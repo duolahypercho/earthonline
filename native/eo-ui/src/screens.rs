@@ -45,6 +45,7 @@ pub(crate) struct Ctx<'a> {
     pub fmt: &'a mut String,
     /// The other players' name tags, and whether the HUD's plates are drawn.
     pub tags: &'a [NameTag],
+    pub avoid: &'a [[f32; 4]],
     pub chrome: bool,
 }
 
@@ -97,32 +98,101 @@ pub(crate) fn build(p: &mut Painter, c: &mut Ctx) {
     }
 }
 
-/// The plate behind a name tag: the HUD's surface ink, lighter (it sits on the scene, not on a panel).
-const TAG_PLATE: Color = rgba(5, 10, 17, 0.52);
+/// A name tag's plate: the HUD's surface ink at 70 % (legible over a bright
+/// sky or a white facade), a 1 px light hairline round it, the name in the
+/// HUD's ink and the second line a little dimmer.
+const TAG_PLATE: Color = rgba(6, 10, 16, 0.70);
+const TAG_EDGE: Color = rgba(237, 245, 251, 0.34);
+const TAG_LEADER: Color = rgba(237, 245, 251, 0.78);
+const TAG_DETAIL: Color = rgba(237, 245, 251, 0.86);
 
-/// Name tags over the other players: a rounded plate with the name in the
-/// HUD's sans, a small pointer down to the head, an optional second line.
+/// One tag's plate as laid out.
+struct TagBox {
+    rect: Rect,
+    name_size: f32,
+    detail_size: f32,
+}
+
+fn radius_of(b: &TagBox) -> f32 {
+    (b.name_size * 0.62).min(b.rect.h * 0.5)
+}
+
+fn tag_box(p: &mut Painter, t: &NameTag) -> TagBox {
+    let fs = t.size.clamp(7.0, 40.0);
+    let ds = t.detail_size.clamp(7.0, 40.0);
+    let ts = st(Stack::HudSans, 600, fs).tracking(0.02);
+    let mut w = p.text_width(&t.name, ts);
+    if let Some(d) = &t.detail {
+        w = w.max(p.text_width(d, st(Stack::HudSans, 500, ds).tracking(0.03)));
+    }
+    let (padx, pady) = (fs * 0.6, fs * 0.28);
+    let h = fs * 1.2 + if t.detail.is_some() { ds * 1.18 } else { 0.0 } + 2.0 * pady;
+    TagBox { rect: Rect::new(t.x - w * 0.5 - padx, 0.0, w + 2.0 * padx, h), name_size: fs, detail_size: ds }
+}
+
+/// Name tags over the other players. Laid out nearest first: each plate
+/// sits over its head point with a small pointer down to it; one that would
+/// cover a plate already placed or someone else's face (`Ctx::avoid`) tries
+/// the places beside and above (up to three plates up), nearest first, and
+/// draws a 1 px leader line down to its head; with no place clear of the
+/// faces it takes one clear of the other plates; with none of those either
+/// it is left out. Drawn farthest first, so the nearest is on top.
 fn name_tags(p: &mut Painter, c: &mut Ctx) {
-    for t in c.tags {
-        if !(t.alpha > 0.01) || !t.x.is_finite() || !t.y.is_finite() {
-            continue;
+    let mut order: Vec<usize> = (0..c.tags.len()).filter(|&i| c.tags[i].alpha > 0.01 && c.tags[i].x.is_finite() && c.tags[i].y.is_finite()).collect();
+    order.sort_by(|&a, &b| c.tags[a].depth.total_cmp(&c.tags[b].depth));
+    let mut placed: Vec<(usize, TagBox, bool)> = vec![];
+    let gap = 2.0;
+    let over = |a: &Rect, b: [f32; 4]| a.x < b[2] + gap && b[0] < a.x + a.w + gap && a.y < b[3] + gap && b[1] < a.y + a.h + gap;
+    for i in order {
+        let t = &c.tags[i];
+        let mut b = tag_box(p, t);
+        let point = b.name_size * 0.34;
+        let home = Rect::new(b.rect.x, t.y - point - b.rect.h, b.rect.w, b.rect.h);
+        let (w, h) = (b.rect.w, b.rect.h + gap);
+        let mut cands = vec![(0.0, 0.0)];
+        for k in 0..4 {
+            let up = -(k as f32) * h;
+            for dx in [0.0, 0.62 * w + gap, -(0.62 * w + gap)] {
+                if k > 0 || dx != 0.0 {
+                    cands.push((dx, up));
+                }
+            }
         }
-        let fs = t.size.clamp(8.0, 40.0);
-        let ts = st(Stack::HudSans, 600, fs).tracking(0.02);
-        let w = p.text_width(&t.name, ts);
-        let (padx, h) = (fs * 0.62, fs * 1.55);
-        let point = fs * 0.32;
-        let r = Rect::new(t.x - w * 0.5 - padx, t.y - point - h, w + 2.0 * padx, h);
+        cands.sort_by(|a, b| (a.0.hypot(a.1)).total_cmp(&b.0.hypot(b.1)));
+        let free_of_tags = |r: &Rect| !placed.iter().any(|(_, q, _)| over(r, [q.rect.x, q.rect.y, q.rect.right(), q.rect.bottom()]));
+        let free_of_faces = |r: &Rect| !c.avoid.iter().any(|f| *f != t.head && over(r, *f));
+        let at = |d: &(f32, f32)| home.translate(d.0, d.1);
+        let Some(d) = cands.iter().find(|d| free_of_tags(&at(d)) && free_of_faces(&at(d))).or_else(|| cands.iter().find(|d| free_of_tags(&at(d)))) else { continue };
+        b.rect = at(d);
+        placed.push((i, b, d.0 != 0.0 || d.1 != 0.0));
+    }
+    for (i, b, moved) in placed.iter().rev() {
+        let t = &c.tags[*i];
+        let r = b.rect;
         p.opacity = t.alpha.min(1.0);
-        p.rrect(r, h * 0.5, TAG_PLATE);
-        p.polygon(&[[t.x - point, r.bottom()], [t.x + point, r.bottom()], [t.x, r.bottom() + point]], TAG_PLATE);
-        let b = p.text.baseline(ts, r.y + (h - fs * 1.15) * 0.5, 1.15);
-        p.text(r.x + padx, b, &t.name, ts, hud::INK);
+        let point = b.name_size * 0.34;
+        if *moved {
+            // The leader: from the plate's lower edge (above the head where it can) down to the point over the head.
+            let lx = t.x.clamp(r.x + radius_of(b), r.right() - radius_of(b));
+            p.polyline(&[[lx, r.bottom()], [t.x, t.y - 1.0]], 1.0, false, TAG_LEADER);
+            p.ellipse(t.x, t.y, 1.6, 1.6, 0.0, TAG_LEADER);
+        } else {
+            p.polygon(&[[t.x - point, r.bottom() - 0.5], [t.x + point, r.bottom() - 0.5], [t.x, r.bottom() + point]], TAG_PLATE);
+        }
+        let radius = radius_of(b);
+        p.rrect(r, radius, TAG_PLATE);
+        p.rrect_stroke(r, radius, 1.0, TAG_EDGE);
+        let pady = b.name_size * 0.28;
+        let ts = st(Stack::HudSans, 600, b.name_size).tracking(0.02);
+        let nw = p.text_width(&t.name, ts);
+        let base = p.text.baseline(ts, r.y + pady, 1.2);
+        let cx = r.x + r.w * 0.5;
+        p.text(cx - nw * 0.5, base, &t.name, ts, hud::INK);
         if let Some(d) = &t.detail {
-            let ds = st(Stack::HudSans, 500, fs * 0.78).tracking(0.06);
+            let ds = st(Stack::HudSans, 500, b.detail_size).tracking(0.03);
             let dw = p.text_width(d, ds);
-            let b = p.text.baseline(ds, r.y - fs * 0.95, 1.15);
-            p.text(t.x - dw * 0.5, b, d, ds, hud::INK_MUTED);
+            let base = p.text.baseline(ds, r.y + pady + b.name_size * 1.2, 1.18);
+            p.text(cx - dw * 0.5, base, d, ds, TAG_DETAIL);
         }
         p.opacity = 1.0;
     }
