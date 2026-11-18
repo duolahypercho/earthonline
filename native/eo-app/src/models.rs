@@ -424,6 +424,9 @@ pub struct ModelRuntime {
     pub street: Option<eo_render::street::StreetRuntime>,
     /// the far layer's streamer (cells and districts).
     pub hlod: Option<eo_render::hlod::HlodRuntime>,
+    /// the renderer has the far layer's GPU side (it needs multi-draw-indirect-count):
+    /// without it nothing of the far layer is drawn or streamed, and a settle does not wait for it.
+    hlod_drawn: bool,
     /// the distant trees' list is still to arrive or to be written (0 none, 1 waiting, 2 writing).
     hlod_trees: u8,
     bases: Bases,
@@ -525,6 +528,7 @@ impl ModelRuntime {
             street,
             hlod_trees: if world.hlod_trees.is_some() && hlod.is_some() { 1 } else { 0 }, // hlod
             hlod, // hlod
+            hlod_drawn: true, // until a pump sees the renderer
             kit_rx: world.kit_rx.take(),
             kit_ready: false,
             kit_queued: false,
@@ -691,6 +695,10 @@ impl ModelRuntime {
         }
         if let Some(h) = &mut self.hlod {
             h.update(renderer, &ctx.queue, cam); // the far layer, its own upload budget
+            if self.hlod_drawn && renderer.hlod.get().is_none() {
+                self.hlod_drawn = false;
+                eprintln!("far layer: not attached to the renderer (the adapter has no multi-draw-indirect-count); nothing of it is drawn, so settles do not wait for it");
+            }
         }
         // the distant trees' list, once gathered, written in a slice a frame.
         if self.hlod_trees > 0 {
@@ -910,14 +918,14 @@ impl ModelRuntime {
             self.uploads.pending(),
             self.kit.as_ref().map(|k| k.settled()).unwrap_or(true),
             self.street.as_ref().map(|s| s.settled()).unwrap_or(true),
-            self.hlod.as_ref().map(|h| h.unsettled()).unwrap_or_default() // hlod
+            self.hlod.as_ref().filter(|_| self.hlod_drawn).map(|h| h.unsettled()).unwrap_or_default() // hlod
         )
     }
 
     /// Models, maps and every kit pack wanted around the camera resident.
     pub fn settled(&self) -> bool {
         self.done() && self.uploads.pending() == 0 && self.kit.as_ref().map(|k| k.settled()).unwrap_or(true) && self.street.as_ref().map(|s| s.settled()).unwrap_or(true)
-            && self.hlod.as_ref().is_none_or(|h| h.settled()) // the far cells around the camera and every district
+            && (!self.hlod_drawn || self.hlod.as_ref().is_none_or(|h| h.settled())) // the far cells around the camera and every district (when drawn)
             && self.hlod_trees == 0 // and the distant trees
             && self.cc0.as_ref().map(|c| c.settled()).unwrap_or(true) // cc0
     }
