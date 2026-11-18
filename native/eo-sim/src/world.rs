@@ -31,7 +31,8 @@ use std::time::Instant;
 
 use crate::consts::FIXED_STEP_S;
 use crate::network::Network;
-use crate::output::AgentBuffer;
+use crate::corridor::Corridors;
+use crate::output::{AgentBuffer, CorridorInstance};
 use crate::region::{Focus, Region};
 
 #[derive(Clone, Copy)]
@@ -183,6 +184,9 @@ pub struct World {
     accumulator: f64,
     pool: Option<WorkerPool>,
     pub last: StepTiming,
+    /// The corridor layer (the long roads' through traffic), stepped on this
+    /// clock after the regions, with the first region's focus for its hand-over.
+    pub corridors: Option<Corridors>,
 }
 
 /// The most fixed steps one `advance` runs (the JS clock's catch-up cap).
@@ -190,7 +194,7 @@ pub const MAX_STEPS_PER_ADVANCE: u32 = 8;
 
 impl World {
     pub fn new(net: Network) -> Self {
-        World { net, regions: vec![], time: 0.0, steps: 0, accumulator: 0.0, pool: None, last: StepTiming::default() }
+        World { net, regions: vec![], time: 0.0, steps: 0, accumulator: 0.0, pool: None, last: StepTiming::default(), corridors: None }
     }
 
     /// Use `helpers` worker threads besides the stepping thread (0: step inline).
@@ -217,6 +221,13 @@ impl World {
                 t0.elapsed().as_nanos() as u64
             }
         };
+        let mut cpu = cpu;
+        if let Some(c) = &mut self.corridors {
+            let t1 = Instant::now();
+            let focus = self.regions.first().map(|r| [r.focus.x, r.focus.z]);
+            c.step(dt, focus);
+            cpu += t1.elapsed().as_nanos() as u64;
+        }
         self.last = StepTiming { wall_ns: t0.elapsed().as_nanos() as u64, cpu_ns: cpu };
     }
 
@@ -250,6 +261,8 @@ pub struct Frame {
     pub time: f64,
     pub steps: u64,
     pub regions: Vec<AgentBuffer>,
+    /// The corridor layer's vehicles and walkers (empty without one).
+    pub corridor: Vec<CorridorInstance>,
     /// The last fixed step's timing on the simulation thread.
     pub timing: StepTiming,
 }
@@ -268,6 +281,10 @@ impl Frame {
             dst.vehicles.extend_from_slice(&r.out.vehicles);
             dst.walkers.clear();
             dst.walkers.extend_from_slice(&r.out.walkers);
+        }
+        self.corridor.clear();
+        if let Some(c) = &world.corridors {
+            self.corridor.extend_from_slice(&c.out);
         }
     }
 }
