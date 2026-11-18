@@ -590,7 +590,12 @@ pub fn load_world(args: &Args) -> Result<World> {
         std::thread::spawn(move || eo_landmarks::ground_cover::GroundCover::load(&root))
     });
     let t = Instant::now();
-    let land = LandCover::load(&paths).ok();
+    let land = LandCover::load(&paths).ok().map(Arc::new);
+    // the land-cover classes the daylight's ground albedo reads (eo-look `phys`).
+    if let Some(l) = &land {
+        let l = l.clone();
+        eo_look::phys::set_ground_classes(Box::new(move |x: f64, z: f64| l.class_at(x, z)));
+    }
     let land_cover_ms = t.elapsed().as_secs_f64() * 1e3;
     let street_job = street_plan.map(|p| streets::spawn(p, &city, &elevation));
     let standards = CaStandards::load(&paths)?;
@@ -865,7 +870,7 @@ pub fn load_world(args: &Args) -> Result<World> {
     // ground (ground_tone.rs): beach sand (its shore distance, metres inland,
     // in the alpha byte) or a green's tone.
     let far_land_fn = ground_tone::far_land(cover.as_deref(), water_field.as_deref(), elev);
-    let ground_tone_fn = ground_tone::ground_tone(cover.as_deref(), water_field.as_deref(), elev, land.as_ref());
+    let ground_tone_fn = ground_tone::ground_tone(cover.as_deref(), water_field.as_deref(), elev, land.as_deref());
     // land beyond the city's shoreline rings. The rings call the
     // Marin headlands across the Golden Gate sea (they are not San
     // Francisco's), so the water press drew the elevation grid's own ground
@@ -886,7 +891,7 @@ pub fn load_world(args: &Args) -> Result<World> {
     let mut scene = build_scene(&SceneInputs { // mut (the landmarks are appended)
         city: &city,
         elevation: &elevation,
-        land: land.as_ref(),
+        land: land.as_deref(),
         standards: &standards,
         authored: &authored.group_of_record,
         terrain_lod: args.terrain_lod,

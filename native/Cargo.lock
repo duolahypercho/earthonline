@@ -614,6 +614,7 @@ dependencies = [
  "eo-farshore",
  "eo-kit",
  "eo-landmarks",
+ "eo-look",
  "eo-net",
  "eo-player",
  "eo-props",

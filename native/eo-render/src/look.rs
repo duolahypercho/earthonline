@@ -167,8 +167,8 @@ struct AoTarget {
 }
 
 /// What a frame's physical daylight was made for: the hour, the haze density and the weight (f64
-/// bits) and the day of the year (f64 bits).
-type DaylightKey = (u64, u64, u64, u64);
+/// bits), the day of the year (f64 bits) and the ground's albedo in 1/256 steps.
+type DaylightKey = (u64, u64, u64, u64, [i64; 3]);
 
 struct State {
     hour: f64,
@@ -197,7 +197,7 @@ struct State {
     /// the weather frame before its fill (hour, day of the year, sky profile, frame): `eo_sky::frame::base_frame`.
     sky_base: Option<(f64, f64, String, LookFrame)>,
     /// the physical daylight of the frame in force (`--no-phys-sky`: None), and what it was made for
-    /// (hour, density, weight, the day of the year).
+    /// (hour, density, weight, the day of the year, the ground's albedo in 1/256 steps).
     daylight: Option<(DaylightKey, std::sync::Arc<eo_look::phys::Daylight>)>,
 }
 
@@ -1002,9 +1002,12 @@ impl LookGpu {
                 if opts.phys_sky {
                     let density = eo_sky::frame::daylight_density(&w);
                     let weight = eo_sky::frame::daylight_weight(&f, &w);
-                    let key = (h.to_bits(), density.to_bits(), weight.to_bits(), day.to_bits());
+                    // the ground the sky light sees from the eye (eo-look `phys::ground_albedo_at`).
+                    let eye = s.cur_cam.map_or([0.0; 3], |c| [c.1.x as f64, c.1.y as f64, c.1.z as f64]);
+                    let ground = eo_look::phys::ground_albedo_at(eye);
+                    let key = (h.to_bits(), density.to_bits(), weight.to_bits(), day.to_bits(), ground.map(|a| (a * 256.0).round() as i64));
                     if s.daylight.as_ref().is_none_or(|(k, _)| *k != key) {
-                        s.daylight = Some((key, std::sync::Arc::new(eo_look::phys::Daylight::new(f.model.sun.dir(), density, weight))));
+                        s.daylight = Some((key, std::sync::Arc::new(eo_look::phys::Daylight::new_with_ground(f.model.sun.dir(), density, weight, ground))));
                     }
                     let d = s.daylight.as_ref().unwrap().1.clone();
                     eo_sky::frame::apply_daylight(&mut f, &mut terms, &d);

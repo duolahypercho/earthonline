@@ -15,7 +15,7 @@
 use crate::LookFrame;
 use crate::atmosphere::{self, Atmosphere, Tables, URBAN_GROUND_ALBEDO};
 use crate::math::*;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, OnceLock, RwLock};
 
 /// How much of the frame the physical daylight takes at a solar altitude:
 /// all of it from 3 deg up, none from 2 deg under the horizon (there the
@@ -73,6 +73,27 @@ pub fn exposure_at_ev100(ev100: f64, compensation_ev: f64) -> f64 {
     0.6 * 0.18 * lux_per_unit() / mid_grey_luminance(ev100) * 2f64.powf(compensation_ev)
 }
 
+/// The land-cover class (ESA WorldCover code) at a ground-plan point (game
+/// x, z metres), as `set_ground_classes` installed it.
+pub type GroundClasses = Box<dyn Fn(f64, f64) -> u8 + Send + Sync>;
+
+static GROUND_CLASSES: RwLock<Option<GroundClasses>> = RwLock::new(None);
+
+/// Install the land-cover lookup the ground's albedo is read from (eo-app
+/// main.rs, `LandCover::class_at`). Stored only: `ground_albedo_at` does not
+/// read it yet.
+pub fn set_ground_classes(f: GroundClasses) {
+    if let Ok(mut g) = GROUND_CLASSES.write() {
+        *g = Some(f);
+    }
+}
+
+/// The broadband albedo of the ground the sky light sees from an eye (game
+/// metres): `URBAN_GROUND_ALBEDO` everywhere for now.
+pub fn ground_albedo_at(_eye: [f64; 3]) -> Rgb {
+    URBAN_GROUND_ALBEDO
+}
+
 /// Daylight for one sun direction, haze density and weather weight.
 #[derive(Clone)]
 pub struct Daylight {
@@ -101,8 +122,14 @@ impl Daylight {
     /// `sun`: toward the sun; `density`: the aerosol over the clear medium's (the
     /// weather's haze); `weight`: `weather_weight`.
     pub fn new(sun: [f64; 3], density: f64, weight: f64) -> Self {
+        Self::new_with_ground(sun, density, weight, URBAN_GROUND_ALBEDO)
+    }
+
+    /// `new` over a ground of broadband albedo `ground` (the sky light's
+    /// lower hemisphere; `new` takes `URBAN_GROUND_ALBEDO`).
+    pub fn new_with_ground(sun: [f64; 3], density: f64, weight: f64, ground: Rgb) -> Self {
         let tables = atmosphere::tables(&Atmosphere::coastal_clear(), density);
-        let l = atmosphere::sky_light(&tables, sun, URBAN_GROUND_ALBEDO);
+        let l = atmosphere::sky_light(&tables, sun, ground);
         let e = e_toa_units();
         let c = atmosphere::sun_colour_toa();
         let sun_toa = c.map(|v| v * e);
@@ -165,6 +192,16 @@ mod tests {
         let r = LookFrame::new(13.0);
         let k = luminance(d.key) / luminance(r.key);
         assert!((0.85..1.15).contains(&k), "key / rig key {k}");
+    }
+
+    #[test]
+    fn the_ground_seam_matches_new_at_the_urban_albedo() {
+        let s = crate::sun::sun_direction(13.0);
+        let a = Daylight::new(s.dir(), 1.0, 1.0);
+        let b = Daylight::new_with_ground(s.dir(), 1.0, 1.0, ground_albedo_at([0.0, 1.7, 0.0]));
+        assert_eq!(a.key, b.key);
+        assert_eq!(a.env_sh, b.env_sh);
+        assert_eq!(a.e_h, b.e_h);
     }
 
     #[test]
