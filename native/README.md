@@ -195,6 +195,7 @@ switch it does not take.
 | `--pace realtime\|60hz\|all-60hz\|none` | How the bench paces its frames |
 | `--shots FILE.json --out DIR` | Offscreen stills instead of the timing: one PNG per shot of the file, and `DIR/<name>.json` beside it (below) |
 | `--scene-cards --out DIR` | The eight scene cards of [the visual gate](../Docs/VISUAL_QUALITY_GATE.md) at the Ferry Building and The Embarcadero, 2560 x 1440 unless `--width`/`--height` are given (below) |
+| `--clip FILE.json --out DIR` | Moving clips along camera paths: every frame drawn at 60 Hz of wall time, every `60 / fps`-th written as `DIR/<name>/NNNN.png` with `DIR/<name>.json`; each clip is `{"name", "seconds", "fps", "time_of_day", "fov", "keys": [{"t", "eye", "look_at"}]}` in game metres (`bench/clip.rs`) |
 | `--shots-only a,b` | Only the shots or cards whose name contains `a` or `b` |
 | `--settle-timeout S` | The most a shot waits for streaming to settle (600 s) |
 | `--card8-seconds S`, `--card8-fps N`, `--card8-speed M` | Card 8's length (30 s), frames written per second (10) and speed (the player's run, 5.6 m/s) |
@@ -296,7 +297,7 @@ selection:
 | Content | `--no-models`, `--no-kit`, `--no-streets`, `--no-props`, `--no-agents`, `--no-landmarks`, `--no-water`, `--no-farshore`, `--no-sky` |
 | People | `--no-rocketbox`, `--no-rocketbox-motions` (either one: no people) |
 | Props | `--no-props2`, `--no-furniture`, `--no-eztree`, `--no-wires`, `--no-overhead`, `--no-lamp-sprites` |
-| Bridges | `--no-bridges2` (all of these), `--no-bridge-scale`, `--no-bridge-paint`, `--no-bridge-detail`, `--no-bridge-wires`, `--no-bridge-night` |
+| Bridges | `--no-bridges2` (all of these), `--no-bridge-scale`, `--no-bridge-paint`, `--no-bridge-detail`, `--no-bridge-wires`, `--no-bridge-night`; the second pass: `--no-bridges3` (all of its), `--no-bridge-air`, `--no-bridge-finish`, `--no-bridge-members`, `--no-bridge-floods`, `--no-bridge-curtain` |
 | Buildings | `--no-facade-detail`, `--no-facade-age`, `--no-rooms`, `--no-room-frames`, `--no-room-dim`, `--no-roof-colours`, `--no-roof-plant`, `--no-roof-parapet`, `--no-roof-patches`, `--no-wall-paint` |
 | Ground | `--no-ground-hills`, `--no-ground-green`, `--no-ground-contact`, `--no-terrain-lod` |
 | Scanned surfaces | `--no-cc0` (all), `--no-cc0-street`, `--no-cc0-walls`, `--no-cc0-ground`, `--no-cc0-decals`, `--no-cc0-grime`, `--no-cc0-stains`, `--no-cc0-pom`, `--no-cc0-tiling` |
@@ -488,6 +489,18 @@ its deck its painted steel underside; the cables and suspenders are drawn
 after the atmosphere at every distance, anti-aliased at a screen-space floor
 width; at night the Golden Gate towers are floodlit and the west span's
 suspenders carry their LEDs (`eo_landmarks::suspension::BridgeFeatures`).
+The second pass gives the wires the aerial perspective and a hairline's
+mean half-section shading (`--no-bridge-air`); paints the coats as
+dielectric films at a low sheen, lights the members' undersides with the
+sea's reflected light, shadows what stands under a deck from the sun past
+the shadow maps' reach and eases the baked occlusion (`--no-bridge-finish`);
+adds the cable saddles' housings, cable bands and sockets, the Fort Point
+arch's open web, the pylons' pilasters, the south pier's fender, the lamp
+standards and the west span's floor system and laced tower bracing
+(`--no-bridge-members`); lights the Golden Gate towers by their placed
+floods above and below the roadway and plays the suspender LEDs in bands
+(`--no-bridge-floods`); and veils a receding suspender curtain at its mean
+cover (`--no-bridge-curtain`).
 
 **Traffic and people.** `eo-sim` runs traffic on the street graph with
 signals and junction rules, and pedestrians on the sidewalks and crossings,
