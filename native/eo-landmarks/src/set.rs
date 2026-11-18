@@ -507,7 +507,11 @@ impl LandmarkSet {
             // piers of the citywide map as decks over the water, the quay wall
             // without its landward side under the apron, and the terrain press.
             use crate::waterfront as wf;
-            let rings = wf::load_pier_rings(repo_root)?;
+            let mut rings = wf::load_pier_rings(repo_root)?;
+            // the piers the citywide map draws as lines (Torpedo Wharf, the Coast Guard walkway)
+            let line_rings = if crate::features::shore_ground("pier-lines") { wf::load_pier_line_rings(repo_root, &rings)? } else { Vec::new() };
+            let first_line_pier = rings.len();
+            rings.extend(line_rings.iter().cloned());
             let piers = wf::plan_piers(&rings, &oracle, height_at, js.sea_level_y, sh.road_lift);
             let (edges, c) = wf::classify_edges(&oracle, height_at, js.sea_level_y, &rule, &piers);
             let wall_edges: Vec<[f64; 4]> = edges.iter().filter(|e| e.pier.is_none()).map(|e| [e.a[0], e.a[1], e.b[0], e.b[1]]).collect();
@@ -530,6 +534,17 @@ impl LandmarkSet {
             let apron = hex(js.open_space.colors.get("path").map(|s| s.as_str()).unwrap_or("#e1e3e4"));
             let m = wf::build_meshes(&edges, &piers, &oracle, &crest_at, js.sea_level_y, 0.42, concrete, wf::UNDER_DECK_LINEAR, apron, crate::geometry::srgb_hex(fp.deck_srgb));
             piers_built = (m.decks, m.piles);
+            // their guard on the water edges (the decks the citywide map draws as lines)
+            if !line_rings.is_empty() {
+                let mut g = crate::geometry::MeshArrays::new("waterfront:pier-guard");
+                for p in piers.iter().filter(|p| line_rings.iter().any(|r| r == &p.ring)) {
+                    wf::pier_guard(&mut g, p, &|x, z| oracle.is_water(x, z), crate::geometry::srgb_hex(0x6e7478));
+                }
+                eprintln!("pier lines: {} rings ({} piers before them), guard {} triangles", line_rings.len(), first_line_pier, g.triangles());
+                if g.triangles() > 0 {
+                    structures.push(Structure { cast: true, footway: false, kit: Some(wf::RAILING_KIT.into()), name: "waterfront:pier-guard".into(), material: plain_material(0.5, 0.0, "painted-metal"), mesh: g.freeze() });
+                }
+            }
             structures.push(Structure { cast: false, footway: true, kit: None, name: "waterfront:paving".into(), material: plain_material(0.9, 0.0, "sidewalk"), mesh: m.paving });
             structures.push(Structure { cast: true, footway: false, kit: None, name: "waterfront:concrete".into(), material: Material { surface: Some("concrete".into()), ..plain_material(0.92, 0.0, "facade-masonry") }, mesh: m.concrete });
             structures.push(Structure { cast: false, footway: false, kit: None, name: "waterfront:under-deck".into(), material: plain_material(0.95, 0.0, "facade-masonry"), mesh: m.under_deck });
