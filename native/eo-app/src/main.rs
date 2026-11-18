@@ -719,6 +719,8 @@ pub fn load_world(args: &Args) -> Result<World> {
         None => None,
     };
     let press = water.clone().filter(|_| args.look.water);
+    // (water r2) piers on piles over the water, unless --no-water-shore
+    eo_water::field::PIERS_OVER_WATER.store(args.look.water_features & eo_render::water::FEAT_SHORE != 0, std::sync::atomic::Ordering::Relaxed);
     // the beach foreshore goes into the street world's carpet, which the
     // drawn ground, the collision ground (eo-player StreetGround) and the
     // agents all read, so they agree on the lowered beach.
