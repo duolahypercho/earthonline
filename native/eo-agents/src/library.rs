@@ -65,6 +65,10 @@ pub struct Meta {
     /// The phone a player's selfie holds (`rig::phone`), a model of its own
     /// (no traffic or parked pool reads it).
     pub phone_model: Option<u32>,
+    /// The ground-contact patch under another player's feet, shins and
+    /// hips (`rig::contacts`), appended after loading (`Library::add_contact_model`):
+    /// it is not cooked, so the cache is the same with or without it.
+    pub contact_model: Option<u32>,
 }
 
 /// where the street people come from.
@@ -230,6 +234,7 @@ impl Library {
                 match read_cache(&p) {
                     Ok(mut lib) => {
                         lib.from_cache = true;
+                        lib.add_contact_model();
                         lib.load_ms = t.elapsed().as_secs_f64() * 1e3;
                         lib.cache_path = Some(p);
                         return Ok(lib);
@@ -248,8 +253,39 @@ impl Library {
                 lib.cache_path = Some(p);
             }
         }
+        lib.add_contact_model();
         lib.load_ms = t.elapsed().as_secs_f64() * 1e3;
         Ok(lib)
+    }
+
+    /// Append the ground-contact patch (`rig::contact_body`) as a model of
+    /// its own, every level of detail the same quad, where the cull can still
+    /// address another mesh. Idempotent.
+    pub fn add_contact_model(&mut self) {
+        if self.meta.contact_model.is_some() || self.meshes.len() >= MAX_MESHES {
+            return;
+        }
+        let b = crate::rig::contact_body();
+        let mat0 = self.materials.len() as u32;
+        self.materials.extend_from_slice(&b.materials);
+        let base = self.vertices.len() as i32;
+        for v in &b.vertices {
+            let mut v = *v;
+            v.tag = (v.tag & !0xffff) | (mat0 + (v.tag & 0xffff));
+            self.vertices.push(v);
+        }
+        let first = self.indices.len() as u32;
+        self.indices.extend_from_slice(&b.opaque);
+        let glass_first = self.indices.len() as u32;
+        self.indices.extend_from_slice(&b.glass);
+        self.meshes.push(GpuMesh { first_index: first, index_count: b.opaque.len() as u32, glass_first, glass_count: b.glass.len() as u32, base_vertex: base, pad: [0; 3] });
+        self.meta.mesh_triangles.push(b.triangles);
+        let mesh = self.meshes.len() as u32 - 1;
+        let m = self.models.len() as u32;
+        // The quad spans [-1, 1] in x and z; the instance scale is its half size in metres.
+        self.models.push(GpuModel { meshes: [mesh; LODS], wheel: [[0.0; 4]; 4], center: [0.0; 3], radius: std::f32::consts::SQRT_2, class: CLASS_VEHICLE, skeleton: 0, joints: 0, wheel_radius: 0.0, pad: [0; 4] });
+        self.meta.model_names.push("contact".into());
+        self.meta.contact_model = Some(m);
     }
 
     pub fn model(&self, name: &str) -> Option<u32> {

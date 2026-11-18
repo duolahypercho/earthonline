@@ -134,7 +134,8 @@ pub fn phone(lib: &Library, a: &GpuAgent) -> Option<GpuAgent> {
     let (y, z) = (l, n);
     let x = y.cross(z);
     let rot = Quat::from_mat3(&Mat3::from_cols(x, y, z)).normalize();
-    Some(GpuAgent { pos: centre.to_array(), model, rot: rot.to_array(), color: 0xffffffff, flags: 0, anim: 0.0, steer: 0.0, speed: 0.0, scale: 1.0, clip_phase: 0.0, clip: 0 })
+    // A player's (no distance cap demotes it, and it takes no car's place in the cull's tiers).
+    Some(GpuAgent { pos: centre.to_array(), model, rot: rot.to_array(), color: 0xffffffff, flags: crate::AGENT_PLAYER, anim: 0.0, steer: 0.0, speed: 0.0, scale: 1.0, clip_phase: 0.0, clip: 0 })
 }
 
 /// The phone as a body (`library` appends it as a model): a slab with a
@@ -176,6 +177,244 @@ pub fn phone_body() -> CookedBody {
     b
 }
 
+/// The ground-contact patch as a body (`library` appends it as a model,
+/// `Library::add_contact_model`): a quad in the ground plane, x and z in
+/// [-1, 1] (the instance scale is its half size), facing up, drawn only in
+/// the glass pass: no opaque part, so it casts no shadow and writes no depth
+/// or motion. One black material flagged `M_CONTACT`: the shader works out
+/// how much of the ground's light the instance's box takes away.
+pub fn contact_body() -> CookedBody {
+    let m = AgentMaterial { base: [0.0, 0.0, 0.0, 1.0], params: [1.0, 0.0, 0.0, 0.0], layer: -1, flags: crate::M_CONTACT | crate::F_BLEND, ..Default::default() };
+    let mut b = CookedBody { materials: vec![m], material_names: vec!["contact".into()], ..Default::default() };
+    for (x, z) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+        b.vertices.push(AgentVertex { pos: [x, 0.0, z], normal: pack_normal(Vec3::Y), tag: tag(0, 0), ..Default::default() });
+    }
+    b.glass = vec![0, 1, 2, 0, 2, 3];
+    b.triangles = 2;
+    b.min = [-1.0, 0.0, -1.0];
+    b.max = [1.0, 0.0, 1.0];
+    b
+}
+
+/// One box of a drawn body over the ground, as the contact patch's shader
+/// reads it (eo-render `agents_draw.wgsl` `ag_contact`): the share of the
+/// sky a ground point sees that the box hides (the exact view factor of a
+/// box standing on or floating over the plane, Howell's catalogue of
+/// radiation configuration factors: a plane element to a perpendicular
+/// rectangle, and to a parallel one, summed over the faces the point
+/// sees), and, for a low box, whether it stands between the point and the
+/// sun (a few centimetres from a sole, which the shadow cascades and the
+/// screen-space contact ray cannot resolve).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ContactBox {
+    /// Centre of the footprint (world x, z).
+    pub centre: [f32; 2],
+    /// The box's z axis is world +z turned `yaw` about +y.
+    pub yaw: f32,
+    /// Half width (box x) and half length (box z), metres.
+    pub half: [f32; 2],
+    /// Bottom and top above the ground, metres.
+    pub h0: f32,
+    pub h1: f32,
+    /// The patch also takes the sun the box blocks.
+    pub sun: bool,
+    /// 0..1: a foot lifting off the ground fades its patch out before it
+    /// swings (a moving patch writes no motion for the temporal resolve).
+    pub weight: f32,
+}
+
+/// The patch quad's half size: the footprint and as far out as the box
+/// still hides 1-3 % of the sky (a wall of height h hides
+/// (1 - c / sqrt(c^2 + h^2)) / 2 of it c away: 2.6 % at 3 h).
+pub fn contact_reach(b: &ContactBox) -> f32 {
+    let m = if b.h0 < 0.02 { (2.5 * b.h1).clamp(0.08, 0.9) } else { (2.0 * b.h1).clamp(0.2, 0.9) };
+    b.half[0].max(b.half[1]) + m
+}
+
+// Proportions of the shod foot (ANSUR 1988 summary statistics, Gordon et
+// al. 1989, means of men and women, about): the ball of the foot (first
+// metatarsophalangeal joint, the Bip01 Toe0 joint) 0.73 of the foot's
+// length from the heel; the ankle (lateral malleolus, the Bip01 Foot
+// joint) about 0.22 of it; foot breadth 0.37 of it (100.9 / 269.7 mm men,
+// 91.4 / 244.5 mm women). A shoe adds about 1 cm behind the heel, 1.5 cm
+// past the toes and 1 cm across; its upper averages 0.8 of the ankle's
+// height (high at the collar, low over the toes).
+const BALL_OF_FOOT: f32 = 0.73;
+const ANKLE_OF_FOOT: f32 = 0.22;
+const BREADTH_OF_FOOT: f32 = 0.37;
+// Limb radii, metres (about: calf 0.37 m and thigh 0.58 m round, adult means).
+const SHIN_R: f32 = 0.055;
+const THIGH_R: f32 = 0.085;
+
+/// A limb from joint `p` to joint `q` (world), `r` round, as `n` boxes along it.
+fn limb(out: &mut Vec<ContactBox>, p: Vec3, q: Vec3, r: f32, ground: f32, n: usize) {
+    let d = glam::Vec2::new(q.x - p.x, q.z - p.z);
+    let len = d.length();
+    let yaw = if len > 1e-4 { d.x.atan2(d.y) } else { 0.0 };
+    for k in 0..n {
+        let a = p.lerp(q, k as f32 / n as f32);
+        let b = p.lerp(q, (k + 1) as f32 / n as f32);
+        let c = (a + b) * 0.5;
+        let h0 = (a.y.min(b.y) - r - ground).max(0.0);
+        let h1 = a.y.max(b.y) + r - ground;
+        if h1 <= h0 + 1e-3 {
+            continue;
+        }
+        out.push(ContactBox { centre: [c.x, c.z], yaw, half: [r, (len / n as f32 * 0.5).max(r)], h0, h1, sun: h1 < 0.25, weight: 1.0 });
+    }
+}
+
+/// The boxes of `a`'s body that darken the ground under it this frame
+/// (`ground`: the height its feet stand on): each shoe, each shin and thigh
+/// as two boxes along it, and, crouched (hips under 0.6 m), the hips.
+pub fn contacts(lib: &Library, a: &GpuAgent, ground: f32) -> Option<Vec<ContactBox>> {
+    let bind = bind_of(lib, a)?;
+    let s = a.scale;
+    let forward = Quat::from_array(a.rot) * Vec3::Z;
+    let mut out = Vec::with_capacity(12);
+    let mut hips = Vec3::ZERO;
+    for side in [Side::Left, Side::Right] {
+        let (fj, tj) = (side.j("Foot"), side.j("Toe0"));
+        let ankle = joint_at(lib, a, fj)?;
+        let ball = joint_at(lib, a, tj)?;
+        let knee = joint_at(lib, a, side.j("Calf"))?;
+        let hip = joint_at(lib, a, side.j("Thigh"))?;
+        hips += hip * 0.5;
+        let (a0, b0) = (Vec3::from(*bind.get(fj)?) * s, Vec3::from(*bind.get(tj)?) * s);
+        let ab = glam::Vec2::new(b0.x - a0.x, b0.z - a0.z).length();
+        if ab > 0.02 {
+            let foot = ab / (BALL_OF_FOOT - ANKLE_OF_FOOT);
+            let mut d = glam::Vec2::new(ball.x - ankle.x, ball.z - ankle.z);
+            if d.length() < 1e-3 {
+                d = glam::Vec2::new(forward.x, forward.z);
+            }
+            let d = d.normalize_or_zero();
+            let heel = glam::Vec2::new(ankle.x, ankle.z) - d * (ANKLE_OF_FOOT * foot + 0.01);
+            let long = foot + 0.025;
+            let c = heel + d * (long * 0.5);
+            let lift = (((ankle.y - ground - a0.y) + (ball.y - ground - b0.y)) * 0.5).max(0.0);
+            let weight = 1.0 - smoothstep(0.04, 0.12, lift);
+            if weight > 0.0 {
+                // The box a little inside the shoe's outline (0.85 of its
+                // breadth, 0.9 of its length), so its corners stay under the
+                // rounded toe and heel.
+                out.push(ContactBox { centre: [c.x, c.y], yaw: d.x.atan2(d.y), half: [0.85 * (BREADTH_OF_FOOT * foot + 0.01) * 0.5, 0.9 * long * 0.5], h0: lift, h1: lift + 0.8 * a0.y, sun: true, weight });
+            }
+        }
+        limb(&mut out, knee, ankle, SHIN_R * s, ground, 2);
+        limb(&mut out, hip, knee, THIGH_R * s, ground, 2);
+    }
+    // The hips and seat of a crouch (about 0.36 m across and 0.25 m deep,
+    // from 8 cm under the hip joints).
+    let low = hips.y - ground - 0.08;
+    if low < 0.6 {
+        out.push(ContactBox { centre: [hips.x, hips.z], yaw: forward.x.atan2(forward.z), half: [0.18 * s, 0.125 * s], h0: low.max(0.0), h1: low.max(0.0) + 0.3, sun: false, weight: 1.0 });
+    }
+    Some(out)
+}
+
+/// `contacts` as instances of the contact model (`Meta::contact_model`),
+/// each 1 cm over the ground (no fight with it; the patch's own depth test
+/// keeps it under the feet that stand on it). The box rides in the fields a
+/// vehicle without wheels leaves unused: `anim` half width, `steer` half
+/// length, `speed` top, `clip_phase` bottom; `color` the weight (low byte)
+/// and the sun bit (bit 8). Flagged as a player's, so no distance cap
+/// demotes it and it takes no car's place in the cull's tiers.
+pub fn contact_instances(lib: &Library, a: &GpuAgent, ground: f32, out: &mut Vec<GpuAgent>) -> usize {
+    let (Some(model), Some(boxes)) = (lib.meta.contact_model, contacts(lib, a, ground)) else { return 0 };
+    let n0 = out.len();
+    for b in boxes {
+        let w = (b.weight.clamp(0.0, 1.0) * 255.0).round() as u32;
+        if w == 0 {
+            continue;
+        }
+        out.push(GpuAgent {
+            pos: [b.centre[0], ground + CONTACT_LIFT_M, b.centre[1]],
+            model,
+            rot: Quat::from_rotation_y(b.yaw).to_array(),
+            color: w | (u32::from(b.sun) << 8),
+            flags: crate::AGENT_PLAYER,
+            anim: b.half[0],
+            steer: b.half[1],
+            speed: b.h1,
+            scale: contact_reach(&b),
+            clip_phase: b.h0,
+            clip: 0,
+        });
+    }
+    out.len() - n0
+}
+
+/// How far over the ground a contact patch is drawn.
+pub const CONTACT_LIFT_M: f32 = 0.01;
+
+// The shader's view factors, mirrored term for term (tests).
+const INV_2PI: f32 = 0.159_154_94;
+
+/// A ground element to a vertical rectangle `h` high and `b` wide whose
+/// bottom corner is the foot of the element's perpendicular, `c` away
+/// (Howell's catalogue: plane element to a rectangle in a plane at 90
+/// degrees to it).
+pub fn vf_wall(c: f32, h: f32, b: f32) -> f32 {
+    if h <= 0.0 || b <= 0.0 {
+        return 0.0;
+    }
+    let (x, y) = (h / b, c.max(1e-4) / b);
+    let s = (x * x + y * y).sqrt();
+    INV_2PI * ((1.0 / y).atan() - y / s * (1.0 / s).atan())
+}
+
+/// A ground element to a horizontal rectangle `a` by `b`, `c` over it,
+/// with one corner straight above it (Howell's catalogue: plane element to
+/// a parallel rectangle, the normal through a corner).
+pub fn vf_ceiling(c: f32, a: f32, b: f32) -> f32 {
+    if a <= 0.0 || b <= 0.0 {
+        return 0.0;
+    }
+    let (x, y) = (a / c.max(1e-4), b / c.max(1e-4));
+    let (sx, sy) = ((1.0 + x * x).sqrt(), (1.0 + y * y).sqrt());
+    INV_2PI * (x / sx * (y / sx).atan() + y / sy * (x / sy).atan())
+}
+
+fn signed(w: f32, f: impl Fn(f32) -> f32) -> f32 {
+    if w >= 0.0 { f(w) } else { -f(-w) }
+}
+
+/// The share of the sky a ground point (box frame x, z) sees that box
+/// `half` x [h0, h1] hides: the faces it sees, summed.
+pub fn box_view_factor(px: f32, pz: f32, half: [f32; 2], h0: f32, h1: f32) -> f32 {
+    let [hx, hz] = half;
+    let inside = px.abs() <= hx && pz.abs() <= hz;
+    if inside && h0 < 0.002 {
+        let r = 0.9 * hx.min(hz);
+        let (ex, ez) = (px.abs() - hx + r, pz.abs() - hz + r);
+        let sd = (ex.max(0.0).powi(2) + ez.max(0.0).powi(2)).sqrt() + ex.max(ez).min(0.0) - r;
+        return 0.45 + 0.55 * smoothstep(0.0, 0.01, -sd);
+    }
+    let side = |c: f32, t: f32, half_w: f32| {
+        let w = |e: f32| signed(e, |u| vf_wall(c, h1, u) - if h0 > 0.002 { vf_wall(c, h0, u) } else { 0.0 });
+        w(half_w - t) - w(-half_w - t)
+    };
+    let mut f = 0.0;
+    if h0 > 0.002 {
+        let p = |u: f32, v: f32| u.signum() * v.signum() * vf_ceiling(h0, u.abs(), v.abs());
+        f += p(hx - px, hz - pz) - p(-hx - px, hz - pz) - p(hx - px, -hz - pz) + p(-hx - px, -hz - pz);
+    }
+    if px > hx {
+        f += side(px - hx, pz, hz);
+    }
+    if px < -hx {
+        f += side(-hx - px, pz, hz);
+    }
+    if pz > hz {
+        f += side(pz - hz, px, hx);
+    }
+    if pz < -hz {
+        f += side(-hz - pz, px, hx);
+    }
+    f.clamp(0.0, 1.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -208,6 +447,35 @@ mod tests {
         assert!((joint_rows(&lib, &a, 5).unwrap()[0].w - 1.0).abs() < 1e-6, "walking: walk frame 1");
         let p = point(&lib, &GpuAgent { pos: [10.0, 0.0, 0.0], ..a }, 5, Vec3::new(0.0, 1.7, 0.0)).unwrap();
         assert!((p - Vec3::new(11.0, 1.7, 0.0)).length() < 1e-5, "{p}");
+    }
+
+    /// The view factors meet their known limits: a long wall hides
+    /// (1 - c / sqrt(c^2 + h^2)) / 2 of the sky, a tall narrow one
+    /// atan(b / c) / 2 pi per side, a wide ceiling a quarter per quadrant;
+    /// a box hides all of it under its sole, less with distance, and a
+    /// box lifted off the ground hides less right beside it.
+    #[test]
+    fn contact_view_factors_meet_their_limits() {
+        for (c, h) in [(0.01f32, 0.07f32), (0.05, 0.07), (0.2, 0.5)] {
+            let long = 2.0 * vf_wall(c, h, 1e4);
+            let exact = 0.5 * (1.0 - c / (c * c + h * h).sqrt());
+            assert!((long - exact).abs() < 1e-4, "wall c {c} h {h}: {long} vs {exact}");
+        }
+        let tall = vf_wall(0.3, 1e5, 0.2);
+        assert!((tall - (0.2f32 / 0.3).atan() / std::f32::consts::TAU).abs() < 1e-4, "{tall}");
+        assert!((vf_ceiling(0.5, 1e5, 1e5) - 0.25).abs() < 1e-3);
+        let half = [0.05, 0.14];
+        assert_eq!(box_view_factor(0.0, 0.0, half, 0.0, 0.07), 1.0);
+        assert!((box_view_factor(0.05, 0.14, half, 0.0, 0.07) - 0.45).abs() < 1e-3, "a corner keeps the faces' value");
+        let edge = box_view_factor(0.06, 0.0, half, 0.0, 0.07);
+        let near = box_view_factor(0.1, 0.0, half, 0.0, 0.07);
+        let far = box_view_factor(0.3, 0.0, half, 0.0, 0.07);
+        assert!(edge > 0.35 && edge < 0.5 && near < edge && far < 0.03 && far > 0.0, "{edge} {near} {far}");
+        let lifted = box_view_factor(0.06, 0.0, half, 0.05, 0.12);
+        assert!(lifted < edge && lifted > 0.0, "{lifted}");
+        // Under a seat 0.35 m up, 0.36 x 0.25 m: about A / (pi c^2) straight under it.
+        let seat = box_view_factor(0.0, 0.0, [0.18, 0.125], 0.35, 0.65);
+        assert!(seat > 0.15 && seat < 0.3, "{seat}");
     }
 
     #[test]
