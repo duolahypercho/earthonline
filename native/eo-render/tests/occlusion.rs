@@ -155,8 +155,8 @@ fn frame(ctx: &GpuContext, r: &Renderer, cam: &Camera, samples: u32) -> Frame {
 
 fn check(samples: u32) {
     let ctx = ctx();
-    if !ctx.indirect_count {
-        panic!("the occlusion test needs MULTI_DRAW_INDIRECT_COUNT (occlusion is off without it)");
+    if !ctx.compact_lists() {
+        panic!("the occlusion test needs the compacted lists (occlusion is off without them)");
     }
     let s = scene();
     let ids = samples == 1;

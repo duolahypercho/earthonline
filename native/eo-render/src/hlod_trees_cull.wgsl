@@ -20,13 +20,18 @@ struct TcParams {
     cam: vec4<f32>,
     // x = blocks
     counts: vec4<u32>,
+    // the bounded list's guards (bounds.rs): the camera's frustum widened by
+    // WIDE_DEG a side; x the ring's reach, y 1 to count them, z the near sphere
+    wide: array<vec4<f32>, 6>,
+    guard: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> tc: TcParams;
 @group(0) @binding(1) var<storage, read> tc_blocks: array<TreeBlock>;
 @group(0) @binding(2) var<storage, read_write> tc_cmds: array<u32>;
-// [0] commands, [1] trees, [2] blocks in the frustum, [3] blocks occluded
-@group(0) @binding(3) var<storage, read_write> tc_count: array<atomic<u32>, 4>;
+// [0] commands, [1] trees, [2] blocks in the frustum, [3] blocks occluded,
+// [4] blocks past the near distance in the widened frustum, [5] past it within the ring (bounds.rs)
+@group(0) @binding(3) var<storage, read_write> tc_count: array<atomic<u32>, 8>;
 
 @compute @workgroup_size(64)
 fn tree_cull(@builtin(global_invocation_id) gid: vec3<u32>) {
@@ -42,6 +47,23 @@ fn tree_cull(@builtin(global_invocation_id) gid: vec3<u32>) {
     let fz = max(abs(tc.cam.z - b.min.z), abs(tc.cam.z - b.max.z));
     if (length(vec2<f32>(fx, fz)) < tc.cam.w) {
         return;
+    }
+    let gd = distance(clamp(tc.cam.xyz, b.min, b.max), tc.cam.xyz);
+    if (tc.guard.y == 1.0 && gd <= tc.guard.x) {
+        atomicAdd(&tc_count[5], 1u);
+        var wide = true;
+        if (gd > tc.guard.z) {
+            for (var p = 0u; p < 6u; p = p + 1u) {
+                let pl = tc.wide[p];
+                let v = select(b.min, b.max, pl.xyz >= vec3<f32>(0.0));
+                if (dot(pl.xyz, v) + pl.w < 0.0) {
+                    wide = false;
+                }
+            }
+        }
+        if (wide) {
+            atomicAdd(&tc_count[4], 1u);
+        }
     }
     for (var p = 0u; p < 6u; p = p + 1u) {
         let pl = tc.planes[p];

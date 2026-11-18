@@ -87,7 +87,9 @@ struct ProbeCull {
     cam: [f32; 4],
     object_count: u32,
     kit_box_m: f32,
-    pad: [u32; 2],
+    /// the bounded list's guard (bounds.rs) reaches this far from the capture point.
+    guard_reach: f32,
+    pad: u32,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -136,6 +138,9 @@ pub struct ProbeGpu {
     draws: wgpu::Buffer,
     counters: wgpu::Buffer,
     cull_pipeline: wgpu::ComputePipeline,
+    /// the bounded list's count pass (bounds.rs) and its faces' planes.
+    count_pipeline: wgpu::ComputePipeline,
+    faces_buf: wgpu::Buffer,
     cull_bg: wgpu::BindGroup,
     fill_pipeline: wgpu::ComputePipeline,
     mip_pipeline: wgpu::ComputePipeline,
@@ -198,8 +203,10 @@ impl ProbeGpu {
         let buf = |label: &str, size: u64, usage: wgpu::BufferUsages| d.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: size.max(16), usage, mapped_at_creation: false });
         let frame_buf = buf("probe-frame", 160, wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST);
         let cull_buf = buf("probe-cull", std::mem::size_of::<ProbeCull>() as u64, wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST);
-        let draws = buf("probe-draws", init.object_count.max(1) as u64 * 20, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT);
-        let counters = buf("probe-counters", 16, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC);
+        let draws = buf("probe-draws", init.object_count.max(1) as u64 * 20, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_DST);
+        let counters = buf("probe-counters", 48, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC);
+        // the six faces' planes for the count pass (bounds.rs).
+        let faces_buf = buf("probe-faces", 36 * 16, wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST);
         let lobe_buf = buf("probe-lobe", 160, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC);
         let lobe_read = buf("probe-lobe-read", 16, wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST);
 
@@ -214,7 +221,7 @@ impl ProbeGpu {
         let st = |ro: bool| wgpu::BufferBindingType::Storage { read_only: ro };
         let cull_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("probe-cull-bgl"),
-            entries: &[be(0, wgpu::BufferBindingType::Uniform), be(1, st(true)), be(2, st(true)), be(3, st(false)), be(4, st(false))],
+            entries: &[be(0, wgpu::BufferBindingType::Uniform), be(1, st(true)), be(2, st(true)), be(3, st(false)), be(4, st(false)), be(5, wgpu::BufferBindingType::Uniform)],
         });
         let cull_module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("probe-cull"), source: wgpu::ShaderSource::Wgsl(include_str!("probe_cull.wgsl").into()) });
         let cull_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("probe-cull-layout"), bind_group_layouts: &[Some(&cull_bgl)], immediate_size: 0 });
@@ -223,6 +230,14 @@ impl ProbeGpu {
             layout: Some(&cull_layout),
             module: &cull_module,
             entry_point: Some("probe_cull"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+        let count_pipeline = d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("probe_count"),
+            layout: Some(&cull_layout),
+            module: &cull_module,
+            entry_point: Some("probe_count"),
             compilation_options: Default::default(),
             cache: None,
         });
@@ -235,6 +250,7 @@ impl ProbeGpu {
                 wgpu::BindGroupEntry { binding: 2, resource: init.group_buf.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 3, resource: draws.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 4, resource: counters.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 5, resource: faces_buf.as_entire_binding() },
             ],
         });
 
@@ -342,6 +358,8 @@ impl ProbeGpu {
             draws,
             counters,
             cull_pipeline,
+            count_pipeline,
+            faces_buf,
             cull_bg,
             fill_pipeline,
             mip_pipeline,
@@ -454,7 +472,7 @@ impl ProbeGpu {
         s.this_frame = Some((face, pos));
         let vp = face_view_proj(pos, face, self.c.near, self.c.far);
         let planes = frustum_planes(vp).map(|p| p.to_array());
-        let cull = ProbeCull { planes, cam: [pos.x, pos.y, pos.z, self.c.far], object_count: self.object_count, kit_box_m: PROBE_KIT_BOX_M, pad: [0; 2] };
+        let cull = ProbeCull { planes, cam: [pos.x, pos.y, pos.z, self.c.far], object_count: self.object_count, kit_box_m: PROBE_KIT_BOX_M, guard_reach: self.c.far + crate::bounds::RING_MOVE_M, pad: 0 };
         queue.write_buffer(&self.cull_buf, 0, bytemuck::bytes_of(&cull));
         let mut fu = *frame_template;
         fu[..16].copy_from_slice(&vp.to_cols_array());
@@ -471,6 +489,40 @@ impl ProbeGpu {
     /// pass: a middle or far cascade refresh (up to 1.0-1.7 ms of GPU) or a
     /// large upload. A face measured up to 2.4 ms on its own, and the two
     /// stacking was the shape of the frames near the budget.
+    /// This frame's face and capture point (None: no face this frame).
+    pub fn job(&self) -> Option<(u32, Vec3)> {
+        self.state.lock().unwrap().this_frame
+    }
+
+    /// The face cull's counters: [0] commands, [1] triangles, [2] the bounded
+    /// list's guard, [4..10) the count pass's per-face counts.
+    pub fn counter_buffer(&self) -> &wgpu::Buffer {
+        &self.counters
+    }
+
+    /// Ready the count pass for a capture at `pos` (this frame's face is the
+    /// capture's, deferred: the face cull's uniform already holds `pos`).
+    pub fn write_count(&self, queue: &wgpu::Queue, pos: Vec3) {
+        let mut planes = [[0f32; 4]; 36];
+        for f in 0..6u32 {
+            let p = frustum_planes(face_view_proj(pos, f, self.c.near, self.c.far));
+            for k in 0..6 {
+                planes[f as usize * 6 + k] = p[k].to_array();
+            }
+        }
+        queue.write_buffer(&self.faces_buf, 0, bytemuck::cast_slice(&planes));
+    }
+
+    /// The count pass: what each of the capture's six faces will draw
+    /// (counters [4..10), read back before its faces are drawn with those bounds).
+    pub fn encode_count(&self, enc: &mut wgpu::CommandEncoder) {
+        enc.clear_buffer(&self.counters, 0, None);
+        let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("probe-count"), timestamp_writes: None });
+        pass.set_pipeline(&self.count_pipeline);
+        pass.set_bind_group(0, &self.cull_bg, &[]);
+        pass.dispatch_workgroups(self.object_count.div_ceil(64), 1, 1);
+    }
+
     pub fn defer_this_frame(&self) -> bool {
         let mut s = self.state.lock().unwrap();
         let had = s.this_frame.is_some();
@@ -494,6 +546,7 @@ impl ProbeGpu {
         draw_bg: &wgpu::BindGroup,
         look: &crate::look::LookGpu,
         ts: Option<(&wgpu::QuerySet, u32)>,
+        bound: Option<u32>,
     ) -> bool {
         let job = self.state.lock().unwrap().this_frame;
         let Some((face, _pos)) = job else {
@@ -506,6 +559,9 @@ impl ProbeGpu {
             return false;
         };
         enc.clear_buffer(&self.counters, 0, None);
+        if let Some(b) = bound {
+            crate::clear_list(enc, &self.draws, 0, b, crate::DRAW_ARGS_BYTES); // the bounded list (bounds.rs)
+        }
         {
             let tw = ts.map(|(q, b)| wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b), end_of_pass_write_index: None });
             let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("probe-cull"), timestamp_writes: tw });
@@ -538,7 +594,7 @@ impl ProbeGpu {
             look.bind_main(&mut pass);
             pass.set_vertex_buffer(0, vertex.slice(..));
             pass.set_index_buffer(index.slice(..), wgpu::IndexFormat::Uint32);
-            pass.multi_draw_indexed_indirect_count(&self.draws, 0, &self.counters, 0, self.object_count);
+            crate::draw_compacted(&mut pass, &self.draws, 0, &self.counters, 0, self.object_count, bound);
         }
         let mut s = self.state.lock().unwrap();
         s.stats.faces += 1;

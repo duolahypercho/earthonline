@@ -10,11 +10,14 @@
 //! `DrawIndexedIndirect` commands into an opaque list and a transparent list.
 //! The render pass draws each list with one `multi_draw_indexed_indirect_count`
 //! (two pipelines: opaque, then alpha-blended glass). The CPU never loops over
-//! objects per frame.
+//! objects per frame. Without the indirect count the same compacted lists are
+//! drawn with a bounded fixed count, the slots past the cull's count cleared
+//! to empty draws (bounds.rs).
 
 pub mod agents; // agents
 pub mod alloc;
 pub mod authored;
+pub mod bounds; // compacted lists drawn with a bounded fixed count (no indirect count)
 pub mod camera;
 pub mod clouds; // the cloud noise, blue noise and cloud-shadow map
 pub mod cc0; // the CC0 scanned sets
@@ -79,8 +82,9 @@ pub const Q_WATER: u32 = 20;
 /// parts drawn, model triangles, footprint stand-ins drawn, kit objects, kit
 /// triangles, street objects, street triangles, (occlusion) late opaque draws,
 /// objects in the frustum, triangles in the frustum, objects drawn early,
-/// objects found occluded, pad.
-pub const COUNTER_WORDS: usize = 16; // was 10
+/// objects found occluded, pad, then the bounded lists' guards (bounds.rs):
+/// opaque and transparent objects in the widened frustum, then within the ring.
+pub const COUNTER_WORDS: usize = 20; // was 16
 /// Terrain tiles further than this (camera to tile box) draw their coarse level.
 pub const TERRAIN_LOD_DISTANCE_M: f32 = 1200.0;
 
@@ -90,12 +94,17 @@ pub struct GpuOptions {
     pub indirect_validation: bool,
     /// Ignore MULTI_DRAW_INDIRECT_COUNT even if the adapter has it.
     pub force_no_indirect_count: bool,
+    /// Without MULTI_DRAW_INDIRECT_COUNT, keep the one-slot-per-object lists
+    /// (`--no-bounded-draws`) instead of the compacted lists drawn with a
+    /// bounded fixed count (bounds.rs): the far layer, occlusion, the probe,
+    /// the water pass and the distant trees then stay off, as before.
+    pub force_no_bounded_draws: bool,
     pub backends: wgpu::Backends,
 }
 
 impl Default for GpuOptions {
     fn default() -> Self {
-        Self { indirect_validation: true, force_no_indirect_count: false, backends: wgpu::Backends::PRIMARY }
+        Self { indirect_validation: true, force_no_indirect_count: false, force_no_bounded_draws: false, backends: wgpu::Backends::PRIMARY }
     }
 }
 
@@ -108,6 +117,9 @@ pub struct GpuContext {
     pub adapter_features: wgpu::Features,
     pub enabled_features: wgpu::Features,
     pub indirect_count: bool,
+    /// compacted lists drawn with a CPU-bounded fixed count (no indirect
+    /// count on the adapter, `--no-bounded-draws` not given): bounds.rs.
+    pub bounded_draws: bool,
     pub timestamps: bool,
     pub first_instance: bool,
     pub options: GpuOptions,
@@ -147,6 +159,9 @@ impl GpuContext {
         if indirect_count {
             wanted |= wgpu::Features::MULTI_DRAW_INDIRECT_COUNT;
         }
+        // Adapter capability decides: the count path where the adapter has
+        // it, else the bounded fixed-count path (unless switched off).
+        let bounded_draws = !indirect_count && !options.force_no_bounded_draws;
         let timestamps = adapter_features.contains(wgpu::Features::TIMESTAMP_QUERY);
         if timestamps {
             wanted |= wgpu::Features::TIMESTAMP_QUERY;
@@ -176,6 +191,9 @@ impl GpuContext {
             ..Default::default()
         }))
         .context("request_device")?;
+        // a lost device fails later submissions quietly (wgpu reports no error
+        // for it); say why it was lost, once, where it happens.
+        device.set_device_lost_callback(|reason, message| eprintln!("gpu: device lost ({reason:?}): {message}"));
         Ok(Self {
             instance,
             adapter,
@@ -185,11 +203,30 @@ impl GpuContext {
             adapter_features,
             enabled_features: wanted,
             indirect_count,
+            bounded_draws,
             timestamps,
             first_instance,
             options,
             bc, // cc0
         })
+    }
+
+    /// The GPU cull compacts its lists (drawn with the indirect count, or
+    /// with a bounded fixed count): the far layer, occlusion, the probe and
+    /// the water pass need this.
+    pub fn compact_lists(&self) -> bool {
+        self.indirect_count || self.bounded_draws
+    }
+
+    /// How the lists are drawn, for reports.
+    pub fn draw_lists(&self) -> &'static str {
+        if self.indirect_count {
+            "indirect-count"
+        } else if self.bounded_draws {
+            "bounded"
+        } else {
+            "slots"
+        }
     }
 }
 
@@ -215,6 +252,102 @@ struct CullParams {
     view_proj: [[f32; 4]; 4],
     /// x two-phase occlusion on, y late opaque list base (slots).
     occ: [u32; 4],
+    /// the bounded lists' guards: the widened frustum's planes; x the ring's
+    /// reach, y the near sphere, z 1 to count them (bounds.rs).
+    wide: [[f32; 4]; 6],
+    guard: [f32; 4],
+}
+
+/// The sun-shadow lists' key: what the cascades were fitted for.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ShadowKey {
+    pub eye: glam::Vec3,
+    pub to_sun: glam::Vec3,
+    pub lens: [f32; 4],
+    /// the camera's view (the wide guard holds for the turns its key covers).
+    pub view: bounds::ViewKey,
+    /// how far the eye may move before the ring guard is stale (look::LookGpu::set_guard_move).
+    pub margin: f32,
+}
+
+impl ShadowKey {
+    fn cover(&self, now: &ShadowKey) -> bounds::Cover {
+        let same = self.lens == now.lens && self.to_sun.dot(now.to_sun) > 0.999_999;
+        let near = self.eye.distance(now.eye) <= self.margin;
+        if !same || !near {
+            bounds::Cover::None
+        } else if self.view.cover(&now.view) == bounds::Cover::Wide {
+            bounds::Cover::Wide
+        } else {
+            bounds::Cover::Ring
+        }
+    }
+}
+
+/// What one frame drew with the bounded lists (and what its read-back is checked against).
+#[derive(Clone, Copy, Debug)]
+pub struct FrameBounds {
+    pub frame: u64,
+    pub view: bounds::ViewKey,
+    /// commands drawn: the opaque list (early with occlusion), the late opaque list, the glass.
+    pub city: [u32; 3],
+    pub occlusion: bool,
+    /// the cascades refreshed (key, mask) and their bounds.
+    pub shadow: Option<(ShadowKey, u32, [u32; 3])>,
+    /// the probe face's capture point, face and bound.
+    pub probe: Option<(glam::Vec3, u32, u32)>,
+    /// the probe's count pass for a capture at this point (its faces wait for the counts).
+    pub probe_count: Option<glam::Vec3>,
+    pub trees: Option<u32>,
+    pub water: Option<u32>,
+    pub hlod: Option<u32>,
+}
+
+/// Every bounded list's bound and the read-back ring they learn from.
+struct DrawBounds {
+    frame: u64,
+    opaque: bounds::ListBound<bounds::ViewKey>,
+    blend: bounds::ListBound<bounds::ViewKey>,
+    shadow: [bounds::ListBound<ShadowKey>; 3],
+    probe: bounds::ListBound<glam::Vec3>,
+    /// the probe's per-face counts for a capture point, and the count pass asked for (point, frame).
+    probe_faces: Option<(glam::Vec3, [u32; 6])>,
+    probe_asked: Option<(glam::Vec3, u64)>,
+    /// the eye of the last update and the speed the margins follow (m a frame).
+    motion: (Option<glam::Vec3>, f32),
+    trees: bounds::ListBound<bounds::ViewKey>,
+    water: bounds::ListBound<bounds::ViewKey>,
+    hlod: bounds::ListBound<bounds::ViewKey>,
+    now: Option<FrameBounds>,
+    feedback: bounds::Feedback<FrameBounds>,
+}
+
+/// Bytes of the read-back ring's regions (past its stamp): the city's counters,
+/// the shadow counters, the probe's, the distant trees', the water's.
+const FB_CITY: u64 = 0;
+const FB_SHADOW: u64 = 128;
+const FB_PROBE: u64 = 192;
+const FB_TREES: u64 = 256;
+const FB_WATER: u64 = 288;
+const FB_HLOD: u64 = 320;
+const FB_BYTES: u64 = 352;
+
+/// One compacted list in a render pass: with the indirect count, or with `bound` fixed commands.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn draw_compacted(pass: &mut wgpu::RenderPass<'_>, buf: &wgpu::Buffer, offset: u64, count_buf: &wgpu::Buffer, count_offset: u64, max: u32, bound: Option<u32>) {
+    match bound {
+        None => pass.multi_draw_indexed_indirect_count(buf, offset, count_buf, count_offset, max),
+        Some(b) if b.min(max) > 0 => pass.multi_draw_indexed_indirect(buf, offset, b.min(max)),
+        Some(_) => {}
+    }
+}
+
+/// Empty the first `bound` commands of a list (of `stride` bytes) before its cull appends to them.
+pub(crate) fn clear_list(enc: &mut wgpu::CommandEncoder, buf: &wgpu::Buffer, offset: u64, bound: u32, stride: u64) {
+    let bytes = (bound as u64 * stride).min(buf.size().saturating_sub(offset));
+    if bytes > 0 {
+        enc.clear_buffer(buf, offset, Some(bytes));
+    }
 }
 
 #[repr(C)]
@@ -326,6 +459,9 @@ pub struct Renderer {
     pub debug_ids: bool,
     /// First object that may be transparent (the fallback sizes its transparent list from here).
     pub blend_first: u32,
+    /// the compacted lists are drawn with a bounded fixed count (no indirect count; bounds.rs).
+    pub bounded: bool,
+    draw_bounds: std::sync::Mutex<DrawBounds>,
     vertex_buf: wgpu::Buffer,
     index_buf: wgpu::Buffer,
     object_buf: wgpu::Buffer,
@@ -658,9 +794,9 @@ impl Renderer {
         let hlod_flags_buf = buffer("hlod-flags", hlod::MAX_CELLS as u64 * 4, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST);
         // Opaque list at [0, n), transparent list at [n, 2n); the
         // late opaque list at [2n, 3n) (compacted lists only).
-        let lists = if ctx.indirect_count { 3 } else { 2 };
+        let lists = if ctx.compact_lists() { 3 } else { 2 };
         let draw_bytes = (object_count.max(1) as u64) * lists * DRAW_ARGS_BYTES;
-        let draw_buf = buffer("indirect-draws", draw_bytes, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_SRC);
+        let draw_buf = buffer("indirect-draws", draw_bytes, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST); // + COPY_DST: the bounded lists are cleared
         let counter_buf = buffer(
             "draw-counters",
             (COUNTER_WORDS * 4) as u64,
@@ -848,7 +984,8 @@ impl Renderer {
                 object_buf: &object_buf,
                 group_buf: &group_buf,
                 object_count,
-                compact: ctx.indirect_count,
+                compact: ctx.compact_lists(),
+                bounded: ctx.bounded_draws,
                 output_format: init.color_format,
                 sample_count: init.sample_count,
                 debug_ids: init.debug_ids,
@@ -952,11 +1089,27 @@ impl Renderer {
             object_count,
             base_object_count: init.objects.len() as u32,
             group_count: init.groups.len() as u32,
-            compact: ctx.indirect_count,
+            compact: ctx.compact_lists(),
             color_format: init.color_format,
             sample_count: init.sample_count,
             debug_ids: init.debug_ids,
             blend_first: if n > 1 { 0 } else { init.blend_first_object.min(object_count) },
+            bounded: ctx.bounded_draws,
+            draw_bounds: std::sync::Mutex::new(DrawBounds {
+                frame: 0,
+                opaque: bounds::ListBound::new(object_count),
+                blend: bounds::ListBound::new(object_count),
+                shadow: [0; 3].map(|_| bounds::ListBound::new(object_count)),
+                probe: bounds::ListBound::new(object_count),
+                probe_faces: None,
+                probe_asked: None,
+                motion: (None, 0.0),
+                trees: bounds::ListBound::new(hlod_trees::MAX_BLOCKS),
+                water: bounds::ListBound::new(water::PATCH_COUNT),
+                hlod: bounds::ListBound::new(hlod::MAX_CELLS),
+                now: None,
+                feedback: bounds::Feedback::new(d, FB_BYTES),
+            }),
             vertex_buf,
             index_buf,
             object_buf,
@@ -972,7 +1125,7 @@ impl Renderer {
             cull_bg,
             late_pipeline,
             occlusion: occlusion_gpu,
-            occlusion_enabled: std::sync::atomic::AtomicBool::new(ctx.indirect_count),
+            occlusion_enabled: std::sync::atomic::AtomicBool::new(ctx.compact_lists()),
             occlusion_frame: std::sync::atomic::AtomicBool::new(false),
             opaque_pipeline,
             blend_pipeline,
@@ -1480,6 +1633,16 @@ impl Renderer {
 
     fn update_with(&self, queue: &wgpu::Queue, cam: &Camera, occlusion: bool) {
         self.observe_view(cam, None); // the streamers' view (unjittered)
+        // the bounded lists' ring margins follow the camera's speed (bounds.rs).
+        let speed = {
+            let mut b = self.draw_bounds.lock().unwrap();
+            let step = b.motion.0.map(|e| e.distance(cam.eye)).unwrap_or(0.0);
+            let s = if step.is_finite() && step < bounds::JUMP_M { step.max(b.motion.1 * 0.9) } else { 0.0 };
+            b.motion = (Some(cam.eye), s);
+            s
+        };
+        let ring_margin = bounds::move_margin(speed, bounds::RING_MOVE_M);
+        self.look.set_guard_move(bounds::move_margin(speed, look::SHADOW_GUARD_MOVE_M));
         // the coming frame's sub-pixel jitter (TAA); every view of the frame goes through it.
         self.look.sky.begin_frame(self.look.out_size());
         let jittered = Camera { jitter: self.look.sky.jitter(), ..*cam };
@@ -1505,16 +1668,24 @@ impl Renderer {
             street: self.street_radii,
             view_proj: vp.to_cols_array_2d(),                           // occlusion
             occ: [occlusion as u32, 2 * self.object_count, self.water_active() as u32, 0], // occlusion; z = the flat sea quad stands down
+            wide: frustum_planes(bounds::ViewKey::widened(cam).view_proj()).map(|p| p.to_array()),
+            guard: [cam.far + ring_margin, bounds::NEAR_M, self.bounded as u32 as f32, 0.0],
         };
         queue.write_buffer(&self.cull_params_buf, 0, bytemuck::bytes_of(&params));
         if let Some(h) = self.hlod.get() {
             h.update(queue, vp, planes, cam.eye); // the far layer's cull, the same camera
+            if self.bounded {
+                h.set_guard(queue, frustum_planes(bounds::ViewKey::widened(cam).view_proj()).map(|p| p.to_array()), cam.far + ring_margin);
+            }
         }
         if let Some(l) = self.hlod_lights.get() {
             l.update(queue, cam.fov_y_deg, self.look.out_size().1, true); // stage 3
         }
         if let Some(t) = self.hlod_trees.get() {
             t.update(queue, true, vp, planes, cam.eye); // stage 4, its blocks culled with the same camera
+            if self.bounded {
+                t.set_guard(queue, frustum_planes(bounds::ViewKey::widened(cam).view_proj()).map(|p| p.to_array()), cam.far + ring_margin);
+            }
         }
         // A fixed afternoon sun from the south-west, for readability only.
         let sun = glam::Vec3::new(-0.45, 0.75, 0.48).normalize();
@@ -1551,6 +1722,9 @@ impl Renderer {
         if fx & facade::RUN_PROBE_DEFER != 0 && (self.look.encoded_shadow_mask() & 0b110 != 0 || uploaded >= PROBE_DEFER_UPLOAD_BYTES) {
             self.probe.defer_this_frame();
         }
+        if self.bounded {
+            self.plan_bounds(queue, cam, occlusion, ring_margin);
+        }
         if let Some(a) = self.agents.get() {
             a.set_camera_late(occlusion && self.compact && fx & facade::RUN_AGENT_HZB != 0); // the camera view against this frame's pyramid
             a.update(queue, cam, &self.look, 0.0); // agents
@@ -1571,14 +1745,165 @@ impl Renderer {
         }
     }
 
+    /// the bounded lists' read-back and this frame's bounds (once a frame, after
+    /// the look, the probe and the shadows chose what the coming encode draws).
+    fn plan_bounds(&self, queue: &wgpu::Queue, cam: &Camera, occlusion: bool, ring_margin: f32) {
+        use bounds::Guard;
+        let mut guard = self.draw_bounds.lock().unwrap();
+        let b = &mut *guard;
+        b.frame += 1;
+        let frame = b.frame;
+        // what the frames now read back counted.
+        let (opaque, blend, shadow, probe, probe_faces, trees, water, hlod) = (&mut b.opaque, &mut b.blend, &mut b.shadow, &mut b.probe, &mut b.probe_faces, &mut b.trees, &mut b.water, &mut b.hlod);
+        b.feedback.collect(
+            |m| m.frame,
+            |m, w| {
+                let word = |at: u64, k: usize| w.get((at / 4) as usize + k).copied().unwrap_or(0);
+                let late = if m.occlusion { word(FB_CITY, 10) } else { 0 };
+                opaque.sample(m.frame, m.view, Guard { count: word(FB_CITY, 0).max(late), wide: word(FB_CITY, 16), ring: word(FB_CITY, 18) }, m.city[0].min(if m.occlusion { m.city[1] } else { u32::MAX }));
+                blend.sample(m.frame, m.view, Guard { count: word(FB_CITY, 1), wide: word(FB_CITY, 17), ring: word(FB_CITY, 19) }, m.city[2]);
+                if let Some((key, mask, drawn)) = m.shadow {
+                    for c in 0..3 {
+                        if mask & (1 << c) != 0 {
+                            shadow[c].sample(m.frame, key, Guard { count: word(FB_SHADOW, c), wide: word(FB_SHADOW, 11 + c), ring: word(FB_SHADOW, 8 + c) }, drawn[c]);
+                        }
+                    }
+                }
+                if let Some((pos, _, drawn)) = m.probe {
+                    probe.sample(m.frame, pos, Guard { count: word(FB_PROBE, 0), wide: 0, ring: word(FB_PROBE, 2) }, drawn);
+                    if word(FB_PROBE, 0) > drawn {
+                        *probe_faces = None; // count again
+                    }
+                }
+                if let Some(pos) = m.probe_count {
+                    *probe_faces = Some((pos, [0, 1, 2, 3, 4, 5].map(|f| word(FB_PROBE, 4 + f))));
+                }
+                if let Some(drawn) = m.trees {
+                    trees.sample(m.frame, m.view, Guard { count: word(FB_TREES, 0), wide: word(FB_TREES, 4), ring: word(FB_TREES, 5) }, drawn);
+                }
+                if let Some(drawn) = m.water {
+                    water.sample(m.frame, m.view, Guard { count: word(FB_WATER, 0), wide: word(FB_WATER, 6), ring: word(FB_WATER, 5) }, drawn);
+                }
+                if let Some(drawn) = m.hlod {
+                    hlod.sample(m.frame, m.view, Guard { count: word(FB_HLOD, 0), wide: word(FB_HLOD, 4), ring: word(FB_HLOD, 5) }, drawn);
+                }
+            },
+        );
+        // this frame's bounds: a guard the newest sample's view covers, else the capacity.
+        let view = bounds::ViewKey::of(cam, ring_margin);
+        let o = b.opaque.bound(frame, 8, |k| k.cover(&view));
+        let g = b.blend.bound(frame, 8, |k| k.cover(&view));
+        let (mask, eye, to_sun) = self.look.shadow_refresh();
+        let shadow = (mask != 0).then(|| {
+            let key = ShadowKey { eye, to_sun, lens: [cam.fov_y_deg, cam.aspect, cam.near, cam.far], view, margin: self.look.guard_move() };
+            let mut drawn = [0u32; 3];
+            for (c, d) in drawn.iter_mut().enumerate() {
+                if mask & (1 << c) != 0 {
+                    *d = b.shadow[c].bound(frame, 16, |k| k.cover(&key));
+                }
+            }
+            (key, mask, drawn)
+        });
+        // the probe's faces wait for their capture's count pass (one frame of
+        // compute, read back a few frames later), then draw with those counts.
+        let mut probe_count = None;
+        let probe = match self.probe.job() {
+            Some((face, pos)) => match b.probe_faces {
+                Some((p, counts)) if p == pos => {
+                    let n = if bounds::at_capacity_forced() { self.object_count } else { bounds::pad(counts[face as usize % 6], 8).min(self.object_count) };
+                    b.probe.stats.frames += 1;
+                    b.probe.stats.drawn += n as u64;
+                    b.probe.stats.max_bound = b.probe.stats.max_bound.max(n);
+                    Some((pos, face, n))
+                }
+                _ => {
+                    self.probe.defer_this_frame();
+                    if b.probe_asked.is_none_or(|(p, f)| p != pos || frame.saturating_sub(f) > 30) {
+                        b.probe_asked = Some((pos, frame));
+                        self.probe.write_count(queue, pos);
+                        probe_count = Some(pos);
+                    }
+                    None
+                }
+            },
+            None => None,
+        };
+        let trees = self.hlod_trees.get().map(|t| t.block_count()).filter(|&n| n > 0).map(|n| {
+            b.trees.capacity = n;
+            b.trees.bound(frame, 8, |k| k.cover(&view))
+        });
+        let water = self.water_active().then(|| b.water.bound(frame, 8, |k| k.cover(&view)));
+        // the far layer: never more than its resident entries.
+        let hlod = self.hlod.get().map(|h| {
+            b.hlod.capacity = h.resident_bound();
+            b.hlod.bound(frame, 8, |k| k.cover(&view))
+        });
+        b.now = Some(FrameBounds { frame, view, city: [o, o, g], occlusion, shadow, probe, probe_count, trees, water, hlod });
+        b.feedback.stamp(queue, frame);
+    }
+
+    /// This frame's bounds (None: the lists are drawn with the indirect count, or one slot per object).
+    pub fn frame_bounds(&self) -> Option<FrameBounds> {
+        if !self.bounded {
+            return None;
+        }
+        self.draw_bounds.lock().unwrap().now
+    }
+
+    /// The bounded lists' running numbers by list (None without them): bench reports.
+    pub fn bound_stats(&self) -> Option<Vec<(&'static str, bounds::BoundStats)>> {
+        if !self.bounded {
+            return None;
+        }
+        let b = self.draw_bounds.lock().unwrap();
+        Some(vec![
+            ("city_opaque", b.opaque.stats),
+            ("city_glass", b.blend.stats),
+            ("shadow_near", b.shadow[0].stats),
+            ("shadow_middle", b.shadow[1].stats),
+            ("shadow_far", b.shadow[2].stats),
+            ("probe", b.probe.stats),
+            ("far_trees", b.trees.stats),
+            ("water", b.water.stats),
+            ("far_layer", b.hlod.stats),
+        ])
+    }
+
+    /// Forget the bounded lists' samples (the next frames draw at capacity until new ones arrive).
+    pub fn reset_bounds(&self) {
+        let mut b = self.draw_bounds.lock().unwrap();
+        b.opaque.reset();
+        b.blend.reset();
+        for s in &mut b.shadow {
+            s.reset();
+        }
+        b.probe.reset();
+        b.trees.reset();
+        b.water.reset();
+    }
+
     fn encode_cull(&self, enc: &mut wgpu::CommandEncoder, ts: Option<(&wgpu::QuerySet, u32)>) {
         enc.clear_buffer(&self.counter_buf, 0, None);
+        let fb = self.frame_bounds();
+        if let Some(m) = &fb {
+            // the bounded lists: their first `bound` commands empty before the cull appends.
+            let n = self.object_count as u64 * DRAW_ARGS_BYTES;
+            clear_list(enc, &self.draw_buf, 0, m.city[0], DRAW_ARGS_BYTES);
+            clear_list(enc, &self.draw_buf, n, m.city[2], DRAW_ARGS_BYTES);
+            if m.occlusion {
+                clear_list(enc, &self.draw_buf, 2 * n, m.city[1], DRAW_ARGS_BYTES);
+            }
+            if let (Some(w), Some(bw)) = (self.water.get(), m.water) {
+                w.clear_list(enc, bw);
+            }
+        }
+        // (bounded: a list not planned this frame draws nothing, never the count.)
         let hlod = self.hlod.get(); // hlod
         if let Some(h) = hlod {
-            h.clear(enc);
+            h.clear(enc, fb.map(|m| m.hlod.unwrap_or(0)));
         }
         if let Some(t) = self.hlod_trees.get() {
-            t.clear(enc); // stage 4
+            t.clear(enc, fb.map(|m| m.trees.unwrap_or(0))); // stage 4
         }
         let tw = ts.map(|(q, base)| wgpu::ComputePassTimestampWrites {
             query_set: q,
@@ -1632,9 +1957,10 @@ impl Renderer {
         ts: Option<(&wgpu::QuerySet, u32)>,
     ) {
         self.encode_cull(enc, ts);
+        let fb = self.frame_bounds();
         // sun shadow cull + depth passes; the city renders into the HDR
         // target (resolving MSAA into it) and post writes the output.
-        self.look.encode_shadows(enc, &self.vertex_buf, &self.index_buf, ts);
+        self.look.encode_shadows(enc, &self.vertex_buf, &self.index_buf, ts, fb.map(|m| m.shadow.map(|s| s.2).unwrap_or([0; 3])));
         if let Some(a) = self.agents.get() {
             a.encode(enc, &self.look); // cull + LOD compute, casters into the refreshed cascades
         }
@@ -1646,7 +1972,10 @@ impl Renderer {
             let pbg = self.probe_draw_bg.lock().unwrap()[self.probe.front().0].clone();
             // a finished capture flips the front cube; the city pass below
             // takes that cube's bind group (made in advance), nothing is rebuilt.
-            let _flipped = self.probe.encode(enc, &self.vertex_buf, &self.index_buf, &pbg, &self.look, ts.map(|(q, b)| (q, b + Q_PROBE)));
+            if fb.is_some_and(|m| m.probe_count.is_some()) {
+                self.probe.encode_count(enc); // the capture's per-face counts (bounds.rs)
+            }
+            let _flipped = self.probe.encode(enc, &self.vertex_buf, &self.index_buf, &pbg, &self.look, ts.map(|(q, b)| (q, b + Q_PROBE)), fb.map(|m| m.probe.map(|p| p.2).unwrap_or(0)));
         }
         // the frame's lights (lamps, headlamps) gathered and clustered before the city reads them.
         self.look.encode_sky_lights(enc, self.agents.get(), self.props.get(), ts);
@@ -1729,9 +2058,9 @@ impl Renderer {
                 if std::ptr::eq(pipeline, &self.blend_pipeline) {
                     if let Some(h) = self.hlod.get() {
                         // the far layer after the opaque city (the late pass with occlusion), before the sky.
-                        h.draw(&mut pass);
+                        h.draw(&mut pass, fb.map(|m| m.hlod.unwrap_or(0)));
                         if let Some(t) = self.hlod_trees.get() {
-                            t.draw(&mut pass); // stage 4, the distant trees
+                            t.draw(&mut pass, fb.map(|m| m.trees.unwrap_or(0))); // stage 4, the distant trees
                         }
                         pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
                         pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint32);
@@ -1768,7 +2097,9 @@ impl Renderer {
                 }
                 pass.set_pipeline(pipeline);
                 if self.compact {
-                    pass.multi_draw_indexed_indirect_count(&self.draw_buf, offset, &self.counter_buf, counter, self.object_count);
+                    // the bounded lists: early / only opaque, glass, late opaque.
+                    let bound = fb.map(|m| m.city[if offset == 0 { 0 } else if offset == blend_offset { 2 } else { 1 }]);
+                    draw_compacted(&mut pass, &self.draw_buf, offset, &self.counter_buf, counter, self.object_count, bound);
                 } else {
                     let k = (offset != 0) as usize;
                     if slots[k] > 0 {
@@ -1839,13 +2170,13 @@ impl Renderer {
             w.encode_compute(enc, occlusion, ts.map(|(q, b)| (q, b + Q_WATER_FFT)));
             let (front, _) = self.probe.front();
             // The glass in the same pass, after the water (it tests the read-only depth, never writes it).
-            w.encode_draw(enc, &self.look, &hdr, depth, [&self.probe.cube_views[0], &self.probe.cube_views[1]], front, /* hitch2: both cubes */ ts.map(|(q, b)| (q, b + Q_WATER)), |pass| {
+            w.encode_draw(enc, &self.look, &hdr, depth, [&self.probe.cube_views[0], &self.probe.cube_views[1]], front, /* hitch2: both cubes */ ts.map(|(q, b)| (q, b + Q_WATER)), fb.map(|m| m.water.unwrap_or(0)), |pass| {
                 pass.set_bind_group(0, &draw_bg, &[]);
                 self.look.bind_main(pass);
                 pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
                 pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint32);
                 pass.set_pipeline(&self.blend_pipeline);
-                pass.multi_draw_indexed_indirect_count(&self.draw_buf, self.object_count as u64 * DRAW_ARGS_BYTES, &self.counter_buf, 4, self.object_count);
+                draw_compacted(pass, &self.draw_buf, self.object_count as u64 * DRAW_ARGS_BYTES, &self.counter_buf, 4, self.object_count, fb.map(|m| m.city[2]));
                 if let Some(a) = self.agents.get() {
                     a.draw_glass(pass, &self.look);
                 }
@@ -1880,6 +2211,24 @@ impl Renderer {
         self.look.encode_ao(enc, depth, &hdr, ts); // surfaces
         self.look.encode_sky_after(enc, depth, &hdr, self.agents.get(), ts); // rain, luminaires, velocity, volume, resolve, bloom
         self.look.encode_post(enc, output, ts); // look
+        if let Some(m) = fb {
+            // the bounded lists' counters, read back a frame or two later (never waited for).
+            let mut sources: Vec<(&wgpu::Buffer, u64, u64)> = vec![
+                (&self.counter_buf, (COUNTER_WORDS * 4) as u64, FB_CITY),
+                (self.look.shadow_counter_buffer(), (look::SHADOW_COUNTER_WORDS * 4) as u64, FB_SHADOW),
+                (self.probe.counter_buffer(), 48, FB_PROBE),
+            ];
+            if let Some(t) = self.hlod_trees.get() {
+                sources.push((t.counter_buffer(), 32, FB_TREES));
+            }
+            if let Some(w) = self.water.get().filter(|_| m.water.is_some()) {
+                sources.push((w.counter_buffer(), 32, FB_WATER));
+            }
+            if let Some(h) = self.hlod.get() {
+                sources.push((h.counter_buffer(), 32, FB_HLOD));
+            }
+            self.draw_bounds.lock().unwrap().feedback.record(enc, m.frame, &sources, m);
+        }
     }
 
     /// The counter buffer: see `COUNTER_WORDS`.

@@ -27,13 +27,18 @@ struct HlCull {
     counts: vec4<u32>,
     // the camera; w the cell -> district band's start (HLOD_FAR_A)
     cam: vec4<f32>,
+    // the bounded list's guards (bounds.rs): the widened frustum; x the ring's
+    // reach, y 1 to count them, z the near sphere
+    wide: array<vec4<f32>, 6>,
+    guard: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> hc: HlCull;
 @group(0) @binding(1) var<storage, read> hl_cells: array<HlCell>;
 @group(0) @binding(2) var<storage, read_write> hl_cmds: array<u32>;
-// [0] commands, [1] triangles, [2] entries in the frustum, [3] entries occluded
-@group(0) @binding(3) var<storage, read_write> hl_count: array<atomic<u32>, 4>;
+// [0] commands, [1] triangles, [2] entries in the frustum, [3] entries occluded,
+// [4] entries in the widened frustum or the near sphere, [5] within the ring (bounds.rs)
+@group(0) @binding(3) var<storage, read_write> hl_count: array<atomic<u32>, 8>;
 // per cell its residency (hlod.rs FLAG_*: 1 the cell, 2 its district)
 @group(0) @binding(4) var<storage, read> hl_flags: array<u32>;
 
@@ -57,6 +62,23 @@ fn hlod_cull(@builtin(global_invocation_id) gid: vec3<u32>) {
         let far = max(abs(hc.cam.xyz - c.min), abs(hc.cam.xyz - c.max)) + vec3<f32>(HL_CHUNK_MARGIN_M);
         if (length(far) < hc.cam.w) {
             return;
+        }
+    }
+    let gd = distance(clamp(hc.cam.xyz, c.min, c.max), hc.cam.xyz);
+    if (hc.guard.y == 1.0 && gd <= hc.guard.x) {
+        atomicAdd(&hl_count[5], 1u);
+        var wide = true;
+        if (gd > hc.guard.z) {
+            for (var p = 0u; p < 6u; p = p + 1u) {
+                let pl = hc.wide[p];
+                let v = select(c.min, c.max, pl.xyz >= vec3<f32>(0.0));
+                if (dot(pl.xyz, v) + pl.w < 0.0) {
+                    wide = false;
+                }
+            }
+        }
+        if (wide) {
+            atomicAdd(&hl_count[4], 1u);
         }
     }
     for (var p = 0u; p < 6u; p = p + 1u) {

@@ -178,6 +178,9 @@ struct CullParams {
     cam: [f32; 4],
     /// x the blocks.
     counts: [u32; 4],
+    /// the bounded list's guards (bounds.rs): the widened frustum, and x the ring's reach, y 1 to count them.
+    wide: [[f32; 4]; 6],
+    guard: [f32; 4],
 }
 
 pub const WGSL: &str = include_str!("hlod_trees.wgsl");
@@ -231,8 +234,9 @@ impl FarTrees {
         let block_bytes = MAX_BLOCKS as u64 * std::mem::size_of::<TreeBlock>() as u64;
         let block_buf = buffer("hlod-far-tree-blocks", block_bytes, U::STORAGE | U::COPY_DST);
         let cull_params = buffer("hlod-far-tree-cull-params", std::mem::size_of::<CullParams>() as u64, U::UNIFORM | U::COPY_DST);
-        let cmd_buf = buffer("hlod-far-tree-draws", MAX_BLOCKS as u64 * 16, U::STORAGE | U::INDIRECT);
-        let count_buf = buffer("hlod-far-tree-counts", 16, U::STORAGE | U::INDIRECT | U::COPY_DST);
+        let cmd_buf = buffer("hlod-far-tree-draws", MAX_BLOCKS as u64 * 16, U::STORAGE | U::INDIRECT | U::COPY_DST);
+        // [0] commands, [1] trees, [2] blocks in the frustum, [3] occluded, [4] [5] the bounded list's guards.
+        let count_buf = buffer("hlod-far-tree-counts", 32, U::STORAGE | U::INDIRECT | U::COPY_DST | U::COPY_SRC);
         let vf = wgpu::ShaderStages::VERTEX_FRAGMENT;
         let bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("hlod-far-trees-bgl"),
@@ -306,7 +310,7 @@ impl FarTrees {
             multiview_mask: None,
             cache: None,
         });
-        let bytes = size + block_bytes + MAX_BLOCKS as u64 * 16 + 16 + 16 + std::mem::size_of::<CullParams>() as u64;
+        let bytes = size + block_bytes + MAX_BLOCKS as u64 * 16 + 16 + 32 + std::mem::size_of::<CullParams>() as u64;
         Self {
             pipeline,
             bg,
@@ -378,12 +382,35 @@ impl FarTrees {
     pub fn update(&self, queue: &wgpu::Queue, on: bool, view_proj: glam::Mat4, planes: [[f32; 4]; 6], eye: glam::Vec3) {
         let p = Params { range: [NEAR_M, FULL_M, if on { 1.0 } else { 0.0 }, 0.0] };
         queue.write_buffer(&self.params, 0, bytemuck::bytes_of(&p));
-        let c = CullParams { planes, view_proj: view_proj.to_cols_array_2d(), cam: [eye.x, eye.y, eye.z, NEAR_M], counts: [self.block_count(), 0, 0, 0] };
+        let c = CullParams { planes, view_proj: view_proj.to_cols_array_2d(), cam: [eye.x, eye.y, eye.z, NEAR_M], counts: [self.block_count(), 0, 0, 0], wide: [[0.0; 4]; 6], guard: [0.0; 4] };
         queue.write_buffer(&self.cull_params, 0, bytemuck::bytes_of(&c));
     }
 
-    pub fn clear(&self, enc: &mut wgpu::CommandEncoder) {
+    /// The bounded list's guards for this frame (after `update`): the widened
+    /// frustum's planes and the ring's reach (bounds.rs).
+    pub fn set_guard(&self, queue: &wgpu::Queue, wide: [[f32; 4]; 6], reach: f32) {
+        let at = std::mem::offset_of!(CullParams, wide) as u64;
+        let mut words = [0f32; 28];
+        for (k, p) in wide.iter().enumerate() {
+            words[k * 4..k * 4 + 4].copy_from_slice(p);
+        }
+        words[24] = reach;
+        words[25] = 1.0;
+        words[26] = crate::bounds::NEAR_M;
+        queue.write_buffer(&self.cull_params, at, bytemuck::cast_slice(&words));
+    }
+
+    /// The cull's counters (see `count_buf`).
+    pub fn counter_buffer(&self) -> &wgpu::Buffer {
+        &self.count_buf
+    }
+
+    /// `bound`: the bounded list's commands, emptied before the cull appends (bounds.rs).
+    pub fn clear(&self, enc: &mut wgpu::CommandEncoder, bound: Option<u32>) {
         enc.clear_buffer(&self.count_buf, 0, None);
+        if let Some(b) = bound {
+            crate::clear_list(enc, &self.cmd_buf, 0, b, 16);
+        }
     }
 
     /// Frustum, near-distance and (after the pyramid) occlusion test of every block.
@@ -406,15 +433,20 @@ impl FarTrees {
         pass.dispatch_workgroups(n.div_ceil(64), 1, 1);
     }
 
-    /// In the city pass with the opaque city (groups 0 and 1 bound): the blocks the cull kept.
-    pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
+    /// In the city pass with the opaque city (groups 0 and 1 bound): the blocks the cull kept
+    /// (`bound`: the bounded list's commands; None: the indirect count).
+    pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>, bound: Option<u32>) {
         let n = self.block_count();
         if n == 0 {
             return;
         }
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(2, &self.bg, &[]);
-        pass.multi_draw_indirect_count(&self.cmd_buf, 0, &self.count_buf, 0, n);
+        match bound {
+            None => pass.multi_draw_indirect_count(&self.cmd_buf, 0, &self.count_buf, 0, n),
+            Some(b) if b.min(n) > 0 => pass.multi_draw_indirect(&self.cmd_buf, 0, b.min(n)),
+            Some(_) => {}
+        }
     }
 }
 

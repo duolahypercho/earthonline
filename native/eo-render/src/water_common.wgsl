@@ -31,6 +31,9 @@ struct WaterU {
     wv_sea: vec4<f32>,
     // x storm 0..1, y the sine groundswell's gain (0: the spectrum carries the swell)
     wv_misc: vec4<f32>,
+    // the bounded list's wide guard (bounds.rs): the widened frustum; x the near sphere, y 1 to count it
+    wide: array<vec4<f32>, 6>,
+    guard: vec4<f32>,
 };
 
 // 1024 segments and the two-zone axis of eo-water grid.rs.

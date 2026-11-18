@@ -10,7 +10,10 @@
 @group(0) @binding(0) var<uniform> wu: WaterU;
 @group(0) @binding(1) var<storage, read_write> wdraws: array<u32>;
 // [0] patches drawn, [1] in the frustum, [2] culled as land, [3] culled as
-// occluded, [4] the nearest drawn patch's distance (m, the gate), [5..8) pad
+// occluded, [4] the nearest drawn patch's distance (m, the gate), [5] the
+// bounded list's ring guard (bounds.rs): patches in the reach and not wholly
+// over land, whatever the view direction, [6] of those the ones in the widened
+// frustum or the near sphere (the wide guard), [7] pad
 @group(0) @binding(2) var<storage, read_write> wcount: array<atomic<u32>, 8>;
 @group(0) @binding(3) var land_max: texture_2d<f32>;
 
@@ -71,6 +74,24 @@ fn cull_patch(id: u32) {
     let pad = wu.grid.w;
     let mn = vec3<f32>(lo.x - pad, wu.grid.z - wu.grid.w, lo.y - pad);
     let mx = vec3<f32>(hi.x + pad, wu.grid.z + wu.grid.w, hi.y + pad);
+    let land = !rim && land_max_over(lo - pad, hi + pad) < min(wu.flags.z, wu.probe.w);
+    if (!land) {
+        atomicAdd(&wcount[5], 1u);
+        var wide = distance(clamp(wu.cam.xyz, mn, mx), wu.cam.xyz) <= wu.guard.x;
+        if (!wide) {
+            wide = true;
+            for (var p = 0u; p < 6u; p = p + 1u) {
+                let pl = wu.wide[p];
+                let v = select(mn, mx, pl.xyz >= vec3<f32>(0.0));
+                if (dot(pl.xyz, v) + pl.w < 0.0) {
+                    wide = false;
+                }
+            }
+        }
+        if (wide) {
+            atomicAdd(&wcount[6], 1u);
+        }
+    }
     for (var p = 0u; p < 6u; p = p + 1u) {
         let pl = wu.planes[p];
         let v = select(mn, mx, pl.xyz >= vec3<f32>(0.0));
@@ -79,7 +100,7 @@ fn cull_patch(id: u32) {
         }
     }
     atomicAdd(&wcount[1], 1u);
-    if (!rim && land_max_over(lo - pad, hi + pad) < min(wu.flags.z, wu.probe.w)) {
+    if (land) {
         atomicAdd(&wcount[2], 1u);
         return;
     }

@@ -53,7 +53,7 @@ pub const GATE_NEAR_M: f32 = 1500.0;
 /// The cull's counters: drawn, in the frustum, land, occluded, nearest drawn (m), pad.
 const COUNT_BYTES: u64 = 32;
 
-const PATCH_COUNT: u32 = eo_water::grid::PATCHES * eo_water::grid::PATCHES;
+pub const PATCH_COUNT: u32 = eo_water::grid::PATCHES * eo_water::grid::PATCHES;
 const N: u32 = eo_water::spectrum::N as u32;
 const CASCADES: u32 = eo_water::spectrum::CASCADES as u32;
 /// FFT steps one frame may run (the capture warm-up of the foam), and
@@ -96,6 +96,10 @@ struct WaterUniform {
     wv_sea: [f32; 4],
     // x storm 0..1, y the sine groundswell's gain (0: the spectrum carries the swell), z/w 0
     wv_misc: [f32; 4],
+    // the bounded list's wide guard (bounds.rs): the frustum widened by WIDE_DEG a
+    // side (no far plane, as `planes`), and x the near sphere, y 1 to count it.
+    wide: [[f32; 4]; 6],
+    guard: [f32; 4],
 }
 
 #[repr(C)]
@@ -466,7 +470,7 @@ impl WaterGpu {
         let idx = eo_water::grid::patch_indices();
         let index_buf = buffer("water-patch-indices", (idx.len() * 4) as u64, wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST);
         queue.write_buffer(&index_buf, 0, bytemuck::cast_slice(&idx));
-        let draw_buf = buffer("water-draws", PATCH_COUNT as u64 * crate::DRAW_ARGS_BYTES, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT);
+        let draw_buf = buffer("water-draws", PATCH_COUNT as u64 * crate::DRAW_ARGS_BYTES, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_DST);
         let count_buf = buffer("water-counts", COUNT_BYTES, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST);
         bytes += idx.len() as u64 * 4 + PATCH_COUNT as u64 * crate::DRAW_ARGS_BYTES + COUNT_BYTES;
 
@@ -935,6 +939,12 @@ impl WaterGpu {
             wv_pac: pg.wv[1],
             wv_sea: pg.wv[2],
             wv_misc: pg.wv[3],
+            wide: {
+                let mut w = frustum_planes(crate::bounds::ViewKey::widened(cam).view_proj()).map(|p| p.to_array());
+                w[4] = [0.0, 0.0, 0.0, 1.0];
+                w
+            },
+            guard: [crate::bounds::NEAR_M, 1.0, 0.0, 0.0],
         };
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&u));
         queue.write_buffer(&self.count_buf, 0, bytemuck::cast_slice(&[0u32, 0, 0, 0, u32::MAX, 0, 0, 0]));
@@ -982,6 +992,11 @@ impl WaterGpu {
             st.stats.fogged_frames += 1;
         }
         st.stats.frames += 1;
+    }
+
+    /// `bound`: the bounded list's commands, emptied before the cull appends (bounds.rs).
+    pub fn clear_list(&self, enc: &mut wgpu::CommandEncoder, bound: u32) {
+        crate::clear_list(enc, &self.draw_buf, 0, bound, crate::DRAW_ARGS_BYTES);
     }
 
     /// The patch cull with the city's pyramid (inside its compute pass).
@@ -1051,6 +1066,7 @@ impl WaterGpu {
         probe_views: [&wgpu::TextureView; 2], // both cubes (bind groups made once, a capture flips the index)
         probe_front: usize,
         ts: Option<(&wgpu::QuerySet, u32)>,
+        bound: Option<u32>, // the bounded list's commands (None: the indirect count)
         then: impl FnOnce(&mut wgpu::RenderPass<'_>),
     ) {
         let (copy, slot, fogged, spray) = {
@@ -1131,7 +1147,7 @@ impl WaterGpu {
                 pass.set_bind_group(0, &bg, &[]);
                 look.bind_main(&mut pass);
                 pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint32);
-                pass.multi_draw_indexed_indirect_count(&self.draw_buf, 0, &self.count_buf, 0, PATCH_COUNT);
+                crate::draw_compacted(&mut pass, &self.draw_buf, 0, &self.count_buf, 0, PATCH_COUNT, bound);
                 if spray {
                     // the spray, same bind groups
                     pass.set_pipeline(&self.spray);

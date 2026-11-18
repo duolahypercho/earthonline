@@ -39,8 +39,12 @@ pub const Q_AO: u32 = 10;
 pub const AO_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 pub const AO_Z_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R32Float;
 const VIEW_STRIDE: u64 = 256;
-/// Counter words: commands per cascade [0..3), triangles per cascade [3..6), pad.
-pub const SHADOW_COUNTER_WORDS: usize = 8;
+/// Counter words: commands per cascade [0..3), triangles per cascade [3..6),
+/// pad, then per cascade the bounded lists' guards (bounds.rs): the ring
+/// [8..11), the wide [11..14), pad.
+pub const SHADOW_COUNTER_WORDS: usize = 16;
+/// The shadow lists' guard holds while the eye moved less than this from where it was counted.
+pub const SHADOW_GUARD_MOVE_M: f32 = 16.0;
 
 /// Default hour when nobody asks: noon.
 pub const DEFAULT_HOUR: f64 = 12.0;
@@ -110,6 +114,18 @@ struct ShadowCullParams {
     compact: u32,
     mask: u32,
     pad: u32,
+    /// the bounded lists' guard (bounds.rs): the light basis (x, y, z toward
+    /// the sun), the eye in it (w 1 to count the guard), and per cascade the
+    /// light-space box round the eye that holds the cascade's box for any
+    /// view direction: x the half side, y the reach below the eye, z above.
+    light: [[f32; 4]; 3],
+    eye_l: [f32; 4],
+    guard: [[f32; 4]; 3],
+    /// the wide guard: per cascade its own box (light-space centre x, y and
+    /// half side; z from, to) grown by what a turn of WIDE_DEG / 2 and the
+    /// move the view key allows can shift it.
+    wide: [[f32; 4]; 3],
+    wide_z: [[f32; 4]; 3],
 }
 
 /// The JS refresh rotation (src/render/cascade-refresh.js, 'staggered'): the
@@ -193,9 +209,12 @@ struct PostTarget {
 
 pub struct LookGpu {
     pub options: LookOptions,
+    /// the shadow lists' ring guard margin, metres (f32 bits; `set_guard_move`).
+    guard_move: std::sync::atomic::AtomicU32,
     output_srgb: bool,
     object_count: u32,
     compact: bool,
+    bounded: bool,
     look_buf: wgpu::Buffer,
     cull_buf: wgpu::Buffer,
     view_buf: wgpu::Buffer,
@@ -387,6 +406,8 @@ pub struct LookInit<'a> {
     pub group_buf: &'a wgpu::Buffer,
     pub object_count: u32,
     pub compact: bool,
+    /// the compacted lists are drawn with a bounded fixed count: count the shadow lists' guards (bounds.rs).
+    pub bounded: bool,
     pub output_format: wgpu::TextureFormat,
     pub sample_count: u32,
     pub debug_ids: bool,
@@ -449,7 +470,7 @@ impl LookGpu {
         let view_buf = buffer("shadow-views", VIEW_STRIDE * CASCADES as u64, uni);
         let n = init.object_count.max(1) as u64;
         let draws_bytes = n * CASCADES as u64 * crate::DRAW_ARGS_BYTES;
-        let shadow_draws = buffer("shadow-draws", draws_bytes, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT);
+        let shadow_draws = buffer("shadow-draws", draws_bytes, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_DST);
         let shadow_counters = buffer(
             "shadow-counters",
             (SHADOW_COUNTER_WORDS * 4) as u64,
@@ -677,6 +698,7 @@ impl LookGpu {
         });
         let bytes = shadow_bytes + draws_bytes + (SHADOW_COUNTER_WORDS * 4) as u64 + look_buf.size() + cull_buf.size() + view_buf.size() + sky.bytes; // sky
         Self {
+            guard_move: std::sync::atomic::AtomicU32::new(SHADOW_GUARD_MOVE_M.to_bits()),
             sky, // sky
             sky_depth_ok: std::sync::atomic::AtomicBool::new(false), // sky
             post_source: std::sync::atomic::AtomicU32::new(0),       // sky
@@ -684,6 +706,7 @@ impl LookGpu {
             output_srgb: init.output_format.is_srgb(),
             object_count: init.object_count,
             compact: init.compact,
+            bounded: init.bounded,
             look_buf,
             cull_buf,
             view_buf,
@@ -1165,7 +1188,47 @@ impl LookGpu {
         for (c, cas) in cascades.iter().enumerate() {
             planes[c * 6..c * 6 + 6].copy_from_slice(&cas.planes);
         }
-        let p = ShadowCullParams { planes, object_count: self.object_count, compact: self.compact as u32, mask, pad: 0 };
+        // the guard boxes (bounds.rs). A cascade's box is the light-space box of
+        // its frustum slice (every corner within `r` of the eye: the slice's far
+        // corner distance), centred on it within `r` per axis and snapped to a
+        // texel, `half_extent` to a side; along the light it reaches from 2 half
+        // + 2 m below the slice to LIGHT_MARGIN_M above it (eo-look fit_cascades).
+        // So whatever the view direction it lies in the box round the eye below,
+        // and the eye may move SHADOW_GUARD_MOVE_M before the guard is stale.
+        let lb = shadow::light_basis(f.key_dir);
+        let eye = [cam.eye.x as f64, cam.eye.y as f64, cam.eye.z as f64];
+        let dotl = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+        let th = (cam.fov_y_deg as f64 * 0.5).to_radians().tan();
+        let corner = (1.0 + th * th * (1.0 + (cam.aspect as f64).powi(2))).sqrt();
+        let mv = self.guard_move() as f64;
+        let mut guard = [[0f32; 4]; 3];
+        let (mut wide, mut wide_z) = ([[0f32; 4]; 3], [[0f32; 4]; 3]);
+        // a turn of t moves a slice point at r by at most 2 r sin(t / 2); the
+        // move the wide key allows (bounds::ViewKey::cover) at most NEAR_M sin(t).
+        let t = (crate::bounds::WIDE_DEG as f64 * 0.5).to_radians();
+        for (c, cas) in fitted.iter().enumerate() {
+            let r = cas.split_far * corner;
+            guard[c] = [(r + cas.half_extent + cas.texel_world + mv) as f32, (r + 2.0 * cas.half_extent + 2.0 + mv) as f32, (r + shadow::LIGHT_MARGIN_M + mv) as f32, 0.0];
+            // the box from its clip matrix: x' = (p.lx - cx) / half, z' = (cz - near - p.lz) / dr.
+            let half = cas.half_extent;
+            let (cx, cy) = (-cas.view_proj[3][0] as f64 * half, -cas.view_proj[3][1] as f64 * half);
+            let top = cas.view_proj[3][2] as f64 * cas.depth_range;
+            let e = 2.0 * r * (t * 0.5).sin() + crate::bounds::NEAR_M as f64 * t.sin() + cas.texel_world + 1.0;
+            wide[c] = [cx as f32, cy as f32, (half + e) as f32, 0.0];
+            wide_z[c] = [(top - cas.depth_range - e) as f32, (top + e) as f32, 0.0, 0.0];
+        }
+        let p = ShadowCullParams {
+            planes,
+            object_count: self.object_count,
+            compact: self.compact as u32,
+            mask,
+            pad: 0,
+            light: lb.map(|v| [v[0] as f32, v[1] as f32, v[2] as f32, 0.0]),
+            eye_l: [dotl(eye, lb[0]) as f32, dotl(eye, lb[1]) as f32, dotl(eye, lb[2]) as f32, self.bounded as u32 as f32],
+            guard,
+            wide,
+            wide_z,
+        };
         queue.write_buffer(&self.cull_buf, 0, bytemuck::bytes_of(&p));
         for (c, cas) in cascades.iter().enumerate() {
             let mut bytes = [0f32; 20];
@@ -1181,8 +1244,29 @@ impl LookGpu {
         self.options.shadows && self.frame().shadow_strength > 0.0
     }
 
+    /// How far the eye may move before the shadow lists' ring guard is stale
+    /// (at least SHADOW_GUARD_MOVE_M; the renderer widens it with the camera's speed).
+    pub fn set_guard_move(&self, m: f32) {
+        self.guard_move.store(m.max(SHADOW_GUARD_MOVE_M).to_bits(), std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn guard_move(&self) -> f32 {
+        f32::from_bits(self.guard_move.load(std::sync::atomic::Ordering::Relaxed))
+    }
+
+    /// What the coming `encode_shadows` refreshes (bit c; 0 with shadows off),
+    /// the eye the cascades were fitted at and the direction to the sun: the
+    /// shadow lists' bound key (bounds.rs).
+    pub fn shadow_refresh(&self) -> (u32, glam::Vec3, glam::Vec3) {
+        let mask = self.encoded_shadow_mask();
+        let eye = self.state.lock().unwrap().pending.map(|p| p.1).unwrap_or(glam::Vec3::splat(f32::NAN));
+        let k = self.frame().key_dir;
+        (mask, eye, glam::Vec3::new(k[0] as f32, k[1] as f32, k[2] as f32))
+    }
+
     /// Shadow cull + one depth pass per cascade (after the camera's cull pass).
-    pub fn encode_shadows(&self, enc: &mut wgpu::CommandEncoder, vertex: &wgpu::Buffer, index: &wgpu::Buffer, ts: Option<(&wgpu::QuerySet, u32)>) {
+    /// `bounds`: the bounded lists' commands per cascade (None: the indirect count).
+    pub fn encode_shadows(&self, enc: &mut wgpu::CommandEncoder, vertex: &wgpu::Buffer, index: &wgpu::Buffer, ts: Option<(&wgpu::QuerySet, u32)>, bounds: Option<[u32; 3]>) {
         let active = self.shadows_active();
         // Commit what the last update fitted: these boxes are what the maps
         // will hold after this encode.
@@ -1206,6 +1290,12 @@ impl LookGpu {
         };
         crate::hitch::mark(crate::hitch::Mark::CascadesRefreshed, mask.count_ones() as u64);
         enc.clear_buffer(&self.shadow_counters, 0, None);
+        if let Some(b) = bounds {
+            // the refreshed cascades' first `bound` commands empty before the cull appends.
+            for c in (0..CASCADES).filter(|c| mask & (1 << c) != 0) {
+                crate::clear_list(enc, &self.shadow_draws, c as u64 * self.object_count as u64 * crate::DRAW_ARGS_BYTES, b[c], crate::DRAW_ARGS_BYTES);
+            }
+        }
         {
             let tw = ts.map(|(q, b)| wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b + Q_SHADOW_CULL), end_of_pass_write_index: Some(b + Q_SHADOW_CULL + 1) });
             let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("shadow-cull"), timestamp_writes: tw });
@@ -1255,7 +1345,7 @@ impl LookGpu {
             pass.set_index_buffer(index.slice(..), wgpu::IndexFormat::Uint32);
             let offset = c as u64 * n as u64 * crate::DRAW_ARGS_BYTES;
             if self.compact {
-                pass.multi_draw_indexed_indirect_count(&self.shadow_draws, offset, &self.shadow_counters, c as u64 * 4, n);
+                crate::draw_compacted(&mut pass, &self.shadow_draws, offset, &self.shadow_counters, c as u64 * 4, n, bounds.map(|b| b[c]));
             } else {
                 pass.multi_draw_indexed_indirect(&self.shadow_draws, offset, n);
             }
