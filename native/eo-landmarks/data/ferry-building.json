@@ -1,0 +1,82 @@
+{
+  "schema": "eo-native-ferry-building-v1",
+  "about": "The San Francisco Ferry Building (1896-1898, A. Page Brown), drawn by eo-landmarks ferry_building.rs on the city record it replaces. Every measured value names its source below; every value under `inferred` has no published measurement and is a proportion chosen to fit the measured ones (marked INFERRED in the code).",
+  "sources": {
+    "record": "public/data/sf/sf-city.json.gz detailBuildings id 558731934 (OpenStreetMap way 558731934, building=terminal, height=15; ODbL 1.0, (c) OpenStreetMap contributors; see public/data/sf/sf-city.NOTICE.txt). Surveyed game metres (x east, z south) before the ground-plan scale.",
+    "osm-parts": "OpenStreetMap building:part ways of the Ferry Building, fetched 2026-11-18 through the Overpass API (ODbL 1.0, (c) OpenStreetMap contributors): 24460886 (main body, height 16.1), 404449724 (tower shaft, 43.5 m), 406710833 (50.5 m), 406710834 (54.2 m), 406710835 (60.5 m), 406710836 (64.5 m), 406710837 (68.2 m, round), 406710838 (70 m, roof:shape=dome), 406710839 (83.1 m, the flagstaff). Plan sizes are the parts' extents along and across the record's long axis, projected with the sf-city projection (meta.projection).",
+    "wikipedia": "San Francisco Ferry Building, en.wikipedia.org (read 2026-11-18): 245-foot (75 m) clock tower; four clock dials 22 feet (6.7 m) in diameter; the 660-foot (200 m) Great Nave; 22 nave arches per side.",
+    "noehill": "San Francisco Landmark No. 90, noehill.com/sf/landmarks/sf090.asp (read 2026-11-18): 659 feet long as built; eleven-foot minute hand; seven and one-half foot hour hand; tower modelled on the Giralda of Seville; a flagstaff surmounts the tower.",
+    "architecture-sf": "architecturesf.blogspot.com/2009/05/ferry-building-1896-1898.html (read 2026-11-18): the western front in Colusa sandstone, arcades spanning the full width of both the lower and upper stories, paired Corinthian columns on the entrance pavilion.",
+    "cdmg-191": "California Division of Mines and Geology Bulletin 191 (1966), as quoted by quarriesandbeyond.org (read 2026-11-18): Colusa sandstone is blue-gray and buff, weathering to light brown."
+  },
+  "record": {
+    "id": "sf-building-558731934",
+    "source": "record",
+    "northWest": [2206.4, -2006.2],
+    "northBay": [2244.6, -2033.9],
+    "southBay": [2363.7, -1872.3],
+    "southWest": [2325.5, -1844.6],
+    "pavilion": [[2252.7, -1943.4], [2245.5, -1938.1], [2271.1, -1903.4], [2278.3, -1908.6]]
+  },
+  "tower": {
+    "source": "osm-parts (centre and stage extents), wikipedia (245 ft to the finial), osm-parts 406710839 (the flagstaff top)",
+    "centreSurveyed": [2268.0, -1929.0],
+    "stages": [
+      { "way": 404449724, "topM": 43.5, "sideM": 11.8, "note": "shaft: 12.3 x 11.3 m in OSM, drawn square at their mean" },
+      { "way": 406710833, "topM": 50.5, "sideM": 10.8, "note": "the belfry stage: 11.3 x 10.3 m" },
+      { "way": 406710834, "topM": 54.2, "sideM": 8.45, "note": "8.4 x 8.5 m" },
+      { "way": 406710835, "topM": 60.5, "sideM": 6.4, "note": "the lantern: 6.5 x 6.3 m" },
+      { "way": 406710836, "topM": 64.5, "sideM": 5.0, "note": "4.9 x 5.1 m" }
+    ],
+    "drum": { "way": 406710837, "topM": 68.2, "diameterM": 3.95 },
+    "dome": { "way": 406710838, "topM": 70.0, "diameterM": 2.5 },
+    "finialTopM": 74.68,
+    "flagstaffTopM": 83.1,
+    "clock": { "source": "wikipedia, noehill", "dialDiameterM": 6.706, "minuteHandM": 3.353, "hourHandM": 2.286 }
+  },
+  "body": {
+    "source": "osm-parts 24460886 (parapet top); wikipedia (22 nave arches per side over the surveyed frontage)",
+    "parapetTopM": 16.1,
+    "archesPerFrontage": 22
+  },
+  "stone": {
+    "source": "cdmg-191 (blue-gray and buff, weathering to light brown) and architecture-sf (Colusa sandstone front)",
+    "kit": "limestone-ashlar",
+    "tintLinear": [0.8, 0.87, 1.0],
+    "note": "a multiply on the kit ashlar's #d6cbb6 bake (linear 0.67, 0.60, 0.47), taking it to a cleaned buff-grey (linear 0.54, 0.52, 0.47, albedo about 0.5)"
+  },
+  "inferred": {
+    "note": "INFERRED: no published elevation drawing was available; proportions fit the 16.1 m parapet, the 245 ft tower and the 22-bay frontage.",
+    "plinthM": 0.6,
+    "wallM": 0.9,
+    "galleryDepthM": 4.0,
+    "arcadeArchWidthM": 5.6,
+    "arcadeSpringM": 4.6,
+    "galleryCeilingM": 7.5,
+    "stringCourse": [7.6, 8.1],
+    "upperArchWidthM": 4.6,
+    "upperSillM": 8.7,
+    "upperSpringM": 11.6,
+    "upperRevealM": 0.45,
+    "pilasterWidthM": 0.8,
+    "frieze": [14.2, 14.9],
+    "cornice": [14.9, 15.6],
+    "corniceProjectionM": 0.95,
+    "pavilionParapetTopM": 21.6,
+    "pavilionArchWidthM": 5.6,
+    "pavilionArchSpringM": 5.6,
+    "pavilionArchPitchM": 8.4,
+    "pavilionUpperArchWidthM": 4.4,
+    "pavilionUpperSillM": 9.6,
+    "pavilionUpperSpringM": 13.4,
+    "pavilionCornice": [17.0, 17.8],
+    "columnDiameterM": 0.8,
+    "roofMonitorWidthM": 12.0,
+    "roofEaveM": 15.6,
+    "roofMonitorFootM": 19.0,
+    "roofClerestoryTopM": 20.8,
+    "roofRidgeM": 22.6,
+    "dialCentreBelowShaftTopM": 5.2,
+    "clockHour": 13.0
+  }
+}

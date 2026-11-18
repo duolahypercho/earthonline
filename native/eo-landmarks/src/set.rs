@@ -126,14 +126,21 @@ pub struct PlazaReport {
 /// (landmark-registry.js `claims`, drawn by the landmark instead of the kit)
 /// and those they exclude (`excludes`: not buildings at all, Sutro Tower's
 /// lattice footprints), by the source id without its `sf-building-` prefix.
+///
+/// The Ferry Building's record (ferry_building.rs) is claimed while that
+/// feature is on (`--no-ferry-building` keeps its box).
 pub fn claimed_records() -> std::collections::HashSet<String> {
     let js = LandmarksJs::get();
-    crate::towers::BUILDING_IDS
+    let mut out: std::collections::HashSet<String> = crate::towers::BUILDING_IDS
         .iter()
         .filter_map(|id| js.registry.get(*id))
         .flat_map(|r| r.claims.iter().chain(r.excludes.iter()))
         .map(|s| s.trim_start_matches("sf-building-").to_string())
-        .collect()
+        .collect();
+    if crate::features::ferry_building() {
+        out.insert(crate::ferry_building::RECORD.to_string());
+    }
+    out
 }
 
 /// The JS's own `roughness` / `metalness` for a city structure's material.
@@ -395,6 +402,15 @@ impl LandmarkSet {
                 structures.push(Structure { cast: true, footway: false, kit: Some(wf::SHED_WALL_KIT.into()), name: format!("ferry-pier-sheds-{}", fp.source_way_id), material: plain_material(0.88, 0.03, "facade-masonry"), mesh: walls_m });
                 structures.push(Structure { cast: true, footway: false, kit: Some(wf::SHED_ROOF_KIT.into()), name: format!("ferry-pier-shed-roofs-{}", fp.source_way_id), material: plain_material(0.9, 0.0, "facade-masonry"), mesh: roofs_m });
             }
+            // the guard rail on the quay wall along the Ferry Building corridor.
+            if crate::features::quay_railing() {
+                let fb = eo_data::groundscale::plan(crate::ferry_building::spec().tower.centre_surveyed);
+                let reach = wf::RAILING_CORRIDOR_M * eo_data::groundscale::scale();
+                let (rail, _pieces) = wf::quay_railing(&edges, &crest_at, fb, reach, [1.0; 3]);
+                if !rail.is_empty() {
+                    structures.push(Structure { cast: true, footway: false, kit: Some(wf::RAILING_KIT.into()), name: "waterfront:railing".into(), material: plain_material(0.5, 0.0, "painted-metal"), mesh: rail });
+                }
+            }
             press = Some(std::sync::Arc::new(wf::ShorePress::new(js.sea_level_y, &edges, &piers)));
             census = Some(c);
             walls
@@ -585,6 +601,47 @@ impl LandmarkSet {
             self.structures.push(Structure { cast: true, footway: false, kit: None, name: "sunset-dunes-seawall".into(), material: plain_material(0.9, 0.0, "sidewalk"), mesh: sd.concrete });
         }
         out
+    }
+
+    /// The Ferry Building (ferry_building.rs) on `level_at` (the footway
+    /// datum), one structure per finish; nothing when `--no-ferry-building`
+    /// (its record then keeps its box: `claimed_records`). Returns what was built.
+    ///
+    /// Its forecourt is laid where `paved_at` (the street's paving) is None and
+    /// `carpet_at` (the drawn ground) stands over the sea.
+    pub fn add_ferry_building(&mut self, level_at: &dyn Fn(f64, f64) -> f64, paved_at: &dyn Fn(f64, f64) -> Option<f64>, carpet_at: &dyn Fn(f64, f64) -> f64) -> Option<crate::ferry_building::Report> {
+        if !crate::features::ferry_building() {
+            return None;
+        }
+        let t0 = Instant::now();
+        let b = crate::ferry_building::build_with(level_at, paved_at, carpet_at);
+        let report = crate::ferry_building::Report { base_y: b.base_y, length_m: b.length_m, depth_m: b.depth_m, bays: b.bays, triangles: b.triangles, ms: 0.0 };
+        for p in b.parts {
+            // a part without a kit finish draws its vertex colour at its own roughness and metalness.
+            let material = plain_material(p.rough, p.metal, match p.key {
+                "floor" => "sidewalk",
+                "glass" | "shop" | "skylight" => "facade-glass",
+                _ => "facade-masonry",
+            });
+            self.structures.push(Structure { cast: p.cast, footway: p.footway, kit: p.kit.map(str::to_string), name: format!("ferry-building:{}", p.key), material, mesh: p.mesh });
+        }
+        Some(crate::ferry_building::Report { ms: t0.elapsed().as_secs_f64() * 1e3, ..report })
+    }
+
+    /// The streetcar rails of the corridor (tram.rs) over `surface_at` (the
+    /// drawn street surface), `lift` over it; nothing when `--no-tram-tracks`.
+    /// Returns (tracks, metres, triangles).
+    pub fn add_tram_tracks(&mut self, repo_root: &std::path::Path, surface_at: &dyn Fn(f64, f64) -> f64, lift: f64) -> Result<Option<(usize, f64, usize)>> {
+        if !crate::features::tram_tracks() {
+            return Ok(None);
+        }
+        let ways = crate::tram::load_corridor_ways(repo_root, crate::ferry_building::spec().tower.centre_surveyed)?;
+        let t = crate::tram::build(&ways, surface_at, lift);
+        let tris = t.heads.triangles() + t.grooves.triangles();
+        // the polished heads as bare steel; the grooves a matte dark.
+        self.structures.push(Structure { cast: false, footway: false, kit: None, name: "tram:heads".into(), material: plain_material(0.36, 1.0, "facade-metal"), mesh: t.heads });
+        self.structures.push(Structure { cast: false, footway: false, kit: None, name: "tram:grooves".into(), material: plain_material(0.9, 0.0, "asphalt"), mesh: t.grooves });
+        Ok(Some((t.tracks, t.metres, tris)))
     }
 
     pub fn triangles(&self, role: Role) -> usize {

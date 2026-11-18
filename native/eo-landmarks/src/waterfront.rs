@@ -643,3 +643,98 @@ fn pier_fascia(conc: &mut MeshArrays, under: &mut MeshArrays, a: [f64; 2], b: [f
         *piles += 1;
     }
 }
+
+/// The guard rail along the Embarcadero's quay wall: the promenade's edge
+/// over the bay within `RAILING_CORRIDOR_M` of the Ferry Building, on the
+/// wall's coping. A picket guard of painted steel (`--no-quay-railing`: none).
+///
+/// * Height: 42 in (1067 mm) to the top of the rail, the guard height of the
+///   California Building Code 2022 section 1015.3.
+/// * Openings: no 4 in (102 mm) sphere passes (CBC 1015.4): pickets of
+///   `RAILING_PICKET_M` square at `RAILING_PICKET_PITCH_M` leave 99 mm.
+/// * INFERRED (no survey of the rail): the post pitch, the sections, the
+///   bottom rail's height, its place on the coping.
+pub const RAILING_HEIGHT_M: f64 = 1.067;
+pub const RAILING_PICKET_M: f64 = 0.016;
+pub const RAILING_PICKET_PITCH_M: f64 = 0.115;
+pub const RAILING_POST_PITCH_M: f64 = 1.83;
+pub const RAILING_POST_M: f64 = 0.06;
+pub const RAILING_TOP_RAIL_M: [f64; 2] = [0.064, 0.05];
+pub const RAILING_BOTTOM_RAIL_Y_M: f64 = 0.1;
+/// The rail's line, landward of the wall's sea face (half the coping), m.
+pub const RAILING_SET_BACK_M: f64 = 0.21;
+/// The corridor (surveyed metres from the Ferry Building's tower, before the plan scale).
+pub const RAILING_CORRIDOR_M: f64 = 900.0;
+/// The kit finish the rail is drawn in (kit-material-specs.json: a mid-grey painted steel).
+pub const RAILING_KIT: &str = "painted-steel-mid";
+
+/// The guard on every walled (non-pier) shore edge piece whose middle is
+/// within `reach` of `centre` (drawn plan), standing on `crest_at`.
+pub fn quay_railing(edges: &[ShoreEdge], crest_at: &dyn Fn(f64, f64) -> f64, centre: [f64; 2], reach: f64, colour: Rgb) -> (Frozen, usize) {
+    let mut m = MeshArrays::new("waterfront:railing");
+    let mut pieces = 0usize;
+    let face = |m: &mut MeshArrays, q: [[f64; 3]; 4], want: [f64; 3]| {
+        let e1 = [q[1][0] - q[0][0], q[1][1] - q[0][1], q[1][2] - q[0][2]];
+        let e2 = [q[3][0] - q[0][0], q[3][1] - q[0][1], q[3][2] - q[0][2]];
+        let n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+        if n[0] * want[0] + n[1] * want[1] + n[2] * want[2] >= 0.0 { m.quad(q[0], q[1], q[2], q[3], colour) } else { m.quad(q[3], q[2], q[1], q[0], colour) }
+    };
+    // A bar from a to b (plan points, heights ya..yb at its foot) of section w x h, its sides facing out.
+    let bar = |m: &mut MeshArrays, a: [f64; 2], b: [f64; 2], ya: f64, yb: f64, w: f64, h: f64, ends: bool| {
+        let l = (b[0] - a[0]).hypot(b[1] - a[1]);
+        if l < 1e-6 {
+            return;
+        }
+        let (t, n) = ([(b[0] - a[0]) / l, (b[1] - a[1]) / l], [-(b[1] - a[1]) / l, (b[0] - a[0]) / l]);
+        let p = |s: [f64; 2], y: f64, o: f64, k: f64| [s[0] + n[0] * o, y + k, s[1] + n[1] * o];
+        let (o0, o1) = (-w / 2.0, w / 2.0);
+        face(m, [p(a, ya, o1, 0.0), p(b, yb, o1, 0.0), p(b, yb, o1, h), p(a, ya, o1, h)], [n[0], 0.0, n[1]]);
+        face(m, [p(a, ya, o0, 0.0), p(b, yb, o0, 0.0), p(b, yb, o0, h), p(a, ya, o0, h)], [-n[0], 0.0, -n[1]]);
+        face(m, [p(a, ya, o0, h), p(b, yb, o0, h), p(b, yb, o1, h), p(a, ya, o1, h)], [0.0, 1.0, 0.0]);
+        face(m, [p(a, ya, o0, 0.0), p(b, yb, o0, 0.0), p(b, yb, o1, 0.0), p(a, ya, o1, 0.0)], [0.0, -1.0, 0.0]);
+        if ends {
+            face(m, [p(a, ya, o0, 0.0), p(a, ya, o1, 0.0), p(a, ya, o1, h), p(a, ya, o0, h)], [-t[0], 0.0, -t[1]]);
+            face(m, [p(b, yb, o0, 0.0), p(b, yb, o1, 0.0), p(b, yb, o1, h), p(b, yb, o0, h)], [t[0], 0.0, t[1]]);
+        }
+    };
+    // A vertical member of square section s at plan point c from y0 to y1, its four sides.
+    let post = |m: &mut MeshArrays, c: [f64; 2], u: [f64; 2], y0: f64, y1: f64, s: f64| {
+        let v = [-u[1], u[0]];
+        let h = s / 2.0;
+        let corner = |a: f64, b: f64, y: f64| [c[0] + u[0] * a + v[0] * b, y, c[1] + u[1] * a + v[1] * b];
+        for (da, db, want) in [(1.0, 0.0, [u[0], 0.0, u[1]]), (-1.0, 0.0, [-u[0], 0.0, -u[1]]), (0.0, 1.0, [v[0], 0.0, v[1]]), (0.0, -1.0, [-v[0], 0.0, -v[1]])] {
+            let (a0, b0, a1, b1) = if da != 0.0 { (da * h, -h, da * h, h) } else { (-h, db * h, h, db * h) };
+            face(m, [corner(a0, b0, y0), corner(a1, b1, y0), corner(a1, b1, y1), corner(a0, b0, y1)], want);
+        }
+    };
+    for e in edges.iter().filter(|e| e.pier.is_none()) {
+        let mid = [(e.a[0] + e.b[0]) / 2.0, (e.a[1] + e.b[1]) / 2.0];
+        if (mid[0] - centre[0]).hypot(mid[1] - centre[1]) > reach {
+            continue;
+        }
+        let on = |p: [f64; 2]| [p[0] + e.land[0] * RAILING_SET_BACK_M, p[1] + e.land[1] * RAILING_SET_BACK_M];
+        let (a, b) = (on(e.a), on(e.b));
+        let l = (b[0] - a[0]).hypot(b[1] - a[1]);
+        if l < 0.2 {
+            continue;
+        }
+        pieces += 1;
+        let u = [(b[0] - a[0]) / l, (b[1] - a[1]) / l];
+        let (ya, yb) = (crest_at(e.a[0], e.a[1]), crest_at(e.b[0], e.b[1]));
+        let at = |t: f64| ([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], ya + (yb - ya) * t);
+        let (tw, th) = (RAILING_TOP_RAIL_M[0], RAILING_TOP_RAIL_M[1]);
+        bar(&mut m, a, b, ya + RAILING_HEIGHT_M - th, yb + RAILING_HEIGHT_M - th, tw, th, false);
+        bar(&mut m, a, b, ya + RAILING_BOTTOM_RAIL_Y_M, yb + RAILING_BOTTOM_RAIL_Y_M, 0.04, 0.04, false);
+        let posts = (l / RAILING_POST_PITCH_M).ceil().max(1.0) as usize;
+        for k in 0..posts {
+            let (c, y) = at(k as f64 / posts as f64);
+            post(&mut m, c, u, y - 0.05, y + RAILING_HEIGHT_M - th, RAILING_POST_M);
+        }
+        let pickets = (l / RAILING_PICKET_PITCH_M).floor() as usize;
+        for k in 0..pickets {
+            let (c, y) = at((k as f64 + 0.5) / pickets as f64);
+            post(&mut m, c, u, y + RAILING_BOTTOM_RAIL_Y_M + 0.04, y + RAILING_HEIGHT_M - th, RAILING_PICKET_M);
+        }
+    }
+    (m.freeze(), pieces)
+}
