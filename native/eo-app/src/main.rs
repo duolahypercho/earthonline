@@ -354,6 +354,13 @@ fn parse_args() -> Result<Args> {
             "--no-meter" => a.look.sky.meter = false, // the camera meter off (the hour's exposure curve alone)
             "--no-atmosphere" => a.look.sky.atmosphere = false, // the JS analytic dome instead of the atmosphere tables
             "--no-contact-shadows" => a.look.sky.contact = false,
+            // lighting: the physical daylight, the aerial-perspective volume, the filmic display, the EV100 meter
+            "--no-phys-sky" => a.look.sky.phys_sky = false,
+            "--no-ap-lut" => a.look.sky.ap_lut = false,
+            "--no-filmic" => a.look.sky.filmic = false,
+            "--no-ev100" => a.look.sky.ev100 = false,
+            "--no-sky-vis" => a.look.sky.sky_vis = false,
+            "--no-night-shaping" => a.look.sky.night_shaping = false,
             "--sky-shots" => {} // bench/sky_shots.rs reads it
             "--so-shots" => {} // so: bench/so_shots.rs reads it (the sky and ocean review cards)
             "--no-farshore" => {} // farshore.rs reads it (no far terrain)

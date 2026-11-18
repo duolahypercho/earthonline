@@ -75,7 +75,8 @@ pub fn lamp_units_per_lux() -> f64 {
 /// sRGB display (0..1) of a grey of linear radiance `v` at `exposure`, the
 /// delivered transform (eo-look `tone::display`).
 pub fn display_grey(v: f64, exposure: f64) -> f64 {
-    tone::display([v, v, v], exposure, [0.5, 0.5])[1]
+    // the display transform the frame is drawn with (`tone::set_filmic`)
+    tone::display_active([v, v, v], exposure, [0.5, 0.5])[1]
 }
 
 /// the display (0-255) of unlit ground of albedo 0.18 at full night: 8,
@@ -137,6 +138,18 @@ pub const WEATHER_COMPENSATION: f64 = 0.6;
 /// for the hour's clear sky, x (clear / weather illuminance)^0.5. The
 /// weather's illuminance: its sky model's sky term (dome brightness
 /// included) and the sun x the deck's mean beam.
+/// The weather's illuminance over the clear sky's at the frame's hour (the JS's
+/// `sceneIlluminance` with the deck's dome brightness and mean beam): 1 when clear.
+pub fn weather_light_ratio(f: &LookFrame, w: &WeatherState) -> f64 {
+    let m = &f.model;
+    let total = eo_look::rig::scene_illuminance(m, f.rig.light_rig_sun_scale);
+    let sky = luminance(m.sky_irradiance());
+    let e = sky + (total - sky).max(0.0) * mean_beam(w);
+    let clear = eo_look::sky::SkyModel::new(f.hour);
+    let e_clear = eo_look::rig::scene_illuminance(&clear, f.rig.light_rig_sun_scale);
+    (e / e_clear.max(1e-9)).clamp(1e-3, 1.0)
+}
+
 pub fn day_exposure(f: &LookFrame, w: &WeatherState) -> f64 {
     let m = &f.model;
     let total = eo_look::rig::scene_illuminance(m, f.rig.light_rig_sun_scale);
@@ -220,21 +233,77 @@ pub const METER_FLOOR: f64 = 0.35;
 pub const METER_CEILING: f64 = 40.0;
 
 pub fn meter(f: &LookFrame, w: &WeatherState, dirs: &[([f64; 3], f64)]) -> f64 {
+    let card = 0.18 * (key_on_ground(f) * mean_beam(w) + ground_fill(f, SIDEWALK_ENV)) / std::f64::consts::PI;
+    meter_with(f, dirs, card, &|d| luminance(f.model.dome(d)))
+}
+
+/// `meter` for a card of luminance `card` (look units) and the sky's luminance
+/// along a direction as the frame draws it (`sky`): the physical daylight's
+/// sky and card (eo-look `phys`) when it lights the frame.
+pub fn meter_with(f: &LookFrame, dirs: &[([f64; 3], f64)], card: f64, sky: &dyn Fn([f64; 3]) -> f64) -> f64 {
     let n = nightness(f.model.sun.altitude_deg);
     if n >= 1.0 || dirs.is_empty() {
         return 1.0;
     }
-    let card = 0.18 * (key_on_ground(f) * mean_beam(w) + ground_fill(f, SIDEWALK_ENV)) / std::f64::consts::PI;
     if card <= 0.0 {
         return 1.0;
     }
     let (mut sum, mut wsum) = (0.0, 0.0);
     for (d, wt) in dirs {
-        let v = if d[1] > 0.0 { luminance(f.model.dome(*d)).min(card * METER_CEILING) } else { card };
+        let v = if d[1] > 0.0 { sky(*d).min(card * METER_CEILING) } else { card };
         sum += v * wt;
         wsum += wt;
     }
     let mean = sum / wsum.max(1e-9);
     let c = (METER_KEY * card / mean.max(1e-9)).powf(METER_GAIN).clamp(METER_FLOOR, 1.0);
     1.0 + (c - 1.0) * (1.0 - n)
+}
+
+/// The illuminance on a horizontal surface (look units, luminance) the frame
+/// lights it with: the key x the weather's mean beam, the hemisphere's sky
+/// lobe, the ambient and the diffuse environment, the environment at the
+/// sidewalk class where the rig lights the frame and at its own intensity
+/// where the physical daylight does (`phys_weight`, eo-look `phys`).
+pub fn horizontal_illuminance(f: &LookFrame, w: &WeatherState, phys_weight: f64) -> f64 {
+    let sh = sh_eval(&f.env_sh, [0.0, 1.0, 0.0]);
+    let env = f.rig.environment_intensity * SIDEWALK_ENV;
+    let env = env + (1.0 - env) * phys_weight.clamp(0.0, 1.0);
+    let fill = [0, 1, 2].map(|i| f.hemi_sky[i] + f.ambient[i] + sh[i] * env);
+    key_on_ground(f) * mean_beam(w) + luminance(fill)
+}
+
+/// How far over the incident meter's middle grey the day is rendered (EV):
+/// an incident reading (ISO 2720) renders a card of reflectance pi K / C =
+/// 0.157 at middle grey, where an sRGB camera's picture of a sunlit scene
+/// (evaluative metering, its rendering curve) puts a sunlit 18 % card near L*
+/// 60 (sRGB ~150), about 0.85 EV over it; the same offset keeps the frame's
+/// day brightness near where the browser game's exposure curve had it at noon.
+pub const EV100_COMPENSATION: f64 = 0.85;
+
+/// The day exposure an incident-light meter gives (`--no-ev100`: the JS curve,
+/// `day_exposure`): EV100 = log2(E S / C) of the horizontal illuminance `e_h`
+/// (look units, lux through eo-look `phys::lux_per_unit`), the metered middle
+/// grey at scene 0.18 + `EV100_COMPENSATION`. Returns (EV100, exposure).
+pub fn ev100_day_exposure(e_h: f64) -> (f64, f64) {
+    let ev = eo_look::phys::ev100_incident(e_h * eo_look::phys::lux_per_unit());
+    (ev, eo_look::phys::exposure_at_ev100(ev, EV100_COMPENSATION))
+}
+
+/// `target_exposure` with the day term from the incident meter, by `weight`
+/// (eo-look `phys::weight`: the sun up), blended in log exposure into the JS
+/// curve as the sun sets; the night solve takes over as before.
+pub fn target_exposure_ev100(f: &LookFrame, w: &WeatherState, e_h: f64, weight: f64) -> f64 {
+    let n = exposure_nightness(f.model.sun.altitude_deg);
+    let js = day_exposure(f, w);
+    // the meter reads the hour's clear-sky light; a weather's darkening is made up
+    // `WEATHER_COMPENSATION` of the way, as `day_exposure` does (a rainy noon stays darker
+    // than a clear one): the frame's illuminance over the weather's share of the clear's.
+    let k = weather_light_ratio(f, w);
+    let day_ev = ev100_day_exposure(e_h / k).1 * (1.0 / k).max(1.0).powf(WEATHER_COMPENSATION);
+    let day = eo_look::math::geo_mix(js, day_ev, weight.clamp(0.0, 1.0));
+    if n <= 0.0 {
+        return day;
+    }
+    let solved = night_exposure(f, 0.0);
+    day + (solved - day) * n
 }

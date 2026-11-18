@@ -75,6 +75,12 @@ struct Look {
     // the weather's dome (eo-look `upperFromRow`): overcast, isotropy, desaturation, directional horizon band (1/0); tint.
     wx: vec4<f32>,
     wx_tint: vec4<f32>,
+    // the filmic display transform (eo-look `tone::filmic_curve`): contrast a, shoulder d, b, c
+    tone: vec4<f32>,
+    // x filmic on (1/0), y the chroma gain (Oklab)
+    tone2: vec4<f32>,
+    // the filmic transform's white balance (daylight D55 to D65, Bradford), rows
+    wb: array<vec4<f32>, 3>,
 };
 
 // wet-surface-reflection.js `skyDomeRadiance`: the sky model's horizon

@@ -9,9 +9,11 @@
 //! set of cascades per camera.
 
 pub mod aerial;
+pub mod atmosphere;
 pub mod ground_field;
 pub mod look;
 pub mod math;
+pub mod phys;
 pub mod rig;
 pub mod shadow;
 pub mod sky;
