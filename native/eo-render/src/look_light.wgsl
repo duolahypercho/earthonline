@@ -110,6 +110,9 @@ var<private> rm_emit: vec3<f32>;
 // the share of a landmark wall that is glazing (landmarks_surface.wgsl
 // `lm_authored3`): its environment reflection takes the glass class.
 var<private> lm_glaze: f32;
+// the share of a landmark wall's pixel its own relief shades from the key
+// light (landmarks_surface.wgsl `lm_authored4`: fins, sunshades and reveals).
+var<private> lm_unlit: f32;
 
 fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: vec3<f32>, object: u32) -> vec4<f32> {
     var s = s_in; // sky
@@ -147,7 +150,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     let nl = max(dot(n, l), 0.0);
     var key = vec3<f32>(0.0);
     if (nl > 0.0 && dot(ng, l) > -0.05) {
-        key = look.key.xyz * nl * lk_shadow(world, ng) * sky_cloud_transmittance(world) * sky_contact_shadow(world, ng); // cloud and contact shadows
+        key = look.key.xyz * nl * lk_shadow(world, ng) * sky_cloud_transmittance(world) * sky_contact_shadow(world, ng) * (1.0 - lm_unlit); // cloud and contact shadows; a landmark's relief
     }
     var direct_d = key * diffuse / LK_PI;
     var direct_s = key * lk_ggx(n, v, l, f0, rough);
