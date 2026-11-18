@@ -148,17 +148,26 @@ Presence at landmarks (`eo_net::presence`): the server owns the hour, how
 fast it runs and the weather, and every snapshot carries them (a client
 eases toward the server's clock, so friends see the same sunset;
 `--time-of-day`, `--day-rate` and `--weather` set a local server's).
-Other players are drawn as Rocketbox people moved from their replicated
-speed and state (walk, stop on a planted foot, step through a turn on the
-spot, emotes), on a smooth path through the snapshots, with name tags that
-fade with distance and hide behind buildings. In the window, 1 to 4 wave,
-point, crouch and take a photo, 0 stops, and T fast-travels to the next
-landmark viewpoint (`assets/landmark-viewpoints.json`; the server checks
-the request and lands the player there half a second later).
+Other players are drawn as Rocketbox people in their account's body,
+moved from their replicated speed and state (walk; stop with the feet
+closing together; step through a turn on the spot; emotes), on a smooth
+path through the snapshots, and no street person is drawn in a player's
+body. The emotes are edited at the bake (`eo_agents::pose_edit`): a
+one-arm wave with the forearm swinging, a point with the index finger out
+and the head turned along the arm, a selfie with a phone in the hand
+(`eo_agents::rig`), and a crouch. Name tags hang over each head as it is
+drawn, fade with distance (opaque to 12 m, 0.35 at 25 m, gone at 40 m),
+hide behind buildings and, from a GPU depth probe of the frame, behind
+anything nearer than the head (a passer-by, a pole, another player), and
+step aside or up with a leader line rather than cover another tag or a
+face. In the window, 1 to 4 wave, point, crouch and take a selfie, 0
+stops, and T fast-travels to the next landmark viewpoint
+(`assets/landmark-viewpoints.json`; the server checks the request and
+lands the player there half a second later).
 
 ```sh
 ./target/release/eo-server bots --connect 127.0.0.1:47800 --count 12 --landmarks   # bots that walk up to the viewpoints, emote, travel on
-./target/release/eo-app --connect local --net-shots scenes.json --out DIR --width 1600 --height 900   # landmark captures (eo-app/src/net.rs)
+./target/release/eo-app --connect local --net-shots scenes.json --out DIR --width 1600 --height 900 [--pair-before DIR2]   # landmark captures (eo-app/src/net.rs); DIR2: the same instants with --no-remote-bodies --no-name-tags
 ```
 
 ## Command-line switches
@@ -321,7 +330,7 @@ selection:
 | Camera finish | `--no-taa`, `--no-bloom`, `--no-adaptation`, `--no-ssr` |
 | Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count` |
 | Interface and sound | `--no-hud`, `--no-audio`, `--audio-null` (mix to a null output) |
-| Online (`--connect`) | `--no-remote-bodies` (other players drawn as before: first walk style and idle, linear path, no emotes), `--no-name-tags`, `--no-shared-sky` (the client's own hour and weather) |
+| Online (`--connect`) | `--no-remote-bodies` (other players drawn as before: first walk style and idle, linear path, no emotes or phone, street people may wear a player's body), `--no-name-tags` (no tags, no tag depth probe), `--no-shared-sky` (the client's own hour and weather) |
 
 A new visual feature should come with its own switch, defaulting to on only
 once it has been reviewed.
