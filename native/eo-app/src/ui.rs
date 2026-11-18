@@ -3,9 +3,11 @@
 //!
 //!   eo-app --ui                      windowed: title, boot progress, HUD over the fly-through, pause
 //!   eo-app --capture-ui SCREEN       offscreen 1920x1080 PNG, no window:
-//!                                    title | loading | pause | settings | hud | map | photo | all
+//!                                    title | loading | pause | settings | hud | map | photo | photo-look | all
 //!                                    (photo: photo mode's panel over a frame through its
-//!                                    pipeline; with `--no-photo-mode`, the HUD frame it replaces)
+//!                                    pipeline, the Camera page with focus peaking on; photo-look:
+//!                                    its Look page, monochrome through its contrast filter; with
+//!                                    `--no-photo-mode`, the HUD frame it replaces)
 //!   eo-app --ui-bench                HUD on over the street walk, plus each full-screen
 //!                                    menu; prints the UI's own cost with PASS/FAIL
 //!
@@ -359,7 +361,7 @@ fn capture(args: &Args, list: &[String], process_start: Instant) -> Result<()> {
     let dir = out_dir(args);
     std::fs::create_dir_all(&dir)?;
     let off = offscreen(&ctx);
-    let want_hud = list.iter().any(|s| s.starts_with("hud") || s == "photo");
+    let want_hud = list.iter().any(|s| s.starts_with("hud") || s.starts_with("photo"));
     // The world (for the street under the HUD) or just the city data (menus).
     let mut street = if want_hud { Some(Street::new(&ctx, args, process_start)?) } else { None };
     let paths = eo_data::DataPaths::discover()?;
@@ -416,28 +418,38 @@ fn capture(args: &Args, list: &[String], process_start: Instant) -> Result<()> {
                 ui.hud.mode = if name == "hud-drive" { HudMode::Drive { speed_kph: 42.0 } } else { HudMode::OnFoot };
                 ui.set_screen_age(0.0);
             }
-            "photo" => {
+            "photo" | "photo-look" => {
                 ui.set_screen(Screen::Hud);
                 ui.hud.mode = HudMode::OnFoot;
                 ui.set_screen_age(0.0);
             }
-            other => anyhow::bail!("--capture-ui: unknown screen {other} (title, loading, pause, settings, hud, hud-drive, map, photo, all)"),
+            other => anyhow::bail!("--capture-ui: unknown screen {other} (title, loading, pause, settings, hud, hud-drive, map, photo, photo-look, all)"),
         }
         let age_t0 = t0;
         ui_frames(&ctx, &mut ui, age_t0, 3);
         let mut enc = ctx.device.create_command_encoder(&Default::default());
-        if name.starts_with("hud") || name == "photo" {
+        if name.starts_with("hud") || name.starts_with("photo") {
             let s = street.as_mut().unwrap();
             let mut cam = s.camera(0.0, 0.0, args.far);
-            // photo mode: a 50 mm lens looking down the street at f/2.8, focused 12 m out, the panel open on the aperture.
-            let photo = (name == "photo" && crate::photo::enabled()).then(|| {
+            // photo mode: a 50 mm lens looking down the street at f/2.8, focused 12 m out; the
+            // Camera page open on focus peaking (on: the 12 m plane's edges marked), or the Look
+            // page on monochrome's contrast filter.
+            let photo = (name.starts_with("photo") && crate::photo::enabled()).then(|| {
                 let mut m = crate::photo::PhotoMode::new(false, args.time_of_day);
                 m.enter(&cam, cam.eye.as_dvec3() + glam::DVec3::new(0.0, -0.27, 0.0));
                 m.focal_mm = 50.0;
                 m.focus = crate::photo::Focus::Manual;
                 m.focus_m = 12.0;
                 m.step(&crate::photo::Feed { held: &Default::default(), mouse: [0.0, 0.0], dt: 10.0, aspect: W as f64 / H as f64, anchor: m.anchor, cw: None });
-                m.select_row(5);
+                if name == "photo-look" {
+                    m.grade = eo_render::photo::Grade::Monochrome;
+                    m.grain = m.grade.look().grain;
+                    m.set_tab(1);
+                    m.select_row(3);
+                } else {
+                    m.peaking = true;
+                    m.select_row(7);
+                }
                 m
             });
             if let Some(m) = &photo {

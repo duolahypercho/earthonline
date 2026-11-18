@@ -5,17 +5,23 @@
 //! server's simulation runs on and the client keeps sending empty inputs).
 //! A free camera flies or orbits within `RADIUS_M` of the player, swept as a
 //! ball against the collision world; the lens runs 14-200 mm (35 mm
-//! equivalent, `eo_render::photo`), with roll, focus (on the player, on what
-//! is at the centre, or a distance), aperture, exposure compensation, a
-//! grade, vignetting, grain, letterbox, the rule-of-thirds guides and a
-//! local time of day. The HUD is hidden while the panel (eo-ui
-//! `photo::PhotoPanel`) is up. Enter saves a PNG, at the window's size or
-//! rendered at twice it, into `photos_dir()`, with the settings beside it.
+//! equivalent: the 36 mm width's field of view, `eo_render::photo`), with
+//! roll, focus (on the player's eyes, at an AF point, or a distance; the
+//! panel shows the depth of field's near and far limits, a reticle where the
+//! focus is taken and optional focus peaking), aperture and the iris's
+//! blades, exposure compensation, a grade at a strength (with monochrome's
+//! contrast filter), fade, vignetting, grain, a letterbox that can be moved
+//! up or down, the rule-of-thirds guides and a local time of day. The HUD is
+//! hidden while the panel (eo-ui `photo::PhotoPanel`, three pages) is up; it
+//! fades back while the camera moves. Enter saves a PNG, at the window's
+//! size or rendered at twice it, into `photos_dir()`, with the settings
+//! beside it (never the peaking marks).
 //!
 //! Keys in photo mode: mouse look; W A S D fly (orbit: W S nearer and
 //! farther), Q E down and up, Shift faster, Ctrl slower; wheel the lens;
-//! Z X roll; Up Down choose a setting, Left Right change it; O orbit or
-//! fly; H hide the panel; Enter capture; P or Esc leave.
+//! Z X roll; Tab the next page; Up Down choose a setting, Left Right change
+//! it; F the AF point (focus there, then the next point); G peaking; O orbit
+//! or fly; H hide the panel; Enter capture; P or Esc leave.
 //!
 //! `--no-photo-mode` takes all of it away (P does nothing, the frame is the
 //! game's); `--no-dof` keeps photo mode without the depth of field.
@@ -77,9 +83,18 @@ pub fn bench_requested() -> bool {
 /// The bench's photo: f/1.4 focused at 0.5 m through the game's 52 degree
 /// lens (20.8 mm): nearly every pixel is behind the focus and blurred to
 /// about a 3 % radius of the height, the gather's most rings: the depth of
-/// field's heaviest frame. Neutral grade, vignetting and grain on (the finish's whole cost).
+/// field's heaviest frame, through the 9-bladed iris and the cat's eye (the
+/// shaped disc's whole cost). Warm grade, vignetting and grain on (the finish's whole cost).
 pub fn bench_params() -> PhotoParams {
-    PhotoParams { dof: Some(Dof { f_number: 1.4, focus_m: 0.5 }), exposure_ev: 0.0, grade: Grade::WarmFilm, vignette: 0.5, grain: 0.5, letterbox: None, accumulate: rp::STILL_FRAMES, animate_grain: true }
+    PhotoParams {
+        dof: Some(Dof { f_number: 1.4, focus_m: 0.5, aperture: rp::Aperture::default() }),
+        grade: Grade::WarmFilm,
+        vignette: 0.5,
+        grain: 0.5,
+        accumulate: rp::STILL_FRAMES,
+        animate_grain: true,
+        ..Default::default()
+    }
 }
 
 /// `--photo-bench`'s exact cost: the photo passes' GPU time at one still
@@ -128,10 +143,24 @@ pub fn photos_dir() -> Option<PathBuf> {
 pub enum Focus {
     /// The player's eyes.
     Subject,
-    /// Whatever the centre of the frame meets.
-    Centre,
+    /// Whatever the AF point (`AF_POINTS`) meets.
+    Point,
     Manual,
 }
+
+/// The AF points: the centre and the four rule-of-thirds crossings (NDC, y up).
+pub const AF_POINTS: [([f64; 2], &str); 5] = [([0.0, 0.0], "Centre"), ([-1.0 / 3.0, 1.0 / 3.0], "Upper left"), ([1.0 / 3.0, 1.0 / 3.0], "Upper right"), ([-1.0 / 3.0, -1.0 / 3.0], "Lower left"), ([1.0 / 3.0, -1.0 / 3.0], "Lower right")];
+
+/// The iris choices: (blades, rounded, label, what it does).
+pub const IRISES: [(u32, bool, &str, &str); 4] = [
+    (9, true, "9 rounded blades", "Round wide open, a nonagon stopped down"),
+    (7, false, "7 straight blades", "Heptagonal highlights"),
+    (6, false, "6 straight blades", "Hexagonal highlights"),
+    (0, false, "Ideal circle", "A perfect disc at every stop"),
+];
+
+/// The panel's pages.
+pub const TABS: [&str; 3] = ["Camera", "Look", "Frame"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Row {
@@ -139,19 +168,30 @@ enum Row {
     Lens,
     Roll,
     Focus,
+    AfPoint,
     Distance,
     Aperture,
+    Iris,
+    Peaking,
     Exposure,
     Look,
+    Strength,
+    Filter,
+    Fade,
     Vignette,
     Grain,
     Frame,
+    Position,
     Grid,
     Time,
     Capture,
+    Dock,
 }
 
-const ROWS: [Row; 14] = [Row::Camera, Row::Lens, Row::Roll, Row::Focus, Row::Distance, Row::Aperture, Row::Exposure, Row::Look, Row::Vignette, Row::Grain, Row::Frame, Row::Grid, Row::Time, Row::Capture];
+/// Seconds the camera must hold still before the panel comes back up (it fades back while the view moves).
+const PANEL_RETURN_S: f64 = 0.45;
+/// The faded panel's opacity.
+const PANEL_FADED: f64 = 0.18;
 
 /// What the window feeds photo mode each frame.
 pub struct Feed<'a> {
@@ -180,20 +220,35 @@ pub struct PhotoMode {
     /// None: the aperture "off" (everything sharp); else an index into `STOPS`.
     pub stop: Option<usize>,
     pub focus: Focus,
+    /// The AF point (an index into `AF_POINTS`).
+    pub af: usize,
     pub focus_m: f64,
     focus_now: f64,
+    /// The iris (an index into `IRISES`).
+    pub iris: usize,
+    pub peaking: bool,
     pub ev_thirds: i32,
     pub grade: Grade,
+    /// 0..2 of the grade.
+    pub strength: f64,
+    pub filter: rp::MonoFilter,
+    pub fade: f64,
     pub vignette: f64,
     pub grain: f64,
     pub frame: usize,
+    /// -1..1: the letterbox opening's place.
+    pub frame_offset: f64,
     pub thirds: bool,
     /// The local time of day override (None: the game's hour).
     pub hour: Option<f64>,
     pub game_hour: f64,
     pub capture_2x: bool,
     pub panel: bool,
+    pub dock_left: bool,
+    tab: usize,
     row: usize,
+    /// Seconds since the view last moved (the panel's fade).
+    still_s: f64,
     toast: Option<(String, Instant)>,
     /// A capture asked for (the scale), taken after the frame.
     pub request: Option<u32>,
@@ -214,19 +269,29 @@ impl PhotoMode {
             focal_mm: 35.0,
             stop: Some(6),
             focus: Focus::Subject,
+            af: 0,
             focus_m: 5.0,
             focus_now: 5.0,
+            iris: 0,
+            peaking: false,
             ev_thirds: 0,
             grade: Grade::Neutral,
+            strength: 1.0,
+            filter: rp::MonoFilter::DeepYellow,
+            fade: 0.0,
             vignette: 0.35,
             grain: 0.0,
             frame: 0,
+            frame_offset: 0.0,
             thirds: true,
             hour: None,
             game_hour,
             capture_2x: false,
             panel: true,
+            dock_left: false,
+            tab: 0,
             row: 1,
+            still_s: 10.0,
             toast: None,
             request: None,
         }
@@ -242,13 +307,18 @@ impl PhotoMode {
         self.anchor = anchor;
         self.orbit_m = (self.eye - anchor).length().clamp(1.0, RADIUS_M);
         self.focal_mm = rp::focal_mm(cam.fov_y_deg as f64, cam.aspect as f64).clamp(LENS_MIN_MM, LENS_MAX_MM);
-        self.focus_now = (anchor + DVec3::Y * (SUBJECT_EYE_M - eo_player::camera::on_foot::PIVOT_HEIGHT) - self.eye).length().max(0.3);
+        self.focus_now = (self.subject_eyes() - self.eye).length().max(0.3);
+        self.still_s = 10.0;
         self.request = None;
     }
 
     pub fn leave(&mut self) {
         self.on = false;
         self.request = None;
+    }
+
+    fn subject_eyes(&self) -> DVec3 {
+        self.anchor + DVec3::Y * (SUBJECT_EYE_M - eo_player::camera::on_foot::PIVOT_HEIGHT)
     }
 
     fn forward(&self) -> DVec3 {
@@ -268,17 +338,32 @@ impl PhotoMode {
         }
     }
 
+    /// The ray through the AF point (unit, world), for the camera at an aspect.
+    pub fn af_ray(&self, aspect: f64) -> DVec3 {
+        let cam = self.camera(aspect, 1000.0);
+        let [x, y] = AF_POINTS[self.af.min(AF_POINTS.len() - 1)].0;
+        let ty = (0.5 * cam.fov_y_deg as f64).to_radians().tan();
+        let tx = ty * aspect;
+        (cam.forward().as_dvec3() + cam.right().as_dvec3() * (x * tx) + cam.up().as_dvec3() * (y * ty)).normalize()
+    }
+
     /// The renderer's photo settings at this frame's focus.
     pub fn params(&self) -> PhotoParams {
+        let (blades, rounded, _, _) = IRISES[self.iris.min(IRISES.len() - 1)];
         PhotoParams {
-            dof: self.stop.map(|s| Dof { f_number: STOPS[s], focus_m: self.focus_now }),
+            dof: self.stop.map(|s| Dof { f_number: STOPS[s], focus_m: self.focus_now, aperture: rp::Aperture { blades, rounded, cat_eye: true } }),
             exposure_ev: self.ev_thirds as f64 / 3.0,
             grade: self.grade,
+            strength: self.strength,
+            filter: self.filter,
+            fade: self.fade,
             vignette: self.vignette,
             grain: self.grain,
             letterbox: FRAMES[self.frame].0,
+            frame_offset: self.frame_offset,
             accumulate: if self.live { rp::LIVE_FRAMES } else { rp::STILL_FRAMES },
             animate_grain: true,
+            peaking: self.peaking,
         }
     }
 
@@ -303,6 +388,9 @@ impl PhotoMode {
         let (sy, cy) = self.yaw.sin_cos();
         let right = DVec3::new(cy, 0.0, sy);
         let axis = |a: &str, b: &str| (k(a) as i32 - k(b) as i32) as f64;
+        let flying = ["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"].iter().any(|c| k(c));
+        let moving = flying || f.mouse[0].abs() + f.mouse[1].abs() > 0.5;
+        self.still_s = if moving { 0.0 } else { self.still_s + f.dt };
         if self.orbit {
             self.orbit_m = (self.orbit_m - axis("KeyW", "KeyS") * step).clamp(0.8, RADIUS_M);
             let pivot = f.anchor;
@@ -324,10 +412,14 @@ impl PhotoMode {
             }
         }
         // focus: the target distance along the view axis, approached like a lens motor.
+        let fwd = self.forward();
         let target = match self.focus {
             Focus::Manual => self.focus_m,
-            Focus::Subject => (f.anchor + DVec3::Y * (SUBJECT_EYE_M - eo_player::camera::on_foot::PIVOT_HEIGHT) - self.eye).dot(fwd).max(0.3),
-            Focus::Centre => f.cw.and_then(|cw| cw.raycast(self.eye, fwd, 1000.0, layer::WORLD | layer::STREET | layer::VEHICLE, None)).map(|h| h.distance).unwrap_or(1000.0).max(0.3),
+            Focus::Subject => (self.subject_eyes() - self.eye).dot(fwd).max(0.3),
+            Focus::Point => {
+                let ray = self.af_ray(f.aspect);
+                f.cw.and_then(|cw| cw.raycast(self.eye, ray, 1000.0, layer::WORLD | layer::STREET | layer::VEHICLE, None)).map(|h| h.distance * ray.dot(fwd)).unwrap_or(1000.0).max(0.3)
+            }
         };
         if self.focus != Focus::Manual {
             self.focus_m = target;
@@ -347,17 +439,64 @@ impl PhotoMode {
         self.focal_mm = (self.focal_mm * 1.04f64.powf(notches)).clamp(LENS_MIN_MM, LENS_MAX_MM);
     }
 
+    /// The shown page's rows (some only when they do something).
+    fn rows(&self) -> Vec<Row> {
+        match self.tab {
+            0 => {
+                let mut r = vec![Row::Camera, Row::Lens, Row::Roll, Row::Focus];
+                if self.focus == Focus::Point {
+                    r.push(Row::AfPoint);
+                }
+                r.extend([Row::Distance, Row::Aperture, Row::Iris, Row::Peaking]);
+                r
+            }
+            1 => {
+                let mut r = vec![Row::Exposure, Row::Look];
+                if self.grade != Grade::Neutral {
+                    r.push(Row::Strength);
+                }
+                if self.grade == Grade::Monochrome {
+                    r.push(Row::Filter);
+                }
+                r.extend([Row::Fade, Row::Vignette, Row::Grain]);
+                r
+            }
+            _ => {
+                let mut r = vec![Row::Frame];
+                if FRAMES[self.frame].0.is_some() {
+                    r.push(Row::Position);
+                }
+                r.extend([Row::Grid, Row::Time, Row::Capture, Row::Dock]);
+                r
+            }
+        }
+    }
+
+    /// Show a page (its first row selected).
+    pub fn set_tab(&mut self, t: usize) {
+        self.tab = t % TABS.len();
+        self.row = 0;
+    }
+
     /// A key pressed in photo mode; true when photo mode used it.
     pub fn key(&mut self, code: winit::keyboard::KeyCode) -> bool {
         use winit::keyboard::KeyCode as K;
+        let n = self.rows().len();
         match code {
-            K::ArrowUp => self.row = (self.row + ROWS.len() - 1) % ROWS.len(),
-            K::ArrowDown => self.row = (self.row + 1) % ROWS.len(),
+            K::ArrowUp => self.row = (self.row.min(n - 1) + n - 1) % n,
+            K::ArrowDown => self.row = (self.row.min(n - 1) + 1) % n,
             K::ArrowLeft => self.change(-1),
             K::ArrowRight => self.change(1),
+            K::Tab => self.set_tab(self.tab + 1),
             K::Enter | K::NumpadEnter => self.request = Some(if self.capture_2x { 2 } else { 1 }),
             K::KeyH => self.panel = !self.panel,
             K::KeyO => self.orbit = !self.orbit,
+            K::KeyF => {
+                // the AF point: to the next one (and focus there).
+                self.af = if self.focus == Focus::Point { (self.af + 1) % AF_POINTS.len() } else { self.af };
+                self.focus = Focus::Point;
+            }
+            K::KeyG => self.peaking = !self.peaking,
             K::KeyZ => self.roll_deg = (self.roll_deg - 1.0).clamp(-45.0, 45.0),
             K::KeyX => self.roll_deg = (self.roll_deg + 1.0).clamp(-45.0, 45.0),
             _ => return false,
@@ -367,15 +506,19 @@ impl PhotoMode {
 
     fn change(&mut self, d: i32) {
         let df = d as f64;
-        match ROWS[self.row] {
+        let rows = self.rows();
+        let row = rows[self.row.min(rows.len() - 1)];
+        let step_frac = |v: f64, by: f64, lo: f64, hi: f64| ((v / by).round() * by + by * df).clamp(lo, hi);
+        match row {
             Row::Camera => self.orbit = !self.orbit,
             Row::Lens => self.focal_mm = (self.focal_mm * 1.06f64.powf(df)).clamp(LENS_MIN_MM, LENS_MAX_MM),
             Row::Roll => self.roll_deg = (self.roll_deg + df).clamp(-45.0, 45.0),
             Row::Focus => {
-                let modes = [Focus::Subject, Focus::Centre, Focus::Manual];
+                let modes = [Focus::Subject, Focus::Point, Focus::Manual];
                 let i = modes.iter().position(|m| *m == self.focus).unwrap_or(0) as i32;
                 self.focus = modes[(i + d).rem_euclid(3) as usize];
             }
+            Row::AfPoint => self.af = (self.af as i32 + d).rem_euclid(AF_POINTS.len() as i32) as usize,
             Row::Distance => {
                 self.focus = Focus::Manual;
                 self.focus_m = (self.focus_m * 1.1f64.powf(df)).clamp(0.3, 1000.0);
@@ -389,15 +532,25 @@ impl PhotoMode {
                     (Some(s), false) => Some(s - 1),
                 }
             }
+            Row::Iris => self.iris = (self.iris as i32 + d).rem_euclid(IRISES.len() as i32) as usize,
+            Row::Peaking => self.peaking = !self.peaking,
             Row::Exposure => self.ev_thirds = (self.ev_thirds + d).clamp(-9, 9),
             Row::Look => {
                 let i = GRADES.iter().position(|g| *g == self.grade).unwrap_or(0) as i32;
                 self.grade = GRADES[(i + d).rem_euclid(GRADES.len() as i32) as usize];
                 self.grain = self.grade.look().grain;
+                self.strength = 1.0;
             }
-            Row::Vignette => self.vignette = ((self.vignette * 10.0).round() / 10.0 + 0.1 * df).clamp(0.0, 1.0),
-            Row::Grain => self.grain = ((self.grain * 10.0).round() / 10.0 + 0.1 * df).clamp(0.0, 1.0),
+            Row::Strength => self.strength = step_frac(self.strength, 0.1, 0.0, 2.0),
+            Row::Filter => {
+                let i = rp::MONO_FILTERS.iter().position(|f| *f == self.filter).unwrap_or(0) as i32;
+                self.filter = rp::MONO_FILTERS[(i + d).rem_euclid(rp::MONO_FILTERS.len() as i32) as usize];
+            }
+            Row::Fade => self.fade = step_frac(self.fade, 0.1, 0.0, 1.0),
+            Row::Vignette => self.vignette = step_frac(self.vignette, 0.1, 0.0, 1.0),
+            Row::Grain => self.grain = step_frac(self.grain, 0.1, 0.0, 1.0),
             Row::Frame => self.frame = (self.frame as i32 + d).rem_euclid(FRAMES.len() as i32) as usize,
+            Row::Position => self.frame_offset = step_frac(self.frame_offset, 0.1, -1.0, 1.0),
             Row::Grid => self.thirds = !self.thirds,
             Row::Time => {
                 self.hour = match self.hour {
@@ -410,12 +563,15 @@ impl PhotoMode {
                 }
             }
             Row::Capture => self.capture_2x = !self.capture_2x,
+            Row::Dock => self.dock_left = !self.dock_left,
         }
+        let n = self.rows().len();
+        self.row = self.row.min(n - 1);
     }
 
-    /// Put the panel's selection on a row (captures pick one).
+    /// Put the panel's selection on a row of the shown page (captures pick one).
     pub fn select_row(&mut self, i: usize) {
-        self.row = i.min(ROWS.len() - 1);
+        self.row = i.min(self.rows().len() - 1);
     }
 
     /// A line on screen for a few seconds.
@@ -423,50 +579,133 @@ impl PhotoMode {
         self.toast = Some((s, Instant::now()));
     }
 
+    /// The panel's opacity: faded back while the view moves, up again once it holds still.
+    fn panel_alpha(&self) -> f32 {
+        let t = ((self.still_s - PANEL_RETURN_S) / 0.25).clamp(0.0, 1.0);
+        (PANEL_FADED + (1.0 - PANEL_FADED) * t) as f32
+    }
+
     /// The panel's rows as eo-ui draws them.
     pub fn panel(&self, aspect: f64) -> PhotoPanel {
         let lin = |v: f64, a: f64, b: f64| Some(((v - a) / (b - a)) as f32);
         let log = |v: f64, a: f64, b: f64| Some(((v.ln() - a.ln()) / (b.ln() - a.ln())) as f32);
-        let fov = rp::fov_y_deg(self.focal_mm, aspect);
+        let fov_y = rp::fov_y_deg(self.focal_mm, aspect);
+        let fov_x = rp::fov_x_deg(self.focal_mm);
         let stop = self.stop.map(|s| format!("f/{}", fmt_stop(STOPS[s]))).unwrap_or_else(|| "Off".into());
         let ev = self.ev_thirds as f64 / 3.0;
-        let rows = vec![
-            PhotoRow::new("Camera", if self.orbit { "Orbit".into() } else { "Free".into() }, None),
-            PhotoRow::new("Lens", format!("{:.0} mm", self.focal_mm), log(self.focal_mm, LENS_MIN_MM, LENS_MAX_MM)).note(&format!("{fov:.1}\u{b0} vertical, 35 mm equivalent")),
-            PhotoRow::new("Roll", format!("{:+.0}\u{b0}", self.roll_deg), lin(self.roll_deg, -45.0, 45.0)),
-            PhotoRow::new("Focus", match self.focus { Focus::Subject => "Player", Focus::Centre => "Centre", Focus::Manual => "Manual" }.into(), None),
-            PhotoRow::new("Distance", fmt_m(self.focus_m), log(self.focus_m, 0.3, 1000.0)),
-            PhotoRow::new("Aperture", stop, self.stop.map(|s| s as f32 / (STOPS.len() - 1) as f32)),
-            PhotoRow::new("Exposure", format!("{ev:+.1} EV"), lin(ev, -3.0, 3.0)),
-            PhotoRow::new("Look", self.grade.label().into(), None),
-            PhotoRow::new("Vignette", format!("{:.0} %", self.vignette * 100.0), Some(self.vignette as f32)),
-            PhotoRow::new("Grain", format!("{:.0} %", self.grain * 100.0), Some(self.grain as f32)),
-            PhotoRow::new("Frame", FRAMES[self.frame].1.into(), None),
-            PhotoRow::new("Thirds", if self.thirds { "On".into() } else { "Off".into() }, None),
-            PhotoRow::new("Time of day", match self.hour { None => "Game".into(), Some(h) => fmt_hour(h) }, self.hour.map(|h| (h / 24.0) as f32)).note("Local: only you see this"),
-            PhotoRow::new("Capture", if self.capture_2x { "2\u{d7} size".into() } else { "Screen size".into() }, None),
-        ];
+        let look = self.grade.look();
+        let (mired, _, _, _) = rp::graded(self.grade, self.strength, self.filter);
+        let sharp = self.stop.map(|s| {
+            let (n, f) = rp::dof_limits_m(self.focal_mm, STOPS[s], self.focus_now, rp::COC_LIMIT_MM);
+            format!("Sharp from {} to {}", fmt_m(n), f.map(fmt_m).unwrap_or_else(|| "\u{221e}".into()))
+        });
+        let (_, _, iris, iris_note) = IRISES[self.iris.min(IRISES.len() - 1)];
+        let row = |r: Row| -> PhotoRow {
+            match r {
+                Row::Camera => PhotoRow::new("Camera", if self.orbit { "Orbit".into() } else { "Free".into() }, None).note(&format!("Within {RADIUS_M:.0} m of you")),
+                Row::Lens => PhotoRow::new("Lens", format!("{:.0} mm", self.focal_mm), log(self.focal_mm, LENS_MIN_MM, LENS_MAX_MM)).note(&format!("35 mm equivalent: {fov_x:.1}\u{b0} wide, {fov_y:.1}\u{b0} high")),
+                Row::Roll => PhotoRow::new("Roll", format!("{:+.0}\u{b0}", self.roll_deg), lin(self.roll_deg, -45.0, 45.0)),
+                Row::Focus => PhotoRow::new("Focus", match self.focus { Focus::Subject => "Your eyes", Focus::Point => "AF point", Focus::Manual => "Manual" }.into(), None),
+                Row::AfPoint => PhotoRow::new("AF point", AF_POINTS[self.af].1.into(), None).note("F moves it"),
+                Row::Distance => {
+                    let r = PhotoRow::new("Distance", fmt_m(self.focus_now), log(self.focus_now.clamp(0.3, 1000.0), 0.3, 1000.0));
+                    match &sharp {
+                        Some(s) => r.note(s),
+                        None => r,
+                    }
+                }
+                Row::Aperture => PhotoRow::new("Aperture", stop.clone(), self.stop.map(|s| s as f32 / (STOPS.len() - 1) as f32)),
+                Row::Iris => PhotoRow::new("Bokeh", iris.into(), None).note(iris_note),
+                Row::Peaking => PhotoRow::new("Peaking", if self.peaking { "On".into() } else { "Off".into() }, None).note("Marks what is in focus, never saved"),
+                Row::Exposure => PhotoRow::new("Exposure", format!("{ev:+.1} EV"), lin(ev, -3.0, 3.0)),
+                Row::Look => PhotoRow::new("Look", self.grade.label().into(), None).note(&match self.grade {
+                    Grade::Neutral => "As the eye sees it".to_string(),
+                    Grade::WarmFilm => format!("{} warming filter, {:+.0} mired", look.filter, look.mired),
+                    Grade::Cool => format!("{} cooling filter, {:+.0} mired", look.filter, look.mired),
+                    Grade::Monochrome => format!("{}, a panchromatic film", look.film.name),
+                }),
+                Row::Strength => PhotoRow::new("Strength", format!("{:.0} %", self.strength * 100.0), Some((self.strength / 2.0) as f32)).note(&if look.mono {
+                    "Of the contrast filter".to_string()
+                } else {
+                    format!("{:+.0} mired: 6500 K to {:.0} K", mired, rp::shifted_cct(mired))
+                }),
+                Row::Filter => PhotoRow::new("Filter", self.filter.label().into(), None).note(match self.filter {
+                    rp::MonoFilter::None => "Pale skies, as unfiltered film",
+                    rp::MonoFilter::Yellow => "Close to the eye's tones",
+                    rp::MonoFilter::DeepYellow => "Darker sky, clouds stand out",
+                    rp::MonoFilter::Orange => "Dark sky, lighter brick and skin",
+                    rp::MonoFilter::Red => "Near-black sky, hard contrast",
+                    rp::MonoFilter::Green => "Light foliage, darker red",
+                }),
+                Row::Fade => PhotoRow::new("Fade", format!("{:.0} %", self.fade * 100.0), Some(self.fade as f32)).note("Lifted blacks, softer highlights"),
+                Row::Vignette => PhotoRow::new("Vignette", format!("{:.0} %", self.vignette * 100.0), Some(self.vignette as f32)).note("The lens's own falloff"),
+                Row::Grain => PhotoRow::new("Grain", format!("{:.0} %", self.grain * 100.0), Some(self.grain as f32)).note(&format!("{}, RMS granularity {:.0}", look.film.name, look.film.rms_granularity)),
+                Row::Frame => PhotoRow::new("Frame", FRAMES[self.frame].1.into(), None),
+                Row::Position => PhotoRow::new("Position", if self.frame_offset.abs() < 0.05 { "Centre".into() } else { format!("{:+.0} %", self.frame_offset * 100.0) }, lin(self.frame_offset, -1.0, 1.0)).note("Moves the opening up or down"),
+                Row::Grid => PhotoRow::new("Thirds", if self.thirds { "On".into() } else { "Off".into() }, None),
+                Row::Time => PhotoRow::new("Time of day", match self.hour { None => "Game".into(), Some(h) => fmt_hour(h) }, self.hour.map(|h| (h / 24.0) as f32)).note("Local: only you see this"),
+                Row::Capture => PhotoRow::new("Capture", if self.capture_2x { "2\u{d7} size".into() } else { "Screen size".into() }, None).note(&photos_dir().map(|d| format!("Into {}", d.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default())).unwrap_or_else(|| "No photos folder".into())),
+                Row::Dock => PhotoRow::new("Panel", if self.dock_left { "Left".into() } else { "Right".into() }, None).note("Fades while the camera moves"),
+            }
+        };
+        let rows: Vec<PhotoRow> = self.rows().into_iter().map(row).collect();
+        let selected = self.row.min(rows.len().saturating_sub(1));
         PhotoPanel {
-            summary: format!("{:.0} mm \u{b7} {} \u{b7} {} \u{b7} {:+.1} EV", self.focal_mm, if self.stop.is_some() { format!("f/{}", fmt_stop(STOPS[self.stop.unwrap()])) } else { "all sharp".into() }, fmt_m(self.focus_now), ev),
+            summary: format!("{:.0} mm \u{b7} {} \u{b7} {} \u{b7} {:+.1} EV", self.focal_mm, if self.stop.is_some() { stop.clone() } else { "all sharp".into() }, fmt_m(self.focus_now), ev),
+            tabs: TABS.iter().map(|t| t.to_string()).collect(),
+            tab: self.tab,
             rows,
-            selected: self.row,
-            hints: [("Enter", "Capture"), ("Arrows", "Settings"), ("Wheel", "Lens"), ("Z X", "Roll"), ("O", "Orbit"), ("H", "Hide"), ("P", "Exit")].iter().map(|(a, b)| (a.to_string(), b.to_string())).collect(),
+            selected,
+            hints: [("Enter", "Capture"), ("Tab", "Pages"), ("Arrows", "Settings"), ("Wheel", "Lens"), ("F", "AF point"), ("G", "Peaking"), ("Z X", "Roll"), ("O", "Orbit"), ("H", "Hide"), ("P", "Exit")]
+                .iter()
+                .map(|(a, b)| (a.to_string(), b.to_string()))
+                .collect(),
             toast: self.toast.as_ref().map(|t| t.0.clone()),
             thirds: self.thirds,
             frame_aspect: FRAMES[self.frame].0.map(|a| a as f32),
+            frame_offset: self.frame_offset as f32,
             visible: self.panel,
+            dock_left: self.dock_left,
+            alpha: self.panel_alpha(),
+            reticle: self.reticle(aspect),
         }
+    }
+
+    /// Where the focus is taken, on the screen: the AF point, or the player's eyes (None: manual focus, or out of view).
+    fn reticle(&self, aspect: f64) -> Option<eo_ui::photo::Reticle> {
+        let at = match self.focus {
+            Focus::Manual => return None,
+            Focus::Point => {
+                let [x, y] = AF_POINTS[self.af.min(AF_POINTS.len() - 1)].0;
+                [x, y]
+            }
+            Focus::Subject => {
+                let c = self.camera(aspect, 20000.0).view_proj() * self.subject_eyes().as_vec3().extend(1.0);
+                if c.w <= 0.0 {
+                    return None;
+                }
+                [(c.x / c.w) as f64, (c.y / c.w) as f64]
+            }
+        };
+        if at[0].abs() > 0.95 || at[1].abs() > 0.95 {
+            return None;
+        }
+        let target = self.focus_m;
+        Some(eo_ui::photo::Reticle { x: (0.5 + 0.5 * at[0]) as f32, y: (0.5 - 0.5 * at[1]) as f32, locked: (target.ln() - self.focus_now.ln()).abs() < 0.01, label: fmt_m(self.focus_now) })
     }
 
     /// The settings a saved photo records.
     pub fn describe(&self, cam: &Camera) -> serde_json::Value {
+        let (blades, rounded, _, _) = IRISES[self.iris.min(IRISES.len() - 1)];
         json!({
             "eye": [cam.eye.x, cam.eye.y, cam.eye.z],
             "yaw_deg": (cam.yaw as f64).to_degrees(), "pitch_deg": (cam.pitch as f64).to_degrees(), "roll_deg": self.roll_deg,
-            "focal_mm_35mm_equivalent": self.focal_mm, "fov_y_deg": cam.fov_y_deg,
+            "focal_mm_35mm_equivalent": self.focal_mm, "fov_y_deg": cam.fov_y_deg, "fov_x_deg": rp::fov_x_deg(self.focal_mm),
             "f_number": self.stop.map(|s| STOPS[s]), "focus_m": self.focus_now, "focus": format!("{:?}", self.focus),
-            "exposure_ev": self.ev_thirds as f64 / 3.0, "grade": self.grade.name(),
-            "vignette": self.vignette, "grain": self.grain, "letterbox": FRAMES[self.frame].0,
+            "iris": { "blades": blades, "rounded": rounded, "cat_eye": true },
+            "exposure_ev": self.ev_thirds as f64 / 3.0, "grade": self.grade.name(), "strength": self.strength,
+            "filter": if self.grade == Grade::Monochrome { Some(self.filter.name()) } else { None },
+            "fade": self.fade, "vignette": self.vignette, "grain": self.grain, "letterbox": FRAMES[self.frame].0, "frame_offset": self.frame_offset,
             "local_hour": self.hour, "game_hour": self.game_hour,
         })
     }
@@ -587,6 +826,11 @@ pub fn capture(ctx: &GpuContext, renderer: &Renderer, cam: &Camera, size: (u32, 
     if w > lim || h > lim {
         anyhow::bail!("{w} x {h} is over the device's {lim} texture limit");
     }
+    // peaking marks are the window's: never in a saved photo.
+    let held = renderer.photo.params();
+    if let Some(p) = held.filter(|p| p.peaking) {
+        renderer.photo.set(Some(PhotoParams { peaking: false, ..p }));
+    }
     let tex = target(ctx, w, h, format);
     let view = tex.create_view(&Default::default());
     // the renderer's own sample count (with MSAA the colour resolves into the capture).
@@ -603,6 +847,9 @@ pub fn capture(ctx: &GpuContext, renderer: &Renderer, cam: &Camera, size: (u32, 
         renderer.encode(&mut enc, attach, resolve, &targets.depth, None);
         ctx.queue.submit([enc.finish()]);
         let _ = ctx.device.poll(wgpu::PollType::wait_indefinitely());
+    }
+    if held.is_some_and(|p| p.peaking) {
+        renderer.photo.set(held);
     }
     let rgba = read_rgba(ctx, &tex)?;
     let name = format!("earth-online-{}", stamp());
@@ -622,11 +869,16 @@ pub fn anchor_of(feet: DVec3) -> DVec3 {
 mod tests {
     use super::*;
 
+    fn select(m: &mut PhotoMode, tab: usize, row: Row) {
+        m.set_tab(tab);
+        m.row = m.rows().iter().position(|r| *r == row).unwrap();
+    }
+
     #[test]
     fn the_lens_rows_step_and_clamp() {
         let mut m = PhotoMode::new(false, 12.0);
         m.focal_mm = 50.0;
-        m.row = ROWS.iter().position(|r| *r == Row::Lens).unwrap();
+        select(&mut m, 0, Row::Lens);
         for _ in 0..200 {
             m.change(1);
         }
@@ -635,17 +887,71 @@ mod tests {
             m.change(-1);
         }
         assert_eq!(m.focal_mm, LENS_MIN_MM);
-        m.row = ROWS.iter().position(|r| *r == Row::Aperture).unwrap();
+        select(&mut m, 0, Row::Aperture);
         m.stop = Some(0);
         m.change(-1);
         assert_eq!(m.stop, None, "below f/1.4 the aperture turns off");
         m.change(1);
         assert_eq!(m.stop, Some(0));
-        m.row = ROWS.iter().position(|r| *r == Row::Time).unwrap();
+        select(&mut m, 2, Row::Time);
         m.change(1);
         assert_eq!(m.hour, Some(12.25));
         m.change(-1);
         assert_eq!(m.hour, None, "back to the game's hour");
+    }
+
+    #[test]
+    fn rows_appear_where_they_do_something() {
+        let mut m = PhotoMode::new(false, 12.0);
+        m.set_tab(1);
+        assert!(!m.rows().contains(&Row::Strength) && !m.rows().contains(&Row::Filter), "neutral: no strength, no filter");
+        select(&mut m, 1, Row::Look);
+        m.change(1);
+        assert_eq!(m.grade, Grade::WarmFilm);
+        assert!(m.rows().contains(&Row::Strength) && !m.rows().contains(&Row::Filter));
+        m.grade = Grade::Monochrome;
+        assert!(m.rows().contains(&Row::Filter));
+        assert_eq!(m.params().filter, rp::MonoFilter::DeepYellow, "the city daylight default");
+        // the letterbox's position only with a letterbox.
+        m.set_tab(2);
+        assert!(!m.rows().contains(&Row::Position));
+        m.frame = 1;
+        assert!(m.rows().contains(&Row::Position));
+        // F takes the focus to the AF point and moves it on the next press.
+        m.key(winit::keyboard::KeyCode::KeyF);
+        assert_eq!((m.focus, m.af), (Focus::Point, 0));
+        m.key(winit::keyboard::KeyCode::KeyF);
+        assert_eq!(m.af, 1);
+        // peaking is the window's alone: a saved photo clears it (`capture`).
+        m.key(winit::keyboard::KeyCode::KeyG);
+        assert!(m.params().peaking);
+    }
+
+    #[test]
+    fn the_af_point_ray_is_the_thirds_crossing() {
+        let mut m = PhotoMode::new(false, 12.0);
+        m.focal_mm = 50.0;
+        m.af = 2; // upper right
+        let r = m.af_ray(16.0 / 9.0);
+        // north-facing level camera: right is +x, up +y; a third of the half-width out and up.
+        let ty = (0.5 * rp::fov_y_deg(50.0, 16.0 / 9.0)).to_radians().tan();
+        let want = DVec3::new(ty * 16.0 / 9.0 / 3.0, ty / 3.0, -1.0).normalize();
+        assert!((r - want).length() < 1e-5, "{r:?} {want:?}");
+    }
+
+    #[test]
+    fn the_panel_fades_while_the_view_moves() {
+        let mut m = PhotoMode::new(false, 12.0);
+        let cam = Camera::new(Vec3::new(0.0, 2.0, 0.0), 0.0, 0.0, 16.0 / 9.0);
+        m.enter(&cam, DVec3::new(0.0, 1.43, 0.0));
+        assert_eq!(m.panel(16.0 / 9.0).alpha, 1.0);
+        let none = HashSet::new();
+        m.step(&Feed { held: &none, mouse: [30.0, 0.0], dt: 1.0 / 60.0, aspect: 16.0 / 9.0, anchor: DVec3::new(0.0, 1.43, 0.0), cw: None });
+        assert!(m.panel(16.0 / 9.0).alpha < 0.3);
+        for _ in 0..60 {
+            m.step(&Feed { held: &none, mouse: [0.0, 0.0], dt: 1.0 / 60.0, aspect: 16.0 / 9.0, anchor: DVec3::new(0.0, 1.43, 0.0), cw: None });
+        }
+        assert_eq!(m.panel(16.0 / 9.0).alpha, 1.0);
     }
 
     #[test]
