@@ -225,7 +225,7 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
                 let checked = t.elapsed().as_secs_f64() * 1e3;
                 let b = r.attach_cc0(ctx);
                 r.bytes.textures += b;
-                eprintln!("cc0: downloads present ({checked:.0} ms to check), {:.1} MB of arrays, tables and decal buffers allocated in {:.0} ms", b as f64 / 1e6, t.elapsed().as_secs_f64() * 1e3 - checked);
+                eprintln!("cc0: downloads present at {} ({checked:.0} ms to check), {:.1} MB of arrays, tables and decal buffers allocated in {:.0} ms", eo_assets::cc0::root().unwrap_or_default().display(), b as f64 / 1e6, t.elapsed().as_secs_f64() * 1e3 - checked);
             }
             Err(e) => crate::cc0_runtime::say_unavailable(&e),
         }

@@ -25,7 +25,7 @@ pub fn availability(ctx: &GpuContext) -> Result<(), String> {
     if !ctx.bc {
         return Err("the adapter has no BC texture compression".into());
     }
-    let root = ac::root().ok_or_else(|| "EO_CC0_ROOT is not set".to_string())?;
+    let root = ac::root().ok_or_else(|| eo_data::external::CC0.looked_in())?;
     ac::available(&root).map_err(|e| format!("{} ({e:#})", root.display()))
 }
 
@@ -33,7 +33,7 @@ pub fn availability(ctx: &GpuContext) -> Result<(), String> {
 pub fn say_unavailable(e: &str) {
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| {
-        eprintln!("cc0: the CC0 texture sets are not used: {e}. The renderer keeps its own materials (fetch them with `node native/tools/fetch-cc0.mjs`, or point EO_CC0_ROOT at them).")
+        eprintln!("cc0: the CC0 texture sets are not used: {e}. The renderer keeps its own materials (fetch them with `python3 scripts/setup-assets.py --only cc0`, or point EO_CC0_ROOT at a copy).")
     });
 }
 

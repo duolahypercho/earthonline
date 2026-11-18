@@ -162,6 +162,7 @@ fn parse(raw: &[String]) -> Result<(Args, NetOpts)> {
                 val()?;
             }
             "--low-camera" | "--default-camera" => {}
+            "--no-external" => {} // main's `external_flag`
             other => anyhow::bail!("--connect: unknown argument {other} (see native/eo-app/src/net.rs)"),
         }
     }

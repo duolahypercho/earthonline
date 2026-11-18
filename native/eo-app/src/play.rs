@@ -149,6 +149,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--low-camera" | "--default-camera" => {}
             "--no-roof-colours" | "--no-roof-contrast" | "--no-roof-parapet" | "--no-roof-patches" | "--no-roof-plant" => {} // main's `roofs_flags`
             "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" => {} // main's `roofs_flags`
+            "--no-external" => {} // main's `external_flag`
             other => anyhow::bail!("--play: unknown argument {other} (see native/eo-app/src/play.rs)"),
         }
     }
