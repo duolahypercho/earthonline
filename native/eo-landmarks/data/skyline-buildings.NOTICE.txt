@@ -18,6 +18,14 @@ Sources consulted (public descriptions; nothing reproduced beyond short facts):
   Sutro Tower Inc., sutrotower.com "Tower Technology" (antenna levels)
   IES Lighting Handbook, floodlighting illuminance recommendations
   Mitchell Charity, "What color is a blackbody?" (vendian.org), 3,500 K
+  Third pass (each facade's and building's "v3" object, and "v3Night"):
+    glass makers' published visible-reflectance ranges for clear and tinted
+    solar-control low-e units (PPG, Solarban 70XL product data); the Fresnel
+    reflectance of float glass (about 4 % a face at normal incidence);
+    SOM and Wikipedia on 555 California's polished carnelian granite;
+    SFYIMBY on Embarcadero Center's protruding vertical concrete stripes;
+    Wikipedia, Salesforce Tower, on the crown's light sculpture (Day for
+    Night, Jim Campbell, 2018); Wikipedia, 181 Fremont, on its screen and spire
 
 Plans: each entry names its footprint record in public/data/sf/sf-city.json
 (OpenStreetMap, ODbL 1.0; see sf-city.NOTICE.txt); the plan is read from that

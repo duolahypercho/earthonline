@@ -43,6 +43,20 @@ pub struct FacadeStyle {
     /// How far the frame stands proud of the glass (m).
     #[serde(default)]
     pub fin_depth_m: f64,
+    /// v3: the glazing's visible reflectance at normal incidence (0: the
+    /// previous coated-mirror tint), the room seen through it by day, each
+    /// pane's set-out tilt (degrees), the night lighting's bay (modules) and
+    /// a lit window's luminance (cd/m2).
+    #[serde(default)]
+    pub reflectance: f64,
+    #[serde(default)]
+    pub body_srgb: Option<String>,
+    #[serde(default)]
+    pub jitter_deg: f64,
+    #[serde(default)]
+    pub bay_modules: f64,
+    #[serde(default)]
+    pub window_cd: f64,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -80,12 +94,55 @@ pub struct Skyline {
     pub facades: BTreeMap<String, FacadeStyle>,
     pub floodlight: Value,
     pub buildings: Vec<Entry>,
+    /// v3: the crown's light sculpture (`night`, cd/m2).
+    #[serde(default)]
+    pub night: Option<Value>,
 }
 
-/// The parsed table (compiled in).
+/// Each facade style's and building's `v3` object laid over its own keys
+/// (the third pass's values; the previous ones stay for `--no-towers3`).
+fn overlay_v3(v: &mut Value) {
+    let lay = |o: &mut Value| {
+        if let Some(Value::Object(over)) = o.get("v3").cloned() {
+            for (k, x) in over {
+                if k != "source" {
+                    o[k.as_str()] = x;
+                }
+            }
+        }
+    };
+    if let Some(Value::Object(f)) = v.get_mut("facades") {
+        for (_, style) in f.iter_mut() {
+            lay(style);
+        }
+    }
+    if let Some(Value::Array(b)) = v.get_mut("buildings") {
+        for e in b.iter_mut() {
+            lay(e);
+        }
+    }
+    if let Some(n) = v.get("v3Night").cloned() {
+        v["night"] = n;
+    }
+}
+
+/// The parsed table (compiled in), with the third pass's values when `v3`.
+pub fn data_for(v3: bool) -> &'static Skyline {
+    static D2: OnceLock<Skyline> = OnceLock::new();
+    static D3: OnceLock<Skyline> = OnceLock::new();
+    let parse = |v3: bool| {
+        let mut v: Value = serde_json::from_str(SKYLINE_JSON).expect("eo-landmarks: data/skyline-buildings.json does not parse");
+        if v3 {
+            overlay_v3(&mut v);
+        }
+        serde_json::from_value::<Skyline>(v).expect("eo-landmarks: data/skyline-buildings.json does not parse")
+    };
+    if v3 { D3.get_or_init(|| parse(true)) } else { D2.get_or_init(|| parse(false)) }
+}
+
+/// The table as the switches set it (`crate::towers3_on`).
 pub fn data() -> &'static Skyline {
-    static D: OnceLock<Skyline> = OnceLock::new();
-    D.get_or_init(|| serde_json::from_str(SKYLINE_JSON).expect("eo-landmarks: data/skyline-buildings.json does not parse"))
+    data_for(crate::towers3_on())
 }
 
 /// The index of a facade style in the generated WGSL table (`LM_FACADES`, in the table's key order).
@@ -98,15 +155,39 @@ pub fn hex_linear(s: &str) -> Rgb {
     srgb_hex(u32::from_str_radix(s.trim_start_matches('#'), 16).unwrap_or(0x808080))
 }
 
-/// Each facade style as three rows of the WGSL table: (module, storey,
+/// The albedo and metalness that give a pane of visible reflectance `r` at
+/// normal incidence (F0) over a room of diffuse albedo `d` in the city
+/// shader's metalness model (diffuse = a (1 - m), F0 = 0.04 (1 - m) + a m):
+/// x = 1 - m solves 0.04 x^2 - (r + d) x + d = 0.
+pub fn pane_albedo_metal(r: f64, d: f64) -> (f64, f64) {
+    let (r, d) = (r.clamp(0.04, 0.9), d.clamp(1e-4, 0.5));
+    let b = r + d;
+    let x = ((b - (b * b - 0.16 * d).max(0.0).sqrt()) / 0.08).clamp(0.02, 1.0);
+    (d / x, 1.0 - x)
+}
+
+/// Each facade style as four rows of the WGSL table: (module, storey,
 /// glaze x, glaze y), (glass linear rgb, glass roughness), (pattern code,
-/// night lit share, led, frame depth). Pattern 0 a window grid, 1 an open screen.
-pub fn facade_rows() -> Vec<[f32; 12]> {
-    data()
+/// night lit share, led, frame depth), (v3: the pane's metalness, its tilt
+/// in radians, the night bay in modules, a lit window's cd/m2). Pattern 0 a
+/// window grid, 1 an open screen. With a `reflectance` the glass row is the
+/// pane's albedo (`pane_albedo_metal`, the tint's chroma at the reflectance)
+/// and its metalness in the fourth; without one the tint as before.
+pub fn facade_rows_for(v3: bool) -> Vec<[f32; 16]> {
+    data_for(v3)
         .facades
         .values()
         .map(|f| {
-            let g = hex_linear(&f.glass_srgb);
+            let mut g = hex_linear(&f.glass_srgb);
+            let mut metal = 0.85;
+            if f.reflectance > 0.0 {
+                let body = f.body_srgb.as_deref().map(hex_linear).unwrap_or([0.025; 3]);
+                let lum = |c: Rgb| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+                let (a, m) = pane_albedo_metal(f.reflectance, lum(body));
+                let l = lum(g).max(1e-4);
+                g = g.map(|c| (c / l * a).min(1.0));
+                metal = m;
+            }
             let pattern = if f.pattern == "screen" { 1.0 } else { 0.0 };
             [
                 f.module_m as f32,
@@ -121,9 +202,24 @@ pub fn facade_rows() -> Vec<[f32; 12]> {
                 f.night_lit as f32,
                 f.led as f32,
                 f.fin_depth_m as f32,
+                metal as f32,
+                f.jitter_deg.to_radians() as f32,
+                f.bay_modules as f32,
+                f.window_cd as f32,
             ]
         })
         .collect()
+}
+
+/// `facade_rows_for` as the switches set it.
+pub fn facade_rows() -> Vec<[f32; 16]> {
+    facade_rows_for(crate::towers3_on())
+}
+
+/// v3: the crown sculpture's colour wash and its figures' peak, cd/m2 (`night`).
+pub fn led_luminance() -> [f64; 2] {
+    let n = data().night.clone().unwrap_or(Value::Null);
+    [n["ledWashCd"].as_f64().unwrap_or(0.0), n["ledFigureCd"].as_f64().unwrap_or(0.0)]
 }
 
 /// The floodlights' colour: `floodlight.colourK` as an sRGB tone at unit
@@ -402,11 +498,33 @@ pub fn build_tower(e: &Entry, points: &[f64], ground_at: &dyn Fn(f64, f64) -> f6
             pyramid(&mut metal, &square(pc, 1.4, a[1].atan2(a[0])), screen_top - 6.0, spire_top, spire_c);
             tip_y = spire_top;
         }
+        "screen-taper" => {
+            // v3: the curtain wall carried up past the roof as the
+            // mechanical screen, its faces leaning in to `screenTopScale` of
+            // the roof's plan at its top (the tower's sloped crown), open
+            // over the roof; a slender spire from the roof inside it.
+            let screen_top = base + num("screenTopM");
+            let k = cr["screenTopScale"].as_f64().unwrap_or(1.0).clamp(0.3, 1.0);
+            let pc = ring_centroid(&top_plan);
+            let top_ring = scale_about(&top_plan, pc, k);
+            facade.loft(&top_plan, top_y, &top_ring, screen_top, stone, false);
+            far.loft(&top_plan, top_y, &top_ring, screen_top, far_c, false);
+            // the screen's inner face (seen down into the crown) and the roof inside it.
+            roof.loft(&scale_about(&top_plan, pc, 0.985), top_y, &scale_about(&top_plan, pc, k * 0.985), screen_top, stone.map(|v| v * 0.6), false);
+            cap(&mut roof, &scale_about(&top_plan, pc, 0.97), top_y + 0.3, roof_c);
+            let spire_top = base + num("spireTopM");
+            let spire_c = hex_linear(cr["spireSrgb"].as_str().unwrap_or("#c8ccce"));
+            let half = cr["spireBaseHalfM"].as_f64().unwrap_or(1.0);
+            pyramid(&mut metal, &square(pc, half, a[1].atan2(a[0])), top_y, spire_top, spire_c);
+            pyramid(&mut far, &square(pc, half, a[1].atan2(a[0])), top_y, spire_top, spire_c);
+            tip_y = spire_top;
+        }
         _ => {}
     }
     if let Some(b) = &e.braces {
         // Diagonal braces across every long face, one X per `storeysPerBay` storeys.
         let span = b["storeysPerBay"].as_f64().unwrap_or(8.0) * style.storey_m;
+        let (bw, bd) = (b["widthM"].as_f64().unwrap_or(0.9), b["depthM"].as_f64().unwrap_or(0.35));
         let brace_c = hex_linear(e.crown["spireSrgb"].as_str().unwrap_or("#c8ccce"));
         let n = ring.len();
         for i in 0..n {
@@ -418,13 +536,13 @@ pub fn build_tower(e: &Entry, points: &[f64], ground_at: &dyn Fn(f64, f64) -> f6
             }
             // Outward normal of an edge of the outward-wound ring (orient_ring: its side quads face (-dz, dx)).
             let (nx, nz) = (-dz / len, dx / len);
-            let o = 0.18;
+            let o = 0.18 + if bd > 0.35 { bd / 2.0 - 0.175 } else { 0.0 };
             let at = |t: f64, y: f64| -> V3 { [p[0] + dx * t + nx * o, y, p[1] + dz * t + nz * o] };
             let bays = ((top_y - base) / span).floor().max(1.0) as i64;
             for k in 0..bays {
                 let (ya, yb) = (base + k as f64 * span, base + (k + 1) as f64 * span);
-                metal.beam_up(at(0.04, ya), at(0.96, yb), 0.9, 0.35, brace_c, Some([nx, 0.0, nz]));
-                metal.beam_up(at(0.96, ya), at(0.04, yb), 0.9, 0.35, brace_c, Some([nx, 0.0, nz]));
+                metal.beam_up(at(0.04, ya), at(0.96, yb), bw, bd, brace_c, Some([nx, 0.0, nz]));
+                metal.beam_up(at(0.96, ya), at(0.04, yb), bw, bd, brace_c, Some([nx, 0.0, nz]));
             }
         }
     }

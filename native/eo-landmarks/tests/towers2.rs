@@ -26,6 +26,8 @@ fn the_skyline_table_is_whole() {
     }
     let rows = skyline::facade_rows();
     assert_eq!(rows.len(), d.facades.len());
+    // the previous table's rows are the v2 data's, whatever the switch.
+    assert_eq!(skyline::facade_rows_for(false).len(), skyline::data_for(false).facades.len());
     for (r, (name, f)) in rows.iter().zip(d.facades.iter()) {
         assert!(f.module_m > 0.0 && f.storey_m > 0.0, "{name}");
         assert!((0.0..=1.0).contains(&f.glaze_x) && (0.0..=1.0).contains(&f.glaze_y), "{name}");
@@ -83,7 +85,7 @@ fn the_second_generators_build_the_five() {
     for id in eo_landmarks::towers::BUILDING_IDS {
         let ground = js.registry[id].ground.sampled(&|x, z| g.sample(x, z));
         let v1 = eo_landmarks::towers::build(id, &js.buildings[id], &ground).unwrap();
-        let v2 = eo_landmarks::towers2::build(id, &js.buildings[id], &ground).unwrap();
+        let v2 = eo_landmarks::towers2::build_v(id, &js.buildings[id], &ground, false).unwrap();
         assert!(v1.materials.is_empty() && v1.lights.is_empty(), "{id}: the previous generator is unchanged");
         assert!(v2.version.ends_with("+towers2"), "{id}");
         for (key, _) in &v2.groups {
@@ -145,4 +147,98 @@ fn the_towers_carry_their_aviation_lights() {
     let off = eo_landmarks::set::Options { towers2: false, skyline: false, ..eo_landmarks::set::Options::default() };
     let set = eo_landmarks::LandmarkSet::build_with(&paths.repo_root, &|x, z| elevation.sample(x, z), &ca, off).unwrap();
     assert!(set.tower_lights.is_empty());
+}
+
+/// The third pass (towers3.rs, `eo-app --no-towers3` off) builds the five
+/// within their budgets, in the registry's groups; the floodlit ones carry
+/// a projector rig (not the lit band) and the rest keep their materials.
+#[test]
+fn the_third_pass_builds_the_five() {
+    eo_data::groundscale::pin(1.0);
+    let (g, _) = elevation();
+    let js = LandmarksJs::get();
+    let (_, ranges) = eo_landmarks::towers3::projector_rows();
+    for id in eo_landmarks::towers::BUILDING_IDS {
+        let ground = js.registry[id].ground.sampled(&|x, z| g.sample(x, z));
+        let v1 = eo_landmarks::towers::build(id, &js.buildings[id], &ground).unwrap();
+        let v3 = eo_landmarks::towers2::build_v(id, &js.buildings[id], &ground, true).unwrap();
+        assert!(v3.version.ends_with("+towers3"), "{id}: {}", v3.version);
+        for (key, _) in &v3.groups {
+            assert!(v1.groups.iter().any(|(k, _)| k == key), "{id}: group {key} is the registry's");
+        }
+        let tris: usize = v3.groups.iter().map(|(_, f)| f.triangles()).sum();
+        let budget = js.registry[id].budget["triangles"].as_f64().unwrap() as usize;
+        assert!(tris <= budget, "{id}: {tris} triangles over the registry's budget {budget}");
+        let rigged: Vec<&str> = v3.materials.iter().filter_map(|(k, m)| m.surface_options.as_ref().filter(|o| o["rig"].is_array()).map(|_| k.as_str())).collect();
+        assert!(v3.materials.iter().all(|(_, m)| m.surface_options.as_ref().is_none_or(|o| o["flood"].is_null())), "{id}: no lit band in the third pass");
+        match id {
+            "coit-tower" => assert!(rigged.contains(&"concrete"), "{id}: floodlit"),
+            "city-hall" => assert!(rigged.contains(&"stone") && rigged.contains(&"dome"), "{id}: floodlit"),
+            "transamerica-pyramid" => assert!(rigged.contains(&"metal"), "{id}: the spire lit from within"),
+            _ => assert!(rigged.is_empty(), "{id}"),
+        }
+        for (_, m) in &v3.materials {
+            if let Some(r) = m.surface_options.as_ref().and_then(|o| o["rig"].as_array()) {
+                let (first, count) = (r[0].as_u64().unwrap() as u32, r[2].as_u64().unwrap() as u32);
+                assert!(count > 0 && ranges.iter().any(|(_, f, c)| *f == first && *c == count), "{id}: the rig is in the table");
+            }
+        }
+    }
+    // Coit: the third pass's flutes cut deeper than the export's.
+    let id = "coit-tower";
+    let ground = js.registry[id].ground.sampled(&|x, z| g.sample(x, z));
+    let o = eo_landmarks::towers2::build_v(id, &js.buildings[id], &ground, true).unwrap();
+    let export_depth = js.buildings[id]["dimensions"]["fluteDepth"].as_f64().unwrap() * js.buildings[id]["dimensions"]["shaftRadiusM"].as_f64().unwrap();
+    assert!(o.stats["fluteDepthM"].as_f64().unwrap() > 2.0 * export_depth);
+}
+
+/// Every projector stands outside the surface it lights, aims at it, and
+/// gives its aim illuminance there (E = I cos / d^2): the rows the shader
+/// reads carry the cone's cosines in order (field <= beam).
+#[test]
+fn the_projector_rigs_are_physical() {
+    let (rows, ranges) = eo_landmarks::towers3::projector_rows();
+    assert_eq!(ranges.len(), 3);
+    let total: u32 = ranges.iter().map(|r| r.2).sum();
+    assert_eq!(rows.len() as u32, total);
+    for r in &rows {
+        assert!(r[3] > 0.0, "candela");
+        let aim = (r[4] * r[4] + r[5] * r[5] + r[6] * r[6]).sqrt();
+        assert!((aim - 1.0).abs() < 1e-3, "unit aim");
+        assert!(r[7] <= r[8] && r[8] <= 1.0 && r[7] >= 0.0, "field {} beam {}", r[7], r[8]);
+        assert!((0.0..=1.0).contains(&r[9]), "spill");
+    }
+    // the ground and roof floods aim up (none down onto a roof).
+    for (id, first, count) in &ranges {
+        for r in &rows[*first as usize..(*first + *count) as usize] {
+            assert!(r[5] > 0.0, "{id}: a flood aimed up");
+        }
+    }
+}
+
+/// The pane's albedo and metalness reproduce its reflectance at normal
+/// incidence and the room's diffuse in the city shader's metalness model;
+/// the third pass's table carries them and the previous table its tints.
+#[test]
+fn the_glazing_is_a_dielectric_pane() {
+    for (r, d) in [(0.08, 0.02), (0.12, 0.03), (0.15, 0.025)] {
+        let (a, m) = skyline::pane_albedo_metal(r, d);
+        let f0 = 0.04 * (1.0 - m) + a * m;
+        assert!((f0 - r).abs() < 1e-3, "F0 {f0} for {r}");
+        assert!((a * (1.0 - m) - d).abs() < 1e-4, "diffuse for {d}");
+    }
+    let v2 = skyline::data_for(false);
+    let v3 = skyline::data_for(true);
+    assert!(v2.facades.values().all(|f| f.reflectance == 0.0), "the previous table has no reflectance");
+    assert!(v3.facades.values().filter(|f| f.pattern == "grid" && f.glaze_x > 0.0).all(|f| f.reflectance > 0.0));
+    // 555 California's granite: darker and less saturated than the previous tone.
+    let b2 = v2.buildings.iter().find(|b| b.id == "skyline-555-california").unwrap();
+    let b3 = v3.buildings.iter().find(|b| b.id == "skyline-555-california").unwrap();
+    let (c2, c3) = (skyline::hex_linear(&b2.stone_srgb), skyline::hex_linear(&b3.stone_srgb));
+    let sat = |c: [f64; 3]| (c[0] - c[2]) / c[0];
+    assert!(sat(c3) < 0.5 * sat(c2), "desaturated");
+    assert!(b3.stone_roughness <= 0.25, "polished");
+    let rows = skyline::facade_rows_for(true);
+    let i = skyline::data_for(true).facades.keys().position(|k| k == "fremont-181").unwrap();
+    assert!(rows[i][12] > 0.5 && rows[i][15] > 0.0, "pane metalness and window luminance");
 }

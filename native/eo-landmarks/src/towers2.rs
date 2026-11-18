@@ -45,12 +45,12 @@ fn with_flood(m: &Material, flood: [f64; 3]) -> Material {
     m
 }
 
-fn registry_material(id: &str, key: &str) -> Option<Material> {
+pub(crate) fn registry_material(id: &str, key: &str) -> Option<Material> {
     LandmarksJs::get().registry.get(id).and_then(|r| r.materials.get(key)).cloned()
 }
 
 /// Set the storey origin (the building's base, world y) of an authored-facade material.
-fn with_origin(mut m: Material, y: f64) -> Material {
+pub(crate) fn with_origin(mut m: Material, y: f64) -> Material {
     if let Some(o) = m.surface_options.as_mut() {
         o["originY"] = serde_json::json!(y);
     }
@@ -478,8 +478,17 @@ pub fn sutro(site: &Value, g: &GroundGrid) -> Out {
     }
 }
 
-/// The second generator of a registered landmark building, by id.
+/// The second generator of a registered landmark building, by id, with
+/// the third pass when the switches leave it on (`crate::towers3_on`).
 pub fn build(id: &str, site: &Value, g: &GroundGrid) -> Option<Out> {
+    build_v(id, site, g, crate::towers3_on())
+}
+
+/// `build` with the third pass on or off (`v3`; off: the previous output).
+pub fn build_v(id: &str, site: &Value, g: &GroundGrid, v3: bool) -> Option<Out> {
+    if v3 {
+        return crate::towers3::build(id, site, g);
+    }
     Some(match id {
         "transamerica-pyramid" => transamerica(site, g),
         "salesforce-tower" => salesforce(site, g),

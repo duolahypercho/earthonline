@@ -28,9 +28,18 @@ pub mod skyline; // the named skyline towers
 pub mod suspension;
 pub mod towers;
 pub mod towers2; // the landmark buildings' second generators
+pub mod towers3; // their third pass (projector floodlights, the base truss, the fluted shaft, the lattice)
 pub mod waterfront;
 
 pub use data::LandmarksJs;
+
+/// The landmark buildings' and skyline towers' third pass (towers2.rs and
+/// skyline.rs under `v3`; eo-render's projector floodlights, glazing and
+/// night windows): on unless `eo-app --no-towers3` set `EO_TOWERS3=off`
+/// before any thread started, which restores the previous output.
+pub fn towers3_on() -> bool {
+    std::env::var("EO_TOWERS3").map(|v| v != "off").unwrap_or(true)
+}
 pub use geometry::{Frozen, GroundGrid, MeshArrays};
 pub use set::{Draw, Landmark, LandmarkSet, Role};
 
