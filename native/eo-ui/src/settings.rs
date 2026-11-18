@@ -355,6 +355,27 @@ pub fn default_path() -> Option<PathBuf> {
     std::env::var("HOME").ok().map(|h| PathBuf::from(h).join(".config").join("earth-online").join("settings.json"))
 }
 
+/// Where photo mode saves its pictures: `EO_PHOTOS_DIR`, else a `photos`
+/// folder in the application-data folder the settings file lives in
+/// (`%APPDATA%\Earth Online\photos` on Windows, else
+/// `$XDG_CONFIG_HOME/earth-online/photos` or `~/.config/earth-online/photos`).
+pub fn photos_dir() -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("EO_PHOTOS_DIR") {
+        if !p.is_empty() {
+            return Some(PathBuf::from(p));
+        }
+    }
+    if cfg!(windows) {
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            return Some(PathBuf::from(appdata).join("Earth Online").join("photos"));
+        }
+    }
+    if let Ok(x) = std::env::var("XDG_CONFIG_HOME") {
+        return Some(PathBuf::from(x).join("earth-online").join("photos"));
+    }
+    std::env::var("HOME").ok().map(|h| PathBuf::from(h).join(".config").join("earth-online").join("photos"))
+}
+
 impl Settings {
     /// Read the file; a missing or unreadable file (or entry) gives the
     /// defaults, as a fresh browser profile does.
