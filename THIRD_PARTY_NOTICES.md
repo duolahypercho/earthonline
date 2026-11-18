@@ -27,6 +27,12 @@ licences. A summary by declared licence is generated at the end of this file
 offer LGPL-2.1-or-later only as one option of a choice that includes MIT;
 the project uses them under MIT or Apache-2.0.
 
+Some crates are licensed under the Apache License 2.0 alone (the
+`Apache-2.0` row of that table, among them `rapier3d`, `parry3d`,
+`nalgebra`, `winit` and `cpal`). A build of the game contains their object
+code, so the licence text they require is kept in
+[LICENSES/Apache-2.0.txt](LICENSES/Apache-2.0.txt).
+
 ### ez-tree (port)
 
 `native/eo-props/src/eztree/` is a Rust port of ez-tree's tree generator.
