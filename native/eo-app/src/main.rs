@@ -400,7 +400,7 @@ fn parse_args() -> Result<Args> {
             // read by `roofs_flags` (main) into the environment switches.
             "--no-roof-colours" | "--no-roof-contrast" | "--no-roof-parapet" | "--no-roof-patches" | "--no-roof-plant" => {}
             "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" => {} // `roofs_flags`
-            "--no-towers2" | "--no-skyline" | "--no-towers3" | "--no-grove" => {} // `roofs_flags` (eo_landmarks::set::Options, eo_landmarks::towers3_on)
+            "--no-towers2" | "--no-skyline" | "--no-towers3" | "--no-grove" | "--no-towers4" => {} // `roofs_flags` (eo_landmarks::set::Options, eo_landmarks::towers3_on, towers4_on)
             "--segments" => a.segments = Some(val()?.split(',').map(|s| s.trim().to_string()).collect()),
             // occlusion / hitch
             "--no-occlusion" => a.perf.occlusion = false,
@@ -1030,6 +1030,8 @@ fn roofs_flags() {
         ("--no-towers3", "EO_TOWERS3"),
         // the groves round Coit and Sutro towers (eo_landmarks::grove::grove_on).
         ("--no-grove", "EO_GROVE"),
+        // the landmark buildings', skyline towers' and groves' fourth pass (eo_landmarks::towers4_on).
+        ("--no-towers4", "EO_TOWERS4"),
     ] {
         if a.iter().any(|x| x == flag) {
             // SAFETY: first thing in main, before any other thread exists.
