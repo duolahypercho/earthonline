@@ -138,7 +138,20 @@ fn tower_stack(height: f64, random: &mut Rng) -> Stack {
 }
 
 /// The glazed elevations (edge indices), longest first, capped at four.
+///
+/// With the facade typology on (typology.rs), every face that is not on a lot
+/// line is glazed (`typology::glaze_every_face`): a tower is windowed on all
+/// its exposed sides; only a party wall stands blind. The port's cap of four
+/// left a many-sided tower (a chamfered or stepped plan, 12-48 edges) with
+/// twenty-storey blank stone faces between its four longest sides.
 fn glazed_edges(frame: &Frame) -> Vec<usize> {
+    if crate::typology::glaze_every_face() {
+        let mut ordered: Vec<&Edge> = frame.edges.iter().filter(|e| !e.party && e.length >= MIN_FALLBACK_EDGE_M).collect();
+        ordered.sort_by(|a, b| b.length.partial_cmp(&a.length).unwrap_or(std::cmp::Ordering::Equal).then(a.index.cmp(&b.index)));
+        if !ordered.is_empty() {
+            return ordered.into_iter().map(|e| e.index).collect();
+        }
+    }
     let mut ordered: Vec<&Edge> = frame.edges.iter().filter(|e| !e.party && e.length >= MIN_FALLBACK_EDGE_M).collect();
     ordered.sort_by(|a, b| {
         let d = b.length - a.length;
@@ -228,7 +241,12 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
             band_projection: t.band_projection,
         };
     }
-    let crown_finish = if prewar { "cast-stone" } else { drawn_crown };
+    // A granite-clad tower (typology.rs `granite-bay`) carries its stone to the
+    // top: the crown band and the coping in the tower's own granite, not a
+    // light cast stone (555 California's parapet and roof edge are the same
+    // dark carnelian granite as its bays).
+    let granite = system.as_ref().is_some_and(|t| t.system == "granite-bay");
+    let crown_finish = if granite { fam.wall } else if prewar { "cast-stone" } else { drawn_crown };
     let base_finish = if prewar { "limestone-ashlar" } else { drawn_base };
     let retail = c.has_retail_ground;
 
@@ -319,7 +337,7 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
             "wall": fam.wall,
             "spandrel": fam.spandrel,
             "parapet": crown_finish,
-            "coping": "cast-stone",
+            "coping": if granite { fam.wall } else { "cast-stone" },
             "base": base_finish,
             "bulkhead": base_finish,
             "trim": system.as_ref().map(|t| t.trim).unwrap_or("cast-stone-trim"),
@@ -617,5 +635,28 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
     // the stone's per-tower tone (typology.rs), drawn after the paint (pipeline.rs `drawn_materials`).
     if let Some(t) = meta.get_nn("stoneTints").filter(|v| v.is_object()) {
         plan.extra.insert("stoneTints".into(), t.clone());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::frame::{footprint_frame, FrameOptions};
+
+    #[test]
+    fn a_many_sided_tower_is_glazed_on_every_face_off_a_lot_line() {
+        if !crate::typology::glaze_every_face() {
+            return;
+        }
+        // A chamfered 40 m square: four 30 m sides and four 7 m corners.
+        let pts = [(-15.0, -20.0), (15.0, -20.0), (20.0, -15.0), (20.0, 15.0), (15.0, 20.0), (-15.0, 20.0), (-20.0, 15.0), (-20.0, -15.0)];
+        let polygon: Vec<P2> = pts.iter().map(|&(x, z)| P2 { x, z }).collect();
+        let mut frame = footprint_frame(&polygon, 0, &FrameOptions::default()).expect("frame");
+        assert_eq!(frame.edges.len(), 8);
+        assert_eq!(glazed_edges(&frame).len(), 8, "the port's cap of four left the corners blind");
+        frame.edges[2].party = true;
+        let g = glazed_edges(&frame);
+        assert_eq!(g.len(), 7);
+        assert!(!g.contains(&2), "a party wall stays blind");
     }
 }

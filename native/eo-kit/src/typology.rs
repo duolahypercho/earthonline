@@ -35,6 +35,9 @@
 //!   with the pane's coating, the spandrel's finish and the stone's tone
 //!   per tower. Known towers take their own system (`TOWER_IDENTITY`).
 //!
+//! * *Every face glazed* (`glaze_every_face`): a tower is windowed on all its
+//!   sides off a lot line (the port glazed its four longest only).
+//!
 //! Switch: `EO_FACADE_TYPOLOGY=off` (eo-app `--no-facade-typology`): every
 //! spec as the port writes it. On, `cache_tag` names the kit tile cache.
 
@@ -43,7 +46,7 @@ use crate::js::*;
 use crate::rng::Rng;
 
 /// Bump when a draw changes (names the kit tile cache folder).
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 
 static PINNED: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
@@ -65,6 +68,11 @@ pub fn enabled() -> bool {
 /// A tag for the kit tile cache key (empty when off).
 pub fn cache_tag() -> String {
     if enabled() { format!("typology-v{VERSION}") } else { String::new() }
+}
+
+/// A tower glazes every face off a lot line (downtown_tower.rs `glazed_edges`).
+pub fn glaze_every_face() -> bool {
+    enabled()
 }
 
 fn lerp(a: f64, b: f64, t: f64) -> f64 {
