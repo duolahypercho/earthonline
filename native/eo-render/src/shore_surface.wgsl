@@ -32,6 +32,9 @@ fn lm_seawall(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>) {
     let ragged = lm_mx_noise(vec3<f32>(world.x * 0.7, 0.3, world.z * 0.7)) * 0.18 + lm_mx_noise(vec3<f32>(world.x * 3.1, 1.7, world.z * 3.1)) * 0.06;
     let tide = lm_ss(sea + 1.25 + ragged, sea + 1.05 + ragged, world.y) * faceness;
     let splash = lm_ss(sea + 0.45, sea + 0.05, world.y) * faceness;
+    if (GG2_ASHLAR) {
+        gg2_ashlar(s, world, n, faceness);
+    }
     (*s).albedo = mix((*s).albedo, (*s).albedo * vec3<f32>(0.42, 0.44, 0.36), tide);
     (*s).albedo = mix((*s).albedo, (*s).albedo * vec3<f32>(0.45, 0.5, 0.42), splash * 0.7); // (sea r9: darkened, not black: it read as a gap at the wall foot)
     (*s).rough = mix((*s).rough, 0.22, splash);
@@ -188,4 +191,35 @@ fn gg2_footprints(wp: vec3<f32>) -> f32 {
         }
     }
     return best;
+}
+
+// The Fort Point seawall's coursed granite ashlar (GG2_ASHLAR, cc0.rs
+// `ashlar_wgsl`): on the wall faces inside the revetment's box, courses of
+// blocks of varied length, each its own shade of the granite's mean albedo
+// (the wall's mottle and streaks kept on it), darker recessed joints.
+fn gg2_ashlar(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, faceness: f32) {
+    let b = GG2_ASHLAR_BOX;
+    if (world.x < b.x || world.x > b.z || world.z < b.y || world.z > b.w || faceness < 0.5) {
+        return;
+    }
+    let t = normalize(vec2<f32>(-n.z, n.x) + vec2<f32>(1e-5, 0.0));
+    let u = dot(world.xz, t);
+    let course = floor((world.y - LM_SEA_LEVEL_Y) / GG2_ASHLAR_COURSE_M);
+    let cv = fract((world.y - LM_SEA_LEVEL_Y) / GG2_ASHLAR_COURSE_M);
+    let blen = mix(GG2_ASHLAR_BLOCK_M.x, GG2_ASHLAR_BLOCK_M.y, lm_cell_hash(vec3<f32>(course, 3.0, 11.0)));
+    let uu = u / blen + lm_cell_hash(vec3<f32>(course, 5.0, 7.0));
+    let block = floor(uu);
+    let cu = fract(uu);
+    // joints: about 2 cm, anti-aliased by the footprint
+    let jw_v = 0.02 / GG2_ASHLAR_COURSE_M;
+    let jw_u = 0.02 / blen;
+    let fv = max(fwidth(cv), 1e-4);
+    let fu = max(fwidth(uu), 1e-4);
+    let jv = 1.0 - smoothstep(jw_v, jw_v + fv, min(cv, 1.0 - cv));
+    let ju = 1.0 - smoothstep(jw_u, jw_u + fu, min(cu, 1.0 - cu));
+    let joint = max(jv, ju);
+    let shade = 0.85 + 0.3 * lm_cell_hash(vec3<f32>(course, block, 29.0));
+    let stone = GG2_GRANITE * shade * (0.9 + 0.2 * lm_mx_noise(world * 1.7));
+    (*s).albedo = mix(stone, GG2_GRANITE * 0.35, joint);
+    (*s).rough = mix((*s).rough, 0.95, joint);
 }
