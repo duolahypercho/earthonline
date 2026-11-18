@@ -358,6 +358,10 @@ fn parse_args() -> Result<Args> {
             "--so-shots" => {} // so: bench/so_shots.rs reads it (the sky and ocean review cards)
             "--no-farshore" => {} // farshore.rs reads it (no far terrain)
             "--no-water" => a.look.water = false, // the flat sea quad, as before
+            "--no-water-instanced" => a.look.water_features &= !eo_render::water::FEAT_INSTANCED, // the water pass needs multi-draw-indirect-count again (without it, the flat sea)
+            "--no-water-brdf" => a.look.water_features &= !eo_render::water::FEAT_BRDF, // the earlier Fresnel, roughness and sun lobe
+            "--no-water-body" => a.look.water_features &= !eo_render::water::FEAT_BODY, // the earlier body colour
+            "--no-water-foam-cover" => a.look.water_features &= !eo_render::water::FEAT_FOAM, // the earlier whitecap cover and foam sampling
             // agents
             "--no-agents" => a.agents = false,
             "--no-props" => a.props = false, // props
