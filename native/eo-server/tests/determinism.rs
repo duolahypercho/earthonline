@@ -7,7 +7,7 @@
 use eo_net::game::{GameWorld, rebuild_player, spawn_player, step_player};
 use eo_net::wire::{NetInput, read_player_state, write_player_state};
 use eo_player::Mode;
-use eo_player::world::CollisionWorld;
+use eo_player::world::{CollisionWorld, GroundProvider, SurfaceMesh, TileKey};
 use eo_server::predict::{Script, script_route};
 use eo_server::tiles::SharedTiles;
 use glam::DVec3;
@@ -127,4 +127,69 @@ fn a_client_rewound_to_a_server_state_replays_to_the_same_place() {
     // through a stretch of driving may differ by centimetres; the position
     // check corrects it. On foot nothing is hidden.
     assert!(worst.0 < 0.10, "worst fresh-world replay {:.4} m at {}", worst.0, worst.1);
+}
+
+/// The city's ground with every tile's street surface `delay_ms` slower to
+/// cook: a loaded machine, a debug build or a slower CPU, where the replays
+/// above (which step far faster than real time) outrun the tile cookers.
+struct SlowCook(Arc<dyn GroundProvider>, u64);
+
+impl GroundProvider for SlowCook {
+    fn ground_y(&self, x: f64, z: f64) -> f64 {
+        self.0.ground_y(x, z)
+    }
+    fn surface_tile(&self, key: TileKey) -> Option<SurfaceMesh> {
+        std::thread::sleep(std::time::Duration::from_millis(self.1));
+        self.0.surface_tile(key)
+    }
+}
+
+/// The nondeterminism behind the rewind test's failures: before every
+/// authoritative step had the tiles it reaches made resident, a run's
+/// colliders at a step depended on how fast the worker threads had cooked,
+/// and a body stepped faster than real time ran over ground that was not
+/// there yet (a 40 ms cook: 1157 of 2400 steps over a missing tile, replays
+/// parted by 4 to 1850 m). Now the same inputs give the same body, step for
+/// step, with fast and slow cooks, and the fresh-world replays of a
+/// slow-cooking world land where the uninterrupted run did.
+#[test]
+fn a_slow_tile_cook_does_not_change_a_single_step() {
+    let g = game();
+    let slow = GameWorld::from_parts(g.city.clone(), g.elevation.clone(), Arc::new(SlowCook(g.ground.clone(), 40)), g.buildings.clone(), g.streets);
+    let (route, spawn) = script_route(g);
+    let mut fast_cw = g.collision_world(2);
+    let (mut fast, cars) = spawn_player(&mut fast_cw, spawn[0], spawn[1], spawn[2], false);
+    let mut slow_cw = slow.collision_world(2);
+    let (mut lagging, _) = spawn_player(&mut slow_cw, spawn[0], spawn[1], spawn[2], false);
+    let mut script = Script::new(route, [cars[0][0] as f64, cars[0][1] as f64]);
+    let mut inputs = vec![];
+    let mut saved: Vec<(usize, Vec<u8>)> = vec![];
+    for k in 0..STEPS {
+        let i = script.input(k, STEPS, &mut fast, &fast_cw);
+        inputs.push(i);
+        step_player(&mut fast, &mut fast_cw, &i);
+        step_player(&mut lagging, &mut slow_cw, &i);
+        fast_cw.pump(fast.position(&fast_cw));
+        slow_cw.pump(lagging.position(&slow_cw));
+        assert!(slow_cw.is_resident(lagging.position(&slow_cw).x, lagging.position(&slow_cw).z), "step {k}: the body stands on a tile that is not resident");
+        assert_eq!(fast.state(&fast_cw), lagging.state(&slow_cw), "step {k}: a slow cook changed the step");
+        if k % 600 == 300 {
+            let mut b = vec![];
+            write_player_state(&lagging.state(&slow_cw), &mut b);
+            saved.push((k + 1, b));
+        }
+    }
+    println!("slow cook: {} steps waited for a tile, the longest {:.1} ms", slow_cw.step_waits, slow_cw.step_wait_ms_max);
+    let end = lagging.state(&slow_cw);
+    for (k, bytes) in &saved {
+        let mut cw2 = slow.collision_world(2);
+        let mut p2 = rebuild_player(&mut cw2, &read_player_state(bytes).unwrap(), &cars);
+        for i in &inputs[*k..] {
+            step_player(&mut p2, &mut cw2, i);
+            cw2.pump(p2.position(&cw2));
+        }
+        let d = (DVec3::from_array(p2.state(&cw2).character.position) - DVec3::from_array(end.character.position)).length();
+        println!("slow cook: rewound to step {k} in a fresh world, replayed {} inputs: {d:.5} m from the uninterrupted run", STEPS - k);
+        assert!(d < 0.10, "slow cook: the fresh-world replay from step {k} ends {d:.4} m away");
+    }
 }

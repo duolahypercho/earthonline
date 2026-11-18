@@ -36,15 +36,27 @@ impl GameWorld {
         Self { city, elevation, ground, buildings, streets }
     }
 
-    /// A collision world with its own tile cookers (a client).
+    /// A collision world with its own tile cookers (a client), streaming in
+    /// lockstep (`CollisionWorld::lockstep`): its colliders at each step follow
+    /// the body's path, not the cookers' speed.
     pub fn collision_world(&self, threads: usize) -> CollisionWorld {
-        CollisionWorld::new(self.ground.clone(), self.buildings.clone(), threads)
+        let mut cw = CollisionWorld::new(self.ground.clone(), self.buildings.clone(), threads);
+        cw.lockstep = true;
+        cw
     }
 }
 
-/// One authoritative fixed step: the input's camera yaw, then the step.
+/// One authoritative fixed step: the tiles the step can reach made resident
+/// (`CollisionWorld::ensure_step_tiles`, waiting for a late cook rather than
+/// stepping over a missing tile), the input's camera yaw, then the step.
+/// The server, a predicting client and a client replaying after a correction
+/// all step through here, so the same state and inputs give the same body
+/// whatever the machine's load (the defect `determinism.rs` caught: a replay
+/// faster than real time outran the tile cookers and walked or drove over
+/// ground that was not there).
 #[inline]
 pub fn step_player(player: &mut Player, cw: &mut CollisionWorld, input: &NetInput) {
+    cw.ensure_step_tiles(player.position(cw));
     player.yaw = input.yaw();
     player.fixed_step(cw, &input.step_input());
 }

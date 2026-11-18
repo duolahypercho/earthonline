@@ -542,7 +542,10 @@ What the tests cover, in short:
   against published illuminance tables and lighting recommendations.
 - **Player and network** (`eo-player`, `eo-server`): kerbs climbed, walls
   stop the walker, a long walk and drive over the hills stay on the ground;
-  server and client agree bit for bit.
+  server and client agree bit for bit, and a replay lands where the first
+  run did however slowly the collision tiles cook (every authoritative step
+  has the tiles it reaches resident first: `CollisionWorld::ensure_step_tiles`);
+  names, emotes, the sky clock and fast travel reach every client.
 - **Frame budget** (`eo-app` `frame_budget`): the real bench, under the
   10 ms budget at the median on the standard paths, and no frame over the
   upload budget. It needs a GPU and a quiet machine; a loaded machine can
@@ -550,18 +553,17 @@ What the tests cover, in short:
 
 ### Known failing tests
 
-Three tests fail today. They are open defects, not flaky tests; do not
+Two tests fail today. They are open defects, not flaky tests; do not
 loosen them to make them pass.
 
 | Test | What fails |
 | --- | --- |
-| `eo-server` `determinism::a_client_rewound_to_a_server_state_replays_to_the_same_place` | A client rewound to a server state does not replay to exactly the same place (rewind determinism) |
 | `eo-street` `surface::street_surface_is_closed_and_on_its_section` | Two walkable surfaces fight in one place at more probes than the test allows |
 | `eo-street` `surface::verge_banks_stay_off_the_paving` | Some verge banks reach onto the paving |
 
 ## Known issues
 
-- The three failing tests above.
+- The two failing tests above.
 - Some content and behaviour of the earlier browser game is not ported yet:
   interiors, mantling and swimming, the car's full handling model, gamepad
   input in the window, and more.

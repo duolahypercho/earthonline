@@ -666,6 +666,9 @@ impl Server {
         for k in ready.into_iter().rev() {
             let mut j = self.joining.swap_remove(k);
             let (player, cars) = spawn_player(&mut j.cw, j.spawn[0], j.spawn[1], j.spawn[2], j.driving);
+            // From here the player's world streams in lockstep: what it holds at a step
+            // follows the body, not how fast the shared cookers ran (as the client's does).
+            j.cw.lockstep = true;
             let player_id = self.next_player;
             self.next_player += 1;
             let resume_key = keyed(self.secret, &[player_id as u64, j.connection, 3]);
