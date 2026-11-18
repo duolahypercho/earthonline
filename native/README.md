@@ -302,7 +302,7 @@ selection:
 | Lighting and sky | `--no-shadows`, `--no-ao`, `--no-contact-shadows`, `--no-atmosphere`, `--no-fog`, `--no-clouds`, `--no-cloud-shadows`, `--no-shafts`, `--no-moon-stars`, `--no-lights` |
 | Weather | `--no-rain`, `--no-wet`, `--no-wind` |
 | Camera finish | `--no-taa`, `--no-bloom`, `--no-adaptation`, `--no-ssr` |
-| Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count` |
+| Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count`, `--no-bounded-draws` |
 | Interface and sound | `--no-hud`, `--no-audio`, `--audio-null` (mix to a null output) |
 
 A new visual feature should come with its own switch, defaulting to on only
@@ -431,7 +431,13 @@ This is a summary of the systems, not a description of how they look.
 **Renderer.** One vertex and index arena, one object table, and GPU culling:
 a compute pass chooses each object's level of detail and tests it against
 the frustum and a hierarchical depth pyramid (occlusion), then the frame is
-drawn with multi-draw indirect. Streamed content (models, building tiles,
+drawn with multi-draw indirect: with the indirect count where the adapter
+has `MULTI_DRAW_INDIRECT_COUNT`, otherwise (Metal) with a bounded fixed
+count, the GPU-compacted lists' unused slots cleared to empty draws and each
+bound learnt from the counts the GPU wrote a frame or two earlier
+(`eo-render/src/bounds.rs`; `--no-bounded-draws` draws one slot per object
+instead, with the far layer, occlusion, the probe, the water pass and the
+distant trees off, as before). Streamed content (models, building tiles,
 street tiles) is uploaded through a budgeted staging ring, a few megabytes a
 frame, so streaming does not stall the frame. The best-quality layer is
 loaded for what the camera can see, with a lighter level around it.
