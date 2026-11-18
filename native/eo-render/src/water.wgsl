@@ -1438,6 +1438,26 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         tide = w_tidal(p, t);
         det.x = det.x * mix(0.75, 1.25, wg_smooth(-0.35, 0.35, paws)) * (1.0 + 0.3 * tide.x + 0.45 * tide.y);
     }
+    if (wg_gg2(64u)) {
+        // (iteration 2, far calm: water-11) the gust patches' contrast fades with
+        // range (the far strait from a height read as kilometre blotches: each
+        // patch's roughness and darkening is averaged over the many a far pixel
+        // spans), and the slicks lie as long narrow current lines along the
+        // Golden Gate's tidal axis (heading 255 degrees through the bridge's
+        // mid-span, as `w_tidal`), a few tens of metres across and kilometres long,
+        // where the wind leaves them
+        let far_k = wg_smooth(250.0, 2500.0, view_dist);
+        det.y = mix(det.y, 0.5, 0.75 * far_k);
+        det.x = mix(det.x, 1.0, 0.6 * far_k);
+        let ax = vec2<f32>(-0.966, 0.259);
+        let d0 = p - vec2<f32>(-6478.0, -5791.0);
+        let al = dot(d0, ax);
+        let wob = mx_noise(vec3<f32>(al / 1800.0, 0.7, t * 0.001)) * 120.0;
+        let ac = dot(d0, vec2<f32>(-ax.y, ax.x)) + wob;
+        let ln = textureSampleLevel(w_detail, w_repeat, vec2<f32>(al / 2600.0, ac / 28.0) + vec2<f32>(0.37, 0.11), 0.0).z;
+        let lines = wg_smooth(0.66, 0.78, ln) * (1.0 - det.y * 0.7) * wg_smooth(9.0, 3.0, wv_u10(p.x));
+        det.z = max(det.z * (1.0 - far_k), lines);
+    }
     // the sun-keyed westerly, the swell banding and the storm's noise caps are
     // retired: the waves simulation carries the wind, the swell and the whitecaps
     let rough = det.x * wv_ripple(p.x); // x the wind's ripples (glassy in a calm)
@@ -1655,6 +1675,18 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
                     dop_foam = mix(1.0, wu.wv_dop.y * wu.wv_dop.y, tide.x);
                 }
                 wv_raw = max(wv_raw, wv_foam(d, p.x, det.y) * fb[c] * kc * dop_foam); // the place's whitecap foam of this cascade
+                if (wg_gg2(32u) && (c == 1u || c == 2u) && fb[c] * kc > 0.02) {
+                    // (iteration 2, streak caps: water-10) a whitecap's foam is combed
+                    // downwind into a streak four to eight times as long as it is wide
+                    // (the residual foam of a breaking crest trails the crest): the
+                    // crest foam read upwind of here over 2 of the cascade's middle
+                    // wavelengths in six steps, fading along the trail
+                    let wdc = w_sea_wind_dir(p.x);
+                    for (var k = 1; k <= 6; k = k + 1) {
+                        let dk = textureSampleLevel(w_deriv, w_repeat, w_casc_uv(p - wdc * (f32(k) * WV_MID_M[c] * 0.33), c), c, 0.0);
+                        wv_raw = max(wv_raw, wv_foam(dk, p.x, det.y) * fb[c] * kc * dop_foam * (1.0 - f32(k) * 0.12));
+                    }
+                }
                 wv_fine = wv_fine + select(0.0, (d.x + d.y) * wb[c], c >= 2u);
             }
         }
