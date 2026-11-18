@@ -423,6 +423,9 @@ impl PropLibrary {
         h.update(eo_props::data::PROPS_JS_GZ);
         h.update(include_bytes!("props_lib.rs"));
         h.update(include_bytes!("props_lib2.rs"));
+        // the procedural furniture kinds (and whether they draw: `--no-furniture-models`).
+        h.update(include_bytes!("props_lib2/furniture_models.rs"));
+        h.update([crate::props_lib2::furniture_models::enabled() as u8]);
         for p in js.street_props.values() {
             h.update(p.sha256.as_bytes());
         }
