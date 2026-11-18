@@ -26,7 +26,9 @@ pub mod library;
 pub mod motion;
 pub mod packed_glb; // people
 pub mod people;
+pub mod pose_edit; // the players' emotes, edited at the bake
 pub mod remote; // other players' bodies (online)
+pub mod rig; // where a drawn body's head and hands are (name tags, the selfie's phone)
 pub mod rocketbox; // people
 pub mod vehicles;
 

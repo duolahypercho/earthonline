@@ -11,8 +11,12 @@
 //!   foot does not slide; the shader blends walk and stand by the speed;
 //! * speed eases (0.12 s up, 0.25 s down), so a start and a stop blend
 //!   instead of snapping at the 20 Hz the snapshots arrive at;
-//! * stopping: the cycle runs on to the next heel strike (phase 0 or 0.5,
-//!   both feet down) as the walk fades, so a player never freezes mid-stride;
+//! * stopping: the cycle runs on to the next passing point (phase 0.25 or
+//!   0.75: the stance foot under the body, the other just past it and a few
+//!   centimetres up) as the walk fades, so the last step closes the feet
+//!   together into the standing loop; at a heel strike (0 or 0.5) the feet
+//!   are 0.5 to 0.7 m apart and the blend into the standing loop drew them
+//!   scissoring through each other;
 //! * turning on the spot: a body that turns faster than 0.8 rad/s while
 //!   standing steps through the turn (a slow walk weight, 0.22 m of
 //!   footwork a radian) instead of spinning on planted feet;
@@ -63,12 +67,20 @@ pub struct RemoteBody {
     pub yaw_rate: f64,
     emote: Option<(Family, u8, f64)>,
     pub stepping_turn: bool,
+    /// The passing point a stop is running on to (latched when the stop begins).
+    stop_at: Option<f64>,
 }
 
 const RISE_S: f64 = 0.12;
 const FALL_S: f64 = 0.25;
 /// Under this the walk weight is nil (`gait::walk_weight`, the shader's 0.15 m/s).
 const STAND_MPS: f64 = 0.15;
+/// Where a stopping walk comes to rest in the cycle (0 = left heel strike):
+/// the feet pass each other at 0.19 to 0.25 and 0.69 to 0.75 in every
+/// street style (measured on the bake: the ankles' fore-aft gap crosses
+/// zero there, the swing foot 6 to 9 cm up); a little after, the swing
+/// foot is beside the stance foot and nearly down.
+const STOP_PHASES: [f64; 2] = [0.25, 0.75];
 const TURN_STEP_RAD_PER_S: f64 = 0.8;
 const TURN_FOOTWORK_M_PER_RAD: f64 = 0.22;
 
@@ -119,13 +131,14 @@ impl RemoteBody {
             let style = self.style.map(|s| s.0).unwrap_or(0);
             let stride = (mo.walk_of(look, style)[0] as f64 * scale).max(0.3);
             let mut dphase = v * dt / stride;
-            // Stopping: run on to the next heel strike while the walk fades.
+            // Stopping: run on to the next passing point while the walk fades, and rest there.
             if target < STAND_MPS && self.shown_speed < 0.6 && !self.stepping_turn {
-                let next = if self.phase < 0.5 { 0.5 } else { 1.0 };
-                let left = next - self.phase;
-                if left > 1e-3 && left < 0.5 {
-                    dphase = dphase.max((0.9 * dt).min(left));
-                }
+                let phase = self.phase;
+                let goal = *self.stop_at.get_or_insert_with(|| STOP_PHASES.iter().copied().find(|&p| p > phase).unwrap_or(STOP_PHASES[0]));
+                let left = (goal - self.phase).rem_euclid(1.0);
+                dphase = if left < 1e-4 || left > 0.75 { 0.0 } else { dphase.max(0.9 * dt).min(left) };
+            } else {
+                self.stop_at = None;
             }
             self.phase = (self.phase + dphase).rem_euclid(1.0);
             (mo.walk_anim(style, self.phase), v)
@@ -186,8 +199,8 @@ pub fn emote_family(wire: u8) -> Option<Family> {
 mod tests {
     use super::*;
 
-    /// A remote walker that stops ends on a heel strike, its walk faded out,
-    /// and the speed it is drawn at never steps by more than the ease allows.
+    /// A remote walker that stops ends on a passing point, its walk faded
+    /// out, and the speed it is drawn at never steps by more than the ease allows.
     #[test]
     fn a_stop_settles_on_a_planted_foot_and_eases() {
         let mut lib = Library::default();
@@ -210,8 +223,8 @@ mod tests {
             last_speed = a.speed as f64;
         }
         assert!(b.shown_speed < STAND_MPS, "the walk faded out ({})", b.shown_speed);
-        let to_strike = b.phase.min((b.phase - 0.5).abs()).min(1.0 - b.phase);
-        assert!(to_strike < 0.02, "stopped at phase {} (not on a heel strike)", b.phase);
+        let to_pass = STOP_PHASES.iter().map(|p| (b.phase - p).abs()).fold(f64::MAX, f64::min);
+        assert!(to_pass < 0.02, "stopped at phase {} (not where the feet pass)", b.phase);
         // Turning on the spot steps; standing still does not.
         let mut c = RemoteBody::default();
         for f in 0..60 {
