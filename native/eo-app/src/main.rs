@@ -377,6 +377,11 @@ fn parse_args() -> Result<Args> {
             "--no-ferry-building" => eo_landmarks::features::set_ferry_building(false), // its record's box, as before
             "--no-tram-tracks" => eo_landmarks::features::set_tram_tracks(false), // no streetcar rails, as before
             "--no-quay-railing" => eo_landmarks::features::set_quay_railing(false), // no guard on the quay wall, as before
+            "--no-ferry-building-detail" => eo_landmarks::features::set_ferry_building_detail(false), // the Ferry Building's first pass, as before
+            "--no-rail-finish" => eo_landmarks::features::set_rail_finish(false), // one bare-steel rail head, as before
+            "--no-corridor-palms" => eo_landmarks::features::set_corridor_palms(false), // no Embarcadero palms, as before
+            "--no-guard-detail" => eo_landmarks::features::set_guard_detail(false), // the quay guard's first pass, as before
+            "--no-pier-sheds" => eo_landmarks::features::set_pier_sheds(false), // the Ferry Plaza's JS shed boxes, as before
             "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
             s if a.props2.parse_flag(s) => {} // --no-props2, --no-furniture, --no-eztree, --no-overhead, --no-wires, --no-props2-shading, --capture-props2
             "--agents-bench" | "--agents-capture" | "--people-capture" | "--people-lineup" => {} // + --people-capture, --people-lineup
@@ -599,6 +604,30 @@ pub fn load_world(args: &Args) -> Result<World> {
                         Ok(Some((n, m, tris))) if trace => eprintln!("landmarks: streetcar rails {n} tracks, {m:.0} m, {tris} triangles"),
                         Err(e) => eprintln!("warning: streetcar rails not built ({e:#})"),
                         _ => {}
+                    }
+                    // the corridor's surveyed palms (eo-landmarks palms.rs) from the street tree list.
+                    if eo_landmarks::features::corridor_palms() {
+                        match eo_props::JsProps::load() {
+                            Ok(js) => {
+                                let t = &js.trees;
+                                let st = t.stride.max(3);
+                                let palm = t.forms.iter().position(|f| f == "palm");
+                                let list: Vec<(f64, f64, Option<f64>, Option<f64>, u32)> = (0..t.data.len() / st)
+                                    .filter(|&i| palm.is_some_and(|p| t.data[i * st + 2] as usize == p))
+                                    .map(|i| {
+                                        let d = &t.data[i * st..i * st + st];
+                                        let dm = |k: usize| (st > k && d[k] > 0).then(|| d[k] as f64 / 10.0);
+                                        (d[0] as f64 / 10.0, d[1] as f64 / 10.0, dm(3), dm(4), i as u32)
+                                    })
+                                    .collect();
+                                if let Some((n, tris)) = s.add_corridor_palms(&list, &|x, z| sw.surface_at(x, z, None), &|x, z| sw.buildings.contains(x, z)) {
+                                    if trace {
+                                        eprintln!("landmarks: corridor palms {n}, {tris} triangles");
+                                    }
+                                }
+                            }
+                            Err(e) => eprintln!("warning: corridor palms not built ({e:#})"),
+                        }
                     }
                 }
                 Ok((s, r, pr))
