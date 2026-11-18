@@ -22,6 +22,51 @@ const PAIR_GAP_M: f64 = 0.4;
 /// `smin` rounding at the deck's grade corners, metres.
 const CORNER_ROUNDING_M: f64 = 12.0;
 
+/// Dimension keys that are heights or member sizes of the structure: times
+/// `golden_gate::structure_scale` (the plan widths are data.rs's; the deck
+/// ends keep their clearances, where the decks meet the elevated plan's).
+const STRUCTURE_KEYS: &[&str] = &["clearanceM", "trussDepthM", "panelM", "pierTopAboveWaterM", "saddleBelowTopM", "cableLowAboveDeckM", "suspenderSpacingM", "portalAboveDeckM"];
+const ANCHORAGE_KEYS: &[&str] = &["plinthM", "corniceM", "corniceProudM", "pilasterM", "pilasterProudM", "housingHalfAlongM", "housingTaperM", "housingWallM", "deckClearanceM", "collarM"];
+
+/// The west span's paint (`BridgeFeatures::paint`): a finish coat of grey
+/// aluminium over two coats of red lead (San Francisco Chronicle, "What it was
+/// like to be a Bay Bridge painter in 1948": the three coats the crews laid);
+/// the span opened as "the silver bridge" (Bay Crossings, the 75th
+/// anniversary). INFERRED: the weathered finish at a luminance factor 0.30
+/// (steel), the truss a shade under it (0.26: the grime of the decks inside
+/// it) and the shadowed members' 0.13; the export's tones were 0.11 / 0.08.
+pub const STEEL_SRGB: u32 = 0x8F9598;
+pub const TRUSS_SRGB: u32 = 0x878D90;
+pub const STEEL_DARK_SRGB: u32 = 0x63686B;
+
+/// The west span's site data with the structure's heights and member sizes
+/// times the structure scale (see `golden_gate::data`).
+pub fn data(js: &LandmarksJs) -> BayBridgeWest {
+    let mut b = js.bay_bridge_west.clone();
+    let h = crate::golden_gate::structure_scale();
+    if h != 1.0 {
+        let scale = |v: &mut serde_json::Value, k: &str| {
+            if let Some(x) = v[k].as_f64() {
+                v[k] = json!(x * h);
+            }
+        };
+        for k in STRUCTURE_KEYS {
+            scale(&mut b.dimensions, k);
+        }
+        for k in ANCHORAGE_KEYS {
+            scale(&mut b.dimensions["anchorage"], k);
+        }
+        let [along, across] = pair(&b.dimensions, "pierPlanM");
+        b.dimensions["pierPlanM"] = json!([along * h, across]);
+        b.tower_top_above_water_m *= h;
+        b.tower_plan_m[1] *= h; // along (across is the plan's)
+        b.center_anchorage.height_m *= h;
+        scale(&mut b.center_anchorage.plan_m, "along");
+        b.deck_step_m *= h;
+    }
+    b
+}
+
 /// Smooth minimum of two heights (k metres of rounding where they cross).
 fn smin(a: f64, b: f64, k: f64) -> f64 {
     (a + b - ((a - b).powi(2) + k * k).sqrt()) / 2.0
@@ -68,7 +113,7 @@ fn frame_of(b: &BayBridgeWest) -> Frame<'static> {
 
 /// `bayBridgeWestPlan`.
 pub fn plan(js: &LandmarksJs, ground: &dyn Fn(f64, f64) -> f64) -> Plan {
-    let b = &js.bay_bridge_west;
+    let b = &data(js);
     let d = &b.dimensions;
     let f = frame_of(b);
     let (sf, isl) = (&b.deck_ends["sf"], &b.deck_ends["island"]);
@@ -90,7 +135,7 @@ struct Cables {
 }
 
 fn cable_runs(js: &LandmarksJs, p: &Plan) -> Cables {
-    let b = &js.bay_bridge_west;
+    let b = &data(js);
     let d = &b.dimensions;
     let (w2, w3, w5, w6) = (p.towers[0].2, p.towers[1].2, p.towers[2].2, p.towers[3].2);
     let saddle = js.sea_level_y + b.tower_top_above_water_m - num(d, "saddleBelowTopM");
@@ -136,7 +181,9 @@ fn frame_rect(f: &Frame, c: f64, s: f64, half_along: f64, half_across: f64) -> V
 
 #[allow(clippy::too_many_arguments)]
 fn towers(js: &LandmarksJs, p: &Plan, f: &Frame, k: &Colours, h: f64, ground: &dyn Fn(f64, f64) -> f64, steel: &mut MeshArrays, concrete: &mut MeshArrays, skirt: &mut MeshArrays, far: &mut MeshArrays) {
-    let b = &js.bay_bridge_west;
+    let b = &data(js);
+    let m = crate::golden_gate::structure_scale();
+    let detail = crate::suspension::features().detail;
     let d = &b.dimensions;
     let w = js.sea_level_y;
     let top = w + b.tower_top_above_water_m;
@@ -153,36 +200,42 @@ fn towers(js: &LandmarksJs, p: &Plan, f: &Frame, k: &Colours, h: f64, ground: &d
         for s in [-h, h] {
             let mut y0 = pier_top;
             for [to, wd, dp] in TIERS {
+                let (wd, dp) = (wd * m, dp * m);
                 let y1 = pier_top + (top - pier_top) * to;
                 let [x, z] = f.point(tc, s);
-                steel.box_(x, z, y0, y1, dp / 2.0, wd / 2.0, f.yaw, k.steel, crate::geometry::Faces { top: true, bottom: y0 == pier_top });
+                let faces = crate::geometry::Faces { top: true, bottom: y0 == pier_top };
+                if detail {
+                    crate::suspension::notched_box(steel, x, z, y0, y1, dp / 2.0, wd / 2.0, f.yaw, k.steel, faces);
+                } else {
+                    steel.box_(x, z, y0, y1, dp / 2.0, wd / 2.0, f.yaw, k.steel, faces);
+                }
                 far.box_(x, z, y0, y1, dp / 2.0, wd / 2.0, f.yaw, k.steel, ALL);
                 y0 = y1;
             }
         }
         let dy = p.deck_top(tc);
         let under = dy - truss_depth - 2.0;
-        steel.beam(f.P(tc, -h, pier_top + 4.0), f.P(tc, h, under - 3.0), 1.8, 2.2, k.steel_dark);
-        steel.beam(f.P(tc, h, pier_top + 4.0), f.P(tc, -h, under - 3.0), 1.8, 2.2, k.steel_dark);
-        steel.beam(f.P(tc, -h, under), f.P(tc, h, under), 4.0, 4.0, k.steel_dark);
-        let (x_base, x_top) = (dy + 6.0, top - 7.0);
+        steel.beam(f.P(tc, -h, pier_top + 4.0 * m), f.P(tc, h, under - 3.0 * m), 1.8 * m, 2.2 * m, k.steel_dark);
+        steel.beam(f.P(tc, h, pier_top + 4.0 * m), f.P(tc, -h, under - 3.0 * m), 1.8 * m, 2.2 * m, k.steel_dark);
+        steel.beam(f.P(tc, -h, under), f.P(tc, h, under), 4.0 * m, 4.0 * m, k.steel_dark);
+        let (x_base, x_top) = (dy + 6.0 * m, top - 7.0 * m);
         for pn in 0..3 {
             let ya = x_base + (x_top - x_base) * (pn as f64 / 3.0);
             let yb = x_base + (x_top - x_base) * ((pn + 1) as f64 / 3.0);
-            steel.beam(f.P(tc, -h, ya), f.P(tc, h, yb), 1.6, 2.0, k.steel);
-            steel.beam(f.P(tc, h, ya), f.P(tc, -h, yb), 1.6, 2.0, k.steel);
-            steel.beam(f.P(tc, -h, ya), f.P(tc, h, ya), 2.6, 2.4, k.steel);
-            far.beam(f.P(tc, -h, ya), f.P(tc, h, yb), 2.0, 2.0, k.steel);
-            far.beam(f.P(tc, h, ya), f.P(tc, -h, yb), 2.0, 2.0, k.steel);
+            steel.beam(f.P(tc, -h, ya), f.P(tc, h, yb), 1.6 * m, 2.0 * m, k.steel);
+            steel.beam(f.P(tc, h, ya), f.P(tc, -h, yb), 1.6 * m, 2.0 * m, k.steel);
+            steel.beam(f.P(tc, -h, ya), f.P(tc, h, ya), 2.6 * m, 2.4 * m, k.steel);
+            far.beam(f.P(tc, -h, ya), f.P(tc, h, yb), 2.0 * m, 2.0 * m, k.steel);
+            far.beam(f.P(tc, h, ya), f.P(tc, -h, yb), 2.0 * m, 2.0 * m, k.steel);
         }
-        steel.beam(f.P(tc, -h, top - 3.5), f.P(tc, h, top - 3.5), 4.0, 7.0, k.steel);
-        far.beam(f.P(tc, -h, top - 3.5), f.P(tc, h, top - 3.5), 4.0, 7.0, k.steel);
+        steel.beam(f.P(tc, -h, top - 3.5 * m), f.P(tc, h, top - 3.5 * m), 4.0 * m, 7.0 * m, k.steel);
+        far.beam(f.P(tc, -h, top - 3.5 * m), f.P(tc, h, top - 3.5 * m), 4.0 * m, 7.0 * m, k.steel);
     }
 }
 
 #[allow(clippy::too_many_arguments)]
 fn center_anchorage(js: &LandmarksJs, p: &Plan, f: &Frame, k: &Colours, h: f64, cables: &Cables, ground: &dyn Fn(f64, f64) -> f64, concrete: &mut MeshArrays, steel: &mut MeshArrays, skirt: &mut MeshArrays, far: &mut MeshArrays) {
-    let b = &js.bay_bridge_west;
+    let b = &data(js);
     let d = &b.dimensions;
     let a = &b.center_anchorage;
     let an = &d["anchorage"];
@@ -250,27 +303,32 @@ fn center_anchorage(js: &LandmarksJs, p: &Plan, f: &Frame, k: &Colours, h: f64, 
 }
 
 fn end_portals(js: &LandmarksJs, p: &Plan, f: &Frame, k: &Colours, h: f64, cables: &Cables, steel: &mut MeshArrays) {
-    let truss = num(&js.bay_bridge_west.dimensions, "trussDepthM");
+    let truss = num(&data(js).dimensions, "trussDepthM");
+    let m = crate::golden_gate::structure_scale();
     for (c, y) in [(p.c_a, cables.portal_a), (p.c_b, cables.portal_b)] {
         for s in [-h, h] {
-            steel.beam(f.P(c, s, p.deck_top(c) - truss), f.P(c, s, y + 1.0), 2.2, 2.2, k.steel);
+            steel.beam(f.P(c, s, p.deck_top(c) - truss), f.P(c, s, y + 1.0 * m), 2.2 * m, 2.2 * m, k.steel);
         }
-        steel.beam(f.P(c, -h, y), f.P(c, h, y), 2.4, 2.0, k.steel);
+        steel.beam(f.P(c, -h, y), f.P(c, h, y), 2.4 * m, 2.0 * m, k.steel);
     }
 }
 
 /// `buildBayBridgeWest`.
 pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built {
-    let b = &js.bay_bridge_west;
+    let features = crate::suspension::features();
+    let bd = data(js);
+    let b = &bd;
+    let m = crate::golden_gate::structure_scale();
     let d = &b.dimensions;
     let ground_at = |x: f64, z: f64| ground.at(x, z);
     let p = plan(js, &ground_at);
     let f = frame_of(b);
     let h = num(d, "halfPlaneM");
+    let paint = |cited: u32, key: &str| srgb_hex(if features.paint { cited } else { hex(d, key) });
     let k = Colours {
-        steel: srgb_hex(hex(d, "steelSrgb")),
-        truss: srgb_hex(hex(d, "trussSrgb")),
-        steel_dark: srgb_hex(hex(d, "steelDarkSrgb")),
+        steel: paint(STEEL_SRGB, "steelSrgb"),
+        truss: paint(TRUSS_SRGB, "trussSrgb"),
+        steel_dark: paint(STEEL_DARK_SRGB, "steelDarkSrgb"),
         asphalt: srgb_hex(hex(d, "asphaltSrgb")),
         concrete: srgb_hex(hex(d, "concreteSrgb")),
         concrete_light: srgb_hex(hex(d, "concreteLightSrgb")),
@@ -291,7 +349,7 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
 
     towers(js, &p, &f, &k, h, &ground_at, &mut steel, &mut concrete, &mut skirt, &mut far);
     center_anchorage(js, &p, &f, &k, h, &cables, &ground_at, &mut concrete, &mut steel, &mut skirt, &mut far);
-    suspension::main_cables(&mut wires, &mut far, &f, &cables.runs, &CableSpec { half_plane: h, diameter: num(d, "cableDiameterM"), colour: k.steel });
+    suspension::main_cables(&mut wires, &mut far, &f, &cables.runs, &CableSpec { half_plane: h, diameter: num(d, "cableDiameterM"), colour: k.steel, far_beams: !features.wires });
     let suspenders = suspension::suspender_pairs(
         &mut wires,
         &f,
@@ -315,6 +373,7 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
             gap: &gap,
             far_half_width: h + 0.5,
             far_above: 1.0,
+            member: m,
         },
     );
     let colours = DeckColours { asphalt: k.asphalt, sidewalk: k.asphalt, soffit: k.steel_dark, barrier: k.concrete, white: k.white, yellow: k.yellow, rail: k.steel };

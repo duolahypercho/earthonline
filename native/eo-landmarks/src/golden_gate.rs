@@ -31,6 +31,63 @@ const DARK: f64 = 0.62;
 /// INFERRED: rope spacing within a suspender pair.
 const PAIR_GAP_M: f64 = 0.45;
 
+/// Dimension keys that are heights or member sizes of the structure (not
+/// plan widths, which data.rs puts on the ground plan, nor the real-size
+/// cable, rope, railing, curb and barrier sizes): times `structure_scale`.
+const STRUCTURE_KEYS: &[&str] = &["towerAboveWaterM", "towerAboveRoadwayM", "roadwayAtTowerM", "clearanceM", "trussDepthM", "panelM", "saddleBelowTopM", "cableLowAboveDeckM", "pylonAboveDeckM", "suspenderSpacingM", "bentSpacingMaxM"];
+
+/// International Orange as an sRGB tone (`BridgeFeatures::paint`). The
+/// Golden Gate Bridge Highway and Transportation District's paint formula is
+/// given as print values, C 0 % M 69 % Y 100 % K 6 %, the paint supplied by
+/// Sherwin-Williams to that formula, the nearest stock colour SW 6328
+/// Fireweed (goldengate.org, "Color & Art Deco Styling"; Fireweed's light
+/// reflectance value 7). The export's 0xF04A00 is the naive separation of the
+/// print values (luminance factor 0.23, no blue at all): a print ink, not a
+/// reflectance. #C0362C (sRGB 192, 54, 44; luminance factor 0.14, between
+/// Fireweed's 0.07 and the naive 0.23) is the bridge's widely published
+/// screen equivalent.
+pub const INTERNATIONAL_ORANGE_SRGB: u32 = 0xC0362C;
+
+/// The structure's own scale on the drawn world: the drawn terrain's height
+/// scale with `BridgeFeatures::scale` (the plan is the ground plan's already),
+/// else 1 (every height real, as the export).
+pub fn structure_scale() -> f64 {
+    if suspension::features().scale { eo_data::groundscale::height_scale() } else { 1.0 }
+}
+
+/// The site data the generator builds from: the export's, with the
+/// structure's heights and member sizes times `structure_scale` (the leg
+/// stages and struts, the piers' tops, the supports' sizes along the span).
+/// With the plan 1.25 x and heights real the towers stood 1 / 1.25 as tall
+/// as their span and the hills about them draw them (a 1,600 m span under
+/// 227 m towers); scaled, every proportion of the published drawings holds.
+pub fn data(js: &LandmarksJs) -> GoldenGate {
+    let mut g = js.golden_gate.clone();
+    let h = structure_scale();
+    if h != 1.0 {
+        for k in STRUCTURE_KEYS {
+            if let Some(v) = g.dimensions[*k].as_f64() {
+                g.dimensions[*k] = json!(v * h);
+            }
+        }
+        let [cw, cd] = pair(&g.dimensions, "bentColumnM");
+        g.dimensions["bentColumnM"] = json!([cw * h, cd * h]);
+        for st in &mut g.leg_stages {
+            st.iter_mut().for_each(|v| *v *= h);
+        }
+        for st in &mut g.struts {
+            st.iter_mut().for_each(|v| *v *= h);
+        }
+        for sup in g.supports.values_mut() {
+            sup.extent[1] *= h; // along the span (across is the deck's, on the plan)
+            if let Some(t) = sup.top_m.as_mut() {
+                *t *= h;
+            }
+        }
+    }
+    g
+}
+
 /// The site's derived frame (golden-gate-bridge-site.js).
 pub struct Site {
     pub south_tower: [f64; 2],
@@ -132,7 +189,7 @@ impl Plan<'_> {
 }
 
 pub fn plan<'a>(js: &LandmarksJs, site: &'a Site, ground: &dyn Fn(f64, f64) -> f64) -> Plan<'a> {
-    let g = &js.golden_gate;
+    let g = &data(js);
     let d = &g.dimensions;
     let water = js.sea_level_y;
     let l = site.main_span_measured;
@@ -207,6 +264,11 @@ struct Ctx<'a> {
     yaw: f64,
     water: f64,
     tower_zone_half: f64,
+    /// `structure_scale` (member sizes the export leaves in code are scaled with it).
+    h: f64,
+    /// `BridgeFeatures::detail`, `::wires`.
+    detail: bool,
+    wires: bool,
 }
 
 impl Ctx<'_> {
@@ -255,30 +317,62 @@ impl Ctx<'_> {
             for [lx, lz] in [legs.east, legs.west] {
                 for &[h0, h1, across, along] in stages {
                     let y1 = if h1 == top_h1 { num(d, "towerAboveWaterM") } else { h1 };
-                    orange.box_(lx, lz, w + h0, w + y1, along / 2.0, across / 2.0, yaw, k.orange, crate::geometry::Faces { top: true, bottom: h0 == foot_h0 });
+                    let faces = crate::geometry::Faces { top: true, bottom: h0 == foot_h0 };
+                    if self.detail {
+                        suspension::notched_box(orange, lx, lz, w + h0, w + y1, along / 2.0, across / 2.0, yaw, k.orange, faces);
+                    } else {
+                        orange.box_(lx, lz, w + h0, w + y1, along / 2.0, across / 2.0, yaw, k.orange, faces);
+                    }
                     far.box_(lx, lz, w + h0, w + y1, along / 2.0, across / 2.0, yaw, k.orange, ALL);
                 }
             }
             let ([ex, ez], [wx, wz]) = (legs.east, legs.west);
+            let c = self.site.chainage(ex, ez);
             for &[h0, h1, along] in &g.struts {
                 let (mx, mz) = ((ex + wx) / 2.0, (ez + wz) / 2.0);
                 let span = (ex - wx).hypot(ez - wz);
                 orange.box_(mx, mz, w + h0, w + h1, along / 2.0, span / 2.0, yaw, k.orange_dark, ALL);
                 far.box_(mx, mz, w + h0, w + h1, along / 2.0, span / 2.0, yaw, k.orange_dark, ALL);
+                if self.detail && w + h0 > self.plan.y_tower {
+                    self.portal_ribs(orange, c, w + h0, w + h1, along);
+                }
             }
             // INFERRED: X bracing between the two lowest struts (the JS's 26 and 50 m: their facing chords).
-            let c = self.site.chainage(ex, ez);
-            let s = self.site.half_plane - 3.0;
+            let s = self.site.half_plane - 3.0 * self.h;
             let (lo, hi) = (g.struts[0][1], g.struts[1][0]);
-            orange.beam(self.P(c, -s, w + lo), self.P(c, s, w + hi), 1.4, 1.4, k.orange_dark);
-            orange.beam(self.P(c, s, w + lo), self.P(c, -s, w + hi), 1.4, 1.4, k.orange_dark);
+            let xb = 1.4 * self.h;
+            orange.beam(self.P(c, -s, w + lo), self.P(c, s, w + hi), xb, xb, k.orange_dark);
+            orange.beam(self.P(c, s, w + lo), self.P(c, -s, w + hi), xb, xb, k.orange_dark);
+        }
+    }
+
+    /// The "wide, vertical ribbing" on the horizontal tower bracing above the
+    /// roadway (goldengate.org, "Color & Art Deco Styling": added to catch the
+    /// sun): fins on both faces of a portal strut, between the legs' inner
+    /// faces. INFERRED: fin width 1.2 m, 0.35 m proud, at a 3 m pitch (x the
+    /// structure scale), the strut's full height less 0.4 m top and bottom.
+    fn portal_ribs(&self, orange: &mut MeshArrays, c: f64, y0: f64, y1: f64, along: f64) {
+        let g = self.g;
+        let w = self.water;
+        let h = self.h;
+        let stage = g.leg_stages.iter().find(|st| y0 - w >= st[0] && y0 - w < st[1]).unwrap_or(&g.leg_stages[g.leg_stages.len() - 1]);
+        let clear = self.site.half_plane - stage[2] / 2.0;
+        let (fin_w, proud, pitch, lip) = (1.2 * h, 0.35 * h, 3.0 * h, 0.4 * h);
+        let n = ((2.0 * clear - fin_w) / pitch).floor().max(1.0) as i64;
+        let first = -(n as f64) * pitch / 2.0;
+        for side in [-1.0, 1.0] {
+            let cf = c + side * (along / 2.0 + proud / 2.0);
+            for i in 0..=n {
+                let [x, z] = self.site.axis_point(cf, first + i as f64 * pitch);
+                orange.box_(x, z, y0 + lip, y1 - lip, proud / 2.0, fin_w / 2.0, self.yaw, self.k.orange_dark, NO_BOTTOM);
+            }
         }
     }
 
     fn cables(&self, wires: &mut MeshArrays, far: &mut MeshArrays) -> usize {
         let runs = self.cable_runs();
         let d = self.d;
-        suspension::main_cables(wires, far, self.frame, &runs, &CableSpec { half_plane: self.site.half_plane, diameter: num(d, "cableDiameterM"), colour: self.k.orange });
+        suspension::main_cables(wires, far, self.frame, &runs, &CableSpec { half_plane: self.site.half_plane, diameter: num(d, "cableDiameterM"), colour: self.k.orange, far_beams: !self.wires });
         let p = self.plan;
         suspension::suspender_pairs(
             wires,
@@ -307,6 +401,7 @@ impl Ctx<'_> {
                 gap: &|a, b| self.in_tower_zone(a, b),
                 far_half_width: num(d, "widthM") / 2.0,
                 far_above: num(d, "railingM"),
+                member: self.h,
             },
         );
     }
@@ -318,7 +413,7 @@ impl Ctx<'_> {
         if !(b - a > 1.0) {
             return;
         }
-        let depth = APPROACH_GIRDER_DEPTH_M;
+        let depth = APPROACH_GIRDER_DEPTH_M * self.h;
         let panel = num(d, "panelM");
         let hp = self.site.half_plane;
         for s in [-hp, hp] {
@@ -366,10 +461,19 @@ impl Ctx<'_> {
                 inner_barrier_m: num(d, "innerBarrierM"),
                 panel: num(d, "panelM"),
                 gap: &|a, b| self.in_tower_zone(a, b),
-                colours: DeckColours { asphalt: k.asphalt, sidewalk: k.sidewalk, soffit: shade(k.asphalt, 0.6), barrier: k.barrier, white: k.white, yellow: k.yellow, rail: k.orange },
+                colours: DeckColours { asphalt: k.asphalt, sidewalk: k.sidewalk, soffit: self.soffit(), barrier: k.barrier, white: k.white, yellow: k.yellow, rail: k.orange },
                 markings: true,
             },
         );
+    }
+
+    /// The deck plate's underside: with `detail` the orthotropic steel deck
+    /// that replaced the concrete deck and its stringers (747 sections over
+    /// 401 nights, 1982-1986: goldengate.org, "Major Bridge Improvements"),
+    /// painted as the rest of the steel (in shadow: 0.8 of it); else the
+    /// export's asphalt shade.
+    fn soffit(&self) -> Rgb {
+        if self.detail { shade(self.k.orange, 0.8) } else { shade(self.k.asphalt, 0.6) }
     }
 
     fn tower_walkways(&self, deck: &mut MeshArrays, orange: &mut MeshArrays) {
@@ -385,7 +489,7 @@ impl Ctx<'_> {
         let zone = self.tower_zone_half;
         let (curb_m, railing, inner_barrier) = (num(d, "curbM"), num(d, "railingM"), num(d, "innerBarrierM"));
         let top = |c: f64| p.deck_top(c) + curb_m;
-        let soffit = shade(k.asphalt, 0.6);
+        let soffit = self.soffit();
         let plate = |deck: &mut MeshArrays, c0: f64, c1: f64, s0: f64, s1: f64| {
             deck.quad(self.P(c0, s0, top(c0)), self.P(c0, s1, top(c0)), self.P(c1, s1, top(c1)), self.P(c1, s0, top(c1)), k.sidewalk);
             deck.quad(self.P(c1, s0, top(c1) - 0.5), self.P(c1, s1, top(c1) - 0.5), self.P(c0, s1, top(c0) - 0.5), self.P(c0, s0, top(c0) - 0.5), soffit);
@@ -517,7 +621,7 @@ impl Ctx<'_> {
             let c = self.site.chainage(support.centre[0], support.centre[1]);
             let half_outer = support.extent[0] / 2.0;
             let inner = self.site.half_plane + 0.5;
-            let width = (half_outer - inner).min(ARCH_PYLON_COLUMN_M);
+            let width = (half_outer - inner).min(ARCH_PYLON_COLUMN_M * self.h);
             let top = p.deck_top(c) + num(d, "pylonAboveDeckM");
             for sgn in [-1.0, 1.0] {
                 let [x, z] = self.site.deck_point(c, sgn * (inner + width / 2.0));
@@ -629,7 +733,9 @@ fn polyline_distance(x: f64, z: f64, pts: &[f64]) -> f64 {
 
 /// `buildGoldenGateBridge`.
 pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built {
-    let g = &js.golden_gate;
+    let features = suspension::features();
+    let gd = data(js);
+    let g = &gd;
     let d = &g.dimensions;
     let site = Site::new(g);
     let ground_at = |x: f64, z: f64| ground.at(x, z);
@@ -637,7 +743,7 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
     let offset = |c: f64| site.centre_offset(c);
     let mut frame = Frame::new(site.axis_point(0.0, 0.0), site.axis);
     frame.offset = Some(&offset);
-    let orange = srgb_hex(hex(d, "orangeSrgb"));
+    let orange = srgb_hex(if features.paint { INTERNATIONAL_ORANGE_SRGB } else { hex(d, "orangeSrgb") });
     let k = Colours {
         orange,
         orange_dark: shade(orange, DARK),
@@ -649,7 +755,7 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
         yellow: srgb_hex(hex(d, "yellowSrgb")),
     };
     let tower_zone_half = g.leg_stages.iter().map(|s| s[3]).fold(f64::MIN, f64::max) / 2.0 + 1.0;
-    let ctx = Ctx { g, d, site: &site, plan: &plan, frame: &frame, ground: &ground_at, k, yaw: site.axis[1].atan2(site.axis[0]), water: js.sea_level_y, tower_zone_half };
+    let ctx = Ctx { g, d, site: &site, plan: &plan, frame: &frame, ground: &ground_at, k, yaw: site.axis[1].atan2(site.axis[0]), water: js.sea_level_y, tower_zone_half, h: structure_scale(), detail: features.detail, wires: features.wires };
     let mut orange_m = MeshArrays::new("golden-gate-bridge:orange");
     let mut deck_m = MeshArrays::new("golden-gate-bridge:deck");
     let mut concrete_m = MeshArrays::new("golden-gate-bridge:concrete");

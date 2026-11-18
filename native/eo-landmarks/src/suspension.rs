@@ -6,6 +6,64 @@
 //! California standards table (`caMetric`) here, as the JS reads them.
 
 use crate::geometry::{Faces, MeshArrays, NO_BOTTOM, Rgb, V3};
+use std::sync::OnceLock;
+
+/// The bridges' fidelity features (both bridges; each on by default and
+/// turned off by its eo-app switch, which restores the earlier output;
+/// `--no-bridges2` turns every one off).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BridgeFeatures {
+    /// `--no-bridge-scale`: the structures' heights follow the drawn
+    /// terrain's height scale (`eo_data::groundscale::height_scale`), as
+    /// their spans follow the ground plan, so each bridge keeps the surveyed
+    /// proportions (span to tower height, deck clearance to truss depth) on
+    /// the 1.25 x plan instead of standing 1 / 1.25 as tall as its own span
+    /// and its shores allow.
+    pub scale: bool,
+    /// `--no-bridge-paint`: the cited paint colours (International Orange;
+    /// the west span's aluminium grey) instead of the export's tones.
+    pub paint: bool,
+    /// `--no-bridge-detail`: the towers' portal bracing, setbacks and caps,
+    /// the deck's painted underside and the heavier west-span members.
+    pub detail: bool,
+    /// `--no-bridge-wires`: the cables and suspenders drawn after the
+    /// atmosphere at every distance, anti-aliased at a screen-space floor
+    /// width (the far item then carries no cable beams).
+    pub wires: bool,
+    /// `--no-bridge-night`: the Golden Gate towers' floodlights and the west
+    /// span's suspender LEDs.
+    pub night: bool,
+}
+
+impl BridgeFeatures {
+    pub const ALL: Self = Self { scale: true, paint: true, detail: true, wires: true, night: true };
+    pub const OFF: Self = Self { scale: false, paint: false, detail: false, wires: false, night: false };
+
+    /// The features a command line leaves on.
+    pub fn from_args<S: AsRef<str>>(args: &[S]) -> Self {
+        let has = |f: &str| args.iter().any(|a| a.as_ref() == f);
+        if has("--no-bridges2") {
+            return Self::OFF;
+        }
+        Self { scale: !has("--no-bridge-scale"), paint: !has("--no-bridge-paint"), detail: !has("--no-bridge-detail"), wires: !has("--no-bridge-wires"), night: !has("--no-bridge-night") }
+    }
+}
+
+static FEATURES: OnceLock<BridgeFeatures> = OnceLock::new();
+
+/// The process's bridge features: pinned by `pin_features`, else read once from its arguments.
+pub fn features() -> BridgeFeatures {
+    *FEATURES.get_or_init(|| BridgeFeatures::from_args(&std::env::args().collect::<Vec<_>>()))
+}
+
+/// Pin the features before anything reads them (a test, a tool); false when
+/// the process already reads others.
+pub fn pin_features(f: BridgeFeatures) -> bool {
+    *FEATURES.get_or_init(|| f) == f
+}
+
+/// The kill switches `features` reads (eo-app accepts them).
+pub const SWITCHES: &[&str] = &["--no-bridges2", "--no-bridge-scale", "--no-bridge-paint", "--no-bridge-detail", "--no-bridge-wires", "--no-bridge-night"];
 
 /// A frame along a bridge: chainage c along `axis` from `origin`, offset s to
 /// its right; `offset`, when given, adds a lateral offset per chainage (the
@@ -52,6 +110,18 @@ impl<'a> Frame<'a> {
     }
 }
 
+/// One stage of a tower leg with its corners notched (`BridgeFeatures::detail`):
+/// a riveted cellular leg's re-entrant corners, which draw a shadow line down
+/// each corner of the leg and its setbacks. Two boxes, the inner one's top
+/// 3 cm under the outer's (no coplanar tops). INFERRED: the notch, 0.18 of
+/// the leg's smaller half size.
+#[allow(clippy::too_many_arguments)]
+pub fn notched_box(m: &mut MeshArrays, x: f64, z: f64, y0: f64, y1: f64, half_along: f64, half_across: f64, yaw: f64, colour: Rgb, faces: Faces) {
+    let n = 0.18 * half_along.min(half_across);
+    m.box_(x, z, y0, y1, half_along, half_across - n, yaw, colour, faces);
+    m.box_(x, z, y0, y1 - 0.03, half_along - n, half_across, yaw, colour, faces);
+}
+
 pub fn stations(c0: f64, c1: f64, step: f64) -> Vec<f64> {
     let n = (((c1 - c0) / step).round() as i64).max(1);
     (0..=n).map(|i| c0 + ((c1 - c0) * i as f64) / n as f64).collect()
@@ -86,6 +156,9 @@ pub struct CableSpec {
     pub half_plane: f64,
     pub diameter: f64,
     pub colour: Rgb,
+    /// The far item's beams at twice the diameter (the JS); false when the
+    /// wire pass draws the cables at every distance (`BridgeFeatures::wires`).
+    pub far_beams: bool,
 }
 
 /// `mainCables` (step 12, farStep 60, farScale 2).
@@ -103,6 +176,9 @@ pub fn main_cables(near: &mut MeshArrays, far: &mut MeshArrays, frame: &Frame, r
                 } else {
                     near.beam(a, b, o.diameter, o.diameter, o.colour);
                 }
+            }
+            if !o.far_beams {
+                continue;
             }
             let fs = stations(r.c0, r.c1, far_step);
             for i in 0..fs.len() - 1 {
@@ -170,6 +246,8 @@ pub struct TrussSpec<'a> {
     pub gap: &'a dyn Fn(f64, f64) -> bool,
     pub far_half_width: f64,
     pub far_above: f64,
+    /// The members' section sizes times this (the structure scale; 1: the JS's).
+    pub member: f64,
 }
 
 /// `stiffeningTruss` (farStep 40).
@@ -177,6 +255,8 @@ pub fn stiffening_truss(near: &mut MeshArrays, far: &mut MeshArrays, frame: &Fra
     let h = o.half_plane;
     let depth = o.depth;
     let far_step = 40.0;
+    let k = o.member;
+    let top = 0.5 * k;
     let cs = stations(o.c_start, o.c_end, o.panel);
     for i in 0..cs.len() - 1 {
         let (a, b) = (cs[i], cs[i + 1]);
@@ -184,23 +264,23 @@ pub fn stiffening_truss(near: &mut MeshArrays, far: &mut MeshArrays, frame: &Fra
         let cut = (o.gap)(a, b);
         if !cut {
             for s in [-h, h] {
-                near.beam(frame.P(a, s, ta - 0.5), frame.P(b, s, tb - 0.5), 0.9, 1.0, o.colour);
-                near.beam(frame.P(a, s, ta - depth), frame.P(b, s, tb - depth), 0.9, 1.0, o.colour);
-                near.beam(frame.P(b, s, tb - depth), frame.P(b, s, tb - 0.5), 0.5, 0.6, o.colour);
+                near.beam(frame.P(a, s, ta - top), frame.P(b, s, tb - top), 0.9 * k, 1.0 * k, o.colour);
+                near.beam(frame.P(a, s, ta - depth), frame.P(b, s, tb - depth), 0.9 * k, 1.0 * k, o.colour);
+                near.beam(frame.P(b, s, tb - depth), frame.P(b, s, tb - top), 0.5 * k, 0.6 * k, o.colour);
                 let up = i % 2 == 0;
                 near.beam(
-                    frame.P(a, s, if up { ta - depth } else { ta - 0.5 }),
-                    frame.P(b, s, if up { tb - 0.5 } else { tb - depth }),
-                    0.45,
-                    0.5,
+                    frame.P(a, s, if up { ta - depth } else { ta - top }),
+                    frame.P(b, s, if up { tb - top } else { tb - depth }),
+                    0.45 * k,
+                    0.5 * k,
                     o.colour,
                 );
             }
         }
-        near.beam(frame.P(b, -h, tb - 1.1), frame.P(b, h, tb - 1.1), 0.7, 1.0, o.dark);
+        near.beam(frame.P(b, -h, tb - 1.1 * k), frame.P(b, h, tb - 1.1 * k), 0.7 * k, 1.0 * k, o.dark);
         if !cut {
-            near.beam(frame.P(a, -h, ta - depth), frame.P(b, h, tb - depth), 0.35, 0.35, o.dark);
-            near.beam(frame.P(a, h, ta - depth), frame.P(b, -h, tb - depth), 0.35, 0.35, o.dark);
+            near.beam(frame.P(a, -h, ta - depth), frame.P(b, h, tb - depth), 0.35 * k, 0.35 * k, o.dark);
+            near.beam(frame.P(a, h, ta - depth), frame.P(b, -h, tb - depth), 0.35 * k, 0.35 * k, o.dark);
         }
     }
     let fs = stations(o.c_start, o.c_end, far_step);

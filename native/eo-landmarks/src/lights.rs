@@ -9,8 +9,16 @@
 //! | Deck luminaires | both roadway edges, Golden Gate deck and the Bay Bridge's upper deck | a full-cutoff street luminaire: 30 lux pool peak (eo_sky photometry `LAMP_POOL_PEAK_LUX`, the street lamps' own value) from a 10 m head, 3,000 cd at the nadir; the street lamp role's colour | INFERRED head (10 m, a usual highway pole of 30-40 ft) and pitch (50 m, 5 mounting heights, the usual highway spacing ratio); the lamp model is the street slice's |
 //! | Necklace lights | along the Bay Bridge west span's two main cables | 600 cd each, warm white (3,000 K), every 15 m | The west span's cable ("necklace") lights, strung on its suspension cables for the bridge's 50th anniversary in 1986. INFERRED: pitch and intensity (a 7,500 lm source radiating evenly, 7,500 / 4 pi = 600 cd; at 160 cd, a 2,000 lm lamp, the string did not show from the Embarcadero at the night exposure) |
 //!
+//! | Tower floodlights (`BridgeFeatures::night`) | the Golden Gate towers above the deck | 24 x 400 W HPS, 6 a leg at the sidewalk, aimed up; a flux-conserving mean on the legs (`gg_floodlit`) | goldengate.org "Color & Art Deco Styling" (24 sidewalk-level lights, lit 22 June 1987); ANSI C78.42 S51 (50,000 lm) |
+//! | Suspender LEDs (`BridgeFeatures::night`) | the west span's suspender ropes, both faces | 1 cd every 0.3 m, white, a slow sequence | "The Bay Lights" (25,000 LEDs on 300 cables, 2013), "Bay Lights 360" (about 48,000-50,000, both faces, 20 March 2026). INFERRED: the intensity |
+//!
 //! Intensities enter the gather as the props slice's lamp practicals do
-//! (`intensity` is candela times `eo_sky::night::lamp_units_per_lux`).
+//! (`intensity` is candela times `eo_sky::night::lamp_units_per_lux`). The
+//! floods and the LEDs are shaded by the landmark surfaces and the wire pass
+//! (eo-render landmarks_surface.wgsl `lm_floodlit`, landmarks_wire.wgsl
+//! `lm_led`), not gathered: an up-aimed flood is not a street luminaire (the
+//! gather would draw its source and a pool under it), and 48,000 LEDs are not
+//! lamps for the clusters.
 
 use crate::LandmarkLight;
 use crate::data::LandmarksJs;
@@ -71,7 +79,7 @@ pub fn bridge_lights(js: &LandmarksJs, gg_ground: &GroundGrid, bb_ground: &Groun
     let mut out = Vec::new();
     let water = js.sea_level_y;
     // The Golden Gate: its four tower legs' tops and its deck's two edges.
-    let g = &js.golden_gate;
+    let g = &crate::golden_gate::data(js);
     let top = water + crate::data::num(&g.dimensions, "towerAboveWaterM");
     for key in ["south", "north"] {
         let legs = &g.tower_legs[key];
@@ -91,7 +99,7 @@ pub fn bridge_lights(js: &LandmarksJs, gg_ground: &GroundGrid, bb_ground: &Groun
         c += DECK_PITCH_M;
     }
     // The Bay Bridge west span: its towers' leg tops, its upper deck's edges, the necklace on its main cables.
-    let b = &js.bay_bridge_west;
+    let b = &crate::bay_bridge::data(js);
     let bground = |x: f64, z: f64| bb_ground.at(x, z);
     let bp = crate::bay_bridge::plan(js, &bground);
     let f = crate::bay_bridge::frame(b);
@@ -124,4 +132,69 @@ pub fn bridge_lights(js: &LandmarksJs, gg_ground: &GroundGrid, bb_ground: &Groun
         c += NECKLACE_PITCH_M;
     }
     out
+}
+
+/// The Golden Gate towers' floodlighting (`BridgeFeatures::night`), as the
+/// landmark surface shades it: "24 sidewalk-level lights, with six at each of
+/// the four tower legs" aimed up the towers (goldengate.org, "Color & Art
+/// Deco Styling"; lit since 22 June 1987), 400 W high-pressure sodium
+/// floodlights. A 400 W HPS lamp gives 50,000 lm (ANSI C78.42, lamp S51);
+/// INFERRED: 60 % of it in the beam and half of that landing on the leg, over
+/// the leg's two along faces and its outer face above the deck: the mean
+/// illuminance `lux`, flux conserved, laid on the faces from 1.4 x at the deck
+/// to 0.6 x at the top (the floods stand at the deck).
+#[derive(Clone, Copy, Debug)]
+pub struct Floodlit {
+    /// The south tower's centre on the tower line (x, z), the span's axis, the main span.
+    pub origin: [f64; 2],
+    pub axis: [f64; 2],
+    pub span: f64,
+    pub half_plane: f64,
+    pub deck_y: f64,
+    pub top_y: f64,
+    /// The largest half sizes of a leg above the deck (along the span, across it).
+    pub half_along: f64,
+    pub half_across: f64,
+    pub lux: f64,
+    /// Linear colour at unit luminance.
+    pub colour: [f32; 3],
+}
+
+/// HPS lamp white (chromaticity near x 0.52, y 0.42; ~2,100 K), as an sRGB tone. INFERRED rendition.
+const HPS_SRGB: u32 = 0xffa552;
+/// ANSI C78.42 S51 (400 W HPS) rated initial lumens.
+pub const HPS_400W_LM: f64 = 50_000.0;
+pub const FLOODS_PER_LEG: f64 = 6.0;
+
+pub fn gg_floodlit(js: &LandmarksJs) -> Floodlit {
+    let g = crate::golden_gate::data(js);
+    let d = &g.dimensions;
+    let site = crate::golden_gate::Site::new(&g);
+    let water = js.sea_level_y;
+    let deck_y = water + crate::data::num(d, "roadwayAtTowerM");
+    let top_y = water + crate::data::num(d, "towerAboveWaterM");
+    let above: Vec<&[f64; 4]> = g.leg_stages.iter().filter(|s| water + s[1] > deck_y).collect();
+    let half_along = above.iter().map(|s| s[3] / 2.0).fold(0.0, f64::max);
+    let half_across = above.iter().map(|s| s[2] / 2.0).fold(0.0, f64::max);
+    // The lit area of one leg: its two along faces (the leg's width across) and its outer face (its depth along), stage by stage.
+    let area: f64 = above.iter().map(|s| (2.0 * s[2] + s[3]) * ((water + s[1]).min(top_y) - (water + s[0]).max(deck_y)).max(0.0)).sum();
+    let lux = FLOODS_PER_LEG * HPS_400W_LM * 0.6 * 0.5 / area.max(1.0);
+    Floodlit { origin: site.south_tower, axis: site.axis, span: site.main_span_measured, half_plane: site.half_plane, deck_y, top_y, half_along, half_across, lux, colour: unit_luminance(HPS_SRGB) }
+}
+
+/// The west span's suspender LEDs (`BridgeFeatures::night`): "The Bay Lights",
+/// 25,000 white LEDs on 300 vertical cables (2013; Architect, "25,000 LEDs
+/// Light Up the San Francisco-Oakland Bay Bridge"), relit on 20 March 2026 as
+/// "Bay Lights 360" with about 48,000-50,000 on both faces of the cables
+/// (KQED; SFist). 25,000 / 300 is 83 a cable face; over a mean cable of about
+/// 25 m that is one every 0.3 m. INFERRED: 1 cd an LED seen from the side
+/// (a diffused white node of a few tens of lumens; at 3 cd every rope burnt
+/// out white from the Embarcadero and the sequence did not read).
+pub const LED_CD: f64 = 1.0;
+pub const LED_PITCH_M: f64 = 0.3;
+
+/// The west span's frame origin (W2) and axis (for the LEDs' sequence along it).
+pub fn bay_axis(js: &LandmarksJs) -> ([f64; 2], [f64; 2]) {
+    let f = crate::bay_bridge::frame(&js.bay_bridge_west);
+    (f.origin, f.axis)
 }
