@@ -202,7 +202,22 @@ const WS_GLINT_FACETS: f32 = 400.0;
 // (glint) no pixel of glint brighter than this on the display (the
 // exposure's scale): the core of a glitter path is blinding white well under
 // it, and a brighter single pixel only fed the bloom and the temporal resolve a firefly.
-const WS_GLINT_DISPLAY_MAX: f32 = 24.0;
+// (3, not 24: the temporal resolve reads its history through a 5-tap
+// Catmull-Rom whose negative lobes, under a 24x highlight, left a black pixel
+// beside each sparkle; at 3x display white the sparkle still clips to white)
+const WS_GLINT_DISPLAY_MAX: f32 = 3.0;
+// (shore) how far into the field's land the open sea draws at a wall, a pier
+// or a rocky shore (m, negative landward; `water.rs` MASK_M is the earlier 4 m)
+const WS_WALL_REACH_M: f32 = -40.0;
+// (shore) the least column under open water off a wall, a pier or a rocky
+// shore (m): what the survey raster holds there (a pier's deck smeared into
+// the seabed, the carpet pressed 2 m down) is no bottom the eye can see. The
+// city's seawall and piers front water several metres deep (the Port of San
+// Francisco's seawall stands on a rock dike in the bay mud); under 10 m of
+// the bay (diffuse attenuation about 0.25 / m in the green, more in the red
+// and blue; eo-water optics.rs `fill_rate_spectral`) the bottom sends back
+// under 1 % of its light, as under the open water round it.
+const WS_WALL_FLOOR_M: f32 = 10.0;
 
 // a Poisson draw of mean lam from two uniforms (by its CDF under 12, the
 // normal approximation over).
@@ -268,50 +283,66 @@ fn w_sea_wind_dir(x: f32) -> vec2<f32> {
     return normalize(mix(vec2<f32>(0.98481, 0.17365), vec2<f32>(0.76604, 0.64279), wg_ocean(x)));
 }
 
-// (foam lit) the foam's own texture at a world point, 0 in a bubble cell's
-// middle, 1 on its walls: rafts of 0.9 m cells stretched four to one along
-// the wind (the residual streaks a breaking crest leaves downwind), over
-// 0.28 m bubble cells, the seeds drifting. `near` fades it to its mean (0.5)
-// where a pixel spans the cells.
+// (foam lit) the foam's own texture at a world point, about 0.2 to 0.8:
+// patches of two octaves of gradient noise (1.6 m and 0.55 m) drawn out
+// two and a half to one along the wind (an aging whitecap's foam is combed
+// into streaks downwind), drifting with it, under 0.32 m bubble cells whose
+// middles open first (aged foam is a raft with holes in it, Monahan and
+// Woolf's stage B). `near` fades it to its mean (0.5) where a pixel spans it.
+// (water r2b: the earlier cell-wall lace thresholded into a net of thin bright
+// lines, read as crackle, not foam)
 fn w_foam_tex(p: vec2<f32>, t: f32, near: f32) -> f32 {
     if (near <= 0.0) {
         return 0.5;
     }
     let wd = w_sea_wind_dir(p.x);
     let q = vec2<f32>(dot(p, wd), dot(p, vec2<f32>(-wd.y, wd.x)));
-    let l1 = 1.0 - clamp(w_cells(vec2<f32>(q.x / 3.6, q.y / 0.9) + vec2<f32>(-t * 0.04, 0.0), t, 61.0) * 1.7, 0.0, 1.0);
-    var l2 = 0.5;
+    let qa = vec2<f32>(q.x / 2.5 - t * 0.06, q.y);
+    let n1 = mx_noise(vec3<f32>(qa / 1.6, t * 0.02));
+    let n2 = mx_noise(vec3<f32>(qa / 0.55 + vec2<f32>(3.1, 7.7), t * 0.05 + 1.3));
+    let blob = clamp(0.5 + 0.7 * (n1 * 0.68 + n2 * 0.32), 0.0, 1.0);
+    var holes = 0.5;
     let k2 = wg_smooth(0.12, 0.03, w_fp_lat);
     if (k2 > 0.0) {
-        l2 = mix(0.5, 1.0 - clamp(w_cells(p / 0.28, t * 1.4, 67.0) * 2.2, 0.0, 1.0), k2);
+        let e = clamp(w_cells(p / 0.32, t * 1.4, 67.0) * 2.0, 0.0, 1.0);
+        holes = mix(0.5, e * (2.0 - e), k2); // (rounded: no crease on the cell walls)
     }
-    return mix(0.5, l1 * 0.62 + l2 * 0.38, near);
+    return mix(0.5, blob * 0.82 + (1.0 - holes) * 0.18, near);
 }
 
 // (foam lit) a whitecap from the cascades' foam `raw` (1 fresh, fading as it
 // ages) and the fine chop under it: each crest its own size (a random scale
-// per 9 m x 6 m cell along the wind and a slow patchiness), then the
+// per 9 m x 6 m cell along the wind), broken along the crest into the few
+// metres where it actually spills (a crest's foam line from the cascades
+// is the whole crest; a whitecap is a stretch of it), then the
 // coverage-threshold dissolve of the foam texture: a dense fresh core, the
-// aging foam a lace of cell walls and wind streaks that thins until it is
-// gone, with a soft edge. Far off (the cells under a pixel) the expected
-// cover, never a solid blob. Returns the foam's coverage of the pixel.
+// aging foam patches and streaks with holes that thin until they are gone,
+// with a soft edge. Far off (the patches under a pixel) the expected cover.
+// Returns the foam's coverage of the pixel.
 fn w_whitecap(raw: f32, fine: f32, p: vec2<f32>, t: f32, gust: f32, far: f32) -> f32 {
     let wd = w_sea_wind_dir(p.x);
     let q = vec2<f32>(dot(p, wd), dot(p, vec2<f32>(-wd.y, wd.x)));
     let size = 0.5 + 0.9 * w_hash(floor(q / vec2<f32>(9.0, 6.0)), 41.0);
-    // (the cascades' foam stands at about 0.55 on a fresh crest: a solid core there; aged foam a few tenths of that, lace)
-    let c = clamp(raw * size * (1.0 + 2.0 * clamp(fine, -0.25, 0.25)) * 1.8, 0.0, 1.0);
+    // (the spilling stretches: a mask of noise about 5 m along the crest (across
+    // the wind) and 2 m across it, applied over the saturated crest so a crest's
+    // foam breaks into stretches; half the crest spills, each stretch twice as dense)
+    let spill = wg_smooth(0.38, 0.72, 0.5 + 0.75 * mx_noise(vec3<f32>(q.x / 1.8, q.y / 4.5, 5.0 + t * 0.03)));
+    // (the cascades' foam stands at about 0.55 on a fresh crest: a solid core there; aged foam a few tenths of that, patches)
+    let c = clamp(raw * size * (1.0 + 2.0 * clamp(fine, -0.25, 0.25)) * 2.6, 0.0, 1.0) * spill;
     if (c <= 0.004) {
         return 0.0;
     }
     let near = 1.0 - wg_smooth(0.15, 0.6, w_fp_lat);
     // (the texture spread over 0..1, so a cover c leaves about c of the area foam)
-    let tex = clamp((w_foam_tex(p, t, near) - 0.18) / 0.62, 0.0, 1.0);
+    let tex = clamp((w_foam_tex(p, t, near) - 0.2) / 0.6, 0.0, 1.0);
     let thr = 1.0 - c;
-    let w = mix(0.3, 0.08, near);
+    let w = mix(0.3, 0.16, near);
     let a = wg_smooth(thr - w, thr + w, tex);
-    // the visible cover where the texture is resolved; its mean where it is not (and where the foam's own texels are not)
-    return mix(a, c, max(far, 1.0 - near));
+    // the visible cover where the texture is resolved; its mean where it is not
+    // (and where the foam's own texels are not, unless a pixel is still narrow
+    // across the view: at a grazing view the footprint is long only along the
+    // view, and the mean drew each crest's foam as a solid white pill)
+    return mix(a, c, max(far * wg_smooth(0.2, 1.2, w_fp_lat), 1.0 - near));
 }
 
 // (wind texture) the Golden Gate's tidal current: the jet through the
@@ -1185,7 +1216,16 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // The mask (ocean-open-sea.js): past the zero line by FAR_SHORE_REACH_M,
     // by 60 m where the nearest shore is a beach. Land above the sea hides
     // the rest by depth.
-    let mask = select(wu.flags.z, wu.probe.w, beach > 0.5);
+    var mask = select(wu.flags.z, wu.probe.w, beach > 0.5);
+    if (wv_feat(64u)) {
+        // (shore) the field's land at a wall, a pier or a rocky shore is cut
+        // WS_WALL_REACH_M in, not 4 m: a pier's footprint (Torpedo Wharf's head
+        // off Crissy Field) is land in the field, but what the survey raster
+        // holds there is the pier's deck smeared under the sea, and a 4 m cut
+        // showed it as a bare sand blob in the open water. Land standing above
+        // the sea still hides the water by depth.
+        mask = select(WS_WALL_REACH_M, wu.probe.w, beach > 0.5);
+    }
     let reach = wg_reach(); // past the terrain grid over open water
     // (sea r8: past the shore field's region its clamped edge texels hold the coast's
     // cut as long stripes; the skirt there is open sea)
@@ -1210,6 +1250,13 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     let ray_scale = dist / view_dist;
     let straight = max(w_scene_depth(uv_here) - view_dist, 0.0) * ray_scale;
     let column = min(straight, 400.0) * max(abs(v.y), 0.02);
+    // (shore) past the earlier 4 m cut into a wall's land the sea draws only
+    // over a sunken pier footprint (eo-water field.rs `PIERS_OVER_WATER`, the
+    // ground pressed to the seabed under it), never over the land the press
+    // holds 10 cm above the sea along a seawall, where a wave crest would poke through
+    if (wv_feat(64u) && beach <= 0.5 && signed < wu.flags.z && column < 0.8) {
+        discard;
+    }
     // The collar's shore distance. The JS reads the shoreline rings' distance
     // (its ground is pressed to the seabed under the rings' water and a wall
     // stands on the ring line, so ring, ground and wall agree there). Here what
@@ -1291,8 +1338,11 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     }
     // (and round whatever stands out of open water: a tower's footing, a pile, a pier's head)
     let emergent = wg_smooth(15.0, 30.0, signed);
-    if (shore_feat && ((max(1.0 - beach, emergent) > 0.01 && column < 2.5) || wall_near > 0.0)) {
-        let wall = max(1.0 - beach, emergent);
+    // (not inside the field's land, where the sea draws over a pier's sunken
+    // raster ridge: a foam outline there drew the pier that is not there)
+    let in_land = wg_smooth(-1.0, -4.0, signed) * (1.0 - beach);
+    if (shore_feat && ((max(1.0 - beach, emergent) * (1.0 - in_land) > 0.01 && column < 2.5) || wall_near > 0.0)) {
+        let wall = max(1.0 - beach, emergent) * (1.0 - in_land);
         let reach = 0.3 + 0.3 * surge;
         let cov = max(wg_smooth(reach, 0.0, column) * wall * select(1.0, 0.0, column >= 2.5), wall_near * mix(0.35, 0.75, surge));
         if (cov > 0.002) {
@@ -1320,7 +1370,13 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         }
         if (signed < 40.0 && signed > -120.0) {
             let sw = w_swash(fr.z, t, sf_amp_scale(base.x));
-            let front = wg_smooth(0.022, 0.002, column);
+            var front = wg_smooth(0.022, 0.002, column);
+            if (wv_feat(64u)) {
+                // (shore) the swash front's foam a thin, broken bubble line, not a
+                // ruled white edge: over the sheet's last 4 cm (2 m of a 1:55 beach),
+                // at most half covered, thinning to nothing in its patches
+                front = wg_smooth(0.04, 0.004, column) * 0.55 * wg_smooth(-0.3, 0.3, mx_noise(vec3<f32>(p * 0.35, t * 0.2)));
+            }
             let carried = (1.0 - wg_smooth(0.04, 0.45, sw.y)) * 0.5;
             let cover = clamp(front * 0.7 + carried, 0.0, 1.0);
             let near_shore = wg_smooth(30.0, 4.0, signed) * beach;
@@ -1329,7 +1385,10 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
             // The sheet's edge is ragged: it runs out where the sand stands
             // within a few millimetres to centimetres of its level.
             let rag = mx_noise(vec3<f32>(p * 0.7, 3.3)) * 0.6 + mx_noise(vec3<f32>(p * 2.3, 1.1)) * 0.4;
-            if (film > 0.5 && column < 0.012 * (rag + 0.9)) {
+            // (shore: no cut; the sheet fades into the sand over its last 25 cm
+            // below, and a cut edge, ragged and jittered under the temporal
+            // resolve, drew the waterline as a dark hairline)
+            if (film > 0.5 && column < 0.012 * (rag + 0.9) && !wv_feat(64u)) {
                 discard;
             }
         }
@@ -1938,6 +1997,19 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
             // waterline as an ink line; past it the open water's floor as before (the
             // carpet under the drawn ground, a pier's ridge in the survey raster)
             deep = max(column, mix(5.0 + 0.25 * max(signed, 0.0), 0.05 * max(signed, 0.0), beach) * wg_smooth(4.0, 20.0, signed));
+            // off a wall, a pier or a rocky shore (the beach weight under about
+            // a third, so no beach's waterline takes it) the water stands at least
+            // WS_WALL_FLOOR_M deep from the line out, and inside the field's land
+            // where the sea now draws over a pier's footprint: the raster's ridge
+            // under it is not a bottom anyone sees
+            let wall_w = wg_smooth(0.35, 0.1, beach);
+            // and wherever the drawn bottom is the carpet pressed under open
+            // water (a column of nearly WO_CARPET_DEPTH_M: past the beach's 1:55
+            // foreshore, round a pier's footprint the field calls a shore) it is
+            // the open bay's floor, not sand 2 m down; between 60 and 100 % of
+            // that depth (the foreshore's last 40 m) it hands over
+            let carpet_w = wg_smooth(0.6, 0.97, column / WO_CARPET_DEPTH_M);
+            deep = max(deep, (WS_WALL_FLOOR_M + 0.25 * max(signed, 0.0)) * max(wall_w, carpet_w));
         }
         let fill = vec3<f32>(1.0) - exp(-2.0 * fill_k * deep);
         vol.inscatter = rrs * e_d * fill / (1.0 - WO_F0);
