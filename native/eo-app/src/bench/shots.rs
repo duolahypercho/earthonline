@@ -40,9 +40,14 @@
 //! renders through photo mode's pipeline (eo-render `photo`): `focal_mm`
 //! (35 mm equivalent; sets the field of view), `f_number` (no aperture: all
 //! sharp), `focus` (metres, `"look_at"` or `"subject"`), `grade`
-//! (`neutral`, `warm-film`, `cool`, `monochrome`), `ev`, `vignette`,
-//! `grain` (0..1; default the grade's), `letterbox` (an aspect) and `roll`
-//! (degrees). `"subject"` stands the player's body there: `at` [x, z] game
+//! (`neutral`, `warm-film`, `cool`, `monochrome`), `strength` (0..2 of the
+//! grade), `filter` (monochrome's contrast filter: `none`, `yellow`,
+//! `deep-yellow`, `orange`, `red`, `green`), `fade` (0..1), `ev`, `vignette`,
+//! `grain` (0..1; default the grade's), `letterbox` (an aspect),
+//! `frame_offset` (-1..1: where the letterbox's opening sits), `roll`
+//! (degrees), `blades` (the iris: 0 a circle, else straight blades; default
+//! 9 rounded), `rounded` (default true), `cat_eye` (default true) and
+//! `peaking` (the window's focus marks, for a review of them). `"subject"` stands the player's body there: `at` [x, z] game
 //! metres on the street surface, `facing` (compass degrees; default toward
 //! the camera), `model` (an index into the people models), `walking`. With
 //! `--no-photo-mode` the lens's field of view is kept and nothing else of it
@@ -192,6 +197,12 @@ pub struct PhotoSpec {
     pub grain: Option<f64>,
     pub letterbox: Option<f64>,
     pub roll_deg: f64,
+    pub strength: f64,
+    pub filter: eo_render::photo::MonoFilter,
+    pub fade: f64,
+    pub frame_offset: f64,
+    pub aperture: eo_render::photo::Aperture,
+    pub peaking: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -213,7 +224,7 @@ pub struct SubjectSpec {
     pub walking: bool,
 }
 
-const PHOTO_KEYS: &[&str] = &["focal_mm", "f_number", "focus", "grade", "ev", "vignette", "grain", "letterbox", "roll"];
+const PHOTO_KEYS: &[&str] = &["focal_mm", "f_number", "focus", "grade", "strength", "filter", "fade", "ev", "vignette", "grain", "letterbox", "frame_offset", "roll", "blades", "rounded", "cat_eye", "peaking"];
 const SUBJECT_KEYS: &[&str] = &["at", "facing", "model", "walking"];
 
 fn parse_photo(name: &str, v: &Value) -> Result<PhotoSpec> {
@@ -247,7 +258,24 @@ fn parse_photo(name: &str, v: &Value) -> Result<PhotoSpec> {
         Some(Value::String(g)) => eo_render::photo::Grade::parse(g).ok_or_else(|| anyhow!("shot \"{name}\": grade \"{g}\" is not neutral, warm-film, cool or monochrome"))?,
         Some(_) => bail!("shot \"{name}\": grade is not a string"),
     };
+    let filter = match o.get("filter") {
+        None | Some(Value::Null) => eo_render::photo::MonoFilter::DeepYellow,
+        Some(Value::String(f)) => eo_render::photo::MonoFilter::parse(f).ok_or_else(|| anyhow!("shot \"{name}\": filter \"{f}\" is not none, yellow, deep-yellow, orange, red or green"))?,
+        Some(_) => bail!("shot \"{name}\": filter is not a string"),
+    };
+    let flag = |k: &str, d: bool| o.get(k).and_then(Value::as_bool).unwrap_or(d);
+    let blades = match num("blades")? {
+        None => 9,
+        Some(b) if b == 0.0 || (3.0..=16.0).contains(&b) => b as u32,
+        Some(b) => bail!("shot \"{name}\": blades {b} is not 0 (a circle) or 3 to 16"),
+    };
     Ok(PhotoSpec {
+        strength: num("strength")?.unwrap_or(1.0).clamp(0.0, 2.0),
+        filter,
+        fade: num("fade")?.unwrap_or(0.0).clamp(0.0, 1.0),
+        frame_offset: num("frame_offset")?.unwrap_or(0.0).clamp(-1.0, 1.0),
+        aperture: eo_render::photo::Aperture { blades, rounded: flag("rounded", true), cat_eye: flag("cat_eye", true) },
+        peaking: flag("peaking", false),
         focal_mm,
         f_number,
         focus,
@@ -535,9 +563,14 @@ pub fn resolve(spec: &Spec, world: &World, gf: &GeoFrame, args: &Args, aspect: f
                 FocusSpec::Subject => subject.map(|s| along(DVec3::from(s.0) + DVec3::Y * crate::photo::SUBJECT_EYE_M * eo_data::groundscale::people())).unwrap_or(1000.0),
             };
             let params = eo_render::photo::PhotoParams {
-                dof: p.f_number.map(|n| eo_render::photo::Dof { f_number: n, focus_m }),
+                dof: p.f_number.map(|n| eo_render::photo::Dof { f_number: n, focus_m, aperture: p.aperture }),
                 exposure_ev: p.ev,
                 grade: p.grade,
+                strength: p.strength,
+                filter: p.filter,
+                fade: p.fade,
+                frame_offset: p.frame_offset,
+                peaking: p.peaking,
                 vignette: p.vignette,
                 grain: p.grain.unwrap_or(p.grade.look().grain),
                 letterbox: p.letterbox,
@@ -550,7 +583,11 @@ pub fn resolve(spec: &Spec, world: &World, gf: &GeoFrame, args: &Args, aspect: f
                     "focal_mm_35mm_equivalent": eo_render::photo::focal_mm(cam.fov_y_deg as f64, aspect as f64), "fov_y_deg": cam.fov_y_deg,
                     "f_number": p.f_number, "focus_m": focus_m, "focus": format!("{:?}", p.focus),
                     "coc_at_infinity_mm": p.f_number.map(|n| eo_render::photo::coc_inf_mm(eo_render::photo::focal_mm(cam.fov_y_deg as f64, aspect as f64), n, focus_m)),
-                    "grade": p.grade.name(), "exposure_ev": p.ev, "vignette": p.vignette, "grain": params.grain, "letterbox": p.letterbox, "roll_deg": p.roll_deg,
+                    "grade": p.grade.name(), "strength": p.strength, "filter": (p.grade == eo_render::photo::Grade::Monochrome).then(|| p.filter.name()),
+                    "fade": p.fade, "exposure_ev": p.ev, "vignette": p.vignette, "grain": params.grain, "letterbox": p.letterbox, "frame_offset": p.frame_offset, "roll_deg": p.roll_deg,
+                    "fov_x_deg": eo_render::photo::fov_x_deg(eo_render::photo::focal_mm(cam.fov_y_deg as f64, aspect as f64)),
+                    "iris": { "blades": p.aperture.blades, "rounded": p.aperture.rounded, "cat_eye": p.aperture.cat_eye }, "peaking": p.peaking,
+                    "sharp_m": p.f_number.map(|n| { let (a, b) = eo_render::photo::dof_limits_m(eo_render::photo::focal_mm(cam.fov_y_deg as f64, aspect as f64), n, focus_m, eo_render::photo::COC_LIMIT_MM); json!([a, b]) }),
                     "dof": crate::photo::dof_enabled(),
                 }),
             );
