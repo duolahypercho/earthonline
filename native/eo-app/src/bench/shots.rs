@@ -693,6 +693,8 @@ pub fn shoot(io: &mut Io, common: &Map<String, Value>, shot: &Shot, dir: &Path, 
     let cam = shot.cam;
     eprintln!("shots: {}: eye ({:.1}, {:.1}, {:.1}), heading {:.1}, pitch {:.1}, {} h, {}", shot.name, cam.eye.x, cam.eye.y, cam.eye.z, compass(cam.yaw as f64), (cam.pitch as f64).to_degrees(), shot.hour, weather_name(shot.weather));
     io.set_look(shot.hour, shot.weather);
+    // each shot meters afresh (its clock is stopped: an exposure carried from the last shot never adapts).
+    io.renderer.look.sky.snap_adaptation();
     let agents = io.place_agents(shot.focus);
     io.agents.extras = shot.extras.clone();
     let settle = io.settle(&cam, timeout_s)?;
@@ -768,10 +770,14 @@ pub fn run(io: &mut Io, mode: Mode, dir: &Path) -> Result<()> {
                     if body.is_none() {
                         shot.notes.push("no person: the agent library has no people (the optional people assets are absent)".into());
                     }
+                    // the body on a landmark deck: its contact occlusion and the room's light (eo-render interior_meter.rs).
+                    let height = io.agents.lib.as_deref().and_then(|l| l.meta.family_heights.first().copied()).unwrap_or(1.75) as f64;
+                    eo_render::interior_meter::set_player(body.is_some().then_some((feet.to_array(), height)));
                     shot.extras.extend(body);
                     io.agents.hide_near = vec![(feet.as_vec3().to_array(), 0.8)];
                 }
                 shoot(io, &common, &shot, dir, timeout)?;
+                eo_render::interior_meter::set_player(None);
                 io.agents.hide_near.clear();
                 n += 1;
             }

@@ -177,7 +177,8 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
             sample_count: args.msaa,
             multiplier: args.multiply,
             debug_ids,
-            blend_first_object: models.object,
+            // the landmark decks' glazing stands before the model arena (eo-render landmarks.rs `blend_first`).
+            blend_first_object: world.landmarks.as_ref().and_then(|l| l.blend_first).map_or(models.object, |b| b.min(models.object)),
         },
     )?;
     r.kit_radii = eo_render::kit::DEFAULT_KIT_RADII;
@@ -231,6 +232,8 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
         }
     }
     if let Some(l) = &world.landmarks {
+        // the wire members round and depth-true with the landmark decks (`--no-landmark-access`: as before).
+        eo_render::landmarks::ROUND_WIRES.store(args.landmark_access, std::sync::atomic::Ordering::Relaxed);
         r.bytes.vertex += r.attach_landmark_wires(ctx, &l.wire_vertices, &l.wire_indices); // the wire members
     }
     // the sea over the terrain grid's extent (where the flat sea quad was).

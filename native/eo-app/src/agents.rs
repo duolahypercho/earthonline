@@ -368,12 +368,16 @@ impl PlayerVisual {
         self.time += dt;
         let height = lib.meta.family_heights.first().copied().unwrap_or(1.75) as f64;
         self.phase = eo_agents::gait::advance_phase(self.phase, player.ground_speed, dt, height);
+        let mut drawn = None;
         if player.mode == Mode::OnFoot && body_visible {
             let f = player.character.feet();
             if let Some(b) = eo_agents::feed::player_body(lib, [f.x, f.y, f.z], player.facing_yaw, player.ground_speed, self.phase, self.time) {
                 out.push(b);
+                drawn = Some(([f.x, f.y, f.z], height));
             }
         }
+        // the body on a landmark deck: its contact occlusion and the room's light (eo-render interior_meter.rs).
+        eo_render::interior_meter::set_player(drawn);
         self.spins.resize(player.vehicles.len(), 0.0);
         for (k, v) in player.vehicles.iter().enumerate() {
             let speed = v.forward_speed(cw);
