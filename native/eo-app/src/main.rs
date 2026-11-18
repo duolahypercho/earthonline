@@ -17,6 +17,7 @@ mod people_capture; // people
 mod bench;
 mod cc0_runtime; // the CC0 scanned sets at run time
 mod farshore; // the far terrain's load and attach
+mod ground_tone; // the terrain's vertex tone and the far land (the scene build's closures)
 mod models;
 mod net; // net
 mod streets;
@@ -859,51 +860,12 @@ pub fn load_world(args: &Args) -> Result<World> {
         }
         _ => None,
     };
-    let pack = |c: [f64; 3], a: u8| -> u32 {
-        let b = |v: f64| (v.max(0.0).powf(1.0 / 2.2).min(1.0) * 255.0).round() as u32;
-        b(c[0]) | (b(c[1]) << 8) | (b(c[2]) << 16) | ((a as u32) << 24)
-    };
     let water_field = water.clone();
-    const FAR_LAND_ABOVE_SEA_M: f64 = 2.0;
-    const FAR_LAND_SHORE_M: f64 = 60.0;
-    let far_land_fn = |x: f64, z: f64| -> Option<f64> {
-        cover.as_ref()?;
-        let w = water_field.as_deref()?;
-        if w.field.signed_at(x, z) <= FAR_LAND_SHORE_M {
-            return None;
-        }
-        elev.sample(x, z).filter(|h| *h > eo_water::SEA_LEVEL_Y + FAR_LAND_ABOVE_SEA_M)
-    };
-    let ground_tone_fn = |x: f32, z: f32| -> Option<u32> {
-        let cover = cover.as_ref()?;
-        let (x, z) = (x as f64, z as f64);
-        // the far land's ground by its land-cover class (tile-ground-cover.js
-        // `DERIVED_TONES`: unmapped open ground, wild grass or coastal scrub; under trees understorey).
-        if far_land_fn(x, z).is_some() {
-            let class = land.as_ref().map(|l| l.class_at(x, z)).unwrap_or(0);
-            return Some(pack(eo_landmarks::ground_cover::far_land_tone(class, x, z), 255));
-        }
-        if let Some(w) = water_field.as_deref() {
-            let s = w.field.signed_at(x, z);
-            if cover.beach_sand(x, z, s.abs()) {
-                let a = ((64.0 - s) * 1.5).round().clamp(0.0, 253.0) as u8;
-                return Some(pack(cover.sand_at(x, z), a));
-            }
-        }
-        // the open ground's measured green (yards, lots, hills), inland of the shore.
-        let park = cover.tone_name_at(x, z).and_then(|n| cover.tone_at(x, z).map(|c| (n, c)));
-        let class = land.as_ref().map(|l| l.class_at(x, z)).unwrap_or(0);
-        let shore = water_field.as_deref().map(|w| w.field.signed_at(x, z).abs());
-        let h = |dx: f64, dz: f64| elev.sample(x + dx, z + dz);
-        let slope = match (h(-6.0, 0.0), h(6.0, 0.0), h(0.0, -6.0), h(0.0, 6.0)) {
-            (Some(a), Some(b), Some(c), Some(d)) => ((b - a).hypot(d - c)) / 12.0,
-            _ => 0.0,
-        };
-        if let Some(c) = eo_render::ground2::open_ground(x, z, class, park, shore, h(0.0, 0.0).map(|h| h - eo_water::SEA_LEVEL_Y), slope) {
-            return Some(pack(c, 255));
-        }
-        cover.tone_at(x, z).map(|c| pack(c, 255))
-    };
+    // the far land's height and a terrain vertex's colour from the open-space
+    // ground (ground_tone.rs): beach sand (its shore distance, metres inland,
+    // in the alpha byte) or a green's tone.
+    let far_land_fn = ground_tone::far_land(cover.as_deref(), water_field.as_deref(), elev);
+    let ground_tone_fn = ground_tone::ground_tone(cover.as_deref(), water_field.as_deref(), elev, land.as_ref());
     // land beyond the city's shoreline rings. The rings call the
     // Marin headlands across the Golden Gate sea (they are not San
     // Francisco's), so the water press drew the elevation grid's own ground
@@ -938,6 +900,9 @@ pub fn load_world(args: &Args) -> Result<World> {
         smooth_terrain: args.landmarks && args.landmarks2,
     })?;
     drop(carpet_fn); // water
+    // (the ground-tone closures borrow the elevation, which the world takes below)
+    drop(ground_tone_fn);
+    drop(far_land_fn);
     // the bridges (eo-landmarks, the JS generators ported) on the
     // drawn ground, appended to the static table; their LOD groups follow the street's.
     let landmarks = if let Some(mut set) = landmark_set {
