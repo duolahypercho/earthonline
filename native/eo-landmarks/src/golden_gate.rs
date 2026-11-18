@@ -808,6 +808,68 @@ impl Ctx<'_> {
         }
     }
 
+    /// The stiffening truss and the walkways where they meet the towers
+    /// (`BridgeFeatures::collar`). The truss's panels in the tower zone were
+    /// dropped whole, leaving a gap of up to a panel and a half before each
+    /// leg: the last panel is drawn clipped at the leg's face, closed by an
+    /// end vertical and a housing over the rocker links that carry the main
+    /// span's trusses at the towers ("25 ft rocker links": Strauss 1937; the
+    /// District's 2025 retrofit scope: windlocks and links at the towers).
+    /// The balconies round the legs get the painted steel they are: a fascia
+    /// plate along their outer edge and knee brackets under them off the
+    /// legs' outer faces. INFERRED: the housing's and fascia's sections and
+    /// the brackets' pitch.
+    fn tower_collar(&self, orange: &mut MeshArrays) {
+        let (d, p, k, h, w) = (self.d, self.plan, &self.k, self.h, self.water);
+        let (truss, panel) = (num(d, "trussDepthM"), num(d, "panelM"));
+        let hp = self.site.half_plane;
+        let stage = self.stage_at(p.y_tower - w + 0.5);
+        let (leg_half_across, leg_half_along) = (stage[2] / 2.0, stage[3] / 2.0);
+        let st = stations(p.c_start, p.c_end, panel);
+        let top = 0.5 * h;
+        for t in [0.0, p.l] {
+            for dir in [-1.0, 1.0] {
+                // the last whole panel's end on this side of the tower, and the leg's face.
+                let face = t + dir * (leg_half_along + 0.3);
+                let Some(&e) = st.iter().filter(|&&c| (c - t) * dir > 0.0).filter(|&&c| !self.in_tower_zone(c.min(c + dir * panel), c.max(c + dir * panel))).min_by(|a, b| ((*a - t).abs()).total_cmp(&(*b - t).abs())) else { continue };
+                if (e - face) * dir <= 0.5 {
+                    continue;
+                }
+                let (te, tf) = (p.deck_top(e), p.deck_top(face));
+                for s in [-hp, hp] {
+                    orange.beam(self.P(e, s, te - top), self.P(face, s, tf - top), 0.9 * h, 1.0 * h, k.orange);
+                    orange.beam(self.P(e, s, te - truss), self.P(face, s, tf - truss), 0.9 * h, 1.0 * h, k.orange);
+                    orange.beam(self.P(e, s, te - truss), self.P(face, s, tf - top), 0.45 * h, 0.5 * h, k.orange);
+                    // the end vertical and the rocker links' housing against the leg.
+                    orange.beam(self.P(face + dir * 0.6 * h, s, tf - truss), self.P(face + dir * 0.6 * h, s, tf - top), 1.2 * h, 1.2 * h, k.orange);
+                    let [x, z] = self.frame.point(face + dir * COLLAR_HOUSING_M[0] * h / 2.0, s);
+                    orange.box_(x, z, tf - truss - 0.3 * h, tf - top + 0.2 * h, COLLAR_HOUSING_M[0] * h / 2.0, COLLAR_HOUSING_M[1] * h / 2.0, self.yaw, k.orange, ALL);
+                }
+                orange.beam(self.P(e, -hp, te - truss), self.P(face, hp, tf - truss), 0.35 * h, 0.35 * h, k.orange);
+                orange.beam(self.P(e, hp, te - truss), self.P(face, -hp, tf - truss), 0.35 * h, 0.35 * h, k.orange);
+            }
+            // the balconies' fascia and brackets.
+            let walk_outer = hp + leg_half_across + num(d, "sidewalkM");
+            let zone = self.tower_zone_half;
+            let curb = num(d, "curbM");
+            let deck_at = |c: f64| p.deck_top(c) + curb - 0.5;
+            let fh = COLLAR_FASCIA_M * h;
+            for sgn in [-1.0, 1.0] {
+                let s = sgn * (walk_outer + 0.05);
+                orange.beam(self.P(t - zone, s, deck_at(t - zone) - fh / 2.0 + 0.5), self.P(t + zone, s, deck_at(t + zone) - fh / 2.0 + 0.5), 0.1, fh, k.orange);
+                let leg_outer = sgn * (hp + leg_half_across);
+                let n = ((2.0 * leg_half_along) / (COLLAR_BRACKET_PITCH_M * h)).floor().max(1.0) as i64;
+                for i in 0..=n {
+                    let c = t - leg_half_along + 2.0 * leg_half_along * i as f64 / n as f64;
+                    let y = deck_at(c);
+                    let drop = (walk_outer - hp - leg_half_across) * 0.9;
+                    orange.beam(self.P(c, leg_outer, y - drop), self.P(c, s - sgn * 0.15, y - 0.05), 0.25 * h, 0.3 * h, k.orange);
+                    orange.beam(self.P(c, leg_outer, y - 0.15), self.P(c, s - sgn * 0.15, y - 0.15), 0.25 * h, 0.3 * h, k.orange);
+                }
+            }
+        }
+    }
+
     /// `bentColumns`: (x, z, ground, top) of a two-column bent at chainage c.
     fn bent_columns(&self, c: f64) -> [[f64; 4]; 2] {
         let hp = self.site.half_plane;
@@ -1304,6 +1366,12 @@ impl Ctx<'_> {
 /// over the sea. The fender's wall: 10 ft at sea level (the District's 2025
 /// statement on the NTSB's report).
 const ARCH_TRUSS_DEPTH_M: f64 = 4.5;
+/// INFERRED (`BridgeFeatures::collar`): the rocker links' housing along the
+/// span and across it; the balconies' fascia depth; their brackets' pitch
+/// (each times the structure scale).
+const COLLAR_HOUSING_M: [f64; 2] = [1.6, 2.0];
+const COLLAR_FASCIA_M: f64 = 0.9;
+const COLLAR_BRACKET_PITCH_M: f64 = 2.4;
 /// The Fort Point arch (`BridgeFeatures::arch2`; Strauss 1937): the span
 /// between the bearings' centres (319 ft 7 in), its rise (113 ft), the
 /// roadway over the springing at the north end (185 ft), the ribs' spacings
@@ -1411,6 +1479,9 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
     ctx.approach_span(&mut orange_m, &mut concrete_m, &mut far, plan.c_south, plan.c_start, plan.c_south);
     ctx.approach_span(&mut orange_m, &mut concrete_m, &mut far, plan.c_end, plan.c_north, plan.c_north);
     ctx.tower_walkways(&mut deck_m, &mut orange_m);
+    if ctx.collar {
+        ctx.tower_collar(&mut orange_m);
+    }
     ctx.approaches(&mut orange_m, &mut concrete_m, &mut far);
     ctx.arch_ribs(&mut orange_m, &mut far);
     if ctx.arch2 {
