@@ -46,6 +46,14 @@ pub const TILE_SIZE_M: f64 = 128.0;
 pub const LOAD_RADIUS_M: f64 = 160.0;
 /// And dropped past this.
 pub const DROP_RADIUS_M: f64 = 260.0;
+/// The reach of one authoritative fixed step: every tile whose rectangle
+/// lies within this of the body is resident before the step runs
+/// (`CollisionWorld::ensure_step_tiles`). A step reads the building prisms of
+/// the tiles within its sweep plus 64 m (`prisms_near`, a footprint is keyed
+/// by its centroid), the car moves at most 1 m a step at its 60 m/s top speed
+/// and the exit probe looks a car's width beside it: 96 m holds all of that
+/// with a margin and stays inside the `LOAD_RADIUS_M` the stream prefetches.
+pub const STEP_RADIUS_M: f64 = 96.0;
 
 /// Collision layers (`PHYSICS_LAYERS` in src/simulation/physics/core/layers.js, the subset used here).
 pub mod layer {
@@ -521,6 +529,19 @@ pub struct CollisionWorld {
     pub stats: StreamStats,
     /// At most this many tiles are inserted per pump (the rest wait a frame).
     pub insert_per_pump: usize,
+    /// LOCKSTEP: what the world holds at each fixed step is a function of
+    /// where the body has been, never of how fast the cookers ran. `pump`
+    /// then only requests and collects cooked tiles; `ensure_step_tiles`
+    /// (before every authoritative step) inserts the tiles within
+    /// `STEP_RADIUS_M`, waiting for a cook that is late, and drops the tiles
+    /// past `DROP_RADIUS_M`, both in key order. A client and the server
+    /// stepping the same inputs, or a client replaying them after a
+    /// correction, see the same colliders however loaded the machine is.
+    pub lockstep: bool,
+    /// Longest wait for a late cook in `ensure_step_tiles`, ms, and how many
+    /// steps waited at all.
+    pub step_wait_ms_max: f64,
+    pub step_waits: u64,
     /// Removed tiles go here to be freed on another thread (None when fed: shared shapes are freed in place).
     graveyard: Option<Sender<(Vec<Collider>, Arc<TileHeights>, Arc<Vec<Prism>>)>>,
 }
@@ -546,12 +567,12 @@ impl CollisionWorld {
                 }
             })
             .expect("spawn tile graveyard");
-        Self { physics, ground, buildings, cooker: Some(cooker), feed: None, resident: HashMap::new(), requested: HashSet::new(), pending: vec![], stats: StreamStats::default(), insert_per_pump: 1, graveyard: Some(graveyard) }
+        Self { physics, ground, buildings, cooker: Some(cooker), feed: None, resident: HashMap::new(), requested: HashSet::new(), pending: vec![], stats: StreamStats::default(), insert_per_pump: 1, lockstep: false, step_wait_ms_max: 0.0, step_waits: 0, graveyard: Some(graveyard) }
     }
 
     /// a world whose tiles come from a shared feed (no threads of its own).
     pub fn fed(ground: Arc<dyn GroundProvider>, buildings: Arc<BuildingSet>, feed: Arc<dyn TileFeed>) -> Self {
-        Self { physics: new_physics(), ground, buildings, cooker: None, feed: Some(feed), resident: HashMap::new(), requested: HashSet::new(), pending: vec![], stats: StreamStats::default(), insert_per_pump: 1, graveyard: None }
+        Self { physics: new_physics(), ground, buildings, cooker: None, feed: Some(feed), resident: HashMap::new(), requested: HashSet::new(), pending: vec![], stats: StreamStats::default(), insert_per_pump: 1, lockstep: false, step_wait_ms_max: 0.0, step_waits: 0, graveyard: None }
     }
 
     fn wanted(x: f64, z: f64, radius: f64) -> Vec<TileKey> {
@@ -596,7 +617,9 @@ impl CollisionWorld {
         // Nearest first.
         self.pending.sort_by(|a, b| b.key.distance_to(center.x, center.z).partial_cmp(&a.key.distance_to(center.x, center.z)).unwrap());
         let mut inserted = 0;
-        while inserted < self.insert_per_pump {
+        // Lockstep: the cooked tiles wait in `pending` for `ensure_step_tiles`.
+        let budget = if self.lockstep { 0 } else { self.insert_per_pump };
+        while inserted < budget {
             let Some(b) = self.pending.pop() else { break };
             self.requested.remove(&b.key);
             if b.key.distance_to(center.x, center.z) > DROP_RADIUS_M || self.resident.contains_key(&b.key) {
@@ -607,33 +630,122 @@ impl CollisionWorld {
         }
         // Drop far tiles, one per pump (and forget far requests). The removed
         // colliders (heightfield and trimesh buffers) are freed off-thread.
-        let far = self.resident.keys().copied().filter(|k| k.distance_to(center.x, center.z) > DROP_RADIUS_M).max_by(|a, b| a.distance_to(center.x, center.z).partial_cmp(&b.distance_to(center.x, center.z)).unwrap());
+        let far = if self.lockstep { None } else { self.resident.keys().copied().filter(|k| k.distance_to(center.x, center.z) > DROP_RADIUS_M).max_by(|a, b| a.distance_to(center.x, center.z).partial_cmp(&b.distance_to(center.x, center.z)).unwrap()) };
         if let Some(k) = far {
-            let tr = Instant::now();
-            if let Some(r) = self.resident.remove(&k) {
-                let mut gone = Vec::with_capacity(r.colliders.len());
-                for h in r.colliders {
-                    if let Some(c) = self.physics.remove_collider(h) {
-                        gone.push(c);
-                    }
-                }
-                if let Some(g) = &self.graveyard {
-                    let _ = g.send((gone, r.heights, r.prisms));
-                }
-                self.stats.tiles_removed += 1;
-            }
-            self.stats.remove_ms_max = self.stats.remove_ms_max.max(tr.elapsed().as_secs_f64() * 1e3);
+            self.remove_tile(k);
         }
         let keep: HashSet<TileKey> = Self::wanted(center.x, center.z, DROP_RADIUS_M).into_iter().collect();
         self.requested.retain(|k| keep.contains(k));
         if let Some(cooker) = &self.cooker {
             cooker.cancel_except(&keep);
         }
-        self.pending.retain(|b| keep.contains(&b.key));
+        let resident = &self.resident;
+        self.pending.retain(|b| keep.contains(&b.key) && !resident.contains_key(&b.key));
         self.stats.tiles_resident = self.resident.len();
         let ms = t.elapsed().as_secs_f64() * 1e3;
         self.stats.pump_ms_max = self.stats.pump_ms_max.max(ms);
         ms
+    }
+
+    fn remove_tile(&mut self, k: TileKey) {
+        let tr = Instant::now();
+        if let Some(r) = self.resident.remove(&k) {
+            let mut gone = Vec::with_capacity(r.colliders.len());
+            for h in r.colliders {
+                if let Some(c) = self.physics.remove_collider(h) {
+                    gone.push(c);
+                }
+            }
+            if let Some(g) = &self.graveyard {
+                let _ = g.send((gone, r.heights, r.prisms));
+            }
+            self.stats.tiles_removed += 1;
+        }
+        self.stats.remove_ms_max = self.stats.remove_ms_max.max(tr.elapsed().as_secs_f64() * 1e3);
+    }
+
+    /// Before an authoritative fixed step at `center` (the body): every tile
+    /// within `STEP_RADIUS_M` resident, waiting for the cook of any that is
+    /// not ready yet (normally none: the stream asked for them 64 m earlier),
+    /// inserted in key order; in a lockstep world, the tiles past
+    /// `DROP_RADIUS_M` removed, in key order. No physics step is taken (the
+    /// tiles that arrive here lie 95 m or more from the body, so the step
+    /// cannot touch them before the next one). Returns the tiles inserted.
+    ///
+    /// Why: without it the colliders at a step depend on how fast the
+    /// worker threads cooked relative to the stepping. A replay that runs
+    /// faster than real time (a correction, a test) or a loaded machine
+    /// steps the body over tiles that are not resident yet in one run and
+    /// are in another, and the two runs part (tens of metres, measured with
+    /// a 40 ms cook: `eo-server` `determinism`).
+    pub fn ensure_step_tiles(&mut self, center: DVec3) -> usize {
+        let (x, z) = (center.x, center.z);
+        let mut inserted = 0;
+        let want = Self::wanted(x, z, STEP_RADIUS_M); // row by row: a fixed key order
+        let missing: Vec<TileKey> = want.into_iter().filter(|k| !self.resident.contains_key(k)).collect();
+        if !missing.is_empty() {
+            let t = Instant::now();
+            let mut got: Vec<Option<BuiltTile>> = missing
+                .iter()
+                .map(|k| {
+                    let i = self.pending.iter().position(|b| b.key == *k)?;
+                    Some(self.pending.swap_remove(i))
+                })
+                .collect();
+            let mut waited = false;
+            let mut asked = Instant::now() - std::time::Duration::from_secs(10);
+            while got.iter().any(Option::is_none) {
+                if let Some(feed) = self.feed.clone() {
+                    for (k, g) in missing.iter().zip(got.iter_mut()) {
+                        if g.is_none() {
+                            *g = feed.fetch(*k, (x, z));
+                        }
+                    }
+                    if got.iter().any(Option::is_none) {
+                        waited = true;
+                        std::thread::sleep(std::time::Duration::from_micros(200));
+                    }
+                } else if let Some(cooker) = &self.cooker {
+                    // (Re)ask for what is neither cooked nor known to be queued; once a second
+                    // ask again for all of it (a request the stream cancelled meanwhile).
+                    if asked.elapsed().as_secs_f64() > 1.0 {
+                        let ask: Vec<TileKey> = missing.iter().zip(&got).filter(|(_, g)| g.is_none()).map(|(k, _)| *k).collect();
+                        self.requested.extend(ask.iter().copied());
+                        cooker.request(&ask, (x, z));
+                        asked = Instant::now();
+                    }
+                    waited = true;
+                    match cooker.rx.recv_timeout(std::time::Duration::from_millis(250)) {
+                        Ok(b) => match missing.iter().position(|k| *k == b.key) {
+                            Some(i) if got[i].is_none() => got[i] = Some(b),
+                            _ => self.pending.push(b),
+                        },
+                        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                        Err(_) => break,
+                    }
+                } else {
+                    break;
+                }
+            }
+            for b in got.into_iter().flatten() {
+                self.requested.remove(&b.key);
+                self.insert(b);
+                inserted += 1;
+            }
+            if waited {
+                self.step_waits += 1;
+                self.step_wait_ms_max = self.step_wait_ms_max.max(t.elapsed().as_secs_f64() * 1e3);
+            }
+        }
+        if self.lockstep {
+            let mut far: Vec<TileKey> = self.resident.keys().copied().filter(|k| k.distance_to(x, z) > DROP_RADIUS_M).collect();
+            far.sort_unstable();
+            for k in far {
+                self.remove_tile(k);
+            }
+        }
+        self.stats.tiles_resident = self.resident.len();
+        inserted
     }
 
     fn insert(&mut self, b: BuiltTile) {
@@ -653,47 +765,53 @@ impl CollisionWorld {
     /// Block until every tile within `radius` of `center` is resident (setup and tests).
     pub fn load_blocking(&mut self, center: DVec3, radius: f64) {
         let want = Self::wanted(center.x, center.z, radius);
+        // Every tile cooked first, then inserted in `want`'s fixed order: the
+        // order the cooks finish in varies from run to run, and the colliders'
+        // handles (and so the solver's contact order) follow the insertion order.
+        let mut got: HashMap<TileKey, BuiltTile> = HashMap::new();
         if let Some(feed) = self.feed.clone() {
             // wait on the shared feed.
             loop {
                 for k in &want {
-                    if !self.resident.contains_key(k) {
+                    if !self.resident.contains_key(k) && !got.contains_key(k) {
                         if let Some(b) = feed.fetch(*k, (center.x, center.z)) {
-                            self.insert(b);
+                            got.insert(*k, b);
                         }
                     }
                 }
-                if want.iter().all(|k| self.resident.contains_key(k)) {
+                if want.iter().all(|k| self.resident.contains_key(k) || got.contains_key(k)) {
                     break;
                 }
                 std::thread::sleep(std::time::Duration::from_millis(1));
             }
-            self.stats.tiles_resident = self.resident.len();
-            self.physics.step();
-            return;
-        }
-        if self.cooker.is_none() {
-            return;
-        }
-        let missing: Vec<TileKey> = want.iter().copied().filter(|k| !self.resident.contains_key(k) && !self.requested.contains(k)).collect();
-        self.requested.extend(missing.iter().copied());
-        self.cooker.as_ref().unwrap().request(&missing, (center.x, center.z));
-        loop {
-            for i in (0..self.pending.len()).rev() {
-                if want.contains(&self.pending[i].key) {
-                    let b = self.pending.swap_remove(i);
-                    self.requested.remove(&b.key);
-                    if !self.resident.contains_key(&b.key) {
-                        self.insert(b);
+        } else if self.cooker.is_some() {
+            let missing: Vec<TileKey> = want.iter().copied().filter(|k| !self.resident.contains_key(k) && !self.requested.contains(k)).collect();
+            self.requested.extend(missing.iter().copied());
+            self.cooker.as_ref().unwrap().request(&missing, (center.x, center.z));
+            loop {
+                for i in (0..self.pending.len()).rev() {
+                    if want.contains(&self.pending[i].key) {
+                        let b = self.pending.swap_remove(i);
+                        self.requested.remove(&b.key);
+                        if !self.resident.contains_key(&b.key) {
+                            got.insert(b.key, b);
+                        }
                     }
                 }
+                if want.iter().all(|k| self.resident.contains_key(k) || got.contains_key(k)) {
+                    break;
+                }
+                match self.cooker.as_ref().unwrap().rx.recv() {
+                    Ok(b) => self.pending.push(b),
+                    Err(_) => break,
+                }
             }
-            if want.iter().all(|k| self.resident.contains_key(k)) {
-                break;
-            }
-            match self.cooker.as_ref().unwrap().rx.recv() {
-                Ok(b) => self.pending.push(b),
-                Err(_) => break,
+        } else {
+            return;
+        }
+        for k in &want {
+            if let Some(b) = got.remove(k) {
+                self.insert(b);
             }
         }
         self.stats.tiles_resident = self.resident.len();
