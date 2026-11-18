@@ -153,11 +153,13 @@ pub struct Spec {
     pub hour: Option<f64>,
     pub weather: Option<Kind>,
     pub what: Option<String>,
+    /// A person standing in the shot (the player's body): feet, game metres, and the compass heading faced.
+    pub person: Option<(DVec3, f64)>,
     /// The entry as written.
     pub input: Value,
 }
 
-const SHOT_KEYS: &[&str] = &["name", "geo", "lat", "lon", "alt", "range", "heading", "tilt", "fov", "eye", "yaw", "pitch", "look_at", "far", "time_of_day", "weather", "what", "note"];
+const SHOT_KEYS: &[&str] = &["name", "geo", "lat", "lon", "alt", "range", "heading", "tilt", "fov", "eye", "yaw", "pitch", "look_at", "far", "time_of_day", "weather", "what", "note", "person"];
 const GEO_KEYS: &[&str] = &["lat", "lon", "alt", "range", "heading", "tilt", "fov"];
 
 fn unknown_keys(o: &Map<String, Value>, known: &[&str]) -> Vec<String> {
@@ -255,7 +257,17 @@ pub fn parse_specs(v: &Value) -> Result<Vec<Spec>> {
             bail!("shot \"{name}\": far {far:?} is too near");
         }
         let what = o.get("what").and_then(Value::as_str).map(String::from);
-        out.push(Spec { name, pose, fov, far, hour, weather, what, input: e.clone() });
+        // `"person": {"feet": [x, y, z], "heading": degrees}`: the player's body standing there.
+        let person = match o.get("person") {
+            None | Some(Value::Null) => None,
+            Some(Value::Object(p)) => {
+                let feet = p.get("feet").and_then(Value::as_array).filter(|a| a.len() == 3 && a.iter().all(|x| x.as_f64().is_some_and(f64::is_finite))).map(|a| DVec3::new(a[0].as_f64().unwrap(), a[1].as_f64().unwrap(), a[2].as_f64().unwrap()));
+                let Some(feet) = feet else { bail!("shot \"{name}\": \"person\" needs \"feet\": [x, y, z]") };
+                Some((feet, num(p, "heading")?.unwrap_or(0.0)))
+            }
+            Some(_) => bail!("shot \"{name}\": \"person\" is not an object"),
+        };
+        out.push(Spec { name, pose, fov, far, hour, weather, what, person, input: e.clone() });
     }
     if out.is_empty() {
         bail!("no shots");
@@ -748,7 +760,19 @@ pub fn run(io: &mut Io, mode: Mode, dir: &Path) -> Result<()> {
             for spec in specs.iter().filter(|s| wanted(&s.name)) {
                 let mut shot = resolve(spec, io.world, &gf, io.args, aspect, far);
                 shot.info.insert("shots_file".into(), json!(path.display().to_string()));
+                if let Some((feet, heading)) = spec.person {
+                    // The player's body (the first pool person), standing; the simulated people near it hidden.
+                    let h = heading.to_radians();
+                    let body = io.agents.lib.as_deref().and_then(|l| eo_agents::feed::player_body(l, feet.to_array(), h.sin().atan2(-h.cos()), 0.0, 0.0, 0.0));
+                    shot.info.insert("person".into(), json!({ "feet": feet.to_array(), "heading_deg": heading, "drawn": body.is_some() }));
+                    if body.is_none() {
+                        shot.notes.push("no person: the agent library has no people (the optional people assets are absent)".into());
+                    }
+                    shot.extras.extend(body);
+                    io.agents.hide_near = vec![(feet.as_vec3().to_array(), 0.8)];
+                }
                 shoot(io, &common, &shot, dir, timeout)?;
+                io.agents.hide_near.clear();
                 n += 1;
             }
             println!("shots: {n} shots in {}", dir.display());

@@ -73,6 +73,7 @@ impl Flags {
                 "--no-kit" => args.kit = false,
                 "--no-vsync" => args.vsync = false,
                 "--no-props" => args.props = false, // props in the UI's street
+                "--no-landmark-access" => args.landmark_access = false, // the landmark decks
                 "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
                 s if args.props2.parse_flag(s) => {}
                 // read by main's `groundscale_flags`.
@@ -136,6 +137,7 @@ fn default_args() -> Args {
         perf: Default::default(), // occlusion / hitch
         landmarks: true,          // landmarks
         landmarks2: true,
+        landmark_access: true,
     }
 }
 
