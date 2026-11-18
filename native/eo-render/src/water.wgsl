@@ -46,11 +46,24 @@
 // (exposure) set this point's exposure (`wg_ex`, water_common.wgsl) from the
 // field, when there is one and --no-water-exposure is not given
 fn w_expo_set(xz: vec2<f32>) {
-    if (wu.wv_gg2.z > 0.5 && wg_gg2(1u)) {
+    let on_e = wu.wv_gg2.z > 0.5 && wg_gg2(1u);
+    let on_b = wu.wv_gg2.w > 0.5 && wg_gg2(16u);
+    if (on_e || on_b) {
         let e = textureSampleLevel(w_expo, w_clamp, (xz - wu.wv_expo.xy) * wu.wv_expo.zw, 0.0);
-        wg_ex = vec4<f32>(e.x, e.y * 2.0, e.z, e.w);
+        if (on_e) {
+            wg_ex = vec4<f32>(e.x, e.y * 2.0, e.z, 1.0);
+        }
+        if (on_b) {
+            w_surf_k = max(e.w * 10.0, 0.1);
+        }
     }
 }
+
+// (iteration 2, beach profiles) the surf model's offshore distance over the
+// world's here: its foreshore is the drawn 1:55, a beach's measured one is
+// steeper (eo-water beaches.rs; the exposure texture's A holds 55 x the slope / 10),
+// so the bores break and run up that much nearer the sand
+var<private> w_surf_k: f32 = 1.0;
 
 // the sky as the sky slice now draws it where nothing covers it: the
 // look's graded dome blended toward the atmosphere tables (`at_sky`, its
@@ -628,7 +641,7 @@ fn w_displacement(base: vec2<f32>, spacing: f32, f: vec2<f32>) -> vec3<f32> {
     let surf_vw = 1.0 - wg_smooth(1.0, 2.5, spacing);
     if (f.y > 0.01 && f.x > -2.0 && f.x < 420.0 && surf_vw > 0.0) {
         let fr = w_shore_frame(base);
-        let s = surf_at(wu.cam.w, f.x, fr.z, f.y, sf_amp_scale(base.x));
+        let s = surf_at(wu.cam.w, f.x * w_surf_k, fr.z, f.y, sf_amp_scale(base.x));
         // (sea r4: half the shoreward throw: on the 0.8 m grid the full curl folded the face over itself, and the folded triangles read as dark boxes on the breaker line)
         disp = disp + vec3<f32>(fr.x * s.shoreward * 0.5, s.height, fr.y * s.shoreward * 0.5) * surf_vw;
     }
@@ -1214,6 +1227,13 @@ fn w_ppr_reflect(world: vec3<f32>, r: vec3<f32>, frag: vec2<f32>, smear: f32) ->
     return vec4<f32>(col / hits, hits * w_edge(uvq));
 }
 
+// (iteration 2, beach profiles) the diffuse attenuation the stirred-up sand
+// adds over a beach's shallows (1/m): with the bay's own, the sand under a
+// metre of swash water is about a tenth seen (both ways), as a Secchi depth of
+// about a metre gives (Kd ~ 1.7 / Secchi depth, Poole and Atkins 1929, J. Mar.
+// Biol. Assoc. UK 16, 297; the metre INFERRED for a beach's swash zone)
+const WB_NEAR_KD: f32 = 1.2;
+
 // (iteration 2, ppr blur) one facet's tap of the mirror: the reflected ray
 // `r` from the water at `world` carried `t0` (the distance to what the flat
 // mirror shows here, from the projected reflection's source) to the point it
@@ -1712,8 +1732,8 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     var surf_bored = 0.0;
     if (beach > 0.01 && signed > -4.0 && signed < 420.0) {
         let sa = sf_amp_scale(base.x);
-        let s0 = surf_at(t, signed, fr.z, beach, sa);
-        let s1 = surf_at(t, signed - 0.6, fr.z, beach, sa);
+        let s0 = surf_at(t, signed * w_surf_k, fr.z, beach, sa);
+        let s1 = surf_at(t, (signed - 0.6) * w_surf_k, fr.z, beach, sa);
         let dhds = (s1.height - s0.height) / 0.6;
         sx = sx + fr.x * dhds;
         sz = sz + fr.y * dhds;
@@ -2220,6 +2240,17 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
             // that depth (the foreshore's last 40 m) it hands over
             let carpet_w = wg_smooth(0.6, 0.97, column / WO_CARPET_DEPTH_M);
             deep = max(deep, (WS_WALL_FLOOR_M + 0.25 * max(signed, 0.0)) * max(wall_w, carpet_w));
+        }
+        if (wg_gg2(16u)) {
+            // (iteration 2, beach profiles: water-3) on a beach the ground is the
+            // measured foreshore down to the seabed (eo-water beaches.rs), so the
+            // column is the water's own: no 1:20 floor and no carpet hand-over
+            // (its seam drew a line across the shallows); the nearshore water
+            // carries the sand the swash stirs up, so the bottom fades within
+            // about a metre (`WB_NEAR_KD`)
+            let bk = wg_smooth(0.35, 0.6, beach);
+            deep = mix(deep, column, bk);
+            fill_k = fill_k + vec3<f32>(WB_NEAR_KD * bk);
         }
         let fill = vec3<f32>(1.0) - exp(-2.0 * fill_k * deep);
         vol.inscatter = rrs * e_d * fill / (1.0 - WO_F0);

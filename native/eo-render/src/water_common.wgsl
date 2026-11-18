@@ -36,7 +36,7 @@ struct WaterU {
     // (iteration 2) the exposure field's frame: origin x, z, 1 / extent x, z (eo-water exposure.rs)
     wv_expo: vec4<f32>,
     // (iteration 2) x the tidal current at the Gate (m/s, + flood), y the parts on
-    // (eo-water switches.rs bits), z 1 with an exposure field, w 0
+    // (eo-water switches.rs bits), z 1 with an exposure field, w 1 with the beaches' slopes (in its A)
     wv_gg2: vec4<f32>,
     // (iteration 2) per cascade, the wind sea's amplitude on the tidal jet (wave
     // action against the current, Longuet-Higgins and Stewart 1961)

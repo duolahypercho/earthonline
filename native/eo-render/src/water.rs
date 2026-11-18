@@ -368,6 +368,8 @@ pub struct WaterGpu {
     expo_view: wgpu::TextureView,
     expo_frame: [f32; 4],
     expo_on: bool,
+    /// (iteration 2) the beaches' measured slopes are in the exposure texture's A.
+    slopes_on: bool,
     /// (iteration 2) the parts on (eo-water `switches`).
     gg2: u32,
 }
@@ -592,10 +594,28 @@ impl WaterGpu {
         // clamp-sampled; a 1 x 1 stand-in without one (the shader then keeps the ramp)
         let gg2 = eo_water::switches::on();
         let expo = eo_water::exposure::installed().filter(|_| gg2 & eo_water::switches::EXPOSURE != 0);
-        let (ew, eh, etex): (u32, u32, Vec<[u8; 4]>) = match expo {
-            Some(e) => (e.width as u32, e.height as u32, e.texels.clone()),
-            None => (1, 1, vec![[0, 128, 255, 255]]),
+        // (beach profiles) each beach's slope in A, as 55 x the slope / 10 (water.wgsl `w_surf_k`)
+        let slopes = eo_water::beaches::installed().filter(|_| gg2 & eo_water::switches::BEACH_PROFILES != 0);
+        let (ew, eh, mut etex): (u32, u32, Vec<[u8; 4]>) = match (expo, slopes) {
+            (Some(e), _) => (e.width as u32, e.height as u32, e.texels.clone()),
+            (None, Some(_)) => {
+                let d = eo_water::exposure::DOMAIN;
+                let (w, h) = (((d[2] - d[0]) / eo_water::exposure::CELL_M).round() as u32, ((d[3] - d[1]) / eo_water::exposure::CELL_M).round() as u32);
+                (w, h, vec![[0, 128, 255, 255]; (w * h) as usize])
+            }
+            (None, None) => (1, 1, vec![[0, 128, 255, 255]]),
         };
+        let (eorigin, ecell) = (expo.map_or([eo_water::exposure::DOMAIN[0], eo_water::exposure::DOMAIN[1]], |e| e.origin), expo.map_or(eo_water::exposure::CELL_M, |e| e.cell_m));
+        if let Some(v) = slopes {
+            let fallback = eo_water::field::BEACH_FORESHORE_SLOPE;
+            for j in 0..eh as usize {
+                for i in 0..ew as usize {
+                    let (x, z) = (eorigin[0] + (i as f64 + 0.5) * ecell, eorigin[1] + (j as f64 + 0.5) * ecell);
+                    let k = eo_water::beaches::slope_at(v, x, z, fallback) / fallback;
+                    etex[j * ew as usize + i][3] = ((k / 10.0).clamp(0.0, 1.0) * 255.0).round() as u8;
+                }
+            }
+        }
         let expo_tex = d.create_texture(&wgpu::TextureDescriptor {
             label: Some("water-exposure"),
             size: wgpu::Extent3d { width: ew, height: eh, depth_or_array_layers: 1 },
@@ -615,10 +635,8 @@ impl WaterGpu {
         bytes += (ew * eh * 4) as u64;
         let expo_view = expo_tex.create_view(&Default::default());
         let expo_on = expo.is_some();
-        let expo_frame = match expo {
-            Some(e) => [e.origin[0] as f32, e.origin[1] as f32, (1.0 / (e.width as f64 * e.cell_m)) as f32, (1.0 / (e.height as f64 * e.cell_m)) as f32],
-            None => [0.0, 0.0, 0.0, 0.0],
-        };
+        let slopes_on = slopes.is_some();
+        let expo_frame = if expo_on || slopes_on { [eorigin[0] as f32, eorigin[1] as f32, (1.0 / (ew as f64 * ecell)) as f32, (1.0 / (eh as f64 * ecell)) as f32] } else { [0.0; 4] };
 
         // The grid: one shared index list and a compact stream of visible patch IDs.
         let idx = eo_water::grid::patch_indices();
@@ -880,6 +898,7 @@ impl WaterGpu {
             expo_view,
             expo_frame,
             expo_on,
+            slopes_on,
             gg2,
         }
     }
@@ -1196,7 +1215,7 @@ impl WaterGpu {
             wv_misc: pg.wv[3],
             wv_mss: pg.wv[4],
             wv_expo: self.expo_frame,
-            wv_gg2: [current as f32, self.gg2 as f32, self.expo_on as u32 as f32, 0.0],
+            wv_gg2: [current as f32, self.gg2 as f32, self.expo_on as u32 as f32, self.slopes_on as u32 as f32],
             wv_dop: doppler_gain(current).map(|g| g as f32),
         };
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&u));
