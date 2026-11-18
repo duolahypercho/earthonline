@@ -301,15 +301,18 @@ impl Corridors {
             let per_lane = flow / lanes.len() as f64; // vehicles per hour per lane
             if per_lane > 0.0 {
                 for (k, &lat) in lanes.iter().enumerate() {
-                    // mean headway per lane, s; at least the following gap at the desired speed.
+                    // headways: a shifted exponential (the following gap at the
+                    // desired speed, then a random part), its mean the lane's
+                    // flow, so the lane holds its flow up to the gap's capacity.
                     let mean_h = 3600.0 / per_lane;
                     let mut s = self.rng.next_f64() * mean_h * speed;
                     while s < len {
                         let m = self.new_mover(travel, &mix, speed, k as u16, lat, s);
                         let min_space = m.len + equilibrium_gap(&p, m.v0) * if travel == Travel::Walkers { 0.3 } else { 1.0 };
+                        let min_h = min_space / m.v0.max(0.1);
                         movers.push(m);
-                        let h = -(1.0 - self.rng.next_f64()).ln() * mean_h;
-                        s += (h * m.v0).max(min_space);
+                        let h = min_h + -(1.0 - self.rng.next_f64()).ln() * (mean_h - min_h).max(0.0);
+                        s += h * m.v0;
                     }
                 }
             }
@@ -337,15 +340,18 @@ impl Corridors {
                         let w = &self.ways[wi];
                         (w.spec.lanes.clone(), w.spec.speed_mps, w.spec.travel, w.spec.mix)
                     };
-                    let k = ((self.rng.next_f64() * lanes.len() as f64) as usize).min(lanes.len() - 1);
-                    let m = self.new_mover(travel, &mix, speed, k as u16, lanes[k], 0.0);
+                    let k0 = ((self.rng.next_f64() * lanes.len() as f64) as usize).min(lanes.len() - 1);
+                    let mut m = self.new_mover(travel, &mix, speed, k0 as u16, lanes[k0], 0.0);
                     let w = &mut self.ways[wi];
-                    // the lane's last mover must have cleared the entry.
-                    let last = w.movers.iter().filter(|o| o.lane == k as u16).map(|o| o.s - o.len).fold(f64::INFINITY, f64::min);
+                    // the drawn lane, else the next lane whose last mover has cleared the entry.
                     let need = m.len + if travel == Travel::Walkers { 0.5 } else { equilibrium_gap(&p, m.v0) * 0.5 };
-                    if last >= need {
-                        let mut m = m;
-                        if let Some(lead) = w.movers.iter().filter(|o| o.lane == k as u16).min_by(|a, b| a.s.total_cmp(&b.s)) {
+                    let clear = |k: usize| w.movers.iter().filter(|o| o.lane == k as u16).map(|o| o.s - o.len).fold(f64::INFINITY, f64::min) >= need;
+                    let free = (0..lanes.len()).map(|j| (k0 + j) % lanes.len()).find(|&k| clear(k));
+                    if let Some(k) = free {
+                        m.lane = k as u16;
+                        m.lat_from = lanes[k];
+                        let k = k as u16;
+                        if let Some(lead) = w.movers.iter().filter(|o| o.lane == k).min_by(|a, b| a.s.total_cmp(&b.s)) {
                             m.v = m.v.min(lead.v);
                         }
                         w.movers.push(m);
