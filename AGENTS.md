@@ -13,8 +13,10 @@ workspace in `native/`.
 | Path | What | Notes |
 | --- | --- | --- |
 | `native/` | Cargo workspace: the game and its crates | [native/README.md](native/README.md) lists every crate, switch and test |
-| `native/assets/` | Small tracked inputs: manifests of optional off-repository assets, sound credits, measured tables, the fallback font, building placement modules | Regenerate manifests with the scripts in `native/tools/` |
-| `native/tools/` | Node scripts that fetch optional assets into a folder outside the repository and write their manifests | Never point them inside the repository |
+| `native/assets/` | Small tracked inputs: manifests of the optional assets, sound credits, measured tables, the fallback font, building placement modules | Regenerate manifests with the scripts in `native/tools/` |
+| `native/tools/` | Node scripts that fetch optional assets and write their manifests | Inside the repository the only target is `external/<set>` |
+| `external/` | The optional assets (people, motions, scanned surfaces, sound, sign art, far-shore terrain), one folder per set, filled by `python3 scripts/setup-assets.py` | Git-ignored; never commit or stage its contents, or a link to it |
+| `scripts/setup-assets.py` | One-command download of the optional assets into `external/`, every file checked against its manifest | Python 3 standard library only; reads the manifests, never edits them |
 | `public/data/sf/` | The city data the game loads | Each file has a `*.NOTICE.txt` |
 | `public/assets/` | Shipped models and textures | Each has a provenance file; hash-verified at load |
 | `artifacts/` | Provenance and `ASSETS.lock.json` of the off-repository asset store | No binaries ([Docs/ASSET-STORE.md](Docs/ASSET-STORE.md)) |
@@ -140,10 +142,13 @@ It is not evidence about how a frame looks.
   `artifacts/`. `npm run verify:asset-lock` rejects tracked source binaries
   and drifted files.
 - Optional runtime content too large for Git (people, motions, scanned
-  surfaces, sound, sign art, far-shore terrain) is fetched from its source
-  into a folder outside the repository and pinned by a manifest in
-  `native/assets/` or `native/eo-props/data/`. Its location is read from an
-  environment variable; never hard-code an absolute path.
+  surfaces, sound, sign art, far-shore terrain) is pinned by a manifest in
+  `native/assets/` or `native/eo-props/data/` and downloaded from its
+  source by `python3 scripts/setup-assets.py` into the git-ignored
+  `external/<set>/` at the repository root. Never commit anything under
+  `external/`. The game finds that folder from the repository root
+  (`eo_data::external`); a set's environment variable names another folder
+  instead. Never hard-code an absolute path.
 - Vehicles are hand-built in Blender. Never use a text- or image-to-3D
   generator for a vehicle body, not even as a shape guide.
 

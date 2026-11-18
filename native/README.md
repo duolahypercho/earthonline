@@ -19,7 +19,7 @@ new blind review can change it.
 - [Command-line switches](#command-line-switches)
 - [Environment variables](#environment-variables)
 - [Where the data comes from](#where-the-data-comes-from)
-- [Optional off-repository assets](#optional-off-repository-assets)
+- [Optional assets](#optional-assets)
 - [What is drawn](#what-is-drawn)
 - [Tests](#tests)
 - [Known issues](#known-issues)
@@ -52,12 +52,13 @@ new blind review can change it.
 
 Other folders:
 
-- `assets/` holds small tracked inputs: manifests of the optional
-  off-repository assets, the sound credits, the roof-colour and ground
+- `assets/` holds small tracked inputs: manifests of the [optional
+  assets](#optional-assets), the sound credits, the roof-colour and ground
   tables, the fallback font, and the placement modules of the hand-built
   buildings.
-- `tools/` holds Node scripts that download optional assets into a folder
-  outside the repository and write their provenance manifests.
+- `tools/` holds the Node scripts that made the optional assets'
+  provenance manifests from their sources. Inside the repository they
+  write only into `external/<set>`.
 - `*/data/` folders hold reference answers and tables that the crates and
   their tests read. Some were exported from the earlier browser
   implementation of the game, whose exporters are no longer in this
@@ -79,12 +80,27 @@ Other folders:
   the audio output.
 - Disk space: the first run cooks models, building tiles and textures into
   `native/cache/`, which grows to several gigabytes.
+- Python 3 (its standard library only) for `scripts/setup-assets.py`, the
+  one-time download of the [optional assets](#optional-assets) into
+  `external/` at the repository root (about 2 GB more disk).
 - Node.js only if you use the scripts in `tools/` or the asset-store scripts
   at the repository root.
 
 ## Build and run
 
-Run every command from `native/`.
+First-time setup, once, from the repository root: download the optional
+assets (people, motions, scanned surfaces, sound, sign art, far-shore
+elevation; about 2 GB) into the git-ignored `external/` folder. Run it again
+after a pull that changes a manifest; files already present and verified
+are skipped, and an interrupted run resumes.
+
+```sh
+python3 scripts/setup-assets.py
+```
+
+The game runs without them too, with those features off (see
+[Optional assets](#optional-assets)). Run every other command from
+`native/`.
 
 ```sh
 cargo build --release
@@ -213,6 +229,7 @@ selection:
 | Camera finish | `--no-taa`, `--no-bloom`, `--no-adaptation`, `--no-ssr` |
 | Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count` |
 | Interface and sound | `--no-hud`, `--no-audio`, `--audio-null` (mix to a null output) |
+| Optional assets | `--no-external` (read each set only from the folder its variable names, not from `external/`: the output before that folder was read) |
 
 A new visual feature should come with its own switch, defaulting to on only
 once it has been reviewed.
@@ -237,34 +254,40 @@ Experiments are not shipped defaults.
 | `EO_TRACE_LOAD` | Print timings of the world load |
 | `EO_CUMULUS` | `1` draws the fair-weather cumulus field under a clear sky (off by default; the overcast, fog and rain decks are drawn either way) |
 
-The locations of the optional off-repository assets are read from the
-variables below.
+The [optional assets](#optional-assets) are read from `external/` at the
+repository root; the variables below point a set at another folder.
 
-### Off-repository folders
+### Optional asset folders
 
-Each of these names a folder outside the repository. None has a default:
-when one is unset, or its folder does not match its manifest, that feature
-is turned off, the log says so in one line, and the game runs without it.
+Each set is read from its folder under `external/` (the repository is found
+as [Where the data comes from](#where-the-data-comes-from) describes) unless
+its variable names another folder; an empty variable counts as unset. When
+the folder does not hold a copy that matches the set's manifest, that
+feature is turned off, the log says so in one line, and the game runs
+without it. `--no-external` stops the game reading `external/`, so only the
+variables count.
 
-| Variable | Folder it names | Read by |
-| --- | --- | --- |
-| `EO_PEOPLE_ROOT` | Rocketbox avatars | The game |
-| `EO_PEOPLE_MOTIONS_ROOT` | Rocketbox motion clips | The game |
-| `EO_PEOPLE_STYLES_ROOT` | 100STYLE walking styles | The game |
-| `EO_CC0_ROOT` | Scanned CC0 texture sets (Poly Haven, ambientCG) | The game, `tools/fetch-cc0.mjs` |
-| `EO_AUDIO_ROOT` | Sound clips | The game |
-| `EO_SIGN_ART_ROOT` | Official sign art and the sign font | The game, `tools/fetch-sign-art.mjs` |
-| `EO_DEM_ROOT` | Elevation tiles for the far shore | The game |
-| `EO_AERIAL_DIR` | Aerial imagery | Tools only (the roof survey and `tools/fetch-aerial.mjs`) |
-| `EO_POLYHAVEN_STORE` | Poly Haven downloads | The Blender building scripts |
+| Variable | Default folder | What it holds | Read by |
+| --- | --- | --- | --- |
+| `EO_PEOPLE_ROOT` | `external/people` | Rocketbox avatars | The game |
+| `EO_PEOPLE_MOTIONS_ROOT` | `external/people-motions` | Rocketbox motion clips | The game |
+| `EO_PEOPLE_STYLES_ROOT` | `external/people-styles` | 100STYLE walking styles | The game |
+| `EO_CC0_ROOT` | `external/cc0` | Scanned CC0 texture sets (Poly Haven, ambientCG) | The game, `tools/fetch-cc0.mjs` |
+| `EO_AUDIO_ROOT` | `external/audio` | Sound clips | The game |
+| `EO_SIGN_ART_ROOT` | `external/sign-art` | Official sign art and the sign font | The game, `tools/fetch-sign-art.mjs` |
+| `EO_DEM_ROOT` | `external/dem` | Elevation tiles for the far shore | The game |
+| `EO_AERIAL_DIR` | none | Aerial imagery | Tools only (the roof survey and `tools/fetch-aerial.mjs`) |
+| `EO_POLYHAVEN_STORE` | none | Poly Haven downloads | The Blender building scripts |
 
-The street people need all three `EO_PEOPLE_*` variables. With any of them
-missing, or with `--no-rocketbox` or `--no-rocketbox-motions`, there are no
-people on the streets: there is no other motion set to fall back on.
+The street people need all three people sets (`people`, `people-motions`,
+`people-styles`). With any of them missing, or with `--no-rocketbox` or
+`--no-rocketbox-motions`, there are no people on the streets: there is no
+other motion set to fall back on.
 
 The fetch tools in `tools/` need either a folder argument (`--root <folder>`;
-`fetch-aerial.mjs` takes it as its first argument) or their
-variable; they have no default folder.
+`fetch-aerial.mjs` takes it as its first argument) or their variable; they
+have no default folder. Inside the repository the only folder they accept
+is `external/<set>` (`external/aerial` for the imagery).
 
 ## Where the data comes from
 
@@ -294,36 +317,58 @@ digest and required attribution. Models and textures under `public/assets/`
 are checked against the SHA-256 digest in their provenance file before they
 are used; a file that does not match is refused.
 
-## Optional off-repository assets
+## Optional assets
 
-Some content is too large to keep in Git, or its source asks that it be
-fetched from the source. The program runs without any of it and draws a
-simpler stand-in where it is missing. Each kind has a manifest in
-`native/assets/` (or `eo-props/data/`) that pins every file by size and
-SHA-256; a folder that does not match its manifest is ignored as a whole,
-and the log says why.
+Some content is too large to keep in Git (about 2 GB in all), or its source
+asks that it be fetched from the source. It is never committed. One command,
+run from the repository root, downloads all of it into `external/` there, a
+git-ignored folder with one subfolder per set, and the game reads it from
+that folder:
 
-| Content | How to get it | Manifest |
-| --- | --- | --- |
-| Rocketbox people | A copy of the GLB repackaging of the Microsoft Rocketbox Avatar Library (MIT) | `assets/people-manifest.json` |
-| Rocketbox motion clips | A copy of the Rocketbox in-place clips in GLB (MIT) | `assets/rocketbox-motions-manifest.json` |
-| 100STYLE walking styles | A copy of the 100STYLE dataset in GLB (CC BY 4.0) | `assets/100style-manifest.json` |
-| Scanned surface sets | `node native/tools/fetch-cc0.mjs --root <folder>` (Poly Haven and ambientCG, CC0) | `assets/cc0-manifest.json` |
-| Sign art and sign font | `node native/tools/fetch-sign-art.mjs --root <folder>` (FHWA, Caltrans, Overpass) | `eo-props/data/sign-art-manifest.json` |
-| Sound clips | FSD50K and SFX Kit clips (CC0 and CC BY); credits in `assets/AUDIO-CREDITS.md` | `assets/audio-manifest.json` |
-| Far-shore elevation | USGS 3DEP 1 arc-second tiles (public domain) | `assets/dem-manifest.json` |
-| Aerial imagery | `node native/tools/fetch-aerial.mjs <folder>` (USDA NAIP, public domain); only the roof survey tool reads it | written beside the imagery |
+```sh
+python3 scripts/setup-assets.py                    # every set
+python3 scripts/setup-assets.py --only people,dem  # some sets
+python3 scripts/setup-assets.py --dry-run          # what is missing; no request is made
+```
 
-The scripts in `tools/` refuse a target folder inside the repository, send
-nothing about the user in their requests, and never execute what they
-download. `write-people-manifest.mjs` and `write-motion-manifests.mjs`
-regenerate the people and motion manifests from a local copy.
+Each set has a manifest in `native/assets/` (or `eo-props/data/`) that pins
+every file by source, size and SHA-256. The script fetches exactly those
+files and checks each one before it is renamed into place; a file already
+present with the right digest is skipped and an interrupted download
+resumes, so running it again is cheap. It uses only the Python 3 standard
+library, sends requests one at a time only to the hosts the manifests name
+(and the download servers those hosts redirect to), with a generic
+User-Agent and nothing about the user, extracts each archive into its own
+new temporary folder, and never executes anything it downloads. The game
+checks every file again: a folder that does not match its manifest is
+ignored as a whole, and the log says why. The program runs without any of
+it and draws a simpler stand-in where it is missing.
 
-Without all three people and motion copies there are no street people.
+| Content | Folder | Source | Manifest |
+| --- | --- | --- | --- |
+| Rocketbox people | `external/people` | The GLB repackaging of the Microsoft Rocketbox Avatar Library (MIT) | `assets/people-manifest.json` |
+| Rocketbox motion clips | `external/people-motions` | The Rocketbox in-place clips in GLB (MIT) | `assets/rocketbox-motions-manifest.json` |
+| 100STYLE walking styles | `external/people-styles` | The 100STYLE dataset in GLB (CC BY 4.0) | `assets/100style-manifest.json` |
+| Scanned surface sets | `external/cc0` | Poly Haven and ambientCG (CC0) | `assets/cc0-manifest.json` |
+| Sound clips | `external/audio` | FSD50K and SFX Kit clips (CC0 and CC BY); credits in `assets/AUDIO-CREDITS.md` | `assets/audio-manifest.json` |
+| Sign art and sign font | `external/sign-art` | FHWA, Caltrans, Overpass | `eo-props/data/sign-art-manifest.json` |
+| Far-shore elevation | `external/dem` | USGS 3DEP 1 arc-second tiles (public domain) | `assets/dem-manifest.json` |
+| Aerial imagery (not part of the setup) | `EO_AERIAL_DIR` | `node native/tools/fetch-aerial.mjs <folder>` (USDA NAIP, public domain); only the roof survey tool reads it | written beside the imagery |
+
+The Node scripts in `tools/` are how the manifests were made:
+`fetch-cc0.mjs` and `fetch-sign-art.mjs` fetch their sets and rewrite
+their manifests, and `write-people-manifest.mjs` and
+`write-motion-manifests.mjs` regenerate the people and motion manifests
+from a local copy. Inside the repository they accept only `external/<set>`
+as a target; they send nothing about the user in their requests and never
+execute what they download.
+
+Without all three people and motion sets there are no street people.
 Without the sound clips the game is silent; without the scanned sets, sign
 art or far-shore tiles, those surfaces, faces and the distant relief fall
-back to simpler drawings or are left out. The variables that name each
-folder are listed under [Environment variables](#environment-variables).
+back to simpler drawings or are left out. Each set's variable (see
+[Environment variables](#environment-variables)) points it at another
+folder, and `--no-external` turns the `external/` folders off.
 
 Some street-prop models and two vehicle bodies are kept outside the
 repository because they cannot be redistributed; without them the game
@@ -434,6 +479,10 @@ cargo test --release -p eo-net -p eo-server
 
 What the tests cover, in short:
 
+- **Optional assets**: tests that read people, motions, scanned sets, sound,
+  sign art or the DEM use `external/` (or the set's variable) and are
+  skipped, saying so, when the set is not there; each crate checks that its
+  folder defaults to `external/<set>`.
 - **Data and assets** (`eo-data`, `eo-assets`): the real files load with the
   expected counts; every GLB matches its manifest digest, and a corrupted or
   truncated file is refused and never cached; cooked models and caches round
@@ -471,6 +520,14 @@ loosen them to make them pass.
 ## Known issues
 
 - The three failing tests above.
+- The sign-art manifest records the first ZIP of the FHWA Standard Highway
+  Signs 2024 Release 3 as the source of six signs (S1-1, W8-1, W11-2,
+  W16-7PL, W16-9P, W17-1), but the published first ZIP does not hold them;
+  its second ZIP (`..._Vector_Graphics_2-of-2.zip`) does, with the recorded
+  SHA-256. So `setup-assets.py` cannot fetch them from the recorded source,
+  the sign-art set is incomplete, and the sign atlases keep their drawn
+  faces. `tools/fetch-sign-art.mjs` has the same table; correcting it and
+  regenerating the manifest with it fixes both.
 - Some content and behaviour of the earlier browser game is not ported yet:
   interiors, mantling and swimming, the car's full handling model, gamepad
   input in the window, and more.
