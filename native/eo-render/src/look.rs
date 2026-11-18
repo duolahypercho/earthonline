@@ -137,13 +137,15 @@ pub struct LookOptions {
     pub sky: crate::sky::SkyOptions,
     /// the water pass (`--no-water`: the flat sea quad, as before).
     pub water: bool,
+    /// Opt-in wave-driven underwater lighting and camera.
+    pub water_optics: bool,
     /// the CC0 scanned sets' switches (`cc0::RUN_*`; `--no-cc0` and the per-feature `--no-cc0-*`).
     pub cc0: u32,
 }
 
 impl Default for LookOptions {
     fn default() -> Self {
-        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT } // + rooms, agent pyramid test, probe deferral // water // sky
+        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT } // + rooms, agent pyramid test, probe deferral // water // sky
     }
 }
 
@@ -193,7 +195,7 @@ struct PostTarget {
 
 pub struct LookGpu {
     pub options: LookOptions,
-    output_srgb: bool,
+    pub(crate) output_format: wgpu::TextureFormat,
     object_count: u32,
     compact: bool,
     look_buf: wgpu::Buffer,
@@ -645,7 +647,7 @@ impl LookGpu {
         });
 
         // Post.
-        let post_src = format!("{}\n{}", look_common_source(), include_str!("look_post.wgsl"));
+        let post_src = format!("{}\n{}\n{}", look_common_source(), include_str!("look_finish.wgsl"), include_str!("look_post.wgsl"));
         let post_module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("look_post.wgsl"), source: wgpu::ShaderSource::Wgsl(post_src.into()) });
         let post_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("post-bgl"),
@@ -681,7 +683,7 @@ impl LookGpu {
             sky_depth_ok: std::sync::atomic::AtomicBool::new(false), // sky
             post_source: std::sync::atomic::AtomicU32::new(0),       // sky
             options,
-            output_srgb: init.output_format.is_srgb(),
+            output_format: init.output_format,
             object_count: init.object_count,
             compact: init.compact,
             look_buf,
@@ -1132,7 +1134,7 @@ impl LookGpu {
             disc: v4(f.disc, f.disc_radius.cos()),
             post0: [tone::aces_neutral_inverse(tone::HIGHLIGHT_START_DISPLAY) as f32, tone::HIGHLIGHT_SCALE as f32, look.grade_saturation as f32, look.grade_contrast as f32],
             post1: [look.grade_brightness as f32, look.finish_balance as f32, look.finish_vibrance as f32, look.finish_vignette as f32],
-            post2: [look.finish_density as f32, 1.0 / 255.0, if self.output_srgb { 1.0 } else { 0.0 }, (frame_index % 64) as f32],
+            post2: [look.finish_density as f32, 1.0 / 255.0, if self.output_format.is_srgb() { 1.0 } else { 0.0 }, (frame_index % 64) as f32],
             shadow_tint: v4(look.finish_shadow_tint, 0.0),
             highlight_tint: v4(look.finish_highlight_tint, 0.0),
             ao_vp: ao_made.map(|m| m.0.to_cols_array_2d()).unwrap_or([[0.0; 4]; 4]),
@@ -1324,6 +1326,13 @@ impl LookGpu {
 
     /// HDR target -> output.
     pub fn encode_post(&self, enc: &mut wgpu::CommandEncoder, out: &wgpu::TextureView, ts: Option<(&wgpu::QuerySet, u32)>) {
+        self.encode_post_with_water(enc, out, ts, None);
+    }
+
+    pub(crate) fn encode_post_with_water(
+        &self, enc: &mut wgpu::CommandEncoder, out: &wgpu::TextureView,
+        ts: Option<(&wgpu::QuerySet, u32)>, water: Option<(&crate::water::WaterGpu, usize)>,
+    ) {
         let p = self.post.lock().unwrap();
         let t = p.as_ref().expect("hdr_target before encode_post");
         let tw = ts.map(|(q, b)| wgpu::RenderPassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b + Q_POST), end_of_pass_write_index: Some(b + Q_POST + 1) });
@@ -1344,6 +1353,9 @@ impl LookGpu {
         let src = self.post_source.load(std::sync::atomic::Ordering::Relaxed) as usize; // sky
         pass.set_bind_group(0, &t.bind[src.min(2)], &[]);
         pass.draw(0..3, 0..1);
+        if let Some((water, front)) = water {
+            water.draw_submerged(&mut pass, self, front);
+        }
     }
 
     // what the agent renderer (agents.rs) needs to cast into the cascades.

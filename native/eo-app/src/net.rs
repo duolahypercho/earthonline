@@ -78,6 +78,7 @@ pub fn intercept(process_start: Instant) -> Option<Result<()>> {
 fn base_args() -> Args {
     Args {
         bench: false,
+        start_underwater: false,
         frames: 720,
         warmup: 60,
         width: 1920,
@@ -145,6 +146,8 @@ fn parse(raw: &[String]) -> Result<(Args, NetOpts)> {
             "--no-hud" => o.hud = false,
             "--width" => a.width = val()?.parse()?,
             "--height" => a.height = val()?.parse()?,
+            "--water-optics" => a.look.water_optics = true,
+            "--no-water-optics" => a.look.water_optics = false,
             "--no-vsync" => a.vsync = false,
             "--out" => a.out_dir = Some(val()?.into()),
             "--cache" => a.cache_dir = Some(val()?.into()),

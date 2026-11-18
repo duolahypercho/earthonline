@@ -1563,7 +1563,8 @@ impl Renderer {
             let probe = (frame.probe_info[3] > 0.5).then(|| glam::Vec3::new(frame.probe_info[0], frame.probe_info[1], frame.probe_info[2]));
             let wx = self.look.sky.weather(); // the sea state follows the hour and the weather
             w.set_sea(Some(water::SeaInput::Weather { hour: self.look.time_of_day(), wind: wx.wind, severity: wx.severity }));
-            w.update(queue, cam, probe, self.water_active(), self.look.frame().aerial.far as f32);
+            let clock = if self.look.options.water_optics { self.look.sky.world_time() } else { 0.0 };
+            w.update_at_time(queue, cam, probe, self.water_active(), self.look.frame().aerial.far as f32, clock);
         }
         if let Some(s) = self.surf.get() {
             let swell_hs = self.water.get().and_then(|w| w.plan()).map(|p| p.state.swell.hs as f32).unwrap_or(1.8); // the swell's Hs scales the incoming surf
@@ -1879,7 +1880,7 @@ impl Renderer {
         }
         self.look.encode_ao(enc, depth, &hdr, ts); // surfaces
         self.look.encode_sky_after(enc, depth, &hdr, self.agents.get(), ts); // rain, luminaires, velocity, volume, resolve, bloom
-        self.look.encode_post(enc, output, ts); // look
+        self.look.encode_post_with_water(enc, output, ts, water.filter(|_| self.look.options.water_optics).map(|w| (w, self.probe.front().0)));
     }
 
     /// The counter buffer: see `COUNTER_WORDS`.

@@ -131,6 +131,7 @@ mod so_shots; // the sky and ocean review cards
 mod street_bench;
 mod view_bench;
 mod water_bench; // water
+pub(crate) use water_bench::dive_camera;
 mod sign_shots; // signs
 
 struct Segment {
@@ -392,6 +393,7 @@ fn segments(world: &World, args: &Args, aspect: f32, far: f32) -> Vec<Segment> {
     .chain(street_bench::sidewalk_segment(world, frames, aspect, far))
     .chain(water_bench::waterfront_segment(world, frames, aspect, far)) // water
     .chain(water_bench::bay_segment(world, frames, aspect, far)) // water
+    .chain(water_bench::dive_segment(world, frames, aspect, far))
     .chain(so_shots::surf_segment(world, frames, aspect, far)) // opt-in (EO_SURF_BENCH=1), Ocean Beach's surf in view
     .chain(landmarks_bench::segments(world, frames, aspect, far)) // landmarks
     .chain(view_bench::turn_segments(world, frames, args.warmup, aspect, far))
@@ -1416,6 +1418,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             // water
             "water": {
                 "on": renderer.water_active(),
+                "water_optics": args.look.water_optics,
                 "patches_drawn_per_frame": summary(&water_drawn),
                 "patches_in_frustum_per_frame": summary(&water_frustum),
                 "patches_culled_land_per_frame": summary(&water_land),
@@ -1677,6 +1680,9 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             if only.is_some() {
                 return Ok(());
             }
+        }
+        if only.as_deref() == Some("water") {
+            renderer.look.sky.set_clock(args.look.sky.world_time_s, 0.0);
         }
         for (name, cam, what) in water_bench::capture_cameras(&world, aspect, args.far) {
             settle_p(&ctx, &renderer, &world, &mut models, Some(&mut props), &cam, 600.0)?;

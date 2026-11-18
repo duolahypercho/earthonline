@@ -155,6 +155,7 @@ switch it does not take.
 | Switch | What |
 | --- | --- |
 | (none) | Windowed fly-through |
+| `--start-underwater` | Start the fly camera just beneath the Bay, looking up toward the skyline |
 | `--play` | The player instead of the free camera |
 | `--ui` | The interface shell: title, loading, HUD, pause menu |
 | `--connect ADDR\|local` | Online client (with `--name`, `--spawn x,z,heading`) |
@@ -186,7 +187,7 @@ switch it does not take.
 | Switch | What |
 | --- | --- |
 | `--frames N`, `--warmup N` | Measured and warm-up frames per path (720 and 60) |
-| `--segments a,b,...` | Which camera paths to run, for example `street_walk`, `elevated_sweep`, `city_overview`, `authored_street`, `kit_street`, `drive`, `turn_around`, `waterfront`, `bay` |
+| `--segments a,b,...` | Which camera paths to run, for example `street_walk`, `elevated_sweep`, `city_overview`, `authored_street`, `kit_street`, `drive`, `turn_around`, `waterfront`, `bay`, `bay_dive` |
 | `--capture` | Also write PNGs of each path to `bench-out/` |
 | `--out DIR`, `--label NAME` | Output folder and run label |
 | `--check-budget` | Exit 1 if a path's median frame reaches the 10 ms budget |
@@ -203,6 +204,7 @@ selection:
 | Area | Switches |
 | --- | --- |
 | Content | `--no-models`, `--no-kit`, `--no-streets`, `--no-props`, `--no-agents`, `--no-landmarks`, `--no-water`, `--no-farshore`, `--no-sky` |
+| Water optics | `--water-optics` enables the preview, `--no-water-optics` restores the original water shading |
 | People | `--no-rocketbox`, `--no-rocketbox-motions` (either one: no people) |
 | Props | `--no-props2`, `--no-furniture`, `--no-eztree`, `--no-wires`, `--no-overhead`, `--no-lamp-sprites` |
 | Buildings | `--no-facade-detail`, `--no-facade-age`, `--no-rooms`, `--no-room-frames`, `--no-room-dim`, `--no-roof-colours`, `--no-roof-plant`, `--no-roof-parapet`, `--no-roof-patches`, `--no-wall-paint` |
@@ -379,6 +381,15 @@ entrances are fitted to the drawn street.
 spectrum, masked by a citywide shore field, with its own optics per body of
 water, screen-space reflection, surf on the mapped beaches and a shore
 collar. `--no-water` draws a flat sea plane.
+
+Run `./target/release/eo-app --water-optics --start-underwater` for the
+submerged fly camera. Hold Ctrl for fine movement, E to surface and Q to
+descend. The preview requires the compact water pass and single-sample
+rendering (`--msaa 1`). It uses the displaced wave surface, refraction at the
+waterline, depth-dependent scattering and absorption, and moving light on
+shallow receivers. Visibility follows the Bay and Pacific water properties.
+Above the surface the preview integrates unresolved sun glitter over the
+pixel. The `bay_dive` bench path crosses the surface in both directions.
 
 **Sky and weather.** Analytic sky and atmosphere, volumetric clouds and the
 marine layer, a weather schedule (clear to storm) with rain, wet ground and

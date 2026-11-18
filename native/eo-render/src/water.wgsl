@@ -358,6 +358,53 @@ fn w_sky_ratio(d: vec3<f32>, dome: vec3<f32>, uv: vec2<f32>, ahead: bool) -> vec
     return dome * mix(vec3<f32>(lr), tint, 0.5);
 }
 
+fn w_wave_ramp(f: vec2<f32>) -> f32 {
+    return wg_smooth(50.0, 220.0, f.x) * (1.0 - 0.6 * f.y) + 0.25 * f.y * wg_smooth(0.0, 60.0, f.x);
+}
+
+// The camera and the mesh sample the same swell, breakers and swash.
+fn w_displacement(base: vec2<f32>, spacing: f32, f: vec2<f32>) -> vec3<f32> {
+    var disp = vec3<f32>(0.0);
+    if (wu.flags.w > 0.5) {
+        // ocean-open-sea.js: full spectrum offshore, ramped from zero at the
+        // hand-off (50 m) to full at 220 m; at a beach a quarter of it comes ashore.
+        // the beach share fades out toward the waterline, where the swash level takes over.
+        let ramp = w_wave_ramp(f);
+        if (ramp > 0.0) {
+            let w = wg_band(spacing) * wg_cascade_amp(base.x);
+            for (var c = 0u; c < 4u; c = c + 1u) {
+                if (w[c] > 0.0) {
+                    disp = disp + textureSampleLevel(w_disp, w_repeat, w_casc_uv(base, c), c, 0.0).xyz * w[c];
+                }
+            }
+            // a storm's sea stands higher (the chop and the swell, 1.6 x at the storm preset)
+            disp = disp * ramp; // the sea state's spectrum carries the storm's sea (was x (1 + 0.6 storm))
+        }
+    }
+    // The breaking surf where the nearest shore is a beach (ocean-surf.js):
+    // its height and its shoreward throw.
+    // Only where the grid is fine enough to carry a breaking face: past ~2 m of
+    // vertex spacing the face drew as a row of sawtooth triangles (the JS's
+    // grid shows the same), so there the surf is shading and foam only.
+    let surf_vw = 1.0 - wg_smooth(1.0, 2.5, spacing);
+    if (f.y > 0.01 && f.x > -2.0 && f.x < 420.0 && surf_vw > 0.0) {
+        let fr = w_shore_frame(base);
+        let s = surf_at(wu.cam.w, f.x, fr.z, f.y, sf_amp_scale(base.x));
+        // (sea r4: half the shoreward throw: on the 0.8 m grid the full curl folded the face over itself, and the folded triangles read as dark boxes on the breaker line)
+        disp = disp + vec3<f32>(fr.x * s.shoreward * 0.5, s.height, fr.y * s.shoreward * 0.5) * surf_vw;
+    }
+    // the swash. Near a beach's waterline the water stands at the level
+    // the last bore ran up to (`w_swash`): a level, so it meets the sand where
+    // the drawn ground lies under it, whatever that ground's height.
+    // (no sine swell: the waves simulation carries the swell)
+    if (f.y > 0.01 && f.x < 40.0 && f.x > -120.0) {
+        let frs = w_shore_frame(base);
+        let sw = w_swash(frs.z, wu.cam.w, sf_amp_scale(base.x)).x * f.y;
+        disp.y = mix(disp.y, max(disp.y, sw), wg_smooth(40.0, 6.0, f.x));
+    }
+    return disp;
+}
+
 @vertex
 fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) pid: u32) -> VsOut {
     let side = WG_PATCH_QUADS + 1u;
@@ -380,47 +427,13 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) pid: u32) -> VsOu
         local.y = local.y * sk;
     }
     let base = wu.grid.xy + local;
-    var disp = vec3<f32>(0.0);
-    var wv_far = vec4<f32>(0.0);
     let f = w_field_at(base);
-    if (wu.flags.w > 0.5) {
-        // ocean-open-sea.js: full spectrum offshore, ramped from zero at the
-        // hand-off (50 m) to full at 220 m; at a beach a quarter of it comes ashore.
-        // the beach share fades out toward the waterline, where the swash level takes over.
-        let ramp = wg_smooth(50.0, 220.0, f.x) * (1.0 - 0.6 * f.y) + 0.25 * f.y * wg_smooth(0.0, 60.0, f.x);
-        if (ramp > 0.0) {
-            let spacing = max(wg_spacing(local.x, r), wg_spacing(local.y, r));
-            let w = wg_band(spacing) * wg_cascade_amp(base.x);
-            for (var c = 0u; c < 4u; c = c + 1u) {
-                if (w[c] > 0.0) {
-                    disp = disp + textureSampleLevel(w_disp, w_repeat, w_casc_uv(base, c), c, 0.0).xyz * w[c];
-                }
-            }
-            // a storm's sea stands higher (the chop and the swell, 1.6 x at the storm preset)
-            disp = disp * ramp; // the sea state's spectrum carries the storm's sea (was x (1 + 0.6 storm))
-            wv_far = wv_vertex_slope(base, spacing) * ramp;
-        }
-    }
-    // The breaking surf where the nearest shore is a beach (ocean-surf.js):
-    // its height and its shoreward throw.
-    // Only where the grid is fine enough to carry a breaking face: past ~2 m of
-    // vertex spacing the face drew as a row of sawtooth triangles (the JS's
-    // grid shows the same), so there the surf is shading and foam only.
-    let surf_vw = 1.0 - wg_smooth(1.0, 2.5, max(wg_spacing(local.x, r), wg_spacing(local.y, r)));
-    if (f.y > 0.01 && f.x > -2.0 && f.x < 420.0 && surf_vw > 0.0) {
-        let fr = w_shore_frame(base);
-        let s = surf_at(wu.cam.w, f.x, fr.z, f.y, sf_amp_scale(base.x));
-        // (sea r4: half the shoreward throw: on the 0.8 m grid the full curl folded the face over itself, and the folded triangles read as dark boxes on the breaker line)
-        disp = disp + vec3<f32>(fr.x * s.shoreward * 0.5, s.height, fr.y * s.shoreward * 0.5) * surf_vw;
-    }
-    // the swash. Near a beach's waterline the water stands at the level
-    // the last bore ran up to (`w_swash`): a level, so it meets the sand where
-    // the drawn ground lies under it, whatever that ground's height.
-    // (no sine swell: the waves simulation carries the swell)
-    if (f.y > 0.01 && f.x < 40.0 && f.x > -120.0) {
-        let frs = w_shore_frame(base);
-        let sw = w_swash(frs.z, wu.cam.w, sf_amp_scale(base.x)).x * f.y;
-        disp.y = mix(disp.y, max(disp.y, sw), wg_smooth(40.0, 6.0, f.x));
+    let spacing = max(wg_spacing(local.x, r), wg_spacing(local.y, r));
+    let disp = w_displacement(base, spacing, f);
+    var wv_far = vec4<f32>(0.0);
+    let ramp = w_wave_ramp(f);
+    if (wu.flags.w > 0.5 && ramp > 0.0) {
+        wv_far = wv_vertex_slope(base, spacing) * ramp;
     }
     let world = vec3<f32>(base.x + disp.x, wu.grid.z + disp.y, base.y + disp.z);
     var o: VsOut;
@@ -557,6 +570,21 @@ fn wo_underwater(depth: f32, l: vec3<f32>) -> vec3<f32> {
     let direct = mix(vec3<f32>(1.0), exp(-sig_t * d / mu), wg_smooth(0.0, 0.08, d));
     let amb = mix(vec3<f32>(1.0), exp(-sig_t * d * 1.2) * 0.85 + vec3<f32>(0.0, 0.02, 0.04) * exp(-d * 0.1), wg_smooth(0.0, 0.1, d));
     return mix(amb, direct, 0.6);
+}
+
+// Focus the direct beam where neighbouring refracted rays converge on a receiver.
+// A finite aperture and a bounded gain soften the geometric focus at a fold.
+fn w_caustic(receiver: vec3<f32>, depth: f32, sun_up: vec3<f32>) -> f32 {
+    let entry = receiver.xz + sun_up.xz * (depth / max(sun_up.y, 0.1));
+    let step = wu.sizes.w / 256.0 * 3.0;
+    let uv = w_casc_uv(entry, 3u);
+    let du = step / wu.sizes.w;
+    let slope = textureSampleLevel(w_deriv, w_repeat, uv, 3u, 0.0).xy;
+    let dx = textureSampleLevel(w_deriv, w_repeat, uv + vec2<f32>(du, 0.0), 3u, 0.0).xy - slope;
+    let dz = textureSampleLevel(w_deriv, w_repeat, uv + vec2<f32>(0.0, du), 3u, 0.0).xy - slope;
+    let k = depth * (1.0 - 1.0 / WO_IOR) * wg_cascade_amp(entry.x).w / step;
+    let area = (1.0 + k * dx.x) * (1.0 + k * dz.y) - k * k * dx.y * dz.x;
+    return clamp(1.0 / max(abs(area), 0.3), 0.45, 2.5);
 }
 
 // ---- the look's cascaded sun shadow (look_light.wgsl `lk_shadow`) ----
@@ -749,6 +777,55 @@ struct Shade {
     sun_near: f32,
 };
 
+fn w_capillary(p: vec2<f32>) -> vec2<f32> {
+    let a0 = 0.63;
+    let a1 = 2.14;
+    let r0 = vec2<f32>(p.x * cos(a0) - p.y * sin(a0), p.x * sin(a0) + p.y * cos(a0)) * 7.3;
+    let r1 = vec2<f32>(p.x * cos(a1) - p.y * sin(a1), p.x * sin(a1) + p.y * cos(a1)) * 3.1;
+    let g0 = textureSampleLevel(w_deriv, w_repeat, w_casc_uv(r0, 3u), 3u, 0.0).xy;
+    let g1 = textureSampleLevel(w_deriv, w_repeat, w_casc_uv(r1, 3u), 3u, 0.0).xy;
+    let b0 = vec2<f32>(g0.x * cos(a0) + g0.y * sin(a0), -g0.x * sin(a0) + g0.y * cos(a0));
+    let b1 = vec2<f32>(g1.x * cos(a1) + g1.y * sin(a1), -g1.x * sin(a1) + g1.y * cos(a1));
+    return b0 * 0.55 + b1 * 0.35;
+}
+
+fn w_chop(p: vec2<f32>, t: f32, footprint: f32, fine_fade: f32, rough: f32) -> vec2<f32> {
+    var sx = 0.0;
+    var sz = 0.0;
+    // The chop (v15): three octaves of noise slope at non-harmonic spacings,
+    // each turned off the wind and drifting at its own phase speed, scaled by
+    // a travelling patchiness.
+    if (fine_fade > 0.0) {
+        let patchy = mx_noise(vec3<f32>((p.x - t * WS_WIND_DIR.x * 1.4) / WS_PATCH_M, (p.y - t * WS_WIND_DIR.y * 1.4) / WS_PATCH_M, t * 0.03));
+        let ruffle = rough * mix(WS_PATCH_RANGE.x, WS_PATCH_RANGE.y, wg_smooth(-0.3, 0.35, patchy));
+        var octs = array<vec3<f32>, 3>(WS_OCT0, WS_OCT1, WS_OCT2);
+        for (var i = 0u; i < 3u; i = i + 1u) {
+            let o = octs[i];
+            let lam = 1.0 / (max(WS_CHOP_ALONG, WS_CHOP_CROSS) * o.x);
+            let fade = fine_fade * (1.0 - wg_smooth(lam * WS_RESOLVE.x, lam * WS_RESOLVE.y, footprint));
+            if (fade <= 0.0) {
+                continue;
+            }
+            let ax = WS_WIND_DIR.x * cos(o.y) - WS_WIND_DIR.y * sin(o.y);
+            let az = WS_WIND_DIR.x * sin(o.y) + WS_WIND_DIR.y * cos(o.y);
+            let drift_v = WS_CHOP_DRIFT / sqrt(o.x);
+            let dx0 = p.x - t * ax * drift_v;
+            let dz0 = p.y - t * az * drift_v;
+            let nt = t * 0.55 * sqrt(o.x) + f32(i) * 17.3;
+            let step = WS_CHOP_STEP / o.x;
+            let n0 = mx_noise(vec3<f32>((dx0 * ax + dz0 * az) * WS_CHOP_ALONG * o.x, (-dx0 * az + dz0 * ax) * WS_CHOP_CROSS * o.x, nt));
+            let xs = dx0 + step;
+            let n1 = mx_noise(vec3<f32>((xs * ax + dz0 * az) * WS_CHOP_ALONG * o.x, (-xs * az + dz0 * ax) * WS_CHOP_CROSS * o.x, nt));
+            let zs = dz0 + step;
+            let n2 = mx_noise(vec3<f32>((dx0 * ax + zs * az) * WS_CHOP_ALONG * o.x, (-dx0 * az + zs * ax) * WS_CHOP_CROSS * o.x, nt));
+            let gain = fade * (WS_CHOP_GAIN * sqrt(o.z) * WS_CHOP_UNDER_FFT / o.x) * ruffle;
+            sx = sx + (n1 - n0) / step * gain;
+            sz = sz + (n2 - n0) / step * gain;
+        }
+    }
+    return vec2<f32>(sx, sz);
+}
+
 fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) -> Shade {
     let t = wu.cam.w;
     let footprint = clamp(max(length(dpdx(world.xz)), length(dpdy(world.xz))), 0.0, 64.0);
@@ -885,15 +962,7 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         // ~2.3 m tiles, rotated, where a pixel is under 4 cm (tidewater).
         let near = wg_smooth(0.04, 0.01, footprint) * rough;
         if (near > 0.0) {
-            let a0 = 0.63;
-            let a1 = 2.14;
-            let r0 = vec2<f32>(p.x * cos(a0) - p.y * sin(a0), p.x * sin(a0) + p.y * cos(a0)) * 7.3;
-            let r1 = vec2<f32>(p.x * cos(a1) - p.y * sin(a1), p.x * sin(a1) + p.y * cos(a1)) * 3.1;
-            let g0 = textureSampleLevel(w_deriv, w_repeat, w_casc_uv(r0, 3u), 3u, 0.0).xy;
-            let g1 = textureSampleLevel(w_deriv, w_repeat, w_casc_uv(r1, 3u), 3u, 0.0).xy;
-            let b0 = vec2<f32>(g0.x * cos(a0) + g0.y * sin(a0), -g0.x * sin(a0) + g0.y * cos(a0));
-            let b1 = vec2<f32>(g1.x * cos(a1) + g1.y * sin(a1), -g1.x * sin(a1) + g1.y * cos(a1));
-            let g = b0 * 0.55 + b1 * 0.35;
+            let g = w_capillary(p);
             sx = sx + g.x * near;
             sz = sz + g.y * near;
         }
@@ -908,37 +977,9 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
             sz = sz + g.y * near_r;
         }
     }
-    // The chop (v15): three octaves of noise slope at non-harmonic spacings,
-    // each turned off the wind and drifting at its own phase speed, scaled by
-    // a travelling patchiness.
-    if (fine_fade > 0.0) {
-        let patchy = mx_noise(vec3<f32>((p.x - t * WS_WIND_DIR.x * 1.4) / WS_PATCH_M, (p.y - t * WS_WIND_DIR.y * 1.4) / WS_PATCH_M, t * 0.03));
-        let ruffle = rough * mix(WS_PATCH_RANGE.x, WS_PATCH_RANGE.y, wg_smooth(-0.3, 0.35, patchy));
-        var octs = array<vec3<f32>, 3>(WS_OCT0, WS_OCT1, WS_OCT2);
-        for (var i = 0u; i < 3u; i = i + 1u) {
-            let o = octs[i];
-            let lam = 1.0 / (max(WS_CHOP_ALONG, WS_CHOP_CROSS) * o.x);
-            let fade = fine_fade * (1.0 - wg_smooth(lam * WS_RESOLVE.x, lam * WS_RESOLVE.y, footprint));
-            if (fade <= 0.0) {
-                continue;
-            }
-            let ax = WS_WIND_DIR.x * cos(o.y) - WS_WIND_DIR.y * sin(o.y);
-            let az = WS_WIND_DIR.x * sin(o.y) + WS_WIND_DIR.y * cos(o.y);
-            let drift_v = WS_CHOP_DRIFT / sqrt(o.x);
-            let dx0 = p.x - t * ax * drift_v;
-            let dz0 = p.y - t * az * drift_v;
-            let nt = t * 0.55 * sqrt(o.x) + f32(i) * 17.3;
-            let step = WS_CHOP_STEP / o.x;
-            let n0 = mx_noise(vec3<f32>((dx0 * ax + dz0 * az) * WS_CHOP_ALONG * o.x, (-dx0 * az + dz0 * ax) * WS_CHOP_CROSS * o.x, nt));
-            let xs = dx0 + step;
-            let n1 = mx_noise(vec3<f32>((xs * ax + dz0 * az) * WS_CHOP_ALONG * o.x, (-xs * az + dz0 * ax) * WS_CHOP_CROSS * o.x, nt));
-            let zs = dz0 + step;
-            let n2 = mx_noise(vec3<f32>((dx0 * ax + zs * az) * WS_CHOP_ALONG * o.x, (-dx0 * az + zs * ax) * WS_CHOP_CROSS * o.x, nt));
-            let gain = fade * (WS_CHOP_GAIN * sqrt(o.z) * WS_CHOP_UNDER_FFT / o.x) * ruffle;
-            sx = sx + (n1 - n0) / step * gain;
-            sz = sz + (n2 - n0) / step * gain;
-        }
-    }
+    let chop = w_chop(p, t, footprint, fine_fade, rough);
+    sx += chop.x;
+    sz += chop.y;
     // The breaking surf where the nearest shore is a beach (ocean-surf.js via
     // ocean-open-sea.js): its foam (with the whitecaps, over the surf zone),
     // its face's slope one step shoreward; the collar stands down there.
@@ -1126,29 +1167,35 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         let gl = ndv * sqrt(ndl_g * ndl_g * (1.0 - alpha2) + alpha2);
         let vis = 0.5 / max(gv + gl, 1e-5);
         var spec = dggx * vis * wo_fresnel(vdh, WO_IOR) * ndl_g;
-        // the share of the glint from facets finer than a pixel lands on a
-        // few of them, each a sharp point (same mean): sparkles over dark water,
-        // not a smooth sheen.
-        let cell = floor(world.xz / max(footprint * 1.2, 0.012));
-        let spark = select(0.0, 1.0 / 0.2, w_hash(cell, floor(t * 6.0)) < 0.2);
-        // (sea r2: only where a glint is about a pixel; where a pixel holds
-        // metres of sea its many glints average to a smooth sheen, not confetti)
-        let sparkle = 0.9 * clamp(unresolved * 1.6, 0.0, 1.0) * (1.0 - wg_smooth(0.06, 0.35, footprint));
-        // inside the glitter path (where the glint is bright) every
-        // pixel is a few facets: about a third of them flash, clipped, and the
-        // rest are dark water, at any range (outside the path, where the glint
-        // is faint, the smooth sheen stays: no confetti off the path).
-        // (by how bright the glint stands against the low sky, not by the raw lobe:
-        // under a low sun the sun is so bright that a faint lobe was the whole strip)
-        // (r11b: a wide soft envelope; toward its sides the sparkles thin out rather
-        // than dim, so the path has no hard edge)
-        let in_path = wg_smooth(0.05, 1.5, lk_luma(key_g) * spec / max(lk_luma(look.horizon.xyz), 1e-6));
-        // (world cells about three pixels wide, so the temporal resolve keeps them: one-pixel flashes averaged out)
-        let gh = w_hash(floor(world.xz / max(footprint * 1.5, 0.02)), floor(t * 8.0) + 3.0);
-        let fp = 0.01 + 0.156 * in_path;
-        let flash = select(0.0, 1.0 / fp, gh < fp); // (fewer, brighter; r11b: thinning at the envelope's edge)
-        // (not under the moon: they read as grey noise on the night water)
-        spec = min(spec * mix(mix(1.0, spark, sparkle * (1.0 - skyu.night.z)), flash, wg_smooth(0.0, 0.15, in_path) * (1.0 - skyu.night.z)), WO_SPEC_CEILING);
+        if (wu.screen.z > 0.5) {
+            // Resolved crests move the highlight. The GGX lobe already
+            // integrates unresolved facets over the pixel footprint.
+            spec = min(spec, WO_SPEC_CEILING);
+        } else {
+            // the share of the glint from facets finer than a pixel lands on a
+            // few of them, each a sharp point (same mean): sparkles over dark water,
+            // not a smooth sheen.
+            let cell = floor(world.xz / max(footprint * 1.2, 0.012));
+            let spark = select(0.0, 1.0 / 0.2, w_hash(cell, floor(t * 6.0)) < 0.2);
+            // (sea r2: only where a glint is about a pixel; where a pixel holds
+            // metres of sea its many glints average to a smooth sheen, not confetti)
+            let sparkle = 0.9 * clamp(unresolved * 1.6, 0.0, 1.0) * (1.0 - wg_smooth(0.06, 0.35, footprint));
+            // inside the glitter path (where the glint is bright) every
+            // pixel is a few facets: about a third of them flash, clipped, and the
+            // rest are dark water, at any range (outside the path, where the glint
+            // is faint, the smooth sheen stays: no confetti off the path).
+            // (by how bright the glint stands against the low sky, not by the raw lobe:
+            // under a low sun the sun is so bright that a faint lobe was the whole strip)
+            // (r11b: a wide soft envelope; toward its sides the sparkles thin out rather
+            // than dim, so the path has no hard edge)
+            let in_path = wg_smooth(0.05, 1.5, lk_luma(key_g) * spec / max(lk_luma(look.horizon.xyz), 1e-6));
+            // (world cells about three pixels wide, so the temporal resolve keeps them: one-pixel flashes averaged out)
+            let gh = w_hash(floor(world.xz / max(footprint * 1.5, 0.02)), floor(t * 8.0) + 3.0);
+            let fp = 0.01 + 0.156 * in_path;
+            let flash = select(0.0, 1.0 / fp, gh < fp); // (fewer, brighter; r11b: thinning at the envelope's edge)
+            // (not under the moon: they read as grey noise on the night water)
+            spec = min(spec * mix(mix(1.0, spark, sparkle * (1.0 - skyu.night.z)), flash, wg_smooth(0.0, 0.15, in_path) * (1.0 - skyu.night.z)), WO_SPEC_CEILING);
+        }
         // past the shadow cascades, a sun the frame shows hidden behind the
         // skyline (geometry at the sun's own screen point) is hidden from the far water too
         let sc = wu.view_proj * vec4<f32>(lg, 0.0);
@@ -1301,6 +1348,10 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     s.own = ((vol.inscatter + sss) * k_t + foam_rad * foam_w + glint) * (1.0 - fog) + look.fog_color.xyz * fog;
     // sand under a thin sheet is wet sand (darker: water fills its pores).
     s.through = vol.tview * wo_underwater(bottom_depth, l) * k_t * (1.0 - fog) * (1.0 - 0.4 * film);
+    if (wu.screen.z > 0.5 && wu.flags.w > 0.5 && lk_luma(s.through) > 0.015 && l.y > 0.0) {
+        let direct = shadow * (1.0 - ovc) * wg_smooth(0.0, 0.2, l.y);
+        s.through *= mix(1.0, w_caustic(p_bottom, bottom_depth, ls_up), 0.6 * direct);
+    }
     s.uv = uv_f;
     s.refl_k = fres * water * (1.0 - fog);
     // wind patches and slicks read from afar: a slick (its capillaries
@@ -1415,7 +1466,7 @@ fn fs_copy(i: VsOut) -> @location(0) vec4<f32> {
     // (r11b: gated by the direction to the sun alone, its soft envelope: a brightness
     // threshold cut a hard-edged block where the mirror read the drawn sky's glare)
     let glare = s.sun_near;
-    if (glare > 0.0) {
+    if (glare > 0.0 && wu.screen.z < 0.5) {
         // (fewer, smaller, brighter: one cell in six, 1.5 px, at six times; between
         // them the water keeps the plain low sky, not the sun's glare)
         let gh = w_hash(floor(i.world.xz / max(fpx * 1.5, 0.02)), floor(wu.cam.w * 8.0) + 3.0);
