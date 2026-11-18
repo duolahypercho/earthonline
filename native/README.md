@@ -155,7 +155,13 @@ path through the snapshots, and no street person is drawn in a player's
 body. The emotes are edited at the bake (`eo_agents::pose_edit`): a
 one-arm wave with the forearm swinging, a point with the index finger out
 and the head turned along the arm, a selfie with a phone in the hand
-(`eo_agents::rig`), and a crouch. Name tags hang over each head as it is
+(`eo_agents::rig`), and a crouch. The ground under each body darkens
+where the body takes light from it (`eo_agents::rig::contacts`): each
+shoe, each shin and thigh and a crouch's seat is a box, and a patch on
+the ground around it takes away the share of the sky the box hides (its
+exact view factor) and, a few centimetres from a sole, the sun it blocks,
+out of the light the renderer puts there (eo-render `agents_draw.wgsl`
+`ag_contact`, in the agents' glass pass). Name tags hang over each head as it is
 drawn, fade with distance (opaque to 12 m, 0.35 at 25 m, gone at 40 m),
 hide behind buildings and, from a GPU depth probe of the frame, behind
 anything nearer than the head (a passer-by, a pole, another player), and
@@ -330,7 +336,7 @@ selection:
 | Camera finish | `--no-taa`, `--no-bloom`, `--no-adaptation`, `--no-ssr` |
 | Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count` |
 | Interface and sound | `--no-hud`, `--no-audio`, `--audio-null` (mix to a null output) |
-| Online (`--connect`) | `--no-remote-bodies` (other players drawn as before: first walk style and idle, linear path, no emotes or phone, street people may wear a player's body), `--no-name-tags` (no tags, no tag depth probe), `--no-shared-sky` (the client's own hour and weather) |
+| Online (`--connect`) | `--no-remote-bodies` (other players drawn as before: first walk style and idle, linear path, no emotes or phone, street people may wear a player's body), `--no-name-tags` (no tags, no tag depth probe), `--no-player-contact` (no ground contact under their bodies), `--no-shared-sky` (the client's own hour and weather) |
 
 A new visual feature should come with its own switch, defaulting to on only
 once it has been reviewed.
