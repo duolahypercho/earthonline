@@ -45,9 +45,21 @@ use crate::rng::Rng;
 /// Bump when a draw changes (names the kit tile cache folder).
 pub const VERSION: u32 = 1;
 
+static PINNED: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// Tests that compare the plan with the JS planner pin the typology off
+/// (the JS game draws the port's one module), as they pin the ground plan to 1:1.
+pub fn pin(on: bool) {
+    PINNED.store(if on { 2 } else { 1 }, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// `EO_FACADE_TYPOLOGY=off` (or 0) turns the typology off (eo-app `--no-facade-typology`).
 pub fn enabled() -> bool {
-    !matches!(std::env::var("EO_FACADE_TYPOLOGY").as_deref(), Ok("off") | Ok("0"))
+    match PINNED.load(std::sync::atomic::Ordering::Relaxed) {
+        1 => false,
+        2 => true,
+        _ => !matches!(std::env::var("EO_FACADE_TYPOLOGY").as_deref(), Ok("off") | Ok("0")),
+    }
 }
 
 /// A tag for the kit tile cache key (empty when off).
