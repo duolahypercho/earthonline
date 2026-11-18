@@ -27,7 +27,7 @@ pub const NECKLACE_CD: f64 = 600.0;
 pub const NECKLACE_PITCH_M: f64 = 15.0;
 
 /// Linear colour at unit luminance of an sRGB hex.
-fn unit_luminance(hex: u32) -> [f32; 3] {
+pub(crate) fn unit_luminance(hex: u32) -> [f32; 3] {
     let c = crate::geometry::srgb_hex(hex);
     let l = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
     [(c[0] / l) as f32, (c[1] / l) as f32, (c[2] / l) as f32]
@@ -36,9 +36,9 @@ fn unit_luminance(hex: u32) -> [f32; 3] {
 /// Aviation red (FAA / CIE aviation red: chromaticity near x 0.70, y 0.29), as an sRGB tone.
 const AVIATION_RED_SRGB: u32 = 0xff1a0a;
 /// 3,000 K lamp white, as an sRGB tone.
-const WARM_WHITE_SRGB: u32 = 0xffd2a1;
+pub(crate) const WARM_WHITE_SRGB: u32 = 0xffd2a1;
 
-fn light(pos: [f64; 3], base: [f64; 3], colour: [f32; 3], candela: f64, range: f64, angle: f64, penumbra: f64) -> LandmarkLight {
+pub(crate) fn light(pos: [f64; 3], base: [f64; 3], colour: [f32; 3], candela: f64, range: f64, angle: f64, penumbra: f64) -> LandmarkLight {
     LandmarkLight {
         pos,
         base,

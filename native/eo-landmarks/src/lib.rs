@@ -14,6 +14,7 @@
 //! (the earlier browser version's exporter); every California street value
 //! (the decks' barrier and markings) through `eo_data::CaStandards`.
 
+pub mod access;
 pub mod bay_bridge;
 pub mod data;
 pub mod geometry;
