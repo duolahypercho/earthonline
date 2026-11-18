@@ -1,0 +1,189 @@
+{
+  "version": "skyline-buildings-v1",
+  "about": "Named downtown towers drawn as authored landmarks in place of the generic kit facade (eo-landmarks skyline.rs), and the authored facade styles the landmark buildings' material kind 7 draws (eo-render landmarks_surface.wgsl `lm_authored`). Plans are the buildings' own footprint records in public/data/sf/sf-city.json (`record`); heights, materials and colours are the published values cited per entry. A value marked INFERRED has no published figure: it is chosen within the cited description and says so.",
+  "facadeKeys": "moduleM: horizontal pitch of the window grid (m); finDepthM: how far the frame (fins, sunshades, reveals) stands proud of the glass, which hides the glass by the view angle; storeyM: vertical pitch (m); glazeX / glazeY: share of the module width / storey height that is glass; glassSrgb: the glazing's reflectance tint by day (drawn as a coated mirror: albedo x 0.85 metalness); glassRoughness; pattern: grid (punched or curtain wall), screen (an open lattice over a dark interior); nightLit: share of the city's lit-window fraction this facade's windows take at night; led: 1 for the Salesforce crown's light sculpture",
+  "facades": {
+    "solid": {
+      "moduleM": 1.0, "storeyM": 1.0, "glazeX": 0.0, "glazeY": 0.0,
+      "glassSrgb": "#000000", "glassRoughness": 0.5, "pattern": "grid", "nightLit": 0.0, "led": 0, "finDepthM": 0.0,
+      "source": "no window grid: a material that takes only the floodlight (the Transamerica spire's aluminium)"
+    },
+    "transamerica-window": {
+      "moduleM": 3.0, "storeyM": 4.0654, "glazeX": 0.9, "glazeY": 1.0,
+      "glassSrgb": "#3b444c", "glassRoughness": 0.08, "pattern": "grid", "nightLit": 1.0, "led": 0, "finDepthM": 0.2,
+      "source": "frame depth INFERRED; the JS export's windowPitchM 3 and floorM 4.065 (data/landmarks-js.json transamerica-pyramid dimensions); the window quads are the openings, so the whole quad is glass but its mullion share. Tint INFERRED: the export's glassSrgb 0x29323a lightened to a coated pane's reflectance (Wikipedia, Transamerica Pyramid: 3,678 windows)"
+    },
+    "transamerica-far": {
+      "moduleM": 3.0, "storeyM": 4.0654, "glazeX": 0.85, "glazeY": 0.42,
+      "glassSrgb": "#3b444c", "glassRoughness": 0.08, "pattern": "grid", "nightLit": 1.0, "led": 0, "finDepthM": 0.2,
+      "source": "frame depth INFERRED; the far item's walls: the export's window band (windowBandM 1.7 of floorM 4.065) and pitch (windowPitchM 3), so the window share of the facade's far tone and its lit windows at night match the near windows"
+    },
+    "salesforce-curtain": {
+      "moduleM": 1.524, "storeyM": 4.557, "glazeX": 0.78, "glazeY": 0.87,
+      "glassSrgb": "#9aa9b4", "glassRoughness": 0.06, "pattern": "grid", "nightLit": 1.0, "led": 0, "finDepthM": 0.61,
+      "source": "module 5 ft (1.524 m) and fin share 0.22 from the export's fin-curtain surface (landmark-surface.js); storey 277.98 m / 61 floors (export topFloorM, floors); the sunshade band per floor, 0.6 m of 4.56 m, from the export's spandrel. Pelli Clarke Pelli (architectmagazine.com project gallery): 'clear glass with pearlescent metal accents', 'each floor ... integrated metal sunshades'; Wikipedia: 'white aluminum fins and perforated sunshades, which reach up to two feet beyond the glass skin' (finDepthM 0.61). Clear low-e glass: tint INFERRED from the export's glassSrgb 0x8f9ca5"
+    },
+    "salesforce-crown": {
+      "moduleM": 1.524, "storeyM": 1.524, "glazeX": 0.55, "glazeY": 0.55,
+      "glassSrgb": "#5a646c", "glassRoughness": 0.3, "pattern": "screen", "nightLit": 0.0, "led": 1, "finDepthM": 0.3,
+      "source": "frame depth INFERRED; Pelli Clarke Pelli: 'the walls rise past the top floor to form a transparent crown that appears to dissolve into the sky'; Wikipedia: the top 150 ft (46 m) above the 61st floor are largely ornamental, a nine-storey light sculpture (Jim Campbell, Day for Night, 2018) of 11,000 inward-facing LEDs on the top six floors and colour lighting on the three below. The open share of the lattice (0.55 x 0.55 of a 1.524 m module) is INFERRED"
+    },
+    "carnelian-bays": {
+      "moduleM": 1.36, "storeyM": 4.566, "glazeX": 0.64, "glazeY": 0.7,
+      "glassSrgb": "#3a3029", "glassRoughness": 0.07, "pattern": "grid", "nightLit": 0.9, "led": 0, "finDepthM": 0.25,
+      "source": "frame depth INFERRED; SOM, 555 California Street (som.com projects): 'polished red Carnelian granite' and 'faceted bronze-tinted bay windows'; storey 779 ft (237.4 m) / 52 floors (Wikipedia, 555 California Street). The module is half the footprint record's bay facet (about 2.7 m between the sawtooth's points). Bronze tint and the glass share INFERRED"
+    },
+    "embarcadero-ribs": {
+      "moduleM": 1.524, "storeyM": 3.85, "glazeX": 0.62, "glazeY": 0.6,
+      "glassSrgb": "#4c4a46", "glassRoughness": 0.08, "pattern": "grid", "nightLit": 0.9, "led": 0, "finDepthM": 0.15,
+      "source": "frame depth INFERRED; SFYIMBY, 'Number 19: One Embarcadero Center': 'a repetition of concrete and glass panels, with vertical concrete stripes that protrude slightly from the window plane'; Docomomo US register, Embarcadero Center: precast concrete facades. Storey 568 ft (173.1 m) / 45 floors (Wikipedia, Embarcadero Center). Module, glass share and the dark tint INFERRED"
+    },
+    "california-345": {
+      "moduleM": 3.0, "storeyM": 3.94, "glazeX": 0.58, "glazeY": 0.55,
+      "glassSrgb": "#46514f", "glassRoughness": 0.07, "pattern": "grid", "nightLit": 0.9, "led": 0, "finDepthM": 0.3,
+      "source": "frame depth INFERRED; Wikipedia, 345 California Center: 48 storeys, roof 620 ft (189.0 m); buildingsdb.com: a granite and glass window wall with large square windows. Storey 189.0 m / 48; module and tint INFERRED"
+    },
+    "millennium-glass": {
+      "moduleM": 1.5, "storeyM": 3.18, "glazeX": 0.93, "glazeY": 0.88,
+      "glassSrgb": "#7f97a6", "glassRoughness": 0.05, "pattern": "grid", "nightLit": 0.8, "led": 0, "finDepthM": 0.05,
+      "source": "frame depth INFERRED; Wikipedia, Millennium Tower (San Francisco): 'blue-gray glass', roof 605 ft (184.4 m), 58 floors above ground. Storey 184.4 m / 58; module INFERRED"
+    },
+    "fremont-181": {
+      "moduleM": 1.5, "storeyM": 3.74, "glazeX": 0.93, "glazeY": 0.9,
+      "glassSrgb": "#8a9fa3", "glassRoughness": 0.05, "pattern": "grid", "nightLit": 0.8, "led": 0, "finDepthM": 0.05,
+      "source": "frame depth INFERRED; Permasteelisa Group, 181 Fremont project page: a unitised glass curtain wall over large diagonal columns; buildingsdb.com: Solarban 70XL low-e glass, green-tinted, the diagonal trussed beams coated in aluminium. Storey 700 ft (213.4 m) / 57 floors (Wikipedia, 181 Fremont); module INFERRED"
+    },
+    "city-hall-window": {
+      "moduleM": 2.2, "storeyM": 30.0, "glazeX": 0.92, "glazeY": 1.0,
+      "glassSrgb": "#323a40", "glassRoughness": 0.1, "pattern": "grid", "nightLit": 0.6, "led": 0, "finDepthM": 0.4,
+      "source": "frame depth INFERRED; the export's window quads (data/landmarks-js.json city-hall: windowSrgb 0x23272b), each a whole opening; lit share at night INFERRED (a civic building, fewer late offices)"
+    }
+  },
+  "floodlight": {
+    "colourK": 3500,
+    "source": "IES Lighting Handbook, floodlighting illuminance recommendations for building facades: light surfaces (reflectance 70-85 %) 5 fc (50 lux) in dark surroundings to 15 fc (150 lux) in bright surroundings; medium-light surfaces 10 to 20 fc. Colour: a 3,500 K metal-halide / LED floodlight, INFERRED"
+  },
+  "buildings": [
+    {
+      "id": "skyline-555-california",
+      "name": "555 California Street",
+      "record": "288511106",
+      "heightM": 237.4,
+      "floors": 52,
+      "facade": "carnelian-bays",
+      "stoneSrgb": "#3f2c28",
+      "stoneRoughness": 0.28,
+      "roofSrgb": "#3a3532",
+      "tiers": [{ "to": 1.0, "alongFrac": 1.0 }],
+      "crown": { "kind": "flat", "parapetM": 1.6, "penthouseFrac": 0.5, "penthouseM": 7.0 },
+      "aviation": true,
+      "source": "Wikipedia, 555 California Street: 779 ft (237 m) roof, 52 floors, 'clad in costly polished or rough carnelian granite', 'thousands of bay windows'. SOM: 'polished red Carnelian granite', 'faceted bronze-tinted bay windows'. The record's height (166.4 m) is under the published roof; the published value is drawn. Granite tone INFERRED (a polished dark red-brown granite); penthouse INFERRED"
+    },
+    {
+      "id": "skyline-embarcadero-1",
+      "name": "One Embarcadero Center",
+      "record": "32612608",
+      "heightM": 173.1,
+      "floors": 45,
+      "facade": "embarcadero-ribs",
+      "stoneSrgb": "#d2cdc1",
+      "stoneRoughness": 0.82,
+      "roofSrgb": "#8e8a84",
+      "tiers": [{ "to": 0.84, "alongFrac": 1.0 }, { "to": 0.93, "alongFrac": 0.78 }, { "to": 1.0, "alongFrac": 0.56 }],
+      "crown": { "kind": "flat", "parapetM": 1.2, "penthouseFrac": 0.0, "penthouseM": 0.0 },
+      "aviation": true,
+      "source": "Wikipedia, Embarcadero Center: One, 568 ft (173 m), 45 floors (1971). Profile: 'a series of thin slabs ascending in size toward the center' (architecture guide quoted in the search record); the tier heights and lengths (fractions of the height and of the plan's length) are INFERRED. Precast tone INFERRED (light precast concrete)"
+    },
+    {
+      "id": "skyline-embarcadero-2",
+      "name": "Two Embarcadero Center",
+      "record": "32612520",
+      "heightM": 125.9,
+      "floors": 30,
+      "facade": "embarcadero-ribs",
+      "stoneSrgb": "#d2cdc1",
+      "stoneRoughness": 0.82,
+      "roofSrgb": "#8e8a84",
+      "tiers": [{ "to": 0.86, "alongFrac": 1.0 }, { "to": 1.0, "alongFrac": 0.7 }],
+      "crown": { "kind": "flat", "parapetM": 1.2, "penthouseFrac": 0.0, "penthouseM": 0.0 },
+      "aviation": false,
+      "source": "Wikipedia, Embarcadero Center: Two, 413 ft (126 m), 30 floors (1974). Tiers INFERRED as for One"
+    },
+    {
+      "id": "skyline-embarcadero-3",
+      "name": "Three Embarcadero Center",
+      "record": "32612538",
+      "heightM": 125.9,
+      "floors": 31,
+      "facade": "embarcadero-ribs",
+      "stoneSrgb": "#d2cdc1",
+      "stoneRoughness": 0.82,
+      "roofSrgb": "#8e8a84",
+      "tiers": [{ "to": 0.86, "alongFrac": 1.0 }, { "to": 1.0, "alongFrac": 0.7 }],
+      "crown": { "kind": "flat", "parapetM": 1.2, "penthouseFrac": 0.0, "penthouseM": 0.0 },
+      "aviation": false,
+      "source": "Wikipedia, Embarcadero Center: Three, 413 ft (126 m), 31 floors (1977). Tiers INFERRED as for One"
+    },
+    {
+      "id": "skyline-embarcadero-4",
+      "name": "Four Embarcadero Center",
+      "record": "616812910",
+      "heightM": 174.0,
+      "floors": 45,
+      "facade": "embarcadero-ribs",
+      "stoneSrgb": "#d2cdc1",
+      "stoneRoughness": 0.82,
+      "roofSrgb": "#8e8a84",
+      "tiers": [{ "to": 0.84, "alongFrac": 1.0 }, { "to": 0.93, "alongFrac": 0.78 }, { "to": 1.0, "alongFrac": 0.56 }],
+      "crown": { "kind": "flat", "parapetM": 1.2, "penthouseFrac": 0.0, "penthouseM": 0.0 },
+      "aviation": true,
+      "source": "Wikipedia, Embarcadero Center: Four, 571 ft (174 m), 45 floors (1982). Tiers INFERRED as for One"
+    },
+    {
+      "id": "skyline-345-california",
+      "name": "345 California Center",
+      "record": "588355355",
+      "heightM": 189.0,
+      "floors": 48,
+      "facade": "california-345",
+      "stoneSrgb": "#a59d93",
+      "stoneRoughness": 0.45,
+      "roofSrgb": "#6c6862",
+      "tiers": [{ "to": 0.77, "alongFrac": 1.0 }],
+      "crown": { "kind": "twin-spires", "towerFrac": 0.26, "spireTopM": 219.8, "spireSrgb": "#b9bec2" },
+      "aviation": true,
+      "source": "Wikipedia, 345 California Center: 48 storeys, roof 620 ft (189 m), spire tips 721 ft (220 m); the top 11 floors (38-48) 'located in twin towers set at 45-degree angles to the rest of the building', the twin spires. buildingsdb.com: granite and glass. The shaft below the twin towers ends at floor 37 (0.77 of the roof height); the twin towers' plan (0.26 of the plan's length, square, at the plan's ends) and the granite tone are INFERRED"
+    },
+    {
+      "id": "skyline-millennium-tower",
+      "name": "Millennium Tower",
+      "record": "72963089",
+      "heightM": 184.4,
+      "floors": 58,
+      "facade": "millennium-glass",
+      "stoneSrgb": "#b8c0c6",
+      "stoneRoughness": 0.35,
+      "roofSrgb": "#8d9296",
+      "tiers": [{ "to": 1.0, "alongFrac": 1.0 }],
+      "crown": { "kind": "spire", "parapetM": 3.0, "spireTopM": 196.6, "spireSrgb": "#c0c4c7" },
+      "aviation": true,
+      "source": "Wikipedia, Millennium Tower (San Francisco): roof 605 ft (184 m), antenna spire 645 ft (197 m), 58 floors above ground, 'blue-gray glass'. Mullion tone INFERRED"
+    },
+    {
+      "id": "skyline-181-fremont",
+      "name": "181 Fremont",
+      "record": "445566153",
+      "heightM": 213.4,
+      "floors": 57,
+      "facade": "fremont-181",
+      "stoneSrgb": "#c4c9cc",
+      "stoneRoughness": 0.32,
+      "roofSrgb": "#8d9296",
+      "tiers": [{ "to": 1.0, "alongFrac": 1.0 }],
+      "crown": { "kind": "screen-spire", "screenTopM": 227.1, "spireTopM": 244.6, "spireSrgb": "#c8ccce" },
+      "braces": { "storeysPerBay": 8 },
+      "aviation": true,
+      "source": "Wikipedia, 181 Fremont: roof 700 ft (213 m), a parapet / mechanical screen to 745 ft (227 m), spire to 802.5 ft (244.6 m), 57 floors. Permasteelisa: large diagonal columns behind the curtain wall; buildingsdb.com: the diagonal trussed beams coated in aluminium. The braces' span (8 storeys a bay) INFERRED"
+    }
+  ]
+}

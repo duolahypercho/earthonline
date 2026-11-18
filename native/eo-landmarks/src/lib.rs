@@ -24,8 +24,10 @@ pub mod plaza;
 pub mod promenade;
 pub mod set;
 pub mod shore;
+pub mod skyline; // the named skyline towers
 pub mod suspension;
 pub mod towers;
+pub mod towers2; // the landmark buildings' second generators
 pub mod waterfront;
 
 pub use data::LandmarksJs;

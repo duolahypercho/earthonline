@@ -1,0 +1,26 @@
+skyline-buildings.json - authored facade descriptions of named San Francisco towers
+
+Hand-written table (eo-landmarks skyline.rs reads it; no build script). It
+holds facts, not copied content: heights, floor counts, materials and
+colours as published, each entry with its source in its "source" field, and
+values that no source gives marked INFERRED there.
+
+Sources consulted (public descriptions; nothing reproduced beyond short facts):
+  Wikipedia: 555 California Street; Embarcadero Center; 345 California Center;
+    Millennium Tower (San Francisco); 181 Fremont; Salesforce Tower;
+    Transamerica Pyramid; Sutro Tower; Coit Tower
+  Skidmore, Owings & Merrill, project page 555 California Street (som.com)
+  Pelli Clarke Pelli, Salesforce Tower (architectmagazine.com project gallery)
+  SFYIMBY, "Number 19: One Embarcadero Center"; Docomomo US register,
+    Embarcadero Center
+  Permasteelisa Group, 181 Fremont project page; buildingsdb.com entries
+    (181 Fremont, 345 California Center)
+  Sutro Tower Inc., sutrotower.com "Tower Technology" (antenna levels)
+  IES Lighting Handbook, floodlighting illuminance recommendations
+  Mitchell Charity, "What color is a blackbody?" (vendian.org), 3,500 K
+
+Plans: each entry names its footprint record in public/data/sf/sf-city.json
+(OpenStreetMap, ODbL 1.0; see sf-city.NOTICE.txt); the plan is read from that
+file at load, not copied here.
+
+No photograph, web-globe image or mesh was traced or sampled for any value.
