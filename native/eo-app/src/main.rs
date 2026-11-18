@@ -400,6 +400,7 @@ fn parse_args() -> Result<Args> {
             // read by `roofs_flags` (main) into the environment switches.
             "--no-roof-colours" | "--no-roof-contrast" | "--no-roof-parapet" | "--no-roof-patches" | "--no-roof-plant" => {}
             "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" => {} // `roofs_flags`
+            "--no-towers2" | "--no-skyline" => {} // `roofs_flags` (eo_landmarks::set::Options)
             "--segments" => a.segments = Some(val()?.split(',').map(|s| s.trim().to_string()).collect()),
             // occlusion / hitch
             "--no-occlusion" => a.perf.occlusion = false,
@@ -588,7 +589,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         _ => None,
     };
     // the building records the landmark buildings draw instead.
-    let landmark_claims: HashSet<String> = if args.landmarks && args.landmarks2 { eo_landmarks::set::claimed_records() } else { HashSet::new() };
+    let landmark_claims: HashSet<String> = if args.landmarks && args.landmarks2 { eo_landmarks::set::claimed_records_with(eo_landmarks::set::Options::default()) } else { HashSet::new() };
     // Kit buildings: every building the authored registry does not draw.
     let t = Instant::now();
     let mut kit_set = None;
@@ -1022,6 +1023,9 @@ fn roofs_flags() {
         ("--no-ground-green", "EO_GROUND_GREEN"),
         ("--no-ground-hills", "EO_GROUND_HILLS"),
         ("--no-ground-contact", "EO_GROUND_CONTACT"),
+        // the landmark buildings' second generators and the named skyline towers (eo_landmarks::set::Options).
+        ("--no-towers2", "EO_TOWERS2"),
+        ("--no-skyline", "EO_SKYLINE"),
     ] {
         if a.iter().any(|x| x == flag) {
             // SAFETY: first thing in main, before any other thread exists.
