@@ -26,6 +26,7 @@ pub mod library;
 pub mod motion;
 pub mod packed_glb; // people
 pub mod people;
+pub mod remote; // other players' bodies (online)
 pub mod rocketbox; // people
 pub mod vehicles;
 

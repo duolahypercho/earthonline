@@ -87,7 +87,7 @@ fn manifests_pin_the_sources() {
         }
         assert!(r.fps * r.seconds >= 60.0 && r.slot >= 1 && r.slot <= 3, "{}", r.name);
     }
-    for f in [Family::Idle, Family::Wait, Family::Talk, Family::Listen, Family::Call, Family::Text] {
+    for f in [Family::Idle, Family::Wait, Family::Talk, Family::Listen, Family::Call, Family::Text, Family::Wave, Family::Point, Family::Sit, Family::Photo] {
         assert!(ROLES.iter().any(|r| r.family == f), "no loop for {f:?}");
     }
     let s = Manifest::styles().unwrap();
@@ -197,6 +197,23 @@ fn clips_and_walks_on_every_group() {
                         }
                         if role.family == Family::Call {
                             assert!(median(ear.clone()) < 0.12, "{id} {}: the knuckles are {:.3} m from the ear", role.name, median(ear));
+                        }
+                        // The players' emotes hold the pose they are named for over most of the loop.
+                        let share = |ok: &dyn Fn(usize) -> bool| frames.clone().filter(|f| ok(*f)).count() as f32 / n as f32;
+                        let head = |f: usize| at(&b.rows, sk, f, idx("Bip01 Head"));
+                        let hand = |f: usize, s: &str| at(&b.rows, sk, f, idx(&format!("Bip01 {s} Hand")));
+                        let pel = |f: usize| at(&b.rows, sk, f, pelvis);
+                        let reach = |f: usize, s: &str| (hand(f, s) - pel(f)).x.hypot((hand(f, s) - pel(f)).z);
+                        let held = match role.family {
+                            Family::Wave => Some(("a hand above the head", share(&|f| hand(f, "L").y.max(hand(f, "R").y) > head(f).y))),
+                            Family::Point => Some(("an arm held out 0.5 m at shoulder height", share(&|f| ["L", "R"].iter().any(|s| reach(f, s) > 0.5 && hand(f, s).y > head(f).y - 0.35)))),
+                            Family::Photo => Some(("both hands at the face", share(&|f| ["L", "R"].iter().all(|s| (hand(f, s).y - head(f).y).abs() < 0.15)))),
+                            Family::Sit => Some(("the pelvis 0.2 m under standing", share(&|f| pel(f).y < sk.pos[pelvis].y - 0.2))),
+                            _ => None,
+                        };
+                        if let Some((what, k)) = held {
+                            println!("  {name:<11} {what}: {:.0} % of the loop", k * 100.0);
+                            assert!(k >= 0.6, "{id} {}: {what} in only {:.0} % of the loop", role.name, k * 100.0);
                         }
                         // The seam: no bigger a step than the loop's own.
                         let step = |f: usize| -> f32 { (0..JOINTS.len()).map(|k| (at(&b.rows, sk, f + 1, k) - at(&b.rows, sk, f, k)).length()).fold(0.0, f32::max) };
