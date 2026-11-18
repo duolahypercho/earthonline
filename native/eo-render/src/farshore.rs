@@ -76,7 +76,7 @@ impl Default for FarOptions {
             tail: env_f32("EO_FARSHORE_TAIL").unwrap_or(6.0).clamp(0.05, 50.0),
             self_shadow: std::env::var("EO_FARSHORE_SHADOW").map_or(true, |v| v.trim() != "0"),
             debug: std::env::var("EO_FARSHORE_DEBUG").is_ok_and(|v| v.trim() == "1"),
-            dryness: env_f32("EO_FARSHORE_DRY").map(|v| v.clamp(0.0, 1.0)).unwrap_or_else(|| dryness_for_day(eo_look::sun::DAY_OF_YEAR)),
+            dryness: env_f32("EO_FARSHORE_DRY").map(|v| v.clamp(0.0, 1.0)).unwrap_or_else(|| dryness_for_day(eo_look::sun::day_of_year())),
         }
     }
 }

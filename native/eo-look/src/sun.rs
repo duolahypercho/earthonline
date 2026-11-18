@@ -1,14 +1,30 @@
 //! Solar position: `computeSunDirection` of src/render/environment-ibl.js
 //! (NOAA approximation) on the canonical site and date the game uses:
-//! San Francisco, September 22 (day 265 of a common year), UTC-7.
+//! San Francisco, September 22 (day 265 of a common year, `day_of_year`), UTC-7.
 
 use crate::math::{DEG, TAU, clamp};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 pub const LATITUDE_DEG: f64 = 37.7749;
 pub const LONGITUDE_DEG: f64 = -122.4194;
 pub const UTC_OFFSET_HOURS: f64 = -7.0;
 /// `dayOfYearFromMonthDay(9, 22)`.
 pub const DAY_OF_YEAR: f64 = 265.0;
+
+/// The day of the year the sun is placed on (`day_of_year`), as f64 bits;
+/// `DAY_OF_YEAR` until `set_day_of_year` changes it.
+static DAY: AtomicU64 = AtomicU64::new(DAY_OF_YEAR.to_bits());
+
+/// The day of the year (1 = 1 January, a common year) the sun is placed on:
+/// `DAY_OF_YEAR` unless `set_day_of_year` set another.
+pub fn day_of_year() -> f64 {
+    f64::from_bits(DAY.load(Ordering::Relaxed))
+}
+
+/// Place the sun on another day of the year (process-wide).
+pub fn set_day_of_year(day: f64) {
+    DAY.store(day.to_bits(), Ordering::Relaxed);
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Sun {
@@ -36,7 +52,7 @@ pub fn wrap_hour(hour: f64) -> f64 {
 
 pub fn sun_direction(hour: f64) -> Sun {
     let h = wrap_hour(hour);
-    let gamma = (TAU / 365.0) * (DAY_OF_YEAR - 1.0 + (h - UTC_OFFSET_HOURS - 12.0) / 24.0);
+    let gamma = (TAU / 365.0) * (day_of_year() - 1.0 + (h - UTC_OFFSET_HOURS - 12.0) / 24.0);
     let eq_time = 229.18
         * (0.000075 + 0.001868 * gamma.cos() - 0.032077 * gamma.sin() - 0.014615 * (2.0 * gamma).cos() - 0.040849 * (2.0 * gamma).sin());
     let decl = 0.006918 - 0.399912 * gamma.cos() + 0.070257 * gamma.sin() - 0.006758 * (2.0 * gamma).cos() + 0.000907 * (2.0 * gamma).sin()
@@ -64,5 +80,15 @@ pub fn sun_direction(hour: f64) -> Sun {
         altitude_deg: altitude / DEG,
         azimuth_deg: az / DEG,
         hour_angle_deg: hour_angle / DEG,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_day_defaults_to_the_game_date() {
+        assert_eq!(day_of_year(), DAY_OF_YEAR);
     }
 }

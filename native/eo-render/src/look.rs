@@ -166,6 +166,10 @@ struct AoTarget {
     bind: Option<(wgpu::Texture, wgpu::Texture, wgpu::BindGroup)>,
 }
 
+/// What a frame's physical daylight was made for: the hour, the haze density and the weight (f64
+/// bits) and the day of the year (f64 bits).
+type DaylightKey = (u64, u64, u64, u64);
+
 struct State {
     hour: f64,
     /// the scene probe's measured transfer (None: the JS fallback yield).
@@ -190,10 +194,11 @@ struct State {
     /// the weather and night terms of `frame`, and the weather they were built for.
     terms: Option<eo_sky::SkyTerms>,
     weather_key: (i64, i64, i64),
-    /// the weather frame before its fill (hour, sky profile, frame): `eo_sky::frame::base_frame`.
-    sky_base: Option<(f64, String, LookFrame)>,
-    /// the physical daylight of the frame in force (`--no-phys-sky`: None), and what it was made for (hour, density, weight).
-    daylight: Option<((u64, u64, u64), std::sync::Arc<eo_look::phys::Daylight>)>,
+    /// the weather frame before its fill (hour, day of the year, sky profile, frame): `eo_sky::frame::base_frame`.
+    sky_base: Option<(f64, f64, String, LookFrame)>,
+    /// the physical daylight of the frame in force (`--no-phys-sky`: None), and what it was made for
+    /// (hour, density, weight, the day of the year).
+    daylight: Option<(DaylightKey, std::sync::Arc<eo_look::phys::Daylight>)>,
 }
 
 struct PostTarget {
@@ -987,16 +992,17 @@ impl LookGpu {
                 // the sky is integrated once per hour and weather; a new
                 // probe transfer (each capture) re-solves only the fill from it.
                 let profile = format!("{:?}", eo_sky::weather::sky_profile(&w.profile));
-                if s.sky_base.as_ref().is_none_or(|(bh, bp, _)| *bh != h || *bp != profile) {
-                    s.sky_base = Some((h, profile, eo_sky::frame::base_frame(&c, t)));
+                let day = eo_look::sun::day_of_year();
+                if s.sky_base.as_ref().is_none_or(|(bh, bd, bp, _)| *bh != h || *bd != day || *bp != profile) {
+                    s.sky_base = Some((h, day, profile, eo_sky::frame::base_frame(&c, t)));
                 }
-                let (mut f, mut terms) = eo_sky::frame::look_frame_from(&s.sky_base.as_ref().unwrap().2, &c, t);
+                let (mut f, mut terms) = eo_sky::frame::look_frame_from(&s.sky_base.as_ref().unwrap().3, &c, t);
                 // the physical daylight (eo-look `phys`) in place of the rig while the sun is
                 // up, and the incident meter's exposure (EV100).
                 if opts.phys_sky {
                     let density = eo_sky::frame::daylight_density(&w);
                     let weight = eo_sky::frame::daylight_weight(&f, &w);
-                    let key = (h.to_bits(), density.to_bits(), weight.to_bits());
+                    let key = (h.to_bits(), density.to_bits(), weight.to_bits(), day.to_bits());
                     if s.daylight.as_ref().is_none_or(|(k, _)| *k != key) {
                         s.daylight = Some((key, std::sync::Arc::new(eo_look::phys::Daylight::new(f.model.sun.dir(), density, weight))));
                     }
