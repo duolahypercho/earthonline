@@ -161,6 +161,21 @@ impl Site {
     }
 }
 
+/// The roadway at midspan, el. 270.9 ft MLLW in the 1992 survey
+/// (goldengate.org, "FAQs"; 266.70 ft as designed, Strauss 1937), against
+/// the export's midspan of the 220 ft clearance plus the truss's depth: that
+/// clearance is the War Department's minimum over MHHW under live load at
+/// 110 F, not the roadway's height, and drew a sag where the deck crests
+/// (`BridgeFeatures::crest`).
+pub const ROADWAY_MIDSPAN_MLLW_FT: f64 = 270.9;
+
+/// The roadway at midspan over mean sea level, times the structure scale:
+/// the survey's MLLW elevation less MSL's height over MLLW at NOAA station
+/// 9414290 (0.951 m, epoch 1983-2001).
+pub fn midspan_roadway_m() -> f64 {
+    (ROADWAY_MIDSPAN_MLLW_FT * 0.3048 - pylons::MSL_OVER_MLLW_M) * structure_scale()
+}
+
 /// `goldenGatePlan`.
 pub struct Plan<'a> {
     pub l: f64,
@@ -203,7 +218,7 @@ pub fn plan<'a>(js: &LandmarksJs, site: &'a Site, ground: &dyn Fn(f64, f64) -> f
     let y_south = ground(ws[0], ws[1]) + road_lift;
     let y_north = ground(wn[0], wn[1]) + road_lift;
     let y_tower = water + num(d, "roadwayAtTowerM");
-    let y_mid = water + num(d, "clearanceM") + num(d, "trussDepthM");
+    let y_mid = if suspension::features().crest { water + midspan_roadway_m() } else { water + num(d, "clearanceM") + num(d, "trussDepthM") };
     let sup = |k: &str| g.supports[k].centre;
     let mut p = Plan {
         l,
