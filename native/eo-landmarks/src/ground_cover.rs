@@ -227,6 +227,25 @@ pub fn installed() -> Option<&'static std::sync::Arc<GroundCover>> {
 /// city-tile-derive.js `GROUND_SAND` / `GROUND_SAND_DARK` (linear).
 pub const GROUND_SAND: Linear = [0.366, 0.337, 0.275];
 pub const GROUND_SAND_DARK: Linear = [0.305, 0.275, 0.216];
+/// The dry beach sand's broadband albedo (`--no-sand-albedo`: the JS tones
+/// above, whose mean luminance is 0.31): Ångström's pyranometer measurement
+/// of dry sand, 0.182 (wet: 0.091), as tabulated in J. Lekner and M. C. Dorf,
+/// "Why some things are darker when wet", Applied Optics 27, 1278 (1988).
+/// The JS pair keeps its hue and mottle and is scaled to this mean luminance.
+pub const DRY_SAND_ALBEDO: f64 = 0.182;
+/// Wet over dry sand albedo, the same measurement: 0.091 / 0.182.
+pub const WET_SAND_RATIO: f64 = 0.5;
+
+fn luma(c: Linear) -> f64 {
+    0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+}
+
+/// The factor that takes the JS sand pair to `DRY_SAND_ALBEDO` (the mean of
+/// its two tones' luminance, as the mottle mixes them half and half).
+pub fn sand_albedo_scale() -> f64 {
+    DRY_SAND_ALBEDO / (0.5 * (luma(GROUND_SAND) + luma(GROUND_SAND_DARK)))
+}
+
 /// beach-sand.js: how far past a mapped beach the sand runs, and how near the sea it must be.
 pub const BEACH_SAND_REACH_M: f64 = 150.0;
 pub const BEACH_SAND_SHORE_M: f64 = 90.0;
@@ -476,9 +495,34 @@ impl GroundCover {
         out.into_iter().map(|(t, _)| t).collect()
     }
 
-    /// The beach sand's colour at (x, z): `GROUND_SAND` to `GROUND_SAND_DARK` by the mottle.
+    /// The beach sand's colour at (x, z): `GROUND_SAND` to `GROUND_SAND_DARK`
+    /// by the mottle, scaled to the measured dry-sand albedo (`sand_albedo_scale`)
+    /// unless `--no-sand-albedo`.
     pub fn sand_at(&self, x: f64, z: f64) -> Linear {
-        let t = ground_mottle(x, z);
-        [0, 1, 2].map(|k| GROUND_SAND[k] + (GROUND_SAND_DARK[k] - GROUND_SAND[k]) * t)
+        sand_tone(x, z, crate::features::shore_ground("sand-albedo"))
+    }
+}
+
+/// `GroundCover::sand_at` with the albedo switch given.
+pub fn sand_tone(x: f64, z: f64, measured: bool) -> Linear {
+    let t = ground_mottle(x, z);
+    let k = if measured { sand_albedo_scale() } else { 1.0 };
+    [0, 1, 2].map(|i| (GROUND_SAND[i] + (GROUND_SAND_DARK[i] - GROUND_SAND[i]) * t) * k)
+}
+
+#[cfg(test)]
+mod sand_tests {
+    use super::*;
+
+    #[test]
+    fn the_sand_has_the_measured_albedo() {
+        // mean over the mottle: the measured dry albedo; the JS tones without the switch
+        let mean = |on: bool| (0..400).map(|i| luma(sand_tone(i as f64 * 7.3, i as f64 * 3.1, on))).sum::<f64>() / 400.0;
+        assert!((mean(true) - DRY_SAND_ALBEDO).abs() < 0.015, "{}", mean(true));
+        assert!((mean(false) - 0.31).abs() < 0.02, "{}", mean(false));
+        assert_eq!(sand_tone(5.0, 9.0, false)[0], GROUND_SAND[0] + (GROUND_SAND_DARK[0] - GROUND_SAND[0]) * ground_mottle(5.0, 9.0));
+        // the hue is the JS pair's
+        let (a, b) = (sand_tone(5.0, 9.0, true), sand_tone(5.0, 9.0, false));
+        assert!((a[0] / a[2] - b[0] / b[2]).abs() < 1e-9);
     }
 }

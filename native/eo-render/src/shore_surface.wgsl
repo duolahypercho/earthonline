@@ -79,14 +79,23 @@ fn lm_beach(s: ptr<function, Surface>, wp: vec3<f32>, shore: f32) {
     dry = dry * ((coarse - 0.5) * 0.13 + 1.0) * ((grain - 0.45) * 0.26 + 0.99) * ((grain_fine - 0.45) * 0.16 + 1.0);
     let ripple_k = lm_ss(LM_SWASH_REACH_M + 4.0, LM_SWASH_REACH_M + 18.0, shore);
     dry = dry * ((ripples - 0.5) * 0.1 * ripple_k + 1.0);
-    let wrack_band = lm_ss(LM_WRACK_A, LM_WRACK_A + 7.0, shore) * lm_ss(LM_WRACK_B, LM_WRACK_B - 9.0, shore);
+    var wrack_band = lm_ss(LM_WRACK_A, LM_WRACK_A + 7.0, shore) * lm_ss(LM_WRACK_B, LM_WRACK_B - 9.0, shore);
+    if (GG2_SAND) {
+        wrack_band = gg2_wrack_band(wp);
+        dry = dry * (1.0 - 0.18 * gg2_footprints(wp) * lm_ss(GG2_SAND_MHHW_M + 0.05, GG2_SAND_MHHW_M + 0.3, wp.y - LM_SEA_LEVEL_Y));
+    }
     let wrack = wrack_band * lm_ss(0.56, 0.74, grain) * lm_ss(0.4, 0.6, macro_n);
     dry = mix(dry, vec3<f32>(0.27, 0.21, 0.14), wrack * 0.62);
     let reach = 0.7 * LM_SWASH_REACH_M;
-    let damp = lm_ss(reach + 5.0, reach - 6.0, shore) * 0.62;
+    var damp = lm_ss(reach + 5.0, reach - 6.0, shore) * 0.62;
+    var wet_ratio = 0.58;
+    if (GG2_SAND) {
+        damp = gg2_damp(wp);
+        wet_ratio = GG2_WET_SAND_RATIO;
+    }
     let margin = lm_ss(LM_SEA_LEVEL_Y + 0.35, LM_SEA_LEVEL_Y + 0.02, wp.y) * 0.6;
     let wet = clamp(max(damp, margin), 0.0, 1.0);
-    let wet_base = dry * 0.58;
+    let wet_base = dry * wet_ratio;
     let luma = dot(wet_base, vec3<f32>(0.2126, 0.7152, 0.0722));
     let wet_sand = mix(vec3<f32>(luma), wet_base, 1.15) * vec3<f32>(0.97, 0.98, 1.0);
     var colour = mix(dry, wet_sand, wet);
@@ -124,4 +133,59 @@ fn lm_beach_swash_wet(s: ptr<function, Surface>, wp: vec3<f32>) {
     (*s).rough = mix((*s).rough, 0.07, film);
     (*s).albedo = (*s).albedo * (1.0 - 0.1 * film);
     (*s).env = ENV_WET_FILM;
+}
+
+// The shore ground pass's sand (`GG2_SAND`, cc0.rs `shore_ground_wgsl`;
+// `--no-sand-albedo` off): bands keyed to the height over the sea, at the
+// drawn height scale, from the Golden Gate tide station's datums.
+//
+// The damp band: the sand the high water covers twice a day stays damp below
+// it (mean high water), darkest where the swash keeps it wet (0.3 m over the
+// sea, where `lm_beach_swash_wet` takes over) and drying toward the high
+// water line, its edge ragged (a few centimetres of height).
+fn gg2_damp(wp: vec3<f32>) -> f32 {
+    let rag = lm_mx_noise(vec3<f32>(wp.x * 0.09, wp.z * 0.09, 6.3)) * 0.08;
+    let h = wp.y - LM_SEA_LEVEL_Y + rag;
+    return lm_ss(GG2_SAND_MHW_M, 0.3, h) * 0.8;
+}
+
+// The wrack (the strand line of kelp and eelgrass the higher high water
+// leaves): a ragged band round the mean higher high water line, a few
+// centimetres of height across (a couple of metres on the foreshore).
+fn gg2_wrack_band(wp: vec3<f32>) -> f32 {
+    let rag = lm_mx_noise(vec3<f32>(wp.x * 0.05, wp.z * 0.05, 3.7)) * 0.1 + lm_mx_noise(vec3<f32>(wp.x * 0.6, wp.z * 0.6, 8.9)) * 0.03;
+    let d = abs(wp.y - LM_SEA_LEVEL_Y - GG2_SAND_MHHW_M + rag);
+    return lm_ss(0.07, 0.025, d);
+}
+
+// Footprints in the dry sand above the strand line: in walkers' trails (a
+// slow field), one print per 0.8 m cell where a hash keeps it, each a
+// scuffed oval 0.28 x 0.11 m (an adult shoe) turned along the trail; 1 in
+// the print's hollow, 0 outside.
+fn gg2_footprints(wp: vec3<f32>) -> f32 {
+    let trail = lm_ss(0.15, 0.45, lm_mx_noise(vec3<f32>(wp.x * 0.035, wp.z * 0.035, 2.9)));
+    if (trail <= 0.0) {
+        return 0.0;
+    }
+    let cs = 0.8;
+    let c = floor(wp.xz / cs);
+    var best = 0.0;
+    for (var j = -1; j <= 1; j = j + 1) {
+        for (var i = -1; i <= 1; i = i + 1) {
+            let cc = c + vec2<f32>(f32(i), f32(j));
+            let h = lm_cell_hash(vec3<f32>(cc, 41.0));
+            if (h > 0.55 * trail) {
+                continue;
+            }
+            let h2 = lm_cell_hash(vec3<f32>(cc, 77.0));
+            let h3 = lm_cell_hash(vec3<f32>(cc, 113.0));
+            let centre = (cc + vec2<f32>(0.2 + 0.6 * h2, 0.2 + 0.6 * h3)) * cs;
+            let a = lm_mx_noise(vec3<f32>(centre.x * 0.02, centre.y * 0.02, 1.3)) * 3.1 + (h2 - 0.5) * 0.6;
+            let d = wp.xz - centre;
+            let u = vec2<f32>(cos(a) * d.x + sin(a) * d.y, -sin(a) * d.x + cos(a) * d.y);
+            let e = length(u / vec2<f32>(0.14, 0.055));
+            best = max(best, lm_ss(1.0, 0.7, e));
+        }
+    }
+    return best;
 }

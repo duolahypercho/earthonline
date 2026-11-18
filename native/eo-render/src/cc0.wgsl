@@ -488,7 +488,11 @@ fn cc0_beach(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, dpx: vec
         return;
     }
     let reach = 0.7 * LM_SWASH_REACH_M;
-    let damp = max(smoothstep(reach + 5.0, reach - 6.0, shore), smoothstep(LM_SEA_LEVEL_Y + 0.35, LM_SEA_LEVEL_Y + 0.02, world.y));
+    var damp_band = smoothstep(reach + 5.0, reach - 6.0, shore);
+    if (GG2_SAND) {
+        damp_band = gg2_damp(world) / 0.8; // keyed to the height over the sea (shore_surface.wgsl)
+    }
+    let damp = max(damp_band, smoothstep(LM_SEA_LEVEL_Y + 0.35, LM_SEA_LEVEL_Y + 0.02, world.y));
     // Dry sand (two phases) above the swash, damp sand (one) in it; each read
     // only where the height blend can reach it.
     let wd = (damp - 0.5) * 3.0 + 0.5;
