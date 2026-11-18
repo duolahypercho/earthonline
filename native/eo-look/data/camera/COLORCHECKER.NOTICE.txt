@@ -1,0 +1,19 @@
+eo-look/src/tone/camera.rs COLORCHECKER_XYY_D50 - the virtual ColorChecker the
+camera look's tests calibrate against
+
+Source: BabelColor, "ColorChecker RGB and spectra" (2012), the average of
+measurements of 30 ColorChecker Classic charts, CIE xyY under ICC D50 (2 deg
+observer). BabelColor ColorChecker data: Copyright (C) 2004-2012 Danny Pascale
+(www.babelcolor.com). The 24 xyY triplets were transcribed from the
+colour-science package's tabulation of that average (BSD-3-Clause), where
+they are reproduced by permission of BabelColor:
+
+  https://github.com/colour-science/colour (branch develop, commit 094a45cb3d95548d862602ab68456c0ccd150c19)
+    colour/characterisation/datasets/colour_checkers/chromaticity_coordinates.py
+      DATA_BABELCOLOR_AVERAGE   file sha256 477b932653b2cef891f392f0161a6e9c4a2db2f3c8dd919a63bb367a24928ff6
+
+Use: test data only (a tracked Rust constant read by unit tests); nothing of
+it reaches a rendered frame. The redistribution terms of the BabelColor
+values themselves (colour-science states "used by permission") have not been
+confirmed for this repository; see the completion report of the change that
+added them.

@@ -8,6 +8,11 @@
 use crate::look::LOOK;
 use crate::math::*;
 
+/// the ACES 2.0 output transform (a port of the Academy's reference CTL).
+pub mod aces2;
+/// the camera look (`--no-camera-look`): white balance, ISO 12232 placement, ACES 2.0, baked to a table.
+pub mod camera;
+
 /// `RRTAndODTFit`.
 pub fn rrt_odt_fit(x: f64) -> f64 {
     let a = x * (x + 0.0245786) - 0.000090537;
@@ -248,9 +253,15 @@ pub fn filmic_on() -> bool {
     FILMIC_ON.load(Ordering::Relaxed)
 }
 
-/// The display transform in force (`display` or `display_filmic`).
+/// The display transform in force (`camera::display_camera`, `display_filmic` or `display`).
 pub fn display_active(c: Rgb, exposure: f64, uv: [f64; 2]) -> Rgb {
-    if filmic_on() { display_filmic(c, exposure) } else { display(c, exposure, uv) }
+    if camera::camera_look_on() {
+        camera::display_camera(c, exposure)
+    } else if filmic_on() {
+        display_filmic(c, exposure)
+    } else {
+        display(c, exposure, uv)
+    }
 }
 
 #[cfg(test)]

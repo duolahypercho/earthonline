@@ -280,13 +280,27 @@ pub fn horizontal_illuminance(f: &LookFrame, w: &WeatherState, phys_weight: f64)
 /// day brightness near where the browser game's exposure curve had it at noon.
 pub const EV100_COMPENSATION: f64 = 0.85;
 
+/// `EV100_COMPENSATION` under the camera look (eo-look `tone::camera`,
+/// `--no-camera-look` keeps 0.85): 0. The camera look carries the ISO 12232
+/// SOS placement itself (the meter's grey at scene 0.18 and the SOS point at
+/// 0.2215 shown at sRGB 118), so an incident reading renders a sunlit 18 %
+/// card at sRGB ~114, as a correctly rated stills camera does; any further
+/// offset is the scene meter's (a frame of dark water and deep sky opens up,
+/// one of sand and sunlit cloud closes down), not a fixed bias.
+pub const CAMERA_EV100_COMPENSATION: f64 = 0.0;
+
+/// The incident offset in force (the camera look's or the filmic transform's).
+pub fn ev100_compensation() -> f64 {
+    if tone::camera::camera_look_on() { CAMERA_EV100_COMPENSATION } else { EV100_COMPENSATION }
+}
+
 /// The day exposure an incident-light meter gives (`--no-ev100`: the JS curve,
 /// `day_exposure`): EV100 = log2(E S / C) of the horizontal illuminance `e_h`
 /// (look units, lux through eo-look `phys::lux_per_unit`), the metered middle
 /// grey at scene 0.18 + `EV100_COMPENSATION`. Returns (EV100, exposure).
 pub fn ev100_day_exposure(e_h: f64) -> (f64, f64) {
     let ev = eo_look::phys::ev100_incident(e_h * eo_look::phys::lux_per_unit());
-    (ev, eo_look::phys::exposure_at_ev100(ev, EV100_COMPENSATION))
+    (ev, eo_look::phys::exposure_at_ev100(ev, ev100_compensation()))
 }
 
 /// `target_exposure` with the day term from the incident meter, by `weight`

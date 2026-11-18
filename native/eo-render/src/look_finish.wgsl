@@ -67,7 +67,8 @@ fn pf_chroma(c: vec3<f32>, gain: f32) -> vec3<f32> {
     ), vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
-fn finish_color(radiance: vec3<f32>, pos: vec4<f32>, dims: vec2<f32>) -> vec4<f32> {
+// mesopic vision (shared by `finish_color` and the camera look's `finish_camera`).
+fn finish_mesopic(radiance: vec3<f32>) -> vec3<f32> {
     var c = radiance;
     let exposure = look.key.w;
     // mesopic vision: at night colour fades from what is dim (CIE
@@ -82,6 +83,12 @@ fn finish_color(radiance: vec3<f32>, pos: vec4<f32>, dims: vec2<f32>) -> vec4<f3
         // 0.5 (0.75 greyed the city's orange skyglow into neutral charcoal)
         c = mix(c, vec3<f32>(y), 0.5 * nz * dim);
     }
+    return c;
+}
+
+fn finish_color(radiance: vec3<f32>, pos: vec4<f32>, dims: vec2<f32>) -> vec4<f32> {
+    var c = finish_mesopic(radiance);
+    let exposure = look.key.w;
     if (look.tone2.x > 0.5) {
         // the filmic display transform (eo-look `tone::display_filmic`): the toe and
         // shoulder curve per channel, the Oklab chroma gain, sRGB, the display dither.
