@@ -1452,6 +1452,31 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
                 wv_fine = wv_fine + select(0.0, (d.x + d.y) * wb[c], c >= 2u);
             }
         }
+        if (shore_feat && signed > 0.0 && signed < 30.0 && beach < 0.35) {
+            // (shore) the clapotis off a seawall: a vertical wall sends the
+            // wind sea back almost whole (reflection coefficient about 0.9 for a
+            // vertical wall, Goda 2000, "Random Seas and Design of Maritime
+            // Structures", ch. 5), so within a few wavelengths of it the
+            // reflected chop crosses the incoming one: the wind sea's cascades
+            // read at the point mirrored across the wall's line (from the shore
+            // field's gradient), their slopes mirrored with it, fading over
+            // 30 m as the reflected crests spread and break
+            let g2 = vec2<f32>(w_field_at(base + vec2<f32>(1.0, 0.0)).x - signed, w_field_at(base + vec2<f32>(0.0, 1.0)).x - signed);
+            let gl = length(g2);
+            if (gl > 0.2) {
+                let gn = g2 / gl;
+                let pm = p - gn * (2.0 * signed);
+                let kr = 0.9 * wg_smooth(30.0, 4.0, signed) * wg_smooth(0.35, 0.1, beach) * swell_fade;
+                for (var c = 1u; c < 3u; c = c + 1u) {
+                    if (wb[c] > 0.0) {
+                        let d = textureSampleLevel(w_deriv, w_repeat, w_casc_uv(pm, c), c, 0.0).xy;
+                        let dr = d - 2.0 * dot(d, gn) * gn;
+                        sx = sx + dr.x * wb[c] * kr;
+                        sz = sz + dr.y * wb[c] * kr;
+                    }
+                }
+            }
+        }
         // the far slope from the vertex where the pixel's own cascades 0-1 have faded
         sx = sx + wv_far_slope.x * (1.0 - fb.x) + wv_far_slope.z * (1.0 - fb.y);
         sz = sz + wv_far_slope.y * (1.0 - fb.x) + wv_far_slope.w * (1.0 - fb.y);
