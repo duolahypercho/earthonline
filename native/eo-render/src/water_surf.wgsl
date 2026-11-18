@@ -250,7 +250,13 @@ fn surf_at(time: f32, offshore: f32, along: f32, weight: f32, amp: f32) -> Surf 
     let lam = SF_PERIOD * sqrt(d * SF_G);
     // the crest lines break in sections (peaks and shoulders 50-300 m long)
     let sections = 0.22 * sin(along * 0.011 + 0.4) + 0.14 * sin(along * 0.037 + 1.3) + 0.08 * sin(along * 0.083 + 2.2);
-    let phase = sf_travel_time(offshore) / SF_PERIOD + time / SF_PERIOD + sf_wobble(along) + sections;
+    let phase0 = sf_travel_time(offshore) / SF_PERIOD + time / SF_PERIOD + sf_wobble(along) + sections;
+    // Each wave's own meander along its crest (sf_crest_lobes), blended toward its neighbour's in the trough.
+    let m0 = floor(phase0 + 0.5);
+    let u0 = phase0 - m0;
+    let lob_own = sf_crest_lobes(along, m0);
+    let lob = mix(lob_own, 0.5 * (lob_own + sf_crest_lobes(along, m0 + select(-1.0, 1.0, u0 > 0.0))), wg_smooth(0.3, 0.5, abs(u0)));
+    let phase = phase0 + lob * wg_smooth(0.0, 40.0, offshore);
     let m = floor(phase + 0.5);
     let u = phase - m;
     let a_own = sf_wave_amp(m, along) * amp;
@@ -262,7 +268,12 @@ fn surf_at(time: f32, offshore: f32, along: f32, weight: f32, amp: f32) -> Surf 
     let bored = wg_smooth(0.9, 1.3, bk.b);
     let persist = bored * exp(since / -4.5) * 0.8;
     let patch_w = wg_smooth(-0.5, 0.45, mx_noise2(vec2<f32>(along * 0.06 + time * 0.05, m * 2.9 + 0.4)));
-    let ww = prof.z * mix(0.3, 1.0, patch_w);
+    // The whitewater's edges torn (sf_tatter, on the open Pacific's surf); where a section barely
+    // breaks it keeps a quarter of its whitewater.
+    var ww = prof.z * mix(0.25, 1.0, patch_w);
+    if (ocean_back > 0.35) {
+        ww = sf_tatter(ww, along, u * lam, m);
+    }
     // a trough never sinks below the sand under it (the bigger surf bared the bar)
     o.height = max(prof.y, -0.7 * d) * w;
     // no shoreward throw: on the sea's grid the folded triangles drew a dotted row of dark dashes in the outer surf
@@ -359,4 +370,165 @@ fn surf_silt(x: f32, column: f32) -> f32 {
 // the field's distance is constant and the veil stopped on a hard band near the horizon).
 fn surf_veil(signed: f32) -> f32 {
     return wg_smooth(395.0, 300.0, signed);
+}
+
+// ---- Surf foam lighting, glint on foam, uneven bores and swash fronts ----
+
+// Each wave's crest meanders along the shore: lobes 15-90 m long and a few metres deep,
+// different for every wave `m`, so a bore is never a ruled band of constant width.
+fn sf_crest_lobes(along: f32, m: f32) -> f32 {
+    let w = sin(along * 0.043 + m * 1.9) * 1.3;
+    return 0.045 * sin(along * 0.17 + m * 2.71 + w) + 0.03 * sin(along * 0.071 + m * 4.3 - w * 0.6) + 0.02 * sin(along * 0.29 + m * 5.3 + w * 0.4);
+}
+
+// The whitewater's edges torn: the solid core is kept, its front and trailing foam break into
+// tongues and rafts. A noise in the bore's own frame (`x` metres from the crest), so
+// the tatters ride shoreward with the bore and differ from wave to wave.
+fn sf_tatter(ww: f32, along: f32, x: f32, m: f32) -> f32 {
+    if (ww <= 0.002) {
+        return ww;
+    }
+    let r = mx_noise2(vec2<f32>(along * 0.3, x * 0.45 + m * 7.1)) * 0.9;
+    return clamp(ww + 1.6 * r * ww * (1.0 - ww), 0.0, 1.0) * (1.0 + 0.12 * r);
+}
+
+// The swash's run-up scalloped along the shore: tongues and cusps 4-12 m apart (a ridged sine,
+// sharp where two lobes meet), different for every bore `m`. A factor on the run-up.
+fn sf_swash_cusp(along: f32, m: f32) -> f32 {
+    let w = 0.9 * sin(along * 0.13 + m * 1.3);
+    let ridged = 1.0 - 2.0 * abs(sin(along * 0.31 + m * 1.7 + w));
+    return 1.0 + 0.07 * ridged + 0.05 * sin(along * 0.67 + m * 3.1) + 0.035 * sin(along * 0.23 + m * 5.3 + w);
+}
+
+// The surf's share of a pixel's foam cover, as `w_shade`'s foam opacity reads it: the open
+// Pacific's surf only (the bay's small beach surf keeps the sea's foam light), and zero in the surf
+// strip's own fragments (the strip lights its own foam). Under a storm's deck most of the
+// weight stays with the sea's own foam light: with the churned field fully lit, its gaps read as
+// dark holes.
+fn sf_foam_share(foam: f32, surf_cov: f32, beach: f32, x: f32) -> f32 {
+    return (1.0 - sf_inj.on) * (1.0 - 0.7 * w_storm()) * wg_smooth(0.35, 0.6, wg_ocean(x)) * beach * clamp(surf_cov / max(foam, 1e-3), 0.0, 1.0) * wg_smooth(0.0, 0.02, foam);
+}
+
+// The sky's irradiance on a level diffuser, over pi (the radiance of a white one). Under a deck a
+// level surface sees the deck's bright zenith: for the CIE overcast sky, L = Lz (1 + 2 cos z) / 3,
+// so E / pi = 7/9 Lz, 2.3 x the horizon's Lz / 3. Here 2.3 x the rig's horizon colour under a
+// deck (1.6 x in a storm), which is about 1.7 x the horizon the frame draws there (foam brighter
+// than that stood out as self-lit under a grey sky); 0.85 x under a clear sky, where the dome
+// overhead is darker than the horizon. The colour is two thirds the horizon's and a third the
+// rig's sky hemisphere (a level diffuser sees the whole sky, the warm belt round a low sun
+// included, not only the blue overhead), more than half neutral. No texture taps: the rig's
+// uniforms only.
+fn sf_sky_irradiance(deck: f32) -> vec3<f32> {
+    let hz = look.horizon.xyz;
+    let hz_l = max(lk_luma(hz), 1e-6);
+    let hs = look.hemi_sky.xyz;
+    let c = mix(hs / max(lk_luma(hs), 1e-6), hz / hz_l, 0.65);
+    let tint = mix(c, vec3<f32>(1.0), 0.55 + 0.45 * deck);
+    return tint * hz_l * mix(0.85, 2.3, deck) * (1.0 - 0.3 * w_storm());
+}
+
+// The surf's foam as a white diffuser lit by the light it receives: the sun where it reaches it
+// (the cascades, the cloud decks) and the whole sky over it. Albedo 0.8 for thick fresh
+// whitewater, 0.45 for thin aging foam (fewer bubbles, the water between them showing), the
+// lumps lighter and darker with the foam's relief. Its top faces the sky (the bubbles scatter
+// every way), the wave's tilt a little. Replaces `old`, the sea's foam light (held at the sky's
+// own brightness), by the surf's `share`.
+fn sf_foam_light(old: vec3<f32>, foam: f32, share: f32, n: vec3<f32>, shadow: f32, relief: f32, v: vec3<f32>) -> vec3<f32> {
+    if (share <= 0.001) {
+        return old;
+    }
+    let deck = clamp(max(look.wx.x, w_storm()), 0.0, 1.0);
+    let alb = mix(0.45, 0.8, wg_smooth(0.3, 0.95, foam)) * (relief * 0.3 + 0.85) * (1.0 - 0.2 * w_storm());
+    let nf = normalize(vec3<f32>(n.x * 0.4, 1.0, n.z * 0.4));
+    // A lumpy bubble cluster, not a plane: its side faces catch a low sun, so the sun's cosine
+    // is wrapped a little (0.27 at 7 degrees of sun, 0.89 at noon).
+    let l = look.key_dir.xyz;
+    let cos_e = max(dot(nf, l), 0.0) * 0.6 + 0.4 * clamp(l.y * 0.5 + 0.35, 0.0, 1.0) * wg_smooth(-0.05, 0.05, l.y);
+    // Looking toward a low sun the eye sees the lumps' shaded sides: the sun's share drops.
+    let toward = wg_smooth(0.2, 0.9, dot(normalize(-v.xz + vec2<f32>(1e-5, 0.0)), normalize(l.xz + vec2<f32>(1e-5, 0.0)))) * wg_smooth(0.6, 0.15, l.y);
+    let sun = look.key.xyz * cos_e * shadow * (1.0 - 0.85 * clamp(look.wx.x, 0.0, 1.0)) * (1.0 - 0.55 * toward) / WG_PI;
+    let rad = alb * (sun + sf_sky_irradiance(deck));
+    return mix(old, rad, share);
+}
+
+// Foam is a diffuser: where the surf's foam covers the water the sun's mirror glint and its
+// sparkle are gone (the sea keeps a tenth of it under its own foam); thin lace lets the glint
+// through its holes only.
+fn sf_glint_cut(foam: f32, share: f32) -> f32 {
+    return mix(1.0 - 0.9 * foam, 1.0 - wg_smooth(0.04, 0.45, foam), share);
+}
+
+// The spray over the breaking crests and the bores (`over`) is a cloud of droplets lit as the
+// foam is (sun and sky) rather than by the dim ambient, so it whitens the crest instead of
+// greying it; the thin veil over the sea past the break (`veil`) keeps the sea's haze colour.
+fn sf_spray_colour(haze: vec3<f32>, over: f32, veil: f32, shadow: f32, v: vec3<f32>, x: f32) -> vec3<f32> {
+    if (over <= 0.001 || sf_inj.on > 0.5 || wg_ocean(x) < 0.35) {
+        return haze;
+    }
+    let spray = sf_foam_light(vec3<f32>(0.0), 0.6, 1.0, vec3<f32>(0.0, 1.0, 0.0), shadow, 0.0, v);
+    return mix(haze, max(spray, haze), over / max(over + veil, 1e-4) * (1.0 - 0.7 * w_storm()));
+}
+
+// A cheap smooth field in about -1..1 (two products of warped sines), for slow patchiness where
+// a noise evaluation per pixel would cost too much.
+fn sf_warped_field(q: vec2<f32>) -> f32 {
+    let a = sin(q.x + 1.7 * sin(q.y * 0.61 + 0.3)) * sin(q.y + 1.3 * sin(q.x * 0.53 + 1.1));
+    let b = sin(q.x * 1.9 - 1.1 * sin(q.y * 1.3 + 2.0)) * sin(q.y * 2.1 + 0.9 * sin(q.x * 1.7 + 0.4));
+    return a * 0.7 + b * 0.3;
+}
+
+// How much of the aged foam survives, in a slow field (about 11 m, riding shoreward with the bores):
+// rafts where it lingers, clearer water where it has gone.
+fn sf_aged_patches(old: f32, p: vec2<f32>, shoreward: vec2<f32>, t: f32) -> f32 {
+    if (wg_ocean(p.x) < 0.35 || length(p - wu.cam.xz) > 250.0) {
+        return old;
+    }
+    let q = p - shoreward * (t * 0.6);
+    let n = sf_warped_field(q * 0.09);
+    return clamp(old * mix(0.6, 1.3, wg_smooth(-0.45, 0.45, n)), 0.0, 1.0);
+}
+
+// The spray's amount over the fresh whitewater (`ww`) and over the foam left on a
+// bore's back (`bored_lift`), in puffs (0.7 to full strength; full in a storm). None over the last bores
+// within a few metres of the sand, where it lay as a smooth milky band across the swash. Half of
+// it at a grazing view (`vy`, the view direction's rise): along the surface the veil reads as a
+// smooth ribbon, from above as foam fading behind each bore.
+fn sf_spray_amount(ww: f32, bored_lift: f32, signed: f32, p: vec2<f32>, t: f32, vy: f32) -> f32 {
+    if (wg_ocean(p.x) < 0.35) {
+        return clamp(ww * 0.45 + bored_lift * 0.35, 0.0, 1.0);
+    }
+    let over = (ww * 0.45 + bored_lift * 0.35) * mix(0.5, 1.0, wg_smooth(0.04, 0.2, abs(vy)));
+    if (over <= 0.001) {
+        return 0.0;
+    }
+    var puff = 0.3;
+    if (length(p - wu.cam.xz) < 300.0) {
+        puff = sf_warped_field(p * 0.12 + vec2<f32>(t * 0.03, -t * 0.02));
+    }
+    return clamp(over, 0.0, 1.0) * wg_smooth(3.0, 15.0, signed) * mix(mix(0.7, 1.0, wg_smooth(-0.55, 0.35, puff)), 1.0, w_storm());
+}
+
+// A bore's fresh whitewater from its profile `ww`: dense on the roller (lumpy, solid at its very front);
+// behind it the density follows the lace's cells and strands, torn by 1-3 m turbulence riding
+// shoreward with the bore, not a smooth bar. The last bores near the sand (`inner` under 1) are
+// torn into lace rather than thinned into a translucent band.
+fn sf_fresh_foam(ww: f32, lace: f32, p: vec2<f32>, shoreward: vec2<f32>, t: f32, inner: f32) -> f32 {
+    if (wg_ocean(p.x) < 0.35) {
+        return wg_smooth(0.25, 0.7, ww) * (0.82 + 0.18 * lace) * inner;
+    }
+    let ws = wg_smooth(0.25, 0.7, ww);
+    if (ws <= 0.001) {
+        return 0.0;
+    }
+    let q = p - shoreward * (t * 1.2);
+    var n = 0.0;
+    if (length(p - wu.cam.xz) < 250.0) {
+        n = mx_noise(vec3<f32>(q * 0.6, t * 0.4));
+    }
+    let tex = wg_smooth(0.15, 0.85, lace + 0.35 * n);
+    let core = wg_smooth(0.85, 1.0, ww);
+    // In a storm the churned whitewater is graded rather than holed.
+    let body = ws * mix(mix(0.4 + 0.6 * tex, 0.75 + 0.25 * tex, w_storm()), mix(0.8 + 0.2 * tex, 1.0, wg_smooth(0.93, 1.0, ww)), core);
+    let torn = wg_smooth(0.62 - 0.5 * inner, 0.8 - 0.45 * inner, lace + 0.25 * n);
+    return body * mix(torn, 1.0, wg_smooth(0.5, 0.95, inner));
 }

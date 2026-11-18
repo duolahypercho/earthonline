@@ -19,6 +19,8 @@
 const ENV_ASPHALT: i32 = 1;
 const ENV_SIDEWALK: i32 = 2;
 const ENV_PAINTED_METAL: i32 = 3;
+// A film of water over sand (the swash's wet band, landmarks_surface.wgsl): it reflects the environment strongly.
+const ENV_WET_FILM: i32 = 4;
 // GLAZING_PROBE_ROUGHNESS_FLOOR (src/render/materials/glazing-environment.js:
 // a 4-texel footprint on the 128 px probe).
 const GLAZING_ROUGHNESS_FLOOR: f32 = 0.152;
@@ -128,6 +130,8 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
         cls = look.env_class.w;
     } else if (s.env == ENV_PAINTED_METAL) {
         cls = ST_ENV_PAINTED_METAL;
+    } else if (s.env == ENV_WET_FILM) {
+        cls = 0.65 / max(look.ambient.w, 1e-3); // env_i 0.65 (at 1 the film reads as standing water)
     } else if (kind == 2u || kind == 6u || kind == 7u) {
         cls = look.env_class.z;
     } else if (kind == 1u) {
@@ -149,7 +153,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     let rnl = max(dot(n, rl), 0.0);
     let rim = look.rim.xyz * rnl;
     direct_d = direct_d + rim * diffuse / LK_PI;
-    direct_s = direct_s + rim * lk_ggx(n, v, rl, f0, rough);
+    direct_s = direct_s + rim * lk_ggx(n, v, rl, f0, rough) * select(1.0, 0.0, s.env == ENV_WET_FILM); // the rig's rim light draws no false sun in a water film
 
     // Indirect diffuse.
     let hemi = mix(look.hemi_ground.xyz, look.hemi_sky.xyz, n.y * 0.5 + 0.5);

@@ -191,7 +191,7 @@ fn w_swash(along: f32, t: f32, amp: f32) -> vec2<f32> {
     let u = phase - m;
     let a = min(sf_wave_amp(m, along) * amp, 0.7); // a dissipative beach's run-up stays under about 0.6 m
     // (no shorter than ~10 m: the front is where the grid's level meets the sand)
-    let cusp = 1.0 + 0.16 * sin(along * 0.19 + m * 2.3) + 0.1 * sin(along * 0.53 + m * 1.1);
+    let cusp = (1.0 + 0.16 * sin(along * 0.19 + m * 2.3) + 0.1 * sin(along * 0.53 + m * 1.1)) * sf_swash_cusp(along, m); // scalloped (water_surf.wgsl)
     let rise = wg_smooth(0.0, 0.2, u);
     let fall = 1.0 - wg_smooth(0.2, 0.98, u);
     return vec2<f32>(a * (0.9 * cusp * rise * pow(fall, 1.4) - 0.08), u);
@@ -962,10 +962,10 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         // (sea r2: as much foam as the waves have height: a sheltered bay beach
         // keeps a thin swash line, not the Pacific's surf lace)
         let sized = wg_smooth(0.12, 0.7, sa);
-        let fresh = wg_smooth(0.25, 0.7, s0.whitewater) * (0.82 + 0.18 * lace) * inner * sized;
+        let fresh = sf_fresh_foam(s0.whitewater, lace, p, fr.xy, t, inner) * sized; // broken behind the roller, torn into lace near the sand (water_surf.wgsl)
         // (in a storm the whole surf zone churns: whitewater stays dense between the bores)
         let churn = storm * sized * wg_smooth(-2.0, 25.0, signed) * wg_smooth(520.0, 260.0, signed) * 0.95; // (denser, wider)
-        let old = clamp(max((s0.bored * (0.8 * exp(-s0.age / 2.6) + 0.06) * sized + whitecap * (0.3 + 0.5 * storm)) * inner, churn), 0.0, 1.0);
+        let old = clamp(max(sf_aged_patches((s0.bored * (0.8 * exp(-s0.age / 2.6) + 0.06) * sized + whitecap * (0.3 + 0.5 * storm)) * inner, p, fr.xy, t), churn), 0.0, 1.0); // aged foam in rafts and clearings (water_surf.wgsl)
         let torn = wg_smooth(1.0 - old, 1.14 - old, lace);
         surf_cov = max(fresh, torn) * wg_smooth(-4.0, 0.5, signed) * sf_hand; // x sf_hand
         surf_face = clamp(s0.face * 1.5, 0.0, 1.0) * sized;
@@ -1184,7 +1184,7 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         // `key_envelope`), so the glitter path ends at sunset while the clouds are still
         // lit; drive this (and the low-sun body light) from the sky slice's sun radiance
         // through the atmosphere when it lands as a sky uniform.
-        glint = key_g * spec * shadow * (1.0 - sun_hidden) * (1.0 - sf_inj.spec_cut) * (1.0 - 0.9 * foam); // the sea's own foam is a diffuser too. surf: foam drawn over the strip takes no mirror glint
+        glint = key_g * spec * shadow * (1.0 - sun_hidden) * (1.0 - sf_inj.spec_cut) * sf_glint_cut(foam, sf_foam_share(foam, surf_cov, beach, p.x)); // no glint on the surf's foam (water_surf.wgsl); the sea's own foam is a diffuser too, and foam drawn over the strip takes no mirror glint
     }
 
     // --- the water column: refracted view ray, path to the bottom in the frame.
@@ -1272,7 +1272,7 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // (a white diffuser under the whole sky sits near the sky's own brightness, a little under it)
     // (under an overcast the zenith is brighter than the horizon, so foam lit by the whole dome sits a little over the horizon sky)
     let foam_amb = amb_raw * (mix(0.92, 1.2, clamp(look.wx.x, 0.0, 1.0)) * max(lk_luma(dome), lk_luma(look.horizon.xyz)) / max(lk_luma(amb_raw), 1e-6));
-    let foam_rad = foam_tone * 0.88 * (look.key.xyz * ndl * shadow * (1.0 - 0.85 * clamp(look.wx.x, 0.0, 1.0)) / WG_PI + foam_amb);
+    let foam_rad = sf_foam_light(foam_tone * 0.88 * (look.key.xyz * ndl * shadow * (1.0 - 0.85 * clamp(look.wx.x, 0.0, 1.0)) / WG_PI + foam_amb), foam, sf_foam_share(foam, surf_cov, beach, p.x), n, shadow, relief, v); // the surf's foam lit by the light it receives (water_surf.wgsl)
 
     // --- the fog (three's range fog on view depth).
     let fog = lk_smooth(look.fog.x, look.fog.y, sky_fog_depth(view_dist, world.y - look.cam_pos.y)); // the city's aerial path density
@@ -1337,10 +1337,10 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // the sky as foam is (no brighter than the sky in its mirror).
     if (beach > 0.01) {
         let lift = wg_smooth(0.0, 1.6, world.y - wu.grid.z);
-        let over = clamp(surf_ww * 0.45 + surf_bored * lift * 0.35, 0.0, 1.0);
+        let over = sf_spray_amount(surf_ww, surf_bored * lift, signed, p, wu.cam.w, v.y); // in puffs, none over the last bores, halved at grazing views (water_surf.wgsl)
         let veil = (0.16 + 0.3 * storm) * wg_smooth(60.0, 260.0, signed) * wg_smooth(1200.0 + 2000.0 * storm, 600.0, signed) * surf_veil(signed); // x surf_veil
         let hz = clamp((over + veil) * beach * (1.0 + 1.5 * storm), 0.0, 0.75) * (1.0 - fog);
-        let haze_col = min((hemi + look.ambient.xyz) / WG_PI * 0.85, dome * 0.95) + look.key.xyz * shadow * 0.012;
+        let haze_col = sf_spray_colour(min((hemi + look.ambient.xyz) / WG_PI * 0.85, dome * 0.95) + look.key.xyz * shadow * 0.012, over * beach, veil * beach, shadow, v, p.x); // the spray over the crests lit as the foam is (water_surf.wgsl)
         s.own = mix(s.own, haze_col, hz);
         s.through = s.through * (1.0 - hz);
         s.refl_k = s.refl_k * (1.0 - hz);

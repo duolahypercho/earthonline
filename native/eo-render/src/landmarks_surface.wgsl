@@ -364,6 +364,16 @@ fn lm_beach_swash_wet(s: ptr<function, Surface>, wp: vec3<f32>) {
     let soak = lm_ss(LM_SEA_LEVEL_Y + 0.3, LM_SEA_LEVEL_Y + 0.03, wp.y);
     (*s).albedo = mix((*s).albedo, (*s).albedo * vec3<f32>(0.5, 0.52, 0.56), wet * 0.9);
     (*s).rough = mix((*s).rough, mix(0.3, 0.08, soak), wet);
+    // The band the swash keeps running over lies under a film of water a few millimetres thick,
+    // in patches (drier between): the film half fills the sand's relief (the normal halfway to flat),
+    // is nearly smooth (0.07), reflects the environment at 0.65 of its radiance (ENV_WET_FILM,
+    // look_light.wgsl), and the sand under it is a tenth darker.
+    let patchy = lm_mx_noise(vec3<f32>(wp.x * 0.06, wp.z * 0.06, 5.1));
+    let film = lm_ss(LM_SEA_LEVEL_Y + 0.42, LM_SEA_LEVEL_Y + 0.12, wp.y + 0.12 * patchy) * lm_ss(0.0, 0.35, patchy + 0.1 * soak) * (0.55 + 0.45 * lm_ss(-0.3, 0.3, lm_mx_noise(vec3<f32>(wp.x * 0.7, wp.z * 0.7, 2.6))));
+    (*s).n = normalize(mix((*s).n, vec3<f32>(0.0, 1.0, 0.0), film * 0.5));
+    (*s).rough = mix((*s).rough, 0.07, film);
+    (*s).albedo = (*s).albedo * (1.0 - 0.1 * film);
+    (*s).env = ENV_WET_FILM;
 }
 
 // landmark-set.js `landmarkFog`: a landmark takes the scene's range fog with
