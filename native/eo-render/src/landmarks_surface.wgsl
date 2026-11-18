@@ -98,6 +98,7 @@ fn lm_surface(s: ptr<function, Surface>, m: Material, world: vec3<f32>, n: vec3<
         // `finish`, the sea's light on its faces turned down).
         rm_emit = rm_emit + lm_floodlit(world, n, (*s).albedo);
         if (LM_FINISH_ON) {
+            (*s).ao = (*s).ao * lm_bridge_sky_vis(world, n);
             rm_emit = rm_emit + lm_bridge_bounce(world, n, (*s).albedo, (*s).ao);
             lm_rim_vis = lm_bridge_rim();
         }
@@ -132,7 +133,7 @@ fn lm_surface(s: ptr<function, Surface>, m: Material, world: vec3<f32>, n: vec3<
         (*s).albedo = (*s).albedo * (vec3<f32>((1.0 + tone - abs(streak)) * grime) + chalk);
         if (bridge) {
             (*s).albedo = (*s).albedo * lm_bridge_plating(uv, du, dv, vertical);
-            (*s).ao = (*s).ao * lm_gg_deck_contact(world);
+            (*s).ao = (*s).ao * lm_gg_deck_contact(world) * lm_bridge_sky_vis(world, n);
             lm_key_vis = lm_deck_key(world);
             lm_rim_vis = lm_bridge_rim();
         }
@@ -160,6 +161,7 @@ fn lm_surface(s: ptr<function, Surface>, m: Material, world: vec3<f32>, n: vec3<
         let streak = lm_noise(vec3<f32>(uv.x * 2.3, uv.y * 0.11, 4.2)) * LM_CO_STREAK_TONE * vertical;
         (*s).albedo = (*s).albedo * vec3<f32>((1.0 + tone - abs(streak)) * wet);
         if (bridge) {
+            (*s).ao = (*s).ao * lm_bridge_sky_vis(world, n);
             lm_key_vis = lm_deck_key(world);
             lm_rim_vis = lm_bridge_rim();
             lm_bridge_tide(s, world, vertical);
@@ -354,9 +356,114 @@ fn lm_gg_deck_contact(p: vec3<f32>) -> f32 {
 fn lm_bridge_bounce_e(world: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
     let up = vec3<f32>(0.0, 1.0, 0.0);
     let key = look.key.xyz * max(look.key_dir.y, 0.0) * sky_cloud_transmittance(world);
-    let sky = look.hemi_sky.xyz + look.ambient.xyz + lk_sh(up) * look.ambient.w * look.env_class.x;
+    var env_i = look.ambient.w * look.env_class.x;
+    var ground = look.hemi_ground.xyz;
+    if (LM_DIELECTRIC_ON && lm_gg_over_water(world)) {
+        // (`dielectric`, the Golden Gate) the physical daylight fades the rig's
+        // ground out (eo-look phys.rs `apply`) and delivers the ground's light
+        // in the environment's lower hemisphere instead (its sky light over the
+        // land's albedo): the irradiance a face turned straight down takes from
+        // it is lk_sh(-up), the share a face sees (1 - n.y) / 2 of it. That is
+        // the light the sea's replaces, so it is what comes off, else the
+        // ground was counted twice. The sky's irradiance on the level is the
+        // environment's at its own intensity under the daylight (look_light's
+        // `env_i`), as the paint's diffuse takes it.
+        let w = lk_phys();
+        env_i = mix(env_i, 1.0, w);
+        ground = ground + lk_sh(-up) * w;
+    }
+    let sky = look.hemi_sky.xyz + look.ambient.xyz + lk_sh(up) * env_i;
     let share = clamp((1.0 - n.y) * 0.5, 0.0, 1.0);
-    return (LM_SEA_ALBEDO * (key + sky) - look.hemi_ground.xyz) * share;
+    return (LM_SEA_ALBEDO * (key + sky) - ground) * share;
+}
+
+// A point belongs to the Golden Gate (not the west span): the nearer of the two frames' origins.
+fn lm_is_gg(p: vec3<f32>) -> bool {
+    return distance(p.xz, LM_GG_ORIGIN) < distance(p.xz, LM_BAY_ORIGIN);
+}
+
+// A Golden Gate point over the strait (between the shore-end pylon and the
+// Marin anchorage): the sea under it is what its faces turned down see.
+fn lm_gg_over_water(p: vec3<f32>) -> bool {
+    let c = dot(p.xz - LM_GG_ORIGIN, LM_GG_AXIS);
+    return lm_is_gg(p) && c > LM_GG_WATER_C.x && c < LM_GG_WATER_C.y;
+}
+
+// The view factor from a point to a rectangle in a plane parallel to the
+// point's face, `c` away, with one corner on the face's normal and sides a
+// and b (Howell, "A Catalog of Radiation Heat Transfer Configuration
+// Factors", B-3: differential planar element to a parallel rectangle).
+fn lm_vf_rect(a: f32, b: f32, c: f32) -> f32 {
+    let x = max(a, 0.0) / max(c, 1e-3);
+    let y = max(b, 0.0) / max(c, 1e-3);
+    let sx = sqrt(1.0 + x * x);
+    let sy = sqrt(1.0 + y * y);
+    return (x / sx * atan(y / sx) + y / sy * atan(x / sy)) / (2.0 * 3.14159265);
+}
+
+// The share of the sky a Golden Gate face still sees (`shade2`): what the
+// screen-space occlusion misses at the bridge's distances (it is near 1 past
+// a few hundred metres), from the structure's own two large occluders, taken
+// off the indirect light only (the albedo bake it replaces dimmed the sun on
+// the face as well, and a face turned down twice: its environment irradiance
+// holds no sky).
+//  * The deck plate over a member under it (the truss, the floor beams, the
+//    legs under the roadway): an infinitely long strip of the deck's half
+//    width at the height over the point (Howell B-14 and B-15 for a
+//    differential strip under, beside and facing a parallel strip); a face
+//    turned up loses 0.5 (sin a + sin b) of its sky (a and b the edges'
+//    angles off the vertical), a face turned across 0.5 (1 - sin e) (e the
+//    near edge's elevation), a face turned along the span half the up face's.
+//  * The opposite leg over a leg's inner face between the legs: a rectangle
+//    the opposite leg's width along the span and the tower's height, facing
+//    the face across the gap (lm_vf_rect over its four quadrants).
+// The occluders' own reflected light (paint of a 0.14 albedo) is left out.
+fn lm_bridge_sky_vis(p: vec3<f32>, n: vec3<f32>) -> f32 {
+    if (!LM_SHADE2_ON || !lm_is_gg(p)) {
+        return 1.0;
+    }
+    let ax = LM_GG_AXIS;
+    let across = vec2<f32>(-ax.y, ax.x);
+    let rel = p.xz - LM_GG_ORIGIN;
+    let c = dot(rel, ax);
+    let u = dot(rel, across);
+    let na = dot(n.xz, across);
+    let nc = dot(n.xz, ax);
+    let horiz = max(abs(na) + abs(nc), 1e-4);
+    var f = 0.0;
+    // the deck.
+    let hw = LM_GG_DECK[7];
+    let dh = lm_gg_deck_top(c) - 0.3 - p.y;
+    if (c > LM_GG_DECK[0] && c < LM_GG_DECK[5] && dh > 0.05 && abs(u) < hw + 40.0) {
+        let ea = hw - u;
+        let eb = hw + u;
+        let f_up = 0.5 * (ea / sqrt(ea * ea + dh * dh) + eb / sqrt(eb * eb + dh * dh));
+        let e = max(select(eb, ea, na > 0.0), 0.0);
+        let f_side = 0.5 * (1.0 - dh / sqrt(dh * dh + e * e));
+        let f_vert = (abs(na) * f_side + abs(nc) * 0.5 * f_up) / horiz;
+        f = select((1.0 + n.y) * f_vert, n.y * f_up + (1.0 - n.y) * f_vert, n.y > 0.0);
+    }
+    // the opposite leg, over a leg's inner face.
+    let ct = select(0.0, LM_GG_SPAN, c > LM_GG_SPAN * 0.5);
+    let inward = -sign(u) * na;
+    if (abs(c - ct) < LM_GG_HALF_ALONG + 1.0 && abs(u) < LM_GG_HP && inward > 0.0) {
+        var ha = LM_GG_STAGES[0].w;
+        var hc = LM_GG_STAGES[0].z;
+        for (var i = 0u; i < LM_GG_STAGE_N; i = i + 1u) {
+            if (p.y >= LM_GG_STAGES[i].x) {
+                ha = LM_GG_STAGES[i].w;
+                hc = LM_GG_STAGES[i].z;
+            }
+        }
+        let gap = abs(u) + LM_GG_HP - hc;
+        let up_b = LM_GG_STAGES[LM_GG_STAGE_N - 1u].y - p.y;
+        let down_b = p.y - LM_GG_STAGES[0].x;
+        let a0 = ha + (c - ct);
+        let a1 = ha - (c - ct);
+        let leg = lm_vf_rect(a0, up_b, gap) + lm_vf_rect(a1, up_b, gap) + lm_vf_rect(a0, down_b, gap) + lm_vf_rect(a1, down_b, gap);
+        f = max(f, leg * inward);
+    }
+    return clamp(1.0 - f, 0.0, 1.0);
 }
 
 // The sea's light as outgoing Lambert radiance (added on the emission slot,

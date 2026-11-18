@@ -949,7 +949,9 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
     let orange = srgb_hex(if features.paint { INTERNATIONAL_ORANGE_SRGB } else { hex(d, "orangeSrgb") });
     let k = Colours {
         orange,
-        orange_dark: shade(orange, DARK),
+        // `shade2`: every painted member in the one paint (the JS's 0.62 stood
+        // for shade the renderer now draws: the struts read as dark grilles).
+        orange_dark: if features.shade2 { orange } else { shade(orange, DARK) },
         asphalt: srgb_hex(hex(d, "asphaltSrgb")),
         sidewalk: srgb_hex(hex(d, "sidewalkSrgb")),
         concrete: srgb_hex(hex(d, "concreteSrgb")),
@@ -984,12 +986,20 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
         far.box_(x, z, y0, y1, hx, hz, yaw, ctx.k.concrete, ALL);
     }
     // Past the sun's shadow reach the structure's own occlusion is baked in.
-    let inward = frame.inward();
-    let (dn, inw) = suspension::occlusion(0.62, 0.74);
-    orange_m.shade_occlusion(Some(&inward), dn, inw, 1.5);
-    concrete_m.shade_occlusion(Some(&inward), dn, suspension::occlusion(0.62, 0.86).1, 1.5);
-    deck_m.shade_occlusion(None, dn, inw, 1.5);
-    far.shade_occlusion(Some(&inward), dn, inw, 1.5);
+    // With `shade2` nothing is baked: the bake darkened the albedo, so the
+    // sun on an inward face lost it too, and a face turned down was darkened
+    // twice (the environment's irradiance on it already holds no sky). The
+    // renderer takes what the screen-space occlusion misses at a bridge's
+    // distance, the sky the deck and the opposite leg hide from a face, off
+    // the indirect light alone (eo-render landmarks_surface.wgsl `lm_bridge_sky_vis`).
+    if !(features.shade2 && features.finish) {
+        let inward = frame.inward();
+        let (dn, inw) = suspension::occlusion(0.62, 0.74);
+        orange_m.shade_occlusion(Some(&inward), dn, inw, 1.5);
+        concrete_m.shade_occlusion(Some(&inward), dn, suspension::occlusion(0.62, 0.86).1, 1.5);
+        deck_m.shade_occlusion(None, dn, inw, 1.5);
+        far.shade_occlusion(Some(&inward), dn, inw, 1.5);
+    }
 
     let r1 = |v: f64| (v * 10.0).round() / 10.0;
     let r2 = |v: f64| (v * 100.0).round() / 100.0;

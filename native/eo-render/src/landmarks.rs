@@ -528,6 +528,26 @@ fn bridges_wgsl(js: &eo_landmarks::LandmarksJs) -> String {
         arr(bay),
         eo_landmarks::bay_bridge::CORNER_ROUNDING_M
     ));
+    // the fourth pass's shading (`shade2`, `dielectric`): the Golden Gate's own sky
+    // occlusion (its deck line and its legs' stages) and its sea light counted once.
+    let g = eo_landmarks::golden_gate::data(js);
+    let w = js.sea_level_y;
+    let stages = g.leg_stages.iter().map(|st| format!("vec4<f32>({:.4}, {:.4}, {:.4}, {:.4})", w + st[0], w + st[1], st[2] / 2.0, st[3] / 2.0)).collect::<Vec<_>>();
+    // the chainages between which the Golden Gate stands over the strait (the
+    // shore-end pylon S1 to the Marin anchorage): the sea's light replaces the
+    // ground's there, the land's stays outside.
+    let site = eo_landmarks::golden_gate::Site::new(&g);
+    let ch = |k: &str| site.chainage(g.supports[k].centre[0], g.supports[k].centre[1]);
+    s.push_str(&format!("const LM_GG_WATER_C: vec2<f32> = vec2<f32>({:.3}, {:.3});\n", ch("archNorth"), ch("northAnchor")));
+    s.push_str(&format!(
+        "const LM_SHADE2_ON: bool = {};\nconst LM_DIELECTRIC_ON: bool = {};\nconst LM_GG_STAGE_N: u32 = {}u;\nconst LM_GG_STAGES: array<vec4<f32>, {}> = array<vec4<f32>, {}>({});\n",
+        feat.shade2 && feat.finish && gg.is_some(),
+        feat.dielectric && feat.finish,
+        stages.len(),
+        stages.len(),
+        stages.len(),
+        stages.join(", ")
+    ));
     s
 }
 

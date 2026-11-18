@@ -134,3 +134,25 @@ fn the_finish_makes_the_coats_dielectric() {
     eo_landmarks::suspension::finish_material("transamerica-pyramid", "cables", &mut other);
     assert_eq!((other.roughness, other.metalness), (0.45, 0.35));
 }
+
+/// The fourth pass's switches: each turns its own feature off and leaves the
+/// rest on; `--no-bridges4` is the third pass's output, and `--no-bridges3`
+/// and `--no-bridges2` take the fourth pass's features off with their own.
+#[test]
+fn the_fourth_pass_switches_turn_their_features_off() {
+    let one = |f: &str| BridgeFeatures::from_args(&[f]);
+    assert_eq!(one("--no-bridges4"), BridgeFeatures::THIRD);
+    assert!(BridgeFeatures::THIRD.finish && BridgeFeatures::THIRD.members && BridgeFeatures::THIRD.curtain);
+    let four = |f: BridgeFeatures| [f.shade2, f.dielectric, f.haunch, f.bracing, f.pylons, f.arch2, f.fender2, f.crest, f.collar];
+    assert!(four(one("--no-bridges3")).iter().all(|on| !on));
+    assert!(four(one("--no-bridges2")).iter().all(|on| !on));
+    let names = ["--no-bridge-shade2", "--no-bridge-dielectric", "--no-bridge-haunch", "--no-bridge-bracing", "--no-bridge-pylons", "--no-bridge-arch2", "--no-bridge-fender2", "--no-bridge-crest", "--no-bridge-collar"];
+    for (i, n) in names.iter().enumerate() {
+        assert!(SWITCHES.contains(n), "{n} is accepted");
+        let f = four(one(n));
+        for (j, on) in f.iter().enumerate() {
+            assert_eq!(*on, i != j, "{n}: feature {j}");
+        }
+        assert!(one(n).finish && one(n).members, "{n} keeps the third pass");
+    }
+}
