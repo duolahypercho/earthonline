@@ -919,6 +919,18 @@ mod tests {
     }
 
     #[test]
+    fn a_shot_names_its_day_and_its_sky() {
+        let v: Value = serde_json::from_str(r#"[{"name": "a", "eye": [0, 2, 0], "yaw": 0, "pitch": 0, "day_of_year": 103, "sky": "cirrus"}, {"name": "b", "eye": [0, 2, 0], "yaw": 0, "pitch": 0}]"#).unwrap();
+        let s = parse_specs(&v).unwrap();
+        assert_eq!(s[0].day, Some(103.0));
+        assert_eq!(s[0].sky, Some(eo_sky::clouds::SkyState::Cirrus));
+        assert_eq!((s[1].day, s[1].sky), (None, None));
+        for bad in [r#"[{"name": "a", "eye": [0, 2, 0], "yaw": 0, "pitch": 0, "day_of_year": 0}]"#, r#"[{"name": "a", "eye": [0, 2, 0], "yaw": 0, "pitch": 0, "sky": "storm"}]"#] {
+            assert!(parse_specs(&serde_json::from_str(bad).unwrap()).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
     fn shot_files_parse_both_geo_forms_and_local_poses() {
         let v: Value = serde_json::from_str(
             r#"[
