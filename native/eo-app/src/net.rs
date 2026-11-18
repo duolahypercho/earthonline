@@ -29,6 +29,10 @@
 //!                       (and no selfie phone; street people may wear a
 //!                       player's body again)
 //!   --no-name-tags      no name tags over them (and no tag depth probe)
+//!   --no-player-contact no ground contact under their bodies (the patches
+//!                       that darken the ground by the sky and sun each
+//!                       shoe, shin, thigh and crouched seat hides:
+//!                       `eo_agents::rig::contacts`)
 //!   --no-shared-sky     the hour and weather are this client's own
 //!                       (`--time-of-day`, `--weather`), not the server's
 //! In the window: 1 wave, 2 point, 3 sit (crouch), 4 photo, 0 stop;
@@ -100,11 +104,13 @@ pub struct Presence {
     pub tags: bool,
     /// The server's hour and weather (off: this client's own).
     pub shared_sky: bool,
+    /// Ground contact under the bodies (`eo_agents::rig::contact_instances`).
+    pub contact: bool,
 }
 
 impl Default for Presence {
     fn default() -> Self {
-        Self { bodies: true, tags: true, shared_sky: true }
+        Self { bodies: true, tags: true, shared_sky: true, contact: true }
     }
 }
 
@@ -193,6 +199,7 @@ fn parse(raw: &[String]) -> Result<(Args, NetOpts)> {
             "--no-hud" => o.hud = false,
             "--no-remote-bodies" => o.presence.bodies = false,
             "--no-name-tags" => o.presence.tags = false,
+            "--no-player-contact" => o.presence.contact = false,
             "--no-shared-sky" => o.presence.shared_sky = false,
             "--net-shots" => {
                 o.mode = Mode2::Shots;
@@ -704,6 +711,10 @@ impl NetSession {
                                 }
                                 if !player_models.contains(&b.model) {
                                     player_models.push(b.model);
+                                }
+                                // The ground under the shoes, shins and a crouch's seat.
+                                if self.presence.contact {
+                                    eo_agents::rig::contact_instances(lib, &b, b.pos[1], &mut agents.extras);
                                 }
                                 agents.extras.push(b);
                             }
