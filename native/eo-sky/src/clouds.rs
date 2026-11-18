@@ -178,7 +178,7 @@ const DRIFT_HIGH_MS: f64 = 18.0;
 /// draws one of three skies.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SkyState {
-    /// no cloud at all (a NOAA "clear" day, 0-3/10 sky cover, with nothing aloft).
+    /// no cloud at all.
     Cloudless,
     /// high ice cloud only: fibrous cirrus at `CIRRUS_ALT_M`.
     Cirrus,
@@ -213,14 +213,31 @@ impl SkyState {
     }
 }
 
-/// Mean number of clear days (0-3/10 mean daylight sky cover) and of cloudy
-/// days (8/10-10/10) per month, January first, at San Francisco airport:
-/// NOAA National Climatic Data Center, Comparative Climatic Data for the
-/// United States (normals 1981-2010, period of record ending 2015), as
-/// tabulated by month at ggweather.com/climate/clear.htm and cloudy.htm
-/// (public-domain US government data). The partly cloudy days are the rest.
-pub const SFO_CLEAR_DAYS: [f64; 12] = [9.0, 8.0, 10.0, 11.0, 14.0, 16.0, 21.0, 19.0, 18.0, 16.0, 11.0, 9.0];
-pub const SFO_CLOUDY_DAYS: [f64; 12] = [15.0, 13.0, 13.0, 10.0, 8.0, 5.0, 3.0, 3.0, 4.0, 7.0, 11.0, 14.0];
+/// The share of a month's clear days at San Francisco airport (KSFO) that
+/// are cloudless, cirrus-only and fair (scattered low cloud), January first.
+/// From the routine hourly METARs of 2014-2023 (NOAA/NWS ASOS observations,
+/// public domain, as archived by the Iowa Environmental Mesonet,
+/// mesonet.agron.iastate.edu/request/download.phtml), the reports of 10:00 to
+/// 16:59 local time: a day with broken or overcast cloud under 18,000 ft in
+/// over half of them is not a clear day and is left out; of the rest, a day
+/// with scattered or more cloud under 18,000 ft in two or more reports is
+/// fair, else one with any layer at or over 18,000 ft (cirrus height) in two
+/// or more is cirrus, else cloudless (INFERRED: the 18,000 ft line and the
+/// two-report thresholds). 182-286 days a month.
+pub const KSFO_CLEAR_DAY_SHARES: [[f64; 3]; 12] = [
+    [0.14, 0.53, 0.32],
+    [0.15, 0.60, 0.25],
+    [0.16, 0.51, 0.33],
+    [0.16, 0.61, 0.22],
+    [0.24, 0.46, 0.30],
+    [0.38, 0.38, 0.24],
+    [0.47, 0.33, 0.20],
+    [0.43, 0.31, 0.26],
+    [0.40, 0.41, 0.19],
+    [0.30, 0.50, 0.20],
+    [0.13, 0.62, 0.24],
+    [0.09, 0.58, 0.33],
+];
 const MONTH_DAYS: [f64; 12] = [31.0, 28.0, 31.0, 30.0, 31.0, 30.0, 31.0, 31.0, 30.0, 31.0, 30.0, 31.0];
 
 /// The month (0 = January) of a day of a common year (1 = 1 January).
@@ -235,21 +252,20 @@ pub fn month_of(day_of_year: f64) -> usize {
     11
 }
 
-/// The chance that a day of the month that is not cloudy is clear (0-3/10):
-/// clear / (days - cloudy) in `SFO_CLEAR_DAYS`.
-pub fn clear_share(month: usize) -> f64 {
-    let m = month.min(11);
-    SFO_CLEAR_DAYS[m] / (MONTH_DAYS[m] - SFO_CLOUDY_DAYS[m])
-}
-
-/// The clear rung's sky on a day of the year, drawn from the month's
-/// statistics with a hash of the day (the same day draws the same sky): a
-/// clear day is cloudless, a partly cloudy one the fair-weather sky. (No
-/// cited climatology splits the clear days into cloudless and cirrus ones,
-/// so cirrus is drawn only where a shot names it: `set_sky_state`.)
+/// The clear rung's sky on a day of the year, drawn from the month's shares
+/// (`KSFO_CLEAR_DAY_SHARES`) with a hash of the day: the same day draws the
+/// same sky.
 pub fn drawn_state(day_of_year: f64) -> SkyState {
     let u = hash01(0x5c1e_a7e5, day_of_year.floor().max(0.0) as u32, 17);
-    if u < clear_share(month_of(day_of_year)) { SkyState::Cloudless } else { SkyState::FairCumulus }
+    let [cloudless, cirrus, fair] = KSFO_CLEAR_DAY_SHARES[month_of(day_of_year)];
+    let u = u * (cloudless + cirrus + fair);
+    if u < cloudless {
+        SkyState::Cloudless
+    } else if u < cloudless + cirrus {
+        SkyState::Cirrus
+    } else {
+        SkyState::FairCumulus
+    }
 }
 
 static STATE: AtomicU8 = AtomicU8::new(0);
@@ -381,17 +397,19 @@ mod tests {
     }
     #[test]
     fn a_clear_day_draws_its_sky_from_the_month() {
-        // a summer month is clearer than a winter one; the draw is stable per day
-        assert!(clear_share(6) > clear_share(0));
-        assert!((0.0..=1.0).contains(&clear_share(11)));
+        for sh in KSFO_CLEAR_DAY_SHARES {
+            assert!((sh.iter().sum::<f64>() - 1.0).abs() < 0.02, "{sh:?}");
+        }
         assert_eq!(month_of(1.0), 0);
         assert_eq!(month_of(103.0), 3);
         assert_eq!(month_of(265.0), 8);
         assert_eq!(month_of(365.0), 11);
         assert_eq!(drawn_state(150.0), drawn_state(150.0));
-        // over the days of July the cloudless share is the month's clear share
-        let n = (182..213).filter(|d| drawn_state(*d as f64) == SkyState::Cloudless).count() as f64 / 31.0;
-        assert!((n - clear_share(6)).abs() < 0.3, "{n} {}", clear_share(6));
+        // over a year the draws follow the shares: every state turns up, summer is the most cloudless
+        let count = |m: std::ops::Range<u32>, k: SkyState| m.filter(|d| drawn_state(*d as f64) == k).count();
+        let all: Vec<usize> = [SkyState::Cloudless, SkyState::Cirrus, SkyState::FairCumulus].iter().map(|k| count(1..366, *k)).collect();
+        assert!(all.iter().all(|n| *n > 30), "{all:?}");
+        assert!(count(182..244, SkyState::Cloudless) > count(1..60, SkyState::Cloudless), "July-August against January-February");
     }
 
     #[test]
