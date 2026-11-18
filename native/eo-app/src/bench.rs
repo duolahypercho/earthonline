@@ -953,7 +953,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let (mut sh_cull, mut sh_draw, mut post) = (vec![], vec![], vec![]);
         let mut ao_pass = vec![]; // surfaces
         let mut probe_pass = vec![]; // facade
-        let mut sky_passes: [Vec<f64>; 5] = Default::default(); // sky
+        let mut sky_passes: [Vec<f64>; 6] = Default::default(); // the sky passes, then the cloud-shadow map
         let (mut water_fft, mut water_copy, mut water_pass) = (vec![], vec![], vec![]); // water
         let (mut occ_ms, mut late_draw, mut early_draw) = (vec![], vec![], vec![]); // occlusion
         if !qsets.is_empty() {
@@ -996,7 +996,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 let qp = eo_render::Q_PROBE as usize; // the scene probe's face (+ fill on a capture's last face)
                 probe_pass.push(ms(ts[b + qp], ts[b + qp + 1]));
                 // lights, fx (rain, luminaires, velocity), volume, resolve, bloom.
-                for (k, q) in [eo_render::sky::Q_SKY_LIGHTS, eo_render::sky::Q_SKY_FX, eo_render::sky::Q_SKY_VOLUME, eo_render::sky::Q_SKY_RESOLVE, eo_render::sky::Q_SKY_BLOOM].iter().enumerate() {
+                for (k, q) in [eo_render::sky::Q_SKY_LIGHTS, eo_render::sky::Q_SKY_FX, eo_render::sky::Q_SKY_VOLUME, eo_render::sky::Q_SKY_RESOLVE, eo_render::sky::Q_SKY_BLOOM, eo_render::sky::Q_CLOUD_SHADOW].iter().enumerate() {
                     sky_passes[k].push(ms(ts[b + *q as usize], ts[b + *q as usize + 1]));
                 }
                 // FFT (+ plain cull), the copy (the gap before the water pass), the water pass (+ the glass after the water).
@@ -1030,6 +1030,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 "sky_volume_pass_ms (shafts, marine layer, clouds; half resolution)": summary(&sky_passes[2]),
                 "sky_resolve_pass_ms (volume composite + TAA)": summary(&sky_passes[3]),
                 "sky_bloom_pass_ms": summary(&sky_passes[4]),
+                "sky_cloud_shadow_pass_ms (the cloud-shadow map)": summary(&sky_passes[5]),
                 "sky": sky_shots::describe(&renderer),
                 // water
                 "water_fft_pass_ms (FFT when water was seen lately, + the patch cull without occlusion)": summary(&water_fft),
@@ -1124,7 +1125,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         // sky
         if !sky_passes[0].is_empty() {
             println!(
-                "    sky (median / p95 ms): lights {:.3} / {:.3}, fx {:.3} / {:.3}, volume {:.3} / {:.3}, resolve {:.3} / {:.3}, bloom {:.3} / {:.3}",
+                "    sky (median / p95 ms): lights {:.3} / {:.3}, fx {:.3} / {:.3}, volume {:.3} / {:.3}, resolve {:.3} / {:.3}, bloom {:.3} / {:.3}, cloud shadow {:.3} / {:.3}",
                 percentile(&sky_passes[0], 50.0),
                 percentile(&sky_passes[0], 95.0),
                 percentile(&sky_passes[1], 50.0),
@@ -1135,6 +1136,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 percentile(&sky_passes[3], 95.0),
                 percentile(&sky_passes[4], 50.0),
                 percentile(&sky_passes[4], 95.0),
+                percentile(&sky_passes[5], 50.0),
+                percentile(&sky_passes[5], 95.0),
             );
         }
         // water
@@ -1212,6 +1215,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 ("gpu_sky_volume", sky_passes[2][k]),
                 ("gpu_sky_resolve", sky_passes[3][k]),
                 ("gpu_sky_bloom", sky_passes[4][k]),
+                ("gpu_cloud_shadow", sky_passes[5][k]),
                 ("gpu_props_cascade_cull", pr_cull.get(k).copied().unwrap_or(0.0)),
                 ("gpu_props_casters", pr_casters.get(k).copied().unwrap_or(0.0)),
                 ("gpu_props_wires", pr_wires.get(k).copied().unwrap_or(0.0)),

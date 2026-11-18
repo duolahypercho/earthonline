@@ -38,6 +38,8 @@ pub const Q_SKY_FX: u32 = 24;
 pub const Q_SKY_VOLUME: u32 = 26;
 pub const Q_SKY_RESOLVE: u32 = 28;
 pub const Q_SKY_BLOOM: u32 = 30;
+/// The cloud-shadow map's pass (and the noise bake on the first frame).
+pub const Q_CLOUD_SHADOW: u32 = 32;
 
 pub const LAMP_CAP: u32 = 65_536;
 pub const FRAME_LIGHT_CAP: u32 = 1024;
@@ -85,6 +87,9 @@ pub struct SkyOptions {
     pub atmosphere: bool,
     /// Contact shadows toward the key (`--no-contact-shadows`).
     pub contact: bool,
+    /// The fair-weather cumulus field, off by default (a clear sky keeps the high sheet
+    /// alone; the overcast, fog and rain decks are drawn either way); `EO_CUMULUS=1` draws it.
+    pub cumulus: bool,
     pub weather: WeatherMode,
     pub seed: u32,
     /// The world clock at the first frame (seconds since the world's epoch).
@@ -113,6 +118,7 @@ impl Default for SkyOptions {
             meter: true,
             atmosphere: true,
             contact: true,
+            cumulus: std::env::var("EO_CUMULUS").is_ok_and(|v| v == "1"),
             weather: WeatherMode::Preset(eo_sky::Kind::Clear),
             seed: eo_sky::world_seed(),
             world_time_s: 0.0,
@@ -143,6 +149,7 @@ impl SkyOptions {
             meter: false,
             atmosphere: false,
             contact: false,
+            cumulus: false,
             ..Self::default()
         }
     }
@@ -169,6 +176,7 @@ impl SkyOptions {
             (self.bloom, 1024),
             (self.sprites, 4096),
             (self.contact, 8192),
+            (self.cumulus, 16384), // SKY_CUMULUS
         ] {
             if on {
                 b |= bit;
@@ -674,7 +682,7 @@ impl SkyGpu {
         let atmo_bgs = [atmo_bg(0, &dummy_view, &dummy_view), atmo_bg(1, &atmo_views[0], &dummy_view), atmo_bg(2, &atmo_views[0], &atmo_views[1])];
         let volume_pipe = compute("sky_volume", &layout("sky-volume-layout", &volume_bgl), &vm, "vol_main");
         // the cloud noise, blue noise and cloud-shadow map (the shadow pass is the volume module's `cl_shadow_main`)
-        let clouds = crate::clouds::CloudGpu::new(d, crate::clouds::ShadowInputs { module: &vm, look_buf: init.look_buf, sky_uniform: &uniform, sheet: &sheet_view, repeat: &rep });
+        let clouds = crate::clouds::CloudGpu::new(d, crate::clouds::ShadowInputs { module: &vm, look_buf: init.look_buf, sky_uniform: &uniform, sheet: &sheet_view, repeat: &rep, sky_view: &atmo_views[2], linear: &lin });
         // the reconstruction: this frame's traced quarter, the last frame's full-resolution volume, out.
         let recon_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("sky-recon-bgl"),
@@ -1361,7 +1369,7 @@ impl SkyGpu {
             }
         }
         // the cloud noise (once) and this frame's cloud-shadow map, before the city pass reads it
-        self.clouds.encode(enc);
+        self.clouds.encode(enc, ts.map(|(q, b)| (q, b + Q_CLOUD_SHADOW)));
         let mut s = self.state.lock().unwrap();
         let on = s.opts.lights;
         enc.clear_buffer(&self.counter, 0, None);

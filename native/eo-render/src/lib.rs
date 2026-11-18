@@ -65,7 +65,7 @@ pub const DRAW_ARGS_BYTES: u64 = 20;
 /// shadow depth begin/end, post begin/end, (surfaces) AO begin/end, then
 /// (occlusion) pyramid + late cull begin/end and late city pass begin/end.
 /// Post is the last pass executed whatever its slot.
-pub const QUERIES_PER_FRAME: u32 = 32; // +10 (sky::Q_SKY_*, slots 22-31) // water: +4 (Q_WATER_FFT, Q_WATER) // facade: +2 for the scene probe (Q_PROBE) // surfaces: +2 for the AO pass (look::Q_AO); +4
+pub const QUERIES_PER_FRAME: u32 = 34; // +2 (sky::Q_CLOUD_SHADOW, slots 32-33) // +10 (sky::Q_SKY_*, slots 22-31) // water: +4 (Q_WATER_FFT, Q_WATER) // facade: +2 for the scene probe (Q_PROBE) // surfaces: +2 for the AO pass (look::Q_AO); +4
 /// timestamp slots of the pyramid + late cull pass and the late city pass.
 pub const Q_OCCLUSION: u32 = 12;
 pub const Q_LATE_DRAW: u32 = 14;

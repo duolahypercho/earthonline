@@ -77,7 +77,9 @@ fn rc_main(@builtin(global_invocation_id) gid: vec3<u32>) {
             dw = select(0.001, 1.0, z < 0.0);
         } else if (z >= 0.0) {
             dw = exp(-abs(z - dist) / (0.04 * dist + 0.5)) + 0.001;
-            if (dist > 3000.0 && z > 3000.0) {
+            // and only within a factor of 2 of the pixel's own depth, as in sky_resolve, so a tower
+            // 3-5 km off does not take the land 10+ km behind it
+            if (dist > 3000.0 && z > 3000.0 && z < 2.0 * dist && dist < 2.0 * z) {
                 dw = max(dw, 0.5);
             }
         }

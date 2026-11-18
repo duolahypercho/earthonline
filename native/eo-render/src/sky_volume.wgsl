@@ -205,6 +205,40 @@ fn vol_atmo_disc(d: vec3<f32>) -> vec3<f32> {
     return vol_atmo_sun_t(skyu.eye.y) * vol_atmo_gain() * 3000.0 * limb;
 }
 
+/// The sky's light on the clouds, from the atmosphere tables: `amb` the whole sky's
+/// mean (the light from below takes half of it), `zen` the zenith x 1.2 (a twilight top),
+/// `top` the upper sky as a surface facing up sees it (the zenith and a ring 35 deg up: the
+/// sky's blue, not the pale horizon), `sun` / `anti` the half of the sky a side faces
+/// toward the sun or away from it. Made once a frame by the cloud-shadow pass (sky_clouds
+/// `cl_shadow_main`, five table reads) into five texels of its map.
+struct ClSky {
+    amb: vec3<f32>,
+    zen: vec3<f32>,
+    top: vec3<f32>,
+    sun: vec3<f32>,
+    anti: vec3<f32>,
+};
+
+fn cl_sky_light() -> ClSky {
+    let sun_h = normalize(vec3<f32>(skyu.atmo.x, 0.0, skyu.atmo.z) + vec3<f32>(1e-5, 0.0, 0.0));
+    let side = vec3<f32>(-sun_h.z, 0.0, sun_h.x);
+    let zz = vol_atmo_sky(vec3<f32>(0.0, 1.0, 0.0));
+    let zen = zz * 1.2;
+    // the rings 35 deg up: lower rings are pale, near the horizon's white, and the shaded
+    // side of a cloud comes out light grey or, at a low sun, brown
+    let e2 = 0.7;
+    let ss2 = vol_atmo_sky(normalize(sun_h + vec3<f32>(0.0, e2, 0.0)));
+    let aa2 = vol_atmo_sky(normalize(-sun_h + vec3<f32>(0.0, e2, 0.0)));
+    let s12 = vol_atmo_sky(normalize(side + vec3<f32>(0.0, e2, 0.0)));
+    let s22 = vol_atmo_sky(normalize(-side + vec3<f32>(0.0, e2, 0.0)));
+    let top = 0.55 * zz + 0.45 * (ss2 + aa2 + s12 + s22) * 0.25;
+    // (five table reads: the whole-sky mean from the zenith and the ring)
+    let amb = (zz + (ss2 + aa2 + s12 + s22) * 0.25) * 0.5;
+    let sun = 0.4 * zz + 0.6 * (0.5 * ss2 + 0.25 * (s12 + s22));
+    let anti = 0.4 * zz + 0.6 * (0.5 * aa2 + 0.25 * (s12 + s22));
+    return ClSky(amb, zen, top, sun, anti);
+}
+
 /// Metres a half-resolution pixel spans at distance `t`.
 fn vol_footprint(t: f32) -> f32 {
     return t * 4.0 * skyu.cluster.z * skyu.res.w;
@@ -352,26 +386,6 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // atmosphere at the deck's height (reddened, and kept after the ground's
     // sunset until the planet hides it) and the sky's own light for their ambient.
     let atmo_on = skyu.atmo2.x > 0.5;
-    var atmo_amb = vec3<f32>(0.0);
-    var atmo_zen = vec3<f32>(0.0); // the zenith x 1.2, the twilight cloud tops' light
-    // the sky toward the sun and away from it (a cloud's sides take the half of the
-    // sky they face), each the mean of its low ring and the zenith
-    var atmo_sun = vec3<f32>(0.0);
-    var atmo_anti = vec3<f32>(0.0);
-    if (atmo_on) {
-        let sun_h = normalize(vec3<f32>(skyu.atmo.x, 0.0, skyu.atmo.z) + vec3<f32>(1e-5, 0.0, 0.0));
-        let side = vec3<f32>(-sun_h.z, 0.0, sun_h.x);
-        let e = 0.26;
-        let zz = vol_atmo_sky(vec3<f32>(0.0, 1.0, 0.0));
-        let ss = vol_atmo_sky(normalize(sun_h + vec3<f32>(0.0, e, 0.0)));
-        let aa = vol_atmo_sky(normalize(-sun_h + vec3<f32>(0.0, e, 0.0)));
-        let s1 = vol_atmo_sky(normalize(side + vec3<f32>(0.0, e, 0.0)));
-        let s2 = vol_atmo_sky(normalize(-side + vec3<f32>(0.0, e, 0.0)));
-        atmo_amb = (zz * 2.0 + ss + aa + s1 + s2) / 6.0;
-        atmo_zen = zz * 1.2;
-        atmo_sun = (ss * 2.0 + s1 + s2 + zz * 2.0) / 6.0;
-        atmo_anti = (aa * 2.0 + s1 + s2 + zz * 2.0) / 6.0;
-    }
     var L = vec3<f32>(0.0);
     var T = 1.0;
     var tdisc = 0.0;
@@ -543,20 +557,8 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // side the viewer sees (looking toward the sun, the side away from it), the light from
     // below (the ground's bounce, the sky low round it; the city's glow and the twilight
     // toward the set sun are added per sample, by position).
-    var a_top = skyu.amb_top.xyz;
-    var a_side = skyu.amb_top.xyz;
-    var a_bot = skyu.amb_base.xyz;
     let cl_l = cl_light_dir();
     let cl_cs = dot(dir, cl_l);
-    if (atmo_on) {
-        a_top = mix(a_top, atmo_amb, skyu.atmo2.y);
-        // after sunset a cloud's top sees the blue zenith, not the whole-sky average
-        a_top = mix(a_top, atmo_zen, 0.35 * smoothstep(0.02, -0.06, skyu.atmo.y));
-        let lh = normalize(vec2<f32>(cl_l.x, cl_l.z) + vec2<f32>(1e-5, 0.0));
-        let vh = normalize(dir.xz + vec2<f32>(1e-5, 0.0));
-        a_side = mix(a_side, mix(atmo_sun, atmo_anti, 0.5 + 0.5 * dot(vh, lh)), skyu.atmo2.y);
-        a_bot = mix(a_bot, skyu.amb_base.xyz * 0.4 + atmo_amb * 0.5, skyu.atmo2.y);
-    }
     // under a heavy deck (rain, storm) no sun reaches the base or the high sheet
     let heavy = smoothstep(0.03, 0.18, skyu.cloud1.w);
     if (sky_on(bits, SKY_CLOUDS) && skyu.cloud0.z > 0.0) {
@@ -589,13 +591,34 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
         // (at most 16 km of the shell along a grazing ray, from at most 60 km out: past that the
         // field has sunk into the horizon haze)
-        t1 = min(min(t1, t0 + 16000.0), dist);
-        if (t0 >= 0.0 && t1 > t0 && t0 < 60000.0) {
+        t1 = min(min(min(t1, t0 + 16000.0), 45000.0), dist); // (past 45 km the field is >85 % haze)
+        // no cumulus field unless EO_CUMULUS=1 (sky_clouds `cl_low_deck_on`)
+        let march = t0 >= 0.0 && t1 > t0 && t0 < 60000.0 && cl_low_deck_on();
+        let high = dist > 1e8 && dir.y > 0.0 && skyu.cloud1.z > 0.0;
+        var a_top = skyu.amb_top.xyz;
+        var a_side = skyu.amb_top.xyz;
+        var a_bot = skyu.amb_base.xyz;
+        if (atmo_on && (march || high)) {
+            // made once a frame by the cloud-shadow pass (sky_clouds `cl_shadow_main`)
+            let sk = ClSky(textureLoad(cl_shadow, vec2<i32>(0, 0), 0).gba, textureLoad(cl_shadow, vec2<i32>(1, 0), 0).gba, textureLoad(cl_shadow, vec2<i32>(2, 0), 0).gba, textureLoad(cl_shadow, vec2<i32>(3, 0), 0).gba, textureLoad(cl_shadow, vec2<i32>(4, 0), 0).gba);
+            a_top = mix(a_top, sk.top, skyu.atmo2.y);
+            // after sunset a cloud's top sees the blue zenith, not the whole-sky average
+            a_top = mix(a_top, sk.zen, 0.35 * smoothstep(0.02, -0.06, skyu.atmo.y));
+            let lh = normalize(vec2<f32>(cl_l.x, cl_l.z) + vec2<f32>(1e-5, 0.0));
+            let vh = normalize(dir.xz + vec2<f32>(1e-5, 0.0));
+            a_side = mix(a_side, mix(sk.sun, sk.anti, 0.5 + 0.5 * dot(vh, lh)), skyu.atmo2.y);
+            a_bot = mix(a_bot, skyu.amb_base.xyz * 0.4 + sk.amb * 0.5, skyu.atmo2.y);
+        }
+        if (march) {
             let hl = length(dir.xz);
             let sig_max = skyu.cloud1.x * skyu.cloud0.w * CL_DENSITY;
             // Steps of ~20 m near the eye growing with distance (a pixel's footprint), up to
             // 4 x the quality's count; empty space crossed 3 x as fast.
-            let max_steps = i32(skyu.amb_base.w) * 4;
+            // (a ray that meets the shell farther out takes fewer: the far field is faded into the
+            // haze, and the horizon rows are the sea views' cost)
+            // (x 3 from 5 km: the elevated and aerial views' main load)
+            // (x 1.5 from 15 km, as far at the 4 x empty steps)
+            let max_steps = select(select(i32(skyu.amb_base.w) * 4, i32(skyu.amb_base.w) * 3, t0 > 5000.0), (i32(skyu.amb_base.w) * 3) / 2, t0 > 15000.0);
             var Tc = 1.0;
             var Lc = vec3<f32>(0.0);
             var tw = 0.0;
@@ -603,36 +626,51 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
             // Coarse steps (3 x) on the shape alone through empty air; on a hit, one coarse step
             // back and fine steps with the full density until 6 come up empty (Schneider 2017).
             // The jitter shifts the whole lattice of a ray's samples by a fraction of a step.
-            var t = t0 + jit * 3.0 * clamp(16.0 + 0.005 * t0, 16.0, 800.0);
+            // past 12 km the empty air is crossed 4 x as fast (the far field's rays reach their
+            // step limit otherwise); past 6 km 3 empty fine steps end a cloud, not 6
+            var t = t0 + jit * select(3.0, 4.0, t0 > 12000.0) * clamp(16.0 + 0.005 * t0 + 0.004 * max(t0 - 10000.0, 0.0), 16.0, 800.0);
             var fine = 0;
+            // the sun's light of the last sample, held once little of the pixel is left
+            var sun_held = vec3<f32>(-1.0);
             for (var i = 0; i < max_steps; i = i + 1) {
                 if (t >= t1) {
                     break;
                 }
-                let dt = clamp(16.0 + 0.005 * t, 16.0, 800.0);
+                let dt = clamp(16.0 + 0.005 * t + 0.004 * max(t - 10000.0, 0.0), 16.0, 800.0);
                 let pp = eye + dir * t;
                 let ht = t * hl;
                 let pc = vec3<f32>(pp.x, pp.y + ht * ht / (2.0 * CL_EARTH_R), pp.z);
                 let lod = clamp(log2(max(vol_footprint(t), 1.0) / 25.0), 0.0, 3.0);
+                let fine_n = select(6, 3, t > 6000.0);
                 if (fine == 0) {
+                    let cm = select(3.0, 4.0, t > 12000.0);
                     if (cl_shape(pc, lod).x > 0.0) {
-                        fine = 6;
-                        t = max(t - 3.0 * dt, t0);
+                        fine = fine_n;
+                        t = max(t - cm * dt, t0);
                     } else {
-                        t = t + 3.0 * dt;
+                        t = t + cm * dt;
                     }
                     continue;
                 }
                 let s = cl_density(pc, t, lod);
                 if (s.x > 0.002) {
-                    fine = 6;
+                    fine = fine_n;
                     let sig = sig_max * s.x;
                     let e_sun = cl_sun(pc.y) * heavy;
                     var sun = vec3<f32>(0.0);
-                    if (any(e_sun > vec3<f32>(0.0))) {
-                        let tl = cl_light_tau(pc, cl_l, t, lod, s.x);
+                    if (Tc < 0.3 && sun_held.x >= 0.0) {
+                        // under 30 % of the pixel left: the last sample's sun light
+                        sun = sun_held;
+                    } else if (any(e_sun > vec3<f32>(0.0))) {
+                        // past 20 km no light march: the optical depth of ~400 m of
+                        // the sample's own density (the far field is faded into the haze)
+                        var tl = vec2<f32>(400.0, 80.0) * s.x * sig_max;
+                        if (t <= 20000.0) {
+                            tl = cl_light_tau(pc, cl_l, t, lod, s.x);
+                        }
                         sun = e_sun * cl_ms(tl.x, tl.y, cl_cs) * CL_SUN_GAIN;
                     }
+                    sun_held = sun;
                     let amb = cl_ambient(a_top, a_side, a_bot + vol_extra_amb(pc, dir), s.y, s.x);
                     let ext = exp(-sig * dt);
                     let wgt = Tc * (1.0 - ext);
@@ -640,7 +678,8 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                     tw = tw + wgt * t;
                     twt = twt + wgt;
                     Tc = Tc * ext;
-                    if (Tc < 0.01) {
+                    // past 6 km 3 % left ends the ray (1 % near)
+                    if (Tc < select(0.01, 0.03, t > 6000.0)) {
                         break;
                     }
                 } else {
@@ -670,9 +709,16 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 let wb = pb.xz + skyu.cloud2.xy;
                 let nb = textureSampleLevel(cl_base, vol_rep, vec3<f32>(wb.x, base * 0.6, wb.y) / (CL_BASE_TILE * 2.0), 0.0);
                 let thick = smoothstep(0.2, 0.8, mix(nb.r, 0.625 * nb.g + 0.25 * nb.b + 0.125 * nb.a, 0.3));
-                let b2 = textureSampleLevel(vol_sheet, vol_rep, (pb.xz + skyu.cloud2.xy) / 640.0, 0.0).a;
+                // under rain the base also rolls: bands drawn out 3 : 1 along the onshore
+                // drift (x), darker where the deck above is thick; and the sheet's 600 m detail is
+                // read at the footprint's mip (at mip 0 it aliases into the deck's speckle).
+                let nr = textureSampleLevel(cl_base, vol_rep, vec3<f32>(wb.x, base * 0.6, wb.y * 3.0) / (CL_BASE_TILE * 2.0), 0.0);
+                let roll = smoothstep(0.25, 0.75, 0.6 * nr.g + 0.4 * nr.b);
+                let rain_w = smoothstep(2.0, 8.0, skyu.wet.z);
+                let thick2 = mix(thick, 0.55 * thick + 0.45 * roll, rain_w);
+                let b2 = textureSampleLevel(vol_sheet, vol_rep, (pb.xz + skyu.cloud2.xy) / 640.0, clamp(log2(max(vol_footprint(t0), 1.0) / 2.5), 0.0, 6.0)).a;
                 let k = strat * mix(0.8, 0.15, heavy) * smoothstep(0.02, 0.12, dir.y);
-                let mf = max(1.0 + k * ((1.0 - 2.0 * thick) * 0.7 + (2.0 * b2 - 1.0) * 0.3) * 1.6, 0.2);
+                let mf = max(1.0 + k * ((1.0 - 2.0 * thick2) * 0.85 + (2.0 * b2 - 1.0) * 0.15) * 1.6, 0.2);
                 // a raining deck's base is the source of the light under it (the light the
                 // rain veil in front of it is drawn with, section E): 1.35 x that light overhead,
                 // falling to 0.95 x it at the horizon, where the veil in front takes over, so the
@@ -690,16 +736,18 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 let sb0 = cl_hit(eye.y, dir, base - 350.0, false);
                 let sb1 = min(cl_hit(eye.y, dir, base - 60.0, false), sb0 + 4000.0);
                 if (sb0 > 0.0 && sb1 > sb0 && sb0 < 20000.0) {
-                    let ds = (sb1 - sb0) / 6.0;
+                    // (a 1.6 km tile read a mip softer, ten samples: at 0.8 km and mip 0 the rags are
+                    // thinner than the samples' spacing and stipple the deck)
+                    let ds = (sb1 - sb0) / 10.0;
                     var ts = 1.0;
                     var ls = vec3<f32>(0.0);
                     let lit = a_bot * 0.55;
-                    for (var i = 0; i < 6; i = i + 1) {
+                    for (var i = 0; i < 10; i = i + 1) {
                         let q = eye + dir * (sb0 + (f32(i) + jit) * ds);
                         let w = q.xz + skyu.cloud2.xy;
-                        let nq = textureSampleLevel(cl_base, vol_rep, vec3<f32>(w.x, q.y, w.y) / 800.0, 0.0);
+                        let nq = textureSampleLevel(cl_base, vol_rep, vec3<f32>(w.x, q.y * 2.0, w.y) / 1600.0, 1.0);
                         let hb = clamp((base - q.y) / 350.0, 0.0, 1.0);
-                        let dn = smoothstep(0.6, 0.85, 0.65 * nq.r + 0.35 * nq.g) * smoothstep(0.1, 0.3, hb) * (1.0 - smoothstep(0.7, 1.0, hb)) * smoothstep(4.0, 15.0, rate_s);
+                        let dn = smoothstep(0.5, 0.85, 0.65 * nq.r + 0.35 * nq.g) * smoothstep(0.1, 0.3, hb) * (1.0 - smoothstep(0.7, 1.0, hb)) * smoothstep(4.0, 15.0, rate_s);
                         let e = exp(-0.02 * dn * ds);
                         ls = ls + ts * lit * (1.0 - e);
                         ts = ts * e;
@@ -728,7 +776,7 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
         // (D) The high deck: one sheet at its altitude, sky only; lit by the same
         // sun as the low deck (the atmosphere's transmittance at its own height, the same
         // phase and octaves), so the two layers agree and the high one keeps the sun longest.
-        if (dist > 1e8 && dir.y > 0.0 && skyu.cloud1.z > 0.0) {
+        if (high) {
             let t = cl_hit(eye.y, dir, skyu.cloud1.y, false);
             if (t > 0.0) {
                 let p = eye + dir * t;

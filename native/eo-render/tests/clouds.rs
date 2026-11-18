@@ -1,8 +1,9 @@
 //! the cloud noise bake on the GPU (needs a GPU). The base-shape and
 //! detail volumes and the curl field fill their range, tile seamlessly on every
 //! axis (the step across the wrap is no larger than a step inside), and carry no
-//! layering along an axis (the slices' means stray from the volume's mean about as
-//! much along every axis; a layered volume strays far more along one).
+//! layering along an axis: the mean step between neighbouring texels is the same along
+//! every axis (every lattice of the bake has the same period on all three axes, so the
+//! noise is isotropic; slices made apart from each other step far more along one axis).
 //! `EO_CLOUD_NOISE_DUMP=<dir>` writes slices of each as PNG for a look.
 
 use eo_render::clouds::{BASE_RES, CURL_RES, CloudNoise, DETAIL_RES};
@@ -44,7 +45,7 @@ fn dump(dir: &str, name: &str, w: u32, h: u32, px: &[u8]) {
 }
 
 /// For channel `c` of a cubic volume: (min, max, mean, the mean step across the wrap over the
-/// mean step inside, per axis; the largest deviation of a slice's mean from the mean, per axis).
+/// mean step inside, per axis; the mean step between neighbouring texels, per axis).
 fn stats(v: &[u8], res: usize, c: usize) -> (f64, f64, f64, [f64; 3], [f64; 3]) {
     let at = |x: usize, y: usize, z: usize| v[((z * res + y) * res + x) * 4 + c] as f64 / 255.0;
     let (mut lo, mut hi, mut sum) = (1.0f64, 0.0f64, 0.0);
@@ -71,15 +72,15 @@ fn stats(v: &[u8], res: usize, c: usize) -> (f64, f64, f64, [f64; 3], [f64; 3]) 
             }
         }
         seam[axis] = wrap / inside.max(1e-9);
+        let mut step = 0.0;
         for k in 0..res {
-            let mut s = 0.0;
             for i in 0..res {
                 for j in 0..res {
-                    s += p(i, j, k);
+                    step += (p(i, j, (k + 1) % res) - p(i, j, k)).abs();
                 }
             }
-            layer[axis] = layer[axis].max((s / (res * res) as f64 - mean).abs());
         }
+        layer[axis] = step / (res * res * res) as f64;
     }
     (lo, hi, mean, seam, layer)
 }
@@ -115,17 +116,16 @@ fn the_cloud_noise_fills_its_range_tiles_and_has_no_layers() {
     for (name, v, res, chans) in [("base", &base, BASE_RES as usize, 4), ("detail", &detail, DETAIL_RES as usize, 3)] {
         for c in 0..chans {
             let (lo, hi, mean, seam, layer) = stats(v, res, c);
-            eprintln!("{name} channel {c}: {lo:.2}..{hi:.2} mean {mean:.2}, wrap step / inner step {seam:.2?}, worst slice mean off {layer:.3?}");
+            eprintln!("{name} channel {c}: {lo:.2}..{hi:.2} mean {mean:.2}, wrap step / inner step {seam:.2?}, mean neighbour step by axis {layer:.4?}");
             assert!(lo < 0.2 && hi > 0.75, "{name} channel {c} does not fill its range: {lo}..{hi}");
             assert!(mean > 0.2 && mean < 0.8, "{name} channel {c} mean {mean}");
             for a in 0..3 {
                 assert!(seam[a] < 1.6, "{name} channel {c} has a seam across axis {a}: x{:.2}", seam[a]);
-                assert!(layer[a] < 0.15, "{name} channel {c}: a slice's mean is {:.3} off along axis {a}", layer[a]);
             }
+            // isotropy: the steps along the three axes agree within 15 % (each is a mean over the
+            // whole volume, so chance moves it by a few per cent; a layered axis steps far more)
             let (lmin, lmax) = (layer.iter().cloned().fold(1.0, f64::min), layer.iter().cloned().fold(0.0, f64::max));
-            // (with 4 cells a tile, a channel's slice means stray up to ~2.2 x more along one axis
-            // than another by chance; a layered bake strays far more along one axis)
-            assert!(lmax < 0.04 || lmax < 3.0 * lmin, "{name} channel {c} is layered: slice means stray {layer:.3?} by axis");
+            assert!(lmax < 1.15 * lmin, "{name} channel {c} is anisotropic (layered): mean neighbour step by axis {layer:.4?}");
         }
     }
     // the curl field: centred on 0.5 and not flat

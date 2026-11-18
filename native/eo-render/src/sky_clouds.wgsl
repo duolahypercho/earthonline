@@ -15,8 +15,8 @@
 // Light (Hillaire 2016, Wrenninge et al. 2013): Beer's law along the view, a
 // light march toward the sun (six segments of growing length, 30-1100 m, and
 // one long step to 2.6 km), four multiple-scattering octaves (extinction x
-// 0.5, light x 0.3, eccentricity x 0.5 per octave) over a dual-lobe phase
-// (0.78 HG(0.8) + 0.22 HG(-0.3)) with the droplets' diffraction peak and a
+// 0.5, light x 0.25, eccentricity x 0.5 per octave) over a dual-lobe phase
+// (0.72 HG(0.8) + 0.28 HG(-0.3)) with the droplets' diffraction peak and a
 // powder term on the first octave; the sun's colour and strength are the
 // atmosphere's transmittance at the cloud's own height (zero in the Earth's
 // shadow at that height), the same for the cumulus, the decks and the high
@@ -39,9 +39,9 @@ const CL_CURL_TILE: f32 = 1600.0;
 const CL_DENSITY: f32 = 2.6;
 /// The sun's gain on the clouds (the octaves' sum is a single-scattering phase; a thick
 /// cloud's multiple scattering returns ~2.5 x what they carry).
-const CL_SUN_GAIN: f32 = 2.6;
+const CL_SUN_GAIN: f32 = 4.0;
 /// Light-march segment ends along the sun (m): growing segments, then one long step.
-const CL_TAPS: array<f32, 7> = array<f32, 7>(30.0, 80.0, 170.0, 340.0, 640.0, 1100.0, 2600.0);
+const CL_TAPS: array<f32, 5> = array<f32, 5>(30.0, 80.0, 240.0, 700.0, 2600.0);
 
 fn cl_remap(v: f32, lo: f32, hi: f32) -> f32 {
     return clamp((v - lo) / max(hi - lo, 1e-4), 0.0, 1.0);
@@ -50,6 +50,19 @@ fn cl_remap(v: f32, lo: f32, hi: f32) -> f32 {
 /// 0 for a cumulus field, 1 for a continuous deck (overcast, fog, rain, storm).
 fn cl_stratus() -> f32 {
     return clamp((skyu.cloud0.z - 0.75) / 0.2, 0.0, 1.0);
+}
+
+/// The fair-weather cumulus field is drawn only with `EO_CUMULUS=1` (`SKY_CUMULUS`):
+/// without it a clear sky has the high sheet alone, and the low deck draws only as it
+/// closes into a continuous deck (coverage over 0.75: the overcast, fog, drizzle, rain
+/// and storm decks), its cumulus part faded out.
+fn cl_cumulus_on() -> f32 {
+    return select(0.0, 1.0, sky_on(skyu.flags.x, SKY_CUMULUS));
+}
+
+/// Whether the low deck draws at all (the march, its cloud shadows).
+fn cl_low_deck_on() -> bool {
+    return skyu.cloud0.z > 0.0 && (cl_cumulus_on() > 0.0 || cl_stratus() > 0.0);
 }
 
 /// The weather map at a drifted xz: the local coverage 0..1 (how far inside a cell's
@@ -61,7 +74,9 @@ fn cl_weather(wxz: vec2<f32>, lod: f32) -> f32 {
     let thr = 1.0 - cu.y;
     // a broad, soft envelope: the coverage falls off across the whole cell, so the 3D
     // shape (not the sheet's outline) decides where its edge is
-    let cum = smoothstep(thr - 0.12, thr + 0.32, cu.x);
+    // over a wide band of the sheet's rank (~0.3 km): a steep envelope contour stands as a
+    // cloud's outline (a box seen from below); the 3D shape draws it instead
+    let cum = smoothstep(thr - 0.25, thr + 0.45, cu.x);
     // a deck: everywhere covered, thinner where the sheet is low (its rolls and gaps)
     let deck = mix(0.55, 1.0, smoothstep(thr - 0.25, thr + 0.25, cu.x));
     return mix(cum, deck, st);
@@ -91,8 +106,13 @@ fn cl_shape(p: vec3<f32>, lod: f32) -> vec4<f32> {
     let n = textureSampleLevel(cl_base, vol_rep, q / (CL_BASE_TILE * (1.0 + st)), lod);
     // The weather map read at a point the 3D noise pushes sideways, more with height, so a
     // cell's outline changes from one height to the next (no 2D outline extruded upward).
-    let warp = (vec2<f32>(n.g, n.b) - 0.5) * (140.0 + 320.0 * h) * (1.0 - st);
-    let wc = cl_weather(wxz + warp, clamp(lod + 1.0, 0.0, 6.0));
+    // (the sheet is value noise on a square lattice: this push bends its contours, which
+    // otherwise stand as straight walls under a flat lid, most in the big cells, whose
+    // lattice is 2.6 x the small cells')
+    let warp = (vec2<f32>(n.g, n.b) - 0.5) * (260.0 + 440.0 * h) * (1.0 - st);
+    // (1.5 mips softer than the sample's own, never finer than mip 2.5, ~70 m: a smooth
+    // envelope the 3D shape carves; the sheet's 25-50 m octaves would cut the walls' edges)
+    let wc = cl_weather(wxz + warp, clamp(max(lod + 1.5, 2.5), 0.0, 6.0));
     if (wc <= 0.0) {
         return vec4<f32>(0.0, 0.0, h, 0.0);
     }
@@ -101,14 +121,20 @@ fn cl_shape(p: vec3<f32>, lod: f32) -> vec4<f32> {
     // marine layer from above, a storm deck's upper surface: 0.4-0.8 km billows, up to a
     // quarter of the slab).
     let lowfbm = 0.625 * n.g + 0.25 * n.b + 0.125 * n.a;
-    let crown = mix(0.14 + 0.5 * wc * sqrt(wc), 0.75 + 0.25 * smoothstep(0.3, 0.8, 0.6 * n.g + 0.4 * n.b), st);
+    // and the crown rises and falls across the cell with the 3D noise: a cumulus top is a
+    // cluster of domes, never one flat lid
+    // (broad domes rather than 100 m spires: 0.75 of the 400 m channel, 0.1 of the 100 m one)
+    let turret = 0.55 + 0.75 * n.g + 0.1 * n.a;
+    let crown = mix((0.15 + 0.55 * wc * sqrt(wc)) * turret, 0.75 + 0.25 * smoothstep(0.3, 0.8, 0.6 * n.g + 0.4 * n.b), st);
     let hc = h / crown;
     if (hc >= 1.0) {
         return vec4<f32>(0.0, 1.0, h, wc);
     }
     // Height profile: a flat base at one condensation level (a 5 % ramp), a dome over
     // the top 45 % of the column; a deck with a 10 % base ramp and a rolling top.
-    let prof_cu = smoothstep(0.0, 0.05, h) * (1.0 - smoothstep(0.55, 1.0, hc));
+    // (the dome from 0.3 of the column under a crown 1.1 x as high: the top spreads over
+    // 0.5-0.75 of the crown with the noise, not one lid)
+    let prof_cu = smoothstep(0.0, 0.03, h) * (1.0 - smoothstep(0.3, 1.0, hc));
     // (a raining deck's base hangs lower in lumps: up to 0.12 of the slab, 0.06 for a dry one)
     let rainy = smoothstep(2.0, 8.0, skyu.wet.z);
     let base_lo = mix(0.06, 0.12, rainy) * smoothstep(0.35, 0.85, n.b);
@@ -118,14 +144,24 @@ fn cl_shape(p: vec3<f32>, lod: f32) -> vec4<f32> {
     // The coverage remap (not a multiply: a cell's core stays solid, its outline is the
     // 3D shape's): coverage over 1 at a cell's centre, 0 at its envelope's edge, shrunk
     // by the height profile (a flat base, a dome narrowing over its top).
-    let c = wc * mix(1.2, 1.4, st) * prof * mix(mix(1.0, 0.8, hc * hc), 1.0, st);
-    let d_cu = clamp((shape - (1.0 - c)) / 0.35, 0.0, 1.0) * min(c, 1.0);
+    // A cumulus is a rounded tower: its coverage swells and shrinks with a 3D noise
+    // (bulges of 0.2-0.4 km, so no side is a flat wall), narrows over its top (a dome,
+    // 1 - 0.7 hc^2) and draws in a little at its base, under a body that bulges out.
+    // (half of it from the 400 m channel: a side swells over ~0.4 km, not only in 200 m bumps)
+    let bulge = mix(0.5 + 0.6 * n.b + 0.4 * n.g, 1.0, st);
+    // the lowest third of a cumulus is filled out (x 1.3 at the base), so its base is one flat
+    // sheet at the condensation level with no lobes hung under it
+    let dome = mix((1.0 - 0.7 * hc * hc) * (1.3 - 0.3 * smoothstep(0.0, 0.3, hc)), 1.0, st);
+    // (x 1.2 for cumulus, 1.4 for a deck)
+    let c = wc * mix(1.2, 1.4, st) * prof * dome * bulge;
+    // a crisp surface: the density reaches the core within 0.25 of the shape
+    let d_cu = clamp((shape - (1.0 - c)) / 0.25, 0.0, 1.0) * min(c, 1.0);
     // A continuous deck is not carved into cells with gaps between: its density
     // undulates (thicker rolls and thinner places, 0.62-1 of its peak) under the profile;
     // a deck short of full cover still opens where the weather map's sheet is low.
     // (under rain the cells stand out more: 0.4-1)
     let d_st = prof * min(wc * 1.25, 1.0) * (mix(0.62, 0.4, rainy) + mix(0.38, 0.6, rainy) * smoothstep(0.2, 0.8, shape));
-    let d = mix(d_cu, d_st, st);
+    let d = mix(d_cu * cl_cumulus_on(), d_st, st);
     return vec4<f32>(d, hc, h, wc);
 }
 
@@ -136,7 +172,7 @@ fn cl_density(p: vec3<f32>, t: f32, lod: f32) -> vec4<f32> {
     if (s.x <= 0.0) {
         return s;
     }
-    let near = 1.0 - smoothstep(5000.0, 18000.0, t);
+    let near = 1.0 - smoothstep(5000.0, 15000.0, t);
     if (near > 0.0) {
         let st = cl_stratus();
         let wxz = p.xz + skyu.cloud2.xy;
@@ -144,10 +180,27 @@ fn cl_density(p: vec3<f32>, t: f32, lod: f32) -> vec4<f32> {
         let dq = vec3<f32>(wxz.x, p.y, wxz.y) + vec3<f32>(cv.x, 0.4 * cv.y, cv.y) * 45.0 * (1.0 - 0.6 * s.z);
         let fp = vol_footprint(t);
         let dn = textureSampleLevel(cl_detail, vol_rep, dq / CL_DETAIL_TILE, clamp(log2(max(fp, 1.0) / 8.3), 0.0, 2.0));
-        let hf = 0.625 * dn.r + 0.25 * dn.g + 0.125 * dn.b;
+        // (without the finest octave, 33 m cells: it cuts pinholes and a stipple into thin rims)
+        let hf = 0.7 * dn.r + 0.3 * dn.g;
         // wispy at the base (the Worley web), billowy on the body and top (its inverse)
         let hfm = mix(hf, 1.0 - hf, clamp(s.y * 5.0, 0.0, 1.0));
-        s.x = cl_remap(s.x, hfm * mix(mix(0.42, 0.58, clamp(s.y, 0.0, 1.0)), 0.22, st) * near, 1.0);
+        // half as much on the thin rim (density under 0.3), where the erosion cuts pinholes
+        // that the march's per-pixel offset turns into a stipple; the body keeps its billows
+        let rim = mix(0.5, 1.0, smoothstep(0.0, 0.3, s.x));
+        // (little at the base, which stays flat and crisp; full on the upper body)
+        s.x = cl_remap(s.x, hfm * mix(mix(0.15, 0.58, smoothstep(0.0, 0.5, s.y)), 0.22, st) * near * rim, 1.0);
+        // billows between the lumps and the fine detail: the base noise again at a 0.8 km
+        // tile (Worley cells of ~200 m) eats into the upper body along its cells' borders, so a
+        // crown is a cauliflower of domes, not one rounded block
+        // (within 8 km and for cumulus only: a deck's samples would read it for nothing)
+        let near2 = 1.0 - smoothstep(2500.0, 8000.0, t);
+        if (near2 > 0.0 && st < 0.5) {
+            let n2 = textureSampleLevel(cl_base, vol_rep, dq / 800.0, clamp(log2(max(fp, 1.0) / 6.25), 0.0, 3.0));
+            // (all the way down: the outline a cloud shows from below is its base's, and needs the
+            // lobes too; more on the upper body)
+            let topw = mix(0.35, 1.0, smoothstep(0.12, 0.7, s.y));
+            s.x = cl_remap(s.x, (1.0 - (0.7 * n2.g + 0.3 * n2.b)) * 0.45 * topw * near2 * (1.0 - st), 1.0);
+        }
     }
     return s;
 }
@@ -158,25 +211,27 @@ fn cl_hg(c: f32, g: f32) -> f32 {
     return (1.0 - g2) / (12.566371 * pow(max(1.0 + g2 - 2.0 * g * c, 1e-4), 1.5));
 }
 
-/// The cloud phase: a strong forward lobe and a back lobe, eccentricity x `k`.
+/// The cloud phase: a strong forward lobe and a back lobe (0.72 / 0.28), eccentricity x `k`.
 fn cl_phase(c: f32, k: f32) -> f32 {
-    return 0.78 * cl_hg(c, 0.8 * k) + 0.22 * cl_hg(c, -0.3 * k);
+    return 0.72 * cl_hg(c, 0.8 * k) + 0.28 * cl_hg(c, -0.3 * k);
 }
 
 /// The sun scattered at a point under light optical depth `tau` (toward the sun), seen at
-/// `c` = cos(view, sun): four octaves (extinction and eccentricity x 0.5, light x 0.3
+/// `c` = cos(view, sun): four octaves (extinction and eccentricity x 0.5, light x 0.25
 /// each); the first with the droplets' diffraction peak and the powder term (`tau_near`,
 /// the optical depth of the first 80 m toward the sun: a front-lit face's edges and
 /// folds darker than its body; faded toward the sun, where the forward lobe rules).
 fn cl_ms(tau: f32, tau_near: f32, c: f32) -> f32 {
-    let powder = mix(1.0, 1.0 - exp(-2.0 * tau_near), 0.5 * (0.5 - 0.5 * c));
+    // (0.15: with a stronger powder term, front-lit faces, the sunward side seen with the
+    // sun behind the viewer, come out dull grey-beige)
+    let powder = mix(1.0, 1.0 - exp(-2.0 * tau_near), 0.15 * (0.5 - 0.5 * c));
     var e = exp(-tau) * (0.88 * cl_phase(c, 1.0) + 0.12 * cl_hg(c, 0.96)) * powder;
-    var a = 0.3;
+    var a = 0.25;
     var b = 0.5;
     var k = 0.5;
     for (var o = 1; o < 4; o = o + 1) {
         e = e + a * exp(-b * tau) * cl_phase(c, k);
-        a = a * 0.3;
+        a = a * 0.25;
         b = b * 0.5;
         k = k * 0.5;
     }
@@ -190,7 +245,9 @@ fn cl_sun(h_m: f32) -> vec3<f32> {
     if (skyu.atmo2.x > 0.5 && skyu.sun_rad.w < 0.5) {
         return vol_atmo_sun_t(h_m) * skyu.atmo2.w;
     }
-    return skyu.sun_rad.xyz;
+    // the moon's key x 0.35: at night a cloud is lit from below by the city, not from
+    // above as by a dim sun
+    return skyu.sun_rad.xyz * select(1.0, 0.35, skyu.sun_rad.w > 0.5);
 }
 
 /// The direction the clouds are lit from (the sun, or the moon when it keys).
@@ -209,24 +266,27 @@ fn cl_light_tau(p: vec3<f32>, l: vec3<f32>, t: f32, lod: f32, d0: f32) -> vec2<f
     var tau = 0.0;
     var tau_n = 0.0;
     var sp = 0.0;
+    // five segments (30, 80, 240, 700, 2600 m), only the first with
+    // the full density; past 6 km the first 80 m at the point's own density and three taps,
+    // past 20 km two (700, 2600 m)
     var j0 = 0;
     if (t > 6000.0) {
         tau = 80.0 * d0;
         tau_n = tau;
         sp = 80.0;
-        j0 = 2;
+        j0 = select(2, 3, t > 20000.0);
     }
-    for (var j = j0; j < 7; j = j + 1) {
+    for (var j = j0; j < 5; j = j + 1) {
         let sn = CL_TAPS[j];
         let q = p + l * (0.5 * (sp + sn));
         if (q.y > skyu.cloud0.y) {
             break;
         }
         var dj = 0.0;
-        if (j < 2) {
+        if (j == 0) {
             dj = cl_density(q, t, lod).x;
         } else {
-            dj = cl_shape(q, min(lod + f32(j - 1) * 0.5, 3.0)).x;
+            dj = cl_shape(q, min(lod + f32(j) * 0.5, 3.0)).x;
         }
         tau = tau + (sn - sp) * dj;
         sp = sn;
@@ -276,8 +336,13 @@ fn cl_jitter(px: vec2<i32>, frame: u32) -> f32 {
 /// inside a dense body. `amb`: (top, side, below) per pixel.
 fn cl_ambient(top: vec3<f32>, side: vec3<f32>, below: vec3<f32>, hc: f32, d: f32) -> vec3<f32> {
     let up = smoothstep(0.0, 1.0, hc);
-    let a = mix(below, mix(side, top, 0.55 + 0.45 * up), sqrt(up));
-    return a * mix(1.0, 0.6, clamp(d, 0.0, 1.0));
+    // the light from below only near the base (by a third of the column the sky round it
+    // rules): a cloud in another's shadow is lit by the sky, not left a dark smudge
+    // at night (the city's glow on) the light from below reaches most of the body
+    let a = mix(below, mix(side, top, 0.55 + 0.45 * up), smoothstep(0.0, mix(0.35, 0.9, clamp(skyu.amb_top.w, 0.0, 1.0)), hc));
+    // light scattered many times inside a body stays near the light round it: only a
+    // little dimmer in a dense core (darker, a cloud in another's shadow is a dark smudge)
+    return a * mix(1.0, 0.85, clamp(d, 0.0, 1.0));
 }
 
 /// the cloud-shadow map (clouds.rs, before the city pass): for the sea-level point
@@ -294,7 +359,7 @@ fn cl_shadow_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let l = look.key_dir.xyz;
     var tr = 1.0;
-    if (skyu.cloud0.z > 0.0 && l.y > 0.02 && cl_stratus() < 0.999) {
+    if (cl_low_deck_on() && l.y > 0.02 && cl_stratus() < 0.999) {
         // The window's first texel (world index), and this texel's world index in it.
         let k0 = vec2<i32>(floor((look.cam_pos.xz - 0.5 * SKY_CSHADOW_RES * SKY_CSHADOW_TEXEL) / SKY_CSHADOW_TEXEL));
         let wi = k0 + (((ij - k0) % res) + res) % res;
@@ -314,9 +379,22 @@ fn cl_shadow_main(@builtin(global_invocation_id) gid: vec3<u32>) {
         for (var i = 0; i < n_eff; i = i + 1) {
             let s = s0 + (f32(i) + 0.5) * ds;
             let p = vec3<f32>(g.x, SKY_SEA_Y, g.y) + l * s;
-            tau = tau + cl_shape(p, 1.0).x * sig * ds;
+            // the shape read coarser as the sun drops (at ~9 deg the weather map 4 mips
+            // coarser, the noise at its coarsest): a low sun's samples lie ~0.6 km apart along a
+            // long path, and read fine they alias into one blotch per small cell; coarse, the
+            // long shadows merge into the cloud fields' coherent patches
+            tau = tau + cl_shape(p, mix(5.0, 1.0, smoothstep(0.15, 0.5, l.y))).x * sig * ds;
         }
         tr = exp(-tau);
     }
-    textureStore(cl_shadow_out, ij, vec4<f32>(tr, 0.0, 0.0, 1.0));
+    // the sky's light on the clouds, once a frame: texels (0..4, 0) carry it in
+    // their g, b, a (amb, zen, top, sun, anti; sky_volume `cl_sky_light`); the receivers read r
+    // alone. The volume pass reads these five texels instead of the sky table per pixel.
+    var gba = vec3<f32>(0.0);
+    if (ij.y == 0 && ij.x < 5) {
+        let sk = cl_sky_light();
+        var parts = array<vec3<f32>, 5>(sk.amb, sk.zen, sk.top, sk.sun, sk.anti);
+        gba = parts[ij.x];
+    }
+    textureStore(cl_shadow_out, ij, vec4<f32>(tr, gba));
 }

@@ -94,6 +94,10 @@ pub struct ShadowInputs<'a> {
     pub sky_uniform: &'a wgpu::Buffer,
     pub sheet: &'a wgpu::TextureView,
     pub repeat: &'a wgpu::Sampler,
+    /// The atmosphere's sky-view table and a clamped linear sampler: the pass also makes
+    /// the clouds' sky light once a frame.
+    pub sky_view: &'a wgpu::TextureView,
+    pub linear: &'a wgpu::Sampler,
 }
 
 impl CloudNoise {
@@ -172,7 +176,7 @@ impl CloudGpu {
         let samp = wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering);
         let shadow_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("clouds-shadow-bgl"),
-            entries: &[entry(0, ubuf), entry(1, ubuf), entry(3, t2), entry(5, samp), entry(15, t3(true)), entry(17, t2), entry(21, st2(wgpu::TextureFormat::Rgba16Float))],
+            entries: &[entry(0, ubuf), entry(1, ubuf), entry(3, t2), entry(5, samp), entry(12, samp), entry(14, t2), entry(15, t3(true)), entry(17, t2), entry(21, st2(wgpu::TextureFormat::Rgba16Float))],
         });
         let shadow_pipe = compute("clouds-shadow", &layout("clouds-shadow-layout", &shadow_bgl), inp.module, "cl_shadow_main");
         let base_view = noise.base.create_view(&Default::default());
@@ -186,6 +190,8 @@ impl CloudGpu {
                 wgpu::BindGroupEntry { binding: 1, resource: inp.sky_uniform.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(inp.sheet) },
                 wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::Sampler(inp.repeat) },
+                wgpu::BindGroupEntry { binding: 12, resource: wgpu::BindingResource::Sampler(inp.linear) },
+                wgpu::BindGroupEntry { binding: 14, resource: wgpu::BindingResource::TextureView(inp.sky_view) },
                 wgpu::BindGroupEntry { binding: 15, resource: wgpu::BindingResource::TextureView(&base_view) },
                 wgpu::BindGroupEntry { binding: 17, resource: wgpu::BindingResource::TextureView(&curl_view) },
                 wgpu::BindGroupEntry { binding: 21, resource: wgpu::BindingResource::TextureView(&shadow_view) },
@@ -236,8 +242,10 @@ impl CloudGpu {
     }
 
     /// Before the city pass: the one-time noise bake, then this frame's cloud-shadow map.
-    pub(crate) fn encode(&self, enc: &mut wgpu::CommandEncoder) {
-        let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("clouds-shadow"), timestamp_writes: None });
+    /// `ts`: the bench's query set and this pass's first slot (sky.rs `Q_CLOUD_SHADOW`).
+    pub(crate) fn encode(&self, enc: &mut wgpu::CommandEncoder, ts: Option<(&wgpu::QuerySet, u32)>) {
+        let tw = ts.map(|(q, b)| wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b), end_of_pass_write_index: Some(b + 1) });
+        let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("clouds-shadow"), timestamp_writes: tw });
         if !self.baked.swap(true, Ordering::Relaxed) {
             self.noise.encode(&mut pass);
         }

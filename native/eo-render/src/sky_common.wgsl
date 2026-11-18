@@ -90,6 +90,8 @@ const SKY_TAA: u32 = 512u;
 const SKY_BLOOM: u32 = 1024u;
 const SKY_SPRITES: u32 = 4096u;
 const SKY_CONTACT: u32 = 8192u;
+// the fair-weather cumulus field (off by default: `EO_CUMULUS=1`, sky.rs `SkyOptions::cumulus`)
+const SKY_CUMULUS: u32 = 16384u;
 
 /// World metres one cloud-sheet tile spans (eo-sky clouds.rs).
 const SKY_LOW_TILE: f32 = 3200.0;
@@ -223,12 +225,19 @@ fn sky_cluster_cover(cov: f32, big: f32) -> f32 {
 // the drift; `lod` is the 3.2 km sheet's mip.
 fn sky_cumulus(sheet: texture_2d<f32>, smp: sampler, xz: vec2<f32>, cov: f32, lod: f32) -> vec2<f32> {
     let stratus = clamp((cov - 0.75) / 0.2, 0.0, 1.0);
-    let a = textureSampleLevel(sheet, smp, xz / SKY_LOW_TILE, lod).r;
-    let b = textureSampleLevel(sheet, smp, xz / (SKY_LOW_TILE * 2.6) + vec2<f32>(0.5, 0.21), max(lod - 1.4, 0.0)).r;
     let q = vec2<f32>(dot(xz, vec2<f32>(0.8, -0.6)) / 2.5, dot(xz, vec2<f32>(0.6, 0.8)));
     // fields 0.55 x the tile (~8 km, streets ~19 km long): several in every view
     let big = textureSampleLevel(sheet, smp, q / (SKY_CLUSTER_TILE * 0.55), max(lod - 1.3, 0.0)).b;
     let sz = textureSampleLevel(sheet, smp, xz / SKY_CLUSTER_TILE + vec2<f32>(0.37, 0.11), max(lod - 2.1, 0.0)).g;
     let w = smoothstep(0.3, 0.7, sz) * (1.0 - stratus);
-    return vec2<f32>(mix(a, b, w), sky_cluster_cover(cov, big));
+    // only the cell size(s) this place uses: one read where the size field is settled
+    // (the same mix(a, b, w); the march reads this at every step)
+    var r = 0.0;
+    if (w < 1.0) {
+        r = textureSampleLevel(sheet, smp, xz / SKY_LOW_TILE, lod).r * (1.0 - w);
+    }
+    if (w > 0.0) {
+        r = r + textureSampleLevel(sheet, smp, xz / (SKY_LOW_TILE * 2.6) + vec2<f32>(0.5, 0.21), max(lod - 1.4, 0.0)).r * w;
+    }
+    return vec2<f32>(r, sky_cluster_cover(cov, big));
 }
