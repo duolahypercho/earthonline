@@ -2125,7 +2125,7 @@ pub fn load_or_cook(cache_dir: &Path, js: &JsProps, fonts: &Fonts, street_names:
         "eo-props: sign atlases {} in {:.0} ms ({}; art verified in {verify_ms:.0} ms; {:.1} MB RGBA)",
         if r.1 == CacheOutcome::Hit { "read from the cache" } else { "cooked" },
         t.elapsed().as_secs_f64() * 1e3,
-        if art.is_some() { "official sign art + Overpass" } else { "drawn faces" },
+        art.as_ref().map_or_else(|| "drawn faces".to_string(), |a| format!("official sign art + Overpass from {}", a.root.display())),
         r.0.rgba_bytes() as f64 / 1e6
     );
     Ok(r)

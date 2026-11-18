@@ -8,7 +8,7 @@ use eo_props::sign_atlas::art::{self, Manifest, SignArt};
 
 fn main() -> anyhow::Result<()> {
     let t = std::time::Instant::now();
-    let root = art::root().ok_or_else(|| anyhow::anyhow!("EO_SIGN_ART_ROOT is not set"))?;
+    let root = art::root().ok_or_else(|| anyhow::anyhow!("no sign art: {}", eo_data::external::SIGN_ART.looked_in()))?;
     let art = SignArt::load(&root)?;
     println!("sign art verified and parsed in {:.0} ms from {}", t.elapsed().as_secs_f64() * 1e3, art.root.display());
     for (s, text, f) in &art.calibration {
