@@ -189,6 +189,146 @@ pub fn mean_fresnel(cos_v: f64, sigma: f64) -> f64 {
     f0 + (1.0 - f0) * m
 }
 
+// ---- the body's colour over the whole visible spectrum (water r2) ----
+//
+// Three wavelengths stood for the render's channels above; the red one
+// (610 nm) sits where pure water absorbs a quarter of what it does at 650 nm,
+// so the bay's red came out half its green and the body read olive-brown
+// under the turbidity it really carries. Here the reflectance and the
+// diffuse attenuation are evaluated every 5 nm from 380 to 700 nm and
+// integrated into linear sRGB the way a camera or the eye integrates them:
+// weighted by a daylight spectrum (a 6504 K Planckian, the correlated colour
+// temperature of CIE D65) and the CIE 1931 colour matching functions (the
+// multi-lobe Gaussian fit of Wyman, Sloan and Shirley 2013, JCGT 2(2), 1),
+// then the sRGB primaries (IEC 61966-2-1 XYZ to linear RGB). A channel's
+// value is the ratio of the water's integral to the daylight's, so it
+// multiplies the render's own RGB irradiance.
+
+/// Pure water absorption (1/m), Pope and Fry 1997 (Appl. Opt. 36(33),
+/// 8710, their table), 380 to 700 nm in 10 nm steps.
+pub const POPE_FRY_A: [f64; 33] = [
+    0.01137, 0.00851, 0.00663, 0.00473, 0.00454, 0.00495, 0.00635, 0.00922, 0.00981, 0.0106, 0.0127, 0.0150, 0.0204, 0.0325, 0.0409, 0.0434, 0.0474, 0.0565, 0.0619, 0.0695, 0.0896, 0.1351, 0.2224, 0.2644, 0.2755, 0.2916, 0.3108, 0.340, 0.410, 0.439, 0.465, 0.516, 0.624,
+];
+pub const POPE_FRY_NM0: f64 = 380.0;
+pub const POPE_FRY_STEP_NM: f64 = 10.0;
+
+/// Pure water absorption at `nm` (linear between the table's rows).
+pub fn pure_water_a(nm: f64) -> f64 {
+    let x = ((nm - POPE_FRY_NM0) / POPE_FRY_STEP_NM).clamp(0.0, (POPE_FRY_A.len() - 1) as f64);
+    let i = (x.floor() as usize).min(POPE_FRY_A.len() - 2);
+    let f = x - i as f64;
+    POPE_FRY_A[i] * (1.0 - f) + POPE_FRY_A[i + 1] * f
+}
+
+/// The CIE 1931 2-degree colour matching functions, Wyman, Sloan and
+/// Shirley's (2013) multi-lobe piecewise-Gaussian fit (their eq. 2-4).
+pub fn cie_xyz(nm: f64) -> [f64; 3] {
+    let g = |x: f64, mu: f64, s1: f64, s2: f64| {
+        let t = (x - mu) / if x < mu { s1 } else { s2 };
+        (-0.5 * t * t).exp()
+    };
+    [
+        1.056 * g(nm, 599.8, 37.9, 31.0) + 0.362 * g(nm, 442.0, 16.0, 26.7) - 0.065 * g(nm, 501.1, 20.4, 26.2),
+        0.821 * g(nm, 568.8, 46.9, 40.5) + 0.286 * g(nm, 530.9, 16.3, 31.1),
+        1.217 * g(nm, 437.0, 11.8, 36.0) + 0.681 * g(nm, 459.0, 26.0, 13.8),
+    ]
+}
+
+/// XYZ to linear sRGB (IEC 61966-2-1, D65 white).
+pub fn xyz_to_linear_srgb(c: [f64; 3]) -> [f64; 3] {
+    [
+        3.2406 * c[0] - 1.5372 * c[1] - 0.4986 * c[2],
+        -0.9689 * c[0] + 1.8758 * c[1] + 0.0415 * c[2],
+        0.0557 * c[0] - 0.2040 * c[1] + 1.0570 * c[2],
+    ]
+}
+
+/// Planck's spectral radiance at `nm` for temperature `k` (relative units).
+fn planck(nm: f64, k: f64) -> f64 {
+    let l = nm * 1e-9;
+    1.0 / (l.powi(5) * ((1.438_777e-2 / (l * k)).exp() - 1.0))
+}
+
+/// Total absorption and backscatter (1/m) at one wavelength (the forms of `iop`).
+pub fn iop_at(c: &Constituents, nm: f64) -> (f64, f64) {
+    let a = pure_water_a(nm) + c.a_dg_440 * (-A_DG_SLOPE * (nm - 440.0)).exp();
+    let bb = 0.5 * 0.00288 * (nm / 500.0).powf(-4.32) + c.bbp_550 * (550.0 / nm).powf(c.eta);
+    (a, bb)
+}
+
+/// Lee, Du and Arnone 2005 (J. Geophys. Res. 110, C02016), the diffuse
+/// attenuation of downwelling irradiance from a and bb, sun 30 degrees from
+/// the zenith: Kd = (1 + 0.005 theta) a + 4.18 (1 - 0.52 exp(-10.8 a)) bb.
+pub fn kd_lee2005(a: f64, bb: f64) -> f64 {
+    (1.0 + 0.005 * 30.0) * a + 4.18 * (1.0 - 0.52 * (-10.8 * a).exp()) * bb
+}
+
+/// A spectral quantity integrated into linear sRGB channels as a ratio to
+/// daylight: sum f E cmf over sum E cmf, through the sRGB primaries.
+pub fn spectral_rgb(f: impl Fn(f64) -> f64) -> [f64; 3] {
+    let (mut num, mut den) = ([0.0; 3], [0.0; 3]);
+    let mut nm = 380.0;
+    while nm <= 700.0 + 1e-9 {
+        let e = planck(nm, 6504.0);
+        let w = cie_xyz(nm);
+        let v = f(nm);
+        for i in 0..3 {
+            num[i] += v * e * w[i];
+            den[i] += e * w[i];
+        }
+        nm += 5.0;
+    }
+    let (n, d) = (xyz_to_linear_srgb(num), xyz_to_linear_srgb(den));
+    [n[0] / d[0], n[1] / d[1], n[2] / d[2]]
+}
+
+/// The optically deep body's remote-sensing reflectance (sr^-1) per linear
+/// sRGB channel, integrated over the spectrum.
+pub fn deep_rrs_spectral(c: &Constituents) -> [f64; 3] {
+    let r = spectral_rgb(|nm| {
+        let (a, bb) = iop_at(c, nm);
+        rrs_of(a, bb)
+    });
+    // (a blue-peaked spectrum lies a little outside the sRGB gamut in the red: kept at a trace)
+    r.map(|v| v.max(2e-4))
+}
+
+/// The column's fill rate per channel (1/m): the diffuse attenuation (Lee et
+/// al. 2005) the water-leaving light carries, weighted by that light (its
+/// Rrs), so a channel's rate is the attenuation of the light it sees.
+pub fn fill_rate_spectral(c: &Constituents) -> [f64; 3] {
+    // (a floor of 1e-3 sr^-1 under the weight: a channel the body barely
+    // reaches is weighted by daylight instead of by a near-zero integral)
+    let w = |nm: f64| {
+        let (a, bb) = iop_at(c, nm);
+        rrs_of(a, bb) + 1e-3
+    };
+    let r = spectral_rgb(w);
+    let k = spectral_rgb(|nm| {
+        let (a, bb) = iop_at(c, nm);
+        w(nm) * kd_lee2005(a, bb)
+    });
+    [k[0] / r[0], k[1] / r[1], k[2] / r[2]]
+}
+
+/// The central bay's surface water with the sediment it carries (water r2),
+/// at the Gate's marine end of the estuary. USGS continuous monitoring at
+/// Alcatraz Island (USGS Data Series 226, 282 and 744) finds suspended
+/// sediment of order 10-30 mg/L at mid depth most of the year; the surface
+/// water the flood tide brings through the Gate carries less: 4.4 mg/L at
+/// Babin et al.'s (2003, J. Geophys. Res. 108(C7), 3211) coastal mean
+/// mass-specific backscatter of about 0.008 m^2/g is bbp(550) 0.035 / m (fine
+/// silt, eta 0.8). The lumped non-water absorption at 440 nm, 0.3 / m: the
+/// particles' own detritus about 0.15 / m (4.4 mg/L at Babin et al.'s
+/// 0.041 m^2/g at 443 nm, rounded down for the coarser mineral share),
+/// coloured dissolved matter about 0.1 / m at the ocean end and phytoplankton
+/// at a few ug/L of chlorophyll about 0.05 / m (Bricaud et al. 1995, J.
+/// Geophys. Res. 100(C7), 13321). Over the spectrum it is a dark green-teal
+/// body (Rrs about 0.005 / 0.015 / 0.008 sr^-1, red a third of the green)
+/// whose diffuse attenuation (about 0.25 / m in the green, 0.5 in the red)
+/// leaves a bottom faint under a metre or two of water.
+pub const BAY_TURBID_IOP: Constituents = Constituents { a_dg_440: 0.3, bbp_550: 0.035, eta: 0.8 };
+
 /// WGSL constants for eo-render's water shader.
 pub fn wgsl_constants() -> String {
     let v3 = |v: [f64; 3]| format!("vec3<f32>({:.6}, {:.6}, {:.6})", v[0], v[1], v[2]);
@@ -214,6 +354,13 @@ pub fn wgsl_constants() -> String {
     s.push_str(&format!("const WO_COAST_FILL: vec3<f32> = {};\n", v3e(fill_rate(&COAST_IOP))));
     s.push_str(&format!("const WO_SILT_FILL: vec3<f32> = {};\n", v3e(fill_rate(&SILT_IOP))));
     s.push_str(&format!("const WO_F0: f32 = {:.6};\n", fresnel_dielectric(1.0, IOR)));
+    // the turbid bay and the coast over the whole spectrum (water r2, `deep_rrs_spectral`, `fill_rate_spectral`)
+    s.push_str(&format!("const WO_BAY2_RRS: vec3<f32> = {};\n", v3e(deep_rrs_spectral(&BAY_TURBID_IOP))));
+    s.push_str(&format!("const WO_COAST2_RRS: vec3<f32> = {};\n", v3e(deep_rrs_spectral(&COAST_IOP))));
+    s.push_str(&format!("const WO_SILT2_RRS: vec3<f32> = {};\n", v3e(deep_rrs_spectral(&SILT_IOP))));
+    s.push_str(&format!("const WO_BAY2_FILL: vec3<f32> = {};\n", v3e(fill_rate_spectral(&BAY_TURBID_IOP))));
+    s.push_str(&format!("const WO_COAST2_FILL: vec3<f32> = {};\n", v3e(fill_rate_spectral(&COAST_IOP))));
+    s.push_str(&format!("const WO_SILT2_FILL: vec3<f32> = {};\n", v3e(fill_rate_spectral(&SILT_IOP))));
     s
 }
 
@@ -245,6 +392,56 @@ mod tests {
         // the surf zone's silt is brighter than the bay in every channel
         let silt = deep_rrs(&SILT_IOP);
         assert!((0..3).all(|i| silt[i] > bay[i]), "{silt:?}");
+    }
+
+    #[test]
+    fn spectral_integration_is_a_ratio_to_daylight() {
+        // a flat spectrum is itself in every channel
+        let one = spectral_rgb(|_| 0.37);
+        for v in one {
+            assert!((v - 0.37).abs() < 1e-9, "{one:?}");
+        }
+        // the table's rows read back exactly, and between them linearly
+        assert!((pure_water_a(550.0) - 0.0565).abs() < 1e-12);
+        assert!((pure_water_a(555.0) - 0.5 * (0.0565 + 0.0619)).abs() < 1e-12);
+        // the colour matching fit peaks where the CIE functions do (y near 555 nm, z near 445)
+        let y = |nm: f64| cie_xyz(nm)[1];
+        assert!(y(555.0) > y(530.0) && y(555.0) > y(580.0));
+        // daylight's own white maps to sRGB's white within the fit's error
+        let (mut x, mut yy, mut z) = (0.0, 0.0, 0.0);
+        let mut nm = 380.0;
+        while nm <= 700.0 {
+            let e = planck(nm, 6504.0);
+            let c = cie_xyz(nm);
+            x += e * c[0];
+            yy += e * c[1];
+            z += e * c[2];
+            nm += 5.0;
+        }
+        let rgb = xyz_to_linear_srgb([x / yy, 1.0, z / yy]);
+        assert!(rgb.iter().all(|v| (v - 1.0).abs() < 0.12), "{rgb:?}");
+    }
+
+    #[test]
+    fn the_turbid_bay_is_green_teal_and_hides_its_bottom() {
+        let bay = deep_rrs_spectral(&BAY_TURBID_IOP);
+        let coast = deep_rrs_spectral(&COAST_IOP);
+        let fill = fill_rate_spectral(&BAY_TURBID_IOP);
+        eprintln!("Rrs turbid bay {bay:?} fill {fill:?}; coast {coast:?} fill {:?}; silt {:?}", fill_rate_spectral(&COAST_IOP), deep_rrs_spectral(&SILT_IOP));
+        // green-peaked, the red well under the green (no olive body), the blue under it
+        assert!(bay[1] > 2.2 * bay[0] && bay[1] > 1.6 * bay[2], "{bay:?}");
+        // brighter in the green than the three-wavelength bay (its turbidity)
+        assert!(bay[1] > deep_rrs(&BAY_IOP)[1], "{bay:?}");
+        // inside the measured range for turbid coastal and estuarine water
+        assert!(bay.iter().all(|v| (0.002..0.03).contains(v)), "{bay:?}");
+        // the open coast is bluer than the bay
+        assert!(coast[2] / coast[1] > bay[2] / bay[1], "{coast:?}");
+        // diffuse attenuation of turbid coastal water in the green: 0.2 - 1 / m, more in the red and blue
+        assert!((0.2..1.0).contains(&fill[1]) && fill[0] > fill[1] && fill[2] > fill[1], "{fill:?}");
+        // two metres of water send back under 40 % of what lies at their bottom (down and up), three under a quarter
+        assert!((-2.0 * 2.0 * fill[1]).exp() < 0.4 && (-2.0 * 3.0 * fill[1]).exp() < 0.25);
+        // the coast's channels all positive and finite
+        assert!(coast.iter().chain(fill_rate_spectral(&COAST_IOP).iter()).all(|v| v.is_finite() && *v > 0.0), "{coast:?}");
     }
 
     #[test]
