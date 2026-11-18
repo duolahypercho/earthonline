@@ -43,6 +43,9 @@ struct RmOut {
 // seed_kind: (seed, shop, office, distance); floor_key: (shop switch key or
 // facade-plane hash, pane bottom); env: (dusk, occupancy, shop occupancy,
 // cool share); work: (office share, pixel angle).
+// An office pane's tenant run (rm_kit_pane sets it before rm_room; below 0: none).
+var<private> rm_run_seed: f32;
+
 fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4<f32>, floor_key: vec2<f32>, env: vec4<f32>, work: vec4<f32>, day_mode: bool, night_mode: bool) -> RmOut {
     var o: RmOut;
     let shop = seed_kind.y;
@@ -216,8 +219,13 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
         let curtain = curtain_col * folds * 0.5 * light_radiance * max(illum, 0.5);
         radiance = mix(radiance, curtain, in_curtain);
         day_room = mix(day_room, curtain_col * folds * 0.62, in_curtain);
-        let blind_style = max(step(0.26, style) * step(style, 0.46) * (1.0 - shop), step(style, 0.3) * office);
-        let blind_to = mix(0.2, 0.95, rm_h(seed, 34.0));
+        var blind_style = max(step(0.26, style) * step(style, 0.46) * (1.0 - shop), step(style, 0.3) * office);
+        var blind_to = mix(0.2, 0.95, rm_h(seed, 34.0));
+        if (RM_BLIND_RUNS && rm_run_seed >= 0.0 && office > 0.5) {
+            // a tenant's run: one choice and one of three levels for the run.
+            blind_style = step(rm_h(rm_run_seed, 30.0), 0.34);
+            blind_to = 0.3 + 0.3 * floor(rm_h(rm_run_seed, 34.0) * 3.0);
+        }
         let covered = step(1.0 - blind_to, uy) * blind_style;
         let slat = fract(local.y / 0.045);
         let gap = rm_filtered(rm_ss(0.78, 0.86, slat), 0.17, glass_footprint, 0.045) * detail;
@@ -270,6 +278,7 @@ fn rm_kit_pane(pane: vec4<f32>, pos: vec3<f32>, ng: vec3<f32>, cam: vec3<f32>, k
     }
     let view = normalize(pos - cam);
     let dir = vec3<f32>(dot(view, tangent), view.y, -dot(view, n));
+    rm_run_seed = -1.0;
     let corner = pos - tangent * local.x - vec3<f32>(0.0, local.y, 0.0);
     let c = floor(corner * 2.0 + 0.5);
     let seed = fract(sin(fract(c.x * 0.1031 + c.y * 0.11369 + c.z * 0.13787) * 311.7) * 43758.5453);
@@ -282,6 +291,13 @@ fn rm_kit_pane(pane: vec4<f32>, pos: vec3<f32>, ng: vec3<f32>, cam: vec3<f32>, k
     let heading = floor(nw.x * 8.0 + 0.5) * 0.37 + floor(nw.z * 8.0 + 0.5) * 0.71;
     let plane_hash = fract(sin(plane_off * 0.1031 + heading) * 43758.5453);
     let pane_bottom = pos.y - local.y;
+    if (RM_BLIND_RUNS && office > 0.5) {
+        // the tenant run: 3-7 room cells of 3.6 m along this facade plane's floor.
+        let fl = floor(pos.y / 3.6);
+        let run = 3.0 + floor(5.0 * fract(sin(plane_hash * 91.7 + fl * 12.9898) * 43758.5453));
+        let along = floor(floor(dot(pos, tangent) / 3.6) / run);
+        rm_run_seed = fract(sin(plane_hash * 37.1 + fl * 78.233 + along * 4.719) * 43758.5453);
+    }
     // A forced shop glass carries its building's switch class in the kind
     // signs and the size parity (not packed here: one class per window from
     // its own bits), handed in negated.

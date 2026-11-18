@@ -272,10 +272,11 @@ pub fn wgsl_constants() -> String {
     // the switches of the room fixes (see `RoomFixes`).
     let f = RoomFixes::from_args();
     s.push_str(&format!(
-        "const RM_FRAMES: bool = {};\nconst RM_DAY_DEPTH: f32 = {:?};\nconst RM_DAY_THROUGH: f32 = {:?};\n",
+        "const RM_FRAMES: bool = {};\nconst RM_DAY_DEPTH: f32 = {:?};\nconst RM_DAY_THROUGH: f32 = {:?};\nconst RM_BLIND_RUNS: bool = {};\n",
         f.frames,
         if f.dim { DAY_DEPTH } else { 1.0 },
-        if f.dim { DAY_THROUGH } else { 1.0 }
+        if f.dim { DAY_THROUGH } else { 1.0 },
+        f.blind_runs
     ));
     s
 }
@@ -288,11 +289,14 @@ pub fn wgsl_constants() -> String {
 /// light that reaches into it, not the full light on the facade: everything
 /// past the glass plane takes `DAY_DEPTH` of it, and all of it, the curtains
 /// and blinds at the glass too, is seen through the tinted pane
-/// (`DAY_THROUGH`) (`--no-room-dim`).
+/// (`DAY_THROUGH`) (`--no-room-dim`). An office's blinds go by tenant, a
+/// run of 3-7 room cells along a floor at one of a few levels, not cell by
+/// cell (the scatter of pale cells over a dark tower) (`--no-room-blind-runs`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RoomFixes {
     pub frames: bool,
     pub dim: bool,
+    pub blind_runs: bool,
 }
 
 pub const DAY_DEPTH: f32 = 0.5;
@@ -303,7 +307,11 @@ pub const FRAME_MAX_Q: u8 = 127;
 impl RoomFixes {
     pub fn from_args() -> Self {
         let args: Vec<String> = std::env::args().collect();
-        Self { frames: !args.iter().any(|a| a == "--no-room-frames"), dim: !args.iter().any(|a| a == "--no-room-dim") }
+        Self {
+            frames: !args.iter().any(|a| a == "--no-room-frames"),
+            dim: !args.iter().any(|a| a == "--no-room-dim"),
+            blind_runs: !args.iter().any(|a| a == "--no-room-blind-runs"),
+        }
     }
 }
 
