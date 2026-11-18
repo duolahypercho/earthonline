@@ -298,6 +298,7 @@ selection:
 | Props | `--no-props2`, `--no-furniture`, `--no-eztree`, `--no-wires`, `--no-overhead`, `--no-lamp-sprites` |
 | Buildings | `--no-facade-detail`, `--no-facade-age`, `--no-rooms`, `--no-room-frames`, `--no-room-dim`, `--no-roof-colours`, `--no-roof-plant`, `--no-roof-parapet`, `--no-roof-patches`, `--no-wall-paint` |
 | Ground | `--no-ground-hills`, `--no-ground-green`, `--no-ground-contact`, `--no-terrain-lod` |
+| Water | `--no-water` (the flat sea plane), `--no-water-instanced` (the pass needs multi-draw-indirect-count, as before; without it the flat sea plane), `--no-water-brdf` (the earlier Fresnel, roughness, sun lobe and reflection march), `--no-water-body` (the earlier body colour), `--no-water-foam-cover` (the earlier whitecap cover and foam sampling) |
 | Scanned surfaces | `--no-cc0` (all), `--no-cc0-street`, `--no-cc0-walls`, `--no-cc0-ground`, `--no-cc0-decals`, `--no-cc0-grime`, `--no-cc0-stains`, `--no-cc0-pom`, `--no-cc0-tiling` |
 | Lighting and sky | `--no-shadows`, `--no-ao`, `--no-contact-shadows`, `--no-atmosphere`, `--no-fog`, `--no-clouds`, `--no-cloud-shadows`, `--no-shafts`, `--no-moon-stars`, `--no-lights` |
 | Weather | `--no-rain`, `--no-wet`, `--no-wind` |
@@ -469,7 +470,14 @@ entrances are fitted to the drawn street.
 **Water.** A camera-following grid displaced by a cascaded FFT ocean
 spectrum, masked by a citywide shore field, with its own optics per body of
 water, screen-space reflection, surf on the mapped beaches and a shore
-collar. `--no-water` draws a flat sea plane.
+collar. Its patches are one instanced indirect draw, so it draws on adapters
+without multi-draw-indirect-count too. The slope variance a pixel does not
+resolve goes to the BRDF (the Cox-Munk total for the wind kept at every
+range), with the Fresnel averaged over the visible facets and a Beckmann sun
+lobe; the body's colour is the water-leaving reflectance of the bay's and
+the coast's optical properties under the city's own irradiance
+(`eo-water` `optics`); whitecaps cover what the Monahan and
+O'Muircheartaigh fit gives. `--no-water` draws a flat sea plane.
 
 **Sky and weather.** Analytic sky and atmosphere, volumetric clouds and the
 marine layer, a weather schedule (clear to storm) with rain, wet ground and
