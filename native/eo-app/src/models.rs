@@ -62,7 +62,8 @@ pub fn model_arena_bound(set: &eo_render::authored::AuthoredSet) -> (u32, u32) {
         .iter()
         .map(|b| {
             let g = &set.groups[b.group as usize];
-            (Vec3::new(g.center[0], 0.0, g.center[2]), g.radius, b.slot.vertex_count, b.slot.index_count)
+            let extra = far_model_extra(&b.id, eo_render::far_city::FarCity::current().landmark_models);
+            (Vec3::new(g.center[0], 0.0, g.center[2]), g.radius + extra, b.slot.vertex_count, b.slot.index_count)
         })
         .collect();
     let step = 40.0f32;
@@ -121,6 +122,16 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     }
     objects.extend(set.placeholder_objects());
     let mut groups: Vec<GpuLodGroup> = set.groups.clone();
+    // the records kept resident far out: the LOD pass measures to a sphere
+    // larger by the extra reach, so the model (not the footprint) draws that far.
+    let far_models = eo_render::far_city::FarCity::current().landmark_models;
+    for b in &set.buildings {
+        let extra = far_model_extra(&b.id, far_models);
+        if extra > 0.0 {
+            groups[b.group as usize].radius += extra;
+            eprintln!("models: {} kept resident to {:.0} m from its bounds (see FAR_MODELS)", b.id, MODEL_LOAD_M + extra);
+        }
+    }
     let mut kit = KitArena::default();
     if let Some(k) = &world.kit {
         assert_eq!(groups.len() as u32, k.group_base);
@@ -374,6 +385,31 @@ pub enum ModelState {
 /// which level draws; a model not resident draws its footprint.
 pub const MODEL_LOAD_M: f32 = 360.0;
 pub const MODEL_DROP_M: f32 = 420.0;
+
+/// An authored landmark record kept resident, and drawn as its full model,
+/// out to `reach_m` from its bounds instead of `MODEL_LOAD_M`.
+pub struct FarModel {
+    /// The Blender building's id (its `public/assets/buildings/<id>` folder).
+    pub id: &'static str,
+    pub reach_m: f32,
+    pub why: &'static str,
+}
+
+/// The records kept resident far out (`--no-landmark-far-models`: none).
+pub const FAR_MODELS: &[FarModel] = &[FarModel {
+    id: "sf-building-ds856",
+    reach_m: 3000.0,
+    why: "Fort Point (DataSF footprint ds856, build_fort.py, about 10k triangles): it stands under the bridge's south arch and is in frame from the Fort Point shore (about 0.8 km), Crissy Field and the bluff east of the anchorage (1-2.5 km); past 360 m it was its white footprint box",
+}];
+
+/// Metres added to record `id`'s distance budget: the LOD pass and the
+/// model gate both measure to its bounds less this (0 for every other record).
+pub fn far_model_extra(id: &str, on: bool) -> f32 {
+    if !on {
+        return 0.0;
+    }
+    FAR_MODELS.iter().find(|f| f.id == id).map(|f| (f.reach_m - MODEL_LOAD_M).max(0.0)).unwrap_or(0.0)
+}
 /// every model whose bounds are within this of the camera is
 /// wanted in every direction (no view test): a Blender building has no middle
 /// level, so turning toward one this close must never show its footprint box.
@@ -816,6 +852,7 @@ impl ModelRuntime {
         s.set_view(cone);
         let set = &world.authored;
         let load = MODEL_LOAD_M.min(self.model_radius);
+        let far_models = eo_render::far_city::FarCity::current().landmark_models;
         let (mut gone_queued, mut evict) = (std::collections::HashSet::new(), vec![]);
         self.residency.out_of_view = 0;
         for (i, b) in set.buildings.iter().enumerate() {
@@ -825,7 +862,7 @@ impl ModelRuntime {
             }
             let g = &set.groups[b.group as usize];
             let c = Vec3::from(g.center);
-            let d = (c - cam).length() - g.radius;
+            let d = (c - cam).length() - g.radius - far_model_extra(&b.id, far_models);
             let mut want = d <= load || (st != ModelState::Absent && d <= MODEL_DROP_M.min(self.model_radius.max(load)));
             // Within the ring every direction is wanted; past it, the view decides.
             if want && d > MODEL_RING_M.min(load) {
