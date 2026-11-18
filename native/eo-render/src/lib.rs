@@ -21,6 +21,7 @@ pub mod cc0; // the CC0 scanned sets
 pub mod cc0_decals; // street wear decals
 pub mod facade; // facade
 pub mod ground2; // the open ground from the measured ground-green table
+pub mod groundcover; // the ground vegetation and hill rock (hooks beside the props')
 pub mod hitch; // hitch
 pub mod hlod; // hlod
 pub mod hlod_bake; // hlod
@@ -383,6 +384,8 @@ pub struct Renderer {
     pub agents: std::sync::OnceLock<agents::AgentsGpu>,
     /// static street props (signals, signs, trees, pads), attached once their library is cooked.
     pub props: std::sync::OnceLock<props::PropsGpu>,
+    /// the ground vegetation and hill rock near the camera (`groundcover`; nothing attached draws nothing).
+    pub groundcover: groundcover::GroundCover,
     /// bytes written through `write` since the last `update` (the
     /// frame's streaming uploads); a frame over `PROBE_DEFER_UPLOAD_BYTES`
     /// draws no probe face.
@@ -999,6 +1002,7 @@ impl Renderer {
             street_radii: street::DEFAULT_STREET_RADII,
             agents: std::sync::OnceLock::new(), // agents
             props: std::sync::OnceLock::new(),  // props
+            groundcover: Default::default(),
             frame_upload_bytes: std::sync::atomic::AtomicU64::new(0),
             water: std::sync::OnceLock::new(),  // water
             surf: std::sync::OnceLock::new(), // surf
@@ -1561,6 +1565,7 @@ impl Renderer {
         if let Some(p) = self.props.get() {
             p.update(queue, cam, &self.look, occlusion && self.compact); // props
         }
+        self.groundcover.update(queue, cam, &self.look, occlusion && self.compact);
         if let Some(w) = self.water.get() {
             // the grid, the clock, the gate, the uniforms (the probe as the mirror's fallback).
             let probe = (frame.probe_info[3] > 0.5).then(|| glam::Vec3::new(frame.probe_info[0], frame.probe_info[1], frame.probe_info[2]));
@@ -1645,6 +1650,7 @@ impl Renderer {
         if let Some(p) = self.props.get() {
             p.encode_pre(enc, &self.look); // cascade cull + casters (and the camera cull with occlusion off)
         }
+        self.groundcover.encode_pre(enc, &self.look);
         // the scene probe's face for this frame (after the shadows it is lit with).
         {
             let pbg = self.probe_draw_bg.lock().unwrap()[self.probe.front().0].clone();
@@ -1749,6 +1755,11 @@ impl Renderer {
                         pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
                         pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint32);
                     }
+                    if self.groundcover.draw(&mut pass, &self.look) {
+                        // the ground cover after the props; the city buffers again if it bound its own.
+                        pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
+                        pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint32);
+                    }
                     if let Some(a) = self.agents.get() {
                         // moving things after the opaque city, then the city buffers again.
                         a.draw_opaque(&mut pass, &self.look);
@@ -1812,6 +1823,7 @@ impl Renderer {
                     if let Some(p) = self.props.get() {
                         p.cull_camera(pass, hzb_bg); // the camera view against this frame's pyramid
                     }
+                    self.groundcover.cull_camera(pass, hzb_bg);
                     if let Some(a) = self.agents.get() {
                         a.cull_camera(pass, hzb_bg); // moving agents against this frame's pyramid
                     }
