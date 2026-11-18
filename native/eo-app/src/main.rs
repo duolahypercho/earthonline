@@ -382,6 +382,10 @@ fn parse_args() -> Result<Args> {
             "--no-corridor-palms" => eo_landmarks::features::set_corridor_palms(false), // no Embarcadero palms, as before
             "--no-guard-detail" => eo_landmarks::features::set_guard_detail(false), // the quay guard's first pass, as before
             "--no-pier-sheds" => eo_landmarks::features::set_pier_sheds(false), // the Ferry Plaza's JS shed boxes, as before
+            "--no-palm-detail" => eo_landmarks::features::set_palm_detail(false), // the corridor palms' first pass, as before
+            "--no-facade-relief" => eo_landmarks::features::set_ferry_building_relief(false), // the Ferry Building's second pass, as before
+            "--no-rail-polish" => eo_landmarks::features::set_rail_polish(false), // the rails' worn band at 0.4 / 0.65, no sealant joints, as before
+            "--no-furniture-models" => eo_render::props_lib2::furniture_models::set_enabled(false), // missing-GLB furniture as boxes, as before
             "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
             s if a.props2.parse_flag(s) => {} // --no-props2, --no-furniture, --no-eztree, --no-overhead, --no-wires, --no-props2-shading, --capture-props2
             "--agents-bench" | "--agents-capture" | "--people-capture" | "--people-lineup" => {} // + --people-capture, --people-lineup
