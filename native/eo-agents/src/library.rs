@@ -67,14 +67,15 @@ pub struct Meta {
 /// where the street people come from.
 #[derive(Clone, Debug, PartialEq)]
 pub enum PeopleSource {
-    /// No people (`--no-rocketbox`, or no copy at `EO_PEOPLE_ROOT`).
+    /// No people (`--no-rocketbox`, or no copy in the people folder).
     Off,
     /// The Rocketbox avatars under this root (no people if they cannot be cooked).
     Rocketbox(PathBuf),
 }
 
 impl PeopleSource {
-    /// `EO_PEOPLE_ROOT` when it holds a copy, else no people.
+    /// The people folder (`<repo>/external/people`, or the one `EO_PEOPLE_ROOT`
+    /// names) when it holds a copy, else no people.
     pub fn from_env() -> Self {
         match rocketbox::root_from_env() {
             Some(p) => PeopleSource::Rocketbox(p),
@@ -208,8 +209,8 @@ pub fn cache_path(cache_dir: &Path, key: &str) -> PathBuf {
 
 impl Library {
     /// Load from the cache, else cook from the GLBs (and write the cache).
-    /// The street people are the Rocketbox people when a copy is at
-    /// `EO_PEOPLE_ROOT`, else there are none.
+    /// The street people are the Rocketbox people when the people folder
+    /// holds a copy (`rocketbox::root_from_env`), else there are none.
     pub fn load(repo_root: &Path, cache_dir: Option<&Path>) -> Result<Self> {
         Self::load_with(repo_root, cache_dir, &PeopleSource::from_env())
     }
@@ -229,6 +230,7 @@ impl Library {
                         lib.from_cache = true;
                         lib.load_ms = t.elapsed().as_secs_f64() * 1e3;
                         lib.cache_path = Some(p);
+                        say_people(&lib, people, &motions);
                         return Ok(lib);
                     }
                     Err(e) => eprintln!("agents: cache {} refused ({e:#}); cooking again", p.display()),
@@ -246,6 +248,7 @@ impl Library {
             }
         }
         lib.load_ms = t.elapsed().as_secs_f64() * 1e3;
+        say_people(&lib, people, &motions);
         Ok(lib)
     }
 
@@ -255,6 +258,19 @@ impl Library {
 
     pub fn triangles(&self, mesh: u32) -> u32 {
         self.meta.mesh_triangles.get(mesh as usize).copied().unwrap_or(0)
+    }
+}
+
+/// One line when the people are drawn: which folders they came from.
+fn say_people(lib: &Library, people: &PeopleSource, motions: &MotionRoots) {
+    if let ("rocketbox", PeopleSource::Rocketbox(root), Some(clips), Some(styles)) = (lib.meta.people_source.as_str(), people, &motions.clips, &motions.styles) {
+        eprintln!(
+            "agents: people drawn ({}): Rocketbox avatars from {}, clips from {}, walks from {}",
+            if lib.from_cache { "from the cache" } else { "cooked" },
+            root.display(),
+            clips.display(),
+            styles.display()
+        );
     }
 }
 
@@ -365,7 +381,7 @@ pub fn cook_full(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions
             }
         }
         PeopleSource::Off => {
-            let why = format!("no Rocketbox people (set {} to a copy of them, and {} and {} to their motions)", rocketbox::ROOT_ENV, crate::motion::CLIPS_ROOT_ENV, crate::motion::STYLES_ROOT_ENV);
+            let why = format!("no Rocketbox people (--no-rocketbox, or no copy at {})", eo_data::external::PEOPLE.looked_in());
             eprintln!("agents: people are not drawn: {why}");
             b.lib.meta.people_fallback = Some(why);
         }
@@ -555,12 +571,12 @@ struct MotionSources {
 
 /// Both motion sources, or why the people cannot move.
 fn motion_sources(roots: &MotionRoots, meta: &mut crate::motion::MotionMeta) -> Result<MotionSources> {
-    use crate::motion::{CLIPS_ROOT_ENV, Manifest, ROLES, STYLES, STYLES_ROOT_ENV, load_rb_clip};
+    use crate::motion::{Manifest, ROLES, STYLES, load_rb_clip};
     if !crate::motion::enabled() {
         bail!("the Rocketbox motions are switched off (--no-rocketbox-motions), and nothing else moves the people");
     }
-    let clips_root = roots.clips.as_ref().ok_or_else(|| anyhow!("no Rocketbox motion clips ({CLIPS_ROOT_ENV} is not set or holds no copy)"))?;
-    let styles_root = roots.styles.as_ref().ok_or_else(|| anyhow!("no 100STYLE walks ({STYLES_ROOT_ENV} is not set or holds no copy)"))?;
+    let clips_root = roots.clips.as_ref().ok_or_else(|| anyhow!("no Rocketbox motion clips: no copy at {}", eo_data::external::PEOPLE_MOTIONS.looked_in()))?;
+    let styles_root = roots.styles.as_ref().ok_or_else(|| anyhow!("no 100STYLE walks: no copy at {}", eo_data::external::PEOPLE_STYLES.looked_in()))?;
     let clips = (|| -> Result<HashMap<String, crate::motion::RbClip>> {
         let m = Manifest::clips()?;
         m.read(clips_root, "LICENSES.md").context("the copy's LICENSES.md")?;
