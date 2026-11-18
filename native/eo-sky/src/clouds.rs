@@ -19,8 +19,9 @@
 //! at or under the city's hills; the fog bucket's deck is that layer, 60-300
 //! m, and the drizzle/rain decks sit between it and the cumulus base.
 
-use crate::hash::lattice01;
+use crate::hash::{hash01, lattice01};
 use crate::weather::{Kind, WeatherState};
+use std::sync::atomic::{AtomicU8, Ordering};
 
 pub const SHEET_RES: usize = 256;
 /// World metres one sheet tile spans (sky-atmosphere.js tile sizes).
@@ -173,6 +174,122 @@ const DRIFT_LOW_MS: f64 = 7.0;
 pub const FAIR_WEATHER_COVER: f64 = 0.4;
 const DRIFT_HIGH_MS: f64 = 18.0;
 
+/// A clear day's sky: the clear rung (the weather's overcast under 0.3)
+/// draws one of three skies.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SkyState {
+    /// no cloud at all (a NOAA "clear" day, 0-3/10 sky cover, with nothing aloft).
+    Cloudless,
+    /// high ice cloud only: fibrous cirrus at `CIRRUS_ALT_M`.
+    Cirrus,
+    /// the fair-weather sky this port drew on every clear day: the high
+    /// sheet at 5.2 km over the (opt-in) cumulus field.
+    FairCumulus,
+}
+
+impl SkyState {
+    pub fn name(self) -> &'static str {
+        match self {
+            SkyState::Cloudless => "cloudless",
+            SkyState::Cirrus => "cirrus",
+            SkyState::FairCumulus => "fair_cumulus",
+        }
+    }
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "cloudless" => SkyState::Cloudless,
+            "cirrus" => SkyState::Cirrus,
+            "fair_cumulus" | "cumulus" => SkyState::FairCumulus,
+            _ => return None,
+        })
+    }
+    fn code(s: Option<Self>) -> u8 {
+        match s {
+            None => 0,
+            Some(SkyState::Cloudless) => 1,
+            Some(SkyState::Cirrus) => 2,
+            Some(SkyState::FairCumulus) => 3,
+        }
+    }
+}
+
+/// Mean number of clear days (0-3/10 mean daylight sky cover) and of cloudy
+/// days (8/10-10/10) per month, January first, at San Francisco airport:
+/// NOAA National Climatic Data Center, Comparative Climatic Data for the
+/// United States (normals 1981-2010, period of record ending 2015), as
+/// tabulated by month at ggweather.com/climate/clear.htm and cloudy.htm
+/// (public-domain US government data). The partly cloudy days are the rest.
+pub const SFO_CLEAR_DAYS: [f64; 12] = [9.0, 8.0, 10.0, 11.0, 14.0, 16.0, 21.0, 19.0, 18.0, 16.0, 11.0, 9.0];
+pub const SFO_CLOUDY_DAYS: [f64; 12] = [15.0, 13.0, 13.0, 10.0, 8.0, 5.0, 3.0, 3.0, 4.0, 7.0, 11.0, 14.0];
+const MONTH_DAYS: [f64; 12] = [31.0, 28.0, 31.0, 30.0, 31.0, 30.0, 31.0, 31.0, 30.0, 31.0, 30.0, 31.0];
+
+/// The month (0 = January) of a day of a common year (1 = 1 January).
+pub fn month_of(day_of_year: f64) -> usize {
+    let mut d = day_of_year.floor().clamp(1.0, 365.0);
+    for (m, n) in MONTH_DAYS.iter().enumerate() {
+        if d <= *n {
+            return m;
+        }
+        d -= n;
+    }
+    11
+}
+
+/// The chance that a day of the month that is not cloudy is clear (0-3/10):
+/// clear / (days - cloudy) in `SFO_CLEAR_DAYS`.
+pub fn clear_share(month: usize) -> f64 {
+    let m = month.min(11);
+    SFO_CLEAR_DAYS[m] / (MONTH_DAYS[m] - SFO_CLOUDY_DAYS[m])
+}
+
+/// The clear rung's sky on a day of the year, drawn from the month's
+/// statistics with a hash of the day (the same day draws the same sky): a
+/// clear day is cloudless, a partly cloudy one the fair-weather sky. (No
+/// cited climatology splits the clear days into cloudless and cirrus ones,
+/// so cirrus is drawn only where a shot names it: `set_sky_state`.)
+pub fn drawn_state(day_of_year: f64) -> SkyState {
+    let u = hash01(0x5c1e_a7e5, day_of_year.floor().max(0.0) as u32, 17);
+    if u < clear_share(month_of(day_of_year)) { SkyState::Cloudless } else { SkyState::FairCumulus }
+}
+
+static STATE: AtomicU8 = AtomicU8::new(0);
+
+/// Hold the clear rung's sky (a shot's `sky`, the observation of its day),
+/// or None to draw it from the day (`drawn_state`).
+pub fn set_sky_state(s: Option<SkyState>) {
+    STATE.store(SkyState::code(s), Ordering::Relaxed);
+}
+
+/// The held sky, if any.
+pub fn held_sky_state() -> Option<SkyState> {
+    match STATE.load(Ordering::Relaxed) {
+        1 => Some(SkyState::Cloudless),
+        2 => Some(SkyState::Cirrus),
+        3 => Some(SkyState::FairCumulus),
+        _ => None,
+    }
+}
+
+/// The clear rung's sky in force (`--no-clear-sky-state`: always the fair-weather sky).
+pub fn sky_state() -> SkyState {
+    if !eo_look::features::daylight().clear_sky_state {
+        return SkyState::FairCumulus;
+    }
+    held_sky_state().unwrap_or_else(|| drawn_state(eo_look::sun::day_of_year()))
+}
+
+/// The cirrus deck's height: 9.5 km. The WMO International Cloud Atlas
+/// (2017, "Definitions: approximate height ranges of the etages") puts the
+/// high etage, where cirrus forms, at 5-13 km in temperate regions; under a
+/// mid-latitude tropopause at 10-12 km it sits mostly at 8-11 km, whose
+/// middle this is (INFERRED from the etage and the tropopause height).
+pub const CIRRUS_ALT_M: f64 = 9500.0;
+/// A cirrus streak's peak opacity: thin cirrus has a visible optical depth
+/// of 0.03-0.3 (Sassen and Cho 1992, "Subvisual-thin cirrus lidar dataset
+/// for satellite verification and climatological research", J. Appl.
+/// Meteor. 31: thin cirrus 0.03 < tau < 0.3); 0.3 at a streak's core.
+pub const CIRRUS_OPACITY: f64 = 0.3;
+
 pub fn decks(w: &WeatherState) -> Decks {
     let p = &w.profile;
     let s = w.severity.clamp(0.0, 4.0);
@@ -217,6 +334,31 @@ pub fn decks(w: &WeatherState) -> Decks {
         marine_swing_m: 110.0,
         marine_drift: [3.0 * dir[0], 3.0 * dir[1]],
     }
+    .with_sky(p.overcast < 0.3, sky_state(), eo_look::features::daylight().cirrus)
+}
+
+impl Decks {
+    /// The clear rung's sky (`clear`: the weather's overcast under 0.3): a
+    /// cloudless day has no deck, a cirrus day only the cirrus (with
+    /// `cirrus` off, the fair-weather sky), a fair day the decks unchanged.
+    pub fn with_sky(mut self, clear: bool, state: SkyState, cirrus: bool) -> Self {
+        if !clear {
+            return self;
+        }
+        match state {
+            SkyState::Cloudless => {
+                self.coverage = 0.0;
+                self.high_opacity = 0.0;
+            }
+            SkyState::Cirrus if cirrus => {
+                self.coverage = 0.0;
+                self.high_alt_m = CIRRUS_ALT_M;
+                self.high_opacity = CIRRUS_OPACITY;
+            }
+            _ => {}
+        }
+        self
+    }
 }
 
 /// Where the drift has moved a deck at `world_s`, wrapped to the tile (so
@@ -237,6 +379,38 @@ mod tests {
             assert!((covered - c).abs() < 0.01, "coverage {c}: {covered}");
         }
     }
+    #[test]
+    fn a_clear_day_draws_its_sky_from_the_month() {
+        // a summer month is clearer than a winter one; the draw is stable per day
+        assert!(clear_share(6) > clear_share(0));
+        assert!((0.0..=1.0).contains(&clear_share(11)));
+        assert_eq!(month_of(1.0), 0);
+        assert_eq!(month_of(103.0), 3);
+        assert_eq!(month_of(265.0), 8);
+        assert_eq!(month_of(365.0), 11);
+        assert_eq!(drawn_state(150.0), drawn_state(150.0));
+        // over the days of July the cloudless share is the month's clear share
+        let n = (182..213).filter(|d| drawn_state(*d as f64) == SkyState::Cloudless).count() as f64 / 31.0;
+        assert!((n - clear_share(6)).abs() < 0.3, "{n} {}", clear_share(6));
+    }
+
+    #[test]
+    fn the_sky_state_only_moves_the_clear_rung() {
+        let w = crate::weather::preset(Kind::Clear);
+        let d = decks(&w);
+        let fair = d.with_sky(true, SkyState::FairCumulus, true);
+        assert_eq!(fair.high_alt_m, d.high_alt_m);
+        let none = d.with_sky(true, SkyState::Cloudless, true);
+        assert_eq!((none.coverage, none.high_opacity), (0.0, 0.0));
+        let ci = d.with_sky(true, SkyState::Cirrus, true);
+        assert!(ci.high_alt_m >= 8000.0 && ci.high_alt_m <= 11000.0 && ci.coverage == 0.0);
+        let off = d.with_sky(true, SkyState::Cirrus, false);
+        assert_eq!((off.coverage, off.high_alt_m, off.high_opacity), (d.coverage, d.high_alt_m, d.high_opacity));
+        let rain = decks(&crate::weather::preset(Kind::Rain));
+        let r2 = rain.with_sky(false, SkyState::Cloudless, true);
+        assert_eq!(r2.coverage, rain.coverage);
+    }
+
     #[test]
     fn the_sheet_tiles() {
         // Opposite edges continue each other (no seam): mean step across the edge like inside.
