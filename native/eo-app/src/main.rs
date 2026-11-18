@@ -39,6 +39,7 @@ use std::time::Instant;
 #[derive(Clone, Debug)]
 pub struct Args {
     pub bench: bool,
+    pub start_underwater: bool,
     pub frames: usize,
     pub warmup: usize,
     pub width: u32,
@@ -181,6 +182,7 @@ impl Default for PerfArgs {
 fn parse_args() -> Result<Args> {
     let mut a = Args {
         bench: false,
+        start_underwater: false,
         frames: 720,
         warmup: 60,
         width: 1920,
@@ -364,6 +366,9 @@ fn parse_args() -> Result<Args> {
             "--sky-shots" => {} // bench/sky_shots.rs reads it
             "--so-shots" => {} // so: bench/so_shots.rs reads it (the sky and ocean review cards)
             "--no-farshore" => {} // farshore.rs reads it (no far terrain)
+            "--start-underwater" => a.start_underwater = true,
+            "--water-optics" => a.look.water_optics = true,
+            "--no-water-optics" => a.look.water_optics = false,
             "--no-water" => a.look.water = false, // the flat sea quad, as before
             "--no-water-instanced" => a.look.water_features &= !eo_render::water::FEAT_INSTANCED, // the water pass needs multi-draw-indirect-count again (without it, the flat sea)
             "--no-water-brdf" => a.look.water_features &= !eo_render::water::FEAT_BRDF, // the earlier Fresnel, roughness and sun lobe

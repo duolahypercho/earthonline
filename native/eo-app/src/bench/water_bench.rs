@@ -218,6 +218,35 @@ pub fn bay_segment(world: &World, frames: usize, aspect: f32, far: f32) -> Optio
     })
 }
 
+/// A shallow dive off the Ferry Building. Check the local shore and bed so
+/// the capture and the interactive fly camera start inside navigable water.
+pub(crate) fn dive_camera(world: &World, aspect: f32, far: f32) -> Option<Camera> {
+    let eye = super::on_plan(Vec3::new(FERRY_BUILDING_SURVEYED[0] + 550.0, sea() - 0.4, FERRY_BUILDING_SURVEYED[1] - 250.0));
+    let field = &world.water.as_ref()?.field;
+    let bed = field.press_ground(eye.x as f64, eye.z as f64, world.elevation.ground(eye.x as f64, eye.z as f64));
+    if signed(world, eye.x, eye.z)? < 50.0 || eye.y - (bed as f32) < 0.6 {
+        return None;
+    }
+    Some(Camera { far, ..Camera::new(eye, yaw_of(Vec3::NEG_X), 0.78, aspect) })
+}
+
+pub fn dive_segment(world: &World, frames: usize, aspect: f32, far: f32) -> Option<Segment> {
+    let camera = dive_camera(world, aspect, far)?;
+    Some(Segment {
+        name: "bay_dive",
+        description: "Descend through the wave surface off the Ferry Building, look up through the water, then surface.".into(),
+        camera: Box::new(move |i, n| {
+            let t = i as f32 / n.saturating_sub(1).max(1) as f32;
+            let dive = (std::f32::consts::PI * t).sin().powi(2);
+            let y = sea() + 1.2 - 2.0 * dive;
+            Camera { eye: Vec3::new(camera.eye.x, y, camera.eye.z), pitch: -0.15 + dive * 1.05, ..camera }
+        }),
+        frames,
+        paced: false,
+        streams: true,
+    })
+}
+
 /// The `capture-water-*` views: (name, camera, what it shows).
 pub fn capture_cameras(world: &World, aspect: f32, far: f32) -> Vec<(&'static str, Camera, String)> {
     let mut out = vec![];
@@ -245,6 +274,11 @@ pub fn capture_cameras(world: &World, aspect: f32, far: f32) -> Vec<(&'static st
     // The skyline across the bay: 1 km off the Ferry Building, 8 m up, looking west.
     let eye = super::on_plan(Vec3::new(FERRY_BUILDING_SURVEYED[0] + 1000.0, sea() + 8.0, FERRY_BUILDING_SURVEYED[1] + 150.0));
     out.push(("skyline-reflection", Camera { far, ..Camera::new(eye, yaw_of(Vec3::new(-1.0, 0.0, 0.12)), -0.035, aspect) }, "downtown across the bay from 1 km out, 8 m over the water".to_string()));
+    if let Some(cam) = dive_camera(world, aspect, far) {
+        out.push(("bay-submerged", cam, "0.4 m under the bay surface, looking up toward the city".into()));
+        let crossing = Camera { eye: Vec3::new(cam.eye.x, sea(), cam.eye.z), pitch: 0.0, ..cam };
+        out.push(("bay-waterline", crossing, "at mean sea level facing the city".into()));
+    }
     // The bay from above: 1.6 km up over the water east of the city, looking down-west.
     let eye = super::on_plan(Vec3::new(FERRY_BUILDING_SURVEYED[0] + 2600.0, 1600.0, FERRY_BUILDING_SURVEYED[1] + 900.0));
     let to = super::on_plan(Vec3::new(FERRY_BUILDING_SURVEYED[0] - 600.0, 0.0, FERRY_BUILDING_SURVEYED[1])) - eye;
@@ -255,6 +289,19 @@ pub fn capture_cameras(world: &World, aspect: f32, far: f32) -> Vec<(&'static st
         if signed(world, x, z).is_some_and(|s| s > -40.0) {
             let eye = Vec3::new(x, ground(world, x, z).max(sea()) + EYE_HEIGHT_M, z);
             out.push(("ocean-beach", Camera { far, ..Camera::new(eye, yaw_of(Vec3::new(-1.0, 0.0, -0.25)), -0.04, aspect) }, "Ocean Beach, on the sand 40 m from the waterline, looking out at the Pacific".to_string()));
+            if let Some(w) = &world.water {
+                // Search offshore for a shallow, submerged sand receiver.
+                for k in 1..100 {
+                    let q = x - 2.0 * k as f32;
+                    let bed = w.field.press_ground(q as f64, z as f64, world.elevation.ground(q as f64, z as f64)) as f32;
+                    if w.field.signed_at(q as f64, z as f64) > 0.0 && bed < sea() - 1.2 {
+                        let eye = Vec3::new(q, bed + 0.65, z);
+                        out.push(("pacific-bed", Camera { far, ..Camera::new(eye, yaw_of(Vec3::NEG_X), -0.36, aspect) },
+                            "above the submerged Ocean Beach foreshore, looking down at the sand".into()));
+                        break;
+                    }
+                }
+            }
             break;
         }
     }

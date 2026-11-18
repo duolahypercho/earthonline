@@ -57,7 +57,7 @@ fn test_field() -> ShoreField {
     ShoreField { origin, size, width: w, height: h, half, range: [-400.0, 400.0], beach_texels: 0, bake_ms: 0.0 }
 }
 
-fn setup(ctx: &GpuContext) -> (Renderer, eo_water::WaterData) {
+fn setup(ctx: &GpuContext, water_optics: bool) -> (Renderer, eo_water::WaterData) {
     let (mut v, mut i, mut o) = (vec![], vec![], vec![]);
     let sand = 0xff60_7080;
     boxed(&mut v, &mut i, &mut o, ObjectKind::Terrain, Vec3::new(-400.0, -8.0, -400.0), Vec3::new(400.0, -6.0, 400.0), sand);
@@ -73,7 +73,7 @@ fn setup(ctx: &GpuContext) -> (Renderer, eo_water::WaterData) {
     o.push(GpuObject::new(ObjectKind::Sea, [-400.0, sea, -400.0], [400.0, sea, 400.0], first, 6, base));
     let mut r = Renderer::from_parts(ctx, &v, &i, &o, wgpu::TextureFormat::Rgba8UnormSrgb, 1).unwrap();
     // No screen-space occlusion pass: it reads the HDR the water changes.
-    r.look.set_options(&ctx.device, eo_render::look::LookOptions { ao: false, ..r.look.options });
+    r.look.set_options(&ctx.device, eo_render::look::LookOptions { ao: false, water_optics, ..r.look.options });
     let data = eo_water::WaterData { field: test_field(), field_from_cache: false, ms: 0.0 };
     r.attach_water(ctx, &eo_render::water::WaterInit { data: &data, extent: [-400.0, -400.0, 400.0, 400.0] });
     (r, data)
@@ -124,7 +124,7 @@ fn frame(ctx: &GpuContext, r: &Renderer, cam: &Camera, frames: usize) -> (Vec<u8
 #[test]
 fn fft_matches_the_cpu_sum() {
     let ctx = ctx();
-    let (r, data) = setup(&ctx);
+    let (r, data) = setup(&ctx, false);
     let w = r.water.get().expect("water attached");
     w.set_always(true);
     // a fixed sea (the clear afternoon: swell, the Pacific's and the bay's wind seas).
@@ -219,7 +219,7 @@ fn foam_cover(ctx: &GpuContext, tex: &wgpu::Texture, c: u32, ch: usize) -> f64 {
 #[test]
 fn whitecaps_form_on_the_gpu() {
     let ctx = ctx();
-    let (r, _data) = setup(&ctx);
+    let (r, _data) = setup(&ctx, false);
     let w = r.water.get().expect("water attached");
     w.set_always(true);
     w.set_time(20.0);
@@ -242,7 +242,7 @@ fn whitecaps_form_on_the_gpu() {
 #[test]
 fn water_draws_where_the_field_says_water() {
     let ctx = ctx();
-    let (r, _data) = setup(&ctx);
+    let (r, _data) = setup(&ctx, false);
     let w = r.water.get().expect("water attached");
     w.set_always(true);
     w.set_time(2.0);
@@ -277,4 +277,34 @@ fn water_draws_where_the_field_says_water() {
     let up = Camera::new(Vec3::new(0.0, 30.0, 200.0), 0.0, 1.2, W as f32 / H as f32);
     let (_, c_up) = frame(&ctx, &r, &up, 2);
     assert_eq!(c_up[0], 0, "a patch drawn while looking at the sky");
+}
+
+#[test]
+fn submerged_camera_obeys_depth_critical_angle_and_shore() {
+    let ctx = ctx();
+    let (on, _) = setup(&ctx, true);
+    let (off, _) = setup(&ctx, false);
+    // At x = -70 m the nearshore ramp gives a flat surface. A steep
+    // sightline is inside Snell's window and a grazing one outside.
+    let view = |x, depth, pitch| {
+        Camera::new(Vec3::new(x, eo_water::SEA_LEVEL_Y as f32 - depth, 0.0), 0.0, pitch, W as f32 / H as f32)
+    };
+    let center = |r: &Renderer, cam: Camera| {
+        let (img, _) = frame(&ctx, r, &cam, 2);
+        let mut sum = 0u32;
+        for y in H / 2 - 4..H / 2 + 4 {
+            for x in W / 2 - 4..W / 2 + 4 {
+                let i = ((y * W + x) * 4) as usize;
+                sum += img[i..i + 3].iter().map(|&v| v as u32).sum::<u32>();
+            }
+        }
+        sum as f32 / (64.0 * 3.0)
+    };
+    let shallow = center(&on, view(-70.0, 0.35, 1.2));
+    let deep = center(&on, view(-70.0, 2.0, 1.2));
+    let grazing = center(&on, view(-70.0, 0.35, 0.18));
+    assert!(shallow > deep + 5.0, "shallow {shallow}, deep {deep}");
+    assert!(shallow > grazing + 5.0, "inside the window {shallow}, outside {grazing}");
+    let dry = view(-180.0, 0.5, 1.4);
+    assert!((center(&on, dry) - center(&off, dry)).abs() < 2.0, "submerged optics on dry land");
 }

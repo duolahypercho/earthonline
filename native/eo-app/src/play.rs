@@ -63,6 +63,7 @@ pub fn intercept(process_start: Instant) -> Option<Result<()>> {
 fn base_args() -> Args {
     Args {
         bench: false,
+        start_underwater: false,
         frames: 720,
         warmup: 60,
         width: 1920,
@@ -122,6 +123,8 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--segments" => o.segments = Some(val()?.split(',').map(|s| s.trim().to_string()).collect()),
             "--no-render" => o.render = false,
             "--collision-threads" => o.collision_threads = val()?.parse::<usize>()?.max(1),
+            "--water-optics" => a.look.water_optics = true,
+            "--no-water-optics" => a.look.water_optics = false,
             "--width" => a.width = val()?.parse()?,
             "--height" => a.height = val()?.parse()?,
             "--msaa" => a.msaa = val()?.parse()?,

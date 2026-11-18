@@ -55,9 +55,15 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         eo_render::hitch::raise_render_thread(); // render thread above the streaming workers
     }
     let world = load_world(args)?;
-    let spawn = crate::bench::spawn(); // the spawn on the scaled plan
-    let ground = world.elevation.ground(spawn[0] as f64, spawn[1] as f64) as f32;
-    let cam = Camera::new(Vec3::new(spawn[0], ground + 1.7, spawn[1]), 0.8, 0.0, args.width as f32 / args.height as f32);
+    let aspect = args.width as f32 / args.height as f32;
+    let cam = if args.start_underwater {
+        crate::bench::dive_camera(&world, aspect, args.far)
+            .ok_or_else(|| anyhow::anyhow!("the underwater start requires an open-water point above the bay bed"))?
+    } else {
+        let spawn = crate::bench::spawn();
+        let ground = world.elevation.ground(spawn[0] as f64, spawn[1] as f64) as f32;
+        Camera::new(Vec3::new(spawn[0], ground + 1.7, spawn[1]), 0.8, 0.0, aspect)
+    };
     let event_loop = EventLoop::new()?;
     let mut app = App {
         world,

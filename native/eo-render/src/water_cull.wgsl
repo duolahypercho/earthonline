@@ -1,4 +1,4 @@
-// one invocation per grid patch (32 x 32 patches of 16 x 16 quads).
+// One invocation per grid patch.
 // A patch is drawn when its box (the displaced surface's reach) is inside the
 // frustum and the terrain grid, not wholly over land (the max-reduction
 // pyramid of the shore field below the land mask), and, with occlusion on,

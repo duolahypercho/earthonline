@@ -71,6 +71,8 @@ impl Flags {
                 "--no-cache" => args.no_cache = true,
                 "--no-models" => args.models = false,
                 "--no-kit" => args.kit = false,
+                "--water-optics" => args.look.water_optics = true,
+                "--no-water-optics" => args.look.water_optics = false,
                 "--no-vsync" => args.vsync = false,
                 "--no-props" => args.props = false, // props in the UI's street
                 "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
@@ -94,6 +96,7 @@ impl Flags {
 fn default_args() -> Args {
     Args {
         bench: false,
+        start_underwater: false,
         frames: 720,
         warmup: 60,
         width: W,
