@@ -400,6 +400,8 @@ fn parse_args() -> Result<Args> {
             // read by `roofs_flags` (main) into the environment switches.
             "--no-roof-colours" | "--no-roof-contrast" | "--no-roof-parapet" | "--no-roof-patches" | "--no-roof-plant" => {}
             "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" => {} // `roofs_flags`
+            "--no-far-facade" => {} // `roofs_flags`: the far boxes as before (eo-render far_box.rs)
+            "--no-period-paint" => {} // `roofs_flags`: the timber rows' period paint at its finish's luminance (eo-kit wall_paint.rs)
             "--segments" => a.segments = Some(val()?.split(',').map(|s| s.trim().to_string()).collect()),
             // occlusion / hitch
             "--no-occlusion" => a.perf.occlusion = false,
@@ -1019,6 +1021,8 @@ fn roofs_flags() {
         ("--no-roof-patches", "EO_ROOF_PATCHES"),
         ("--no-roof-plant", "EO_ROOF_PLANT"),
         ("--no-wall-paint", "EO_WALL_PAINT"),
+        ("--no-far-facade", "EO_FAR_FACADE"),
+        ("--no-period-paint", "EO_PERIOD_PAINT"),
         ("--no-ground-green", "EO_GROUND_GREEN"),
         ("--no-ground-hills", "EO_GROUND_HILLS"),
         ("--no-ground-contact", "EO_GROUND_CONTACT"),

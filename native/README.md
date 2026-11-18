@@ -296,7 +296,7 @@ selection:
 | Content | `--no-models`, `--no-kit`, `--no-streets`, `--no-props`, `--no-agents`, `--no-landmarks`, `--no-water`, `--no-farshore`, `--no-sky` |
 | People | `--no-rocketbox`, `--no-rocketbox-motions` (either one: no people) |
 | Props | `--no-props2`, `--no-furniture`, `--no-eztree`, `--no-wires`, `--no-overhead`, `--no-lamp-sprites` |
-| Buildings | `--no-facade-detail`, `--no-facade-age`, `--no-rooms`, `--no-room-frames`, `--no-room-dim`, `--no-roof-colours`, `--no-roof-plant`, `--no-roof-parapet`, `--no-roof-patches`, `--no-wall-paint` |
+| Buildings | `--no-facade-detail`, `--no-facade-age`, `--no-rooms`, `--no-room-frames`, `--no-room-dim`, `--no-roof-colours`, `--no-roof-plant`, `--no-roof-parapet`, `--no-roof-patches`, `--no-wall-paint`, `--no-period-paint`, `--no-far-facade` |
 | Ground | `--no-ground-hills`, `--no-ground-green`, `--no-ground-contact`, `--no-terrain-lod` |
 | Scanned surfaces | `--no-cc0` (all), `--no-cc0-street`, `--no-cc0-walls`, `--no-cc0-ground`, `--no-cc0-decals`, `--no-cc0-grime`, `--no-cc0-stains`, `--no-cc0-pom`, `--no-cc0-tiling` |
 | Lighting and sky | `--no-shadows`, `--no-ao`, `--no-contact-shadows`, `--no-atmosphere`, `--no-fog`, `--no-clouds`, `--no-cloud-shadows`, `--no-shafts`, `--no-moon-stars`, `--no-lights` |
@@ -453,7 +453,11 @@ behind the glass, and roofs coloured from the measured aerial table.
 prepared ahead of time: 256 m neighbourhood cells with a facade atlas, then
 2,048 m districts with flat facade colours, with distant lit windows and
 distant trees. The level is chosen per building on the GPU, so one draw per
-cell covers the buildings that are far in this frame.
+cell covers the buildings that are far in this frame. Where the far layer is
+not drawn, a building past its own levels is its footprint box, drawn by the
+city shader with its archetype's facade (`eo-kit` `far_facade`, `eo-render`
+`far_box`): storeys, window bays, glass, frames, spandrels, shop fronts,
+cornices and crowns, the kit's paint, and the measured roof colour.
 
 **Terrain.** The 8 m elevation grid in 256 m tiles with a coarse far level,
 tinted by land cover and the open-space ground (greens, sand, park trees).
