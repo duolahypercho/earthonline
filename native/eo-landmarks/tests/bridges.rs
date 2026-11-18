@@ -77,3 +77,60 @@ fn the_night_values_are_in_their_published_range() {
     let mean_cable_m = eo_landmarks::lights::LED_PITCH_M * per_cable;
     assert!((15.0..40.0).contains(&mean_cable_m), "{mean_cable_m} m a cable");
 }
+
+/// The second pass's switches: each turns its own feature off and leaves the
+/// first pass's on; `--no-bridges3` is the first pass's output.
+#[test]
+fn the_second_pass_switches_turn_their_features_off() {
+    let one = |f: &str| BridgeFeatures::from_args(&[f]);
+    assert_eq!(one("--no-bridges3"), BridgeFeatures::FIRST);
+    assert!(BridgeFeatures::FIRST.scale && BridgeFeatures::FIRST.wires && BridgeFeatures::FIRST.night);
+    assert!(!one("--no-bridge-air").air && one("--no-bridge-air").finish);
+    assert!(!one("--no-bridge-finish").finish && one("--no-bridge-finish").members);
+    assert!(!one("--no-bridge-members").members && one("--no-bridge-members").floods);
+    assert!(!one("--no-bridge-floods").floods && one("--no-bridge-floods").curtain);
+    assert!(!one("--no-bridge-curtain").curtain && one("--no-bridge-curtain").air);
+    // a first-pass switch with `--no-bridges3` still turns its own feature off.
+    let both = BridgeFeatures::from_args(&["--no-bridges3", "--no-bridge-night"]);
+    assert!(!both.night && !both.floods && both.wires);
+}
+
+/// Each Golden Gate tower's 24 placed lights: the 12 at the sidewalk (6 a
+/// leg) and the 12 below the roadway (4 x 150, 4 x 250, 4 x 400 W HPS), the
+/// sidewalk ones first; the below-roadway mean on the legs under the deck
+/// (less flux over a shorter stretch of leg) is in the same floodlit range
+/// as the sidewalk floods' over the legs above it.
+#[test]
+fn the_tower_lights_are_the_published_two_sets() {
+    let js = LandmarksJs::get();
+    let (floods, f) = eo_landmarks::lights::gg_tower_floods(js);
+    assert_eq!(floods.len(), 24);
+    assert!(floods[..12].iter().all(|x| !x.below) && floods[12..].iter().all(|x| x.below));
+    let lm = eo_landmarks::lights::gg_below_lumens_per_leg();
+    assert_eq!(lm, 2.0 * (16_000.0 + 27_500.0 + 50_000.0));
+    let b = eo_landmarks::lights::gg_floodlit_below(js);
+    println!("below the roadway: {:.1} lux mean over the legs from {:.0} to {:.0} m (above: {:.1} lux)", b.lux, b.base_y, b.under_y, f.lux);
+    assert!(b.under_y < f.deck_y && b.base_y < b.under_y - 30.0);
+    assert!(b.lux > 5.0 && b.lux < 60.0 && b.lux < 2.0 * f.lux, "{} lux below, {} above", b.lux, f.lux);
+    for x in &floods {
+        let y = x.pos[2];
+        assert!(if x.below { (b.base_y..b.under_y).contains(&y) } else { y >= f.deck_y }, "{x:?}");
+        let n = (x.aim[0] * x.aim[0] + x.aim[1] * x.aim[1] + x.aim[2] * x.aim[2]).sqrt();
+        assert!((n - 1.0).abs() < 1e-9 && x.aim[2] > 0.99, "{x:?} aims up");
+    }
+}
+
+/// `finish`: the bridges' painted steel, cables and far items are dielectric
+/// films at the coat's low sheen; other landmarks keep the registry's values.
+#[test]
+fn the_finish_makes_the_coats_dielectric() {
+    let mut m = eo_landmarks::data::Material { roughness: 0.45, metalness: 0.35, env_class: "painted-metal".into(), surface: None, draw: None, wire: true, surface_options: None };
+    eo_landmarks::suspension::finish_material("bay-bridge-west", "cables", &mut m);
+    if eo_landmarks::suspension::features().finish {
+        assert_eq!(m.metalness, 0.0);
+        assert!(m.roughness >= eo_landmarks::suspension::PAINT_ROUGHNESS);
+    }
+    let mut other = eo_landmarks::data::Material { roughness: 0.45, metalness: 0.35, env_class: "painted-metal".into(), surface: None, draw: None, wire: true, surface_options: None };
+    eo_landmarks::suspension::finish_material("transamerica-pyramid", "cables", &mut other);
+    assert_eq!((other.roughness, other.metalness), (0.45, 0.35));
+}

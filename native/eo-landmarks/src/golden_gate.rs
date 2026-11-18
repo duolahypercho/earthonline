@@ -259,6 +259,8 @@ struct Ctx<'a> {
     site: &'a Site,
     plan: &'a Plan<'a>,
     frame: &'a Frame<'a>,
+    /// On the tower line (no curve offset): where the legs stand.
+    tower_frame: &'a Frame<'a>,
     ground: &'a dyn Fn(f64, f64) -> f64,
     k: Colours,
     yaw: f64,
@@ -269,6 +271,8 @@ struct Ctx<'a> {
     /// `BridgeFeatures::detail`, `::wires`.
     detail: bool,
     wires: bool,
+    /// `BridgeFeatures::members`.
+    members: bool,
 }
 
 impl Ctx<'_> {
@@ -660,6 +664,14 @@ impl Ctx<'_> {
                 let crown = crown_at((s_c + n_c) / 2.0) - (y_s + y_n) / 2.0;
                 chord + crown * 4.0 * t * (1.0 - t)
             };
+            if self.members {
+                self.arch_truss(orange, s, s_c, n_c, &rib_y);
+                let fcs = stations(s_c, n_c, 16.0);
+                for i in 0..fcs.len() - 1 {
+                    far.beam(self.P(fcs[i], s, rib_y(fcs[i])), self.P(fcs[i + 1], s, rib_y(fcs[i + 1])), 2.0, 2.6, k.orange);
+                }
+                continue;
+            }
             let cs = stations(s_c, n_c, 4.0);
             for i in 0..cs.len() - 1 {
                 orange.beam(self.P(cs[i], s, rib_y(cs[i])), self.P(cs[i + 1], s, rib_y(cs[i + 1])), 1.6, 2.4, k.orange);
@@ -674,6 +686,162 @@ impl Ctx<'_> {
                     orange.beam(self.P(c, s, rib_y(c)), self.P(c, s, y_top), 0.6, 0.6, k.orange);
                 }
             }
+        }
+    }
+
+    /// The Fort Point arch's rib as the open-web steel arch it is
+    /// (`BridgeFeatures::members`; the arch spans 320 ft over the fort:
+    /// goldengate.org, "Fort Point Arch"; the export's `archSpanM`): a
+    /// two-hinged arch truss whose bottom chord is the rib's line and whose
+    /// top chord stands `ARCH_TRUSS_DEPTH_M` over it at the crown, closing
+    /// to the hinges at the springings; verticals at each half panel,
+    /// alternating diagonals, and the spandrel posts from the top chord up
+    /// to the deck truss. INFERRED: the depth and the members' sections.
+    fn arch_truss(&self, orange: &mut MeshArrays, s: f64, s_c: f64, n_c: f64, rib_y: &dyn Fn(f64) -> f64) {
+        let (d, p, k, h) = (self.d, self.plan, &self.k, self.h);
+        let truss = num(d, "trussDepthM");
+        let depth = ARCH_TRUSS_DEPTH_M * h;
+        let top_at = |c: f64| {
+            let t = ((c - s_c) / (n_c - s_c)).clamp(0.0, 1.0);
+            let y = rib_y(c) + depth * (std::f64::consts::PI * t).sin().sqrt();
+            y.min(p.deck_top(c) - truss - 0.3)
+        };
+        let panel = num(d, "panelM") / 2.0;
+        let cs = stations(s_c, n_c, panel);
+        let (chord_w, chord_d) = (1.2 * h, 1.4 * h);
+        for i in 0..cs.len() - 1 {
+            let (a, b) = (cs[i], cs[i + 1]);
+            orange.beam(self.P(a, s, rib_y(a)), self.P(b, s, rib_y(b)), chord_w, chord_d, k.orange);
+            orange.beam(self.P(a, s, top_at(a)), self.P(b, s, top_at(b)), chord_w, chord_d * 0.8, k.orange);
+            if top_at(b) - rib_y(b) > 0.6 {
+                orange.beam(self.P(b, s, rib_y(b)), self.P(b, s, top_at(b)), 0.5 * h, 0.6 * h, k.orange_dark);
+            }
+            let (ya, yb) = if i % 2 == 0 { (rib_y(a), top_at(b)) } else { (top_at(a), rib_y(b)) };
+            if (top_at(a) - rib_y(a)).min(top_at(b) - rib_y(b)) > 0.3 {
+                orange.beam(self.P(a, s, ya), self.P(b, s, yb), 0.4 * h, 0.5 * h, k.orange_dark);
+            }
+        }
+        // lateral struts between the two ribs at every other panel point.
+        let hp = self.site.half_plane;
+        if s > 0.0 {
+            for (i, &c) in cs.iter().enumerate() {
+                if i % 2 == 0 && i > 0 && i + 1 < cs.len() {
+                    orange.beam(self.P(c, -hp, top_at(c) - 0.5 * h), self.P(c, hp, top_at(c) - 0.5 * h), 0.6 * h, 0.8 * h, k.orange_dark);
+                }
+            }
+        }
+        for c in stations(s_c + num(d, "panelM"), n_c - num(d, "panelM"), num(d, "panelM")) {
+            let y_top = p.deck_top(c) - truss;
+            if y_top - top_at(c) > 1.0 {
+                orange.beam(self.P(c, s, top_at(c)), self.P(c, s, y_top), 0.6, 0.6, k.orange);
+            }
+        }
+    }
+
+    /// The parts the second pass adds (`BridgeFeatures::members`): the
+    /// cable saddles' housings, the cable bands and the ropes' sockets, the
+    /// pylons' Art Deco pilasters, the south pier's fender and the lamp
+    /// standards along the roadway.
+    fn members(&self, orange: &mut MeshArrays, concrete: &mut MeshArrays, skirt: &mut MeshArrays, wires: &mut MeshArrays, far: &mut MeshArrays) {
+        let (g, d, p, k, w, h) = (self.g, self.d, self.plan, &self.k, self.water, self.h);
+        // Saddle housings over each leg's top (the saddles 2 m under it: the export's `saddleBelowTopM`).
+        let top = w + num(d, "towerAboveWaterM");
+        let last = g.leg_stages.iter().fold(g.leg_stages[0], |a, s| if s[1] > a[1] { *s } else { a });
+        for tc in [0.0, p.l] {
+            for sgn in [-1.0, 1.0] {
+                suspension::saddle_housing(orange, self.tower_frame, tc, sgn * self.site.half_plane, top, last[3] / 2.0 * 0.92, last[2] / 2.0 * 0.95, SADDLE_PLINTH_M * h, k.orange);
+            }
+        }
+        // Cable bands and sockets.
+        let runs = self.cable_runs();
+        suspension::cable_bands(
+            wires,
+            self.frame,
+            &runs,
+            &|c| p.deck_top(c) - 0.5,
+            &suspension::BandSpec {
+                half_plane: self.site.half_plane,
+                spacing: num(d, "suspenderSpacingM"),
+                pair_gap: PAIR_GAP_M,
+                cable_d: num(d, "cableDiameterM"),
+                band_len: CABLE_BAND_LEN_M,
+                band_d: num(d, "cableDiameterM") + 2.0 * CABLE_BAND_WALL_M,
+                socket_len: SOCKET_LEN_M,
+                socket_d: SOCKET_D_M,
+                colour: k.orange,
+            },
+        );
+        // The pylons' pilasters: three proud strips on each column's two faces along the span and its outer face.
+        for (name, [x, z, y0, y1, hx, hz, yaw], cap) in self.pylon_parts() {
+            if cap {
+                continue;
+            }
+            let (cy, sy) = (yaw.cos(), yaw.sin());
+            let at = |lx: f64, lz: f64| [x + lx * cy - lz * sy, z + lx * sy + lz * cy];
+            let (pw, pd) = (PILASTER_W_M * h, PILASTER_PROUD_M * h);
+            let top = y1 - PILASTER_TOP_CLEAR_M * h;
+            for along in [-1.0, 1.0] {
+                for kk in [-0.55, 0.0, 0.55] {
+                    let [px, pz] = at(along * (hx + pd / 2.0), kk * hz);
+                    concrete.box_(px, pz, y0 + 1.0, top, pd / 2.0, pw / 2.0, yaw, k.concrete, NO_BOTTOM);
+                }
+            }
+            if !name.starts_with("northAnchor") {
+                // a stepped band under the cap.
+                concrete.box_(x, z, top + 0.4 * h, top + 1.6 * h, hx + pd * 1.5, hz + pd * 1.5, yaw, k.concrete, ALL);
+            }
+        }
+        // The south tower's fender: the oval concrete wall poured round the pier
+        // (goldengate.org, "A Bathtub for the South Tower"), enclosing an area the
+        // size of a football field (a District inspection presentation, 2015:
+        // walls 40 ft thick at most), sand-filled, 27 ft thick at its base and
+        // 10 ft at sea level (the District's 2025 statement on the NTSB's
+        // report). INFERRED: the oval's 110 x 52 m outside (a field and its end
+        // zones, 360 x 160 ft, with the wall) and its top FENDER_TOP_M over the
+        // sea; the wall drawn at its sea-level thickness.
+        let pier = &g.supports["southPier"];
+        let [cx, cz] = pier.centre;
+        let (ra, rb) = (FENDER_OUTER_M[0] / 2.0, FENDER_OUTER_M[1] / 2.0);
+        let wall = FENDER_WALL_TOP_M;
+        let n = 64;
+        let ring = |r_across: f64, r_along: f64| -> Vec<[f64; 2]> {
+            (0..n)
+                .map(|i| {
+                    let t = std::f64::consts::TAU * i as f64 / n as f64;
+                    let (ca, sa) = (t.cos() * r_along, t.sin() * r_across);
+                    [cx + self.site.axis[0] * ca + self.site.across[0] * sa, cz + self.site.axis[1] * ca + self.site.across[1] * sa]
+                })
+                .collect()
+        };
+        let outer = crate::geometry::orient_ring(&ring(ra, rb));
+        let inner = crate::geometry::orient_ring(&ring(ra - wall, rb - wall));
+        let (floor, top_y) = (w + NEAR_FLOOR_ABOVE_SEA_M, w + FENDER_TOP_M);
+        let bed = (self.ground)(cx, cz).min(w - 2.0);
+        for i in 0..n {
+            let j = (i + 1) % n;
+            let (o0, o1, i0, i1) = (outer[i], outer[j], inner[i], inner[j]);
+            // outer face, inner face, top.
+            concrete.quad([o0[0], floor, o0[1]], [o1[0], floor, o1[1]], [o1[0], top_y, o1[1]], [o0[0], top_y, o0[1]], k.concrete);
+            concrete.quad([i1[0], floor, i1[1]], [i0[0], floor, i0[1]], [i0[0], top_y, i0[1]], [i1[0], top_y, i1[1]], k.concrete);
+            concrete.quad([o0[0], top_y, o0[1]], [o1[0], top_y, o1[1]], [i1[0], top_y, i1[1]], [i0[0], top_y, i0[1]], k.concrete);
+            skirt.quad([o0[0], bed, o0[1]], [o1[0], bed, o1[1]], [o1[0], floor, o1[1]], [o0[0], floor, o0[1]], k.concrete);
+            skirt.quad([i1[0], bed, i1[1]], [i0[0], bed, i0[1]], [i0[0], floor, i0[1]], [i1[0], floor, i1[1]], k.concrete);
+            far.quad([o0[0], bed, o0[1]], [o1[0], bed, o1[1]], [o1[0], top_y, o1[1]], [o0[0], top_y, o0[1]], k.concrete);
+            far.quad([o0[0], top_y, o0[1]], [o1[0], top_y, o1[1]], [i1[0], top_y, i1[1]], [i0[0], top_y, i0[1]], k.concrete);
+        }
+        // Lamp standards at the deck luminaires (lights.rs `bridge_lights`: their pitch and head),
+        // on the curb line, the arm reaching over the roadway; none where the curb passes a tower leg.
+        let half = num(d, "roadwayM") / 2.0;
+        let head = crate::lights::DECK_HEAD_M;
+        let mut c = p.c_start + crate::lights::DECK_PITCH_M / 2.0;
+        while c < p.c_end {
+            if !self.in_tower_zone(c - 2.0, c + 2.0) {
+                let y = p.deck_top(c) + num(d, "curbM");
+                for sgn in [-1.0, 1.0] {
+                    lamp_standard(orange, self.frame, c, sgn * (half + 0.25), -sgn, y, head, k.orange);
+                }
+            }
+            c += crate::lights::DECK_PITCH_M;
         }
     }
 
@@ -712,6 +880,40 @@ impl Ctx<'_> {
     }
 }
 
+/// INFERRED (`BridgeFeatures::members`; none is published): the Fort Point
+/// arch truss's depth at its crown; a saddle housing's plinth over the leg's
+/// top; a cable band's length and wall (the band 1.2 m long, 8 cm thick
+/// round the 0.92 m cable); a rope socket's length and diameter; the
+/// pylons' pilasters (width, how proud, how far under the top they stop);
+/// the south fender's oval outside (across the bridge, along it) and its top
+/// over the sea. The fender's wall: 10 ft at sea level (the District's 2025
+/// statement on the NTSB's report).
+const ARCH_TRUSS_DEPTH_M: f64 = 4.5;
+const SADDLE_PLINTH_M: f64 = 0.8;
+const CABLE_BAND_LEN_M: f64 = 1.2;
+const CABLE_BAND_WALL_M: f64 = 0.08;
+const SOCKET_LEN_M: f64 = 0.9;
+const SOCKET_D_M: f64 = 0.2;
+const PILASTER_W_M: f64 = 0.9;
+const PILASTER_PROUD_M: f64 = 0.35;
+const PILASTER_TOP_CLEAR_M: f64 = 5.5;
+const FENDER_OUTER_M: [f64; 2] = [110.0, 52.0];
+const FENDER_WALL_TOP_M: f64 = 10.0 * 0.3048;
+const FENDER_TOP_M: f64 = 4.5;
+
+/// A lamp standard on a bridge's curb line (`BridgeFeatures::members`): a
+/// pole from its base `head` metres up, a short arm reaching `toward` (+-1
+/// across) over the roadway and the luminaire's housing at its end, over the
+/// deck luminaire lights.rs places at the curb. INFERRED: the sections.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn lamp_standard(m: &mut MeshArrays, frame: &Frame, c: f64, s: f64, toward: f64, y: f64, head: f64, colour: Rgb) {
+    let [x, z] = frame.point(c, s);
+    m.box_(x, z, y, y + 0.9, 0.3, 0.3, frame.yaw, colour, NO_BOTTOM);
+    m.beam(frame.P(c, s, y + 0.9), frame.P(c, s, y + head - 0.25), 0.24, 0.24, colour);
+    m.beam(frame.P(c, s, y + head - 0.6), frame.P(c, s + toward * 0.7, y + head), 0.12, 0.16, colour);
+    m.beam(frame.P(c, s + toward * 0.3, y + head - 0.1), frame.P(c, s + toward * 1.2, y + head - 0.1), 0.42, 0.26, colour);
+}
+
 /// `Math.round` (halves toward +infinity).
 fn js_round(v: f64) -> i64 {
     (v + 0.5).floor() as i64
@@ -740,6 +942,7 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
     let site = Site::new(g);
     let ground_at = |x: f64, z: f64| ground.at(x, z);
     let plan = plan(js, &site, &ground_at);
+    suspension::record_deck_line("golden-gate-bridge", [plan.c_south, plan.y_south, plan.l, plan.y_tower, plan.y_mid, plan.c_north, plan.y_north, num(d, "widthM") / 2.0]);
     let offset = |c: f64| site.centre_offset(c);
     let mut frame = Frame::new(site.axis_point(0.0, 0.0), site.axis);
     frame.offset = Some(&offset);
@@ -755,7 +958,8 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
         yellow: srgb_hex(hex(d, "yellowSrgb")),
     };
     let tower_zone_half = g.leg_stages.iter().map(|s| s[3]).fold(f64::MIN, f64::max) / 2.0 + 1.0;
-    let ctx = Ctx { g, d, site: &site, plan: &plan, frame: &frame, ground: &ground_at, k, yaw: site.axis[1].atan2(site.axis[0]), water: js.sea_level_y, tower_zone_half, h: structure_scale(), detail: features.detail, wires: features.wires };
+    let tower_frame = Frame::new(site.axis_point(0.0, 0.0), site.axis);
+    let ctx = Ctx { g, d, site: &site, plan: &plan, frame: &frame, tower_frame: &tower_frame, ground: &ground_at, k, yaw: site.axis[1].atan2(site.axis[0]), water: js.sea_level_y, tower_zone_half, h: structure_scale(), detail: features.detail, wires: features.wires, members: features.members };
     let mut orange_m = MeshArrays::new("golden-gate-bridge:orange");
     let mut deck_m = MeshArrays::new("golden-gate-bridge:deck");
     let mut concrete_m = MeshArrays::new("golden-gate-bridge:concrete");
@@ -772,16 +976,20 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
     ctx.tower_walkways(&mut deck_m, &mut orange_m);
     ctx.approaches(&mut orange_m, &mut concrete_m, &mut far);
     ctx.arch_ribs(&mut orange_m, &mut far);
+    if ctx.members {
+        ctx.members(&mut orange_m, &mut concrete_m, &mut skirt, &mut wires, &mut far);
+    }
     for (_, [x, z, y0, y1, hx, hz, yaw], _) in ctx.pylon_parts() {
         concrete_m.box_(x, z, y0, y1, hx, hz, yaw, ctx.k.concrete, NO_BOTTOM);
         far.box_(x, z, y0, y1, hx, hz, yaw, ctx.k.concrete, ALL);
     }
     // Past the sun's shadow reach the structure's own occlusion is baked in.
     let inward = frame.inward();
-    orange_m.shade_occlusion(Some(&inward), 0.62, 0.74, 1.5);
-    concrete_m.shade_occlusion(Some(&inward), 0.62, 0.86, 1.5);
-    deck_m.shade_occlusion(None, 0.62, 0.74, 1.5);
-    far.shade_occlusion(Some(&inward), 0.62, 0.74, 1.5);
+    let (dn, inw) = suspension::occlusion(0.62, 0.74);
+    orange_m.shade_occlusion(Some(&inward), dn, inw, 1.5);
+    concrete_m.shade_occlusion(Some(&inward), dn, suspension::occlusion(0.62, 0.86).1, 1.5);
+    deck_m.shade_occlusion(None, dn, inw, 1.5);
+    far.shade_occlusion(Some(&inward), dn, inw, 1.5);
 
     let r1 = |v: f64| (v * 10.0).round() / 10.0;
     let r2 = |v: f64| (v * 100.0).round() / 100.0;

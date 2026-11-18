@@ -10,6 +10,7 @@
 //! | Necklace lights | along the Bay Bridge west span's two main cables | 600 cd each, warm white (3,000 K), every 15 m | The west span's cable ("necklace") lights, strung on its suspension cables for the bridge's 50th anniversary in 1986. INFERRED: pitch and intensity (a 7,500 lm source radiating evenly, 7,500 / 4 pi = 600 cd; at 160 cd, a 2,000 lm lamp, the string did not show from the Embarcadero at the night exposure) |
 //!
 //! | Tower floodlights (`BridgeFeatures::night`) | the Golden Gate towers above the deck | 24 x 400 W HPS, 6 a leg at the sidewalk, aimed up; a flux-conserving mean on the legs (`gg_floodlit`) | goldengate.org "Color & Art Deco Styling" (24 sidewalk-level lights, lit 22 June 1987); ANSI C78.42 S51 (50,000 lm) |
+//! | Tower lights below the roadway (`BridgeFeatures::floods`) | the Golden Gate towers' legs under the deck | 12 a tower: 4 x 150 W, 4 x 250 W, 4 x 400 W HPS, on the pier round the legs, aimed up (`gg_floodlit_below`) | goldengate.org "Color & Art Deco Styling"; ANSI C78.42 S55 (16,000 lm), S50 (27,500 lm), S51. INFERRED: their placing and aim |
 //! | Suspender LEDs (`BridgeFeatures::night`) | the west span's suspender ropes, both faces | 1 cd every 0.3 m, white, a slow sequence | "The Bay Lights" (25,000 LEDs on 300 cables, 2013), "Bay Lights 360" (about 48,000-50,000, both faces, 20 March 2026). INFERRED: the intensity |
 //!
 //! Intensities enter the gather as the props slice's lamp practicals do
@@ -198,3 +199,121 @@ pub fn bay_axis(js: &LandmarksJs) -> ([f64; 2], [f64; 2]) {
     let f = crate::bay_bridge::frame(&js.bay_bridge_west);
     (f.origin, f.axis)
 }
+
+/// One of a Golden Gate tower's floods (`BridgeFeatures::floods`), in the
+/// tower's own frame: `c` along the span from the tower's centre line, `s`
+/// across it (+ to the frame's right), `y` world height.
+#[derive(Clone, Copy, Debug)]
+pub struct Flood {
+    pub pos: [f64; 3],
+    /// Unit aim (c, s, y).
+    pub aim: [f64; 3],
+    /// One of the 12 below the roadway (on the pier, lighting the legs up to
+    /// the deck's underside), else one of the 12 at the sidewalk.
+    pub below: bool,
+}
+
+/// Rated initial lumens of the 150 W and 250 W high-pressure sodium lamps
+/// (ANSI C78.42 lamps S55 and S50, as the lamp makers' catalogues rate them).
+pub const HPS_150W_LM: f64 = 16_000.0;
+pub const HPS_250W_LM: f64 = 27_500.0;
+
+/// The 12 lights each tower carries below the roadway: four of 150 W, four of
+/// 250 W and four of 400 W, high-pressure sodium (goldengate.org, "Color &
+/// Art Deco Styling"), so half that flux a leg.
+pub fn gg_below_lumens_per_leg() -> f64 {
+    4.0 * (HPS_150W_LM + HPS_250W_LM + HPS_400W_LM) / 2.0
+}
+
+/// The legs under the deck as the below-roadway lights light them
+/// (`BridgeFeatures::floods`): from the pier's top (`base_y`) to the deck's
+/// underside (`under_y`, the stiffening truss's bottom chord), the mean
+/// illuminance `lux` over the same three faces a leg as above the deck, with
+/// the same utilisation (0.6 of the lamps' flux in the beams, half of it on
+/// the leg).
+#[derive(Clone, Copy, Debug)]
+pub struct FloodlitBelow {
+    pub base_y: f64,
+    pub under_y: f64,
+    pub lux: f64,
+}
+
+pub fn gg_floodlit_below(js: &LandmarksJs) -> FloodlitBelow {
+    let g = crate::golden_gate::data(js);
+    let d = &g.dimensions;
+    let water = js.sea_level_y;
+    let deck_y = water + crate::data::num(d, "roadwayAtTowerM");
+    let under_y = deck_y - crate::data::num(d, "trussDepthM");
+    let base_y = water + g.leg_stages.iter().map(|s| s[0]).fold(f64::MAX, f64::min);
+    let area: f64 = g.leg_stages.iter().map(|s| (2.0 * s[2] + s[3]) * ((water + s[1]).min(under_y) - (water + s[0]).max(base_y)).max(0.0)).sum();
+    FloodlitBelow { base_y, under_y, lux: gg_below_lumens_per_leg() * 0.6 * 0.5 / area.max(1.0) }
+}
+
+/// A Golden Gate tower's floods as placed sources: the 12 sidewalk-level
+/// lights pointed up each tower, six at each leg, and the 12 below the
+/// roadway (goldengate.org, "Color & Art Deco Styling"). The sidewalk ones
+/// stand on the sidewalk that wraps each leg's outside (the walkway round
+/// the leg: golden_gate.rs `tower_walkways`). INFERRED: two on each of the
+/// leg's three faces the sidewalk passes (its outer face and its two faces
+/// along the span), at the sidewalk's outer edge less 0.3 m, at 0.45 of the
+/// face's half width either side of its middle, each aimed up its own face
+/// with 3 deg of tilt toward it; the below-roadway ones in the same layout on
+/// the pier's top, 1 m off the leg's base. The beams' spread and the face
+/// illuminance they lay are `FLOOD_*` below, `Floodlit::lux` and
+/// `FloodlitBelow::lux`. The first 12 returned are the sidewalk's.
+pub fn gg_tower_floods(js: &LandmarksJs) -> (Vec<Flood>, Floodlit) {
+    let f = gg_floodlit(js);
+    let g = crate::golden_gate::data(js);
+    let d = &g.dimensions;
+    let sidewalk = crate::data::num(d, "sidewalkM");
+    let curb = crate::data::num(d, "curbM");
+    let y = f.deck_y + curb;
+    let (hp, ha, hx) = (f.half_plane, f.half_along, f.half_across);
+    let out = (sidewalk - 0.3).max(0.5);
+    let tilt = 3f64.to_radians();
+    let up = |dc: f64, ds: f64| {
+        let (sn, cs) = (tilt.sin(), tilt.cos());
+        [dc * sn, ds * sn, cs]
+    };
+    let mut v = Vec::new();
+    for side in [-1.0, 1.0] {
+        let leg = side * hp;
+        // the outer face (normal +side across): floods outboard of it, aimed up and in toward it.
+        for k in [-0.45, 0.45] {
+            v.push(Flood { pos: [k * ha, leg + side * (hx + out), y], aim: up(0.0, -side), below: false });
+        }
+        // the two faces along the span (normal +-c): floods beyond each, aimed back toward it.
+        for along in [-1.0, 1.0] {
+            for k in [-0.45, 0.45] {
+                v.push(Flood { pos: [along * (ha + out), leg + k * hx, y], aim: up(-along, 0.0), below: false });
+            }
+        }
+    }
+    // Below the roadway: on the pier's top round the leg's base stage.
+    let below = gg_floodlit_below(js);
+    let base = g.leg_stages.iter().fold(g.leg_stages[0], |a, s| if s[0] < a[0] { *s } else { a });
+    let (bx, ba) = (base[2] / 2.0, base[3] / 2.0);
+    let (yb, off) = (below.base_y + 0.3, 1.0);
+    for side in [-1.0, 1.0] {
+        let leg = side * hp;
+        for k in [-0.45, 0.45] {
+            v.push(Flood { pos: [k * ba, leg + side * (bx + off), yb], aim: up(0.0, -side), below: true });
+        }
+        for along in [-1.0, 1.0] {
+            for k in [-0.45, 0.45] {
+                v.push(Flood { pos: [along * (ba + off), leg + k * bx, yb], aim: up(-along, 0.0), below: true });
+            }
+        }
+    }
+    (v, f)
+}
+
+/// The floods' beams (INFERRED: a wide-flood NEMA type 5-6 distribution,
+/// full intensity within 20 deg of the aim, none past 32 deg).
+pub const FLOOD_INNER_DEG: f64 = 20.0;
+pub const FLOOD_OUTER_DEG: f64 = 32.0;
+/// The face illuminance up the tower relative to its mean over the height
+/// above the deck: 1.35 at the deck to 0.65 at the top (mean 1), the
+/// floods stand at the deck, so the faces dim upward. INFERRED: the
+/// floods' combined aim (not published), set to about half at the top.
+pub const FLOOD_PROFILE: [f64; 2] = [1.35, -0.7];

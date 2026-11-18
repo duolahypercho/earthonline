@@ -33,11 +33,41 @@ pub struct BridgeFeatures {
     /// `--no-bridge-night`: the Golden Gate towers' floodlights and the west
     /// span's suspender LEDs.
     pub night: bool,
+    /// `--no-bridge-air`: the wire members (drawn after the atmosphere) take
+    /// the aerial perspective the volume gives every other surface at their
+    /// distance, and their sun shadow is looked up clear of their own
+    /// shadow-map footprint (a rope sloping up toward the sun self-shadowed
+    /// in the far cascades: one cable plane of a span drew dark grey).
+    pub air: bool,
+    /// `--no-bridge-finish`: the paints as dielectric films (metalness 0),
+    /// the bridges' own plate seams and rivet lines in place of the
+    /// landmark steel's low-frequency mottle, the west span's truss in the
+    /// towers' paint, the baked occlusion eased where the frame's own sun
+    /// shadow and ambient occlusion now darken the members.
+    pub finish: bool,
+    /// `--no-bridge-members`: the members added in the second pass (cable
+    /// saddles and their housings, cable bands, the Fort Point arch's open
+    /// web, the pylons' pilasters, the south pier's fender, the lamp
+    /// standards, the west span's deck slabs, floor beams, sway frames and
+    /// laced tower bracing, the Golden Gate far item's deck as one welded strip).
+    pub members: bool,
+    /// `--no-bridge-floods`: the Golden Gate towers lit by their 24 floods
+    /// as placed sources (lit outer and along faces, dark inner faces, the
+    /// struts' shadows), the suspender LEDs' sequence in bands with dark
+    /// gaps; else the flux-conserving mean and the continuous sequence.
+    /// With it the towers' 12 lights below the roadway light the legs under
+    /// the deck.
+    pub floods: bool,
+    /// `--no-bridge-curtain`: a suspender rope's coverage filter widens to
+    /// the spacing between its neighbours where they close to under a few
+    /// pixels on screen, so a receding curtain sums to its true mean cover
+    /// (a partition of unity) instead of beating in moire bands.
+    pub curtain: bool,
 }
 
 impl BridgeFeatures {
-    pub const ALL: Self = Self { scale: true, paint: true, detail: true, wires: true, night: true };
-    pub const OFF: Self = Self { scale: false, paint: false, detail: false, wires: false, night: false };
+    pub const ALL: Self = Self { scale: true, paint: true, detail: true, wires: true, night: true, air: true, finish: true, members: true, floods: true, curtain: true };
+    pub const OFF: Self = Self { scale: false, paint: false, detail: false, wires: false, night: false, air: false, finish: false, members: false, floods: false, curtain: false };
 
     /// The features a command line leaves on.
     pub fn from_args<S: AsRef<str>>(args: &[S]) -> Self {
@@ -45,8 +75,25 @@ impl BridgeFeatures {
         if has("--no-bridges2") {
             return Self::OFF;
         }
-        Self { scale: !has("--no-bridge-scale"), paint: !has("--no-bridge-paint"), detail: !has("--no-bridge-detail"), wires: !has("--no-bridge-wires"), night: !has("--no-bridge-night") }
+        let first = has("--no-bridges3");
+        let has = |f: &str| first || has(f);
+        let keep = |f: &str| !args.iter().any(|a| a.as_ref() == f);
+        Self {
+            scale: keep("--no-bridge-scale"),
+            paint: keep("--no-bridge-paint"),
+            detail: keep("--no-bridge-detail"),
+            wires: keep("--no-bridge-wires"),
+            night: keep("--no-bridge-night"),
+            air: !has("--no-bridge-air"),
+            finish: !has("--no-bridge-finish"),
+            members: !has("--no-bridge-members"),
+            floods: !has("--no-bridge-floods"),
+            curtain: !has("--no-bridge-curtain"),
+        }
     }
+
+    /// The second pass's features off (`--no-bridges3`): the first pass's output.
+    pub const FIRST: Self = Self { air: false, finish: false, members: false, floods: false, curtain: false, ..Self::ALL };
 }
 
 static FEATURES: OnceLock<BridgeFeatures> = OnceLock::new();
@@ -63,7 +110,7 @@ pub fn pin_features(f: BridgeFeatures) -> bool {
 }
 
 /// The kill switches `features` reads (eo-app accepts them).
-pub const SWITCHES: &[&str] = &["--no-bridges2", "--no-bridge-scale", "--no-bridge-paint", "--no-bridge-detail", "--no-bridge-wires", "--no-bridge-night"];
+pub const SWITCHES: &[&str] = &["--no-bridges2", "--no-bridges3", "--no-bridge-scale", "--no-bridge-paint", "--no-bridge-detail", "--no-bridge-wires", "--no-bridge-night", "--no-bridge-air", "--no-bridge-finish", "--no-bridge-members", "--no-bridge-floods", "--no-bridge-curtain"];
 
 /// A frame along a bridge: chainage c along `axis` from `origin`, offset s to
 /// its right; `offset`, when given, adds a lateral offset per chainage (the
@@ -234,6 +281,79 @@ pub fn suspender_pairs(near: &mut MeshArrays, frame: &Frame, runs: &[Run], attac
     count
 }
 
+/// The cable bands and the ropes' deck sockets (`BridgeFeatures::members`)
+/// at `suspender_pairs`' own stations: a band clamped round the main cable
+/// where each pair loops over it (the Golden Gate's every 50 ft:
+/// goldengate.org, "Design & Construction Stats"), `band_len` long and
+/// `band_d` across, and a socket `socket_len` long and `socket_d` across at
+/// each rope's foot.
+pub struct BandSpec {
+    pub half_plane: f64,
+    pub spacing: f64,
+    pub pair_gap: f64,
+    pub cable_d: f64,
+    pub band_len: f64,
+    pub band_d: f64,
+    pub socket_len: f64,
+    pub socket_d: f64,
+    pub colour: Rgb,
+}
+
+pub fn cable_bands(wires: &mut MeshArrays, frame: &Frame, runs: &[Run], attach_y: &dyn Fn(f64) -> f64, o: &BandSpec) -> usize {
+    let end_clear = 6.0;
+    let mut count = 0;
+    for r in runs {
+        let n = ((r.c1 - r.c0) / o.spacing).floor() as i64;
+        let offset = ((r.c1 - r.c0) - n as f64 * o.spacing) / 2.0;
+        for k in 0..=n {
+            let c = r.c0 + offset + k as f64 * o.spacing;
+            if c - r.c0 < end_clear || r.c1 - c < end_clear {
+                continue;
+            }
+            let one = [*r];
+            let (Some(top), Some(a), Some(b)) = (cable_height_at(&one, c), cable_height_at(&one, c - o.band_len / 2.0), cable_height_at(&one, c + o.band_len / 2.0)) else { continue };
+            let bottom = attach_y(c);
+            if top - bottom < 0.5 {
+                continue;
+            }
+            for s in [-o.half_plane, o.half_plane] {
+                // the band's axis on the cable's (the band sits round it, so its axis is the cable's centre).
+                wires.wire_segment(frame.P(c - o.band_len / 2.0, s, a), frame.P(c + o.band_len / 2.0, s, b), o.band_d, o.colour);
+                for d in [-o.pair_gap / 2.0, o.pair_gap / 2.0] {
+                    wires.wire_segment(frame.P(c + d, s, bottom), frame.P(c + d, s, bottom + o.socket_len), o.socket_d, o.colour);
+                }
+            }
+            count += 1;
+        }
+    }
+    let _ = o.cable_d;
+    count
+}
+
+/// A saddle housing over a tower leg's top (`BridgeFeatures::members`): a
+/// half-cylinder cover along the span, `half_along` long either side of the
+/// leg's centre and `radius` round, standing on a plinth `plinth` high over
+/// the leg's top; the cable passes under it over the saddle.
+#[allow(clippy::too_many_arguments)]
+pub fn saddle_housing(m: &mut MeshArrays, frame: &Frame, c: f64, s: f64, top: f64, half_along: f64, radius: f64, plinth: f64, colour: Rgb) {
+    let segs = 8;
+    let y0 = top + plinth;
+    let arc = |k: usize| {
+        let t = std::f64::consts::PI * k as f64 / segs as f64;
+        (radius * t.cos(), radius * t.sin())
+    };
+    let [x, z] = frame.point(c, s);
+    m.box_(x, z, top - 0.05, y0, half_along, radius, frame.yaw, colour, NO_BOTTOM);
+    for k in 0..segs {
+        let ((a0, b0), (a1, b1)) = (arc(k), arc(k + 1));
+        let p = |cc: f64, ds: f64, dy: f64| frame.P(cc, s + ds, y0 + dy);
+        m.quad(p(c - half_along, a0, b0), p(c + half_along, a0, b0), p(c + half_along, a1, b1), p(c - half_along, a1, b1), colour);
+        // the end plates (fans from the cylinder's axis).
+        m.tri(p(c + half_along, 0.0, 0.0), p(c + half_along, a1, b1), p(c + half_along, a0, b0), colour);
+        m.tri(p(c - half_along, 0.0, 0.0), p(c - half_along, a0, b0), p(c - half_along, a1, b1), colour);
+    }
+}
+
 pub struct TrussSpec<'a> {
     pub deck_top: &'a dyn Fn(f64) -> f64,
     pub c_start: f64,
@@ -249,6 +369,11 @@ pub struct TrussSpec<'a> {
     /// The members' section sizes times this (the structure scale; 1: the JS's).
     pub member: f64,
 }
+
+/// The far deck strip's station pitch (`welded_strip`): the camber's sag
+/// between stations (a 1,280 m span's 3 m crown over 20 m) is under a
+/// centimetre, under a pixel past the near distance.
+pub const FAR_STRIP_STEP_M: f64 = 20.0;
 
 /// `stiffeningTruss` (farStep 40).
 pub fn stiffening_truss(near: &mut MeshArrays, far: &mut MeshArrays, frame: &Frame, o: &TrussSpec) {
@@ -283,12 +408,16 @@ pub fn stiffening_truss(near: &mut MeshArrays, far: &mut MeshArrays, frame: &Fra
             near.beam(frame.P(a, h, ta - depth), frame.P(b, -h, tb - depth), 0.35 * k, 0.35 * k, o.dark);
         }
     }
-    let fs = stations(o.c_start, o.c_end, far_step);
-    for i in 0..fs.len() - 1 {
-        let (a, b) = (fs[i], fs[i + 1]);
-        let (ta, tb) = ((o.deck_top)(a), (o.deck_top)(b));
-        let [mx, mz] = frame.point((a + b) / 2.0, 0.0);
-        far.box_(mx, mz, (ta + tb) / 2.0 - depth, (ta + tb) / 2.0 + o.far_above, (b - a) / 2.0, o.far_half_width, frame.yaw, o.colour, crate::geometry::ALL);
+    if features().members {
+        welded_strip(far, frame, o.deck_top, o.c_start, o.c_end, FAR_STRIP_STEP_M, o.far_half_width, depth, o.far_above, o.colour);
+    } else {
+        let fs = stations(o.c_start, o.c_end, far_step);
+        for i in 0..fs.len() - 1 {
+            let (a, b) = (fs[i], fs[i + 1]);
+            let (ta, tb) = ((o.deck_top)(a), (o.deck_top)(b));
+            let [mx, mz] = frame.point((a + b) / 2.0, 0.0);
+            far.box_(mx, mz, (ta + tb) / 2.0 - depth, (ta + tb) / 2.0 + o.far_above, (b - a) / 2.0, o.far_half_width, frame.yaw, o.colour, crate::geometry::ALL);
+        }
     }
     for c in [o.c_start, o.c_end] {
         let t = (o.deck_top)(c);
@@ -455,4 +584,147 @@ pub fn road_deck(deck: &mut MeshArrays, rail: &mut MeshArrays, frame: &Frame, ca
 #[allow(dead_code)]
 pub(crate) fn faces_all() -> Faces {
     crate::geometry::ALL
+}
+
+/// The coat's roughness (`finish`): the Golden Gate's coat is an acrylic
+/// topcoat over an inorganic zinc primer (goldengate.org, "Painting the
+/// Bridge"), a low-sheen film; the west span's aluminium finish coat
+/// (bay_bridge.rs `STEEL_SRGB`) weathers to a matte grey. INFERRED: 0.6 (the registry's 0.45-0.55 dropped under
+/// 0.5 with the landmark steel's 0.22 spread, where the sky's sharp
+/// reflection mixes in: the clouds drew as pink-white blotches on the struts).
+pub const PAINT_ROUGHNESS: f64 = 0.6;
+
+/// The sea's albedo under the bridges (`finish`): 0.06 for a sun over 40 deg
+/// in a clear sky (Payne 1972, "Albedo of the Sea Surface", J. Atmos. Sci.
+/// 29, 959-970; it rises toward a low sun, so this is the noon value and an
+/// underestimate in the morning and evening). The members' faces turned
+/// down take the light the sea reflects (eo-render landmarks_surface.wgsl
+/// `lm_bridge_bounce_e`): the struts' undersides and the cables seen from
+/// below drew black.
+pub const SEA_ALBEDO: f64 = 0.06;
+
+/// The decks' lines as the builds laid them (`BridgeFeatures::finish`), for
+/// the render's analytic deck shadow (eo-render landmarks_surface.wgsl
+/// `lm_deck_key`): the sun's shadow maps reach 160 m from the eye
+/// (eo-look shadow.rs `MAX_FAR_M`), and past them a member under a deck, the
+/// stiffening truss's bracing, the floor beams, the lower deck, took the
+/// full sun through the deck above it. The Golden Gate's: south way end
+/// (chainage, height), the main span, the tower and mid-span heights, the
+/// north way end, the deck's half width; the west span's: its ends, their
+/// heights, the crest, the grade, the step down to the lower deck, the
+/// decks' half width. Chainage on each bridge's own frame.
+static GG_DECK: OnceLock<[f64; 8]> = OnceLock::new();
+static BAY_DECK: OnceLock<[f64; 8]> = OnceLock::new();
+
+pub fn record_deck_line(id: &str, v: [f64; 8]) {
+    let _ = if id == BRIDGE_IDS[0] { GG_DECK.set(v) } else { BAY_DECK.set(v) };
+}
+
+/// A bridge's deck line, once its build has run.
+pub fn deck_line(id: &str) -> Option<[f64; 8]> {
+    if id == BRIDGE_IDS[0] { GG_DECK.get().copied() } else { BAY_DECK.get().copied() }
+}
+
+/// The two bridges' ids.
+pub const BRIDGE_IDS: [&str; 2] = ["golden-gate-bridge", "bay-bridge-west"];
+
+/// `BridgeFeatures::finish`: a bridge draw's material as the coat it is. A
+/// paint film is a dielectric (a binder of refractive index about 1.5, F0
+/// 0.04: the specular is the film's, uncoloured, and the pigment is all in
+/// the diffuse), so the painted steel, the painted cables and the far item
+/// take metalness 0 (the registry's 0.2 and 0.35 tinted the sky's reflection
+/// with the paint and added it to the diffuse: the sunlit faces went pink-white);
+/// the painted steel is marked as the bridges' own (`bridgePaint`: its plate
+/// seams and rivet rows in place of the landmark steel's mottle) and so is
+/// the bridges' concrete (the intertidal band on the piers).
+pub fn finish_material(id: &str, key: &str, m: &mut crate::data::Material) {
+    if !features().finish || !BRIDGE_IDS.contains(&id) {
+        return;
+    }
+    let painted = m.surface.as_deref() == Some("painted-steel");
+    if painted || m.wire || key == "far" {
+        m.metalness = 0.0;
+        m.roughness = m.roughness.max(PAINT_ROUGHNESS);
+    }
+    if key == "far" {
+        // the far item is the painted structure seen from afar (the registry's far batch was masonry-rough).
+        m.roughness = 0.6;
+        if id == BRIDGE_IDS[1] {
+            // the west span's far item takes the bridges' coat (its sea light, the deck's shadow; the
+            // Golden Gate's far item has its own floodlit surface, eo-render landmarks.rs).
+            m.surface = Some("painted-steel".into());
+        }
+    }
+    if m.surface.as_deref() == Some("painted-steel") || m.surface.as_deref() == Some("concrete") {
+        m.surface_options = Some(serde_json::json!({ "bridge": true }));
+    }
+}
+
+/// The baked occlusion a bridge's members take (`MeshArrays::shade_occlusion`:
+/// faces turned down, faces turned in). With `finish` the frame's own sun
+/// shadow and screen-space occlusion darken the members where they are
+/// shadowed or enclosed, so the bake keeps only what those miss (the sky a
+/// face turned down does not see, the interior's inter-reflection deficit).
+/// INFERRED: 0.82 down, 0.88 in, from the first pass's 0.62 / 0.74 (the
+/// struts' undersides were crushed to black).
+pub fn occlusion(down: f64, inward: f64) -> (f64, f64) {
+    if features().finish { (down.max(0.82), inward.max(0.88)) } else { (down, inward) }
+}
+
+/// A built-up member laced in its own plane (`BridgeFeatures::members`):
+/// two chords `depth` apart about the axis p0-p1, offset along `in_plane`
+/// (unit, perpendicular to the axis), joined by single lacing bars
+/// zig-zagging at `pitch`; the chords `chord` square, the bars `lace`
+/// square. The open web shows the sky through it where a solid plank did not.
+#[allow(clippy::too_many_arguments)]
+pub fn laced(m: &mut MeshArrays, p0: V3, p1: V3, in_plane: V3, depth: f64, chord: f64, lace: f64, pitch: f64, colour: Rgb) {
+    let h = (depth - chord) / 2.0;
+    let off = |p: V3, k: f64| [p[0] + in_plane[0] * k, p[1] + in_plane[1] * k, p[2] + in_plane[2] * k];
+    let len = ((p1[0] - p0[0]).powi(2) + (p1[1] - p0[1]).powi(2) + (p1[2] - p0[2]).powi(2)).sqrt();
+    if !(len > 1e-6) {
+        return;
+    }
+    let normal = {
+        let a = [(p1[0] - p0[0]) / len, (p1[1] - p0[1]) / len, (p1[2] - p0[2]) / len];
+        [a[1] * in_plane[2] - a[2] * in_plane[1], a[2] * in_plane[0] - a[0] * in_plane[2], a[0] * in_plane[1] - a[1] * in_plane[0]]
+    };
+    for k in [-h, h] {
+        m.beam_up(off(p0, k), off(p1, k), chord, chord, colour, Some(in_plane));
+    }
+    let n = ((len / pitch).round() as usize).max(1);
+    let at = |t: f64| [p0[0] + (p1[0] - p0[0]) * t, p0[1] + (p1[1] - p0[1]) * t, p0[2] + (p1[2] - p0[2]) * t];
+    for i in 0..n {
+        let (a, b) = (at(i as f64 / n as f64), at((i + 1) as f64 / n as f64));
+        let (ka, kb) = if i % 2 == 0 { (-h, h) } else { (h, -h) };
+        m.beam_up(off(a, ka), off(b, kb), lace, lace * 0.5, colour, Some(normal));
+    }
+    // batten plates at the ends.
+    for t in [0.0, 1.0] {
+        let p = at(t);
+        m.beam_up(off(p, -h - chord / 2.0), off(p, h + chord / 2.0), chord * 1.6, chord * 0.6, colour, Some(normal));
+    }
+}
+
+/// The far item's deck as one strip welded along the deck's curve
+/// (`BridgeFeatures::members`): cross-sections every `step` from `c0` to
+/// `c1` joined face to face (the 40 m boxes at their mean height stepped
+/// along the camber), the top `above` over the deck, the bottom `depth`
+/// under it, `half` either side.
+#[allow(clippy::too_many_arguments)]
+pub fn welded_strip(far: &mut MeshArrays, frame: &Frame, deck_top: &dyn Fn(f64) -> f64, c0: f64, c1: f64, step: f64, half: f64, depth: f64, above: f64, colour: Rgb) {
+    let cs = stations(c0, c1, step);
+    let ring = |c: f64| {
+        let t = deck_top(c);
+        [frame.P(c, -half, t - depth), frame.P(c, half, t - depth), frame.P(c, half, t + above), frame.P(c, -half, t + above)]
+    };
+    for i in 0..cs.len() - 1 {
+        let (a, b) = (ring(cs[i]), ring(cs[i + 1]));
+        for k in 0..4 {
+            let j = (k + 1) % 4;
+            far.quad(a[k], b[k], b[j], a[j], colour);
+        }
+    }
+    let (a, b) = (ring(cs[0]), ring(cs[cs.len() - 1]));
+    far.quad(a[0], a[1], a[2], a[3], colour);
+    far.quad(b[3], b[2], b[1], b[0], colour);
 }

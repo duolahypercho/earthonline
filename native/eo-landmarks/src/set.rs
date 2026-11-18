@@ -267,7 +267,8 @@ pub fn build_landmark(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: &Deck
     for target in keys {
         let list: Vec<&Frozen> = groups.iter().filter(|(k, _)| def.materials.get(k).and_then(|m| m.draw.clone()).unwrap_or_else(|| k.clone()) == target).map(|(_, g)| g).collect();
         let mesh = if list.len() == 1 { list[0].clone() } else { merge(&format!("{id}:{target}"), &list) };
-        let material = def.materials.get(&target).cloned().unwrap_or_else(far_material);
+        let mut material = def.materials.get(&target).cloned().unwrap_or_else(far_material);
+        crate::suspension::finish_material(id, &target, &mut material); // the bridges' paint as a dielectric film
         draws.push(Draw { key: target, role: Role::Near, material, mesh });
     }
     let (mut mn, mut mx) = ([f32::MAX; 3], [f32::MIN; 3]);
@@ -280,7 +281,9 @@ pub fn build_landmark(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: &Deck
         }
     }
     if !built.far.is_empty() {
-        draws.push(Draw { key: "far".into(), role: Role::Far, material: far_material(), mesh: built.far.clone() });
+        let mut material = far_material();
+        crate::suspension::finish_material(id, "far", &mut material);
+        draws.push(Draw { key: "far".into(), role: Role::Far, material, mesh: built.far.clone() });
     }
     if !built.skirt.is_empty() {
         draws.push(Draw { key: "skirt".into(), role: Role::Near, material: far_material(), mesh: built.skirt.clone() });

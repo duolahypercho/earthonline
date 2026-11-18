@@ -20,7 +20,7 @@ const TIERS: [[f64; 3]; 3] = [[0.40, 6.0, 8.0], [0.75, 5.0, 6.5], [1.00, 4.0, 5.
 /// INFERRED: rope spacing within a suspender pair.
 const PAIR_GAP_M: f64 = 0.4;
 /// `smin` rounding at the deck's grade corners, metres.
-const CORNER_ROUNDING_M: f64 = 12.0;
+pub const CORNER_ROUNDING_M: f64 = 12.0;
 
 /// Dimension keys that are heights or member sizes of the structure: times
 /// `golden_gate::structure_scale` (the plan widths are data.rs's; the deck
@@ -215,21 +215,107 @@ fn towers(js: &LandmarksJs, p: &Plan, f: &Frame, k: &Colours, h: f64, ground: &d
         }
         let dy = p.deck_top(tc);
         let under = dy - truss_depth - 2.0;
-        steel.beam(f.P(tc, -h, pier_top + 4.0 * m), f.P(tc, h, under - 3.0 * m), 1.8 * m, 2.2 * m, k.steel_dark);
-        steel.beam(f.P(tc, h, pier_top + 4.0 * m), f.P(tc, -h, under - 3.0 * m), 1.8 * m, 2.2 * m, k.steel_dark);
+        // `BridgeFeatures::members`: the diagonals as laced built-up members (two chords and their lacing in the tower's plane).
+        let members = crate::suspension::features().members;
+        let brace = |steel: &mut MeshArrays, a: crate::geometry::V3, b: crate::geometry::V3, wd: f64, dp: f64, colour: Rgb| {
+            if members {
+                let ax = [f.axis[0], 0.0, f.axis[1]];
+                let dir = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+                let l = (dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]).sqrt().max(1e-9);
+                let dn = [dir[0] / l, dir[1] / l, dir[2] / l];
+                let ip = [ax[1] * dn[2] - ax[2] * dn[1], ax[2] * dn[0] - ax[0] * dn[2], ax[0] * dn[1] - ax[1] * dn[0]];
+                let il = (ip[0] * ip[0] + ip[1] * ip[1] + ip[2] * ip[2]).sqrt().max(1e-9);
+                let ip = [ip[0] / il, ip[1] / il, ip[2] / il];
+                crate::suspension::laced(steel, a, b, ip, dp * LACED_DEPTH_K, LACED_CHORD_M * m, LACED_BAR_M * m, LACED_PITCH_M * m, colour);
+                // the chords' flanges through the tower (its width along the span).
+                let _ = wd;
+            } else {
+                steel.beam(a, b, wd, dp, colour);
+            }
+        };
+        brace(steel, f.P(tc, -h, pier_top + 4.0 * m), f.P(tc, h, under - 3.0 * m), 1.8 * m, 2.2 * m, k.steel_dark);
+        brace(steel, f.P(tc, h, pier_top + 4.0 * m), f.P(tc, -h, under - 3.0 * m), 1.8 * m, 2.2 * m, k.steel_dark);
         steel.beam(f.P(tc, -h, under), f.P(tc, h, under), 4.0 * m, 4.0 * m, k.steel_dark);
         let (x_base, x_top) = (dy + 6.0 * m, top - 7.0 * m);
         for pn in 0..3 {
             let ya = x_base + (x_top - x_base) * (pn as f64 / 3.0);
             let yb = x_base + (x_top - x_base) * ((pn + 1) as f64 / 3.0);
-            steel.beam(f.P(tc, -h, ya), f.P(tc, h, yb), 1.6 * m, 2.0 * m, k.steel);
-            steel.beam(f.P(tc, h, ya), f.P(tc, -h, yb), 1.6 * m, 2.0 * m, k.steel);
+            brace(steel, f.P(tc, -h, ya), f.P(tc, h, yb), 1.6 * m, 2.0 * m, k.steel);
+            brace(steel, f.P(tc, h, ya), f.P(tc, -h, yb), 1.6 * m, 2.0 * m, k.steel);
             steel.beam(f.P(tc, -h, ya), f.P(tc, h, ya), 2.6 * m, 2.4 * m, k.steel);
             far.beam(f.P(tc, -h, ya), f.P(tc, h, yb), 2.0 * m, 2.0 * m, k.steel);
             far.beam(f.P(tc, h, ya), f.P(tc, -h, yb), 2.0 * m, 2.0 * m, k.steel);
         }
         steel.beam(f.P(tc, -h, top - 3.5 * m), f.P(tc, h, top - 3.5 * m), 4.0 * m, 7.0 * m, k.steel);
         far.beam(f.P(tc, -h, top - 3.5 * m), f.P(tc, h, top - 3.5 * m), 4.0 * m, 7.0 * m, k.steel);
+        if members {
+            // the cable saddles' housings over the legs' tops (the saddle `saddleBelowTopM` under the top).
+            let [_, wd, dp] = TIERS[TIERS.len() - 1];
+            for s in [-h, h] {
+                crate::suspension::saddle_housing(steel, f, tc, s, top, dp * m / 2.0 * 0.95, wd * m / 2.0 * 0.9, 0.6 * m, k.steel);
+            }
+        }
+    }
+}
+
+/// INFERRED (`BridgeFeatures::members`; no section is published): a laced
+/// diagonal's depth over the solid plank's, its chords' and lacing bars'
+/// sections, the lacing's pitch; the decks' slab (with its haunch) under
+/// the roadway, the stringers' count and section, the floor beams' depth
+/// and width at each panel point.
+const LACED_DEPTH_K: f64 = 1.5;
+const LACED_CHORD_M: f64 = 0.55;
+const LACED_BAR_M: f64 = 0.22;
+const LACED_PITCH_M: f64 = 1.8;
+const DECK_SLAB_M: f64 = 0.45;
+const STRINGERS: usize = 6;
+const STRINGER_M: [f64; 2] = [0.35, 0.9];
+const FLOOR_BEAM_M: [f64; 2] = [0.5, 2.0];
+
+/// The decks' structure (`BridgeFeatures::members`): each deck's floor
+/// system closed at its edges (the edge stringer's web, `DECK_SLAB_M` plus a
+/// floor beam's depth), its stringers under the slab and a floor beam
+/// across the truss at each panel point (the lower deck's sky showed
+/// through the truss where only its plate was drawn), and the lamp
+/// standards on the upper deck at the luminaires lights.rs places there.
+fn deck_members(p: &Plan, f: &Frame, k: &Colours, h: f64, panel: f64, roadway: f64, steel: &mut MeshArrays) {
+    let half = h - 0.6;
+    let cs = crate::suspension::stations(p.c_a, p.c_b, panel);
+    for upper in [true, false] {
+        let y = |c: f64| if upper { p.deck_top(c) } else { p.lower_top(c) };
+        for i in 0..cs.len() - 1 {
+            let (a, b) = (cs[i], cs[i + 1]);
+            let (ya, yb) = (y(a), y(b));
+            for sgn in [-1.0, 1.0] {
+                // the floor system's outer face: the edge stringer's web from the slab's top down
+                // to the floor beams' bottom flange, in the members' paint (the slab's edge sits
+                // behind its top flange). A concrete fascia the slab's depth alone drew as a
+                // light stepped strip with the sky under it.
+                let e = sgn * half;
+                let (p0, p1) = if sgn > 0.0 { (b, a) } else { (a, b) };
+                let (y0, y1) = if sgn > 0.0 { (yb, ya) } else { (ya, yb) };
+                let dd = DECK_SLAB_M + FLOOR_BEAM_M[1];
+                steel.quad(f.P(p0, e, y0 - dd), f.P(p1, e, y1 - dd), f.P(p1, e, y1), f.P(p0, e, y0), k.steel);
+            }
+            for j in 0..STRINGERS {
+                let s = -half + (j as f64 + 0.5) / STRINGERS as f64 * 2.0 * half;
+                let d = DECK_SLAB_M + STRINGER_M[1] / 2.0;
+                steel.beam(f.P(a, s, ya - d), f.P(b, s, yb - d), STRINGER_M[0], STRINGER_M[1], k.steel);
+            }
+        }
+        for &c in &cs {
+            let d = DECK_SLAB_M + FLOOR_BEAM_M[1] / 2.0;
+            steel.beam(f.P(c, -h, y(c) - d), f.P(c, h, y(c) - d), FLOOR_BEAM_M[0], FLOOR_BEAM_M[1], k.steel);
+        }
+    }
+    let bhalf = roadway / 2.0;
+    let head = crate::lights::DECK_HEAD_M;
+    let mut c = p.c_a + crate::lights::DECK_PITCH_M / 2.0;
+    while c < p.c_b {
+        for sgn in [-1.0, 1.0] {
+            crate::golden_gate::lamp_standard(steel, f, c, sgn * (bhalf + 0.3), -sgn, p.deck_top(c) + 0.2, head, k.steel);
+        }
+        c += crate::lights::DECK_PITCH_M;
     }
 }
 
@@ -324,10 +410,12 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
     let p = plan(js, &ground_at);
     let f = frame_of(b);
     let h = num(d, "halfPlaneM");
+    crate::suspension::record_deck_line("bay-bridge-west", [p.c_a, p.c_b, p.y_a, p.y_b, p.crest, p.grade, p.step, h - 0.6]);
     let paint = |cited: u32, key: &str| srgb_hex(if features.paint { cited } else { hex(d, key) });
     let k = Colours {
         steel: paint(STEEL_SRGB, "steelSrgb"),
-        truss: paint(TRUSS_SRGB, "trussSrgb"),
+        // `finish`: the truss in the towers' coat (the same paint; the frame's shadows darken its interior).
+        truss: paint(if features.finish { STEEL_SRGB } else { TRUSS_SRGB }, "trussSrgb"),
         steel_dark: paint(STEEL_DARK_SRGB, "steelDarkSrgb"),
         asphalt: srgb_hex(hex(d, "asphaltSrgb")),
         concrete: srgb_hex(hex(d, "concreteSrgb")),
@@ -409,11 +497,34 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
         );
     }
     end_portals(js, &p, &f, &k, h, &cables, &mut steel);
+    if features.members {
+        deck_members(&p, &f, &k, h, num(d, "panelM"), num(d, "roadwayM"), &mut steel);
+        // the cable bands and the ropes' sockets (as the Golden Gate's: golden_gate.rs).
+        // INFERRED: the bands 1.1 m long and 7 cm thick round the 0.73 m cable, the sockets 0.8 m by 0.18 m.
+        crate::suspension::cable_bands(
+            &mut wires,
+            &f,
+            &cables.runs,
+            &|c| p.deck_top(c) - 0.5,
+            &crate::suspension::BandSpec {
+                half_plane: h,
+                spacing: num(d, "suspenderSpacingM"),
+                pair_gap: PAIR_GAP_M,
+                cable_d: num(d, "cableDiameterM"),
+                band_len: 1.1,
+                band_d: num(d, "cableDiameterM") + 0.14,
+                socket_len: 0.8,
+                socket_d: 0.18,
+                colour: k.steel,
+            },
+        );
+    }
     let inward = f.inward();
-    let (down, inw) = (num(d, "steelShadeDown"), num(d, "steelShadeInward"));
+    let (down, inw) = crate::suspension::occlusion(num(d, "steelShadeDown"), num(d, "steelShadeInward"));
     steel.shade_occlusion(Some(&inward), down, inw, 1.5);
-    concrete.shade_occlusion(Some(&inward), 0.62, 0.86, 1.5);
-    deck.shade_occlusion(None, 0.62, 0.74, 1.5);
+    concrete.shade_occlusion(Some(&inward), crate::suspension::occlusion(0.62, 0.86).0, crate::suspension::occlusion(0.62, 0.86).1, 1.5);
+    let (dd, di) = crate::suspension::occlusion(0.62, 0.74);
+    deck.shade_occlusion(None, dd, di, 1.5);
     far.shade_occlusion(Some(&inward), down, inw, 1.5);
 
     let mut colliders = Vec::new();
