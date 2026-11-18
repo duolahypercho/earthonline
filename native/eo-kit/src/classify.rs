@@ -205,6 +205,8 @@ pub struct Classified {
     pub shop_units: Vec<ShopUnit>,
     pub civic: Option<Civic>,
     pub record_id: String,
+    /// The Presidio rule applies (presidio.rs).
+    pub presidio: bool,
 }
 
 /// `resolveHeight(record)`.
