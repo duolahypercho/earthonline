@@ -1820,6 +1820,9 @@ mod net_shots {
             anyhow::bail!("{}: no scenes", path.display());
         }
         let dir = args.out_dir.clone().ok_or_else(|| anyhow!("--net-shots needs --out DIR"))?;
+        // Frames under the still camera: a still's, and each kept instant's of a sequence (the file may lower them on a busy GPU).
+        let converge = file["converge_frames"].as_u64().map(|n| n as usize).unwrap_or(CONVERGE_FRAMES).max(8);
+        let per_instant = file["frames_per_instant"].as_u64().map(|n| n as usize).unwrap_or(SEQUENCE_FRAMES).max(1);
         std::fs::create_dir_all(&dir)?;
         // The server, its clock held still at the first scene's hour, and every scene's bots.
         let first = &scenes[0];
@@ -1888,7 +1891,7 @@ mod net_shots {
                 agents.remote = remote.clone();
                 let settle2 = settle(g, &world, props, agents, &cam, 600.0)?;
                 agents.extras = extras.clone();
-                for _ in 0..CONVERGE_FRAMES {
+                for _ in 0..converge {
                     draw_frame(g, &world, props, agents, &cam, 0.0)?;
                 }
                 let tags = s.name_tags(&cam, args.width, args.height, 0.0);
@@ -1901,7 +1904,7 @@ mod net_shots {
                     "players": sc.players, "others_drawn": s.others.len(), "name_tags": tags.len(),
                     "tags": tags.iter().map(|t| json!({ "name": t.name, "detail": t.detail, "alpha": t.alpha, "x": t.x, "y": t.y })).collect::<Vec<_>>(),
                     "presence": { "remote_bodies": o.presence.bodies, "name_tags": o.presence.tags, "shared_sky": o.presence.shared_sky },
-                    "player_cars_drawn": false, "converge_frames": CONVERGE_FRAMES, "settle_ms": settle_ms + settle2,
+                    "player_cars_drawn": false, "converge_frames": converge, "settle_ms": settle_ms + settle2,
                 }));
                 std::fs::write(dir.join(format!("{}.json", sh.name)), serde_json::to_vec_pretty(report.last().unwrap())?)?;
                 println!("wrote {}", file.display());
@@ -1940,12 +1943,12 @@ mod net_shots {
                 for (i, (extras, remote, tags)) in kept.into_iter().enumerate() {
                     agents.extras = extras;
                     agents.remote = remote;
-                    for _ in 0..SEQUENCE_FRAMES {
+                    for _ in 0..per_instant {
                         draw_frame(g, &world, props, agents, &cam, 0.0)?;
                     }
                     overlay_and_save(g, ui, &tags, args, &sdir.join(format!("{i:04}.png")))?;
                 }
-                let m = json!({ "name": name, "scene": sc.name, "fps": fps, "seconds": seconds, "frames": k, "eye": [cam.eye.x, cam.eye.y, cam.eye.z], "look_at": [sh.at.x, sh.at.y, sh.at.z], "presence": { "remote_bodies": o.presence.bodies, "name_tags": o.presence.tags }, "log": log, "note": format!("the world run at wall time (the client drawing every 4 ms), the other players, traffic and tags kept every 1/fps s, each kept instant then drawn {SEQUENCE_FRAMES} frames under the still camera") });
+                let m = json!({ "name": name, "scene": sc.name, "fps": fps, "seconds": seconds, "frames": k, "eye": [cam.eye.x, cam.eye.y, cam.eye.z], "look_at": [sh.at.x, sh.at.y, sh.at.z], "presence": { "remote_bodies": o.presence.bodies, "name_tags": o.presence.tags }, "log": log, "note": format!("the world run at wall time (the client drawing every 4 ms), the other players, traffic and tags kept every 1/fps s, each kept instant then drawn {per_instant} frames under the still camera") });
                 std::fs::write(dir.join(format!("{name}.json")), serde_json::to_vec_pretty(&m)?)?;
                 println!("wrote {} frames to {}", k, sdir.display());
             }
