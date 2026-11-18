@@ -75,7 +75,10 @@ fn near_and_far_switch_on_the_gpu() {
             // Twice: the switch has hysteresis; the second frame reads the first's state.
             r.cull_readback(&ctx, &cam).unwrap();
             let out = r.cull_readback(&ctx, &cam).unwrap();
-            let drawn: Vec<u32> = out.draws.iter().take(out.counters[0] as usize).map(|d| d[4]).collect();
+            // the drawn commands: the readback's compacted list holds only
+            // them; the uncompacted fallback (no multi-draw-indirect-count)
+            // holds one slot per object, an undrawn one with no instance.
+            let drawn: Vec<u32> = out.draws.iter().filter(|d| d[1] > 0).map(|d| d[4]).collect();
             let near = drawn.iter().filter(|&&i| scene.objects[i as usize].lod_group == li as u32 && scene.objects[i as usize].lod_role == LOD_LANDMARK_NEAR).count();
             let far = drawn.iter().filter(|&&i| scene.objects[i as usize].lod_group == li as u32 && scene.objects[i as usize].lod_role == LOD_LANDMARK_FAR).count();
             counts.push((d, near, far));
