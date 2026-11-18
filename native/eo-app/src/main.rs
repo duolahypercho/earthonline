@@ -306,7 +306,7 @@ fn parse_args() -> Result<Args> {
             "--no-atlas2" => a.look.facade &= !eo_render::facade::RUN_ATLAS2, // facade
             "--no-probe" => a.look.facade &= !eo_render::facade::RUN_PROBE, // facade
             "--no-rooms" => a.look.facade &= !eo_render::facade::RUN_ROOMS, // no room behind kit glazing
-            "--no-room-frames" | "--no-room-dim" => {} // read by eo_render::rooms::wgsl_constants
+            "--no-room-frames" | "--no-room-dim" | "--no-room-blind-runs" => {} // read by eo_render::rooms::wgsl_constants
             // near kit buildings as their envelope box ("box"), or the box with the shader-only facade ("shader").
             "--facade-test" => match val()?.as_str() {
                 "box" => eo_render::kit::FACADE_TEST.store(1, std::sync::atomic::Ordering::Relaxed),
@@ -402,6 +402,9 @@ fn parse_args() -> Result<Args> {
             "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" => {} // `roofs_flags`
             "--no-far-facade" => {} // `roofs_flags`: the far boxes as before (eo-render far_box.rs)
             "--no-period-paint" => {} // `roofs_flags`: the timber rows' period paint at its finish's luminance (eo-kit wall_paint.rs)
+            // `roofs_flags`: one window module per archetype (eo-kit typology.rs), uncapped wall chroma
+            // (wall_paint.rs), the measured roofs' cast kept (roof_measured.rs), the far box's flat cap (far_box.rs).
+            "--no-facade-typology" | "--no-wall-chroma" | "--no-roof-neutral" | "--no-far-roofs" => {}
             "--segments" => a.segments = Some(val()?.split(',').map(|s| s.trim().to_string()).collect()),
             // occlusion / hitch
             "--no-occlusion" => a.perf.occlusion = false,
@@ -1023,6 +1026,10 @@ fn roofs_flags() {
         ("--no-wall-paint", "EO_WALL_PAINT"),
         ("--no-far-facade", "EO_FAR_FACADE"),
         ("--no-period-paint", "EO_PERIOD_PAINT"),
+        ("--no-facade-typology", "EO_FACADE_TYPOLOGY"),
+        ("--no-wall-chroma", "EO_WALL_CHROMA"),
+        ("--no-roof-neutral", "EO_ROOF_NEUTRAL"),
+        ("--no-far-roofs", "EO_FAR_ROOFS"),
         ("--no-ground-green", "EO_GROUND_GREEN"),
         ("--no-ground-hills", "EO_GROUND_HILLS"),
         ("--no-ground-contact", "EO_GROUND_CONTACT"),

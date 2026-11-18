@@ -296,7 +296,7 @@ selection:
 | Content | `--no-models`, `--no-kit`, `--no-streets`, `--no-props`, `--no-agents`, `--no-landmarks`, `--no-water`, `--no-farshore`, `--no-sky` |
 | People | `--no-rocketbox`, `--no-rocketbox-motions` (either one: no people) |
 | Props | `--no-props2`, `--no-furniture`, `--no-eztree`, `--no-wires`, `--no-overhead`, `--no-lamp-sprites` |
-| Buildings | `--no-facade-detail`, `--no-facade-age`, `--no-rooms`, `--no-room-frames`, `--no-room-dim`, `--no-roof-colours`, `--no-roof-plant`, `--no-roof-parapet`, `--no-roof-patches`, `--no-wall-paint`, `--no-period-paint`, `--no-far-facade` |
+| Buildings | `--no-facade-detail`, `--no-facade-age`, `--no-rooms`, `--no-room-frames`, `--no-room-dim`, `--no-roof-colours`, `--no-roof-plant`, `--no-roof-parapet`, `--no-roof-patches`, `--no-roof-neutral`, `--no-wall-paint`, `--no-period-paint`, `--no-wall-chroma`, `--no-facade-typology`, `--no-room-blind-runs`, `--no-far-facade`, `--no-far-roofs` |
 | Ground | `--no-ground-hills`, `--no-ground-green`, `--no-ground-contact`, `--no-terrain-lod` |
 | Scanned surfaces | `--no-cc0` (all), `--no-cc0-street`, `--no-cc0-walls`, `--no-cc0-ground`, `--no-cc0-decals`, `--no-cc0-grime`, `--no-cc0-stains`, `--no-cc0-pom`, `--no-cc0-tiling` |
 | Lighting and sky | `--no-shadows`, `--no-ao`, `--no-contact-shadows`, `--no-atmosphere`, `--no-fog`, `--no-clouds`, `--no-cloud-shadows`, `--no-shafts`, `--no-moon-stars`, `--no-lights` |
@@ -446,8 +446,15 @@ under `public/assets/buildings/`, placed by the modules in
 `eo-kit` from its footprint, height, district and use: an archetype, a
 street front, storeys and bays, shop fronts, roof plant, materials. Plans
 are meshed per 128 m tile at several levels, cooked on worker threads and
-cached. Facades carry a detail atlas, weathering and age, window rooms
-behind the glass, and roofs coloured from the measured aerial table.
+cached. Each building draws its own window module (bay pitch, window
+width, sill and head), and a tower its own facade system (unitised or
+stick curtain wall, ribbon, punched or finned precast, masonry piers) with
+its glass coating and stone tone, known towers their recorded one
+(`eo-kit` `typology`); Queen Anne rows carry their front gable. Wall
+bodies are held to a muted chroma, with a Chinatown front's accent on its
+trim. Facades carry a detail atlas, weathering and age, window rooms
+behind the glass (an office's blinds by tenant run), and roofs coloured
+from the measured aerial table with the imagery's colour cast taken off.
 
 **Far city.** Past the near bands, buildings are drawn from merged meshes
 prepared ahead of time: 256 m neighbourhood cells with a facade atlas, then
@@ -457,7 +464,11 @@ cell covers the buildings that are far in this frame. Where the far layer is
 not drawn, a building past its own levels is its footprint box, drawn by the
 city shader with its archetype's facade (`eo-kit` `far_facade`, `eo-render`
 `far_box`): storeys, window bays, glass, frames, spandrels, shop fronts,
-cornices and crowns, the kit's paint, and the measured roof colour.
+cornices and crowns, the kit's paint, and the measured roof colour, with
+the coping round the roof's edge, the roof plant (packaged units, stair
+bulkheads, elevator overruns, a tower's penthouse) as boxes, a curtain
+wall's panes a little out of plane, and the lot rhythm of a footprint over
+several lots.
 
 **Terrain.** The 8 m elevation grid in 256 m tiles with a coarse far level,
 tinted by land cover and the open-space ground (greens, sand, park trees).
