@@ -83,7 +83,11 @@ fn lm_bump(n: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, h: f32, hx: f32, hy: f3
 // floodlights at night (LM_F_FLOOD).
 fn lm_surface(s: ptr<function, Surface>, m: Material, world: vec3<f32>, n: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) {
     lm_surface_kind(s, m, world, n, dpx, dpy);
-    lm_flood(s, m, world, n);
+    if (LM_V3) {
+        lm_flood3(s, m, world); // projector rigs (eo-landmarks towers3.rs)
+    } else {
+        lm_flood(s, m, world, n);
+    }
 }
 
 // The surface kinds: 1 painted steel, 2 cast concrete, 3 the seawall, 4-6
@@ -102,7 +106,11 @@ fn lm_surface_kind(s: ptr<function, Surface>, m: Material, world: vec3<f32>, n: 
         return;
     }
     if (kind == 7u) {
-        lm_authored(s, m, world, n, dpx, dpy);
+        if (LM_V3) {
+            lm_authored3(s, m, world, n, dpx, dpy); // the third pass (eo-app --no-towers3: the previous)
+        } else {
+            lm_authored(s, m, world, n, dpx, dpy);
+        }
         return;
     }
     if (kind >= 4u) {
@@ -175,6 +183,17 @@ fn lm_building_surface(s: ptr<function, Surface>, m: Material, kind: u32, world:
         (*s).albedo = (*s).albedo * (1.0 + panel_tone + tone - drip);
         (*s).rough = clamp((*s).rough + tone * (LM_PC_ROUGH_SPREAD / max(1e-3, LM_PC_PATCH_TONE)), 0.4, 0.95);
         let footprint = ((abs(du.x) + abs(dv.x)) + (abs(du.y) + abs(dv.y))) * 0.5;
+        if (LM_V3) {
+            // the panels' chamfered joints (a 40 mm V-groove, its sealant and
+            // the groove's own shadow reading about half the panel's tone,
+            // INFERRED), box-filtered over the pixel so a far wall takes their share.
+            let fu = max(abs(du.x) + abs(dv.x), 1e-4) / cellm.x;
+            let fv = max(abs(du.y) + abs(dv.y), 1e-4) / cellm.y;
+            let ju = 1.0 - mix(lm_pulse(uv.x / cellm.x, fu, 1.0 - 0.04 / cellm.x), 1.0 - 0.04 / cellm.x, lm_ss(0.5, 1.0, fu));
+            let jv = 1.0 - mix(lm_pulse(uv.y / cellm.y, fv, 1.0 - 0.04 / cellm.y), 1.0 - 0.04 / cellm.y, lm_ss(0.5, 1.0, fv));
+            let joint = clamp(ju + jv - ju * jv, 0.0, 1.0) * vertical;
+            (*s).albedo = (*s).albedo * (1.0 - 0.5 * joint);
+        }
         let fj = lm_fade(footprint, cellm.x);
         if (fj > 0.0) {
             let h0 = lm_precast_height(uv, cellm);
@@ -251,7 +270,7 @@ fn lm_led(u_m: f32, y_rel: f32, crown_m: f32) -> vec3<f32> {
 }
 
 fn lm_authored(s: ptr<function, Surface>, m: Material, world: vec3<f32>, n: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) {
-    let i = min(u32(round(max(m.rough_flatten, 0.0))), max(LM_FACADE_COUNT, 1u) - 1u) * 3u;
+    let i = min(u32(round(max(m.rough_flatten, 0.0))), max(LM_FACADE_COUNT, 1u) - 1u) * 4u;
     let r0 = LM_FACADES[i];
     let r1 = LM_FACADES[i + 1u];
     let r2 = LM_FACADES[i + 2u];
@@ -326,6 +345,171 @@ fn lm_flood(s: ptr<function, Surface>, m: Material, world: vec3<f32>, n: vec3<f3
     let facing = clamp(1.0 - abs(n.y), 0.0, 1.0) + max(n.y, 0.0) * 0.35;
     let e = m.base.x * mix(1.0, 0.25, pow(t, 0.7)) * band * facing;
     rm_emit = rm_emit + (*s).albedo * (1.0 - 0.6 * (*s).metal) * LM_FLOOD_RGB * e * skyu.bloom_w2.z * dusk / LK_PI;
+}
+
+
+// ---- the third pass (LM_V3; eo-app --no-towers3 draws the previous above) ----
+//
+// `lm_authored3`: the authored facade as `lm_authored` with
+//  * the window grid's box filter faded to its mean once a period is under
+//    two pixels (past Nyquist a box filter's ringing is the stripe moire);
+//  * the glass a dielectric pane of the style's visible reflectance over a
+//    dark room (skyline.rs `pane_albedo_metal`: albedo and metalness that
+//    give F0 = the reflectance, diffuse = the room), drawn in the glazing's
+//    environment class (look_light `lm_glaze`), each pane tilted by up to the
+//    style's set-out angle (a curtain wall's broken reflections), the tilt
+//    turning into roughness where panes fall under a pixel;
+//  * at night, office bays (`bayModules` modules a storey) lit by floor and
+//    by tenant run (floors cluster: some dark, some mostly lit, the mean the
+//    occupancy x `nightLit`), each at a lit window's luminance (`windowCd`,
+//    under the night exposure's clip) times a per-bay dimming;
+//  * the crown's sculpture as a blue colour wash over the whole crown and
+//    moving low-resolution figures over its top six storeys, seen through
+//    the screen's openings (the members lit a third as much by the field behind).
+
+const LM_LED_PITCH_M: f32 = 1.6;
+
+fn lm_led3(u_m: f32, y_rel: f32, crown_m: f32, open: f32) -> vec3<f32> {
+    let t = skyu.wet.w;
+    let p = vec2<f32>(u_m, y_rel) / LM_LED_PITCH_M;
+    // the figures: soft blobs drifting sideways and fading (Day for Night's walkers, INFERRED motion).
+    let f0 = lm_noise(vec3<f32>(p.x * 0.11 - t * 0.09, p.y * 0.07, t * 0.05 + 3.7));
+    let f1 = lm_noise(vec3<f32>(floor(p.x) * 0.31 + t * 0.13, floor(p.y) * 0.23, 9.1));
+    let figure = lm_ss(0.15, 0.55, f0) * (0.7 + 0.3 * f1);
+    let upper = lm_ss(crown_m * 0.33 - 1.5, crown_m * 0.33 + 1.5, y_rel);
+    let wash = vec3<f32>(0.32, 0.5, 1.0) / dot(vec3<f32>(0.32, 0.5, 1.0), vec3<f32>(0.2126, 0.7152, 0.0722));
+    let white = vec3<f32>(0.9, 0.95, 1.0);
+    let l = wash * LM_LED_WASH_CD * (0.8 + 0.2 * f1) + white * LM_LED_FIGURE_CD * figure * upper;
+    return l * (open + 0.33 * (1.0 - open));
+}
+
+fn lm_authored3(s: ptr<function, Surface>, m: Material, world: vec3<f32>, n: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) {
+    let i = min(u32(round(max(m.rough_flatten, 0.0))), max(LM_FACADE_COUNT, 1u) - 1u) * 4u;
+    let r0 = LM_FACADES[i];
+    let r1 = LM_FACADES[i + 1u];
+    let r2 = LM_FACADES[i + 2u];
+    let r3 = LM_FACADES[i + 3u];
+    let vertical = lm_ss(0.45, 0.25, abs(n.y));
+    if (vertical <= 0.0) {
+        return;
+    }
+    let t = normalize(vec2<f32>(-n.z, n.x) + vec2<f32>(1e-5, 0.0));
+    let module_m = max(r0.x, 0.05);
+    let storey_m = max(r0.y, 0.05);
+    let u = dot(world.xz, t) / module_m;
+    let v = (world.y - m.thin_absorption) / storey_m;
+    let fu = (abs(dot(dpx.xz, t)) + abs(dot(dpy.xz, t))) / module_m;
+    let fv = (abs(dpx.y) + abs(dpy.y)) / storey_m;
+    let view = normalize(frame.cam_pos.xyz - world);
+    let nh = normalize(n.xz + vec2<f32>(1e-5, 0.0));
+    let vn = max(dot(view.xz, nh), 0.08);
+    let gx = max(r0.z - r2.w * abs(dot(view.xz, t)) / vn / module_m, 0.0);
+    let gy = max(r0.w - r2.w * abs(view.y) / vn / storey_m, 0.0);
+    let pu = mix(lm_pulse(u, fu, gx), gx, lm_ss(0.5, 1.0, fu));
+    let pv = mix(lm_pulse(v, fv, gy), gy, lm_ss(0.5, 1.0, fv));
+    let glass = pu * pv * vertical;
+    let seed = vec2<f32>(m.params.z * 0.0131, m.params.w * 0.0173);
+    let cell = floor(vec2<f32>(u, v));
+    // polished stone (the frame's own roughness under 0.35) reflects as the glazing does.
+    let polish = lm_ss(0.35, 0.2, (*s).rough);
+    (*s).albedo = mix((*s).albedo, r1.xyz, glass);
+    (*s).rough = mix((*s).rough, r1.w, glass);
+    if (r2.x < 0.5) {
+        (*s).metal = mix((*s).metal, r3.x, glass);
+        lm_glaze = max(glass, polish * vertical);
+        if (r3.y > 0.0) {
+            let j = (vec2<f32>(st_hash(cell * vec2<f32>(1.37, 2.11) + seed + 3.3), st_hash(cell * vec2<f32>(2.71, 1.13) + seed + 8.1)) * 2.0 - 1.0) * r3.y;
+            let far_k = lm_ss(0.3, 1.0, max(fu, fv));
+            let tt = vec3<f32>(t.x, 0.0, t.y);
+            let nj = normalize((*s).n + (tt * j.x + vec3<f32>(0.0, j.y, 0.0)) * (1.0 - far_k));
+            (*s).n = normalize(mix((*s).n, nj, glass));
+            let r = (*s).rough;
+            (*s).rough = mix(r, sqrt(r * r + 4.0 * r3.y * far_k), glass);
+        }
+    }
+    let dusk = look.rooms_env.x;
+    if (dusk <= 0.0 || !sky_on(skyu.flags.x, SKY_LIGHTS) || frame.copy_step.z > 0.5) {
+        return;
+    }
+    let level = skyu.bloom_w2.z * dusk;
+    if (r2.z > 0.5) {
+        rm_emit = rm_emit + lm_led3(u * module_m, world.y - m.thin_absorption, LM_LED_CROWN_M, glass) * level * vertical;
+    }
+    if (r2.y > 0.0) {
+        let bay = max(r3.z, 1.0);
+        let bc = floor(vec2<f32>(u / bay, v));
+        let occ = clamp(look.rooms_env.y * r2.y, 0.0, 1.0);
+        // the floor's share (uniform over occ -/+ 0.8, clamped: about a quarter of floors dark, the mean about occ).
+        let fh = st_hash(vec2<f32>(bc.y * 3.17, 7.9) + seed);
+        let floor_share = clamp(occ + (fh - 0.5) * 1.6, 0.0, 1.0);
+        // tenant runs of two to five bays along the floor, each lit or not.
+        let run_len = 2.0 + floor(st_hash(vec2<f32>(bc.y * 1.91, 2.3) + seed) * 4.0);
+        let run = floor((bc.x + 13.0 * st_hash(vec2<f32>(bc.y, 4.4) + seed)) / run_len);
+        let lit = step(st_hash(vec2<f32>(run * 1.37, bc.y * 2.11) + seed), floor_share);
+        // per bay: a lamp's spread and a few blinds down.
+        let dim = (0.7 + 0.3 * st_hash(bc + 5.1 + seed)) * mix(1.0, 0.35, step(0.86, st_hash(bc + 11.7 + seed)));
+        let cool = step(1.0 - look.rooms_env.w, st_hash(vec2<f32>(run, bc.y) + 17.3 + seed));
+        let warm_c = vec3<f32>(1.0, 0.62, 0.34) / 0.6779;
+        let cool_c = vec3<f32>(0.86, 0.93, 1.0) / 0.9200;
+        let col = select(warm_c, cool_c, cool > 0.5);
+        // past a bay a pixel, the mean (the floors' mean share x the mean dimming).
+        let k = mix(lit * dim, occ * 0.78, lm_ss(0.25, 0.6, max(fu / bay, fv)));
+        rm_emit = rm_emit + col * k * glass * level * max(r3.w, 0.1);
+    }
+}
+
+// `lm_flood3`: a floodlit material lit by its projector rig (`base`: first
+// projector, the rig's origin y, count; LM_PROJ three rows a projector:
+// offset from (anchor x, origin y, anchor z) and axis cd, aim and cos of
+// the field angle, cos of the beam angle, spill share, interior flag). Each
+// projector gives E = I(theta) N.L / d^2 lux, I full inside the beam,
+// smoothstepped to none at the field, plus its spill over the forward
+// hemisphere; the lit surface's radiance is E (albedo (1 - metal) / pi +
+// GGX), in the floodlights' colour (3,500 K), in the night lighting's units
+// (lamp_k a lux), times the scene AO. An interior projector lights a
+// translucent skin from inside: |N.L|, E albedo / pi.
+fn lm_flood3(s: ptr<function, Surface>, m: Material, world: vec3<f32>) {
+    if ((m.flags & LM_F_FLOOD) == 0u) {
+        return;
+    }
+    let dusk = look.rooms_env.x;
+    if (dusk <= 0.0 || !sky_on(skyu.flags.x, SKY_LIGHTS) || frame.copy_step.z > 0.5) {
+        return;
+    }
+    let first = u32(max(m.base.x, 0.0) + 0.5);
+    let count = u32(max(m.base.z, 0.0) + 0.5);
+    let origin = vec3<f32>(m.params.z, m.base.y, m.params.w);
+    let nn = (*s).n;
+    let v = normalize(frame.cam_pos.xyz - world);
+    let diffuse = (*s).albedo * (1.0 - (*s).metal);
+    let f0 = mix(vec3<f32>(0.04), (*s).albedo, (*s).metal);
+    let rough = clamp((*s).rough, 0.05, 1.0);
+    var lo = vec3<f32>(0.0);
+    for (var k = first; k < min(first + count, LM_PROJ_COUNT); k = k + 1u) {
+        let a = LM_PROJ[3u * k];
+        let b = LM_PROJ[3u * k + 1u];
+        let c = LM_PROJ[3u * k + 2u];
+        let d = origin + a.xyz - world;
+        let d2 = max(dot(d, d), 0.25);
+        let l = d * inverseSqrt(d2);
+        let ct = dot(-l, b.xyz);
+        let beam = lm_ss(b.w, c.x, ct) + c.y * step(0.0, ct);
+        if (beam <= 0.0) {
+            continue;
+        }
+        let e = a.w * beam / d2;
+        if (c.z > 0.5) {
+            lo = lo + e * abs(dot(nn, l)) * (*s).albedo / LK_PI;
+            continue;
+        }
+        let nl = dot(nn, l);
+        if (nl <= 0.0) {
+            continue;
+        }
+        lo = lo + e * nl * (diffuse / LK_PI + lk_ggx(nn, v, l, f0, rough));
+    }
+    let ao = ao_multi_bounce(ao_fetch(world).a);
+    rm_emit = rm_emit + lo * ao * LM_FLOOD_RGB * skyu.bloom_w2.z * dusk;
 }
 
 fn lm_precast_height(uv: vec2<f32>, cellm: vec2<f32>) -> f32 {

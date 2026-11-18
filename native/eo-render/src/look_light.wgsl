@@ -107,6 +107,9 @@ fn lk_dfg(nv: f32, rough: f32) -> vec2<f32> {
 // the room behind kit glazing at night (rooms.wgsl), set by the city
 // shader before `look_light`: the pane's emission (kit/materials.js emissiveNode).
 var<private> rm_emit: vec3<f32>;
+// the share of a landmark wall that is glazing (landmarks_surface.wgsl
+// `lm_authored3`): its environment reflection takes the glass class.
+var<private> lm_glaze: f32;
 
 fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: vec3<f32>, object: u32) -> vec4<f32> {
     var s = s_in; // sky
@@ -137,7 +140,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     } else if (kind == 1u) {
         cls = look.env_class.w;
     }
-    let env_i = look.ambient.w * cls;
+    let env_i = look.ambient.w * mix(cls, look.env_class.y, clamp(lm_glaze, 0.0, 1.0)); // landmark glazing
 
     // Key light with its shadow.
     let l = look.key_dir.xyz;
