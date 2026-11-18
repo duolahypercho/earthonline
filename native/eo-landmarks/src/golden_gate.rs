@@ -867,6 +867,10 @@ impl Ctx<'_> {
     }
 
     fn arch_ribs(&self, orange: &mut MeshArrays, far: &mut MeshArrays) {
+        if self.arch2 {
+            self.arch4(orange, far);
+            return;
+        }
         let (g, d, p, k) = (self.g, self.d, self.plan, &self.k);
         let s_c = p.arch_south_c + g.supports["archSouth"].extent[1] / 2.0;
         let n_c = p.arch_north_c - g.supports["archNorth"].extent[1] / 2.0;
@@ -955,6 +959,119 @@ impl Ctx<'_> {
             let y_top = p.deck_top(c) - truss;
             if y_top - top_at(c) > 1.0 {
                 orange.beam(self.P(c, s, top_at(c)), self.P(c, s, y_top), 0.6, 0.6, k.orange);
+            }
+        }
+    }
+
+    /// The Fort Point arch as built (`BridgeFeatures::arch2`): a steel,
+    /// two-hinged arch of four ribs, the inner pair 42 ft 6 in apart and the
+    /// outer pair 102 ft 6 in apart (6 ft 3 in outside the cable backstays),
+    /// spanning 319 ft 7 in between the bearings' centres with a rise of
+    /// 113 ft, the roadway 185 ft over the springing (Strauss 1937; the plan
+    /// widths and the span times the ground plan's scale, the heights times
+    /// the structure's). Each rib an open-web arch truss (its bottom chord on
+    /// the rib's parabola, its top chord ARCH_TRUSS_DEPTH_M over it at the
+    /// crown, closing to the hinges), verticals and alternating diagonals at
+    /// every half panel; spandrel bents (a post on each rib at every panel
+    /// point, up to the stiffening truss's bottom chord, X-braced across
+    /// between the ribs); laterals (X between neighbouring ribs' top chords,
+    /// struts across all four at the bottom chords). The springing line is
+    /// level, 185 ft under the roadway at the north bearing. INFERRED: the
+    /// ribs' depth, the members' sections, the bracing's pattern.
+    fn arch4(&self, orange: &mut MeshArrays, far: &mut MeshArrays) {
+        let (d, p, k, h) = (self.d, self.plan, &self.k, self.h);
+        let gs = eo_data::groundscale::scale();
+        let ft = 0.3048;
+        let mid = (p.arch_south_c + p.arch_north_c) / 2.0;
+        let half_span = ARCH_SPAN_FT * ft * gs / 2.0;
+        let (b0, b1) = (mid - half_span, mid + half_span);
+        let truss = num(d, "trussDepthM");
+        let spring = p.deck_top(b1) - ARCH_ROADWAY_OVER_SPRINGING_FT * ft * h;
+        let rise = ARCH_RISE_FT * ft * h;
+        let rib_y = |c: f64| {
+            let t = ((c - b0) / (b1 - b0)).clamp(0.0, 1.0);
+            spring + rise * 4.0 * t * (1.0 - t)
+        };
+        let depth = ARCH_TRUSS_DEPTH_M * h;
+        let floor = |c: f64| p.deck_top(c) - truss;
+        let top_at = |c: f64| {
+            let t = ((c - b0) / (b1 - b0)).clamp(0.0, 1.0);
+            (rib_y(c) + depth * (std::f64::consts::PI * t).sin().sqrt()).min(floor(c) - 0.3)
+        };
+        let ribs = ARCH_RIBS_FT.map(|f| f * ft * gs / 2.0);
+        let ss = [-ribs[1], -ribs[0], ribs[0], ribs[1]];
+        let panel = num(d, "panelM");
+        let cs = stations(b0, b1, panel / 2.0);
+        let (chord_w, chord_d) = (1.2 * h, 1.4 * h);
+        for &s in &ss {
+            for i in 0..cs.len() - 1 {
+                let (a, b) = (cs[i], cs[i + 1]);
+                orange.beam(self.P(a, s, rib_y(a)), self.P(b, s, rib_y(b)), chord_w, chord_d, k.orange);
+                orange.beam(self.P(a, s, top_at(a)), self.P(b, s, top_at(b)), chord_w, chord_d * 0.8, k.orange);
+                if top_at(b) - rib_y(b) > 0.6 {
+                    orange.beam(self.P(b, s, rib_y(b)), self.P(b, s, top_at(b)), 0.5 * h, 0.6 * h, k.orange);
+                }
+                let (ya, yb) = if i % 2 == 0 { (rib_y(a), top_at(b)) } else { (top_at(a), rib_y(b)) };
+                if (top_at(a) - rib_y(a)).min(top_at(b) - rib_y(b)) > 0.3 {
+                    orange.beam(self.P(a, s, ya), self.P(b, s, yb), 0.4 * h, 0.5 * h, k.orange);
+                }
+            }
+            let fcs = stations(b0, b1, 16.0);
+            for i in 0..fcs.len() - 1 {
+                far.beam(self.P(fcs[i], s, rib_y(fcs[i])), self.P(fcs[i + 1], s, rib_y(fcs[i + 1])), 2.0, 2.6, k.orange);
+            }
+        }
+        // laterals: X between neighbouring ribs' top chords in every other panel, struts across at the bottom chords.
+        for (i, w) in cs.windows(2).enumerate() {
+            let (a, b) = (w[0], w[1]);
+            if i % 2 == 0 && i > 0 && i + 2 < cs.len() {
+                for j in 0..3 {
+                    let (s0, s1) = (ss[j], ss[j + 1]);
+                    orange.beam(self.P(a, s0, top_at(a) - 0.4 * h), self.P(b, s1, top_at(b) - 0.4 * h), 0.3 * h, 0.4 * h, k.orange);
+                    orange.beam(self.P(a, s1, top_at(a) - 0.4 * h), self.P(b, s0, top_at(b) - 0.4 * h), 0.3 * h, 0.4 * h, k.orange);
+                }
+                orange.beam(self.P(a, ss[0], rib_y(a) + 0.4 * h), self.P(a, ss[3], rib_y(a) + 0.4 * h), 0.4 * h, 0.5 * h, k.orange);
+            }
+        }
+        // spandrel bents at the panel points: a post on each rib, X-braced across between the ribs.
+        for c in stations(b0 + panel, b1 - panel, panel) {
+            let (y0, y1) = (top_at(c), floor(c));
+            if y1 - y0 < 1.0 {
+                continue;
+            }
+            for &s in &ss {
+                orange.beam(self.P(c, s, y0), self.P(c, s, y1), 0.7 * h, 0.8 * h, k.orange);
+            }
+            if y1 - y0 > 3.0 {
+                for j in 0..3 {
+                    let (s0, s1) = (ss[j], ss[j + 1]);
+                    orange.beam(self.P(c, s0, y0 + 0.5), self.P(c, s1, y1 - 0.5), 0.3 * h, 0.35 * h, k.orange);
+                    orange.beam(self.P(c, s1, y0 + 0.5), self.P(c, s0, y1 - 0.5), 0.3 * h, 0.35 * h, k.orange);
+                }
+            }
+            // the bent's cap under the deck truss.
+            orange.beam(self.P(c, ss[0], y1 - 0.4 * h), self.P(c, ss[3], y1 - 0.4 * h), 0.6 * h, 0.8 * h, k.orange);
+        }
+    }
+
+    /// The arch's bearings (`BridgeFeatures::arch2`): a concrete pedestal
+    /// under each rib's hinge, from the ground up to the springing line.
+    /// INFERRED: its plan, 3 m square at the structure's scale.
+    fn arch_bearings(&self, concrete: &mut MeshArrays) {
+        let p = self.plan;
+        let (gs, h, ft) = (eo_data::groundscale::scale(), self.h, 0.3048);
+        let mid = (p.arch_south_c + p.arch_north_c) / 2.0;
+        let half_span = ARCH_SPAN_FT * ft * gs / 2.0;
+        let spring = p.deck_top(mid + half_span) - ARCH_ROADWAY_OVER_SPRINGING_FT * ft * h;
+        let ribs = ARCH_RIBS_FT.map(|f| f * ft * gs / 2.0);
+        let half = 1.5 * h;
+        for c in [mid - half_span, mid + half_span] {
+            for s in [-ribs[1], -ribs[0], ribs[0], ribs[1]] {
+                let [x, z] = self.frame.point(c, s);
+                let ground = (self.ground)(x, z);
+                if spring - ground > 0.1 {
+                    concrete.box_(x, z, ground - 1.0, spring, half, half, self.yaw, self.k.concrete, NO_BOTTOM);
+                }
             }
         }
     }
@@ -1113,6 +1230,14 @@ impl Ctx<'_> {
 /// over the sea. The fender's wall: 10 ft at sea level (the District's 2025
 /// statement on the NTSB's report).
 const ARCH_TRUSS_DEPTH_M: f64 = 4.5;
+/// The Fort Point arch (`BridgeFeatures::arch2`; Strauss 1937): the span
+/// between the bearings' centres (319 ft 7 in), its rise (113 ft), the
+/// roadway over the springing at the north end (185 ft), the ribs' spacings
+/// (inner pair, outer pair), feet.
+const ARCH_SPAN_FT: f64 = 319.0 + 7.0 / 12.0;
+const ARCH_RISE_FT: f64 = 113.0;
+const ARCH_ROADWAY_OVER_SPRINGING_FT: f64 = 185.0;
+const ARCH_RIBS_FT: [f64; 2] = [42.5, 102.5];
 const SADDLE_PLINTH_M: f64 = 0.8;
 const CABLE_BAND_LEN_M: f64 = 1.2;
 const CABLE_BAND_WALL_M: f64 = 0.08;
@@ -1202,6 +1327,9 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
     ctx.tower_walkways(&mut deck_m, &mut orange_m);
     ctx.approaches(&mut orange_m, &mut concrete_m, &mut far);
     ctx.arch_ribs(&mut orange_m, &mut far);
+    if ctx.arch2 {
+        ctx.arch_bearings(&mut concrete_m);
+    }
     if ctx.members {
         ctx.members(&mut orange_m, &mut concrete_m, &mut skirt, &mut wires, &mut far);
     }
