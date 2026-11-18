@@ -110,6 +110,15 @@ goals/
 .tripo/
 Docs/art-reference/
 
+# The optional open assets the game reads (people, motions, walking styles,
+# scanned CC0 surfaces, sounds, sign art and font, far-shore elevation; about
+# 2 GB): `python3 scripts/setup-assets.py` downloads them from the sources
+# their tracked manifests pin, one folder per set. Never committed. The
+# second line also ignores a link named external (a second checkout that
+# shares the first one's copy), which the folder pattern does not match.
+/external/
+/external
+
 # Pipeline source binaries live off-repo in a content-addressed store; only
 # artifacts/ASSETS.lock.json is committed. Run `npm run assets:pull` to fetch.
 # See Docs/ASSET-STORE.md.
