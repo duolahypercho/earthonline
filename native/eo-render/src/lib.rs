@@ -1124,6 +1124,7 @@ impl Renderer {
             sample_count: self.sample_count,
             vertices,
             indices,
+            sky_view: self.look.sky.atmo_tables().0,
         });
         let bytes = w.as_ref().map(|w| w.bytes).unwrap_or(0);
         if let Some(w) = w {

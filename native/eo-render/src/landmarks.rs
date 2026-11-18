@@ -129,6 +129,12 @@ pub fn material(m: &eo_landmarks::data::Material, anchor: [f64; 2], landmark: bo
         g.rough_flatten = o.and_then(|o| o["bayM"].as_f64()).unwrap_or(2.0) as f32;
         g.thin_absorption = o.and_then(|o| o["storeyM"].as_f64()).unwrap_or(3.9) as f32;
     }
+    let kind = surface_code(m.surface.as_deref());
+    if (kind == SURFACE_PAINTED_STEEL || kind == SURFACE_CONCRETE) && m.surface_options.as_ref().is_some_and(|o| o["bridge"] == serde_json::json!(true)) {
+        // a bridge's own coat (eo-landmarks suspension.rs `finish_material`): the
+        // word a vertex-colour material does not read marks it for lm_surface.
+        g.rough_flatten = 1.0;
+    }
     g
 }
 
@@ -271,9 +277,10 @@ pub fn append(scene: &mut Scene, set: &LandmarkSet, materials: &mut MaterialTabl
     out
 }
 
-/// A wire member under this radius is a suspender rope (the main cables are
-/// 0.37 m and over), metres.
-const LED_ROPE_MAX_RADIUS_M: f32 = 0.1;
+/// A wire member under this radius is a suspender rope (the ropes are
+/// 0.035 m; the main cables 0.37 m and over, the cable bands and the ropes'
+/// sockets 0.09 m and over), metres.
+const LED_ROPE_MAX_RADIUS_M: f32 = 0.06;
 
 /// One plan cell of a mesh as GPU vertices and indices, with its bounds.
 pub struct Chunk {
@@ -482,6 +489,15 @@ fn bridges_wgsl(js: &eo_landmarks::LandmarksJs) -> String {
     let v2 = |p: [f64; 2]| format!("vec2<f32>({:.6}, {:.6})", p[0], p[1]);
     let mut s = String::new();
     s.push_str(&format!("const LM_FLOOD_ON: bool = {};\nconst LM_LED_ON: bool = {};\n", feat.night, feat.night && feat.wires));
+    s.push_str(&format!("const LM_AIR_ON: bool = {};\nconst LM_FLOODS2_ON: bool = {};\n", feat.air && feat.wires, feat.floods && feat.night));
+    s.push_str(&format!("const LM_FINISH_ON: bool = {};\nconst LM_CURTAIN_ON: bool = {};\n", feat.finish, feat.curtain && feat.wires));
+    let pitch = |d: &serde_json::Value| d["suspenderSpacingM"].as_f64().unwrap_or(15.24);
+    s.push_str(&format!(
+        "const LM_GG_SUSP_PITCH: f32 = {:.4};\nconst LM_BAY_SUSP_PITCH: f32 = {:.4};\nconst LM_SEA_ALBEDO: f32 = {:.4};\n",
+        pitch(&eo_landmarks::golden_gate::data(js).dimensions),
+        pitch(&eo_landmarks::bay_bridge::data(js).dimensions),
+        eo_landmarks::suspension::SEA_ALBEDO
+    ));
     s.push_str(&format!("const LM_GG_ORIGIN: vec2<f32> = {};\nconst LM_GG_AXIS: vec2<f32> = {};\n", v2(fl.origin), v2(fl.axis)));
     for (name, v) in [
         ("LM_GG_SPAN", fl.span),
@@ -498,6 +514,47 @@ fn bridges_wgsl(js: &eo_landmarks::LandmarksJs) -> String {
     }
     s.push_str(&format!("const LM_FLOOD_RGB: vec3<f32> = vec3<f32>({:.6}, {:.6}, {:.6});\n", fl.colour[0], fl.colour[1], fl.colour[2]));
     s.push_str(&format!("const LM_BAY_ORIGIN: vec2<f32> = {};\nconst LM_BAY_AXIS: vec2<f32> = {};\n", v2(bo), v2(ba)));
+    s.push_str(&gg_floods_wgsl(js));
+    // the decks' lines for the analytic deck shadow (`finish`; eo-landmarks suspension.rs `deck_line`):
+    // off when the bridges were not built before the shaders.
+    let (gg, bay) = (eo_landmarks::suspension::deck_line("golden-gate-bridge"), eo_landmarks::suspension::deck_line("bay-bridge-west"));
+    let arr = |v: Option<[f64; 8]>| format!("array<f32, 8>({})", v.unwrap_or([0.0; 8]).iter().map(|x| format!("{x:.4}")).collect::<Vec<_>>().join(", "));
+    s.push_str(&format!(
+        "const LM_DECKSHADE_ON: bool = {};\nconst LM_GG_DECK: array<f32, 8> = {};\nconst LM_BAY_DECK: array<f32, 8> = {};\nconst LM_BAY_ROUND_M: f32 = {:.3};\n",
+        feat.finish && gg.is_some() && bay.is_some(),
+        arr(gg),
+        arr(bay),
+        eo_landmarks::bay_bridge::CORNER_ROUNDING_M
+    ));
+    s
+}
+
+/// A Golden Gate tower's 12 placed floods and the members that shadow them
+/// (`BridgeFeatures::floods`, eo-landmarks lights.rs `gg_tower_floods`), in
+/// the tower's frame (c along the span, s across it, y up).
+fn gg_floods_wgsl(js: &eo_landmarks::LandmarksJs) -> String {
+    let (floods, fl) = eo_landmarks::lights::gg_tower_floods(js);
+    let below = eo_landmarks::lights::gg_floodlit_below(js);
+    let v3 = |p: [f64; 3]| format!("vec3<f32>({:.5}, {:.5}, {:.5})", p[0], p[1], p[2]);
+    let list = |f: &dyn Fn(&eo_landmarks::lights::Flood) -> [f64; 3]| floods.iter().map(|x| v3(f(x))).collect::<Vec<_>>().join(", ");
+    let n = floods.len();
+    let n_above = floods.iter().filter(|x| !x.below).count();
+    let g = eo_landmarks::golden_gate::data(js);
+    let w = js.sea_level_y;
+    // the portal struts (with `floods`, the ones under the deck too: the below-roadway lights'):
+    // (y0, y1, half along, half span between the legs' centre planes, less half a leg).
+    let all = eo_landmarks::suspension::features().floods;
+    let struts: Vec<String> = g.struts.iter().filter(|st| all || w + st[0] > fl.deck_y).map(|st| format!("vec4<f32>({:.4}, {:.4}, {:.4}, {:.4})", w + st[0], w + st[1], st[2] / 2.0, fl.half_plane - 0.5 * fl.half_across)).collect();
+    let ns = struts.len().max(1);
+    let struts = if struts.is_empty() { "vec4<f32>(0.0, 0.0, 0.0, 0.0)".to_string() } else { struts.join(", ") };
+    let mut s = String::new();
+    s.push_str(&format!("const LM_GG_FLOOD_NA: u32 = {n_above}u;\nconst LM_FLOOD_LUX_B: f32 = {:.5};\nconst LM_GG_UNDER_Y: f32 = {:.4};\nconst LM_GG_BASE_Y: f32 = {:.4};\n", below.lux, below.under_y, below.base_y));
+    s.push_str(&format!("const LM_GG_FLOOD_N: u32 = {n}u;\nconst LM_GG_FLOOD_POS: array<vec3<f32>, {n}> = array<vec3<f32>, {n}>({});\n", list(&|x| x.pos)));
+    s.push_str(&format!("const LM_GG_FLOOD_AIM: array<vec3<f32>, {n}> = array<vec3<f32>, {n}>({});\n", list(&|x| x.aim)));
+    s.push_str(&format!("const LM_GG_STRUT_N: u32 = {ns}u;\nconst LM_GG_STRUTS: array<vec4<f32>, {ns}> = array<vec4<f32>, {ns}>({struts});\n"));
+    let (inner, outer) = (eo_landmarks::lights::FLOOD_INNER_DEG.to_radians().cos(), eo_landmarks::lights::FLOOD_OUTER_DEG.to_radians().cos());
+    let [p0, p1] = eo_landmarks::lights::FLOOD_PROFILE;
+    s.push_str(&format!("const LM_FLOOD_COS_IN: f32 = {inner:.6};\nconst LM_FLOOD_COS_OUT: f32 = {outer:.6};\nconst LM_FLOOD_PROFILE: vec2<f32> = vec2<f32>({p0:.4}, {p1:.4});\n"));
     s
 }
 
@@ -585,6 +642,8 @@ pub struct WireInit<'a> {
     pub sample_count: u32,
     pub vertices: &'a [WireVertex],
     pub indices: &'a [u32],
+    /// The atmosphere's sky-view table (`SkyGpu::atmo_tables`), for the members' aerial perspective.
+    pub sky_view: &'a wgpu::TextureView,
 }
 
 impl LandmarksGpu {
@@ -598,14 +657,40 @@ impl LandmarksGpu {
         let ibuf = d.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some("landmark-wires-i"), contents: bytemuck::cast_slice(w.indices), usage: wgpu::BufferUsages::INDEX });
         let bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("landmark-wires-bgl"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None },
-                count: None,
-            }],
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None },
+                    count: None,
+                },
+                // the sky-view table and its sampler (the overlay's aerial perspective).
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry { binding: 2, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None },
+            ],
         });
-        let bg = d.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("landmark-wires-bg"), layout: &bgl, entries: &[wgpu::BindGroupEntry { binding: 0, resource: w.group_buf.as_entire_binding() }] });
+        let lin = d.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("landmark-wires-sky"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        let bg = d.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("landmark-wires-bg"),
+            layout: &bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: w.group_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(w.sky_view) },
+                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Sampler(&lin) },
+            ],
+        });
         let src = format!("{}\n{}", crate::look::city_shader_source(), include_str!("landmarks_wire.wgsl"));
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("landmarks_wire.wgsl"), source: wgpu::ShaderSource::Wgsl(src.into()) });
         let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("landmark-wires-layout"), bind_group_layouts: &[Some(w.draw_bgl), Some(w.main_bgl), Some(&bgl)], immediate_size: 0 });

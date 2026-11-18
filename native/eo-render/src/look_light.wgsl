@@ -144,14 +144,14 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     let nl = max(dot(n, l), 0.0);
     var key = vec3<f32>(0.0);
     if (nl > 0.0 && dot(ng, l) > -0.05) {
-        key = look.key.xyz * nl * lk_shadow(world, ng) * sky_cloud_transmittance(world) * sky_contact_shadow(world, ng); // cloud and contact shadows
+        key = look.key.xyz * nl * lk_shadow(world, ng) * sky_cloud_transmittance(world) * sky_contact_shadow(world, ng) * lm_key_vis; // cloud and contact shadows (and a bridge deck's: landmarks_surface.wgsl)
     }
     var direct_d = key * diffuse / LK_PI;
     var direct_s = key * lk_ggx(n, v, l, f0, rough);
     // Rim (no shadow).
     let rl = look.rim_dir.xyz;
     let rnl = max(dot(n, rl), 0.0);
-    let rim = look.rim.xyz * rnl;
+    let rim = look.rim.xyz * rnl * lm_rim_vis; // (a bridge's night: landmarks_surface.wgsl)
     direct_d = direct_d + rim * diffuse / LK_PI;
     direct_s = direct_s + rim * lk_ggx(n, v, rl, f0, rough) * select(1.0, 0.0, s.env == ENV_WET_FILM); // the rig's rim light draws no false sun in a water film
 
