@@ -238,3 +238,53 @@ pub fn meter(f: &LookFrame, w: &WeatherState, dirs: &[([f64; 3], f64)]) -> f64 {
     let c = (METER_KEY * card / mean.max(1e-9)).powf(METER_GAIN).clamp(METER_FLOOR, 1.0);
     1.0 + (c - 1.0) * (1.0 - n)
 }
+
+/// The most the meter opens up for a camera inside a room (eo-render
+/// `interior_meter`: a landmark deck's room), 2 EV. A reflected-light meter
+/// pointed into a room lit through its windows opens up until the room's
+/// surfaces read toward middle grey and the windows go bright; held to 2 EV
+/// (INFERRED: the windows keep their view, as a bracketed interior with a
+/// view is exposed, instead of clipping to white).
+pub const METER_ROOM_MAX: f64 = 4.0;
+
+/// `meter` for a camera inside a room: a direction whose third member is
+/// `Some(k)` meets the room's own surfaces, not the sky or the open ground,
+/// and counts as an 18 % card in k of the open ground's fill (k: the room's
+/// mean sky visibility, eo-landmarks access_sky.rs, its sun share
+/// included); a direction with None leaves through an opening and counts as
+/// `meter` counts it. The exposure may also rise, up to 1 plus the room's
+/// weighted share of the directions times (`METER_ROOM_MAX` - 1), so a
+/// view out of a window that shows a strip of sill keeps the open view's
+/// exposure; with no room direction this is `meter`. Pure.
+pub fn meter_room(f: &LookFrame, w: &WeatherState, dirs: &[([f64; 3], f64, Option<f64>)]) -> f64 {
+    if dirs.iter().all(|d| d.2.is_none()) {
+        let open: Vec<([f64; 3], f64)> = dirs.iter().map(|d| (d.0, d.1)).collect();
+        return meter(f, w, &open);
+    }
+    let n = nightness(f.model.sun.altitude_deg);
+    if n >= 1.0 {
+        return 1.0;
+    }
+    let card = 0.18 * (key_on_ground(f) * mean_beam(w) + ground_fill(f, SIDEWALK_ENV)) / std::f64::consts::PI;
+    if card <= 0.0 {
+        return 1.0;
+    }
+    let room_card = 0.18 * ground_fill(f, SIDEWALK_ENV) / std::f64::consts::PI;
+    let (mut sum, mut wsum, mut wroom) = (0.0, 0.0, 0.0);
+    for (d, wt, k) in dirs {
+        let v = match k {
+            Some(k) => {
+                wroom += wt;
+                room_card * k.clamp(0.0, 1.0)
+            }
+            None if d[1] > 0.0 => luminance(f.model.dome(*d)).min(card * METER_CEILING),
+            None => card,
+        };
+        sum += v * wt;
+        wsum += wt;
+    }
+    let mean = sum / wsum.max(1e-9);
+    let ceiling = 1.0 + (METER_ROOM_MAX - 1.0) * (wroom / wsum.max(1e-9));
+    let c = (METER_KEY * card / mean.max(1e-9)).powf(METER_GAIN).clamp(METER_FLOOR, ceiling);
+    1.0 + (c - 1.0) * (1.0 - n)
+}
