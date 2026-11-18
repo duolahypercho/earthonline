@@ -631,7 +631,8 @@ const ROOF_WEIGHTS_COMMERCIAL: [(&str, f64); 6] =
 const ROOF_WEIGHTS_RESIDENTIAL: [(&str, f64); 6] =
     [("membrane-white", 0.06), ("membrane-light-grey", 0.12), ("membrane-silver", 0.1), ("membrane-aged", 0.17), ("cap-sheet-grey", 0.2), ("tar-gravel", 0.35)];
 
-fn roof_finish(id: &str) -> (&'static str, Option<u32>) {
+/// A roof finish id's material and tint (`ROOF_FINISHES`).
+pub fn roof_finish(id: &str) -> (&'static str, Option<u32>) {
     match id {
         "membrane-white" => ("membrane-roof", None),
         "membrane-light-grey" => ("membrane-roof", Some(0xdcdad5)),

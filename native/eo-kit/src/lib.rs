@@ -22,6 +22,7 @@ pub mod archetypes;
 pub mod city;
 pub mod classify;
 pub mod elevation;
+pub mod far_facade; // the far box's facade from the archetype's own spec
 pub mod frame;
 pub mod js;
 pub mod lod;
