@@ -124,10 +124,28 @@ Fly-through (default):
 | Space | Jump | Handbrake |
 | F | Enter a car within reach | Get out |
 | V | Place a new car ahead (a test helper) | |
+| P | Photo mode (below) | Photo mode |
 | Esc | Release the mouse; press again to quit | |
 
 The title bar shows the frame rate, and in `--play` the mode, speed and the
 player step time.
+
+**Photo mode** (`--play` and `--connect`, P; `eo-app/src/photo.rs`). The
+player's input is frozen (in `--play` the local world holds still too; in
+`--connect` the server's simulation runs on). A free camera flies or orbits
+within 30 m of the player, swept as a ball against the collision world: mouse
+look, W A S D fly (orbit: W S nearer and farther), Q E down and up, Shift
+faster, Ctrl slower, O orbit or fly. The lens runs 14 to 200 mm (35 mm
+equivalent, the wheel), Z X roll. The panel (Up and Down choose a setting,
+Left and Right change it, H hides it) sets focus (on the player, on what the
+centre meets, or a distance), aperture (f/1.4 to f/22, or off), exposure
+compensation (plus or minus 3 EV), a look (Neutral, Warm film, Cool,
+Monochrome), vignetting, grain, a letterbox (2.39:1, 1.85:1, 4:3, 1:1),
+the rule-of-thirds guides, a local time of day (only you see it) and the
+capture size. Enter saves a PNG at the window's size or rendered at twice it,
+with its settings beside it, into the photos folder (`EO_PHOTOS_DIR`, else
+`photos` in the application-data folder). The HUD is hidden while photo mode
+is on; P or Esc leaves. The depth of field and finish are `eo-render/src/photo.rs`.
 
 ### Online
 
@@ -160,7 +178,7 @@ switch it does not take.
 | `--connect ADDR\|local` | Online client (with `--name`, `--spawn x,z,heading`) |
 | `--bench` | Offscreen timing run over scripted camera paths; prints and writes JSON to `bench-out/` |
 | `--bench --play` | Scripted walk and drive paths with the player |
-| `--capture-ui SCREEN` | Writes a PNG of one screen: `title`, `loading`, `settings`, `pause`, `map`, `hud` or `all` |
+| `--capture-ui SCREEN` | Writes a PNG of one screen: `title`, `loading`, `settings`, `pause`, `map`, `hud`, `photo` (the photo mode panel over a frame through its pipeline) or `all` |
 | `--ui-bench` | Interface cost over the street walk and each full-screen menu |
 | `--audio-render all --out DIR` | Offline sound mixes; no GPU, no audio device |
 
@@ -191,6 +209,7 @@ switch it does not take.
 | `--out DIR`, `--label NAME` | Output folder and run label |
 | `--check-budget` | Exit 1 if a path's median frame reaches the 10 ms budget |
 | `--check-max` | Exit 1 if any path's median, p95 or worst frame reaches the budget |
+| `--photo-bench` | Every path through photo mode at the depth of field's heaviest (f/1.4 focused at 0.5 m); first the photo passes' own GPU time at each path's start with and without the depth of field, into `photo-cost-<label>.json` (and, with `EO_PHOTOS_DIR` set, one 2x capture) |
 | `--worst-frames N` | How many of the worst frames to report |
 | `--pace realtime\|60hz\|all-60hz\|none` | How the bench paces its frames |
 | `--shots FILE.json --out DIR` | Offscreen stills instead of the timing: one PNG per shot of the file, and `DIR/<name>.json` beside it (below) |
@@ -231,7 +250,17 @@ digits, `-`, `_`, `.`; it names the files) and one pose:
 - Optional: `fov` (degrees, default 52, the game camera's), `far` (metres;
   default `--far` if given, else 20000 m so a view across the city is not
   cut short), `time_of_day`, `weather` (`clear`, `overcast`, `fog`,
-  `drizzle`, `rain`, `storm`), `what`, and keys starting with `_` (comments).
+  `drizzle`, `rain`, `storm`), `what`, `photo`, `subject` (below), and keys
+  starting with `_` (comments).
+- `photo` renders the shot through photo mode's pipeline: `focal_mm` (35 mm
+  equivalent; it sets the field of view), `f_number` (none: everything
+  sharp), `focus` (metres, `"look_at"` or `"subject"`), `grade` (`neutral`,
+  `warm-film`, `cool`, `monochrome`), `ev`, `vignette` and `grain` (0 to 1),
+  `letterbox` (an aspect) and `roll` (degrees). `subject` stands the player's
+  body in the shot: `at` [x, z] game metres on the drawn street, `facing`
+  (compass degrees; default toward the camera), `model` (an index into the
+  people models), `walking`. With `--no-photo-mode` a shot keeps the lens's
+  field of view and the subject and nothing else of photo mode.
   Any other key is an error.
 
 Latitude, longitude and height go to game coordinates through
@@ -304,6 +333,7 @@ selection:
 | Camera finish | `--no-taa`, `--no-bloom`, `--no-adaptation`, `--no-ssr` |
 | Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count` |
 | Interface and sound | `--no-hud`, `--no-audio`, `--audio-null` (mix to a null output) |
+| Photo mode | `--no-photo-mode` (none of it: P does nothing, shots draw no depth of field or finish), `--no-dof` (photo mode without its depth of field) |
 
 A new visual feature should come with its own switch, defaulting to on only
 once it has been reviewed.
@@ -326,6 +356,7 @@ Experiments are not shipped defaults.
 | `EO_UI_SETTINGS` | Where the interface keeps its settings file (default: the user's application-data folder) |
 | `EO_UI_FONT_DIR` | A font folder to use instead of the system font folder |
 | `EO_TRACE_LOAD` | Print timings of the world load |
+| `EO_PHOTOS_DIR` | Where photo mode saves its pictures (default: `photos` in the application-data folder the settings file is in) |
 | `EO_CUMULUS` | `1` draws the fair-weather cumulus field under a clear sky (off by default; the overcast, fog and rain decks are drawn either way) |
 
 The locations of the optional off-repository assets are read from the
