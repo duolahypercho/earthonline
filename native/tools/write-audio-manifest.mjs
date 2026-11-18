@@ -15,9 +15,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import url from 'node:url';
+import { checkTarget } from './target-folder.mjs';
 
 const native = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..');
 const root = process.argv[2] || process.env.EO_AUDIO_ROOT || (() => { console.error('usage: write-audio-manifest.mjs <root> (or set EO_AUDIO_ROOT)'); process.exit(2); })();
+// It writes MANIFEST.tsv and REVIEW.md into the store: inside the repository only external/audio.
+checkTarget(root, 'audio');
 const read = (p) => JSON.parse(fs.readFileSync(path.join(root, p), 'utf8'));
 const sel = read('fsd50k/selection.json');
 const fsdLog = read('fsd50k/fetch-log.json');

@@ -35,8 +35,8 @@ How each set is obtained, as its manifest records it:
     (`sources`); a clip's URL is that revision's file at the clip's path
     without its first folder. The bank's marker file MANIFEST.tsv (one line
     per clip: source, Freesound ID, uploader, licence, URLs, size, SHA-256,
-    path, roles, screen verdict) is written from the manifest once the clips
-    verify.
+    path, roles, screen verdict) is written from the manifest once every clip
+    verifies; a partial set has none, so the game does not take it for a copy.
   * sign-art: the FHWA SVGs are single entries of very large release ZIPs:
     the ZIP's directory and each pinned entry are read with HTTP Range
     requests (as native/tools/fetch-sign-art.mjs does) instead of
@@ -444,6 +444,15 @@ class RemoteZip:
         _, size = self.range(0, 0)
         tail_len = min(size, (1 << 16) + 22)
         tail, _ = self.range(size - tail_len, size - 1)
+        try:
+            entries = self._parse(tail)
+        except (struct.error, UnicodeDecodeError) as e:
+            # A cut or garbled directory fails the entries read from it, not the run.
+            raise Refused(f'unreadable central directory ({e})')
+        self.entries = entries
+        return entries
+
+    def _parse(self, tail):
         eocd = tail.rfind(b'PK\x05\x06')
         if eocd < 0:
             raise Refused('no end of central directory')
@@ -481,7 +490,6 @@ class RemoteZip:
                 e += 4 + xsz
             entries[name] = (flags, method, crc, csize, usize, off)
             p += 46 + nl + el + kl
-        self.entries = entries
         return entries
 
     def read(self, name, size):
@@ -497,7 +505,7 @@ class RemoteZip:
             raise Refused(f'compression method {method}')
         # The local header, its name and extra field (guessed at most 1 KB) and the data in one request.
         buf, _ = self.range(off, off + 30 + 1024 + csize - 1)
-        if buf[:4] != b'PK\x03\x04':
+        if len(buf) < 30 or buf[:4] != b'PK\x03\x04':
             raise Refused('bad local header')
         nl, el = struct.unpack_from('<HH', buf, 26)
         start = 30 + nl + el
@@ -507,8 +515,15 @@ class RemoteZip:
         data = buf[start:start + csize]
         if method == 8:
             d = zlib.decompressobj(-15)
-            raw = d.decompress(data, usize + 1)
-            raw += d.flush()
+            try:
+                # At most one byte more than recorded is ever expanded. With all
+                # of the input consumed below that cap, zlib holds nothing back,
+                # so there is no flush (whose output has no cap).
+                raw = d.decompress(data, usize + 1)
+            except zlib.error as e:
+                raise Refused(f'the entry does not inflate ({e})')
+            if len(raw) > usize or d.unconsumed_tail:
+                raise Refused('the entry inflates to more than its recorded size')
         else:
             raw = data
         if len(raw) != usize or zlib.crc32(raw) & 0xFFFFFFFF != crc:
@@ -567,9 +582,10 @@ def extract_members(archive, members, set_dir, tmp_root, tally):
                     tally.fetched += 1
                     tally.size += it.bytes
                     print(f'    extracted {it.rel} ({mb(it.bytes)})', flush=True)
-                except (Refused, zipfile.BadZipFile, OSError) as e:
+                except (Refused, zipfile.BadZipFile, zlib.error, EOFError, NotImplementedError, OSError) as e:
+                    # A member that does not inflate fails that member only.
                     tally.failed.append((it.rel, str(e)))
-    except (zipfile.BadZipFile, OSError) as e:
+    except (zipfile.BadZipFile, struct.error, ValueError, OSError) as e:
         for it in members:
             if not any(p == it.rel for p, _ in tally.failed):
                 tally.failed.append((it.rel, f'{archive.name}: {e}'))
@@ -577,11 +593,25 @@ def extract_members(archive, members, set_dir, tmp_root, tally):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def write_audio_index(set_dir, man, items):
-    """MANIFEST.tsv, the bank's marker: one line per verified clip of the manifest."""
-    ok = {it.rel: it for it in items if verified_cache.get((set_dir, it.rel))}
-    if not ok:
+def write_audio_index(set_dir, man, items, tally):
+    """MANIFEST.tsv, the bank's marker: one line per clip of the manifest.
+
+    The game takes the folder for a copy of the bank once MANIFEST.tsv is
+    there, so it is written only when every clip verified; a partial set
+    removes a marker left by an earlier run and stays invisible."""
+    marker = set_dir / 'MANIFEST.tsv'
+    missing = [it.rel for it in items if not verified_cache.get((set_dir, it.rel))]
+    if missing:
+        try:
+            marker.unlink()
+            print('    removed the MANIFEST.tsv of an earlier run', flush=True)
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            tally.failed.append(('MANIFEST.tsv', f'an earlier copy could not be removed ({e})'))
+        print(f'    MANIFEST.tsv not written: {len(missing)} of {len(items)} clips are not there; the game will not use this folder', flush=True)
         return
+    ok = {it.rel: it for it in items}
     roles = {}
     for c in man['clips']:
         roles.setdefault(c['path'], []).append(c['role'])
@@ -599,7 +629,7 @@ def write_audio_index(set_dir, man, items):
             src = [c['source'], '', c.get('uploader'), c['licence'], 'https://github.com/wyzowl/sfx-kit']
         # Every clip in the game's bank passed the automatic screen (write-audio-manifest.mjs).
         rows.append('\t'.join(clean(v) for v in src + [it.url, it.bytes, it.sha256, it.rel, ','.join(roles[c['path']]), 'pass', '']))
-    write_atomic(set_dir / 'MANIFEST.tsv', ('\n'.join(rows) + '\n').encode('utf-8'))
+    write_atomic(marker, ('\n'.join(rows) + '\n').encode('utf-8'))
     print(f'    wrote MANIFEST.tsv ({len(rows) - 1} clips)', flush=True)
 
 
@@ -689,13 +719,34 @@ def run_set(name, manifest_rel, root, net, dry_run):
                 tally.failed.append((it.rel, str(e)))
                 print(f'    FAILED {it.rel}: {e}', flush=True)
     if name == 'audio':
-        write_audio_index(set_dir, man, [it for it in items if it.kind == 'url'])
+        write_audio_index(set_dir, man, [it for it in items if it.kind == 'url'], tally)
     return tally
 
 
-def inside(path, base):
-    p, b = os.path.normcase(str(path)), os.path.normcase(str(base))
-    return p == b or p.startswith(b.rstrip(os.sep) + os.sep)
+def _same(a, b):
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
+def refused_root(root):
+    """True when `root` is inside this repository but is not <repo>/external.
+
+    Walks up the resolved path and compares each folder with the repository
+    and its external/ by identity (device and inode), so neither a different
+    case on a case-insensitive disk nor a link into the repository gets past
+    it. A part not made yet must be spelled exactly."""
+    ext = REPO / 'external'
+    p = root.resolve()
+    below = []  # the parts of p under the folder looked at
+    for a in (p, *p.parents):
+        if _same(a, ext):
+            return bool(below)
+        if _same(a, REPO):
+            return below != ['external']
+        below.insert(0, a.name)
+    return False
 
 
 def main(argv=None):
@@ -719,7 +770,7 @@ def main(argv=None):
     root = Path(a.root).expanduser() if a.root else default
     root = root if root.is_absolute() else Path.cwd() / root
     # Inside this repository only external/ itself: no other tracked folder is a target.
-    if inside(root.resolve(), REPO.resolve()) and os.path.normcase(str(root.resolve())) != os.path.normcase(str(default.resolve())):
+    if refused_root(root):
         ap.error(f'refusing {root}: inside the repository the sets go only into {default}')
     if not a.dry_run:
         root.mkdir(parents=True, exist_ok=True)
@@ -731,7 +782,8 @@ def main(argv=None):
             continue
         try:
             tallies.append(run_set(name, manifest, root, net, a.dry_run))
-        except (Refused, OSError, KeyError, ValueError) as e:
+        except (Refused, OSError, KeyError, ValueError, struct.error, zlib.error, zipfile.BadZipFile, EOFError) as e:
+            # Whatever a bad reply raises past the checks fails this set, not the run.
             t = Tally(name, 0)
             t.failed.append(('(manifest)', str(e)))
             tallies.append(t)
