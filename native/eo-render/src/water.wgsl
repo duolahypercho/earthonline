@@ -1315,7 +1315,12 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // (thinner with height, as the look's aerial path density: from the air the haze is over the far water only)
     // (the skirt past the grid's radius is horizon colour only: its stretched quads alias)
     let skirt = wg_smooth(wu.fwd.w * 0.98, wu.fwd.w * 1.25, length(world.xz - wu.cam.xz));
-    let hz_far = max(1.0 - exp(-dist * sky_path_density(world.y - wu.cam.y) / 9000.0), skirt) * (1.0 - fog);
+    // With the atmosphere tables on, the far sea fades only through the sky volume's aerial
+    // perspective (to the sea's own distance) into the same sky drawn above it: the salt haze
+    // would fade it a second time toward the raw tables' horizon, drawing a pale seam along the
+    // sea horizon. The skirt past the grid stays (its stretched quads alias).
+    let salt = select(1.0 - exp(-dist * sky_path_density(world.y - wu.cam.y) / 9000.0), 0.0, skyu.atmo2.x > 0.5);
+    let hz_far = max(salt, skirt) * (1.0 - fog);
     if (hz_far > 0.002) {
         let hsky = w_atmo_dome(normalize(vec3<f32>(-v.x, 0.01, -v.z)));
         s.own = mix(s.own, hsky, hz_far);
