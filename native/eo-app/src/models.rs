@@ -182,6 +182,7 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     )?;
     r.kit_radii = eo_render::kit::DEFAULT_KIT_RADII;
     r.set_occlusion(args.perf.occlusion); // occlusion
+    r.photo.options.dof = crate::photo::dof_enabled(); // photo mode's depth of field (`--no-dof`)
     // the far layer's GPU side and every group's cell.
     if let Some(h) = &world.hlod {
         if r.attach_hlod(ctx, &eo_render::hlod::HlodOptions::from_env()) > 0 {

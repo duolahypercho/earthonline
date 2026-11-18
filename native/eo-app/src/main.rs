@@ -19,6 +19,7 @@ mod cc0_runtime; // the CC0 scanned sets at run time
 mod farshore; // the far terrain's load and attach
 mod models;
 mod net; // net
+mod photo; // photo mode (--play, --connect; `--no-photo-mode`, `--no-dof`)
 mod streets;
 mod window;
 mod audio; // the sound (eo-audio), see audio.rs
@@ -375,6 +376,7 @@ fn parse_args() -> Result<Args> {
             "--cc0-shots" => {}
             "--no-landmarks2" => a.landmarks2 = false,
             "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
+            "--no-photo-mode" | "--no-dof" | "--photo-bench" => {} // read by photo.rs (and the bench, `--photo-bench`)
             s if a.props2.parse_flag(s) => {} // --no-props2, --no-furniture, --no-eztree, --no-overhead, --no-wires, --no-props2-shading, --capture-props2
             "--agents-bench" | "--agents-capture" | "--people-capture" | "--people-lineup" => {} // + --people-capture, --people-lineup
             "--no-rocketbox" => a.rocketbox = false, // people

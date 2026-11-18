@@ -157,6 +157,7 @@ fn parse(raw: &[String]) -> Result<(Args, NetOpts)> {
             "--no-thread-priority" => a.perf.thread_priority = false,
             "--no-submit-pacing" => a.perf.submit_pacing = false,
             "--time-of-day" => a.time_of_day = val()?.parse()?,
+            "--no-photo-mode" | "--no-dof" => {} // read by photo.rs
             // read by main's `groundscale_flags`.
             "--ground-scale" | "--height-scale" | "--people-scale" | "--vehicle-scale" => {
                 val()?;
@@ -982,6 +983,8 @@ mod window {
         world: World,
         args: Args,
         gfx: Option<Gfx>,
+        /// photo mode (P), None with `--no-photo-mode`; the server's world runs on under it.
+        photo: Option<crate::photo::PhotoMode>,
         session: NetSession,
         _local: Option<LocalServer>,
         map: ActionMap,
@@ -1008,6 +1011,7 @@ mod window {
             world,
             args: args.clone(),
             gfx: None,
+            photo: crate::photo::enabled().then(|| crate::photo::PhotoMode::new(true, args.time_of_day)),
             session,
             _local: local,
             map: ActionMap::default(),
@@ -1078,12 +1082,18 @@ mod window {
             let aspect = g.config.width as f64 / g.config.height.max(1) as f64;
             let s = &mut self.session;
             s.poll();
-            let frame = self.map.resolve(&mut self.raw, dt, false);
-            if let Some(p) = s.pred.as_mut() {
-                p.player.look(frame.look_yaw, frame.look_pitch);
+            let photo_on = self.photo.as_ref().is_some_and(|p| p.on);
+            if photo_on {
+                // photo mode freezes the local player's input only: empty inputs go on to the server.
+                s.step(&StepInput::default(), dt);
+            } else {
+                let frame = self.map.resolve(&mut self.raw, dt, false);
+                if let Some(p) = s.pred.as_mut() {
+                    p.player.look(frame.look_yaw, frame.look_pitch);
+                }
+                s.step(&StepInput::from_frame(&frame), dt);
             }
-            s.step(&StepInput::from_frame(&frame), dt);
-            let (cam, body, off) = match s.camera(dt, aspect) {
+            let (mut cam, mut body, off) = match s.camera(dt, aspect) {
                 Some((v, off)) => (to_camera(&v, aspect as f32, self.args.far), v.body_visible, off),
                 None => {
                     // Not joined yet: look down the street from the spawn.
@@ -1091,6 +1101,16 @@ mod window {
                     (Camera { far: self.args.far, ..Camera::new(e, self.spawn[2] as f32, 0.0, aspect as f32) }, true, DVec3::ZERO)
                 }
             };
+            if let (Some(ph), true) = (self.photo.as_mut(), photo_on) {
+                let mouse = [std::mem::take(&mut self.raw.mouse_dx), std::mem::take(&mut self.raw.mouse_dy)];
+                let anchor = s.pred.as_ref().map(|p| crate::photo::anchor_of(p.player.position(&p.cw))).unwrap_or(ph.anchor);
+                let cw = s.pred.as_ref().map(|p| &p.cw);
+                ph.step(&crate::photo::Feed { held: &self.raw.held, mouse, dt, aspect, anchor, cw });
+                g.renderer.look.set_time_of_day(ph.hour.unwrap_or(self.args.time_of_day)); // local only
+                g.renderer.photo.set(Some(ph.params()));
+                cam = ph.camera(aspect, self.args.far);
+                body = true;
+            }
             s.draw(&mut g.agents, None, dt, body, off);
             self.net_ms_max = self.net_ms_max.max(s.net_ms);
             let (acquired, _) = g.pacer.around(&g.ctx.device, &g.ctx.queue, || g.surface.get_current_texture());
@@ -1129,18 +1149,28 @@ mod window {
             }
             g.ui.hud.hour = self.args.time_of_day as f32;
             g.ui.hud.objective = Some((title, sub));
+            // photo mode's panel in place of the HUD.
+            g.ui.photo = self.photo.as_ref().filter(|p| p.on).map(|p| p.panel(aspect));
             g.ui.set_time(self.clock.elapsed().as_secs_f64());
             let _ = g.ui.prepare(&g.ctx.device, &g.ctx.queue, &mut enc, g.config.width, g.config.height, &eo_ui::Input::default());
             g.ui.draw(&g.ctx.device, &mut enc, &ui_view, ui_format, None);
             eo_render::pace::submit(&g.ctx.queue, [enc.finish()]); // counted
             g.window.pre_present_notify();
             g.ctx.queue.present(surf);
+            if let Some(ph) = self.photo.as_mut() {
+                if let Some(scale) = ph.request.take() {
+                    match crate::photo::capture(&g.ctx, &g.renderer, &cam, (g.config.width, g.config.height), g.config.format, scale, ph.describe(&cam)) {
+                        Ok(p) => ph.say(format!("Saved {}", p.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default())),
+                        Err(e) => ph.say(format!("Not saved: {e:#}")),
+                    }
+                }
+            }
             self.fps_frames += 1;
             let el = self.fps_t.elapsed().as_secs_f64();
             if el >= 1.0 {
                 let st = s.client.status();
                 g.window.set_title(&format!(
-                    "Earth Online native - online - {:.0} fps - {} - ping {:.0} ms - net {:.3} ms max - F: car, Esc: mouse",
+                    "Earth Online native - online - {:.0} fps - {} - ping {:.0} ms - net {:.3} ms max - F: car, P: photo mode, Esc: mouse",
                     self.fps_frames as f64 / el,
                     st.phase.label(),
                     st.rtt_ms,
@@ -1150,6 +1180,25 @@ mod window {
                 self.net_ms_max = 0.0;
                 self.fps_t = Instant::now();
             }
+        }
+    }
+
+    impl App {
+        /// P: enter or leave photo mode (the HUD comes back on leaving).
+        fn toggle_photo(&mut self) {
+            let (Some(ph), Some(g)) = (self.photo.as_mut(), self.gfx.as_ref()) else { return };
+            if ph.on {
+                ph.leave();
+                g.renderer.photo.set(None);
+                g.renderer.look.set_time_of_day(self.args.time_of_day);
+                return;
+            }
+            let aspect = g.config.width as f64 / g.config.height.max(1) as f64;
+            let Some(p) = self.session.pred.as_mut() else { return }; // not joined yet
+            let view = p.player.camera(&p.cw, 0.0, aspect);
+            let cam = to_camera(&view, aspect as f32, self.args.far);
+            ph.enter(&cam, crate::photo::anchor_of(p.player.position(&p.cw)));
+            self.raw.held.clear();
         }
     }
 
@@ -1210,6 +1259,14 @@ mod window {
                         let name = format!("{code:?}");
                         match event.state {
                             ElementState::Pressed => {
+                                let photo_on = self.photo.as_ref().is_some_and(|p| p.on);
+                                if (code == crate::photo::TOGGLE && !event.repeat && self.photo.is_some()) || (code == KeyCode::Escape && photo_on) {
+                                    self.toggle_photo();
+                                    return;
+                                }
+                                if photo_on && self.photo.as_mut().is_some_and(|p| p.key(code)) {
+                                    return;
+                                }
                                 if code == KeyCode::Escape {
                                     if self.looking {
                                         self.set_looking(false);
@@ -1224,6 +1281,15 @@ mod window {
                                 self.raw.held.remove(&name);
                             }
                         }
+                    }
+                }
+                WindowEvent::MouseWheel { delta, .. } => {
+                    if let Some(ph) = self.photo.as_mut().filter(|p| p.on) {
+                        let n = match delta {
+                            winit::event::MouseScrollDelta::LineDelta(_, y) => y as f64,
+                            winit::event::MouseScrollDelta::PixelDelta(p) => p.y / 40.0,
+                        };
+                        ph.wheel(n);
                     }
                 }
                 WindowEvent::RedrawRequested => self.redraw(),

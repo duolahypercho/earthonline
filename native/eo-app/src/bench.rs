@@ -698,6 +698,32 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         return Ok(());
     }
 
+    // `--photo-bench`: every path through photo mode's pipeline, at the depth
+    // of field's heaviest (photo.rs `bench_params`), for its frame cost (A/B with `--no-dof`).
+    if crate::photo::bench_requested() {
+        renderer.photo.set(Some(crate::photo::bench_params()));
+        eprintln!("photo-bench: photo mode on every path ({:?}; depth of field {})", crate::photo::bench_params(), if crate::photo::dof_enabled() { "on" } else { "off (--no-dof)" });
+        // the passes' own GPU time at each path's first camera, settled (with and without the depth of field).
+        let mut costs = serde_json::Map::new();
+        for seg in &segs {
+            let cam = (seg.camera)(0, args.warmup + seg.frames);
+            settle_p(&ctx, &renderer, &world, &mut models, Some(&mut props), &cam, 600.0)?;
+            let c = crate::photo::gpu_cost(&ctx, &renderer, attach, resolve, &targets.depth, &cam, 120);
+            println!("photo-bench [{}] {w} x {h}: photo passes GPU {}", seg.name, c);
+            costs.insert(seg.name.to_string(), c);
+        }
+        // and one saved photo at twice the size (the window's capture path, offscreen), when a photos folder is set.
+        if std::env::var("EO_PHOTOS_DIR").is_ok() {
+            let cam = (segs[0].camera)(0, args.warmup + segs[0].frames);
+            match crate::photo::capture(&ctx, &renderer, &cam, (w, h), format, 2, serde_json::json!({ "bench": true })) {
+                Ok(p) => println!("photo-bench: a 2x capture saved to {}", p.display()),
+                Err(e) => println!("photo-bench: the 2x capture failed: {e:#}"),
+            }
+        }
+        let dir = args.out_dir.clone().unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bench-out"));
+        std::fs::create_dir_all(&dir)?;
+        std::fs::write(dir.join(format!("photo-cost-{}.json", args.label.as_deref().unwrap_or("default"))), serde_json::to_string_pretty(&serde_json::Value::Object(costs))?)?;
+    }
     let period_ns = ctx.queue.get_timestamp_period() as f64;
     let mut seg_reports = vec![];
     let mut budget_failures: Vec<String> = vec![];
