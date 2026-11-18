@@ -175,6 +175,28 @@ fn blend_dir(a: f64, b: f64, t: f64) -> f64 {
 /// direction the air moves, x east, z south; eo-sky `WeatherState::wind`) and
 /// its severity (0 clear, 1 fog, 2 drizzle, 3 rain, 4 storm).
 pub fn sea_state(hour: f64, wind: [f64; 2], severity: f64) -> SeaState {
+    sea_state_with(hour, wind, severity, None)
+}
+
+/// The sea state with the strait's measured wind (iteration 2): the bay's
+/// breeze at least the mean wind at NOAA station 9414290 for the day and hour
+/// (`climate::strait_wind`: a morning floor of 2-3 m/s, so the strait is never
+/// glassy in daylight; the glassy calm is left to the lee the exposure field
+/// finds) with `floor`, and in place of the `BAY_WESTERLY` 10 m/s afternoon
+/// peak (about 5-6 m/s measured) with `measured_peak`.
+pub fn sea_state_on(day_of_year: f64, hour: f64, wind: [f64; 2], severity: f64, floor: bool, measured_peak: bool) -> SeaState {
+    if !floor && !measured_peak {
+        return sea_state(hour, wind, severity);
+    }
+    let breeze = smooth(10.5, 15.0, hour) * (1.0 - smooth(19.5, 22.5, hour));
+    let old = lerp(BAY_CALM, BAY_WESTERLY, breeze);
+    let station = crate::climate::strait_wind(day_of_year, hour);
+    let u = if measured_peak { station } else { old.max(station) };
+    sea_state_with(hour, wind, severity, Some(u))
+}
+
+/// `sea_state` with the bay's own breeze (m/s, before the weather) given.
+pub fn sea_state_with(hour: f64, wind: [f64; 2], severity: f64, bay_wind: Option<f64>) -> SeaState {
     // The summer sea breeze: calm until late morning, the westerly from
     // noon, strongest from mid-afternoon to sunset, easing in the evening.
     let breeze = smooth(10.5, 15.0, hour) * (1.0 - smooth(19.5, 22.5, hour));
@@ -183,7 +205,7 @@ pub fn sea_state(hour: f64, wind: [f64; 2], severity: f64) -> SeaState {
     let ww = wind[0].hypot(wind[1]) * OVER_WATER;
     let wdir = wind[1].atan2(wind[0]);
     let storm = smooth(9.0, 16.0, ww);
-    let bay_breeze = lerp(BAY_CALM, BAY_WESTERLY, breeze) * clearish;
+    let bay_breeze = bay_wind.unwrap_or_else(|| lerp(BAY_CALM, BAY_WESTERLY, breeze)) * clearish;
     let pac_breeze = lerp(PACIFIC_WIND[0], PACIFIC_WIND[1], breeze) * clearish + PACIFIC_WIND[2] * (1.0 - clearish);
     let take = |own: f64| smooth(0.8, 1.25, ww / own.max(0.1));
     SeaState {
@@ -642,6 +664,24 @@ mod tests {
         // Whitecaps: a few tenths of a percent active at 15 kt, several percent in a gale.
         assert!((0.002..0.006).contains(&active_whitecaps(7.7)));
         assert!((0.04..0.1).contains(&active_whitecaps(17.0)));
+    }
+
+    // (iteration 2) the strait at the measured wind: never glassy by day, and
+    // the afternoon at the station's 5-6 m/s, not the 10 m/s westerly
+    #[test]
+    fn the_strait_has_its_measured_wind() {
+        let m = sea_state_on(265.0, 10.0, [0.0, 0.0], 0.0, true, false);
+        assert!(m.bay.u10 > 2.0, "a morning strait at {} m/s", m.bay.u10);
+        assert!(m.bay.hs() > 0.08, "a morning chop of {} m", m.bay.hs());
+        let a = sea_state_on(265.0, 16.4, [0.0, 0.0], 0.0, true, true);
+        assert!((4.5..6.5).contains(&a.bay.u10), "afternoon {}", a.bay.u10);
+        // the measured afternoon breaks few crests: well under a percent of whitecaps
+        assert!(foam_cover_over(a.bay.u10, FOAM_OVER_TOTAL) < 0.003);
+        // the floor alone keeps the earlier afternoon westerly
+        let f = sea_state_on(265.0, 16.4, [0.0, 0.0], 0.0, true, false);
+        assert!(f.bay.u10 > 9.0);
+        // both off: the earlier sea state exactly
+        assert_eq!(sea_state_on(265.0, 10.0, [1.0, 2.0], 0.0, false, false), sea_state(10.0, [1.0, 2.0], 0.0));
     }
 
     #[test]
