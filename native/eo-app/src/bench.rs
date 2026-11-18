@@ -410,6 +410,11 @@ const REALTIME_FRAME_CAP: usize = 16;
 
 /// Frames per timestamp query set (a set holds at most 4096 queries).
 const TS_FRAMES: usize = (4096 / QUERIES_PER_FRAME) as usize;
+/// Timestamp query sets in the ring the paths share (see the segment loop).
+const TS_RING: usize = 2;
+/// Frames into a chunk at which the last chunk is resolved (the bench has
+/// waited for the GPU two frames back by then).
+const TS_RESOLVE_LAG: usize = 4;
 
 /// The whole-frame target at 1920x1080 on the reference desktop GPU.
 pub const FRAME_BUDGET_MS: f64 = 10.0;
@@ -705,6 +710,22 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     let budget_ms = args.budget_ms.unwrap_or(FRAME_BUDGET_MS);
     let cw = COUNTER_WORDS as u64 * 4;
     let mut kit_after_paths = vec![];
+    // the timestamp query sets: a ring made once for every path, each chunk of
+    // TS_FRAMES frames resolved into its path's read buffer TS_RESOLVE_LAG frames
+    // into the next chunk, once the bench has waited for the chunk's last frame
+    // (Metal's end-of-pass samples of a frame were not yet in the set for a
+    // resolve recorded in the very next command buffer). One set per chunk of
+    // every path, as before, ran out of Metal's counter sample buffers: wgpu-hal
+    // reports that as an unexpected device error and the device is lost; the
+    // realtime drive alone asked for 336.
+    let ts_ring: Vec<wgpu::QuerySet> = if ctx.timestamps {
+        (0..TS_RING).map(|_| ctx.device.create_query_set(&wgpu::QuerySetDescriptor { label: Some("frame-timestamps"), ty: wgpu::QueryType::Timestamp, count: QUERIES_PER_FRAME * TS_FRAMES as u32 })).collect()
+    } else {
+        vec![]
+    };
+    let pq = eo_render::props::QUERIES_PER_FRAME;
+    let mut props_ring: Vec<wgpu::QuerySet> = vec![];
+    let ts_resolve = ctx.device.create_buffer(&wgpu::BufferDescriptor { label: Some("ts-resolve"), size: (QUERIES_PER_FRAME as u64).max(pq as u64) * TS_FRAMES as u64 * 8, usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC, mapped_at_creation: false });
     for seg in &segs {
         // camera positions along the path; with `Pace::Realtime` the
         // drive's camera follows the wall clock and frames are rendered back
@@ -728,19 +749,22 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let streams = seg.streams || args.perf.stream_all_paths;
         let mut vd_caps = view_bench::capture_frames(seg.name);
         let chunks = total.div_ceil(TS_FRAMES);
-        let qsets: Vec<wgpu::QuerySet> = if ctx.timestamps {
-            (0..chunks)
-                .map(|_| ctx.device.create_query_set(&wgpu::QuerySetDescriptor { label: Some("frame-timestamps"), ty: wgpu::QueryType::Timestamp, count: QUERIES_PER_FRAME * TS_FRAMES as u32 }))
-                .collect()
-        } else {
-            vec![]
-        };
-        // the props' own passes (cascade cull, casters, wires), a query set beside each.
-        let pq = eo_render::props::QUERIES_PER_FRAME;
-        let props_qsets: Vec<wgpu::QuerySet> = if ctx.timestamps && renderer.props.get().is_some() {
-            (0..chunks).map(|_| ctx.device.create_query_set(&wgpu::QuerySetDescriptor { label: Some("props-timestamps"), ty: wgpu::QueryType::Timestamp, count: pq * TS_FRAMES as u32 })).collect()
-        } else {
-            vec![]
+        // the props' own passes (cascade cull, casters, wires), a query set ring beside the frame's.
+        if props_ring.is_empty() && ctx.timestamps && renderer.props.get().is_some() {
+            props_ring = (0..TS_RING).map(|_| ctx.device.create_query_set(&wgpu::QuerySetDescriptor { label: Some("props-timestamps"), ty: wgpu::QueryType::Timestamp, count: pq * TS_FRAMES as u32 })).collect();
+        }
+        let ts_read = |label: &str, per_frame: u32| ctx.device.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: (chunks * TS_FRAMES) as u64 * per_frame as u64 * 8, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+        let frame_ts_read = (!ts_ring.is_empty()).then(|| ts_read("ts-read", QUERIES_PER_FRAME));
+        let props_ts_read = (!props_ring.is_empty()).then(|| ts_read("props-ts-read", pq));
+        // chunk k's timestamps into the read buffers (its sets are free for chunk k + TS_RING after this).
+        let resolve_chunk = |enc: &mut wgpu::CommandEncoder, k: usize| {
+            for (ring, read, per_frame) in [(&ts_ring, &frame_ts_read, QUERIES_PER_FRAME), (&props_ring, &props_ts_read, pq)] {
+                if let (Some(q), Some(read)) = (ring.get(k % TS_RING), read.as_ref()) {
+                    let n = per_frame * TS_FRAMES as u32;
+                    enc.resolve_query_set(q, 0..n, &ts_resolve, 0);
+                    enc.copy_buffer_to_buffer(&ts_resolve, 0, read, k as u64 * n as u64 * 8, n as u64 * 8);
+                }
+            }
         };
         let stats_buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("stats-readback"),
@@ -778,6 +802,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let mut warmup = args.warmup;
         let mut cam_last = 0;
         let mut idle_ms = 0.0; // the last frame's wait for the GPU (prepay included)
+        let mut resolved = 0; // timestamp chunks resolved so far
         let seg_start = Instant::now();
         for i in 0..total {
             let cam_i = if realtime { (seg_start.elapsed().as_secs_f64() / FRAME_PERIOD_S) as usize } else { i };
@@ -848,9 +873,13 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             hitch::timed(hitch::Phase::CameraUpdate, || renderer.update(&ctx.queue, &cam));
             let enc_span = hitch::span(hitch::Phase::Encode);
             let mut enc = ctx.device.create_command_encoder(&Default::default());
-            let ts = qsets.get(i / TS_FRAMES).map(|q| (q, QUERIES_PER_FRAME * (i % TS_FRAMES) as u32));
+            if i % TS_FRAMES == TS_RESOLVE_LAG && i >= TS_FRAMES {
+                resolve_chunk(&mut enc, i / TS_FRAMES - 1); // the last chunk, done on the GPU, before its sets are written again
+                resolved = i / TS_FRAMES;
+            }
+            let ts = ts_ring.get((i / TS_FRAMES) % TS_RING).map(|q| (q, QUERIES_PER_FRAME * (i % TS_FRAMES) as u32));
             if let Some(p) = renderer.props.get() {
-                p.set_timestamps(props_qsets.get(i / TS_FRAMES).map(|q| (q.clone(), pq * (i % TS_FRAMES) as u32)));
+                p.set_timestamps(props_ring.get((i / TS_FRAMES) % TS_RING).map(|q| (q.clone(), pq * (i % TS_FRAMES) as u32)));
             }
             renderer.encode(&mut enc, attach, resolve, &targets.depth, ts);
             enc.copy_buffer_to_buffer(renderer.counter_buffer(), 0, &stats_buf, i as u64 * cw, cw);
@@ -893,20 +922,24 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         }
         // frames actually drawn (realtime: as many as the clock allowed).
         let total = cpu_ms.len();
+        // the chunks not resolved in the loop (the GPU is idle here).
+        if total > 0 && !ts_ring.is_empty() {
+            let mut enc = ctx.device.create_command_encoder(&Default::default());
+            for k in resolved..=(total - 1) / TS_FRAMES {
+                resolve_chunk(&mut enc, k);
+            }
+            eo_render::pace::submit(&ctx.queue, [enc.finish()]); // counted
+        }
+        let ts_of = |read: &Option<wgpu::Buffer>| -> Result<Vec<u64>> {
+            Ok(match read {
+                Some(b) => read_mapped(&ctx, b)?.chunks_exact(8).map(|c| u64::from_le_bytes(c.try_into().unwrap())).collect(),
+                None => vec![],
+            })
+        };
         // the props' own passes, per measured frame.
         let (mut pr_cull, mut pr_casters, mut pr_wires) = (vec![], vec![], vec![]);
-        if !props_qsets.is_empty() {
-            let mut ts: Vec<u64> = vec![];
-            for q in props_qsets.iter().take(total.div_ceil(TS_FRAMES)) {
-                let n = pq * TS_FRAMES as u32;
-                let resolve_buf = ctx.device.create_buffer(&wgpu::BufferDescriptor { label: Some("props-ts-resolve"), size: n as u64 * 8, usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC, mapped_at_creation: false });
-                let read_buf = ctx.device.create_buffer(&wgpu::BufferDescriptor { label: Some("props-ts-read"), size: n as u64 * 8, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
-                let mut enc = ctx.device.create_command_encoder(&Default::default());
-                enc.resolve_query_set(q, 0..n, &resolve_buf, 0);
-                enc.copy_buffer_to_buffer(&resolve_buf, 0, &read_buf, 0, n as u64 * 8);
-                eo_render::pace::submit(&ctx.queue, [enc.finish()]); // counted
-                ts.extend(read_mapped(&ctx, &read_buf)?.chunks_exact(8).map(|c| u64::from_le_bytes(c.try_into().unwrap())));
-            }
+        if props_ts_read.is_some() {
+            let ts: Vec<u64> = ts_of(&props_ts_read)?;
             let ms = |a: u64, b: u64| if b >= a { (b - a) as f64 * period_ns / 1e6 } else { 0.0 };
             for i in warmup.min(total)..total {
                 let b = i * pq as usize;
@@ -966,29 +999,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let mut sky_passes: [Vec<f64>; 6] = Default::default(); // the sky passes, then the cloud-shadow map
         let (mut water_fft, mut water_copy, mut water_pass) = (vec![], vec![], vec![]); // water
         let (mut occ_ms, mut late_draw, mut early_draw) = (vec![], vec![], vec![]); // occlusion
-        if !qsets.is_empty() {
-            let mut ts: Vec<u64> = vec![];
-            for q in qsets.iter().take(total.div_ceil(TS_FRAMES)) {
-                let n = QUERIES_PER_FRAME * TS_FRAMES as u32;
-                let resolve_buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("ts-resolve"),
-                    size: n as u64 * 8,
-                    usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
-                    mapped_at_creation: false,
-                });
-                let read_buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("ts-read"),
-                    size: n as u64 * 8,
-                    usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-                    mapped_at_creation: false,
-                });
-                let mut enc = ctx.device.create_command_encoder(&Default::default());
-                enc.resolve_query_set(q, 0..n, &resolve_buf, 0);
-                enc.copy_buffer_to_buffer(&resolve_buf, 0, &read_buf, 0, n as u64 * 8);
-                eo_render::pace::submit(&ctx.queue, [enc.finish()]); // counted
-                let bytes = read_mapped(&ctx, &read_buf)?;
-                ts.extend(bytes.chunks_exact(8).map(|c| u64::from_le_bytes(c.try_into().unwrap())));
-            }
+        if frame_ts_read.is_some() {
+            let ts: Vec<u64> = ts_of(&frame_ts_read)?;
             let ms = |a: u64, b: u64| b.wrapping_sub(a) as f64 * period_ns / 1e6;
             let (qo, ql) = (eo_render::Q_OCCLUSION as usize, eo_render::Q_LATE_DRAW as usize); // occlusion
             for i in args.warmup..total {
