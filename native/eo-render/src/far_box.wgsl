@@ -20,6 +20,18 @@ const FB_MASONRY: u32 = 4u;
 const FB_INDUSTRIAL: u32 = 5u;
 const FB_SHED: u32 = 6u;
 const FB_BLIND: u32 = 7u;
+// The roof plant's boxes (far_box.rs ALPHA_PLANT): drawn in their own colour.
+const FB_PLANT: u32 = 8u;
+// A tower's facade system (the wall's normal byte 0; eo_kit TowerSystem).
+const FB_SYS_CURTAIN_FLUSH: u32 = 1u;
+const FB_SYS_CURTAIN_MULLION: u32 = 2u;
+const FB_SYS_PRECAST_FIN: u32 = 5u;
+// Fins of a precast-fin tower stand about 0.3-0.6 m proud (typology.rs).
+const FB_FIN_M: f32 = 0.45;
+// Coping and the parapet's inner face round a roof's edge: a coping of
+// about 0.3 m (a 12 in parapet cap) and the inner face's shade below it.
+const FB_COPING_M: f32 = 0.3;
+const FB_PARAPET_FACE_M: f32 = 0.25;
 // Glass kinds (eo_kit::far_facade::GlassKind).
 const FB_DOMESTIC: u32 = 0u;
 const FB_OFFICE: u32 = 1u;
@@ -116,13 +128,14 @@ fn fb_span(x: f32, a: f32, b: f32, w: f32) -> f32 {
 // A facade box's vertex (alpha byte FB_ALPHA_BASE + class) of a building (kind 0).
 fn fb_on(in: VOut) -> bool {
     let a = in.aux.x;
-    return (objects[in.object].kind & 255u) == 0u && a > FB_ALPHA_BASE - 0.5 && a < FB_ALPHA_BASE + 7.5;
+    return (objects[in.object].kind & 255u) == 0u && a > FB_ALPHA_BASE - 0.5 && a < FB_ALPHA_BASE + 8.5;
 }
 
 // The roof cap: the measured colour (the roof word's rgb565) with its plant
 // and hatches as a zero-mean pattern of 4 m cells (the aerial measurement
 // already holds them on average), gone to the mean once a cell is under a pixel.
-fn fb_roof(s: ptr<function, Surface>, ob: Object, object: u32, world: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, cls: u32) {
+fn fb_roof(s: ptr<function, Surface>, ob: Object, object: u32, world: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, cls: u32, extra: vec2<f32>) {
+    let wall = (*s).albedo;
     let w0 = ob.far_first_index;
     let roof = srgb_decode(vec3<f32>(f32(w0 & 31u) / 31.0, f32((w0 >> 5u) & 63u) / 63.0, f32((w0 >> 11u) & 31u) / 31.0));
     let cell_m = 4.0;
@@ -144,6 +157,22 @@ fn fb_roof(s: ptr<function, Surface>, ob: Object, object: u32, world: vec3<f32>,
     (*s).albedo = roof * factor;
     (*s).rough = 0.9;
     (*s).metal = 0.0;
+    // The coping band (far_box.rs: byte 0 its width in 0.1 m, byte 1 the
+    // edge weight, 31 on the roof's edge): the coping in the wall's finish
+    // with its flashing, the parapet's inner face in shade, the roof's foot
+    // against the parapet a little darker; box filtered over the pixel.
+    let band_w = extra.x * 12.7;
+    if (band_w > 0.05) {
+        let d = (1.0 - clamp(extra.y * 127.0 / 31.0, 0.0, 1.0)) * band_w;
+        let fm = max(length(dpx.xz) + length(dpy.xz), 1e-3);
+        let coping = fb_span(d, -1.0, FB_COPING_M, fm);
+        let face = fb_span(d, FB_COPING_M, FB_COPING_M + FB_PARAPET_FACE_M, fm);
+        let foot = fb_span(d, FB_COPING_M + FB_PARAPET_FACE_M, band_w + 0.05, fm) * (1.0 - smoothstep(FB_COPING_M + FB_PARAPET_FACE_M, band_w + 0.05, d));
+        let coping_c = mix(wall, vec3<f32>(0.52, 0.52, 0.5), 0.35);
+        let rest = max(1.0 - coping - face, 0.0);
+        (*s).albedo = (*s).albedo * rest * (1.0 - 0.18 * foot) + coping_c * coping + wall * 0.5 * face;
+        (*s).rough = mix(0.9, 0.6, coping);
+    }
 }
 
 // What a pane reflects beyond the light rig's own 4 %: a pane's Fresnel
@@ -206,8 +235,16 @@ fn fb_night(object: u32, cell: vec2<i32>, cov: f32, office: bool, a: f32) -> vec
 fn fb_apply(s: ptr<function, Surface>, in: VOut, n: vec3<f32>, v: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, du: vec2<f32>) -> vec3<f32> {
     let ob = objects[in.object];
     let cls = u32(round(in.aux.x - FB_ALPHA_BASE));
+    if (cls == FB_PLANT) {
+        // Roof plant: its own colour (the vertex's), a painted metal or its walls' finish.
+        (*s).rough = 0.55;
+        (*s).metal = 0.0;
+        return vec3<f32>(0.0);
+    }
+    // The normal word's first two bytes (far_box.rs): the system and lot on a wall, the coping on the cap.
+    let extra = max(in.normal.xy, vec2<f32>(0.0));
     if (n.y > 0.7) {
-        fb_roof(s, ob, in.object, in.world, dpx, dpy, cls);
+        fb_roof(s, ob, in.object, in.world, dpx, dpy, cls, extra);
         return vec3<f32>(0.0);
     }
     if (abs(n.y) > 0.3) {
@@ -229,6 +266,8 @@ fn fb_apply(s: ptr<function, Surface>, in: VOut, n: vec3<f32>, v: vec3<f32>, dpx
     let trim = fb_trim((w1 >> 28u) & 7u, wall);
     let shop = (w1 >> 31u) != 0u;
     let office = glass_kind != FB_DOMESTIC;
+    let sys = u32(round(extra.x * 127.0));
+    let lot_code = u32(round(extra.y * 127.0));
 
     let t = normalize(vec3<f32>(-n.z, 0.0, n.x) + vec3<f32>(1e-6, 0.0, 0.0));
     // Pixel footprint: bays along the wall, metres along it and up it.
@@ -306,7 +345,12 @@ fn fb_apply(s: ptr<function, Surface>, in: VOut, n: vec3<f32>, v: vec3<f32>, dpx
             } else if (cls == FB_RIBBON) {
                 // A glass band per floor; piers (the wall) at the bay; mullions in the band.
                 let cv = fb_pulse(vs - sill, wh, vert_fy);
-                let pier = 1.0 - ww;
+                var pier = 1.0 - ww;
+                if (sys == FB_SYS_PRECAST_FIN) {
+                    // A fin's side hides the glass beside it as the wall turns from the eye.
+                    let side = FB_FIN_M * abs(dot(v, t)) / max(abs(dot(v, n)), 0.25) / max(bay_m, 0.5);
+                    pier = min(pier + min(side, 0.45), 0.85);
+                }
                 let cp = fb_pulse(bay_x + 0.5 * pier, pier, fu);
                 let lm = min(0.4, (lights - 1.0) * FB_MULLION_M / max(bay_m * ww, 0.3));
                 cov = cv * (1.0 - cp) * (1.0 - lm);
@@ -372,11 +416,18 @@ fn fb_apply(s: ptr<function, Surface>, in: VOut, n: vec3<f32>, v: vec3<f32>, dpx
     // tenant, a run of 3-8 bays along a floor at one level.
     var bcell = cell;
     if (office) {
-        let run = 3.0 + floor(5.0 * fb_h(in.object, vec2<i32>(0, cell.y), 21u));
+        // A tower's tenants (a facade system): a floor's blinds run over 6-20 bays at one level.
+        let run_n = select(5.0, 14.0, sys != 0u);
+        let run = select(3.0, 6.0, sys != 0u) + floor(run_n * fb_h(in.object, vec2<i32>(0, cell.y), 21u));
         bcell = vec2<i32>(i32(floor(bay_x / run + fb_h(in.object, vec2<i32>(1, cell.y), 22u))), cell.y);
     }
     let hw = fb_h(in.object, bcell, 3u);
-    let drawn = mix(select(0.0, 0.35 + 0.65 * fb_h(in.object, bcell, 4u), hw < share), share * 0.675, a);
+    var level = 0.35 + 0.65 * fb_h(in.object, bcell, 4u);
+    if (sys != 0u) {
+        // ... at one of a few levels a building's blinds share (a floor at a time, not cell by cell).
+        level = 0.3 + 0.2 * floor(3.0 * fb_h(in.object, vec2<i32>(2, cell.y / 3), 4u) + 0.5 * fb_h(in.object, bcell, 4u));
+    }
+    let drawn = mix(select(0.0, level, hw < share), share * 0.675, a);
     var body = mix(FB_ROOM, FB_BLIND_ALBEDO, drawn);
     // Clear float reflects 8 % outside (the data above): the pane's F0.
     var f0 = vec3<f32>(0.08);
@@ -392,7 +443,35 @@ fn fb_apply(s: ptr<function, Surface>, in: VOut, n: vec3<f32>, v: vec3<f32>, dpx
         // Through a grey tinted pane twice (visible transmittance 0.44, against about 0.78 for clear double glazing: (0.44 / 0.78)^2, about 0.32).
         body = body * 0.32;
     }
-    (*s).albedo = wall * wall_share + trim * frame_cov + dark * dark_cov + body * cov;
+    var wall_c = wall;
+    var glass_n = n;
+    if (sys == FB_SYS_CURTAIN_FLUSH || sys == FB_SYS_CURTAIN_MULLION) {
+        // A curtain wall's panes are not one mirror: each unit sits a little
+        // out of plane (a glazed unit's bow and the frame's tolerance, about
+        // a degree), its coating a shade off its neighbours'; to the mean
+        // once a pane is under a pixel.
+        let ph = vec2<f32>(fb_h(in.object, cell, 31u), fb_h(in.object, cell, 32u)) - 0.5;
+        let keep = 1.0 - a;
+        glass_n = normalize(n + t * (ph.x * 0.035 * keep) + vec3<f32>(0.0, ph.y * 0.03 * keep, 0.0));
+        body = body * (1.0 + (fb_h(in.object, cell, 33u) - 0.5) * 0.25 * keep);
+    }
+    if (lot_code > 0u && !blind) {
+        // A footprint over several lots: each lot its own paint (a shade
+        // lighter or darker, warmer or cooler) and a downpipe at the lot line.
+        let lot_m = 4.0 + f32(lot_code - 1u) * 0.5;
+        let x_m = bay_x * bay_m / lot_m;
+        let li = i32(floor(x_m));
+        let hl = fb_h(in.object, vec2<i32>(li, 77), 51u);
+        let hc = fb_h(in.object, vec2<i32>(li, 78), 52u);
+        let tone = mix(vec3<f32>(1.0), select(vec3<f32>(1.03, 1.0, 0.95), vec3<f32>(0.96, 0.99, 1.04), hc < 0.5), 0.8);
+        let paint = wall * tone * (0.86 + 0.22 * hl);
+        let fl = fu * bay_m / lot_m;
+        let lot_fade = 1.0 - smoothstep(0.35, 1.0, fl);
+        wall_c = mix(wall, paint, lot_fade);
+        let pipe = fb_pulse(x_m + 0.012, 0.024, fl);
+        wall_c = mix(wall_c, wall_c * 0.6, pipe);
+    }
+    (*s).albedo = wall_c * wall_share + trim * frame_cov + dark * dark_cov + body * cov;
     (*s).albedo = (*s).albedo * mix(1.0, occ, 0.6);
     var rough = mix(wall_rough, 0.12, cov);
     if (cls == FB_CURTAIN) {
@@ -403,7 +482,7 @@ fn fb_apply(s: ptr<function, Surface>, in: VOut, n: vec3<f32>, v: vec3<f32>, dpx
     (*s).n = nrm;
     // The street's canyon: the lowest storeys see less sky.
     (*s).ao = (*s).ao * mix(0.78, 1.0, smoothstep(0.0, 12.0, y));
-    var emit = fb_glass_sky(n, v, f0, cov);
+    var emit = fb_glass_sky(glass_n, v, f0, cov);
     emit = emit + fb_night(in.object, cell, cov, office && cls != FB_ROW_BAYS, a);
     return emit;
 }
