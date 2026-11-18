@@ -35,6 +35,18 @@
 //!   south); yaw in degrees from north (-z) toward east (+x), pitch in
 //!   degrees, up positive.
 //! * `{"eye": [x, y, z], "look_at": [x, y, z]}`: game metres.
+//!
+//! Photo mode (`photo`, `subject`; see `PhotoSpec`): a shot with `"photo"`
+//! renders through photo mode's pipeline (eo-render `photo`): `focal_mm`
+//! (35 mm equivalent; sets the field of view), `f_number` (no aperture: all
+//! sharp), `focus` (metres, `"look_at"` or `"subject"`), `grade`
+//! (`neutral`, `warm-film`, `cool`, `monochrome`), `ev`, `vignette`,
+//! `grain` (0..1; default the grade's), `letterbox` (an aspect) and `roll`
+//! (degrees). `"subject"` stands the player's body there: `at` [x, z] game
+//! metres on the street surface, `facing` (compass degrees; default toward
+//! the camera), `model` (an index into the people models), `walking`. With
+//! `--no-photo-mode` the lens's field of view is kept and nothing else of it
+//! (no depth of field, grade, finish or roll): the shot as before photo mode.
 
 use super::{CAPTURE_WALL_WARN_M, blocked_view, draw, read_color, settle_p, write_png};
 use crate::agents::AgentRuntime;
@@ -153,11 +165,133 @@ pub struct Spec {
     pub hour: Option<f64>,
     pub weather: Option<Kind>,
     pub what: Option<String>,
+    /// photo mode: the shot through its pipeline, and a person in it.
+    pub photo: Option<PhotoSpec>,
+    pub subject: Option<SubjectSpec>,
     /// The entry as written.
     pub input: Value,
 }
 
-const SHOT_KEYS: &[&str] = &["name", "geo", "lat", "lon", "alt", "range", "heading", "tilt", "fov", "eye", "yaw", "pitch", "look_at", "far", "time_of_day", "weather", "what", "note"];
+const SHOT_KEYS: &[&str] = &["name", "geo", "lat", "lon", "alt", "range", "heading", "tilt", "fov", "eye", "yaw", "pitch", "look_at", "far", "time_of_day", "weather", "what", "note", "photo", "subject"];
+
+// ---------------------------------------------------------------------------
+// Photo mode's shots.
+// ---------------------------------------------------------------------------
+
+/// `"photo"`: lens, focus and finish (eo-render `photo`).
+#[derive(Clone, Debug)]
+pub struct PhotoSpec {
+    pub focal_mm: Option<f64>,
+    /// None: no depth of field.
+    pub f_number: Option<f64>,
+    pub focus: FocusSpec,
+    pub grade: eo_render::photo::Grade,
+    pub ev: f64,
+    pub vignette: f64,
+    /// None: the grade's own.
+    pub grain: Option<f64>,
+    pub letterbox: Option<f64>,
+    pub roll_deg: f64,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum FocusSpec {
+    Metres(f64),
+    /// The shot's look-at target (a geo or look_at pose).
+    LookAt,
+    /// The subject's eyes.
+    Subject,
+}
+
+/// `"subject"`: the player's body standing in the shot.
+#[derive(Clone, Debug)]
+pub struct SubjectSpec {
+    pub at: [f64; 2],
+    /// Compass degrees the subject faces; None: toward the camera.
+    pub facing_deg: Option<f64>,
+    pub model: Option<usize>,
+    pub walking: bool,
+}
+
+const PHOTO_KEYS: &[&str] = &["focal_mm", "f_number", "focus", "grade", "ev", "vignette", "grain", "letterbox", "roll"];
+const SUBJECT_KEYS: &[&str] = &["at", "facing", "model", "walking"];
+
+fn parse_photo(name: &str, v: &Value) -> Result<PhotoSpec> {
+    let o = v.as_object().ok_or_else(|| anyhow!("shot \"{name}\": \"photo\" is not an object"))?;
+    let bad = unknown_keys(o, PHOTO_KEYS);
+    if !bad.is_empty() {
+        bail!("shot \"{name}\": unknown \"photo\" keys {bad:?} (known: {PHOTO_KEYS:?})");
+    }
+    let num = |k: &str| -> Result<Option<f64>> {
+        match o.get(k) {
+            None | Some(Value::Null) => Ok(None),
+            Some(x) => x.as_f64().filter(|v| v.is_finite()).map(Some).ok_or_else(|| anyhow!("shot \"{name}\": photo \"{k}\" is not a number")),
+        }
+    };
+    let focal_mm = num("focal_mm")?;
+    if focal_mm.is_some_and(|f| !(crate::photo::LENS_MIN_MM..=crate::photo::LENS_MAX_MM).contains(&f)) {
+        bail!("shot \"{name}\": focal_mm {focal_mm:?} is not {} to {} mm", crate::photo::LENS_MIN_MM, crate::photo::LENS_MAX_MM);
+    }
+    let f_number = num("f_number")?;
+    if f_number.is_some_and(|n| !(1.0..=32.0).contains(&n)) {
+        bail!("shot \"{name}\": f_number {f_number:?} is not 1 to 32");
+    }
+    let focus = match o.get("focus") {
+        None | Some(Value::Null) => FocusSpec::LookAt,
+        Some(Value::String(s)) if s == "look_at" => FocusSpec::LookAt,
+        Some(Value::String(s)) if s == "subject" => FocusSpec::Subject,
+        Some(x) => FocusSpec::Metres(x.as_f64().filter(|m| *m > 0.05).ok_or_else(|| anyhow!("shot \"{name}\": photo focus is metres, \"look_at\" or \"subject\""))?),
+    };
+    let grade = match o.get("grade") {
+        None | Some(Value::Null) => eo_render::photo::Grade::Neutral,
+        Some(Value::String(g)) => eo_render::photo::Grade::parse(g).ok_or_else(|| anyhow!("shot \"{name}\": grade \"{g}\" is not neutral, warm-film, cool or monochrome"))?,
+        Some(_) => bail!("shot \"{name}\": grade is not a string"),
+    };
+    Ok(PhotoSpec {
+        focal_mm,
+        f_number,
+        focus,
+        grade,
+        ev: num("ev")?.unwrap_or(0.0).clamp(-3.0, 3.0),
+        vignette: num("vignette")?.unwrap_or(0.0).clamp(0.0, 1.0),
+        grain: num("grain")?.map(|g| g.clamp(0.0, 1.0)),
+        letterbox: num("letterbox")?.filter(|a| *a > 0.2),
+        roll_deg: num("roll")?.unwrap_or(0.0).clamp(-45.0, 45.0),
+    })
+}
+
+fn parse_subject(name: &str, v: &Value) -> Result<SubjectSpec> {
+    let o = v.as_object().ok_or_else(|| anyhow!("shot \"{name}\": \"subject\" is not an object"))?;
+    let bad = unknown_keys(o, SUBJECT_KEYS);
+    if !bad.is_empty() {
+        bail!("shot \"{name}\": unknown \"subject\" keys {bad:?} (known: {SUBJECT_KEYS:?})");
+    }
+    let at = match o.get("at") {
+        Some(Value::Array(a)) if a.len() == 2 && a.iter().all(|x| x.as_f64().is_some_and(f64::is_finite)) => [a[0].as_f64().unwrap(), a[1].as_f64().unwrap()],
+        _ => bail!("shot \"{name}\": subject \"at\" is [x, z] game metres"),
+    };
+    Ok(SubjectSpec {
+        at,
+        facing_deg: o.get("facing").and_then(Value::as_f64),
+        model: o.get("model").and_then(Value::as_u64).map(|m| m as usize),
+        walking: o.get("walking").and_then(Value::as_bool).unwrap_or(false),
+    })
+}
+
+/// The subject's feet on the drawn street (or the ground) and its body yaw
+/// (eo-agents: facing (sin yaw, cos yaw) in x, z).
+fn subject_place(world: &World, s: &SubjectSpec, eye: DVec3) -> ([f64; 3], f64) {
+    let [x, z] = s.at;
+    let y = world.street.as_ref().map(|st| st.world.surface_at(x, z, None)).unwrap_or_else(|| world.elevation.ground(x, z));
+    let face = match s.facing_deg {
+        Some(c) => {
+            let r = c.to_radians();
+            (r.sin(), -r.cos())
+        }
+        None => (eye.x - x, eye.z - z),
+    };
+    ([x, y, z], face.0.atan2(face.1))
+}
 const GEO_KEYS: &[&str] = &["lat", "lon", "alt", "range", "heading", "tilt", "fov"];
 
 fn unknown_keys(o: &Map<String, Value>, known: &[&str]) -> Vec<String> {
@@ -255,7 +389,12 @@ pub fn parse_specs(v: &Value) -> Result<Vec<Spec>> {
             bail!("shot \"{name}\": far {far:?} is too near");
         }
         let what = o.get("what").and_then(Value::as_str).map(String::from);
-        out.push(Spec { name, pose, fov, far, hour, weather, what, input: e.clone() });
+        let photo = o.get("photo").map(|v| parse_photo(&name, v)).transpose()?;
+        let subject = o.get("subject").map(|v| parse_subject(&name, v)).transpose()?;
+        if photo.as_ref().is_some_and(|p| matches!(p.focus, FocusSpec::Subject)) && subject.is_none() {
+            bail!("shot \"{name}\": photo focus \"subject\" needs a \"subject\"");
+        }
+        out.push(Spec { name, pose, fov, far, hour, weather, what, photo, subject, input: e.clone() });
     }
     if out.is_empty() {
         bail!("no shots");
@@ -303,6 +442,10 @@ pub struct Shot {
     /// Extra instances drawn with the agents (a scene card's character).
     pub extras: Vec<GpuAgent>,
     pub notes: Vec<String>,
+    /// photo mode's settings for this shot (None: the frame as before photo mode).
+    pub photo: Option<eo_render::photo::PhotoParams>,
+    /// A person standing in the shot: feet, body yaw, model index, walking.
+    pub subject: Option<([f64; 3], f64, Option<usize>, bool)>,
 }
 
 /// The resolved pose's manifest entries: eye, orientation (radians and
@@ -343,6 +486,8 @@ pub fn resolve(spec: &Spec, world: &World, gf: &GeoFrame, args: &Args, aspect: f
     let far = spec.far.unwrap_or(default_far);
     let mut info = Map::new();
     info.insert("input".into(), spec.input.clone());
+    // photo mode's lens sets the field of view (kept with `--no-photo-mode`: the same framing).
+    let spec = &Spec { fov: spec.photo.as_ref().and_then(|p| p.focal_mm).map(|f| eo_render::photo::fov_y_deg(f, aspect as f64)).unwrap_or(spec.fov), ..spec.clone() };
     let (cam, look_at) = match spec.pose {
         Pose::Geo { lat, lon, alt, range, heading, tilt } => {
             let (clat, clon, calt) = look_at_camera(lat, lon, alt, range, heading, tilt);
@@ -374,6 +519,52 @@ pub fn resolve(spec: &Spec, world: &World, gf: &GeoFrame, args: &Args, aspect: f
             (camera(eye, yaw, pitch, spec.fov, far, aspect), Some(at))
         }
     };
+    let mut cam = cam;
+    let subject = spec.subject.as_ref().map(|s| {
+        let (feet, yaw) = subject_place(world, s, cam.eye.as_dvec3());
+        (feet, yaw, s.model, s.walking)
+    });
+    let photo = match (&spec.photo, crate::photo::enabled()) {
+        (Some(p), true) => {
+            cam.roll = (p.roll_deg as f32).to_radians();
+            let fwd = cam.forward().as_dvec3();
+            let along = |q: DVec3| (q - cam.eye.as_dvec3()).dot(fwd).max(0.05);
+            let focus_m = match p.focus {
+                FocusSpec::Metres(m) => m,
+                FocusSpec::LookAt => look_at.map(along).unwrap_or(1000.0),
+                FocusSpec::Subject => subject.map(|s| along(DVec3::from(s.0) + DVec3::Y * crate::photo::SUBJECT_EYE_M * eo_data::groundscale::people())).unwrap_or(1000.0),
+            };
+            let params = eo_render::photo::PhotoParams {
+                dof: p.f_number.map(|n| eo_render::photo::Dof { f_number: n, focus_m }),
+                exposure_ev: p.ev,
+                grade: p.grade,
+                vignette: p.vignette,
+                grain: p.grain.unwrap_or(p.grade.look().grain),
+                letterbox: p.letterbox,
+                accumulate: eo_render::photo::SHOT_FRAMES,
+                animate_grain: false,
+            };
+            info.insert(
+                "photo".into(),
+                json!({
+                    "focal_mm_35mm_equivalent": eo_render::photo::focal_mm(cam.fov_y_deg as f64, aspect as f64), "fov_y_deg": cam.fov_y_deg,
+                    "f_number": p.f_number, "focus_m": focus_m, "focus": format!("{:?}", p.focus),
+                    "coc_at_infinity_mm": p.f_number.map(|n| eo_render::photo::coc_inf_mm(eo_render::photo::focal_mm(cam.fov_y_deg as f64, aspect as f64), n, focus_m)),
+                    "grade": p.grade.name(), "exposure_ev": p.ev, "vignette": p.vignette, "grain": params.grain, "letterbox": p.letterbox, "roll_deg": p.roll_deg,
+                    "dof": crate::photo::dof_enabled(),
+                }),
+            );
+            Some(params)
+        }
+        (Some(_), false) => {
+            info.insert("photo".into(), json!({ "off": "--no-photo-mode: the lens's field of view only" }));
+            None
+        }
+        _ => None,
+    };
+    if let Some(s) = subject {
+        info.insert("subject".into(), json!({ "feet": s.0, "yaw_rad": s.1, "model": s.2, "walking": s.3 }));
+    }
     info.insert("resolved".into(), pose_json(gf, world, &cam, look_at));
     if let Some(w) = &spec.what {
         info.insert("what".into(), json!(w));
@@ -392,6 +583,8 @@ pub fn resolve(spec: &Spec, world: &World, gf: &GeoFrame, args: &Args, aspect: f
         info,
         extras: vec![],
         notes: vec![],
+        photo,
+        subject,
     }
 }
 
@@ -701,7 +894,10 @@ pub fn shoot(io: &mut Io, common: &Map<String, Value>, shot: &Shot, dir: &Path, 
         notes.push(format!("the eye is {:.1} m under the drawn ground", ground - cam.eye.y as f64));
     }
     let png = dir.join(format!("{}.png", shot.name));
-    let taa = io.converge_and_write(&cam, &png)?;
+    io.renderer.photo.set(shot.photo); // photo mode's pipeline (None: as before)
+    let taa = io.converge_and_write(&cam, &png);
+    io.renderer.photo.set(None);
+    let taa = taa?;
     if taa["converged"] != json!(true) {
         notes.push(format!("the temporal resolve did not converge in {} frames (RMS {})", taa["frames"], taa["rms_8bit"]));
     }
@@ -748,7 +944,25 @@ pub fn run(io: &mut Io, mode: Mode, dir: &Path) -> Result<()> {
             for spec in specs.iter().filter(|s| wanted(&s.name)) {
                 let mut shot = resolve(spec, io.world, &gf, io.args, aspect, far);
                 shot.info.insert("shots_file".into(), json!(path.display().to_string()));
+                // the subject: the player's body (a chosen person model), the street's people kept clear of it.
+                if let Some((feet, yaw, model, walking)) = shot.subject {
+                    let lib = io.agents.lib.clone();
+                    let body = lib.as_deref().and_then(|l| {
+                        let (speed, phase) = if walking { (eo_player::tuning::speed::WALK_MPS, 0.3) } else { (0.0, 0.0) };
+                        let mut a = eo_agents::feed::player_body(l, feet, yaw, speed, phase, 0.0)?;
+                        if let Some(m) = model.and_then(|k| l.meta.people_models.get(k)) {
+                            a.model = *m;
+                        }
+                        Some(a)
+                    });
+                    match body {
+                        Some(a) => shot.extras = vec![a],
+                        None => shot.notes.push("no subject: the optional people assets are absent".into()),
+                    }
+                    io.agents.hide_near = vec![([feet[0] as f32, feet[1] as f32, feet[2] as f32], 0.9)];
+                }
                 shoot(io, &common, &shot, dir, timeout)?;
+                io.agents.hide_near.clear();
                 n += 1;
             }
             println!("shots: {n} shots in {}", dir.display());
