@@ -16,8 +16,14 @@
 //!   accents, a few deeper colours; value and saturation vary more than hue.
 //!   The tint written is target / primer (a multiply of at most 1).
 //! * Victorian rows and Edwardian flats keep the period paint the port draws
-//!   (already varied: charcoal, navy, sage, teal, oxblood) on the neutral
-//!   primer at the luminance of their finish; Chinatown's paint stays.
+//!   (already varied: charcoal, navy, sage, teal, oxblood). *Period primer*
+//!   (on by default): the paint is the colour it names, on the primer, its
+//!   value moved as a palette draw's is (`pick`): a paint's albedo is its
+//!   light reflectance value (a white house paint's LRV is about 80-90, a
+//!   charcoal's about 10), whatever the boards under it. Off
+//!   (`EO_PERIOD_PAINT=off`, eo-app `--no-period-paint`): the paint at the
+//!   luminance of its finish, as before (a white Victorian on wood siding then
+//!   drew at 0.36). Chinatown's paint stays.
 //! * Every other painted finish on the building without a paint (a recess, a
 //!   bulkhead) takes the neutral grey of its old colour's luminance, so
 //!   nothing turns brighter than before unless a palette says so. The
@@ -60,7 +66,12 @@ pub fn enabled() -> bool {
 
 /// A tag for the kit tile cache key (empty when off: the key is today's).
 pub fn cache_tag() -> String {
-    if enabled() { format!("wall-paint-v{VERSION}") } else { String::new() }
+    if enabled() { format!("wall-paint-v{VERSION}{}", if period_primer() { "-period-primer" } else { "" }) } else { String::new() }
+}
+
+/// The timber rows' period paint drawn on the primer (`EO_PERIOD_PAINT=off`: at its finish's luminance).
+pub fn period_primer() -> bool {
+    !matches!(std::env::var("EO_PERIOD_PAINT").as_deref(), Ok("off") | Ok("0"))
 }
 
 fn lin(c: [u8; 3]) -> [f32; 3] {
@@ -278,6 +289,12 @@ pub fn apply(c: &Classified, materials: &BTreeMap<String, String>, own_tints: bo
         let own = finish_colour(&wall_base).unwrap_or(lin(PRIMER_SRGB));
         let t = match palette {
             Some(p) if !chinatown => on_primer(pick(p, district, c.seed)),
+            None if period_primer() => {
+                // The period paint as the colour it names, its value moved as a palette draw's.
+                let paint = tints.get(&wall_base).copied().map(hex_linear).unwrap_or([1.0; 3]);
+                let v = 0.82 + 0.16 * unit(c.seed, "value");
+                on_primer(paint.map(|x| x * v))
+            }
             _ => {
                 let paint = tints.get(&wall_base).copied().map(hex_linear).unwrap_or([1.0; 3]);
                 let n = neutral_of(own);
@@ -365,6 +382,25 @@ mod tests {
     fn districts_shift_the_mix() {
         let deep = |d: &str| (0..5000).filter(|s| rc::oklab(pick(&STUCCO, Some(d), hash_seed(&format!("d{s}"))))[0] < 0.75).count();
         assert!(deep("Mission") > deep("Marina") * 3 / 2, "Mission {} Marina {}", deep("Mission"), deep("Marina"));
+    }
+
+    #[test]
+    fn a_period_paint_draws_its_own_colour_on_the_primer() {
+        if !enabled() || !period_primer() {
+            return;
+        }
+        let c = Classified { archetype: "victorian-row", seed: 77, ..Default::default() };
+        let mats: BTreeMap<String, String> = [("wall".to_string(), "wood-siding".to_string())].into();
+        // White (no tint) and charcoal period paint on wood siding.
+        for (paint, lo, hi) in [(None, 0.6, 0.9), (Some(0x5c6066u32), 0.07, 0.13)] {
+            let mut tints = Tints::new();
+            if let Some(p) = paint {
+                tints.insert("wood-siding".into(), p);
+            }
+            apply(&c, &mats, true, &mut tints);
+            let drawn = luma([0, 1, 2].map(|k| hex_linear(tints["wood-siding"])[k] * lin(PRIMER_SRGB)[k]));
+            assert!(drawn > lo && drawn < hi, "{paint:?}: {drawn}");
+        }
     }
 
     #[test]
