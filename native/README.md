@@ -37,7 +37,7 @@ new blind review can change it.
 | `eo-look` | The lighting model as pure functions: sun position, analytic sky, fog, the light rig, exposure, tone curve and shadow cascade fitting. No GPU. |
 | `eo-sky` | Weather schedule, clouds, marine layer, rain and wetness, moon and stars, street-lamp photometry. No GPU. |
 | `eo-water` | The shoreline field, the FFT ocean spectrum, wind, water optics, surf and the open-sea grid. No GPU. |
-| `eo-landmarks` | Bridges, the quay wall, piers, seawalls, plazas, landmark towers and the open-space ground as plain meshes. No GPU. |
+| `eo-landmarks` | Bridges, the quay wall, piers, seawalls, plazas, landmark towers, the Ferry Building, the corridor's streetcar rails and quay railing, and the open-space ground as plain meshes. No GPU. |
 | `eo-farshore` | The land beyond the city out to the horizon, cooked from elevation tiles. No GPU. |
 | `eo-props` | Street furniture, traffic and pedestrian signals, signs and sign atlases, street trees, parked cars, placed per tile by rule. No GPU. |
 | `eo-sim` | The headless world simulation: traffic, signals, pedestrians, population and level of detail, tile-keyed and multi-threaded. No GPU. |
@@ -298,6 +298,7 @@ selection:
 | Props | `--no-props2`, `--no-furniture`, `--no-eztree`, `--no-wires`, `--no-overhead`, `--no-lamp-sprites` |
 | Buildings | `--no-facade-detail`, `--no-facade-age`, `--no-rooms`, `--no-room-frames`, `--no-room-dim`, `--no-roof-colours`, `--no-roof-plant`, `--no-roof-parapet`, `--no-roof-patches`, `--no-wall-paint` |
 | Ground | `--no-ground-hills`, `--no-ground-green`, `--no-ground-contact`, `--no-terrain-lod` |
+| Waterfront corridor | `--no-ferry-building` (its record's plain box instead), `--no-tram-tracks` (no streetcar rails), `--no-quay-railing` (no guard on the Embarcadero quay wall) |
 | Scanned surfaces | `--no-cc0` (all), `--no-cc0-street`, `--no-cc0-walls`, `--no-cc0-ground`, `--no-cc0-decals`, `--no-cc0-grime`, `--no-cc0-stains`, `--no-cc0-pom`, `--no-cc0-tiling` |
 | Lighting and sky | `--no-shadows`, `--no-ao`, `--no-contact-shadows`, `--no-atmosphere`, `--no-fog`, `--no-clouds`, `--no-cloud-shadows`, `--no-shafts`, `--no-moon-stars`, `--no-lights` |
 | Weather | `--no-rain`, `--no-wet`, `--no-wind` |
