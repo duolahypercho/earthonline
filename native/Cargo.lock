@@ -743,6 +743,7 @@ dependencies = [
  "anyhow",
  "earcut",
  "eo-data",
+ "eo-landmarks",
  "eo-street",
  "glam 0.34.3",
  "rapier3d",

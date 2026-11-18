@@ -10,6 +10,7 @@
 pub mod camera;
 pub mod character;
 pub mod input;
+pub mod lift;
 pub mod momentum;
 pub mod player;
 pub mod routes;
@@ -19,4 +20,4 @@ pub mod vehicle;
 pub mod world;
 
 pub use player::{CameraView, Mode, Player, PlayerState, StepInput}; // + PlayerState
-pub use world::{BuildingSet, CollisionWorld, ElevationGround, GroundProvider, SurfaceMesh, TileFeed, TileKey}; // + TileFeed
+pub use world::{BuildingSet, CollisionWorld, DeckPart, Decks, ElevationGround, GroundProvider, LiftDef, PrismCut, SurfaceMesh, TileFeed, TileKey}; // + TileFeed, decks
