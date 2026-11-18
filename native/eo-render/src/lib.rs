@@ -32,6 +32,7 @@ pub mod landmarks; // landmarks
 pub mod look;
 pub mod occlusion; // occlusion
 pub mod pace;
+pub mod photo; // photo mode: depth of field and the photo finish
 pub mod props; // props
 pub mod props_lib; // props
 pub mod props_lib2;
@@ -411,6 +412,8 @@ pub struct Renderer {
     /// the far street lamps by night (stage 3) and the distant trees (stage 4).
     pub hlod_lights: std::sync::OnceLock<hlod_lights::FarLights>,
     pub hlod_trees: std::sync::OnceLock<hlod_trees::FarTrees>,
+    /// photo mode's depth of field and finish (photo.rs); nothing runs until a photo is set.
+    pub photo: photo::PhotoGpu,
 }
 
 /// a frame that uploads this much (a quarter of the default 4 MiB budget)
@@ -1012,6 +1015,7 @@ impl Renderer {
             hlod: std::sync::OnceLock::new(),       // hlod
             hlod_lights: std::sync::OnceLock::new(), // hlod
             hlod_trees: std::sync::OnceLock::new(),  // hlod
+            photo: photo::PhotoGpu::new(&ctx.device, &ctx.queue), // photo mode
         })
     }
 
@@ -1484,6 +1488,7 @@ impl Renderer {
         self.look.sky.begin_frame(self.look.out_size());
         let jittered = Camera { jitter: self.look.sky.jitter(), ..*cam };
         let cam = &jittered;
+        self.photo.update(queue, cam, self.look.out_size(), self.look.sky.options().bloom); // photo mode (nothing without a photo set)
         if let Some(f) = self.farshore.get().filter(|_| self.farshore_active()) {
             f.update(queue, cam, self.water_active()); // the far terrain's nodes and camera (jittered, as the city), and where the sea is drawn
         }
@@ -1658,6 +1663,8 @@ impl Renderer {
         let keep_depth = (self.look.options.ao || self.look.sky_wants_depth()) && depth.texture().usage().contains(wgpu::TextureUsages::TEXTURE_BINDING) && depth.texture().sample_count() == 1; // + the sky passes
         // the wire pass after the late city pass depth-tests against it.
         let keep_depth = keep_depth || self.props.get().is_some_and(|p| p.wires_pending());
+        // photo mode's depth of field reads it after the sky passes.
+        let keep_depth = keep_depth || (self.photo.active() && depth.texture().usage().contains(wgpu::TextureUsages::TEXTURE_BINDING) && depth.texture().sample_count() == 1);
         let draw_bg = self.draw_bg.lock().unwrap()[self.probe.front().0].clone(); // the front cube's
         // with occlusion on the city is two passes, the early
         // (objects visible last frame, depth kept for the pyramid) and the
@@ -1879,7 +1886,9 @@ impl Renderer {
         }
         self.look.encode_ao(enc, depth, &hdr, ts); // surfaces
         self.look.encode_sky_after(enc, depth, &hdr, self.agents.get(), ts); // rain, luminaires, velocity, volume, resolve, bloom
-        self.look.encode_post(enc, output, ts); // look
+        // photo mode (nothing without a photo set): depth of field and the finish, read by post.
+        let photo = self.photo.encode(enc, &self.look, depth, &hdr, (output.texture().width(), output.texture().height()));
+        self.look.encode_post_with(enc, output, ts, photo.as_ref()); // look
     }
 
     /// The counter buffer: see `COUNTER_WORDS`.

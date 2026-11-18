@@ -277,7 +277,7 @@ pub fn aim(eye: DVec3, at: DVec3, fallback_yaw: f64) -> (f64, f64) {
 }
 
 pub fn camera(eye: DVec3, yaw: f64, pitch: f64, fov: f64, far: f32, aspect: f32) -> Camera {
-    Camera { eye: eye.as_vec3(), yaw: yaw as f32, pitch: pitch as f32, fov_y_deg: fov as f32, near: GAME_NEAR_M, far, aspect, jitter: [0.0; 2] }
+    Camera { eye: eye.as_vec3(), yaw: yaw as f32, pitch: pitch as f32, fov_y_deg: fov as f32, near: GAME_NEAR_M, far, aspect, jitter: [0.0; 2], roll: 0.0 }
 }
 
 fn compass(rad: f64) -> f64 {

@@ -1015,7 +1015,7 @@ pub fn read_poses(path: &std::path::Path) -> anyhow::Result<Vec<(String, eo_rend
                     let e = &p["eye"];
                     (
                         p["name"].as_str().unwrap_or("pose").to_string(),
-                        eo_render::camera::Camera { eye: Vec3::new(f(&e[0]), f(&e[1]), f(&e[2])), yaw: f(&p["yaw"]), pitch: f(&p["pitch"]), fov_y_deg: f(&p["fov_y_deg"]), near: f(&p["near"]), far: f(&p["far"]), aspect: f(&p["aspect"]), jitter: [0.0; 2] }, // + jitter
+                        eo_render::camera::Camera { eye: Vec3::new(f(&e[0]), f(&e[1]), f(&e[2])), yaw: f(&p["yaw"]), pitch: f(&p["pitch"]), fov_y_deg: f(&p["fov_y_deg"]), near: f(&p["near"]), far: f(&p["far"]), aspect: f(&p["aspect"]), jitter: [0.0; 2], roll: 0.0 }, // + jitter
                     )
                 })
                 .collect()

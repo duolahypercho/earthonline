@@ -21,11 +21,15 @@ pub struct Camera {
     pub aspect: f32,
     /// sub-pixel offset of the projection (NDC), the temporal resolve's jitter.
     pub jitter: [f32; 2],
+    /// Radians about the view axis: positive rolls the camera clockwise as
+    /// seen from behind (its right side down), so the horizon in the image
+    /// rises to the right; photo mode's roll. 0 everywhere else.
+    pub roll: f32,
 }
 
 impl Camera {
     pub fn new(eye: Vec3, yaw: f32, pitch: f32, aspect: f32) -> Self {
-        Self { eye, yaw, pitch, fov_y_deg: GAME_FOV_Y_DEG, near: GAME_NEAR_M, far: GAME_FAR_M, aspect, jitter: [0.0; 2] }
+        Self { eye, yaw, pitch, fov_y_deg: GAME_FOV_Y_DEG, near: GAME_NEAR_M, far: GAME_FAR_M, aspect, jitter: [0.0; 2], roll: 0.0 }
     }
 
     pub fn forward(&self) -> Vec3 {
@@ -34,13 +38,35 @@ impl Camera {
         Vec3::new(sy * cp, sp, -cy * cp)
     }
 
+    /// The image's right, rolled about the view axis by `roll` (level: in the ground plane).
     pub fn right(&self) -> Vec3 {
         let (sy, cy) = self.yaw.sin_cos();
-        Vec3::new(cy, 0.0, sy)
+        let level = Vec3::new(cy, 0.0, sy);
+        if self.roll == 0.0 {
+            return level;
+        }
+        let (sr, cr) = self.roll.sin_cos();
+        level * cr - self.level_up() * sr
+    }
+
+    /// The image's up (rolled with `right`).
+    pub fn up(&self) -> Vec3 {
+        if self.roll == 0.0 {
+            return self.level_up();
+        }
+        self.right().cross(self.forward())
+    }
+
+    /// The up of the level (unrolled) camera.
+    fn level_up(&self) -> Vec3 {
+        let (sy, cy) = self.yaw.sin_cos();
+        Vec3::new(cy, 0.0, sy).cross(self.forward())
     }
 
     pub fn view(&self) -> Mat4 {
-        glam::camera::rh::view::look_to_mat4(self.eye, self.forward(), Vec3::Y)
+        // a level camera keeps world up exactly (the output before roll existed).
+        let up = if self.roll == 0.0 { Vec3::Y } else { self.up() };
+        glam::camera::rh::view::look_to_mat4(self.eye, self.forward(), up)
     }
 
     /// Reversed-Z perspective: near maps to depth 1, far to depth 0.
@@ -86,4 +112,39 @@ pub fn aabb_visible(planes: &[Vec4; 6], min: Vec3, max: Vec3) -> bool {
         );
         n.dot(p) + pl.w >= 0.0
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn clip(c: &Camera, p: Vec3) -> glam::Vec2 {
+        let q = c.view_proj() * p.extend(1.0);
+        glam::Vec2::new(q.x / q.w, q.y / q.w)
+    }
+
+    #[test]
+    fn a_level_camera_is_the_camera_before_roll() {
+        let c = Camera::new(Vec3::new(10.0, 2.0, -5.0), 0.7, -0.2, 16.0 / 9.0);
+        assert_eq!(c.view(), glam::camera::rh::view::look_to_mat4(c.eye, c.forward(), Vec3::Y));
+        let (sy, cy) = c.yaw.sin_cos();
+        assert_eq!(c.right(), Vec3::new(cy, 0.0, sy));
+    }
+
+    #[test]
+    fn roll_turns_the_image_about_the_view_axis() {
+        let level = Camera::new(Vec3::ZERO, 0.0, 0.0, 1.0);
+        let rolled = Camera { roll: std::f32::consts::FRAC_PI_2, ..level };
+        // looking north: a point to the east is right of centre level; rolled a
+        // quarter turn clockwise (right side down) it is at the top.
+        let p = Vec3::new(1.0, 0.0, -10.0);
+        let a = clip(&level, p);
+        let b = clip(&rolled, p);
+        assert!(a.x > 0.05 && a.y.abs() < 1e-5, "{a}");
+        assert!(b.y > 0.05 && b.x.abs() < 1e-5, "{b}");
+        // the view axis does not move, the basis stays orthonormal.
+        assert!((rolled.forward() - level.forward()).length() < 1e-6);
+        assert!(rolled.right().dot(rolled.up()).abs() < 1e-6 && rolled.right().dot(rolled.forward()).abs() < 1e-6);
+        assert!((rolled.right().length() - 1.0).abs() < 1e-5 && (rolled.up().length() - 1.0).abs() < 1e-5);
+    }
 }

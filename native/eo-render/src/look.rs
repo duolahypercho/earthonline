@@ -1059,7 +1059,8 @@ impl LookGpu {
         let m = &f.model;
         let fld = &m.field;
         let fog = f.fog_color(fwd.x as f64, fwd.z as f64);
-        let rot = glam::camera::rh::view::look_to_mat4(glam::Vec3::ZERO, fwd, glam::Vec3::Y);
+        // (a rolled photo camera's up; world up otherwise, as before)
+        let rot = glam::camera::rh::view::look_to_mat4(glam::Vec3::ZERO, fwd, if cam.roll == 0.0 { glam::Vec3::Y } else { cam.up() });
         let inv = (cam.proj() * rot).inverse();
         let g = m.grade;
         let look = eo_look::look::LOOK;
@@ -1322,8 +1323,41 @@ impl LookGpu {
         self.post.lock().unwrap().as_ref().map(|t| t.size.0 as u64 * t.size.1 as u64 * 8).unwrap_or(0)
     }
 
+    /// photo mode: what post would read this frame (the HDR scene or the resolved history).
+    pub(crate) fn post_source_view(&self, hdr: &wgpu::TextureView) -> wgpu::TextureView {
+        match self.post_source.load(std::sync::atomic::Ordering::Relaxed) {
+            0 => hdr.clone(),
+            n => self.sky.history_view((n - 1) as usize).unwrap_or_else(|| hdr.clone()),
+        }
+    }
+
+    /// photo mode: the bloom post would add (None with the bloom stage off or no targets yet).
+    pub(crate) fn bloom_view(&self) -> Option<wgpu::TextureView> {
+        if self.sky.options().bloom { self.sky.bloom_view() } else { None }
+    }
+
+    /// photo mode: a post bind group reading `src`, with `bloom` in the bloom's place.
+    pub(crate) fn post_bind_group(&self, src: &wgpu::TextureView, bloom: &wgpu::TextureView) -> wgpu::BindGroup {
+        self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("post-bg-photo"),
+            layout: &self.post_bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: self.look_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(src) },
+                wgpu::BindGroupEntry { binding: 2, resource: self.sky.uniform.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(bloom) },
+                wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::Sampler(self.sky.linear_sampler()) },
+            ],
+        })
+    }
+
     /// HDR target -> output.
     pub fn encode_post(&self, enc: &mut wgpu::CommandEncoder, out: &wgpu::TextureView, ts: Option<(&wgpu::QuerySet, u32)>) {
+        self.encode_post_with(enc, out, ts, None);
+    }
+
+    /// HDR target -> output, or `photo` (photo mode's bind group) -> output.
+    pub fn encode_post_with(&self, enc: &mut wgpu::CommandEncoder, out: &wgpu::TextureView, ts: Option<(&wgpu::QuerySet, u32)>, photo: Option<&wgpu::BindGroup>) {
         let p = self.post.lock().unwrap();
         let t = p.as_ref().expect("hdr_target before encode_post");
         let tw = ts.map(|(q, b)| wgpu::RenderPassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b + Q_POST), end_of_pass_write_index: Some(b + Q_POST + 1) });
@@ -1342,7 +1376,10 @@ impl LookGpu {
         });
         pass.set_pipeline(&self.post_pipeline);
         let src = self.post_source.load(std::sync::atomic::Ordering::Relaxed) as usize; // sky
-        pass.set_bind_group(0, &t.bind[src.min(2)], &[]);
+        match photo {
+            Some(bg) => pass.set_bind_group(0, bg, &[]),
+            None => pass.set_bind_group(0, &t.bind[src.min(2)], &[]),
+        }
         pass.draw(0..3, 0..1);
     }
 

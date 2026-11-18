@@ -132,7 +132,7 @@ fn read_poses(p: &Path) -> Result<Vec<(String, Camera, f64, String)>> {
             let e = &p["eye"];
             (
                 p["name"].as_str().unwrap_or("pose").to_string(),
-                Camera { eye: Vec3::new(f(&e[0]), f(&e[1]), f(&e[2])), yaw: f(&p["yaw"]), pitch: f(&p["pitch"]), fov_y_deg: f(&p["fov_y_deg"]), near: f(&p["near"]), far: f(&p["far"]), aspect: f(&p["aspect"]), jitter: [0.0; 2] },
+                Camera { eye: Vec3::new(f(&e[0]), f(&e[1]), f(&e[2])), yaw: f(&p["yaw"]), pitch: f(&p["pitch"]), fov_y_deg: f(&p["fov_y_deg"]), near: f(&p["near"]), far: f(&p["far"]), aspect: f(&p["aspect"]), jitter: [0.0; 2], roll: 0.0 },
                 p["hour"].as_f64().unwrap_or(12.0),
                 p["what"].as_str().unwrap_or("").to_string(),
             )
