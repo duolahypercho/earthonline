@@ -142,6 +142,52 @@ pub struct Inferred {
     pub clock_hour: f64,
 }
 
+/// The second pass's proportions and finishes (`detail` in the spec; INFERRED
+/// unless named): drawn while `features::ferry_building_detail` is on.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Detail {
+    /// The ashlar scan's tile and its courses (polyhaven-sandstone), and the course it is drawn at.
+    pub scan_tile_m: f64,
+    pub scan_courses_per_tile: f64,
+    pub ashlar_course_m: f64,
+    /// The scan's variation kept (its wall is rough-dressed; the front's sandstone is rubbed smooth).
+    pub ashlar_contrast: f64,
+    pub upper_reveal_m: f64,
+    /// A reveal's tone where it meets the glass (its face edge is 1): the sky it sees falls off with depth.
+    pub reveal_deep_tone: f64,
+    pub rustication_proud_m: f64,
+    pub rustication_joint_m: f64,
+    /// The rusticated piers' tone at their foot (splash and grime), rising to 1 over the lowest courses.
+    pub rustication_ground_tone: f64,
+    pub keystone_proud_m: f64,
+    pub modillion_pitch_m: f64,
+    pub modillion_width_m: f64,
+    pub modillion_height_m: f64,
+    pub crown_mould_m: f64,
+    pub plinth_m: f64,
+    pub plinth_proud_m: f64,
+    pub plinth_linear: [f64; 3],
+    /// The plinth's tone where it meets the paving (the contact occlusion), rising to 1 at its top.
+    pub plinth_contact_tone: f64,
+    /// Rain-washed dirt under the cornice and the sills: the darkest tone, fading to 1.
+    pub weather_tone: f64,
+    pub streak_length_m: f64,
+    pub balustrade_m: f64,
+    pub baluster_pitch_m: f64,
+    pub baluster_diameter_m: f64,
+    pub urn_m: f64,
+    /// The gallery shops' lit interiors seen through their glass: the spread of their tone.
+    pub shop_tone_spread: [f64; 2],
+}
+
+impl Detail {
+    /// The ashlar scan's repeat scale: its course drawn at `ashlar_course_m`.
+    pub fn ashlar_scale(&self) -> f64 {
+        self.ashlar_course_m / (self.scan_tile_m / self.scan_courses_per_tile)
+    }
+}
+
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Spec {
@@ -152,6 +198,16 @@ pub struct Spec {
     pub body: Body,
     pub stone: Stone,
     pub inferred: Inferred,
+    pub detail: Detail,
+}
+
+/// The stone finish with the detail pass: the kit finish's scan at the
+/// ashlar's course and the dressed face's evenness (`<kit>*<scale>~<contrast>`:
+/// eo-render draws the finish with its texture repeat that many times larger
+/// and its scan's variation around its mean times the contrast).
+pub fn detail_stone_kit() -> &'static str {
+    static K: OnceLock<String> = OnceLock::new();
+    K.get_or_init(|| format!("{}*{:.3}~{:.3}", spec().stone.kit, spec().detail.ashlar_scale(), spec().detail.ashlar_contrast))
 }
 
 /// The spec compiled into the crate.
@@ -210,6 +266,32 @@ fn dot(a: V3, b: V3) -> f64 {
 }
 fn mul(c: Rgb, k: f64) -> Rgb {
     [c[0] * k, c[1] * k, c[2] * k]
+}
+
+/// A wall's face in world terms: how far a world point stands out of it.
+#[derive(Clone, Copy)]
+struct WRef {
+    o: V3,
+    n: V3,
+}
+
+impl WRef {
+    /// How far `p` stands out of the face (the wall's `d`).
+    fn d(&self, p: V3) -> f64 {
+        (p[0] - self.o[0]) * self.n[0] + (p[2] - self.o[2]) * self.n[2]
+    }
+}
+
+/// A stable hash of a plan point to [0, 1) (bay-to-bay variation).
+fn h01(x: f64, z: f64, salt: i64) -> f64 {
+    let (a, b) = ((x * 10.0).round() as i64, (z * 10.0).round() as i64);
+    let h = (a.wrapping_mul(73_856_093) ^ b.wrapping_mul(19_349_663) ^ salt.wrapping_mul(83_492_791)).rem_euclid(10_007);
+    h as f64 / 10_007.0
+}
+
+fn smooth(t: f64) -> f64 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }
 
 /// The sky a face sees, baked into its vertex colour: a face turned down
@@ -354,19 +436,50 @@ struct B {
     f: Frame,
     m: Vec<MeshArrays>,
     stone: Rgb,
+    /// The second pass (None: the first pass, `--no-ferry-building-detail`).
+    dt: Option<Detail>,
 }
 
 impl B {
     fn mesh(&mut self, k: F) -> &mut MeshArrays {
         &mut self.m[k as usize]
     }
+    /// The vertex count of a finish's mesh (a mark for `shade_from`).
+    fn mark(&self, k: F) -> usize {
+        self.m[k as usize].positions.len() / 3
+    }
+    /// Multiply the colour of every vertex of finish `k` pushed since `from` by `f(world position)`.
+    fn shade_from(&mut self, k: F, from: usize, f: &dyn Fn(V3) -> f64) {
+        let m = &mut self.m[k as usize];
+        for v in from..m.positions.len() / 3 {
+            let s = f([m.positions[3 * v], m.positions[3 * v + 1], m.positions[3 * v + 2]]);
+            for c in 0..3 {
+                m.colors[3 * v + c] *= s;
+            }
+        }
+    }
+    /// Wall `w`'s face in world terms, to read a world point's (s, y, d) back.
+    fn wref(&self, w: &Wall) -> WRef {
+        WRef { o: self.p(w, 0.0, 0.0, 0.0), n: self.wn(w, 1.0) }
+    }
+    /// The lit shop interior's tone multiplier of a bay at `s` on `w` (1 with the first pass).
+    fn shop_tone(&self, w: &Wall, s: f64) -> f64 {
+        match &self.dt {
+            Some(d) => {
+                let c = self.p(w, s, 0.0, 0.0);
+                let [lo, hi] = d.shop_tone_spread;
+                lo + (hi - lo) * h01(c[0], c[2], 7)
+            }
+            None => 1.0,
+        }
+    }
     fn tone(&self, k: F) -> Rgb {
         match k {
             F::Stone => self.stone,
             // the trim in the stone's tone over its smooth bake.
             F::Trim => [self.stone[0] * 1.02, self.stone[1] * 1.02, self.stone[2] * 1.02],
-            // the granite-grey base course (INFERRED: darker than the ashlar above).
-            F::Plinth => [0.62, 0.62, 0.63],
+            // the granite-grey base course (INFERRED: darker than the ashlar above; the second pass's own tone).
+            F::Plinth => self.dt.as_ref().map(|d| d.plinth_linear).unwrap_or([0.62, 0.62, 0.63]),
             F::Dark => [0.012, 0.012, 0.013],
             // the room behind the glass in daylight (INFERRED: a dim interior seen through it).
             F::Glass => [0.028, 0.031, 0.034],
@@ -563,7 +676,15 @@ impl B {
         }
         // the keystone, and the impost blocks the band springs from.
         let kw = (o.w * 0.11).clamp(0.3, 0.7);
-        self.wbox(F::Trim, w, [o.s - kw / 2.0, o.s + kw / 2.0], [o.top() - band * 0.4, o.top() + band * 1.25], [d, d + proud + 0.06], false, true, 1.0);
+        match self.dt.as_ref().map(|t| t.keystone_proud_m) {
+            Some(kp) => {
+                // a projecting keystone that casts its own shadow: its foot in the
+                // band, its head over it, a capping slab a little wider on top.
+                self.wbox(F::Trim, w, [o.s - kw / 2.0, o.s + kw / 2.0], [o.top() - band * 0.7, o.top() + band * 1.5], [d, d + kp], false, true, 1.0);
+                self.wbox(F::Trim, w, [o.s - kw / 2.0 - 0.05, o.s + kw / 2.0 + 0.05], [o.top() + band * 1.5, o.top() + band * 1.5 + 0.1], [d, d + kp + 0.04], false, true, 1.0);
+            }
+            None => self.wbox(F::Trim, w, [o.s - kw / 2.0, o.s + kw / 2.0], [o.top() - band * 0.4, o.top() + band * 1.25], [d, d + proud + 0.06], false, true, 1.0),
+        }
         for s in [o.l() - band, o.rt()] {
             self.wbox(F::Trim, w, [s, s + band], [o.spring - band * 0.7, o.spring], [d, d + proud], false, true, 1.0);
         }
@@ -608,14 +729,21 @@ impl B {
     /// An opening complete: reveal, what is behind it, archivolt and sill trim.
     #[allow(clippy::too_many_arguments)]
     fn opening(&mut self, w: &Wall, o: &Op, depth: f64, back: Back, band: f64, sill_trim: bool, reveal_sill: bool) {
+        let at = self.mark(F::Stone);
         self.reveal(F::Stone, w, o, 0.0, -depth, reveal_sill, 0.8);
+        if let Some(deep) = self.dt.as_ref().map(|d| d.reveal_deep_tone) {
+            // the sky a reveal sees falls off into the wall: darkest at the glass.
+            let r = self.wref(w);
+            self.shade_from(F::Stone, at, &move |p| 1.0 - (1.0 - deep) * smooth(-r.d(p) / depth));
+        }
         match back {
             Back::Glass => {
                 self.pane(F::Glass, w, o, -depth, 1.0);
                 self.mullions(w, o, -depth, false);
             }
             Back::Shop => {
-                self.pane(F::Shop, w, o, -depth, 1.0);
+                let k = self.shop_tone(w, o.s);
+                self.pane(F::Shop, w, o, -depth, k);
                 self.mullions(w, o, -depth, true);
             }
             Back::Void => self.pane(F::Dark, w, o, -depth, 1.0),
@@ -627,6 +755,174 @@ impl B {
         if sill_trim {
             self.wbox(F::Trim, w, [o.l() - 0.18, o.rt() + 0.18], [o.sill - 0.16, o.sill], [0.0, 0.16], false, true, 1.0);
         }
+    }
+}
+
+/// The second pass's pieces (each a no-op without `dt`).
+impl B {
+    /// The base course: granite-grey, proud of the wall, darkest where it meets
+    /// the paving (the contact occlusion) and with a weathered top course;
+    /// over `spans` along `w` (the wall between its ground openings).
+    fn plinth(&mut self, w: &Wall, spans: &[[f64; 2]], foot: f64, first: (f64, f64)) {
+        let Some(d) = self.dt.clone() else {
+            for s in spans {
+                self.wbox(F::Plinth, w, *s, [foot, first.0], [0.0, first.1], false, false, 1.0);
+            }
+            return;
+        };
+        let (h, pr) = (d.plinth_m, d.plinth_proud_m);
+        let at = self.mark(F::Plinth);
+        for s in spans {
+            // below the paving (its walls go down past the lowest ground) and the visible course
+            self.wbox(F::Plinth, w, *s, [foot, 0.0], [0.0, pr], false, false, 1.0);
+            self.wbox(F::Plinth, w, *s, [0.0, h - 0.1], [0.0, pr], false, false, 1.0);
+            self.wbox(F::Plinth, w, [s[0] - 0.03, s[1] + 0.03], [h - 0.1, h], [0.0, pr + 0.04], false, true, 1.0);
+        }
+        let base = self.f.base;
+        let c = d.plinth_contact_tone;
+        self.shade_from(F::Plinth, at, &move |p| c + (1.0 - c) * smooth((p[1] - base) / (h * 0.8)));
+    }
+
+    /// Banded rustication on the ground storey's piers: courses of
+    /// `ashlar_course_m` proud of the wall, a channel joint between each, from
+    /// the plinth up to `top`, on `spans` along `w`; the lowest courses carry the street's splash.
+    fn rustication(&mut self, w: &Wall, spans: &[[f64; 2]], top: f64) {
+        let Some(d) = self.dt.clone() else { return };
+        let y0 = d.plinth_m;
+        let n = ((top - y0) / d.ashlar_course_m).round().max(1.0) as usize;
+        let c = (top - y0) / n as f64;
+        let at = self.mark(F::Stone);
+        for s in spans {
+            if s[1] - s[0] < 0.3 {
+                continue;
+            }
+            for k in 0..n {
+                let (a, b) = (y0 + c * k as f64 + d.rustication_joint_m / 2.0, y0 + c * (k + 1) as f64 - d.rustication_joint_m / 2.0);
+                self.wbox(F::Stone, w, *s, [a, b.min(top)], [0.0, d.rustication_proud_m], false, true, 1.0);
+            }
+        }
+        let base = self.f.base;
+        let g = d.rustication_ground_tone;
+        self.shade_from(F::Stone, at, &move |p| g + (1.0 - g) * smooth((p[1] - base - y0) / 1.6));
+    }
+
+    /// Modillions under a cornice's corona (`soffit`, projecting `proj`) from
+    /// the bed mould (`bed` out) along `w` over `s`, and a crown moulding on
+    /// the corona at `crown_y`.
+    fn modillions(&mut self, w: &Wall, s: [f64; 2], soffit: f64, bed: f64, proj: f64) {
+        let Some(d) = self.dt.clone() else { return };
+        let n = ((s[1] - s[0]) / d.modillion_pitch_m).floor().max(1.0) as usize;
+        let p = (s[1] - s[0]) / n as f64;
+        for k in 0..n {
+            let c = s[0] + p * (k as f64 + 0.5);
+            let hw = d.modillion_width_m / 2.0;
+            // the bracket and its scrolled foot (a smaller block under its front)
+            self.wbox(F::Trim, w, [c - hw, c + hw], [soffit - d.modillion_height_m * 0.55, soffit], [bed, proj - 0.1], false, true, 1.0);
+            self.wbox(F::Trim, w, [c - hw * 0.8, c + hw * 0.8], [soffit - d.modillion_height_m, soffit - d.modillion_height_m * 0.55], [bed, bed + 0.16], false, true, 1.0);
+        }
+    }
+
+    /// The cyma on a corona over `s` at `y`: a lip that throws a second shadow line.
+    fn crown(&mut self, w: &Wall, s: [f64; 2], y: f64, proj: f64) {
+        let Some(d) = self.dt.clone() else { return };
+        self.wbox(F::Trim, w, s, [y, y + d.crown_mould_m], [-0.3, proj + 0.06], false, true, 1.0);
+    }
+
+    /// Rain-washed dirt as stain sheets a few millimetres proud of a face, in
+    /// the face's own finish (the scan carries on across them, only darker):
+    /// a band on `w` over `s` from `y_top` (darkest, `weather_tone`) fading out
+    /// down to `y_bot`, at `d` out of the wall.
+    fn stain(&mut self, k: F, w: &Wall, s: [f64; 2], y_top: f64, y_bot: f64, d: f64, strength: f64) {
+        let Some(dt) = self.dt.clone() else { return };
+        if !(s[1] - s[0] > 0.02 && y_top - y_bot > 0.02) {
+            return;
+        }
+        let dark = 1.0 - (1.0 - dt.weather_tone) * strength;
+        let col = self.tone(k);
+        let want = self.wn(w, 1.0);
+        let d = d + 0.004;
+        let q = [self.p(w, s[0], y_bot, d), self.p(w, s[1], y_bot, d), self.p(w, s[1], y_top, d), self.p(w, s[0], y_top, d)];
+        let m = self.mesh(k);
+        let v = m.positions.len() / 3;
+        quad(m, q[0], q[1], q[2], q[3], col, want);
+        // the two vertices at y_top darker than the two at y_bot
+        for i in v..v + 4 {
+            if (m.positions[3 * i + 1] - q[2][1]).abs() < 1e-6 {
+                for c in 0..3 {
+                    m.colors[3 * i + c] *= dark;
+                }
+            }
+        }
+    }
+
+    /// Streaks under an opening's sill: two or three narrow runs of dirt from
+    /// `y_top` down `len`, their widths and strengths drawn per opening.
+    fn sill_streaks(&mut self, k: F, w: &Wall, o: &Op, y_top: f64, len: f64, d: f64) {
+        if self.dt.is_none() {
+            return;
+        }
+        let c = self.p(w, o.s, 0.0, 0.0);
+        for (i, x) in [-0.3, 0.02, 0.31].iter().enumerate() {
+            let h = h01(c[0], c[2], 11 + i as i64);
+            if i == 1 && h < 0.4 {
+                continue;
+            }
+            let width = 0.14 + 0.22 * h;
+            let s = o.s + x * o.w + (h - 0.5) * 0.3;
+            self.stain(k, w, [s - width / 2.0, s + width / 2.0], y_top, y_top - len * (0.55 + 0.45 * h), d, 0.6 + 0.4 * h);
+        }
+    }
+
+    /// A balustrade round the square of half side `h` about the tower's plan
+    /// centre `tc` (frame), standing at `y`: plinth and top rails, balusters,
+    /// corner pedestals with urns.
+    fn balustrade(&mut self, tc: [f64; 2], h: f64, y: f64, urns: bool) {
+        let Some(d) = self.dt.clone() else { return };
+        let ht = d.balustrade_m;
+        let walls = [
+            Wall::new([tc[0] - h, tc[1] + h], [tc[0] + h, tc[1] + h], [0.0, 1.0]),
+            Wall::new([tc[0] + h, tc[1] + h], [tc[0] + h, tc[1] - h], [1.0, 0.0]),
+            Wall::new([tc[0] + h, tc[1] - h], [tc[0] - h, tc[1] - h], [0.0, -1.0]),
+            Wall::new([tc[0] - h, tc[1] - h], [tc[0] - h, tc[1] + h], [-1.0, 0.0]),
+        ];
+        let col = self.tone(F::Trim);
+        let base = self.f.base;
+        let r = d.baluster_diameter_m / 2.0;
+        let ped = 0.5;
+        for w in walls {
+            self.wbox(F::Trim, &w, [0.0, w.len], [y, y + 0.16], [-0.17, 0.17], true, false, 1.0);
+            self.wbox(F::Trim, &w, [0.0, w.len], [y + ht - 0.15, y + ht], [-0.19, 0.19], true, true, 1.0);
+            let run = w.len - 2.0 * ped;
+            let n = (run / d.baluster_pitch_m).floor().max(1.0) as usize;
+            for k in 0..n {
+                let s = ped + run * (k as f64 + 0.5) / n as f64;
+                let c = self.p(&w, s, 0.0, 0.0);
+                let (y0, y1) = (y + 0.16, y + ht - 0.15);
+                let prof = [[r * 0.7, y0], [r * 0.75, y0 + 0.06], [r, y0 + (y1 - y0) * 0.3], [r * 0.55, y0 + (y1 - y0) * 0.72], [r * 0.6, y1 - 0.05], [r * 0.75, y1]];
+                let prof: Vec<[f64; 2]> = prof.iter().map(|[a, yy]| [*a, base + yy]).collect();
+                self.mesh(F::Trim).lathe(c[0], c[2], &prof, 6, col, None, None);
+            }
+            // the pedestal at the wall's start corner (each corner once)
+            self.wbox(F::Trim, &w, [-ped / 2.0, ped / 2.0], [y, y + ht + 0.08], [-ped / 2.0, ped / 2.0], true, true, 1.0);
+            if urns {
+                let c = self.p(&w, 0.0, 0.0, 0.0);
+                let u = d.urn_m;
+                let y0 = y + ht + 0.08;
+                let prof = [[0.16, y0], [0.12, y0 + 0.12], [0.2, y0 + u * 0.35], [0.24, y0 + u * 0.55], [0.13, y0 + u * 0.75], [0.07, y0 + u * 0.85], [0.1, y0 + u * 0.9], [0.0, y0 + u]];
+                let prof: Vec<[f64; 2]> = prof.iter().map(|[a, yy]| [*a, base + yy]).collect();
+                self.mesh(F::Trim).lathe(c[0], c[2], &prof, 8, col, None, None);
+            }
+        }
+    }
+
+    /// A moulded surround (architrave) round a flat opening, `bw` wide, `proud` out.
+    fn surround(&mut self, w: &Wall, o: &Op, bw: f64, proud: f64) {
+        if self.dt.is_none() {
+            return;
+        }
+        self.wbox(F::Trim, w, [o.l() - bw, o.l()], [o.sill, o.top()], [0.0, proud], false, false, 1.0);
+        self.wbox(F::Trim, w, [o.rt(), o.rt() + bw], [o.sill, o.top()], [0.0, proud], false, false, 1.0);
+        self.wbox(F::Trim, w, [o.l() - bw, o.rt() + bw], [o.top(), o.top() + bw], [0.0, proud], false, true, 1.0);
     }
 }
 
@@ -698,7 +994,10 @@ pub fn build_with(level_at: &dyn Fn(f64, f64) -> f64, paved_at: &dyn Fn(f64, f64
         "cast-stone" => "cast-stone",
         _ => "limestone-ashlar",
     };
-    let mut b = B { f, m: PARTS.iter().map(|(k, ..)| MeshArrays::new(&format!("ferry-building:{k}"))).collect(), stone: sp.stone.tint_linear };
+    let dt = crate::features::ferry_building_detail().then(|| sp.detail.clone());
+    let mut b = B { f, m: PARTS.iter().map(|(k, ..)| MeshArrays::new(&format!("ferry-building:{k}"))).collect(), stone: sp.stone.tint_linear, dt: dt.clone() };
+    // the upper windows' reveal (the second pass sets the glazing deeper)
+    let upper_reveal = dt.as_ref().map(|d| d.upper_reveal_m).unwrap_or(inf.upper_reveal_m);
 
     let pitch = {
         // the surveyed bay pitch: the record's surveyed length over its 22 nave arches.
@@ -738,15 +1037,21 @@ pub fn build_with(level_at: &dyn Fn(f64, f64) -> f64, paved_at: &dyn Fn(f64, f64
             b.opening(&w, o, wall_t, back, 0.42, false, false);
         }
         for o in &upper {
-            b.opening(&w, o, inf.upper_reveal_m, Back::Glass, 0.3, true, true);
+            b.opening(&w, o, upper_reveal, Back::Glass, 0.3, true, true);
+            // dirt washed off the sill, down to the string course and over its face
+            b.sill_streaks(F::Stone, &w, o, o.sill - 0.16, o.sill - 0.16 - inf.string_course[1], 0.0);
+            b.sill_streaks(F::Trim, &w, o, inf.string_course[1], inf.string_course[1] - inf.string_course[0], 0.25);
         }
-        // the base course between the arches
+        // the base course between the arches, and the rusticated piers over it
+        let mut spans = Vec::new();
         let mut cur = 0.0;
         for o in &arcade {
-            b.wbox(F::Plinth, &w, [cur, o.l()], [foot, inf.plinth_m], [0.0, 0.12], false, false, 1.0);
+            spans.push([cur, o.l()]);
             cur = o.rt();
         }
-        b.wbox(F::Plinth, &w, [cur, w.len], [foot, inf.plinth_m], [0.0, 0.12], false, false, 1.0);
+        spans.push([cur, w.len]);
+        b.plinth(&w, &spans, foot, (inf.plinth_m, 0.12));
+        b.rustication(&w, &spans, inf.arcade_spring_m);
         // string course, pilasters with their capitals, frieze band, cornice, parapet, coping
         let (sc0, sc1) = (inf.string_course[0], inf.string_course[1]);
         b.wbox(F::Trim, &w, ext(0.25), [sc0, sc1], [0.0, 0.25], false, true, 1.0);
@@ -757,11 +1062,18 @@ pub fn build_with(level_at: &dyn Fn(f64, f64) -> f64, paved_at: &dyn Fn(f64, f64
         for e in edges {
             b.wbox(F::Trim, &w, [e - pw / 2.0, e + pw / 2.0], [sc1, inf.frieze[0] - 0.3], [0.0, 0.14], false, false, 1.0);
             b.wbox(F::Trim, &w, [e - pw / 2.0 - 0.1, e + pw / 2.0 + 0.1], [inf.frieze[0] - 0.3, inf.frieze[0]], [0.0, 0.22], false, true, 1.0);
+            let k = h01(e, w.a[1] + w.len, 3);
+            b.stain(F::Trim, &w, [e - pw / 2.0, e + pw / 2.0], inf.frieze[0] - 0.3, inf.frieze[0] - 0.3 - 1.2 - 1.6 * k, 0.14, 0.7 + 0.3 * k);
         }
         b.wbox(F::Trim, &w, ext(0.3), [inf.frieze[0], inf.frieze[0] + 0.18], [0.0, 0.18], false, true, 1.0);
         b.wbox(F::Trim, &w, ext(0.45), [c0, c0 + (c1 - c0) * 0.45], [0.0, 0.45], false, true, 1.0);
         let pr = inf.cornice_projection_m;
         b.wbox(F::Trim, &w, ext(pr), [c0 + (c1 - c0) * 0.45, c1], [0.0, pr], false, true, 1.0);
+        // the second pass: modillions under the corona, its crown moulding, and the
+        // dirt the cornice's drip washes down the frieze and the pilasters' heads.
+        b.modillions(&w, [0.3, w.len - 0.3], c0 + (c1 - c0) * 0.45, 0.45, pr);
+        b.crown(&w, ext(pr + 0.06), c1, pr);
+        b.stain(F::Stone, &w, [0.0, w.len], c0, upper.first().map(|o| o.top() + 0.05).unwrap_or(c0 - 1.0), 0.0, 1.0);
         b.wbox(F::Stone, &w, [0.0, w.len], [c1, top - 0.12], [-0.5, 0.0], true, false, 1.0);
         b.wbox(F::Trim, &w, ext(0.1), [top - 0.12, top], [-0.6, 0.1], true, true, 1.0);
         // the gallery behind the arcade
@@ -782,7 +1094,8 @@ pub fn build_with(level_at: &dyn Fn(f64, f64) -> f64, paved_at: &dyn Fn(f64, f64
             b.panel(F::Stone, &back_wall, [g0, g1], [0.0, ceil], 0.0, 1.0, &shops, 0.62);
             for o in &shops {
                 b.reveal(F::Stone, &back_wall, o, 0.0, -0.25, false, 0.55);
-                b.pane(F::Shop, &back_wall, o, -0.25, 1.0);
+                let k = b.shop_tone(&back_wall, o.s);
+                b.pane(F::Shop, &back_wall, o, -0.25, k);
                 b.mullions(&back_wall, o, -0.25, true);
             }
             // its end walls
@@ -836,21 +1149,30 @@ pub fn build_with(level_at: &dyn Fn(f64, f64) -> f64, paved_at: &dyn Fn(f64, f64
             b.opening(&w, o, d, Back::Shop, 0.5, false, false);
         }
         for o in &upper {
-            b.opening(&w, o, inf.upper_reveal_m, Back::Glass, 0.32, true, true);
+            b.opening(&w, o, upper_reveal, Back::Glass, 0.32, true, true);
+            b.sill_streaks(F::Stone, &w, o, o.sill - 0.16, 1.2, 0.0);
         }
         for o in &attic {
-            b.opening(&w, o, 0.3, Back::Glass, 0.0, true, true);
+            b.opening(&w, o, if b.dt.is_some() { 0.45 } else { 0.3 }, Back::Glass, 0.0, true, true);
+            b.surround(&w, o, 0.18, 0.1);
         }
+        let mut spans = Vec::new();
         let mut cur = 0.0;
         for o in &ground {
-            b.wbox(F::Plinth, &w, [cur, o.l()], [foot, inf.plinth_m], [0.0, 0.14], false, false, 1.0);
+            spans.push([cur, o.l()]);
             cur = o.rt();
         }
-        b.wbox(F::Plinth, &w, [cur, w.len], [foot, inf.plinth_m], [0.0, 0.14], false, false, 1.0);
+        spans.push([cur, w.len]);
+        b.plinth(&w, &spans, foot, (inf.plinth_m, 0.14));
+        b.rustication(&w, &spans, inf.pavilion_arch_spring_m);
         // string course over the entrances, the entablature, cornice, attic cornice, parapet
         b.wbox(F::Trim, &w, [-0.3, w.len + 0.3], [scy, scy + 0.5], [0.0, 0.3], false, true, 1.0);
         b.wbox(F::Trim, &w, [-0.45, w.len + 0.45], [pc0, pc0 + 0.35], [0.0, 0.45], false, true, 1.0);
         b.wbox(F::Trim, &w, [-1.0, w.len + 1.0], [pc0 + 0.35, pc1], [0.0, 1.0], false, true, 1.0);
+        b.modillions(&w, [0.4, w.len - 0.4], pc0 + 0.35, 0.45, 1.0);
+        b.crown(&w, [-1.06, w.len + 1.06], pc1, 1.0);
+        let heads = upper.iter().map(|o| o.top()).fold(scy + 0.5, f64::max);
+        b.stain(F::Stone, &w, [0.0, w.len], pc0, heads + 0.05, 0.0, 1.0);
         b.wbox(F::Trim, &w, [-0.5, w.len + 0.5], [ptop - 0.6, ptop - 0.3], [0.0, 0.5], false, true, 1.0);
         b.wbox(F::Stone, &w, [0.0, w.len], [ptop - 0.3, ptop], [-0.5, 0.0], true, false, 1.0);
         // the paired Corinthian columns either side of the main bays, on their pedestals
@@ -883,15 +1205,16 @@ pub fn build_with(level_at: &dyn Fn(f64, f64) -> f64, paved_at: &dyn Fn(f64, f64
         let scy = inf.pavilion_arch_spring_m + inf.pavilion_arch_width_m / 2.0 + 0.25;
         b.panel_bands(F::Stone, &w, [0.0, w.len], [foot, ptop - 0.3], &[scy], 0.0, &ops, 1.0);
         b.opening(&w, &ops[0], wall_t, Back::Shop, 0.42, false, false);
-        b.opening(&w, &ops[1], inf.upper_reveal_m, Back::Glass, 0.3, true, true);
+        b.opening(&w, &ops[1], upper_reveal, Back::Glass, 0.3, true, true);
         let (pc0, pc1) = (inf.pavilion_cornice[0], inf.pavilion_cornice[1]);
         b.wbox(F::Trim, &w, ext(0.3), [scy, scy + 0.5], [0.0, 0.3], false, true, 1.0);
         b.wbox(F::Trim, &w, ext(0.45), [pc0, pc0 + 0.35], [0.0, 0.45], false, true, 1.0);
         b.wbox(F::Trim, &w, ext(1.0), [pc0 + 0.35, pc1], [0.0, 1.0], false, true, 1.0);
         b.wbox(F::Trim, &w, ext(0.5), [ptop - 0.6, ptop - 0.3], [0.0, 0.5], false, true, 1.0);
         b.wbox(F::Stone, &w, [0.0, w.len], [ptop - 0.3, ptop], [-0.5, 0.0], true, false, 1.0);
-        b.wbox(F::Plinth, &w, [0.0, ops[0].l()], [foot, inf.plinth_m], [0.0, 0.14], false, false, 1.0);
-        b.wbox(F::Plinth, &w, [ops[0].rt(), w.len], [foot, inf.plinth_m], [0.0, 0.14], false, false, 1.0);
+        let spans = [[0.0, ops[0].l()], [ops[0].rt(), w.len]];
+        b.plinth(&w, &spans, foot, (inf.plinth_m, 0.14));
+        b.rustication(&w, &spans, inf.pavilion_arch_spring_m);
     }
     {
         let w = prear;
@@ -1060,9 +1383,10 @@ pub fn build_with(level_at: &dyn Fn(f64, f64) -> f64, paved_at: &dyn Fn(f64, f64
                 b.mesh(F::Frame).beam_up(p0, p1, wdt, 0.06, col, Some(up));
             }
         }
-        // the shaft's cornice
+        // the shaft's cornice, and the balustrade round the belfry's foot on it
         cbox(&mut b, F::Trim, h0 + 0.35, shaft_top - 0.6, shaft_top - 0.25);
         cbox(&mut b, F::Trim, h0 + 0.7, shaft_top - 0.25, shaft_top);
+        b.balustrade(tc, h0 + 0.42, shaft_top, true);
         // the upper stages: each with its openings (voids), corner piers and cornice
         let mut y = shaft_top;
         for (i, stg) in st.iter().enumerate().skip(1) {
@@ -1087,10 +1411,25 @@ pub fn build_with(level_at: &dyn Fn(f64, f64) -> f64, paved_at: &dyn Fn(f64, f64
                 for s0 in [-0.15, w.len - pier + 0.15] {
                     b.wbox(F::Stone, &w, [s0, s0 + pier], [y, stg.top_m - 0.4], [0.0, 0.15], false, false, 1.0);
                 }
+                if b.dt.is_some() && i == 3 {
+                    // the lantern's corners: an engaged column with base and capital at each
+                    let c = b.p(&w, -0.05, 0.0, 0.2);
+                    let base = b.f.base;
+                    let (y0, y1) = (y, stg.top_m - 0.4);
+                    let prof = [[0.36, y0], [0.36, y0 + 0.2], [0.27, y0 + 0.32], [0.25, y1 - 0.55], [0.3, y1 - 0.35], [0.38, y1 - 0.12], [0.38, y1]];
+                    let prof: Vec<[f64; 2]> = prof.iter().map(|[r, yy]| [*r, base + yy]).collect();
+                    let col = b.tone(F::Trim);
+                    b.mesh(F::Trim).lathe(c[0], c[2], &prof, 10, col, None, None);
+                }
             }
             cbox(&mut b, F::Trim, h + 0.25, stg.top_m - 0.4, stg.top_m - 0.15);
             cbox(&mut b, F::Trim, h + 0.45, stg.top_m - 0.15, stg.top_m);
-            if i == 1 {
+            if b.dt.is_some() {
+                // the second pass: a balustrade with corner urns at each setback up to the lantern
+                if i + 1 < st.len() && i <= 2 {
+                    b.balustrade(tc, h + 0.22, stg.top_m, true);
+                }
+            } else if i == 1 {
                 // the belfry's balustrade line on its cornice
                 cbox(&mut b, F::Trim, h + 0.35, stg.top_m, stg.top_m + 0.7);
             }
@@ -1177,7 +1516,7 @@ pub fn build_with(level_at: &dyn Fn(f64, f64) -> f64, paved_at: &dyn Fn(f64, f64
             continue;
         }
         triangles += mesh.triangles();
-        let kit = if *key == "stone" { Some(stone_kit) } else { *kit };
+        let kit = if *key == "stone" { Some(if dt.is_some() { detail_stone_kit() } else { stone_kit }) } else { *kit };
         parts.push(Part { key, kit, cast: *cast, footway: *footway, rough: *rough, metal: *metal, mesh });
     }
     Built { parts, base_y: f.base, length_m: length, depth_m: depth, bays: counts, triangles }
@@ -1201,6 +1540,23 @@ mod tests {
         for p in s.tower.stages.windows(2) {
             assert!(p[1].top_m > p[0].top_m && p[1].side_m < p[0].side_m);
         }
+    }
+
+    #[test]
+    fn the_detail_pass_adds_to_the_first_and_names_its_scaled_ashlar() {
+        crate::features::set_ferry_building_detail(false);
+        let a = build(&|_, _| 3.0);
+        crate::features::set_ferry_building_detail(true);
+        let b = build(&|_, _| 3.0);
+        assert!(b.triangles > a.triangles && b.triangles < 150_000, "{} -> {} triangles", a.triangles, b.triangles);
+        let kit = |x: &Built| x.parts.iter().find(|p| p.key == "stone").and_then(|p| p.kit).unwrap();
+        assert_eq!(kit(&a), "limestone-ashlar");
+        assert_eq!(kit(&b), detail_stone_kit());
+        // 0.6 m courses drawn from the scan's eleven over its 2 m tile.
+        assert!((spec().detail.ashlar_scale() - 3.3).abs() < 1e-9);
+        // the second pass's pieces stay on the building: nothing below its foot or over the flagstaff.
+        let (lo, hi) = b.parts.iter().flat_map(|p| p.mesh.positions.chunks_exact(3).map(|v| v[1] as f64)).fold((f64::MAX, f64::MIN), |(l, h), y| (l.min(y), h.max(y)));
+        assert!(lo > 3.0 - 6.0 && hi <= 3.0 + spec().tower.flagstaff_top_m + 1e-3, "{lo} .. {hi}");
     }
 
     #[test]

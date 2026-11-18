@@ -22,6 +22,7 @@ pub mod geometry;
 pub mod golden_gate;
 pub mod ground_cover;
 pub mod lights;
+pub mod palms;
 pub mod plaza;
 pub mod promenade;
 pub mod set;

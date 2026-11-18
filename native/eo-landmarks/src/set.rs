@@ -148,6 +148,40 @@ pub fn plain_material(roughness: f64, metalness: f64, env: &str) -> Material {
     Material { roughness, metalness, env_class: env.into(), surface: None, draw: None, wire: false, surface_options: None }
 }
 
+/// The quay guard with its second pass (waterfront.rs) as a landmark: its
+/// rails and posts near (casting) and as its far item, its pickets a wire
+/// draw near (the wire pass fades them to their coverage), all in the kit's
+/// painted steel (#6e7478, roughness 0.5) as vertex colour.
+fn railing_landmark_of(solid: Frozen, pickets: Frozen) -> Landmark {
+    let (mut mn, mut mx) = ([f32::MAX; 3], [f32::MIN; 3]);
+    for p in solid.positions.chunks_exact(3).chain(pickets.positions.chunks_exact(3)) {
+        for k in 0..3 {
+            mn[k] = mn[k].min(p[k]);
+            mx[k] = mx[k].max(p[k]);
+        }
+    }
+    let paint = plain_material(0.5, 0.0, "painted-metal");
+    let mut draws = vec![
+        Draw { key: "rails".into(), role: Role::Near, material: paint.clone(), mesh: solid.clone() },
+        Draw { key: "rails-far".into(), role: Role::Far, material: paint.clone(), mesh: solid },
+    ];
+    if !pickets.is_empty() {
+        draws.push(Draw { key: "pickets".into(), role: Role::Near, material: Material { wire: true, ..paint }, mesh: pickets });
+    }
+    Landmark {
+        id: "quay-railing".into(),
+        name: "The Embarcadero quay guard".into(),
+        version: "eo-native-quay-guard-v2".into(),
+        anchor: [((mn[0] + mx[0]) / 2.0) as f64, ((mn[2] + mx[2]) / 2.0) as f64],
+        box_min: mn,
+        box_max: mx,
+        draws,
+        colliders: Vec::new(),
+        stats: serde_json::json!({}),
+        build_ms: 0.0,
+    }
+}
+
 /// A frozen mesh with one flat face normal per triangle (no shared vertices).
 pub fn flat_mesh(name: &str, positions: &[[f64; 3]], indices: &[u32], colour: [f64; 3]) -> Frozen {
     let mut f = Frozen { name: name.into(), min_y: f64::INFINITY, max_y: f64::NEG_INFINITY, ..Default::default() };
@@ -359,6 +393,7 @@ impl LandmarkSet {
         let thick = crate::data::num(&fp.presentation, "deckThicknessM");
         let elev = |x: f64, z: f64| height_at(x, z).unwrap_or(0.0) + sh.road_lift;
         let mut structures = Vec::new();
+        let mut railing_landmark: Option<Landmark> = None;
         let (mut press, mut census, mut piers_built) = (None, None, (0usize, 0usize));
         let walls = if !opts.waterfront {
             let walls = crate::shore::city_walls(&sh.seawall, js.sea_level_y, &oracle, height_at, &top_at, js.sea_level_y - sh.bottom_below_sea_m, &rule, wall_colour);
@@ -382,7 +417,16 @@ impl LandmarkSet {
             let (edges, c) = wf::classify_edges(&oracle, height_at, js.sea_level_y, &rule, &piers);
             let wall_edges: Vec<[f64; 4]> = edges.iter().filter(|e| e.pier.is_none()).map(|e| [e.a[0], e.a[1], e.b[0], e.b[1]]).collect();
             // The crest on the quay's own top (renderer.js's crest over the highest ground within 8 m).
-            let crest_at = |x: f64, z: f64| wf::crest_ground(height_at, x, z) + sh.road_lift + sh.crest_above_road_m;
+            // With the guard's second pass the corridor's quay stands on that top at the drawn
+            // carpet's level (waterfront.rs `QUAY_APRON_LIFT_M`), not at the JS road lift.
+            let corridor_c = eo_data::groundscale::plan(crate::ferry_building::spec().tower.centre_surveyed);
+            let corridor_r = wf::RAILING_CORRIDOR_M * eo_data::groundscale::scale();
+            let corridor = crate::features::guard_detail() && crate::features::quay_railing();
+            let js_lift = sh.road_lift + sh.crest_above_road_m;
+            let crest_at = |x: f64, z: f64| {
+                let lift = if corridor { wf::quay_lift((x - corridor_c[0]).hypot(z - corridor_c[1]), corridor_r, js_lift) } else { js_lift };
+                wf::crest_ground(height_at, x, z) + lift
+            };
             let walls = crate::shore::walls_on_edges(&sh.seawall, js.sea_level_y, &|x, z| oracle.is_water(x, z), &wall_edges, &crest_at, js.sea_level_y - sh.bottom_below_sea_m, wall_colour, false);
             let concrete = crate::geometry::srgb_hex(sh.wall_srgb);
             // The apron in the street palette's pedestrian-way tone (`path`: the
@@ -398,7 +442,13 @@ impl LandmarkSet {
             // deck, walls and roofs in the kit's corrugated metal and membrane.
             let c0 = crate::geometry::ring_centroid(&fp.outline);
             let deck_y = piers.iter().find(|p| p.contains(c0[0], c0[1])).map(|p| p.deck_y).unwrap_or_else(|| elev(c0[0], c0[1]) + lift);
-            if let Some((walls_m, roofs_m)) = wf::ferry_sheds(&fp.outline, &fp.sheds, deck_y) {
+            let gates = if crate::features::pier_sheds() { wf::ferry_gate_sheds(&fp.outline, &fp.sheds, deck_y) } else { None };
+            if let Some(g) = gates {
+                // the gate sheds as built pieces (waterfront.rs `ferry_gate_sheds`)
+                structures.push(Structure { cast: true, footway: false, kit: Some(wf::SHED_WALL_KIT.into()), name: format!("ferry-gate-sheds-{}", fp.source_way_id), material: plain_material(0.88, 0.03, "facade-masonry"), mesh: g.frames });
+                structures.push(Structure { cast: true, footway: false, kit: Some(wf::SHED_ROOF_KIT.into()), name: format!("ferry-gate-shed-roofs-{}", fp.source_way_id), material: plain_material(0.9, 0.0, "facade-masonry"), mesh: g.roofs });
+                structures.push(Structure { cast: false, footway: false, kit: None, name: format!("ferry-gate-shed-glass-{}", fp.source_way_id), material: plain_material(0.08, 0.0, "facade-glass"), mesh: g.glass });
+            } else if let Some((walls_m, roofs_m)) = wf::ferry_sheds(&fp.outline, &fp.sheds, deck_y) {
                 structures.push(Structure { cast: true, footway: false, kit: Some(wf::SHED_WALL_KIT.into()), name: format!("ferry-pier-sheds-{}", fp.source_way_id), material: plain_material(0.88, 0.03, "facade-masonry"), mesh: walls_m });
                 structures.push(Structure { cast: true, footway: false, kit: Some(wf::SHED_ROOF_KIT.into()), name: format!("ferry-pier-shed-roofs-{}", fp.source_way_id), material: plain_material(0.9, 0.0, "facade-masonry"), mesh: roofs_m });
             }
@@ -406,9 +456,17 @@ impl LandmarkSet {
             if crate::features::quay_railing() {
                 let fb = eo_data::groundscale::plan(crate::ferry_building::spec().tower.centre_surveyed);
                 let reach = wf::RAILING_CORRIDOR_M * eo_data::groundscale::scale();
-                let (rail, _pieces) = wf::quay_railing(&edges, &crest_at, fb, reach, [1.0; 3]);
-                if !rail.is_empty() {
-                    structures.push(Structure { cast: true, footway: false, kit: Some(wf::RAILING_KIT.into()), name: "waterfront:railing".into(), material: plain_material(0.5, 0.0, "painted-metal"), mesh: rail });
+                let detail = crate::features::guard_detail();
+                // (the pickets' wire record carries the kit finish's colour: the wire pass reads its vertex colour.)
+                let paint = crate::geometry::srgb_hex(0x6e7478);
+                let r = wf::quay_railing_with(&edges, &crest_at, fb, reach, if detail { paint } else { [1.0; 3] }, detail);
+                if detail {
+                    // a landmark: the rails and posts near and far (in the paint's own colour), the pickets near.
+                    if !r.solid.is_empty() {
+                        railing_landmark = Some(railing_landmark_of(r.solid, r.pickets));
+                    }
+                } else if !r.solid.is_empty() {
+                    structures.push(Structure { cast: true, footway: false, kit: Some(wf::RAILING_KIT.into()), name: "waterfront:railing".into(), material: plain_material(0.5, 0.0, "painted-metal"), mesh: r.solid });
                 }
             }
             press = Some(std::sync::Arc::new(wf::ShorePress::new(js.sea_level_y, &edges, &piers)));
@@ -424,6 +482,8 @@ impl LandmarkSet {
         } else {
             Vec::new()
         };
+        let mut landmarks = landmarks;
+        landmarks.extend(railing_landmark);
         Ok(Self {
             landmarks,
             lights,
@@ -637,11 +697,34 @@ impl LandmarkSet {
         }
         let ways = crate::tram::load_corridor_ways(repo_root, crate::ferry_building::spec().tower.centre_surveyed)?;
         let t = crate::tram::build(&ways, surface_at, lift);
-        let tris = t.heads.triangles() + t.grooves.triangles();
-        // the polished heads as bare steel; the grooves a matte dark.
-        self.structures.push(Structure { cast: false, footway: false, kit: None, name: "tram:heads".into(), material: plain_material(0.36, 1.0, "facade-metal"), mesh: t.heads });
-        self.structures.push(Structure { cast: false, footway: false, kit: None, name: "tram:grooves".into(), material: plain_material(0.9, 0.0, "asphalt"), mesh: t.grooves });
+        let tris = t.heads.triangles() + t.grooves.triangles() + t.sides.triangles();
+        // the polished heads as bare steel; the grooves a matte dark. With the
+        // finish (tram.rs): the worn band less glossy, the oxidised edges a rough dielectric.
+        let (band_rough, band_metal) = if t.sides.is_empty() { (0.36, 1.0) } else { (crate::tram::BAND_ROUGHNESS, crate::tram::BAND_METALNESS) };
+        self.structures.push(Structure { cast: false, footway: false, kit: None, name: "tram:heads".into(), material: plain_material(band_rough, band_metal, "facade-metal"), mesh: t.heads });
+        self.structures.push(Structure { cast: false, footway: false, kit: None, name: "tram:grooves".into(), material: plain_material(if t.sides.is_empty() { 0.9 } else { 0.95 }, 0.0, "asphalt"), mesh: t.grooves });
+        if !t.sides.is_empty() {
+            self.structures.push(Structure { cast: false, footway: false, kit: None, name: "tram:sides".into(), material: plain_material(crate::tram::OXIDE_ROUGHNESS, 0.0, "painted-metal"), mesh: t.sides });
+        }
         Ok(Some((t.tracks, t.metres, tris)))
+    }
+
+    /// The corridor's surveyed palms (palms.rs) on `ground_at` (the drawn
+    /// surface); nothing when `--no-corridor-palms`. `palms` gives every palm
+    /// record of the street tree list (x, z, crown m, height m, record) on the
+    /// drawn plan; `blocked` refuses a site (inside a building). Returns (palms, triangles).
+    pub fn add_corridor_palms(&mut self, palms: &[(f64, f64, Option<f64>, Option<f64>, u32)], ground_at: &dyn Fn(f64, f64) -> f64, blocked: &dyn Fn(f64, f64) -> bool) -> Option<(usize, usize)> {
+        if !crate::features::corridor_palms() {
+            return None;
+        }
+        let centre = eo_data::groundscale::plan(crate::ferry_building::spec().tower.centre_surveyed);
+        let sites: Vec<crate::palms::Site> = crate::palms::corridor_sites(palms, centre).into_iter().filter(|s| !blocked(s.x, s.z)).collect();
+        let p = crate::palms::build(&sites, ground_at);
+        let tris = p.trunks.triangles() + p.leaves.triangles();
+        self.structures.push(Structure { cast: true, footway: false, kit: None, name: "palms:trunks".into(), material: plain_material(0.9, 0.0, "facade-masonry"), mesh: p.trunks });
+        // the leaves' waxy cuticle: a dielectric of moderate gloss.
+        self.structures.push(Structure { cast: true, footway: false, kit: None, name: "palms:leaves".into(), material: plain_material(0.55, 0.0, "facade-painted"), mesh: p.leaves });
+        Some((p.count, tris))
     }
 
     pub fn triangles(&self, role: Role) -> usize {

@@ -7,7 +7,8 @@
     "wikipedia": "San Francisco Ferry Building, en.wikipedia.org (read 2026-11-18): 245-foot (75 m) clock tower; four clock dials 22 feet (6.7 m) in diameter; the 660-foot (200 m) Great Nave; 22 nave arches per side.",
     "noehill": "San Francisco Landmark No. 90, noehill.com/sf/landmarks/sf090.asp (read 2026-11-18): 659 feet long as built; eleven-foot minute hand; seven and one-half foot hour hand; tower modelled on the Giralda of Seville; a flagstaff surmounts the tower.",
     "architecture-sf": "architecturesf.blogspot.com/2009/05/ferry-building-1896-1898.html (read 2026-11-18): the western front in Colusa sandstone, arcades spanning the full width of both the lower and upper stories, paired Corinthian columns on the entrance pavilion.",
-    "cdmg-191": "California Division of Mines and Geology Bulletin 191 (1966), as quoted by quarriesandbeyond.org (read 2026-11-18): Colusa sandstone is blue-gray and buff, weathering to light brown."
+    "cdmg-191": "California Division of Mines and Geology Bulletin 191 (1966), as quoted by quarriesandbeyond.org (read 2026-11-18): Colusa sandstone is blue-gray and buff, weathering to light brown.",
+    "polyhaven-sandstone": "Poly Haven 'White Sandstone Blocks 02' (CC0; native/assets/cc0-manifest.json; the scan the kit's limestone-ashlar finish draws): a 2 m x 2 m tile of eleven courses (counted on its albedo), 0.18 m a course."
   },
   "record": {
     "id": "sf-building-558731934",
@@ -78,5 +79,33 @@
     "roofRidgeM": 22.6,
     "dialCentreBelowShaftTopM": 5.2,
     "clockHour": 13.0
+  },
+  "detail": {
+    "source": "INFERRED unless a source is named: no published elevation drawing or stone schedule was available. The course is the period's dimension-stone ashlar, about two feet; the scan (polyhaven-sandstone) is drawn at that course. --no-ferry-building-detail draws without this block.",
+    "scanTileM": 2.0,
+    "scanCoursesPerTile": 11,
+    "ashlarCourseM": 0.6,
+    "ashlarContrast": 0.5,
+    "upperRevealM": 0.7,
+    "revealDeepTone": 0.6,
+    "rusticationProudM": 0.055,
+    "rusticationJointM": 0.07,
+    "rusticationGroundTone": 0.84,
+    "keystoneProudM": 0.26,
+    "modillionPitchM": 0.62,
+    "modillionWidthM": 0.2,
+    "modillionHeightM": 0.26,
+    "crownMouldM": 0.14,
+    "plinthM": 0.95,
+    "plinthProudM": 0.17,
+    "plinthLinear": [0.40, 0.40, 0.42],
+    "plinthContactTone": 0.62,
+    "weatherTone": 0.8,
+    "streakLengthM": 1.0,
+    "balustradeM": 1.05,
+    "balusterPitchM": 0.3,
+    "balusterDiameterM": 0.2,
+    "urnM": 1.1,
+    "shopToneSpread": [0.9, 2.4]
   }
 }

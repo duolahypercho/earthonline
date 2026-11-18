@@ -37,6 +37,35 @@ pub const PIECE_M: f64 = 2.5;
 pub const HEAD_LINEAR: Rgb = [0.56, 0.57, 0.58];
 pub const GROOVE_LINEAR: Rgb = [0.02, 0.019, 0.018];
 
+/// The rail's finish (`features::rail_finish`; off: the whole head is bare
+/// steel and the groove near black, as before). A street rail's head is
+/// polished only where the wheels run: the worn band, about 20-30 mm wide on a
+/// tread of 50-60 mm (the wheel-rail contact patch of a tram wheel is roughly
+/// 10-15 mm long and a little wider; the band is the spread of its lateral
+/// position, INFERRED from that). The rest of the head, its gauge corner and
+/// the groove's keeper lip carry mill scale and rust (iron oxides: a dark
+/// brown-grey dielectric, albedo about 0.1, rough), and the flangeway fills
+/// with packed grit and brake dust (a dark matte, a little over the paving's
+/// shade). Widths, m: the field shoulder and gauge corner either side of the
+/// band, the keeper lip on the far side of the groove (INFERRED).
+pub const FIELD_SHOULDER_M: f64 = 0.014;
+pub const GAUGE_CORNER_M: f64 = 0.012;
+pub const KEEPER_LIP_M: f64 = 0.012;
+/// The worn band's steel (F0) and roughness: bright steel, not a mirror (the
+/// wheels burnish it but grit scores it and a road film of dust and oil
+/// covers part of it at sub-millimetre scale, so it reads grey-silver with a
+/// blurred sheen, not the sky): roughness 0.4 and metalness 0.65 (the bare
+/// share of the band), INFERRED.
+pub const BAND_LINEAR: Rgb = [0.52, 0.52, 0.52];
+pub const BAND_ROUGHNESS: f64 = 0.4;
+pub const BAND_METALNESS: f64 = 0.65;
+/// Mill scale and rust (Fe3O4 / Fe2O3 mixes over dust read brown-grey,
+/// albedo about 0.15), linear, and its roughness.
+pub const OXIDE_LINEAR: Rgb = [0.17, 0.135, 0.105];
+pub const OXIDE_ROUGHNESS: f64 = 0.75;
+/// The grit packed in the flangeway (road dust and brake fines, darker than the paving), linear.
+pub const GRIT_LINEAR: Rgb = [0.075, 0.068, 0.06];
+
 /// The OSM tram and light-rail ways' runs within the corridor, on the scaled plan.
 pub fn load_corridor_ways(repo_root: &std::path::Path, centre_surveyed: [f64; 2]) -> Result<Vec<Vec<[f64; 2]>>> {
     use std::io::Read;
@@ -121,25 +150,43 @@ fn resample(line: &[[f64; 2]], step: f64) -> Vec<([f64; 2], [f64; 2])> {
 }
 
 pub struct Tracks {
-    /// The running heads (polished steel).
+    /// The running heads (polished steel; with the finish, the worn band only).
     pub heads: Frozen,
     /// The flangeway grooves.
     pub grooves: Frozen,
+    /// With the finish: the oxidised field shoulders, gauge corners and keeper lips (else empty).
+    pub sides: Frozen,
     pub tracks: usize,
     pub metres: f64,
 }
 
 /// Both rails of every way: a running head and its groove on the gauge side,
-/// strips over the paving `surface_at` (x, z) gives, `lift` over it.
+/// strips over the paving `surface_at` (x, z) gives, `lift` over it; with the
+/// finish (`features::rail_finish`) the head's worn band, its oxidised edges
+/// and the keeper lip, and a grit-filled groove.
 pub fn build(ways: &[Vec<[f64; 2]>], surface_at: &dyn Fn(f64, f64) -> f64, lift: f64) -> Tracks {
+    build_with(ways, surface_at, lift, crate::features::rail_finish())
+}
+
+pub fn build_with(ways: &[Vec<[f64; 2]>], surface_at: &dyn Fn(f64, f64) -> f64, lift: f64, finish: bool) -> Tracks {
     let mut heads = MeshArrays::new("tram:heads");
     let mut grooves = MeshArrays::new("tram:grooves");
+    let mut sides = MeshArrays::new("tram:sides");
     let mut metres = 0.0;
     let half = GAUGE_M / 2.0;
     // lateral strips (from, to) off the centreline: each rail's head outside
     // the gauge face, its groove inside it.
-    let head_strips = [(-half - HEAD_M, -half), (half, half + HEAD_M)];
-    let groove_strips = [(-half, -half + GROOVE_M), (half - GROOVE_M, half)];
+    let (head_strips, groove_strips, side_strips): (Vec<(f64, f64)>, Vec<(f64, f64)>, Vec<(f64, f64)>) = if finish {
+        let (f, g, k) = (FIELD_SHOULDER_M, GAUGE_CORNER_M, KEEPER_LIP_M);
+        (
+            vec![(-half - HEAD_M + f, -half - g), (half + g, half + HEAD_M - f)],
+            vec![(-half, -half + GROOVE_M), (half - GROOVE_M, half)],
+            vec![(-half - HEAD_M, -half - HEAD_M + f), (-half - g, -half), (-half + GROOVE_M, -half + GROOVE_M + k), (half - GROOVE_M - k, half - GROOVE_M), (half, half + g), (half + HEAD_M - f, half + HEAD_M)],
+        )
+    } else {
+        (vec![(-half - HEAD_M, -half), (half, half + HEAD_M)], vec![(-half, -half + GROOVE_M), (half - GROOVE_M, half)], vec![])
+    };
+    let (head_col, groove_col) = if finish { (BAND_LINEAR, GRIT_LINEAR) } else { (HEAD_LINEAR, GROOVE_LINEAR) };
     for line in ways {
         let pts = resample(line, PIECE_M);
         for w in line.windows(2) {
@@ -151,7 +198,7 @@ pub fn build(ways: &[Vec<[f64; 2]>], surface_at: &dyn Fn(f64, f64) -> f64, lift:
                 let (x, z) = (p[0] + n[0] * o, p[1] + n[1] * o);
                 [x, surface_at(x, z) + lift, z]
             };
-            for (strips, m, col) in [(&head_strips, &mut heads, HEAD_LINEAR), (&groove_strips, &mut grooves, GROOVE_LINEAR)] {
+            for (strips, m, col) in [(&head_strips, &mut heads, head_col), (&groove_strips, &mut grooves, groove_col), (&side_strips, &mut sides, OXIDE_LINEAR)] {
                 for (o0, o1) in strips.iter() {
                     let q = [at(p0, n0, *o0), at(p1, n1, *o0), at(p1, n1, *o1), at(p0, n0, *o1)];
                     // facing up whichever way the line runs
@@ -163,7 +210,7 @@ pub fn build(ways: &[Vec<[f64; 2]>], surface_at: &dyn Fn(f64, f64) -> f64, lift:
             }
         }
     }
-    Tracks { heads: heads.freeze(), grooves: grooves.freeze(), tracks: ways.len(), metres }
+    Tracks { heads: heads.freeze(), grooves: grooves.freeze(), sides: sides.freeze(), tracks: ways.len(), metres }
 }
 
 #[cfg(test)]
@@ -172,7 +219,7 @@ mod tests {
 
     #[test]
     fn a_straight_track_has_both_rails_at_gauge_and_faces_up() {
-        let t = build(&[vec![[0.0, 0.0], [10.0, 0.0]]], &|_, _| 1.0, 0.02);
+        let t = build_with(&[vec![[0.0, 0.0], [10.0, 0.0]]], &|_, _| 1.0, 0.02, false);
         assert_eq!(t.tracks, 1);
         assert!((t.metres - 10.0).abs() < 1e-9);
         // 4 pieces of 2.5 m, two heads each, two triangles a quad.
@@ -189,5 +236,23 @@ mod tests {
             let cross_y = (b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1]);
             assert!(cross_y > 0.0, "a rail triangle faces down");
         }
+    }
+
+    #[test]
+    fn the_finish_splits_the_head_without_changing_the_rail() {
+        let line = [vec![[0.0, 0.0], [10.0, 0.0]]];
+        let (a, b) = (build_with(&line, &|_, _| 1.0, 0.02, false), build_with(&line, &|_, _| 1.0, 0.02, true));
+        assert!(a.sides.is_empty() && !b.sides.is_empty());
+        // the same outer edges: the head and keeper strips span the bare head and more, nothing past it.
+        let span = |m: &[&Frozen]| {
+            let zs: Vec<f32> = m.iter().flat_map(|f| f.positions.chunks_exact(3).map(|p| p[2])).collect();
+            (zs.iter().cloned().fold(f32::MAX, f32::min), zs.iter().cloned().fold(f32::MIN, f32::max))
+        };
+        assert_eq!(span(&[&a.heads]), span(&[&b.heads, &b.sides]));
+        // the bands sit inside the heads, the field shoulders outside them.
+        let w = |f: &Frozen| f.positions.chunks_exact(3).map(|p| p[2]).fold(f32::MIN, f32::max) - f.positions.chunks_exact(3).map(|p| p[2]).fold(f32::MAX, f32::min);
+        assert!(w(&b.heads) < w(&a.heads));
+        assert!(((w(&a.heads) - w(&b.heads)) as f64 - 2.0 * FIELD_SHOULDER_M).abs() < 1e-5, "the band loses the field shoulders on the outside");
+        assert!(b.sides.normals.chunks_exact(3).all(|n| n[1] == 1.0));
     }
 }
