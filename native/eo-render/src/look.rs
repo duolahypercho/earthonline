@@ -1061,6 +1061,10 @@ impl LookGpu {
                 if opts.night_shaping {
                     eo_sky::frame::apply_night_shaping(&mut f, &terms);
                 }
+                // the street lamps on their photocells (`--no-lamp-photocell`: the sun-altitude ramp)
+                if self.cam_switches.photocell {
+                    terms.lamps_on = eo_sky::night::lamps_on_photocell(&f, &terms.weather);
+                }
                 s.frame = Some(f);
                 s.terms = Some(terms);
             }
@@ -1282,7 +1286,12 @@ impl LookGpu {
                     let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
                     t * t * (3.0 - 2.0 * t)
                 };
-                [(gf.lamp_pool * (1.0 - ss(-3.0, 8.0, alt))) as f32, (gf.shop_spill * (1.0 - ss(2.0, 16.0, alt))) as f32, 0.0, 0.0]
+                // the lamp pools follow the photocells with the switch on (their share is the frame's)
+                let lamps = match terms {
+                    Some(t) if self.cam_switches.photocell => t.lamps_on,
+                    _ => 1.0 - ss(-3.0, 8.0, alt),
+                };
+                [(gf.lamp_pool * lamps) as f32, (gf.shop_spill * (1.0 - ss(2.0, 16.0, alt))) as f32, 0.0, 0.0]
             },
             dome_zenith: v4(m.zenith_radiance, 0.0),
             rooms_env: crate::rooms::drive(m.sun.altitude_deg, self.time_of_day()).0,

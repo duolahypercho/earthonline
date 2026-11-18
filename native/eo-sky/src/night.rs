@@ -17,6 +17,53 @@ pub fn lamps_on(sun_alt_deg: f64) -> f64 {
     1.0 - smoothstep(-3.0, 8.0, sun_alt_deg)
 }
 
+// ---- the lamp photocell (`--no-lamp-photocell` keeps `lamps_on`) ----
+//
+// Street lamps switch on a photocontrol that reads the horizontal
+// illuminance, not the sun's altitude: ANSI C136.10 practice (as utility
+// specifications cite it, e.g. Riverside Public Utilities spec. 1-6.3) turns
+// a lamp on at 1.5 fc (16 lx) +- 0.5 fc and off at no more than 1.5 x its
+// turn-on level. Across a city's lamps the calibration spreads over that
+// tolerance, so the share of lamps lit is the share of photocells whose
+// level the light has crossed: on through the evening as the light falls
+// past 21.5 .. 10.8 lx, off through the morning as it rises past 16 .. 32 lx.
+// The clear sky's light through twilight falls log-linearly from sunset to
+// the end of civil twilight (AMS Glossary of Meteorology, "civil twilight":
+// ~585-410 lx at sunset to ~3.5-2 lx at the sun's centre 6 deg under the
+// horizon; the geometric means are taken), scaled by the weather's light.
+
+pub const FOOTCANDLE_LX: f64 = 10.7639;
+/// ANSI C136.10 turn-on: 1.5 fc +- 0.5 fc.
+pub const PHOTOCELL_ON_FC: [f64; 2] = [1.0, 2.0];
+/// ANSI C136.10: turn-off at most 1.5 x turn-on.
+pub const PHOTOCELL_OFF_OVER_ON: f64 = 1.5;
+/// Horizontal illuminance of a clear sky at sunset and at the end of civil twilight (lx).
+pub const SUNSET_LUX: f64 = 490.0;
+pub const CIVIL_TWILIGHT_END_LUX: f64 = 2.65;
+
+/// The clear sky's horizontal illuminance (lx) about the horizon, log-linear in
+/// the sun's altitude through the two AMS anchors (and on either side of them).
+pub fn twilight_lux(sun_alt_deg: f64) -> f64 {
+    SUNSET_LUX * (CIVIL_TWILIGHT_END_LUX / SUNSET_LUX).powf(-sun_alt_deg / 6.0)
+}
+
+/// The share of street lamps lit for a horizontal illuminance (lx): evening
+/// (the light falling, the turn-on levels) or morning (rising, the turn-off levels).
+pub fn photocell_share(lux: f64, morning: bool) -> f64 {
+    let k = if morning { PHOTOCELL_OFF_OVER_ON } else { 1.0 };
+    let (lo, hi) = (PHOTOCELL_ON_FC[0] * FOOTCANDLE_LX * k, PHOTOCELL_ON_FC[1] * FOOTCANDLE_LX * k);
+    ((hi - lux) / (hi - lo)).clamp(0.0, 1.0)
+}
+
+/// The photocell's lamp share for a frame: the twilight light at the sun's
+/// altitude under the weather's light (`weather_light_ratio`), the morning
+/// by the sun's hour angle (before solar noon).
+pub fn lamps_on_photocell(f: &LookFrame, w: &WeatherState) -> f64 {
+    let sun = &f.model.sun;
+    let lux = twilight_lux(sun.altitude_deg) * weather_light_ratio(f, w);
+    photocell_share(lux, sun.hour_angle_deg < 0.0)
+}
+
 /// `dusk = 1 - smoothstep(2, 16, sun altitude)` (windows and interiors).
 pub fn dusk(sun_alt_deg: f64) -> f64 {
     1.0 - smoothstep(2.0, 16.0, sun_alt_deg)
@@ -462,5 +509,44 @@ mod scene_meter_tests {
     #[test]
     fn night_leaves_the_exposure_to_the_night_solve() {
         assert_eq!(scene_meter(-10.0, &hist_of(&[(-3.0, 100)]), 2.0), 1.0);
+    }
+}
+
+#[cfg(test)]
+mod photocell_tests {
+    use super::*;
+
+    #[test]
+    fn the_twilight_light_passes_the_ams_anchors() {
+        assert!((twilight_lux(0.0) - SUNSET_LUX).abs() < 1e-9);
+        assert!((twilight_lux(-6.0) - CIVIL_TWILIGHT_END_LUX).abs() < 1e-9);
+    }
+
+    #[test]
+    fn lamps_are_off_at_a_low_sun_and_on_by_the_end_of_civil_twilight() {
+        // the sun 3 deg up (the Baker Beach photograph): no lamp lit
+        assert_eq!(photocell_share(twilight_lux(3.0), false), 0.0);
+        // the old ramp had 43 % lit there
+        assert!(lamps_on(3.0) > 0.4);
+        // all lit by -5 deg in the evening, still some lit at -3.5 deg in the morning
+        assert_eq!(photocell_share(twilight_lux(-5.0), false), 1.0);
+        let e = photocell_share(twilight_lux(-4.0), false);
+        assert!(e > 0.2 && e < 0.9, "{e}");
+        // hysteresis: at the same light more lamps are lit in the morning than in the evening
+        let l = twilight_lux(-3.6);
+        assert!(photocell_share(l, true) > photocell_share(l, false));
+    }
+
+    #[test]
+    fn a_darker_weather_lights_the_lamps_earlier() {
+        let clear = crate::weather::preset(crate::Kind::Clear);
+        let rain = crate::weather::preset(crate::Kind::Rain);
+        // find the hour the sun stands ~2 deg down in the evening
+        let mut h = 18.0;
+        while LookFrame::new(h).model.sun.altitude_deg > -2.0 {
+            h += 0.01;
+        }
+        let f = LookFrame::new(h);
+        assert!(lamps_on_photocell(&f, &rain) >= lamps_on_photocell(&f, &clear));
     }
 }
