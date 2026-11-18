@@ -526,7 +526,9 @@ fn pct(v: &[f64], p: f64) -> f64 {
         return f64::NAN;
     }
     let mut s = v.to_vec();
-    s.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    // A total order: off Windows the on-CPU time is NaN (`hitch::on_cpu_ms` has
+    // no thread cycle counter there), which `partial_cmp` cannot order.
+    s.sort_by(f64::total_cmp);
     s[((p / 100.0) * (s.len() - 1) as f64).round() as usize]
 }
 
