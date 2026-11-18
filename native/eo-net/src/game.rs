@@ -21,12 +21,22 @@ pub struct GameWorld {
 
 impl GameWorld {
     /// `streets`: stand on the drawn street surface (eo-street), as `--play`
-    /// does by default; else on the elevation grid.
+    /// does by default; else on the elevation grid. The landmarks' decks and
+    /// lifts are in the collision world (`load_with` to leave them out).
     pub fn load(paths: &eo_data::DataPaths, streets: bool) -> Result<Self> {
+        Self::load_with(paths, streets, true)
+    }
+
+    /// `load`; `access`: the landmark decks and lifts (`--no-landmark-access` leaves them out).
+    pub fn load_with(paths: &eo_data::DataPaths, streets: bool, access: bool) -> Result<Self> {
         let city = Arc::new(eo_data::City::load(paths)?);
         let elevation = Arc::new(eo_data::ElevationGrid::load(paths)?);
         let lift = eo_assets::placement::PlacementConstants::load()?.construction_lift_m;
-        let buildings = Arc::new(BuildingSet::from_city(&city, lift));
+        let mut set = BuildingSet::from_city(&city, lift);
+        if access {
+            set = set.with_decks(landmark_decks(&elevation));
+        }
+        let buildings = Arc::new(set);
         let ground: Arc<dyn GroundProvider> = if streets { Arc::new(eo_player::street_ground::StreetGround::build(&city, elevation.clone())?) } else { Arc::new(ElevationGround(elevation.clone())) };
         Ok(Self { city, elevation, ground, buildings, streets })
     }
@@ -39,6 +49,31 @@ impl GameWorld {
     /// A collision world with its own tile cookers (a client).
     pub fn collision_world(&self, threads: usize) -> CollisionWorld {
         CollisionWorld::new(self.ground.clone(), self.buildings.clone(), threads)
+    }
+}
+
+/// The landmarks' walkable decks as the collision world takes them
+/// (eo-landmarks access.rs on the drawn ground, the grid's `sample`, as the
+/// renderer builds the landmarks): the same on a server and every client.
+pub fn landmark_decks(elevation: &eo_data::ElevationGrid) -> eo_player::Decks {
+    let set = eo_landmarks::access::AccessSet::build(&|x: f64, z: f64| elevation.sample(x, z));
+    decks_of(&set)
+}
+
+/// An access set's collision, prism cuts and lifts.
+pub fn decks_of(set: &eo_landmarks::access::AccessSet) -> eo_player::Decks {
+    // compass heading to the player's yaw (forward = (sin yaw, 0, cos yaw)).
+    let yaw = |h: f64| {
+        let d = eo_landmarks::access::dir_of(h);
+        d[0].atan2(d[1])
+    };
+    eo_player::Decks {
+        parts: set.decks.iter().map(|d| eo_player::DeckPart { name: d.id.clone(), walk: d.walk.clone(), barrier: d.barrier.clone() }).collect(),
+        cuts: set.decks.iter().flat_map(|d| d.cuts.iter()).map(|c| eo_player::PrismCut { centre: c.centre, radius_m: c.radius_m, y0: c.y0, y1: c.y1 }).collect(),
+        lifts: set
+            .lifts()
+            .map(|l| eo_player::LiftDef { name: l.name.clone(), bottom: DVec3::from_array(l.bottom.feet), bottom_yaw: yaw(l.bottom.heading_deg), top: DVec3::from_array(l.top.feet), top_yaw: yaw(l.top.heading_deg) })
+            .collect(),
     }
 }
 

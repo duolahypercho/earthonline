@@ -13,17 +13,21 @@ use eo_player::vehicle::VehicleState;
 use eo_player::{PlayerState, StepInput};
 
 pub mod button {
-    pub const SPRINT: u8 = 1;
-    pub const CROUCH: u8 = 2;
-    pub const JUMP: u8 = 4;
-    pub const AIM: u8 = 8;
-    pub const VEHICLE_TOGGLE: u8 = 16;
-    pub const ANALOG_STEER: u8 = 32;
-    pub const HANDBRAKE: u8 = 64;
-    pub const LOOK_BEHIND: u8 = 128;
+    pub const SPRINT: u16 = 1;
+    pub const CROUCH: u16 = 2;
+    pub const JUMP: u16 = 4;
+    pub const AIM: u16 = 8;
+    pub const VEHICLE_TOGGLE: u16 = 16;
+    pub const ANALOG_STEER: u16 = 32;
+    pub const HANDBRAKE: u16 = 64;
+    pub const LOOK_BEHIND: u16 = 128;
+    /// A tap: ride a landmark lift (eo-player lift.rs).
+    pub const INTERACT: u16 = 256;
+    /// The taps (act on one step; a stood-in input drops them).
+    pub const TAPS: u16 = JUMP | VEHICLE_TOGGLE | INTERACT;
 }
 
-/// One fixed step's input as sent (8 bytes).
+/// One fixed step's input as sent (9 bytes).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct NetInput {
     pub move_x: i8,
@@ -31,7 +35,7 @@ pub struct NetInput {
     pub throttle: u8,
     pub brake: u8,
     pub steer: i8,
-    pub buttons: u8,
+    pub buttons: u16,
     /// Camera yaw, 2 pi / 65536.
     pub yaw: u16,
 }
@@ -55,7 +59,7 @@ pub fn yaw_of(q: u16) -> f64 {
 
 impl NetInput {
     pub fn quantize(s: &StepInput, yaw: f64) -> Self {
-        let mut b = 0u8;
+        let mut b = 0u16;
         for (on, bit) in [
             (s.sprint, button::SPRINT),
             (s.crouch, button::CROUCH),
@@ -65,6 +69,7 @@ impl NetInput {
             (s.analog_steer, button::ANALOG_STEER),
             (s.handbrake, button::HANDBRAKE),
             (s.look_behind, button::LOOK_BEHIND),
+            (s.interact, button::INTERACT),
         ] {
             if on {
                 b |= bit;
@@ -74,7 +79,7 @@ impl NetInput {
     }
 
     pub fn step_input(&self) -> StepInput {
-        let b = |bit: u8| self.buttons & bit != 0;
+        let b = |bit: u16| self.buttons & bit != 0;
         StepInput {
             move_x: self.move_x as f64 / 127.0,
             move_y: self.move_y as f64 / 127.0,
@@ -89,6 +94,7 @@ impl NetInput {
             analog_steer: b(button::ANALOG_STEER),
             handbrake: b(button::HANDBRAKE),
             look_behind: b(button::LOOK_BEHIND),
+            interact: b(button::INTERACT),
         }
     }
 
@@ -101,7 +107,7 @@ impl NetInput {
     }
 }
 
-const FIELD_BITS: [u32; 7] = [8, 8, 8, 8, 8, 8, 16];
+const FIELD_BITS: [u32; 7] = [8, 8, 8, 8, 8, 16, 16];
 
 /// The client's position check for one step: the server compares it with
 /// its own body after the same step and sends a correction when they differ.
@@ -209,7 +215,7 @@ impl InputPacket {
                     }
                 }
             }
-            inputs.push(NetInput { move_x: f[0] as u8 as i8, move_y: f[1] as u8 as i8, throttle: f[2] as u8, brake: f[3] as u8, steer: f[4] as u8 as i8, buttons: f[5] as u8, yaw: f[6] as u16 });
+            inputs.push(NetInput { move_x: f[0] as u8 as i8, move_y: f[1] as u8 as i8, throttle: f[2] as u8, brake: f[3] as u8, steer: f[4] as u8 as i8, buttons: f[5] as u16, yaw: f[6] as u16 });
             prev = f;
         }
         Ok(InputPacket { ack_snapshot, correction_applied, check, first_seq, inputs, ping_ms })
@@ -271,6 +277,15 @@ pub fn write_player_state(s: &PlayerState, out: &mut Vec<u8>) {
             out.put_f64(x);
         }
     }
+    // a landmark lift ride (eo-player lift.rs).
+    match s.lift {
+        Some(r) => {
+            out.put_u8(1 | (r.up as u8) << 1);
+            out.put_u32(r.lift);
+            out.put_u32(r.step);
+        }
+        None => out.put_u8(0),
+    }
 }
 
 pub fn read_player_state(data: &[u8]) -> Result<PlayerState, Truncated> {
@@ -320,6 +335,8 @@ pub fn read_player_state(data: &[u8]) -> Result<PlayerState, Truncated> {
             controls: [r.f64()?, r.f64()?, r.f64()?],
         });
     }
+    let lf = r.u8()?;
+    let lift = if lf & 1 != 0 { Some(eo_player::lift::LiftRide { up: lf & 2 != 0, lift: r.u32()?, step: r.u32()? }) } else { None };
     Ok(PlayerState {
         character,
         momentum,
@@ -334,6 +351,7 @@ pub fn read_player_state(data: &[u8]) -> Result<PlayerState, Truncated> {
         driving: if d == 0 { None } else { Some(d - 1) },
         ticks,
         vehicles,
+        lift,
     })
 }
 
@@ -363,5 +381,23 @@ mod tests {
         p.write(&mut b);
         assert_eq!(InputPacket::read(&b).unwrap(), p);
         assert!(b.len() < 120, "20 inputs in {} bytes", b.len());
+    }
+
+    #[test]
+    fn the_lift_tap_and_a_ride_cross_the_wire() {
+        let s = StepInput { interact: true, move_y: 1.0, ..Default::default() };
+        let q = NetInput::quantize(&s, 1.0);
+        assert_ne!(q.buttons & button::INTERACT, 0);
+        assert!(q.step_input().interact);
+        let p = InputPacket { inputs: vec![q, NetInput { buttons: 0, ..q }, q], first_seq: 7, ..Default::default() };
+        let mut b = vec![];
+        p.write(&mut b);
+        assert_eq!(InputPacket::read(&b).unwrap(), p);
+        for lift in [None, Some(eo_player::lift::LiftRide { lift: 3, up: true, step: 44 }), Some(eo_player::lift::LiftRide { lift: 0, up: false, step: 89 })] {
+            let st = PlayerState { lift, ticks: 12, yaw: 0.5, ..Default::default() };
+            let mut b = vec![];
+            write_player_state(&st, &mut b);
+            assert_eq!(read_player_state(&b).unwrap(), st, "the ride {lift:?} round trips");
+        }
     }
 }

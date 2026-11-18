@@ -31,7 +31,9 @@ use crate::bits::{ByteReader, PutLe, Truncated};
 /// "EON" + protocol generation 1.
 pub const MAGIC: u32 = 0x454F_4E01;
 /// 2: the handshake carries the ground plan (groundscale).
-pub const PROTOCOL_VERSION: u16 = 2;
+/// 3: inputs carry 16 button bits (the lift's interact tap) and the player
+/// state a landmark lift ride.
+pub const PROTOCOL_VERSION: u16 = 3;
 
 /// this process's ground-plan scale in parts per million (the
 /// handshake's ground plan; 1,250,000 by default). hills: when the ground
