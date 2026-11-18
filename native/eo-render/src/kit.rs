@@ -871,6 +871,9 @@ pub struct KitRuntime {
     tile_y: Arc<Vec<[f32; 2]>>,
     hold: crate::view_detail::ViewHold<u32>,
     pub near_out_of_view: usize,
+    /// resident packs the last `update` found no longer wanted (evicted
+    /// EVICTIONS_PER_FRAME a frame): what an earlier camera left behind.
+    pub stale_resident: usize,
     /// the near packs' own part of the arena (None: one arena for
     /// both rungs, as before), and whether a part freed space since a pack was
     /// deferred (near, mid).
@@ -1004,6 +1007,7 @@ impl KitRuntime {
             tile_y,
             hold: Default::default(),
             near_out_of_view: 0,
+            stale_resident: 0,
             near_pool: None,
             freed: [false; 2],
         }
@@ -1095,6 +1099,7 @@ impl KitRuntime {
             })
             .map(|(k, _)| *k)
             .collect();
+        self.stale_resident = evictable;
         if !gone.is_empty() {
             let gone_set: HashSet<(u32, u8)> = gone.iter().copied().collect();
             for k in &gone_set {
