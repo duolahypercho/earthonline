@@ -10,6 +10,7 @@ use std::collections::HashSet;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+pub mod external; // where the optional open assets are read from (<repo>/external/<set>, or the set's variable)
 pub mod groundscale; // the street size (the approved ground-plan deviation, 1.25)
 pub mod roof_colours; // measured roof colours (aerial imagery)
 pub mod sim_source;
