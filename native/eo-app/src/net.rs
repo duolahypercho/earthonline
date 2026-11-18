@@ -15,15 +15,20 @@
 //!       offscreen: two clients (two sockets, two sessions) standing on Folsom
 //!       Street facing each other; each one's view at the same server tick ->
 //!       bench-out/capture-net-a.png, capture-net-b.png.
-//!   eo-app --connect local --net-shots FILE.json --out DIR
+//!   eo-app --connect local --net-shots FILE.json --out DIR [--pair-before DIR2]
 //!       offscreen: landmark scenes (`net_shots`): bot players walk up to a
 //!       viewpoint and hold emotes; stills from the shots' cameras, and frame
-//!       sequences of one player walking up and stopping.
+//!       sequences of one player walking up and stopping. `--pair-before`
+//!       draws every still and frame a second time from the same instant
+//!       with `--no-remote-bodies --no-name-tags` into DIR2: matched pairs
+//!       whose street people and traffic are the same server state.
 //!
 //! PRESENCE (kill switches, each restoring the previous drawing):
 //!   --no-remote-bodies  other players drawn as before: the first walk style
 //!                       and idle loop, the linear snapshot path, no emotes
-//!   --no-name-tags      no name tags over them
+//!                       (and no selfie phone; street people may wear a
+//!                       player's body again)
+//!   --no-name-tags      no name tags over them (and no tag depth probe)
 //!   --no-shared-sky     the hour and weather are this client's own
 //!                       (`--time-of-day`, `--weather`), not the server's
 //! In the window: 1 wave, 2 point, 3 sit (crouch), 4 photo, 0 stop;
@@ -80,6 +85,8 @@ struct NetOpts {
     /// `--net-shots FILE.json`: the landmark scenes (`--shots-only a,b`: the scenes whose name contains a or b).
     shots: Option<std::path::PathBuf>,
     only: Option<String>,
+    /// `--pair-before DIR`: every capture again from the same instant with the previous drawing.
+    pair_before: Option<std::path::PathBuf>,
     /// The local server's sky (`--time-of-day`, `--weather`, `--day-rate`).
     weather: u8,
     day_rate: f64,
@@ -166,7 +173,7 @@ fn base_args() -> Args {
 
 fn parse(raw: &[String]) -> Result<(Args, NetOpts)> {
     let mut a = base_args();
-    let mut o = NetOpts { mode: Mode2::Window, connect: String::new(), name: "player".into(), spawn: None, cond: Conditions::NONE, frames: 16_000, seconds: 40.0, bots: 0, hud: true, presence: Presence::default(), shots: None, only: None, weather: 0, day_rate: 1.0 };
+    let mut o = NetOpts { mode: Mode2::Window, connect: String::new(), name: "player".into(), spawn: None, cond: Conditions::NONE, frames: 16_000, seconds: 40.0, bots: 0, hud: true, presence: Presence::default(), shots: None, only: None, pair_before: None, weather: 0, day_rate: 1.0 };
     let mut it = raw.iter();
     while let Some(s) = it.next() {
         let mut val = || it.next().cloned().ok_or_else(|| anyhow!("{s} needs a value"));
@@ -204,6 +211,7 @@ fn parse(raw: &[String]) -> Result<(Args, NetOpts)> {
                 val()?;
             }
             "--shots-only" => o.only = Some(val()?),
+            "--pair-before" => o.pair_before = Some(val()?.into()),
             "--width" => a.width = val()?.parse()?,
             "--height" => a.height = val()?.parse()?,
             "--no-vsync" => a.vsync = false,
@@ -337,6 +345,13 @@ pub struct NetSession {
     /// The other players drawn this frame (feet, facing, emote), for the name tags.
     pub others: Vec<Other>,
     tag_alpha: HashMap<u32, f32>,
+    /// The name tags' depth tests for the next GPU probe, and each head's
+    /// visible share from the last probe read back (0 hidden .. 1 clear).
+    pub probe_asks: Vec<ProbeAsk>,
+    pub head_visible: HashMap<u32, f32>,
+    /// The faces on screen this frame (the other players' and the street
+    /// people's heads) the tags' plates keep off (`eo_ui::Ui::tag_avoid`).
+    pub tag_avoid: Vec<[f32; 4]>,
     sky: SkySmoother,
     /// The server's sky as drawn this frame, and as last handed to the renderer.
     pub sky_shown: Option<SkyClock>,
@@ -362,20 +377,51 @@ pub struct Other {
     pub feet: [f64; 3],
     pub emote: Emote,
     pub speed: f64,
+    /// Where its head is in the drawn pose (`eo_agents::rig`; None without a body).
+    pub head: Option<eo_agents::rig::Head>,
+}
+
+/// One name tag's depth test, asked of the GPU (`TagProbe`): nine points
+/// over the head (window pixels) and the depth a nearer occluder would
+/// exceed (reversed Z: the head centre moved `TAG_OCCLUDER_M` toward the eye).
+#[derive(Clone, Debug)]
+pub struct ProbeAsk {
+    pub id: u32,
+    pub px: [[f32; 2]; 9],
+    pub depth: f32,
 }
 
 /// Seconds a name tag takes to fade in or out (occlusion, distance).
 const TAG_FADE_S: f64 = 0.15;
-/// Name tags are opaque nearer than this and gone past `TAG_FAR_M` (a face is
-/// recognisable to about 20 to 25 m in daylight: the "social distance" of
-/// public-space studies; a label past 40 m only clutters).
-const TAG_NEAR_M: f64 = 18.0;
+/// The distance fade: opaque to 12 m, 0.35 at 25 m, gone at 40 m (a face is
+/// recognisable to about 20 to 25 m in daylight, the "social distance" of
+/// public-space studies; past that a label is clutter, and past 40 m it only
+/// covers the scene).
+const TAG_NEAR_M: f64 = 12.0;
+const TAG_MID_M: f64 = 25.0;
+const TAG_MID_ALPHA: f64 = 0.35;
 const TAG_FAR_M: f64 = 40.0;
-/// The tag hangs this far over the feet: a 1.75 m body plus a hand's breadth.
+/// The tag hangs this far over the head joint (pose-aware: a crouch lowers it).
+const TAG_OVER_HEAD_M: f64 = 0.25;
+/// Without a body to read the head from: this far over the feet (a 1.75 m body plus a hand's breadth).
 const TAG_OVER_FEET_M: f64 = 2.02;
 const TAG_OVER_FEET_CROUCHED_M: f64 = 1.45;
 /// The second line (what the player is doing) is shown nearer than this.
 const TAG_DETAIL_M: f64 = 12.0;
+/// The name's size at 1600 x 900: 18 px at 7 m, falling as the square root
+/// of distance; a plate under 14 px tall is not drawn. The second line is
+/// at least 12 px.
+const TAG_NAME_PX: f64 = 18.0;
+const TAG_NAME_AT_M: f64 = 7.0;
+const TAG_MIN_PLATE_PX: f64 = 14.0;
+const TAG_DETAIL_MIN_PX: f64 = 12.0;
+/// Something this much nearer the eye than the head's centre hides it (a
+/// head is about 0.2 m deep: its own face, hair or a hand at it do not).
+const TAG_OCCLUDER_M: f64 = 0.30;
+/// The visible share of the head under which a tag is hidden, and over which it is clear; between, it is at 0.3.
+const TAG_HIDDEN_SHARE: f32 = 0.12;
+const TAG_CLEAR_SHARE: f32 = 0.85;
+const TAG_PARTLY_ALPHA: f32 = 0.3;
 /// A sky clock change smaller than this is not handed to the renderer (each
 /// change refits every shadow cascade): 10 s of game time.
 const SKY_STEP_H: f64 = 10.0 / 3600.0;
@@ -406,6 +452,9 @@ impl NetSession {
             bodies: HashMap::new(),
             others: vec![],
             tag_alpha: HashMap::new(),
+            probe_asks: vec![],
+            head_visible: HashMap::new(),
+            tag_avoid: vec![],
             sky: SkySmoother::default(),
             sky_shown: None,
             sky_applied: None,
@@ -616,6 +665,8 @@ impl NetSession {
         let lib = agents.lib.clone();
         let mine = self.you & 0x3FFF_FFFF;
         let mut players = 0;
+        // The bodies the other players are drawn in (no street person wears one).
+        let mut player_models: Vec<u32> = vec![];
         for s in &self.shown {
             let local = s.id & 0x3FFF_FFFF;
             let pos = [(s.pos[0] - origin[0]) as f32, 0.0, (s.pos[2] - origin[1]) as f32];
@@ -634,7 +685,7 @@ impl NetSession {
                     let Some(lib) = &lib else { continue };
                     let (emote, count) = unpack_anim((s.anim * 256.0).round() as u8);
                     if s.flags & flag::DRIVING == 0 {
-                        self.others.push(Other { id: local, feet: s.pos, emote, speed: s.speed });
+                        self.others.push(Other { id: local, feet: s.pos, emote, speed: s.speed, head: None });
                     }
                     if self.presence.bodies {
                         // Locomotion from the replicated speed and state, emotes, stops on a planted foot.
@@ -642,6 +693,18 @@ impl NetSession {
                             let body = self.bodies.entry(s.id).or_default();
                             let inp = RemoteInput { feet: s.pos, yaw: s.yaw, speed: s.speed, sprint: s.flags & flag::SPRINT != 0, airborne: s.flags & flag::AIRBORNE != 0, emote: emote_family(emote as u8), emote_count: count, key: local, look: s.kind as usize, time: v.sim_time, dt };
                             if let Some(b) = body.step(lib, &inp) {
+                                // The head the name tag hangs over, in this pose; the selfie's phone in the hand.
+                                if let Some(o) = self.others.last_mut().filter(|o| o.id == local) {
+                                    o.head = eo_agents::rig::head(lib, &b);
+                                }
+                                if emote == Emote::Selfie {
+                                    if let Some(ph) = eo_agents::rig::phone(lib, &b) {
+                                        agents.extras.push(ph);
+                                    }
+                                }
+                                if !player_models.contains(&b.model) {
+                                    player_models.push(b.model);
+                                }
                                 agents.extras.push(b);
                             }
                         } else {
@@ -682,12 +745,26 @@ impl NetSession {
             self.bodies.retain(|k, _| live.contains(k));
         }
         agents.remote = Some(self.frame.clone());
+        agents.remap_people.clear();
+        if let (true, Some(lib)) = (self.presence.bodies, lib.as_ref()) {
+            // Each player body to the next one in the pool, of the same
+            // proportion group's sex, that no player here wears.
+            let pool = &lib.meta.people_models;
+            let female = |m: u32| pool.iter().position(|&x| x == m).and_then(|i| lib.meta.motion.person_group.get(i)).and_then(|&g| lib.meta.motion.group_female.get(g as usize)).copied();
+            for &m in &player_models {
+                let Some(i) = pool.iter().position(|&x| x == m) else { continue };
+                if let Some(to) = (1..pool.len()).map(|k| pool[(i + k) % pool.len()]).find(|&c| !player_models.contains(&c) && female(c) == female(m)) {
+                    agents.remap_people.push((m, to));
+                }
+            }
+        }
         // The local player, predicted (drawn with the correction offset), in
         // the same family and paint the others see it in.
         if let (Some(p), Some(lib), true) = (self.pred.as_ref(), lib.as_ref(), self.draw_self) {
             let n0 = agents.extras.len();
             self.visual.instances(lib, &p.player, &p.cw, body_visible, dt, &mut agents.extras);
-            let look = mine % 251;
+            // The look the server gives this player (its account's), as the others see it.
+            let look = self.shown.iter().find(|e| class_of(e.id) == CLASS_PLAYER && e.id & 0x3FFF_FFFF == mine).map(|e| e.kind as u32).unwrap_or(mine % 251);
             for e in &mut agents.extras[n0..] {
                 e.pos[0] += offset.x as f32;
                 e.pos[1] += offset.y as f32;
@@ -700,6 +777,20 @@ impl NetSession {
             }
         }
         self.net_ms += t0.elapsed().as_secs_f64() * 1e3;
+    }
+
+    /// The other players as the previous drawing draws them
+    /// (`--no-remote-bodies`) at the same instant, for a matched capture:
+    /// `draw` with the bodies off, everything else it touches put back (the
+    /// drawn sky, the players listed for the tags, the cars' wheel travel).
+    pub fn previous_extras(&mut self, agents: &mut AgentRuntime, tick: Option<f64>, dt: f64, body_visible: bool) -> Vec<eo_agents::GpuAgent> {
+        let keep = (self.presence, self.others.clone(), self.sky, self.sky_shown, self.players_near, self.travelled.clone(), agents.remote.clone(), self.net_ms, agents.remap_people.clone());
+        self.presence.bodies = false;
+        self.presence.tags = false;
+        self.draw(agents, tick, dt, body_visible, DVec3::ZERO);
+        let out = agents.extras.clone();
+        (self.presence, self.others, self.sky, self.sky_shown, self.players_near, self.travelled, agents.remote, self.net_ms, agents.remap_people) = keep;
+        out
     }
 
     /// The server's hour and weather to the renderer (`--no-shared-sky`:
@@ -729,82 +820,141 @@ impl NetSession {
         Some(sky)
     }
 
-    /// The name tags for this frame: each other player's head projected
-    /// through `cam`, faded by distance (opaque to 18 m, gone at 40 m) and
-    /// hidden behind buildings, the ground and the players' cars (a ray from
-    /// the eye against the collision world; the street's parked and moving
-    /// traffic is not in it, so a tag shows through those), easing in and out
-    /// over 0.15 s (`dt` 0: at once).
+    /// The name tags for this frame. Each hangs 0.25 m over its player's
+    /// head joint as drawn (a crouch lowers it); fades with distance (opaque
+    /// to 12 m, 0.35 at 25 m, gone at 40 m) and shrinks with it (no plate
+    /// under 14 px at 1600 x 900); hides behind buildings, the ground and the
+    /// players' cars (a ray against the collision world) and, from the GPU's
+    /// depth probe of the last frame (`TagProbe`), behind anything nearer
+    /// than the head: a passer-by, a pole, another player (partly hidden: 0.3,
+    /// wholly: gone); easing in and out over 0.15 s (`dt` 0: at once). The
+    /// HUD lays them out (a tag that would cover a nearer one moves up with
+    /// a leader line). Also fills `probe_asks` for the next probe.
     pub fn name_tags(&mut self, cam: &Camera, width: u32, height: u32, dt: f64) -> Vec<eo_ui::NameTag> {
+        self.probe_asks.clear();
+        self.tag_avoid.clear();
         if !self.presence.tags {
             return vec![];
         }
         let vp = cam.view_proj();
         let eye = cam.eye.as_dvec3();
-        let px = height as f64 / 1080.0;
+        let px = height as f64 / 900.0;
         let scale = eo_data::groundscale::people();
-        let mut out: Vec<(f64, eo_ui::NameTag)> = vec![];
+        let (right, up) = {
+            let f = cam.forward();
+            let r = cam.right();
+            (r, r.cross(f).normalize())
+        };
+        let project = |p: Vec3| -> Option<(f32, f32, f32)> {
+            let c = vp * p.extend(1.0);
+            (c.w > 0.05).then(|| ((c.x / c.w * 0.5 + 0.5) * width as f32, (1.0 - (c.y / c.w * 0.5 + 0.5)) * height as f32, c.z / c.w))
+        };
+        // A head's box on screen: 0.11 m either side of its centre, 0.13 m over and under.
+        let head_box = |c: Vec3, s: f32| -> Option<[f32; 4]> {
+            let pts = [c + right * 0.11 * s, c - right * 0.11 * s, c + up * 0.13 * s, c - up * 0.13 * s];
+            let mut b = [f32::MAX, f32::MAX, f32::MIN, f32::MIN];
+            for p in pts {
+                let (x, y, _) = project(p)?;
+                b = [b[0].min(x), b[1].min(y), b[2].max(x), b[3].max(y)];
+            }
+            Some(b)
+        };
+        // The street people's faces within 35 m (their heads 1.62 m over the drawn feet).
+        let buf = &self.frame.regions[0];
+        for w in &buf.walkers {
+            let (x, z) = (buf.origin[0] + w.pos[0] as f64, buf.origin[1] + w.pos[2] as f64);
+            if (x - eye.x).hypot(z - eye.z) > 35.0 {
+                continue;
+            }
+            let c = Vec3::new(x as f32, (self.game.ground.ground_y(x, z) + 1.62 * scale) as f32, z as f32);
+            if let Some(b) = head_box(c, scale as f32) {
+                self.tag_avoid.push(b);
+            }
+        }
+        let mut out = vec![];
         let mut seen = std::collections::HashSet::new();
         for o in &self.others {
             seen.insert(o.id);
-            // Down on the heels the head is lower (the crouch loop's pelvis sits 0.3 m under standing).
-            let over = if o.emote == Emote::Sit { TAG_OVER_FEET_CROUCHED_M } else { TAG_OVER_FEET_M };
-            let anchor = DVec3::new(o.feet[0], o.feet[1] + over * scale, o.feet[2]);
-            let d = anchor.distance(eye);
-            let c = vp * glam::Vec4::new(anchor.x as f32, anchor.y as f32, anchor.z as f32, 1.0);
-            let on_screen = c.w > 0.05 && (c.x / c.w).abs() < 1.1 && (c.y / c.w).abs() < 1.1;
-            let far = ((d - TAG_NEAR_M) / (TAG_FAR_M - TAG_NEAR_M)).clamp(0.0, 1.0);
-            let fade = 1.0 - far * far * (3.0 - 2.0 * far);
-            let hidden = match self.pred.as_ref() {
-                Some(p) if d > 0.5 => p.cw.raycast(eye, (anchor - eye) / d, d - 0.35, eo_player::world::layer::WORLD | eo_player::world::layer::STREET | eo_player::world::layer::VEHICLE, None).is_some(),
+            let (anchor, centre) = match o.head {
+                Some(h) => (DVec3::new(h.joint.x as f64, h.joint.y as f64 + TAG_OVER_HEAD_M * scale, h.joint.z as f64), h.centre.as_dvec3()),
+                None => {
+                    // Down on the heels the head is lower (the crouch loop's pelvis sits 0.3 m under standing).
+                    let over = if o.emote == Emote::Sit { TAG_OVER_FEET_CROUCHED_M } else { TAG_OVER_FEET_M };
+                    let a = DVec3::new(o.feet[0], o.feet[1] + over * scale, o.feet[2]);
+                    (a, a - DVec3::Y * 0.3 * scale)
+                }
+            };
+            let d = centre.distance(eye);
+            let own_head = head_box(centre.as_vec3(), scale as f32).unwrap_or([0.0; 4]);
+            if d < 35.0 {
+                self.tag_avoid.push(own_head);
+            }
+            let fade = if d <= TAG_NEAR_M {
+                1.0
+            } else if d <= TAG_MID_M {
+                1.0 - (1.0 - TAG_MID_ALPHA) * (d - TAG_NEAR_M) / (TAG_MID_M - TAG_NEAR_M)
+            } else {
+                (TAG_MID_ALPHA * (1.0 - (d - TAG_MID_M) / (TAG_FAR_M - TAG_MID_M))).max(0.0)
+            };
+            let fs = TAG_NAME_PX * (TAG_NAME_AT_M / d.max(1.0)).sqrt().min(1.0) * px;
+            let big_enough = fs * 1.76 >= TAG_MIN_PLATE_PX * px;
+            let a_px = project(anchor.as_vec3());
+            let on_screen = a_px.is_some_and(|(x, y, _)| x > -0.05 * width as f32 && x < 1.05 * width as f32 && y > -0.05 * height as f32 && y < 1.1 * height as f32);
+            let ray_hidden = match self.pred.as_ref() {
+                Some(p) if d > 0.5 => p.cw.raycast(eye, (centre - eye) / d, d - 0.35, eo_player::world::layer::WORLD | eo_player::world::layer::STREET | eo_player::world::layer::VEHICLE, None).is_some(),
                 _ => false,
             };
-            let target = if on_screen && !hidden { fade as f32 } else { 0.0 };
+            // The depth probe's verdict on the head (none yet: clear).
+            let share = self.head_visible.get(&o.id).copied().unwrap_or(1.0);
+            let occl = if share < TAG_HIDDEN_SHARE {
+                0.0
+            } else if share < TAG_CLEAR_SHARE {
+                TAG_PARTLY_ALPHA
+            } else {
+                1.0
+            };
+            let target = if on_screen && big_enough && !ray_hidden && fade > 0.0 { fade as f32 * occl } else { 0.0 };
             let a = self.tag_alpha.entry(o.id).or_insert(target);
             *a = if dt <= 0.0 { target } else { *a + (target - *a) * (1.0 - (-dt / TAG_FADE_S).exp()) as f32 };
-            if *a < 0.01 || c.w <= 0.05 {
+            // The probe for the next frame: nine points over the head, and the depth of a nearer occluder.
+            if on_screen && fade > 0.0 {
+                let c = centre.as_vec3();
+                let toward = (eye.as_vec3() - c).normalize_or_zero();
+                let hs = scale as f32;
+                let mut pts = [[0.0f32; 2]; 9];
+                let mut ok = true;
+                for (k, pt) in pts.iter_mut().enumerate() {
+                    let (i, j) = ((k % 3) as f32 - 1.0, (k / 3) as f32);
+                    let w = c + right * (i * 0.065 * hs) + up * ((-0.06 + j * 0.07) * hs);
+                    match project(w) {
+                        Some((x, y, _)) => *pt = [x, y],
+                        None => ok = false,
+                    }
+                }
+                if let (true, Some((_, _, z))) = (ok, project(c + toward * TAG_OCCLUDER_M as f32 * hs)) {
+                    self.probe_asks.push(ProbeAsk { id: o.id, px: pts, depth: z });
+                }
+            }
+            let Some((sx, sy, _)) = a_px else { continue };
+            if *a < 0.01 {
                 continue;
             }
-            let (sx, sy) = ((c.x / c.w * 0.5 + 0.5) * width as f32, (1.0 - (c.y / c.w * 0.5 + 0.5)) * height as f32);
             let name = self.names.get(&o.id).cloned().unwrap_or_else(|| format!("player {}", o.id));
             let detail = match o.emote {
                 Emote::Wave => Some("waving"),
                 Emote::Point => Some("pointing"),
                 Emote::Sit => Some("crouching"),
-                Emote::Selfie => Some("taking a photo"),
+                Emote::Selfie => Some("taking a selfie"),
                 Emote::None => None,
             };
-            let size = ((17.0 * (9.0 / d.max(1.0)).sqrt()).clamp(11.0, 17.0) * px) as f32;
             // What they are doing only up close (past 12 m it is clutter: the pose says it).
             let detail = if d < TAG_DETAIL_M { detail.map(String::from) } else { None };
-            out.push((d, eo_ui::NameTag { x: sx, y: sy, name, detail, alpha: *a, size }));
+            let ds = (fs * 0.8).max(TAG_DETAIL_MIN_PX * px);
+            out.push(eo_ui::NameTag { x: sx, y: sy, depth: d as f32, name, detail, alpha: *a, size: fs as f32, detail_size: ds as f32, head: own_head });
         }
         self.tag_alpha.retain(|k, _| seen.contains(k));
-        // Declutter, nearest first: a tag that would cover a nearer one is
-        // lifted above it (twice at most), else faded behind it.
-        out.sort_by(|a, b| a.0.total_cmp(&b.0));
-        let mut placed: Vec<[f32; 4]> = vec![];
-        for (_, t) in out.iter_mut() {
-            let w = t.name.chars().count() as f32 * t.size * 0.62 + 1.3 * t.size;
-            let h = t.size * (1.9 + if t.detail.is_some() { 1.0 } else { 0.0 });
-            let rect = |y: f32| [t.x - w * 0.5, y - h, t.x + w * 0.5, y];
-            let hits = |r: [f32; 4], placed: &[[f32; 4]]| placed.iter().any(|p| r[0] < p[2] && p[0] < r[2] && r[1] < p[3] && p[1] < r[3]);
-            let mut y = t.y;
-            let mut lifts = 0;
-            while hits(rect(y), &placed) && lifts < 2 {
-                y -= h + 2.0 * px as f32;
-                lifts += 1;
-            }
-            if hits(rect(y), &placed) {
-                t.alpha *= 0.3;
-            } else {
-                t.y = y;
-            }
-            placed.push(rect(t.y));
-        }
-        // Far first: the nearest is drawn on top.
-        out.reverse();
-        out.into_iter().map(|t| t.1).collect()
+        self.head_visible.retain(|k, _| seen.contains(k));
+        out
     }
 
     pub fn hud(&self) -> (String, String) {
@@ -825,6 +975,165 @@ impl NetSession {
             format!("{} · {}", st.phase.label(), self.client.config().server)
         };
         (title, sub)
+    }
+}
+
+/// The name tags' depth probe: each tag's nine points over its head read
+/// from the frame's depth target by a compute pass, each counted visible
+/// unless something there is nearer than the head's centre by
+/// `TAG_OCCLUDER_M` (reversed Z: a larger depth is nearer). The window and
+/// the bench read the counts back a frame or two later (a ring of three
+/// buffers, never waited on); a capture waits for them (`run_now`).
+pub struct TagProbe {
+    pipeline: wgpu::ComputePipeline,
+    layout: wgpu::BindGroupLayout,
+    slots: Vec<ProbeSlot>,
+    next: usize,
+}
+
+struct ProbeSlot {
+    asks: wgpu::Buffer,
+    hits: wgpu::Buffer,
+    read: wgpu::Buffer,
+    ids: Vec<u32>,
+    /// 0 free, 1 encoded, 2 mapping, 3 mapped.
+    state: Arc<std::sync::atomic::AtomicU8>,
+}
+
+const PROBE_TAGS: usize = 64;
+const PROBE_POINTS: usize = PROBE_TAGS * 9;
+
+const PROBE_WGSL: &str = r#"
+@group(0) @binding(0) var depth: texture_depth_2d;
+@group(0) @binding(1) var<storage, read> asks: array<vec4<f32>>;
+@group(0) @binding(2) var<storage, read_write> hits: array<u32>;
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let i = gid.x;
+    if (i >= arrayLength(&asks)) {
+        return;
+    }
+    let a = asks[i];
+    if (a.w < 0.5) {
+        hits[i] = 0u;
+        return;
+    }
+    let dims = vec2<i32>(textureDimensions(depth));
+    let p = clamp(vec2<i32>(floor(a.xy)), vec2<i32>(0), dims - vec2<i32>(1));
+    let z = textureLoad(depth, p, 0);
+    // Reversed Z: visible unless something there is nearer than the threshold.
+    hits[i] = select(0u, 1u, z <= a.z);
+}
+"#;
+
+impl TagProbe {
+    pub fn new(device: &wgpu::Device) -> Self {
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("tag-probe"), source: wgpu::ShaderSource::Wgsl(PROBE_WGSL.into()) });
+        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("tag-probe"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry { binding: 0, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }, count: None },
+                wgpu::BindGroupLayoutEntry { binding: 1, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }, count: None },
+                wgpu::BindGroupLayoutEntry { binding: 2, visibility: wgpu::ShaderStages::COMPUTE, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: false }, has_dynamic_offset: false, min_binding_size: None }, count: None },
+            ],
+        });
+        let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("tag-probe"), bind_group_layouts: &[Some(&layout)], immediate_size: 0 });
+        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some("tag-probe"), layout: Some(&pl), module: &module, entry_point: Some("main"), compilation_options: Default::default(), cache: None });
+        let slot = || ProbeSlot {
+            asks: device.create_buffer(&wgpu::BufferDescriptor { label: Some("tag-probe asks"), size: (PROBE_POINTS * 16) as u64, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false }),
+            hits: device.create_buffer(&wgpu::BufferDescriptor { label: Some("tag-probe hits"), size: (PROBE_POINTS * 4) as u64, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC, mapped_at_creation: false }),
+            read: device.create_buffer(&wgpu::BufferDescriptor { label: Some("tag-probe read"), size: (PROBE_POINTS * 4) as u64, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false }),
+            ids: vec![],
+            state: Arc::new(std::sync::atomic::AtomicU8::new(0)),
+        };
+        Self { pipeline, layout, slots: (0..3).map(|_| slot()).collect(), next: 0 }
+    }
+
+    /// Encode this frame's probe (after the scene, into `enc`) into a free
+    /// slot; returns the slot, or None (nothing asked, or every slot busy).
+    pub fn encode(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, enc: &mut wgpu::CommandEncoder, depth: &wgpu::TextureView, asks: &[ProbeAsk]) -> Option<usize> {
+        use std::sync::atomic::Ordering;
+        if asks.is_empty() {
+            return None;
+        }
+        let k = (0..self.slots.len()).map(|i| (self.next + i) % self.slots.len()).find(|&i| self.slots[i].state.load(Ordering::Acquire) == 0)?;
+        self.next = (k + 1) % self.slots.len();
+        let n = asks.len().min(PROBE_TAGS);
+        let mut data = vec![0f32; n * 9 * 4];
+        for (t, a) in asks.iter().take(n).enumerate() {
+            for (j, p) in a.px.iter().enumerate() {
+                let o = (t * 9 + j) * 4;
+                data[o..o + 4].copy_from_slice(&[p[0], p[1], a.depth, 1.0]);
+            }
+        }
+        let slot = &mut self.slots[k];
+        queue.write_buffer(&slot.asks, 0, bytemuck::cast_slice(&data));
+        let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("tag-probe"),
+            layout: &self.layout,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::TextureView(depth) },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding { buffer: &slot.asks, offset: 0, size: std::num::NonZeroU64::new((n * 9 * 16) as u64) }) },
+                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding { buffer: &slot.hits, offset: 0, size: std::num::NonZeroU64::new((n * 9 * 4) as u64) }) },
+            ],
+        });
+        {
+            let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("tag-probe"), timestamp_writes: None });
+            pass.set_pipeline(&self.pipeline);
+            pass.set_bind_group(0, &bg, &[]);
+            pass.dispatch_workgroups(((n * 9) as u32).div_ceil(64), 1, 1);
+        }
+        enc.copy_buffer_to_buffer(&slot.hits, 0, &slot.read, 0, (n * 9 * 4) as u64);
+        slot.ids = asks.iter().take(n).map(|a| a.id).collect();
+        slot.state.store(1, Ordering::Release);
+        Some(k)
+    }
+
+    /// After the submit that carried `encode`'s pass: ask for the slot's counts.
+    pub fn submitted(&mut self, k: Option<usize>) {
+        use std::sync::atomic::Ordering;
+        let Some(k) = k else { return };
+        let slot = &self.slots[k];
+        slot.state.store(2, Ordering::Release);
+        let st = slot.state.clone();
+        let n = slot.ids.len();
+        slot.read.slice(0..(n * 9 * 4) as u64).map_async(wgpu::MapMode::Read, move |r| {
+            st.store(if r.is_ok() { 3 } else { 0 }, Ordering::Release);
+        });
+    }
+
+    /// Every slot whose counts arrived, oldest first, into `out` (id -> visible share of the head).
+    pub fn collect(&mut self, out: &mut HashMap<u32, f32>) {
+        use std::sync::atomic::Ordering;
+        for i in 0..self.slots.len() {
+            let k = (self.next + i) % self.slots.len();
+            let slot = &mut self.slots[k];
+            if slot.state.load(Ordering::Acquire) != 3 {
+                continue;
+            }
+            let n = slot.ids.len();
+            if let Ok(view) = slot.read.slice(0..(n * 9 * 4) as u64).get_mapped_range() {
+                let hits: &[u32] = bytemuck::cast_slice(&view);
+                for (t, id) in slot.ids.iter().enumerate() {
+                    let seen = hits[t * 9..t * 9 + 9].iter().filter(|&&h| h != 0).count();
+                    out.insert(*id, seen as f32 / 9.0);
+                }
+            }
+            slot.read.unmap();
+            slot.state.store(0, Ordering::Release);
+        }
+    }
+
+    /// A capture: probe `depth` now and wait for the counts.
+    pub fn run_now(&mut self, ctx: &GpuContext, depth: &wgpu::TextureView, asks: &[ProbeAsk], out: &mut HashMap<u32, f32>) -> Result<()> {
+        let mut enc = ctx.device.create_command_encoder(&Default::default());
+        let k = self.encode(&ctx.device, &ctx.queue, &mut enc, depth, asks);
+        ctx.queue.submit([enc.finish()]);
+        self.submitted(k);
+        ctx.device.poll(wgpu::PollType::wait_indefinitely()).map_err(|e| anyhow!("{e}"))?;
+        self.collect(out);
+        Ok(())
     }
 }
 
@@ -971,6 +1280,7 @@ fn bench(args: &Args, o: &NetOpts, process_start: Instant) -> Result<()> {
     let mut agents = AgentRuntime::start_remote(&world, args);
     let mut props = crate::props::PropsRuntime::start(&world, args);
     let settle_ms = settle(&mut g, &world, &mut props, &mut agents, &first, 600.0)?;
+    let mut probe = TagProbe::new(&g.ctx.device);
     // Let the world fill around the player before measuring.
     for _ in 0..120 {
         s.poll();
@@ -1037,6 +1347,7 @@ fn bench(args: &Args, o: &NetOpts, process_start: Instant) -> Result<()> {
         // The presence work on the render thread: the sky handed over, the name tags (projection, occlusion rays).
         let tp0 = Instant::now();
         s.apply_sky(&g.renderer, args.look.sky);
+        probe.collect(&mut s.head_visible);
         let tags = s.name_tags(&cam, args.width, args.height, dt);
         tags_n = tags_n.max(tags.len());
         s.net_ms += tp0.elapsed().as_secs_f64() * 1e3;
@@ -1056,7 +1367,12 @@ fn bench(args: &Args, o: &NetOpts, process_start: Instant) -> Result<()> {
         let mut enc = g.ctx.device.create_command_encoder(&Default::default());
         let ts = sets.get(i / ts_frames).map(|q| (q, QUERIES_PER_FRAME * (i % ts_frames) as u32));
         g.renderer.encode(&mut enc, &g.view, None, &g.targets.depth, ts);
+        // The tags' depth probe (its encode counted with the network's presence work).
+        let tq = Instant::now();
+        let probed = if s.presence.tags { probe.encode(&g.ctx.device, &g.ctx.queue, &mut enc, &g.targets.depth, &s.probe_asks) } else { None };
+        let n = n + tq.elapsed().as_secs_f64() * 1e3;
         subs.push(eo_render::pace::submit(&g.ctx.queue, [enc.finish()])); // counted
+        probe.submitted(probed);
         cpu_ms.push(t0.elapsed().as_secs_f64() * 1e3 + charged_ms);
         net_ms.push(n);
         step_ms.push(s.step_ms);
@@ -1333,6 +1649,7 @@ mod window {
         props: crate::props::PropsRuntime,
         ui: eo_ui::Ui,
         pacer: eo_render::pace::WaitPacer, // the driver's submission spike, taken in the swapchain wait
+        probe: TagProbe,
     }
 
     struct App {
@@ -1412,7 +1729,8 @@ mod window {
             let mut ui = eo_ui::Ui::new(&ctx.device, &ctx.queue, Some(&self.world.paths.repo_root), None, Some(eo_ui::MapInputs { city: &self.world.city, land: land.as_ref(), backdrop_centre: [self.spawn[0] as f32, self.spawn[1] as f32] }));
             ui.set_screen(eo_ui::Screen::Hud);
             let pacer = eo_render::pace::WaitPacer::new(self.args.perf.submit_pacing);
-            self.gfx = Some(Gfx { window, surface, config, ctx, renderer, targets, models, agents, props, ui, pacer });
+            let probe = TagProbe::new(&ctx.device);
+            self.gfx = Some(Gfx { window, surface, config, ctx, renderer, targets, models, agents, props, ui, pacer, probe });
             Ok(())
         }
 
@@ -1451,7 +1769,11 @@ mod window {
             };
             s.draw(&mut g.agents, None, dt, body, off);
             let sky = s.apply_sky(&g.renderer, self.args.look.sky);
+            // The tags' depth probes that have come back (never waited on).
+            let _ = g.ctx.device.poll(wgpu::PollType::Poll);
+            g.probe.collect(&mut s.head_visible);
             g.ui.tags = s.name_tags(&cam, g.config.width, g.config.height, dt);
+            g.ui.tag_avoid.clone_from(&s.tag_avoid);
             self.net_ms_max = self.net_ms_max.max(s.net_ms);
             let (acquired, _) = g.pacer.around(&g.ctx.device, &g.ctx.queue, || g.surface.get_current_texture());
             let surf = match acquired {
@@ -1476,6 +1798,8 @@ mod window {
             g.renderer.update(&g.ctx.queue, &cam);
             let mut enc = g.ctx.device.create_command_encoder(&Default::default());
             g.renderer.encode(&mut enc, &view, None, &g.targets.depth, None);
+            // The heads under the name tags, tested against this frame's depth.
+            let probed = if s.presence.tags { g.probe.encode(&g.ctx.device, &g.ctx.queue, &mut enc, &g.targets.depth, &s.probe_asks) } else { None };
             // HUD: the connection state and ping in the objective chip.
             let (title, sub) = s.hud();
             if let Some(p) = s.pred.as_ref() {
@@ -1493,6 +1817,7 @@ mod window {
             let _ = g.ui.prepare(&g.ctx.device, &g.ctx.queue, &mut enc, g.config.width, g.config.height, &eo_ui::Input::default());
             g.ui.draw(&g.ctx.device, &mut enc, &ui_view, ui_format, None);
             eo_render::pace::submit(&g.ctx.queue, [enc.finish()]); // counted
+            g.probe.submitted(probed);
             g.window.pre_present_notify();
             g.ctx.queue.present(surf);
             self.fps_frames += 1;
@@ -1824,6 +2149,10 @@ mod net_shots {
         let converge = file["converge_frames"].as_u64().map(|n| n as usize).unwrap_or(CONVERGE_FRAMES).max(8);
         let per_instant = file["frames_per_instant"].as_u64().map(|n| n as usize).unwrap_or(SEQUENCE_FRAMES).max(1);
         std::fs::create_dir_all(&dir)?;
+        let pair = o.pair_before.clone();
+        if let Some(b) = &pair {
+            std::fs::create_dir_all(b)?;
+        }
         // The server, its clock held still at the first scene's hour, and every scene's bots.
         let first = &scenes[0];
         let server = LocalServer::start(&world, &game, 0, [first.frame.o[0], first.frame.o[1]], (first.hour, 0.0, first.weather))?;
@@ -1831,7 +2160,7 @@ mod net_shots {
         let bots = BotRun::start(BotConfig { server: server.addr, count: visits.len(), threads: 1, spawn: eo_server::bots::Spawn::Spread, drive_share: 0.0, drive_mps: 0.0, seed: 5, conditions: Conditions::NONE, send_hz: 30.0, visits }, graph)?;
         let aspect = args.width as f32 / args.height as f32;
         let far = args.far.max(4000.0);
-        let mut gpu: Option<(Offscreen, AgentRuntime, crate::props::PropsRuntime, eo_ui::Ui)> = None;
+        let mut gpu: Option<(Offscreen, AgentRuntime, crate::props::PropsRuntime, eo_ui::Ui, TagProbe)> = None;
         let mut report = vec![];
         for (si, sc) in scenes.iter().enumerate() {
             server.ctl.lock().unwrap().sky = Some((sc.hour, 0.0, sc.weather, 1));
@@ -1840,7 +2169,9 @@ mod net_shots {
             s.draw_self = false;
             s.player_cars = false;
             wait_joined(&mut [&mut s], 180.0)?;
-            let cam0 = camera(&sc.shots[0], aspect, far);
+            // The first still's camera (or the sequence's, in a scene with no stills).
+            let Some(first_shot) = sc.shots.first().or(sc.sequence.as_ref().map(|q| &q.4)) else { anyhow::bail!("scene {}: no shots and no sequence", sc.name) };
+            let cam0 = camera(first_shot, aspect, far);
             if gpu.is_none() {
                 let g = offscreen(&mut world, args, cam0.eye, process_start)?;
                 let agents = AgentRuntime::start_remote(&world, args);
@@ -1853,9 +2184,10 @@ mod net_shots {
                     w.set_time(WATER_CLOCK_S);
                     w.set_always(true);
                 }
-                gpu = Some((g, agents, props, ui));
+                let probe = TagProbe::new(&g.ctx.device);
+                gpu = Some((g, agents, props, ui, probe));
             }
-            let (g, agents, props, ui) = gpu.as_mut().unwrap();
+            let (g, agents, props, ui, probe) = gpu.as_mut().unwrap();
             // The look: the scene's hour and weather for this client too (so `--no-shared-sky` draws the same sky).
             g.renderer.look.set_time_of_day(sc.hour);
             let base = args.look.sky;
@@ -1878,47 +2210,73 @@ mod net_shots {
                 last = Instant::now();
                 frame(g, &world, props, agents, &mut s, &cam0, dt, true)?;
             }
-            // The stills, from one frozen instant.
+            // The stills, from one frozen instant (and, with `--pair-before`, the
+            // previous drawing of the same instant: the same street people and traffic).
             let tick = s.client.render_tick(Instant::now()).unwrap_or(0.0);
             s.poll();
             s.draw(agents, Some(tick), 0.0, false, DVec3::ZERO);
             s.apply_sky(&g.renderer, args.look.sky);
             let extras = agents.extras.clone();
             let remote = agents.remote.clone();
+            let others = s.others.clone();
+            let remap = agents.remap_people.clone();
+            let before = pair.as_ref().map(|_| s.previous_extras(agents, Some(tick), 0.0, false));
             for sh in &sc.shots {
                 let cam = camera(sh, aspect, far);
                 agents.extras = extras.clone();
                 agents.remote = remote.clone();
+                agents.remap_people = remap.clone();
                 let settle2 = settle(g, &world, props, agents, &cam, 600.0)?;
                 agents.extras = extras.clone();
                 for _ in 0..converge {
                     draw_frame(g, &world, props, agents, &cam, 0.0)?;
                 }
-                let tags = s.name_tags(&cam, args.width, args.height, 0.0);
+                s.others = others.clone();
+                let tags = tags_now(&mut s, g, probe, &cam, args, 0.0)?;
                 let file = dir.join(format!("{}.png", sh.name));
-                overlay_and_save(g, ui, &tags, args, &file)?;
-                report.push(json!({
+                overlay_and_save(g, ui, &tags, &s.tag_avoid, args, &file)?;
+                let entry = json!({
                     "name": sh.name, "scene": sc.name, "file": file.file_name().map(|f| f.to_string_lossy().to_string()),
                     "eye": [cam.eye.x, cam.eye.y, cam.eye.z], "look_at": [sh.at.x, sh.at.y, sh.at.z], "fov_y_deg": sh.fov, "yaw_rad": cam.yaw, "pitch_rad": cam.pitch,
                     "server_tick": tick, "time_of_day": sc.hour, "weather": sc.weather_name, "sky_drawn": s.sky_shown.map(|k| json!({ "hour": k.hour, "weather": eo_net::presence::weather_name(k.weather) })),
                     "players": sc.players, "others_drawn": s.others.len(), "name_tags": tags.len(),
-                    "tags": tags.iter().map(|t| json!({ "name": t.name, "detail": t.detail, "alpha": t.alpha, "x": t.x, "y": t.y })).collect::<Vec<_>>(),
+                    "tags": tag_report(&s, &tags),
+                    "street_people_drawn": remote.as_ref().map(|f| f.regions.iter().map(|r| r.walkers.len()).sum::<usize>()), "cars_drawn": remote.as_ref().map(|f| f.regions.iter().map(|r| r.vehicles.len()).sum::<usize>()),
                     "presence": { "remote_bodies": o.presence.bodies, "name_tags": o.presence.tags, "shared_sky": o.presence.shared_sky },
                     "player_cars_drawn": false, "converge_frames": converge, "settle_ms": settle_ms + settle2,
-                }));
-                std::fs::write(dir.join(format!("{}.json", sh.name)), serde_json::to_vec_pretty(report.last().unwrap())?)?;
+                });
+                std::fs::write(dir.join(format!("{}.json", sh.name)), serde_json::to_vec_pretty(&entry)?)?;
+                report.push(entry.clone());
                 println!("wrote {}", file.display());
+                if let (Some(bdir), Some(bx)) = (pair.as_ref(), before.as_ref()) {
+                    // The same instant, the previous drawing (`--no-remote-bodies --no-name-tags`).
+                    agents.extras = bx.clone();
+                    agents.remote = remote.clone();
+                    agents.remap_people.clear();
+                    for _ in 0..converge {
+                        draw_frame(g, &world, props, agents, &cam, 0.0)?;
+                    }
+                    let bfile = bdir.join(format!("{}.png", sh.name));
+                    overlay_and_save(g, ui, &[], &[], args, &bfile)?;
+                    let mut be = entry.clone();
+                    be["file"] = json!(bfile.file_name().map(|f| f.to_string_lossy().to_string()));
+                    be["presence"] = json!({ "remote_bodies": false, "name_tags": false, "shared_sky": o.presence.shared_sky });
+                    be["name_tags"] = json!(0);
+                    be["tags"] = json!([]);
+                    be["pair_of"] = json!(file.display().to_string());
+                    std::fs::write(bdir.join(format!("{}.json", sh.name)), serde_json::to_vec_pretty(&be)?)?;
+                }
             }
             // The sequence: one more player walks up to the camera and stops, the world running.
             if let Some((name, gate, fps, seconds, sh)) = &sc.sequence {
                 let cam = camera(sh, aspect, far);
                 agents.extras.clear();
                 settle(g, &world, props, agents, &cam, 600.0)?;
-                let sdir = dir.join(name);
-                std::fs::create_dir_all(&sdir)?;
                 // Recorded at wall time with the world running (the client draws every
                 // 4 ms, as a fast frame loop would), every 1/fps s the instant kept;
-                // then each kept instant drawn under the still camera until it resolves.
+                // then each kept instant drawn under the still camera until it resolves
+                // (every kept instant of the sequence in turn, then the previous
+                // drawing's, each pass its own run of frames).
                 gate.store(true, Ordering::Relaxed);
                 let t0 = Instant::now();
                 let mut last = Instant::now();
@@ -1931,24 +2289,49 @@ mod net_shots {
                     s.poll();
                     s.step(&StepInput::default(), dt);
                     s.draw(agents, None, dt, false, DVec3::ZERO);
-                    let tags = s.name_tags(&cam, args.width, args.height, dt);
+                    let on = agents.extras.clone();
+                    let off = pair.as_ref().map(|_| s.previous_extras(agents, None, dt, false));
                     if t0.elapsed().as_secs_f64() >= next {
                         log.push(json!({ "frame": kept.len(), "wall_s": t0.elapsed().as_secs_f64(), "server_tick": s.tick, "others": s.others.iter().map(|p| json!({ "id": p.id, "name": s.names.get(&p.id), "feet": p.feet, "speed": p.speed, "emote": p.emote.name() })).collect::<Vec<_>>() }));
-                        kept.push((agents.extras.clone(), agents.remote.clone(), tags));
+                        kept.push((on, off, agents.remote.clone(), s.others.clone(), agents.remap_people.clone()));
                         next += 1.0 / fps;
                     }
                     std::thread::sleep(Duration::from_millis(4));
                 }
                 let k = kept.len();
-                for (i, (extras, remote, tags)) in kept.into_iter().enumerate() {
-                    agents.extras = extras;
-                    agents.remote = remote;
+                let sdir = dir.join(name);
+                std::fs::create_dir_all(&sdir)?;
+                let mut tag_log = vec![];
+                for (i, (on, _, remote, others, remap)) in kept.iter().enumerate() {
+                    agents.extras = on.clone();
+                    agents.remote = remote.clone();
+                    agents.remap_people = remap.clone();
                     for _ in 0..per_instant {
                         draw_frame(g, &world, props, agents, &cam, 0.0)?;
                     }
-                    overlay_and_save(g, ui, &tags, args, &sdir.join(format!("{i:04}.png")))?;
+                    s.others = others.clone();
+                    if let Some(f) = remote {
+                        // The street people of that instant (the faces the tags keep off).
+                        s.frame = f.clone();
+                    }
+                    let tags = tags_now(&mut s, g, probe, &cam, args, if i == 0 { 0.0 } else { 1.0 / fps })?;
+                    tag_log.push(json!({ "frame": i, "tags": tag_report(&s, &tags) }));
+                    overlay_and_save(g, ui, &tags, &s.tag_avoid, args, &sdir.join(format!("{i:04}.png")))?;
                 }
-                let m = json!({ "name": name, "scene": sc.name, "fps": fps, "seconds": seconds, "frames": k, "eye": [cam.eye.x, cam.eye.y, cam.eye.z], "look_at": [sh.at.x, sh.at.y, sh.at.z], "presence": { "remote_bodies": o.presence.bodies, "name_tags": o.presence.tags }, "log": log, "note": format!("the world run at wall time (the client drawing every 4 ms), the other players, traffic and tags kept every 1/fps s, each kept instant then drawn {per_instant} frames under the still camera") });
+                if let Some(bdir) = pair.as_ref() {
+                    let bsdir = bdir.join(name);
+                    std::fs::create_dir_all(&bsdir)?;
+                    for (i, (_, off, remote, _, _)) in kept.iter().enumerate() {
+                        agents.extras = off.clone().unwrap_or_default();
+                        agents.remote = remote.clone();
+                        agents.remap_people.clear();
+                        for _ in 0..per_instant {
+                            draw_frame(g, &world, props, agents, &cam, 0.0)?;
+                        }
+                        overlay_and_save(g, ui, &[], &[], args, &bsdir.join(format!("{i:04}.png")))?;
+                    }
+                }
+                let m = json!({ "name": name, "scene": sc.name, "fps": fps, "seconds": seconds, "frames": k, "eye": [cam.eye.x, cam.eye.y, cam.eye.z], "look_at": [sh.at.x, sh.at.y, sh.at.z], "presence": { "remote_bodies": o.presence.bodies, "name_tags": o.presence.tags }, "log": log, "tags": tag_log, "note": format!("the world run at wall time (the client drawing every 4 ms), the other players, traffic and tags kept every 1/fps s, each kept instant then drawn {per_instant} frames under the still camera; with --pair-before the previous drawing of the same instants after") });
                 std::fs::write(dir.join(format!("{name}.json")), serde_json::to_vec_pretty(&m)?)?;
                 println!("wrote {} frames to {}", k, sdir.display());
             }
@@ -1959,6 +2342,24 @@ mod net_shots {
         let _ = bots.stop();
         drop(server);
         Ok(())
+    }
+
+    /// The name tags over the frame just drawn: their heads' depth probed
+    /// against it (waited for), then the tags (easing over `dt`).
+    fn tags_now(s: &mut NetSession, g: &mut Offscreen, probe: &mut TagProbe, cam: &Camera, args: &Args, dt: f64) -> Result<Vec<eo_ui::NameTag>> {
+        // The probe's asks for this camera, the tags' easing left as it was.
+        let eased = s.tag_alpha.clone();
+        s.name_tags(cam, args.width, args.height, 0.0);
+        s.tag_alpha = eased;
+        let asks = s.probe_asks.clone();
+        probe.run_now(&g.ctx, &g.targets.depth, &asks, &mut s.head_visible)?;
+        Ok(s.name_tags(cam, args.width, args.height, dt))
+    }
+
+    /// What the tags were, for a capture's manifest.
+    fn tag_report(s: &NetSession, tags: &[eo_ui::NameTag]) -> Vec<Value> {
+        let by_name: HashMap<String, u32> = s.names.iter().map(|(k, v)| (v.clone(), *k)).collect();
+        tags.iter().map(|t| json!({ "name": t.name, "detail": t.detail, "alpha": t.alpha, "anchor": [t.x, t.y], "depth_m": t.depth, "size_px": t.size, "head_visible": by_name.get(&t.name).and_then(|id| s.head_visible.get(id)) })).collect()
     }
 
     /// One running frame: the network, the camera player standing still, the world streamed and drawn.
@@ -1988,9 +2389,10 @@ mod net_shots {
     }
 
     /// The name tags over the drawn frame (the HUD pass, plates off), then the PNG.
-    fn overlay_and_save(g: &mut Offscreen, ui: &mut eo_ui::Ui, tags: &[eo_ui::NameTag], args: &Args, file: &std::path::Path) -> Result<()> {
+    fn overlay_and_save(g: &mut Offscreen, ui: &mut eo_ui::Ui, tags: &[eo_ui::NameTag], avoid: &[[f32; 4]], args: &Args, file: &std::path::Path) -> Result<()> {
         if !tags.is_empty() {
             ui.tags = tags.to_vec();
+            ui.tag_avoid = avoid.to_vec();
             ui.set_time(100.0);
             let mut enc = g.ctx.device.create_command_encoder(&Default::default());
             ui.prepare(&g.ctx.device, &g.ctx.queue, &mut enc, args.width, args.height, &eo_ui::Input::default());

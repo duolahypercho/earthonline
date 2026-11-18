@@ -80,6 +80,10 @@ pub struct AgentRuntime {
     /// (a traffic car driven through the player's car or the lens; the simulation does
     /// not see the player's car).
     pub hide_near: Vec<([f32; 3], f32)>,
+    /// online (`net.rs`): street people drawn in one of these bodies are
+    /// drawn in the other (from, to) instead, so no passer-by wears a
+    /// player's body (empty: as simulated).
+    pub remap_people: Vec<(u32, u32)>,
 }
 
 /// One region around `focus` at `density` times the default population.
@@ -124,6 +128,7 @@ impl AgentRuntime {
             extras: vec![],
             parked: vec![], // props
             hide_near: vec![],
+            remap_people: vec![],
             started: Instant::now(),
             sim_ready_ms: None,
             lib_ready_ms: None,
@@ -298,7 +303,7 @@ impl AgentRuntime {
                 } else {
                     base
                 };
-                let list: &[GpuAgent] = if self.extras.is_empty() && self.parked.is_empty() && self.hide_near.is_empty() { // + parked; + hide_near
+                let list: &[GpuAgent] = if self.extras.is_empty() && self.parked.is_empty() && self.hide_near.is_empty() && self.remap_people.is_empty() { // + parked; + hide_near; + remap_people
                     base
                 } else {
                     self.scratch.clear();
@@ -311,6 +316,13 @@ impl AgentRuntime {
                         let lib = self.lib.as_deref();
                         let body = |a: &GpuAgent| lib.and_then(|l| l.models.get(a.model as usize)).map(|m| m.radius * a.scale.max(1.0)).unwrap_or(3.0);
                         self.scratch.extend(base.iter().filter(|a| !hide.iter().any(|(p, r)| (a.pos[0] - p[0]).hypot(a.pos[2] - p[2]) < *r + body(a))));
+                    }
+                    if !self.remap_people.is_empty() {
+                        for a in self.scratch.iter_mut() {
+                            if let Some(&(_, to)) = self.remap_people.iter().find(|(from, _)| *from == a.model) {
+                                a.model = to;
+                            }
+                        }
                     }
                     self.scratch.extend_from_slice(&self.extras);
                     self.scratch.extend_from_slice(&self.parked); // props
