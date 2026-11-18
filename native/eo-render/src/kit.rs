@@ -624,6 +624,11 @@ pub fn inputs_key(repo_root: &Path, palette: &[String], streets: bool) -> String
     if !paint.is_empty() {
         h.update(paint.as_bytes());
     }
+    // the kit's facade typology and roof rules (eo_kit::rules_cache_tag; all off: the key is unchanged).
+    let rules = eo_kit::rules_cache_tag();
+    if !rules.is_empty() {
+        h.update(rules.as_bytes());
+    }
     for p in palette {
         h.update(p.as_bytes());
         h.update([0u8]);
