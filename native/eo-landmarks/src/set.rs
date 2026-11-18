@@ -356,6 +356,8 @@ impl LandmarkSet {
         let (built, skyline) = std::thread::scope(|s| {
             // the named skyline towers (skyline.rs) beside the landmarks.
             let sky = opts.skyline.then(|| s.spawn(|| crate::skyline::build_all(repo_root, height_at)));
+            // the groves round Coit and Sutro towers (grove.rs; `--no-grove`).
+            let grove = (opts.buildings && crate::grove::grove_on()).then(|| s.spawn(|| crate::grove::build_all(repo_root, height_at, ca)));
             let hs: Vec<_> = ids
                 .iter()
                 .map(|id| {
@@ -380,7 +382,17 @@ impl LandmarkSet {
                 })
                 .collect();
             let built = hs.into_iter().map(|h| h.join().expect("landmark build thread panicked")).collect::<Result<Vec<_>>>();
-            let skyline = sky.map(|h| h.join().expect("skyline build thread panicked"));
+            let mut skyline = sky.map(|h| h.join().expect("skyline build thread panicked"));
+            if let Some(g) = grove.map(|h| h.join().expect("grove build thread panicked")) {
+                skyline = Some(match (skyline, g) {
+                    (Some(Ok((mut a, b))), Ok((ga, _))) => {
+                        a.extend(ga);
+                        Ok((a, b))
+                    }
+                    (None, g) => g,
+                    (Some(e @ Err(_)), _) | (Some(Ok(_)), e @ Err(_)) => e,
+                });
+            }
             (built, skyline)
         });
         let mut tower_lights: Vec<LandmarkLight> = Vec::new();

@@ -19,6 +19,7 @@ pub mod data;
 pub mod geometry;
 pub mod golden_gate;
 pub mod ground_cover;
+pub mod grove; // the groves round Coit and Sutro towers
 pub mod lights;
 pub mod plaza;
 pub mod promenade;
