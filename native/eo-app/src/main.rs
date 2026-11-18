@@ -393,6 +393,18 @@ fn parse_args() -> Result<Args> {
             "--cc0-shots" => {}
             "--no-landmarks2" => a.landmarks2 = false,
             s if eo_landmarks::suspension::SWITCHES.contains(&s) => {} // read by eo_landmarks::suspension::features (the bridges)
+            "--no-ferry-building" => eo_landmarks::features::set_ferry_building(false), // its record's box, as before
+            "--no-tram-tracks" => eo_landmarks::features::set_tram_tracks(false), // no streetcar rails, as before
+            "--no-quay-railing" => eo_landmarks::features::set_quay_railing(false), // no guard on the quay wall, as before
+            "--no-ferry-building-detail" => eo_landmarks::features::set_ferry_building_detail(false), // the Ferry Building's first pass, as before
+            "--no-rail-finish" => eo_landmarks::features::set_rail_finish(false), // one bare-steel rail head, as before
+            "--no-corridor-palms" => eo_landmarks::features::set_corridor_palms(false), // no Embarcadero palms, as before
+            "--no-guard-detail" => eo_landmarks::features::set_guard_detail(false), // the quay guard's first pass, as before
+            "--no-pier-sheds" => eo_landmarks::features::set_pier_sheds(false), // the Ferry Plaza's JS shed boxes, as before
+            "--no-palm-detail" => eo_landmarks::features::set_palm_detail(false), // the corridor palms' first pass, as before
+            "--no-facade-relief" => eo_landmarks::features::set_ferry_building_relief(false), // the Ferry Building's second pass, as before
+            "--no-rail-polish" => eo_landmarks::features::set_rail_polish(false), // the rails' worn band at 0.4 / 0.65, no sealant joints, as before
+            "--no-furniture-models" => eo_render::props_lib2::furniture_models::set_enabled(false), // missing-GLB furniture as boxes, as before
             "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
             s if a.props2.parse_flag(s) => {} // --no-props2, --no-furniture, --no-eztree, --no-overhead, --no-wires, --no-props2-shading, --capture-props2
             "--agents-bench" | "--agents-capture" | "--people-capture" | "--people-lineup" => {} // + --people-capture, --people-lineup
@@ -604,6 +616,46 @@ pub fn load_world(args: &Args) -> Result<World> {
                 let r = s.add_plazas_with(&root, &|x, z| sw.buildings.contains(x, z), &fps, &|x, z| sw.ground(x, z) + o.footway_lift, &|x, z| sw.paved_at(x, z), o.verge_max_drop, bay_tones)?; // bay tones
                 let carpet = |x: f64, z: f64| sw.carpet_y(x, z);
                 let pr = s.add_promenades(&carpet, &carpet);
+                // the Ferry Building on the footway datum (eo-landmarks ferry_building.rs) and the
+                // corridor's streetcar rails in the drawn paving, a paint step over the junction paint.
+                if bay_tones {
+                    let trace = std::env::var("EO_TRACE_LOAD").is_ok();
+                    if let Some(fb) = s.add_ferry_building(&|x, z| sw.ground(x, z) + o.footway_lift, &|x, z| sw.paved_at(x, z), &|x, z| sw.carpet_y(x, z)) {
+                        if trace {
+                            eprintln!("landmarks: Ferry Building floor {:.2} m, {:.1} x {:.1} m, bays {:?}, {} triangles, {:.0} ms", fb.base_y, fb.length_m, fb.depth_m, fb.bays, fb.triangles, fb.ms);
+                        }
+                    }
+                    let lift = o.junction_paint_lift + (o.junction_paint_lift - o.marking_lift).abs();
+                    match s.add_tram_tracks(&root, &|x, z| sw.surface_at(x, z, None), lift) {
+                        Ok(Some((n, m, tris))) if trace => eprintln!("landmarks: streetcar rails {n} tracks, {m:.0} m, {tris} triangles"),
+                        Err(e) => eprintln!("warning: streetcar rails not built ({e:#})"),
+                        _ => {}
+                    }
+                    // the corridor's surveyed palms (eo-landmarks palms.rs) from the street tree list.
+                    if eo_landmarks::features::corridor_palms() {
+                        match eo_props::JsProps::load() {
+                            Ok(js) => {
+                                let t = &js.trees;
+                                let st = t.stride.max(3);
+                                let palm = t.forms.iter().position(|f| f == "palm");
+                                let list: Vec<(f64, f64, Option<f64>, Option<f64>, u32)> = (0..t.data.len() / st)
+                                    .filter(|&i| palm.is_some_and(|p| t.data[i * st + 2] as usize == p))
+                                    .map(|i| {
+                                        let d = &t.data[i * st..i * st + st];
+                                        let dm = |k: usize| (st > k && d[k] > 0).then(|| d[k] as f64 / 10.0);
+                                        (d[0] as f64 / 10.0, d[1] as f64 / 10.0, dm(3), dm(4), i as u32)
+                                    })
+                                    .collect();
+                                if let Some((n, tris)) = s.add_corridor_palms(&list, &|x, z| sw.surface_at(x, z, None), &|x, z| sw.buildings.contains(x, z)) {
+                                    if trace {
+                                        eprintln!("landmarks: corridor palms {n}, {tris} triangles");
+                                    }
+                                }
+                            }
+                            Err(e) => eprintln!("warning: corridor palms not built ({e:#})"),
+                        }
+                    }
+                }
                 Ok((s, r, pr))
             }))
         }
@@ -907,6 +959,9 @@ pub fn load_world(args: &Args) -> Result<World> {
             pr
         } else {
             let ground = |x: f64, z: f64| elevation.ground(x, z);
+            if args.landmarks2 {
+                set.add_ferry_building(&ground, &|_, _| None, &|_, _| f64::NEG_INFINITY);
+            }
             set.add_promenades(&ground, &ground)
         };
         if std::env::var("EO_TRACE_LOAD").is_ok() {

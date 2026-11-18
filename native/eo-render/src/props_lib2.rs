@@ -26,6 +26,9 @@
 use crate::props_lib::*;
 use eo_props::{JsProps, Model};
 
+/// Street furniture drawn in code where a kind's GLB is missing (`--no-furniture-models`: boxes).
+pub mod furniture_models;
+
 /// Render model ids past `eo_props::MODEL_COUNT` (instances carry these).
 pub const TREE_BASE: u32 = eo_props::MODEL_COUNT as u32;
 pub const MAX_TREE_SPECIES: u32 = 32;
@@ -556,8 +559,29 @@ pub(crate) fn cook_extras(out: &mut Out, repo: &std::path::Path, js: &JsProps, x
         ("sandwichBoard", Model::SandwichBoard, [14.0, 40.0, 0.0, near], 1.0),
         ("utilityBox", Model::UtilityBox, [16.0, 45.0, 0.0, near], 1.12),
     ];
+    // the procedural kinds' materials and sizes (furniture_models.rs), only when they draw.
+    let procedural = if furniture_models::enabled() {
+        match furniture_models::Sizes::load(repo) {
+            Ok(s) => Some((furniture_models::Mats::new(out.materials, m_paint, m_metal, m_matte), s)),
+            Err(e) => {
+                out.missing.push(format!("furniture models: sizes not read ({e:#}); boxes drawn"));
+                None
+            }
+        }
+    } else {
+        None
+    };
     for (name, model, lod, h) in glbs {
         if !glb_model(out, repo, js, name, model as u32, lod, cascades_for(h)) {
+            if let Some((mats, sizes)) = &procedural {
+                if furniture_models::build(out, name, model as u32, lod, cascades_for(h), mats, sizes) {
+                    // the report names what stands in for the missing file.
+                    if let Some(m) = out.missing.iter_mut().rev().find(|m| m.starts_with(&format!("{name}: "))) {
+                        m.push_str("; drawn in code instead (props_lib2/furniture_models.rs)");
+                    }
+                    continue;
+                }
+            }
             // A proxy at the kind's height (the JS keeps its procedural mesh).
             bx(&mut out.b, m_paint, 0.3, h, 0.3, "#6d6f6d", 0.0, h / 2.0, 0.0, 1.0);
             let k = out.finish();

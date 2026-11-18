@@ -279,6 +279,22 @@ impl MaterialTable {
         self.by_key.get(key).copied()
     }
 
+    /// A kit finish by name, or `<finish>*<k>[~<c>]` (`kit_repeat`): that
+    /// finish with its texture repeat k times larger (eo-landmarks' Ferry
+    /// Building ashlar), registered once beside the palette's entry.
+    pub fn kit_finish(&mut self, key: &str) -> Option<u32> {
+        if let Some(i) = self.by_name(key) {
+            return Some(i);
+        }
+        let (name, k, c) = kit_repeat(key);
+        if k == 1.0 && c == 1.0 {
+            return None;
+        }
+        let mut g = self.gpu[self.by_name(name)? as usize];
+        g.params[3] /= k as f32;
+        Some(self.push(key.to_string(), g))
+    }
+
     fn push(&mut self, key: String, g: GpuMaterial) -> u32 {
         let i = self.gpu.len() as u32;
         let name = key.split('|').next().unwrap_or_default().to_string();
@@ -292,6 +308,20 @@ impl MaterialTable {
 impl Default for MaterialTable {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// A kit finish key's name, repeat scale and scan contrast: `<finish>*<k>`
+/// draws `<finish>` with its texture k times larger, `<finish>*<k>~<c>` also
+/// with its CC0 scan's variation around its mean times c; a plain name is (1, 1).
+pub fn kit_repeat(key: &str) -> (&str, f64, f64) {
+    let pos = |v: &str| v.parse::<f64>().ok().filter(|k| *k > 1e-3);
+    match key.split_once('*') {
+        Some((name, rest)) => {
+            let (k, c) = rest.split_once('~').unwrap_or((rest, "1"));
+            (name, pos(k).unwrap_or(1.0), pos(c).unwrap_or(1.0))
+        }
+        None => (key, 1.0, 1.0),
     }
 }
 
@@ -839,4 +869,18 @@ pub fn mip_chain(rgba: &[u8], res: usize, srgb: bool) -> Vec<Vec<u8>> {
         r = n;
     }
     levels
+}
+
+#[cfg(test)]
+mod kit_repeat_tests {
+    use super::kit_repeat;
+
+    #[test]
+    fn a_finish_key_reads_its_repeat_and_contrast() {
+        assert_eq!(kit_repeat("limestone-ashlar"), ("limestone-ashlar", 1.0, 1.0));
+        assert_eq!(kit_repeat("limestone-ashlar*3.300"), ("limestone-ashlar", 3.3, 1.0));
+        assert_eq!(kit_repeat("limestone-ashlar*3.300~0.500"), ("limestone-ashlar", 3.3, 0.5));
+        // a malformed scale is the plain finish's
+        assert_eq!(kit_repeat("cast-stone*x"), ("cast-stone", 1.0, 1.0));
+    }
 }

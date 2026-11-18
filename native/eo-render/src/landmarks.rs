@@ -264,7 +264,8 @@ pub fn append(scene: &mut Scene, set: &LandmarkSet, materials: &mut MaterialTabl
             continue;
         }
         // a structure drawn in a kit finish takes the kit palette's material (textured, aged).
-        let kit = s.kit.as_deref().and_then(|k| materials.by_name(k));
+        // (`<finish>*<k>`: the finish at k times its texture repeat, authored::kit_repeat.)
+        let kit = s.kit.as_deref().and_then(|k| materials.kit_finish(k));
         let mat = match kit {
             Some(m) => m,
             None => materials.named(&format!("structure:{}", s.name), material(&s.material, [0.0, 0.0], false)),

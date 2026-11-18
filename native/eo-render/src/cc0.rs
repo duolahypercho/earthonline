@@ -183,7 +183,9 @@ pub fn material_table(mt: &MaterialTable, kit_means: &[[f32; 3]], layers: &[Laye
     let mut mapped = 0;
     for (i, g) in mt.gpu.iter().enumerate() {
         let name = mt.names.get(i).map(|s| s.as_str()).unwrap_or("");
-        let base = name.split('@').next().unwrap_or("");
+        // (`<finish>*<k>~<c>`: a kit finish drawn k times larger, its scan's variation times c.)
+        let (base, rep, contrast) = crate::authored::kit_repeat(name.split('@').next().unwrap_or(""));
+        let (rep, contrast) = (rep as f32, contrast as f32);
         let textured_kit = g.flags & F_TEXTURED != 0 && g.flags & F_GLASS == 0 && g.layer >= 0;
         let (c, kit_mean) = if textured_kit {
             match (kit_class(base), kit_means.get(g.layer as usize)) {
@@ -210,10 +212,12 @@ pub fn material_table(mt: &MaterialTable, kit_means: &[[f32; 3]], layers: &[Laye
         let la_info = &layers[la as usize];
         let ma = mul(la);
         let mb = lb.map(mul).unwrap_or(ma);
-        v[i * MAT_VEC4] = [la as f32, lb.map(|l| l as f32).unwrap_or(-1.0), 1.0 / la_info.size_m[0], 1.0 / la_info.size_m[1]];
+        v[i * MAT_VEC4] = [la as f32, lb.map(|l| l as f32).unwrap_or(-1.0), 1.0 / (la_info.size_m[0] * rep), 1.0 / (la_info.size_m[1] * rep)];
         v[i * MAT_VEC4 + 1] = [ma[0], ma[1], ma[2], (c.mode | c.drive << 4) as f32];
-        v[i * MAT_VEC4 + 2] = [mb[0], mb[1], mb[2], c.normal];
-        v[i * MAT_VEC4 + 3] = [c.pom_m, c.grime, c.contrast, lb.map(|l| 1.0 / layers[l as usize].size_m[0]).unwrap_or(0.0)];
+        // (A scaled finish is dressed stone at a larger course, not a larger rough
+        // block: its relief keeps the scan's height, so its slopes ease by the scale.)
+        v[i * MAT_VEC4 + 2] = [mb[0], mb[1], mb[2], c.normal / rep.sqrt()];
+        v[i * MAT_VEC4 + 3] = [c.pom_m, c.grime, c.contrast * contrast, lb.map(|l| 1.0 / (layers[l as usize].size_m[0] * rep)).unwrap_or(0.0)];
         mapped += 1;
     }
     (v, mapped)

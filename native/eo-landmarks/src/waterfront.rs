@@ -129,6 +129,113 @@ pub fn ferry_sheds(outline: &[[f64; 2]], spec: &serde_json::Value, deck_y: f64) 
     Some((walls.freeze(), roofs.freeze()))
 }
 
+/// The Ferry Plaza's gate sheds drawn as built pieces (`features::pier_sheds`;
+/// off: the JS's boxes, `ferry_sheds`): at the JS's anchors and plan sizes, a
+/// single-storey steel-framed terminal shed, INFERRED (no survey of the
+/// gates): columns at the corners and every `GATE_BAY_M`, a glazed lower
+/// storey with mullions behind a sill, a painted panel band to the eave, and a
+/// low gabled roof overhanging every side as a canopy, with a fascia.
+pub const GATE_BAY_M: f64 = 4.0;
+pub const GATE_EAVE_M: f64 = 5.2;
+pub const GATE_GLAZING_TOP_M: f64 = 3.3;
+pub const GATE_RIDGE_RISE_M: f64 = 1.6;
+pub const GATE_OVERHANG_M: f64 = 1.8;
+pub const GATE_COLUMN_M: f64 = 0.32;
+/// The glazing's tone (a dim waiting hall behind clear glass, linear) and its roughness.
+pub const GATE_GLASS_LINEAR: Rgb = [0.035, 0.04, 0.045];
+
+/// The gate sheds' meshes: frames and panels (in `SHED_WALL_KIT`), roofs (`SHED_ROOF_KIT`), glazing (vertex colour).
+pub struct GateSheds {
+    pub frames: Frozen,
+    pub roofs: Frozen,
+    pub glass: Frozen,
+}
+
+pub fn ferry_gate_sheds(outline: &[[f64; 2]], spec: &serde_json::Value, deck_y: f64) -> Option<GateSheds> {
+    let n = |k: &str| crate::data::num(spec, k);
+    let (w, d) = (n("widthM"), n("depthM"));
+    let picked = crate::shore::ferry_shed_anchors(outline, spec);
+    if picked.is_empty() {
+        return None;
+    }
+    let mut frames = MeshArrays::new("ferry-gate-sheds:frames");
+    let mut roofs = MeshArrays::new("ferry-gate-sheds:roofs");
+    let mut glass = MeshArrays::new("ferry-gate-sheds:glass");
+    let white = [1.0; 3];
+    for (p, yaw) in &picked {
+        // the box's frame: local x (its width) turned by -yaw as `ferry_sheds` turns it.
+        let (c, s) = ((-yaw).cos(), (-yaw).sin());
+        let at = |lx: f64, lz: f64, y: f64| [p[0] + lx * c - lz * s, deck_y + y, p[1] + lx * s + lz * c];
+        let (hx, hz) = (w / 2.0, d / 2.0);
+        let face = |m: &mut MeshArrays, q: [[f64; 3]; 4], want: [f64; 3], col: Rgb| {
+            let e1 = [q[1][0] - q[0][0], q[1][1] - q[0][1], q[1][2] - q[0][2]];
+            let e2 = [q[3][0] - q[0][0], q[3][1] - q[0][1], q[3][2] - q[0][2]];
+            let nn = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+            if nn[0] * want[0] + nn[1] * want[1] + nn[2] * want[2] >= 0.0 { m.quad(q[0], q[1], q[2], q[3], col) } else { m.quad(q[3], q[2], q[1], q[0], col) }
+        };
+        let dir = |lx: f64, lz: f64| [lx * c - lz * s, 0.0, lx * s + lz * c];
+        // an axis box in the shed's frame
+        let lbox = |m: &mut MeshArrays, x: [f64; 2], z: [f64; 2], y: [f64; 2], col: Rgb| {
+            let v = |i: usize, j: usize, k: usize| at(x[i], z[k], y[j]);
+            face(m, [v(0, 0, 1), v(1, 0, 1), v(1, 1, 1), v(0, 1, 1)], dir(0.0, 1.0), col);
+            face(m, [v(0, 0, 0), v(1, 0, 0), v(1, 1, 0), v(0, 1, 0)], dir(0.0, -1.0), col);
+            face(m, [v(1, 0, 0), v(1, 0, 1), v(1, 1, 1), v(1, 1, 0)], dir(1.0, 0.0), col);
+            face(m, [v(0, 0, 0), v(0, 0, 1), v(0, 1, 1), v(0, 1, 0)], dir(-1.0, 0.0), col);
+            face(m, [v(0, 1, 0), v(1, 1, 0), v(1, 1, 1), v(0, 1, 1)], [0.0, 1.0, 0.0], col);
+            face(m, [v(0, 0, 0), v(1, 0, 0), v(1, 0, 1), v(0, 0, 1)], [0.0, -1.0, 0.0], scale_rgb(col, 0.6));
+        };
+        let cw = GATE_COLUMN_M / 2.0;
+        // the four walls: (start, end) in the frame, outward normal
+        let walls = [([-hx, hz], [hx, hz], (0.0, 1.0)), ([hx, -hz], [-hx, -hz], (0.0, -1.0)), ([hx, hz], [hx, -hz], (1.0, 0.0)), ([-hx, -hz], [-hx, hz], (-1.0, 0.0))];
+        for (a, b, (nx, nz)) in walls {
+            let len = (b[0] - a[0]).hypot(b[1] - a[1]);
+            let bays = (len / GATE_BAY_M).round().max(1.0) as usize;
+            let t = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
+            let pt = |s: f64, o: f64| [a[0] + t[0] * s + nx * o, a[1] + t[1] * s + nz * o];
+            // glazing set 0.15 m in behind the frame line, the panel band flush
+            let g0 = pt(0.0, -0.15);
+            let g1 = pt(len, -0.15);
+            face(&mut glass, [at(g0[0], g0[1], 0.0), at(g1[0], g1[1], 0.0), at(g1[0], g1[1], GATE_GLAZING_TOP_M), at(g0[0], g0[1], GATE_GLAZING_TOP_M)], dir(nx, nz), GATE_GLASS_LINEAR);
+            let (q0, q1) = (pt(0.0, 0.0), pt(len, 0.0));
+            face(&mut frames, [at(q0[0], q0[1], GATE_GLAZING_TOP_M), at(q1[0], q1[1], GATE_GLAZING_TOP_M), at(q1[0], q1[1], GATE_EAVE_M), at(q0[0], q0[1], GATE_EAVE_M)], dir(nx, nz), white);
+            // the sill kerb and the transom under the band
+            let (k0, k1) = (pt(0.0, -0.2), pt(len, 0.05));
+            lbox(&mut frames, [k0[0].min(k1[0]), k0[0].max(k1[0])], [k0[1].min(k1[1]), k0[1].max(k1[1])], [0.0, 0.25], white);
+            for k in 0..=bays {
+                let sc = len * k as f64 / bays as f64;
+                let cpt = pt(sc, 0.0);
+                lbox(&mut frames, [cpt[0] - cw, cpt[0] + cw], [cpt[1] - cw, cpt[1] + cw], [0.0, GATE_EAVE_M], white);
+                // two mullions a bay
+                if k < bays {
+                    for f in [1.0 / 3.0, 2.0 / 3.0] {
+                        let mp = pt(sc + len / bays as f64 * f, -0.12);
+                        lbox(&mut frames, [mp[0] - 0.05, mp[0] + 0.05], [mp[1] - 0.05, mp[1] + 0.05], [0.25, GATE_GLAZING_TOP_M], white);
+                    }
+                }
+            }
+        }
+        // the roof: a low gable along the shed's width, overhanging every side; its fascia and soffit
+        let (ox, oz) = (hx + GATE_OVERHANG_M, hz + GATE_OVERHANG_M);
+        let (e, r) = (GATE_EAVE_M + 0.15, GATE_EAVE_M + 0.15 + GATE_RIDGE_RISE_M);
+        for side in [1.0, -1.0] {
+            let q = [at(-ox, side * oz, e), at(ox, side * oz, e), at(ox, 0.0, r), at(-ox, 0.0, r)];
+            face(&mut roofs, q, [dir(0.0, side)[0] * 0.3, 1.0, dir(0.0, side)[2] * 0.3], white);
+            face(&mut frames, [at(-ox, side * oz, e - 0.35), at(ox, side * oz, e - 0.35), at(ox, side * oz, e), at(-ox, side * oz, e)], dir(0.0, side), white);
+            face(&mut frames, [at(-ox, side * oz, e - 0.35), at(ox, side * oz, e - 0.35), at(ox, 0.0, r - 0.35), at(-ox, 0.0, r - 0.35)], [0.0, -1.0, 0.0], scale_rgb(white, 0.55));
+        }
+        for side in [1.0, -1.0] {
+            // the gable ends, panelled
+            face(&mut frames, [at(side * hx, -hz, GATE_EAVE_M), at(side * hx, hz, GATE_EAVE_M), at(side * hx, 0.0, r - 0.1)].iter().chain([at(side * hx, 0.0, r - 0.1)].iter()).copied().collect::<Vec<_>>().try_into().unwrap(), dir(side, 0.0), white);
+            face(&mut frames, [at(side * ox, -oz, e - 0.35), at(side * ox, oz, e - 0.35), at(side * ox, oz, e), at(side * ox, -oz, e)], dir(side, 0.0), white);
+        }
+    }
+    Some(GateSheds { frames: frames.freeze(), roofs: roofs.freeze(), glass: glass.freeze() })
+}
+
+fn scale_rgb(c: Rgb, k: f64) -> Rgb {
+    [c[0] * k, c[1] * k, c[2] * k]
+}
+
 impl std::fmt::Debug for ShorePress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "ShorePress({} edges, {} piers)", self.edges.len(), self.piers.len())
@@ -642,4 +749,171 @@ fn pier_fascia(conc: &mut MeshArrays, under: &mut MeshArrays, a: [f64; 2], b: [f
         conc.box_(c[0], c[1], foot, soffit, h, h, yaw, concrete, crate::geometry::Faces { top: false, bottom: false });
         *piles += 1;
     }
+}
+
+/// The guard rail along the Embarcadero's quay wall: the promenade's edge
+/// over the bay within `RAILING_CORRIDOR_M` of the Ferry Building, on the
+/// wall's coping. A picket guard of painted steel (`--no-quay-railing`: none).
+///
+/// * Height: 42 in (1067 mm) to the top of the rail, the guard height of the
+///   California Building Code 2022 section 1015.3.
+/// * Openings: no 4 in (102 mm) sphere passes (CBC 1015.4): pickets of
+///   `RAILING_PICKET_M` square at `RAILING_PICKET_PITCH_M` leave 99 mm.
+/// * INFERRED (no survey of the rail): the post pitch, the sections, the
+///   bottom rail's height, its place on the coping.
+pub const RAILING_HEIGHT_M: f64 = 1.067;
+pub const RAILING_PICKET_M: f64 = 0.016;
+pub const RAILING_PICKET_PITCH_M: f64 = 0.115;
+pub const RAILING_POST_PITCH_M: f64 = 1.83;
+pub const RAILING_POST_M: f64 = 0.06;
+pub const RAILING_TOP_RAIL_M: [f64; 2] = [0.064, 0.05];
+pub const RAILING_BOTTOM_RAIL_Y_M: f64 = 0.1;
+/// The rail's line, landward of the wall's sea face (half the coping), m.
+pub const RAILING_SET_BACK_M: f64 = 0.21;
+/// The corridor (surveyed metres from the Ferry Building's tower, before the plan scale).
+pub const RAILING_CORRIDOR_M: f64 = 900.0;
+/// The kit finish the rail is drawn in (kit-material-specs.json: a mid-grey painted steel).
+pub const RAILING_KIT: &str = "painted-steel-mid";
+
+/// The corridor quay's lift over the quay's own top (`crest_ground`) with the
+/// guard's second pass: just over the drawn terrain carpet (eo-street's
+/// `openGroundLiftM`, 0.11 m, plus a 2 cm margin) so the apron is the walk
+/// and no carpet shows through it. The JS crest (its road lift, 0.45 m, and
+/// 0.04 m over it) stood the apron 0.5 m over the promenade's carpet beside
+/// it: a raised shelf with a trench behind its kerb skirt, and the guard read
+/// half a metre too tall from the walk. Blended back to the JS crest over
+/// `QUAY_LIFT_BLEND_M` at the corridor's edge.
+pub const QUAY_APRON_LIFT_M: f64 = 0.13;
+pub const QUAY_LIFT_BLEND_M: f64 = 60.0;
+
+/// The quay's lift at `d` from the corridor's centre (corridor radius `reach`; `js_lift` outside it).
+pub fn quay_lift(d: f64, reach: f64, js_lift: f64) -> f64 {
+    let t = ((d - (reach - QUAY_LIFT_BLEND_M)) / QUAY_LIFT_BLEND_M).clamp(0.0, 1.0);
+    let t = t * t * (3.0 - 2.0 * t);
+    QUAY_APRON_LIFT_M + (js_lift - QUAY_APRON_LIFT_M) * t
+}
+
+/// The guard's second pass (`features::guard_detail`), INFERRED (no survey of
+/// the rail): a kick plate along its foot on the coping (its bottom rail
+/// seated on it), a base plate under each post, the posts' feet darkened
+/// where the coping's grime and the sky's occlusion meet them, and the
+/// pickets as wire members (eo-render's wire pass keeps a picket where the
+/// view ray passes within its radius or half a few pixels of its axis, faded
+/// by the share it truly covers: far pickets fade to their coverage instead
+/// of aliasing into moire), each drawn inside `PICKET_ENVELOPE_M` of its axis.
+pub const KICK_PLATE_M: [f64; 2] = [0.1, 0.01];
+pub const BASE_PLATE_M: [f64; 2] = [0.15, 0.015];
+pub const POST_FOOT_TONE: f64 = 0.62;
+pub const POST_FOOT_M: f64 = 0.3;
+pub const PICKET_ENVELOPE_M: f64 = 0.05;
+
+/// The guard: its rails, posts and (first pass) pickets, and with the second
+/// pass its pickets as a wire record (else empty), and the pieces built.
+pub struct Railing {
+    pub solid: Frozen,
+    pub pickets: Frozen,
+    pub pieces: usize,
+}
+
+/// The guard on every walled (non-pier) shore edge piece whose middle is
+/// within `reach` of `centre` (drawn plan), standing on `crest_at`.
+pub fn quay_railing(edges: &[ShoreEdge], crest_at: &dyn Fn(f64, f64) -> f64, centre: [f64; 2], reach: f64, colour: Rgb) -> (Frozen, usize) {
+    let r = quay_railing_with(edges, crest_at, centre, reach, colour, false);
+    (r.solid, r.pieces)
+}
+
+/// `quay_railing`, with the second pass when `detail`.
+pub fn quay_railing_with(edges: &[ShoreEdge], crest_at: &dyn Fn(f64, f64) -> f64, centre: [f64; 2], reach: f64, colour: Rgb, detail: bool) -> Railing {
+    let mut m = MeshArrays::new("waterfront:railing");
+    let mut wires = MeshArrays::wire("waterfront:railing:pickets", PICKET_ENVELOPE_M);
+    let mut pieces = 0usize;
+    let face = |m: &mut MeshArrays, q: [[f64; 3]; 4], want: [f64; 3]| {
+        let e1 = [q[1][0] - q[0][0], q[1][1] - q[0][1], q[1][2] - q[0][2]];
+        let e2 = [q[3][0] - q[0][0], q[3][1] - q[0][1], q[3][2] - q[0][2]];
+        let n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+        if n[0] * want[0] + n[1] * want[1] + n[2] * want[2] >= 0.0 { m.quad(q[0], q[1], q[2], q[3], colour) } else { m.quad(q[3], q[2], q[1], q[0], colour) }
+    };
+    // A bar from a to b (plan points, heights ya..yb at its foot) of section w x h, its sides facing out.
+    let bar = |m: &mut MeshArrays, a: [f64; 2], b: [f64; 2], ya: f64, yb: f64, w: f64, h: f64, ends: bool| {
+        let l = (b[0] - a[0]).hypot(b[1] - a[1]);
+        if l < 1e-6 {
+            return;
+        }
+        let (t, n) = ([(b[0] - a[0]) / l, (b[1] - a[1]) / l], [-(b[1] - a[1]) / l, (b[0] - a[0]) / l]);
+        let p = |s: [f64; 2], y: f64, o: f64, k: f64| [s[0] + n[0] * o, y + k, s[1] + n[1] * o];
+        let (o0, o1) = (-w / 2.0, w / 2.0);
+        face(m, [p(a, ya, o1, 0.0), p(b, yb, o1, 0.0), p(b, yb, o1, h), p(a, ya, o1, h)], [n[0], 0.0, n[1]]);
+        face(m, [p(a, ya, o0, 0.0), p(b, yb, o0, 0.0), p(b, yb, o0, h), p(a, ya, o0, h)], [-n[0], 0.0, -n[1]]);
+        face(m, [p(a, ya, o0, h), p(b, yb, o0, h), p(b, yb, o1, h), p(a, ya, o1, h)], [0.0, 1.0, 0.0]);
+        face(m, [p(a, ya, o0, 0.0), p(b, yb, o0, 0.0), p(b, yb, o1, 0.0), p(a, ya, o1, 0.0)], [0.0, -1.0, 0.0]);
+        if ends {
+            face(m, [p(a, ya, o0, 0.0), p(a, ya, o1, 0.0), p(a, ya, o1, h), p(a, ya, o0, h)], [-t[0], 0.0, -t[1]]);
+            face(m, [p(b, yb, o0, 0.0), p(b, yb, o1, 0.0), p(b, yb, o1, h), p(b, yb, o0, h)], [t[0], 0.0, t[1]]);
+        }
+    };
+    // A vertical member of square section s at plan point c from y0 to y1, its four sides.
+    let post = |m: &mut MeshArrays, c: [f64; 2], u: [f64; 2], y0: f64, y1: f64, s: f64| {
+        let v = [-u[1], u[0]];
+        let h = s / 2.0;
+        let corner = |a: f64, b: f64, y: f64| [c[0] + u[0] * a + v[0] * b, y, c[1] + u[1] * a + v[1] * b];
+        for (da, db, want) in [(1.0, 0.0, [u[0], 0.0, u[1]]), (-1.0, 0.0, [-u[0], 0.0, -u[1]]), (0.0, 1.0, [v[0], 0.0, v[1]]), (0.0, -1.0, [-v[0], 0.0, -v[1]])] {
+            let (a0, b0, a1, b1) = if da != 0.0 { (da * h, -h, da * h, h) } else { (-h, db * h, h, db * h) };
+            face(m, [corner(a0, b0, y0), corner(a1, b1, y0), corner(a1, b1, y1), corner(a0, b0, y1)], want);
+        }
+    };
+    for e in edges.iter().filter(|e| e.pier.is_none()) {
+        let mid = [(e.a[0] + e.b[0]) / 2.0, (e.a[1] + e.b[1]) / 2.0];
+        if (mid[0] - centre[0]).hypot(mid[1] - centre[1]) > reach {
+            continue;
+        }
+        let on = |p: [f64; 2]| [p[0] + e.land[0] * RAILING_SET_BACK_M, p[1] + e.land[1] * RAILING_SET_BACK_M];
+        let (a, b) = (on(e.a), on(e.b));
+        let l = (b[0] - a[0]).hypot(b[1] - a[1]);
+        if l < 0.2 {
+            continue;
+        }
+        pieces += 1;
+        let u = [(b[0] - a[0]) / l, (b[1] - a[1]) / l];
+        let (ya, yb) = (crest_at(e.a[0], e.a[1]), crest_at(e.b[0], e.b[1]));
+        let at = |t: f64| ([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], ya + (yb - ya) * t);
+        let (tw, th) = (RAILING_TOP_RAIL_M[0], RAILING_TOP_RAIL_M[1]);
+        let from = m.positions.len() / 3;
+        bar(&mut m, a, b, ya + RAILING_HEIGHT_M - th, yb + RAILING_HEIGHT_M - th, tw, th, false);
+        bar(&mut m, a, b, ya + RAILING_BOTTOM_RAIL_Y_M, yb + RAILING_BOTTOM_RAIL_Y_M, 0.04, 0.04, false);
+        if detail {
+            // the kick plate seated on the coping, the bottom rail on it
+            bar(&mut m, a, b, ya, yb, KICK_PLATE_M[1], RAILING_BOTTOM_RAIL_Y_M, true);
+        }
+        let posts = (l / RAILING_POST_PITCH_M).ceil().max(1.0) as usize;
+        for k in 0..posts {
+            let (c, y) = at(k as f64 / posts as f64);
+            post(&mut m, c, u, y - 0.05, y + RAILING_HEIGHT_M - th, RAILING_POST_M);
+            if detail {
+                let c1 = [c[0] + u[0] * BASE_PLATE_M[0] / 2.0, c[1] + u[1] * BASE_PLATE_M[0] / 2.0];
+                let c0 = [c[0] - u[0] * BASE_PLATE_M[0] / 2.0, c[1] - u[1] * BASE_PLATE_M[0] / 2.0];
+                bar(&mut m, c0, c1, y, y, BASE_PLATE_M[0], BASE_PLATE_M[1], true);
+            }
+        }
+        if detail {
+            // the feet darker: the coping's grime and the sky the plates and posts lose there
+            let base = ya.min(yb);
+            for v in from..m.positions.len() / 3 {
+                let t = ((m.positions[3 * v + 1] - base) / POST_FOOT_M).clamp(0.0, 1.0);
+                let k = POST_FOOT_TONE + (1.0 - POST_FOOT_TONE) * t * t * (3.0 - 2.0 * t);
+                for ch in 0..3 {
+                    m.colors[3 * v + ch] *= k;
+                }
+            }
+        }
+        let pickets = (l / RAILING_PICKET_PITCH_M).floor() as usize;
+        for k in 0..pickets {
+            let (c, y) = at((k as f64 + 0.5) / pickets as f64);
+            if detail {
+                wires.wire_segment([c[0], y + RAILING_BOTTOM_RAIL_Y_M + 0.04, c[1]], [c[0], y + RAILING_HEIGHT_M - th, c[1]], RAILING_PICKET_M, colour);
+            } else {
+                post(&mut m, c, u, y + RAILING_BOTTOM_RAIL_Y_M + 0.04, y + RAILING_HEIGHT_M - th, RAILING_PICKET_M);
+            }
+        }
+    }
+    Railing { solid: m.freeze(), pickets: wires.freeze(), pieces }
 }

@@ -16,16 +16,20 @@
 
 pub mod bay_bridge;
 pub mod data;
+pub mod features;
+pub mod ferry_building;
 pub mod geometry;
 pub mod golden_gate;
 pub mod ground_cover;
 pub mod lights;
+pub mod palms;
 pub mod plaza;
 pub mod promenade;
 pub mod set;
 pub mod shore;
 pub mod suspension;
 pub mod towers;
+pub mod tram;
 pub mod waterfront;
 
 pub use data::LandmarksJs;
