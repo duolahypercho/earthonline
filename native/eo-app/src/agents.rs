@@ -400,7 +400,7 @@ fn build_corridors(paths: &eo_data::DataPaths, source: &eo_sim::native::NativeSo
         _ => vec![],
     };
     let carpet = |x: f64, z: f64| ground.y(x, z);
-    let surfaces = corridor::Surfaces { deck: Some(&deck), paved: &paved, ground: &carpet };
+    let surfaces = corridor::Surfaces { deck: Some(&deck), street: matches!(ground, Ground::Street(_)), paved: &paved, ground: &carpet };
     let ways = corridor::ways(source, &surfaces, walkers);
     let c = eo_sim::corridor::Corridors::new(ways, eo_sim::corridor::Params::with_time_gap(time_gap), SEED_INT);
     c.hour_handle().store(hour.to_bits(), Ordering::Relaxed);

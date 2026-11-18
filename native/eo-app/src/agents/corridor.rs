@@ -212,6 +212,8 @@ fn heights(pts: &[[f64; 2]], start: Option<f64>, paved: &dyn Fn(f64, f64) -> Vec
 /// Everything the ways are laid on.
 pub struct Surfaces<'a> {
     pub deck: Option<&'a Deck<'a>>,
+    /// `paved` reads a drawn street (else it is always empty and hides nothing).
+    pub street: bool,
     pub paved: &'a dyn Fn(f64, f64) -> Vec<f64>,
     pub ground: &'a dyn Fn(f64, f64) -> f64,
 }
@@ -261,7 +263,12 @@ fn way_of(chain: &Chain, s: &Surfaces, name: &str, flow: [f64; 24], mix: [f64; 4
             }
         }
     }
-    let hidden = flags.iter().map(|(t, _)| *t).collect();
+    // Nothing is drawn where the street draws no road (a tunnel, a covered
+    // cut, a way the street leaves out): off the deck, a stretch whose road
+    // line has no paving under it is hidden (with a street to read).
+    let hidden = (0..pts.len())
+        .map(|i| flags[i].0 || (s.street && deck_c[i].is_none() && (s.paved)(pts[i][0], pts[i][1]).is_empty()))
+        .collect();
     WaySpec {
         name: name.to_string(),
         points: out_pts,
@@ -385,5 +392,66 @@ mod tests {
         assert!(s > d.curb && s < d.half_width);
         // and outside the legs at a tower.
         assert!(d.walk_s(0.0) > d.tower_walk[2]);
+    }
+
+    /// The real ways on the drawn ground: every vehicle on the bridge rides
+    /// the deck (none under it), the lanes keep their sides, and the 16:24
+    /// weekday deck carries the counted flow's order of traffic.
+    #[test]
+    fn bridge_traffic_rides_the_deck_at_the_counted_flow() {
+        let paths = eo_data::DataPaths::discover().expect("repository");
+        let source = eo_sim::native::load(&paths).expect("sim source");
+        let elevation = eo_data::ElevationGrid::load(&paths).expect("elevation");
+        let js = LandmarksJs::get();
+        let gg = eo_landmarks::set::ground_of(js, "golden-gate-bridge", &|x: f64, z: f64| elevation.sample(x, z));
+        let site = Site::new(&golden_gate::data(js));
+        let ca = eo_data::CaStandards::load(&paths).expect("standards");
+        let k_width = eo_landmarks::suspension::DeckStandards::load(&ca).expect("deck").k_width;
+        let deck = Deck::new(js, &site, &|x: f64, z: f64| gg.at(x, z), k_width);
+        let paved = |_: f64, _: f64| vec![];
+        let ground = |x: f64, z: f64| elevation.ground(x, z);
+        let s = Surfaces { deck: Some(&deck), street: false, paved: &paved, ground: &ground };
+        let ways = ways(&source, &s, true);
+        let names: Vec<&str> = ways.iter().map(|w| w.name.as_str()).collect();
+        for n in ["US-101 southbound", "US-101 northbound", "east walk northbound", "east walk southbound"] {
+            assert!(names.contains(&n), "{n} missing from {names:?}");
+        }
+        let gap = eo_sim::Standards::load(&paths).expect("standards").metric("following-time-gap").expect("time gap");
+        let mut c = eo_sim::corridor::Corridors::new(ways, eo_sim::corridor::Params::with_time_gap(gap), 1);
+        c.hour_handle().store(16.4f64.to_bits(), std::sync::atomic::Ordering::Relaxed);
+        for _ in 0..(60 * 30) {
+            c.step(1.0 / 60.0, None);
+        }
+        let (mut north, mut south, mut walkers) = (0usize, 0usize, 0usize);
+        let len_km = (deck.plan.c_north - deck.plan.c_south) / 1000.0;
+        for o in &c.out {
+            let (x, z) = (o.pos[0] as f64, o.pos[2] as f64);
+            let cc = site.chainage(x, z);
+            // (the last 10 m at each way end ramp to the road beyond it.)
+            if cc < deck.plan.c_south + 10.0 || cc > deck.plan.c_north - 10.0 {
+                continue;
+            }
+            let [ax, az] = site.deck_point(cc, 0.0);
+            let lat = (x - ax) * site.across[0] + (z - az) * site.across[1];
+            let top = deck.plan.deck_top(cc);
+            if o.kind >= eo_sim::output::KIND_WALKER_BASE {
+                walkers += 1;
+                assert!((o.pos[1] as f64 - top - deck.curb_m).abs() < 0.2, "walker off the walk height");
+                assert!(lat > deck.curb && lat < deck.tower_walk[3] + 0.5, "walker off the east walk: {lat}");
+                continue;
+            }
+            assert!((o.pos[1] as f64 - top).abs() < 0.25, "vehicle at {} under/over the deck top {top}", o.pos[1]);
+            assert!(lat.abs() < deck.curb && lat.abs() > k_width / 2.0, "vehicle off the roadway: {lat}");
+            // right-hand traffic: northbound (heading toward the north tower) east of the median.
+            let north_bound = (o.heading as f64).sin() * site.axis[0] + (o.heading as f64).cos() * site.axis[1] > 0.0;
+            assert_eq!(north_bound, lat > 0.0, "a vehicle on the wrong side");
+            if north_bound { north += 1 } else { south += 1 }
+        }
+        eprintln!("16:24 on the deck ({len_km:.2} km): {north} northbound, {south} southbound, {walkers} walkers");
+        // 3 lanes a way at the 3 s gap hold at most about 3 x 1060 vph; at 20 m/s that is
+        // about 50 a kilometre a direction; the off-peak direction about 40.
+        assert!(north as f64 / len_km > 25.0 && north as f64 / len_km < 70.0, "north {north}");
+        assert!(south as f64 / len_km > 20.0 && south as f64 / len_km < 60.0, "south {south}");
+        assert!(walkers > 20, "walkers {walkers}");
     }
 }
