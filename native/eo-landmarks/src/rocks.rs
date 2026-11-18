@@ -374,9 +374,10 @@ pub fn revetment(edges: &[([f64; 2], [f64; 2], [f64; 2])], crest_at: &dyn Fn(f64
                 out.push(Stone {
                     bed: ([x, y_face - 0.3 * d, z], bed_n),
                     c: [x, y_face - 0.15 * d, z],
-                    r: [d * 0.55, d * (0.38 + 0.1 * hash(s as i64, 1, 3)), d * (0.45 + 0.1 * hash(s as i64, 2, 3))],
+                    // quarried blocks: as long as wide or up to 1.6 times, the shortest axis 0.6-0.9 of the middle
+                    r: [d * (0.5 + 0.15 * hash(s as i64, 7, 3)), d * (0.3 + 0.15 * hash(s as i64, 1, 3)), d * (0.38 + 0.12 * hash(s as i64, 2, 3))],
                     yaw: hash(s as i64, 3, 3) * std::f64::consts::TAU,
-                    tilt: [(hash(s as i64, 4, 3) - 0.5) * 0.6, (hash(s as i64, 5, 3) - 0.5) * 0.6],
+                    tilt: [(hash(s as i64, 4, 3) - 0.5) * 1.2, (hash(s as i64, 5, 3) - 0.5) * 1.2],
                     seed: s,
                     tone: tone(hash(s as i64, 6, 3)),
                     angular: true,
@@ -490,7 +491,7 @@ mod tests {
         assert!(!st.is_empty());
         for s in &st {
             let dmax = 2.0 * s.r[0].max(s.r[1]).max(s.r[2]);
-            assert!(dmax <= ARMOUR_D50_M * 1.25 * ARMOUR_GRADATION[1] * 0.56 * 2.0 + 1e-9);
+            assert!(dmax <= ARMOUR_D50_M * 1.25 * ARMOUR_GRADATION[1] * 0.65 * 2.0 + 1e-9);
             assert!(s.c[2] > 0.0, "the stones lie seaward of the wall: {:?}", s.c);
             assert!(s.c[1] < 0.829 * 1.25 + 2.0 * 1.25, "under the armour's crest");
         }
