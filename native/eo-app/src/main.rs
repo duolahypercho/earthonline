@@ -437,6 +437,15 @@ fn parse_args() -> Result<Args> {
             // read by `roofs_flags` (main) into the environment switches.
             "--no-roof-colours" | "--no-roof-contrast" | "--no-roof-parapet" | "--no-roof-patches" | "--no-roof-plant" => {}
             "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" => {} // `roofs_flags`
+            // the Golden Gate photo-realism pass's switches, each read by its crate from the command line
+            // (the bridges' own are in eo_landmarks::suspension::SWITCHES, above).
+            "--no-gg2-camera" | "--no-camera-look" | "--no-scene-meter" | "--no-lamp-photocell" => {} // read by its crate (the camera)
+            "--no-gg2-daylight" | "--no-ground-albedo" | "--no-photo-date" | "--no-cirrus" | "--no-clear-sky-state" | "--no-terminator-bias" | "--no-spectral-sky" => {} // read by its crate (the daylight)
+            "--no-gg2-water" | "--no-water-exposure" | "--no-water-current" | "--no-water-lean" | "--no-water-ppr-blur" | "--no-beach-profiles" | "--no-water-streak-caps" | "--no-water-far-calm" | "--no-baker-surf" | "--no-swash-line" => {} // read by its crate (the water)
+            "--no-gg2-ground" | "--no-beach-sand-limit" | "--no-sand-albedo" | "--no-rocks" | "--no-riprap" | "--no-pier-lines" | "--no-ground-steps" | "--no-season-seam" => {} // read by its crate (the shore ground)
+            "--no-gg2-far" | "--no-far-fallback" | "--no-landmark-far-models" | "--no-far-tree-density" | "--no-presidio-rule" | "--no-far-paint" => {} // read by its crate (the far layer)
+            "--no-corridor-traffic" | "--no-deck-walkers" => {} // read by its crate (the corridor traffic)
+            "--no-gg2-vegetation" | "--no-coastal-trees" | "--no-ground-cover" | "--no-hill-rock" => {} // read by its crate (the vegetation and hill rock)
             "--segments" => a.segments = Some(val()?.split(',').map(|s| s.trim().to_string()).collect()),
             // occlusion / hitch
             "--no-occlusion" => a.perf.occlusion = false,
