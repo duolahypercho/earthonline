@@ -151,7 +151,16 @@ fn lm_wire2_vs(
     var out: LmWire2Out;
     let vp = skyu.vp;
     let drawn0 = max(radius, LM_WIRE_ENVELOPE_M);
-    let need = max(drawn0, radius + 2.0 * lm_wire_mpp((vp * vec4<f32>(pos, 1.0)).w));
+    let mpp = lm_wire_mpp((vp * vec4<f32>(pos, 1.0)).w);
+    var need = max(drawn0, radius + 2.0 * mpp);
+    // a rope whose peak coverage (2 r / pixel) is under 1/64 changes no pixel
+    // by more than a level of the display: its prism closes to the axis there
+    // (no fragments; per vertex, so a segment tapers where it crosses the
+    // threshold). A lit LED rope stays.
+    let lit = color.a < 0.5 && LM_LED_ON && skyu.night.x > 0.0;
+    if (2.0 * radius < mpp / 64.0 && !lit) {
+        need = 0.0;
+    }
     let p = axis + (pos - axis) * (need / drawn0);
     out.clip = vp * vec4<f32>(p, 1.0);
     if (!(radius > 0.0)) {
@@ -193,10 +202,13 @@ fn lm_wire2_fs(in: LmWire2Out) -> @location(0) vec4<f32> {
     let dir = normalize(in.dir);
     let a = cam - in.axis;
     // Only the prism's half toward the eye (it covers the whole silhouette
-    // once; the far half drew every pixel a second time).
+    // once; the far half drew every pixel a second time). A rejected pixel
+    // returns a transparent colour rather than discarding, so the scene depth
+    // test runs before the fragment (a discarding shader takes it late, and
+    // every rope behind a building was shaded in full).
     let off = in.world - in.axis;
     if (dot(off - dir * dot(off, dir), a - dir * dot(a, dir)) < 0.0) {
-        discard;
+        return vec4<f32>(0.0); // (no discard: the depth test stays early)
     }
     let ray = normalize(in.world - cam);
     let q0 = cross(dir, ray);
@@ -206,7 +218,7 @@ fn lm_wire2_fs(in: LmWire2Out) -> @location(0) vec4<f32> {
     let r = in.radius;
     let cov = lm_tent_cdf(miss + r, mpp) - lm_tent_cdf(miss - r, mpp);
     if (!(r > 0.0) || cov < 1.0 / 1024.0) {
-        discard;
+        return vec4<f32>(0.0); // (no discard: the depth test stays early)
     }
     let facing = normalize(a - dir * dot(a, dir));
     let on_axis = in.axis + dir * dot(in.world - in.axis, dir);
@@ -219,25 +231,18 @@ fn lm_wire2_fs(in: LmWire2Out) -> @location(0) vec4<f32> {
     s.alpha = 1.0;
     s.env = ENV_PAINTED_METAL;
     // The section the pixel sees: the round normal at its offset where the
-    // rope is wider than the pixel's tent, else the mean of the visible half
-    // section (two offsets across it, +-0.6 of the radius: the sunlit flank
-    // of a hairline shows).
-    var c = vec3<f32>(0.0);
-    var offsets = array<f32, 2>(-0.6, 0.6);
-    let wide = r > mpp;
-    let taps = select(2, 1, wide);
-    for (var k = 0; k < taps; k = k + 1) {
-        var t = clamp(miss / r, -1.0, 1.0);
-        if (!wide) {
-            t = offsets[k];
-        }
-        let n = normalize(q * t + facing * sqrt(max(1.0 - t * t, 0.0)));
-        let p = on_axis + n * r;
-        s.n = n;
-        c = c + look_light(s, m, normalize(cam - p), p, n, 0u).rgb;
+    // rope is wider than the pixel's tent, else one normal standing for the
+    // visible half section: 0.3 of the radius toward the key light's side
+    // (the mean of the half section's Lambert term over its two flanks, within
+    // a few per cent; the sunlit flank of a hairline shows).
+    var t = clamp(miss / r, -1.0, 1.0);
+    if (r <= mpp) {
+        t = select(-0.3, 0.3, dot(q, look.key_dir.xyz) > 0.0);
     }
-    c = c / f32(taps);
-    let p = on_axis + facing * r;
+    let n = normalize(q * t + facing * sqrt(max(1.0 - t * t, 0.0)));
+    let p = on_axis + n * r;
+    s.n = n;
+    var c = look_light(s, m, normalize(cam - p), p, n, 0u).rgb;
     if (in.color.a < 0.5 && LM_LED_ON) {
         c = c + vec3<f32>(lm_led(p, r, mpp) * skyu.bloom_w2.z * skyu.night.x);
     }
