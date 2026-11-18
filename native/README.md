@@ -136,16 +136,25 @@ player's input is frozen (in `--play` the local world holds still too; in
 within 30 m of the player, swept as a ball against the collision world: mouse
 look, W A S D fly (orbit: W S nearer and farther), Q E down and up, Shift
 faster, Ctrl slower, O orbit or fly. The lens runs 14 to 200 mm (35 mm
-equivalent, the wheel), Z X roll. The panel (Up and Down choose a setting,
-Left and Right change it, H hides it) sets focus (on the player, on what the
-centre meets, or a distance), aperture (f/1.4 to f/22, or off), exposure
-compensation (plus or minus 3 EV), a look (Neutral, Warm film, Cool,
-Monochrome), vignetting, grain, a letterbox (2.39:1, 1.85:1, 4:3, 1:1),
-the rule-of-thirds guides, a local time of day (only you see it) and the
-capture size. Enter saves a PNG at the window's size or rendered at twice it,
-with its settings beside it, into the photos folder (`EO_PHOTOS_DIR`, else
-`photos` in the application-data folder). The HUD is hidden while photo mode
-is on; P or Esc leaves. The depth of field and finish are `eo-render/src/photo.rs`.
+equivalent: the field of view across the 36 mm width; the wheel), Z X roll.
+The panel has three pages (Tab: Camera, Look, Frame; Up and Down choose a
+setting, Left and Right change it, H hides it; it fades back while the camera
+moves and docks left or right). Camera: focus (on your eyes, at an AF point,
+the centre or a rule-of-thirds crossing, F, or a distance; the depth of
+field's near and far limits are shown, a reticle marks where the focus is
+taken and G turns focus peaking on, never saved), aperture (f/1.4 to f/22,
+or off) and the iris (9 rounded blades, 7 or 6 straight blades, an ideal
+circle). Look: exposure compensation (plus or minus 3 EV), a look (Neutral;
+Warm film, an 81A warming filter; Cool, an 82B cooling filter; Monochrome,
+Tri-X 400 through a yellow, deep yellow, orange, red or green contrast
+filter) at a strength, fade, vignetting and grain. Frame: a letterbox
+(2.39:1, 1.85:1, 4:3, 1:1) whose opening can be moved up or down, the
+rule-of-thirds guides, a local time of day (only you see it), the capture
+size and the panel's side. Enter saves a PNG at the window's size or rendered
+at twice it, with its settings beside it, into the photos folder
+(`EO_PHOTOS_DIR`, else `photos` in the application-data folder). The HUD is
+hidden while photo mode is on; P or Esc leaves. The depth of field and finish
+are `eo-render/src/photo.rs`.
 
 ### Online
 
@@ -178,7 +187,7 @@ switch it does not take.
 | `--connect ADDR\|local` | Online client (with `--name`, `--spawn x,z,heading`) |
 | `--bench` | Offscreen timing run over scripted camera paths; prints and writes JSON to `bench-out/` |
 | `--bench --play` | Scripted walk and drive paths with the player |
-| `--capture-ui SCREEN` | Writes a PNG of one screen: `title`, `loading`, `settings`, `pause`, `map`, `hud`, `photo` (the photo mode panel over a frame through its pipeline) or `all` |
+| `--capture-ui SCREEN` | Writes a PNG of one screen: `title`, `loading`, `settings`, `pause`, `map`, `hud`, `photo` (the photo mode panel's Camera page over a frame through its pipeline, focus peaking on), `photo-look` (its Look page, monochrome) or `all` |
 | `--ui-bench` | Interface cost over the street walk and each full-screen menu |
 | `--audio-render all --out DIR` | Offline sound mixes; no GPU, no audio device |
 
@@ -255,8 +264,13 @@ digits, `-`, `_`, `.`; it names the files) and one pose:
 - `photo` renders the shot through photo mode's pipeline: `focal_mm` (35 mm
   equivalent; it sets the field of view), `f_number` (none: everything
   sharp), `focus` (metres, `"look_at"` or `"subject"`), `grade` (`neutral`,
-  `warm-film`, `cool`, `monochrome`), `ev`, `vignette` and `grain` (0 to 1),
-  `letterbox` (an aspect) and `roll` (degrees). `subject` stands the player's
+  `warm-film`, `cool`, `monochrome`), `strength` (0 to 2 of the grade),
+  `filter` (monochrome's contrast filter: `none`, `yellow`, `deep-yellow`,
+  the default, `orange`, `red`, `green`), `fade`, `ev`, `vignette` and
+  `grain` (0 to 1), `letterbox` (an aspect), `frame_offset` (-1 to 1: the
+  letterbox opening from the top to the bottom), `roll` (degrees), `blades`
+  (0: a circle, else 3 to 16; default 9), `rounded` (default true), `cat_eye`
+  (default true) and `peaking`. `subject` stands the player's
   body in the shot: `at` [x, z] game metres on the drawn street, `facing`
   (compass degrees; default toward the camera), `model` (an index into the
   people models), `walking`. With `--no-photo-mode` a shot keeps the lens's
