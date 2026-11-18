@@ -1,0 +1,10 @@
+[package]
+name = "eo-look"
+version = "0.1.0"
+edition = "2024"
+description = "Earth Online native: the JS game's lighting model as pure functions (sun, sky, aerial perspective, light rig, exposure, tone curve, grade, shadow cascades)"
+publish = false
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"

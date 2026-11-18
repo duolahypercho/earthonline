@@ -1,0 +1,82 @@
+{
+  "builder": "house",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "painted-stucco",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "groundM": 2.6,
+  "roofLevelM": 5.25,
+  "storeysSeen": 2,
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "seed": 13,
+  "notes": "Kirkham N row, 1944 tract: white horizontal painted siding, front gable under grey composition shingle, flat roof behind; ground: a round-pattern iron gate on the left, an iron grille garage door on the right; two upper windows with dark green frames.",
+  "wall": "painted-clapboard",
+  "wallTint": "#f1f0eb",
+  "roofForm": {
+    "form": "front-gable",
+    "depthM": 5.0,
+    "eaveM": 0.3,
+    "material": "asphalt-roof",
+    "tint": "#6f6d69",
+    "pediment": false
+  },
+  "gate": {
+    "from": 0.08,
+    "to": 0.3,
+    "headM": 2.2,
+    "material": "painted-steel",
+    "tint": "#1f1f1f"
+  },
+  "garages": [
+    {
+      "from": 0.52,
+      "to": 0.94,
+      "headM": 2.15,
+      "material": "painted-white",
+      "pattern": "panel",
+      "tint": "#6f7270"
+    }
+  ],
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.12,
+      "to": 0.4,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        2,
+        2
+      ],
+      "frameTint": "#3d5a45"
+    },
+    {
+      "storey": 1,
+      "from": 0.56,
+      "to": 0.86,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        2,
+        2
+      ],
+      "frameTint": "#3d5a45"
+    }
+  ]
+}

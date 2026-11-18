@@ -1,0 +1,582 @@
+{
+  "seed": 1,
+  "notes": "1908 three-storey mixed-use block, W side of Grant Avenue between Clay and Washington (831-843). Cream-painted brick with tall double-hung windows in dark brown sashes; the whole ground storey faced in polished dark green-black stone with narrow piers. Ground: four shopfronts (a grilled shop at the south end, an open-front shop, a display-window shop, a north shop) and a narrow glazed stair door between the first two. Two light steel fire escapes at second-storey level (wide south one with a hung drop ladder, narrow north one). Third storey: one long balcony with a light steel railing across most of the front; under its middle, a painted eave (yellow soffit, red and green rafters and brackets, green tile edge) over the second-storey windows. Plain parapet with a raised fret band; over the middle a small green-tiled crown roof. Flat roof. Signage: shop sign bands only (blank). Cream wall, brown sashes with curtains, polished dark-green veined stone ground storey, roll-down shutter on the south shop, painted skirt eave (yellow soffit, alternating red/green rafters, green tile rim), tiled crown with upturned corners over the parapet, raised key band, teal lattice panel in the balcony rail, grated fire-escape decks with a stowed drop stair, stocked shop windows, blank bordered sign boards, a projecting board, a window A/C unit and a downpipe. Gate fix (shutter on a kit material), dark raised key bands (left high under the parapet, right lower), shorter stowed drop ladder, softer crown upturns, warmer cream wall. The balcony eave is a shallow sloped soffit tucked under the 3rd-storey slab with strut brackets; a deeper hipped crown with finials over a bordered nameboard; one large key band either side of the crown; a folding scissor grille at the south shop; high-contrast sign boards with illegible procedural marks (no real sign text); darker stocked displays; longer drop ladder, a roof ladder, flagpoles, vents, curtains and heavier sashes. Weathered-ochre soffits; retail-density shop stock, garment rails, ceiling fixtures and a warm lining in the ground-floor shops. Yellow soffit back at about half depth, brick running bond in warm cream, see-through vertical-bar roll grille at the south shop, deeper sign fascias with a display plinth and transom, darker raised key bands, lower crown, grey steel fire escapes with the roof ladder at the north corner, dark brown sashes.",
+  "wall": "brick-running-bond",
+  "wallTint": "#f4ead0",
+  "trim": "cast-stone-trim@e3d9c2",
+  "frame": "painted-white@4e3222",
+  "glass": "glass-clear",
+  "storefrontFrame": "painted-steel@1a1d1b",
+  "storefrontGlass": "glass-low-iron",
+  "bulkhead": "int-ext-stone",
+  "cornice": true,
+  "corniceProjectionM": 0.12,
+  "beltCourse": false,
+  "windowHoods": false,
+  "bayM": 2.3,
+  "windowW": 0.95,
+  "windowSillM": 0.75,
+  "windowHeadM": 2.55,
+  "endPierM": 0.85,
+  "groundBand": {
+    "material": "int-ext-stone",
+    "topM": 4.85
+  },
+  "edgeRoles": {
+    "0": "party",
+    "3": "rear",
+    "4": "rear"
+  },
+  "ground": "shop",
+  "upper": "rooms",
+  "upperFit": true,
+  "fireEscapes": [
+    {
+      "at": 0.28,
+      "widthM": 8.0,
+      "depthM": 1.0,
+      "toStorey": 1,
+      "material": "painted-steel",
+      "dropLadder": true,
+      "stairUp": {
+        "from": 0.25,
+        "to": 0.4,
+        "upRight": true
+      },
+      "grating": true,
+      "dropLadderAt": 0.17,
+      "dropLadderM": 2.3
+    },
+    {
+      "at": 0.865,
+      "widthM": 4.4,
+      "depthM": 1.0,
+      "toStorey": 1,
+      "material": "painted-steel",
+      "grating": true
+    }
+  ],
+  "balconyCanopies": [
+    {
+      "slab": {
+        "material": "painted-stucco",
+        "tint": "#cfc5ad"
+      },
+      "soffit": {
+        "material": "painted-white",
+        "tint": "#f2b800"
+      },
+      "rafters": {
+        "material": "signal-red",
+        "tint": "#a83a2c"
+      },
+      "fascia": {
+        "material": "glazed-tile",
+        "tint": "#2f7a5c"
+      },
+      "roof": {
+        "material": "glazed-tile",
+        "tint": "#3d7a5a"
+      },
+      "at": 0.62,
+      "widthM": 12.4,
+      "storey": 2,
+      "depthM": 1.0,
+      "rail": {
+        "material": "painted-steel-light"
+      },
+      "canopy": "below",
+      "canopyAt": 0.615,
+      "canopyWidthM": 8.4,
+      "canopyDepthM": 1.25,
+      "fallM": 0.7,
+      "rafterCount": 16,
+      "bracketDropM": 0.3,
+      "rafters2": {
+        "material": "glazed-tile",
+        "tint": "#3f8a5c"
+      },
+      "edge": {
+        "material": "glazed-tile",
+        "tint": "#3d7a5a"
+      },
+      "upturnM": 0.25,
+      "canopyTopM": -0.2,
+      "overhangM": 0.15,
+      "bracketCount": 7,
+      "bracketStruts": true,
+      "rafterW": 0.11
+    }
+  ],
+  "storefront": {
+    "awning": false,
+    "headDropM": 0.95,
+    "bulkheadM": 0.5,
+    "transomM": 0.5,
+    "pierM": 0.35,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.04,
+        "to": 0.26
+      },
+      {
+        "kind": "door",
+        "from": 0.285,
+        "to": 0.345,
+        "leaf": "int-door",
+        "stair": true
+      },
+      {
+        "kind": "door",
+        "from": 0.38,
+        "to": 0.45,
+        "leaf": "glass-door"
+      },
+      {
+        "kind": "window",
+        "from": 0.45,
+        "to": 0.59
+      },
+      {
+        "kind": "window",
+        "from": 0.61,
+        "to": 0.7
+      },
+      {
+        "kind": "door",
+        "from": 0.7,
+        "to": 0.76,
+        "leaf": "glass-door"
+      },
+      {
+        "kind": "window",
+        "from": 0.76,
+        "to": 0.84
+      },
+      {
+        "kind": "window",
+        "from": 0.86,
+        "to": 0.92
+      },
+      {
+        "kind": "door",
+        "from": 0.92,
+        "to": 0.98,
+        "leaf": "glass-door"
+      }
+    ]
+  },
+  "upperWindows": [
+    0.13,
+    0.26,
+    0.37,
+    0.49,
+    0.6,
+    0.71,
+    0.91
+  ],
+  "signBands": [
+    {
+      "from": 0.06,
+      "to": 0.24,
+      "material": "painted-white",
+      "tint": "#f3ead2",
+      "heightM": 0.88,
+      "bottomM": 3.95,
+      "border": {
+        "material": "signal-red",
+        "tint": "#b02a22",
+        "widthM": 0.06
+      },
+      "glyphs": {
+        "count": 5,
+        "material": "signal-red",
+        "tint": "#b3261e",
+        "seed": 3
+      }
+    },
+    {
+      "from": 0.29,
+      "to": 0.34,
+      "material": "painted-white",
+      "tint": "#c9a24a",
+      "heightM": 0.4,
+      "bottomM": 3.1,
+      "border": {
+        "material": "signage",
+        "tint": "#1a1a1a",
+        "widthM": 0.03
+      },
+      "glyphs": {
+        "count": 2,
+        "material": "signage",
+        "tint": "#161616",
+        "seed": 4
+      }
+    },
+    {
+      "from": 0.39,
+      "to": 0.58,
+      "material": "signage",
+      "tint": "#121212",
+      "heightM": 0.88,
+      "bottomM": 3.95,
+      "border": {
+        "material": "painted-white",
+        "tint": "#c9a24a",
+        "widthM": 0.06
+      },
+      "glyphs": {
+        "count": 4,
+        "material": "painted-white",
+        "tint": "#d6ae4c",
+        "seed": 7
+      }
+    },
+    {
+      "from": 0.62,
+      "to": 0.83,
+      "material": "signal-red",
+      "tint": "#c8321f",
+      "heightM": 0.88,
+      "bottomM": 3.95,
+      "border": {
+        "material": "painted-white",
+        "tint": "#c9a24a",
+        "widthM": 0.06
+      },
+      "glyphs": {
+        "count": 4,
+        "material": "painted-white",
+        "tint": "#e8c35a",
+        "seed": 9
+      }
+    },
+    {
+      "from": 0.87,
+      "to": 0.97,
+      "material": "painted-white",
+      "tint": "#f6f3ec",
+      "heightM": 0.55,
+      "bottomM": 3.98,
+      "border": {
+        "material": "signage",
+        "tint": "#1a1a1a",
+        "widthM": 0.04
+      },
+      "glyphs": {
+        "count": 3,
+        "material": "signage",
+        "tint": "#1c1c1c",
+        "seed": 11
+      }
+    }
+  ],
+  "glassBacking": {
+    "material": "painted-white",
+    "tints": [
+      "#5e4f40",
+      "#4b4239",
+      "#6d5c49",
+      "#3f3a35"
+    ],
+    "depthM": 0.4,
+    "kinds": [
+      "punched"
+    ],
+    "blindTint": "#ddd2b8",
+    "blindMax": 0.6
+  },
+  "parapetCrown": {
+    "at": 0.6,
+    "widthM": 6.6,
+    "depthM": 1.35,
+    "backM": 0.9,
+    "eaveM": 0.42,
+    "ridgeM": 0.8,
+    "hipM": 0.6,
+    "upturnM": 0.45,
+    "roof": {
+      "material": "glazed-tile",
+      "tint": "#2f8a78"
+    },
+    "soffit": {
+      "material": "painted-white",
+      "tint": "#c9a24a"
+    },
+    "fascia": {
+      "material": "glazed-tile",
+      "tint": "#236b62"
+    },
+    "rafters": {
+      "material": "signal-red",
+      "tint": "#c23a2c"
+    },
+    "capM": 1.12,
+    "finialM": 0.3,
+    "nameboard": {
+      "widthM": 3.6,
+      "bottomM": -0.62,
+      "topDropM": 0.2,
+      "material": "painted-white",
+      "tint": "#f5eed8",
+      "borderMaterial": "signage",
+      "borderTint": "#141414",
+      "glyphs": {
+        "count": 4,
+        "material": "signage",
+        "tint": "#111111",
+        "seed": 21,
+        "fill": 0.82
+      }
+    }
+  },
+  "fretBands": [
+    {
+      "from": 0.03,
+      "to": 0.4,
+      "yM": 10.95,
+      "heightM": 0.75,
+      "material": "painted-white",
+      "tint": "#8f7e5c",
+      "reliefM": 0.11
+    },
+    {
+      "from": 0.8,
+      "to": 0.97,
+      "yM": 10.95,
+      "heightM": 0.75,
+      "material": "painted-white",
+      "tint": "#8f7e5c",
+      "reliefM": 0.11
+    }
+  ],
+  "stoneVeins": {
+    "count": 1.4,
+    "seed": 11,
+    "widthM": 0.012
+  },
+  "railPanels": [
+    {
+      "at": 0.6,
+      "widthM": 2.2,
+      "storey": 2,
+      "heightM": 0.7,
+      "depthM": 1.0,
+      "panel": {
+        "material": "glazed-tile",
+        "tint": "#2f8a86"
+      },
+      "bars": {
+        "material": "painted-steel"
+      }
+    }
+  ],
+  "shopDisplays": [
+    {
+      "from": 0.05,
+      "to": 0.25,
+      "seed": 13,
+      "heightM": 2.9,
+      "backM": 1.4,
+      "tiers": 6,
+      "hanging": 4,
+      "shelf": "int-wood"
+    },
+    {
+      "from": 0.45,
+      "to": 0.59,
+      "seed": 3,
+      "heightM": 2.9,
+      "backM": 1.1,
+      "tiers": 6,
+      "hanging": 3,
+      "shelf": "int-wood"
+    },
+    {
+      "from": 0.61,
+      "to": 0.7,
+      "seed": 5,
+      "heightM": 2.9,
+      "backM": 1.1,
+      "tiers": 6,
+      "hanging": 3,
+      "shelf": "int-wood"
+    },
+    {
+      "from": 0.76,
+      "to": 0.84,
+      "seed": 7,
+      "heightM": 2.9,
+      "backM": 1.1,
+      "tiers": 6,
+      "hanging": 3,
+      "shelf": "int-wood"
+    },
+    {
+      "from": 0.86,
+      "to": 0.92,
+      "seed": 9,
+      "heightM": 2.9,
+      "backM": 1.1,
+      "hanging": 2,
+      "tiers": 6,
+      "shelf": "int-wood"
+    }
+  ],
+  "lanterns": [
+    {
+      "at": 0.43,
+      "offM": 0.75,
+      "yM": 6.55
+    },
+    {
+      "at": 0.82,
+      "offM": 0.75,
+      "yM": 6.55
+    }
+  ],
+  "acUnits": [
+    {
+      "at": 0.03,
+      "storey": 1,
+      "yM": 1.2
+    },
+    {
+      "at": 0.2,
+      "storey": 1,
+      "yM": 0.55
+    }
+  ],
+  "downpipes": [
+    {
+      "at": 0.545,
+      "fromM": 4.9,
+      "toM": 11.0
+    }
+  ],
+  "bladeBoards": [
+    {
+      "at": 0.015,
+      "bottomM": 3.2,
+      "heightM": 1.1,
+      "widthM": 0.5,
+      "material": "painted-white",
+      "tint": "#f2ecdf",
+      "border": {
+        "material": "signal-red",
+        "tint": "#b02a22",
+        "widthM": 0.05
+      }
+    }
+  ],
+  "scissorGrilles": [
+    {
+      "from": 0.04,
+      "to": 0.26,
+      "bottomM": 0.05,
+      "topM": 3.75,
+      "material": "painted-white",
+      "tint": "#c8c6bf",
+      "pitchM": 0.09,
+      "slope": 60
+    }
+  ],
+  "windowCurtains": {
+    "material": "int-curtain",
+    "tints": [
+      "#d9c9a6",
+      "#b9a27e",
+      "#e6dcc8",
+      "#9a3a2e"
+    ],
+    "every": 1,
+    "widthFrac": 0.24
+  },
+  "sashFrames": {
+    "material": "painted-white@4a3322",
+    "stileM": 0.09
+  },
+  "roofLadders": [
+    {
+      "at": 0.955,
+      "fromM": 8.3,
+      "toM": 11.75,
+      "widthM": 0.42,
+      "offM": 0.16,
+      "material": "painted-steel-light"
+    }
+  ],
+  "flagpoles": [
+    {
+      "at": 0.45,
+      "baseM": -0.2,
+      "heightM": 1.45,
+      "lean": 0.72,
+      "offM": 0.12
+    },
+    {
+      "at": 0.6,
+      "baseM": -0.2,
+      "heightM": 1.45,
+      "lean": 0.72,
+      "offM": 0.12
+    },
+    {
+      "at": 0.75,
+      "baseM": -0.2,
+      "heightM": 1.45,
+      "lean": 0.72,
+      "offM": 0.12
+    }
+  ],
+  "wallVents": [
+    {
+      "at": 0.07,
+      "yM": 10.3
+    },
+    {
+      "at": 0.965,
+      "yM": 10.3
+    },
+    {
+      "at": 0.33,
+      "yM": 7.3
+    }
+  ],
+  "shopStock": {
+    "racks": 7,
+    "palette": [
+      "#b02a22",
+      "#c9a24a",
+      "#2f7a5c",
+      "#e8dcc0",
+      "#3d5f8c",
+      "#8a4f7d",
+      "#d98c3a",
+      "#f0e6d0"
+    ]
+  },
+  "shopFixtures": {
+    "ceilingM": 4.4,
+    "spacingM": 2.4,
+    "rowsM": [
+      2.0,
+      4.6,
+      7.2
+    ]
+  },
+  "shopFitout": {
+    "heightM": 4.4,
+    "tints": [
+      "#b59a72",
+      "#a06a4a",
+      "#8f7a63",
+      "#9c8a5e"
+    ],
+    "stock": {
+      "stacks": true
+    }
+  }
+}

@@ -1,0 +1,119 @@
+{
+ "seed": 9,
+ "notes": "1912 flats W side: tan buff brick with russet-orange painted bays and trim. Garage storey with a white person door at the left, an orange-brown garage door and a barred gate at the right. Two canted bay stacks run up three storeys, russet sashes and belts at each floor, simple cornice. Tan buff brick wall and ground, deep red-brown bays/cornice, red-brown garage door, one large sash per bay face. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour.",
+ "wall": "brick-buff",
+ "wallTint": "#ffffff",
+ "trim": "painted-white@80503f",
+ "frame": "painted-white@efe4d0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@9e6e55",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "brick-buff@ffffff",
+ "cornice": true,
+ "corniceProjectionM": 0.6,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.3,
+   "widthM": 2.2,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#a9654d",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.18,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    }
+   }
+  },
+  {
+   "at": 0.74,
+   "widthM": 2.2,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#a9654d",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.18,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.05,
+    "to": 0.16,
+    "kind": "door",
+    "headM": 2.3,
+    "leaf": "painted-white@efe9d8"
+   },
+   {
+    "from": 0.22,
+    "to": 0.5,
+    "kind": "garage",
+    "headM": 2.5,
+    "leaf": "painted-white@9a4a30"
+   },
+   {
+    "from": 0.6,
+    "to": 0.9,
+    "kind": "gate",
+    "headM": 2.4
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.0,
+  "upperM": 3.45
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.6,
+  "heightM": 0.4,
+  "depthM": 0.3,
+  "widthM": 0.2,
+  "material": "painted-white",
+  "tint": "#9a4a2e"
+ },
+ "groundBand": {
+  "material": "brick-buff",
+  "tint": "#ffffff",
+  "topM": 3.0
+ }
+}

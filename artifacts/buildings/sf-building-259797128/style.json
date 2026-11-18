@@ -1,0 +1,103 @@
+{
+ "seed": 7,
+ "notes": "Rework r4: warm taupe stucco, round corner bay with three plain sashes between stucco piers and a flat curved parapet (no dome), charcoal ground storefront band kept, black fire escape. Storey count kept at the data (3): photo shows two upper rows over the ground. GroundBand lift (2026-10-03): groundBand tint #2e2e2c -> #4d4d4c (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#b9ab93",
+ "trim": "painted-white@d8ceb8",
+ "frame": "painted-white@d8ceb8",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@e2d8c0",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-stucco@4d4d4c",
+ "cornice": false,
+ "corniceProjectionM": 0.45,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "upperWindows": [
+  0.4,
+  0.78
+ ],
+ "bays": [
+  {
+   "at": 0.1,
+   "widthM": 3.2,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#b9ab93",
+   "hyB": {
+    "plan": "swell",
+    "cornice": {
+     "projectionM": 0.1,
+     "roofRiseM": 0
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 1
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 2.1,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.2,
+    "to": 0.49,
+    "kind": "window",
+    "headM": 3.1
+   },
+   {
+    "from": 0.58,
+    "to": 0.85,
+    "kind": "window",
+    "headM": 3.1
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "sashFrames": {
+  "material": "painted-white@e2d8c0",
+  "stileM": 0.06
+ },
+ "hbBayGlazing": {
+  "marginM": 0.2,
+  "maxW": 1.05,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#e2d8c0",
+  "sashM": 0.08,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#4d4d4c",
+  "topM": 3.3
+ },
+ "floorsM": {
+  "groundM": 3.3,
+  "upperM": 3.275
+ },
+ "fireEscape": {
+  "at": 0.68,
+  "widthM": 2.0,
+  "depthM": 0.7,
+  "material": "painted-steel@0c0c0c",
+  "ladder": true
+ }
+}

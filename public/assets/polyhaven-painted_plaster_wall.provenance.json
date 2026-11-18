@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "asset": "polyhaven-painted_plaster_wall-2k",
+  "license": "CC0-1.0",
+  "author": "Amal Kumar",
+  "assetPage": "https://polyhaven.com/a/painted_plaster_wall",
+  "physicalWidthMetres": 2,
+  "intent": "wall material cell 4 (plaster) of facade-atlas-v2; the 2k source is not shipped, only the packed cell",
+  "sources": {
+    "diffuse": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/painted_plaster_wall/painted_plaster_wall_diff_2k.jpg",
+      "md5": "32f4f4e5ded7d20e55e337004d0d9691",
+      "downloadedMd5": "32f4f4e5ded7d20e55e337004d0d9691",
+      "downloadedSha256": "6fd812ed8dd5be1873c29aeef38ce9bf1fb30a22c6d4b3a12db725e98c26a1be"
+    },
+    "normalGl": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/painted_plaster_wall/painted_plaster_wall_nor_gl_2k.jpg",
+      "md5": "18faf9f7949aefdb3ae7cef7195cba04",
+      "downloadedMd5": "18faf9f7949aefdb3ae7cef7195cba04",
+      "downloadedSha256": "2d601a46ed5ce2af866741c53cafa3cba472620c272e633b6484d4de16a80eb1"
+    },
+    "arm": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/painted_plaster_wall/painted_plaster_wall_arm_2k.jpg",
+      "md5": "b66f912016257faa7e71a1530e387545",
+      "downloadedMd5": "b66f912016257faa7e71a1530e387545",
+      "downloadedSha256": "8d6a2e391e87130aabb1dc6fea23e6ebcc80aca6559a0aa82e57b75729055be5"
+    }
+  },
+  "outputs": {
+    "albedo": {
+      "path": "public/assets/facade-atlas-v2-albedo.jpg",
+      "sha256": "4bf15707ee8eb7bee1887a6149742070260b86ca48c63643bde39668f277f13b",
+      "encoding": "sRGB base color, 4:4:4 jpeg",
+      "atlasCell": 4
+    },
+    "normal": {
+      "path": "public/assets/facade-atlas-v2-normal-rough.jpg",
+      "sha256": "5e0c89718fe981f96bf0c7ca1ecad67146afc04582b07abb6349e5411ee5d804",
+      "encoding": "RG OpenGL tangent-space normal xy (z rebuilt in shader), B Poly Haven roughness; linear/no-color, 4:4:4 jpeg",
+      "atlasCell": 4
+    }
+  },
+  "generator": {
+    "path": "scripts/assets/pack-facade-atlas-v2.mjs",
+    "sha256": "2d5051ca01c786d3b4e0766c611d5ba83b3322b8b14dc272c4e55b6b5710e3ad",
+    "algorithm": "md5-verified 2k jpg sources; LANCZOS to 960 px content; 32 px wrapped ring; row 0 at image bottom (flipY); roughness packed into the normal sheet B channel; libjpeg q90 4:4:4",
+    "pillow": "11.3.0",
+    "numpy": "2.0.2"
+  }
+}

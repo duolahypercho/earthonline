@@ -1,0 +1,45 @@
+{
+  "asset": "sf-police-helicopter-v1",
+  "method": "hand-authored Blender script (lofted superellipse fuselage + modelled parts); no AI 3D generation",
+  "blender": "5.1.2",
+  "frame": "+Z up, nose -Y (GLB: +Y up, nose +Z)",
+  "dimensions_m": {
+    "min": [
+      -5.179999828338623,
+      -4.980000019073486,
+      -0.04970432072877884
+    ],
+    "max": [
+      5.179999828338623,
+      7.820000171661377,
+      3.322000026702881
+    ],
+    "size": [
+      10.359999656677246,
+      12.800000190734863,
+      3.371704339981079
+    ]
+  },
+  "main_rotor_diameter_m": 10.36,
+  "mesh_objects": 73,
+  "triangles": 147268,
+  "glb": "sf-police-helicopter-v1.glb",
+  "glb_bytes": 2829548,
+  "renders": [
+    "sf-police-helicopter-v1-front34.png",
+    "sf-police-helicopter-v1-side.png",
+    "sf-police-helicopter-v1-rear34.png",
+    "sf-police-helicopter-v1-below.png",
+    "sf-police-helicopter-v1-top.png"
+  ],
+  "named_nodes": [
+    "MainRotor",
+    "TailRotor",
+    "Searchlight",
+    "Light_Beacon_Top",
+    "Light_Beacon_Belly",
+    "Light_Nav_L",
+    "Light_Nav_R",
+    "Light_Strobe_Tail"
+  ]
+}

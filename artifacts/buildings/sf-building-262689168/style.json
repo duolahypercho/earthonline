@@ -1,0 +1,120 @@
+{
+ "seed": 3,
+ "notes": "Round 9: butter-yellow clapboard piano nobile on raised hedge/retaining base, arched fanlight door at stair top (left), wide segmental window right of door, deep white eaves, dark shingle hip. Clapboard fix (2026-10-02): painted siding moved from the stained-timber wood-siding base to painted-clapboard so the photo tint renders as paint, not olive. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k) - photo-sampled tints rendered dark/olive in game.",
+ "wall": "painted-clapboard",
+ "wallTint": "#f2ecd2",
+ "trim": "painted-white",
+ "frame": "painted-white",
+ "glass": "glass-clear",
+ "roof": "asphalt-roof",
+ "cornice": true,
+ "corniceProjectionM": 0.9,
+ "beltCourse": false,
+ "windowHoods": true,
+ "windowW": 0.85,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.3,
+ "storefront": {
+  "bulkheadM": 1.55,
+  "transomM": 0.25,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.15,
+    "to": 0.25,
+    "kind": "door",
+    "stair": true,
+    "headM": 2.7,
+    "leaf": "wood-siding@5a3a24",
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.15,
+      "projectionM": 0.05,
+      "material": "painted-white",
+      "tint": "#f7f2e4"
+     },
+     "fan": true
+    }
+   },
+   {
+    "from": 0.34,
+    "to": 0.5,
+    "kind": "window",
+    "headM": 2.8,
+    "arch": {
+     "type": "segmental",
+     "surround": {
+      "widthM": 0.1,
+      "material": "painted-white",
+      "tint": "#f7f2e4"
+     }
+    }
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "bulkhead": "painted-clapboard@f8eed4",
+ "storefrontGlass": "glass-clear",
+ "storefrontFrame": "painted-white",
+ "wallTopM": 7.3,
+ "roofBlocks": [
+  {
+   "at": 0.5,
+   "widthM": 11.6,
+   "depthM": 16.62,
+   "setbackM": 0.02,
+   "hipRiseM": 1.9,
+   "eaveM": 0.9,
+   "material": "painted-clapboard",
+   "tint": "#f0deaa",
+   "hipMaterial": "asphalt-roof@4a4a4c"
+  }
+ ],
+ "upperWindowSpans": [
+  [
+   0.15,
+   0.25
+  ],
+  [
+   0.36,
+   0.46
+  ],
+  [
+   0.58,
+   0.68
+  ],
+  [
+   0.78,
+   0.88
+  ]
+ ],
+ "upperSillM": 0.9,
+ "upperHeadM": 2.3,
+ "sashRows": 1,
+ "sashCols": 2,
+ "mullionM": 0.9,
+ "sashMaterial": "painted-white",
+ "storeysSeen": {
+  "count": 2,
+  "groundM": 4.1,
+  "upperM": 3.2
+ },
+ "plinth": {
+  "material": "painted-stucco",
+  "tint": "#4a6a3c",
+  "heightM": 1.4,
+  "projectionM": 0.6
+ },
+ "streetStills": true,
+ "hyDLap": {
+  "pitchM": 0.15,
+  "fromM": 0.5,
+  "projM": 0.018,
+  "heightM": 0.045,
+  "shade": 0.7
+ },
+ "corniceMaterial": "painted-white"
+}

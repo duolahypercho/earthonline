@@ -1,0 +1,62 @@
+{
+ "seed": 3,
+ "wall": "painted-stucco",
+ "wallTint": "#f0e7d2",
+ "trim": "painted-white@efe6d0",
+ "frame": "painted-white@e8e0d0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@e8e0d0",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-stucco@58585d",
+ "cornice": true,
+ "corniceProjectionM": 0.6,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 1.0,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.6,
+ "upperWindows": [
+  0.15,
+  0.4,
+  0.62,
+  0.85
+ ],
+ "bays": [],
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#58585d",
+  "topM": 4.4
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.1,
+    "to": 0.3,
+    "kind": "window",
+    "headM": 3.0
+   },
+   {
+    "from": 0.55,
+    "to": 0.72,
+    "kind": "double-door",
+    "stair": true,
+    "leaf": "painted-steel@d8d0c0",
+    "headM": 3.0
+   },
+   {
+    "from": 0.76,
+    "to": 0.97,
+    "kind": "window",
+    "headM": 3.3
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "notes": "Round 1: 1908 four-storey, black tile ground (dark painted band to 4.4 m, glazed door right, cafe window far right), tan stucco uppers with four window columns. Iron balconies and red pediments not modelled. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. GroundBand lift (2026-10-03): groundBand tint #3a3a40 -> #58585d (same rule as walls; it was missed by the first colour pass)."
+}

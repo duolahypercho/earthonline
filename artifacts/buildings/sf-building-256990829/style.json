@@ -1,0 +1,136 @@
+{
+ "seed": 7,
+ "notes": "Thin dark-grey frames with pale sashes on the visible windows; lap siding relief added (real clapboard geometry); arched gate kept. Bay count/cornice unverifiable. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-clapboard",
+ "wallTint": "#eeece8",
+ "trim": "painted-white@f0ece2",
+ "frame": "painted-white@4a4f55",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@4a4f55",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-clapboard@eae8e2",
+ "cornice": true,
+ "corniceProjectionM": 0.3,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.5,
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.0,
+  "upperM": 3.36
+ },
+ "upperWindows": [
+  0.38,
+  0.52
+ ],
+ "bays": [
+  {
+   "at": 0.15,
+   "widthM": 2.9,
+   "projectionM": 0.65,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#eeece8"
+  },
+  {
+   "at": 0.76,
+   "widthM": 2.9,
+   "projectionM": 0.65,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#eeece8"
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.9,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.4,
+    "to": 0.52,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel@2a2c30"
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "entryGate": {
+  "tint": "#2a2c30",
+  "closed": true
+ },
+ "hbArchDoors": [
+  {
+   "from": 0.4,
+   "to": 0.52,
+   "material": "painted-clapboard",
+   "tint": "#dcdad2",
+   "ringTint": "#e8e6de",
+   "fillTint": "#1c1d20"
+  }
+ ],
+ "shopBays": [
+  {
+   "edge": 0,
+   "from": 0.0,
+   "to": 1.0,
+   "windows": [
+    {
+     "from": 0.03,
+     "to": 0.14,
+     "sillM": 0.95,
+     "headM": 2.4,
+     "cols": 2,
+     "rows": 2,
+     "frameTint": "#4a4f55"
+    },
+    {
+     "from": 0.15,
+     "to": 0.21,
+     "sillM": 0.95,
+     "headM": 2.4,
+     "cols": 1,
+     "rows": 2,
+     "frameTint": "#4a4f55"
+    },
+    {
+     "from": 0.28,
+     "to": 0.34,
+     "sillM": 1.0,
+     "headM": 2.1,
+     "cols": 1,
+     "rows": 2,
+     "frameTint": "#4a4f55"
+    },
+    {
+     "from": 0.82,
+     "to": 0.94,
+     "sillM": 0.95,
+     "headM": 2.4,
+     "cols": 2,
+     "rows": 2,
+     "frameTint": "#4a4f55"
+    },
+    {
+     "from": 0.67,
+     "to": 0.79,
+     "sillM": 0.95,
+     "headM": 2.4,
+     "cols": 2,
+     "rows": 2,
+     "frameTint": "#4a4f55"
+    }
+   ]
+  }
+ ],
+ "streetStills": true,
+ "hyDLap": {
+  "pitchM": 0.15,
+  "fromM": 0.6
+ }
+}

@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "kind": "generated-vehicle",
+  "vehicleId": "urban-utility-v1",
+  "body": "urbanUtility",
+  "lengthM": 4.7,
+  "wheelRadiusM": 0.34,
+  "typeIds": [
+    "urbanUtility"
+  ],
+  "lods": [
+    {
+      "file": "generated/urban-utility-v1/urbanUtility-lod0.glb",
+      "sha256": "263ff8c6ea34afd2beab7195f24dd76faf4a3ada10c5ff8195be0646c52c6d36",
+      "bytes": 3675712
+    },
+    {
+      "file": "generated/urban-utility-v1/urbanUtility-lod1.glb",
+      "sha256": "902ff7bd28f881ce85fda04eb09b3e3f5029d2bb7655e0eb919d3c861eb3b473",
+      "bytes": 698924
+    },
+    {
+      "file": "generated/urban-utility-v1/urbanUtility-lod2.glb",
+      "sha256": "cb5a13d04ed53a3ad54b1601772664ca343e95dea3283e3677e69084aa74b3be",
+      "bytes": 162260
+    }
+  ],
+  "source": {
+    "method": "Authored study source; Blender rig conversion",
+    "sha256": "921ce4137b41c0da836b6ecfdccdfdee8f900808c8f61148e18d3845b7a78c7b",
+    "bytes": 2668301,
+    "file": "urban-utility.blend"
+  },
+  "donor": {
+    "path": "study-source:urban-utility.blend",
+    "sha256": "921ce4137b41c0da836b6ecfdccdfdee8f900808c8f61148e18d3845b7a78c7b",
+    "bytes": 2668301,
+    "kind": "authored-study-source"
+  },
+  "assembly": {
+    "generator": "scripts/assets/export-urban-utility-lods.py",
+    "reportSha256": "3058df52350bcc7f80c577eba437b046f689572e60d1483169fb10e7c122b7da"
+  },
+  "acceptance": {
+    "verdict": "accepted",
+    "lodSha256": [
+      "263ff8c6ea34afd2beab7195f24dd76faf4a3ada10c5ff8195be0646c52c6d36",
+      "902ff7bd28f881ce85fda04eb09b3e3f5029d2bb7655e0eb919d3c861eb3b473",
+      "cb5a13d04ed53a3ad54b1601772664ca343e95dea3283e3677e69084aa74b3be"
+    ],
+    "evidence": [
+      {
+        "sha256": "7ea280edab1d2b73aa41ede94cc7fa1a4ace89cc7777556e44153ca40f37ed02",
+        "bytes": 251933
+      },
+      {
+        "sha256": "80c2f4aec7b467a128de83569af66293426c1ec1a30668fd468f8cb606ab8819",
+        "bytes": 34647
+      },
+      {
+        "sha256": "203de1b7732e74b800dde77b3cff054d2d6a6b9accf4ae5e54ea39b70a719e43",
+        "bytes": 25860
+      }
+    ]
+  }
+}

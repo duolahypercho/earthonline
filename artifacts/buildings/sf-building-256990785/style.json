@@ -1,0 +1,160 @@
+{
+ "seed": 31,
+ "notes": "Orange-tan face brick base (now running-bond at c8905a instead of buff that rendered beige), deeper slate-blue clapboard 7f93b8, arched gate left, two barred windows, narrow gate right, heavy ornate bracketed cornice (frieze 0.9 m, bigger brackets). Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-clapboard",
+ "wallTint": "#99a9c6",
+ "trim": "painted-white@e8e8e4",
+ "frame": "painted-white@f0f0ec",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@2a2c30",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "brick-running-bond@ffffff",
+ "cornice": true,
+ "corniceProjectionM": 0.75,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.8,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.4,
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.1,
+  "upperM": 3.07
+ },
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.745,
+   "widthM": 3.65,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#99a9c6"
+  },
+  {
+   "at": 0.255,
+   "widthM": 3.65,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#99a9c6"
+  }
+ ],
+ "wallZones": [
+  {
+   "from": 0.0,
+   "to": 1.0,
+   "toY": 3.1,
+   "material": "brick-running-bond",
+   "tint": "#ffffff"
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.9,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.07,
+    "to": 0.32,
+    "kind": "gate",
+    "material": "painted-steel",
+    "tint": "#2a2c30",
+    "headM": 2.7
+   },
+   {
+    "from": 0.83,
+    "to": 0.98,
+    "kind": "gate",
+    "material": "painted-steel",
+    "tint": "#2a2c30",
+    "headM": 2.4
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "plaques": [
+  {
+   "at": 0.5,
+   "y": 2.9,
+   "w": 7.6,
+   "h": 0.18,
+   "face": "brick-running-bond@ffffff"
+  }
+ ],
+ "hbFrieze": {
+  "heightM": 0.9,
+  "material": "painted-white",
+  "tint": "#cfd2d4"
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.5,
+  "heightM": 0.9,
+  "depthM": 0.45,
+  "widthM": 0.24,
+  "material": "painted-white",
+  "tint": "#cfd2d4"
+ },
+ "hbCorniceDentils": {
+  "spacingM": 0.16,
+  "sizeM": 0.1,
+  "tint": "#cfd2d4"
+ },
+ "hbArchDoors": [
+  {
+   "from": 0.07,
+   "to": 0.32,
+   "material": "brick-running-bond",
+   "tint": "#ffffff",
+   "ringTint": "#a87048",
+   "fillTint": "#1c1d20"
+  }
+ ],
+ "shopBays": [
+  {
+   "edge": 0,
+   "from": 0.0,
+   "to": 1.0,
+   "windows": [
+    {
+     "from": 0.61,
+     "to": 0.73,
+     "sillM": 0.85,
+     "headM": 2.35,
+     "cols": 4,
+     "rows": 2,
+     "frameTint": "#2a2c30"
+    },
+    {
+     "from": 0.45,
+     "to": 0.57,
+     "sillM": 0.85,
+     "headM": 2.35,
+     "cols": 4,
+     "rows": 2,
+     "frameTint": "#2a2c30"
+    }
+   ]
+  }
+ ],
+ "hbBayCrown": {
+  "dropM": 0.35,
+  "hipRiseM": 0.3,
+  "hipMaterial": "painted-white",
+  "hipTint": "#cfd2d4",
+  "corbelTiers": 2,
+  "corbelStepM": 0.12,
+  "panels": false
+ },
+ "hyDLap": {
+  "pitchM": 0.13,
+  "fromM": 3.3,
+  "projM": 0.018,
+  "heightM": 0.04,
+  "shade": 0.65,
+  "maxTris": 12000
+ },
+ "streetStills": true
+}

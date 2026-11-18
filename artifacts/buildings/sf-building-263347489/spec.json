@@ -1,0 +1,147 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-263347489",
+  "slug": "b263347489",
+  "walkIndex": 109,
+  "street": "Chestnut Street",
+  "address": "1901 Chestnut Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "street count 4 (style storeysSeen) overrides Assessor roll (assessor) 3"
+  },
+  "storeysRoll": 3,
+  "heightM": 12.1,
+  "storeys": 4,
+  "floors": {
+    "groundM": 3.25,
+    "upperM": 2.8,
+    "roofM": 0.45
+  },
+  "yearBuilt": 1960,
+  "use": "MRES",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "edwardian",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 1,
+    "center": {
+      "x": -1353.65,
+      "z": 2524.95
+    },
+    "heading": -0.156323,
+    "width": 18.721,
+    "depth": 18.034
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -9.267,
+      "z": -9.017
+    },
+    {
+      "x": -9.36,
+      "z": 9.017
+    },
+    {
+      "x": 9.267,
+      "z": 9.017
+    },
+    {
+      "x": 8.101,
+      "z": -6.085
+    },
+    {
+      "x": 9.36,
+      "z": -9.017
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -9.267,
+        "z": -9.017
+      },
+      "b": {
+        "x": -9.36,
+        "z": 9.017
+      },
+      "lengthM": 18.035,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -9.36,
+        "z": 9.017
+      },
+      "b": {
+        "x": 9.267,
+        "z": 9.017
+      },
+      "lengthM": 18.627,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 9.267,
+        "z": 9.017
+      },
+      "b": {
+        "x": 8.101,
+        "z": -6.085
+      },
+      "lengthM": 15.148,
+      "role": "flank",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 8.101,
+        "z": -6.085
+      },
+      "b": {
+        "x": 9.36,
+        "z": -9.017
+      },
+      "lengthM": 3.191,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": 9.36,
+        "z": -9.017
+      },
+      "b": {
+        "x": -9.267,
+        "z": -9.017
+      },
+      "lengthM": 18.627,
+      "role": "rear",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

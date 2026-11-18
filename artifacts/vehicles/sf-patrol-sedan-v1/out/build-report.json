@@ -1,0 +1,90 @@
+{
+  "assetId": "sf-patrol-sedan-v1",
+  "sourceBlend": "artifacts/vehicles/project-sedan-v1/project-sedan-v1.blend",
+  "sourceBlendSha256": "03ac7cd30a703f0d7dc1a0c5d3b9ec7f99ec644e12d030331df2e6dc1fa98b6c",
+  "blenderVersion": "5.1.2",
+  "scaleMPerBlenderUnit": 1.0,
+  "bounds_m": {
+    "length": 4.95,
+    "width_including_mirrors_and_spotlight": 2.228056,
+    "body_width_excluding_mirrors": 1.9,
+    "height": 1.520025
+  },
+  "boundsMin_m": [
+    -1.141038,
+    -2.455029,
+    -0.000522
+  ],
+  "boundsMax_m": [
+    1.087018,
+    2.494971,
+    1.519503
+  ],
+  "wheelbase_m": 2.9,
+  "wheelRadius_m": 0.35,
+  "wheelCenters_m": {
+    "Wheel_FL": [
+      -0.805439,
+      -1.45,
+      0.35
+    ],
+    "Wheel_FR": [
+      0.805439,
+      -1.45,
+      0.35
+    ],
+    "Wheel_RL": [
+      -0.805439,
+      1.45,
+      0.35
+    ],
+    "Wheel_RR": [
+      0.805439,
+      1.45,
+      0.35
+    ]
+  },
+  "liveryPaintFaceCounts": {
+    "whiteDoorFaces": 4659,
+    "whiteFrontQuarterFaces": 324
+  },
+  "geometry": {
+    "mesh_object_count": 450,
+    "polygon_triangle_estimate": 215890,
+    "uv_mapped_mesh_count": 11
+  },
+  "driverPreview": {
+    "source": "public/assets/human-npc-probe-v3/npc-01.glb",
+    "sourceSha256": "e26a7332637a3180d547ddcd39e48c1213fef5c60338a5aef7913f72fe45abbe",
+    "motionSha256": "6b2d5a12fe7851972eac9ffdd66843f84cbddf577bf53b150e3d5a6b6027a0c4",
+    "sourceHeightM": 1.75,
+    "poseClip": "drive",
+    "poseFrame": 12,
+    "productionAuthorized": false
+  },
+  "driverFitM": {
+    "headTopZ": 1.2822,
+    "roofLinerZAtHead": 1.3739,
+    "headroom": 0.0917,
+    "seatBaseBottomZ": 0.2873,
+    "cabinFloorTopZ": 0.2827,
+    "seatFloorGap": 0.0046,
+    "shoeBottomZ": 0.3354,
+    "shoeFloorGap": 0.0526
+  },
+  "export": {
+    "path": "artifacts/vehicles/sf-patrol-sedan-v1/out/sf-patrol-sedan-v1.glb",
+    "sha256": "4a4a0b4af5b01df485b8d61f93b6af3ba5f3e1056c25d3850070c42a5d9a468f",
+    "bytes": 7293536
+  },
+  "sourceBlendOutput": "artifacts/vehicles/sf-patrol-sedan-v1/out/sf-patrol-sedan-v1.blend",
+  "renderDirectory": "artifacts/vehicles/sf-patrol-sedan-v1/out/renders",
+  "gameStage": "Blender source + GLB candidate; runtime integration not performed",
+  "checks": {
+    "dimensions": "PASS",
+    "driverCabinFit": "PASS",
+    "assetBodyHandBuilt": true,
+    "wheelNodesPreserved": true,
+    "doorNodesPreserved": true
+  }
+}

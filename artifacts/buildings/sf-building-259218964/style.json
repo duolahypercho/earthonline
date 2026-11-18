@@ -1,0 +1,116 @@
+{
+ "seed": 10,
+ "notes": "1911 flats E side: pale mint-green painted wood with white trim. Two round (swell) bays at each side of the front over storeys 1-2, dark bracket-like corbels under the lower ones, bracketed cornice. Ground: an ornate wrought-iron entry gate with a small hood left of centre, a dark blue panelled garage door, a narrow person door at the right. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. GroundBand lift (2026-10-03): groundBand tint #b9cfba -> #dce7dc (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-white",
+ "wallTint": "#dce7dc",
+ "trim": "painted-white@f2f0e6",
+ "frame": "painted-white@f2f0e6",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f2f0e6",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@dce7dc",
+ "cornice": true,
+ "corniceProjectionM": 0.55,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.24,
+   "widthM": 2.6,
+   "projectionM": 0.75,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#dce7dc",
+   "hyB": {
+    "plan": "swell",
+    "cornice": {
+     "projectionM": 0.18,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2
+   }
+  },
+  {
+   "at": 0.76,
+   "widthM": 2.6,
+   "projectionM": 0.75,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#dce7dc",
+   "hyB": {
+    "plan": "swell",
+    "cornice": {
+     "projectionM": 0.18,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.12,
+    "to": 0.38,
+    "kind": "gate",
+    "headM": 2.5
+   },
+   {
+    "from": 0.46,
+    "to": 0.84,
+    "kind": "garage",
+    "headM": 2.5,
+    "leaf": "painted-white@2a3a68"
+   },
+   {
+    "from": 0.89,
+    "to": 0.97,
+    "kind": "door",
+    "headM": 2.3,
+    "leaf": "painted-white@3a3a4a"
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#dce7dc",
+  "topM": 3.2
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.9,
+  "heightM": 0.3,
+  "depthM": 0.25,
+  "widthM": 0.2,
+  "material": "painted-white",
+  "tint": "#1f1f26"
+ },
+ "hbFloors": {
+  "groundM": 3.4,
+  "upperM": 4.295
+ }
+}

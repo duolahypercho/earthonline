@@ -1,0 +1,222 @@
+{
+ "seed": 11,
+ "notes": "Wall e9e5d9 warm off-white; only one door kept (between the display windows), the far-right green side door removed; window signs now red panels with a thin white text strip instead of big white boards; signband/fascia + vents kept. Third-storey claim not supported: storefront + 2 bay storeys, matching roll 3 / 12.3 m. Rework 5: wall warm pale grey-cream d8d5cb; dark green-black glazed tile lifted to 386554 (bulkhead) / 3a6152 (thick 0.5 m piers and frames) to stay above the 0.10 luminance floor; narrow dark-green service door at the far right end; projecting sign band (shopFascia 0.5 m tall, 0.3 m proud) under the small-panel frieze; bays unchanged (left bay near the left edge, right at the corner, flat centre). Rework 4: dark green tile base 2f5a4a, black frames, greige wall d8d6cc, red lettering on white sign panels kept. Rework 3: warm light grey-beige wall #d3cdbf, red-pink lettering bands on the white sign boards, a green-framed narrow door at the far right of the storefront, warmer grey tile-panel transom. Skipped: raised corner parapet (no key; the corner bay already exists at the right edge). Rework 2: warm cream #e3dfd2; dark green tile kickplate; storefront frames and door dark bronze; the panelled frieze made taller (~0.55 m) and capped by a thin projecting band (beltCourse) at the shop/first-storey line. Skipped: bay positions; sash type is the kit's. Rework 1: warm pale grey stucco; shopfront = display window, dark-framed glazed door between the two windows, second display window, mint-green kickplate, plain white sign panels filling the display glass (no lettering); a frieze of small recessed-look panels between the shop head and the first bay storey; the second bay moved to the Green corner (the kit has no curved-corner bay with sashes, so it stays three-sided); plain parapet with a thin coping instead of the bracket cornice; the short corner chamfer (edge 4) is dressed as a street face with a window per storey and no service door. 1911 ten-unit flats over one shop at the SW corner of Hyde and Green. Green return (edge 3) a flank. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-white",
+ "wallTint": "#f4f2ec",
+ "trim": "painted-white@ece8dc",
+ "frame": "painted-white",
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-storefront",
+ "storefrontFrame": "painted-steel@3a6152",
+ "bulkhead": "painted-white@608476",
+ "cornice": false,
+ "corniceProjectionM": 0.3,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.8,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.45,
+ "ground": "shop",
+ "upper": "apartment",
+ "upperWindows": [
+  0.58
+ ],
+ "bays": [
+  {
+   "at": 0.26,
+   "widthM": 2.5,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f4f2ec"
+  },
+  {
+   "at": 0.87,
+   "widthM": 2.0,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f4f2ec"
+  }
+ ],
+ "edgeRoles": {
+  "3": "flank",
+  "4": "flank"
+ },
+ "storefront": {
+  "bulkheadM": 0.45,
+  "transomM": 0.6,
+  "pierM": 0.5,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.03,
+    "to": 0.33,
+    "kind": "window"
+   },
+   {
+    "from": 0.38,
+    "to": 0.5,
+    "kind": "door",
+    "leaf": "painted-steel@4a3f33"
+   },
+   {
+    "from": 0.57,
+    "to": 0.87,
+    "kind": "window"
+   }
+  ],
+  "headDropM": 1.6
+ },
+ "coping": {
+  "material": "painted-white",
+  "tint": "#ece8dc",
+  "heightM": 0.25,
+  "projectionM": 0.06
+ },
+ "streetEdges": {
+  "4": {
+   "upperWindows": [
+    0.5
+   ],
+   "plaques": []
+  }
+ },
+ "plaques": [
+  {
+   "at": 0.16,
+   "y": 2.15,
+   "w": 1.4400000000000002,
+   "h": 0.8800000000000001,
+   "face": "painted-white@c65a66"
+  },
+  {
+   "at": 0.635,
+   "y": 2.65,
+   "w": 1.8399999999999999,
+   "h": 0.49500000000000005,
+   "face": "painted-white@c65a66"
+  },
+  {
+   "at": 0.078,
+   "y": 4.3,
+   "w": 0.5,
+   "h": 0.55,
+   "face": "painted-white@c4bcae"
+  },
+  {
+   "at": 0.155,
+   "y": 4.3,
+   "w": 0.5,
+   "h": 0.55,
+   "face": "painted-white@c4bcae"
+  },
+  {
+   "at": 0.232,
+   "y": 4.3,
+   "w": 0.5,
+   "h": 0.55,
+   "face": "painted-white@c4bcae"
+  },
+  {
+   "at": 0.308,
+   "y": 4.3,
+   "w": 0.5,
+   "h": 0.55,
+   "face": "painted-white@c4bcae"
+  },
+  {
+   "at": 0.385,
+   "y": 4.3,
+   "w": 0.5,
+   "h": 0.55,
+   "face": "painted-white@c4bcae"
+  },
+  {
+   "at": 0.462,
+   "y": 4.3,
+   "w": 0.5,
+   "h": 0.55,
+   "face": "painted-white@c4bcae"
+  },
+  {
+   "at": 0.538,
+   "y": 4.3,
+   "w": 0.5,
+   "h": 0.55,
+   "face": "painted-white@c4bcae"
+  },
+  {
+   "at": 0.615,
+   "y": 4.3,
+   "w": 0.5,
+   "h": 0.55,
+   "face": "painted-white@c4bcae"
+  },
+  {
+   "at": 0.692,
+   "y": 4.3,
+   "w": 0.5,
+   "h": 0.55,
+   "face": "painted-white@c4bcae"
+  },
+  {
+   "at": 0.768,
+   "y": 4.3,
+   "w": 0.5,
+   "h": 0.55,
+   "face": "painted-white@c4bcae"
+  },
+  {
+   "at": 0.845,
+   "y": 4.3,
+   "w": 0.5,
+   "h": 0.55,
+   "face": "painted-white@c4bcae"
+  },
+  {
+   "at": 0.922,
+   "y": 4.3,
+   "w": 0.5,
+   "h": 0.55,
+   "face": "painted-white@c4bcae"
+  },
+  {
+   "at": 0.18,
+   "y": 2.35,
+   "w": 1.5,
+   "h": 0.3,
+   "face": "painted-white@c8505c"
+  },
+  {
+   "at": 0.72,
+   "y": 2.7,
+   "w": 1.9,
+   "h": 0.26,
+   "face": "painted-white@c8505c"
+  },
+  {
+   "at": 0.16,
+   "y": 2.05,
+   "w": 1.2,
+   "h": 0.22,
+   "face": "painted-white@f4f2ee"
+  },
+  {
+   "at": 0.72,
+   "y": 2.4,
+   "w": 1.5,
+   "h": 0.22,
+   "face": "painted-white@f4f2ee"
+  }
+ ],
+ "streetStills": true,
+ "shopFascia": {
+  "heightM": 0.5,
+  "projectionM": 0.3,
+  "material": "painted-white",
+  "tint": "#e9e5d9",
+  "topM": 1.05,
+  "lamps": 0
+ }
+}

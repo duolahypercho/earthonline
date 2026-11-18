@@ -1,0 +1,204 @@
+{
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "beltCourse": true,
+ "windowHoods": true,
+ "windowW": 1.1,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "bays": [
+  {
+   "at": 0.26,
+   "widthM": 3.2,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f1dcae",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    },
+    "muntins": {
+     "upperRows": 2,
+     "upperCols": 2,
+     "lowerRows": 1,
+     "lowerCols": 1
+    }
+   }
+  },
+  {
+   "at": 0.55,
+   "widthM": 3.2,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f1dcae",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    },
+    "muntins": {
+     "upperRows": 2,
+     "upperCols": 2,
+     "lowerRows": 1,
+     "lowerCols": 1
+    }
+   }
+  },
+  {
+   "at": 0.8,
+   "widthM": 3.2,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f1dcae",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    },
+    "muntins": {
+     "upperRows": 2,
+     "upperCols": 2,
+     "lowerRows": 1,
+     "lowerCols": 1
+    }
+   }
+  }
+ ],
+ "upperWindows": [
+  0.07,
+  0.95
+ ],
+ "seed": 12,
+ "notes": "Round 2: warmer buff-cream wall, deep oxblood trim and frames (belt and bay sashes), black fire escape on the central bay, tan glazed-brick piers with grilles over the shop windows, dark barred gate, one flat canopy across the front. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. Rework 2 (2026-10-03): warmer buff wall, brighter red trim, divided sashes, red sign band at the right, red spandrel panels (hand.py). Second fire-escape stack not added: the photo shows one stack. Colour re-apply (2026-10-03): a rework re-sampled wallTint #f1dcae from the photo; lifted/converted once to #f8eed6.",
+ "wall": "painted-stucco",
+ "wallTint": "#f8eed6",
+ "trim": "painted-white@9c3a30",
+ "frame": "painted-white@9c3a30",
+ "bulkhead": "brick-buff@ffffff",
+ "corniceProjectionM": 0.45,
+ "groundBand": {
+  "material": "brick-buff",
+  "tint": "#ffffff",
+  "topM": 3.4
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.6,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.02,
+    "to": 0.1,
+    "kind": "blank",
+    "material": "brick-buff",
+    "tint": "#ffffff",
+    "headM": 3.3
+   },
+   {
+    "from": 0.13,
+    "to": 0.35,
+    "kind": "window",
+    "headM": 3.0,
+    "grille": true
+   },
+   {
+    "from": 0.4,
+    "to": 0.68,
+    "kind": "gate",
+    "headM": 3.2,
+    "tint": "#1c1c1e"
+   },
+   {
+    "from": 0.71,
+    "to": 0.8,
+    "kind": "blank",
+    "material": "painted-stucco",
+    "tint": "#d8c9a0",
+    "headM": 3.3
+   },
+   {
+    "from": 0.84,
+    "to": 0.98,
+    "kind": "window",
+    "headM": 3.0,
+    "grille": true
+   }
+  ]
+ },
+ "awningSpans": [
+  {
+   "from": 0.02,
+   "to": 0.98,
+   "depthM": 1.4,
+   "valanceM": 0.35
+  }
+ ],
+ "awning": "canvas-plain@cbbf9e",
+ "fireEscape": {
+  "at": 0.55,
+  "widthM": 1.8,
+  "depthM": 0.9,
+  "material": "painted-steel"
+ },
+ "sashLights": {
+  "upperCols": 3,
+  "upperRows": 2,
+  "lowerCols": 1,
+  "barM": 0.03
+ },
+ "hbSignBands": [
+  {
+   "from": 0.82,
+   "to": 0.98,
+   "bottomM": 3.2,
+   "topM": 3.95,
+   "material": "painted-stucco",
+   "tint": "#a8404a"
+  }
+ ]
+}

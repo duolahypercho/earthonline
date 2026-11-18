@@ -1,0 +1,157 @@
+{
+  "kind": "blender-building",
+  "id": "sf-building-8001805023",
+  "pass": "b8001805023-blender-38c455b0-6bd228",
+  "generator": "scripts/blender-buildings/build_house.py",
+  "generatorInputs": [
+    "scripts/blender-buildings/build_building.py",
+    "scripts/blender-buildings/build_house.py"
+  ],
+  "generatorSha256": "38c455b006cfa80509e027b33025c90cd9f267560fe8bb698ef8b147d0c2dcc5",
+  "blender": "Blender 5.1.2",
+  "inputs": {
+    "spec": "artifacts/buildings/sf-building-8001805023/spec.json",
+    "specSha256": "86473d43da68923d0c83df3501e8136dd5109c0e2e52be12773bee81825ce657",
+    "style": "artifacts/buildings/sf-building-8001805023/style.json",
+    "styleSha256": "6bd228fe2914768e8911be5a3074216553b13d368dce2e082da5cfd0e00f4406"
+  },
+  "sources": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "license": "Building geometry generated from open data (DataSF footprints, LiDAR, Assessor roll). Furniture in the fine-s*.glb storeys is decimated from the CC0 pieces listed under `furniture`.",
+  "furniture": [
+    {
+      "kind": "shelving",
+      "source": "https://polyhaven.com/a/steel_frame_shelves_01",
+      "name": "Steel Frame Shelves 01",
+      "authors": [
+        "James Ray Cock"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "cardboard-box",
+      "source": "https://polyhaven.com/a/cardboard_box_01",
+      "name": "Cardboard Box 01",
+      "authors": [
+        "Rahul Chaudhary"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "crate",
+      "source": "https://polyhaven.com/a/wooden_crate_01",
+      "name": "Wooden Crate 01",
+      "authors": [
+        "James Ray Cock"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "ceiling-lamp",
+      "source": "https://polyhaven.com/a/modern_ceiling_lamp_01",
+      "name": "Modern Ceiling Lamp 01",
+      "authors": [
+        "James Ray Cock"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "sofa",
+      "source": "https://polyhaven.com/a/sofa_02",
+      "name": "Sofa 02",
+      "authors": [
+        "Kirill Sannikov"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "pillows",
+      "source": "https://polyhaven.com/a/throw_pillows_01",
+      "name": "Throw Pillows 01",
+      "authors": [
+        "Serhii Khromov"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "coffee-table",
+      "source": "https://polyhaven.com/a/modern_coffee_table_01",
+      "name": "Modern Coffee Table 01",
+      "authors": [
+        "Amin"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "lounge-chair",
+      "source": "https://polyhaven.com/a/mid_century_lounge_chair",
+      "name": "Mid Century Lounge Chair",
+      "authors": [
+        "Kuutti Siitonen"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "side-table",
+      "source": "https://polyhaven.com/a/side_table_01",
+      "name": "Side Table 01",
+      "authors": [
+        "James Ray Cock"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "plant-medium",
+      "source": "https://polyhaven.com/a/potted_plant_02",
+      "name": "Potted Plant 02",
+      "authors": [
+        "Rico Cilliers"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "frame-c",
+      "source": "https://polyhaven.com/a/hanging_picture_frame_03",
+      "name": "Hanging Picture Frame 03",
+      "authors": [
+        "James Ray Cock"
+      ],
+      "license": "CC0-1.0"
+    }
+  ],
+  "assets": {
+    "exterior": {
+      "url": "/assets/buildings/sf-building-8001805023/exterior.glb",
+      "sha256": "fcba3612fcaaadb7445479f674bfa7414ac50e03c7279c4a47f8901a8aec3b3b",
+      "bytes": 134424
+    },
+    "interior": {
+      "url": "/assets/buildings/sf-building-8001805023/interior.glb",
+      "sha256": "72f76a92e9b122edde936b8e0ef3aa26f876387586d63e28df6f0f0b517eef29",
+      "bytes": 108548
+    },
+    "fine": [
+      {
+        "storey": 0,
+        "url": "/assets/buildings/sf-building-8001805023/fine-s0.glb",
+        "sha256": "e7d6ceef7fc9d884486cdc09b5e2487bba25dbd787034e84a956b5798d9e04cb",
+        "bytes": 12416
+      },
+      {
+        "storey": 1,
+        "url": "/assets/buildings/sf-building-8001805023/fine-s1.glb",
+        "sha256": "0792f267ebedb6485876029860428c2a3fe06ab5a027fd626c29602cec3f08b3",
+        "bytes": 48892
+      },
+      {
+        "storey": 2,
+        "url": "/assets/buildings/sf-building-8001805023/fine-s2.glb",
+        "sha256": "98ec24797ce6eb28937ed1531011d055e344c40bb71c7e7d0ea15989f33a4613",
+        "bytes": 51812
+      }
+    ]
+  }
+}

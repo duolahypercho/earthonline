@@ -1,0 +1,222 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-8001894042",
+  "slug": "b8001894042",
+  "walkIndex": 7251,
+  "street": "Kirkham Street",
+  "address": "4425 Kirkham Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 6.06,
+  "storeys": 2,
+  "floors": {
+    "groundM": 2.96,
+    "upperM": 2.5,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1956,
+  "use": "SRES",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "edwardian",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 8,
+    "center": {
+      "x": -7833.013,
+      "z": -2182.511
+    },
+    "heading": -0.019778,
+    "width": 9.521,
+    "depth": 15.933
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": 4.341,
+      "z": 7.966
+    },
+    {
+      "x": 4.76,
+      "z": -0.683
+    },
+    {
+      "x": 3.229,
+      "z": -0.723
+    },
+    {
+      "x": 3.308,
+      "z": -4.846
+    },
+    {
+      "x": -0.965,
+      "z": -4.931
+    },
+    {
+      "x": -0.944,
+      "z": -7.942
+    },
+    {
+      "x": -3.755,
+      "z": -7.966
+    },
+    {
+      "x": -4.307,
+      "z": -4.995
+    },
+    {
+      "x": -4.76,
+      "z": 7.966
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 4.341,
+        "z": 7.966
+      },
+      "b": {
+        "x": 4.76,
+        "z": -0.683
+      },
+      "lengthM": 8.66,
+      "role": "rear",
+      "partyShare": 0.25
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 4.76,
+        "z": -0.683
+      },
+      "b": {
+        "x": 3.229,
+        "z": -0.723
+      },
+      "lengthM": 1.532,
+      "role": "rear",
+      "partyShare": 0.44
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 3.229,
+        "z": -0.723
+      },
+      "b": {
+        "x": 3.308,
+        "z": -4.846
+      },
+      "lengthM": 4.123,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 3.308,
+        "z": -4.846
+      },
+      "b": {
+        "x": -0.965,
+        "z": -4.931
+      },
+      "lengthM": 4.273,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": -0.965,
+        "z": -4.931
+      },
+      "b": {
+        "x": -0.944,
+        "z": -7.942
+      },
+      "lengthM": 3.011,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": -0.944,
+        "z": -7.942
+      },
+      "b": {
+        "x": -3.755,
+        "z": -7.966
+      },
+      "lengthM": 2.811,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": -3.755,
+        "z": -7.966
+      },
+      "b": {
+        "x": -4.307,
+        "z": -4.995
+      },
+      "lengthM": 3.022,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": -4.307,
+        "z": -4.995
+      },
+      "b": {
+        "x": -4.76,
+        "z": 7.966
+      },
+      "lengthM": 12.969,
+      "role": "party",
+      "partyShare": 0.94
+    },
+    {
+      "index": 8,
+      "a": {
+        "x": -4.76,
+        "z": 7.966
+      },
+      "b": {
+        "x": 4.341,
+        "z": 7.966
+      },
+      "lengthM": 9.102,
+      "role": "front",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

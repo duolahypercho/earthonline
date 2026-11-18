@@ -1,0 +1,226 @@
+{
+ "seed": 3,
+ "notes": "1908 three-storey corner flats over shops at the Union end of the Hyde east face. Warm tan smooth stucco upper storeys with two cant bays from storey 1 to the roof and paired white sash windows between them, plain flat parapet, dark fascia over the ground. Ground: a shop window with a white panel bulkhead at the north end, a recessed stair door in a brick pier, a slate blue-grey panel wall, and an arched restaurant front with a dark awning at the corner end. Wall re-tinted to a saturated ochre-tan (painted-white base), plain coping instead of a bracketed cornice, charcoal awning, darker slate ground band, the north side (edge 4) is a party wall against the neighbour, the jogged Union return (edge 6) gets upper windows. Layout fractions are real viewer left to right. Warmer saturated ochre wall; shallow box-like bays (wide flat centre light, short cheeks); ground split in two: pale panelled shop left, slate restaurant right with a charcoal fascia strip and a deep charcoal canvas awning across its whole width; brown brick pier between the shops. Arched stone surround not expressible with the current keys. Awning moved to the neutral canvas kit (the tinted awning-canvas read red), pier brick tint browned. Deeper golden ochre wall and bays; darker bronze sash on all windows so the bays read; bays projected deeper (0.7 m); brick pier replaced by a slate panel; the whole shop storey darkened (grey ground band, slate from the pier to the corner, a continuous charcoal fascia); restaurant openings lowered inside a pale limestone surround with a black canvas awning and a tall sign valance; left shop a single large pane over a white panel bulkhead. Slate panel and fascia darkened again. Wall a little darker/less orange; white wide window frames and trim; no belt course, no grey ground band; the charcoal fascia cut to a thin black line at the storefront head with stucco down to it; ground split into a white clapboard shop (left), a brown brick pier with the arched stair door, and the slate-blue restaurant panel. Two bays kept: the the second bay's underside over the shop/pier behind the tree, so the one-bay claim is not supported. Added a round-arched head with white voussoir ring over the restaurant opening (hbArchDoors, slate spandrels), black barrel awning, white clapboard bulkhead 1.0 m, wall tint a3651f (more saturated ochre), removed the rectangular limestone surround. Recessed gallery arch not expressible (arch head is tied to the storefront head). Mirrored claim SKIPPED again. Applied: ochre-tan wall 98601f, slate panel 6e7f99, near-black fascia, ONE wide arch 0.60-0.965 with white ring over the whole glazed front (left third of the slate panel blank), awning widened to the arch, second white-ringed round arch on the gallery entry. Quarter-round awning and sign band above the gallery window not expressible / not visible (dark sign at far left is the neighbour). Applied: hyB cant bays with one large front sash and slim side sashes, projecting dark belt board at the storefront/bay line. SKIPPED: remove door left of restaurant (the recessed arched stair door in the brick pier there), plain thin coping kept, no brackets. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-white",
+ "wallTint": "#ad804c",
+ "trim": "painted-white@f2efe8",
+ "frame": "painted-white@f2efe8",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f0ece2",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@f6f4ee",
+ "awning": "canvas-plain@1c1c1e",
+ "cornice": false,
+ "corniceProjectionM": 0.22,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.95,
+ "windowSillM": 0.8,
+ "windowHeadM": 2.4,
+ "upperWindows": [
+  0.05,
+  0.12,
+  0.45,
+  0.83,
+  0.91
+ ],
+ "bays": [
+  {
+   "at": 0.29,
+   "widthM": 3.0,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#ad804c",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.1,
+     "roofRiseM": 0
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.64,
+   "widthM": 3.0,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#ad804c",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.1,
+     "roofRiseM": 0
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 1.0,
+  "transomM": 0.8,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.01,
+    "to": 0.06,
+    "kind": "door",
+    "leaf": "painted-white"
+   },
+   {
+    "from": 0.07,
+    "to": 0.29,
+    "kind": "window"
+   },
+   {
+    "from": 0.3,
+    "to": 0.37,
+    "kind": "blank",
+    "material": "painted-white",
+    "tint": "#6e5a4c"
+   },
+   {
+    "from": 0.38,
+    "to": 0.45,
+    "kind": "door",
+    "stair": true,
+    "leaf": "wood-siding"
+   },
+   {
+    "from": 0.61,
+    "to": 0.73,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.74,
+    "to": 0.82,
+    "kind": "door",
+    "leaf": "wood-siding",
+    "headM": 3.3
+   },
+   {
+    "from": 0.83,
+    "to": 0.955,
+    "kind": "window",
+    "headM": 3.3
+   }
+  ],
+  "paneM": 99
+ },
+ "awningSpans": [
+  {
+   "from": 0.58,
+   "to": 0.97,
+   "profile": "barrel",
+   "depthM": 1.3,
+   "topM": 3.95,
+   "riseM": 0.7,
+   "valanceM": 0.3,
+   "material": "canvas-plain@1c1c1e"
+  }
+ ],
+ "ground": "restaurant",
+ "upper": "apartment",
+ "coping": {
+  "heightM": 0.3,
+  "projectionM": 0.08,
+  "material": "painted-white",
+  "tint": "#98601f"
+ },
+ "edgeRoles": {
+  "4": "party"
+ },
+ "streetEdges": {
+  "6": {
+   "upperWindows": [
+    0.3,
+    0.7
+   ]
+  }
+ },
+ "wallZones": [
+  {
+   "from": 0.0,
+   "to": 0.29,
+   "toY": 4.15,
+   "material": "painted-white",
+   "tint": "#e6e2da"
+  },
+  {
+   "from": 0.29,
+   "to": 0.465,
+   "toY": 4.15,
+   "material": "painted-white",
+   "tint": "#6e5a4c"
+  },
+  {
+   "from": 0.465,
+   "to": 1.0,
+   "toY": 4.15,
+   "material": "painted-white",
+   "tint": "#6e7f99"
+  },
+  {
+   "from": 0.0,
+   "to": 1.0,
+   "fromY": 4.15,
+   "toY": 4.45,
+   "material": "painted-white",
+   "tint": "#2e2e30"
+  }
+ ],
+ "hbArchDoors": [
+  {
+   "from": 0.6,
+   "to": 0.965,
+   "material": "painted-white",
+   "tint": "#6e7f99",
+   "ringTint": "#f0ebe0",
+   "fillTint": "#26262a",
+   "fillDownM": 0.0
+  },
+  {
+   "from": 0.38,
+   "to": 0.45,
+   "material": "painted-white",
+   "tint": "#6e5a4c",
+   "ringTint": "#f0ebe0",
+   "fillTint": "#26262a"
+  }
+ ],
+ "streetStills": true,
+ "hbSignBands": [
+  {
+   "from": 0.29,
+   "to": 1.0,
+   "bottomM": 4.05,
+   "topM": 4.5,
+   "material": "painted-white",
+   "tint": "#2a2a2e"
+  }
+ ]
+}

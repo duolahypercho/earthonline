@@ -1,0 +1,152 @@
+{
+ "seed": 94,
+ "notes": "1913 flats, off-white painted siding, four storeys. Ground: two arched windows with white balustrades either side of a wide dark garage opening, a small white door at left. Uppers: two cant bays, an arched centre window with a railed balcony, fire-escape balcony across the top. Grey-green siding between white bays, white rusticated ground storey, balustrades at the arched windows and a balconette over the garage (hand.py), shorter fire escape. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. GroundBand lift (2026-10-03): groundBand tint #ece8dc -> #f6f4ee (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-clapboard",
+ "wallTint": "#8f9a8d",
+ "trim": "painted-white@f0ede0",
+ "frame": "painted-white@f0ede0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f0ede0",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@f6f4ee",
+ "cornice": true,
+ "corniceProjectionM": 0.45,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.5
+ ],
+ "bays": [
+  {
+   "at": 0.18,
+   "widthM": 2.8,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#f4f2ea",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.81,
+   "widthM": 2.8,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#f4f2ea",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.02,
+    "to": 0.09,
+    "kind": "door",
+    "leaf": "painted-white@f0ede6",
+    "headM": 2.2
+   },
+   {
+    "from": 0.17,
+    "to": 0.3,
+    "kind": "window",
+    "headM": 2.9,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   },
+   {
+    "from": 0.43,
+    "to": 0.66,
+    "kind": "garage",
+    "leaf": "painted-steel@2a2c30",
+    "headM": 2.7
+   },
+   {
+    "from": 0.78,
+    "to": 0.87,
+    "kind": "window",
+    "headM": 2.9,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.8,
+  "upperM": 2.93
+ },
+ "fireEscape": {
+  "at": 0.5,
+  "widthM": 2.6,
+  "depthM": 0.9,
+  "material": "painted-steel"
+ },
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#f6f4ee",
+  "topM": 3.8
+ },
+ "hyDRubble": {
+  "toM": 3.8,
+  "courseM": 0.45,
+  "blockM": 4.0,
+  "projM": 0.02,
+  "shade": 0.8,
+  "seed": 5
+ },
+ "upperWindowArch": {
+  "type": "round",
+  "surround": true,
+  "storeys": [
+   1
+  ]
+ }
+}

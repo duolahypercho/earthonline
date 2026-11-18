@@ -1,0 +1,89 @@
+{
+ "seed": 712,
+ "wall": "painted-stucco",
+ "wallTint": "#ffffff",
+ "trim": "painted-white@d4d6d8",
+ "frame": "painted-white@e0e2e4",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@c8cacc",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "corniceProjectionM": 0.6,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.19,
+  0.33,
+  0.69,
+  0.83
+ ],
+ "bays": [],
+ "storefront": {
+  "bulkheadM": 0.7,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.13,
+    "to": 0.38,
+    "kind": "gate",
+    "headM": 3.1,
+    "leaf": "painted-steel@2b2b2d",
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.15,
+      "tint": "#d0d2d4"
+     }
+    }
+   },
+   {
+    "from": 0.48,
+    "to": 0.86,
+    "kind": "window",
+    "headM": 2.7
+   },
+   {
+    "from": 0.88,
+    "to": 0.98,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-white@d0d2d4",
+    "headM": 2.8
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "notes": "1922 flats. Pale grey painted stucco, three storeys read off the street still (data says four), two storeys of paired sash windows, a railed steel fire escape on the front, bracketed cornice. Ground: round-arched gated entry left, small shopfront with glazed door right. Rework r-eddy: paired windows in two groups, green shop sign band, plain cornice. Storey count kept at 3. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Base fix (2026-10-03): cool/grey wallTint = target / painted-stucco base so the warm stucco albedo does not turn it pink. GroundBand lift (2026-10-03): groundBand tint #b8bcc0 -> #dcdee0 (same rule as walls; it was missed by the first colour pass).",
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#dcdee0",
+  "topM": 3.9
+ },
+ "storeysSeen": {
+  "count": 3,
+  "groundM": 3.9
+ },
+ "fireEscape": {
+  "at": 0.5,
+  "widthM": 3.7,
+  "depthM": 0.9,
+  "material": "painted-steel@d0d4d8"
+ },
+ "hbSignBands": [
+  {
+   "from": 0.48,
+   "to": 0.98,
+   "bottomM": 2.75,
+   "topM": 3.75,
+   "material": "painted-stucco",
+   "tint": "#2f6b4f"
+  }
+ ]
+}

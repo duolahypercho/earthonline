@@ -1,0 +1,125 @@
+{
+ "seed": 95,
+ "notes": "1912 flats, cream painted siding with cream trim, four storeys. Ground: dark grey-green stucco base with an iron gate at left, a shop-style window right of centre and a dark side door. Uppers: two cant bays side by side on every upper storey. Dark green-grey ground storey, cream wall with tan trim and frames, per-bay bracketed cornices, heavier roof cornice, darker glass. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. GroundBand lift (2026-10-03): groundBand tint #4f5f56 -> #727f78 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-clapboard",
+ "wallTint": "#f2f0e6",
+ "trim": "painted-white@cdbd98",
+ "frame": "painted-white@cdbd98",
+ "glass": "glass-reflective",
+ "storefrontFrame": "painted-white@efe8d0",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@f2f0e6",
+ "cornice": true,
+ "corniceProjectionM": 0.6,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.22,
+   "widthM": 2.6,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#f2f0e6",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.24,
+     "dentils": true,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 2,
+     "dropM": 0.3
+    }
+   }
+  },
+  {
+   "at": 0.74,
+   "widthM": 2.6,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#f2f0e6",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.24,
+     "dentils": true,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 2,
+     "dropM": 0.3
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.08,
+    "to": 0.34,
+    "kind": "gate",
+    "headM": 2.6
+   },
+   {
+    "from": 0.52,
+    "to": 0.77,
+    "kind": "window",
+    "headM": 2.3
+   },
+   {
+    "from": 0.83,
+    "to": 0.97,
+    "kind": "door",
+    "leaf": "painted-steel@2a2c30",
+    "headM": 2.3
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.2,
+  "upperM": 2.94
+ },
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#727f78",
+  "topM": 3.2
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.9,
+  "heightM": 0.55,
+  "depthM": 0.35,
+  "widthM": 0.14,
+  "tint": "#cdbd98"
+ }
+}

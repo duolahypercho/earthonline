@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "asset": "polyhaven-asphalt-02-2k",
+  "license": "CC0-1.0",
+  "author": "Rob Tuytel",
+  "assetPage": "https://polyhaven.com/a/asphalt_02",
+  "physicalWidthMetres": 3,
+  "intent": "presentation-only carriageway asphalt for the street surface; not survey or scan reconstruction",
+  "sources": {
+    "diffuse": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/asphalt_02/asphalt_02_diff_2k.jpg",
+      "md5": "336af399fd98a39ab986d8b3bf73b4ff",
+      "downloadedMd5": "336af399fd98a39ab986d8b3bf73b4ff",
+      "downloadedSha256": "28f5ba8690553f192c0e5e1a5ff40f34765b4b93f4cc7059b1a3e9c795b6c28c"
+    },
+    "normalGlPng": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/asphalt_02/asphalt_02_nor_gl_2k.png",
+      "md5": "5e1dc171185794b1ffcf8f48864467dd",
+      "downloadedMd5": "5e1dc171185794b1ffcf8f48864467dd",
+      "downloadedSha256": "f96c0a1664e556d233b3f76e8f70ab08af5b1c342786efb99b72b8854563440e"
+    },
+    "armPng": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/asphalt_02/asphalt_02_arm_2k.png",
+      "md5": "4002a43c5941707d51f572358ad30d0c",
+      "downloadedMd5": "4002a43c5941707d51f572358ad30d0c",
+      "downloadedSha256": "d55172b4aeb248cb85742321125d608b7da5f09d26328c55735e88fa7c483129"
+    }
+  },
+  "outputs": {
+    "diffuse": {
+      "path": "public/assets/polyhaven-asphalt-02-diffuse-2k.jpg",
+      "sha256": "28f5ba8690553f192c0e5e1a5ff40f34765b4b93f4cc7059b1a3e9c795b6c28c",
+      "encoding": "sRGB base color"
+    },
+    "nra": {
+      "path": "public/assets/polyhaven-asphalt-02-nra-2k.png",
+      "sha256": "39b458d2553653855cdb72a64aa5e2da571ebf053a42f1d3accbe23f48c9823d",
+      "encoding": "R,G OpenGL tangent normal x,y (z rebuilt); B Poly Haven roughness; A 128 + occlusion * 127; 8-bit PNG, linear/no-color, not premultiplied"
+    }
+  },
+  "generator": {
+    "path": "scripts/assets/fetch-polyhaven-texture.mjs",
+    "sha256": "dc95175584447e64778fdca3331fd860947e02b7405d89d77f83b14176a720ce",
+    "algorithm": "diffuse: lossless copy of the Poly Haven 2k jpg after md5 verification against the files API; nra: decode the verified 2k PNG normal and ARM, pack R,G=normal xy, B=roughness, A=128+round(ao*127), encode 8-bit RGBA PNG with Paeth filtering and deflate level 9"
+  }
+}

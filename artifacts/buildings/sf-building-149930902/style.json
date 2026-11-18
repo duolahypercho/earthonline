@@ -1,0 +1,64 @@
+{
+ "seed": 6,
+ "wall": "painted-stucco",
+ "wallTint": "#d1ceca",
+ "trim": "painted-white@3a4248",
+ "frame": "painted-white@e8e6e0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@2a3238",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-stucco@97a1a8",
+ "cornice": true,
+ "corniceProjectionM": 0.5,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 1.2,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.5,
+ "upperWindows": [
+  0.07,
+  0.2,
+  0.33,
+  0.5,
+  0.68,
+  0.85
+ ],
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#97a1a8",
+  "topM": 7.0
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.05,
+    "to": 0.12,
+    "kind": "window",
+    "headM": 1.8,
+    "grille": true
+   },
+   {
+    "from": 0.16,
+    "to": 0.24,
+    "kind": "window",
+    "headM": 1.8,
+    "grille": true
+   },
+   {
+    "from": 0.4,
+    "to": 0.6,
+    "kind": "window",
+    "headM": 1.9
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "bayM": 8,
+ "streetStills": true,
+ "notes": "Round 1: 1908 ten-storey block, slate stucco two-storey base with dark cornice, grey stucco uppers with six window columns; fire escape skipped. Photos too close to count all storeys; data storeys kept. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. GroundBand lift (2026-10-03): groundBand tint #7d8a92 -> #97a1a8 (same rule as walls; it was missed by the first colour pass)."
+}

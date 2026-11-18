@@ -1,0 +1,906 @@
+{
+ "seed": 11,
+ "notes": "Clapboard laps (hyDLap) on greige wall c4bfae, round bows via hyB swell with dentil/belt cornice and corbels (maroon 7a1f2a), box bay with 3 sashes at 0.62 storey 2, dark forest awnings 1f4f3c, darker green bulkheads, dark bronze frames. Clapboard fix (2026-10-02): painted siding moved from the stained-timber wood-siding base to painted-clapboard so the tint renders as paint, not olive. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-clapboard",
+ "wallTint": "#e2dfd6",
+ "trim": "painted-white@f2efe8",
+ "frame": "painted-white@f2efe8",
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-storefront",
+ "storefrontFrame": "painted-steel@4a3c2c",
+ "bulkhead": "glazed-tile@3a5548",
+ "awning": "canvas-plain@1f4f3c",
+ "cornice": true,
+ "corniceProjectionM": 0.4,
+ "beltCourse": true,
+ "windowHoods": true,
+ "windowW": 0.95,
+ "windowSillM": 0.7,
+ "windowHeadM": 2.1,
+ "edgeRoles": {
+  "2": "flank",
+  "3": "flank"
+ },
+ "upperWindows": [
+  0.52,
+  0.8
+ ],
+ "bays": [
+  {
+   "at": 0.34,
+   "widthM": 3.2,
+   "projectionM": 0.65,
+   "fromStorey": 2,
+   "roundCorners": 4,
+   "material": "painted-clapboard",
+   "tint": "#e2dfd6",
+   "hyB": {
+    "plan": "swell",
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2,
+    "sillM": 0.7,
+    "headGapM": 0.25,
+    "cornice": {
+     "projectionM": 0.22,
+     "dentils": true,
+     "roofRiseM": 0.2
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0,
+     "beltBrackets": true
+    }
+   }
+  },
+  {
+   "at": 0.65,
+   "widthM": 3.2,
+   "projectionM": 0.65,
+   "fromStorey": 2,
+   "roundCorners": 4,
+   "material": "painted-clapboard",
+   "tint": "#e2dfd6",
+   "hyB": {
+    "plan": "swell",
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2,
+    "sillM": 0.7,
+    "headGapM": 0.25,
+    "cornice": {
+     "projectionM": 0.22,
+     "dentils": true,
+     "roofRiseM": 0.2
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0,
+     "beltBrackets": true
+    }
+   }
+  },
+  {
+   "at": 0.94,
+   "widthM": 2.6,
+   "projectionM": 0.65,
+   "fromStorey": 2,
+   "roundCorners": 4,
+   "material": "painted-clapboard",
+   "tint": "#e2dfd6",
+   "hyB": {
+    "plan": "swell",
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2,
+    "sillM": 0.7,
+    "headGapM": 0.25,
+    "cornice": {
+     "projectionM": 0.22,
+     "dentils": true,
+     "roofRiseM": 0.2
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0,
+     "beltBrackets": true
+    }
+   }
+  },
+  {
+   "at": 0.62,
+   "widthM": 3.0,
+   "projectionM": 0.5,
+   "fromStorey": 1,
+   "toStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#e2dfd6",
+   "hyB": {
+    "plan": "box",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sillM": 0.7,
+    "headGapM": 0.25
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.55,
+  "transomM": 0.4,
+  "pierM": 0.35,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.02,
+    "to": 0.33,
+    "kind": "window"
+   },
+   {
+    "from": 0.37,
+    "to": 0.45,
+    "kind": "double-door",
+    "stair": true,
+    "leaf": "painted-white@4a2e1e"
+   },
+   {
+    "from": 0.47,
+    "to": 0.62,
+    "kind": "window"
+   },
+   {
+    "from": 0.63,
+    "to": 0.68,
+    "kind": "door",
+    "leaf": "painted-steel-mid"
+   },
+   {
+    "from": 0.69,
+    "to": 0.88,
+    "kind": "window"
+   },
+   {
+    "from": 0.9,
+    "to": 0.97,
+    "kind": "door",
+    "leaf": "painted-steel-mid"
+   }
+  ]
+ },
+ "awningSpans": [
+  {
+   "from": 0.01,
+   "to": 0.35,
+   "depthM": 1.3,
+   "profile": "barrel",
+   "riseM": 0.45,
+   "ribM": 40,
+   "valanceM": 0.3
+  },
+  {
+   "from": 0.36,
+   "to": 0.46,
+   "depthM": 0.95,
+   "profile": "barrel",
+   "riseM": 0.65,
+   "ribM": 40,
+   "valanceM": 0.25
+  },
+  {
+   "from": 0.465,
+   "to": 0.99,
+   "depthM": 1.3,
+   "profile": "barrel",
+   "riseM": 0.45,
+   "ribM": 40,
+   "valanceM": 0.3
+  }
+ ],
+ "streetEdges": {
+  "2": {
+   "upperWindows": [
+    0.5
+   ],
+   "storefront": {
+    "layout": [
+     {
+      "from": 0.1,
+      "to": 0.9,
+      "kind": "window"
+     }
+    ]
+   },
+   "awningSpans": [
+    {
+     "from": 0.0,
+     "to": 1.0,
+     "depthM": 1.3
+    }
+   ],
+   "plaques": [],
+   "fireEscapeLanding": null
+  },
+  "3": {
+   "upperWindows": [
+    0.1,
+    0.25,
+    0.4,
+    0.55,
+    0.7,
+    0.85
+   ],
+   "storefront": {
+    "layout": [
+     {
+      "from": 0.02,
+      "to": 0.28,
+      "kind": "window"
+     },
+     {
+      "from": 0.45,
+      "to": 0.5,
+      "kind": "door",
+      "leaf": "painted-steel-mid"
+     }
+    ]
+   },
+   "awningSpans": [
+    {
+     "from": 0.0,
+     "to": 0.3,
+     "depthM": 1.3
+    }
+   ],
+   "plaques": [],
+   "fireEscapeLanding": null
+  }
+ },
+ "ground": "shop",
+ "upper": "apartment",
+ "wallZones": [
+  {
+   "from": 0.0,
+   "to": 1.0,
+   "toY": 2.95,
+   "material": "glazed-tile",
+   "tint": "#3a5548"
+  }
+ ],
+ "plaques": [
+  {
+   "at": 0.17,
+   "y": 3.45,
+   "w": 5.4,
+   "h": 0.55,
+   "face": "painted-white@b8b090"
+  },
+  {
+   "at": 0.17,
+   "y": 3.75,
+   "w": 5.6,
+   "h": 0.06,
+   "face": "painted-white@f2efe8"
+  },
+  {
+   "at": 0.17,
+   "y": 3.15,
+   "w": 5.6,
+   "h": 0.06,
+   "face": "painted-white@f2efe8"
+  },
+  {
+   "at": 0.5,
+   "y": 5.58,
+   "w": 19.2,
+   "h": 0.26,
+   "face": "painted-white@f2efe8"
+  },
+  {
+   "at": 0.5,
+   "y": 5.33,
+   "w": 19.2,
+   "h": 0.06,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.0063,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.0187,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.0312,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.0437,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.0563,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.0688,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.0813,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.0938,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.1062,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.1187,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.1313,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.1437,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.1562,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.1688,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.1812,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.1938,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.2062,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.2188,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.2313,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.2437,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.2562,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.2687,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.2812,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.2938,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.3063,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.3187,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.3312,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.3438,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.3563,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.3688,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.3812,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.3937,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.4062,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.4188,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.4313,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.4437,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.4562,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.4688,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.4813,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.4938,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.5062,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.5188,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.5312,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.5437,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.5563,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.5687,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.5813,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.5938,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.6062,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.6188,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.6312,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.6438,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.6562,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.6687,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.6813,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.6937,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.7063,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.7188,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.7312,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.7438,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.7562,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.7688,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.7812,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.7937,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.8063,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.8187,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.8313,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.8438,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.8562,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.8688,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.8812,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.8938,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.9062,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.9187,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.9313,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.9437,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.9563,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.9688,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.9812,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.9938,
+   "y": 5.43,
+   "w": 0.12,
+   "h": 0.13,
+   "face": "painted-white@7a1f2a"
+  },
+  {
+   "at": 0.5,
+   "y": 3.12,
+   "w": 19.2,
+   "h": 0.22,
+   "face": "painted-white@f2efe8"
+  },
+  {
+   "at": 0.5,
+   "y": 2.98,
+   "w": 19.2,
+   "h": 0.07,
+   "face": "painted-white@7a1f2a"
+  }
+ ],
+ "fireEscapeLanding": {
+  "at": 0.49,
+  "yM": 5.58,
+  "widthM": 2.2,
+  "depthM": 0.8,
+  "material": "painted-steel",
+  "ladderToM": 3.6
+ },
+ "hbCorniceDentils": {
+  "spacingM": 0.22,
+  "sizeM": 0.12,
+  "tint": "7a1f2a"
+ },
+ "hyDLap": {
+  "pitchM": 0.15,
+  "fromM": 3.1,
+  "projM": 0.018,
+  "heightM": 0.045,
+  "shade": 0.65,
+  "maxTris": 14000
+ },
+ "streetStills": true
+}

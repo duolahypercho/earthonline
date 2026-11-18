@@ -1,0 +1,115 @@
+{
+ "seed": 3,
+ "notes": "1909 flats, E side north of Washington: cream stucco, tan brick ground storey, stack of round bays from storey 1 under a plain cornice; ground has an entry and barred windows. Read from the cream round-bay flats along the east side; the facade is partly hidden by trees. Rework r3: photo (sv-h080 right, cream round-bay building over a buff stone base and a dark shop front with black awning and red double door) checked; applied cream wall, buff stone base, dark fascia+awning, red doors. Footprint front is one 8.2 m edge so massing kept. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game.",
+ "wall": "painted-white",
+ "wallTint": "#f5f0e2",
+ "trim": "painted-white@f2ecdc",
+ "frame": "painted-white@f2ecdc",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f2ecdc",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "brick-buff@ffffff",
+ "cornice": true,
+ "corniceProjectionM": 0.55,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.5
+ ],
+ "bays": [
+  {
+   "at": 0.27,
+   "widthM": 2.4,
+   "projectionM": 0.85,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f5f0e2",
+   "hyB": {
+    "plan": "swell",
+    "cornice": {
+     "projectionM": 0.18,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2
+   }
+  },
+  {
+   "at": 0.74,
+   "widthM": 2.4,
+   "projectionM": 0.85,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f5f0e2",
+   "hyB": {
+    "plan": "swell",
+    "cornice": {
+     "projectionM": 0.18,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2
+   }
+  }
+ ],
+ "groundBand": {
+  "material": "brick-buff",
+  "tint": "#ffffff",
+  "topM": 3.4
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.04,
+    "to": 0.6,
+    "kind": "window",
+    "headM": 2.7
+   },
+   {
+    "from": 0.66,
+    "to": 0.84,
+    "kind": "double-door",
+    "leaf": "painted-white@8a2a22",
+    "headM": 2.5
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "hbFloors": {
+  "groundM": 3.4,
+  "upperM": 4.1005
+ },
+ "shopUnits": [
+  {
+   "from": 0.04,
+   "to": 0.6,
+   "fascia": "#1d1c1b",
+   "panel": "#1d1c1b",
+   "boardM": 0.9,
+   "awning": "painted-white@1d1c1c",
+   "awningDepthM": 1.2,
+   "awningDropM": 0.05
+  }
+ ]
+}

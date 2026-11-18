@@ -1,0 +1,3507 @@
+{
+ "schema": "eo-cc0-manifest-v1",
+ "generatedBy": "native/tools/fetch-cc0.mjs",
+ "licence": "CC0-1.0 (https://creativecommons.org/publicdomain/zero/1.0/)",
+ "rootEnv": "EO_CC0_ROOT",
+ "note": "Downloads stay outside the repository; paths are relative to the root. The renderer verifies every file it reads against sha256 here.",
+ "downloadedBytes": 550280205,
+ "assets": [
+  {
+   "source": "polyhaven",
+   "id": "white_stucco",
+   "page": "https://polyhaven.com/a/white_stucco",
+   "name": "White Stucco",
+   "authors": [
+    "Amal Kumar"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    1.998,
+    1.998
+   ],
+   "use": "stucco walls (painted-stucco, float-finish-stucco), fresh paint",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/white_stucco/white_stucco_diff_2k.jpg",
+     "bytes": 2326889,
+     "sha256": "a1cf9063e72d82306c5f3330cfaa56ed75ee365dc6a6eb875cde125395dbe4ea",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/white_stucco/white_stucco_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "9f8369b068a4fee870f4f2f19a6cb66f"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/white_stucco/white_stucco_nor_gl_2k.jpg",
+     "bytes": 4025312,
+     "sha256": "d11eae11d09af20a1bd4e1262b1d35ad4259451a19651307a7fa8f6c0cadfc59",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/white_stucco/white_stucco_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "aded1a765eca8ced74d4b8d1b6367818"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/white_stucco/white_stucco_arm_2k.jpg",
+     "bytes": 1390598,
+     "sha256": "15c6162bd93fc94b1fec078cabe595e44652b1b4d78d5932f8f143e3911b6bb1",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/white_stucco/white_stucco_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "8331cf3cf11da2f4bad5729f305c7aee"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/white_stucco/white_stucco_disp_2k.jpg",
+     "bytes": 2056092,
+     "sha256": "e7b970fb598d5c02f0603f4723b6fa600c15c6868eae01cc15898a861252b3d9",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/white_stucco/white_stucco_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "acc6d2ffa979bf92941505cde6de2651"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "worn_plaster_wall",
+   "page": "https://polyhaven.com/a/worn_plaster_wall",
+   "name": "Worn Plaster Wall",
+   "authors": [
+    "Dimitrios Savva"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    1.8,
+    1.8
+   ],
+   "use": "stucco walls, worn (fetched; not drawn: its peeled patches read as camouflage under paint)",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/worn_plaster_wall/worn_plaster_wall_diff_2k.jpg",
+     "bytes": 3096042,
+     "sha256": "1cf28fcd1a0aa5873055fbfaf791e4a1528e03d3eeea8f66af23aba651e71f54",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/worn_plaster_wall/worn_plaster_wall_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "113c336124507f4b3fc7d440f6fd8346"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/worn_plaster_wall/worn_plaster_wall_nor_gl_2k.jpg",
+     "bytes": 2935964,
+     "sha256": "ffc110c57a6f98416a9cec390aeee80e1c6a3e6be627cfabfa041a55ccf96546",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/worn_plaster_wall/worn_plaster_wall_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "737e4eb8ec9af427c8aafe46675409d9"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/worn_plaster_wall/worn_plaster_wall_arm_2k.jpg",
+     "bytes": 1644844,
+     "sha256": "228ec3a51edbb51c1442ffe15b94656f3e15e748e23c138216199681e4928863",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/worn_plaster_wall/worn_plaster_wall_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "4131b686f55a1e47777f58931d423b66"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/worn_plaster_wall/worn_plaster_wall_disp_2k.jpg",
+     "bytes": 387205,
+     "sha256": "05d4df483465d2c3178f6652d147ff037981a7db7b3f862678ced211df0fa874",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/worn_plaster_wall/worn_plaster_wall_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "e31139132c91352d81b717911860e96a"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "red_bricks_04",
+   "page": "https://polyhaven.com/a/red_bricks_04",
+   "name": "Red Bricks 04",
+   "authors": [
+    "Rob Tuytel"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    2.5,
+    2.5
+   ],
+   "use": "red brick, running bond",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/red_bricks_04/red_bricks_04_diff_2k.jpg",
+     "bytes": 1033535,
+     "sha256": "6f6961031e8a85dc1a09cb6e6891d63d3c9baed8a0598f917856aa863d813828",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/red_bricks_04/red_bricks_04_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "31853e9c8519c54a0df96cbe3dd7f31f"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/red_bricks_04/red_bricks_04_nor_gl_2k.jpg",
+     "bytes": 1175166,
+     "sha256": "408b1e35c676257d7186db82b457c669e4187a2dd7497c3d6d56b586410cc130",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/red_bricks_04/red_bricks_04_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "96757e0dfdb0d0f6bcd48e71d12c0d60"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/red_bricks_04/red_bricks_04_arm_2k.jpg",
+     "bytes": 952959,
+     "sha256": "b4a0bb6761ffa73074c75664f1f4ee3cc98e0bda226644aafe7239417cd56e56",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/red_bricks_04/red_bricks_04_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "2fd33790ad5a1de62f5cbd8c33fe9f77"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/red_bricks_04/red_bricks_04_disp_2k.jpg",
+     "bytes": 260391,
+     "sha256": "f2143bb90053aae2087828d7af33feaf906e643fe46eaa1cedbb5ea587edd9e5",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/red_bricks_04/red_bricks_04_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "2efc074e44d371bc4607edd6e6401808"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "brick_wall_006",
+   "page": "https://polyhaven.com/a/brick_wall_006",
+   "name": "Brick Wall 006",
+   "authors": [
+    "Jan Burghardt"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    3,
+    3
+   ],
+   "use": "red-brown brick, common bond",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/brick_wall_006/brick_wall_006_diff_2k.jpg",
+     "bytes": 4337453,
+     "sha256": "6b5e1102e30d38c8b7c9885013bbb063817575567487fbdcf2671ebba5256a4b",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/brick_wall_006/brick_wall_006_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "ce58078bffb33ca142240f675060e972"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/brick_wall_006/brick_wall_006_nor_gl_2k.jpg",
+     "bytes": 3471088,
+     "sha256": "229b2263753614807f5acd72370e00c47b411088c2bd100a65d62ed17ba67be9",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/brick_wall_006/brick_wall_006_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "4c9fe7bc3abfb9da9fb541e9b25c3995"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/brick_wall_006/brick_wall_006_arm_2k.jpg",
+     "bytes": 2567917,
+     "sha256": "dc313e13bd12687bd8827b5e439c1ea2b56fbc883d935f26132b44781a21be14",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/brick_wall_006/brick_wall_006_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "4ac18c9b094ded66e0638f6563599574"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/brick_wall_006/brick_wall_006_disp_2k.jpg",
+     "bytes": 894989,
+     "sha256": "326fc48a8ed13859c6d24b23c95d5d4cfe0a8dbd7354017b3622e31cc15cc078",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/brick_wall_006/brick_wall_006_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "87e75e7bcb9a2a5253e608824f4da02d"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "yellow_bricks",
+   "page": "https://polyhaven.com/a/yellow_bricks",
+   "name": "Yellow Bricks",
+   "authors": [
+    "Rob Tuytel"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    2,
+    2
+   ],
+   "use": "buff brick",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/yellow_bricks/yellow_bricks_diff_2k.jpg",
+     "bytes": 4002452,
+     "sha256": "3a7d4603b590b1c2146f9f58d594965818489a84edfc0266678eaaa448f2c74c",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/yellow_bricks/yellow_bricks_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "8ccd10570b1e4a6776c243cafdd6f1c6"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/yellow_bricks/yellow_bricks_nor_gl_2k.jpg",
+     "bytes": 2146960,
+     "sha256": "68a9fd716e5b7b35f2f76e56ae53ec40e12b343ef62a688ce23c5e9bb7089c08",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/yellow_bricks/yellow_bricks_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "d6c639e366f7894a40337520da83ba5a"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/yellow_bricks/yellow_bricks_arm_2k.jpg",
+     "bytes": 2185187,
+     "sha256": "5bfeca3154dfe10769b24f27c52456f930b344203945b8e7b85e35d8e5d101ee",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/yellow_bricks/yellow_bricks_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "e361f5893edd6c1b89f44006165a7faf"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/yellow_bricks/yellow_bricks_disp_2k.jpg",
+     "bytes": 715649,
+     "sha256": "3415cf14e0ccfd20eb8d568dc6a1dc40a398c2a6f5d2993e859b06b01781ced2",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/yellow_bricks/yellow_bricks_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "108d486c2f591b149d1f2daa48752853"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "white_sandstone_blocks_02",
+   "page": "https://polyhaven.com/a/white_sandstone_blocks_02",
+   "name": "White Sandstone Blocks 02",
+   "authors": [
+    "Rob Tuytel"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    2,
+    2
+   ],
+   "use": "cast stone and limestone ashlar",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/white_sandstone_blocks_02/white_sandstone_blocks_02_diff_2k.jpg",
+     "bytes": 3780151,
+     "sha256": "a6bf9a91fcd5221dfa6ea458740916b03cdc9ce56796779471c8f400c6937dd3",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/white_sandstone_blocks_02/white_sandstone_blocks_02_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "141a8964984195586d2d6fac4ee34fef"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/white_sandstone_blocks_02/white_sandstone_blocks_02_nor_gl_2k.jpg",
+     "bytes": 3117994,
+     "sha256": "e827a760c93df71f1d5695f4feeb4fe5c07b9dfc4bc4657191cf683e3c3645ed",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/white_sandstone_blocks_02/white_sandstone_blocks_02_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "aa73e395015c04dfe452405b8be5d337"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/white_sandstone_blocks_02/white_sandstone_blocks_02_arm_2k.jpg",
+     "bytes": 2856173,
+     "sha256": "f068fd8176fbe8979a4b49da324cdeafa5fd5d5107f8bff36335cd5295346d68",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/white_sandstone_blocks_02/white_sandstone_blocks_02_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "62719faf93f71a6daa3659bdc5dff0bd"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/white_sandstone_blocks_02/white_sandstone_blocks_02_disp_2k.jpg",
+     "bytes": 846666,
+     "sha256": "b2e55d2b640c74d1d372b9b47fc65835ad19fc7b30d544a579378cd721f1697e",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/white_sandstone_blocks_02/white_sandstone_blocks_02_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "902f2c3a9f18458821890a64a6fd63b2"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "concrete_wall_008",
+   "page": "https://polyhaven.com/a/concrete_wall_008",
+   "name": "Concrete Wall 008",
+   "authors": [
+    "Dario Barresi",
+    "Charlotte Baglioni"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    2.71,
+    2.71
+   ],
+   "use": "smooth concrete and precast panels",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/concrete_wall_008/concrete_wall_008_diff_2k.jpg",
+     "bytes": 2666189,
+     "sha256": "a3eb7b24c5cf6f113ec9b3be8ab1715360ef3cbf4b1699979414e44341f54846",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_wall_008/concrete_wall_008_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "9e834dad5c07a3ba452a2ad0f1454c9f"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/concrete_wall_008/concrete_wall_008_nor_gl_2k.jpg",
+     "bytes": 2342650,
+     "sha256": "58ce9b818772d37fe16e1154ea0278f3ab423ed34073357e786ef44f9ceef052",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_wall_008/concrete_wall_008_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "deca87f9fa074c7f041d23178f74ec95"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/concrete_wall_008/concrete_wall_008_arm_2k.jpg",
+     "bytes": 2585631,
+     "sha256": "98e5e8f447e2ce92bb0349cb0c8265ca0b67c6fe6f6a1be31c4be8e986aa47c7",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_wall_008/concrete_wall_008_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "b2f992f83c82627c5e4a05ac0caff50d"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/concrete_wall_008/concrete_wall_008_disp_2k.jpg",
+     "bytes": 777437,
+     "sha256": "95d38f253bdd8767a2b4b2ce9dcf832355c71fd03627a42a24f8373df801465a",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_wall_008/concrete_wall_008_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "5bb8b340c56eb483f8fdb69b6ff29d6f"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "wood_textured_concrete",
+   "page": "https://polyhaven.com/a/wood_textured_concrete",
+   "name": "Wood Textured Concrete",
+   "authors": [
+    "Dimitrios Savva"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    1.8,
+    1.8
+   ],
+   "use": "board-formed concrete (landmark piers, seawall faces)",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/wood_textured_concrete/wood_textured_concrete_diff_2k.jpg",
+     "bytes": 2416133,
+     "sha256": "c37f3d6b3f1ef99b4053cbb9629bffb0f938cc40d726f70acb80e309dbb3882f",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wood_textured_concrete/wood_textured_concrete_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "1527cc03b1a2a97fe20615b895600829"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/wood_textured_concrete/wood_textured_concrete_nor_gl_2k.jpg",
+     "bytes": 3110818,
+     "sha256": "87a9aec54c2d20ea283be1c296d1d50289ad726f59ac9e3171cc27694f47885c",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wood_textured_concrete/wood_textured_concrete_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "6f7dec5b4c5f115ad9b060e774a2cb3b"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/wood_textured_concrete/wood_textured_concrete_arm_2k.jpg",
+     "bytes": 2651820,
+     "sha256": "6bcfca5eececd9e86663d9b306d8b26ab5b998ae78c41f0260a7526226bf91d8",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wood_textured_concrete/wood_textured_concrete_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "5ec9786095c9eafe206dd26986dc3fe4"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/wood_textured_concrete/wood_textured_concrete_disp_2k.jpg",
+     "bytes": 836863,
+     "sha256": "d390e771d557ce7ae2c9a08d2752bf8399d04825e8356e23a72ae7a0d08f7901",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/wood_textured_concrete/wood_textured_concrete_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "8b8a5bd00dd96268e5a3784269415010"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "corrugated_iron_02",
+   "page": "https://polyhaven.com/a/corrugated_iron_02",
+   "name": "Corrugated Iron 02",
+   "authors": [
+    "Jenelle van Heerden",
+    "Sergej Majboroda"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    2.7,
+    2.7
+   ],
+   "use": "corrugated metal cladding",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/corrugated_iron_02/corrugated_iron_02_diff_2k.jpg",
+     "bytes": 2325335,
+     "sha256": "1bd2b9900e066d7e6cbacc5093aa4204db71c1bbe13b42a3d8ad23d04fa8075a",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/corrugated_iron_02/corrugated_iron_02_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "88f0ec0310e41f408dd0092c8c53db58"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/corrugated_iron_02/corrugated_iron_02_nor_gl_2k.jpg",
+     "bytes": 2178443,
+     "sha256": "a7972360f64fb44beee57750b0ad6bee1f3b64268cd9f649b5e92e1de4de0632",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/corrugated_iron_02/corrugated_iron_02_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "7ce1e415161ddffdf06fb1f9a80bae5c"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/corrugated_iron_02/corrugated_iron_02_arm_2k.jpg",
+     "bytes": 4037544,
+     "sha256": "80ae7f8b9ff7521898049cb79b7cfb82a0bb95bf0cba312ffe1d0e5760f45dcb",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/corrugated_iron_02/corrugated_iron_02_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "290894c6b9198558707e9ca713010f02"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/corrugated_iron_02/corrugated_iron_02_disp_2k.jpg",
+     "bytes": 821702,
+     "sha256": "9cb37271014c8f02dc8a06917b2f78ed3ee29a62ca4d571ab1914b19e6e59502",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/corrugated_iron_02/corrugated_iron_02_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "fa00e4c5677dd541fb614efe07eb6399"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "box_profile_metal_sheet",
+   "page": "https://polyhaven.com/a/box_profile_metal_sheet",
+   "name": "Box Profile Metal Sheet",
+   "authors": [
+    "Amal Kumar"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    2,
+    2
+   ],
+   "use": "standing-seam and box-profile metal panels",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/box_profile_metal_sheet/box_profile_metal_sheet_diff_2k.jpg",
+     "bytes": 1473974,
+     "sha256": "ac6136f370a9ec7370e2bac2e5467cabd92857693033e1a49fa67a5cafa1303b",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/box_profile_metal_sheet/box_profile_metal_sheet_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "965ed6379d3468a1fe1beb7297a3487d"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/box_profile_metal_sheet/box_profile_metal_sheet_nor_gl_2k.jpg",
+     "bytes": 2481787,
+     "sha256": "8f4f34e06aae460b0f0de2b1dd6f76ac2e1e251e5cc929907ff258bd04793e1e",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/box_profile_metal_sheet/box_profile_metal_sheet_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "6aae76d513237050435d0fbc77f29a54"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/box_profile_metal_sheet/box_profile_metal_sheet_arm_2k.jpg",
+     "bytes": 2879869,
+     "sha256": "ce9c722a34df21ce469a9ffa08d9d357340866885647ba5dff48d054fa724313",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/box_profile_metal_sheet/box_profile_metal_sheet_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "3783562c428e1c13944f4e3e2232949a"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/box_profile_metal_sheet/box_profile_metal_sheet_disp_2k.jpg",
+     "bytes": 588975,
+     "sha256": "5292e099b62519bc032ae6bfdb0dc40fe60bea2d7aeae9dd59c5adc00f5dbbe2",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/box_profile_metal_sheet/box_profile_metal_sheet_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "b79f0045d518912ac7fd3d1aec3678d8"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "rectangular_facade_tiles",
+   "page": "https://polyhaven.com/a/rectangular_facade_tiles",
+   "name": "Rectangular Facade Tiles",
+   "authors": [
+    "Charlotte Baglioni"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    2,
+    2
+   ],
+   "use": "shopfront glazed tile",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/rectangular_facade_tiles/rectangular_facade_tiles_diff_2k.jpg",
+     "bytes": 2288265,
+     "sha256": "a8d604be82d451f08094c628e9a49d88aaa9e981bbdd3363d67df48e5643c542",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rectangular_facade_tiles/rectangular_facade_tiles_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "9f920e3d0e33856fb1c780821e18c7da"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/rectangular_facade_tiles/rectangular_facade_tiles_nor_gl_2k.jpg",
+     "bytes": 3584640,
+     "sha256": "c790ccf246c3020b92285b99f6a055d67b47fdea1158fe4be5fadd9e0c7f88b1",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rectangular_facade_tiles/rectangular_facade_tiles_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "c2597b6e3d76a72e1f3684fdc932a094"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/rectangular_facade_tiles/rectangular_facade_tiles_arm_2k.jpg",
+     "bytes": 1785921,
+     "sha256": "5b32321f9d8e5ca2ba358b480fcd2e3c0649b24727208154bb80aec78da31573",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rectangular_facade_tiles/rectangular_facade_tiles_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "fa7643289dbdaf99386b97b9af323145"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/rectangular_facade_tiles/rectangular_facade_tiles_disp_2k.jpg",
+     "bytes": 1026097,
+     "sha256": "179d0132f512b624b44dc835ce3505deb67db5426fbb751234522725c6d5e6a4",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/rectangular_facade_tiles/rectangular_facade_tiles_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "8536937e440bad6c5370cda2fcdde8ce"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "concrete_block_wall",
+   "page": "https://polyhaven.com/a/concrete_block_wall",
+   "name": "Concrete Block Wall",
+   "authors": [
+    "Charlotte Baglioni"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    2,
+    2
+   ],
+   "use": "painted concrete block",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/concrete_block_wall/concrete_block_wall_diff_2k.jpg",
+     "bytes": 3501045,
+     "sha256": "c9159f6bb8713e00bc844ddf9f4007dc85008fa59e0f5d1ea559da632749cdd1",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_block_wall/concrete_block_wall_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "8a9e821de1c023dab880b0c6cbdb23c9"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/concrete_block_wall/concrete_block_wall_nor_gl_2k.jpg",
+     "bytes": 4302780,
+     "sha256": "e7f6a5e8a83ac939590eca3a6be4e74dff3d803ddbf472598437bda13f59b951",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_block_wall/concrete_block_wall_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "87f92b7f2598febfae42d2549e91e7d6"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/concrete_block_wall/concrete_block_wall_arm_2k.jpg",
+     "bytes": 2095785,
+     "sha256": "5f5b68651c2af23722e95addec815b17b42e9fe8b41134f854e7609a9883e7f2",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_block_wall/concrete_block_wall_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "306087a636fdee4b814dc3a3d0d44744"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/concrete_block_wall/concrete_block_wall_disp_2k.jpg",
+     "bytes": 748001,
+     "sha256": "4a866c2a65bfa10b5decb2cb959d053ff90cea78348295c28ae95090d0c5ee3f",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_block_wall/concrete_block_wall_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "05e7206a04fa93cb2acecc34d19dfc70"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "painted_metal_shutter",
+   "page": "https://polyhaven.com/a/painted_metal_shutter",
+   "name": "Painted Metal Shutter",
+   "authors": [
+    "Dario Barresi",
+    "Rico Cilliers",
+    "Charlotte Baglioni"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    2,
+    2
+   ],
+   "use": "sectional and roll-up garage doors",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/painted_metal_shutter/painted_metal_shutter_diff_2k.jpg",
+     "bytes": 2474114,
+     "sha256": "0aa6835b7da52960dd371897f1777166210ca07386a2872eb162ab8398595997",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/painted_metal_shutter/painted_metal_shutter_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "71f3093741ac82b1e4ab10fd25bc367d"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/painted_metal_shutter/painted_metal_shutter_nor_gl_2k.jpg",
+     "bytes": 3097249,
+     "sha256": "2757f76146b522c9a0e5c057bd8fcac6600861def33a814c63b8b8e1f6a1d97f",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/painted_metal_shutter/painted_metal_shutter_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "702bd74c66505f8beb45a9a1171cade6"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/painted_metal_shutter/painted_metal_shutter_arm_2k.jpg",
+     "bytes": 2565660,
+     "sha256": "86f1b5e96df17d30114007b17ba272b7c8771fc212223257cb2621aa9ce39ce1",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/painted_metal_shutter/painted_metal_shutter_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "3cf687653a871b93b7cb2502ce1bf047"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/painted_metal_shutter/painted_metal_shutter_disp_2k.jpg",
+     "bytes": 1080331,
+     "sha256": "6094c08f55f24d954c8d46d80b1fdf2c5c9d012a153be0294f88de8747d1116c",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/painted_metal_shutter/painted_metal_shutter_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "c323ac2d79c40fc33288741598745567"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "tarred_gravel",
+   "page": "https://polyhaven.com/a/tarred_gravel",
+   "name": "Tarred Gravel",
+   "authors": [
+    "Dimitrios Savva"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    2.2,
+    2.2
+   ],
+   "use": "flat tar-and-gravel roofs",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/tarred_gravel/tarred_gravel_diff_2k.jpg",
+     "bytes": 2979831,
+     "sha256": "e0555303a794d7aa1f83a64ca67117006cb5556bf780cbf6e273b2f7a9c664a9",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/tarred_gravel/tarred_gravel_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "ced39cf20e4f53032f60c64c53a0b3b9"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/tarred_gravel/tarred_gravel_nor_gl_2k.jpg",
+     "bytes": 4028743,
+     "sha256": "64587dbb0b3fd6d4a7c74a00a504f63d1b78feebec2a7dceba8ee415c8610946",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/tarred_gravel/tarred_gravel_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "6e8e442e9335585b8637e597d5984b91"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/tarred_gravel/tarred_gravel_arm_2k.jpg",
+     "bytes": 4198012,
+     "sha256": "f30ad1586a4f4f42477b8b3e19bee085e2197adc4d0dd693221709f3b6f76cca",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/tarred_gravel/tarred_gravel_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "67c713fd9da9d054763bd0039829af11"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/tarred_gravel/tarred_gravel_disp_2k.jpg",
+     "bytes": 1185609,
+     "sha256": "17c10c5c02bb37e5b62629a59614e48a9ebd703d1332944289a168f7907c56ea",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/tarred_gravel/tarred_gravel_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "384d3bc529b21618998020711f5cc8e5"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "clay_roof_tiles_02",
+   "page": "https://polyhaven.com/a/clay_roof_tiles_02",
+   "name": "Clay Roof Tiles 02",
+   "authors": [
+    "Amal Kumar"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    2.5,
+    2.5
+   ],
+   "use": "clay barrel-tile roofs",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/clay_roof_tiles_02/clay_roof_tiles_02_diff_2k.jpg",
+     "bytes": 3459427,
+     "sha256": "570e1878985993bf81433d785b4fa2d4ab9f6d32447706193089b11ff0851731",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/clay_roof_tiles_02/clay_roof_tiles_02_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "0a1350644116c58a19908b22f569bf8e"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/clay_roof_tiles_02/clay_roof_tiles_02_nor_gl_2k.jpg",
+     "bytes": 3526539,
+     "sha256": "762e2f18ba063fe3c587955be9f8a0a6e8e75cee4057e188970d1ec70a880194",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/clay_roof_tiles_02/clay_roof_tiles_02_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "1ccc234195df3d48107490a7f7f03e59"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/clay_roof_tiles_02/clay_roof_tiles_02_arm_2k.jpg",
+     "bytes": 2014906,
+     "sha256": "8e7cb954ebff60591bb19fb950f6e85727793caca16077bc2b42222e050efbb7",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/clay_roof_tiles_02/clay_roof_tiles_02_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "0b690f55feebb1a697fc0fbe5a73a36b"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/clay_roof_tiles_02/clay_roof_tiles_02_disp_2k.jpg",
+     "bytes": 1011709,
+     "sha256": "9e289eef96763ea7f7034cb3d1997adf7f84c692dd76edbaf9512aaf35fce3b0",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/clay_roof_tiles_02/clay_roof_tiles_02_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "8efa4576ee01440378d1394b3569a16e"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "worn_asphalt",
+   "page": "https://polyhaven.com/a/worn_asphalt",
+   "name": "Worn Asphalt",
+   "authors": [
+    "Amal Kumar"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    2,
+    2
+   ],
+   "use": "carriageway wear in the wheel paths",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/worn_asphalt/worn_asphalt_diff_2k.jpg",
+     "bytes": 3573942,
+     "sha256": "8313d3f8d25515d6ef0be59d461cdeb0feb484694eae385711ecf688c0afa4de",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/worn_asphalt/worn_asphalt_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "7bd15211eea2137bfcc6af510e17cd3d"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/worn_asphalt/worn_asphalt_nor_gl_2k.jpg",
+     "bytes": 5863366,
+     "sha256": "114db3391e7d74c03758b06c8af2901a2c9392cf4cb37e7a8a3254a3235ce63e",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/worn_asphalt/worn_asphalt_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "e5e67ff8533fba07858b7efaa0bf29f0"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/worn_asphalt/worn_asphalt_arm_2k.jpg",
+     "bytes": 4385137,
+     "sha256": "82e4e37bf67f0f5cbd3bd534ac617eef17e536b612beea7948cae53067c1cd66",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/worn_asphalt/worn_asphalt_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "5d954d45765f22b143f8fd3daa81f977"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/worn_asphalt/worn_asphalt_disp_2k.jpg",
+     "bytes": 2438807,
+     "sha256": "6051d3ca6a2ed587074651536b0b50fac9974c16aa89b273f2656a19426a38e1",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/worn_asphalt/worn_asphalt_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "fb41e0fccb06f21ccc61793f2ddeafe0"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "road_damaged",
+   "page": "https://polyhaven.com/a/road_damaged",
+   "name": "Road Damaged",
+   "authors": [
+    "Dimitrios Savva"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    2.2,
+    2.2
+   ],
+   "use": "cracked carriageway",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/road_damaged/road_damaged_diff_2k.jpg",
+     "bytes": 3590993,
+     "sha256": "07e5d5424365d512a297a0610cb53d1a4ab0b66b1accfd027076baa570b72dd3",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/road_damaged/road_damaged_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "3a4dd0a783f4e3dd7f10462132279e33"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/road_damaged/road_damaged_nor_gl_2k.jpg",
+     "bytes": 3867036,
+     "sha256": "78fa83e74f9f6de92eeb7badeb05aac470e88b5bb75f58da2e7a9ca54cfb80cb",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/road_damaged/road_damaged_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "7b50f7492091f370a35da27bd79cc1a1"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/road_damaged/road_damaged_arm_2k.jpg",
+     "bytes": 3299640,
+     "sha256": "8fb977ce2e6d07542864c861a1c06d8a132b3828152d60b98558432e06ac2068",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/road_damaged/road_damaged_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "b192f3b33c8fa71db76ed4b7a550c8bd"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/road_damaged/road_damaged_disp_2k.jpg",
+     "bytes": 903595,
+     "sha256": "78be6a948b5e6a499b38436222623a2c79830b92c471f0e70cd355fbd319f6e6",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/road_damaged/road_damaged_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "96365cadbfe8f9da240ab3ff954ac775"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "clean_asphalt",
+   "page": "https://polyhaven.com/a/clean_asphalt",
+   "name": "Clean Asphalt",
+   "authors": [
+    "Dimitrios Savva"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    2.1,
+    2.1
+   ],
+   "use": "fresh utility-cut patches",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/clean_asphalt/clean_asphalt_diff_2k.jpg",
+     "bytes": 3314999,
+     "sha256": "9d58f263b695c268e391aa39ea2f6b30ab9f36d279715cc78593a4d43368039c",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/clean_asphalt/clean_asphalt_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "d3afa117daf0846a743bbf5b4eb2464d"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/clean_asphalt/clean_asphalt_nor_gl_2k.jpg",
+     "bytes": 3923727,
+     "sha256": "ee6e217a75851a73ab0ce54501e787b63707e0cf8dfd7293989adf7d3e325162",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/clean_asphalt/clean_asphalt_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "f9d4e1b14ac5b231748b600dcd59f20e"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/clean_asphalt/clean_asphalt_arm_2k.jpg",
+     "bytes": 3461113,
+     "sha256": "88e7f69b2b749559841c46c5f7732c1dc59f15acca7bb8f27c6a8b3a6f22cfac",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/clean_asphalt/clean_asphalt_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "683b881a2b614cd57fd518102f6ce99a"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/clean_asphalt/clean_asphalt_disp_2k.jpg",
+     "bytes": 1453317,
+     "sha256": "8e2f7d89de668a9c1da7d0cc3fbcaeade21f942cf92d2d3f04829e674ef1e6cf",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/clean_asphalt/clean_asphalt_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "3650d19a3975a4ee9e4fff94dde3fcae"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "dirty_concrete",
+   "page": "https://polyhaven.com/a/dirty_concrete",
+   "name": "Dirty Concrete",
+   "authors": [
+    "Rob Tuytel"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    3,
+    3
+   ],
+   "use": "sidewalk concrete",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/dirty_concrete/dirty_concrete_diff_2k.jpg",
+     "bytes": 2952697,
+     "sha256": "774ed7fec21f4fe14d625b3d21d3fd882a766a7f63e16217f32f8513b93f78bc",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dirty_concrete/dirty_concrete_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "935b487b6c68388fdbb705f37682cb24"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/dirty_concrete/dirty_concrete_nor_gl_2k.jpg",
+     "bytes": 1507149,
+     "sha256": "c41502c1d07f7644428ad6c2141cc131ff04319672bf74b7dc8d5c3fe5f60610",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dirty_concrete/dirty_concrete_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "7ae7d791c6750752441ec50e8ec38189"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/dirty_concrete/dirty_concrete_arm_2k.jpg",
+     "bytes": 526449,
+     "sha256": "219916e7646c423485a24ed60fcc5ce8357fdc5d2a994f3f29f6bf28b67ab609",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dirty_concrete/dirty_concrete_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "59c1a6bcafa290717f8ddb942a7e9d3e"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/dirty_concrete/dirty_concrete_disp_2k.jpg",
+     "bytes": 812520,
+     "sha256": "8a70bcefee84a796a27e6cdd88a3b8ca17ceeca5cab0ea3e2ba2d5acf0877ec6",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/dirty_concrete/dirty_concrete_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "20bb55fa68547519f8acef8d5b9a1908"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "concrete_floor_worn_001",
+   "page": "https://polyhaven.com/a/concrete_floor_worn_001",
+   "name": "Concrete Floor Worn 001",
+   "authors": [
+    "Dimitrios Savva",
+    "Rico Cilliers"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    3,
+    3
+   ],
+   "use": "sidewalk concrete, worn",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/concrete_floor_worn_001/concrete_floor_worn_001_diff_2k.jpg",
+     "bytes": 482906,
+     "sha256": "e29b45cdcd6d02fae3c087c456196ffa750779a9b62e7071aa3831dc322a0cc4",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_floor_worn_001/concrete_floor_worn_001_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "6a3645f19f2ac4b7f60f43419c5d09ec"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/concrete_floor_worn_001/concrete_floor_worn_001_nor_gl_2k.jpg",
+     "bytes": 870609,
+     "sha256": "3b782137e34d63fd59b2e92b4e27b2ee4d082caf9dd23f00dc7ab4da5513daef",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_floor_worn_001/concrete_floor_worn_001_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "210fbc9fe40492177e79fdb4afda268e"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/concrete_floor_worn_001/concrete_floor_worn_001_arm_2k.jpg",
+     "bytes": 649883,
+     "sha256": "f239a75b8b816ceb85058933b6115e0fcd92e4709e9210e2b4f834f47d9fa7c6",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_floor_worn_001/concrete_floor_worn_001_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "ed519bf68bcf8581447a9d3fbc1e8c45"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/concrete_floor_worn_001/concrete_floor_worn_001_disp_2k.jpg",
+     "bytes": 666150,
+     "sha256": "793a833047c28b17344ca7543c32de39fb5d86d17e33ab380cf8639040d3a637",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_floor_worn_001/concrete_floor_worn_001_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "6e46161e741bf9a18e8f96d1def46f03"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "granite_wall",
+   "page": "https://polyhaven.com/a/granite_wall",
+   "name": "Granite Wall",
+   "authors": [
+    "Dimitrios Savva"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    1.9,
+    1.9
+   ],
+   "use": "granite kerbs (fetched; not drawn: its block joints read as a dashed band on a 15 cm kerb top)",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/granite_wall/granite_wall_diff_2k.jpg",
+     "bytes": 3772384,
+     "sha256": "a7755e7e855630e7ef27c06aba1e97a0d0a92299cd60908a49bcb1074434bc35",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/granite_wall/granite_wall_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "4039c648b02d1e7eae2aa65f6a05204d"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/granite_wall/granite_wall_nor_gl_2k.jpg",
+     "bytes": 4443302,
+     "sha256": "2da9fb64bef583ea26b780880be52bde1d731b2b763ea435ecbe67eff85511c2",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/granite_wall/granite_wall_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "9c7c42ffd0ab2948cf3cd5e42a270097"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/granite_wall/granite_wall_arm_2k.jpg",
+     "bytes": 2115153,
+     "sha256": "46dd6f6bb4e5ca67d97f38bfbbcffef127f0d7f12f6b04d351a64c0fe899fcff",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/granite_wall/granite_wall_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "1a4e6fdf79ecdeba280c7b9615f18e92"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/granite_wall/granite_wall_disp_2k.jpg",
+     "bytes": 865808,
+     "sha256": "12d8a40889e5896c2ddbda85215c2a3ea091b17c95aaa50e718df62b94b95d0e",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/granite_wall/granite_wall_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "33f6b27af3f6d4570359e7948693a102"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "herringbone_pavement",
+   "page": "https://polyhaven.com/a/herringbone_pavement",
+   "name": "Herringbone Pavement",
+   "authors": [
+    "Charlotte Baglioni"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    2,
+    2
+   ],
+   "use": "plaza brick pavers",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/herringbone_pavement/herringbone_pavement_diff_2k.jpg",
+     "bytes": 3796204,
+     "sha256": "9e2b6a78df1abde83d8a35f25e9bd1d5d07d0fa0fcc64c17035b6c7755834194",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/herringbone_pavement/herringbone_pavement_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "7ffdee19c0faa074828b4175cccb86f6"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/herringbone_pavement/herringbone_pavement_nor_gl_2k.jpg",
+     "bytes": 4225006,
+     "sha256": "434eee60936c3746039ab2634cd28a77043585df20ddeecee407f254e8bc6eac",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/herringbone_pavement/herringbone_pavement_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "683414aa7cbb22443d3712896e61ca0f"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/herringbone_pavement/herringbone_pavement_arm_2k.jpg",
+     "bytes": 3152961,
+     "sha256": "83b20855a7be971958a05915f71bd7fca7004169a611a74e23c2f37320094cf7",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/herringbone_pavement/herringbone_pavement_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "384d9631186cc8f78105b18a4c785ed8"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/herringbone_pavement/herringbone_pavement_disp_2k.jpg",
+     "bytes": 1745548,
+     "sha256": "10f39e75d31bde38a84359e8930e1a10ee5238e844e1ce3c2d84fc04651fa10c",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/herringbone_pavement/herringbone_pavement_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "647ffc3db22b089c8c10cd0f224323a1"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "patterned_concrete_pavers",
+   "page": "https://polyhaven.com/a/patterned_concrete_pavers",
+   "name": "Patterned Concrete Pavers",
+   "authors": [
+    "Amal Kumar"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    1.8,
+    1.8
+   ],
+   "use": "plaza concrete pavers",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/patterned_concrete_pavers/patterned_concrete_pavers_diff_2k.jpg",
+     "bytes": 3258831,
+     "sha256": "30d3c8c3c1f7ba3c8b2c435992016ed2c5e397ee7af2015339bbb87234b0646d",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/patterned_concrete_pavers/patterned_concrete_pavers_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "9a7dd667f6417946443aebc384b936a3"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/patterned_concrete_pavers/patterned_concrete_pavers_nor_gl_2k.jpg",
+     "bytes": 3097933,
+     "sha256": "25a1dc8e1f7fb5c1ca17aa6ef1e1e046b78170f2dd6abcd688d252eff0f43b05",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/patterned_concrete_pavers/patterned_concrete_pavers_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "ba65eadecd8f049f7d620dbe641b68aa"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/patterned_concrete_pavers/patterned_concrete_pavers_arm_2k.jpg",
+     "bytes": 2642919,
+     "sha256": "0bd9ef6cd1f9be1f397c651384733b906bc7c24c815a68e851dda2586b0b50ba",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/patterned_concrete_pavers/patterned_concrete_pavers_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "51c8e1d9db58cec5888d4d6e4ff61e2f"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/patterned_concrete_pavers/patterned_concrete_pavers_disp_2k.jpg",
+     "bytes": 1556296,
+     "sha256": "bd280512a82dd2b4dd8f4a70517b574cd3c85b9e91f2fb1a833e7999a5f75ca6",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/patterned_concrete_pavers/patterned_concrete_pavers_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "a196dead4b90774b08359dc3945d9a7a"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "cobblestone_floor_08",
+   "page": "https://polyhaven.com/a/cobblestone_floor_08",
+   "name": "Cobblestone Floor 08",
+   "authors": [
+    "Rob Tuytel"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    2,
+    2
+   ],
+   "use": "plaza granite setts",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/cobblestone_floor_08/cobblestone_floor_08_diff_2k.jpg",
+     "bytes": 2289909,
+     "sha256": "9aaf7db7f660f03d0c5c129c11e83caa828fb8bca63f8cd5154d450ffc4c340f",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/cobblestone_floor_08/cobblestone_floor_08_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "56404e8a3cdf04c8697dbbc7f9ddd65c"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/cobblestone_floor_08/cobblestone_floor_08_nor_gl_2k.jpg",
+     "bytes": 3948187,
+     "sha256": "42dd5fc2da4a858f9c076c9ac5002857a1c064f8f4c4ffb12fafecffb84e96cc",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/cobblestone_floor_08/cobblestone_floor_08_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "3d1c34ed083de54949e8375d69033b0b"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/cobblestone_floor_08/cobblestone_floor_08_arm_2k.jpg",
+     "bytes": 805558,
+     "sha256": "c963cb6e73960e0a0562a2650d13fc6a259ef57e85945ed3b47d502697df4c03",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/cobblestone_floor_08/cobblestone_floor_08_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "6cbb7aa63416eb4ef1620477ac7b605b"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/cobblestone_floor_08/cobblestone_floor_08_disp_2k.jpg",
+     "bytes": 537774,
+     "sha256": "503cf1444d98526e4105b065112c36258c0063e0fa0a86c573c29f45eecebe88",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/cobblestone_floor_08/cobblestone_floor_08_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "956f21bf0f92dcab336b955b9334c7d6"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "leafy_grass",
+   "page": "https://polyhaven.com/a/leafy_grass",
+   "name": "Leafy Grass",
+   "authors": [
+    "Charlotte Baglioni"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    2,
+    2
+   ],
+   "use": "grass with leaf litter: under trees, gardens and yards",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/leafy_grass/leafy_grass_diff_2k.jpg",
+     "bytes": 4766204,
+     "sha256": "8e1c6d21365d4b89bc5a35ab664da98a78dbc3ab9ba6100474881c8619a5b113",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/leafy_grass/leafy_grass_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "8014f4dace676a62ed71b3dd76119dae"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/leafy_grass/leafy_grass_nor_gl_2k.jpg",
+     "bytes": 6047262,
+     "sha256": "df0cf0ce96e653f033e5b934d5b12995464bda027aa53bd12e329be889aa9f45",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/leafy_grass/leafy_grass_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "ea5e91abe01dc5e5d7028c68c3bc9194"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/leafy_grass/leafy_grass_arm_2k.jpg",
+     "bytes": 4116600,
+     "sha256": "70d61c669fe9d186a84f5bb50e8a337083014d7e46534306a89d47d48fd5eb0e",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/leafy_grass/leafy_grass_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "64f2eb364e806301df19edc7a67d65bb"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/leafy_grass/leafy_grass_disp_2k.jpg",
+     "bytes": 2545281,
+     "sha256": "de34be0f135a3c92fe6e55cca9501a4cc40e02e84de9cc4c7fefded1da5bd3f3",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/leafy_grass/leafy_grass_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "9c0a5f6c375be590bda0c28e2c1dfa2a"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "withered_grass",
+   "page": "https://polyhaven.com/a/withered_grass",
+   "name": "Withered Grass",
+   "authors": [
+    "Charlotte Baglioni"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    2,
+    2
+   ],
+   "use": "dry grass on open hills",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/withered_grass/withered_grass_diff_2k.jpg",
+     "bytes": 4632786,
+     "sha256": "0cf0fca68cbf4277199a2b9b7b3a8013357e4087247b1367f86d4a53b4fafa7e",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/withered_grass/withered_grass_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "503d5c7262c46351e5b0acdcc90dd30b"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/withered_grass/withered_grass_nor_gl_2k.jpg",
+     "bytes": 6194953,
+     "sha256": "5fd42baf06224086cb9afcb2f7a3b9f26feddd719bf1f9aed65ec49c586e7ff9",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/withered_grass/withered_grass_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "dd239e55b44c9b9bb0e9f1e145bf3a22"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/withered_grass/withered_grass_arm_2k.jpg",
+     "bytes": 4802892,
+     "sha256": "0b4bfb6549a56c48f7239be7f520124b38e7842188b8d1d53b0a376686c40371",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/withered_grass/withered_grass_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "8d649cc74868ffaf11b34970ee2ff058"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/withered_grass/withered_grass_disp_2k.jpg",
+     "bytes": 2432965,
+     "sha256": "2e9ade0a66c6d6b9990ce19ead20b155e1aed7969e4e86f8210fc7595dd2983d",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/withered_grass/withered_grass_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "79a099429fb43c8557d223ba4fed887b"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "park_dirt",
+   "page": "https://polyhaven.com/a/park_dirt",
+   "name": "Park Dirt",
+   "authors": [
+    "Christopher Melani"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    3,
+    3
+   ],
+   "use": "park soil and paths",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/park_dirt/park_dirt_diff_2k.jpg",
+     "bytes": 4811059,
+     "sha256": "b1eafefbd8cd3c5e295cc4bcfae743e552b029aff0cf89dd1c5b0abe43fb4223",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/park_dirt/park_dirt_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "8bc8ed810fd16003adf47fbd38d912d0"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/park_dirt/park_dirt_nor_gl_2k.jpg",
+     "bytes": 5146454,
+     "sha256": "b6b454e10994ae9d44d1a450f1d26eab51955df3fb4fabf1f70ee2f1e02257c3",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/park_dirt/park_dirt_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "1c265620ca317d8ff3b12bc7a82254f7"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/park_dirt/park_dirt_arm_2k.jpg",
+     "bytes": 4437354,
+     "sha256": "3c42f6290af1de9decd9f693a10dce1b73cbff523a0040f6bb2e60f1efbce0e6",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/park_dirt/park_dirt_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "819d78f9713c594a8a803bfd536dde38"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/park_dirt/park_dirt_disp_2k.jpg",
+     "bytes": 2351174,
+     "sha256": "5d332e7bc1d022ca52741274efac99a2d4ae87f6d304ad7cb6aadc68c4e78c9a",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/park_dirt/park_dirt_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "a57943336d4db49badbd3f20f7bb8229"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "gravel_floor_03",
+   "page": "https://polyhaven.com/a/gravel_floor_03",
+   "name": "Gravel Floor 03",
+   "authors": [
+    "Charlotte Baglioni"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    2.5,
+    2.5
+   ],
+   "use": "gravel paths and yards",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/gravel_floor_03/gravel_floor_03_diff_2k.jpg",
+     "bytes": 3635501,
+     "sha256": "06465933a54619900230fe85bff4c29f83fd3237a76b600e9845def4a206aece",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/gravel_floor_03/gravel_floor_03_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "d86981602e03f8f1deeccc5e37a14468"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/gravel_floor_03/gravel_floor_03_nor_gl_2k.jpg",
+     "bytes": 6132167,
+     "sha256": "27367a648385db57d6650c2a52c993245be084c1ca57686ba44a52925187d491",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/gravel_floor_03/gravel_floor_03_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "864d073353dcfbbb0a507cbc07e250b7"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/gravel_floor_03/gravel_floor_03_arm_2k.jpg",
+     "bytes": 4456679,
+     "sha256": "b8d007c6e75dee029b411f5f5ce96063a983f85469fcc5afe07ecd272c4e5398",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/gravel_floor_03/gravel_floor_03_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "6e17e282a81db6a6e554b1f80cff7edf"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/gravel_floor_03/gravel_floor_03_disp_2k.jpg",
+     "bytes": 2667796,
+     "sha256": "da971005b2a94793fbef1789e420c2c43cfaa44bd2fd5d69ea239afd97ea1754",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/gravel_floor_03/gravel_floor_03_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "2d685bcade532a1e4b4756372cb815d1"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "forest_floor",
+   "page": "https://polyhaven.com/a/forest_floor",
+   "name": "Forest Floor",
+   "authors": [
+    "eye-candy.xyz"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    2.14,
+    2.14
+   ],
+   "use": "ground under trees",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/forest_floor/forest_floor_diff_2k.jpg",
+     "bytes": 5452936,
+     "sha256": "308bc5f916dcc113bf276cbfdc411bed48b6a9ce5e3bc0c228faa3d54acf125d",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/forest_floor/forest_floor_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "a93f845fca105e6cabc82853161ff7b6"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/forest_floor/forest_floor_nor_gl_2k.jpg",
+     "bytes": 5367757,
+     "sha256": "27ea9cf7778fd3f5eacc24159d2cfc040878125c2289c3bccc49be5806e87bd1",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/forest_floor/forest_floor_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "41e49ec58f74a749e325f59290266e9d"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/forest_floor/forest_floor_arm_2k.jpg",
+     "bytes": 3926636,
+     "sha256": "c5d7ae6d2f6a5b801235b0592e62e67c05f25d41d3f5abd8a68565fdec52fbe9",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/forest_floor/forest_floor_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "00a1d0081bfa9a574d5973106c94c01e"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/forest_floor/forest_floor_disp_2k.jpg",
+     "bytes": 1935809,
+     "sha256": "8f28f7e6ca4f409429c2d6d079543471a48f0d5c9504ef9d0ffa69df0c788e7e",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/forest_floor/forest_floor_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "2882f21e8b3f3aad8b89a1ec26014e25"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "coast_sand_04",
+   "page": "https://polyhaven.com/a/coast_sand_04",
+   "name": "Coast Sand 04",
+   "authors": [
+    "Rob Tuytel",
+    "Dario Barresi"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    3.94,
+    3.94
+   ],
+   "use": "dry beach sand",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/coast_sand_04/coast_sand_04_diff_2k.jpg",
+     "bytes": 4264697,
+     "sha256": "02744081f9aef538b829b00db8ef9d5a11d25c22fc439d5acb4c4353d7dcd4dc",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/coast_sand_04/coast_sand_04_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "276f7b5eb446550cb7dd2b8217058f5a"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/coast_sand_04/coast_sand_04_nor_gl_2k.jpg",
+     "bytes": 5418999,
+     "sha256": "c2cd2fdd652229e0f4978ac7d6db2935d9845bcccb3dadecb01d6005221e17df",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/coast_sand_04/coast_sand_04_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "bf57552bdb5271396fe0bb447a0c789e"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/coast_sand_04/coast_sand_04_arm_2k.jpg",
+     "bytes": 3646398,
+     "sha256": "40ea69a79f8f88a1158ca62c3211f54a756e6014b835415021469b225d47f6c4",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/coast_sand_04/coast_sand_04_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "7b27de7f1a94bce0ac8ad290dd733992"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/coast_sand_04/coast_sand_04_disp_2k.jpg",
+     "bytes": 1292635,
+     "sha256": "1ff0807523f41af8f8a3a894cbd6dfc4a430d5a1684b4767a5f3d69d658fc806",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/coast_sand_04/coast_sand_04_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "56105fb02cf86ca41009812f5f74058e"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "damp_beach_sand",
+   "page": "https://polyhaven.com/a/damp_beach_sand",
+   "name": "Damp Beach Sand",
+   "authors": [
+    "Dimitrios Savva"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    2,
+    2
+   ],
+   "use": "wet beach sand",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/damp_beach_sand/damp_beach_sand_diff_2k.jpg",
+     "bytes": 3249410,
+     "sha256": "d87190deb69254dea4722cb5a017b98f3e022185a9d67ddb53d1576e5416ddf8",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/damp_beach_sand/damp_beach_sand_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "87e71069e2d6210ef300464550e81efe"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/damp_beach_sand/damp_beach_sand_nor_gl_2k.jpg",
+     "bytes": 3345218,
+     "sha256": "ca664b7737f4c75093300407df6f2b0f476f577ac3bce2c7f013760e50269efa",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/damp_beach_sand/damp_beach_sand_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "f33f2bb7017bbda819088f000f5d3aad"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/damp_beach_sand/damp_beach_sand_arm_2k.jpg",
+     "bytes": 3483651,
+     "sha256": "957710f04361d311ac8422bba5bec575738a420d59ed614077c85f26aec8421d",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/damp_beach_sand/damp_beach_sand_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "9a9217a970248df034ab2849b3ce6e6f"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/damp_beach_sand/damp_beach_sand_disp_2k.jpg",
+     "bytes": 1048436,
+     "sha256": "5df930cbbc00815a7b55320a034d7d486fa4f7be1801b714214327832162fb7b",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/damp_beach_sand/damp_beach_sand_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "da4996c1b6a2b097e6d7d7fc31c2043f"
+    }
+   ]
+  },
+  {
+   "source": "polyhaven",
+   "id": "seaside_rock",
+   "page": "https://polyhaven.com/a/seaside_rock",
+   "name": "Seaside Rock",
+   "authors": [
+    "Dimitrios Savva"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [
+    2,
+    2
+   ],
+   "use": "riprap and shore rock (fetched; not drawn: no surface of the port is riprap)",
+   "files": [
+    {
+     "role": "albedo",
+     "path": "polyhaven/seaside_rock/seaside_rock_diff_2k.jpg",
+     "bytes": 3883057,
+     "sha256": "a0e01ad03110a84046c0e7ee611cd6d20bf11a9001e96dfa6e92ac6b59989d83",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/seaside_rock/seaside_rock_diff_2k.jpg",
+     "resolution": "2k",
+     "md5": "f70bd6084c9b634daaea40b0cee34c20"
+    },
+    {
+     "role": "normal",
+     "path": "polyhaven/seaside_rock/seaside_rock_nor_gl_2k.jpg",
+     "bytes": 4527854,
+     "sha256": "4e067c8f418bb9f2fd5b6fd4bb018ad00a99e70076cf302c1a5581787e2ab8df",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/seaside_rock/seaside_rock_nor_gl_2k.jpg",
+     "resolution": "2k",
+     "md5": "28f8bd7b913f55b92d333217d02e8d1a"
+    },
+    {
+     "role": "arm",
+     "path": "polyhaven/seaside_rock/seaside_rock_arm_2k.jpg",
+     "bytes": 2590567,
+     "sha256": "1ea4852f5c0744839d97e2c20f307e9c48ee791812659ca8a131b6dc189199b7",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/seaside_rock/seaside_rock_arm_2k.jpg",
+     "resolution": "2k",
+     "md5": "0ab1a7c17d00aa56c27c274168821032"
+    },
+    {
+     "role": "height",
+     "path": "polyhaven/seaside_rock/seaside_rock_disp_2k.jpg",
+     "bytes": 870843,
+     "sha256": "8610c998b66eaf6bf2a3bf905e469b4824a480236723ef660ab7ed7209f9a2e7",
+     "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/seaside_rock/seaside_rock_disp_2k.jpg",
+     "resolution": "2k",
+     "md5": "fa1a33f9adda55d3cb96754c5ae5bf1d"
+    }
+   ]
+  },
+  {
+   "source": "ambientcg",
+   "id": "WoodSiding009",
+   "page": "https://ambientcg.com/a/WoodSiding009",
+   "name": "Wood Siding 009",
+   "authors": [
+    "ambientCG (ambientcg.com)"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [],
+   "use": "painted clapboard, fresh paint",
+   "files": [
+    {
+     "role": "archive",
+     "path": "ambientcg/WoodSiding009/WoodSiding009_2K-JPG.zip",
+     "bytes": 13807004,
+     "sha256": "5e55bdc169c4b3e33769f2fd7453ca416bc0a83f061585c675305369c07cac4b",
+     "url": "https://ambientcg.com/get?file=WoodSiding009_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "ao",
+     "path": "ambientcg/WoodSiding009/x/WoodSiding009_2K-JPG_AmbientOcclusion.jpg",
+     "bytes": 503252,
+     "sha256": "80a83b35dd12d59b4089f2bcf7c6f9ecd826073bdd7edc30f311c4a5d6014f27",
+     "archive": "ambientcg/WoodSiding009/WoodSiding009_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "albedo",
+     "path": "ambientcg/WoodSiding009/x/WoodSiding009_2K-JPG_Color.jpg",
+     "bytes": 3022230,
+     "sha256": "a54c4735df8cf6effc0cc2b85dab50f1d228493cc98090970bbb8d11b4844bc3",
+     "archive": "ambientcg/WoodSiding009/WoodSiding009_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "height",
+     "path": "ambientcg/WoodSiding009/x/WoodSiding009_2K-JPG_Displacement.jpg",
+     "bytes": 347313,
+     "sha256": "de545bbe181f4ea8256132f85207b7689794bcddea69cded88c19f8b749f3b67",
+     "archive": "ambientcg/WoodSiding009/WoodSiding009_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "metalness",
+     "path": "ambientcg/WoodSiding009/x/WoodSiding009_2K-JPG_Metalness.jpg",
+     "bytes": 13382,
+     "sha256": "3e00abd735be54941bb44187ffa40664f84ac867406989cab87842dbe0db6305",
+     "archive": "ambientcg/WoodSiding009/WoodSiding009_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "normal",
+     "path": "ambientcg/WoodSiding009/x/WoodSiding009_2K-JPG_NormalGL.jpg",
+     "bytes": 3706036,
+     "sha256": "d1dc5fb165bc915a5345f70b64339f5378b19ef9558198ee1e9cdde5f9519984",
+     "archive": "ambientcg/WoodSiding009/WoodSiding009_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "roughness",
+     "path": "ambientcg/WoodSiding009/x/WoodSiding009_2K-JPG_Roughness.jpg",
+     "bytes": 1089203,
+     "sha256": "983c17c21a05e95c0127e6ba02bab4a70d25d6578535452356eac3ef07cf8c69",
+     "archive": "ambientcg/WoodSiding009/WoodSiding009_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    }
+   ]
+  },
+  {
+   "source": "ambientcg",
+   "id": "Planks010",
+   "page": "https://ambientcg.com/a/Planks010",
+   "name": "Planks 010",
+   "authors": [
+    "ambientCG (ambientcg.com)"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [],
+   "use": "painted clapboard, weathered paint",
+   "files": [
+    {
+     "role": "archive",
+     "path": "ambientcg/Planks010/Planks010_2K-JPG.zip",
+     "bytes": 22505371,
+     "sha256": "21a829eb2daa7be485c855dbef42220ff43d0cbf60827502fde0133982df8f4d",
+     "url": "https://ambientcg.com/get?file=Planks010_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "ao",
+     "path": "ambientcg/Planks010/x/Planks010_2K-JPG_AmbientOcclusion.jpg",
+     "bytes": 1034691,
+     "sha256": "efb920283230f612d6d9a3ca027f0542fb3efecb8ea9eb97fc5cd96219a570ec",
+     "archive": "ambientcg/Planks010/Planks010_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "albedo",
+     "path": "ambientcg/Planks010/x/Planks010_2K-JPG_Color.jpg",
+     "bytes": 3985681,
+     "sha256": "a250056efa336ccf3f304aee24daedf64d87408228561c475a3181c52d01edf1",
+     "archive": "ambientcg/Planks010/Planks010_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "height",
+     "path": "ambientcg/Planks010/x/Planks010_2K-JPG_Displacement.jpg",
+     "bytes": 954016,
+     "sha256": "448cd714945d3cd4514c8decd15f7d90d4ece002872d699d06b959d27c2af94e",
+     "archive": "ambientcg/Planks010/Planks010_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "normal",
+     "path": "ambientcg/Planks010/x/Planks010_2K-JPG_NormalGL.jpg",
+     "bytes": 6471702,
+     "sha256": "b8ae6def44217e297e3ebd8a2fd80ee686d031909f2b60826cd7fdeffdba7b6f",
+     "archive": "ambientcg/Planks010/Planks010_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "roughness",
+     "path": "ambientcg/Planks010/x/Planks010_2K-JPG_Roughness.jpg",
+     "bytes": 2228778,
+     "sha256": "59061979eb4502f29259baa760067ba31d7aa621e8870deb5d8d82a6bfff1cae",
+     "archive": "ambientcg/Planks010/Planks010_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    }
+   ]
+  },
+  {
+   "source": "ambientcg",
+   "id": "WoodSiding011",
+   "page": "https://ambientcg.com/a/WoodSiding011",
+   "name": "Wood Siding 011",
+   "authors": [
+    "ambientCG (ambientcg.com)"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [],
+   "use": "shingle siding (cedar and painted shingle)",
+   "files": [
+    {
+     "role": "archive",
+     "path": "ambientcg/WoodSiding011/WoodSiding011_2K-JPG.zip",
+     "bytes": 22529797,
+     "sha256": "bcb81a20e67160a964ba7a08cb90e30cf843803b52753b3384c35c253e51d265",
+     "url": "https://ambientcg.com/get?file=WoodSiding011_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "albedo",
+     "path": "ambientcg/WoodSiding011/x/WoodSiding011_2K-JPG_Color.jpg",
+     "bytes": 4888621,
+     "sha256": "b17927d13854f8bef4a2c4ab6254ddacb5b50e31bdca5871ce95c27dc19614f0",
+     "archive": "ambientcg/WoodSiding011/WoodSiding011_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "height",
+     "path": "ambientcg/WoodSiding011/x/WoodSiding011_2K-JPG_Displacement.jpg",
+     "bytes": 1336950,
+     "sha256": "0891dfb1f0d0409ef31768ec108b89e12d0c7a286636cc81be1657bb1005835a",
+     "archive": "ambientcg/WoodSiding011/WoodSiding011_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "normal",
+     "path": "ambientcg/WoodSiding011/x/WoodSiding011_2K-JPG_NormalGL.jpg",
+     "bytes": 7423905,
+     "sha256": "938f126d0acf24b300cf10f2d5f6e8beb160eb4d40c15c987433c7acee699647",
+     "archive": "ambientcg/WoodSiding011/WoodSiding011_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    }
+   ]
+  },
+  {
+   "source": "ambientcg",
+   "id": "Grass004",
+   "page": "https://ambientcg.com/a/Grass004",
+   "name": "Grass 004",
+   "authors": [
+    "ambientCG (ambientcg.com)"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [],
+   "use": "irrigated park lawn",
+   "files": [
+    {
+     "role": "archive",
+     "path": "ambientcg/Grass004/Grass004_2K-JPG.zip",
+     "bytes": 39900302,
+     "sha256": "d7d3f08e8bb1e59aed0c3dbb85ea0b46d5308481f89b6a3fd62c0ec9e862245b",
+     "url": "https://ambientcg.com/get?file=Grass004_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "ao",
+     "path": "ambientcg/Grass004/x/Grass004_2K-JPG_AmbientOcclusion.jpg",
+     "bytes": 3659925,
+     "sha256": "0f9180993db4c7b9479ad2a4b65763d90e8668fb7e800baff68cac1883a9dff5",
+     "archive": "ambientcg/Grass004/Grass004_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "albedo",
+     "path": "ambientcg/Grass004/x/Grass004_2K-JPG_Color.jpg",
+     "bytes": 7644307,
+     "sha256": "735b141c8f1972e70a45879424f1238fea9f887324173097785f4ac36e67e9a3",
+     "archive": "ambientcg/Grass004/Grass004_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "height",
+     "path": "ambientcg/Grass004/x/Grass004_2K-JPG_Displacement.jpg",
+     "bytes": 3491166,
+     "sha256": "7b3f8f545fad85bd980330dc29bb59fc5c76ea3099fb1ef2a29fb1d916f602c9",
+     "archive": "ambientcg/Grass004/Grass004_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "normal",
+     "path": "ambientcg/Grass004/x/Grass004_2K-JPG_NormalGL.jpg",
+     "bytes": 10015079,
+     "sha256": "15ccad231764049d6581a52076d02bb6b627df77895cb0508e4017d8a4877fef",
+     "archive": "ambientcg/Grass004/Grass004_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "roughness",
+     "path": "ambientcg/Grass004/x/Grass004_2K-JPG_Roughness.jpg",
+     "bytes": 3413801,
+     "sha256": "c449fdf1e779eb7be5a19c1d58ee28cc155ed0523a141b151f3cbc843c4ae2e3",
+     "archive": "ambientcg/Grass004/Grass004_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    }
+   ]
+  },
+  {
+   "source": "ambientcg",
+   "id": "AsphaltDamage001",
+   "page": "https://ambientcg.com/a/AsphaltDamage001",
+   "name": "Asphalt Damage 001",
+   "authors": [
+    "ambientCG (ambientcg.com)"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [],
+   "use": "decal: carriageway cracks",
+   "files": [
+    {
+     "role": "archive",
+     "path": "ambientcg/AsphaltDamage001/AsphaltDamage001_2K-JPG.zip",
+     "bytes": 26172740,
+     "sha256": "fd1150305512ad835e96c1fd7d3fac9d561e7f7db54e5b055b43cd5b6dbd537d",
+     "url": "https://ambientcg.com/get?file=AsphaltDamage001_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "albedo",
+     "path": "ambientcg/AsphaltDamage001/x/AsphaltDamage001_2K-JPG_Color.jpg",
+     "bytes": 5640256,
+     "sha256": "cebabcb65e24a3d4582135bae9639911899dc9f0cc1bee51197386de97eee096",
+     "archive": "ambientcg/AsphaltDamage001/AsphaltDamage001_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "height",
+     "path": "ambientcg/AsphaltDamage001/x/AsphaltDamage001_2K-JPG_Displacement.jpg",
+     "bytes": 1350316,
+     "sha256": "190f390de862d545eb500870200867560910bf41dad527e51caa563c49b5dc2d",
+     "archive": "ambientcg/AsphaltDamage001/AsphaltDamage001_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "normal",
+     "path": "ambientcg/AsphaltDamage001/x/AsphaltDamage001_2K-JPG_NormalGL.jpg",
+     "bytes": 7689523,
+     "sha256": "4ef95ba459b02412130ecbfddb1cac81bdd3846b66c46139d41fe444dfd363ab",
+     "archive": "ambientcg/AsphaltDamage001/AsphaltDamage001_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "opacity",
+     "path": "ambientcg/AsphaltDamage001/x/AsphaltDamage001_2K-JPG_Opacity.jpg",
+     "bytes": 74345,
+     "sha256": "ba5d4f3ea5a86ad497bae87742f5b0b1ec13bbeb9a659f08d1bda8ef65e90e2b",
+     "archive": "ambientcg/AsphaltDamage001/AsphaltDamage001_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "roughness",
+     "path": "ambientcg/AsphaltDamage001/x/AsphaltDamage001_2K-JPG_Roughness.jpg",
+     "bytes": 2275784,
+     "sha256": "40965e6f02822a051dc6d91856cb2601481f45e36bb037277712c1b0dd8b24a4",
+     "archive": "ambientcg/AsphaltDamage001/AsphaltDamage001_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    }
+   ]
+  },
+  {
+   "source": "ambientcg",
+   "id": "ManholeCover004",
+   "page": "https://ambientcg.com/a/ManholeCover004",
+   "name": "Manhole Cover 004",
+   "authors": [
+    "ambientCG (ambientcg.com)"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [],
+   "use": "decal: manhole cover (fetched; not drawn: its cobbled surround is not a San Francisco street)",
+   "files": [
+    {
+     "role": "archive",
+     "path": "ambientcg/ManholeCover004/ManholeCover004_1K-JPG.zip",
+     "bytes": 9064498,
+     "sha256": "ed0043eee0288a4bb798fcf866358626e3057284f0fa0ab85946782e72d78e81",
+     "url": "https://ambientcg.com/get?file=ManholeCover004_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "ao",
+     "path": "ambientcg/ManholeCover004/x/ManholeCover004_1K-JPG_AmbientOcclusion.jpg",
+     "bytes": 608385,
+     "sha256": "c335f27e4eedaffa826f12b308ef07f8ad25bfc684e2cd8871a435a7afdcddf1",
+     "archive": "ambientcg/ManholeCover004/ManholeCover004_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "albedo",
+     "path": "ambientcg/ManholeCover004/x/ManholeCover004_1K-JPG_Color.jpg",
+     "bytes": 1494271,
+     "sha256": "78ad33c53ba3bf951f7c9f3db2ed5623b57856763fc5d43796ddc10a292a24f0",
+     "archive": "ambientcg/ManholeCover004/ManholeCover004_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "height",
+     "path": "ambientcg/ManholeCover004/x/ManholeCover004_1K-JPG_Displacement.jpg",
+     "bytes": 481276,
+     "sha256": "124e981e0ee1d082da23369a389a51e4ffef1b44fd626a2b3cf07faec32e1b35",
+     "archive": "ambientcg/ManholeCover004/ManholeCover004_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "metalness",
+     "path": "ambientcg/ManholeCover004/x/ManholeCover004_1K-JPG_Metalness.jpg",
+     "bytes": 170764,
+     "sha256": "66406115b31ef61d08a4252b6ff319da81d7853318041025f9c31f31629d14d4",
+     "archive": "ambientcg/ManholeCover004/ManholeCover004_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "normal",
+     "path": "ambientcg/ManholeCover004/x/ManholeCover004_1K-JPG_NormalGL.jpg",
+     "bytes": 2167102,
+     "sha256": "71cc06d154731e4e781d5f2e06bd4d5cefa86daaa1b05e1b3d9e1b12354d94eb",
+     "archive": "ambientcg/ManholeCover004/ManholeCover004_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "opacity",
+     "path": "ambientcg/ManholeCover004/x/ManholeCover004_1K-JPG_Opacity.jpg",
+     "bytes": 30855,
+     "sha256": "b9a31975bfaa03958e1b0efe06015aa011d36928b2d24f9b57b1618aa8507005",
+     "archive": "ambientcg/ManholeCover004/ManholeCover004_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "roughness",
+     "path": "ambientcg/ManholeCover004/x/ManholeCover004_1K-JPG_Roughness.jpg",
+     "bytes": 536630,
+     "sha256": "8292a3de1198bd8316655db2ec62f80737e79506c0a51ceb4566ded63aec7810",
+     "archive": "ambientcg/ManholeCover004/ManholeCover004_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    }
+   ]
+  },
+  {
+   "source": "ambientcg",
+   "id": "ManholeCover003",
+   "page": "https://ambientcg.com/a/ManholeCover003",
+   "name": "Manhole Cover 003",
+   "authors": [
+    "ambientCG (ambientcg.com)"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [],
+   "use": "decal: utility vault cover (concrete-filled) beside the kerb",
+   "files": [
+    {
+     "role": "archive",
+     "path": "ambientcg/ManholeCover003/ManholeCover003_1K-JPG.zip",
+     "bytes": 5950437,
+     "sha256": "cc122d7221b6280112dcd6d766710fb60b23e551329f9d9874782058944e0b2f",
+     "url": "https://ambientcg.com/get?file=ManholeCover003_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "ao",
+     "path": "ambientcg/ManholeCover003/x/ManholeCover003_1K-JPG_AmbientOcclusion.jpg",
+     "bytes": 335372,
+     "sha256": "003a06458f8a78604c2b06c16e02f529172ba18f24438844ac84fc60a3ec1e1e",
+     "archive": "ambientcg/ManholeCover003/ManholeCover003_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "albedo",
+     "path": "ambientcg/ManholeCover003/x/ManholeCover003_1K-JPG_Color.jpg",
+     "bytes": 866495,
+     "sha256": "0a91bab557f9245ae610dc8fbf6575348f4351d5915e1d54239f8574e7548387",
+     "archive": "ambientcg/ManholeCover003/ManholeCover003_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "height",
+     "path": "ambientcg/ManholeCover003/x/ManholeCover003_1K-JPG_Displacement.jpg",
+     "bytes": 180665,
+     "sha256": "1e688c1dbc215f6593b92aa836230cd921276ef5708cc928aae104455d86e8d5",
+     "archive": "ambientcg/ManholeCover003/ManholeCover003_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "metalness",
+     "path": "ambientcg/ManholeCover003/x/ManholeCover003_1K-JPG_Metalness.jpg",
+     "bytes": 236651,
+     "sha256": "dd56252cfb9310a07dab2924e4d0874b2321cddb56241db99a3205c076ffea32",
+     "archive": "ambientcg/ManholeCover003/ManholeCover003_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "normal",
+     "path": "ambientcg/ManholeCover003/x/ManholeCover003_1K-JPG_NormalGL.jpg",
+     "bytes": 1275773,
+     "sha256": "65d016577978ab7dd821959e2dc02b022960025d8ddc733cfaee560cd9f4040e",
+     "archive": "ambientcg/ManholeCover003/ManholeCover003_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "opacity",
+     "path": "ambientcg/ManholeCover003/x/ManholeCover003_1K-JPG_Opacity.jpg",
+     "bytes": 37823,
+     "sha256": "d8178188bd9ae8473b66071c50c9a81d275a4c1d5baa9c431aa4f66ec3eb51f1",
+     "archive": "ambientcg/ManholeCover003/ManholeCover003_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "roughness",
+     "path": "ambientcg/ManholeCover003/x/ManholeCover003_1K-JPG_Roughness.jpg",
+     "bytes": 338692,
+     "sha256": "e95f9687f4b79b81fcae82fd58973475b40c4db07c7183cce658a2dde000570b",
+     "archive": "ambientcg/ManholeCover003/ManholeCover003_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    }
+   ]
+  },
+  {
+   "source": "ambientcg",
+   "id": "ChewingGum001",
+   "page": "https://ambientcg.com/a/ChewingGum001",
+   "name": "Chewing Gum 001",
+   "authors": [
+    "ambientCG (ambientcg.com)"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [],
+   "use": "decal: gum spots on the sidewalk",
+   "files": [
+    {
+     "role": "archive",
+     "path": "ambientcg/ChewingGum001/ChewingGum001_1K-JPG.zip",
+     "bytes": 2744604,
+     "sha256": "e9657f90607583a099a780d2009203dbdc4af35acb9f9db50293f9009a52ed21",
+     "url": "https://ambientcg.com/get?file=ChewingGum001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "ao",
+     "path": "ambientcg/ChewingGum001/x/ChewingGum001_1K-JPG_AmbientOcclusion.jpg",
+     "bytes": 110229,
+     "sha256": "c9f06f5d8f4c5607cf6ea17a3c7de7bfffd544c9573573490c8589f225f7c513",
+     "archive": "ambientcg/ChewingGum001/ChewingGum001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "albedo",
+     "path": "ambientcg/ChewingGum001/x/ChewingGum001_1K-JPG_Color.jpg",
+     "bytes": 337456,
+     "sha256": "a78819382187bab5157d85c21310e4fead6337dbcae1dde3b04dc5637d75607a",
+     "archive": "ambientcg/ChewingGum001/ChewingGum001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "height",
+     "path": "ambientcg/ChewingGum001/x/ChewingGum001_1K-JPG_Displacement.jpg",
+     "bytes": 147689,
+     "sha256": "25977fef493ae9e95003ce1c3f601421a8e859337027db06e59b069b83f73463",
+     "archive": "ambientcg/ChewingGum001/ChewingGum001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "normal",
+     "path": "ambientcg/ChewingGum001/x/ChewingGum001_1K-JPG_NormalGL.jpg",
+     "bytes": 302038,
+     "sha256": "7a8290f2424c7c4d34ab9619bae526b9ce745d4e1d2cf96b9295394499d1c373",
+     "archive": "ambientcg/ChewingGum001/ChewingGum001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "opacity",
+     "path": "ambientcg/ChewingGum001/x/ChewingGum001_1K-JPG_Opacity.jpg",
+     "bytes": 126198,
+     "sha256": "1924e5f4de0ebef5eff931e376b9b42168670723c2f8d2c51ed63cfd73ba87f5",
+     "archive": "ambientcg/ChewingGum001/ChewingGum001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "roughness",
+     "path": "ambientcg/ChewingGum001/x/ChewingGum001_1K-JPG_Roughness.jpg",
+     "bytes": 173132,
+     "sha256": "1d935afbea4880541de1f0f60d246051bd17eb443c4be41f7824b385e065465f",
+     "archive": "ambientcg/ChewingGum001/ChewingGum001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    }
+   ]
+  },
+  {
+   "source": "ambientcg",
+   "id": "Leaking001",
+   "page": "https://ambientcg.com/a/Leaking001",
+   "name": "Leaking 001",
+   "authors": [
+    "ambientCG (ambientcg.com)"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [],
+   "use": "wall stain below sills",
+   "files": [
+    {
+     "role": "archive",
+     "path": "ambientcg/Leaking001/Leaking001_1K-JPG.zip",
+     "bytes": 3880394,
+     "sha256": "9b85f082b31107f52143dadb16849bcbeb908c16c2886a6e1689840484c49862",
+     "url": "https://ambientcg.com/get?file=Leaking001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "albedo",
+     "path": "ambientcg/Leaking001/x/Leaking001_1K-JPG_Color.jpg",
+     "bytes": 336340,
+     "sha256": "ffe6d676330590d090e07626d36cf9d57804f4e967e8c4a9643828d25911445f",
+     "archive": "ambientcg/Leaking001/Leaking001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "height",
+     "path": "ambientcg/Leaking001/x/Leaking001_1K-JPG_Displacement.jpg",
+     "bytes": 259218,
+     "sha256": "74a8dcb5fa2d06d9beb05a9113bdaddf32f4547d26c774781d1be224b6ccdf94",
+     "archive": "ambientcg/Leaking001/Leaking001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "normal",
+     "path": "ambientcg/Leaking001/x/Leaking001_1K-JPG_NormalGL.jpg",
+     "bytes": 667446,
+     "sha256": "ad500b245a661cd0b205890a588cdacf7e1df3d1c851f515af348ae52b65638d",
+     "archive": "ambientcg/Leaking001/Leaking001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "opacity",
+     "path": "ambientcg/Leaking001/x/Leaking001_1K-JPG_Opacity.jpg",
+     "bytes": 282297,
+     "sha256": "fb4fc7afcb9f5444be1b166fead08591226dfce75b56853e27d89c7f58a8eba5",
+     "archive": "ambientcg/Leaking001/Leaking001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "roughness",
+     "path": "ambientcg/Leaking001/x/Leaking001_1K-JPG_Roughness.jpg",
+     "bytes": 269904,
+     "sha256": "04ca61cbb976d1fbca5db63e6322ea9b899b6448a3fdc48fc14dfb245be1e5f7",
+     "archive": "ambientcg/Leaking001/Leaking001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    }
+   ]
+  },
+  {
+   "source": "ambientcg",
+   "id": "Leaking003",
+   "page": "https://ambientcg.com/a/Leaking003",
+   "name": "Leaking 003",
+   "authors": [
+    "ambientCG (ambientcg.com)"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [],
+   "use": "wall stain below sills",
+   "files": [
+    {
+     "role": "archive",
+     "path": "ambientcg/Leaking003/Leaking003_1K-JPG.zip",
+     "bytes": 4050906,
+     "sha256": "d3c3d45b1db3369ef755ff0d92e9e7b5f8bf6e832309f4970ed99f3d45dec9fa",
+     "url": "https://ambientcg.com/get?file=Leaking003_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "albedo",
+     "path": "ambientcg/Leaking003/x/Leaking003_1K-JPG_Color.jpg",
+     "bytes": 451729,
+     "sha256": "946891879b9790e2667b46990c3440dfef3a87b58617192c1c5747027d761ba7",
+     "archive": "ambientcg/Leaking003/Leaking003_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "height",
+     "path": "ambientcg/Leaking003/x/Leaking003_1K-JPG_Displacement.jpg",
+     "bytes": 260965,
+     "sha256": "6e9a277a5f16d96de2cd7b599ade8e5426b78849c4f72126213e2f854d2cda25",
+     "archive": "ambientcg/Leaking003/Leaking003_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "normal",
+     "path": "ambientcg/Leaking003/x/Leaking003_1K-JPG_NormalGL.jpg",
+     "bytes": 672968,
+     "sha256": "0931c843881f6eb30100361e856aad5beff04541bffc71cb76b041d0f1c9bb4e",
+     "archive": "ambientcg/Leaking003/Leaking003_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "opacity",
+     "path": "ambientcg/Leaking003/x/Leaking003_1K-JPG_Opacity.jpg",
+     "bytes": 299001,
+     "sha256": "83f44b7175e063b7ee135db4fa7323f80f6d735781d9b37e1246b9ebaaaa6ed7",
+     "archive": "ambientcg/Leaking003/Leaking003_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "roughness",
+     "path": "ambientcg/Leaking003/x/Leaking003_1K-JPG_Roughness.jpg",
+     "bytes": 277392,
+     "sha256": "1dfba470a7a118f91635376af70a73ab360935bdbe101624c44fc3a44fc63b98",
+     "archive": "ambientcg/Leaking003/Leaking003_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    }
+   ]
+  },
+  {
+   "source": "ambientcg",
+   "id": "ManholeCover001",
+   "page": "https://ambientcg.com/a/ManholeCover001",
+   "name": "Manhole Cover 001",
+   "authors": [
+    "ambientCG (ambientcg.com)"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [],
+   "use": "decal: cast-iron sewer manhole cover on a lane centre",
+   "files": [
+    {
+     "role": "archive",
+     "path": "ambientcg/ManholeCover001/ManholeCover001_1K-JPG.zip",
+     "bytes": 7275740,
+     "sha256": "e15478f7bf27a33c05571d73c1225661ecb857599734ed4fdc33a0be47949b09",
+     "url": "https://ambientcg.com/get?file=ManholeCover001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "ao",
+     "path": "ambientcg/ManholeCover001/x/ManholeCover001_1K-JPG_AmbientOcclusion.jpg",
+     "bytes": 415021,
+     "sha256": "748b62e5b9ca2149cce64098fa8ffacb50e30b14ded445061a390060de0c9d60",
+     "archive": "ambientcg/ManholeCover001/ManholeCover001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "albedo",
+     "path": "ambientcg/ManholeCover001/x/ManholeCover001_1K-JPG_Color.jpg",
+     "bytes": 898982,
+     "sha256": "cb0b17db4877888b399380ee2245340c03c6d77be5e1c7da9a10b9da8a60faa8",
+     "archive": "ambientcg/ManholeCover001/ManholeCover001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "height",
+     "path": "ambientcg/ManholeCover001/x/ManholeCover001_1K-JPG_Displacement.jpg",
+     "bytes": 287732,
+     "sha256": "51a5887a4fe5bb16f12d7b7a2b86776c9dd31fb5763c898048a1e34671d391e2",
+     "archive": "ambientcg/ManholeCover001/ManholeCover001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "metalness",
+     "path": "ambientcg/ManholeCover001/x/ManholeCover001_1K-JPG_Metalness.jpg",
+     "bytes": 524655,
+     "sha256": "6382340a02a27723bf21745cc42ed120cf7f6d19db24e3b3b093f497bec88e2d",
+     "archive": "ambientcg/ManholeCover001/ManholeCover001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "normal",
+     "path": "ambientcg/ManholeCover001/x/ManholeCover001_1K-JPG_NormalGL.jpg",
+     "bytes": 1585247,
+     "sha256": "96e5d1edcd362b637662ab2fc0e7ba4c8a0e6643b64494da7cd865499d3e35da",
+     "archive": "ambientcg/ManholeCover001/ManholeCover001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "opacity",
+     "path": "ambientcg/ManholeCover001/x/ManholeCover001_1K-JPG_Opacity.jpg",
+     "bytes": 33762,
+     "sha256": "43bea76d411b477813ffc3093ec431e838296ca70a6cbde93b1c1bbae8baf59d",
+     "archive": "ambientcg/ManholeCover001/ManholeCover001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "roughness",
+     "path": "ambientcg/ManholeCover001/x/ManholeCover001_1K-JPG_Roughness.jpg",
+     "bytes": 472376,
+     "sha256": "d7ba755e271c906aa1d0a133f5e098adb263d2a76df97fc7bf1f206587c7cf1e",
+     "archive": "ambientcg/ManholeCover001/ManholeCover001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    }
+   ]
+  },
+  {
+   "source": "ambientcg",
+   "id": "ManholeCover006",
+   "page": "https://ambientcg.com/a/ManholeCover006",
+   "name": "Manhole Cover 006",
+   "authors": [
+    "ambientCG (ambientcg.com)"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [],
+   "use": "decal: cast-iron manhole cover (second pattern)",
+   "files": [
+    {
+     "role": "archive",
+     "path": "ambientcg/ManholeCover006/ManholeCover006_1K-JPG.zip",
+     "bytes": 7930252,
+     "sha256": "060feff6d5f376798aea453beab0c5950299c3ad1715f862bc89e7737f9e4ed1",
+     "url": "https://ambientcg.com/get?file=ManholeCover006_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "ao",
+     "path": "ambientcg/ManholeCover006/x/ManholeCover006_1K-JPG_AmbientOcclusion.jpg",
+     "bytes": 566204,
+     "sha256": "09a7b9708058b76a37dd883ab7a9a3d40ea492a1b91c583933b933ee3d1ba6c9",
+     "archive": "ambientcg/ManholeCover006/ManholeCover006_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "albedo",
+     "path": "ambientcg/ManholeCover006/x/ManholeCover006_1K-JPG_Color.jpg",
+     "bytes": 973863,
+     "sha256": "eeb2817f096a624694301baa32efbd04dbdd79d2edfa95beb3bdae03efbe89f9",
+     "archive": "ambientcg/ManholeCover006/ManholeCover006_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "height",
+     "path": "ambientcg/ManholeCover006/x/ManholeCover006_1K-JPG_Displacement.jpg",
+     "bytes": 275831,
+     "sha256": "97f2b8b6c22c2364ed6da9c2ad63e64a62f613904276a233902015101416411d",
+     "archive": "ambientcg/ManholeCover006/ManholeCover006_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "metalness",
+     "path": "ambientcg/ManholeCover006/x/ManholeCover006_1K-JPG_Metalness.jpg",
+     "bytes": 659492,
+     "sha256": "e85c43b165395ecd40c7cfdd1ae2464bfe55cd4babf926fad7aef3febd40983a",
+     "archive": "ambientcg/ManholeCover006/ManholeCover006_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "normal",
+     "path": "ambientcg/ManholeCover006/x/ManholeCover006_1K-JPG_NormalGL.jpg",
+     "bytes": 1762245,
+     "sha256": "8f3f338b735c5c15524a46df87f381d1ee161fd3c7c8dd1fe9edee4fa9fe4ee2",
+     "archive": "ambientcg/ManholeCover006/ManholeCover006_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "opacity",
+     "path": "ambientcg/ManholeCover006/x/ManholeCover006_1K-JPG_Opacity.jpg",
+     "bytes": 36982,
+     "sha256": "7a108c0e579c309e742d444c8032c53f24179d94c06fbcf74de811356263cbb7",
+     "archive": "ambientcg/ManholeCover006/ManholeCover006_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "roughness",
+     "path": "ambientcg/ManholeCover006/x/ManholeCover006_1K-JPG_Roughness.jpg",
+     "bytes": 488538,
+     "sha256": "48ae86e6071e5d81444e1f76b65f64ea1acf8e8fc502df6e39ac591841d6acb1",
+     "archive": "ambientcg/ManholeCover006/ManholeCover006_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    }
+   ]
+  },
+  {
+   "source": "ambientcg",
+   "id": "ChewingGum002",
+   "page": "https://ambientcg.com/a/ChewingGum002",
+   "name": "Chewing Gum 002",
+   "authors": [
+    "ambientCG (ambientcg.com)"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [],
+   "use": "decal: gum spots on busy sidewalks (second scatter)",
+   "files": [
+    {
+     "role": "archive",
+     "path": "ambientcg/ChewingGum002/ChewingGum002_1K-JPG.zip",
+     "bytes": 3422279,
+     "sha256": "8a9c64efb5d1a0776561954760336ac905f2f384b593a16cd3259c2380cd630f",
+     "url": "https://ambientcg.com/get?file=ChewingGum002_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "ao",
+     "path": "ambientcg/ChewingGum002/x/ChewingGum002_1K-JPG_AmbientOcclusion.jpg",
+     "bytes": 155714,
+     "sha256": "d8ba886efaf51c3d0265b57f72b5cbe4d25b08216f97ad0ce89e0783804ac162",
+     "archive": "ambientcg/ChewingGum002/ChewingGum002_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "albedo",
+     "path": "ambientcg/ChewingGum002/x/ChewingGum002_1K-JPG_Color.jpg",
+     "bytes": 435711,
+     "sha256": "713d8d228069397628f116d22ca853077f049bdbd1f5b263d4b92ff82675a51a",
+     "archive": "ambientcg/ChewingGum002/ChewingGum002_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "height",
+     "path": "ambientcg/ChewingGum002/x/ChewingGum002_1K-JPG_Displacement.jpg",
+     "bytes": 215398,
+     "sha256": "2d07d287cfa87a9b6fca586e6a275faa74929425f156f9211e4fc11e21f17241",
+     "archive": "ambientcg/ChewingGum002/ChewingGum002_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "normal",
+     "path": "ambientcg/ChewingGum002/x/ChewingGum002_1K-JPG_NormalGL.jpg",
+     "bytes": 439472,
+     "sha256": "f4fd2b855f5cd7e96a785b4475230529f68dfc82e62d62be532f226f0e008e08",
+     "archive": "ambientcg/ChewingGum002/ChewingGum002_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "opacity",
+     "path": "ambientcg/ChewingGum002/x/ChewingGum002_1K-JPG_Opacity.jpg",
+     "bytes": 189956,
+     "sha256": "19b1911c5945efb5aca43c7808ae788fc0660ca6f690ff5b95fd36b9ac70babb",
+     "archive": "ambientcg/ChewingGum002/ChewingGum002_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "roughness",
+     "path": "ambientcg/ChewingGum002/x/ChewingGum002_1K-JPG_Roughness.jpg",
+     "bytes": 249468,
+     "sha256": "529186988dcfd5fcab1aaf91bb39d70d70311738c2d560c1c613021930925511",
+     "archive": "ambientcg/ChewingGum002/ChewingGum002_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    }
+   ]
+  },
+  {
+   "source": "ambientcg",
+   "id": "TireTracks001",
+   "page": "https://ambientcg.com/a/TireTracks001",
+   "name": "Tire Tracks 001",
+   "authors": [
+    "ambientCG (ambientcg.com)"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [],
+   "use": "decal: tyre tread imprint, as a mask for rubber tracks in wheel paths and parking lanes",
+   "files": [
+    {
+     "role": "archive",
+     "path": "ambientcg/TireTracks001/TireTracks001_2K-JPG.zip",
+     "bytes": 6794243,
+     "sha256": "3f7c5d9cad425f9c75bbc049175cd17f56fa85162d659d24b777594ce8b5f20e",
+     "url": "https://ambientcg.com/get?file=TireTracks001_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "ao",
+     "path": "ambientcg/TireTracks001/x/TireTracks001_2K-JPG_AmbientOcclusion.jpg",
+     "bytes": 606111,
+     "sha256": "d8ac1f4625aa89a44b809b96133763ea66b7c4ede3d5f174224c438792fef8f3",
+     "archive": "ambientcg/TireTracks001/TireTracks001_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "albedo",
+     "path": "ambientcg/TireTracks001/x/TireTracks001_2K-JPG_Color.jpg",
+     "bytes": 1012798,
+     "sha256": "f677e4f9783eadcdaae8bf49012f5a64a1c6039aa0ec9ba3fc97d4500827f686",
+     "archive": "ambientcg/TireTracks001/TireTracks001_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "height",
+     "path": "ambientcg/TireTracks001/x/TireTracks001_2K-JPG_Displacement.jpg",
+     "bytes": 346708,
+     "sha256": "d54a19ddfb73e8b409bbec64385653b1d95f1d05694035234b4811fc51928f71",
+     "archive": "ambientcg/TireTracks001/TireTracks001_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "normal",
+     "path": "ambientcg/TireTracks001/x/TireTracks001_2K-JPG_NormalGL.jpg",
+     "bytes": 1538583,
+     "sha256": "157480018f5b5066fdda6b6f69c1ba5f69932f6defad39bad646b004b0970cb0",
+     "archive": "ambientcg/TireTracks001/TireTracks001_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    },
+    {
+     "role": "roughness",
+     "path": "ambientcg/TireTracks001/x/TireTracks001_2K-JPG_Roughness.jpg",
+     "bytes": 301808,
+     "sha256": "d932ee1b9762269ab697ef1571ba4f6f8bb57c5dc3b5c3b719e3329b23bd0309",
+     "archive": "ambientcg/TireTracks001/TireTracks001_2K-JPG.zip",
+     "resolution": "2K-JPG"
+    }
+   ]
+  },
+  {
+   "source": "ambientcg",
+   "id": "SurfaceImperfections002",
+   "page": "https://ambientcg.com/a/SurfaceImperfections002",
+   "name": "Surface Imperfections 002",
+   "authors": [
+    "ambientCG (ambientcg.com)"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [],
+   "use": "decal: stain blotches, as the mask of oil drips and leaks on the carriageway",
+   "files": [
+    {
+     "role": "archive",
+     "path": "ambientcg/SurfaceImperfections002/SurfaceImperfections002_1K-JPG.zip",
+     "bytes": 4703995,
+     "sha256": "713a87f946a9db585d2fbcc7749b8610aeafda0d9553e694ebdd29b9c47b4fec",
+     "url": "https://ambientcg.com/get?file=SurfaceImperfections002_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "albedo",
+     "path": "ambientcg/SurfaceImperfections002/x/SurfaceImperfections002_1K-JPG_Color.jpg",
+     "bytes": 604770,
+     "sha256": "79bb74885fc47d54689aea9889fe65bdae964243bcaede8ec12775a31132cc75",
+     "archive": "ambientcg/SurfaceImperfections002/SurfaceImperfections002_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "normal",
+     "path": "ambientcg/SurfaceImperfections002/x/SurfaceImperfections002_1K-JPG_NormalGL.jpg",
+     "bytes": 1081944,
+     "sha256": "7a19d728cddb3871999b6f3591d0ec6bf1c949fcbf8e077d3ff13a1a0cfa3480",
+     "archive": "ambientcg/SurfaceImperfections002/SurfaceImperfections002_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "opacity",
+     "path": "ambientcg/SurfaceImperfections002/x/SurfaceImperfections002_1K-JPG_Opacity.jpg",
+     "bytes": 604770,
+     "sha256": "79bb74885fc47d54689aea9889fe65bdae964243bcaede8ec12775a31132cc75",
+     "archive": "ambientcg/SurfaceImperfections002/SurfaceImperfections002_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    }
+   ]
+  },
+  {
+   "source": "ambientcg",
+   "id": "SurfaceImperfections008",
+   "page": "https://ambientcg.com/a/SurfaceImperfections008",
+   "name": "Surface Imperfections 008",
+   "authors": [
+    "ambientCG (ambientcg.com)"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [],
+   "use": "overlay: mottled dirt inside each sidewalk slab and over the carriageway",
+   "files": [
+    {
+     "role": "archive",
+     "path": "ambientcg/SurfaceImperfections008/SurfaceImperfections008_1K-JPG.zip",
+     "bytes": 6363308,
+     "sha256": "0615f7a85031d5ba480cb01fe65cbfc69c635d5dd4f0187687641327aa15ba4a",
+     "url": "https://ambientcg.com/get?file=SurfaceImperfections008_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "albedo",
+     "path": "ambientcg/SurfaceImperfections008/x/SurfaceImperfections008_1K-JPG_Color.jpg",
+     "bytes": 652005,
+     "sha256": "7f1b2eea14e8e425ac0bcfdf51d996cc7266695f7ec46d123bd028942d4475b7",
+     "archive": "ambientcg/SurfaceImperfections008/SurfaceImperfections008_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "normal",
+     "path": "ambientcg/SurfaceImperfections008/x/SurfaceImperfections008_1K-JPG_NormalGL.jpg",
+     "bytes": 1861645,
+     "sha256": "3c6ed140b09df5105b3f9d24106a78b5ce7cb2c9a391c59dd772ca4afbbf6d69",
+     "archive": "ambientcg/SurfaceImperfections008/SurfaceImperfections008_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "opacity",
+     "path": "ambientcg/SurfaceImperfections008/x/SurfaceImperfections008_1K-JPG_Opacity.jpg",
+     "bytes": 652005,
+     "sha256": "7f1b2eea14e8e425ac0bcfdf51d996cc7266695f7ec46d123bd028942d4475b7",
+     "archive": "ambientcg/SurfaceImperfections008/SurfaceImperfections008_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    }
+   ]
+  },
+  {
+   "source": "ambientcg",
+   "id": "Leaking008",
+   "page": "https://ambientcg.com/a/Leaking008",
+   "name": "Leaking 008",
+   "authors": [
+    "ambientCG (ambientcg.com)"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [],
+   "use": "decal: grime rising from the foot of walls and kerb faces, and along the gutter",
+   "files": [
+    {
+     "role": "archive",
+     "path": "ambientcg/Leaking008/Leaking008_1K-JPG.zip",
+     "bytes": 2093571,
+     "sha256": "ed56d4de009532d0232333981fa11bc0ad63bcd0252771f436465c0ce393f9d9",
+     "url": "https://ambientcg.com/get?file=Leaking008_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "albedo",
+     "path": "ambientcg/Leaking008/x/Leaking008_1K-JPG_Color.jpg",
+     "bytes": 159811,
+     "sha256": "e6df33961130c1cd775958984e7adf86bb30bd0f12b2314bc2d5eb591846a8be",
+     "archive": "ambientcg/Leaking008/Leaking008_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "height",
+     "path": "ambientcg/Leaking008/x/Leaking008_1K-JPG_Displacement.jpg",
+     "bytes": 127687,
+     "sha256": "a7864d501a6d92c2cf0f939b0597620c3e8e78f1af14587f189318fe232b69a4",
+     "archive": "ambientcg/Leaking008/Leaking008_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "normal",
+     "path": "ambientcg/Leaking008/x/Leaking008_1K-JPG_NormalGL.jpg",
+     "bytes": 145177,
+     "sha256": "8c7a1dc108ad07dd24d182403ea2247c16c3ddf9baa80c6d2e8e71a4c1d3e55d",
+     "archive": "ambientcg/Leaking008/Leaking008_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "opacity",
+     "path": "ambientcg/Leaking008/x/Leaking008_1K-JPG_Opacity.jpg",
+     "bytes": 103493,
+     "sha256": "23cc8f0b465f67f02fa00414909451b1b548875be30a193b964a657d49a79c0e",
+     "archive": "ambientcg/Leaking008/Leaking008_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "roughness",
+     "path": "ambientcg/Leaking008/x/Leaking008_1K-JPG_Roughness.jpg",
+     "bytes": 94367,
+     "sha256": "98bbf30df24d24256af27b2f62d66ffec7244cc343bbdf34a387c269cd1fd6c9",
+     "archive": "ambientcg/Leaking008/Leaking008_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    }
+   ]
+  },
+  {
+   "source": "ambientcg",
+   "id": "Grate002",
+   "page": "https://ambientcg.com/a/Grate002",
+   "name": "Grate 002",
+   "authors": [
+    "ambientCG (ambientcg.com)"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [],
+   "use": "decal: storm-drain inlet grate in the gutter",
+   "files": [
+    {
+     "role": "archive",
+     "path": "ambientcg/Grate002/Grate002_1K-JPG.zip",
+     "bytes": 5234045,
+     "sha256": "704721e1d834768eecb1c5b6ba942016244da5096c5bfc8fefa2b5627cfc528e",
+     "url": "https://ambientcg.com/get?file=Grate002_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "ao",
+     "path": "ambientcg/Grate002/x/Grate002_1K-JPG_AmbientOcclusion.jpg",
+     "bytes": 378429,
+     "sha256": "90474597eae291ac97b5062f8548f2989afe1345e50f8f4a9bff0e9c0b33ad7e",
+     "archive": "ambientcg/Grate002/Grate002_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "albedo",
+     "path": "ambientcg/Grate002/x/Grate002_1K-JPG_Color.jpg",
+     "bytes": 854502,
+     "sha256": "5ffa958099098198bb97265b388682503bf5974f36e48957db8f0194944e89bb",
+     "archive": "ambientcg/Grate002/Grate002_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "height",
+     "path": "ambientcg/Grate002/x/Grate002_1K-JPG_Displacement.jpg",
+     "bytes": 199295,
+     "sha256": "9bfaa294b75e8a38f3c9b47a0c389480d5ff9702f4e4baaa04ebf7a4ad79e756",
+     "archive": "ambientcg/Grate002/Grate002_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "metalness",
+     "path": "ambientcg/Grate002/x/Grate002_1K-JPG_Metalness.jpg",
+     "bytes": 242330,
+     "sha256": "f2c129cad1571db8171f5db69eb7cb596b4a057d29cbc21d9f9b02ddc6c542dc",
+     "archive": "ambientcg/Grate002/Grate002_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "normal",
+     "path": "ambientcg/Grate002/x/Grate002_1K-JPG_NormalGL.jpg",
+     "bytes": 894490,
+     "sha256": "885d0668a3643d1b2a60c43fba62211830dd5d4103f6f199218f2dc05ecbdb9b",
+     "archive": "ambientcg/Grate002/Grate002_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "opacity",
+     "path": "ambientcg/Grate002/x/Grate002_1K-JPG_Opacity.jpg",
+     "bytes": 52639,
+     "sha256": "057ce2d074b4c6171441c4896edd4b40988c8b907440809b529cec190f2db555",
+     "archive": "ambientcg/Grate002/Grate002_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "roughness",
+     "path": "ambientcg/Grate002/x/Grate002_1K-JPG_Roughness.jpg",
+     "bytes": 356793,
+     "sha256": "218125fe7a479c98df723ec3aa1c99f5bc21dd1328a31fc171b7935c31dffeca",
+     "archive": "ambientcg/Grate002/Grate002_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    }
+   ]
+  },
+  {
+   "source": "ambientcg",
+   "id": "RoadLines004",
+   "page": "https://ambientcg.com/a/RoadLines004",
+   "name": "Road Lines 004",
+   "authors": [
+    "ambientCG (ambientcg.com)"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [],
+   "use": "mask: worn-paint pattern inside the geometric lane markings (never marking geometry)",
+   "files": [
+    {
+     "role": "archive",
+     "path": "ambientcg/RoadLines004/RoadLines004_1K-JPG.zip",
+     "bytes": 2177921,
+     "sha256": "c184693ed11f99040096be118e76f148a71b7a1fd16c5f4d46bd82197646e79a",
+     "url": "https://ambientcg.com/get?file=RoadLines004_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "ao",
+     "path": "ambientcg/RoadLines004/x/RoadLines004_1K-JPG_AmbientOcclusion.jpg",
+     "bytes": 66134,
+     "sha256": "2e169c11a14b4fc6a79579272ec3648a333cb59d22456cc1bc5804127f2d4819",
+     "archive": "ambientcg/RoadLines004/RoadLines004_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "albedo",
+     "path": "ambientcg/RoadLines004/x/RoadLines004_1K-JPG_Color.jpg",
+     "bytes": 128275,
+     "sha256": "65f2a1fde90b6e8398d4f58d8c54205a656e51fb0c22c039dc5d300203a0281e",
+     "archive": "ambientcg/RoadLines004/RoadLines004_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "height",
+     "path": "ambientcg/RoadLines004/x/RoadLines004_1K-JPG_Displacement.jpg",
+     "bytes": 51952,
+     "sha256": "9b1f4f8d7f8581ba71809a2e3bd4800ba4c448c7072308fb594e78142ca9ecd3",
+     "archive": "ambientcg/RoadLines004/RoadLines004_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "normal",
+     "path": "ambientcg/RoadLines004/x/RoadLines004_1K-JPG_NormalGL.jpg",
+     "bytes": 271657,
+     "sha256": "fc71e5dd5ddccafbde119e17b9d0028228667abe035e13d8b0effaa4bfd2d7e7",
+     "archive": "ambientcg/RoadLines004/RoadLines004_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "opacity",
+     "path": "ambientcg/RoadLines004/x/RoadLines004_1K-JPG_Opacity.jpg",
+     "bytes": 38556,
+     "sha256": "93990a60d293cb3a04491d5f9cb33a608f06b1adcb366d48b1587d3fae22bf58",
+     "archive": "ambientcg/RoadLines004/RoadLines004_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "roughness",
+     "path": "ambientcg/RoadLines004/x/RoadLines004_1K-JPG_Roughness.jpg",
+     "bytes": 60473,
+     "sha256": "c4d63d09c9792616429a14b49a638dd37a5c3afe156e80a764ad49c39ad88053",
+     "archive": "ambientcg/RoadLines004/RoadLines004_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    }
+   ]
+  },
+  {
+   "source": "ambientcg",
+   "id": "RoadLines001",
+   "page": "https://ambientcg.com/a/RoadLines001",
+   "name": "Road Lines 001",
+   "authors": [
+    "ambientCG (ambientcg.com)"
+   ],
+   "licence": "CC0-1.0",
+   "size_m": [],
+   "use": "worn-paint candidate (fetched; not drawn: RoadLines004 laid along each marking serves every width)",
+   "files": [
+    {
+     "role": "archive",
+     "path": "ambientcg/RoadLines001/RoadLines001_1K-JPG.zip",
+     "bytes": 2061450,
+     "sha256": "a931166b2056bfeec5f7ef0b2de3cb4eb8e30652127e0ac3093383b0bdd3c67e",
+     "url": "https://ambientcg.com/get?file=RoadLines001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "albedo",
+     "path": "ambientcg/RoadLines001/x/RoadLines001_1K-JPG_Color.jpg",
+     "bytes": 253476,
+     "sha256": "f5c32750ecfd2556733f688c229247b8f85c6e0d221a143f4b563f4b7fcf7b19",
+     "archive": "ambientcg/RoadLines001/RoadLines001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "height",
+     "path": "ambientcg/RoadLines001/x/RoadLines001_1K-JPG_Displacement.jpg",
+     "bytes": 76113,
+     "sha256": "7e6d383b5956392bed24978e2f2c4213bd473be2cfddbd88f19d69826e977895",
+     "archive": "ambientcg/RoadLines001/RoadLines001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "normal",
+     "path": "ambientcg/RoadLines001/x/RoadLines001_1K-JPG_NormalGL.jpg",
+     "bytes": 166398,
+     "sha256": "4522c59dc28fdc0fad3fafda13feaa7c0b16ce0c6861d66c208695fe3f5032c7",
+     "archive": "ambientcg/RoadLines001/RoadLines001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    },
+    {
+     "role": "roughness",
+     "path": "ambientcg/RoadLines001/x/RoadLines001_1K-JPG_Roughness.jpg",
+     "bytes": 73459,
+     "sha256": "a2c01eebcfe0bf702cd1cb8e44dfadd0c46b24120f27ac8f55a876d50969d2e3",
+     "archive": "ambientcg/RoadLines001/RoadLines001_1K-JPG.zip",
+     "resolution": "1K-JPG"
+    }
+   ]
+  }
+ ],
+ "indexNote": "API listings (api.polyhaven.com, ambientcg.com/api/v2) and 256 px preview thumbnails (the APIs' own preview links) fetched to choose sets; not read by the game.",
+ "indexBytes": 12815736,
+ "index": [
+  {
+   "path": "_index/acg-asphalt.json",
+   "bytes": 1019491,
+   "sha256": "71de15457451b8de5322f8e8f00fae072b71bd8b8358030f89edccc9baf6d54e"
+  },
+  {
+   "path": "_index/acg-asphaltdamage.json",
+   "bytes": 614,
+   "sha256": "3728d758f8ebbbb282e696d2a26ceea356ceddde0c7dd9d3e9d2691c1ef69d1b"
+  },
+  {
+   "path": "_index/acg-crack.json",
+   "bytes": 34174,
+   "sha256": "622ddc42727880ba133f0d77ca0dbc97365296565048668fc16031de0aca538f"
+  },
+  {
+   "path": "_index/acg-curb.json",
+   "bytes": 596,
+   "sha256": "24868c3b04582705e63218eed3bb0331846a2a6cd47d3b2f2da45038f46ad71c"
+  },
+  {
+   "path": "_index/acg-decal.json",
+   "bytes": 100938,
+   "sha256": "d287801f141ffe690ecd3d29fa45a99a26720ad41e187f7f776b479d3879a2cc"
+  },
+  {
+   "path": "_index/acg-dirt.json",
+   "bytes": 991540,
+   "sha256": "3503ba23a2036192774e3d6936cc8453809a42d7ddf3ad9891553e655bf5cb76"
+  },
+  {
+   "path": "_index/acg-facade.json",
+   "bytes": 357294,
+   "sha256": "e6f8c16527136d31ff6298712970be0c5e5ab2a6747597dd5a7c246026816aea"
+  },
+  {
+   "path": "_index/acg-graffiti.json",
+   "bytes": 13357,
+   "sha256": "9c8cddb7fe7b2281d1cd9d29aa157c850353ff0719e73c82077dbfa0c97745af"
+  },
+  {
+   "path": "_index/acg-grass.json",
+   "bytes": 183542,
+   "sha256": "61c29f6c58da79e637a72e009abe767b3ffd7da8805a9a242333d79f685a6542"
+  },
+  {
+   "path": "_index/acg-leaking.json",
+   "bytes": 564115,
+   "sha256": "6da1e737de0efa73756612294ea72b584be1e0b6bcc8bddcb3817435ddeb6e66"
+  },
+  {
+   "path": "_index/acg-manhole.json",
+   "bytes": 162311,
+   "sha256": "5dc458681e27f335b08815dd871ab7848cf3979374323b70883e2be97bb11020"
+  },
+  {
+   "path": "_index/acg-oil.json",
+   "bytes": 594,
+   "sha256": "3c5af4615bdc9773158c768273df0bf1f6210826934e5f45f972036d15dec232"
+  },
+  {
+   "path": "_index/acg-paintedplaster.json",
+   "bytes": 616,
+   "sha256": "d0c0a2b39858a45bfa73b01671de56056e6debb14606bae92e89f62101790726"
+  },
+  {
+   "path": "_index/acg-paintedwood.json",
+   "bytes": 610,
+   "sha256": "f3fceacc9dda7c58e319f0a3f51ee59b3a95f5969d8d9b25dc2ab28a24eba88b"
+  },
+  {
+   "path": "_index/acg-patch.json",
+   "bytes": 598,
+   "sha256": "8ecb13240a9da56389d51fa13dedbbf8d3392fd7d51477eddbe66c267b1bf9be"
+  },
+  {
+   "path": "_index/acg-pavement.json",
+   "bytes": 1045242,
+   "sha256": "decc9f4487ede5135df5697f50dfee6c4d2b0617f354d8e72fd914fe9563170c"
+  },
+  {
+   "path": "_index/acg-planks.json",
+   "bytes": 998544,
+   "sha256": "ea527323cf47655e3139c61eb9a957d8b8d11905011b991850f7ae4e8cae88c3"
+  },
+  {
+   "path": "_index/acg-roadlines.json",
+   "bytes": 606,
+   "sha256": "a4fa27c62c3df36165182cee843d0002007e79cd1ca9ca4cc2b82b35c3b71f89"
+  },
+  {
+   "path": "_index/acg-roofing.json",
+   "bytes": 425856,
+   "sha256": "d9483532e9304eac2d74adae22e6425493113c062137f2cdd4c9dc010c070eec"
+  },
+  {
+   "path": "_index/acg-shingles.json",
+   "bytes": 63519,
+   "sha256": "bcea29df0627b7662a32a0271bd3b1ca047dc5e21610b926fd99afdb7a6b3b1f"
+  },
+  {
+   "path": "_index/acg-sidewalk.json",
+   "bytes": 49302,
+   "sha256": "05abc28ff6be677bdb3adbd4be6af15542b737ae60e6adfac74f6c752dc36379"
+  },
+  {
+   "path": "_index/acg-siding.json",
+   "bytes": 185021,
+   "sha256": "bf98a36fed714d2ce758dae04d69fdf5a47e7b98503d478c7ac8126620cf849d"
+  },
+  {
+   "path": "_index/acg-skid.json",
+   "bytes": 596,
+   "sha256": "66c20d10021c7a5ef726d7c1f65c4c846cd2e95d3a2efd90db1778eb114cdc62"
+  },
+  {
+   "path": "_index/acg-smear.json",
+   "bytes": 383972,
+   "sha256": "197906284ee6c4310c3b8684586aa725e8e5bfbf95d7834fbc16f4feeaffeff6"
+  },
+  {
+   "path": "_index/acg-stain.json",
+   "bytes": 598,
+   "sha256": "857ea30b2855e47c48434272c493cfc5722d69953718e84a8b3e6a7645ef58ef"
+  },
+  {
+   "path": "_index/acg-tire.json",
+   "bytes": 27493,
+   "sha256": "66e848ead25a3d02bcc46192ef4f5582654992b13edcb96cd3dd77e4c3d71a42"
+  },
+  {
+   "path": "_index/acg-type-decal.json",
+   "bytes": 1695499,
+   "sha256": "c1fb7373426a6f070ebb183cf1735aea365fccdb62c1458f317976cea5a48595"
+  },
+  {
+   "path": "_index/ph-files-white_stucco.json",
+   "bytes": 25855,
+   "sha256": "6676e86527ba1871afae2cbc3dc3d7ae6ae03492d3dc2381e2c853cdbea14840"
+  },
+  {
+   "path": "_index/ph-info-white_stucco.json",
+   "bytes": 924,
+   "sha256": "c80ce1b4086ed5f052220aa3ce388a343edb79307c3a29d73de028dbe1df10a9"
+  },
+  {
+   "path": "_index/polyhaven-textures.json",
+   "bytes": 855255,
+   "sha256": "2ef7dd3a8c2fc6d61b4bf3e87037ef3670c04baebc1fc0c21aaa544509800ac7"
+  },
+  {
+   "path": "_index/thumbs/acg_Asphalt011.png",
+   "bytes": 25161,
+   "sha256": "8557fbc1829b8cfc5ba1a0c4e2d3a4790e7df5061d4c450c721fac38cc3088d3"
+  },
+  {
+   "path": "_index/thumbs/acg_Asphalt012.png",
+   "bytes": 25305,
+   "sha256": "3b0fd4d06536271f1333e0c7ae103773bb4d6fcca6a839bdcb731f3f6a673b91"
+  },
+  {
+   "path": "_index/thumbs/acg_Asphalt013.png",
+   "bytes": 23747,
+   "sha256": "31aaae95b9573372816803346fcd1df75f9b1c2caafe150e084b31db8c38fe99"
+  },
+  {
+   "path": "_index/thumbs/acg_AsphaltDamage001.png",
+   "bytes": 80076,
+   "sha256": "24b58fd37cf18760683bdc2dd68c68e9772a55707970bfeb5bfda8b6e9ed0f8d"
+  },
+  {
+   "path": "_index/thumbs/acg_ChewingGum001.png",
+   "bytes": 55435,
+   "sha256": "7d11dd9df42dde08bb2978417317ae17fa0c2449850f8533f55ca37d0d543915"
+  },
+  {
+   "path": "_index/thumbs/acg_ChewingGum002.png",
+   "bytes": 75855,
+   "sha256": "15c63a2490c8679c39ad082789d3b9c0ed5d303b9d7b365030960839fc60687b"
+  },
+  {
+   "path": "_index/thumbs/acg_Concrete047A.png",
+   "bytes": 25383,
+   "sha256": "efd354d315f7555b632fb29625a81c671f536ca5f23f7fd7a182eae874ba27e3"
+  },
+  {
+   "path": "_index/thumbs/acg_Grate001.png",
+   "bytes": 85528,
+   "sha256": "2eb4d823c590870c9bf756f60f7d2cef70e7faf7b20ce38785b6add7e6365e0a"
+  },
+  {
+   "path": "_index/thumbs/acg_Grate002.png",
+   "bytes": 60939,
+   "sha256": "2053079d80ffc3d4d42b52a00afe3b705d6ae8704684c681fc1167b3e9c96d1e"
+  },
+  {
+   "path": "_index/thumbs/acg_Leaking001.png",
+   "bytes": 23438,
+   "sha256": "2752ac9302beeef86e131adf55dab52e0f32284249787d54aa1282c446b9dd88"
+  },
+  {
+   "path": "_index/thumbs/acg_Leaking002.png",
+   "bytes": 61637,
+   "sha256": "5ec59c9d33abb5e6ab3b363c6ec539114bf2afed8efd712a413db6daec6e2d1e"
+  },
+  {
+   "path": "_index/thumbs/acg_Leaking003.png",
+   "bytes": 81271,
+   "sha256": "4d072cfb7aed6f78fec3ec6c4022282a63cc4cac514bc9c6cdf967113c408266"
+  },
+  {
+   "path": "_index/thumbs/acg_Leaking004.png",
+   "bytes": 78300,
+   "sha256": "db99d01d299a0f4b841b9b12a085bb6766ebacd6b92fcb78a3a6bb98ff9e67de"
+  },
+  {
+   "path": "_index/thumbs/acg_Leaking005.png",
+   "bytes": 68091,
+   "sha256": "73b04e36c685f26a343e95d3c90dc4388defc7e495c26bf3f82271598d3ea17a"
+  },
+  {
+   "path": "_index/thumbs/acg_Leaking006.png",
+   "bytes": 30822,
+   "sha256": "befdbae6c88a3bb422c32accf220fe0963a72c176993787430a91f73191e0f03"
+  },
+  {
+   "path": "_index/thumbs/acg_Leaking007.png",
+   "bytes": 48141,
+   "sha256": "19233cf27c2ac1598b42b533d96775e9faa6747b5a9687ce6b084595acc523a8"
+  },
+  {
+   "path": "_index/thumbs/acg_Leaking008.png",
+   "bytes": 56231,
+   "sha256": "9ce7861a8bbe235a72ca2c9c5c4e8496b6fa1f24aa5f059e7966eda698c1f534"
+  },
+  {
+   "path": "_index/thumbs/acg_Leaking009.png",
+   "bytes": 35310,
+   "sha256": "237e79173ff845617c7fa5f6c6e651d177d5280194eee375161efa8dbc80f61c"
+  },
+  {
+   "path": "_index/thumbs/acg_Leaking010A.png",
+   "bytes": 2071,
+   "sha256": "246d092a332fedd01339d5405a3401f170a3441e3e141acd264cdb58c057d919"
+  },
+  {
+   "path": "_index/thumbs/acg_ManholeCover001.png",
+   "bytes": 99383,
+   "sha256": "9566a51c7860f4c988ec35b2d12086da7ee0c33ea4f783a7ad99165c526c578d"
+  },
+  {
+   "path": "_index/thumbs/acg_ManholeCover002.png",
+   "bytes": 105970,
+   "sha256": "5a0219e40807c706fba58df85a5000ae678e52db3f92c5be7d3d493807d414cf"
+  },
+  {
+   "path": "_index/thumbs/acg_ManholeCover003.png",
+   "bytes": 79405,
+   "sha256": "06674990754f9359ad9c7e24cad4f5369e749f2ac407af3fabb2a0a43adf7f12"
+  },
+  {
+   "path": "_index/thumbs/acg_ManholeCover004.png",
+   "bytes": 21738,
+   "sha256": "f31f3d6375ff70eabc40d40588001504bf98b370daeb132846988bdc9a85dd7e"
+  },
+  {
+   "path": "_index/thumbs/acg_ManholeCover005.png",
+   "bytes": 29254,
+   "sha256": "0eedc8ca92831fdb5ed573e6113197a4c2d654afa60efdbabb82723eaff22bd3"
+  },
+  {
+   "path": "_index/thumbs/acg_ManholeCover006.png",
+   "bytes": 71627,
+   "sha256": "fbda5d9e355cc3c21f510974443ef66df4ff2ad39e5414ad7a2a9b3097d08768"
+  },
+  {
+   "path": "_index/thumbs/acg_ManholeCover007.png",
+   "bytes": 55659,
+   "sha256": "46bd7cdc1523ba8f5adaadf4d0c09f99285ed1ce1eae0e7e8bda8d5aedfa0535"
+  },
+  {
+   "path": "_index/thumbs/acg_ManholeCover009.png",
+   "bytes": 121196,
+   "sha256": "a6cebfa32ab3ecd61773ed51c333a409770778a3f47f1556982f81bcc0c690a0"
+  },
+  {
+   "path": "_index/thumbs/acg_PavingEdge001.png",
+   "bytes": 59421,
+   "sha256": "5dc3725271ff709115be37774a5d83129c2a81eca33679084ad7b24a8370de0e"
+  },
+  {
+   "path": "_index/thumbs/acg_PavingEdge002.png",
+   "bytes": 30191,
+   "sha256": "c06f1849af8ae5d19b4781bfe0ff18d3d4e5d8ede0934b9bdb00a803fbf86b70"
+  },
+  {
+   "path": "_index/thumbs/acg_Planks010.png",
+   "bytes": 18993,
+   "sha256": "55c87ba3acdc4f231a1327ecbed19b6c0be2bf97eabdec4551d52395484fc367"
+  },
+  {
+   "path": "_index/thumbs/acg_Planks028.png",
+   "bytes": 23330,
+   "sha256": "1dc06fb8e07b536ed19a92ffb3a301e3732912576df48bd7a35b3feee70121bc"
+  },
+  {
+   "path": "_index/thumbs/acg_Road008A.png",
+   "bytes": 18799,
+   "sha256": "084635c91ddcd6befa439ca484f654f2a97ec0231c1e98cca9fb69e8e1d83bf6"
+  },
+  {
+   "path": "_index/thumbs/acg_Road008B.png",
+   "bytes": 19602,
+   "sha256": "36a3e115465b9dd38996953f230876b8e9b97ab6d06b7c5cea25d2b942390ca8"
+  },
+  {
+   "path": "_index/thumbs/acg_Road012A.png",
+   "bytes": 18580,
+   "sha256": "7f6cac1f8f6956e59a7eb2ead5afea879406e4f62af4c2947264e8daaf19fbc0"
+  },
+  {
+   "path": "_index/thumbs/acg_RoadLines001.png",
+   "bytes": 62545,
+   "sha256": "05f5fdcc8422ec01e9fe62db2837ce0f0c66315d56efecd1cb224d8a970a37a7"
+  },
+  {
+   "path": "_index/thumbs/acg_RoadLines003.png",
+   "bytes": 50675,
+   "sha256": "3fe462c9fdc79c8176219d1ae3768fb617c7e734c3ed58ce9cfb7ae3942e2576"
+  },
+  {
+   "path": "_index/thumbs/acg_RoadLines004.png",
+   "bytes": 53963,
+   "sha256": "f28f2ecbd08e9826796b531c931999f3e9776f46b85f41fdf3d55b0e510ea1c6"
+  },
+  {
+   "path": "_index/thumbs/acg_RoadLines006.png",
+   "bytes": 12445,
+   "sha256": "23e7af98cf7f520271edfdd828f55e25fdb00fa63f0126305ee640fc535108b7"
+  },
+  {
+   "path": "_index/thumbs/acg_RoadLines007.png",
+   "bytes": 15653,
+   "sha256": "e3807f694614184d9f8b25c182033138ca30305ec5f49f5829afc0d2aeaf101b"
+  },
+  {
+   "path": "_index/thumbs/acg_RoadLines019B.png",
+   "bytes": 127277,
+   "sha256": "7dafff0293c35af31b2c13573af81634737054b1c6a7d3740b0f9d9f3ba4b556"
+  },
+  {
+   "path": "_index/thumbs/acg_RoadLines019C.png",
+   "bytes": 124838,
+   "sha256": "130837b9f3065ae1786c49477de3d982a4ec8a04a5cdbb00cc480c3ffbac427e"
+  },
+  {
+   "path": "_index/thumbs/acg_Smear001.png",
+   "bytes": 59002,
+   "sha256": "6bc87b253aa7cdf690c7d0c773b9cd8cb80910ed361671eeb6f5862be366f590"
+  },
+  {
+   "path": "_index/thumbs/acg_Smear002.png",
+   "bytes": 75704,
+   "sha256": "81c2d83f774ff5a602b095481e5e23b7f422c2f9315b9f0242abe3051f18c4c9"
+  },
+  {
+   "path": "_index/thumbs/acg_Smear004.png",
+   "bytes": 77032,
+   "sha256": "e72613a18bb2a75bccb8fa613824302ad8a2ecea804a616c9cf92334fc5a741a"
+  },
+  {
+   "path": "_index/thumbs/acg_Smear005.png",
+   "bytes": 73212,
+   "sha256": "d9c3380f11f9fe1e768e2950d0534ca78ffa4ea566b7f4680b286539117d17a3"
+  },
+  {
+   "path": "_index/thumbs/acg_Smear006.png",
+   "bytes": 79892,
+   "sha256": "9770491f1b82cc1815483b8c5b3f334658e4458044170683cc47db5e07494951"
+  },
+  {
+   "path": "_index/thumbs/acg_SurfaceImperfections001.png",
+   "bytes": 73686,
+   "sha256": "2e42329686973606786f920907d9b383399fb0b44b2a1bb7c0c18e8e64431208"
+  },
+  {
+   "path": "_index/thumbs/acg_SurfaceImperfections002.png",
+   "bytes": 70066,
+   "sha256": "5bb5094b4d7d40ee17cbcbae3c2246635ce4b32aa383b470db589378e88eb079"
+  },
+  {
+   "path": "_index/thumbs/acg_SurfaceImperfections003.png",
+   "bytes": 67791,
+   "sha256": "339a891b7dad67771404d288cc744dd3bbb4a200f8cdcccf101ff40872943a54"
+  },
+  {
+   "path": "_index/thumbs/acg_SurfaceImperfections004.png",
+   "bytes": 61096,
+   "sha256": "01b78182160c909808ded68a11a275e378c47034098d1ac9ff218a1bfbe5c411"
+  },
+  {
+   "path": "_index/thumbs/acg_SurfaceImperfections008.png",
+   "bytes": 68335,
+   "sha256": "49e6148b069ef092978711e865354b5aeae62ccaeb61919822ce55c6bdcd4550"
+  },
+  {
+   "path": "_index/thumbs/acg_SurfaceImperfections013.png",
+   "bytes": 68930,
+   "sha256": "d08c99e93345b70b17fa5b23cb517525efe0312d0ef898a133e151f1bdffcf62"
+  },
+  {
+   "path": "_index/thumbs/acg_SurfaceImperfections017.png",
+   "bytes": 91665,
+   "sha256": "d20f68750073539358196fbfe39108d5c46da88ebe7a0c634271ab60119e8c7a"
+  },
+  {
+   "path": "_index/thumbs/acg_SurfaceImperfections018.png",
+   "bytes": 80212,
+   "sha256": "1c80bf7d3d8d0a79a13a8046ed7a5f6452bd150d1b746efc937ee3635732ff1e"
+  },
+  {
+   "path": "_index/thumbs/acg_SurfaceImperfections020.png",
+   "bytes": 80586,
+   "sha256": "c3edf72847d9372535a0c728816fb09d0be49c1ba7445f3f26102ed8e1ea8ff3"
+  },
+  {
+   "path": "_index/thumbs/acg_TireTracks001.png",
+   "bytes": 94702,
+   "sha256": "b0b747e0de8d81ca4d84131a7b49c8bf42e702af97de4d4ae8105f74c404a906"
+  },
+  {
+   "path": "_index/thumbs/acg_WoodSiding009.png",
+   "bytes": 22743,
+   "sha256": "c3cb9248562e67c3788f6301ff9fa4b43375da632b35ee3a7553e9a9948237b2"
+  },
+  {
+   "path": "_index/thumbs/ph_concrete_pavement.png",
+   "bytes": 29510,
+   "sha256": "25229e6e72167609431188a31798dba0a3236988c80d8137e6d51e30614199f2"
+  },
+  {
+   "path": "_index/thumbs/ph_distressed_painted_planks.png",
+   "bytes": 3902,
+   "sha256": "17037f9a7879b3f32989d4c431f46d6ffa5e605356ff527abf3192f18423a829"
+  },
+  {
+   "path": "_index/thumbs/ph_road_damaged.png",
+   "bytes": 31214,
+   "sha256": "5c95ae0497b1acb133d2d7a5c24f22161d774c2229c23753c388ce4d4ed50a5f"
+  },
+  {
+   "path": "_index/thumbs/ph_synthetic_wood.png",
+   "bytes": 29324,
+   "sha256": "2f937318846f769b8075df279162ef61278a73e6ed5b1878ab8eece30cded0ca"
+  },
+  {
+   "path": "_index/thumbs/ph_tarred_gravel.png",
+   "bytes": 28655,
+   "sha256": "16742383024c32d92472f3e1eaae281691bd1a6a7c6e5045a963b024f2d0e47e"
+  },
+  {
+   "path": "_index/thumbs/ph_weathered_plank_siding.png",
+   "bytes": 27014,
+   "sha256": "0de28d2f52243c546d7ffe22b3501a85f02d2134af8a0de97b362adc92e790a4"
+  },
+  {
+   "path": "_index/thumbs/ph_white_planks_clean.png",
+   "bytes": 27414,
+   "sha256": "1a8e9c8a8708b19b346796c1838d549a8d5dcc1a1bb3f1d38b6461ce5b52f6bd"
+  },
+  {
+   "path": "_index/thumbs/ph_white_stucco.png",
+   "bytes": 22680,
+   "sha256": "e88aa51b65fd1360d0e93e96056978e2e9bf68f46875f0bfa9bd9a462cf66670"
+  },
+  {
+   "path": "_index/thumbs/ph_wood_peeling_paint_weathered.png",
+   "bytes": 34073,
+   "sha256": "e05bd66fcb97907544e9ed9e628c36e0f476e04d2f49bd73fd54fcd1ec3ae896"
+  },
+  {
+   "path": "_index/thumbs/ph_wood_plank_wall.png",
+   "bytes": 23758,
+   "sha256": "de0e05fba9cb4b08aec356a6f1ab9593920cca320ff6912c31cd701ce6b37dce"
+  },
+  {
+   "path": "_index/thumbs/ph_wood_textured_concrete.png",
+   "bytes": 27288,
+   "sha256": "aae000393ecd1f13fd233b56cd573af7fca3897d5393334c6d9c3b755960489b"
+  },
+  {
+   "path": "_index/thumbs/ph_worn_asphalt.png",
+   "bytes": 34293,
+   "sha256": "dc5756a0dcc1c3dc098e77d565238d940a6591e5590cd0a24c38ce24a2e5d14a"
+  }
+ ]
+}

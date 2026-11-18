@@ -1,0 +1,137 @@
+{
+  "seed": 1,
+  "notes": "Mid-grey painted stucco Art Deco industrial front: fluted pilasters, entrance bay with glazed door and sidelights on the left, two large divided shop windows, two steel roll-up doors at the right end. The two fluted Art Deco pilaster strips flanking the entry bay (flutes 4) that the notes described but the build lacked. Lavender-grey (painted-white base; grey on warm stucco read beige). Street grime: soot at the base, grime, faint wide streaks. Mid grey (a warm mid-grey, not near-white); dark scroll-crest bands over both roll-ups. Raised parapet (0.9 m) and iron scissor grilles in front of both roll-ups.",
+  "wall": "painted-white",
+  "wallTint": "#9a999f",
+  "trim": "painted-stucco",
+  "cornice": false,
+  "beltCourse": true,
+  "windowHoods": false,
+  "coping": {
+    "heightM": 0.9,
+    "projectionM": 0.12,
+    "material": "painted-white",
+    "tint": "#8c8b92"
+  },
+  "upperWindowSpans": [
+    [
+      0.06,
+      0.15
+    ]
+  ],
+  "upperSillM": 0.3,
+  "upperHeadM": 1.9,
+  "mullionM": 0.7,
+  "sashRows": 2,
+  "sashCols": 2,
+  "sashMaterial": "painted-white",
+  "storefrontFrame": "painted-white",
+  "bulkhead": "painted-stucco",
+  "ground": "vacant",
+  "upper": "office",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.55,
+    "paneM": 0.8,
+    "transomPaneM": 0.8,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.05,
+        "to": 0.08
+      },
+      {
+        "kind": "door",
+        "from": 0.08,
+        "to": 0.13,
+        "leaf": "painted-white",
+        "stair": true
+      },
+      {
+        "kind": "window",
+        "from": 0.13,
+        "to": 0.16
+      },
+      {
+        "kind": "window",
+        "from": 0.24,
+        "to": 0.41
+      },
+      {
+        "kind": "window",
+        "from": 0.43,
+        "to": 0.6
+      },
+      {
+        "kind": "garage",
+        "from": 0.65,
+        "to": 0.8,
+        "material": "painted-steel-light",
+        "headM": 3.3
+      },
+      {
+        "kind": "garage",
+        "from": 0.82,
+        "to": 0.97,
+        "material": "painted-steel-light",
+        "headM": 3.3
+      }
+    ]
+  },
+  "weathering": {
+    "patches": {
+      "strength": 0.08,
+      "metres": 1.6,
+      "top": 3.5,
+      "mottle": 0.06
+    },
+    "grime": {
+      "strength": 0.22,
+      "metres": 2.4
+    },
+    "soot": {
+      "height": 1.1,
+      "strength": 0.26
+    },
+    "streak": {
+      "strength": 0.035,
+      "columnMetres": 2.2,
+      "drop": 0.7
+    },
+    "bandStrength": 0.1,
+    "axis": "wall"
+  },
+  "storefrontGlass": "glass-shell",
+  "glass": "glass-shell",
+  "pilasters": {
+    "at": [
+      0.035,
+      0.18
+    ],
+    "widthM": 0.8,
+    "projectionM": 0.12,
+    "flutes": 4,
+    "material": "painted-white",
+    "tint": "#a6a5ab"
+  },
+  "signBands": [
+    {
+      "from": 0.65,
+      "to": 0.8,
+      "material": "painted-steel",
+      "tint": "#45454b",
+      "heightM": 0.3,
+      "bottomM": 3.5,
+      "projectionM": 0.05
+    },
+    {
+      "from": 0.82,
+      "to": 0.97,
+      "material": "painted-steel",
+      "tint": "#45454b",
+      "heightM": 0.3,
+      "bottomM": 3.5,
+      "projectionM": 0.05
+    }
+  ]
+}

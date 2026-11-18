@@ -1,0 +1,166 @@
+{
+ "seed": 5,
+ "notes": "1907 four-storey flats at the north corner of Allen Street. Brown smooth stucco, two cant bays near each end from storey 2 to the roof with flat paired windows under them on storey 1, a centre column of single hooded windows, dark brown trim. Ground: a central glazed entry under a brown awning, a wide window left, two small barred windows right. Allen return (edge 0) gets upper windows. Wall read pale pinkish grey against a clearly brown street; tint darkened, flank no longer inherits the entry awning. Deeper chocolate wall, espresso trim on frames, hoods, bay plates and cornice; brown sloped canvas awning over the centre door instead of the steel louvre; heavier cornice. Ground order is real viewer left to right (picture window, door, barred pair); awning moved to the neutral canvas kit (tinted awning-canvas read red). Wall pushed to a dark chocolate tint; near-black espresso on frames, sills, hoods, bay plates, cornice and shop frames; both cant bays now start at storey 1 and run to the roof; dark brown canvas awning with a valance over the centre entry, no pale stepped canopy; large dark-framed picture window and barred pair; dark bracketed cornice in the trim colour. Wall tint warmer and darker (less blue) so it stops reading mauve. Applied: taupe-brown wall 7a6558, chocolate trim 3f302a, bays start on storey 2 (flat pairs on storey 1), glazed double door under a wider brown canvas awning, heavy dark sash frames. Mirrored claim SKIPPED. Applied: wall 7f6a5f, dark chocolate 3b2c25 trim/frames/sash, ground storey shortened to 3.3 m, flat brown shed awning 1.2 m, Allen flank reduced to one window. Applied: dark chocolate wall 6c574c (lit side; luminance floor), espresso trim and frames, brown awning 4a3028, bracketed dark cornice, hyB cant bays (one big sash + slim sides). SKIPPED: extending bays down to storey 2 - flat paired windows directly above the ground floor and the bays only from the next storey. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-white",
+ "wallTint": "#897970",
+ "trim": "painted-white@2f221c",
+ "frame": "painted-white@2f221c",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@2f221c",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@897970",
+ "awning": "canvas-plain@4a3028",
+ "cornice": true,
+ "corniceProjectionM": 0.42,
+ "beltCourse": true,
+ "windowHoods": true,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.13,
+  0.26,
+  0.49,
+  0.72,
+  0.85
+ ],
+ "bays": [
+  {
+   "at": 0.2,
+   "widthM": 2.6,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-white",
+   "tint": "#897970",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.79,
+   "widthM": 2.6,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-white",
+   "tint": "#897970",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.07,
+    "to": 0.3,
+    "kind": "window",
+    "headM": 2.4
+   },
+   {
+    "from": 0.41,
+    "to": 0.58,
+    "kind": "double-door",
+    "stair": true,
+    "leaf": "painted-white@3f302a"
+   },
+   {
+    "from": 0.68,
+    "to": 0.77,
+    "kind": "window",
+    "headM": 1.8,
+    "grille": true
+   },
+   {
+    "from": 0.78,
+    "to": 0.87,
+    "kind": "window",
+    "headM": 1.8,
+    "grille": true
+   }
+  ]
+ },
+ "awningSpans": [
+  {
+   "from": 0.36,
+   "to": 0.64,
+   "depthM": 1.2,
+   "valanceM": 0.3
+  }
+ ],
+ "streetEdges": {
+  "0": {
+   "upperWindows": [
+    0.35
+   ],
+   "awningSpans": []
+  }
+ },
+ "edgeRoles": {
+  "0": "flank"
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "sashFrames": {
+  "material": "painted-white@2f221c",
+  "stileM": 0.07
+ },
+ "hbBayGlazing": {
+  "marginM": 0.2,
+  "maxW": 1.05,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#3b2c25",
+  "sashM": 0.09,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "hbFloors": {
+  "groundM": 3.3,
+  "upperM": 3.4067
+ },
+ "streetStills": true,
+ "hbCorniceBrackets": {
+  "spacingM": 0.75,
+  "heightM": 0.4,
+  "depthM": 0.3,
+  "widthM": 0.2,
+  "material": "painted-white",
+  "tint": "#2f221c"
+ }
+}

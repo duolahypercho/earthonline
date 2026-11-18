@@ -1,0 +1,163 @@
+{
+ "seed": 7,
+ "notes": "Rework r5: warm cream stucco, near-black green window frames, brown brick wainscot only (no pink piers), white sectional garage door, deep arched stair entry left, zig-zag fire escape with solid decks between the bays.",
+ "wall": "painted-stucco",
+ "wallTint": "#f6e8cc",
+ "trim": "painted-white@f0eadb",
+ "frame": "painted-white@16241c",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f0eadb",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "brick-running-bond@e0b8a0",
+ "cornice": true,
+ "corniceProjectionM": 0.4,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 1.3,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "upperWindows": [
+  0.27,
+  0.78
+ ],
+ "bays": [
+  {
+   "at": 0.27,
+   "widthM": 2.7,
+   "projectionM": 0.5,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#f6e8cc",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15
+   },
+   "toStorey": 3
+  },
+  {
+   "at": 0.8,
+   "widthM": 2.7,
+   "projectionM": 0.5,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#f6e8cc",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15
+   },
+   "toStorey": 3
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.07,
+    "to": 0.21,
+    "kind": "door",
+    "arch": {
+     "type": "round",
+     "surround": true,
+     "porch": true,
+     "revealM": 0.45
+    },
+    "stair": true
+   },
+   {
+    "from": 0.38,
+    "to": 0.74,
+    "kind": "glazed-garage",
+    "headM": 2.4
+   },
+   {
+    "from": 0.84,
+    "to": 0.95,
+    "kind": "door"
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "sashFrames": {
+  "material": "painted-white@16241c",
+  "stileM": 0.08
+ },
+ "hbBayGlazing": {
+  "marginM": 0.2,
+  "maxW": 1.05,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#16241c",
+  "sashM": 0.08,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "groundBand": {
+  "material": "brick-running-bond",
+  "tint": "#e0b8a0",
+  "topM": 1.6
+ },
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 2.7,
+  "upperM": 2.8
+ },
+ "hbArchDoors": [
+  {
+   "from": 0.07,
+   "to": 0.21,
+   "material": "painted-stucco",
+   "tint": "#e6dcc0",
+   "ringTint": "#d8cdb0",
+   "fillTint": "#1c1814"
+  }
+ ],
+ "fireEscape": {
+  "at": 0.535,
+  "widthM": 1.4,
+  "depthM": 0.75,
+  "zigzag": true,
+  "flightW": 0.55,
+  "material": "painted-steel@111111"
+ },
+ "garagePanels": {
+  "material": "painted-white",
+  "tint": "#f4f0e6",
+  "rows": 4,
+  "cols": 4
+ }
+}

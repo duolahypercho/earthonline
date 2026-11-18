@@ -1,0 +1,170 @@
+{
+ "seed": 49,
+ "notes": "Rework r3: stacked rounded bays and a fire escape on the upper facade, charcoal base with paired fanlight-arched windows, black entry awning, white string course (hand.py). Source view is privacy-blurred. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. GroundBand lift (2026-10-03): groundBand tint #2e3238 -> #4d5156 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#e8ecf2",
+ "trim": "painted-white@f6f8fb",
+ "frame": "painted-white@eceef2",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@2a2e34",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-stucco@4d5156",
+ "cornice": true,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.4,
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "upperWindows": [
+  0.08,
+  0.5,
+  0.92
+ ],
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#4d5156",
+  "topM": 4.2
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.15,
+    "to": 0.2,
+    "kind": "window",
+    "headM": 2.9,
+    "grille": true,
+    "arch": {
+     "type": "round",
+     "fan": true
+    }
+   },
+   {
+    "from": 0.23,
+    "to": 0.28,
+    "kind": "window",
+    "headM": 2.9,
+    "grille": true,
+    "arch": {
+     "type": "round",
+     "fan": true
+    }
+   },
+   {
+    "from": 0.31,
+    "to": 0.43,
+    "kind": "double-door",
+    "stair": true,
+    "leaf": "painted-steel@2c2a28",
+    "headM": 3.2,
+    "arch": {
+     "type": "round"
+    }
+   },
+   {
+    "from": 0.5,
+    "to": 0.58,
+    "kind": "window",
+    "headM": 2.9,
+    "grille": true,
+    "arch": {
+     "type": "round",
+     "fan": true
+    }
+   },
+   {
+    "from": 0.66,
+    "to": 0.71,
+    "kind": "window",
+    "headM": 2.9,
+    "grille": true,
+    "arch": {
+     "type": "round",
+     "fan": true
+    }
+   },
+   {
+    "from": 0.75,
+    "to": 0.8,
+    "kind": "window",
+    "headM": 2.9,
+    "grille": true,
+    "arch": {
+     "type": "round",
+     "fan": true
+    }
+   }
+  ]
+ },
+ "corniceProjectionM": 0.5,
+ "bays": [
+  {
+   "at": 0.3,
+   "widthM": 3.2,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#e8ecf2",
+   "hyB": {
+    "plan": "swell",
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.7,
+   "widthM": 3.2,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#e8ecf2",
+   "hyB": {
+    "plan": "swell",
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "fireEscape": {
+  "at": 0.5,
+  "widthM": 2.4,
+  "depthM": 0.9,
+  "material": "painted-steel"
+ },
+ "awning": "awning-canvas@1c1c1e",
+ "awningSpans": [
+  {
+   "from": 0.3,
+   "to": 0.44,
+   "depthM": 1.2,
+   "riseM": 0.35,
+   "dropM": 0.3
+  }
+ ]
+}

@@ -1,0 +1,22 @@
+[package]
+name = "eo-agents"
+version = "0.1.0"
+edition = "2024"
+description = "Moving things on screen: the simulated cars and people and the player, as GPU-ready meshes, skeletal animation and per-frame instances (no GPU code)"
+
+[dependencies]
+anyhow = "1.0.104"
+bytemuck = { version = "1.25.2", features = ["derive"] }
+eo-assets = { path = "../eo-assets" }
+eo-data = { path = "../eo-data" }
+eo-sim = { path = "../eo-sim" }
+eo-street = { path = "../eo-street" }
+glam = "0.34.3"
+image-webp = "0.2.4" # people: the Rocketbox WebP maps
+gltf = { version = "1.4.1", default-features = false, features = ["utils", "names", "KHR_materials_emissive_strength"] }
+meshopt = "0.7.0" # people: EXT_meshopt_compression
+png = "0.18.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+texpresso = "2.0.2" # people: BC atlases

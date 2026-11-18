@@ -1,0 +1,120 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-149930902",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-149930902",
+    "walkIndex": 5076,
+    "builder": "blender",
+    "street": "Hyde Street",
+    "side": "W",
+    "addr": "1000 Sutter Street",
+    "sourceHeight": 32,
+    "sourceLevels": null,
+    "frontEdge": 4,
+    "status": "review",
+    "lidarHeightM": 32.4,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b149930902.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b149930902.js"
+  },
+  "base": {
+    "id": "sf-building-149930902",
+    "walkIndex": 5076,
+    "builder": "blender",
+    "street": "Hyde Street",
+    "side": "W",
+    "addr": "1000 Sutter Street",
+    "sourceHeight": 32,
+    "sourceLevels": null,
+    "frontEdge": 4,
+    "status": "review",
+    "lidarHeightM": 32.4,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b149930902.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b149930902.js"
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b149930902.js",
+    "sha256": "77461bfa7f59b156e1a3e0eb91ada43765f16c3023a8d2ad2b2d943dccae8672",
+    "pass": "b149930902-blender-6facb6b9-12fb8b"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-149930902/provenance.json",
+    "sha256": "72c43dbdd80ef84fe36c58c5c94be5901e2c023ddf35dbad46eb2d302eddb33f",
+    "pass": "b149930902-blender-6facb6b9-12fb8b"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-149930902/exterior.glb",
+      "sha256": "09b207166825363c52629049dc09abdc61f789cc1c0b9d4018a38b19a8e2153d",
+      "bytes": 839684
+    },
+    {
+      "role": "interior",
+      "url": "/assets/buildings/sf-building-149930902/interior.glb",
+      "sha256": "0a75053fb359b62724eab7b12725cd9fed6e988ca752e18dd163d8d58b9aa372",
+      "bytes": 1123744
+    },
+    {
+      "role": "fine-s0",
+      "url": "/assets/buildings/sf-building-149930902/fine-s0.glb",
+      "sha256": "acb88ac5655a32aaa598e439947982d2a4d95b350bc2aa28c1f302bd60d0501a",
+      "bytes": 36972
+    },
+    {
+      "role": "fine-s1",
+      "url": "/assets/buildings/sf-building-149930902/fine-s1.glb",
+      "sha256": "baff69392e462410a77e11e1910bb692ac9f41898a11d0aba95680db55cab8a8",
+      "bytes": 197884
+    },
+    {
+      "role": "fine-s2",
+      "url": "/assets/buildings/sf-building-149930902/fine-s2.glb",
+      "sha256": "e1f3a66315dea1e96b391e93722c78149691c86f38ded89faea2b927b4ac3ea2",
+      "bytes": 197884
+    },
+    {
+      "role": "fine-s3",
+      "url": "/assets/buildings/sf-building-149930902/fine-s3.glb",
+      "sha256": "caa1b05034a248098a0a61c3ccefdcedd0f563f7b0b6373a1098102075b7e3a9",
+      "bytes": 198012
+    },
+    {
+      "role": "fine-s4",
+      "url": "/assets/buildings/sf-building-149930902/fine-s4.glb",
+      "sha256": "dc93436edb873fa2d344af750ab53c14db297ec9f80471fc58b1f0f3db48c62f",
+      "bytes": 198012
+    },
+    {
+      "role": "fine-s5",
+      "url": "/assets/buildings/sf-building-149930902/fine-s5.glb",
+      "sha256": "55392c47a9df81c5ef9c393f7ba737ca9f7f9e819dd3401c13a220f8c3cb26e7",
+      "bytes": 197908
+    },
+    {
+      "role": "fine-s6",
+      "url": "/assets/buildings/sf-building-149930902/fine-s6.glb",
+      "sha256": "ed75a620ed28f72868f8a7de316f181d19badb7e18fe26a9b7279c56f80628b5",
+      "bytes": 197992
+    },
+    {
+      "role": "fine-s7",
+      "url": "/assets/buildings/sf-building-149930902/fine-s7.glb",
+      "sha256": "29be9976b7ec6160281f66d573d0244b726a1942bf82afd16a685e18c31f7ebc",
+      "bytes": 198008
+    },
+    {
+      "role": "fine-s8",
+      "url": "/assets/buildings/sf-building-149930902/fine-s8.glb",
+      "sha256": "e7206184555da88e0280322f5618b26f5f61e1b1b9a1cad4f9a2c61c1030ac41",
+      "bytes": 198008
+    },
+    {
+      "role": "fine-s9",
+      "url": "/assets/buildings/sf-building-149930902/fine-s9.glb",
+      "sha256": "049ba849f08eaa34d29d4a81add038f35fe067a419d47b51d28ffb49bc80d15d",
+      "bytes": 197908
+    }
+  ],
+  "generatedAt": "2026-10-03T05:02:13.722Z"
+}

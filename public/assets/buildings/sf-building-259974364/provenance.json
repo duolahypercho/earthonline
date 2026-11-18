@@ -1,0 +1,50 @@
+{
+  "kind": "blender-building",
+  "id": "sf-building-259974364",
+  "pass": "b259974364-blender-6facb6b9-46ba3e-h8ec475",
+  "generator": "scripts/blender-buildings/build_building.py",
+  "generatorSha256": "6facb6b980e5966bff381f1088766095f94c593f58d833334af51d6578efa055",
+  "blender": "Blender 5.1.2",
+  "inputs": {
+    "spec": "artifacts/buildings/sf-building-259974364/spec.json",
+    "specSha256": "00ab6515f48a35014cb98751c8b283858cfdf2c131f2f6b538ae4383a6243213",
+    "style": "artifacts/buildings/sf-building-259974364/style.json",
+    "styleSha256": "6995c6b3926fee7f8ee2e1e74b8a9faca6b3628f74f9eecd4794171ba2c225c3",
+    "styleNotesRevised": "notes text reworded for publication after the build; geometry inputs unchanged",
+    "hand": "artifacts/buildings/sf-building-259974364/hand.py",
+    "handSha256": "8ec4757390c28b5bff703157eb2d432c8abb67a0cd93c70234f5cf1e8854f305"
+  },
+  "sources": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "license": "Original geometry generated from open data (DataSF footprints, LiDAR, Assessor roll). No third-party meshes or textures.",
+  "furniture": [],
+  "assets": {
+    "exterior": {
+      "url": "/assets/buildings/sf-building-259974364/exterior.glb",
+      "sha256": "b5f5f345584a9c51a03d3dcc1abb00ece5cef55233b9ce9743ab0494ecf390bf",
+      "bytes": 156208
+    },
+    "interior": {
+      "url": "/assets/buildings/sf-building-259974364/interior.glb",
+      "sha256": "4a533a2600afd94420a664005604b720e70b3646d27b4a26112b5817086ec074",
+      "bytes": 83404
+    },
+    "fine": [
+      {
+        "storey": 0,
+        "url": "/assets/buildings/sf-building-259974364/fine-s0.glb",
+        "sha256": "6c0dba32ddf21b38698df622cf26fb31fddfaa19308ca25ae6bb081f58e69fc6",
+        "bytes": 20828
+      },
+      {
+        "storey": 1,
+        "url": "/assets/buildings/sf-building-259974364/fine-s1.glb",
+        "sha256": "8ed664fec6439a0df7f934a351b7e64d21b3625fec9ab6347563b357a7bfe028",
+        "bytes": 80436
+      }
+    ]
+  }
+}

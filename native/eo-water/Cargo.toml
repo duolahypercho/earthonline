@@ -1,0 +1,17 @@
+[package]
+name = "eo-water"
+version = "0.1.0"
+edition = "2024"
+description = "Earth Online native (water): the JS game's shoreline oracle, shore field, FFT ocean spectrum, wind field, water optics and shore collar as pure functions"
+publish = false
+
+[dependencies]
+eo-data = { path = "../eo-data" } # groundscale: the ground-plan scale
+anyhow = "1.0.104"
+flate2 = "1.1.11"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+
+[dev-dependencies]
+serde_json = { version = "1.0.154", features = ["float_roundtrip"] }

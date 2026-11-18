@@ -1,0 +1,175 @@
+{
+ "seed": 11,
+ "notes": "Round 9: warm cream #ece3cf, rusticated base only below string course, three left-of-centre round-arched multi-light windows, shallow clay-tile hip with thin edge, charcoal garage under segmental head. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k) - photo-sampled tints rendered dark/olive in game.",
+ "wall": "painted-stucco",
+ "wallTint": "#f6f1e7",
+ "trim": "painted-white@e9dcc2",
+ "frame": "painted-steel@2a2c30",
+ "glass": "glass-clear",
+ "roof": "terracotta",
+ "cornice": false,
+ "corniceProjectionM": 0.6,
+ "beltCourse": false,
+ "windowHoods": false,
+ "groundBand": {
+  "material": "limestone-ashlar",
+  "tint": "#ece3cf",
+  "topM": 3.0
+ },
+ "storefront": {
+  "bulkheadM": 0.0,
+  "transomM": 0.0,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.04,
+    "to": 0.2,
+    "kind": "garage",
+    "material": "painted-steel",
+    "tint": "#1e2630",
+    "headM": 2.6,
+    "arch": {
+     "type": "segmental",
+     "riseM": 0.3,
+     "surround": {
+      "widthM": 0.1,
+      "projectionM": 0.04,
+      "material": "limestone-ashlar",
+      "tint": "#efe6d2"
+     }
+    }
+   },
+   {
+    "from": 0.87,
+    "to": 0.95,
+    "kind": "door",
+    "stair": true,
+    "leaf": "wood-siding",
+    "headM": 2.7,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.18,
+      "projectionM": 0.06,
+      "material": "limestone-ashlar",
+      "tint": "#efe6d2"
+     }
+    }
+   }
+  ],
+  "headDropM": 0.4
+ },
+ "storefrontFrame": "painted-white@e4d8bc",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "limestone-ashlar@ece3cf",
+ "ground": "lobby",
+ "upper": "apartment",
+ "wallTopM": 5.55,
+ "roofBlocks": [
+  {
+   "at": 0.5,
+   "widthM": 14.2,
+   "depthM": 9.0,
+   "setbackM": 0.02,
+   "hipRiseM": 0.8,
+   "eaveM": 0.35,
+   "material": "painted-stucco",
+   "tint": "#ece3cf",
+   "hipMaterial": "terracotta@a8634c"
+  }
+ ],
+ "storeysSeen": {
+  "count": 2,
+  "groundM": 3.0,
+  "upperM": 2.6
+ },
+ "upperWindowSpans": [
+  [
+   0.27,
+   0.36
+  ],
+  [
+   0.48,
+   0.57
+  ],
+  [
+   0.67,
+   0.76
+  ]
+ ],
+ "upperSillM": 0.2,
+ "upperHeadM": 2.0,
+ "sashRows": 4,
+ "sashCols": 3,
+ "mullionM": 0.6,
+ "sashMaterial": "painted-white@e4d8bc",
+ "tileRoof": {
+  "sections": [
+   {
+    "edge": 4,
+    "from": 0.0,
+    "to": 1.0,
+    "lipM": 5.15,
+    "riseM": 0.0
+   }
+  ],
+  "projectionM": 0.35,
+  "material": "terracotta@a8634c",
+  "courseEveryM": 0.3,
+  "backM": 0.8,
+  "bracket": "painted-stucco@e6d8b8",
+  "bracketEveryM": 2.9
+ },
+ "tileBarrels": {
+  "everyM": 0.3,
+  "heightM": 0.05,
+  "widthM": 0.15,
+  "material": "terracotta@a8634c"
+ },
+ "corniceBand": {
+  "edges": [
+   4
+  ],
+  "belowLipM": 0.3,
+  "heightM": 0.55,
+  "projM": 0.14,
+  "dentilEveryM": 2.9,
+  "material": "painted-stucco",
+  "tint": "#e6d8b8"
+ },
+ "hbArchDoors": [],
+ "hyDRubble": {
+  "toM": 3.0,
+  "courseM": 0.6,
+  "blockM": 2.0,
+  "projM": 0.015,
+  "shade": 0.8,
+  "seed": 5,
+  "maxTris": 8000
+ },
+ "plinth": {
+  "material": "painted-stucco",
+  "tint": "#4a6a3c",
+  "heightM": 1.2,
+  "projectionM": 0.5
+ },
+ "streetStills": true,
+ "upperWindowArch": {
+  "type": "round",
+  "surround": {
+   "widthM": 0.1,
+   "projectionM": 0.04,
+   "material": "painted-white",
+   "tint": "#efe6d2"
+  },
+  "fan": {
+   "rays": 7,
+   "rings": 1
+  },
+  "storeys": [
+   1
+  ],
+  "riseM": 0.45
+ }
+}

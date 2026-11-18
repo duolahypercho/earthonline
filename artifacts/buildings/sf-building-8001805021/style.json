@@ -1,0 +1,84 @@
+{
+  "builder": "house",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "painted-stucco",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "groundM": 2.6,
+  "roofLevelM": 5.25,
+  "storeysSeen": 2,
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "seed": 14,
+  "notes": "Kirkham N row, 1944 tract: cream horizontal siding, flat front with a low parapet; two upper windows with black louvred shutters; ground: a dark recessed entry and porch on the left, a white garage door with a row of small windows on the right.",
+  "wall": "painted-clapboard",
+  "wallTint": "#ece3cc",
+  "roofForm": {
+    "form": "flat",
+    "eaveM": 0.0
+  },
+  "parapetM": 0.35,
+  "entry": {
+    "from": 0.12,
+    "to": 0.26,
+    "headM": 2.2,
+    "material": "painted-white",
+    "glass": false,
+    "recessM": 0.6
+  },
+  "garages": [
+    {
+      "from": 0.55,
+      "to": 0.9,
+      "headM": 2.15,
+      "material": "painted-white",
+      "pattern": "panel",
+      "lites": 4
+    }
+  ],
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.12,
+      "to": 0.36,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        2,
+        2
+      ],
+      "shutters": {
+        "tint": "#262626"
+      }
+    },
+    {
+      "storey": 1,
+      "from": 0.58,
+      "to": 0.84,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        2,
+        2
+      ],
+      "shutters": {
+        "tint": "#262626"
+      }
+    }
+  ]
+}

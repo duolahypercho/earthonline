@@ -1,0 +1,146 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-79377193",
+  "slug": "b79377193",
+  "walkIndex": 5261,
+  "street": "Mission Street",
+  "address": "118 2nd Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 24.26,
+  "storeys": 6,
+  "floors": {
+    "groundM": 5.126,
+    "upperM": 3.707,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1907,
+  "use": "COMO",
+  "usage": "office",
+  "amenity": null,
+  "shop": null,
+  "facade": "loft",
+  "material": "concrete",
+  "frame": {
+    "edgeIndex": 3,
+    "center": {
+      "x": 1726.65,
+      "z": 1070.45
+    },
+    "heading": -0.785398,
+    "width": 22.91,
+    "depth": 30.688
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": 11.243,
+      "z": 15.274
+    },
+    {
+      "x": 11.455,
+      "z": -15.344
+    },
+    {
+      "x": -11.314,
+      "z": -15.344
+    },
+    {
+      "x": -11.455,
+      "z": 15.344
+    },
+    {
+      "x": 8.061,
+      "z": 15.344
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 11.243,
+        "z": 15.274
+      },
+      "b": {
+        "x": 11.455,
+        "z": -15.344
+      },
+      "lengthM": 30.618,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 11.455,
+        "z": -15.344
+      },
+      "b": {
+        "x": -11.314,
+        "z": -15.344
+      },
+      "lengthM": 22.769,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -11.314,
+        "z": -15.344
+      },
+      "b": {
+        "x": -11.455,
+        "z": 15.344
+      },
+      "lengthM": 30.689,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -11.455,
+        "z": 15.344
+      },
+      "b": {
+        "x": 8.061,
+        "z": 15.344
+      },
+      "lengthM": 19.516,
+      "role": "front",
+      "partyShare": 0.06
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": 8.061,
+        "z": 15.344
+      },
+      "b": {
+        "x": 11.243,
+        "z": 15.274
+      },
+      "lengthM": 3.183,
+      "role": "rear",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

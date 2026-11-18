@@ -1,0 +1,103 @@
+{
+ "seed": 7,
+ "notes": "Rework r6: deeper red brick on the lower two storeys, white-framed windows, white door left and grilled window right, light grey lap siding above with the cant bay, thin white cornice (neighbour's ornate bay not copied).",
+ "wall": "painted-clapboard",
+ "wallTint": "#c7cedc",
+ "trim": "painted-white@f0eee6",
+ "frame": "painted-white@f0eee6",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f0eee6",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "brick-running-bond@d29c96",
+ "cornice": true,
+ "corniceProjectionM": 0.2,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 1.5,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "upperWindows": [
+  0.27,
+  0.72
+ ],
+ "bays": [
+  {
+   "at": 0.27,
+   "widthM": 3.4,
+   "projectionM": 0.55,
+   "fromStorey": 2,
+   "material": "painted-clapboard",
+   "tint": "#c7cedc",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.1,
+    "to": 0.22,
+    "kind": "door"
+   },
+   {
+    "from": 0.36,
+    "to": 0.8,
+    "kind": "window",
+    "headM": 1.9,
+    "grille": true
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "sashFrames": {
+  "material": "painted-white@f0eee6",
+  "stileM": 0.08
+ },
+ "hbBayGlazing": {
+  "marginM": 0.2,
+  "maxW": 1.05,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#f0eee6",
+  "sashM": 0.08,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "groundBand": {
+  "material": "brick-running-bond",
+  "tint": "#d29c96",
+  "topM": 5.3
+ },
+ "hyDLap": {
+  "pitchM": 0.16,
+  "fromM": 5.3,
+  "projM": 0.018,
+  "heightM": 0.045,
+  "shade": 0.65,
+  "maxTris": 9000
+ }
+}

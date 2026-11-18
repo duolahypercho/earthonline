@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "asset": "polyhaven-white_stucco-2k",
+  "license": "CC0-1.0",
+  "author": "Amal Kumar",
+  "assetPage": "https://polyhaven.com/a/white_stucco",
+  "physicalWidthMetres": 2,
+  "intent": "wall material cell 5 (plaster) of facade-atlas-v2; the 2k source is not shipped, only the packed cell",
+  "sources": {
+    "diffuse": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/white_stucco/white_stucco_diff_2k.jpg",
+      "md5": "9f8369b068a4fee870f4f2f19a6cb66f",
+      "downloadedMd5": "9f8369b068a4fee870f4f2f19a6cb66f",
+      "downloadedSha256": "a1cf9063e72d82306c5f3330cfaa56ed75ee365dc6a6eb875cde125395dbe4ea"
+    },
+    "normalGl": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/white_stucco/white_stucco_nor_gl_2k.jpg",
+      "md5": "aded1a765eca8ced74d4b8d1b6367818",
+      "downloadedMd5": "aded1a765eca8ced74d4b8d1b6367818",
+      "downloadedSha256": "d11eae11d09af20a1bd4e1262b1d35ad4259451a19651307a7fa8f6c0cadfc59"
+    },
+    "arm": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/white_stucco/white_stucco_arm_2k.jpg",
+      "md5": "8331cf3cf11da2f4bad5729f305c7aee",
+      "downloadedMd5": "8331cf3cf11da2f4bad5729f305c7aee",
+      "downloadedSha256": "15c6162bd93fc94b1fec078cabe595e44652b1b4d78d5932f8f143e3911b6bb1"
+    }
+  },
+  "outputs": {
+    "albedo": {
+      "path": "public/assets/facade-atlas-v2-albedo.jpg",
+      "sha256": "4bf15707ee8eb7bee1887a6149742070260b86ca48c63643bde39668f277f13b",
+      "encoding": "sRGB base color, 4:4:4 jpeg",
+      "atlasCell": 5
+    },
+    "normal": {
+      "path": "public/assets/facade-atlas-v2-normal-rough.jpg",
+      "sha256": "5e0c89718fe981f96bf0c7ca1ecad67146afc04582b07abb6349e5411ee5d804",
+      "encoding": "RG OpenGL tangent-space normal xy (z rebuilt in shader), B Poly Haven roughness; linear/no-color, 4:4:4 jpeg",
+      "atlasCell": 5
+    }
+  },
+  "generator": {
+    "path": "scripts/assets/pack-facade-atlas-v2.mjs",
+    "sha256": "2d5051ca01c786d3b4e0766c611d5ba83b3322b8b14dc272c4e55b6b5710e3ad",
+    "algorithm": "md5-verified 2k jpg sources; LANCZOS to 960 px content; 32 px wrapped ring; row 0 at image bottom (flipY); roughness packed into the normal sheet B channel; libjpeg q90 4:4:4",
+    "pillow": "11.3.0",
+    "numpy": "2.0.2"
+  }
+}

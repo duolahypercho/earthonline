@@ -1,0 +1,279 @@
+{
+ "seed": 7,
+ "notes": "1914 white stucco house at the Francisco corner, E side of Hyde. Three storeys under a steep dark pitched roof (roof block with a hipped cap above a 9.8 m eave line), thin vertical battens on the upper storeys over a string course, one shallow squared bay at the Francisco end of the upper storeys, dark near-black window frames; ground: a wide arched-look window left of centre and two small casement pairs at the right end, no garage on Hyde. Francisco face (edge 0) is a windowed flank. Front gable, attic arched window and chimney have no key. Ground windows sat on the pavement like shopfronts; sills raised (bulkhead 1.1 m). Steep dark-brown hipped roof with a taller front hip-gable over the left/centre (roof blocks under a 8.9 m eave; no gable key), small ridge chimney, dark fascia; the cant bay removed (the Francisco end is only a shallow squared overhang the kit cannot draw); bright white wall, thin battens with a mid-height half-timber rail, heavier belt band; upper windows only a dark casement pair at the right end; ground: arched multi-light window left of centre and two casements at the right with stucco sills over the frame legs. Steeper street-facing front roof over the left/centre (narrower 5.0 m block, 3.3 m rise, ~49 deg, darker roof) - still a hipped front end, the kit has no vertical gable key; upper storeys 2.75 m under an 8.6 m eave so the roof shows taller; ground arched window reworked as one squat segmental-arched multi-light window (arch springs 0.35 m down into the window, dark glass, higher stucco sill, ~1.7:1); battens widened to 0.14 m with a heavier floor belt; wall #f4f3ee. Arch ring drawn in the dark frame colour (reads as the dark arched frame, not a pale fan), flatter segment. Battens tightened to ~0.8 m spacing; ground casements squared (0.9 m wide, sill 1.0, head 1.9); eave block now dark shingle with a thin white frieze; arch flatter. Mirror claim skipped again. Mirror claim skipped. Battens widened to ~2.2 m (7 panels) CONFIRMED; corner pilaster/console brackets at the Hyde end CONFIRMED; panel under arch made wall-coloured; chimney to 0.62; true vertical gable has no key (hipped front kept). Rework: ground feature window rebuilt as a segmental-arched multi-pane window (layout arch) with sill 1.1 m; battens narrowed to 0.10 m; eaves trimmed to 0.3 m; wall lifted to f8f7f2. Battens confirmed vertical-dominant, narrowed to 0.08 m at ~1.4 m spacing, mid rail thinned; white wall, dark roof, corner pilaster kept. True front gable + apex window have no key (hipped front kept; previous rounds). Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-stucco",
+ "wallTint": "#fcfbf8",
+ "trim": "painted-white@f4f2ec",
+ "frame": "painted-steel@2c3240",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-steel@2c3240",
+ "storefrontGlass": "glass-dark",
+ "bulkhead": "painted-stucco@fcfbf8",
+ "cornice": false,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 1.1,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.2,
+ "upperWindows": [
+  0.86
+ ],
+ "bays": [],
+ "storefront": {
+  "bulkheadM": 1.35,
+  "transomM": 0.35,
+  "pierM": 0.3,
+  "awning": false,
+  "paneM": 0.3,
+  "layout": [
+   {
+    "from": 0.29,
+    "to": 0.42,
+    "kind": "window",
+    "headM": 2.45,
+    "arch": {
+     "type": "segmental",
+     "riseM": 0.3
+    }
+   },
+   {
+    "from": 0.77,
+    "to": 0.832,
+    "kind": "window",
+    "headM": 2.3
+   },
+   {
+    "from": 0.845,
+    "to": 0.907,
+    "kind": "window",
+    "headM": 2.3
+   }
+  ]
+ },
+ "sashRows": 2,
+ "sashCols": 2,
+ "sashMaterial": "painted-steel@2c3240",
+ "edgeRoles": {
+  "0": "flank"
+ },
+ "streetEdges": {
+  "0": {
+   "upperWindows": [
+    0.25,
+    0.5,
+    0.75
+   ],
+   "bays": [],
+   "storefront": {
+    "bulkheadM": 0.6,
+    "transomM": 0.3,
+    "pierM": 0.3,
+    "awning": false,
+    "layout": [
+     {
+      "from": 0.3,
+      "to": 0.4,
+      "kind": "window",
+      "headM": 2.2
+     },
+     {
+      "from": 0.6,
+      "to": 0.7,
+      "kind": "window",
+      "headM": 2.2
+     }
+    ]
+   }
+  }
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "floorsM": {
+  "groundM": 3.0,
+  "upperM": 2.75
+ },
+ "wallTopM": 8.6,
+ "roofBlocks": [
+  {
+   "at": 0.5,
+   "widthM": 14.4,
+   "depthM": 8.0,
+   "setbackM": 0.0,
+   "material": "asphalt-roof",
+   "tint": "#3e322e",
+   "hipRiseM": 2.9,
+   "eaveM": 0.3,
+   "hipMaterial": "asphalt-roof@3e322e"
+  },
+  {
+   "at": 0.33,
+   "widthM": 5.0,
+   "depthM": 9.0,
+   "setbackM": 0.0,
+   "material": "asphalt-roof",
+   "tint": "#3e322e",
+   "hipRiseM": 3.3,
+   "eaveM": 0.3,
+   "hipMaterial": "asphalt-roof@3e322e"
+  },
+  {
+   "at": 0.62,
+   "widthM": 0.6,
+   "depthM": 0.6,
+   "setbackM": 3.1,
+   "material": "painted-stucco",
+   "tint": "#e8e4dc"
+  }
+ ],
+ "plaques": [
+  {
+   "at": 0.5,
+   "y": 5.75,
+   "w": 14.2,
+   "h": 0.12,
+   "face": "painted-white@f6f4ee"
+  },
+  {
+   "at": 0.5,
+   "y": 2.95,
+   "w": 14.2,
+   "h": 0.45,
+   "face": "painted-white@f4f2ec"
+  },
+  {
+   "at": 0.5,
+   "y": 3.25,
+   "w": 14.2,
+   "h": 0.1,
+   "face": "painted-white@f6f4ee"
+  },
+  {
+   "at": 0.5,
+   "y": 8.75,
+   "w": 14.2,
+   "h": 0.2,
+   "face": "painted-steel@3a2e2a"
+  },
+  {
+   "at": 0.355,
+   "y": 0.675,
+   "w": 2.1,
+   "h": 1.35,
+   "face": "painted-stucco@f8f7f2"
+  },
+  {
+   "at": 0.5,
+   "y": 8.5,
+   "w": 14.2,
+   "h": 0.16,
+   "face": "painted-white@f4f2ec"
+  },
+  {
+   "at": 0.801,
+   "y": 0.675,
+   "w": 1.0,
+   "h": 1.35,
+   "face": "painted-stucco@f8f7f2"
+  },
+  {
+   "at": 0.876,
+   "y": 0.675,
+   "w": 1.0,
+   "h": 1.35,
+   "face": "painted-stucco@f8f7f2"
+  },
+  {
+   "at": 0.975,
+   "y": 6.0,
+   "w": 0.32,
+   "h": 5.3,
+   "face": "painted-white@f4f2ec"
+  },
+  {
+   "at": 0.972,
+   "y": 5.55,
+   "w": 0.5,
+   "h": 0.35,
+   "face": "painted-white@f4f2ec"
+  },
+  {
+   "at": 0.972,
+   "y": 3.15,
+   "w": 0.5,
+   "h": 0.4,
+   "face": "painted-white@f4f2ec"
+  },
+  {
+   "at": 0.972,
+   "y": 8.25,
+   "w": 0.5,
+   "h": 0.35,
+   "face": "painted-white@f4f2ec"
+  },
+  {
+   "at": 0.05,
+   "y": 5.8,
+   "w": 0.08,
+   "h": 5.6,
+   "face": "painted-white@f6f4ee"
+  },
+  {
+   "at": 0.15,
+   "y": 5.8,
+   "w": 0.08,
+   "h": 5.6,
+   "face": "painted-white@f6f4ee"
+  },
+  {
+   "at": 0.25,
+   "y": 5.8,
+   "w": 0.08,
+   "h": 5.6,
+   "face": "painted-white@f6f4ee"
+  },
+  {
+   "at": 0.35,
+   "y": 5.8,
+   "w": 0.08,
+   "h": 5.6,
+   "face": "painted-white@f6f4ee"
+  },
+  {
+   "at": 0.45,
+   "y": 5.8,
+   "w": 0.08,
+   "h": 5.6,
+   "face": "painted-white@f6f4ee"
+  },
+  {
+   "at": 0.55,
+   "y": 5.8,
+   "w": 0.08,
+   "h": 5.6,
+   "face": "painted-white@f6f4ee"
+  },
+  {
+   "at": 0.65,
+   "y": 5.8,
+   "w": 0.08,
+   "h": 5.6,
+   "face": "painted-white@f6f4ee"
+  },
+  {
+   "at": 0.75,
+   "y": 5.8,
+   "w": 0.08,
+   "h": 5.6,
+   "face": "painted-white@f6f4ee"
+  },
+  {
+   "at": 0.85,
+   "y": 5.8,
+   "w": 0.08,
+   "h": 5.6,
+   "face": "painted-white@f6f4ee"
+  }
+ ],
+ "upperHeadM": 2.2,
+ "streetStills": true
+}

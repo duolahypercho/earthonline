@@ -1,0 +1,61 @@
+{
+ "seed": 100,
+ "notes": "1912 flats, tan stucco with maroon-painted window frames, four storeys. Ground: buff brick base, a dark iron door at left and a brown panelled garage door. Uppers: plain paired and triple sash windows in maroon frames. Yellow-tan brick base with coursing, greyer beige wall, burgundy frames, simpler cornice. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour.",
+ "wall": "painted-stucco",
+ "wallTint": "#e4ddd0",
+ "trim": "painted-white@e8dcc0",
+ "frame": "painted-white@7a3236",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@7a3236",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@e4ddd0",
+ "cornice": true,
+ "corniceProjectionM": 0.35,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.16,
+  0.35,
+  0.6,
+  0.8
+ ],
+ "bays": [],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.1,
+    "to": 0.34,
+    "kind": "door",
+    "leaf": "painted-steel@26282c",
+    "headM": 2.4
+   },
+   {
+    "from": 0.53,
+    "to": 0.87,
+    "kind": "garage",
+    "leaf": "wood-siding@6b5640",
+    "headM": 2.5
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.2,
+  "upperM": 2.85
+ },
+ "groundBand": {
+  "material": "brick-common-bond",
+  "tint": "#ffffff",
+  "topM": 3.2
+ }
+}

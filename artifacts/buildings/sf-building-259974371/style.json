@@ -1,0 +1,156 @@
+{
+ "seed": 7,
+ "notes": "1926 tall white stucco flats over a charcoal rusticated base. Ground: a teal-surrounded round arch entry right of centre, three narrow windows and one large window left, a barred gate bay at the right end. Three-sash cant bays at both ends from the first upper storey, a fire escape with balconies between. Eleven storeys from the data. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Black rusticated base, grey double garage door at the left with three small square-pane windows above it (hand.py), teal arched entry, tall green vine motif high on the right bay column as an abstract mural. GroundBand lift (2026-10-03): groundBand tint #3c4048 -> #595d63 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#f7f6f2",
+ "trim": "painted-white@f0ece0",
+ "frame": "painted-white@f4f0e6",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f4f0e6",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@3c4048",
+ "cornice": true,
+ "corniceProjectionM": 0.5,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.5
+ ],
+ "bays": [
+  {
+   "at": 0.17,
+   "widthM": 3.2,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f6f4f0",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1,
+     "dentils": false
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15
+   }
+  },
+  {
+   "at": 0.85,
+   "widthM": 3.2,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f6f4f0",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1,
+     "dentils": false
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15
+   }
+  }
+ ],
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#595d63",
+  "topM": 4.35
+ },
+ "hyDRubble": {
+  "courseM": 0.45,
+  "blockM": 0.9
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.05,
+    "to": 0.26,
+    "kind": "garage",
+    "headM": 2.0,
+    "material": "painted-steel",
+    "tint": "#8a8c8e"
+   },
+   {
+    "from": 0.34,
+    "to": 0.45,
+    "kind": "window",
+    "headM": 3.2
+   },
+   {
+    "from": 0.49,
+    "to": 0.7,
+    "kind": "double-door",
+    "leaf": "painted-steel@2a2622",
+    "headM": 3.6,
+    "stair": true,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.35,
+      "tint": "#4fb5a5"
+     }
+    }
+   },
+   {
+    "from": 0.75,
+    "to": 0.96,
+    "kind": "gate",
+    "headM": 2.6
+   }
+  ]
+ },
+ "fireEscapes": [
+  {
+   "at": 0.5,
+   "widthM": 4.0,
+   "depthM": 1.0,
+   "toStorey": 4,
+   "material": "painted-white@e8e8e8"
+  }
+ ],
+ "mural": {
+  "from": 0.62,
+  "to": 0.95,
+  "bottomM": 20.0,
+  "topM": 36.0,
+  "seed": 5,
+  "shapes": 18,
+  "ground": "#f4efe6",
+  "palette": [
+   "#2f8a4a",
+   "#5fb06a",
+   "#1d6a3a"
+  ]
+ }
+}

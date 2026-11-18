@@ -1,0 +1,203 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-148427243",
+  "slug": "b148427243",
+  "walkIndex": 5102,
+  "street": "Hyde Street",
+  "address": "1388 California Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 13.73,
+  "storeys": 4,
+  "floors": {
+    "groundM": 4.267,
+    "upperM": 2.954,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1907,
+  "use": "COMH",
+  "usage": "mixed",
+  "amenity": "hotel",
+  "shop": null,
+  "facade": "art-deco",
+  "material": "stone",
+  "frame": {
+    "edgeIndex": 7,
+    "center": {
+      "x": 192.076,
+      "z": 1466.147
+    },
+    "heading": -1.731987,
+    "width": 24.923,
+    "depth": 24.267
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": 12.462,
+      "z": 12.133
+    },
+    {
+      "x": 12.404,
+      "z": 1.809
+    },
+    {
+      "x": 11.006,
+      "z": 1.935
+    },
+    {
+      "x": 12.163,
+      "z": -12.133
+    },
+    {
+      "x": 7.099,
+      "z": -12.12
+    },
+    {
+      "x": 7.127,
+      "z": -10.707
+    },
+    {
+      "x": -12.25,
+      "z": -12.115
+    },
+    {
+      "x": -12.462,
+      "z": 12.133
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 12.462,
+        "z": 12.133
+      },
+      "b": {
+        "x": 12.404,
+        "z": 1.809
+      },
+      "lengthM": 10.325,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 12.404,
+        "z": 1.809
+      },
+      "b": {
+        "x": 11.006,
+        "z": 1.935
+      },
+      "lengthM": 1.404,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 11.006,
+        "z": 1.935
+      },
+      "b": {
+        "x": 12.163,
+        "z": -12.133
+      },
+      "lengthM": 14.116,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 12.163,
+        "z": -12.133
+      },
+      "b": {
+        "x": 7.099,
+        "z": -12.12
+      },
+      "lengthM": 5.064,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": 7.099,
+        "z": -12.12
+      },
+      "b": {
+        "x": 7.127,
+        "z": -10.707
+      },
+      "lengthM": 1.414,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": 7.127,
+        "z": -10.707
+      },
+      "b": {
+        "x": -12.25,
+        "z": -12.115
+      },
+      "lengthM": 19.428,
+      "role": "rear",
+      "partyShare": 0.5
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": -12.25,
+        "z": -12.115
+      },
+      "b": {
+        "x": -12.462,
+        "z": 12.133
+      },
+      "lengthM": 24.249,
+      "role": "rear",
+      "partyShare": 0.06
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": -12.462,
+        "z": 12.133
+      },
+      "b": {
+        "x": 12.462,
+        "z": 12.133
+      },
+      "lengthM": 24.923,
+      "role": "front",
+      "partyShare": 0.06
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

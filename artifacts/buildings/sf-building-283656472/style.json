@@ -1,0 +1,81 @@
+{
+  "seed": 3,
+  "notes": "Round 1 (street-level words): 1970s three-storey mixed-use corner block. Ground: small buff glazed brick tile, aluminium-framed shop glass in dark bronze, one corner door, recessed entries, an ATM bay, a garage door and an arched entry on the side street. Upper two storeys: cream smooth stucco alternating with tan vertical wood-siding bays, dark bronze aluminium windows (some louvred), stepped canted bays on the side street, flat roof with a dark slate-blue parapet cap that steps with the bays. Street count 3 storeys; the roll says 2.",
+  "storeysSeen": { "count": 3, "groundM": 3.5, "upperM": 2.8 },
+  "wall": "painted-stucco",
+  "wallTint": "#e3d9c2",
+  "trim": "painted-steel-mid@3a4658",
+  "frame": "painted-steel-mid@3b2e26",
+  "glass": "glass-clear",
+  "storefrontGlass": "glass-low-iron",
+  "storefrontFrame": "painted-steel-mid@3b2e26",
+  "bulkhead": "brick-buff@d4c39b",
+  "cornice": true,
+  "corniceProjectionM": 0.18,
+  "beltCourse": false,
+  "windowHoods": false,
+  "groundBand": { "material": "brick-buff", "tint": "#d6c6a0" },
+  "bayM": 2.9,
+  "windowW": 1.5,
+  "windowSillM": 0.85,
+  "windowHeadM": 2.15,
+  "upperWindows": [0.13, 0.33, 0.6, 0.85],
+  "ground": "shop",
+  "upper": "apartment",
+  "storefront": {
+    "bulkheadM": 0.6,
+    "transomM": 0.55,
+    "pierM": 0.45,
+    "awning": false,
+    "layout": [
+      { "kind": "door", "from": 0.02, "to": 0.09 },
+      { "kind": "window", "from": 0.12, "to": 0.22 },
+      { "kind": "window", "from": 0.25, "to": 0.34 },
+      { "kind": "window", "from": 0.37, "to": 0.45 },
+      { "kind": "window", "from": 0.5, "to": 0.62 },
+      { "kind": "door", "from": 0.67, "to": 0.75 },
+      { "kind": "window", "from": 0.79, "to": 0.89 },
+      { "kind": "door", "from": 0.92, "to": 0.98 }
+    ]
+  },
+  "bays": [
+    { "at": 0.3, "widthM": 2.2, "projectionM": 0.35, "fromStorey": 1, "toStorey": 2, "material": "wood-siding", "tint": "#c79a5b" },
+    { "at": 0.74, "widthM": 2.2, "projectionM": 0.35, "fromStorey": 1, "toStorey": 2, "material": "wood-siding", "tint": "#c79a5b" }
+  ],
+  "streetEdges": {
+    "3": {
+      "upperWindows": [0.2, 0.52, 0.84],
+      "windowW": 1.4,
+      "storefront": {
+        "bulkheadM": 0.6,
+        "transomM": 0.55,
+        "awning": false,
+        "layout": [
+          { "kind": "window", "from": 0.06, "to": 0.2 },
+          { "kind": "window", "from": 0.26, "to": 0.4 },
+          { "kind": "door", "from": 0.5, "to": 0.62 },
+          { "kind": "window", "from": 0.7, "to": 0.9 }
+        ]
+      },
+      "bays": [
+        { "at": 0.2, "widthM": 2.6, "projectionM": 0.7, "fromStorey": 1, "toStorey": 2, "material": "painted-stucco", "tint": "#e3d9c2" },
+        { "at": 0.52, "widthM": 2.6, "projectionM": 0.7, "fromStorey": 1, "toStorey": 2, "material": "wood-siding", "tint": "#c79a5b" },
+        { "at": 0.84, "widthM": 2.6, "projectionM": 0.7, "fromStorey": 1, "toStorey": 2, "material": "painted-stucco", "tint": "#e3d9c2" }
+      ]
+    },
+    "4": {
+      "upperWindows": [0.3, 0.75],
+      "windowW": 1.4,
+      "storefront": {
+        "bulkheadM": 0.6,
+        "transomM": 0.55,
+        "awning": false,
+        "layout": [
+          { "kind": "garage", "from": 0.08, "to": 0.4, "material": "painted-steel-mid", "tint": "#cfc6b4", "headM": 2.6, "recessM": 0.2, "doorM": 2.4 },
+          { "kind": "door", "from": 0.55, "to": 0.68 },
+          { "kind": "window", "from": 0.74, "to": 0.92 }
+        ]
+      }
+    }
+  }
+}

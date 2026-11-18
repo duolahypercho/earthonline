@@ -1,0 +1,593 @@
+{
+ "seed": 25,
+ "notes": "1907 four-storey (read as three window storeys over a low sloping brick base on the Hyde fall) red common-bond brick warehouse. 20 bays, tall segmental-arched windows in dark frames, brick surround arches, string courses between storeys, pilaster-like piers every few bays, stepped parapet with a deeper cornice. Entry door near the right end. Sign and downpipes not modelled. Three window rows read over a low brick plinth, so the stack is now a 1.9 m plinth (small arched vents) plus three 3.2 m window storeys (4 levels). White cornice/string course replaced by brick-toned trim (the real parapet is brick); round iron anchor plates added between the storeys; pale downpipes added. Windows keep segmental arches and dark frames on the front; the square-headed windows in the 3/4 view are the short rear return (not a street face). Skipped: raised centre parapet plaque and the corbelled brick band (no key). Skipped as already done or unsupported: a 4th window storey (3 window rows over a plinth; 4 levels built), white cornice (already brick), semicircular heads (heads are segmental), tall arched ground doors (one door only). Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Now brick-buff with a warm tint. Wall back to brick-common-bond with a near-neutral tint (brick-buff plus pink tint rendered lavender), frames dark green-black, hand.py adds three brick pilaster strips at the downpipe positions. Not added: hotel sign panel (names forbidden). Budget: build was over the 60000 exterior triangle cap, so the soldier-arch surrounds on upper windows were dropped to fit; segmental heads kept.",
+ "wall": "brick-common-bond",
+ "wallTint": "#fff0e8",
+ "trim": "brick-common-bond@fff7ff",
+ "frame": "painted-white@2c3a30",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@2c3a30",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "brick-common-bond@fff0e8",
+ "cornice": true,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 1.15,
+ "windowSillM": 0.85,
+ "windowHeadM": 3.0,
+ "upperWindows": [
+  0.0217,
+  0.0652,
+  0.1087,
+  0.1522,
+  0.1957,
+  0.2391,
+  0.2826,
+  0.3261,
+  0.3696,
+  0.413,
+  0.4565,
+  0.5,
+  0.5435,
+  0.587,
+  0.6304,
+  0.6739,
+  0.7174,
+  0.7609,
+  0.8043,
+  0.8478,
+  0.8913,
+  0.9348,
+  0.9783
+ ],
+ "bays": [],
+ "streetStills": true,
+ "ground": "vacant",
+ "upper": "office",
+ "upperWindowArch": {
+  "type": "segmental"
+ },
+ "corniceProjectionM": 0.25,
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 1.9,
+  "upperM": 3.2
+ },
+ "storefront": {
+  "bulkheadM": 0.3,
+  "transomM": 0.0,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.0142,
+    "to": 0.0292,
+    "kind": "window",
+    "headM": 1.2,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.0577,
+    "to": 0.0727,
+    "kind": "window",
+    "headM": 1.2,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.1012,
+    "to": 0.1162,
+    "kind": "window",
+    "headM": 1.2,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.1447,
+    "to": 0.1597,
+    "kind": "window",
+    "headM": 1.2,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.1882,
+    "to": 0.2032,
+    "kind": "window",
+    "headM": 1.2,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.2316,
+    "to": 0.2466,
+    "kind": "window",
+    "headM": 1.2,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.2751,
+    "to": 0.2901,
+    "kind": "window",
+    "headM": 1.2,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.3186,
+    "to": 0.3336,
+    "kind": "window",
+    "headM": 1.2,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.3621,
+    "to": 0.3771,
+    "kind": "window",
+    "headM": 1.2,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.4055,
+    "to": 0.4205,
+    "kind": "window",
+    "headM": 1.2,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.449,
+    "to": 0.464,
+    "kind": "window",
+    "headM": 1.2,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.4925,
+    "to": 0.5075,
+    "kind": "window",
+    "headM": 1.2,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.536,
+    "to": 0.551,
+    "kind": "window",
+    "headM": 1.2,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.5795,
+    "to": 0.5945,
+    "kind": "window",
+    "headM": 1.2,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.6229,
+    "to": 0.6379,
+    "kind": "window",
+    "headM": 1.2,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.6664,
+    "to": 0.6814,
+    "kind": "window",
+    "headM": 1.2,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.7099,
+    "to": 0.7249,
+    "kind": "window",
+    "headM": 1.2,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.7534,
+    "to": 0.7684,
+    "kind": "window",
+    "headM": 1.2,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.7968,
+    "to": 0.8118,
+    "kind": "window",
+    "headM": 1.2,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.8403,
+    "to": 0.8553,
+    "kind": "window",
+    "headM": 1.2,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.8838,
+    "to": 0.8988,
+    "kind": "window",
+    "headM": 1.2,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.9228,
+    "to": 0.9468,
+    "kind": "door",
+    "leaf": "painted-steel@2a2c28",
+    "headM": 2.7,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.9708,
+    "to": 0.9858,
+    "kind": "window",
+    "headM": 1.2,
+    "arch": {
+     "type": "segmental"
+    }
+   }
+  ]
+ },
+ "hbDownspouts": {
+  "at": [
+   0.2174,
+   0.5217,
+   0.7826
+  ],
+  "widthM": 0.12,
+  "material": "cast-stone-trim",
+  "tint": "#d3b4a4",
+  "topDropM": 0.4
+ },
+ "plaques": [
+  {
+   "at": 0.0435,
+   "y": 4.75,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.087,
+   "y": 4.75,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.1304,
+   "y": 4.75,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.1739,
+   "y": 4.75,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.2174,
+   "y": 4.75,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.2609,
+   "y": 4.75,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.3043,
+   "y": 4.75,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.3478,
+   "y": 4.75,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.3913,
+   "y": 4.75,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.4348,
+   "y": 4.75,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.4783,
+   "y": 4.75,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.5217,
+   "y": 4.75,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.5652,
+   "y": 4.75,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.6087,
+   "y": 4.75,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.6522,
+   "y": 4.75,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.6957,
+   "y": 4.75,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.7391,
+   "y": 4.75,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.7826,
+   "y": 4.75,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.8261,
+   "y": 4.75,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.8696,
+   "y": 4.75,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.913,
+   "y": 4.75,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.9565,
+   "y": 4.75,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.0435,
+   "y": 7.95,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.087,
+   "y": 7.95,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.1304,
+   "y": 7.95,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.1739,
+   "y": 7.95,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.2174,
+   "y": 7.95,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.2609,
+   "y": 7.95,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.3043,
+   "y": 7.95,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.3478,
+   "y": 7.95,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.3913,
+   "y": 7.95,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.4348,
+   "y": 7.95,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.4783,
+   "y": 7.95,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.5217,
+   "y": 7.95,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.5652,
+   "y": 7.95,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.6087,
+   "y": 7.95,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.6522,
+   "y": 7.95,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.6957,
+   "y": 7.95,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.7391,
+   "y": 7.95,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.7826,
+   "y": 7.95,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.8261,
+   "y": 7.95,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.8696,
+   "y": 7.95,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.913,
+   "y": 7.95,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  },
+  {
+   "at": 0.9565,
+   "y": 7.95,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-steel@34322e"
+  }
+ ]
+}

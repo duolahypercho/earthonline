@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "asset": "polyhaven-concrete_wall_006-2k",
+  "license": "CC0-1.0",
+  "author": "Dario Barresi (processing), Charlotte Baglioni (photography)",
+  "assetPage": "https://polyhaven.com/a/concrete_wall_006",
+  "physicalWidthMetres": 2,
+  "intent": "wall material cell 6 (concrete) of facade-atlas-v2; the 2k source is not shipped, only the packed cell",
+  "sources": {
+    "diffuse": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_wall_006/concrete_wall_006_diff_2k.jpg",
+      "md5": "604ffd4e767e1949d714ee9ee35215ca",
+      "downloadedMd5": "604ffd4e767e1949d714ee9ee35215ca",
+      "downloadedSha256": "daee26f5b5dae37e3fb2947c64f4045fd4e6d3b89884eb0d878ba6414746e8e8"
+    },
+    "normalGl": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_wall_006/concrete_wall_006_nor_gl_2k.jpg",
+      "md5": "856f47ebd894a492b33398f22cc8b923",
+      "downloadedMd5": "856f47ebd894a492b33398f22cc8b923",
+      "downloadedSha256": "22bd9c17a6dfe3441f671cba1b40e2329767c79b6472004d1633aeac368d5210"
+    },
+    "arm": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_wall_006/concrete_wall_006_arm_2k.jpg",
+      "md5": "cc886437ea78c089ae5776a6a65228b0",
+      "downloadedMd5": "cc886437ea78c089ae5776a6a65228b0",
+      "downloadedSha256": "f1a60edecc22e1f6d0937ce4b65203e54a4b5d9abc720e5587d834a474ec6fe8"
+    }
+  },
+  "outputs": {
+    "albedo": {
+      "path": "public/assets/facade-atlas-v2-albedo.jpg",
+      "sha256": "4bf15707ee8eb7bee1887a6149742070260b86ca48c63643bde39668f277f13b",
+      "encoding": "sRGB base color, 4:4:4 jpeg",
+      "atlasCell": 6
+    },
+    "normal": {
+      "path": "public/assets/facade-atlas-v2-normal-rough.jpg",
+      "sha256": "5e0c89718fe981f96bf0c7ca1ecad67146afc04582b07abb6349e5411ee5d804",
+      "encoding": "RG OpenGL tangent-space normal xy (z rebuilt in shader), B Poly Haven roughness; linear/no-color, 4:4:4 jpeg",
+      "atlasCell": 6
+    }
+  },
+  "generator": {
+    "path": "scripts/assets/pack-facade-atlas-v2.mjs",
+    "sha256": "2d5051ca01c786d3b4e0766c611d5ba83b3322b8b14dc272c4e55b6b5710e3ad",
+    "algorithm": "md5-verified 2k jpg sources; LANCZOS to 960 px content; 32 px wrapped ring; row 0 at image bottom (flipY); roughness packed into the normal sheet B channel; libjpeg q90 4:4:4",
+    "pillow": "11.3.0",
+    "numpy": "2.0.2"
+  }
+}

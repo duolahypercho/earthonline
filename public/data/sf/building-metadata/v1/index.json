@@ -1,0 +1,7683 @@
+{
+  "tiles": {
+    "5_-3": {
+      "file": "tile_5_-3.json",
+      "buildings": 7
+    },
+    "6_-2": {
+      "file": "tile_6_-2.json",
+      "buildings": 22
+    },
+    "4_-2": {
+      "file": "tile_4_-2.json",
+      "buildings": 39
+    },
+    "6_-3": {
+      "file": "tile_6_-3.json",
+      "buildings": 10
+    },
+    "5_-2": {
+      "file": "tile_5_-2.json",
+      "buildings": 31
+    },
+    "5_-1": {
+      "file": "tile_5_-1.json",
+      "buildings": 38
+    },
+    "6_-1": {
+      "file": "tile_6_-1.json",
+      "buildings": 11
+    },
+    "4_-1": {
+      "file": "tile_4_-1.json",
+      "buildings": 53
+    },
+    "6_0": {
+      "file": "tile_6_0.json",
+      "buildings": 35
+    },
+    "5_0": {
+      "file": "tile_5_0.json",
+      "buildings": 18
+    },
+    "4_0": {
+      "file": "tile_4_0.json",
+      "buildings": 35
+    },
+    "7_-3": {
+      "file": "tile_7_-3.json",
+      "buildings": 24
+    },
+    "6_-4": {
+      "file": "tile_6_-4.json",
+      "buildings": 26
+    },
+    "4_-3": {
+      "file": "tile_4_-3.json",
+      "buildings": 9
+    },
+    "3_-1": {
+      "file": "tile_3_-1.json",
+      "buildings": 50
+    },
+    "3_-3": {
+      "file": "tile_3_-3.json",
+      "buildings": 37
+    },
+    "3_-4": {
+      "file": "tile_3_-4.json",
+      "buildings": 47
+    },
+    "5_-4": {
+      "file": "tile_5_-4.json",
+      "buildings": 15
+    },
+    "8_0": {
+      "file": "tile_8_0.json",
+      "buildings": 15
+    },
+    "3_-2": {
+      "file": "tile_3_-2.json",
+      "buildings": 41
+    },
+    "4_-4": {
+      "file": "tile_4_-4.json",
+      "buildings": 29
+    },
+    "7_-4": {
+      "file": "tile_7_-4.json",
+      "buildings": 27
+    },
+    "8_-3": {
+      "file": "tile_8_-3.json",
+      "buildings": 21
+    },
+    "8_-4": {
+      "file": "tile_8_-4.json",
+      "buildings": 21
+    },
+    "5_1": {
+      "file": "tile_5_1.json",
+      "buildings": 30
+    },
+    "7_0": {
+      "file": "tile_7_0.json",
+      "buildings": 16
+    },
+    "7_1": {
+      "file": "tile_7_1.json",
+      "buildings": 15
+    },
+    "7_-1": {
+      "file": "tile_7_-1.json",
+      "buildings": 32
+    },
+    "8_-1": {
+      "file": "tile_8_-1.json",
+      "buildings": 31
+    },
+    "8_-2": {
+      "file": "tile_8_-2.json",
+      "buildings": 49
+    },
+    "7_-2": {
+      "file": "tile_7_-2.json",
+      "buildings": 24
+    },
+    "3_1": {
+      "file": "tile_3_1.json",
+      "buildings": 48
+    },
+    "3_0": {
+      "file": "tile_3_0.json",
+      "buildings": 45
+    },
+    "6_1": {
+      "file": "tile_6_1.json",
+      "buildings": 24
+    },
+    "4_1": {
+      "file": "tile_4_1.json",
+      "buildings": 9
+    },
+    "5_-8": {
+      "file": "tile_5_-8.json",
+      "buildings": 50
+    },
+    "18_-18": {
+      "file": "tile_18_-18.json",
+      "buildings": 2
+    },
+    "13_12": {
+      "file": "tile_13_12.json",
+      "buildings": 2
+    },
+    "-18_-12": {
+      "file": "tile_-18_-12.json",
+      "buildings": 3
+    },
+    "-3_-23": {
+      "file": "tile_-3_-23.json",
+      "buildings": 1
+    },
+    "-2_-22": {
+      "file": "tile_-2_-22.json",
+      "buildings": 12
+    },
+    "4_10": {
+      "file": "tile_4_10.json",
+      "buildings": 12
+    },
+    "1_-1": {
+      "file": "tile_1_-1.json",
+      "buildings": 13
+    },
+    "5_9": {
+      "file": "tile_5_9.json",
+      "buildings": 4
+    },
+    "1_-2": {
+      "file": "tile_1_-2.json",
+      "buildings": 38
+    },
+    "-1_-22": {
+      "file": "tile_-1_-22.json",
+      "buildings": 4
+    },
+    "5_-13": {
+      "file": "tile_5_-13.json",
+      "buildings": 4
+    },
+    "1_-13": {
+      "file": "tile_1_-13.json",
+      "buildings": 9
+    },
+    "3_3": {
+      "file": "tile_3_3.json",
+      "buildings": 14
+    },
+    "4_3": {
+      "file": "tile_4_3.json",
+      "buildings": 9
+    },
+    "2_3": {
+      "file": "tile_2_3.json",
+      "buildings": 18
+    },
+    "2_4": {
+      "file": "tile_2_4.json",
+      "buildings": 11
+    },
+    "1_5": {
+      "file": "tile_1_5.json",
+      "buildings": 19
+    },
+    "1_4": {
+      "file": "tile_1_4.json",
+      "buildings": 17
+    },
+    "2_5": {
+      "file": "tile_2_5.json",
+      "buildings": 18
+    },
+    "5_3": {
+      "file": "tile_5_3.json",
+      "buildings": 14
+    },
+    "-1_-13": {
+      "file": "tile_-1_-13.json",
+      "buildings": 42
+    },
+    "1_-15": {
+      "file": "tile_1_-15.json",
+      "buildings": 3
+    },
+    "0_-15": {
+      "file": "tile_0_-15.json",
+      "buildings": 1
+    },
+    "-1_-15": {
+      "file": "tile_-1_-15.json",
+      "buildings": 1
+    },
+    "7_-10": {
+      "file": "tile_7_-10.json",
+      "buildings": 7
+    },
+    "7_-11": {
+      "file": "tile_7_-11.json",
+      "buildings": 3
+    },
+    "8_-9": {
+      "file": "tile_8_-9.json",
+      "buildings": 3
+    },
+    "0_-1": {
+      "file": "tile_0_-1.json",
+      "buildings": 6
+    },
+    "-23_-7": {
+      "file": "tile_-23_-7.json",
+      "buildings": 1
+    },
+    "-17_5": {
+      "file": "tile_-17_5.json",
+      "buildings": 46
+    },
+    "-6_-10": {
+      "file": "tile_-6_-10.json",
+      "buildings": 49
+    },
+    "-7_-10": {
+      "file": "tile_-7_-10.json",
+      "buildings": 41
+    },
+    "-5_-12": {
+      "file": "tile_-5_-12.json",
+      "buildings": 12
+    },
+    "-21_19": {
+      "file": "tile_-21_19.json",
+      "buildings": 65
+    },
+    "-5_-6": {
+      "file": "tile_-5_-6.json",
+      "buildings": 39
+    },
+    "-13_-12": {
+      "file": "tile_-13_-12.json",
+      "buildings": 3
+    },
+    "10_9": {
+      "file": "tile_10_9.json",
+      "buildings": 25
+    },
+    "10_4": {
+      "file": "tile_10_4.json",
+      "buildings": 6
+    },
+    "11_1": {
+      "file": "tile_11_1.json",
+      "buildings": 4
+    },
+    "7_9": {
+      "file": "tile_7_9.json",
+      "buildings": 13
+    },
+    "2_-14": {
+      "file": "tile_2_-14.json",
+      "buildings": 7
+    },
+    "9_4": {
+      "file": "tile_9_4.json",
+      "buildings": 4
+    },
+    "11_3": {
+      "file": "tile_11_3.json",
+      "buildings": 4
+    },
+    "-2_-23": {
+      "file": "tile_-2_-23.json",
+      "buildings": 3
+    },
+    "-2_0": {
+      "file": "tile_-2_0.json",
+      "buildings": 49
+    },
+    "7_-8": {
+      "file": "tile_7_-8.json",
+      "buildings": 27
+    },
+    "4_12": {
+      "file": "tile_4_12.json",
+      "buildings": 6
+    },
+    "2_12": {
+      "file": "tile_2_12.json",
+      "buildings": 42
+    },
+    "3_5": {
+      "file": "tile_3_5.json",
+      "buildings": 12
+    },
+    "6_-11": {
+      "file": "tile_6_-11.json",
+      "buildings": 8
+    },
+    "8_-8": {
+      "file": "tile_8_-8.json",
+      "buildings": 3
+    },
+    "3_-14": {
+      "file": "tile_3_-14.json",
+      "buildings": 9
+    },
+    "-32_3": {
+      "file": "tile_-32_3.json",
+      "buildings": 4
+    },
+    "-26_19": {
+      "file": "tile_-26_19.json",
+      "buildings": 89
+    },
+    "-25_19": {
+      "file": "tile_-25_19.json",
+      "buildings": 76
+    },
+    "-17_3": {
+      "file": "tile_-17_3.json",
+      "buildings": 1
+    },
+    "4_-11": {
+      "file": "tile_4_-11.json",
+      "buildings": 44
+    },
+    "-4_-4": {
+      "file": "tile_-4_-4.json",
+      "buildings": 20
+    },
+    "-20_15": {
+      "file": "tile_-20_15.json",
+      "buildings": 21
+    },
+    "-30_19": {
+      "file": "tile_-30_19.json",
+      "buildings": 22
+    },
+    "-31_19": {
+      "file": "tile_-31_19.json",
+      "buildings": 18
+    },
+    "-31_20": {
+      "file": "tile_-31_20.json",
+      "buildings": 2
+    },
+    "-29_19": {
+      "file": "tile_-29_19.json",
+      "buildings": 18
+    },
+    "-29_20": {
+      "file": "tile_-29_20.json",
+      "buildings": 3
+    },
+    "3_-10": {
+      "file": "tile_3_-10.json",
+      "buildings": 64
+    },
+    "3_-11": {
+      "file": "tile_3_-11.json",
+      "buildings": 69
+    },
+    "2_-8": {
+      "file": "tile_2_-8.json",
+      "buildings": 8
+    },
+    "-13_-11": {
+      "file": "tile_-13_-11.json",
+      "buildings": 10
+    },
+    "-15_-10": {
+      "file": "tile_-15_-10.json",
+      "buildings": 9
+    },
+    "-14_-10": {
+      "file": "tile_-14_-10.json",
+      "buildings": 4
+    },
+    "-14_-11": {
+      "file": "tile_-14_-11.json",
+      "buildings": 9
+    },
+    "-17_-11": {
+      "file": "tile_-17_-11.json",
+      "buildings": 4
+    },
+    "-18_-11": {
+      "file": "tile_-18_-11.json",
+      "buildings": 1
+    },
+    "-27_13": {
+      "file": "tile_-27_13.json",
+      "buildings": 2
+    },
+    "-15_2": {
+      "file": "tile_-15_2.json",
+      "buildings": 5
+    },
+    "-18_3": {
+      "file": "tile_-18_3.json",
+      "buildings": 7
+    },
+    "-22_26": {
+      "file": "tile_-22_26.json",
+      "buildings": 14
+    },
+    "6_-10": {
+      "file": "tile_6_-10.json",
+      "buildings": 32
+    },
+    "-3_14": {
+      "file": "tile_-3_14.json",
+      "buildings": 16
+    },
+    "-3_15": {
+      "file": "tile_-3_15.json",
+      "buildings": 15
+    },
+    "-5_12": {
+      "file": "tile_-5_12.json",
+      "buildings": 15
+    },
+    "-1_19": {
+      "file": "tile_-1_19.json",
+      "buildings": 45
+    },
+    "-6_12": {
+      "file": "tile_-6_12.json",
+      "buildings": 20
+    },
+    "-31_-2": {
+      "file": "tile_-31_-2.json",
+      "buildings": 14
+    },
+    "-30_-2": {
+      "file": "tile_-30_-2.json",
+      "buildings": 11
+    },
+    "4_-10": {
+      "file": "tile_4_-10.json",
+      "buildings": 94
+    },
+    "4_-9": {
+      "file": "tile_4_-9.json",
+      "buildings": 59
+    },
+    "5_-11": {
+      "file": "tile_5_-11.json",
+      "buildings": 35
+    },
+    "2_-11": {
+      "file": "tile_2_-11.json",
+      "buildings": 67
+    },
+    "7_-9": {
+      "file": "tile_7_-9.json",
+      "buildings": 13
+    },
+    "8_-7": {
+      "file": "tile_8_-7.json",
+      "buildings": 15
+    },
+    "7_-7": {
+      "file": "tile_7_-7.json",
+      "buildings": 22
+    },
+    "6_-8": {
+      "file": "tile_6_-8.json",
+      "buildings": 21
+    },
+    "5_-12": {
+      "file": "tile_5_-12.json",
+      "buildings": 14
+    },
+    "-10_-9": {
+      "file": "tile_-10_-9.json",
+      "buildings": 11
+    },
+    "-11_-9": {
+      "file": "tile_-11_-9.json",
+      "buildings": 6
+    },
+    "-12_-11": {
+      "file": "tile_-12_-11.json",
+      "buildings": 14
+    },
+    "-14_-9": {
+      "file": "tile_-14_-9.json",
+      "buildings": 11
+    },
+    "-15_-9": {
+      "file": "tile_-15_-9.json",
+      "buildings": 3
+    },
+    "-16_-11": {
+      "file": "tile_-16_-11.json",
+      "buildings": 5
+    },
+    "-34_-2": {
+      "file": "tile_-34_-2.json",
+      "buildings": 1
+    },
+    "-19_-11": {
+      "file": "tile_-19_-11.json",
+      "buildings": 6
+    },
+    "-20_-11": {
+      "file": "tile_-20_-11.json",
+      "buildings": 11
+    },
+    "-19_-14": {
+      "file": "tile_-19_-14.json",
+      "buildings": 1
+    },
+    "-2_-13": {
+      "file": "tile_-2_-13.json",
+      "buildings": 23
+    },
+    "-2_-12": {
+      "file": "tile_-2_-12.json",
+      "buildings": 35
+    },
+    "5_-9": {
+      "file": "tile_5_-9.json",
+      "buildings": 54
+    },
+    "6_-9": {
+      "file": "tile_6_-9.json",
+      "buildings": 46
+    },
+    "5_-7": {
+      "file": "tile_5_-7.json",
+      "buildings": 28
+    },
+    "6_-7": {
+      "file": "tile_6_-7.json",
+      "buildings": 41
+    },
+    "9_-7": {
+      "file": "tile_9_-7.json",
+      "buildings": 15
+    },
+    "10_-5": {
+      "file": "tile_10_-5.json",
+      "buildings": 11
+    },
+    "8_-6": {
+      "file": "tile_8_-6.json",
+      "buildings": 10
+    },
+    "3_-5": {
+      "file": "tile_3_-5.json",
+      "buildings": 41
+    },
+    "4_-5": {
+      "file": "tile_4_-5.json",
+      "buildings": 50
+    },
+    "2_-1": {
+      "file": "tile_2_-1.json",
+      "buildings": 24
+    },
+    "2_-2": {
+      "file": "tile_2_-2.json",
+      "buildings": 34
+    },
+    "-1_-1": {
+      "file": "tile_-1_-1.json",
+      "buildings": 7
+    },
+    "-1_0": {
+      "file": "tile_-1_0.json",
+      "buildings": 29
+    },
+    "0_1": {
+      "file": "tile_0_1.json",
+      "buildings": 12
+    },
+    "-2_1": {
+      "file": "tile_-2_1.json",
+      "buildings": 47
+    },
+    "7_-6": {
+      "file": "tile_7_-6.json",
+      "buildings": 19
+    },
+    "6_-6": {
+      "file": "tile_6_-6.json",
+      "buildings": 26
+    },
+    "5_-5": {
+      "file": "tile_5_-5.json",
+      "buildings": 39
+    },
+    "3_-6": {
+      "file": "tile_3_-6.json",
+      "buildings": 70
+    },
+    "4_-6": {
+      "file": "tile_4_-6.json",
+      "buildings": 63
+    },
+    "2_-7": {
+      "file": "tile_2_-7.json",
+      "buildings": 13
+    },
+    "1_-7": {
+      "file": "tile_1_-7.json",
+      "buildings": 70
+    },
+    "2_-6": {
+      "file": "tile_2_-6.json",
+      "buildings": 76
+    },
+    "3_-7": {
+      "file": "tile_3_-7.json",
+      "buildings": 33
+    },
+    "5_-10": {
+      "file": "tile_5_-10.json",
+      "buildings": 71
+    },
+    "2_0": {
+      "file": "tile_2_0.json",
+      "buildings": 37
+    },
+    "-5_-3": {
+      "file": "tile_-5_-3.json",
+      "buildings": 17
+    },
+    "-6_-5": {
+      "file": "tile_-6_-5.json",
+      "buildings": 54
+    },
+    "-3_-6": {
+      "file": "tile_-3_-6.json",
+      "buildings": 45
+    },
+    "-4_-7": {
+      "file": "tile_-4_-7.json",
+      "buildings": 50
+    },
+    "2_-10": {
+      "file": "tile_2_-10.json",
+      "buildings": 87
+    },
+    "1_0": {
+      "file": "tile_1_0.json",
+      "buildings": 23
+    },
+    "1_-4": {
+      "file": "tile_1_-4.json",
+      "buildings": 79
+    },
+    "0_0": {
+      "file": "tile_0_0.json",
+      "buildings": 15
+    },
+    "-2_-11": {
+      "file": "tile_-2_-11.json",
+      "buildings": 66
+    },
+    "-2_-10": {
+      "file": "tile_-2_-10.json",
+      "buildings": 65
+    },
+    "-19_4": {
+      "file": "tile_-19_4.json",
+      "buildings": 1
+    },
+    "0_-4": {
+      "file": "tile_0_-4.json",
+      "buildings": 77
+    },
+    "-1_-4": {
+      "file": "tile_-1_-4.json",
+      "buildings": 28
+    },
+    "17_-20": {
+      "file": "tile_17_-20.json",
+      "buildings": 4
+    },
+    "16_-20": {
+      "file": "tile_16_-20.json",
+      "buildings": 5
+    },
+    "17_-21": {
+      "file": "tile_17_-21.json",
+      "buildings": 7
+    },
+    "18_-21": {
+      "file": "tile_18_-21.json",
+      "buildings": 3
+    },
+    "19_-20": {
+      "file": "tile_19_-20.json",
+      "buildings": 1
+    },
+    "18_-19": {
+      "file": "tile_18_-19.json",
+      "buildings": 2
+    },
+    "17_-19": {
+      "file": "tile_17_-19.json",
+      "buildings": 3
+    },
+    "17_-22": {
+      "file": "tile_17_-22.json",
+      "buildings": 6
+    },
+    "18_-22": {
+      "file": "tile_18_-22.json",
+      "buildings": 9
+    },
+    "17_-23": {
+      "file": "tile_17_-23.json",
+      "buildings": 3
+    },
+    "16_-22": {
+      "file": "tile_16_-22.json",
+      "buildings": 2
+    },
+    "15_-22": {
+      "file": "tile_15_-22.json",
+      "buildings": 24
+    },
+    "16_-24": {
+      "file": "tile_16_-24.json",
+      "buildings": 12
+    },
+    "-11_-3": {
+      "file": "tile_-11_-3.json",
+      "buildings": 26
+    },
+    "2_-4": {
+      "file": "tile_2_-4.json",
+      "buildings": 53
+    },
+    "2_-5": {
+      "file": "tile_2_-5.json",
+      "buildings": 74
+    },
+    "2_-3": {
+      "file": "tile_2_-3.json",
+      "buildings": 57
+    },
+    "1_1": {
+      "file": "tile_1_1.json",
+      "buildings": 39
+    },
+    "-21_21": {
+      "file": "tile_-21_21.json",
+      "buildings": 10
+    },
+    "-1_1": {
+      "file": "tile_-1_1.json",
+      "buildings": 26
+    },
+    "0_-2": {
+      "file": "tile_0_-2.json",
+      "buildings": 16
+    },
+    "-9_1": {
+      "file": "tile_-9_1.json",
+      "buildings": 90
+    },
+    "-1_4": {
+      "file": "tile_-1_4.json",
+      "buildings": 36
+    },
+    "-17_-2": {
+      "file": "tile_-17_-2.json",
+      "buildings": 35
+    },
+    "-2_4": {
+      "file": "tile_-2_4.json",
+      "buildings": 56
+    },
+    "-3_-4": {
+      "file": "tile_-3_-4.json",
+      "buildings": 15
+    },
+    "-8_-4": {
+      "file": "tile_-8_-4.json",
+      "buildings": 53
+    },
+    "-10_-4": {
+      "file": "tile_-10_-4.json",
+      "buildings": 29
+    },
+    "10_-3": {
+      "file": "tile_10_-3.json",
+      "buildings": 13
+    },
+    "10_-4": {
+      "file": "tile_10_-4.json",
+      "buildings": 11
+    },
+    "21_-17": {
+      "file": "tile_21_-17.json",
+      "buildings": 1
+    },
+    "-8_18": {
+      "file": "tile_-8_18.json",
+      "buildings": 4
+    },
+    "-9_16": {
+      "file": "tile_-9_16.json",
+      "buildings": 1
+    },
+    "-11_14": {
+      "file": "tile_-11_14.json",
+      "buildings": 5
+    },
+    "0_-3": {
+      "file": "tile_0_-3.json",
+      "buildings": 53
+    },
+    "6_-12": {
+      "file": "tile_6_-12.json",
+      "buildings": 1
+    },
+    "1_-14": {
+      "file": "tile_1_-14.json",
+      "buildings": 15
+    },
+    "-7_6": {
+      "file": "tile_-7_6.json",
+      "buildings": 15
+    },
+    "-19_-2": {
+      "file": "tile_-19_-2.json",
+      "buildings": 33
+    },
+    "-7_5": {
+      "file": "tile_-7_5.json",
+      "buildings": 19
+    },
+    "6_4": {
+      "file": "tile_6_4.json",
+      "buildings": 12
+    },
+    "-10_-2": {
+      "file": "tile_-10_-2.json",
+      "buildings": 7
+    },
+    "0_3": {
+      "file": "tile_0_3.json",
+      "buildings": 16
+    },
+    "0_2": {
+      "file": "tile_0_2.json",
+      "buildings": 31
+    },
+    "-13_6": {
+      "file": "tile_-13_6.json",
+      "buildings": 23
+    },
+    "1_2": {
+      "file": "tile_1_2.json",
+      "buildings": 42
+    },
+    "0_30": {
+      "file": "tile_0_30.json",
+      "buildings": 141
+    },
+    "8_4": {
+      "file": "tile_8_4.json",
+      "buildings": 7
+    },
+    "8_1": {
+      "file": "tile_8_1.json",
+      "buildings": 6
+    },
+    "9_0": {
+      "file": "tile_9_0.json",
+      "buildings": 5
+    },
+    "7_2": {
+      "file": "tile_7_2.json",
+      "buildings": 6
+    },
+    "8_2": {
+      "file": "tile_8_2.json",
+      "buildings": 3
+    },
+    "2_30": {
+      "file": "tile_2_30.json",
+      "buildings": 69
+    },
+    "-21_18": {
+      "file": "tile_-21_18.json",
+      "buildings": 3
+    },
+    "-21_15": {
+      "file": "tile_-21_15.json",
+      "buildings": 19
+    },
+    "7_3": {
+      "file": "tile_7_3.json",
+      "buildings": 2
+    },
+    "-29_15": {
+      "file": "tile_-29_15.json",
+      "buildings": 5
+    },
+    "-28_15": {
+      "file": "tile_-28_15.json",
+      "buildings": 7
+    },
+    "-5_-13": {
+      "file": "tile_-5_-13.json",
+      "buildings": 5
+    },
+    "0_-6": {
+      "file": "tile_0_-6.json",
+      "buildings": 75
+    },
+    "4_-7": {
+      "file": "tile_4_-7.json",
+      "buildings": 70
+    },
+    "4_-8": {
+      "file": "tile_4_-8.json",
+      "buildings": 98
+    },
+    "3_-8": {
+      "file": "tile_3_-8.json",
+      "buildings": 45
+    },
+    "-14_4": {
+      "file": "tile_-14_4.json",
+      "buildings": 7
+    },
+    "-17_4": {
+      "file": "tile_-17_4.json",
+      "buildings": 4
+    },
+    "-1_-5": {
+      "file": "tile_-1_-5.json",
+      "buildings": 42
+    },
+    "-1_-6": {
+      "file": "tile_-1_-6.json",
+      "buildings": 51
+    },
+    "-10_23": {
+      "file": "tile_-10_23.json",
+      "buildings": 7
+    },
+    "-9_22": {
+      "file": "tile_-9_22.json",
+      "buildings": 84
+    },
+    "1_15": {
+      "file": "tile_1_15.json",
+      "buildings": 2
+    },
+    "-18_-2": {
+      "file": "tile_-18_-2.json",
+      "buildings": 47
+    },
+    "12_20": {
+      "file": "tile_12_20.json",
+      "buildings": 79
+    },
+    "-10_30": {
+      "file": "tile_-10_30.json",
+      "buildings": 150
+    },
+    "-13_-10": {
+      "file": "tile_-13_-10.json",
+      "buildings": 9
+    },
+    "-15_-6": {
+      "file": "tile_-15_-6.json",
+      "buildings": 3
+    },
+    "-7_10": {
+      "file": "tile_-7_10.json",
+      "buildings": 11
+    },
+    "-14_-1": {
+      "file": "tile_-14_-1.json",
+      "buildings": 25
+    },
+    "-11_-13": {
+      "file": "tile_-11_-13.json",
+      "buildings": 2
+    },
+    "-9_-12": {
+      "file": "tile_-9_-12.json",
+      "buildings": 52
+    },
+    "-1_-8": {
+      "file": "tile_-1_-8.json",
+      "buildings": 74
+    },
+    "9_-8": {
+      "file": "tile_9_-8.json",
+      "buildings": 5
+    },
+    "1_-3": {
+      "file": "tile_1_-3.json",
+      "buildings": 71
+    },
+    "9_-2": {
+      "file": "tile_9_-2.json",
+      "buildings": 30
+    },
+    "1_-5": {
+      "file": "tile_1_-5.json",
+      "buildings": 71
+    },
+    "0_-5": {
+      "file": "tile_0_-5.json",
+      "buildings": 65
+    },
+    "-2_-3": {
+      "file": "tile_-2_-3.json",
+      "buildings": 21
+    },
+    "6_-5": {
+      "file": "tile_6_-5.json",
+      "buildings": 33
+    },
+    "7_-5": {
+      "file": "tile_7_-5.json",
+      "buildings": 34
+    },
+    "9_3": {
+      "file": "tile_9_3.json",
+      "buildings": 12
+    },
+    "10_3": {
+      "file": "tile_10_3.json",
+      "buildings": 18
+    },
+    "11_5": {
+      "file": "tile_11_5.json",
+      "buildings": 5
+    },
+    "-21_-3": {
+      "file": "tile_-21_-3.json",
+      "buildings": 33
+    },
+    "-7_11": {
+      "file": "tile_-7_11.json",
+      "buildings": 16
+    },
+    "-6_11": {
+      "file": "tile_-6_11.json",
+      "buildings": 27
+    },
+    "-15_7": {
+      "file": "tile_-15_7.json",
+      "buildings": 7
+    },
+    "-7_7": {
+      "file": "tile_-7_7.json",
+      "buildings": 43
+    },
+    "-10_3": {
+      "file": "tile_-10_3.json",
+      "buildings": 101
+    },
+    "-20_17": {
+      "file": "tile_-20_17.json",
+      "buildings": 2
+    },
+    "4_-14": {
+      "file": "tile_4_-14.json",
+      "buildings": 1
+    },
+    "2_-12": {
+      "file": "tile_2_-12.json",
+      "buildings": 71
+    },
+    "2_-13": {
+      "file": "tile_2_-13.json",
+      "buildings": 22
+    },
+    "3_-13": {
+      "file": "tile_3_-13.json",
+      "buildings": 23
+    },
+    "0_-14": {
+      "file": "tile_0_-14.json",
+      "buildings": 10
+    },
+    "1_-12": {
+      "file": "tile_1_-12.json",
+      "buildings": 58
+    },
+    "4_-13": {
+      "file": "tile_4_-13.json",
+      "buildings": 8
+    },
+    "-3_-14": {
+      "file": "tile_-3_-14.json",
+      "buildings": 3
+    },
+    "4_-12": {
+      "file": "tile_4_-12.json",
+      "buildings": 32
+    },
+    "9_-6": {
+      "file": "tile_9_-6.json",
+      "buildings": 14
+    },
+    "14_-22": {
+      "file": "tile_14_-22.json",
+      "buildings": 6
+    },
+    "15_-21": {
+      "file": "tile_15_-21.json",
+      "buildings": 24
+    },
+    "14_-21": {
+      "file": "tile_14_-21.json",
+      "buildings": 2
+    },
+    "16_-21": {
+      "file": "tile_16_-21.json",
+      "buildings": 11
+    },
+    "15_-23": {
+      "file": "tile_15_-23.json",
+      "buildings": 20
+    },
+    "16_-23": {
+      "file": "tile_16_-23.json",
+      "buildings": 14
+    },
+    "15_-24": {
+      "file": "tile_15_-24.json",
+      "buildings": 10
+    },
+    "14_-23": {
+      "file": "tile_14_-23.json",
+      "buildings": 13
+    },
+    "14_-24": {
+      "file": "tile_14_-24.json",
+      "buildings": 1
+    },
+    "-5_5": {
+      "file": "tile_-5_5.json",
+      "buildings": 92
+    },
+    "7_14": {
+      "file": "tile_7_14.json",
+      "buildings": 9
+    },
+    "8_12": {
+      "file": "tile_8_12.json",
+      "buildings": 9
+    },
+    "8_11": {
+      "file": "tile_8_11.json",
+      "buildings": 13
+    },
+    "9_10": {
+      "file": "tile_9_10.json",
+      "buildings": 8
+    },
+    "-22_15": {
+      "file": "tile_-22_15.json",
+      "buildings": 17
+    },
+    "3_18": {
+      "file": "tile_3_18.json",
+      "buildings": 6
+    },
+    "4_17": {
+      "file": "tile_4_17.json",
+      "buildings": 10
+    },
+    "4_18": {
+      "file": "tile_4_18.json",
+      "buildings": 6
+    },
+    "9_-3": {
+      "file": "tile_9_-3.json",
+      "buildings": 20
+    },
+    "-23_26": {
+      "file": "tile_-23_26.json",
+      "buildings": 17
+    },
+    "12_1": {
+      "file": "tile_12_1.json",
+      "buildings": 1
+    },
+    "11_-5": {
+      "file": "tile_11_-5.json",
+      "buildings": 5
+    },
+    "11_-3": {
+      "file": "tile_11_-3.json",
+      "buildings": 1
+    },
+    "10_-6": {
+      "file": "tile_10_-6.json",
+      "buildings": 4
+    },
+    "11_-2": {
+      "file": "tile_11_-2.json",
+      "buildings": 2
+    },
+    "12_2": {
+      "file": "tile_12_2.json",
+      "buildings": 1
+    },
+    "8_13": {
+      "file": "tile_8_13.json",
+      "buildings": 4
+    },
+    "10_15": {
+      "file": "tile_10_15.json",
+      "buildings": 12
+    },
+    "-10_25": {
+      "file": "tile_-10_25.json",
+      "buildings": 76
+    },
+    "-1_-2": {
+      "file": "tile_-1_-2.json",
+      "buildings": 23
+    },
+    "11_2": {
+      "file": "tile_11_2.json",
+      "buildings": 4
+    },
+    "5_11": {
+      "file": "tile_5_11.json",
+      "buildings": 15
+    },
+    "4_11": {
+      "file": "tile_4_11.json",
+      "buildings": 31
+    },
+    "18_-20": {
+      "file": "tile_18_-20.json",
+      "buildings": 1
+    },
+    "-20_-14": {
+      "file": "tile_-20_-14.json",
+      "buildings": 4
+    },
+    "-20_-13": {
+      "file": "tile_-20_-13.json",
+      "buildings": 3
+    },
+    "-6_3": {
+      "file": "tile_-6_3.json",
+      "buildings": 54
+    },
+    "-20_-9": {
+      "file": "tile_-20_-9.json",
+      "buildings": 2
+    },
+    "-23_-6": {
+      "file": "tile_-23_-6.json",
+      "buildings": 2
+    },
+    "-21_-6": {
+      "file": "tile_-21_-6.json",
+      "buildings": 8
+    },
+    "-22_-5": {
+      "file": "tile_-22_-5.json",
+      "buildings": 4
+    },
+    "-18_-3": {
+      "file": "tile_-18_-3.json",
+      "buildings": 51
+    },
+    "-17_-3": {
+      "file": "tile_-17_-3.json",
+      "buildings": 57
+    },
+    "-1_3": {
+      "file": "tile_-1_3.json",
+      "buildings": 36
+    },
+    "10_-2": {
+      "file": "tile_10_-2.json",
+      "buildings": 16
+    },
+    "2_7": {
+      "file": "tile_2_7.json",
+      "buildings": 15
+    },
+    "-8_2": {
+      "file": "tile_-8_2.json",
+      "buildings": 68
+    },
+    "-2_-1": {
+      "file": "tile_-2_-1.json",
+      "buildings": 30
+    },
+    "-12_4": {
+      "file": "tile_-12_4.json",
+      "buildings": 69
+    },
+    "-4_4": {
+      "file": "tile_-4_4.json",
+      "buildings": 58
+    },
+    "8_-5": {
+      "file": "tile_8_-5.json",
+      "buildings": 16
+    },
+    "-5_4": {
+      "file": "tile_-5_4.json",
+      "buildings": 102
+    },
+    "-3_3": {
+      "file": "tile_-3_3.json",
+      "buildings": 29
+    },
+    "-7_-6": {
+      "file": "tile_-7_-6.json",
+      "buildings": 30
+    },
+    "9_-4": {
+      "file": "tile_9_-4.json",
+      "buildings": 8
+    },
+    "-5_-4": {
+      "file": "tile_-5_-4.json",
+      "buildings": 25
+    },
+    "-23_25": {
+      "file": "tile_-23_25.json",
+      "buildings": 13
+    },
+    "-19_27": {
+      "file": "tile_-19_27.json",
+      "buildings": 57
+    },
+    "13_28": {
+      "file": "tile_13_28.json",
+      "buildings": 1
+    },
+    "-21_3": {
+      "file": "tile_-21_3.json",
+      "buildings": 2
+    },
+    "-20_3": {
+      "file": "tile_-20_3.json",
+      "buildings": 1
+    },
+    "-19_2": {
+      "file": "tile_-19_2.json",
+      "buildings": 5
+    },
+    "-20_4": {
+      "file": "tile_-20_4.json",
+      "buildings": 1
+    },
+    "-13_4": {
+      "file": "tile_-13_4.json",
+      "buildings": 3
+    },
+    "-27_3": {
+      "file": "tile_-27_3.json",
+      "buildings": 1
+    },
+    "-21_5": {
+      "file": "tile_-21_5.json",
+      "buildings": 30
+    },
+    "-28_2": {
+      "file": "tile_-28_2.json",
+      "buildings": 6
+    },
+    "-4_3": {
+      "file": "tile_-4_3.json",
+      "buildings": 35
+    },
+    "-4_5": {
+      "file": "tile_-4_5.json",
+      "buildings": 83
+    },
+    "-4_2": {
+      "file": "tile_-4_2.json",
+      "buildings": 76
+    },
+    "-5_2": {
+      "file": "tile_-5_2.json",
+      "buildings": 93
+    },
+    "2_14": {
+      "file": "tile_2_14.json",
+      "buildings": 10
+    },
+    "3_-15": {
+      "file": "tile_3_-15.json",
+      "buildings": 10
+    },
+    "2_-15": {
+      "file": "tile_2_-15.json",
+      "buildings": 3
+    },
+    "5_-6": {
+      "file": "tile_5_-6.json",
+      "buildings": 59
+    },
+    "9_-1": {
+      "file": "tile_9_-1.json",
+      "buildings": 20
+    },
+    "10_-1": {
+      "file": "tile_10_-1.json",
+      "buildings": 6
+    },
+    "-22_9": {
+      "file": "tile_-22_9.json",
+      "buildings": 1
+    },
+    "-24_10": {
+      "file": "tile_-24_10.json",
+      "buildings": 3
+    },
+    "-23_10": {
+      "file": "tile_-23_10.json",
+      "buildings": 8
+    },
+    "-21_10": {
+      "file": "tile_-21_10.json",
+      "buildings": 13
+    },
+    "-22_10": {
+      "file": "tile_-22_10.json",
+      "buildings": 7
+    },
+    "-21_9": {
+      "file": "tile_-21_9.json",
+      "buildings": 21
+    },
+    "-23_9": {
+      "file": "tile_-23_9.json",
+      "buildings": 2
+    },
+    "-24_9": {
+      "file": "tile_-24_9.json",
+      "buildings": 2
+    },
+    "-25_10": {
+      "file": "tile_-25_10.json",
+      "buildings": 6
+    },
+    "-25_9": {
+      "file": "tile_-25_9.json",
+      "buildings": 1
+    },
+    "1_3": {
+      "file": "tile_1_3.json",
+      "buildings": 23
+    },
+    "2_2": {
+      "file": "tile_2_2.json",
+      "buildings": 36
+    },
+    "3_4": {
+      "file": "tile_3_4.json",
+      "buildings": 16
+    },
+    "5_2": {
+      "file": "tile_5_2.json",
+      "buildings": 22
+    },
+    "10_2": {
+      "file": "tile_10_2.json",
+      "buildings": 7
+    },
+    "-14_13": {
+      "file": "tile_-14_13.json",
+      "buildings": 6
+    },
+    "-17_16": {
+      "file": "tile_-17_16.json",
+      "buildings": 28
+    },
+    "-15_13": {
+      "file": "tile_-15_13.json",
+      "buildings": 6
+    },
+    "-2_30": {
+      "file": "tile_-2_30.json",
+      "buildings": 66
+    },
+    "-2_6": {
+      "file": "tile_-2_6.json",
+      "buildings": 80
+    },
+    "9_5": {
+      "file": "tile_9_5.json",
+      "buildings": 3
+    },
+    "-21_22": {
+      "file": "tile_-21_22.json",
+      "buildings": 12
+    },
+    "1_6": {
+      "file": "tile_1_6.json",
+      "buildings": 40
+    },
+    "-1_5": {
+      "file": "tile_-1_5.json",
+      "buildings": 51
+    },
+    "-17_6": {
+      "file": "tile_-17_6.json",
+      "buildings": 53
+    },
+    "-8_15": {
+      "file": "tile_-8_15.json",
+      "buildings": 6
+    },
+    "0_-7": {
+      "file": "tile_0_-7.json",
+      "buildings": 96
+    },
+    "-2_14": {
+      "file": "tile_-2_14.json",
+      "buildings": 20
+    },
+    "11_-1": {
+      "file": "tile_11_-1.json",
+      "buildings": 2
+    },
+    "7_21": {
+      "file": "tile_7_21.json",
+      "buildings": 126
+    },
+    "1_-6": {
+      "file": "tile_1_-6.json",
+      "buildings": 77
+    },
+    "3_-9": {
+      "file": "tile_3_-9.json",
+      "buildings": 63
+    },
+    "-25_7": {
+      "file": "tile_-25_7.json",
+      "buildings": 18
+    },
+    "-26_7": {
+      "file": "tile_-26_7.json",
+      "buildings": 6
+    },
+    "-25_8": {
+      "file": "tile_-25_8.json",
+      "buildings": 2
+    },
+    "-23_8": {
+      "file": "tile_-23_8.json",
+      "buildings": 7
+    },
+    "12_14": {
+      "file": "tile_12_14.json",
+      "buildings": 10
+    },
+    "11_14": {
+      "file": "tile_11_14.json",
+      "buildings": 5
+    },
+    "12_15": {
+      "file": "tile_12_15.json",
+      "buildings": 6
+    },
+    "11_15": {
+      "file": "tile_11_15.json",
+      "buildings": 7
+    },
+    "13_16": {
+      "file": "tile_13_16.json",
+      "buildings": 1
+    },
+    "12_16": {
+      "file": "tile_12_16.json",
+      "buildings": 7
+    },
+    "11_16": {
+      "file": "tile_11_16.json",
+      "buildings": 9
+    },
+    "-18_17": {
+      "file": "tile_-18_17.json",
+      "buildings": 29
+    },
+    "-16_-1": {
+      "file": "tile_-16_-1.json",
+      "buildings": 41
+    },
+    "4_2": {
+      "file": "tile_4_2.json",
+      "buildings": 19
+    },
+    "-11_23": {
+      "file": "tile_-11_23.json",
+      "buildings": 12
+    },
+    "-13_23": {
+      "file": "tile_-13_23.json",
+      "buildings": 16
+    },
+    "-12_24": {
+      "file": "tile_-12_24.json",
+      "buildings": 100
+    },
+    "-13_24": {
+      "file": "tile_-13_24.json",
+      "buildings": 134
+    },
+    "-1_15": {
+      "file": "tile_-1_15.json",
+      "buildings": 31
+    },
+    "-1_14": {
+      "file": "tile_-1_14.json",
+      "buildings": 36
+    },
+    "-11_22": {
+      "file": "tile_-11_22.json",
+      "buildings": 10
+    },
+    "-10_22": {
+      "file": "tile_-10_22.json",
+      "buildings": 108
+    },
+    "-11_24": {
+      "file": "tile_-11_24.json",
+      "buildings": 53
+    },
+    "-13_22": {
+      "file": "tile_-13_22.json",
+      "buildings": 20
+    },
+    "-12_23": {
+      "file": "tile_-12_23.json",
+      "buildings": 5
+    },
+    "-12_22": {
+      "file": "tile_-12_22.json",
+      "buildings": 18
+    },
+    "-10_24": {
+      "file": "tile_-10_24.json",
+      "buildings": 6
+    },
+    "-13_2": {
+      "file": "tile_-13_2.json",
+      "buildings": 10
+    },
+    "-22_-6": {
+      "file": "tile_-22_-6.json",
+      "buildings": 14
+    },
+    "-13_1": {
+      "file": "tile_-13_1.json",
+      "buildings": 47
+    },
+    "-6_-6": {
+      "file": "tile_-6_-6.json",
+      "buildings": 54
+    },
+    "-9_-5": {
+      "file": "tile_-9_-5.json",
+      "buildings": 61
+    },
+    "-7_-3": {
+      "file": "tile_-7_-3.json",
+      "buildings": 17
+    },
+    "-20_-7": {
+      "file": "tile_-20_-7.json",
+      "buildings": 10
+    },
+    "-20_-8": {
+      "file": "tile_-20_-8.json",
+      "buildings": 10
+    },
+    "-19_-8": {
+      "file": "tile_-19_-8.json",
+      "buildings": 2
+    },
+    "-5_-1": {
+      "file": "tile_-5_-1.json",
+      "buildings": 33
+    },
+    "1_7": {
+      "file": "tile_1_7.json",
+      "buildings": 22
+    },
+    "-3_12": {
+      "file": "tile_-3_12.json",
+      "buildings": 24
+    },
+    "6_14": {
+      "file": "tile_6_14.json",
+      "buildings": 14
+    },
+    "-12_6": {
+      "file": "tile_-12_6.json",
+      "buildings": 27
+    },
+    "-24_-1": {
+      "file": "tile_-24_-1.json",
+      "buildings": 42
+    },
+    "12_22": {
+      "file": "tile_12_22.json",
+      "buildings": 121
+    },
+    "-26_11": {
+      "file": "tile_-26_11.json",
+      "buildings": 2
+    },
+    "-32_4": {
+      "file": "tile_-32_4.json",
+      "buildings": 1
+    },
+    "1_-11": {
+      "file": "tile_1_-11.json",
+      "buildings": 100
+    },
+    "-28_11": {
+      "file": "tile_-28_11.json",
+      "buildings": 1
+    },
+    "-30_7": {
+      "file": "tile_-30_7.json",
+      "buildings": 7
+    },
+    "-29_12": {
+      "file": "tile_-29_12.json",
+      "buildings": 2
+    },
+    "-30_10": {
+      "file": "tile_-30_10.json",
+      "buildings": 3
+    },
+    "-30_8": {
+      "file": "tile_-30_8.json",
+      "buildings": 2
+    },
+    "-26_13": {
+      "file": "tile_-26_13.json",
+      "buildings": 1
+    },
+    "-28_12": {
+      "file": "tile_-28_12.json",
+      "buildings": 3
+    },
+    "-31_7": {
+      "file": "tile_-31_7.json",
+      "buildings": 17
+    },
+    "-28_-1": {
+      "file": "tile_-28_-1.json",
+      "buildings": 39
+    },
+    "-28_0": {
+      "file": "tile_-28_0.json",
+      "buildings": 10
+    },
+    "-19_-3": {
+      "file": "tile_-19_-3.json",
+      "buildings": 23
+    },
+    "-32_2": {
+      "file": "tile_-32_2.json",
+      "buildings": 9
+    },
+    "-19_-1": {
+      "file": "tile_-19_-1.json",
+      "buildings": 26
+    },
+    "-25_-2": {
+      "file": "tile_-25_-2.json",
+      "buildings": 18
+    },
+    "-16_0": {
+      "file": "tile_-16_0.json",
+      "buildings": 44
+    },
+    "-14_-2": {
+      "file": "tile_-14_-2.json",
+      "buildings": 24
+    },
+    "-14_27": {
+      "file": "tile_-14_27.json",
+      "buildings": 48
+    },
+    "-19_20": {
+      "file": "tile_-19_20.json",
+      "buildings": 46
+    },
+    "-17_21": {
+      "file": "tile_-17_21.json",
+      "buildings": 80
+    },
+    "-18_26": {
+      "file": "tile_-18_26.json",
+      "buildings": 183
+    },
+    "-16_-2": {
+      "file": "tile_-16_-2.json",
+      "buildings": 30
+    },
+    "-15_-2": {
+      "file": "tile_-15_-2.json",
+      "buildings": 58
+    },
+    "-1_11": {
+      "file": "tile_-1_11.json",
+      "buildings": 53
+    },
+    "-20_-2": {
+      "file": "tile_-20_-2.json",
+      "buildings": 43
+    },
+    "-16_-3": {
+      "file": "tile_-16_-3.json",
+      "buildings": 46
+    },
+    "-13_-6": {
+      "file": "tile_-13_-6.json",
+      "buildings": 32
+    },
+    "-3_4": {
+      "file": "tile_-3_4.json",
+      "buildings": 61
+    },
+    "-34_-1": {
+      "file": "tile_-34_-1.json",
+      "buildings": 2
+    },
+    "-25_20": {
+      "file": "tile_-25_20.json",
+      "buildings": 116
+    },
+    "-26_20": {
+      "file": "tile_-26_20.json",
+      "buildings": 104
+    },
+    "5_4": {
+      "file": "tile_5_4.json",
+      "buildings": 12
+    },
+    "-21_28": {
+      "file": "tile_-21_28.json",
+      "buildings": 3
+    },
+    "-20_29": {
+      "file": "tile_-20_29.json",
+      "buildings": 7
+    },
+    "-21_29": {
+      "file": "tile_-21_29.json",
+      "buildings": 2
+    },
+    "-27_23": {
+      "file": "tile_-27_23.json",
+      "buildings": 1
+    },
+    "-20_25": {
+      "file": "tile_-20_25.json",
+      "buildings": 70
+    },
+    "-21_-12": {
+      "file": "tile_-21_-12.json",
+      "buildings": 3
+    },
+    "-15_-3": {
+      "file": "tile_-15_-3.json",
+      "buildings": 51
+    },
+    "-27_21": {
+      "file": "tile_-27_21.json",
+      "buildings": 49
+    },
+    "-28_21": {
+      "file": "tile_-28_21.json",
+      "buildings": 35
+    },
+    "-28_20": {
+      "file": "tile_-28_20.json",
+      "buildings": 92
+    },
+    "-27_20": {
+      "file": "tile_-27_20.json",
+      "buildings": 99
+    },
+    "-28_19": {
+      "file": "tile_-28_19.json",
+      "buildings": 94
+    },
+    "-27_19": {
+      "file": "tile_-27_19.json",
+      "buildings": 81
+    },
+    "-1_-3": {
+      "file": "tile_-1_-3.json",
+      "buildings": 37
+    },
+    "-30_18": {
+      "file": "tile_-30_18.json",
+      "buildings": 5
+    },
+    "-29_17": {
+      "file": "tile_-29_17.json",
+      "buildings": 12
+    },
+    "-25_16": {
+      "file": "tile_-25_16.json",
+      "buildings": 1
+    },
+    "-26_15": {
+      "file": "tile_-26_15.json",
+      "buildings": 13
+    },
+    "-26_16": {
+      "file": "tile_-26_16.json",
+      "buildings": 1
+    },
+    "-20_-5": {
+      "file": "tile_-20_-5.json",
+      "buildings": 6
+    },
+    "-24_15": {
+      "file": "tile_-24_15.json",
+      "buildings": 13
+    },
+    "-22_16": {
+      "file": "tile_-22_16.json",
+      "buildings": 2
+    },
+    "-21_16": {
+      "file": "tile_-21_16.json",
+      "buildings": 1
+    },
+    "-21_17": {
+      "file": "tile_-21_17.json",
+      "buildings": 3
+    },
+    "-24_17": {
+      "file": "tile_-24_17.json",
+      "buildings": 9
+    },
+    "-25_17": {
+      "file": "tile_-25_17.json",
+      "buildings": 2
+    },
+    "-26_17": {
+      "file": "tile_-26_17.json",
+      "buildings": 8
+    },
+    "-24_19": {
+      "file": "tile_-24_19.json",
+      "buildings": 157
+    },
+    "-25_18": {
+      "file": "tile_-25_18.json",
+      "buildings": 3
+    },
+    "0_10": {
+      "file": "tile_0_10.json",
+      "buildings": 72
+    },
+    "-1_10": {
+      "file": "tile_-1_10.json",
+      "buildings": 37
+    },
+    "0_9": {
+      "file": "tile_0_9.json",
+      "buildings": 46
+    },
+    "2_1": {
+      "file": "tile_2_1.json",
+      "buildings": 60
+    },
+    "-28_17": {
+      "file": "tile_-28_17.json",
+      "buildings": 5
+    },
+    "-28_16": {
+      "file": "tile_-28_16.json",
+      "buildings": 3
+    },
+    "-29_18": {
+      "file": "tile_-29_18.json",
+      "buildings": 1
+    },
+    "-30_14": {
+      "file": "tile_-30_14.json",
+      "buildings": 1
+    },
+    "-1_-9": {
+      "file": "tile_-1_-9.json",
+      "buildings": 80
+    },
+    "-7_0": {
+      "file": "tile_-7_0.json",
+      "buildings": 77
+    },
+    "-7_1": {
+      "file": "tile_-7_1.json",
+      "buildings": 82
+    },
+    "-3_-3": {
+      "file": "tile_-3_-3.json",
+      "buildings": 12
+    },
+    "-29_28": {
+      "file": "tile_-29_28.json",
+      "buildings": 3
+    },
+    "-29_27": {
+      "file": "tile_-29_27.json",
+      "buildings": 1
+    },
+    "-6_-4": {
+      "file": "tile_-6_-4.json",
+      "buildings": 48
+    },
+    "-2_2": {
+      "file": "tile_-2_2.json",
+      "buildings": 35
+    },
+    "0_-13": {
+      "file": "tile_0_-13.json",
+      "buildings": 18
+    },
+    "6_5": {
+      "file": "tile_6_5.json",
+      "buildings": 13
+    },
+    "11_-6": {
+      "file": "tile_11_-6.json",
+      "buildings": 2
+    },
+    "9_2": {
+      "file": "tile_9_2.json",
+      "buildings": 3
+    },
+    "0_-8": {
+      "file": "tile_0_-8.json",
+      "buildings": 94
+    },
+    "-1_-7": {
+      "file": "tile_-1_-7.json",
+      "buildings": 95
+    },
+    "-3_11": {
+      "file": "tile_-3_11.json",
+      "buildings": 41
+    },
+    "-3_10": {
+      "file": "tile_-3_10.json",
+      "buildings": 30
+    },
+    "-2_11": {
+      "file": "tile_-2_11.json",
+      "buildings": 66
+    },
+    "-2_10": {
+      "file": "tile_-2_10.json",
+      "buildings": 69
+    },
+    "9_-5": {
+      "file": "tile_9_-5.json",
+      "buildings": 16
+    },
+    "-2_16": {
+      "file": "tile_-2_16.json",
+      "buildings": 17
+    },
+    "-6_19": {
+      "file": "tile_-6_19.json",
+      "buildings": 115
+    },
+    "-5_11": {
+      "file": "tile_-5_11.json",
+      "buildings": 50
+    },
+    "-4_23": {
+      "file": "tile_-4_23.json",
+      "buildings": 165
+    },
+    "-8_27": {
+      "file": "tile_-8_27.json",
+      "buildings": 138
+    },
+    "-8_26": {
+      "file": "tile_-8_26.json",
+      "buildings": 158
+    },
+    "4_22": {
+      "file": "tile_4_22.json",
+      "buildings": 90
+    },
+    "-1_21": {
+      "file": "tile_-1_21.json",
+      "buildings": 175
+    },
+    "3_21": {
+      "file": "tile_3_21.json",
+      "buildings": 107
+    },
+    "4_20": {
+      "file": "tile_4_20.json",
+      "buildings": 169
+    },
+    "6_23": {
+      "file": "tile_6_23.json",
+      "buildings": 25
+    },
+    "-17_22": {
+      "file": "tile_-17_22.json",
+      "buildings": 111
+    },
+    "-16_22": {
+      "file": "tile_-16_22.json",
+      "buildings": 133
+    },
+    "-20_21": {
+      "file": "tile_-20_21.json",
+      "buildings": 21
+    },
+    "-9_28": {
+      "file": "tile_-9_28.json",
+      "buildings": 177
+    },
+    "-10_29": {
+      "file": "tile_-10_29.json",
+      "buildings": 127
+    },
+    "-12_30": {
+      "file": "tile_-12_30.json",
+      "buildings": 111
+    },
+    "-11_3": {
+      "file": "tile_-11_3.json",
+      "buildings": 106
+    },
+    "-4_21": {
+      "file": "tile_-4_21.json",
+      "buildings": 149
+    },
+    "0_5": {
+      "file": "tile_0_5.json",
+      "buildings": 42
+    },
+    "1_8": {
+      "file": "tile_1_8.json",
+      "buildings": 52
+    },
+    "1_10": {
+      "file": "tile_1_10.json",
+      "buildings": 29
+    },
+    "-4_20": {
+      "file": "tile_-4_20.json",
+      "buildings": 74
+    },
+    "-28_1": {
+      "file": "tile_-28_1.json",
+      "buildings": 14
+    },
+    "1_17": {
+      "file": "tile_1_17.json",
+      "buildings": 10
+    },
+    "-9_-10": {
+      "file": "tile_-9_-10.json",
+      "buildings": 15
+    },
+    "-5_-10": {
+      "file": "tile_-5_-10.json",
+      "buildings": 37
+    },
+    "-8_-10": {
+      "file": "tile_-8_-10.json",
+      "buildings": 52
+    },
+    "-2_-5": {
+      "file": "tile_-2_-5.json",
+      "buildings": 56
+    },
+    "-2_-8": {
+      "file": "tile_-2_-8.json",
+      "buildings": 38
+    },
+    "-11_21": {
+      "file": "tile_-11_21.json",
+      "buildings": 158
+    },
+    "-10_21": {
+      "file": "tile_-10_21.json",
+      "buildings": 173
+    },
+    "-10_20": {
+      "file": "tile_-10_20.json",
+      "buildings": 165
+    },
+    "-7_18": {
+      "file": "tile_-7_18.json",
+      "buildings": 2
+    },
+    "-5_19": {
+      "file": "tile_-5_19.json",
+      "buildings": 110
+    },
+    "0_-9": {
+      "file": "tile_0_-9.json",
+      "buildings": 72
+    },
+    "-9_26": {
+      "file": "tile_-9_26.json",
+      "buildings": 183
+    },
+    "-9_27": {
+      "file": "tile_-9_27.json",
+      "buildings": 209
+    },
+    "-4_22": {
+      "file": "tile_-4_22.json",
+      "buildings": 133
+    },
+    "-6_22": {
+      "file": "tile_-6_22.json",
+      "buildings": 164
+    },
+    "-11_-2": {
+      "file": "tile_-11_-2.json",
+      "buildings": 36
+    },
+    "5_5": {
+      "file": "tile_5_5.json",
+      "buildings": 17
+    },
+    "2_-9": {
+      "file": "tile_2_-9.json",
+      "buildings": 59
+    },
+    "-1_-10": {
+      "file": "tile_-1_-10.json",
+      "buildings": 79
+    },
+    "-2_-9": {
+      "file": "tile_-2_-9.json",
+      "buildings": 68
+    },
+    "-23_3": {
+      "file": "tile_-23_3.json",
+      "buildings": 2
+    },
+    "-5_6": {
+      "file": "tile_-5_6.json",
+      "buildings": 48
+    },
+    "6_3": {
+      "file": "tile_6_3.json",
+      "buildings": 9
+    },
+    "-9_5": {
+      "file": "tile_-9_5.json",
+      "buildings": 32
+    },
+    "-9_3": {
+      "file": "tile_-9_3.json",
+      "buildings": 65
+    },
+    "-3_2": {
+      "file": "tile_-3_2.json",
+      "buildings": 36
+    },
+    "-17_17": {
+      "file": "tile_-17_17.json",
+      "buildings": 11
+    },
+    "-19_18": {
+      "file": "tile_-19_18.json",
+      "buildings": 4
+    },
+    "-18_18": {
+      "file": "tile_-18_18.json",
+      "buildings": 20
+    },
+    "7_4": {
+      "file": "tile_7_4.json",
+      "buildings": 3
+    },
+    "7_5": {
+      "file": "tile_7_5.json",
+      "buildings": 17
+    },
+    "8_5": {
+      "file": "tile_8_5.json",
+      "buildings": 16
+    },
+    "6_2": {
+      "file": "tile_6_2.json",
+      "buildings": 12
+    },
+    "-11_20": {
+      "file": "tile_-11_20.json",
+      "buildings": 145
+    },
+    "-7_15": {
+      "file": "tile_-7_15.json",
+      "buildings": 3
+    },
+    "3_2": {
+      "file": "tile_3_2.json",
+      "buildings": 46
+    },
+    "-12_3": {
+      "file": "tile_-12_3.json",
+      "buildings": 81
+    },
+    "-11_4": {
+      "file": "tile_-11_4.json",
+      "buildings": 109
+    },
+    "-13_13": {
+      "file": "tile_-13_13.json",
+      "buildings": 9
+    },
+    "-12_14": {
+      "file": "tile_-12_14.json",
+      "buildings": 11
+    },
+    "-13_8": {
+      "file": "tile_-13_8.json",
+      "buildings": 10
+    },
+    "-6_7": {
+      "file": "tile_-6_7.json",
+      "buildings": 62
+    },
+    "-6_6": {
+      "file": "tile_-6_6.json",
+      "buildings": 68
+    },
+    "-10_-10": {
+      "file": "tile_-10_-10.json",
+      "buildings": 3
+    },
+    "11_7": {
+      "file": "tile_11_7.json",
+      "buildings": 14
+    },
+    "10_7": {
+      "file": "tile_10_7.json",
+      "buildings": 24
+    },
+    "0_6": {
+      "file": "tile_0_6.json",
+      "buildings": 70
+    },
+    "2_8": {
+      "file": "tile_2_8.json",
+      "buildings": 25
+    },
+    "-10_-8": {
+      "file": "tile_-10_-8.json",
+      "buildings": 49
+    },
+    "-12_1": {
+      "file": "tile_-12_1.json",
+      "buildings": 35
+    },
+    "-10_19": {
+      "file": "tile_-10_19.json",
+      "buildings": 165
+    },
+    "-21_7": {
+      "file": "tile_-21_7.json",
+      "buildings": 24
+    },
+    "-1_-14": {
+      "file": "tile_-1_-14.json",
+      "buildings": 11
+    },
+    "-6_28": {
+      "file": "tile_-6_28.json",
+      "buildings": 166
+    },
+    "-25_-3": {
+      "file": "tile_-25_-3.json",
+      "buildings": 14
+    },
+    "-3_-12": {
+      "file": "tile_-3_-12.json",
+      "buildings": 37
+    },
+    "-1_2": {
+      "file": "tile_-1_2.json",
+      "buildings": 23
+    },
+    "-22_17": {
+      "file": "tile_-22_17.json",
+      "buildings": 4
+    },
+    "0_11": {
+      "file": "tile_0_11.json",
+      "buildings": 46
+    },
+    "-2_15": {
+      "file": "tile_-2_15.json",
+      "buildings": 25
+    },
+    "7_11": {
+      "file": "tile_7_11.json",
+      "buildings": 7
+    },
+    "7_10": {
+      "file": "tile_7_10.json",
+      "buildings": 16
+    },
+    "8_10": {
+      "file": "tile_8_10.json",
+      "buildings": 10
+    },
+    "15_19": {
+      "file": "tile_15_19.json",
+      "buildings": 11
+    },
+    "-8_20": {
+      "file": "tile_-8_20.json",
+      "buildings": 168
+    },
+    "-7_2": {
+      "file": "tile_-7_2.json",
+      "buildings": 86
+    },
+    "-15_14": {
+      "file": "tile_-15_14.json",
+      "buildings": 4
+    },
+    "0_12": {
+      "file": "tile_0_12.json",
+      "buildings": 43
+    },
+    "-15_5": {
+      "file": "tile_-15_5.json",
+      "buildings": 46
+    },
+    "-16_6": {
+      "file": "tile_-16_6.json",
+      "buildings": 43
+    },
+    "-9_-14": {
+      "file": "tile_-9_-14.json",
+      "buildings": 1
+    },
+    "2_6": {
+      "file": "tile_2_6.json",
+      "buildings": 15
+    },
+    "3_7": {
+      "file": "tile_3_7.json",
+      "buildings": 22
+    },
+    "3_6": {
+      "file": "tile_3_6.json",
+      "buildings": 16
+    },
+    "4_6": {
+      "file": "tile_4_6.json",
+      "buildings": 27
+    },
+    "-8_-8": {
+      "file": "tile_-8_-8.json",
+      "buildings": 75
+    },
+    "-7_-9": {
+      "file": "tile_-7_-9.json",
+      "buildings": 64
+    },
+    "-8_-9": {
+      "file": "tile_-8_-9.json",
+      "buildings": 52
+    },
+    "-3_-10": {
+      "file": "tile_-3_-10.json",
+      "buildings": 82
+    },
+    "-3_-11": {
+      "file": "tile_-3_-11.json",
+      "buildings": 58
+    },
+    "-3_-9": {
+      "file": "tile_-3_-9.json",
+      "buildings": 63
+    },
+    "-3_1": {
+      "file": "tile_-3_1.json",
+      "buildings": 54
+    },
+    "-2_-2": {
+      "file": "tile_-2_-2.json",
+      "buildings": 18
+    },
+    "-10_7": {
+      "file": "tile_-10_7.json",
+      "buildings": 22
+    },
+    "-8_4": {
+      "file": "tile_-8_4.json",
+      "buildings": 2
+    },
+    "-4_1": {
+      "file": "tile_-4_1.json",
+      "buildings": 74
+    },
+    "-5_-2": {
+      "file": "tile_-5_-2.json",
+      "buildings": 24
+    },
+    "18_23": {
+      "file": "tile_18_23.json",
+      "buildings": 12
+    },
+    "18_24": {
+      "file": "tile_18_24.json",
+      "buildings": 7
+    },
+    "17_24": {
+      "file": "tile_17_24.json",
+      "buildings": 5
+    },
+    "18_21": {
+      "file": "tile_18_21.json",
+      "buildings": 22
+    },
+    "20_23": {
+      "file": "tile_20_23.json",
+      "buildings": 6
+    },
+    "17_23": {
+      "file": "tile_17_23.json",
+      "buildings": 8
+    },
+    "19_22": {
+      "file": "tile_19_22.json",
+      "buildings": 8
+    },
+    "16_23": {
+      "file": "tile_16_23.json",
+      "buildings": 2
+    },
+    "18_25": {
+      "file": "tile_18_25.json",
+      "buildings": 1
+    },
+    "19_21": {
+      "file": "tile_19_21.json",
+      "buildings": 4
+    },
+    "19_20": {
+      "file": "tile_19_20.json",
+      "buildings": 5
+    },
+    "16_22": {
+      "file": "tile_16_22.json",
+      "buildings": 57
+    },
+    "15_22": {
+      "file": "tile_15_22.json",
+      "buildings": 12
+    },
+    "17_25": {
+      "file": "tile_17_25.json",
+      "buildings": 4
+    },
+    "20_22": {
+      "file": "tile_20_22.json",
+      "buildings": 8
+    },
+    "19_23": {
+      "file": "tile_19_23.json",
+      "buildings": 6
+    },
+    "17_21": {
+      "file": "tile_17_21.json",
+      "buildings": 55
+    },
+    "19_25": {
+      "file": "tile_19_25.json",
+      "buildings": 2
+    },
+    "19_24": {
+      "file": "tile_19_24.json",
+      "buildings": 8
+    },
+    "20_21": {
+      "file": "tile_20_21.json",
+      "buildings": 2
+    },
+    "-33_-1": {
+      "file": "tile_-33_-1.json",
+      "buildings": 1
+    },
+    "-32_-3": {
+      "file": "tile_-32_-3.json",
+      "buildings": 1
+    },
+    "-26_-5": {
+      "file": "tile_-26_-5.json",
+      "buildings": 5
+    },
+    "11_9": {
+      "file": "tile_11_9.json",
+      "buildings": 3
+    },
+    "-4_-9": {
+      "file": "tile_-4_-9.json",
+      "buildings": 78
+    },
+    "-2_3": {
+      "file": "tile_-2_3.json",
+      "buildings": 57
+    },
+    "-3_-8": {
+      "file": "tile_-3_-8.json",
+      "buildings": 73
+    },
+    "-3_-7": {
+      "file": "tile_-3_-7.json",
+      "buildings": 44
+    },
+    "12_7": {
+      "file": "tile_12_7.json",
+      "buildings": 6
+    },
+    "-1_9": {
+      "file": "tile_-1_9.json",
+      "buildings": 67
+    },
+    "3_8": {
+      "file": "tile_3_8.json",
+      "buildings": 30
+    },
+    "3_9": {
+      "file": "tile_3_9.json",
+      "buildings": 40
+    },
+    "2_9": {
+      "file": "tile_2_9.json",
+      "buildings": 24
+    },
+    "1_11": {
+      "file": "tile_1_11.json",
+      "buildings": 59
+    },
+    "4_8": {
+      "file": "tile_4_8.json",
+      "buildings": 5
+    },
+    "3_10": {
+      "file": "tile_3_10.json",
+      "buildings": 25
+    },
+    "3_11": {
+      "file": "tile_3_11.json",
+      "buildings": 33
+    },
+    "-4_6": {
+      "file": "tile_-4_6.json",
+      "buildings": 36
+    },
+    "-3_6": {
+      "file": "tile_-3_6.json",
+      "buildings": 52
+    },
+    "-1_12": {
+      "file": "tile_-1_12.json",
+      "buildings": 47
+    },
+    "0_4": {
+      "file": "tile_0_4.json",
+      "buildings": 48
+    },
+    "-2_12": {
+      "file": "tile_-2_12.json",
+      "buildings": 54
+    },
+    "-4_12": {
+      "file": "tile_-4_12.json",
+      "buildings": 21
+    },
+    "4_5": {
+      "file": "tile_4_5.json",
+      "buildings": 21
+    },
+    "-4_11": {
+      "file": "tile_-4_11.json",
+      "buildings": 44
+    },
+    "4_4": {
+      "file": "tile_4_4.json",
+      "buildings": 10
+    },
+    "5_6": {
+      "file": "tile_5_6.json",
+      "buildings": 5
+    },
+    "6_6": {
+      "file": "tile_6_6.json",
+      "buildings": 12
+    },
+    "-2_-4": {
+      "file": "tile_-2_-4.json",
+      "buildings": 15
+    },
+    "7_6": {
+      "file": "tile_7_6.json",
+      "buildings": 27
+    },
+    "-4_-5": {
+      "file": "tile_-4_-5.json",
+      "buildings": 58
+    },
+    "5_7": {
+      "file": "tile_5_7.json",
+      "buildings": 13
+    },
+    "-4_-2": {
+      "file": "tile_-4_-2.json",
+      "buildings": 25
+    },
+    "-3_-2": {
+      "file": "tile_-3_-2.json",
+      "buildings": 16
+    },
+    "6_7": {
+      "file": "tile_6_7.json",
+      "buildings": 21
+    },
+    "7_7": {
+      "file": "tile_7_7.json",
+      "buildings": 23
+    },
+    "-3_-1": {
+      "file": "tile_-3_-1.json",
+      "buildings": 28
+    },
+    "-4_-3": {
+      "file": "tile_-4_-3.json",
+      "buildings": 23
+    },
+    "-4_-1": {
+      "file": "tile_-4_-1.json",
+      "buildings": 18
+    },
+    "-3_-5": {
+      "file": "tile_-3_-5.json",
+      "buildings": 51
+    },
+    "-3_0": {
+      "file": "tile_-3_0.json",
+      "buildings": 48
+    },
+    "-4_0": {
+      "file": "tile_-4_0.json",
+      "buildings": 35
+    },
+    "-5_1": {
+      "file": "tile_-5_1.json",
+      "buildings": 92
+    },
+    "-7_-4": {
+      "file": "tile_-7_-4.json",
+      "buildings": 38
+    },
+    "-6_1": {
+      "file": "tile_-6_1.json",
+      "buildings": 58
+    },
+    "-5_0": {
+      "file": "tile_-5_0.json",
+      "buildings": 53
+    },
+    "-6_-1": {
+      "file": "tile_-6_-1.json",
+      "buildings": 47
+    },
+    "-6_-2": {
+      "file": "tile_-6_-2.json",
+      "buildings": 19
+    },
+    "-6_-3": {
+      "file": "tile_-6_-3.json",
+      "buildings": 12
+    },
+    "-7_-1": {
+      "file": "tile_-7_-1.json",
+      "buildings": 81
+    },
+    "1_-8": {
+      "file": "tile_1_-8.json",
+      "buildings": 63
+    },
+    "-6_2": {
+      "file": "tile_-6_2.json",
+      "buildings": 97
+    },
+    "-13_15": {
+      "file": "tile_-13_15.json",
+      "buildings": 5
+    },
+    "-12_15": {
+      "file": "tile_-12_15.json",
+      "buildings": 2
+    },
+    "-2_-6": {
+      "file": "tile_-2_-6.json",
+      "buildings": 45
+    },
+    "-2_-7": {
+      "file": "tile_-2_-7.json",
+      "buildings": 58
+    },
+    "-4_-6": {
+      "file": "tile_-4_-6.json",
+      "buildings": 56
+    },
+    "1_-9": {
+      "file": "tile_1_-9.json",
+      "buildings": 39
+    },
+    "1_-10": {
+      "file": "tile_1_-10.json",
+      "buildings": 67
+    },
+    "-5_-7": {
+      "file": "tile_-5_-7.json",
+      "buildings": 73
+    },
+    "11_8": {
+      "file": "tile_11_8.json",
+      "buildings": 5
+    },
+    "12_8": {
+      "file": "tile_12_8.json",
+      "buildings": 5
+    },
+    "10_8": {
+      "file": "tile_10_8.json",
+      "buildings": 35
+    },
+    "11_6": {
+      "file": "tile_11_6.json",
+      "buildings": 6
+    },
+    "12_10": {
+      "file": "tile_12_10.json",
+      "buildings": 7
+    },
+    "13_10": {
+      "file": "tile_13_10.json",
+      "buildings": 1
+    },
+    "11_10": {
+      "file": "tile_11_10.json",
+      "buildings": 15
+    },
+    "0_-10": {
+      "file": "tile_0_-10.json",
+      "buildings": 74
+    },
+    "1_12": {
+      "file": "tile_1_12.json",
+      "buildings": 41
+    },
+    "2_11": {
+      "file": "tile_2_11.json",
+      "buildings": 36
+    },
+    "-5_-5": {
+      "file": "tile_-5_-5.json",
+      "buildings": 48
+    },
+    "2_10": {
+      "file": "tile_2_10.json",
+      "buildings": 28
+    },
+    "1_9": {
+      "file": "tile_1_9.json",
+      "buildings": 47
+    },
+    "-21_-15": {
+      "file": "tile_-21_-15.json",
+      "buildings": 1
+    },
+    "-4_-10": {
+      "file": "tile_-4_-10.json",
+      "buildings": 59
+    },
+    "-4_-11": {
+      "file": "tile_-4_-11.json",
+      "buildings": 54
+    },
+    "-5_-11": {
+      "file": "tile_-5_-11.json",
+      "buildings": 28
+    },
+    "-29_1": {
+      "file": "tile_-29_1.json",
+      "buildings": 11
+    },
+    "-30_1": {
+      "file": "tile_-30_1.json",
+      "buildings": 9
+    },
+    "-29_2": {
+      "file": "tile_-29_2.json",
+      "buildings": 2
+    },
+    "-4_10": {
+      "file": "tile_-4_10.json",
+      "buildings": 20
+    },
+    "-3_9": {
+      "file": "tile_-3_9.json",
+      "buildings": 59
+    },
+    "-3_8": {
+      "file": "tile_-3_8.json",
+      "buildings": 29
+    },
+    "-4_9": {
+      "file": "tile_-4_9.json",
+      "buildings": 15
+    },
+    "5_13": {
+      "file": "tile_5_13.json",
+      "buildings": 8
+    },
+    "5_14": {
+      "file": "tile_5_14.json",
+      "buildings": 14
+    },
+    "5_15": {
+      "file": "tile_5_15.json",
+      "buildings": 29
+    },
+    "4_16": {
+      "file": "tile_4_16.json",
+      "buildings": 11
+    },
+    "5_16": {
+      "file": "tile_5_16.json",
+      "buildings": 12
+    },
+    "5_17": {
+      "file": "tile_5_17.json",
+      "buildings": 24
+    },
+    "6_16": {
+      "file": "tile_6_16.json",
+      "buildings": 19
+    },
+    "-4_8": {
+      "file": "tile_-4_8.json",
+      "buildings": 37
+    },
+    "-2_9": {
+      "file": "tile_-2_9.json",
+      "buildings": 64
+    },
+    "-5_-9": {
+      "file": "tile_-5_-9.json",
+      "buildings": 82
+    },
+    "-2_8": {
+      "file": "tile_-2_8.json",
+      "buildings": 63
+    },
+    "-1_8": {
+      "file": "tile_-1_8.json",
+      "buildings": 45
+    },
+    "5_12": {
+      "file": "tile_5_12.json",
+      "buildings": 11
+    },
+    "7_16": {
+      "file": "tile_7_16.json",
+      "buildings": 16
+    },
+    "7_15": {
+      "file": "tile_7_15.json",
+      "buildings": 6
+    },
+    "4_9": {
+      "file": "tile_4_9.json",
+      "buildings": 21
+    },
+    "-4_-8": {
+      "file": "tile_-4_-8.json",
+      "buildings": 65
+    },
+    "-5_-8": {
+      "file": "tile_-5_-8.json",
+      "buildings": 66
+    },
+    "-6_-8": {
+      "file": "tile_-6_-8.json",
+      "buildings": 66
+    },
+    "-6_-9": {
+      "file": "tile_-6_-9.json",
+      "buildings": 72
+    },
+    "-6_-7": {
+      "file": "tile_-6_-7.json",
+      "buildings": 72
+    },
+    "-7_-8": {
+      "file": "tile_-7_-8.json",
+      "buildings": 55
+    },
+    "-3_-13": {
+      "file": "tile_-3_-13.json",
+      "buildings": 11
+    },
+    "-14_5": {
+      "file": "tile_-14_5.json",
+      "buildings": 36
+    },
+    "-13_5": {
+      "file": "tile_-13_5.json",
+      "buildings": 46
+    },
+    "-16_-4": {
+      "file": "tile_-16_-4.json",
+      "buildings": 43
+    },
+    "-8_1": {
+      "file": "tile_-8_1.json",
+      "buildings": 61
+    },
+    "-1_7": {
+      "file": "tile_-1_7.json",
+      "buildings": 69
+    },
+    "0_8": {
+      "file": "tile_0_8.json",
+      "buildings": 54
+    },
+    "0_7": {
+      "file": "tile_0_7.json",
+      "buildings": 63
+    },
+    "-2_7": {
+      "file": "tile_-2_7.json",
+      "buildings": 55
+    },
+    "-14_1": {
+      "file": "tile_-14_1.json",
+      "buildings": 64
+    },
+    "-19_-4": {
+      "file": "tile_-19_-4.json",
+      "buildings": 33
+    },
+    "-3_7": {
+      "file": "tile_-3_7.json",
+      "buildings": 36
+    },
+    "-4_7": {
+      "file": "tile_-4_7.json",
+      "buildings": 38
+    },
+    "4_7": {
+      "file": "tile_4_7.json",
+      "buildings": 12
+    },
+    "-1_6": {
+      "file": "tile_-1_6.json",
+      "buildings": 57
+    },
+    "-2_5": {
+      "file": "tile_-2_5.json",
+      "buildings": 76
+    },
+    "5_8": {
+      "file": "tile_5_8.json",
+      "buildings": 10
+    },
+    "-3_5": {
+      "file": "tile_-3_5.json",
+      "buildings": 64
+    },
+    "6_8": {
+      "file": "tile_6_8.json",
+      "buildings": 24
+    },
+    "-5_3": {
+      "file": "tile_-5_3.json",
+      "buildings": 69
+    },
+    "6_9": {
+      "file": "tile_6_9.json",
+      "buildings": 9
+    },
+    "-7_-2": {
+      "file": "tile_-7_-2.json",
+      "buildings": 26
+    },
+    "6_10": {
+      "file": "tile_6_10.json",
+      "buildings": 10
+    },
+    "-6_0": {
+      "file": "tile_-6_0.json",
+      "buildings": 33
+    },
+    "-7_3": {
+      "file": "tile_-7_3.json",
+      "buildings": 61
+    },
+    "-9_-9": {
+      "file": "tile_-9_-9.json",
+      "buildings": 30
+    },
+    "-8_0": {
+      "file": "tile_-8_0.json",
+      "buildings": 94
+    },
+    "-9_0": {
+      "file": "tile_-9_0.json",
+      "buildings": 98
+    },
+    "-8_-1": {
+      "file": "tile_-8_-1.json",
+      "buildings": 65
+    },
+    "-9_-1": {
+      "file": "tile_-9_-1.json",
+      "buildings": 32
+    },
+    "-8_-7": {
+      "file": "tile_-8_-7.json",
+      "buildings": 63
+    },
+    "-10_0": {
+      "file": "tile_-10_0.json",
+      "buildings": 24
+    },
+    "-8_-6": {
+      "file": "tile_-8_-6.json",
+      "buildings": 93
+    },
+    "-10_1": {
+      "file": "tile_-10_1.json",
+      "buildings": 36
+    },
+    "-7_-7": {
+      "file": "tile_-7_-7.json",
+      "buildings": 58
+    },
+    "-10_2": {
+      "file": "tile_-10_2.json",
+      "buildings": 56
+    },
+    "-9_2": {
+      "file": "tile_-9_2.json",
+      "buildings": 52
+    },
+    "-10_-1": {
+      "file": "tile_-10_-1.json",
+      "buildings": 27
+    },
+    "3_-12": {
+      "file": "tile_3_-12.json",
+      "buildings": 74
+    },
+    "-9_-8": {
+      "file": "tile_-9_-8.json",
+      "buildings": 82
+    },
+    "-11_0": {
+      "file": "tile_-11_0.json",
+      "buildings": 16
+    },
+    "-11_1": {
+      "file": "tile_-11_1.json",
+      "buildings": 48
+    },
+    "-9_-7": {
+      "file": "tile_-9_-7.json",
+      "buildings": 60
+    },
+    "-10_-7": {
+      "file": "tile_-10_-7.json",
+      "buildings": 31
+    },
+    "-1_-12": {
+      "file": "tile_-1_-12.json",
+      "buildings": 43
+    },
+    "0_-12": {
+      "file": "tile_0_-12.json",
+      "buildings": 43
+    },
+    "-10_-6": {
+      "file": "tile_-10_-6.json",
+      "buildings": 79
+    },
+    "-9_-6": {
+      "file": "tile_-9_-6.json",
+      "buildings": 94
+    },
+    "-11_-7": {
+      "file": "tile_-11_-7.json",
+      "buildings": 5
+    },
+    "-11_-6": {
+      "file": "tile_-11_-6.json",
+      "buildings": 80
+    },
+    "6_-13": {
+      "file": "tile_6_-13.json",
+      "buildings": 1
+    },
+    "-9_6": {
+      "file": "tile_-9_6.json",
+      "buildings": 26
+    },
+    "-12_-6": {
+      "file": "tile_-12_-6.json",
+      "buildings": 52
+    },
+    "0_-11": {
+      "file": "tile_0_-11.json",
+      "buildings": 71
+    },
+    "-1_-11": {
+      "file": "tile_-1_-11.json",
+      "buildings": 44
+    },
+    "-11_2": {
+      "file": "tile_-11_2.json",
+      "buildings": 63
+    },
+    "-11_-5": {
+      "file": "tile_-11_-5.json",
+      "buildings": 63
+    },
+    "-12_2": {
+      "file": "tile_-12_2.json",
+      "buildings": 46
+    },
+    "-10_-5": {
+      "file": "tile_-10_-5.json",
+      "buildings": 62
+    },
+    "-8_-5": {
+      "file": "tile_-8_-5.json",
+      "buildings": 68
+    },
+    "-7_-5": {
+      "file": "tile_-7_-5.json",
+      "buildings": 58
+    },
+    "-13_0": {
+      "file": "tile_-13_0.json",
+      "buildings": 27
+    },
+    "-14_0": {
+      "file": "tile_-14_0.json",
+      "buildings": 69
+    },
+    "-13_-1": {
+      "file": "tile_-13_-1.json",
+      "buildings": 24
+    },
+    "-4_-12": {
+      "file": "tile_-4_-12.json",
+      "buildings": 39
+    },
+    "-15_0": {
+      "file": "tile_-15_0.json",
+      "buildings": 66
+    },
+    "-15_-1": {
+      "file": "tile_-15_-1.json",
+      "buildings": 18
+    },
+    "-15_1": {
+      "file": "tile_-15_1.json",
+      "buildings": 32
+    },
+    "-6_-11": {
+      "file": "tile_-6_-11.json",
+      "buildings": 12
+    },
+    "-6_-12": {
+      "file": "tile_-6_-12.json",
+      "buildings": 56
+    },
+    "-7_-12": {
+      "file": "tile_-7_-12.json",
+      "buildings": 48
+    },
+    "-7_-13": {
+      "file": "tile_-7_-13.json",
+      "buildings": 37
+    },
+    "-6_-13": {
+      "file": "tile_-6_-13.json",
+      "buildings": 15
+    },
+    "-16_1": {
+      "file": "tile_-16_1.json",
+      "buildings": 35
+    },
+    "-8_-13": {
+      "file": "tile_-8_-13.json",
+      "buildings": 15
+    },
+    "-8_-12": {
+      "file": "tile_-8_-12.json",
+      "buildings": 36
+    },
+    "-7_-11": {
+      "file": "tile_-7_-11.json",
+      "buildings": 47
+    },
+    "-8_-3": {
+      "file": "tile_-8_-3.json",
+      "buildings": 29
+    },
+    "-9_-3": {
+      "file": "tile_-9_-3.json",
+      "buildings": 43
+    },
+    "-10_-3": {
+      "file": "tile_-10_-3.json",
+      "buildings": 29
+    },
+    "-17_-1": {
+      "file": "tile_-17_-1.json",
+      "buildings": 51
+    },
+    "-17_0": {
+      "file": "tile_-17_0.json",
+      "buildings": 32
+    },
+    "-9_-4": {
+      "file": "tile_-9_-4.json",
+      "buildings": 41
+    },
+    "-9_-13": {
+      "file": "tile_-9_-13.json",
+      "buildings": 13
+    },
+    "-17_1": {
+      "file": "tile_-17_1.json",
+      "buildings": 34
+    },
+    "-18_0": {
+      "file": "tile_-18_0.json",
+      "buildings": 22
+    },
+    "-18_1": {
+      "file": "tile_-18_1.json",
+      "buildings": 27
+    },
+    "-18_2": {
+      "file": "tile_-18_2.json",
+      "buildings": 2
+    },
+    "-11_-4": {
+      "file": "tile_-11_-4.json",
+      "buildings": 8
+    },
+    "-9_8": {
+      "file": "tile_-9_8.json",
+      "buildings": 9
+    },
+    "-9_7": {
+      "file": "tile_-9_7.json",
+      "buildings": 15
+    },
+    "-8_8": {
+      "file": "tile_-8_8.json",
+      "buildings": 17
+    },
+    "-8_7": {
+      "file": "tile_-8_7.json",
+      "buildings": 18
+    },
+    "-8_3": {
+      "file": "tile_-8_3.json",
+      "buildings": 16
+    },
+    "-17_7": {
+      "file": "tile_-17_7.json",
+      "buildings": 30
+    },
+    "14_16": {
+      "file": "tile_14_16.json",
+      "buildings": 5
+    },
+    "14_17": {
+      "file": "tile_14_17.json",
+      "buildings": 2
+    },
+    "13_17": {
+      "file": "tile_13_17.json",
+      "buildings": 7
+    },
+    "15_16": {
+      "file": "tile_15_16.json",
+      "buildings": 8
+    },
+    "17_16": {
+      "file": "tile_17_16.json",
+      "buildings": 1
+    },
+    "-7_8": {
+      "file": "tile_-7_8.json",
+      "buildings": 34
+    },
+    "-6_8": {
+      "file": "tile_-6_8.json",
+      "buildings": 64
+    },
+    "-7_9": {
+      "file": "tile_-7_9.json",
+      "buildings": 12
+    },
+    "-9_4": {
+      "file": "tile_-9_4.json",
+      "buildings": 22
+    },
+    "-16_-5": {
+      "file": "tile_-16_-5.json",
+      "buildings": 19
+    },
+    "-8_9": {
+      "file": "tile_-8_9.json",
+      "buildings": 22
+    },
+    "-10_4": {
+      "file": "tile_-10_4.json",
+      "buildings": 81
+    },
+    "-6_9": {
+      "file": "tile_-6_9.json",
+      "buildings": 36
+    },
+    "-12_5": {
+      "file": "tile_-12_5.json",
+      "buildings": 83
+    },
+    "-11_5": {
+      "file": "tile_-11_5.json",
+      "buildings": 69
+    },
+    "10_13": {
+      "file": "tile_10_13.json",
+      "buildings": 6
+    },
+    "-10_5": {
+      "file": "tile_-10_5.json",
+      "buildings": 54
+    },
+    "-5_7": {
+      "file": "tile_-5_7.json",
+      "buildings": 40
+    },
+    "-10_6": {
+      "file": "tile_-10_6.json",
+      "buildings": 33
+    },
+    "-5_8": {
+      "file": "tile_-5_8.json",
+      "buildings": 26
+    },
+    "-5_9": {
+      "file": "tile_-5_9.json",
+      "buildings": 10
+    },
+    "-11_6": {
+      "file": "tile_-11_6.json",
+      "buildings": 31
+    },
+    "-8_6": {
+      "file": "tile_-8_6.json",
+      "buildings": 15
+    },
+    "-6_10": {
+      "file": "tile_-6_10.json",
+      "buildings": 18
+    },
+    "-8_5": {
+      "file": "tile_-8_5.json",
+      "buildings": 22
+    },
+    "-7_4": {
+      "file": "tile_-7_4.json",
+      "buildings": 42
+    },
+    "-5_10": {
+      "file": "tile_-5_10.json",
+      "buildings": 13
+    },
+    "-6_4": {
+      "file": "tile_-6_4.json",
+      "buildings": 45
+    },
+    "-6_5": {
+      "file": "tile_-6_5.json",
+      "buildings": 100
+    },
+    "-8_11": {
+      "file": "tile_-8_11.json",
+      "buildings": 8
+    },
+    "-8_10": {
+      "file": "tile_-8_10.json",
+      "buildings": 16
+    },
+    "-13_7": {
+      "file": "tile_-13_7.json",
+      "buildings": 4
+    },
+    "-9_11": {
+      "file": "tile_-9_11.json",
+      "buildings": 38
+    },
+    "-9_10": {
+      "file": "tile_-9_10.json",
+      "buildings": 33
+    },
+    "-9_12": {
+      "file": "tile_-9_12.json",
+      "buildings": 32
+    },
+    "-8_12": {
+      "file": "tile_-8_12.json",
+      "buildings": 13
+    },
+    "-12_7": {
+      "file": "tile_-12_7.json",
+      "buildings": 14
+    },
+    "-12_8": {
+      "file": "tile_-12_8.json",
+      "buildings": 9
+    },
+    "-11_8": {
+      "file": "tile_-11_8.json",
+      "buildings": 20
+    },
+    "-11_7": {
+      "file": "tile_-11_7.json",
+      "buildings": 18
+    },
+    "8_3": {
+      "file": "tile_8_3.json",
+      "buildings": 3
+    },
+    "-12_9": {
+      "file": "tile_-12_9.json",
+      "buildings": 10
+    },
+    "-11_9": {
+      "file": "tile_-11_9.json",
+      "buildings": 12
+    },
+    "-12_10": {
+      "file": "tile_-12_10.json",
+      "buildings": 2
+    },
+    "-7_12": {
+      "file": "tile_-7_12.json",
+      "buildings": 15
+    },
+    "-13_11": {
+      "file": "tile_-13_11.json",
+      "buildings": 3
+    },
+    "-14_11": {
+      "file": "tile_-14_11.json",
+      "buildings": 1
+    },
+    "-14_10": {
+      "file": "tile_-14_10.json",
+      "buildings": 1
+    },
+    "-13_10": {
+      "file": "tile_-13_10.json",
+      "buildings": 2
+    },
+    "-15_9": {
+      "file": "tile_-15_9.json",
+      "buildings": 8
+    },
+    "-16_9": {
+      "file": "tile_-16_9.json",
+      "buildings": 9
+    },
+    "-16_8": {
+      "file": "tile_-16_8.json",
+      "buildings": 11
+    },
+    "-13_12": {
+      "file": "tile_-13_12.json",
+      "buildings": 5
+    },
+    "-14_12": {
+      "file": "tile_-14_12.json",
+      "buildings": 1
+    },
+    "-12_13": {
+      "file": "tile_-12_13.json",
+      "buildings": 2
+    },
+    "-13_14": {
+      "file": "tile_-13_14.json",
+      "buildings": 1
+    },
+    "-15_6": {
+      "file": "tile_-15_6.json",
+      "buildings": 27
+    },
+    "-16_5": {
+      "file": "tile_-16_5.json",
+      "buildings": 46
+    },
+    "-6_13": {
+      "file": "tile_-6_13.json",
+      "buildings": 8
+    },
+    "-7_14": {
+      "file": "tile_-7_14.json",
+      "buildings": 7
+    },
+    "-8_14": {
+      "file": "tile_-8_14.json",
+      "buildings": 11
+    },
+    "-6_14": {
+      "file": "tile_-6_14.json",
+      "buildings": 3
+    },
+    "-16_7": {
+      "file": "tile_-16_7.json",
+      "buildings": 21
+    },
+    "-15_8": {
+      "file": "tile_-15_8.json",
+      "buildings": 6
+    },
+    "-5_13": {
+      "file": "tile_-5_13.json",
+      "buildings": 25
+    },
+    "-4_13": {
+      "file": "tile_-4_13.json",
+      "buildings": 13
+    },
+    "-15_12": {
+      "file": "tile_-15_12.json",
+      "buildings": 11
+    },
+    "-5_14": {
+      "file": "tile_-5_14.json",
+      "buildings": 16
+    },
+    "-4_14": {
+      "file": "tile_-4_14.json",
+      "buildings": 13
+    },
+    "-16_13": {
+      "file": "tile_-16_13.json",
+      "buildings": 19
+    },
+    "-16_11": {
+      "file": "tile_-16_11.json",
+      "buildings": 3
+    },
+    "-16_12": {
+      "file": "tile_-16_12.json",
+      "buildings": 13
+    },
+    "-17_11": {
+      "file": "tile_-17_11.json",
+      "buildings": 4
+    },
+    "-5_15": {
+      "file": "tile_-5_15.json",
+      "buildings": 13
+    },
+    "-6_15": {
+      "file": "tile_-6_15.json",
+      "buildings": 9
+    },
+    "-4_15": {
+      "file": "tile_-4_15.json",
+      "buildings": 7
+    },
+    "-16_14": {
+      "file": "tile_-16_14.json",
+      "buildings": 9
+    },
+    "-17_12": {
+      "file": "tile_-17_12.json",
+      "buildings": 1
+    },
+    "-17_13": {
+      "file": "tile_-17_13.json",
+      "buildings": 17
+    },
+    "-19_5": {
+      "file": "tile_-19_5.json",
+      "buildings": 9
+    },
+    "-18_6": {
+      "file": "tile_-18_6.json",
+      "buildings": 31
+    },
+    "-18_5": {
+      "file": "tile_-18_5.json",
+      "buildings": 25
+    },
+    "-19_6": {
+      "file": "tile_-19_6.json",
+      "buildings": 16
+    },
+    "8_6": {
+      "file": "tile_8_6.json",
+      "buildings": 43
+    },
+    "-18_7": {
+      "file": "tile_-18_7.json",
+      "buildings": 8
+    },
+    "8_7": {
+      "file": "tile_8_7.json",
+      "buildings": 24
+    },
+    "-19_7": {
+      "file": "tile_-19_7.json",
+      "buildings": 4
+    },
+    "-18_8": {
+      "file": "tile_-18_8.json",
+      "buildings": 8
+    },
+    "-17_8": {
+      "file": "tile_-17_8.json",
+      "buildings": 23
+    },
+    "-17_9": {
+      "file": "tile_-17_9.json",
+      "buildings": 16
+    },
+    "9_7": {
+      "file": "tile_9_7.json",
+      "buildings": 10
+    },
+    "9_6": {
+      "file": "tile_9_6.json",
+      "buildings": 10
+    },
+    "-17_10": {
+      "file": "tile_-17_10.json",
+      "buildings": 8
+    },
+    "-18_9": {
+      "file": "tile_-18_9.json",
+      "buildings": 8
+    },
+    "-16_10": {
+      "file": "tile_-16_10.json",
+      "buildings": 8
+    },
+    "9_8": {
+      "file": "tile_9_8.json",
+      "buildings": 18
+    },
+    "8_8": {
+      "file": "tile_8_8.json",
+      "buildings": 13
+    },
+    "7_8": {
+      "file": "tile_7_8.json",
+      "buildings": 9
+    },
+    "-18_10": {
+      "file": "tile_-18_10.json",
+      "buildings": 8
+    },
+    "-19_10": {
+      "file": "tile_-19_10.json",
+      "buildings": 8
+    },
+    "-20_6": {
+      "file": "tile_-20_6.json",
+      "buildings": 36
+    },
+    "-20_5": {
+      "file": "tile_-20_5.json",
+      "buildings": 21
+    },
+    "-21_6": {
+      "file": "tile_-21_6.json",
+      "buildings": 42
+    },
+    "-20_7": {
+      "file": "tile_-20_7.json",
+      "buildings": 11
+    },
+    "-9_13": {
+      "file": "tile_-9_13.json",
+      "buildings": 21
+    },
+    "-20_8": {
+      "file": "tile_-20_8.json",
+      "buildings": 2
+    },
+    "-10_8": {
+      "file": "tile_-10_8.json",
+      "buildings": 21
+    },
+    "-9_9": {
+      "file": "tile_-9_9.json",
+      "buildings": 27
+    },
+    "-19_8": {
+      "file": "tile_-19_8.json",
+      "buildings": 7
+    },
+    "-10_9": {
+      "file": "tile_-10_9.json",
+      "buildings": 11
+    },
+    "-19_9": {
+      "file": "tile_-19_9.json",
+      "buildings": 4
+    },
+    "-20_9": {
+      "file": "tile_-20_9.json",
+      "buildings": 1
+    },
+    "-10_10": {
+      "file": "tile_-10_10.json",
+      "buildings": 2
+    },
+    "-20_10": {
+      "file": "tile_-20_10.json",
+      "buildings": 2
+    },
+    "-10_11": {
+      "file": "tile_-10_11.json",
+      "buildings": 23
+    },
+    "-10_12": {
+      "file": "tile_-10_12.json",
+      "buildings": 18
+    },
+    "-20_11": {
+      "file": "tile_-20_11.json",
+      "buildings": 3
+    },
+    "-19_11": {
+      "file": "tile_-19_11.json",
+      "buildings": 3
+    },
+    "-18_11": {
+      "file": "tile_-18_11.json",
+      "buildings": 2
+    },
+    "-19_12": {
+      "file": "tile_-19_12.json",
+      "buildings": 3
+    },
+    "-18_12": {
+      "file": "tile_-18_12.json",
+      "buildings": 5
+    },
+    "6_11": {
+      "file": "tile_6_11.json",
+      "buildings": 14
+    },
+    "-20_12": {
+      "file": "tile_-20_12.json",
+      "buildings": 3
+    },
+    "-19_13": {
+      "file": "tile_-19_13.json",
+      "buildings": 2
+    },
+    "-20_13": {
+      "file": "tile_-20_13.json",
+      "buildings": 2
+    },
+    "6_12": {
+      "file": "tile_6_12.json",
+      "buildings": 13
+    },
+    "7_12": {
+      "file": "tile_7_12.json",
+      "buildings": 6
+    },
+    "5_10": {
+      "file": "tile_5_10.json",
+      "buildings": 5
+    },
+    "-18_13": {
+      "file": "tile_-18_13.json",
+      "buildings": 10
+    },
+    "3_12": {
+      "file": "tile_3_12.json",
+      "buildings": 20
+    },
+    "-17_14": {
+      "file": "tile_-17_14.json",
+      "buildings": 6
+    },
+    "-20_14": {
+      "file": "tile_-20_14.json",
+      "buildings": 11
+    },
+    "-18_14": {
+      "file": "tile_-18_14.json",
+      "buildings": 3
+    },
+    "-17_15": {
+      "file": "tile_-17_15.json",
+      "buildings": 1
+    },
+    "-18_15": {
+      "file": "tile_-18_15.json",
+      "buildings": 14
+    },
+    "3_13": {
+      "file": "tile_3_13.json",
+      "buildings": 8
+    },
+    "-19_15": {
+      "file": "tile_-19_15.json",
+      "buildings": 13
+    },
+    "2_13": {
+      "file": "tile_2_13.json",
+      "buildings": 9
+    },
+    "-3_13": {
+      "file": "tile_-3_13.json",
+      "buildings": 21
+    },
+    "-2_13": {
+      "file": "tile_-2_13.json",
+      "buildings": 29
+    },
+    "1_13": {
+      "file": "tile_1_13.json",
+      "buildings": 14
+    },
+    "4_13": {
+      "file": "tile_4_13.json",
+      "buildings": 3
+    },
+    "4_14": {
+      "file": "tile_4_14.json",
+      "buildings": 2
+    },
+    "3_14": {
+      "file": "tile_3_14.json",
+      "buildings": 1
+    },
+    "3_15": {
+      "file": "tile_3_15.json",
+      "buildings": 4
+    },
+    "1_14": {
+      "file": "tile_1_14.json",
+      "buildings": 2
+    },
+    "-3_16": {
+      "file": "tile_-3_16.json",
+      "buildings": 11
+    },
+    "0_14": {
+      "file": "tile_0_14.json",
+      "buildings": 8
+    },
+    "0_13": {
+      "file": "tile_0_13.json",
+      "buildings": 22
+    },
+    "-3_17": {
+      "file": "tile_-3_17.json",
+      "buildings": 1
+    },
+    "0_15": {
+      "file": "tile_0_15.json",
+      "buildings": 2
+    },
+    "-4_16": {
+      "file": "tile_-4_16.json",
+      "buildings": 4
+    },
+    "-5_16": {
+      "file": "tile_-5_16.json",
+      "buildings": 3
+    },
+    "-4_17": {
+      "file": "tile_-4_17.json",
+      "buildings": 2
+    },
+    "-1_13": {
+      "file": "tile_-1_13.json",
+      "buildings": 24
+    },
+    "-4_19": {
+      "file": "tile_-4_19.json",
+      "buildings": 150
+    },
+    "-4_18": {
+      "file": "tile_-4_18.json",
+      "buildings": 3
+    },
+    "-1_16": {
+      "file": "tile_-1_16.json",
+      "buildings": 11
+    },
+    "0_16": {
+      "file": "tile_0_16.json",
+      "buildings": 3
+    },
+    "0_17": {
+      "file": "tile_0_17.json",
+      "buildings": 3
+    },
+    "-5_17": {
+      "file": "tile_-5_17.json",
+      "buildings": 3
+    },
+    "-2_17": {
+      "file": "tile_-2_17.json",
+      "buildings": 17
+    },
+    "-7_19": {
+      "file": "tile_-7_19.json",
+      "buildings": 131
+    },
+    "-1_17": {
+      "file": "tile_-1_17.json",
+      "buildings": 6
+    },
+    "-7_16": {
+      "file": "tile_-7_16.json",
+      "buildings": 9
+    },
+    "-8_16": {
+      "file": "tile_-8_16.json",
+      "buildings": 4
+    },
+    "-8_17": {
+      "file": "tile_-8_17.json",
+      "buildings": 4
+    },
+    "-7_17": {
+      "file": "tile_-7_17.json",
+      "buildings": 10
+    },
+    "-5_18": {
+      "file": "tile_-5_18.json",
+      "buildings": 1
+    },
+    "-6_16": {
+      "file": "tile_-6_16.json",
+      "buildings": 2
+    },
+    "-6_18": {
+      "file": "tile_-6_18.json",
+      "buildings": 3
+    },
+    "-6_17": {
+      "file": "tile_-6_17.json",
+      "buildings": 2
+    },
+    "-8_13": {
+      "file": "tile_-8_13.json",
+      "buildings": 6
+    },
+    "-9_14": {
+      "file": "tile_-9_14.json",
+      "buildings": 10
+    },
+    "-10_15": {
+      "file": "tile_-10_15.json",
+      "buildings": 1
+    },
+    "-10_14": {
+      "file": "tile_-10_14.json",
+      "buildings": 1
+    },
+    "3_16": {
+      "file": "tile_3_16.json",
+      "buildings": 4
+    },
+    "4_15": {
+      "file": "tile_4_15.json",
+      "buildings": 4
+    },
+    "3_17": {
+      "file": "tile_3_17.json",
+      "buildings": 2
+    },
+    "-8_-11": {
+      "file": "tile_-8_-11.json",
+      "buildings": 33
+    },
+    "2_17": {
+      "file": "tile_2_17.json",
+      "buildings": 2
+    },
+    "-9_-11": {
+      "file": "tile_-9_-11.json",
+      "buildings": 47
+    },
+    "0_18": {
+      "file": "tile_0_18.json",
+      "buildings": 3
+    },
+    "-10_-11": {
+      "file": "tile_-10_-11.json",
+      "buildings": 26
+    },
+    "-2_18": {
+      "file": "tile_-2_18.json",
+      "buildings": 12
+    },
+    "-1_18": {
+      "file": "tile_-1_18.json",
+      "buildings": 3
+    },
+    "1_19": {
+      "file": "tile_1_19.json",
+      "buildings": 162
+    },
+    "-10_-12": {
+      "file": "tile_-10_-12.json",
+      "buildings": 48
+    },
+    "2_19": {
+      "file": "tile_2_19.json",
+      "buildings": 68
+    },
+    "2_18": {
+      "file": "tile_2_18.json",
+      "buildings": 8
+    },
+    "-10_-13": {
+      "file": "tile_-10_-13.json",
+      "buildings": 1
+    },
+    "0_19": {
+      "file": "tile_0_19.json",
+      "buildings": 147
+    },
+    "-12_-5": {
+      "file": "tile_-12_-5.json",
+      "buildings": 82
+    },
+    "-13_-5": {
+      "file": "tile_-13_-5.json",
+      "buildings": 78
+    },
+    "-14_-5": {
+      "file": "tile_-14_-5.json",
+      "buildings": 85
+    },
+    "-14_-6": {
+      "file": "tile_-14_-6.json",
+      "buildings": 17
+    },
+    "-12_-4": {
+      "file": "tile_-12_-4.json",
+      "buildings": 26
+    },
+    "-13_-4": {
+      "file": "tile_-13_-4.json",
+      "buildings": 39
+    },
+    "-2_20": {
+      "file": "tile_-2_20.json",
+      "buildings": 117
+    },
+    "-1_20": {
+      "file": "tile_-1_20.json",
+      "buildings": 92
+    },
+    "0_20": {
+      "file": "tile_0_20.json",
+      "buildings": 67
+    },
+    "-3_20": {
+      "file": "tile_-3_20.json",
+      "buildings": 94
+    },
+    "1_20": {
+      "file": "tile_1_20.json",
+      "buildings": 76
+    },
+    "-2_19": {
+      "file": "tile_-2_19.json",
+      "buildings": 121
+    },
+    "-14_-4": {
+      "file": "tile_-14_-4.json",
+      "buildings": 47
+    },
+    "-3_19": {
+      "file": "tile_-3_19.json",
+      "buildings": 140
+    },
+    "-12_-3": {
+      "file": "tile_-12_-3.json",
+      "buildings": 29
+    },
+    "-13_-3": {
+      "file": "tile_-13_-3.json",
+      "buildings": 35
+    },
+    "-14_-3": {
+      "file": "tile_-14_-3.json",
+      "buildings": 47
+    },
+    "-5_20": {
+      "file": "tile_-5_20.json",
+      "buildings": 94
+    },
+    "-13_-2": {
+      "file": "tile_-13_-2.json",
+      "buildings": 43
+    },
+    "-3_18": {
+      "file": "tile_-3_18.json",
+      "buildings": 5
+    },
+    "-12_-2": {
+      "file": "tile_-12_-2.json",
+      "buildings": 49
+    },
+    "-12_0": {
+      "file": "tile_-12_0.json",
+      "buildings": 12
+    },
+    "-12_-1": {
+      "file": "tile_-12_-1.json",
+      "buildings": 3
+    },
+    "9_11": {
+      "file": "tile_9_11.json",
+      "buildings": 16
+    },
+    "8_9": {
+      "file": "tile_8_9.json",
+      "buildings": 19
+    },
+    "10_11": {
+      "file": "tile_10_11.json",
+      "buildings": 29
+    },
+    "10_10": {
+      "file": "tile_10_10.json",
+      "buildings": 15
+    },
+    "11_11": {
+      "file": "tile_11_11.json",
+      "buildings": 3
+    },
+    "10_12": {
+      "file": "tile_10_12.json",
+      "buildings": 11
+    },
+    "11_13": {
+      "file": "tile_11_13.json",
+      "buildings": 7
+    },
+    "11_12": {
+      "file": "tile_11_12.json",
+      "buildings": 8
+    },
+    "9_12": {
+      "file": "tile_9_12.json",
+      "buildings": 5
+    },
+    "12_12": {
+      "file": "tile_12_12.json",
+      "buildings": 10
+    },
+    "13_11": {
+      "file": "tile_13_11.json",
+      "buildings": 1
+    },
+    "12_9": {
+      "file": "tile_12_9.json",
+      "buildings": 2
+    },
+    "9_9": {
+      "file": "tile_9_9.json",
+      "buildings": 5
+    },
+    "-11_-1": {
+      "file": "tile_-11_-1.json",
+      "buildings": 5
+    },
+    "-8_-2": {
+      "file": "tile_-8_-2.json",
+      "buildings": 42
+    },
+    "-9_-2": {
+      "file": "tile_-9_-2.json",
+      "buildings": 22
+    },
+    "10_6": {
+      "file": "tile_10_6.json",
+      "buildings": 26
+    },
+    "-15_-5": {
+      "file": "tile_-15_-5.json",
+      "buildings": 39
+    },
+    "-2_21": {
+      "file": "tile_-2_21.json",
+      "buildings": 194
+    },
+    "-18_-4": {
+      "file": "tile_-18_-4.json",
+      "buildings": 29
+    },
+    "-3_21": {
+      "file": "tile_-3_21.json",
+      "buildings": 192
+    },
+    "-17_-4": {
+      "file": "tile_-17_-4.json",
+      "buildings": 57
+    },
+    "-17_-5": {
+      "file": "tile_-17_-5.json",
+      "buildings": 23
+    },
+    "-15_-4": {
+      "file": "tile_-15_-4.json",
+      "buildings": 50
+    },
+    "-2_22": {
+      "file": "tile_-2_22.json",
+      "buildings": 179
+    },
+    "-1_22": {
+      "file": "tile_-1_22.json",
+      "buildings": 174
+    },
+    "0_22": {
+      "file": "tile_0_22.json",
+      "buildings": 167
+    },
+    "0_21": {
+      "file": "tile_0_21.json",
+      "buildings": 107
+    },
+    "2_20": {
+      "file": "tile_2_20.json",
+      "buildings": 181
+    },
+    "1_21": {
+      "file": "tile_1_21.json",
+      "buildings": 167
+    },
+    "2_21": {
+      "file": "tile_2_21.json",
+      "buildings": 172
+    },
+    "3_20": {
+      "file": "tile_3_20.json",
+      "buildings": 194
+    },
+    "3_19": {
+      "file": "tile_3_19.json",
+      "buildings": 70
+    },
+    "-2_23": {
+      "file": "tile_-2_23.json",
+      "buildings": 167
+    },
+    "-1_23": {
+      "file": "tile_-1_23.json",
+      "buildings": 123
+    },
+    "1_22": {
+      "file": "tile_1_22.json",
+      "buildings": 157
+    },
+    "2_22": {
+      "file": "tile_2_22.json",
+      "buildings": 47
+    },
+    "-18_-1": {
+      "file": "tile_-18_-1.json",
+      "buildings": 33
+    },
+    "-3_22": {
+      "file": "tile_-3_22.json",
+      "buildings": 190
+    },
+    "-19_0": {
+      "file": "tile_-19_0.json",
+      "buildings": 21
+    },
+    "-3_23": {
+      "file": "tile_-3_23.json",
+      "buildings": 187
+    },
+    "-19_1": {
+      "file": "tile_-19_1.json",
+      "buildings": 19
+    },
+    "-2_24": {
+      "file": "tile_-2_24.json",
+      "buildings": 27
+    },
+    "-3_24": {
+      "file": "tile_-3_24.json",
+      "buildings": 192
+    },
+    "-20_-4": {
+      "file": "tile_-20_-4.json",
+      "buildings": 18
+    },
+    "-23_-4": {
+      "file": "tile_-23_-4.json",
+      "buildings": 31
+    },
+    "-23_-5": {
+      "file": "tile_-23_-5.json",
+      "buildings": 9
+    },
+    "-22_-4": {
+      "file": "tile_-22_-4.json",
+      "buildings": 36
+    },
+    "-21_-4": {
+      "file": "tile_-21_-4.json",
+      "buildings": 32
+    },
+    "-20_-3": {
+      "file": "tile_-20_-3.json",
+      "buildings": 38
+    },
+    "-22_-3": {
+      "file": "tile_-22_-3.json",
+      "buildings": 38
+    },
+    "-4_24": {
+      "file": "tile_-4_24.json",
+      "buildings": 181
+    },
+    "-23_-3": {
+      "file": "tile_-23_-3.json",
+      "buildings": 46
+    },
+    "-24_-6": {
+      "file": "tile_-24_-6.json",
+      "buildings": 7
+    },
+    "-3_25": {
+      "file": "tile_-3_25.json",
+      "buildings": 161
+    },
+    "-24_-5": {
+      "file": "tile_-24_-5.json",
+      "buildings": 36
+    },
+    "-25_-5": {
+      "file": "tile_-25_-5.json",
+      "buildings": 32
+    },
+    "-3_26": {
+      "file": "tile_-3_26.json",
+      "buildings": 98
+    },
+    "-2_25": {
+      "file": "tile_-2_25.json",
+      "buildings": 1
+    },
+    "-25_-4": {
+      "file": "tile_-25_-4.json",
+      "buildings": 19
+    },
+    "-26_-4": {
+      "file": "tile_-26_-4.json",
+      "buildings": 28
+    },
+    "-27_-4": {
+      "file": "tile_-27_-4.json",
+      "buildings": 3
+    },
+    "-24_-4": {
+      "file": "tile_-24_-4.json",
+      "buildings": 50
+    },
+    "-4_25": {
+      "file": "tile_-4_25.json",
+      "buildings": 167
+    },
+    "-26_-3": {
+      "file": "tile_-26_-3.json",
+      "buildings": 24
+    },
+    "-24_-3": {
+      "file": "tile_-24_-3.json",
+      "buildings": 51
+    },
+    "-5_23": {
+      "file": "tile_-5_23.json",
+      "buildings": 175
+    },
+    "-5_24": {
+      "file": "tile_-5_24.json",
+      "buildings": 196
+    },
+    "-5_22": {
+      "file": "tile_-5_22.json",
+      "buildings": 115
+    },
+    "-22_5": {
+      "file": "tile_-22_5.json",
+      "buildings": 9
+    },
+    "-22_6": {
+      "file": "tile_-22_6.json",
+      "buildings": 25
+    },
+    "-22_7": {
+      "file": "tile_-22_7.json",
+      "buildings": 8
+    },
+    "-23_6": {
+      "file": "tile_-23_6.json",
+      "buildings": 19
+    },
+    "-23_5": {
+      "file": "tile_-23_5.json",
+      "buildings": 3
+    },
+    "-25_5": {
+      "file": "tile_-25_5.json",
+      "buildings": 1
+    },
+    "-13_16": {
+      "file": "tile_-13_16.json",
+      "buildings": 1
+    },
+    "-24_5": {
+      "file": "tile_-24_5.json",
+      "buildings": 1
+    },
+    "-26_5": {
+      "file": "tile_-26_5.json",
+      "buildings": 1
+    },
+    "-26_6": {
+      "file": "tile_-26_6.json",
+      "buildings": 1
+    },
+    "-14_15": {
+      "file": "tile_-14_15.json",
+      "buildings": 6
+    },
+    "-23_7": {
+      "file": "tile_-23_7.json",
+      "buildings": 4
+    },
+    "-24_7": {
+      "file": "tile_-24_7.json",
+      "buildings": 11
+    },
+    "-24_6": {
+      "file": "tile_-24_6.json",
+      "buildings": 8
+    },
+    "-25_6": {
+      "file": "tile_-25_6.json",
+      "buildings": 3
+    },
+    "-27_7": {
+      "file": "tile_-27_7.json",
+      "buildings": 1
+    },
+    "-27_6": {
+      "file": "tile_-27_6.json",
+      "buildings": 1
+    },
+    "-28_7": {
+      "file": "tile_-28_7.json",
+      "buildings": 8
+    },
+    "-28_6": {
+      "file": "tile_-28_6.json",
+      "buildings": 3
+    },
+    "-29_6": {
+      "file": "tile_-29_6.json",
+      "buildings": 9
+    },
+    "-30_6": {
+      "file": "tile_-30_6.json",
+      "buildings": 2
+    },
+    "-29_7": {
+      "file": "tile_-29_7.json",
+      "buildings": 1
+    },
+    "-31_6": {
+      "file": "tile_-31_6.json",
+      "buildings": 13
+    },
+    "-16_16": {
+      "file": "tile_-16_16.json",
+      "buildings": 2
+    },
+    "-15_16": {
+      "file": "tile_-15_16.json",
+      "buildings": 4
+    },
+    "-14_16": {
+      "file": "tile_-14_16.json",
+      "buildings": 1
+    },
+    "-15_18": {
+      "file": "tile_-15_18.json",
+      "buildings": 21
+    },
+    "-15_17": {
+      "file": "tile_-15_17.json",
+      "buildings": 18
+    },
+    "-16_17": {
+      "file": "tile_-16_17.json",
+      "buildings": 8
+    },
+    "-16_18": {
+      "file": "tile_-16_18.json",
+      "buildings": 12
+    },
+    "-17_18": {
+      "file": "tile_-17_18.json",
+      "buildings": 16
+    },
+    "-17_28": {
+      "file": "tile_-17_28.json",
+      "buildings": 132
+    },
+    "4_28": {
+      "file": "tile_4_28.json",
+      "buildings": 177
+    },
+    "9_20": {
+      "file": "tile_9_20.json",
+      "buildings": 142
+    },
+    "-32_6": {
+      "file": "tile_-32_6.json",
+      "buildings": 13
+    },
+    "-10_16": {
+      "file": "tile_-10_16.json",
+      "buildings": 1
+    },
+    "-32_7": {
+      "file": "tile_-32_7.json",
+      "buildings": 19
+    },
+    "-12_16": {
+      "file": "tile_-12_16.json",
+      "buildings": 1
+    },
+    "-32_8": {
+      "file": "tile_-32_8.json",
+      "buildings": 12
+    },
+    "-10_17": {
+      "file": "tile_-10_17.json",
+      "buildings": 1
+    },
+    "-9_19": {
+      "file": "tile_-9_19.json",
+      "buildings": 182
+    },
+    "-9_18": {
+      "file": "tile_-9_18.json",
+      "buildings": 15
+    },
+    "-19_25": {
+      "file": "tile_-19_25.json",
+      "buildings": 140
+    },
+    "-11_19": {
+      "file": "tile_-11_19.json",
+      "buildings": 160
+    },
+    "-24_2": {
+      "file": "tile_-24_2.json",
+      "buildings": 8
+    },
+    "-21_-1": {
+      "file": "tile_-21_-1.json",
+      "buildings": 37
+    },
+    "-22_-1": {
+      "file": "tile_-22_-1.json",
+      "buildings": 45
+    },
+    "-18_25": {
+      "file": "tile_-18_25.json",
+      "buildings": 183
+    },
+    "-18_24": {
+      "file": "tile_-18_24.json",
+      "buildings": 83
+    },
+    "-8_19": {
+      "file": "tile_-8_19.json",
+      "buildings": 135
+    },
+    "-9_20": {
+      "file": "tile_-9_20.json",
+      "buildings": 168
+    },
+    "-17_25": {
+      "file": "tile_-17_25.json",
+      "buildings": 187
+    },
+    "-17_24": {
+      "file": "tile_-17_24.json",
+      "buildings": 87
+    },
+    "-12_19": {
+      "file": "tile_-12_19.json",
+      "buildings": 172
+    },
+    "-13_18": {
+      "file": "tile_-13_18.json",
+      "buildings": 6
+    },
+    "-14_18": {
+      "file": "tile_-14_18.json",
+      "buildings": 24
+    },
+    "-16_25": {
+      "file": "tile_-16_25.json",
+      "buildings": 182
+    },
+    "-16_24": {
+      "file": "tile_-16_24.json",
+      "buildings": 103
+    },
+    "-13_19": {
+      "file": "tile_-13_19.json",
+      "buildings": 120
+    },
+    "-14_19": {
+      "file": "tile_-14_19.json",
+      "buildings": 113
+    },
+    "-23_-1": {
+      "file": "tile_-23_-1.json",
+      "buildings": 50
+    },
+    "-22_0": {
+      "file": "tile_-22_0.json",
+      "buildings": 27
+    },
+    "-21_0": {
+      "file": "tile_-21_0.json",
+      "buildings": 7
+    },
+    "-15_25": {
+      "file": "tile_-15_25.json",
+      "buildings": 177
+    },
+    "-15_24": {
+      "file": "tile_-15_24.json",
+      "buildings": 146
+    },
+    "-23_0": {
+      "file": "tile_-23_0.json",
+      "buildings": 16
+    },
+    "-24_1": {
+      "file": "tile_-24_1.json",
+      "buildings": 6
+    },
+    "-23_1": {
+      "file": "tile_-23_1.json",
+      "buildings": 20
+    },
+    "-24_0": {
+      "file": "tile_-24_0.json",
+      "buildings": 25
+    },
+    "-19_26": {
+      "file": "tile_-19_26.json",
+      "buildings": 109
+    },
+    "-14_17": {
+      "file": "tile_-14_17.json",
+      "buildings": 1
+    },
+    "-17_26": {
+      "file": "tile_-17_26.json",
+      "buildings": 156
+    },
+    "-25_0": {
+      "file": "tile_-25_0.json",
+      "buildings": 18
+    },
+    "-25_1": {
+      "file": "tile_-25_1.json",
+      "buildings": 5
+    },
+    "-15_19": {
+      "file": "tile_-15_19.json",
+      "buildings": 107
+    },
+    "-14_20": {
+      "file": "tile_-14_20.json",
+      "buildings": 79
+    },
+    "-16_26": {
+      "file": "tile_-16_26.json",
+      "buildings": 196
+    },
+    "-13_20": {
+      "file": "tile_-13_20.json",
+      "buildings": 117
+    },
+    "-12_20": {
+      "file": "tile_-12_20.json",
+      "buildings": 131
+    },
+    "-15_26": {
+      "file": "tile_-15_26.json",
+      "buildings": 180
+    },
+    "-26_1": {
+      "file": "tile_-26_1.json",
+      "buildings": 6
+    },
+    "-25_2": {
+      "file": "tile_-25_2.json",
+      "buildings": 7
+    },
+    "-22_1": {
+      "file": "tile_-22_1.json",
+      "buildings": 15
+    },
+    "-22_2": {
+      "file": "tile_-22_2.json",
+      "buildings": 10
+    },
+    "-23_2": {
+      "file": "tile_-23_2.json",
+      "buildings": 17
+    },
+    "-21_2": {
+      "file": "tile_-21_2.json",
+      "buildings": 17
+    },
+    "-21_1": {
+      "file": "tile_-21_1.json",
+      "buildings": 20
+    },
+    "-26_2": {
+      "file": "tile_-26_2.json",
+      "buildings": 3
+    },
+    "-16_19": {
+      "file": "tile_-16_19.json",
+      "buildings": 87
+    },
+    "-16_20": {
+      "file": "tile_-16_20.json",
+      "buildings": 94
+    },
+    "-15_20": {
+      "file": "tile_-15_20.json",
+      "buildings": 86
+    },
+    "-15_21": {
+      "file": "tile_-15_21.json",
+      "buildings": 110
+    },
+    "-18_16": {
+      "file": "tile_-18_16.json",
+      "buildings": 5
+    },
+    "-7_20": {
+      "file": "tile_-7_20.json",
+      "buildings": 126
+    },
+    "-8_21": {
+      "file": "tile_-8_21.json",
+      "buildings": 90
+    },
+    "-9_21": {
+      "file": "tile_-9_21.json",
+      "buildings": 135
+    },
+    "-12_21": {
+      "file": "tile_-12_21.json",
+      "buildings": 166
+    },
+    "-6_20": {
+      "file": "tile_-6_20.json",
+      "buildings": 67
+    },
+    "-16_21": {
+      "file": "tile_-16_21.json",
+      "buildings": 127
+    },
+    "-20_16": {
+      "file": "tile_-20_16.json",
+      "buildings": 5
+    },
+    "-19_17": {
+      "file": "tile_-19_17.json",
+      "buildings": 1
+    },
+    "-20_18": {
+      "file": "tile_-20_18.json",
+      "buildings": 7
+    },
+    "-20_19": {
+      "file": "tile_-20_19.json",
+      "buildings": 77
+    },
+    "-19_19": {
+      "file": "tile_-19_19.json",
+      "buildings": 47
+    },
+    "-18_19": {
+      "file": "tile_-18_19.json",
+      "buildings": 72
+    },
+    "-13_21": {
+      "file": "tile_-13_21.json",
+      "buildings": 119
+    },
+    "-26_0": {
+      "file": "tile_-26_0.json",
+      "buildings": 8
+    },
+    "-14_21": {
+      "file": "tile_-14_21.json",
+      "buildings": 110
+    },
+    "-14_22": {
+      "file": "tile_-14_22.json",
+      "buildings": 118
+    },
+    "-14_23": {
+      "file": "tile_-14_23.json",
+      "buildings": 124
+    },
+    "-15_22": {
+      "file": "tile_-15_22.json",
+      "buildings": 173
+    },
+    "-15_23": {
+      "file": "tile_-15_23.json",
+      "buildings": 97
+    },
+    "-17_19": {
+      "file": "tile_-17_19.json",
+      "buildings": 66
+    },
+    "-18_20": {
+      "file": "tile_-18_20.json",
+      "buildings": 115
+    },
+    "-18_21": {
+      "file": "tile_-18_21.json",
+      "buildings": 95
+    },
+    "-17_20": {
+      "file": "tile_-17_20.json",
+      "buildings": 131
+    },
+    "-16_23": {
+      "file": "tile_-16_23.json",
+      "buildings": 100
+    },
+    "-19_21": {
+      "file": "tile_-19_21.json",
+      "buildings": 68
+    },
+    "-18_22": {
+      "file": "tile_-18_22.json",
+      "buildings": 108
+    },
+    "-19_22": {
+      "file": "tile_-19_22.json",
+      "buildings": 66
+    },
+    "-19_23": {
+      "file": "tile_-19_23.json",
+      "buildings": 68
+    },
+    "-19_24": {
+      "file": "tile_-19_24.json",
+      "buildings": 88
+    },
+    "-18_23": {
+      "file": "tile_-18_23.json",
+      "buildings": 85
+    },
+    "-17_23": {
+      "file": "tile_-17_23.json",
+      "buildings": 94
+    },
+    "-14_24": {
+      "file": "tile_-14_24.json",
+      "buildings": 185
+    },
+    "-14_25": {
+      "file": "tile_-14_25.json",
+      "buildings": 184
+    },
+    "-13_25": {
+      "file": "tile_-13_25.json",
+      "buildings": 167
+    },
+    "-12_25": {
+      "file": "tile_-12_25.json",
+      "buildings": 184
+    },
+    "-14_26": {
+      "file": "tile_-14_26.json",
+      "buildings": 171
+    },
+    "-13_26": {
+      "file": "tile_-13_26.json",
+      "buildings": 174
+    },
+    "-12_26": {
+      "file": "tile_-12_26.json",
+      "buildings": 177
+    },
+    "-11_25": {
+      "file": "tile_-11_25.json",
+      "buildings": 125
+    },
+    "-11_26": {
+      "file": "tile_-11_26.json",
+      "buildings": 107
+    },
+    "-12_27": {
+      "file": "tile_-12_27.json",
+      "buildings": 191
+    },
+    "-16_27": {
+      "file": "tile_-16_27.json",
+      "buildings": 195
+    },
+    "-15_27": {
+      "file": "tile_-15_27.json",
+      "buildings": 175
+    },
+    "-13_27": {
+      "file": "tile_-13_27.json",
+      "buildings": 166
+    },
+    "-15_28": {
+      "file": "tile_-15_28.json",
+      "buildings": 142
+    },
+    "-16_28": {
+      "file": "tile_-16_28.json",
+      "buildings": 156
+    },
+    "-13_28": {
+      "file": "tile_-13_28.json",
+      "buildings": 122
+    },
+    "-14_28": {
+      "file": "tile_-14_28.json",
+      "buildings": 138
+    },
+    "-16_29": {
+      "file": "tile_-16_29.json",
+      "buildings": 54
+    },
+    "-15_29": {
+      "file": "tile_-15_29.json",
+      "buildings": 115
+    },
+    "-14_29": {
+      "file": "tile_-14_29.json",
+      "buildings": 96
+    },
+    "-13_29": {
+      "file": "tile_-13_29.json",
+      "buildings": 49
+    },
+    "-17_27": {
+      "file": "tile_-17_27.json",
+      "buildings": 154
+    },
+    "-18_27": {
+      "file": "tile_-18_27.json",
+      "buildings": 198
+    },
+    "-18_28": {
+      "file": "tile_-18_28.json",
+      "buildings": 123
+    },
+    "-19_28": {
+      "file": "tile_-19_28.json",
+      "buildings": 27
+    },
+    "-21_14": {
+      "file": "tile_-21_14.json",
+      "buildings": 5
+    },
+    "-21_13": {
+      "file": "tile_-21_13.json",
+      "buildings": 4
+    },
+    "-21_12": {
+      "file": "tile_-21_12.json",
+      "buildings": 4
+    },
+    "-23_11": {
+      "file": "tile_-23_11.json",
+      "buildings": 1
+    },
+    "-26_10": {
+      "file": "tile_-26_10.json",
+      "buildings": 5
+    },
+    "-27_12": {
+      "file": "tile_-27_12.json",
+      "buildings": 1
+    },
+    "-23_13": {
+      "file": "tile_-23_13.json",
+      "buildings": 1
+    },
+    "-23_14": {
+      "file": "tile_-23_14.json",
+      "buildings": 1
+    },
+    "-24_13": {
+      "file": "tile_-24_13.json",
+      "buildings": 1
+    },
+    "-24_14": {
+      "file": "tile_-24_14.json",
+      "buildings": 1
+    },
+    "-27_15": {
+      "file": "tile_-27_15.json",
+      "buildings": 2
+    },
+    "-25_15": {
+      "file": "tile_-25_15.json",
+      "buildings": 13
+    },
+    "-23_15": {
+      "file": "tile_-23_15.json",
+      "buildings": 23
+    },
+    "-30_11": {
+      "file": "tile_-30_11.json",
+      "buildings": 5
+    },
+    "-28_10": {
+      "file": "tile_-28_10.json",
+      "buildings": 3
+    },
+    "-27_8": {
+      "file": "tile_-27_8.json",
+      "buildings": 1
+    },
+    "-27_10": {
+      "file": "tile_-27_10.json",
+      "buildings": 1
+    },
+    "-28_9": {
+      "file": "tile_-28_9.json",
+      "buildings": 2
+    },
+    "-28_8": {
+      "file": "tile_-28_8.json",
+      "buildings": 1
+    },
+    "-30_9": {
+      "file": "tile_-30_9.json",
+      "buildings": 5
+    },
+    "-29_9": {
+      "file": "tile_-29_9.json",
+      "buildings": 1
+    },
+    "-31_9": {
+      "file": "tile_-31_9.json",
+      "buildings": 3
+    },
+    "-31_10": {
+      "file": "tile_-31_10.json",
+      "buildings": 3
+    },
+    "-21_8": {
+      "file": "tile_-21_8.json",
+      "buildings": 9
+    },
+    "-22_8": {
+      "file": "tile_-22_8.json",
+      "buildings": 1
+    },
+    "-23_-2": {
+      "file": "tile_-23_-2.json",
+      "buildings": 49
+    },
+    "-24_-2": {
+      "file": "tile_-24_-2.json",
+      "buildings": 60
+    },
+    "-21_-2": {
+      "file": "tile_-21_-2.json",
+      "buildings": 30
+    },
+    "-22_-2": {
+      "file": "tile_-22_-2.json",
+      "buildings": 60
+    },
+    "-25_-1": {
+      "file": "tile_-25_-1.json",
+      "buildings": 35
+    },
+    "-27_-3": {
+      "file": "tile_-27_-3.json",
+      "buildings": 1
+    },
+    "-26_-2": {
+      "file": "tile_-26_-2.json",
+      "buildings": 33
+    },
+    "-29_-1": {
+      "file": "tile_-29_-1.json",
+      "buildings": 17
+    },
+    "-29_-2": {
+      "file": "tile_-29_-2.json",
+      "buildings": 5
+    },
+    "-28_-2": {
+      "file": "tile_-28_-2.json",
+      "buildings": 4
+    },
+    "-27_-2": {
+      "file": "tile_-27_-2.json",
+      "buildings": 26
+    },
+    "-27_-1": {
+      "file": "tile_-27_-1.json",
+      "buildings": 25
+    },
+    "-26_-1": {
+      "file": "tile_-26_-1.json",
+      "buildings": 14
+    },
+    "-27_0": {
+      "file": "tile_-27_0.json",
+      "buildings": 31
+    },
+    "-29_0": {
+      "file": "tile_-29_0.json",
+      "buildings": 9
+    },
+    "-32_9": {
+      "file": "tile_-32_9.json",
+      "buildings": 9
+    },
+    "-30_-1": {
+      "file": "tile_-30_-1.json",
+      "buildings": 14
+    },
+    "-32_-2": {
+      "file": "tile_-32_-2.json",
+      "buildings": 2
+    },
+    "-32_-1": {
+      "file": "tile_-32_-1.json",
+      "buildings": 2
+    },
+    "-31_-1": {
+      "file": "tile_-31_-1.json",
+      "buildings": 6
+    },
+    "-32_10": {
+      "file": "tile_-32_10.json",
+      "buildings": 3
+    },
+    "-32_11": {
+      "file": "tile_-32_11.json",
+      "buildings": 3
+    },
+    "-32_0": {
+      "file": "tile_-32_0.json",
+      "buildings": 5
+    },
+    "-32_1": {
+      "file": "tile_-32_1.json",
+      "buildings": 26
+    },
+    "-31_0": {
+      "file": "tile_-31_0.json",
+      "buildings": 3
+    },
+    "-31_1": {
+      "file": "tile_-31_1.json",
+      "buildings": 8
+    },
+    "-30_0": {
+      "file": "tile_-30_0.json",
+      "buildings": 2
+    },
+    "-31_11": {
+      "file": "tile_-31_11.json",
+      "buildings": 6
+    },
+    "-33_1": {
+      "file": "tile_-33_1.json",
+      "buildings": 24
+    },
+    "-33_2": {
+      "file": "tile_-33_2.json",
+      "buildings": 2
+    },
+    "-32_12": {
+      "file": "tile_-32_12.json",
+      "buildings": 2
+    },
+    "-32_13": {
+      "file": "tile_-32_13.json",
+      "buildings": 1
+    },
+    "-31_13": {
+      "file": "tile_-31_13.json",
+      "buildings": 2
+    },
+    "-30_2": {
+      "file": "tile_-30_2.json",
+      "buildings": 2
+    },
+    "-31_2": {
+      "file": "tile_-31_2.json",
+      "buildings": 2
+    },
+    "-27_1": {
+      "file": "tile_-27_1.json",
+      "buildings": 18
+    },
+    "-20_-1": {
+      "file": "tile_-20_-1.json",
+      "buildings": 25
+    },
+    "-20_0": {
+      "file": "tile_-20_0.json",
+      "buildings": 19
+    },
+    "-20_1": {
+      "file": "tile_-20_1.json",
+      "buildings": 22
+    },
+    "-20_2": {
+      "file": "tile_-20_2.json",
+      "buildings": 11
+    },
+    "-30_15": {
+      "file": "tile_-30_15.json",
+      "buildings": 1
+    },
+    "-31_16": {
+      "file": "tile_-31_16.json",
+      "buildings": 7
+    },
+    "-31_15": {
+      "file": "tile_-31_15.json",
+      "buildings": 1
+    },
+    "-27_2": {
+      "file": "tile_-27_2.json",
+      "buildings": 8
+    },
+    "-30_16": {
+      "file": "tile_-30_16.json",
+      "buildings": 3
+    },
+    "-13_3": {
+      "file": "tile_-13_3.json",
+      "buildings": 3
+    },
+    "7_13": {
+      "file": "tile_7_13.json",
+      "buildings": 6
+    },
+    "6_13": {
+      "file": "tile_6_13.json",
+      "buildings": 14
+    },
+    "8_14": {
+      "file": "tile_8_14.json",
+      "buildings": 2
+    },
+    "6_15": {
+      "file": "tile_6_15.json",
+      "buildings": 12
+    },
+    "8_15": {
+      "file": "tile_8_15.json",
+      "buildings": 9
+    },
+    "8_16": {
+      "file": "tile_8_16.json",
+      "buildings": 4
+    },
+    "8_17": {
+      "file": "tile_8_17.json",
+      "buildings": 12
+    },
+    "5_18": {
+      "file": "tile_5_18.json",
+      "buildings": 4
+    },
+    "6_17": {
+      "file": "tile_6_17.json",
+      "buildings": 10
+    },
+    "7_17": {
+      "file": "tile_7_17.json",
+      "buildings": 7
+    },
+    "10_14": {
+      "file": "tile_10_14.json",
+      "buildings": 14
+    },
+    "9_14": {
+      "file": "tile_9_14.json",
+      "buildings": 7
+    },
+    "9_15": {
+      "file": "tile_9_15.json",
+      "buildings": 3
+    },
+    "-31_18": {
+      "file": "tile_-31_18.json",
+      "buildings": 4
+    },
+    "-30_20": {
+      "file": "tile_-30_20.json",
+      "buildings": 25
+    },
+    "12_13": {
+      "file": "tile_12_13.json",
+      "buildings": 7
+    },
+    "13_13": {
+      "file": "tile_13_13.json",
+      "buildings": 1
+    },
+    "-31_21": {
+      "file": "tile_-31_21.json",
+      "buildings": 6
+    },
+    "-29_21": {
+      "file": "tile_-29_21.json",
+      "buildings": 2
+    },
+    "-30_21": {
+      "file": "tile_-30_21.json",
+      "buildings": 23
+    },
+    "-30_22": {
+      "file": "tile_-30_22.json",
+      "buildings": 8
+    },
+    "-29_23": {
+      "file": "tile_-29_23.json",
+      "buildings": 2
+    },
+    "-31_22": {
+      "file": "tile_-31_22.json",
+      "buildings": 2
+    },
+    "13_14": {
+      "file": "tile_13_14.json",
+      "buildings": 8
+    },
+    "-28_13": {
+      "file": "tile_-28_13.json",
+      "buildings": 1
+    },
+    "14_14": {
+      "file": "tile_14_14.json",
+      "buildings": 1
+    },
+    "-28_4": {
+      "file": "tile_-28_4.json",
+      "buildings": 1
+    },
+    "-27_4": {
+      "file": "tile_-27_4.json",
+      "buildings": 2
+    },
+    "-32_5": {
+      "file": "tile_-32_5.json",
+      "buildings": 2
+    },
+    "9_16": {
+      "file": "tile_9_16.json",
+      "buildings": 15
+    },
+    "10_16": {
+      "file": "tile_10_16.json",
+      "buildings": 16
+    },
+    "-15_4": {
+      "file": "tile_-15_4.json",
+      "buildings": 5
+    },
+    "-16_4": {
+      "file": "tile_-16_4.json",
+      "buildings": 2
+    },
+    "-15_3": {
+      "file": "tile_-15_3.json",
+      "buildings": 4
+    },
+    "12_17": {
+      "file": "tile_12_17.json",
+      "buildings": 5
+    },
+    "10_17": {
+      "file": "tile_10_17.json",
+      "buildings": 19
+    },
+    "9_17": {
+      "file": "tile_9_17.json",
+      "buildings": 14
+    },
+    "-30_-3": {
+      "file": "tile_-30_-3.json",
+      "buildings": 3
+    },
+    "-31_-3": {
+      "file": "tile_-31_-3.json",
+      "buildings": 4
+    },
+    "-22_-7": {
+      "file": "tile_-22_-7.json",
+      "buildings": 13
+    },
+    "-18_-7": {
+      "file": "tile_-18_-7.json",
+      "buildings": 1
+    },
+    "11_17": {
+      "file": "tile_11_17.json",
+      "buildings": 2
+    },
+    "-20_20": {
+      "file": "tile_-20_20.json",
+      "buildings": 67
+    },
+    "-23_20": {
+      "file": "tile_-23_20.json",
+      "buildings": 125
+    },
+    "-22_20": {
+      "file": "tile_-22_20.json",
+      "buildings": 74
+    },
+    "-21_20": {
+      "file": "tile_-21_20.json",
+      "buildings": 86
+    },
+    "-24_20": {
+      "file": "tile_-24_20.json",
+      "buildings": 122
+    },
+    "-22_19": {
+      "file": "tile_-22_19.json",
+      "buildings": 97
+    },
+    "-23_19": {
+      "file": "tile_-23_19.json",
+      "buildings": 138
+    },
+    "-19_-5": {
+      "file": "tile_-19_-5.json",
+      "buildings": 3
+    },
+    "-20_-6": {
+      "file": "tile_-20_-6.json",
+      "buildings": 1
+    },
+    "-21_-8": {
+      "file": "tile_-21_-8.json",
+      "buildings": 2
+    },
+    "-21_-7": {
+      "file": "tile_-21_-7.json",
+      "buildings": 25
+    },
+    "-22_-8": {
+      "file": "tile_-22_-8.json",
+      "buildings": 1
+    },
+    "-21_-10": {
+      "file": "tile_-21_-10.json",
+      "buildings": 1
+    },
+    "-21_-13": {
+      "file": "tile_-21_-13.json",
+      "buildings": 2
+    },
+    "-19_-10": {
+      "file": "tile_-19_-10.json",
+      "buildings": 9
+    },
+    "-18_-9": {
+      "file": "tile_-18_-9.json",
+      "buildings": 3
+    },
+    "-20_-10": {
+      "file": "tile_-20_-10.json",
+      "buildings": 6
+    },
+    "-20_-12": {
+      "file": "tile_-20_-12.json",
+      "buildings": 4
+    },
+    "-18_-10": {
+      "file": "tile_-18_-10.json",
+      "buildings": 1
+    },
+    "-19_-12": {
+      "file": "tile_-19_-12.json",
+      "buildings": 4
+    },
+    "-19_-13": {
+      "file": "tile_-19_-13.json",
+      "buildings": 4
+    },
+    "-18_-13": {
+      "file": "tile_-18_-13.json",
+      "buildings": 4
+    },
+    "-16_-9": {
+      "file": "tile_-16_-9.json",
+      "buildings": 3
+    },
+    "-15_-11": {
+      "file": "tile_-15_-11.json",
+      "buildings": 4
+    },
+    "-13_-9": {
+      "file": "tile_-13_-9.json",
+      "buildings": 4
+    },
+    "-19_-9": {
+      "file": "tile_-19_-9.json",
+      "buildings": 1
+    },
+    "-14_-8": {
+      "file": "tile_-14_-8.json",
+      "buildings": 11
+    },
+    "-13_-8": {
+      "file": "tile_-13_-8.json",
+      "buildings": 13
+    },
+    "-13_-7": {
+      "file": "tile_-13_-7.json",
+      "buildings": 4
+    },
+    "-12_-8": {
+      "file": "tile_-12_-8.json",
+      "buildings": 16
+    },
+    "-12_-7": {
+      "file": "tile_-12_-7.json",
+      "buildings": 6
+    },
+    "-11_-8": {
+      "file": "tile_-11_-8.json",
+      "buildings": 7
+    },
+    "-12_-9": {
+      "file": "tile_-12_-9.json",
+      "buildings": 6
+    },
+    "-12_-10": {
+      "file": "tile_-12_-10.json",
+      "buildings": 9
+    },
+    "-11_-11": {
+      "file": "tile_-11_-11.json",
+      "buildings": 5
+    },
+    "-17_-13": {
+      "file": "tile_-17_-13.json",
+      "buildings": 6
+    },
+    "-11_-12": {
+      "file": "tile_-11_-12.json",
+      "buildings": 8
+    },
+    "-12_-12": {
+      "file": "tile_-12_-12.json",
+      "buildings": 2
+    },
+    "-11_-10": {
+      "file": "tile_-11_-10.json",
+      "buildings": 4
+    },
+    "-17_-12": {
+      "file": "tile_-17_-12.json",
+      "buildings": 4
+    },
+    "-16_-12": {
+      "file": "tile_-16_-12.json",
+      "buildings": 1
+    },
+    "-4_-13": {
+      "file": "tile_-4_-13.json",
+      "buildings": 6
+    },
+    "-5_-14": {
+      "file": "tile_-5_-14.json",
+      "buildings": 2
+    },
+    "-4_-14": {
+      "file": "tile_-4_-14.json",
+      "buildings": 1
+    },
+    "17_22": {
+      "file": "tile_17_22.json",
+      "buildings": 49
+    },
+    "16_21": {
+      "file": "tile_16_21.json",
+      "buildings": 57
+    },
+    "15_20": {
+      "file": "tile_15_20.json",
+      "buildings": 57
+    },
+    "14_20": {
+      "file": "tile_14_20.json",
+      "buildings": 45
+    },
+    "14_19": {
+      "file": "tile_14_19.json",
+      "buildings": 39
+    },
+    "15_21": {
+      "file": "tile_15_21.json",
+      "buildings": 19
+    },
+    "14_21": {
+      "file": "tile_14_21.json",
+      "buildings": 36
+    },
+    "-23_17": {
+      "file": "tile_-23_17.json",
+      "buildings": 2
+    },
+    "12_19": {
+      "file": "tile_12_19.json",
+      "buildings": 61
+    },
+    "13_19": {
+      "file": "tile_13_19.json",
+      "buildings": 45
+    },
+    "12_18": {
+      "file": "tile_12_18.json",
+      "buildings": 5
+    },
+    "13_18": {
+      "file": "tile_13_18.json",
+      "buildings": 18
+    },
+    "13_20": {
+      "file": "tile_13_20.json",
+      "buildings": 90
+    },
+    "11_18": {
+      "file": "tile_11_18.json",
+      "buildings": 5
+    },
+    "11_19": {
+      "file": "tile_11_19.json",
+      "buildings": 156
+    },
+    "16_20": {
+      "file": "tile_16_20.json",
+      "buildings": 7
+    },
+    "13_21": {
+      "file": "tile_13_21.json",
+      "buildings": 104
+    },
+    "12_21": {
+      "file": "tile_12_21.json",
+      "buildings": 162
+    },
+    "13_22": {
+      "file": "tile_13_22.json",
+      "buildings": 58
+    },
+    "-13_9": {
+      "file": "tile_-13_9.json",
+      "buildings": 3
+    },
+    "-14_7": {
+      "file": "tile_-14_7.json",
+      "buildings": 4
+    },
+    "-14_6": {
+      "file": "tile_-14_6.json",
+      "buildings": 11
+    },
+    "4_19": {
+      "file": "tile_4_19.json",
+      "buildings": 80
+    },
+    "5_19": {
+      "file": "tile_5_19.json",
+      "buildings": 105
+    },
+    "6_18": {
+      "file": "tile_6_18.json",
+      "buildings": 2
+    },
+    "9_1": {
+      "file": "tile_9_1.json",
+      "buildings": 1
+    },
+    "14_11": {
+      "file": "tile_14_11.json",
+      "buildings": 1
+    },
+    "12_3": {
+      "file": "tile_12_3.json",
+      "buildings": 1
+    },
+    "6_19": {
+      "file": "tile_6_19.json",
+      "buildings": 207
+    },
+    "10_19": {
+      "file": "tile_10_19.json",
+      "buildings": 104
+    },
+    "8_22": {
+      "file": "tile_8_22.json",
+      "buildings": 35
+    },
+    "9_23": {
+      "file": "tile_9_23.json",
+      "buildings": 18
+    },
+    "8_23": {
+      "file": "tile_8_23.json",
+      "buildings": 21
+    },
+    "9_22": {
+      "file": "tile_9_22.json",
+      "buildings": 77
+    },
+    "7_19": {
+      "file": "tile_7_19.json",
+      "buildings": 179
+    },
+    "9_29": {
+      "file": "tile_9_29.json",
+      "buildings": 8
+    },
+    "8_29": {
+      "file": "tile_8_29.json",
+      "buildings": 42
+    },
+    "11_29": {
+      "file": "tile_11_29.json",
+      "buildings": 1
+    },
+    "6_29": {
+      "file": "tile_6_29.json",
+      "buildings": 102
+    },
+    "6_28": {
+      "file": "tile_6_28.json",
+      "buildings": 149
+    },
+    "11_20": {
+      "file": "tile_11_20.json",
+      "buildings": 152
+    },
+    "4_25": {
+      "file": "tile_4_25.json",
+      "buildings": 67
+    },
+    "2_27": {
+      "file": "tile_2_27.json",
+      "buildings": 12
+    },
+    "1_27": {
+      "file": "tile_1_27.json",
+      "buildings": 28
+    },
+    "-1_29": {
+      "file": "tile_-1_29.json",
+      "buildings": 44
+    },
+    "-2_28": {
+      "file": "tile_-2_28.json",
+      "buildings": 7
+    },
+    "-2_29": {
+      "file": "tile_-2_29.json",
+      "buildings": 51
+    },
+    "0_29": {
+      "file": "tile_0_29.json",
+      "buildings": 28
+    },
+    "1_28": {
+      "file": "tile_1_28.json",
+      "buildings": 136
+    },
+    "1_29": {
+      "file": "tile_1_29.json",
+      "buildings": 171
+    },
+    "-1_28": {
+      "file": "tile_-1_28.json",
+      "buildings": 14
+    },
+    "0_28": {
+      "file": "tile_0_28.json",
+      "buildings": 10
+    },
+    "-10_27": {
+      "file": "tile_-10_27.json",
+      "buildings": 180
+    },
+    "6_20": {
+      "file": "tile_6_20.json",
+      "buildings": 195
+    },
+    "9_19": {
+      "file": "tile_9_19.json",
+      "buildings": 145
+    },
+    "8_19": {
+      "file": "tile_8_19.json",
+      "buildings": 149
+    },
+    "5_20": {
+      "file": "tile_5_20.json",
+      "buildings": 84
+    },
+    "8_20": {
+      "file": "tile_8_20.json",
+      "buildings": 149
+    },
+    "7_20": {
+      "file": "tile_7_20.json",
+      "buildings": 200
+    },
+    "-30_17": {
+      "file": "tile_-30_17.json",
+      "buildings": 2
+    },
+    "-31_17": {
+      "file": "tile_-31_17.json",
+      "buildings": 1
+    },
+    "10_18": {
+      "file": "tile_10_18.json",
+      "buildings": 10
+    },
+    "8_18": {
+      "file": "tile_8_18.json",
+      "buildings": 1
+    },
+    "9_18": {
+      "file": "tile_9_18.json",
+      "buildings": 8
+    },
+    "-26_21": {
+      "file": "tile_-26_21.json",
+      "buildings": 49
+    },
+    "-25_21": {
+      "file": "tile_-25_21.json",
+      "buildings": 8
+    },
+    "-24_21": {
+      "file": "tile_-24_21.json",
+      "buildings": 20
+    },
+    "10_20": {
+      "file": "tile_10_20.json",
+      "buildings": 153
+    },
+    "11_21": {
+      "file": "tile_11_21.json",
+      "buildings": 172
+    },
+    "-20_22": {
+      "file": "tile_-20_22.json",
+      "buildings": 48
+    },
+    "-20_23": {
+      "file": "tile_-20_23.json",
+      "buildings": 54
+    },
+    "14_22": {
+      "file": "tile_14_22.json",
+      "buildings": 17
+    },
+    "-20_24": {
+      "file": "tile_-20_24.json",
+      "buildings": 79
+    },
+    "16_25": {
+      "file": "tile_16_25.json",
+      "buildings": 2
+    },
+    "16_24": {
+      "file": "tile_16_24.json",
+      "buildings": 1
+    },
+    "18_20": {
+      "file": "tile_18_20.json",
+      "buildings": 3
+    },
+    "19_26": {
+      "file": "tile_19_26.json",
+      "buildings": 4
+    },
+    "18_26": {
+      "file": "tile_18_26.json",
+      "buildings": 1
+    },
+    "-20_26": {
+      "file": "tile_-20_26.json",
+      "buildings": 27
+    },
+    "21_22": {
+      "file": "tile_21_22.json",
+      "buildings": 7
+    },
+    "21_21": {
+      "file": "tile_21_21.json",
+      "buildings": 4
+    },
+    "-20_27": {
+      "file": "tile_-20_27.json",
+      "buildings": 79
+    },
+    "-20_28": {
+      "file": "tile_-20_28.json",
+      "buildings": 23
+    },
+    "-21_27": {
+      "file": "tile_-21_27.json",
+      "buildings": 63
+    },
+    "-21_26": {
+      "file": "tile_-21_26.json",
+      "buildings": 18
+    },
+    "13_23": {
+      "file": "tile_13_23.json",
+      "buildings": 28
+    },
+    "14_23": {
+      "file": "tile_14_23.json",
+      "buildings": 9
+    },
+    "-21_25": {
+      "file": "tile_-21_25.json",
+      "buildings": 22
+    },
+    "-22_25": {
+      "file": "tile_-22_25.json",
+      "buildings": 15
+    },
+    "-22_27": {
+      "file": "tile_-22_27.json",
+      "buildings": 22
+    },
+    "12_23": {
+      "file": "tile_12_23.json",
+      "buildings": 5
+    },
+    "-23_27": {
+      "file": "tile_-23_27.json",
+      "buildings": 12
+    },
+    "11_22": {
+      "file": "tile_11_22.json",
+      "buildings": 99
+    },
+    "-19_29": {
+      "file": "tile_-19_29.json",
+      "buildings": 31
+    },
+    "-22_28": {
+      "file": "tile_-22_28.json",
+      "buildings": 7
+    },
+    "-24_30": {
+      "file": "tile_-24_30.json",
+      "buildings": 2
+    },
+    "-23_29": {
+      "file": "tile_-23_29.json",
+      "buildings": 5
+    },
+    "-23_28": {
+      "file": "tile_-23_28.json",
+      "buildings": 8
+    },
+    "-23_30": {
+      "file": "tile_-23_30.json",
+      "buildings": 43
+    },
+    "-27_30": {
+      "file": "tile_-27_30.json",
+      "buildings": 6
+    },
+    "-28_26": {
+      "file": "tile_-28_26.json",
+      "buildings": 3
+    },
+    "-29_25": {
+      "file": "tile_-29_25.json",
+      "buildings": 3
+    },
+    "-24_26": {
+      "file": "tile_-24_26.json",
+      "buildings": 4
+    },
+    "-28_30": {
+      "file": "tile_-28_30.json",
+      "buildings": 6
+    },
+    "-27_27": {
+      "file": "tile_-27_27.json",
+      "buildings": 7
+    },
+    "-24_27": {
+      "file": "tile_-24_27.json",
+      "buildings": 2
+    },
+    "-18_29": {
+      "file": "tile_-18_29.json",
+      "buildings": 95
+    },
+    "-19_30": {
+      "file": "tile_-19_30.json",
+      "buildings": 14
+    },
+    "-17_29": {
+      "file": "tile_-17_29.json",
+      "buildings": 56
+    },
+    "-18_30": {
+      "file": "tile_-18_30.json",
+      "buildings": 97
+    },
+    "-17_30": {
+      "file": "tile_-17_30.json",
+      "buildings": 59
+    },
+    "-16_30": {
+      "file": "tile_-16_30.json",
+      "buildings": 148
+    },
+    "-3_30": {
+      "file": "tile_-3_30.json",
+      "buildings": 58
+    },
+    "-4_30": {
+      "file": "tile_-4_30.json",
+      "buildings": 105
+    },
+    "-5_30": {
+      "file": "tile_-5_30.json",
+      "buildings": 115
+    },
+    "9_21": {
+      "file": "tile_9_21.json",
+      "buildings": 131
+    },
+    "-7_30": {
+      "file": "tile_-7_30.json",
+      "buildings": 134
+    },
+    "-8_30": {
+      "file": "tile_-8_30.json",
+      "buildings": 141
+    },
+    "-6_30": {
+      "file": "tile_-6_30.json",
+      "buildings": 119
+    },
+    "10_21": {
+      "file": "tile_10_21.json",
+      "buildings": 181
+    },
+    "-4_29": {
+      "file": "tile_-4_29.json",
+      "buildings": 152
+    },
+    "-5_29": {
+      "file": "tile_-5_29.json",
+      "buildings": 136
+    },
+    "-15_30": {
+      "file": "tile_-15_30.json",
+      "buildings": 147
+    },
+    "-5_28": {
+      "file": "tile_-5_28.json",
+      "buildings": 30
+    },
+    "-6_29": {
+      "file": "tile_-6_29.json",
+      "buildings": 163
+    },
+    "-7_29": {
+      "file": "tile_-7_29.json",
+      "buildings": 164
+    },
+    "-3_29": {
+      "file": "tile_-3_29.json",
+      "buildings": 66
+    },
+    "11_23": {
+      "file": "tile_11_23.json",
+      "buildings": 39
+    },
+    "-14_30": {
+      "file": "tile_-14_30.json",
+      "buildings": 144
+    },
+    "10_22": {
+      "file": "tile_10_22.json",
+      "buildings": 89
+    },
+    "-7_28": {
+      "file": "tile_-7_28.json",
+      "buildings": 165
+    },
+    "8_21": {
+      "file": "tile_8_21.json",
+      "buildings": 95
+    },
+    "-13_30": {
+      "file": "tile_-13_30.json",
+      "buildings": 169
+    },
+    "6_21": {
+      "file": "tile_6_21.json",
+      "buildings": 142
+    },
+    "5_21": {
+      "file": "tile_5_21.json",
+      "buildings": 80
+    },
+    "3_30": {
+      "file": "tile_3_30.json",
+      "buildings": 65
+    },
+    "1_30": {
+      "file": "tile_1_30.json",
+      "buildings": 130
+    },
+    "6_22": {
+      "file": "tile_6_22.json",
+      "buildings": 61
+    },
+    "2_29": {
+      "file": "tile_2_29.json",
+      "buildings": 133
+    },
+    "3_29": {
+      "file": "tile_3_29.json",
+      "buildings": 155
+    },
+    "-12_29": {
+      "file": "tile_-12_29.json",
+      "buildings": 145
+    },
+    "5_29": {
+      "file": "tile_5_29.json",
+      "buildings": 62
+    },
+    "4_30": {
+      "file": "tile_4_30.json",
+      "buildings": 142
+    },
+    "5_30": {
+      "file": "tile_5_30.json",
+      "buildings": 5
+    },
+    "4_29": {
+      "file": "tile_4_29.json",
+      "buildings": 154
+    },
+    "3_28": {
+      "file": "tile_3_28.json",
+      "buildings": 164
+    },
+    "-11_30": {
+      "file": "tile_-11_30.json",
+      "buildings": 149
+    },
+    "-11_29": {
+      "file": "tile_-11_29.json",
+      "buildings": 176
+    },
+    "2_28": {
+      "file": "tile_2_28.json",
+      "buildings": 185
+    },
+    "7_22": {
+      "file": "tile_7_22.json",
+      "buildings": 175
+    },
+    "7_23": {
+      "file": "tile_7_23.json",
+      "buildings": 29
+    },
+    "7_24": {
+      "file": "tile_7_24.json",
+      "buildings": 117
+    },
+    "-1_30": {
+      "file": "tile_-1_30.json",
+      "buildings": 153
+    },
+    "8_24": {
+      "file": "tile_8_24.json",
+      "buildings": 85
+    },
+    "6_24": {
+      "file": "tile_6_24.json",
+      "buildings": 104
+    },
+    "7_26": {
+      "file": "tile_7_26.json",
+      "buildings": 79
+    },
+    "7_25": {
+      "file": "tile_7_25.json",
+      "buildings": 87
+    },
+    "7_30": {
+      "file": "tile_7_30.json",
+      "buildings": 15
+    },
+    "6_30": {
+      "file": "tile_6_30.json",
+      "buildings": 22
+    },
+    "8_30": {
+      "file": "tile_8_30.json",
+      "buildings": 10
+    },
+    "10_24": {
+      "file": "tile_10_24.json",
+      "buildings": 42
+    },
+    "11_24": {
+      "file": "tile_11_24.json",
+      "buildings": 21
+    },
+    "10_25": {
+      "file": "tile_10_25.json",
+      "buildings": 110
+    },
+    "10_23": {
+      "file": "tile_10_23.json",
+      "buildings": 53
+    },
+    "7_28": {
+      "file": "tile_7_28.json",
+      "buildings": 124
+    },
+    "7_29": {
+      "file": "tile_7_29.json",
+      "buildings": 188
+    },
+    "8_28": {
+      "file": "tile_8_28.json",
+      "buildings": 11
+    },
+    "9_24": {
+      "file": "tile_9_24.json",
+      "buildings": 81
+    },
+    "7_27": {
+      "file": "tile_7_27.json",
+      "buildings": 18
+    },
+    "6_27": {
+      "file": "tile_6_27.json",
+      "buildings": 155
+    },
+    "5_27": {
+      "file": "tile_5_27.json",
+      "buildings": 185
+    },
+    "5_28": {
+      "file": "tile_5_28.json",
+      "buildings": 179
+    },
+    "12_27": {
+      "file": "tile_12_27.json",
+      "buildings": 9
+    },
+    "13_27": {
+      "file": "tile_13_27.json",
+      "buildings": 6
+    },
+    "11_26": {
+      "file": "tile_11_26.json",
+      "buildings": 33
+    },
+    "12_26": {
+      "file": "tile_12_26.json",
+      "buildings": 5
+    },
+    "8_25": {
+      "file": "tile_8_25.json",
+      "buildings": 155
+    },
+    "10_26": {
+      "file": "tile_10_26.json",
+      "buildings": 84
+    },
+    "6_26": {
+      "file": "tile_6_26.json",
+      "buildings": 130
+    },
+    "8_27": {
+      "file": "tile_8_27.json",
+      "buildings": 5
+    },
+    "8_26": {
+      "file": "tile_8_26.json",
+      "buildings": 128
+    },
+    "5_26": {
+      "file": "tile_5_26.json",
+      "buildings": 184
+    },
+    "6_25": {
+      "file": "tile_6_25.json",
+      "buildings": 88
+    },
+    "5_25": {
+      "file": "tile_5_25.json",
+      "buildings": 158
+    },
+    "9_25": {
+      "file": "tile_9_25.json",
+      "buildings": 177
+    },
+    "9_27": {
+      "file": "tile_9_27.json",
+      "buildings": 2
+    },
+    "9_26": {
+      "file": "tile_9_26.json",
+      "buildings": 117
+    },
+    "10_27": {
+      "file": "tile_10_27.json",
+      "buildings": 58
+    },
+    "11_27": {
+      "file": "tile_11_27.json",
+      "buildings": 1
+    },
+    "4_26": {
+      "file": "tile_4_26.json",
+      "buildings": 135
+    },
+    "3_25": {
+      "file": "tile_3_25.json",
+      "buildings": 170
+    },
+    "3_26": {
+      "file": "tile_3_26.json",
+      "buildings": 20
+    },
+    "3_27": {
+      "file": "tile_3_27.json",
+      "buildings": 144
+    },
+    "4_27": {
+      "file": "tile_4_27.json",
+      "buildings": 177
+    },
+    "-5_21": {
+      "file": "tile_-5_21.json",
+      "buildings": 159
+    },
+    "5_24": {
+      "file": "tile_5_24.json",
+      "buildings": 177
+    },
+    "5_23": {
+      "file": "tile_5_23.json",
+      "buildings": 190
+    },
+    "-12_28": {
+      "file": "tile_-12_28.json",
+      "buildings": 47
+    },
+    "-11_27": {
+      "file": "tile_-11_27.json",
+      "buildings": 92
+    },
+    "4_24": {
+      "file": "tile_4_24.json",
+      "buildings": 81
+    },
+    "3_24": {
+      "file": "tile_3_24.json",
+      "buildings": 149
+    },
+    "-6_21": {
+      "file": "tile_-6_21.json",
+      "buildings": 185
+    },
+    "2_25": {
+      "file": "tile_2_25.json",
+      "buildings": 39
+    },
+    "-11_28": {
+      "file": "tile_-11_28.json",
+      "buildings": 146
+    },
+    "-10_28": {
+      "file": "tile_-10_28.json",
+      "buildings": 191
+    },
+    "2_24": {
+      "file": "tile_2_24.json",
+      "buildings": 65
+    },
+    "-6_23": {
+      "file": "tile_-6_23.json",
+      "buildings": 161
+    },
+    "-7_22": {
+      "file": "tile_-7_22.json",
+      "buildings": 156
+    },
+    "4_23": {
+      "file": "tile_4_23.json",
+      "buildings": 140
+    },
+    "-7_21": {
+      "file": "tile_-7_21.json",
+      "buildings": 139
+    },
+    "3_23": {
+      "file": "tile_3_23.json",
+      "buildings": 86
+    },
+    "-8_22": {
+      "file": "tile_-8_22.json",
+      "buildings": 160
+    },
+    "-10_26": {
+      "file": "tile_-10_26.json",
+      "buildings": 200
+    },
+    "5_22": {
+      "file": "tile_5_22.json",
+      "buildings": 123
+    },
+    "-7_23": {
+      "file": "tile_-7_23.json",
+      "buildings": 157
+    },
+    "-8_23": {
+      "file": "tile_-8_23.json",
+      "buildings": 168
+    },
+    "3_22": {
+      "file": "tile_3_22.json",
+      "buildings": 170
+    },
+    "-9_23": {
+      "file": "tile_-9_23.json",
+      "buildings": 67
+    },
+    "-9_24": {
+      "file": "tile_-9_24.json",
+      "buildings": 83
+    },
+    "-8_24": {
+      "file": "tile_-8_24.json",
+      "buildings": 128
+    },
+    "-7_24": {
+      "file": "tile_-7_24.json",
+      "buildings": 90
+    },
+    "0_23": {
+      "file": "tile_0_23.json",
+      "buildings": 133
+    },
+    "2_23": {
+      "file": "tile_2_23.json",
+      "buildings": 18
+    },
+    "1_24": {
+      "file": "tile_1_24.json",
+      "buildings": 65
+    },
+    "1_23": {
+      "file": "tile_1_23.json",
+      "buildings": 136
+    },
+    "0_24": {
+      "file": "tile_0_24.json",
+      "buildings": 55
+    },
+    "-9_25": {
+      "file": "tile_-9_25.json",
+      "buildings": 129
+    },
+    "-8_25": {
+      "file": "tile_-8_25.json",
+      "buildings": 107
+    },
+    "-7_25": {
+      "file": "tile_-7_25.json",
+      "buildings": 114
+    },
+    "-6_24": {
+      "file": "tile_-6_24.json",
+      "buildings": 177
+    },
+    "4_21": {
+      "file": "tile_4_21.json",
+      "buildings": 177
+    },
+    "-4_27": {
+      "file": "tile_-4_27.json",
+      "buildings": 73
+    },
+    "-3_27": {
+      "file": "tile_-3_27.json",
+      "buildings": 22
+    },
+    "-4_26": {
+      "file": "tile_-4_26.json",
+      "buildings": 193
+    },
+    "0_26": {
+      "file": "tile_0_26.json",
+      "buildings": 2
+    },
+    "-16_15": {
+      "file": "tile_-16_15.json",
+      "buildings": 7
+    },
+    "-22_14": {
+      "file": "tile_-22_14.json",
+      "buildings": 1
+    },
+    "-22_13": {
+      "file": "tile_-22_13.json",
+      "buildings": 1
+    },
+    "-9_29": {
+      "file": "tile_-9_29.json",
+      "buildings": 186
+    },
+    "-9_30": {
+      "file": "tile_-9_30.json",
+      "buildings": 159
+    },
+    "-8_29": {
+      "file": "tile_-8_29.json",
+      "buildings": 172
+    },
+    "-8_28": {
+      "file": "tile_-8_28.json",
+      "buildings": 177
+    },
+    "-5_25": {
+      "file": "tile_-5_25.json",
+      "buildings": 163
+    },
+    "-6_25": {
+      "file": "tile_-6_25.json",
+      "buildings": 197
+    },
+    "-5_26": {
+      "file": "tile_-5_26.json",
+      "buildings": 202
+    },
+    "-6_27": {
+      "file": "tile_-6_27.json",
+      "buildings": 154
+    },
+    "-7_27": {
+      "file": "tile_-7_27.json",
+      "buildings": 172
+    },
+    "-5_27": {
+      "file": "tile_-5_27.json",
+      "buildings": 127
+    },
+    "-7_26": {
+      "file": "tile_-7_26.json",
+      "buildings": 190
+    },
+    "-6_26": {
+      "file": "tile_-6_26.json",
+      "buildings": 196
+    },
+    "19_-16": {
+      "file": "tile_19_-16.json",
+      "buildings": 11
+    },
+    "20_-14": {
+      "file": "tile_20_-14.json",
+      "buildings": 19
+    },
+    "19_-14": {
+      "file": "tile_19_-14.json",
+      "buildings": 3
+    },
+    "19_-15": {
+      "file": "tile_19_-15.json",
+      "buildings": 7
+    },
+    "20_-15": {
+      "file": "tile_20_-15.json",
+      "buildings": 21
+    },
+    "18_-15": {
+      "file": "tile_18_-15.json",
+      "buildings": 6
+    },
+    "20_-13": {
+      "file": "tile_20_-13.json",
+      "buildings": 3
+    },
+    "17_-14": {
+      "file": "tile_17_-14.json",
+      "buildings": 1
+    },
+    "16_-18": {
+      "file": "tile_16_-18.json",
+      "buildings": 1
+    },
+    "17_-24": {
+      "file": "tile_17_-24.json",
+      "buildings": 13
+    },
+    "-22_23": {
+      "file": "tile_-22_23.json",
+      "buildings": 20
+    },
+    "-22_22": {
+      "file": "tile_-22_22.json",
+      "buildings": 22
+    },
+    "-22_21": {
+      "file": "tile_-22_21.json",
+      "buildings": 5
+    },
+    "-21_23": {
+      "file": "tile_-21_23.json",
+      "buildings": 14
+    },
+    "-23_24": {
+      "file": "tile_-23_24.json",
+      "buildings": 9
+    },
+    "-23_23": {
+      "file": "tile_-23_23.json",
+      "buildings": 11
+    },
+    "-22_24": {
+      "file": "tile_-22_24.json",
+      "buildings": 7
+    },
+    "-21_24": {
+      "file": "tile_-21_24.json",
+      "buildings": 4
+    },
+    "-23_22": {
+      "file": "tile_-23_22.json",
+      "buildings": 3
+    },
+    "-11_17": {
+      "file": "tile_-11_17.json",
+      "buildings": 2
+    },
+    "-25_29": {
+      "file": "tile_-25_29.json",
+      "buildings": 1
+    },
+    "2_26": {
+      "file": "tile_2_26.json",
+      "buildings": 1
+    },
+    "-29_-3": {
+      "file": "tile_-29_-3.json",
+      "buildings": 1
+    },
+    "13_29": {
+      "file": "tile_13_29.json",
+      "buildings": 1
+    },
+    "13_30": {
+      "file": "tile_13_30.json",
+      "buildings": 1
+    },
+    "-18_4": {
+      "file": "tile_-18_4.json",
+      "buildings": 1
+    },
+    "-26_22": {
+      "file": "tile_-26_22.json",
+      "buildings": 1
+    },
+    "-28_25": {
+      "file": "tile_-28_25.json",
+      "buildings": 1
+    },
+    "-4_28": {
+      "file": "tile_-4_28.json",
+      "buildings": 1
+    },
+    "-22_-10": {
+      "file": "tile_-22_-10.json",
+      "buildings": 1
+    },
+    "-23_-8": {
+      "file": "tile_-23_-8.json",
+      "buildings": 1
+    },
+    "-3_28": {
+      "file": "tile_-3_28.json",
+      "buildings": 1
+    },
+    "-2_27": {
+      "file": "tile_-2_27.json",
+      "buildings": 1
+    },
+    "0_25": {
+      "file": "tile_0_25.json",
+      "buildings": 1
+    },
+    "1_25": {
+      "file": "tile_1_25.json",
+      "buildings": 1
+    },
+    "10_1": {
+      "file": "tile_10_1.json",
+      "buildings": 6
+    },
+    "11_4": {
+      "file": "tile_11_4.json",
+      "buildings": 4
+    },
+    "17_-16": {
+      "file": "tile_17_-16.json",
+      "buildings": 3
+    },
+    "13_9": {
+      "file": "tile_13_9.json",
+      "buildings": 1
+    },
+    "18_22": {
+      "file": "tile_18_22.json",
+      "buildings": 4
+    },
+    "12_25": {
+      "file": "tile_12_25.json",
+      "buildings": 3
+    },
+    "11_25": {
+      "file": "tile_11_25.json",
+      "buildings": 1
+    },
+    "20_25": {
+      "file": "tile_20_25.json",
+      "buildings": 4
+    },
+    "-16_2": {
+      "file": "tile_-16_2.json",
+      "buildings": 1
+    },
+    "13_26": {
+      "file": "tile_13_26.json",
+      "buildings": 1
+    },
+    "9_28": {
+      "file": "tile_9_28.json",
+      "buildings": 3
+    },
+    "15_30": {
+      "file": "tile_15_30.json",
+      "buildings": 1
+    },
+    "10_5": {
+      "file": "tile_10_5.json",
+      "buildings": 3
+    },
+    "-15_11": {
+      "file": "tile_-15_11.json",
+      "buildings": 1
+    },
+    "-31_5": {
+      "file": "tile_-31_5.json",
+      "buildings": 1
+    },
+    "-1_24": {
+      "file": "tile_-1_24.json",
+      "buildings": 1
+    },
+    "15_-20": {
+      "file": "tile_15_-20.json",
+      "buildings": 5
+    },
+    "20_-16": {
+      "file": "tile_20_-16.json",
+      "buildings": 1
+    },
+    "-30_5": {
+      "file": "tile_-30_5.json",
+      "buildings": 1
+    },
+    "-1_-21": {
+      "file": "tile_-1_-21.json",
+      "buildings": 1
+    },
+    "-23_21": {
+      "file": "tile_-23_21.json",
+      "buildings": 2
+    },
+    "-26_12": {
+      "file": "tile_-26_12.json",
+      "buildings": 1
+    },
+    "13_2": {
+      "file": "tile_13_2.json",
+      "buildings": 1
+    },
+    "8_-10": {
+      "file": "tile_8_-10.json",
+      "buildings": 1
+    },
+    "10_0": {
+      "file": "tile_10_0.json",
+      "buildings": 1
+    },
+    "19_-19": {
+      "file": "tile_19_-19.json",
+      "buildings": 1
+    },
+    "17_-18": {
+      "file": "tile_17_-18.json",
+      "buildings": 1
+    },
+    "16_-19": {
+      "file": "tile_16_-19.json",
+      "buildings": 2
+    },
+    "-31_3": {
+      "file": "tile_-31_3.json",
+      "buildings": 1
+    },
+    "-17_2": {
+      "file": "tile_-17_2.json",
+      "buildings": 1
+    },
+    "-30_24": {
+      "file": "tile_-30_24.json",
+      "buildings": 2
+    },
+    "-30_28": {
+      "file": "tile_-30_28.json",
+      "buildings": 2
+    },
+    "-33_6": {
+      "file": "tile_-33_6.json",
+      "buildings": 1
+    },
+    "14_18": {
+      "file": "tile_14_18.json",
+      "buildings": 1
+    }
+  },
+  "areas": {
+    "soma-pilot": {
+      "bbox": {
+        "north": 37.783,
+        "south": 37.77758,
+        "west": -122.40685,
+        "east": -122.40001
+      },
+      "buildings": 172,
+      "generatedAt": "2026-09-25T23:52:17.880Z",
+      "frontageM": 12,
+      "inputs": [
+        {
+          "file": "datasf-business-locations-g8m3-pdis-2026-09-26.categories.csv",
+          "sha256": "03c63e264e1c56beca9a414a6f4b93ab0770583eaf0f4487add5b30ce1de5583"
+        },
+        {
+          "file": "osm-pois-cfccab23.categories.csv",
+          "sha256": "55f32bff3219ddc7ec44aecf37e57739554cb97c68cd9d0e45493ae099924655"
+        },
+        {
+          "file": "datasf-land-use-c5ge-t6pj-soma-pilot-2026-09-26.json",
+          "sha256": "92549d356bafc141dd9695facf8686d79b2431e29e1487b558ad4e51c3a4dfa8"
+        }
+      ],
+      "coarseFootprints": null,
+      "receiptCounts": {
+        "businesses": {
+          "receipt": "ingest-businesses-receipt-2026-09-26.json",
+          "file": "datasf-business-locations-g8m3-pdis-2026-09-26.categories.csv",
+          "sha256": "03c63e264e1c56beca9a414a6f4b93ab0770583eaf0f4487add5b30ce1de5583",
+          "dataAsOf": "2026-09-25T00:00:00.000",
+          "fetched": 99972,
+          "closed": 0,
+          "kept": 99972,
+          "categorised": 63916,
+          "ignored": 13221,
+          "lessors": 10579,
+          "dwellingUnits": 7565,
+          "unmapped": 22835,
+          "unmappedEmptyNaics": 20400,
+          "unmappedUnrecognisedCode": 2435,
+          "byCategory": {
+            "restaurant": 5473,
+            "office": 39492,
+            "civic": 713,
+            "convenience": 999,
+            "retail": 9586,
+            "hospital": 135,
+            "warehouse": 1418,
+            "school": 699,
+            "supermarket": 229,
+            "industrial": 2358,
+            "auto-shop": 461,
+            "bar": 518,
+            "hotel": 961,
+            "cafe": 153,
+            "parking-garage": 344,
+            "church": 175,
+            "gas-station": 106,
+            "museum": 81,
+            "apartment": 15
+          }
+        },
+        "osm": {
+          "receipt": "ingest-businesses-receipt-2026-09-26.json",
+          "file": "osm-pois-cfccab23.categories.csv",
+          "sha256": "55f32bff3219ddc7ec44aecf37e57739554cb97c68cd9d0e45493ae099924655",
+          "nodes": 12483,
+          "ways": 3267,
+          "byCategory": {
+            "bar": 539,
+            "civic": 419,
+            "parking-garage": 2569,
+            "retail": 4778,
+            "restaurant": 2805,
+            "gas-station": 123,
+            "office": 1543,
+            "supermarket": 105,
+            "convenience": 477,
+            "church": 244,
+            "school": 549,
+            "cafe": 995,
+            "museum": 153,
+            "auto-shop": 191,
+            "vacant": 135,
+            "hotel": 106,
+            "warehouse": 1,
+            "hospital": 18
+          }
+        },
+        "landUse": {
+          "receipt": "ingest-businesses-receipt-2026-09-26.json",
+          "file": "datasf-land-use-c5ge-t6pj-soma-pilot-2026-09-26.json",
+          "sha256": "92549d356bafc141dd9695facf8686d79b2431e29e1487b558ad4e51c3a4dfa8",
+          "area": "soma-pilot",
+          "parcels": 365
+        }
+      },
+      "report": {
+        "buildings": 172,
+        "byFootprint": {
+          "runtime-detail": 172
+        },
+        "withAnyBusinessPoint": 141,
+        "withCategorisedBusinessPoint": 101,
+        "withAnyPoint": 145,
+        "withGroundUnit": 69,
+        "useCounts": {
+          "hotel": 9,
+          "civic": 5,
+          "school": 2,
+          "office": 32,
+          "retail": 11,
+          "industrial": 38,
+          "mixed-use": 25,
+          "condo": 27,
+          "apartment": 15,
+          "gas-station": 1,
+          "parking-garage": 4,
+          "house": 3
+        },
+        "unitCounts": {
+          "hotel": 11,
+          "restaurant": 20,
+          "parking-garage": 6,
+          "retail": 34,
+          "bar": 3,
+          "auto-shop": 17,
+          "convenience": 5,
+          "supermarket": 1,
+          "cafe": 2
+        },
+        "confidence": {
+          "lt04": 0,
+          "04to07": 30,
+          "ge07": 142
+        },
+        "pctWithAnyBusinessPoint": 82,
+        "pctWithCategorisedBusinessPoint": 58.7,
+        "pctWithAnyPoint": 84.3,
+        "join": {
+          "business": {
+            "inside": 447,
+            "frontage": 179,
+            "unjoined": 39
+          },
+          "osm": {
+            "inside": 49,
+            "frontage": 20,
+            "unjoined": 10
+          }
+        },
+        "businessPointsInArea": {
+          "categorised": 389,
+          "emptyNaics": 147,
+          "unrecognisedCode": 12,
+          "ignoredCode": 18,
+          "lessor": 60
+        },
+        "footprints": {
+          "detail": 172,
+          "detailDegenerate": 0,
+          "coarseInArea": 0,
+          "coarseRecovered": 0,
+          "coarseRejected": {}
+        }
+      }
+    },
+    "soma-pilot-blocks": {
+      "bbox": {
+        "north": 37.78556,
+        "south": 37.77461,
+        "west": -122.41052,
+        "east": -122.39627
+      },
+      "buildings": 677,
+      "generatedAt": "2026-09-25T23:52:17.089Z",
+      "frontageM": 12,
+      "inputs": [
+        {
+          "file": "datasf-business-locations-g8m3-pdis-2026-09-26.categories.csv",
+          "sha256": "03c63e264e1c56beca9a414a6f4b93ab0770583eaf0f4487add5b30ce1de5583"
+        },
+        {
+          "file": "osm-pois-cfccab23.categories.csv",
+          "sha256": "55f32bff3219ddc7ec44aecf37e57739554cb97c68cd9d0e45493ae099924655"
+        },
+        {
+          "file": "datasf-land-use-c5ge-t6pj-soma-pilot-blocks-2026-09-26.json",
+          "sha256": "ba93e76442bae62404272944f87cb17b35098df228ffe165c397ffd42013b943"
+        }
+      ],
+      "coarseFootprints": null,
+      "receiptCounts": {
+        "businesses": {
+          "receipt": "ingest-businesses-receipt-2026-09-26.json",
+          "file": "datasf-business-locations-g8m3-pdis-2026-09-26.categories.csv",
+          "sha256": "03c63e264e1c56beca9a414a6f4b93ab0770583eaf0f4487add5b30ce1de5583",
+          "dataAsOf": "2026-09-25T00:00:00.000",
+          "fetched": 99972,
+          "closed": 0,
+          "kept": 99972,
+          "categorised": 63916,
+          "ignored": 13221,
+          "lessors": 10579,
+          "dwellingUnits": 7565,
+          "unmapped": 22835,
+          "unmappedEmptyNaics": 20400,
+          "unmappedUnrecognisedCode": 2435,
+          "byCategory": {
+            "restaurant": 5473,
+            "office": 39492,
+            "civic": 713,
+            "convenience": 999,
+            "retail": 9586,
+            "hospital": 135,
+            "warehouse": 1418,
+            "school": 699,
+            "supermarket": 229,
+            "industrial": 2358,
+            "auto-shop": 461,
+            "bar": 518,
+            "hotel": 961,
+            "cafe": 153,
+            "parking-garage": 344,
+            "church": 175,
+            "gas-station": 106,
+            "museum": 81,
+            "apartment": 15
+          }
+        },
+        "osm": {
+          "receipt": "ingest-businesses-receipt-2026-09-26.json",
+          "file": "osm-pois-cfccab23.categories.csv",
+          "sha256": "55f32bff3219ddc7ec44aecf37e57739554cb97c68cd9d0e45493ae099924655",
+          "nodes": 12483,
+          "ways": 3267,
+          "byCategory": {
+            "bar": 539,
+            "civic": 419,
+            "parking-garage": 2569,
+            "retail": 4778,
+            "restaurant": 2805,
+            "gas-station": 123,
+            "office": 1543,
+            "supermarket": 105,
+            "convenience": 477,
+            "church": 244,
+            "school": 549,
+            "cafe": 995,
+            "museum": 153,
+            "auto-shop": 191,
+            "vacant": 135,
+            "hotel": 106,
+            "warehouse": 1,
+            "hospital": 18
+          }
+        },
+        "landUse": {
+          "receipt": "ingest-businesses-receipt-2026-09-26.json",
+          "file": "datasf-land-use-c5ge-t6pj-soma-pilot-blocks-2026-09-26.json",
+          "sha256": "ba93e76442bae62404272944f87cb17b35098df228ffe165c397ffd42013b943",
+          "area": "soma-pilot-blocks",
+          "parcels": 1231
+        }
+      },
+      "report": {
+        "buildings": 677,
+        "byFootprint": {
+          "runtime-detail": 677
+        },
+        "withAnyBusinessPoint": 551,
+        "withCategorisedBusinessPoint": 424,
+        "withAnyPoint": 569,
+        "withGroundUnit": 293,
+        "useCounts": {
+          "hotel": 52,
+          "civic": 16,
+          "retail": 71,
+          "mixed-use": 78,
+          "office": 122,
+          "parking-garage": 14,
+          "church": 3,
+          "industrial": 154,
+          "school": 8,
+          "apartment": 70,
+          "restaurant": 5,
+          "gas-station": 6,
+          "house": 8,
+          "condo": 66,
+          "vacant": 4
+        },
+        "unitCounts": {
+          "hotel": 66,
+          "restaurant": 166,
+          "parking-garage": 29,
+          "retail": 151,
+          "bar": 42,
+          "cafe": 25,
+          "convenience": 32,
+          "supermarket": 5,
+          "auto-shop": 33,
+          "gas-station": 3,
+          "office": 3
+        },
+        "confidence": {
+          "lt04": 8,
+          "04to07": 116,
+          "ge07": 553
+        },
+        "pctWithAnyBusinessPoint": 81.4,
+        "pctWithCategorisedBusinessPoint": 62.6,
+        "pctWithAnyPoint": 84,
+        "join": {
+          "business": {
+            "inside": 3565,
+            "frontage": 1033,
+            "unjoined": 427
+          },
+          "osm": {
+            "inside": 308,
+            "frontage": 90,
+            "unjoined": 43
+          }
+        },
+        "businessPointsInArea": {
+          "categorised": 3425,
+          "emptyNaics": 788,
+          "unrecognisedCode": 61,
+          "ignoredCode": 83,
+          "lessor": 241
+        },
+        "footprints": {
+          "detail": 677,
+          "detailDegenerate": 0,
+          "coarseInArea": 0,
+          "coarseRecovered": 0,
+          "coarseRejected": {}
+        }
+      }
+    },
+    "city": {
+      "bbox": {
+        "north": 37.84,
+        "south": 37.7,
+        "west": -122.53,
+        "east": -122.35
+      },
+      "buildings": 73683,
+      "generatedAt": "2026-09-25T23:52:16.195Z",
+      "frontageM": 12,
+      "inputs": [
+        {
+          "file": "datasf-business-locations-g8m3-pdis-2026-09-26.categories.csv",
+          "sha256": "03c63e264e1c56beca9a414a6f4b93ab0770583eaf0f4487add5b30ce1de5583"
+        },
+        {
+          "file": "osm-pois-cfccab23.categories.csv",
+          "sha256": "55f32bff3219ddc7ec44aecf37e57739554cb97c68cd9d0e45493ae099924655"
+        },
+        {
+          "file": "datasf-land-use-c5ge-t6pj-city-2026-09-26.json",
+          "sha256": "b9a184d9d503577fd536fed5d3ce9c686379ee5147841aa3f8a3e6fc53ce79e2"
+        }
+      ],
+      "coarseFootprints": {
+        "pbf": "public/data/sf/SanFrancisco.osm.pbf",
+        "pbfSha8": "7192f9cf",
+        "cache": "osm-coarse-rings-7192f9cf.json"
+      },
+      "receiptCounts": {
+        "businesses": {
+          "receipt": "ingest-businesses-receipt-2026-09-26.json",
+          "file": "datasf-business-locations-g8m3-pdis-2026-09-26.categories.csv",
+          "sha256": "03c63e264e1c56beca9a414a6f4b93ab0770583eaf0f4487add5b30ce1de5583",
+          "dataAsOf": "2026-09-25T00:00:00.000",
+          "fetched": 99972,
+          "closed": 0,
+          "kept": 99972,
+          "categorised": 63916,
+          "ignored": 13221,
+          "lessors": 10579,
+          "dwellingUnits": 7565,
+          "unmapped": 22835,
+          "unmappedEmptyNaics": 20400,
+          "unmappedUnrecognisedCode": 2435,
+          "byCategory": {
+            "restaurant": 5473,
+            "office": 39492,
+            "civic": 713,
+            "convenience": 999,
+            "retail": 9586,
+            "hospital": 135,
+            "warehouse": 1418,
+            "school": 699,
+            "supermarket": 229,
+            "industrial": 2358,
+            "auto-shop": 461,
+            "bar": 518,
+            "hotel": 961,
+            "cafe": 153,
+            "parking-garage": 344,
+            "church": 175,
+            "gas-station": 106,
+            "museum": 81,
+            "apartment": 15
+          }
+        },
+        "osm": {
+          "receipt": "ingest-businesses-receipt-2026-09-26.json",
+          "file": "osm-pois-cfccab23.categories.csv",
+          "sha256": "55f32bff3219ddc7ec44aecf37e57739554cb97c68cd9d0e45493ae099924655",
+          "nodes": 12483,
+          "ways": 3267,
+          "byCategory": {
+            "bar": 539,
+            "civic": 419,
+            "parking-garage": 2569,
+            "retail": 4778,
+            "restaurant": 2805,
+            "gas-station": 123,
+            "office": 1543,
+            "supermarket": 105,
+            "convenience": 477,
+            "church": 244,
+            "school": 549,
+            "cafe": 995,
+            "museum": 153,
+            "auto-shop": 191,
+            "vacant": 135,
+            "hotel": 106,
+            "warehouse": 1,
+            "hospital": 18
+          }
+        },
+        "landUse": {
+          "receipt": "ingest-businesses-receipt-2026-09-26.json",
+          "file": "datasf-land-use-c5ge-t6pj-city-2026-09-26.json",
+          "sha256": "b9a184d9d503577fd536fed5d3ce9c686379ee5147841aa3f8a3e6fc53ce79e2",
+          "area": "city",
+          "parcels": 153765
+        }
+      },
+      "report": {
+        "buildings": 73683,
+        "byFootprint": {
+          "runtime-detail": 28000,
+          "osm-way-ring": 45683
+        },
+        "withAnyBusinessPoint": 22865,
+        "withCategorisedBusinessPoint": 9250,
+        "withAnyPoint": 23511,
+        "withGroundUnit": 7323,
+        "useCounts": {
+          "parking-garage": 310,
+          "hotel": 493,
+          "office": 1352,
+          "civic": 731,
+          "hospital": 218,
+          "retail": 1996,
+          "school": 570,
+          "mixed-use": 4410,
+          "apartment": 14413,
+          "church": 581,
+          "museum": 15,
+          "industrial": 1855,
+          "warehouse": 157,
+          "vacant": 238,
+          "condo": 4106,
+          "supermarket": 4,
+          "cafe": 2,
+          "convenience": 15,
+          "house": 42014,
+          "restaurant": 74,
+          "auto-shop": 15,
+          "gas-station": 110,
+          "bar": 4
+        },
+        "unitCounts": {
+          "cafe": 760,
+          "parking-garage": 320,
+          "bar": 612,
+          "restaurant": 3598,
+          "hotel": 682,
+          "retail": 5521,
+          "office": 244,
+          "convenience": 841,
+          "supermarket": 217,
+          "auto-shop": 357,
+          "vacant": 95,
+          "gas-station": 68
+        },
+        "confidence": {
+          "lt04": 346,
+          "04to07": 4304,
+          "ge07": 69033
+        },
+        "pctWithAnyBusinessPoint": 31,
+        "pctWithCategorisedBusinessPoint": 12.6,
+        "pctWithAnyPoint": 31.9,
+        "join": {
+          "business": {
+            "inside": 60272,
+            "frontage": 21236,
+            "unjoined": 18464
+          },
+          "osm": {
+            "inside": 7446,
+            "frontage": 2369,
+            "unjoined": 2240
+          }
+        },
+        "businessPointsInArea": {
+          "categorised": 52089,
+          "emptyNaics": 16681,
+          "unrecognisedCode": 1872,
+          "ignoredCode": 1901,
+          "lessor": 8965
+        },
+        "footprints": {
+          "detail": 28000,
+          "detailDegenerate": 0,
+          "coarseInArea": 45683,
+          "coarseRecovered": 45683,
+          "coarseRejected": {}
+        }
+      }
+    }
+  },
+  "schema": "eo-building-metadata-v1",
+  "tileSizeM": 250,
+  "frame": "sf-city.json world metres (x east, z south); tile = floor(centroid / tileSizeM); edge indices refer to the ring named by each record footprint.source: runtime-detail = detailBuildings[].points without a repeated closing vertex, osm-way-ring = the OSM way ring recovered for a coarseBuildings[] record",
+  "categories": [
+    "house",
+    "apartment",
+    "condo",
+    "mixed-use",
+    "office",
+    "restaurant",
+    "cafe",
+    "bar",
+    "supermarket",
+    "convenience",
+    "retail",
+    "gas-station",
+    "auto-shop",
+    "parking-garage",
+    "hotel",
+    "school",
+    "church",
+    "hospital",
+    "civic",
+    "museum",
+    "warehouse",
+    "industrial",
+    "vacant"
+  ],
+  "keyedBy": "sf-city.json detailBuildings[].id or coarseBuildings[].id",
+  "namesStored": false,
+  "sources": [
+    {
+      "id": "datasf-g8m3-pdis",
+      "dataset": "DataSF Registered Business Locations - San Francisco",
+      "license": "PDDL-1.0",
+      "use": "business point categories (NAICS, licence), names stripped at ingest"
+    },
+    {
+      "id": "osm",
+      "dataset": "OpenStreetMap",
+      "license": "ODbL-1.0",
+      "attribution": "(c) OpenStreetMap contributors",
+      "use": "POI trade values, building tags and coarse footprint rings; names never read"
+    },
+    {
+      "id": "assessor-wv5m-vpq2",
+      "dataset": "DataSF Assessor Historical Secured Property Tax Rolls (via sf-building-civic sidecar)",
+      "license": "PDDL-1.0",
+      "use": "use/class, storeys, year, units"
+    },
+    {
+      "id": "planning-land-use-c5ge-t6pj",
+      "dataset": "SF Planning San Francisco Land Use",
+      "license": "CC0-1.0",
+      "use": "per-parcel square feet by use, residential units"
+    }
+  ]
+}

@@ -1,0 +1,210 @@
+{
+ "seed": 37,
+ "notes": "Storey 1 above the stone base is a flat row of three windows (plus one at the right) and the cant bays start a storey higher; ground windows are small in the ashlar; red-edged canopy over a red-framed glazed door; off-white stucco. Bays now start at storey 2, storey-1 ribbon groups added, ground windows shrunk, stone 1.2 m tan c8bba5, canopy red c83a32. Breeze-block screen cannot be pierced (no key): stays embossed fret bands. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-stucco",
+ "wallTint": "#f0eeea",
+ "trim": "painted-white@ecebe6",
+ "frame": "painted-white@d8d8d4",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@d8d8d4",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "cast-stone@c8bba5",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 1.1,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.3,
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.2,
+  "upperM": 3.15
+ },
+ "bays": [
+  {
+   "at": 0.2,
+   "widthM": 2.8,
+   "projectionM": 0.6,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#f0eeea"
+  },
+  {
+   "at": 0.88,
+   "widthM": 2.9,
+   "projectionM": 0.6,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#f0eeea"
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 1.0,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.09,
+    "to": 0.15,
+    "kind": "window",
+    "headM": 2.0
+   },
+   {
+    "from": 0.19,
+    "to": 0.25,
+    "kind": "window",
+    "headM": 2.0
+   },
+   {
+    "from": 0.79,
+    "to": 0.84,
+    "kind": "window",
+    "headM": 2.0
+   },
+   {
+    "from": 0.44,
+    "to": 0.56,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel@c83a32",
+    "headM": 2.5
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "groundBand": {
+  "material": "cast-stone",
+  "tint": "#c8bba5",
+  "topM": 1.2
+ },
+ "hyDRubble": {
+  "toM": 1.2,
+  "courseM": 0.3,
+  "blockM": 0.6,
+  "projM": 0.03,
+  "shade": 0.6,
+  "seed": 9
+ },
+ "awning": "painted-steel@c83a32",
+ "awningSpans": [
+  {
+   "from": 0.38,
+   "to": 0.62,
+   "depthM": 1.3,
+   "profile": "box",
+   "riseM": 0.45,
+   "dropM": 0.2
+  }
+ ],
+ "upperWindows": [],
+ "fretBands": [
+  {
+   "from": 0.4,
+   "to": 0.56,
+   "yM": 3.9,
+   "heightM": 0.6,
+   "material": "cast-stone-trim",
+   "tint": "#f0eee8",
+   "reliefM": 0.04
+  },
+  {
+   "from": 0.4,
+   "to": 0.56,
+   "yM": 4.85,
+   "heightM": 0.6,
+   "material": "cast-stone-trim",
+   "tint": "#f0eee8",
+   "reliefM": 0.04
+  },
+  {
+   "from": 0.4,
+   "to": 0.56,
+   "yM": 5.8,
+   "heightM": 0.6,
+   "material": "cast-stone-trim",
+   "tint": "#f0eee8",
+   "reliefM": 0.04
+  },
+  {
+   "from": 0.4,
+   "to": 0.56,
+   "yM": 6.75,
+   "heightM": 0.6,
+   "material": "cast-stone-trim",
+   "tint": "#f0eee8",
+   "reliefM": 0.04
+  },
+  {
+   "from": 0.4,
+   "to": 0.56,
+   "yM": 7.699999999999999,
+   "heightM": 0.6,
+   "material": "cast-stone-trim",
+   "tint": "#f0eee8",
+   "reliefM": 0.04
+  },
+  {
+   "from": 0.4,
+   "to": 0.56,
+   "yM": 8.65,
+   "heightM": 0.6,
+   "material": "cast-stone-trim",
+   "tint": "#f0eee8",
+   "reliefM": 0.04
+  },
+  {
+   "from": 0.4,
+   "to": 0.56,
+   "yM": 9.6,
+   "heightM": 0.6,
+   "material": "cast-stone-trim",
+   "tint": "#f0eee8",
+   "reliefM": 0.04
+  },
+  {
+   "from": 0.4,
+   "to": 0.56,
+   "yM": 10.549999999999999,
+   "heightM": 0.6,
+   "material": "cast-stone-trim",
+   "tint": "#f0eee8",
+   "reliefM": 0.04
+  },
+  {
+   "from": 0.4,
+   "to": 0.56,
+   "yM": 11.5,
+   "heightM": 0.6,
+   "material": "cast-stone-trim",
+   "tint": "#f0eee8",
+   "reliefM": 0.04
+  }
+ ],
+ "streetStills": true,
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.09,
+     0.14
+    ],
+    [
+     0.17,
+     0.25
+    ],
+    [
+     0.27,
+     0.33
+    ],
+    [
+     0.8,
+     0.88
+    ]
+   ],
+   "sillM": 0.9,
+   "headM": 2.3
+  }
+ }
+}

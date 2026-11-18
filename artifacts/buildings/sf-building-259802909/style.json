@@ -1,0 +1,114 @@
+{
+ "seed": 96,
+ "notes": "1912 flats, lilac painted siding with cream trim, four storeys. Ground: buff brick base with lilac double doors and an iron gate. Uppers: two round (swell) bays side by side on every upper storey with lilac bellcast bands. Canted three-sided bays, deeper mauve, plum trim bands, tan brick coursing base. Red diamond ornament and carriage-door arched glazing skipped (too small for a style key). Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour.",
+ "wall": "painted-clapboard",
+ "wallTint": "#b395ae",
+ "trim": "painted-white@8a5a7e",
+ "frame": "painted-white@efe8d4",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@efe8d4",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@b395ae",
+ "cornice": true,
+ "corniceProjectionM": 0.45,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.25,
+   "widthM": 3.0,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#b395ae",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.45,
+    "marginM": 0.12,
+    "cornice": {
+     "projectionM": 0.2,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0,
+     "beltBrackets": true
+    }
+   }
+  },
+  {
+   "at": 0.75,
+   "widthM": 3.0,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#b395ae",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.45,
+    "marginM": 0.12,
+    "cornice": {
+     "projectionM": 0.2,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0,
+     "beltBrackets": true
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.11,
+    "to": 0.4,
+    "kind": "double-door",
+    "leaf": "painted-white@a07aa0",
+    "headM": 2.5,
+    "arch": {
+     "type": "round",
+     "surround": false
+    }
+   },
+   {
+    "from": 0.6,
+    "to": 0.87,
+    "kind": "gate",
+    "headM": 2.6
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.2,
+  "upperM": 2.73
+ },
+ "groundBand": {
+  "material": "brick-common-bond",
+  "tint": "#ffffff",
+  "topM": 3.2
+ }
+}

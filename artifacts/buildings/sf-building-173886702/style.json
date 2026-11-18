@@ -1,0 +1,126 @@
+{
+  "seed": 1,
+  "notes": "Red common-bond brick two-storey, arched steel-sash window centre-right, tall steel-sash window left, louvred vent panels and a painted yellow loading panel at ground, small steel door beside it. The brick part (t 0.4-1) had three red roll-up doors; now two rust louvred vent panels, a mustard loading panel and a small steel door, a tall steel sash over the louvres and the wide sash over the entry. Warm tan/ochre brick (brick-buff), not saturated red; the clapboard part gets glazed carriage doors. The two vents are louvred panels (garage material \"louvre\"), not roll-ups; a segmental arched fanlight over the wide upper window (archHeads). Arch springs 1.0 m below the window head with brick corner fills (archHeads.dropM) so the window reads round-headed.",
+  "wall": "brick-buff",
+  "trim": "cast-stone-trim",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "coping": {
+    "heightM": 0.18,
+    "projectionM": 0.05,
+    "material": "cast-stone-trim"
+  },
+  "upperWindowSpans": [
+    [
+      0.08,
+      0.16
+    ],
+    [
+      0.24,
+      0.32
+    ],
+    [
+      0.44,
+      0.6
+    ],
+    [
+      0.64,
+      0.92
+    ]
+  ],
+  "upperSillM": 0.25,
+  "upperHeadM": 2.2,
+  "mullionM": 0.95,
+  "sashRows": 3,
+  "sashCols": 2,
+  "sashMaterial": "painted-steel",
+  "storefrontFrame": "painted-steel",
+  "bulkhead": "painted-steel-mid",
+  "ground": "vacant",
+  "upper": "office",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.5,
+    "layout": [
+      {
+        "kind": "garage",
+        "from": 0.05,
+        "to": 0.3,
+        "material": "carriage",
+        "tint": "#1f2123",
+        "headM": 2.8
+      },
+      {
+        "kind": "door",
+        "from": 0.32,
+        "to": 0.38,
+        "leaf": "painted-steel",
+        "stair": true
+      },
+      {
+        "kind": "garage",
+        "from": 0.43,
+        "to": 0.515,
+        "material": "louvre",
+        "tint": "#7a4a36",
+        "headM": 2.5
+      },
+      {
+        "kind": "garage",
+        "from": 0.525,
+        "to": 0.61,
+        "material": "louvre",
+        "tint": "#7a4a36",
+        "headM": 2.5
+      },
+      {
+        "kind": "blank",
+        "from": 0.66,
+        "to": 0.81,
+        "material": "painted-white",
+        "tint": "#c9a340",
+        "headM": 2.7
+      },
+      {
+        "kind": "door",
+        "from": 0.83,
+        "to": 0.89,
+        "leaf": "painted-steel"
+      }
+    ]
+  },
+  "weathering": {
+    "patches": {
+      "strength": 0.07,
+      "metres": 1.6,
+      "top": 4.0,
+      "mottle": 0.05
+    },
+    "grime": {
+      "strength": 0.12,
+      "metres": 3.0
+    }
+  },
+  "storefrontGlass": "glass-shell",
+  "glass": "glass-shell",
+  "wallZones": [
+    {
+      "from": 0.0,
+      "to": 0.4,
+      "material": "wood-siding",
+      "tint": "#8a9a8e"
+    }
+  ],
+  "wallTint": "#b58f6e",
+  "archHeads": [
+    {
+      "from": 0.64,
+      "to": 0.92,
+      "storey": 1,
+      "riseM": 0.4,
+      "segments": 32,
+      "dropM": 1.0
+    }
+  ]
+}

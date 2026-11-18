@@ -1,0 +1,159 @@
+{
+ "seed": 7,
+ "notes": "Rework r6: cool grey stucco, dark red brick ground with diamond-pattern panel strips under the ground windows, arched multi-pane window with cream surround and fan, shallower flatter cant bays, black gate in brick arch. Base fix (2026-10-03): cool/grey wallTint = target / painted-stucco base so the warm stucco albedo does not turn it pink.",
+ "wall": "painted-stucco",
+ "wallTint": "#f1ffff",
+ "trim": "painted-white@f2f0ea",
+ "frame": "painted-white@f4f2ec",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f4f2ec",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "brick-running-bond@ab8d92",
+ "cornice": true,
+ "corniceProjectionM": 0.15,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "upperWindows": [
+  0.4,
+  0.5,
+  0.6
+ ],
+ "bays": [
+  {
+   "at": 0.16,
+   "widthM": 3.4,
+   "projectionM": 0.25,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#cdd3dc",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.32,
+    "marginM": 0.15
+   }
+  },
+  {
+   "at": 0.84,
+   "widthM": 3.4,
+   "projectionM": 0.25,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#cdd3dc",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.32,
+    "marginM": 0.15
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.06,
+    "to": 0.28,
+    "kind": "window",
+    "headM": 2.9,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.16,
+      "tint": "#e3d8bf"
+     },
+     "fan": {
+      "rays": 6,
+      "rings": 1,
+      "tint": "#f2efe6"
+     }
+    }
+   },
+   {
+    "from": 0.41,
+    "to": 0.61,
+    "kind": "window",
+    "headM": 2.3
+   },
+   {
+    "from": 0.76,
+    "to": 0.94,
+    "kind": "gate",
+    "headM": 3.2,
+    "tint": "#101010",
+    "arch": {
+     "type": "round"
+    }
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "sashFrames": {
+  "material": "painted-white@f4f2ec",
+  "stileM": 0.13
+ },
+ "hbBayGlazing": {
+  "marginM": 0.2,
+  "maxW": 1.05,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#f4f2ec",
+  "sashM": 0.14,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.8,
+  "upperM": 3.2
+ },
+ "groundBand": {
+  "material": "brick-running-bond",
+  "tint": "#ab8d92",
+  "topM": 3.8
+ },
+ "hbArchDoors": [
+  {
+   "from": 0.76,
+   "to": 0.94,
+   "material": "brick-running-bond",
+   "tint": "#cdaead",
+   "ringTint": "#a8573c",
+   "fillTint": "#1c1c1c"
+  }
+ ]
+}

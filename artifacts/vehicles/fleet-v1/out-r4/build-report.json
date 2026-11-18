@@ -1,0 +1,27 @@
+{
+ "compactHatch-lod2": {
+  "triangles": 5138,
+  "bytes": 165916,
+  "seconds": 1.5
+ },
+ "compactSuv-lod2": {
+  "triangles": 5472,
+  "bytes": 172164,
+  "seconds": 1.3
+ },
+ "pickup-lod2": {
+  "triangles": 5843,
+  "bytes": 185036,
+  "seconds": 1.7
+ },
+ "deliveryVan-lod2": {
+  "triangles": 4794,
+  "bytes": 150176,
+  "seconds": 1.2
+ },
+ "taxi-lod2": {
+  "triangles": 5483,
+  "bytes": 174800,
+  "seconds": 1.5
+ }
+}

@@ -1,0 +1,29 @@
+{
+  "task_id": "779b363f-9d22-40b3-8ca9-30e33d57bcb5",
+  "type": "text_to_model",
+  "status": "success",
+  "input": {
+    "pbr": true,
+    "prompt": "inverted U bicycle rack, two galvanized steel tube hoops bolted to the pavement, realistic street furniture",
+    "texture": true,
+    "export_uv": true,
+    "model_version": "v3.1-20260211",
+    "texture_quality": "detailed",
+    "geometry_quality": "standard",
+    "texture_alignment": "geometry"
+  },
+  "output_fields": [
+    "model_url",
+    "rendered_image_url",
+    "generated_image_url"
+  ],
+  "credits_consumed": 30,
+  "created_at": "2026-09-22T19:32:00.475729Z",
+  "completed_at": "2026-09-22T19:33:57.281157Z",
+  "files": [
+    "model.glb",
+    "rendered_image.webp",
+    "generated_image.jpeg",
+    "preview.png"
+  ]
+}

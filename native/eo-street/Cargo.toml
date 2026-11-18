@@ -1,0 +1,13 @@
+[package]
+name = "eo-street"
+version = "0.1.0"
+edition = "2024"
+description = "Earth Online native: Rust port of the browser game's street surface (street-surface-v2) plan, paint and mesh, and the street-front floor of buildings"
+publish = false
+
+[dependencies]
+anyhow = "1.0.104"
+eo-data = { path = "../eo-data" }
+flate2 = "1.1.11"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"

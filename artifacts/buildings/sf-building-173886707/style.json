@@ -1,0 +1,107 @@
+{
+  "seed": 1,
+  "notes": "Grey painted stucco two-storey; upper: long horizontal window band; ground: full-height steel bar gate on the left, a door, a gated window on the right. Steel grille on the right-hand door so the Folsom face reads gated. Mid grey-tan scanned plaster (not near-white ribbed stucco), reflective shop glazing instead of an opaque dark slab. Milky three-bay storefront over a concrete plinth, a tall steel bar gate on the right, a strip of small lights above the shop glass, a dark painted band under the top storey, tall steel-sash windows divided by slim pilasters, a flat parapet cap. Mid-grey smooth painted concrete (cast-stone-trim, neutral grey, no scanned plaster, no flutes), dark grey band, heavy steel grille gate moved to the NE end with a short pier after it; reflective dark shop glass (glassModel). Smooth painted stucco grey (no cast-stone grain), no streak weathering. Dark grey painted concrete (was mid grey that read tan in warm light), dark reflective steel-window band, frosted shop glass. Mid warm grey with the maroon-brown band under the steel-window band. Multi-pane shop window, opaque pale grey glass. Soot at the base, grime, faint wide streaks.",
+  "wall": "painted-stucco",
+  "wallTint": "#e2ddd2",
+  "trim": "painted-steel-mid",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "coping": {
+    "heightM": 0.35,
+    "projectionM": 0.08,
+    "material": "painted-stucco",
+    "tint": "#8d959b"
+  },
+  "upperWindowSpans": [
+    [
+      0.12,
+      0.9
+    ]
+  ],
+  "upperSillM": 0.2,
+  "upperHeadM": 2.55,
+  "mullionM": 1.9,
+  "storefrontFrame": "painted-steel@3c3d3b",
+  "bulkhead": "painted-stucco@8f969c",
+  "ground": "shop",
+  "upper": "office",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.75,
+    "headDropM": 1.25,
+    "transomPaneM": 0.45,
+    "paneM": 0.6,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.06,
+        "to": 0.64
+      },
+      {
+        "kind": "door",
+        "from": 0.71,
+        "to": 0.93,
+        "leaf": "painted-steel",
+        "stair": true,
+        "grille": true
+      }
+    ]
+  },
+  "weathering": {
+    "patches": {
+      "strength": 0.08,
+      "metres": 1.6,
+      "top": 3.5,
+      "mottle": 0.06
+    },
+    "grime": {
+      "strength": 0.22,
+      "metres": 2.4
+    },
+    "soot": {
+      "height": 1.1,
+      "strength": 0.26
+    },
+    "streak": {
+      "strength": 0.035,
+      "columnMetres": 2.2,
+      "drop": 0.7
+    },
+    "bandStrength": 0.1,
+    "axis": "wall"
+  },
+  "storefrontGlass": "glass-frosted",
+  "glass": "glass-shell",
+  "sashRows": 4,
+  "sashCols": 3,
+  "sashMaterial": "painted-steel",
+  "pilasters": {
+    "at": [
+      0.12,
+      0.315,
+      0.51,
+      0.705,
+      0.9
+    ],
+    "widthM": 0.28,
+    "projectionM": 0.1,
+    "fromM": 5.33,
+    "toM": 8.45,
+    "material": "painted-stucco",
+    "tint": "#88909a"
+  },
+  "stripes": {
+    "fromStorey": 1,
+    "offsetsM": [
+      -0.85
+    ],
+    "heightM": 0.65,
+    "material": "painted-stucco",
+    "tint": "#5a3f3b"
+  },
+  "glassModel": {
+    "upper": "glass-reflective@7a848a",
+    "street": "glass-reflective@b8bec2"
+  }
+}

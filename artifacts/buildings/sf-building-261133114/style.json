@@ -1,0 +1,178 @@
+{
+ "seed": 7,
+ "notes": "Slate blue-grey siding on the uppers, grey stucco ground matching the walls (no brick), black iron arched gate, denser zig-zag fire escape with diagonal flights, gilt fan pediments over the bay windows. GroundBand lift (2026-10-03): groundBand tint #a3a9b3 -> #d1d4d9 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-clapboard",
+ "wallTint": "#6f7b8d",
+ "trim": "painted-white@f2eee2",
+ "frame": "painted-white@f2eee2",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@ebe5d4",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-stucco@a3a9b3",
+ "cornice": true,
+ "corniceProjectionM": 0.5,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.12,
+   "widthM": 3.0,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#6f7b8d",
+   "hyB": {
+    "plan": "swell",
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "arc": "segmental",
+    "panes": 2,
+    "facetsPerPane": 4
+   }
+  },
+  {
+   "at": 0.5,
+   "widthM": 3.0,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#6f7b8d",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15
+   }
+  },
+  {
+   "at": 0.88,
+   "widthM": 2.6,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#6f7b8d",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.1,
+    "to": 0.24,
+    "kind": "window",
+    "headM": 2.7
+   },
+   {
+    "from": 0.37,
+    "to": 0.41,
+    "kind": "window",
+    "headM": 2.0,
+    "grille": true
+   },
+   {
+    "from": 0.44,
+    "to": 0.58,
+    "kind": "gate",
+    "headM": 2.3,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   },
+   {
+    "from": 0.63,
+    "to": 0.67,
+    "kind": "window",
+    "headM": 2.0,
+    "grille": true
+   },
+   {
+    "from": 0.79,
+    "to": 0.9,
+    "kind": "window",
+    "headM": 2.7
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "sashFrames": {
+  "material": "painted-white@ebe5d4",
+  "stileM": 0.06
+ },
+ "hbBayGlazing": {
+  "marginM": 0.2,
+  "maxW": 1.05,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#f2eee2",
+  "sashM": 0.08,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#d1d4d9",
+  "topM": 4.2
+ },
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 4.2,
+  "upperM": 2.75
+ },
+ "fireEscape": {
+  "at": 0.72,
+  "widthM": 1.6,
+  "depthM": 0.8,
+  "zigzag": true,
+  "flightW": 0.6,
+  "material": "painted-steel@111111"
+ }
+}

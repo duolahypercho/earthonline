@@ -1,0 +1,34 @@
+[package]
+name = "eo-app"
+version = "0.1.0"
+edition = "2024"
+description = "Earth Online native slice: windowed fly-through and offscreen --bench"
+publish = false
+
+[dependencies]
+anyhow = "1.0.104"
+bytemuck = "1.25.2"
+eo-agents = { path = "../eo-agents" }
+eo-audio = { path = "../eo-audio" } # audio
+eo-assets = { path = "../eo-assets" }
+eo-sim = { path = "../eo-sim" }
+eo-data = { path = "../eo-data" }
+eo-kit = { path = "../eo-kit" }
+eo-net = { path = "../eo-net" } # net
+eo-player = { path = "../eo-player" }
+eo-server = { path = "../eo-server" } # net: `--connect local` runs a server in-process
+eo-props = { path = "../eo-props" } # props
+eo-render = { path = "../eo-render" }
+eo-sky = { path = "../eo-sky" } # sky
+eo-street = { path = "../eo-street" }
+eo-ui = { path = "../eo-ui" }
+eo-water = { path = "../eo-water" } # water
+eo-landmarks = { path = "../eo-landmarks" } # landmarks
+eo-farshore = { path = "../eo-farshore" } # farshore
+glam = "0.34.3"
+hound = "3.5.1" # audio: the offline mixes (--audio-render)
+png = "0.18.1"
+pollster = "1.0.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+winit = "0.30.13"

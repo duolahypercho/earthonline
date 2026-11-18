@@ -1,0 +1,108 @@
+{
+ "seed": 32,
+ "notes": "1916 four-storey flats at Geary, west side. Orange-brown brick stack over a tall pale painted-brick ground storey with a plain belt. Brick uppers have a few paired sash windows and a front fire escape of railed balconies near the Geary end. Ground: shop front with sign band at the Geary end, two shuttered square windows, a wide steel gate, an arched door at the north end. Street trees hide the middle of the facade; windows there are inferred from the data. Applied: desaturated tan-brown brick, cream rusticated ground storey, black iron escape, arched entry gets a stone surround, keystone and fanlight, last grille gate removed. Rustication grooves and deeper reveals have no key; the gate at 0.66-0.82 stays (the an iron scissor gate there, not a roll-up). Brick tint desaturated further toward tan-brown. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Common-bond brick (more orange than running bond), window hoods as the light stone lintels, denser window columns (trees hide the middle: inferred), scissor gate drawn as an iron lattice instead of a plain door. SKIPPED second arched entry (one arch, the other belongs to the neighbour) and rustication (no key). GroundBand lift (2026-10-03): groundBand tint #efe6d8 -> #f7f2ec (same rule as walls; it was missed by the first colour pass).",
+ "wall": "brick-common-bond",
+ "wallTint": "#ffffff",
+ "trim": "painted-white@ece0cc",
+ "frame": "painted-white@ece0cc",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@ece0cc",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "corniceProjectionM": 0.45,
+ "beltCourse": true,
+ "windowHoods": true,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "bulkhead": "painted-white@f2ece6",
+ "groundBand": {
+  "material": "painted-white",
+  "tint": "#f7f2ec",
+  "topM": 4.4
+ },
+ "upperWindows": [
+  0.07,
+  0.18,
+  0.3,
+  0.45,
+  0.55,
+  0.7,
+  0.82,
+  0.93
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.02,
+    "to": 0.15,
+    "kind": "window",
+    "headM": 2.6
+   },
+   {
+    "from": 0.3,
+    "to": 0.37,
+    "kind": "window",
+    "headM": 2.4
+   },
+   {
+    "from": 0.52,
+    "to": 0.6,
+    "kind": "window",
+    "headM": 2.4
+   },
+   {
+    "from": 0.66,
+    "to": 0.82,
+    "kind": "gate",
+    "lattice": true
+   },
+   {
+    "from": 0.87,
+    "to": 0.93,
+    "kind": "door",
+    "leaf": "painted-steel@4a4f4a",
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.2,
+      "projectionM": 0.08,
+      "material": "cast-stone-trim",
+      "tint": "#efe6d8"
+     },
+     "keystone": true,
+     "fan": true
+    }
+   }
+  ]
+ },
+ "fireEscape": {
+  "at": 0.07,
+  "widthM": 2.2,
+  "depthM": 0.9,
+  "material": "painted-steel"
+ },
+ "hbArchDoors": [
+  {
+   "from": 0.87,
+   "to": 0.93,
+   "material": "cast-stone-trim",
+   "tint": "#efe6d8",
+   "ringTint": "#efe6d8",
+   "fillTint": "#3a403a"
+  }
+ ],
+ "hbCorniceDentils": {
+  "spacingM": 0.25,
+  "sizeM": 0.1,
+  "tint": "#e0c8a8"
+ },
+ "edgeRoles": {}
+}

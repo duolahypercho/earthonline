@@ -1,0 +1,132 @@
+{
+ "seed": 8,
+ "notes": "Wall mid grey 7f8489, bays lighter aeb2b5, bay bracket fringe replaced by smooth 3-tier rounded soffit, garage panel light grey a3abb2. Scalloped parapet: no style key (skipped). Interior containment previously needed upper=office; left. Rework 5: wall charcoal 5d6166 (lit sample, luminance >= 0.10); both bays rounded bows via hyB swell (left 3 panes, right narrower 1.7 m with 2 panes) with curved moulded top and a 3-tier bracket corbel skirt; garage plain blue-grey 6f7b88 with the window row removed; arched entry with a thin plain surround, no keystone ring. Not possible with existing keys: the scalloped parapet above the bays. Rework 4: charcoal 585c61 with white trim, rounded drum bays wider on the left over the garage; layout as photographed (garage left, arched gate right). Skipped: 'ground floor mirrored', bracketed soffits and scalloped parapet (no key). Rework 2: wall darker charcoal #5a5e63, garage panel grey-blue. Skipped: 'whole facade mirrored'; rounded bays (kit round facets cannot hold sashes - see rework 1); dentil band under the bay windows has no style key. Rework 1: the sectional garage door is a flat painted panel with a row of small glazed lights near the top (the kit's carriage leaf is steel, which a tint only darkens). Rework 1: dark charcoal stucco with white frames and trim; two bays on storeys 2-3, the left one wider; the bowed bays, but the kit's round facets are too narrow to hold a sash, so they stay deep three-sided bays that carry three white sashes; ground: grey sectional garage door with a glazed top row at the left, an arched opening with a black iron gate at the right; plain parapet, no bracket cornice. Ground programme 'vacant' (a bare garage level) so no store-room shelving/boxes are placed against the zig-zag rear footprint. 1913 five-unit flats. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-white",
+ "wallTint": "#999da1",
+ "trim": "painted-white",
+ "frame": "painted-white",
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-clear",
+ "storefrontFrame": "painted-white",
+ "bulkhead": "painted-white@999da1",
+ "cornice": false,
+ "corniceProjectionM": 0.35,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.8,
+ "windowSillM": 0.85,
+ "windowHeadM": 3.0,
+ "ground": "vacant",
+ "upper": "office",
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.32,
+   "widthM": 3.0,
+   "projectionM": 0.85,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#d6d8da",
+   "hyB": {
+    "plan": "swell",
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2,
+    "sillM": 0.7,
+    "headGapM": 0.25,
+    "corbel": {
+     "tiers": 3,
+     "stepM": 0.12,
+     "brackets": 0,
+     "dropM": 0.4
+    },
+    "cornice": {
+     "projectionM": 0.1,
+     "dentils": true,
+     "roofRiseM": 0.12
+    }
+   }
+  },
+  {
+   "at": 0.83,
+   "widthM": 1.7,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#d6d8da",
+   "hyB": {
+    "plan": "swell",
+    "arc": "segmental",
+    "panes": 2,
+    "facetsPerPane": 2,
+    "sillM": 0.7,
+    "headGapM": 0.25,
+    "corbel": {
+     "tiers": 3,
+     "stepM": 0.12,
+     "brackets": 0,
+     "dropM": 0.4
+    },
+    "cornice": {
+     "projectionM": 0.1,
+     "dentils": true,
+     "roofRiseM": 0.12
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.4,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "headDropM": 2.14,
+  "layout": [
+   {
+    "from": 0.13,
+    "to": 0.47,
+    "kind": "blank",
+    "material": "painted-steel-mid",
+    "tint": "#a3abb2",
+    "headM": 2.5
+   },
+   {
+    "from": 0.6,
+    "to": 0.93,
+    "kind": "door",
+    "leaf": "painted-steel@1e1f20",
+    "grille": true,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.07,
+      "projectionM": 0.03,
+      "tint": "#d8d8d4",
+      "material": "painted-white"
+     },
+     "spandrel": {
+      "material": "painted-white",
+      "tint": "#7f8489"
+     }
+    }
+   }
+  ]
+ },
+ "coping": {
+  "material": "painted-white",
+  "tint": "#7f8489",
+  "heightM": 0.3,
+  "projectionM": 0.06
+ },
+ "archHeads": [],
+ "plaques": [],
+ "hbCorniceBrackets": {
+  "spacingM": 0.9,
+  "heightM": 0.4,
+  "depthM": 0.25,
+  "widthM": 0.12,
+  "material": "painted-white",
+  "tint": "#e8e8e4"
+ },
+ "streetStills": true
+}

@@ -1,0 +1,140 @@
+{
+ "seed": 274,
+ "notes": "Round 1 from the street reference (words only, local): corner market block at a Clement St / 5th Ave corner. Cream painted stucco, one row of ten tall sash windows over the awning on the Clement face (a narrow one at the corner, three groups of three), darker tan surrounds and sill band, a tall plain frieze with small vent holes under a dentil parapet cornice, wide sloped green fabric awning with a printed-fruit valance wrapping the chamfered corner, open produce stalls with a brick pier at the corner, low grey roof behind the parapet.",
+ "wall": "painted-stucco",
+ "wallTint": "#fff3d2",
+ "trim": "painted-stucco@dcc9a0",
+ "frame": "painted-white@e8e0cc",
+ "cornice": true,
+ "corniceProjectionM": 0.3,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 1.0,
+ "windowHeadM": 2.4,
+ "edgeRoles": {
+  "3": "flank",
+  "2": "flank"
+ },
+ "upperWindowStoreys": [
+  1
+ ],
+ "upperWindows": [
+  0.05,
+  0.15,
+  0.24,
+  0.33,
+  0.46,
+  0.55,
+  0.64,
+  0.77,
+  0.86,
+  0.95
+ ],
+ "awning": "awning-canvas@1f9e5a",
+ "bulkhead": "painted-steel-mid",
+ "storefrontFrame": "painted-steel",
+ "ground": "shop",
+ "upper": "rooms",
+ "storefront": {
+  "awning": false,
+  "bulkheadM": 0.3,
+  "transomM": 0.6,
+  "pierM": 0.5,
+  "layout": [
+   {
+    "kind": "window",
+    "from": 0.06,
+    "to": 0.44
+   },
+   {
+    "kind": "double-door",
+    "from": 0.46,
+    "to": 0.58,
+    "leaf": "painted-steel"
+   },
+   {
+    "kind": "window",
+    "from": 0.6,
+    "to": 0.94
+   }
+  ]
+ },
+ "streetEdges": {
+  "3": {
+   "upperWindows": [
+    0.5
+   ],
+   "storefront": {
+    "awning": false,
+    "layout": [
+     {
+      "kind": "window",
+      "from": 0.1,
+      "to": 0.9
+     }
+    ]
+   },
+   "awningSpans": [
+    {
+     "from": 0.0,
+     "to": 1.0,
+     "depthM": 1.9,
+     "riseM": 0.6,
+     "dropM": 0.6,
+     "valanceM": 0.7,
+     "valance": "awning-canvas@1c8c7a"
+    }
+   ]
+  },
+  "2": {
+   "upperWindows": [
+    0.1,
+    0.18,
+    0.55,
+    0.78
+   ],
+   "upperWindowStoreys": [
+    1
+   ],
+   "storefront": {
+    "awning": false,
+    "layout": [
+     {
+      "kind": "window",
+      "from": 0.04,
+      "to": 0.3
+     },
+     {
+      "kind": "door",
+      "from": 0.34,
+      "to": 0.4,
+      "leaf": "painted-steel"
+     }
+    ]
+   },
+   "awningSpans": [
+    {
+     "from": 0.0,
+     "to": 0.3,
+     "depthM": 1.9,
+     "riseM": 0.6,
+     "dropM": 0.6,
+     "valanceM": 0.7,
+     "valance": "awning-canvas@1c8c7a"
+    }
+   ]
+  }
+ },
+ "awningSpans": [
+  {
+   "from": 0.02,
+   "to": 0.98,
+   "depthM": 1.9,
+   "riseM": 0.6,
+   "dropM": 0.6,
+   "valanceM": 0.7,
+   "valance": "awning-canvas@1c8c7a"
+  }
+ ]
+}

@@ -1,0 +1,360 @@
+{
+  "schemaVersion": 1,
+  "asset": "facade-atlas-v2",
+  "license": "CC0-1.0",
+  "intent": "wall base colour/roughness/relief for the fallback (mid) facade family; window layout, reveals and cornices stay procedural",
+  "layout": {
+    "width": 4096,
+    "height": 2048,
+    "columns": 4,
+    "rows": 2,
+    "cellPx": 1024,
+    "padPx": 32,
+    "contentPx": 960,
+    "rowZeroAtImageBottom": true
+  },
+  "cells": [
+    {
+      "index": 0,
+      "id": "red_brick",
+      "family": "brick",
+      "tileMetres": 1.4,
+      "author": "Rob Tuytel",
+      "assetPage": "https://polyhaven.com/a/red_brick",
+      "license": "CC0-1.0",
+      "placement": {
+        "index": 0,
+        "col": 0,
+        "row": 0,
+        "x0": 0,
+        "y0": 1024,
+        "lumaMean": 109.32,
+        "lumaSd": 11.3,
+        "roughMean": 0.924,
+        "aoMean": 0.928
+      },
+      "sources": {
+        "diffuse": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/red_brick/red_brick_diff_2k.jpg",
+          "md5": "d38aaa7b2c8533c033919bc566c62c37",
+          "downloadedMd5": "d38aaa7b2c8533c033919bc566c62c37",
+          "downloadedSha256": "a1ae5ba7e63026971ceaf68ebbcf8982d9c2dadde1c99996c49b8ac1160af995"
+        },
+        "normalGl": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/red_brick/red_brick_nor_gl_2k.jpg",
+          "md5": "f10a21aa51b3a0950d1ca0f1fbb8e707",
+          "downloadedMd5": "f10a21aa51b3a0950d1ca0f1fbb8e707",
+          "downloadedSha256": "dd2ce5b5c42f04f02fce555d53eae42503733a0a42e76ae9a18bfb9d0680da5b"
+        },
+        "arm": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/red_brick/red_brick_arm_2k.jpg",
+          "md5": "873ae73e7e778153066b99fbb628a601",
+          "downloadedMd5": "873ae73e7e778153066b99fbb628a601",
+          "downloadedSha256": "2e732048bffd98207d6f35d37390a84c06ca9a16d086d0cea3fd7bc7cb80ec28"
+        }
+      }
+    },
+    {
+      "index": 1,
+      "id": "brick_wall_02",
+      "family": "brick",
+      "tileMetres": 2,
+      "author": "Dimitrios Savva",
+      "assetPage": "https://polyhaven.com/a/brick_wall_02",
+      "license": "CC0-1.0",
+      "placement": {
+        "index": 1,
+        "col": 1,
+        "row": 0,
+        "x0": 1024,
+        "y0": 1024,
+        "lumaMean": 144.57,
+        "lumaSd": 40.4,
+        "roughMean": 0.789,
+        "aoMean": 0.869
+      },
+      "sources": {
+        "diffuse": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/brick_wall_02/brick_wall_02_diff_2k.jpg",
+          "md5": "f1d0eaf49c00c02b65fe04536708d4be",
+          "downloadedMd5": "f1d0eaf49c00c02b65fe04536708d4be",
+          "downloadedSha256": "58c268fc076af4f8a6f645db037141ae12b6a8e045320ad4526e02e9840753ac"
+        },
+        "normalGl": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/brick_wall_02/brick_wall_02_nor_gl_2k.jpg",
+          "md5": "9720922a284b2860ef11e29731fd2854",
+          "downloadedMd5": "9720922a284b2860ef11e29731fd2854",
+          "downloadedSha256": "87fb0bb453347772015ba124db0ebb39fb5a9687a8f3e4d77172fabd017a0fd3"
+        },
+        "arm": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/brick_wall_02/brick_wall_02_arm_2k.jpg",
+          "md5": "e14283afbd866431ba295164550f2d95",
+          "downloadedMd5": "e14283afbd866431ba295164550f2d95",
+          "downloadedSha256": "93d8a7ebc6d2523a1555d94cb93d7d0396e0e7d17fa145b7568c4ed872a09adc"
+        }
+      }
+    },
+    {
+      "index": 2,
+      "id": "painted_brick",
+      "family": "brick",
+      "tileMetres": 1.8,
+      "author": "Amal Kumar",
+      "assetPage": "https://polyhaven.com/a/painted_brick",
+      "license": "CC0-1.0",
+      "placement": {
+        "index": 2,
+        "col": 2,
+        "row": 0,
+        "x0": 2048,
+        "y0": 1024,
+        "lumaMean": 151.56,
+        "lumaSd": 21,
+        "roughMean": 0.933,
+        "aoMean": 0.861
+      },
+      "sources": {
+        "diffuse": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/painted_brick/painted_brick_diff_2k.jpg",
+          "md5": "512a7cccab9caf88e7a7833fb0f28d81",
+          "downloadedMd5": "512a7cccab9caf88e7a7833fb0f28d81",
+          "downloadedSha256": "d76623127649e0878aecdfe8159bb3f6ec3b89d1b9160b6fd6036fc33737e842"
+        },
+        "normalGl": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/painted_brick/painted_brick_nor_gl_2k.jpg",
+          "md5": "cde7d331b58b9f426102ebb2259180bf",
+          "downloadedMd5": "cde7d331b58b9f426102ebb2259180bf",
+          "downloadedSha256": "3e3330b5ec7e44323de78c9f5571549e215cf95130e4df8ce033ab2587614b9e"
+        },
+        "arm": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/painted_brick/painted_brick_arm_2k.jpg",
+          "md5": "ced105acd5cb6f26ee69bde680f0bfa1",
+          "downloadedMd5": "ced105acd5cb6f26ee69bde680f0bfa1",
+          "downloadedSha256": "4bd7fac360f619b11324380c2a43f33bb133d15e4d1c5b92a3e4c24611613f63"
+        }
+      }
+    },
+    {
+      "index": 3,
+      "id": "grey_plaster_02",
+      "family": "plaster",
+      "tileMetres": 1,
+      "author": "Rob Tuytel",
+      "assetPage": "https://polyhaven.com/a/grey_plaster_02",
+      "license": "CC0-1.0",
+      "placement": {
+        "index": 3,
+        "col": 3,
+        "row": 0,
+        "x0": 3072,
+        "y0": 1024,
+        "lumaMean": 131.17,
+        "lumaSd": 21.13,
+        "roughMean": 0.806,
+        "aoMean": 0.831
+      },
+      "sources": {
+        "diffuse": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/grey_plaster_02/grey_plaster_02_diff_2k.jpg",
+          "md5": "416e8ab093cb28128b8ecc0c1439e927",
+          "downloadedMd5": "416e8ab093cb28128b8ecc0c1439e927",
+          "downloadedSha256": "2094a17962b352299d8e6b01848acf2496deed0c283f96fdb373128334356d8e"
+        },
+        "normalGl": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/grey_plaster_02/grey_plaster_02_nor_gl_2k.jpg",
+          "md5": "a45e547c197eb311423460225d8e616b",
+          "downloadedMd5": "a45e547c197eb311423460225d8e616b",
+          "downloadedSha256": "cab8e86d685fd306868b838700ffb02e876ca8d322e6dd7deb5a93e3cdad366c"
+        },
+        "arm": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/grey_plaster_02/grey_plaster_02_arm_2k.jpg",
+          "md5": "a0318742e73d955055d27bd46094ad7d",
+          "downloadedMd5": "a0318742e73d955055d27bd46094ad7d",
+          "downloadedSha256": "092c7e567aac0a6e092cf591a3e4773326d138a5847e82063ec4763731551298"
+        }
+      }
+    },
+    {
+      "index": 4,
+      "id": "painted_plaster_wall",
+      "family": "plaster",
+      "tileMetres": 2,
+      "author": "Amal Kumar",
+      "assetPage": "https://polyhaven.com/a/painted_plaster_wall",
+      "license": "CC0-1.0",
+      "placement": {
+        "index": 4,
+        "col": 0,
+        "row": 1,
+        "x0": 0,
+        "y0": 0,
+        "lumaMean": 164.37,
+        "lumaSd": 6.37,
+        "roughMean": 0.919,
+        "aoMean": 0.957
+      },
+      "sources": {
+        "diffuse": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/painted_plaster_wall/painted_plaster_wall_diff_2k.jpg",
+          "md5": "32f4f4e5ded7d20e55e337004d0d9691",
+          "downloadedMd5": "32f4f4e5ded7d20e55e337004d0d9691",
+          "downloadedSha256": "6fd812ed8dd5be1873c29aeef38ce9bf1fb30a22c6d4b3a12db725e98c26a1be"
+        },
+        "normalGl": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/painted_plaster_wall/painted_plaster_wall_nor_gl_2k.jpg",
+          "md5": "18faf9f7949aefdb3ae7cef7195cba04",
+          "downloadedMd5": "18faf9f7949aefdb3ae7cef7195cba04",
+          "downloadedSha256": "2d601a46ed5ce2af866741c53cafa3cba472620c272e633b6484d4de16a80eb1"
+        },
+        "arm": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/painted_plaster_wall/painted_plaster_wall_arm_2k.jpg",
+          "md5": "b66f912016257faa7e71a1530e387545",
+          "downloadedMd5": "b66f912016257faa7e71a1530e387545",
+          "downloadedSha256": "8d6a2e391e87130aabb1dc6fea23e6ebcc80aca6559a0aa82e57b75729055be5"
+        }
+      }
+    },
+    {
+      "index": 5,
+      "id": "white_stucco",
+      "family": "plaster",
+      "tileMetres": 2,
+      "author": "Amal Kumar",
+      "assetPage": "https://polyhaven.com/a/white_stucco",
+      "license": "CC0-1.0",
+      "placement": {
+        "index": 5,
+        "col": 1,
+        "row": 1,
+        "x0": 1024,
+        "y0": 0,
+        "lumaMean": 211.61,
+        "lumaSd": 3.62,
+        "roughMean": 0.881,
+        "aoMean": 0.983
+      },
+      "sources": {
+        "diffuse": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/white_stucco/white_stucco_diff_2k.jpg",
+          "md5": "9f8369b068a4fee870f4f2f19a6cb66f",
+          "downloadedMd5": "9f8369b068a4fee870f4f2f19a6cb66f",
+          "downloadedSha256": "a1cf9063e72d82306c5f3330cfaa56ed75ee365dc6a6eb875cde125395dbe4ea"
+        },
+        "normalGl": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/white_stucco/white_stucco_nor_gl_2k.jpg",
+          "md5": "aded1a765eca8ced74d4b8d1b6367818",
+          "downloadedMd5": "aded1a765eca8ced74d4b8d1b6367818",
+          "downloadedSha256": "d11eae11d09af20a1bd4e1262b1d35ad4259451a19651307a7fa8f6c0cadfc59"
+        },
+        "arm": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/white_stucco/white_stucco_arm_2k.jpg",
+          "md5": "8331cf3cf11da2f4bad5729f305c7aee",
+          "downloadedMd5": "8331cf3cf11da2f4bad5729f305c7aee",
+          "downloadedSha256": "15c6162bd93fc94b1fec078cabe595e44652b1b4d78d5932f8f143e3911b6bb1"
+        }
+      }
+    },
+    {
+      "index": 6,
+      "id": "concrete_wall_006",
+      "family": "concrete",
+      "tileMetres": 2,
+      "author": "Dario Barresi (processing), Charlotte Baglioni (photography)",
+      "assetPage": "https://polyhaven.com/a/concrete_wall_006",
+      "license": "CC0-1.0",
+      "placement": {
+        "index": 6,
+        "col": 2,
+        "row": 1,
+        "x0": 2048,
+        "y0": 0,
+        "lumaMean": 82.43,
+        "lumaSd": 11.02,
+        "roughMean": 0.771,
+        "aoMean": 0.711
+      },
+      "sources": {
+        "diffuse": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_wall_006/concrete_wall_006_diff_2k.jpg",
+          "md5": "604ffd4e767e1949d714ee9ee35215ca",
+          "downloadedMd5": "604ffd4e767e1949d714ee9ee35215ca",
+          "downloadedSha256": "daee26f5b5dae37e3fb2947c64f4045fd4e6d3b89884eb0d878ba6414746e8e8"
+        },
+        "normalGl": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_wall_006/concrete_wall_006_nor_gl_2k.jpg",
+          "md5": "856f47ebd894a492b33398f22cc8b923",
+          "downloadedMd5": "856f47ebd894a492b33398f22cc8b923",
+          "downloadedSha256": "22bd9c17a6dfe3441f671cba1b40e2329767c79b6472004d1633aeac368d5210"
+        },
+        "arm": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_wall_006/concrete_wall_006_arm_2k.jpg",
+          "md5": "cc886437ea78c089ae5776a6a65228b0",
+          "downloadedMd5": "cc886437ea78c089ae5776a6a65228b0",
+          "downloadedSha256": "f1a60edecc22e1f6d0937ce4b65203e54a4b5d9abc720e5587d834a474ec6fe8"
+        }
+      }
+    },
+    {
+      "index": 7,
+      "id": "concrete_wall_008",
+      "family": "concrete",
+      "tileMetres": 2.71,
+      "author": "Dario Barresi (processing), Charlotte Baglioni (photography)",
+      "assetPage": "https://polyhaven.com/a/concrete_wall_008",
+      "license": "CC0-1.0",
+      "placement": {
+        "index": 7,
+        "col": 3,
+        "row": 1,
+        "x0": 3072,
+        "y0": 0,
+        "lumaMean": 133.44,
+        "lumaSd": 5.71,
+        "roughMean": 0.737,
+        "aoMean": 0.969
+      },
+      "sources": {
+        "diffuse": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_wall_008/concrete_wall_008_diff_2k.jpg",
+          "md5": "9e834dad5c07a3ba452a2ad0f1454c9f",
+          "downloadedMd5": "9e834dad5c07a3ba452a2ad0f1454c9f",
+          "downloadedSha256": "a3eb7b24c5cf6f113ec9b3be8ab1715360ef3cbf4b1699979414e44341f54846"
+        },
+        "normalGl": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_wall_008/concrete_wall_008_nor_gl_2k.jpg",
+          "md5": "deca87f9fa074c7f041d23178f74ec95",
+          "downloadedMd5": "deca87f9fa074c7f041d23178f74ec95",
+          "downloadedSha256": "58ce9b818772d37fe16e1154ea0278f3ab423ed34073357e786ef44f9ceef052"
+        },
+        "arm": {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_wall_008/concrete_wall_008_arm_2k.jpg",
+          "md5": "b2f992f83c82627c5e4a05ac0caff50d",
+          "downloadedMd5": "b2f992f83c82627c5e4a05ac0caff50d",
+          "downloadedSha256": "98e5e8f447e2ce92bb0349cb0c8265ca0b67c6fe6f6a1be31c4be8e986aa47c7"
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "albedo": {
+      "path": "public/assets/facade-atlas-v2-albedo.jpg",
+      "sha256": "4bf15707ee8eb7bee1887a6149742070260b86ca48c63643bde39668f277f13b",
+      "bytes": 2753291,
+      "encoding": "sRGB base color, 4:4:4 jpeg"
+    },
+    "normal": {
+      "path": "public/assets/facade-atlas-v2-normal-rough.jpg",
+      "sha256": "5e0c89718fe981f96bf0c7ca1ecad67146afc04582b07abb6349e5411ee5d804",
+      "bytes": 4172202,
+      "encoding": "RG OpenGL tangent-space normal xy (z rebuilt in shader), B Poly Haven roughness; linear/no-color, 4:4:4 jpeg"
+    }
+  },
+  "shippedBytes": 6925493,
+  "generator": {
+    "path": "scripts/assets/pack-facade-atlas-v2.mjs",
+    "sha256": "2d5051ca01c786d3b4e0766c611d5ba83b3322b8b14dc272c4e55b6b5710e3ad",
+    "algorithm": "md5-verified 2k jpg sources; LANCZOS to 960 px content; 32 px wrapped ring; row 0 at image bottom (flipY); roughness packed into the normal sheet B channel; libjpeg q90 4:4:4",
+    "pillow": "11.3.0",
+    "numpy": "2.0.2"
+  }
+}

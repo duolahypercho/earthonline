@@ -1,0 +1,72 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-222862957",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-222862957",
+    "walkIndex": 7529,
+    "builder": "blender",
+    "street": "Castro Street",
+    "side": null,
+    "addr": null,
+    "sourceHeight": 12,
+    "sourceLevels": null,
+    "frontEdge": 4,
+    "status": "review",
+    "lidarHeightM": 9.79,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b222862957.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b222862957.js"
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b222862957.js",
+    "sha256": "235be19116830c3edf70c32f7d6f5ad6871cfe9fd83840608667918988ee5062",
+    "pass": "b222862957-blender-278d8a98-6f281a"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-222862957/provenance.json",
+    "sha256": "f36facd4271ae7b06efa05fa52d3a3fb8bdb49b6a1b76607300a6f571c811bfe",
+    "pass": "b222862957-blender-278d8a98-6f281a"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-222862957/exterior.glb",
+      "sha256": "737dc7db2f8164a4c6c6dab0742d35f9f29854b30d041ae54bbe570268bb43c3",
+      "bytes": 712484
+    },
+    {
+      "role": "interior",
+      "url": "/assets/buildings/sf-building-222862957/interior.glb",
+      "sha256": "005e8376449bf36b3e485736c71ec6a836b12f3a4a202107c22ecbf2ef22f55f",
+      "bytes": 272880
+    },
+    {
+      "role": "fine-s0",
+      "url": "/assets/buildings/sf-building-222862957/fine-s0.glb",
+      "sha256": "9979a4ab520b3495c039ad26429e98957d4bccffa8c0ebc102594ca4e196abff",
+      "bytes": 247868
+    },
+    {
+      "role": "fine-s1",
+      "url": "/assets/buildings/sf-building-222862957/fine-s1.glb",
+      "sha256": "8ff36e76cc90d9e8b234dd25809843515a47cd977a8ac9e3b08e661a613945ef",
+      "bytes": 726768
+    }
+  ],
+  "generatedAt": "2026-09-30T15:35:01.044Z",
+  "base": {
+    "id": "sf-building-222862957",
+    "walkIndex": 7529,
+    "builder": "blender",
+    "street": "Castro Street",
+    "side": null,
+    "addr": null,
+    "sourceHeight": 12,
+    "sourceLevels": null,
+    "frontEdge": 4,
+    "status": "review",
+    "lidarHeightM": 9.79,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b222862957.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b222862957.js"
+  }
+}

@@ -1,0 +1,706 @@
+//! The Golden Gate Bridge: a port of src/world/landmarks/golden-gate-bridge.js
+//! (generator) and golden-gate-bridge-site.js (alignment and the derived
+//! frame) from the `main` branch. Positions and dimensions come from the
+//! export (`data::GoldenGate`); the INFERRED structural literals of the JS
+//! generator's function bodies are kept here with their JS names.
+//!
+//! PRESENTATION ONLY, as in the JS: the deck has no collider and nothing
+//! routes onto it; the colliders are the parts a body on the ground or the
+//! water can meet.
+
+use crate::Built;
+use crate::Collider;
+use crate::data::{GoldenGate, LandmarksJs, hex, num, pair};
+use crate::geometry::{ALL, GroundGrid, MeshArrays, NO_BOTTOM, NO_TOP, Rgb, shade, srgb_hex};
+use crate::suspension::{self, CableSpec, DeckColours, DeckSpec, DeckStandards, Frame, Run, SuspenderSpec, TrussSpec, stations};
+use serde_json::json;
+
+/// Near geometry stays this far above the sea; below it is the far batch's skirt.
+const NEAR_FLOOR_ABOVE_SEA_M: f64 = 1.0;
+/// Width of each arch pylon column across the bridge (INFERRED).
+const ARCH_PYLON_COLUMN_M: f64 = 2.4;
+/// Depth of the south approach span's plate girders (INFERRED).
+const APPROACH_GIRDER_DEPTH_M: f64 = 1.8;
+/// `goldenGatePlan`: the structure's start is searched from the road end up
+/// to this chainage (south) and down to L + this (north), in 2 m steps.
+const STRUCTURE_SEARCH_SOUTH_C: f64 = -460.0;
+const STRUCTURE_SEARCH_NORTH_PAST_L: f64 = 360.0;
+const STRUCTURE_SEARCH_STEP_M: f64 = 2.0;
+/// `ORANGE_DARK = ORANGE * 0.62`.
+const DARK: f64 = 0.62;
+/// INFERRED: rope spacing within a suspender pair.
+const PAIR_GAP_M: f64 = 0.45;
+
+/// The site's derived frame (golden-gate-bridge-site.js).
+pub struct Site {
+    pub south_tower: [f64; 2],
+    pub north_tower: [f64; 2],
+    pub main_span_measured: f64,
+    pub axis: [f64; 2],
+    pub across: [f64; 2],
+    pub half_plane: f64,
+    profiles: [Vec<[f64; 2]>; 2],
+}
+
+impl Site {
+    pub fn new(g: &GoldenGate) -> Self {
+        let mid = |a: [f64; 2], b: [f64; 2]| [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0];
+        let (s, n) = (&g.tower_legs["south"], &g.tower_legs["north"]);
+        let south_tower = mid(s.east, s.west);
+        let north_tower = mid(n.east, n.west);
+        let (dx, dz) = (north_tower[0] - south_tower[0], north_tower[1] - south_tower[1]);
+        let l = dx.hypot(dz);
+        let axis = [dx / l, dz / l];
+        let across = [-axis[1], axis[0]];
+        let half_plane = (s.east[0] - s.west[0]).hypot(s.east[1] - s.west[1]) / 2.0;
+        let mut site = Self { south_tower, north_tower, main_span_measured: l, axis, across, half_plane, profiles: [vec![], vec![]] };
+        let p0 = site.lateral_profile(&g.carriageways[0]);
+        let p1 = site.lateral_profile(&g.carriageways[1]);
+        site.profiles = [p0, p1];
+        site
+    }
+    /// `ggbChainage`.
+    pub fn chainage(&self, x: f64, z: f64) -> f64 {
+        (x - self.south_tower[0]) * self.axis[0] + (z - self.south_tower[1]) * self.axis[1]
+    }
+    /// The site's `ggbPoint` (on the tower line).
+    pub fn axis_point(&self, c: f64, s: f64) -> [f64; 2] {
+        [self.south_tower[0] + self.axis[0] * c + self.across[0] * s, self.south_tower[1] + self.axis[1] * c + self.across[1] * s]
+    }
+    fn lateral_profile(&self, points: &[f64]) -> Vec<[f64; 2]> {
+        let mut rows: Vec<[f64; 2]> = points
+            .chunks_exact(2)
+            .map(|p| {
+                let c = self.chainage(p[0], p[1]);
+                let [ax, az] = self.axis_point(c, 0.0);
+                [c, (p[0] - ax) * self.across[0] + (p[1] - az) * self.across[1]]
+            })
+            .collect();
+        rows.sort_by(|p, q| p[0].total_cmp(&q[0]));
+        rows
+    }
+    /// `ggbCentreOffset`: the mean of the two carriageways' lateral offsets.
+    pub fn centre_offset(&self, c: f64) -> f64 {
+        let interp = |rows: &[[f64; 2]], c: f64| {
+            if c <= rows[0][0] {
+                return rows[0][1];
+            }
+            for i in 1..rows.len() {
+                if c <= rows[i][0] {
+                    let t = (c - rows[i - 1][0]) / (rows[i][0] - rows[i - 1][0]);
+                    return rows[i - 1][1] + (rows[i][1] - rows[i - 1][1]) * t;
+                }
+            }
+            rows[rows.len() - 1][1]
+        };
+        (interp(&self.profiles[0], c) + interp(&self.profiles[1], c)) / 2.0
+    }
+    /// The generator's `ggbPoint`: on the deck's own alignment.
+    pub fn deck_point(&self, c: f64, s: f64) -> [f64; 2] {
+        self.axis_point(c, s + self.centre_offset(c))
+    }
+}
+
+/// `goldenGatePlan`.
+pub struct Plan<'a> {
+    pub l: f64,
+    pub c_south: f64,
+    pub c_north: f64,
+    pub c_start: f64,
+    pub c_end: f64,
+    pub y_south: f64,
+    pub y_north: f64,
+    pub y_tower: f64,
+    pub y_mid: f64,
+    pub arch_south_c: f64,
+    pub arch_north_c: f64,
+    pub anchor_north_c: f64,
+    pub site: &'a Site,
+}
+
+impl Plan<'_> {
+    pub fn deck_top(&self, c: f64) -> f64 {
+        if c <= 0.0 {
+            return self.y_south + (self.y_tower - self.y_south) * ((c - self.c_south) / (0.0 - self.c_south)).max(0.0).min(1.0);
+        }
+        if c <= self.l {
+            let t = (c - self.l / 2.0) / (self.l / 2.0);
+            return self.y_tower + (self.y_mid - self.y_tower) * (1.0 - t * t);
+        }
+        self.y_tower + (self.y_north - self.y_tower) * ((c - self.l) / (self.c_north - self.l)).max(0.0).min(1.0)
+    }
+}
+
+pub fn plan<'a>(js: &LandmarksJs, site: &'a Site, ground: &dyn Fn(f64, f64) -> f64) -> Plan<'a> {
+    let g = &js.golden_gate;
+    let d = &g.dimensions;
+    let water = js.sea_level_y;
+    let l = site.main_span_measured;
+    let (ws, wn) = (g.way_ends["south"], g.way_ends["north"]);
+    let c_south = site.chainage(ws[0], ws[1]);
+    let c_north = site.chainage(wn[0], wn[1]);
+    let road_lift = js.default_road_lift_m;
+    let y_south = ground(ws[0], ws[1]) + road_lift;
+    let y_north = ground(wn[0], wn[1]) + road_lift;
+    let y_tower = water + num(d, "roadwayAtTowerM");
+    let y_mid = water + num(d, "clearanceM") + num(d, "trussDepthM");
+    let sup = |k: &str| g.supports[k].centre;
+    let mut p = Plan {
+        l,
+        c_south,
+        c_north,
+        c_start: c_south,
+        c_end: c_north,
+        y_south,
+        y_north,
+        y_tower,
+        y_mid,
+        arch_south_c: site.chainage(sup("archSouth")[0], sup("archSouth")[1]),
+        arch_north_c: site.chainage(sup("archNorth")[0], sup("archNorth")[1]),
+        anchor_north_c: site.chainage(sup("northAnchor")[0], sup("northAnchor")[1]),
+        site,
+    };
+    let hp = site.half_plane;
+    let min_ground = |c: f64| {
+        let a = site.deck_point(c, 0.0);
+        let b = site.deck_point(c, hp);
+        let e = site.deck_point(c, -hp);
+        ground(a[0], a[1]).max(ground(b[0], b[1])).max(ground(e[0], e[1]))
+    };
+    let (truss, clearance) = (num(d, "trussDepthM"), num(d, "vehicleClearanceM"));
+    let clears = |p: &Plan, c: f64| p.deck_top(c) - truss - min_ground(c) >= clearance;
+    let mut c_start = c_south;
+    // the search bounds are chainages, on the scaled plan as the span is.
+    let gs = eo_data::groundscale::scale();
+    while c_start < STRUCTURE_SEARCH_SOUTH_C * gs && !clears(&p, c_start) {
+        c_start += STRUCTURE_SEARCH_STEP_M;
+    }
+    let mut c_end = c_north;
+    while c_end > l + STRUCTURE_SEARCH_NORTH_PAST_L * gs && !clears(&p, c_end) {
+        c_end -= STRUCTURE_SEARCH_STEP_M;
+    }
+    p.c_start = c_start;
+    p.c_end = c_end;
+    p
+}
+
+struct Colours {
+    orange: Rgb,
+    orange_dark: Rgb,
+    asphalt: Rgb,
+    sidewalk: Rgb,
+    concrete: Rgb,
+    barrier: Rgb,
+    white: Rgb,
+    yellow: Rgb,
+}
+
+/// Everything the part builders share.
+struct Ctx<'a> {
+    g: &'a GoldenGate,
+    d: &'a serde_json::Value,
+    site: &'a Site,
+    plan: &'a Plan<'a>,
+    frame: &'a Frame<'a>,
+    ground: &'a dyn Fn(f64, f64) -> f64,
+    k: Colours,
+    yaw: f64,
+    water: f64,
+    tower_zone_half: f64,
+}
+
+impl Ctx<'_> {
+    fn in_tower_zone(&self, c0: f64, c1: f64) -> bool {
+        [0.0, self.plan.l].iter().any(|&t| c1 > t - self.tower_zone_half && c0 < t + self.tower_zone_half)
+    }
+    #[allow(non_snake_case)]
+    fn P(&self, c: f64, s: f64, y: f64) -> [f64; 3] {
+        self.frame.P(c, s, y)
+    }
+
+    fn cable_runs(&self) -> Vec<Run> {
+        let (d, p) = (self.d, self.plan);
+        let saddle = self.water + num(d, "towerAboveWaterM") - num(d, "saddleBelowTopM");
+        let low = p.y_mid + num(d, "cableLowAboveDeckM");
+        let sag_main = saddle - low;
+        let south_top = p.deck_top(p.arch_north_c) + num(d, "pylonAboveDeckM");
+        let north_top = p.deck_top(p.anchor_north_c) + num(d, "pylonAboveDeckM");
+        vec![
+            Run { c0: p.arch_north_c, c1: 0.0, y0: south_top, y1: saddle, sag: suspension::side_span_sag(sag_main, p.l, -p.arch_north_c) },
+            Run { c0: 0.0, c1: p.l, y0: saddle, y1: saddle, sag: sag_main },
+            Run { c0: p.l, c1: p.anchor_north_c, y0: saddle, y1: north_top, sag: suspension::side_span_sag(sag_main, p.l, p.anchor_north_c - p.l) },
+        ]
+    }
+
+    fn towers(&self, orange: &mut MeshArrays, concrete: &mut MeshArrays, skirt: &mut MeshArrays, far: &mut MeshArrays) {
+        let (g, d, w, yaw) = (self.g, self.d, self.water, self.yaw);
+        let k = &self.k;
+        let stages = &g.leg_stages;
+        // The JS writes `h1 === 225` (the top stage reaches the published tower
+        // top) and `h0 === 13` (the lowest stage sits on the pier): the last
+        // stage's top and the first stage's foot of the exported table.
+        let top_h1 = stages.iter().map(|s| s[1]).fold(f64::MIN, f64::max);
+        let foot_h0 = stages[0][0];
+        for (key, pier) in [("south", &g.supports["southPier"]), ("north", &g.supports["northPier"])] {
+            let [cx, cz] = pier.centre;
+            let half_across = pier.extent[0] / 2.0;
+            let half_along = pier.extent[1] / 2.0;
+            let top = w + pier.top_m.unwrap_or(0.0);
+            let floor = w + NEAR_FLOOR_ABOVE_SEA_M;
+            let bed = (self.ground)(cx, cz).min(w - 2.0);
+            concrete.box_(cx, cz, floor, top, half_along, half_across, yaw, k.concrete, NO_BOTTOM);
+            skirt.box_(cx, cz, bed, floor, half_along, half_across, yaw, k.concrete, NO_TOP);
+            far.box_(cx, cz, bed, top, half_along, half_across, yaw, k.concrete, ALL);
+            let legs = &g.tower_legs[key];
+            for [lx, lz] in [legs.east, legs.west] {
+                for &[h0, h1, across, along] in stages {
+                    let y1 = if h1 == top_h1 { num(d, "towerAboveWaterM") } else { h1 };
+                    orange.box_(lx, lz, w + h0, w + y1, along / 2.0, across / 2.0, yaw, k.orange, crate::geometry::Faces { top: true, bottom: h0 == foot_h0 });
+                    far.box_(lx, lz, w + h0, w + y1, along / 2.0, across / 2.0, yaw, k.orange, ALL);
+                }
+            }
+            let ([ex, ez], [wx, wz]) = (legs.east, legs.west);
+            for &[h0, h1, along] in &g.struts {
+                let (mx, mz) = ((ex + wx) / 2.0, (ez + wz) / 2.0);
+                let span = (ex - wx).hypot(ez - wz);
+                orange.box_(mx, mz, w + h0, w + h1, along / 2.0, span / 2.0, yaw, k.orange_dark, ALL);
+                far.box_(mx, mz, w + h0, w + h1, along / 2.0, span / 2.0, yaw, k.orange_dark, ALL);
+            }
+            // INFERRED: X bracing between the two lowest struts (the JS's 26 and 50 m: their facing chords).
+            let c = self.site.chainage(ex, ez);
+            let s = self.site.half_plane - 3.0;
+            let (lo, hi) = (g.struts[0][1], g.struts[1][0]);
+            orange.beam(self.P(c, -s, w + lo), self.P(c, s, w + hi), 1.4, 1.4, k.orange_dark);
+            orange.beam(self.P(c, s, w + lo), self.P(c, -s, w + hi), 1.4, 1.4, k.orange_dark);
+        }
+    }
+
+    fn cables(&self, wires: &mut MeshArrays, far: &mut MeshArrays) -> usize {
+        let runs = self.cable_runs();
+        let d = self.d;
+        suspension::main_cables(wires, far, self.frame, &runs, &CableSpec { half_plane: self.site.half_plane, diameter: num(d, "cableDiameterM"), colour: self.k.orange });
+        let p = self.plan;
+        suspension::suspender_pairs(
+            wires,
+            self.frame,
+            &runs,
+            &|c| p.deck_top(c) - 0.5,
+            &SuspenderSpec { half_plane: self.site.half_plane, spacing: num(d, "suspenderSpacingM"), diameter: num(d, "suspenderDiameterM"), pair_gap: PAIR_GAP_M, colour: self.k.orange },
+        )
+    }
+
+    fn truss(&self, orange: &mut MeshArrays, far: &mut MeshArrays) {
+        let (d, p) = (self.d, self.plan);
+        suspension::stiffening_truss(
+            orange,
+            far,
+            self.frame,
+            &TrussSpec {
+                deck_top: &|c| p.deck_top(c),
+                c_start: p.c_start,
+                c_end: p.c_end,
+                half_plane: self.site.half_plane,
+                depth: num(d, "trussDepthM"),
+                panel: num(d, "panelM"),
+                colour: self.k.orange,
+                dark: self.k.orange_dark,
+                gap: &|a, b| self.in_tower_zone(a, b),
+                far_half_width: num(d, "widthM") / 2.0,
+                far_above: num(d, "railingM"),
+            },
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn approach_span(&self, orange: &mut MeshArrays, concrete: &mut MeshArrays, far: &mut MeshArrays, from: f64, to: f64, seat_at: f64) {
+        let (d, p, k) = (self.d, self.plan, &self.k);
+        let (a, b) = (from.min(to), from.max(to));
+        if !(b - a > 1.0) {
+            return;
+        }
+        let depth = APPROACH_GIRDER_DEPTH_M;
+        let panel = num(d, "panelM");
+        let hp = self.site.half_plane;
+        for s in [-hp, hp] {
+            let st = stations(a, b, panel / 2.0);
+            for &c in &st[..st.len() - 1] {
+                let c1 = b.min(c + panel / 2.0);
+                orange.beam(self.P(c, s, p.deck_top(c) - 0.3 - depth / 2.0), self.P(c1, s, p.deck_top(c1) - 0.3 - depth / 2.0), 0.5, depth, k.orange);
+            }
+        }
+        let st = stations(a, b, panel);
+        if st.len() > 2 {
+            for &c in &st[1..st.len() - 1] {
+                orange.beam(self.P(c, -hp, p.deck_top(c) - 0.3 - depth / 2.0), self.P(c, hp, p.deck_top(c) - 0.3 - depth / 2.0), 0.4, depth * 0.8, k.orange_dark);
+            }
+        }
+        let [x, z] = self.site.deck_point(seat_at, 0.0);
+        let seat_top = p.deck_top(seat_at) - 0.3 - depth;
+        let seat_bottom = (seat_top - 0.5).min((self.ground)(x, z) - 0.5);
+        let width = num(d, "widthM");
+        concrete.box_(x, z, seat_bottom, seat_top, 1.0, width / 2.0 + 0.5, self.yaw, k.concrete, NO_BOTTOM);
+        let [mx, mz] = self.site.deck_point((a + b) / 2.0, 0.0);
+        let mean = (p.deck_top(a) + p.deck_top(b)) / 2.0;
+        far.box_(mx, mz, mean - 0.3 - depth, mean + num(d, "railingM"), (b - a) / 2.0, width / 2.0, self.yaw, k.orange, ALL);
+    }
+
+    fn deck(&self, deck: &mut MeshArrays, orange: &mut MeshArrays, ca: &DeckStandards) {
+        let (d, p, k) = (self.d, self.plan, &self.k);
+        suspension::road_deck(
+            deck,
+            orange,
+            self.frame,
+            ca,
+            &DeckSpec {
+                y: &|c| p.deck_top(c),
+                c_start: p.c_south,
+                c_end: p.c_north,
+                half_width: num(d, "widthM") / 2.0,
+                roadway_m: num(d, "roadwayM"),
+                lanes: 2 * num(d, "lanesPerDirection") as u32,
+                median: true,
+                sidewalk_m: num(d, "sidewalkM"),
+                curb_m: num(d, "curbM"),
+                railings: true,
+                railing_m: num(d, "railingM"),
+                inner_barrier_m: num(d, "innerBarrierM"),
+                panel: num(d, "panelM"),
+                gap: &|a, b| self.in_tower_zone(a, b),
+                colours: DeckColours { asphalt: k.asphalt, sidewalk: k.sidewalk, soffit: shade(k.asphalt, 0.6), barrier: k.barrier, white: k.white, yellow: k.yellow, rail: k.orange },
+                markings: true,
+            },
+        );
+    }
+
+    fn tower_walkways(&self, deck: &mut MeshArrays, orange: &mut MeshArrays) {
+        let (g, d, p, k, w) = (self.g, self.d, self.plan, &self.k, self.water);
+        let stage = g.leg_stages.iter().find(|s| p.y_tower - w >= s[0] && p.y_tower - w < s[1]).unwrap_or(&g.leg_stages[2]);
+        let (leg_half_across, leg_half_along) = (stage[2] / 2.0, stage[3] / 2.0);
+        let curb = num(d, "roadwayM") / 2.0;
+        let half = num(d, "widthM") / 2.0;
+        let hp = self.site.half_plane;
+        let leg_inner = hp - leg_half_across;
+        let leg_outer = hp + leg_half_across;
+        let walk_outer = leg_outer + num(d, "sidewalkM");
+        let zone = self.tower_zone_half;
+        let (curb_m, railing, inner_barrier) = (num(d, "curbM"), num(d, "railingM"), num(d, "innerBarrierM"));
+        let top = |c: f64| p.deck_top(c) + curb_m;
+        let soffit = shade(k.asphalt, 0.6);
+        let plate = |deck: &mut MeshArrays, c0: f64, c1: f64, s0: f64, s1: f64| {
+            deck.quad(self.P(c0, s0, top(c0)), self.P(c0, s1, top(c0)), self.P(c1, s1, top(c1)), self.P(c1, s0, top(c1)), k.sidewalk);
+            deck.quad(self.P(c1, s0, top(c1) - 0.5), self.P(c1, s1, top(c1) - 0.5), self.P(c0, s1, top(c0) - 0.5), self.P(c0, s0, top(c0) - 0.5), soffit);
+        };
+        for t in [0.0, p.l] {
+            for sgn in [-1.0, 1.0] {
+                let span = |a: f64, b: f64| if sgn > 0.0 { (a, b) } else { (-b, -a) };
+                let (s0, s1) = span(curb, walk_outer);
+                plate(deck, t - zone, t - leg_half_along, s0, s1);
+                plate(deck, t + leg_half_along, t + zone, s0, s1);
+                let (s0, s1) = span(leg_outer, walk_outer);
+                plate(deck, t - leg_half_along, t + leg_half_along, s0, s1);
+                let [mx, mz] = self.site.deck_point(t, sgn * (curb + leg_inner) / 2.0);
+                deck.box_(mx, mz, p.deck_top(t), p.deck_top(t) + inner_barrier, leg_half_along, (leg_inner - curb) / 2.0 + 0.05, self.yaw, k.barrier, NO_BOTTOM);
+                let rail = |orange: &mut MeshArrays, c0: f64, s0: f64, c1: f64, s1: f64| {
+                    orange.beam(self.P(c0, s0, top(c0) + railing), self.P(c1, s1, top(c1) + railing), 0.12, 0.12, k.orange);
+                    orange.beam(self.P(c0, s0, top(c0) + railing * 0.5), self.P(c1, s1, top(c1) + railing * 0.5), 0.08, 0.08, k.orange);
+                    orange.beam(self.P(c1, s1, top(c1)), self.P(c1, s1, top(c1) + railing), 0.14, 0.14, k.orange);
+                };
+                let edge = sgn * (walk_outer - 0.15);
+                let mut c = t - zone;
+                while c < t + zone - 0.01 {
+                    rail(orange, c, edge, (t + zone).min(c + zone / 2.0), edge);
+                    c += zone / 2.0;
+                }
+                for end in [t - zone, t + zone] {
+                    rail(orange, end, sgn * (half - 0.15), end, edge);
+                }
+            }
+        }
+    }
+
+    /// `bentColumns`: (x, z, ground, top) of a two-column bent at chainage c.
+    fn bent_columns(&self, c: f64) -> [[f64; 4]; 2] {
+        let hp = self.site.half_plane;
+        let top = self.plan.deck_top(c) - num(self.d, "trussDepthM");
+        [-hp, hp].map(|s| {
+            let [x, z] = self.site.deck_point(c, s);
+            [x, z, (self.ground)(x, z), top]
+        })
+    }
+
+    fn bent_clear(&self, c: f64) -> bool {
+        let [cw, cd] = pair(self.d, "bentColumnM");
+        let reach = (cw / 2.0 + 0.6).hypot(cd / 2.0 + 0.6);
+        let hp = self.site.half_plane;
+        for s in [-hp, hp] {
+            let [x, z] = self.site.deck_point(c, s);
+            for way in &self.g.keep_clear {
+                if polyline_distance(x, z, &way.points) < way.half + reach {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
+    /// `bentStations`.
+    fn bent_stations(&self) -> Vec<f64> {
+        let (g, d, p) = (self.g, self.d, self.plan);
+        let spacing = num(d, "bentSpacingMaxM");
+        let place = |list: Vec<f64>| {
+            let mut out = Vec::new();
+            for c in list {
+                let mut placed = None;
+                let mut dd = 0.0;
+                while dd <= spacing / 2.0 && placed.is_none() {
+                    let cands: Vec<f64> = if dd != 0.0 { vec![c - dd, c + dd] } else { vec![c] };
+                    for cc in cands {
+                        if placed.is_none() && self.bent_clear(cc) {
+                            placed = Some(cc);
+                        }
+                    }
+                    dd += 0.5;
+                }
+                if let Some(c) = placed {
+                    out.push(c);
+                }
+            }
+            out
+        };
+        let mut south = vec![];
+        let first_s = p.c_start + 4.0;
+        let last_s = p.arch_south_c - g.supports["archSouth"].extent[1];
+        if last_s > first_s {
+            south = stations(first_s, last_s, spacing);
+        }
+        let mut north = vec![];
+        let first_n = p.anchor_north_c + g.supports["northAnchor"].extent[1];
+        let last_n = p.c_end - 4.0;
+        if last_n > first_n {
+            north = stations(first_n, last_n, spacing);
+        }
+        let mut out = place(south);
+        out.extend(place(north));
+        out
+    }
+
+    fn approaches(&self, orange: &mut MeshArrays, concrete: &mut MeshArrays, far: &mut MeshArrays) {
+        let [cw, cd] = pair(self.d, "bentColumnM");
+        let k = &self.k;
+        for c in self.bent_stations() {
+            let cols = self.bent_columns(c);
+            for &[x, z, ground, top] in &cols {
+                if top - ground < 1.0 {
+                    continue;
+                }
+                orange.box_(x, z, ground + 1.2, top, cw / 2.0, cd / 2.0, self.yaw, k.orange, ALL);
+                concrete.box_(x, z, ground - 1.0, ground + 1.2, cw / 2.0 + 0.6, cd / 2.0 + 0.6, self.yaw, k.concrete, NO_BOTTOM);
+                far.box_(x, z, ground, top, cw / 2.0, cd / 2.0, self.yaw, k.orange, ALL);
+            }
+            let [a, b] = cols;
+            let top = a[3].min(b[3]);
+            orange.beam([a[0], top - 0.6, a[1]], [b[0], top - 0.6, b[1]], 1.0, 1.2, k.orange_dark);
+            let low = a[2].max(b[2]) + 3.0;
+            if top - low > 8.0 {
+                orange.beam([a[0], low, a[1]], [b[0], top - 1.5, b[1]], 0.5, 0.5, k.orange_dark);
+                orange.beam([b[0], low, b[1]], [a[0], top - 1.5, a[1]], 0.5, 0.5, k.orange_dark);
+            }
+        }
+    }
+
+    /// `pylonParts`: the arch pylons as twin columns under a cap, and the north anchorage.
+    fn pylon_parts(&self) -> Vec<(String, [f64; 7], bool)> {
+        let (g, d, p) = (self.g, self.d, self.plan);
+        let mut parts = Vec::new();
+        for key in ["archSouth", "archNorth"] {
+            let support = &g.supports[key];
+            let c = self.site.chainage(support.centre[0], support.centre[1]);
+            let half_outer = support.extent[0] / 2.0;
+            let inner = self.site.half_plane + 0.5;
+            let width = (half_outer - inner).min(ARCH_PYLON_COLUMN_M);
+            let top = p.deck_top(c) + num(d, "pylonAboveDeckM");
+            for sgn in [-1.0, 1.0] {
+                let [x, z] = self.site.deck_point(c, sgn * (inner + width / 2.0));
+                let side = if sgn < 0.0 { "west" } else { "east" };
+                parts.push((format!("{key}-{side}"), [x, z, (self.ground)(x, z) - 1.0, top, support.extent[1] / 2.0, width / 2.0, self.yaw], false));
+            }
+            let [x, z] = self.site.deck_point(c, 0.0);
+            parts.push((format!("{key}-cap"), [x, z, top - 4.0, top, support.extent[1] / 2.0, inner + width, self.yaw], true));
+        }
+        let a = &g.supports["northAnchor"];
+        let ca = self.site.chainage(a.centre[0], a.centre[1]);
+        parts.push((
+            "northAnchor".to_string(),
+            [a.centre[0], a.centre[1], (self.ground)(a.centre[0], a.centre[1]) - 1.0, p.deck_top(ca) + num(d, "pylonAboveDeckM"), a.extent[1] / 2.0, a.extent[0] / 2.0, self.yaw],
+            false,
+        ));
+        parts
+    }
+
+    fn arch_ribs(&self, orange: &mut MeshArrays, far: &mut MeshArrays) {
+        let (g, d, p, k) = (self.g, self.d, self.plan, &self.k);
+        let s_c = p.arch_south_c + g.supports["archSouth"].extent[1] / 2.0;
+        let n_c = p.arch_north_c - g.supports["archNorth"].extent[1] / 2.0;
+        let truss = num(d, "trussDepthM");
+        let panel = num(d, "panelM");
+        let hp = self.site.half_plane;
+        for s in [-hp, hp] {
+            let ps = self.site.deck_point(s_c, s);
+            let pn = self.site.deck_point(n_c, s);
+            let y_s = (self.ground)(ps[0], ps[1]) + 0.5;
+            let y_n = (self.ground)(pn[0], pn[1]) + 0.5;
+            let crown_at = |c: f64| p.deck_top(c) - truss - 1.2;
+            let rib_y = |c: f64| {
+                let t = (c - s_c) / (n_c - s_c);
+                let chord = y_s + (y_n - y_s) * t;
+                let crown = crown_at((s_c + n_c) / 2.0) - (y_s + y_n) / 2.0;
+                chord + crown * 4.0 * t * (1.0 - t)
+            };
+            let cs = stations(s_c, n_c, 4.0);
+            for i in 0..cs.len() - 1 {
+                orange.beam(self.P(cs[i], s, rib_y(cs[i])), self.P(cs[i + 1], s, rib_y(cs[i + 1])), 1.6, 2.4, k.orange);
+            }
+            let fcs = stations(s_c, n_c, 16.0);
+            for i in 0..fcs.len() - 1 {
+                far.beam(self.P(fcs[i], s, rib_y(fcs[i])), self.P(fcs[i + 1], s, rib_y(fcs[i + 1])), 2.0, 2.6, k.orange);
+            }
+            for c in stations(s_c + panel, n_c - panel, panel) {
+                let y_top = p.deck_top(c) - truss;
+                if y_top - rib_y(c) > 1.0 {
+                    orange.beam(self.P(c, s, rib_y(c)), self.P(c, s, y_top), 0.6, 0.6, k.orange);
+                }
+            }
+        }
+    }
+
+    fn colliders(&self) -> Vec<Collider> {
+        let (g, d, w) = (self.g, self.d, self.water);
+        let mut out = Vec::new();
+        for (key, pier) in [("south", &g.supports["southPier"]), ("north", &g.supports["northPier"])] {
+            let [cx, cz] = pier.centre;
+            out.push(Collider {
+                part: format!("{key}-pier"),
+                x: cx,
+                z: cz,
+                y0: (self.ground)(cx, cz).min(w - 2.0),
+                y1: w + pier.top_m.unwrap_or(0.0),
+                hx: pier.extent[1] / 2.0,
+                hz: pier.extent[0] / 2.0,
+                yaw: self.yaw,
+            });
+        }
+        for (part, [x, z, y0, y1, hx, hz, yaw], cap_only) in self.pylon_parts() {
+            if cap_only {
+                continue;
+            }
+            out.push(Collider { part, x, z, y0, y1: y1.min(y0 + 30.0), hx, hz, yaw });
+        }
+        let [cw, cd] = pair(d, "bentColumnM");
+        for c in self.bent_stations() {
+            for (k, &[x, z, ground, top]) in self.bent_columns(c).iter().enumerate() {
+                if top - ground < 1.0 {
+                    continue;
+                }
+                out.push(Collider { part: format!("bent-{}-{k}", js_round(c)), x, z, y0: ground - 1.0, y1: top.min(ground + 8.0), hx: cw / 2.0 + 0.6, hz: cd / 2.0 + 0.6, yaw: self.yaw });
+            }
+        }
+        out
+    }
+}
+
+/// `Math.round` (halves toward +infinity).
+fn js_round(v: f64) -> i64 {
+    (v + 0.5).floor() as i64
+}
+
+/// Distance from (x, z) to a flat [x, z, ...] polyline.
+fn polyline_distance(x: f64, z: f64, pts: &[f64]) -> f64 {
+    let mut best = f64::INFINITY;
+    let mut i = 0;
+    while i + 3 < pts.len() {
+        let (ax, az, dx, dz) = (pts[i], pts[i + 1], pts[i + 2] - pts[i], pts[i + 3] - pts[i + 1]);
+        let l = dx * dx + dz * dz;
+        let t = if l != 0.0 { (((x - ax) * dx + (z - az) * dz) / l).min(1.0).max(0.0) } else { 0.0 };
+        best = best.min((x - ax - t * dx).hypot(z - az - t * dz));
+        i += 2;
+    }
+    best
+}
+
+/// `buildGoldenGateBridge`.
+pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built {
+    let g = &js.golden_gate;
+    let d = &g.dimensions;
+    let site = Site::new(g);
+    let ground_at = |x: f64, z: f64| ground.at(x, z);
+    let plan = plan(js, &site, &ground_at);
+    let offset = |c: f64| site.centre_offset(c);
+    let mut frame = Frame::new(site.axis_point(0.0, 0.0), site.axis);
+    frame.offset = Some(&offset);
+    let orange = srgb_hex(hex(d, "orangeSrgb"));
+    let k = Colours {
+        orange,
+        orange_dark: shade(orange, DARK),
+        asphalt: srgb_hex(hex(d, "asphaltSrgb")),
+        sidewalk: srgb_hex(hex(d, "sidewalkSrgb")),
+        concrete: srgb_hex(hex(d, "concreteSrgb")),
+        barrier: srgb_hex(hex(d, "barrierSrgb")),
+        white: srgb_hex(hex(d, "whiteSrgb")),
+        yellow: srgb_hex(hex(d, "yellowSrgb")),
+    };
+    let tower_zone_half = g.leg_stages.iter().map(|s| s[3]).fold(f64::MIN, f64::max) / 2.0 + 1.0;
+    let ctx = Ctx { g, d, site: &site, plan: &plan, frame: &frame, ground: &ground_at, k, yaw: site.axis[1].atan2(site.axis[0]), water: js.sea_level_y, tower_zone_half };
+    let mut orange_m = MeshArrays::new("golden-gate-bridge:orange");
+    let mut deck_m = MeshArrays::new("golden-gate-bridge:deck");
+    let mut concrete_m = MeshArrays::new("golden-gate-bridge:concrete");
+    let mut wires = MeshArrays::wire("golden-gate-bridge:cables", js.wire_drawn_radius_m);
+    let mut far = MeshArrays::new("golden-gate-bridge:far");
+    let mut skirt = MeshArrays::new("golden-gate-bridge:skirt");
+
+    ctx.towers(&mut orange_m, &mut concrete_m, &mut skirt, &mut far);
+    let suspenders = ctx.cables(&mut wires, &mut far);
+    ctx.truss(&mut orange_m, &mut far);
+    ctx.deck(&mut deck_m, &mut orange_m, ca);
+    ctx.approach_span(&mut orange_m, &mut concrete_m, &mut far, plan.c_south, plan.c_start, plan.c_south);
+    ctx.approach_span(&mut orange_m, &mut concrete_m, &mut far, plan.c_end, plan.c_north, plan.c_north);
+    ctx.tower_walkways(&mut deck_m, &mut orange_m);
+    ctx.approaches(&mut orange_m, &mut concrete_m, &mut far);
+    ctx.arch_ribs(&mut orange_m, &mut far);
+    for (_, [x, z, y0, y1, hx, hz, yaw], _) in ctx.pylon_parts() {
+        concrete_m.box_(x, z, y0, y1, hx, hz, yaw, ctx.k.concrete, NO_BOTTOM);
+        far.box_(x, z, y0, y1, hx, hz, yaw, ctx.k.concrete, ALL);
+    }
+    // Past the sun's shadow reach the structure's own occlusion is baked in.
+    let inward = frame.inward();
+    orange_m.shade_occlusion(Some(&inward), 0.62, 0.74, 1.5);
+    concrete_m.shade_occlusion(Some(&inward), 0.62, 0.86, 1.5);
+    deck_m.shade_occlusion(None, 0.62, 0.74, 1.5);
+    far.shade_occlusion(Some(&inward), 0.62, 0.74, 1.5);
+
+    let r1 = |v: f64| (v * 10.0).round() / 10.0;
+    let r2 = |v: f64| (v * 100.0).round() / 100.0;
+    let bents = ctx.bent_stations().len();
+    let colliders = ctx.colliders();
+    Built {
+        id: g.id.clone(),
+        version: g.version.clone(),
+        groups: vec![
+            ("orange".into(), orange_m.freeze()),
+            ("deck".into(), deck_m.freeze()),
+            ("concrete".into(), concrete_m.freeze()),
+            ("cables".into(), wires.freeze()),
+        ],
+        far: far.freeze(),
+        skirt: skirt.freeze(),
+        colliders,
+        stats: json!({
+            "mainSpanMeasuredM": r1(site.main_span_measured),
+            "mainSpanPublishedM": r1(num(d, "mainSpanM")),
+            "structureFromC": plan.c_start, "structureToC": plan.c_end, "roadEndC": plan.c_south, "wayNorthC": plan.c_north,
+            "deckTopAtRoadEnd": r2(plan.y_south), "deckTopAtTowers": r2(plan.y_tower), "deckTopMid": r2(plan.y_mid),
+            "deckTopAtStructureStart": r2(plan.deck_top(plan.c_start)),
+            "suspenderPairsPerCable": suspenders,
+            "bents": bents,
+        }),
+    }
+}

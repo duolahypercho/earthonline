@@ -1,0 +1,13 @@
+[package]
+name = "eo-net"
+version = "0.1.0"
+edition = "2024"
+description = "Earth Online online foundation: UDP transport with its own reliability and ordering, the session handshake, snapshot replication (interest, delta compression, quantisation, bandwidth budget), client prediction, reconciliation and interpolation (no GPU)"
+publish = false
+
+[dependencies]
+anyhow = "1.0.104"
+eo-assets = { path = "../eo-assets" }
+eo-data = { path = "../eo-data" }
+eo-player = { path = "../eo-player" }
+glam = "0.34.3"

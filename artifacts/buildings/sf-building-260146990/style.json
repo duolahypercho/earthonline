@@ -1,0 +1,117 @@
+{
+ "seed": 5,
+ "notes": "One tall commercial storey: slate-blue stucco parapet with a plain projecting cap over a teal clerestory band, a saturated abstract mural (generic shapes) with a tile-mosaic base either side of a recessed dark glazed entry under a small canopy. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. Base fix (2026-10-03): cool/grey wallTint = target / painted-stucco base so the warm stucco albedo does not turn it pink.",
+ "streetStills": true,
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-storefront",
+ "wall": "painted-stucco",
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "cornice": false,
+ "corniceProjectionM": 0.3,
+ "beltCourse": true,
+ "ground": "lobby",
+ "upper": "apartment",
+ "wallTint": "#a5b9f8",
+ "trim": "painted-white@6370a0",
+ "frame": "painted-white@5a6488",
+ "storefrontFrame": "painted-steel@3a3f4a",
+ "blankUpper": true,
+ "upperWindows": [],
+ "floorsM": {
+  "groundM": 5.0,
+  "upperM": 2.0
+ },
+ "storefront": {
+  "bulkheadM": 0.3,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.02,
+    "to": 0.98,
+    "kind": "blank",
+    "material": "painted-stucco",
+    "tint": "#7d88ae",
+    "headM": 3.5
+   }
+  ]
+ },
+ "mural": {
+  "from": 0.03,
+  "to": 0.97,
+  "bottomM": 0.3,
+  "topM": 3.8,
+  "seed": 23,
+  "shapes": 34,
+  "palette": [
+   "#1f4f9a",
+   "#2a8a5a",
+   "#d8402a",
+   "#f08a2a",
+   "#1c7a8a",
+   "#e8d9b0",
+   "#6a3a9a",
+   "#2f6fa8"
+  ]
+ },
+ "streetEdges": {
+  "3": {
+   "blankUpper": true,
+   "upperWindows": [],
+   "storefront": {
+    "bulkheadM": 0.3,
+    "transomM": 0.4,
+    "pierM": 0.3,
+    "awning": false,
+    "layout": [
+     {
+      "from": 0.05,
+      "to": 0.21,
+      "kind": "double-door",
+      "headM": 2.9,
+      "stair": true
+     },
+     {
+      "from": 0.27,
+      "to": 0.97,
+      "kind": "blank",
+      "material": "painted-stucco",
+      "tint": "#7d88ae",
+      "headM": 3.5
+     }
+    ]
+   },
+   "mural": {
+    "from": 0.26,
+    "to": 0.97,
+    "bottomM": 0.3,
+    "topM": 3.8,
+    "seed": 11,
+    "shapes": 34,
+    "palette": [
+     "#1f4f9a",
+     "#2a8a5a",
+     "#d8402a",
+     "#f08a2a",
+     "#1c7a8a",
+     "#e8d9b0",
+     "#6a3a9a",
+     "#2f6fa8"
+    ]
+   }
+  }
+ },
+ "hbSignBands": [
+  {
+   "from": 0.0,
+   "to": 1.0,
+   "bottomM": 3.95,
+   "topM": 4.85,
+   "material": "glass-reflective",
+   "tint": "#2f9a98"
+  }
+ ]
+}

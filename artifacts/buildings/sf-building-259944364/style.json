@@ -1,0 +1,136 @@
+{
+ "seed": 13,
+ "notes": "Rework r3: warm off-white, four gridded panel bays between pilasters over the ground, long glazed shopfront near the corner, full-width multi-light bands on storeys 1-2, pilasters between the bays, lighter cornice. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game.",
+ "wall": "concrete-precast",
+ "wallTint": "#e6e3da",
+ "trim": "painted-white@e6e3da",
+ "frame": "painted-white@e6e3da",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@d8d2c4",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@f2f1ec",
+ "cornice": true,
+ "corniceProjectionM": 0.3,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "bays": [],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.03,
+    "to": 0.14,
+    "kind": "glazed-garage",
+    "headM": 3.0
+   },
+   {
+    "from": 0.16,
+    "to": 0.27,
+    "kind": "glazed-garage",
+    "headM": 3.0
+   },
+   {
+    "from": 0.29,
+    "to": 0.4,
+    "kind": "glazed-garage",
+    "headM": 3.0
+   },
+   {
+    "from": 0.42,
+    "to": 0.51,
+    "kind": "glazed-garage",
+    "headM": 3.0
+   },
+   {
+    "from": 0.56,
+    "to": 0.64,
+    "kind": "window",
+    "headM": 2.6
+   },
+   {
+    "from": 0.68,
+    "to": 0.92,
+    "kind": "window",
+    "headM": 3.4
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.07,
+     0.215
+    ],
+    [
+     0.25,
+     0.405
+    ],
+    [
+     0.435,
+     0.59
+    ],
+    [
+     0.62,
+     0.775
+    ],
+    [
+     0.805,
+     0.95
+    ]
+   ],
+   "sillM": 0.7,
+   "headM": 2.7
+  },
+  "2": {
+   "spans": [
+    [
+     0.07,
+     0.215
+    ],
+    [
+     0.25,
+     0.405
+    ],
+    [
+     0.435,
+     0.59
+    ],
+    [
+     0.62,
+     0.775
+    ],
+    [
+     0.805,
+     0.95
+    ]
+   ],
+   "sillM": 0.7,
+   "headM": 2.6
+  }
+ },
+ "hbLadderEscape": {
+  "at": 0.88,
+  "widthM": 3.4,
+  "depthM": 0.8,
+  "ladderOffM": 0.8,
+  "dropM": 3.0,
+  "gooseneckM": 1.0
+ },
+ "garagePanels": {
+  "material": "painted-white",
+  "tint": "#cfc9bb",
+  "rows": 5,
+  "cols": 4
+ }
+}

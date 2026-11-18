@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "asset": "facade-detail-v1",
+  "license": "CC0-1.0",
+  "intent": "high-frequency surface detail (normal + cavity) for aged archetype facades, one sampler for every finish (templates world, ?archetypesV3=1)",
+  "layout": {
+    "width": 1536,
+    "height": 1024,
+    "columns": 3,
+    "rows": 2,
+    "cellPx": 512,
+    "padPx": 16,
+    "contentPx": 480,
+    "rowZeroAtImageBottom": true
+  },
+  "encoding": "RGB JPEG q92 4:4:4, linear/no-color: R,G OpenGL tangent normal x,y (z rebuilt); B cavity = 0.5 + 0.16 * standardised (65/35 albedo-luminance high-pass (sigma content/6) and normal-integrated height high-passed at sigma content/24, periodic; height alone (sigma content/6) on a flat-albedo set; 70/30 with occlusion where shipped)",
+  "cells": [
+    {
+      "index": 0,
+      "id": "grey_plaster_02",
+      "source": "facade-atlas-v2",
+      "sourceCell": 3,
+      "tileMetres": 1,
+      "author": "Rob Tuytel",
+      "assetPage": "https://polyhaven.com/a/grey_plaster_02",
+      "license": "CC0-1.0",
+      "sourceRectFilePx": {
+        "x0": 3104,
+        "y0": 1056,
+        "size": 960
+      },
+      "normalXyRms": 0.1405,
+      "cavitySd": 0.1572,
+      "cavityMean": 0.5005
+    },
+    {
+      "index": 1,
+      "id": "white_stucco",
+      "source": "facade-atlas-v2",
+      "sourceCell": 5,
+      "tileMetres": 2,
+      "author": "Amal Kumar",
+      "assetPage": "https://polyhaven.com/a/white_stucco",
+      "license": "CC0-1.0",
+      "sourceRectFilePx": {
+        "x0": 1056,
+        "y0": 32,
+        "size": 960
+      },
+      "normalXyRms": 0.0567,
+      "cavitySd": 0.1579,
+      "cavityMean": 0.4996
+    },
+    {
+      "index": 2,
+      "id": "painted_plaster_wall",
+      "source": "facade-atlas-v2",
+      "sourceCell": 4,
+      "tileMetres": 2,
+      "author": "Amal Kumar",
+      "assetPage": "https://polyhaven.com/a/painted_plaster_wall",
+      "license": "CC0-1.0",
+      "sourceRectFilePx": {
+        "x0": 32,
+        "y0": 32,
+        "size": 960
+      },
+      "normalXyRms": 0.0544,
+      "cavitySd": 0.1553,
+      "cavityMean": 0.5004
+    },
+    {
+      "index": 3,
+      "id": "coated_pine",
+      "source": "shopfront-surface-atlas-v1",
+      "sourceCell": 1,
+      "tileMetres": 0.74,
+      "author": "Charlotte Baglioni, Rico Cilliers",
+      "assetPage": "https://polyhaven.com/a/coated_pine",
+      "license": "CC0-1.0",
+      "provenance": "public/assets/polyhaven-coated-pine.provenance.json",
+      "sourceRectFilePx": {
+        "x0": 512,
+        "y0": 512,
+        "size": 512
+      },
+      "normalXyRms": 0.0196,
+      "cavitySd": 0.1585,
+      "cavityMean": 0.5002
+    },
+    {
+      "index": 4,
+      "id": "concrete_wall_008",
+      "source": "facade-atlas-v2",
+      "sourceCell": 7,
+      "tileMetres": 2.71,
+      "author": "Dario Barresi (processing), Charlotte Baglioni (photography)",
+      "assetPage": "https://polyhaven.com/a/concrete_wall_008",
+      "license": "CC0-1.0",
+      "sourceRectFilePx": {
+        "x0": 3104,
+        "y0": 32,
+        "size": 960
+      },
+      "normalXyRms": 0.021,
+      "cavitySd": 0.1571,
+      "cavityMean": 0.4996
+    },
+    {
+      "index": 5,
+      "id": "blue_metal_plate",
+      "source": "shopfront-surface-atlas-v1",
+      "sourceCell": 3,
+      "tileMetres": 2.5,
+      "author": "Rob Tuytel",
+      "assetPage": "https://polyhaven.com/a/blue_metal_plate",
+      "license": "CC0-1.0",
+      "provenance": "public/assets/polyhaven-blue-metal-plate.provenance.json",
+      "sourceRectFilePx": {
+        "x0": 512,
+        "y0": 0,
+        "size": 512
+      },
+      "normalXyRms": 0.0332,
+      "cavitySd": 0.1569,
+      "cavityMean": 0.4999
+    }
+  ],
+  "inputs": {
+    "facade-atlas-v2:albedo": {
+      "path": "public/assets/facade-atlas-v2-albedo.jpg",
+      "sha256": "4bf15707ee8eb7bee1887a6149742070260b86ca48c63643bde39668f277f13b"
+    },
+    "facade-atlas-v2:normal": {
+      "path": "public/assets/facade-atlas-v2-normal-rough.jpg",
+      "sha256": "5e0c89718fe981f96bf0c7ca1ecad67146afc04582b07abb6349e5411ee5d804"
+    },
+    "facade-atlas-v2:provenance": {
+      "path": "public/assets/facade-atlas-v2.provenance.json",
+      "sha256": "3b94d50359e517bde01e507a174066b6afe1e279e292a6bfb99d0ea14e58b4a7"
+    },
+    "shopfront-surface-atlas-v1:albedo": {
+      "path": "public/assets/shopfront-surface-atlas-v1-diffuse.png",
+      "sha256": "8c26cadb5db9c92b141f6c13c4733a80617f8f05370276f749ad6693e34849f0"
+    },
+    "shopfront-surface-atlas-v1:normal": {
+      "path": "public/assets/shopfront-surface-atlas-v1-nra.png",
+      "sha256": "14224073d3d4f718b0302ca878b7eb2ea5b4fcdfeb33d1d91283dc33a75632bc"
+    },
+    "shopfront-surface-atlas-v1:provenance": {
+      "path": "public/assets/shopfront-surface-atlas-v1.provenance.json",
+      "sha256": "d13302d578342c4043903f9207d662b2737d8c4de5431e861170b3f3f0ed7dd6"
+    }
+  },
+  "outputs": {
+    "map": {
+      "path": "public/assets/facade-detail-v1.jpg",
+      "sha256": "12184f87fa2a368caabe5ad3cf456bcc6c514db8999acbadd7391cd8e6ad0b7a",
+      "bytes": 782891
+    }
+  },
+  "generator": {
+    "path": "scripts/assets/pack-facade-detail-v1.mjs",
+    "sha256": "934be87afcfe42db9b3d1d86641eae27c49d9f31bcf99717f4976ce50d4d49d2"
+  }
+}

@@ -1,0 +1,140 @@
+{
+ "seed": 17,
+ "notes": "Navy shingle, bright-blue trim, projecting box bays on two storeys with bracketed hoods and divided-light sashes, fire escape right, door left and recessed entry right under a beam. Bay is now a hyB box bay (3 sashes per front, barred upper sashes, bracket corbel and belt brackets). Wall stays lifted (4a5f8c) for the luminance floor. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-clapboard",
+ "wallTint": "#6e7fa3",
+ "trim": "painted-white@4a6fb5",
+ "frame": "painted-white@232a3a",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@232a3a",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-clapboard@6e7fa3",
+ "cornice": true,
+ "corniceProjectionM": 0.65,
+ "beltCourse": true,
+ "windowHoods": true,
+ "windowW": 0.75,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.5,
+ "upperWindows": [
+  0.86
+ ],
+ "bays": [
+  {
+   "at": 0.32,
+   "widthM": 3.6,
+   "projectionM": 0.55,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#6e7fa3",
+   "frame": "painted-white@3b64b3",
+   "soffit": {
+    "tint": "#4a6fb5",
+    "depthM": 0.5
+   },
+   "hyB": {
+    "plan": "box",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "muntins": {
+     "upperRows": 3,
+     "upperCols": 1,
+     "lowerRows": 1,
+     "lowerCols": 1
+    },
+    "sillM": 0.8,
+    "cornice": {
+     "projectionM": 0.3,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.08,
+     "brackets": 3,
+     "dropM": 0.35,
+     "beltBrackets": true
+    }
+   }
+  }
+ ],
+ "fireEscape": {
+  "at": 0.82,
+  "widthM": 1.8,
+  "depthM": 0.9,
+  "material": "painted-steel"
+ },
+ "storefront": {
+  "bulkheadM": 0.6,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.07,
+    "to": 0.21,
+    "kind": "door",
+    "leaf": "wood-siding@5a4636",
+    "headM": 2.4,
+    "stair": true
+   },
+   {
+    "from": 0.5,
+    "to": 0.94,
+    "kind": "door",
+    "leaf": "painted-steel@2a2c30",
+    "headM": 2.6
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "plaques": [
+  {
+   "at": 0.32,
+   "y": 3.15,
+   "w": 2.9,
+   "h": 0.35,
+   "face": "painted-white@3b64b3"
+  },
+  {
+   "at": 0.32,
+   "y": 3.42,
+   "w": 3.0,
+   "h": 0.1,
+   "face": "painted-white@2c4f8f"
+  }
+ ],
+ "hbCorniceBrackets": {
+  "spacingM": 0.55,
+  "heightM": 0.5,
+  "depthM": 0.35,
+  "widthM": 0.14,
+  "material": "painted-white",
+  "tint": "#4a6fb5"
+ },
+ "hbFrieze": {
+  "heightM": 0.35,
+  "material": "painted-white",
+  "tint": "#4a6fb5"
+ },
+ "shopFascia": {
+  "heightM": 0.4,
+  "projectionM": 0.75,
+  "material": "painted-white",
+  "tint": "#3d5d9e",
+  "topM": 0.05,
+  "lamps": 0
+ },
+ "hyDShingle": {
+  "kind": "square",
+  "rowM": 0.16,
+  "shingleM": 0.14,
+  "projM": 0.014,
+  "shade": 0.7,
+  "fromM": 0.3,
+  "maxTris": 12000
+ },
+ "streetStills": true
+}

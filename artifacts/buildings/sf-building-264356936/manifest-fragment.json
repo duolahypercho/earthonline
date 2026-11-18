@@ -1,0 +1,78 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-264356936",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-264356936",
+    "walkIndex": 7532,
+    "builder": "blender",
+    "street": "Haight Street",
+    "side": "A",
+    "addr": "1427;1429;1431;1433 Haight Street",
+    "sourceHeight": 11,
+    "sourceLevels": null,
+    "frontEdge": 11,
+    "status": "review",
+    "lidarHeightM": 10.93,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b264356936.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b264356936.js"
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b264356936.js",
+    "sha256": "774f0a313bd39e50591501466645dcd7985283b7e5bf0d13edd04cebce35f3c6",
+    "pass": "b264356936-blender-28ab01b6-06ce44"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-264356936/provenance.json",
+    "sha256": "7e388839a35a0590244f8b64ca26aebec63e332a14bb495114157fa031011a33",
+    "pass": "b264356936-blender-28ab01b6-06ce44"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-264356936/exterior.glb",
+      "sha256": "ce81d40ba0ff8128505acb756a34f4e65ad92a8f8bdadc16747a528c59363a6a",
+      "bytes": 692964
+    },
+    {
+      "role": "interior",
+      "url": "/assets/buildings/sf-building-264356936/interior.glb",
+      "sha256": "64b0a1f49cc257b9634090eb9700d18a665de2adbaebfe99543b10f9b9c2d329",
+      "bytes": 164112
+    },
+    {
+      "role": "fine-s0",
+      "url": "/assets/buildings/sf-building-264356936/fine-s0.glb",
+      "sha256": "2d0fa8dbe3f6e66616dcaa9b0c44447f473c6ccdcab69ada6530aa70df54e92c",
+      "bytes": 30680
+    },
+    {
+      "role": "fine-s1",
+      "url": "/assets/buildings/sf-building-264356936/fine-s1.glb",
+      "sha256": "499443f7eb96ef9e8f41f84a95e45a9dcefd3c71633ceaf8fba7aa8f52f0be98",
+      "bytes": 75904
+    },
+    {
+      "role": "fine-s2",
+      "url": "/assets/buildings/sf-building-264356936/fine-s2.glb",
+      "sha256": "4ade31876af439571b6a7acde4d699f5c6fee9a06a4ae45e2fb02c5fb9722bb1",
+      "bytes": 75904
+    }
+  ],
+  "generatedAt": "2026-09-30T15:01:00.812Z",
+  "base": {
+    "id": "sf-building-264356936",
+    "walkIndex": 7532,
+    "builder": "blender",
+    "street": "Haight Street",
+    "side": "A",
+    "addr": "1427;1429;1431;1433 Haight Street",
+    "sourceHeight": 11,
+    "sourceLevels": null,
+    "frontEdge": 11,
+    "status": "review",
+    "lidarHeightM": 10.93,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b264356936.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b264356936.js"
+  }
+}

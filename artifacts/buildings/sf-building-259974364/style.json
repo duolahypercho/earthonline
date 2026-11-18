@@ -1,0 +1,77 @@
+{
+ "seed": 7,
+ "notes": "1949 two-storey cream stucco commercial block (laundry). Upper storey: one wide four-pane ribbon window. Ground: wide shop window left of centre, a recessed door with a folding grille, a plain sign fascia over the shopfront. No names. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Deeper white sign fascia over the glass shopfront, ribbon window over it, gated doorway at the right, projecting blade sign on the upper right corner, dark parapet cap (hand.py). Lifted/converted once to #f6f2ea.",
+ "wall": "painted-stucco",
+ "wallTint": "#f6f2ea",
+ "trim": "painted-white@f0ece0",
+ "frame": "painted-white@f2eee2",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f2eee2",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@f4f0e7",
+ "cornice": false,
+ "corniceProjectionM": 0.5,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "bays": [],
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.12,
+    "to": 0.62,
+    "kind": "window",
+    "headM": 2.6
+   },
+   {
+    "from": 0.63,
+    "to": 0.76,
+    "kind": "door",
+    "leaf": "painted-steel@2a2420",
+    "headM": 2.6
+   },
+   {
+    "from": 0.78,
+    "to": 0.92,
+    "kind": "gate",
+    "leaf": "painted-steel@222222",
+    "headM": 2.6
+   }
+  ]
+ },
+ "shopFascia": {
+  "heightM": 1.0,
+  "projectionM": 0.15,
+  "material": "painted-white",
+  "tint": "#f4f1ea",
+  "topM": 0.25
+ },
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.18,
+     0.84
+    ]
+   ],
+   "sillM": 1.0,
+   "headM": 2.2
+  }
+ },
+ "bladeSign": {
+  "at": 0.96,
+  "heightM": 2.0,
+  "bottomM": 0.4,
+  "face": "painted-white@2f5fa8"
+ }
+}

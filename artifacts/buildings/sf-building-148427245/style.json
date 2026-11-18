@@ -1,0 +1,112 @@
+{
+ "seed": 7,
+ "notes": "Rework r7: five window columns per storey (photo rhythm ~2.7 m), deeper red-brown brick, rusticated dark base with four heavy iron-grilled windows, cream keystone lintels on every bay, belt course, projecting cream cornice. The straight-on still is framed on the bounding box and shows the rear wing of the lot, not the Hyde face: judge from front-34 / the data.",
+ "wall": "brick-common-bond",
+ "wallTint": "#b97d78",
+ "trim": "painted-white@e2d6b8",
+ "frame": "painted-white@f0ece0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f0ece0",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "brick-common-bond@a86e6c",
+ "cornice": true,
+ "corniceProjectionM": 0.6,
+ "beltCourse": true,
+ "windowHoods": true,
+ "windowW": 0.9,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "upperWindows": [
+  0.14,
+  0.34,
+  0.54,
+  0.74,
+  0.93
+ ],
+ "bays": [],
+ "storefront": {
+  "bulkheadM": 0.6,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.09,
+    "to": 0.2,
+    "kind": "window",
+    "headM": 3.0,
+    "grille": true
+   },
+   {
+    "from": 0.28,
+    "to": 0.42,
+    "kind": "window",
+    "headM": 3.0,
+    "grille": true
+   },
+   {
+    "from": 0.5,
+    "to": 0.6,
+    "kind": "window",
+    "headM": 3.0,
+    "grille": true
+   },
+   {
+    "from": 0.68,
+    "to": 0.8,
+    "kind": "window",
+    "headM": 3.0,
+    "grille": true
+   },
+   {
+    "from": 0.86,
+    "to": 0.96,
+    "kind": "door",
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "edgeRoles": {
+  "0": "party",
+  "1": "party",
+  "2": "party",
+  "4": "party",
+  "5": "party",
+  "6": "party",
+  "8": "party",
+  "12": "party",
+  "13": "party",
+  "14": "party",
+  "16": "party",
+  "17": "party",
+  "19": "party",
+  "20": "party",
+  "21": "party",
+  "22": "party",
+  "23": "party",
+  "25": "party",
+  "26": "party",
+  "27": "party",
+  "29": "party"
+ },
+ "hyDRubble": {
+  "toM": 3.9,
+  "courseM": 0.45,
+  "blockM": 1.2,
+  "projM": 0.03,
+  "shade": 0.6,
+  "seed": 3,
+  "maxTris": 5000
+ },
+ "groundBand": {
+  "material": "brick-common-bond",
+  "tint": "#a8706c",
+  "topM": 3.9
+ }
+}

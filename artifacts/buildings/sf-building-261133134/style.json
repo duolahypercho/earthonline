@@ -1,0 +1,98 @@
+{
+ "seed": 34,
+ "notes": "Round 3: 1980 white stucco flats. Viewer-left half: recessed balconies with railings and glass doors over the lattice gate; right half: flat pier with one wide blinds window per floor, mint strip on its right corner only; teal-framed multi-panel garage door right; alarm bell and address plaque (hand.py) between gate and garage. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game.",
+ "wall": "painted-stucco",
+ "wallTint": "#f7f5f1",
+ "trim": "painted-white@e6e2d8",
+ "frame": "painted-white@3d4a48",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@6fa8a2",
+ "storefrontGlass": "glass-storefront",
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.6,
+  "upperM": 3.15
+ },
+ "windowW": 1.6,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.3,
+ "upperWindows": [
+  0.76
+ ],
+ "garagePanels": {
+  "material": "painted-white",
+  "tint": "#eee9d8",
+  "rows": 5,
+  "cols": 2,
+  "railM": 0.1,
+  "surroundM": 0.14,
+  "surroundTint": "#4f9a94"
+ },
+ "storefront": {
+  "bulkheadM": 0,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.03,
+    "to": 0.43,
+    "kind": "gate",
+    "lattice": true,
+    "headM": 2.7,
+    "material": "painted-steel",
+    "tint": "#35383a"
+   },
+   {
+    "from": 0.5,
+    "to": 0.95,
+    "kind": "glazed-garage",
+    "headM": 2.7,
+    "material": "painted-white",
+    "tint": "#4f9a94"
+   }
+  ]
+ },
+ "ground": "garage",
+ "upper": "apartment",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "streetStills": true,
+ "frameGrid": {
+  "columns": [
+   0.0,
+   0.5,
+   1.0
+  ],
+  "columnW": 0.3,
+  "slabEdgeH": 0.3,
+  "projectionM": 0.0,
+  "fromStorey": 1,
+  "storeyPatterns": [
+   [
+    "wall",
+    "balcony"
+   ]
+  ],
+  "recessM": 1.5,
+  "rail": "steel",
+  "mullionM": 1.6,
+  "balconyMaterial": "painted-stucco",
+  "balconyTint": "#d8d3c8",
+  "material": "painted-white",
+  "tint": "#efebe3",
+  "frameMaterial": "painted-steel-mid"
+ },
+ "pilasters": {
+  "at": [
+   0.98
+  ],
+  "widthM": 0.14,
+  "projectionM": 0.08,
+  "fromM": 3.6,
+  "material": "painted-white",
+  "tint": "#6fb0a8"
+ },
+ "latticeMaterial": "painted-steel@35383a"
+}

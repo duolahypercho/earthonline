@@ -1,0 +1,165 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-262418269",
+  "slug": "b262418269",
+  "walkIndex": 5250,
+  "street": "Hyde Street",
+  "address": null,
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 12.17,
+  "storeys": 3,
+  "floors": {
+    "groundM": 5.014,
+    "upperM": 3.278,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1956,
+  "use": "COMO",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "loft",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 1,
+    "center": {
+      "x": -65.85,
+      "z": 3132.6
+    },
+    "heading": -1.72434,
+    "width": 17.156,
+    "depth": 38.934
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -8.578,
+      "z": -19.467
+    },
+    {
+      "x": -8.422,
+      "z": 19.467
+    },
+    {
+      "x": 8.578,
+      "z": 19.467
+    },
+    {
+      "x": 8.542,
+      "z": 12.693
+    },
+    {
+      "x": 3.068,
+      "z": 12.629
+    },
+    {
+      "x": 2.963,
+      "z": -19.432
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -8.578,
+        "z": -19.467
+      },
+      "b": {
+        "x": -8.422,
+        "z": 19.467
+      },
+      "lengthM": 38.934,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -8.422,
+        "z": 19.467
+      },
+      "b": {
+        "x": 8.578,
+        "z": 19.467
+      },
+      "lengthM": 17,
+      "role": "front",
+      "partyShare": 0.13
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 8.578,
+        "z": 19.467
+      },
+      "b": {
+        "x": 8.542,
+        "z": 12.693
+      },
+      "lengthM": 6.774,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 8.542,
+        "z": 12.693
+      },
+      "b": {
+        "x": 3.068,
+        "z": 12.629
+      },
+      "lengthM": 5.474,
+      "role": "rear",
+      "partyShare": 0.19
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": 3.068,
+        "z": 12.629
+      },
+      "b": {
+        "x": 2.963,
+        "z": -19.432
+      },
+      "lengthM": 32.061,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": 2.963,
+        "z": -19.432
+      },
+      "b": {
+        "x": -8.578,
+        "z": -19.467
+      },
+      "lengthM": 11.541,
+      "role": "rear",
+      "partyShare": 0.06
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

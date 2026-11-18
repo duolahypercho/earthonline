@@ -1,0 +1,96 @@
+{
+ "seed": 27,
+ "notes": "One continuous shallow bay stacked over storeys 1-2 with wide paired sashes; tile spandrels (brown/blue patterned panel at the floor line, two green cross-tile panels near the top, hand.py); ground band dark oxblood with red door and two white-framed windows; cornice small. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. GroundBand lift (2026-10-03): groundBand tint #6a2226 -> #804347 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-white",
+ "wallTint": "#f7f6f0",
+ "trim": "painted-white@8a8478",
+ "frame": "painted-white@f2eee0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f2eee0",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@914a4c",
+ "cornice": true,
+ "corniceProjectionM": 0.25,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.5,
+   "widthM": 5.4,
+   "projectionM": 0.5,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f7f6f0",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.4,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   },
+   "toStorey": 2
+  }
+ ],
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "storefront": {
+  "bulkheadM": 0.9,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.05,
+    "to": 0.2,
+    "kind": "door",
+    "leaf": "wood-siding@a82e24",
+    "headM": 2.6
+   },
+   {
+    "from": 0.31,
+    "to": 0.48,
+    "kind": "window",
+    "headM": 2.9
+   },
+   {
+    "from": 0.59,
+    "to": 0.79,
+    "kind": "window",
+    "headM": 2.9
+   }
+  ]
+ },
+ "groundBand": {
+  "material": "painted-white",
+  "tint": "#804347",
+  "topM": 4.3
+ },
+ "storeyWindowSpans": {
+  "3": {
+   "spans": [
+    [
+     0.22,
+     0.78
+    ]
+   ],
+   "sillM": 0.9,
+   "headM": 2.3
+  }
+ }
+}

@@ -1,0 +1,222 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-277889215",
+  "slug": "b277889215",
+  "walkIndex": 7001,
+  "street": "La Playa Street",
+  "address": "1400 La Playa Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 8.82,
+  "storeys": 2,
+  "floors": {
+    "groundM": 5.343,
+    "upperM": 2.877,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1960,
+  "use": "MRES",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "edwardian",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 0,
+    "center": {
+      "x": -7868.395,
+      "z": -1982.831
+    },
+    "heading": -1.62887,
+    "width": 25.851,
+    "depth": 31.945
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -12.764,
+      "z": 15.972
+    },
+    {
+      "x": -4.149,
+      "z": 15.972
+    },
+    {
+      "x": -4.264,
+      "z": 12.273
+    },
+    {
+      "x": -2.561,
+      "z": 12.274
+    },
+    {
+      "x": -2.204,
+      "z": -3.974
+    },
+    {
+      "x": 7.814,
+      "z": -3.956
+    },
+    {
+      "x": 12.308,
+      "z": -5.92
+    },
+    {
+      "x": 12.925,
+      "z": -15.972
+    },
+    {
+      "x": -12.925,
+      "z": -14.369
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -12.764,
+        "z": 15.972
+      },
+      "b": {
+        "x": -4.149,
+        "z": 15.972
+      },
+      "lengthM": 8.615,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -4.149,
+        "z": 15.972
+      },
+      "b": {
+        "x": -4.264,
+        "z": 12.273
+      },
+      "lengthM": 3.701,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -4.264,
+        "z": 12.273
+      },
+      "b": {
+        "x": -2.561,
+        "z": 12.274
+      },
+      "lengthM": 1.703,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -2.561,
+        "z": 12.274
+      },
+      "b": {
+        "x": -2.204,
+        "z": -3.974
+      },
+      "lengthM": 16.252,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": -2.204,
+        "z": -3.974
+      },
+      "b": {
+        "x": 7.814,
+        "z": -3.956
+      },
+      "lengthM": 10.018,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": 7.814,
+        "z": -3.956
+      },
+      "b": {
+        "x": 12.308,
+        "z": -5.92
+      },
+      "lengthM": 4.904,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": 12.308,
+        "z": -5.92
+      },
+      "b": {
+        "x": 12.925,
+        "z": -15.972
+      },
+      "lengthM": 10.072,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": 12.925,
+        "z": -15.972
+      },
+      "b": {
+        "x": -12.925,
+        "z": -14.369
+      },
+      "lengthM": 25.9,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 8,
+      "a": {
+        "x": -12.925,
+        "z": -14.369
+      },
+      "b": {
+        "x": -12.764,
+        "z": 15.972
+      },
+      "lengthM": 30.342,
+      "role": "rear",
+      "partyShare": 0.38
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

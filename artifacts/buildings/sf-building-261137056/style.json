@@ -1,0 +1,104 @@
+{
+ "seed": 90,
+ "notes": "1908 narrow three-storey flats, pink rough-cast stucco with cream trim. Ground: arched wood entry up a stoop at left, a four-lite window right of centre, a small side door at the right end, dark grey-brown base band. Uppers: paired sash windows left and right sharing a shallow railed fire-escape balcony, bracketed cornice over the ground storey. Salmon wall, rusticated pink ground storey (hyDRubble), pink fire escape, full-width projecting box bay on the upper storeys, arched surround on the stoop door. Dark plinth not separable from the pink band, SKIPPED. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. GroundBand lift (2026-10-03): groundBand tint #d6a090 -> #ead0c8 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#ecd2ca",
+ "trim": "painted-white@efe6d2",
+ "frame": "painted-white@f0e8d6",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f0e8d6",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@ecd2ca",
+ "cornice": true,
+ "corniceProjectionM": 0.5,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.5,
+   "widthM": 4.4,
+   "projectionM": 0.4,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#ecd2ca",
+   "hyB": {
+    "plan": "box",
+    "sashes": {
+     "front": 2,
+     "sides": 0
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.2,
+    "cornice": {
+     "projectionM": 0.16,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.12,
+    "to": 0.4,
+    "kind": "door",
+    "leaf": "wood-siding@8a5a30",
+    "headM": 3.0,
+    "stair": true,
+    "arch": {
+     "type": "round",
+     "surround": true,
+     "keystone": true
+    }
+   },
+   {
+    "from": 0.46,
+    "to": 0.74,
+    "kind": "window",
+    "headM": 2.3
+   },
+   {
+    "from": 0.83,
+    "to": 0.93,
+    "kind": "door",
+    "leaf": "wood-siding@8a5a30",
+    "headM": 2.2
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "fireEscape": {
+  "at": 0.56,
+  "widthM": 3.4,
+  "depthM": 0.9,
+  "material": "painted-white@d49a8a"
+ },
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#ead0c8",
+  "topM": 5.1
+ },
+ "hyDRubble": {
+  "toM": 5.1,
+  "courseM": 0.3,
+  "blockM": 0.55,
+  "projM": 0.03,
+  "shade": 0.7,
+  "seed": 3
+ }
+}

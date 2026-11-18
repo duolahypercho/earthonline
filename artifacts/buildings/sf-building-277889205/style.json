@@ -1,0 +1,34 @@
+{
+  "seed": 1,
+  "notes": "Judah S side mid-block, 1957 three-storey walk-up: tan stucco, brown band at each floor line, four garage doors in stone-veneer piers with a gated centre entry, steel fire escape with balconies over the entry, wide windows each side.",
+  "wall": "painted-stucco",
+  "wallTint": "#a48f76",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "coping": { "heightM": 0.3, "projectionM": 0.05, "material": "painted-stucco", "tint": "#8d7862" },
+  "stripes": { "fromStorey": 1, "offsetsM": [-0.25], "heightM": 0.22, "material": "painted-stucco", "tint": "#6e5646" },
+  "groundBand": { "material": "cast-stone", "tint": "#b6aa98" },
+  "storefrontFrame": "painted-white",
+  "bulkhead": "cast-stone",
+  "ground": "lobby",
+  "upper": "apartment",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.2,
+    "layout": [
+      { "kind": "garage", "from": 0.05, "to": 0.25, "headM": 2.3, "tint": "#8a6a52" },
+      { "kind": "garage", "from": 0.28, "to": 0.47, "headM": 2.3, "tint": "#8a6a52" },
+      { "kind": "door", "from": 0.5, "to": 0.6, "leaf": "painted-steel", "stair": true, "grille": true },
+      { "kind": "garage", "from": 0.63, "to": 0.82, "headM": 2.3, "tint": "#8a6a52" },
+      { "kind": "garage", "from": 0.84, "to": 0.96, "headM": 2.3, "tint": "#8a6a52" }
+    ]
+  },
+  "upperWindowSpans": [[0.06, 0.26], [0.39, 0.47], [0.49, 0.57], [0.72, 0.92]],
+  "upperSillM": 0.7,
+  "upperHeadM": 2.2,
+  "fireEscape": { "at": 0.48, "widthM": 3.4, "depthM": 0.9 },
+  "weathering": { "patches": { "strength": 0.06, "metres": 1.6, "top": 9.0, "mottle": 0.05 }, "grime": { "strength": 0.1, "metres": 2.5 } }
+}

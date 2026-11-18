@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "asset": "polyhaven-brushed-concrete-03-2k",
+  "license": "CC0-1.0",
+  "author": "Amal Kumar",
+  "assetPage": "https://polyhaven.com/a/brushed_concrete_03",
+  "physicalWidthMetres": 2,
+  "intent": "presentation-only broom-finished footway concrete for the street surface; not survey or scan reconstruction",
+  "sources": {
+    "diffuse": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/brushed_concrete_03/brushed_concrete_03_diff_2k.jpg",
+      "md5": "47306c2e0ac2b2b15c40b18099533776",
+      "downloadedMd5": "47306c2e0ac2b2b15c40b18099533776",
+      "downloadedSha256": "da9b80809dd1e85b17ee58b0f19b130a441308128d0c3e66038317f18926d219"
+    },
+    "normalGlPng": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/brushed_concrete_03/brushed_concrete_03_nor_gl_2k.png",
+      "md5": "5f354da6634a26fcc6b71060b45f4ed1",
+      "downloadedMd5": "5f354da6634a26fcc6b71060b45f4ed1",
+      "downloadedSha256": "7e200f42ef11827341fb28f09e2a856329e6055e0f6fc874ada5d02f64ee75e1"
+    },
+    "armPng": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/brushed_concrete_03/brushed_concrete_03_arm_2k.png",
+      "md5": "5b02c6102a96b1decfa7775bb0b9fa0b",
+      "downloadedMd5": "5b02c6102a96b1decfa7775bb0b9fa0b",
+      "downloadedSha256": "c7fe7e805c10f07a76cc00025b59c9a57855732108076825e32cec268cc1e3d7"
+    }
+  },
+  "outputs": {
+    "diffuse": {
+      "path": "public/assets/polyhaven-brushed-concrete-03-diffuse-2k.jpg",
+      "sha256": "da9b80809dd1e85b17ee58b0f19b130a441308128d0c3e66038317f18926d219",
+      "encoding": "sRGB base color"
+    },
+    "nra": {
+      "path": "public/assets/polyhaven-brushed-concrete-03-nra-2k.png",
+      "sha256": "b6f0a9aa1cc6afc54ba83949c3d67686a3e912d8ab32f7ed6f45fa1fec486a72",
+      "encoding": "R,G OpenGL tangent normal x,y (z rebuilt); B Poly Haven roughness; A 128 + occlusion * 127; 8-bit PNG, linear/no-color, not premultiplied"
+    }
+  },
+  "generator": {
+    "path": "scripts/assets/fetch-polyhaven-texture.mjs",
+    "sha256": "dc95175584447e64778fdca3331fd860947e02b7405d89d77f83b14176a720ce",
+    "algorithm": "diffuse: lossless copy of the Poly Haven 2k jpg after md5 verification against the files API; nra: decode the verified 2k PNG normal and ARM, pack R,G=normal xy, B=roughness, A=128+round(ao*127), encode 8-bit RGBA PNG with Paeth filtering and deflate level 9"
+  }
+}

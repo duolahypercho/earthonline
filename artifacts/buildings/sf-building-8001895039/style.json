@@ -1,0 +1,90 @@
+{
+  "builder": "house",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "painted-stucco",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "storeysSeen": 2,
+  "groundM": 2.6,
+  "roofLevelM": 5.25,
+  "seed": 73,
+  "notes": "1618 Great Highway (1949), by eye: grey-green lap siding, a hipped roof in grey composition shingle, an open upper porch across the front with slim white posts and a black railing in front of a glazed door and a window; ground: a white garage door on the right and planting boxes on the left.",
+  "wall": "painted-clapboard",
+  "wallTint": "#8e948a",
+  "roofForm": {
+    "form": "front-hip",
+    "depthM": 6.0,
+    "eaveM": 0.3,
+    "sideOverhangM": 0.12,
+    "material": "asphalt-roof",
+    "tint": "#6a6a66"
+  },
+  "garages": [
+    {
+      "from": 0.55,
+      "to": 0.9,
+      "headM": 2.15,
+      "material": "painted-white",
+      "pattern": "panel"
+    }
+  ],
+  "entry": {
+    "from": 0.2,
+    "to": 0.32,
+    "headM": 2.2,
+    "material": "painted-white",
+    "glass": false,
+    "recessM": 0.3
+  },
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.12,
+      "to": 0.4,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        2,
+        2
+      ]
+    },
+    {
+      "storey": 1,
+      "from": 0.55,
+      "to": 0.72,
+      "sill": 0.0,
+      "head": 2.2,
+      "panes": [
+        1,
+        2
+      ]
+    }
+  ],
+  "galleries": [
+    {
+      "edge": 5,
+      "fromStorey": 1,
+      "projectionM": 0.42,
+      "material": "painted-steel",
+      "tint": "#1d1d1d",
+      "postMaterial": "painted-white"
+    }
+  ]
+}

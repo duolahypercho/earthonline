@@ -1,0 +1,295 @@
+{
+  "schemaVersion": 1,
+  "asset": "generated-vehicles",
+  "sourcePixels": "declared per vehicle in each receipt source block",
+  "generationMethod": "Authored study source; Blender rig conversion; Normals repair of the shipped runtime GLB (scripts/assets/repair-vehicle-glb-normals.py)",
+  "generator": "artifacts/vehicles/write-manifest.py",
+  "consumer": "src/vehicles/hero-vehicle-manifest.js runtime SHA-256 allowlist",
+  "vehicles": {
+    "roboCab": {
+      "schemaVersion": 1,
+      "kind": "generated-vehicle",
+      "vehicleId": "robo-cab-v1",
+      "body": "roboCab",
+      "lengthM": 4.5115,
+      "wheelRadiusM": 0.4,
+      "typeIds": [
+        "roboCab"
+      ],
+      "lods": [
+        {
+          "file": "generated/robo-cab-v1/roboCab-lod0.glb",
+          "sha256": "010a8795217f62e0048445abe7797ea7a2c46e8128bf84864908a11417537f85",
+          "bytes": 2893572
+        },
+        {
+          "file": "generated/robo-cab-v1/roboCab-lod1.glb",
+          "sha256": "aa40bd41a981f60e8c87aaa6c29e0364909d000d710e096427d00ccac7cd47aa",
+          "bytes": 789584
+        },
+        {
+          "file": "generated/robo-cab-v1/roboCab-lod2.glb",
+          "sha256": "8d04aa4f17e66a4974866843fd1d13d1af7fbc6b903147881dcde7e597779ba0",
+          "bytes": 284672
+        }
+      ],
+      "source": {
+        "method": "Normals repair of the shipped runtime GLB (scripts/assets/repair-vehicle-glb-normals.py)",
+        "sha256": "e29effaff2ad100563fa545d1b207711ef3348489d6318f93c6310f7f0a145cb",
+        "bytes": 2254840,
+        "file": "roboCab-lod0.glb"
+      },
+      "donor": {
+        "path": "shipped-runtime-glb:generated/robo-cab-v1/roboCab-lod0.glb",
+        "sha256": "e29effaff2ad100563fa545d1b207711ef3348489d6318f93c6310f7f0a145cb",
+        "bytes": 2254840,
+        "kind": "shipped-runtime-glb"
+      },
+      "upstream": {
+        "method": "Authored study source; Blender rig conversion",
+        "sha256": "a46665430bb1d2e1abdbbc0732d513ddbd548a7a7c349be0cbcda4929d7d6fab",
+        "bytes": 38579853,
+        "file": "cybercab-study.blend"
+      },
+      "assembly": {
+        "generator": "scripts/assets/repair-vehicle-glb-normals.py",
+        "reportSha256": "092aefcbf2153a821c9324744619452e057acfb7606253b99b75885151a42c49",
+        "upstreamGenerator": "scripts/assets/build-robo-cab-v1.py"
+      },
+      "acceptance": {
+        "verdict": "accepted",
+        "lodSha256": [
+          "010a8795217f62e0048445abe7797ea7a2c46e8128bf84864908a11417537f85",
+          "aa40bd41a981f60e8c87aaa6c29e0364909d000d710e096427d00ccac7cd47aa",
+          "8d04aa4f17e66a4974866843fd1d13d1af7fbc6b903147881dcde7e597779ba0"
+        ],
+        "evidence": [
+          {
+            "sha256": "b00072d6038911d39a5a9366f2ca9a4bc0ebe7584e748aa73735027beea5cd8c",
+            "bytes": 1507491
+          },
+          {
+            "sha256": "781bbb19d4f84a9269f0321f4b923ea5afb4be4d2e69f8318b8413dcc3c9315a",
+            "bytes": 1307424
+          },
+          {
+            "sha256": "39975e0b9fa5a5fc9e9fbe51787950199186d45a0b37590d6b90ccbba45034c6",
+            "bytes": 1400410
+          },
+          {
+            "sha256": "18b0cf9e39bf5c935a47e1ba894004b2a30eafb434563e8b5cfa09c985f0e6a8",
+            "bytes": 1173973
+          },
+          {
+            "sha256": "ca24a23a024691d71e5ca13f23c21f897c4fd471b870a4de6a46bd4b4b3242ac",
+            "bytes": 93428
+          }
+        ]
+      }
+    },
+    "urbanUtility": {
+      "schemaVersion": 1,
+      "kind": "generated-vehicle",
+      "vehicleId": "urban-utility-v1",
+      "body": "urbanUtility",
+      "lengthM": 4.7,
+      "wheelRadiusM": 0.34,
+      "typeIds": [
+        "urbanUtility"
+      ],
+      "lods": [
+        {
+          "file": "generated/urban-utility-v1/urbanUtility-lod0.glb",
+          "sha256": "263ff8c6ea34afd2beab7195f24dd76faf4a3ada10c5ff8195be0646c52c6d36",
+          "bytes": 3675712
+        },
+        {
+          "file": "generated/urban-utility-v1/urbanUtility-lod1.glb",
+          "sha256": "902ff7bd28f881ce85fda04eb09b3e3f5029d2bb7655e0eb919d3c861eb3b473",
+          "bytes": 698924
+        },
+        {
+          "file": "generated/urban-utility-v1/urbanUtility-lod2.glb",
+          "sha256": "cb5a13d04ed53a3ad54b1601772664ca343e95dea3283e3677e69084aa74b3be",
+          "bytes": 162260
+        }
+      ],
+      "source": {
+        "method": "Authored study source; Blender rig conversion",
+        "sha256": "921ce4137b41c0da836b6ecfdccdfdee8f900808c8f61148e18d3845b7a78c7b",
+        "bytes": 2668301,
+        "file": "urban-utility.blend"
+      },
+      "donor": {
+        "path": "study-source:urban-utility.blend",
+        "sha256": "921ce4137b41c0da836b6ecfdccdfdee8f900808c8f61148e18d3845b7a78c7b",
+        "bytes": 2668301,
+        "kind": "authored-study-source"
+      },
+      "assembly": {
+        "generator": "scripts/assets/export-urban-utility-lods.py",
+        "reportSha256": "3058df52350bcc7f80c577eba437b046f689572e60d1483169fb10e7c122b7da"
+      },
+      "acceptance": {
+        "verdict": "accepted",
+        "lodSha256": [
+          "263ff8c6ea34afd2beab7195f24dd76faf4a3ada10c5ff8195be0646c52c6d36",
+          "902ff7bd28f881ce85fda04eb09b3e3f5029d2bb7655e0eb919d3c861eb3b473",
+          "cb5a13d04ed53a3ad54b1601772664ca343e95dea3283e3677e69084aa74b3be"
+        ],
+        "evidence": [
+          {
+            "sha256": "7ea280edab1d2b73aa41ede94cc7fa1a4ace89cc7777556e44153ca40f37ed02",
+            "bytes": 251933
+          },
+          {
+            "sha256": "80c2f4aec7b467a128de83569af66293426c1ec1a30668fd468f8cb606ab8819",
+            "bytes": 34647
+          },
+          {
+            "sha256": "203de1b7732e74b800dde77b3cff054d2d6a6b9accf4ae5e54ea39b70a719e43",
+            "bytes": 25860
+          }
+        ]
+      }
+    },
+    "exoticCoupe": {
+      "schemaVersion": 1,
+      "kind": "generated-vehicle",
+      "vehicleId": "exotic-coupe-v1",
+      "body": "exoticCoupe",
+      "lengthM": 4.519,
+      "wheelRadiusM": 0.346,
+      "typeIds": [
+        "exoticCoupe"
+      ],
+      "lods": [
+        {
+          "file": "generated/exotic-coupe-v1/exoticCoupe-lod0.glb",
+          "sha256": "e79591aab49e1d7a571b32c5a5055b99bfbb2d174333a8cc6e6e6fc053461a89",
+          "bytes": 3611664
+        },
+        {
+          "file": "generated/exotic-coupe-v1/exoticCoupe-lod1.glb",
+          "sha256": "bd216a1805ab958f2dd73447a07006dd741d0dc04b90e5f77c3976525767bfb5",
+          "bytes": 936376
+        },
+        {
+          "file": "generated/exotic-coupe-v1/exoticCoupe-lod2.glb",
+          "sha256": "ba256cfacec012e75c974e537d6ec79fd41df3fe3c9d33228e1e2acd3f2064ba",
+          "bytes": 253264
+        }
+      ],
+      "source": {
+        "method": "Authored study source; Blender rig conversion",
+        "sha256": "8002bac0cd8215a288faeab910f3d7dd12808df8ac0a3934e584473a0a3ec3ff",
+        "bytes": 11485838,
+        "file": "exotic-coupe-v1.blend"
+      },
+      "donor": {
+        "path": "study-source:exotic-coupe-v1.blend",
+        "sha256": "8002bac0cd8215a288faeab910f3d7dd12808df8ac0a3934e584473a0a3ec3ff",
+        "bytes": 11485838,
+        "kind": "authored-study-source"
+      },
+      "assembly": {
+        "generator": "build_game_lods.py",
+        "reportSha256": "250f9d3d23e1acc200d5178dba3b96e8141d8df6166c2e73f200570d7af7ac7b"
+      },
+      "acceptance": {
+        "verdict": "accepted",
+        "lodSha256": [
+          "e79591aab49e1d7a571b32c5a5055b99bfbb2d174333a8cc6e6e6fc053461a89",
+          "bd216a1805ab958f2dd73447a07006dd741d0dc04b90e5f77c3976525767bfb5",
+          "ba256cfacec012e75c974e537d6ec79fd41df3fe3c9d33228e1e2acd3f2064ba"
+        ],
+        "evidence": [
+          {
+            "sha256": "436cdce5f4b142d3d6a3b5f97078057d2f52ef7aa7d91e88e33e59222fbb181a",
+            "bytes": 1771
+          },
+          {
+            "sha256": "a4b14c363c4633eb9d54a113f589a321b47e0f82f00610f6beeab2a0213843c1",
+            "bytes": 7526
+          },
+          {
+            "sha256": "56365ef7b5142cc4ae45cde7c6415f641f2c19d035d5d78feeba185a1d90b8d6",
+            "bytes": 1518023
+          },
+          {
+            "sha256": "40eac8ea8563c8389f939196a084b15fd3890ed6d03584f5de8e4d3ce111d42e",
+            "bytes": 1877810
+          }
+        ],
+        "scope": "User-authorized game integration of the current vehicle with rare parked spawning; visual quality remains unapproved.",
+        "visualVerdict": "REJECT",
+        "authorization": "User request on 2026-09-30 to implement the previously disclosed rejected candidate into the game."
+      }
+    }
+  },
+  "outputs": {
+    "assets/vehicles/generated/robo-cab-v1/roboCab-lod0.glb": {
+      "path": "public/assets/vehicles/generated/robo-cab-v1/roboCab-lod0.glb",
+      "sha256": "010a8795217f62e0048445abe7797ea7a2c46e8128bf84864908a11417537f85",
+      "bytes": 2893572,
+      "body": "roboCab",
+      "kind": "generated-vehicle-glb"
+    },
+    "assets/vehicles/generated/robo-cab-v1/roboCab-lod1.glb": {
+      "path": "public/assets/vehicles/generated/robo-cab-v1/roboCab-lod1.glb",
+      "sha256": "aa40bd41a981f60e8c87aaa6c29e0364909d000d710e096427d00ccac7cd47aa",
+      "bytes": 789584,
+      "body": "roboCab",
+      "kind": "generated-vehicle-glb"
+    },
+    "assets/vehicles/generated/robo-cab-v1/roboCab-lod2.glb": {
+      "path": "public/assets/vehicles/generated/robo-cab-v1/roboCab-lod2.glb",
+      "sha256": "8d04aa4f17e66a4974866843fd1d13d1af7fbc6b903147881dcde7e597779ba0",
+      "bytes": 284672,
+      "body": "roboCab",
+      "kind": "generated-vehicle-glb"
+    },
+    "assets/vehicles/generated/urban-utility-v1/urbanUtility-lod0.glb": {
+      "path": "public/assets/vehicles/generated/urban-utility-v1/urbanUtility-lod0.glb",
+      "sha256": "263ff8c6ea34afd2beab7195f24dd76faf4a3ada10c5ff8195be0646c52c6d36",
+      "bytes": 3675712,
+      "body": "urbanUtility",
+      "kind": "generated-vehicle-glb"
+    },
+    "assets/vehicles/generated/urban-utility-v1/urbanUtility-lod1.glb": {
+      "path": "public/assets/vehicles/generated/urban-utility-v1/urbanUtility-lod1.glb",
+      "sha256": "902ff7bd28f881ce85fda04eb09b3e3f5029d2bb7655e0eb919d3c861eb3b473",
+      "bytes": 698924,
+      "body": "urbanUtility",
+      "kind": "generated-vehicle-glb"
+    },
+    "assets/vehicles/generated/urban-utility-v1/urbanUtility-lod2.glb": {
+      "path": "public/assets/vehicles/generated/urban-utility-v1/urbanUtility-lod2.glb",
+      "sha256": "cb5a13d04ed53a3ad54b1601772664ca343e95dea3283e3677e69084aa74b3be",
+      "bytes": 162260,
+      "body": "urbanUtility",
+      "kind": "generated-vehicle-glb"
+    },
+    "assets/vehicles/generated/exotic-coupe-v1/exoticCoupe-lod0.glb": {
+      "path": "public/assets/vehicles/generated/exotic-coupe-v1/exoticCoupe-lod0.glb",
+      "sha256": "e79591aab49e1d7a571b32c5a5055b99bfbb2d174333a8cc6e6e6fc053461a89",
+      "bytes": 3611664,
+      "body": "exoticCoupe",
+      "kind": "generated-vehicle-glb"
+    },
+    "assets/vehicles/generated/exotic-coupe-v1/exoticCoupe-lod1.glb": {
+      "path": "public/assets/vehicles/generated/exotic-coupe-v1/exoticCoupe-lod1.glb",
+      "sha256": "bd216a1805ab958f2dd73447a07006dd741d0dc04b90e5f77c3976525767bfb5",
+      "bytes": 936376,
+      "body": "exoticCoupe",
+      "kind": "generated-vehicle-glb"
+    },
+    "assets/vehicles/generated/exotic-coupe-v1/exoticCoupe-lod2.glb": {
+      "path": "public/assets/vehicles/generated/exotic-coupe-v1/exoticCoupe-lod2.glb",
+      "sha256": "ba256cfacec012e75c974e537d6ec79fd41df3fe3c9d33228e1e2acd3f2064ba",
+      "bytes": 253264,
+      "body": "exoticCoupe",
+      "kind": "generated-vehicle-glb"
+    }
+  }
+}

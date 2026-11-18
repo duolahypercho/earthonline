@@ -1,0 +1,20 @@
+[package]
+name = "eo-landmarks"
+version = "0.1.0"
+edition = "2024"
+description = "Earth Online native (landmarks): the JS game's bridges, shore edges, piers and open spaces as plain meshes, ported from its generators. No GPU."
+publish = false
+
+[dependencies]
+anyhow = "1.0.104"
+earcut = "0.4.12"
+eo-data = { path = "../eo-data" }
+eo-sky = { path = "../eo-sky" } # landmarks2: the bridges' lights in the street lamps' photometry
+eo-water = { path = "../eo-water" }
+flate2 = "1.1.11"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+
+[dev-dependencies]
+serde_json = { version = "1.0.154", features = ["float_roundtrip"] }

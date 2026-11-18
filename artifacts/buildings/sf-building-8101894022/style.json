@@ -1,0 +1,96 @@
+{
+  "builder": "house",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "painted-stucco",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "seed": 36,
+  "storeysSeen": 2,
+  "groundM": 2.6,
+  "roofLevelM": 5.3,
+  "notes": "1590 Great Highway (1949), by eye: a two-storey house with olive-grey painted siding over a cream stucco ground storey, a street-facing gable in brown composition shingle, flat roof behind; ground: a garage on the left and an arched entry on the right; upper: two windows.",
+  "wall": "painted-clapboard",
+  "wallTint": "#6f6e59",
+  "groundBand": {
+    "material": "painted-stucco",
+    "tint": "#e6dcc6",
+    "topM": 2.6
+  },
+  "roofForm": {
+    "form": "front-gable",
+    "depthM": 5.0,
+    "eaveM": 0.25,
+    "material": "asphalt-roof",
+    "tint": "#5b4638",
+    "pediment": false
+  },
+  "garages": [
+    {
+      "from": 0.08,
+      "to": 0.8,
+      "headM": 2.2,
+      "material": "painted-white",
+      "pattern": "panel",
+      "tint": "#f0ede4"
+    }
+  ],
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.12,
+      "to": 0.8,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        3,
+        2
+      ]
+    }
+  ],
+  "streetEdges": {
+    "4": {}
+  },
+  "edgeFront": {
+    "4": {
+      "entry": {
+        "from": 0.25,
+        "to": 0.65,
+        "headM": 2.2,
+        "material": "painted-white",
+        "tint": "#3b2c22",
+        "glass": false,
+        "recessM": 0.4
+      },
+      "windows": [
+        {
+          "storey": 1,
+          "from": 0.2,
+          "to": 0.8,
+          "sill": 0.85,
+          "head": 2.2,
+          "panes": [
+            1,
+            2
+          ]
+        }
+      ]
+    }
+  }
+}

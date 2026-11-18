@@ -1,0 +1,128 @@
+{
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-storefront",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 2.2,
+ "windowSillM": 0.9,
+ "windowHeadM": 3.9,
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "bays": [],
+ "upperWindows": [],
+ "seed": 15,
+ "notes": "Round 2: two tall storeys (4.6 m ground), large grid steel-sash windows filling each bay, steel-blue front and khaki bay, black iron gates, brown awning over the entry pair. Pilaster caps and fins not modelled. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. Rework 2 (2026-10-03): the footprint is 40.9 m and spans three facades (cream deco, steel-blue, khaki), so the wall is zoned by colour rather than made all blue; blue front gets pilaster fluting, medallion caps, moulded frieze and a single narrow iron gate beside a louvre vent (hand.py). Colour re-apply (2026-10-03): a rework re-sampled wallTint #d3c9a6 from the photo; lifted/converted once to #e9e4d2.",
+ "wall": "painted-stucco",
+ "wallTint": "#e9e4d2",
+ "trim": "painted-white@8f8872",
+ "frame": "painted-white@2e2c2a",
+ "bulkhead": "painted-stucco@dad4c4",
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.0,
+    "to": 0.24,
+    "kind": "blank",
+    "material": "painted-stucco",
+    "tint": "#9aa0a8",
+    "headM": 3.0
+   },
+   {
+    "from": 0.29,
+    "to": 0.42,
+    "kind": "gate",
+    "headM": 3.4,
+    "tint": "#1c1c1e"
+   },
+   {
+    "from": 0.548,
+    "to": 0.592,
+    "kind": "gate",
+    "headM": 3.2,
+    "tint": "#1c1c1e"
+   },
+   {
+    "from": 0.665,
+    "to": 0.705,
+    "kind": "door",
+    "stair": false,
+    "headM": 2.6
+   },
+   {
+    "from": 0.72,
+    "to": 0.77,
+    "kind": "door",
+    "stair": false,
+    "headM": 2.6
+   },
+   {
+    "from": 0.8,
+    "to": 0.92,
+    "kind": "window",
+    "headM": 2.3
+   }
+  ]
+ },
+ "awningSpans": [
+  {
+   "from": 0.65,
+   "to": 0.78,
+   "depthM": 1.2,
+   "valanceM": 0.35
+  }
+ ],
+ "awning": "canvas-plain@5a3a30",
+ "storeysSeen": {
+  "count": 2,
+  "groundM": 4.6
+ },
+ "sashRows": 5,
+ "sashCols": 2,
+ "mullionM": 2.4,
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.27,
+     0.42
+    ],
+    [
+     0.505,
+     0.625
+    ],
+    [
+     0.665,
+     0.775
+    ],
+    [
+     0.8,
+     0.92
+    ],
+    [
+     0.94,
+     0.985
+    ]
+   ],
+   "sillM": 0.9,
+   "headM": 3.9
+  }
+ },
+ "wallZones": [
+  {
+   "from": 0.0,
+   "to": 0.455,
+   "tint": "#eae2cc"
+  },
+  {
+   "from": 0.485,
+   "to": 0.645,
+   "tint": "#86a2d2"
+  }
+ ]
+}

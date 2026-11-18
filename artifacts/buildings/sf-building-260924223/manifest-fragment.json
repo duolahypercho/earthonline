@@ -1,0 +1,84 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-260924223",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-260924223",
+    "walkIndex": 7531,
+    "builder": "blender",
+    "street": "Grant Avenue",
+    "side": "A",
+    "addr": null,
+    "sourceHeight": 0,
+    "sourceLevels": null,
+    "frontEdge": 0,
+    "status": "review",
+    "lidarHeightM": 15.73,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b260924223.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b260924223.js"
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b260924223.js",
+    "sha256": "35a4cb8288fcace332a2b4bc292a1cec2dfcbcb3c71822a61b3f11315c951dfc",
+    "pass": "b260924223-blender-dcb435e2-5a865b"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-260924223/provenance.json",
+    "sha256": "c54c4c5390ba0d376b856628919a12c69cfad62bcfd123871500b940bf1dcb56",
+    "pass": "b260924223-blender-dcb435e2-5a865b"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-260924223/exterior.glb",
+      "sha256": "569fb505e5e9a92a9066942453f8256489d6ee42a0f2ef2757c467dcc9644a1e",
+      "bytes": 2974000
+    },
+    {
+      "role": "interior",
+      "url": "/assets/buildings/sf-building-260924223/interior.glb",
+      "sha256": "161492960ac1c3fea222cffda5c73d04e48788b5fda7a79a29adc8fe4bfa10e0",
+      "bytes": 2355492
+    },
+    {
+      "role": "fine-s0",
+      "url": "/assets/buildings/sf-building-260924223/fine-s0.glb",
+      "sha256": "c9a5b02b3281cee5e7490df76306cfa1ca6917a76739647bcb635e9a6179537c",
+      "bytes": 19252
+    },
+    {
+      "role": "fine-s1",
+      "url": "/assets/buildings/sf-building-260924223/fine-s1.glb",
+      "sha256": "887f1df0c5fdc9b3995fc767128ab6136c16afc7108dea77dd23f338234a2d16",
+      "bytes": 66092
+    },
+    {
+      "role": "fine-s2",
+      "url": "/assets/buildings/sf-building-260924223/fine-s2.glb",
+      "sha256": "0387f2a48c994fc370bc470c01ef15d58a70087b44d8e6c60c80701b07464c66",
+      "bytes": 66100
+    },
+    {
+      "role": "fine-s3",
+      "url": "/assets/buildings/sf-building-260924223/fine-s3.glb",
+      "sha256": "2b41e49bc152a9694cc58f388bf44ac5ff1533afda4e8a649f7012a21d4f6c14",
+      "bytes": 66160
+    }
+  ],
+  "generatedAt": "2026-09-29T19:47:22.904Z",
+  "base": {
+    "id": "sf-building-260924223",
+    "walkIndex": 7531,
+    "builder": "blender",
+    "street": "Grant Avenue",
+    "side": "A",
+    "addr": null,
+    "sourceHeight": 0,
+    "sourceLevels": null,
+    "frontEdge": 0,
+    "status": "review",
+    "lidarHeightM": 15.73,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b260924223.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b260924223.js"
+  }
+}

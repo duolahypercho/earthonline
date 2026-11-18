@@ -1,0 +1,20 @@
+sf-footprints.json.gz - San Francisco building footprints for the world stream
+
+Source dataset: DataSF "Building Footprints" (ynuv-fyni), City and County of
+San Francisco, published under the Open Data Commons Public Domain Dedication
+and License (PDDL) 1.0: https://opendatacommons.org/licenses/pddl/1-0/
+Dataset page:   https://data.sfgov.org/d/ynuv-fyni
+
+Source file:    datasf-building-footprints-ynuv-fyni-2026-09-03.csv
+Source sha256:  0d0b5e8229368994ec34a7b0f70b9cdf82596b42268f859b4561a57814efb899
+Produced by:    scripts/build-sf-footprint-pack.mjs (sf-footprints-v5-datasf)
+Output sha256:  e2e5ab9f27acf0a83bbc9a0ed15f88d64fe9645b0dd6c8cfc893f908107eeb74 (sf-footprints.json.gz)
+
+Contents: the outer ring of each footprint (largest polygon), re-projected to
+the extract's world metres (sf-frame-south-v1), rounded to 0.1 m, repeated and
+collinear vertices removed (Douglas-Peucker 0.25 m), simple rings only; height
+from the dataset's LiDAR fields (hgt_median_m; 0.85 x the first-return peak for
+towers whose median undercounts, unless a road deck stands over the footprint,
+whose first returns are the deck). Footprints whose centroid an OpenStreetMap
+footprint of sf-city.json already covers are left out, so the two never draw one
+building twice. No names or addresses are carried.

@@ -1,0 +1,270 @@
+{
+ "seed": 1,
+ "notes": "Ochre #d3aa5c, sills/ledges green #37634c, brick #8a4a3a, garage #3b5f74, ground windows lowered onto a 1.3 m bulkhead (no legs), cream bracketed cornice with frieze. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-white",
+ "wallTint": "#e9d4ae",
+ "trim": "painted-white@37634c",
+ "frame": "painted-white@f0e6cc",
+ "glass": "glass-clear",
+ "cornice": false,
+ "corniceProjectionM": 0.75,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 1.0,
+ "windowSillM": 0.8,
+ "windowHeadM": 2.45,
+ "upperWindows": [
+  0.28,
+  0.43
+ ],
+ "bays": [
+  {
+   "at": 0.09,
+   "widthM": 2.7,
+   "projectionM": 0.55,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#e9d4ae"
+  },
+  {
+   "at": 0.6,
+   "widthM": 3.3,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#e9d4ae"
+  },
+  {
+   "at": 0.85,
+   "widthM": 3.3,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#e9d4ae"
+  }
+ ],
+ "plaques": [
+  {
+   "at": 0.6,
+   "y": 4.02,
+   "w": 3.3,
+   "h": 0.3,
+   "face": "painted-white@37634c"
+  },
+  {
+   "at": 0.85,
+   "y": 4.02,
+   "w": 3.3,
+   "h": 0.3,
+   "face": "painted-white@37634c"
+  },
+  {
+   "at": 0.355,
+   "y": 0.45,
+   "w": 2.025,
+   "h": 0.9,
+   "face": "brick-running-bond@fff8ff"
+  },
+  {
+   "at": 0.355,
+   "y": 1.36,
+   "w": 2.125,
+   "h": 0.12,
+   "face": "painted-white@37634c"
+  },
+  {
+   "at": 0.6000000000000001,
+   "y": 0.45,
+   "w": 2.2,
+   "h": 0.9,
+   "face": "brick-running-bond@fff8ff"
+  },
+  {
+   "at": 0.6000000000000001,
+   "y": 1.36,
+   "w": 2.3000000000000003,
+   "h": 0.12,
+   "face": "painted-white@37634c"
+  },
+  {
+   "at": 0.8500000000000001,
+   "y": 0.45,
+   "w": 2.2,
+   "h": 0.9,
+   "face": "brick-running-bond@fff8ff"
+  },
+  {
+   "at": 0.8500000000000001,
+   "y": 1.36,
+   "w": 2.3000000000000003,
+   "h": 0.12,
+   "face": "painted-white@37634c"
+  },
+  {
+   "at": 0.24,
+   "y": 4.02,
+   "w": 8.4,
+   "h": 0.22,
+   "face": "painted-white@37634c"
+  },
+  {
+   "at": 0.6,
+   "y": 5.3,
+   "w": 3.1,
+   "h": 0.22,
+   "face": "painted-white@37634c"
+  },
+  {
+   "at": 0.85,
+   "y": 5.3,
+   "w": 3.1,
+   "h": 0.22,
+   "face": "painted-white@37634c"
+  },
+  {
+   "at": 0.09,
+   "y": 5.3,
+   "w": 2.7,
+   "h": 0.22,
+   "face": "painted-white@37634c"
+  },
+  {
+   "at": 0.6,
+   "y": 8.5,
+   "w": 3.1,
+   "h": 0.22,
+   "face": "painted-white@37634c"
+  },
+  {
+   "at": 0.85,
+   "y": 8.5,
+   "w": 3.1,
+   "h": 0.22,
+   "face": "painted-white@37634c"
+  },
+  {
+   "at": 0.09,
+   "y": 8.5,
+   "w": 2.7,
+   "h": 0.22,
+   "face": "painted-white@37634c"
+  },
+  {
+   "at": 0.6,
+   "y": 11.7,
+   "w": 3.1,
+   "h": 0.22,
+   "face": "painted-white@37634c"
+  },
+  {
+   "at": 0.85,
+   "y": 11.7,
+   "w": 3.1,
+   "h": 0.22,
+   "face": "painted-white@37634c"
+  },
+  {
+   "at": 0.09,
+   "y": 11.7,
+   "w": 2.7,
+   "h": 0.22,
+   "face": "painted-white@37634c"
+  }
+ ],
+ "edgeRoles": {
+  "0": "flank"
+ },
+ "streetEdges": {
+  "0": {
+   "upperWindows": [
+    0.22,
+    0.5,
+    0.78
+   ],
+   "windowW": 1.0,
+   "plaques": []
+  }
+ },
+ "storefrontFrame": "painted-white@f0e6cc",
+ "bulkhead": "painted-white@e9d4ae",
+ "storefront": {
+  "bulkheadM": 1.3,
+  "transomM": 0.1,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.015,
+    "to": 0.15,
+    "kind": "garage",
+    "material": "painted-steel-light",
+    "tint": "#3b5f74",
+    "headM": 2.7
+   },
+   {
+    "from": 0.19,
+    "to": 0.26,
+    "kind": "door",
+    "stair": true,
+    "leaf": "wood-siding"
+   },
+   {
+    "from": 0.3,
+    "to": 0.41,
+    "kind": "window",
+    "headM": 2.7
+   },
+   {
+    "from": 0.54,
+    "to": 0.66,
+    "kind": "window",
+    "headM": 2.7
+   },
+   {
+    "from": 0.79,
+    "to": 0.91,
+    "kind": "window",
+    "headM": 2.7
+   }
+  ]
+ },
+ "groundBand": {
+  "material": "brick-running-bond",
+  "tint": "#fff8ff",
+  "topM": 0.9
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "coping": {
+  "material": "painted-white",
+  "tint": "#efe3c2",
+  "projectionM": 0.4,
+  "heightM": 0.4
+ },
+ "hbFrieze": {
+  "heightM": 0.8,
+  "material": "painted-white",
+  "tint": "#efe6cf"
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.55,
+  "heightM": 0.9,
+  "depthM": 0.5,
+  "widthM": 0.26,
+  "material": "painted-white",
+  "tint": "#efe3c2"
+ },
+ "garagePanel": {
+  "cols": 2,
+  "rows": 4,
+  "tint": "#3b5f74",
+  "panelTint": "#466a82",
+  "leaves": 1,
+  "doorM": 3.0
+ },
+ "streetStills": true,
+ "entryGate": {
+  "tint": "#1c1e20",
+  "backdrop": "#26282a"
+ }
+}

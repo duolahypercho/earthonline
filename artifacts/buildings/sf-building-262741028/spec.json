@@ -1,0 +1,222 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-262741028",
+  "slug": "b262741028",
+  "walkIndex": 5232,
+  "street": "Hyde Street",
+  "address": "1000 Chestnut Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 44.01,
+  "storeys": 14,
+  "floors": {
+    "groundM": 4.031,
+    "upperM": 3.029,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1955,
+  "use": "MRES",
+  "usage": "office",
+  "amenity": null,
+  "shop": null,
+  "facade": "modern-grid",
+  "material": "concrete",
+  "frame": {
+    "edgeIndex": 6,
+    "center": {
+      "x": -63.232,
+      "z": 2777.315
+    },
+    "heading": 1.322201,
+    "width": 31.959,
+    "depth": 25.794
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": 11.837,
+      "z": -12.773
+    },
+    {
+      "x": 0.319,
+      "z": -11.809
+    },
+    {
+      "x": 0.774,
+      "z": -6.766
+    },
+    {
+      "x": -15.98,
+      "z": -5.299
+    },
+    {
+      "x": -14.563,
+      "z": 10.849
+    },
+    {
+      "x": 2.191,
+      "z": 9.382
+    },
+    {
+      "x": 2.567,
+      "z": 12.897
+    },
+    {
+      "x": 15.98,
+      "z": 12.897
+    },
+    {
+      "x": 12.733,
+      "z": -12.897
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 11.837,
+        "z": -12.773
+      },
+      "b": {
+        "x": 0.319,
+        "z": -11.809
+      },
+      "lengthM": 11.557,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 0.319,
+        "z": -11.809
+      },
+      "b": {
+        "x": 0.774,
+        "z": -6.766
+      },
+      "lengthM": 5.064,
+      "role": "rear",
+      "partyShare": 0.19
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 0.774,
+        "z": -6.766
+      },
+      "b": {
+        "x": -15.98,
+        "z": -5.299
+      },
+      "lengthM": 16.818,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -15.98,
+        "z": -5.299
+      },
+      "b": {
+        "x": -14.563,
+        "z": 10.849
+      },
+      "lengthM": 16.21,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": -14.563,
+        "z": 10.849
+      },
+      "b": {
+        "x": 2.191,
+        "z": 9.382
+      },
+      "lengthM": 16.818,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": 2.191,
+        "z": 9.382
+      },
+      "b": {
+        "x": 2.567,
+        "z": 12.897
+      },
+      "lengthM": 3.536,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": 2.567,
+        "z": 12.897
+      },
+      "b": {
+        "x": 15.98,
+        "z": 12.897
+      },
+      "lengthM": 13.412,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": 15.98,
+        "z": 12.897
+      },
+      "b": {
+        "x": 12.733,
+        "z": -12.897
+      },
+      "lengthM": 25.998,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 8,
+      "a": {
+        "x": 12.733,
+        "z": -12.897
+      },
+      "b": {
+        "x": 11.837,
+        "z": -12.773
+      },
+      "lengthM": 0.906,
+      "role": "party",
+      "partyShare": 1
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

@@ -1,0 +1,185 @@
+{
+ "seed": 7,
+ "notes": "Round 1: 1907 four-storey flats, 17.1 m front. Grey-lavender stucco with cream and rust trim; three cant bays over three upper storeys with a fire escape between, flat windows in the piers. Ground: arched entry and arched window, then a wide shopfront under a blue awning. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. Base fix (2026-10-03): cool/grey wallTint = target / painted-stucco base so the warm stucco albedo does not turn it pink.",
+ "wall": "painted-stucco",
+ "wallTint": "#f4ffff",
+ "trim": "painted-white@e6dcc0",
+ "frame": "painted-white@e6dcc0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@e6dcc0",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-stucco@a5a4a9",
+ "cornice": true,
+ "corniceProjectionM": 0.6,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.18,
+  0.68
+ ],
+ "streetStills": true,
+ "bays": [
+  {
+   "at": 0.09,
+   "widthM": 2.4,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#eae7d8",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.2,
+     "dentils": false,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.29,
+   "widthM": 2.4,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#eae7d8",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.2,
+     "dentils": false,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.89,
+   "widthM": 3.0,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#eae7d8",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.2,
+     "dentils": false,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "fireEscape": {
+  "at": 0.5,
+  "widthM": 4.0,
+  "depthM": 0.8,
+  "standoffM": 0.3,
+  "ladder": true,
+  "material": "painted-steel-mid",
+  "roofLadder": true,
+  "braces": true
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.04,
+    "to": 0.11,
+    "kind": "window",
+    "headM": 2.4
+   },
+   {
+    "from": 0.13,
+    "to": 0.18,
+    "kind": "window",
+    "headM": 2.0
+   },
+   {
+    "from": 0.2,
+    "to": 0.29,
+    "kind": "door",
+    "headM": 3.2,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.14,
+      "projectionM": 0.05,
+      "tint": "#e2dcc8"
+     }
+    }
+   },
+   {
+    "from": 0.31,
+    "to": 0.39,
+    "kind": "window",
+    "headM": 2.9,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.14,
+      "projectionM": 0.05,
+      "tint": "#e2dcc8"
+     }
+    }
+   },
+   {
+    "from": 0.42,
+    "to": 0.98,
+    "kind": "window",
+    "headM": 2.9
+   }
+  ]
+ },
+ "awning": "canvas-plain@1f3a7a",
+ "signBands": [
+  {
+   "from": 0.4,
+   "to": 0.99,
+   "material": "painted-white",
+   "tint": "#9a9690",
+   "heightM": 0.7,
+   "bottomM": 3.0,
+   "projectionM": 0.08
+  }
+ ],
+ "ground": "shop",
+ "upper": "apartment"
+}

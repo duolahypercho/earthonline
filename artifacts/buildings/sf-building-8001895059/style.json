@@ -1,0 +1,132 @@
+{
+  "builder": "house",
+  "seed": 81,
+  "storeysSeen": 3,
+  "groundM": 2.7,
+  "roofLevelM": 8.55,
+  "programme": "flats",
+  "notes": "1682 Great Highway (1971 flats; roll 3 storeys, LiDAR 9.0 m), from the street-level reference by eye (words only): three storeys, the upper two in beige stucco with brick-red spandrel panels under the north windows, white-framed two-light windows, a flat roof with a thin fascia; a rough stone-veneer ground storey with a white sectional garage door and a deep recessed entry.",
+  "wall": "painted-stucco",
+  "wallTint": "#dcc8ad",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "groundBand": {
+    "material": "cast-stone",
+    "tint": "#8a7f72",
+    "topM": 2.7
+  },
+  "roofForm": {
+    "form": "flat",
+    "eaveM": 0.12,
+    "fasciaM": 0.25,
+    "sideOverhangM": 0.05
+  },
+  "parapetM": 0.45,
+  "garages": [
+    {
+      "from": 0.06,
+      "to": 0.5,
+      "headM": 2.2,
+      "material": "painted-white",
+      "pattern": "sectional"
+    }
+  ],
+  "entry": {
+    "from": 0.6,
+    "to": 0.74,
+    "headM": 2.2,
+    "material": "painted-white",
+    "glass": false,
+    "recessM": 0.9
+  },
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.1,
+      "to": 0.42,
+      "sill": 0.8,
+      "head": 2.25,
+      "panes": [
+        2,
+        2
+      ]
+    },
+    {
+      "storey": 1,
+      "from": 0.56,
+      "to": 0.9,
+      "sill": 0.8,
+      "head": 2.25,
+      "panes": [
+        2,
+        2
+      ]
+    },
+    {
+      "storey": 2,
+      "from": 0.1,
+      "to": 0.42,
+      "sill": 0.8,
+      "head": 2.25,
+      "panes": [
+        2,
+        2
+      ]
+    },
+    {
+      "storey": 2,
+      "from": 0.56,
+      "to": 0.9,
+      "sill": 0.8,
+      "head": 2.25,
+      "panes": [
+        2,
+        2
+      ]
+    }
+  ],
+  "panels": [
+    {
+      "storey": 1,
+      "from": 0.1,
+      "to": 0.42,
+      "y0": -0.35,
+      "y1": 0.75,
+      "material": "painted-white",
+      "tint": "#b5523e"
+    },
+    {
+      "storey": 2,
+      "from": 0.1,
+      "to": 0.42,
+      "y0": -0.35,
+      "y1": 0.75,
+      "material": "painted-white",
+      "tint": "#b5523e"
+    }
+  ],
+  "rearWall": "painted-stucco",
+  "rearTint": "#d8d2c6",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "rear": {
+    "windowsPerStorey": 3,
+    "windowW": 1.1,
+    "panes": [
+      2,
+      1
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.3,
+        0.4
+      ],
+      [
+        0.7,
+        0.6
+      ]
+    ]
+  }
+}

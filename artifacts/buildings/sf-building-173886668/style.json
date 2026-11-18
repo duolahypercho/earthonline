@@ -1,0 +1,125 @@
+{
+  "seed": 1,
+  "notes": "Yellow-green painted concrete industrial loft: four pilasters with capitals, frieze panels at the parapet, steel-sash multi-pane windows in three groups above, three tall shop windows with multi-pane transoms and louvred bulkheads, iron-gated entry at the right end. Dark sage-grey, low saturation. Milky pale shop glass (was an opaque tan-reading shell), dark olive slim storefront members, a deeper moulded parapet band, heavier pilasters, a blank blue leasing board inside the middle window. Storefront members on a painted-white base with an olive tint (a tint on painted-steel only darkens it to black). Smooth painted cast stone (cast-stone-trim) in a lighter, less saturated sage with a darker base plinth; no pilaster flutes; moulded spandrel squares; weathering without streak columns; reflection-dominant glass (glassModel). Smooth painted stucco (sage kept), pale blue-grey frosted ground-floor glass, darker reflective uppers, no streak weathering. Pale celery / lime-cream paint (the sage read dark blue-green along the street). Multi-pane steel shopfronts (0.6 m panes), opaque pale blue-grey shop glass (frosted read as a lit white room), no blue plaque. Yellow-green (celery read cream), flat pilasters without capitals (read classical). 3 storeys over the shop. LiDAR 7.5 m allows 2 - needs a dossier. Paler yellow-green (read lime). Street grime: soot at the base, grime, faint wide streaks. Olive/khaki-green deco (mid olive, not cream); the right end is a wide black iron-gated bay.",
+  "wall": "painted-stucco",
+  "wallTint": "#bcc183",
+  "trim": "painted-stucco",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "coping": {
+    "heightM": 0.8,
+    "projectionM": 0.22,
+    "material": "painted-stucco",
+    "tint": "#b2b878"
+  },
+  "pilasters": {
+    "at": [
+      0.0,
+      0.33,
+      0.64,
+      1.0
+    ],
+    "widthM": 0.7,
+    "projectionM": 0.1,
+    "capital": false,
+    "tint": "#c4c98c",
+    "material": "painted-stucco"
+  },
+  "spandrels": {
+    "tint": "#b0b676",
+    "squares": 3,
+    "material": "painted-stucco",
+    "squaresTint": "#a2a868"
+  },
+  "upperWindowSpans": [
+    [
+      0.04,
+      0.3
+    ],
+    [
+      0.37,
+      0.61
+    ],
+    [
+      0.67,
+      0.85
+    ]
+  ],
+  "upperSillM": 0.25,
+  "upperHeadM": 2.75,
+  "mullionM": 0.9,
+  "sashRows": 3,
+  "sashCols": 3,
+  "sashMaterial": "painted-steel@3a4038",
+  "sashHopper": true,
+  "storefrontFrame": "painted-white@5d6a5c",
+  "bulkhead": "painted-steel@56645a",
+  "storefrontGlass": "glass-frosted",
+  "ground": "vacant",
+  "upper": "office",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.7,
+    "bulkheadM": 0.6,
+    "transomPaneM": 0.45,
+    "paneM": 0.6,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.04,
+        "to": 0.3
+      },
+      {
+        "kind": "window",
+        "from": 0.37,
+        "to": 0.61
+      },
+      {
+        "kind": "window",
+        "from": 0.67,
+        "to": 0.85
+      },
+      {
+        "kind": "gate",
+        "from": 0.86,
+        "to": 0.975,
+        "headM": 3.1,
+        "tint": "#1d1f1e"
+      }
+    ]
+  },
+  "weathering": {
+    "patches": {
+      "strength": 0.08,
+      "metres": 1.6,
+      "top": 3.5,
+      "mottle": 0.06
+    },
+    "grime": {
+      "strength": 0.22,
+      "metres": 2.4
+    },
+    "soot": {
+      "height": 1.1,
+      "strength": 0.26
+    },
+    "streak": {
+      "strength": 0.035,
+      "columnMetres": 2.2,
+      "drop": 0.7
+    },
+    "bandStrength": 0.1,
+    "axis": "wall"
+  },
+  "glass": "glass-shell",
+  "glassModel": {
+    "upper": "glass-reflective@9aa4aa",
+    "street": "glass-reflective@c9d3d8"
+  },
+  "groundBand": {
+    "material": "painted-stucco",
+    "tint": "#8f9672",
+    "topM": 0.6
+  }
+}

@@ -1,0 +1,1127 @@
+{
+ "seed": 1,
+ "notes": "Warm grey shaft, grey-green block base with 4 grilled windows, far-left stoop, balustraded central window over a dark belt, arched top pairs, balconettes on most storeys. Shaft #939691, base #7f8a82, extra balconettes on storeys 8-9. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-white",
+ "wallTint": "#a9aba7",
+ "trim": "painted-white@efece4",
+ "frame": "painted-white",
+ "glass": "glass-clear",
+ "cornice": true,
+ "corniceProjectionM": 0.8,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.8,
+ "windowHeadM": 2.2,
+ "upperWindows": [
+  0.14,
+  0.21,
+  0.32,
+  0.45,
+  0.52,
+  0.65,
+  0.79,
+  0.86
+ ],
+ "groundBand": {
+  "material": "cast-stone",
+  "tint": "#7f8a82",
+  "topM": 5.75
+ },
+ "storefrontFrame": "painted-steel",
+ "bulkhead": "cast-stone@7f8a82",
+ "storefront": {
+  "bulkheadM": 0.9,
+  "transomM": 0.3,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.02,
+    "to": 0.11,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel"
+   },
+   {
+    "from": 0.25,
+    "to": 0.34,
+    "kind": "window",
+    "grille": true
+   },
+   {
+    "from": 0.37,
+    "to": 0.46,
+    "kind": "window",
+    "grille": true
+   },
+   {
+    "from": 0.68,
+    "to": 0.77,
+    "kind": "window",
+    "grille": true
+   },
+   {
+    "from": 0.8,
+    "to": 0.89,
+    "kind": "window",
+    "grille": true
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "plaques": [
+  {
+   "at": 0.485,
+   "y": 11.53,
+   "w": 2.3,
+   "h": 0.07,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.485,
+   "y": 11.05,
+   "w": 2.3,
+   "h": 0.06,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.451,
+   "y": 11.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4578,
+   "y": 11.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4646,
+   "y": 11.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4714,
+   "y": 11.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4782,
+   "y": 11.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.485,
+   "y": 11.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4918,
+   "y": 11.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4986,
+   "y": 11.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.5054,
+   "y": 11.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.5122,
+   "y": 11.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.519,
+   "y": 11.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.485,
+   "y": 14.03,
+   "w": 2.3,
+   "h": 0.07,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.485,
+   "y": 13.55,
+   "w": 2.3,
+   "h": 0.06,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.451,
+   "y": 13.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4578,
+   "y": 13.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4646,
+   "y": 13.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4714,
+   "y": 13.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4782,
+   "y": 13.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.485,
+   "y": 13.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4918,
+   "y": 13.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4986,
+   "y": 13.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.5054,
+   "y": 13.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.5122,
+   "y": 13.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.519,
+   "y": 13.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.485,
+   "y": 16.53,
+   "w": 2.3,
+   "h": 0.07,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.485,
+   "y": 16.05,
+   "w": 2.3,
+   "h": 0.06,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.451,
+   "y": 16.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4578,
+   "y": 16.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4646,
+   "y": 16.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4714,
+   "y": 16.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4782,
+   "y": 16.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.485,
+   "y": 16.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4918,
+   "y": 16.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4986,
+   "y": 16.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.5054,
+   "y": 16.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.5122,
+   "y": 16.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.519,
+   "y": 16.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.485,
+   "y": 21.53,
+   "w": 2.3,
+   "h": 0.07,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.485,
+   "y": 21.05,
+   "w": 2.3,
+   "h": 0.06,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.451,
+   "y": 21.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4578,
+   "y": 21.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4646,
+   "y": 21.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4714,
+   "y": 21.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4782,
+   "y": 21.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.485,
+   "y": 21.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4918,
+   "y": 21.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4986,
+   "y": 21.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.5054,
+   "y": 21.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.5122,
+   "y": 21.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.519,
+   "y": 21.29,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.5,
+   "y": 5.95,
+   "w": 16.2,
+   "h": 0.85,
+   "face": "painted-white@4e524c"
+  },
+  {
+   "at": 0.5,
+   "y": 23.1,
+   "w": 16.2,
+   "h": 0.25,
+   "face": "painted-white@efece4"
+  },
+  {
+   "at": 0.825,
+   "y": 8.02,
+   "w": 1.9,
+   "h": 0.22,
+   "face": "painted-white@efece4"
+  },
+  {
+   "at": 0.825,
+   "y": 8.3,
+   "w": 1.2,
+   "h": 0.3,
+   "face": "painted-white@efece4"
+  },
+  {
+   "at": 0.781,
+   "y": 6.95,
+   "w": 0.14,
+   "h": 1.9,
+   "face": "painted-white@efece4"
+  },
+  {
+   "at": 0.869,
+   "y": 6.95,
+   "w": 0.14,
+   "h": 1.9,
+   "face": "painted-white@efece4"
+  },
+  {
+   "at": 0.185,
+   "y": 0.52,
+   "w": 2.106,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.185,
+   "y": 1.04,
+   "w": 2.106,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.185,
+   "y": 1.56,
+   "w": 2.106,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.185,
+   "y": 2.08,
+   "w": 2.106,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.185,
+   "y": 2.6,
+   "w": 2.106,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.185,
+   "y": 3.12,
+   "w": 2.106,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.185,
+   "y": 3.64,
+   "w": 2.106,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.185,
+   "y": 4.16,
+   "w": 2.106,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.185,
+   "y": 4.68,
+   "w": 2.106,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.185,
+   "y": 5.2,
+   "w": 2.106,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.355,
+   "y": 0.52,
+   "w": 0.486,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.355,
+   "y": 1.04,
+   "w": 0.486,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.355,
+   "y": 1.56,
+   "w": 0.486,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.355,
+   "y": 2.08,
+   "w": 0.486,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.355,
+   "y": 2.6,
+   "w": 0.486,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.355,
+   "y": 3.12,
+   "w": 0.486,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.355,
+   "y": 3.64,
+   "w": 0.486,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.355,
+   "y": 4.16,
+   "w": 0.486,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.355,
+   "y": 4.68,
+   "w": 0.486,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.355,
+   "y": 5.2,
+   "w": 0.486,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.57,
+   "y": 0.52,
+   "w": 3.564,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.57,
+   "y": 1.04,
+   "w": 3.564,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.57,
+   "y": 1.56,
+   "w": 3.564,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.57,
+   "y": 2.08,
+   "w": 3.564,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.57,
+   "y": 2.6,
+   "w": 3.564,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.57,
+   "y": 3.12,
+   "w": 3.564,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.57,
+   "y": 3.64,
+   "w": 3.564,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.57,
+   "y": 4.16,
+   "w": 3.564,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.57,
+   "y": 4.68,
+   "w": 3.564,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.57,
+   "y": 5.2,
+   "w": 3.564,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.785,
+   "y": 0.52,
+   "w": 0.486,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.785,
+   "y": 1.04,
+   "w": 0.486,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.785,
+   "y": 1.56,
+   "w": 0.486,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.785,
+   "y": 2.08,
+   "w": 0.486,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.785,
+   "y": 2.6,
+   "w": 0.486,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.785,
+   "y": 3.12,
+   "w": 0.486,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.785,
+   "y": 3.64,
+   "w": 0.486,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.785,
+   "y": 4.16,
+   "w": 0.486,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.785,
+   "y": 4.68,
+   "w": 0.486,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.785,
+   "y": 5.2,
+   "w": 0.486,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.945,
+   "y": 0.52,
+   "w": 1.782,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.945,
+   "y": 1.04,
+   "w": 1.782,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.945,
+   "y": 1.56,
+   "w": 1.782,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.945,
+   "y": 2.08,
+   "w": 1.782,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.945,
+   "y": 2.6,
+   "w": 1.782,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.945,
+   "y": 3.12,
+   "w": 1.782,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.945,
+   "y": 3.64,
+   "w": 1.782,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.945,
+   "y": 4.16,
+   "w": 1.782,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.945,
+   "y": 4.68,
+   "w": 1.782,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.945,
+   "y": 5.2,
+   "w": 1.782,
+   "h": 0.05,
+   "face": "cast-stone@464a44"
+  },
+  {
+   "at": 0.5,
+   "y": 0.22,
+   "w": 16.2,
+   "h": 0.44,
+   "face": "cast-stone@5e625a"
+  },
+  {
+   "at": 0.65,
+   "y": 7.72,
+   "w": 1.25,
+   "h": 0.22,
+   "face": "painted-white@efece4"
+  },
+  {
+   "at": 0.65,
+   "y": 7.95,
+   "w": 0.75,
+   "h": 0.18,
+   "face": "painted-white@efece4"
+  },
+  {
+   "at": 0.65,
+   "y": 6.15,
+   "w": 1.1,
+   "h": 0.14,
+   "face": "painted-white@efece4"
+  },
+  {
+   "at": 0.65,
+   "y": 6.6,
+   "w": 1.05,
+   "h": 0.07,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.485,
+   "y": 19.03,
+   "w": 2.3,
+   "h": 0.07,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.485,
+   "y": 24.03,
+   "w": 2.3,
+   "h": 0.07,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.485,
+   "y": 18.55,
+   "w": 2.3,
+   "h": 0.06,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.485,
+   "y": 23.55,
+   "w": 2.3,
+   "h": 0.06,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.451,
+   "y": 18.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.451,
+   "y": 23.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4578,
+   "y": 18.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4578,
+   "y": 23.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4646,
+   "y": 18.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4646,
+   "y": 23.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4714,
+   "y": 18.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4714,
+   "y": 23.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4782,
+   "y": 18.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4782,
+   "y": 23.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.485,
+   "y": 18.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.485,
+   "y": 23.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4918,
+   "y": 18.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4918,
+   "y": 23.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4986,
+   "y": 18.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.4986,
+   "y": 23.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.5054,
+   "y": 18.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.5054,
+   "y": 23.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.5122,
+   "y": 18.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.5122,
+   "y": 23.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.519,
+   "y": 18.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  },
+  {
+   "at": 0.519,
+   "y": 23.79,
+   "w": 0.05,
+   "h": 0.48,
+   "face": "painted-steel@2e302e"
+  }
+ ],
+ "coping": {
+  "material": "painted-white",
+  "tint": "#3e403c",
+  "projectionM": 0.5,
+  "heightM": 0.8
+ },
+ "archHeads": [
+  {
+   "from": 0.11376543209876544,
+   "to": 0.1662345679012346,
+   "storey": 9,
+   "riseM": 0.5,
+   "dropM": 0.45
+  },
+  {
+   "from": 0.18376543209876542,
+   "to": 0.23623456790123457,
+   "storey": 9,
+   "riseM": 0.5,
+   "dropM": 0.45
+  },
+  {
+   "from": 0.29376543209876543,
+   "to": 0.3462345679012346,
+   "storey": 9,
+   "riseM": 0.5,
+   "dropM": 0.45
+  },
+  {
+   "from": 0.42376543209876544,
+   "to": 0.4762345679012346,
+   "storey": 9,
+   "riseM": 0.5,
+   "dropM": 0.45
+  },
+  {
+   "from": 0.49376543209876544,
+   "to": 0.5462345679012346,
+   "storey": 9,
+   "riseM": 0.5,
+   "dropM": 0.45
+  },
+  {
+   "from": 0.6237654320987654,
+   "to": 0.6762345679012346,
+   "storey": 9,
+   "riseM": 0.5,
+   "dropM": 0.45
+  },
+  {
+   "from": 0.7637654320987655,
+   "to": 0.8162345679012346,
+   "storey": 9,
+   "riseM": 0.5,
+   "dropM": 0.45
+  },
+  {
+   "from": 0.8337654320987654,
+   "to": 0.8862345679012346,
+   "storey": 9,
+   "riseM": 0.5,
+   "dropM": 0.45
+  }
+ ],
+ "hbFrieze": {
+  "heightM": 0.6,
+  "material": "painted-white",
+  "tint": "#8a8d84"
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.9,
+  "heightM": 0.65,
+  "depthM": 0.4,
+  "widthM": 0.22,
+  "material": "painted-white",
+  "tint": "#a9aaa0"
+ },
+ "streetStills": true
+}

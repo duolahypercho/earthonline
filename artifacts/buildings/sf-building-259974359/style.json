@@ -1,0 +1,98 @@
+{
+ "seed": 7,
+ "notes": "1922 four-storey narrow flats, 6.8 m front. Light grey-cream stucco, an arched wood entry with a stone surround at the right of the ground floor and barred doors and a window at the left, a balcony on the second storey spanning the front, a flat window row above and a fire escape on the right. Plain, no ornament invented. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Light grey upper wall d4d0c6 over a separate beige ground band; continuous iron-railed balcony across the first floor; arched double door now dark stained wood. Fire escape on the right half kept. Lifted/converted once to #eae8e2. GroundBand lift (2026-10-03): groundBand tint #cdb98c -> #e6dcc6 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#eae8e2",
+ "trim": "painted-white@e8e2d4",
+ "frame": "painted-white@f0ece0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f0ece0",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@cdb98c",
+ "cornice": true,
+ "corniceProjectionM": 0.4,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.2,
+  0.45,
+  0.7
+ ],
+ "bays": [],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.04,
+    "to": 0.2,
+    "kind": "door",
+    "leaf": "painted-steel@2a2a2a",
+    "headM": 2.4
+   },
+   {
+    "from": 0.26,
+    "to": 0.5,
+    "kind": "window",
+    "headM": 2.2,
+    "grille": true
+   },
+   {
+    "from": 0.6,
+    "to": 0.92,
+    "kind": "door",
+    "leaf": "wood-siding@3a2214",
+    "headM": 3.2,
+    "stair": true,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "hbFloors": {
+  "groundM": 3.6,
+  "upperM": 3.533
+ },
+ "fireEscape": {
+  "at": 0.7,
+  "widthM": 3.0,
+  "depthM": 0.8,
+  "toStorey": 3,
+  "material": "painted-steel@262626"
+ },
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#e6dcc6",
+  "topM": 4.4
+ },
+ "balconyCanopies": [
+  {
+   "at": 0.5,
+   "widthM": 6.2,
+   "depthM": 0.55,
+   "storey": 1,
+   "slab": {
+    "material": "concrete-precast",
+    "tint": "#b8b2a4"
+   },
+   "rail": {
+    "material": "painted-steel",
+    "tint": "#2a2a2a"
+   },
+   "canopy": "below",
+   "canopyDepthM": 0.1,
+   "fallM": 0.05,
+   "canopyTopM": -0.3
+  }
+ ]
+}

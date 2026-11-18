@@ -1,0 +1,113 @@
+{
+  "seed": 1,
+  "notes": "Round 5: nine-storey 1984 residential slab seen across the vacant corner lot at 4th and Folsom: pale blue-grey render, regular rows of white-framed punched windows, plain parapet, glazed lobby at ground. Round 12: punched windows read as black holes from 4th & Folsom (opaque dark glass-shell, interior beyond the 90 m interior LOD). Now clear glass over a room-tone backing with drawn blinds of varying drop (kit glassBacking) inside the white frames. Wall tint desaturated (#aac7ec read saturated blue under the round-12 overcast at F). Round 13: kit glassModel: reflective window glass (sky mirrored over a dark room) inside the white frames, no lit room-tone backing; shopfront glass reflective, darker. Wall tint moved toward the photos' light blue-teal (#c4d4e8 read lavender-grey at F in r12). Round 20: red ground band dropped (read as an orange base at t250N; the photo tower is light blue).",
+  "wall": "painted-white",
+  "wallTint": "#b0d4ea",
+  "trim": "painted-white",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "coping": {
+    "heightM": 0.3,
+    "projectionM": 0.06,
+    "material": "painted-white"
+  },
+  "bayM": 2.3,
+  "windowW": 1.3,
+  "windowSillM": 0.85,
+  "windowHeadM": 2.2,
+  "endPierM": 0.8,
+  "glass": "glass-clear@e4eef4",
+  "frame": "painted-white",
+  "storefrontFrame": "anodized-aluminium",
+  "storefrontGlass": "glass-film",
+  "bulkhead": "painted-stucco",
+  "ground": "lobby",
+  "upper": "apartment",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.5,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.04,
+        "to": 0.3
+      },
+      {
+        "kind": "door",
+        "from": 0.34,
+        "to": 0.4,
+        "leaf": "anodized-aluminium",
+        "stair": true
+      },
+      {
+        "kind": "window",
+        "from": 0.44,
+        "to": 0.7
+      },
+      {
+        "kind": "garage",
+        "from": 0.76,
+        "to": 0.9,
+        "material": "painted-steel-light",
+        "headM": 3.0
+      }
+    ]
+  },
+  "weathering": {
+    "soot": {
+      "height": 1.0,
+      "strength": 0.18
+    },
+    "streak": {
+      "strength": 0.12,
+      "columnMetres": 0.4,
+      "drop": 1.0
+    }
+  },
+  "stripes": {
+    "fromStorey": 1,
+    "offsetsM": [
+      0.0
+    ],
+    "heightM": 0.22,
+    "material": "painted-white"
+  },
+  "groundBand": {
+    "material": "painted-white",
+    "tint": "#b7cde0"
+  },
+  "awningSpans": [
+    {
+      "from": 0.05,
+      "to": 0.3
+    },
+    {
+      "from": 0.45,
+      "to": 0.7
+    }
+  ],
+  "awning": "canvas-plain@4f8a5a",
+  "glassBacking": {
+    "material": "painted-white",
+    "kinds": [
+      "punched",
+      "ribbon",
+      "high"
+    ],
+    "depthM": 0.3,
+    "tints": [
+      "#dcdcd6",
+      "#b9c2c8",
+      "#9ea9b1",
+      "#e8e4da",
+      "#c4ccd0"
+    ],
+    "blindTint": "#eeeae2",
+    "blindMax": 0.6
+  },
+  "glassModel": {
+    "upper": "glass-reflective@d6dde2",
+    "street": "glass-storefront@9ca4aa"
+  }
+}

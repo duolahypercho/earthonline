@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = ["eo-data", "eo-assets", "eo-kit", "eo-street", "eo-render", "eo-app", "eo-sim", "eo-player", "eo-ui", "eo-look", "eo-agents", "eo-props", "eo-net", "eo-server", "eo-water", "eo-sky", "eo-landmarks", "eo-audio", "eo-farshore"]
+
+[profile.release]
+debug = 1
+
+[profile.dev.package."*"]
+opt-level = 2

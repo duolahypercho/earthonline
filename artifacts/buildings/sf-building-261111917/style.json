@@ -1,0 +1,102 @@
+{
+ "seed": 5,
+ "notes": "1908 flats W side, between the Washington corner flat and the red-trim flat. Only a sliver is visible, read from the neighbours' views: grey-green lap siding over a dark green shingled raised base, a canopied entry porch with a stair at the left, a small arched white side door at the right, a balconied bay on the first upper storey and plain sash windows above, bracketed cornice. Upper detail inferred from data (storeys 3 plus the base). Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. GroundBand lift (2026-10-03): groundBand tint #6f7d63 -> #8c9782 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-white",
+ "wallTint": "#d1d6cc",
+ "trim": "painted-white@e9e2c8",
+ "frame": "painted-white@e9e2c8",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@e9e2c8",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@8c9782",
+ "cornice": true,
+ "corniceProjectionM": 0.55,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.22,
+  0.45
+ ],
+ "bays": [
+  {
+   "at": 0.66,
+   "widthM": 3.0,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#d4d6ca",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.18,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    }
+   },
+   "toStorey": 2
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.08,
+    "to": 0.38,
+    "kind": "door",
+    "headM": 2.5,
+    "leaf": "painted-white@3a4a32",
+    "stair": true
+   },
+   {
+    "from": 0.84,
+    "to": 0.94,
+    "kind": "door",
+    "headM": 2.3,
+    "leaf": "painted-white@efe9d8",
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#8c9782",
+  "topM": 2.6
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.8,
+  "heightM": 0.35,
+  "depthM": 0.3,
+  "widthM": 0.2,
+  "material": "painted-white",
+  "tint": "#e9e2c8"
+ },
+ "hyDLap": {
+  "pitchM": 0.15,
+  "fromM": 2.6
+ },
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 2.6,
+  "upperM": 3.5
+ }
+}

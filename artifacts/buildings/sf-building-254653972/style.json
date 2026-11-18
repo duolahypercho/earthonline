@@ -1,0 +1,114 @@
+{
+ "seed": 19,
+ "notes": "4 storeys (garage + 3 bay storeys reaching the roof), bays starting just above the garage lintel, pinkish cream stucco, brown window trim, glazed 4x5 garage grid, recessed arched entry with a few steps. StoreysSeen 4 (3.0 + 3x2.87) replaces the 3-storey roll; garage head raised to 2.75 so no blank band. Clapboard fix (2026-10-02): painted siding moved from the stained-timber wood-siding base to painted-clapboard so the tint renders as paint, not olive. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-stucco",
+ "wallTint": "#f4eee5",
+ "trim": "painted-white@efe6d6",
+ "frame": "painted-white@8a6a4a",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@8a6a4a",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-stucco@f0e8de",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.75,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.4,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.245,
+   "widthM": 2.7,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f4eee5"
+  },
+  {
+   "at": 0.75,
+   "widthM": 2.7,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f4eee5"
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.6,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.06,
+    "to": 0.25,
+    "kind": "door",
+    "stair": true,
+    "leaf": "wood-siding@7a5236",
+    "headM": 2.5,
+    "arch": {
+     "type": "round",
+     "porch": {
+      "steps": 3,
+      "riseM": 0.15,
+      "treadM": 0.26,
+      "material": "painted-stucco",
+      "tint": "#e0cfb8"
+     }
+    }
+   },
+   {
+    "from": 0.38,
+    "to": 0.9,
+    "kind": "garage",
+    "material": "painted-clapboard",
+    "tint": "#ecddc2",
+    "headM": 2.75
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "roofBlocks": [
+  {
+   "at": 0.245,
+   "widthM": 2.3,
+   "depthM": 0.5,
+   "setbackM": 0.05,
+   "material": "painted-stucco",
+   "tint": "#eadccb"
+  },
+  {
+   "at": 0.75,
+   "widthM": 2.3,
+   "depthM": 0.5,
+   "setbackM": 0.05,
+   "material": "painted-stucco",
+   "tint": "#eadccb"
+  }
+ ],
+ "garagePanel": {
+  "leaves": 1,
+  "cols": 5,
+  "rows": 4,
+  "doorM": 2.75,
+  "tint": "#8a6a4a",
+  "panelTint": "#e8dcc4"
+ },
+ "hbBayCrown": {
+  "dropM": 0.0,
+  "hipRiseM": 0.0,
+  "hipMaterial": "painted-stucco",
+  "hipTint": "#e5d2bf",
+  "corbelTiers": 2,
+  "corbelStepM": 0.1,
+  "panels": false
+ },
+ "streetStills": true,
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.0,
+  "upperM": 2.87
+ }
+}

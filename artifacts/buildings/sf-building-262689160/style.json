@@ -1,0 +1,162 @@
+{
+ "seed": 8,
+ "notes": "Round 7: sage stucco, box bays with picture windows, pale grey zigzag fire escape with diagonal stairs, frosted-panel garage 4x2 under a dark hood, columned porch right. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k) - photo-sampled tints rendered dark/olive in game.",
+ "wall": "painted-stucco",
+ "wallTint": "#d6dcd4",
+ "trim": "painted-white",
+ "frame": "painted-white",
+ "glass": "glass-clear",
+ "cornice": true,
+ "corniceProjectionM": 0.45,
+ "beltCourse": true,
+ "windowHoods": true,
+ "windowW": 0.7,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.4,
+ "upperWindows": [
+  0.49,
+  0.61
+ ],
+ "bays": [
+  {
+   "at": 0.22,
+   "widthM": 3.3,
+   "projectionM": 0.45,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#d6dcd4",
+   "box": true,
+   "windowW": 2.0,
+   "lights": 1,
+   "sillM": 0.8,
+   "headM": 0.5,
+   "sideWindowW": 0.45,
+   "plates": true
+  },
+  {
+   "at": 0.85,
+   "widthM": 3.4,
+   "projectionM": 0.5,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#d6dcd4",
+   "box": true,
+   "windowW": 2.0,
+   "lights": 1,
+   "sillM": 0.8,
+   "headM": 0.5,
+   "sideWindowW": 0.45,
+   "plates": true
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 1.1,
+  "transomM": 0.4,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.1,
+    "to": 0.33,
+    "kind": "garage",
+    "material": "painted-white",
+    "tint": "#d8dad6",
+    "headM": 3.0
+   },
+   {
+    "from": 0.46,
+    "to": 0.53,
+    "kind": "door",
+    "leaf": "painted-white",
+    "headM": 2.4
+   },
+   {
+    "from": 0.68,
+    "to": 0.86,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel"
+   }
+  ]
+ },
+ "storefrontFrame": "painted-white",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-stucco@9cb1a3",
+ "ground": "lobby",
+ "upper": "apartment",
+ "stripes": {
+  "fromStorey": 2,
+  "offsetsM": [
+   -0.18
+  ],
+  "heightM": 0.26,
+  "material": "painted-white"
+ },
+ "pilasters": {
+  "at": [
+   0.71,
+   0.845
+  ],
+  "widthM": 0.34,
+  "projectionM": 0.2,
+  "fromM": 0.0,
+  "toM": 3.6,
+  "material": "painted-white",
+  "capital": true
+ },
+ "plaques": [
+  {
+   "at": 0.19,
+   "y": 3.95,
+   "w": 0.55,
+   "h": 0.3,
+   "face": "painted-white"
+  },
+  {
+   "at": 0.27,
+   "y": 3.95,
+   "w": 0.55,
+   "h": 0.3,
+   "face": "painted-white"
+  }
+ ],
+ "hbBayGlazing": {
+  "marginM": 0.2,
+  "maxW": 2.0,
+  "sillM": 0.8,
+  "headM": 0.4,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#33363a",
+  "sashM": 0.04,
+  "revealM": 0.06,
+  "meetingRail": false
+ },
+ "garagePanel": {
+  "leaves": 1,
+  "cols": 2,
+  "rows": 4,
+  "tint": "#dfe1dc",
+  "panelTint": "#c4cfcb"
+ },
+ "fireEscape": {
+  "zigzag": true,
+  "at": 0.53,
+  "widthM": 3.0,
+  "depthM": 0.8,
+  "material": "painted-stucco",
+  "tint": "#c9cdc8",
+  "toStorey": 3
+ },
+ "hbSignBands": [
+  {
+   "from": 0.1,
+   "to": 0.33,
+   "bottomM": 3.0,
+   "topM": 3.35,
+   "material": "painted-steel",
+   "tint": "#3a3f44"
+  }
+ ],
+ "streetStills": true
+}

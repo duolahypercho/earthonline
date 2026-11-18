@@ -1,0 +1,82 @@
+{
+  "seed": 1,
+  "notes": "Single-storey auto-repair front: deep charcoal sign band across the top (blank, no names), orange painted wall below, shop window and glazed door on the left, steel roll-up bay door on the right. Now a bright orange painted wall to 2.9 m under the tall black sign band, dark shop glass + a glazed door at the NE (viewer-left) end, and a grey steel roll-up shutter at the SW end. Orange read red and blocky, sign band missing, roll-up a dark blank. Orange on a painted-white base (truer orange), a lighter grey projecting sign band across the top, slatted silver roll-up (glass-shutter). Orange as a lower band only (to 2.4 m, the roll-up head). Roll-up kept but dulled to grey painted steel, 0.4 m set back. Opaque dark reflective glass so no lit interior shows behind upper or shop panes.",
+  "wall": "painted-stucco",
+  "wallTint": "#2c2e31",
+  "trim": "painted-steel",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "fascia": {
+    "heightM": 2.1,
+    "projectionM": 0.12,
+    "material": "painted-steel-mid",
+    "tint": "#9aa0a8"
+  },
+  "storefrontFrame": "painted-steel",
+  "bulkhead": "painted-stucco",
+  "ground": "shop",
+  "upper": "office",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.3,
+    "headDropM": 2.8,
+    "bulkheadM": 0.3,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.03,
+        "to": 0.17,
+        "headM": 2.6
+      },
+      {
+        "kind": "door",
+        "from": 0.18,
+        "to": 0.25,
+        "leaf": "painted-steel",
+        "stair": true
+      },
+      {
+        "kind": "garage",
+        "from": 0.72,
+        "to": 0.95,
+        "material": "painted-steel-mid",
+        "headM": 2.65,
+        "tint": "#8d9094",
+        "recessM": 0.4
+      }
+    ]
+  },
+  "weathering": {
+    "patches": {
+      "strength": 0.07,
+      "metres": 1.6,
+      "top": 4.0,
+      "mottle": 0.05
+    },
+    "grime": {
+      "strength": 0.12,
+      "metres": 3.0
+    }
+  },
+  "storefrontGlass": "glass-film",
+  "glass": "glass-film",
+  "groundBand": {
+    "material": "painted-white",
+    "tint": "#ff9440",
+    "topM": 2.4
+  },
+  "plaques": [
+    {
+      "at": 0.45,
+      "y": 2.3,
+      "w": 2.6,
+      "h": 0.5,
+      "face": "painted-steel"
+    }
+  ],
+  "glassModel": {
+    "upper": "glass-reflective@6e635c",
+    "street": "glass-reflective@5b524c"
+  }
+}

@@ -1,0 +1,586 @@
+{
+  "seed": 1,
+  "wall": "painted-stucco",
+  "wallTint": "#2b40a8",
+  "returnWallTint": "#2b40a8",
+  "trim": "painted-steel",
+  "frame": "painted-steel",
+  "glass": "glass-clear",
+  "storefrontFrame": "painted-steel",
+  "bulkhead": "painted-steel",
+  "cornice": false,
+  "corniceProjectionM": 0.22,
+  "beltCourse": false,
+  "windowHoods": false,
+  "windowW": 0.55,
+  "windowSillM": 0.9,
+  "windowHeadM": 2.3,
+  "upperWindows": [],
+  "wallZones": [
+    {
+      "from": 0.0,
+      "to": 0.61,
+      "tint": "#2b40a8"
+    },
+    {
+      "from": 0.61,
+      "to": 1.0,
+      "tint": "#1c1c20"
+    }
+  ],
+  "storefront": {
+    "bulkheadM": 0.4,
+    "transomM": 1.5,
+    "transomPaneM": 0.26,
+    "transomRows": 3,
+    "headDropM": 0.85,
+    "pierM": 0.3,
+    "paneM": 0.8,
+    "awning": false,
+    "layout": [
+      {
+        "from": 0.02,
+        "to": 0.25,
+        "kind": "window",
+        "headM": 3.95
+      },
+      {
+        "from": 0.25,
+        "to": 0.33,
+        "kind": "door",
+        "leaf": "painted-steel",
+        "headM": 3.95
+      },
+      {
+        "from": 0.33,
+        "to": 0.59,
+        "kind": "window",
+        "headM": 3.95
+      },
+      {
+        "from": 0.64,
+        "to": 0.79,
+        "kind": "window",
+        "headM": 2.75
+      },
+      {
+        "from": 0.81,
+        "to": 0.96,
+        "kind": "window",
+        "headM": 2.75
+      }
+    ]
+  },
+  "streetEdges": {
+    "6": {
+      "wallZones": [
+        {
+          "from": 0.0,
+          "to": 0.36,
+          "tint": "#1c1c20"
+        },
+        {
+          "from": 0.36,
+          "to": 1.0,
+          "tint": "#b81c25"
+        }
+      ],
+      "storefront": {
+        "transomM": 0.3,
+        "transomPaneM": 0,
+        "transomRows": 1,
+        "bulkheadM": 0.35,
+        "paneM": 1.25,
+        "layout": [
+          {
+            "from": 0.02,
+            "to": 0.14,
+            "kind": "window",
+            "headM": 2.8
+          },
+          {
+            "from": 0.14,
+            "to": 0.22,
+            "kind": "door",
+            "leaf": "painted-steel",
+            "headM": 2.8
+          },
+          {
+            "from": 0.22,
+            "to": 0.34,
+            "kind": "window",
+            "headM": 2.8
+          },
+          {
+            "from": 0.4,
+            "to": 0.56,
+            "kind": "window",
+            "headM": 3.0
+          },
+          {
+            "from": 0.56,
+            "to": 0.68,
+            "kind": "double-door",
+            "leaf": "painted-steel",
+            "headM": 3.0
+          },
+          {
+            "from": 0.68,
+            "to": 0.96,
+            "kind": "window",
+            "headM": 3.0
+          }
+        ]
+      }
+    },
+    "1": {
+      "storefront": {
+        "layout": [
+          {
+            "from": 0.52,
+            "to": 0.66,
+            "kind": "window",
+            "headM": 3.3
+          },
+          {
+            "from": 0.77,
+            "to": 0.93,
+            "kind": "window",
+            "headM": 3.3
+          }
+        ],
+        "bulkheadM": 0.85,
+        "paneM": 1.0,
+        "transomM": 0.5,
+        "transomRows": 2,
+        "transomPaneM": 0.3
+      },
+      "mural": {
+        "from": 0.04,
+        "to": 0.4,
+        "bottomM": 0.4,
+        "topM": 4.3,
+        "seed": 11
+      }
+    }
+  },
+  "ground": "shop",
+  "upper": "apartment",
+  "storefrontGlass": "glass-storefront",
+  "shopBays": [
+    {
+      "edge": 0,
+      "from": 0.0,
+      "to": 0.61,
+      "fascia": {
+        "fromM": 4.05,
+        "toM": 4.95,
+        "tint": "#2b40a8",
+        "projectionM": 0.12,
+        "lipTint": "#1b2a7a"
+      },
+      "cornice": {
+        "topM": 5.87,
+        "heightM": 0.55,
+        "projectionM": 0.2,
+        "tint": "#1b2a7a",
+        "bracketM": 1.4,
+        "dentils": false
+      },
+      "pilasters": {
+        "tint": "#2b40a8",
+        "widthM": 0.3,
+        "projectionM": 0.08,
+        "toM": 4.05,
+        "at": [
+          0.005
+        ]
+      },
+      "panels": [
+        {
+          "fromM": 0.04,
+          "toM": 0.42,
+          "tint": "#2b40a8",
+          "projectionM": 0.05,
+          "from": 0.02,
+          "to": 0.59
+        },
+        {
+          "fromM": 0.11,
+          "toM": 0.135,
+          "tint": "#eef0f2",
+          "projectionM": 0.065,
+          "from": 0.025,
+          "to": 0.585
+        },
+        {
+          "fromM": 0.34,
+          "toM": 0.365,
+          "tint": "#eef0f2",
+          "projectionM": 0.065,
+          "from": 0.025,
+          "to": 0.585
+        }
+      ],
+      "displays": [
+        {
+          "from": 0.02,
+          "to": 0.25,
+          "toM": 2.2
+        },
+        {
+          "from": 0.33,
+          "to": 0.59,
+          "toM": 2.2
+        }
+      ],
+      "signBoards": [
+        {
+          "from": 0.03,
+          "to": 0.58,
+          "fromM": 4.1,
+          "toM": 4.9,
+          "tint": "#2b40a8",
+          "faceTint": "#3a52c0",
+          "frameTint": "#1b2a7a",
+          "projectionM": 0.2,
+          "lampsM": 1.8
+        }
+      ]
+    },
+    {
+      "edge": 0,
+      "from": 0.61,
+      "to": 1.0,
+      "lattice": [
+        {
+          "from": 0.64,
+          "to": 0.79,
+          "toM": 2.72,
+          "tint": "#d7dadd",
+          "frameTint": "#6a6d72",
+          "cellM": 0.3
+        },
+        {
+          "from": 0.815,
+          "to": 0.955,
+          "toM": 2.72,
+          "tint": "#d7dadd",
+          "frameTint": "#6a6d72",
+          "cellM": 0.3
+        }
+      ],
+      "windows": [
+        {
+          "from": 0.625,
+          "to": 0.8,
+          "sillM": 2.9,
+          "headM": 3.85,
+          "cols": 8,
+          "rows": 2,
+          "frameTint": "#1a1a1c",
+          "lit": "#e7c48c"
+        },
+        {
+          "from": 0.81,
+          "to": 0.99,
+          "sillM": 2.9,
+          "headM": 3.85,
+          "cols": 8,
+          "rows": 2,
+          "frameTint": "#1a1a1c",
+          "lit": "#e7c48c"
+        }
+      ],
+      "cornice": {
+        "topM": 5.87,
+        "heightM": 0.6,
+        "projectionM": 0.2,
+        "tint": "#33261b",
+        "bracketM": 1.4,
+        "dentils": false
+      },
+      "pilasters": {
+        "tint": "#1c1c20",
+        "widthM": 0.3,
+        "projectionM": 0.08,
+        "toM": 5.3,
+        "at": [
+          0.61,
+          0.8,
+          0.995
+        ]
+      },
+      "fascia": {
+        "fromM": 3.95,
+        "toM": 4.75,
+        "tint": "#161618",
+        "projectionM": 0.1,
+        "lipTint": "#33261b"
+      },
+      "displays": [],
+      "signBoards": [
+        {
+          "from": 0.81,
+          "to": 0.99,
+          "fromM": 3.98,
+          "toM": 4.72,
+          "tint": "#161618",
+          "faceTint": "#1b1b1e",
+          "frameTint": "#33261b",
+          "projectionM": 0.22
+        }
+      ],
+      "catenary": [
+        {
+          "atM": 4.15,
+          "from": 0.61,
+          "to": 1.0,
+          "loopM": 1.8,
+          "sagM": 0.22,
+          "spacingM": 0.28,
+          "offM": 0.2
+        }
+      ]
+    },
+    {
+      "edge": 6,
+      "from": 0.0,
+      "to": 0.36,
+      "fascia": {
+        "fromM": 2.85,
+        "toM": 3.55,
+        "tint": "#141418",
+        "projectionM": 0.1
+      },
+      "windows": [
+        {
+          "from": 0.02,
+          "to": 0.35,
+          "sillM": 2.95,
+          "headM": 3.6,
+          "cols": 9,
+          "rows": 1,
+          "frameTint": "#1a1a1c",
+          "lit": "#e7c48c"
+        }
+      ],
+      "cornice": {
+        "topM": 5.87,
+        "heightM": 0.6,
+        "projectionM": 0.2,
+        "tint": "#33261b",
+        "bracketM": 0.8,
+        "dentils": false
+      },
+      "catenary": [
+        {
+          "atM": 4.15,
+          "from": 0.0,
+          "to": 0.36,
+          "loopM": 1.8,
+          "sagM": 0.22,
+          "spacingM": 0.28,
+          "offM": 0.2
+        }
+      ],
+      "displays": [
+        {
+          "from": 0.02,
+          "to": 0.14,
+          "toM": 1.9
+        },
+        {
+          "from": 0.22,
+          "to": 0.34,
+          "toM": 1.9
+        }
+      ]
+    },
+    {
+      "edge": 6,
+      "from": 0.365,
+      "to": 1.0,
+      "pilasters": {
+        "tint": "#b81c25",
+        "widthM": 0.34,
+        "projectionM": 0.14,
+        "toM": 5.3
+      },
+      "windows": [
+        {
+          "from": 0.39,
+          "to": 0.97,
+          "sillM": 3.15,
+          "headM": 3.62,
+          "cols": 14,
+          "rows": 1,
+          "frameTint": "#8e1b20",
+          "lit": "#e6c79a"
+        }
+      ],
+      "panels": [
+        {
+          "fromM": 3.0,
+          "toM": 3.15,
+          "tint": "#b81c25",
+          "projectionM": 0.06,
+          "from": 0.37,
+          "to": 0.995
+        },
+        {
+          "fromM": 3.55,
+          "toM": 4.45,
+          "tint": "#7a1418",
+          "projectionM": 0.08,
+          "from": 0.72,
+          "to": 0.765
+        },
+        {
+          "fromM": 3.65,
+          "toM": 4.35,
+          "tint": "#e9e1cf",
+          "projectionM": 0.1,
+          "from": 0.726,
+          "to": 0.759
+        }
+      ],
+      "frieze": {
+        "fromM": 4.85,
+        "toM": 5.3,
+        "tint": "#1a1a1e",
+        "accent": "#c43a36",
+        "moduleM": 0.34
+      },
+      "cornice": {
+        "topM": 5.87,
+        "heightM": 0.45,
+        "projectionM": 0.18,
+        "tint": "#1a1a1e"
+      },
+      "signBoards": [
+        {
+          "from": 0.42,
+          "to": 0.7,
+          "fromM": 3.72,
+          "toM": 4.72,
+          "tint": "#9c131b",
+          "faceTint": "#f6efe0",
+          "frameTint": "#b81c25",
+          "projectionM": 0.26,
+          "lampsM": 1.4
+        },
+        {
+          "from": 0.78,
+          "to": 0.96,
+          "fromM": 3.78,
+          "toM": 4.62,
+          "tint": "#141418",
+          "faceTint": "#121216",
+          "frameTint": "#b81c25",
+          "projectionM": 0.12
+        }
+      ]
+    },
+    {
+      "edge": 1,
+      "from": 0.0,
+      "to": 1.0,
+      "cornice": {
+        "topM": 5.87,
+        "heightM": 0.7,
+        "projectionM": 0.22,
+        "tint": "#2b40a8",
+        "bracketM": 1.1
+      }
+    },
+    {
+      "edge": 1,
+      "from": 0.45,
+      "to": 1.0,
+      "fascia": {
+        "fromM": 4.05,
+        "toM": 4.95,
+        "tint": "#2b40a8",
+        "projectionM": 0.12,
+        "lipTint": "#1b2a7a"
+      },
+      "pilasters": {
+        "tint": "#2b40a8",
+        "widthM": 0.34,
+        "projectionM": 0.1,
+        "toM": 4.05,
+        "at": [
+          0.995,
+          0.71
+        ]
+      },
+      "displays": [
+        {
+          "from": 0.52,
+          "to": 0.66,
+          "toM": 2.2
+        },
+        {
+          "from": 0.77,
+          "to": 0.93,
+          "toM": 2.2
+        }
+      ]
+    }
+  ],
+  "shopStock": {
+    "racks": 7,
+    "palette": [
+      "#3f8f4e",
+      "#e8b73a",
+      "#c23b7a",
+      "#2f6fb0",
+      "#e8e0cc",
+      "#d9642b",
+      "#6d3f8c",
+      "#5fae5a"
+    ]
+  },
+  "notes": "Game lighting crushed the navy to near-black so navy lifted to #2b40a8 (value +25%); red restaurant deeper less pink (#b81c25); corner transoms 3 rows of 0.26 m lights (divided-light muntins). Masonic face: two narrow windows with a 0.85 m bulkhead instead of a tall glazed curtain; colourful shop stock (plants, yellow, magenta, blue). Sign boards are clean blank faces (no glyph strokes that read as gibberish); more saturated navy (#2b40a8) so the corner shop stays navy under game light; black-section cornice is a dark projecting wood band (no flat dentil stripe). Saturated deep navy corner shop (#1d2552) with a boxed navy sign cabinet (abstract text-free glyph strokes, gooseneck lamps) and modelled scroll brackets with modillions under the cornice; packed, lit window displays (dark back board, stepped shelves of coloured goods) behind every storefront pane so the glass shows merchandise instead of a pale empty room; a big boxed sign over the right black shop and tan scroll brackets over the black section; festoon catenary string lights (sagging wire, hanging emissive bulbs); the red restaurant gets a boxed illuminated white-face sign and a dark lettered lower sign board in place of the plain band; taller transom band on the corner shop; pendant shop lights over the sales floor. Corner shop deep navy (not royal blue); black bays glazed behind the gates with a continuous warm-lit multipane transom band over each shop and a tan bracketed cornice above the black section; brighter silver gates in grey frames over one opening only; red restaurant gets a lit (text-free) lightbox sign band under the red fascia; interior split per shop (`shopFitout` partitions with mid-tone linings) with folded-garment stack tables and a muted stock palette. Royal-blue corner shop (brighter, kickplates with white pinstripes, taller transom band), silver diamond scissor gates in black cast-iron frames, string lights across the black shop, a navy sign band and round sign disc on a glossier red restaurant front, denser stock. Per-shop dressing through the new `shopBays` builder key - navy corner shop in three tiers (tall multipane display bays, a band of small multipane transom lights, a navy sign fascia under a bracketed, dentilled cornice), gated shop with dark scissor-lattice gates and two big multipane windows above, black shop with a low storefront, sign band and small lit windows above, red restaurant framed by red pilasters with a clerestory strip, an inset black sign band and a frieze under the parapet; corner pier and fascia wrap onto Masonic; shelves, rails and wall runs stocked (`shopStock`); reflective storefront glass. 1906 one-storey row of five shops, S side of Haight Street at the SW corner of Masonic (1401-1419). Tall commercial storey with a flat roof, short parapet and thin cornice; painted stucco in zones: a deep navy corner shop with full-height glazing and a multipane clerestory band that wraps onto Masonic, two black-painted shops (one behind two white folding lattice gates, one glazed with a centre door), and a red restaurant front with an open glazed face. Masonic face navy with large windows near the corner and a painted colour-field panel at the south end.",
+  "shopFitout": {
+    "partitions": [
+      {
+        "edge": 0,
+        "at": 0.61
+      },
+      {
+        "edge": 0,
+        "at": 0.8
+      },
+      {
+        "edge": 0,
+        "at": 0.995
+      },
+      {
+        "edge": 6,
+        "at": 0.365
+      }
+    ],
+    "rearPassageM": 2.6,
+    "tints": [
+      "#8f7a63",
+      "#6f7f86",
+      "#9a6b58",
+      "#7d7560",
+      "#5f6a78"
+    ],
+    "stock": {
+      "stacks": true
+    }
+  },
+  "shopFixtures": {
+    "ceilingM": 5.05,
+    "spacingM": 2.4,
+    "rowsM": [
+      2.2,
+      5.0,
+      8.0
+    ]
+  }
+}

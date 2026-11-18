@@ -1,0 +1,79 @@
+{
+  "builder": "house",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "painted-stucco",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "groundM": 2.6,
+  "roofLevelM": 5.25,
+  "storeysSeen": 2,
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "seed": 11,
+  "notes": "Kirkham N row, 1944 tract, second house east of the corner group: white stucco, grey composition hipped roof over the front with a flat roof behind, an entry recess behind a decorative black iron gate on the viewer's left, a white panelled garage door on the right, a small window over the entry and a wide picture window over the garage.",
+  "wall": "painted-stucco",
+  "wallTint": "#eeece6",
+  "roofForm": {
+    "form": "front-hip",
+    "depthM": 5.5,
+    "eaveM": 0.22,
+    "material": "asphalt-roof",
+    "tint": "#6f6d69",
+    "sideOverhangM": 0.12
+  },
+  "gate": {
+    "from": 0.08,
+    "to": 0.3,
+    "headM": 2.2,
+    "material": "painted-steel",
+    "tint": "#1f1f1f"
+  },
+  "garages": [
+    {
+      "from": 0.47,
+      "to": 0.92,
+      "headM": 2.15,
+      "material": "painted-white",
+      "pattern": "panel"
+    }
+  ],
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.1,
+      "to": 0.34,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        2,
+        2
+      ]
+    },
+    {
+      "storey": 1,
+      "from": 0.5,
+      "to": 0.9,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        3,
+        2
+      ]
+    }
+  ]
+}

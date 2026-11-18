@@ -1,0 +1,170 @@
+{
+ "seed": 3,
+ "notes": "Rusticated channel joints on the garage storey base, white garage door with 4 panel rows, dark timber door at the right, greige wall, projecting ledge over the garage. Applied: wall e4dcc8, hyDRubble course relief (5 channel bands, long blocks) on the garage storey, garagePanel 3x4, door leaf 5b3b28, shopFascia ledge projecting 0.25 m, darker upper glass 4a5d6c. SKIPPED: garage recess 1.5-2 m, entry recess (not expressible without the ornate vestibule), raised-panel relief on the door (not a key), aedicule beyond the LiDAR height allowance. Fluted pilasters already continue to the parapet. Layered multi-band belt over the garage and a relief frieze on the parapet. Applied: two extra stacked projecting bands at the belt (total about 0.9 m) and a parapet frieze band. Garage-left/entry-right claim already true in street frame. Applied: two wide picture-window bays per storey, wall ivory e6e0c6. Skipped: sectional 4x5 raised panels, aedicule beyond LiDAR height. Mirrored claim not supported (garage left, dark wood door right in street frame). CONFIRMED garage door has 5 horizontal panel rows (garagePanel) and wall is paler sage-cream e2dfca. Skipped: merge to 2 bays (right half hidden by trees), taller crest, deeper stepped belt (single box only). Wall shifted to pale greenish cream dcd8c2; pilasters made finer and flatter (0.34 m, 0.06 m proud, four fine flutes) so they read as recessed reeded panels; picture windows set deeper in their reveals; a relief panel on the raised parapet centre. The right half is hidden by the trees, so the third window stays. Already modelled: garage recessed 1 m, rusticated stone ground band, moulded belt band. Not expressible: 4x5 raised-panel sectional door (kit draws slats), small-pane transom strip (sash rows split evenly), sloping apron. Warmer putty-cream wall d8d2bc; channel-jointed stone base on the garage storey (groundBand) under the moulded belt band; white panelled garage door set about 1 m back in its portal; entry moved to the right end as a tall dark-stained wood door; bracketed cornice replaced by a plain parapet with a raised stepped centre and flat relief panels in a frieze. Kept: garage at the viewer's LEFT beside the white neighbour, entry at the RIGHT, two picture windows left of the centre pilaster and one to the right; 3 storeys (LiDAR 10.6 m, the tall tower element in one view stands behind). Earlier: 1937 Moderne three-flat, E side of Hyde, mostly hidden behind two street trees; fluted flat pilasters, single-light picture windows in slim cream frames. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-stucco",
+ "wallTint": "#f2eee4",
+ "trim": "painted-white@efebdc",
+ "frame": "painted-white@ece8da",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@ece8da",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-stucco@f2eee4",
+ "cornice": false,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 1.4,
+ "windowSillM": 0.7,
+ "windowHeadM": 2.35,
+ "bays": [],
+ "pilasters": {
+  "at": [
+   0.03,
+   0.6,
+   0.97
+  ],
+  "widthM": 0.34,
+  "projectionM": 0.06,
+  "flutes": 4,
+  "fromM": 0,
+  "material": "painted-stucco",
+  "tint": "#e0dac6",
+  "capital": true
+ },
+ "storefront": {
+  "bulkheadM": 0.3,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.08,
+    "to": 0.36,
+    "kind": "garage",
+    "material": "painted-white",
+    "tint": "#eeebe2",
+    "headM": 2.5,
+    "recessM": 1.0
+   },
+   {
+    "from": 0.83,
+    "to": 0.94,
+    "kind": "door",
+    "stair": true,
+    "leaf": "wood-siding@5b3b28",
+    "headM": 2.6
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "upperWindowSpans": [
+  [
+   0.13,
+   0.34
+  ],
+  [
+   0.68,
+   0.9
+  ]
+ ],
+ "mullionM": 3,
+ "sashMaterial": "painted-white@ece8da",
+ "upperSillM": 0.6,
+ "upperHeadM": 2.4,
+ "groundBand": {
+  "material": "limestone-ashlar",
+  "tint": "#e4dcc8"
+ },
+ "coping": {
+  "heightM": 0.6,
+  "projectionM": 0.08,
+  "material": "painted-stucco",
+  "tint": "#e0dac6"
+ },
+ "roofBlocks": [
+  {
+   "at": 0.5,
+   "widthM": 3.6,
+   "depthM": 0.5,
+   "setbackM": 0.0,
+   "material": "painted-stucco",
+   "tint": "#e0dac6"
+  }
+ ],
+ "plaques": [
+  {
+   "at": 0.2,
+   "y": 10.2,
+   "w": 1.3,
+   "h": 0.45,
+   "face": "cast-stone-trim@cfc8b2"
+  },
+  {
+   "at": 0.42,
+   "y": 10.2,
+   "w": 1.3,
+   "h": 0.45,
+   "face": "cast-stone-trim@cfc8b2"
+  },
+  {
+   "at": 0.72,
+   "y": 10.2,
+   "w": 1.3,
+   "h": 0.45,
+   "face": "cast-stone-trim@cfc8b2"
+  },
+  {
+   "at": 0.5,
+   "y": 10.8,
+   "w": 2.6,
+   "h": 0.5,
+   "face": "cast-stone-trim@d6cfb8"
+  }
+ ],
+ "windowDepthM": 0.24,
+ "garagePanel": {
+  "doorM": 3.4,
+  "cols": 3,
+  "rows": 4,
+  "tint": "#e8e5da",
+  "panelTint": "#f0ede3"
+ },
+ "hbSignBands": [
+  {
+   "from": 0.0,
+   "to": 1.0,
+   "bottomM": 4.5,
+   "topM": 4.78,
+   "material": "painted-stucco",
+   "tint": "#ddd6c0"
+  },
+  {
+   "from": 0.06,
+   "to": 0.94,
+   "bottomM": 9.55,
+   "topM": 9.85,
+   "material": "painted-stucco",
+   "tint": "#d8d2bc"
+  }
+ ],
+ "streetStills": true,
+ "hyDRubble": {
+  "toM": 3.85,
+  "courseM": 0.77,
+  "blockM": 2.2,
+  "projM": 0.025,
+  "shade": 0.72,
+  "marginM": 0.06
+ },
+ "shopFascia": {
+  "heightM": 0.32,
+  "projectionM": 0.25,
+  "material": "painted-stucco",
+  "tint": "#ddd6c0",
+  "topM": 0.12,
+  "lamps": 0
+ },
+ "glassModel": {
+  "upper": "glass-reflective@4a5d6c"
+ }
+}

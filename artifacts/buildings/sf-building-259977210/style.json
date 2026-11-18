@@ -1,0 +1,279 @@
+{
+ "seed": 210,
+ "wall": "painted-stucco",
+ "wallTint": "#eeece0",
+ "trim": "painted-white@dcd8c0",
+ "frame": "painted-white@7c8a58",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@d8d4bc",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "corniceProjectionM": 0.5,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.9,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.37,
+  0.81
+ ],
+ "bays": [
+  {
+   "at": 0.1,
+   "widthM": 3,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#dcdec8",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   },
+   "plaques": {
+    "material": "painted-stucco",
+    "tint": "#cfc9a8",
+    "heightM": 0.7,
+    "widthFrac": 0.8,
+    "ornament": {
+     "material": "painted-white",
+     "tint": "#efe9d2"
+    }
+   }
+  },
+  {
+   "at": 0.24,
+   "widthM": 2.4,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#dcdec8",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   },
+   "plaques": {
+    "material": "painted-stucco",
+    "tint": "#cfc9a8",
+    "heightM": 0.7,
+    "widthFrac": 0.8,
+    "ornament": {
+     "material": "painted-white",
+     "tint": "#efe9d2"
+    }
+   }
+  },
+  {
+   "at": 0.49,
+   "widthM": 2.8,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#dcdec8",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   },
+   "plaques": {
+    "material": "painted-stucco",
+    "tint": "#cfc9a8",
+    "heightM": 0.7,
+    "widthFrac": 0.8,
+    "ornament": {
+     "material": "painted-white",
+     "tint": "#efe9d2"
+    }
+   }
+  },
+  {
+   "at": 0.64,
+   "widthM": 2.8,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#dcdec8",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   },
+   "plaques": {
+    "material": "painted-stucco",
+    "tint": "#cfc9a8",
+    "heightM": 0.7,
+    "widthFrac": 0.8,
+    "ornament": {
+     "material": "painted-white",
+     "tint": "#efe9d2"
+    }
+   }
+  },
+  {
+   "at": 0.93,
+   "widthM": 3,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#dcdec8",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   },
+   "plaques": {
+    "material": "painted-stucco",
+    "tint": "#cfc9a8",
+    "heightM": 0.7,
+    "widthFrac": 0.8,
+    "ornament": {
+     "material": "painted-white",
+     "tint": "#efe9d2"
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.9,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.02,
+    "to": 0.17,
+    "kind": "window",
+    "headM": 3.4,
+    "grille": true
+   },
+   {
+    "from": 0.43,
+    "to": 0.53,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel@2a2a28",
+    "headM": 3.8,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.18,
+      "tint": "#dcd8c0"
+     }
+    }
+   },
+   {
+    "from": 0.6,
+    "to": 0.69,
+    "kind": "window",
+    "headM": 4.2
+   },
+   {
+    "from": 0.73,
+    "to": 0.78,
+    "kind": "window",
+    "headM": 3.4
+   },
+   {
+    "from": 0.83,
+    "to": 0.97,
+    "kind": "window",
+    "headM": 3.4,
+    "grille": true
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "notes": "1926 flats, five storeys. Tall olive-green clapboard ground storey with a round-arched entry at centre, a grilled shop window left, a ribbon window and shopfront right; cream stucco uppers with five splayed bays trimmed olive and cream (relief panels not modelled), two railed steel fire escapes (left of centre, right), cream cornice. Rework r-eddy: darker olive base storey, olive sashes, cartouche plaques in the bay spandrels, white fire escapes, dark canopy over the arch (hand.py). Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. GroundBand lift (2026-10-03): groundBand tint #6f7a4c -> #8c9570 (same rule as walls; it was missed by the first colour pass).",
+ "groundBand": {
+  "material": "painted-clapboard",
+  "tint": "#8c9570",
+  "topM": 5.5
+ },
+ "storeysSeen": {
+  "count": 5,
+  "groundM": 5.5
+ },
+ "fireEscapes": [
+  {
+   "at": 0.34,
+   "widthM": 3.6,
+   "depthM": 0.9,
+   "material": "painted-steel@e6e2d6"
+  },
+  {
+   "at": 0.81,
+   "widthM": 3.6,
+   "depthM": 0.9,
+   "material": "painted-steel@e6e2d6"
+  }
+ ]
+}

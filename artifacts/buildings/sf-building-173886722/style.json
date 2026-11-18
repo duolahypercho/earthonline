@@ -1,0 +1,119 @@
+{
+  "seed": 1,
+  "notes": "Light-blue painted concrete loft, tan framed spandrel panels, two steel-sash window groups per storey, papered-over shop windows with two doors at ground. Light blue (was slate on warm stucco), fine 4x3 steel sash grids, reflective glass. Soot at the base, grime, faint wide streaks. The vacant ground unit becomes Bay Arms, the game's invented gun shop. The papered-over shop windows become clear display glass, the shop door widens to a 1.4 m pair at the same pier line. The room stays a bare hall here; its fit-out and the weapons are src/world/buildings/authored/shops/gun-shop.js.",
+  "wall": "painted-white",
+  "wallTint": "#a8d8fa",
+  "trim": "painted-stucco",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "coping": {
+    "heightM": 0.3,
+    "projectionM": 0.06,
+    "material": "painted-stucco",
+    "tint": "#d9c49a"
+  },
+  "pilasters": {
+    "at": "spans",
+    "widthM": 0.45,
+    "projectionM": 0.1,
+    "tint": "#a2d2f4",
+    "material": "painted-white"
+  },
+  "spandrels": {
+    "tint": "#d2c6ae"
+  },
+  "stripes": {
+    "fromStorey": 1,
+    "offsetsM": [
+      -0.05
+    ],
+    "heightM": 0.5,
+    "material": "painted-stucco",
+    "tint": "#d2c6ae"
+  },
+  "upperWindowSpans": [
+    [
+      0.05,
+      0.47
+    ],
+    [
+      0.53,
+      0.95
+    ]
+  ],
+  "upperSillM": 0.55,
+  "upperHeadM": 2.35,
+  "mullionM": 0.8,
+  "sashRows": 4,
+  "sashCols": 3,
+  "sashMaterial": "painted-steel",
+  "storefrontFrame": "painted-steel-mid",
+  "bulkhead": "painted-steel-mid",
+  "ground": "vacant",
+  "upper": "office",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.4,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.04,
+        "to": 0.2
+      },
+      {
+        "kind": "door",
+        "from": 0.21,
+        "to": 0.29,
+        "leaf": "painted-white",
+        "stair": true
+      },
+      {
+        "kind": "window",
+        "from": 0.3,
+        "to": 0.48
+      },
+      {
+        "kind": "door",
+        "from": 0.53,
+        "to": 0.67,
+        "leaf": "painted-steel",
+        "double": true
+      },
+      {
+        "kind": "window",
+        "from": 0.68,
+        "to": 0.96
+      }
+    ]
+  },
+  "weathering": {
+    "patches": {
+      "strength": 0.08,
+      "metres": 1.6,
+      "top": 3.5,
+      "mottle": 0.06
+    },
+    "grime": {
+      "strength": 0.22,
+      "metres": 2.4
+    },
+    "soot": {
+      "height": 1.1,
+      "strength": 0.26
+    },
+    "streak": {
+      "strength": 0.035,
+      "columnMetres": 2.2,
+      "drop": 0.7
+    },
+    "bandStrength": 0.1,
+    "axis": "wall"
+  },
+  "storefrontGlass": "glass-clear",
+  "glass": "glass-shell",
+  "glassModel": {
+    "upper": "glass-reflective@9aa4aa",
+    "street": "glass-clear"
+  }
+}

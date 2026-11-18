@@ -1,0 +1,151 @@
+{
+ "seed": 35,
+ "notes": "1904 grey stucco flats, three storeys. Ground: dark garage door with dark brick base at left, a stair up to an entry at right. Storey 2: wide window group with dark frames; storey 3: a canted bay behind trees. Applied: cream lap siding with maroon frieze, dentil and bracket cornice, blue-painted ground storey, white panelled garage, stair to a recessed arched entry with a dark wood door, red roll-up and red base band removed, two bay stacks on the storeys above the flat window storey with a maroon-railed balcony between. Four levels via storeysSeen. Balcony hand.py heights follow. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Upper wall warmed to cream f0e2bc, ground storey navy 5a6fa5 (lum 0.17 floor), white panelled garage (glazed-garage + garagePanels), rectangular stair entry with dark door. Kept. Navy base deepened to 506aa8; dark wood door panel added in hand.py over the stair entry (blank infill broke the interior stair containment gate). Lifted/converted once to #f8f0de. GroundBand lift (2026-10-03): groundBand tint #506aa8 -> #7388b9 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-clapboard",
+ "wallTint": "#f8f0de",
+ "trim": "painted-white@e6dcc0",
+ "frame": "painted-white@fbf6ea",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@2a2e32",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-stucco@506aa8",
+ "cornice": true,
+ "corniceProjectionM": 0.6,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.55,
+ "windowHeadM": 1.95,
+ "upperWindows": [
+  0.3,
+  0.5,
+  0.7
+ ],
+ "bays": [
+  {
+   "at": 0.25,
+   "widthM": 2.2,
+   "projectionM": 0.6,
+   "fromStorey": 2,
+   "toStorey": 3,
+   "material": "painted-clapboard",
+   "tint": "#f0e2bc",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.75,
+   "widthM": 2.2,
+   "projectionM": 0.6,
+   "fromStorey": 2,
+   "toStorey": 3,
+   "material": "painted-clapboard",
+   "tint": "#f0e2bc",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "hbBayGlazing": {
+  "marginM": 0.2,
+  "maxW": 1.05,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#fbf6ea",
+  "sashM": 0.09,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.04,
+    "to": 0.4,
+    "kind": "glazed-garage",
+    "material": "painted-white",
+    "tint": "#f2eee4"
+   },
+   {
+    "from": 0.58,
+    "to": 0.82,
+    "kind": "door",
+    "stair": true,
+    "leaf": "wood-siding@3a2218"
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#7388b9",
+  "topM": 3.0
+ },
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.0,
+  "upperM": 2.7
+ },
+ "hbFrieze": {
+  "heightM": 0.4,
+  "material": "painted-white",
+  "tint": "#9a4040"
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.7,
+  "heightM": 0.35,
+  "depthM": 0.25,
+  "widthM": 0.18,
+  "material": "painted-white",
+  "tint": "#e6dcc0"
+ },
+ "hbCorniceDentils": {
+  "spacingM": 0.14,
+  "sizeM": 0.07,
+  "tint": "#e6dcc0"
+ },
+ "garagePanels": {
+  "material": "painted-white",
+  "tint": "#f2eee4",
+  "rows": 3,
+  "cols": 4
+ }
+}

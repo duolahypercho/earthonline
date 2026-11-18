@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "asset": "polyhaven-decrepit-wallpaper-2k",
+  "license": "CC0-1.0",
+  "author": "Rob Tuytel",
+  "assetPage": "https://polyhaven.com/a/decrepit_wallpaper",
+  "physicalWidthMetres": 2.5,
+  "intent": "shopfront interior per-part-class surface atlas (round 2): the printed-paper/card class for book spines, boxed goods and packaging",
+  "sources": {
+    "diffuse": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/decrepit_wallpaper/decrepit_wallpaper_diff_2k.jpg",
+      "md5": "6d8cef16eecb7b4c84d77008ffc375b5",
+      "downloadedMd5": "6d8cef16eecb7b4c84d77008ffc375b5",
+      "downloadedSha256": "6a16d2c30016b98cce1176e85c64075fe48255d0302e7d7b9f71198fbe818cf1"
+    },
+    "normalGlPng": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/decrepit_wallpaper/decrepit_wallpaper_nor_gl_2k.png",
+      "md5": "3834a263d4aab4adf413ee4074991a46",
+      "downloadedMd5": "3834a263d4aab4adf413ee4074991a46",
+      "downloadedSha256": "5a7477948de3cd28d2d2c415293d515afb981864d30cfd5a910c5d792fbbf998"
+    },
+    "armPng": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/decrepit_wallpaper/decrepit_wallpaper_arm_2k.png",
+      "md5": "2cfeda711c91d34b61029dfbb060c150",
+      "downloadedMd5": "2cfeda711c91d34b61029dfbb060c150",
+      "downloadedSha256": "98cc4406cb3c13cc4789b7fa3121ec5b99ba6742b399ddbdf03ca91cf82cd27f"
+    }
+  },
+  "outputs": {
+    "diffuse": {
+      "path": "public/assets/polyhaven-decrepit-wallpaper-diffuse-2k.jpg",
+      "sha256": "6a16d2c30016b98cce1176e85c64075fe48255d0302e7d7b9f71198fbe818cf1",
+      "encoding": "sRGB base color"
+    },
+    "nra": {
+      "path": "public/assets/polyhaven-decrepit-wallpaper-nra-2k.png",
+      "sha256": "3cc2d38af5f436ee873c2a9df16e2b0af2730f9ae8ecd9b1579ee148d89cda10",
+      "encoding": "R,G OpenGL tangent normal x,y (z rebuilt); B Poly Haven roughness; A 128 + occlusion * 127; 8-bit PNG, linear/no-color, not premultiplied"
+    }
+  },
+  "generator": {
+    "path": "scripts/assets/fetch-polyhaven-texture.mjs",
+    "sha256": "dc95175584447e64778fdca3331fd860947e02b7405d89d77f83b14176a720ce",
+    "algorithm": "diffuse: lossless copy of the Poly Haven 2k jpg after md5 verification against the files API; nra: decode the verified 2k PNG normal and ARM, pack R,G=normal xy, B=roughness, A=128+round(ao*127), encode 8-bit RGBA PNG with Paeth filtering and deflate level 9"
+  }
+}

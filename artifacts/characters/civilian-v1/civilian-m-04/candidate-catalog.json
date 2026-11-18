@@ -1,0 +1,188 @@
+{
+  "version": "earthonline-civilian-catalog-v1",
+  "previewOnly": true,
+  "productionAuthorized": false,
+  "contract": "earthonline-humanoid-v1",
+  "characters": [
+    {
+      "id": "civilian-m-04",
+      "lods": {
+        "player": {
+          "file": "player.glb",
+          "sha256": "9544d26ad329287233ae91149d74106cd7b7e6709b73d326cfe55b0d272421a2",
+          "bytes": 13665924,
+          "triangles": 22985,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 16,
+          "textureDimensions": [
+            [
+              2048,
+              2048
+            ],
+            [
+              2048,
+              2048
+            ],
+            [
+              2048,
+              2048
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.26229193806648254,
+              -0.007203311193734407,
+              -0.11318868398666382
+            ],
+            "max": [
+              0.2622919976711273,
+              1.75,
+              0.20454852283000946
+            ]
+          }
+        },
+        "hero": {
+          "file": "hero.glb",
+          "sha256": "6087f37753b882cf087c89b03a08c0e5eed6c31db456cdff5227d1f60438b1ad",
+          "bytes": 5411388,
+          "triangles": 11482,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 16,
+          "textureDimensions": [
+            [
+              1024,
+              1024
+            ],
+            [
+              1024,
+              1024
+            ],
+            [
+              1024,
+              1024
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.262397438287735,
+              -0.007112458813935518,
+              -0.11319486796855927
+            ],
+            "max": [
+              0.2620679438114166,
+              1.75,
+              0.20473289489746094
+            ]
+          }
+        },
+        "near": {
+          "file": "near.glb",
+          "sha256": "5a529af090a8cf153718c5d99335792c8d5f9461fce1b1cf5a29bc196c57bbfc",
+          "bytes": 676620,
+          "triangles": 1882,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              512,
+              512
+            ],
+            [
+              512,
+              512
+            ],
+            [
+              512,
+              512
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.2624395787715912,
+              -0.00799771398305893,
+              -0.11309932917356491
+            ],
+            "max": [
+              0.26256904006004333,
+              1.75,
+              0.2074776142835617
+            ]
+          }
+        },
+        "mid": {
+          "file": "mid.glb",
+          "sha256": "ba822b00dbf347dea48efa439024e58bfa03261577dba167e1cff42c8d9568ce",
+          "bytes": 204944,
+          "triangles": 346,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              256,
+              256
+            ],
+            [
+              256,
+              256
+            ],
+            [
+              256,
+              256
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.26353156566619873,
+              4.8239773605018854e-05,
+              -0.12577274441719055
+            ],
+            "max": [
+              0.2612323760986328,
+              1.75,
+              0.21201442182064056
+            ]
+          }
+        },
+        "far": {
+          "file": "far.glb",
+          "sha256": "63a9f6abd10d415c82ed74dc95827f7313c67df642a8511cbaa32388f32bb248",
+          "bytes": 76332,
+          "triangles": 115,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              128,
+              128
+            ],
+            [
+              128,
+              128
+            ],
+            [
+              128,
+              128
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.2576074004173279,
+              0.008209221996366978,
+              -0.13073807954788208
+            ],
+            "max": [
+              0.2520606517791748,
+              1.75,
+              0.23322248458862305
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

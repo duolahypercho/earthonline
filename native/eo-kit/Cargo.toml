@@ -1,0 +1,22 @@
+[package]
+name = "eo-kit"
+version = "0.1.0"
+edition = "2024"
+description = "Earth Online native: Rust port of the browser game's archetype (kit) building planner, its LOD rungs and mesh emission"
+publish = false
+
+[features]
+default = []
+
+[dependencies]
+earcut = "0.4.12"
+eo-data = { path = "../eo-data" }
+flate2 = "1.1.11"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+
+[dev-dependencies]
+# roofs: the roof survey tool (examples/roof_survey.rs) reads JPEG tiles and writes PNG evidence
+jpeg-decoder = { version = "0.3.2", default-features = false }
+png = "0.18.1"
+sha2 = "0.11.1"

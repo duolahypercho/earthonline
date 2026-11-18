@@ -1,0 +1,59 @@
+{
+  "seed": 1,
+  "builder": "fort",
+  "streamPresentation": true,
+  "notes": "A three-tier brick casemate fort round an open parade, on the DataSF footprint and LiDAR median. Front edge 4 is the landward gorge (barracks face, sally port); the channel and side faces carry three rows of embrasures. Look values come from the words-only dossier sheet (.qa-quality-cards/landmarks/runs/fort-point/dossier/sheet.md).",
+  "fort": {
+    "brick": "brick-common-bond@c8a49c",
+    "granite": "limestone-ashlar@b4b8bc",
+    "deck": "concrete-precast@a49e94",
+    "parade": "concrete-precast@8e897f",
+    "recess": "painted-block@3a332e",
+    "door": "wood-siding@5a4434",
+    "parapetM": 1.3,
+    "parapetThickM": 0.9,
+    "plinthM": 1.1,
+    "copingM": 0.35,
+    "casemateDepthM": 11.0,
+    "gorgeDepthM": 9.0,
+    "tiers": [
+      0.0,
+      4.9,
+      9.4
+    ],
+    "embrasure": {
+      "widthM": 0.8,
+      "heightM": 1.2,
+      "sillM": 1.4,
+      "spacingM": 5.2,
+      "minEdgeM": 5.0,
+      "surroundM": 0.2
+    },
+    "arcade": {
+      "bayM": 5.2,
+      "widthFrac": 0.62,
+      "springFrac": 0.5,
+      "depthM": 0.9,
+      "segments": 8
+    },
+    "gorgeWindows": {
+      "rows": [
+        1.0,
+        5.6,
+        10.1
+      ],
+      "widthM": 1.6,
+      "heightM": 2.6,
+      "spacingM": 3.4,
+      "depthM": 0.45
+    },
+    "sallyPort": {
+      "widthM": 3.2,
+      "heightM": 4.4,
+      "springM": 2.9,
+      "surroundM": 0.5
+    },
+    "turrets": [],
+    "gallery": true
+  }
+}

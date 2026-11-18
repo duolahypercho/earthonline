@@ -1,0 +1,810 @@
+//! Moving things on the GPU: the simulated cars and people and the player.
+//!
+//! The agent library (`eo_agents::library::Library`: every traffic body's
+//! LODs and every civilian tier in one vertex and one index buffer, a mesh
+//! table, a model table, materials, atlases and baked joint matrices) is
+//! written once. Per frame the CPU writes the instance array (64 bytes an
+//! agent, built off the render thread by `eo_agents::feed`) and two small
+//! uniforms; everything else is GPU-driven, like the static city:
+//!
+//! 1. one compute pass (`agents_cull.wgsl`): frustum cull, the distance tier
+//!    per agent with the JS tier caps applied nearest first, a coarser caster
+//!    tier per sun cascade, and one `DrawIndexedIndirect` per (view, mesh)
+//!    whose instances are the agents in that bucket;
+//! 2. the cascades the look refreshed this frame get the agents' casters with
+//!    ONE `multi_draw_indexed_indirect` each, after the city's own casters
+//!    (so moving things cast sun shadows);
+//! 3. in the city pass, after the opaque city list: ONE multi-draw for the
+//!    agents' opaque parts (people skinned in the vertex shader from the baked
+//!    matrices, wheels spun and steered), lit by the city's `look_light`
+//!    (sun with the cascaded shadow, so they also receive shadows), and after
+//!    the city's transparent list ONE multi-draw for their glass and lenses.
+
+use crate::camera::{Camera, frustum_planes};
+use crate::look::LookGpu;
+use crate::{DEPTH_FORMAT, DRAW_ARGS_BYTES, GpuContext, IDS_FORMAT};
+use anyhow::{Result, anyhow};
+use bytemuck::{Pod, Zeroable};
+use eo_agents::library::Library;
+use eo_agents::{AgentVertex, GpuAgent, LODS};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use wgpu::util::DeviceExt;
+
+/// Agents the buffers hold.
+pub const AGENT_CAPACITY: u32 = 32_768;
+/// Views: the camera and three cascades.
+pub const VIEWS: u64 = 4;
+/// Command lists: camera opaque, camera transparent, cascades 0..2.
+pub const LISTS: u64 = 5;
+const BINS: u64 = 512;
+/// Counter words of the stats buffer: per view (instances, triangles), then
+/// agents submitted per class (vehicles, people), pad.
+pub const STATS_WORDS: usize = 12;
+/// Timestamps this module writes per frame: cull begin/end, casters begin/end.
+pub const QUERIES_PER_FRAME: u32 = 4;
+
+/// Distance tiers and caps (`HERO_OVERLAY` / the crowd's bands and budget), metres.
+#[derive(Clone, Copy, Debug)]
+pub struct Tiers {
+    pub veh_radius: [f32; 4],
+    pub veh_cap: [u32; 4],
+    pub ped_radius: [f32; 4],
+    pub ped_cap: [u32; 4],
+}
+
+impl Tiers {
+    /// The JS values: vehicles LOD0 within `nearRadius` (22 m, at most
+    /// `nearMax` 2), LOD1 within `radius` (60 m, at most `max` 10), LOD2 (no
+    /// cap here: the JS draws the bodies past its 40 overlay slots as the
+    /// procedural lofted fleet, which is not ported) to 160 m, the box to 400 m;
+    /// hero tier within 6 m (`civilianTierForDistance`), near (skinned
+    /// band) within 34 m and the hero + near tiers at most `CROWD_BUDGET.skinned`
+    /// 24, mid (instanced band) within 145 m at most 104, far within 240 m at most 320.
+    pub fn from_js(js: &eo_agents::catalog::AgentsJs) -> Self {
+        let h = js.hero_overlay;
+        let c = &js.crowd;
+        Tiers {
+            veh_radius: [h.near_radius as f32, h.radius as f32, 160.0, 400.0],
+            veh_cap: [h.near_max, h.max, u32::MAX / 2, u32::MAX / 2],
+            ped_radius: [6.0, c.band_distances.skinned as f32, c.band_distances.instanced as f32, c.band_distances.far as f32],
+            ped_cap: [c.budget.skinned, c.budget.skinned, c.budget.instanced, c.budget.far],
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct AgParams {
+    planes: [[f32; 4]; 6],
+    cam: [f32; 4],
+    counts: [u32; 4],
+    veh_radius: [f32; 4],
+    veh_cap: [u32; 4],
+    ped_radius: [f32; 4],
+    ped_cap: [u32; 4],
+    clip_frames: [u32; 4],
+    clip_base: [u32; 4],
+    lamp_tail: [f32; 4],
+    lamp_head: [f32; 4],
+    lamp_misc: [f32; 4],
+    /// x the views a cull dispatch serves (bit 0 camera, bits 1..3 cascades).
+    misc: [u32; 4],
+    /// the camera's view-projection (the pyramid test).
+    view_proj: [[f32; 4]; 4],
+}
+
+/// draw.wgsl's `Frame`.
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+struct AgFrame {
+    view_proj: [[f32; 4]; 4],
+    cam_pos: [f32; 4],
+    sun_dir: [f32; 4],
+    sun_color: [f32; 4],
+    ambient_sky: [f32; 4],
+    ambient_ground: [f32; 4],
+    copy_step: [f32; 4],
+}
+
+pub struct AgentsGpu {
+    enabled: AtomicBool,
+    active: AtomicBool,
+    count: AtomicU32,
+    pub mesh_count: u32,
+    pub model_count: u32,
+    tiers: Tiers,
+    clip_frames: [u32; 4],
+    clip_base: [u32; 4],
+    lamps: ([f32; 4], [f32; 4], f32),
+    vbuf: wgpu::Buffer,
+    ibuf: wgpu::Buffer,
+    agents: wgpu::Buffer,
+    params: wgpu::Buffer,
+    frame: wgpu::Buffer,
+    counts: wgpu::Buffer,
+    hist: wgpu::Buffer,
+    cmds: wgpu::Buffer,
+    stats: wgpu::Buffer,
+    cull_bg: wgpu::BindGroup,
+    cull: [wgpu::ComputePipeline; 5],
+    /// the camera view's cull after the pyramid (assign, offsets, scatter)
+    /// with its own parameters (`params_c`: the camera view only).
+    params_c: wgpu::Buffer,
+    cull_bg_c: wgpu::BindGroup,
+    cull_c: [wgpu::ComputePipeline; 3],
+    camera_late: AtomicBool,
+    draw_bg: wgpu::BindGroup,
+    data_bg: wgpu::BindGroup,
+    view_bg: wgpu::BindGroup,
+    opaque: wgpu::RenderPipeline,
+    glass: wgpu::RenderPipeline,
+    /// the velocity pipeline (single-sample renderers) and the model table the light gather reads.
+    velocity: Option<wgpu::RenderPipeline>,
+    models_buf: wgpu::Buffer,
+    shadow: wgpu::RenderPipeline,
+    timing: Mutex<Option<(wgpu::QuerySet, u32)>>,
+    /// GPU bytes allocated here.
+    pub bytes: u64,
+}
+
+impl AgentsGpu {
+    /// `late_bgl`: the occlusion pyramid's bind group layout (`OcclusionGpu::late_bgl`).
+    pub fn new(ctx: &GpuContext, look: &LookGpu, lib: &Library, sample_count: u32, debug_ids: bool, late_bgl: &wgpu::BindGroupLayout) -> Result<Self> {
+        let d = &ctx.device;
+        let q = &ctx.queue;
+        let js = eo_agents::catalog::AgentsJs::load()?;
+        let mesh_count = lib.meshes.len() as u32;
+        if mesh_count == 0 || mesh_count > 511 {
+            // the cull keeps the mesh in 9 bits of its record (511, was 255).
+            return Err(anyhow!("agent library has {mesh_count} meshes (1..=511 supported)"));
+        }
+        let init = |label: &str, bytes: &[u8], usage: wgpu::BufferUsages| {
+            let contents: Vec<u8> = if bytes.is_empty() { vec![0u8; 16] } else { bytes.to_vec() };
+            d.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some(label), contents: &contents, usage })
+        };
+        let empty = |label: &str, size: u64, usage: wgpu::BufferUsages| {
+            d.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: size.max(16).next_multiple_of(16), usage, mapped_at_creation: false })
+        };
+        use wgpu::BufferUsages as U;
+        let vbuf = init("agent-vertices", bytemuck::cast_slice(&lib.vertices), U::VERTEX);
+        let ibuf = init("agent-indices", bytemuck::cast_slice(&lib.indices), U::INDEX);
+        let meshes = init("agent-meshes", bytemuck::cast_slice(&lib.meshes), U::STORAGE);
+        let models = init("agent-models", bytemuck::cast_slice(&lib.models), U::STORAGE);
+        let bones = init("agent-bones", bytemuck::cast_slice(&lib.bones), U::STORAGE);
+        let materials = init("agent-materials", bytemuck::cast_slice(&lib.materials), U::STORAGE);
+        // One object entry: the look's material class "painted" (draw.wgsl kind 0).
+        let objects = init("agent-object", &[0u8; 64], U::STORAGE);
+        let n = AGENT_CAPACITY as u64;
+        let m = mesh_count as u64;
+        let agents = empty("agents", n * 64, U::STORAGE | U::COPY_DST);
+        let params = empty("agent-params", std::mem::size_of::<AgParams>() as u64, U::UNIFORM | U::COPY_DST);
+        let params_c = empty("agent-params-camera", std::mem::size_of::<AgParams>() as u64, U::UNIFORM | U::COPY_DST);
+        let frame = empty("agent-frame", std::mem::size_of::<AgFrame>() as u64, U::UNIFORM | U::COPY_DST);
+        let records = empty("agent-records", n * VIEWS * 4, U::STORAGE);
+        let visible = empty("agent-visible", n * VIEWS * 4, U::STORAGE);
+        let counts = empty("agent-counts", m * VIEWS * 2 * 4, U::STORAGE | U::COPY_DST);
+        let hist = empty("agent-hist", (2 * BINS + 8) * 4, U::STORAGE | U::COPY_DST);
+        let cmds = empty("agent-draws", m * LISTS * DRAW_ARGS_BYTES, U::STORAGE | U::INDIRECT | U::COPY_SRC);
+        let stats = empty("agent-stats", (STATS_WORDS * 4) as u64, U::STORAGE | U::COPY_DST | U::COPY_SRC);
+
+        // Atlases: albedo (sRGB), normal, ORM; one layer per civilian family.
+        // or the cooked BC chains (BC3 sRGB, BC5, BC1), decoded to RGBA8
+        // on a device without BC textures.
+        let res = lib.meta.atlas_res.max(1);
+        let layers = (lib.atlases.len() as u32).max(1);
+        let bc_levels = lib.atlases.first().filter(|a| !a.bc[0].is_empty()).map(|a| a.bc_levels);
+        let bc_native = bc_levels.is_some() && d.features().contains(wgpu::Features::TEXTURE_COMPRESSION_BC);
+        let mips = bc_levels.unwrap_or(if res > 1 { res.ilog2() + 1 } else { 1 });
+        let mut tex_bytes = 0u64;
+        let formats = if bc_native {
+            [wgpu::TextureFormat::Bc3RgbaUnormSrgb, wgpu::TextureFormat::Bc5RgUnorm, wgpu::TextureFormat::Bc1RgbaUnorm]
+        } else {
+            [wgpu::TextureFormat::Rgba8UnormSrgb, wgpu::TextureFormat::Rgba8Unorm, wgpu::TextureFormat::Rgba8Unorm]
+        };
+        let textures: Vec<wgpu::Texture> = formats
+            .iter()
+            .enumerate()
+            .map(|(k, fmt)| {
+                let t = d.create_texture(&wgpu::TextureDescriptor {
+                    label: Some(["agent-atlas-albedo", "agent-atlas-normal", "agent-atlas-orm"][k]),
+                    size: wgpu::Extent3d { width: res, height: res, depth_or_array_layers: layers },
+                    mip_level_count: mips,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: *fmt,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                    view_formats: &[],
+                });
+                if bc_levels.is_some() {
+                    // the cooked chains, level by level.
+                    for (layer, a) in lib.atlases.iter().enumerate() {
+                        let mut at = 0usize;
+                        for mip in 0..mips {
+                            let r = (res >> mip).max(4);
+                            let n = eo_agents::rocketbox::bc_level_bytes(k, r);
+                            let Some(level) = a.bc[k].get(at..at + n) else { break };
+                            at += n;
+                            let origin = wgpu::Origin3d { x: 0, y: 0, z: layer as u32 };
+                            let size = wgpu::Extent3d { width: r, height: r, depth_or_array_layers: 1 };
+                            if bc_native {
+                                let blocks = r.div_ceil(4);
+                                q.write_texture(wgpu::TexelCopyTextureInfo { texture: &t, mip_level: mip, origin, aspect: wgpu::TextureAspect::All }, level, wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(blocks * (n as u32 / (blocks * blocks))), rows_per_image: Some(blocks) }, size);
+                            } else {
+                                let rgba = eo_agents::rocketbox::bc_level_rgba(k, level, r);
+                                q.write_texture(wgpu::TexelCopyTextureInfo { texture: &t, mip_level: mip, origin, aspect: wgpu::TextureAspect::All }, &rgba, wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(r * 4), rows_per_image: Some(r) }, size);
+                            }
+                        }
+                    }
+                    tex_bytes += (0..mips).map(|mp| if bc_native { eo_agents::rocketbox::bc_level_bytes(k, (res >> mp).max(4)) as u64 } else { ((res >> mp).max(4) as u64).pow(2) * 4 }).sum::<u64>() * layers as u64;
+                    return t;
+                }
+                for (layer, a) in lib.atlases.iter().enumerate() {
+                    let chain = crate::authored::mip_chain(&a.maps[k], res as usize, k == 0);
+                    for (mip, level) in chain.iter().enumerate().take(mips as usize) {
+                        let r = (res >> mip).max(1);
+                        q.write_texture(
+                            wgpu::TexelCopyTextureInfo { texture: &t, mip_level: mip as u32, origin: wgpu::Origin3d { x: 0, y: 0, z: layer as u32 }, aspect: wgpu::TextureAspect::All },
+                            level,
+                            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(r * 4), rows_per_image: Some(r) },
+                            wgpu::Extent3d { width: r, height: r, depth_or_array_layers: 1 },
+                        );
+                    }
+                }
+                tex_bytes += (0..mips).map(|mp| ((res >> mp).max(1) as u64).pow(2) * 4).sum::<u64>() * layers as u64;
+                t
+            })
+            .collect();
+        let view = |t: &wgpu::Texture| t.create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() });
+        let sampler = d.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("agent-atlas-sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Linear,
+            anisotropy_clamp: 16,
+            ..Default::default()
+        });
+
+        let entry = |binding, visibility, ty| wgpu::BindGroupLayoutEntry { binding, visibility, ty, count: None };
+        let ubuf = wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None };
+        let sbuf = |read_only| wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only }, has_dynamic_offset: false, min_binding_size: None };
+        let cs = wgpu::ShaderStages::COMPUTE;
+        let vf = wgpu::ShaderStages::VERTEX_FRAGMENT;
+        let fs = wgpu::ShaderStages::FRAGMENT;
+        fn bge(binding: u32, b: &wgpu::Buffer) -> wgpu::BindGroupEntry<'_> {
+            wgpu::BindGroupEntry { binding, resource: b.as_entire_binding() }
+        }
+
+        // Cull.
+        let cull_src = format!("{}\n{}\nfn ag_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return false; }}\n", include_str!("agents_types.wgsl"), include_str!("agents_cull.wgsl"));
+        // the camera view after the pyramid (occlusion.wgsl's `hzb_occluded`).
+        let hzb_src = format!(
+            "{}\n{}\nstruct HzbInfo {{ screen: vec4<f32> }};\n@group(1) @binding(0) var hzb: texture_2d<f32>;\n@group(1) @binding(1) var<uniform> hzb_info: HzbInfo;\n{}\nfn ag_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return hzb_occluded(mn, mx, ag.view_proj, hzb_info.screen.xy); }}\n",
+            include_str!("agents_types.wgsl"),
+            include_str!("agents_cull.wgsl"),
+            crate::occlusion::OCCLUSION_WGSL
+        );
+        let cull_module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("agents_cull.wgsl"), source: wgpu::ShaderSource::Wgsl(cull_src.into()) });
+        let cull_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("agent-cull-bgl"),
+            entries: &[
+                entry(0, cs, ubuf),
+                entry(1, cs, sbuf(true)),
+                entry(2, cs, sbuf(true)),
+                entry(3, cs, sbuf(true)),
+                entry(4, cs, sbuf(false)),
+                entry(5, cs, sbuf(false)),
+                entry(6, cs, sbuf(false)),
+                entry(7, cs, sbuf(false)),
+                entry(8, cs, sbuf(false)),
+                entry(9, cs, sbuf(false)),
+                entry(10, cs, ubuf),
+            ],
+        });
+        let cull_bg_for = |p: &wgpu::Buffer, label: &str| d.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(label),
+            layout: &cull_bgl,
+            entries: &[
+                bge(0, p),
+                bge(1, &agents),
+                bge(2, &models),
+                bge(3, &meshes),
+                bge(4, &records),
+                bge(5, &visible),
+                bge(6, &counts),
+                bge(7, &hist),
+                bge(8, &cmds),
+                bge(9, &stats),
+                wgpu::BindGroupEntry {
+                    binding: 10,
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding { buffer: look.shadow_view_buffer(), offset: 0, size: Some(std::num::NonZeroU64::new(768).unwrap()) }),
+                },
+            ],
+        });
+        let cull_bg = cull_bg_for(&params, "agent-cull-bg");
+        let cull_bg_c = cull_bg_for(&params_c, "agent-cull-bg-camera");
+        let cull_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("agent-cull-layout"), bind_group_layouts: &[Some(&cull_bgl)], immediate_size: 0 });
+        let compute = |e: &str| {
+            d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some(e), layout: Some(&cull_layout), module: &cull_module, entry_point: Some(e), compilation_options: Default::default(), cache: None })
+        };
+        let cull = [compute("classify"), compute("cutoffs"), compute("assign"), compute("offsets"), compute("scatter")];
+        // the late camera cull binds the pyramid as group 1.
+        let hzb_module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("agents_cull.wgsl (hzb)"), source: wgpu::ShaderSource::Wgsl(hzb_src.into()) });
+        let hzb_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("agent-cull-hzb-layout"), bind_group_layouts: &[Some(&cull_bgl), Some(late_bgl)], immediate_size: 0 });
+        let compute_c = |e: &str| {
+            d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some(e), layout: Some(&hzb_layout), module: &hzb_module, entry_point: Some(e), compilation_options: Default::default(), cache: None })
+        };
+        let cull_c = [compute_c("assign"), compute_c("offsets"), compute_c("scatter")];
+
+        // Agent data (group 2 of the colour and shadow pipelines).
+        let data_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("agent-data-bgl"),
+            entries: &[entry(0, vf, ubuf), entry(1, vf, sbuf(true)), entry(2, vf, sbuf(true)), entry(3, vf, sbuf(true)), entry(4, vf, sbuf(true)), entry(5, vf, sbuf(true))],
+        });
+        let data_bg = d.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("agent-data-bg"),
+            layout: &data_bgl,
+            entries: &[bge(0, &params), bge(1, &agents), bge(2, &models), bge(3, &meshes), bge(4, &bones), bge(5, &visible)],
+        });
+        // Group 0 in draw.wgsl's layout, with the agents' own resources.
+        let tex = |binding| {
+            entry(binding, fs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2Array, multisampled: false })
+        };
+        let draw_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("agent-draw-bgl"),
+            entries: &[
+                entry(0, vf, ubuf),
+                entry(1, vf, sbuf(true)),
+                entry(2, fs, sbuf(true)),
+                tex(3),
+                tex(4),
+                tex(5),
+                entry(6, fs, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
+                // look_light names the scene probe; agents keep the analytic sky
+                // (their frame says no probe), so a 1 x 1 stand-in is bound.
+                tex(14),
+                entry(15, fs, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
+                entry(16, fs, sbuf(true)),
+            ],
+        });
+        let probe_stand_in = d.create_texture(&wgpu::TextureDescriptor {
+            label: Some("agent-probe-stand-in"),
+            size: wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 6 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let probe_view = view(&probe_stand_in); // facade
+        let probe_sh = d.create_buffer(&wgpu::BufferDescriptor { label: Some("agent-probe-sh-stand-in"), size: 160, usage: wgpu::BufferUsages::STORAGE, mapped_at_creation: false }); // facade
+        let (av, nv, ov) = (view(&textures[0]), view(&textures[1]), view(&textures[2]));
+        let draw_bg = d.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("agent-draw-bg"),
+            layout: &draw_bgl,
+            entries: &[
+                bge(0, &frame),
+                bge(1, &objects),
+                bge(2, &materials),
+                wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&av) },
+                wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(&nv) },
+                wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(&ov) },
+                wgpu::BindGroupEntry { binding: 6, resource: wgpu::BindingResource::Sampler(&sampler) },
+                wgpu::BindGroupEntry { binding: 14, resource: wgpu::BindingResource::TextureView(&probe_view) }, // facade
+                wgpu::BindGroupEntry { binding: 15, resource: wgpu::BindingResource::Sampler(&sampler) },        // facade
+                wgpu::BindGroupEntry { binding: 16, resource: probe_sh.as_entire_binding() },                   // facade
+            ],
+        });
+        let draw_src = format!(
+            "{}\n{}\n{}\n{}\n{}",
+            crate::look::city_shader_source(),
+            include_str!("agents_types.wgsl"),
+            include_str!("agents_common.wgsl"),
+            include_str!("agents_draw.wgsl"),
+            include_str!("sky_velocity.wgsl") // sky
+        );
+        let draw_module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("agents_draw.wgsl"), source: wgpu::ShaderSource::Wgsl(draw_src.into()) });
+        let draw_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("agent-draw-layout"),
+            bind_group_layouts: &[Some(&draw_bgl), Some(look.main_bind_group_layout()), Some(&data_bgl)],
+            immediate_size: 0,
+        });
+        let attrs = [
+            wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x3, offset: 0, shader_location: 0 },
+            wgpu::VertexAttribute { format: wgpu::VertexFormat::Snorm8x4, offset: 12, shader_location: 1 },
+            wgpu::VertexAttribute { format: wgpu::VertexFormat::Unorm16x2, offset: 16, shader_location: 2 },
+            wgpu::VertexAttribute { format: wgpu::VertexFormat::Uint8x4, offset: 20, shader_location: 3 },
+            wgpu::VertexAttribute { format: wgpu::VertexFormat::Unorm8x4, offset: 24, shader_location: 4 },
+            wgpu::VertexAttribute { format: wgpu::VertexFormat::Uint32, offset: 28, shader_location: 5 },
+        ];
+        let stride = std::mem::size_of::<AgentVertex>() as u64;
+        let make = |label: &str, blend: bool| {
+            let color = wgpu::ColorTargetState { format: crate::look::HDR_FORMAT, blend: blend.then_some(wgpu::BlendState::ALPHA_BLENDING), write_mask: wgpu::ColorWrites::ALL };
+            let ids = wgpu::ColorTargetState { format: IDS_FORMAT, blend: None, write_mask: if blend { wgpu::ColorWrites::empty() } else { wgpu::ColorWrites::ALL } };
+            let targets_ids = [Some(color.clone()), Some(ids)];
+            let targets = [Some(color)];
+            d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&draw_layout),
+                vertex: wgpu::VertexState {
+                    module: &draw_module,
+                    entry_point: Some("agent_vs"),
+                    compilation_options: Default::default(),
+                    buffers: &[Some(wgpu::VertexBufferLayout { array_stride: stride, step_mode: wgpu::VertexStepMode::Vertex, attributes: &attrs })],
+                },
+                primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleList, cull_mode: None, ..Default::default() },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: DEPTH_FORMAT,
+                    depth_write_enabled: Some(!blend),
+                    depth_compare: Some(if blend { wgpu::CompareFunction::GreaterEqual } else { wgpu::CompareFunction::Greater }),
+                    stencil: Default::default(),
+                    bias: Default::default(),
+                }),
+                multisample: wgpu::MultisampleState { count: sample_count, ..Default::default() },
+                fragment: Some(wgpu::FragmentState {
+                    module: &draw_module,
+                    entry_point: Some(if debug_ids { "agent_fs_ids" } else { "agent_fs" }),
+                    compilation_options: Default::default(),
+                    targets: if debug_ids { &targets_ids } else { &targets },
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let opaque = make("agent-opaque", false);
+        let glass = make("agent-glass", true);
+        // the agents' screen motion for the temporal resolve (single-sample, no ids).
+        let velocity = (sample_count == 1 && !debug_ids).then(|| {
+            d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("agent-velocity"),
+                layout: Some(&draw_layout),
+                vertex: wgpu::VertexState {
+                    module: &draw_module,
+                    entry_point: Some("agent_vel_vs"),
+                    compilation_options: Default::default(),
+                    buffers: &[Some(wgpu::VertexBufferLayout { array_stride: stride, step_mode: wgpu::VertexStepMode::Vertex, attributes: &attrs })],
+                },
+                primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleList, cull_mode: None, ..Default::default() },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: DEPTH_FORMAT,
+                    depth_write_enabled: Some(false),
+                    depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
+                    stencil: Default::default(),
+                    bias: wgpu::DepthBiasState { constant: 4, slope_scale: 1.0, clamp: 0.0 },
+                }),
+                multisample: Default::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &draw_module,
+                    entry_point: Some("agent_vel_fs"),
+                    compilation_options: Default::default(),
+                    targets: &[Some(wgpu::ColorTargetState { format: crate::sky::VEL_FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL })],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        });
+
+        // Shadow casters.
+        let view_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("agent-shadow-view-bgl"),
+            entries: &[entry(0, wgpu::ShaderStages::VERTEX, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: true, min_binding_size: None })],
+        });
+        let view_bg = d.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("agent-shadow-view-bg"),
+            layout: &view_bgl,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding { buffer: look.shadow_view_buffer(), offset: 0, size: Some(std::num::NonZeroU64::new(80).unwrap()) }),
+            }],
+        });
+        let shadow_src = format!("{}\n{}\n{}", include_str!("agents_types.wgsl"), include_str!("agents_common.wgsl"), include_str!("agents_shadow.wgsl"));
+        let shadow_module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("agents_shadow.wgsl"), source: wgpu::ShaderSource::Wgsl(shadow_src.into()) });
+        let shadow_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("agent-shadow-layout"),
+            bind_group_layouts: &[Some(&view_bgl), None, Some(&data_bgl)],
+            immediate_size: 0,
+        });
+        let shadow = d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("agent-shadow"),
+            layout: Some(&shadow_layout),
+            vertex: wgpu::VertexState {
+                module: &shadow_module,
+                entry_point: Some("agent_shadow_vs"),
+                compilation_options: Default::default(),
+                buffers: &[Some(wgpu::VertexBufferLayout { array_stride: stride, step_mode: wgpu::VertexStepMode::Vertex, attributes: &attrs })],
+            },
+            primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleList, cull_mode: None, ..Default::default() },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: crate::look::SHADOW_FORMAT,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Less),
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multisample: Default::default(),
+            fragment: None,
+            multiview_mask: None,
+            cache: None,
+        });
+
+        let lamp = |k: &str| js.hero_lamp.get(k).map(|l| (l.day as f32, l.night as f32)).unwrap_or((0.0, 0.0));
+        let (tail, brake, head, ind) = (lamp("tail"), lamp("brake"), lamp("head"), lamp("indicator"));
+        let bytes = [&vbuf, &ibuf, &meshes, &models, &bones, &materials, &objects, &agents, &params, &params_c, &frame, &records, &visible, &counts, &hist, &cmds, &stats].iter().map(|b| b.size()).sum::<u64>() + tex_bytes;
+        Ok(Self {
+            enabled: AtomicBool::new(true),
+            active: AtomicBool::new(false),
+            count: AtomicU32::new(0),
+            mesh_count,
+            model_count: lib.models.len() as u32,
+            tiers: Tiers::from_js(&js),
+            clip_frames: lib.meta.clip_frames,
+            clip_base: lib.meta.clip_base,
+            lamps: ([tail.0, tail.1, brake.0, brake.1], [head.0, head.1, ind.0, ind.1], js.hero_lamp_day_running_floor as f32),
+            vbuf,
+            ibuf,
+            agents,
+            params,
+            frame,
+            counts,
+            hist,
+            cmds,
+            stats,
+            cull_bg,
+            cull,
+            params_c,
+            cull_bg_c,
+            cull_c,
+            camera_late: AtomicBool::new(false),
+            draw_bg,
+            data_bg,
+            view_bg,
+            opaque,
+            glass,
+            velocity,                // sky
+            models_buf: models.clone(), // sky
+            shadow,
+            timing: Mutex::new(None),
+            bytes,
+        })
+    }
+
+    /// Agents on or off (off: no pass runs, nothing is drawn).
+    pub fn set_enabled(&self, on: bool) {
+        self.enabled.store(on, Ordering::Relaxed);
+    }
+
+    pub fn enabled(&self) -> bool {
+        self.enabled.load(Ordering::Relaxed)
+    }
+
+    /// This frame's agents (at most `AGENT_CAPACITY`; the rest are dropped).
+    pub fn upload(&self, queue: &wgpu::Queue, agents: &[GpuAgent]) -> usize {
+        let n = agents.len().min(AGENT_CAPACITY as usize);
+        if n > 0 {
+            queue.write_buffer(&self.agents, 0, bytemuck::cast_slice(&agents[..n]));
+        }
+        self.count.store(n as u32, Ordering::Relaxed);
+        n
+    }
+
+    pub fn count(&self) -> u32 {
+        self.count.load(Ordering::Relaxed)
+    }
+
+    /// Timestamps for the coming encode (bench): a query set and the first of `QUERIES_PER_FRAME` slots.
+    pub fn set_timestamps(&self, ts: Option<(wgpu::QuerySet, u32)>) {
+        *self.timing.lock().unwrap() = ts;
+    }
+
+    pub fn stats_buffer(&self) -> &wgpu::Buffer {
+        &self.stats
+    }
+
+    /// The camera's uniforms (after the look's update, which fitted this frame's cascades).
+    pub fn update(&self, queue: &wgpu::Queue, cam: &Camera, look: &LookGpu, seconds: f64) {
+        let vp = cam.view_proj();
+        let planes = frustum_planes(vp).map(|p| p.to_array());
+        let alt = look.frame().model.sun.altitude_deg as f32;
+        // Day / night lamp state from the sun (not the JS's own lamp clock): night below -6 deg, day above 6 deg.
+        let night = ((6.0 - alt) / 12.0).clamp(0.0, 1.0);
+        let t = self.tiers;
+        let p = AgParams {
+            planes,
+            cam: [cam.eye.x, cam.eye.y, cam.eye.z, 0.0],
+            counts: [self.count(), self.mesh_count, AGENT_CAPACITY, self.model_count],
+            veh_radius: t.veh_radius,
+            veh_cap: t.veh_cap,
+            ped_radius: t.ped_radius,
+            ped_cap: t.ped_cap,
+            clip_frames: self.clip_frames,
+            clip_base: self.clip_base,
+            lamp_tail: self.lamps.0,
+            lamp_head: self.lamps.1,
+            lamp_misc: [night, self.lamps.2, seconds.rem_euclid(3600.0) as f32, 0.0],
+            // before the shadows the cascades, and the camera only
+            // without an occlusion pass this frame.
+            misc: [if self.camera_late.load(Ordering::Relaxed) { 0b1110 } else { 0b1111 }, 0, 0, 0],
+            view_proj: vp.to_cols_array_2d(),
+        };
+        queue.write_buffer(&self.params, 0, bytemuck::bytes_of(&p));
+        let pc = AgParams { misc: [0b0001, 0, 0, 0], ..p }; // after the pyramid, the camera
+        queue.write_buffer(&self.params_c, 0, bytemuck::bytes_of(&pc));
+        let f = AgFrame {
+            view_proj: vp.to_cols_array_2d(),
+            cam_pos: cam.eye.extend(1.0).to_array(),
+            sun_dir: [0.0, 1.0, 0.0, 0.0],
+            sun_color: [1.0, 1.0, 1.0, 0.0],
+            ambient_sky: [0.0; 4],
+            ambient_ground: [0.0; 4],
+            copy_step: [0.0; 4],
+        };
+        queue.write_buffer(&self.frame, 0, bytemuck::bytes_of(&f));
+    }
+
+    /// The compute pass and the casters into the cascades the look refreshed
+    /// this frame (after `LookGpu::encode_shadows`, before the city pass).
+    pub fn encode(&self, enc: &mut wgpu::CommandEncoder, look: &LookGpu) {
+        let n = self.count();
+        let on = self.enabled() && n > 0;
+        self.active.store(on, Ordering::Relaxed);
+        if !on {
+            return;
+        }
+        let ts = self.timing.lock().unwrap().clone();
+        enc.clear_buffer(&self.counts, 0, None);
+        enc.clear_buffer(&self.hist, 0, None);
+        enc.clear_buffer(&self.stats, 0, None);
+        {
+            let tw = ts.as_ref().map(|(q, b)| wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(*b), end_of_pass_write_index: Some(*b + 1) });
+            let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("agents-cull"), timestamp_writes: tw });
+            pass.set_bind_group(0, &self.cull_bg, &[]);
+            let groups = n.div_ceil(64);
+            for (k, p) in self.cull.iter().enumerate() {
+                pass.set_pipeline(p);
+                pass.dispatch_workgroups(if k == 1 || k == 3 { 1 } else { groups }, 1, 1);
+            }
+        }
+        let mask = look.encoded_shadow_mask();
+        let layers = look.shadow_layer_views();
+        let list: Vec<usize> = (0..3).filter(|c| mask & (1 << c) != 0).collect();
+        let m = self.mesh_count as u64;
+        if list.is_empty() {
+            if let Some((q, b)) = &ts {
+                // Keep the query pair written.
+                enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("agents-casters (none this frame)"),
+                    timestamp_writes: Some(wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(*b + 2), end_of_pass_write_index: Some(*b + 3) }),
+                });
+            }
+            return;
+        }
+        for (k, &c) in list.iter().enumerate() {
+            let tw = ts.as_ref().and_then(|(q, b)| {
+                let begin = (k == 0).then_some(*b + 2);
+                let end = (k == list.len() - 1).then_some(*b + 3);
+                (begin.is_some() || end.is_some()).then_some(wgpu::RenderPassTimestampWrites { query_set: q, beginning_of_pass_write_index: begin, end_of_pass_write_index: end })
+            });
+            let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("agents-casters"),
+                color_attachments: &[],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &layers[c],
+                    depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: tw,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&self.shadow);
+            pass.set_bind_group(0, &self.view_bg, &[(c as u64 * 256) as u32]);
+            pass.set_bind_group(2, &self.data_bg, &[]);
+            pass.set_vertex_buffer(0, self.vbuf.slice(..));
+            pass.set_index_buffer(self.ibuf.slice(..), wgpu::IndexFormat::Uint32);
+            pass.multi_draw_indexed_indirect(&self.cmds, (2 + c as u64) * m * DRAW_ARGS_BYTES, self.mesh_count);
+        }
+    }
+
+    /// whether the coming frames test the camera view against the
+    /// occlusion pyramid (`cull_camera`, inside the pyramid pass) instead of
+    /// in `encode`. Set before `update`.
+    pub fn set_camera_late(&self, on: bool) {
+        self.camera_late.store(on, Ordering::Relaxed);
+    }
+
+    /// inside the occlusion compute pass, after the pyramid: the camera
+    /// view's tiers and commands, an agent the pyramid hides left out
+    /// (`hzb_bg`: `OcclusionGpu::late_bgl`'s group). The casters were assigned
+    /// in `encode`, before the shadow passes, as they must be: a car hidden
+    /// from the camera still casts a shadow the camera sees.
+    pub fn cull_camera(&self, pass: &mut wgpu::ComputePass<'_>, hzb_bg: &wgpu::BindGroup) {
+        if !self.active.load(Ordering::Relaxed) || !self.camera_late.load(Ordering::Relaxed) {
+            return;
+        }
+        let groups = self.count().div_ceil(64);
+        pass.set_bind_group(0, &self.cull_bg_c, &[]);
+        pass.set_bind_group(1, hzb_bg, &[]);
+        for (k, p) in self.cull_c.iter().enumerate() {
+            pass.set_pipeline(p);
+            pass.dispatch_workgroups(if k == 1 { 1 } else { groups }, 1, 1);
+        }
+    }
+
+    /// Inside the city pass, after the opaque city list. Leaves the agent
+    /// vertex and index buffers bound: the caller binds its own again.
+    pub fn draw_opaque(&self, pass: &mut wgpu::RenderPass<'_>, look: &LookGpu) {
+        if !self.active.load(Ordering::Relaxed) {
+            return;
+        }
+        pass.set_pipeline(&self.opaque);
+        pass.set_bind_group(0, &self.draw_bg, &[]);
+        look.bind_main(pass);
+        pass.set_bind_group(2, &self.data_bg, &[]);
+        pass.set_vertex_buffer(0, self.vbuf.slice(..));
+        pass.set_index_buffer(self.ibuf.slice(..), wgpu::IndexFormat::Uint32);
+        pass.multi_draw_indexed_indirect(&self.cmds, 0, self.mesh_count);
+    }
+
+    /// the agent instances, the model table and how many agents are live (the lights' gather reads them).
+    pub fn sky_buffers(&self) -> (&wgpu::Buffer, &wgpu::Buffer, u32) {
+        let n = if self.active.load(Ordering::Relaxed) { self.count.load(Ordering::Relaxed) } else { 0 };
+        (&self.agents, &self.models_buf, n)
+    }
+
+    /// the camera's visible agents again, into the velocity target (after the city pass).
+    pub fn draw_velocity(&self, pass: &mut wgpu::RenderPass<'_>, look: &LookGpu) {
+        let Some(p) = &self.velocity else { return };
+        if !self.active.load(Ordering::Relaxed) {
+            return;
+        }
+        pass.set_pipeline(p);
+        pass.set_bind_group(0, &self.draw_bg, &[]);
+        look.bind_main(pass);
+        pass.set_bind_group(2, &self.data_bg, &[]);
+        pass.set_vertex_buffer(0, self.vbuf.slice(..));
+        pass.set_index_buffer(self.ibuf.slice(..), wgpu::IndexFormat::Uint32);
+        pass.multi_draw_indexed_indirect(&self.cmds, 0, self.mesh_count);
+    }
+
+    /// Inside the city pass, after the city's transparent list: glass and lenses.
+    pub fn draw_glass(&self, pass: &mut wgpu::RenderPass<'_>, look: &LookGpu) {
+        if !self.active.load(Ordering::Relaxed) {
+            return;
+        }
+        pass.set_pipeline(&self.glass);
+        pass.set_bind_group(0, &self.draw_bg, &[]);
+        look.bind_main(pass);
+        pass.set_bind_group(2, &self.data_bg, &[]);
+        pass.set_vertex_buffer(0, self.vbuf.slice(..));
+        pass.set_index_buffer(self.ibuf.slice(..), wgpu::IndexFormat::Uint32);
+        pass.multi_draw_indexed_indirect(&self.cmds, self.mesh_count as u64 * DRAW_ARGS_BYTES, self.mesh_count);
+    }
+
+    /// The command lists as the last cull wrote them (tests; blocks): camera
+    /// opaque, camera transparent, cascades 0..2, `mesh_count` commands each.
+    pub fn commands_readback(&self, ctx: &GpuContext) -> Result<Vec<[u32; 5]>> {
+        let size = self.cmds.size();
+        let staging = ctx.device.create_buffer(&wgpu::BufferDescriptor { label: Some("agent-cmds-readback"), size, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+        let mut enc = ctx.device.create_command_encoder(&Default::default());
+        enc.copy_buffer_to_buffer(&self.cmds, 0, &staging, 0, size);
+        ctx.queue.submit([enc.finish()]);
+        let words: Vec<u32> = bytemuck::pod_collect_to_vec(&crate::read_mapped(ctx, &staging)?);
+        Ok(words.chunks_exact(5).take(self.mesh_count as usize * LISTS as usize).map(|c| [c[0], c[1], c[2], c[3], c[4]]).collect())
+    }
+
+    /// The stats words of the last cull (tests; blocks): see `STATS_WORDS`.
+    pub fn stats_readback(&self, ctx: &GpuContext) -> Result<Vec<u32>> {
+        let size = self.stats.size();
+        let staging = ctx.device.create_buffer(&wgpu::BufferDescriptor { label: Some("agent-stats-readback"), size, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+        let mut enc = ctx.device.create_command_encoder(&Default::default());
+        enc.copy_buffer_to_buffer(&self.stats, 0, &staging, 0, size);
+        ctx.queue.submit([enc.finish()]);
+        Ok(bytemuck::pod_collect_to_vec(&crate::read_mapped(ctx, &staging)?))
+    }
+
+    /// Slots per model (vehicles: LOD0-2 + box; hero, near, mid, far).
+    pub const LOD_SLOTS: usize = LODS;
+}

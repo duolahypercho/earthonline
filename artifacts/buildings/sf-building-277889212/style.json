@@ -1,0 +1,152 @@
+{
+  "builder": "house",
+  "seed": 2,
+  "notes": "1444 La Playa, from the street-level reference by eye (words only): greige painted shingle, white trim, a yellow panelled garage door on the north half, the entry on the south half behind planting, two box bays on the first living storey, a wide box bay across the top storey under a street-facing gable with a boxed pediment, flat roof behind the gable, white stucco rear. The north wall abuts the neighbouring house (party), with a lightwell notch at mid-depth.",
+  "storeysSeen": 3,
+  "groundM": 2.75,
+  "roofLevelM": 9.2,
+  "wall": "painted-shingle",
+  "wallTint": "#c4bdb3",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "float-finish-stucco",
+  "rearTint": "#ebe8e0",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "edgeRoles": {
+    "0": "party",
+    "4": "party"
+  },
+  "streetEdges": {
+    "8": {}
+  },
+  "roofForm": {
+    "form": "front-gable",
+    "depthM": 5.0,
+    "eaveM": 0.32,
+    "ridgeM": 10.86,
+    "material": "asphalt-roof",
+    "tint": "#8a8680",
+    "pediment": true,
+    "gableMaterial": "painted-shingle"
+  },
+  "garages": [
+    {
+      "from": 0.12,
+      "to": 0.45,
+      "headM": 2.3,
+      "material": "painted-white",
+      "tint": "#e9c95e",
+      "pattern": "panel"
+    }
+  ],
+  "entry": {
+    "from": 0.62,
+    "to": 0.74,
+    "headM": 2.2,
+    "material": "painted-white",
+    "glass": true,
+    "recessM": 0.15
+  },
+  "windows": [],
+  "bays": [
+    {
+      "from": 0.03,
+      "to": 0.3,
+      "shape": "box",
+      "projectionM": 0.4,
+      "fromStorey": 1,
+      "toStorey": 1,
+      "windows": {
+        "front": 1,
+        "side": 0
+      },
+      "panes": [
+        3,
+        2
+      ],
+      "sillM": 0.8,
+      "headGapM": 0.35
+    },
+    {
+      "from": 0.53,
+      "to": 0.82,
+      "shape": "box",
+      "projectionM": 0.4,
+      "fromStorey": 1,
+      "toStorey": 1,
+      "windows": {
+        "front": 1,
+        "side": 0
+      },
+      "panes": [
+        3,
+        2
+      ],
+      "sillM": 0.8,
+      "headGapM": 0.35
+    },
+    {
+      "from": 0.05,
+      "to": 0.85,
+      "shape": "box",
+      "projectionM": 0.5,
+      "fromStorey": 2,
+      "toStorey": 2,
+      "windows": {
+        "front": 2,
+        "side": 1
+      },
+      "panes": [
+        3,
+        2
+      ],
+      "sillM": 0.7,
+      "headGapM": 0.3
+    }
+  ],
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.1,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.3,
+        0.25
+      ],
+      [
+        0.6,
+        0.15
+      ]
+    ]
+  },
+  "floors": {
+    "1": {
+      "front": "living",
+      "rooms": [
+        "bath",
+        "dining",
+        "kitchen"
+      ]
+    },
+    "2": {
+      "front": [
+        "bedroom",
+        "bedroom"
+      ],
+      "rooms": [
+        "bath",
+        "bedroom"
+      ]
+    }
+  },
+  "groundRooms": [
+    "laundry",
+    "family"
+  ]
+}

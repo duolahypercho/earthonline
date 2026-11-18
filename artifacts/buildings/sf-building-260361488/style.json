@@ -1,0 +1,242 @@
+{
+  "seed": 1,
+  "notes": "Butter-yellow stucco with yellow ground piers (no dark ground band); recessed dark panelled stair door left, one lattice-gated shop door, a glazed shop window to the right pier; thin maroon shop fascia + a thin line above it, a thin maroon sill course under the top storey, a maroon cornice line with a yellow parapet strip above; four evenly spaced tall dark-framed top windows; ribbon with dark interior and side curtains; darker heavier fire escape with a drop ladder to a small landing at the right end of the ribbon; wall lamps, blank address plate and blank sign panel; shop ceiling lamps. Greyed pale butter wall, cream fire escape, deeper cornice with 0.85 m parapet, storefront mullions, fascia sconces, oval plaque, blade address sign. Saturated butter wall, projecting bracketed cornice, window hoods and deeper reveals, wider ground piers, darker shop glass.",
+  "wall": "painted-stucco",
+  "wallTint": "#dcc674",
+  "trim": "painted-stucco@5a2224",
+  "frame": "painted-white@3b2a28",
+  "beltCourse": false,
+  "windowHoods": true,
+  "cornice": true,
+  "upperWindows": [
+    0.185,
+    0.405,
+    0.615,
+    0.83
+  ],
+  "windowW": 1.3,
+  "windowSillM": 0.55,
+  "windowHeadM": 2.3,
+  "endPierM": 0.6,
+  "storefront": {
+    "awning": false,
+    "bulkheadM": 0.45,
+    "transomM": 0.6,
+    "pierM": 0.3,
+    "headDropM": 0.8,
+    "transomPaneM": 0.9,
+    "layout": [
+      {
+        "kind": "door",
+        "from": 0.045,
+        "to": 0.185,
+        "leaf": "painted-steel@1f1a18",
+        "stair": true
+      },
+      {
+        "kind": "door",
+        "from": 0.25,
+        "to": 0.36,
+        "leaf": "painted-steel@1f1d1c"
+      },
+      {
+        "kind": "window",
+        "from": 0.37,
+        "to": 0.935
+      }
+    ],
+    "paneM": 1.15
+  },
+  "storefrontFrame": "painted-steel@1c1c1c",
+  "bulkhead": "painted-stucco@5a2224",
+  "ground": "shop",
+  "upper": "apartment",
+  "corniceProjectionM": 0.42,
+  "sashMaterial": "painted-white@3b2a28",
+  "mullionM": 1.3,
+  "storeyWindowSpans": {
+    "1": {
+      "spans": [
+        [
+          0.07,
+          0.93
+        ]
+      ],
+      "sillM": 0.45,
+      "headM": 2.1
+    }
+  },
+  "fireEscapeDrop": {
+    "at": 0.6,
+    "widthM": 2.3,
+    "depthM": 0.8,
+    "storey": 2,
+    "material": "painted-steel@d9cfa0",
+    "ladder": {
+      "at": -1.0,
+      "runM": 1.85,
+      "toM": 0.3,
+      "widthM": 0.45
+    }
+  },
+  "shopFascia": {
+    "heightM": 0.34,
+    "projectionM": 0.06,
+    "material": "painted-stucco",
+    "tint": "#5a2224",
+    "topM": 0.45,
+    "lamps": 3
+  },
+  "coping": {
+    "material": "painted-stucco",
+    "tint": "#d2bd6c",
+    "heightM": 0.1,
+    "projectionM": 0.08
+  },
+  "floorsM": {
+    "groundM": 3.75,
+    "upperM": 3.06
+  },
+  "grilleMaterial": "painted-steel@141414",
+  "glassModel": {
+    "upper": "glass-dark@7a8084",
+    "street": "glass-dark@363b3f",
+    "backing": true
+  },
+  "glassBacking": {
+    "material": "painted-white",
+    "kinds": [
+      "ribbon",
+      "punched"
+    ],
+    "depthM": 0.35,
+    "tints": [
+      "#3b342d",
+      "#2f2a25",
+      "#4a4036"
+    ],
+    "blindTint": "#e9e3d4",
+    "blindMax": 0.35
+  },
+  "sillDrips": {
+    "tint": "#b8ad84",
+    "fade": "#cfc59d",
+    "lengthM": 0.33,
+    "steps": 3,
+    "kinds": [
+      "punched"
+    ],
+    "startM": 0.56,
+    "widthShare": 0.7
+  },
+  "glassCurtains": {
+    "kinds": [
+      "ribbon",
+      "punched"
+    ],
+    "tint": "#efeade",
+    "share": 0.34,
+    "depthM": 0.1
+  },
+  "stringCourses": [
+    {
+      "yM": 3.46,
+      "hM": 0.08,
+      "offM": 0.05,
+      "material": "painted-stucco@5a2224"
+    },
+    {
+      "yM": 6.72,
+      "hM": 0.2,
+      "offM": 0.07,
+      "material": "painted-stucco@5a2224"
+    },
+    {
+      "yM": 9.55,
+      "hM": 0.34,
+      "offM": 0.17,
+      "material": "painted-stucco@5a2224"
+    },
+    {
+      "yM": 9.5,
+      "hM": 0.06,
+      "offM": 0.09,
+      "material": "painted-stucco@4a1c1e"
+    }
+  ],
+  "fireEscapeLanding": {
+    "at": 0.895,
+    "widthM": 1.1,
+    "depthM": 0.7,
+    "storey": 1,
+    "yM": 0.3,
+    "material": "painted-steel@d9cfa0"
+  },
+  "latticeGrilles": [
+    {
+      "from": 0.25,
+      "to": 0.36,
+      "bottomM": 0.05,
+      "topM": 2.9,
+      "pitchM": 0.28,
+      "barM": 0.03,
+      "offM": 0.05,
+      "material": "painted-steel@1c1c1c"
+    }
+  ],
+  "fasciaSigns": [
+    {
+      "from": 0.45,
+      "to": 0.8,
+      "yM": 3.12,
+      "hM": 0.24,
+      "offM": 0.1,
+      "face": "signage"
+    }
+  ],
+  "plaques": [
+    {
+      "at": 0.965,
+      "y": 2.3,
+      "w": 0.32,
+      "h": 0.22,
+      "face": "painted-steel@2a2220"
+    },
+    {
+      "at": 0.115,
+      "y": 3.15,
+      "w": 0.4,
+      "h": 0.2,
+      "face": "painted-white@efe6cf"
+    },
+    {
+      "at": 0.215,
+      "y": 1.5,
+      "w": 0.14,
+      "h": 0.2,
+      "face": "painted-steel@b9a45a"
+    }
+  ],
+  "wallLamps": [
+    {
+      "at": 0.115,
+      "y": 3.62,
+      "d": 0.22,
+      "face": "painted-white@f3e2c0"
+    }
+  ],
+  "shopCeiling": {
+    "lamps": 2,
+    "rows": 3,
+    "light": true
+  },
+  "bladeSigns": [
+    {
+      "at": 0.955,
+      "bottomM": -1.0,
+      "heightM": 0.55,
+      "face": "painted-white@efe6cf"
+    }
+  ],
+  "windowDepthM": 0.3
+}

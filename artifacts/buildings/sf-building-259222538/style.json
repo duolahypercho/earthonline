@@ -1,0 +1,200 @@
+{
+ "seed": 7,
+ "notes": "Rework r6: 3 storeys (tall buff glazed-brick ground + two bay storeys); four curved bays each with three separate sashes between stucco, no dense bar pattern; warm cream stucco; arched double-door entry with cream surround and steps; dark-framed grilled windows right; ladder fire escape.",
+ "wall": "painted-white",
+ "wallTint": "#efe3c8",
+ "trim": "painted-white@ece4cf",
+ "frame": "painted-white@ece4cf",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@2a221c",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "limestone-ashlar@e8c98c",
+ "cornice": true,
+ "corniceProjectionM": 0.5,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.08,
+   "widthM": 2.4,
+   "projectionM": 0.45,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#efe3c8",
+   "hyB": {
+    "plan": "swell",
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 1
+   }
+  },
+  {
+   "at": 0.38,
+   "widthM": 2.4,
+   "projectionM": 0.45,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#efe3c8",
+   "hyB": {
+    "plan": "swell",
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 1
+   }
+  },
+  {
+   "at": 0.69,
+   "widthM": 2.4,
+   "projectionM": 0.45,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#efe3c8",
+   "hyB": {
+    "plan": "swell",
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 1
+   }
+  },
+  {
+   "at": 0.92,
+   "widthM": 2.4,
+   "projectionM": 0.45,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#efe3c8",
+   "hyB": {
+    "plan": "swell",
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 1
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.4,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.37,
+    "to": 0.53,
+    "kind": "double-door",
+    "arch": {
+     "type": "round",
+     "surround": {
+      "material": "cast-stone-trim",
+      "tint": "#e6dcc0"
+     },
+     "keystone": true,
+     "revealM": 0.3
+    },
+    "stair": true
+   },
+   {
+    "from": 0.62,
+    "to": 0.75,
+    "kind": "window",
+    "headM": 2.8,
+    "bulkheadM": 1.0,
+    "grille": true
+   },
+   {
+    "from": 0.82,
+    "to": 0.92,
+    "kind": "window",
+    "headM": 2.8,
+    "bulkheadM": 1.0,
+    "grille": true
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "sashFrames": {
+  "material": "painted-white@ece4cf",
+  "stileM": 0.06
+ },
+ "hbBayGlazing": {
+  "marginM": 0.2,
+  "maxW": 1.05,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#ece4cf",
+  "sashM": 0.08,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "groundBand": {
+  "material": "limestone-ashlar",
+  "tint": "#e8c98c",
+  "topM": 4.5
+ },
+ "storeysSeen": {
+  "count": 3,
+  "groundM": 4.5
+ },
+ "hbArchDoors": [
+  {
+   "from": 0.37,
+   "to": 0.53,
+   "material": "limestone-ashlar",
+   "tint": "#e8c98c",
+   "ringTint": "#e6dcc0",
+   "fillTint": "#2a2018"
+  }
+ ],
+ "hbLadderEscape": {
+  "at": 0.53,
+  "widthM": 1.9,
+  "depthM": 0.7,
+  "material": "painted-steel@111111",
+  "ladderOffM": 0.5,
+  "dropM": 0.6,
+  "gooseneckM": 0.25
+ }
+}

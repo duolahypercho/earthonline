@@ -1,0 +1,241 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-259995712",
+  "slug": "b259995712",
+  "walkIndex": 5027,
+  "street": "Hyde Street",
+  "address": "333;335 Hyde Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 11.31,
+  "storeys": 4,
+  "floors": {
+    "groundM": 3.21,
+    "upperM": 2.5,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1922,
+  "use": "MRES",
+  "usage": "residential",
+  "amenity": "beauty",
+  "shop": null,
+  "facade": "bay-window",
+  "material": "painted",
+  "frame": {
+    "edgeIndex": 0,
+    "center": {
+      "x": 275.226,
+      "z": 654.705
+    },
+    "heading": 1.414928,
+    "width": 7.588,
+    "depth": 29.18
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -3.472,
+      "z": 14.59
+    },
+    {
+      "x": 3.614,
+      "z": 14.59
+    },
+    {
+      "x": 2.479,
+      "z": -4.87
+    },
+    {
+      "x": 3.794,
+      "z": -4.874
+    },
+    {
+      "x": 3.786,
+      "z": -14.59
+    },
+    {
+      "x": -3.794,
+      "z": -14.513
+    },
+    {
+      "x": -3.718,
+      "z": -5.009
+    },
+    {
+      "x": -2.19,
+      "z": -4.946
+    },
+    {
+      "x": -2.197,
+      "z": 4.672
+    },
+    {
+      "x": -3.496,
+      "z": 4.775
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -3.472,
+        "z": 14.59
+      },
+      "b": {
+        "x": 3.614,
+        "z": 14.59
+      },
+      "lengthM": 7.086,
+      "role": "front",
+      "partyShare": 0.25
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 3.614,
+        "z": 14.59
+      },
+      "b": {
+        "x": 2.479,
+        "z": -4.87
+      },
+      "lengthM": 19.493,
+      "role": "party",
+      "partyShare": 0.81
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 2.479,
+        "z": -4.87
+      },
+      "b": {
+        "x": 3.794,
+        "z": -4.874
+      },
+      "lengthM": 1.315,
+      "role": "party",
+      "partyShare": 0.63
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 3.794,
+        "z": -4.874
+      },
+      "b": {
+        "x": 3.786,
+        "z": -14.59
+      },
+      "lengthM": 9.716,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": 3.786,
+        "z": -14.59
+      },
+      "b": {
+        "x": -3.794,
+        "z": -14.513
+      },
+      "lengthM": 7.58,
+      "role": "rear",
+      "partyShare": 0.25
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": -3.794,
+        "z": -14.513
+      },
+      "b": {
+        "x": -3.718,
+        "z": -5.009
+      },
+      "lengthM": 9.504,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": -3.718,
+        "z": -5.009
+      },
+      "b": {
+        "x": -2.19,
+        "z": -4.946
+      },
+      "lengthM": 1.53,
+      "role": "rear",
+      "partyShare": 0.56
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": -2.19,
+        "z": -4.946
+      },
+      "b": {
+        "x": -2.197,
+        "z": 4.672
+      },
+      "lengthM": 9.618,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 8,
+      "a": {
+        "x": -2.197,
+        "z": 4.672
+      },
+      "b": {
+        "x": -3.496,
+        "z": 4.775
+      },
+      "lengthM": 1.304,
+      "role": "party",
+      "partyShare": 0.69
+    },
+    {
+      "index": 9,
+      "a": {
+        "x": -3.496,
+        "z": 4.775
+      },
+      "b": {
+        "x": -3.472,
+        "z": 14.59
+      },
+      "lengthM": 9.815,
+      "role": "party",
+      "partyShare": 1
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

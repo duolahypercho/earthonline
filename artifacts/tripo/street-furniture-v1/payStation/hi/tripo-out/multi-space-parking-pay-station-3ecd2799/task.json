@@ -1,0 +1,29 @@
+{
+  "task_id": "3ecd2799-7355-4607-b30e-0a2b7b382661",
+  "type": "text_to_model",
+  "status": "success",
+  "input": {
+    "pbr": true,
+    "prompt": "multi-space parking pay station kiosk, grey steel cabinet with a small solar panel on top, screen, keypad and card reader, realistic, no text",
+    "texture": true,
+    "export_uv": true,
+    "model_version": "v3.1-20260211",
+    "texture_quality": "detailed",
+    "geometry_quality": "standard",
+    "texture_alignment": "geometry"
+  },
+  "output_fields": [
+    "model_url",
+    "rendered_image_url",
+    "generated_image_url"
+  ],
+  "credits_consumed": 30,
+  "created_at": "2026-09-22T19:27:13.087539Z",
+  "completed_at": "2026-09-22T19:30:03.706655Z",
+  "files": [
+    "model.glb",
+    "rendered_image.webp",
+    "generated_image.jpeg",
+    "preview.png"
+  ]
+}

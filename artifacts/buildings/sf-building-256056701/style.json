@@ -1,0 +1,135 @@
+{
+ "seed": 33,
+ "notes": "1910 three-storey flats, narrow tan stucco with white trim. Two three-sided bays side by side from the first upper storey to the cornice, each capped by a small cornice hood; one sash per facet. Ground: a gated arched entry left, a barred window right, a raised plinth. Plain flat-roofed cornice. Applied: greige stucco, white trim, bay hood crowns (deeper cornice with dentils and a taller cap) and a bracketed cornice, arched gated entry, plain white-sash ground window with the grille removed. SKIPPED storey count: the ground plus two bay storeys = 3, matching the spec. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Greige stucco tint, deeper bays with spandrel panels, heavier bracketed cornice, raised plinth under the sash window, iron lattice in the arched entry. SKIPPED third bay storey (ground plus two bay storeys = 3, matches the data). Lifted/converted once to #e2dad0.",
+ "wall": "painted-stucco",
+ "wallTint": "#e2dad0",
+ "trim": "painted-white@f6f2ea",
+ "frame": "painted-white@f6f2ea",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f2ede2",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "corniceProjectionM": 0.6,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "bulkhead": "painted-stucco@c4b4a0",
+ "bays": [
+  {
+   "at": 0.26,
+   "widthM": 2.4,
+   "projectionM": 0.85,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#ece4da",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.3,
+     "roofRiseM": 0.3,
+     "dentils": true
+    },
+    "corbel": {
+     "tiers": 3,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   },
+   "plaques": {
+    "material": "painted-white",
+    "tint": "#f6f2ea",
+    "heightM": 0.5,
+    "widthFrac": 0.75
+   }
+  },
+  {
+   "at": 0.74,
+   "widthM": 2.4,
+   "projectionM": 0.85,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#ece4da",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.3,
+     "roofRiseM": 0.3,
+     "dentils": true
+    },
+    "corbel": {
+     "tiers": 3,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   },
+   "plaques": {
+    "material": "painted-white",
+    "tint": "#f6f2ea",
+    "heightM": 0.5,
+    "widthFrac": 0.75
+   }
+  }
+ ],
+ "upperWindows": [],
+ "storefront": {
+  "bulkheadM": 1.0,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.07,
+    "to": 0.34,
+    "kind": "gate",
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.14,
+      "projectionM": 0.06,
+      "material": "cast-stone-trim",
+      "tint": "#f2ece0"
+     },
+     "keystone": true
+    },
+    "lattice": true
+   },
+   {
+    "from": 0.52,
+    "to": 0.93,
+    "kind": "window",
+    "headM": 2.2
+   }
+  ]
+ },
+ "hbCorniceDentils": {
+  "spacingM": 0.2,
+  "sizeM": 0.12,
+  "tint": "#f2ede2"
+ },
+ "edgeRoles": {},
+ "hbCorniceBrackets": {
+  "spacingM": 1.4,
+  "heightM": 0.6,
+  "depthM": 0.3,
+  "widthM": 0.26,
+  "material": "painted-white",
+  "tint": "#f6f2ea"
+ }
+}

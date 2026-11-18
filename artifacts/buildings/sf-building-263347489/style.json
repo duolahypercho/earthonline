@@ -1,0 +1,276 @@
+{
+ "seed": 1,
+ "notes": "Bldg-263347489 (city-streets batch 3): 1960 flat-roofed stucco apartment block on the SW corner of Chestnut and Webster. Street count 4 storeys: a garage base under three flats (roll 3). Cool grey smooth stucco, flat-fronted boxed bays clad in pale ribbed metal at both ends of the Chestnut face and at the Webster corner, aluminium slider windows, no cornice, thin parapet coping. Chestnut ground: two runs of dark panelled garage doors either side of a central iron entry gate. Webster: two dark garage doors, a steel fire escape on the flat wall, blank ground near the corner. Ribbed pale cladding battens on every box bay with a dark soffit under each cantilever; the centre window pair in a ribbed recessed strip with louvre vents and no sills; two continuous runs of charcoal panelled doors (three leaves each) either side of a black steel entry gate with the street number over it. Webster: black double doors under a heavy three-landing fire escape and a second narrower ribbed bay at the south end; darker room tones behind the glass; interior door leaves and garage columns. One blue-grey tone for wall, bays and strip (ribbed vs smooth is the difference, not colour), garage doors 2.15 m under a ~1.1 m plain band (ground storey 3.25 m), tall two-panel leaves, one pair of small vents per spandrel on the strip centre line. Bay and strip cladding are painted (dielectric) ribbed siding - kit corrugated-metal is metal=1 and read saturated sky-blue in game. Webster: ribbed bay at the SOUTH end only (no corner bay), the three-landing fire escape toward the Chestnut corner, two wide black multi-panel double doors from the south end under it, blank ground at the corner. Spec storeys 4 from the street count (roll 3 kept as storeysRoll). Wall, bays, strip and coping move to the flat painted-white kit (the stucco kit's borrowed plaster tiled in blocks) under one pale cool-grey tint, so the ribbed bays read the same value as the wall; white aluminium frames; charcoal-black flat leaves, exactly three per Chestnut run on either side of a closed black grille gate with a mailbox bank inside. Webster: south bay, a light-grey painted fire escape mid-face over the two wide black doors, and a corner bay that meets the Chestnut corner bay so the corner reads as one wrapped volume over a blank ground wall. The single garage door west of the Chestnut run belongs to the neighbouring lot and is not drawn. Bay cladding is fine flush siding (grooves about 0.14 m apart), not deep battens - the 35 mm battens broke into dark dashes in game shadows; ribs now 14 mm deep at 0.14 m pitch. Panel tint lifted toward the moulding highlight. The Webster fire escape is one continuous zig-zag - solid decks, channel stringers deck to deck, treads between them, painted light grey steel (fireEscape.zigzag; no wall brackets, hangers or drop ladder). The tan post between the Webster garage doors was an interior garage column poking through the angled Webster wall: columns and storage racks removed. Wall, bays, strip and coping move to the exterior float-finish stucco (the flat kit tiled in blocks) in one light grey; bays project 0.85 m (Webster south 0.8) over a 0.12 m dark soffit. Rooms behind the glass are darker so the panes read dark with pale blinds. Chestnut garage leaves are ribbed roll-up doors (eleven horizontal slats per leaf) under a lighter plain trim band; bay soffits 0.22 m deep and darker so the cantilevers cast a read over the recessed garage base. The garage leaves are swing/sectional doors with raised vertical panels, not roll-up slats - Chestnut three leaves per run at 2 x 2 tall panels, Webster one wide leaf per door at 8 x 2; panel faces lifted to a mid charcoal so the raised grid reads against the near-black leaf. Webster south bay projects 0.5 m. A clean repainted wall, not an aged one - weathering off (the square overpaint blocks and the base soot read as blotches and a beige plinth). Wall, bays, strip, coping and ground band move to the flat painted kit in one cool light grey; bay ribs removed. Bay soffits are a thin shadow line (60 mm, mid grey), not a black slab. Coping 0.3 m with a 0.08 m drip so the parapet has a cap. Garage leaves are painted charcoal (the painted-steel kit is near-black under any tint), four by two raised panels per Chestnut leaf. Webster fire escape: light grey painted steel on open grating landings with a wall ladder to the parapet. Panes sit 0.14 m back in the wall; rooms behind are darker with more drawn blinds. A dark lobby wall behind the entry gate hides the stair. Chestnut garage leaves are dark brown-charcoal swing doors, each with three narrow tall inset panels in a raised moulding frame (garagePanel.panelW), so the three leaves per run read as separate doors. Webster doors get eight narrow panels per leaf. The upper storeys oversail the garage base: a 0.3 m soffit slab in a mid grey along every street face at the band top (groundBand.soffit) gives the shadow line over the doors. Box bays get fine vertical ribbed siding at 0.2 m pitch with a darker 0.1 m soffit. Fire escape in dark galvanised painted steel (painted-steel-mid), steep 1.5 m-run ship-ladder flights between three grated landings, ladder to the parapet. Glass backs darker with blinds drawn only part way (blindMax 0.45) so most panes read dark. The gate backdrop is a lit warm-grey lobby. Top storey living/bed phase shifted and sofa colour varied per storey so no two flats repeat. Not drawn: the narrow door at the far east of the Chestnut garage row sits under the neighbouring house (outside this footprint). The garage behind the doors gets columns on the stall line, strip lights and painted wheel-stop caps (groundGarage.fitout). Mid blue-grey wall (#a4adb5) with lighter ground band, all bay/strip ribs removed (moire), Chestnut leaves 2x2 raised panels, larger crisp address number. Lighter even stucco (#cbd0d5) with slightly darker bays so the returns read as a step, bay projection 1.0 m Chestnut / 0.8 m Webster, taller openings (sill 0.7, head 2.4), fire escape white with wider 0.8 m flights.",
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.25,
+  "upperM": 2.8
+ },
+ "wall": "painted-white",
+ "wallTint": "#cbd0d5",
+ "groundBand": {
+  "material": "painted-white",
+  "tint": "#c4c9ce",
+  "topM": 3.25,
+  "soffit": {
+   "depthM": 0.3,
+   "heightM": 0.14,
+   "tint": "#a3aaaf"
+  }
+ },
+ "trim": "painted-white",
+ "frame": "painted-white",
+ "glass": "glass-clear",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "coping": {
+  "heightM": 0.3,
+  "projectionM": 0.08,
+  "material": "painted-white",
+  "tint": "#dfe3e6"
+ },
+ "windowW": 1.85,
+ "windowSillM": 0.7,
+ "windowHeadM": 2.4,
+ "upperWindows": [
+  0.49,
+  0.6
+ ],
+ "edgeRoles": {
+  "4": "party"
+ },
+ "glassBacking": {
+  "material": "painted-white",
+  "kinds": [
+   "punched",
+   "bay"
+  ],
+  "depthM": 0.5,
+  "tints": [
+   "#121314",
+   "#18171a",
+   "#101113",
+   "#1c1a18",
+   "#151516"
+  ],
+  "blindTint": "#d2cdc3",
+  "blindMax": 0.45
+ },
+ "bays": [
+  {
+   "box": true,
+   "at": 0.0886,
+   "widthM": 4.5,
+   "projectionM": 1.0,
+   "fromStorey": 1,
+   "toStorey": 3,
+   "material": "painted-white",
+   "tint": "#bcc3c9",
+   "windowW": 3.0,
+   "lights": 3,
+   "sillM": 0.7,
+   "headM": 2.35,
+   "capM": 0.2,
+   "soffit": {
+    "tint": "#72787d",
+    "depthM": 0.1
+   }
+  },
+  {
+   "box": true,
+   "at": 0.912,
+   "widthM": 3.2,
+   "projectionM": 1.0,
+   "fromStorey": 1,
+   "toStorey": 3,
+   "material": "painted-white",
+   "tint": "#bcc3c9",
+   "windowW": 2.2,
+   "lights": 2,
+   "sillM": 0.7,
+   "headM": 2.35,
+   "capM": 0.2,
+   "soffit": {
+    "tint": "#72787d",
+    "depthM": 0.1
+   }
+  }
+ ],
+ "ground": "vacant",
+ "upper": "apartment",
+ "groundGarage": {
+  "stallW": 2.8,
+  "stallD": 5.2,
+  "storage": false,
+  "fitout": true
+ },
+ "storefront": {
+  "awning": false,
+  "bulkheadM": 0.0,
+  "transomM": 0.45,
+  "pierM": 0.2,
+  "layout": [
+   {
+    "kind": "garage",
+    "from": 0.02,
+    "to": 0.48,
+    "material": "painted-white",
+    "headM": 2.15
+   },
+   {
+    "kind": "door",
+    "from": 0.5,
+    "to": 0.61,
+    "leaf": "painted-steel",
+    "stair": true
+   },
+   {
+    "kind": "garage",
+    "from": 0.63,
+    "to": 0.97,
+    "material": "painted-white",
+    "headM": 2.15
+   }
+  ]
+ },
+ "streetEdges": {
+  "2": {
+   "upperWindows": [
+    0.55
+   ],
+   "bays": [
+    {
+     "box": true,
+     "at": 0.14,
+     "widthM": 3.8,
+     "projectionM": 0.8,
+     "fromStorey": 1,
+     "toStorey": 3,
+     "material": "painted-white",
+     "tint": "#bcc3c9",
+     "windowW": 2.6,
+     "lights": 3,
+     "sillM": 0.8,
+     "headM": 2.25,
+     "capM": 0.2,
+     "soffit": {
+      "tint": "#72787d",
+      "depthM": 0.1
+     }
+    },
+    {
+     "box": true,
+     "at": 0.901,
+     "widthM": 3.0,
+     "projectionM": 0.8,
+     "fromStorey": 1,
+     "toStorey": 3,
+     "material": "painted-white",
+     "tint": "#bcc3c9",
+     "windowW": 1.5,
+     "lights": 2,
+     "sillM": 0.8,
+     "headM": 2.25,
+     "capM": 0.2,
+     "soffit": {
+      "tint": "#72787d",
+      "depthM": 0.1
+     }
+    }
+   ],
+   "fireEscape": {
+    "at": 0.57,
+    "widthM": 3.8,
+    "depthM": 1.0,
+    "toStorey": 3,
+    "material": "painted-white",
+    "zigzag": true,
+    "flightW": 0.8,
+    "grate": true,
+    "flightRunM": 1.5
+   },
+   "storefront": {
+    "awning": false,
+    "bulkheadM": 0.0,
+    "transomM": 0.4,
+    "pierM": 0.3,
+    "layout": [
+     {
+      "kind": "garage",
+      "from": 0.02,
+      "to": 0.33,
+      "material": "painted-white",
+      "headM": 2.15
+     },
+     {
+      "kind": "garage",
+      "from": 0.35,
+      "to": 0.66,
+      "material": "painted-white",
+      "headM": 2.15
+     }
+    ]
+   },
+   "garagePanel": {
+    "doorM": 4.4,
+    "cols": 8,
+    "rows": 1,
+    "tint": "#3a3735",
+    "panelTint": "#2a2826",
+    "leaves": 1,
+    "frameTint": "#4d4946",
+    "panelW": 0.16
+   }
+  },
+  "3": {
+   "upperWindows": [
+    0.5
+   ],
+   "windowW": 1.2
+  }
+ },
+ "windowSills": false,
+ "windowStrip": {
+  "from": 0.43,
+  "to": 0.66,
+  "tint": "#a4adb5",
+  "revealTint": "#6d7478",
+  "louvre": {
+   "widthM": 0.34,
+   "heightM": 0.16,
+   "tint": "#5d6367",
+   "centre": true
+  },
+  "material": "painted-white"
+ },
+ "garagePanel": {
+  "doorM": 2.5,
+  "leaves": 3,
+  "cols": 2,
+  "rows": 2,
+  "tint": "#3a3735",
+  "panelTint": "#33363a",
+  "frameTint": "#5a5e63",
+  "panelW": 0.2
+ },
+ "entryGate": {
+  "tint": "#17181a",
+  "number": "1901",
+  "numberTint": "#1b1c1e",
+  "numberM": 0.4,
+  "closed": true,
+  "mailboxes": true,
+  "centreOne": true,
+  "lamp": true,
+  "backdrop": "#77736b",
+  "backdropM": 0.9
+ },
+ "doorLeaves": {
+  "material": "int-door"
+ },
+ "flatRooms": true,
+ "weathering": false,
+ "windowDepthM": 0.14,
+ "flatRoomsShift": true
+}

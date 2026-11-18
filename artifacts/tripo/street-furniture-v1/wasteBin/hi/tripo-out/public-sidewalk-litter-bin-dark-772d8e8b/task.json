@@ -1,0 +1,29 @@
+{
+  "task_id": "772d8e8b-300d-4666-bdd8-3807908d80b0",
+  "type": "text_to_model",
+  "status": "success",
+  "input": {
+    "pbr": true,
+    "prompt": "public sidewalk litter bin, dark green powder-coated steel cylinder with a domed lid and a front disposal opening, bolted to the pavement, realistic, lightly weathered, no text, no logos",
+    "texture": true,
+    "export_uv": true,
+    "model_version": "v3.1-20260211",
+    "texture_quality": "detailed",
+    "geometry_quality": "standard",
+    "texture_alignment": "geometry"
+  },
+  "output_fields": [
+    "model_url",
+    "rendered_image_url",
+    "generated_image_url"
+  ],
+  "credits_consumed": 30,
+  "created_at": "2026-09-22T18:52:24.330834Z",
+  "completed_at": "2026-09-22T18:55:14.672497Z",
+  "files": [
+    "model.glb",
+    "rendered_image.webp",
+    "generated_image.jpeg",
+    "preview.png"
+  ]
+}

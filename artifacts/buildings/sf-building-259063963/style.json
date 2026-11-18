@@ -1,0 +1,129 @@
+{
+ "seed": 3,
+ "notes": "Kept tan a78660 wall, trim 7a5a3d at the luminance floor. The far-right ground door and the small left window, so layout kept. Storey 2 now three evenly spaced windows; taller darker brown coping as fascia. Rework 5: wall mid tan a78660 (lit side), trim/frames lifted to 7a5a3d (luminance floor), pilasters and mid-height belt removed, ground = small left window + wide tan garage panel (0.40-0.81) + slim right door, side doors removed; storey 2 uses its own smaller windows so the picture-window storey is not repeated. Rework 4: wall lit-face caramel tan b8926a; trim/pilasters/frames/doors dark chocolate 5e4432; garage a darker tan panel in a dark-brown surround (plaque frame); solid brown doors; tan-khaki wall, dark brown trim/pilasters/frames, single wide picture light in the storey-2 centre window. Rework 2: ground storey lowered to 3.3 m and upper plates to 3.2 m (floorsM) so the window row sits right above the ground storey, street wall stopped at 10.3 m (wallTopM) so it reads lower than the white neighbour; dark brown fascia (beltCourse) and deep dark window surrounds; tan-khaki wall. The two short side jogs next to the front (edges 3, 5) set to party so no service door shows at the corners. The upper front is a flat stucco wall with plain punched windows (small left window, one wide centre window, narrow right window), not a bay - bay and bracket cornice removed; wall a warmer tan-brown; ground storey plain stucco, no belt course - recessed entry with a small window at the left, a flush tan panel garage right of centre, and a tan door at the right end (the that door, so it stays). 1913 three-storey flats, Hyde east side one lot north of the Vallejo corner. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-white",
+ "wallTint": "#b99e80",
+ "trim": "painted-white@7a5a3d",
+ "frame": "painted-white@7a5a3d",
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-clear",
+ "storefrontFrame": "painted-white@7a5a3d",
+ "bulkhead": "painted-white@b59b7d",
+ "cornice": false,
+ "corniceProjectionM": 0.3,
+ "coping": {
+  "material": "painted-white",
+  "tint": "#6a4c34",
+  "heightM": 0.42,
+  "projectionM": 0.08
+ },
+ "beltCourse": false,
+ "windowHoods": true,
+ "windowW": 0.8,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.45,
+ "upperSillM": 0.45,
+ "upperHeadM": 2.3,
+ "sashMaterial": "painted-white@7a5a3d",
+ "mullionM": 4.0,
+ "ground": "lobby",
+ "upper": "apartment",
+ "upperWindowSpans": [
+  [
+   0.15,
+   0.23
+  ],
+  [
+   0.38,
+   0.74
+  ],
+  [
+   0.82,
+   0.9
+  ]
+ ],
+ "bays": [],
+ "storefront": {
+  "bulkheadM": 1.0,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "headDropM": 0.6,
+  "layout": [
+   {
+    "from": 0.06,
+    "to": 0.14,
+    "kind": "window",
+    "headM": 2.3
+   },
+   {
+    "from": 0.4,
+    "to": 0.81,
+    "kind": "blank",
+    "material": "painted-white",
+    "tint": "#a8835c",
+    "headM": 2.6
+   },
+   {
+    "from": 0.85,
+    "to": 0.94,
+    "kind": "door",
+    "leaf": "painted-white@7a5a3d"
+   }
+  ]
+ },
+ "edgeRoles": {
+  "3": "party",
+  "5": "party"
+ },
+ "floorsM": {
+  "groundM": 3.3,
+  "upperM": 3.2
+ },
+ "wallTopM": 10.3,
+ "windowDepthM": 0.22,
+ "plaques": [
+  {
+   "at": 0.605,
+   "y": 2.68,
+   "w": 3.3,
+   "h": 0.16,
+   "face": "painted-white@7a5a3d"
+  },
+  {
+   "at": 0.392,
+   "y": 1.3,
+   "w": 0.16,
+   "h": 2.6,
+   "face": "painted-white@7a5a3d"
+  },
+  {
+   "at": 0.818,
+   "y": 1.3,
+   "w": 0.16,
+   "h": 2.6,
+   "face": "painted-white@7a5a3d"
+  }
+ ],
+ "streetStills": true,
+ "storeyWindowSpans": {
+  "2": {
+   "spans": [
+    [
+     0.14,
+     0.26
+    ],
+    [
+     0.44,
+     0.56
+    ],
+    [
+     0.74,
+     0.86
+    ]
+   ],
+   "sillM": 0.6,
+   "headM": 2.2
+  }
+ }
+}

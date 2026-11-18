@@ -1,0 +1,15 @@
+{
+ "extends": "compactHatch",
+ "id": "compactHatchSport",
+ "label": "Metro hatch v3, sport trim",
+ "typeIds": [
+  "compactHatchSport"
+ ],
+ "roofDelta": -0.03,
+ "wheelStyle": "twin5",
+ "wheelFinish": "dark",
+ "rimRatio": 0.74,
+ "mirrorFinish": "gloss",
+ "dloTrim": "gloss",
+ "note": "Trim of the measured Metro hatch body: roof 30 mm lower (catalogue roofDeltaM -0.030), dark twin-spoke wheels, gloss-black mirrors and window surround. Collision box shared with compactHatch."
+}

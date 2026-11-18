@@ -1,0 +1,233 @@
+{
+ "seed": 12,
+ "notes": "1913 three-flat, cream painted wood over a buff brick garage and raised-floor base. Two round (bowed) bays side by side across the whole front on both upper storeys, white-framed sash, heavy ornate cornice. Ground: north half an open arched porch with a stair to the recessed entry, south half one white panel garage door and a narrow grilled service door. The buff brick base read cream like the wall and the bays swallowed the cornice; base tint strengthened toward buff, bays narrowed and made shallower so the cornice projects past their caps. Each swell bay is a deeper two-segment round bay so every storey carries a centre sash plus two curved side sashes (white frames); buff brick street storey (brick-buff kit); ground at the real left is the recessed stair entry with a dark wood door, then one white panelled garage door (panel grid on a white leaf, not a roll-up) and a narrow white service door. The round-arched porch head, the arched first-floor window, egg-and-dart bands and a swag frieze have no style key; the still is mirrored by the world east-west mirror. Smoother curved turret bays (four facets a quarter) set a little shallower so the heavier crowning cornice reads past them; pale grey-white upper wall with cream trim; the tall data street storey is tan/yellow brick carrying the raised-floor window over the garage (a framed flat glass panel under a brick lintel band, since arched heads have no key), a recessed porch opening at the real left reached by a pale stone stoop (flat step bands), one white panelled garage door with horizontal panel lines and a narrow service door; small darker brick accent squares stand in for the diamond panels. The bays still cover the two upper data storeys. Four-facet quarters left no room for side sashes, so the bays go back to two-segment curves (three sashes a storey) at a deeper projection. Applied: round-arched stair porch recess (hbArchDoors with headDropM 1.7, brick spandrels, dark tympanum), brick bands recoloured buff-brown (no orange-red), buff face brick base dcc48c, grey-white wall d9d7cf, dentil course under the cornice. Round arched raised window has no key. Ground-mirror claim SKIPPED. Applied: pale grey wall cfd0cc, buff brick c8aa76, narrow grey door. Bays already round (roundCorners 2); arched parlour window and moulded bay belts have no key. Applied: hyB round bays (3 curved sashes, curved belt cornices with dentils and corbel), grey-white wall dcdcd6, golden buff brick c9a55f. Raised arched stair entry and garage + small door kept; arched window above the garage has no key (would need a second storey of ground openings). Hand pass 1 (2026-10-02): the arched parlour window (segmental buff-brick voussoir ring, keystone, glazed fan with radial bars) and a real stone stair up into the arched porch moved to hand.py; their flat plaque stand-ins removed. Hand pass 1b: arch spring lowered to 4.05 m (at 4.7 it hid under the bay's corbel); rectangular glass now 3.2-4.05 m under the arched fan. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-white",
+ "wallTint": "#eeeeea",
+ "trim": "painted-white@efe3c4",
+ "frame": "painted-white@f4f0e6",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f4f0e6",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "brick-buff@fffff7",
+ "cornice": true,
+ "corniceProjectionM": 0.95,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.4,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.25,
+   "widthM": 3.4,
+   "projectionM": 1.0,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#eeeeea",
+   "hyB": {
+    "plan": "swell",
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2,
+    "cornice": {
+     "projectionM": 0.2,
+     "dentils": true,
+     "roofRiseM": 0.15
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0,
+     "beltBrackets": true
+    }
+   }
+  },
+  {
+   "at": 0.75,
+   "widthM": 3.4,
+   "projectionM": 1.0,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#eeeeea",
+   "hyB": {
+    "plan": "swell",
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2,
+    "cornice": {
+     "projectionM": 0.2,
+     "dentils": true,
+     "roofRiseM": 0.15
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0,
+     "beltBrackets": true
+    }
+   }
+  }
+ ],
+ "groundBand": {
+  "material": "brick-buff",
+  "tint": "#fffff7"
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.06,
+    "to": 0.4,
+    "kind": "door",
+    "stair": true,
+    "leaf": "wood-siding@4a2e1c",
+    "headM": 3.2
+   },
+   {
+    "from": 0.48,
+    "to": 0.8,
+    "kind": "blank",
+    "material": "painted-white",
+    "tint": "#f2efe8",
+    "headM": 2.4
+   },
+   {
+    "from": 0.83,
+    "to": 0.92,
+    "kind": "door",
+    "leaf": "painted-white@a09a94",
+    "headM": 2.3
+   }
+  ],
+  "headDropM": 1.7
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "plaques": [
+  {
+   "at": 0.64,
+   "y": 0.48,
+   "w": 2.496,
+   "h": 0.05,
+   "face": "painted-white@a8a49c"
+  },
+  {
+   "at": 0.64,
+   "y": 0.96,
+   "w": 2.496,
+   "h": 0.05,
+   "face": "painted-white@a8a49c"
+  },
+  {
+   "at": 0.64,
+   "y": 1.44,
+   "w": 2.496,
+   "h": 0.05,
+   "face": "painted-white@a8a49c"
+  },
+  {
+   "at": 0.64,
+   "y": 1.92,
+   "w": 2.496,
+   "h": 0.05,
+   "face": "painted-white@a8a49c"
+  },
+  {
+   "at": 0.56,
+   "y": 1.2,
+   "w": 0.04,
+   "h": 2.4,
+   "face": "painted-white@c4c0b8"
+  },
+  {
+   "at": 0.64,
+   "y": 1.2,
+   "w": 0.04,
+   "h": 2.4,
+   "face": "painted-white@c4c0b8"
+  },
+  {
+   "at": 0.72,
+   "y": 1.2,
+   "w": 0.04,
+   "h": 2.4,
+   "face": "painted-white@c4c0b8"
+  },
+  {
+   "at": 0.7,
+   "y": 3.625,
+   "w": 2.6,
+   "h": 0.85,
+   "face": "glass-reflective@7d868c"
+  },
+  {
+   "at": 0.7,
+   "y": 3.2,
+   "w": 2.7,
+   "h": 0.1,
+   "face": "painted-white@f4f0e6"
+  },
+  {
+   "at": 0.5333,
+   "y": 3.625,
+   "w": 0.08,
+   "h": 0.85,
+   "face": "painted-white@f4f0e6"
+  },
+  {
+   "at": 0.7,
+   "y": 3.625,
+   "w": 0.08,
+   "h": 0.85,
+   "face": "painted-white@f4f0e6"
+  },
+  {
+   "at": 0.8667,
+   "y": 3.625,
+   "w": 0.08,
+   "h": 0.85,
+   "face": "painted-white@f4f0e6"
+  },
+  {
+   "at": 0.23,
+   "y": 3.45,
+   "w": 2.952,
+   "h": 0.35,
+   "face": "brick-running-bond@ffffff"
+  },
+  {
+   "at": 0.44,
+   "y": 4.0,
+   "w": 0.3,
+   "h": 0.3,
+   "face": "brick-running-bond@ffffff"
+  },
+  {
+   "at": 0.97,
+   "y": 4.0,
+   "w": 0.3,
+   "h": 0.3,
+   "face": "brick-running-bond@ffffff"
+  }
+ ],
+ "hbArchDoors": [
+  {
+   "from": 0.06,
+   "to": 0.4,
+   "material": "brick-buff",
+   "tint": "#ffffff",
+   "ringTint": "#c9a86a",
+   "fillTint": "#2b2621"
+  }
+ ],
+ "hbCorniceDentils": {
+  "spacingM": 0.2,
+  "sizeM": 0.08,
+  "tint": "#d9d8d2"
+ },
+ "streetStills": true
+}

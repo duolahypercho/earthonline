@@ -1,0 +1,76 @@
+{
+  "seed": 1,
+  "notes": "Round 3: tall white-painted block on 5th Street; punched windows on the 5th Street front, the wall facing Folsom carries a large generic painted mural (abstract colour fields; no real artwork copied).",
+  "wall": "painted-stucco",
+  "wallTint": "#f2f1ec",
+  "trim": "painted-white",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "coping": {
+    "heightM": 0.3,
+    "projectionM": 0.06,
+    "material": "painted-white"
+  },
+  "windowW": 1.3,
+  "bayM": 2.6,
+  "frame": "painted-steel-mid",
+  "storefrontFrame": "anodized-aluminium",
+  "bulkhead": "painted-stucco",
+  "ground": "lobby",
+  "upper": "office",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.6,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.06,
+        "to": 0.4
+      },
+      {
+        "kind": "door",
+        "from": 0.44,
+        "to": 0.54,
+        "leaf": "anodized-aluminium",
+        "stair": true
+      },
+      {
+        "kind": "window",
+        "from": 0.58,
+        "to": 0.94
+      }
+    ]
+  },
+  "streetEdges": {
+    "1": {
+      "blankUpper": true,
+      "mural": {
+        "from": 0.03,
+        "to": 0.97,
+        "bottomM": 5.0,
+        "topM": 17.6,
+        "seed": 11,
+        "shapes": 44
+      }
+    }
+  },
+  "weathering": {
+    "patches": {
+      "strength": 0.07,
+      "metres": 1.6,
+      "top": 4.0,
+      "mottle": 0.05
+    },
+    "grime": {
+      "strength": 0.12,
+      "metres": 3.0
+    }
+  },
+  "storefrontGlass": "glass-film",
+  "glass": "glass-film",
+  "groundBand": {
+    "material": "painted-stucco",
+    "tint": "#6a6fb0"
+  }
+}

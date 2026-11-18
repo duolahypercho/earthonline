@@ -1,0 +1,222 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-260140481",
+  "slug": "b260140481",
+  "walkIndex": 5007,
+  "street": "Hyde Street",
+  "address": "276;278;280;282;284 Golden Gate Avenue",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 11.97,
+  "storeys": 3,
+  "floors": {
+    "groundM": 4.927,
+    "upperM": 3.222,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1913,
+  "use": "COMH",
+  "usage": "mixed",
+  "amenity": "restaurant",
+  "shop": null,
+  "facade": "loft",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 2,
+    "center": {
+      "x": 365.799,
+      "z": 429.708
+    },
+    "heading": -1.728565,
+    "width": 22.761,
+    "depth": 14.728
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -11.291,
+      "z": 7.364
+    },
+    {
+      "x": 2.448,
+      "z": 5.887
+    },
+    {
+      "x": 2.47,
+      "z": 7.301
+    },
+    {
+      "x": 11.381,
+      "z": 7.301
+    },
+    {
+      "x": 11.275,
+      "z": -7.364
+    },
+    {
+      "x": 2.183,
+      "z": -7.234
+    },
+    {
+      "x": 2.237,
+      "z": -5.622
+    },
+    {
+      "x": -11.381,
+      "z": -7.203
+    },
+    {
+      "x": -11.336,
+      "z": 4.536
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -11.291,
+        "z": 7.364
+      },
+      "b": {
+        "x": 2.448,
+        "z": 5.887
+      },
+      "lengthM": 13.818,
+      "role": "rear",
+      "partyShare": 0.38
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 2.448,
+        "z": 5.887
+      },
+      "b": {
+        "x": 2.47,
+        "z": 7.301
+      },
+      "lengthM": 1.414,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 2.47,
+        "z": 7.301
+      },
+      "b": {
+        "x": 11.381,
+        "z": 7.301
+      },
+      "lengthM": 8.911,
+      "role": "front",
+      "partyShare": 0.13
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 11.381,
+        "z": 7.301
+      },
+      "b": {
+        "x": 11.275,
+        "z": -7.364
+      },
+      "lengthM": 14.666,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": 11.275,
+        "z": -7.364
+      },
+      "b": {
+        "x": 2.183,
+        "z": -7.234
+      },
+      "lengthM": 9.093,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": 2.183,
+        "z": -7.234
+      },
+      "b": {
+        "x": 2.237,
+        "z": -5.622
+      },
+      "lengthM": 1.612,
+      "role": "rear",
+      "partyShare": 0.56
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": 2.237,
+        "z": -5.622
+      },
+      "b": {
+        "x": -11.381,
+        "z": -7.203
+      },
+      "lengthM": 13.709,
+      "role": "rear",
+      "partyShare": 0.56
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": -11.381,
+        "z": -7.203
+      },
+      "b": {
+        "x": -11.336,
+        "z": 4.536
+      },
+      "lengthM": 11.739,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 8,
+      "a": {
+        "x": -11.336,
+        "z": 4.536
+      },
+      "b": {
+        "x": -11.291,
+        "z": 7.364
+      },
+      "lengthM": 2.828,
+      "role": "rear",
+      "partyShare": 0.31
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

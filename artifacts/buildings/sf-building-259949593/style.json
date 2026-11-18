@@ -1,0 +1,67 @@
+{
+ "seed": 7,
+ "notes": "Rework r3: deep blue clinker-brick wall (held at lum ~0.17 so it does not render black), cream wood-trim windows, no cornice (photo shows plain parapet), red block removed: ground right is a muted wall with an abstract multicolour mural (no copied art), blue pilasters at the corner shopfront. The projecting shop sign is not modelled (no business names). Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game.",
+ "wall": "painted-white",
+ "wallTint": "#7d86ab",
+ "trim": "painted-white@ecdca0",
+ "frame": "painted-white@ecdca0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@ecdca0",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@858db1",
+ "cornice": false,
+ "corniceProjectionM": 0.3,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.225,
+  0.43,
+  0.575,
+  0.79
+ ],
+ "bays": [],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.03,
+    "to": 0.27,
+    "kind": "window",
+    "headM": 2.8
+   },
+   {
+    "from": 0.29,
+    "to": 0.97,
+    "kind": "blank",
+    "material": "painted-white",
+    "tint": "#bfb5a8",
+    "headM": 3.2
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "mural": {
+  "from": 0.3,
+  "to": 0.96,
+  "bottomM": 0.35,
+  "topM": 3.1,
+  "palette": [
+   "#cdbaa8",
+   "#c0503a",
+   "#3a6fa8",
+   "#e8b830",
+   "#4a8a5a",
+   "#f0ece0"
+  ],
+  "seed": 4,
+  "shapes": 30
+ }
+}

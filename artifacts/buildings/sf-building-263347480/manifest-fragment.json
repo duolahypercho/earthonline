@@ -1,0 +1,84 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-263347480",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-263347480",
+    "walkIndex": 7524,
+    "builder": "blender",
+    "street": "Chestnut Street",
+    "side": "A",
+    "addr": "1925 Chestnut Street",
+    "sourceHeight": 12,
+    "sourceLevels": null,
+    "frontEdge": 0,
+    "status": "review",
+    "lidarHeightM": 12.11,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b263347480.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b263347480.js"
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b263347480.js",
+    "sha256": "5f9b89ea24e0799a932a84c4d6f598d356358485fbd43221c75788ab5a02471d",
+    "pass": "b263347480-blender-5628d1e5-dc2e91"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-263347480/provenance.json",
+    "sha256": "4e53d07b4db4ca95d5daef345bec4db5485ace3c4518627906bd3da4127ebfd0",
+    "pass": "b263347480-blender-5628d1e5-dc2e91"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-263347480/exterior.glb",
+      "sha256": "3e8b4cb884fe6262f4e019b97659719fad494dae91aad371ceee5cf060a79ef9",
+      "bytes": 1996904
+    },
+    {
+      "role": "interior",
+      "url": "/assets/buildings/sf-building-263347480/interior.glb",
+      "sha256": "2dcbc117d45394fa175baba39df5e789783bca4054c3f64d09fccb28c11b7feb",
+      "bytes": 373448
+    },
+    {
+      "role": "fine-s0",
+      "url": "/assets/buildings/sf-building-263347480/fine-s0.glb",
+      "sha256": "576628ef95785b5a2b6ad9d296485cb792163cb9bea13695e8dacc09bd0c3d79",
+      "bytes": 10160
+    },
+    {
+      "role": "fine-s1",
+      "url": "/assets/buildings/sf-building-263347480/fine-s1.glb",
+      "sha256": "492439215f7edb804f478566b1b6c0b1fa84acc29faee69912d18fb779ee2c04",
+      "bytes": 89760
+    },
+    {
+      "role": "fine-s2",
+      "url": "/assets/buildings/sf-building-263347480/fine-s2.glb",
+      "sha256": "ae4eaa264f2bd2a4aa0a113c469412ba6a9977d6e97a81f2505c0e5292c8d4b0",
+      "bytes": 88964
+    },
+    {
+      "role": "fine-s3",
+      "url": "/assets/buildings/sf-building-263347480/fine-s3.glb",
+      "sha256": "6156a96dff794854746da7191f49cca1f9de9f8c10696144c5bb3ce8d385c58e",
+      "bytes": 89672
+    }
+  ],
+  "generatedAt": "2026-09-30T11:45:24.031Z",
+  "base": {
+    "id": "sf-building-263347480",
+    "walkIndex": 7524,
+    "builder": "blender",
+    "street": "Chestnut Street",
+    "side": "A",
+    "addr": "1925 Chestnut Street",
+    "sourceHeight": 12,
+    "sourceLevels": null,
+    "frontEdge": 0,
+    "status": "review",
+    "lidarHeightM": 12.11,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b263347480.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b263347480.js"
+  }
+}

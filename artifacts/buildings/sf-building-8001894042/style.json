@@ -1,0 +1,96 @@
+{
+  "builder": "house",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "painted-stucco",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "groundM": 2.6,
+  "roofLevelM": 5.25,
+  "storeysSeen": 2,
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "seed": 15,
+  "notes": "Kirkham S, 1956: blue-painted vertical board siding, flat roof with a projecting fascia and a tall steel chimney flue; ground: two round-pattern black iron gates at the entry on the left, two blue panelled garage doors with a window strip; upper: a wide picture window left of centre and a smaller window right.",
+  "wall": "painted-clapboard",
+  "wallTint": "#5b7ca4",
+  "roofForm": {
+    "form": "flat",
+    "eaveM": 0.25,
+    "fasciaM": 0.25,
+    "sideOverhangM": 0.1,
+    "fascia": "painted-white"
+  },
+  "parapetM": 0.3,
+  "gate": {
+    "from": 0.04,
+    "to": 0.3,
+    "headM": 2.2,
+    "material": "painted-steel",
+    "tint": "#1f1f1f"
+  },
+  "garages": [
+    {
+      "from": 0.36,
+      "to": 0.62,
+      "headM": 2.15,
+      "material": "painted-white",
+      "pattern": "panel",
+      "tint": "#5f7fa6"
+    },
+    {
+      "from": 0.66,
+      "to": 0.93,
+      "headM": 2.15,
+      "material": "painted-white",
+      "pattern": "panel",
+      "tint": "#5f7fa6"
+    }
+  ],
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.18,
+      "to": 0.5,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        3,
+        2
+      ]
+    },
+    {
+      "storey": 1,
+      "from": 0.62,
+      "to": 0.82,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        2,
+        2
+      ]
+    }
+  ],
+  "chimney": {
+    "fx": 0.08,
+    "fz": 0.85,
+    "heightM": 1.6,
+    "dM": 0.22,
+    "material": "painted-steel-mid",
+    "tint": null
+  }
+}

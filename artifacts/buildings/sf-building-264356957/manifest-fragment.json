@@ -1,0 +1,66 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-264356957",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-264356957",
+    "walkIndex": 7533,
+    "builder": "blender",
+    "street": "Haight Street",
+    "side": "A",
+    "addr": "1401;1405;1409;1415;1419 Haight Street",
+    "sourceHeight": 0,
+    "sourceLevels": null,
+    "frontEdge": 0,
+    "status": "review",
+    "lidarHeightM": 5.87,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b264356957.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b264356957.js"
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b264356957.js",
+    "sha256": "576711f844afa98ab49747bb781e973870a4831aa604e0533c608c5f65cbabd5",
+    "pass": "b264356957-blender-225ef653-2ed123"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-264356957/provenance.json",
+    "sha256": "44eb55c2ad73f4b8fc09f8af4fe2987681d8ee91425fe9d581f8d485b861d633",
+    "pass": "b264356957-blender-225ef653-2ed123"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-264356957/exterior.glb",
+      "sha256": "f97a184944dbd561375cc761ec2d2a031a272181d587505e9133d81cf619e04e",
+      "bytes": 694432
+    },
+    {
+      "role": "interior",
+      "url": "/assets/buildings/sf-building-264356957/interior.glb",
+      "sha256": "5e58fe60b37bd85e1f9d172ed4d815621019ab12a8db0d0471f193c4f9a5d9ee",
+      "bytes": 33020
+    },
+    {
+      "role": "fine-s0",
+      "url": "/assets/buildings/sf-building-264356957/fine-s0.glb",
+      "sha256": "11fa9dd1164d2448b0e6db325c09be9a6a3d5e79051b57a17db5c77301f51df7",
+      "bytes": 1970776
+    }
+  ],
+  "generatedAt": "2026-09-30T09:22:03.599Z",
+  "base": {
+    "id": "sf-building-264356957",
+    "walkIndex": 7533,
+    "builder": "blender",
+    "street": "Haight Street",
+    "side": "A",
+    "addr": "1401;1405;1409;1415;1419 Haight Street",
+    "sourceHeight": 0,
+    "sourceLevels": null,
+    "frontEdge": 0,
+    "status": "review",
+    "lidarHeightM": 5.87,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b264356957.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b264356957.js"
+  }
+}

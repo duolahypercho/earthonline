@@ -1,0 +1,120 @@
+{
+ "seed": 5,
+ "notes": "Slate grey stucco flats with a dark charcoal base storey. North end: round curved bay from storey 1 up; single tall dark-framed sash windows and one wide picture window; dark bracketed cornice. Ground: glazed double entry door and a glazed grid garage door, dark planting bed; uphill part of the frontage is a plain wall behind the garden. Slate grey darkened and base charcoal deepened, one more window in the uphill run. Wall dark charcoal-slate, base near-black. Round bay is a glazed half cylinder (storeys 1-2) with plates as dark bands and its own cap. Windows are plain dark-framed openings without sills: the first upper storey has a wide picture window (left), one centre and one right window; the top storey has a single window centred on the flat wall. Dark cornice. A set-back roof block (penthouse) at the top left inside the LiDAR allowance. The data's storey count (3) is kept, so the extra real storey cannot be drawn. Window-frame pilasters thinned so they no longer cut through the dark base; wall pushed darker. Wall pushed to dark charcoal-slate and base near-black; frame seams flattened out of the stucco; round bay drawn with one large pane per facet. Wall a neutral medium slate grey (blue cast removed) over a darker charcoal ground storey, window seams reduced to the openings only; the corner round bay is a solid grey drum with punched dark-framed windows on its curved facets, starting above the three-window storey; the upper storey has one window centred over the middle window below; ground: recessed black-framed glazed entry at the left third and a black-framed multi-light glazed garage centre-right; the bracketed cornice is replaced by a thin dark plain cap. Storey count stays the data 3 (spec-locked), so the extra real storey is not drawn; the setback penthouse block stays. Rework B: the street shows 4 storeys (dark ground + 3 upper), so storeysSeen 4 (2.8 m ground, 2.5 m uppers) replaces the roll count; wall a cool charcoal slate at the luminance floor over a darker #2c2f35 charcoal base course; the round oriel spans the two top storeys with the wall colour, a flat window under it on storey 2; storey 2 keeps wide-left / centre / under-bay windows, storeys 3-4 only the centre window plus the oriel; a dark bracketed stepped cornice replaces the thin fascia. Not doable: one large window plus a narrow side light per oriel storey (kit draws a sash per facet), the recessed panel round the centre window, and removing the frame-grid column seams (the per-storey window pattern needs the grid). Ground entry and window frames pushed to near-black steel so the recessed entry reads as a black-framed glazed door beside the black gridded garage (the doorway itself stays an open walk-in passage; sidelights are not drawable on a narrow door span). Rework 2: the corner oriel is a smooth 7-facet glazed bow (one wide curved window band per storey in dark frames between solid plates) instead of a 5-facet bay with a sash per facet; flat-wall window frames white on the charcoal wall; the penthouse block moved 1 m back from the front so it shows over the cornice. Not doable: the cornice wrapping the bow, windows in the penthouse block, and a closed dark glazed entry door (kit doors stand open for walk-in; the lit lobby shows through). Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k). Rebuild fix (2026-10-02): storeysSeen 4x2.5 m removed - below the 2.6 m storey minimum under the 10.43 m LiDAR height; the roll already counts 4. GroundBand lift (2026-10-03): groundBand tint #464a51 -> #62656b (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-white",
+ "wallTint": "#868b94",
+ "trim": "painted-steel@6a6e78",
+ "frame": "painted-steel@3a3d42",
+ "glass": "glass-clear",
+ "cornice": true,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.9,
+ "windowSillM": 0.8,
+ "windowHeadM": 2.4,
+ "floorsM": {
+  "groundM": 2.8,
+  "upperM": 2.5
+ },
+ "frameGrid": {
+  "columns": [
+   0.93,
+   0.72,
+   0.54,
+   0.43,
+   0.22,
+   0.09
+  ],
+  "fromStorey": 1,
+  "storeyPatterns": [
+   [
+    "glass",
+    "wall",
+    "glass",
+    "wall",
+    "glass"
+   ],
+   [
+    "wall",
+    "wall",
+    "glass",
+    "wall",
+    "wall"
+   ],
+   [
+    "wall",
+    "wall",
+    "glass",
+    "wall",
+    "wall"
+   ]
+  ],
+  "columnW": 0.01,
+  "slabEdgeH": 0.9,
+  "projectionM": 0,
+  "mullionM": 1.3,
+  "material": "painted-white",
+  "tint": "#686e79",
+  "frameMaterial": "painted-white",
+  "glassRecessM": 0.12
+ },
+ "bays": [
+  {
+   "at": 0.13,
+   "widthM": 3.4,
+   "projectionM": 1.2,
+   "fromStorey": 2,
+   "toStorey": 3,
+   "frame": "painted-steel",
+   "frameTint": "#2b2b2e",
+   "material": "painted-white",
+   "tint": "#868b94",
+   "glazed": true,
+   "roundCorners": 3
+  }
+ ],
+ "roofBlocks": [
+  {
+   "at": 0.78,
+   "widthM": 4.6,
+   "depthM": 5,
+   "setbackM": 1.0,
+   "material": "painted-white",
+   "tint": "#686e79"
+  }
+ ],
+ "storefrontFrame": "painted-steel@2a2c30",
+ "storefrontGlass": "glass-clear@303840",
+ "bulkhead": "painted-steel",
+ "groundBand": {
+  "material": "painted-white",
+  "tint": "#62656b",
+  "topM": 2.8
+ },
+ "storefront": {
+  "bulkheadM": 0.3,
+  "transomM": 0.3,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.72,
+    "to": 0.86,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel"
+   },
+   {
+    "from": 0.34,
+    "to": 0.6,
+    "kind": "glazed-garage",
+    "material": "painted-steel",
+    "tint": "#18181a",
+    "headM": 2.5
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "coping": null
+}

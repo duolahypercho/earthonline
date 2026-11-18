@@ -1,0 +1,72 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-8101894021",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-8101894021",
+    "walkIndex": 7302,
+    "builder": "blender",
+    "street": "Lawton Street",
+    "side": "N",
+    "addr": "4242 Lawton Street",
+    "sourceHeight": 5.95,
+    "sourceLevels": null,
+    "frontEdge": 9,
+    "status": "review",
+    "lidarHeightM": 5.95,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b8101894021.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b8101894021.js"
+  },
+  "base": {
+    "id": "sf-building-8101894021",
+    "walkIndex": 7302,
+    "builder": "blender",
+    "street": "Lawton Street",
+    "side": "N",
+    "addr": "4242 Lawton Street",
+    "sourceHeight": 5.95,
+    "sourceLevels": null,
+    "frontEdge": 9,
+    "status": "review",
+    "lidarHeightM": 5.95,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b8101894021.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b8101894021.js"
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b8101894021.js",
+    "sha256": "6b34e35128a61e2acd1ba835d78bffdb235d5b4bbeed9caf2c46e31a65d5e330",
+    "pass": "b8101894021-blender-38c455b0-69e22d"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-8101894021/provenance.json",
+    "sha256": "a4fac6720a6373415c7366f6437bd2da9e5c670697170f84de06d79cf38143e6",
+    "pass": "b8101894021-blender-38c455b0-69e22d"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-8101894021/exterior.glb",
+      "sha256": "dd410e3cb211f05b22f33ba5a88cf7ef9f4de592e67845307ebc588aeacac11f",
+      "bytes": 194856
+    },
+    {
+      "role": "interior",
+      "url": "/assets/buildings/sf-building-8101894021/interior.glb",
+      "sha256": "77d34dbfab4d8c8b0e1451f3ef03fa7bd7c87c4e090b16f8c599c2e402f1103d",
+      "bytes": 85364
+    },
+    {
+      "role": "fine-s0",
+      "url": "/assets/buildings/sf-building-8101894021/fine-s0.glb",
+      "sha256": "c0e77da0c8eda6422989f156e6ab819d4be7bb33da8be3430f5d34037ed2e9cc",
+      "bytes": 23964
+    },
+    {
+      "role": "fine-s1",
+      "url": "/assets/buildings/sf-building-8101894021/fine-s1.glb",
+      "sha256": "1a5492815141f0aab7b4398bf49daf4b3b4b33c3141a16fd7a4e59fe33ff021d",
+      "bytes": 70768
+    }
+  ],
+  "generatedAt": "2026-10-02T06:19:48.197Z"
+}

@@ -1,0 +1,248 @@
+{
+  "seed": 1,
+  "notes": "2004 mixed-use residential block on the Folsom S frontage between the mid-block tower and the 4th Street corner (DataSF footprint, no OSM way). Pale blue-grey render upper storeys with a regular grid of paired white-framed windows; charcoal ground storey of shopfronts between square piers, each under a deep maroon fabric awning; a glazed residential lobby door; flat parapet cap. Pale blue-teal render (was lavender-grey reading), reflective window glass (glassModel), smooth-render weathering. The render tint read sage/teal in the street light (painted-stucco's warm albedo x a teal tint). Tint re-derived bluer; coping to match. Upper windows too sparse, awnings read as a red trim strip, ground too uniformly black. Windows every 1.6 m at 1.0 m wide; awnings 1.3 m deep with a 0.6 m valance; ground a lighter charcoal. Awnings read as flat strips; sloped fabric awnings (1.0 m rise over the 1.3 m depth, kit riseM/dropM); paler blue-grey render. No awnings over the SW end of the front; lighter charcoal base; windows set deeper. Each awning span split into two discrete awnings with a gap, lower rise, so they read as separate fabric awnings not one band. Wall greyer pale blue (was periwinkle), lighter ground band (was blue-black), window reveals 0.45 m.",
+  "wall": "painted-stucco",
+  "wallTint": "#c2d0e8",
+  "trim": "painted-stucco",
+  "groundBand": {
+    "material": "painted-stucco",
+    "tint": "#80858a",
+    "topM": 4.4
+  },
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "coping": {
+    "heightM": 0.35,
+    "projectionM": 0.1,
+    "material": "painted-stucco",
+    "tint": "#b2c2dc"
+  },
+  "bayM": 1.6,
+  "windowW": 1.0,
+  "endPierM": 1.0,
+  "frame": "painted-white",
+  "storefrontFrame": "painted-steel",
+  "bulkhead": "painted-steel-mid",
+  "storefrontGlass": "glass-clear",
+  "ground": "shop",
+  "upper": "apartment",
+  "awning": "canvas-plain@a82a30",
+  "storefront": {
+    "awning": true,
+    "transomM": 0.5,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.04,
+        "to": 0.18
+      },
+      {
+        "kind": "window",
+        "from": 0.22,
+        "to": 0.36
+      },
+      {
+        "kind": "door",
+        "from": 0.4,
+        "to": 0.47,
+        "leaf": "glass-door",
+        "stair": true
+      },
+      {
+        "kind": "window",
+        "from": 0.5,
+        "to": 0.64
+      },
+      {
+        "kind": "window",
+        "from": 0.68,
+        "to": 0.82
+      },
+      {
+        "kind": "garage",
+        "from": 0.86,
+        "to": 0.96,
+        "material": "painted-steel",
+        "tint": "#7a7e84",
+        "headM": 3.2
+      }
+    ]
+  },
+  "awningSpans": [
+    {
+      "from": 0.04,
+      "to": 0.104,
+      "depthM": 1.3,
+      "valanceM": 0.6,
+      "riseM": 0.7,
+      "dropM": 0.8
+    },
+    {
+      "from": 0.116,
+      "to": 0.18,
+      "depthM": 1.3,
+      "valanceM": 0.6,
+      "riseM": 0.7,
+      "dropM": 0.8
+    },
+    {
+      "from": 0.22,
+      "to": 0.284,
+      "depthM": 1.3,
+      "valanceM": 0.6,
+      "riseM": 0.7,
+      "dropM": 0.8
+    },
+    {
+      "from": 0.296,
+      "to": 0.36,
+      "depthM": 1.3,
+      "valanceM": 0.6,
+      "riseM": 0.7,
+      "dropM": 0.8
+    },
+    {
+      "from": 0.5,
+      "to": 0.564,
+      "depthM": 1.3,
+      "valanceM": 0.6,
+      "riseM": 0.7,
+      "dropM": 0.8
+    },
+    {
+      "from": 0.576,
+      "to": 0.64,
+      "depthM": 1.3,
+      "valanceM": 0.6,
+      "riseM": 0.7,
+      "dropM": 0.8
+    }
+  ],
+  "streetEdges": {
+    "8": {
+      "storefront": {
+        "awning": true,
+        "transomM": 0.5,
+        "layout": [
+          {
+            "kind": "garage",
+            "from": 0.08,
+            "to": 0.26,
+            "material": "painted-steel",
+            "tint": "#9aa0a6",
+            "headM": 3.3
+          },
+          {
+            "kind": "window",
+            "from": 0.3,
+            "to": 0.46
+          },
+          {
+            "kind": "window",
+            "from": 0.5,
+            "to": 0.62
+          },
+          {
+            "kind": "door",
+            "from": 0.66,
+            "to": 0.73,
+            "leaf": "glass-door"
+          },
+          {
+            "kind": "window",
+            "from": 0.77,
+            "to": 0.94
+          }
+        ]
+      },
+      "awningSpans": [
+        {
+          "from": 0.3,
+          "to": 0.374,
+          "depthM": 1.3,
+          "valanceM": 0.6,
+          "riseM": 0.7,
+          "dropM": 0.8
+        },
+        {
+          "from": 0.386,
+          "to": 0.46,
+          "depthM": 1.3,
+          "valanceM": 0.6,
+          "riseM": 0.7,
+          "dropM": 0.8
+        },
+        {
+          "from": 0.5,
+          "to": 0.554,
+          "depthM": 1.3,
+          "valanceM": 0.6,
+          "riseM": 0.7,
+          "dropM": 0.8
+        },
+        {
+          "from": 0.566,
+          "to": 0.62,
+          "depthM": 1.3,
+          "valanceM": 0.6,
+          "riseM": 0.7,
+          "dropM": 0.8
+        },
+        {
+          "from": 0.77,
+          "to": 0.849,
+          "depthM": 1.3,
+          "valanceM": 0.6,
+          "riseM": 0.7,
+          "dropM": 0.8
+        },
+        {
+          "from": 0.861,
+          "to": 0.94,
+          "depthM": 1.3,
+          "valanceM": 0.6,
+          "riseM": 0.7,
+          "dropM": 0.8
+        }
+      ]
+    },
+    "7": {
+      "storefront": {
+        "awning": false,
+        "transomM": 0.5,
+        "layout": [
+          {
+            "kind": "window",
+            "from": 0.15,
+            "to": 0.85
+          }
+        ]
+      }
+    }
+  },
+  "weathering": {
+    "patches": {
+      "strength": 0.06,
+      "metres": 1.8,
+      "top": 4.0,
+      "mottle": 0.06
+    },
+    "grime": {
+      "strength": 0.16,
+      "metres": 2.6
+    },
+    "streak": {
+      "strength": 0.03,
+      "columnMetres": 1.1,
+      "drop": 0.6
+    },
+    "bandStrength": 0.08,
+    "axis": "wall"
+  },
+  "glassModel": {
+    "upper": "glass-reflective@e4cec0",
+    "street": "glass-storefront@8e979d"
+  },
+  "windowDepthM": 0.45
+}

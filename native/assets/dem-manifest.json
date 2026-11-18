@@ -1,0 +1,71 @@
+{
+  "product": "USGS 3D Elevation Program (3DEP) 1 arc-second DEM, seamless 1 x 1 degree GeoTIFF tiles (current)",
+  "publisher": "U.S. Geological Survey, The National Map",
+  "distribution": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Elevation/1/TIFF/current/ (found through the TNM Access API, tnmaccess.nationalmap.gov/api/v1/products, dataset National Elevation Dataset (NED) 1 arc-second)",
+  "license": "Public domain, USGS (U.S. Government work; no copyright in the United States)",
+  "attribution": "U.S. Geological Survey, 3D Elevation Program",
+  "moreInfo": "https://www.usgs.gov/3d-elevation-program",
+  "horizontalCrs": "EPSG:4269 NAD83 geographic, 1 arc-second (1/3600 degree) pixels, pixel-is-area, 6-12 pixel overlap between tiles",
+  "verticalDatum": "NAVD88 metres",
+  "format": "GeoTIFF, float32, 512 x 512 tiles, LZW with the floating-point predictor; decoded by eo-farshore with the tiff crate",
+  "coverage": "37-39 N, 121-124 W; the cook uses 37.185-38.408 N, 121.49-123.12 W",
+  "why": "1 arc-second (about 30 m) because the far shore is 2 km or more from any camera and mostly 5-60 km: a 30 m cell is several pixels there; the 1/3 arc-second product is about 10x the disk and memory for detail only the Golden Gate's north end would show",
+  "downloadedAt": "2026-11-17T08:52:14Z",
+  "totalBytes": 226292957,
+  "tiles": [
+    {
+      "id": "n38w122",
+      "file": "raw/USGS_1_n38w122.tif",
+      "url": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Elevation/1/TIFF/current/n38w122/USGS_1_n38w122.tif",
+      "lastModified": "Wed, 27 Aug 2025 16:37:28 GMT",
+      "etag": "bacad7826cfbd682a9b58338c4fc3953",
+      "bytes": 59929571,
+      "sha256": "8455a55d308fa1acca748cdf8efa7ce1cb971f0cb66a98a54bcc1721b1b62377"
+    },
+    {
+      "id": "n38w123",
+      "file": "raw/USGS_1_n38w123.tif",
+      "url": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Elevation/1/TIFF/current/n38w123/USGS_1_n38w123.tif",
+      "lastModified": "Wed, 27 Aug 2025 16:11:31 GMT",
+      "etag": "b2f4d66d8e96c57a15ebf0920506de33",
+      "bytes": 28522813,
+      "sha256": "9b00c16eeb5defde2296e103ec7efd126923fc9f3e976b14a79259e301584af8"
+    },
+    {
+      "id": "n38w124",
+      "file": "raw/USGS_1_n38w124.tif",
+      "url": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Elevation/1/TIFF/current/n38w124/USGS_1_n38w124.tif",
+      "lastModified": "Tue, 30 Aug 2022 16:19:27 GMT",
+      "etag": "842f3effe44902a8289b4f2ebe05f8e4",
+      "bytes": 299634,
+      "sha256": "07af816c696dc810e363bdb8cb1d44958f63cec2a17b69604e46c30b09d545a0"
+    },
+    {
+      "id": "n39w122",
+      "file": "raw/USGS_1_n39w122.tif",
+      "url": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Elevation/1/TIFF/current/n39w122/USGS_1_n39w122.tif",
+      "lastModified": "Tue, 08 Jul 2025 20:57:07 GMT",
+      "etag": "cec909259c10642a2f4997471d961756",
+      "bytes": 58954880,
+      "sha256": "2593e47a34f401c9b66887980214e0697826e19c857f25601a4884649b76aaf9"
+    },
+    {
+      "id": "n39w123",
+      "file": "raw/USGS_1_n39w123.tif",
+      "url": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Elevation/1/TIFF/current/n39w123/USGS_1_n39w123.tif",
+      "lastModified": "Tue, 02 Jun 2026 15:24:55 GMT",
+      "etag": "1d754bcb432c481da5c7120d5f1dd979",
+      "bytes": 59894215,
+      "sha256": "44cc22f96e9da81c5ee865df4dbe5aa46c1f1aee40be8413d9742c65ed28cee6"
+    },
+    {
+      "id": "n39w124",
+      "file": "raw/USGS_1_n39w124.tif",
+      "url": "https://prd-tnm.s3.amazonaws.com/StagedProducts/Elevation/1/TIFF/current/n39w124/USGS_1_n39w124.tif",
+      "lastModified": "Tue, 02 Jun 2026 15:24:40 GMT",
+      "etag": "c5d78f11471d54e2e792501f46d00305",
+      "bytes": 18691844,
+      "sha256": "6ede35f2cc48ad8e69649a10402dce3fe44916cf6e46a371a186f2fbc5498208"
+    }
+  ]
+}

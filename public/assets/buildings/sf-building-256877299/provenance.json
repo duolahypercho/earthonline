@@ -1,0 +1,53 @@
+{
+  "kind": "blender-building",
+  "id": "sf-building-256877299",
+  "pass": "b256877299-blender-1704a15b-57d6e5",
+  "generator": "scripts/blender-buildings/build_building.py",
+  "generatorSha256": "1704a15b341374dc4b72bea6bb5da46de7d15add7ea24a94f5306382044dd66e",
+  "blender": "Blender 5.1.2",
+  "inputs": {
+    "spec": "artifacts/buildings/sf-building-256877299/spec.json",
+    "specSha256": "51c05f51c63a19318069ca53f836100dff4e1fbc7d72964dcb92b984d844c677",
+    "style": "artifacts/buildings/sf-building-256877299/style.json",
+    "styleSha256": "57d6e577f2e0e7f5d99540a23e43d64c97d6ab5ec841615c1ad369179d8626ad"
+  },
+  "sources": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "license": "Original geometry generated from open data (DataSF footprints, LiDAR, Assessor roll). No third-party meshes or textures.",
+  "furniture": [],
+  "assets": {
+    "exterior": {
+      "url": "/assets/buildings/sf-building-256877299/exterior.glb",
+      "sha256": "4c218e8e065d2059ee6f3347b162c320c697edb83be95d5b0752bf722fd4f137",
+      "bytes": 216884
+    },
+    "interior": {
+      "url": "/assets/buildings/sf-building-256877299/interior.glb",
+      "sha256": "e0524472e251c34a4464e4712f57356994d58988f161b1e3ad90d7d0f25d9363",
+      "bytes": 146320
+    },
+    "fine": [
+      {
+        "storey": 0,
+        "url": "/assets/buildings/sf-building-256877299/fine-s0.glb",
+        "sha256": "382bf7b834c71c1ae1508a44cdb056a9fb43fbd98e35e26c4f6a7750426e1f07",
+        "bytes": 29240
+      },
+      {
+        "storey": 1,
+        "url": "/assets/buildings/sf-building-256877299/fine-s1.glb",
+        "sha256": "3af540bc0b9b59733f53e01a967204fd0f2ff436ef956d72f9c5785e53dc603d",
+        "bytes": 110124
+      },
+      {
+        "storey": 2,
+        "url": "/assets/buildings/sf-building-256877299/fine-s2.glb",
+        "sha256": "32ce067fb6a96a0a9240192dbb1c75cddf60edbb991ca410f32c3882c52b850d",
+        "bytes": 110084
+      }
+    ]
+  }
+}

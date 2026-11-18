@@ -1,0 +1,3686 @@
+{
+  "title": "California + San Francisco road design standards for a 1:1 SF map",
+  "generated": "2026-10-09",
+  "conventions": {
+    "metricValue": "metres for lengths, m/s for speeds, seconds for time, ratio (0.02 = 2%) for slopes; objects/arrays mirror 'value'",
+    "applicability": [
+      "binding statewide",
+      "state highway only",
+      "local agency standard",
+      "guidance"
+    ],
+    "confidence": [
+      "primary-source-checked",
+      "source-file-read-plot-unread",
+      "secondary",
+      "unverified"
+    ],
+    "pages": "Printed page numbers of the cited PDF (CA MUTCD continuous pagination; HDM chapter-page; Standard Plans sheet number)"
+  },
+  "sourceHierarchy": [
+    {
+      "rank": 1,
+      "name": "California MUTCD 2026 Edition",
+      "edition": "CA MUTCD 2026 (FHWA MUTCD 2023 as amended for California), effective 2026-01-18; replaced CA MUTCD 2014 Rev 9. Caltrans page (archived 2026-09-19) shows no later revision; LA28 Supplement (2026-07-15) is Olympic-route only; 'Summary of Significant Changes' still pending.",
+      "legalBasis": "CVC 21400; FHWA substantial-conformance letter received",
+      "scope": "Binding on all traffic control devices on all public roads in California, including SF city streets (Standard = shall; Guidance = should; Option = may; Support = info)",
+      "url": "https://dot.ca.gov/programs/safety-programs/camutcd",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "rank": 2,
+      "name": "California Vehicle Code",
+      "edition": "Current text on leginfo (22500 captured 2026-09-04; 22352 per AB 382, Stats. 2025 ch. 555)",
+      "scope": "Binding statewide: parking/stopping, curb colors (21458), speed law (22348-22358.9), limit line definition (377)",
+      "url": "https://leginfo.legislature.ca.gov/faces/codes.xhtml",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "rank": 3,
+      "name": "Caltrans Highway Design Manual",
+      "edition": "7th Edition (2020-07-01) with updates; chapters used dated 2020-07-01 to 2023-09-29; latest transmittal MCT #5 (Aug 2025)",
+      "scope": "Geometric design standards for the State Highway System only; Foreword says it does not establish a legal standard and is for Department use. For local streets crossing/within State R/W it defers to local standards or AASHTO (HDM 202.7, 308.1). Bikeway criteria (Ch. 1000, DIB 89) reach local agencies via SHC 891 unless alternatives are adopted.",
+      "url": "https://dot.ca.gov/programs/design/manual-highway-design-manual-hdm",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "rank": 4,
+      "name": "Caltrans Standard Plans",
+      "edition": "2025 Edition (sheets 7-1-25, approved 2025-09-19; revised plans file updated 2026-04-20); required on Caltrans projects submitted on/after 2025-10-20 per the implementation memo (memo not re-read)",
+      "scope": "Construction details for State projects (A20A-G markers/lines, A24A-L markings, A87A curbs & driveways, A87B dikes, A88A/B curb ramps). Locals may adopt them; SF uses its own SFPW plans for curbs/ramps.",
+      "url": "https://dot.ca.gov/programs/design/2025-ccs-standard-plans-and-standard-specifications",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "rank": 5,
+      "name": "San Francisco local standards",
+      "edition": "Better Streets Plan (adopted Dec 2010; Planning Code 138.1 makes recommended widths mandatory on new streets); SF Public Works Standard Plans (87,169-87,213, 2007-2012) and Accessible Street Crossing Standard RX-1..RX-11 (Order 185854, effective 2017-04-03); SFPW street-acceptance minimums (Subdivision Rules and Regulations)",
+      "scope": "Govern SF city streets for geometry (sidewalks, curbs, ramps, driveways, radii, lighting) where the State is silent; cannot override CA MUTCD or CVC. On State routes in SF the HDM governs geometry and Caltrans approval is needed for ordinances (CVC 21960 via CA MUTCD 3B.27).",
+      "url": "https://sfpublicworks.org/services/standards-specifications-and-plans",
+      "confidence": "primary-source-checked"
+    }
+  ],
+  "stateHighwaysInSF": {
+    "note": "Route definitions from Streets and Highways Code (text via california.public.law, mirrors leginfo, accessed 2026-10-05); street-level alignments from secondary sources. Treat as secondary.",
+    "confidence": "secondary",
+    "routes": [
+      {
+        "route": "US-101",
+        "shc": "SHC 401(a): Route 5 in LA to Route 1, Funston approach, and the Golden Gate Bridge approach in the Presidio",
+        "inSF": "Bayshore Fwy, Central Fwy (to Mission/S Van Ness), then surface on S Van Ness/Van Ness Ave, Lombard St, Richardson Ave, Presidio Pkwy (Doyle Dr) to GG Bridge",
+        "alignmentConfidence": "secondary"
+      },
+      {
+        "route": "SR-1",
+        "shc": "SHC 301(e): Route 280 near south SF boundary to Route 101 near the Golden Gate Bridge approach",
+        "inSF": "19th Ave from I-280 to Golden Gate Park, then through the park and Park Presidio Blvd / the Presidio to US-101 at the bridge approach",
+        "alignmentConfidence": "secondary"
+      },
+      {
+        "route": "I-80",
+        "shc": "SHC 380(a): Route 101 near Division St to Route 280 near First St, then east via Bay Bridge",
+        "inSF": "Freeway only (Skyway, Bay Bridge approach)",
+        "alignmentConfidence": "secondary"
+      },
+      {
+        "route": "I-280",
+        "shc": "SHC 580: Route 101 in San Jose to Route 80 near First St in SF via Daly City (leginfo capture 2025-05-29)",
+        "inSF": "Freeway only (ends near King/4th-6th St)",
+        "alignmentConfidence": "primary-source-checked"
+      },
+      {
+        "route": "SR-35",
+        "shc": "SHC 335(c): Route 280 via Skyline Blvd to Route 1 in SF",
+        "inSF": "Skyline Blvd and Sloat Blvd to SR-1 at 19th Ave (Sloat segment per secondary sources)",
+        "alignmentConfidence": "secondary"
+      },
+      {
+        "route": "SR-82",
+        "shc": "SHC 382: Route 880 in San Jose to Route 280 in SF",
+        "inSF": "Mission St / San Jose Ave short segment to I-280 (secondary)",
+        "alignmentConfidence": "secondary"
+      }
+    ]
+  },
+  "entries": [
+    {
+      "id": "travel-lane-width-state-highway-min",
+      "topic": "travel lane width",
+      "value": 12,
+      "unit": "ft",
+      "metricValue": 3.658,
+      "condition": "State highways: two-lane and multilane highways, ramps, C-D roads (boldface standard)",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 301.1 Lane Width, p. 300-1",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0300-092923-a11y.pdf",
+      "quote": "minimum lane width ... shall be 12 feet",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "travel-lane-width-state-highway-urban-low-speed-min",
+      "topic": "travel lane width",
+      "value": 11,
+      "unit": "ft",
+      "metricValue": 3.353,
+      "condition": "Conventional State highways, posted speed <= 40 mph, AADTT < 250 per lane, urban areas or rural main streets; 12 ft preferred. Applies to US-101 on Van Ness/Lombard and SR-1 on 19th Ave where conditions are met",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 301.1, p. 300-1",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0300-092923-a11y.pdf",
+      "quote": "minimum lane width shall be 11 feet. The preferred lane width is ...",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "travel-lane-width-sf-local-street",
+      "topic": "travel lane width",
+      "value": null,
+      "unit": "ft",
+      "metricValue": null,
+      "condition": "SF city (non-State) streets. HDM Topic 308 defers city streets to locally adopted standards / AASHTO. No published SFMTA or SF Public Works numeric travel-lane-width standard was found; only the Better Streets curb-extension clearances below",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025); SFMTA (searched, none found)",
+      "section": "HDM Index 308.1, p. 300-32",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0300-092923-a11y.pdf",
+      "quote": "should conform to locally adopted standards",
+      "applicability": "local agency standard",
+      "confidence": "unverified"
+    },
+    {
+      "id": "travel-lane-clearance-at-bulbout-auto-sf",
+      "topic": "travel lane width",
+      "value": 10,
+      "unit": "ft",
+      "metricValue": 3.048,
+      "condition": "SF streets: bulb-out should leave at least this width for the nearest general auto travel lane",
+      "source": "San Francisco Better Streets Plan (adopted Dec 2010), design guidelines at sfbetterstreets.org",
+      "section": "Curb Extensions (Bulb-outs), Width and length",
+      "url": "https://sfbetterstreets.org/find-project-types/pedestrian-safety-and-traffic-calming/traffic-calming-overview/curb-extensions/",
+      "quote": "leave: 10 feet for the nearest auto travel lane",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "travel-lane-clearance-at-bulbout-transit-sf",
+      "topic": "travel lane width",
+      "value": {
+        "min": 11,
+        "max": 12
+      },
+      "unit": "ft",
+      "metricValue": {
+        "min": 3.353,
+        "max": 3.658
+      },
+      "condition": "SF streets where the nearest travel lane is a transit lane",
+      "source": "San Francisco Better Streets Plan (adopted Dec 2010), design guidelines at sfbetterstreets.org",
+      "section": "Curb Extensions, Width and length",
+      "url": "https://sfbetterstreets.org/find-project-types/pedestrian-safety-and-traffic-calming/traffic-calming-overview/curb-extensions/",
+      "quote": "11 to 12 feet for the nearest travel lane if it is ...",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "travel-lane-clearance-at-bulbout-freight-sf",
+      "topic": "travel lane width",
+      "value": 12,
+      "unit": "ft",
+      "metricValue": 3.658,
+      "condition": "SF designated freight routes / industrial streets",
+      "source": "San Francisco Better Streets Plan (adopted Dec 2010), design guidelines at sfbetterstreets.org",
+      "section": "Curb Extensions, Width and length",
+      "url": "https://sfbetterstreets.org/find-project-types/pedestrian-safety-and-traffic-calming/traffic-calming-overview/curb-extensions/",
+      "quote": "12 feet ... if it is a designated freight route or industrial ...",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "vehicle-width-max",
+      "topic": "design vehicle",
+      "value": 102,
+      "unit": "in",
+      "metricValue": 2.591,
+      "condition": "Total outside width of any vehicle or its load, except as otherwise provided in CVC Division 15 Chapter 2; safety devices excluded (35100(b)). A city or county may by ordinance prohibit combinations wider than 96 in (35100(c))",
+      "source": "California Vehicle Code (official text, leginfo.legislature.ca.gov; read via Internet Archive capture 2025-08-21, leginfo returned 403 on 2026-10-10); Amended by Stats. 1988, Ch. 1452, Sec. 5, effective 1988-09-28",
+      "section": "CVC 35100(a), Division 15 Chapter 2 (Width)",
+      "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=35100",
+      "quote": "shall not exceed 102 inches",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "left-turn-lane-width-state-highway",
+      "topic": "turn lane width",
+      "value": {
+        "standard": 12,
+        "urbanLowSpeedMin": 11
+      },
+      "unit": "ft",
+      "metricValue": {
+        "standard": 3.658,
+        "urbanLowSpeedMin": 3.353
+      },
+      "condition": "Single and double left-turn lanes on State highways; 11 ft min on conventional SH <= 40 mph, AADTT < 250/lane, urban",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 405.2(2)(a), p. 400-30",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0400-092923-a11y.pdf",
+      "quote": "lane width for both single and double left-turn lanes ... shall be ...",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "left-turn-bay-taper-urban",
+      "topic": "turn lane geometry",
+      "value": {
+        "typical": [
+          60,
+          90
+        ],
+        "restricted": 60
+      },
+      "unit": "ft",
+      "metricValue": {
+        "typical": [
+          18.288,
+          27.432
+        ],
+        "restricted": 18.288
+      },
+      "condition": "State highway left-turn bay taper in urban areas",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 405.2(2)(c), p. 400-34",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0400-092923-a11y.pdf",
+      "quote": "In urban areas, lengths of 60 feet and 90 feet are normally ...",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "left-turn-storage-min-unsignalized",
+      "topic": "turn lane geometry",
+      "value": 50,
+      "unit": "ft",
+      "metricValue": 15.24,
+      "condition": "Unsignalized State highway intersections: space for at least 2 vehicles at 25 ft each",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 405.2(2)(e), p. 400-34",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0400-092923-a11y.pdf",
+      "quote": "space for 2 vehicles should be provided at 25 feet per vehicle",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "twltl-width-state-highway",
+      "topic": "two-way left-turn lane",
+      "value": {
+        "min": 12,
+        "preferred": 14,
+        "max": 16
+      },
+      "unit": "ft",
+      "metricValue": {
+        "min": 3.658,
+        "preferred": 4.267,
+        "max": 4.877
+      },
+      "condition": "State highways (min is boldface standard; max is 'in no case should')",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 405.2(4), p. 400-36",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0400-092923-a11y.pdf",
+      "quote": "minimum width for a TWLTL shall be 12 feet ... preferred width ...",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "parking-stall-desirable-size",
+      "topic": "parking lane width",
+      "value": {
+        "width": 8,
+        "length": 24,
+        "minLength": 20
+      },
+      "unit": "ft",
+      "metricValue": {
+        "width": 2.438,
+        "length": 7.315,
+        "minLength": 6.096
+      },
+      "condition": "Parking meter stalls (California support text)",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 3B.27 para 09, p. 889",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3b-a11y.pdf",
+      "quote": "desirable dimensions of parking meter stalls are 8 feet by 24 feet",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "parking-space-marking-layout",
+      "topic": "parking lane width",
+      "value": {
+        "laneWidth": 8,
+        "interiorStall": [
+          22,
+          26
+        ],
+        "endStall": 20
+      },
+      "unit": "ft",
+      "metricValue": {
+        "laneWidth": 2.438,
+        "interiorStall": [
+          6.706,
+          7.925
+        ],
+        "endStall": 6.096
+      },
+      "condition": "Example on-street parallel stall markings",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Figure 3B-23, p. 943",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3b-a11y.pdf",
+      "quote": "8 ft; 22 to 26 ft; 20 ft typical for end space",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "parking-shoulder-width-state-highway",
+      "topic": "parking lane width",
+      "value": {
+        "preferredWithParking": 10,
+        "minParkingWithBikeLane": 8
+      },
+      "unit": "ft",
+      "metricValue": {
+        "preferredWithParking": 3.048,
+        "minParkingWithBikeLane": 2.438
+      },
+      "condition": "Conventional State highways (right shoulder 8 ft standard). With a Class II bike lane, min 8 ft for parking plus the bike lane width",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Table 302.1 note (7), p. 300-6",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0300-092923-a11y.pdf",
+      "quote": "minimum shoulder width shall be 8 feet where on street parking is ...",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "parking-lane-width-sf-local",
+      "topic": "parking lane width",
+      "value": null,
+      "unit": "ft",
+      "metricValue": null,
+      "condition": "SF local streets: no SFMTA numeric parking-lane width standard found; only CA MUTCD stall guidance (8 ft) applies",
+      "source": "SFMTA (searched, none found)",
+      "section": "n/a",
+      "url": "",
+      "quote": "",
+      "applicability": "local agency standard",
+      "confidence": "unverified"
+    },
+    {
+      "id": "shoulder-width-conventional-highway",
+      "topic": "shoulders",
+      "value": {
+        "right": 8,
+        "leftCurbedMedianUrbanLe45": 2
+      },
+      "unit": "ft",
+      "metricValue": {
+        "right": 2.438,
+        "leftCurbedMedianUrbanLe45": 0.61
+      },
+      "condition": "Conventional multilane State highways; left 2 ft in urban areas <= 45 mph with curbed medians (may be omitted <= 35 mph)",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Table 302.1, p. 300-6",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0300-092923-a11y.pdf",
+      "quote": "Urban areas with posted speeds less than or equal to 45 mph ...",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "bike-lane-class-ii-width-min",
+      "topic": "bike lane width",
+      "value": 4,
+      "unit": "ft",
+      "metricValue": 1.219,
+      "condition": "Class II bike lane, State highways (boldface). Local agencies must use Caltrans minimum bikeway criteria unless they adopt alternatives per SHC 891(b)",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 301.2(1), p. 300-2",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0300-092923-a11y.pdf",
+      "quote": "minimum Class II bike lane width shall be 4 feet",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "bike-lane-class-ii-width-adjacent-parking",
+      "topic": "bike lane width",
+      "value": 5,
+      "unit": "ft",
+      "metricValue": 1.524,
+      "condition": "Class II bike lane adjacent to on-street parking",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 301.2(1), p. 300-2",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0300-092923-a11y.pdf",
+      "quote": "Adjacent to on-street parking, the minimum bike lane should be 5 feet",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "bike-lane-class-ii-width-over-40mph",
+      "topic": "bike lane width",
+      "value": 6,
+      "unit": "ft",
+      "metricValue": 1.829,
+      "condition": "Class II bike lane where posted speed > 40 mph",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 301.2(1), p. 300-2",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0300-092923-a11y.pdf",
+      "quote": "greater than 40 miles per hour, the minimum bike lane should be ...",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "bike-lane-class-ii-width-to-gutter-joint",
+      "topic": "bike lane width",
+      "value": 3,
+      "unit": "ft",
+      "metricValue": 0.914,
+      "condition": "Class II bike lane with concrete curb and gutter: stripe to gutter joint",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 301.2(1), p. 300-2",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0300-092923-a11y.pdf",
+      "quote": "minimum width of 3 feet measured from the bike lane stripe to ...",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "bikeway-criteria-local-applicability",
+      "topic": "bike lane width",
+      "value": null,
+      "unit": null,
+      "metricValue": null,
+      "condition": "Local agencies (incl. SF) shall use Caltrans minimum bikeway safety design criteria (HDM Ch.1000 / DIB 89) unless alternative criteria are engineer-approved, adopted by resolution, and follow a national guide (e.g., NACTO)",
+      "source": "California Streets and Highways Code 891 and 890.6 (text via california.public.law, mirrors leginfo)",
+      "section": "SHC 891(a)-(b), 890.6",
+      "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=SHC&sectionNum=891",
+      "quote": "shall utilize the minimum safety design criteria established pursuant to Section 890.6",
+      "applicability": "binding statewide",
+      "confidence": "secondary"
+    },
+    {
+      "id": "bike-lane-line-width",
+      "topic": "bike lane markings",
+      "value": {
+        "local": [
+          4,
+          6
+        ],
+        "stateHighway": 6
+      },
+      "unit": "in",
+      "metricValue": {
+        "local": [
+          0.102,
+          0.152
+        ],
+        "stateHighway": 0.152
+      },
+      "condition": "Solid white bike lane line",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 9E.01 para 03h, p. 1636; Figure 9E-106(CA)",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-9e-a11y.pdf",
+      "quote": "4 to 6 inch wide solid white stripe on local agency roadways",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "bike-lane-dashed-before-intersection",
+      "topic": "bike lane markings",
+      "value": {
+        "min": 50,
+        "max": 200
+      },
+      "unit": "ft",
+      "metricValue": {
+        "min": 15.24,
+        "max": 60.96
+      },
+      "condition": "Where motorist right turns are permitted, bike lane line dropped or dashed starting this far before the intersection",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 9E.01 para 03g, p. 1636",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-9e-a11y.pdf",
+      "quote": "dashed beginning at a point between 50 feet and 200 feet",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "bike-lane-symbol-size",
+      "topic": "bike lane markings",
+      "value": {
+        "bikeSymbolLength": 72,
+        "arrowLength": 72,
+        "gapSymbolToArrow": 72,
+        "BIKE_LANE_letterHeight": 44
+      },
+      "unit": "in",
+      "metricValue": {
+        "bikeSymbolLength": 1.829,
+        "arrowLength": 1.829,
+        "gapSymbolToArrow": 1.829,
+        "BIKE_LANE_letterHeight": 1.118
+      },
+      "condition": "Bicycle lane word/symbol/arrow markings (figure dimensions)",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Figure 9E-1, p. 1652",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-9e-a11y.pdf",
+      "quote": "72 inches; 44 inches",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "bike-lane-buffer",
+      "topic": "bike lane width",
+      "value": {
+        "minBufferAsMultipleOfLineWidth": 3,
+        "chevronsRequiredAboveFt": 3,
+        "chevronsShouldFt": [
+          2,
+          3
+        ],
+        "chevronSpacingMinFt": 10,
+        "figureMinBufferIn": 18
+      },
+      "unit": "mixed",
+      "metricValue": {
+        "chevronsRequiredAbove": 0.914,
+        "chevronsShould": [
+          0.61,
+          0.914
+        ],
+        "chevronSpacingMin": 3.048,
+        "figureMinBuffer": 0.457
+      },
+      "condition": "Buffer-separated (buffered) Class II bike lane; buffer width includes the two white lines; chevron/diagonal lines 4-6 in local, 6 in State, 45 deg, every 10-40 ft (CA guidance)",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 9E.06 paras 08-14b, p. 1642; Figure 9E-6(CA)",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-9e-a11y.pdf",
+      "quote": "Where a buffer space is more than 3 feet wide, chevron or ...",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "bike-lane-class-iv-one-way-width",
+      "topic": "bike lane width",
+      "value": {
+        "preferred": 7,
+        "min": 5,
+        "atAccessibleParkingOrBusIsland": 4
+      },
+      "unit": "ft",
+      "metricValue": {
+        "preferred": 2.134,
+        "min": 1.524,
+        "atAccessibleParkingOrBusIsland": 1.219
+      },
+      "condition": "One-way Class IV separated bikeway clear width (two-way uses Class I widths, HDM 1003.1)",
+      "source": "Caltrans Design Information Bulletin 89-02, Class IV Bikeway Guidance (2022-02-07)",
+      "section": "Section 3.4, p. 23",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/dib-89-02-final-a11y.pdf",
+      "quote": "clear width should be 7 feet preferred, with 5 feet being the ...",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "bike-lane-class-iv-buffer",
+      "topic": "bike lane width",
+      "value": {
+        "postsOrBarrierPreferred": 3,
+        "postsOrBarrierMin": 2,
+        "withParkingMin": 3,
+        "accessibleParkingMin": 5,
+        "sidewalkLevelSeparationMin": 1.5
+      },
+      "unit": "ft",
+      "metricValue": {
+        "postsOrBarrierPreferred": 0.914,
+        "postsOrBarrierMin": 0.61,
+        "withParkingMin": 0.914,
+        "accessibleParkingMin": 1.524,
+        "sidewalkLevelSeparationMin": 0.457
+      },
+      "condition": "Class IV separation/buffer widths; inflexible barriers in <= 35 mph environments",
+      "source": "Caltrans Design Information Bulletin 89-02, Class IV Bikeway Guidance (2022-02-07)",
+      "section": "Section 3.3, pp. 21-22; Figure 4",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/dib-89-02-final-a11y.pdf",
+      "quote": "marked buffer that is 3 feet wide preferred, with 2 feet being ...",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "green-colored-pavement-bike",
+      "topic": "bike lane markings",
+      "value": "green",
+      "unit": null,
+      "metricValue": null,
+      "condition": "Green pavement only in bike lanes, bike lane extensions/weaving areas, two-stage turn boxes, bike boxes, detector symbol backgrounds; never in crosswalks or behind sharrows",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 3H.06 paras 02-04, p. 1008",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3h-a11y.pdf",
+      "quote": "If used, green-colored pavement shall be limited to",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "traveled-way-cross-slope-new",
+      "topic": "cross slope",
+      "value": 2,
+      "unit": "%",
+      "metricValue": 0.02,
+      "condition": "New construction, all surfaces, State highways",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 301.3(2)(a), p. 300-4",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0300-092923-a11y.pdf",
+      "quote": "standard cross slope ... shall be 2 percent",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "traveled-way-cross-slope-resurface",
+      "topic": "cross slope",
+      "value": {
+        "min": 1.5,
+        "max": 3
+      },
+      "unit": "%",
+      "metricValue": {
+        "min": 0.015,
+        "max": 0.03
+      },
+      "condition": "Resurfacing/widening to match existing, State highways",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 301.3(2)(b), p. 300-4",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0300-092923-a11y.pdf",
+      "quote": "minimum shall be 1.5 percent and the maximum shall be 3 percent",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "traveled-way-cross-slope-sf-local",
+      "topic": "cross slope",
+      "value": null,
+      "unit": "%",
+      "metricValue": null,
+      "condition": "SF local street crown/cross slope: no SF numeric standard found; SFPW 87,170 says gutter is set to fit crown or superelevation of adjacent roadway",
+      "source": "SF Public Works Standard Plan 87,170 (2007)",
+      "section": "87,170 note 2",
+      "url": "https://sfpublicworks.org/sites/default/files/87%2C170.pdf",
+      "quote": "set to fit crown or superelevation of adjacent roadway",
+      "applicability": "local agency standard",
+      "confidence": "unverified"
+    },
+    {
+      "id": "cross-slope-rate-of-change-restrictive-max",
+      "topic": "cross slope",
+      "value": 6,
+      "unit": "% per 100 ft",
+      "metricValue": 0.0019685,
+      "condition": "Most the cross slope may change along a State highway where the standard transition does not fit (interchange ramps, short tangents). Metric value is slope ratio per metre, rounded down: 0.06 / 30.48 m. Taken off a 2% crown it runs 10.16 m. The index is stated for superelevation; applying it to crown removal at a deck landing is an analogy",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025); read from a saved text extraction of the cited PDF, because the PDF itself did not load",
+      "section": "Index 202.5(3), p. 200-19",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0200-092923-a11y.pdf",
+      "quote": "cross slope should not exceed 6 percent per 100 feet",
+      "applicability": "state highway only",
+      "confidence": "secondary"
+    },
+    {
+      "id": "superelevation-emax-urban",
+      "topic": "cross slope",
+      "value": {
+        "designSpeedUnder35": 4,
+        "designSpeed35to45": 6
+      },
+      "unit": "%",
+      "metricValue": {
+        "designSpeedUnder35": 0.04,
+        "designSpeed35to45": 0.06
+      },
+      "condition": "Urban roads; local streets in State R/W follow AASHTO or stricter local standards (Index 202.7)",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 202.2 (d)-(e), pp. 200-10 to 200-11",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0200-092923-a11y.pdf",
+      "quote": "Use emax=4% for urban roads with design speeds less than 35",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sidewalk-cross-slope-sf",
+      "topic": "cross slope",
+      "value": {
+        "designMin": 1,
+        "designMax": 1.5,
+        "constructedMin": 0.5,
+        "constructedMax": 2
+      },
+      "unit": "%",
+      "metricValue": {
+        "designMin": 0.01,
+        "designMax": 0.015,
+        "constructedMin": 0.005,
+        "constructedMax": 0.02
+      },
+      "condition": "SF sidewalks (pedestrian access route); running grade may match adjoining street grade",
+      "source": "SF Public Works Accessible Street Crossing Standard, Drawing RX-2 (102,855), effective 2017-04-03",
+      "section": "General Note G27",
+      "url": "https://sfpublicworks.org/sites/default/files/RX-2_0.pdf",
+      "quote": "design cross slope ... minimum of 1% to a maximum of 1.5%",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sidewalk-cross-slope-state",
+      "topic": "cross slope",
+      "value": 1.5,
+      "unit": "%",
+      "metricValue": 0.015,
+      "condition": "Sidewalk adjacent to curb ramps and driveways on State R/W (max)",
+      "source": "Caltrans Standard Plans, 2025 Edition (sheets dated 7-1-25, approved 2025-09-19)",
+      "section": "A88A Curb Ramp Details; A87A Case A",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/2025-standard-plans-locked.pdf",
+      "quote": "1.5% Max",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "crosswalk-roadway-cross-slope-sf",
+      "topic": "cross slope",
+      "value": {
+        "stopYieldControlledDesignMax": 1.5,
+        "uncontrolledDesignMax": 4.5,
+        "uncontrolledConstructedMax": 5
+      },
+      "unit": "%",
+      "metricValue": {
+        "stopYieldControlledDesignMax": 0.015,
+        "uncontrolledDesignMax": 0.045,
+        "uncontrolledConstructedMax": 0.05
+      },
+      "condition": "Roadway slope within SF crosswalks measured perpendicular to the pedestrian route",
+      "source": "SF Public Works RX-4 (102,857)",
+      "section": "Table C 'PAR Crosswalk Cross Slopes'; Note G36",
+      "url": "https://sfpublicworks.org/sites/default/files/RX-4_0.pdf",
+      "quote": "4.5% design/5% constructed",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "driveway-sidewalk-slope-sf",
+      "topic": "cross slope",
+      "value": 0.2,
+      "unit": "in/ft",
+      "metricValue": 0.0167,
+      "condition": "Sidewalk across an SF standard driveway (1/5 inch per foot ~ 1.7%)",
+      "source": "SF Public Works Standard Plan 87,171 Driveway Construction (rev. 2012-12-10)",
+      "section": "Section A-A",
+      "url": "https://sfpublicworks.org/sites/default/files/DPW%20updated%20standard%20driveway%20plan.pdf",
+      "quote": "SLOPE 1/5\" PER FOOT",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "curb-height-sf-standard",
+      "topic": "curb",
+      "value": 6,
+      "unit": "in",
+      "metricValue": 0.152,
+      "condition": "SF standard combined concrete curb and gutter (an 8-inch curb-and-gutter variant also exists); 6-inch top width, 1:4 batter face, 3/4 in top radii",
+      "source": "SF Public Works Standard Plan 87,170 (2007)",
+      "section": "87,170 'Combined 6-inch concrete curb and gutter'",
+      "url": "https://sfpublicworks.org/sites/default/files/87%2C170.pdf",
+      "quote": "COMBINED 6-INCH CONCRETE CURB AND GUTTER",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "curb-height-sf-at-crosswalk",
+      "topic": "curb",
+      "value": {
+        "typical": 6,
+        "min": 4,
+        "max": 7
+      },
+      "unit": "in",
+      "metricValue": {
+        "typical": 0.152,
+        "min": 0.102,
+        "max": 0.178
+      },
+      "condition": "SF curb height within crosswalk area / curb return to allow curb ramps",
+      "source": "SF Public Works RX-2 (102,855)",
+      "section": "General Note G19",
+      "url": "https://sfpublicworks.org/sites/default/files/RX-2_0.pdf",
+      "quote": "curb height may be 4 to 7-inches within crosswalk and curb return ...",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "gutter-width-sf",
+      "topic": "curb",
+      "value": {
+        "min": 1,
+        "max": 3
+      },
+      "unit": "ft",
+      "metricValue": {
+        "min": 0.305,
+        "max": 0.914
+      },
+      "condition": "SF combined curb and gutter: gutter width varies",
+      "source": "SF Public Works Standard Plan 87,170 (2007)",
+      "section": "87,170",
+      "url": "https://sfpublicworks.org/sites/default/files/87%2C170.pdf",
+      "quote": "GUTTER VARIES 1' TO 3'",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "parking-strip-sf",
+      "topic": "curb",
+      "value": {
+        "min": 5,
+        "max": 8
+      },
+      "unit": "ft",
+      "metricValue": {
+        "min": 1.524,
+        "max": 2.438
+      },
+      "condition": "Optional SF concrete 'parking strip' poured with the curb (instead of a gutter)",
+      "source": "SF Public Works Standard Plan 87,170 (2007)",
+      "section": "87,170 'Combined 6-inch concrete curb and parking strip'",
+      "url": "https://sfpublicworks.org/sites/default/files/87%2C170.pdf",
+      "quote": "PARKING STRIP VARIES 5' TO 8'",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "gutter-width-sf-at-curb-ramp",
+      "topic": "curb",
+      "value": 2,
+      "unit": "ft",
+      "metricValue": 0.61,
+      "condition": "Concrete gutter level landing at foot of SF curb ramp; gutter extends >= 3 ft beyond crosswalk",
+      "source": "SF Public Works RX-2 / RX-4",
+      "section": "Notes G6, G38",
+      "url": "https://sfpublicworks.org/sites/default/files/RX-2_0.pdf",
+      "quote": "level landing concrete gutter of 2 feet minimum width",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "curb-types-state-highway",
+      "topic": "curb",
+      "value": {
+        "verticalHeightRangeIn": [
+          4,
+          8
+        ],
+        "slopedHeightRangeIn": [
+          3,
+          6
+        ],
+        "typeA_6_heightIn": 6,
+        "typeA_8_heightIn": 8
+      },
+      "unit": "in",
+      "metricValue": {
+        "verticalHeightRange": [
+          0.102,
+          0.203
+        ],
+        "slopedHeightRange": [
+          0.076,
+          0.152
+        ]
+      },
+      "condition": "State highways. Type A (vertical, ~1:4 batter) 6 in adjacent to sidewalks; 8 in only at local request and <= 35 mph; curb avoided at >= 40 mph except per Table 303.1",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 303.2 and Table 303.1, pp. 300-9 to 300-11",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0300-092923-a11y.pdf",
+      "quote": "Types A1-6, A2-6, and A3-6. These curbs are 6 inches high",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "gutter-pan-state-highway",
+      "topic": "curb",
+      "value": {
+        "typicalWidthFt": 2,
+        "rangeFt": [
+          1,
+          4
+        ],
+        "crossSlopeTypicalPct": 8.33
+      },
+      "unit": "mixed",
+      "metricValue": {
+        "typicalWidth": 0.61,
+        "range": [
+          0.305,
+          1.219
+        ],
+        "crossSlope": 0.0833
+      },
+      "condition": "Curb with gutter pan on State highways (Type A2/B2 curbs show 2'-0\" gutter on Standard Plan A87A)",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 303.2, p. 300-11; Standard Plan A87A",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0300-092923-a11y.pdf",
+      "quote": "Gutter pans are typically 2 feet wide but may be 1 foot ...",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "gutter-slope-at-curb-ramp-state",
+      "topic": "curb",
+      "value": 0.5,
+      "unit": "in/ft",
+      "metricValue": 0.0417,
+      "condition": "Across pedestrian route at curb ramps: gutter pan slope <= 1 in depth per 2 ft of width (~4.2%); counter slopes <= 5% within 24 in",
+      "source": "Caltrans Standard Plans, 2025 Edition (sheets dated 7-1-25, approved 2025-09-19)",
+      "section": "A87A note 7; A88A notes 8-9",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/2025-standard-plans-locked.pdf",
+      "quote": "shall not exceed 1\" of depth for each 2'-0\" of width",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "bulbout-curb-face-setback-state",
+      "topic": "curb",
+      "value": 2,
+      "unit": "ft",
+      "metricValue": 0.61,
+      "condition": "Bulbouts on State highways: curb face set back at least 2 ft (from travel lane edge); posted <= 35 mph; avoid on grades > 5%",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 303.4(1), p. 300-13",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0300-092923-a11y.pdf",
+      "quote": "curb face of the bulbout should be setback a minimum of 2 ...",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sidewalk-width-sf-downtown-commercial",
+      "topic": "sidewalk width",
+      "value": "Per Downtown Streetscape Plan",
+      "unit": "ft",
+      "metricValue": null,
+      "condition": "SF Better Streets street type 'downtown commercial', measured from face of curb; below-minimum = deficient; recommended widths mandatory for new streets per Planning Code 138.1",
+      "source": "San Francisco Better Streets Plan (adopted Dec 2010), design guidelines at sfbetterstreets.org",
+      "section": "Sidewalk Width, table 'Minimum and Recommended Sidewalk Width by Street Type'",
+      "url": "https://sfbetterstreets.org/design-guidelines/sidewalk-width/",
+      "quote": "as measured from the face of the curb",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sidewalk-width-sf-commercial-throughway",
+      "topic": "sidewalk width",
+      "value": {
+        "minimum": 12,
+        "recommended": 15
+      },
+      "unit": "ft",
+      "metricValue": {
+        "minimum": 3.658,
+        "recommended": 4.572
+      },
+      "condition": "SF Better Streets street type 'commercial throughway', measured from face of curb; below-minimum = deficient; recommended widths mandatory for new streets per Planning Code 138.1",
+      "source": "San Francisco Better Streets Plan (adopted Dec 2010), design guidelines at sfbetterstreets.org",
+      "section": "Sidewalk Width, table 'Minimum and Recommended Sidewalk Width by Street Type'",
+      "url": "https://sfbetterstreets.org/design-guidelines/sidewalk-width/",
+      "quote": "as measured from the face of the curb",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sidewalk-width-sf-neighborhood-commercial",
+      "topic": "sidewalk width",
+      "value": {
+        "minimum": 12,
+        "recommended": 15
+      },
+      "unit": "ft",
+      "metricValue": {
+        "minimum": 3.658,
+        "recommended": 4.572
+      },
+      "condition": "SF Better Streets street type 'neighborhood commercial', measured from face of curb; below-minimum = deficient; recommended widths mandatory for new streets per Planning Code 138.1",
+      "source": "San Francisco Better Streets Plan (adopted Dec 2010), design guidelines at sfbetterstreets.org",
+      "section": "Sidewalk Width, table 'Minimum and Recommended Sidewalk Width by Street Type'",
+      "url": "https://sfbetterstreets.org/design-guidelines/sidewalk-width/",
+      "quote": "as measured from the face of the curb",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sidewalk-width-sf-downtown-residential",
+      "topic": "sidewalk width",
+      "value": {
+        "minimum": 12,
+        "recommended": 15
+      },
+      "unit": "ft",
+      "metricValue": {
+        "minimum": 3.658,
+        "recommended": 4.572
+      },
+      "condition": "SF Better Streets street type 'downtown residential', measured from face of curb; below-minimum = deficient; recommended widths mandatory for new streets per Planning Code 138.1",
+      "source": "San Francisco Better Streets Plan (adopted Dec 2010), design guidelines at sfbetterstreets.org",
+      "section": "Sidewalk Width, table 'Minimum and Recommended Sidewalk Width by Street Type'",
+      "url": "https://sfbetterstreets.org/design-guidelines/sidewalk-width/",
+      "quote": "as measured from the face of the curb",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sidewalk-width-sf-residential-throughway",
+      "topic": "sidewalk width",
+      "value": {
+        "minimum": 12,
+        "recommended": 15
+      },
+      "unit": "ft",
+      "metricValue": {
+        "minimum": 3.658,
+        "recommended": 4.572
+      },
+      "condition": "SF Better Streets street type 'residential throughway', measured from face of curb; below-minimum = deficient; recommended widths mandatory for new streets per Planning Code 138.1",
+      "source": "San Francisco Better Streets Plan (adopted Dec 2010), design guidelines at sfbetterstreets.org",
+      "section": "Sidewalk Width, table 'Minimum and Recommended Sidewalk Width by Street Type'",
+      "url": "https://sfbetterstreets.org/design-guidelines/sidewalk-width/",
+      "quote": "as measured from the face of the curb",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sidewalk-width-sf-neighborhood-residential",
+      "topic": "sidewalk width",
+      "value": {
+        "minimum": 10,
+        "recommended": 12
+      },
+      "unit": "ft",
+      "metricValue": {
+        "minimum": 3.048,
+        "recommended": 3.658
+      },
+      "condition": "SF Better Streets street type 'neighborhood residential', measured from face of curb; below-minimum = deficient; recommended widths mandatory for new streets per Planning Code 138.1",
+      "source": "San Francisco Better Streets Plan (adopted Dec 2010), design guidelines at sfbetterstreets.org",
+      "section": "Sidewalk Width, table 'Minimum and Recommended Sidewalk Width by Street Type'",
+      "url": "https://sfbetterstreets.org/design-guidelines/sidewalk-width/",
+      "quote": "as measured from the face of the curb",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sidewalk-scoring-grid-sf",
+      "topic": "sidewalk paving",
+      "value": 3,
+      "unit": "ft",
+      "metricValue": 0.914,
+      "condition": "SF standard concrete sidewalk: scored in squares, the same pitch along and across the walk; non-customary scoring is special paving and should extend at least one block",
+      "source": "San Francisco Better Streets Plan design guidelines at sfbetterstreets.org (archived content, copyright 2015 City & County of San Francisco)",
+      "section": "Sidewalk Paving > Design Guidelines > Design > Paving type > Standard Paving",
+      "url": "https://sfbetterstreets.org/find-project-types/streetscape-elements/sidewalk_paving/",
+      "quote": "Standard sidewalks should use concrete scored in 3’ x 3’ squares.",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sidewalk-width-sf-industrial",
+      "topic": "sidewalk width",
+      "value": {
+        "minimum": 8,
+        "recommended": 10
+      },
+      "unit": "ft",
+      "metricValue": {
+        "minimum": 2.438,
+        "recommended": 3.048
+      },
+      "condition": "SF Better Streets street type 'industrial', measured from face of curb; below-minimum = deficient; recommended widths mandatory for new streets per Planning Code 138.1",
+      "source": "San Francisco Better Streets Plan (adopted Dec 2010), design guidelines at sfbetterstreets.org",
+      "section": "Sidewalk Width, table 'Minimum and Recommended Sidewalk Width by Street Type'",
+      "url": "https://sfbetterstreets.org/design-guidelines/sidewalk-width/",
+      "quote": "as measured from the face of the curb",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sidewalk-width-sf-mixed-use",
+      "topic": "sidewalk width",
+      "value": {
+        "minimum": 12,
+        "recommended": 15
+      },
+      "unit": "ft",
+      "metricValue": {
+        "minimum": 3.658,
+        "recommended": 4.572
+      },
+      "condition": "SF Better Streets street type 'mixed use', measured from face of curb; below-minimum = deficient; recommended widths mandatory for new streets per Planning Code 138.1",
+      "source": "San Francisco Better Streets Plan (adopted Dec 2010), design guidelines at sfbetterstreets.org",
+      "section": "Sidewalk Width, table 'Minimum and Recommended Sidewalk Width by Street Type'",
+      "url": "https://sfbetterstreets.org/design-guidelines/sidewalk-width/",
+      "quote": "as measured from the face of the curb",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sidewalk-width-sf-parkway",
+      "topic": "sidewalk width",
+      "value": {
+        "minimum": 12,
+        "recommended": 17
+      },
+      "unit": "ft",
+      "metricValue": {
+        "minimum": 3.658,
+        "recommended": 5.182
+      },
+      "condition": "SF Better Streets street type 'parkway', measured from face of curb; below-minimum = deficient; recommended widths mandatory for new streets per Planning Code 138.1",
+      "source": "San Francisco Better Streets Plan (adopted Dec 2010), design guidelines at sfbetterstreets.org",
+      "section": "Sidewalk Width, table 'Minimum and Recommended Sidewalk Width by Street Type'",
+      "url": "https://sfbetterstreets.org/design-guidelines/sidewalk-width/",
+      "quote": "as measured from the face of the curb",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sidewalk-width-sf-park-edge",
+      "topic": "sidewalk width",
+      "value": {
+        "minimum": 12,
+        "recommended": 24
+      },
+      "unit": "ft",
+      "metricValue": {
+        "minimum": 3.658,
+        "recommended": 7.315
+      },
+      "condition": "SF Better Streets street type 'park edge', measured from face of curb; below-minimum = deficient; recommended widths mandatory for new streets per Planning Code 138.1",
+      "source": "San Francisco Better Streets Plan (adopted Dec 2010), design guidelines at sfbetterstreets.org",
+      "section": "Sidewalk Width, table 'Minimum and Recommended Sidewalk Width by Street Type'",
+      "url": "https://sfbetterstreets.org/design-guidelines/sidewalk-width/",
+      "quote": "as measured from the face of the curb",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sidewalk-width-sf-multi-way-boulevard",
+      "topic": "sidewalk width",
+      "value": {
+        "minimum": 12,
+        "recommended": 15
+      },
+      "unit": "ft",
+      "metricValue": {
+        "minimum": 3.658,
+        "recommended": 4.572
+      },
+      "condition": "SF Better Streets street type 'multi way boulevard', measured from face of curb; below-minimum = deficient; recommended widths mandatory for new streets per Planning Code 138.1",
+      "source": "San Francisco Better Streets Plan (adopted Dec 2010), design guidelines at sfbetterstreets.org",
+      "section": "Sidewalk Width, table 'Minimum and Recommended Sidewalk Width by Street Type'",
+      "url": "https://sfbetterstreets.org/design-guidelines/sidewalk-width/",
+      "quote": "as measured from the face of the curb",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sidewalk-width-sf-alley",
+      "topic": "sidewalk width",
+      "value": {
+        "minimum": 6,
+        "recommended": 9
+      },
+      "unit": "ft",
+      "metricValue": {
+        "minimum": 1.829,
+        "recommended": 2.743
+      },
+      "condition": "SF Better Streets street type 'alley', measured from face of curb; below-minimum = deficient; recommended widths mandatory for new streets per Planning Code 138.1",
+      "source": "San Francisco Better Streets Plan (adopted Dec 2010), design guidelines at sfbetterstreets.org",
+      "section": "Sidewalk Width, table 'Minimum and Recommended Sidewalk Width by Street Type'",
+      "url": "https://sfbetterstreets.org/design-guidelines/sidewalk-width/",
+      "quote": "as measured from the face of the curb",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sidewalk-throughway-zone-sf",
+      "topic": "sidewalk zones",
+      "value": {
+        "default": 6,
+        "alleyOrAdaMin": 4,
+        "passingSpaceEvery200ft": 5
+      },
+      "unit": "ft",
+      "metricValue": {
+        "default": 1.829,
+        "alleyOrAdaMin": 1.219,
+        "passingSpaceEvery200ft": 1.524
+      },
+      "condition": "SF clear path; 4 ft allowed on alleys and very-low-volume neighborhood residential streets",
+      "source": "San Francisco Better Streets Plan (adopted Dec 2010), design guidelines at sfbetterstreets.org",
+      "section": "Sidewalk Zones, Throughway Zone",
+      "url": "https://sfbetterstreets.org/design-guidelines/sidewalk-zones/",
+      "quote": "all other street types should maintain a minimum 6 feet of clear",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sidewalk-frontage-zone-sf",
+      "topic": "sidewalk zones",
+      "value": {
+        "allStreets": 1.5,
+        "commercialMin": 2
+      },
+      "unit": "ft",
+      "metricValue": {
+        "allStreets": 0.457,
+        "commercialMin": 0.61
+      },
+      "condition": "SF frontage zone at property line; may be reduced where continuous setbacks exist",
+      "source": "San Francisco Better Streets Plan (adopted Dec 2010), design guidelines at sfbetterstreets.org",
+      "section": "Sidewalk Zones, Frontage Zone",
+      "url": "https://sfbetterstreets.org/design-guidelines/sidewalk-zones/",
+      "quote": "frontage zone should be 18 inches",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sidewalk-furnishing-zone-sf",
+      "topic": "sidewalk zones",
+      "value": {
+        "withTreesMin": 3,
+        "noParkingLe25mph": 4,
+        "addPer5mph": 1
+      },
+      "unit": "ft",
+      "metricValue": {
+        "withTreesMin": 0.914,
+        "noParkingLe25mph": 1.219,
+        "addPer5mph": 0.305
+      },
+      "condition": "SF furnishing zone (trees, lights, poles, hydrants). Increment base differs on the same page: table says over 25 mph, text says above 30 mph",
+      "source": "San Francisco Better Streets Plan (adopted Dec 2010), design guidelines at sfbetterstreets.org",
+      "section": "Sidewalk Zones, Furnishing Zone",
+      "url": "https://sfbetterstreets.org/design-guidelines/sidewalk-zones/",
+      "quote": "one foot wider for every 5 mph increment",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sidewalk-edge-zone-sf",
+      "topic": "sidewalk zones",
+      "value": {
+        "noParking": 0,
+        "parallelParkingWithContinuousPlanting": 2,
+        "angledOrPerpendicularParking": 2.5,
+        "verticalElementOffsetFromCurb": 1.5
+      },
+      "unit": "ft",
+      "metricValue": {
+        "noParking": 0,
+        "parallelParkingWithContinuousPlanting": 0.61,
+        "angledOrPerpendicularParking": 0.762,
+        "verticalElementOffsetFromCurb": 0.457
+      },
+      "condition": "SF edge zone beside the curb for car-door access; poles, meters, trees may be 18 in from curb face",
+      "source": "San Francisco Better Streets Plan (adopted Dec 2010), design guidelines at sfbetterstreets.org",
+      "section": "Sidewalk Zones, Edge Zone",
+      "url": "https://sfbetterstreets.org/design-guidelines/sidewalk-zones/",
+      "quote": "may encroach to within 18 inches of the face of the curb",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sidewalk-width-state-highway",
+      "topic": "sidewalk width",
+      "value": {
+        "urbanOrMainStreet": 8,
+        "contiguousToCurb": 6,
+        "withPlantingStrip": 5
+      },
+      "unit": "ft",
+      "metricValue": {
+        "urbanOrMainStreet": 2.438,
+        "contiguousToCurb": 1.829,
+        "withPlantingStrip": 1.524
+      },
+      "condition": "State highway sidewalks, excluding curb width",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 105.2, p. 100-9",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0100--a11y.pdf",
+      "quote": "minimum width of a sidewalk should be 8 feet between a curb ...",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sidewalk-clear-passage-state",
+      "topic": "sidewalk width",
+      "value": 4.17,
+      "unit": "ft",
+      "metricValue": 1.271,
+      "condition": "Minimum clear passageway for sidewalk at driveways / curb ramps on State R/W (4'-2\")",
+      "source": "Caltrans Standard Plans, 2025 Edition (sheets dated 7-1-25, approved 2025-09-19)",
+      "section": "A87A note 5; A88A",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/2025-standard-plans-locked.pdf",
+      "quote": "Minimum width of clear passageway for sidewalk shall be 4'-2\"",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sf-new-street-minimums",
+      "topic": "sidewalk width",
+      "value": {
+        "rowMin": 40,
+        "roadwayCurbToCurbMin": 26,
+        "oneSidewalkMin": 4
+      },
+      "unit": "ft",
+      "metricValue": {
+        "rowMin": 12.192,
+        "roadwayCurbToCurbMin": 7.925,
+        "oneSidewalkMin": 1.219
+      },
+      "condition": "Minimums for SF to accept new subdivision streets (concrete pavement above 15% grade; curbs required)",
+      "source": "SF Public Works, Street Acceptance minimum infrastructure requirements (page dated 2024-10-06; refers to Subdivision Rules and Regulations)",
+      "section": "Minimum Infrastructure and Roadway Requirements",
+      "url": "https://sfpublicworks.org/services/acceptance",
+      "quote": "minimum roadway width of twenty-six (26) feet",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "curb-ramp-running-slope-sf",
+      "topic": "curb ramps",
+      "value": {
+        "designMin": 5.5,
+        "designMax": 7.5,
+        "constructedMax": 8.33
+      },
+      "unit": "%",
+      "metricValue": {
+        "designMin": 0.055,
+        "designMax": 0.075,
+        "constructedMax": 0.0833
+      },
+      "condition": "SF standard curb ramps (perpendicular); ramp length max 15 ft",
+      "source": "SF Public Works RX-4 (102,857), RX-2 notes G15/G26",
+      "section": "Table A Design Parameters; Table B Construction Parameters",
+      "url": "https://sfpublicworks.org/sites/default/files/RX-4_0.pdf",
+      "quote": "RAMP 5.50% 7.50%",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "curb-ramp-running-slope-state",
+      "topic": "curb ramps",
+      "value": 7.5,
+      "unit": "%",
+      "metricValue": 0.075,
+      "condition": "Caltrans standard curb ramps (State R/W)",
+      "source": "Caltrans Standard Plans, 2025 Edition (sheets dated 7-1-25, approved 2025-09-19)",
+      "section": "A88A Cases A-G",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/2025-standard-plans-locked.pdf",
+      "quote": "7.5% Max",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "curb-ramp-width",
+      "topic": "curb ramps",
+      "value": {
+        "sfMin": 4,
+        "caltransMin": 4.17
+      },
+      "unit": "ft",
+      "metricValue": {
+        "sfMin": 1.219,
+        "caltransMin": 1.271
+      },
+      "condition": "Ramp width excluding flares",
+      "source": "SF Public Works RX-4 / Caltrans Standard Plan A88A (2025)",
+      "section": "RX-4 Table A; A88A",
+      "url": "https://sfpublicworks.org/sites/default/files/RX-4_0.pdf",
+      "quote": "MIN. 4' CALTRANS R.O.W.: MIN. 4' 2\"",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "curb-ramp-top-landing",
+      "topic": "curb ramps",
+      "value": {
+        "sfMinLength": 4,
+        "caltransMin": 4.17,
+        "slopeMaxPct": 1.5
+      },
+      "unit": "ft",
+      "metricValue": {
+        "sfMinLength": 1.219,
+        "caltransMin": 1.271,
+        "slopeMax": 0.015
+      },
+      "condition": "Level landing at upper end of ramp, extends to back of sidewalk",
+      "source": "SF Public Works RX-2 note G7 / RX-4; Caltrans A88A",
+      "section": "G7; RX-4 Table A",
+      "url": "https://sfpublicworks.org/sites/default/files/RX-2_0.pdf",
+      "quote": "A level landing 4 feet minimum in length",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "curb-ramp-bottom-landing-sf",
+      "topic": "curb ramps",
+      "value": {
+        "gutterLandingMin": 2,
+        "maxAlgebraicSlopeDiffPct": 10.33,
+        "gutterFlowlineSlopeMaxPct": 5
+      },
+      "unit": "mixed",
+      "metricValue": {
+        "gutterLandingMin": 0.61,
+        "maxAlgebraicSlopeDiff": 0.1033,
+        "gutterFlowlineSlopeMax": 0.05
+      },
+      "condition": "SF curb ramp lower landing in gutter; ramp bottom flush (no lip)",
+      "source": "SF Public Works RX-2 (102,855)",
+      "section": "Notes G6, G31",
+      "url": "https://sfpublicworks.org/sites/default/files/RX-2_0.pdf",
+      "quote": "algebraic sum of the opposing slopes ... shall not exceed 10.33%",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "curb-ramp-cross-slope",
+      "topic": "curb ramps",
+      "value": {
+        "designMin": 1,
+        "designMax": 1.5,
+        "constructedMin": 0.5,
+        "constructedMax": 2
+      },
+      "unit": "%",
+      "metricValue": {
+        "designMin": 0.01,
+        "designMax": 0.015,
+        "constructedMin": 0.005,
+        "constructedMax": 0.02
+      },
+      "condition": "SF ramp cross slope (Caltrans A88A: 1.5% max)",
+      "source": "SF Public Works RX-4 (102,857)",
+      "section": "Tables A and B",
+      "url": "https://sfpublicworks.org/sites/default/files/RX-4_0.pdf",
+      "quote": "1% - 1.5%",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "curb-ramp-flare-slope",
+      "topic": "curb ramps",
+      "value": {
+        "sfDesignMin": 6,
+        "sfDesignMax": 9,
+        "sfConstructedMax": 10,
+        "caltransMaxAtCurb": 9
+      },
+      "unit": "%",
+      "metricValue": {
+        "sfDesignMin": 0.06,
+        "sfDesignMax": 0.09,
+        "sfConstructedMax": 0.1,
+        "caltransMaxAtCurb": 0.09
+      },
+      "condition": "Flared sides, measured perpendicular to ramp (SF reduces to 7.5% design / 8.33% constructed where ramp < 4 ft wide or landing < 4 ft)",
+      "source": "SF Public Works RX-4; Caltrans Standard Plan A88A note 6",
+      "section": "RX-4 Tables A-B; A88A note 6",
+      "url": "https://sfpublicworks.org/sites/default/files/RX-4_0.pdf",
+      "quote": "9.0% Max AT CURB",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "detectable-warning-size",
+      "topic": "curb ramps",
+      "value": {
+        "depthMin": 3,
+        "widthGapEachSideMaxIn": 1
+      },
+      "unit": "ft",
+      "metricValue": {
+        "depthMin": 0.914,
+        "widthGapEachSideMax": 0.025
+      },
+      "condition": "Truncated-dome detectable warning: full ramp width x 3 ft min deep, measured from grade break at back of curb",
+      "source": "Caltrans Standard Plan A88A note 10 (2025); SF Public Works RX-6 note 3",
+      "section": "A88A note 10; RX-6 (102,859)",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/2025-standard-plans-locked.pdf",
+      "quote": "detectable warning surface that extends the full width and 3'-0\" depth",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "detectable-warning-dome-geometry",
+      "topic": "curb ramps",
+      "value": {
+        "baseDiaIn": [
+          0.9,
+          0.92
+        ],
+        "topDiaIn": [
+          0.45,
+          0.47
+        ],
+        "heightIn": [
+          0.18,
+          0.22
+        ],
+        "spacingCaltransIn": [
+          2.3,
+          2.4
+        ],
+        "spacingSFIn": [
+          1.6,
+          1.72
+        ]
+      },
+      "unit": "in",
+      "metricValue": {
+        "baseDia": [
+          0.023,
+          0.023
+        ],
+        "topDia": [
+          0.011,
+          0.012
+        ],
+        "height": [
+          0.005,
+          0.006
+        ],
+        "spacingCaltrans": [
+          0.058,
+          0.061
+        ],
+        "spacingSF": [
+          0.041,
+          0.044
+        ]
+      },
+      "condition": "In-line dome pattern, rows parallel to ramp direction; Caltrans R/W uses 2.3-2.4 in spacing, SF city ramps 1.6-1.72 in",
+      "source": "Caltrans Standard Plan A88A (2025); SF Public Works RX-6 Detail 3/4",
+      "section": "A88A 'Raised truncated dome'; RX-6 Details 3-4",
+      "url": "https://sfpublicworks.org/sites/default/files/RX-6_0.pdf",
+      "quote": "0.9\" Min AND 0.92\" Max BASE Dia",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "detectable-warning-color-sf",
+      "topic": "curb ramps",
+      "value": "Federal Yellow, FS 595B #33538",
+      "unit": null,
+      "metricValue": null,
+      "condition": "SF curb ramps (cast-in-place units)",
+      "source": "SF Public Works RX-6 (102,859)",
+      "section": "Sheet note 8",
+      "url": "https://sfpublicworks.org/sites/default/files/RX-6_0.pdf",
+      "quote": "COLOR #33538 \"FEDERAL YELLOW\"",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "curb-ramp-max-length-sf",
+      "topic": "curb ramps",
+      "value": 15,
+      "unit": "ft",
+      "metricValue": 4.572,
+      "condition": "Ramp length may be capped at 15 ft where steep street grade makes 8.33% infeasible",
+      "source": "SF Public Works RX-2 note G15 / RX-4 Table A",
+      "section": "G15",
+      "url": "https://sfpublicworks.org/sites/default/files/RX-2_0.pdf",
+      "quote": "CURB RAMP LENGTH MAY BE LIMITED TO 15 FEET",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "curb-ramp-no-parking",
+      "topic": "parking prohibitions",
+      "value": 3,
+      "unit": "ft",
+      "metricValue": 0.914,
+      "condition": "No parking within 3 ft of a sidewalk access ramp when signed or curb painted red",
+      "source": "California Vehicle Code (official text, leginfo.legislature.ca.gov; read via Internet Archive capture 2024-2026)",
+      "section": "CVC 22522",
+      "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=22522",
+      "quote": "within three feet of any sidewalk access ramp",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "corner-radius-minor-street-state",
+      "topic": "corner radius",
+      "value": {
+        "min": 15,
+        "max": 25
+      },
+      "unit": "ft",
+      "metricValue": {
+        "min": 4.572,
+        "max": 7.62
+      },
+      "condition": "City street returns at minor cross streets with few trucks/buses (State highway context); otherwise size to design vehicle template; local standards may apply",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 405.8, p. 400-43",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0400-092923-a11y.pdf",
+      "quote": "Smaller radii of 15 feet to 25 feet are appropriate at minor ...",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "bulbout-return-radii-sf",
+      "topic": "corner radius",
+      "value": {
+        "inner": 20,
+        "outer": 10,
+        "reducedInner": 15
+      },
+      "unit": "ft",
+      "metricValue": {
+        "inner": 6.096,
+        "outer": 3.048,
+        "reducedInner": 4.572
+      },
+      "condition": "SF standard bulb-out return (allows street sweepers); curb radius itself per design-vehicle method",
+      "source": "San Francisco Better Streets Plan (adopted Dec 2010), design guidelines at sfbetterstreets.org",
+      "section": "Curb Extensions, Radii",
+      "url": "https://sfbetterstreets.org/find-project-types/pedestrian-safety-and-traffic-calming/traffic-calming-overview/curb-extensions/",
+      "quote": "inner/outer curb radius of 20' and 10'",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "bulbout-transition-sfpw",
+      "topic": "corner radius",
+      "value": {
+        "R1": 20,
+        "R2": 10,
+        "lengthFor4ftWidening": 15,
+        "lengthFor6ftWidening": 18,
+        "lengthFor8ftWidening": 20.42
+      },
+      "unit": "ft",
+      "metricValue": {
+        "R1": 6.096,
+        "R2": 3.048,
+        "lengthFor4ftWidening": 4.572,
+        "lengthFor6ftWidening": 5.486,
+        "lengthFor8ftWidening": 6.224
+      },
+      "condition": "Reverse-curve transition from original to new curb line; L = 30 sin(a), a = arccos((30 - X)/30)",
+      "source": "SF Public Works Standard Plan 87,175 Curb Bulb & Sidewalk Widening Layout (2007)",
+      "section": "87,175",
+      "url": "https://sfpublicworks.org/sites/default/files/87%2C175.pdf",
+      "quote": "R=20' ... R=10'",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "design-vehicle-sf-by-street-type",
+      "topic": "design vehicle",
+      "value": {
+        "local": "P (accommodate SU-30)",
+        "pedestrianActivity": "SU-30 (accommodate WB-40)",
+        "throughway": "SU-30 (accommodate WB-40)",
+        "industrial": "WB-40 (accommodate WB-50)",
+        "muniTurns": "B-40",
+        "freightRoutes": "WB-50",
+        "emergencyAllStreetsOver150ft": "WB-40 (full ROW)"
+      },
+      "unit": null,
+      "metricValue": null,
+      "condition": "SF curb radius design by Better Streets street type; trolley bus <= 9 ft off overhead wire; LRV envelope >= 2 ft from sidewalk",
+      "source": "San Francisco Better Streets Plan (adopted Dec 2010), design guidelines at sfbetterstreets.org",
+      "section": "Curb Radius Changes, Design Vehicles tables",
+      "url": "https://sfbetterstreets.org/find-project-types/pedestrian-safety-and-traffic-calming/traffic-calming-overview/curb-radius-changes/",
+      "quote": "Freight routes should be designed for WB-50 trucks",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "design-vehicle-state-highway",
+      "topic": "design vehicle",
+      "value": {
+        "STAA": "tractor + 48 ft semitrailer, 43 ft KPRA, 8.5 ft wide; templates 56/67 ft",
+        "CaliforniaLegal": "65 ft overall, KPRA 40 ft; templates 50/60 ft",
+        "bus40": "40 ft, 25 ft wheelbase",
+        "busMotorhome45": "45 ft, 28.5 ft wheelbase (smallest on State highways)",
+        "articulatedBus60": "60 ft"
+      },
+      "unit": null,
+      "metricValue": null,
+      "condition": "State highway intersections; STAA vehicle on National Network/Terminal Access routes; turning templates at < 10 mph; tires may not mount curbs; swept path may not touch sidewalks",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Topic 404, Indexes 404.2-404.4, pp. 400-14 to 400-18",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0400-092923-a11y.pdf",
+      "quote": "STAA design vehicle is a truck tractor-semitrailer combination with a 48-foot semitrailer",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "driveway-width-sf",
+      "topic": "driveways",
+      "value": {
+        "standard": 10,
+        "requiresPlanningApprovalAbove": 10,
+        "overwidePermitAbove": 30
+      },
+      "unit": "ft",
+      "metricValue": {
+        "standard": 3.048,
+        "requiresPlanningApprovalAbove": 3.048,
+        "overwidePermitAbove": 9.144
+      },
+      "condition": "SF standard driveway width including flared sides",
+      "source": "SF Public Works Standard Plan 87,171 Driveway Construction (rev. 2012-12-10)",
+      "section": "Notes 3-5",
+      "url": "https://sfpublicworks.org/sites/default/files/DPW%20updated%20standard%20driveway%20plan.pdf",
+      "quote": "WIDTH OF DRIVEWAY IS 10 FEET STANDARD, INCLUDING WINGS/FLARED SIDES",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "driveway-apron-sf",
+      "topic": "driveways",
+      "value": {
+        "flareEachSideIn": 18,
+        "apronDepthIn": 36,
+        "lipIn": 1,
+        "curbTransitionMaxFt": 5
+      },
+      "unit": "in",
+      "metricValue": {
+        "flareEachSide": 0.457,
+        "apronDepth": 0.914,
+        "lip": 0.025,
+        "curbTransitionMax": 1.524
+      },
+      "condition": "SF driveway apron within the curb/sidewalk edge (approx. 36 in deep)",
+      "source": "SF Public Works Standard Plan 87,171",
+      "section": "Plan view, Section A-A, Front view",
+      "url": "https://sfpublicworks.org/sites/default/files/DPW%20updated%20standard%20driveway%20plan.pdf",
+      "quote": "18\" ... 36\" APPROX.",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "driveway-state-highway",
+      "topic": "driveways",
+      "value": {
+        "rampSlopeMaxPct": 10,
+        "sidewalkCrossSlopeMaxPct": 1.5,
+        "lipAboveGutterIn": 0.5,
+        "flareXft": 3,
+        "sidewalkThicknessResIn": 4,
+        "sidewalkThicknessComIn": 6
+      },
+      "unit": "mixed",
+      "metricValue": null,
+      "condition": "Driveways on State R/W (Case A typical); grade change gutter to 5 ft point <= 15%",
+      "source": "Caltrans Standard Plans, 2025 Edition (sheets dated 7-1-25, approved 2025-09-19)",
+      "section": "A87A Curbs and Driveways, Cases A-B, notes 1-4",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/2025-standard-plans-locked.pdf",
+      "quote": "10% Max",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "line-width-state-highway",
+      "topic": "pavement markings",
+      "value": 6,
+      "unit": "in",
+      "metricValue": 0.152,
+      "condition": "Lane lines, edge lines, centerlines on State highways (incl. US-101/SR-1 surface streets in SF)",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 3A.04 para 02a, p. 848",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3a-a11y.pdf",
+      "quote": "on state highways shall be 6 inches wide",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "line-width-local",
+      "topic": "pavement markings",
+      "value": {
+        "min": 4,
+        "max": 6
+      },
+      "unit": "in",
+      "metricValue": {
+        "min": 0.102,
+        "max": 0.152
+      },
+      "condition": "Local agency roadways (SF streets): min 4 in, 6 in optional; wide line >= 2x normal",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 3A.04 paras 02, 02b, 02c, pp. 848-849",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3a-a11y.pdf",
+      "quote": "on local agency roadways shall be a minimum of 4 inches wide",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "broken-line-pattern-le40mph",
+      "topic": "pavement markings",
+      "value": {
+        "line": 7,
+        "gap": 17,
+        "cycle": 24
+      },
+      "unit": "ft",
+      "metricValue": {
+        "line": 2.134,
+        "gap": 5.182,
+        "cycle": 7.315
+      },
+      "condition": "California broken centerline (Detail 1) and lane line (Detail 8) for speeds <= 40 mph (all SF surface streets); widths/patterns shall conform to CA figures",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 3A.04 para 07a; Figure 3A-101(CA) Detail 1 p. 851; Figure 3A-102(CA) Detail 8 p. 852; Standard Plan A20A",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3a-a11y.pdf",
+      "quote": "FOR SPEEDS 40 mph OR LESS ... 7 ft ... 17 ft",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "broken-line-pattern-ge45mph",
+      "topic": "pavement markings",
+      "value": {
+        "line": 12,
+        "gap": 36,
+        "cycle": 48
+      },
+      "unit": "ft",
+      "metricValue": {
+        "line": 3.658,
+        "gap": 10.973,
+        "cycle": 14.63
+      },
+      "condition": "California broken centerline (Detail 5) / lane line (Detail 11) for speeds >= 45 mph (freeways I-80/I-280/US-101)",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Figure 3A-101(CA) Detail 5 p. 851; Figure 3A-102(CA) Detail 11 p. 853",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3a-a11y.pdf",
+      "quote": "FOR SPEEDS 45 mph OR MORE ... 12 ft ... 36 ft",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "broken-line-with-markers-le40mph",
+      "topic": "pavement markings",
+      "value": {
+        "cycle": 48,
+        "lineSegments": 7,
+        "markerToLine": 8.5,
+        "betweenLines": 17
+      },
+      "unit": "ft",
+      "metricValue": {
+        "cycle": 14.63,
+        "lineSegments": 2.134,
+        "markerToLine": 2.591,
+        "betweenLines": 5.182
+      },
+      "condition": "Detail 2 (yellow) / Detail 9 (white): per 48 ft, one retroreflective marker then 8.5 ft, 7 ft line, 17 ft gap, 7 ft line, 8.5 ft",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Figure 3A-101(CA) Detail 2; Figure 3A-102(CA) Details 9/9A, pp. 851-852",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3a-a11y.pdf",
+      "quote": "48 ft ... 8.5 ft ... 7 ft ... 17 ft",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "broken-line-federal-guidance",
+      "topic": "pavement markings",
+      "value": {
+        "line": 10,
+        "gap": 30
+      },
+      "unit": "ft",
+      "metricValue": {
+        "line": 3.048,
+        "gap": 9.144
+      },
+      "condition": "National default retained as guidance text, but CA para 07a requires conformance with the CA figures (7/17 and 12/36)",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 3A.04 para 06, p. 849",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3a-a11y.pdf",
+      "quote": "10-foot line segments and 30-foot gaps, or dimensions in a similar ratio",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "dotted-line-pattern",
+      "topic": "pavement markings",
+      "value": {
+        "laneDropLine": 3,
+        "laneDropGap": 9,
+        "extensionLine": 2,
+        "extensionGapMin": 2,
+        "extensionGapMax": 6
+      },
+      "unit": "ft",
+      "metricValue": {
+        "laneDropLine": 0.914,
+        "laneDropGap": 2.743,
+        "extensionLine": 0.61,
+        "extensionGapMin": 0.61,
+        "extensionGapMax": 1.829
+      },
+      "condition": "Dotted lane line (lane drop warning) and dotted extensions through intersections",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 3A.04 para 07, p. 849",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3a-a11y.pdf",
+      "quote": "3-foot line segments and 9-foot gaps",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "double-yellow-spacing",
+      "topic": "pavement markings",
+      "value": 3,
+      "unit": "in",
+      "metricValue": 0.076,
+      "condition": "Gap between the two lines of a double yellow centerline / TWLTL lines in CA figures; black 3-in contrast line required between painted yellow lines on State highways, optional on local",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Figures 3A-108(CA) p. 859, 3A-109(CA) p. 860; Section 3A.03 paras 02a-02b; Section 3A.04 para 03",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3a-a11y.pdf",
+      "quote": "3 in. black line shall be placed between the yellow lines on ...",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "raised-pavement-markers-botts-dots",
+      "topic": "pavement markings",
+      "value": "Non-retroreflective (Botts' dot) details deleted; only retroreflective markers remain",
+      "unit": null,
+      "metricValue": null,
+      "condition": "2025 Standard Plan A20A shows only Type C/D/G/H retroreflective markers (3 7/8-4 1/2 in square) and marks former marker-only details as DELETED; CA MUTCD 2026 figures show only retroreflective markers; RPMs optional on non-State highways. Caltrans' 2017 phase-out announcement itself was not re-read (secondary)",
+      "source": "Caltrans Standard Plans, 2025 Edition (sheets dated 7-1-25, approved 2025-09-19); California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "A20A (Details 3, 4, 7, 10, 13, 14, 14A deleted); CA MUTCD Figure 3A-109(CA) note 1",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/2025-standard-plans-locked.pdf",
+      "quote": "DETAIL 3 DELETED",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "twltl-markings",
+      "topic": "pavement markings",
+      "value": {
+        "brokenLine": 12,
+        "brokenGap": 36,
+        "solidToBrokenSeparationIn": 3
+      },
+      "unit": "ft",
+      "metricValue": {
+        "brokenLine": 3.658,
+        "brokenGap": 10.973,
+        "solidToBrokenSeparation": 0.076
+      },
+      "condition": "Two-way left-turn lane: broken yellow toward TWLTL + solid yellow toward through lane on each side (Detail 31); opposing white arrows; gap at intersections",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 3B.05; Figure 3A-108(CA) Detail 31, p. 859",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3a-a11y.pdf",
+      "quote": "normal width broken yellow line and a normal width solid yellow line",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "centerline-warrant",
+      "topic": "pavement markings",
+      "value": {
+        "traveledWayMin": 20,
+        "shallAdt": 6000,
+        "shallLanes": 3,
+        "shouldUrbanAdt": 4000,
+        "ruralTraveledWayMin": 18,
+        "ruralAdt": 3000,
+        "mayTraveledWayMin": 16
+      },
+      "unit": "ft (ADT in vehicles per day; lanes as a count)",
+      "metricValue": {
+        "traveledWayMin": 6.096,
+        "shallAdt": 6000,
+        "shallLanes": 3,
+        "shouldUrbanAdt": 4000,
+        "ruralTraveledWayMin": 5.486,
+        "ruralAdt": 3000,
+        "mayTraveledWayMin": 4.877
+      },
+      "condition": "Paved undivided two-way streets. SHALL: urban arterials and collectors with a traveled way of 20 ft or more and ADT 6,000+; any street with 3 or more lanes for moving motor vehicles. SHOULD: urban arterials and collectors 20 ft+ with ADT 4,000+; rural arterials and collectors 18 ft+ with ADT 3,000+; elsewhere on an engineering study. MAY: other paved two-way traveled ways 16 ft or more wide; engineering judgment below 16 ft. Where no count exists the ADT may be an engineering-judgment estimate (para 05). Local streets and alleys carry no requirement.",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18; read via Internet Archive capture 2026-07-12 (dot.ca.gov reset the connection)",
+      "section": "Section 3B.02 Warrants for Yellow Center Lines, paras 01-05, p. 867",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3b-a11y.pdf",
+      "quote": "shall be placed on all paved undivided two-way urban arterials and collectors",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked",
+      "gameApplication": "No ADT exists in the map, so: SHALL (double yellow) where the drawn cross-section has 3+ moving lanes, where OSM tags a two-way way with 3+ lanes (src/world/streets/sf-centre-lines.generated.js; the fitted section can draw fewer), or on a collector/arterial class with a 20 ft+ traveled way; MAY (single broken yellow) on a two-way street of 16 ft+ that carries an SFMTA class II/IV bike lane, the evidence that its travel lanes are delineated. Searched 2026-10-25: no DataSF/SFMTA striping layer and no OSM lane_markings/divider tags exist for SF. See centreLineWarranted in street-surface-v2.js."
+    },
+    {
+      "id": "line-colors",
+      "topic": "pavement markings",
+      "value": {
+        "yellow": "opposing-direction separation, left edge of divided/one-way roads, TWLTL",
+        "white": "same-direction separation, right edge",
+        "blue": "supplements white at disabled parking",
+        "red": "RPMs for wrong-way"
+      },
+      "unit": null,
+      "metricValue": null,
+      "condition": "Longitudinal marking colors",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 3A.03 paras 03-06, p. 848",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3a-a11y.pdf",
+      "quote": "white markings for longitudinal lines shall delineate",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "limit-line-width",
+      "topic": "pavement markings",
+      "value": {
+        "min": 12,
+        "max": 24
+      },
+      "unit": "in",
+      "metricValue": {
+        "min": 0.305,
+        "max": 0.61
+      },
+      "condition": "Limit (stop) line, solid white across approach lanes; CVC 377 defines limit line as 12-24 in",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 3B.19 paras 05, 22, p. 881; Standard Plan A24G",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3b-a11y.pdf",
+      "quote": "Stop lines should be 12 to 24 inches wide",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "limit-line-setback-from-crosswalk",
+      "topic": "pavement markings",
+      "value": {
+        "minFromCrosswalk": 4,
+        "noCrosswalkMin": 4,
+        "noCrosswalkMax": 30
+      },
+      "unit": "ft",
+      "metricValue": {
+        "minFromCrosswalk": 1.219,
+        "noCrosswalkMin": 1.219,
+        "noCrosswalkMax": 9.144
+      },
+      "condition": "Stop/yield line placement at controlled intersections; Figure 3B-102(CA) also shows 4 ft",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 3B.19 para 13, p. 881; Figure 3B-102(CA) p. 951",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3b-a11y.pdf",
+      "quote": "a minimum of 4 feet in advance of the nearest crosswalk line",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "advance-stop-yield-line-uncontrolled-multilane",
+      "topic": "pavement markings",
+      "value": {
+        "min": 20,
+        "max": 50
+      },
+      "unit": "ft",
+      "metricValue": {
+        "min": 6.096,
+        "max": 15.24
+      },
+      "condition": "Advance yield/stop line before crosswalk across an uncontrolled multi-lane approach (with R1-5 signs; parking prohibited between)",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 3B.19 para 15, p. 881; Figure 3C-101(CA)",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3b-a11y.pdf",
+      "quote": "20 to 50 feet in advance of the nearest crosswalk line",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "crosswalk-transverse-line-width",
+      "topic": "crosswalks",
+      "value": {
+        "min": 12,
+        "max": 24
+      },
+      "unit": "in",
+      "metricValue": {
+        "min": 0.305,
+        "max": 0.61
+      },
+      "condition": "California amended the national 6 in minimum to 12 in (Standard text). Federal Figure 3C-1 inside the CA manual still shows 6-24 in; the CA Standard text governs",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 3C.03 para 03, p. 958",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3c-a11y.pdf",
+      "quote": "transverse lines shall not be less than 12 inches or greater than ...",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "crosswalk-min-width",
+      "topic": "crosswalks",
+      "value": {
+        "general": 6,
+        "nonIntersectionGe40mph": 8
+      },
+      "unit": "ft",
+      "metricValue": {
+        "general": 1.829,
+        "nonIntersectionGe40mph": 2.438
+      },
+      "condition": "Marked crosswalk width; curb ramps must fall within crosswalk extension",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 3C.03 paras 05-06, 09, p. 958",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3c-a11y.pdf",
+      "quote": "the minimum width of a marked crosswalk shall be 6 feet",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "crosswalk-continental-bars",
+      "topic": "crosswalks",
+      "value": {
+        "barWidthIn": [
+          12,
+          24
+        ],
+        "spacingIn": [
+          12,
+          60
+        ],
+        "maxSpacingToBarWidth": 2.5,
+        "minElements": 3
+      },
+      "unit": "in",
+      "metricValue": {
+        "barWidth": [
+          0.305,
+          0.61
+        ],
+        "spacing": [
+          0.305,
+          1.524
+        ]
+      },
+      "condition": "High-visibility longitudinal-bar (continental) crosswalk; bars parallel to traffic, uniform, gaps may avoid wheel paths/lines",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Sections 3C.05 para 04, 3C.06 paras 02-03, pp. 960-961",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3c-a11y.pdf",
+      "quote": "width of an individual longitudinal bar shall not be less than 12 ...",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "crosswalk-ladder",
+      "topic": "crosswalks",
+      "value": {
+        "transverseLineIn": [
+          6,
+          24
+        ],
+        "interiorBarIn": [
+          12,
+          24
+        ],
+        "spacingIn": [
+          12,
+          60
+        ]
+      },
+      "unit": "in",
+      "metricValue": null,
+      "condition": "Ladder crosswalk (CA did not amend the 6 in transverse minimum in 3C.07, unlike 3C.03)",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 3C.07, p. 961",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3c-a11y.pdf",
+      "quote": "transverse lines ... not be less than 6 inches",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "crosswalk-bar-pair",
+      "topic": "crosswalks",
+      "value": {
+        "barIn": [
+          8,
+          12
+        ],
+        "pairSpacingIn": [
+          24,
+          60
+        ]
+      },
+      "unit": "in",
+      "metricValue": null,
+      "condition": "Bar pair crosswalk (no transverse lines)",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 3C.08, p. 961",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3c-a11y.pdf",
+      "quote": "not be less than 8 inches or greater than 12 inches",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "crosswalk-caltrans-standard-plan",
+      "topic": "crosswalks",
+      "value": {
+        "continentalBarWidth": [
+          1,
+          2
+        ],
+        "continentalGap": [
+          1,
+          5
+        ],
+        "tripleFourBlock": "2 ft x 4 ft, 2 ft gaps, three rows",
+        "basicTransverseLine": [
+          1,
+          2
+        ],
+        "minWidth": 6
+      },
+      "unit": "ft",
+      "metricValue": null,
+      "condition": "Caltrans crosswalk patterns (continental, triple four, ladder, diagonal 45 deg, basic); spaces in wheel tracks; white, yellow near schools",
+      "source": "Caltrans Standard Plans, 2025 Edition (sheets dated 7-1-25, approved 2025-09-19)",
+      "section": "A24F Pavement Markings - Crosswalks",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/2025-standard-plans-locked.pdf",
+      "quote": "Spaces between markings must be placed in wheel tracks of each lane",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "crosswalk-color",
+      "topic": "crosswalks",
+      "value": {
+        "default": "white",
+        "nearSchools": "yellow"
+      },
+      "unit": null,
+      "metricValue": null,
+      "condition": "Crosswalk marking color (CVC 21368 school crosswalks yellow)",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 3C.03 paras 03, 13, pp. 958-959",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3c-a11y.pdf",
+      "quote": "Crosswalk markings near schools shall be yellow",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "word-marking-height",
+      "topic": "word and arrow markings",
+      "value": {
+        "guidanceMinFt": 6,
+        "caltransStandardFt": 8,
+        "reducedBelow25mphPct": 25
+      },
+      "unit": "ft",
+      "metricValue": {
+        "guidanceMin": 1.829,
+        "caltransStandard": 2.438
+      },
+      "condition": "Letters/numerals >= 6 ft (guidance); Caltrans standard words (STOP, XING, PED, SCHOOL, SIGNAL...) are 8 ft tall; may be reduced 25% where operating speed < 25 mph",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18; Caltrans Standard Plans, 2025 Edition (sheets dated 7-1-25, approved 2025-09-19)",
+      "section": "Section 3B.21 paras 01, 07, p. 883; Standard Plan A24D",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3b-a11y.pdf",
+      "quote": "Letters and numerals should be 6 feet or more in height",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "word-marking-sizes-caltrans",
+      "topic": "word and arrow markings",
+      "value": {
+        "STOP": "8'-0\" x 6'-4\" (22 ft2)",
+        "XING": "8'-0\" x 5'-4\" (21 ft2)",
+        "PED": "8'-0\" x 4'-8\" (18 ft2)",
+        "SCHOOL": "8'-0\" x 9'-8\" (35 ft2)",
+        "SIGNAL": "8'-0\" x 8'-8\"",
+        "AHEAD": "8'-0\" x 8'-0\"",
+        "BIKE": "4'-0\" x 2'-8\"",
+        "LANE": "4'-0\" x 3'-2\""
+      },
+      "unit": "ft-in",
+      "metricValue": null,
+      "condition": "Height x overall width of Caltrans standard word markings",
+      "source": "Caltrans Standard Plans, 2025 Edition (sheets dated 7-1-25, approved 2025-09-19)",
+      "section": "A24D Pavement Markings - Words",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/2025-standard-plans-locked.pdf",
+      "quote": "STOP 6'-4\" ... 8'-0\"",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "word-marking-spacing",
+      "topic": "word and arrow markings",
+      "value": {
+        "minTimesCharHeight": 4,
+        "maxTimesCharHeight": 10,
+        "maxLines": 3
+      },
+      "unit": null,
+      "metricValue": null,
+      "condition": "Longitudinal space between words of one message (4x low-speed); message reads 'up' (first word nearest driver)",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18; Caltrans Standard Plans, 2025 Edition (sheets dated 7-1-25, approved 2025-09-19)",
+      "section": "Section 3B.20 paras 06-07, p. 883; A24D note 2",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3b-a11y.pdf",
+      "quote": "at least four times the height of the characters for low-speed roads",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "arrow-marking-sizes",
+      "topic": "word and arrow markings",
+      "value": {
+        "typeI_10ft": "10 x 3.5 ft",
+        "typeI_18ft": "18 x 3.5 ft",
+        "typeI_24ft": "24 x 3.5 ft",
+        "typeII_throughLeft": "24 x 7 ft",
+        "typeIII_left": "24 x 6 ft",
+        "typeIV_turn": "8 x 6 ft",
+        "stemWidth": "1 ft"
+      },
+      "unit": "ft",
+      "metricValue": null,
+      "condition": "California standard lane-use arrows; at least one >= 8 ft arrow in each turn lane near its entrance",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Figure 3B-21(CA) sheet 1, p. 933; Section 3B.23 para 08o, p. 886",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3b-a11y.pdf",
+      "quote": "One directional arrow, a minimum of 8 feet in length",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "parking-space-markings",
+      "topic": "parking",
+      "value": {
+        "color": "white",
+        "teeOrPlusArmIn": 12,
+        "lineWidthIn": [
+          4,
+          6
+        ]
+      },
+      "unit": "in",
+      "metricValue": null,
+      "condition": "On-street parking stall markings (blue may supplement white at disabled stalls)",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 3B.27 paras 01-03, p. 888; Figure 3B-23, p. 943",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3b-a11y.pdf",
+      "quote": "On-street parking space markings shall be white",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "curb-colors",
+      "topic": "curb colors",
+      "value": {
+        "red": "no stopping, standing, or parking (bus may stop in red bus zone)",
+        "yellow": "stop only to load/unload passengers or freight (time per ordinance)",
+        "white": "passenger loading or mailbox deposit",
+        "green": "time-limited parking per ordinance",
+        "blue": "disabled-person parking only"
+      },
+      "unit": null,
+      "metricValue": null,
+      "condition": "Only these colors may be used when local authorities indicate parking regulations by curb paint; CA curb markings are for parking, not delineation",
+      "source": "California Vehicle Code (official text, leginfo.legislature.ca.gov; read via Internet Archive capture 2024-2026); California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "CVC 21458; CA MUTCD Section 3B.18 paras 08-09, p. 880",
+      "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=21458",
+      "quote": "the following colors only shall be used",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "curb-marking-statutory-without-signs",
+      "topic": "curb colors",
+      "value": null,
+      "unit": null,
+      "metricValue": null,
+      "condition": "Curb markings without words/signs may convey statutory no-parking near STOP/YIELD signs, driveways, hydrants, crosswalks",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 3B.18 para 04, p. 880",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3b-a11y.pdf",
+      "quote": "may be used to convey a general prohibition by statute",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "no-parking-fire-hydrant",
+      "topic": "parking prohibitions",
+      "value": 15,
+      "unit": "ft",
+      "metricValue": 4.572,
+      "condition": "Within 15 ft of a fire hydrant (local ordinance may reduce; < 10 ft total must be signed/marked)",
+      "source": "California Vehicle Code (official text, leginfo.legislature.ca.gov; read via Internet Archive capture 2024-2026)",
+      "section": "CVC 22514",
+      "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=22514",
+      "quote": "within 15 feet of a fire hydrant",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "no-parking-crosswalk-daylighting",
+      "topic": "parking prohibitions",
+      "value": {
+        "approachSide": 20,
+        "withCurbExtension": 15
+      },
+      "unit": "ft",
+      "metricValue": {
+        "approachSide": 6.096,
+        "withCurbExtension": 4.572
+      },
+      "condition": "AB 413 (Stats. 2023 ch. 652) effective 2024-01-01; warnings only until 2025-01-01 unless marked; applies to marked AND unmarked crosswalks on the vehicle-approach side; local ordinance may set a different marked distance; bikes/scooter parking and authorized commercial loading may be allowed",
+      "source": "California Vehicle Code (official text, leginfo.legislature.ca.gov; read via Internet Archive capture 2024-2026)",
+      "section": "CVC 22500(n), as amended by AB 413 (capture 2026-09-04)",
+      "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=22500",
+      "quote": "Within 20 feet of the vehicle approach side of any marked or ...",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "no-parking-signalized-approach",
+      "topic": "parking prohibitions",
+      "value": {
+        "nearSide": 30,
+        "farSide": "one stall length"
+      },
+      "unit": "ft",
+      "metricValue": {
+        "nearSide": 9.144
+      },
+      "condition": "Guidance at signalized intersections (Figure 3B-23 also shows 30 ft on STOP/YIELD approaches citing the UVC, which is not California law)",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 3B.27 para 10, p. 889; Figure 3B-23, p. 943",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-3b-a11y.pdf",
+      "quote": "prohibited for a minimum of 30 feet on the near side",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "no-parking-stop-sign-statutory",
+      "topic": "parking prohibitions",
+      "value": null,
+      "unit": "ft",
+      "metricValue": null,
+      "condition": "No separate CVC distance from STOP signs was found beyond the 20 ft crosswalk rule of 22500(n); the 30 ft STOP/YIELD figure in CA MUTCD Fig 3B-23 cites the UVC",
+      "source": "California Vehicle Code (official text, leginfo.legislature.ca.gov; read via Internet Archive capture 2024-2026)",
+      "section": "CVC 22500 (checked), 22500(n)",
+      "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=22500",
+      "quote": "",
+      "applicability": "binding statewide",
+      "confidence": "unverified"
+    },
+    {
+      "id": "no-parking-driveway",
+      "topic": "parking prohibitions",
+      "value": 0,
+      "unit": "ft",
+      "metricValue": 0,
+      "condition": "In front of any public or private driveway (no buffer distance in statute)",
+      "source": "California Vehicle Code (official text, leginfo.legislature.ca.gov; read via Internet Archive capture 2024-2026)",
+      "section": "CVC 22500(e)",
+      "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=22500",
+      "quote": "In front of a public or private driveway",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "no-parking-fire-station-driveway",
+      "topic": "parking prohibitions",
+      "value": 15,
+      "unit": "ft",
+      "metricValue": 4.572,
+      "condition": "Within 15 ft of a fire station driveway entrance",
+      "source": "California Vehicle Code (official text, leginfo.legislature.ca.gov; read via Internet Archive capture 2024-2026)",
+      "section": "CVC 22500(d)",
+      "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=22500",
+      "quote": "Within 15 feet of the driveway entrance to a fire station",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "no-parking-bus-zone",
+      "topic": "parking prohibitions",
+      "value": null,
+      "unit": "ft",
+      "metricValue": null,
+      "condition": "No stopping alongside a common-carrier bus loading curb marked by sign or red paint (CVC 22500(i)); bus zone LENGTHS in SF not found in a primary source (Better Streets: flag 25-35 ft behind front of far-side zone)",
+      "source": "California Vehicle Code (official text, leginfo.legislature.ca.gov; read via Internet Archive capture 2024-2026)",
+      "section": "CVC 22500(i)",
+      "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=22500",
+      "quote": "alongside curb space authorized for the loading and unloading of passengers of ...",
+      "applicability": "binding statewide",
+      "confidence": "unverified"
+    },
+    {
+      "id": "no-parking-other-22500",
+      "topic": "parking prohibitions",
+      "value": null,
+      "unit": null,
+      "metricValue": null,
+      "condition": "Also prohibited: within an intersection, on a crosswalk, on a sidewalk, double parking, at curb cut for wheelchair access, in a transit-only lane, in tubes/tunnels and on bridges",
+      "source": "California Vehicle Code (official text, leginfo.legislature.ca.gov; read via Internet Archive capture 2024-2026)",
+      "section": "CVC 22500(a),(b),(f),(h),(j)-(m)",
+      "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=22500",
+      "quote": "On a portion of a sidewalk",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "parking-curb-distance",
+      "topic": "parking",
+      "value": 18,
+      "unit": "in",
+      "metricValue": 0.457,
+      "condition": "Right-hand wheels parallel to and within 18 in of the curb (or Class IV bikeway edge); one-way streets may use left curb",
+      "source": "California Vehicle Code (official text, leginfo.legislature.ca.gov; read via Internet Archive capture 2024-2026)",
+      "section": "CVC 22502(a),(e)",
+      "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=22502",
+      "quote": "within 18 inches of the right-hand curb",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "speed-prima-facie-business-residence",
+      "topic": "speed",
+      "value": 25,
+      "unit": "mph",
+      "metricValue": 11.18,
+      "condition": "Any highway in a business or residence district unless otherwise set",
+      "source": "California Vehicle Code (official text, leginfo.legislature.ca.gov; read via Internet Archive capture 2024-2026)",
+      "section": "CVC 22352(b)(1) (text as amended by AB 382, Stats. 2025 ch. 555)",
+      "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=22352",
+      "quote": "Twenty-five miles per hour: On any highway in any business or residence ...",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "speed-prima-facie-15mph",
+      "topic": "speed",
+      "value": 15,
+      "unit": "mph",
+      "metricValue": 6.71,
+      "condition": "Alleys; blind uncontrolled intersections (no 100 ft view in last 100 ft); blind rail crossings",
+      "source": "California Vehicle Code (official text, leginfo.legislature.ca.gov; read via Internet Archive capture 2024-2026)",
+      "section": "CVC 22352(a)",
+      "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=22352",
+      "quote": "Fifteen miles per hour ... On any alley",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "speed-school-zone-current",
+      "topic": "speed",
+      "value": 25,
+      "unit": "mph",
+      "metricValue": 11.18,
+      "condition": "Approaching/passing a school with SCHOOL warning sign while children going to/leaving; signs up to 500 ft away. In force until 2031-01-01; local authorities may adopt 20 mph within 500 ft now (new CVC 22352.5)",
+      "source": "California Vehicle Code (official text, leginfo.legislature.ca.gov; read via Internet Archive capture 2024-2026)",
+      "section": "CVC 22352(b)(2) and 22352.5 per AB 382 (chaptered 2025-10-10, ch. 555)",
+      "url": "https://leginfo.legislature.ca.gov/faces/billTextClient.xhtml?bill_id=202520260AB382",
+      "quote": "When approaching or passing a school building or the grounds thereof",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "speed-school-zone-2031",
+      "topic": "speed",
+      "value": 20,
+      "unit": "mph",
+      "metricValue": 8.94,
+      "condition": "From 2031-01-01: school zone = within 500 ft of school grounds, when flashing beacons / children present / posted hours",
+      "source": "California Vehicle Code (official text, leginfo.legislature.ca.gov; read via Internet Archive capture 2024-2026)",
+      "section": "CVC 22352(b) operative 2031-01-01 (AB 382 sec. 2)",
+      "url": "https://leginfo.legislature.ca.gov/faces/billTextClient.xhtml?bill_id=202520260AB382",
+      "quote": "Twenty miles per hour in a school zone",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "speed-school-15mph-option",
+      "topic": "speed",
+      "value": {
+        "within500ft": 15,
+        "from500to1000ft": 25
+      },
+      "unit": "mph",
+      "metricValue": null,
+      "condition": "Local option in residence districts on <= 2-lane roads posted <= 30 mph (CVC 22358.4; AB 382 amended this section in 2025 - only the pre-2025 text was read)",
+      "source": "California Vehicle Code (official text, leginfo.legislature.ca.gov; read via Internet Archive capture 2024-2026)",
+      "section": "CVC 22358.4(b)",
+      "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=22358.4",
+      "quote": "A 15 miles per hour prima facie limit in a residence district",
+      "applicability": "binding statewide",
+      "confidence": "secondary"
+    },
+    {
+      "id": "speed-business-activity-district",
+      "topic": "speed",
+      "value": {
+        "options": [
+          20,
+          25
+        ]
+      },
+      "unit": "mph",
+      "metricValue": null,
+      "condition": "AB 43: local ordinance may set 25 or 20 mph on <= 4-lane highways contiguous to a business activity district (prior limit <= 30 / <= 25 respectively)",
+      "source": "California Vehicle Code (official text, leginfo.legislature.ca.gov; read via Internet Archive capture 2024-2026)",
+      "section": "CVC 22358.9 (AB 43 / AB 1938)",
+      "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=22358.9",
+      "quote": "a 25 or 20 miles per hour prima facie speed limit",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "speed-safety-corridor-reduction",
+      "topic": "speed",
+      "value": 5,
+      "unit": "mph",
+      "metricValue": 2.24,
+      "condition": "AB 43: extra 5 mph reduction after rounding for safety corridors (<= 1/5 of streets) or high ped/bike generators",
+      "source": "California Vehicle Code (official text, leginfo.legislature.ca.gov; read via Internet Archive capture 2024-2026)",
+      "section": "CVC 22358.7",
+      "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=22358.7",
+      "quote": "reduced an additional five miles per hour",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "speed-max-statewide",
+      "topic": "speed",
+      "value": {
+        "max": 65,
+        "twoLaneUndivided": 55
+      },
+      "unit": "mph",
+      "metricValue": {
+        "max": 29.058,
+        "twoLaneUndivided": 24.587
+      },
+      "condition": "Statewide maximum (70 where posted under 22356)",
+      "source": "California Vehicle Code (official text, leginfo.legislature.ca.gov; read via Internet Archive capture 2024-2026)",
+      "section": "CVC 22349",
+      "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=22349",
+      "quote": "no person may drive a vehicle upon a highway at a speed ...",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "yellow-change-min-by-posted-speed",
+      "topic": "signals",
+      "value": {
+        "15": 3,
+        "20": 3.2,
+        "25": 3.6,
+        "30": 3.7,
+        "35": 4.1,
+        "40": 4.4,
+        "45": 4.8,
+        "50": 5.2,
+        "55": 5.5,
+        "60+": 5.9
+      },
+      "unit": "s",
+      "metricValue": {
+        "15": 3,
+        "20": 3.2,
+        "25": 3.6,
+        "30": 3.7,
+        "35": 4.1,
+        "40": 4.4,
+        "45": 4.8,
+        "50": 5.2,
+        "55": 5.5,
+        "60+": 5.9
+      },
+      "condition": "Minimum yellow for through movements when 85th-percentile speed is unknown: posted/prima facie speed +7 mph (>= 30 mph) or +10 mph (<= 25 mph) built in. Formula T = tR + V/(2d), tR = 1 s, d = 10 ft/s2",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 4F.17 paras 13c-13d, p. 1120; Table 4D-101(CA) part b, p. 1090",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-4d-a11y.pdf",
+      "quote": "adding 7 miles per hour to the posted or prima facie speed ...",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "yellow-change-min-by-85th-speed",
+      "topic": "signals",
+      "value": {
+        "30": 3.2,
+        "35": 3.6,
+        "40": 3.9,
+        "45": 4.3,
+        "50": 4.7,
+        "55": 5,
+        "60": 5.4,
+        "65": 5.8,
+        "<=25": 3
+      },
+      "unit": "s",
+      "metricValue": {
+        "30": 3.2,
+        "35": 3.6,
+        "40": 3.9,
+        "45": 4.3,
+        "50": 4.7,
+        "55": 5,
+        "60": 5.4,
+        "65": 5.8,
+        "<=25": 3
+      },
+      "condition": "Minimum yellow when the 85th-percentile speed (rounded up to 5 mph) is known; use posted limit if higher",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 4F.17 para 13c; Table 4D-101(CA) part a, p. 1090",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-4d-a11y.pdf",
+      "quote": "85th percentile speed of free-flow traffic rounded up to the next 5 ...",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "yellow-change-range",
+      "topic": "signals",
+      "value": {
+        "min": 3,
+        "max": 6
+      },
+      "unit": "s",
+      "metricValue": {
+        "min": 3,
+        "max": 6
+      },
+      "condition": "General yellow duration range; constant cycle to cycle",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 4F.17 paras 08, 13, p. 1119",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-4f-a11y.pdf",
+      "quote": "minimum duration of 3 seconds, and a maximum duration of 6 seconds",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "yellow-change-deceleration-rate",
+      "topic": "signals",
+      "value": 10,
+      "unit": "ft/s2",
+      "metricValue": 3.048,
+      "condition": "Deceleration rate d in the yellow change formula T = tR + V/(2d) behind Table 4D-101(CA): 10 ft/s2 = 3.048 m/s2. Read from the formula recorded in yellow-change-min-by-posted-speed; the PDF wording itself is not re-checked here",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 4F.17 para 13d; Table 4D-101(CA), p. 1090",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-4d-a11y.pdf",
+      "applicability": "guidance",
+      "confidence": "secondary"
+    },
+    {
+      "id": "red-clearance",
+      "topic": "signals",
+      "value": {
+        "typicalMin": 0.1,
+        "typicalMax": 2,
+        "max": 6
+      },
+      "unit": "s",
+      "metricValue": {
+        "typicalMin": 0.1,
+        "typicalMax": 2,
+        "max": 6
+      },
+      "condition": "Red clearance by engineering practice; typical range (CA support) and <= 6 s guidance",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 4F.17 paras 06, 12a, 13, pp. 1119-1120",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-4f-a11y.pdf",
+      "quote": "red clearance intervals normally range from 0.1 to 2.0 seconds",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "ped-clearance-walking-speed",
+      "topic": "signals",
+      "value": {
+        "default": 3.5,
+        "olderOrDisabled": 2.8,
+        "withExtendedPushButton": 4
+      },
+      "unit": "ft/s",
+      "metricValue": {
+        "default": 1.067,
+        "olderOrDisabled": 0.853,
+        "withExtendedPushButton": 1.219
+      },
+      "condition": "Pedestrian clearance time from curb to far side of traveled way (or median); 2.8 ft/s is a California addition",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 4I.06 paras 07-10a, p. 1159",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-4i-a11y.pdf",
+      "quote": "walking speed of 3.5 feet per second",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "ped-total-crossing-walking-speed",
+      "topic": "signals",
+      "value": {
+        "speed": 3,
+        "startBehindCurb": 6
+      },
+      "unit": "mixed",
+      "metricValue": {
+        "speed": 0.914,
+        "startBehindCurb": 1.829
+      },
+      "condition": "WALK + clearance must let a pedestrian starting at the push button (or 6 ft behind curb) cross at 3 ft/s; extra time added to WALK",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 4I.06 para 14, p. 1159",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-4i-a11y.pdf",
+      "quote": "walking speed of 3 feet per second",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "ped-walk-interval",
+      "topic": "signals",
+      "value": {
+        "min": 7,
+        "absoluteMin": 4
+      },
+      "unit": "s",
+      "metricValue": {
+        "min": 7,
+        "absoluteMin": 4
+      },
+      "condition": "Walk interval; 4 s allowed where volumes/characteristics permit",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 4I.06 paras 11-12, p. 1159",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-4i-a11y.pdf",
+      "quote": "walk interval should be at least 7 seconds",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "ped-buffer-interval",
+      "topic": "signals",
+      "value": 2,
+      "unit": "s",
+      "metricValue": 2,
+      "condition": "Steady UPRAISED HAND for >= 2 s after flashing DON'T WALK before conflicting vehicles are released (new in 2023/2026)",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 4I.06 para 04, pp. 1158-1159",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-4i-a11y.pdf",
+      "quote": "buffer interval ... displayed for at least 2 seconds",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "ped-countdown-required",
+      "topic": "signals",
+      "value": {
+        "requiredWhenChangeIntervalOver": 7,
+        "digitHeightIn": 6,
+        "digitHeightFarIn": 9
+      },
+      "unit": "mixed",
+      "metricValue": null,
+      "condition": "Countdown display required where pedestrian change interval > 7 s; Portland orange digits >= 6 in (9 in if pedestrians enter > 100 ft away)",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 4I.04 paras 01, 04, 08, pp. 1156-1157",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-4i-a11y.pdf",
+      "quote": "change interval is more than 7 seconds shall include a ... countdown ...",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "ped-leading-interval",
+      "topic": "signals",
+      "value": 3,
+      "unit": "s",
+      "metricValue": 3,
+      "condition": "Leading pedestrian interval, if used",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 4I.06 para 22, p. 1160",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-4i-a11y.pdf",
+      "quote": "should be at least 3 seconds in duration",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "signal-faces-per-approach",
+      "topic": "signals",
+      "value": {
+        "throughMovementMin": 2,
+        "singleLanePerMovementMin": 2,
+        "minSeparationFt": 8
+      },
+      "unit": "mixed",
+      "metricValue": {
+        "throughMovementMin": 2,
+        "singleLanePerMovementMin": 2,
+        "minSeparation": 2.438
+      },
+      "condition": "Min two primary faces for the through movement; CA adds two faces per movement on single-lane approaches; faces >= 8 ft apart; one face per lane over each lane where speeds >= 45 mph (guidance)",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Sections 4D.05 para 01, p. 1079; 4D.07 para 03, p. 1081",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-4d-a11y.pdf",
+      "quote": "a minimum of two primary signal faces shall be provided",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "signal-face-longitudinal-position",
+      "topic": "signals",
+      "value": {
+        "min": 40,
+        "max": 180,
+        "nearSideConsiderFrom": 150,
+        "coneOriginBehindLine": 10,
+        "coneHalfAngleDeg": 20
+      },
+      "unit": "ft",
+      "metricValue": {
+        "min": 12.192,
+        "max": 54.864,
+        "nearSideConsiderFrom": 45.72,
+        "coneOriginBehindLine": 3.048,
+        "coneHalfAngleDeg": 20
+      },
+      "condition": "At least one primary face 40-180 ft beyond the stop line (else add near-side face); within +/-20 deg cone from 10 ft behind stop line",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Sections 4D.07 para 01, 4D.08 para 01, pp. 1081-1082",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-4d-a11y.pdf",
+      "quote": "No less than 40 feet beyond the stop line",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "signal-mounting-height-over-roadway",
+      "topic": "signals",
+      "value": {
+        "min": 15,
+        "caMinGuidance": 17,
+        "maxTopGuidance": 25.6
+      },
+      "unit": "ft",
+      "metricValue": {
+        "min": 4.572,
+        "caMinGuidance": 5.182,
+        "maxTopGuidance": 7.803
+      },
+      "condition": "Bottom of housing over any vehicle-usable roadway (15 ft Standard; 17 ft CA guidance per Standard Plans)",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 4D.09 paras 01-03, p. 1082",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-4d-a11y.pdf",
+      "quote": "should be at least 17 feet",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "signal-mounting-height-side",
+      "topic": "signals",
+      "value": {
+        "minAboveSidewalk": 8,
+        "minMedianNearSide": 4.5,
+        "maxVerticalFace": 19,
+        "maxHorizontalFace": 22
+      },
+      "unit": "ft",
+      "metricValue": {
+        "minAboveSidewalk": 2.438,
+        "minMedianNearSide": 1.372,
+        "maxVerticalFace": 5.791,
+        "maxHorizontalFace": 6.706
+      },
+      "condition": "Pole-mounted faces not over roadway: bottom >= 8 ft above sidewalk (Standard); maxima are guidance",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 4D.09 paras 02, 05-06, pp. 1082-1083",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-4d-a11y.pdf",
+      "quote": "a minimum of 8 feet above the sidewalk",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "signal-lateral-offset",
+      "topic": "signals",
+      "value": 2,
+      "unit": "ft",
+      "metricValue": 0.61,
+      "condition": "Side-mounted faces lower than 15 ft: >= 2 ft from face of curb",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 4D.10 para 01, p. 1083",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-4d-a11y.pdf",
+      "quote": "not less than 2 feet from the face of a vertical curb",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "signal-lens-size",
+      "topic": "signals",
+      "value": {
+        "allArrows": 12,
+        "circularNewFaces": 12,
+        "circularPermitted8InCases": 8,
+        "bicycleOnly": 4
+      },
+      "unit": "in",
+      "metricValue": {
+        "allArrows": 0.305,
+        "circularNewFaces": 0.305,
+        "circularPermitted8InCases": 0.203,
+        "bicycleOnly": 0.102
+      },
+      "condition": "12-in for all arrows and new circular indications; 8-in circular only for listed cases (e.g., face < 120 ft from stop line on <= 30 mph road, supplemental near-side faces)",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 4E.02, pp. 1093-1094",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-4e-a11y.pdf",
+      "quote": "12-inch signal indications shall be used for all arrow signal indications",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "signal-backplate-border",
+      "topic": "signals",
+      "value": {
+        "min": 1,
+        "max": 3
+      },
+      "unit": "in",
+      "metricValue": {
+        "min": 0.025,
+        "max": 0.076
+      },
+      "condition": "Optional yellow retroreflective backplate border; backplates should be used at >= 45 mph",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 4D.06 paras 17, 21, p. 1081",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-4d-a11y.pdf",
+      "quote": "yellow retroreflective strip with a minimum width of 1 inch",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "ped-signal-head-mounting",
+      "topic": "signals",
+      "value": {
+        "min": 7,
+        "max": 10
+      },
+      "unit": "ft",
+      "metricValue": {
+        "min": 2.134,
+        "max": 3.048
+      },
+      "condition": "Bottom of pedestrian signal housing above sidewalk",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 4I.03 para 01, p. 1156",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-4i-a11y.pdf",
+      "quote": "not less than 7 feet or more than 10 feet above sidewalk ...",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "ped-signal-symbol-size",
+      "topic": "signals",
+      "value": {
+        "min": 6,
+        "farCrosswalk": 9
+      },
+      "unit": "in",
+      "metricValue": {
+        "min": 0.152,
+        "farCrosswalk": 0.229
+      },
+      "condition": "WALKING PERSON / UPRAISED HAND symbol height; 9 in if pedestrians enter > 100 ft from head",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 4I.02 paras 07, 10, pp. 1155-1156",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-4i-a11y.pdf",
+      "quote": "the symbols shall be at least 6 inches high",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "stop-sign-size",
+      "topic": "signs",
+      "value": {
+        "singleLaneConventional": 30,
+        "multiLaneConventional": 36,
+        "expressway": 36,
+        "oversized": 48
+      },
+      "unit": "in (square, octagon)",
+      "metricValue": {
+        "singleLaneConventional": 0.762,
+        "multiLaneConventional": 0.914,
+        "expressway": 0.914,
+        "oversized": 1.219
+      },
+      "condition": "R1-1 minimum sizes; multi-lane column required on multi-lane conventional roads (no 35-mph reduction for STOP)",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 2B.03; Table 2B-1, p. 288",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-2b-a11y.pdf",
+      "quote": "Stop R1-1 2B.04 30 x 30 36 x 36",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "turn-on-red-after-stop",
+      "topic": "traffic rules",
+      "value": {"right": true, "leftOneWayToOneWay": true},
+      "unit": null,
+      "metricValue": {"right": true, "leftOneWayToOneWay": true},
+      "condition": "A driver facing a steady circular red may, after stopping at the line, turn right, or left from a one-way onto a one-way, except where a sign prohibits it; yields to people lawfully in an adjacent crosswalk and to any vehicle close enough to be an immediate hazard. A steady red arrow allows no such turn (21453(c)). Amended Stats. 2022, Ch. 957 (AB 2147), effective 2023-01-01",
+      "source": "California Vehicle Code (official text, leginfo.legislature.ca.gov; read in a browser 2026-11-06)",
+      "section": "CVC 21453(a),(b),(c)",
+      "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=21453",
+      "quote": "Except when a sign is in place prohibiting a turn",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "stop-sign-one-way-both-sides",
+      "topic": "signs",
+      "value": 30,
+      "unit": "ft",
+      "metricValue": 9.144,
+      "condition": "STOP signs on both left and right of a one-way street roadway >= 30 ft wide (CVC 21355)",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 2B.04 para 01a, p. 157",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-2b-a11y.pdf",
+      "quote": "roadway of 30 feet or more in width, stop signs shall be ...",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sign-mounting-height-urban",
+      "topic": "signs",
+      "value": {
+        "min": 7,
+        "secondarySignMin": 6,
+        "overheadMin": 17,
+        "overheadStateHighwayMin": 18.5
+      },
+      "unit": "ft",
+      "metricValue": {
+        "min": 2.134,
+        "secondarySignMin": 1.829,
+        "overheadMin": 5.182,
+        "overheadStateHighwayMin": 5.639
+      },
+      "condition": "Business/commercial/residential areas: bottom of sign 7 ft above top of curb / sidewalk; secondary plaque 1 ft lower; overhead 17 ft (18 ft 6 in on State highways)",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 2A.15 paras 05-07, 16-16a, pp. 133-134",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-2a--a11y.pdf",
+      "quote": "minimum height ... of signs installed at the side of the road ...",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "sign-lateral-offset-urban",
+      "topic": "signs",
+      "value": {
+        "typicalFromCurbFace": 2,
+        "minWhereLimited": 1
+      },
+      "unit": "ft",
+      "metricValue": {
+        "typicalFromCurbFace": 0.61,
+        "minWhereLimited": 0.305
+      },
+      "condition": "Urban/curbed locations: edge of sign 2 ft from face of curb typical (Figure 2A-2(CA)); 1 ft allowed where sidewalk is limited; supports must not intrude into sidewalk usable width",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 2A.16 paras 10-11, p. 135; Figure 2A-2(CA), p. 142",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-2a--a11y.pdf",
+      "quote": "A lateral offset of at least 1 foot from the face of ...",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "street-name-sign-letter-height",
+      "topic": "signs",
+      "value": {
+        "overhead": "12 in upper / 9 in lower",
+        "postMultiLaneOver40": "8 / 6 in",
+        "postMultiLaneLe40": "6 / 4.5 in",
+        "postTwoLane": "6 / 4.5 in (4 / 3 in on <= 25 mph local)",
+        "descriptorMin": "3 in"
+      },
+      "unit": "in",
+      "metricValue": null,
+      "condition": "D3-1 street name signs (mixed case); white legend on green, blue, brown (or black on white)",
+      "source": "California MUTCD 2026 Edition (FHWA MUTCD 2023 as amended for use in California), effective 2026-01-18",
+      "section": "Section 2D.45 paras 07-10, 26-28, pp. 412-413; Table 2D-6, p. 490",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-2d-a11y.pdf",
+      "quote": "Letter heights on street name signs should be as shown in Table ...",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "streetlight-sf-residential-pole",
+      "topic": "street lighting",
+      "value": {
+        "shaftHeight": 25,
+        "armLength": 6,
+        "baseHeightIn": 15
+      },
+      "unit": "ft",
+      "metricValue": {
+        "shaftHeight": 7.62,
+        "armLength": 1.829,
+        "baseHeight": 0.381
+      },
+      "condition": "SF residential round concrete standard (8.2 in x 5.0 in taper x 25 ft shaft) with 6 ft Type 'K' arm; other SFPW standards: heavy concrete (87,208), octagonal Type D (87,211), trolley-pole mounts (87,213)",
+      "source": "SF Public Works Standard Plan 87,205 (2007)",
+      "section": "87,205 Elevation",
+      "url": "https://sfpublicworks.org/sites/default/files/87%2C205.pdf",
+      "quote": "ROUND CONCRETE SHAFT ... 8.2\" x 5.0\" x 25'-0\"",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "streetlight-sf-spacing",
+      "topic": "street lighting",
+      "value": null,
+      "unit": "ft",
+      "metricValue": null,
+      "condition": "No SF numeric pole spacing or illuminance standard found; SF street-acceptance rules only require lighting per current IEEE illumination standards",
+      "source": "SF Public Works Street Acceptance page",
+      "section": "Minimum requirements list",
+      "url": "https://sfpublicworks.org/services/acceptance",
+      "quote": "per illumination requirements as established by current IEEE standards",
+      "applicability": "local agency standard",
+      "confidence": "unverified"
+    },
+    {
+      "id": "extensions-through-intersections",
+      "topic": "pavement markings",
+      "value": null,
+      "unit": null,
+      "metricValue": null,
+      "condition": "Markings carried into an intersection keep the colour of the line they extend (Standard, para 01). Dotted lane-line extensions SHOULD be used where design or visibility makes guidance desirable: offset, skewed, complex or multi-leg intersections, curved roadways, multiple turn lanes, offset left-turn lanes (Guidance, para 03); otherwise none is required. Centre-line extensions shall be dotted (para 05); solid lines shall not extend edge lines through an intersection (para 07). No arc, band or other line is a marking inside the box. Pattern: dotted-line-pattern.",
+      "source": "FHWA MUTCD 11th Edition (2023), the base text of the California MUTCD 2026 Edition; read from the FHWA PDF 2026-10-10 because dot.ca.gov and the Internet Archive were unreachable at the time; California amendments to these sections not re-checked",
+      "section": "Section 3B.11 Application of Pavement Markings through Intersections or Interchanges, paras 01, 03, 05, 07",
+      "url": "https://mutcd.fhwa.dot.gov/pdfs/11th_Edition/part3.pdf",
+      "quote": "such as at offset, skewed, complex, or multi-leg intersections",
+      "applicability": "guidance",
+      "confidence": "secondary"
+    },
+    {
+      "id": "lane-line-markings",
+      "topic": "pavement markings",
+      "value": null,
+      "unit": null,
+      "metricValue": null,
+      "condition": "Lane lines separating traffic in the same direction shall be white (para 01): normal broken white where crossing is not discouraged (para 05), solid white where it is discouraged (para 06). A solid white line on an intersection approach separating contiguous through lanes is an OPTION, not a requirement. A pale line on an unmarked street conveys a lane-line message the street does not carry.",
+      "source": "FHWA MUTCD 11th Edition (2023), the base text of the California MUTCD 2026 Edition; read from the FHWA PDF 2026-10-10 because dot.ca.gov and the Internet Archive were unreachable at the time; California amendments to these sections not re-checked",
+      "section": "Section 3B.06 White Lane Line Pavement Markings, paras 01, 05, 06 and Option",
+      "url": "https://mutcd.fhwa.dot.gov/pdfs/11th_Edition/part3.pdf",
+      "quote": "On approaches to intersections to separate contiguous through lanes",
+      "applicability": "binding statewide",
+      "confidence": "secondary"
+    },
+    {
+      "id": "edge-line-warrants",
+      "topic": "pavement markings",
+      "value": null,
+      "unit": null,
+      "metricValue": null,
+      "condition": "Edge lines SHALL be placed only on freeways, expressways, and rural arterials with a traveled way of 20 ft or more and ADT 6,000+ (para 01); elsewhere they are guidance or option. On SF city streets (urban, curbed) an edge line is optional; the game keeps them on primary+ arterials and one-way streets of 3+ lanes (edgeLineMinClassRank). Edge lines are not continued through intersections (3B.09 para 07).",
+      "source": "FHWA MUTCD 11th Edition (2023), the base text of the California MUTCD 2026 Edition; read from the FHWA PDF 2026-10-10 because dot.ca.gov and the Internet Archive were unreachable at the time; California amendments to these sections not re-checked",
+      "section": "Section 3B.10 Warrants for Use of Edge Lines, para 01; Section 3B.09 para 07",
+      "url": "https://mutcd.fhwa.dot.gov/pdfs/11th_Edition/part3.pdf",
+      "quote": "Edge line markings shall be placed on paved streets or highways",
+      "applicability": "binding statewide",
+      "confidence": "secondary"
+    },
+    {
+      "id": "lane-use-arrow-warrant",
+      "topic": "pavement markings",
+      "value": null,
+      "unit": null,
+      "metricValue": null,
+      "condition": "Lane-use arrows SHOULD be used in lanes and turn bays designated for the exclusive use of a turning movement (para 03), with one near the entrance of the full-width turn lane and one upstream of the stop line (para 04); where through lanes become mandatory turn lanes they SHALL be used with signs (para 08). Arrows in ordinary through or shared lanes are optional.",
+      "source": "FHWA MUTCD 11th Edition (2023), the base text of the California MUTCD 2026 Edition; read from the FHWA PDF 2026-10-10 because dot.ca.gov and the Internet Archive were unreachable at the time; California amendments to these sections not re-checked",
+      "section": "Section 3B.23 Lane-Use Arrows, paras 03, 04, 08",
+      "url": "https://mutcd.fhwa.dot.gov/pdfs/11th_Edition/part3.pdf",
+      "quote": "lanes and turn bays designated for the exclusive use of a turning",
+      "applicability": "binding statewide",
+      "confidence": "secondary"
+    },
+    {
+      "id": "parking-space-markings-use",
+      "topic": "parking",
+      "value": null,
+      "unit": null,
+      "metricValue": null,
+      "condition": "On-street parking space markings shall be white (para 01); marking stalls is not required anywhere. The California support text sizes them for parking meter stalls (3B.27 para 09, parking-stall-desirable-size), and SFMTA prices kerbs by meter (DataSF 8vzz-qzz9 meter inventory), so the game marks stalls only on a kerb the meter inventory says is metered.",
+      "source": "FHWA MUTCD 11th Edition (2023), the base text of the California MUTCD 2026 Edition; read from the FHWA PDF 2026-10-10 because dot.ca.gov and the Internet Archive were unreachable at the time; California amendments to these sections not re-checked",
+      "section": "Section 3B.27 Parking Space Markings, para 01",
+      "url": "https://mutcd.fhwa.dot.gov/pdfs/11th_Edition/part3.pdf",
+      "quote": "On-street parking space markings shall be white",
+      "applicability": "binding statewide",
+      "confidence": "secondary"
+    },
+    {
+      "id": "lane-reduction-taper",
+      "topic": "pavement markings",
+      "value": {
+        "lowSpeedDivisor": 60,
+        "highSpeedFrom": 45,
+        "highSpeedFactor": 1,
+        "minUrban": 100
+      },
+      "unit": "mixed (L ft = W ft x S^2 / 60 with S in mph below 45 mph; L ft = W ft x S mph at 45 mph or more; highSpeedFrom in mph; minUrban in ft)",
+      "metricValue": {
+        "lowSpeedDivisor": 11.991,
+        "highSpeedFrom": 20.117,
+        "highSpeedFactor": 2.237,
+        "minUrban": 30.48
+      },
+      "condition": "Lane-reduction transition taper length L, where W is the lateral offset of the lane that ends and S is the 85th-percentile speed or the speed limit, whichever is higher (Figure 3B-14 legend; para 08). In metric: L m = W m x v^2 / 11.991 with v in m/s below 20.117 m/s, L m = W m x v x 2.237 at or above it. The minimum taper is 100 ft in urban areas (para 09). The broken lane line beside the lane that ends terminates upstream of the transition (para 07; Figure 3B-14); where a lane that does not continue is marked, its lane line is the normal-width dotted line (Section 3B.07 para 01; dotted-line-pattern laneDropLine/laneDropGap).",
+      "source": "FHWA MUTCD 11th Edition (2023), the base text of the California MUTCD 2026 Edition; read from the FHWA PDF text extracted 2026-10-10 because dot.ca.gov and the Internet Archive were unreachable at the time; California amendments to these sections not re-checked",
+      "section": "Section 3B.12 Lane-Reduction Transitions, paras 07-09; Figure 3B-14 legend; Section 3B.07 para 01",
+      "url": "https://mutcd.fhwa.dot.gov/pdfs/11th_Edition/part3.pdf",
+      "quote": "For speeds less than 45 mph: L = WS2/60",
+      "applicability": "guidance",
+      "confidence": "secondary"
+    },
+    {
+      "id": "parking-stall-off-street-sf",
+      "topic": "parking",
+      "value": {
+        "width": 8,
+        "length": 18,
+        "compactWidth": 7.5,
+        "compactLength": 15
+      },
+      "unit": "ft",
+      "metricValue": {
+        "width": 2.438,
+        "length": 5.486,
+        "compactWidth": 2.286,
+        "compactLength": 4.572
+      },
+      "condition": "Independently accessible off-street parking space in San Francisco (surface lots): a standard space is 144 sq ft (8 ft x 18 ft), a compact space 112.5 sq ft (7.5 ft x 15 ft), exclusive of driveways, aisles and maneuvering areas; compact spaces must be marked. No dimension is set in DTR, C-3, RTO, NCT, Eastern Neighborhoods Mixed Use and PDR-1-D/G districts. Aisle widths are not set (Sec. 155(h): 'acceptable standards')",
+      "source": "San Francisco Planning Code, as amended by Ordinance 112-08 (2008); area cross-checked against SF Planning's code summary of Ordinance 080095",
+      "section": "Sec. 154(a)(1)-(2)",
+      "url": "https://codelibrary.amlegal.com/codes/san_francisco/latest/sf_planning/0-0-0-18916",
+      "quote": "144 square feet (8 feet by 18 feet)",
+      "applicability": "local agency standard",
+      "confidence": "secondary"
+    },
+    {
+      "id": "overhead-clearance-urban-thoroughfare",
+      "topic": "overhead lines",
+      "value": {
+        "spanWireGuyMessenger": 18
+      },
+      "unit": "ft",
+      "metricValue": {
+        "spanWireGuyMessenger": 5.486
+      },
+      "condition": "Basic minimum vertical clearance of span wires, guys and messengers above thoroughfares in urban districts; the lowest communication messenger of an overhead distribution run is strung at this floor",
+      "source": "CPUC General Order 95 (Overhead Electric Line Construction), Rule 37, Table 1",
+      "section": "Table 1, Case 3, Column A (as cited by GO 95 Rule 86.4-A1 for guys over urban thoroughfares)",
+      "url": "https://ia.cpuc.ca.gov/gos/go95/go_95_table_1.html",
+      "quote": "18 feet above ground ... Table 1, Case 3, Column A",
+      "applicability": "binding statewide",
+      "confidence": "secondary"
+    },
+    {
+      "id": "stair-riser-height",
+      "topic": "step at a public entrance",
+      "value": {
+        "min": 4,
+        "max": 7
+      },
+      "unit": "in",
+      "metricValue": {
+        "min": 0.102,
+        "max": 0.178
+      },
+      "condition": "Riser height of every step of a stair, the shop entry step and the steps inside a sunk entry alike, uniform within a flight. Supporting: 2010 ADA Standards 504.2 gives the same bounds",
+      "source": "2022 California Building Code (Cal. Code Regs. Title 24, Part 2), Chapter 10 Means of Egress",
+      "section": "1011.5.2 Riser height and tread depth",
+      "url": "https://codes.iccsafe.org/content/CABC2022P1",
+      "quote": "7 inches (178 mm) maximum and 4 inches (102 mm) minimum",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "stair-tread-depth",
+      "topic": "step at a public entrance",
+      "value": 11,
+      "unit": "in",
+      "metricValue": 0.279,
+      "condition": "Rectangular tread depth minimum. Supporting: 2010 ADA Standards 504.2 gives the same depth",
+      "source": "2022 California Building Code (Cal. Code Regs. Title 24, Part 2), Chapter 10 Means of Egress",
+      "section": "1011.5.2 Riser height and tread depth",
+      "url": "https://codes.iccsafe.org/content/CABC2022P1",
+      "quote": "11 inches (279 mm) minimum",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "stair-landing-depth",
+      "topic": "step at a public entrance",
+      "value": 48,
+      "unit": "in",
+      "metricValue": 1.219,
+      "condition": "Landing at the top and bottom of every stair, and between flights: as deep as the stairway is wide, or this depth where the stairway is wider, whichever is less",
+      "source": "2022 California Building Code (Cal. Code Regs. Title 24, Part 2), Chapter 10 Means of Egress",
+      "section": "1011.6 Stairway landings",
+      "url": "https://codes.iccsafe.org/content/CABC2022P1",
+      "quote": "equal to the width of the stairway or 48 inches (1219 mm)",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "stair-flight-rise-max",
+      "topic": "step at a public entrance",
+      "value": 12,
+      "unit": "ft",
+      "metricValue": 3.658,
+      "condition": "Most a flight of stairs may rise between landings; a higher rise takes an intermediate landing",
+      "source": "2022 California Building Code (Cal. Code Regs. Title 24, Part 2), Chapter 10 Means of Egress",
+      "section": "1011.8 Vertical rise",
+      "url": "https://codes.iccsafe.org/content/CABC2022P1",
+      "quote": "shall not have a vertical rise greater than 12 feet (3658 mm)",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "shop-entry-steps-max",
+      "topic": "step at a public entrance",
+      "value": 1,
+      "unit": "steps",
+      "metricValue": 1,
+      "condition": "San Francisco grades the primary entry of a place of public accommodation by its steps: none, one, or more than one. A drawn shop door takes at most the one step of Category Three; a door any higher over its footway gets an entrance at footway grade instead. The ordinance requires such entries to be made accessible, so even one step is the existing-building case",
+      "source": "San Francisco Department of Building Inspection, Information Sheet DA-17, Accessible Business Entrance Program (March 10, 2022), on SF Building Code Chapter 11D",
+      "section": "Compliance category, Category Three and Category Four",
+      "url": "https://sf.gov/sites/default/files/2022-03/DA-17-Accessible%20Business%20Entrance%20Program.pdf",
+      "quote": "There is one step to the Primary Entry or Entries",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "door-threshold-height-max",
+      "topic": "step at a public entrance",
+      "value": 0.5,
+      "unit": "in",
+      "metricValue": 0.0127,
+      "condition": "Threshold at a doorway. California reserves the federal exception for existing thresholds up to 3/4 in, so this is the cap for existing buildings too",
+      "source": "2022 California Building Code (Cal. Code Regs. Title 24, Part 2), Chapter 11B, as reproduced in the Division of the State Architect 2022 California Standards for Accessible Design Guide",
+      "section": "11B-404.2.5 Thresholds (California exception: Reserved)",
+      "url": "https://corada.com/documents/2022CBCPG/11b-404-2-5-thresholds",
+      "quote": "Thresholds, if provided at doorways, shall be ½ inch (12.7 mm) high maximum.",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "level-change-vertical-max",
+      "topic": "step at a public entrance",
+      "value": 0.25,
+      "unit": "in",
+      "metricValue": 0.00635,
+      "condition": "A change in level this high or less may be vertical without edge treatment; the most a door may stand off its footway",
+      "source": "2022 California Building Code (Cal. Code Regs. Title 24, Part 2), Chapter 11B, as reproduced in the Division of the State Architect 2022 California Standards for Accessible Design Guide",
+      "section": "11B-303.2 Vertical",
+      "url": "https://corada.com/documents/2022CBCPG/11b-303-2-vertical",
+      "quote": "Changes in level of ¼ inch (6.4 mm) high maximum",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "level-change-bevel-slope-max",
+      "topic": "step at a public entrance",
+      "value": 50,
+      "unit": "%",
+      "metricValue": 0.5,
+      "condition": "A change in level over 11B-303.2 and up to the threshold maximum is beveled no steeper than this; any higher is ramped (11B-303.4)",
+      "source": "2022 California Building Code (Cal. Code Regs. Title 24, Part 2), Chapter 11B, as reproduced in the Division of the State Architect 2022 California Standards for Accessible Design Guide",
+      "section": "11B-303.3 Beveled",
+      "url": "https://corada.com/documents/2022CBCPG/11b-303-3-beveled",
+      "quote": "beveled with a slope not steeper than 1:2",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "ramp-running-slope-max",
+      "topic": "step at a public entrance",
+      "value": 8.33,
+      "unit": "%",
+      "metricValue": 0.0833,
+      "condition": "Steepest running slope of a ramp run; California reserves the federal steeper-slope exception for existing buildings",
+      "source": "2022 California Building Code (Cal. Code Regs. Title 24, Part 2), Chapter 11B, as reproduced in the Division of the State Architect 2022 California Standards for Accessible Design Guide",
+      "section": "11B-405.2 Slope (California exception: Reserved)",
+      "url": "https://corada.com/documents/2022CBCPG/11b-405-2-slope",
+      "quote": "running slope not steeper than 1:12",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "ramp-landing-length",
+      "topic": "step at a public entrance",
+      "value": 60,
+      "unit": "in",
+      "metricValue": 1.524,
+      "condition": "Least clear length of the landing at the top of a ramp run, as wide as the run. A bottom landing extends 72 in in the direction of the run (11B-405.7.3.1); a ramp down into a shop ends on its floor",
+      "source": "2022 California Building Code (Cal. Code Regs. Title 24, Part 2), Chapter 11B, as reproduced in the Division of the State Architect 2022 California Standards for Accessible Design Guide",
+      "section": "11B-405.7.3 Length",
+      "url": "https://corada.com/documents/2022CBCPG/11b-405-7-3-length",
+      "quote": "landing clear length shall be 60 inches (1524 mm) long minimum",
+      "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "ramp-lane-width-min",
+      "topic": "travel lane width",
+      "value": 12,
+      "unit": "ft",
+      "metricValue": 3.658,
+      "condition": "Freeway entrance and exit ramps; wider on a curve of radius 350 ft or less with a central angle over 60 degrees (Table 504.3)",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 504.3(1)(b) Lane Width, p. 500-16",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0500-a11y.pdf",
+      "quote": "Ramp lanes shall be a minimum of 12 feet in width",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "ramp-shoulder-width",
+      "topic": "shoulders",
+      "value": {
+        "left": 4,
+        "right": 8
+      },
+      "unit": "ft",
+      "metricValue": {
+        "left": 1.219,
+        "right": 2.438
+      },
+      "condition": "Freeway entrance and exit ramps, typical widths, by the driver's left and right",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 504.3(1)(c) Shoulder Width, p. 500-17",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0500-a11y.pdf",
+      "quote": "4 feet on the left and 8 feet on the right",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "ramp-profile-grade-max",
+      "topic": "ramp grade",
+      "value": 8,
+      "unit": "%",
+      "metricValue": 0.08,
+      "condition": "Ramp profile grade; up to 1% steeper on a descending entrance or ascending exit",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 504.2(5) Grades, p. 500-15",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0500-a11y.pdf",
+      "quote": "Ramp profile grades should not exceed 8 percent",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "connector-profile-grade-max",
+      "topic": "ramp grade",
+      "value": 6,
+      "unit": "%",
+      "metricValue": 0.06,
+      "condition": "Profile grade of a freeway-to-freeway connection",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 504.4(3) Grades, p. 500-37",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0500-a11y.pdf",
+      "quote": "maximum profile grade on freeway-to-freeway connections should not exceed 6 percent",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "freeway-profile-grade-max",
+      "topic": "freeway grade",
+      "value": {
+        "level": 3,
+        "rolling": 4,
+        "mountainous": 6
+      },
+      "unit": "%",
+      "metricValue": {
+        "level": 0.03,
+        "rolling": 0.04,
+        "mountainous": 0.06
+      },
+      "condition": "Maximum profile grade of a freeway or expressway, which shall not be exceeded, by terrain: level, rolling, mountainous (Table 204.3, Freeways and Expressways column). Ramps take Index 504.2(5) and freeway-to-freeway connections Index 504.4(3) instead",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 204.3 Standards for Grade, Table 204.3, p. 200-27",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0200-a11y.pdf",
+      "quote": "Table 204.3 shows the maximum grades which shall not be exceeded",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "structure-vertical-clearance-freeway",
+      "topic": "vertical clearance",
+      "value": 16.5,
+      "unit": "ft",
+      "metricValue": 5.029,
+      "condition": "Major structure over a freeway or expressway roadbed, including main lanes, shoulders and ramps; all construction except overlay projects",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 309.2(1)(a) Major Structures, p. 300-36",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0300-a11y.pdf",
+      "quote": "16 feet 6 inches shall be the minimum vertical clearance",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "structure-vertical-clearance-local",
+      "topic": "vertical clearance",
+      "value": 15,
+      "unit": "ft",
+      "metricValue": 4.572,
+      "condition": "Major structure over a conventional highway, parkway or local facility, over the traveled way; 14 ft 6 in over shoulders",
+      "source": "Caltrans Highway Design Manual, 7th Edition (2020; chapter pages dated 2020-07-01 to 2023-09-29; current through Manual Change Transmittal #5, Aug 2025)",
+      "section": "Index 309.2(1)(c) Major Structures, p. 300-36",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp0300-a11y.pdf",
+      "quote": "15 feet shall be the minimum vertical clearance over the traveled way",
+      "applicability": "state highway only",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "superstructure-depth-min-span-ratio",
+      "topic": "bridge superstructure depth",
+      "value": {
+        "cipBoxSimple": 0.045,
+        "cipBoxContinuous": 0.04
+      },
+      "unit": "ratio of span length",
+      "metricValue": {
+        "cipBoxSimple": 0.045,
+        "cipBoxContinuous": 0.04
+      },
+      "condition": "Traditional minimum depth, deck included, of a constant-depth prestressed cast-in-place concrete box beam superstructure, as a ratio of the span length L: 0.045L on a simple span, 0.040L on a continuous span (L the longest span within the frame). Optional criteria, taken where no other criteria apply",
+      "source": "Caltrans Bridge Design Practice, Chapter 5.2 Post-Tensioned Concrete Girders (October 2022), reproducing AASHTO LRFD Bridge Design Specifications Table 2.5.2.6.3-1 (2017) as used with the California Amendments (AASHTO-CA BDS-8)",
+      "section": "Table 5.2.3-1, p. 5.2-8; Section 5.2.12.3, p. 5.2-34",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/engineering/documents/bridge-design-practices/202210bdpchapter52posttensionedconcretegirdera11y.pdf",
+      "quote": "Traditional Minimum Depth for Constant Depth Superstructures",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+        },
+    {"id": "concrete-barrier-type-60m-height", "topic": "road closures", "value": 42, "unit": "in", "metricValue": 1.067, "condition": "Read from the sheet DGN Caltrans publishes (2026 Standard Plans, individual DGNs): the dimension is drawn, not lettered, so it was measured from the sheet's dimension elements. Height of the section over the lower roadbed; at the same drawing scale the sheet's lettered 36 in roadbed offset measures 36.0 in", "source": "Caltrans Standard Plans, 2026 Edition", "section": "Sheet A76A Concrete Barrier Type 60M, section", "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/2026-dgn-files/2026__a76a.dgn", "quote": "CONCRETE BARRIER TYPE 60M", "applicability": "state highway only", "confidence": "source-file-read-plot-unread"},
+    {"id": "concrete-barrier-type-60m-base-width", "topic": "road closures", "value": 24, "unit": "in", "metricValue": 0.61, "condition": "Read from the sheet DGN Caltrans publishes (2026 Standard Plans, individual DGNs): the dimension is drawn, not lettered, so it was measured from the sheet's dimension elements. Width of the section at the roadbed, 24.0 in at the scale above", "source": "Caltrans Standard Plans, 2026 Edition", "section": "Sheet A76A Concrete Barrier Type 60M, section", "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/2026-dgn-files/2026__a76a.dgn", "quote": "CONCRETE BARRIER TYPE 60M", "applicability": "state highway only", "confidence": "source-file-read-plot-unread"},
+    {"id": "noise-barrier-height-max", "topic": "road closures", "value": 14, "unit": "ft", "metricValue": 4.267, "condition": "Maximum height from the pavement at the barrier's face within 15 ft of the traveled way (16 ft over the ground further out). The map-edge wall stands no taller than this over its own foot", "source": "Caltrans Highway Design Manual, 7th Edition, Chapter 1100", "section": "Index 1102.3(2), p. 1100-3", "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/chp1100-a11y.pdf", "quote": "Noise barriers should not exceed 14 feet in height", "applicability": "state highway only", "confidence": "primary-source-checked"},
+    {"id": "temporary-railing-type-k-width", "topic": "road closures", "value": 24, "unit": "in", "metricValue": 0.61, "condition": "Read from the sheet DGN Caltrans publishes (2026 Standard Plans, individual DGNs): the dimension is drawn, not lettered, so it was measured from the sheet's dimension elements. Base of the panel section: 6, 12 and 6 in along the pavement line, the section's levels 3, 13 and 32 in", "source": "Caltrans Standard Plans, 2026 Edition", "section": "Sheet T3A Temporary Railing (Type K), panel section", "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/2026-dgn-files/2026__t03a.dgn", "quote": "TEMPORARY RAILING (TYPE K)", "applicability": "state highway only", "confidence": "source-file-read-plot-unread"},
+    {"id": "temporary-railing-type-k-segment-length", "topic": "road closures", "value": 20, "unit": "ft", "metricValue": 6.096, "condition": "One precast panel, lettered on the sheet", "source": "Caltrans Standard Plans, 2026 Edition", "section": "Sheet T3A Temporary Railing (Type K), typical panel", "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/2026-dgn-files/2026__t03a.dgn", "quote": "PRECAST CONCRETE PANEL (20'-0\" LAYING LENGTH)", "applicability": "state highway only", "confidence": "source-file-read-plot-unread"},
+    {"id": "temporary-railing-type-k-height", "topic": "road closures", "value": 32, "unit": "in", "metricValue": 0.813, "condition": "Read from the sheet DGN Caltrans publishes (2026 Standard Plans, individual DGNs): the dimension is drawn, not lettered, so it was measured from the sheet's dimension elements. Top of the panel section over the PAVEMENT OR GROUND LINE, at the scale where its feet measure 6 in and its base 24 in", "source": "Caltrans Standard Plans, 2026 Edition", "section": "Sheet T3A Temporary Railing (Type K), panel section", "url": "https://dot.ca.gov/-/media/dot-media/programs/design/documents/2026-dgn-files/2026__t03a.dgn", "quote": "TEMPORARY RAILING (TYPE K)", "applicability": "state highway only", "confidence": "source-file-read-plot-unread"},
+    {"id": "type-3-barricade-rail-length-min", "topic": "road closures", "value": 48, "unit": "in", "metricValue": 1.219, "condition": "Minimum length of a Type 3 barricade rail; the closure row uses one per rail", "source": "California MUTCD 2026 Edition, effective 2026-01-18", "section": "Section 6K.07 Paragraph 05", "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-6k-a11y.pdf", "quote": "minimum length for Type 3 Barricades shall be 48 inches", "applicability": "binding statewide", "confidence": "primary-source-checked"},
+    {"id": "barricade-rail-width", "topic": "road closures", "value": {"min": 8, "max": 12}, "unit": "in", "metricValue": {"min": 0.203, "max": 0.305}, "condition": "Width of one barricade rail", "source": "California MUTCD 2026 Edition, effective 2026-01-18", "section": "Section 6K.07 Paragraph 05", "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-6k-a11y.pdf", "quote": "Each barricade rail shall be 8 to 12 inches wide", "applicability": "binding statewide", "confidence": "primary-source-checked"},
+    {"id": "barricade-stripe-width", "topic": "road closures", "value": 6, "unit": "in", "metricValue": 0.152, "condition": "Alternating orange and white stripes on a rail, sloping down at 45 degrees the way road users pass", "source": "California MUTCD 2026 Edition, effective 2026-01-18", "section": "Section 6K.07 Paragraph 03", "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-6k-a11y.pdf", "quote": "the stripes shall be 6 inches wide", "applicability": "binding statewide", "confidence": "primary-source-checked"},
+    {"id": "road-closed-sign-r11-2", "topic": "road closures", "value": {"width": 48, "height": 30}, "unit": "in", "metricValue": {"width": 1.219, "height": 0.762}, "condition": "ROAD CLOSED and BRIDGE OUT size in temporary traffic control, on or above a Type 3 barricade at the centre of the road (Section 6G.04)", "source": "California MUTCD 2026 Edition, effective 2026-01-18", "section": "Table 6G-1, Section 6G.04", "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/nmutcd/part6/2026-camutcd-2026-6g-a11y.pdf", "quote": "Road Closed R11-2, 2a, 2b, 2c 6G.04 48 x 30", "applicability": "binding statewide", "confidence": "primary-source-checked"}
+  ]
+}

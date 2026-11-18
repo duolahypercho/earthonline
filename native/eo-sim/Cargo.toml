@@ -1,0 +1,19 @@
+[package]
+name = "eo-sim"
+version = "0.1.0"
+edition = "2024"
+description = "Headless world simulation for Earth Online: traffic, signals, pedestrians, population streaming"
+publish = false
+
+[dependencies]
+eo-data = { path = "../eo-data" }
+anyhow = "1.0.104"
+bytemuck = { version = "1.25.2", features = ["derive"] }
+flate2 = "1.1.11"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[dev-dependencies]
+# The oracle's numbers are compared bit for bit; serde_json's default float
+# parser may land one ulp off. Dev-only, so the game's loaders keep the fast parser.
+serde_json = { version = "1.0.154", features = ["float_roundtrip"] }

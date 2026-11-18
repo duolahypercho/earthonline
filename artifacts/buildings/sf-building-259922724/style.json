@@ -1,0 +1,150 @@
+{
+ "seed": 7,
+ "notes": "Round 2: 1911 flats over shops, 6.1 m front. Deeper teal-green walls, cream trim; two stacked cant bays under a bracketed cornice with dark-green frieze. Ground: gate left, dark fascia over dark shopfronts. Side wall blank (party). Photo shows the corner tower plus a lower wing on the next parcel; the footprint is the tower only. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. Base fix (2026-10-03): cool/grey wallTint = target / painted-stucco base so the warm stucco albedo does not turn it pink.",
+ "wall": "painted-stucco",
+ "wallTint": "#9ac6c9",
+ "trim": "painted-white@dcd4b4",
+ "frame": "painted-white@dcd4b4",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@1c1815",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-stucco@3e3b38",
+ "cornice": true,
+ "corniceProjectionM": 0.8,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "streetStills": true,
+ "bays": [
+  {
+   "at": 0.5,
+   "widthM": 4.6,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#eeeada",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.2,
+     "dentils": true,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 2,
+     "dropM": 0.35
+    }
+   },
+   "toStorey": 1
+  },
+  {
+   "at": 0.5,
+   "widthM": 4.6,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-white",
+   "tint": "#eeeada",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.2,
+     "dentils": true,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 2,
+     "dropM": 0.35
+    }
+   },
+   "toStorey": 2
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.02,
+    "to": 0.16,
+    "kind": "gate",
+    "headM": 2.6
+   },
+   {
+    "from": 0.2,
+    "to": 0.5,
+    "kind": "window",
+    "headM": 2.7
+   },
+   {
+    "from": 0.52,
+    "to": 0.66,
+    "kind": "door",
+    "headM": 2.7,
+    "stair": true
+   },
+   {
+    "from": 0.68,
+    "to": 0.95,
+    "kind": "window",
+    "headM": 2.7
+   }
+  ]
+ },
+ "signBands": [
+  {
+   "from": 0.17,
+   "to": 0.96,
+   "material": "painted-white",
+   "tint": "#17130f",
+   "heightM": 0.5,
+   "bottomM": 2.8,
+   "projectionM": 0.08
+  }
+ ],
+ "hbCorniceDentils": {
+  "spacingM": 0.16,
+  "sizeM": 0.09,
+  "tint": "#dcd4b4"
+ },
+ "ground": "vacant",
+ "upper": "office",
+ "upperFit": true,
+ "hbFrieze": {
+  "heightM": 0.4,
+  "material": "painted-white",
+  "tint": "#31483d"
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.55,
+  "heightM": 0.45,
+  "depthM": 0.3,
+  "widthM": 0.16,
+  "material": "painted-white",
+  "tint": "#dcd4b4"
+ },
+ "edgeRoles": {
+  "0": "party",
+  "2": "party"
+ }
+}

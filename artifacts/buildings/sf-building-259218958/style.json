@@ -1,0 +1,110 @@
+{
+ "seed": 3,
+ "notes": "1908 flats E side: cream painted brick front over a white garage storey; a white garage door with a small door beside it on the left, a recessed arched gated entry right of centre, a wide triple-sash window group on storey 1, a cant bay and a plain window on storey 2, simple cornice. Tree covers the top. Rework r3 (photo sv-h080 centre confirms rusticated pale block coursing to the first upper storey, wide tripartite window on storey 1, white garage door, arched gated entry, bay on storey 2 only): hyDRubble coursing over two storeys, triple window, arch surround with steps. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. GroundBand lift (2026-10-03): groundBand tint #e6dfcd -> #f2efe6 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-white",
+ "wallTint": "#f0ece0",
+ "trim": "painted-white@f0e9d6",
+ "frame": "painted-white@f0e9d6",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f0e9d6",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "brick-running-bond@ffffff",
+ "cornice": true,
+ "corniceProjectionM": 0.55,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.2,
+  0.4
+ ],
+ "bays": [
+  {
+   "at": 0.64,
+   "widthM": 2.9,
+   "projectionM": 0.6,
+   "fromStorey": 2,
+   "material": "painted-white",
+   "tint": "#f0ece0",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.18,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    }
+   }
+  }
+ ],
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#f2efe6",
+  "topM": 3.2
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.05,
+    "to": 0.15,
+    "kind": "door",
+    "headM": 2.2
+   },
+   {
+    "from": 0.17,
+    "to": 0.5,
+    "kind": "garage",
+    "headM": 2.6,
+    "leaf": "painted-white@e8e2d2"
+   },
+   {
+    "from": 0.64,
+    "to": 0.86,
+    "kind": "gate",
+    "headM": 2.9,
+    "stair": true,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "hbFloors": {
+  "groundM": 3.2,
+  "upperM": 3.8405
+ },
+ "upperOpenings": [
+  {
+   "at": 0.35,
+   "w": 2.7,
+   "kind": "triple",
+   "sillM": 0.9
+  }
+ ],
+ "hyDRubble": {
+  "toM": 7.0,
+  "courseM": 0.32,
+  "blockM": 0.5,
+  "projM": 0.03,
+  "shade": 0.82,
+  "marginM": 0.1,
+  "maxTris": 9000
+ }
+}

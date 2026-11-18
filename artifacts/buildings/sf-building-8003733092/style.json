@@ -1,0 +1,105 @@
+{
+  "seed": 1,
+  "notes": "Narrow 3-storey 1911 painted timber walk-up (DataSF footprint, no OSM way). Pale mint-teal siding, two three-sided bays on storeys 1-2 with a steel fire escape between them, white bracketed cornice band over the ground floor, flat roof with a light parapet cap. Ground: small window left, recessed stair door, display window with a small plaque, second door right. Reflective glass (glassModel). Pale mint on painted-white (mint on wood-siding read olive-grey; a light clapboard material would keep the board lines - requested), bays 0.85 m deep. Painted-clapboard (light board base) keeps the board lines in pale mint. Soot at the base, grime, faint wide streaks. Bays 2.1 m wide x 1.2 m deep in a deeper teal than the wall, cornice 0.55 m, heavy dark steel fire escape so the three read from the street.",
+  "wall": "painted-clapboard",
+  "wallTint": "#a9dccb",
+  "trim": "painted-white",
+  "cornice": true,
+  "corniceProjectionM": 0.55,
+  "beltCourse": true,
+  "windowHoods": false,
+  "upperWindows": [
+    0.5
+  ],
+  "windowW": 0.8,
+  "bays": [
+    {
+      "at": 0.2,
+      "widthM": 2.1,
+      "projectionM": 1.2,
+      "fromStorey": 1,
+      "toStorey": 2,
+      "material": "painted-white",
+      "tint": "#86c4b4"
+    },
+    {
+      "at": 0.8,
+      "widthM": 2.1,
+      "projectionM": 1.2,
+      "fromStorey": 1,
+      "toStorey": 2,
+      "material": "painted-white",
+      "tint": "#86c4b4"
+    }
+  ],
+  "fireEscape": {
+    "at": 0.5,
+    "widthM": 1.1,
+    "depthM": 1.0,
+    "toStorey": 2,
+    "heavy": true,
+    "tint": "#2f3a38"
+  },
+  "frame": "painted-white",
+  "storefrontFrame": "painted-white",
+  "bulkhead": "wood-siding",
+  "storefrontGlass": "glass-film",
+  "ground": "shop",
+  "upper": "apartment",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.45,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.04,
+        "to": 0.2
+      },
+      {
+        "kind": "door",
+        "from": 0.23,
+        "to": 0.4,
+        "leaf": "wood-siding",
+        "stair": true
+      },
+      {
+        "kind": "window",
+        "from": 0.44,
+        "to": 0.7
+      },
+      {
+        "kind": "door",
+        "from": 0.74,
+        "to": 0.9,
+        "leaf": "painted-steel"
+      }
+    ]
+  },
+  "weathering": {
+    "patches": {
+      "strength": 0.08,
+      "metres": 1.6,
+      "top": 3.5,
+      "mottle": 0.06
+    },
+    "grime": {
+      "strength": 0.22,
+      "metres": 2.4
+    },
+    "soot": {
+      "height": 1.1,
+      "strength": 0.26
+    },
+    "streak": {
+      "strength": 0.035,
+      "columnMetres": 2.2,
+      "drop": 0.7
+    },
+    "bandStrength": 0.1,
+    "axis": "wall"
+  },
+  "glassModel": {
+    "upper": "glass-reflective@c8d0d6",
+    "street": "glass-storefront@8e979d"
+  }
+}

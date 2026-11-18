@@ -1,0 +1,271 @@
+{
+  "seed": 1,
+  "notes": "Two-storey ochre stucco corner shop at 5th: dark red ground band, green canvas awning, punched upper windows, a glazed corner bay. Folsom face: gated door, one upper window, a round window. Corner reads white stucco with a pitched (hipped) tower over the corner bay; the red band stops at 3.3 m (red only on the lower band). The white corner shop keeps a flat parapet (no hip across it); the pitched volume behind the corner is a grey block with a dark hipped cap; the long yellow part carries its own dark pitched roof with eaves, the red bays stay as its cross-gable fronts. Heights stay inside the LiDAR allowance. Less candy - muted ochre and brick red, grime and soot; the red base band runs the whole front (red bulkheads, narrower dark shop windows with more red wall between); one long dark-green awning from the corner shop across the adjacent frontage; a small dark gable over the corner (white walls, dark hip) instead of the grey block; reflection-dominant dark shop glass (glassModel). Shop glass dark tinted (glass-dark) instead of storefront glass that mirrored the warm horizon as beige boards; awnings 1.5 m deep; red wall zones under the red bays so the bays rise from the red base instead of floating. Corner block and bay bright white; awnings carry a 0.7 m green valance (awningSpans.valanceM) so they read as a band. Edge-3 wall override in a warm pale yellow on painted-white. Walls must top out at the LiDAR height and anything above may rise only 0.6 m (verify:blender-buildings); a gable needs a gate/owner decision. Edge 3 pale yellow toned down to #e8dbb4. Upper floor cream (#efe6cf) over a darker, less saturated red base (#6a2b27). Folsom-face shop glass dark opaque reflective. Upper glass opaque dark reflective too.",
+  "wall": "painted-stucco",
+  "wallTint": "#d2ae6c",
+  "trim": "painted-stucco",
+  "groundBand": {
+    "material": "painted-stucco",
+    "tint": "#6a2b27",
+    "topM": 3.3
+  },
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "coping": {
+    "heightM": 0.45,
+    "projectionM": 0.1,
+    "material": "painted-stucco",
+    "tint": "#e6dfd2"
+  },
+  "upperWindows": [
+    0.2,
+    0.28,
+    0.46,
+    0.52,
+    0.7,
+    0.76,
+    0.93
+  ],
+  "windowW": 1.3,
+  "bays": [
+    {
+      "at": 0.05,
+      "widthM": 2.6,
+      "projectionM": 0.5,
+      "fromStorey": 1,
+      "material": "painted-white",
+      "tint": "#f7f5f0"
+    },
+    {
+      "at": 0.36,
+      "widthM": 2.4,
+      "projectionM": 0.45,
+      "fromStorey": 1,
+      "material": "painted-stucco",
+      "tint": "#8c3b33"
+    },
+    {
+      "at": 0.6,
+      "widthM": 2.4,
+      "projectionM": 0.45,
+      "fromStorey": 1,
+      "material": "painted-stucco",
+      "tint": "#8c3b33"
+    },
+    {
+      "at": 0.84,
+      "widthM": 2.4,
+      "projectionM": 0.45,
+      "fromStorey": 1,
+      "material": "painted-stucco",
+      "tint": "#8c3b33"
+    }
+  ],
+  "awning": "canvas-plain@4a7853",
+  "frame": "painted-white",
+  "storefrontFrame": "painted-steel",
+  "bulkhead": "painted-stucco@7e332c",
+  "ground": "restaurant",
+  "upper": "apartment",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.55,
+    "layout": [
+      {
+        "kind": "door",
+        "from": 0.03,
+        "to": 0.07,
+        "leaf": "painted-steel"
+      },
+      {
+        "kind": "window",
+        "from": 0.1,
+        "to": 0.19
+      },
+      {
+        "kind": "door",
+        "from": 0.2,
+        "to": 0.24,
+        "leaf": "painted-steel",
+        "stair": true
+      },
+      {
+        "kind": "window",
+        "from": 0.28,
+        "to": 0.38
+      },
+      {
+        "kind": "door",
+        "from": 0.41,
+        "to": 0.45,
+        "leaf": "painted-steel"
+      },
+      {
+        "kind": "window",
+        "from": 0.48,
+        "to": 0.57
+      },
+      {
+        "kind": "window",
+        "from": 0.63,
+        "to": 0.72
+      },
+      {
+        "kind": "window",
+        "from": 0.79,
+        "to": 0.88
+      },
+      {
+        "kind": "door",
+        "from": 0.91,
+        "to": 0.95,
+        "leaf": "painted-steel"
+      }
+    ]
+  },
+  "streetEdges": {
+    "3": {
+      "upperWindowSpans": [
+        [
+          0.12,
+          0.45
+        ]
+      ],
+      "upperSillM": 0.5,
+      "upperHeadM": 1.9,
+      "mullionM": 0.8,
+      "storefront": {
+        "layout": [
+          {
+            "kind": "door",
+            "from": 0.08,
+            "to": 0.24,
+            "leaf": "painted-steel",
+            "grille": true
+          },
+          {
+            "kind": "window",
+            "from": 0.32,
+            "to": 0.6
+          }
+        ]
+      },
+      "wallTint": "#efe6cf",
+      "awningSpans": [
+        {
+          "from": 0.1,
+          "to": 0.9,
+          "depthM": 1.5,
+          "valanceM": 0.7
+        }
+      ],
+      "roofBlocks": [],
+      "wall": "painted-white",
+      "wallLamps": [
+        {
+          "at": 0.52,
+          "y": 5.35,
+          "d": 0.9,
+          "face": "glass-dark"
+        }
+      ],
+      "glassModel": {
+        "street": "glass-reflective@5b524c"
+      }
+    }
+  },
+  "wallZones": [
+    {
+      "from": 0.0,
+      "to": 0.24,
+      "material": "painted-stucco",
+      "tint": "#f7f5f0",
+      "fromY": 3.3
+    },
+    {
+      "from": 0.3254,
+      "to": 0.3946,
+      "material": "painted-stucco",
+      "tint": "#8c3b33",
+      "fromY": 3.2,
+      "toY": 4.6
+    },
+    {
+      "from": 0.5654,
+      "to": 0.6346,
+      "material": "painted-stucco",
+      "tint": "#8c3b33",
+      "fromY": 3.2,
+      "toY": 4.6
+    },
+    {
+      "from": 0.8054,
+      "to": 0.8746,
+      "material": "painted-stucco",
+      "tint": "#8c3b33",
+      "fromY": 3.2,
+      "toY": 4.6
+    }
+  ],
+  "weathering": {
+    "patches": {
+      "strength": 0.1,
+      "metres": 1.5,
+      "top": 3.5,
+      "mottle": 0.07
+    },
+    "grime": {
+      "strength": 0.2,
+      "metres": 2.4
+    },
+    "soot": {
+      "height": 1.2,
+      "strength": 0.34
+    },
+    "streak": {
+      "strength": 0.1,
+      "columnMetres": 0.8,
+      "drop": 0.9
+    },
+    "bandStrength": 0.12,
+    "axis": "wall"
+  },
+  "storefrontGlass": "glass-film",
+  "awningSpans": [
+    {
+      "from": 0.1,
+      "to": 0.57,
+      "depthM": 1.5,
+      "valanceM": 0.7
+    }
+  ],
+  "roofBlocks": [
+    {
+      "at": 0.06,
+      "widthM": 4.2,
+      "depthM": 3.6,
+      "setbackM": 0.45,
+      "material": "painted-stucco",
+      "tint": "#ece6da",
+      "hipRiseM": 0.9,
+      "hipMaterial": "asphalt-roof@4b4541",
+      "eaveM": 0.25
+    },
+    {
+      "at": 0.62,
+      "widthM": 24.5,
+      "depthM": 7.0,
+      "setbackM": 0.25,
+      "material": "painted-stucco",
+      "tint": "#d2ae6c",
+      "hipRiseM": 1.5,
+      "hipMaterial": "asphalt-roof@474a4e",
+      "eaveM": 0.45
+    }
+  ],
+  "glassModel": {
+    "street": "glass-reflective@5b524c",
+    "upper": "glass-reflective@6e635c"
+  }
+}

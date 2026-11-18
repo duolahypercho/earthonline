@@ -1,0 +1,186 @@
+{
+ "seed": 10,
+ "notes": "Wall e9e5d9 warm off-white; bays now hyB cant with one wide front sash and wider side sashes (side run 0.5 m), no corbel wedge; gated arch widened (0.68-0.95) and lowered (head 2.7); thin vent band above the ground floor. Extra top storey claim not supported: ground + 2 bay storeys matching the roll 3 / 12.9 m. Rework 5: wall warm pale grey-cream dbd8cb; small arched ground window set high (sill 1.9 m, head 2.65 m) over the lattice panel; entry arch now carries a thick raised archivolt (0.32 m wide, 0.1 m proud) around the black gate; basement vent grilles at the pavement line; projecting cornice at the roof. Bays kept. Rework 4: warm cream e3dccb; small low window at the far left and a vent under the entry added. Rework 3: warmer cream wall #dcd0b2, small arched window head drawn with clear bars so no sunburst reads. Skipped: 'ground floor mirrored'. Rework 2: warm off-white #e3dfd3; second small lattice panel at ~0.6 under the right bay; the gate arch head drawn as dark glass with its radial bars in the surround colour so no sunburst reads (the kit always draws radial bars); plain coping instead of the bracketed cornice. Skipped: 'ground floor mirrored'. Rework 1: warmer pale grey stucco; raised ground storey with a round-arched recessed entry behind a black iron gate at the right and a small round-arched window over a white lattice panel at the left; no roll-up grille; the two cant bays moved in off the left edge; the short jog and side wall toward the corner building (edges 2, 3) set to party so no side service door shows. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-white",
+ "wallTint": "#f4f2ec",
+ "trim": "painted-white",
+ "frame": "painted-white",
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-clear",
+ "storefrontFrame": "painted-white",
+ "bulkhead": "painted-white@f4f2ec",
+ "cornice": true,
+ "corniceProjectionM": 0.45,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.8,
+ "windowSillM": 0.85,
+ "windowHeadM": 3.2,
+ "ground": "lobby",
+ "upper": "apartment",
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.31,
+   "widthM": 2.1,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f4f2ec",
+   "hyB": {
+    "plan": "cant",
+    "sideRunM": 0.5,
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sillM": 0.7,
+    "headGapM": 0.25,
+    "marginM": 0.12,
+    "corbel": {
+     "tiers": 1,
+     "stepM": 0.08,
+     "brackets": 0,
+     "dropM": 0.2
+    },
+    "cornice": {
+     "projectionM": 0.1,
+     "dentils": false,
+     "roofRiseM": 0
+    }
+   }
+  },
+  {
+   "at": 0.76,
+   "widthM": 2.1,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f4f2ec",
+   "hyB": {
+    "plan": "cant",
+    "sideRunM": 0.5,
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sillM": 0.7,
+    "headGapM": 0.25,
+    "marginM": 0.12,
+    "corbel": {
+     "tiers": 1,
+     "stepM": 0.08,
+     "brackets": 0,
+     "dropM": 0.2
+    },
+    "cornice": {
+     "projectionM": 0.1,
+     "dentils": false,
+     "roofRiseM": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 1.9,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "headDropM": 2.13,
+  "layout": [
+   {
+    "from": 0.02,
+    "to": 0.07,
+    "kind": "window",
+    "headM": 1.6
+   },
+   {
+    "from": 0.14,
+    "to": 0.33,
+    "kind": "window",
+    "headM": 2.65,
+    "arch": {
+     "type": "round",
+     "riseM": 0.3,
+     "surround": {
+      "widthM": 0.07,
+      "projectionM": 0.03,
+      "tint": "#e6e2d8",
+      "material": "painted-white"
+     }
+    }
+   },
+   {
+    "from": 0.68,
+    "to": 0.95,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel@1e1f20",
+    "grille": true,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.32,
+      "projectionM": 0.1,
+      "tint": "#e9e5db",
+      "material": "painted-white"
+     },
+     "spandrel": {
+      "material": "painted-white",
+      "tint": "#e9e5d9"
+     }
+    },
+    "headM": 2.7
+   },
+   {
+    "from": 0.52,
+    "to": 0.58,
+    "kind": "window",
+    "headM": 0.6,
+    "grille": true
+   },
+   {
+    "from": 0.03,
+    "to": 0.08,
+    "kind": "window",
+    "headM": 0.6,
+    "grille": true
+   }
+  ]
+ },
+ "edgeRoles": {
+  "2": "party",
+  "3": "party"
+ },
+ "archHeads": [],
+ "plaques": [
+  {
+   "at": 0.235,
+   "y": 1.45,
+   "w": 1.1,
+   "h": 0.7,
+   "face": "painted-white@f2f0ea"
+  },
+  {
+   "at": 0.82,
+   "y": 0.4,
+   "w": 0.6,
+   "h": 0.3,
+   "face": "painted-white@8f8b80"
+  },
+  {
+   "at": 0.5,
+   "y": 3.25,
+   "w": 5.6,
+   "h": 0.3,
+   "face": "painted-white@d0cbbd"
+  }
+ ],
+ "coping": {
+  "material": "painted-white",
+  "tint": "#e6e2d8",
+  "heightM": 0.3,
+  "projectionM": 0.12
+ },
+ "streetStills": true
+}

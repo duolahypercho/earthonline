@@ -1,0 +1,114 @@
+{
+ "seed": 91,
+ "notes": "1900 four-storey flats, olive-green rough stucco with cream trim and a bright cornice band. Ground: arched cream-surround entry left of centre, a small door and a white sectional garage door right. Uppers: window pairs and triples, a shallow bay with a railed fire-escape balcony near the centre. Olive-khaki wall, denser window grid, fanlight over the arched entry, terracotta frieze under the cornice. Second garage door SKIPPED: one sectional door plus a small door. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Sage (2026-10-03): the in-game sheet read cream. Tint = #a4a87a / painted-stucco base = #c1cfa5. GroundBand lift (2026-10-03): groundBand tint #9d9d6c -> #ceceb6 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#c1cfa5",
+ "trim": "painted-white@efe6cc",
+ "frame": "painted-white@efe6cc",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@efe6cc",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@ceceb6",
+ "cornice": true,
+ "corniceProjectionM": 0.45,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.1,
+  0.22,
+  0.34,
+  0.66,
+  0.78,
+  0.9
+ ],
+ "bays": [
+  {
+   "at": 0.5,
+   "widthM": 3.4,
+   "projectionM": 0.5,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#c1cfa5",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.41,
+    "to": 0.57,
+    "kind": "door",
+    "leaf": "wood-siding@e8e0cc",
+    "headM": 3.0,
+    "arch": {
+     "type": "round",
+     "surround": true,
+     "fan": true
+    },
+    "stair": true
+   },
+   {
+    "from": 0.64,
+    "to": 0.7,
+    "kind": "door",
+    "leaf": "painted-white@f0ede6",
+    "headM": 2.2
+   },
+   {
+    "from": 0.8,
+    "to": 0.95,
+    "kind": "garage",
+    "leaf": "painted-white@f0ede6",
+    "headM": 2.5
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.4,
+  "upperM": 2.65
+ },
+ "fireEscape": {
+  "at": 0.5,
+  "widthM": 3.6,
+  "depthM": 0.9,
+  "material": "painted-steel"
+ },
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#ceceb6",
+  "topM": 0.6
+ },
+ "hbFrieze": {
+  "heightM": 0.45,
+  "material": "painted-white",
+  "tint": "#b8553a"
+ }
+}

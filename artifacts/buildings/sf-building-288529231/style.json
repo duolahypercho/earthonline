@@ -1,0 +1,155 @@
+{
+ "seed": 4,
+ "notes": "Box bays flattened to 0.15 m projection (flush-ish sliders), siding cdcfd1, pebble-dash cbbd9c, ground-left steel gate replaced by a single glazed entry door in an open recess position. Fire escape kept (it at centre with a drop ladder). Vertical boards: no kit material (skipped). Rework 5: garage 0.47-0.95 (~0.48 of width) plain blue-grey 8d939b with a 4-light glazed top row; gate recessed at 0.17-0.37 with pebble-dash wall left of it (kit gate is set back ~0.4 m; no open-vestibule key); ground pebble-dash c8bb9f; box bays via hyB box (3 lights across the front face, 1 per side); fire escape heavy (channel landings, hangers, drop ladder). Skipped vertical board siding: no vertical siding material in the kit, clapboard kept. Rework 4: siding d4d7da, pebble-dash cfc5b2, garage mid grey 9aa0a8 with glazed row; vertical battens have no kit material. Rework 3: bays are now shallow square box bays (sash bays, tiny side runs) with one wide window ~55% of the storey, tall upper light over a short lower row in white frames, solid siding above and below, and a narrow window on each side return; siding a light cool grey; ground pebble-dash #c9bfae; garage mid-grey #9ea3a8. Skipped: 'ground floor mirrored' and vertical board siding (no kit material; clapboard kept). Rework 2: two shallow box bays (0.4 m, glazed faces with three tall lights over a low rail, narrow side lights) at each side of every upper storey replace the flat ribbon windows; upper siding pale grey-white; fire escape narrowed to the recess between the bays; pebble-dash ground #cdbd9e. Vertical board siding has no kit material (clapboard kept). Rework 1: the sectional garage door is a flat painted panel with a row of small glazed lights near the top (the kit's carriage leaf is steel, which a tint only darkens). Rework 1: upper storeys grey horizontal lap siding (painted-clapboard) instead of smooth stucco; each end plane now carries one wide three-light window with a lower band per storey (the kit's bay faces cap a window at 1.05 m, so the shallow box bays are expressed as wide ribbon windows in the wall plane instead of bays); ground storey beige pebble-dash with the gated recessed entry at the left and one grey sectional garage door with a glazed top row at the right (no roll-up shutters); fire escape stays on the recessed middle with three landings above the garage; flat plain parapet, no cornice. 1968 five-unit flats, four storeys on the street (storeysSeen). Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k). GroundBand lift (2026-10-03): groundBand tint #cbbd9c -> #e5dece (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-clapboard",
+ "wallTint": "#e6e7e8",
+ "trim": "painted-white",
+ "frame": "painted-white",
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-clear",
+ "storefrontFrame": "painted-white",
+ "bulkhead": "painted-white@e7e2d8",
+ "cornice": false,
+ "corniceProjectionM": 0.4,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 1.0,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.45,
+ "ground": "lobby",
+ "upper": "apartment",
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.4,
+  "upperM": 2.9
+ },
+ "groundBand": {
+  "material": "float-finish-stucco",
+  "tint": "#e5dece",
+  "topM": 3.45
+ },
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.17,
+   "widthM": 2.7,
+   "projectionM": 0.15,
+   "fromStorey": 1,
+   "toStorey": 3,
+   "material": "painted-clapboard",
+   "tint": "#e6e7e8",
+   "frame": "painted-white",
+   "hyB": {
+    "plan": "box",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sillM": 0.7,
+    "headGapM": 0.45,
+    "meetingFrac": 0.32,
+    "marginM": 0.1,
+    "cornice": {
+     "projectionM": 0.05,
+     "roofRiseM": 0
+    }
+   }
+  },
+  {
+   "at": 0.83,
+   "widthM": 2.7,
+   "projectionM": 0.15,
+   "fromStorey": 1,
+   "toStorey": 3,
+   "material": "painted-clapboard",
+   "tint": "#e6e7e8",
+   "frame": "painted-white",
+   "hyB": {
+    "plan": "box",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sillM": 0.7,
+    "headGapM": 0.45,
+    "meetingFrac": 0.32,
+    "marginM": 0.1,
+    "cornice": {
+     "projectionM": 0.05,
+     "roofRiseM": 0
+    }
+   }
+  }
+ ],
+ "fireEscape": {
+  "at": 0.5,
+  "widthM": 2.0,
+  "depthM": 0.8,
+  "heavy": true
+ },
+ "storefront": {
+  "bulkheadM": 0.4,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.2,
+    "to": 0.3,
+    "kind": "door",
+    "leaf": "painted-white@4a4d50"
+   },
+   {
+    "from": 0.47,
+    "to": 0.95,
+    "kind": "blank",
+    "material": "painted-steel-light",
+    "tint": "#8d939b",
+    "headM": 2.45
+   }
+  ]
+ },
+ "upperWindowSpans": [],
+ "upperSillM": 0.75,
+ "upperHeadM": 2.25,
+ "mullionM": 0.95,
+ "sashRows": 2,
+ "sashMaterial": "painted-white",
+ "coping": {
+  "material": "painted-white",
+  "tint": "#d4d7da",
+  "heightM": 0.2,
+  "projectionM": 0.05
+ },
+ "plaques": [
+  {
+   "at": 0.53,
+   "y": 2.15,
+   "w": 0.85,
+   "h": 0.26,
+   "face": "glass-reflective@7d868c"
+  },
+  {
+   "at": 0.65,
+   "y": 2.15,
+   "w": 0.85,
+   "h": 0.26,
+   "face": "glass-reflective@7d868c"
+  },
+  {
+   "at": 0.77,
+   "y": 2.15,
+   "w": 0.85,
+   "h": 0.26,
+   "face": "glass-reflective@7d868c"
+  },
+  {
+   "at": 0.89,
+   "y": 2.15,
+   "w": 0.85,
+   "h": 0.26,
+   "face": "glass-reflective@7d868c"
+  }
+ ],
+ "streetStills": true
+}

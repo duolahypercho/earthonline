@@ -1,0 +1,152 @@
+{
+ "seed": 7,
+ "notes": "Round 1: 1911 three-storey flats over shops, 11.9 m front. Pale painted brick with cream trim; two cant bays over both upper storeys under a heavy bracketed cornice, fire escape between. Ground: shop left under a dark sign board, two gated openings, glazed shop right. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game.",
+ "wall": "painted-stucco",
+ "wallTint": "#eaeae8",
+ "trim": "painted-white@e0d8be",
+ "frame": "painted-white@e0d8be",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@3a2a22",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-stucco@887b6e",
+ "cornice": true,
+ "corniceProjectionM": 0.8,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "streetStills": true,
+ "bays": [
+  {
+   "at": 0.18,
+   "widthM": 2.6,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#ece9dc",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.2,
+     "dentils": true,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.89,
+   "widthM": 2.6,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#ece9dc",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.2,
+     "dentils": true,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "fireEscape": {
+  "at": 0.52,
+  "widthM": 3.2,
+  "depthM": 0.8,
+  "standoffM": 0.3,
+  "ladder": true,
+  "material": "painted-steel-mid",
+  "roofLadder": true,
+  "braces": true
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.02,
+    "to": 0.33,
+    "kind": "window",
+    "headM": 2.8
+   },
+   {
+    "from": 0.37,
+    "to": 0.45,
+    "kind": "gate",
+    "headM": 2.6
+   },
+   {
+    "from": 0.48,
+    "to": 0.55,
+    "kind": "gate",
+    "headM": 2.6
+   },
+   {
+    "from": 0.6,
+    "to": 0.78,
+    "kind": "window",
+    "headM": 2.8
+   },
+   {
+    "from": 0.78,
+    "to": 0.86,
+    "kind": "door",
+    "headM": 2.8
+   },
+   {
+    "from": 0.88,
+    "to": 0.99,
+    "kind": "window",
+    "headM": 2.8
+   }
+  ]
+ },
+ "signBands": [
+  {
+   "from": 0.02,
+   "to": 0.34,
+   "material": "painted-white",
+   "tint": "#5a2a28",
+   "heightM": 0.9,
+   "bottomM": 2.9,
+   "projectionM": 0.1
+  }
+ ],
+ "hbCorniceBrackets": {
+  "spacingM": 1.6,
+  "heightM": 0.5,
+  "depthM": 0.3,
+  "widthM": 0.18,
+  "material": "painted-white",
+  "tint": "#d9d3b8"
+ },
+ "ground": "shop",
+ "upper": "apartment"
+}

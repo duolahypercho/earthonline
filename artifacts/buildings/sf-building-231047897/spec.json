@@ -1,0 +1,165 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-231047897",
+  "slug": "b231047897",
+  "walkIndex": 108,
+  "street": "24th Street",
+  "address": "2801 Mission Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 4.4,
+  "storeys": 1,
+  "floors": {
+    "groundM": 3.8,
+    "upperM": 0,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1974,
+  "use": "COMR",
+  "usage": "retail",
+  "amenity": "fast_food",
+  "shop": null,
+  "facade": "shopfront",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 3,
+    "center": {
+      "x": 113.689,
+      "z": -2863.792
+    },
+    "heading": -0.087278,
+    "width": 32.517,
+    "depth": 16.243
+  },
+  "frameMirrored": true,
+  "polygonWinding": "cw",
+  "polygon": [
+    {
+      "x": 11.463,
+      "z": -7.937
+    },
+    {
+      "x": 11.624,
+      "z": 0.782
+    },
+    {
+      "x": 16.259,
+      "z": 0.979
+    },
+    {
+      "x": 16.08,
+      "z": 8.121
+    },
+    {
+      "x": -16.042,
+      "z": 8.121
+    },
+    {
+      "x": -16.259,
+      "z": -8.121
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 11.463,
+        "z": -7.937
+      },
+      "b": {
+        "x": 11.624,
+        "z": 0.782
+      },
+      "lengthM": 8.721,
+      "role": "rear",
+      "partyShare": 0.13
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 11.624,
+        "z": 0.782
+      },
+      "b": {
+        "x": 16.259,
+        "z": 0.979
+      },
+      "lengthM": 4.639,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 16.259,
+        "z": 0.979
+      },
+      "b": {
+        "x": 16.08,
+        "z": 8.121
+      },
+      "lengthM": 7.145,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 16.08,
+        "z": 8.121
+      },
+      "b": {
+        "x": -16.042,
+        "z": 8.121
+      },
+      "lengthM": 32.122,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": -16.042,
+        "z": 8.121
+      },
+      "b": {
+        "x": -16.259,
+        "z": -8.121
+      },
+      "lengthM": 16.244,
+      "role": "rear",
+      "partyShare": 0.06
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": -16.259,
+        "z": -8.121
+      },
+      "b": {
+        "x": 11.463,
+        "z": -7.937
+      },
+      "lengthM": 27.722,
+      "role": "party",
+      "partyShare": 1
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

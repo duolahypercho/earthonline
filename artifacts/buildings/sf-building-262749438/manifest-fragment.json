@@ -1,0 +1,72 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-262749438",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-262749438",
+    "walkIndex": 5246,
+    "builder": "blender",
+    "street": "Hyde Street",
+    "side": "W",
+    "addr": "2715 Hyde Street",
+    "sourceHeight": 7,
+    "sourceLevels": null,
+    "frontEdge": 7,
+    "status": "review",
+    "lidarHeightM": 7.12,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b262749438.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b262749438.js"
+  },
+  "base": {
+    "id": "sf-building-262749438",
+    "walkIndex": 5246,
+    "builder": "blender",
+    "street": "Hyde Street",
+    "side": "W",
+    "addr": "2715 Hyde Street",
+    "sourceHeight": 7,
+    "sourceLevels": null,
+    "frontEdge": 7,
+    "status": "review",
+    "lidarHeightM": 7.12,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b262749438.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b262749438.js"
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b262749438.js",
+    "sha256": "c681f75b86abc8a027b1c14b63e8dd4f32effd831202925fba15e303c1816863",
+    "pass": "b262749438-blender-6facb6b9-3f735a"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-262749438/provenance.json",
+    "sha256": "51326d4ef5b3e90f896d5037d4b89d655c89636d380d4e075e769b2a4825ac7e",
+    "pass": "b262749438-blender-6facb6b9-3f735a"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-262749438/exterior.glb",
+      "sha256": "11ecac774f6031a5888c33ba7cf0fbe5fc3ebf9c7bbcc107ac6349dd1cbe6ff6",
+      "bytes": 113284
+    },
+    {
+      "role": "interior",
+      "url": "/assets/buildings/sf-building-262749438/interior.glb",
+      "sha256": "718470a103f54220643789f4f665cb459bec6c9648c8db66571cfea5f516e43d",
+      "bytes": 80740
+    },
+    {
+      "role": "fine-s0",
+      "url": "/assets/buildings/sf-building-262749438/fine-s0.glb",
+      "sha256": "ad0a49da34485736940880d65140098a43c66c74443bb88770f0cb48860fb366",
+      "bytes": 31136
+    },
+    {
+      "role": "fine-s1",
+      "url": "/assets/buildings/sf-building-262749438/fine-s1.glb",
+      "sha256": "cacbce62cad54ed9fe7f71aba4f47be72c2bb326c9269dc1ae10ddb121cf6c72",
+      "bytes": 230252
+    }
+  ],
+  "generatedAt": "2026-10-03T08:52:01.307Z"
+}

@@ -1,0 +1,211 @@
+{
+ "seed": 2,
+ "notes": "Upper cream e6e0cf, bracketed cornice deeper (0.65 proj, 0.75 brackets), right arch cut from garage-size to a window-size segmental arched fanlight window (0.60-0.84), basement grilles lowered to 0.75 m, fire escape shortened to a 5.6 m single balcony. ONE arched window right of the entry, not two, so not doubled; brick base already brick-buff. Rework 5: street count 4 (raised buff-brick storey 4.2 m + 3 cream stucco storeys of 2.7 m, fits the LiDAR 12.95 m); brick lit sample bf9468; salmon base/sill bands and terracotta pilasters kept; round arch porch with steps + fanlight at the entry, arched tripartite window with fan at the right (other ground windows small rectangles, white grilles below); cream stucco d6cfb8; belt cornice kept; iron balcony is a fire escape with a drop ladder. Rework 4: added fourth white-grilled basement window under the left ground window; bracketed cornice; brick plinth, salmon string course, arched entry and cream stucco kept (already match). Rework 3: all fractions mirrored; brick tinted buff; salmon string course at grille head height and salmon entry pilasters; cream upper stucco; the zig-zag stair replaced by a single railed balcony deck across the bays at the storey-1 floor line. Rework 2: buff-tan brick base over a salmon water table, white basement grilles, upper stucco a pale olive-grey with cream bays, fire escape widened to the ~0.25-0.68 run the with a second landing at storey 2. Skipped: 'shopfront ground floor' - the layout already has the arched recessed entry at ~0.27-0.41, single windows either side and the arched triple window at ~0.63-0.9 as the (transom reduced so they read less like shop glass); its raised cap has no style key. Rework 1: ground storey drawn as tan-orange brick over a darker salmon plinth with grilled basement windows; round-arched recessed entry left of centre with a stair and a wood double door; the wide triple window at the right and the corner window get round arch heads; white projecting belt ledge at the brick/stucco line; upper storeys pale cream stucco with three shallow cant bays (the three: Vallejo corner, left of centre, over the arched window - not four). The a railed balcony with a drop ladder on this front at the first upper storey, so it stays as one balcony landing (no upper flights). 1922 twelve-unit flats at the NW corner of Hyde and Vallejo. Vallejo return (edge 2) dressed as a flank. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-white",
+ "wallTint": "#f2f0e7",
+ "trim": "painted-white",
+ "frame": "painted-white",
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-clear",
+ "storefrontFrame": "painted-white",
+ "bulkhead": "painted-white@e2ccb8",
+ "cornice": true,
+ "corniceProjectionM": 0.65,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.9,
+ "windowSillM": 0.85,
+ "windowHeadM": 3.7,
+ "ground": "lobby",
+ "upper": "apartment",
+ "groundBand": {
+  "material": "brick-buff",
+  "topM": 4.2,
+  "tint": "#ffffff"
+ },
+ "upperWindows": [
+  0.2,
+  0.44,
+  0.52,
+  0.62,
+  0.92
+ ],
+ "bays": [
+  {
+   "at": 0.07,
+   "widthM": 2.4,
+   "projectionM": 0.5,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f4f0e8"
+  },
+  {
+   "at": 0.31,
+   "widthM": 2.4,
+   "projectionM": 0.5,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f4f0e8"
+  },
+  {
+   "at": 0.8,
+   "widthM": 2.8,
+   "projectionM": 0.5,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f4f0e8"
+  }
+ ],
+ "edgeRoles": {
+  "2": "flank"
+ },
+ "storefront": {
+  "bulkheadM": 1.6,
+  "transomM": 0.2,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.04,
+    "to": 0.15,
+    "kind": "window",
+    "headM": 3.7
+   },
+   {
+    "from": 0.19,
+    "to": 0.23,
+    "kind": "window",
+    "headM": 3.5
+   },
+   {
+    "from": 0.28,
+    "to": 0.41,
+    "kind": "double-door",
+    "leaf": "wood-siding@7a4a2a",
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.22,
+      "projectionM": 0.06,
+      "tint": "#d9967a",
+      "material": "painted-white"
+     },
+     "fan": true,
+     "porch": {
+      "steps": 3,
+      "riseM": 0.14,
+      "treadM": 0.3,
+      "material": "painted-white",
+      "tint": "#d9967a"
+     },
+     "revealM": 0.5
+    }
+   },
+   {
+    "from": 0.48,
+    "to": 0.54,
+    "kind": "window",
+    "headM": 3.5
+   },
+   {
+    "from": 0.6,
+    "to": 0.84,
+    "kind": "window",
+    "headM": 3.7,
+    "arch": {
+     "type": "segmental",
+     "surround": {
+      "widthM": 0.14,
+      "tint": "#efe9dc",
+      "material": "painted-white"
+     },
+     "fan": true
+    }
+   },
+   {
+    "from": 0.155,
+    "to": 0.185,
+    "kind": "window",
+    "headM": 0.75,
+    "grille": true
+   },
+   {
+    "from": 0.56,
+    "to": 0.6,
+    "kind": "window",
+    "headM": 0.75,
+    "grille": true
+   },
+   {
+    "from": 0.915,
+    "to": 0.955,
+    "kind": "window",
+    "headM": 0.75,
+    "grille": true
+   },
+   {
+    "from": 0.06,
+    "to": 0.13,
+    "kind": "window",
+    "headM": 0.75,
+    "grille": true
+   }
+  ],
+  "headDropM": 1.65
+ },
+ "wallZones": [
+  {
+   "from": 0.0,
+   "to": 1.0,
+   "fromY": -1.0,
+   "toY": 0.6,
+   "material": "painted-white",
+   "tint": "#d9967a"
+  },
+  {
+   "from": 0.0,
+   "to": 1.0,
+   "fromY": 1.5,
+   "toY": 1.68,
+   "material": "painted-white",
+   "tint": "#d9967a"
+  }
+ ],
+ "archHeads": [],
+ "grilleMaterial": "painted-white",
+ "pilasters": {
+  "at": [
+   0.265,
+   0.445
+  ],
+  "widthM": 0.5,
+  "projectionM": 0.12,
+  "fromM": 0.0,
+  "toM": 3.6,
+  "material": "painted-white",
+  "tint": "#d9967a"
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 1.0,
+  "heightM": 0.75,
+  "depthM": 0.45,
+  "widthM": 0.2,
+  "material": "painted-white",
+  "tint": "#e8e2d1"
+ },
+ "streetStills": true,
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 4.2,
+  "upperM": 2.7
+ },
+ "fireEscapes": [
+  {
+   "at": 0.46,
+   "widthM": 5.6,
+   "depthM": 0.8,
+   "toStorey": 1,
+   "dropLadder": true
+  }
+ ]
+}

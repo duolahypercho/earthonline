@@ -1,0 +1,49 @@
+{
+  "kind": "blender-building",
+  "id": "sf-building-260146990",
+  "pass": "b260146990-blender-6facb6b9-d34e7e-hd7c009",
+  "generator": "scripts/blender-buildings/build_building.py",
+  "generatorSha256": "6facb6b980e5966bff381f1088766095f94c593f58d833334af51d6578efa055",
+  "blender": "Blender 5.1.2",
+  "inputs": {
+    "spec": "artifacts/buildings/sf-building-260146990/spec.json",
+    "specSha256": "e6c0057a88823e7a69f47a2927534f0bf157b6fc69ed3cc3679fef2d5f40dc7f",
+    "style": "artifacts/buildings/sf-building-260146990/style.json",
+    "styleSha256": "d34e7e07c26eedd1e679bfb7a34bdebbc07452555182a468bcd77e541d8de6c3",
+    "hand": "artifacts/buildings/sf-building-260146990/hand.py",
+    "handSha256": "d7c009f019fc2d7fe0a4d3f98623083261e04fd7112cc8ebf16abc21e16c510c"
+  },
+  "sources": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (lidar-over-roll)"
+  },
+  "license": "Original geometry generated from open data (DataSF footprints, LiDAR, Assessor roll). No third-party meshes or textures.",
+  "furniture": [],
+  "assets": {
+    "exterior": {
+      "url": "/assets/buildings/sf-building-260146990/exterior.glb",
+      "sha256": "b966a44a6371e03d64bc4bd95e3a0fe3a97c76b46fee6d73d4178c085c6ba0bd",
+      "bytes": 99204
+    },
+    "interior": {
+      "url": "/assets/buildings/sf-building-260146990/interior.glb",
+      "sha256": "487305afe16ec4f6ac5a5cd90aaf058fe61438ed28e716ca2673fa11c0d633af",
+      "bytes": 198420
+    },
+    "fine": [
+      {
+        "storey": 0,
+        "url": "/assets/buildings/sf-building-260146990/fine-s0.glb",
+        "sha256": "4d83337898273ed7e9f842acf83d530adbb501523b9f9efdd5e640d94371362d",
+        "bytes": 38172
+      },
+      {
+        "storey": 1,
+        "url": "/assets/buildings/sf-building-260146990/fine-s1.glb",
+        "sha256": "fb3a2c11109000bb2c89108d3ddd741ade19e54dcf60ec66a0a9eede18ead64e",
+        "bytes": 169956
+      }
+    ]
+  }
+}

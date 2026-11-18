@@ -1,0 +1,18 @@
+[package]
+name = "eo-assets"
+version = "0.1.0"
+edition = "2024"
+description = "Earth Online native: hash-verified building GLBs, the binary model cache, the authored kit materials and building placement"
+publish = false
+
+[dependencies]
+eo-data = { path = "../eo-data" } # groundscale: the ground-plan scale and the moved records
+anyhow = "1.0.104"
+bytemuck = { version = "1.25.2", features = ["derive", "extern_crate_alloc"] }
+glam = "0.34.3"
+gltf = { version = "1.4.1", default-features = false, features = ["utils", "names", "KHR_materials_emissive_strength"] }
+png = "0.18.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+intel_tex_2 = "0.5.0" # cc0: BC7 (colour) and BC5 (normal) block compression of the CC0 sets, cooked once into native/cache

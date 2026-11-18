@@ -1,0 +1,241 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-260142629",
+  "slug": "b260142629",
+  "walkIndex": 5018,
+  "street": "Hyde Street",
+  "address": "240;250 Hyde Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 21.94,
+  "storeys": 7,
+  "floors": {
+    "groundM": 3.963,
+    "upperM": 2.896,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1929,
+  "use": "COMH",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "art-deco",
+  "material": "stone",
+  "frame": {
+    "edgeIndex": 0,
+    "center": {
+      "x": 337.814,
+      "z": 571.537
+    },
+    "heading": -1.896031,
+    "width": 17.855,
+    "depth": 28.299
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -5.926,
+      "z": 14.15
+    },
+    {
+      "x": 3.15,
+      "z": 14.15
+    },
+    {
+      "x": 2.86,
+      "z": 12.664
+    },
+    {
+      "x": 8.928,
+      "z": 11.568
+    },
+    {
+      "x": 7.121,
+      "z": 1.202
+    },
+    {
+      "x": 4.94,
+      "z": 1.621
+    },
+    {
+      "x": 2.26,
+      "z": -14.15
+    },
+    {
+      "x": -8.928,
+      "z": -12.277
+    },
+    {
+      "x": -6.121,
+      "z": 3.557
+    },
+    {
+      "x": -7.733,
+      "z": 3.784
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -5.926,
+        "z": 14.15
+      },
+      "b": {
+        "x": 3.15,
+        "z": 14.15
+      },
+      "lengthM": 9.076,
+      "role": "front",
+      "partyShare": 0.13
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 3.15,
+        "z": 14.15
+      },
+      "b": {
+        "x": 2.86,
+        "z": 12.664
+      },
+      "lengthM": 1.513,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 2.86,
+        "z": 12.664
+      },
+      "b": {
+        "x": 8.928,
+        "z": 11.568
+      },
+      "lengthM": 6.166,
+      "role": "rear",
+      "partyShare": 0.13
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 8.928,
+        "z": 11.568
+      },
+      "b": {
+        "x": 7.121,
+        "z": 1.202
+      },
+      "lengthM": 10.522,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": 7.121,
+        "z": 1.202
+      },
+      "b": {
+        "x": 4.94,
+        "z": 1.621
+      },
+      "lengthM": 2.22,
+      "role": "rear",
+      "partyShare": 0.38
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": 4.94,
+        "z": 1.621
+      },
+      "b": {
+        "x": 2.26,
+        "z": -14.15
+      },
+      "lengthM": 15.997,
+      "role": "rear",
+      "partyShare": 0.06
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": 2.26,
+        "z": -14.15
+      },
+      "b": {
+        "x": -8.928,
+        "z": -12.277
+      },
+      "lengthM": 11.344,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": -8.928,
+        "z": -12.277
+      },
+      "b": {
+        "x": -6.121,
+        "z": 3.557
+      },
+      "lengthM": 16.08,
+      "role": "rear",
+      "partyShare": 0.06
+    },
+    {
+      "index": 8,
+      "a": {
+        "x": -6.121,
+        "z": 3.557
+      },
+      "b": {
+        "x": -7.733,
+        "z": 3.784
+      },
+      "lengthM": 1.628,
+      "role": "rear",
+      "partyShare": 0.56
+    },
+    {
+      "index": 9,
+      "a": {
+        "x": -7.733,
+        "z": 3.784
+      },
+      "b": {
+        "x": -5.926,
+        "z": 14.15
+      },
+      "lengthM": 10.522,
+      "role": "party",
+      "partyShare": 1
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

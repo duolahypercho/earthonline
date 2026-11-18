@@ -1,0 +1,88 @@
+{
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-storefront@2a2a3a",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.55,
+ "windowSillM": 1.4,
+ "windowHeadM": 4.2,
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "bays": [],
+ "upperWindows": [
+  0.14,
+  0.32,
+  0.44,
+  0.56,
+  0.68,
+  0.86
+ ],
+ "seed": 13,
+ "notes": "Round 2: white-lavender centre, saturated violet end pilasters rising above a flat stepped parapet (hand.py), four tall narrow dark-framed window strips plus end slots, violet frieze band over a glazed shopfront with central double glass doors, no cornice. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. Base fix (2026-10-03): cool/grey wallTint = target / painted-stucco base so the warm stucco albedo does not turn it pink. Rework 2 (2026-10-03): saturated violet piers and base, dark glazing with violet mullions, tile-frieze panels, pier slots and stepped caps (hand.py), shadow lines at the recessed centre panel. Colour re-apply (2026-10-03): a rework re-sampled wallTint #ffffff from the photo; lifted/converted once to #ffffff.",
+ "wall": "painted-stucco",
+ "wallTint": "#ffffff",
+ "trim": "painted-white@4a2c90",
+ "frame": "painted-white@362851",
+ "bulkhead": "painted-stucco@5c34b4",
+ "corniceProjectionM": 0.15,
+ "storeysSeen": {
+  "count": 2,
+  "groundM": 4.4
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.04,
+    "to": 0.26,
+    "kind": "blank",
+    "material": "painted-stucco",
+    "tint": "#5c34b4",
+    "headM": 2.9
+   },
+   {
+    "from": 0.31,
+    "to": 0.47,
+    "kind": "window",
+    "headM": 3.0
+   },
+   {
+    "from": 0.48,
+    "to": 0.68,
+    "kind": "double-door",
+    "stair": false,
+    "headM": 3.1
+   },
+   {
+    "from": 0.69,
+    "to": 0.8,
+    "kind": "window",
+    "headM": 3.0
+   },
+   {
+    "from": 0.85,
+    "to": 0.96,
+    "kind": "blank",
+    "material": "painted-stucco",
+    "tint": "#5c34b4",
+    "headM": 2.9
+   }
+  ]
+ },
+ "hbSignBands": [
+  {
+   "from": 0.2,
+   "to": 0.8,
+   "bottomM": 3.3,
+   "topM": 4.3,
+   "material": "painted-stucco",
+   "tint": "#3e2a82"
+  }
+ ],
+ "storefrontFrame": "painted-steel@5c34b4"
+}

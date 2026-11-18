@@ -1,0 +1,124 @@
+{
+ "seed": 7,
+ "notes": "Rework r4: greige stucco, grey concrete base (no salmon piers), paired dark-framed windows beside a stair-fronted entry, near-black bay frames with larger panes. GroundBand lift (2026-10-03): groundBand tint #a4a29a -> #d2d0cc (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#dbd1ba",
+ "trim": "painted-white@efe8d2",
+ "frame": "painted-white@1a1612",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@2a2620",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-stucco@a4a29a",
+ "cornice": true,
+ "corniceProjectionM": 0.15,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.27,
+   "widthM": 3.3,
+   "projectionM": 0.5,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#dbd1ba",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15
+   }
+  },
+  {
+   "at": 0.75,
+   "widthM": 3.3,
+   "projectionM": 0.5,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#dbd1ba",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 1.5,
+  "transomM": 0.15,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.06,
+    "to": 0.3,
+    "kind": "window",
+    "headM": 3.5
+   },
+   {
+    "from": 0.42,
+    "to": 0.66,
+    "kind": "door",
+    "stair": true
+   },
+   {
+    "from": 0.82,
+    "to": 0.9,
+    "kind": "window",
+    "headM": 3.3
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "sashFrames": {
+  "material": "painted-white@1a1612",
+  "stileM": 0.12
+ },
+ "hbBayGlazing": {
+  "marginM": 0.15,
+  "maxW": 1.3,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#1a1612",
+  "sashM": 0.13,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#d2d0cc",
+  "topM": 0.9
+ }
+}

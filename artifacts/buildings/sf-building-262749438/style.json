@@ -1,0 +1,334 @@
+{
+ "seed": 5,
+ "notes": "1925 single tall storey commercial garage mid-block. White stucco, navy plinth, trim and coping; eave dropped to 6.3 m (wallTopM) with a stepped Mission gable of plaques over the centre up to the LiDAR peak, end shoulders, red sign boards with navy edges (centre taller), red sign in the gable. Ground (real viewer's left to right): 2x4-light shop window over a navy base, wide garage under a navy banner, lower open garage (deep pale back) under a navy fascia with a multi-pane window above. Mirror/left-right claims skipped. Stepped white gable with navy coping, end piers, blue fascia and dado already in place; centre garage mouth darkened to read as an open dark bay. Low sloped-stepped gable, peak 7.3 m (was 7.7), four fine steps with navy edge on every tread; navy dado 0.9 m. Parapet re-done as eight fine steps approximating angled shoulders rising from the flat ends to a small centre peak (navy only on exposed treads), navy #23349a, sign boards #d0453a, centre opening slightly lighter. Camera crop / 'mirrored' skipped. Sign bands lowered to one aligned row (y 4.75) directly over a larger navy banner (y 4.0, 5.6 m) that sits on the opening head; oval sign in the gable; dado 1.0 m. Skipped: dark right-garage interior (a pale/cream lit interior), scalloped parapet (stepped crest kept). Crest, three red bands (centre wide), blue banner, navy dado 1.0, shop window 2x4 with navy sill already present. Applied: centre opening lightened to #555a62 (dim lit interior), right open garage interior warm cream #cfcabb (recessed 2.2 m). Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k). GroundBand lift (2026-10-03): groundBand tint #23349a -> #4452a9 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#fafaf8",
+ "trim": "painted-white@23349a",
+ "frame": "painted-white",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@23349a",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@4452a9",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.9,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.2,
+ "floorsM": {
+  "groundM": 4.3,
+  "upperM": 1.7
+ },
+ "blankUpper": true,
+ "upperWindows": [],
+ "bays": [],
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#4452a9",
+  "topM": 1.0
+ },
+ "coping": {
+  "heightM": 0.3,
+  "projectionM": 0.15,
+  "material": "painted-white",
+  "tint": "#23349a"
+ },
+ "storefront": {
+  "bulkheadM": 0.8,
+  "transomM": 1.0,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.035,
+    "to": 0.215,
+    "kind": "window",
+    "headM": 3.1
+   },
+   {
+    "from": 0.34,
+    "to": 0.66,
+    "kind": "garage",
+    "material": "painted-steel",
+    "tint": "#555a62",
+    "headM": 3.5
+   },
+   {
+    "from": 0.79,
+    "to": 0.955,
+    "kind": "garage",
+    "material": "painted-white",
+    "tint": "#cfcabb",
+    "headM": 2.6,
+    "recessM": 2.2
+   }
+  ],
+  "paneM": 0.85,
+  "transomPaneM": 0.85
+ },
+ "plaques": [
+  {
+   "at": 0.14,
+   "y": 4.75,
+   "w": 3.3,
+   "h": 0.7,
+   "face": "painted-white@d0453a"
+  },
+  {
+   "at": 0.14,
+   "y": 4.3,
+   "w": 3.5,
+   "h": 0.1,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.14,
+   "y": 5.2,
+   "w": 3.5,
+   "h": 0.1,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.5,
+   "y": 4.75,
+   "w": 6.2,
+   "h": 0.8,
+   "face": "painted-white@d0453a"
+  },
+  {
+   "at": 0.5,
+   "y": 4.25,
+   "w": 6.4,
+   "h": 0.1,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.5,
+   "y": 5.15,
+   "w": 6.4,
+   "h": 0.1,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.86,
+   "y": 4.75,
+   "w": 3.3,
+   "h": 0.7,
+   "face": "painted-white@d0453a"
+  },
+  {
+   "at": 0.86,
+   "y": 4.3,
+   "w": 3.5,
+   "h": 0.1,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.86,
+   "y": 5.2,
+   "w": 3.5,
+   "h": 0.1,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.5,
+   "y": 4.0,
+   "w": 5.6,
+   "h": 0.75,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.87,
+   "y": 2.9,
+   "w": 2.9,
+   "h": 0.45,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.87,
+   "y": 3.8,
+   "w": 2.5,
+   "h": 0.8,
+   "face": "glass-storefront"
+  },
+  {
+   "at": 0.87,
+   "y": 3.8,
+   "w": 2.6,
+   "h": 0.06,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.49,
+   "y": 5.85,
+   "w": 1.9,
+   "h": 0.45,
+   "face": "painted-white@d0453a"
+  },
+  {
+   "at": 0.49,
+   "y": 6.36,
+   "w": 14.0,
+   "h": 0.52,
+   "face": "painted-white@f4f4f2"
+  },
+  {
+   "at": 0.49,
+   "y": 6.41,
+   "w": 12.2,
+   "h": 0.62,
+   "face": "painted-white@f4f4f2"
+  },
+  {
+   "at": 0.49,
+   "y": 6.46,
+   "w": 10.4,
+   "h": 0.72,
+   "face": "painted-white@f4f4f2"
+  },
+  {
+   "at": 0.49,
+   "y": 6.51,
+   "w": 8.6,
+   "h": 0.82,
+   "face": "painted-white@f4f4f2"
+  },
+  {
+   "at": 0.49,
+   "y": 6.56,
+   "w": 6.8,
+   "h": 0.92,
+   "face": "painted-white@f4f4f2"
+  },
+  {
+   "at": 0.49,
+   "y": 6.61,
+   "w": 5.0,
+   "h": 1.02,
+   "face": "painted-white@f4f4f2"
+  },
+  {
+   "at": 0.49,
+   "y": 6.66,
+   "w": 3.6,
+   "h": 1.12,
+   "face": "painted-white@f4f4f2"
+  },
+  {
+   "at": 0.49,
+   "y": 6.71,
+   "w": 2.4,
+   "h": 1.22,
+   "face": "painted-white@f4f4f2"
+  },
+  {
+   "at": 0.0754,
+   "y": 6.66,
+   "w": 0.95,
+   "h": 0.08,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.9046,
+   "y": 6.66,
+   "w": 0.95,
+   "h": 0.08,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.1324,
+   "y": 6.76,
+   "w": 0.95,
+   "h": 0.08,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.8476,
+   "y": 6.76,
+   "w": 0.95,
+   "h": 0.08,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.1894,
+   "y": 6.86,
+   "w": 0.95,
+   "h": 0.08,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.7906,
+   "y": 6.86,
+   "w": 0.95,
+   "h": 0.08,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.2463,
+   "y": 6.96,
+   "w": 0.95,
+   "h": 0.08,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.7337,
+   "y": 6.96,
+   "w": 0.95,
+   "h": 0.08,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.3033,
+   "y": 7.06,
+   "w": 0.95,
+   "h": 0.08,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.6767,
+   "y": 7.06,
+   "w": 0.95,
+   "h": 0.08,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.3539,
+   "y": 7.16,
+   "w": 0.75,
+   "h": 0.08,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.6261,
+   "y": 7.16,
+   "w": 0.75,
+   "h": 0.08,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.3951,
+   "y": 7.26,
+   "w": 0.65,
+   "h": 0.08,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.5849,
+   "y": 7.26,
+   "w": 0.65,
+   "h": 0.08,
+   "face": "painted-white@23349a"
+  },
+  {
+   "at": 0.49,
+   "y": 7.36,
+   "w": 2.5,
+   "h": 0.08,
+   "face": "painted-white@23349a"
+  }
+ ],
+ "ground": "shop",
+ "upper": "office",
+ "wallTopM": 6.3,
+ "streetStills": true
+}

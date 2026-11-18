@@ -1,0 +1,64 @@
+{
+  "builder": "house",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "painted-stucco",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "storeysSeen": 2,
+  "groundM": 2.6,
+  "roofLevelM": 5.25,
+  "seed": 72,
+  "notes": "1614 Great Highway (1949), by eye: brown-olive stucco, a hipped roof in grey composition shingle over the front and a flat roof behind, a white panelled garage door and a single upper window.",
+  "wall": "painted-stucco",
+  "wallTint": "#7a6a52",
+  "streetEdges": {
+    "6": {}
+  },
+  "roofForm": {
+    "form": "front-hip",
+    "depthM": 5.5,
+    "eaveM": 0.22,
+    "sideOverhangM": 0.12,
+    "material": "asphalt-roof",
+    "tint": "#4f5256"
+  },
+  "garages": [
+    {
+      "from": 0.12,
+      "to": 0.88,
+      "headM": 2.15,
+      "material": "painted-white",
+      "pattern": "panel"
+    }
+  ],
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.2,
+      "to": 0.75,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        2,
+        2
+      ]
+    }
+  ]
+}

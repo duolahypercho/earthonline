@@ -1,0 +1,137 @@
+{
+  "kind": "blender-building",
+  "id": "sf-building-267048367",
+  "pass": "b267048367-blender-a92cd3f5-f45921",
+  "generator": "scripts/blender-buildings/build_building.py",
+  "generatorSha256": "a92cd3f5f73facbb4b8c1d1e1ed5964ce97c917b569033c789adca2c5f0e9363",
+  "blender": "Blender 5.1.2",
+  "inputs": {
+    "spec": "artifacts/buildings/sf-building-267048367/spec.json",
+    "specSha256": "2390e82a606e393848c484c50bf93c366321f1bdd93a770aead9b52720377a5e",
+    "style": "artifacts/buildings/sf-building-267048367/style.json",
+    "styleSha256": "9f4c11fe08da0933f292581472c71f736665c76d5258cf70d9eb90dc343499c2",
+    "styleNotesRevised": "notes text reworded for publication after the build; geometry inputs unchanged"
+  },
+  "sources": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (lidar-over-roll)"
+  },
+  "license": "Building geometry generated from open data (DataSF footprints, LiDAR, Assessor roll). Furniture in the fine-s*.glb storeys is decimated from the CC0 pieces listed under `furniture`.",
+  "furniture": [
+    {
+      "kind": "ceiling-lamp",
+      "source": "https://polyhaven.com/a/modern_ceiling_lamp_01",
+      "name": "Modern Ceiling Lamp 01",
+      "authors": [
+        "James Ray Cock"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "wall-sconce",
+      "source": "https://polyhaven.com/a/industrial_wall_sconce",
+      "name": "Industrial Wall Sconce",
+      "authors": [
+        "Ulan Cabanilla"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "office-desk-real",
+      "source": "https://polyhaven.com/a/metal_office_desk",
+      "name": "Metal Office Desk",
+      "authors": [
+        "Ulan Cabanilla"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "office-chair-real",
+      "source": "https://polyhaven.com/a/modern_arm_chair_01",
+      "name": "Modern Arm Chair 01",
+      "authors": [
+        "Vibrant Nordic"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "plant-tall",
+      "source": "https://polyhaven.com/a/potted_plant_01",
+      "name": "Potted Plant 01",
+      "authors": [
+        "Rico Cilliers"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "desk-lamp",
+      "source": "https://polyhaven.com/a/desk_lamp_arm_01",
+      "name": "Desk Lamp Arm 01",
+      "authors": [
+        "Yann Kervran",
+        "Kuutti Siitonen"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "sofa",
+      "source": "https://polyhaven.com/a/sofa_02",
+      "name": "Sofa 02",
+      "authors": [
+        "Kirill Sannikov"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "coffee-table",
+      "source": "https://polyhaven.com/a/modern_coffee_table_01",
+      "name": "Modern Coffee Table 01",
+      "authors": [
+        "Amin"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "plant-medium",
+      "source": "https://polyhaven.com/a/potted_plant_02",
+      "name": "Potted Plant 02",
+      "authors": [
+        "Rico Cilliers"
+      ],
+      "license": "CC0-1.0"
+    }
+  ],
+  "assets": {
+    "exterior": {
+      "url": "/assets/buildings/sf-building-267048367/exterior.glb",
+      "sha256": "c83ed22b091d3cac80acabdd450030e4038ba8dcfe9eb6f211b6c01a641abe0d",
+      "bytes": 669516
+    },
+    "interior": {
+      "url": "/assets/buildings/sf-building-267048367/interior.glb",
+      "sha256": "1947ba15e06629c5f16cb5cd6d0f216d476f030b4d5482dbcb354512c362ec14",
+      "bytes": 469452
+    },
+    "fine": [
+      {
+        "storey": 0,
+        "url": "/assets/buildings/sf-building-267048367/fine-s0.glb",
+        "sha256": "3ffc4ad401328fe319a78a9637381ee2ad68c2b3ce93adecf26d7adccadeed61",
+        "bytes": 389028
+      },
+      {
+        "storey": 1,
+        "url": "/assets/buildings/sf-building-267048367/fine-s1.glb",
+        "sha256": "b9d59f93e92e6e6cf81f393b7546651353825d96b29e85c36f6efa8cd90736fa",
+        "bytes": 88732
+      },
+      {
+        "storey": 2,
+        "url": "/assets/buildings/sf-building-267048367/fine-s2.glb",
+        "sha256": "5460ed1c673562f592ca224ea0ffa157ccd7f2068be01e7cd3b51fc63c07d9ee",
+        "bytes": 88736
+      }
+    ]
+  }
+}

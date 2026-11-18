@@ -1,0 +1,54 @@
+{
+  "kind": "blender-building",
+  "id": "sf-building-262424259",
+  "pass": "b262424259-blender-6facb6b9-769062",
+  "generator": "scripts/blender-buildings/build_building.py",
+  "generatorSha256": "6facb6b980e5966bff381f1088766095f94c593f58d833334af51d6578efa055",
+  "blender": "Blender 5.1.2",
+  "inputs": {
+    "spec": "artifacts/buildings/sf-building-262424259/spec.json",
+    "specSha256": "b07632b30258d1b9e4d3160432c1c15fbd4185356320c66e7d501a2b22cd1614",
+    "style": "artifacts/buildings/sf-building-262424259/style.json",
+    "styleSha256": "27b7aa613d17324ecef29a9e2dabb29751c1aec9a8091ac12e11e7fbc382c1aa",
+    "styleNotesRevised": "notes text reworded for publication after the build; geometry inputs unchanged"
+  },
+  "sources": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor+ground)"
+  },
+  "license": "Original geometry generated from open data (DataSF footprints, LiDAR, Assessor roll). No third-party meshes or textures.",
+  "furniture": [],
+  "assets": {
+    "exterior": {
+      "url": "/assets/buildings/sf-building-262424259/exterior.glb",
+      "sha256": "3d874c30e7ab2abca662b5f2876cf488466ec90e2a0b044de9f3fa6c4981232f",
+      "bytes": 358648
+    },
+    "interior": {
+      "url": "/assets/buildings/sf-building-262424259/interior.glb",
+      "sha256": "29c7852892334e7a45bc3350b12e008857050bcbbf854c4cb109f9951dec7481",
+      "bytes": 137460
+    },
+    "fine": [
+      {
+        "storey": 0,
+        "url": "/assets/buildings/sf-building-262424259/fine-s0.glb",
+        "sha256": "f31268713064a16059176740a86fb5eace17a111b8f9d80289c2881adaa1a349",
+        "bytes": 29392
+      },
+      {
+        "storey": 1,
+        "url": "/assets/buildings/sf-building-262424259/fine-s1.glb",
+        "sha256": "24d1279df7be469f7d5f6eab6866ed2dfd93df447c01d359193977d493093fac",
+        "bytes": 127604
+      },
+      {
+        "storey": 2,
+        "url": "/assets/buildings/sf-building-262424259/fine-s2.glb",
+        "sha256": "ea548f49563fb3fa17894c46a39fa4dda85b26048375aab3c9ddb137339bdaeb",
+        "bytes": 124772
+      }
+    ]
+  }
+}

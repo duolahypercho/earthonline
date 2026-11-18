@@ -1,0 +1,114 @@
+{
+ "seed": 5,
+ "notes": "1927 six-storey warm cream terracotta building: tall ground storey with brown timber folding garage doors under a dark multi-pane clerestory, a round-arched entry in a heavy relief surround with a crest at the keystone and an iron gate, shop glazing right; relief frieze, paired dark windows with relief spandrel panels. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game.",
+ "streetStills": true,
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-storefront",
+ "wall": "painted-stucco",
+ "windowW": 0.95,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.5,
+ "cornice": true,
+ "corniceProjectionM": 0.5,
+ "beltCourse": true,
+ "ground": "lobby",
+ "upper": "apartment",
+ "wallTint": "#eee2cc",
+ "trim": "cast-stone-trim@d4c08e",
+ "frame": "painted-white@2f3548",
+ "storefrontFrame": "painted-steel@3a3d44",
+ "upperWindows": [
+  0.16,
+  0.26,
+  0.37,
+  0.45,
+  0.53,
+  0.6,
+  0.68,
+  0.78,
+  0.9,
+  0.95
+ ],
+ "floorsM": {
+  "groundM": 4.4,
+  "upperM": 3.5
+ },
+ "hbSignBands": [
+  {
+   "from": 0.0,
+   "to": 1.0,
+   "bottomM": 4.4,
+   "topM": 5.0,
+   "material": "painted-white",
+   "tint": "#4a4a40"
+  },
+  {
+   "from": 0.02,
+   "to": 0.4,
+   "bottomM": 3.65,
+   "topM": 4.35,
+   "material": "glass-reflective",
+   "tint": "#5a6a70"
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.9,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.02,
+    "to": 0.2,
+    "kind": "garage",
+    "headM": 3.5,
+    "leaf": "wood-siding@8a5430"
+   },
+   {
+    "from": 0.22,
+    "to": 0.4,
+    "kind": "garage",
+    "headM": 3.5,
+    "leaf": "wood-siding@8a5430"
+   },
+   {
+    "from": 0.46,
+    "to": 0.62,
+    "kind": "gate",
+    "headM": 3.5,
+    "stair": true,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.45,
+      "projectionM": 0.08,
+      "material": "cast-stone-trim",
+      "tint": "#d8cfb8"
+     },
+     "keystone": true
+    }
+   },
+   {
+    "from": 0.66,
+    "to": 0.81,
+    "kind": "window",
+    "headM": 3.4,
+    "grille": true
+   },
+   {
+    "from": 0.83,
+    "to": 0.96,
+    "kind": "window",
+    "headM": 3.4,
+    "grille": true
+   }
+  ]
+ },
+ "garagePanel": {
+  "doorM": 1.7,
+  "cols": 2,
+  "rows": 4,
+  "tint": "8a5430",
+  "panelTint": "7a4828"
+ }
+}

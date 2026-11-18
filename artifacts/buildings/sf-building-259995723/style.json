@@ -1,0 +1,219 @@
+{
+ "seed": 723,
+ "wall": "brick-buff",
+ "wallTint": "#ffffea",
+ "trim": "painted-white@8a5a46",
+ "frame": "painted-white@8a5a46",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@7a4c3a",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "corniceProjectionM": 0.7,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.9,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.37,
+  0.595
+ ],
+ "bays": [
+  {
+   "at": 0.126,
+   "widthM": 3.2,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#b99179",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.3,
+   "widthM": 3.3,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#b99179",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.46,
+   "widthM": 3.3,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#b99179",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.73,
+   "widthM": 3.3,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#b99179",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.9,
+   "widthM": 3.5,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#b99179",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 1.4,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.04,
+    "to": 0.17,
+    "kind": "window",
+    "headM": 3.6
+   },
+   {
+    "from": 0.225,
+    "to": 0.35,
+    "kind": "gate",
+    "headM": 3.4,
+    "leaf": "painted-steel@2a2a2c",
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.2,
+      "tint": "#8a5a46"
+     }
+    }
+   },
+   {
+    "from": 0.4,
+    "to": 0.53,
+    "kind": "window",
+    "headM": 3.8
+   },
+   {
+    "from": 0.675,
+    "to": 0.81,
+    "kind": "window",
+    "headM": 3.8
+   },
+   {
+    "from": 0.87,
+    "to": 0.98,
+    "kind": "window",
+    "headM": 3.4,
+    "grille": true
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "notes": "1916 flats, six storeys. Buff brick uppers with five brown-painted splayed bays from the first upper storey to the roof, a railed steel fire escape right of centre, window pairs between; tall orange-brown brick ground storey with a three-part window left, a gated entry with a transom, two small windows and a shopfront at the right end. Brown trim, deep brown cornice. Rework r-eddy: arched surround on the iron gate, higher sills so the ground windows read as small high lights. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour.",
+ "groundBand": {
+  "material": "brick-running-bond",
+  "tint": "#ffffff",
+  "topM": 5.1
+ },
+ "storeysSeen": {
+  "count": 6,
+  "groundM": 5.1
+ },
+ "fireEscape": {
+  "at": 0.62,
+  "widthM": 5,
+  "depthM": 0.95,
+  "material": "painted-steel@5a4a40"
+ }
+}

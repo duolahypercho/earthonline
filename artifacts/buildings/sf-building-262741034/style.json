@@ -1,0 +1,116 @@
+{
+ "seed": 5,
+ "notes": "Applied: wall 6e7466, trim/frames/fascia a2402c, balcony b04a33 with supports at the entry posts, panel 9e3a2a, hbFloors ground 3.8 / upper 3.87 (same stack), garage head 2.7. SKIPPED/not expressible: garage 5a2a2a (below the near-black floor; kept 7a3c3a), triangle graphic, 1.5 m deep porch (door kit has no recess, the vestibule key is ornate), upper windows kept at 2 per storey. Narrow red-framed entry door with sidelight in a dark recess, red balcony with diagonal struts, garage triangle graphic, thick red cap. Applied: door narrowed to 1.3 m with glazed sidelight and dark jamb panel, fascia 0.5 m, balcony standoff with knee braces. Skipped: wall colour, trim red (already b5402f), upper windows. Not expressible: garage triangle, true 1 m porch depth. Mirrored claim NOT supported again. Applied: trim/frames/balcony/fascia unified to brick red b5402f, wall 6e766a, fascia deeper 0.34 m, red panel widened to 1.5 m. Not expressible: garage triangle, 1.5 m deep porch (kept walkable door), balcony strut to grade. Mirrored-layout claim again NOT supported; wall slightly deeper sage 6c7668 (below that reads black); fascia thinner 0.28 m, more projecting, red b0402f; red vertical panel narrowed to 1.2 m and moved right to 0.63 (a narrow strip right of centre). Not expressible: garage triangle graphic, balcony posts to ground, stepped sills. Wall darkened to grey-green 717a6e; all red trim, window frames, balcony and entry frame deepened to a3342b; the red vertical accent widened to a 2.2 m recessed-looking panel over storeys 2-3; red roof fascia made deeper (0.45 m) with a 0.6 m projection; small pale house-number plate above the garage. A street-frame (flipped) copy of each still is written as *-streetframe.png. Not expressible: triangle graphic on the garage, balcony posts to the ground. Darker grey-green stucco 7d8679 (lit face); bracketed cornice replaced by a thin projecting brick-red flat fascia; upper windows now single-light fixed panes in red frames with a red vertical accent panel between them; oxblood flush garage door lifted to 7a3c3a so it does not read black. Earlier: 1951 three-storey flats, W side of Hyde below the corner tower; red steel balcony on storey 1 over a deep recessed entry, tall 5 m ground storey. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-stucco",
+ "wallTint": "#8b9085",
+ "trim": "painted-white@a2402c",
+ "frame": "painted-white@a2402c",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@a2402c",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-stucco@8b9085",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 1.1,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.4,
+ "bays": [],
+ "fireEscape": {
+  "at": 0.21,
+  "widthM": 2.4,
+  "depthM": 0.8,
+  "material": "painted-white@b04a33",
+  "toStorey": 1,
+  "hbStandoffM": 0.3,
+  "hbSupportsAt": [
+   0.135,
+   0.27
+  ]
+ },
+ "storefront": {
+  "bulkheadM": 0.3,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.05,
+    "to": 0.11,
+    "kind": "blank",
+    "material": "painted-stucco",
+    "tint": "#4f574b",
+    "headM": 3
+   },
+   {
+    "from": 0.12,
+    "to": 0.27,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel@a2402c",
+    "headM": 3
+   },
+   {
+    "from": 0.275,
+    "to": 0.33,
+    "kind": "window",
+    "headM": 2.9
+   },
+   {
+    "from": 0.56,
+    "to": 0.94,
+    "kind": "blank",
+    "material": "painted-steel-light",
+    "tint": "#7a3c3a",
+    "headM": 2.7
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "fascia": {
+  "heightM": 0.5,
+  "projectionM": 0.7,
+  "material": "painted-white",
+  "tint": "#a2402c"
+ },
+ "upperWindowSpans": [
+  [
+   0.12,
+   0.3
+  ],
+  [
+   0.7,
+   0.88
+  ]
+ ],
+ "mullionM": 3,
+ "sashMaterial": "painted-white@a2402c",
+ "upperSillM": 0.8,
+ "upperHeadM": 2.5,
+ "pilasters": {
+  "at": [
+   0.61
+  ],
+  "widthM": 1.5,
+  "projectionM": 0.06,
+  "fromM": 5.2,
+  "toM": 11.4,
+  "material": "painted-stucco",
+  "tint": "#9e3a2a"
+ },
+ "plaques": [
+  {
+   "at": 0.9,
+   "y": 2.85,
+   "w": 0.45,
+   "h": 0.15,
+   "face": "painted-white@d8d6d0"
+  }
+ ],
+ "streetStills": true,
+ "hbFloors": {
+  "groundM": 3.8,
+  "upperM": 3.87
+ }
+}

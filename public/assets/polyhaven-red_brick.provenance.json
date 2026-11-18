@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "asset": "polyhaven-red_brick-2k",
+  "license": "CC0-1.0",
+  "author": "Rob Tuytel",
+  "assetPage": "https://polyhaven.com/a/red_brick",
+  "physicalWidthMetres": 1.4,
+  "intent": "wall material cell 0 (brick) of facade-atlas-v2; the 2k source is not shipped, only the packed cell",
+  "sources": {
+    "diffuse": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/red_brick/red_brick_diff_2k.jpg",
+      "md5": "d38aaa7b2c8533c033919bc566c62c37",
+      "downloadedMd5": "d38aaa7b2c8533c033919bc566c62c37",
+      "downloadedSha256": "a1ae5ba7e63026971ceaf68ebbcf8982d9c2dadde1c99996c49b8ac1160af995"
+    },
+    "normalGl": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/red_brick/red_brick_nor_gl_2k.jpg",
+      "md5": "f10a21aa51b3a0950d1ca0f1fbb8e707",
+      "downloadedMd5": "f10a21aa51b3a0950d1ca0f1fbb8e707",
+      "downloadedSha256": "dd2ce5b5c42f04f02fce555d53eae42503733a0a42e76ae9a18bfb9d0680da5b"
+    },
+    "arm": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/red_brick/red_brick_arm_2k.jpg",
+      "md5": "873ae73e7e778153066b99fbb628a601",
+      "downloadedMd5": "873ae73e7e778153066b99fbb628a601",
+      "downloadedSha256": "2e732048bffd98207d6f35d37390a84c06ca9a16d086d0cea3fd7bc7cb80ec28"
+    }
+  },
+  "outputs": {
+    "albedo": {
+      "path": "public/assets/facade-atlas-v2-albedo.jpg",
+      "sha256": "4bf15707ee8eb7bee1887a6149742070260b86ca48c63643bde39668f277f13b",
+      "encoding": "sRGB base color, 4:4:4 jpeg",
+      "atlasCell": 0
+    },
+    "normal": {
+      "path": "public/assets/facade-atlas-v2-normal-rough.jpg",
+      "sha256": "5e0c89718fe981f96bf0c7ca1ecad67146afc04582b07abb6349e5411ee5d804",
+      "encoding": "RG OpenGL tangent-space normal xy (z rebuilt in shader), B Poly Haven roughness; linear/no-color, 4:4:4 jpeg",
+      "atlasCell": 0
+    }
+  },
+  "generator": {
+    "path": "scripts/assets/pack-facade-atlas-v2.mjs",
+    "sha256": "2d5051ca01c786d3b4e0766c611d5ba83b3322b8b14dc272c4e55b6b5710e3ad",
+    "algorithm": "md5-verified 2k jpg sources; LANCZOS to 960 px content; 32 px wrapped ring; row 0 at image bottom (flipY); roughness packed into the normal sheet B channel; libjpeg q90 4:4:4",
+    "pillow": "11.3.0",
+    "numpy": "2.0.2"
+  }
+}

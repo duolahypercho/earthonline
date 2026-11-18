@@ -1,0 +1,1040 @@
+{
+  "schemaVersion": 1,
+  "generator": "vehicle-v3",
+  "bodies": {
+    "sedan": {
+      "vehicleId": "sedan",
+      "body": "sedan",
+      "label": "Mid-size saloon (vehicle skill build)",
+      "lengthM": 4.85,
+      "wheelRadiusM": 0.34,
+      "typeIds": [
+        "sedan"
+      ],
+      "lods": [
+        {
+          "file": "sedan-lod0.glb",
+          "sha256": "e6bd920461d350be3a2ef92b1a520c1fdf0ab8b1d71ecf153728841c45003a58",
+          "bytes": 4025912,
+          "triangles": 146353
+        },
+        {
+          "file": "sedan-lod1.glb",
+          "sha256": "747a021d1b6f5365447c258e5e97fd033da859c9ec291d009b99a6b48bdd7312",
+          "bytes": 615940,
+          "triangles": 20176
+        },
+        {
+          "file": "sedan-lod2.glb",
+          "sha256": "cbffa0acfb6b9dd2cc809d6c7d39d761547d0a0798cdb80078b26f4f75f42fb6",
+          "bytes": 166756,
+          "triangles": 5906
+        }
+      ],
+      "source": "scripts/assets/export-skill-vehicle-lods.py",
+      "sourceModel": {
+        "method": "zstack /vehicle skill: hand-shaped mirrored subdivision cage in headless Blender, panel cuts, rig and door-swing proof in the skill; no AI 3D generator; reference images were look-only and are not part of the asset",
+        "file": "sedan.blend",
+        "sha256": "5fe232e291697b21d72858db50a92323e30bab87fbece3f280260834e993ae4c",
+        "bytes": 5156554,
+        "cage": {
+          "file": "cage.json",
+          "sha256": "ab1869923d35a9c64c1a0f8475efc1feb337668d1b3265649975f666b66e1b2b"
+        },
+        "parts": {
+          "file": "parts.json",
+          "sha256": "50006f8d524fb25ba4b97f82e5689d4de2d6cddd97eb87b23ae047d81129eac8"
+        }
+      },
+      "recipeSha256": {
+        "export-skill-vehicle-lods.py": "ee03eb8001341618ca993781ffb035ce106f69b8bf9f21a255cbc88dc4ae8ed2",
+        "vehicle_mid_lod.py": "581538fc038e6235e51f8b6d5cca7525df53a97cca8ab5ec40913c747188a2b4"
+      },
+      "status": "candidate; interaction and blind visual review required"
+    },
+    "wagon": {
+      "vehicleId": "wagon",
+      "body": "wagon",
+      "label": "Mid-size estate car (vehicle skill build)",
+      "lengthM": 4.76,
+      "wheelRadiusM": 0.335,
+      "typeIds": [
+        "wagon"
+      ],
+      "lods": [
+        {
+          "file": "wagon-lod0.glb",
+          "sha256": "4b11ee2bc019e2660d8c8a10205f096d459fd494b886545174865eb4bde6354b",
+          "bytes": 3968900,
+          "triangles": 144695
+        },
+        {
+          "file": "wagon-lod1.glb",
+          "sha256": "72c24ed4a0e091fac02cc6255e9b7afb3059bc75652ba9d77e5c838ebec97397",
+          "bytes": 739784,
+          "triangles": 21967
+        },
+        {
+          "file": "wagon-lod2.glb",
+          "sha256": "6e4a95b72bdc29a8facaa4f4a1e83c787b46c2b21ef5da62917acd72249e9aae",
+          "bytes": 162496,
+          "triangles": 5382
+        }
+      ],
+      "source": "scripts/assets/export-skill-vehicle-lods.py",
+      "sourceModel": {
+        "method": "zstack /vehicle skill: hand-shaped mirrored subdivision cage in headless Blender, panel cuts, rig and door-swing proof in the skill; no AI 3D generator; reference images were look-only and are not part of the asset",
+        "file": "wagon.blend",
+        "sha256": "0c6b6d76712f6e74d713ef3ca1f25f9d27b86368081e8fa3bf1c1aec4584013e",
+        "bytes": 6048296,
+        "cage": {
+          "file": "cage.json",
+          "sha256": "e01680e60289a0d629f291b8addcfc48e341585ed40380ea246b19b12835c167"
+        },
+        "parts": {
+          "file": "parts.json",
+          "sha256": "a447c688894aecf41ad7069bc8d253524bcf6f8efb299e5ad18a7b0becdb4f47"
+        }
+      },
+      "recipeSha256": {
+        "export-skill-vehicle-lods.py": "ee03eb8001341618ca993781ffb035ce106f69b8bf9f21a255cbc88dc4ae8ed2",
+        "vehicle_mid_lod.py": "581538fc038e6235e51f8b6d5cca7525df53a97cca8ab5ec40913c747188a2b4"
+      },
+      "status": "candidate; interaction and blind visual review required"
+    },
+    "sedanSport": {
+      "vehicleId": "sedanSport",
+      "body": "sedanSport",
+      "label": "Mid-size saloon, sport trim (trim of the sedan skill build)",
+      "lengthM": 4.85,
+      "wheelRadiusM": 0.34,
+      "typeIds": [
+        "sedanSport"
+      ],
+      "lods": [
+        {
+          "file": "sedanSport-lod0.glb",
+          "sha256": "d9ee48b6a5913f28e58c6e46c83cc67780bcb86d60a64dcdafe82936390db763",
+          "bytes": 4012232,
+          "triangles": 146115
+        },
+        {
+          "file": "sedanSport-lod1.glb",
+          "sha256": "51b9573747f24aeea84fdb65706709de6f4f87e824262df9a0776ffbf8adc4aa",
+          "bytes": 652876,
+          "triangles": 21178
+        },
+        {
+          "file": "sedanSport-lod2.glb",
+          "sha256": "3e4b7c3e7fab0499fd982d227081b49a7322ce3eb3ea960434d2fbe76c80fb9c",
+          "bytes": 169196,
+          "triangles": 5884
+        }
+      ],
+      "source": "scripts/assets/export-skill-vehicle-lods.py",
+      "sourceModel": {
+        "method": "zstack /vehicle skill: hand-shaped mirrored subdivision cage in headless Blender, panel cuts, rig and door-swing proof in the skill; no AI 3D generator; reference images were look-only and are not part of the asset",
+        "file": "sedanSport.blend",
+        "sha256": "2fa62234357246185ebe3060f461552652c2cc071dd05ac72912208053fd19f7",
+        "bytes": 5201467,
+        "cage": {
+          "file": "cage.json",
+          "sha256": "09267c90756c9bf6166d8dcba790a0390522079862cd4763bf63ad4575dc41fd"
+        },
+        "parts": {
+          "file": "parts.json",
+          "sha256": "7a458823e34e415e679f355ace679fee92be2c35c94754f855148736310b409b"
+        }
+      },
+      "recipeSha256": {
+        "export-skill-vehicle-lods.py": "ee03eb8001341618ca993781ffb035ce106f69b8bf9f21a255cbc88dc4ae8ed2",
+        "vehicle_mid_lod.py": "581538fc038e6235e51f8b6d5cca7525df53a97cca8ab5ec40913c747188a2b4"
+      },
+      "status": "candidate; interaction and blind visual review required"
+    },
+    "sedanLuxe": {
+      "vehicleId": "sedanLuxe",
+      "body": "sedanLuxe",
+      "label": "Mid-size saloon, luxury trim (trim of the sedan skill build)",
+      "lengthM": 4.85,
+      "wheelRadiusM": 0.34,
+      "typeIds": [
+        "sedanLuxe"
+      ],
+      "lods": [
+        {
+          "file": "sedanLuxe-lod0.glb",
+          "sha256": "d002f13614495fdc2efcc42b5af6bcc7c52a32e3b4ad638194d0453467d83303",
+          "bytes": 4016212,
+          "triangles": 146177
+        },
+        {
+          "file": "sedanLuxe-lod1.glb",
+          "sha256": "5328934abaecc8b736470fc79e1a29e671030dad61e99007ce3b0c5b96143b2b",
+          "bytes": 650332,
+          "triangles": 21388
+        },
+        {
+          "file": "sedanLuxe-lod2.glb",
+          "sha256": "6df4d252084dd2e8fa244cf0100feef7b666bd7a1ef8c0080c8b2e51184ea840",
+          "bytes": 166948,
+          "triangles": 5915
+        }
+      ],
+      "source": "scripts/assets/export-skill-vehicle-lods.py",
+      "sourceModel": {
+        "method": "zstack /vehicle skill: hand-shaped mirrored subdivision cage in headless Blender, panel cuts, rig and door-swing proof in the skill; no AI 3D generator; reference images were look-only and are not part of the asset",
+        "file": "sedanLuxe.blend",
+        "sha256": "ce5cd6d7295641bc844baa20fcdb871cdb0cd3dc64a7a953fa8153461650ec70",
+        "bytes": 5185230,
+        "cage": {
+          "file": "cage.json",
+          "sha256": "c936583931ab37aa02c0fb4d5d16a3d901bedd45cc6eda347baa4af9a14ee74f"
+        },
+        "parts": {
+          "file": "parts.json",
+          "sha256": "7856d3a228e104d02924d09bb31b329071226a11e0db51bf1d76f222e9f9113c"
+        }
+      },
+      "recipeSha256": {
+        "export-skill-vehicle-lods.py": "ee03eb8001341618ca993781ffb035ce106f69b8bf9f21a255cbc88dc4ae8ed2",
+        "vehicle_mid_lod.py": "581538fc038e6235e51f8b6d5cca7525df53a97cca8ab5ec40913c747188a2b4"
+      },
+      "status": "candidate; interaction and blind visual review required"
+    },
+    "compactSuv": {
+      "vehicleId": "compactSuv",
+      "body": "compactSuv",
+      "label": "Compact SUV (vehicle skill build)",
+      "lengthM": 4.55,
+      "wheelRadiusM": 0.36,
+      "typeIds": [
+        "compactSuv"
+      ],
+      "lods": [
+        {
+          "file": "compactSuv-lod0.glb",
+          "sha256": "54eec6c040af6c8c7de0aed9b1f773028bb8987e2dcb606e9519084704fbb810",
+          "bytes": 4332072,
+          "triangles": 147000
+        },
+        {
+          "file": "compactSuv-lod1.glb",
+          "sha256": "0d5ac259590de81632cb2ab4d617f18c3b2b35647d623a1624b3cf0415f53d9d",
+          "bytes": 707904,
+          "triangles": 21328
+        },
+        {
+          "file": "compactSuv-lod2.glb",
+          "sha256": "84b47f0c08645a7c75f1b86f25dc862217ca06acf915fcc2d12e68eb4ac51c89",
+          "bytes": 168288,
+          "triangles": 5591
+        }
+      ],
+      "source": "scripts/assets/export-skill-vehicle-lods.py",
+      "sourceModel": {
+        "method": "zstack /vehicle skill: hand-shaped mirrored subdivision cage in headless Blender, panel cuts, rig and door-swing proof in the skill; no AI 3D generator; reference images were look-only and are not part of the asset",
+        "file": "compactSuv.blend",
+        "sha256": "3a5789df9dea602ab65334a5c702fe7cfea6433b5edc066ccdcb964b42834aac",
+        "bytes": 5991010,
+        "cage": {
+          "file": "cage.json",
+          "sha256": "c20b00549359b9e08c99920324b908a60ea162a0cea0f26a5ff50f94edb20231"
+        },
+        "parts": {
+          "file": "parts.json",
+          "sha256": "d9a83c81dca9d703d6f753adb162e26218a2ac1d98274d8a2380dd6a4b5b7a81"
+        }
+      },
+      "recipeSha256": {
+        "export-skill-vehicle-lods.py": "ee03eb8001341618ca993781ffb035ce106f69b8bf9f21a255cbc88dc4ae8ed2",
+        "vehicle_mid_lod.py": "581538fc038e6235e51f8b6d5cca7525df53a97cca8ab5ec40913c747188a2b4"
+      },
+      "status": "candidate; interaction and blind visual review required"
+    },
+    "minivan": {
+      "vehicleId": "minivan",
+      "body": "minivan",
+      "label": "Compact MPV (vehicle skill build)",
+      "lengthM": 4.55,
+      "wheelRadiusM": 0.36,
+      "typeIds": [
+        "minivan"
+      ],
+      "lods": [
+        {
+          "file": "minivan-lod0.glb",
+          "sha256": "663bf89c44c14d06261f845e9ae88fcefb0857dc1746ccf70088017748050f7a",
+          "bytes": 4255484,
+          "triangles": 145281
+        },
+        {
+          "file": "minivan-lod1.glb",
+          "sha256": "602fc76abc745e70bdfacd848dba88b2fdd944a16dcc72cad13d46e6b728eb8f",
+          "bytes": 737024,
+          "triangles": 21509
+        },
+        {
+          "file": "minivan-lod2.glb",
+          "sha256": "dabd1b4783daacd9a78ccbe1223ebf2cc9a93f341ab3eb7b369438d0e0eba641",
+          "bytes": 172976,
+          "triangles": 5576
+        }
+      ],
+      "source": "scripts/assets/export-skill-vehicle-lods.py",
+      "sourceModel": {
+        "method": "zstack /vehicle skill: hand-shaped mirrored subdivision cage in headless Blender, panel cuts, rig and door-swing proof in the skill; no AI 3D generator; reference images were look-only and are not part of the asset",
+        "file": "minivan.blend",
+        "sha256": "46aa745b776f93316d1d4406fb8d5403dc5b598a0bda055272de3a56fa9bddd5",
+        "bytes": 6319378,
+        "cage": {
+          "file": "cage.json",
+          "sha256": "9201126bd144fbf3ce2759033b547c8dcf0311592cfa0ba291c90f2f73b9209e"
+        },
+        "parts": {
+          "file": "parts.json",
+          "sha256": "b1e63cf189fc415c89548f77c45e151cf2f75ddab70062bb9407373003caa5ef"
+        }
+      },
+      "recipeSha256": {
+        "export-skill-vehicle-lods.py": "ee03eb8001341618ca993781ffb035ce106f69b8bf9f21a255cbc88dc4ae8ed2",
+        "vehicle_mid_lod.py": "581538fc038e6235e51f8b6d5cca7525df53a97cca8ab5ec40913c747188a2b4"
+      },
+      "status": "candidate; interaction and blind visual review required"
+    },
+    "taxi": {
+      "vehicleId": "taxi",
+      "body": "taxi",
+      "label": "Licensed taxi sedan (vehicle skill build)",
+      "lengthM": 4.92,
+      "wheelRadiusM": 0.345,
+      "typeIds": [
+        "taxi"
+      ],
+      "lods": [
+        {
+          "file": "taxi-lod0.glb",
+          "sha256": "5a041db4317e7994ac3ad18d933716c25527f8be0ad21dfa9db100390439ad3f",
+          "bytes": 4329232,
+          "triangles": 145855
+        },
+        {
+          "file": "taxi-lod1.glb",
+          "sha256": "cf0b2c699ff67eb4aeb115faf8769b5b728edcd6d93f1626cdef8c24bdb3e728",
+          "bytes": 740640,
+          "triangles": 21876
+        },
+        {
+          "file": "taxi-lod2.glb",
+          "sha256": "ab72f5d4b95afe313cbad36b89eab49113d9a9de7a4ecceebb6f32415d7c936a",
+          "bytes": 161800,
+          "triangles": 5463
+        }
+      ],
+      "source": "scripts/assets/export-skill-vehicle-lods.py",
+      "sourceModel": {
+        "method": "zstack /vehicle skill: hand-shaped mirrored subdivision cage in headless Blender, panel cuts, rig and door-swing proof in the skill; no AI 3D generator; reference images were look-only and are not part of the asset",
+        "file": "taxi.blend",
+        "sha256": "64b0d4ea5c8d32f02a15212ea68e4497ddfbd00de168d6ea61d595907c100b50",
+        "bytes": 5588639,
+        "cage": {
+          "file": "cage.json",
+          "sha256": "15e9d9f08f88a504c5159c82a756ace835ffcb991411d827593343133b303509"
+        },
+        "parts": {
+          "file": "parts.json",
+          "sha256": "1fe9434edc3d2cb9a774b8d9f205445d08900d9c920669138437ead938246be1"
+        }
+      },
+      "recipeSha256": {
+        "export-skill-vehicle-lods.py": "ee03eb8001341618ca993781ffb035ce106f69b8bf9f21a255cbc88dc4ae8ed2",
+        "vehicle_mid_lod.py": "581538fc038e6235e51f8b6d5cca7525df53a97cca8ab5ec40913c747188a2b4"
+      },
+      "status": "candidate; interaction and blind visual review required"
+    },
+    "taxiCheckered": {
+      "vehicleId": "taxiCheckered",
+      "body": "taxiCheckered",
+      "label": "Licensed taxi sedan, checker trim (trim of the taxi skill build)",
+      "lengthM": 4.92,
+      "wheelRadiusM": 0.345,
+      "typeIds": [
+        "taxiCheckered"
+      ],
+      "lods": [
+        {
+          "file": "taxiCheckered-lod0.glb",
+          "sha256": "8afaf1ea4acf45f650c8fc21177844ee59b57125dc940b7d300ed87c3365f542",
+          "bytes": 4377128,
+          "triangles": 145699
+        },
+        {
+          "file": "taxiCheckered-lod1.glb",
+          "sha256": "e40e720f349d7bd422b500ec39f055993c0005a2554c800497506e625ce19804",
+          "bytes": 750472,
+          "triangles": 21222
+        },
+        {
+          "file": "taxiCheckered-lod2.glb",
+          "sha256": "5a522fe69141afca413359827c403549c3a04cfe3ed98e71b05b6b776f326ded",
+          "bytes": 181648,
+          "triangles": 5755
+        }
+      ],
+      "source": "scripts/assets/export-skill-vehicle-lods.py",
+      "sourceModel": {
+        "method": "zstack /vehicle skill: hand-shaped mirrored subdivision cage in headless Blender, panel cuts, rig and door-swing proof in the skill; no AI 3D generator; reference images were look-only and are not part of the asset",
+        "file": "taxiCheckered.blend",
+        "sha256": "44ab753fd49e1dcf573d453f03e4b6860f59c6b7a02031329fc603afa3506cda",
+        "bytes": 5642720,
+        "cage": {
+          "file": "cage.json",
+          "sha256": "15e9d9f08f88a504c5159c82a756ace835ffcb991411d827593343133b303509"
+        },
+        "parts": {
+          "file": "parts.json",
+          "sha256": "66207fdcf6e18f547dd915e020800cf66125eaf141caed55a939b413f2a8953b"
+        }
+      },
+      "recipeSha256": {
+        "export-skill-vehicle-lods.py": "ee03eb8001341618ca993781ffb035ce106f69b8bf9f21a255cbc88dc4ae8ed2",
+        "vehicle_mid_lod.py": "581538fc038e6235e51f8b6d5cca7525df53a97cca8ab5ec40913c747188a2b4"
+      },
+      "status": "candidate; interaction and blind visual review required"
+    },
+    "taxiAdBoard": {
+      "vehicleId": "taxiAdBoard",
+      "body": "taxiAdBoard",
+      "label": "Licensed taxi sedan, roof-board trim (trim of the taxi skill build)",
+      "lengthM": 4.92,
+      "wheelRadiusM": 0.345,
+      "typeIds": [
+        "taxiAdBoard"
+      ],
+      "lods": [
+        {
+          "file": "taxiAdBoard-lod0.glb",
+          "sha256": "e104d1823b696824edd31b5164f58cd69e696a903d1cf317e91bfab0508a726f",
+          "bytes": 4337588,
+          "triangles": 145743
+        },
+        {
+          "file": "taxiAdBoard-lod1.glb",
+          "sha256": "942fea92f567b21c54d41a1c313336723c375eaab3c5deebf0ff51278035dcbf",
+          "bytes": 743280,
+          "triangles": 21510
+        },
+        {
+          "file": "taxiAdBoard-lod2.glb",
+          "sha256": "c5e3b62d3ec42227c4b134fdcb53b832fd50eeaf6e6127f9077ac674794a7533",
+          "bytes": 182592,
+          "triangles": 5743
+        }
+      ],
+      "source": "scripts/assets/export-skill-vehicle-lods.py",
+      "sourceModel": {
+        "method": "zstack /vehicle skill: hand-shaped mirrored subdivision cage in headless Blender, panel cuts, rig and door-swing proof in the skill; no AI 3D generator; reference images were look-only and are not part of the asset",
+        "file": "taxiAdBoard.blend",
+        "sha256": "7c492905067dff9f77a7b62f928b2fa5472e41813d680e818c46e63d749bda32",
+        "bytes": 5608003,
+        "cage": {
+          "file": "cage.json",
+          "sha256": "15e9d9f08f88a504c5159c82a756ace835ffcb991411d827593343133b303509"
+        },
+        "parts": {
+          "file": "parts.json",
+          "sha256": "04cc465a28525fc1a97781751e8847ec42022d9276c1cfad3ee22a9fc70efe54"
+        }
+      },
+      "recipeSha256": {
+        "export-skill-vehicle-lods.py": "ee03eb8001341618ca993781ffb035ce106f69b8bf9f21a255cbc88dc4ae8ed2",
+        "vehicle_mid_lod.py": "581538fc038e6235e51f8b6d5cca7525df53a97cca8ab5ec40913c747188a2b4"
+      },
+      "status": "candidate; interaction and blind visual review required"
+    },
+    "pickup": {
+      "vehicleId": "pickup",
+      "body": "pickup",
+      "label": "Full-size crew-cab pickup (vehicle skill build)",
+      "lengthM": 5.89,
+      "wheelRadiusM": 0.39,
+      "typeIds": [
+        "pickup"
+      ],
+      "lods": [
+        {
+          "file": "pickup-lod0.glb",
+          "sha256": "5b07aebfbb705d0774819abb720e11cb028a8147a92e2a4021ea170af5dec9bb",
+          "bytes": 4462440,
+          "triangles": 145085
+        },
+        {
+          "file": "pickup-lod1.glb",
+          "sha256": "2f44981c126f11feedffc513f147f11eecae3edf8c168b1850ea88eacd99e92a",
+          "bytes": 829340,
+          "triangles": 21575
+        },
+        {
+          "file": "pickup-lod2.glb",
+          "sha256": "2a1eda455f4ebef5d954bd59678958be7e38780d33fc83cef89d841de571641f",
+          "bytes": 192672,
+          "triangles": 5643
+        }
+      ],
+      "source": "scripts/assets/export-skill-vehicle-lods.py",
+      "sourceModel": {
+        "method": "zstack /vehicle skill: hand-shaped mirrored subdivision cage in headless Blender, panel cuts, rig and door-swing proof in the skill; no AI 3D generator; reference images were look-only and are not part of the asset",
+        "file": "pickup.blend",
+        "sha256": "63a9f2858ace10f9576a12834175b3da97bb129f078657d576ea8f17de18ce28",
+        "bytes": 6189581,
+        "cage": {
+          "file": "cage.json",
+          "sha256": "df99e9f861bdea385b38c5a0c3de8371225ea31522f5a81a370e44dc73a32e35"
+        },
+        "parts": {
+          "file": "parts.json",
+          "sha256": "ca098c8c5bf3d9517d9b2afead6c1b061f7c73ef50d4451561e6b259d061871a"
+        }
+      },
+      "recipeSha256": {
+        "export-skill-vehicle-lods.py": "ee03eb8001341618ca993781ffb035ce106f69b8bf9f21a255cbc88dc4ae8ed2",
+        "vehicle_mid_lod.py": "581538fc038e6235e51f8b6d5cca7525df53a97cca8ab5ec40913c747188a2b4"
+      },
+      "status": "candidate; interaction and blind visual review required"
+    },
+    "fullSizeSuv": {
+      "vehicleId": "fullSizeSuv",
+      "body": "fullSizeSuv",
+      "label": "Full-size three-row SUV (vehicle skill build)",
+      "lengthM": 5.7,
+      "wheelRadiusM": 0.39,
+      "typeIds": [
+        "fullSizeSuv"
+      ],
+      "lods": [
+        {
+          "file": "fullSizeSuv-lod0.glb",
+          "sha256": "5ada06ff62004a58d6f865ce927ac52f60bf1d8becc4a4d1f6a14123d2329a4d",
+          "bytes": 3994036,
+          "triangles": 146999
+        },
+        {
+          "file": "fullSizeSuv-lod1.glb",
+          "sha256": "8150c52bea876e5d1638b156676cfdadfdee896ca2360b6756e729d1d27b9b68",
+          "bytes": 740984,
+          "triangles": 21382
+        },
+        {
+          "file": "fullSizeSuv-lod2.glb",
+          "sha256": "18eabffae908c41e0b12da3d0b15fbe1733be316881515a9d890f64cc35dffa5",
+          "bytes": 159756,
+          "triangles": 5452
+        }
+      ],
+      "source": "scripts/assets/export-skill-vehicle-lods.py",
+      "sourceModel": {
+        "method": "zstack /vehicle skill: hand-shaped mirrored subdivision cage in headless Blender, panel cuts, rig and door-swing proof in the skill; no AI 3D generator; reference images were look-only and are not part of the asset",
+        "file": "fullSizeSuv.blend",
+        "sha256": "b949c6b1055168f27ea68ad1cd5a8e61eba3a976498186fed4a8319ba6fc8d42",
+        "bytes": 5908330,
+        "cage": {
+          "file": "cage.json",
+          "sha256": "87fb184df979409a7f5ddfcb576ee497b208f0583724e29cf92efed399dfa263"
+        },
+        "parts": {
+          "file": "parts.json",
+          "sha256": "41173abbc797b458db4865c865ea246618b6a0ca68b36b5b070e1062e4aa1caa"
+        }
+      },
+      "recipeSha256": {
+        "export-skill-vehicle-lods.py": "ee03eb8001341618ca993781ffb035ce106f69b8bf9f21a255cbc88dc4ae8ed2",
+        "vehicle_mid_lod.py": "581538fc038e6235e51f8b6d5cca7525df53a97cca8ab5ec40913c747188a2b4"
+      },
+      "status": "candidate; interaction and blind visual review required"
+    },
+    "deliveryVan": {
+      "vehicleId": "deliveryVan",
+      "body": "deliveryVan",
+      "label": "Full-size panel delivery van, medium roof (vehicle skill build)",
+      "lengthM": 5.53,
+      "wheelRadiusM": 0.375,
+      "typeIds": [
+        "deliveryVan"
+      ],
+      "lods": [
+        {
+          "file": "deliveryVan-lod0.glb",
+          "sha256": "0a1496a0b677c29176ae6b88c70fcc729725136b04a8e887ba02d5bfdd8ee94b",
+          "bytes": 3514332,
+          "triangles": 146092
+        },
+        {
+          "file": "deliveryVan-lod1.glb",
+          "sha256": "1bc3bead486fa0d30c4fcdd26e6579795a9c1e68767902e02c866f833caadca0",
+          "bytes": 648928,
+          "triangles": 20621
+        },
+        {
+          "file": "deliveryVan-lod2.glb",
+          "sha256": "15cbd930ced186d45a1c3cc2cadac996edf1c84c32ca0d8fe0fcb57f113e6a71",
+          "bytes": 150464,
+          "triangles": 5514
+        }
+      ],
+      "source": "scripts/assets/export-skill-vehicle-lods.py",
+      "sourceModel": {
+        "method": "zstack /vehicle skill: hand-shaped mirrored subdivision cage in headless Blender, panel cuts, rig and door-swing proof in the skill; no AI 3D generator; reference images were look-only and are not part of the asset",
+        "file": "deliveryVan.blend",
+        "sha256": "d60cf43bb912724d1075e09402efbfac37779fd5c99aa3fb87aeda92057492b2",
+        "bytes": 5401469,
+        "cage": {
+          "file": "cage.json",
+          "sha256": "289111bcffb25b603bf40441863a34a092090664249335586cd999852a775464"
+        },
+        "parts": {
+          "file": "parts.json",
+          "sha256": "6b4cafe4c90ce14dc771de5f31a18ed6848d58fc6fcf087f0eab6de9f9c6a95a"
+        }
+      },
+      "recipeSha256": {
+        "export-skill-vehicle-lods.py": "ee03eb8001341618ca993781ffb035ce106f69b8bf9f21a255cbc88dc4ae8ed2",
+        "vehicle_mid_lod.py": "581538fc038e6235e51f8b6d5cca7525df53a97cca8ab5ec40913c747188a2b4"
+      },
+      "status": "candidate; interaction and blind visual review required"
+    },
+    "coupe": {
+      "vehicleId": "coupe",
+      "body": "coupe",
+      "label": "Two-door sports coupe (vehicle skill build)",
+      "lengthM": 4.5,
+      "wheelRadiusM": 0.345,
+      "typeIds": [
+        "coupe"
+      ],
+      "lods": [
+        {
+          "file": "coupe-lod0.glb",
+          "sha256": "469d395e89c8b9018df103c4ff841c2a5ed716a8d0619197841b4c6adc20aa2c",
+          "bytes": 4635728,
+          "triangles": 145248
+        },
+        {
+          "file": "coupe-lod1.glb",
+          "sha256": "00c712304986dae9044b7691dea63cc16f9b1fa35593d6443d7a7940acf27d3f",
+          "bytes": 661280,
+          "triangles": 21693
+        },
+        {
+          "file": "coupe-lod2.glb",
+          "sha256": "9300e70d2d22617997c15dc759c43030fedc598eeb972ea570612a6b43520574",
+          "bytes": 170228,
+          "triangles": 5788
+        }
+      ],
+      "source": "scripts/assets/export-skill-vehicle-lods.py",
+      "sourceModel": {
+        "method": "zstack /vehicle skill: hand-shaped mirrored subdivision cage in headless Blender, panel cuts, rig and door-swing proof in the skill; no AI 3D generator; reference images were look-only and are not part of the asset",
+        "file": "coupe.blend",
+        "sha256": "415679bd45581b7bfbaf9d980a5ff64254c2cf5fddfcb849151873498b43149d",
+        "bytes": 5922360,
+        "cage": {
+          "file": "cage.json",
+          "sha256": "60b3408056f1d80b02e98d2c8ee8f87423c3cfadb17a162a725873725817ab1a"
+        },
+        "parts": {
+          "file": "parts.json",
+          "sha256": "1e3691cdf65cd2d995e9446b2973751b18fba7900143073a7676487b622368ca"
+        }
+      },
+      "recipeSha256": {
+        "export-skill-vehicle-lods.py": "ee03eb8001341618ca993781ffb035ce106f69b8bf9f21a255cbc88dc4ae8ed2",
+        "vehicle_mid_lod.py": "581538fc038e6235e51f8b6d5cca7525df53a97cca8ab5ec40913c747188a2b4"
+      },
+      "status": "candidate; interaction and blind visual review required"
+    },
+    "patrolSedan": {
+      "vehicleId": "patrolSedan",
+      "body": "patrolSedan",
+      "label": "Full-size patrol sedan (vehicle skill build)",
+      "lengthM": 5.05,
+      "wheelRadiusM": 0.36,
+      "typeIds": [
+        "patrolSedan"
+      ],
+      "lods": [
+        {
+          "file": "patrolSedan-lod0.glb",
+          "sha256": "d94d64192a7c9d0855fa2237e4b9ba5642292ccd5e4a4967da5c0af3cebee994",
+          "bytes": 4144452,
+          "triangles": 144819
+        },
+        {
+          "file": "patrolSedan-lod1.glb",
+          "sha256": "f2eab431edb01a789784a983d1246954fc762d004e9323b8cb1f24f754503e91",
+          "bytes": 730712,
+          "triangles": 21612
+        },
+        {
+          "file": "patrolSedan-lod2.glb",
+          "sha256": "f6389763d64b32c1c554afe766c475d06883d9f4ce8385251d7d63fd0ca8b75f",
+          "bytes": 185412,
+          "triangles": 5867
+        }
+      ],
+      "source": "scripts/assets/export-skill-vehicle-lods.py",
+      "sourceModel": {
+        "method": "zstack /vehicle skill: hand-shaped mirrored subdivision cage in headless Blender, panel cuts, rig and door-swing proof in the skill; no AI 3D generator; reference images were look-only and are not part of the asset",
+        "file": "patrolSedan.blend",
+        "sha256": "2d300ccf4db14f048480d7d52762b5fc77aa40b18857ea14a91b3ee58a7a738b",
+        "bytes": 6245685,
+        "cage": {
+          "file": "cage.json",
+          "sha256": "4c845fffb36a2e44005230b317aba6d1efb5ef1bc7b1bf83bc13b47ecfbaa169"
+        },
+        "parts": {
+          "file": "parts.json",
+          "sha256": "f15d7dc3d9cf014566afddcf08c27e65955fa0fc32f54acfa77767d648a1b5b7"
+        }
+      },
+      "recipeSha256": {
+        "export-skill-vehicle-lods.py": "ee03eb8001341618ca993781ffb035ce106f69b8bf9f21a255cbc88dc4ae8ed2",
+        "vehicle_mid_lod.py": "581538fc038e6235e51f8b6d5cca7525df53a97cca8ab5ec40913c747188a2b4"
+      },
+      "status": "candidate; interaction and blind visual review required"
+    },
+    "boxTruck": {
+      "vehicleId": "boxTruck",
+      "body": "boxTruck",
+      "label": "Low-cab-forward box truck (vehicle skill build)",
+      "lengthM": 7.62,
+      "wheelRadiusM": 0.46,
+      "typeIds": [
+        "boxTruck"
+      ],
+      "lods": [
+        {
+          "file": "boxTruck-lod0.glb",
+          "sha256": "249c32771c235ad7efc4f2e23587d05f2a1791f693d7db42b286b20be3abcf81",
+          "bytes": 3796200,
+          "triangles": 146969
+        },
+        {
+          "file": "boxTruck-lod1.glb",
+          "sha256": "5b2f133cddd366963530ccac252da9b765dd7c2f0ee390e456e3619fb2ae8a06",
+          "bytes": 784372,
+          "triangles": 21992
+        },
+        {
+          "file": "boxTruck-lod2.glb",
+          "sha256": "f66c3a5675d294cbbf08c2f2077a629e0576dfde00c04c374b043089fd6916e1",
+          "bytes": 261368,
+          "triangles": 5991
+        }
+      ],
+      "source": "scripts/assets/export-skill-vehicle-lods.py",
+      "sourceModel": {
+        "method": "zstack /vehicle skill: hand-shaped mirrored subdivision cage in headless Blender, panel cuts, rig and door-swing proof in the skill; no AI 3D generator; reference images were look-only and are not part of the asset",
+        "file": "boxTruck.blend",
+        "sha256": "827b6bb68dd09bcdb6351c30ca783128ce282880e374235843e3b788b92ad788",
+        "bytes": 3766648
+      },
+      "recipeSha256": {
+        "export-skill-vehicle-lods.py": "ee03eb8001341618ca993781ffb035ce106f69b8bf9f21a255cbc88dc4ae8ed2",
+        "vehicle_mid_lod.py": "581538fc038e6235e51f8b6d5cca7525df53a97cca8ab5ec40913c747188a2b4"
+      },
+      "status": "candidate; interaction and blind visual review required"
+    },
+    "cityBus": {
+      "vehicleId": "cityBus",
+      "body": "cityBus",
+      "label": "40 ft low-floor city bus (vehicle skill build)",
+      "lengthM": 12.5,
+      "wheelRadiusM": 0.48,
+      "typeIds": [
+        "cityBus"
+      ],
+      "lods": [
+        {
+          "file": "cityBus-lod0.glb",
+          "sha256": "39d7eeaa029f7cbe552f668ddef97625ebb40c17729158280eeb7b170c3c5161",
+          "bytes": 4871672,
+          "triangles": 146626
+        },
+        {
+          "file": "cityBus-lod1.glb",
+          "sha256": "6d2e36c09fade11922f398c2804ab2c330a99b418d54a0ddb1f1f43d84fe5d5c",
+          "bytes": 886444,
+          "triangles": 22000
+        },
+        {
+          "file": "cityBus-lod2.glb",
+          "sha256": "f8301dfef22a6b9de49a66a8418e3ed8d4f4e14059738ad9e4003cbbf116f6d1",
+          "bytes": 333488,
+          "triangles": 5999
+        }
+      ],
+      "source": "scripts/assets/export-skill-vehicle-lods.py",
+      "sourceModel": {
+        "method": "zstack /vehicle skill: hand-shaped mirrored subdivision cage in headless Blender, panel cuts, rig and door-swing proof in the skill; no AI 3D generator; reference images were look-only and are not part of the asset",
+        "file": "cityBus.blend",
+        "sha256": "7a3203faa66260da45ef3cb60212480791271dcb1bca873563290a2ccb9143e5",
+        "bytes": 5517710
+      },
+      "recipeSha256": {
+        "export-skill-vehicle-lods.py": "5b4ea987956cec2553a015cc2ba1220b5c52ce53f0d4b81890cd81d2ee1e50bf",
+        "vehicle_mid_lod.py": "581538fc038e6235e51f8b6d5cca7525df53a97cca8ab5ec40913c747188a2b4"
+      },
+      "status": "candidate; interaction and blind visual review required"
+    },
+    "compactHatchSport": {
+      "vehicleId": "compactHatchSport",
+      "body": "compactHatchSport",
+      "label": "Compact five-door hatchback, sport trim (trim of the compactHatch skill build)",
+      "lengthM": 4.06,
+      "wheelRadiusM": 0.315,
+      "typeIds": [
+        "compactHatchSport"
+      ],
+      "lods": [
+        {
+          "file": "compactHatchSport-lod0.glb",
+          "sha256": "cc70a4c5686c4e3aca8771b2a5c01e8aa3cad59adb1229d488aabbce900a091d",
+          "bytes": 4147144,
+          "triangles": 145994
+        },
+        {
+          "file": "compactHatchSport-lod1.glb",
+          "sha256": "ebd103cb014de50d15cff0778bf0bdb6e04c651e0912f0f15199ba6d2fd87854",
+          "bytes": 712624,
+          "triangles": 21702
+        },
+        {
+          "file": "compactHatchSport-lod2.glb",
+          "sha256": "b196f5ace64d21127fb6cdf76d15a67f5ce3727ee7921190cd8d867be9cdd654",
+          "bytes": 168000,
+          "triangles": 5794
+        }
+      ],
+      "source": "scripts/assets/export-skill-vehicle-lods.py",
+      "sourceModel": {
+        "method": "zstack /vehicle skill: hand-shaped mirrored subdivision cage in headless Blender, panel cuts, rig and door-swing proof in the skill; no AI 3D generator; reference images were look-only and are not part of the asset",
+        "file": "compactHatchSport.blend",
+        "sha256": "8059045a0e6518b2131f2705f58bd6b8645d19f7d4eba14ccaa272af32dee027",
+        "bytes": 5811517,
+        "cage": {
+          "file": "cage.json",
+          "sha256": "4836b1b91b441d2f85877fc83cc03aea0cfe58734a9b5eaf29116a75c65a139e"
+        },
+        "parts": {
+          "file": "parts.json",
+          "sha256": "6e03a4d909b1047f2239a22c36cc90d4552e55a305e9324ef6b6db08e9bca81d"
+        }
+      },
+      "recipeSha256": {
+        "export-skill-vehicle-lods.py": "ee03eb8001341618ca993781ffb035ce106f69b8bf9f21a255cbc88dc4ae8ed2",
+        "vehicle_mid_lod.py": "581538fc038e6235e51f8b6d5cca7525df53a97cca8ab5ec40913c747188a2b4"
+      },
+      "status": "candidate; interaction and blind visual review required"
+    },
+    "compactHatchCross": {
+      "vehicleId": "compactHatchCross",
+      "body": "compactHatchCross",
+      "label": "Compact five-door hatchback, raised trim (trim of the compactHatch skill build)",
+      "lengthM": 4.06,
+      "wheelRadiusM": 0.315,
+      "typeIds": [
+        "compactHatchCross"
+      ],
+      "lods": [
+        {
+          "file": "compactHatchCross-lod0.glb",
+          "sha256": "f7afef7cb7492e1ee6f34e833ee8df3453ab651973e11b297885baad04e40f53",
+          "bytes": 4132892,
+          "triangles": 146674
+        },
+        {
+          "file": "compactHatchCross-lod1.glb",
+          "sha256": "d50e6552791709e8c351bfaf093780c4292c2c67d289827c95b5a407d26cbdca",
+          "bytes": 736188,
+          "triangles": 21674
+        },
+        {
+          "file": "compactHatchCross-lod2.glb",
+          "sha256": "85c9952556ef1f505a00b068db03414808357b0bbd3ded0a2e931db35f8bd153",
+          "bytes": 179712,
+          "triangles": 5616
+        }
+      ],
+      "source": "scripts/assets/export-skill-vehicle-lods.py",
+      "sourceModel": {
+        "method": "zstack /vehicle skill: hand-shaped mirrored subdivision cage in headless Blender, panel cuts, rig and door-swing proof in the skill; no AI 3D generator; reference images were look-only and are not part of the asset",
+        "file": "compactHatchCross.blend",
+        "sha256": "c811cac328311bbdab0f6242dac097786a9bc3328901207eb0e12e29ee628c49",
+        "bytes": 6509910,
+        "cage": {
+          "file": "cage.json",
+          "sha256": "ce49bae65477310ca779e604d7bafcf230fd339abbb92791e64f43043814f85c"
+        },
+        "parts": {
+          "file": "parts.json",
+          "sha256": "1d92bb0e83b52bb27b0baf5c71d34d9946ba12eaa42e85999e10cf105e67f52e"
+        }
+      },
+      "recipeSha256": {
+        "export-skill-vehicle-lods.py": "ee03eb8001341618ca993781ffb035ce106f69b8bf9f21a255cbc88dc4ae8ed2",
+        "vehicle_mid_lod.py": "581538fc038e6235e51f8b6d5cca7525df53a97cca8ab5ec40913c747188a2b4"
+      },
+      "status": "candidate; interaction and blind visual review required"
+    },
+    "compactHatch": {
+      "vehicleId": "compactHatch",
+      "body": "compactHatch",
+      "label": "Compact five-door hatchback (vehicle skill build)",
+      "lengthM": 4.06,
+      "wheelRadiusM": 0.315,
+      "typeIds": [
+        "compactHatch"
+      ],
+      "lods": [
+        {
+          "file": "compactHatch-lod0.glb",
+          "sha256": "efaf1c110d837b85596aab5b716d9a6441aee6b1ba1e95fdef9cb0efe7e87525",
+          "bytes": 4254084,
+          "triangles": 146253
+        },
+        {
+          "file": "compactHatch-lod1.glb",
+          "sha256": "be198fe786774a97a72534d145a682740e68a7bfbd28141cfea6787710a00766",
+          "bytes": 697820,
+          "triangles": 21419
+        },
+        {
+          "file": "compactHatch-lod2.glb",
+          "sha256": "82f44db3908e9fa25a3a3fa36a154f6523b6ccabfb2eb021d39796e70e17ed06",
+          "bytes": 158844,
+          "triangles": 5486
+        }
+      ],
+      "source": "scripts/assets/export-skill-vehicle-lods.py",
+      "sourceModel": {
+        "method": "zstack /vehicle skill: hand-shaped mirrored subdivision cage in headless Blender, panel cuts, rig and door-swing proof in the skill; no AI 3D generator; reference images were look-only and are not part of the asset",
+        "file": "compactHatch.blend",
+        "sha256": "48c4aad1b2fbd4c09b84b9c0b1de86554c84d0b8e0a54bbe3c4444de433bcde0",
+        "bytes": 6615798,
+        "cage": {
+          "file": "cage.json",
+          "sha256": "be68e66ca73df4b35c418e5fe1a820b323cb88837a134cc7186ee1d731e9628e"
+        },
+        "parts": {
+          "file": "parts.json",
+          "sha256": "221763792185111cbc56a76947465a7522a2b16c6867e252c4a6f4d7a70813e8"
+        }
+      },
+      "recipeSha256": {
+        "export-skill-vehicle-lods.py": "ee03eb8001341618ca993781ffb035ce106f69b8bf9f21a255cbc88dc4ae8ed2",
+        "vehicle_mid_lod.py": "581538fc038e6235e51f8b6d5cca7525df53a97cca8ab5ec40913c747188a2b4"
+      },
+      "status": "candidate; interaction and blind visual review required"
+    },
+    "exoticCoupe": {
+      "vehicleId": "exoticCoupe",
+      "body": "exoticCoupe",
+      "label": "Mid-engine sports coupe (vehicle skill build)",
+      "lengthM": 4.39,
+      "wheelRadiusM": 0.3275,
+      "typeIds": [
+        "exoticCoupe"
+      ],
+      "lods": [
+        {
+          "file": "exoticCoupe-lod0.glb",
+          "sha256": "1b65f98227d05b98780e8cbbe66ac81f29750bec6b6c505b893f61df6350e523",
+          "bytes": 4915040,
+          "triangles": 146993
+        },
+        {
+          "file": "exoticCoupe-lod1.glb",
+          "sha256": "43abc39209bd3fb9ccd63bbf4d196cb366f299d030d95f1d7c88322686efea3f",
+          "bytes": 608712,
+          "triangles": 20866
+        },
+        {
+          "file": "exoticCoupe-lod2.glb",
+          "sha256": "27d7d64f0c24521cdc940a2fd97c766d9be0244f24025975d902b4201143ddfb",
+          "bytes": 179200,
+          "triangles": 5939
+        }
+      ],
+      "source": "scripts/assets/export-skill-vehicle-lods.py",
+      "sourceModel": {
+        "method": "zstack /vehicle skill: hand-shaped mirrored subdivision cage in headless Blender, panel cuts, rig and door-swing proof in the skill; no AI 3D generator; reference images were look-only and are not part of the asset",
+        "file": "exoticCoupe.blend",
+        "sha256": "d915a347f047ee43ffaba983a2253560f24be96aeeb284144a8304aa6c16e6c3",
+        "bytes": 4893101,
+        "cage": {
+          "file": "cage.json",
+          "sha256": "7fc1bf4605f76db5b9d7bf843c9d6710f0881e342a6c102d99df0c7aa057a774"
+        },
+        "parts": {
+          "file": "parts.json",
+          "sha256": "1a8dd01ae57214ca06769f78f4cf2b1116ff866b5a4dadd91af19ec95da75576"
+        }
+      },
+      "recipeSha256": {
+        "export-skill-vehicle-lods.py": "ee03eb8001341618ca993781ffb035ce106f69b8bf9f21a255cbc88dc4ae8ed2",
+        "vehicle_mid_lod.py": "581538fc038e6235e51f8b6d5cca7525df53a97cca8ab5ec40913c747188a2b4"
+      },
+      "status": "candidate; interaction and blind visual review required"
+    },
+    "patrolSuv": {
+      "vehicleId": "patrolSuv",
+      "body": "patrolSuv",
+      "label": "Compact patrol SUV (trim of the compactSuv skill build)",
+      "lengthM": 4.55,
+      "wheelRadiusM": 0.36,
+      "typeIds": [
+        "patrolSuv"
+      ],
+      "lods": [
+        {
+          "file": "patrolSuv-lod0.glb",
+          "sha256": "e118ff2195068566633448950ef26cd6be220990caf0a2e014f31096d7c8c41d",
+          "bytes": 4303828,
+          "triangles": 147000
+        },
+        {
+          "file": "patrolSuv-lod1.glb",
+          "sha256": "f247d3670c8c98c6a4582485d1b7debb6e3e8139ae9853e4c2d117f95ad1143b",
+          "bytes": 721304,
+          "triangles": 21742
+        },
+        {
+          "file": "patrolSuv-lod2.glb",
+          "sha256": "84f8e9179ab3295e12b6b0de9e6ea4a28e100d87fc31fa9d8f61427f43d3c7c7",
+          "bytes": 194440,
+          "triangles": 5761
+        }
+      ],
+      "source": "scripts/assets/export-skill-vehicle-lods.py",
+      "sourceModel": {
+        "method": "zstack /vehicle skill: hand-shaped mirrored subdivision cage in headless Blender, panel cuts, rig and door-swing proof in the skill; no AI 3D generator; reference images were look-only and are not part of the asset",
+        "file": "patrolSuv.blend",
+        "sha256": "b73220b11ddfdbd388aaea4103df257b53446acf029320c25364f71481021982",
+        "bytes": 6552236,
+        "cage": {
+          "file": "cage.json",
+          "sha256": "c20b00549359b9e08c99920324b908a60ea162a0cea0f26a5ff50f94edb20231"
+        },
+        "parts": {
+          "file": "parts.json",
+          "sha256": "098f3cf0709e338d20cc1e1a36d97a7cf2047dcc1b86f1da257fa1681eebac1f"
+        }
+      },
+      "recipeSha256": {
+        "export-skill-vehicle-lods.py": "ee03eb8001341618ca993781ffb035ce106f69b8bf9f21a255cbc88dc4ae8ed2",
+        "vehicle_mid_lod.py": "581538fc038e6235e51f8b6d5cca7525df53a97cca8ab5ec40913c747188a2b4"
+      },
+      "status": "candidate; interaction and blind visual review required"
+    }
+  }
+}

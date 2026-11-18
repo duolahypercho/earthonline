@@ -1,0 +1,121 @@
+{
+ "seed": 26,
+ "notes": "Salmon-peach stucco (e09a84); the single wide bay is replaced by four individual dark-framed punched windows with a green wreath medallion (ring of tile squares, hand.py) between; roofline is a red clay-tile eave (tileEave) instead of a bracketed cornice; ground is a full-width dark-green framed multi-pane storefront under the green awning. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Salmon wall, two canted end bays with clay-tile hoods (hand.py), oval cartouche medallion, no grey bands, one continuous green shopfront on a dark tile bulkhead.",
+ "wall": "painted-white",
+ "wallTint": "#eba58f",
+ "trim": "painted-white@9a4a32",
+ "frame": "painted-white@2c2422",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@1f4a34",
+ "storefrontGlass": "glass-storefront@121a17",
+ "bulkhead": "painted-white@2f5a44",
+ "cornice": false,
+ "corniceProjectionM": 0.5,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.15,
+   "widthM": 2.5,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#eba58f",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 1,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.85,
+   "widthM": 2.5,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#eba58f",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 1,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "ground": "shop",
+ "upper": "apartment",
+ "streetStills": true,
+ "storefront": {
+  "bulkheadM": 0.7,
+  "transomM": 0.5,
+  "pierM": 0.12,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.02,
+    "to": 0.4,
+    "kind": "window",
+    "headM": 3.0
+   },
+   {
+    "from": 0.405,
+    "to": 0.55,
+    "kind": "door",
+    "leaf": "wood-siding@1f4a34",
+    "headM": 2.7
+   },
+   {
+    "from": 0.555,
+    "to": 0.98,
+    "kind": "window",
+    "headM": 3.0
+   }
+  ],
+  "paneM": 0.8
+ },
+ "awning": "canvas-plain@2a5a3a",
+ "awningSpans": [
+  {
+   "from": 0.02,
+   "to": 0.98,
+   "depthM": 1.0
+  }
+ ],
+ "tileEave": {
+  "edges": [
+   4
+  ],
+  "projectionM": 0.5,
+  "dropM": 0.3,
+  "material": "asphalt-roof@b04a2c"
+ }
+}

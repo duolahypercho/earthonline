@@ -1,0 +1,138 @@
+{
+ "seed": 4,
+ "notes": "Sage grey-green board-sided condo over a red brick garage podium. Front edge 3: one round half-cylinder bay stack (storeys 1-3) at the south end, one large dark-framed window per storey over the garage, recessed brown garage door and a narrow service door in the brick base. Setback plane (edge 1) plain siding with windows. Flat roof, no cornice, dark frames. Tint pushed to a greener sage, round bay drawn with fewer wider facets so its curved windows read as panes, not slits. Wall now sage grey-green board siding. The south bay is a true half cylinder (projection = half its width) with full-height curved glazing in dark frames. Centre plane: one wide flush dark-framed window per storey, no sills. Base: whole ground storey in brick with a dark flush panel garage door and a narrow service door. Left (setback) wing: loggia balconies on each upper storey with solid light rails, planters and big glazed walls, recessed entry at its foot. Siding tint pushed greener (sage grey-green), left wing a cool light grey, brick a deeper red-brown. Brick podium a deep red-brown instead of salmon. The round bay is a solid sage siding drum (half-round, no curtain glass) with a punched dark-framed window on each curved facet per floor; a small dark fanlight panel at the parapet above the centre window stack; the garage is a dark brown panel door recessed under a brick lintel in the brick podium; the balcony wing is pale warm grey painted with white slab edges, clear guards with a dark steel rail, and its ground storey is plain wall (no brick) around a recessed entry. Garage a flat dark brown panel door (no roll-up ribs) under the brick lintel; the parapet fanlight kept to the sage block only. Rework B: frames, sashes and trim dark navy, glass dark blue; sage siding a touch deeper; the dark plaque under the parapet is gone and the top window of the flat column carries a half-round fanlight (archHeads, not repeated on the wing); brick base cut to 3.2 m with a soldier-course lintel over a recessed dark garage and a short dark side door (the grey column under the bay was the full-height stair door). Left set-back wing is pale grey siding with glazed bays behind grey slab balconies with thin bar rails. Not doable: a smooth cylinder with one curved window plus one flat window per storey (the kit bay draws one window per facet; rc 2 kept, 5 facets). Brick base at its true red; the dark garage door recessed 1 m. Not doable: one curved window per bow storey (the kit bay draws a sash per facet), a plain half-round fanlight (kit arch), the glazed corner bays of the left mass (kept as grey clapboard with slab balconies; it is inside this footprint). Window frames darker. Not drawable: smooth curved bow with one curved window per storey, recessed loggia notch. Red brick lintel plaque above the garage removed (only a brick header); left balcony wing gets solid parapets in place of picket bars. Wall tint is game-calibrated. Not doable: smooth round bow with one curved + one flat window per storey (kit draws sash per facet), herringbone paving. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-clapboard",
+ "wallTint": "#ccd8d4",
+ "trim": "painted-steel@3c4250",
+ "frame": "painted-steel@3c4250",
+ "glass": "glass-clear@5070a8",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "bayM": 3,
+ "windowW": 1.2,
+ "windowSillM": 0.8,
+ "windowHeadM": 2.3,
+ "upperWindowSpans": [
+  [
+   0.06,
+   0.17
+  ],
+  [
+   0.55,
+   0.8
+  ]
+ ],
+ "upperSillM": 0.7,
+ "upperHeadM": 2.25,
+ "sashMaterial": "painted-steel@3c4250",
+ "mullionM": 1.05,
+ "bays": [
+  {
+   "at": 0.36,
+   "widthM": 2.8,
+   "projectionM": 1.0,
+   "roundCorners": 2,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#cdd7d8"
+  }
+ ],
+ "storefrontFrame": "painted-steel",
+ "bulkhead": "brick-running-bond@ffffff",
+ "groundBand": {
+  "material": "brick-running-bond",
+  "tint": "#ffffff",
+  "topM": 3.2
+ },
+ "storefront": {
+  "bulkheadM": 0.9,
+  "transomM": 0.3,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.48,
+    "to": 0.82,
+    "kind": "blank",
+    "material": "painted-steel",
+    "tint": "#3a2a22",
+    "headM": 2.4,
+    "recessM": 1.0
+   },
+   {
+    "from": 0.36,
+    "to": 0.43,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel",
+    "headM": 2.3
+   }
+  ]
+ },
+ "streetEdges": {
+  "1": {
+   "frameGrid": {
+    "columns": [
+     0,
+     1
+    ],
+    "fromStorey": 1,
+    "pattern": [
+     "balcony"
+    ],
+    "columnW": 0.3,
+    "slabEdgeH": 0.35,
+    "projectionM": 0.05,
+    "material": "painted-clapboard",
+    "tint": "#d4d4d0",
+    "frameMaterial": "painted-steel",
+    "railMaterial": "painted-clapboard",
+    "rail": "solid",
+    "recessM": 0.9,
+    "balconyLipM": 0.5,
+    "balconyMaterial": "painted-clapboard",
+    "balconyTint": "#c8c8c4",
+    "mullionM": 1.3,
+    "railTint": "#c0c0bc"
+   },
+   "storefront": {
+    "layout": [
+     {
+      "from": 0.35,
+      "to": 0.6,
+      "kind": "door",
+      "leaf": "painted-steel"
+     }
+    ]
+   },
+   "wall": "painted-clapboard",
+   "wallTint": "#dcdcd8",
+   "wallZones": [
+    {
+     "from": 0,
+     "to": 1,
+     "fromY": -1,
+     "toY": 3.9,
+     "material": "painted-clapboard",
+     "tint": "#dcdcd8"
+    }
+   ],
+   "plaques": [],
+   "archHeads": []
+  }
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "plaques": [],
+ "storefrontGlass": "glass-clear@303848",
+ "archHeads": [
+  {
+   "from": 0.58,
+   "to": 0.77,
+   "storey": 3,
+   "riseM": 0.55,
+   "ring": "painted-steel@7080b0"
+  }
+ ]
+}

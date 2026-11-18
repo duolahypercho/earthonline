@@ -1,0 +1,86 @@
+{
+ "seed": 7,
+ "notes": "1909 three-storey narrow flats, 7.2 m front. Tan-orange painted stucco; ground storey has a double-hung window left of centre, a small door and a barred vent at the far left, and a black iron-gated entry under a dark awning at the right; each of the two upper storeys has an iron balcony across the front with two French-door windows; light cornice. Plain, no ornament invented. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Ochre brick wall (brick-buff, warm tint), black awning over the gated entry, small dark door left, white-framed ground window, small barred basement vent, front-spanning fire escape balconies with grated decks. Lifted/converted once to #ffffff.",
+ "wall": "brick-buff",
+ "wallTint": "#ffffff",
+ "trim": "painted-white@efe6d0",
+ "frame": "painted-white@f0e8d6",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f0e8d6",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@c08c52",
+ "cornice": true,
+ "corniceProjectionM": 0.35,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.25,
+  0.75
+ ],
+ "bays": [],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.04,
+    "to": 0.11,
+    "kind": "door",
+    "leaf": "painted-steel@2a2a28",
+    "headM": 2.1
+   },
+   {
+    "from": 0.15,
+    "to": 0.38,
+    "kind": "window",
+    "headM": 2.5
+   },
+   {
+    "from": 0.4,
+    "to": 0.5,
+    "kind": "window",
+    "headM": 0.95,
+    "grille": true
+   },
+   {
+    "from": 0.66,
+    "to": 0.9,
+    "kind": "gate",
+    "leaf": "painted-steel@222222",
+    "headM": 2.8,
+    "stair": true
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "hbFloors": {
+  "groundM": 3.8,
+  "upperM": 4.45
+ },
+ "fireEscapes": [
+  {
+   "at": 0.5,
+   "widthM": 6.0,
+   "depthM": 0.8,
+   "toStorey": 2,
+   "material": "painted-steel@2a2420",
+   "grating": true
+  }
+ ],
+ "awningSpans": [
+  {
+   "from": 0.64,
+   "to": 0.92,
+   "depthM": 1.2,
+   "valanceM": 0.3
+  }
+ ],
+ "awning": "canvas-plain@1c1e22"
+}

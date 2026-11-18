@@ -1,0 +1,120 @@
+{
+  "builder": "house",
+  "seed": 61,
+  "storeysSeen": 3,
+  "groundM": 2.7,
+  "roofLevelM": 8.75,
+  "programme": "flats",
+  "notes": "1586 Great Highway (1949, three units), from the street-level reference by eye (words only): three storeys of salmon-pink stucco with a flat roof and a thin parapet; ground: a white garage door and a white entry door; the two upper floors each have a door onto a shallow balcony with black steel railings beside a wide window. The surveyed front is split into two faces; edgeFront dresses the second.",
+  "wall": "painted-stucco",
+  "wallTint": "#d99a8b",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "roofForm": {
+    "form": "flat",
+    "eaveM": 0.0
+  },
+  "parapetM": 0.45,
+  "garages": [
+    {
+      "from": 0.1,
+      "to": 0.9,
+      "headM": 2.2,
+      "material": "painted-white",
+      "pattern": "panel"
+    }
+  ],
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.1,
+      "to": 0.9,
+      "sill": 0.85,
+      "head": 2.25,
+      "panes": [
+        3,
+        2
+      ]
+    },
+    {
+      "storey": 2,
+      "from": 0.1,
+      "to": 0.9,
+      "sill": 0.85,
+      "head": 2.25,
+      "panes": [
+        3,
+        2
+      ]
+    }
+  ],
+  "streetEdges": {
+    "4": {}
+  },
+  "edgeFront": {
+    "4": {
+      "entry": {
+        "from": 0.3,
+        "to": 0.7,
+        "headM": 2.2,
+        "material": "painted-white",
+        "glass": false,
+        "recessM": 0.2
+      },
+      "windows": [
+        {
+          "storey": 1,
+          "from": 0.25,
+          "to": 0.75,
+          "sill": 0.0,
+          "head": 2.25,
+          "panes": [
+            1,
+            2
+          ]
+        },
+        {
+          "storey": 2,
+          "from": 0.25,
+          "to": 0.75,
+          "sill": 0.0,
+          "head": 2.25,
+          "panes": [
+            1,
+            2
+          ]
+        }
+      ]
+    }
+  },
+  "galleries": [
+    {
+      "edge": 4,
+      "fromStorey": 1,
+      "projectionM": 0.42,
+      "material": "painted-steel",
+      "tint": "#222222",
+      "postMaterial": "painted-steel"
+    }
+  ],
+  "rearWall": "painted-stucco",
+  "rearTint": "#dcc9c0",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.6
+      ]
+    ]
+  }
+}

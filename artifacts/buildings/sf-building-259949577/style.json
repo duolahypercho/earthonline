@@ -1,0 +1,155 @@
+{
+ "seed": 15,
+ "notes": "Rework r3: buff-cream face colour with course lines (flat painted wall + hyDLap, because the brick albedo turns orange when tinted), medallion panels under the bays and an oval-ish window frame (hand.py), light stone frame on the arched gate, bracketed cornice. Claim that bays should start at storey 1 not supported: in the photo the bays begin above the storey-1 triple window, as modelled. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game.",
+ "wall": "painted-white",
+ "wallTint": "#ece2d0",
+ "trim": "painted-white@efe7d2",
+ "frame": "painted-white@efe7d2",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@efe7d2",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@ece2d0",
+ "cornice": true,
+ "corniceProjectionM": 0.5,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.18,
+  0.26,
+  0.34,
+  0.55
+ ],
+ "bays": [
+  {
+   "at": 0.26,
+   "widthM": 3.0,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-white",
+   "tint": "#f7f3e8",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.69,
+   "widthM": 3.0,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-white",
+   "tint": "#f7f3e8",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.07,
+    "to": 0.21,
+    "kind": "door",
+    "leaf": "painted-steel@2a2a2a",
+    "grille": true,
+    "headM": 2.6
+   },
+   {
+    "from": 0.31,
+    "to": 0.35,
+    "kind": "window",
+    "headM": 2.0,
+    "grille": true
+   },
+   {
+    "from": 0.44,
+    "to": 0.48,
+    "kind": "window",
+    "headM": 2.0,
+    "grille": true
+   },
+   {
+    "from": 0.55,
+    "to": 0.59,
+    "kind": "window",
+    "headM": 2.0,
+    "grille": true
+   },
+   {
+    "from": 0.72,
+    "to": 0.92,
+    "kind": "gate",
+    "headM": 3.4,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.3,
+      "projectionM": 0.06,
+      "material": "painted-white",
+      "tint": "#efe7d2"
+     },
+     "keystone": true
+    }
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.4,
+  "upperM": 3.4
+ },
+ "hyDLap": {
+  "pitchM": 0.13,
+  "fromM": 0.3,
+  "projM": 0.015,
+  "heightM": 0.04,
+  "shade": 0.7
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.8,
+  "heightM": 0.5,
+  "depthM": 0.3,
+  "widthM": 0.18,
+  "material": "painted-white",
+  "tint": "#efe7d2"
+ }
+}

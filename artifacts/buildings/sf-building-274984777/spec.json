@@ -1,0 +1,203 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-274984777",
+  "slug": "b274984777",
+  "walkIndex": 5258,
+  "street": "Clement Street",
+  "address": "400;404 Clement Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (lidar-over-roll)"
+  },
+  "heightM": 9.92,
+  "storeys": 3,
+  "floors": {
+    "groundM": 4.039,
+    "upperM": 2.641,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1913,
+  "use": "COMR",
+  "usage": "mixed",
+  "amenity": "greengrocer",
+  "shop": null,
+  "facade": "shopfront",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 4,
+    "center": {
+      "x": -3887.753,
+      "z": 577.914
+    },
+    "heading": 3.091003,
+    "width": 20.101,
+    "depth": 32.104
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": 9.956,
+      "z": -7.999
+    },
+    {
+      "x": 10.05,
+      "z": -16.014
+    },
+    {
+      "x": -8.976,
+      "z": -16.052
+    },
+    {
+      "x": -10.05,
+      "z": 14.141
+    },
+    {
+      "x": -8.251,
+      "z": 16.052
+    },
+    {
+      "x": 7.569,
+      "z": 16.052
+    },
+    {
+      "x": 7.552,
+      "z": 13.75
+    },
+    {
+      "x": 9.959,
+      "z": 13.828
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 9.956,
+        "z": -7.999
+      },
+      "b": {
+        "x": 10.05,
+        "z": -16.014
+      },
+      "lengthM": 8.016,
+      "role": "rear",
+      "partyShare": 0.13
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 10.05,
+        "z": -16.014
+      },
+      "b": {
+        "x": -8.976,
+        "z": -16.052
+      },
+      "lengthM": 19.026,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -8.976,
+        "z": -16.052
+      },
+      "b": {
+        "x": -10.05,
+        "z": 14.141
+      },
+      "lengthM": 30.212,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -10.05,
+        "z": 14.141
+      },
+      "b": {
+        "x": -8.251,
+        "z": 16.052
+      },
+      "lengthM": 2.625,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": -8.251,
+        "z": 16.052
+      },
+      "b": {
+        "x": 7.569,
+        "z": 16.052
+      },
+      "lengthM": 15.82,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": 7.569,
+        "z": 16.052
+      },
+      "b": {
+        "x": 7.552,
+        "z": 13.75
+      },
+      "lengthM": 2.302,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": 7.552,
+        "z": 13.75
+      },
+      "b": {
+        "x": 9.959,
+        "z": 13.828
+      },
+      "lengthM": 2.408,
+      "role": "rear",
+      "partyShare": 0.38
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": 9.959,
+        "z": 13.828
+      },
+      "b": {
+        "x": 9.956,
+        "z": -7.999
+      },
+      "lengthM": 21.828,
+      "role": "party",
+      "partyShare": 1
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

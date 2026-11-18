@@ -1,0 +1,183 @@
+{
+ "seed": 7,
+ "notes": "Wall d9aa8c warmer salmon-peach; belt course off and bay corbels cut to one thin moulding; mint plinth lowered to 0.9 m, ground right window group sill raised to 1.2 m with a peach bulkhead, peach plaque removed; dark wood entry door; dentil cornice deeper. Rework 5b: peach band plaque between the teal plinth (1.05 m) and the tripartite window sill (1.75 m). Rework 5: salmon peach stucco d4a583 with scored block lines (cast-stone ashlar), teal plinth 5aa39a 1.05 m across the full width, vent grille (louvre) under the right window, ground window is a tripartite double-hung (wide centre, narrow sides) with sill 1.75 m above the plinth, arched open porch with steps + dark fanlight (archHeads removed), heavier dentil cornice with brackets, cant bays rebuilt via hyB (wide centre + 2 side sashes, moulded corbel skirt with brackets). Rework 4: warm peach d9a988; teal plinth only under the triple sash side; arched entry left, sashes right, as photographed. Rework 3: deeper peach wall #cc9672; cream dentil cornice over both bays replaces the plain bracket cornice; entry arch head drawn as a plain dark tympanum in a cream ring (no glazing bars visible). Skipped: 'ground floor mirrored'; shopfront-vs-residential (window group is already the flat triple); scored blocks and raised centre crest (no key). Rework 2: warmer peach wall #d8a888; the teal plinth now runs only under the right-hand window group (0.36-1.0, ~1.1 m, with the small vent) instead of full width; shorter transom so the triple window reads as sashes. Skipped: 'ground floor mirrored'; small far-left window already present; the raised arched parapet between the bays and scored block lines have no style key. Rework 1: salmon/terracotta stucco with cream trim; teal-green plinth about 1 m high with a vent grille; ground storey = a round-arched recessed entry with steps at the left and a flat tripartite window (three sashes) at the right, no shop glazing; two cant bays on storeys 2-3 over the entry and over the triple window; deeper cream bracketed cornice (the raised centre pediment has no kit option). Entry side is the viewer's left in the game frame; 1912 four-unit flats, Hyde west side mid-block. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "cast-stone",
+ "wallTint": "#d9aa8c",
+ "trim": "painted-white@efe6d2",
+ "frame": "painted-white",
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-clear",
+ "storefrontFrame": "painted-white",
+ "bulkhead": "painted-white@ecd4c6",
+ "cornice": false,
+ "corniceProjectionM": 0.6,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.8,
+ "windowSillM": 0.85,
+ "windowHeadM": 3.3,
+ "ground": "lobby",
+ "upper": "apartment",
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.23,
+   "widthM": 2.6,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "cast-stone",
+   "tint": "#d9aa8c",
+   "hyB": {
+    "plan": "cant",
+    "sideRunM": 0.45,
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sillM": 0.7,
+    "headGapM": 0.25,
+    "marginM": 0.12,
+    "corbel": {
+     "tiers": 1,
+     "stepM": 0.08,
+     "brackets": 0,
+     "dropM": 0.2
+    },
+    "cornice": {
+     "projectionM": 0.25,
+     "dentils": true,
+     "roofRiseM": 0
+    }
+   }
+  },
+  {
+   "at": 0.75,
+   "widthM": 2.9,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "cast-stone",
+   "tint": "#d9aa8c",
+   "hyB": {
+    "plan": "cant",
+    "sideRunM": 0.45,
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sillM": 0.7,
+    "headGapM": 0.25,
+    "marginM": 0.12,
+    "corbel": {
+     "tiers": 1,
+     "stepM": 0.08,
+     "brackets": 0,
+     "dropM": 0.2
+    },
+    "cornice": {
+     "projectionM": 0.25,
+     "dentils": true,
+     "roofRiseM": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 1.2,
+  "transomM": 0.15,
+  "pierM": 0.3,
+  "awning": false,
+  "headDropM": 2.17,
+  "paneM": 0.95,
+  "layout": [
+   {
+    "from": 0.05,
+    "to": 0.09,
+    "kind": "window",
+    "headM": 3.0
+   },
+   {
+    "from": 0.18,
+    "to": 0.38,
+    "kind": "door",
+    "leaf": "wood-siding@5e3a22",
+    "arch": {
+     "type": "round",
+     "fan": {
+      "rays": 7,
+      "rings": 1,
+      "barM": 0.03,
+      "tint": "#2c2420",
+      "material": "painted-steel-mid"
+     },
+     "porch": {
+      "steps": 3,
+      "riseM": 0.14,
+      "treadM": 0.3,
+      "material": "painted-white",
+      "tint": "#7a8a82"
+     },
+     "revealM": 0.45,
+     "spandrel": {
+      "material": "cast-stone",
+      "tint": "#d9aa8c"
+     }
+    }
+   },
+   {
+    "from": 0.52,
+    "to": 0.6,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.62,
+    "to": 0.79,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.81,
+    "to": 0.89,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.62,
+    "to": 0.79,
+    "kind": "garage",
+    "material": "louvre",
+    "tint": "#e6e2d6",
+    "headM": 0.6
+   }
+  ],
+  "sashRows": 2
+ },
+ "archHeads": [],
+ "wallZones": [
+  {
+   "from": 0.0,
+   "to": 1.0,
+   "fromY": -1.0,
+   "toY": 0.9,
+   "material": "painted-white",
+   "tint": "#5aa39a"
+  }
+ ],
+ "dentilCornice": {
+  "material": "painted-white",
+  "tint": "#efe6d2",
+  "projectionM": 0.85,
+  "friezeM": 0.8,
+  "dentilM": 0.26
+ },
+ "streetStills": true,
+ "hbCorniceBrackets": {
+  "spacingM": 0.9,
+  "heightM": 0.5,
+  "depthM": 0.38,
+  "widthM": 0.14,
+  "material": "painted-white",
+  "tint": "#efe6d2"
+ },
+ "plaques": []
+}

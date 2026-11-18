@@ -1,0 +1,92 @@
+{
+  "builder": "house",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "painted-stucco",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "storeysSeen": 2,
+  "groundM": 2.6,
+  "roofLevelM": 5.25,
+  "seed": 71,
+  "notes": "1606 Great Highway at Lawton (1947), from the street-level reference by eye (words only): brown-olive stucco, a street-facing gable with a small louvred vent over the north part, a wide white-framed picture window over a black iron gate at an arched entry, and a white panelled garage door with a single window above on the south part; white window box brackets under the picture window.",
+  "wall": "painted-stucco",
+  "wallTint": "#7a6a52",
+  "streetEdges": {
+    "1": {}
+  },
+  "roofForm": {
+    "form": "front-gable",
+    "depthM": 5.0,
+    "eaveM": 0.25,
+    "material": "asphalt-roof",
+    "tint": "#4b4a47",
+    "pediment": false,
+    "gableWindow": {
+      "widthM": 0.45,
+      "heightM": 0.35
+    }
+  },
+  "gate": {
+    "from": 0.1,
+    "to": 0.75,
+    "headM": 2.2,
+    "material": "painted-steel",
+    "tint": "#1f1f1f"
+  },
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.05,
+      "to": 0.95,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        2,
+        1
+      ]
+    }
+  ],
+  "edgeFront": {
+    "1": {
+      "garages": [
+        {
+          "from": 0.08,
+          "to": 0.92,
+          "headM": 2.15,
+          "material": "painted-white",
+          "pattern": "panel"
+        }
+      ],
+      "windows": [
+        {
+          "storey": 1,
+          "from": 0.2,
+          "to": 0.8,
+          "sill": 0.85,
+          "head": 2.2,
+          "panes": [
+            1,
+            2
+          ]
+        }
+      ]
+    }
+  }
+}

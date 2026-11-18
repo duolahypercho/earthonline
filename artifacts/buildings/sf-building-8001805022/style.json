@@ -1,0 +1,90 @@
+{
+  "builder": "house",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "painted-stucco",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "groundM": 2.6,
+  "roofLevelM": 5.25,
+  "storeysSeen": 2,
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "seed": 12,
+  "notes": "Kirkham N row, 1944 tract: white stucco, a steep front gable with a small louvred vent under grey composition shingle, flat roof behind; ground: a black iron gate over an arched entry recess on the left, a garage bay on the right; two upper windows.",
+  "wall": "painted-stucco",
+  "wallTint": "#efeeea",
+  "roofForm": {
+    "form": "front-gable",
+    "depthM": 5.0,
+    "eaveM": 0.3,
+    "material": "asphalt-roof",
+    "tint": "#6f6d69",
+    "pediment": false,
+    "gableWindow": {
+      "widthM": 0.45,
+      "heightM": 0.35
+    }
+  },
+  "gate": {
+    "from": 0.08,
+    "to": 0.3,
+    "headM": 2.2,
+    "material": "painted-steel",
+    "tint": "#1f1f1f"
+  },
+  "garages": [
+    {
+      "from": 0.5,
+      "to": 0.92,
+      "headM": 2.15,
+      "material": "painted-white",
+      "pattern": "panel",
+      "tint": "#ecebe6"
+    }
+  ],
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.12,
+      "to": 0.4,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        2,
+        2
+      ]
+    },
+    {
+      "storey": 1,
+      "from": 0.56,
+      "to": 0.86,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        2,
+        2
+      ]
+    }
+  ],
+  "rect": [
+    -3.38,
+    3.2,
+    -3.5,
+    6.55
+  ]
+}

@@ -1,0 +1,240 @@
+{
+ "seed": 5,
+ "notes": "1925 corner commercial building: left party wall saturated orange stucco over a beige base; right front ornate cream terracotta with arched ground windows, a relief frieze, large tripartite dark green-black steel windows between ornamented piers, deep bracketed cornice. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. GroundBand lift (2026-10-03): groundBand tint #d6cdb8 -> #eae6dc (same rule as walls; it was missed by the first colour pass).",
+ "streetStills": true,
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-storefront",
+ "wall": "painted-stucco",
+ "windowW": 0.8,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "cornice": true,
+ "corniceProjectionM": 0.8,
+ "beltCourse": false,
+ "ground": "lobby",
+ "upper": "apartment",
+ "wallTint": "#f4eee0",
+ "trim": "limestone-ashlar@e3d8c0",
+ "frame": "painted-steel@16231d",
+ "storefrontFrame": "painted-steel@16231d",
+ "upperWindows": [],
+ "floorsM": {
+  "groundM": 4.5,
+  "upperM": 3.2
+ },
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.52,
+     0.62
+    ],
+    [
+     0.64,
+     0.74
+    ],
+    [
+     0.76,
+     0.86
+    ],
+    [
+     0.88,
+     0.98
+    ]
+   ],
+   "sillM": 0.5,
+   "headM": 3.1
+  },
+  "2": {
+   "spans": [
+    [
+     0.52,
+     0.62
+    ],
+    [
+     0.64,
+     0.74
+    ],
+    [
+     0.76,
+     0.86
+    ],
+    [
+     0.88,
+     0.98
+    ]
+   ],
+   "sillM": 0.5,
+   "headM": 3.1
+  },
+  "3": {
+   "spans": [
+    [
+     0.525,
+     0.605
+    ],
+    [
+     0.65,
+     0.73
+    ],
+    [
+     0.775,
+     0.855
+    ],
+    [
+     0.9,
+     0.98
+    ]
+   ],
+   "sillM": 0.6,
+   "headM": 2.8
+  },
+  "4": {
+   "spans": [
+    [
+     0.525,
+     0.605
+    ],
+    [
+     0.65,
+     0.73
+    ],
+    [
+     0.775,
+     0.855
+    ],
+    [
+     0.9,
+     0.98
+    ]
+   ],
+   "sillM": 0.6,
+   "headM": 2.8
+  },
+  "5": {
+   "spans": [
+    [
+     0.525,
+     0.605
+    ],
+    [
+     0.65,
+     0.73
+    ],
+    [
+     0.775,
+     0.855
+    ],
+    [
+     0.9,
+     0.98
+    ]
+   ],
+   "sillM": 0.6,
+   "headM": 2.8
+  }
+ },
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#eae6dc",
+  "topM": 1.2
+ },
+ "storefront": {
+  "bulkheadM": 0.7,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.8,
+    "to": 0.99,
+    "kind": "window",
+    "headM": 3.4,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   },
+   {
+    "from": 0.69,
+    "to": 0.78,
+    "kind": "window",
+    "headM": 3.4,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   },
+   {
+    "from": 0.6,
+    "to": 0.68,
+    "kind": "window",
+    "headM": 3.4,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   },
+   {
+    "from": 0.52,
+    "to": 0.58,
+    "kind": "window",
+    "headM": 3.4,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   },
+   {
+    "from": 0.04,
+    "to": 0.5,
+    "kind": "blank",
+    "material": "painted-stucco",
+    "tint": "#e8873a",
+    "headM": 4.0
+   }
+  ]
+ },
+ "mural": {
+  "from": 0.0,
+  "to": 0.5,
+  "bottomM": 1.2,
+  "topM": 20.9,
+  "shapes": 0,
+  "seed": 1,
+  "palette": [
+   "#e8873a"
+  ]
+ },
+ "hbSignBands": [
+  {
+   "from": 0.5,
+   "to": 1.0,
+   "bottomM": 4.45,
+   "topM": 5.05,
+   "material": "cast-stone-trim",
+   "tint": "#d9cba8"
+  },
+  {
+   "from": 0.0,
+   "to": 0.5,
+   "bottomM": 0.0,
+   "topM": 1.9,
+   "material": "painted-stucco",
+   "tint": "#d8c9a8"
+  }
+ ],
+ "hbCorniceDentils": {
+  "spacingM": 0.35,
+  "sizeM": 0.16,
+  "tint": "#d9cba8"
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 1.2,
+  "heightM": 0.55,
+  "depthM": 0.4,
+  "widthM": 0.25,
+  "material": "cast-stone-trim",
+  "tint": "#d9cba8"
+ }
+}

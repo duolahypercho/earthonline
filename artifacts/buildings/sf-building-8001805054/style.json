@@ -1,0 +1,76 @@
+{
+  "builder": "house",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "painted-stucco",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "seed": 23,
+  "storeysSeen": 2,
+  "groundM": 2.8,
+  "roofLevelM": 5.95,
+  "notes": "1472 La Playa (1957 roll, 2 storeys; LiDAR 6.4 m), by eye: blue horizontal lap siding over a smooth pale blue-grey stucco ground storey, a flat roof with a deep projecting eave, a long three-light ribbon window centred on each storey, white trim; a side passage gate to the south.",
+  "wall": "painted-clapboard",
+  "wallTint": "#5c7ba4",
+  "groundBand": {
+    "material": "painted-stucco",
+    "tint": "#b4bfcb",
+    "topM": 2.8
+  },
+  "roofForm": {
+    "form": "flat",
+    "eaveM": 0.4,
+    "fasciaM": 0.22,
+    "sideOverhangM": 0.15,
+    "fascia": "painted-steel"
+  },
+  "parapetM": 0.3,
+  "entry": {
+    "from": 0.84,
+    "to": 0.96,
+    "headM": 2.2,
+    "material": "painted-white",
+    "glass": false,
+    "recessM": 0.3
+  },
+  "windows": [
+    {
+      "storey": 0,
+      "from": 0.12,
+      "to": 0.8,
+      "sill": 1.0,
+      "head": 2.2,
+      "panes": [
+        3,
+        1
+      ]
+    },
+    {
+      "storey": 1,
+      "from": 0.1,
+      "to": 0.82,
+      "sill": 0.9,
+      "head": 2.1,
+      "panes": [
+        3,
+        1
+      ]
+    }
+  ]
+}

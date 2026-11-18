@@ -1,0 +1,374 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-ds856",
+  "slug": "bds856",
+  "walkIndex": 7541,
+  "street": "Marine Drive",
+  "address": null,
+  "source": {
+    "footprint": "DataSF building footprints (via the footprint pack, public/data/sf/sf-footprints.json.gz)",
+    "height": "dataset height",
+    "storeys": "dataset levels"
+  },
+  "heightM": 15.3,
+  "storeys": 1,
+  "floors": {
+    "groundM": 14.7,
+    "upperM": 0,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1900,
+  "use": null,
+  "usage": "civic",
+  "amenity": null,
+  "shop": null,
+  "facade": "modern-grid",
+  "material": "concrete",
+  "frame": {
+    "edgeIndex": 4,
+    "center": {
+      "x": -5078.806,
+      "z": 3605.411
+    },
+    "heading": 2.555562,
+    "width": 97.317,
+    "depth": 56.118
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -48.559,
+      "z": -2.081
+    },
+    {
+      "x": -48.658,
+      "z": 6.267
+    },
+    {
+      "x": -45.78,
+      "z": 9.157
+    },
+    {
+      "x": -35.13,
+      "z": 9.289
+    },
+    {
+      "x": -24.711,
+      "z": 28.059
+    },
+    {
+      "x": 45.625,
+      "z": 28.059
+    },
+    {
+      "x": 48.658,
+      "z": 23.045
+    },
+    {
+      "x": 29.367,
+      "z": -11.08
+    },
+    {
+      "x": 34.709,
+      "z": -20.028
+    },
+    {
+      "x": 33.469,
+      "z": -23.885
+    },
+    {
+      "x": 26.738,
+      "z": -28.059
+    },
+    {
+      "x": 22.741,
+      "z": -26.846
+    },
+    {
+      "x": 18.258,
+      "z": -17.869
+    },
+    {
+      "x": -24.842,
+      "z": -18.065
+    },
+    {
+      "x": -28.451,
+      "z": -15.909
+    },
+    {
+      "x": -34.908,
+      "z": -4.661
+    },
+    {
+      "x": -45.558,
+      "z": -4.793
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -48.559,
+        "z": -2.081
+      },
+      "b": {
+        "x": -48.658,
+        "z": 6.267
+      },
+      "lengthM": 8.349,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -48.658,
+        "z": 6.267
+      },
+      "b": {
+        "x": -45.78,
+        "z": 9.157
+      },
+      "lengthM": 4.079,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -45.78,
+        "z": 9.157
+      },
+      "b": {
+        "x": -35.13,
+        "z": 9.289
+      },
+      "lengthM": 10.651,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -35.13,
+        "z": 9.289
+      },
+      "b": {
+        "x": -24.711,
+        "z": 28.059
+      },
+      "lengthM": 21.467,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": -24.711,
+        "z": 28.059
+      },
+      "b": {
+        "x": 45.625,
+        "z": 28.059
+      },
+      "lengthM": 70.336,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": 45.625,
+        "z": 28.059
+      },
+      "b": {
+        "x": 48.658,
+        "z": 23.045
+      },
+      "lengthM": 5.86,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": 48.658,
+        "z": 23.045
+      },
+      "b": {
+        "x": 29.367,
+        "z": -11.08
+      },
+      "lengthM": 39.2,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": 29.367,
+        "z": -11.08
+      },
+      "b": {
+        "x": 34.709,
+        "z": -20.028
+      },
+      "lengthM": 10.422,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 8,
+      "a": {
+        "x": 34.709,
+        "z": -20.028
+      },
+      "b": {
+        "x": 33.469,
+        "z": -23.885
+      },
+      "lengthM": 4.052,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 9,
+      "a": {
+        "x": 33.469,
+        "z": -23.885
+      },
+      "b": {
+        "x": 26.738,
+        "z": -28.059
+      },
+      "lengthM": 7.92,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 10,
+      "a": {
+        "x": 26.738,
+        "z": -28.059
+      },
+      "b": {
+        "x": 22.741,
+        "z": -26.846
+      },
+      "lengthM": 4.176,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 11,
+      "a": {
+        "x": 22.741,
+        "z": -26.846
+      },
+      "b": {
+        "x": 18.258,
+        "z": -17.869
+      },
+      "lengthM": 10.034,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 12,
+      "a": {
+        "x": 18.258,
+        "z": -17.869
+      },
+      "b": {
+        "x": -24.842,
+        "z": -18.065
+      },
+      "lengthM": 43.1,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 13,
+      "a": {
+        "x": -24.842,
+        "z": -18.065
+      },
+      "b": {
+        "x": -28.451,
+        "z": -15.909
+      },
+      "lengthM": 4.205,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 14,
+      "a": {
+        "x": -28.451,
+        "z": -15.909
+      },
+      "b": {
+        "x": -34.908,
+        "z": -4.661
+      },
+      "lengthM": 12.969,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 15,
+      "a": {
+        "x": -34.908,
+        "z": -4.661
+      },
+      "b": {
+        "x": -45.558,
+        "z": -4.793
+      },
+      "lengthM": 10.651,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 16,
+      "a": {
+        "x": -45.558,
+        "z": -4.793
+      },
+      "b": {
+        "x": -48.559,
+        "z": -2.081
+      },
+      "lengthM": 4.045,
+      "role": "rear",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

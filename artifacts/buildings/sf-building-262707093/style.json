@@ -1,0 +1,87 @@
+{
+ "seed": 7,
+ "notes": "1912 four-storey flats, greige horizontal wood siding with cream trim over a buff glazed-brick street storey with a recessed entry left of centre. One cant bay on the left half from storey 2 to the roof, flat paired windows under it on storey 1, a single window column on the right. The right half is inferred. The tinted brick kit rendered terracotta; the street storey is now a buff painted band so it reads as the cream glazed brick base. Khaki olive-grey lap siding, dark brown sash frames inside cream surrounds, windows in pairs on both halves, a shallow bay on the real left (the still is mirrored by the world east-west mirror), buff brick street storey with a recessed dark wood entry and a sidelight. Darker warm mauve-taupe lap siding; two stacked cant bays from storey 1 to the roof (8 units over 4 storeys means two flats a floor, matching the neighbours' paired bay stacks) instead of one bay over a flat half; the pale full-height plinth is gone: a shorter street storey (floorsM) in darkened buff brick with a dark recessed entry porch zone around the stair door and sidelight. Only colours from the blur applied: ground band greyish olive, cornice/trim dark brown (no bright white band visible). No geometry change. Base recoloured beige-grey b3ab9a so it is not the sage/olive neighbour. Clapboard fix (2026-10-02): painted siding moved from the stained-timber wood-siding base to painted-clapboard so the tint renders as paint, not olive. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-clapboard",
+ "wallTint": "#887878",
+ "trim": "painted-white@5c483e",
+ "frame": "painted-white@4a3426",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@efe8d4",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "brick-buff@ffffff",
+ "cornice": true,
+ "corniceProjectionM": 0.4,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.4,
+ "upperWindows": [
+  0.5
+ ],
+ "bays": [
+  {
+   "at": 0.25,
+   "widthM": 2.7,
+   "projectionM": 0.55,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#887878"
+  },
+  {
+   "at": 0.75,
+   "widthM": 2.7,
+   "projectionM": 0.55,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#887878"
+  }
+ ],
+ "groundBand": {
+  "material": "brick-buff",
+  "tint": "#ffffff"
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.2,
+    "to": 0.32,
+    "kind": "door",
+    "stair": true,
+    "leaf": "wood-siding@5a3a24"
+   },
+   {
+    "from": 0.33,
+    "to": 0.39,
+    "kind": "window",
+    "headM": 2.5
+   },
+   {
+    "from": 0.6,
+    "to": 0.8,
+    "kind": "window",
+    "headM": 2.2
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "floorsM": {
+  "groundM": 3.6,
+  "upperM": 3.45
+ },
+ "wallZones": [
+  {
+   "from": 0.15,
+   "to": 0.44,
+   "toY": 3.0,
+   "material": "painted-white",
+   "tint": "#3a2a20"
+  }
+ ],
+ "streetStills": true
+}

@@ -1,0 +1,241 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-8001895040",
+  "slug": "b8001895040",
+  "walkIndex": 7502,
+  "street": "Great Highway",
+  "address": "1614 Great Highway",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 5.68,
+  "storeys": 2,
+  "floors": {
+    "groundM": 2.58,
+    "upperM": 2.5,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1949,
+  "use": "SRES",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "edwardian",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 7,
+    "center": {
+      "x": -7852.607,
+      "z": -2412.597
+    },
+    "heading": -1.616616,
+    "width": 7.666,
+    "depth": 16.233
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": 1.597,
+      "z": -4.414
+    },
+    {
+      "x": 1.607,
+      "z": -8.109
+    },
+    {
+      "x": -2.597,
+      "z": -8.116
+    },
+    {
+      "x": -2.605,
+      "z": -4.352
+    },
+    {
+      "x": -3.806,
+      "z": -4.357
+    },
+    {
+      "x": -3.833,
+      "z": 5.545
+    },
+    {
+      "x": -3.642,
+      "z": 7.748
+    },
+    {
+      "x": -0.752,
+      "z": 8.116
+    },
+    {
+      "x": 3.833,
+      "z": 8.116
+    },
+    {
+      "x": 3.709,
+      "z": -4.411
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 1.597,
+        "z": -4.414
+      },
+      "b": {
+        "x": 1.607,
+        "z": -8.109
+      },
+      "lengthM": 3.694,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 1.607,
+        "z": -8.109
+      },
+      "b": {
+        "x": -2.597,
+        "z": -8.116
+      },
+      "lengthM": 4.205,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -2.597,
+        "z": -8.116
+      },
+      "b": {
+        "x": -2.605,
+        "z": -4.352
+      },
+      "lengthM": 3.764,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -2.605,
+        "z": -4.352
+      },
+      "b": {
+        "x": -3.806,
+        "z": -4.357
+      },
+      "lengthM": 1.201,
+      "role": "party",
+      "partyShare": 0.63
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": -3.806,
+        "z": -4.357
+      },
+      "b": {
+        "x": -3.833,
+        "z": 5.545
+      },
+      "lengthM": 9.902,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": -3.833,
+        "z": 5.545
+      },
+      "b": {
+        "x": -3.642,
+        "z": 7.748
+      },
+      "lengthM": 2.212,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": -3.642,
+        "z": 7.748
+      },
+      "b": {
+        "x": -0.752,
+        "z": 8.116
+      },
+      "lengthM": 2.913,
+      "role": "rear",
+      "partyShare": 0.13
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": -0.752,
+        "z": 8.116
+      },
+      "b": {
+        "x": 3.833,
+        "z": 8.116
+      },
+      "lengthM": 4.585,
+      "role": "front",
+      "partyShare": 0.19
+    },
+    {
+      "index": 8,
+      "a": {
+        "x": 3.833,
+        "z": 8.116
+      },
+      "b": {
+        "x": 3.709,
+        "z": -4.411
+      },
+      "lengthM": 12.528,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 9,
+      "a": {
+        "x": 3.709,
+        "z": -4.411
+      },
+      "b": {
+        "x": 1.597,
+        "z": -4.414
+      },
+      "lengthM": 2.112,
+      "role": "rear",
+      "partyShare": 0.44
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

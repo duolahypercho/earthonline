@@ -1,0 +1,127 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-173886680",
+  "slug": "b173886680",
+  "walkIndex": 78,
+  "street": "Shipley Street",
+  "address": "875 Folsom Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor-tall)"
+  },
+  "heightM": 6.1,
+  "storeys": 1,
+  "floors": {
+    "groundM": 5.5,
+    "upperM": 0,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1921,
+  "use": "IND",
+  "usage": "mixed",
+  "amenity": "car_repair",
+  "shop": null,
+  "facade": "loft",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 0,
+    "center": {
+      "x": 1474.75,
+      "z": 265.5
+    },
+    "heading": -0.785398,
+    "width": 14.779,
+    "depth": 49.568
+  },
+  "frameMirrored": true,
+  "polygonWinding": "cw",
+  "polygon": [
+    {
+      "x": 7.319,
+      "z": 24.784
+    },
+    {
+      "x": -7.389,
+      "z": 24.784
+    },
+    {
+      "x": -7.248,
+      "z": -24.713
+    },
+    {
+      "x": 7.389,
+      "z": -24.784
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 7.319,
+        "z": 24.784
+      },
+      "b": {
+        "x": -7.389,
+        "z": 24.784
+      },
+      "lengthM": 14.708,
+      "role": "front",
+      "partyShare": 0.13
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -7.389,
+        "z": 24.784
+      },
+      "b": {
+        "x": -7.248,
+        "z": -24.713
+      },
+      "lengthM": 49.498,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -7.248,
+        "z": -24.713
+      },
+      "b": {
+        "x": 7.389,
+        "z": -24.784
+      },
+      "lengthM": 14.637,
+      "role": "rear",
+      "partyShare": 0.13
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 7.389,
+        "z": -24.784
+      },
+      "b": {
+        "x": 7.319,
+        "z": 24.784
+      },
+      "lengthM": 49.568,
+      "role": "party",
+      "partyShare": 1
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "seed": 1,
+  "notes": "Flat roof; cream concrete frame (plinth to 2.0 m, projecting parapet beam, narrow piers) with wide recessed salmon brick panels in running bond and tall dark glazed slot windows (single slots at both ends, a pair at 0.30-0.42 and 0.63-0.73) rising from the plinth through both storeys. No awnings, no cornice, no sills. Entrance not visible on this face: one door is placed in the right slot of the second pair so the interior is reachable.",
+  "wall": "brick-running-bond",
+  "wallTint": "#f2c9b5",
+  "trim": "painted-stucco",
+  "frame": "painted-steel",
+  "glass": "glass-clear",
+  "storefrontGlass": "glass-clear",
+  "storefrontFrame": "painted-steel",
+  "bulkhead": "painted-stucco",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "windowSills": false,
+  "groundBand": { "material": "painted-stucco", "tint": "#eadcb8", "topM": 2.0 },
+  "coping": { "heightM": 0.55, "projectionM": 0.12, "material": "painted-stucco", "tint": "#eadcb8" },
+  "pilasters": { "at": [0.0, 0.363, 0.685, 1.0], "widthM": 0.5, "projectionM": 0.1, "material": "painted-stucco", "tint": "#eadcb8" },
+  "upperWindowSpans": [[0.038, 0.076], [0.304, 0.352], [0.373, 0.422], [0.631, 0.673], [0.696, 0.734], [0.937, 0.962]],
+  "upperSillM": 0.05,
+  "upperHeadM": 2.3,
+  "ground": "lobby",
+  "upper": "office",
+  "storefront": {
+    "awning": false,
+    "headDropM": 0.0,
+    "bulkheadM": 1.9,
+    "transomM": 0.6,
+    "layout": [
+      { "kind": "window", "from": 0.038, "to": 0.076 },
+      { "kind": "window", "from": 0.304, "to": 0.352 },
+      { "kind": "window", "from": 0.373, "to": 0.422 },
+      { "kind": "window", "from": 0.631, "to": 0.673 },
+      { "kind": "door", "from": 0.693, "to": 0.737, "leaf": "painted-steel" },
+      { "kind": "window", "from": 0.937, "to": 0.962 }
+    ]
+  }
+}

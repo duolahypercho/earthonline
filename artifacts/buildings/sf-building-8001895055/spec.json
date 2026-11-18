@@ -1,0 +1,127 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-8001895055",
+  "slug": "b8001895055",
+  "walkIndex": 7521,
+  "street": "Great Highway",
+  "address": "1686 Great Highway",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 8.99,
+  "storeys": 2,
+  "floors": {
+    "groundM": 5.454,
+    "upperM": 2.936,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1971,
+  "use": "SRES",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "edwardian",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 1,
+    "center": {
+      "x": -7837.422,
+      "z": -2541.283
+    },
+    "heading": -1.688652,
+    "width": 9.412,
+    "depth": 29.092
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -4.706,
+      "z": -14.006
+    },
+    {
+      "x": -3.118,
+      "z": 14.546
+    },
+    {
+      "x": 4.706,
+      "z": 14.546
+    },
+    {
+      "x": 3.004,
+      "z": -14.546
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -4.706,
+        "z": -14.006
+      },
+      "b": {
+        "x": -3.118,
+        "z": 14.546
+      },
+      "lengthM": 28.595,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -3.118,
+        "z": 14.546
+      },
+      "b": {
+        "x": 4.706,
+        "z": 14.546
+      },
+      "lengthM": 7.824,
+      "role": "front",
+      "partyShare": 0.13
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 4.706,
+        "z": 14.546
+      },
+      "b": {
+        "x": 3.004,
+        "z": -14.546
+      },
+      "lengthM": 29.141,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 3.004,
+        "z": -14.546
+      },
+      "b": {
+        "x": -4.706,
+        "z": -14.006
+      },
+      "lengthM": 7.729,
+      "role": "rear",
+      "partyShare": 0.13
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

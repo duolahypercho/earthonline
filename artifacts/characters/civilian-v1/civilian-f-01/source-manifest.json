@@ -1,0 +1,2213 @@
+{
+  "version": "earthonline-civilian-source-v1",
+  "id": "civilian-f-01",
+  "status": "OUTFIT_FAMILY_UNAPPROVED",
+  "productionAuthorized": false,
+  "previewOnly": true,
+  "scene": "EO Civilian 02 Waist Fit R9",
+  "recipe": {
+    "familyLabel": "sage overshirt, white tee, slate trousers",
+    "familyOf": "civilian-commuter-02",
+    "hairStyle": "ponytail01",
+    "id": "civilian-f-01",
+    "identityTargets": {
+      "chin/chin-width-incr": 0.04,
+      "head/head-rectangular": 0.035
+    },
+    "originalWardrobe": "olive open overshirt, ivory tee, slate trousers, off-white sneakers",
+    "phenotype": {
+      "age": 0.47,
+      "cupsize": 0.5,
+      "firmness": 0.5,
+      "gender": 0.0,
+      "height": 0.5,
+      "muscle": 0.42,
+      "proportions": 0.5,
+      "race": {
+        "african": 0.05,
+        "asian": 0.55,
+        "caucasian": 0.4
+      },
+      "weight": 0.5
+    },
+    "referenceHeightMetres": 1.68,
+    "sourceRig": "mpfb-standard-humanoid",
+    "outfit": "striped blouse, grey pencil skirt",
+    "outfitVersion": "civilian-outfit-v1"
+  },
+  "sourceHeightMetres": 1.68,
+  "build": {
+    "scriptSha256": "cd414d49b790a7b45f9b03dc55f62998370f8593bd28c8dad8642a8b05ac650c",
+    "blender": "5.1.2"
+  },
+  "measuredVisibleBoundsMetres": {
+    "minZ": -9.313225746154785e-10,
+    "maxZ": 1.6800000667572021
+  },
+  "metricNormalization": "evaluated-surface-vertices",
+  "rig": {
+    "type": "MPFB standard humanoid rig with eye/jaw additions; bone names listed without the source rig namespace prefix",
+    "bones": [
+      "Hips",
+      "LeftUpLeg",
+      "LeftLeg",
+      "LeftFoot",
+      "LeftToeBase",
+      "RightUpLeg",
+      "RightLeg",
+      "RightFoot",
+      "RightToeBase",
+      "Spine",
+      "Spine1",
+      "Spine2",
+      "LeftShoulder",
+      "LeftArm",
+      "LeftForeArm",
+      "LeftHand",
+      "LeftHandIndex1",
+      "LeftHandIndex2",
+      "LeftHandIndex3",
+      "LeftHandMiddle1",
+      "LeftHandMiddle2",
+      "LeftHandMiddle3",
+      "LeftHandPinky1",
+      "LeftHandPinky2",
+      "LeftHandPinky3",
+      "LeftHandRing1",
+      "LeftHandRing2",
+      "LeftHandRing3",
+      "LeftHandThumb1",
+      "LeftHandThumb2",
+      "LeftHandThumb3",
+      "Neck",
+      "Head",
+      "LeftEye",
+      "RightEye",
+      "Jaw",
+      "RightShoulder",
+      "RightArm",
+      "RightForeArm",
+      "RightHand",
+      "RightHandIndex1",
+      "RightHandIndex2",
+      "RightHandIndex3",
+      "RightHandMiddle1",
+      "RightHandMiddle2",
+      "RightHandMiddle3",
+      "RightHandPinky1",
+      "RightHandPinky2",
+      "RightHandPinky3",
+      "RightHandRing1",
+      "RightHandRing2",
+      "RightHandRing3",
+      "RightHandThumb1",
+      "RightHandThumb2",
+      "RightHandThumb3"
+    ],
+    "boneCount": 55,
+    "canonicalNormalizationRequired": true
+  },
+  "wardrobe": {
+    "openPlacketFacesRemoved": 27,
+    "hiddenTeeFacesRemoved": 882,
+    "topTailoringNormal": false,
+    "topNormalRationale": "Inherited normal-map/UV-border shading produces dark pocket and collar marks; top and shared pocket/seam material retain native cloth micro-bump instead. Trouser normal map and garment geometry are unchanged.",
+    "materialGrade": "olive-slate-v1",
+    "pocketUv": "continuous-cloth-region-v1",
+    "gradeParameters": null,
+    "sneakerBinding": {
+      "contract": "civilian-sneaker-foot-toe-v1",
+      "vertices": 1594,
+      "verticesWithAncestorInfluenceRemoved": 1272,
+      "maxRemovedNormalizedInfluence": 0.8247150419536895,
+      "verticesBySide": {
+        "Left": 797,
+        "Right": 797
+      },
+      "footToeOnlyVertices": 1044,
+      "cuffBlendHeightMetres": 0.04,
+      "preservesAuthoredFootToeRatio": true,
+      "geometryChanged": false,
+      "directAncestorInfluenceBelowAnkleAfter": 0
+    },
+    "imageGeneratedUvTexture": "$CIVILIAN_STAGE/source/textures/commuter-02-olive-slate-basecolor-v2.png",
+    "imagegenProvenance": {
+      "version": "civilian-imagegen-provenance-v1",
+      "generatedWith": "image_gen.imagegen",
+      "prompt": "Precise single-region correction to this existing garment UV base-color atlas. Keep EVERYTHING identical except the one upright cloth UV island on the far right in the UPPER HALF (approximately x=79%-98%, y=20%-55%). That island is part of the SHIRT, and was mistakenly left charcoal. Recolor only that one island to the same muted olive-green cotton as the other shirt islands below it, preserving its fine woven texture, stitching, exact shape, exact placement, black boundaries and tonal detail. Keep both large trouser islands across the top charcoal unchanged. Keep all existing olive lower shirt islands unchanged. Keep black background, all other pixels, framing, source credit, stitching and button locations unchanged. Technical flat diffuse atlas; no new lighting, no new shapes, no text additions. Same exact image dimensions and UV layout.",
+      "transparentBackground": false,
+      "source": {
+        "path": "$CIVILIAN_STAGE/source/textures/commuter-02-olive-slate-basecolor-v1.png",
+        "sha256": "07144935714243026266d4bb64c84f1f27a7f9a52b9d0b4eee7013fa4f25951f",
+        "license": "Original ImageGen derivative of licensed CC0 MakeHuman/MPFB garment UV texture; source ancestry in commuter-02-r4/source-manifest.json",
+        "provenance": "$CIVILIAN_STAGE/source/textures/commuter-02-olive-slate-basecolor-v1.imagegen.json"
+      },
+      "output": {
+        "path": "$CIVILIAN_STAGE/source/textures/commuter-02-olive-slate-basecolor-v2.png",
+        "sha256": "adb79e42d51ee20698f1a26195e892cd64afd2752357135b42110017fa67adbc"
+      },
+      "previewOnly": true,
+      "productionAuthorized": false,
+      "status": "PENDING native fitted-mesh texture review",
+      "limitations": [
+        "Image generation does not prove exact UV preservation; inspect fitted mesh seams and colors."
+      ]
+    }
+  },
+  "hair": {
+    "imagegenProvenance": null,
+    "capImagegenProvenance": {
+      "version": "civilian-imagegen-provenance-v1",
+      "prompt": "Edit this licensed CC0 game hair diffuse UV texture into an original premium contemporary civilian's deep neutral brown, short naturally swept hair texture. This is a technical flat BASE COLOR + ALPHA texture atlas, not a portrait. Preserve the exact square composition, positions, relative sizes, boundaries, orientations and internal flow directions of EVERY existing UV island. The two large irregular scalp islands on the left must remain where they are, including their cutouts; preserve the two sideburn islands and the many small strip islands along the top and right. Replace coarse gray smears and flat reflective gray bands with finely resolved, irregular, naturally overlapping individual brown hair strands. Keep the roots dark and the fine strand variation subtle but visible. Diffuse color only: remove baked specular reflections, studio highlights and lighting gradients; no painted gray/white shine, metallic areas, broad ribbon bands, new shadows or depth effects. Maintain transparent empty space and fine wispy alpha edges in the same UV layout; no new islands or changed geometry. Preserve texture detail across both large islands at close viewing scale. No face, skin, scalp photograph, head, person, text, logo, watermark, labels, grid or border. High resolution, square 2048 by 2048 technical game texture. Native transparent background.",
+      "generatedWith": "image_gen.imagegen",
+      "transparentBackground": true,
+      "source": {
+        "path": "$MPFB_USER_DATA/hair/short01/short01_diffuse.png",
+        "license": "CC0, MPFB bundled short01 hair diffuse",
+        "sha256": "f34a0957184e3d1e911ed59245f874f8d4843f61ee44ff49f43edb4be0196949"
+      },
+      "output": {
+        "path": "civilian-hair-cap-v1.png",
+        "sha256": "58c6881521870189bd63350feab52fe58c9170f0523796be644f14a2caf3dd9c"
+      },
+      "status": "previewOnly",
+      "productionAuthorized": false
+    },
+    "capTopology": {
+      "retainedComponents": 1,
+      "removedComponents": 199,
+      "retainedSurface": "continuous scalp including sideburn coverage",
+      "removedTempleOverlays": 2,
+      "vertices": 1138,
+      "polygons": 1100,
+      "morphTargets": [
+        "Basis",
+        "jawOpen",
+        "mouthSmileLeft",
+        "mouthSmileRight",
+        "mouthFrownLeft",
+        "mouthFrownRight",
+        "browDownLeft",
+        "browDownRight",
+        "cheekPuff",
+        "viseme_aa",
+        "viseme_PP",
+        "viseme_O"
+      ]
+    },
+    "internalSeamCoverage": {
+      "method": "native internal seam alpha coverage; original RGB/UV/image unchanged",
+      "seamEdges": 29,
+      "seamVertices": 30,
+      "affectedVertices": 53,
+      "sourceVertexBandWidthMetres": 0.01,
+      "outerHairlineFadeMetres": [
+        0.0005,
+        0.003
+      ],
+      "outerBoundaryFillMax": 0,
+      "subdivisionCoverageGain": 1.6
+    }
+  },
+  "face": {
+    "dedicatedTextureRegionPolygons": 5608,
+    "browImagegenProvenance": {
+      "version": "civilian-imagegen-provenance-v1",
+      "prompt": "Edit this licensed CC0 eyebrow diffuse UV texture into a realistic fine-hair BASE COLOR plus ALPHA game texture for an original contemporary adult civilian. Preserve exactly the two existing eyebrow islands: same positions, dimensions, curvature, taper, orientation, hair-flow direction, and transparent gap between them. Do not move, rotate, mirror, enlarge, or add islands. Replace the coarse solid painted strokes with individual fine deep-neutral-brown eyebrow hairs, natural subtle warm variation, many tapered strands, soft sparse outer edges and denser but still strand-resolved interiors. Keep the brows groomed and natural, not heavy cosmetic makeup, not solid charcoal bars. Fine strand separation should remain visible at medium texture size. Flat unlit diffuse color only: no highlights, drop shadow, ambient shading or skin underlay. Native transparent background with smooth hair alpha edges, no face, eyes, person, labels, text, border or watermark. Square texture atlas. Preserve original layout precisely.",
+      "generatedWith": "image_gen.imagegen",
+      "transparentBackground": true,
+      "source": {
+        "path": "$MPFB_USER_DATA/eyebrows/eyebrow009/eyebrow009.png",
+        "license": "CC0, MPFB bundled eyebrow009 texture",
+        "sha256": "4d33c85718ca5accf44625652daf0ae6e8cc007ed8138280e4d95601717910c3"
+      },
+      "output": {
+        "path": "civilian-brows-v1.png",
+        "sha256": "3c2bc146b18e1eb44b953fcd8a0db016277b2528cf3e8bbe9f613abb5c3703e7"
+      },
+      "status": "previewOnly",
+      "productionAuthorized": false
+    },
+    "stubble": false,
+    "skinSource": {
+      "material": "$MPFB_USER_DATA/skins/middleage_asian_female/middleage_asian_female.mhmat",
+      "diffuse": "$MPFB_USER_DATA/skins/middleage_asian_female/middleage_lightskinned_female_diffuse2.png",
+      "license": "CC0-1.0",
+      "materialSha256": "d002c338239d2aeeeec037e21f9dd22cd484ba8a955aee22aa0fe279ad6a3960"
+    }
+  },
+  "assets": [
+    {
+      "role": "Eyes",
+      "mhclo": "eyes/high-poly/high-poly.mhclo",
+      "license": "CC0-1.0"
+    },
+    {
+      "role": "Eyebrows",
+      "mhclo": "eyebrows/eyebrow009/eyebrow009.mhclo",
+      "license": "CC0-1.0"
+    },
+    {
+      "role": "Eyelashes",
+      "mhclo": "eyelashes/eyelashes01/eyelashes01.mhclo",
+      "license": "CC0-1.0"
+    },
+    {
+      "role": "Teeth",
+      "mhclo": "teeth/teeth_base/teeth_base.mhclo",
+      "license": "CC0-1.0"
+    },
+    {
+      "role": "Tongue",
+      "mhclo": "tongue/tongue01/tongue01.mhclo",
+      "license": "CC0-1.0"
+    },
+    {
+      "role": "Sneakers",
+      "mhclo": "clothes/shoes05/shoes05.mhclo",
+      "license": "CC0-1.0"
+    },
+    {
+      "role": "BlouseSkirt",
+      "mhclo": "clothes/female_elegantsuit01/female_elegantsuit01.mhclo",
+      "license": "CC0-1.0"
+    },
+    {
+      "role": "Hair",
+      "mhclo": "hair/ponytail01/ponytail01.mhclo",
+      "license": "CC0-1.0"
+    }
+  ],
+  "objects": [
+    {
+      "name": "EO02.Body.006",
+      "role": "body",
+      "type": "MESH",
+      "archiveOnly": false,
+      "hidden": false,
+      "vertices": 19158,
+      "polygons": 18486
+    },
+    {
+      "name": "EO02.SourceRig.006",
+      "role": null,
+      "type": "ARMATURE",
+      "archiveOnly": false,
+      "hidden": false,
+      "vertices": null,
+      "polygons": null
+    },
+    {
+      "name": "EO02.Eyes.006",
+      "role": "eyes",
+      "type": "MESH",
+      "archiveOnly": false,
+      "hidden": false,
+      "vertices": 1064,
+      "polygons": 1020
+    },
+    {
+      "name": "EO02.Eyebrows.006",
+      "role": "brows",
+      "type": "MESH",
+      "archiveOnly": false,
+      "hidden": false,
+      "vertices": 124,
+      "polygons": 96
+    },
+    {
+      "name": "EO02.Eyelashes.006",
+      "role": "lashes",
+      "type": "MESH",
+      "archiveOnly": false,
+      "hidden": false,
+      "vertices": 250,
+      "polygons": 184
+    },
+    {
+      "name": "EO02.Teeth.006",
+      "role": "teeth",
+      "type": "MESH",
+      "archiveOnly": false,
+      "hidden": false,
+      "vertices": 3868,
+      "polygons": 3560
+    },
+    {
+      "name": "EO02.Tongue.006",
+      "role": "accessory",
+      "type": "MESH",
+      "archiveOnly": false,
+      "hidden": false,
+      "vertices": 226,
+      "polygons": 224
+    },
+    {
+      "name": "EO02.Hair.006",
+      "role": "hair",
+      "type": "MESH",
+      "archiveOnly": false,
+      "hidden": false,
+      "vertices": 1138,
+      "polygons": 1100
+    },
+    {
+      "name": "EO02.Source.CasualSuit03.006",
+      "role": null,
+      "type": "MESH",
+      "archiveOnly": true,
+      "hidden": true,
+      "vertices": 2499,
+      "polygons": 2400
+    },
+    {
+      "name": "EO02.InnerTee.006",
+      "role": "top",
+      "type": "MESH",
+      "archiveOnly": true,
+      "hidden": true,
+      "vertices": 186,
+      "polygons": 152
+    },
+    {
+      "name": "EO02.Sneakers.006",
+      "role": "shoes",
+      "type": "MESH",
+      "archiveOnly": false,
+      "hidden": false,
+      "vertices": 1594,
+      "polygons": 1532
+    },
+    {
+      "name": "EO02.Trousers.006",
+      "role": "bottom",
+      "type": "MESH",
+      "archiveOnly": false,
+      "hidden": false,
+      "vertices": 886,
+      "polygons": 856
+    },
+    {
+      "name": "EO02.Overshirt.006",
+      "role": "top",
+      "type": "MESH",
+      "archiveOnly": false,
+      "hidden": false,
+      "vertices": 1584,
+      "polygons": 1515
+    },
+    {
+      "name": "EO02.OvershirtSeams.006",
+      "role": "accessory",
+      "type": "MESH",
+      "archiveOnly": true,
+      "hidden": true,
+      "vertices": 1728,
+      "polygons": 864
+    },
+    {
+      "name": "EO02.ChestPocket.006",
+      "role": "accessory",
+      "type": "MESH",
+      "archiveOnly": false,
+      "hidden": false,
+      "vertices": 56,
+      "polygons": 42
+    },
+    {
+      "name": "EO02.FullTee.R7.Authoring",
+      "role": null,
+      "type": "MESH",
+      "archiveOnly": true,
+      "hidden": true,
+      "vertices": 1095,
+      "polygons": 1034
+    },
+    {
+      "name": "EO02.OvershirtSeams.R7",
+      "role": "seams",
+      "type": "MESH",
+      "archiveOnly": true,
+      "hidden": true,
+      "vertices": 1120,
+      "polygons": 1120
+    },
+    {
+      "name": "EO02.InnerTee.CageTrial400",
+      "role": "top",
+      "type": "MESH",
+      "archiveOnly": false,
+      "hidden": false,
+      "vertices": 252,
+      "polygons": 400
+    },
+    {
+      "name": "EO02.OvershirtSeams.R8",
+      "role": "seams",
+      "type": "MESH",
+      "archiveOnly": false,
+      "hidden": false,
+      "vertices": 560,
+      "polygons": 280
+    },
+    {
+      "name": "EO Review Key.019",
+      "role": null,
+      "type": "LIGHT",
+      "archiveOnly": false,
+      "hidden": false,
+      "vertices": null,
+      "polygons": null
+    },
+    {
+      "name": "EO Review Fill.019",
+      "role": null,
+      "type": "LIGHT",
+      "archiveOnly": false,
+      "hidden": false,
+      "vertices": null,
+      "polygons": null
+    },
+    {
+      "name": "EO Review Rim.019",
+      "role": null,
+      "type": "LIGHT",
+      "archiveOnly": false,
+      "hidden": false,
+      "vertices": null,
+      "polygons": null
+    },
+    {
+      "name": "EO Civilian Source Camera.015",
+      "role": null,
+      "type": "CAMERA",
+      "archiveOnly": false,
+      "hidden": false,
+      "vertices": null,
+      "polygons": null
+    }
+  ],
+  "sources": [
+    {
+      "path": "$CIVILIAN_STAGE/source/source-packs/faceunits01.zip",
+      "sha256": "d113107bd7eb59f3af4df6fc0ec29bfcc593f496d0b336aec14f086a80ce7146",
+      "bytes": 257821,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$CIVILIAN_STAGE/source/source-packs/visemes02.zip",
+      "sha256": "a69ab6fb95ddd5f56f70acc7e859f5f9c6ae613c527d577ea1571eff2183d29e",
+      "bytes": 130733,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$CIVILIAN_STAGE/source/textures/civilian-brows-v1.png",
+      "sha256": "3c2bc146b18e1eb44b953fcd8a0db016277b2528cf3e8bbe9f613abb5c3703e7",
+      "bytes": 1665526,
+      "license": "ImageGen derivative of CC0 source; see face.browImagegenProvenance"
+    },
+    {
+      "path": "$CIVILIAN_STAGE/source/textures/civilian-hair-cap-v1.png",
+      "sha256": "58c6881521870189bd63350feab52fe58c9170f0523796be644f14a2caf3dd9c",
+      "bytes": 2625941,
+      "license": "ImageGen derivative of CC0 source; see hair.capImagegenProvenance"
+    },
+    {
+      "path": "$CIVILIAN_STAGE/source/textures/commuter-02-olive-slate-basecolor-v2.png",
+      "sha256": "adb79e42d51ee20698f1a26195e892cd64afd2752357135b42110017fa67adbc",
+      "bytes": 2256316,
+      "license": "ImageGen derivative of CC0 source; see wardrobe.imagegenProvenance"
+    },
+    {
+      "path": "$MPFB_USER_DATA/clothes/elvs_crude_t-shirt_male/crude_male_shirt.mhmat",
+      "sha256": "4e456f7b85ff3023b2ec3b4ed58b0ccceac621f3a02f4887d04eaa2a781b229a",
+      "bytes": 794,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/clothes/elvs_crude_t-shirt_male/crude_male_shirt.obj",
+      "sha256": "3389b981a826396213cce2e69f40b3d9eca6cdfadcfcbee2774acb1dfb322fa7",
+      "bytes": 80940,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/clothes/elvs_crude_t-shirt_male/crude_male_tex.png",
+      "sha256": "0704c69ec9ebaf4a9ab0ba04a103a9350939971ca8222f130f4e3defecdc2231",
+      "bytes": 9204,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/clothes/elvs_crude_t-shirt_male/elvs_crude_t-shirt_male.mhclo",
+      "sha256": "64dd3e6e2fbba39cc792854e0ae3e2c4829a37fa4e4b690f463c2956476294da",
+      "bytes": 75660,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/clothes/male_casualsuit03/male_casualsuit03.mhclo",
+      "sha256": "ce796e4cc6ac312e0426d793ccc874d0d94c085e1c06764fe096ec8d59ae94c5",
+      "bytes": 170546,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/clothes/male_casualsuit03/male_casualsuit03.mhmat",
+      "sha256": "5fbf673d1db072aecb850ced389201ae729794deee851c0668e810e6ad082e5b",
+      "bytes": 1396,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/clothes/male_casualsuit03/male_casualsuit03.obj",
+      "sha256": "c55e02caa1f04126606eee5ac704637e9d3461bd527f26ade65e01973dc7aabb",
+      "bytes": 200956,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/clothes/male_casualsuit03/male_casualsuit03_ao.png",
+      "sha256": "b29aebd42545b874599be527c4ec8f89b851ba76613347b0475fac5188de7aea",
+      "bytes": 2214964,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/clothes/male_casualsuit03/male_casualsuit03_diffuse.png",
+      "sha256": "d9079ed2e52d23e1ccce53ddc3d4397e48883729f9324c97c2737f4f79af5153",
+      "bytes": 3439064,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/clothes/male_casualsuit03/male_casualsuit03_normal.png",
+      "sha256": "412c4610d3b2ea1cb04aa3c0715e747a7c9f61d865133b7d69f70eaa738cf99b",
+      "bytes": 9610278,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/clothes/shoes05/shoes05.mhclo",
+      "sha256": "75fc467264b085d7a05ce0c9b5628bb364b246392c59524c556fa09f92b6cb16",
+      "bytes": 110217,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/clothes/shoes05/shoes05.mhmat",
+      "sha256": "e59a9cc4d4c9a56cf9025beb26ca549986c97065cdb675d4f59bd9c5a27dbe8d",
+      "bytes": 1184,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/clothes/shoes05/shoes05.mhw",
+      "sha256": "7963030c66988b4164003b3b02e4ef42a83069fa32fe09362e0c14ae2b730e25",
+      "bytes": 309023,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/clothes/shoes05/shoes05.obj",
+      "sha256": "5726aabac42ff489998d0a769545dea013961bbb71b9c6024d75170181a98818",
+      "bytes": 125457,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/clothes/shoes05/shoes05_diffuse.png",
+      "sha256": "7fe5ea2600f6578cdf017da3392ae13aedabea8e8cc1dd6302a8f57e8fb7e5af",
+      "bytes": 1291907,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/eyebrows/eyebrow009/eyebrow009.mhclo",
+      "sha256": "14819547ba73a98baac1f6eb445e19c22010d2ea30b8a15ee0ca8767c0f3e509",
+      "bytes": 9122,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/eyebrows/eyebrow009/eyebrow009.mhmat",
+      "sha256": "53eca588d5de9378b60f22153d212485e1c76ea907ffc8f5f97b6ca824fe55b0",
+      "bytes": 1098,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/eyebrows/eyebrow009/eyebrow009.obj",
+      "sha256": "037a2edb3252e1fe4a57e63dcb1598916609fd0339f2b453b2f71e9c4cbd481c",
+      "bytes": 8227,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/eyebrows/eyebrow009/eyebrow009.png",
+      "sha256": "4d33c85718ca5accf44625652daf0ae6e8cc007ed8138280e4d95601717910c3",
+      "bytes": 230800,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/eyelashes/eyelashes01/eyelashes01.mhclo",
+      "sha256": "5a86b29c15649273d723084954b7fa7bf199112571d4f58539b46734d397ee6b",
+      "bytes": 2265,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/eyelashes/eyelashes01/eyelashes01.mhmat",
+      "sha256": "8029c99d94f3d87a1e81825fad6b90eec773ae6955a5b2592222ef237377e190",
+      "bytes": 1074,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/eyelashes/eyelashes01/eyelashes01.obj",
+      "sha256": "f78f5b93fea1946fcae103d32c4f082dd9612a1ec2e7e2f90b03ebe59b0baf20",
+      "bytes": 18832,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/eyelashes/eyelashes01/eyelashes01.png",
+      "sha256": "4b69c0fff2648874460e9caf80c31413c444218a5c50afebc425aeaa65484a35",
+      "bytes": 91600,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/eyes/high-poly/high-poly.mhclo",
+      "sha256": "b183cfe37120ab726f9b3f2ea6cd3a64c44ce7b4bd91a77c841cf70c04f83a0d",
+      "bytes": 72490,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/eyes/high-poly/high-poly.obj",
+      "sha256": "da2493215b708a344c33dc72f2a9a5b8fa985dcc5a70ad3b208995cf871da8e1",
+      "bytes": 100882,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/eyes/materials/brown_eye.png",
+      "sha256": "4659691c7295ad6206c78b003e5fd0e5f91dcd53032fa914a229bb48cabe424b",
+      "bytes": 610817,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/hair/short01/short01.mhclo",
+      "sha256": "ae1ffaa98da5753b803b3a173bede4895d2215e6bb94763f3765a71f0e984f35",
+      "bytes": 201588,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/hair/short01/short01.mhmat",
+      "sha256": "01e2e12ce3f3d3c859225456660acadcdd27d4f4b4d888bcbd6f11998cadd975",
+      "bytes": 1314,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/hair/short01/short01.obj",
+      "sha256": "d998d8416f9b5d5591f1d756f4d292288d000a6951bc0f4d2e8e72727bbc44fa",
+      "bytes": 194450,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/hair/short01/short01_diffuse.png",
+      "sha256": "f34a0957184e3d1e911ed59245f874f8d4843f61ee44ff49f43edb4be0196949",
+      "bytes": 2354146,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/skins/middleage_asian_female/middleage_asian_female.mhmat",
+      "sha256": "d002c338239d2aeeeec037e21f9dd22cd484ba8a955aee22aa0fe279ad6a3960",
+      "bytes": 1468,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/skins/middleage_asian_female/middleage_lightskinned_female_diffuse2.png",
+      "sha256": "39c505ca224387bef0b20cd2bf513c3997c27c7e7434447228c9991b87cb8d01",
+      "bytes": 3810424,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/teeth/teeth_base/teeth.mhmat",
+      "sha256": "3baeff72d9eb06ca16c3cff7ca2ab304216717dee247e0d88f1dc33037c8320e",
+      "bytes": 1086,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/teeth/teeth_base/teeth.png",
+      "sha256": "d0afb57869c6fbb56b98f5efc4aec629ee7593e70d8dd2bfb9de923acfb65f43",
+      "bytes": 1799930,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/teeth/teeth_base/teeth_base.mhclo",
+      "sha256": "9edc3deff3bb97a95c791878064dd069a74a38f95ea6d9707a9ba68d888b3b5c",
+      "bytes": 263220,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/teeth/teeth_base/teeth_base.obj",
+      "sha256": "f55198069e55d360c4b4cc7ecb1cc292b2c7665753ab8b65eabf46a8783f2875",
+      "bytes": 313110,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/tongue/tongue01/tongue01.mhclo",
+      "sha256": "61d825899cd78ff3146fa1324118060cb44b095fae1427d408c199ade74e3c9e",
+      "bytes": 2113,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/tongue/tongue01/tongue01.mhmat",
+      "sha256": "7769df66c69b8c09a0ec713d70d8381abbb08ac82207369f5413970495cd4340",
+      "bytes": 1261,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/tongue/tongue01/tongue01.obj",
+      "sha256": "12f4a6a9f85abae2ce3b4aa42d8119e1f679a437e0e89cb928ec68b29a7a1587",
+      "bytes": 17155,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_USER_DATA/tongue/tongue01/tongue01_diffuse.png",
+      "sha256": "3150be398e48e8ba1feac164c3143c16c0b2e959d9ffb6155f0171f59cfb4ea9",
+      "bytes": 625419,
+      "license": "CC0-1.0"
+    },
+    {
+      "path": "$MPFB_DATA/3dobjs/base.obj",
+      "sha256": "8e761e6624b8f54536409135d1636da63b32486a90d4897f84e121d144f6fb4c",
+      "bytes": 1749303,
+      "license": "MPFB bundled data; see installed MPFB license"
+    },
+    {
+      "path": "$MPFB_DATA/rigs/standard/rig.mixamo.json",
+      "sha256": "b4e491bacdcae797e53b7692169cf6a160c50fcc1eda5f0982e92fac1561ae56",
+      "bytes": 84107,
+      "license": "MPFB bundled data; see installed MPFB license"
+    },
+    {
+      "path": "$MPFB_DATA/rigs/standard/weights.mixamo.json",
+      "sha256": "4561be4d7c0093d70e3dba4fbacbbbb6d66781573779fb12a0509cefa181b8ae",
+      "bytes": 2372203,
+      "license": "MPFB bundled data; see installed MPFB license"
+    },
+    {
+      "path": "$MPFB_DATA/targets/chin/chin-width-incr.target.gz",
+      "sha256": "68764b6ec7c923597beaaf643f71c41f00c93639d9bb522c169c279db2ad299e",
+      "bytes": 1110,
+      "license": "MPFB bundled data; see installed MPFB license"
+    },
+    {
+      "path": "$MPFB_DATA/targets/head/head-rectangular.target.gz",
+      "sha256": "a4ff15dbcda4164e823c7a6f00c234cc62cb136b1c568198c7980bf9f2d358f2",
+      "bytes": 2936,
+      "license": "MPFB bundled data; see installed MPFB license"
+    },
+    {
+      "path": "$MPFB_DATA/targets/macrodetails/african-female-young.target.gz",
+      "sha256": "1147ae55ecb0f66bade3f45176b3af187e265878322db172ad1090e9f3108e84",
+      "bytes": 123654,
+      "license": "MPFB bundled data; see installed MPFB license"
+    },
+    {
+      "path": "$MPFB_DATA/targets/macrodetails/asian-female-child.target.gz",
+      "sha256": "3791c73a4a0e05e475d88341ce32f29a6eeefb054217e900497a1723e89bf70d",
+      "bytes": 144489,
+      "license": "MPFB bundled data; see installed MPFB license"
+    },
+    {
+      "path": "$MPFB_DATA/targets/macrodetails/asian-female-young.target.gz",
+      "sha256": "ee17da733288434e5b6fa120497f1fa6e72bf7faad5d694b0431d7275139170d",
+      "bytes": 135687,
+      "license": "MPFB bundled data; see installed MPFB license"
+    },
+    {
+      "path": "$MPFB_DATA/targets/macrodetails/caucasian-female-child.target.gz",
+      "sha256": "ad1ce6b7955e4d610b75648ebdcc456cc8aa7e9e46af399f65265164ea39c844",
+      "bytes": 142183,
+      "license": "MPFB bundled data; see installed MPFB license"
+    },
+    {
+      "path": "$MPFB_DATA/targets/macrodetails/caucasian-female-young.target.gz",
+      "sha256": "e9d6212373ac5f1e2c596fa145e363385f4d169c3c6c88ede3bab93b681af041",
+      "bytes": 127369,
+      "license": "MPFB bundled data; see installed MPFB license"
+    },
+    {
+      "path": "$MPFB_DATA/targets/macrodetails/macro.json",
+      "sha256": "5b6dfabced7b7912df45d3c39f6ef34bca55a72cb6de8ee6c8d66c371de4447c",
+      "bytes": 4356,
+      "license": "MPFB bundled data; see installed MPFB license"
+    },
+    {
+      "path": "$MPFB_DATA/targets/macrodetails/universal-female-child-averagemuscle-averageweight.target.gz",
+      "sha256": "8cd73335ac6f84b1f85b2fa2f44a5b23586aa7f152f0beb189b184761a8cc0ed",
+      "bytes": 78,
+      "license": "MPFB bundled data; see installed MPFB license"
+    },
+    {
+      "path": "$MPFB_DATA/targets/macrodetails/universal-female-child-minmuscle-averageweight.target.gz",
+      "sha256": "9b42a424040b43f67e9176f73a70764a6de6b3470233af238bda349c2a194b1f",
+      "bytes": 65542,
+      "license": "MPFB bundled data; see installed MPFB license"
+    },
+    {
+      "path": "$MPFB_DATA/targets/macrodetails/universal-female-young-averagemuscle-averageweight.target.gz",
+      "sha256": "30046c85a461249824548d5319d74c16392842a1ee00ca9a4485ea3eeb06e2e8",
+      "bytes": 78,
+      "license": "MPFB bundled data; see installed MPFB license"
+    },
+    {
+      "path": "$MPFB_DATA/targets/macrodetails/universal-female-young-minmuscle-averageweight.target.gz",
+      "sha256": "2d939513053fb4a58b6752457c00419c0a2b6a658f0f034dc079d59e19931627",
+      "bytes": 27488,
+      "license": "MPFB bundled data; see installed MPFB license"
+    }
+  ],
+  "sourceMaster": {
+    "path": "$CIVILIAN_STAGE/source/outfit-civilian-f-01/civilian-f-01.blend",
+    "bytes": 37886179,
+    "sha256": "1b378e290da0978b7f1489fb54d10354d55b5b30ac95c3b3e19221a7df97f224"
+  },
+  "limitations": [
+    "Source art is unapproved; canonical runtime and deformation review remain.",
+    "Native procedural skin/cloth microrelief must be baked for runtime.",
+    "Source skin/wardrobe use licensed CC0 authoring assets; this is not an all-new sculpt.",
+    "Detailed source exceeds runtime budgets; derived LODs must preserve facial and clothing silhouette.",
+    "R8 is a garment-authoring trial using a flat bound seam ribbon after R7 round tube HERO reduction rejection. Full runtime animation and world visual acceptance remain pending.",
+    "R9 changes trouser waist height fit, tee tuck position and weights, and adds hidden waist body mask. Full motion/coverage review still required.",
+    "civilian-f-01 is a recolour of civilian-commuter-02: same cut, body, face and hair geometry.",
+    "civilian-f-01 re-dressed with fitted CC0 MPFB garments: striped blouse, grey pencil skirt. Garment clearance in motion needs review."
+  ],
+  "originalReference": {
+    "path": "$CIVILIAN_STAGE/source/commuter-02-reference/civilian-commuter-02-concept-v1.png",
+    "sha256": "41baf704721789c17857dab488cb13aabc4d6faf3a3db1ea11c856896a6f66f4"
+  },
+  "derivativeOf": {
+    "manifest": "$CIVILIAN_STAGE/source/fam-civilian-f-01/source-manifest.json",
+    "sha256": "a9234c7ad8a3ef7e99e070c04515db0910fe8d93dd46cbe81dfde9211d34fb96",
+    "master": {
+      "path": "$CIVILIAN_STAGE/source/fam-civilian-f-01/civilian-f-01.blend",
+      "sha256": "50dbcd43aea5cefac2d893800304977e78d6bc3f2e1e0e6f229e9bcca6137a9b",
+      "bytes": 38751766
+    }
+  },
+  "sourceAuthoringR8": {
+    "purpose": "restore missing torso underlayer; relaxed lower opening; continuous bound seams",
+    "files": [
+      {
+        "path": "$CIVILIAN_STAGE/evidence/commuter-02-garment-authoring-r7/author-placket.py",
+        "sha256": "a17158cd7d7df051f3f0d6f9d9467b5115662cbd5d9c4eb7d865bfdeb9300176"
+      },
+      {
+        "path": "$CIVILIAN_STAGE/evidence/commuter-02-garment-authoring-r7/author-seam-ribbon.py",
+        "sha256": "5ad2eeb653eaaddf9239b43ddd4fb8569cd68ce67ea442312c9bad2be404ad4f"
+      },
+      {
+        "path": "$CIVILIAN_STAGE/evidence/commuter-02-garment-authoring-r7/tee-cage-trial/build-trial.py",
+        "sha256": "25050c836992fba5fa81aca805928a075c3264c97e6d51ddef0a5f7fc17b074e"
+      }
+    ],
+    "concept": {
+      "path": "$CIVILIAN_STAGE/source/garment-fit-r7/raised-thigh-concept-v1.imagegen.json",
+      "sha256": "0047f13152bec5f0d66d1622bd00aa9c4250db047f1bf0a02f9de856a3a593f7"
+    },
+    "changedObjects": [
+      "EO02.Overshirt.006",
+      "EO02.InnerTee.CageTrial400",
+      "EO02.OvershirtSeams.R8"
+    ],
+    "runtimeWeightsChanged": false,
+    "bodyMaskChanged": false,
+    "exportBudgetsChanged": false,
+    "sourceWeightsNote": "Tee native decimation interpolates original weights; seam interpolated weights follow subdivided boundary. Exporter enforces normalized top4.",
+    "visibleReview": "Live Blender rest material views reviewed; runtime motion pending"
+  },
+  "sourceAuthoringR9": {
+    "sourceWorldMetreAuthoring": true,
+    "waistFit": {
+      "previewOnly": true,
+      "productionAuthorized": false,
+      "input": "source/commuter-02-garment-r8/civilian-commuter-02.blend",
+      "waistRimVertices": 26,
+      "waistHeightFitCoefficients": [
+        0.937638758596214,
+        0.0017810675276486172,
+        0.008886385007453323,
+        0.016786591965265812,
+        -0.0008639342315092111
+      ],
+      "waistVertexEdits": [
+        {
+          "vertex": 0,
+          "verticalDeltaMetres": 0.003013602138256026
+        },
+        {
+          "vertex": 1,
+          "verticalDeltaMetres": 0.002531833520595788
+        },
+        {
+          "vertex": 2,
+          "verticalDeltaMetres": 0.003119415919040422
+        },
+        {
+          "vertex": 3,
+          "verticalDeltaMetres": 0.004335351606106493
+        },
+        {
+          "vertex": 4,
+          "verticalDeltaMetres": -0.000961661461080515
+        },
+        {
+          "vertex": 5,
+          "verticalDeltaMetres": -0.0014044534528047927
+        },
+        {
+          "vertex": 6,
+          "verticalDeltaMetres": -0.004683107249001949
+        },
+        {
+          "vertex": 7,
+          "verticalDeltaMetres": -0.0036314124750807548
+        },
+        {
+          "vertex": 80,
+          "verticalDeltaMetres": -0.0031888698582965692
+        },
+        {
+          "vertex": 81,
+          "verticalDeltaMetres": -0.002219568323291424
+        },
+        {
+          "vertex": 84,
+          "verticalDeltaMetres": -0.0003693214380291244
+        },
+        {
+          "vertex": 85,
+          "verticalDeltaMetres": -0.00041399353362622934
+        },
+        {
+          "vertex": 96,
+          "verticalDeltaMetres": 0.0024692258320157608
+        },
+        {
+          "vertex": 97,
+          "verticalDeltaMetres": 0.003806089283355086
+        },
+        {
+          "vertex": 98,
+          "verticalDeltaMetres": -0.0016411325800521866
+        },
+        {
+          "vertex": 99,
+          "verticalDeltaMetres": 6.739998518807443e-05
+        },
+        {
+          "vertex": 100,
+          "verticalDeltaMetres": 4.311769385903665e-05
+        },
+        {
+          "vertex": 105,
+          "verticalDeltaMetres": -0.001211879709911738
+        },
+        {
+          "vertex": 106,
+          "verticalDeltaMetres": -1.8511422940444906e-07
+        },
+        {
+          "vertex": 199,
+          "verticalDeltaMetres": -0.00248055950756912
+        },
+        {
+          "vertex": 200,
+          "verticalDeltaMetres": -0.0017212360566877152
+        },
+        {
+          "vertex": 202,
+          "verticalDeltaMetres": 2.3766894191233647e-06
+        },
+        {
+          "vertex": 203,
+          "verticalDeltaMetres": -4.983532260703201e-06
+        },
+        {
+          "vertex": 210,
+          "verticalDeltaMetres": 0.0002458242820062138
+        },
+        {
+          "vertex": 211,
+          "verticalDeltaMetres": 0.0007619772492353701
+        },
+        {
+          "vertex": 230,
+          "verticalDeltaMetres": -0.004882105002346426
+        },
+        {
+          "vertex": 231,
+          "verticalDeltaMetres": -0.003819004030192974
+        },
+        {
+          "vertex": 244,
+          "verticalDeltaMetres": 0.0045133509405685945
+        },
+        {
+          "vertex": 245,
+          "verticalDeltaMetres": 0.004080592021674878
+        },
+        {
+          "vertex": 306,
+          "verticalDeltaMetres": -4.9307957625663285e-08
+        },
+        {
+          "vertex": 307,
+          "verticalDeltaMetres": -6.661847259623765e-05
+        },
+        {
+          "vertex": 327,
+          "verticalDeltaMetres": 0.0007018476723154643
+        },
+        {
+          "vertex": 328,
+          "verticalDeltaMetres": -0.001222066660247967
+        },
+        {
+          "vertex": 343,
+          "verticalDeltaMetres": 0.003197079807000125
+        },
+        {
+          "vertex": 344,
+          "verticalDeltaMetres": 0.004414011829573905
+        },
+        {
+          "vertex": 362,
+          "verticalDeltaMetres": -0.0014062019723697682
+        },
+        {
+          "vertex": 363,
+          "verticalDeltaMetres": 0.00031650756453895703
+        },
+        {
+          "vertex": 371,
+          "verticalDeltaMetres": -0.0005354302405084799
+        },
+        {
+          "vertex": 376,
+          "verticalDeltaMetres": -0.0005855800143610369
+        },
+        {
+          "vertex": 377,
+          "verticalDeltaMetres": -0.0005943565745908714
+        },
+        {
+          "vertex": 388,
+          "verticalDeltaMetres": -0.003689877842678663
+        },
+        {
+          "vertex": 389,
+          "verticalDeltaMetres": -0.00268494007050488
+        },
+        {
+          "vertex": 422,
+          "verticalDeltaMetres": 0.0013180770082909883
+        },
+        {
+          "vertex": 423,
+          "verticalDeltaMetres": 0.0026781049648991846
+        },
+        {
+          "vertex": 438,
+          "verticalDeltaMetres": -3.826441564447267e-06
+        },
+        {
+          "vertex": 440,
+          "verticalDeltaMetres": 0.0038394015558590815
+        },
+        {
+          "vertex": 441,
+          "verticalDeltaMetres": 0.0026529591124308644
+        },
+        {
+          "vertex": 448,
+          "verticalDeltaMetres": -0.0008846247786851568
+        },
+        {
+          "vertex": 449,
+          "verticalDeltaMetres": -0.0001088550048829115
+        },
+        {
+          "vertex": 466,
+          "verticalDeltaMetres": -0.001066983542665323
+        },
+        {
+          "vertex": 467,
+          "verticalDeltaMetres": -0.00163106040969474
+        },
+        {
+          "vertex": 472,
+          "verticalDeltaMetres": -0.0002705158780514135
+        },
+        {
+          "vertex": 473,
+          "verticalDeltaMetres": 0.0003487431470845953
+        },
+        {
+          "vertex": 479,
+          "verticalDeltaMetres": -0.00616724303157325
+        },
+        {
+          "vertex": 480,
+          "verticalDeltaMetres": -0.00546643952756276
+        },
+        {
+          "vertex": 497,
+          "verticalDeltaMetres": 0.005800573788414337
+        },
+        {
+          "vertex": 498,
+          "verticalDeltaMetres": 0.005304855827886728
+        },
+        {
+          "vertex": 510,
+          "verticalDeltaMetres": -6.825499646450467e-05
+        },
+        {
+          "vertex": 518,
+          "verticalDeltaMetres": 0.004831213440616994
+        },
+        {
+          "vertex": 519,
+          "verticalDeltaMetres": 0.004655436781978331
+        },
+        {
+          "vertex": 523,
+          "verticalDeltaMetres": -0.0017924608721026727
+        },
+        {
+          "vertex": 562,
+          "verticalDeltaMetres": -0.0013082302807718145
+        },
+        {
+          "vertex": 567,
+          "verticalDeltaMetres": 0.00028589248014693094
+        },
+        {
+          "vertex": 568,
+          "verticalDeltaMetres": 1.7060720285611936e-05
+        },
+        {
+          "vertex": 584,
+          "verticalDeltaMetres": -0.0010074554106286565
+        },
+        {
+          "vertex": 585,
+          "verticalDeltaMetres": 0.0002474734924070084
+        },
+        {
+          "vertex": 611,
+          "verticalDeltaMetres": -0.0012253059971776513
+        },
+        {
+          "vertex": 612,
+          "verticalDeltaMetres": -0.0007039613217841811
+        },
+        {
+          "vertex": 640,
+          "verticalDeltaMetres": 0.0005191104269828684
+        },
+        {
+          "vertex": 641,
+          "verticalDeltaMetres": -0.0008814404849415635
+        },
+        {
+          "vertex": 642,
+          "verticalDeltaMetres": -0.001695809005995641
+        },
+        {
+          "vertex": 643,
+          "verticalDeltaMetres": -0.0025883734961751337
+        },
+        {
+          "vertex": 644,
+          "verticalDeltaMetres": -0.0005862305792061574
+        },
+        {
+          "vertex": 646,
+          "verticalDeltaMetres": -0.0039001287216364755
+        },
+        {
+          "vertex": 647,
+          "verticalDeltaMetres": -0.0006288546481049151
+        },
+        {
+          "vertex": 648,
+          "verticalDeltaMetres": 0.001089954958051531
+        },
+        {
+          "vertex": 649,
+          "verticalDeltaMetres": 0.004913022972683145
+        },
+        {
+          "vertex": 650,
+          "verticalDeltaMetres": 0.003681512330227732
+        },
+        {
+          "vertex": 651,
+          "verticalDeltaMetres": 0.0007304249942912122
+        },
+        {
+          "vertex": 652,
+          "verticalDeltaMetres": -0.0012870668123029505
+        },
+        {
+          "vertex": 653,
+          "verticalDeltaMetres": 0.005942467284805186
+        },
+        {
+          "vertex": 654,
+          "verticalDeltaMetres": 0.005376204544262131
+        },
+        {
+          "vertex": 655,
+          "verticalDeltaMetres": -0.0018735075402215307
+        },
+        {
+          "vertex": 656,
+          "verticalDeltaMetres": -0.001455029647975059
+        },
+        {
+          "vertex": 657,
+          "verticalDeltaMetres": 0.00032510889551251587
+        },
+        {
+          "vertex": 658,
+          "verticalDeltaMetres": -0.006483240149548708
+        },
+        {
+          "vertex": 659,
+          "verticalDeltaMetres": -0.0058997994878798865
+        },
+        {
+          "vertex": 785,
+          "verticalDeltaMetres": -0.0008794534705434347
+        },
+        {
+          "vertex": 786,
+          "verticalDeltaMetres": -0.0003869200374870018
+        },
+        {
+          "vertex": 791,
+          "verticalDeltaMetres": 0.0002401693092272724
+        },
+        {
+          "vertex": 792,
+          "verticalDeltaMetres": -0.00041963088873149323
+        },
+        {
+          "vertex": 803,
+          "verticalDeltaMetres": -0.0005781874581514372
+        },
+        {
+          "vertex": 804,
+          "verticalDeltaMetres": -0.00042550713358672815
+        },
+        {
+          "vertex": 805,
+          "verticalDeltaMetres": 0.00013735364706721114
+        },
+        {
+          "vertex": 806,
+          "verticalDeltaMetres": 0.0027375886897041415
+        },
+        {
+          "vertex": 807,
+          "verticalDeltaMetres": 0.0033046046913513777
+        },
+        {
+          "vertex": 881,
+          "verticalDeltaMetres": -1.8120500344530994e-05
+        },
+        {
+          "vertex": 883,
+          "verticalDeltaMetres": -0.00011723602061941563
+        },
+        {
+          "vertex": 884,
+          "verticalDeltaMetres": -0.0009355320633087638
+        },
+        {
+          "vertex": 885,
+          "verticalDeltaMetres": -0.0004504843810048919
+        }
+      ],
+      "teeVertexEdits": [
+        {
+          "vertex": 79,
+          "radialDeltaMetres": 0.0007439654206234128,
+          "bindingBlend": 0.04066222339688397
+        },
+        {
+          "vertex": 82,
+          "radialDeltaMetres": 0.0024543516638881407,
+          "bindingBlend": 0.10406092033230852
+        },
+        {
+          "vertex": 83,
+          "radialDeltaMetres": 1.4901161193847656e-08,
+          "bindingBlend": 0.4229494397761434
+        },
+        {
+          "vertex": 84,
+          "radialDeltaMetres": 7.450580596923828e-09,
+          "bindingBlend": 0.08108543698316828
+        },
+        {
+          "vertex": 85,
+          "radialDeltaMetres": 0.0,
+          "bindingBlend": 0.0923429005146289
+        },
+        {
+          "vertex": 86,
+          "radialDeltaMetres": 0.012981006453770268,
+          "bindingBlend": 0.566735211919368
+        },
+        {
+          "vertex": 87,
+          "radialDeltaMetres": 0.009618783928458956,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 88,
+          "radialDeltaMetres": 0.004691566462700817,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 89,
+          "radialDeltaMetres": 0.00549414298156543,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 90,
+          "radialDeltaMetres": 0.0,
+          "bindingBlend": 0.5438777712951075
+        },
+        {
+          "vertex": 91,
+          "radialDeltaMetres": 0.009017860425116564,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 92,
+          "radialDeltaMetres": 0.0098019579682338,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 93,
+          "radialDeltaMetres": 0.0,
+          "bindingBlend": 0.647289588155086
+        },
+        {
+          "vertex": 94,
+          "radialDeltaMetres": 0.0,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 95,
+          "radialDeltaMetres": 0.0045050329414541785,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 96,
+          "radialDeltaMetres": 0.008062082057443676,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 97,
+          "radialDeltaMetres": 0.004573611735042795,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 98,
+          "radialDeltaMetres": 0.007437857132193033,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 99,
+          "radialDeltaMetres": 0.005178953817326309,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 100,
+          "radialDeltaMetres": 0.004616850097279091,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 101,
+          "radialDeltaMetres": 0.003936809047029601,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 102,
+          "radialDeltaMetres": 0.004883188879512389,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 103,
+          "radialDeltaMetres": 1.501712528671799e-08,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 104,
+          "radialDeltaMetres": 0.0013746141807941443,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 208,
+          "radialDeltaMetres": 0.0023843271332806316,
+          "bindingBlend": 0.14331532864103425
+        },
+        {
+          "vertex": 209,
+          "radialDeltaMetres": 0.008036390914633106,
+          "bindingBlend": 0.9867377225962234
+        },
+        {
+          "vertex": 210,
+          "radialDeltaMetres": 7.450580596923828e-09,
+          "bindingBlend": 0.23822145853529086
+        },
+        {
+          "vertex": 212,
+          "radialDeltaMetres": 0.0,
+          "bindingBlend": 0.01784465345680719
+        },
+        {
+          "vertex": 213,
+          "radialDeltaMetres": 0.004534408818543507,
+          "bindingBlend": 0.20116989933707796
+        },
+        {
+          "vertex": 214,
+          "radialDeltaMetres": 0.0,
+          "bindingBlend": 0.5408286408279392
+        },
+        {
+          "vertex": 215,
+          "radialDeltaMetres": 1.5359765386647212e-08,
+          "bindingBlend": 0.5085939937060187
+        },
+        {
+          "vertex": 216,
+          "radialDeltaMetres": 0.0,
+          "bindingBlend": 0.5541450472157005
+        },
+        {
+          "vertex": 218,
+          "radialDeltaMetres": 0.006768890212339059,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 219,
+          "radialDeltaMetres": 0.007958670269693324,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 220,
+          "radialDeltaMetres": 8.33000234328132e-09,
+          "bindingBlend": 0.12234828531156516
+        },
+        {
+          "vertex": 221,
+          "radialDeltaMetres": 7.45063744012585e-09,
+          "bindingBlend": 0.8265164309943105
+        },
+        {
+          "vertex": 222,
+          "radialDeltaMetres": 0.008071781246144221,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 223,
+          "radialDeltaMetres": 0.0059184592420896695,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 224,
+          "radialDeltaMetres": 0.0006776800481116604,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 225,
+          "radialDeltaMetres": 4.656612873077393e-10,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 226,
+          "radialDeltaMetres": 0.003691622435126761,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 227,
+          "radialDeltaMetres": 0.007081269282716009,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 228,
+          "radialDeltaMetres": 0.00873303228209719,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 229,
+          "radialDeltaMetres": 0.007326361683970661,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 230,
+          "radialDeltaMetres": 0.00040941587287408025,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 231,
+          "radialDeltaMetres": 0.00402815763820569,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 232,
+          "radialDeltaMetres": 0.0010682899095979435,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 233,
+          "radialDeltaMetres": 0.0008681829887426325,
+          "bindingBlend": 1
+        },
+        {
+          "vertex": 234,
+          "radialDeltaMetres": 0.003983054477184236,
+          "bindingBlend": 1
+        }
+      ],
+      "waistMaxVerticalDeltaM": 0.006483240149548708,
+      "teeMaxRadialDeltaM": 0.012981006453770268,
+      "preserved": "indices,UV,material,morphs,height of tee,body masks,other meshes,exact rig",
+      "normalization": "Only deliberately rebound lower tee weights are normalized top4 here; unchanged vertices retain original source weights for exporter",
+      "limitsUnchanged": true,
+      "status": "UNREVIEWED_SOURCE_TRIAL"
+    },
+    "coverage": {
+      "previewOnly": true,
+      "productionAuthorized": false,
+      "body": "EO02.Body.007",
+      "sourceVertexIndices": [
+        4035,
+        4036,
+        4037,
+        4038,
+        4041,
+        4042,
+        4043,
+        4044,
+        4045,
+        4046,
+        4047,
+        4048,
+        4049,
+        4050,
+        4051,
+        4052,
+        4053,
+        4054,
+        4055,
+        4056,
+        4057,
+        4058,
+        4059,
+        4060,
+        4061,
+        4062,
+        4063,
+        4074,
+        4096,
+        4097,
+        4104,
+        4105,
+        4106,
+        4107,
+        4108,
+        4109,
+        4110,
+        4111,
+        4112,
+        4113,
+        4114,
+        4115,
+        4116,
+        4117,
+        4118,
+        4119,
+        4120,
+        4121,
+        4122,
+        4123,
+        4124,
+        4125,
+        4126,
+        4127,
+        4128,
+        4129,
+        4130,
+        4131,
+        4132,
+        4133,
+        4134,
+        4135,
+        4136,
+        4137,
+        4138,
+        4145,
+        4146,
+        4147,
+        4148,
+        4149,
+        4150,
+        4152,
+        4161,
+        4162,
+        4163,
+        4164,
+        4165,
+        4166,
+        4167,
+        4168,
+        4169,
+        4170,
+        4171,
+        4172,
+        4173,
+        4174,
+        4175,
+        4176,
+        4177,
+        4178,
+        4179,
+        4180,
+        4181,
+        4182,
+        4183,
+        4184,
+        4185,
+        4186,
+        4187,
+        4188,
+        4189,
+        4190,
+        4191,
+        4192,
+        4193,
+        4194,
+        4195,
+        4196,
+        4197,
+        4198,
+        4199,
+        4200,
+        4201,
+        4202,
+        4203,
+        4204,
+        4205,
+        4206,
+        4207,
+        4208,
+        4209,
+        4210,
+        4211,
+        4212,
+        4213,
+        4214,
+        4215,
+        4216,
+        4224,
+        4269,
+        4270,
+        4271,
+        4272,
+        4273,
+        4274,
+        4275,
+        4276,
+        4277,
+        4278,
+        4279,
+        4280,
+        4281,
+        4282,
+        4283,
+        4284,
+        4285,
+        4286,
+        4317,
+        4318,
+        4319,
+        4320,
+        4321,
+        4322,
+        4324,
+        4325,
+        4326,
+        4327,
+        4328,
+        4330,
+        4357,
+        4363,
+        4364,
+        4365,
+        4366,
+        4367,
+        4368,
+        4369,
+        4386,
+        4387,
+        4388,
+        4389,
+        4390,
+        4391,
+        4392,
+        4393,
+        4394,
+        4395,
+        4396,
+        4397,
+        4398,
+        4399,
+        4400,
+        10692,
+        10693,
+        10694,
+        10695,
+        10698,
+        10699,
+        10700,
+        10701,
+        10702,
+        10703,
+        10704,
+        10705,
+        10706,
+        10707,
+        10708,
+        10709,
+        10710,
+        10711,
+        10712,
+        10713,
+        10714,
+        10715,
+        10716,
+        10717,
+        10718,
+        10726,
+        10746,
+        10747,
+        10754,
+        10755,
+        10756,
+        10757,
+        10758,
+        10759,
+        10760,
+        10761,
+        10762,
+        10763,
+        10764,
+        10765,
+        10766,
+        10767,
+        10768,
+        10769,
+        10770,
+        10771,
+        10772,
+        10773,
+        10774,
+        10775,
+        10776,
+        10777,
+        10778,
+        10779,
+        10780,
+        10781,
+        10788,
+        10789,
+        10790,
+        10791,
+        10792,
+        10794,
+        10802,
+        10803,
+        10804,
+        10805,
+        10806,
+        10807,
+        10808,
+        10809,
+        10810,
+        10811,
+        10812,
+        10813,
+        10814,
+        10815,
+        10816,
+        10817,
+        10818,
+        10819,
+        10820,
+        10821,
+        10822,
+        10823,
+        10824,
+        10825,
+        10826,
+        10827,
+        10828,
+        10829,
+        10830,
+        10831,
+        10832,
+        10833,
+        10834,
+        10835,
+        10836,
+        10837,
+        10838,
+        10839,
+        10840,
+        10841,
+        10842,
+        10843,
+        10844,
+        10845,
+        10846,
+        10847,
+        10848,
+        10849,
+        10850,
+        10851,
+        10852,
+        10859,
+        10899,
+        10900,
+        10901,
+        10902,
+        10903,
+        10904,
+        10905,
+        10906,
+        10907,
+        10908,
+        10909,
+        10910,
+        10911,
+        10912,
+        10913,
+        10914,
+        10915,
+        10916,
+        10947,
+        10948,
+        10949,
+        10950,
+        10951,
+        10952,
+        10953,
+        10954,
+        10955,
+        10956,
+        10957,
+        10981,
+        10987,
+        10988,
+        10989,
+        10990,
+        10991,
+        10992,
+        11005,
+        11006,
+        11007,
+        11008,
+        11009,
+        11010,
+        11011,
+        11012,
+        11013,
+        11014,
+        11015,
+        11016,
+        11017,
+        11018
+      ],
+      "physicalBodyVertices": 346,
+      "selection": "Physical body group only, source world0.89<height<1.06m and|X|<0.205m; entirely beneath restored full torso tee or trousers.",
+      "geometryAndRigUnchanged": true,
+      "newMask": "EO Tucked Torso Coverage R9",
+      "existingMasksUnchanged": true,
+      "reason": "Restored source underlayer now owns full waist coverage; inward fitted cloth must not expose hidden body fragments during animation.",
+      "requiresVisualCoverageReview": true
+    },
+    "scripts": [
+      {
+        "path": "$CIVILIAN_STAGE/evidence/commuter-02-garment-authoring-r7/author-waist-fit-r9.py",
+        "sha256": "28f2c19605468e9ddcb3d4eaf5b981edb143cb3db9794d2d11be9b93f69dcba8"
+      },
+      {
+        "path": "$CIVILIAN_STAGE/evidence/commuter-02-garment-authoring-r7/fit-coverage-r9.py",
+        "sha256": "e56c7bedd4519f2e33b35e4cf74b1d1574a91457a27165a7a69a10ac0a484e23"
+      }
+    ]
+  },
+  "familyDerivation": {
+    "version": "civilian-family-derivation-v1",
+    "script": "$REPO/scripts/character-assets/civilian-v1/derive-family.py",
+    "scriptSha256": "2f2988a2d0360fd4bf21df5b95143c754f12704da356a8d26e471b781e1e02e9",
+    "spec": {
+      "id": "civilian-f-01",
+      "base": "civilian-commuter-02",
+      "label": "sage overshirt, white tee, slate trousers",
+      "skin": {
+        "mpfb": "middleage_asian_female",
+        "diffuse": "middleage_lightskinned_female_diffuse2.png",
+        "multiplier": [
+          0.79,
+          0.73,
+          0.71
+        ]
+      },
+      "wardrobe": {
+        "top": [
+          0.22,
+          0.27,
+          0.18
+        ],
+        "tee": [
+          0.7,
+          0.68,
+          0.64
+        ],
+        "bottom": [
+          0.12,
+          0.14,
+          0.17
+        ]
+      },
+      "hair": [
+        0.05,
+        0.035,
+        0.025
+      ]
+    },
+    "materials": {
+      "skin": {
+        "mhmat": "$MPFB_USER_DATA/skins/middleage_asian_female/middleage_asian_female.mhmat",
+        "mhmatSha256": "d002c338239d2aeeeec037e21f9dd22cd484ba8a955aee22aa0fe279ad6a3960",
+        "diffuse": "$MPFB_USER_DATA/skins/middleage_asian_female/middleage_lightskinned_female_diffuse2.png",
+        "diffuseSha256": "39c505ca224387bef0b20cd2bf513c3997c27c7e7434447228c9991b87cb8d01",
+        "license": "CC0-1.0",
+        "calibrationMultiplier": [
+          0.79,
+          0.73,
+          0.71
+        ]
+      },
+      "EO02.OliveCotton.PBR.007": {
+        "mode": "luminance-ramp",
+        "linearAlbedo": [
+          0.22,
+          0.27,
+          0.18
+        ],
+        "sourceLuminanceP05": 0.0,
+        "sourceLuminanceP95": 0.10685966163873672,
+        "darkScale": 0.5,
+        "lightScale": 1.12,
+        "sourceImage": "commuter-02-olive-slate-basecolor-v2.png.006"
+      },
+      "EO02.SlateTwill.PBR.007": {
+        "mode": "luminance-ramp",
+        "linearAlbedo": [
+          0.12,
+          0.14,
+          0.17
+        ],
+        "sourceLuminanceP05": 0.0,
+        "sourceLuminanceP95": 0.10685966163873672,
+        "darkScale": 0.5,
+        "lightScale": 1.12,
+        "sourceImage": "commuter-02-olive-slate-basecolor-v2.png.005"
+      },
+      "EO02.IvoryJersey.PBR.009": {
+        "mode": "flat",
+        "linearAlbedo": [
+          0.7,
+          0.68,
+          0.64
+        ]
+      },
+      "EO02.RefinedHairCap.PBR.006": {
+        "mode": "hair-luminance-ramp",
+        "linearAlbedo": [
+          0.05,
+          0.035,
+          0.025
+        ],
+        "sourceLuminanceP05": 0.009862971492111683,
+        "sourceLuminanceP95": 0.0729876309633255
+      }
+    },
+    "geometryChanged": false,
+    "weightsChanged": false,
+    "uvChanged": false
+  },
+  "outfit": {
+    "version": "civilian-outfit-v1",
+    "script": "$REPO/scripts/character-assets/civilian-v1/build-outfit.py",
+    "scriptSha256": "72a0f232446734d30ba05d67407c6c31885e736be88ca2abe50b093ddfbdcd54",
+    "spec": {
+      "id": "civilian-f-01",
+      "label": "striped blouse, grey pencil skirt",
+      "garments": [
+        {
+          "asset": "female_elegantsuit01",
+          "name": "BlouseSkirt",
+          "role": "top",
+          "dye": null,
+          "multiplier": [
+            1.15,
+            1.15,
+            1.15
+          ],
+          "roughness": 0.72,
+          "hemClearanceMetres": 0.12,
+          "snug": 0.5,
+          "snugAboveMetres": 0.95
+        }
+      ],
+      "hair": {
+        "style": "ponytail01",
+        "colour": [
+          0.035,
+          0.026,
+          0.02
+        ],
+        "lodWeight": 16
+      }
+    },
+    "removed": [
+      "EO02.ChestPocket.007",
+      "EO02.Hair.007",
+      "EO02.InnerTee.007",
+      "EO02.InnerTee.CageTrial400.001",
+      "EO02.Overshirt.007",
+      "EO02.OvershirtSeams.007",
+      "EO02.OvershirtSeams.R7.001",
+      "EO02.OvershirtSeams.R8.001",
+      "EO02.Source.CasualSuit03.007",
+      "EO02.Trousers.007"
+    ],
+    "assets": [
+      {
+        "role": "BlouseSkirt",
+        "eoRole": "top",
+        "mhclo": "clothes/female_elegantsuit01/female_elegantsuit01.mhclo",
+        "license": "CC0-1.0",
+        "files": [
+          {
+            "name": "female_elegantsuit01.mhclo",
+            "sha256": "8ed657dbc49466e6a485993cfdcfd7b6ac30a0f44408dfd38de7a649477d8928"
+          },
+          {
+            "name": "female_elegantsuit01.mhmat",
+            "sha256": "a0b1708efbff3c4ad96f8e7d8cc27fb1652719549455ce94b89bcf6294cfbed0"
+          },
+          {
+            "name": "female_elegantsuit01.obj",
+            "sha256": "3b46cef6d63968954dc00c39ede649d76c05e5d36fe9f9c677349c88fd424de9"
+          },
+          {
+            "name": "female_elegantsuit01_ao.png",
+            "sha256": "0f89546c63ab16e2c1ba0556da7e07264b98b58e6200b043491f92f796b87673"
+          },
+          {
+            "name": "female_elegantsuit01_diffuse.png",
+            "sha256": "ebe6f2afcbaadbe56d5cee6e00bab45e97ce482f0be0e34491d16ca5f98b38ac"
+          },
+          {
+            "name": "female_elegantsuit01_normal.png",
+            "sha256": "ae3650bce6678cd67d025ab70e68b22683176aeaabc06d8e5b2129af99c762e9"
+          }
+        ]
+      },
+      {
+        "role": "Hair",
+        "eoRole": "hair",
+        "mhclo": "hair/ponytail01/ponytail01.mhclo",
+        "license": "CC0-1.0",
+        "files": [
+          {
+            "name": "ponytail01.mhclo",
+            "sha256": "97fc50b12bcb3b1c7b33edddd8d427a2604ffb06fe79b31132bf47f82d7afbac"
+          },
+          {
+            "name": "ponytail01.mhmat",
+            "sha256": "b145f5a7c9606859ad523f5113482a1cf989cf0e26dccc2ea95c377cb1c2557f"
+          },
+          {
+            "name": "ponytail01.obj",
+            "sha256": "d9f5fe96fbedbc8006220d87aad0e4a33d15286eb6b21f5929661cdc490ebf5a"
+          },
+          {
+            "name": "ponytail01_diffuse.png",
+            "sha256": "dcb364300cac06ce8bef91b2f7c0970baf310898bbdd06b0c6b884ee9306eb97"
+          }
+        ]
+      }
+    ],
+    "materials": {
+      "EO02.BlouseSkirt.PBR": {
+        "diffuse": "$MPFB_USER_DATA/clothes/female_elegantsuit01/female_elegantsuit01_diffuse.png",
+        "diffuseSha256": "ebe6f2afcbaadbe56d5cee6e00bab45e97ce482f0be0e34491d16ca5f98b38ac",
+        "roughness": 0.72,
+        "specularIorLevel": 0.28,
+        "mode": "native",
+        "calibrationMultiplier": [
+          1.15,
+          1.15,
+          1.15
+        ],
+        "normal": "$MPFB_USER_DATA/clothes/female_elegantsuit01/female_elegantsuit01_normal.png",
+        "normalSha256": "ae3650bce6678cd67d025ab70e68b22683176aeaabc06d8e5b2129af99c762e9"
+      },
+      "EO02.Hair.ponytail01.PBR": {
+        "diffuse": "$MPFB_USER_DATA/hair/ponytail01/ponytail01_diffuse.png",
+        "diffuseSha256": "dcb364300cac06ce8bef91b2f7c0970baf310898bbdd06b0c6b884ee9306eb97",
+        "roughness": 0.77,
+        "specularIorLevel": 0.06,
+        "mode": "luminance-ramp",
+        "linearAlbedo": [
+          0.035,
+          0.026,
+          0.02
+        ],
+        "sourceLuminanceP05": 0.00763596361503005,
+        "sourceLuminanceP95": 0.16974550485610962
+      }
+    },
+    "build": [],
+    "buildMaxShiftMetres": 0.0,
+    "bodyCoverage": {
+      "snug": {
+        "female_elegantsuit01": {
+          "fraction": 0.5,
+          "minGapMetres": 0.006,
+          "aboveMetres": 0.95,
+          "movedVertices": 1282,
+          "largestMoveMetres": 0.04404885161308766
+        }
+      },
+      "female_elegantsuit01": {
+        "keptSkinVertices": 59,
+        "bandMetres": 0.0,
+        "coverInsideMetres": 0.09,
+        "coverOutsideMetres": 0.025,
+        "coveredBodyVertices": 545
+      },
+      "fragments": {
+        "hiddenVertices": 9,
+        "thresholdVertices": 200
+      }
+    }
+  }
+}

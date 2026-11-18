@@ -1,0 +1,137 @@
+{
+ "seed": 5,
+ "notes": "Rework r3: two-storey rusticated tan-brown base (groundBand to 7.5 m, hyDRubble courses), white dentil frieze over it (hand.py), barred basement windows, larger corner-bay casements with muntins. Upper cream wall left as is. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game.",
+ "wall": "painted-stucco",
+ "wallTint": "#e5dfd2",
+ "trim": "painted-white@f2ece0",
+ "frame": "painted-white@f2ece0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@ece4d0",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@e5dfd2",
+ "cornice": true,
+ "corniceProjectionM": 0.6,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 1.0,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.07,
+  0.19,
+  0.31,
+  0.43,
+  0.55,
+  0.67,
+  0.8,
+  0.865,
+  0.93
+ ],
+ "bays": [
+  {
+   "at": 0.865,
+   "widthM": 3.4,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#e5dfd2",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    },
+    "muntins": {
+     "upperRows": 2,
+     "upperCols": 2,
+     "lowerRows": 1,
+     "lowerCols": 1
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.05,
+    "to": 0.11,
+    "kind": "window",
+    "headM": 3.0,
+    "grille": true
+   },
+   {
+    "from": 0.19,
+    "to": 0.25,
+    "kind": "window",
+    "headM": 3.0,
+    "grille": true
+   },
+   {
+    "from": 0.31,
+    "to": 0.37,
+    "kind": "window",
+    "headM": 3.0,
+    "grille": true
+   },
+   {
+    "from": 0.43,
+    "to": 0.49,
+    "kind": "window",
+    "headM": 3.0,
+    "grille": true
+   },
+   {
+    "from": 0.55,
+    "to": 0.61,
+    "kind": "window",
+    "headM": 3.0,
+    "grille": true
+   },
+   {
+    "from": 0.67,
+    "to": 0.73,
+    "kind": "window",
+    "headM": 3.0,
+    "grille": true
+   },
+   {
+    "from": 0.8,
+    "to": 0.9,
+    "kind": "window",
+    "headM": 3.0,
+    "grille": true
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "groundBand": {
+  "material": "limestone-ashlar",
+  "tint": "#9c7a55",
+  "topM": 7.5
+ },
+ "hyDRubble": {
+  "toM": 7.5,
+  "courseM": 0.5,
+  "blockM": 1.1,
+  "projM": 0.04,
+  "shade": 0.6,
+  "seed": 3
+ }
+}

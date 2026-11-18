@@ -1,0 +1,127 @@
+{
+ "seed": 9,
+ "notes": "Round 8: Tudor-revival house behind a white retaining wall; fewer half-timber lines, grouped 3-light casements, red-brown tile hip, awning over stair. Set-back staggered pair/gables not expressible. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k) - photo-sampled tints rendered dark/olive in game. GroundBand lift (2026-10-03): groundBand tint #f0eee8 -> #f8f6f4 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-white",
+ "wallTint": "#f8f7f4",
+ "trim": "painted-steel@38435c",
+ "frame": "painted-steel@38435c",
+ "glass": "glass-clear",
+ "roof": "terracotta",
+ "cornice": false,
+ "corniceProjectionM": 0.4,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 1.6,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.2,
+ "storefront": {
+  "bulkheadM": 1.0,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.38,
+    "to": 0.62,
+    "kind": "door",
+    "stair": true,
+    "leaf": "wood-siding",
+    "headM": 1.7
+   }
+  ]
+ },
+ "storefrontFrame": "painted-steel@38435c",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-white",
+ "ground": "lobby",
+ "upper": "apartment",
+ "floorsM": {
+  "groundM": 1.9,
+  "upperM": 3.0
+ },
+ "wallTopM": 7.9,
+ "roofBlocks": [
+  {
+   "at": 0.5,
+   "widthM": 5.5,
+   "depthM": 11.5,
+   "setbackM": 0.02,
+   "hipRiseM": 2.6,
+   "eaveM": 0.4,
+   "material": "painted-white",
+   "tint": "#f2efe8",
+   "hipMaterial": "terracotta@8a4a36"
+  }
+ ],
+ "pilasters": {
+  "at": [
+   0.03,
+   0.5,
+   0.97
+  ],
+  "widthM": 0.09,
+  "projectionM": 0.04,
+  "fromM": 1.9,
+  "toM": 7.9,
+  "material": "painted-steel",
+  "tint": "#38435c"
+ },
+ "upperWindowSpans": [
+  [
+   0.12,
+   0.45
+  ],
+  [
+   0.55,
+   0.88
+  ]
+ ],
+ "upperSillM": 0.75,
+ "upperHeadM": 1.95,
+ "sashRows": 2,
+ "sashCols": 3,
+ "mullionM": 0.9,
+ "sashMaterial": "painted-steel@38435c",
+ "fireEscape": {
+  "at": 0.5,
+  "widthM": 2.4,
+  "depthM": 0.7,
+  "toStorey": 1,
+  "material": "painted-steel@2b3346"
+ },
+ "awning": "painted-steel@1c1c1e",
+ "awningSpans": [
+  {
+   "from": 0.34,
+   "to": 0.66,
+   "depthM": 1.0
+  }
+ ],
+ "groundBand": {
+  "material": "painted-white",
+  "tint": "#f8f6f4",
+  "topM": 1.9
+ },
+ "frameGrid": {
+  "columns": [
+   0.0,
+   1.0
+  ],
+  "columnW": 0.08,
+  "slabEdgeH": 0.1,
+  "projectionM": 0.02,
+  "fromStorey": 9,
+  "recessM": 20.44,
+  "material": "painted-white",
+  "tint": "#f2efe8"
+ },
+ "lowParts": [
+  {
+   "zMax": -12.15,
+   "heightM": 8.5,
+   "toleranceM": 0.5,
+   "source": "not a lower wing: keeps rooms out of the rear slot of the concave footprint"
+  }
+ ],
+ "streetStills": true
+}

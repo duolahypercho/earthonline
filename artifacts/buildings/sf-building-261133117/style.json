@@ -1,0 +1,163 @@
+{
+ "seed": 11,
+ "notes": "Round 3: 1915 dark purple-charcoal stucco flats; maroon-framed windows; flush shallow box bays on the angled edge; small residential windows over a dark brown brick wainscot; iron gate under a pink sign band; two-platform fire escape; thin parapet coping. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. Colour re-apply (2026-10-03): a rework re-sampled wallTint #8a7e86 from the photo; lifted/converted once to #a1989e. Dark grey (2026-10-03): photo wall is dark grey-brown, the mauve tint rendered pink on the warm stucco base; tint = #5a5552 / base, no lift.",
+ "wall": "painted-stucco",
+ "wallTint": "#6a6970",
+ "trim": "painted-white@3e1c22",
+ "frame": "painted-white@3e1c22",
+ "storefrontFrame": "painted-white@3a2c32",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-stucco@746560",
+ "windowW": 2.3,
+ "windowSillM": 0.8,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.5
+ ],
+ "groundBand": {
+  "material": "brick-common-bond",
+  "tint": "#a08070",
+  "topM": 1.0
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.22,
+    "to": 0.82,
+    "kind": "gate",
+    "lattice": false,
+    "headM": 2.2,
+    "material": "painted-steel",
+    "tint": "#2a2628"
+   }
+  ]
+ },
+ "hbSignBands": [
+  {
+   "from": 0.22,
+   "to": 0.82,
+   "bottomM": 2.3,
+   "topM": 2.8,
+   "material": "painted-white",
+   "tint": "#7a3a4a"
+  }
+ ],
+ "fireEscape": {
+  "at": 0.5,
+  "widthM": 2.3,
+  "depthM": 0.85,
+  "standoffM": 0.1,
+  "ladder": false,
+  "material": "painted-steel-mid",
+  "dropLadder": false,
+  "roofLadder": false,
+  "braces": true,
+  "hbSteepStair": {
+   "runM": 1.3,
+   "treadWM": 0.55,
+   "alongF": 0.5,
+   "riserM": 0.2,
+   "stringerM": 0.04
+  }
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "glass": "glass-clear",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "streetStills": true,
+ "streetEdges": {
+  "6": {
+   "windowW": 0.05,
+   "upperWindows": [
+    0.24,
+    0.72
+   ],
+   "bays": [
+    {
+     "at": 0.24,
+     "widthM": 2.8,
+     "projectionM": 0.35,
+     "fromStorey": 1,
+     "material": "painted-stucco",
+     "tint": "#8a7e86",
+     "hyB": {
+      "plan": "box",
+      "sashes": {
+       "front": 3,
+       "sides": 1
+      },
+      "marginM": 0.15,
+      "cornice": {
+       "projectionM": 0.04,
+       "roofRiseM": 0.0
+      },
+      "corbel": {
+       "tiers": 0,
+       "brackets": 0
+      }
+     }
+    },
+    {
+     "at": 0.72,
+     "widthM": 2.8,
+     "projectionM": 0.35,
+     "fromStorey": 1,
+     "material": "painted-stucco",
+     "tint": "#8a7e86",
+     "hyB": {
+      "plan": "box",
+      "sashes": {
+       "front": 3,
+       "sides": 1
+      },
+      "marginM": 0.15,
+      "cornice": {
+       "projectionM": 0.04,
+       "roofRiseM": 0.0
+      },
+      "corbel": {
+       "tiers": 0,
+       "brackets": 0
+      }
+     }
+    }
+   ],
+   "storefront": {
+    "bulkheadM": 1.0,
+    "transomM": 0.3,
+    "layout": [
+     {
+      "from": 0.11,
+      "to": 0.37,
+      "kind": "window",
+      "headM": 2.4
+     },
+     {
+      "from": 0.59,
+      "to": 0.85,
+      "kind": "window",
+      "headM": 2.4
+     }
+    ]
+   },
+   "coping": {
+    "heightM": 0.14,
+    "projectionM": 0.07,
+    "material": "cast-stone-trim",
+    "tint": "#8a8088"
+   }
+  }
+ },
+ "coping": {
+  "heightM": 0.14,
+  "projectionM": 0.07,
+  "material": "cast-stone-trim",
+  "tint": "#8a8088"
+ }
+}

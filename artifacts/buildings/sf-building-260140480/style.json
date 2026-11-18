@@ -1,0 +1,157 @@
+{
+ "seed": 5,
+ "notes": "1915 four-storey blush-stucco flats on a grey base: stacked projecting bays at both ends, central paired windows with a black fire escape zig-zagging across the upper floors, dark green belt ledges and cornice; ground two wide arched windows and an arched barred entry. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. GroundBand lift (2026-10-03): groundBand tint #6a6a72 -> #88888e (same rule as walls; it was missed by the first colour pass).",
+ "streetStills": true,
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-storefront",
+ "wall": "painted-stucco",
+ "windowW": 0.7,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.45,
+ "cornice": true,
+ "corniceProjectionM": 0.5,
+ "beltCourse": true,
+ "ground": "lobby",
+ "upper": "apartment",
+ "wallTint": "#f2e7e2",
+ "trim": "painted-white@2c6a64",
+ "frame": "painted-white@efe9dc",
+ "storefrontFrame": "painted-white@f2eee2",
+ "bulkhead": "painted-stucco@65656a",
+ "upperWindows": [
+  0.5
+ ],
+ "upperWindowArch": {
+  "type": "segmental",
+  "storeys": [
+   3
+  ],
+  "surround": true
+ },
+ "fireEscape": {
+  "at": 0.5,
+  "widthM": 2.6,
+  "depthM": 0.9,
+  "standoffM": 0.3,
+  "ladder": true,
+  "material": "painted-steel",
+  "levels": [
+   2,
+   3
+  ],
+  "dropLadder": true,
+  "roofLadder": false,
+  "braces": true
+ },
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#88888e",
+  "topM": 1.2
+ },
+ "storefront": {
+  "bulkheadM": 1.0,
+  "transomM": 0.3,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.07,
+    "to": 0.28,
+    "kind": "window",
+    "headM": 2.9,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   },
+   {
+    "from": 0.36,
+    "to": 0.57,
+    "kind": "window",
+    "headM": 2.9,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   },
+   {
+    "from": 0.66,
+    "to": 0.9,
+    "kind": "gate",
+    "headM": 3.2,
+    "stair": true,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   }
+  ]
+ },
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.2,
+  "upperM": 2.9
+ },
+ "bays": [
+  {
+   "at": 0.15,
+   "widthM": 2.9,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f2e7e2",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.45,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.2,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.86,
+   "widthM": 2.9,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f2e7e2",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.45,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.2,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "hbCorniceBrackets": {
+  "spacingM": 0.7,
+  "heightM": 0.4,
+  "depthM": 0.3,
+  "widthM": 0.2,
+  "material": "painted-white",
+  "tint": "#2c6a64"
+ }
+}

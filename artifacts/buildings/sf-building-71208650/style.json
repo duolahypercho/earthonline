@@ -1,0 +1,171 @@
+{
+ "seed": 34,
+ "notes": "Rework r3: storey count back to the data (3 storeys, LiDAR 11.4 m: photo shows base + 2 window rows under the cornice, so the added fourth storey was unsupported). Blush wall, charcoal-brown rusticated base with arched iron-gated entry, two bays with the fire escape between, dark bracketed dentil cornice, plaques under the bays. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. GroundBand lift (2026-10-03): groundBand tint #3a302c -> #584f4c (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#f5e6e0",
+ "trim": "painted-white@8a6a58",
+ "frame": "painted-white@f4ece6",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@3a302c",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-stucco@584f4c",
+ "cornice": true,
+ "corniceProjectionM": 1.0,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.4,
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "upperWindows": [
+  0.5
+ ],
+ "bays": [
+  {
+   "at": 0.13,
+   "widthM": 2.2,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f5e6e0",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   },
+   "plaques": {
+    "material": "painted-white",
+    "tint": "#f0e0d4",
+    "heightM": 0.5,
+    "widthFrac": 0.6
+   }
+  },
+  {
+   "at": 0.8,
+   "widthM": 2.6,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f5e6e0",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   },
+   "plaques": {
+    "material": "painted-white",
+    "tint": "#f0e0d4",
+    "heightM": 0.5,
+    "widthFrac": 0.6
+   }
+  }
+ ],
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#584f4c",
+  "topM": 3.3
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.06,
+    "to": 0.13,
+    "kind": "window",
+    "headM": 2.3,
+    "grille": true
+   },
+   {
+    "from": 0.17,
+    "to": 0.24,
+    "kind": "window",
+    "headM": 2.3,
+    "grille": true
+   },
+   {
+    "from": 0.42,
+    "to": 0.59,
+    "kind": "gate",
+    "stair": true,
+    "leaf": "painted-steel@221e1c",
+    "headM": 2.8,
+    "arch": {
+     "type": "round"
+    }
+   },
+   {
+    "from": 0.68,
+    "to": 0.76,
+    "kind": "window",
+    "headM": 2.3,
+    "grille": true
+   },
+   {
+    "from": 0.82,
+    "to": 0.9,
+    "kind": "window",
+    "headM": 2.3,
+    "grille": true
+   }
+  ]
+ },
+ "fireEscape": {
+  "at": 0.49,
+  "widthM": 2.2,
+  "depthM": 0.9,
+  "material": "painted-steel"
+ },
+ "hyDRubble": {
+  "toM": 3.3,
+  "courseM": 0.55,
+  "blockM": 0.9,
+  "projM": 0.03,
+  "shade": 0.7,
+  "seed": 5,
+  "maxTris": 6000
+ },
+ "hbCorniceDentils": {
+  "spacingM": 0.25,
+  "sizeM": 0.12,
+  "tint": "#6a4a38"
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.8,
+  "heightM": 0.6,
+  "depthM": 0.4,
+  "widthM": 0.2,
+  "material": "painted-white",
+  "tint": "#6a4a38"
+ }
+}

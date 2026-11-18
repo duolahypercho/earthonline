@@ -1,0 +1,102 @@
+{
+ "seed": 41,
+ "notes": "2002 three-storey infill in peach stucco with cream trim at the Post corner, in the same wall as the shop block beside it. Two three-sided bays on the upper storeys, a sash window and small round windows beneath; ground has a dark panelled door, a service panel and a grid-paned window. The year-built field is the only thing saying this is newer than its neighbours. Applied: tan stucco, brown-framed dark-green arched door, big multi-pane ground window, angled bays with light frames. Porthole windows and quoins have no key and are skipped; storey count kept at the data (spec 3). Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Tan stucco tint, rectangular dark wood door with a grille, dark-framed glass-block window, deeper bays, plain cap moulding, two portholes via hand.py. Lifted/converted once to #f8ecd4.",
+ "wall": "painted-stucco",
+ "wallTint": "#f8ecd4",
+ "trim": "painted-white@f2e8cc",
+ "frame": "painted-white@f2e8cc",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-steel@2a3028",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "corniceProjectionM": 0.3,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "bulkhead": "painted-stucco@f0d8a8",
+ "bays": [
+  {
+   "at": 0.27,
+   "widthM": 3.0,
+   "projectionM": 0.85,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f6f0de",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.16,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.76,
+   "widthM": 3.0,
+   "projectionM": 0.85,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f6f0de",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.16,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "upperWindows": [
+  0.27,
+  0.76
+ ],
+ "storefront": {
+  "bulkheadM": 0.6,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.05,
+    "to": 0.2,
+    "kind": "door",
+    "leaf": "wood-siding@3a2418",
+    "grille": true
+   },
+   {
+    "from": 0.5,
+    "to": 0.93,
+    "kind": "window",
+    "headM": 2.7
+   }
+  ]
+ },
+ "edgeRoles": {}
+}

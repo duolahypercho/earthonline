@@ -1,0 +1,121 @@
+{
+ "seed": 41,
+ "notes": "Rework r3: darker red-brown face brick, charcoal-black painted base with white plinth band and entablature (hand.py), white bay stack, white balustrade balconettes at the second-floor level, plain base windows with no barred row. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game.",
+ "wall": "brick-common-bond",
+ "wallTint": "#edcbe1",
+ "trim": "painted-white@f0ece4",
+ "frame": "painted-white@f2eee6",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f4f0e8",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "brick-running-bond@56a1ed",
+ "cornice": true,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.4,
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "bays": [
+  {
+   "at": 0.5,
+   "widthM": 3.4,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f8f6f2",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.6,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "upperWindows": [
+  0.07,
+  0.2,
+  0.3,
+  0.38,
+  0.65,
+  0.75,
+  0.84,
+  0.93
+ ],
+ "groundBand": {
+  "material": "brick-common-bond",
+  "tint": "#4d84c3",
+  "topM": 4.9
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.03,
+    "to": 0.08,
+    "kind": "window",
+    "headM": 2.4
+   },
+   {
+    "from": 0.153,
+    "to": 0.203,
+    "kind": "window",
+    "headM": 2.4
+   },
+   {
+    "from": 0.276,
+    "to": 0.326,
+    "kind": "window",
+    "headM": 2.4
+   },
+   {
+    "from": 0.399,
+    "to": 0.449,
+    "kind": "window",
+    "headM": 2.4
+   },
+   {
+    "from": 0.522,
+    "to": 0.5720000000000001,
+    "kind": "window",
+    "headM": 2.4
+   },
+   {
+    "from": 0.645,
+    "to": 0.6950000000000001,
+    "kind": "window",
+    "headM": 2.4
+   },
+   {
+    "from": 0.768,
+    "to": 0.8180000000000001,
+    "kind": "window",
+    "headM": 2.4
+   },
+   {
+    "from": 0.891,
+    "to": 0.9410000000000001,
+    "kind": "window",
+    "headM": 2.4
+   }
+  ]
+ },
+ "corniceProjectionM": 0.5
+}

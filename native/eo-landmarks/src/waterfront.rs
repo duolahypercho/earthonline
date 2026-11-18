@@ -1,0 +1,645 @@
+//! the waterfront as built places. The quay wall's edges, the
+//! piers as decks over the water, the promenade at the top of the wall, and
+//! the press the terrain takes behind them.
+//!
+//! What the JS has, and where this goes past it:
+//!
+//! - **The shore edges.** The JS walls every shoreline ring edge inside its
+//!   window that is not near a beach (renderer.js `skipBeachEdge`); the port
+//!   (shore.rs `city_walls`) also dropped a ring edge whose ground 4 m out on
+//!   its seaward side reads dry (the county line). That probe reads the
+//!   elevation grid's LiDAR, which the sampler takes whenever one of a
+//!   sample's four cells is LiDAR ground (eo-data `ElevationGrid::sample`):
+//!   4 m out from a quay is still the quay's own cells, so most of the
+//!   Embarcadero lost its wall. Here an edge is a county line only when every
+//!   probe out to `COUNTY_LINE_PROBES_M` reads dry.
+//! - **Piers.** The JS builds one pier deck, the Ferry Plaza's (OSM way
+//!   661723975, hero-waterfront-structures.js, "no piles"), and none of the
+//!   other piers, whose land the shoreline rings carry (the DataSF shoreline
+//!   draws round them: 90-100 % of each big pier's area is ring land). The
+//!   pier outlines are the game's own data: `piers` of
+//!   public/data/sf/sf-map-citywide.json.gz (OSM `man_made=pier|breakwater`,
+//!   ODbL, the earlier map build), which only the 2D map reads.
+//!   Each becomes a flat deck at its surveyed level (the median LiDAR ground
+//!   inside it plus the road lift), with a fascia, a dark under-deck face and
+//!   a pile row along every edge where it meets the water: on the shoreline
+//!   ring's own edges inside the pier (so the deck edge stands exactly on the
+//!   waterline the water pass draws to) and on its OSM edges that stand over
+//!   open water. INFERRED (no JS or data source): the fascia depth, the pile
+//!   pitch and section, the under-deck face, the deck strip's width.
+//! - **The promenade.** The JS presses its carpet below the sea within 12 m
+//!   of the water and lays its streets and paths over it
+//!   (ground-coverage-contract.js); the native terrain stands on the surveyed
+//!   ground, whose 8 m cells slope from the quay down to the seabed across the
+//!   waterline, in front of the wall's face. Here the terrain behind a walled
+//!   edge is pressed (`press_quay`) so that slope is under the water, and a
+//!   paved strip at the wall's crest covers the press (`CAP_W_M`, the quay
+//!   apron; INFERRED width). The wall's landward face, band and block courses
+//!   are under that strip, so the near tier does not build them (shore.rs
+//!   `build_seawall_seaward`).
+
+use crate::geometry::{Frozen, MeshArrays, Rgb, ring_centroid, signed_area};
+use crate::shore::BeachRule;
+use anyhow::Result;
+use std::collections::HashMap;
+
+/// A ring edge is a county line (dry land on its "sea" side) only when the
+/// ground reads more than `SHORE_DRY_ABOVE_SEA_M` over the sea at every one of
+/// these distances out from it.
+pub const COUNTY_LINE_PROBES_M: [f64; 5] = [4.0, 12.0, 24.0, 40.0, 64.0];
+/// The longest piece of a ring edge the wall is built on, metres.
+pub const EDGE_PIECE_M: f64 = 8.0;
+/// The wall's crest stands on the highest ground within this of it (the
+/// quay's own top, not the bank the elevation grid blends down to the sea
+/// along the ring line), metres.
+pub const CREST_REACH_M: f64 = 8.0;
+
+/// The quay crest's ground at (x, z): the highest of the ground there and on
+/// a ring of `CREST_REACH_M` and half of it around it.
+pub fn crest_ground(height_at: &dyn Fn(f64, f64) -> Option<f64>, x: f64, z: f64) -> f64 {
+    let mut best = height_at(x, z).unwrap_or(0.0);
+    for r in [CREST_REACH_M * 0.5, CREST_REACH_M] {
+        for k in 0..8 {
+            let a = k as f64 * std::f64::consts::FRAC_PI_4;
+            if let Some(h) = height_at(x + a.cos() * r, z + a.sin() * r) {
+                best = best.max(h);
+            }
+        }
+    }
+    best
+}
+
+/// Pier outlines smaller than this are left out (moorings, floats). m^2.
+pub const PIER_MIN_AREA_M2: f64 = 150.0;
+/// A pier further than this from every ring edge is not in the bay the city
+/// draws (Marin, the East Bay). Metres.
+pub const PIER_MAX_SHORE_M: f64 = 400.0;
+/// A ring edge whose middle is within this of a pier outline is that pier's edge. Metres.
+pub const PIER_DILATE_M: f64 = 6.0;
+/// The paved strip at the wall's crest (the quay apron) and a pier's deck strip, landward of the waterline. Metres.
+pub const CAP_W_M: f64 = 8.0;
+/// The press behind a wall: at most `sea + QUAY_PRESS_FOOT_M + QUAY_PRESS_SLOPE x d`, d metres inland
+/// of the waterline (the slope keeps the terrain's 8 m cells under the sea at the wall's foot).
+pub const QUAY_PRESS_FOOT_M: f64 = -0.6;
+pub const QUAY_PRESS_SLOPE: f64 = 0.45;
+/// A pier deck's fascia (edge beam) depth, the set-back of the dark under-deck
+/// face, and the pile row's pitch and section. Metres. INFERRED.
+pub const PIER_FASCIA_M: f64 = 0.9;
+pub const PIER_VOID_SETBACK_M: f64 = 1.0;
+pub const PIER_PILE_PITCH_M: f64 = 4.2;
+pub const PIER_PILE_SECTION_M: f64 = 0.46;
+/// The deck stands this far under the road surface (ground + road lift), so
+/// a street on a pier draws over it. Metres.
+pub const PIER_UNDER_ROAD_M: f64 = 0.03;
+/// A pier with no LiDAR ground inside (a float, a pier built over open water)
+/// stands this far over the sea. Metres. INFERRED.
+pub const PIER_FLOAT_FREEBOARD_M: f64 = 1.0;
+
+/// The under-deck face's linear tone: the shadowed void under a pier deck,
+/// over the water (INFERRED: a dark weathered concrete in deep shade).
+pub const UNDER_DECK_LINEAR: Rgb = [0.018, 0.020, 0.019];
+/// The kit finishes the Ferry Plaza pier's sheds are drawn in (kit-material-specs.json):
+/// a painted steel panel (dielectric; the kit's bare corrugated metal, metalness 1,
+/// mirrors the sky and drew the sheds blue at noon) and a membrane roof.
+pub const SHED_WALL_KIT: &str = "painted-steel-light";
+pub const SHED_ROOF_KIT: &str = "membrane-roof";
+
+/// `createFerryCard04PierSheds` on the pier's deck at `deck_y`: the JS's
+/// anchors and box sizes (shore.rs `ferry_shed_anchors`), as walls and roofs
+/// (white vertex colour: the kit finish carries the tone).
+pub fn ferry_sheds(outline: &[[f64; 2]], spec: &serde_json::Value, deck_y: f64) -> Option<(Frozen, Frozen)> {
+    let n = |k: &str| crate::data::num(spec, k);
+    let (w, d, h) = (n("widthM"), n("depthM"), n("heightM"));
+    let picked = crate::shore::ferry_shed_anchors(outline, spec);
+    if picked.is_empty() {
+        return None;
+    }
+    let mut walls = MeshArrays::new("ferry-pier-sheds");
+    let mut roofs = MeshArrays::new("ferry-pier-shed-roofs");
+    for (p, yaw) in &picked {
+        // three's rotation.y turns local +x toward -z: the box's local x is its width.
+        walls.box_(p[0], p[1], deck_y - 0.05, deck_y + h, w / 2.0, d / 2.0, -yaw, [1.0; 3], crate::geometry::Faces { top: false, bottom: false });
+        let mut top = MeshArrays::new("roof");
+        top.box_(p[0], p[1], deck_y + h - 0.01, deck_y + h, w / 2.0, d / 2.0, -yaw, [1.0; 3], crate::geometry::NO_BOTTOM);
+        // Its last quad is the top face (hexahedron: four sides, then the top).
+        let v0 = top.positions.len() - 12;
+        let q: Vec<[f64; 3]> = (0..4).map(|k| [top.positions[v0 + 3 * k], top.positions[v0 + 3 * k + 1], top.positions[v0 + 3 * k + 2]]).collect();
+        roofs.quad_n(q[0], q[1], q[2], q[3], [1.0; 3], [0.0, 1.0, 0.0]);
+    }
+    Some((walls.freeze(), roofs.freeze()))
+}
+
+impl std::fmt::Debug for ShorePress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ShorePress({} edges, {} piers)", self.edges.len(), self.piers.len())
+    }
+}
+
+/// One pier: its outline (the citywide map's ring), its deck level, its box.
+#[derive(Clone, Debug)]
+pub struct Pier {
+    pub ring: Vec<[f64; 2]>,
+    pub deck_y: f64,
+    pub area_m2: f64,
+    /// Share of its plan samples whose ground is LiDAR deck (over the sea).
+    pub lidar_share: f64,
+    pub min: [f64; 2],
+    pub max: [f64; 2],
+}
+
+impl Pier {
+    pub fn contains(&self, x: f64, z: f64) -> bool {
+        if x < self.min[0] || x > self.max[0] || z < self.min[1] || z > self.max[1] {
+            return false;
+        }
+        point_in_ring(&self.ring, x, z)
+    }
+    /// Inside, or within `d` of its outline.
+    pub fn near(&self, x: f64, z: f64, d: f64) -> bool {
+        if x < self.min[0] - d || x > self.max[0] + d || z < self.min[1] - d || z > self.max[1] + d {
+            return false;
+        }
+        self.contains(x, z) || ring_distance(&self.ring, x, z) < d
+    }
+}
+
+pub fn point_in_ring(ring: &[[f64; 2]], x: f64, z: f64) -> bool {
+    let mut inside = false;
+    let mut j = ring.len() - 1;
+    for i in 0..ring.len() {
+        let (a, c) = (ring[i], ring[j]);
+        if (a[1] > z) != (c[1] > z) && x < ((c[0] - a[0]) * (z - a[1])) / (c[1] - a[1]) + a[0] {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
+}
+
+fn seg_distance(x: f64, z: f64, a: [f64; 2], b: [f64; 2]) -> (f64, f64) {
+    let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+    let l2 = dx * dx + dz * dz;
+    let t = if l2 > 0.0 { (((x - a[0]) * dx + (z - a[1]) * dz) / l2).clamp(0.0, 1.0) } else { 0.0 };
+    ((x - a[0] - dx * t).hypot(z - a[1] - dz * t), t)
+}
+
+pub fn ring_distance(ring: &[[f64; 2]], x: f64, z: f64) -> f64 {
+    let mut d = f64::INFINITY;
+    for i in 0..ring.len() {
+        d = d.min(seg_distance(x, z, ring[i], ring[(i + 1) % ring.len()]).0);
+    }
+    d
+}
+
+/// The citywide map's pier rings (`piers`: `len` vertices per feature, `xy`
+/// feature-delta encoded, times `meta.quantum`), in world metres.
+pub fn load_pier_rings(repo_root: &std::path::Path) -> Result<Vec<Vec<[f64; 2]>>> {
+    use std::io::Read;
+    #[derive(serde::Deserialize)]
+    struct Meta {
+        quantum: f64,
+    }
+    #[derive(serde::Deserialize)]
+    struct Layer {
+        len: Vec<usize>,
+        xy: Vec<i64>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Map {
+        meta: Meta,
+        piers: Layer,
+    }
+    let bytes = std::fs::read(repo_root.join("public/data/sf/sf-map-citywide.json.gz"))?;
+    let mut s = String::new();
+    flate2::read::GzDecoder::new(&bytes[..]).read_to_string(&mut s)?;
+    let m: Map = serde_json::from_str(&s)?;
+    let q = m.meta.quantum * eo_data::groundscale::scale(); // the piers at the scaled ground plan
+    let mut out = Vec::with_capacity(m.piers.len.len());
+    let mut k = 0usize;
+    for &n in &m.piers.len {
+        if n == 0 || k + 2 * n > m.piers.xy.len() {
+            break;
+        }
+        let (mut x, mut z) = (m.piers.xy[k], m.piers.xy[k + 1]);
+        let mut r = vec![[x as f64 * q, z as f64 * q]];
+        for v in 1..n {
+            x += m.piers.xy[k + 2 * v];
+            z += m.piers.xy[k + 2 * v + 1];
+            r.push([x as f64 * q, z as f64 * q]);
+        }
+        k += 2 * n;
+        if r.len() > 2 && (r[0][0] - r[r.len() - 1][0]).hypot(r[0][1] - r[r.len() - 1][1]) < 1e-6 {
+            r.pop();
+        }
+        if r.len() >= 3 {
+            out.push(r);
+        }
+    }
+    Ok(out)
+}
+
+/// The piers the city draws: every ring of `PIER_MIN_AREA_M2` or more within
+/// `PIER_MAX_SHORE_M` of a shoreline ring edge, its deck at the median LiDAR
+/// ground inside it plus the road lift (less `PIER_UNDER_ROAD_M`), or
+/// `PIER_FLOAT_FREEBOARD_M` over the sea where nothing inside reads LiDAR.
+pub fn plan_piers(rings: &[Vec<[f64; 2]>], oracle: &eo_water::shoreline::Oracle, ground: &(dyn Fn(f64, f64) -> Option<f64> + Sync), sea: f64, road_lift: f64) -> Vec<Pier> {
+    let mut out = Vec::new();
+    for r in rings {
+        let area = signed_area(r).abs();
+        if area < PIER_MIN_AREA_M2 {
+            continue;
+        }
+        let (mut mn, mut mx) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+        for p in r {
+            for k in 0..2 {
+                mn[k] = mn[k].min(p[k]);
+                mx[k] = mx[k].max(p[k]);
+            }
+        }
+        let c = ring_centroid(r);
+        if oracle.edge_distance(c[0], c[1], PIER_MAX_SHORE_M + 1.0) > PIER_MAX_SHORE_M {
+            continue;
+        }
+        // Plan samples on a grid of about 300 points.
+        let step = ((mx[0] - mn[0]) * (mx[1] - mn[1]) / 300.0).sqrt().max(1.5);
+        let mut hs: Vec<f64> = Vec::new();
+        let mut n = 0usize;
+        let mut z = mn[1] + step / 2.0;
+        while z < mx[1] {
+            let mut x = mn[0] + step / 2.0;
+            while x < mx[0] {
+                if point_in_ring(r, x, z) {
+                    n += 1;
+                    if let Some(g) = ground(x, z).filter(|g| *g > sea + 0.3) {
+                        hs.push(g);
+                    }
+                }
+                x += step;
+            }
+            z += step;
+        }
+        if n == 0 {
+            continue;
+        }
+        let share = hs.len() as f64 / n as f64;
+        let deck_y = if share >= 0.2 {
+            hs.sort_by(|a, b| a.total_cmp(b));
+            hs[hs.len() / 2] + road_lift - PIER_UNDER_ROAD_M
+        } else {
+            sea + PIER_FLOAT_FREEBOARD_M
+        };
+        out.push(Pier { ring: r.clone(), deck_y, area_m2: area, lidar_share: share, min: mn, max: mx });
+    }
+    out
+}
+
+/// One shoreline ring edge the city builds on, with its landward unit normal.
+#[derive(Clone, Copy, Debug)]
+pub struct ShoreEdge {
+    pub a: [f64; 2],
+    pub b: [f64; 2],
+    pub land: [f64; 2],
+    /// The pier it belongs to (`None`: a quay wall edge).
+    pub pier: Option<usize>,
+}
+
+/// What the shore classification found, for the load trace.
+#[derive(Clone, Debug, Default)]
+pub struct EdgeCensus {
+    pub visited: usize,
+    pub beach: usize,
+    pub county_line: usize,
+    pub wall: usize,
+    pub pier: usize,
+    /// Edges the 4 m probe alone (the earlier rule) would have dropped as a county line.
+    pub kept_by_far_probe: usize,
+    pub wall_m: f64,
+    pub pier_m: f64,
+}
+
+/// The landward unit normal of a ring edge, as `buildSeawallGeometry` picks
+/// it (probes at 0.6, 1.4 and 2.6 m off the edge's middle; the side two of
+/// them call water is the sea).
+pub fn land_normal(oracle: &eo_water::shoreline::Oracle, a: [f64; 2], b: [f64; 2]) -> Option<[f64; 2]> {
+    let length = (b[0] - a[0]).hypot(b[1] - a[1]);
+    if !(length > 0.05) {
+        return None;
+    }
+    let (ux, uz) = ((b[0] - a[0]) / length, (b[1] - a[1]) / length);
+    let (nx, nz) = (-uz, ux);
+    let (mx, mz) = ((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0);
+    let water_side = [0.6, 1.4, 2.6].iter().filter(|d| oracle.is_water(mx + nx * **d, mz + nz * **d)).count();
+    Some(if water_side >= 2 { [-nx, -nz] } else { [nx, nz] })
+}
+
+/// Every shoreline ring edge, classified: a beach (no wall, the JS rule), a
+/// county line (dry land on both sides, every probe out to 64 m), a pier's
+/// edge (its middle within `PIER_DILATE_M` of a pier), else a quay wall edge.
+pub fn classify_edges(
+    oracle: &eo_water::shoreline::Oracle,
+    ground: &(dyn Fn(f64, f64) -> Option<f64> + Sync),
+    sea: f64,
+    beaches: &BeachRule,
+    piers: &[Pier],
+) -> (Vec<ShoreEdge>, EdgeCensus) {
+    let mut census = EdgeCensus::default();
+    let mut raw: Vec<[f64; 4]> = Vec::new();
+    oracle.for_each_edge(|ax, az, bx, bz| raw.push([ax, az, bx, bz]));
+    // A pier lookup on a coarse grid of their boxes.
+    const CELL: f64 = 64.0;
+    let mut grid: HashMap<(i64, i64), Vec<usize>> = HashMap::new();
+    for (i, p) in piers.iter().enumerate() {
+        let (c0, c1) = (((p.min[0] - PIER_DILATE_M) / CELL).floor() as i64, ((p.max[0] + PIER_DILATE_M) / CELL).floor() as i64);
+        let (r0, r1) = (((p.min[1] - PIER_DILATE_M) / CELL).floor() as i64, ((p.max[1] + PIER_DILATE_M) / CELL).floor() as i64);
+        for r in r0..=r1 {
+            for c in c0..=c1 {
+                grid.entry((c, r)).or_default().push(i);
+            }
+        }
+    }
+    let dry = sea + crate::shore::SHORE_DRY_ABOVE_SEA_M;
+    let mut out = Vec::new();
+    // The DataSF rings run straight for hundreds of metres along the
+    // Embarcadero (one edge from Rincon Park to the Bay Bridge is 373 m):
+    // the wall's crest follows the ground only at an edge's ends, so a long
+    // edge is cut into pieces of at most `EDGE_PIECE_M`, each classified on
+    // its own (its landward side from the whole edge).
+    let mut pieces: Vec<([f64; 2], [f64; 2], [f64; 2])> = Vec::new();
+    for e in raw {
+        census.visited += 1;
+        let (a, b) = ([e[0], e[1]], [e[2], e[3]]);
+        let Some(land) = land_normal(oracle, a, b) else { continue };
+        let n = ((b[0] - a[0]).hypot(b[1] - a[1]) / EDGE_PIECE_M).ceil().max(1.0) as usize;
+        for k in 0..n {
+            let (t0, t1) = (k as f64 / n as f64, (k + 1) as f64 / n as f64);
+            let p = |t: f64| [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+            pieces.push((p(t0), p(t1), land));
+        }
+    }
+    for (a, b, land) in pieces {
+        let (mx, mz) = ((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0);
+        let sea_n = [-land[0], -land[1]];
+        let probe = |d: f64| ground(mx + sea_n[0] * d, mz + sea_n[1] * d).is_some_and(|g| g > dry);
+        if COUNTY_LINE_PROBES_M.iter().all(|d| probe(*d)) {
+            census.county_line += 1;
+            continue;
+        }
+        if beaches.skip(a[0], a[1], b[0], b[1]) {
+            census.beach += 1;
+            continue;
+        }
+        if probe(COUNTY_LINE_PROBES_M[0]) {
+            census.kept_by_far_probe += 1;
+        }
+        let length = (b[0] - a[0]).hypot(b[1] - a[1]);
+        let key = ((mx / CELL).floor() as i64, (mz / CELL).floor() as i64);
+        let pier = grid.get(&key).and_then(|list| list.iter().copied().find(|&i| piers[i].near(mx, mz, PIER_DILATE_M)));
+        if pier.is_some() {
+            census.pier += 1;
+            census.pier_m += length;
+        } else {
+            census.wall += 1;
+            census.wall_m += length;
+        }
+        out.push(ShoreEdge { a, b, land, pier });
+    }
+    (out, census)
+}
+
+/// The press the terrain takes behind a quay wall, `d` metres inland of the waterline.
+pub fn press_quay(sea: f64, d: f64) -> f64 {
+    sea + QUAY_PRESS_FOOT_M + QUAY_PRESS_SLOPE * d.max(0.0)
+}
+
+/// Behind a pier's edge: under the sea to the under-deck face, then the quay's slope.
+pub fn press_pier_edge(sea: f64, d: f64) -> f64 {
+    sea - 1.2 + QUAY_PRESS_SLOPE * (d - PIER_VOID_SETBACK_M - 0.4).max(0.0)
+}
+
+/// The terrain press of the built waterfront: a grid of the walled and pier
+/// edges (with their landward normals) and the piers, answering the most a
+/// terrain vertex may stand at.
+pub struct ShorePress {
+    sea: f64,
+    cell: f64,
+    edges: Vec<ShoreEdge>,
+    edge_cells: HashMap<(i64, i64), Vec<u32>>,
+    piers: Vec<(Vec<[f64; 2]>, [f64; 2], [f64; 2], f64)>,
+    pier_cells: HashMap<(i64, i64), Vec<u32>>,
+}
+
+impl ShorePress {
+    pub fn new(sea: f64, edges: &[ShoreEdge], piers: &[Pier]) -> Self {
+        let cell = 32.0;
+        let reach = CAP_W_M + 2.0;
+        let mut edge_cells: HashMap<(i64, i64), Vec<u32>> = HashMap::new();
+        for (i, e) in edges.iter().enumerate() {
+            let (x0, x1) = (e.a[0].min(e.b[0]) - reach, e.a[0].max(e.b[0]) + reach);
+            let (z0, z1) = (e.a[1].min(e.b[1]) - reach, e.a[1].max(e.b[1]) + reach);
+            for r in (z0 / cell).floor() as i64..=(z1 / cell).floor() as i64 {
+                for c in (x0 / cell).floor() as i64..=(x1 / cell).floor() as i64 {
+                    edge_cells.entry((c, r)).or_default().push(i as u32);
+                }
+            }
+        }
+        let mut pier_cells: HashMap<(i64, i64), Vec<u32>> = HashMap::new();
+        let mut list = Vec::new();
+        for (i, p) in piers.iter().enumerate() {
+            list.push((p.ring.clone(), [p.min[0] - 2.0, p.min[1] - 2.0], [p.max[0] + 2.0, p.max[1] + 2.0], p.deck_y));
+            for r in ((p.min[1] - 2.0) / cell).floor() as i64..=((p.max[1] + 2.0) / cell).floor() as i64 {
+                for c in ((p.min[0] - 2.0) / cell).floor() as i64..=((p.max[0] + 2.0) / cell).floor() as i64 {
+                    pier_cells.entry((c, r)).or_default().push(i as u32);
+                }
+            }
+        }
+        Self { sea, cell, edges: edges.to_vec(), edge_cells, piers: list, pier_cells }
+    }
+
+    /// The terrain height at (x, z) given the carpet's `y`: under every pier
+    /// deck, and pressed behind the walled and pier edges.
+    pub fn press(&self, x: f64, z: f64, y: f64) -> f64 {
+        let key = ((x / self.cell).floor() as i64, (z / self.cell).floor() as i64);
+        let mut out = y;
+        if let Some(list) = self.pier_cells.get(&key) {
+            for &i in list {
+                let (ring, mn, mx, deck) = &self.piers[i as usize];
+                if x < mn[0] || x > mx[0] || z < mn[1] || z > mx[1] {
+                    continue;
+                }
+                if point_in_ring(ring, x, z) || ring_distance(ring, x, z) < 2.0 {
+                    out = out.min(deck - 0.3);
+                }
+            }
+        }
+        if let Some(list) = self.edge_cells.get(&key) {
+            for &i in list {
+                let e = &self.edges[i as usize];
+                // Only the land side: the water side is the seabed already.
+                let side = (x - e.a[0]) * e.land[0] + (z - e.a[1]) * e.land[1];
+                if side < -0.5 {
+                    continue;
+                }
+                let (d, _) = seg_distance(x, z, e.a, e.b);
+                if d > CAP_W_M + 2.0 {
+                    continue;
+                }
+                let limit = if e.pier.is_some() { press_pier_edge(self.sea, d) } else { press_quay(self.sea, d) };
+                out = out.min(limit);
+            }
+        }
+        out
+    }
+}
+
+/// The meshes of the built waterfront.
+#[derive(Default)]
+pub struct WaterfrontMeshes {
+    /// The quay apron and the pier decks (drawn in the street's footway paving).
+    pub paving: Frozen,
+    /// Pier fascias, piles, the apron's kerb skirt (cast concrete).
+    pub concrete: Frozen,
+    /// The dark under-deck faces.
+    pub under_deck: Frozen,
+    pub piles: usize,
+    pub decks: usize,
+}
+
+/// The quay apron (a strip at the wall's crest, `CAP_W_M` landward of the
+/// coping) and its landward kerb skirt, for each wall edge; the pier fascia,
+/// under-deck face, pile row and deck strip for each pier edge; each pier's
+/// deck slab over its outline and a fascia on its outline edges over open water.
+#[allow(clippy::too_many_arguments)]
+pub fn build_meshes(
+    edges: &[ShoreEdge],
+    piers: &[Pier],
+    oracle: &eo_water::shoreline::Oracle,
+    crest_at: &dyn Fn(f64, f64) -> f64,
+    sea: f64,
+    coping_land: f64,
+    concrete: Rgb,
+    dark: Rgb,
+    apron: Rgb,
+    deck: Rgb,
+) -> WaterfrontMeshes {
+    let mut paving = MeshArrays::new("waterfront:paving");
+    let mut conc = MeshArrays::new("waterfront:concrete");
+    let mut under = MeshArrays::new("waterfront:under-deck");
+    let mut piles = 0usize;
+    // Joints: the strip's corner at each edge end, to fill the wedge between consecutive edges.
+    let mut ends: HashMap<(i64, i64), Vec<([f64; 2], f64, f64, Rgb)>> = HashMap::new();
+    let key = |p: [f64; 2]| ((p[0] * 100.0).round() as i64, (p[1] * 100.0).round() as i64);
+    for e in edges {
+        let (a, b, n) = (e.a, e.b, e.land);
+        let at = |p: [f64; 2], o: f64, y: f64| [p[0] + n[0] * o, y, p[1] + n[1] * o];
+        let (ya, yb, inner, tone) = match e.pier {
+            None => (crest_at(a[0], a[1]), crest_at(b[0], b[1]), coping_land, apron),
+            Some(i) => (piers[i].deck_y, piers[i].deck_y, 0.0, deck),
+        };
+        // The strip: from the coping (or the waterline) to CAP_W_M inland, facing up.
+        let w = CAP_W_M + coping_land;
+        let up = |p: [f64; 3], q: [f64; 3], r: [f64; 3], s: [f64; 3], m: &mut MeshArrays| {
+            // Wound to face up whichever way the edge runs.
+            let cr = (q[0] - p[0]) * (s[2] - p[2]) - (q[2] - p[2]) * (s[0] - p[0]);
+            if cr < 0.0 { m.quad(p, q, r, s, tone) } else { m.quad(s, r, q, p, tone) }
+        };
+        up(at(a, inner, ya), at(b, inner, yb), at(b, w, yb), at(a, w, ya), &mut paving);
+        // Its landward kerb skirt, down past the press.
+        conc.quad(at(a, w, ya), at(b, w, yb), at(b, w, yb - 1.4), at(a, w, ya - 1.4), concrete);
+        ends.entry(key(a)).or_default().push(([n[0], n[1]], ya, inner, tone));
+        ends.entry(key(b)).or_default().push(([n[0], n[1]], yb, inner, tone));
+        if let Some(i) = e.pier {
+            let deck = piers[i].deck_y;
+            pier_fascia(&mut conc, &mut under, a, b, n, deck, sea, concrete, dark, &mut piles);
+        }
+    }
+    // Joint fans: the strip's wedge between two edges meeting at a point.
+    for (k, list) in &ends {
+        if list.len() < 2 {
+            continue;
+        }
+        let p = [k.0 as f64 / 100.0, k.1 as f64 / 100.0];
+        let (n0, y0, i0, tone) = list[0];
+        let (n1, y1, i1, _) = list[1];
+        let y = y0.max(y1);
+        let w = CAP_W_M + i0.max(i1);
+        let a = [p[0] + n0[0] * i0, y, p[1] + n0[1] * i0];
+        let b = [p[0] + n0[0] * w, y, p[1] + n0[1] * w];
+        let c = [p[0] + n1[0] * w, y, p[1] + n1[1] * w];
+        let cr = (b[0] - a[0]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[0] - a[0]);
+        if cr.abs() < 1e-6 {
+            continue;
+        }
+        if cr < 0.0 { paving.tri(a, b, c, tone) } else { paving.tri(a, c, b, tone) }
+    }
+    // Pier slabs over their outlines, and fascias on outline edges over open water.
+    let mut decks = 0usize;
+    for p in piers {
+        let mut ear = earcut::Earcut::<f64>::new();
+        let mut tri: Vec<u32> = Vec::new();
+        ear.earcut(p.ring.iter().copied(), &[] as &[u32], &mut tri);
+        if tri.is_empty() {
+            continue;
+        }
+        decks += 1;
+        for t in tri.chunks_exact(3) {
+            let v = |i: u32| [p.ring[i as usize][0], p.deck_y, p.ring[i as usize][1]];
+            let (a, b, c) = (v(t[0]), v(t[1]), v(t[2]));
+            let cr = (b[0] - a[0]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[0] - a[0]);
+            if cr < 0.0 { paving.tri(a, b, c, deck) } else { paving.tri(a, c, b, deck) }
+        }
+        let inward =if signed_area(&p.ring) > 0.0 { 1.0 } else { -1.0 };
+        for i in 0..p.ring.len() {
+            let (a, b) = (p.ring[i], p.ring[(i + 1) % p.ring.len()]);
+            let l = (b[0] - a[0]).hypot(b[1] - a[1]);
+            if l < 0.5 {
+                continue;
+            }
+            let (mx, mz) = ((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0);
+            // Over open water: the middle, and a metre out from it, is water.
+            let n = [-(b[1] - a[1]) / l * inward, (b[0] - a[0]) / l * inward];
+            if !(oracle.is_water(mx, mz) && oracle.is_water(mx - n[0], mz - n[1])) {
+                continue;
+            }
+            // The outline's interior side: a point a metre in must be inside.
+            let n = if point_in_ring(&p.ring, mx + n[0], mz + n[1]) { n } else { [-n[0], -n[1]] };
+            pier_fascia(&mut conc, &mut under, a, b, n, p.deck_y, sea, concrete, dark, &mut piles);
+        }
+    }
+    WaterfrontMeshes { paving: paving.freeze(), concrete: conc.freeze(), under_deck: under.freeze(), piles, decks }
+}
+
+/// A pier deck's edge on the segment a-b (`n` into the deck): the fascia beam,
+/// its soffit back to the under-deck face, that dark face down into the
+/// water, and a pile row under the soffit.
+#[allow(clippy::too_many_arguments)]
+fn pier_fascia(conc: &mut MeshArrays, under: &mut MeshArrays, a: [f64; 2], b: [f64; 2], n: [f64; 2], deck: f64, sea: f64, concrete: Rgb, dark: Rgb, piles: &mut usize) {
+    let l = (b[0] - a[0]).hypot(b[1] - a[1]);
+    if l < 0.3 {
+        return;
+    }
+    let at = |p: [f64; 2], o: f64, y: f64| [p[0] + n[0] * o, y, p[1] + n[1] * o];
+    let soffit = deck - PIER_FASCIA_M;
+    let foot = sea - 1.4;
+    // Fascia: facing out of the deck (quad wound with the outward normal).
+    let out_quad = |m: &mut MeshArrays, p: [f64; 3], q: [f64; 3], r: [f64; 3], s: [f64; 3], col: Rgb| {
+        let e1 = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
+        let e2 = [s[0] - p[0], s[1] - p[1], s[2] - p[2]];
+        let nn = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+        if nn[0] * -n[0] + nn[2] * -n[1] >= 0.0 { m.quad(p, q, r, s, col) } else { m.quad(s, r, q, p, col) }
+    };
+    out_quad(conc, at(a, 0.0, deck), at(b, 0.0, deck), at(b, 0.0, soffit), at(a, 0.0, soffit), concrete);
+    // Soffit (facing down) and the under-deck face (facing out), set back.
+    under.quad(at(a, 0.0, soffit), at(b, 0.0, soffit), at(b, PIER_VOID_SETBACK_M, soffit), at(a, PIER_VOID_SETBACK_M, soffit), dark);
+    out_quad(under, at(a, PIER_VOID_SETBACK_M, soffit), at(b, PIER_VOID_SETBACK_M, soffit), at(b, PIER_VOID_SETBACK_M, foot), at(a, PIER_VOID_SETBACK_M, foot), dark);
+    // Piles under the soffit, half-way to the face.
+    let count = (l / PIER_PILE_PITCH_M).floor().max(1.0) as usize;
+    let h = PIER_PILE_SECTION_M / 2.0;
+    let u = [(b[0] - a[0]) / l, (b[1] - a[1]) / l];
+    for k in 0..count {
+        let s = (k as f64 + 0.5) * l / count as f64;
+        let c = [a[0] + u[0] * s + n[0] * (PIER_VOID_SETBACK_M * 0.5), a[1] + u[1] * s + n[1] * (PIER_VOID_SETBACK_M * 0.5)];
+        let yaw = u[1].atan2(u[0]);
+        conc.box_(c[0], c[1], foot, soffit, h, h, yaw, concrete, crate::geometry::Faces { top: false, bottom: false });
+        *piles += 1;
+    }
+}

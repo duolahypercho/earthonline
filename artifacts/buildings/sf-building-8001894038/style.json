@@ -1,0 +1,99 @@
+{
+  "builder": "house",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "painted-stucco",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "seed": 34,
+  "storeysSeen": 3,
+  "groundM": 2.6,
+  "roofLevelM": 7.9,
+  "notes": "1520 Great Highway (1954, two units), by eye: a three-storey house in grey vertical board siding with white trim, a steep street-facing gable over the top storey with a small window in it, a flat roof behind; ground: a garage and an entry; upper: a wide window on each floor and a red door onto a small balcony on the top floor.",
+  "wall": "painted-clapboard",
+  "wallTint": "#747a80",
+  "streetEdges": {
+    "6": {}
+  },
+  "roofForm": {
+    "form": "front-gable",
+    "depthM": 5.5,
+    "eaveM": 0.3,
+    "material": "asphalt-roof",
+    "tint": "#555452",
+    "pediment": false,
+    "gableWindow": {
+      "widthM": 0.7,
+      "heightM": 0.5
+    }
+  },
+  "garages": [
+    {
+      "from": 0.1,
+      "to": 0.58,
+      "headM": 2.2,
+      "material": "painted-white",
+      "pattern": "panel"
+    }
+  ],
+  "entry": {
+    "from": 0.7,
+    "to": 0.84,
+    "headM": 2.2,
+    "material": "painted-white",
+    "glass": true,
+    "recessM": 0.2
+  },
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.1,
+      "to": 0.62,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        3,
+        2
+      ]
+    },
+    {
+      "storey": 2,
+      "from": 0.1,
+      "to": 0.55,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        2,
+        2
+      ]
+    },
+    {
+      "storey": 2,
+      "from": 0.66,
+      "to": 0.86,
+      "sill": 0.0,
+      "head": 2.2,
+      "panes": [
+        1,
+        2
+      ],
+      "frameTint": "#a8322c"
+    }
+  ]
+}

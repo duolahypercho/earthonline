@@ -1,0 +1,242 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-261113831",
+  "slug": "b261113831",
+  "walkIndex": 5128,
+  "street": "Hyde Street",
+  "address": "1309 Hyde Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "street count 4 (style storeysSeen) overrides Assessor roll (assessor) 3"
+  },
+  "storeysRoll": 3,
+  "heightM": 13.8,
+  "storeys": 4,
+  "floors": {
+    "groundM": 3.8,
+    "upperM": 3.2,
+    "roofM": 0.4
+  },
+  "yearBuilt": 1908,
+  "use": "MRES",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "bay-window",
+  "material": "painted",
+  "frame": {
+    "edgeIndex": 1,
+    "center": {
+      "x": 112.786,
+      "z": 1656.822
+    },
+    "heading": 1.475434,
+    "width": 14.303,
+    "depth": 31.525
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -7.151,
+      "z": 6.926
+    },
+    {
+      "x": -7.11,
+      "z": 15.762
+    },
+    {
+      "x": 4.443,
+      "z": 15.762
+    },
+    {
+      "x": 4.846,
+      "z": 5.276
+    },
+    {
+      "x": 0.2,
+      "z": 5.018
+    },
+    {
+      "x": 0.837,
+      "z": -4.084
+    },
+    {
+      "x": 5.601,
+      "z": -3.636
+    },
+    {
+      "x": 7.151,
+      "z": -14.734
+    },
+    {
+      "x": -5.203,
+      "z": -15.762
+    },
+    {
+      "x": -6.991,
+      "z": 4.399
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -7.151,
+        "z": 6.926
+      },
+      "b": {
+        "x": -7.11,
+        "z": 15.762
+      },
+      "lengthM": 8.836,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -7.11,
+        "z": 15.762
+      },
+      "b": {
+        "x": 4.443,
+        "z": 15.762
+      },
+      "lengthM": 11.552,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 4.443,
+        "z": 15.762
+      },
+      "b": {
+        "x": 4.846,
+        "z": 5.276
+      },
+      "lengthM": 10.494,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 4.846,
+        "z": 5.276
+      },
+      "b": {
+        "x": 0.2,
+        "z": 5.018
+      },
+      "lengthM": 4.653,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": 0.2,
+        "z": 5.018
+      },
+      "b": {
+        "x": 0.837,
+        "z": -4.084
+      },
+      "lengthM": 9.124,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": 0.837,
+        "z": -4.084
+      },
+      "b": {
+        "x": 5.601,
+        "z": -3.636
+      },
+      "lengthM": 4.785,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": 5.601,
+        "z": -3.636
+      },
+      "b": {
+        "x": 7.151,
+        "z": -14.734
+      },
+      "lengthM": 11.206,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": 7.151,
+        "z": -14.734
+      },
+      "b": {
+        "x": -5.203,
+        "z": -15.762
+      },
+      "lengthM": 12.397,
+      "role": "rear",
+      "partyShare": 0.06
+    },
+    {
+      "index": 8,
+      "a": {
+        "x": -5.203,
+        "z": -15.762
+      },
+      "b": {
+        "x": -6.991,
+        "z": 4.399
+      },
+      "lengthM": 20.241,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 9,
+      "a": {
+        "x": -6.991,
+        "z": 4.399
+      },
+      "b": {
+        "x": -7.151,
+        "z": 6.926
+      },
+      "lengthM": 2.532,
+      "role": "party",
+      "partyShare": 1
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

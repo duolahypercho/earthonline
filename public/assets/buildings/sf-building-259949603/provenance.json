@@ -1,0 +1,61 @@
+{
+  "kind": "blender-building",
+  "id": "sf-building-259949603",
+  "pass": "b259949603-blender-6facb6b9-236db0-hfea566",
+  "generator": "scripts/blender-buildings/build_building.py",
+  "generatorSha256": "6facb6b980e5966bff381f1088766095f94c593f58d833334af51d6578efa055",
+  "blender": "Blender 5.1.2",
+  "inputs": {
+    "spec": "artifacts/buildings/sf-building-259949603/spec.json",
+    "specSha256": "eab5206d6ca4f293832282e7a852a24e526b21152b1d6b13cf4284c66ad42fdb",
+    "style": "artifacts/buildings/sf-building-259949603/style.json",
+    "styleSha256": "236db05d6cde0d6a91c25d1b3aa8d1c228159c0f0bc5482cf271b0de98bc0c80",
+    "hand": "artifacts/buildings/sf-building-259949603/hand.py",
+    "handSha256": "fea566ce9b9f0e6d543c2fbb29593ef523b4ae721a659846bd3d72088e80f900"
+  },
+  "sources": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor+ground)"
+  },
+  "license": "Original geometry generated from open data (DataSF footprints, LiDAR, Assessor roll). No third-party meshes or textures.",
+  "furniture": [],
+  "assets": {
+    "exterior": {
+      "url": "/assets/buildings/sf-building-259949603/exterior.glb",
+      "sha256": "124e1c9b16ad1fa9ab70b2469b00b47d0185618d1be5587acf3faa9117ffccd5",
+      "bytes": 452468
+    },
+    "interior": {
+      "url": "/assets/buildings/sf-building-259949603/interior.glb",
+      "sha256": "79e8f3288ddc9d0bb7d958648e66307fe1d63e9c521ffe611495bd196e58990b",
+      "bytes": 213948
+    },
+    "fine": [
+      {
+        "storey": 0,
+        "url": "/assets/buildings/sf-building-259949603/fine-s0.glb",
+        "sha256": "cfcb22d3cd30cd64d65242227553e919ae337dcad68a2e3dcd24d5ca04f06802",
+        "bytes": 29816
+      },
+      {
+        "storey": 1,
+        "url": "/assets/buildings/sf-building-259949603/fine-s1.glb",
+        "sha256": "15882e1c5f4a0bce773bb5919d3f33d9a773cd3306c81cd9eea1d5dfca9f42b0",
+        "bytes": 95132
+      },
+      {
+        "storey": 2,
+        "url": "/assets/buildings/sf-building-259949603/fine-s2.glb",
+        "sha256": "24fc42a483555255e8752bcef7ff9b4fcf432e40580ac05937581df13340a2a9",
+        "bytes": 95120
+      },
+      {
+        "storey": 3,
+        "url": "/assets/buildings/sf-building-259949603/fine-s3.glb",
+        "sha256": "028f47827bc86d655b1b74073a58729a6c720d4eecc9cbe21b96bd3e5ca13560",
+        "bytes": 95140
+      }
+    ]
+  }
+}

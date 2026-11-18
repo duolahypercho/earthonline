@@ -1,0 +1,39 @@
+sf-city.json.gz - San Francisco roads, building footprints, signals, sidewalks, crossings, street points and rail ways
+
+Sources and licences, as recorded in the file's own meta.sources and per-layer
+meta blocks:
+
+- OpenStreetMap San Francisco extract (bbbike)
+  Contains information from OpenStreetMap, which is made available here under the
+  Open Database License (ODbL) 1.0: https://opendatacommons.org/licenses/odbl/1-0/
+  © OpenStreetMap contributors - https://www.openstreetmap.org/copyright
+  Extract: https://download.bbbike.org/osm/bbbike/SanFrancisco/
+  Extract sha256 values recorded in the file:
+    efcda2e3e31ecb206c995b355743d28fd678b86347a6d19052a98921b51a5b55 (meta.sources extract)
+    7192f9cf2daa76efbbf7184d2d8ee63417ce37fcf554cab22c1b579d8c9d7dcc (street points, building levels,
+      building location/layer, way access, link ways)
+    cfccab232942ae8bfea5933704361ea6011817b913a00f5c74294896791b22cd (embedded tenancy: trade category only;
+      POI names, brands and operators are never read)
+
+- SF Shoreline and Islands (DataSF), City and County of San Francisco
+  Open Data Commons Public Domain Dedication and License (PDDL) 1.0:
+  https://opendatacommons.org/licenses/pddl/1-0/
+  https://data.sfgov.org/api/geospatial/txuc-3kzm?method=export&format=GeoJSON
+  sha256 a3023288edff7a91f84f20ca54fc55693b2f6a4fa4fb396807378f31be80f01d
+  (land boundary rings)
+
+- DataSF civic street attributes (meta.streetDesign.civicAttributes,
+  source datasf-civic-street-attributes-v1), recorded licence "PDDL-1.0 (DataSF)".
+
+- USGS 3D Elevation Program (3DEP) 1 m bare-earth DEM, public domain (U.S.
+  Government work), used to place bridge ends (meta.bridgeEnds, sf-bridge-ends-v1);
+  tile names and sha256 are listed in that block and in sf-elevation.NOTICE.txt.
+
+Output sha256: f1f41c398c24f6636c593a1aefb14e8e4d016b0a800d8f81d0fe7ad522639f1d (sf-city.json.gz)
+Produced by the project's earlier data pipeline (its generator names are recorded in
+meta); those scripts are not part of this repository.
+
+This file is a Derivative Database of OpenStreetMap, re-projected to world metres
+(x east, z south, sf-frame-south-v1). The derived database is offered under the
+ODbL 1.0. Any public use must keep the attribution above and share derivative
+databases under the ODbL.

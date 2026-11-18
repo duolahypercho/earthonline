@@ -1,0 +1,359 @@
+{
+  "seed": 1,
+  "notes": "1927 four-level brick flats (garage storey + 3 storeys of flats; the roll's 3 leaves the garage storey out), S side of Chestnut Street between Webster and Fillmore. Red-brown running-bond face brick; three cream three-sided bays over the upper storeys (one over each ground opening group); plain brick between; white double-hung sashes; cream string course over the ground storey and a bracketed cream cornice; steel fire escape on the west part. Ground: blue side doors at both ends, two red-panel sectional garage doors in white frame grids, recessed central entry with an ornamented cream surround and dark iron gate. Signage: house number only. Garage panels and side-door leaves on a white kit base (the kit tint multiplies, so steel went black); closed royal-blue panelled side doors; recessed dark entry vestibule under a shouldered head with cream pilasters, gilt capitals and keystone, iron gate folded open; large white double-hung bay sashes with divided upper sashes; red glazed-tile spandrel plaques with gilt relief on every storey; thin continuous string course round the bay feet; platform-and-ladder fire escape hung on the west bay; cream stucco rear and a tan clapboard east party return; ground storey 3.0 m. Clean white-painted bays with shallower angled sides so every face is nearly all sash (wide multi-lite uppers over one-light lowers); sculpted spandrel tile panels (sunk red field, gilt border, relief figure and volutes) filling each spandrel; a deep white dentilled cornice across the whole front with the bays rising into its frieze; a light-painted single-balcony fire escape with a roof ladder and braces; a white plinth, white garage casings to the pavement, chunky white rails on both faces; a projecting white belt course; deep-blue panelled side doors, the west one with a glazed grille light; the entrance as a dark recessed vestibule with a closed iron gate at the back under a flat shouldered head in a polychrome and gilt surround; interior room doors and no corridor sconces. Thinner garage rails (red panels dominate), two-row upper sashes. Dark reflective bay glass (tinted clear glass over dark room tones, blinds and curtains drawn at mixed heights), sashes set back in a reveal with mixed 1-over-1 and 6-over-1 patterns; spandrel tiles as large gilt twin-dragon scroll reliefs round a blue and red medallion with dark shading; a thicker, arched entrance surround (wide gilt-ornamented pilasters, a deep frieze, a stepped white architrave) with no centre gate post and a dark stone floor; duller darker brick; a modillioned cornice; 7-row garage doors a little narrower and lower on white stepped sills; a taller garage storey (3.4 m); a dark steel fire escape ending at the roof line; frames instead of corridor sconces. Fire escape moved onto the brick pier between the centre and end bays; deeper crisp cream ledge; glazed grille light on both blue side doors.",
+  "wall": "brick-running-bond",
+  "trim": "painted-white@efe9dc",
+  "cornice": false,
+  "corniceProjectionM": 0.4,
+  "beltCourse": false,
+  "windowHoods": false,
+  "frame": "painted-white",
+  "glass": "glass-clear@4a5058",
+  "storefrontFrame": "painted-white@efe9dc",
+  "bulkhead": "painted-white@efe9dc",
+  "storeysSeen": {
+    "count": 4,
+    "groundM": 3.4,
+    "upperM": 2.7
+  },
+  "edgeRoles": {
+    "1": "party",
+    "3": "party",
+    "5": "party",
+    "9": "party"
+  },
+  "bays": [
+    {
+      "at": 0.245,
+      "widthM": 3.4,
+      "projectionM": 0.32,
+      "fromStorey": 1,
+      "material": "painted-white",
+      "tint": "#f2efe8",
+      "plaques": {
+        "material": "painted-white",
+        "tint": "#b8392c",
+        "fieldTint": "#8f2a22",
+        "heightM": 0.56,
+        "widthFrac": 0.86,
+        "fullSpandrel": true,
+        "ornament": {
+          "material": "painted-white",
+          "tint": "#c99a3e",
+          "relief": "dragon-scroll",
+          "shadeTint": "#4a1712",
+          "medallionTint": "#26357a",
+          "medallionField": "#9c2a22"
+        }
+      },
+      "sash": {
+        "fillFrac": 0.92,
+        "maxWidthM": 1.5,
+        "sideRunM": 0.72,
+        "sillM": 0.45,
+        "headGapM": 0.15,
+        "lightM": 2,
+        "upperRows": 2,
+        "muntinM": 0.34,
+        "meetingFrac": 0.5,
+        "footM": 0.2,
+        "revealM": 0.12,
+        "mix": [
+          [
+            1,
+            1
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "at": 0.595,
+      "widthM": 3,
+      "projectionM": 0.32,
+      "fromStorey": 1,
+      "material": "painted-white",
+      "tint": "#f2efe8",
+      "plaques": {
+        "material": "painted-white",
+        "tint": "#b8392c",
+        "fieldTint": "#8f2a22",
+        "heightM": 0.56,
+        "widthFrac": 0.86,
+        "fullSpandrel": true,
+        "ornament": {
+          "material": "painted-white",
+          "tint": "#c99a3e",
+          "relief": "dragon-scroll",
+          "shadeTint": "#4a1712",
+          "medallionTint": "#26357a",
+          "medallionField": "#9c2a22"
+        }
+      },
+      "sash": {
+        "fillFrac": 0.92,
+        "maxWidthM": 1.5,
+        "sideRunM": 0.72,
+        "sillM": 0.45,
+        "headGapM": 0.15,
+        "lightM": 2,
+        "upperRows": 2,
+        "muntinM": 0.34,
+        "meetingFrac": 0.5,
+        "footM": 0.2,
+        "revealM": 0.12,
+        "mix": [
+          [
+            1,
+            1
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      }
+    },
+    {
+      "at": 0.875,
+      "widthM": 2.4,
+      "projectionM": 0.32,
+      "fromStorey": 1,
+      "material": "painted-white",
+      "tint": "#f2efe8",
+      "plaques": {
+        "material": "painted-white",
+        "tint": "#b8392c",
+        "fieldTint": "#8f2a22",
+        "heightM": 0.56,
+        "widthFrac": 0.86,
+        "fullSpandrel": true,
+        "ornament": {
+          "material": "painted-white",
+          "tint": "#c99a3e",
+          "relief": "dragon-scroll",
+          "shadeTint": "#4a1712",
+          "medallionTint": "#26357a",
+          "medallionField": "#9c2a22"
+        }
+      },
+      "sash": {
+        "fillFrac": 0.92,
+        "maxWidthM": 1.5,
+        "sideRunM": 0.72,
+        "sillM": 0.45,
+        "headGapM": 0.15,
+        "lightM": 2,
+        "upperRows": 2,
+        "muntinM": 0.34,
+        "meetingFrac": 0.5,
+        "footM": 0.2,
+        "revealM": 0.12,
+        "mix": [
+          [
+            1,
+            1
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            1,
+            1
+          ]
+        ]
+      }
+    }
+  ],
+  "fireEscape": {
+    "at": 0.745,
+    "widthM": 1.3,
+    "depthM": 0.8,
+    "standoffM": 0.34,
+    "ladder": true,
+    "material": "painted-steel-mid",
+    "levels": [
+      3
+    ],
+    "dropLadder": false,
+    "roofLadder": true,
+    "braces": true,
+    "roofLadderAboveM": 0.0
+  },
+  "garagePanels": {
+    "material": "painted-white",
+    "tint": "#a31f26",
+    "rows": 7,
+    "cols": 4,
+    "railM": 0.07,
+    "surroundM": 0.2,
+    "surroundTint": "#f2efe8",
+    "baseStepM": 0.14
+  },
+  "ground": "garage",
+  "upper": "apartment",
+  "upperFit": true,
+  "storefront": {
+    "awning": false,
+    "headDropM": 1.05,
+    "bulkheadM": 0,
+    "transomM": 0.3,
+    "pierM": 0.3,
+    "layout": [
+      {
+        "kind": "door",
+        "from": 0.04,
+        "to": 0.1,
+        "leaf": "painted-white@1f3a7a",
+        "leafClosed": {
+          "panelRows": 3,
+          "panelCols": 2,
+          "hinge": "right",
+          "panelTint": "#27468c",
+          "mouldTint": "#152a5a",
+          "grille": true
+        }
+      },
+      {
+        "kind": "glazed-garage",
+        "from": 0.17,
+        "to": 0.42,
+        "material": "painted-white"
+      },
+      {
+        "kind": "door",
+        "from": 0.5,
+        "to": 0.68,
+        "leaf": "painted-steel@1c1a18",
+        "stair": true,
+        "entry": {
+          "style": "shouldered",
+          "recessM": 1.4,
+          "surround": "cast-stone-trim",
+          "surroundTint": "#fff4dc",
+          "gilt": "#c99a3e",
+          "field": "painted-white",
+          "fieldTint": "#8f2a22",
+          "gate": "painted-steel",
+          "gateTint": "#1a1714",
+          "floor": "cast-stone",
+          "floorTint": "#6a5e54",
+          "vestibuleTint": "#3a322c",
+          "backTint": "#1e1915",
+          "friezeM": 0.5,
+          "pilasterM": 0.5,
+          "archCorbels": true,
+          "architraveSteps": 2,
+          "gateCentre": false
+        }
+      },
+      {
+        "kind": "glazed-garage",
+        "from": 0.75,
+        "to": 0.905,
+        "material": "painted-white"
+      },
+      {
+        "kind": "door",
+        "from": 0.93,
+        "to": 0.98,
+        "leaf": "painted-white@1f3a7a",
+        "leafClosed": {
+          "panelRows": 3,
+          "panelCols": 2,
+          "panelTint": "#27468c",
+          "mouldTint": "#152a5a",
+          "grille": true
+        }
+      }
+    ]
+  },
+  "bayOnlyUpper": true,
+  "stringCourse": {
+    "heightM": 0.3,
+    "projectionM": 0.2,
+    "material": "painted-white",
+    "tint": "#f7f3ea"
+  },
+  "wallTint": "#b8aca6",
+  "glassBacking": {
+    "material": "painted-white",
+    "tints": [
+      "#2a2420",
+      "#352c26",
+      "#1f1d1c",
+      "#3b3029"
+    ],
+    "depthM": 0.3,
+    "kinds": [
+      "bay"
+    ],
+    "blindTint": "#e6ddca",
+    "blindMax": 0.85,
+    "curtainTint": "#b9a78c"
+  },
+  "edgeWalls": {
+    "1": {
+      "material": "wood-siding",
+      "tint": "#e2cfa8"
+    },
+    "*": {
+      "material": "painted-stucco",
+      "tint": "#efe7d6"
+    }
+  },
+  "dentilCornice": {
+    "material": "painted-white",
+    "tint": "#f4f1ea",
+    "projectionM": 0.42,
+    "friezeM": 0.6,
+    "dentilM": 0.22,
+    "modillions": {
+      "everyM": 0.62,
+      "widthM": 0.14,
+      "heightM": 0.24
+    }
+  },
+  "plinth": {
+    "heightM": 0.32,
+    "projectionM": 0.06,
+    "material": "painted-white",
+    "tint": "#f2efe8"
+  },
+  "interiorDoors": {
+    "material": "painted-white",
+    "tint": "#e9e2d2"
+  },
+  "noSconces": true,
+  "corridorArt": [
+    "frame-a",
+    "frame-b",
+    "frame-c"
+  ],
+  "garageKit": true,
+  "corridorKit": true
+}

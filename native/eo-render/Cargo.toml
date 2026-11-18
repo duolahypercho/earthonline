@@ -1,0 +1,33 @@
+[package]
+name = "eo-render"
+version = "0.1.0"
+edition = "2024"
+description = "GPU-driven wgpu renderer for the Earth Online native slice"
+publish = false
+
+[dependencies]
+anyhow = "1.0.104"
+bytemuck = { version = "1.25.2", features = ["derive"] }
+earcut = "0.4.12"
+eo-assets = { path = "../eo-assets" }
+eo-data = { path = "../eo-data" }
+eo-kit = { path = "../eo-kit" }
+eo-street = { path = "../eo-street" }
+eo-look = { path = "../eo-look" }
+eo-agents = { path = "../eo-agents" }
+eo-props = { path = "../eo-props" } # props
+eo-sky = { path = "../eo-sky" } # sky
+eo-water = { path = "../eo-water" } # water
+eo-landmarks = { path = "../eo-landmarks" } # landmarks
+eo-farshore = { path = "../eo-farshore" } # farshore
+gltf = { version = "1.4.1", default-features = false, features = ["utils", "names", "KHR_materials_emissive_strength"] } # props
+png = "0.18.1" # props
+sha2 = "0.11.1"
+glam = { version = "0.34.3", features = ["bytemuck"] }
+pollster = "1.0.1"
+wgpu = "30.0.2"
+serde_json = "1.0.154" # facade: the JS facade tables (data/facade-oracle.json)
+
+[dev-dependencies]
+eo-data = { path = "../eo-data" }
+png = "0.18.1" # facade: examples/png_box.rs

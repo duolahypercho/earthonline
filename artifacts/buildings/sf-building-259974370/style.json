@@ -1,0 +1,94 @@
+{
+ "seed": 7,
+ "notes": "Plain version from what shows through: ochre-khaki stucco, low barred base windows, a dark recessed entry left of centre, corner shop opening at the far left, iron balconies on the lower upper storeys. No ornament invented; storeys 6 from the data. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Ground storey is ochre stucco, own colour via groundBand; upper wall khaki (hidden by netting, no detail invented); corner window now barred; fire escape removed (nothing visible under the netting); cornice projects further. Scaffold hides storeys/bays so no bay or storey change. Lifted/converted once to #ece6cc. GroundBand lift (2026-10-03): groundBand tint #c8aa62 -> #e4d4b0 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#ece6cc",
+ "trim": "painted-white@e6dcbc",
+ "frame": "painted-white@e8e2cc",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@e8e2cc",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@c8aa62",
+ "cornice": true,
+ "corniceProjectionM": 0.8,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.07,
+  0.17,
+  0.27,
+  0.37,
+  0.5,
+  0.62,
+  0.74,
+  0.86,
+  0.94
+ ],
+ "bays": [],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.03,
+    "to": 0.12,
+    "kind": "window",
+    "headM": 2.3,
+    "grille": true
+   },
+   {
+    "from": 0.25,
+    "to": 0.34,
+    "kind": "double-door",
+    "leaf": "painted-steel@3a2a24",
+    "headM": 3.0,
+    "stair": true
+   },
+   {
+    "from": 0.46,
+    "to": 0.52,
+    "kind": "window",
+    "headM": 1.8,
+    "grille": true
+   },
+   {
+    "from": 0.58,
+    "to": 0.64,
+    "kind": "window",
+    "headM": 1.8,
+    "grille": true
+   },
+   {
+    "from": 0.74,
+    "to": 0.8,
+    "kind": "window",
+    "headM": 1.8,
+    "grille": true
+   },
+   {
+    "from": 0.86,
+    "to": 0.92,
+    "kind": "window",
+    "headM": 1.8,
+    "grille": true
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "hbFloors": {
+  "groundM": 3.6,
+  "upperM": 3.31
+ },
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#e4d4b0",
+  "topM": 4.2
+ }
+}

@@ -1,0 +1,76 @@
+{
+  "builder": "house",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "painted-stucco",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "seed": 24,
+  "storeysSeen": 2,
+  "groundM": 2.8,
+  "roofLevelM": 6.1,
+  "notes": "1472 La Playa, the second house on the parcel (to the south), by eye: blue lap siding, a flat roof with a projecting eave, a wide window upstairs and a ground window, an entry door at the north end.",
+  "wall": "painted-clapboard",
+  "wallTint": "#5a77a0",
+  "groundBand": {
+    "material": "painted-stucco",
+    "tint": "#aab6c3",
+    "topM": 2.8
+  },
+  "roofForm": {
+    "form": "flat",
+    "eaveM": 0.35,
+    "fasciaM": 0.22,
+    "sideOverhangM": 0.1,
+    "fascia": "painted-steel"
+  },
+  "parapetM": 0.3,
+  "entry": {
+    "from": 0.06,
+    "to": 0.2,
+    "headM": 2.2,
+    "material": "painted-white",
+    "glass": false,
+    "recessM": 0.3
+  },
+  "windows": [
+    {
+      "storey": 0,
+      "from": 0.3,
+      "to": 0.9,
+      "sill": 1.0,
+      "head": 2.2,
+      "panes": [
+        3,
+        1
+      ]
+    },
+    {
+      "storey": 1,
+      "from": 0.25,
+      "to": 0.85,
+      "sill": 0.9,
+      "head": 2.1,
+      "panes": [
+        3,
+        1
+      ]
+    }
+  ]
+}

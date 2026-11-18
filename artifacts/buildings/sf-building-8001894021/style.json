@@ -1,0 +1,88 @@
+{
+  "builder": "house",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "painted-stucco",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "groundM": 2.6,
+  "roofLevelM": 5.25,
+  "storeysSeen": 2,
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "seed": 17,
+  "notes": "Lawton N, 1949: blue stucco, grey composition hipped roof over the front, flat roof behind; ground: a white panelled garage door on the west half, an arched entry behind a patterned black iron gate on the east half; two upper windows. The surveyed front is split in two (a garage face and a slightly recessed entry face): edgeFront dresses both.",
+  "wall": "painted-stucco",
+  "wallTint": "#7089b4",
+  "roofForm": {
+    "form": "front-hip",
+    "depthM": 5.5,
+    "eaveM": 0.22,
+    "material": "asphalt-roof",
+    "tint": "#77736c",
+    "sideOverhangM": 0.12
+  },
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.15,
+      "to": 0.85,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        2,
+        2
+      ]
+    }
+  ],
+  "gate": {
+    "from": 0.2,
+    "to": 0.75,
+    "headM": 2.2,
+    "material": "painted-steel",
+    "tint": "#1f1f1f"
+  },
+  "streetEdges": {
+    "3": {}
+  },
+  "edgeFront": {
+    "3": {
+      "garages": [
+        {
+          "from": 0.1,
+          "to": 0.85,
+          "headM": 2.15,
+          "material": "painted-white",
+          "pattern": "panel"
+        }
+      ],
+      "windows": [
+        {
+          "storey": 1,
+          "from": 0.1,
+          "to": 0.85,
+          "sill": 0.85,
+          "head": 2.2,
+          "panes": [
+            3,
+            2
+          ]
+        }
+      ]
+    }
+  }
+}

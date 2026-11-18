@@ -1,0 +1,91 @@
+{
+ "seed": 7,
+ "notes": "Rework r7: light grey (not white) upper wall, dark brick ground, black gate in brick arch with same-brick voussoirs, two larger white-framed multi-pane windows at the right of the ground storey (photo shows them at the right, behind trees).",
+ "wall": "painted-stucco",
+ "wallTint": "#d4d4d0",
+ "trim": "painted-white@d8d4c8",
+ "frame": "painted-white@efe8d6",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@efe8d6",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "brick-running-bond@a88d92",
+ "cornice": false,
+ "corniceProjectionM": 0.4,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "upperWindows": [
+  0.2,
+  0.5,
+  0.8
+ ],
+ "bays": [],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.1,
+    "to": 0.3,
+    "kind": "gate",
+    "headM": 3.3,
+    "tint": "#101010",
+    "arch": {
+     "type": "round"
+    }
+   },
+   {
+    "from": 0.74,
+    "to": 0.84,
+    "kind": "window",
+    "headM": 2.9,
+    "bulkheadM": 1.0
+   },
+   {
+    "from": 0.88,
+    "to": 0.97,
+    "kind": "window",
+    "headM": 2.9,
+    "bulkheadM": 1.0
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "sashFrames": {
+  "material": "painted-white@efe8d6",
+  "stileM": 0.06
+ },
+ "hbBayGlazing": {
+  "marginM": 0.2,
+  "maxW": 1.05,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#efe8d6",
+  "sashM": 0.08,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "groundBand": {
+  "material": "brick-running-bond",
+  "tint": "#a88d92",
+  "topM": 3.95
+ },
+ "hbArchDoors": [
+  {
+   "from": 0.1,
+   "to": 0.3,
+   "material": "brick-running-bond",
+   "tint": "#a88d92",
+   "ringTint": "#a88d92",
+   "fillTint": "#141414"
+  }
+ ]
+}

@@ -1,0 +1,147 @@
+{
+ "seed": 21,
+ "notes": "Rework r3: yellow-ochre wall and fire escape, ashlar block joints on the base, moulded arch frame with keystone, ornamental belt cornice with dentils (hand.py). Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game.",
+ "wall": "painted-stucco",
+ "wallTint": "#ece1c4",
+ "trim": "painted-white@efe7d2",
+ "frame": "painted-white@efe7d2",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@efe7d2",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@ece1c4",
+ "cornice": true,
+ "corniceProjectionM": 0.5,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.14,
+  0.21,
+  0.28,
+  0.44,
+  0.505,
+  0.57
+ ],
+ "bays": [
+  {
+   "at": 0.23,
+   "widthM": 2.9,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#ece1c4",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.78,
+   "widthM": 2.4,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#ece1c4",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.05,
+    "to": 0.11,
+    "kind": "door",
+    "leaf": "wood-siding@7a5a2a",
+    "headM": 2.4
+   },
+   {
+    "from": 0.77,
+    "to": 0.96,
+    "kind": "double-door",
+    "leaf": "painted-steel@2a2a24",
+    "headM": 3.2,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.35,
+      "projectionM": 0.08,
+      "material": "painted-white",
+      "tint": "#efe7d2"
+     },
+     "keystone": true
+    }
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "groundBand": {
+  "material": "limestone-ashlar",
+  "tint": "#d3c088",
+  "topM": 3.8
+ },
+ "awning": "canvas-plain@3f6a4c",
+ "awningSpans": [
+  {
+   "from": 0.76,
+   "to": 1.0,
+   "depthM": 1.4,
+   "valanceM": 0.3
+  }
+ ],
+ "hbLadderEscape": {
+  "at": 0.5,
+  "widthM": 2.4,
+  "depthM": 0.8,
+  "ladderOffM": 0.7,
+  "dropM": 2.5,
+  "gooseneckM": 1.0,
+  "material": "painted-white@d9c38a"
+ },
+ "hyDRubble": {
+  "toM": 3.8,
+  "courseM": 0.55,
+  "blockM": 1.1,
+  "projM": 0.03,
+  "shade": 0.6,
+  "seed": 2
+ }
+}

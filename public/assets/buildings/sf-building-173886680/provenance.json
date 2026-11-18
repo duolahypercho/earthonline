@@ -1,0 +1,42 @@
+{
+  "kind": "blender-building",
+  "id": "sf-building-173886680",
+  "pass": "b173886680-blender-6facb6b9-a62340",
+  "generator": "scripts/blender-buildings/build_building.py",
+  "generatorSha256": "6facb6b980e5966bff381f1088766095f94c593f58d833334af51d6578efa055",
+  "blender": "Blender 5.1.2",
+  "inputs": {
+    "spec": "artifacts/buildings/sf-building-173886680/spec.json",
+    "specSha256": "e507467551d0e393a2c9930e87bc9164bdf55ce45a597257928405319a597fb0",
+    "style": "artifacts/buildings/sf-building-173886680/style.json",
+    "styleSha256": "946d78b93717753b84f6cfae40fd12ead54e7ec54fb91e9ae1d6b512a39b6a3f",
+    "styleNotesRevised": "notes text reworded for publication after the build; geometry inputs unchanged"
+  },
+  "sources": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor-tall)"
+  },
+  "license": "Original geometry generated from open data (DataSF footprints, LiDAR, Assessor roll). No third-party meshes or textures.",
+  "furniture": [],
+  "assets": {
+    "exterior": {
+      "url": "/assets/buildings/sf-building-173886680/exterior.glb",
+      "sha256": "5080e80f5f33f10cf883c001765c99c9a4dc589ecec1e793e60441abec52c6a8",
+      "bytes": 65456
+    },
+    "interior": {
+      "url": "/assets/buildings/sf-building-173886680/interior.glb",
+      "sha256": "cefda74f59f1a9a9b515aa2e32274da9f8680958c3cb92d5b984c512ce512415",
+      "bytes": 56284
+    },
+    "fine": [
+      {
+        "storey": 0,
+        "url": "/assets/buildings/sf-building-173886680/fine-s0.glb",
+        "sha256": "537f934a59bcf5c6e348d5e7f4e1a46af9c4736de99ed19d712168d7eda964b6",
+        "bytes": 35888
+      }
+    ]
+  }
+}

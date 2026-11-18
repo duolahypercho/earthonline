@@ -1,0 +1,147 @@
+{
+ "seed": 3,
+ "notes": "Right window column sits about half a storey lower than the bay windows (right sill 0.15 m, bay sill 1.3 m); thin corbel band under the bay; lap relief above the ground storey. Colour already periwinkle in the GLB (stills are greyscale). Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-clapboard",
+ "wallTint": "#d2d8e4",
+ "trim": "painted-white@f0f0ee",
+ "frame": "painted-white@2a2a2a",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@2a2a2a",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-clapboard@cad2de",
+ "cornice": false,
+ "corniceProjectionM": 0.12,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.8,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.5,
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 2.8,
+  "upperM": 3.5
+ },
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.33,
+   "widthM": 2.8,
+   "projectionM": 0.55,
+   "fromStorey": 2,
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "cornice": {
+     "projectionM": 0.06,
+     "roofRiseM": 0
+    },
+    "sillM": 1.3,
+    "corbel": {
+     "tiers": 1,
+     "stepM": 0.06,
+     "dropM": 0.1
+    }
+   },
+   "material": "painted-clapboard",
+   "tint": "#d2d8e4",
+   "frame": "painted-white@f0f0ee"
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 1.2,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.63,
+    "to": 0.97,
+    "kind": "gate",
+    "material": "painted-steel",
+    "tint": "#26282c",
+    "headM": 3.2
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "mullionM": 0.7,
+ "upperWindowSpans": [
+  [
+   0.64,
+   0.97
+  ]
+ ],
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.35,
+     0.5
+    ],
+    [
+     0.15,
+     0.29
+    ]
+   ],
+   "sillM": 0.9,
+   "headM": 2.5
+  },
+  "2": {
+   "spans": [
+    [
+     0.64,
+     0.97
+    ]
+   ],
+   "sillM": 0.15,
+   "headM": 1.5
+  },
+  "3": {
+   "spans": [
+    [
+     0.64,
+     0.97
+    ]
+   ],
+   "sillM": 0.15,
+   "headM": 1.5
+  }
+ },
+ "shopBays": [
+  {
+   "edge": 0,
+   "from": 0.0,
+   "to": 1.0,
+   "windows": [
+    {
+     "from": 0.35,
+     "to": 0.5,
+     "sillM": 0.5,
+     "headM": 1.6,
+     "cols": 3,
+     "rows": 2,
+     "frameTint": "#1e1e1e"
+    },
+    {
+     "from": 0.14,
+     "to": 0.29,
+     "sillM": 0.5,
+     "headM": 1.6,
+     "cols": 3,
+     "rows": 2,
+     "frameTint": "#1e1e1e"
+    }
+   ]
+  }
+ ],
+ "streetStills": true,
+ "hyDLap": {
+  "pitchM": 0.15,
+  "fromM": 3.0
+ }
+}

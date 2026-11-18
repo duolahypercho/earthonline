@@ -1,0 +1,122 @@
+{
+ "seed": 37,
+ "notes": "1917 three-storey flats, buff brick over a pale pinkish painted-brick ground storey. Two bays (curved fronts) from the first upper storey with cream hoods and a balustraded balcony between, fire escape up the middle, deep dentilled cornice. Ground: a gated door left, a barred window right. Applied: buff/tan brick, lavender-grey ground, glazed gated entry replaces the vertical-bar garage gate, dentilled bracket cornice, black fire escape. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Buff brick tint, rose base, deeper bracketed cornice. Door surround via hand.py. GroundBand lift (2026-10-03): groundBand tint #e8b8b8 -> #f4dcdc (same rule as walls; it was missed by the first colour pass).",
+ "wall": "brick-buff",
+ "wallTint": "#ffe0a0",
+ "trim": "painted-white@ece1bf",
+ "frame": "painted-white@ece1bf",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@ece1bf",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "corniceProjectionM": 0.9,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "bulkhead": "painted-stucco@e8b8b8",
+ "groundBand": {
+  "material": "painted-white",
+  "tint": "#f4dcdc",
+  "topM": 3.5
+ },
+ "bays": [
+  {
+   "at": 0.28,
+   "widthM": 2.4,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f7f0de",
+   "hyB": {
+    "plan": "swell",
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2,
+    "cornice": {
+     "projectionM": 0.2,
+     "dentils": true,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0,
+     "beltBrackets": true
+    }
+   }
+  },
+  {
+   "at": 0.74,
+   "widthM": 2.4,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f7f0de",
+   "hyB": {
+    "plan": "swell",
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2,
+    "cornice": {
+     "projectionM": 0.2,
+     "dentils": true,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0,
+     "beltBrackets": true
+    }
+   }
+  }
+ ],
+ "upperWindows": [],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.12,
+    "to": 0.32,
+    "kind": "door",
+    "leaf": "painted-steel@2a2a2a",
+    "grille": true
+   },
+   {
+    "from": 0.6,
+    "to": 0.85,
+    "kind": "window",
+    "headM": 2.0,
+    "grille": true
+   }
+  ]
+ },
+ "fireEscape": {
+  "at": 0.5,
+  "widthM": 1.5,
+  "depthM": 0.8,
+  "material": "painted-steel"
+ },
+ "hbCorniceDentils": {
+  "spacingM": 0.2,
+  "sizeM": 0.12,
+  "tint": "#ece1bf"
+ },
+ "edgeRoles": {},
+ "hbCorniceBrackets": {
+  "spacingM": 1.2,
+  "heightM": 0.7,
+  "depthM": 0.3,
+  "widthM": 0.24,
+  "material": "painted-white",
+  "tint": "#efe2bc"
+ }
+}

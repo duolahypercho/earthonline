@@ -1,0 +1,338 @@
+{
+ "seed": 1,
+ "notes": "1920s classical bank temple front on the Irving corner at 8th Ave. One round-headed window in an archivolt with keystone (new key archWindow), pedimented entry hood (doorHood), corner and inner pilasters with capitals, stepped cornice, balustraded parapet above a cornice set 0.6 m below the LiDAR top (balustrade + corniceDropM; wallTopM failed the shell-top gate). Sage-grey painted stone. 8th Ave flank plain with the corner pilaster; west wall attached to the neighbour. Cornice wraps the 8th Ave flank (edge 2 role flank). Ground storey furnished as a banking hall. Lighter wall and trim tints, pilaster projection 0.14 -> 0.22. The real front is a double-height banking hall, so upper slabs and upper programmes stop 6.5 m behind the front wall (new key hallVoid, gallery rail) and the arch transoms no longer follow storey slabs; the arch widens and drops into a tall recessed bay (4.7 m wide, sill 3.95) over the pedimented entry; fluted pilasters projecting to the contract cap; dentil course under the corona (dentils); a base course broken at the doors (plinth); balustrade backing tinted stone instead of dark steel; paler sage wall. Leafed capitals (corinthian) on shorter pilasters with a two-fascia architrave and a taller frieze (entablature) and modillions; the front arch shrinks and rises into a recessed arched panel with the pedimented hood well below it (archWindow.panel); one central white balustrade; moulded door surround, metal reveal, bronze leaves and a threshold step (entry); plain blue panel on the corner pilaster (cornerSign, no text); flank arches widened to fill their bays; a glazed lantern on the roof deck (skylight); the hall void runs deeper so the banking hall is one double-height room, with a coffered ceiling, chandeliers from the roof soffit, wainscot, a teller grille and a vault door (bankInterior). Wall and trim on the smooth flat painted kit (painted-white) in a cooler grey-sage, no stucco speckle; pilasters project 0.36 with a contact-shadow strip either side (pilasterShadow); frieze plain (entablature.modillions false), larger dentils over a dark shadow band and a dark corona soffit (corniceShadow); balustrade runs 0.1-0.9 broken by five solid dies; arch glazing a rectangular grid (no radials, three mullions, rowsM) under a heavy spring transom; taller entrance (3.3 m head, glazed transom, bronze leaves) under the pediment, arch and panel raised to clear it; a 0.9 m rusticated base course (plinthRustication); pilaster, entablature, cornice and plinth return 1.2 m onto the exposed party wall (partyReturn). Interior: library furniture embedded as meshes, the gallery rails replaced by a panelled screen wall so the hall is one double-height room (hallScreen), stone floor with border and diamond insets (hallFloor), sage coffer soffits with gilded rosettes (hallCoffers), chandeliers on short drops (bankInterior.dropM), officers' desks, a second bench and brass stanchions (hallExtras). Leafed capitals 1.0 m tall in a warmer brighter stone so they read at street distance; darker, wider contact-shadow strips beside the pilasters; the front arch drops and widens (3.3 m, sill 4.15, panel down onto the door hood) so the opening dominates the elevation above the entrance; smaller glazing panes (five mullions, four rows) in dark steel; pilaster shafts stop at 6.9 m so the taller capitals keep the architrave under the cornice. Warm greige stone (wall #d8d4c8, trim, panels, plinth, balustrade and shadow strips re-tinted off the mint-sage); three flutes instead of five so the shafts stop speckling at distance; arch glazing two slender light-bronze mullions and one row bar (three panes high) in reflective grey glass; capitals a darker carved-stone tone so they read as a shadowed band; darker, taller shadow under the cornice (projection already at the contract cap); the arch glazed from inside too (archInner: inward pane and bars); check-writing tables, a second bench and corner plants on the public floor of the hall (hallPublic). Two round fluted engaged columns with acanthus capitals flank the arch (columns key, new block) and corner pilasters only; the arch is tall and narrow (2.5 m wide, crown 7.2 m) in a narrower recessed panel, one mullion, no radials; a triangular pediment on the door hood (doorPediment); two short central balustrade runs (0.3-0.7) in a solid attic; grey-green stone tint; hall without left-behind crates and armchairs, bronze teller grille above the counter line (hallClean).",
+ "wall": "painted-white",
+ "wallTint": "#c6c9b9",
+ "trim": "painted-white@dfddd1",
+ "frame": "painted-steel",
+ "beltCourse": false,
+ "windowHoods": false,
+ "cornice": true,
+ "corniceProjectionM": 0.42,
+ "blankUpper": true,
+ "edgeRoles": {
+  "0": "party",
+  "2": "flank"
+ },
+ "pilasters": {
+  "at": [
+   0.0,
+   1.0
+  ],
+  "widthM": 0.95,
+  "projectionM": 0.36,
+  "fromM": 0.55,
+  "toM": 6.9,
+  "capital": false,
+  "flutes": 3
+ },
+ "archWindow": {
+  "at": 0.5,
+  "widthM": 2.5,
+  "sillM": 4.45,
+  "springM": 5.95,
+  "recessM": 0.26,
+  "frame": "painted-steel-light@b8a27c",
+  "mullions": 1,
+  "radials": 0,
+  "archivolt": {
+   "widthM": 0.3,
+   "projectionM": 0.14
+  },
+  "keystone": {
+   "widthM": 0.4,
+   "heightM": 0.55
+  },
+  "transomsM": [
+   5.95
+  ],
+  "panel": {
+   "widthM": 3.5,
+   "bottomM": 4.15,
+   "tint": "#c9c3b5",
+   "mouldM": 0.14
+  },
+  "rowsM": [
+   5.15
+  ]
+ },
+ "doorHood": {
+  "at": 0.5,
+  "widthM": 3.2,
+  "y": 3.45,
+  "heightM": 0.3,
+  "projectionM": 0.3,
+  "brackets": true
+ },
+ "balustrade": {
+  "from": 0.3,
+  "to": 0.7,
+  "bottomM": 9.3,
+  "heightM": 0.55,
+  "spacingM": 0.22,
+  "pedestals": [
+   0.3,
+   0.5,
+   0.7
+  ],
+  "pedestalW": 0.55,
+  "shadow": "painted-white",
+  "shadowTint": "#8a867c",
+  "tint": "#f3f0e7"
+ },
+ "storefront": {
+  "awning": false,
+  "bulkheadM": 0.5,
+  "transomM": 0.8,
+  "pierM": 0.4,
+  "layout": [
+   {
+    "kind": "double-door",
+    "from": 0.4,
+    "to": 0.6,
+    "headM": 3.3,
+    "leaf": "painted-steel-light@7a5a34"
+   }
+  ]
+ },
+ "streetEdges": {
+  "2": {
+   "archWindow": [
+    {
+     "at": 0.16666666666666666,
+     "widthM": 3.3,
+     "sillM": 4.3,
+     "springM": 5.7,
+     "recessM": 0.24,
+     "frame": "painted-steel-light@b8a27c",
+     "mullions": 2,
+     "radials": 1,
+     "archivolt": {
+      "widthM": 0.3,
+      "projectionM": 0.12
+     },
+     "keystone": {
+      "widthM": 0.42,
+      "heightM": 0.55
+     },
+     "panel": {
+      "widthM": 4.6,
+      "bottomM": 3.85,
+      "tint": "#c9c3b5",
+      "mouldM": 0.14
+     },
+     "transomsM": [
+      5.7
+     ],
+     "rowsM": [
+      5.0
+     ]
+    },
+    {
+     "at": 0.5,
+     "widthM": 3.3,
+     "sillM": 4.3,
+     "springM": 5.7,
+     "recessM": 0.24,
+     "frame": "painted-steel-light@b8a27c",
+     "mullions": 2,
+     "radials": 1,
+     "archivolt": {
+      "widthM": 0.3,
+      "projectionM": 0.12
+     },
+     "keystone": {
+      "widthM": 0.42,
+      "heightM": 0.55
+     },
+     "panel": {
+      "widthM": 4.6,
+      "bottomM": 3.85,
+      "tint": "#c9c3b5",
+      "mouldM": 0.14
+     },
+     "transomsM": [
+      5.7
+     ],
+     "rowsM": [
+      5.0
+     ]
+    },
+    {
+     "at": 0.8333333333333334,
+     "widthM": 3.3,
+     "sillM": 4.3,
+     "springM": 5.7,
+     "recessM": 0.24,
+     "frame": "painted-steel-light@b8a27c",
+     "mullions": 2,
+     "radials": 1,
+     "archivolt": {
+      "widthM": 0.3,
+      "projectionM": 0.12
+     },
+     "keystone": {
+      "widthM": 0.42,
+      "heightM": 0.55
+     },
+     "panel": {
+      "widthM": 4.6,
+      "bottomM": 3.85,
+      "tint": "#c9c3b5",
+      "mouldM": 0.14
+     },
+     "transomsM": [
+      5.7
+     ],
+     "rowsM": [
+      5.0
+     ]
+    }
+   ],
+   "doorHood": null,
+   "balustrade": null,
+   "blankUpper": true,
+   "pilasters": {
+    "at": [
+     0.0,
+     0.3333,
+     0.6667,
+     1.0
+    ],
+    "widthM": 0.95,
+    "projectionM": 0.36,
+    "fromM": 0.55,
+    "toM": 6.9,
+    "capital": false,
+    "flutes": 3
+   },
+   "cornerSign": null
+  }
+ },
+ "ground": "shop",
+ "upper": "office",
+ "corniceDropM": 0.6,
+ "bankHall": {
+  "lightIntensity": 16.0
+ },
+ "hallVoid": {
+  "depthM": 17.0,
+  "railM": 1.07
+ },
+ "dentils": {
+  "sizeM": 0.14,
+  "spacingM": 0.26
+ },
+ "plinth": {
+  "heightM": 0.9,
+  "projectionM": 0.14,
+  "material": "painted-white",
+  "tint": "#c2bcae"
+ },
+ "corinthian": {
+  "heightM": 1.0,
+  "tint": "#bdb5a3"
+ },
+ "entablature": {
+  "architraveM": 0.3,
+  "modillionSpacingM": 0.45,
+  "modillions": false
+ },
+ "entry": {
+  "at": 0.5,
+  "widthM": 2.26,
+  "headM": 3.3,
+  "surroundM": 0.26,
+  "projectionM": 0.12,
+  "lining": "painted-steel-light@7a5a34",
+  "step": {
+   "heightM": 0.14,
+   "depthM": 0.3,
+   "tint": "#c4c5b8"
+  }
+ },
+ "cornerSign": {
+  "at": 0.0,
+  "y": 2.3,
+  "widthM": 0.62,
+  "heightM": 1.15,
+  "tint": "#2b5fae"
+ },
+ "skylight": {
+  "widthM": 4.0,
+  "depthM": 7.0,
+  "riseM": 0.45,
+  "fromFrontM": 8.5
+ },
+ "bankInterior": {
+  "coffersM": 1.6,
+  "chandeliers": 3,
+  "wainscotM": 1.2,
+  "lightIntensity": 18.0,
+  "dropM": 1.5
+ },
+ "pilasterShadow": {
+  "widthM": 0.22,
+  "tint": "#aaa597"
+ },
+ "corniceShadow": {
+  "tint": "#6f6b62",
+  "heightM": 0.42
+ },
+ "plinthRustication": {
+  "groovesM": [
+   0.45
+  ],
+  "jointM": 1.3,
+  "grooveM": 0.03,
+  "tint": "#817c72"
+ },
+ "partyReturn": {
+  "lengthM": 1.2
+ },
+ "embedFurniture": true,
+ "hallScreen": {
+  "panelM": 2.4
+ },
+ "hallFloor": {
+  "tileM": 1.2
+ },
+ "hallCoffers": {
+  "soffit": "int-ceiling@d6d0c2",
+  "rosette": "int-wood-light@f2d38a"
+ },
+ "hallExtras": {
+  "desks": true,
+  "stanchions": true
+ },
+ "glass": "glass-reflective",
+ "archInner": {
+  "frame": "painted-steel-light@b8a27c"
+ },
+ "hallPublic": {
+  "tables": true,
+  "benches": false,
+  "plants": true
+ },
+ "columns": {
+  "at": [
+   0.27,
+   0.73
+  ],
+  "radiusM": 0.36,
+  "fromM": 0.9,
+  "toM": 6.9,
+  "flutes": 12,
+  "capitalM": 1.0,
+  "tint": "#d3d2c4",
+  "capitalTint": "#cfcdbf"
+ },
+ "doorPediment": {
+  "widthM": 3.4,
+  "riseM": 0.36,
+  "tint": "#dcdacc"
+ },
+ "hallClean": {
+  "bars": true
+ }
+}

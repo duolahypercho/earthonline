@@ -1,0 +1,60 @@
+{
+ "seed": 97,
+ "notes": "Ground: iron gate door up a stoop at right, a barred window at left. Upper: three sash windows. Plain version from the visible part; no ornament invented. Garage at the left, grilled window and iron-gated stoop entry at the right, five upper windows. Storeys stay 2 (Assessor/LiDAR); tree hides most of the frontage, no ornament invented. The two-box gap comes from the footprint data. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. No garage under the beige 2-storey (stoop with iron rail, small vent window, iron gate); garage door was a neighbour. Grey 4-storey with canted bays beside it is a neighbour (LiDAR 8.6 m, 2 storeys), not modelled.",
+ "wall": "painted-stucco",
+ "wallTint": "#dad6ce",
+ "trim": "painted-white@e8e0cc",
+ "frame": "painted-white@e8e0cc",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@e8e0cc",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@dad6ce",
+ "cornice": true,
+ "corniceProjectionM": 0.5,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.15,
+  0.35,
+  0.55,
+  0.75,
+  0.9
+ ],
+ "bays": [],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.1,
+    "to": 0.26,
+    "kind": "door",
+    "leaf": "painted-steel@26282c",
+    "headM": 2.3,
+    "stair": true
+   },
+   {
+    "from": 0.42,
+    "to": 0.56,
+    "kind": "window",
+    "headM": 2.0,
+    "grille": true
+   },
+   {
+    "from": 0.72,
+    "to": 0.88,
+    "kind": "door",
+    "leaf": "painted-steel@26282c",
+    "headM": 2.3
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true
+}

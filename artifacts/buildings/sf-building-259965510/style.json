@@ -1,0 +1,76 @@
+{
+ "seed": 40,
+ "notes": "1919 corner shop block, warm peach stucco with cream trim at the Post corner. Ground: a dark panelled door left, a plain bay, and a big grid-paned shop window with a corner entry; first storey a sash window and a small round window. Taller stucco block behind is 1262258713. Applied: tan stucco, brown-framed dark-green arched door, big multi-pane ground window, angled bays with light frames. Porthole windows and quoins have no key and are skipped; storey count kept at the data (spec 2). Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Tan stucco tint, rectangular dark wood door with a grille (arch removed), dark-framed multi-pane glass-block window, deeper bay, one porthole via hand.py. Lifted/converted once to #f8ecd4.",
+ "wall": "painted-stucco",
+ "wallTint": "#f8ecd4",
+ "trim": "painted-white@f2e8cc",
+ "frame": "painted-white@f2e8cc",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-steel@2a3028",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "corniceProjectionM": 0.35,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "bulkhead": "painted-stucco@f0d8a8",
+ "upperWindows": [
+  0.51
+ ],
+ "storefront": {
+  "bulkheadM": 0.6,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.21,
+    "to": 0.35,
+    "kind": "door",
+    "leaf": "wood-siding@3a2418",
+    "grille": true
+   },
+   {
+    "from": 0.5,
+    "to": 0.93,
+    "kind": "window",
+    "headM": 2.7
+   }
+  ]
+ },
+ "edgeRoles": {},
+ "bays": [
+  {
+   "at": 0.86,
+   "widthM": 3.0,
+   "projectionM": 0.8,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f6f0de",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.16,
+     "roofRiseM": 0.1,
+     "dentils": true
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ]
+}

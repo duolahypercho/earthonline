@@ -1,0 +1,139 @@
+{
+ "seed": 4,
+ "notes": "1910 flats W side: warm cream painted stucco over a green brick ground storey with round-arched openings (door left, a pair of grilled arched lights, a wide arched gated entry right). Two round (swell) bays at 0.23 and 0.74 over storeys 1-2 in gold trim, bracketed cornice with a curved belt under each bay. Ground darker forest green, wall warmer, bay glazing reduced to 3 plain sashes, red clay-tile cap over the left bay (hand.py). Third bay storey claim unsupported: two bay levels. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. GroundBand lift (2026-10-03): groundBand tint #5d6e46 -> #7d8b6b (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-white",
+ "wallTint": "#f2ecd8",
+ "trim": "painted-white@e6cf8f",
+ "frame": "painted-white@e6cf8f",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@e6cf8f",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@7d8b6b",
+ "cornice": true,
+ "corniceProjectionM": 0.55,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.23,
+   "widthM": 3.0,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f2ecd8",
+   "hyB": {
+    "plan": "swell",
+    "cornice": {
+     "projectionM": 0.18,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 1
+   }
+  },
+  {
+   "at": 0.74,
+   "widthM": 3.0,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f2ecd8",
+   "hyB": {
+    "plan": "swell",
+    "cornice": {
+     "projectionM": 0.18,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 1
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.05,
+    "to": 0.15,
+    "kind": "door",
+    "headM": 2.4,
+    "leaf": "painted-white@5a6a48",
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   },
+   {
+    "from": 0.19,
+    "to": 0.29,
+    "kind": "window",
+    "headM": 2.0,
+    "grille": true,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   },
+   {
+    "from": 0.31,
+    "to": 0.42,
+    "kind": "window",
+    "headM": 2.0,
+    "grille": true,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   },
+   {
+    "from": 0.64,
+    "to": 0.88,
+    "kind": "gate",
+    "headM": 2.8,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#7d8b6b",
+  "topM": 3.4
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.7,
+  "heightM": 0.4,
+  "depthM": 0.3,
+  "widthM": 0.2,
+  "material": "painted-white",
+  "tint": "#e6cf8f"
+ },
+ "hbFloors": {
+  "groundM": 3.6,
+  "upperM": 4.29
+ }
+}

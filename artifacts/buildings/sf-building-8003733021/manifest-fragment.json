@@ -1,0 +1,66 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-8003733021",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-8003733021",
+    "walkIndex": 102,
+    "builder": "blender",
+    "street": "Folsom Street",
+    "side": "B",
+    "addr": "858 Folsom Street",
+    "sourceHeight": 6.66,
+    "sourceLevels": null,
+    "frontEdge": 0,
+    "status": "review",
+    "lidarHeightM": 6.66,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b8003733021.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b8003733021.js"
+  },
+  "base": {
+    "id": "sf-building-8003733021",
+    "walkIndex": 102,
+    "builder": "blender",
+    "street": "Folsom Street",
+    "side": "B",
+    "addr": "858 Folsom Street",
+    "sourceHeight": 6.66,
+    "sourceLevels": null,
+    "frontEdge": 0,
+    "status": "review",
+    "lidarHeightM": 6.66,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b8003733021.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b8003733021.js"
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b8003733021.js",
+    "sha256": "64ce0a4d0df51b31df0bee241cbde076faab41688ebc8625f76a76b1ee4a469c",
+    "pass": "b8003733021-blender-1704a15b-7f42d3"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-8003733021/provenance.json",
+    "sha256": "47313c8c69dfec950dffb43ab24207a21b0bb8ef10eeb5cb22d067082f853368",
+    "pass": "b8003733021-blender-1704a15b-7f42d3"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-8003733021/exterior.glb",
+      "sha256": "49aff8e3586c3e86f5514d49e33cc68caa11a90ec704adc0e0fb7cc77363d620",
+      "bytes": 57152
+    },
+    {
+      "role": "interior",
+      "url": "/assets/buildings/sf-building-8003733021/interior.glb",
+      "sha256": "12e4d1749b8c54248cb88f457bf26044e7f09fbe807801eabaee51c4876bc57c",
+      "bytes": 14224
+    },
+    {
+      "role": "fine-s0",
+      "url": "/assets/buildings/sf-building-8003733021/fine-s0.glb",
+      "sha256": "28395d90c9b216df99950b142ef08d3995d1a538942a17af68c020784ed64fe8",
+      "bytes": 20820
+    }
+  ],
+  "generatedAt": "2026-10-02T02:28:47.778Z"
+}

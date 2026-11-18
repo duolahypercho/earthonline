@@ -1,0 +1,203 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-148428442",
+  "slug": "b148428442",
+  "walkIndex": 5260,
+  "street": "Polk Street",
+  "address": null,
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (lidar-over-roll)"
+  },
+  "heightM": 9.9,
+  "storeys": 3,
+  "floors": {
+    "groundM": 4.03,
+    "upperM": 2.635,
+    "roofM": 0.6
+  },
+  "yearBuilt": 2022,
+  "use": "COMR",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "shopfront",
+  "material": "concrete",
+  "frame": {
+    "edgeIndex": 1,
+    "center": {
+      "x": -81.156,
+      "z": 1047.288
+    },
+    "heading": 1.411694,
+    "width": 35.346,
+    "depth": 20.977
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -17.596,
+      "z": -10.489
+    },
+    {
+      "x": -17.673,
+      "z": 10.489
+    },
+    {
+      "x": 17.673,
+      "z": 10.489
+    },
+    {
+      "x": 17.652,
+      "z": -10.473
+    },
+    {
+      "x": 7.015,
+      "z": -10.488
+    },
+    {
+      "x": 7.016,
+      "z": -7.956
+    },
+    {
+      "x": -7.665,
+      "z": -7.93
+    },
+    {
+      "x": -7.666,
+      "z": -10.461
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -17.596,
+        "z": -10.489
+      },
+      "b": {
+        "x": -17.673,
+        "z": 10.489
+      },
+      "lengthM": 20.977,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -17.673,
+        "z": 10.489
+      },
+      "b": {
+        "x": 17.673,
+        "z": 10.489
+      },
+      "lengthM": 35.346,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 17.673,
+        "z": 10.489
+      },
+      "b": {
+        "x": 17.652,
+        "z": -10.473
+      },
+      "lengthM": 20.961,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 17.652,
+        "z": -10.473
+      },
+      "b": {
+        "x": 7.015,
+        "z": -10.488
+      },
+      "lengthM": 10.637,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": 7.015,
+        "z": -10.488
+      },
+      "b": {
+        "x": 7.016,
+        "z": -7.956
+      },
+      "lengthM": 2.532,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": 7.016,
+        "z": -7.956
+      },
+      "b": {
+        "x": -7.665,
+        "z": -7.93
+      },
+      "lengthM": 14.681,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": -7.665,
+        "z": -7.93
+      },
+      "b": {
+        "x": -7.666,
+        "z": -10.461
+      },
+      "lengthM": 2.532,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": -7.666,
+        "z": -10.461
+      },
+      "b": {
+        "x": -17.596,
+        "z": -10.489
+      },
+      "lengthM": 9.93,
+      "role": "rear",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

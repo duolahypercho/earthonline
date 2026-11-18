@@ -1,0 +1,1553 @@
+{
+  "version": "earthonline-civilian-catalog-v1",
+  "contract": "earthonline-humanoid-v1",
+  "previewOnly": false,
+  "productionAuthorized": true,
+  "playerFamilies": [
+    "civilian-m-01"
+  ],
+  "roleFamilies": {
+    "police": [
+      "civilian-police-f",
+      "civilian-police-m"
+    ]
+  },
+  "characters": [
+    {
+      "id": "civilian-m-01",
+      "label": "tan overshirt, white tee, mid-wash denim",
+      "lods": {
+        "player": {
+          "file": "civilian-m-01-player.glb",
+          "sha256": "bfcb2cdf9c6edd17e8a0f56abe2b00762a2b1a4b964d26c409b0b862ad9a984a",
+          "bytes": 12858620,
+          "triangles": 22974,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 16,
+          "textureDimensions": [
+            [
+              2048,
+              2048
+            ],
+            [
+              2048,
+              2048
+            ],
+            [
+              2048,
+              2048
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.26193946599960327,
+              -0.006661724299192429,
+              -0.1343076527118683
+            ],
+            "max": [
+              0.2619362771511078,
+              1.75,
+              0.20327813923358917
+            ]
+          },
+          "candidateSha256": "3ca39e65c92a3061f6d8dbdca1f829fbc37f363323d3a32ea6d0214d6a1b9998"
+        },
+        "hero": {
+          "file": "civilian-m-01-hero.glb",
+          "sha256": "528f6108d7337920b9724a43f6829b0697ef3d6ae0b7144c57c3575d843dac2b",
+          "bytes": 5219564,
+          "triangles": 11475,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 16,
+          "textureDimensions": [
+            [
+              1024,
+              1024
+            ],
+            [
+              1024,
+              1024
+            ],
+            [
+              1024,
+              1024
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.2618938386440277,
+              -0.006571406964212656,
+              -0.13366110622882843
+            ],
+            "max": [
+              0.2618471086025238,
+              1.75,
+              0.20346130430698395
+            ]
+          },
+          "candidateSha256": "1d8ba86eef3f7ba3f36368c46fb1b7ce9e1fd6a18ab4dd21e99b70d6d3cb4d1f"
+        },
+        "near": {
+          "file": "civilian-m-01-near.glb",
+          "sha256": "6872362a6fbc7efcbd48d1486d005947f6fd1fafb55d41507b1ccda6423bca35",
+          "bytes": 613824,
+          "triangles": 1876,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              512,
+              512
+            ],
+            [
+              512,
+              512
+            ],
+            [
+              512,
+              512
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.26153287291526794,
+              -0.005803360603749752,
+              -0.13345572352409363
+            ],
+            "max": [
+              0.2614440619945526,
+              1.75,
+              0.206632599234581
+            ]
+          },
+          "candidateSha256": "d77195c14b4e1bbcaad39fe7c3f99a14c461aa81ae74507962f065b5eca63179"
+        },
+        "mid": {
+          "file": "civilian-m-01-mid.glb",
+          "sha256": "6bbc495fe77755e7cfa266160516a494112c281fb20f77cbf75ad52eb7b2e533",
+          "bytes": 192388,
+          "triangles": 342,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              256,
+              256
+            ],
+            [
+              256,
+              256
+            ],
+            [
+              256,
+              256
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.25632598996162415,
+              0.0012745321728289127,
+              -0.12231124937534332
+            ],
+            "max": [
+              0.26144081354141235,
+              1.75,
+              0.1983034759759903
+            ]
+          },
+          "candidateSha256": "06ff3022b5a6b6632bb9a14bda5c8d7436117e827c45adf3c6e1c808c85d7275"
+        },
+        "far": {
+          "file": "civilian-m-01-far.glb",
+          "sha256": "cde3a37cf1c31f4e50bf645dae9c7701ac35438457120bdd050968ec7c0d6fc3",
+          "bytes": 74312,
+          "triangles": 116,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              128,
+              128
+            ],
+            [
+              128,
+              128
+            ],
+            [
+              128,
+              128
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.268820196390152,
+              0.009219440631568432,
+              -0.11845318228006363
+            ],
+            "max": [
+              0.22260484099388123,
+              1.75,
+              0.22994065284729004
+            ]
+          },
+          "candidateSha256": "691a97b7bbb4465b8b3250e27aaac6c7130985f10bda31ec25d9772dd11e8a01"
+        }
+      }
+    },
+    {
+      "id": "civilian-m-02",
+      "label": "charcoal two-piece suit, white shirt, tie",
+      "lods": {
+        "hero": {
+          "file": "civilian-m-02-hero.glb",
+          "sha256": "d9cea51251610e1f9db9dccc2308e25df98db9d57fca3740d8700a7027fc950d",
+          "bytes": 5373824,
+          "triangles": 11483,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 16,
+          "textureDimensions": [
+            [
+              1024,
+              1024
+            ],
+            [
+              1024,
+              1024
+            ],
+            [
+              1024,
+              1024
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.2613402307033539,
+              -0.005852626170963049,
+              -0.1091204434633255
+            ],
+            "max": [
+              0.2610394060611725,
+              1.75,
+              0.20177200436592102
+            ]
+          },
+          "candidateSha256": "1c302311290245b4fe3dc56fb6f8e0d4a01fd57486d032e664572efe09869f9b"
+        },
+        "near": {
+          "file": "civilian-m-02-near.glb",
+          "sha256": "f05f93189f35c4f82250b5bd9e733641075274913250a8bd82db8960595541b4",
+          "bytes": 599556,
+          "triangles": 1887,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              512,
+              512
+            ],
+            [
+              512,
+              512
+            ],
+            [
+              512,
+              512
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.2615121901035309,
+              -0.006879940163344145,
+              -0.11133072525262833
+            ],
+            "max": [
+              0.26164019107818604,
+              1.75,
+              0.20484216511249542
+            ]
+          },
+          "candidateSha256": "c84a9af73166381a4050c4eb0c67fbfb44d9522bbf872cbaad6ea919d4d9d207"
+        },
+        "mid": {
+          "file": "civilian-m-02-mid.glb",
+          "sha256": "7716745d0248614556145669b8c25b37a49349edeed8817668dbbcfc8b8ca7af",
+          "bytes": 184768,
+          "triangles": 348,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              256,
+              256
+            ],
+            [
+              256,
+              256
+            ],
+            [
+              256,
+              256
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.261324018239975,
+              0.001145349582657218,
+              -0.12497355788946152
+            ],
+            "max": [
+              0.2607647478580475,
+              1.75,
+              0.20910058915615082
+            ]
+          },
+          "candidateSha256": "3eaa53886dac340a423c89e199577563893b38db7de5b0d53ae9d8bc341a377e"
+        },
+        "far": {
+          "file": "civilian-m-02-far.glb",
+          "sha256": "08ed8362652236c6ee3cd7ec50de8b2a134e1742f099eef110f130c3f7177beb",
+          "bytes": 71608,
+          "triangles": 117,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              128,
+              128
+            ],
+            [
+              128,
+              128
+            ],
+            [
+              128,
+              128
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.2618217170238495,
+              0.009420057758688927,
+              -0.10881558060646057
+            ],
+            "max": [
+              0.24922126531600952,
+              1.75,
+              0.22928892076015472
+            ]
+          },
+          "candidateSha256": "bc22f402b68fc886369f064221791b27e36ca9f4f742b3ba1f924ecd1c10a26b"
+        }
+      }
+    },
+    {
+      "id": "civilian-m-03",
+      "label": "olive field jacket over a plaid shirt, faded jeans",
+      "lods": {
+        "hero": {
+          "file": "civilian-m-03-hero.glb",
+          "sha256": "a827f265839aa42ffb07e2c3192b9d1c724249843b0ffbc03696c5ec27362776",
+          "bytes": 5122132,
+          "triangles": 11485,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 16,
+          "textureDimensions": [
+            [
+              1024,
+              1024
+            ],
+            [
+              1024,
+              1024
+            ],
+            [
+              1024,
+              1024
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.26189565658569336,
+              -0.006514500826597214,
+              -0.15247811377048492
+            ],
+            "max": [
+              0.2618924677371979,
+              1.75,
+              0.21534553170204163
+            ]
+          },
+          "candidateSha256": "af915c0f4c6489cf255daa72a481efefb8626e3ec77f7355eeb452fb5877d7d1"
+        },
+        "near": {
+          "file": "civilian-m-03-near.glb",
+          "sha256": "ea3b57ce95308aee2633d4d7371157f5b5dbf23147d52369abb4ae2c44797b50",
+          "bytes": 636652,
+          "triangles": 1887,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              512,
+              512
+            ],
+            [
+              512,
+              512
+            ],
+            [
+              512,
+              512
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.2608954608440399,
+              -0.007535201031714678,
+              -0.14532069861888885
+            ],
+            "max": [
+              0.2621847093105316,
+              1.75,
+              0.21704629063606262
+            ]
+          },
+          "candidateSha256": "4f60590c11d0dfe51a4e8f22b8d07c7a315551572e05992922913b980a8ce689"
+        },
+        "mid": {
+          "file": "civilian-m-03-mid.glb",
+          "sha256": "82ca731c550651885683ac822bcc0faa5ce4311f411185169df1e0ac695b8e6b",
+          "bytes": 199932,
+          "triangles": 347,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              256,
+              256
+            ],
+            [
+              256,
+              256
+            ],
+            [
+              256,
+              256
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.2626189589500427,
+              0.0010050325654447079,
+              -0.11371799558401108
+            ],
+            "max": [
+              0.26112961769104004,
+              1.75,
+              0.20947326719760895
+            ]
+          },
+          "candidateSha256": "6343da0c54f522cd9364c1da85be8f7b19fcd555d55cb93b1a63f5830a3f3bfd"
+        },
+        "far": {
+          "file": "civilian-m-03-far.glb",
+          "sha256": "9acede162d68dadfbb4b1b16dcd519352317e0d2e53325a4817b9c5e89084615",
+          "bytes": 77256,
+          "triangles": 118,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              128,
+              128
+            ],
+            [
+              128,
+              128
+            ],
+            [
+              128,
+              128
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.2627803683280945,
+              0.01007217075675726,
+              -0.1318802684545517
+            ],
+            "max": [
+              0.2535075843334198,
+              1.75,
+              0.2271704375743866
+            ]
+          },
+          "candidateSha256": "c7c6be16284fd451e42709a2ed3a5fe845a062284af3cc797c05da8517aeafdc"
+        }
+      }
+    },
+    {
+      "id": "civilian-m-04",
+      "label": "oatmeal cable-knit sweater, khaki cargo trousers",
+      "lods": {
+        "hero": {
+          "file": "civilian-m-04-hero.glb",
+          "sha256": "676d3ef72e8a4a463bd460c7b8e30087ed79582b789d64e786487cb8a20d4441",
+          "bytes": 5411556,
+          "triangles": 11482,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 16,
+          "textureDimensions": [
+            [
+              1024,
+              1024
+            ],
+            [
+              1024,
+              1024
+            ],
+            [
+              1024,
+              1024
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.262397438287735,
+              -0.007112458813935518,
+              -0.11319486796855927
+            ],
+            "max": [
+              0.2620679438114166,
+              1.75,
+              0.20473289489746094
+            ]
+          },
+          "candidateSha256": "6087f37753b882cf087c89b03a08c0e5eed6c31db456cdff5227d1f60438b1ad"
+        },
+        "near": {
+          "file": "civilian-m-04-near.glb",
+          "sha256": "3f355c0b953771bf790e0f9f24c074ec5ec737614862dc2186903a05248d0e73",
+          "bytes": 676784,
+          "triangles": 1882,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              512,
+              512
+            ],
+            [
+              512,
+              512
+            ],
+            [
+              512,
+              512
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.2624395787715912,
+              -0.00799771398305893,
+              -0.11309932917356491
+            ],
+            "max": [
+              0.26256904006004333,
+              1.75,
+              0.2074776142835617
+            ]
+          },
+          "candidateSha256": "5a529af090a8cf153718c5d99335792c8d5f9461fce1b1cf5a29bc196c57bbfc"
+        },
+        "mid": {
+          "file": "civilian-m-04-mid.glb",
+          "sha256": "243bf74bbbfe22f2e1b6570e07b3d8aeef0d3789850b94bf9273d902dffdb879",
+          "bytes": 205112,
+          "triangles": 346,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              256,
+              256
+            ],
+            [
+              256,
+              256
+            ],
+            [
+              256,
+              256
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.26353156566619873,
+              0.000048239773605018854,
+              -0.12577274441719055
+            ],
+            "max": [
+              0.2612323760986328,
+              1.75,
+              0.21201442182064056
+            ]
+          },
+          "candidateSha256": "ba822b00dbf347dea48efa439024e58bfa03261577dba167e1cff42c8d9568ce"
+        },
+        "far": {
+          "file": "civilian-m-04-far.glb",
+          "sha256": "2237df260372cc985660c021b64b630eeed536fd9bfc8879d9e7721a10e9e50a",
+          "bytes": 76500,
+          "triangles": 115,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              128,
+              128
+            ],
+            [
+              128,
+              128
+            ],
+            [
+              128,
+              128
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.2576074004173279,
+              0.008209221996366978,
+              -0.13073807954788208
+            ],
+            "max": [
+              0.2520606517791748,
+              1.75,
+              0.23322248458862305
+            ]
+          },
+          "candidateSha256": "63a9f6abd10d415c82ed74dc95827f7313c67df642a8511cbaa32388f32bb248"
+        }
+      }
+    },
+    {
+      "id": "civilian-f-01",
+      "label": "striped blouse, grey pencil skirt",
+      "lods": {
+        "hero": {
+          "file": "civilian-f-01-hero.glb",
+          "sha256": "0c3ed412694f18a2bb354dac4994e81b0df30a4a73aa41e85c578170876fb119",
+          "bytes": 5383424,
+          "triangles": 11487,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 16,
+          "textureDimensions": [
+            [
+              1024,
+              1024
+            ],
+            [
+              1024,
+              1024
+            ],
+            [
+              1024,
+              1024
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.2561873495578766,
+              -0.005977654829621315,
+              -0.1551980972290039
+            ],
+            "max": [
+              0.2564612329006195,
+              1.75,
+              0.19325010478496552
+            ]
+          },
+          "candidateSha256": "8e441d4859d308a80f8d236b92a5c1075ec76e9af4bf4c72eb60aa5a82096fb5"
+        },
+        "near": {
+          "file": "civilian-f-01-near.glb",
+          "sha256": "0c854a82d55ca9cbf7026f318bead893de36dce3601cdb33a69afe5b464bf1c8",
+          "bytes": 655884,
+          "triangles": 1885,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              512,
+              512
+            ],
+            [
+              512,
+              512
+            ],
+            [
+              512,
+              512
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.256819486618042,
+              -0.006461232900619507,
+              -0.157212495803833
+            ],
+            "max": [
+              0.25576943159103394,
+              1.75,
+              0.19031789898872375
+            ]
+          },
+          "candidateSha256": "06f5c92ed108bb4e60d840e3b615e62038d22a87387169d6ea5ec4876e924087"
+        },
+        "mid": {
+          "file": "civilian-f-01-mid.glb",
+          "sha256": "4c6476678dd5065d3727dc075f343c54b3105bb437614a33b0b0d6289df07818",
+          "bytes": 207224,
+          "triangles": 351,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              256,
+              256
+            ],
+            [
+              256,
+              256
+            ],
+            [
+              256,
+              256
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.252179354429245,
+              0.0004930145223625004,
+              -0.15056732296943665
+            ],
+            "max": [
+              0.2560115456581116,
+              1.75,
+              0.21184588968753815
+            ]
+          },
+          "candidateSha256": "00121b043dc5f073fe0ba36c15faddd318af6251249b8557e5d606c7bc4f9939"
+        },
+        "far": {
+          "file": "civilian-f-01-far.glb",
+          "sha256": "a7d0674ba13af079c8abc38c103730b542a01de7f19af375bd5456993ecb4a7f",
+          "bytes": 78548,
+          "triangles": 120,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              128,
+              128
+            ],
+            [
+              128,
+              128
+            ],
+            [
+              128,
+              128
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.24380795657634735,
+              0.0016639746027067304,
+              -0.14615415036678314
+            ],
+            "max": [
+              0.24101923406124115,
+              1.75,
+              0.21710772812366486
+            ]
+          },
+          "candidateSha256": "bc6e470f965f17f0574875824768a439cf055be52b50bf8ef84d3b918b70312a"
+        }
+      }
+    },
+    {
+      "id": "civilian-f-02",
+      "label": "mustard overshirt, black tee, dark denim",
+      "lods": {
+        "hero": {
+          "file": "civilian-f-02-hero.glb",
+          "sha256": "d384ed3c9be137944278dbd771e4cd4389d42174b5be23b463549aa3108c250b",
+          "bytes": 4985140,
+          "triangles": 11476,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 16,
+          "textureDimensions": [
+            [
+              1024,
+              1024
+            ],
+            [
+              1024,
+              1024
+            ],
+            [
+              1024,
+              1024
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.25580883026123047,
+              -0.005806038621813059,
+              -0.16076745092868805
+            ],
+            "max": [
+              0.2559782564640045,
+              1.75,
+              0.19286435842514038
+            ]
+          },
+          "candidateSha256": "31d6e0cb7e1e6d75aae0a5d0f4c5dc58d762b7247e2f3ec8beeac58945c1ea7e"
+        },
+        "near": {
+          "file": "civilian-f-02-near.glb",
+          "sha256": "766e23955e651c2dbcb02315ca79fbc2b19eff6d260652e98b578239070df3f1",
+          "bytes": 557040,
+          "triangles": 1873,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              512,
+              512
+            ],
+            [
+              512,
+              512
+            ],
+            [
+              512,
+              512
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.25667718052864075,
+              -0.006172408349812031,
+              -0.1617998331785202
+            ],
+            "max": [
+              0.2556295096874237,
+              1.75,
+              0.18991640210151672
+            ]
+          },
+          "candidateSha256": "1b2807e177df15514137c236eba3999b42b171c5db500a7b4031b3089bcdf093"
+        },
+        "mid": {
+          "file": "civilian-f-02-mid.glb",
+          "sha256": "8494cebf15371d7e937853dfb6e054fd2cd1eff1dfaef7b54f487d0a74ec96c2",
+          "bytes": 176844,
+          "triangles": 342,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              256,
+              256
+            ],
+            [
+              256,
+              256
+            ],
+            [
+              256,
+              256
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.2555803656578064,
+              0.0002593337558209896,
+              -0.15540634095668793
+            ],
+            "max": [
+              0.267111599445343,
+              1.75,
+              0.21246851980686188
+            ]
+          },
+          "candidateSha256": "e6cd4bfddc86091dc71461647f59a177312cbe5e3e2565a33e853bd69f95854a"
+        },
+        "far": {
+          "file": "civilian-f-02-far.glb",
+          "sha256": "4c7fa2eca946be2faadaff3ebc738e5ae9776de58fcaead44108729e4117129c",
+          "bytes": 68816,
+          "triangles": 116,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              128,
+              128
+            ],
+            [
+              128,
+              128
+            ],
+            [
+              128,
+              128
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.23850423097610474,
+              0.0019504539668560028,
+              -0.11499679833650589
+            ],
+            "max": [
+              0.2408265322446823,
+              1.75,
+              0.21631374955177307
+            ]
+          },
+          "candidateSha256": "6bedc080d5d17f06f8ba19efe2934cd6a3abdb6c97d68d34c14703693e625bb8"
+        }
+      }
+    },
+    {
+      "id": "civilian-f-03",
+      "label": "graphic tee, denim shorts",
+      "lods": {
+        "hero": {
+          "file": "civilian-f-03-hero.glb",
+          "sha256": "4e58a0fdf6a383e6c236a820353fc4d886105127cfe15c80af6b49659744273c",
+          "bytes": 5105732,
+          "triangles": 11482,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 16,
+          "textureDimensions": [
+            [
+              1024,
+              1024
+            ],
+            [
+              1024,
+              1024
+            ],
+            [
+              1024,
+              1024
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.256052166223526,
+              -0.005803531035780907,
+              -0.12807977199554443
+            ],
+            "max": [
+              0.25632554292678833,
+              1.75,
+              0.1928587257862091
+            ]
+          },
+          "candidateSha256": "9e326d6a8967e0c9019aafdc1b224deb1147f4fb129926e0209c27233cff6e7c"
+        },
+        "near": {
+          "file": "civilian-f-03-near.glb",
+          "sha256": "2488c850efa162f44d2c3e3654ebc7567e1f2fe3a628c6815d1f0fedb47bbba6",
+          "bytes": 640768,
+          "triangles": 1885,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              512,
+              512
+            ],
+            [
+              512,
+              512
+            ],
+            [
+              512,
+              512
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.25667309761047363,
+              -0.006273582577705383,
+              -0.1315644383430481
+            ],
+            "max": [
+              0.25562548637390137,
+              1.75,
+              0.19263063371181488
+            ]
+          },
+          "candidateSha256": "3dcdf259066ba40c2eb4911d106524d20d3c6ede96b6e1da5b0495305fc5ef77"
+        },
+        "mid": {
+          "file": "civilian-f-03-mid.glb",
+          "sha256": "2b5d267a4795c886e8cf07801acc25a5b51e32dfcf885539ae9ddb356adaa5ef",
+          "bytes": 202264,
+          "triangles": 348,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              256,
+              256
+            ],
+            [
+              256,
+              256
+            ],
+            [
+              256,
+              256
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.25204232335090637,
+              -0.0076314895413815975,
+              -0.13449439406394958
+            ],
+            "max": [
+              0.25589168071746826,
+              1.75,
+              0.19613464176654816
+            ]
+          },
+          "candidateSha256": "6fe302da9a427b1505fdcc3e54555fea0e18f101d6c6650ce3a39e2f2449cfae"
+        },
+        "far": {
+          "file": "civilian-f-03-far.glb",
+          "sha256": "fa7c248c646f7062900e9faad097aa188fe80fa56bb920a751a3513ea68b4de4",
+          "bytes": 76452,
+          "triangles": 119,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              128,
+              128
+            ],
+            [
+              128,
+              128
+            ],
+            [
+              128,
+              128
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.24356912076473236,
+              0.0019504539668560028,
+              -0.10662349313497543
+            ],
+            "max": [
+              0.2408265322446823,
+              1.75,
+              0.21631374955177307
+            ]
+          },
+          "candidateSha256": "ed5fd6d8b175ccba4d61c2b602a86c6ddaa9699db0c287de7a24233da40a2206"
+        }
+      }
+    },
+    {
+      "id": "civilian-f-04",
+      "label": "camel overshirt, cream tee, grey trousers",
+      "lods": {
+        "hero": {
+          "file": "civilian-f-04-hero.glb",
+          "sha256": "a242b1a3abeb54dee7dd2e9f8f663e38caaad28168fd158b759b5e25ea0ba955",
+          "bytes": 4959092,
+          "triangles": 11476,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 16,
+          "textureDimensions": [
+            [
+              1024,
+              1024
+            ],
+            [
+              1024,
+              1024
+            ],
+            [
+              1024,
+              1024
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.25580883026123047,
+              -0.005806038621813059,
+              -0.16076745092868805
+            ],
+            "max": [
+              0.2559782564640045,
+              1.75,
+              0.19286435842514038
+            ]
+          },
+          "candidateSha256": "2674dbaad088e3d526e41743cafbe736e594d696c09675d3ccbfba06d83d2496"
+        },
+        "near": {
+          "file": "civilian-f-04-near.glb",
+          "sha256": "59bbcd14c171e0eb20714a1e135da3438768e7d58b347d21e7feccc9241a7a60",
+          "bytes": 550976,
+          "triangles": 1873,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              512,
+              512
+            ],
+            [
+              512,
+              512
+            ],
+            [
+              512,
+              512
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.25667718052864075,
+              -0.006172408349812031,
+              -0.1617998331785202
+            ],
+            "max": [
+              0.2556295096874237,
+              1.75,
+              0.18991640210151672
+            ]
+          },
+          "candidateSha256": "8f1f8d4b0738e7fb162364122e3aff8ca286ea99478f5a1d81016091ce5f29f6"
+        },
+        "mid": {
+          "file": "civilian-f-04-mid.glb",
+          "sha256": "911ae574fd722274bb4c23aee6d60e46099ba3f7daa85cbe9e071d0c6e90678e",
+          "bytes": 175752,
+          "triangles": 342,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              256,
+              256
+            ],
+            [
+              256,
+              256
+            ],
+            [
+              256,
+              256
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.2555803656578064,
+              0.0002593337558209896,
+              -0.15540634095668793
+            ],
+            "max": [
+              0.267111599445343,
+              1.75,
+              0.21246851980686188
+            ]
+          },
+          "candidateSha256": "5a808e80264d5f7c0b4ebaa6e7292c7b4815634b39294c45e536ca5885802296"
+        },
+        "far": {
+          "file": "civilian-f-04-far.glb",
+          "sha256": "e5ce0244e20a608f125c53bced26e801db48f4cc4e083af0faa0d5ababbe8f7e",
+          "bytes": 68632,
+          "triangles": 116,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              128,
+              128
+            ],
+            [
+              128,
+              128
+            ],
+            [
+              128,
+              128
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.23850423097610474,
+              0.0019504539668560028,
+              -0.11499679833650589
+            ],
+            "max": [
+              0.2408265322446823,
+              1.75,
+              0.21631374955177307
+            ]
+          },
+          "candidateSha256": "9382bb578ad9efcef1ef7db60ee10fe55a8bc3e2f47633e4d827d6a32ea88440"
+        }
+      }
+    },
+    {
+      "id": "civilian-police-m",
+      "label": "police patrol uniform, navy polo and duty trousers, cap, duty belt",
+      "lods": {
+        "hero": {
+          "file": "civilian-police-m-hero.glb",
+          "sha256": "043ec5681ef0471c0c3d4c5a4146a7811c35db0ae9762e7f832b6a4398eace87",
+          "bytes": 4822232,
+          "triangles": 11477,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 16,
+          "textureDimensions": [
+            [
+              1024,
+              1024
+            ],
+            [
+              1024,
+              1024
+            ],
+            [
+              1024,
+              1024
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.260655015707016,
+              -0.005288769956678152,
+              -0.10989003628492355
+            ],
+            "max": [
+              0.2606765925884247,
+              1.75,
+              0.22572822868824005
+            ]
+          },
+          "candidateSha256": "c798e8ae8fb5abaa3ea277f1d66ec32e3136e9c8087f2ac055f28f7cf86678f6"
+        },
+        "near": {
+          "file": "civilian-police-m-near.glb",
+          "sha256": "277142fda50c9fab1f0e3bacf1ebb881051d69d1186c72b012690e00695ca093",
+          "bytes": 551708,
+          "triangles": 1877,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              512,
+              512
+            ],
+            [
+              512,
+              512
+            ],
+            [
+              512,
+              512
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.2606140673160553,
+              -0.004710019566118717,
+              -0.11008594185113907
+            ],
+            "max": [
+              0.2605263888835907,
+              1.75,
+              0.2254478633403778
+            ]
+          },
+          "candidateSha256": "fdcb69b07a6acd23f4e2b6c5f4baba9db0e1252803d21e2c685025d5b6aee2c9"
+        },
+        "mid": {
+          "file": "civilian-police-m-mid.glb",
+          "sha256": "5e9b8838d3127be1622e44dbbe449484a3bf9874e2262f9aeecc3ce0429ef117",
+          "bytes": 172828,
+          "triangles": 347,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              256,
+              256
+            ],
+            [
+              256,
+              256
+            ],
+            [
+              256,
+              256
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.25691384077072144,
+              0.0015438211848959327,
+              -0.11051569133996964
+            ],
+            "max": [
+              0.2604668140411377,
+              1.75,
+              0.22448942065238953
+            ]
+          },
+          "candidateSha256": "7fb8819ecf45fc1099e9d228eccd94d280aac6f52ecd72a96d70187857c01e0b"
+        },
+        "far": {
+          "file": "civilian-police-m-far.glb",
+          "sha256": "041bff88ed8b47f81a3919afeb9d92c5a115badc95785febabd24519d771a170",
+          "bytes": 68076,
+          "triangles": 114,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              128,
+              128
+            ],
+            [
+              128,
+              128
+            ],
+            [
+              128,
+              128
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.2519867718219757,
+              0.010314988903701305,
+              -0.1167897954583168
+            ],
+            "max": [
+              0.24055145680904388,
+              1.75,
+              0.2263815999031067
+            ]
+          },
+          "candidateSha256": "b7e4e248d9624e7d81fec8d2f83370654364caab81a2685b2dddca22dc025e78"
+        }
+      }
+    },
+    {
+      "id": "civilian-police-f",
+      "label": "police patrol uniform, navy duty shirt and trousers, cap, duty belt",
+      "lods": {
+        "hero": {
+          "file": "civilian-police-f-hero.glb",
+          "sha256": "22a37e1d275dcc8158d63a4233d05c583b15a6522d052df42401e3ff5bdaecc1",
+          "bytes": 4729636,
+          "triangles": 11479,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 16,
+          "textureDimensions": [
+            [
+              1024,
+              1024
+            ],
+            [
+              1024,
+              1024
+            ],
+            [
+              1024,
+              1024
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.2553161382675171,
+              -0.004641623701900244,
+              -0.18036800622940063
+            ],
+            "max": [
+              0.2550305426120758,
+              1.75,
+              0.22433699667453766
+            ]
+          },
+          "candidateSha256": "498dc87b0152518547957926207f5fae39e9571eb724f5c1f75b14cb25af91e9"
+        },
+        "near": {
+          "file": "civilian-police-f-near.glb",
+          "sha256": "df89a4d2d20f509cb757678ed66838617219b64e8654c2b0168f2c6e9f40c2a2",
+          "bytes": 523832,
+          "triangles": 1877,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              512,
+              512
+            ],
+            [
+              512,
+              512
+            ],
+            [
+              512,
+              512
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.2558228671550751,
+              -0.005078538320958614,
+              -0.1805199831724167
+            ],
+            "max": [
+              0.254789263010025,
+              1.75,
+              0.22389985620975494
+            ]
+          },
+          "candidateSha256": "0ac679e4201390aa3cf710b12387f7f56bb91a6343e6a5ad097272c87dad2d55"
+        },
+        "mid": {
+          "file": "civilian-police-f-mid.glb",
+          "sha256": "90ec41ca8a11aa0177bb98916bbcca3eb216264d6ee59bcbec81e47e3850b75b",
+          "bytes": 170420,
+          "triangles": 343,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              256,
+              256
+            ],
+            [
+              256,
+              256
+            ],
+            [
+              256,
+              256
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.2548491954803467,
+              0.0011419231304898858,
+              -0.12733164429664612
+            ],
+            "max": [
+              0.2554677724838257,
+              1.75,
+              0.23824213445186615
+            ]
+          },
+          "candidateSha256": "0c2f2935f3c862431a469eb2a2b7d01d42e5bf71ad4df894dc51659988697417"
+        },
+        "far": {
+          "file": "civilian-police-f-far.glb",
+          "sha256": "ea95886c8dc7b595c1be7a84df8f42ac6edf9a321d57cbf1d29534c597838411",
+          "bytes": 67452,
+          "triangles": 111,
+          "materials": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "textureDimensions": [
+            [
+              128,
+              128
+            ],
+            [
+              128,
+              128
+            ],
+            [
+              128,
+              128
+            ]
+          ],
+          "bounds": {
+            "min": [
+              -0.22386208176612854,
+              0.0026660955045372248,
+              -0.11394238471984863
+            ],
+            "max": [
+              0.2529248893260956,
+              1.75,
+              0.21602097153663635
+            ]
+          },
+          "candidateSha256": "52dbed6ccb6dffd84bb9a5a16f5507bd7e8f3b511b57736633328d4d5cacd136"
+        }
+      }
+    }
+  ]
+}

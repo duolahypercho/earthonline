@@ -1,0 +1,72 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-8101805021",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-8101805021",
+    "walkIndex": 7202,
+    "builder": "blender",
+    "street": "Kirkham Street",
+    "side": "N",
+    "addr": "4422 Kirkham Street",
+    "sourceHeight": 5.57,
+    "sourceLevels": null,
+    "frontEdge": 2,
+    "status": "review",
+    "lidarHeightM": 5.57,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b8101805021.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b8101805021.js"
+  },
+  "base": {
+    "id": "sf-building-8101805021",
+    "walkIndex": 7202,
+    "builder": "blender",
+    "street": "Kirkham Street",
+    "side": "N",
+    "addr": "4422 Kirkham Street",
+    "sourceHeight": 5.57,
+    "sourceLevels": null,
+    "frontEdge": 2,
+    "status": "review",
+    "lidarHeightM": 5.57,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b8101805021.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b8101805021.js"
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b8101805021.js",
+    "sha256": "cefc8579fe4d8bd4dd9e11f35cef352b12bd2b22db07d3c83774d6ae8eb43ead",
+    "pass": "b8101805021-blender-38c455b0-14c0a3"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-8101805021/provenance.json",
+    "sha256": "a13236628d39e4d0ab4d8cf2d4f7892bc136d6c0bb60b2b2e127a979179e63c7",
+    "pass": "b8101805021-blender-38c455b0-14c0a3"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-8101805021/exterior.glb",
+      "sha256": "1a8e871f6f70c3d37d1c0413438c8f9c58b27c95435c40028771ffe918a4e84d",
+      "bytes": 130856
+    },
+    {
+      "role": "interior",
+      "url": "/assets/buildings/sf-building-8101805021/interior.glb",
+      "sha256": "341e393121ec411b24c854a55032e8e907bc45e6d894744fb6521c9c1199057c",
+      "bytes": 73396
+    },
+    {
+      "role": "fine-s0",
+      "url": "/assets/buildings/sf-building-8101805021/fine-s0.glb",
+      "sha256": "92004526d418ce2badc9a1dedbad61a231d90feacd75f7e1b751ce203752e28c",
+      "bytes": 12552
+    },
+    {
+      "role": "fine-s1",
+      "url": "/assets/buildings/sf-building-8101805021/fine-s1.glb",
+      "sha256": "ea78c8d56a77d0c0ec965a33742f58637fcaf132c1fee59ef9aa2e240254144b",
+      "bytes": 56644
+    }
+  ],
+  "generatedAt": "2026-10-02T06:13:42.240Z"
+}

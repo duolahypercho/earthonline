@@ -1,0 +1,149 @@
+{
+ "seed": 38,
+ "notes": "1913 three-storey flats, warm brown brick with cream stone trim. Ground: a shop-type window with pilasters left, a white arched gated entry, barred windows right; a deep flat canopy at the first-floor level; paired windows on the first upper storey; a railed balcony with door in the middle of the second; one three-sided cream bay at the right on the top storey. Re-entrant jogs on the footprint are not photographed. Applied: dark chocolate-brown brick (lifted), cream bays on both sides of the central black fire escape, heavy dark bracketed entablature, round-arched gated entry with cream surround and keystone, framed wide windows flanking. Cartouche panels and quoins have no key and are skipped. Tint greyed so the dark brown reads brown, not orange. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Brown clinker brick tint, heavy dark bracketed canopy at the top of the ground storey via hand.py, barred left window (no shopfront). SKIPPED cream upper walls: the brick piers between cream bays.",
+ "wall": "brick-running-bond",
+ "wallTint": "#c8d4b8",
+ "trim": "painted-white@f2e6b0",
+ "frame": "painted-white@f2e6b0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@efe3bc",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "corniceProjectionM": 0.5,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "bulkhead": "brick-running-bond@c8d4b8",
+ "groundBand": {
+  "material": "brick-running-bond",
+  "tint": "#c8d4b8",
+  "topM": 3.5
+ },
+ "bays": [
+  {
+   "at": 0.1,
+   "widthM": 2.4,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f8f2d8",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.16,
+     "roofRiseM": 0.1,
+     "dentils": true
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.9,
+   "widthM": 2.4,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f8f2d8",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.16,
+     "roofRiseM": 0.1,
+     "dentils": true
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "upperWindows": [
+  0.22,
+  0.78
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.06,
+    "to": 0.3,
+    "kind": "window",
+    "headM": 2.2,
+    "grille": true
+   },
+   {
+    "from": 0.36,
+    "to": 0.62,
+    "kind": "gate",
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.2,
+      "projectionM": 0.08,
+      "material": "cast-stone-trim",
+      "tint": "#f0e4b0"
+     },
+     "keystone": true
+    }
+   },
+   {
+    "from": 0.68,
+    "to": 0.94,
+    "kind": "window",
+    "headM": 2.0,
+    "grille": true
+   }
+  ]
+ },
+ "fireEscape": {
+  "at": 0.5,
+  "widthM": 3.0,
+  "depthM": 0.8,
+  "material": "painted-steel",
+  "levels": [
+   1,
+   2
+  ]
+ },
+ "hbArchDoors": [],
+ "hbCorniceDentils": {
+  "spacingM": 0.22,
+  "sizeM": 0.1,
+  "tint": "#f0e4b0"
+ },
+ "edgeRoles": {},
+ "hbCorniceBrackets": {
+  "spacingM": 1.1,
+  "heightM": 0.7,
+  "depthM": 0.45,
+  "widthM": 0.3,
+  "material": "painted-white",
+  "tint": "#2e2420"
+ }
+}

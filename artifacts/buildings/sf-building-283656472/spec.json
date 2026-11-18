@@ -1,0 +1,147 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-283656472",
+  "slug": "b283656472",
+  "walkIndex": 5261,
+  "street": "Noriega Street",
+  "address": "1801 21st Avenue",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "street count 3 (style storeysSeen) overrides Assessor roll (assessor) 2"
+  },
+  "storeysRoll": 2,
+  "heightM": 9.42,
+  "storeys": 3,
+  "floors": {
+    "groundM": 3.5,
+    "upperM": 2.8,
+    "roofM": 0.32
+  },
+  "yearBuilt": 1977,
+  "use": "MRES",
+  "usage": "mixed",
+  "amenity": "dentist",
+  "shop": null,
+  "facade": "edwardian",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 2,
+    "center": {
+      "x": -5234.2,
+      "z": -2664.8
+    },
+    "heading": -0.048073,
+    "width": 29.179,
+    "depth": 23.825
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": 14.544,
+      "z": -11.913
+    },
+    {
+      "x": -14.589,
+      "z": -11.913
+    },
+    {
+      "x": -14.544,
+      "z": 11.913
+    },
+    {
+      "x": 14.589,
+      "z": 11.913
+    },
+    {
+      "x": 14.559,
+      "z": -1.201
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 14.544,
+        "z": -11.913
+      },
+      "b": {
+        "x": -14.589,
+        "z": -11.913
+      },
+      "lengthM": 29.134,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -14.589,
+        "z": -11.913
+      },
+      "b": {
+        "x": -14.544,
+        "z": 11.913
+      },
+      "lengthM": 23.825,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -14.544,
+        "z": 11.913
+      },
+      "b": {
+        "x": 14.589,
+        "z": 11.913
+      },
+      "lengthM": 29.134,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 14.589,
+        "z": 11.913
+      },
+      "b": {
+        "x": 14.559,
+        "z": -1.201
+      },
+      "lengthM": 13.114,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": 14.559,
+        "z": -1.201
+      },
+      "b": {
+        "x": 14.544,
+        "z": -11.913
+      },
+      "lengthM": 10.712,
+      "role": "rear",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "kind": "blender-building",
+  "id": "sf-building-32611535",
+  "pass": "b32611535-blender-64483521-bdbb37",
+  "generator": "scripts/blender-buildings/build_building.py",
+  "generatorSha256": "64483521ec5191d81d134a2881d6c0b90d5cd1548ee03a93dc886cbca75f921f",
+  "blender": "Blender 5.1.2",
+  "inputs": {
+    "spec": "artifacts/buildings/sf-building-32611535/spec.json",
+    "specSha256": "cc962370d0cd441b3407d5c7e4e5c5af7fdc1ed3ecf6c2fd96288b5c0b4fd9d4",
+    "style": "artifacts/buildings/sf-building-32611535/style.json",
+    "styleSha256": "bdbb3757f8e7d5450fbc8b2308b57f8097ef12d445bb61fce7d13ffbf7e8f0ce"
+  },
+  "sources": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "license": "Original geometry generated from open data (DataSF footprints, LiDAR, Assessor roll). No third-party meshes or textures.",
+  "furniture": [],
+  "assets": {
+    "exterior": {
+      "url": "/assets/buildings/sf-building-32611535/exterior.glb",
+      "sha256": "fc85a64307027dc8174834ced74672be4ba9e117eac696d417def1a3541d4ad3",
+      "bytes": 687384
+    },
+    "interior": {
+      "url": "/assets/buildings/sf-building-32611535/interior.glb",
+      "sha256": "350c9324ca02c30ac81b5b46253f191697c2eed37fa924979631bea8934eb6b5",
+      "bytes": 169172
+    },
+    "fine": [
+      {
+        "storey": 0,
+        "url": "/assets/buildings/sf-building-32611535/fine-s0.glb",
+        "sha256": "04a165b46dafc0a0a76dd1e389ce8b7f391341db8eb1ad020046934be2dcb5ed",
+        "bytes": 32984
+      },
+      {
+        "storey": 1,
+        "url": "/assets/buildings/sf-building-32611535/fine-s1.glb",
+        "sha256": "66fa077aee832cca21122aa9187eca3f0d7a71c2ebb124b6c504cfb6bbc58120",
+        "bytes": 66664
+      },
+      {
+        "storey": 2,
+        "url": "/assets/buildings/sf-building-32611535/fine-s2.glb",
+        "sha256": "a5b0d16909f0309b6d6f98a9c9e11dcec797a09e812a702a95c9637acdfac96b",
+        "bytes": 66656
+      }
+    ]
+  }
+}

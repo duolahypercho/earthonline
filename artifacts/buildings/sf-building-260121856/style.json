@@ -1,0 +1,182 @@
+{
+ "seed": 22,
+ "notes": "Cream painted clapboard (not tan stucco) with fine lap relief; four storeys seen (garages, a paired-window storey, two bay storeys) via storeysSeen; two cream panelled garage doors; gabled-hood stand-in (brown pent awning) over the red door; oxblood belt/trim. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Oxblood belt moved to the bay-bottom line (hbSignBands, no garage-head belt); wider paired windows under bays; shingled hip hood via hand.py.",
+ "wall": "painted-clapboard",
+ "wallTint": "#f6e4b8",
+ "trim": "painted-white@5a1418",
+ "frame": "painted-white@efe6cc",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@efe6cc",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@f6e4b8",
+ "cornice": true,
+ "corniceProjectionM": 0.5,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.68
+ ],
+ "bays": [
+  {
+   "at": 0.16,
+   "widthM": 4.0,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-clapboard",
+   "tint": "#f6e4b8",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.52,
+   "widthM": 3.6,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-clapboard",
+   "tint": "#f6e4b8",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.88,
+   "widthM": 3.0,
+   "projectionM": 0.6,
+   "fromStorey": 2,
+   "material": "painted-clapboard",
+   "tint": "#f6e4b8",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.04,
+    "to": 0.29,
+    "kind": "garage",
+    "material": "painted-white",
+    "tint": "#efe6cc",
+    "headM": 2.6
+   },
+   {
+    "from": 0.365,
+    "to": 0.61,
+    "kind": "garage",
+    "material": "painted-white",
+    "tint": "#efe6cc",
+    "headM": 2.6
+   },
+   {
+    "from": 0.655,
+    "to": 0.72,
+    "kind": "door",
+    "stair": true,
+    "leaf": "wood-siding@a02a30",
+    "headM": 2.6
+   }
+  ]
+ },
+ "garagePanel": {
+  "doorM": 2.6,
+  "cols": 4,
+  "rows": 3,
+  "tint": "#efe6cc",
+  "panelTint": "#e4dcc0"
+ },
+ "awningSpans": [],
+ "edgeRoles": {},
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.0,
+  "upperM": 3.05
+ },
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.07,
+     0.2
+    ],
+    [
+     0.45,
+     0.58
+    ]
+   ],
+   "sillM": 0.8,
+   "headM": 2.4
+  }
+ },
+ "hyDLap": {
+  "pitchM": 0.2,
+  "fromM": 3.1
+ },
+ "awning": "canvas-plain@5a3a2a",
+ "hbSignBands": [
+  {
+   "from": 0.0,
+   "to": 1.0,
+   "bottomM": 5.75,
+   "topM": 6.05,
+   "material": "painted-white",
+   "tint": "#5a1418"
+  }
+ ]
+}

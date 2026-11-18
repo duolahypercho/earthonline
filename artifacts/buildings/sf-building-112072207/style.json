@@ -1,0 +1,19 @@
+{
+  "seed": 1,
+  "builder": "pavilion",
+  "streamPresentation": true,
+  "notes": "A round two-drum pavilion on the OSM footprint, flagged curved: its nine surveyed vertices lie within 2.6 % of one radius about the area centroid, so the ground-storey drum is the round wall they describe (through every vertex, each edge an arc of the fitted 9.10 m circle; scripts/blender-buildings/curved-footprint.mjs), shaded smooth, warm cream stucco standing straight on the ground. A ribbon of dark-red framed windows on its north (bridge) half, a broad thick dark-red flat eave ring, and a smaller set-back upper drum with round windows under its own dark-red eave. No measured height: the shell top is the runtime fallback height (2 levels x 3.2 m). The ground round it is left to the street passes: the footprint record carries no surface, and the extract holds the concrete footways beside it as ways, not a paved area. Look values from the round-0 street reference, in words only.",
+  "pavilion": {
+    "wall": "painted-stucco@ecd3a2",
+    "eave": "signal-red@8c4a40",
+    "frame": "signal-red@8c4a40",
+    "lowerM": 3.9,
+    "eaveM": 2.2,
+    "eaveThickM": 0.6,
+    "upperInsetM": 3.2,
+    "upperEaveM": 0.9,
+    "upperEaveThickM": 0.5,
+    "segmentM": 1.6
+  },
+  "footprintCurved": true
+}

@@ -1,0 +1,65 @@
+{
+ "seed": 9,
+ "wall": "painted-stucco",
+ "wallTint": "#f0e7d0",
+ "trim": "painted-white@f2e8d0",
+ "frame": "painted-white@f4f0e6",
+ "storefrontFrame": "painted-white@e8e2d4",
+ "bulkhead": "glazed-tile@1c2026",
+ "corniceProjectionM": 0.3,
+ "windowW": 0.95,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.7,
+ "upperWindows": [
+  0.3,
+  0.535,
+  0.69,
+  0.79,
+  0.93
+ ],
+ "storefront": {
+  "bulkheadM": 1.0,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.2,
+    "to": 0.37,
+    "kind": "window",
+    "headM": 3.8
+   },
+   {
+    "from": 0.63,
+    "to": 0.72,
+    "kind": "door",
+    "leaf": "painted-steel@3a3a3a",
+    "headM": 3.2
+   },
+   {
+    "from": 0.745,
+    "to": 0.965,
+    "kind": "window",
+    "headM": 3.4
+   }
+  ]
+ },
+ "ground": "shop",
+ "upper": "apartment",
+ "notes": "3 storeys, ground (5.5 m) in glossy black glazed tile with a framed window, glazed entry door and a shop window at the right; cream/buff stucco above with three wide white-surround windows plus narrow windows between, iron balconies on storey 1 (hand.py). The iron passage gate and the striped awning, maroon hood crests are neighbour/no-key and skipped. Tint lift (2026-10-02) retained for paints. Window surrounds dropped (misaligned with the openings), tile tint darkened. UpperOpenings was ignored by the build, so the five window fractions go in upperWindows. TINT-REQUEST e0cfa0 applied (2026-10-03) as #f0e7d0.",
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "beltCourse": true,
+ "windowHoods": false,
+ "streetStills": true,
+ "storeysSeen": {
+  "count": 3,
+  "groundM": 5.5
+ },
+ "groundBand": {
+  "material": "glazed-tile",
+  "tint": "#1c2026",
+  "topM": 5.3
+ }
+}

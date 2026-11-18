@@ -1,0 +1,162 @@
+{
+  "_comment": "Signature buildings that build 'full' (interior) while BUILDING_SCOPE stays 'exterior' (scripts/blender-buildings/scope.mjs). Only ids under `approved` change a build; `proposed` waits for the user's approval (2026-10-10). Criteria: showcase-street corner shops, civic/landmark buildings from the Assessor roll class, tallest/most visible by LiDAR. Cap about 20. User approved the 12 with an installed interior.glb on 2026-10-11.",
+  "approved": [
+    "sf-building-260361486",
+    "sf-building-260361488",
+    "sf-building-267048367",
+    "sf-building-262550699",
+    "sf-building-262725652",
+    "sf-building-24588037",
+    "sf-building-165846552",
+    "sf-building-1206216224",
+    "sf-building-118229926",
+    "sf-building-149930902",
+    "sf-building-179746912",
+    "sf-building-148427243",
+    "sf-building-173886722"
+  ],
+  "proposed": [
+    {
+      "id": "sf-building-132125157",
+      "address": "149-155 Montgomery St",
+      "criterion": "corner",
+      "why": "Montgomery/Bush corner, 15 storeys (1921), ground-floor cafe, showcase street",
+      "hasInteriorGlb": false
+    },
+    {
+      "id": "sf-building-129142347",
+      "address": "235 Montgomery St",
+      "criterion": "tallest",
+      "why": "Russ Building at Montgomery/Bush, 31 storeys (132.6 m LiDAR), lobby only",
+      "hasInteriorGlb": false
+    },
+    {
+      "id": "sf-building-260327749",
+      "address": "630 Valencia St",
+      "criterion": "civic",
+      "why": "Mission Police Station (Assessor POLG) at Valencia/17th, showcase street",
+      "hasInteriorGlb": false
+    },
+    {
+      "id": "sf-building-255871221",
+      "address": "700-718 Irving St",
+      "criterion": "corner",
+      "why": "Irving/8th Ave corner restaurant row, showcase street",
+      "hasInteriorGlb": false
+    },
+    {
+      "id": "sf-building-362491110",
+      "address": "Irving St / 9th Ave",
+      "criterion": "corner",
+      "why": "Irving/9th Ave corner shop, showcase street",
+      "hasInteriorGlb": false
+    },
+    {
+      "id": "sf-building-24446086",
+      "address": "100 Larkin St",
+      "criterion": "civic",
+      "why": "Main Library (Assessor LIBG), Civic Center",
+      "hasInteriorGlb": false
+    },
+    {
+      "id": "sf-building-32865161",
+      "address": "301 Van Ness Ave",
+      "criterion": "civic",
+      "why": "War Memorial Opera House (Assessor ECG), lobby",
+      "hasInteriorGlb": false
+    },
+    {
+      "id": "sf-building-256442760",
+      "address": "3321 16th St",
+      "criterion": "landmark",
+      "why": "Mission Dolores Basilica (Assessor W), nave",
+      "hasInteriorGlb": false
+    }
+  ],
+  "approvedEntries": [
+    {
+      "id": "sf-building-260361486",
+      "address": "500-510 Valencia St",
+      "criterion": "corner",
+      "why": "Valencia/16th corner restaurant, showcase street, ground floor reads through the corner glazing",
+      "hasInteriorGlb": true
+    },
+    {
+      "id": "sf-building-260361488",
+      "address": "518-522 Valencia St",
+      "criterion": "corner-block",
+      "why": "shopfront on the Valencia 16th-17th showcase block, next to the corner",
+      "hasInteriorGlb": true
+    },
+    {
+      "id": "sf-building-267048367",
+      "address": "701 Irving St",
+      "criterion": "corner",
+      "why": "Irving/8th Ave corner bank hall, showcase street",
+      "hasInteriorGlb": true
+    },
+    {
+      "id": "sf-building-262550699",
+      "address": "2310 Hyde St",
+      "criterion": "corner",
+      "why": "Hyde/Lombard corner, showcase street",
+      "hasInteriorGlb": true
+    },
+    {
+      "id": "sf-building-262725652",
+      "address": "2319-2323 Hyde St",
+      "criterion": "corner",
+      "why": "Hyde/Lombard corner, showcase street",
+      "hasInteriorGlb": true
+    },
+    {
+      "id": "sf-building-24588037",
+      "address": "200 Larkin St",
+      "criterion": "civic",
+      "why": "Asian Art Museum (Assessor class ECG, 7 storeys), Civic Center landmark with a public hall",
+      "hasInteriorGlb": true
+    },
+    {
+      "id": "sf-building-165846552",
+      "address": "198 McAllister St",
+      "criterion": "civic",
+      "why": "UC Law SF (Assessor EG), Civic Center, public ground floor",
+      "hasInteriorGlb": true
+    },
+    {
+      "id": "sf-building-1206216224",
+      "address": "429 Castro St",
+      "criterion": "landmark",
+      "why": "Castro Theatre (Assessor class T), landmark with a lobby behind the marquee",
+      "hasInteriorGlb": true
+    },
+    {
+      "id": "sf-building-118229926",
+      "address": "300 4th St",
+      "criterion": "civic",
+      "why": "the civic atrium building; its Blender build superseded the hand-authored atrium",
+      "hasInteriorGlb": true
+    },
+    {
+      "id": "sf-building-149930902",
+      "address": "1000 Sutter St",
+      "criterion": "tallest",
+      "why": "tallest Blender building on the Hyde run (10 storeys, 32 m, LiDAR), art deco hotel",
+      "hasInteriorGlb": true
+    },
+    {
+      "id": "sf-building-179746912",
+      "address": "1199 Bush St",
+      "criterion": "corner",
+      "why": "Hyde/Bush corner, 6 storeys, most visible on the Hyde climb",
+      "hasInteriorGlb": true
+    },
+    {
+      "id": "sf-building-148427243",
+      "address": "1388 California St",
+      "criterion": "corner",
+      "why": "Hyde/California corner on the cable-car line, art deco hotel lobby",
+      "hasInteriorGlb": true
+    }
+  ]
+}

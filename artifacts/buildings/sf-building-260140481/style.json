@@ -1,0 +1,97 @@
+{
+ "seed": 5,
+ "notes": "Corner bay of the three-storey off-white hotel block: dark charcoal base with a glazed diner front under a black sign fascia and awning, dark navy windows, near-black bracketed cornice carried round the flank, black fire escape at centre. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. GroundBand lift (2026-10-03): groundBand tint #7a7a82 -> #95959b (same rule as walls; it was missed by the first colour pass).",
+ "streetStills": true,
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-storefront",
+ "wall": "painted-stucco",
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "cornice": true,
+ "corniceProjectionM": 0.7,
+ "beltCourse": true,
+ "ground": "lobby",
+ "upper": "apartment",
+ "upperWindows": [
+  0.2,
+  0.52,
+  0.82
+ ],
+ "awningSpans": [
+  {
+   "from": 0.12,
+   "to": 0.95,
+   "depthM": 1.1,
+   "valanceM": 0.5
+  }
+ ],
+ "awning": "canvas-plain@1c1c20",
+ "storefront": {
+  "bulkheadM": 0.6,
+  "transomM": 0.5,
+  "pierM": 0.35,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.12,
+    "to": 0.55,
+    "kind": "window",
+    "headM": 3.0
+   },
+   {
+    "from": 0.58,
+    "to": 0.94,
+    "kind": "window",
+    "headM": 3.0
+   }
+  ]
+ },
+ "wallTint": "#f2f1ee",
+ "trim": "painted-white@14182a",
+ "frame": "painted-white@14182a",
+ "storefrontFrame": "painted-white@14182a",
+ "bulkhead": "painted-stucco@8b8b91",
+ "windowHoods": true,
+ "sashFrames": {
+  "material": "painted-white@14182a",
+  "stileM": 0.06
+ },
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#95959b",
+  "topM": 4.2
+ },
+ "floorsM": {
+  "groundM": 4.2,
+  "upperM": 2.95
+ },
+ "edgeRoles": {
+  "3": "flank"
+ },
+ "fireEscape": {
+  "at": 0.52,
+  "widthM": 2.4,
+  "depthM": 0.9,
+  "standoffM": 0.3,
+  "ladder": true,
+  "material": "painted-steel",
+  "levels": [
+   2,
+   3
+  ],
+  "dropLadder": true,
+  "roofLadder": false,
+  "braces": true
+ },
+ "hbSignBands": [
+  {
+   "from": 0.12,
+   "to": 0.95,
+   "bottomM": 3.3,
+   "topM": 3.95,
+   "material": "signage",
+   "tint": "#16161a"
+  }
+ ]
+}

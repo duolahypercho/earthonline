@@ -1,0 +1,91 @@
+{
+ "seed": 5,
+ "notes": "1920 one-storey painted teal brick garage: raised brick parapet with a recessed panel line, dark multi-pane clerestory band over teal panelled garage doors, a teal pedestrian door under a black address sign, and a recessed dark gate bay at the right end framed by a brick pier. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. Base fix (2026-10-03): cool/grey wallTint = target / painted-stucco base so the warm stucco albedo does not turn it pink.",
+ "streetStills": true,
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-storefront",
+ "wall": "painted-stucco",
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "cornice": false,
+ "corniceProjectionM": 0.2,
+ "beltCourse": false,
+ "ground": "lobby",
+ "upper": "apartment",
+ "wallTint": "#59cbd1",
+ "trim": "painted-white@366862",
+ "frame": "painted-steel@2a2f30",
+ "storefrontFrame": "painted-steel@2a2f30",
+ "upperWindows": [],
+ "blankUpper": true,
+ "floorsM": {
+  "groundM": 5.0
+ },
+ "storefront": {
+  "bulkheadM": 0.0,
+  "transomM": 0.9,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.05,
+    "to": 0.5,
+    "kind": "garage",
+    "headM": 3.3,
+    "leaf": "painted-white@1f8f82"
+   },
+   {
+    "from": 0.53,
+    "to": 0.6,
+    "kind": "door",
+    "headM": 2.7,
+    "leaf": "painted-white@1f8f82"
+   },
+   {
+    "from": 0.64,
+    "to": 0.8,
+    "kind": "blank",
+    "material": "painted-white",
+    "tint": "#45b3a3",
+    "headM": 3.4
+   },
+   {
+    "from": 0.85,
+    "to": 0.97,
+    "kind": "gate",
+    "headM": 3.6
+   }
+  ]
+ },
+ "groundBand": {
+  "material": "brick-common-bond",
+  "tint": "#34ffff",
+  "topM": 5.0
+ },
+ "garagePanel": {
+  "doorM": 3.3,
+  "cols": 3,
+  "rows": 4,
+  "tint": "1f8f82",
+  "panelTint": "1a7a6e"
+ },
+ "hbSignBands": [
+  {
+   "from": 0.05,
+   "to": 0.8,
+   "bottomM": 3.55,
+   "topM": 4.25,
+   "material": "painted-steel",
+   "tint": "#2a3232"
+  },
+  {
+   "from": 0.535,
+   "to": 0.625,
+   "bottomM": 3.0,
+   "topM": 3.45,
+   "material": "signage",
+   "tint": "#16161a"
+  }
+ ]
+}

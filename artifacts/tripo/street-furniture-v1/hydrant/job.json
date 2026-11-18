@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "command": "text",
+  "args": {
+    "command": "text",
+    "prompt": "game-ready city fire hydrant, squat cast-iron body, domed bonnet cap with a hex nut on top, one large front outlet cap and two smaller side outlet caps, wide flanged base ring, weathered painted metal with chipped edges and subtle rust at the seams, strong readable silhouette at 20 metres, PBR materials, clean low-poly topology, upright, pivot centred at the base, isolated object, no ground plane, no base plinth, no text, no signage",
+    "model_version": "v3.1-20260211",
+    "negative_prompt": "text, letters, logo, sign, ground plane, base plinth, pedestal, multiple objects, blurry",
+    "model_seed": null,
+    "image_seed": null,
+    "texture_seed": null,
+    "texture_quality": "standard",
+    "geometry_quality": "detailed",
+    "face_limit": 1500,
+    "no_texture": false,
+    "no_pbr": false,
+    "smart_low_poly": false,
+    "quad": false,
+    "auto_size": false,
+    "compress": null,
+    "generate_parts": false,
+    "no_export_uv": false,
+    "wait": true,
+    "download": true,
+    "out_dir": "artifacts/tripo/street-furniture-v1/hydrant",
+    "interval": 8,
+    "timeout": 600
+  },
+  "stages": {
+    "task": {
+      "state": "success",
+      "files": {
+        "pbr_model": {
+          "path": "artifacts/tripo/street-furniture-v1/hydrant/3c81e7d4-b301-42b7-920e-dbcef9cfa76b-pbr-model.glb",
+          "size": 621716,
+          "sha256": "1916a5862d8509bb597711aab30c99a88f532b13f67c7d741a2029074fb9b8e5"
+        },
+        "rendered_image": {
+          "path": "artifacts/tripo/street-furniture-v1/hydrant/3c81e7d4-b301-42b7-920e-dbcef9cfa76b-rendered-image.webp",
+          "size": 165962,
+          "sha256": "8c09896771900309c76c978d39ed519a5130b3e9cf8c877128170214e8a09aba"
+        },
+        "generated_image": {
+          "path": "artifacts/tripo/street-furniture-v1/hydrant/3c81e7d4-b301-42b7-920e-dbcef9cfa76b-generated-image.jpeg",
+          "size": 95559,
+          "sha256": "8a52ed6d96a7662bce248733dfb3d8650b367153295e98cba94711705441f452"
+        }
+      },
+      "request": {
+        "type": "text_to_model"
+      },
+      "task_id": "3c81e7d4-b301-42b7-920e-dbcef9cfa76b",
+      "task": {
+        "task_id": "3c81e7d4-b301-42b7-920e-dbcef9cfa76b",
+        "status": "success",
+        "progress": 100,
+        "output": {}
+      },
+      "downloads_complete": true
+    }
+  }
+}

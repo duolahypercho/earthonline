@@ -1,0 +1,153 @@
+{
+ "seed": 14,
+ "notes": "1908 single house at the Filbert corner, sage grey-green wood shingle with bottle-green trim over a low red-brown brick basement band. Upper-floor cant bay on brackets at the north half, single tall window at the south half, deep bracketed eaves under a hipped roof. Ground: stair up to a porch entry at the south end, a shuttered main-floor window and a corner window at the north. Filbert flank (edge 2) gets windows. Data gives 3 storeys, so the attic storey shows as a third window row. The shingle wall read warm tan and the brick band salmon; wall tint cooled to sage green, brick darkened to red-brown, entry cut down to door height. The main-floor windows now sit on a brick sill panel instead of shop glazing with pink panels, the entry is a narrow dark green door at the real-left stoop end, no garage-like opening; a small hipped dormer block sits on the roof over the centre; trim pushed to a deeper forest green. The data gives 3 storeys, so an attic window row remains where the real house has its roof; a porch hood and paired eave brackets have no style key. Main-floor lights raised to a 1.75 m sill over a shingled panel so the glazing reads as a raised house window rather than shop glazing; transom thinned. The three data storeys become a 2.6 m street level (a 1.1 m red-brown brick plinth, shingle above, the entry at the real-left end reached by pale stone stoop bands under a small dark green hood), a main floor with a shallow flat cant bay, and an upper floor with a deeper dark-green-framed cant bay; the walls stop at 8.7 m (wallTopM) under deep bracketed eaves, and a steep hipped roof over the whole footprint plus a tall dormer block over the centre fill the LiDAR height instead of a flat-roof box; wall darker grey-green, trim dark green. The two street-level lights under the bays are removed; the basement face is brick plinth and shingle with only the stoop entry. Applied: grey-olive wall 7a806f (no shingle material in the kit, siding used), forest-green trim 2f4536, oriel on storey 2 only, storey-1 flat window (shutters not drawn) instead of the shallow bay plus a small canted corner bay at the right, 10-step stair with brick cheek walls. Gabled porch hood and gabled belvedere windows have no key (hip block only). Mirrored claim SKIPPED. Applied: shingle grey-olive 737566, forest green 2c3b31, brick plinth 0.6 m 8a4a38, oriel centred 0.75, deeper eaves. Gabled porch hood and dormer have no key. Applied: shingle relief on the walls (hyDShingle), near-black green trim, deeper 0.7 m eaves, deeper porch hood, taller brick band 1.0 m. Wall tint kept 737566. Hand pass 1 (2026-10-02): the roll's 3 storeys are basement + main + upper: floorsM 1.6/3.05 puts the bay on the upper floor under the eave; brick basement to 1.6 m; entry, porch gable, stair and window hood moved to hand.py. Hand pass 1b: basement is one blank brick run (an empty layout drew default shop panels); main roof block hip rise 4.1 m so the hip springs from the eave (the 3.8 m rise left a 1.3 m plain band above the cornice). Clapboard fix (2026-10-02): painted siding moved from the stained-timber wood-siding base to painted-clapboard so the tint renders as paint, not olive. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-clapboard",
+ "wallTint": "#8f9185",
+ "trim": "painted-white@2a382e",
+ "frame": "painted-white@2a382e",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@2a382e",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-clapboard@8f9185",
+ "cornice": true,
+ "corniceProjectionM": 0.85,
+ "beltCourse": false,
+ "windowHoods": true,
+ "windowW": 0.9,
+ "windowSillM": 0.7,
+ "windowHeadM": 2.4,
+ "upperWindows": [
+  0.28
+ ],
+ "bays": [
+  {
+   "at": 0.75,
+   "widthM": 3.2,
+   "projectionM": 0.6,
+   "fromStorey": 2,
+   "toStorey": 2,
+   "material": "painted-clapboard",
+   "tint": "#8f9185"
+  }
+ ],
+ "groundBand": {
+  "material": "brick-running-bond",
+  "tint": "#cdc9db",
+  "topM": 1.6
+ },
+ "storefront": {
+  "bulkheadM": 1.6,
+  "transomM": 0.0,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.3,
+    "to": 0.98,
+    "kind": "blank",
+    "material": "brick-running-bond",
+    "tint": "#cdc9db",
+    "headM": 1.5
+   }
+  ]
+ },
+ "edgeRoles": {
+  "2": "flank"
+ },
+ "streetEdges": {
+  "2": {
+   "upperWindows": [
+    0.2,
+    0.45,
+    0.7,
+    0.88
+   ],
+   "bays": [],
+   "storefront": {
+    "bulkheadM": 1.2,
+    "transomM": 0.2,
+    "pierM": 0.4,
+    "awning": false,
+    "layout": [
+     {
+      "from": 0.15,
+      "to": 0.27,
+      "kind": "window"
+     },
+     {
+      "from": 0.45,
+      "to": 0.57,
+      "kind": "window"
+     },
+     {
+      "from": 0.72,
+      "to": 0.84,
+      "kind": "window"
+     }
+    ]
+   },
+   "roofBlocks": [],
+   "awningSpans": [],
+   "plaques": []
+  }
+ },
+ "ground": "lobby",
+ "upper": "rooms",
+ "roofBlocks": [
+  {
+   "at": 0.5,
+   "widthM": 8.0,
+   "depthM": 19.0,
+   "setbackM": 0.02,
+   "hipRiseM": 4.1,
+   "eaveM": 0.7,
+   "material": "painted-clapboard",
+   "tint": "#737566",
+   "hipMaterial": "asphalt-roof@4a4e4a"
+  },
+  {
+   "at": 0.5,
+   "widthM": 2.4,
+   "depthM": 2.2,
+   "setbackM": 0.7,
+   "hipRiseM": 1.2,
+   "eaveM": 0.3,
+   "material": "painted-clapboard",
+   "tint": "#737566",
+   "hipMaterial": "asphalt-roof@4a4e4a"
+  }
+ ],
+ "floorsM": {
+  "groundM": 1.6,
+  "upperM": 3.05
+ },
+ "wallTopM": 7.85,
+ "awning": "wood-siding@2f3d34",
+ "awningSpans": [],
+ "plaques": [],
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.58,
+     0.78
+    ],
+    [
+     0.9,
+     0.95
+    ]
+   ],
+   "sillM": 0.8,
+   "headM": 2.3
+  }
+ },
+ "streetStills": true,
+ "hyDShingle": {
+  "kind": "square",
+  "rowM": 0.16,
+  "shingleM": 0.14,
+  "projM": 0.014,
+  "shade": 0.6,
+  "maxTris": 16000
+ }
+}

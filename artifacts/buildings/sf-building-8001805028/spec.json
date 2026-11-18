@@ -1,0 +1,298 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-8001805028",
+  "slug": "b8001805028",
+  "walkIndex": 7011,
+  "street": "La Playa Street",
+  "address": "1468 La Playa",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 9.1,
+  "storeys": 2,
+  "floors": {
+    "groundM": 5.525,
+    "upperM": 2.975,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1970,
+  "use": "MRES",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "edwardian",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 10,
+    "center": {
+      "x": -7860.566,
+      "z": -2105.909
+    },
+    "heading": -1.632257,
+    "width": 22.469,
+    "depth": 37.579
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": 6.572,
+      "z": -13.014
+    },
+    {
+      "x": 3.562,
+      "z": -13.901
+    },
+    {
+      "x": 3.552,
+      "z": -18.79
+    },
+    {
+      "x": -11.234,
+      "z": -18.761
+    },
+    {
+      "x": -11.22,
+      "z": -12.34
+    },
+    {
+      "x": 3.406,
+      "z": -12.368
+    },
+    {
+      "x": 3.405,
+      "z": -4.574
+    },
+    {
+      "x": 5.318,
+      "z": -4.571
+    },
+    {
+      "x": 5.327,
+      "z": 9.244
+    },
+    {
+      "x": 3.564,
+      "z": 9.253
+    },
+    {
+      "x": 3.42,
+      "z": 18.79
+    },
+    {
+      "x": 11.234,
+      "z": 18.79
+    },
+    {
+      "x": 11,
+      "z": -13.016
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 6.572,
+        "z": -13.014
+      },
+      "b": {
+        "x": 3.562,
+        "z": -13.901
+      },
+      "lengthM": 3.138,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 3.562,
+        "z": -13.901
+      },
+      "b": {
+        "x": 3.552,
+        "z": -18.79
+      },
+      "lengthM": 4.889,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 3.552,
+        "z": -18.79
+      },
+      "b": {
+        "x": -11.234,
+        "z": -18.761
+      },
+      "lengthM": 14.786,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -11.234,
+        "z": -18.761
+      },
+      "b": {
+        "x": -11.22,
+        "z": -12.34
+      },
+      "lengthM": 6.421,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": -11.22,
+        "z": -12.34
+      },
+      "b": {
+        "x": 3.406,
+        "z": -12.368
+      },
+      "lengthM": 14.626,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": 3.406,
+        "z": -12.368
+      },
+      "b": {
+        "x": 3.405,
+        "z": -4.574
+      },
+      "lengthM": 7.795,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": 3.405,
+        "z": -4.574
+      },
+      "b": {
+        "x": 5.318,
+        "z": -4.571
+      },
+      "lengthM": 1.914,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": 5.318,
+        "z": -4.571
+      },
+      "b": {
+        "x": 5.327,
+        "z": 9.244
+      },
+      "lengthM": 13.816,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 8,
+      "a": {
+        "x": 5.327,
+        "z": 9.244
+      },
+      "b": {
+        "x": 3.564,
+        "z": 9.253
+      },
+      "lengthM": 1.763,
+      "role": "rear",
+      "partyShare": 0.5
+    },
+    {
+      "index": 9,
+      "a": {
+        "x": 3.564,
+        "z": 9.253
+      },
+      "b": {
+        "x": 3.42,
+        "z": 18.79
+      },
+      "lengthM": 9.538,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 10,
+      "a": {
+        "x": 3.42,
+        "z": 18.79
+      },
+      "b": {
+        "x": 11.234,
+        "z": 18.79
+      },
+      "lengthM": 7.815,
+      "role": "front",
+      "partyShare": 0.19
+    },
+    {
+      "index": 11,
+      "a": {
+        "x": 11.234,
+        "z": 18.79
+      },
+      "b": {
+        "x": 11,
+        "z": -13.016
+      },
+      "lengthM": 31.807,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 12,
+      "a": {
+        "x": 11,
+        "z": -13.016
+      },
+      "b": {
+        "x": 6.572,
+        "z": -13.014
+      },
+      "lengthM": 4.428,
+      "role": "rear",
+      "partyShare": 0.19
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

@@ -1,0 +1,201 @@
+{
+ "seed": 2,
+ "notes": "Rework r10: cant side faces wider (sideRun 0.5) so side sashes are not slits; cornice deeper. Rest (brown frames, brown belt, cream cornice, dark ground, 2 sashes/front) already in place. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k) - photo-sampled tints rendered dark/olive in game.",
+ "wall": "painted-white",
+ "wallTint": "#f8f8f4",
+ "trim": "painted-white@f2f0ea",
+ "frame": "painted-white@4a2f22",
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-dark",
+ "storefrontFrame": "painted-white@4a3426",
+ "bulkhead": "painted-white@655247",
+ "cornice": true,
+ "corniceProjectionM": 0.8,
+ "beltCourse": false,
+ "windowHoods": true,
+ "windowW": 1.2,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.7,
+ "bays": [
+  {
+   "at": 0.14,
+   "widthM": 2.8,
+   "projectionM": 0.32,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f8f8f4",
+   "plaques": {
+    "material": "painted-white",
+    "tint": "#ece6d4",
+    "heightM": 0.55,
+    "widthFrac": 0.8
+   },
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.1,
+    "sillM": 0.75,
+    "headGapM": 0.25
+   }
+  },
+  {
+   "at": 0.49,
+   "widthM": 3.4,
+   "projectionM": 0.32,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f8f8f4",
+   "plaques": {
+    "material": "painted-white",
+    "tint": "#ece6d4",
+    "heightM": 0.55,
+    "widthFrac": 0.8
+   },
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.1,
+    "sillM": 0.75,
+    "headGapM": 0.25
+   }
+  },
+  {
+   "at": 0.85,
+   "widthM": 3.0,
+   "projectionM": 0.32,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f8f8f4",
+   "plaques": {
+    "material": "painted-white",
+    "tint": "#ece6d4",
+    "heightM": 0.55,
+    "widthFrac": 0.8
+   },
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.1,
+    "sillM": 0.75,
+    "headGapM": 0.25
+   }
+  }
+ ],
+ "wallZones": [
+  {
+   "from": 0.0,
+   "to": 0.53,
+   "toY": 4.1,
+   "material": "painted-white",
+   "tint": "#6a5443"
+  },
+  {
+   "from": 0.53,
+   "to": 1.0,
+   "toY": 4.1,
+   "material": "painted-white",
+   "tint": "#5e5b58"
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.85,
+  "transomM": 0.6,
+  "pierM": 0.42,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.015,
+    "to": 0.065,
+    "kind": "window",
+    "grille": true
+   },
+   {
+    "from": 0.09,
+    "to": 0.19,
+    "kind": "door",
+    "leaf": "painted-white@6a4630"
+   },
+   {
+    "from": 0.2,
+    "to": 0.36,
+    "kind": "window"
+   },
+   {
+    "from": 0.4,
+    "to": 0.49,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-white@6a4630"
+   },
+   {
+    "from": 0.56,
+    "to": 0.69,
+    "kind": "window"
+   },
+   {
+    "from": 0.71,
+    "to": 0.78,
+    "kind": "door",
+    "leaf": "painted-white@b0282a"
+   },
+   {
+    "from": 0.8,
+    "to": 0.98,
+    "kind": "window"
+   }
+  ]
+ },
+ "ground": "shop",
+ "upper": "apartment",
+ "hbFloors": {
+  "groundM": 4.1,
+  "upperM": 3.84
+ },
+ "stringCourse": {
+  "heightM": 0.42,
+  "projectionM": 0.26,
+  "material": "painted-white",
+  "tint": "4a3426"
+ },
+ "hbFrieze": {
+  "heightM": 1.0,
+  "tint": "e9e2cf"
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 1.05,
+  "heightM": 1.1,
+  "depthM": 0.65,
+  "widthM": 0.3,
+  "tint": "e9e2cf"
+ },
+ "endPierM": 7.0,
+ "signBands": [
+  {
+   "from": 0.54,
+   "to": 0.995,
+   "material": "painted-steel",
+   "tint": "#26262a",
+   "heightM": 0.8,
+   "bottomM": 3.05,
+   "projectionM": 0.1,
+   "border": {
+    "widthM": 0.05,
+    "material": "painted-white",
+    "tint": "#5a3c2a"
+   }
+  }
+ ],
+ "streetStills": true
+}

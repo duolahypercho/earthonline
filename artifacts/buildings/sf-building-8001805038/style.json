@@ -1,0 +1,112 @@
+{
+  "builder": "house",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "cedar-shingle",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "seed": 41,
+  "storeysSeen": 2,
+  "groundM": 2.6,
+  "roofLevelM": 5.2,
+  "notes": "1424 La Playa (1908 roll, 2 storeys; LiDAR median 7.3 m), from the street-level reference by eye (words only): a dark weathered cedar-shingle house with a street-facing gambrel roof in dark composition shingle, a diamond pattern of shingles in the gambrel end, two white-framed windows side by side on each storey, a brick chimney on the north side; a tall cedar board fence along the sidewalk hides the entry.",
+  "wall": "cedar-shingle",
+  "streetEdges": {
+    "5": {}
+  },
+  "roofForm": {
+    "form": "front-gambrel",
+    "depthM": 7.0,
+    "eaveM": 0.2,
+    "sideOverhangM": 0.1,
+    "kneeInsetF": 0.2,
+    "kneeRiseF": 0.72,
+    "material": "asphalt-roof",
+    "tint": "#3c3935",
+    "gableMaterial": "cedar-shingle",
+    "gableWindows": [
+      [
+        0.3,
+        0.48,
+        0.55,
+        1.35
+      ],
+      [
+        0.52,
+        0.7,
+        0.55,
+        1.35
+      ]
+    ]
+  },
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.2,
+      "to": 0.45,
+      "sill": 0.9,
+      "head": 2.2,
+      "panes": [
+        1,
+        2
+      ]
+    },
+    {
+      "storey": 1,
+      "from": 0.55,
+      "to": 0.8,
+      "sill": 0.9,
+      "head": 2.2,
+      "panes": [
+        1,
+        2
+      ]
+    },
+    {
+      "storey": 0,
+      "from": 0.2,
+      "to": 0.45,
+      "sill": 0.9,
+      "head": 2.2,
+      "panes": [
+        1,
+        2
+      ]
+    },
+    {
+      "storey": 0,
+      "from": 0.55,
+      "to": 0.8,
+      "sill": 0.9,
+      "head": 2.2,
+      "panes": [
+        1,
+        2
+      ]
+    }
+  ],
+  "chimney": {
+    "fx": 0.9,
+    "fz": 0.55,
+    "heightM": 2.0,
+    "dM": 0.5,
+    "material": "brick-running-bond",
+    "tint": null
+  }
+}

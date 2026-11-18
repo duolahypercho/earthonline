@@ -1,0 +1,16 @@
+[package]
+name = "eo-farshore"
+version = "0.1.0"
+edition = "2024"
+description = "farshore: the distant terrain around the city, cooked from USGS 3DEP elevation"
+publish = false
+
+[dependencies]
+anyhow = "1.0.104"
+eo-data = { path = "../eo-data" }
+flate2 = "1.1.11"
+half = "2.7.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+tiff = { version = "0.10", default-features = false, features = ["lzw", "deflate"] }

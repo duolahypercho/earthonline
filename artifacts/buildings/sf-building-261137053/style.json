@@ -1,0 +1,116 @@
+{
+ "seed": 92,
+ "notes": "1913 narrow flats, cream-yellow painted wall with cream trim, four storeys. Ground: a brown side door at left, a rust-red garage door, then a black iron gate. Uppers: two cant bays with a railed fire-escape balcony between them, deep bracketed shelf cornice under the bays. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game.",
+ "wall": "painted-stucco",
+ "wallTint": "#eee6ce",
+ "trim": "painted-white@eee2c0",
+ "frame": "painted-white@eee2c0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@eee2c0",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@eee6ce",
+ "cornice": true,
+ "corniceProjectionM": 0.45,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.2,
+   "widthM": 2.6,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#eee6ce",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.8,
+   "widthM": 2.6,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#eee6ce",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.03,
+    "to": 0.15,
+    "kind": "door",
+    "leaf": "wood-siding@6b3a2a",
+    "headM": 2.2
+   },
+   {
+    "from": 0.19,
+    "to": 0.5,
+    "kind": "garage",
+    "leaf": "wood-siding@8a4030",
+    "headM": 2.7
+   },
+   {
+    "from": 0.6,
+    "to": 0.91,
+    "kind": "gate",
+    "headM": 2.7
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.4,
+  "upperM": 3.22
+ },
+ "fireEscape": {
+  "at": 0.5,
+  "widthM": 3.0,
+  "depthM": 0.9,
+  "material": "painted-steel"
+ }
+}

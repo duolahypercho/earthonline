@@ -1,0 +1,56 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-112072207",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-112072207",
+    "walkIndex": 7542,
+    "builder": "blender",
+    "street": "Presidio Parkway",
+    "side": "A",
+    "addr": "Golden Gate Bridge",
+    "sourceHeight": 0,
+    "sourceLevels": null,
+    "frontEdge": 0,
+    "status": "review",
+    "lidarHeightM": null,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b112072207.js",
+    "interiorModule": null,
+    "interior": false
+  },
+  "base": {
+    "id": "sf-building-112072207",
+    "walkIndex": 7542,
+    "builder": "blender",
+    "street": "Presidio Parkway",
+    "side": "A",
+    "addr": "Golden Gate Bridge",
+    "sourceHeight": 0,
+    "sourceLevels": null,
+    "frontEdge": 0,
+    "status": "review",
+    "lidarHeightM": null,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b112072207.js",
+    "interiorModule": null,
+    "interior": false
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b112072207.js",
+    "sha256": "f5361a11e8324963f22d0bdc14e394c368894b9ba1fbd8b72aa2be3ec91173ce",
+    "pass": "b112072207-blender-4f4d8efc-aa6ae2-ext"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-112072207/provenance.json",
+    "sha256": "3ff3a9f7d5cfa40311eaa57e38c89dff25d1fd828a3a59836993bf22bbcca5dc",
+    "pass": "b112072207-blender-4f4d8efc-aa6ae2-ext"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-112072207/exterior.glb",
+      "sha256": "9f34f8cde79b2b19fdcea0b8d3bcbdd7a601d87cb05b8a978e755a157d5110e7",
+      "bytes": 53932
+    }
+  ],
+  "generatedAt": "2026-11-07T20:01:55.944Z"
+}

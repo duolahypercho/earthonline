@@ -1,0 +1,96 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-79377193",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-79377193",
+    "walkIndex": 7537,
+    "builder": "blender",
+    "street": "Mission Street",
+    "side": "SE",
+    "addr": "118 2nd Street",
+    "sourceHeight": 24,
+    "sourceLevels": null,
+    "frontEdge": 3,
+    "status": "review",
+    "lidarHeightM": 24.26,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b79377193.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b79377193.js"
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b79377193.js",
+    "sha256": "c8cdcb8e15e2370c2b64c1f27ac8f3d423f1f3b430aed7d51fe866c27d1de375",
+    "pass": "b79377193-blender-6facb6b9-550744"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-79377193/provenance.json",
+    "sha256": "2005e5b7aec88e81a1e10e6bc4f32d276e0574bc96b0c6cae99a29232361cdbc",
+    "pass": "b79377193-blender-6facb6b9-550744"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-79377193/exterior.glb",
+      "sha256": "8bf09005cb019967099a01b53bc25f5154c9e51cfad451ab2942a484f65e1184",
+      "bytes": 1316828
+    },
+    {
+      "role": "interior",
+      "url": "/assets/buildings/sf-building-79377193/interior.glb",
+      "sha256": "7096fb069e790f7ce1a71b8346d1cc4bbd8ce6ab820bc6dce4a809eb0a240620",
+      "bytes": 290620
+    },
+    {
+      "role": "fine-s0",
+      "url": "/assets/buildings/sf-building-79377193/fine-s0.glb",
+      "sha256": "024ba1abb0589bf2756526b3f2847c85faec741813af4ca7a7f80e3b293f0db8",
+      "bytes": 24560
+    },
+    {
+      "role": "fine-s1",
+      "url": "/assets/buildings/sf-building-79377193/fine-s1.glb",
+      "sha256": "22c1dcf2721a0a28dfcb0a39ed150b05b2c69ae60baea05756def62afe506daf",
+      "bytes": 197568
+    },
+    {
+      "role": "fine-s2",
+      "url": "/assets/buildings/sf-building-79377193/fine-s2.glb",
+      "sha256": "cf69aeced96488bb4eab46d887bf05a02b413500b7e4818688fc442c3573f0bd",
+      "bytes": 176292
+    },
+    {
+      "role": "fine-s3",
+      "url": "/assets/buildings/sf-building-79377193/fine-s3.glb",
+      "sha256": "689cc59329bd0e9c7f53c9c1708cb6f875b75e6309bd475415e041b03130ec88",
+      "bytes": 190240
+    },
+    {
+      "role": "fine-s4",
+      "url": "/assets/buildings/sf-building-79377193/fine-s4.glb",
+      "sha256": "538c86ff92872aabcaa7e284bdec172939169f3943055c7fd98c60a1bca7251c",
+      "bytes": 189168
+    },
+    {
+      "role": "fine-s5",
+      "url": "/assets/buildings/sf-building-79377193/fine-s5.glb",
+      "sha256": "c4ebcda8ef91487b9b607b2694d80562dbe5faf154995597ddf3b87e06be728f",
+      "bytes": 203104
+    }
+  ],
+  "generatedAt": "2026-10-02T19:51:30.176Z",
+  "base": {
+    "id": "sf-building-79377193",
+    "walkIndex": 7537,
+    "builder": "blender",
+    "street": "Mission Street",
+    "side": "SE",
+    "addr": "118 2nd Street",
+    "sourceHeight": 24,
+    "sourceLevels": null,
+    "frontEdge": 3,
+    "status": "review",
+    "lidarHeightM": 24.26,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b79377193.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b79377193.js"
+  }
+}

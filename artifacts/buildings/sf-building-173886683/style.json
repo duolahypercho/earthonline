@@ -1,0 +1,77 @@
+{
+  "seed": 1,
+  "notes": "Right-hand 12.4 m of a long grey 1920s industrial front; navy fascia band, two clerestory ribbon windows, gated door and grille window, vacant ground floor. The precast wall read tan panels. Painted render in a cool grey-blue, three dark ribbon windows, ground: glazed door + glass bays and a gated recessed doorway at the SW end. The cool grey-blue read lavender; tint moved to a neutral slate grey. Opaque dark reflective glass so no lit interior shows behind upper or shop panes.",
+  "wall": "painted-stucco",
+  "wallTint": "#8c98a4",
+  "trim": "painted-steel-mid",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "fascia": {
+    "heightM": 1.55,
+    "projectionM": 0.25,
+    "material": "painted-steel-light",
+    "tint": "#5a6690"
+  },
+  "upperWindowSpans": [
+    [
+      0.05,
+      0.33
+    ],
+    [
+      0.4,
+      0.68
+    ],
+    [
+      0.71,
+      0.96
+    ]
+  ],
+  "upperSillM": 0.25,
+  "upperHeadM": 1.45,
+  "mullionM": 1.5,
+  "storefrontFrame": "painted-steel-mid",
+  "bulkhead": "painted-steel-mid",
+  "ground": "vacant",
+  "upper": "office",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.4,
+    "layout": [
+      {
+        "kind": "door",
+        "from": 0.06,
+        "to": 0.12,
+        "leaf": "painted-steel-mid",
+        "stair": true
+      },
+      {
+        "kind": "window",
+        "from": 0.14,
+        "to": 0.31
+      },
+      {
+        "kind": "window",
+        "from": 0.4,
+        "to": 0.55
+      },
+      {
+        "kind": "window",
+        "from": 0.56,
+        "to": 0.7
+      },
+      {
+        "kind": "gate",
+        "from": 0.8,
+        "to": 0.96,
+        "material": "painted-steel"
+      }
+    ]
+  },
+  "glass": "glass-film",
+  "storefrontGlass": "glass-storefront@8a939a",
+  "glassModel": {
+    "upper": "glass-reflective@5c6672",
+    "street": "glass-reflective@4e5964"
+  }
+}

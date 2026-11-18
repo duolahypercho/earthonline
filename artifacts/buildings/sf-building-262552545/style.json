@@ -1,0 +1,210 @@
+{
+ "seed": 1,
+ "notes": "Bay #5faa8c, darker relief spandrels #3f8a6c, cream #eee9dc, arched entry head. 11-bay-storey claim rejected again (roll 15 + LiDAR 54.7 m). Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k). Sashes (2026-10-10, one-map/hyde-detail): the verdigris bay front (3.9 m) now carries two sashes split by a pier instead of one 2.5 m light.",
+ "wall": "painted-white",
+ "wallTint": "#f6f4ee",
+ "trim": "painted-white@efe9dc",
+ "frame": "painted-white",
+ "glass": "glass-clear",
+ "cornice": true,
+ "corniceProjectionM": 0.45,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 1.0,
+ "windowSillM": 0.8,
+ "windowHeadM": 2.3,
+ "upperWindows": [
+  0.45
+ ],
+ "bays": [
+  {
+   "at": 0.51,
+   "widthM": 6.1,
+   "projectionM": 1.1,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#7fbba3",
+   "plaques": {
+    "material": "painted-white",
+    "tint": "#3f8a6c",
+    "heightM": 0.9,
+    "widthFrac": 0.85
+   },
+   "sashes": {
+    "front": 2,
+    "sides": 1
+   }
+  }
+ ],
+ "fireEscape": {
+  "at": 0.4,
+  "widthM": 2.0,
+  "depthM": 1.6,
+  "zigzag": true,
+  "material": "painted-steel",
+  "tint": "#1c1e20",
+  "toStorey": 14,
+  "grate": true
+ },
+ "storefrontFrame": "painted-white@efe9dc",
+ "bulkhead": "painted-white@f6f4ee",
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.6,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.05,
+    "to": 0.125,
+    "kind": "window",
+    "headM": 1.5,
+    "grille": true
+   },
+   {
+    "from": 0.16,
+    "to": 0.24,
+    "kind": "window",
+    "headM": 1.5,
+    "grille": true
+   },
+   {
+    "from": 0.275,
+    "to": 0.35,
+    "kind": "window",
+    "headM": 1.5,
+    "grille": true
+   },
+   {
+    "from": 0.44,
+    "to": 0.56,
+    "kind": "door",
+    "leaf": "painted-white@ece6d6"
+   },
+   {
+    "from": 0.63,
+    "to": 0.85,
+    "kind": "double-door",
+    "stair": true,
+    "leaf": "painted-steel",
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.14,
+      "tint": "#7a4a2a"
+     }
+    }
+   }
+  ]
+ },
+ "awning": "painted-white@736759",
+ "awningSpans": [
+  {
+   "from": 0.36,
+   "to": 0.88,
+   "depthM": 1.8,
+   "profile": "barrel",
+   "riseM": 0.7,
+   "material": "painted-white@736759"
+  }
+ ],
+ "ground": "lobby",
+ "upper": "apartment",
+ "pilasters": {
+  "at": [
+   0.615,
+   0.865
+  ],
+  "widthM": 0.3,
+  "projectionM": 0.2,
+  "fromM": 0.0,
+  "toM": 3.4,
+  "capital": true,
+  "material": "painted-white",
+  "tint": "#6b4a30"
+ },
+ "plaques": [
+  {
+   "at": 0.2,
+   "y": 3.25,
+   "w": 0.75,
+   "h": 1.5,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.2,
+   "y": 3.2,
+   "w": 0.55,
+   "h": 1.25,
+   "face": "painted-white@2a3238"
+  },
+  {
+   "at": 0.2,
+   "y": 3.98,
+   "w": 0.45,
+   "h": 0.18,
+   "face": "painted-white@2a3238"
+  },
+  {
+   "at": 0.33,
+   "y": 3.25,
+   "w": 0.75,
+   "h": 1.5,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.33,
+   "y": 3.2,
+   "w": 0.55,
+   "h": 1.25,
+   "face": "painted-white@2a3238"
+  },
+  {
+   "at": 0.33,
+   "y": 3.98,
+   "w": 0.45,
+   "h": 0.18,
+   "face": "painted-white@2a3238"
+  }
+ ],
+ "coping": {
+  "material": "painted-white",
+  "tint": "#2f5a48",
+  "projectionM": 0.35,
+  "heightM": 0.5
+ },
+ "hbBayGlazing": {
+  "marginM": 0.3,
+  "maxW": 2.5,
+  "sillM": 0.55,
+  "headM": 0.35,
+  "frame": "painted-white",
+  "frameTint": "#efe6cf",
+  "meetingRail": false
+ },
+ "hbBayCrown": {
+  "dropM": 0.6,
+  "hipRiseM": 0.55,
+  "hipMaterial": "painted-white",
+  "hipTint": "#2f5a48",
+  "corbelTiers": 3,
+  "corbelStepM": 0.14,
+  "panels": true,
+  "panelTint": "#3f8a6c"
+ },
+ "glassBacking": {
+  "material": "painted-white",
+  "tints": [
+   "#ddd6c3",
+   "#e8e1cf"
+  ],
+  "depthM": 0.25,
+  "kinds": [
+   "bay",
+   "punched"
+  ],
+  "blindTint": "#efe9d9",
+  "blindMax": 1.0
+ },
+ "streetStills": true
+}

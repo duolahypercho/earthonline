@@ -1,0 +1,127 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-173886716",
+  "slug": "b173886716",
+  "walkIndex": 40,
+  "street": "Clementina Street",
+  "address": "275 5th Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 18.41,
+  "storeys": 4,
+  "floors": {
+    "groundM": 5.788,
+    "upperM": 4.007,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1965,
+  "use": "COMO",
+  "usage": "mixed",
+  "amenity": "company",
+  "shop": null,
+  "facade": "modern-grid",
+  "material": "concrete",
+  "frame": {
+    "edgeIndex": 2,
+    "center": {
+      "x": 1389.65,
+      "z": 303.55
+    },
+    "heading": -2.356194,
+    "width": 24.324,
+    "depth": 23.617
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": 12.021,
+      "z": -11.809
+    },
+    {
+      "x": -12.162,
+      "z": -11.809
+    },
+    {
+      "x": -12.021,
+      "z": 11.809
+    },
+    {
+      "x": 12.162,
+      "z": 11.809
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 12.021,
+        "z": -11.809
+      },
+      "b": {
+        "x": -12.162,
+        "z": -11.809
+      },
+      "lengthM": 24.183,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -12.162,
+        "z": -11.809
+      },
+      "b": {
+        "x": -12.021,
+        "z": 11.809
+      },
+      "lengthM": 23.618,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -12.021,
+        "z": 11.809
+      },
+      "b": {
+        "x": 12.162,
+        "z": 11.809
+      },
+      "lengthM": 24.183,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 12.162,
+        "z": 11.809
+      },
+      "b": {
+        "x": 12.021,
+        "z": -11.809
+      },
+      "lengthM": 23.618,
+      "role": "rear",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

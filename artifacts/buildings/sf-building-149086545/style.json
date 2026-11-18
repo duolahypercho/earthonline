@@ -1,0 +1,158 @@
+{
+  "seed": 1,
+  "notes": "Nine-storey 2010 white-painted concrete frame with full-height glazed bays and a few recessed balconies; ground: glazed lobby with a door, entry door, and a white garage door at the right. Wall tint re-derived against the warm painted-stucco base so the render reads white-grey (dossier), not pink/cream; height unchanged (LiDAR 26.8 m). The Folsom face's left two-thirds are two full-height glass curtain-wall bays with rounded corners and white mullions (reflective light-blue glass) projecting from the white frame; the right third keeps recessed grey balconies. Bays now clear glass tinted pale silver-blue over an opaque pale blue-grey room/blind backing (kit glassBacking), with 1.1 m mullions so each facet reads as several lights. Now kit glassModel: bright reflective pale silver-blue curtain glass (glass-reflective, untinted: about a third of the sky mirrored) with no backing; darker street glass; balcony guards reflective. Bays and upper glass now glass-sky: a bright pale silver-blue dielectric pane (clearcoat sheet), which cannot drop below its own lit tone. Painted stucco read tan/pink from the street. Wall, frame and bay cheeks now painted-white in a cool tint. A big film-glass shop bay at the NE end, a glazed door group, the lobby double door under a glass canopy, white service doors at the SW end (no garages on this face). The untinted glass-sky bays read cream like the wall; bay and upper glass tinted blue-grey so the stacked glazed bays read as glass. Three projecting glazed bays (NE, centre-right, SW) not two, projecting 1.0 m; the lobby canopy opaque pale glass so it reads (the clear canopy vanished). A faint grime pass (weathering.grime 0.07) so the white render is not a flat colour. Bay panes 0.72 m (more white mullion rhythm), projection 1.15, deeper blue glass, varied blind/backing tones. Ground glass is opaque reflective (glass-reflective@a39389) so no interior (seat rows, floor) shows through the shop and door panes.",
+  "wall": "painted-white",
+  "wallTint": "#f3f7fc",
+  "trim": "painted-white",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "glass": "glass-clear",
+  "storefrontFrame": "painted-white@eef2f4",
+  "storefrontGlass": "glass-film",
+  "bulkhead": "painted-white",
+  "frameGrid": {
+    "columns": [
+      0.0,
+      0.335,
+      0.67,
+      1.0
+    ],
+    "columnW": 0.35,
+    "slabEdgeH": 0.3,
+    "projectionM": 0.2,
+    "fromStorey": 1,
+    "storeyPatterns": [
+      [
+        "balcony",
+        "glass",
+        "glass"
+      ]
+    ],
+    "balconyMaterial": "painted-stucco",
+    "balconyTint": "#c9ced4",
+    "recessM": 1.1,
+    "rail": "glass",
+    "mullionM": 1.4,
+    "material": "painted-white",
+    "tint": "#f3f7fc",
+    "frameMaterial": "painted-steel-light",
+    "railGlass": "glass-storefront@8a939a"
+  },
+  "bays": [
+    {
+      "projectionM": 1.15,
+      "roundCorners": 3,
+      "glazed": true,
+      "glass": "glass-clear@a9c0d6",
+      "frame": "painted-white",
+      "material": "painted-white",
+      "tint": "#f3f7fc",
+      "fromStorey": 1,
+      "paneM": 0.72,
+      "at": 0.12,
+      "widthM": 4.4
+    },
+    {
+      "projectionM": 1.15,
+      "roundCorners": 3,
+      "glazed": true,
+      "glass": "glass-clear@a9c0d6",
+      "frame": "painted-white",
+      "material": "painted-white",
+      "tint": "#f3f7fc",
+      "fromStorey": 1,
+      "paneM": 0.72,
+      "at": 0.59,
+      "widthM": 5.8
+    },
+    {
+      "projectionM": 1.15,
+      "roundCorners": 3,
+      "glazed": true,
+      "glass": "glass-clear@a9c0d6",
+      "frame": "painted-white",
+      "material": "painted-white",
+      "tint": "#f3f7fc",
+      "fromStorey": 1,
+      "paneM": 0.72,
+      "at": 0.9,
+      "widthM": 3.8
+    }
+  ],
+  "ground": "lobby",
+  "upper": "apartment",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.6,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.04,
+        "to": 0.23
+      },
+      {
+        "kind": "door",
+        "from": 0.27,
+        "to": 0.4,
+        "leaf": "anodized-aluminium",
+        "stair": true
+      },
+      {
+        "kind": "double-door",
+        "from": 0.5,
+        "to": 0.69,
+        "leaf": "anodized-aluminium"
+      },
+      {
+        "kind": "blank",
+        "from": 0.8,
+        "to": 0.91,
+        "material": "painted-white",
+        "tint": "#f7f8f8"
+      }
+    ]
+  },
+  "weathering": {
+    "soot": {
+      "height": 1.0,
+      "strength": 0.18
+    },
+    "streak": {
+      "strength": 0.12,
+      "columnMetres": 0.4,
+      "drop": 1.0
+    },
+    "grime": {
+      "strength": 0.07,
+      "metres": 2.8
+    }
+  },
+  "glassBacking": {
+    "material": "painted-white",
+    "kinds": [
+      "bay"
+    ],
+    "depthM": 0.35,
+    "tints": [
+      "#9fb2c2",
+      "#c9d4dc",
+      "#8ea3b5",
+      "#d8dfe4"
+    ],
+    "blindTint": "#e4e8ea",
+    "blindMax": 0.5
+  },
+  "glassModel": {
+    "upper": "glass-sky@9fb4cc",
+    "street": "glass-reflective@a39389"
+  },
+  "awning": "glass-sky@e4eaf0",
+  "awningSpans": [
+    {
+      "from": 0.49,
+      "to": 0.77,
+      "depthM": 1.4
+    }
+  ]
+}

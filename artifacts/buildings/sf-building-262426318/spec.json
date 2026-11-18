@@ -1,0 +1,127 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-262426318",
+  "slug": "b262426318",
+  "walkIndex": 5237,
+  "street": "Hyde Street",
+  "address": "785;799 Bay Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 11.52,
+  "storeys": 3,
+  "floors": {
+    "groundM": 4.732,
+    "upperM": 3.094,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1954,
+  "use": "MRES",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "edwardian",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 3,
+    "center": {
+      "x": -40.292,
+      "z": 2952.651
+    },
+    "heading": -1.731308,
+    "width": 10.75,
+    "depth": 14.484
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": 5.375,
+      "z": 7.242
+    },
+    {
+      "x": 5.36,
+      "z": -7.242
+    },
+    {
+      "x": -5.375,
+      "z": -7.226
+    },
+    {
+      "x": -5.261,
+      "z": 7.242
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 5.375,
+        "z": 7.242
+      },
+      "b": {
+        "x": 5.36,
+        "z": -7.242
+      },
+      "lengthM": 14.484,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 5.36,
+        "z": -7.242
+      },
+      "b": {
+        "x": -5.375,
+        "z": -7.226
+      },
+      "lengthM": 10.735,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -5.375,
+        "z": -7.226
+      },
+      "b": {
+        "x": -5.261,
+        "z": 7.242
+      },
+      "lengthM": 14.468,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -5.261,
+        "z": 7.242
+      },
+      "b": {
+        "x": 5.375,
+        "z": 7.242
+      },
+      "lengthM": 10.637,
+      "role": "front",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

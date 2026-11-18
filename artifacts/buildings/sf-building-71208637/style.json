@@ -1,0 +1,132 @@
+{
+ "seed": 32,
+ "notes": "Rework r3: base darkened to charcoal with a dark gated recess under the black entry awning, heavier bracketed cornice. Storey count kept at 4 (LiDAR 14.1 m = base + 3 uppers; the photo shows base + 3 window rows under the cornice), so the 'add floors' claim is unsupported. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. GroundBand lift (2026-10-03): groundBand tint #2a2c32 -> #4a4c51 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#e0e8f2",
+ "trim": "painted-white@f6f8fc",
+ "frame": "painted-white@f4f6fa",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@1e2024",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-stucco@4a4c51",
+ "cornice": true,
+ "corniceProjectionM": 1.2,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.4,
+ "upperWindows": [
+  0.1,
+  0.5
+ ],
+ "bays": [
+  {
+   "at": 0.77,
+   "widthM": 3.4,
+   "projectionM": 0.8,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#e0e8f2",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.16,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#4a4c51",
+  "topM": 4.0
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.06,
+    "to": 0.24,
+    "kind": "window",
+    "headM": 2.0,
+    "grille": true
+   },
+   {
+    "from": 0.3,
+    "to": 0.5,
+    "kind": "window",
+    "headM": 2.4
+   },
+   {
+    "from": 0.6,
+    "to": 0.94,
+    "kind": "gate",
+    "headM": 3.0
+   }
+  ]
+ },
+ "fireEscape": {
+  "at": 0.22,
+  "widthM": 2.4,
+  "depthM": 0.9,
+  "material": "painted-steel"
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "awning": "awning-canvas@1c1c1e",
+ "awningSpans": [
+  {
+   "from": 0.56,
+   "to": 0.92,
+   "depthM": 1.2,
+   "riseM": 0.35,
+   "dropM": 0.3
+  }
+ ],
+ "upperOpenings": [
+  {
+   "at": 0.1,
+   "w": 0.85
+  },
+  {
+   "at": 0.3,
+   "w": 0.9,
+   "kind": "balcony",
+   "sillM": 0.95,
+   "depthM": 0.35
+  },
+  {
+   "at": 0.5,
+   "w": 0.85
+  }
+ ],
+ "hbFrieze": {
+  "heightM": 0.5,
+  "material": "painted-white",
+  "tint": "#eef1f6"
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.8,
+  "heightM": 0.7,
+  "depthM": 0.5,
+  "widthM": 0.25,
+  "material": "painted-white",
+  "tint": "#eef1f6"
+ }
+}

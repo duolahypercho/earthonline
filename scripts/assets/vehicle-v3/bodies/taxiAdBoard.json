@@ -1,0 +1,19 @@
+{
+ "extends": "taxi",
+ "id": "taxiAdBoard",
+ "label": "City taxi v3, roof-board trim",
+ "typeIds": [
+  "taxiAdBoard"
+ ],
+ "taxiAdBoard": true,
+ "liveryBand": {
+  "y": [
+   -0.87,
+   0.97
+  ],
+  "z": 0.72,
+  "h": 0.05,
+  "dark": true
+ },
+ "note": "Trim of taxi: two-sided roof advertising board and a flank stripe."
+}

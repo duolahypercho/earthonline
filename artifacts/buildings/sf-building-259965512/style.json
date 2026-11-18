@@ -1,0 +1,105 @@
+{
+ "seed": 34,
+ "notes": "1920, 7.8 m wide infill painted over in grey and white, boarded and shuttered. Plain stucco with a stepped parapet; ground has a tall arched opening left, a central arched door with a hood, and a blank panel right; an oval medallion over the door. The street trees hide the top; the LiDAR height gives three tall storeys, built as plain stucco without invented ornament. Applied: bright white base with grey boarded panels, arched opening left and arched central door with a hood, sunburst relief and oval medallion via hand.py. Upper storeys hidden by trees: kept plain, no window guesses. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. The street face is a low parapeted front (about 6.9 m, no upper windows) with the LiDAR height (probably street-tree canopy plus a rear mass) stepped back 5 m behind it; grey painted lower band; central door boarded flat grey under its arched hood; attic panel with raised border via hand.py. Neighbour awning not carried. Setback of the tall mass behind a low front was tried and rendered open slabs; reverted: the full LiDAR height stands, upper face left blank (no window guesses). The low front + stepped-back tall mass built correctly but upper-storey furniture floated in front of the stepped wall, so it was reverted again. GroundBand lift (2026-10-03): groundBand tint #a39f94 -> #d1cfca (same rule as walls; it was missed by the first colour pass). The low front + stepped mass now builds full scope. _b6_setback_apply read matrix_world before the depsgraph update, so every linked fine-tier piece (beds, dressers, ceiling lamps) tested its box at the origin and stayed put in front of the stepped face; build_building.py now updates the view layer first. StoreysSeen groundM 6.9 puts the step on the storey-1 floor, upperSetback fromM 6.9 depthM 5 bandM 5.1 on edge 4 (5.4 also swept the flank service-door seams at 5.15 m deep past the rear notch, 0.9 m outside the footprint) with a coping ledge and a deck over the low front.",
+ "wall": "painted-stucco",
+ "wallTint": "#f6f4f0",
+ "trim": "painted-white@f4f0e8",
+ "frame": "painted-white@e8e2d6",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@e8e2d6",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "corniceProjectionM": 0.3,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "bulkhead": "painted-stucco@dad8d2",
+ "storeysSeen": {
+  "count": 3,
+  "groundM": 6.9
+ },
+ "upperWindows": [],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.05,
+    "to": 0.32,
+    "kind": "blank",
+    "material": "painted-white",
+    "tint": "#a9a59b",
+    "headM": 3.6,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.15,
+      "projectionM": 0.06,
+      "material": "painted-white",
+      "tint": "#f4f0e8"
+     }
+    }
+   },
+   {
+    "from": 0.38,
+    "to": 0.66,
+    "kind": "blank",
+    "material": "painted-white",
+    "tint": "#a09b90",
+    "headM": 3.0,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.16,
+      "projectionM": 0.07,
+      "material": "painted-white",
+      "tint": "#f4f0e8"
+     },
+     "keystone": true
+    }
+   },
+   {
+    "from": 0.72,
+    "to": 0.95,
+    "kind": "blank",
+    "material": "painted-white",
+    "tint": "#a09b90",
+    "headM": 2.6
+   }
+  ]
+ },
+ "edgeRoles": {},
+ "blankUpper": true,
+ "groundBand": {
+  "material": "painted-white",
+  "tint": "#d1cfca",
+  "topM": 1.6
+ },
+ "upperSetback": [
+  {
+   "fromM": 6.9,
+   "depthM": 5.0,
+   "edges": [
+    4
+   ],
+   "bandM": 5.1,
+   "ledge": {
+    "heightM": 0.3,
+    "projectionM": 0.12,
+    "material": "painted-white",
+    "tint": "#f4f0e8"
+   },
+   "deck": {
+    "material": "concrete-precast",
+    "tint": "#9a9890"
+   }
+  }
+ ]
+}

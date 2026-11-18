@@ -1,0 +1,178 @@
+{
+ "seed": 31,
+ "notes": "1922 six-storey corner flats at Geary. Buff glazed brick over a dark painted-brick base, two tall bays at each end with red-brown mullions from the first upper storey, centre column of paired sash windows, a zigzag steel fire escape up the middle, bracketed cornice. Ground: three windows left, a gilt-stone arched gated entry left of centre, blank dark panels and two small barred windows, a shop front with a gate at the Geary end. Geary return stays plain. Applied: warmer honey buff brick, red-brown bay frames with cream bay panels, chocolate base lifted for the game, black fire escape, grey shop sign band at the Geary end, cream belt via hand.py. Fire escape already beside the central bay group (kept at 0.5). Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Warmer buff wall tint, darker maroon base, deeper cornice and frieze, raised plinth under the white ground windows, larger arched portal with twisted columns and a stone head. SKIPPED extra fire escapes (one central escape). GroundBand lift (2026-10-03): groundBand tint #46323a -> #625158 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "brick-buff",
+ "wallTint": "#ffeec0",
+ "trim": "painted-white@ecdfb8",
+ "frame": "painted-white@8a5040",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@e9d9a8",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "corniceProjectionM": 0.85,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "bulkhead": "painted-steel@46323a",
+ "groundBand": {
+  "material": "painted-white",
+  "tint": "#625158",
+  "topM": 4.3
+ },
+ "upperWindows": [
+  0.22,
+  0.3,
+  0.4,
+  0.58,
+  0.7,
+  0.78
+ ],
+ "bays": [
+  {
+   "at": 0.1,
+   "widthM": 3.0,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f4eeda",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.16,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.91,
+   "widthM": 3.0,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f4eeda",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.16,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.9,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.04,
+    "to": 0.13,
+    "kind": "window",
+    "headM": 2.3
+   },
+   {
+    "from": 0.16,
+    "to": 0.23,
+    "kind": "window",
+    "headM": 2.3
+   },
+   {
+    "from": 0.26,
+    "to": 0.31,
+    "kind": "window",
+    "headM": 2.3
+   },
+   {
+    "from": 0.32,
+    "to": 0.48,
+    "kind": "double-door",
+    "stair": false,
+    "leaf": "painted-steel@2a2a2a"
+   },
+   {
+    "from": 0.6,
+    "to": 0.68,
+    "kind": "window",
+    "headM": 1.8,
+    "grille": true
+   },
+   {
+    "from": 0.72,
+    "to": 0.8,
+    "kind": "window",
+    "headM": 1.8,
+    "grille": true
+   },
+   {
+    "from": 0.86,
+    "to": 0.97,
+    "kind": "gate"
+   }
+  ]
+ },
+ "fireEscape": {
+  "at": 0.5,
+  "widthM": 3.0,
+  "depthM": 0.9,
+  "material": "painted-steel"
+ },
+ "hbArchDoors": [
+  {
+   "from": 0.32,
+   "to": 0.48,
+   "material": "limestone-ashlar",
+   "tint": "#d8c08a",
+   "ringTint": "#d8c08a",
+   "fillTint": "#2a2a2a"
+  }
+ ],
+ "hbCorniceDentils": {
+  "spacingM": 0.2,
+  "sizeM": 0.14,
+  "tint": "#e9d9a8"
+ },
+ "edgeRoles": {},
+ "hbSignBands": [
+  {
+   "from": 0.86,
+   "to": 0.985,
+   "bottomM": 3.0,
+   "topM": 3.95,
+   "material": "painted-white",
+   "tint": "#a8a8a2"
+  }
+ ],
+ "hbFrieze": {
+  "heightM": 0.5,
+  "material": "painted-white",
+  "tint": "#e9dcb0"
+ }
+}

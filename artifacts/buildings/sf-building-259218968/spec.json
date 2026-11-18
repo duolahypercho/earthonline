@@ -1,0 +1,431 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-259218968",
+  "slug": "b259218968",
+  "walkIndex": 5136,
+  "street": "Hyde Street",
+  "address": null,
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 12.2,
+  "storeys": 3,
+  "floors": {
+    "groundM": 5.027,
+    "upperM": 3.287,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1909,
+  "use": "MRES",
+  "usage": "mixed",
+  "amenity": "laundry",
+  "shop": null,
+  "facade": "bay-window",
+  "material": "painted",
+  "frame": {
+    "edgeIndex": 18,
+    "center": {
+      "x": 149.811,
+      "z": 1765.667
+    },
+    "heading": -1.741945,
+    "width": 41.436,
+    "depth": 35.551
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -10.285,
+      "z": 17.215
+    },
+    {
+      "x": -9.855,
+      "z": 6.789
+    },
+    {
+      "x": -11.384,
+      "z": 6.749
+    },
+    {
+      "x": -11.402,
+      "z": 3.707
+    },
+    {
+      "x": -9.89,
+      "z": 3.649
+    },
+    {
+      "x": -9.902,
+      "z": -1.119
+    },
+    {
+      "x": -11.611,
+      "z": -1.026
+    },
+    {
+      "x": -11.634,
+      "z": -7.619
+    },
+    {
+      "x": -9.908,
+      "z": -7.612
+    },
+    {
+      "x": -9.892,
+      "z": -10.457
+    },
+    {
+      "x": 7.567,
+      "z": -10.43
+    },
+    {
+      "x": 7.521,
+      "z": -15.395
+    },
+    {
+      "x": 12.897,
+      "z": -15.41
+    },
+    {
+      "x": 12.909,
+      "z": -10.643
+    },
+    {
+      "x": 20.718,
+      "z": -10.673
+    },
+    {
+      "x": 20.708,
+      "z": -17.775
+    },
+    {
+      "x": -20.718,
+      "z": -17.313
+    },
+    {
+      "x": -20.337,
+      "z": 16.009
+    },
+    {
+      "x": -18.814,
+      "z": 17.775
+    },
+    {
+      "x": -10.594,
+      "z": 17.775
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -10.285,
+        "z": 17.215
+      },
+      "b": {
+        "x": -9.855,
+        "z": 6.789
+      },
+      "lengthM": 10.435,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -9.855,
+        "z": 6.789
+      },
+      "b": {
+        "x": -11.384,
+        "z": 6.749
+      },
+      "lengthM": 1.53,
+      "role": "rear",
+      "partyShare": 0.56
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -11.384,
+        "z": 6.749
+      },
+      "b": {
+        "x": -11.402,
+        "z": 3.707
+      },
+      "lengthM": 3.041,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -11.402,
+        "z": 3.707
+      },
+      "b": {
+        "x": -9.89,
+        "z": 3.649
+      },
+      "lengthM": 1.513,
+      "role": "rear",
+      "partyShare": 0.56
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": -9.89,
+        "z": 3.649
+      },
+      "b": {
+        "x": -9.902,
+        "z": -1.119
+      },
+      "lengthM": 4.768,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": -9.902,
+        "z": -1.119
+      },
+      "b": {
+        "x": -11.611,
+        "z": -1.026
+      },
+      "lengthM": 1.712,
+      "role": "rear",
+      "partyShare": 0.5
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": -11.611,
+        "z": -1.026
+      },
+      "b": {
+        "x": -11.634,
+        "z": -7.619
+      },
+      "lengthM": 6.592,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": -11.634,
+        "z": -7.619
+      },
+      "b": {
+        "x": -9.908,
+        "z": -7.612
+      },
+      "lengthM": 1.726,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 8,
+      "a": {
+        "x": -9.908,
+        "z": -7.612
+      },
+      "b": {
+        "x": -9.892,
+        "z": -10.457
+      },
+      "lengthM": 2.844,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 9,
+      "a": {
+        "x": -9.892,
+        "z": -10.457
+      },
+      "b": {
+        "x": 7.567,
+        "z": -10.43
+      },
+      "lengthM": 17.46,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 10,
+      "a": {
+        "x": 7.567,
+        "z": -10.43
+      },
+      "b": {
+        "x": 7.521,
+        "z": -15.395
+      },
+      "lengthM": 4.965,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 11,
+      "a": {
+        "x": 7.521,
+        "z": -15.395
+      },
+      "b": {
+        "x": 12.897,
+        "z": -15.41
+      },
+      "lengthM": 5.376,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 12,
+      "a": {
+        "x": 12.897,
+        "z": -15.41
+      },
+      "b": {
+        "x": 12.909,
+        "z": -10.643
+      },
+      "lengthM": 4.768,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 13,
+      "a": {
+        "x": 12.909,
+        "z": -10.643
+      },
+      "b": {
+        "x": 20.718,
+        "z": -10.673
+      },
+      "lengthM": 7.809,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 14,
+      "a": {
+        "x": 20.718,
+        "z": -10.673
+      },
+      "b": {
+        "x": 20.708,
+        "z": -17.775
+      },
+      "lengthM": 7.102,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 15,
+      "a": {
+        "x": 20.708,
+        "z": -17.775
+      },
+      "b": {
+        "x": -20.718,
+        "z": -17.313
+      },
+      "lengthM": 41.429,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 16,
+      "a": {
+        "x": -20.718,
+        "z": -17.313
+      },
+      "b": {
+        "x": -20.337,
+        "z": 16.009
+      },
+      "lengthM": 33.324,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 17,
+      "a": {
+        "x": -20.337,
+        "z": 16.009
+      },
+      "b": {
+        "x": -18.814,
+        "z": 17.775
+      },
+      "lengthM": 2.332,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 18,
+      "a": {
+        "x": -18.814,
+        "z": 17.775
+      },
+      "b": {
+        "x": -10.594,
+        "z": 17.775
+      },
+      "lengthM": 8.22,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 19,
+      "a": {
+        "x": -10.594,
+        "z": 17.775
+      },
+      "b": {
+        "x": -10.285,
+        "z": 17.215
+      },
+      "lengthM": 0.64,
+      "role": "party",
+      "partyShare": 1
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

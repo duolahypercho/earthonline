@@ -1,0 +1,528 @@
+{
+  "assets": {
+    "bench": {
+      "bytes": 290128,
+      "dimensionsM": [
+        1.0883,
+        0.86,
+        0.6
+      ],
+      "path": "public/assets/street-props/bench-v1.glb",
+      "scale": 1.09047,
+      "sha256": "c77359131937578a197952d2cf9f5b7cb90f21cf49a30314639244f853d59bcf",
+      "source": {
+        "generator": "Tripo text-to-model, then Tripo highpoly_to_lowpoly (textures baked)",
+        "modelTask": null,
+        "retopologyTask": null
+      },
+      "triangles": 2390,
+      "url": "/assets/street-props/bench-v1.glb"
+    },
+    "bikeRack": {
+      "bytes": 218796,
+      "dimensionsM": [
+        1.9,
+        0.9221,
+        0.7362
+      ],
+      "path": "public/assets/street-props/bikeRack-v1.glb",
+      "scale": 1.9,
+      "sha256": "26559db3d0850e6bab6864d3101b64c7ad2a390e283083cf779a134ed88ecc31",
+      "source": {
+        "generator": "Tripo text-to-model, then Tripo highpoly_to_lowpoly (textures baked)",
+        "modelTask": "779b363f-9d22-40b3-8ca9-30e33d57bcb5",
+        "retopologyTask": "7cad8b4f-8cef-466a-ab93-82a4a5bc9cea"
+      },
+      "triangles": 1973,
+      "url": "/assets/street-props/bikeRack-v1.glb"
+    },
+    "bollard": {
+      "bytes": 178696,
+      "dimensionsM": [
+        0.187,
+        0.92,
+        0.18
+      ],
+      "path": "public/assets/street-props/bollard-v1.glb",
+      "scale": 0.94592,
+      "sha256": "e4e6bf921bb4c94ca28eba0742051df80cda63eee41fc394a4cf07442247fb7f",
+      "source": {
+        "generator": "Tripo text-to-model, then Tripo highpoly_to_lowpoly (textures baked)",
+        "modelTask": "d8fbc4ab-6da7-4877-b5b0-1834663bcbb7",
+        "retopologyTask": "47363727-79ed-4cec-9665-6e096ebc8a53"
+      },
+      "triangles": 1455,
+      "url": "/assets/street-props/bollard-v1.glb"
+    },
+    "busStopFlag": {
+      "bytes": 174256,
+      "dimensionsM": [
+        0.3545,
+        2.9,
+        0.1169
+      ],
+      "path": "public/assets/street-props/busStopFlag-v1.glb",
+      "scale": 2.9,
+      "sha256": "66f8e6facdf7c35deaedfe2f9020e0b4e909013dd967e980ba72d6b6d33ae39a",
+      "source": {
+        "generator": "Tripo text-to-model, then Tripo highpoly_to_lowpoly (textures baked)",
+        "modelTask": "1a0f4d1a-e781-47fa-a7ce-3a5c2d066a10",
+        "retopologyTask": "fe1708be-ee5a-4dfb-8deb-78bd24632c24"
+      },
+      "triangles": 1731,
+      "url": "/assets/street-props/busStopFlag-v1.glb"
+    },
+    "cafeSet": {
+      "bytes": 380488,
+      "dimensionsM": [
+        1.7206,
+        0.86,
+        0.7432
+      ],
+      "path": "public/assets/street-props/cafeSet-v1.glb",
+      "scale": 1.00161,
+      "sha256": "e7adee208edec33e7f66c4c1bea56d0a0e9f7dba63474ea86a1b64cf043924fa",
+      "source": {
+        "authors": [
+          "James Ray Cock"
+        ],
+        "decimatedTo": 3400,
+        "generator": "Poly Haven CC0 model (1k glTF), materials packed into one atlas and decimated by this script",
+        "gltfSha256": "1b718deb56a9f07b260a5f95926fb7caa5fd27918cacca283414c840e46415f2",
+        "license": "CC0-1.0",
+        "name": "Outdoor Table Chair Set 01",
+        "url": "https://polyhaven.com/a/outdoor_table_chair_set_01"
+      },
+      "triangles": 3400,
+      "url": "/assets/street-props/cafeSet-v1.glb"
+    },
+    "cobraArm": {
+      "armM": 1.829,
+      "bytes": 212052,
+      "consumer": "street-overhead",
+      "dimensionsM": [
+        1.829,
+        0.6568,
+        0.4448
+      ],
+      "path": "public/assets/street-props/cobraArm-v1.glb",
+      "scale": 2.12413,
+      "sha256": "ea40eff29546c91c98ad73ee2cf965b84521c70621aa7bb19f2d65f7edb25e9e",
+      "source": {
+        "generator": "Tripo text-to-model, then Tripo highpoly_to_lowpoly (textures baked)",
+        "modelTask": "66042b42-4b60-4f66-a2a0-51f2496557ac",
+        "prompt": "a single street light mast arm with luminaire for mounting on a wooden utility pole: a gently upswept grey steel arm about 2 metres long with a mounting bracket at one end and a flat cobra-head street lamp luminaire at the other end, realistic, isolated, no pole, no ground",
+        "retopologyTask": "178ade30-563e-409b-852e-9b1bdb8f5cc5"
+      },
+      "triangles": 452,
+      "url": "/assets/street-props/cobraArm-v1.glb"
+    },
+    "hydrant": {
+      "bytes": 338408,
+      "dimensionsM": [
+        0.5042,
+        0.78,
+        0.44
+      ],
+      "path": "public/assets/street-props/hydrant-v1.glb",
+      "scale": 0.79724,
+      "sha256": "8d44c480c00641d8462da8f326a6ef1fbe5f7a1e98426945deac344ac7727778",
+      "source": {
+        "generator": "Tripo text-to-model, then Tripo highpoly_to_lowpoly (textures baked)",
+        "modelTask": null,
+        "retopologyTask": null
+      },
+      "triangles": 4182,
+      "url": "/assets/street-props/hydrant-v1.glb"
+    },
+    "lampBanner": {
+      "bytes": 242264,
+      "dimensionsM": [
+        1.3441,
+        7.62,
+        3.51
+      ],
+      "heightM": 7.62,
+      "path": "public/assets/street-props/lampBanner-v1.glb",
+      "scale": 7.62,
+      "sha256": "89dc3db1f8ac0f388551ef026ef50b1d7dbb7a8afd3d12251266fcb2c0c43d51",
+      "source": {
+        "generator": "Tripo text-to-model, then Tripo highpoly_to_lowpoly (textures baked)",
+        "modelTask": "6ccb9c7f-7473-4f5f-b9de-504bb02d9ad0",
+        "prompt": "a single tall modern street light pole, galvanized grey steel round tapered pole about 30 times taller than wide, at the top one long upswept curved arm reaching out to one side ending in a flat cobra-head LED luminaire, two vertical rectangular fabric banners hanging from short brackets on the pole halfway up, full height from ground, realistic, isolated, no ground",
+        "retopologyTask": "91edaf49-43b4-48bc-b2db-3178d7c4d026"
+      },
+      "triangles": 3035,
+      "url": "/assets/street-props/lampBanner-v1.glb"
+    },
+    "lampCobra": {
+      "bytes": 199500,
+      "dimensionsM": [
+        0.8818,
+        7.62,
+        3.51
+      ],
+      "heightM": 7.62,
+      "path": "public/assets/street-props/lampCobra-v1.glb",
+      "scale": 7.62,
+      "sha256": "572d28106d8b6c28466149af64d36eff33b972047d085fbdb664f8b03db7142f",
+      "source": {
+        "generator": "Tripo text-to-model, then Tripo highpoly_to_lowpoly (textures baked)",
+        "modelTask": "6ccb9c7f-7473-4f5f-b9de-504bb02d9ad0",
+        "prompt": "a single tall modern street light pole, galvanized grey steel round tapered pole about 30 times taller than wide, at the top one long upswept curved arm reaching out to one side ending in a flat cobra-head LED luminaire, two vertical rectangular fabric banners hanging from short brackets on the pole halfway up, full height from ground, realistic, isolated, no ground",
+        "retopologyTask": "91edaf49-43b4-48bc-b2db-3178d7c4d026"
+      },
+      "triangles": 1791,
+      "url": "/assets/street-props/lampCobra-v1.glb"
+    },
+    "lampHistoric": {
+      "bytes": 427944,
+      "dimensionsM": [
+        3.1464,
+        7.62,
+        1.7
+      ],
+      "heightM": 7.62,
+      "path": "public/assets/street-props/lampHistoric-v1.glb",
+      "scale": 7.62,
+      "sha256": "89b61ec666c07c0797a9b37fe91e9f7f05e94abeb3a03b6aa9547f99caaa8c85",
+      "source": {
+        "generator": "Tripo text-to-model, then Tripo highpoly_to_lowpoly (textures baked)",
+        "modelTask": "89c0ff1a-2bf0-43f1-884a-ebb9c21824b5",
+        "prompt": "a single tall historic cast iron double-arm street lamp post, dark green-black paint, slender round fluted post about 25 times taller than wide on a wider decorative base, at the very top two ornate curved scroll arms reaching left and right, each arm holding a hanging bell-shaped glass pendant lantern, small decorative finial on top, full height from ground, realistic, isolated, no ground",
+        "retopologyTask": "39a373c9-7c27-4d53-ab6f-be2ff1ee58ae"
+      },
+      "triangles": 4694,
+      "url": "/assets/street-props/lampHistoric-v1.glb"
+    },
+    "lantern": {
+      "bytes": 229036,
+      "consumer": "street-overhead",
+      "dimensionsM": [
+        0.4505,
+        0.55,
+        0.4569
+      ],
+      "heightM": 0.55,
+      "path": "public/assets/street-props/lantern-v1.glb",
+      "scale": 0.55108,
+      "sha256": "58a968a774fb3e63571c2a72aae6bbd180a244485b3859b1dc49ea9fec703b84",
+      "source": {
+        "generator": "Tripo text-to-model, then Tripo highpoly_to_lowpoly (textures baked)",
+        "modelTask": "607be67b-599e-46b8-b0b0-e1f52adaf104",
+        "prompt": "a single round red Chinese paper lantern for hanging on a string above a street, glossy red ribbed globe with small gold caps on top and bottom and a short red tassel hanging below, realistic, isolated, no string, no ground",
+        "retopologyTask": "d3e2edda-d700-4a1e-b9cf-6af981e3513e"
+      },
+      "triangles": 1300,
+      "url": "/assets/street-props/lantern-v1.glb"
+    },
+    "mailbox": {
+      "bytes": 127892,
+      "dimensionsM": [
+        0.5615,
+        0.8721,
+        0.48
+      ],
+      "path": "public/assets/street-props/mailbox-v1.glb",
+      "scale": 0.87211,
+      "sha256": "69b363051e9e55567429ef12ed377b236c5a753b0a4c2b35e459c093f85955f8",
+      "source": {
+        "generator": "Tripo text-to-model, then Tripo highpoly_to_lowpoly (textures baked)",
+        "modelTask": "5ec3c8af-eafe-4179-8975-15c04acb3545",
+        "retopologyTask": "0aa9d897-5915-46be-8444-7bac7c7663ab"
+      },
+      "triangles": 1339,
+      "url": "/assets/street-props/mailbox-v1.glb"
+    },
+    "newsBox": {
+      "bytes": 145572,
+      "dimensionsM": [
+        0.5842,
+        1.18,
+        0.44
+      ],
+      "path": "public/assets/street-props/newsBox-v1.glb",
+      "scale": 1.18,
+      "sha256": "8e9ed2cdce01b996d52581c103b30e7814565253b2b452299c70b50c1d7f0ac9",
+      "source": {
+        "generator": "Tripo text-to-model, then Tripo highpoly_to_lowpoly (textures baked)",
+        "modelTask": "19ab8cde-5edc-41ee-9e50-f2a132a38d2a",
+        "retopologyTask": "97c3558e-b7fe-42a4-8840-3d01cad7a99c"
+      },
+      "triangles": 1282,
+      "url": "/assets/street-props/newsBox-v1.glb"
+    },
+    "palm": {
+      "bytes": 693648,
+      "dimensionsM": [
+        8.7298,
+        10.0,
+        8.3065
+      ],
+      "heightM": 10.0,
+      "path": "public/assets/street-props/palm-v1.glb",
+      "scale": 10.30242,
+      "sha256": "1f075743172623847f8913aa17a80e30bb271ac6d01212141cda08ddbdf81074",
+      "source": {
+        "generator": "Tripo text-to-model, then Tripo highpoly_to_lowpoly (textures baked)",
+        "modelTask": "fbc67a62-a465-4543-babc-a22bc3baceea",
+        "prompt": "a single Canary Island date palm tree, realistic street tree, thick straight textured trunk with diamond-shaped leaf base scars, dense round crown of many long arching feathery pinnate green fronds, full height from ground, trunk about 8 times taller than wide, isolated, no ground, no pot",
+        "retopologyTask": "6b246947-4f2e-4f9a-98b6-2cfc5a35cecc"
+      },
+      "triangles": 6939,
+      "url": "/assets/street-props/palm-v1.glb"
+    },
+    "palmFar": {
+      "bytes": 290044,
+      "dimensionsM": [
+        8.2455,
+        10.0,
+        8.06
+      ],
+      "heightM": 10.0,
+      "path": "public/assets/street-props/palmFar-v1.glb",
+      "scale": 9.87847,
+      "sha256": "3d08c72dce550327d07ebc149a96aab7af94ed7edeb6e304df0629acdb8c6a62",
+      "source": {
+        "generator": "Tripo text-to-model, then Tripo highpoly_to_lowpoly (textures baked)",
+        "modelTask": "fbc67a62-a465-4543-babc-a22bc3baceea",
+        "prompt": "a single Canary Island date palm tree, realistic street tree, thick straight textured trunk with diamond-shaped leaf base scars, dense round crown of many long arching feathery pinnate green fronds, full height from ground, trunk about 8 times taller than wide, isolated, no ground, no pot",
+        "retopologyTask": "677ec34f-ced0-4053-8bd1-dbb1409cab27"
+      },
+      "triangles": 900,
+      "url": "/assets/street-props/palmFar-v1.glb"
+    },
+    "parkingMeter": {
+      "bytes": 167556,
+      "dimensionsM": [
+        0.3253,
+        1.25,
+        0.22
+      ],
+      "path": "public/assets/street-props/parkingMeter-v1.glb",
+      "scale": 1.25,
+      "sha256": "7c3118de555fdc3a2d179960967fc7f386005aae310efada8a23857e39517455",
+      "source": {
+        "generator": "Tripo text-to-model, then Tripo highpoly_to_lowpoly (textures baked)",
+        "modelTask": "227642c0-4b03-4e3e-8c0d-518b56bd2ae7",
+        "retopologyTask": "f26b6aa2-878a-46f0-ae6e-7f62ba702beb"
+      },
+      "triangles": 1260,
+      "url": "/assets/street-props/parkingMeter-v1.glb"
+    },
+    "payStation": {
+      "bytes": 153328,
+      "dimensionsM": [
+        0.6,
+        1.2413,
+        0.32
+      ],
+      "path": "public/assets/street-props/payStation-v1.glb",
+      "scale": 1.2413,
+      "sha256": "5aa922b94ddd70c303310a2fbe5cbbf98581c1aa2593ccf728b3921d11cffefe",
+      "source": {
+        "generator": "Tripo text-to-model, then Tripo highpoly_to_lowpoly (textures baked)",
+        "modelTask": "3ecd2799-7355-4607-b30e-0a2b7b382661",
+        "retopologyTask": "d90d469d-cd26-4ae8-b0e9-4174ae73d3fd"
+      },
+      "triangles": 1189,
+      "url": "/assets/street-props/payStation-v1.glb"
+    },
+    "sandwichBoard": {
+      "bytes": 179568,
+      "dimensionsM": [
+        0.5028,
+        1.0,
+        0.6093
+      ],
+      "path": "public/assets/street-props/sandwichBoard-v1.glb",
+      "scale": 0.66268,
+      "sha256": "62b524a166af3c781da8f0d47f962d41e4e341c070eb518001e35509b99df374",
+      "source": {
+        "authors": [
+          "ParzivalCG"
+        ],
+        "decimatedTo": 1100,
+        "generator": "Poly Haven CC0 model (1k glTF), materials packed into one atlas and decimated by this script",
+        "gltfSha256": "95e3a825067d6a96adf1e732ff088485bc8edc1f87e79f707c97a44702be0574",
+        "license": "CC0-1.0",
+        "name": "Standing Chalkboard 01",
+        "url": "https://polyhaven.com/a/standing_chalkboard_01"
+      },
+      "triangles": 1100,
+      "url": "/assets/street-props/sandwichBoard-v1.glb"
+    },
+    "signPole": {
+      "bytes": 229100,
+      "dimensionsM": [
+        0.2493,
+        2.6,
+        0.1183
+      ],
+      "path": "public/assets/street-props/signPole-v1.glb",
+      "scale": 2.6,
+      "sha256": "623db95095f4a87c369751dd47e7a60d1f838130b298406865d1531bb8cde2bf",
+      "source": {
+        "generator": "Tripo text-to-model, then Tripo highpoly_to_lowpoly (textures baked)",
+        "modelTask": "70e22b43-caed-4965-b119-d1c04b707d25",
+        "retopologyTask": "be1c5a11-d970-4938-aea0-9b190733251f"
+      },
+      "triangles": 1799,
+      "url": "/assets/street-props/signPole-v1.glb"
+    },
+    "signPost": {
+      "bytes": 61368,
+      "consumer": "street-signs",
+      "dimensionsM": [
+        0.0743,
+        3.353,
+        0.0836
+      ],
+      "heightM": 3.353,
+      "path": "public/assets/street-props/signPost-v1.glb",
+      "scale": 3.33341,
+      "sha256": "ef444bc2e1cd9cbe1971a7834a71750f50f919f242a9ac1e3662af7e8e250d67",
+      "shaftRadiusM": 0.0302,
+      "source": {
+        "generator": "Tripo text-to-model, then Blender decimate (this script)",
+        "modelTask": "dd9e1d2f-d67f-46c3-a60c-9045c130c9d0",
+        "prompt": "A single bare galvanised grey steel round pipe street sign post, about two inches in diameter and eleven feet tall, standing straight up from a small square base flange bolted to the pavement, with a plain rounded cap on top. No signs, no plates, no brackets, nothing attached. Realistic weathered metal, clean game-ready street prop, no brand names, no logos.",
+        "retopologyTask": null
+      },
+      "triangles": 400,
+      "url": "/assets/street-props/signPost-v1.glb"
+    },
+    "signalHead": {
+      "bytes": 186616,
+      "consumer": "traffic-signal-heads",
+      "dimensionsM": [
+        0.5803,
+        1.2345,
+        0.3009
+      ],
+      "path": "public/assets/street-props/signalHead-v1.glb",
+      "scale": 1.56886,
+      "sha256": "b61cb1136fb5d4450cb657700777f89ba343e0c0030237849928dc1c1fe25bde",
+      "source": {
+        "generator": "Tripo text-to-model, then Tripo highpoly_to_lowpoly (textures baked)",
+        "modelTask": "1e896490-fae6-491d-b946-54ad78ed2831",
+        "retopologyTask": "2d2e00cb-ed69-4c75-9114-c059ad26f0a8"
+      },
+      "triangles": 1839,
+      "url": "/assets/street-props/signalHead-v1.glb"
+    },
+    "transitShelter": {
+      "bytes": 237216,
+      "dimensionsM": [
+        3.6005,
+        2.6,
+        1.2894
+      ],
+      "path": "public/assets/street-props/transitShelter-v1.glb",
+      "scale": 3.60054,
+      "sha256": "3aac627a94401614be35afe658afc5052f7d0931f36a0b57189111e6ef360584",
+      "source": {
+        "generator": "Tripo text-to-model, then Tripo highpoly_to_lowpoly (textures baked)",
+        "modelTask": "07b0beb8-cebf-4476-b7dc-4d9d33e745ed",
+        "retopologyTask": "702e7e0f-3386-4de3-85e8-e796c1f2b391"
+      },
+      "triangles": 3335,
+      "url": "/assets/street-props/transitShelter-v1.glb"
+    },
+    "utilityBox": {
+      "bytes": 300468,
+      "dimensionsM": [
+        0.9197,
+        1.12,
+        0.4319
+      ],
+      "path": "public/assets/street-props/utilityBox-v1.glb",
+      "scale": 0.9997,
+      "sha256": "d514bad672e5bf559c74840023ce032f867460084e1b1eb868a204c04bf50bf9",
+      "source": {
+        "authors": [
+          "James Ray Cock"
+        ],
+        "generator": "CC0 model, fitted and exported by this script",
+        "license": "CC0-1.0",
+        "name": "Utility Box 02",
+        "url": "https://polyhaven.com/a/utility_box_02"
+      },
+      "triangles": 6268,
+      "url": "/assets/street-props/utilityBox-v1.glb"
+    },
+    "utilityPole": {
+      "attach": [
+        {
+          "arm": 0,
+          "x": -0.9323,
+          "y": 11.4978,
+          "z": -0.2137
+        },
+        {
+          "arm": 0,
+          "x": 0.9543,
+          "y": 11.4978,
+          "z": -0.2137
+        },
+        {
+          "arm": 1,
+          "x": -0.9178,
+          "y": 10.7867,
+          "z": -0.1557
+        },
+        {
+          "arm": 1,
+          "x": 0.9543,
+          "y": 10.7867,
+          "z": -0.1412
+        }
+      ],
+      "bytes": 372648,
+      "consumer": "street-overhead",
+      "crossarmM": 2.438,
+      "dimensionsM": [
+        2.438,
+        11.73,
+        1.248
+      ],
+      "hardwareFromM": 8.668,
+      "heightM": 11.73,
+      "path": "public/assets/street-props/utilityPole-v1.glb",
+      "scale": 7.41558,
+      "sha256": "00536ad582fcba6d3eae0036bc68a6ef928ae0b437c1789343da95df24a7e2d9",
+      "shaftRadiusM": 0.222,
+      "source": {
+        "generator": "Tripo text-to-model, then Tripo highpoly_to_lowpoly (textures baked)",
+        "modelTask": "490cdb48-555b-4468-86fd-2f9554242685",
+        "prompt": "a single American wooden utility pole, tall weathered brown creosote timber pole about 30 times taller than wide, full height from ground, two horizontal wooden crossarms near the top with white ceramic insulators, a grey cylindrical transformer can mounted below the crossarms, metal hardware and brackets, realistic, no wires, isolated, no ground",
+        "retopologyTask": "7a5775b1-255e-4d51-85fb-1fafde8b7100"
+      },
+      "triangles": 3424,
+      "url": "/assets/street-props/utilityPole-v1.glb"
+    },
+    "wasteBin": {
+      "bytes": 127956,
+      "dimensionsM": [
+        0.5905,
+        0.94,
+        0.5795
+      ],
+      "path": "public/assets/street-props/wasteBin-v1.glb",
+      "scale": 0.94,
+      "sha256": "c8eb754ef30008fa8a29e8258f15f2f43f9562a03933ff8197b0afd9fabd497f",
+      "source": {
+        "generator": "Tripo text-to-model, then Tripo highpoly_to_lowpoly (textures baked)",
+        "modelTask": "772d8e8b-300d-4666-bdd8-3807908d80b0",
+        "retopologyTask": "73aaba9b-c9fd-4983-9daf-162b6fa9aa18"
+      },
+      "triangles": 1442,
+      "url": "/assets/street-props/wasteBin-v1.glb"
+    }
+  },
+  "note": "Generated with Tripo AI from text prompts (retopologised and baked by Tripo), or taken from CC0 Poly Haven models (see each source); normalised by scripts/assets/build-street-props-v1.py.",
+  "rejected": {
+    "planter": "retopology flattened the foliage into disconnected shards"
+  },
+  "version": "street-props-v1"
+}

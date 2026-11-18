@@ -1,0 +1,39 @@
+{
+  "task_id": "dc7b4721-c614-4226-8977-3720fbf6dafe",
+  "type": "text_to_model",
+  "status": "success",
+  "input": {
+    "prompt": "game-ready city fire hydrant, squat cast-iron body, domed bonnet cap with a hex nut on top, one large front outlet cap and two smaller side outlet caps, wide flanged base ring, weathered painted metal with chipped edges and subtle rust at the seams, strong readable silhouette at 20 metres, PBR materials, clean low-poly topology, upright, pivot centred at the base, isolated object, no ground plane, no base plinth, no text, no signage",
+    "negative_prompt": "text, letters, logo, sign, ground plane, base plinth, pedestal, multiple objects, blurry",
+    "model_version": "v3.1-20260211",
+    "texture": true,
+    "pbr": true,
+    "texture_quality": "detailed",
+    "texture_alignment": "geometry",
+    "export_uv": true,
+    "face_limit": 30000,
+    "geometry_quality": "detailed"
+  },
+  "output": {
+    "pbr_model": "https://tripo-data.rg1.data.tripo3d.com/tcli_afcb08b6649142dabbe955315941cfa7/20260922/dc7b4721-c614-4226-8977-3720fbf6dafe/tripo_pbr_model_dc7b4721-c614-4226-8977-3720fbf6dafe.glb?Key-Pair-Id=K1676C64NMVM2J&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly90cmlwby1kYXRhLnJnMS5kYXRhLnRyaXBvM2QuY29tL3RjbGlfYWZjYjA4YjY2NDkxNDJkYWJiZTk1NTMxNTk0MWNmYTcvMjAyNjA5MjIvZGM3YjQ3MjEtYzYxNC00MjI2LTg5NzctMzcyMGZiZjZkYWZlL3RyaXBvX3Bicl9tb2RlbF9kYzdiNDcyMS1jNjE0LTQyMjYtODk3Ny0zNzIwZmJmNmRhZmUuZ2xiIiwiQ29uZGl0aW9uIjp7IkRhdGVMZXNzVGhhbiI6eyJBV1M6RXBvY2hUaW1lIjoxNzkwMTIxNjAwfX19XX0_&Signature=xjejVySc35nf-RU4Y7mjBA7I6oEjoVTejCsXtzLOTjGWBa~UaHssDbZjG506CfzGKoJW~c0hLOPIYMKIoxqm3rcdVdqOVQf2z38Pfcf64YXzT8QIG7ZHSUrlazzshBo8A9hDPeTTsAM1o4WnA18~j6xSnjwh2xJ3YiFVyaEKoParEIqQbT5gXJdeCBfTt4wiZKo3pif9HY16Q8Ig8ops6d17SiR~qy~a~fhO-U07TPRFW5O0aZ-VipJriezr1TlSSfjS-RC5EQ8LV6mi0bn7h~yDpo9pDtcOj1Kwdf~qNL-0ln8Go~tnKCS~g8ArOLFib7BSXN6rmhg859XPoYQjcw__",
+    "generated_image": "https://tripo-data.rg1.data.tripo3d.com/tcli_afcb08b6649142dabbe955315941cfa7/20260922/dc7b4721-c614-4226-8977-3720fbf6dafe/text2image_dc7b4721-c614-4226-8977-3720fbf6dafe.jpeg?Key-Pair-Id=K1676C64NMVM2J&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly90cmlwby1kYXRhLnJnMS5kYXRhLnRyaXBvM2QuY29tL3RjbGlfYWZjYjA4YjY2NDkxNDJkYWJiZTk1NTMxNTk0MWNmYTcvMjAyNjA5MjIvZGM3YjQ3MjEtYzYxNC00MjI2LTg5NzctMzcyMGZiZjZkYWZlL3RleHQyaW1hZ2VfZGM3YjQ3MjEtYzYxNC00MjI2LTg5NzctMzcyMGZiZjZkYWZlLmpwZWciLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3OTAxMjE2MDB9fX1dfQ__&Signature=g6B1lUtj-7iwTiJ9PxPWhFdcFMx1qYs8ApDGZJvURzIm~qDpPRoqX2yQp8RaX2~puHok-ocW4zma-c9dkKAGWQiPewKxaB5GxQ2qgYmK7wLksppl-dxX-gd7CTqpiKoDRVqfSNJc6JmlwpgcQg-RLcJ8WQJXC1dxJoKSr9cxiVMtE3wgAg9ziSQGLFGoTWSThEgRUO4MONIA5nOrwfucvk27B3YUEKdFeKqguZXWIe6TMet~jn4PKXyKvNXk4Tj5Ikv4nK6i7FEaya~qOUIRDKXa0MOg280w-CuccZpuFaK1uFrDDdyTlqD-bG7AOxJ~E~Q2LfzdJixSnqWL28FkyQ__",
+    "rendered_image": "https://tripo-data.rg1.data.tripo3d.com/tcli_afcb08b6649142dabbe955315941cfa7/20260922/dc7b4721-c614-4226-8977-3720fbf6dafe/legacy_mesh.webp?Key-Pair-Id=K1676C64NMVM2J&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly90cmlwby1kYXRhLnJnMS5kYXRhLnRyaXBvM2QuY29tL3RjbGlfYWZjYjA4YjY2NDkxNDJkYWJiZTk1NTMxNTk0MWNmYTcvMjAyNjA5MjIvZGM3YjQ3MjEtYzYxNC00MjI2LTg5NzctMzcyMGZiZjZkYWZlL2xlZ2FjeV9tZXNoLndlYnAiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3OTAxMjE2MDB9fX1dfQ__&Signature=n-CoYjNlknxkskFBZ8yP2mVQ~JXlfLc9eK9MeJV-p-npNvNO3jUUGOg6szEDGNHEsNmw2DDOQiiIyvnmSbkr9-JXKAlgdLBrt6R11Oe1sEXLkx5lrD8v0xvAwL1kmhSD27P3Sjm7D1beNhEc46zAVa~c5jII6~2W2xmbHYTjRkpk5D1JpzJR59Hg~zLKERRLwLUkFzSxs4ilAHDX2Bkg3h9HtptGiB20LoycwnUWjSWZ3pEYe6R5nZCeJs8sxPGKMSrF~mZV8yDP41mntZ1djw8SKvumYJk7b9zXRW0ZiZOysYQAedw3ExRofiuwXrm6DI2zeBFotn9D2VeSvZkY-Q__"
+  },
+  "progress": 100,
+  "create_time": 1790081511,
+  "consumed_credit": 50,
+  "prompt": "game-ready city fire hydrant, squat cast-iron body, domed bonnet cap with a hex nut on top, one large front outlet cap and two smaller side outlet caps, wide flanged base ring, weathered painted metal with chipped edges and subtle rust at the seams, strong readable silhouette at 20 metres, PBR materials, clean low-poly topology, upright, pivot centred at the base, isolated object, no ground plane, no base plinth, no text, no signage",
+  "thumbnail": "https://tripo-data.rg1.data.tripo3d.com/tcli_afcb08b6649142dabbe955315941cfa7/20260922/dc7b4721-c614-4226-8977-3720fbf6dafe/legacy_mesh.webp?Key-Pair-Id=K1676C64NMVM2J&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly90cmlwby1kYXRhLnJnMS5kYXRhLnRyaXBvM2QuY29tL3RjbGlfYWZjYjA4YjY2NDkxNDJkYWJiZTk1NTMxNTk0MWNmYTcvMjAyNjA5MjIvZGM3YjQ3MjEtYzYxNC00MjI2LTg5NzctMzcyMGZiZjZkYWZlL2xlZ2FjeV9tZXNoLndlYnAiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3OTAxMjE2MDB9fX1dfQ__&Signature=n-CoYjNlknxkskFBZ8yP2mVQ~JXlfLc9eK9MeJV-p-npNvNO3jUUGOg6szEDGNHEsNmw2DDOQiiIyvnmSbkr9-JXKAlgdLBrt6R11Oe1sEXLkx5lrD8v0xvAwL1kmhSD27P3Sjm7D1beNhEc46zAVa~c5jII6~2W2xmbHYTjRkpk5D1JpzJR59Hg~zLKERRLwLUkFzSxs4ilAHDX2Bkg3h9HtptGiB20LoycwnUWjSWZ3pEYe6R5nZCeJs8sxPGKMSrF~mZV8yDP41mntZ1djw8SKvumYJk7b9zXRW0ZiZOysYQAedw3ExRofiuwXrm6DI2zeBFotn9D2VeSvZkY-Q__",
+  "queuing_num": -1,
+  "running_left_time": -1,
+  "result": {
+    "pbr_model": {
+      "url": "https://tripo-data.rg1.data.tripo3d.com/tcli_afcb08b6649142dabbe955315941cfa7/20260922/dc7b4721-c614-4226-8977-3720fbf6dafe/tripo_pbr_model_dc7b4721-c614-4226-8977-3720fbf6dafe.glb?Key-Pair-Id=K1676C64NMVM2J&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly90cmlwby1kYXRhLnJnMS5kYXRhLnRyaXBvM2QuY29tL3RjbGlfYWZjYjA4YjY2NDkxNDJkYWJiZTk1NTMxNTk0MWNmYTcvMjAyNjA5MjIvZGM3YjQ3MjEtYzYxNC00MjI2LTg5NzctMzcyMGZiZjZkYWZlL3RyaXBvX3Bicl9tb2RlbF9kYzdiNDcyMS1jNjE0LTQyMjYtODk3Ny0zNzIwZmJmNmRhZmUuZ2xiIiwiQ29uZGl0aW9uIjp7IkRhdGVMZXNzVGhhbiI6eyJBV1M6RXBvY2hUaW1lIjoxNzkwMTIxNjAwfX19XX0_&Signature=xjejVySc35nf-RU4Y7mjBA7I6oEjoVTejCsXtzLOTjGWBa~UaHssDbZjG506CfzGKoJW~c0hLOPIYMKIoxqm3rcdVdqOVQf2z38Pfcf64YXzT8QIG7ZHSUrlazzshBo8A9hDPeTTsAM1o4WnA18~j6xSnjwh2xJ3YiFVyaEKoParEIqQbT5gXJdeCBfTt4wiZKo3pif9HY16Q8Ig8ops6d17SiR~qy~a~fhO-U07TPRFW5O0aZ-VipJriezr1TlSSfjS-RC5EQ8LV6mi0bn7h~yDpo9pDtcOj1Kwdf~qNL-0ln8Go~tnKCS~g8ArOLFib7BSXN6rmhg859XPoYQjcw__",
+      "type": "glb"
+    },
+    "rendered_image": {
+      "type": "webp",
+      "url": "https://tripo-data.rg1.data.tripo3d.com/tcli_afcb08b6649142dabbe955315941cfa7/20260922/dc7b4721-c614-4226-8977-3720fbf6dafe/legacy_mesh.webp?Key-Pair-Id=K1676C64NMVM2J&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly90cmlwby1kYXRhLnJnMS5kYXRhLnRyaXBvM2QuY29tL3RjbGlfYWZjYjA4YjY2NDkxNDJkYWJiZTk1NTMxNTk0MWNmYTcvMjAyNjA5MjIvZGM3YjQ3MjEtYzYxNC00MjI2LTg5NzctMzcyMGZiZjZkYWZlL2xlZ2FjeV9tZXNoLndlYnAiLCJDb25kaXRpb24iOnsiRGF0ZUxlc3NUaGFuIjp7IkFXUzpFcG9jaFRpbWUiOjE3OTAxMjE2MDB9fX1dfQ__&Signature=n-CoYjNlknxkskFBZ8yP2mVQ~JXlfLc9eK9MeJV-p-npNvNO3jUUGOg6szEDGNHEsNmw2DDOQiiIyvnmSbkr9-JXKAlgdLBrt6R11Oe1sEXLkx5lrD8v0xvAwL1kmhSD27P3Sjm7D1beNhEc46zAVa~c5jII6~2W2xmbHYTjRkpk5D1JpzJR59Hg~zLKERRLwLUkFzSxs4ilAHDX2Bkg3h9HtptGiB20LoycwnUWjSWZ3pEYe6R5nZCeJs8sxPGKMSrF~mZV8yDP41mntZ1djw8SKvumYJk7b9zXRW0ZiZOysYQAedw3ExRofiuwXrm6DI2zeBFotn9D2VeSvZkY-Q__"
+    }
+  }
+}

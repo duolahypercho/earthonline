@@ -1,0 +1,68 @@
+{
+ "seed": 23,
+ "notes": "One-storey maroon-brown clapboard hut, window architraves in cream, tall sash windows with a panelled door, low roof. Strip is longer than the hut photographed; shopfront-style windows repeated along the front. The real hut is one small maroon lap-sided room with tall narrow cream-trimmed sashes, a half-glazed door and carved brackets. The footprint is a 37 m strip (data) so it cannot be cut to one room; the strip is now clad as that hut repeated: shopfront glazing and roll-up removed, tall narrow single sashes at an even rhythm, one door with a step, cream brackets and hood boards. Skipped: hipped shingle roof with carved eaves (no pitched-roof key). Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Deep oxblood horizontal siding, two tall white windows flanking one panelled door, hipped shingle roof with deep eave. Applied: painted-clapboard, deeper saturated wall (a85f54, lum 0.17), window pair flanking the door, other windows thinned. No key for a hipped roof or eave overhang; hand.py re-aligned to the current window/door layout, corner boards and a deep dark shingle eave band added; wall saturated to d04a3e (lum 0.19) so it reads oxblood not pink. Hipped roof still has no key. Lifted/converted once to #d96e65.",
+ "wall": "painted-clapboard",
+ "wallTint": "#d96e65",
+ "trim": "painted-white@e2d6bc",
+ "frame": "painted-white@e2d6bc",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@e2d6bc",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-clapboard@d04a3e",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.9,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.2,
+ "upperWindows": [],
+ "bays": [],
+ "streetStills": true,
+ "ground": "lobby",
+ "upper": "rooms",
+ "storefront": {
+  "bulkheadM": 0.7,
+  "transomM": 0.2,
+  "pierM": 0.5,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.144,
+    "to": 0.172,
+    "kind": "window",
+    "headM": 2.7
+   },
+   {
+    "from": 0.188,
+    "to": 0.212,
+    "kind": "door",
+    "leaf": "wood-siding@c8b690",
+    "headM": 2.4
+   },
+   {
+    "from": 0.228,
+    "to": 0.256,
+    "kind": "window",
+    "headM": 2.7
+   },
+   {
+    "from": 0.46,
+    "to": 0.488,
+    "kind": "window",
+    "headM": 2.7
+   },
+   {
+    "from": 0.66,
+    "to": 0.688,
+    "kind": "window",
+    "headM": 2.7
+   },
+   {
+    "from": 0.86,
+    "to": 0.888,
+    "kind": "window",
+    "headM": 2.7
+   }
+  ]
+ }
+}

@@ -1,0 +1,1372 @@
+{
+ "schema": "eo-sign-art-manifest-v1",
+ "generatedBy": "native/tools/fetch-sign-art.mjs",
+ "rootEnv": "EO_SIGN_ART_ROOT",
+ "note": "Downloads stay outside the repository; paths are relative to the root. eo-props reads every file and checks its sha256 before drawing anything; one missing or different file and the sign atlases keep their drawn faces. `files` is written by the fetch tool; the other sections are hand-written: `layouts` are transcribed from the Caltrans sheets' dimension tables (inches, origin top left of the sign, y down; letter heights are cap heights, series per the sheet).",
+ "palette": {
+  "red": {
+   "hex": "#bf311a",
+   "from": "R1-1, R5-1, R8-3 fills (FHWA SHS 2024 SVG)"
+  },
+  "black": {
+   "hex": "#231f20",
+   "from": "every FHWA SHS 2024 SVG legend fill"
+  },
+  "white": {
+   "hex": "#ffffff",
+   "from": "every FHWA SHS 2024 SVG background fill"
+  },
+  "yellow": {
+   "hex": "#ffd046",
+   "from": "W8-1, W11-2, W17-1 fills (FHWA SHS 2024 SVG)"
+  },
+  "green": {
+   "hex": "#006f53",
+   "from": "D3-1a, D11-1, R7-8 fills (FHWA SHS 2024 SVG)"
+  },
+  "blue": {
+   "hex": "#005a9c",
+   "from": "R7-8 fill (FHWA SHS 2024 SVG)"
+  }
+ },
+ "fonts": {
+  "regular": "overpass-regular",
+  "semibold": "overpass-semibold",
+  "bold": "overpass-bold"
+ },
+ "seriesCalibration": [
+  {
+   "series": "B",
+   "text": "HOUR",
+   "capIn": 3,
+   "widthIn": 5,
+   "from": "R32C(CA) sheet: H = 3B, D = 5 (legend width of HOUR)"
+  },
+  {
+   "series": "B",
+   "text": "PARKING",
+   "capIn": 3,
+   "widthIn": 9.5,
+   "from": "R26(CA) sheet: L = 3B, P = 9 1/2 (legend width)"
+  },
+  {
+   "series": "C",
+   "text": "PARKING",
+   "capIn": 2.5,
+   "widthIn": 9.5,
+   "from": "R32C(CA) sheet: K = 2.5C, S = 9.5 (legend width)"
+  }
+ ],
+ "seriesFallback": {
+  "D": "C",
+  "E": "C",
+  "F": "C"
+ },
+ "seriesFallbackNote": "No sheet used here dimensions a Series D, E or F line's width; those lines (single numerals, and R32's 3/8 in EXCEPT SUNDAY) take the Series C factor and are shrunk to the legend width where one is given.",
+ "streetName": {
+  "svg": "D3-1a",
+  "legendRegion": [
+   1060,
+   120,
+   2100,
+   340
+  ],
+  "legendText": "E",
+  "legendTextNote": "Only the first glyph of the D3-1a sample legend (a capital E, x 1082-1278) is matched against Overpass: the rest of the sample is not read here.",
+  "legendCalibrationRegion": [
+   1075,
+   135,
+   215,
+   305
+  ],
+  "outerRadius": 72.125,
+  "innerRadius": 45,
+  "radiiFrom": "the D3-1a VARx8 SVG's own <rect rx> values (white sign 72.125, green field 45, viewBox units)"
+ },
+ "faces": {
+  "stop": {
+   "svg": "R1-1"
+  },
+  "allWay": {
+   "svg": "R1-3P"
+  },
+  "streetCleaning": {
+   "layout": "R30B(CA)"
+  },
+  "permitParking": {
+   "layout": "R32C(CA)"
+  },
+  "timeParking": {
+   "layout": "R32(CA)"
+  },
+  "noParking": {
+   "layout": "R26(CA)"
+  },
+  "towAway": {
+   "drawn": "TOW (TANSAT / TANP ANY TIME): the California sign is R107(CA) Tow-Away NO STOPPING 4 TO 6 PM, whose tow-away symbol is published only as a grid sheet (R107 GRID(CA)); not vectorised in this pass"
+  },
+  "oneWayRight": {
+   "svg": "R6-1R"
+  },
+  "oneWayLeft": {
+   "svg": "R6-1L"
+  },
+  "speedLimit": {
+   "svg": "R2-1",
+   "replace": [
+    {
+     "region": [
+      150,
+      1100,
+      1430,
+      830
+     ],
+     "text": "25",
+     "colour": "black",
+     "fitWidth": true,
+     "note": "the layout's sample numerals (x 208-1520, y 1140-1885) replaced by SF's prima facie 25 at their height and width"
+    }
+   ]
+  },
+  "noLeftTurn": {
+   "svg": "R3-2"
+  },
+  "noRightTurn": {
+   "svg": "R3-1"
+  },
+  "school": {
+   "stack": [
+    {
+     "svg": "S1-1"
+    },
+    {
+     "svg": "W16-7PL",
+     "sizeIn": [
+      24,
+      12
+     ]
+    }
+   ]
+  },
+  "schoolAhead": {
+   "stack": [
+    {
+     "svg": "S1-1"
+    },
+    {
+     "svg": "W16-9P"
+    }
+   ]
+  },
+  "pedestrian": {
+   "svg": "W11-2"
+  },
+  "warning": {
+   "svg": "W17-1"
+  },
+  "regulatory": {
+   "drawn": "OTHER REGULATORY / BIKE REG / BIKE: a catch-all inventory category that names no single sign"
+  },
+  "doNotEnter": {
+   "svg": "R5-1"
+  },
+  "guide": {
+   "drawn": "OTHER GUIDE: a catch-all inventory category that names no single sign; the JS green plate is kept with its legend reduced to BUS STOP (the JS names a transit operator, and no face carries a brand)"
+  },
+  "bikeGuide": {
+   "svg": "D11-1"
+  },
+  "transitLane": {
+   "svg": "R3-11e"
+  },
+  "parkingAngle": {
+   "drawn": "PARKING:PARK AT 90 / PARALLEL: no CA or federal code for PARK AT 90 DEGREE ANGLE (R24(CA) is PARK PARALLEL only)"
+  },
+  "disabledParking": {
+   "layout": "R99(CA)"
+  },
+  "noDoubleParking": {
+   "layout": "R39-1(CA)"
+  }
+ },
+ "printed": {
+  "street-cleaning": {
+   "layout": "R30B(CA) picket"
+  },
+  "pay-here": {
+   "svg": "R7-20"
+  },
+  "pay-by-plate": {
+   "drawn": "SFMTA pay-by-plate meter sign: no CA or federal code"
+  },
+  "right-lane-must-turn-right": {
+   "svg": "R3-7R"
+  },
+  "one-way-left": {
+   "svg": "R6-1L"
+  },
+  "passenger-loading": {
+   "drawn": "R25C(CA) PASSENGER LOADING ONLY is the California sign; its layout is not transcribed in this pass"
+  }
+ },
+ "propSheet": {
+  "regulatory": {
+   "layout": "R26(CA)"
+  },
+  "workZone": {
+   "svg": "W20-1"
+  }
+ },
+ "layouts": {
+  "R26(CA)": {
+   "sheet": "R26(CA)",
+   "legend": "NO PARKING ANY TIME; border and legend red, NO white on a red box, background white",
+   "plate": {
+    "w": 12,
+    "h": 18,
+    "r": 1.5,
+    "fill": "white"
+   },
+   "elements": [
+    {
+     "t": "border",
+     "inset": 0.25,
+     "width": 0.25,
+     "colour": "red",
+     "from": "C 1/4, D 1/4, J 1 1/2"
+    },
+    {
+     "t": "box",
+     "x0": 0,
+     "y0": 0,
+     "x1": 5.5,
+     "y1": 5.5,
+     "colour": "red",
+     "from": "H 5 1/2; G + F + E = 1 1/8 + 3 1/2 + 7/8"
+    },
+    {
+     "t": "text",
+     "s": "NO",
+     "series": "B",
+     "cap": 3.5,
+     "top": 1.125,
+     "cx": 3,
+     "colour": "white",
+     "from": "F 3 1/2B, G 1 1/8; centred in the box inside the border"
+    },
+    {
+     "t": "text",
+     "s": "PARKING",
+     "series": "B",
+     "cap": 3,
+     "top": 6.375,
+     "w": 9.5,
+     "colour": "red",
+     "from": "K 6 3/8, L 3B, P 9 1/2"
+    },
+    {
+     "t": "text",
+     "s": "ANY",
+     "series": "B",
+     "cap": 2.25,
+     "top": 10.25,
+     "maxW": 9.5,
+     "colour": "red",
+     "from": "E 7/8, M 2 1/4B"
+    },
+    {
+     "t": "text",
+     "s": "TIME",
+     "series": "B",
+     "cap": 2.25,
+     "top": 13.375,
+     "maxW": 9.5,
+     "colour": "red",
+     "from": "E 7/8, M 2 1/4B, N 2 3/8"
+    }
+   ]
+  },
+  "R30B(CA)": {
+   "sheet": "R30B(CA)",
+   "legend": "No Parking (symbol), time, day, STREET SWEEPING; border, circle, diagonal and legend red, letter black, background white. Times and day are the sheet's variable slots: filled with the JS face's legend (TUES 8AM-10AM; the JS line 1ST & 3RD OF MONTH has no slot on R30B), not the sheet's example (10AM TO 12PM WEDNESDAY)",
+   "plate": {
+    "w": 18,
+    "h": 24,
+    "r": 1.5,
+    "fill": "white"
+   },
+   "elements": [
+    {
+     "t": "border",
+     "inset": 0.375,
+     "width": 0.5,
+     "colour": "red",
+     "from": "C .375, D .5, W 1.5"
+    },
+    {
+     "t": "ring",
+     "cx": 9,
+     "cy": 7.25,
+     "ro": 5.875,
+     "ri": 4.875,
+     "colour": "red",
+     "from": "S 5.875, T 4.875; centre at E + F = 3.25 + 4 below the top, on the centre line"
+    },
+    {
+     "t": "svgpart",
+     "file": "R8-3",
+     "region": [
+      590,
+      428,
+      708,
+      872
+     ],
+     "x": 6.5,
+     "y": 3.25,
+     "w": 6.48,
+     "h": 8,
+     "colour": "black",
+     "from": "G 8E: the P of the FHWA R8-3 symbol at 8 in, offset from the circle centre as on R8-3 (P ink x 594-1294, circle centre 864, scaled 8/12)"
+    },
+    {
+     "t": "slash",
+     "cx": 9,
+     "cy": 7.25,
+     "r": 4.875,
+     "width": 1,
+     "angleDeg": 45,
+     "colour": "red",
+     "from": "U 1, across the inner circle"
+    },
+    {
+     "t": "runs",
+     "top": 13.75,
+     "colour": "red",
+     "runs": [
+      [
+       "8",
+       "C",
+       3,
+       "base"
+      ],
+      [
+       "AM",
+       "C",
+       2.25,
+       "base"
+      ],
+      [
+       "TO",
+       "C",
+       1,
+       "top"
+      ],
+      [
+       "10",
+       "C",
+       3,
+       "base"
+      ],
+      [
+       "AM",
+       "C",
+       2.25,
+       "base"
+      ]
+     ],
+     "from": "H 2.5, L 3C, K 2.25C, J 1C; V 15.1 is the example line's width, used as the limit",
+     "maxW": 15.1
+    },
+    {
+     "t": "text",
+     "s": "TUESDAY",
+     "series": "C",
+     "cap": 2,
+     "top": 18,
+     "maxW": 15.1,
+     "colour": "red",
+     "from": "M 1.25, N 2C"
+    },
+    {
+     "t": "text",
+     "s": "STREET SWEEPING",
+     "series": "C",
+     "cap": 1.25,
+     "top": 21,
+     "maxW": 15.1,
+     "colour": "red",
+     "from": "P 1, Q 1.25C, R 1.75"
+    }
+   ]
+  },
+  "R32(CA)": {
+   "sheet": "R32(CA)",
+   "legend": "1 HOUR PARKING 7 A.M. TO 6 P.M. EXCEPT SUNDAY (the sheet's example says 2 HOUR; the numeral is its variable slot, filled with the JS face's 1 HOUR); border and legend green, numeral white on a green box, background white",
+   "plate": {
+    "w": 12,
+    "h": 18,
+    "r": 1.5,
+    "fill": "white"
+   },
+   "elements": [
+    {
+     "t": "border",
+     "inset": 0.25,
+     "width": 0.25,
+     "colour": "green",
+     "from": "C 1/4, D 1/4, J 1 1/2"
+    },
+    {
+     "t": "box",
+     "x0": 0,
+     "y0": 0,
+     "x1": 4.5,
+     "y1": 5.5,
+     "colour": "green",
+     "from": "H 4 1/2; G + F + E = 1 1/8 + 3 1/2 + 7/8"
+    },
+    {
+     "t": "text",
+     "s": "1",
+     "series": "D",
+     "cap": 3.5,
+     "top": 1.125,
+     "cx": 2.5,
+     "colour": "white",
+     "from": "F 3 1/2D, G 1 1/8; centred in the box inside the border"
+    },
+    {
+     "t": "text",
+     "s": "HOUR",
+     "series": "B",
+     "cap": 2.5,
+     "top": 2.125,
+     "cx": 8,
+     "maxW": 6.5,
+     "colour": "green",
+     "from": "K 2 1/8, L 2 1/2B; centred between the box and the border"
+    },
+    {
+     "t": "text",
+     "s": "PARKING",
+     "series": "B",
+     "cap": 3,
+     "top": 7,
+     "maxW": 9.5,
+     "colour": "green",
+     "from": "S 2 3/8, M 3B"
+    },
+    {
+     "t": "runs",
+     "top": 11.625,
+     "w": 9.5,
+     "colour": "green",
+     "runs": [
+      [
+       "7",
+       "C",
+       2.5,
+       "base"
+      ],
+      [
+       "A.M.",
+       "C",
+       1.75,
+       "base"
+      ],
+      [
+       "TO",
+       "D",
+       0.75,
+       "mid"
+      ],
+      [
+       "6",
+       "C",
+       2.5,
+       "base"
+      ],
+      [
+       "P.M.",
+       "C",
+       1.75,
+       "base"
+      ]
+     ],
+     "from": "T 1 5/8, N 2 1/2C, Q 1 3/4C, R 3/4D, X 9 1/2"
+    },
+    {
+     "t": "text",
+     "s": "EXCEPT  SUNDAY",
+     "series": "F",
+     "cap": 0.375,
+     "top": 15.5,
+     "maxW": 9.5,
+     "colour": "green",
+     "from": "U 1 3/8, P 3/8F, W 2 1/8"
+    }
+   ]
+  },
+  "R32C(CA)": {
+   "sheet": "R32C(CA)",
+   "legend": "2 HOUR PARKING 8AM TO 6PM VEHICLES WITH AREA PERMITS EXEMPT (the sheet's DISTRICT 7 line is its variable slot, filled with the JS face's VEHICLES WITH AREA; the JS line MON THRU FRI has no slot); border and legend green, background white",
+   "plate": {
+    "w": 12,
+    "h": 18,
+    "r": 1.5,
+    "fill": "white"
+   },
+   "elements": [
+    {
+     "t": "border",
+     "inset": 0.25,
+     "width": 0.25,
+     "colour": "green",
+     "from": "C .25, C .25, G 1.5"
+    },
+    {
+     "t": "box",
+     "x0": 0,
+     "y0": 0,
+     "x1": 4,
+     "y1": 5,
+     "colour": "green",
+     "from": "R 4, D 5"
+    },
+    {
+     "t": "text",
+     "s": "2",
+     "series": "D",
+     "cap": 3.5,
+     "top": 0.75,
+     "cx": 2.25,
+     "colour": "white",
+     "from": "E 3.5D, F .75 above the box bottom; centred in the box inside the border"
+    },
+    {
+     "t": "text",
+     "s": "HOUR",
+     "series": "B",
+     "cap": 3,
+     "top": 1.5,
+     "cx": 7.75,
+     "w": 5,
+     "colour": "green",
+     "from": "G 1.5, H 3B, D 5; centred between the box and the border"
+    },
+    {
+     "t": "text",
+     "s": "PARKING",
+     "series": "C",
+     "cap": 2.5,
+     "top": 5.75,
+     "w": 9.5,
+     "colour": "green",
+     "from": "J 1.25, K 2.5C, S 9.5"
+    },
+    {
+     "t": "runs",
+     "top": 8.75,
+     "w": 9.5,
+     "colour": "green",
+     "runs": [
+      [
+       "8",
+       "C",
+       2.5,
+       "base"
+      ],
+      [
+       "AM",
+       "C",
+       1.75,
+       "base"
+      ],
+      [
+       "TO",
+       "C",
+       0.75,
+       "top"
+      ],
+      [
+       "6",
+       "C",
+       2.5,
+       "base"
+      ],
+      [
+       "PM",
+       "C",
+       1.75,
+       "base"
+      ]
+     ],
+     "from": "L .5, K 2.5C, N 1.75C, M .75C, S 9.5"
+    },
+    {
+     "t": "text",
+     "s": "VEHICLES WITH AREA",
+     "series": "C",
+     "cap": 1,
+     "top": 12.5,
+     "maxW": 9.5,
+     "colour": "green",
+     "from": "J 1.25, P 1C"
+    },
+    {
+     "t": "text",
+     "s": "PERMITS  EXEMPT",
+     "series": "C",
+     "cap": 1,
+     "top": 14.25,
+     "maxW": 9.5,
+     "colour": "green",
+     "from": "F .75, P 1C, Q 2.75"
+    }
+   ]
+  },
+  "R39-1(CA)": {
+   "sheet": "R39-1(CA)",
+   "legend": "NO DOUBLE PARKING ANYTIME COMMERCIAL VEHICLES INCLUDED; border and legend red, NO white on a red box, background white",
+   "plate": {
+    "w": 12,
+    "h": 18,
+    "r": 1.5,
+    "fill": "white"
+   },
+   "elements": [
+    {
+     "t": "border",
+     "inset": 0.25,
+     "width": 0.25,
+     "colour": "red",
+     "from": "C .25, C .25, J 1.5"
+    },
+    {
+     "t": "box",
+     "x0": 0,
+     "y0": 0,
+     "x1": 5,
+     "y1": 5,
+     "colour": "red",
+     "from": "D 5, D 5"
+    },
+    {
+     "t": "text",
+     "s": "NO",
+     "series": "B",
+     "cap": 3.5,
+     "top": 0.75,
+     "cx": 2.75,
+     "colour": "white",
+     "from": "E 3.5B, F .75 above the box bottom; centred in the box inside the border"
+    },
+    {
+     "t": "text",
+     "s": "DOUBLE",
+     "series": "B",
+     "cap": 1.5,
+     "top": 0.75,
+     "left": 5.5,
+     "w": 5,
+     "colour": "red",
+     "from": "F .75, H 1.5B; G .5 right of the box, D 5 wide"
+    },
+    {
+     "t": "text",
+     "s": "PARKING",
+     "series": "B",
+     "cap": 1.5,
+     "top": 2.75,
+     "left": 5.5,
+     "w": 5,
+     "colour": "red",
+     "from": "G .5, H 1.5B, D 5"
+    },
+    {
+     "t": "text",
+     "s": "ANYTIME",
+     "series": "B",
+     "cap": 2,
+     "top": 5.75,
+     "maxW": 10.5,
+     "colour": "red",
+     "from": "J 1.5, K 2B"
+    },
+    {
+     "t": "text",
+     "s": "COMMERCIAL",
+     "series": "B",
+     "cap": 2,
+     "top": 8.5,
+     "maxW": 10.5,
+     "colour": "red",
+     "from": "F .75, K 2B"
+    },
+    {
+     "t": "text",
+     "s": "VEHICLES",
+     "series": "B",
+     "cap": 2,
+     "top": 11.25,
+     "maxW": 10.5,
+     "colour": "red",
+     "from": "F .75, K 2B"
+    },
+    {
+     "t": "text",
+     "s": "INCLUDED",
+     "series": "B",
+     "cap": 2,
+     "top": 14,
+     "maxW": 10.5,
+     "colour": "red",
+     "from": "F .75, K 2B, L 2"
+    }
+   ]
+  },
+  "R99(CA)": {
+   "sheet": "R99(CA)",
+   "legend": "(International Symbol of Accessibility) PARKING ONLY; border and legend white, background blue",
+   "plate": {
+    "w": 12,
+    "h": 18,
+    "r": 1.5,
+    "fill": "white"
+   },
+   "elements": [
+    {
+     "t": "field",
+     "inset": 0.5,
+     "colour": "blue",
+     "from": "0.5 in white border, 1.5 in radius"
+    },
+    {
+     "t": "svgpart",
+     "file": "R7-8",
+     "region": [
+      300,
+      640,
+      265,
+      305
+     ],
+     "x": 2.5,
+     "y": 1,
+     "w": 7,
+     "h": 8,
+     "colour": "white",
+     "from": "8 in symbol 1 in below the top; the symbol of the FHWA R7-8 layout (the sheet's note: see the SHS appendix symbol), centred"
+    },
+    {
+     "t": "text",
+     "s": "PARKING",
+     "series": "B",
+     "cap": 3,
+     "top": 9.5,
+     "maxW": 10.5,
+     "colour": "white",
+     "from": "0.5 in, 3 in B"
+    },
+    {
+     "t": "text",
+     "s": "ONLY",
+     "series": "B",
+     "cap": 3,
+     "top": 13.5,
+     "maxW": 10.5,
+     "colour": "white",
+     "from": "1 in, 3 in B, 1.5 in"
+    }
+   ]
+  },
+  "R30B(CA) picket": {
+   "sheet": "R30B(CA)",
+   "legend": "No Parking (symbol), time, day, STREET SWEEPING; border, circle, diagonal and legend red, letter black, background white. Times and day are the sheet's variable slots: filled with the JS picket face's legend (12:01 A.M. TO 6 A.M., MON WED FRI), not the sheet's example (10AM TO 12PM WEDNESDAY)",
+   "plate": {
+    "w": 18,
+    "h": 24,
+    "r": 1.5,
+    "fill": "white"
+   },
+   "elements": [
+    {
+     "t": "border",
+     "inset": 0.375,
+     "width": 0.5,
+     "colour": "red",
+     "from": "C .375, D .5, W 1.5"
+    },
+    {
+     "t": "ring",
+     "cx": 9,
+     "cy": 7.25,
+     "ro": 5.875,
+     "ri": 4.875,
+     "colour": "red",
+     "from": "S 5.875, T 4.875; centre at E + F = 3.25 + 4 below the top, on the centre line"
+    },
+    {
+     "t": "svgpart",
+     "file": "R8-3",
+     "region": [
+      590,
+      428,
+      708,
+      872
+     ],
+     "x": 6.5,
+     "y": 3.25,
+     "w": 6.48,
+     "h": 8,
+     "colour": "black",
+     "from": "G 8E: the P of the FHWA R8-3 symbol at 8 in, offset from the circle centre as on R8-3 (P ink x 594-1294, circle centre 864, scaled 8/12)"
+    },
+    {
+     "t": "slash",
+     "cx": 9,
+     "cy": 7.25,
+     "r": 4.875,
+     "width": 1,
+     "angleDeg": 45,
+     "colour": "red",
+     "from": "U 1, across the inner circle"
+    },
+    {
+     "t": "runs",
+     "top": 13.75,
+     "colour": "red",
+     "runs": [
+      [
+       "12:01",
+       "C",
+       3,
+       "base"
+      ],
+      [
+       "AM",
+       "C",
+       2.25,
+       "base"
+      ],
+      [
+       "TO",
+       "C",
+       1,
+       "top"
+      ],
+      [
+       "6",
+       "C",
+       3,
+       "base"
+      ],
+      [
+       "AM",
+       "C",
+       2.25,
+       "base"
+      ]
+     ],
+     "from": "H 2.5, L 3C, K 2.25C, J 1C; V 15.1 is the example line's width, used as the limit",
+     "maxW": 15.1
+    },
+    {
+     "t": "text",
+     "s": "MON  WED  FRI",
+     "series": "C",
+     "cap": 2,
+     "top": 18,
+     "maxW": 15.1,
+     "colour": "red",
+     "from": "M 1.25, N 2C"
+    },
+    {
+     "t": "text",
+     "s": "STREET SWEEPING",
+     "series": "C",
+     "cap": 1.25,
+     "top": 21,
+     "maxW": 15.1,
+     "colour": "red",
+     "from": "P 1, Q 1.25C, R 1.75"
+    }
+   ]
+  }
+ },
+ "files": [
+  {
+   "id": "R1-1",
+   "path": "fhwa/shs2024/R01-01/R01-01 Stop 30x30.svg",
+   "bytes": 1852,
+   "sha256": "f6e17894af2a49076e226675a6e28bb6ad51d526ed3ce55e5843d0cd91a3d4e5",
+   "retrieved": "2026-11-14",
+   "source": "FHWA Standard Highway Signs 2024 (MUTCD 11th Ed.), Release 3 (file 1 of 2) vector graphics",
+   "url": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/zip_files/2024_SHS_Release_3-Regulatory_Warning_TTC_School_Signs_Vector_Graphics_1-of-2.zip",
+   "zipEntry": "R01-01 Stop/R01-01 Stop 30x30.svg",
+   "licence": "Public domain: a work of the U.S. Government (17 U.S.C. 105)",
+   "licenceUrl": "https://www.copyright.gov/title17/92chap1.html#105",
+   "sizeIn": [
+    30,
+    30
+   ]
+  },
+  {
+   "id": "R1-3P",
+   "path": "fhwa/shs2024/R01-03P/R01-03P All-Way (plaque) 30x12.svg",
+   "bytes": 2222,
+   "sha256": "3880dffca0ebcf3d13ce1adc4328556aa26346aa93d96b0bd81db70f9226885c",
+   "retrieved": "2026-11-14",
+   "source": "FHWA Standard Highway Signs 2024 (MUTCD 11th Ed.), Release 3 (file 1 of 2) vector graphics",
+   "url": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/zip_files/2024_SHS_Release_3-Regulatory_Warning_TTC_School_Signs_Vector_Graphics_1-of-2.zip",
+   "zipEntry": "R01-03P All Way (plaque)/R01-03P All-Way (plaque) 30x12.svg",
+   "licence": "Public domain: a work of the U.S. Government (17 U.S.C. 105)",
+   "licenceUrl": "https://www.copyright.gov/title17/92chap1.html#105",
+   "sizeIn": [
+    30,
+    12
+   ]
+  },
+  {
+   "id": "R2-1",
+   "path": "fhwa/shs2024/R02-01/R02-01 Speed Limit 24x30.svg",
+   "bytes": 3151,
+   "sha256": "a4d058f0591f26ce43a8533d7def2220e2522cee950bed5095392dd6b86d6571",
+   "retrieved": "2026-11-14",
+   "source": "FHWA Standard Highway Signs 2024 (MUTCD 11th Ed.), Release 3 (file 1 of 2) vector graphics",
+   "url": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/zip_files/2024_SHS_Release_3-Regulatory_Warning_TTC_School_Signs_Vector_Graphics_1-of-2.zip",
+   "zipEntry": "R02-01 Speed Limit/R02-01 Speed Limit 24x30.svg",
+   "licence": "Public domain: a work of the U.S. Government (17 U.S.C. 105)",
+   "licenceUrl": "https://www.copyright.gov/title17/92chap1.html#105",
+   "sizeIn": [
+    24,
+    30
+   ]
+  },
+  {
+   "id": "R3-1",
+   "path": "fhwa/shs2024/R03-01/R03-01 Movement Prohibition - No Right Turn 36x36.svg",
+   "bytes": 2456,
+   "sha256": "ef936c1bb7b57e957d06baa5a063c39e0b103fd957be25612508e2475e58a150",
+   "retrieved": "2026-11-14",
+   "source": "FHWA Standard Highway Signs 2024 (MUTCD 11th Ed.), Release 3 (file 1 of 2) vector graphics",
+   "url": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/zip_files/2024_SHS_Release_3-Regulatory_Warning_TTC_School_Signs_Vector_Graphics_1-of-2.zip",
+   "zipEntry": "R03-01 Movement Prohibition - No Right Turn/R03-01 Movement Prohibition - No Right Turn 36x36.svg",
+   "licence": "Public domain: a work of the U.S. Government (17 U.S.C. 105)",
+   "licenceUrl": "https://www.copyright.gov/title17/92chap1.html#105",
+   "sizeIn": [
+    36,
+    36
+   ]
+  },
+  {
+   "id": "R3-2",
+   "path": "fhwa/shs2024/R03-02/R03-02 Movement Prohibition - No Left Turn 36x36.svg",
+   "bytes": 2498,
+   "sha256": "633a2542b3ef544d438c090ba0f418aa0676eda4a99dc033e95830dcc8ccd93e",
+   "retrieved": "2026-11-14",
+   "source": "FHWA Standard Highway Signs 2024 (MUTCD 11th Ed.), Release 3 (file 1 of 2) vector graphics",
+   "url": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/zip_files/2024_SHS_Release_3-Regulatory_Warning_TTC_School_Signs_Vector_Graphics_1-of-2.zip",
+   "zipEntry": "R03-02 Movement Prohibition - No Left Turn/R03-02 Movement Prohibition - No Left Turn 36x36.svg",
+   "licence": "Public domain: a work of the U.S. Government (17 U.S.C. 105)",
+   "licenceUrl": "https://www.copyright.gov/title17/92chap1.html#105",
+   "sizeIn": [
+    36,
+    36
+   ]
+  },
+  {
+   "id": "R3-7R",
+   "path": "fhwa/shs2024/R03-07R/R03-07R Right Lane Must Turn Right 30x30.svg",
+   "bytes": 51950,
+   "sha256": "ad52246ed866ba928bae3ee647314b1bff1e87e4db26d0e9185fa8740be5073a",
+   "retrieved": "2026-11-14",
+   "source": "FHWA Standard Highway Signs 2024 (MUTCD 11th Ed.), Release 2 vector graphics",
+   "url": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/zip_files/2024_SHS_Release_2-New_Regulatory_TTC_School_Signs_Vector_Graphics.zip",
+   "zipEntry": "R03-07 Right (Left) Lane Must Turn Right (Left)/R03-07R Right Lane Must Turn Right 30x30.svg",
+   "licence": "Public domain: a work of the U.S. Government (17 U.S.C. 105)",
+   "licenceUrl": "https://www.copyright.gov/title17/92chap1.html#105",
+   "sizeIn": [
+    30,
+    30
+   ]
+  },
+  {
+   "id": "R3-11e",
+   "path": "fhwa/shs2024/R03-11e/R03-11e Preferential Lane Operation - Full-Time (Right Lane Buses Only) (post-mounted) 30x42.svg",
+   "bytes": 52150,
+   "sha256": "e02eec64873972da4d821a8c56539c639c1171098f29b817b7d7adf1826c4cac",
+   "retrieved": "2026-11-14",
+   "source": "FHWA Standard Highway Signs 2024 (MUTCD 11th Ed.), Release 2 vector graphics",
+   "url": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/zip_files/2024_SHS_Release_2-New_Regulatory_TTC_School_Signs_Vector_Graphics.zip",
+   "zipEntry": "R03-11e Preferential Lane Operation - Full-Time (Right Lane Buses Only) (post-mounted)/R03-11e Preferential Lane Operation - Full-Time (Right Lane Buses Only) (post-mounted) 30x42.svg",
+   "licence": "Public domain: a work of the U.S. Government (17 U.S.C. 105)",
+   "licenceUrl": "https://www.copyright.gov/title17/92chap1.html#105",
+   "sizeIn": [
+    30,
+    42
+   ]
+  },
+  {
+   "id": "R5-1",
+   "path": "fhwa/shs2024/R05-01/R05-01 Do Not Enter 30x30.svg",
+   "bytes": 2822,
+   "sha256": "979e959035f839e285a530dabcb09de354ed26d79e197d9006968e5af64f0782",
+   "retrieved": "2026-11-14",
+   "source": "FHWA Standard Highway Signs 2024 (MUTCD 11th Ed.), Release 3 (file 1 of 2) vector graphics",
+   "url": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/zip_files/2024_SHS_Release_3-Regulatory_Warning_TTC_School_Signs_Vector_Graphics_1-of-2.zip",
+   "zipEntry": "R05-01 Do Not Enter/R05-01 Do Not Enter 30x30.svg",
+   "licence": "Public domain: a work of the U.S. Government (17 U.S.C. 105)",
+   "licenceUrl": "https://www.copyright.gov/title17/92chap1.html#105",
+   "sizeIn": [
+    30,
+    30
+   ]
+  },
+  {
+   "id": "R6-1R",
+   "path": "fhwa/shs2024/R06-01R/R06-01R One Way 36x12.svg",
+   "bytes": 2175,
+   "sha256": "7b3da6948ee5e42ccffe94b3b3fd19406bee50592a7630bc507b058ebd14fd02",
+   "retrieved": "2026-11-14",
+   "source": "FHWA Standard Highway Signs 2024 (MUTCD 11th Ed.), Release 4 vector graphics",
+   "url": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/zip_files/2024_SHS_Release_4-Regulatory_Warning_TTC_School_Signs_Vector_Graphics.zip",
+   "zipEntry": "R06-01 One Way/R06-01R One Way 36x12.svg",
+   "licence": "Public domain: a work of the U.S. Government (17 U.S.C. 105)",
+   "licenceUrl": "https://www.copyright.gov/title17/92chap1.html#105",
+   "sizeIn": [
+    36,
+    12
+   ]
+  },
+  {
+   "id": "R6-1L",
+   "path": "fhwa/shs2024/R06-01L/R06-01L One Way 36x12.svg",
+   "bytes": 2240,
+   "sha256": "125c939e1d0766f11a956f266db806a59963db5674fc8d6b9d3e98a7b9df1986",
+   "retrieved": "2026-11-14",
+   "source": "FHWA Standard Highway Signs 2024 (MUTCD 11th Ed.), Release 4 vector graphics",
+   "url": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/zip_files/2024_SHS_Release_4-Regulatory_Warning_TTC_School_Signs_Vector_Graphics.zip",
+   "zipEntry": "R06-01 One Way/R06-01L One Way 36x12.svg",
+   "licence": "Public domain: a work of the U.S. Government (17 U.S.C. 105)",
+   "licenceUrl": "https://www.copyright.gov/title17/92chap1.html#105",
+   "sizeIn": [
+    36,
+    12
+   ]
+  },
+  {
+   "id": "R7-8",
+   "path": "fhwa/shs2024/R07-08/R07-08 Reserved Parking - Accessible 12x18.svg",
+   "bytes": 4673,
+   "sha256": "740fa0a85d1bffee5cfc6ec4b3e4f92ba04c74c005fed92d1cc031e4a2484316",
+   "retrieved": "2026-11-14",
+   "source": "FHWA Standard Highway Signs 2024 (MUTCD 11th Ed.), Release 3 (file 1 of 2) vector graphics",
+   "url": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/zip_files/2024_SHS_Release_3-Regulatory_Warning_TTC_School_Signs_Vector_Graphics_1-of-2.zip",
+   "zipEntry": "R07-08 Reserved Parking - Accessible/R07-08 Reserved Parking - Accessible 12x18.svg",
+   "licence": "Public domain: a work of the U.S. Government (17 U.S.C. 105)",
+   "licenceUrl": "https://www.copyright.gov/title17/92chap1.html#105",
+   "sizeIn": [
+    12,
+    18
+   ]
+  },
+  {
+   "id": "R7-20",
+   "path": "fhwa/shs2024/R07-20/R07-20 Parking Fee Station, Multispace Meter 24x18.svg",
+   "bytes": 3678,
+   "sha256": "404b3fa4b2f0a92f6f507d47b1d348c325631df5f8903193fdba60b9505de975",
+   "retrieved": "2026-11-14",
+   "source": "FHWA Standard Highway Signs 2024 (MUTCD 11th Ed.), Release 3 (file 1 of 2) vector graphics",
+   "url": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/zip_files/2024_SHS_Release_3-Regulatory_Warning_TTC_School_Signs_Vector_Graphics_1-of-2.zip",
+   "zipEntry": "R07-20 Parking Fee Station, Multispace Meter/R07-20 Parking Fee Station, Multispace Meter 24x18.svg",
+   "licence": "Public domain: a work of the U.S. Government (17 U.S.C. 105)",
+   "licenceUrl": "https://www.copyright.gov/title17/92chap1.html#105",
+   "sizeIn": [
+    24,
+    18
+   ]
+  },
+  {
+   "id": "R8-3",
+   "path": "fhwa/shs2024/R08-03/R08-03 No Parking (symbol) 24x24.svg",
+   "bytes": 1719,
+   "sha256": "d7de4b69f25afc3f84d9ec33d82403fbc2c3da1173728b8a0651f9d99bff7a11",
+   "retrieved": "2026-11-14",
+   "source": "FHWA Standard Highway Signs 2024 (MUTCD 11th Ed.), Release 3 (file 1 of 2) vector graphics",
+   "url": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/zip_files/2024_SHS_Release_3-Regulatory_Warning_TTC_School_Signs_Vector_Graphics_1-of-2.zip",
+   "zipEntry": "R08-03 No Parking (symbol)/R08-03 No Parking (symbol) 24x24.svg",
+   "licence": "Public domain: a work of the U.S. Government (17 U.S.C. 105)",
+   "licenceUrl": "https://www.copyright.gov/title17/92chap1.html#105",
+   "sizeIn": [
+    24,
+    24
+   ]
+  },
+  {
+   "id": "S1-1",
+   "path": "fhwa/shs2024/S01-01/S01-01 School 30x30.svg",
+   "bytes": 2734,
+   "sha256": "98efc7be478a0ccb3ea7f33742bbb5b7d0b0fd275b7185c1d91e1d110315f111",
+   "retrieved": "2026-11-14",
+   "source": "FHWA Standard Highway Signs 2024 (MUTCD 11th Ed.), Release 3 (file 1 of 2) vector graphics",
+   "url": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/zip_files/2024_SHS_Release_3-Regulatory_Warning_TTC_School_Signs_Vector_Graphics_1-of-2.zip",
+   "zipEntry": "S01-01 School/S01-01 School 30x30.svg",
+   "licence": "Public domain: a work of the U.S. Government (17 U.S.C. 105)",
+   "licenceUrl": "https://www.copyright.gov/title17/92chap1.html#105",
+   "sizeIn": [
+    30,
+    30
+   ]
+  },
+  {
+   "id": "W8-1",
+   "path": "fhwa/shs2024/W08-01/W08-01 Bump 30x30.svg",
+   "bytes": 2491,
+   "sha256": "1136a5f1316c11bdf8e50bbb6a4bd950a763110c0c234d7d06d813e9f7ca7983",
+   "retrieved": "2026-11-14",
+   "source": "FHWA Standard Highway Signs 2024 (MUTCD 11th Ed.), Release 3 (file 1 of 2) vector graphics",
+   "url": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/zip_files/2024_SHS_Release_3-Regulatory_Warning_TTC_School_Signs_Vector_Graphics_1-of-2.zip",
+   "zipEntry": "W08-01 Bump/W08-01 Bump 30x30.svg",
+   "licence": "Public domain: a work of the U.S. Government (17 U.S.C. 105)",
+   "licenceUrl": "https://www.copyright.gov/title17/92chap1.html#105",
+   "sizeIn": [
+    30,
+    30
+   ]
+  },
+  {
+   "id": "W11-2",
+   "path": "fhwa/shs2024/W11-02/W11-02 Pedestrian 30x30.svg",
+   "bytes": 2090,
+   "sha256": "4b632e8282845447038386b3aafdeba8f656b71271dc26c9a2c80e5c59932659",
+   "retrieved": "2026-11-14",
+   "source": "FHWA Standard Highway Signs 2024 (MUTCD 11th Ed.), Release 3 (file 1 of 2) vector graphics",
+   "url": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/zip_files/2024_SHS_Release_3-Regulatory_Warning_TTC_School_Signs_Vector_Graphics_1-of-2.zip",
+   "zipEntry": "W11-02 Pedestrian/W11-02 Pedestrian 30x30.svg",
+   "licence": "Public domain: a work of the U.S. Government (17 U.S.C. 105)",
+   "licenceUrl": "https://www.copyright.gov/title17/92chap1.html#105",
+   "sizeIn": [
+    30,
+    30
+   ]
+  },
+  {
+   "id": "W16-7PL",
+   "path": "fhwa/shs2024/W16-07PL/W16-07PL Downward Diagonal Arrow (plaque) 12x6.svg",
+   "bytes": 1366,
+   "sha256": "93b9af25851c8b3766c6c6e93abebaef72c74b57515fa089360bcdef56dac58a",
+   "retrieved": "2026-11-14",
+   "source": "FHWA Standard Highway Signs 2024 (MUTCD 11th Ed.), Release 3 (file 1 of 2) vector graphics",
+   "url": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/zip_files/2024_SHS_Release_3-Regulatory_Warning_TTC_School_Signs_Vector_Graphics_1-of-2.zip",
+   "zipEntry": "W16-07P Downward Diagonal Arrow (plaque)/W16-07PL Downward Diagonal Arrow (plaque) 12x6.svg",
+   "licence": "Public domain: a work of the U.S. Government (17 U.S.C. 105)",
+   "licenceUrl": "https://www.copyright.gov/title17/92chap1.html#105",
+   "sizeIn": [
+    12,
+    6
+   ]
+  },
+  {
+   "id": "W16-9P",
+   "path": "fhwa/shs2024/W16-09P/W16-09P Ahead (plaque) 24x12.svg",
+   "bytes": 1730,
+   "sha256": "a47ce352041072802a203456d01df64a7015efbf8dd32ed649948836284bd4ea",
+   "retrieved": "2026-11-14",
+   "source": "FHWA Standard Highway Signs 2024 (MUTCD 11th Ed.), Release 3 (file 1 of 2) vector graphics",
+   "url": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/zip_files/2024_SHS_Release_3-Regulatory_Warning_TTC_School_Signs_Vector_Graphics_1-of-2.zip",
+   "zipEntry": "W16-09P Ahead (plaque)/W16-09P Ahead (plaque) 24x12.svg",
+   "licence": "Public domain: a work of the U.S. Government (17 U.S.C. 105)",
+   "licenceUrl": "https://www.copyright.gov/title17/92chap1.html#105",
+   "sizeIn": [
+    24,
+    12
+   ]
+  },
+  {
+   "id": "W17-1",
+   "path": "fhwa/shs2024/W17-01/W17-01 Speed Hump 30x30.svg",
+   "bytes": 3255,
+   "sha256": "72fc96a428ee50c09bd10d656c7d9ce572ea3714171d0290e3115f5d7dca5aec",
+   "retrieved": "2026-11-14",
+   "source": "FHWA Standard Highway Signs 2024 (MUTCD 11th Ed.), Release 3 (file 1 of 2) vector graphics",
+   "url": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/zip_files/2024_SHS_Release_3-Regulatory_Warning_TTC_School_Signs_Vector_Graphics_1-of-2.zip",
+   "zipEntry": "W17-01 Speed Hump/W17-01 Speed Hump 30x30.svg",
+   "licence": "Public domain: a work of the U.S. Government (17 U.S.C. 105)",
+   "licenceUrl": "https://www.copyright.gov/title17/92chap1.html#105",
+   "sizeIn": [
+    30,
+    30
+   ]
+  },
+  {
+   "id": "W20-1",
+   "path": "fhwa/shs2024/W20-01/W20-01 Road Work (with distance) Ahead 30x30.svg",
+   "bytes": 3903,
+   "sha256": "ee30f0bfee19fb68535903e444875704b4a45021e84c10ebd3a665ee849fee20",
+   "retrieved": "2026-11-14",
+   "source": "FHWA Standard Highway Signs 2024 (MUTCD 11th Ed.), Release 4 vector graphics",
+   "url": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/zip_files/2024_SHS_Release_4-Regulatory_Warning_TTC_School_Signs_Vector_Graphics.zip",
+   "zipEntry": "W20-01 Road (Street) Work (with distance)/W20-01 Road Work (with distance) Ahead 30x30.svg",
+   "licence": "Public domain: a work of the U.S. Government (17 U.S.C. 105)",
+   "licenceUrl": "https://www.copyright.gov/title17/92chap1.html#105",
+   "sizeIn": [
+    30,
+    30
+   ]
+  },
+  {
+   "id": "D3-1a",
+   "path": "fhwa/shs2024/D03-01a/D03-01a Street Name with Route Sign (1 line) VARx8.svg",
+   "bytes": 79861,
+   "sha256": "afc3530376288ea23617300cdade1dc3f872295b1cecfcfb8dea099d107c8d69",
+   "retrieved": "2026-11-14",
+   "source": "FHWA Standard Highway Signs 2024 (MUTCD 11th Ed.), Release 6 vector graphics",
+   "url": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/zip_files/2024_SHS_Release_6-Signs_Vector_Graphics.zip",
+   "zipEntry": "SHS Release 6/D03-01a Street Name with Route Sign (1 line)/D03-01a Street Name with Route Sign (1 line) VARx8.svg",
+   "licence": "Public domain: a work of the U.S. Government (17 U.S.C. 105)",
+   "licenceUrl": "https://www.copyright.gov/title17/92chap1.html#105"
+  },
+  {
+   "id": "D11-1",
+   "path": "fhwa/shs2024/D11-01/D11-01 Bike Route 24x18.svg",
+   "bytes": 73486,
+   "sha256": "14a4900294c89a3cd5d576e9f904da5c7757733ebf2da94f0b975a57fa7736be",
+   "retrieved": "2026-11-14",
+   "source": "FHWA Standard Highway Signs 2024 (MUTCD 11th Ed.), Release 6 vector graphics",
+   "url": "https://mutcd.fhwa.dot.gov/kno-shs_2024-release-status/zip_files/2024_SHS_Release_6-Signs_Vector_Graphics.zip",
+   "zipEntry": "SHS Release 6/D11-01 Bike Route/D11-01 Bike Route 24x18.svg",
+   "licence": "Public domain: a work of the U.S. Government (17 U.S.C. 105)",
+   "licenceUrl": "https://www.copyright.gov/title17/92chap1.html#105",
+   "sizeIn": [
+    24,
+    18
+   ]
+  },
+  {
+   "id": "R26(CA)",
+   "path": "caltrans/r/f0019008-r26-a11y.pdf",
+   "bytes": 111215,
+   "sha256": "bd9e3edc6b72fd8bb5d1deb1ce8fa6b4f2f8416792f657b2970c0ff749241d40",
+   "retrieved": "2026-11-14",
+   "source": "Caltrans California Sign Specification sheet R26(CA): NO PARKING ANY TIME (3/22/91)",
+   "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/signs/r/f0019008-r26-a11y.pdf",
+   "licence": "Public domain per the Caltrans Conditions of Use (\"information presented on this website, unless otherwise indicated, is considered in the public domain\")",
+   "licenceUrl": "https://dot.ca.gov/conditions-of-use"
+  },
+  {
+   "id": "R30B(CA)",
+   "path": "caltrans/r/r30b-ca-a11y.pdf",
+   "bytes": 1081640,
+   "sha256": "21f3c24d0f3fa0c4cf6028df933afc1d901c54143c0632e54d58ed9d9b65300d",
+   "retrieved": "2026-11-14",
+   "source": "Caltrans California Sign Specification sheet R30B(CA): No Parking 10AM TO 12PM WEDNESDAY STREET SWEEPING (3/1/24)",
+   "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/signs/r/r30b-ca-a11y.pdf",
+   "licence": "Public domain per the Caltrans Conditions of Use (\"information presented on this website, unless otherwise indicated, is considered in the public domain\")",
+   "licenceUrl": "https://dot.ca.gov/conditions-of-use"
+  },
+  {
+   "id": "R32(CA)",
+   "path": "caltrans/r/f0019038-r32-a11y.pdf",
+   "bytes": 116728,
+   "sha256": "e29b0348b93e5cd2bab0d658cff1c038915e989b02d0b2945c5852723bef3cec",
+   "retrieved": "2026-11-14",
+   "source": "Caltrans California Sign Specification sheet R32(CA): Limited Hour Parking Specific Hours (3/22/91)",
+   "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/signs/r/f0019038-r32-a11y.pdf",
+   "licence": "Public domain per the Caltrans Conditions of Use (\"information presented on this website, unless otherwise indicated, is considered in the public domain\")",
+   "licenceUrl": "https://dot.ca.gov/conditions-of-use"
+  },
+  {
+   "id": "R32C(CA)",
+   "path": "caltrans/r/r32c-a11y.pdf",
+   "bytes": 41818,
+   "sha256": "f0cf1de2b23935c005ec6c2e50d4344d49e236e93c221bffbc13bda113b6e6ef",
+   "retrieved": "2026-11-14",
+   "source": "Caltrans California Sign Specification sheet R32C(CA): 2 HOUR PARKING 8AM TO 6PM DISTRICT 7 PERMITS EXEMPT (2/17/09)",
+   "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/signs/r/r32c-a11y.pdf",
+   "licence": "Public domain per the Caltrans Conditions of Use (\"information presented on this website, unless otherwise indicated, is considered in the public domain\")",
+   "licenceUrl": "https://dot.ca.gov/conditions-of-use"
+  },
+  {
+   "id": "R39-1(CA)",
+   "path": "caltrans/r/f0019057-r39-1-a11y.pdf",
+   "bytes": 81659,
+   "sha256": "4f10c93da9feece7e2bc0cf0a25b4ec0391bcdfeb5d682d36b52058f679ade40",
+   "retrieved": "2026-11-14",
+   "source": "Caltrans California Sign Specification sheet R39-1(CA): NO DOUBLE PARKING ANYTIME COMMERCIAL VEHICLES INCLUDED (1/21/10)",
+   "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/signs/r/f0019057-r39-1-a11y.pdf",
+   "licence": "Public domain per the Caltrans Conditions of Use (\"information presented on this website, unless otherwise indicated, is considered in the public domain\")",
+   "licenceUrl": "https://dot.ca.gov/conditions-of-use"
+  },
+  {
+   "id": "R99(CA)",
+   "path": "caltrans/r/r99-r99b-a11y.pdf",
+   "bytes": 53317,
+   "sha256": "c5f80988ae9362bd24e95cdbfd5bbf0b1bae897be64e63657dfeb135b9ca3474",
+   "retrieved": "2026-11-14",
+   "source": "Caltrans California Sign Specification sheet R99(CA): Accessible Parking Only (7/1/08)",
+   "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/signs/r/r99-r99b-a11y.pdf",
+   "licence": "Public domain per the Caltrans Conditions of Use (\"information presented on this website, unless otherwise indicated, is considered in the public domain\")",
+   "licenceUrl": "https://dot.ca.gov/conditions-of-use"
+  },
+  {
+   "id": "overpass-release-zip",
+   "path": "overpass/overpass-3.0.5.zip",
+   "bytes": 5431410,
+   "sha256": "87d738d647546f95996f8a2ad9e2d4b19f93718e7a1695a3831d2d900d132562",
+   "retrieved": "2026-11-14",
+   "source": "Overpass 3.0.5 release archive (Red Hat)",
+   "url": "https://github.com/RedHatOfficial/Overpass/releases/download/v3.0.5/overpass-3.0.5.zip",
+   "licence": "SIL Open Font License 1.1 (Overpass is offered under OFL-1.1 or LGPL-2.1; used under OFL-1.1)",
+   "licenceUrl": "https://github.com/RedHatOfficial/Overpass/blob/master/LICENSE.md"
+  },
+  {
+   "id": "overpass-regular",
+   "path": "overpass/x/Overpass-3.0.5/webfonts/overpass-webfont/overpass-regular.ttf",
+   "bytes": 96096,
+   "sha256": "5a0305fcc71e7b4e5b942f62e00315788be72ea7f3a3bda55098ad7f404e78e8",
+   "retrieved": "2026-11-14",
+   "source": "Overpass 3.0.5 (Red Hat)",
+   "url": "https://github.com/RedHatOfficial/Overpass/releases/download/v3.0.5/overpass-3.0.5.zip",
+   "archiveEntry": "Overpass-3.0.5/webfonts/overpass-webfont/overpass-regular.ttf",
+   "licence": "SIL Open Font License 1.1 (Overpass is offered under OFL-1.1 or LGPL-2.1; used under OFL-1.1)",
+   "licenceUrl": "https://github.com/RedHatOfficial/Overpass/blob/master/LICENSE.md"
+  },
+  {
+   "id": "overpass-semibold",
+   "path": "overpass/x/Overpass-3.0.5/webfonts/overpass-webfont/overpass-semibold.ttf",
+   "bytes": 93420,
+   "sha256": "ee93e47e22306e0669de5b05e6dd9dee8050b36bb77c8ad5371ff2d3e807334b",
+   "retrieved": "2026-11-14",
+   "source": "Overpass 3.0.5 (Red Hat)",
+   "url": "https://github.com/RedHatOfficial/Overpass/releases/download/v3.0.5/overpass-3.0.5.zip",
+   "archiveEntry": "Overpass-3.0.5/webfonts/overpass-webfont/overpass-semibold.ttf",
+   "licence": "SIL Open Font License 1.1 (Overpass is offered under OFL-1.1 or LGPL-2.1; used under OFL-1.1)",
+   "licenceUrl": "https://github.com/RedHatOfficial/Overpass/blob/master/LICENSE.md"
+  },
+  {
+   "id": "overpass-bold",
+   "path": "overpass/x/Overpass-3.0.5/webfonts/overpass-webfont/overpass-bold.ttf",
+   "bytes": 94520,
+   "sha256": "e6f3ec3d7a14a9819e9b2726cfa8d86ae8b6594990247a26cf0adafa3e03fb84",
+   "retrieved": "2026-11-14",
+   "source": "Overpass 3.0.5 (Red Hat)",
+   "url": "https://github.com/RedHatOfficial/Overpass/releases/download/v3.0.5/overpass-3.0.5.zip",
+   "archiveEntry": "Overpass-3.0.5/webfonts/overpass-webfont/overpass-bold.ttf",
+   "licence": "SIL Open Font License 1.1 (Overpass is offered under OFL-1.1 or LGPL-2.1; used under OFL-1.1)",
+   "licenceUrl": "https://github.com/RedHatOfficial/Overpass/blob/master/LICENSE.md"
+  },
+  {
+   "id": "overpass-licence",
+   "path": "overpass/x/Overpass-3.0.5/LICENSE.md",
+   "bytes": 4422,
+   "sha256": "3236e099bead8e30bc7fff46c76728bc59c1c5dc9948b07440f5e62c81d3be54",
+   "retrieved": "2026-11-14",
+   "source": "Overpass 3.0.5 (Red Hat)",
+   "url": "https://github.com/RedHatOfficial/Overpass/releases/download/v3.0.5/overpass-3.0.5.zip",
+   "archiveEntry": "Overpass-3.0.5/LICENSE.md",
+   "licence": "SIL Open Font License 1.1 (Overpass is offered under OFL-1.1 or LGPL-2.1; used under OFL-1.1)",
+   "licenceUrl": "https://github.com/RedHatOfficial/Overpass/blob/master/LICENSE.md"
+  }
+ ],
+ "downloadedBytes": 7222289
+}

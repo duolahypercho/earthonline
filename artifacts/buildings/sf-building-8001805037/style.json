@@ -1,0 +1,84 @@
+{
+  "builder": "house",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "cedar-shingle",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "seed": 42,
+  "storeysSeen": 2,
+  "groundM": 2.6,
+  "roofLevelM": 5.2,
+  "notes": "1436 La Playa (1900 roll, 2 storeys; LiDAR median 7.1 m), by eye: a dark shingle house of several parts behind the board fence, with a street-facing gable over the front part in dark composition shingle, a small dormer, and white-framed windows in pairs on both storeys.",
+  "wall": "cedar-shingle",
+  "wallTint": "#8a8a8a",
+  "roofForm": {
+    "form": "front-gable",
+    "depthM": 6.0,
+    "eaveM": 0.25,
+    "material": "asphalt-roof",
+    "tint": "#3f3d3a",
+    "pediment": false,
+    "gableWindow": {
+      "widthM": 0.9,
+      "heightM": 0.8
+    }
+  },
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.15,
+      "to": 0.42,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        2,
+        2
+      ]
+    },
+    {
+      "storey": 1,
+      "from": 0.58,
+      "to": 0.85,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        2,
+        2
+      ]
+    },
+    {
+      "storey": 0,
+      "from": 0.2,
+      "to": 0.45,
+      "sill": 1.0,
+      "head": 2.2,
+      "panes": [
+        2,
+        2
+      ]
+    }
+  ],
+  "rect": [
+    -6.2,
+    5.8,
+    0.75,
+    6.4
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-274847455",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-274847455",
+    "walkIndex": 7540,
+    "builder": "blender",
+    "street": "Geary Boulevard",
+    "side": "A",
+    "addr": "389 9th Avenue",
+    "sourceHeight": 17,
+    "sourceLevels": 3,
+    "frontEdge": 3,
+    "status": "review",
+    "lidarHeightM": 16.8,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b274847455.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b274847455.js"
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b274847455.js",
+    "sha256": "3212fcb1dfe0d26bc48304f3d8d44b3d790808347363a924cc79f491f0de2f3b",
+    "pass": "b274847455-blender-bebfe2af-b38f8a"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-274847455/provenance.json",
+    "sha256": "f6460985ebbadfcfa290938dd9fda84dc2e59355de1f6d529c8a76d0570f1d0c",
+    "pass": "b274847455-blender-bebfe2af-b38f8a"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-274847455/exterior.glb",
+      "sha256": "9a2349ebdc484ddf647c341cdfb6969649aed61faac7511ac78a77b6e8911e63",
+      "bytes": 591704
+    },
+    {
+      "role": "interior",
+      "url": "/assets/buildings/sf-building-274847455/interior.glb",
+      "sha256": "284abffdd4a32cf6112d76d6902b10f6e9e07100b5c8ae0e5d4eef8fccacebdb",
+      "bytes": 189700
+    },
+    {
+      "role": "fine-s0",
+      "url": "/assets/buildings/sf-building-274847455/fine-s0.glb",
+      "sha256": "77498e16185f1841ec943abc26ab57f80f0ef6ac8fae437ca72ddccd86669545",
+      "bytes": 28892
+    },
+    {
+      "role": "fine-s1",
+      "url": "/assets/buildings/sf-building-274847455/fine-s1.glb",
+      "sha256": "a9802fc145767725f5465387029944c70208149e0df571d9da09b289f73a7363",
+      "bytes": 196724
+    },
+    {
+      "role": "fine-s2",
+      "url": "/assets/buildings/sf-building-274847455/fine-s2.glb",
+      "sha256": "b07ea635ce6cf3fc0e71ecfa028b20eac02b1e3ddee2c7ed9a23f586938271a1",
+      "bytes": 202580
+    }
+  ],
+  "generatedAt": "2026-10-02T19:55:55.391Z",
+  "base": {
+    "id": "sf-building-274847455",
+    "walkIndex": 7540,
+    "builder": "blender",
+    "street": "Geary Boulevard",
+    "side": "A",
+    "addr": "389 9th Avenue",
+    "sourceHeight": 17,
+    "sourceLevels": 3,
+    "frontEdge": 3,
+    "status": "review",
+    "lidarHeightM": 16.8,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b274847455.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b274847455.js"
+  }
+}

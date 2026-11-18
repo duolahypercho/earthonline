@@ -1,0 +1,78 @@
+{
+  "seed": 1,
+  "notes": "r12 M: tall 1-storey 1943 industrial shed (DataSF footprint, no OSM way) re-clad in dark-stained vertical timber boards; a flat timber canopy over the entrance, a boarded double gate on the left, a glazed door, and a small window at the right; plain dark parapet cap. Round 22: dark cafe front; awning kept canvas; see tint.",
+  "wall": "wood-siding",
+  "wallTint": "#4f3e33",
+  "trim": "wood-siding",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "blankUpper": true,
+  "coping": {
+    "heightM": 0.3,
+    "projectionM": 0.06,
+    "material": "painted-steel-mid",
+    "tint": "#3a3432"
+  },
+  "frame": "painted-steel",
+  "storefrontFrame": "painted-steel",
+  "bulkhead": "wood-siding",
+  "storefrontGlass": "glass-dark",
+  "ground": "shop",
+  "upper": "office",
+  "storefront": {
+    "awning": true,
+    "transomM": 0.35,
+    "layout": [
+      {
+        "kind": "gate",
+        "from": 0.06,
+        "to": 0.42,
+        "material": "wood-siding"
+      },
+      {
+        "kind": "door",
+        "from": 0.48,
+        "to": 0.62,
+        "leaf": "painted-steel"
+      },
+      {
+        "kind": "window",
+        "from": 0.66,
+        "to": 0.93
+      }
+    ],
+    "headDropM": 2.8
+  },
+  "awning": "canvas-plain",
+  "awningSpans": [
+    {
+      "from": 0.4,
+      "to": 0.96
+    }
+  ],
+  "weathering": {
+    "patches": {
+      "strength": 0.07,
+      "metres": 1.6,
+      "top": 4.0,
+      "mottle": 0.05
+    },
+    "grime": {
+      "strength": 0.12,
+      "metres": 3.0
+    }
+  },
+  "pilasters": {
+    "at": [
+      0.03,
+      0.45,
+      0.64,
+      0.95
+    ],
+    "widthM": 0.2,
+    "projectionM": 0.1,
+    "material": "painted-white",
+    "tint": "#3a2a20"
+  }
+}

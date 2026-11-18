@@ -1,0 +1,112 @@
+{
+ "seed": 39,
+ "notes": "1909 cream horizontal-clapboard three-storey flats, long front. Ground: tall window left, a recessed arched entry with stair and maroon surround, plain window and a dark garage/gate opening at the right end, a dark red band at the base. Storeys 2-3: regular narrow sash windows in pale surrounds, two with small arched maroon hoods, no bays on the front. Applied: cream lap siding, maroon belt stripe, ground: small window, round-arched recessed entry with stair and dark door (door head capped at 2.8 m so it no longer reads as a large arched garage), dark brown sashes, arched brown hoods over a centre window of two upper storeys, plain eave line. Skipped: corner bay stack (not this building). Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Lap relief on, warm cream wall, brown frames, corner bay added, hand.py adds belt band, window hoods and portico. Lap siding on the ground storey too (above and below the maroon belt), so lap relief now starts at 0.3 m instead of 5.0 m. Lifted/converted once to #f2ead8.",
+ "wall": "painted-clapboard",
+ "wallTint": "#f2ead8",
+ "trim": "painted-white@efe8d4",
+ "frame": "painted-white@4a2a26",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@efe8d4",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-clapboard@e6d6b0",
+ "cornice": true,
+ "corniceProjectionM": 0.12,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.24,
+  0.38,
+  0.52,
+  0.66,
+  0.8,
+  0.93
+ ],
+ "bays": [
+  {
+   "at": 0.07,
+   "widthM": 2.4,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "toStorey": 2,
+   "material": "painted-clapboard",
+   "tint": "#e6d6b0",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.4,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "hbBayGlazing": {
+  "marginM": 0.2,
+  "maxW": 1.05,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#4a2a26",
+  "sashM": 0.09,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.37,
+    "to": 0.43,
+    "kind": "window",
+    "headM": 2.2
+   },
+   {
+    "from": 0.48,
+    "to": 0.6,
+    "kind": "door",
+    "stair": true,
+    "leaf": "wood-siding@2e2a26",
+    "headM": 2.8,
+    "arch": {
+     "type": "round"
+    }
+   },
+   {
+    "from": 0.72,
+    "to": 0.8,
+    "kind": "window",
+    "headM": 2.0
+   },
+   {
+    "from": 0.9,
+    "to": 0.99,
+    "kind": "garage",
+    "material": "painted-white",
+    "tint": "#3a3028"
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "hyDLap": {
+  "pitchM": 0.15
+ }
+}

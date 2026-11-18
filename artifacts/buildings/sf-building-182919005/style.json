@@ -1,0 +1,256 @@
+{
+ "seed": 11,
+ "notes": "1958 stucco apartment block on the North Point corner, W side of Hyde. Four storeys seen (storeysSeen: a dark street storey plus three residential storeys; roll 3): smooth tan-greige stucco (lit c8bca8) over a dark grey-brown painted street band (6e645c), plain punched dark-framed windows, a black steel fire escape left of centre, a glazed entry under a glazed stair strip right of centre with a low stair tower on the roof over it, flat coping. The stacked steel balconies on the south half have no key. North Point face (edge 3) is a windowed flank. Applied a warmer, deeper taupe stucco c0b29e, the dark street band 686058, a glazed lobby double door at 0.52-0.63 with a flat dark canopy and a dark sign plate at 0.77 (no roll-up door), a projecting glazed stair tower at 0.52-0.63 (glazed bay, 2x2 panes a storey) rising a storey above the roof (roof block), the fire escape directly left of it (0.445), wide dark-framed sliders 1.5 m (0.10, a pair at 0.285/0.355 on the left wing, one at 0.73 on the right wing), a thin dark coping. The two continuous balconies on the left wing and the recessed fire-escape notch have no key. Fire escape left of the tower and one window per storey on the right wing are already the game hand. Applied: the glazed stair shaft nearly flush (projection 0.08), dark-bronze frames 3a3430, wider sliders 1.75 m, sills in the wall colour (no light sill band). Kept: stucco c0b29e, street band 686058. Not applied (no key): the two cantilevered balconies on the left wing. Rework: wall greige c7bcad; two black-railed cantilever balconies on storeys 2-3 of the left wing (balconyCanopies, canopy hung below, negligible); fire escape gets a drop ladder (fireEscapes); slot-vent-like plaque moved to 0.83 as a sign plate; penthouse gets two dark glazed panes as plaques. Dark ground band stays 686058 (charcoal-brown 4a443e is under the 0.10 luminance floor). StoreysSeen removed: the spec already carries 4 storeys (2.7/2.55) and the new check rejects upperM under the minimum. Fits under LiDAR 11.77); warm beige body bcae9b; full-height dark taupe ground band 645a52 (lifted over 0.10); tower-top panes moved up. Tower rising a full level above the parapet is capped by the roof-block allowance (no key). Wall taupe-beige c4b8a4; lobby entry gets glazed sidelights either side of the double door under a wider flat canopy. Skipped: tower one storey above the parapet (the roof block is capped to the LiDAR height allowance, no key lifts it), ground band stays 645a52 (4a4642 is below the 0.10 luminance floor), window rail removal (no key), balconies and 3-landing escape already match. Rework bay-northpoint rd2: wall c7b8a4; stair tower now rises above the main roofline (floorsM 3.0/2.4 + wallTopM 10.4 so the roofBlock gets ~1.9 m) with a two-pane window on top; the continuous glazed bay is replaced by separate two-pane windows per storey with stucco spandrels (storeyWindowSpans) and the right wing has one wide window per floor; entry glass group and flat canopy moved right of the tower centreline with a dark plaque right. Base stays 645a52 (4a4541 is under the 0.10 luminance floor). Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k). GroundBand lift (2026-10-03): groundBand tint #645a52 -> #837b75 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#e3dcd2",
+ "trim": "painted-stucco@c7bcad",
+ "frame": "painted-steel@3a3430",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-steel@3a3430",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-white@837b75",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 1.75,
+ "windowSillM": 0.8,
+ "windowHeadM": 2.0,
+ "upperWindows": [],
+ "groundBand": {
+  "material": "painted-white",
+  "tint": "#837b75",
+  "topM": 3.2
+ },
+ "storefront": {
+  "bulkheadM": 0.15,
+  "transomM": 0.35,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.555,
+    "to": 0.583,
+    "kind": "window",
+    "headM": 2.5
+   },
+   {
+    "from": 0.587,
+    "to": 0.69,
+    "kind": "double-door",
+    "stair": true,
+    "leaf": "painted-steel@2c2c2e",
+    "headM": 2.5
+   },
+   {
+    "from": 0.694,
+    "to": 0.72,
+    "kind": "window",
+    "headM": 2.5
+   }
+  ]
+ },
+ "roofBlocks": [
+  {
+   "at": 0.58,
+   "widthM": 2.8,
+   "depthM": 4.0,
+   "setbackM": 0.0,
+   "material": "painted-stucco",
+   "tint": "#c9bfae"
+  }
+ ],
+ "coping": {
+  "material": "painted-steel",
+  "tint": "#3a3836",
+  "projectionM": 0.06,
+  "heightM": 0.15
+ },
+ "edgeRoles": {
+  "3": "flank"
+ },
+ "streetEdges": {
+  "3": {
+   "upperWindows": [
+    0.15,
+    0.35,
+    0.55,
+    0.75,
+    0.9
+   ],
+   "bays": [],
+   "storefront": {
+    "bulkheadM": 0.4,
+    "transomM": 0.3,
+    "pierM": 0.3,
+    "awning": false,
+    "layout": []
+   },
+   "plaques": [],
+   "roofBlocks": [],
+   "awningSpans": []
+  }
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "awning": "painted-steel@3c3834",
+ "awningSpans": [
+  {
+   "from": 0.545,
+   "to": 0.73,
+   "depthM": 1.2,
+   "riseM": 0.05,
+   "dropM": 0.02
+  }
+ ],
+ "plaques": [
+  {
+   "at": 0.552,
+   "y": 11.3,
+   "w": 0.95,
+   "h": 1.3,
+   "face": "painted-steel@3c4a5e"
+  },
+  {
+   "at": 0.608,
+   "y": 11.3,
+   "w": 0.95,
+   "h": 1.3,
+   "face": "painted-steel@3c4a5e"
+  },
+  {
+   "at": 0.58,
+   "y": 11.3,
+   "w": 0.06,
+   "h": 1.4,
+   "face": "painted-steel@3a3430"
+  },
+  {
+   "at": 0.78,
+   "y": 2.35,
+   "w": 1.5,
+   "h": 0.4,
+   "face": "painted-steel-mid@4a4a4c"
+  }
+ ],
+ "fireEscapes": [
+  {
+   "at": 0.445,
+   "widthM": 2.8,
+   "depthM": 1.0,
+   "material": "painted-steel",
+   "dropLadder": true
+  }
+ ],
+ "balconyCanopies": [
+  {
+   "widthM": 5.4,
+   "depthM": 1.1,
+   "slab": {
+    "material": "concrete-precast",
+    "tint": "#a89e90"
+   },
+   "rail": {
+    "material": "painted-steel",
+    "tint": "#3a3836"
+   },
+   "canopy": "below",
+   "canopyDepthM": 0.15,
+   "fallM": 0.05,
+   "canopyTopM": -0.3,
+   "at": 0.22,
+   "storey": 2
+  },
+  {
+   "widthM": 5.4,
+   "depthM": 1.1,
+   "slab": {
+    "material": "concrete-precast",
+    "tint": "#a89e90"
+   },
+   "rail": {
+    "material": "painted-steel",
+    "tint": "#3a3836"
+   },
+   "canopy": "below",
+   "canopyDepthM": 0.15,
+   "fallM": 0.05,
+   "canopyTopM": -0.3,
+   "at": 0.22,
+   "storey": 3
+  }
+ ],
+ "streetStills": true,
+ "floorsM": {
+  "groundM": 3.0,
+  "upperM": 2.4
+ },
+ "wallTopM": 10.4,
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.085,
+     0.16
+    ],
+    [
+     0.27,
+     0.39
+    ],
+    [
+     0.525,
+     0.635
+    ],
+    [
+     0.68,
+     0.785
+    ]
+   ],
+   "sillM": 0.6,
+   "headM": 2.0
+  },
+  "2": {
+   "spans": [
+    [
+     0.085,
+     0.16
+    ],
+    [
+     0.27,
+     0.39
+    ],
+    [
+     0.525,
+     0.635
+    ],
+    [
+     0.68,
+     0.785
+    ]
+   ],
+   "sillM": 0.6,
+   "headM": 2.0
+  },
+  "3": {
+   "spans": [
+    [
+     0.085,
+     0.16
+    ],
+    [
+     0.27,
+     0.39
+    ],
+    [
+     0.525,
+     0.635
+    ],
+    [
+     0.68,
+     0.785
+    ]
+   ],
+   "sillM": 0.6,
+   "headM": 2.0
+  }
+ }
+}

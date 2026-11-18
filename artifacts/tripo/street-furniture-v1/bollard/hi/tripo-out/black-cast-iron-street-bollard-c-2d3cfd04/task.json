@@ -1,0 +1,29 @@
+{
+  "task_id": "2d3cfd04-b41e-4dd7-9942-271a2ea97b27",
+  "type": "text_to_model",
+  "status": "success",
+  "input": {
+    "pbr": true,
+    "prompt": "black cast iron street bollard, cylindrical post with rounded cap and two decorative rings, realistic, lightly weathered",
+    "texture": true,
+    "export_uv": true,
+    "model_version": "v3.1-20260211",
+    "texture_quality": "detailed",
+    "geometry_quality": "standard",
+    "texture_alignment": "geometry"
+  },
+  "output_fields": [
+    "model_url",
+    "rendered_image_url",
+    "generated_image_url"
+  ],
+  "credits_consumed": 30,
+  "created_at": "2026-09-22T19:22:57.975352Z",
+  "completed_at": "2026-09-22T19:25:25.155346Z",
+  "files": [
+    "model.glb",
+    "rendered_image.webp",
+    "generated_image.jpeg",
+    "preview.png"
+  ]
+}

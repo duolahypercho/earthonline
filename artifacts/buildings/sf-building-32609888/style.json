@@ -1,0 +1,497 @@
+{
+  "seed": 1,
+  "notes": "1929 corner bank hall reading as one tall storey; near-white cast stone, dark green glazed-tile plinth, tall dark steel multi-pane windows in stepped stone surrounds, central Stockton entrance, deep eave with red clay tile edge. Front = Stockton face (edge 1). Green face (edge 2) is a second street face; edge 0 is the party wall. Layout fractions mirrored (fractions run from the edge's b end as seen); frieze stripe added. Smooth near-white stucco instead of jointed cast stone, darker window glass, deeper red tile eave band. Warm buff/ochre plaster, taller terracotta tile cap over a dark soffit band, cream frieze band + relief panels (plaques) on the corner piers, 3 tall dark small-pane bays per face with heavy cream jambs, Green face entrance bay moved to the W end in a white surround, glossy green plinth 0.75 m, ground storey raised to 6.0 m (mezzanine above the window heads, no slab across the glass), banking-hall interior (bankHall), rooftop units on a pale membrane. New builder keys missionTile (pitched red barrel-tile band 0.40 m out past the wall, ridge 0.9 m behind it, short back slope, cream cornice mould with dentils) and missionOrnament (stepped cream window surrounds, segmental arched heads with dark fan lights and archivolts, estipite relief panels on the corner piers and pier heads, ornamented Stockton entrance with a crest and two lanterns, 1.2 m corner piers, rusticated pier joints, frieze rosettes, a raised abstract glyph band - no text); warmer buff wall, dark bottle-green/black plinth, coping/cornice/dark stripe removed, floating corner plaques removed, raised rear roof block, coffered bank-hall ceiling and a stone-like hall floor. Pitched red barrel-tile hip band (missionTile) with cornice mould + dentils replaces the flat eave strip; cast relief estipite stacks on corner and entrance piers, stepped surrounds + segmental arched heads with dark fan lights and archivolts on the tall bays, ornamented Stockton entrance with lanterns, frieze rosettes + abstract raised glyph band (no text); warmer ochre wall, cream trim, dark bottle-green plinth; coffered banking-hall ceiling + wainscot; stray corner plaque slabs removed. Street faces bright white glazed look (#eeede6 wall, #f6f4ee trim/surrounds/reliefs), square window heads (archedHeads removed), garbled glyph band removed (frieze left plain, no text), deeper stepped surrounds, near-black bronze sash frames with fine horizontal muntins every 0.5 m (new missionSash key) on very dark glass, dark green-black 0.9 m glazed plinth, dimmer bank hall (doorway no longer a bright box), 6 rooftop units + two glazed hip skylights + roof-edge flashing (new roofKit key). Plinth/bulkhead on painted-steel #141c17 (glazed-tile tint rendered mint). New bankFront key - glazed double doors drawn shut with bronze stiles, transom bar + dark transom lights, dark vestibule reveals, pale flat architrave and small pediment (doorway stays a physics passage), lanterns moved to it; dark-green glazed tile wainscot in running courses with grout and a sill cap; deep dark cornice band with modillions under the tile eave; carved heightfield relief panels (framed, mirrored scrolls, central standing figure) at the corners and above the piers replace the stepped estipite stacks; abstract blackletter-style stroke band in the frieze (no text) and a small dark corner plate; graded grime bands above the base. Fewer heavier muntins (panes ~0.95 m wide x ~1.05 m high, 0.08 m bars), single transom row, thin moulded architrave surrounds, rusticated pier joints removed. Window heads dropped to 5.45 m with a wall band before the frieze (6.3 m).",
+  "edgeRoles": {
+    "0": "party",
+    "2": "flank"
+  },
+  "wall": "scanned-painted-plaster",
+  "wallTint": "#ebe5d4",
+  "trim": "cast-stone-trim",
+  "frame": "painted-steel",
+  "glass": "glass-dark@161b1a",
+  "storefrontGlass": "glass-dark@161b1a",
+  "storefrontFrame": "painted-steel@1d1b17",
+  "bulkhead": "painted-steel@141c17",
+  "roof": "asphalt-roof@b8b5ad",
+  "cornice": false,
+  "corniceProjectionM": 0.42,
+  "beltCourse": false,
+  "windowHoods": false,
+  "blankUpper": true,
+  "groundBand": {
+    "material": "painted-steel",
+    "tint": "#141c17",
+    "topM": 0.9
+  },
+  "pilasters": {
+    "at": [
+      0.02,
+      0.15,
+      0.29,
+      0.35,
+      0.47,
+      0.53,
+      0.67,
+      0.73,
+      0.87,
+      0.98
+    ],
+    "widthM": 0.55,
+    "projectionM": 0.03,
+    "toM": 6.0,
+    "material": "scanned-painted-plaster",
+    "tint": "#ebe5d4"
+  },
+  "ground": "shop",
+  "upper": "office",
+  "storefront": {
+    "awning": false,
+    "bulkheadM": 0.9,
+    "transomM": 1.0,
+    "transomPaneM": 0.95,
+    "transomRows": 1,
+    "paneM": 0.95,
+    "pierM": 0.5,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.16,
+        "to": 0.28
+      },
+      {
+        "kind": "double-door",
+        "from": 0.36,
+        "to": 0.46,
+        "leaf": "painted-steel@2c3431"
+      },
+      {
+        "kind": "window",
+        "from": 0.54,
+        "to": 0.66
+      },
+      {
+        "kind": "window",
+        "from": 0.74,
+        "to": 0.86
+      }
+    ],
+    "headDropM": 0.55
+  },
+  "streetEdges": {
+    "2": {
+      "pilasters": {
+        "at": [
+          0.02,
+          0.11,
+          0.27,
+          0.32,
+          0.48,
+          0.53,
+          0.69,
+          0.73,
+          0.94,
+          0.98
+        ],
+        "widthM": 0.55,
+        "projectionM": 0.03,
+        "toM": 6.0,
+        "material": "scanned-painted-plaster",
+        "tint": "#ebe5d4"
+      },
+      "storefront": {
+        "layout": [
+          {
+            "kind": "window",
+            "from": 0.12,
+            "to": 0.26
+          },
+          {
+            "kind": "window",
+            "from": 0.33,
+            "to": 0.47
+          },
+          {
+            "kind": "window",
+            "from": 0.54,
+            "to": 0.68
+          },
+          {
+            "kind": "door",
+            "from": 0.8,
+            "to": 0.87,
+            "leaf": "painted-steel@2c3431"
+          }
+        ]
+      },
+      "wallZones": [
+        {
+          "from": 0.73,
+          "to": 0.94,
+          "tint": "#f8f7f2",
+          "toY": 7.3
+        }
+      ],
+      "plaques": [
+        {
+          "at": 0.42,
+          "y": 6.42,
+          "w": 13.0,
+          "h": 0.64,
+          "face": "cast-stone-trim@dccba6"
+        },
+        {
+          "at": 0.835,
+          "y": 4.1,
+          "w": 0.8,
+          "h": 0.8,
+          "face": "glass-dark@2a3230"
+        },
+        {
+          "at": 0.835,
+          "y": 5.2,
+          "w": 0.8,
+          "h": 0.7,
+          "face": "glass-dark@2a3230"
+        }
+      ],
+      "missionOrnament": {
+        "tint": "#f1ede2",
+        "surrounds": {
+          "steps": [
+            [
+              0.09,
+              0.05
+            ],
+            [
+              0.07,
+              0.1
+            ]
+          ]
+        },
+        "reliefs": [],
+        "rosettes": {
+          "y": 6.42,
+          "r": 0.18,
+          "at": [
+            0.12,
+            0.88
+          ]
+        }
+      },
+      "roofBlocks": [],
+      "missionTile": {
+        "eaveDropM": 0.15,
+        "projectionM": 0.4,
+        "ridgeRiseM": 0.42,
+        "ridgeBackM": 0.9,
+        "backDepthM": 1.3,
+        "pitchM": 0.24,
+        "tint": "#a4462a",
+        "mould": "#efe3c6"
+      },
+      "bankFront": {
+        "door": {
+          "leafH": 2.5,
+          "frame": "painted-steel@2a211a",
+          "leaf": "painted-steel@2a211a",
+          "glass": "glass-dark@141816",
+          "transomBars": 2,
+          "surround": {
+            "w": 0.25,
+            "tint": "#f1ede2",
+            "pedimentH": 0.0
+          },
+          "lanterns": false
+        },
+        "wainscot": {
+          "h": 0.9,
+          "tint": "#1f3d2e",
+          "joint": "#56604f",
+          "tileW": 0.3,
+          "tileH": 0.15
+        },
+        "grime": {
+          "h": 0.75,
+          "steps": [
+            "#cbc1a9",
+            "#d7ceb9",
+            "#e1dac8"
+          ]
+        },
+        "eaveBand": {
+          "h": 0.36,
+          "tint": "#4a372b",
+          "projectionM": 0.14,
+          "modillionM": 0.6
+        },
+        "nameBand": {
+          "from": 0.2,
+          "to": 0.64,
+          "y": 6.42,
+          "h": 0.4,
+          "tint": "#2c2720",
+          "seed": 11,
+          "words": [
+            4,
+            2,
+            7
+          ]
+        },
+        "reliefTint": "#d8c6a0",
+        "reliefs": [
+          {
+            "at": 0.03,
+            "y0": 3.4,
+            "y1": 7.3,
+            "w": 1.15,
+            "seed": 4,
+            "depthM": 0.16
+          },
+          {
+            "at": 0.97,
+            "y0": 3.4,
+            "y1": 7.3,
+            "w": 1.0,
+            "seed": 6,
+            "depthM": 0.16
+          },
+          {
+            "at": 0.295,
+            "y0": 5.7,
+            "y1": 7.1,
+            "w": 0.6,
+            "seed": 10,
+            "depthM": 0.16
+          },
+          {
+            "at": 0.505,
+            "y0": 5.7,
+            "y1": 7.1,
+            "w": 0.6,
+            "seed": 12,
+            "depthM": 0.16
+          },
+          {
+            "at": 0.71,
+            "y0": 5.7,
+            "y1": 7.1,
+            "w": 0.6,
+            "seed": 13,
+            "depthM": 0.16
+          }
+        ]
+      }
+    }
+  },
+  "rooftop": {
+    "units": 6,
+    "seed": 5
+  },
+  "floorsM": {
+    "groundM": 6.0,
+    "upperM": 2.6
+  },
+  "bankHall": {
+    "lightIntensity": 7.0,
+    "coffers": {
+      "bayM": 2.0,
+      "beamM": 0.28,
+      "depthM": 0.36,
+      "material": "int-ceiling@e6d6b0",
+      "panel": "int-ceiling@c9b58a"
+    },
+    "wainscot": {
+      "h": 1.1,
+      "material": "int-wood@6a4a30"
+    },
+    "floor": "int-tile-floor@d8c8a8"
+  },
+  "plaques": [
+    {
+      "at": 0.5,
+      "y": 6.42,
+      "w": 15.5,
+      "h": 0.64,
+      "face": "cast-stone-trim@dccba6"
+    }
+  ],
+  "wallZones": [
+    {
+      "from": 0.33,
+      "to": 0.49,
+      "tint": "#f8f7f2",
+      "toY": 7.3
+    }
+  ],
+  "roofBlocks": [
+    {
+      "at": 0.5,
+      "widthM": 8.0,
+      "depthM": 6.0,
+      "setbackM": 8.0,
+      "material": "scanned-painted-plaster",
+      "tint": "#cdbd9a"
+    }
+  ],
+  "missionTile": {
+    "eaveDropM": 0.15,
+    "projectionM": 0.4,
+    "ridgeRiseM": 0.42,
+    "ridgeBackM": 0.9,
+    "backDepthM": 1.3,
+    "pitchM": 0.24,
+    "tint": "#a4462a",
+    "mould": "#efe3c6"
+  },
+  "missionOrnament": {
+    "tint": "#f1ede2",
+    "surrounds": {
+      "steps": [
+        [
+          0.09,
+          0.05
+        ],
+        [
+          0.07,
+          0.1
+        ]
+      ]
+    },
+    "reliefs": [],
+    "rosettes": {
+      "y": 6.42,
+      "r": 0.18,
+      "at": [
+        0.12,
+        0.88
+      ]
+    }
+  },
+  "roofKit": {
+    "skylights": [
+      {
+        "x": 0.5,
+        "z": 0.45,
+        "w": 2.4,
+        "d": 1.6
+      },
+      {
+        "x": 0.5,
+        "z": 0.72,
+        "w": 2.4,
+        "d": 1.6
+      }
+    ],
+    "flashing": {
+      "h": 0.18,
+      "tint": "#8d8f8a"
+    }
+  },
+  "missionSash": {
+    "rowM": 1.05,
+    "barM": 0.08,
+    "frame": "painted-steel@1d1b17"
+  },
+  "bankFront": {
+    "door": {
+      "leafH": 2.75,
+      "frame": "painted-steel@2a211a",
+      "leaf": "painted-steel@2a211a",
+      "glass": "glass-dark@141816",
+      "transomBars": 2,
+      "surround": {
+        "w": 0.3,
+        "tint": "#f1ede2",
+        "pedimentH": 0.25
+      },
+      "lanterns": true
+    },
+    "wainscot": {
+      "h": 0.9,
+      "tint": "#1f3d2e",
+      "joint": "#56604f",
+      "tileW": 0.3,
+      "tileH": 0.15
+    },
+    "grime": {
+      "h": 0.75,
+      "steps": [
+        "#cbc1a9",
+        "#d7ceb9",
+        "#e1dac8"
+      ]
+    },
+    "eaveBand": {
+      "h": 0.36,
+      "tint": "#4a372b",
+      "projectionM": 0.14,
+      "modillionM": 0.6
+    },
+    "nameBand": {
+      "from": 0.3,
+      "to": 0.7,
+      "y": 6.42,
+      "h": 0.4,
+      "tint": "#2c2720",
+      "seed": 11,
+      "words": [
+        4,
+        2,
+        7
+      ]
+    },
+    "signs": [
+      {
+        "at": 0.16,
+        "y": 6.3,
+        "w": 1.3,
+        "h": 0.3,
+        "tint": "#1d2230"
+      }
+    ],
+    "reliefTint": "#d8c6a0",
+    "reliefs": [
+      {
+        "at": 0.03,
+        "y0": 3.4,
+        "y1": 7.3,
+        "w": 1.15,
+        "seed": 3,
+        "depthM": 0.16
+      },
+      {
+        "at": 0.97,
+        "y0": 3.4,
+        "y1": 7.3,
+        "w": 1.15,
+        "seed": 5,
+        "depthM": 0.16
+      },
+      {
+        "at": 0.32,
+        "y0": 5.7,
+        "y1": 7.1,
+        "w": 0.6,
+        "seed": 7,
+        "depthM": 0.16
+      },
+      {
+        "at": 0.5,
+        "y0": 5.7,
+        "y1": 7.1,
+        "w": 0.6,
+        "seed": 8,
+        "depthM": 0.16
+      },
+      {
+        "at": 0.7,
+        "y0": 5.7,
+        "y1": 7.1,
+        "w": 0.6,
+        "seed": 9,
+        "depthM": 0.16
+      }
+    ]
+  }
+}

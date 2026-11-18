@@ -1,0 +1,53 @@
+{
+  "kind": "blender-building",
+  "id": "sf-building-259218968",
+  "pass": "b259218968-blender-1704a15b-1b52b3",
+  "generator": "scripts/blender-buildings/build_building.py",
+  "generatorSha256": "1704a15b341374dc4b72bea6bb5da46de7d15add7ea24a94f5306382044dd66e",
+  "blender": "Blender 5.1.2",
+  "inputs": {
+    "spec": "artifacts/buildings/sf-building-259218968/spec.json",
+    "specSha256": "e1d97430dd42890a9e62af8c7a3c0b6cafb7ed4ad27533cca82c6034c68a9b83",
+    "style": "artifacts/buildings/sf-building-259218968/style.json",
+    "styleSha256": "1b52b3ec05071423c78aba7a624f23832bd264a816d8d183547d1a7a798157ba"
+  },
+  "sources": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "license": "Original geometry generated from open data (DataSF footprints, LiDAR, Assessor roll). No third-party meshes or textures.",
+  "furniture": [],
+  "assets": {
+    "exterior": {
+      "url": "/assets/buildings/sf-building-259218968/exterior.glb",
+      "sha256": "97518dbf7050693d9ebe8663cd6603da3ee6cc3640fa0c01f444c4ec2b546a47",
+      "bytes": 966384
+    },
+    "interior": {
+      "url": "/assets/buildings/sf-building-259218968/interior.glb",
+      "sha256": "844c1c2616716a425b3dc67cbef5ca5c490e2734877cd8d32dcc76ee824dbafa",
+      "bytes": 260236
+    },
+    "fine": [
+      {
+        "storey": 0,
+        "url": "/assets/buildings/sf-building-259218968/fine-s0.glb",
+        "sha256": "c3684881d0619952f30f2856d2ba4ad69c07f0d3f3b77613b82a93ae8e578666",
+        "bytes": 30984
+      },
+      {
+        "storey": 1,
+        "url": "/assets/buildings/sf-building-259218968/fine-s1.glb",
+        "sha256": "7bb661b9d3b31badea2228cca6f465aa9ae644936df084ebe8c0106b7c5285f3",
+        "bytes": 209748
+      },
+      {
+        "storey": 2,
+        "url": "/assets/buildings/sf-building-259218968/fine-s2.glb",
+        "sha256": "d5bcf94cf2d6bffb2207d797affdbeb89a7cd1c23a7d292502466aa2dbf3779c",
+        "bytes": 209680
+      }
+    ]
+  }
+}

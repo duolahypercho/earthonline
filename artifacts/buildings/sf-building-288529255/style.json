@@ -1,0 +1,170 @@
+{
+ "seed": 9,
+ "notes": "Pale wall e9ecee; swell bay facets 1 per pane (3 lights), oriel cant bay 3 front sashes; storey-1 arched entry gets a fanlight; white steep exterior stair added from the storey-1 balcony to the pavement; ground arched door is now a low service opening under the stair (no interior stair). An oval glass light and stair. Rework 5: wall very pale grey-white e5e7e8 with pale blue-grey trim d3dae0; left bay is a round bow (hyB swell, 3 panes) from the garden storey to the cornice with corbel brackets; entry moved to storey 1 as an arched door opening (storeyWindowSpans + upperWindowArch) reached by a white straight stair+landing (fireEscape tinted white; no solid-balustrade stoop key), small arched ground door under the stair at the right, cant oriel with bracketed base directly over the porch at storey 3. No key for the little pediment or the oval door glass. Rework 4: wall d9dfe4 painted clapboard; full-height rounded bay left, entry right; raised stoop has no key. Heavier cornice with a frieze board and close brackets. Skipped: 'layout mirrored'; raised white stoop and arched porch at storey-2 level (no kit key). Rework 2: a small box oriel over the entry at the top storey (0.77, 1.5 m), wall a cooler pale blue-white #e6ecf1. Skipped: 'facade mirrored'; rounded bay (kit round facets too narrow for sashes); raised arched porch with exterior stair and the second door under it (no kit option). Rework 1: pale grey-white horizontal wood siding (painted-clapboard, tint lightened); the garden storey drawn low (floorsM ground 3.3 m, upper 4.1 m, same total) so the bay's bottom windows read as normal double-hung sashes instead of tall shop glass; the cant bay stays stacked through all three levels on the viewer's left with a bracketed cornice; side stoop entry at the right with a teal-green door leaf. Not applied: 'facade mirrored'; an exterior stair up to a raised arched porch and the small railed balcony have no kit option. Ground programme 'vacant' to keep store-room props off the skewed footprint. 1906 three-unit Victorian row house. Interior containment still fails. No style key places the corridor; needs an interior fix in build_building.py. Not installed. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k). Containment fix (2026-10-02): upper programme 'rooms' - the apartment layout put a ceiling lamp / rug past the notched footprint and the interior gate rejected every build. Interior clip (2026-10-02): clipInteriorToFootprint - the room planner put furniture past this narrow/notched footprint and the containment gate rejected every build.",
+ "wall": "painted-clapboard",
+ "wallTint": "#f4f6f6",
+ "trim": "painted-white@d3dae0",
+ "frame": "painted-white",
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-clear",
+ "storefrontFrame": "painted-white",
+ "bulkhead": "painted-clapboard@f2f3f4",
+ "cornice": true,
+ "corniceProjectionM": 0.5,
+ "beltCourse": true,
+ "windowHoods": true,
+ "windowW": 0.8,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.9,
+ "ground": "vacant",
+ "upper": "rooms",
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.28,
+   "widthM": 2.3,
+   "projectionM": 0.65,
+   "fromStorey": 0,
+   "material": "painted-clapboard",
+   "tint": "#f2f3f4",
+   "hyB": {
+    "plan": "swell",
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 1,
+    "sillM": 0.75,
+    "headGapM": 0.3,
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 3,
+     "dropM": 0.35,
+     "beltBrackets": true
+    },
+    "cornice": {
+     "projectionM": 0.1,
+     "dentils": true,
+     "roofRiseM": 0.1
+    }
+   }
+  },
+  {
+   "at": 0.77,
+   "widthM": 1.6,
+   "projectionM": 0.45,
+   "fromStorey": 2,
+   "toStorey": 2,
+   "material": "painted-clapboard",
+   "tint": "#f2f3f4",
+   "hyB": {
+    "plan": "cant",
+    "sideRunM": 0.25,
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sillM": 0.7,
+    "headGapM": 0.3,
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 2,
+     "dropM": 0.4
+    },
+    "cornice": {
+     "projectionM": 0.12,
+     "dentils": true,
+     "roofRiseM": 0.3
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.8,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.8,
+    "to": 0.93,
+    "kind": "door",
+    "leaf": "painted-white@3f7f78",
+    "headM": 1.95,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.06,
+      "tint": "#d3dae0",
+      "material": "painted-white"
+     }
+    },
+    "stair": true
+   }
+  ],
+  "headDropM": 0.4
+ },
+ "floorsM": {
+  "groundM": 3.85,
+  "upperM": 3.84
+ },
+ "archHeads": [],
+ "edgeRoles": {
+  "2": "party"
+ },
+ "hbFrieze": {
+  "heightM": 0.5,
+  "material": "painted-white",
+  "tint": "#eef2f5"
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.55,
+  "heightM": 0.6,
+  "depthM": 0.3,
+  "widthM": 0.16,
+  "material": "painted-white",
+  "tint": "#eef2f5"
+ },
+ "streetStills": true,
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.66,
+     0.86
+    ]
+   ],
+   "sillM": 0.05,
+   "headM": 2.75
+  }
+ },
+ "upperWindowArch": {
+  "type": "round",
+  "riseM": 0.4,
+  "storeys": [
+   1
+  ],
+  "surround": {
+   "widthM": 0.1,
+   "projectionM": 0.04,
+   "tint": "#d3dae0",
+   "material": "painted-white"
+  },
+  "fan": true
+ },
+ "fireEscape": {
+  "at": 0.77,
+  "widthM": 2.0,
+  "depthM": 1.0,
+  "toStorey": 1,
+  "tint": "#eef2f5",
+  "hbSteepStair": {
+   "runM": 2.4,
+   "treadWM": 0.9,
+   "alongF": 0.72,
+   "riserM": 0.19,
+   "stringerM": 0.06
+  }
+ },
+ "clipInteriorToFootprint": true
+}

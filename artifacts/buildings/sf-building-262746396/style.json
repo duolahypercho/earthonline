@@ -1,0 +1,249 @@
+{
+ "seed": 8,
+ "notes": "1908 four flats, W side of Hyde just north of Bergen Alley. Smooth light grey-white stucco (lit e2e2e6) under a flat coping; two navy painted cant bays (lifted to 4a5a80 so they do not render black) from the first upper storey to the roof, one sash per face; ground: a navy-framed recessed entry with three yellow panelled doors side by side on the left half, a white band over it, two white-cased double-hung windows right of centre. Stoop steps and planting strip have no key. Navy bays a touch deeper and bluer (44588c, still above the 0.10 luminance floor), ground-storey sashes sit on a 1.5 m sill instead of reading as shop glass. Applied: solid yellow panelled door leaves e8c95a, a red-brick stoop of four steps under the doors, a full-width moulded fascia band at the storey-1 head under the bays (plaques). Not applied: navy #2e3a50 is below the 0.10 luminance floor (bays stay 44588c, the darkest allowed); the bay centre sash is capped at 1.05 m by the builder (no key widens it); bay bottoms already share one line (both fromStorey 1). Doors-left/windows-right is already the game hand. Applied: bays to a greyer slate navy 4c5a74, matching navy door surround, a thin dark header band over the entry. Not applied: wider centre picture sash and a rising brick stair (no keys); door leaves are drawn open by the builder. Rework: bay navy kept at 4c5a74; box bays: builder has only cant bays, no key. Applied: side yellow doors are solid painted panels (kind blank, e6c25a) with the centre door the walkable one; ground right windows are sill-height sashes (bulkhead 1.0, head 2.6) not full-height; wall dedae4 lavender-white; darker plinth band bab8c0. Wide centre sash + narrow side sashes, navy soffit); wall warmed e8e3e2; plinth 0.5 m grey. Navy stays 4c5a74 (2e3b55 is below the 0.10 luminance floor). Doors already three yellow panels; shrubs no key. Both bays are visibly canted (angled sides, wide front pane, narrow side sashes), so the box bays are replaced by hyB cant bays (1 wide front sash ~1.5 m, 1 narrow sash per cant face, bays reach the roofline with top-storey windows). Navy kept 4c5a74 (2b3448 is below the 0.10 luminance floor). Kept. Navy lifted to the luminance floor 465a8a; centre door drawn as a closed yellow panelled leaf (leafClosed) so all three read as yellow doors. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k). GroundBand lift (2026-10-03): groundBand tint #6c6a72 -> #89888e (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#f4f1f0",
+ "trim": "painted-white@f4f4f2",
+ "frame": "painted-white@f4f4f2",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@465a8a",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-stucco@f4f1f0",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.8,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.6,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.23,
+   "widthM": 2.7,
+   "projectionM": 0.65,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#62739c",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.55,
+    "marginM": 0.1,
+    "sillM": 0.85,
+    "headGapM": 0.3,
+    "cornice": {
+     "projectionM": 0.1,
+     "roofRiseM": 0.15
+    },
+    "corbel": {
+     "tiers": 1,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   },
+   "frame": "painted-white",
+   "frameTint": "#f4f4f2"
+  },
+  {
+   "at": 0.68,
+   "widthM": 2.6,
+   "projectionM": 0.65,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#62739c",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.55,
+    "marginM": 0.1,
+    "sillM": 0.85,
+    "headGapM": 0.3,
+    "cornice": {
+     "projectionM": 0.1,
+     "roofRiseM": 0.15
+    },
+    "corbel": {
+     "tiers": 1,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   },
+   "frame": "painted-white",
+   "frameTint": "#f4f4f2"
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 1.0,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.06,
+    "to": 0.15,
+    "kind": "blank",
+    "material": "painted-white",
+    "tint": "#e6c25a",
+    "headM": 2.6
+   },
+   {
+    "from": 0.165,
+    "to": 0.255,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-white@e8c95a",
+    "headM": 3.1,
+    "leafClosed": {
+     "panelRows": 3,
+     "panelCols": 1
+    }
+   },
+   {
+    "from": 0.27,
+    "to": 0.36,
+    "kind": "blank",
+    "material": "painted-white",
+    "tint": "#e6c25a",
+    "headM": 2.6
+   },
+   {
+    "from": 0.59,
+    "to": 0.7,
+    "kind": "window",
+    "headM": 2.6
+   },
+   {
+    "from": 0.73,
+    "to": 0.81,
+    "kind": "window",
+    "headM": 2.6
+   }
+  ],
+  "sashRows": 2,
+  "mullionM": 4.0
+ },
+ "plaques": [
+  {
+   "at": 0.5,
+   "y": 4.25,
+   "w": 7.0,
+   "h": 0.38,
+   "face": "painted-white@f4f4f2"
+  },
+  {
+   "at": 0.5,
+   "y": 4.02,
+   "w": 7.0,
+   "h": 0.08,
+   "face": "painted-white@c8c8cc"
+  },
+  {
+   "at": 0.21,
+   "y": 3.5,
+   "w": 2.6,
+   "h": 0.3,
+   "face": "painted-white@f4f4f2"
+  },
+  {
+   "at": 0.21,
+   "y": 0.07,
+   "w": 2.3,
+   "h": 0.14,
+   "face": "brick-running-bond@ffffff"
+  },
+  {
+   "at": 0.21,
+   "y": 0.16,
+   "w": 2.36,
+   "h": 0.04,
+   "face": "brick-running-bond@cdc3db"
+  },
+  {
+   "at": 0.21,
+   "y": 0.25,
+   "w": 2.3,
+   "h": 0.14,
+   "face": "brick-running-bond@ffffff"
+  },
+  {
+   "at": 0.21,
+   "y": 0.34,
+   "w": 2.36,
+   "h": 0.04,
+   "face": "brick-running-bond@cdc3db"
+  },
+  {
+   "at": 0.21,
+   "y": 0.43,
+   "w": 2.3,
+   "h": 0.14,
+   "face": "brick-running-bond@ffffff"
+  },
+  {
+   "at": 0.21,
+   "y": 0.52,
+   "w": 2.36,
+   "h": 0.04,
+   "face": "brick-running-bond@cdc3db"
+  },
+  {
+   "at": 0.21,
+   "y": 0.61,
+   "w": 2.3,
+   "h": 0.14,
+   "face": "brick-running-bond@ffffff"
+  },
+  {
+   "at": 0.21,
+   "y": 0.7,
+   "w": 2.36,
+   "h": 0.04,
+   "face": "brick-running-bond@cdc3db"
+  },
+  {
+   "at": 0.21,
+   "y": 0.79,
+   "w": 2.3,
+   "h": 0.14,
+   "face": "brick-running-bond@ffffff"
+  },
+  {
+   "at": 0.21,
+   "y": 0.88,
+   "w": 2.36,
+   "h": 0.04,
+   "face": "brick-running-bond@cdc3db"
+  },
+  {
+   "at": 0.21,
+   "y": 3.28,
+   "w": 3.0,
+   "h": 0.12,
+   "face": "painted-white@465a8a"
+  }
+ ],
+ "coping": {
+  "material": "painted-white",
+  "tint": "#f0f0ee",
+  "projectionM": 0.08,
+  "heightM": 0.25
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "floorsM": {
+  "groundM": 4.4,
+  "upperM": 4.1
+ },
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#89888e",
+  "topM": 0.5
+ },
+ "streetStills": true
+}

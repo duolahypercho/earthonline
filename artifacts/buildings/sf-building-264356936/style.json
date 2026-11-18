@@ -1,0 +1,308 @@
+{
+  "seed": 1,
+  "notes": "Hard-edged mural shards (hbMuralShards), neon script sign, tiled bulkhead, floors 3.7/3.315 (upper storeys taller), grey return walls. 1905 three-storey brick flats over shops, S side of Haight Street between Masonic and Ashbury (1427-1433). Orange-red running-bond face brick; four cream two-storey three-sided cant bays over the upper storeys with dark green sash frames; deep dark green bracketed cornice; black steel fire escape across the two centre bays; tall storefront storey: iron security gate over a lobby passage (left), a shop with dark glass and a centre door, a roll-down shutter painted with a bright mural, and a round-arched residential door (right). Patchwork mural bands (hbMuralBands) replace shapes+dots; downspouts. FE platforms 5.6x0.75",
+  "wall": "brick-buff",
+  "trim": "painted-white@2b4436",
+  "frame": "painted-white@d8ccaa",
+  "glass": "glass-clear",
+  "storefrontFrame": "painted-steel",
+  "bulkhead": "painted-white@1d1d1f",
+  "cornice": true,
+  "corniceProjectionM": 0.6,
+  "beltCourse": true,
+  "windowHoods": false,
+  "windowW": 0.55,
+  "windowSillM": 0.9,
+  "windowHeadM": 2.9,
+  "upperWindows": [
+    0.515
+  ],
+  "bays": [
+    {
+      "at": 0.15,
+      "widthM": 2.3,
+      "projectionM": 0.5,
+      "fromStorey": 1,
+      "material": "painted-white",
+      "tint": "#d9ccad"
+    },
+    {
+      "at": 0.385,
+      "widthM": 2.3,
+      "projectionM": 0.5,
+      "fromStorey": 1,
+      "material": "painted-white",
+      "tint": "#d9ccad"
+    },
+    {
+      "at": 0.645,
+      "widthM": 2.3,
+      "projectionM": 0.5,
+      "fromStorey": 1,
+      "material": "painted-white",
+      "tint": "#d9ccad"
+    },
+    {
+      "at": 0.87,
+      "widthM": 2.3,
+      "projectionM": 0.5,
+      "fromStorey": 1,
+      "material": "painted-white",
+      "tint": "#d9ccad"
+    }
+  ],
+  "storefront": {
+    "bulkheadM": 0.45,
+    "transomM": 0.6,
+    "pierM": 0.4,
+    "awning": false,
+    "layout": [
+      {
+        "from": 0.02,
+        "to": 0.15,
+        "kind": "door",
+        "leaf": "painted-white@2e2a26",
+        "grille": true
+      },
+      {
+        "from": 0.17,
+        "to": 0.3,
+        "kind": "window"
+      },
+      {
+        "from": 0.3,
+        "to": 0.38,
+        "kind": "door",
+        "leaf": "painted-steel"
+      },
+      {
+        "from": 0.38,
+        "to": 0.555,
+        "kind": "window"
+      },
+      {
+        "from": 0.575,
+        "to": 0.885,
+        "kind": "garage",
+        "material": "painted-white",
+        "tint": "#6f8fc4"
+      },
+      {
+        "from": 0.905,
+        "to": 0.985,
+        "kind": "door",
+        "stair": true,
+        "leaf": "painted-white@2a211c"
+      }
+    ],
+    "transomPaneM": 0.5,
+    "transomRows": 1
+  },
+  "ground": "shop",
+  "upper": "apartment",
+  "wallTint": "#dcb9a6",
+  "mural": {
+    "from": 0.585,
+    "to": 0.875,
+    "bottomM": 0.35,
+    "topM": 2.8,
+    "seed": 11,
+    "shapes": 0,
+    "palette": [
+      "#1b1b1b",
+      "#2f6fa8",
+      "#3f8f5e",
+      "#f0b531",
+      "#6fb7d8",
+      "#9bc64a",
+      "#e8e0c8",
+      "#141414"
+    ]
+  },
+  "roof": "concrete-precast@dcdcd4",
+  "hbBayCrown": {
+    "dropM": 1.35,
+    "hipRiseM": 0.55,
+    "hipMaterial": "painted-white",
+    "hipTint": "#273b2f",
+    "corbelTiers": 1,
+    "corbelStepM": 0.12,
+    "panels": true,
+    "panelTint": "#d3c6a4"
+  },
+  "hbCorniceDentils": {
+    "spacingM": 0.16,
+    "sizeM": 0.1
+  },
+  "hbSignBands": [
+    {
+      "from": 0.17,
+      "to": 0.555,
+      "bottomM": 2.85,
+      "topM": 3.35,
+      "material": "signage",
+      "tint": "#1f2d4a"
+    },
+    {
+      "from": 0.575,
+      "to": 0.885,
+      "bottomM": 2.95,
+      "topM": 3.35,
+      "material": "signage",
+      "tint": "#d9d2c0"
+    }
+  ],
+  "hbArchDoors": [
+    {
+      "from": 0.905,
+      "to": 0.985,
+      "ringTint": "#8e4128",
+      "fillTint": "#2a211c",
+      "fillDepthM": 0.1,
+      "fillDownM": 0.95
+    }
+  ],
+  "storefrontGlass": "glass-storefront@2a3036",
+  "hbFrieze": {
+    "heightM": 0.45,
+    "tint": "#273b2f"
+  },
+  "hbCorniceBrackets": {
+    "spacingM": 0.7,
+    "heightM": 0.62,
+    "depthM": 0.38,
+    "widthM": 0.17,
+    "tint": "#24372b"
+  },
+  "glassBacking": {
+    "material": "painted-white",
+    "tints": [
+      "#2a2520",
+      "#332c25",
+      "#231f1b",
+      "#3a3129"
+    ],
+    "depthM": 0.35,
+    "kinds": [
+      "punched"
+    ],
+    "blindTint": "#d9d0bc",
+    "blindMax": 0.4
+  },
+  "hbFloors": {
+    "groundM": 3.7,
+    "upperM": 3.315
+  },
+  "rooftop": {
+    "units": 5,
+    "seed": 4,
+    "material": "painted-steel-light"
+  },
+  "plaques": [
+    {
+      "at": 0.945,
+      "y": 2.75,
+      "w": 0.35,
+      "h": 0.12,
+      "face": "painted-white@d8cfae"
+    }
+  ],
+  "materialSeen": "brick",
+  "grilleMaterial": "painted-steel",
+  "hbBayGlazing": {
+    "marginM": 0.14,
+    "maxW": 1.25,
+    "sillM": 0.5,
+    "headM": 0.2,
+    "glass": "glass-storefront@20262b",
+    "frame": "painted-white",
+    "frameTint": "#23372b",
+    "sashM": 0.075,
+    "revealM": 0.1,
+    "meetingRail": true
+  },
+  "fireEscape": {
+    "at": 0.515,
+    "widthM": 5.6,
+    "depthM": 0.75,
+    "ladder": true,
+    "material": "painted-steel",
+    "hbStandoffM": 0.5,
+    "hbSupportsAt": [
+      0.36,
+      0.515,
+      0.67
+    ],
+    "hbStringers": {
+      "widthM": 0.04,
+      "depthM": 0.12
+    },
+    "hbSteepStair": {
+      "runM": 1.5,
+      "treadWM": 0.5,
+      "alongF": 0.52,
+      "riserM": 0.21,
+      "stringerM": 0.1
+    }
+  },
+  "hbDownspouts": {
+    "at": [
+      0.005,
+      0.995
+    ],
+    "widthM": 0.09,
+    "material": "painted-steel",
+    "tint": "#3a3f3a",
+    "topDropM": 0.75
+  },
+  "hbMuralShards": {
+    "cellM": 0.55,
+    "seed": 7,
+    "palette": [
+      "#2f6fa8",
+      "#1c4f8a",
+      "#3f8f5e",
+      "#f0b531",
+      "#79b84a"
+    ],
+    "dotPalette": [
+      "#c8282d"
+    ],
+    "dotChance": 0.4,
+    "dotRM": 0.05
+  },
+  "returnWallTint": "#a4a8a6",
+  "hbNeonSigns": [
+    {
+      "from": 0.2,
+      "to": 0.52,
+      "yM": 3.1,
+      "heightM": 0.36,
+      "tint": "#ff5fa8",
+      "seed": 3,
+      "tubeM": 0.045
+    }
+  ],
+  "hbBulkheadTiles": [
+    {
+      "from": 0.17,
+      "to": 0.3,
+      "heightM": 0.45,
+      "cellM": 0.15,
+      "tints": [
+        "#1f3f3c",
+        "#0f2523"
+      ]
+    },
+    {
+      "from": 0.38,
+      "to": 0.555,
+      "heightM": 0.45,
+      "cellM": 0.15,
+      "tints": [
+        "#1f3f3c",
+        "#0f2523"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,96 @@
+{
+  "builder": "house",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "painted-stucco",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "groundM": 2.6,
+  "roofLevelM": 5.25,
+  "storeysSeen": 2,
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "seed": 18,
+  "notes": "Lawton N, 1949 (two units on the roll): pale pink stucco, grey composition hipped roof over the front, flat roof behind; ground: a side door at the west end, a garage and a gated entry to the east behind heavy planting; wide upper windows. The surveyed front is split in two faces: edgeFront dresses the east one.",
+  "wall": "painted-stucco",
+  "wallTint": "#e6b9aa",
+  "roofForm": {
+    "form": "front-hip",
+    "depthM": 5.5,
+    "eaveM": 0.22,
+    "material": "asphalt-roof",
+    "tint": "#6d6b68",
+    "sideOverhangM": 0.12
+  },
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.1,
+      "to": 0.9,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        3,
+        2
+      ]
+    }
+  ],
+  "entry": {
+    "from": 0.05,
+    "to": 0.22,
+    "headM": 2.1,
+    "material": "painted-white",
+    "glass": false,
+    "recessM": 0.1
+  },
+  "garages": [
+    {
+      "from": 0.32,
+      "to": 0.95,
+      "headM": 2.15,
+      "material": "painted-white",
+      "pattern": "panel"
+    }
+  ],
+  "streetEdges": {
+    "8": {}
+  },
+  "edgeFront": {
+    "8": {
+      "gate": {
+        "from": 0.2,
+        "to": 0.7,
+        "headM": 2.2,
+        "material": "painted-steel",
+        "tint": "#1f1f1f"
+      },
+      "windows": [
+        {
+          "storey": 1,
+          "from": 0.15,
+          "to": 0.85,
+          "sill": 0.85,
+          "head": 2.2,
+          "panes": [
+            2,
+            2
+          ]
+        }
+      ]
+    }
+  }
+}

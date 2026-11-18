@@ -1,0 +1,96 @@
+{
+ "seed": 7,
+ "notes": "Round 1: 1914 three-storey flats, 7.6 m front. Off-white stucco; one cant bay left with a fire escape and a flat window right. Ground: gated door left under a transom, wide glazed shopfront with door. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game.",
+ "wall": "painted-stucco",
+ "wallTint": "#f2f0ea",
+ "trim": "painted-white@f0ece0",
+ "frame": "painted-white@f0ece0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-steel@2a2a2a",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-stucco@e7e4de",
+ "cornice": true,
+ "corniceProjectionM": 0.4,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.85
+ ],
+ "streetStills": true,
+ "bays": [
+  {
+   "at": 0.2,
+   "widthM": 2.6,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f2f0ea",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.2,
+     "dentils": false,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "fireEscape": {
+  "at": 0.55,
+  "widthM": 2.4,
+  "depthM": 0.8,
+  "standoffM": 0.3,
+  "ladder": true,
+  "material": "painted-steel-mid",
+  "roofLadder": true,
+  "braces": true
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.03,
+    "to": 0.19,
+    "kind": "gate",
+    "headM": 2.8
+   },
+   {
+    "from": 0.27,
+    "to": 0.48,
+    "kind": "window",
+    "headM": 2.9
+   },
+   {
+    "from": 0.5,
+    "to": 0.68,
+    "kind": "door",
+    "headM": 2.9
+   },
+   {
+    "from": 0.7,
+    "to": 0.97,
+    "kind": "window",
+    "headM": 2.9
+   }
+  ]
+ },
+ "ground": "shop",
+ "upper": "apartment"
+}

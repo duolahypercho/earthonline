@@ -1,0 +1,238 @@
+{
+  "seed": 253,
+  "notes": "Round 1 (street-level look, words only): two-storey flat-roofed 1910 commercial block, khaki-olive painted stucco, darker green-black ground storey and piers, pale olive moulded cornice with a block parapet course, dark green spandrel bands carrying round orange discs above tall multi-pane window groups at a ~3.3 m rhythm (two blind panels), black scissor and iron gates, a timber slat screen with an orange door on the Sutter face, big blank tan panels on the Sutter face.",
+  "wall": "painted-stucco",
+  "wallTint": "#a9ab8c",
+  "trim": "painted-stucco",
+  "edgeRoles": {
+    "1": "flank"
+  },
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "coping": {
+    "heightM": 0.75,
+    "projectionM": 0.2,
+    "material": "painted-stucco",
+    "tint": "#c3c597"
+  },
+  "pilasters": {
+    "at": [
+      0.02,
+      0.1073,
+      0.1945,
+      0.2818,
+      0.3691,
+      0.4564,
+      0.5436,
+      0.6309,
+      0.7182,
+      0.8055,
+      0.8927,
+      0.98
+    ],
+    "widthM": 0.4,
+    "projectionM": 0.06,
+    "capital": false,
+    "tint": "#9a9c7e",
+    "material": "painted-stucco"
+  },
+  "spandrels": {
+    "tint": "#5f6a58",
+    "material": "painted-stucco"
+  },
+  "upperWindowSpans": [
+    [
+      0.0287,
+      0.0985
+    ],
+    [
+      0.116,
+      0.1858
+    ],
+    [
+      0.2033,
+      0.2731
+    ],
+    [
+      0.2905,
+      0.3604
+    ],
+    [
+      0.4651,
+      0.5349
+    ],
+    [
+      0.5524,
+      0.6222
+    ],
+    [
+      0.6396,
+      0.7095
+    ],
+    [
+      0.7269,
+      0.7967
+    ],
+    [
+      0.9015,
+      0.9713
+    ]
+  ],
+  "upperSillM": 0.3,
+  "upperHeadM": 2.2,
+  "mullionM": 0.75,
+  "sashRows": 3,
+  "sashCols": 2,
+  "sashMaterial": "painted-steel@2c3029",
+  "sashHopper": false,
+  "storefrontFrame": "painted-steel@262a25",
+  "bulkhead": "painted-stucco@3d4339",
+  "storefrontGlass": "glass-dark",
+  "ground": "restaurant",
+  "upper": "rooms",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.8,
+    "bulkheadM": 0.7,
+    "transomPaneM": 0.5,
+    "paneM": 0.7,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.0287,
+        "to": 0.0985
+      },
+      {
+        "kind": "gate",
+        "from": 0.116,
+        "to": 0.1858,
+        "headM": 3.5,
+        "tint": "#1d1f1e"
+      },
+      {
+        "kind": "door",
+        "from": 0.2033,
+        "to": 0.2731
+      },
+      {
+        "kind": "gate",
+        "from": 0.2905,
+        "to": 0.3604,
+        "headM": 3.5,
+        "tint": "#1d1f1e"
+      },
+      {
+        "kind": "window",
+        "from": 0.3778,
+        "to": 0.4476
+      },
+      {
+        "kind": "door",
+        "from": 0.4651,
+        "to": 0.5349
+      },
+      {
+        "kind": "gate",
+        "from": 0.5524,
+        "to": 0.6222,
+        "headM": 3.5,
+        "tint": "#1d1f1e"
+      },
+      {
+        "kind": "window",
+        "from": 0.6396,
+        "to": 0.7095
+      },
+      {
+        "kind": "window",
+        "from": 0.7269,
+        "to": 0.7967
+      },
+      {
+        "kind": "gate",
+        "from": 0.8142,
+        "to": 0.884,
+        "headM": 3.5,
+        "tint": "#1d1f1e"
+      },
+      {
+        "kind": "window",
+        "from": 0.9015,
+        "to": 0.9713
+      }
+    ]
+  },
+  "weathering": {
+    "patches": {
+      "strength": 0.08,
+      "metres": 1.6,
+      "top": 3.5,
+      "mottle": 0.06
+    },
+    "grime": {
+      "strength": 0.2,
+      "metres": 2.4
+    },
+    "soot": {
+      "height": 1.1,
+      "strength": 0.24
+    },
+    "axis": "wall"
+  },
+  "groundBand": {
+    "material": "painted-stucco",
+    "tint": "#454b3f",
+    "topM": 3.7
+  },
+  "streetEdges": {
+    "1": {
+      "upperWindows": [
+        0.07,
+        0.93
+      ],
+      "windowW": 2.3,
+      "windowSillM": 4.9,
+      "windowHeadM": 6.8,
+      "storefront": {
+        "awning": false,
+        "layout": [
+          {
+            "kind": "window",
+            "from": 0.02,
+            "to": 0.1
+          },
+          {
+            "kind": "door",
+            "from": 0.13,
+            "to": 0.2
+          },
+          {
+            "kind": "gate",
+            "from": 0.24,
+            "to": 0.37,
+            "headM": 3.4,
+            "tint": "#1d1f1e"
+          },
+          {
+            "kind": "gate",
+            "from": 0.39,
+            "to": 0.52,
+            "headM": 3.4,
+            "tint": "#1d1f1e"
+          },
+          {
+            "kind": "blank",
+            "from": 0.58,
+            "to": 0.68
+          },
+          {
+            "kind": "window",
+            "from": 0.86,
+            "to": 0.97
+          }
+        ]
+      }
+    }
+  }
+}

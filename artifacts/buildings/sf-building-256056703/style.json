@@ -1,0 +1,143 @@
+{
+ "seed": 36,
+ "notes": "1917 three-storey flats, olive-green brick with cream bays. Two curved swell bays from the first upper storey to a heavy dentilled cornice, a fire escape platform in front of them, belt of cream stone. Ground: barred window left, small vent, arched door right. This is the green one south of it. Identity: this footprint is the olive-green neighbour (arched dark-wood door at right, barred window left, green tile ground). Applied: olive-green brick, cream bays with dentilled bracket cornice, black fire escape, dark wood arched door. Red brick kit rendered the green orange; switched to the buff brick kit with a green tint. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Painted-stucco sage wall over a dark-green base, cream spandrel panels in the bays, bigger bracketed cornice. Base is one tall storey under a cream belt. GroundBand lift (2026-10-03): groundBand tint #486a42 -> #6d8868 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#d0ecb8",
+ "trim": "painted-white@e8dcb0",
+ "frame": "painted-white@e8dcb0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@e8dcb0",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "corniceProjectionM": 0.9,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "bulkhead": "painted-stucco@486a42",
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#6d8868",
+  "topM": 3.5
+ },
+ "bays": [
+  {
+   "at": 0.28,
+   "widthM": 2.4,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f7f2dc",
+   "hyB": {
+    "plan": "swell",
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2,
+    "cornice": {
+     "projectionM": 0.24,
+     "dentils": true,
+     "roofRiseM": 0.22
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0,
+     "beltBrackets": true
+    }
+   },
+   "plaques": {
+    "material": "painted-white",
+    "tint": "#efe6c8",
+    "heightM": 0.5,
+    "widthFrac": 0.7
+   }
+  },
+  {
+   "at": 0.76,
+   "widthM": 2.4,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f7f2dc",
+   "hyB": {
+    "plan": "swell",
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2,
+    "cornice": {
+     "projectionM": 0.24,
+     "dentils": true,
+     "roofRiseM": 0.22
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0,
+     "beltBrackets": true
+    }
+   },
+   "plaques": {
+    "material": "painted-white",
+    "tint": "#efe6c8",
+    "heightM": 0.5,
+    "widthFrac": 0.7
+   }
+  }
+ ],
+ "upperWindows": [],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.1,
+    "to": 0.32,
+    "kind": "window",
+    "headM": 2.0,
+    "grille": true
+   },
+   {
+    "from": 0.68,
+    "to": 0.9,
+    "kind": "door",
+    "leaf": "wood-siding@4a3020"
+   }
+  ]
+ },
+ "fireEscape": {
+  "at": 0.52,
+  "widthM": 1.6,
+  "depthM": 0.8,
+  "material": "painted-steel"
+ },
+ "hbArchDoors": [
+  {
+   "from": 0.68,
+   "to": 0.9,
+   "material": "cast-stone-trim",
+   "tint": "#e8dcb0",
+   "ringTint": "#e8dcb0",
+   "fillTint": "#2a2a2a"
+  }
+ ],
+ "hbCorniceDentils": {
+  "spacingM": 0.2,
+  "sizeM": 0.14,
+  "tint": "#e8dcb0"
+ },
+ "edgeRoles": {},
+ "hbCorniceBrackets": {
+  "spacingM": 1.2,
+  "heightM": 0.7,
+  "depthM": 0.3,
+  "widthM": 0.24,
+  "material": "painted-white",
+  "tint": "#efe4b8"
+ }
+}

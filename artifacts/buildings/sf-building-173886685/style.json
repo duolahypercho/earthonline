@@ -1,0 +1,82 @@
+{
+  "seed": 1,
+  "notes": "Narrow pale-teal painted Victorian flat front: two three-sided bays on the upper storeys, steel fire escape between them, bracketed cornice; ground: small shop window, recessed doors, display window. The mint Victorian stands on the lot to the SW, which has no DataSF footprint; this 6.3 m footprint (roll: built 2001, residential, 5 storeys, LiDAR 14.9 m) is the narrow dark modern infill between the Victorian and the low wood-clad building: charcoal two-storey base with a tall recessed dark entry, mid-grey rendered upper storeys with a single wide window per storey, flat roof with a deck rail. Smooth render weathering (no streak columns) and reflective glass (glassModel). No streak weathering. Soot at the base, grime, faint wide streaks. Pale concrete modern building above a dark recessed ground floor; the stucco base x warm plaster read brown-tan, so painted-white in a light grey.",
+  "wall": "painted-white",
+  "wallTint": "#cfd0d0",
+  "trim": "painted-steel-mid",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "frame": "painted-steel",
+  "storefrontFrame": "painted-steel",
+  "bulkhead": "painted-steel",
+  "ground": "lobby",
+  "upper": "apartment",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.6,
+    "layout": [
+      {
+        "kind": "door",
+        "from": 0.08,
+        "to": 0.42,
+        "leaf": "painted-steel",
+        "stair": true
+      },
+      {
+        "kind": "window",
+        "from": 0.5,
+        "to": 0.92
+      }
+    ]
+  },
+  "weathering": {
+    "patches": {
+      "strength": 0.08,
+      "metres": 1.6,
+      "top": 3.5,
+      "mottle": 0.06
+    },
+    "grime": {
+      "strength": 0.22,
+      "metres": 2.4
+    },
+    "soot": {
+      "height": 1.1,
+      "strength": 0.26
+    },
+    "streak": {
+      "strength": 0.035,
+      "columnMetres": 2.2,
+      "drop": 0.7
+    },
+    "bandStrength": 0.1,
+    "axis": "wall"
+  },
+  "storefrontGlass": "glass-dark",
+  "groundBand": {
+    "material": "painted-stucco",
+    "tint": "#2d2e30",
+    "topM": 6.35
+  },
+  "coping": {
+    "heightM": 0.3,
+    "projectionM": 0.05,
+    "material": "painted-steel-mid",
+    "tint": "#b9babb"
+  },
+  "upperWindowSpans": [
+    [
+      0.14,
+      0.86
+    ]
+  ],
+  "upperSillM": 0.7,
+  "upperHeadM": 2.25,
+  "mullionM": 1.5,
+  "glass": "glass-shell",
+  "glassModel": {
+    "upper": "glass-reflective@b8c0c6",
+    "street": "glass-storefront@8e979d"
+  }
+}

@@ -1,0 +1,103 @@
+{
+ "seed": 33,
+ "notes": "Rework r3: khaki-olive stucco, grouped casements behind continuous iron balconies, rusticated base (central arched grilled door between two wide arched windows) on a dark brown plinth, string course, fire escape on the left balconies. 4 storeys kept (LiDAR 15.3 m). Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. GroundBand lift (2026-10-03): groundBand tint #a89870 -> #b9ad8d (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#dad2ba",
+ "trim": "painted-white@e8e0c8",
+ "frame": "painted-white@ece6d4",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@ece6d4",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-stucco@65564a",
+ "cornice": true,
+ "corniceProjectionM": 0.8,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.4,
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "bays": [],
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#b9ad8d",
+  "topM": 4.771
+ },
+ "storefront": {
+  "bulkheadM": 1.0,
+  "transomM": 0.4,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.09,
+    "to": 0.28,
+    "kind": "window",
+    "headM": 3.5,
+    "arch": {
+     "type": "round"
+    }
+   },
+   {
+    "from": 0.4,
+    "to": 0.6,
+    "kind": "gate",
+    "stair": true,
+    "leaf": "painted-steel@221e1c",
+    "headM": 3.4,
+    "arch": {
+     "type": "round"
+    }
+   },
+   {
+    "from": 0.73,
+    "to": 0.92,
+    "kind": "window",
+    "headM": 3.5,
+    "arch": {
+     "type": "round"
+    }
+   }
+  ]
+ },
+ "fireEscape": {
+  "at": 0.3,
+  "widthM": 2.4,
+  "depthM": 0.9,
+  "material": "painted-steel"
+ },
+ "upperOpenings": [
+  {
+   "at": 0.19,
+   "w": 1.9,
+   "kind": "triple",
+   "sillM": 0.5,
+   "headM": 2.7
+  },
+  {
+   "at": 0.52,
+   "w": 1.9,
+   "kind": "triple",
+   "sillM": 0.5,
+   "headM": 2.7
+  },
+  {
+   "at": 0.82,
+   "w": 1.9,
+   "kind": "triple",
+   "sillM": 0.5,
+   "headM": 2.7
+  }
+ ],
+ "hyDRubble": {
+  "toM": 3.8,
+  "courseM": 0.6,
+  "blockM": 1.0,
+  "projM": 0.03,
+  "shade": 0.7,
+  "seed": 3,
+  "maxTris": 6000
+ }
+}

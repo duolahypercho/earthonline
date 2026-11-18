@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "asset": "polyhaven-blue-metal-plate-2k",
+  "license": "CC0-1.0",
+  "author": "Rob Tuytel",
+  "assetPage": "https://polyhaven.com/a/blue_metal_plate",
+  "physicalWidthMetres": 2.5,
+  "intent": "shopfront interior per-part-class surface atlas (round 2): differentiate wood, card and painted metal from the shell plaster",
+  "sources": {
+    "diffuse": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/blue_metal_plate/blue_metal_plate_diff_2k.jpg",
+      "md5": "6189f7c443f0b7767d3e046f021b5495",
+      "downloadedMd5": "6189f7c443f0b7767d3e046f021b5495",
+      "downloadedSha256": "82855f6297ad07ea7ea4d1c501e6b56ed4c9c758653ca126bda9fd0ebba63c59"
+    },
+    "normalGlPng": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/blue_metal_plate/blue_metal_plate_nor_gl_2k.png",
+      "md5": "575215af128c0f58a661694c13ee1458",
+      "downloadedMd5": "575215af128c0f58a661694c13ee1458",
+      "downloadedSha256": "8c5701c09d71bbc7dffe97b45fde3c57b132c5fca8d39851695f7566f54b02e9"
+    },
+    "armPng": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/2k/blue_metal_plate/blue_metal_plate_arm_2k.png",
+      "md5": "f765240c85b92f3d0be74b7d7d4b7143",
+      "downloadedMd5": "f765240c85b92f3d0be74b7d7d4b7143",
+      "downloadedSha256": "c04e73256f21c29bea59929fde7a43578cf2ec56550d21449d37918ad822e668"
+    }
+  },
+  "outputs": {
+    "diffuse": {
+      "path": "public/assets/polyhaven-blue-metal-plate-diffuse-2k.jpg",
+      "sha256": "82855f6297ad07ea7ea4d1c501e6b56ed4c9c758653ca126bda9fd0ebba63c59",
+      "encoding": "sRGB base color"
+    },
+    "nra": {
+      "path": "public/assets/polyhaven-blue-metal-plate-nra-2k.png",
+      "sha256": "f60b6e5631339e7fe3e4b01f8a7490b0a4c0012844ac87cc0a7eec978b65fded",
+      "encoding": "R,G OpenGL tangent normal x,y (z rebuilt); B Poly Haven roughness; A 128 + occlusion * 127; 8-bit PNG, linear/no-color, not premultiplied"
+    }
+  },
+  "generator": {
+    "path": "scripts/assets/fetch-polyhaven-texture.mjs",
+    "sha256": "dc95175584447e64778fdca3331fd860947e02b7405d89d77f83b14176a720ce",
+    "algorithm": "diffuse: lossless copy of the Poly Haven 2k jpg after md5 verification against the files API; nra: decode the verified 2k PNG normal and ARM, pack R,G=normal xy, B=roughness, A=128+round(ao*127), encode 8-bit RGBA PNG with Paeth filtering and deflate level 9"
+  }
+}

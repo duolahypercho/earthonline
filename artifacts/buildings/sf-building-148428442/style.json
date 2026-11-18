@@ -1,0 +1,52 @@
+{
+  "seed": 148,
+  "notes": "Round 1 (street-level look, words only): flat modern mid-rise on Polk. Dark charcoal stone-panel base with tall black-framed storefront glazing and a recessed glass entry; pale cream plaster upper storeys with tall slender dark-framed windows in pairs; flat roof with a thin coping, no cornice, no belt course, no hoods, no awning (a thin dark canopy band reads over the base). Data governs mass: 3 storeys, 9.9 m LiDAR. Round 2: fewer, taller windows (bay 3.3 m, 1.45 m wide).",
+  "wall": "painted-stucco",
+  "wallTint": "#e4dccb",
+  "trim": "painted-steel-light",
+  "frame": "painted-steel",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "coping": {
+    "heightM": 0.35,
+    "projectionM": 0.08,
+    "material": "painted-steel-light"
+  },
+  "bayM": 3.3,
+  "windowW": 1.45,
+  "windowSillM": 0.4,
+  "windowHeadM": 2.4,
+  "endPierM": 1.0,
+  "glass": "glass-reflective",
+  "storefrontGlass": "glass-low-iron",
+  "storefrontFrame": "painted-steel",
+  "bulkhead": "painted-steel-mid",
+  "ground": "shop",
+  "upper": "apartment",
+  "storefront": {
+    "awning": false,
+    "bulkheadM": 0.7,
+    "transomM": 0.55,
+    "pierM": 0.55,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.02,
+        "to": 0.36
+      },
+      {
+        "kind": "door",
+        "from": 0.4,
+        "to": 0.5,
+        "leaf": "painted-steel",
+        "stair": true
+      },
+      {
+        "kind": "window",
+        "from": 0.54,
+        "to": 0.98
+      }
+    ]
+  }
+}

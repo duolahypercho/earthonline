@@ -1,0 +1,25 @@
+sf-footprint-supplement.json - extra San Francisco building footprints (sf-footprint-supplement-v1)
+
+Sources, as recorded in the file's own meta.sources:
+
+- DataSF "Building Footprints" (ynuv-fyni), City and County of San Francisco
+  Open Data Commons Public Domain Dedication and License (PDDL) 1.0:
+  https://opendatacommons.org/licenses/pddl/1-0/
+  Dataset page: https://data.sfgov.org/d/ynuv-fyni
+  Source file:  datasf-building-footprints-ynuv-fyni-2026-09-03.csv
+
+- DataSF "Assessor Historical Secured Property Tax Rolls" (wv5m-vpq2),
+  City and County of San Francisco, PDDL 1.0
+  Source file:  datasf-assessor-roll-wv5m-vpq2-2025-2026-09-23.csv
+
+Output sha256: 8209db51448c536b5d4f006b311dc1358ee9fb0b68b5bf0c40a7548bee6618a5 (sf-footprint-supplement.json)
+Produced by the project's earlier data pipeline (generator recorded in meta); that
+script is not part of this repository.
+
+Contents: 276 footprints in the sf-city frame (x east, z south, metres), each with
+its block/lot key, street address (275 of 276), height from the footprint dataset's
+LiDAR fields, and assessor-roll civic attributes (storeys, year built, use code,
+units, construction and property class). Ids are 8e9 + block/lot.
+DataSF footprints are shifted per area onto the runtime footprints (median of
+one-to-one neighbour pairs, recorded in meta.offsets) and trimmed off every runtime
+footprint they would overlap; no OpenStreetMap geometry is copied into this file.

@@ -1,0 +1,184 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-8003752079",
+  "slug": "b8003752079",
+  "walkIndex": 108,
+  "street": "Folsom Street",
+  "address": "893 Folsom Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 6.71,
+  "storeys": 2,
+  "floors": {
+    "groundM": 3.61,
+    "upperM": 2.5,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1925,
+  "use": "IND",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "loft",
+  "material": "concrete",
+  "frame": {
+    "edgeIndex": 5,
+    "center": {
+      "x": 1460.925,
+      "z": 251.25
+    },
+    "heading": -0.783106,
+    "width": 10.263,
+    "depth": 50.429
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": 5.131,
+      "z": -25.214
+    },
+    {
+      "x": -2.048,
+      "z": -24.276
+    },
+    {
+      "x": -2.082,
+      "z": -9.427
+    },
+    {
+      "x": -2.077,
+      "z": -2.363
+    },
+    {
+      "x": -5.069,
+      "z": -1.938
+    },
+    {
+      "x": -5.131,
+      "z": 25.214
+    },
+    {
+      "x": 4.125,
+      "z": 25.214
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 5.131,
+        "z": -25.214
+      },
+      "b": {
+        "x": -2.048,
+        "z": -24.276
+      },
+      "lengthM": 7.24,
+      "role": "rear",
+      "partyShare": 0.19
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -2.048,
+        "z": -24.276
+      },
+      "b": {
+        "x": -2.082,
+        "z": -9.427
+      },
+      "lengthM": 14.849,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -2.082,
+        "z": -9.427
+      },
+      "b": {
+        "x": -2.077,
+        "z": -2.363
+      },
+      "lengthM": 7.064,
+      "role": "rear",
+      "partyShare": 0.13
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -2.077,
+        "z": -2.363
+      },
+      "b": {
+        "x": -5.069,
+        "z": -1.938
+      },
+      "lengthM": 3.022,
+      "role": "rear",
+      "partyShare": 0.31
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": -5.069,
+        "z": -1.938
+      },
+      "b": {
+        "x": -5.131,
+        "z": 25.214
+      },
+      "lengthM": 27.153,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": -5.131,
+        "z": 25.214
+      },
+      "b": {
+        "x": 4.125,
+        "z": 25.214
+      },
+      "lengthM": 9.256,
+      "role": "front",
+      "partyShare": 0.13
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": 4.125,
+        "z": 25.214
+      },
+      "b": {
+        "x": 5.131,
+        "z": -25.214
+      },
+      "lengthM": 50.439,
+      "role": "party",
+      "partyShare": 1
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

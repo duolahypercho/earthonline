@@ -1,0 +1,113 @@
+{
+ "seed": 7,
+ "notes": "Rework r6: warm beige clapboard with blue trim; ground = small windows, one small round-arched window, white doors with gabled porch hoods, double door under a porch gable at the right; no large arched shopfront glazing; upper arched windows kept; main front gable reduced.",
+ "wall": "painted-clapboard",
+ "wallTint": "#e8dcc0",
+ "trim": "painted-white@4d688d",
+ "frame": "painted-white@4d688d",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@4d688d",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@a39d93",
+ "cornice": false,
+ "corniceProjectionM": 0.3,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "upperWindows": [
+  0.15,
+  0.44,
+  0.64,
+  0.92
+ ],
+ "bays": [],
+ "storefront": {
+  "bulkheadM": 0.9,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.01,
+    "to": 0.06,
+    "kind": "door"
+   },
+   {
+    "from": 0.12,
+    "to": 0.27,
+    "kind": "window",
+    "headM": 2.3
+   },
+   {
+    "from": 0.31,
+    "to": 0.355,
+    "kind": "door"
+   },
+   {
+    "from": 0.39,
+    "to": 0.43,
+    "kind": "window",
+    "headM": 2.2,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   },
+   {
+    "from": 0.46,
+    "to": 0.51,
+    "kind": "door"
+   },
+   {
+    "from": 0.6,
+    "to": 0.78,
+    "kind": "window",
+    "headM": 2.5,
+    "grille": true
+   },
+   {
+    "from": 0.86,
+    "to": 0.956,
+    "kind": "double-door",
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "rooms",
+ "streetStills": true,
+ "sashFrames": {
+  "material": "painted-white@3d6aa8",
+  "stileM": 0.06
+ },
+ "hbBayGlazing": {
+  "marginM": 0.2,
+  "maxW": 1.05,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#4a7ab5",
+  "sashM": 0.08,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "floorsM": {
+  "groundM": 3.6,
+  "upperM": 3.0
+ },
+ "wallTopM": 7.2,
+ "hyDLap": {
+  "pitchM": 0.16,
+  "fromM": 0.4
+ },
+ "upperWindowArch": {
+  "type": "round",
+  "surround": true
+ }
+}

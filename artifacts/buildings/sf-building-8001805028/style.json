@@ -1,0 +1,127 @@
+{
+  "builder": "house",
+  "seed": 52,
+  "storeysSeen": 3,
+  "groundM": 2.9,
+  "roofLevelM": 8.65,
+  "programme": "flats",
+  "notes": "1468 La Playa (1970 flats; roll 2 storeys, LiDAR median 9.1 m). By eye (words only): tan pebble-dash stucco flats over a rough stone-veneer ground storey with a white roll-up garage door and a glazed lobby door with a dark frame; large white-framed windows, two per floor, and a band of tan shingle at the parapet. DATA CONFLICT: the street shows four levels, but 9.1 m holds only three at the 2.6 m minimum storey, so three are drawn (garage plus two floors of flats).",
+  "wall": "float-finish-stucco",
+  "wallTint": "#bcab8f",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "groundBand": {
+    "material": "cast-stone",
+    "tint": "#c9b89a",
+    "topM": 2.9
+  },
+  "roofForm": {
+    "form": "flat",
+    "eaveM": 0.0
+  },
+  "parapetM": 0.45,
+  "panels": [
+    {
+      "storey": 2,
+      "from": 0.02,
+      "to": 0.98,
+      "y0": 2.55,
+      "y1": 3.2,
+      "material": "painted-clapboard",
+      "tint": "#9c8a70"
+    }
+  ],
+  "garages": [
+    {
+      "from": 0.08,
+      "to": 0.55,
+      "headM": 2.3,
+      "material": "painted-white",
+      "pattern": "sectional"
+    }
+  ],
+  "entry": {
+    "from": 0.64,
+    "to": 0.78,
+    "headM": 2.3,
+    "material": "painted-steel",
+    "glass": true,
+    "recessM": 0.4
+  },
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.08,
+      "to": 0.42,
+      "sill": 0.8,
+      "head": 2.25,
+      "panes": [
+        2,
+        2
+      ]
+    },
+    {
+      "storey": 1,
+      "from": 0.55,
+      "to": 0.92,
+      "sill": 0.8,
+      "head": 2.25,
+      "panes": [
+        2,
+        2
+      ]
+    },
+    {
+      "storey": 2,
+      "from": 0.08,
+      "to": 0.42,
+      "sill": 0.8,
+      "head": 2.25,
+      "panes": [
+        2,
+        2
+      ]
+    },
+    {
+      "storey": 2,
+      "from": 0.55,
+      "to": 0.92,
+      "sill": 0.8,
+      "head": 2.25,
+      "panes": [
+        2,
+        2
+      ]
+    }
+  ],
+  "rearWall": "painted-stucco",
+  "rearTint": "#d6ccb8",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "rear": {
+    "windowsPerStorey": 3,
+    "windowW": 1.1,
+    "panes": [
+      2,
+      1
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.3,
+        0.4
+      ],
+      [
+        0.7,
+        0.6
+      ]
+    ]
+  },
+  "rect": [
+    5.7,
+    10.6,
+    -12.6,
+    18.4
+  ]
+}

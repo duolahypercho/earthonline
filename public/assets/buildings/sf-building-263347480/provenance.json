@@ -1,0 +1,233 @@
+{
+  "kind": "blender-building",
+  "id": "sf-building-263347480",
+  "pass": "b263347480-blender-5628d1e5-dc2e91",
+  "generator": "scripts/blender-buildings/build_building.py",
+  "generatorSha256": "5628d1e59fcfec3f41fd3c3175aac1334269246e553ce57e21f60ec0b3ad2dd5",
+  "blender": "Blender 5.1.2",
+  "inputs": {
+    "spec": "artifacts/buildings/sf-building-263347480/spec.json",
+    "specSha256": "8e9e517e47476c0f11fed0926e34af96c8be13a5aabef7546ecc57d343053734",
+    "style": "artifacts/buildings/sf-building-263347480/style.json",
+    "styleSha256": "f3817498150e30be3de3ed80b9f6610e9c720b5e742458e8510b3a7fd0d211c5",
+    "styleNotesRevised": "notes text reworded for publication after the build; geometry inputs unchanged"
+  },
+  "sources": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "street count 4 (style storeysSeen) overrides Assessor roll (assessor) 3"
+  },
+  "license": "Building geometry generated from open data (DataSF footprints, LiDAR, Assessor roll). Furniture in the fine-s*.glb storeys is decimated from the CC0 pieces listed under `furniture`.",
+  "furniture": [
+    {
+      "kind": "ceiling-lamp",
+      "source": "https://polyhaven.com/a/modern_ceiling_lamp_01",
+      "name": "Modern Ceiling Lamp 01",
+      "authors": [
+        "James Ray Cock"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "wall-sconce",
+      "source": "https://polyhaven.com/a/industrial_wall_sconce",
+      "name": "Industrial Wall Sconce",
+      "authors": [
+        "Ulan Cabanilla"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "shelving",
+      "source": "https://polyhaven.com/a/steel_frame_shelves_01",
+      "name": "Steel Frame Shelves 01",
+      "authors": [
+        "James Ray Cock"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "cardboard-box",
+      "source": "https://polyhaven.com/a/cardboard_box_01",
+      "name": "Cardboard Box 01",
+      "authors": [
+        "Rahul Chaudhary"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "crate",
+      "source": "https://polyhaven.com/a/wooden_crate_01",
+      "name": "Wooden Crate 01",
+      "authors": [
+        "James Ray Cock"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "writing-desk",
+      "source": "https://polyhaven.com/a/small_wooden_table_01",
+      "name": "Small Wooden Table 01",
+      "authors": [
+        "Ulan Cabanilla"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "desk-lamp",
+      "source": "https://polyhaven.com/a/desk_lamp_arm_01",
+      "name": "Desk Lamp Arm 01",
+      "authors": [
+        "Yann Kervran",
+        "Kuutti Siitonen"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "bar-stool",
+      "source": "https://polyhaven.com/a/bar_chair_round_01",
+      "name": "Bar Chair Round 01",
+      "authors": [
+        "Dairon Sanchez"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "frame-a",
+      "source": "https://polyhaven.com/a/hanging_picture_frame_01",
+      "name": "Hanging Picture Frame 01",
+      "authors": [
+        "James Ray Cock"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "frame-b",
+      "source": "https://polyhaven.com/a/hanging_picture_frame_02",
+      "name": "Hanging Picture Frame 02",
+      "authors": [
+        "James Ray Cock"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "frame-c",
+      "source": "https://polyhaven.com/a/hanging_picture_frame_03",
+      "name": "Hanging Picture Frame 03",
+      "authors": [
+        "James Ray Cock"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "bed-frame",
+      "source": "https://polyhaven.com/a/old_bed_frame",
+      "name": "Old Bed Frame",
+      "authors": [
+        "Luca B"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "nightstand",
+      "source": "https://polyhaven.com/a/painted_wooden_nightstand",
+      "name": "Painted Wooden Nightstand",
+      "authors": [
+        "Kirill Sannikov"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "dresser",
+      "source": "https://polyhaven.com/a/painted_wooden_cabinet",
+      "name": "Painted Wooden Cabinet",
+      "authors": [
+        "Kirill Sannikov"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "plant-small",
+      "source": "https://polyhaven.com/a/potted_plant_04",
+      "name": "Potted Plant 04",
+      "authors": [
+        "James Ray Cock"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "lounge-chair",
+      "source": "https://polyhaven.com/a/mid_century_lounge_chair",
+      "name": "Mid Century Lounge Chair",
+      "authors": [
+        "Kuutti Siitonen"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "side-table",
+      "source": "https://polyhaven.com/a/side_table_01",
+      "name": "Side Table 01",
+      "authors": [
+        "James Ray Cock"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "cafe-chair",
+      "source": "https://polyhaven.com/a/dining_chair_02",
+      "name": "Dining Chair 02",
+      "authors": [
+        "James Ray Cock"
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "kind": "plant-tall",
+      "source": "https://polyhaven.com/a/potted_plant_01",
+      "name": "Potted Plant 01",
+      "authors": [
+        "Rico Cilliers"
+      ],
+      "license": "CC0-1.0"
+    }
+  ],
+  "assets": {
+    "exterior": {
+      "url": "/assets/buildings/sf-building-263347480/exterior.glb",
+      "sha256": "3e8b4cb884fe6262f4e019b97659719fad494dae91aad371ceee5cf060a79ef9",
+      "bytes": 1996904
+    },
+    "interior": {
+      "url": "/assets/buildings/sf-building-263347480/interior.glb",
+      "sha256": "2dcbc117d45394fa175baba39df5e789783bca4054c3f64d09fccb28c11b7feb",
+      "bytes": 373448
+    },
+    "fine": [
+      {
+        "storey": 0,
+        "url": "/assets/buildings/sf-building-263347480/fine-s0.glb",
+        "sha256": "576628ef95785b5a2b6ad9d296485cb792163cb9bea13695e8dacc09bd0c3d79",
+        "bytes": 10160
+      },
+      {
+        "storey": 1,
+        "url": "/assets/buildings/sf-building-263347480/fine-s1.glb",
+        "sha256": "492439215f7edb804f478566b1b6c0b1fa84acc29faee69912d18fb779ee2c04",
+        "bytes": 89760
+      },
+      {
+        "storey": 2,
+        "url": "/assets/buildings/sf-building-263347480/fine-s2.glb",
+        "sha256": "ae4eaa264f2bd2a4aa0a113c469412ba6a9977d6e97a81f2505c0e5292c8d4b0",
+        "bytes": 88964
+      },
+      {
+        "storey": 3,
+        "url": "/assets/buildings/sf-building-263347480/fine-s3.glb",
+        "sha256": "6156a96dff794854746da7191f49cca1f9de9f8c10696144c5bb3ce8d385c58e",
+        "bytes": 89672
+      }
+    ]
+  }
+}

@@ -1,0 +1,305 @@
+{
+  "version": "ez-vegetation-v1",
+  "atlas": {
+    "file": "ez-vegetation-atlas-v1.png",
+    "sha256": "f3b162773028126967c3e97c341c28e4b6073f48d7825ff826e7cdca04d93030",
+    "layout": "ez-vegetation-atlas-v1",
+    "width": 2048,
+    "height": 2048
+  },
+  "meshes": {
+    "file": "src/render/vegetation/ez-tree/ground-meshes.generated.js",
+    "sha256": "3e3e4a9bc281715150485d54095f3738c0592a409fa1b568cb6c09954f46165b",
+    "materials": {
+      "grass": [
+        {
+          "material": "GrassMaterial",
+          "mode": "grass-atlas",
+          "vertices": 12,
+          "colour": null
+        }
+      ],
+      "flower-blue": [
+        {
+          "material": "texture3",
+          "mode": "texture-mean",
+          "vertices": 104,
+          "colour": [
+            0.0401,
+            0.1997,
+            0.0599
+          ]
+        },
+        {
+          "material": "blue",
+          "mode": "factor",
+          "vertices": 460,
+          "colour": [
+            0.1238,
+            0.0416,
+            1
+          ]
+        },
+        {
+          "material": "texture 2",
+          "mode": "texture-mean",
+          "vertices": 120,
+          "colour": [
+            0.453,
+            0.3218,
+            0.0093
+          ]
+        },
+        {
+          "material": "leef",
+          "mode": "leaf-atlas",
+          "vertices": 86,
+          "colour": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "material": "green",
+          "mode": "factor",
+          "vertices": 82,
+          "colour": [
+            0.0069,
+            0.2883,
+            0
+          ]
+        },
+        {
+          "material": "white",
+          "mode": "factor",
+          "vertices": 122,
+          "colour": [
+            0.8,
+            0.8,
+            0.8
+          ]
+        },
+        {
+          "material": "dark green",
+          "mode": "factor",
+          "vertices": 24,
+          "colour": [
+            0.0022,
+            0.0352,
+            0
+          ]
+        }
+      ],
+      "flower-white": [
+        {
+          "material": "texture3",
+          "mode": "texture-mean",
+          "vertices": 104,
+          "colour": [
+            0.0401,
+            0.1997,
+            0.0599
+          ]
+        },
+        {
+          "material": "white",
+          "mode": "factor",
+          "vertices": 588,
+          "colour": [
+            0.8,
+            0.8,
+            0.8
+          ]
+        },
+        {
+          "material": "texture 2",
+          "mode": "texture-mean",
+          "vertices": 120,
+          "colour": [
+            0.453,
+            0.3218,
+            0.0093
+          ]
+        },
+        {
+          "material": "leef",
+          "mode": "leaf-atlas",
+          "vertices": 86,
+          "colour": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "material": "green",
+          "mode": "factor",
+          "vertices": 76,
+          "colour": [
+            0.0069,
+            0.2883,
+            0
+          ]
+        },
+        {
+          "material": "dark green",
+          "mode": "factor",
+          "vertices": 24,
+          "colour": [
+            0.0022,
+            0.0352,
+            0
+          ]
+        }
+      ],
+      "flower-yellow": [
+        {
+          "material": "texture3",
+          "mode": "texture-mean",
+          "vertices": 104,
+          "colour": [
+            0.0401,
+            0.1997,
+            0.0599
+          ]
+        },
+        {
+          "material": "texture",
+          "mode": "texture-mean",
+          "vertices": 460,
+          "colour": [
+            0.8341,
+            0.7114,
+            0.0042
+          ]
+        },
+        {
+          "material": "texture 2",
+          "mode": "texture-mean",
+          "vertices": 120,
+          "colour": [
+            0.453,
+            0.3218,
+            0.0093
+          ]
+        },
+        {
+          "material": "leef",
+          "mode": "leaf-atlas",
+          "vertices": 86,
+          "colour": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        {
+          "material": "green",
+          "mode": "factor",
+          "vertices": 78,
+          "colour": [
+            0.0069,
+            0.2883,
+            0
+          ]
+        },
+        {
+          "material": "dark red",
+          "mode": "factor",
+          "vertices": 120,
+          "colour": [
+            0.1523,
+            0,
+            0.0279
+          ]
+        },
+        {
+          "material": "dark green",
+          "mode": "factor",
+          "vertices": 24,
+          "colour": [
+            0.0022,
+            0.0352,
+            0
+          ]
+        }
+      ]
+    }
+  },
+  "sources": [
+    {
+      "id": "oak",
+      "url": "https://media.githubusercontent.com/media/dgreenheck/ez-tree/dcf309bd86bd521083d9c70f01f2de45fdc7c457/src/app/public/textures/leaves/oak.png",
+      "sha256": "24451223cf396d22910a4932b8bb996a7274e63d81e24128c96a430ab67822b1",
+      "licence": "MIT"
+    },
+    {
+      "id": "ash",
+      "url": "https://media.githubusercontent.com/media/dgreenheck/ez-tree/dcf309bd86bd521083d9c70f01f2de45fdc7c457/src/app/public/textures/leaves/ash.png",
+      "sha256": "5ec987db3829a839856c32c79b18a33a78f209e911cad55c65abfb77f30e2d29",
+      "licence": "MIT"
+    },
+    {
+      "id": "aspen",
+      "url": "https://media.githubusercontent.com/media/dgreenheck/ez-tree/dcf309bd86bd521083d9c70f01f2de45fdc7c457/src/app/public/textures/leaves/aspen.png",
+      "sha256": "6c8cbfa3eda0f070df6ebb3c8ec6899400f3c966d1658fcfd9ae518347c2dcb9",
+      "licence": "MIT"
+    },
+    {
+      "id": "pine",
+      "url": "https://media.githubusercontent.com/media/dgreenheck/ez-tree/dcf309bd86bd521083d9c70f01f2de45fdc7c457/src/app/public/textures/leaves/pine.png",
+      "sha256": "88be36a2387554ac4b7c7d1549eae454a37ad896e8e33a7d6ae5956bd169ab08",
+      "licence": "MIT"
+    },
+    {
+      "id": "grass",
+      "url": "https://raw.githubusercontent.com/dgreenheck/ez-tree/dcf309bd86bd521083d9c70f01f2de45fdc7c457/src/app/public/models/grass.glb",
+      "sha256": "13f83e0a6b7a8756642e030bcbe7e335092a1bad3d6f42a3d65f422a25016c28",
+      "licence": "MIT"
+    },
+    {
+      "id": "flower-blue",
+      "url": "https://raw.githubusercontent.com/dgreenheck/ez-tree/dcf309bd86bd521083d9c70f01f2de45fdc7c457/src/app/public/models/flower_blue.glb",
+      "sha256": "1174f9130672bef1b5aa7e30a6d8b7ba8128ce59fa5c9d462ff04c21831851a8",
+      "licence": "MIT"
+    },
+    {
+      "id": "flower-white",
+      "url": "https://raw.githubusercontent.com/dgreenheck/ez-tree/dcf309bd86bd521083d9c70f01f2de45fdc7c457/src/app/public/models/flower_white.glb",
+      "sha256": "b38fd66e59764f21c2ed1054717817161bf8bbc28c7947e7f3a5f3fa6fdaea9b",
+      "licence": "MIT"
+    },
+    {
+      "id": "flower-yellow",
+      "url": "https://raw.githubusercontent.com/dgreenheck/ez-tree/dcf309bd86bd521083d9c70f01f2de45fdc7c457/src/app/public/models/flower_yellow.glb",
+      "sha256": "778351964bf00f586a86280c9324376e9be845703d65566e24c74374cdd04f81",
+      "licence": "MIT"
+    },
+    {
+      "id": "bark",
+      "url": "https://ambientcg.com/get?file=Bark001_1K-PNG.zip",
+      "sha256": "c585486ef1c00a383cd603340b19bcceab429246a10857ad41c8424f0a8b8515",
+      "licence": "CC0-1.0"
+    }
+  ],
+  "upstream": {
+    "ezTree": {
+      "repository": "https://github.com/dgreenheck/ez-tree",
+      "commit": "dcf309bd86bd521083d9c70f01f2de45fdc7c457",
+      "licence": "MIT",
+      "copyright": "Copyright (c) 2024 Daniel Greenheck"
+    },
+    "ambientCG": {
+      "asset": "Bark001",
+      "licence": "CC0-1.0",
+      "licenceUrl": "https://docs.ambientcg.com/license/"
+    }
+  },
+  "transform": [
+    "aspen sprig recoloured to summer green (luminance kept)",
+    "sprigs resized to 768 px cells with colour bleed into transparent texels",
+    "bark 512x1024 resized to 512x512 tiles; the material restores aspect with a 0.45 m vertical period",
+    "flower parts: tiny swatch textures averaged to linear vertex colour; leaf photograph kept in atlas"
+  ]
+}

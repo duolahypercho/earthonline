@@ -1,0 +1,119 @@
+{
+ "seed": 13,
+ "notes": "Cream stucco, varnished entry and one panelled off-white garage (already in GLB), storey 1 as two groups of three separate sashes (now six windows, not two ribbons), escape moved slightly left of centre between the bays. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-stucco",
+ "wallTint": "#f0eae1",
+ "trim": "painted-white@ece4d2",
+ "frame": "painted-white@2e2a26",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@2e2a26",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-stucco@ece6da",
+ "cornice": true,
+ "corniceProjectionM": 0.15,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.5,
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.0,
+  "upperM": 3.06
+ },
+ "upperWindows": [
+  0.49
+ ],
+ "bays": [
+  {
+   "at": 0.27,
+   "widthM": 2.2,
+   "projectionM": 0.6,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#f0eae1"
+  },
+  {
+   "at": 0.75,
+   "widthM": 2.4,
+   "projectionM": 0.6,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#f0eae1"
+  }
+ ],
+ "fireEscape": {
+  "at": 0.47,
+  "widthM": 1.6,
+  "depthM": 0.9,
+  "material": "painted-steel"
+ },
+ "storefront": {
+  "bulkheadM": 0.6,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.07,
+    "to": 0.23,
+    "kind": "door",
+    "stair": true,
+    "leaf": "wood-siding@7a4a2c",
+    "headM": 2.5
+   },
+   {
+    "from": 0.43,
+    "to": 0.74,
+    "kind": "garage",
+    "material": "painted-white",
+    "tint": "#e6ddca",
+    "headM": 2.5
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "mullionM": 0.9,
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.1,
+     0.17
+    ],
+    [
+     0.2,
+     0.29
+    ],
+    [
+     0.33,
+     0.4
+    ],
+    [
+     0.66,
+     0.72
+    ],
+    [
+     0.76,
+     0.85
+    ],
+    [
+     0.89,
+     0.96
+    ]
+   ],
+   "sillM": 0.9,
+   "headM": 2.4
+  }
+ },
+ "garagePanel": {
+  "leaves": 1,
+  "cols": 1,
+  "rows": 4,
+  "doorM": 2.6,
+  "tint": "#e6ddca",
+  "panelTint": "#d8cdb6"
+ },
+ "streetStills": true
+}

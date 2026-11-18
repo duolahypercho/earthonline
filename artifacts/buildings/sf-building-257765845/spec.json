@@ -1,0 +1,127 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-257765845",
+  "slug": "b257765845",
+  "walkIndex": 5196,
+  "street": "Hyde Street",
+  "address": "1900;1906 Hyde Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 12.75,
+  "storeys": 4,
+  "floors": {
+    "groundM": 3.949,
+    "upperM": 2.734,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1908,
+  "use": "MRES",
+  "usage": "mixed",
+  "amenity": "laundry",
+  "shop": null,
+  "facade": "bay-window",
+  "material": "clapboard",
+  "frame": {
+    "edgeIndex": 0,
+    "center": {
+      "x": 56.806,
+      "z": 2263.716
+    },
+    "heading": -1.734162,
+    "width": 18.627,
+    "depth": 7.316
+  },
+  "frameMirrored": true,
+  "polygonWinding": "cw",
+  "polygon": [
+    {
+      "x": 9.202,
+      "z": 3.658
+    },
+    {
+      "x": -9.244,
+      "z": 3.658
+    },
+    {
+      "x": -9.313,
+      "z": -3.527
+    },
+    {
+      "x": 9.313,
+      "z": -3.658
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 9.202,
+        "z": 3.658
+      },
+      "b": {
+        "x": -9.244,
+        "z": 3.658
+      },
+      "lengthM": 18.446,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -9.244,
+        "z": 3.658
+      },
+      "b": {
+        "x": -9.313,
+        "z": -3.527
+      },
+      "lengthM": 7.185,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -9.313,
+        "z": -3.527
+      },
+      "b": {
+        "x": 9.313,
+        "z": -3.658
+      },
+      "lengthM": 18.627,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 9.313,
+        "z": -3.658
+      },
+      "b": {
+        "x": 9.202,
+        "z": 3.658
+      },
+      "lengthM": 7.316,
+      "role": "rear",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

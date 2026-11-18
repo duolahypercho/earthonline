@@ -1,0 +1,140 @@
+{
+ "seed": 3,
+ "notes": "1908 white flats E side: raised garage storey under two floors. Ground: wide white panelled garage door right, a columned porch with a stair up to the entry on the left. Storey 1: three-sash cant bay over the garage; storey 2: two round bays with curved cornices. 3 visible storeys; the roll says 4 (garage counted). Added columned portico + stair at storey-1 level (hand.py) and a heavier bracketed cornice. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. GroundBand lift (2026-10-03): groundBand tint #e0dccf -> #f0eee7 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-white",
+ "wallTint": "#f6f4ee",
+ "trim": "painted-white@f4f0e6",
+ "frame": "painted-white@f4f0e6",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f4f0e6",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "brick-running-bond@ffffff",
+ "cornice": true,
+ "corniceProjectionM": 0.8,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.71,
+   "widthM": 2.4,
+   "projectionM": 0.55,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f6f4ee",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.18,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    }
+   },
+   "toStorey": 1
+  },
+  {
+   "at": 0.26,
+   "widthM": 3.0,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-white",
+   "tint": "#f6f4ee",
+   "hyB": {
+    "plan": "swell",
+    "cornice": {
+     "projectionM": 0.18,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2
+   }
+  },
+  {
+   "at": 0.73,
+   "widthM": 3.0,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-white",
+   "tint": "#f6f4ee",
+   "hyB": {
+    "plan": "swell",
+    "cornice": {
+     "projectionM": 0.18,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2
+   }
+  }
+ ],
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#f0eee7",
+  "topM": 3.0
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.16,
+    "to": 0.32,
+    "kind": "double-door",
+    "stair": true,
+    "leaf": "painted-white@2a2420"
+   },
+   {
+    "from": 0.49,
+    "to": 0.86,
+    "kind": "garage",
+    "headM": 2.5,
+    "leaf": "painted-white@ece6d8"
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "storeysSeen": {
+  "count": 3,
+  "groundM": 3.0
+ },
+ "hbCorniceDentils": {
+  "spacingM": 0.16,
+  "sizeM": 0.09,
+  "tint": "#f4f0e6"
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.55,
+  "heightM": 0.5,
+  "depthM": 0.36,
+  "widthM": 0.22,
+  "material": "painted-white",
+  "tint": "#f4f0e6"
+ }
+}

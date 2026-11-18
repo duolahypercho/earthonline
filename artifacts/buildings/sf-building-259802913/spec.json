@@ -1,0 +1,185 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-259802913",
+  "slug": "b259802913",
+  "walkIndex": 5114,
+  "street": "Hyde Street",
+  "address": "1487 Sacramento Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "street count 4 (style storeysSeen) overrides Assessor roll (assessor) 3"
+  },
+  "storeysRoll": 3,
+  "heightM": 12.78,
+  "storeys": 4,
+  "floors": {
+    "groundM": 3.7,
+    "upperM": 2.81,
+    "roofM": 0.65
+  },
+  "yearBuilt": 1912,
+  "use": "MRES",
+  "usage": "mixed",
+  "amenity": "beauty",
+  "shop": null,
+  "facade": "bay-window",
+  "material": "painted",
+  "frame": {
+    "edgeIndex": 1,
+    "center": {
+      "x": 181.372,
+      "z": 1533.444
+    },
+    "heading": -1.730709,
+    "width": 10.28,
+    "depth": 26.455
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -5.14,
+      "z": 11.74
+    },
+    {
+      "x": -3.685,
+      "z": 13.227
+    },
+    {
+      "x": 2.595,
+      "z": 13.227
+    },
+    {
+      "x": 5.14,
+      "z": 10.791
+    },
+    {
+      "x": 5.025,
+      "z": -11.272
+    },
+    {
+      "x": 2.076,
+      "z": -13.227
+    },
+    {
+      "x": -4.936,
+      "z": -11.489
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -5.14,
+        "z": 11.74
+      },
+      "b": {
+        "x": -3.685,
+        "z": 13.227
+      },
+      "lengthM": 2.081,
+      "role": "rear",
+      "partyShare": 0.44
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -3.685,
+        "z": 13.227
+      },
+      "b": {
+        "x": 2.595,
+        "z": 13.227
+      },
+      "lengthM": 6.28,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 2.595,
+        "z": 13.227
+      },
+      "b": {
+        "x": 5.14,
+        "z": 10.791
+      },
+      "lengthM": 3.523,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 5.14,
+        "z": 10.791
+      },
+      "b": {
+        "x": 5.025,
+        "z": -11.272
+      },
+      "lengthM": 22.064,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": 5.025,
+        "z": -11.272
+      },
+      "b": {
+        "x": 2.076,
+        "z": -13.227
+      },
+      "lengthM": 3.538,
+      "role": "rear",
+      "partyShare": 0.13
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": 2.076,
+        "z": -13.227
+      },
+      "b": {
+        "x": -4.936,
+        "z": -11.489
+      },
+      "lengthM": 7.225,
+      "role": "rear",
+      "partyShare": 0.5
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": -4.936,
+        "z": -11.489
+      },
+      "b": {
+        "x": -5.14,
+        "z": 11.74
+      },
+      "lengthM": 23.23,
+      "role": "party",
+      "partyShare": 1
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

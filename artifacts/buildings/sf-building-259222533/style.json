@@ -1,0 +1,122 @@
+{
+ "seed": 7,
+ "notes": "Rework r7: ground = three narrow tall sashes left, plain door right of centre, one square multi-pane window right; round corner bay with three separate sashes between stucco piers; ladder escape with short drop ending on the brick. Warm beige stucco over dark brick.",
+ "wall": "painted-white",
+ "wallTint": "#ece1cc",
+ "trim": "painted-white@cdb68a",
+ "frame": "painted-white@efe8d4",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@efe8d4",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "brick-running-bond@ab8d92",
+ "cornice": true,
+ "corniceProjectionM": 0.45,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "upperWindows": [
+  0.12,
+  0.31
+ ],
+ "bays": [
+  {
+   "at": 0.85,
+   "widthM": 2.3,
+   "projectionM": 0.55,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#ece1cc",
+   "hyB": {
+    "plan": "swell",
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 1
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.12,
+    "to": 0.17,
+    "kind": "window",
+    "headM": 2.3
+   },
+   {
+    "from": 0.2,
+    "to": 0.29,
+    "kind": "window",
+    "headM": 2.3
+   },
+   {
+    "from": 0.32,
+    "to": 0.37,
+    "kind": "window",
+    "headM": 2.3
+   },
+   {
+    "from": 0.44,
+    "to": 0.52,
+    "kind": "door"
+   },
+   {
+    "from": 0.72,
+    "to": 0.85,
+    "kind": "window",
+    "headM": 2.1
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "sashFrames": {
+  "material": "painted-white@efe8d4",
+  "stileM": 0.06
+ },
+ "hbBayGlazing": {
+  "marginM": 0.2,
+  "maxW": 1.05,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#e6dcc4",
+  "sashM": 0.08,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "hbFloors": {
+  "groundM": 3.6,
+  "upperM": 3.277
+ },
+ "groundBand": {
+  "material": "brick-running-bond",
+  "tint": "#ab8d92",
+  "topM": 3.6
+ },
+ "hbLadderEscape": {
+  "at": 0.5,
+  "widthM": 1.9,
+  "depthM": 0.7,
+  "material": "painted-steel@111111",
+  "ladderOffM": 0.5,
+  "dropM": 0.6,
+  "gooseneckM": 0.25
+ }
+}

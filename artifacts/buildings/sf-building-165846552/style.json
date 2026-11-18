@@ -1,0 +1,239 @@
+{
+ "seed": 5,
+ "notes": "Seven-storey champagne ribbed-panel block over a full-height glass curtain wall with dense vertical mullions: deep-set dark-framed windows in pairs between ribbed panel strips, stacked in columns, thin flat roof edge. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game.",
+ "streetStills": true,
+ "glass": "glass-reflective",
+ "storefrontGlass": "glass-storefront",
+ "wall": "painted-stucco",
+ "windowW": 1.15,
+ "windowSillM": 0.7,
+ "windowHeadM": 2.2,
+ "cornice": false,
+ "corniceProjectionM": 0.4,
+ "beltCourse": false,
+ "ground": "lobby",
+ "upper": "apartment",
+ "wallTint": "#e6dcc4",
+ "trim": "painted-white@b8a272",
+ "frame": "painted-steel@1c2230",
+ "storefrontFrame": "painted-steel@262c3c",
+ "upperWindows": [
+  0.0292,
+  0.0542,
+  0.1125,
+  0.1375,
+  0.1958,
+  0.2208,
+  0.2792,
+  0.3042,
+  0.3625,
+  0.3875,
+  0.4458,
+  0.4708,
+  0.5292,
+  0.5542,
+  0.6125,
+  0.6375,
+  0.6958,
+  0.7208,
+  0.7792,
+  0.8042,
+  0.8625,
+  0.8875,
+  0.9458,
+  0.9708
+ ],
+ "floorsM": {
+  "groundM": 4.0,
+  "upperM": 2.85
+ },
+ "storefront": {
+  "bulkheadM": 0.15,
+  "transomM": 0.25,
+  "pierM": 0.1,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.004,
+    "to": 0.0341,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.0371,
+    "to": 0.0671,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.0701,
+    "to": 0.1002,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.1032,
+    "to": 0.1333,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.1363,
+    "to": 0.1663,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.1693,
+    "to": 0.1994,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.2024,
+    "to": 0.2325,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.2355,
+    "to": 0.2655,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.2685,
+    "to": 0.2986,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.3016,
+    "to": 0.3317,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.3347,
+    "to": 0.3647,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.3677,
+    "to": 0.3978,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.4008,
+    "to": 0.4309,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.4339,
+    "to": 0.4639,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.4669,
+    "to": 0.497,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.5,
+    "to": 0.5301,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.5331,
+    "to": 0.5631,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.5661,
+    "to": 0.5962,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.5992,
+    "to": 0.6293,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.6323,
+    "to": 0.6623,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.6653,
+    "to": 0.6954,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.6984,
+    "to": 0.7285,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.7315,
+    "to": 0.7615,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.7645,
+    "to": 0.7946,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.7976,
+    "to": 0.8277,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.8307,
+    "to": 0.8607,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.8637,
+    "to": 0.8938,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.8968,
+    "to": 0.9269,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.9299,
+    "to": 0.9599,
+    "kind": "window",
+    "headM": 3.95
+   },
+   {
+    "from": 0.9629,
+    "to": 0.993,
+    "kind": "window",
+    "headM": 3.95
+   }
+  ]
+ },
+ "windowSills": false
+}

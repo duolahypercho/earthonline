@@ -1,0 +1,99 @@
+{
+ "seed": 7,
+ "notes": "1916 four-storey flats at the O'Farrell corner: buff glazed brick upper storeys with iron balcony fire escapes, a dark slate-grey tiled base under a banded cornice. Ground: a wide lattice shop window at the corner end, five small sash windows, a garage door at the right end. Plain, no ornament invented. Buff glazed brick drawn as buff stucco (brick kit renders red under a buff tint). Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Cream/buff brick upper wall, dark blue-black glazed-tile base to the belt, large multi-pane barred window left, bronze belt cornice over the base (hand.py). Fire escapes: the two columns (left and right), not 3-4, so no column added. Lifted/converted once to #ffffff. GroundBand lift (2026-10-03): groundBand tint #323b46 -> #515862 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "brick-buff",
+ "wallTint": "#ffffff",
+ "trim": "painted-white@d6c48e",
+ "frame": "painted-white@f0ead8",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f0ead8",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@323b46",
+ "cornice": true,
+ "corniceProjectionM": 0.6,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.13,
+  0.26,
+  0.37,
+  0.52,
+  0.63,
+  0.76,
+  0.87
+ ],
+ "bays": [],
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#515862",
+  "topM": 4.9
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.02,
+    "to": 0.27,
+    "kind": "window",
+    "headM": 3.2,
+    "grille": true
+   },
+   {
+    "from": 0.34,
+    "to": 0.4,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.46,
+    "to": 0.53,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.59,
+    "to": 0.66,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.72,
+    "to": 0.79,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.86,
+    "to": 0.97,
+    "kind": "garage",
+    "leaf": "wood-siding@5a4636",
+    "headM": 2.8
+   }
+  ]
+ },
+ "fireEscapes": [
+  {
+   "at": 0.3,
+   "widthM": 3.4,
+   "depthM": 1.0,
+   "toStorey": 3,
+   "material": "painted-white@e8e0c8"
+  },
+  {
+   "at": 0.82,
+   "widthM": 3.4,
+   "depthM": 1.0,
+   "toStorey": 3,
+   "material": "painted-white@e8e0c8"
+  }
+ ]
+}

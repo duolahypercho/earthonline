@@ -1,0 +1,129 @@
+{
+ "seed": 203,
+ "wall": "brick-running-bond",
+ "wallTint": "#ffffff",
+ "trim": "painted-white@d8cdb2",
+ "frame": "painted-white@dcd2b8",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@dcd2b8",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "corniceProjectionM": 0.55,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.9,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.22,
+   "widthM": 2.9,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#e9e4d6",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.77,
+   "widthM": 2.8,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#e9e4d6",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.9,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.03,
+    "to": 0.37,
+    "kind": "gate",
+    "headM": 3.3,
+    "leaf": "painted-steel@2b2b2d",
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.18,
+      "tint": "#a8714f"
+     }
+    }
+   },
+   {
+    "from": 0.4,
+    "to": 0.47,
+    "kind": "window",
+    "headM": 2.9
+   },
+   {
+    "from": 0.6,
+    "to": 0.94,
+    "kind": "window",
+    "headM": 3.1
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "notes": "1914 flats, three storeys. Red-brown brick ground storey with a round-arched gated entry left and a large window right, cream-painted splayed bays left and right over a narrow brick strip, a railed steel fire escape platform run across both bays, cream cornice. Rework r-eddy: cream bracketed cornice added. Kept brick upper wall (brick strips between cream bays), kept 3 storeys (two bay tiers), kept the small sidelight. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour.",
+ "groundBand": {
+  "material": "brick-running-bond",
+  "tint": "#ffffff",
+  "topM": 4
+ },
+ "fireEscape": {
+  "at": 0.5,
+  "widthM": 6,
+  "depthM": 0.8,
+  "material": "painted-steel@d6d2c6"
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.7,
+  "heightM": 0.4,
+  "depthM": 0.28,
+  "widthM": 0.18,
+  "material": "painted-white",
+  "tint": "#d3c9ae"
+ }
+}

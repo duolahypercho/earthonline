@@ -1,0 +1,146 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-32611535",
+  "slug": "b32611535",
+  "walkIndex": 5253,
+  "street": "Columbus Avenue",
+  "address": null,
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 12.55,
+  "storeys": 3,
+  "floors": {
+    "groundM": 5.178,
+    "upperM": 3.386,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1914,
+  "use": "MRES",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "bay-window",
+  "material": "painted",
+  "frame": {
+    "edgeIndex": 0,
+    "center": {
+      "x": 786.375,
+      "z": 2445.962
+    },
+    "heading": -0.164281,
+    "width": 41.679,
+    "depth": 18.541
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -20.84,
+      "z": 9.271
+    },
+    {
+      "x": 17.071,
+      "z": 9.271
+    },
+    {
+      "x": 20.84,
+      "z": 4.49
+    },
+    {
+      "x": 20.687,
+      "z": -9.271
+    },
+    {
+      "x": -20.659,
+      "z": -9.208
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -20.84,
+        "z": 9.271
+      },
+      "b": {
+        "x": 17.071,
+        "z": 9.271
+      },
+      "lengthM": 37.91,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 17.071,
+        "z": 9.271
+      },
+      "b": {
+        "x": 20.84,
+        "z": 4.49
+      },
+      "lengthM": 6.088,
+      "role": "rear",
+      "partyShare": 0.13
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 20.84,
+        "z": 4.49
+      },
+      "b": {
+        "x": 20.687,
+        "z": -9.271
+      },
+      "lengthM": 13.761,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 20.687,
+        "z": -9.271
+      },
+      "b": {
+        "x": -20.659,
+        "z": -9.208
+      },
+      "lengthM": 41.346,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": -20.659,
+        "z": -9.208
+      },
+      "b": {
+        "x": -20.84,
+        "z": 9.271
+      },
+      "lengthM": 18.479,
+      "role": "rear",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

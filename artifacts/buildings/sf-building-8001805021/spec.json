@@ -1,0 +1,203 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-8001805021",
+  "slug": "b8001805021",
+  "walkIndex": 7201,
+  "street": "Kirkham Street",
+  "address": "4418 Kirkham Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (lidar-over-roll)"
+  },
+  "heightM": 5.5,
+  "storeys": 1,
+  "floors": {
+    "groundM": 4.9,
+    "upperM": 0,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1944,
+  "use": "SRES",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "edwardian",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 2,
+    "center": {
+      "x": -7829.702,
+      "z": -2142.445
+    },
+    "heading": 3.118725,
+    "width": 8.187,
+    "depth": 13.981
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -1.665,
+      "z": -4.048
+    },
+    {
+      "x": -3.477,
+      "z": -4.096
+    },
+    {
+      "x": -4.093,
+      "z": 6.991
+    },
+    {
+      "x": 3.779,
+      "z": 6.991
+    },
+    {
+      "x": 4.093,
+      "z": -3.749
+    },
+    {
+      "x": 2.041,
+      "z": -3.812
+    },
+    {
+      "x": 2.131,
+      "z": -6.885
+    },
+    {
+      "x": -1.572,
+      "z": -6.991
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -1.665,
+        "z": -4.048
+      },
+      "b": {
+        "x": -3.477,
+        "z": -4.096
+      },
+      "lengthM": 1.812,
+      "role": "rear",
+      "partyShare": 0.44
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -3.477,
+        "z": -4.096
+      },
+      "b": {
+        "x": -4.093,
+        "z": 6.991
+      },
+      "lengthM": 11.104,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -4.093,
+        "z": 6.991
+      },
+      "b": {
+        "x": 3.779,
+        "z": 6.991
+      },
+      "lengthM": 7.872,
+      "role": "front",
+      "partyShare": 0.25
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 3.779,
+        "z": 6.991
+      },
+      "b": {
+        "x": 4.093,
+        "z": -3.749
+      },
+      "lengthM": 10.745,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": 4.093,
+        "z": -3.749
+      },
+      "b": {
+        "x": 2.041,
+        "z": -3.812
+      },
+      "lengthM": 2.053,
+      "role": "rear",
+      "partyShare": 0.44
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": 2.041,
+        "z": -3.812
+      },
+      "b": {
+        "x": 2.131,
+        "z": -6.885
+      },
+      "lengthM": 3.074,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": 2.131,
+        "z": -6.885
+      },
+      "b": {
+        "x": -1.572,
+        "z": -6.991
+      },
+      "lengthM": 3.705,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": -1.572,
+        "z": -6.991
+      },
+      "b": {
+        "x": -1.665,
+        "z": -4.048
+      },
+      "lengthM": 2.944,
+      "role": "rear",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

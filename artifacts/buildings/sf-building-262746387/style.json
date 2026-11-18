@@ -1,0 +1,371 @@
+{
+ "seed": 6,
+ "notes": "1905 three flats, W side of Hyde between Bay Street and Bergen Alley. Pale grey-blue painted siding (lit a9bdd6) with white trim over a dark grey plinth; the street face is two edges: the entry half (edge 3, front) with a white-columned porch door up a short stoop and one sash per upper storey, and the projecting bay half (edge 4, dressed as a street face) carrying three sashes a storey for the cant bay that runs ground to roof. Oval window, turned columns and the angled bay faces have no key. The stair core plus corridor are wider than the narrow front); ground programme vacant and upper office tried as the only style-side lever. The front (edge 3, north) now carries the cant bay (three sashes a storey, bays key) over a wide ground-storey window, and the porch entry with one sash per upper storey moves to the south half (edge 4 street face). Confirmed and applied: the cant bay now runs all three storeys from the grey base (fromStorey 0), no ground shop glazing (a small grilled base window under the bay), a raised grey base 6f7a88 to 1.1 m, a periwinkle lap-siding blue 9fb3d6, white porch columns either side of the entry (pilasters), a stoop of five steps in front of the door and the oval window at the far left of the porch (plaques), one sash per upper storey over the porch, a modest cornice. A true sunken-basement storey would need a sub-2.6 m storey (storeysSeen cannot express it). Applied: slate base 5f6878, flat white coping band instead of the bracketed cornice (a plain band), taller bay sashes (sill 0.7, head 2.75), a small service door in the base under the bay (plaque). Kept: wall 9fb3d6. Oval window stays a plate (no oval key). Rework: clapboard lap finish (painted-clapboard) at 9aacd2; bay now starts at storey 1 (fromStorey 1) with a flat 3-window ground group under its soffit; plinth 6f7c8f. Not applied: round columns/oculus (no key; oval plate stays), bracketed cornice. Periwinkle 90a6d6, slate plinth 5b6470 at 0.8 m, coping 0.5 m x 0.2 m projection as a white cornice band. Skipped: round columns/oculus/ground 3-face bay. The bay on storeys 2-3 with a mullioned flat 3-window group at the porch level under the porch-roof band. Skipped: round columns, true oval (no key). (Plinth window/door plaques under the bay dropped: the ground-level bay covers that whole front edge, so they would sit inside the volume.) Rework bay-northpoint rd2: the bay on storeys 1-2 over a flat mullioned ground group under the porch band, so fromStorey back to 1 with a 3-window ground group; bay faces = three facets x one sash (no muntins); oval window built from stacked plaques (white ring + dark pane) - approximate; porch pilasters fluted (no round-column key), extra cornice lip on the porch band; plinth 6f7c93; bracketed roof cornice skipped (roofline hidden by trees). Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k). GroundBand lift (2026-10-03): groundBand tint #6f7c93 -> #8c96a9 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-clapboard",
+ "wallTint": "#c8d2ea",
+ "trim": "painted-white@f2f2ee",
+ "frame": "painted-white@f4f4f0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f4f4f0",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-white@7f8693",
+ "cornice": false,
+ "beltCourse": true,
+ "windowHoods": true,
+ "windowW": 0.85,
+ "windowSillM": 0.7,
+ "windowHeadM": 2.75,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.5,
+   "widthM": 3.0,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#c8d2ea",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "sillM": 0.9,
+    "headGapM": 0.25,
+    "cornice": {
+     "projectionM": 0.18,
+     "roofRiseM": 0.2,
+     "dentils": true
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.09,
+     "brackets": 2,
+     "dropM": 0.3,
+     "beltBrackets": true
+    }
+   }
+  }
+ ],
+ "groundBand": {
+  "material": "painted-white",
+  "tint": "#8c96a9",
+  "topM": 0.8
+ },
+ "storefront": {
+  "bulkheadM": 1.0,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.14,
+    "to": 0.86,
+    "kind": "window",
+    "headM": 2.7
+   }
+  ]
+ },
+ "edgeRoles": {
+  "4": "flank"
+ },
+ "streetEdges": {
+  "4": {
+   "upperWindows": [
+    0.63
+   ],
+   "bays": [],
+   "storefront": {
+    "bulkheadM": 0.9,
+    "transomM": 0.4,
+    "pierM": 0.3,
+    "awning": false,
+    "layout": [
+     {
+      "from": 0.5,
+      "to": 0.76,
+      "kind": "door",
+      "leaf": "wood-siding@7a6a58",
+      "headM": 3.1
+     }
+    ]
+   },
+   "pilasters": {
+    "at": [
+     0.38,
+     0.88
+    ],
+    "widthM": 0.3,
+    "projectionM": 0.22,
+    "fromM": 1.1,
+    "toM": 3.4,
+    "material": "painted-white",
+    "tint": "#f4f4f0",
+    "capital": true,
+    "flutes": 3
+   },
+   "plaques": [
+    {
+     "at": 0.63,
+     "y": 3.45,
+     "w": 2.3,
+     "h": 0.25,
+     "face": "painted-white@f4f4f0"
+    },
+    {
+     "at": 0.63,
+     "y": 0.09,
+     "w": 1.3,
+     "h": 0.18,
+     "face": "painted-white@c8ccd0"
+    },
+    {
+     "at": 0.63,
+     "y": 0.2,
+     "w": 1.36,
+     "h": 0.04,
+     "face": "painted-white@7a808a"
+    },
+    {
+     "at": 0.63,
+     "y": 0.31,
+     "w": 1.3,
+     "h": 0.18,
+     "face": "painted-white@c8ccd0"
+    },
+    {
+     "at": 0.63,
+     "y": 0.42,
+     "w": 1.36,
+     "h": 0.04,
+     "face": "painted-white@7a808a"
+    },
+    {
+     "at": 0.63,
+     "y": 0.53,
+     "w": 1.3,
+     "h": 0.18,
+     "face": "painted-white@c8ccd0"
+    },
+    {
+     "at": 0.63,
+     "y": 0.64,
+     "w": 1.36,
+     "h": 0.04,
+     "face": "painted-white@7a808a"
+    },
+    {
+     "at": 0.63,
+     "y": 0.75,
+     "w": 1.3,
+     "h": 0.18,
+     "face": "painted-white@c8ccd0"
+    },
+    {
+     "at": 0.63,
+     "y": 0.86,
+     "w": 1.36,
+     "h": 0.04,
+     "face": "painted-white@7a808a"
+    },
+    {
+     "at": 0.63,
+     "y": 0.97,
+     "w": 1.3,
+     "h": 0.18,
+     "face": "painted-white@c8ccd0"
+    },
+    {
+     "at": 0.63,
+     "y": 1.08,
+     "w": 1.36,
+     "h": 0.04,
+     "face": "painted-white@7a808a"
+    },
+    {
+     "at": 0.19,
+     "y": 1.841,
+     "w": 0.33,
+     "h": 0.102,
+     "face": "painted-white@f4f4f0"
+    },
+    {
+     "at": 0.1452,
+     "y": 1.943,
+     "w": 0.183,
+     "h": 0.102,
+     "face": "painted-white@f4f4f0"
+    },
+    {
+     "at": 0.2348,
+     "y": 1.943,
+     "w": 0.183,
+     "h": 0.102,
+     "face": "painted-white@f4f4f0"
+    },
+    {
+     "at": 0.19,
+     "y": 1.943,
+     "w": 0.17,
+     "h": 0.102,
+     "face": "painted-steel@3a4048"
+    },
+    {
+     "at": 0.1263,
+     "y": 2.046,
+     "w": 0.142,
+     "h": 0.102,
+     "face": "painted-white@f4f4f0"
+    },
+    {
+     "at": 0.2537,
+     "y": 2.046,
+     "w": 0.142,
+     "h": 0.102,
+     "face": "painted-white@f4f4f0"
+    },
+    {
+     "at": 0.19,
+     "y": 2.046,
+     "w": 0.361,
+     "h": 0.102,
+     "face": "painted-steel@3a4048"
+    },
+    {
+     "at": 0.1178,
+     "y": 2.148,
+     "w": 0.132,
+     "h": 0.102,
+     "face": "painted-white@f4f4f0"
+    },
+    {
+     "at": 0.2622,
+     "y": 2.148,
+     "w": 0.132,
+     "h": 0.102,
+     "face": "painted-white@f4f4f0"
+    },
+    {
+     "at": 0.19,
+     "y": 2.148,
+     "w": 0.437,
+     "h": 0.102,
+     "face": "painted-steel@3a4048"
+    },
+    {
+     "at": 0.1152,
+     "y": 2.25,
+     "w": 0.13,
+     "h": 0.102,
+     "face": "painted-white@f4f4f0"
+    },
+    {
+     "at": 0.2648,
+     "y": 2.25,
+     "w": 0.13,
+     "h": 0.102,
+     "face": "painted-white@f4f4f0"
+    },
+    {
+     "at": 0.19,
+     "y": 2.25,
+     "w": 0.46,
+     "h": 0.102,
+     "face": "painted-steel@3a4048"
+    },
+    {
+     "at": 0.1178,
+     "y": 2.352,
+     "w": 0.132,
+     "h": 0.102,
+     "face": "painted-white@f4f4f0"
+    },
+    {
+     "at": 0.2622,
+     "y": 2.352,
+     "w": 0.132,
+     "h": 0.102,
+     "face": "painted-white@f4f4f0"
+    },
+    {
+     "at": 0.19,
+     "y": 2.352,
+     "w": 0.437,
+     "h": 0.102,
+     "face": "painted-steel@3a4048"
+    },
+    {
+     "at": 0.1263,
+     "y": 2.454,
+     "w": 0.142,
+     "h": 0.102,
+     "face": "painted-white@f4f4f0"
+    },
+    {
+     "at": 0.2537,
+     "y": 2.454,
+     "w": 0.142,
+     "h": 0.102,
+     "face": "painted-white@f4f4f0"
+    },
+    {
+     "at": 0.19,
+     "y": 2.454,
+     "w": 0.361,
+     "h": 0.102,
+     "face": "painted-steel@3a4048"
+    },
+    {
+     "at": 0.1452,
+     "y": 2.557,
+     "w": 0.183,
+     "h": 0.102,
+     "face": "painted-white@f4f4f0"
+    },
+    {
+     "at": 0.2348,
+     "y": 2.557,
+     "w": 0.183,
+     "h": 0.102,
+     "face": "painted-white@f4f4f0"
+    },
+    {
+     "at": 0.19,
+     "y": 2.557,
+     "w": 0.17,
+     "h": 0.102,
+     "face": "painted-steel@3a4048"
+    },
+    {
+     "at": 0.19,
+     "y": 2.659,
+     "w": 0.33,
+     "h": 0.102,
+     "face": "painted-white@f4f4f0"
+    },
+    {
+     "at": 0.63,
+     "y": 3.66,
+     "w": 2.5,
+     "h": 0.08,
+     "face": "painted-white@f4f4f0"
+    }
+   ]
+  }
+ },
+ "ground": "vacant",
+ "upper": "office",
+ "floorsM": {
+  "groundM": 3.6,
+  "upperM": 3.3
+ },
+ "coping": {
+  "material": "painted-white",
+  "tint": "#f2f2ee",
+  "projectionM": 0.2,
+  "heightM": 0.5
+ },
+ "plaques": [],
+ "streetStills": true
+}

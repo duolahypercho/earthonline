@@ -1,0 +1,88 @@
+{
+  "seed": 1,
+  "notes": "Round 1 (Mission St SE side, street-level look-only): pale white-cream painted concrete frame, tall pale-framed steel-sash window groups in two wide bays per storey with plain piers between, a flat parapet with a shallow cap, no cornice. Ground: dark steel storefront, left half a recessed glazed entry beside a painted mural panel, right half a glazed shopfront under a dark fabric awning. Round 2 (full-face street ref): six storeys counted at the street (roll says 7): tall ground (storefront with a street-art mural at the entry), five tall upper storeys, window ribbon two rows tall, raised plain parapet panel.",
+  "wall": "painted-stucco",
+  "wallTint": "#ebe9e2",
+  "trim": "painted-white",
+  "cornice": false,
+  "beltCourse": true,
+  "windowHoods": false,
+  "coping": {
+    "heightM": 0.55,
+    "projectionM": 0.05,
+    "material": "painted-white"
+  },
+  "upperWindowSpans": [
+    [
+      0.08,
+      0.46
+    ],
+    [
+      0.54,
+      0.93
+    ]
+  ],
+  "upperSillM": 0.8,
+  "upperHeadM": 3.2,
+  "mullionM": 1.5,
+  "sashRows": 2,
+  "sashMaterial": "painted-steel",
+  "glass": "glass-clear",
+  "storefrontFrame": "painted-steel",
+  "bulkhead": "painted-steel-mid",
+  "ground": "shop",
+  "upper": "office",
+  "storefront": {
+    "awning": true,
+    "transomM": 0.6,
+    "bulkheadM": 0.45,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.04,
+        "to": 0.3,
+        "headM": 3.0
+      },
+      {
+        "kind": "door",
+        "from": 0.32,
+        "to": 0.4,
+        "leaf": "anodized-aluminium"
+      },
+      {
+        "kind": "window",
+        "from": 0.42,
+        "to": 0.5,
+        "headM": 3.0
+      },
+      {
+        "kind": "door",
+        "from": 0.55,
+        "to": 0.62,
+        "leaf": "anodized-aluminium"
+      },
+      {
+        "kind": "window",
+        "from": 0.64,
+        "to": 0.96,
+        "headM": 3.0
+      }
+    ]
+  },
+  "weathering": {
+    "patches": {
+      "strength": 0.06,
+      "metres": 1.6,
+      "top": 4.0,
+      "mottle": 0.05
+    },
+    "grime": {
+      "strength": 0.1,
+      "metres": 3.0
+    }
+  },
+  "storeysSeen": {
+    "count": 6,
+    "groundM": 5.4
+  }
+}

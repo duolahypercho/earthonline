@@ -1,0 +1,195 @@
+{
+ "seed": 23,
+ "notes": "Raised first floor, two varnished double-door entries (far left and right of centre) each up a stone stair, shallow bays with tall narrow sashes, cream stucco already in the GLB, flat parapet. Left entry stair not added (a second stair door duplicates a physics part id and pushes a shop counter outside the footprint); bay fronts carry three tall narrow sashes instead of two wide ones. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k). GroundBand lift (2026-10-03): groundBand tint #d0c6ac -> #e8e2d6 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#f4eee0",
+ "trim": "painted-white@efe8d8",
+ "frame": "painted-white@f2eee6",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f2eee6",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-stucco@ece6da",
+ "cornice": false,
+ "corniceProjectionM": 0.35,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 1.05,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.45,
+ "storeysSeen": {
+  "count": 3,
+  "groundM": 3.9,
+  "upperM": 3.5
+ },
+ "upperWindows": [
+  0.11,
+  0.87
+ ],
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#e8e2d6",
+  "topM": 1.3
+ },
+ "storefront": {
+  "bulkheadM": 1.5,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.76,
+    "to": 0.89,
+    "kind": "double-door",
+    "stair": true,
+    "leaf": "wood-siding@8a5a30",
+    "headM": 3.4
+   },
+   {
+    "from": 0.09,
+    "to": 0.22,
+    "kind": "double-door",
+    "leaf": "wood-siding@8a5a30",
+    "headM": 3.4
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "coping": {
+  "projectionM": 0.1,
+  "heightM": 0.2,
+  "tint": "#d8d0bc"
+ },
+ "bays": [
+  {
+   "at": 0.34,
+   "widthM": 3.2,
+   "projectionM": 0.38,
+   "fromStorey": 1,
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.3,
+    "cornice": {
+     "projectionM": 0.04,
+     "roofRiseM": 0
+    }
+   },
+   "material": "painted-stucco",
+   "tint": "#f4eee0",
+   "frame": "painted-white@f2eee6"
+  },
+  {
+   "at": 0.62,
+   "widthM": 3.2,
+   "projectionM": 0.38,
+   "fromStorey": 1,
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.3,
+    "cornice": {
+     "projectionM": 0.04,
+     "roofRiseM": 0
+    }
+   },
+   "material": "painted-stucco",
+   "tint": "#f4eee0",
+   "frame": "painted-white@f2eee6"
+  }
+ ],
+ "shopBays": [
+  {
+   "edge": 0,
+   "from": 0.0,
+   "to": 1.0,
+   "windows": [
+    {
+     "from": 0.3,
+     "to": 0.39,
+     "sillM": 1.7,
+     "headM": 3.3,
+     "cols": 1,
+     "rows": 3,
+     "frameTint": "#f2eee6",
+     "lit": "#c8ccd0"
+    },
+    {
+     "from": 0.42,
+     "to": 0.49,
+     "sillM": 1.7,
+     "headM": 3.3,
+     "cols": 1,
+     "rows": 3,
+     "frameTint": "#f2eee6",
+     "lit": "#c8ccd0"
+    },
+    {
+     "from": 0.5,
+     "to": 0.55,
+     "sillM": 1.7,
+     "headM": 3.3,
+     "cols": 1,
+     "rows": 3,
+     "frameTint": "#f2eee6",
+     "lit": "#c8ccd0"
+    },
+    {
+     "from": 0.58,
+     "to": 0.67,
+     "sillM": 1.7,
+     "headM": 3.3,
+     "cols": 1,
+     "rows": 3,
+     "frameTint": "#f2eee6",
+     "lit": "#c8ccd0"
+    },
+    {
+     "from": 0.7,
+     "to": 0.75,
+     "sillM": 1.7,
+     "headM": 3.3,
+     "cols": 1,
+     "rows": 3,
+     "frameTint": "#f2eee6",
+     "lit": "#c8ccd0"
+    },
+    {
+     "from": 0.92,
+     "to": 0.96,
+     "sillM": 2.3,
+     "headM": 3.1,
+     "cols": 1,
+     "rows": 2,
+     "frameTint": "#f2eee6",
+     "lit": "#c8ccd0"
+    },
+    {
+     "from": 0.4,
+     "to": 0.45,
+     "sillM": 0.4,
+     "headM": 0.95,
+     "cols": 3,
+     "rows": 1,
+     "frameTint": "#3a3a38"
+    },
+    {
+     "from": 0.55,
+     "to": 0.6,
+     "sillM": 0.4,
+     "headM": 0.95,
+     "cols": 3,
+     "rows": 1,
+     "frameTint": "#3a3a38"
+    }
+   ]
+  }
+ ],
+ "streetStills": true
+}

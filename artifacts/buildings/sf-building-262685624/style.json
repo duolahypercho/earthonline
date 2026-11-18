@@ -1,0 +1,157 @@
+{
+ "seed": 11,
+ "notes": "1907 flats, warm white smooth stucco over a whitewashed rubble-stone street storey. Two cant bays near each end from the first upper storey to the roof with a single-window column between, maroon frames, hoods and floor bands, ornate cornice with a maroon edge, narrow fire escape at the south end. Ground: small maroon door and a wide iron-grille glazed entry at the north end, a maroon-framed window pair and barred basement windows to the south, a second small door at the south end. Data has 3 storeys; the street shows five levels on this slope. Maroon trim read pink and the rubble base did not separate from the wall; trim darkened to oxblood, base band a greyer stone tone, street doors cut to door height instead of the full tall street storey. No fire escape on the street face; trim and frames pushed to a deep oxblood; the whole street storey is white rusticated stone (ashlar kit) with a door-sized iron-grilled glazed entry at the real left, a row of small barred basement windows and a small panelled door at the real right (the big shop window and wide gated opening are gone); the real-left bay is a shallow near-flat box, the right one stays canted. The fourth and fifth levels the street shows need a storey-count change the style cannot make (data: 3). The grey-beige rusticated ashlar base stops at 2.7 m (groundBand topM) and three maroon-framed window openings sit above it on stone sills, so the face reads as a stone basement storey plus three window storeys; small barred basement openings at sidewalk level between them, a grilled recessed entry at the real-left end and a small maroon door at the real right. Wall pale blush pink-white, bays on the same tint and projected deeper, heavier cornice. Bays still start at the first data storey. No centre mullion in the street-storey window row so no frame line runs down through the stone base. Applied: 4 storeys via storeysSeen (3.1 m rusticated base + 3 uppers), plate-glass storefront windows removed for one sash window and two barred basement vents, off-white rusticated base e6e0d8, maroon trim 5a201a, warm-white wall f3e4de, left bay shallow (0.3 m), right bay canted. Fire escape skipped (optional). Layout shifted to those fractions, pair of sashes on the right, oxblood trim 601f18, hbBayGlazing so both bays carry sashes on every facet. Two-sash front face on the left bay and spandrel bands have no key. Applied: pinkish-white wall eadcd6, oxblood trim 7a3b32, buff-grey rusticated ashlar base b7ada0 (hyDRubble coursing), five small barred basement vents, modillion-style cornice brackets. Bays keep one large sash per facet (hbBayGlazing, maroon frames). Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k). Sashes (2026-10-10, one-map/hyde-detail): the left bay's front facet now carries two double-hung sashes side by side, sides one each; right bay unchanged.",
+ "wall": "painted-white",
+ "wallTint": "#f4eeea",
+ "trim": "painted-white@7a3b32",
+ "frame": "painted-white@6a2d26",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@6a2d26",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "limestone-ashlar@b7ada0",
+ "cornice": true,
+ "corniceProjectionM": 0.6,
+ "beltCourse": true,
+ "windowHoods": true,
+ "windowW": 0.9,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.4,
+ "upperWindows": [
+  0.46
+ ],
+ "bays": [
+  {
+   "at": 0.2,
+   "widthM": 2.4,
+   "projectionM": 0.3,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f4eeea",
+   "sashes": {
+    "front": 2,
+    "sides": 1
+   }
+  },
+  {
+   "at": 0.75,
+   "widthM": 2.8,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f4eeea"
+  }
+ ],
+ "groundBand": {
+  "material": "limestone-ashlar",
+  "tint": "#b7ada0",
+  "topM": 3.1
+ },
+ "storefront": {
+  "bulkheadM": 1.0,
+  "transomM": 0.3,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.09,
+    "to": 0.22,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel",
+    "grille": true,
+    "headM": 2.5
+   },
+   {
+    "from": 0.27,
+    "to": 0.32,
+    "kind": "gate",
+    "headM": 0.9,
+    "material": "painted-steel"
+   },
+   {
+    "from": 0.335,
+    "to": 0.385,
+    "kind": "gate",
+    "headM": 0.9,
+    "material": "painted-steel"
+   },
+   {
+    "from": 0.4,
+    "to": 0.455,
+    "kind": "gate",
+    "headM": 0.9,
+    "material": "painted-steel"
+   },
+   {
+    "from": 0.465,
+    "to": 0.52,
+    "kind": "gate",
+    "headM": 0.9,
+    "material": "painted-steel"
+   },
+   {
+    "from": 0.6,
+    "to": 0.69,
+    "kind": "window",
+    "headM": 2.4
+   },
+   {
+    "from": 0.7,
+    "to": 0.79,
+    "kind": "window",
+    "headM": 2.4
+   },
+   {
+    "from": 0.83,
+    "to": 0.875,
+    "kind": "gate",
+    "headM": 0.9,
+    "material": "painted-steel"
+   },
+   {
+    "from": 0.885,
+    "to": 0.945,
+    "kind": "door",
+    "leaf": "painted-white@5a201a",
+    "headM": 2.4
+   }
+  ],
+  "paneM": 99
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.1,
+  "upperM": 3.13
+ },
+ "hbBayGlazing": {
+  "marginM": 0.2,
+  "maxW": 1.05,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#6a2d26",
+  "sashM": 0.09,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "streetStills": true,
+ "hyDRubble": {
+  "toM": 3.1,
+  "courseM": 0.3,
+  "blockM": 0.6,
+  "projM": 0.03,
+  "shade": 0.6,
+  "seed": 3
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.6,
+  "heightM": 0.35,
+  "depthM": 0.28,
+  "widthM": 0.16,
+  "material": "painted-white",
+  "tint": "#e8d8c8"
+ }
+}

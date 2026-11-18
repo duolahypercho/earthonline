@@ -1,0 +1,465 @@
+{
+ "seed": 10,
+ "notes": "1927 three-storey flats. Pale butter-cream stucco, rusticated cream block street storey, two box bays across both upper storeys with dark frames; a full-width dark teal glazed-tile frieze under a moulded cap; ground (viewer's left to right): deep dark entry behind an iron gate, wide shop window behind a grille, narrow dark grilled door. Whiter upper wall over the cream rusticated street storey (block joints on the piers), royal-blue grille on the wide centre opening, wide dark entry door at the left, teal coping deepened to project past the bay caps so it reads continuous. Butter-cream #eeebd2, bays two-light single mullion with dark frames, bright blue #1e4fa8 grille, dentil row under the teal band. Bay centre faces read as one large undivided pane (lightM 1.4); mirror claim skipped again. Staggered vertical block joints on the ground piers (square ashlar), darker green frieze #27504b. Scallop frieze not expressible. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-stucco",
+ "wallTint": "#f6f5e8",
+ "trim": "painted-white@f4f2e2",
+ "frame": "painted-steel@4a4640",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@2e4ea8",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "limestone-ashlar@ece6c6",
+ "cornice": false,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 1.0,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.4,
+ "floorsM": {
+  "groundM": 3.5,
+  "upperM": 3.0
+ },
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.29,
+   "widthM": 3.3,
+   "projectionM": 0.5,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f6f5e8",
+   "frame": "painted-steel",
+   "frameTint": "#2a2826",
+   "sash": {
+    "footM": 0.3,
+    "fillFrac": 0.88,
+    "maxWidthM": 1.9,
+    "sillM": 0.6,
+    "headGapM": 0.3,
+    "lightM": 1.4,
+    "upperRows": 1,
+    "upperCols": 1,
+    "meetingFrac": 0.5
+   }
+  },
+  {
+   "at": 0.71,
+   "widthM": 3.3,
+   "projectionM": 0.5,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f6f5e8",
+   "frame": "painted-steel",
+   "frameTint": "#2a2826",
+   "sash": {
+    "footM": 0.3,
+    "fillFrac": 0.88,
+    "maxWidthM": 1.9,
+    "sillM": 0.6,
+    "headGapM": 0.3,
+    "lightM": 1.4,
+    "upperRows": 1,
+    "upperCols": 1,
+    "meetingFrac": 0.5
+   }
+  }
+ ],
+ "groundBand": {
+  "material": "limestone-ashlar",
+  "tint": "#ece6c6",
+  "topM": 3.5
+ },
+ "stripes": {
+  "material": "glazed-tile",
+  "tint": "#27504b",
+  "heightM": 0.5,
+  "fromStorey": 2,
+  "offsetsM": [
+   3.25
+  ]
+ },
+ "coping": {
+  "heightM": 0.3,
+  "projectionM": 0.35,
+  "material": "glazed-tile",
+  "tint": "#27504b"
+ },
+ "storefront": {
+  "bulkheadM": 0.4,
+  "transomM": 0.3,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.02,
+    "to": 0.26,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel@1e1e20"
+   },
+   {
+    "from": 0.36,
+    "to": 0.78,
+    "kind": "window",
+    "grille": true
+   },
+   {
+    "from": 0.87,
+    "to": 0.98,
+    "kind": "door",
+    "leaf": "painted-steel@1e1e20",
+    "grille": true
+   }
+  ]
+ },
+ "ground": "shop",
+ "upper": "apartment",
+ "grilleMaterial": "painted-steel@1e4fa8",
+ "plaques": [
+  {
+   "at": 0.31,
+   "y": 0.44,
+   "w": 0.81,
+   "h": 0.035,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.31,
+   "y": 0.88,
+   "w": 0.81,
+   "h": 0.035,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.31,
+   "y": 1.32,
+   "w": 0.81,
+   "h": 0.035,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.31,
+   "y": 1.76,
+   "w": 0.81,
+   "h": 0.035,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.31,
+   "y": 2.2,
+   "w": 0.81,
+   "h": 0.035,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.31,
+   "y": 2.64,
+   "w": 0.81,
+   "h": 0.035,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.31,
+   "y": 3.08,
+   "w": 0.81,
+   "h": 0.035,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.825,
+   "y": 0.44,
+   "w": 0.73,
+   "h": 0.035,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.825,
+   "y": 0.88,
+   "w": 0.73,
+   "h": 0.035,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.825,
+   "y": 1.32,
+   "w": 0.73,
+   "h": 0.035,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.825,
+   "y": 1.76,
+   "w": 0.73,
+   "h": 0.035,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.825,
+   "y": 2.2,
+   "w": 0.73,
+   "h": 0.035,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.825,
+   "y": 2.64,
+   "w": 0.73,
+   "h": 0.035,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.825,
+   "y": 3.08,
+   "w": 0.73,
+   "h": 0.035,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.5,
+   "y": 9.68,
+   "w": 8.1,
+   "h": 0.1,
+   "face": "painted-steel@2a2e2c"
+  },
+  {
+   "at": 0.03,
+   "y": 9.5,
+   "w": 0.2,
+   "h": 0.14,
+   "face": "painted-white@cfcbb0"
+  },
+  {
+   "at": 0.0795,
+   "y": 9.5,
+   "w": 0.2,
+   "h": 0.14,
+   "face": "painted-white@cfcbb0"
+  },
+  {
+   "at": 0.1289,
+   "y": 9.5,
+   "w": 0.2,
+   "h": 0.14,
+   "face": "painted-white@cfcbb0"
+  },
+  {
+   "at": 0.1784,
+   "y": 9.5,
+   "w": 0.2,
+   "h": 0.14,
+   "face": "painted-white@cfcbb0"
+  },
+  {
+   "at": 0.2279,
+   "y": 9.5,
+   "w": 0.2,
+   "h": 0.14,
+   "face": "painted-white@cfcbb0"
+  },
+  {
+   "at": 0.2774,
+   "y": 9.5,
+   "w": 0.2,
+   "h": 0.14,
+   "face": "painted-white@cfcbb0"
+  },
+  {
+   "at": 0.3268,
+   "y": 9.5,
+   "w": 0.2,
+   "h": 0.14,
+   "face": "painted-white@cfcbb0"
+  },
+  {
+   "at": 0.3763,
+   "y": 9.5,
+   "w": 0.2,
+   "h": 0.14,
+   "face": "painted-white@cfcbb0"
+  },
+  {
+   "at": 0.4258,
+   "y": 9.5,
+   "w": 0.2,
+   "h": 0.14,
+   "face": "painted-white@cfcbb0"
+  },
+  {
+   "at": 0.4753,
+   "y": 9.5,
+   "w": 0.2,
+   "h": 0.14,
+   "face": "painted-white@cfcbb0"
+  },
+  {
+   "at": 0.5247,
+   "y": 9.5,
+   "w": 0.2,
+   "h": 0.14,
+   "face": "painted-white@cfcbb0"
+  },
+  {
+   "at": 0.5742,
+   "y": 9.5,
+   "w": 0.2,
+   "h": 0.14,
+   "face": "painted-white@cfcbb0"
+  },
+  {
+   "at": 0.6237,
+   "y": 9.5,
+   "w": 0.2,
+   "h": 0.14,
+   "face": "painted-white@cfcbb0"
+  },
+  {
+   "at": 0.6732,
+   "y": 9.5,
+   "w": 0.2,
+   "h": 0.14,
+   "face": "painted-white@cfcbb0"
+  },
+  {
+   "at": 0.7226,
+   "y": 9.5,
+   "w": 0.2,
+   "h": 0.14,
+   "face": "painted-white@cfcbb0"
+  },
+  {
+   "at": 0.7721,
+   "y": 9.5,
+   "w": 0.2,
+   "h": 0.14,
+   "face": "painted-white@cfcbb0"
+  },
+  {
+   "at": 0.8216,
+   "y": 9.5,
+   "w": 0.2,
+   "h": 0.14,
+   "face": "painted-white@cfcbb0"
+  },
+  {
+   "at": 0.8711,
+   "y": 9.5,
+   "w": 0.2,
+   "h": 0.14,
+   "face": "painted-white@cfcbb0"
+  },
+  {
+   "at": 0.9205,
+   "y": 9.5,
+   "w": 0.2,
+   "h": 0.14,
+   "face": "painted-white@cfcbb0"
+  },
+  {
+   "at": 0.97,
+   "y": 9.5,
+   "w": 0.2,
+   "h": 0.14,
+   "face": "painted-white@cfcbb0"
+  },
+  {
+   "at": 0.2915,
+   "y": 0.22,
+   "w": 0.035,
+   "h": 0.44,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.3285,
+   "y": 0.66,
+   "w": 0.035,
+   "h": 0.44,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.2915,
+   "y": 1.1,
+   "w": 0.035,
+   "h": 0.44,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.3285,
+   "y": 1.54,
+   "w": 0.035,
+   "h": 0.44,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.2915,
+   "y": 1.98,
+   "w": 0.035,
+   "h": 0.44,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.3285,
+   "y": 2.42,
+   "w": 0.035,
+   "h": 0.44,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.2915,
+   "y": 2.86,
+   "w": 0.035,
+   "h": 0.44,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.8065,
+   "y": 0.22,
+   "w": 0.035,
+   "h": 0.44,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.8435,
+   "y": 0.66,
+   "w": 0.035,
+   "h": 0.44,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.8065,
+   "y": 1.1,
+   "w": 0.035,
+   "h": 0.44,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.8435,
+   "y": 1.54,
+   "w": 0.035,
+   "h": 0.44,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.8065,
+   "y": 1.98,
+   "w": 0.035,
+   "h": 0.44,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.8435,
+   "y": 2.42,
+   "w": 0.035,
+   "h": 0.44,
+   "face": "limestone-ashlar@c8c2a4"
+  },
+  {
+   "at": 0.8065,
+   "y": 2.86,
+   "w": 0.035,
+   "h": 0.44,
+   "face": "limestone-ashlar@c8c2a4"
+  }
+ ],
+ "wallTopM": 10.3,
+ "streetStills": true
+}

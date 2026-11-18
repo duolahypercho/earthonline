@@ -1,0 +1,95 @@
+{
+ "seed": 7,
+ "notes": "Rework r11: warm taupe stucco, one two-storey angled bay with paired dark-framed sashes under a projecting bracketed cornice (front is only 2.8 m, so no bay run), taupe stucco ground storey with paired dark-framed windows over a low dark-red plinth. Projections trimmed (physics AABB gate rejected r6-r10).",
+ "wall": "painted-stucco",
+ "wallTint": "#d3c9b4",
+ "trim": "painted-white@3a2e26",
+ "frame": "painted-white@3a2e26",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@3a2e26",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "brick-running-bond@8a6589",
+ "cornice": true,
+ "corniceProjectionM": 0.3,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.5,
+   "widthM": 2.3,
+   "projectionM": 0.3,
+   "fromStorey": 1,
+   "toStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#d3c9b4",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.3,
+    "marginM": 0.12,
+    "cornice": {
+     "projectionM": 0.1,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.08,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.06,
+    "to": 0.5,
+    "kind": "window",
+    "headM": 2.4,
+    "bulkheadM": 0.9
+   },
+   {
+    "from": 0.58,
+    "to": 0.92,
+    "kind": "door",
+    "stair": true
+   }
+  ]
+ },
+ "ground": "vacant",
+ "upper": "rooms",
+ "streetStills": true,
+ "sashFrames": {
+  "material": "painted-white@3a2e26",
+  "stileM": 0.06
+ },
+ "groundBand": {
+  "material": "brick-running-bond",
+  "tint": "#8a6589",
+  "topM": 0.9
+ },
+ "clipInteriorToFootprint": true,
+ "hbBayGlazing": {
+  "marginM": 0.2,
+  "maxW": 1.05,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#3a2e26",
+  "sashM": 0.1,
+  "revealM": 0.06,
+  "meetingRail": true
+ }
+}

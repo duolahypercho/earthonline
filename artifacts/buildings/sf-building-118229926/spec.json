@@ -1,0 +1,127 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-118229926",
+  "slug": "b118229926",
+  "walkIndex": 4,
+  "street": "4th Street",
+  "address": "300 4th Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 16.31,
+  "storeys": 5,
+  "floors": {
+    "groundM": 4.085,
+    "upperM": 2.906,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1984,
+  "use": "COMO",
+  "usage": "commercial",
+  "amenity": "company",
+  "shop": null,
+  "facade": "shopfront",
+  "material": "concrete",
+  "frame": {
+    "edgeIndex": 3,
+    "center": {
+      "x": 1600.325,
+      "z": 414.625
+    },
+    "heading": 0.785398,
+    "width": 14.708,
+    "depth": 21.991
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": 7.354,
+      "z": 10.996
+    },
+    {
+      "x": 6.859,
+      "z": -10.996
+    },
+    {
+      "x": -7.354,
+      "z": -10.925
+    },
+    {
+      "x": -6.788,
+      "z": 10.996
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 7.354,
+        "z": 10.996
+      },
+      "b": {
+        "x": 6.859,
+        "z": -10.996
+      },
+      "lengthM": 21.997,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 6.859,
+        "z": -10.996
+      },
+      "b": {
+        "x": -7.354,
+        "z": -10.925
+      },
+      "lengthM": 14.213,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -7.354,
+        "z": -10.925
+      },
+      "b": {
+        "x": -6.788,
+        "z": 10.996
+      },
+      "lengthM": 21.928,
+      "role": "rear",
+      "partyShare": 0.06
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -6.788,
+        "z": 10.996
+      },
+      "b": {
+        "x": 7.354,
+        "z": 10.996
+      },
+      "lengthM": 14.142,
+      "role": "front",
+      "partyShare": 0.06
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

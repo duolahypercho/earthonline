@@ -1,0 +1,12 @@
+{
+ "extends": "compactHatch",
+ "id": "compactHatchCross",
+ "label": "Metro hatch v3, raised trim",
+ "typeIds": [
+  "compactHatchCross"
+ ],
+ "cladding": true,
+ "roofRails": true,
+ "wheelStyle": "multi10",
+ "note": "Trim of the measured Metro hatch body: arch cladding and roof rails (catalogue features roofRails + cladding). Collision box shared with compactHatch."
+}

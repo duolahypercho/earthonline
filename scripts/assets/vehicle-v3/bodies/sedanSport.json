@@ -1,0 +1,25 @@
+{
+ "extends": "sedan",
+ "id": "sedanSport",
+ "label": "Executive sedan v3, sport trim",
+ "typeIds": [
+  "sedanSport"
+ ],
+ "wheelStyle": "twin5",
+ "wheelFinish": "dark",
+ "rimRatio": 0.74,
+ "tyreWidth": 0.245,
+ "mirrorFinish": "gloss",
+ "dloTrim": "gloss",
+ "spoiler": true,
+ "note": "Trim of sedan: gloss-black mirrors and window surround, dark twin-spoke wheels, deck lip. Collision box and body shared with sedan.",
+ "grilleStyle": {
+  "insert": "none",
+  "bars": 4,
+  "barMat": "gloss",
+  "barFill": 0.34,
+  "barInset": -0.005,
+  "frame": "gloss",
+  "frameW": 0.012
+ }
+}

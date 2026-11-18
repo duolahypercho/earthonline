@@ -1,0 +1,102 @@
+{
+ "seed": 3,
+ "notes": "Warm brown face brick, buff stone quoin surrounds (hand.py), charcoal base, dark bracketed eave and frieze, iron balcony upper right. The 3 rows above the dark base, so storey count kept at 4. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. GroundBand lift (2026-10-03): groundBand tint #5e5e63 -> #7e7e82 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "brick-running-bond",
+ "wallTint": "#ffffff",
+ "trim": "painted-white@d9c7a0",
+ "frame": "painted-white@d9c7a0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@e6dcc2",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@b3896d",
+ "cornice": true,
+ "corniceProjectionM": 0.9,
+ "beltCourse": true,
+ "windowHoods": true,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.165,
+  0.33,
+  0.44,
+  0.54,
+  0.64,
+  0.82
+ ],
+ "bays": [],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.4,
+    "to": 0.47,
+    "kind": "window",
+    "headM": 1.9,
+    "grille": true
+   },
+   {
+    "from": 0.6,
+    "to": 0.67,
+    "kind": "window",
+    "headM": 1.9,
+    "grille": true
+   },
+   {
+    "from": 0.78,
+    "to": 0.86,
+    "kind": "window",
+    "headM": 1.9,
+    "grille": true
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#7e7e82",
+  "topM": 3.2
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.7,
+  "heightM": 0.55,
+  "depthM": 0.4,
+  "widthM": 0.22,
+  "material": "painted-white",
+  "tint": "#4a2f22"
+ },
+ "hbFrieze": {
+  "heightM": 0.6,
+  "material": "painted-white",
+  "tint": "#4a2f22"
+ },
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.4,
+     0.47
+    ],
+    [
+     0.505,
+     0.575
+    ],
+    [
+     0.62,
+     0.73
+    ],
+    [
+     0.79,
+     0.87
+    ]
+   ],
+   "sillM": 0.9,
+   "headM": 2.5
+  }
+ }
+}

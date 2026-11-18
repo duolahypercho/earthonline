@@ -1,0 +1,203 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-173886727",
+  "slug": "b173886727",
+  "walkIndex": 77,
+  "street": "Shipley Street",
+  "address": null,
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 6.22,
+  "storeys": 2,
+  "floors": {
+    "groundM": 3.12,
+    "upperM": 2.5,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1907,
+  "use": "IND",
+  "usage": "mixed",
+  "amenity": "company",
+  "shop": null,
+  "facade": "loft",
+  "material": "concrete",
+  "frame": {
+    "edgeIndex": 0,
+    "center": {
+      "x": 1466.85,
+      "z": 257.7
+    },
+    "heading": -0.776053,
+    "width": 8.17,
+    "depth": 49.494
+  },
+  "frameMirrored": true,
+  "polygonWinding": "cw",
+  "polygon": [
+    {
+      "x": 3.481,
+      "z": 24.747
+    },
+    {
+      "x": -4.085,
+      "z": 24.747
+    },
+    {
+      "x": -3.788,
+      "z": 0.495
+    },
+    {
+      "x": 0.526,
+      "z": 0.465
+    },
+    {
+      "x": 0.552,
+      "z": -2.364
+    },
+    {
+      "x": -3.761,
+      "z": -2.333
+    },
+    {
+      "x": -3.481,
+      "z": -24.747
+    },
+    {
+      "x": 4.085,
+      "z": -24.747
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 3.481,
+        "z": 24.747
+      },
+      "b": {
+        "x": -4.085,
+        "z": 24.747
+      },
+      "lengthM": 7.566,
+      "role": "front",
+      "partyShare": 0.13
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -4.085,
+        "z": 24.747
+      },
+      "b": {
+        "x": -3.788,
+        "z": 0.495
+      },
+      "lengthM": 24.254,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -3.788,
+        "z": 0.495
+      },
+      "b": {
+        "x": 0.526,
+        "z": 0.465
+      },
+      "lengthM": 4.314,
+      "role": "rear",
+      "partyShare": 0.13
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 0.526,
+        "z": 0.465
+      },
+      "b": {
+        "x": 0.552,
+        "z": -2.364
+      },
+      "lengthM": 2.828,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": 0.552,
+        "z": -2.364
+      },
+      "b": {
+        "x": -3.761,
+        "z": -2.333
+      },
+      "lengthM": 4.314,
+      "role": "rear",
+      "partyShare": 0.13
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": -3.761,
+        "z": -2.333
+      },
+      "b": {
+        "x": -3.481,
+        "z": -24.747
+      },
+      "lengthM": 22.415,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": -3.481,
+        "z": -24.747
+      },
+      "b": {
+        "x": 4.085,
+        "z": -24.747
+      },
+      "lengthM": 7.566,
+      "role": "rear",
+      "partyShare": 0.25
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": 4.085,
+        "z": -24.747
+      },
+      "b": {
+        "x": 3.481,
+        "z": 24.747
+      },
+      "lengthM": 49.498,
+      "role": "party",
+      "partyShare": 1
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

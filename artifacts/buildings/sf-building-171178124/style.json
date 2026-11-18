@@ -1,0 +1,473 @@
+{
+ "seed": 43,
+ "notes": "Rework r3: golden ochre wall, white bays with plaques under the sills, roll-down shuttered retail front under a dark maroon fascia and rust awning, fire escape at the left (photo matches the position). Graffiti not modelled. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. Graffiti (2026-10-03): the boarded shop front is covered in graffiti on white in every photo; abstract mural.layout over 0.33-0.98 up to 3.1 m (letter forms suggested, none copied). Ground band (2026-10-03): raw ochre #b8924f rendered mustard in game; photo base is dull tan, tint = #c4ad88 / stucco base = #e6d5b7.",
+ "wall": "painted-stucco",
+ "wallTint": "#e4d0ae",
+ "trim": "painted-white@ece4d0",
+ "frame": "painted-white@efe9d8",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@efe9d8",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-stucco@8e584f",
+ "cornice": true,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.4,
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "bays": [
+  {
+   "at": 0.07,
+   "widthM": 3.0,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f6f2ea",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.6,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   },
+   "plaques": {
+    "material": "painted-white",
+    "tint": "#ece6d4",
+    "heightM": 0.5,
+    "widthFrac": 0.6
+   }
+  },
+  {
+   "at": 0.36,
+   "widthM": 3.4,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f6f2ea",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.6,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   },
+   "plaques": {
+    "material": "painted-white",
+    "tint": "#ece6d4",
+    "heightM": 0.5,
+    "widthFrac": 0.6
+   }
+  },
+  {
+   "at": 0.75,
+   "widthM": 3.4,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f6f2ea",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.6,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   },
+   "plaques": {
+    "material": "painted-white",
+    "tint": "#ece6d4",
+    "heightM": 0.5,
+    "widthFrac": 0.6
+   }
+  }
+ ],
+ "upperWindows": [
+  0.56
+ ],
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#e6d5b7",
+  "topM": 4.0
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.11,
+    "to": 0.2,
+    "kind": "gate",
+    "headM": 2.8
+   },
+   {
+    "from": 0.24,
+    "to": 0.29,
+    "kind": "gate",
+    "headM": 2.8
+   },
+   {
+    "from": 0.33,
+    "to": 0.99,
+    "kind": "blank",
+    "material": "painted-white",
+    "tint": "#c4c0b8",
+    "headM": 3.2
+   }
+  ]
+ },
+ "fireEscape": {
+  "at": 0.2,
+  "widthM": 2.6,
+  "depthM": 0.9,
+  "material": "painted-steel"
+ },
+ "corniceProjectionM": 0.6,
+ "shopFascia": {
+  "heightM": 0.5,
+  "projectionM": 0.2,
+  "material": "painted-steel-mid",
+  "tint": "#6a2a28",
+  "topM": 0.3
+ },
+ "awning": "awning-canvas@7a4a30",
+ "awningSpans": [
+  {
+   "from": 0.5,
+   "to": 0.62,
+   "depthM": 0.9,
+   "riseM": 0.3,
+   "dropM": 0.3
+  }
+ ],
+ "mural": {
+  "from": 0.33,
+  "to": 0.98,
+  "bottomM": 0.25,
+  "topM": 3.1,
+  "ground": "#ece9e2",
+  "layout": [
+   {
+    "kind": "disc",
+    "cx": 0.06,
+    "cy": 0.45,
+    "rM": 1.05,
+    "color": "#141416"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.13,
+    "cy": 0.45,
+    "rM": 1.05,
+    "color": "#141416"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.2,
+    "cy": 0.45,
+    "rM": 1.05,
+    "color": "#141416"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.06,
+    "cy": 0.45,
+    "rM": 0.9,
+    "color": "#3fb04a"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.13,
+    "cy": 0.45,
+    "rM": 0.9,
+    "color": "#3fb04a"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.2,
+    "cy": 0.45,
+    "rM": 0.9,
+    "color": "#3fb04a"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.1,
+    "cy": 0.48,
+    "rM": 0.55,
+    "color": "#141416"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.17,
+    "cy": 0.42,
+    "rM": 0.4,
+    "color": "#ece9e2"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.21,
+    "cy": 0.52,
+    "rM": 0.3,
+    "color": "#141416"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.36,
+    "cy": 0.4,
+    "rM": 0.7,
+    "color": "#e0a040"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.36,
+    "cy": 0.62,
+    "rM": 0.35,
+    "color": "#3a7ad0"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.5,
+    "cy": 0.42,
+    "rM": 0.95,
+    "color": "#141416"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.57,
+    "cy": 0.42,
+    "rM": 0.95,
+    "color": "#141416"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.64,
+    "cy": 0.42,
+    "rM": 0.95,
+    "color": "#141416"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.5,
+    "cy": 0.42,
+    "rM": 0.8,
+    "color": "#3c3c44"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.57,
+    "cy": 0.42,
+    "rM": 0.8,
+    "color": "#3c3c44"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.64,
+    "cy": 0.42,
+    "rM": 0.8,
+    "color": "#3c3c44"
+   },
+   {
+    "kind": "rect",
+    "x0": 0.47,
+    "x1": 0.68,
+    "y0": 0.4,
+    "y1": 0.45,
+    "color": "#ece9e2"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.75,
+    "cy": 0.42,
+    "rM": 1.08,
+    "color": "#141416"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.82,
+    "cy": 0.42,
+    "rM": 1.08,
+    "color": "#141416"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.89,
+    "cy": 0.42,
+    "rM": 1.08,
+    "color": "#141416"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.96,
+    "cy": 0.42,
+    "rM": 1.08,
+    "color": "#141416"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.75,
+    "cy": 0.42,
+    "rM": 0.93,
+    "color": "#f0cc20"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.82,
+    "cy": 0.42,
+    "rM": 0.93,
+    "color": "#f0cc20"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.89,
+    "cy": 0.42,
+    "rM": 0.93,
+    "color": "#f0cc20"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.96,
+    "cy": 0.42,
+    "rM": 0.93,
+    "color": "#f0cc20"
+   },
+   {
+    "kind": "rect",
+    "x0": 0.72,
+    "x1": 0.99,
+    "y0": 0.4,
+    "y1": 0.44,
+    "color": "#141416"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.79,
+    "cy": 0.47,
+    "rM": 0.22,
+    "color": "#141416"
+   },
+   {
+    "kind": "disc",
+    "cx": 0.93,
+    "cy": 0.47,
+    "rM": 0.22,
+    "color": "#141416"
+   },
+   {
+    "kind": "lines",
+    "x0": 0.02,
+    "x1": 0.18,
+    "y0": 0.8,
+    "y1": 0.95,
+    "n": 2,
+    "color": "#141416",
+    "seed": 1
+   },
+   {
+    "kind": "lines",
+    "x0": 0.24,
+    "x1": 0.42,
+    "y0": 0.84,
+    "y1": 0.97,
+    "n": 2,
+    "color": "#141416",
+    "seed": 2
+   },
+   {
+    "kind": "lines",
+    "x0": 0.46,
+    "x1": 0.62,
+    "y0": 0.78,
+    "y1": 0.92,
+    "n": 2,
+    "color": "#c03a9a",
+    "seed": 3
+   },
+   {
+    "kind": "lines",
+    "x0": 0.66,
+    "x1": 0.8,
+    "y0": 0.82,
+    "y1": 0.96,
+    "n": 2,
+    "color": "#141416",
+    "seed": 4
+   },
+   {
+    "kind": "lines",
+    "x0": 0.84,
+    "x1": 0.98,
+    "y0": 0.8,
+    "y1": 0.93,
+    "n": 2,
+    "color": "#d8402a",
+    "seed": 5
+   },
+   {
+    "kind": "lines",
+    "x0": 0.28,
+    "x1": 0.44,
+    "y0": 0.05,
+    "y1": 0.16,
+    "n": 2,
+    "color": "#c03a9a",
+    "seed": 6
+   },
+   {
+    "kind": "lines",
+    "x0": 0.7,
+    "x1": 0.9,
+    "y0": 0.04,
+    "y1": 0.14,
+    "n": 2,
+    "color": "#141416",
+    "seed": 7
+   },
+   {
+    "kind": "lines",
+    "x0": 0.02,
+    "x1": 0.14,
+    "y0": 0.04,
+    "y1": 0.14,
+    "n": 2,
+    "color": "#d8402a",
+    "seed": 8
+   }
+  ]
+ }
+}

@@ -1,0 +1,241 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-259222532",
+  "slug": "b259222532",
+  "walkIndex": 5131,
+  "street": "Hyde Street",
+  "address": "1328 Hyde Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 11.79,
+  "storeys": 3,
+  "floors": {
+    "groundM": 4.849,
+    "upperM": 3.17,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1909,
+  "use": "MRES",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "art-deco",
+  "material": "stone",
+  "frame": {
+    "edgeIndex": 8,
+    "center": {
+      "x": 163.945,
+      "z": 1685.579
+    },
+    "heading": -1.352127,
+    "width": 21.671,
+    "depth": 36.433
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -7.137,
+      "z": 16.08
+    },
+    {
+      "x": -1.67,
+      "z": 18.217
+    },
+    {
+      "x": 10.836,
+      "z": -13.629
+    },
+    {
+      "x": 5.684,
+      "z": -15.798
+    },
+    {
+      "x": 4.48,
+      "z": -18.217
+    },
+    {
+      "x": -2.061,
+      "z": -5.841
+    },
+    {
+      "x": -8.645,
+      "z": 13.184
+    },
+    {
+      "x": -10.836,
+      "z": 13.824
+    },
+    {
+      "x": -10.152,
+      "z": 16.742
+    },
+    {
+      "x": -7.386,
+      "z": 16.742
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -7.137,
+        "z": 16.08
+      },
+      "b": {
+        "x": -1.67,
+        "z": 18.217
+      },
+      "lengthM": 5.869,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -1.67,
+        "z": 18.217
+      },
+      "b": {
+        "x": 10.836,
+        "z": -13.629
+      },
+      "lengthM": 34.213,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 10.836,
+        "z": -13.629
+      },
+      "b": {
+        "x": 5.684,
+        "z": -15.798
+      },
+      "lengthM": 5.59,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 5.684,
+        "z": -15.798
+      },
+      "b": {
+        "x": 4.48,
+        "z": -18.217
+      },
+      "lengthM": 2.702,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": 4.48,
+        "z": -18.217
+      },
+      "b": {
+        "x": -2.061,
+        "z": -5.841
+      },
+      "lengthM": 13.998,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": -2.061,
+        "z": -5.841
+      },
+      "b": {
+        "x": -8.645,
+        "z": 13.184
+      },
+      "lengthM": 20.132,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": -8.645,
+        "z": 13.184
+      },
+      "b": {
+        "x": -10.836,
+        "z": 13.824
+      },
+      "lengthM": 2.283,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": -10.836,
+        "z": 13.824
+      },
+      "b": {
+        "x": -10.152,
+        "z": 16.742
+      },
+      "lengthM": 2.997,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 8,
+      "a": {
+        "x": -10.152,
+        "z": 16.742
+      },
+      "b": {
+        "x": -7.386,
+        "z": 16.742
+      },
+      "lengthM": 2.766,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 9,
+      "a": {
+        "x": -7.386,
+        "z": 16.742
+      },
+      "b": {
+        "x": -7.137,
+        "z": 16.08
+      },
+      "lengthM": 0.707,
+      "role": "rear",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

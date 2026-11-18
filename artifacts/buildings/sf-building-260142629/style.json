@@ -1,0 +1,176 @@
+{
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "beltCourse": true,
+ "windowHoods": true,
+ "windowW": 1.0,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "bays": [
+  {
+   "at": 0.2,
+   "widthM": 2.7,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#f5dcb8",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.8,
+   "widthM": 2.7,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#f5dcb8",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "upperWindows": [
+  0.5
+ ],
+ "seed": 14,
+ "notes": "Round 2: deep green shop storey, a row of arched windows over it (storey 1), warmer buff upper wall, red belt, cant bays kept, tan fire escape left of centre. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. Rework 2 (2026-10-03): peach-buff upper wall, olive-khaki arched storey (wallZones), reddish-brown belt with brackets and ornamented bay aprons (hand.py), deeper green shop storey, tan escape. Colour re-apply (2026-10-03): a rework re-sampled wallTint #f5dcb8 from the photo; lifted/converted once to #faeedc. GroundBand lift (2026-10-03): groundBand tint #3f7440 -> #659066 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#faeedc",
+ "trim": "painted-white@844038",
+ "frame": "painted-white@e6dcc0",
+ "bulkhead": "painted-stucco@3f7440",
+ "corniceProjectionM": 0.4,
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#659066",
+  "topM": 4.0
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.04,
+    "to": 0.3,
+    "kind": "window",
+    "headM": 2.9,
+    "tint": "#3f7440"
+   },
+   {
+    "from": 0.38,
+    "to": 0.6,
+    "kind": "door",
+    "stair": false,
+    "headM": 3.0
+   },
+   {
+    "from": 0.66,
+    "to": 0.8,
+    "kind": "window",
+    "headM": 2.9
+   },
+   {
+    "from": 0.85,
+    "to": 0.97,
+    "kind": "blank",
+    "material": "painted-stucco",
+    "tint": "#3f7440",
+    "headM": 3.3
+   }
+  ]
+ },
+ "awningSpans": [
+  {
+   "from": 0.36,
+   "to": 0.62,
+   "depthM": 1.1,
+   "valanceM": 0.3
+  }
+ ],
+ "awning": "canvas-plain@5a3a2c",
+ "fireEscape": {
+  "at": 0.45,
+  "widthM": 1.8,
+  "depthM": 0.9,
+  "material": "painted-white@a58a6c"
+ },
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.07,
+     0.29
+    ],
+    [
+     0.35,
+     0.65
+    ],
+    [
+     0.71,
+     0.93
+    ]
+   ],
+   "sillM": 0.7,
+   "headM": 2.5
+  }
+ },
+ "upperWindowArch": {
+  "type": "segmental",
+  "riseM": 0.45,
+  "surround": {
+   "widthM": 0.12,
+   "projectionM": 0.04,
+   "material": "painted-white",
+   "tint": "#d8c88c"
+  },
+  "storeys": [
+   1
+  ]
+ },
+ "wallZones": [
+  {
+   "from": 0.0,
+   "to": 1.0,
+   "fromY": 3.96,
+   "toY": 6.86,
+   "tint": "#cdbf84"
+  }
+ ]
+}

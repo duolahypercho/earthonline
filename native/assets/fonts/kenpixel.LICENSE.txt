@@ -1,0 +1,9 @@
+kenpixel.ttf - Kenney Fonts
+
+Source  : https://www.kenney.nl/assets/kenney-fonts
+Copied  : from the three.js distribution (examples/fonts/ttf/kenpixel.ttf,
+          three 0.180.0), byte for byte
+SHA-256 : fd42226067fc44707d41ef9f43597574c6a0fd415249416b38cf93371a7a611a
+Licence : CC0 1.0 Universal (CC0 1.0) Public Domain Dedication
+          https://creativecommons.org/publicdomain/zero/1.0/
+          (as stated by the README that ships beside the font in three.js)

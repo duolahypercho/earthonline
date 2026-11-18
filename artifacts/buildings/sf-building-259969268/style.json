@@ -1,0 +1,128 @@
+{
+ "seed": 31,
+ "notes": "Rework r3: darker brown-red face brick, navy bays (two kept; photo shows a navy-framed canted stack left of the fire escape too), fire escape between them as in photo, brick ground storey with dark barred gate and closed dark door, no pale openings. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game.",
+ "wall": "brick-common-bond",
+ "wallTint": "#dfc8e1",
+ "trim": "painted-white@e8dcc0",
+ "frame": "painted-white@d8d2c0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@2a2420",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "brick-running-bond@e3e4ff",
+ "cornice": true,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.4,
+ "upperWindows": [
+  0.5
+ ],
+ "bays": [
+  {
+   "at": 0.27,
+   "widthM": 2.1,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#3b4869",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.4,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.73,
+   "widthM": 2.3,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#3b4869",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.4,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "groundBand": {
+  "material": "brick-running-bond",
+  "tint": "#ebebff",
+  "topM": 3.4
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.05,
+    "to": 0.15,
+    "kind": "window",
+    "headM": 2.0,
+    "grille": true
+   },
+   {
+    "from": 0.3,
+    "to": 0.5,
+    "kind": "gate"
+   },
+   {
+    "from": 0.65,
+    "to": 0.76,
+    "kind": "window",
+    "headM": 2.0,
+    "grille": true
+   },
+   {
+    "from": 0.83,
+    "to": 0.93,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel@25221f",
+    "headM": 2.4,
+    "leafClosed": {
+     "panelRows": 3,
+     "panelCols": 1
+    }
+   }
+  ]
+ },
+ "fireEscape": {
+  "at": 0.49,
+  "widthM": 2.0,
+  "depthM": 0.9,
+  "material": "painted-steel"
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true
+}

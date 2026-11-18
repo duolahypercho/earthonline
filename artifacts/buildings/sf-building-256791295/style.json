@@ -1,0 +1,92 @@
+{
+ "seed": 32,
+ "notes": "Mid-century block, not Victorian: tan stucco end piers with full-width ribbon glazing bands (two glazed runs) on storeys 1-2 (storeys 1 and 2) via storeyWindowSpans; central dark-brown lattice screen over the entry core (hand.py slats) with a gated entry and small red pergola canopy; flat roof, no cornice, no belt course; dark thin fascia (trim). Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Beige piers, ground storey glazed (stair tower + ribbon), tower sills dropped to full-height glazing with a visible stair (hand.py), rectangular-grid screen over the gate, thin dark roof fascia, red-topped pipe canopy standing out at the kerb side.",
+ "wall": "painted-white",
+ "wallTint": "#d9c79c",
+ "trim": "painted-white@3a3a3a",
+ "frame": "painted-white@2a2a2c",
+ "glass": "glass-reflective@5a6670",
+ "storefrontFrame": "painted-white@2a2a2c",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@d9c79c",
+ "cornice": false,
+ "corniceProjectionM": 0.4,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 1.2,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "bays": [],
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "storefront": {
+  "bulkheadM": 0.45,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.11,
+    "to": 0.26,
+    "kind": "window",
+    "headM": 3.0
+   },
+   {
+    "from": 0.27,
+    "to": 0.45,
+    "kind": "gate",
+    "material": "painted-steel",
+    "tint": "#26262a",
+    "headM": 2.9
+   },
+   {
+    "from": 0.56,
+    "to": 0.97,
+    "kind": "window",
+    "headM": 3.0
+   }
+  ]
+ },
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.11,
+     0.26
+    ],
+    [
+     0.56,
+     0.97
+    ]
+   ],
+   "sillM": 0.15,
+   "headM": 2.95
+  },
+  "2": {
+   "spans": [
+    [
+     0.11,
+     0.26
+    ],
+    [
+     0.56,
+     0.97
+    ]
+   ],
+   "sillM": 0.15,
+   "headM": 2.95
+  }
+ },
+ "hbFloors": {
+  "groundM": 3.4,
+  "upperM": 3.1705
+ },
+ "fascia": {
+  "heightM": 0.4,
+  "projectionM": 0.3,
+  "material": "painted-white",
+  "tint": "#3a3a3e"
+ }
+}

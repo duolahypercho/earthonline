@@ -1,0 +1,18 @@
+sf-land-cover.bin.gz - San Francisco land-cover classes for unmapped open ground
+
+Source: ESA WorldCover 10 m 2021 v200, tile N36W123 (Zanaga, D. et al., 2022,
+ESA WorldCover 10 m 2021 v200, https://doi.org/10.5281/zenodo.7254221).
+(c) ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021)
+processed by ESA WorldCover consortium.
+Licence: Creative Commons Attribution 4.0 International (CC BY 4.0),
+  https://creativecommons.org/licenses/by/4.0/ - attribution required.
+Source file:   https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/ESA_WorldCover_10m_2021_v200_N36W123_Map.tif
+Retrieved:     2026-11-10
+Source sha256: cd255268fb81c7073bf10e5325e1d11c601dde5dc5ccd9c1f0b40a8bcb8a9b29
+Produced by:   scripts/world-data/build-sf-land-cover-v1.mjs (version 1)
+Output sha256: 98de914047f781e57c395a2e361b5c2265db7bc85f398b8a2af1e49b58f296ca
+
+Kept: the source pixels unchanged (class codes), cut to lat 37.68..37.84, lon -122.53..-122.35:
+2162 x 1922 pixels of 1/12000 degree. Class shares: water 43.9%, built 36.3%, tree 12.3%, grass 5.9%, bare 1.3%, shrub 0.2%, wetland 0.0%, crop 0.0%.
+The game reads a class only where no mapped polygon, car park or derived yard has claimed
+the ground; the classifier is coarse (about 9 x 7 m a pixel) and dated 2021.

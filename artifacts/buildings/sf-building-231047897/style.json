@@ -1,0 +1,483 @@
+{
+  "seed": 1,
+  "notes": "Round 1 (fascia: dark wall zone above 3.0 m on the restaurant spans only; mural on 24th Street and both east end faces): one-storey corner fast-food restaurant, SE corner of 24th Street and Mission Street. Flat roof behind a plain parapet. The 24th Street face is a blank stucco wall carrying a large painted mural over its east two-thirds; the glazed dining room, entrance and dark vertical timber-slat cladding sit at the Mission Street end and wrap the corner onto the Mission Street face. Signage kind only: a dark fascia band with a channel-letter wordmark (no text modelled). Round 3 (send-back r1): boxed dark fascia with a light ledge and abstract channel-letter blocks (no text) on 24th and Mission, red boxed canopies over both doors, a lit yellow logo panel, brick-running-bond piers in place of glazed tile, dark storefront glazing, white membrane roof with rooftop plant, a dense painted mural (mural.detail), fast-food menu boards + counter + more dining, interior lights x0.55. Round 5 (send-back r2): stroke-glyph channel letters (generic, spell nothing) on the 24th fascia, lit generic ring-and-disc emblems (no logo shape) (Mission fascia centre, 24th end-bay timber), vertical timber battens (slatCladding) on both end bays and the corner pier, redder tile panels, wider Mission display windows with lit poster panels and a wider glazed double door, clear low-iron shop and door glass so the lit dining room reads, a continuous 0.26 m bright trim band, a light parapet coping cap, and figurative painted forms (faces, hair, raised arms) running up to the parapet over the dense mural tiers (generic, not a copy of the artwork). Round 5 also: doorVignettes - a lit menu-board row on a red wall, a service counter and two-tops seen through each glazed door. Door glass is kit shop glass with a dark frame, meeting stile and push bar.",
+  "wall": "painted-stucco",
+  "wallTint": "#d8d3c8",
+  "trim": "painted-steel-mid",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "coping": {
+    "heightM": 0.22,
+    "projectionM": 0.1,
+    "material": "painted-steel-light",
+    "tint": "#9a9c9a"
+  },
+  "frame": "painted-steel",
+  "storefrontFrame": "painted-steel",
+  "storefrontGlass": "glass-storefront",
+  "glass": "glass-clear",
+  "bulkhead": "painted-steel-mid",
+  "ground": "restaurant",
+  "upper": "auto",
+  "edgeRoles": {
+    "4": "flank"
+  },
+  "storefront": {
+    "awning": false,
+    "bulkheadM": 0.35,
+    "transomM": 0.35,
+    "pierM": 0.3,
+    "layout": [
+      {
+        "kind": "blank",
+        "material": "wood-siding",
+        "tint": "#a86a3a",
+        "from": 0.5,
+        "to": 0.535
+      },
+      {
+        "kind": "door",
+        "from": 0.54,
+        "to": 0.6,
+        "leaf": "anodized-aluminium"
+      },
+      {
+        "kind": "blank",
+        "from": 0.605,
+        "to": 0.68,
+        "material": "brick-running-bond",
+        "tint": "#a4432e"
+      },
+      {
+        "kind": "window",
+        "from": 0.685,
+        "to": 0.8
+      },
+      {
+        "kind": "window",
+        "from": 0.81,
+        "to": 0.9
+      },
+      {
+        "kind": "blank",
+        "material": "wood-siding",
+        "tint": "#a86a3a",
+        "from": 0.905,
+        "to": 0.995
+      }
+    ]
+  },
+  "mural": {
+    "from": 0.02,
+    "to": 0.48,
+    "bottomM": 0.35,
+    "topM": 4.4,
+    "seed": 24,
+    "shapes": 44,
+    "palette": [
+      "#1f6f7a",
+      "#d8402a",
+      "#f2b632",
+      "#ff7a2a",
+      "#1a9aa3",
+      "#c23b6b",
+      "#e2709a",
+      "#2f8f4e",
+      "#7b3f9c",
+      "#f0d25a",
+      "#b3202a",
+      "#8fd0e0"
+    ],
+    "detail": {
+      "cells": [
+        1.6,
+        0.9,
+        0.5
+      ],
+      "seed": 241,
+      "fill": 0.9,
+      "figures": 7,
+      "toParapet": true
+    }
+  },
+  "streetEdges": {
+    "4": {
+      "storefront": {
+        "layout": [
+          {
+            "kind": "blank",
+            "material": "wood-siding",
+            "tint": "#a86a3a",
+            "from": 0.005,
+            "to": 0.07
+          },
+          {
+            "kind": "window",
+            "from": 0.08,
+            "to": 0.24
+          },
+          {
+            "kind": "blank",
+            "material": "brick-running-bond",
+            "tint": "#a4432e",
+            "from": 0.25,
+            "to": 0.42
+          },
+          {
+            "kind": "door",
+            "from": 0.43,
+            "to": 0.57,
+            "leaf": "anodized-aluminium"
+          },
+          {
+            "kind": "blank",
+            "material": "brick-running-bond",
+            "tint": "#a4432e",
+            "from": 0.58,
+            "to": 0.61
+          },
+          {
+            "kind": "window",
+            "from": 0.62,
+            "to": 0.77
+          },
+          {
+            "kind": "blank",
+            "material": "wood-siding",
+            "tint": "#a86a3a",
+            "from": 0.78,
+            "to": 0.99
+          }
+        ]
+      },
+      "mural": null,
+      "wallZones": [
+        {
+          "material": "painted-stucco",
+          "tint": "#2b2c2e",
+          "fromY": 3.0,
+          "from": 0.0,
+          "to": 1.0
+        }
+      ],
+      "plaques": []
+    },
+    "0": {
+      "blankUpper": true,
+      "wallZones": [],
+      "storefront": {
+        "layout": []
+      },
+      "mural": {
+        "from": 0.04,
+        "to": 0.96,
+        "bottomM": 0.35,
+        "topM": 4.0,
+        "seed": 31,
+        "shapes": 16,
+        "palette": [
+          "#1f6f7a",
+          "#d8402a",
+          "#f2b632",
+          "#ff7a2a",
+          "#1a9aa3",
+          "#c23b6b",
+          "#e2709a",
+          "#2f8f4e",
+          "#7b3f9c",
+          "#f0d25a",
+          "#b3202a",
+          "#8fd0e0"
+        ],
+        "detail": {
+          "cells": [
+            1.6,
+            0.9,
+            0.5
+          ],
+          "seed": 243,
+          "fill": 0.9,
+          "figures": 3,
+          "toParapet": true
+        }
+      },
+      "plaques": []
+    },
+    "2": {
+      "blankUpper": true,
+      "wallZones": [],
+      "storefront": {
+        "layout": []
+      },
+      "mural": {
+        "from": 0.04,
+        "to": 0.96,
+        "bottomM": 0.35,
+        "topM": 4.0,
+        "seed": 37,
+        "shapes": 14,
+        "palette": [
+          "#1f6f7a",
+          "#d8402a",
+          "#f2b632",
+          "#ff7a2a",
+          "#1a9aa3",
+          "#c23b6b",
+          "#e2709a",
+          "#2f8f4e",
+          "#7b3f9c",
+          "#f0d25a",
+          "#b3202a",
+          "#8fd0e0"
+        ],
+        "detail": {
+          "cells": [
+            1.6,
+            0.9,
+            0.5
+          ],
+          "seed": 247,
+          "fill": 0.9,
+          "figures": 3,
+          "toParapet": true
+        }
+      },
+      "plaques": []
+    }
+  },
+  "groundBand": {
+    "material": "painted-stucco",
+    "tint": "#d8d3c8",
+    "topM": 3.0
+  },
+  "wallZones": [
+    {
+      "material": "painted-stucco",
+      "tint": "#2b2c2e",
+      "fromY": 3.0,
+      "from": 0.49,
+      "to": 1.0
+    }
+  ],
+  "glassModel": {
+    "upper": "glass-reflective",
+    "street": "glass-low-iron",
+    "backing": false
+  },
+  "roof": "painted-white@d9d9d4",
+  "rooftop": {
+    "units": 7,
+    "seed": 11,
+    "material": "painted-steel-light"
+  },
+  "fasciaBoxes": [
+    {
+      "edge": 3,
+      "from": 0.49,
+      "to": 1.0,
+      "bottomM": 3.05,
+      "projectionM": 0.3,
+      "material": "painted-steel-mid",
+      "tint": "#1d1e20",
+      "ledge": {
+        "heightM": 0.26,
+        "projectionM": 0.42,
+        "material": "painted-white",
+        "tint": "#f2f2ee"
+      },
+      "letters": {
+        "from": 0.63,
+        "to": 0.88,
+        "bottomM": 3.5,
+        "count": 9,
+        "seed": 5,
+        "material": "painted-white",
+        "tint": "#f7f7f4",
+        "glyphs": true,
+        "capM": 0.62,
+        "xM": 0.46,
+        "standoffM": 0.03
+      },
+      "emblem": {
+        "at": 0.95,
+        "y": 2.1,
+        "w": 1.1,
+        "h": 0.9,
+        "tint": "#ffc234",
+        "ground": "#6a3a1e",
+        "offM": 0.09
+      }
+    },
+    {
+      "edge": 4,
+      "from": 0.0,
+      "to": 1.0,
+      "bottomM": 3.05,
+      "projectionM": 0.3,
+      "material": "painted-steel-mid",
+      "tint": "#1d1e20",
+      "ledge": {
+        "heightM": 0.26,
+        "projectionM": 0.42,
+        "material": "painted-white",
+        "tint": "#f2f2ee"
+      },
+      "emblem": {
+        "at": 0.5,
+        "y": 3.78,
+        "w": 1.0,
+        "h": 0.72,
+        "tint": "#ffc234",
+        "ground": "#161618"
+      }
+    }
+  ],
+  "canopyBoxes": [
+    {
+      "edge": 3,
+      "from": 0.53,
+      "to": 0.61,
+      "bottomM": 2.62,
+      "heightM": 0.45,
+      "depthM": 0.42,
+      "material": "signal-red"
+    },
+    {
+      "edge": 4,
+      "from": 0.43,
+      "to": 0.57,
+      "bottomM": 2.62,
+      "heightM": 0.45,
+      "depthM": 0.42,
+      "material": "signal-red"
+    }
+  ],
+  "plaques": [],
+  "fastFood": {
+    "menuBoards": 5,
+    "counterM": 6,
+    "extraTables": 6
+  },
+  "interiorLightScale": 0.55,
+  "doorGlaze": [
+    {
+      "edge": 3,
+      "from": 0.54,
+      "to": 0.6,
+      "heightM": 2.4,
+      "material": "glass-storefront",
+      "frame": "#2a2c2e"
+    },
+    {
+      "edge": 4,
+      "from": 0.43,
+      "to": 0.57,
+      "heightM": 2.4,
+      "material": "glass-storefront",
+      "frame": "#2a2c2e"
+    }
+  ],
+  "slatCladding": [
+    {
+      "edge": 3,
+      "from": 0.5,
+      "to": 0.535,
+      "bottomM": 0.05,
+      "topM": 3.05,
+      "pitchM": 0.11,
+      "widthM": 0.06,
+      "depthM": 0.045,
+      "tint": "#a86a3a",
+      "backTint": "#3e2616"
+    },
+    {
+      "edge": 3,
+      "from": 0.905,
+      "to": 0.998,
+      "bottomM": 0.05,
+      "topM": 3.05,
+      "pitchM": 0.11,
+      "widthM": 0.06,
+      "depthM": 0.045,
+      "tint": "#a86a3a",
+      "backTint": "#3e2616"
+    },
+    {
+      "edge": 4,
+      "from": 0.002,
+      "to": 0.07,
+      "bottomM": 0.05,
+      "topM": 3.05,
+      "pitchM": 0.11,
+      "widthM": 0.06,
+      "depthM": 0.045,
+      "tint": "#a86a3a",
+      "backTint": "#3e2616"
+    },
+    {
+      "edge": 4,
+      "from": 0.78,
+      "to": 0.99,
+      "bottomM": 0.05,
+      "topM": 3.05,
+      "pitchM": 0.11,
+      "widthM": 0.06,
+      "depthM": 0.045,
+      "tint": "#a86a3a",
+      "backTint": "#3e2616"
+    }
+  ],
+  "windowDisplays": [
+    {
+      "edge": 4,
+      "from": 0.09,
+      "to": 0.23,
+      "bottomM": 0.75,
+      "topM": 2.25,
+      "insetM": 0.4,
+      "count": 2,
+      "tints": [
+        "#f3d9a4",
+        "#e9b98a"
+      ]
+    },
+    {
+      "edge": 4,
+      "from": 0.63,
+      "to": 0.76,
+      "bottomM": 0.75,
+      "topM": 2.25,
+      "insetM": 0.4,
+      "count": 2,
+      "tints": [
+        "#f1dcae",
+        "#e7c08e"
+      ]
+    }
+  ],
+  "doorVignettes": [
+    {
+      "edge": 3,
+      "from": 0.54,
+      "to": 0.6,
+      "depthM": 4.4,
+      "boards": 3,
+      "tables": [
+        -1.8,
+        1.8
+      ]
+    },
+    {
+      "edge": 4,
+      "from": 0.43,
+      "to": 0.57,
+      "depthM": 4.2,
+      "boards": 3,
+      "tables": [
+        -1.9,
+        1.9
+      ]
+    }
+  ]
+}

@@ -1,0 +1,187 @@
+{
+ "seed": 26,
+ "notes": "1907 corner flats, four storeys: warm grey-beige painted wall, cream trim. Ground: dark roll gate at the left end, a long blue painted blank wall, small glazed shop front with a green canopy at the corner end. Uppers: cant bays near the left, centre and a taller round corner bay at the right, white ladder fire escape balconies across the middle, single sash windows between. Blue mural wall now runs 0.11-0.78 with a short dark gate at the left end (the gate), warmer grey-beige wall, deeper bays with dentilled caps, bracketed roof cornice. Second fire escape run SKIPPED: one escape with stacked balconies. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour.",
+ "wall": "painted-stucco",
+ "wallTint": "#e2ddd2",
+ "trim": "painted-white@efe9d6",
+ "frame": "painted-white@efe9d6",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@efe9d6",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@e2ddd2",
+ "cornice": true,
+ "corniceProjectionM": 0.45,
+ "beltCourse": true,
+ "windowHoods": true,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.22,
+  0.32,
+  0.58
+ ],
+ "bays": [
+  {
+   "at": 0.09,
+   "widthM": 2.8,
+   "projectionM": 0.95,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#e2ddd2",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.22,
+     "dentils": true,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.41,
+   "widthM": 3.0,
+   "projectionM": 0.95,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#e2ddd2",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.22,
+     "dentils": true,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.7,
+   "widthM": 2.9,
+   "projectionM": 0.95,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#e2ddd2",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.22,
+     "dentils": true,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.935,
+   "widthM": 2.6,
+   "projectionM": 0.8,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#e2ddd2",
+   "hyB": {
+    "plan": "swell",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.22,
+     "dentils": true,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.01,
+    "to": 0.1,
+    "kind": "blank",
+    "material": "painted-steel",
+    "tint": "#4a4a4a",
+    "headM": 2.5
+   },
+   {
+    "from": 0.11,
+    "to": 0.78,
+    "kind": "blank",
+    "material": "painted-stucco",
+    "tint": "#3a66b8",
+    "headM": 2.9
+   },
+   {
+    "from": 0.8,
+    "to": 0.85,
+    "kind": "window",
+    "headM": 2.5
+   },
+   {
+    "from": 0.86,
+    "to": 0.95,
+    "kind": "door",
+    "leaf": "painted-steel@2a2c30",
+    "headM": 2.5
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "fireEscape": {
+  "at": 0.55,
+  "widthM": 4.6,
+  "depthM": 0.9,
+  "material": "painted-steel"
+ },
+ "awning": "canvas-plain@2f6b4a",
+ "hbCorniceBrackets": {
+  "spacingM": 1.1,
+  "heightM": 0.6,
+  "depthM": 0.4,
+  "widthM": 0.16
+ }
+}

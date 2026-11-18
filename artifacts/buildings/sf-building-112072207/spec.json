@@ -1,0 +1,222 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-112072207",
+  "slug": "b112072207",
+  "walkIndex": 7542,
+  "street": "Presidio Parkway",
+  "address": "Golden Gate Bridge",
+  "source": {
+    "footprint": "OpenStreetMap (ODbL-1.0) building way (via public/data/sf/sf-city.json)",
+    "height": "no measured height: the runtime fallback (src/citygen/sf-data.js resolveSourceHeight, levels x 3.2 m)",
+    "storeys": "dataset levels"
+  },
+  "heightM": 6.4,
+  "storeys": 1,
+  "floors": {
+    "groundM": 5.8,
+    "upperM": 0,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1900,
+  "use": null,
+  "usage": "mixed",
+  "amenity": "cafe",
+  "shop": null,
+  "facade": "art-deco",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 0,
+    "center": {
+      "x": -4951.492,
+      "z": 3293.454
+    },
+    "heading": -0.033321,
+    "width": 17.011,
+    "depth": 17.104
+  },
+  "frameMirrored": true,
+  "polygonWinding": "cw",
+  "polygon": [
+    {
+      "x": 2.978,
+      "z": 8.552
+    },
+    {
+      "x": -3.025,
+      "z": 8.552
+    },
+    {
+      "x": -8.505,
+      "z": 3.232
+    },
+    {
+      "x": -8.432,
+      "z": -3.575
+    },
+    {
+      "x": -3.195,
+      "z": -8.552
+    },
+    {
+      "x": 3.921,
+      "z": -8.189
+    },
+    {
+      "x": 8.375,
+      "z": -3.635
+    },
+    {
+      "x": 8.505,
+      "z": 3.265
+    },
+    {
+      "x": 4.751,
+      "z": 7.692
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 2.978,
+        "z": 8.552
+      },
+      "b": {
+        "x": -3.025,
+        "z": 8.552
+      },
+      "lengthM": 6.003,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -3.025,
+        "z": 8.552
+      },
+      "b": {
+        "x": -8.505,
+        "z": 3.232
+      },
+      "lengthM": 7.638,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -8.505,
+        "z": 3.232
+      },
+      "b": {
+        "x": -8.432,
+        "z": -3.575
+      },
+      "lengthM": 6.807,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -8.432,
+        "z": -3.575
+      },
+      "b": {
+        "x": -3.195,
+        "z": -8.552
+      },
+      "lengthM": 7.225,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": -3.195,
+        "z": -8.552
+      },
+      "b": {
+        "x": 3.921,
+        "z": -8.189
+      },
+      "lengthM": 7.125,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": 3.921,
+        "z": -8.189
+      },
+      "b": {
+        "x": 8.375,
+        "z": -3.635
+      },
+      "lengthM": 6.37,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": 8.375,
+        "z": -3.635
+      },
+      "b": {
+        "x": 8.505,
+        "z": 3.265
+      },
+      "lengthM": 6.901,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": 8.505,
+        "z": 3.265
+      },
+      "b": {
+        "x": 4.751,
+        "z": 7.692
+      },
+      "lengthM": 5.805,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 8,
+      "a": {
+        "x": 4.751,
+        "z": 7.692
+      },
+      "b": {
+        "x": 2.978,
+        "z": 8.552
+      },
+      "lengthM": 1.97,
+      "role": "rear",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

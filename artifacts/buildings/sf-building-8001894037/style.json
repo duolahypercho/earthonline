@@ -1,0 +1,88 @@
+{
+  "builder": "house",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "painted-stucco",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "seed": 35,
+  "storeysSeen": 2,
+  "groundM": 2.6,
+  "roofLevelM": 5.25,
+  "notes": "1526 Great Highway (1954, eight units on the roll), by eye: a long two-storey block painted brick red with white window frames and a flat roof; ground: a garage door and a white entry door to the south; upper: two white-framed windows across the front.",
+  "wall": "painted-stucco",
+  "wallTint": "#9e3b35",
+  "roofForm": {
+    "form": "flat",
+    "eaveM": 0.0
+  },
+  "parapetM": 0.4,
+  "garages": [
+    {
+      "from": 0.08,
+      "to": 0.5,
+      "headM": 2.2,
+      "material": "painted-white",
+      "pattern": "panel"
+    }
+  ],
+  "entry": {
+    "from": 0.66,
+    "to": 0.8,
+    "headM": 2.2,
+    "material": "painted-white",
+    "glass": false,
+    "recessM": 0.15
+  },
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.1,
+      "to": 0.42,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        2,
+        2
+      ]
+    },
+    {
+      "storey": 1,
+      "from": 0.58,
+      "to": 0.88,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        2,
+        2
+      ]
+    },
+    {
+      "storey": 0,
+      "from": 0.84,
+      "to": 0.95,
+      "sill": 1.0,
+      "head": 2.2,
+      "panes": [
+        1,
+        2
+      ]
+    }
+  ]
+}

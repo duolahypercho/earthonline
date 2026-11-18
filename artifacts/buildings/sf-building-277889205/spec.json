@@ -1,0 +1,279 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-277889205",
+  "slug": "b277889205",
+  "walkIndex": 7101,
+  "street": "Judah Street",
+  "address": "4321 Judah Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 8.94,
+  "storeys": 2,
+  "floors": {
+    "groundM": 5.421,
+    "upperM": 2.919,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1957,
+  "use": "MRES",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "edwardian",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 0,
+    "center": {
+      "x": -7843.4,
+      "z": -1977.75
+    },
+    "heading": -0.052931,
+    "width": 15.18,
+    "depth": 18.122
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -7.531,
+      "z": 9.061
+    },
+    {
+      "x": 7.59,
+      "z": 9.061
+    },
+    {
+      "x": 7.55,
+      "z": 0.752
+    },
+    {
+      "x": 3.745,
+      "z": 0.753
+    },
+    {
+      "x": 3.755,
+      "z": -0.95
+    },
+    {
+      "x": 7.56,
+      "z": -0.951
+    },
+    {
+      "x": 7.531,
+      "z": -9.061
+    },
+    {
+      "x": -7.59,
+      "z": -9.061
+    },
+    {
+      "x": -7.566,
+      "z": -1.051
+    },
+    {
+      "x": -3.362,
+      "z": -1.074
+    },
+    {
+      "x": -3.377,
+      "z": 0.529
+    },
+    {
+      "x": -7.581,
+      "z": 0.552
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -7.531,
+        "z": 9.061
+      },
+      "b": {
+        "x": 7.59,
+        "z": 9.061
+      },
+      "lengthM": 15.121,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 7.59,
+        "z": 9.061
+      },
+      "b": {
+        "x": 7.55,
+        "z": 0.752
+      },
+      "lengthM": 8.31,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 7.55,
+        "z": 0.752
+      },
+      "b": {
+        "x": 3.745,
+        "z": 0.753
+      },
+      "lengthM": 3.805,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 3.745,
+        "z": 0.753
+      },
+      "b": {
+        "x": 3.755,
+        "z": -0.95
+      },
+      "lengthM": 1.703,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": 3.755,
+        "z": -0.95
+      },
+      "b": {
+        "x": 7.56,
+        "z": -0.951
+      },
+      "lengthM": 3.805,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": 7.56,
+        "z": -0.951
+      },
+      "b": {
+        "x": 7.531,
+        "z": -9.061
+      },
+      "lengthM": 8.11,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": 7.531,
+        "z": -9.061
+      },
+      "b": {
+        "x": -7.59,
+        "z": -9.061
+      },
+      "lengthM": 15.121,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": -7.59,
+        "z": -9.061
+      },
+      "b": {
+        "x": -7.566,
+        "z": -1.051
+      },
+      "lengthM": 8.01,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 8,
+      "a": {
+        "x": -7.566,
+        "z": -1.051
+      },
+      "b": {
+        "x": -3.362,
+        "z": -1.074
+      },
+      "lengthM": 4.205,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 9,
+      "a": {
+        "x": -3.362,
+        "z": -1.074
+      },
+      "b": {
+        "x": -3.377,
+        "z": 0.529
+      },
+      "lengthM": 1.603,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 10,
+      "a": {
+        "x": -3.377,
+        "z": 0.529
+      },
+      "b": {
+        "x": -7.581,
+        "z": 0.552
+      },
+      "lengthM": 4.205,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 11,
+      "a": {
+        "x": -7.581,
+        "z": 0.552
+      },
+      "b": {
+        "x": -7.531,
+        "z": 9.061
+      },
+      "lengthM": 8.509,
+      "role": "rear",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

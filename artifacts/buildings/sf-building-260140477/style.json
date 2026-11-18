@@ -1,0 +1,150 @@
+{
+ "seed": 5,
+ "notes": "Three-storey off-white stucco hotel block over a dark charcoal base: dark navy/black double-hung windows alternating wide and narrow, near-black bracketed cornice, black fire escape right of centre; ground a snack shop under a black sign band, barred door, small grilled window. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. GroundBand lift (2026-10-03): groundBand tint #7a7a82 -> #95959b (same rule as walls; it was missed by the first colour pass).",
+ "streetStills": true,
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-storefront",
+ "wall": "painted-stucco",
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "cornice": true,
+ "corniceProjectionM": 0.7,
+ "beltCourse": true,
+ "ground": "lobby",
+ "upper": "apartment",
+ "fireEscape": {
+  "at": 0.76,
+  "widthM": 2.4,
+  "depthM": 0.9,
+  "standoffM": 0.3,
+  "ladder": true,
+  "material": "painted-steel",
+  "levels": [
+   2,
+   3
+  ],
+  "dropLadder": false,
+  "roofLadder": false,
+  "braces": true
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.35,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.04,
+    "to": 0.14,
+    "kind": "blank",
+    "material": "painted-white",
+    "tint": "#a48fb0",
+    "headM": 3.0
+   },
+   {
+    "from": 0.17,
+    "to": 0.24,
+    "kind": "window",
+    "headM": 2.8
+   },
+   {
+    "from": 0.27,
+    "to": 0.45,
+    "kind": "window",
+    "headM": 2.9
+   },
+   {
+    "from": 0.62,
+    "to": 0.68,
+    "kind": "window",
+    "headM": 2.0,
+    "grille": true
+   },
+   {
+    "from": 0.74,
+    "to": 0.82,
+    "kind": "door",
+    "headM": 2.7,
+    "grille": true
+   }
+  ]
+ },
+ "wallTint": "#f2f1ee",
+ "trim": "painted-white@14182a",
+ "frame": "painted-white@14182a",
+ "storefrontFrame": "painted-white@14182a",
+ "bulkhead": "painted-stucco@8b8b91",
+ "windowHoods": true,
+ "sashFrames": {
+  "material": "painted-white@14182a",
+  "stileM": 0.06
+ },
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#95959b",
+  "topM": 4.2
+ },
+ "floorsM": {
+  "groundM": 4.2,
+  "upperM": 2.95
+ },
+ "upperWindowSpans": [
+  [
+   0.0807,
+   0.1306
+  ],
+  [
+   0.1689,
+   0.1955
+  ],
+  [
+   0.2338,
+   0.2837
+  ],
+  [
+   0.322,
+   0.3719
+  ],
+  [
+   0.4101,
+   0.4368
+  ],
+  [
+   0.475,
+   0.525
+  ],
+  [
+   0.5632,
+   0.6131
+  ],
+  [
+   0.6514,
+   0.678
+  ],
+  [
+   0.7163,
+   0.7662
+  ],
+  [
+   0.8045,
+   0.8544
+  ],
+  [
+   0.8927,
+   0.9193
+  ]
+ ],
+ "upperSillM": 0.85,
+ "upperHeadM": 2.35,
+ "hbSignBands": [
+  {
+   "from": 0.255,
+   "to": 0.465,
+   "bottomM": 3.2,
+   "topM": 3.85,
+   "material": "signage",
+   "tint": "#16161a"
+  }
+ ]
+}

@@ -1,0 +1,336 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-8101894021",
+  "slug": "b8101894021",
+  "walkIndex": 7302,
+  "street": "Lawton Street",
+  "address": "4242 Lawton Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor+ground)"
+  },
+  "heightM": 5.95,
+  "storeys": 2,
+  "floors": {
+    "groundM": 2.85,
+    "upperM": 2.5,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1949,
+  "use": "MRES",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "edwardian",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 9,
+    "center": {
+      "x": -7839.77,
+      "z": -2347.992
+    },
+    "heading": 3.074337,
+    "width": 7.853,
+    "depth": 18.948
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -3.888,
+      "z": -7.878
+    },
+    {
+      "x": -2.292,
+      "z": -7.845
+    },
+    {
+      "x": -2.255,
+      "z": -4.911
+    },
+    {
+      "x": -3.926,
+      "z": -4.879
+    },
+    {
+      "x": -3.857,
+      "z": -0.574
+    },
+    {
+      "x": -2.525,
+      "z": -0.593
+    },
+    {
+      "x": -2.465,
+      "z": 2.389
+    },
+    {
+      "x": -3.785,
+      "z": 2.428
+    },
+    {
+      "x": -3.631,
+      "z": 9.474
+    },
+    {
+      "x": 0.058,
+      "z": 8.885
+    },
+    {
+      "x": 3.926,
+      "z": 8.885
+    },
+    {
+      "x": 3.605,
+      "z": -4.965
+    },
+    {
+      "x": 2.183,
+      "z": -4.939
+    },
+    {
+      "x": 2.12,
+      "z": -9.445
+    },
+    {
+      "x": -3.855,
+      "z": -9.474
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -3.888,
+        "z": -7.878
+      },
+      "b": {
+        "x": -2.292,
+        "z": -7.845
+      },
+      "lengthM": 1.596,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -2.292,
+        "z": -7.845
+      },
+      "b": {
+        "x": -2.255,
+        "z": -4.911
+      },
+      "lengthM": 2.934,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -2.255,
+        "z": -4.911
+      },
+      "b": {
+        "x": -3.926,
+        "z": -4.879
+      },
+      "lengthM": 1.672,
+      "role": "rear",
+      "partyShare": 0.5
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -3.926,
+        "z": -4.879
+      },
+      "b": {
+        "x": -3.857,
+        "z": -0.574
+      },
+      "lengthM": 4.306,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": -3.857,
+        "z": -0.574
+      },
+      "b": {
+        "x": -2.525,
+        "z": -0.593
+      },
+      "lengthM": 1.332,
+      "role": "party",
+      "partyShare": 0.69
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": -2.525,
+        "z": -0.593
+      },
+      "b": {
+        "x": -2.465,
+        "z": 2.389
+      },
+      "lengthM": 2.983,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": -2.465,
+        "z": 2.389
+      },
+      "b": {
+        "x": -3.785,
+        "z": 2.428
+      },
+      "lengthM": 1.321,
+      "role": "party",
+      "partyShare": 0.69
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": -3.785,
+        "z": 2.428
+      },
+      "b": {
+        "x": -3.631,
+        "z": 9.474
+      },
+      "lengthM": 7.047,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 8,
+      "a": {
+        "x": -3.631,
+        "z": 9.474
+      },
+      "b": {
+        "x": 0.058,
+        "z": 8.885
+      },
+      "lengthM": 3.736,
+      "role": "rear",
+      "partyShare": 0.25
+    },
+    {
+      "index": 9,
+      "a": {
+        "x": 0.058,
+        "z": 8.885
+      },
+      "b": {
+        "x": 3.926,
+        "z": 8.885
+      },
+      "lengthM": 3.869,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 10,
+      "a": {
+        "x": 3.926,
+        "z": 8.885
+      },
+      "b": {
+        "x": 3.605,
+        "z": -4.965
+      },
+      "lengthM": 13.853,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 11,
+      "a": {
+        "x": 3.605,
+        "z": -4.965
+      },
+      "b": {
+        "x": 2.183,
+        "z": -4.939
+      },
+      "lengthM": 1.422,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 12,
+      "a": {
+        "x": 2.183,
+        "z": -4.939
+      },
+      "b": {
+        "x": 2.12,
+        "z": -9.445
+      },
+      "lengthM": 4.506,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 13,
+      "a": {
+        "x": 2.12,
+        "z": -9.445
+      },
+      "b": {
+        "x": -3.855,
+        "z": -9.474
+      },
+      "lengthM": 5.975,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 14,
+      "a": {
+        "x": -3.855,
+        "z": -9.474
+      },
+      "b": {
+        "x": -3.888,
+        "z": -7.878
+      },
+      "lengthM": 1.596,
+      "role": "rear",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

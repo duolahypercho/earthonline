@@ -1,0 +1,157 @@
+{
+  "builder": "house",
+  "seed": 3,
+  "notes": "1448 La Playa, 1991 house (assessor), from the street-level reference by eye (words only): pale blue-grey painted shingle, white trim, garage storey with a white sectional door on the right and a glazed white entry door on the left, two narrow box bays on the first living storey, a wide angled bay across the top storey under a street-facing gable, flat roof behind the gable, white stucco rear.",
+  "storeysSeen": 3,
+  "groundM": 2.75,
+  "roofLevelM": 9.25,
+  "wall": "painted-shingle",
+  "wallTint": "#c6d0db",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "float-finish-stucco",
+  "rearTint": "#ebe8e0",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "roofForm": {
+    "form": "front-gable",
+    "depthM": 5.2,
+    "eaveM": 0.32,
+    "ridgeM": 12.06,
+    "material": "asphalt-roof",
+    "tint": "#8a8680",
+    "pediment": true,
+    "gableWindow": {
+      "widthM": 0.8,
+      "heightM": 0.5
+    },
+    "gableMaterial": "painted-shingle"
+  },
+  "garages": [
+    {
+      "from": 0.56,
+      "to": 0.93,
+      "headM": 2.3,
+      "material": "painted-white",
+      "pattern": "sectional"
+    }
+  ],
+  "entry": {
+    "from": 0.18,
+    "to": 0.3,
+    "headM": 2.2,
+    "material": "painted-white",
+    "glass": true,
+    "recessM": 0.15
+  },
+  "windows": [],
+  "bays": [
+    {
+      "from": 0.11,
+      "to": 0.42,
+      "shape": "box",
+      "projectionM": 0.42,
+      "fromStorey": 1,
+      "toStorey": 1,
+      "windows": {
+        "front": 1,
+        "side": 0
+      },
+      "panes": [
+        1,
+        2
+      ],
+      "sillM": 0.75,
+      "headGapM": 0.35
+    },
+    {
+      "from": 0.59,
+      "to": 0.9,
+      "shape": "box",
+      "projectionM": 0.42,
+      "fromStorey": 1,
+      "toStorey": 1,
+      "windows": {
+        "front": 1,
+        "side": 0
+      },
+      "panes": [
+        1,
+        2
+      ],
+      "sillM": 0.75,
+      "headGapM": 0.35
+    },
+    {
+      "from": 0.04,
+      "to": 0.96,
+      "shape": "angled",
+      "projectionM": 0.55,
+      "fromStorey": 2,
+      "toStorey": 2,
+      "windows": {
+        "front": 3,
+        "side": 1
+      },
+      "panes": [
+        2,
+        2
+      ],
+      "sillM": 0.65,
+      "headGapM": 0.3
+    }
+  ],
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.1,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "edgeRoles": {},
+  "rooftop": {
+    "vents": [
+      [
+        0.3,
+        0.25
+      ],
+      [
+        0.7,
+        0.4
+      ]
+    ],
+    "skylights": [
+      [
+        0.5,
+        0.3,
+        0.9,
+        0.9
+      ]
+    ]
+  },
+  "floors": {
+    "1": {
+      "front": "living",
+      "rooms": [
+        "bath",
+        "dining",
+        "kitchen"
+      ]
+    },
+    "2": {
+      "front": [
+        "bedroom",
+        "bedroom"
+      ],
+      "rooms": [
+        "bath",
+        "bedroom"
+      ]
+    }
+  },
+  "groundRooms": [
+    "laundry",
+    "family"
+  ]
+}

@@ -1,0 +1,15 @@
+[package]
+name = "eo-server"
+version = "0.1.0"
+edition = "2024"
+description = "Earth Online headless authoritative server: the simulation regions, every player's controller, interest-managed snapshots over UDP, scripted bot clients and the server bench (no GPU)"
+publish = false
+
+[dependencies]
+anyhow = "1.0.104"
+eo-data = { path = "../eo-data" }
+eo-net = { path = "../eo-net" }
+eo-player = { path = "../eo-player" }
+eo-sim = { path = "../eo-sim" }
+glam = "0.34.3"
+serde_json = "1.0.154"

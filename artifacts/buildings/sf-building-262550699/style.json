@@ -1,0 +1,231 @@
+{
+ "seed": 3,
+ "notes": "1976 dark grey-brown board-sided townhouse cluster, stepped Hyde frontage (edges 1, 2, 4). Centre plane (edge 2): recessed red brick covered entry below a square box-bay stack. North plane (edge 1): box-bay stack with large panes. South plane (edge 4): tall plain wall with slot windows and a wide glazed box bay. Brick ground band, no cornice, dark frames. Wall darkened to charcoal-taupe, side-plane bay stacks now wide single panes (edge 1 windowW 2.2), front bay narrowed toward a box bay. 1970s stepped modern. Wall charcoal-brown board siding; no sills or caps anywhere (ribbon lights in dark frames). Front: a glazed box bay stack (storeys 1-3) left of centre over a recessed dark garage/entry, a tall slot window beside it. North plane: a banded full-height glazed stack (the second box bay with big corner glazing). South plane: slot window plus a wide glazed band. Low storey plates free the LiDAR allowance for shallow standing-seam metal roof caps on each plane. Pink base replaced by a low brick planter band. Wall pushed darker and cooler (charcoal-brown), brick planter band a deeper red-brown. Siding darker and cooler (charcoal-brown), brick planter band deep red-brown instead of salmon, front box bay a little deeper so its flat face reads. Siding pushed to dark brown-grey; the faceted glazed front bay is replaced by a squared box-bay stack (frame with solid spandrel bands between floors, one large dark-framed window per floor) plus the slot window; north plane loses its strip glazing for a squared stack with one large window per floor and dark trim bands; south plane is a squared glazed stack on the upper two floors over plain siding with a slot window; ground is a dark recessed garage panel and entry over a low brick planter line (roll-up door gone); roof edges dark standing-seam with a thin dark coping instead of pale flashing. Posts thinned to hairlines so each plane reads as siding with one large punched dark-framed window per floor and a flat dark spandrel band between floors. Rework B: cooler dark taupe-grey siding (tint held at the 0.10 luminance floor); the ribbon grid and full-width band courses are gone. Left plane: a narrow box stack, one wide window per storey with wood ledges, rising as a flat-topped tower block above the eave, red brick undercroft with a deep dark recess at the ground. Centre plane: blank siding with two small narrow windows at storeys 3-4 only, the stair door at the ground. Right (set-back) plane: blank siding at storeys 1-2 and one large glazed opening per storey at storeys 3-4 with blinds, under a grey standing-seam hip. Terracotta base band and roller door removed. Not doable with style keys: the angled projection of the right bay (projecting bays are front-edge only) and brick planters/paving. Left box-stack ledges a dark brown timber (~#5a4d42 in game); brick at its true red; the left ground recess lined in shadowed brick instead of a dark panel; the right plane's ground storey is a 1.5 m dark recess over a brick planter band; the centre slits a little taller. Two slit columns on the centre planes, so both are kept. Not doable: the canted oriel on the set-back right plane (projecting bays are front-edge only). The right ground recess is now dark brick (a brick undercroft with planters, not a garage door), left tower box-stack ledges project 0.3 m. Board texture, angled right bays and sloped roof edge: kit limits / already present. Dark vertical siding, brick undercroft behind planters (no garage door), box-bay stack left, slit windows centre, canted glazed bays right. Wall tint is game-calibrated. Brick undercroft tints darkened so the recess reads as shadowed brick, not a red door. Not doable: canted right bays (front-edge-only projection), herringbone paving, standing-seam texture. Clapboard fix (2026-10-02): painted siding moved from the stained-timber wood-siding base to painted-clapboard so the tint renders as paint, not olive. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-clapboard",
+ "wallTint": "#d4d0d2",
+ "trim": "painted-steel",
+ "frame": "painted-steel",
+ "glass": "glass-clear",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "bayM": 3.4,
+ "windowW": 0.6,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.3,
+ "floorsM": {
+  "groundM": 3.3,
+  "upperM": 2.9
+ },
+ "wallTopM": 12.4,
+ "upperSillM": 0.25,
+ "upperHeadM": 2.55,
+ "sashMaterial": "painted-steel",
+ "mullionM": 1.2,
+ "storefrontFrame": "painted-steel",
+ "bulkhead": "painted-clapboard@d4d0d2",
+ "roofBlocks": [
+  {
+   "at": 0.5,
+   "widthM": 5.6,
+   "depthM": 7,
+   "setbackM": 0.2,
+   "hipRiseM": 1.6,
+   "eaveM": 0.4,
+   "material": "painted-clapboard",
+   "tint": "#a8a2a4",
+   "hipMaterial": "painted-steel@8a8e96"
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.3,
+  "transomM": 0.3,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.3,
+    "to": 0.5,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel"
+   }
+  ]
+ },
+ "streetEdges": {
+  "1": {
+   "frameGrid": {
+    "columnW": 0.02,
+    "projectionM": 0.3,
+    "material": "painted-clapboard",
+    "tint": "#8b7d79",
+    "frameMaterial": "painted-steel",
+    "glassRecessM": 0.15,
+    "columns": [
+     0.35,
+     0.75
+    ],
+    "fromStorey": 1,
+    "pattern": [
+     "glass"
+    ],
+    "slabEdgeH": 0.45,
+    "mullionM": 3.5,
+    "storeyPatterns": [
+     [
+      "glass"
+     ]
+    ]
+   },
+   "roofBlocks": [
+    {
+     "at": 0.55,
+     "widthM": 3.6,
+     "depthM": 4.0,
+     "setbackM": 0.0,
+     "hipRiseM": 0.0,
+     "material": "painted-clapboard",
+     "tint": "#a8a2a4"
+    }
+   ],
+   "storefront": {
+    "layout": [
+     {
+      "from": 0.12,
+      "to": 0.8,
+      "kind": "blank",
+      "material": "brick-running-bond",
+      "tint": "#c5f2ff",
+      "headM": 2.7,
+      "recessM": 1.5
+     }
+    ]
+   },
+   "wallZones": [
+    {
+     "from": 0.0,
+     "to": 1.0,
+     "fromY": -1,
+     "toY": 3.3,
+     "material": "brick-running-bond",
+     "tint": "#ffffff"
+    }
+   ]
+  },
+  "4": {
+   "roofBlocks": [
+    {
+     "at": 0.5,
+     "widthM": 6.8,
+     "depthM": 7,
+     "setbackM": 0.2,
+     "hipRiseM": 1.6,
+     "eaveM": 0.4,
+     "material": "painted-clapboard",
+     "tint": "#a8a2a4",
+     "hipMaterial": "painted-steel@8a8e96"
+    }
+   ],
+   "storefront": {
+    "layout": [
+     {
+      "from": 0.1,
+      "to": 0.9,
+      "kind": "blank",
+      "material": "brick-running-bond",
+      "tint": "#afd7ff",
+      "headM": 2.7,
+      "recessM": 1.5
+     }
+    ]
+   },
+   "frameGrid": {
+    "columnW": 0.02,
+    "projectionM": 0.02,
+    "material": "painted-clapboard",
+    "tint": "#a8a2a4",
+    "frameMaterial": "painted-steel",
+    "glassRecessM": 0.15,
+    "columns": [
+     0.15,
+     0.85
+    ],
+    "fromStorey": 2,
+    "pattern": [
+     "glass"
+    ],
+    "slabEdgeH": 0.4,
+    "mullionM": 1.4,
+    "storeyPatterns": [
+     [
+      "glass"
+     ]
+    ]
+   },
+   "blankUpper": true,
+   "wallZones": [
+    {
+     "from": 0.0,
+     "to": 1.0,
+     "fromY": -1,
+     "toY": 0.9,
+     "material": "brick-running-bond",
+     "tint": "#ffffff"
+    }
+   ]
+  }
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "frameGrid": {
+  "columnW": 0.02,
+  "projectionM": 0.02,
+  "material": "painted-clapboard",
+  "tint": "#a8a2a4",
+  "frameMaterial": "painted-steel",
+  "glassRecessM": 0.15,
+  "columns": [
+   0.2,
+   0.3,
+   0.7,
+   0.8
+  ],
+  "fromStorey": 1,
+  "slabEdgeH": 1.4,
+  "mullionM": 1.0,
+  "storeyPatterns": [
+   [
+    "wall"
+   ],
+   [
+    "glass",
+    "wall",
+    "glass"
+   ],
+   [
+    "glass",
+    "wall",
+    "glass"
+   ]
+  ]
+ },
+ "coping": {
+  "heightM": 0.25,
+  "projectionM": 0.1,
+  "material": "painted-steel",
+  "tint": "#2a2a2e"
+ },
+ "glassBacking": {
+  "material": "painted-white",
+  "tints": [
+   "#b8c0cc",
+   "#c8ccd2"
+  ],
+  "depthM": 0.25,
+  "kinds": [
+   "grid"
+  ],
+  "blindTint": "#8e9cb4",
+  "blindMax": 0.8
+ }
+}

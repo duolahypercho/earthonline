@@ -1,0 +1,101 @@
+{
+ "seed": 1,
+ "notes": "1908 corner flats at Washington: cream painted wood, low brick-red base, round bay at the south corner from storey 1, barred window and round-arched stair entry on the raised ground floor, bracketed cornice. The Hyde face partly behind a tree; upper storeys inferred from data (3). Warmer cream, heavier bracketed cornice with dentils; brick plinth kept. Bay glazing reduced to 3 large sashes (facetsPerPane 1). Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour.",
+ "wall": "painted-white",
+ "wallTint": "#f2ecda",
+ "trim": "painted-white@efe7d2",
+ "frame": "painted-white@efe7d2",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@efe7d2",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "brick-running-bond@e3ebf6",
+ "cornice": true,
+ "corniceProjectionM": 0.8,
+ "beltCourse": true,
+ "windowHoods": true,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.5,
+  0.82
+ ],
+ "bays": [
+  {
+   "at": 0.14,
+   "widthM": 3.0,
+   "projectionM": 0.8,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#eee7d6",
+   "hyB": {
+    "plan": "swell",
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 1,
+    "cornice": {
+     "projectionM": 0.2,
+     "dentils": true,
+     "roofRiseM": 0.15
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0,
+     "beltBrackets": true
+    }
+   }
+  }
+ ],
+ "groundBand": {
+  "material": "brick-running-bond",
+  "tint": "#e3ebf6",
+  "topM": 1.0
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.2,
+    "to": 0.36,
+    "kind": "window",
+    "headM": 2.2,
+    "grille": true
+   },
+   {
+    "from": 0.62,
+    "to": 0.82,
+    "kind": "double-door",
+    "stair": true,
+    "leaf": "painted-white@5a4535",
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "hbCorniceBrackets": {
+  "spacingM": 0.6,
+  "heightM": 0.55,
+  "depthM": 0.4,
+  "widthM": 0.24,
+  "material": "painted-white",
+  "tint": "#efe7d2"
+ },
+ "hbFloors": {
+  "groundM": 3.4,
+  "upperM": 4.5205
+ },
+ "hbCorniceDentils": {
+  "spacingM": 0.18,
+  "sizeM": 0.1,
+  "tint": "#d8c9a0"
+ }
+}

@@ -1,0 +1,7966 @@
+{
+ "version": 1,
+ "generated_by": "native/tools/write-audio-manifest.mjs",
+ "note": "Chosen by an automatic screen only. Nobody has listened to these clips yet (see REVIEW.md in the audio root).",
+ "root_env": "EO_AUDIO_ROOT",
+ "sources": {
+  "fsd50k": "https://zenodo.org/records/4060432 (metadata), audio from https://huggingface.co/datasets/Fhrozen/FSD50k@ccf1acaff12f3f4a4c10052dddafbb6d22152c9b",
+  "sfx_kit": "https://huggingface.co/datasets/wyzowl/sfx-kit@74e7a19b22f9f99f1d44a7b42f3b843aa18b24ab"
+ },
+ "stream_over_s": 8,
+ "clips": [
+  {
+   "id": "fsd-341556-bed_city",
+   "path": "fsd50k/clips/eval/341556.wav",
+   "bytes": 2066070,
+   "sha256": "50db3c8f8b1dcad1570a9f9027c8279a99a7592e973a2b8af05a0aaf8ad5a21e",
+   "role": "bed_city",
+   "source": "FSD50K",
+   "freesound_id": 341556,
+   "uploader": "dggrunzweig",
+   "licence": "CC0-1.0",
+   "title": "Busy Intersection.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1032996,
+   "lufs": -24,
+   "peak_db": -3.57,
+   "gain_db": -4,
+   "stream": true
+  },
+  {
+   "id": "fsd-341569-bed_city",
+   "path": "fsd50k/clips/eval/341569.wav",
+   "bytes": 1952698,
+   "sha256": "ce6235220c69aa1765c107fa955057a43d96f143a1199e6ab9b760facfa35b97",
+   "role": "bed_city",
+   "source": "FSD50K",
+   "freesound_id": 341569,
+   "uploader": "dggrunzweig",
+   "licence": "CC0-1.0",
+   "title": "Street_Car.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 976310,
+   "lufs": -25.48,
+   "peak_db": -4.33,
+   "gain_db": -2.52,
+   "stream": true
+  },
+  {
+   "id": "fsd-215178-bed_city",
+   "path": "fsd50k/clips/eval/215178.wav",
+   "bytes": 1983666,
+   "sha256": "f4ed3577b5502e1af65c79f9394733dbab6826c09d8fe27a4113697fb9d5de7d",
+   "role": "bed_city",
+   "source": "FSD50K",
+   "freesound_id": 215178,
+   "uploader": "john9",
+   "licence": "CC-BY-3.0",
+   "title": "rainy stream 22 sec.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 991794,
+   "lufs": -38.08,
+   "peak_db": -17.56,
+   "gain_db": 10.08,
+   "stream": true
+  },
+  {
+   "id": "fsd-396489-bed_city",
+   "path": "fsd50k/clips/eval/396489.wav",
+   "bytes": 1403214,
+   "sha256": "60f793da4647742fb8fe3b2e4ec182fb6cbba0237f4defa245dbf56a1d8d3241",
+   "role": "bed_city",
+   "source": "FSD50K",
+   "freesound_id": 396489,
+   "uploader": "macdaddyno1",
+   "licence": "CC0-1.0",
+   "title": "Cars driving on a wet road (2).MP3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 701568,
+   "lufs": -16.4,
+   "peak_db": -2.87,
+   "gain_db": -11.6,
+   "stream": true
+  },
+  {
+   "id": "fsd-184609-bed_city",
+   "path": "fsd50k/clips/dev/184609.wav",
+   "bytes": 1861710,
+   "sha256": "1d60d22f30acf61d5b98002f9ae0aad3f6ae1261e12a95ee7b4dbd683e506e36",
+   "role": "bed_city",
+   "source": "FSD50K",
+   "freesound_id": 184609,
+   "uploader": "davenatale",
+   "licence": "CC0-1.0",
+   "title": "HWY-I90.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 930816,
+   "lufs": -18.31,
+   "peak_db": -1.78,
+   "gain_db": -9.69,
+   "stream": true
+  },
+  {
+   "id": "fsd-161238-bed_city",
+   "path": "fsd50k/clips/dev/161238.wav",
+   "bytes": 2445294,
+   "sha256": "39b6cc7d6db15ad74dfac04e9e6bb5bd819aecdf509fbd787dacd8dda625c923",
+   "role": "bed_city",
+   "source": "FSD50K",
+   "freesound_id": 161238,
+   "uploader": "cuauh89",
+   "licence": "CC-BY-3.0",
+   "title": "Mexico City Traffic.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1222608,
+   "lufs": -42.73,
+   "peak_db": -28.55,
+   "gain_db": 14.73,
+   "stream": true
+  },
+  {
+   "id": "fsd-91113-bed_city",
+   "path": "fsd50k/clips/eval/91113.wav",
+   "bytes": 1499316,
+   "sha256": "59879951a2d1cb976efc20eb87878c57f8a27f3697f75c503996a18c2e58bc12",
+   "role": "bed_city",
+   "source": "FSD50K",
+   "freesound_id": 91113,
+   "uploader": "Fasolt",
+   "licence": "CC0-1.0",
+   "title": "evening_rain.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 749619,
+   "lufs": -35.73,
+   "peak_db": -13.59,
+   "gain_db": 7.73,
+   "stream": true
+  },
+  {
+   "id": "fsd-263523-bed_city",
+   "path": "fsd50k/clips/dev/263523.wav",
+   "bytes": 2233302,
+   "sha256": "18e733fec7eee91d309808a6046610bbb695fc93b073df4a3ff93a6dc67fd2c7",
+   "role": "bed_city",
+   "source": "FSD50K",
+   "freesound_id": 263523,
+   "uploader": "Alcappuccino",
+   "licence": "CC0-1.0",
+   "title": "Paris Pedestrians",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1116612,
+   "lufs": -22.49,
+   "peak_db": -6.14,
+   "gain_db": -5.51,
+   "stream": true
+  },
+  {
+   "id": "fsd-420482-bed_city",
+   "path": "fsd50k/clips/dev/420482.wav",
+   "bytes": 2462152,
+   "sha256": "29c395955adc539587a993edfc6982230d0f4a0523763e5b8153382d15c0d792",
+   "role": "bed_city",
+   "source": "FSD50K",
+   "freesound_id": 420482,
+   "uploader": "isaacpauls",
+   "licence": "CC0-1.0",
+   "title": "river_01.WAV",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1231037,
+   "lufs": -26.53,
+   "peak_db": -11.49,
+   "gain_db": -1.47,
+   "stream": true
+  },
+  {
+   "id": "fsd-84909-bed_city",
+   "path": "fsd50k/clips/eval/84909.wav",
+   "bytes": 1990466,
+   "sha256": "eff60ce1f42e28c79e168c63be8541b1911c65d030ee67995deda47163eaa3e0",
+   "role": "bed_city",
+   "source": "FSD50K",
+   "freesound_id": 84909,
+   "uploader": "cognito perceptu",
+   "licence": "CC0-1.0",
+   "title": "cars over segmented roadway.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 995194,
+   "lufs": -16.52,
+   "peak_db": -0.2,
+   "gain_db": -11.48,
+   "stream": true
+  },
+  {
+   "id": "fsd-428144-bed_city",
+   "path": "fsd50k/clips/eval/428144.wav",
+   "bytes": 1622812,
+   "sha256": "062d8dd930ce504d943b0636ab7932e137adeff5c3f889060b10ad0304431dac",
+   "role": "bed_city",
+   "source": "FSD50K",
+   "freesound_id": 428144,
+   "uploader": "4barrelcarb",
+   "licence": "CC0-1.0",
+   "title": "Cows Birds Spring.m4a",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 811367,
+   "lufs": -44.45,
+   "peak_db": -15.31,
+   "gain_db": 14.31,
+   "stream": true
+  },
+  {
+   "id": "fsd-101242-bed_city",
+   "path": "fsd50k/clips/dev/101242.wav",
+   "bytes": 1575790,
+   "sha256": "3b0103a0946b00bfe7c1a2af7bbdd27407e48b1e4723f758be90de963b6b4d98",
+   "role": "bed_city",
+   "source": "FSD50K",
+   "freesound_id": 101242,
+   "uploader": "paubg_pou",
+   "licence": "CC-BY-3.0",
+   "title": "Ronda Barcelona cullera.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 787856,
+   "lufs": -15.52,
+   "peak_db": -1.66,
+   "gain_db": -12.48,
+   "stream": true
+  },
+  {
+   "id": "fsd-105275-bed_city",
+   "path": "fsd50k/clips/eval/105275.wav",
+   "bytes": 1944124,
+   "sha256": "3c664b8eb71971791e912f66662327be2b75840e20ae295e684647ea0a19fc25",
+   "role": "bed_city",
+   "source": "FSD50K",
+   "freesound_id": 105275,
+   "uploader": "E330",
+   "licence": "CC-BY-3.0",
+   "title": "St Botolph bells.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 972023,
+   "lufs": -15.31,
+   "peak_db": -0.8,
+   "gain_db": -12.69,
+   "stream": true
+  },
+  {
+   "id": "fsd-212186-bed_city",
+   "path": "fsd50k/clips/dev/212186.wav",
+   "bytes": 2512014,
+   "sha256": "1322e48a929ac33698c095df171787b4a229e4b89960f36ce8df677c0544ebbb",
+   "role": "bed_city",
+   "source": "FSD50K",
+   "freesound_id": 212186,
+   "uploader": "blaukreuz",
+   "licence": "CC0-1.0",
+   "title": "120308_NYTbldg02.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1255968,
+   "lufs": -29.57,
+   "peak_db": -8.46,
+   "gain_db": 1.57,
+   "stream": true
+  },
+  {
+   "id": "fsd-212187-bed_city",
+   "path": "fsd50k/clips/dev/212187.wav",
+   "bytes": 2261526,
+   "sha256": "4be647860a0c9bc3bc2d3acfa23bd39168109952aa017440c7293f88dcc7db6b",
+   "role": "bed_city",
+   "source": "FSD50K",
+   "freesound_id": 212187,
+   "uploader": "blaukreuz",
+   "licence": "CC0-1.0",
+   "title": "120308_NYTbldg06n.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1130724,
+   "lufs": -35.57,
+   "peak_db": -18.18,
+   "gain_db": 7.57,
+   "stream": true
+  },
+  {
+   "id": "fsd-121287-bed_city",
+   "path": "fsd50k/clips/dev/121287.wav",
+   "bytes": 1396282,
+   "sha256": "022a6f89736cb4897b8cc35a506020d788ef2dc2be1d1c3134b234f65e45bfb2",
+   "role": "bed_city",
+   "source": "FSD50K",
+   "freesound_id": 121287,
+   "uploader": "dkaufman",
+   "licence": "CC-BY-3.0",
+   "title": "light suburban ambiance.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 698102,
+   "lufs": -27.58,
+   "peak_db": -10.5,
+   "gain_db": -0.42,
+   "stream": true
+  },
+  {
+   "id": "fsd-237686-bed_quiet",
+   "path": "fsd50k/clips/eval/237686.wav",
+   "bytes": 2065986,
+   "sha256": "acb9ee8a21c82d2f6832d96cc875ab67f2c5f1d7bfb555deb6b2f263b3aa7086",
+   "role": "bed_quiet",
+   "source": "FSD50K",
+   "freesound_id": 237686,
+   "uploader": "rivernile7",
+   "licence": "CC-BY-3.0",
+   "title": "Bird Morning.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1032954,
+   "lufs": -44.49,
+   "peak_db": -27.98,
+   "gain_db": 16.49,
+   "stream": true
+  },
+  {
+   "id": "fsd-344573-bed_quiet",
+   "path": "fsd50k/clips/eval/344573.wav",
+   "bytes": 1985872,
+   "sha256": "303947cde3059cd328601e80ee05c2134886ad01bb6dfbb9d1b5439262e6f9c0",
+   "role": "bed_quiet",
+   "source": "FSD50K",
+   "freesound_id": 344573,
+   "uploader": "kmyers1316",
+   "licence": "CC0-1.0",
+   "title": "City_Ambience_Cars_Night.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 992897,
+   "lufs": -42.91,
+   "peak_db": -25.83,
+   "gain_db": 14.91,
+   "stream": true
+  },
+  {
+   "id": "fsd-376994-bed_quiet",
+   "path": "fsd50k/clips/dev/376994.wav",
+   "bytes": 1638892,
+   "sha256": "818138245a6695eab1560e50678a1dfc77c057ff898a0e5cf9205e70d564fc91",
+   "role": "bed_quiet",
+   "source": "FSD50K",
+   "freesound_id": 376994,
+   "uploader": "FairhavenCollection",
+   "licence": "CC-BY-3.0",
+   "title": "Car in the Distance",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 819407,
+   "lufs": -35,
+   "peak_db": -17.93,
+   "gain_db": 7,
+   "stream": true
+  },
+  {
+   "id": "fsd-212194-bed_quiet",
+   "path": "fsd50k/clips/dev/212194.wav",
+   "bytes": 2317974,
+   "sha256": "747f14001714035166151042067703ba94abe59aca4a18a1b6d89c647d686a9c",
+   "role": "bed_quiet",
+   "source": "FSD50K",
+   "freesound_id": 212194,
+   "uploader": "blaukreuz",
+   "licence": "CC0-1.0",
+   "title": "120308_TimesSquareOp02.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1158948,
+   "lufs": -25.14,
+   "peak_db": -6.11,
+   "gain_db": -2.86,
+   "stream": true
+  },
+  {
+   "id": "fsd-212197-bed_quiet",
+   "path": "fsd50k/clips/dev/212197.wav",
+   "bytes": 1760550,
+   "sha256": "073d73d91b905f159bee024b7efdb53fec8629168645d572494a5db0bdb185cc",
+   "role": "bed_quiet",
+   "source": "FSD50K",
+   "freesound_id": 212197,
+   "uploader": "blaukreuz",
+   "licence": "CC0-1.0",
+   "title": "120308_Manhattan59th01.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 880236,
+   "lufs": -40.36,
+   "peak_db": -20.62,
+   "gain_db": 12.36,
+   "stream": true
+  },
+  {
+   "id": "fsd-253760-bed_quiet",
+   "path": "fsd50k/clips/eval/253760.wav",
+   "bytes": 1545342,
+   "sha256": "5fb6a3bdf26b4375aa2fcccc596d5221a0249b45342af4b98c9604487bfd1d1a",
+   "role": "bed_quiet",
+   "source": "FSD50K",
+   "freesound_id": 253760,
+   "uploader": "caculo",
+   "licence": "CC-BY-3.0",
+   "title": "Highway traffic sounds (in the background)",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 772632,
+   "lufs": -21.13,
+   "peak_db": -0.02,
+   "gain_db": -6.87,
+   "stream": true
+  },
+  {
+   "id": "fsd-239098-bed_quiet",
+   "path": "fsd50k/clips/dev/239098.wav",
+   "bytes": 2136220,
+   "sha256": "b262b067af4ceeca8ba6a2552cb417925f3b97277e17bf376cf4634a65cf824d",
+   "role": "bed_quiet",
+   "source": "FSD50K",
+   "freesound_id": 239098,
+   "uploader": "mark646",
+   "licence": "CC-BY-3.0",
+   "title": "Morgens 04.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1068071,
+   "lufs": -34.1,
+   "peak_db": -17.36,
+   "gain_db": 6.1,
+   "stream": true
+  },
+  {
+   "id": "fsd-187443-bed_quiet",
+   "path": "fsd50k/clips/eval/187443.wav",
+   "bytes": 1875336,
+   "sha256": "d04d6a375ab63fec359bc1a3c40c4105437791ebc9d903d9083ee4e428791336",
+   "role": "bed_quiet",
+   "source": "FSD50K",
+   "freesound_id": 187443,
+   "uploader": "VlatkoBlazek",
+   "licence": "CC-BY-3.0",
+   "title": "Nature - Birds Chirping",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 937629,
+   "lufs": -33.8,
+   "peak_db": -6.88,
+   "gain_db": 5.8,
+   "stream": true
+  },
+  {
+   "id": "fsd-201734-bed_walla",
+   "path": "fsd50k/clips/dev/201734.wav",
+   "bytes": 877638,
+   "sha256": "84803707732c866ede83c2ae46455edaa4296dbfb4c6447d1250c495fc38ef9e",
+   "role": "bed_walla",
+   "source": "FSD50K",
+   "freesound_id": 201734,
+   "uploader": "univ_lyon3",
+   "licence": "CC0-1.0",
+   "title": "AMIZET_Hugo_2013_2014_son5.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 438780,
+   "lufs": -16.84,
+   "peak_db": -2.21,
+   "gain_db": -11.16,
+   "stream": true
+  },
+  {
+   "id": "fsd-340969-bed_walla",
+   "path": "fsd50k/clips/dev/340969.wav",
+   "bytes": 1185834,
+   "sha256": "266d321656e3a883349a0eb3a01d307590bf5489e84f504ca9fb9ee02b5c96bc",
+   "role": "bed_walla",
+   "source": "FSD50K",
+   "freesound_id": 340969,
+   "uploader": "SoundsAreGr8",
+   "licence": "CC0-1.0",
+   "title": "Crowd noise at parade",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 592878,
+   "lufs": -39.33,
+   "peak_db": -21.19,
+   "gain_db": 11.33,
+   "stream": true
+  },
+  {
+   "id": "fsd-340971-bed_walla",
+   "path": "fsd50k/clips/dev/340971.wav",
+   "bytes": 1211858,
+   "sha256": "e7365b8214ff27b7ef6fb05c009444a5711be07e8af4cf000aa5bf11b16ffdd5",
+   "role": "bed_walla",
+   "source": "FSD50K",
+   "freesound_id": 340971,
+   "uploader": "SoundsAreGr8",
+   "licence": "CC0-1.0",
+   "title": "Crowd noise at parade",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 605890,
+   "lufs": -30.29,
+   "peak_db": -7.84,
+   "gain_db": 2.29,
+   "stream": true
+  },
+  {
+   "id": "fsd-210004-bed_walla",
+   "path": "fsd50k/clips/dev/210004.wav",
+   "bytes": 1057236,
+   "sha256": "5ebfb79143d0ca24261a8fa084cb50ea739b4c7325999cd9f4294ea50c0abcd3",
+   "role": "bed_walla",
+   "source": "FSD50K",
+   "freesound_id": 210004,
+   "uploader": "jason130178",
+   "licence": "CC-BY-3.0",
+   "title": "Walking in leaves in the park.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 528579,
+   "lufs": -32.38,
+   "peak_db": -6.62,
+   "gain_db": 4.38,
+   "stream": true
+  },
+  {
+   "id": "fsd-341550-bed_walla",
+   "path": "fsd50k/clips/eval/341550.wav",
+   "bytes": 2032630,
+   "sha256": "63e572c575e5d8d1049d6a88648b7a05a9fedbf173918adc893acd015d40a696",
+   "role": "bed_walla",
+   "source": "FSD50K",
+   "freesound_id": 341550,
+   "uploader": "dggrunzweig",
+   "licence": "CC0-1.0",
+   "title": "Buses.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1016276,
+   "lufs": -27.51,
+   "peak_db": -2.34,
+   "gain_db": -0.49,
+   "stream": true
+  },
+  {
+   "id": "fsd-341557-bed_walla",
+   "path": "fsd50k/clips/eval/341557.wav",
+   "bytes": 1368878,
+   "sha256": "2c36a2b6910f4100bec81bad12c9c867390f54d3d14c563bbbc76662f812465b",
+   "role": "bed_walla",
+   "source": "FSD50K",
+   "freesound_id": 341557,
+   "uploader": "dggrunzweig",
+   "licence": "CC0-1.0",
+   "title": "Buses2.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 684400,
+   "lufs": -21.18,
+   "peak_db": -4.71,
+   "gain_db": -6.82,
+   "stream": true
+  },
+  {
+   "id": "fsd-178571-bed_rain",
+   "path": "fsd50k/clips/dev/178571.wav",
+   "bytes": 2338782,
+   "sha256": "8e297899f838e56b5f3150a4bc2cc09aef2aed197ef118e8f384a0a6e9970603",
+   "role": "bed_rain",
+   "source": "FSD50K",
+   "freesound_id": 178571,
+   "uploader": "copycatfilms",
+   "licence": "CC0-1.0",
+   "title": "Heavy Rain & Hail - San Francisco Bay Area",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1169352,
+   "lufs": -33.35,
+   "peak_db": -6.6,
+   "gain_db": 5.35,
+   "stream": true
+  },
+  {
+   "id": "fsd-134909-bed_rain",
+   "path": "fsd50k/clips/eval/134909.wav",
+   "bytes": 1791530,
+   "sha256": "4a3eea1535593dcd576608612c4a3b147b8a664fee58680dfef67f81ef9f11bd",
+   "role": "bed_rain",
+   "source": "FSD50K",
+   "freesound_id": 134909,
+   "uploader": "barrygusey",
+   "licence": "CC0-1.0",
+   "title": "Rain Rain",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 895726,
+   "lufs": -39.74,
+   "peak_db": -23.11,
+   "gain_db": 11.74,
+   "stream": true
+  },
+  {
+   "id": "fsd-341802-bed_rain",
+   "path": "fsd50k/clips/dev/341802.wav",
+   "bytes": 2028678,
+   "sha256": "a24ac6da03f3349e7d04ab409066311edf35856062f40506b189276639f966a9",
+   "role": "bed_rain",
+   "source": "FSD50K",
+   "freesound_id": 341802,
+   "uploader": "TiesWijnen",
+   "licence": "CC-BY-3.0",
+   "title": "Rain.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1014300,
+   "lufs": -23.01,
+   "peak_db": -0.13,
+   "gain_db": -4.99,
+   "stream": true
+  },
+  {
+   "id": "fsd-67828-bed_rain",
+   "path": "fsd50k/clips/dev/67828.wav",
+   "bytes": 2478144,
+   "sha256": "e432ad38a9f35666da6006e9b1f5947e97c2b888ea5078c8e20b46019a467583",
+   "role": "bed_rain",
+   "source": "FSD50K",
+   "freesound_id": 67828,
+   "uploader": "14all41",
+   "licence": "CC-BY-3.0",
+   "title": "Rain_00029.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1239033,
+   "lufs": -16.69,
+   "peak_db": -0.38,
+   "gain_db": -11.31,
+   "stream": true
+  },
+  {
+   "id": "fsd-81487-bed_rain",
+   "path": "fsd50k/clips/dev/81487.wav",
+   "bytes": 1867814,
+   "sha256": "9108b4d6b5a7b303881bdaa693546f7ac079041399a6e14d0763ddd1885db161",
+   "role": "bed_rain",
+   "source": "FSD50K",
+   "freesound_id": 81487,
+   "uploader": "LG",
+   "licence": "CC-BY-3.0",
+   "title": "Rain 04 091012.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 933868,
+   "lufs": -40.54,
+   "peak_db": -19.84,
+   "gain_db": 12.54,
+   "stream": true
+  },
+  {
+   "id": "fsd-262005-bed_rain",
+   "path": "fsd50k/clips/dev/262005.wav",
+   "bytes": 2006628,
+   "sha256": "ecd7104578036c70c397011fd55983ba068f39b6fbd238453ac2c5d1e31709f9",
+   "role": "bed_rain",
+   "source": "FSD50K",
+   "freesound_id": 262005,
+   "uploader": "olliehahn12",
+   "licence": "CC0-1.0",
+   "title": "Rain.aif",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1003275,
+   "lufs": -14.13,
+   "peak_db": -0.1,
+   "gain_db": -13.87,
+   "stream": true
+  },
+  {
+   "id": "fsd-37618-bed_rain",
+   "path": "fsd50k/clips/eval/37618.wav",
+   "bytes": 2621262,
+   "sha256": "61b9267f2258515a0e429da8d32a5b8839f81835c84bc2f3dfa2e6c3b7a6ebe8",
+   "role": "bed_rain",
+   "source": "FSD50K",
+   "freesound_id": 37618,
+   "uploader": "aesqe",
+   "licence": "CC-BY-3.0",
+   "title": "rain_loop_01.ogg",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1310592,
+   "lufs": -37.3,
+   "peak_db": -21.42,
+   "gain_db": 9.3,
+   "stream": true
+  },
+  {
+   "id": "fsd-157433-bed_rain",
+   "path": "fsd50k/clips/eval/157433.wav",
+   "bytes": 2179136,
+   "sha256": "b7850908e9123f2f6b52c07535427ea679fbc065ffde6c42ab1b4c781670128d",
+   "role": "bed_rain",
+   "source": "FSD50K",
+   "freesound_id": 157433,
+   "uploader": "timgormly",
+   "licence": "CC0-1.0",
+   "title": "Medium Rain.aif",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1089529,
+   "lufs": -43.57,
+   "peak_db": -25.79,
+   "gain_db": 15.57,
+   "stream": true
+  },
+  {
+   "id": "fsd-18809-bed_rain",
+   "path": "fsd50k/clips/dev/18809.wav",
+   "bytes": 1376434,
+   "sha256": "68a3506c249ca2587def21dbeab6d3896bb415990c75ce8417945a6160966dbd",
+   "role": "bed_rain",
+   "source": "FSD50K",
+   "freesound_id": 18809,
+   "uploader": "Koops",
+   "licence": "CC-BY-3.0",
+   "title": "Rain_Pouring_03_LOOP.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 688178,
+   "lufs": -23.4,
+   "peak_db": -0.47,
+   "gain_db": -4.6,
+   "stream": true
+  },
+  {
+   "id": "fsd-60127-bed_rain",
+   "path": "fsd50k/clips/dev/60127.wav",
+   "bytes": 2523986,
+   "sha256": "e2e23b3693f5176687a33e34881ba658f5553a4160ed4087ec78d1a76cfc390f",
+   "role": "bed_rain",
+   "source": "FSD50K",
+   "freesound_id": 60127,
+   "uploader": "creebefu",
+   "licence": "CC-BY-3.0",
+   "title": "Wool Rain.aif",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1261954,
+   "lufs": -38.23,
+   "peak_db": -23.92,
+   "gain_db": 10.23,
+   "stream": true
+  },
+  {
+   "id": "fsd-162252-bed_wind",
+   "path": "fsd50k/clips/dev/162252.wav",
+   "bytes": 1461042,
+   "sha256": "50f4160210b57c2a6e0c0af0bf7c8f8733e3709e0a7515419a502fe89631aa36",
+   "role": "bed_wind",
+   "source": "FSD50K",
+   "freesound_id": 162252,
+   "uploader": "qubodup",
+   "licence": "CC0-1.0",
+   "title": "High Seas Wind Ambient Noise",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 730482,
+   "lufs": -31.37,
+   "peak_db": -19.38,
+   "gain_db": 3.37,
+   "stream": true
+  },
+  {
+   "id": "fsd-344887-bed_wind",
+   "path": "fsd50k/clips/eval/344887.wav",
+   "bytes": 1741902,
+   "sha256": "caeeb421f0fe39e97b591fb8d113918522b01acbc28a3825cf3d9c5f203c9921",
+   "role": "bed_wind",
+   "source": "FSD50K",
+   "freesound_id": 344887,
+   "uploader": "thearxx08",
+   "licence": "CC0-1.0",
+   "title": "Sound Of Strong Wind.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 870912,
+   "lufs": -17.61,
+   "peak_db": -3.25,
+   "gain_db": -10.39,
+   "stream": true
+  },
+  {
+   "id": "fsd-5997-bed_wind",
+   "path": "fsd50k/clips/dev/5997.wav",
+   "bytes": 1393638,
+   "sha256": "30568ad2b8a5a492bd2c0247297bfec13531f89eb409ab35b10a3d19fb1e9317",
+   "role": "bed_wind",
+   "source": "FSD50K",
+   "freesound_id": 5997,
+   "uploader": "dobroide",
+   "licence": "CC-BY-3.0",
+   "title": "wind.poplar.02.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 696780,
+   "lufs": -30.01,
+   "peak_db": -10.46,
+   "gain_db": 2.01,
+   "stream": true
+  },
+  {
+   "id": "fsd-238039-bed_wind",
+   "path": "fsd50k/clips/dev/238039.wav",
+   "bytes": 1628386,
+   "sha256": "06cef7845cc67e16540b0769b1d0c5f9c7dbf306e6439ea9453edc0741d5d264",
+   "role": "bed_wind",
+   "source": "FSD50K",
+   "freesound_id": 238039,
+   "uploader": "raremess",
+   "licence": "CC0-1.0",
+   "title": "!rm_wind_distortion.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 814154,
+   "lufs": -27.4,
+   "peak_db": -10.51,
+   "gain_db": -0.6,
+   "stream": true
+  },
+  {
+   "id": "fsd-209620-bed_wind",
+   "path": "fsd50k/clips/eval/209620.wav",
+   "bytes": 1160412,
+   "sha256": "4172b63d8c259faf75a9067ab56a8fdb15eb5f10a5c02965db8ba80d8991fc3d",
+   "role": "bed_wind",
+   "source": "FSD50K",
+   "freesound_id": 209620,
+   "uploader": "Soundscape_Leuphana",
+   "licence": "CC0-1.0",
+   "title": "20131204_leaves2_H2nextXY.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 580167,
+   "lufs": -26.51,
+   "peak_db": -2.68,
+   "gain_db": -1.49,
+   "stream": true
+  },
+  {
+   "id": "fsd-118999-bed_water",
+   "path": "fsd50k/clips/eval/118999.wav",
+   "bytes": 2110542,
+   "sha256": "ddc4d1bba5ebd2c0c0e24f09709a1b949328daf12b7fa2c98561ef8fe84c1ff9",
+   "role": "bed_water",
+   "source": "FSD50K",
+   "freesound_id": 118999,
+   "uploader": "JoneagleX",
+   "licence": "CC0-1.0",
+   "title": "greenkey-beach.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1055232,
+   "lufs": -23.55,
+   "peak_db": -6.43,
+   "gain_db": -4.45,
+   "stream": true
+  },
+  {
+   "id": "fsd-88168-bed_water",
+   "path": "fsd50k/clips/dev/88168.wav",
+   "bytes": 1058478,
+   "sha256": "4be80ccd6c6040d8455c89ccdc5d834c682a5840503634233fd8c8002be918fc",
+   "role": "bed_water",
+   "source": "FSD50K",
+   "freesound_id": 88168,
+   "uploader": "tec studios",
+   "licence": "CC0-1.0",
+   "title": "Aquaticparksf2009m.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 529200,
+   "lufs": -37.18,
+   "peak_db": -13.15,
+   "gain_db": 9.18,
+   "stream": true
+  },
+  {
+   "id": "fsd-111305-bed_water",
+   "path": "fsd50k/clips/dev/111305.wav",
+   "bytes": 1181982,
+   "sha256": "7d0b44ca0a7eca37a3bed63ff15db1f8c4328816ccecf909d626dc46850ae313",
+   "role": "bed_water",
+   "source": "FSD50K",
+   "freesound_id": 111305,
+   "uploader": "echobones",
+   "licence": "CC-BY-3.0",
+   "title": "gulls-long.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 590952,
+   "lufs": -31.86,
+   "peak_db": -10.52,
+   "gain_db": 3.86,
+   "stream": true
+  },
+  {
+   "id": "fsd-43778-bed_water",
+   "path": "fsd50k/clips/dev/43778.wav",
+   "bytes": 1750262,
+   "sha256": "3c759044b463ab2e14657bd55b324d4ccd10a3e09bedb790f227b4e19144fe4e",
+   "role": "bed_water",
+   "source": "FSD50K",
+   "freesound_id": 43778,
+   "uploader": "digifishmusic",
+   "licence": "CC-BY-3.0",
+   "title": "Lapping Waves and Sea Gulls 1.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 875092,
+   "lufs": -32.05,
+   "peak_db": -3.42,
+   "gain_db": 2.42,
+   "stream": true
+  },
+  {
+   "id": "fsd-39052-bed_water",
+   "path": "fsd50k/clips/eval/39052.wav",
+   "bytes": 2280342,
+   "sha256": "889e99f8d7b9063eeb6e536cb5907fcf7d81b2f23f1bdb3fd177b495c0fcc653",
+   "role": "bed_water",
+   "source": "FSD50K",
+   "freesound_id": 39052,
+   "uploader": "Heigh-hoo",
+   "licence": "CC0-1.0",
+   "title": "summer_beach.aif",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1140132,
+   "lufs": -40.16,
+   "peak_db": -21.26,
+   "gain_db": 12.16,
+   "stream": true
+  },
+  {
+   "id": "fsd-410135-engine_car",
+   "path": "fsd50k/clips/dev/410135.wav",
+   "bytes": 602958,
+   "sha256": "c1833b11c5faf29592beeb053c637e41dd47e1ad4444726e8eaeaa70cf36125c",
+   "role": "engine_car",
+   "source": "FSD50K",
+   "freesound_id": 410135,
+   "uploader": "soundman9826",
+   "licence": "CC0-1.0",
+   "title": "car start muffler 2",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 301440,
+   "lufs": -34.86,
+   "peak_db": -12.21,
+   "gain_db": 10.86,
+   "stream": false,
+   "loop": [
+    19845,
+    141120,
+    11025
+   ],
+   "decode_frames": 141136
+  },
+  {
+   "id": "fsd-410137-engine_car",
+   "path": "fsd50k/clips/dev/410137.wav",
+   "bytes": 752718,
+   "sha256": "6c7d9c47f00e2ec8b8e3eae9bac638e7449f3c1bdc876a10e47d8b5f218023fb",
+   "role": "engine_car",
+   "source": "FSD50K",
+   "freesound_id": 410137,
+   "uploader": "soundman9826",
+   "licence": "CC0-1.0",
+   "title": "car start 5 feet from engine (open hood)",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 376320,
+   "lufs": -42.11,
+   "peak_db": -12.95,
+   "gain_db": 11.95,
+   "stream": false,
+   "loop": [
+    222705,
+    343980,
+    11025
+   ],
+   "decode_frames": 343996
+  },
+  {
+   "id": "fsd-386793-engine_car",
+   "path": "fsd50k/clips/dev/386793.wav",
+   "bytes": 777128,
+   "sha256": "ef3431c8187e79908ef0d5bb7d73aff73285f5fcd9b4a060a8289dd9fff31eb8",
+   "role": "engine_car",
+   "source": "FSD50K",
+   "freesound_id": 386793,
+   "uploader": "RichieMcMullen",
+   "licence": "CC0-1.0",
+   "title": "engine_idle_loop_1.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 388525,
+   "lufs": -20.23,
+   "peak_db": -5.98,
+   "gain_db": -3.77,
+   "stream": false,
+   "loop": [
+    19845,
+    141120,
+    11025
+   ],
+   "decode_frames": 141136
+  },
+  {
+   "id": "fsd-405322-engine_car",
+   "path": "fsd50k/clips/dev/405322.wav",
+   "bytes": 1102578,
+   "sha256": "15afe41166752fa01d07a3debdd7e1a863e0ee48a925b422f5694933485c1152",
+   "role": "engine_car",
+   "source": "FSD50K",
+   "freesound_id": 405322,
+   "uploader": "tberger2168",
+   "licence": "CC0-1.0",
+   "title": "Car Engine Start.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 551250,
+   "lufs": -24.92,
+   "peak_db": -6.95,
+   "gain_db": 0.92,
+   "stream": false,
+   "loop": [
+    156555,
+    277830,
+    11025
+   ],
+   "decode_frames": 277846
+  },
+  {
+   "id": "fsd-194950-engine_car",
+   "path": "fsd50k/clips/eval/194950.wav",
+   "bytes": 946288,
+   "sha256": "ba6db82fde967774116724f3dd9cf36fc4a6366b69a3a0da673f75acaf42ab1f",
+   "role": "engine_car",
+   "source": "FSD50K",
+   "freesound_id": 194950,
+   "uploader": "soundmary",
+   "licence": "CC-BY-3.0",
+   "title": "digger engine start and stop.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 473105,
+   "lufs": -31.58,
+   "peak_db": -17.5,
+   "gain_db": 7.58,
+   "stream": false,
+   "loop": [
+    196245,
+    317520,
+    11025
+   ],
+   "decode_frames": 317536
+  },
+  {
+   "id": "fsd-14276-engine_car",
+   "path": "fsd50k/clips/dev/14276.wav",
+   "bytes": 1594734,
+   "sha256": "84ce3c694a5c89a5cc44cd2a5e0d0b0d91ad10b81afd243acd2cc7651fe49943",
+   "role": "engine_car",
+   "source": "FSD50K",
+   "freesound_id": 14276,
+   "uploader": "LG",
+   "licence": "CC-BY-3.0",
+   "title": "Streetcar01.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 797328,
+   "lufs": -14.07,
+   "peak_db": 0,
+   "gain_db": -9.93,
+   "stream": false,
+   "loop": [
+    213885,
+    335160,
+    11025
+   ],
+   "decode_frames": 335176
+  },
+  {
+   "id": "fsd-432638-engine_car",
+   "path": "fsd50k/clips/eval/432638.wav",
+   "bytes": 923982,
+   "sha256": "ccd4e3005696052ea7600fb86247f7d38ad98bfb5560db998b3c537122e778d9",
+   "role": "engine_car",
+   "source": "FSD50K",
+   "freesound_id": 432638,
+   "uploader": "DigPro120",
+   "licence": "CC0-1.0",
+   "title": "Starting and revving a 74 Corvette.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 461952,
+   "lufs": -11.16,
+   "peak_db": 0,
+   "gain_db": -12.84,
+   "stream": false,
+   "loop": [
+    85995,
+    207270,
+    11025
+   ],
+   "decode_frames": 207286
+  },
+  {
+   "id": "fsd-386792-engine_car",
+   "path": "fsd50k/clips/dev/386792.wav",
+   "bytes": 766142,
+   "sha256": "499141d6e94d1f90a6a49fef6414a39c2edd5ba62f0754e825ffc65572499cba",
+   "role": "engine_car",
+   "source": "FSD50K",
+   "freesound_id": 386792,
+   "uploader": "RichieMcMullen",
+   "licence": "CC0-1.0",
+   "title": "engine_idle_loop_2.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 383032,
+   "lufs": -19.47,
+   "peak_db": -5.36,
+   "gain_db": -4.53,
+   "stream": false,
+   "loop": [
+    85995,
+    207270,
+    11025
+   ],
+   "decode_frames": 207286
+  },
+  {
+   "id": "fsd-387019-engine_car",
+   "path": "fsd50k/clips/dev/387019.wav",
+   "bytes": 2374050,
+   "sha256": "23446e24c8ca2374f87af5932cd50f36c687c880385d5fc3be190e27b88faba1",
+   "role": "engine_car",
+   "source": "FSD50K",
+   "freesound_id": 387019,
+   "uploader": "dobroide",
+   "licence": "CC-BY-3.0",
+   "title": "20170401.2CV.idling.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1186986,
+   "lufs": -19.6,
+   "peak_db": -5.55,
+   "gain_db": -4.4,
+   "stream": false,
+   "loop": [
+    319725,
+    441000,
+    11025
+   ],
+   "decode_frames": 441016
+  },
+  {
+   "id": "fsd-235507-engine_car",
+   "path": "fsd50k/clips/eval/235507.wav",
+   "bytes": 1917532,
+   "sha256": "3a00ec1f3ca9375d8f21364072cf6693e8f2234f44673d330678f464b4de7832",
+   "role": "engine_car",
+   "source": "FSD50K",
+   "freesound_id": 235507,
+   "uploader": "ceberation",
+   "licence": "CC-BY-3.0",
+   "title": "Car Engine.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 958727,
+   "lufs": -33.56,
+   "peak_db": -20.24,
+   "gain_db": 9.56,
+   "stream": false,
+   "loop": [
+    24255,
+    145530,
+    11025
+   ],
+   "decode_frames": 145546
+  },
+  {
+   "id": "fsd-186935-engine_heavy",
+   "path": "fsd50k/clips/dev/186935.wav",
+   "bytes": 535224,
+   "sha256": "065b246f9d5c1bfadcde730ac73572dd73c4a70d85947de5084f23d21798a543",
+   "role": "engine_heavy",
+   "source": "FSD50K",
+   "freesound_id": 186935,
+   "uploader": "ReadeOnly",
+   "licence": "CC0-1.0",
+   "title": "engine_idle_loop.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 267573,
+   "lufs": -19.52,
+   "peak_db": -3.59,
+   "gain_db": -4.48,
+   "stream": false,
+   "loop": [
+    99225,
+    220500,
+    11025
+   ],
+   "decode_frames": 220516
+  },
+  {
+   "id": "fsd-361113-engine_heavy",
+   "path": "fsd50k/clips/dev/361113.wav",
+   "bytes": 1410198,
+   "sha256": "0ae76c87d00d16bae9687e04badbdc6bfdbb990350bb8413a98a28307750ac6f",
+   "role": "engine_heavy",
+   "source": "FSD50K",
+   "freesound_id": 361113,
+   "uploader": "Borys_Kozielski",
+   "licence": "CC0-1.0",
+   "title": "DM550683.WAV",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 705060,
+   "lufs": -23.72,
+   "peak_db": -4.56,
+   "gain_db": -0.28,
+   "stream": false,
+   "loop": [
+    19845,
+    141120,
+    11025
+   ],
+   "decode_frames": 141136
+  },
+  {
+   "id": "fsd-165281-engine_heavy",
+   "path": "fsd50k/clips/dev/165281.wav",
+   "bytes": 884396,
+   "sha256": "1a78c5471e4d7887d39a8936eb1f6a8fd1a7522af2a5c45b4c6f3b4b2d8ea1cd",
+   "role": "engine_heavy",
+   "source": "FSD50K",
+   "freesound_id": 165281,
+   "uploader": "Rylius",
+   "licence": "CC-BY-3.0",
+   "title": "Bus Idle 1",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 442159,
+   "lufs": -29.69,
+   "peak_db": -14.28,
+   "gain_db": 5.69,
+   "stream": false,
+   "loop": [
+    191835,
+    313110,
+    11025
+   ],
+   "decode_frames": 313126
+  },
+  {
+   "id": "fsd-251547-engine_heavy",
+   "path": "fsd50k/clips/dev/251547.wav",
+   "bytes": 1802968,
+   "sha256": "ffa30b9c0972aac541ed8ee32349438da100258f34e9a34d6c910ccfabc87e0f",
+   "role": "engine_heavy",
+   "source": "FSD50K",
+   "freesound_id": 251547,
+   "uploader": "Omar Alvarado",
+   "licence": "CC-BY-3.0",
+   "title": "R05_0026.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 901445,
+   "lufs": -12.68,
+   "peak_db": -0.72,
+   "gain_db": -11.32,
+   "stream": false,
+   "loop": [
+    288855,
+    410130,
+    11025
+   ],
+   "decode_frames": 410146
+  },
+  {
+   "id": "fsd-51834-engine_heavy",
+   "path": "fsd50k/clips/dev/51834.wav",
+   "bytes": 883278,
+   "sha256": "4603b56fa5f8c7d701cb656704c8ff3e59ff5c999535f3e60dc520311defd447",
+   "role": "engine_heavy",
+   "source": "FSD50K",
+   "freesound_id": 51834,
+   "uploader": "timdrussell",
+   "licence": "CC-BY-3.0",
+   "title": "BusIdling.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 441600,
+   "lufs": -14.12,
+   "peak_db": -0.76,
+   "gain_db": -9.88,
+   "stream": false,
+   "loop": [
+    19845,
+    141120,
+    11025
+   ],
+   "decode_frames": 141136
+  },
+  {
+   "id": "fsd-22882-engine_heavy",
+   "path": "fsd50k/clips/dev/22882.wav",
+   "bytes": 2075854,
+   "sha256": "2b459a04141b3e0941f2635f2d07c14309f45d1411f4859b439c1bf0a48e7c81",
+   "role": "engine_heavy",
+   "source": "FSD50K",
+   "freesound_id": 22882,
+   "uploader": "Corsica_S",
+   "licence": "CC-BY-3.0",
+   "title": "idle truck.flac",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1037888,
+   "lufs": -22.84,
+   "peak_db": -3.38,
+   "gain_db": -1.16,
+   "stream": false,
+   "loop": [
+    174195,
+    295470,
+    11025
+   ],
+   "decode_frames": 295486
+  },
+  {
+   "id": "fsd-410135-engine_player_lo",
+   "path": "fsd50k/clips/dev/410135.wav",
+   "bytes": 602958,
+   "sha256": "c1833b11c5faf29592beeb053c637e41dd47e1ad4444726e8eaeaa70cf36125c",
+   "role": "engine_player_lo",
+   "source": "FSD50K",
+   "freesound_id": 410135,
+   "uploader": "soundman9826",
+   "licence": "CC0-1.0",
+   "title": "car start muffler 2",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 301440,
+   "lufs": -34.86,
+   "peak_db": -12.21,
+   "gain_db": 10.86,
+   "stream": false,
+   "loop": [
+    19845,
+    141120,
+    11025
+   ],
+   "decode_frames": 141136
+  },
+  {
+   "id": "fsd-410137-engine_player_lo",
+   "path": "fsd50k/clips/dev/410137.wav",
+   "bytes": 752718,
+   "sha256": "6c7d9c47f00e2ec8b8e3eae9bac638e7449f3c1bdc876a10e47d8b5f218023fb",
+   "role": "engine_player_lo",
+   "source": "FSD50K",
+   "freesound_id": 410137,
+   "uploader": "soundman9826",
+   "licence": "CC0-1.0",
+   "title": "car start 5 feet from engine (open hood)",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 376320,
+   "lufs": -42.11,
+   "peak_db": -12.95,
+   "gain_db": 11.95,
+   "stream": false,
+   "loop": [
+    222705,
+    343980,
+    11025
+   ],
+   "decode_frames": 343996
+  },
+  {
+   "id": "fsd-432638-engine_player_hi",
+   "path": "fsd50k/clips/eval/432638.wav",
+   "bytes": 923982,
+   "sha256": "ccd4e3005696052ea7600fb86247f7d38ad98bfb5560db998b3c537122e778d9",
+   "role": "engine_player_hi",
+   "source": "FSD50K",
+   "freesound_id": 432638,
+   "uploader": "DigPro120",
+   "licence": "CC0-1.0",
+   "title": "Starting and revving a 74 Corvette.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 461952,
+   "lufs": -11.16,
+   "peak_db": 0,
+   "gain_db": -12.84,
+   "stream": false,
+   "loop": [
+    85995,
+    207270,
+    11025
+   ],
+   "decode_frames": 207286
+  },
+  {
+   "id": "fsd-433584-engine_player_hi",
+   "path": "fsd50k/clips/eval/433584.wav",
+   "bytes": 1890348,
+   "sha256": "d2de70fab2c04604887d1107ca88fa344ebcd3bed9e373c34dd3507c5290d498",
+   "role": "engine_player_hi",
+   "source": "FSD50K",
+   "freesound_id": 433584,
+   "uploader": "jacklmurr27",
+   "licence": "CC0-1.0",
+   "title": "Car Starting and Accelerating",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 945135,
+   "lufs": -27.19,
+   "peak_db": -6.03,
+   "gain_db": 3.19,
+   "stream": false,
+   "loop": [
+    262395,
+    383670,
+    11025
+   ],
+   "decode_frames": 383686
+  },
+  {
+   "id": "fsd-262905-engine_player_hi",
+   "path": "fsd50k/clips/eval/262905.wav",
+   "bytes": 800210,
+   "sha256": "6feb10790e3a9eafeeda51216a5f08320e538843aadf6e57436674067fc82c03",
+   "role": "engine_player_hi",
+   "source": "FSD50K",
+   "freesound_id": 262905,
+   "uploader": "VlatkoBlazek",
+   "licence": "CC-BY-3.0",
+   "title": "Older car start",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 400066,
+   "lufs": -17.15,
+   "peak_db": -0.27,
+   "gain_db": -6.85,
+   "stream": false,
+   "loop": [
+    121275,
+    242550,
+    11025
+   ],
+   "decode_frames": 242566
+  },
+  {
+   "id": "fsd-7723-tyre_squeal",
+   "path": "fsd50k/clips/dev/7723.wav",
+   "bytes": 994600,
+   "sha256": "97768d26551c2179da98c9c54a68ad5c81eddea3bb001964c72bb5696af2f4e6",
+   "role": "tyre_squeal",
+   "source": "FSD50K",
+   "freesound_id": 7723,
+   "uploader": "NoiseCollector",
+   "licence": "CC-BY-3.0",
+   "title": "balloon1.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 497261,
+   "lufs": -20.24,
+   "peak_db": 0,
+   "gain_db": -3.76,
+   "stream": false,
+   "loop": [
+    200655,
+    321930,
+    11025
+   ],
+   "decode_frames": 321946
+  },
+  {
+   "id": "fsd-95731-tyre_squeal",
+   "path": "fsd50k/clips/dev/95731.wav",
+   "bytes": 1205736,
+   "sha256": "3fe85d2e9ddf258a7b6cad37c11b5f5c59b94da72aa5320aec65ec2478b08229",
+   "role": "tyre_squeal",
+   "source": "FSD50K",
+   "freesound_id": 95731,
+   "uploader": "Corsica_S",
+   "licence": "CC-BY-3.0",
+   "title": "power_down.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 602829,
+   "lufs": -24.51,
+   "peak_db": -8.64,
+   "gain_db": 0.51,
+   "stream": false,
+   "loop": [
+    116865,
+    238140,
+    11025
+   ],
+   "decode_frames": 238156
+  },
+  {
+   "id": "fsd-131385-tyre_squeal",
+   "path": "fsd50k/clips/dev/131385.wav",
+   "bytes": 1670270,
+   "sha256": "56d23ec77228cd014cccd021b7fe52ff2cbf7a8db65145ca526b60c016aa3364",
+   "role": "tyre_squeal",
+   "source": "FSD50K",
+   "freesound_id": 131385,
+   "uploader": "musicmasta1",
+   "licence": "CC0-1.0",
+   "title": "CarStartSkidCrash.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 835096,
+   "lufs": -19.78,
+   "peak_db": 0,
+   "gain_db": -4.22,
+   "stream": false,
+   "loop": [
+    134505,
+    255780,
+    11025
+   ],
+   "decode_frames": 255796
+  },
+  {
+   "id": "fsd-136628-cable_slot",
+   "path": "fsd50k/clips/dev/136628.wav",
+   "bytes": 704944,
+   "sha256": "6b657002e5e10ecd722269a5192b4c1c9a53afac9305431525ac4f56f00850ba",
+   "role": "cable_slot",
+   "source": "FSD50K",
+   "freesound_id": 136628,
+   "uploader": "mgalloway",
+   "licence": "CC-BY-3.0",
+   "title": "SF cablecar cable.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 352433,
+   "lufs": -23.28,
+   "peak_db": -10.68,
+   "gain_db": -0.72,
+   "stream": false,
+   "loop": [
+    222705,
+    343980,
+    11025
+   ],
+   "decode_frames": 343996
+  },
+  {
+   "id": "fsd-393663-brake",
+   "path": "fsd50k/clips/dev/393663.wav",
+   "bytes": 404660,
+   "sha256": "e922b9933cb80f8e2e8030d0e056405d4c388e06f79ab0ed3e1815d263447a20",
+   "role": "brake",
+   "source": "FSD50K",
+   "freesound_id": 393663,
+   "uploader": "chripei",
+   "licence": "CC0-1.0",
+   "title": "WaHi Airbrakes blast.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 202291,
+   "lufs": -18.17,
+   "peak_db": -1.89,
+   "gain_db": -3.83,
+   "stream": false
+  },
+  {
+   "id": "fsd-126043-brake",
+   "path": "fsd50k/clips/eval/126043.wav",
+   "bytes": 262450,
+   "sha256": "2b1fe9cc8e11f0207b3f66159265885fcc1b2382b9d482bc627691c182e44e41",
+   "role": "brake",
+   "source": "FSD50K",
+   "freesound_id": 126043,
+   "uploader": "mhtaylor67",
+   "licence": "CC0-1.0",
+   "title": "Hand Brake",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 131186,
+   "lufs": -22.09,
+   "peak_db": -0.96,
+   "gain_db": -0.04,
+   "stream": false
+  },
+  {
+   "id": "fsd-194968-brake",
+   "path": "fsd50k/clips/eval/194968.wav",
+   "bytes": 122854,
+   "sha256": "8262361c9065d7eaf99a862d8dac797ecbf3a872e8dffb7af204f2b95cda6bed",
+   "role": "brake",
+   "source": "FSD50K",
+   "freesound_id": 194968,
+   "uploader": "soundmary",
+   "licence": "CC-BY-3.0",
+   "title": "brake squeek.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 61388,
+   "lufs": -20.44,
+   "peak_db": -4.84,
+   "gain_db": -1.56,
+   "stream": false
+  },
+  {
+   "id": "fsd-394655-horn",
+   "path": "fsd50k/clips/eval/394655.wav",
+   "bytes": 136014,
+   "sha256": "c7823b41025f0c0c0d2cb09592f6cb996d480308e6b95fd27c48f4f8a96a0a58",
+   "role": "horn",
+   "source": "FSD50K",
+   "freesound_id": 394655,
+   "uploader": "DigPro120",
+   "licence": "CC0-1.0",
+   "title": "Beep Beep.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 67968,
+   "lufs": -17.36,
+   "peak_db": -2.79,
+   "gain_db": -4.64,
+   "stream": false
+  },
+  {
+   "id": "fsd-164627-horn",
+   "path": "fsd50k/clips/dev/164627.wav",
+   "bytes": 217476,
+   "sha256": "43416a9584537ca8169e0fc2d6259608a40a215c24760c893903cf088d3dad2c",
+   "role": "horn",
+   "source": "FSD50K",
+   "freesound_id": 164627,
+   "uploader": "Adam_N",
+   "licence": "CC0-1.0",
+   "title": "Car_horn_long.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 108699,
+   "lufs": -16.45,
+   "peak_db": -8.99,
+   "gain_db": -5.55,
+   "stream": false
+  },
+  {
+   "id": "fsd-164626-horn",
+   "path": "fsd50k/clips/dev/164626.wav",
+   "bytes": 245802,
+   "sha256": "5aefbdd4c721244604ff23fa855cedf96602c8352c3655b3e43ce02b8780ff6e",
+   "role": "horn",
+   "source": "FSD50K",
+   "freesound_id": 164626,
+   "uploader": "Adam_N",
+   "licence": "CC0-1.0",
+   "title": "Car_horn_mid.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 122862,
+   "lufs": -18.31,
+   "peak_db": -9.82,
+   "gain_db": -3.69,
+   "stream": false
+  },
+  {
+   "id": "fsd-164625-horn",
+   "path": "fsd50k/clips/dev/164625.wav",
+   "bytes": 119666,
+   "sha256": "b204dfd2611089eb72f5dd4c75dbc7c5e9a44d136674b0873c6a172b92fc984f",
+   "role": "horn",
+   "source": "FSD50K",
+   "freesound_id": 164625,
+   "uploader": "Adam_N",
+   "licence": "CC0-1.0",
+   "title": "Car_horn_short.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 59794,
+   "lufs": -21.97,
+   "peak_db": -9.56,
+   "gain_db": -0.03,
+   "stream": false
+  },
+  {
+   "id": "fsd-432641-horn",
+   "path": "fsd50k/clips/eval/432641.wav",
+   "bytes": 258126,
+   "sha256": "4dd71301d24a8e391babcfeeafa8c9bc99bb66016d6db6dad7ef55dbdd1080bf",
+   "role": "horn",
+   "source": "FSD50K",
+   "freesound_id": 432641,
+   "uploader": "DigPro120",
+   "licence": "CC0-1.0",
+   "title": "Car Horn.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 129024,
+   "lufs": -15.98,
+   "peak_db": -0.8,
+   "gain_db": -6.02,
+   "stream": false
+  },
+  {
+   "id": "fsd-254678-horn",
+   "path": "fsd50k/clips/dev/254678.wav",
+   "bytes": 221718,
+   "sha256": "8b564fd691213b04e28b33d2df6c839406c705d7d5d75ec976dc95e55b5f638b",
+   "role": "horn",
+   "source": "FSD50K",
+   "freesound_id": 254678,
+   "uploader": "hsaunier10",
+   "licence": "CC0-1.0",
+   "title": "Car Horn Beeps.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 110820,
+   "lufs": -18.03,
+   "peak_db": -8.9,
+   "gain_db": -3.97,
+   "stream": false
+  },
+  {
+   "id": "fsd-118070-horn",
+   "path": "fsd50k/clips/eval/118070.wav",
+   "bytes": 207054,
+   "sha256": "90b1bb5c91d9ef65023ebea9f01d8598553f7a0bddda6fdb9c63354896b6408f",
+   "role": "horn",
+   "source": "FSD50K",
+   "freesound_id": 118070,
+   "uploader": "ipears1",
+   "licence": "CC0-1.0",
+   "title": "carhorn.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 103488,
+   "lufs": -20.39,
+   "peak_db": -8.91,
+   "gain_db": -1.61,
+   "stream": false
+  },
+  {
+   "id": "fsd-349922-horn",
+   "path": "fsd50k/clips/eval/349922.wav",
+   "bytes": 282376,
+   "sha256": "1f8c6a72c3e665197e77ec06050756e18a8e2bf1ad21bf15904b455c1309096f",
+   "role": "horn",
+   "source": "FSD50K",
+   "freesound_id": 349922,
+   "uploader": "bigmanjoe",
+   "licence": "CC0-1.0",
+   "title": "Car Horn Honk.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 141149,
+   "lufs": -12.83,
+   "peak_db": 0,
+   "gain_db": -9.17,
+   "stream": false
+  },
+  {
+   "id": "fsd-322130-horn",
+   "path": "fsd50k/clips/dev/322130.wav",
+   "bytes": 256974,
+   "sha256": "da48eaf0100da306b2abdee7cdb9672bcca923a09798695f906573bc8625cdfd",
+   "role": "horn",
+   "source": "FSD50K",
+   "freesound_id": 322130,
+   "uploader": "vacuumfan7072",
+   "licence": "CC0-1.0",
+   "title": "camry horn.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 128448,
+   "lufs": -26.87,
+   "peak_db": 0,
+   "gain_db": -1,
+   "stream": false
+  },
+  {
+   "id": "fsd-179864-horn",
+   "path": "fsd50k/clips/dev/179864.wav",
+   "bytes": 201336,
+   "sha256": "57bf6fc0de6655660650bb0adf0f42232b76654f22dfbc5cf0acdcac6d6a1cec",
+   "role": "horn",
+   "source": "FSD50K",
+   "freesound_id": 179864,
+   "uploader": "toiletrolltube",
+   "licence": "CC0-1.0",
+   "title": "car horn 3 - 26.3.11.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 100629,
+   "lufs": -20.96,
+   "peak_db": -8.03,
+   "gain_db": -1.04,
+   "stream": false
+  },
+  {
+   "id": "fsd-377302-horn",
+   "path": "fsd50k/clips/dev/377302.wav",
+   "bytes": 108968,
+   "sha256": "d17245a1a5b6fa0f8e799320de926e6cbdeda139f8b3aca0260851c2f193c8c4",
+   "role": "horn",
+   "source": "FSD50K",
+   "freesound_id": 377302,
+   "uploader": "13GPanska_Sekera_Krystof",
+   "licence": "CC0-1.0",
+   "title": "troub zblízka.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 54445,
+   "lufs": -16.41,
+   "peak_db": -5.02,
+   "gain_db": -5.59,
+   "stream": false
+  },
+  {
+   "id": "fsd-175854-horn",
+   "path": "fsd50k/clips/dev/175854.wav",
+   "bytes": 231910,
+   "sha256": "1b6dffe82424d490fb08fa4be85ac9eebfadcd985ecd39a51c155e1b34bf4fe2",
+   "role": "horn",
+   "source": "FSD50K",
+   "freesound_id": 175854,
+   "uploader": "toiletrolltube",
+   "licence": "CC0-1.0",
+   "title": "120216_02 car horn (6).WAV",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 115916,
+   "lufs": -19.84,
+   "peak_db": -6.82,
+   "gain_db": -2.16,
+   "stream": false
+  },
+  {
+   "id": "fsd-175852-horn",
+   "path": "fsd50k/clips/dev/175852.wav",
+   "bytes": 212476,
+   "sha256": "bd3f323ca18565b64f215f4c1a197c7808b2425b3c24fec7305b85e26aecd914",
+   "role": "horn",
+   "source": "FSD50K",
+   "freesound_id": 175852,
+   "uploader": "toiletrolltube",
+   "licence": "CC0-1.0",
+   "title": "120216_02 car horn (5).wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 106199,
+   "lufs": -17.82,
+   "peak_db": -5.75,
+   "gain_db": -4.18,
+   "stream": false
+  },
+  {
+   "id": "fsd-175855-horn",
+   "path": "fsd50k/clips/dev/175855.wav",
+   "bytes": 218966,
+   "sha256": "878ae8523ee45ee370b5b31ad55f774d934dd5f414bae85429dbd9e204d9144f",
+   "role": "horn",
+   "source": "FSD50K",
+   "freesound_id": 175855,
+   "uploader": "toiletrolltube",
+   "licence": "CC0-1.0",
+   "title": "120218_01 car horn (2).wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 109444,
+   "lufs": -21.94,
+   "peak_db": -10.63,
+   "gain_db": -0.06,
+   "stream": false
+  },
+  {
+   "id": "fsd-173009-car_door",
+   "path": "fsd50k/clips/dev/173009.wav",
+   "bytes": 67816,
+   "sha256": "4627373d420213c2ee716990ad92054edf55de4015424cb4cb6d1e5ce4280cb9",
+   "role": "car_door",
+   "source": "FSD50K",
+   "freesound_id": 173009,
+   "uploader": "ninebilly",
+   "licence": "CC0-1.0",
+   "title": "car door close.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 33869,
+   "lufs": -20.59,
+   "peak_db": 0,
+   "gain_db": -1.41,
+   "stream": false
+  },
+  {
+   "id": "fsd-335092-car_door",
+   "path": "fsd50k/clips/dev/335092.wav",
+   "bytes": 138396,
+   "sha256": "d5d43d245d5b3b4a274edc61026df058eb311a53ff1f46d2d0812e3a6d1d0f1a",
+   "role": "car_door",
+   "source": "FSD50K",
+   "freesound_id": 335092,
+   "uploader": "rnl",
+   "licence": "CC0-1.0",
+   "title": "closing_car_Door.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 69159,
+   "lufs": -24.1,
+   "peak_db": -8.89,
+   "gain_db": 2.1,
+   "stream": false
+  },
+  {
+   "id": "fsd-54085-car_door",
+   "path": "fsd50k/clips/eval/54085.wav",
+   "bytes": 89166,
+   "sha256": "0f382d2f63425322aa6347238e7ae09afd7da879c343bf5784f04867ad7fdb15",
+   "role": "car_door",
+   "source": "FSD50K",
+   "freesound_id": 54085,
+   "uploader": "guitarguy1985",
+   "licence": "CC0-1.0",
+   "title": "close.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 44544,
+   "lufs": -23.09,
+   "peak_db": -0.24,
+   "gain_db": -0.76,
+   "stream": false
+  },
+  {
+   "id": "fsd-208695-car_door",
+   "path": "fsd50k/clips/eval/208695.wav",
+   "bytes": 50414,
+   "sha256": "85d5aa93d5cb0a78bd80375c8772a404e0cba789e2ff4a4e255cd5c882d1fc34",
+   "role": "car_door",
+   "source": "FSD50K",
+   "freesound_id": 208695,
+   "uploader": "monotraum",
+   "licence": "CC0-1.0",
+   "title": "car door close.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 25168,
+   "lufs": -19.28,
+   "peak_db": -1.7,
+   "gain_db": -2.72,
+   "stream": false
+  },
+  {
+   "id": "fsd-50698-car_door",
+   "path": "fsd50k/clips/dev/50698.wav",
+   "bytes": 78064,
+   "sha256": "e71b749cdf5dd62d26418b88115cc15c5f90f686b1f2f229da582b7bea28db09",
+   "role": "car_door",
+   "source": "FSD50K",
+   "freesound_id": 50698,
+   "uploader": "RutgerMuller",
+   "licence": "CC0-1.0",
+   "title": "Car Door Porter Closing Muffled.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 38993,
+   "lufs": -21.49,
+   "peak_db": -0.45,
+   "gain_db": -0.55,
+   "stream": false
+  },
+  {
+   "id": "fsd-86229-car_door",
+   "path": "fsd50k/clips/dev/86229.wav",
+   "bytes": 107464,
+   "sha256": "8a8bb1f701309a9b9343a2789b3d734323f792fd7b88691bee0929d871a2a36e",
+   "role": "car_door",
+   "source": "FSD50K",
+   "freesound_id": 86229,
+   "uploader": "nmscher",
+   "licence": "CC0-1.0",
+   "title": "Car_Door-Open_bulky.aif",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 53693,
+   "lufs": -35.34,
+   "peak_db": -10.03,
+   "gain_db": 9.03,
+   "stream": false
+  },
+  {
+   "id": "fsd-157257-car_door",
+   "path": "fsd50k/clips/dev/157257.wav",
+   "bytes": 43568,
+   "sha256": "5f2c7f295ad6817f5bd3dc5bd0e099030b40fb4be7fe8b0ab3525bd691ffe658",
+   "role": "car_door",
+   "source": "FSD50K",
+   "freesound_id": 157257,
+   "uploader": "baujahr66",
+   "licence": "CC0-1.0",
+   "title": "autotuer1.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 21745,
+   "lufs": -19,
+   "peak_db": -0.34,
+   "gain_db": -3,
+   "stream": false
+  },
+  {
+   "id": "fsd-157256-car_door",
+   "path": "fsd50k/clips/dev/157256.wav",
+   "bytes": 60724,
+   "sha256": "c043101da8657efb8dca50c953f6cfc072c126604895ce8d982c85682888ad86",
+   "role": "car_door",
+   "source": "FSD50K",
+   "freesound_id": 157256,
+   "uploader": "baujahr66",
+   "licence": "CC0-1.0",
+   "title": "autotuer2.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 30323,
+   "lufs": -24.66,
+   "peak_db": -0.65,
+   "gain_db": -0.35,
+   "stream": false
+  },
+  {
+   "id": "fsd-75195-gull",
+   "path": "fsd50k/clips/eval/75195.wav",
+   "bytes": 169890,
+   "sha256": "443f3c4f703463bb3f2d9fb664f4690321cd03c85ea7d7ed15a478d754e9a48e",
+   "role": "gull",
+   "source": "FSD50K",
+   "freesound_id": 75195,
+   "uploader": "nigelcoop",
+   "licence": "CC0-1.0",
+   "title": "Seagull trill and whine.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 84906,
+   "lufs": -34.34,
+   "peak_db": -20.33,
+   "gain_db": 12.34,
+   "stream": false
+  },
+  {
+   "id": "fsd-263786-gull",
+   "path": "fsd50k/clips/dev/263786.wav",
+   "bytes": 36558,
+   "sha256": "7135d6191d128d140049304a5a27ff7a29cb8296f12f346559a89ea68ed57796",
+   "role": "gull",
+   "source": "FSD50K",
+   "freesound_id": 263786,
+   "uploader": "isteak",
+   "licence": "CC0-1.0",
+   "title": "Seagull single call",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 18240,
+   "lufs": -26.98,
+   "peak_db": -16.4,
+   "gain_db": 4.98,
+   "stream": false
+  },
+  {
+   "id": "fsd-166703-gull",
+   "path": "fsd50k/clips/dev/166703.wav",
+   "bytes": 646414,
+   "sha256": "0b085cfc7deda210fc3699368477b9e442274337844f60e2818a4c8719be0e68",
+   "role": "gull",
+   "source": "FSD50K",
+   "freesound_id": 166703,
+   "uploader": "Snapper4298",
+   "licence": "CC0-1.0",
+   "title": "sea gulls.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 323168,
+   "lufs": -30.37,
+   "peak_db": -13.11,
+   "gain_db": 8.37,
+   "stream": false
+  },
+  {
+   "id": "fsd-73497-gull",
+   "path": "fsd50k/clips/eval/73497.wav",
+   "bytes": 324588,
+   "sha256": "f7626be0559fdba919b50b6f99b58df6164749f7f925a01cea06ef7f1341ff2a",
+   "role": "gull",
+   "source": "FSD50K",
+   "freesound_id": 73497,
+   "uploader": "nigelcoop",
+   "licence": "CC0-1.0",
+   "title": "Gull.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 162255,
+   "lufs": -30.18,
+   "peak_db": -16.41,
+   "gain_db": 8.18,
+   "stream": false
+  },
+  {
+   "id": "fsd-174898-gull",
+   "path": "fsd50k/clips/dev/174898.wav",
+   "bytes": 185592,
+   "sha256": "d70b49df994113482bf3bf566821d1aee7d0777ec2d42a93486ed8b859f35537",
+   "role": "gull",
+   "source": "FSD50K",
+   "freesound_id": 174898,
+   "uploader": "toiletrolltube",
+   "licence": "CC0-1.0",
+   "title": "110724_01 (5) seagull.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 92757,
+   "lufs": -28.87,
+   "peak_db": -7.04,
+   "gain_db": 6.04,
+   "stream": false
+  },
+  {
+   "id": "fsd-174896-gull",
+   "path": "fsd50k/clips/dev/174896.wav",
+   "bytes": 343966,
+   "sha256": "579fb2e27b233988aed4bbd6fe155a190382416ff62e5449e6bff989713ffeac",
+   "role": "gull",
+   "source": "FSD50K",
+   "freesound_id": 174896,
+   "uploader": "toiletrolltube",
+   "licence": "CC0-1.0",
+   "title": "110728_01 (10) seagull.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 171944,
+   "lufs": -30.54,
+   "peak_db": -14.22,
+   "gain_db": 8.54,
+   "stream": false
+  },
+  {
+   "id": "fsd-75656-gull",
+   "path": "fsd50k/clips/dev/75656.wav",
+   "bytes": 341070,
+   "sha256": "297eb47427f6e54884b408635001ff6dfb73e773fb4a8638b0a4894b33ab4626",
+   "role": "gull",
+   "source": "FSD50K",
+   "freesound_id": 75656,
+   "uploader": "NoiseCollector",
+   "licence": "CC-BY-3.0",
+   "title": "newjersey_AC_seagull.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 170496,
+   "lufs": -24.18,
+   "peak_db": -7.47,
+   "gain_db": 2.18,
+   "stream": false
+  },
+  {
+   "id": "fsd-75657-gull",
+   "path": "fsd50k/clips/dev/75657.wav",
+   "bytes": 50826,
+   "sha256": "f074657e81f50eaf17a29980b94a890e97847ea5d2863899a97e42e0b3539efc",
+   "role": "gull",
+   "source": "FSD50K",
+   "freesound_id": 75657,
+   "uploader": "NoiseCollector",
+   "licence": "CC-BY-3.0",
+   "title": "newjersey_AC_seagulloop.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 25374,
+   "lufs": -22.38,
+   "peak_db": -9.07,
+   "gain_db": 0.38,
+   "stream": false
+  },
+  {
+   "id": "fsd-344967-pigeon",
+   "path": "fsd50k/clips/dev/344967.wav",
+   "bytes": 382030,
+   "sha256": "f5f560b8dc4dbc32cc55fc4a23b4e0d9dc45cc11eb6972c98c03a5de182700e8",
+   "role": "pigeon",
+   "source": "FSD50K",
+   "freesound_id": 344967,
+   "uploader": "mrmunk",
+   "licence": "CC0-1.0",
+   "title": "Man Doing Dove Call",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 190976,
+   "lufs": -12.39,
+   "peak_db": -1.52,
+   "gain_db": -9.61,
+   "stream": false
+  },
+  {
+   "id": "fsd-94932-pigeon",
+   "path": "fsd50k/clips/eval/94932.wav",
+   "bytes": 132662,
+   "sha256": "5e667c118c71ac1357830c66f2e3d8fa614406239a6146d1db57b251ddae46e6",
+   "role": "pigeon",
+   "source": "FSD50K",
+   "freesound_id": 94932,
+   "uploader": "higginsdj",
+   "licence": "CC0-1.0",
+   "title": "wood_pigeon2_takes_flight_24_96.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 66292,
+   "lufs": -25.64,
+   "peak_db": -7.76,
+   "gain_db": 3.64,
+   "stream": false
+  },
+  {
+   "id": "fsd-129355-pigeon",
+   "path": "fsd50k/clips/dev/129355.wav",
+   "bytes": 160792,
+   "sha256": "65c551baf4452cbffa6ead8308ce35ee9712be00089ebaf33b36a288149c9e77",
+   "role": "pigeon",
+   "source": "FSD50K",
+   "freesound_id": 129355,
+   "uploader": "Bernardomatasoto",
+   "licence": "CC0-1.0",
+   "title": "paloma.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 80357,
+   "lufs": -32.18,
+   "peak_db": -10.59,
+   "gain_db": 9.59,
+   "stream": false
+  },
+  {
+   "id": "fsd-379079-pigeon",
+   "path": "fsd50k/clips/dev/379079.wav",
+   "bytes": 571614,
+   "sha256": "7496e45ded927c316d9ca9b5bccef170535af5ac1229036018d3718e4b7f3f61",
+   "role": "pigeon",
+   "source": "FSD50K",
+   "freesound_id": 379079,
+   "uploader": "13FPanska_Krug_Antonin",
+   "licence": "CC0-1.0",
+   "title": "pigeons near water.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 285768,
+   "lufs": -39.18,
+   "peak_db": -10.15,
+   "gain_db": 9.15,
+   "stream": false
+  },
+  {
+   "id": "fsd-104954-pigeon",
+   "path": "fsd50k/clips/eval/104954.wav",
+   "bytes": 238806,
+   "sha256": "9131ba5b2c1cc416c5ff6d1e0b491519ebc48478ec2af44c59a5ef5acf5c3cbd",
+   "role": "pigeon",
+   "source": "FSD50K",
+   "freesound_id": 104954,
+   "uploader": "Glaneur de sons",
+   "licence": "CC-BY-3.0",
+   "title": "Pigeons taking off.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 119364,
+   "lufs": -29.27,
+   "peak_db": -8.1,
+   "gain_db": 7.1,
+   "stream": false
+  },
+  {
+   "id": "fsd-342254-pigeon",
+   "path": "fsd50k/clips/dev/342254.wav",
+   "bytes": 705604,
+   "sha256": "38371fa7a0d3e6545bdeb6b0f559bff8a4ff5f11957d3d884fe885f843124ae3",
+   "role": "pigeon",
+   "source": "FSD50K",
+   "freesound_id": 342254,
+   "uploader": "Baldirideltasona",
+   "licence": "CC-BY-3.0",
+   "title": "Tortola Turca- Ariadna i Nerea.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 352763,
+   "lufs": -26.91,
+   "peak_db": -0.42,
+   "gain_db": -0.58,
+   "stream": false
+  },
+  {
+   "id": "fsd-114449-pigeon",
+   "path": "fsd50k/clips/dev/114449.wav",
+   "bytes": 119148,
+   "sha256": "50bcf759f1c9cd2247cc3f111ee585cd7045a4f5bb1882bb816a6baeb0c5fd57",
+   "role": "pigeon",
+   "source": "FSD50K",
+   "freesound_id": 114449,
+   "uploader": "soundbytez",
+   "licence": "CC-BY-3.0",
+   "title": "wompoo_fruit_dove.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 59535,
+   "lufs": -24.75,
+   "peak_db": -10.11,
+   "gain_db": 2.75,
+   "stream": false
+  },
+  {
+   "id": "fsd-7156-pigeon",
+   "path": "fsd50k/clips/dev/7156.wav",
+   "bytes": 493998,
+   "sha256": "7138c0e0ddbe8664590b27a373e48a83f4394a5cce191504b7e9b9313f96c7f1",
+   "role": "pigeon",
+   "source": "FSD50K",
+   "freesound_id": 7156,
+   "uploader": "dobroide",
+   "licence": "CC-BY-3.0",
+   "title": "pigeon.wings.00.WAV",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 246960,
+   "lufs": -29.13,
+   "peak_db": -1.67,
+   "gain_db": 0.67,
+   "stream": false
+  },
+  {
+   "id": "fsd-346210-bird",
+   "path": "fsd50k/clips/dev/346210.wav",
+   "bytes": 440768,
+   "sha256": "05e587fade4f1b267870d14943158ed1fb260d31ece5f0797faa94e9aaa19fdf",
+   "role": "bird",
+   "source": "FSD50K",
+   "freesound_id": 346210,
+   "uploader": "BThayer56",
+   "licence": "CC0-1.0",
+   "title": "What is this bird---.flac",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 220345,
+   "lufs": -19.91,
+   "peak_db": -0.18,
+   "gain_db": -2.09,
+   "stream": false
+  },
+  {
+   "id": "fsd-20221-bird",
+   "path": "fsd50k/clips/eval/20221.wav",
+   "bytes": 211758,
+   "sha256": "05e9e6c7de842afb74b44e56814fbf69414920f4af76f15bcfdca8162e1ee8f0",
+   "role": "bird",
+   "source": "FSD50K",
+   "freesound_id": 20221,
+   "uploader": "LS",
+   "licence": "CC-BY-3.0",
+   "title": "bird call.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 105840,
+   "lufs": -24.62,
+   "peak_db": -12.42,
+   "gain_db": 2.62,
+   "stream": false
+  },
+  {
+   "id": "fsd-348192-bird",
+   "path": "fsd50k/clips/eval/348192.wav",
+   "bytes": 286286,
+   "sha256": "cf344fe40beda2919944370fccbe4d8f3e130a007cf7320be2aba2b9a1c28726",
+   "role": "bird",
+   "source": "FSD50K",
+   "freesound_id": 348192,
+   "uploader": "konstantinusz",
+   "licence": "CC0-1.0",
+   "title": "000_crow.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 143104,
+   "lufs": -12.98,
+   "peak_db": 0,
+   "gain_db": -9.02,
+   "stream": false
+  },
+  {
+   "id": "fsd-182090-bird",
+   "path": "fsd50k/clips/dev/182090.wav",
+   "bytes": 590936,
+   "sha256": "0546ef0f7215586fd7a49fd2543b663f460a3151989fc61301bc84dca8be97ee",
+   "role": "bird",
+   "source": "FSD50K",
+   "freesound_id": 182090,
+   "uploader": "qubodup",
+   "licence": "CC0-1.0",
+   "title": "U.S. National Park Service - American Crow.flac",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 295429,
+   "lufs": -14.77,
+   "peak_db": -0.01,
+   "gain_db": -7.23,
+   "stream": false
+  },
+  {
+   "id": "fsd-266832-bird",
+   "path": "fsd50k/clips/dev/266832.wav",
+   "bytes": 306460,
+   "sha256": "bb463a10ce286717937d3b9c9723f6b239e5923a1b0fffe231bb1810b7c446a7",
+   "role": "bird",
+   "source": "FSD50K",
+   "freesound_id": 266832,
+   "uploader": "supercell10",
+   "licence": "CC0-1.0",
+   "title": "Bird chirping",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 153191,
+   "lufs": -28.25,
+   "peak_db": -13.89,
+   "gain_db": 6.25,
+   "stream": false
+  },
+  {
+   "id": "fsd-395830-bird",
+   "path": "fsd50k/clips/eval/395830.wav",
+   "bytes": 119886,
+   "sha256": "dd7121ae54c2616f756b300c8d031d01162dd054cc15f04cd4fcb4e81a925b19",
+   "role": "bird",
+   "source": "FSD50K",
+   "freesound_id": 395830,
+   "uploader": "Wakerone",
+   "licence": "CC0-1.0",
+   "title": "Bird-Sing-3.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 59904,
+   "lufs": -17.86,
+   "peak_db": -5.92,
+   "gain_db": -4.14,
+   "stream": false
+  },
+  {
+   "id": "fsd-389609-bird",
+   "path": "fsd50k/clips/dev/389609.wav",
+   "bytes": 491184,
+   "sha256": "04fb6ecfb4fcdfa1c73e9d8de251c5e562f04542c0ac64300b1f029d3dd572a3",
+   "role": "bird",
+   "source": "FSD50K",
+   "freesound_id": 389609,
+   "uploader": "16coreyn",
+   "licence": "CC0-1.0",
+   "title": "Crows-Clean_mixdown.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 245553,
+   "lufs": -32.92,
+   "peak_db": -17.05,
+   "gain_db": 10.92,
+   "stream": false
+  },
+  {
+   "id": "fsd-269067-bird",
+   "path": "fsd50k/clips/dev/269067.wav",
+   "bytes": 209998,
+   "sha256": "850bb9efc456c91b71d305e7b65895198e943d4255957dab6e4d9984cd082793",
+   "role": "bird",
+   "source": "FSD50K",
+   "freesound_id": 269067,
+   "uploader": "CaitlinMKearney",
+   "licence": "CC0-1.0",
+   "title": "bird.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 104960,
+   "lufs": -30.09,
+   "peak_db": -17.21,
+   "gain_db": 8.09,
+   "stream": false
+  },
+  {
+   "id": "fsd-342164-bird",
+   "path": "fsd50k/clips/dev/342164.wav",
+   "bytes": 303182,
+   "sha256": "c73e21abd95ad9c4032dbc45d5a684a306da2e1e2b2092c999ba6de4a6a2b9fa",
+   "role": "bird",
+   "source": "FSD50K",
+   "freesound_id": 342164,
+   "uploader": "Ragu21",
+   "licence": "CC0-1.0",
+   "title": "starling bird twitter.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 151552,
+   "lufs": -24.78,
+   "peak_db": -11.19,
+   "gain_db": 2.78,
+   "stream": false
+  },
+  {
+   "id": "fsd-395831-bird",
+   "path": "fsd50k/clips/eval/395831.wav",
+   "bytes": 232782,
+   "sha256": "ade8542e1d9b20d17fd7335e09c03808ebb50724c63d4340e506d97cdec5a867",
+   "role": "bird",
+   "source": "FSD50K",
+   "freesound_id": 395831,
+   "uploader": "Wakerone",
+   "licence": "CC0-1.0",
+   "title": "Bird-Sing-2.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 116352,
+   "lufs": -21.93,
+   "peak_db": -6.52,
+   "gain_db": -0.07,
+   "stream": false
+  },
+  {
+   "id": "fsd-395829-bird",
+   "path": "fsd50k/clips/eval/395829.wav",
+   "bytes": 288078,
+   "sha256": "40d1ced1997463445d6ae1637bb80b22da71c2d097715f542f307e78f48e06d4",
+   "role": "bird",
+   "source": "FSD50K",
+   "freesound_id": 395829,
+   "uploader": "Wakerone",
+   "licence": "CC0-1.0",
+   "title": "Bird-Sing.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 144000,
+   "lufs": -23.91,
+   "peak_db": -7.89,
+   "gain_db": 1.91,
+   "stream": false
+  },
+  {
+   "id": "fsd-342160-bird",
+   "path": "fsd50k/clips/dev/342160.wav",
+   "bytes": 62542,
+   "sha256": "1f11ec336d620ee47088ff48f41af47622ab2f5736ab7451cb1d68bc76a646b0",
+   "role": "bird",
+   "source": "FSD50K",
+   "freesound_id": 342160,
+   "uploader": "Ragu21",
+   "licence": "CC0-1.0",
+   "title": "starling bird short voice_04.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 31232,
+   "lufs": -23.73,
+   "peak_db": -10.22,
+   "gain_db": 1.73,
+   "stream": false
+  },
+  {
+   "id": "fsd-216255-thunder",
+   "path": "fsd50k/clips/dev/216255.wav",
+   "bytes": 617478,
+   "sha256": "e147ac9ceb32d184ac669aa4c8be7b795fa6d7999c928ded2bae1c38fd919d74",
+   "role": "thunder",
+   "source": "FSD50K",
+   "freesound_id": 216255,
+   "uploader": "RSilveira_88",
+   "licence": "CC-BY-3.0",
+   "title": "Synthesized_Thunder_Slow_02.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 308700,
+   "lufs": -23.56,
+   "peak_db": -4.21,
+   "gain_db": -0.44,
+   "stream": false
+  },
+  {
+   "id": "fsd-237412-thunder",
+   "path": "fsd50k/clips/dev/237412.wav",
+   "bytes": 1463234,
+   "sha256": "ae0e92a400604da2d70a8278fbbb804c16f826f957a95c61d67952926992b8d9",
+   "role": "thunder",
+   "source": "FSD50K",
+   "freesound_id": 237412,
+   "uploader": "squareal",
+   "licence": "CC0-1.0",
+   "title": "Thunder 03",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 731578,
+   "lufs": -28.8,
+   "peak_db": -6.13,
+   "gain_db": 4.8,
+   "stream": true
+  },
+  {
+   "id": "fsd-237409-thunder",
+   "path": "fsd50k/clips/dev/237409.wav",
+   "bytes": 877648,
+   "sha256": "18741f58a9f6b04df5d20fcc848cb63f8c95cfa48dccce18a4fa3486cf74b27f",
+   "role": "thunder",
+   "source": "FSD50K",
+   "freesound_id": 237409,
+   "uploader": "squareal",
+   "licence": "CC0-1.0",
+   "title": "Thunder 02",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 438785,
+   "lufs": -28.06,
+   "peak_db": -6.85,
+   "gain_db": 4.06,
+   "stream": true
+  },
+  {
+   "id": "fsd-151196-thunder",
+   "path": "fsd50k/clips/dev/151196.wav",
+   "bytes": 880884,
+   "sha256": "2a20f6a5f90441322be1b1af36e76e958d7c22a5b4f4d54272d9954debf42faf",
+   "role": "thunder",
+   "source": "FSD50K",
+   "freesound_id": 151196,
+   "uploader": "hokstnator",
+   "licence": "CC-BY-3.0",
+   "title": "balfron thunder E.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 440403,
+   "lufs": -29.19,
+   "peak_db": -8.76,
+   "gain_db": 5.19,
+   "stream": true
+  },
+  {
+   "id": "fsd-151195-thunder",
+   "path": "fsd50k/clips/dev/151195.wav",
+   "bytes": 1104734,
+   "sha256": "fa71988e8272b18726c6e1ff19e519fd18bc47e0490431a19cc7b431c7985f0e",
+   "role": "thunder",
+   "source": "FSD50K",
+   "freesound_id": 151195,
+   "uploader": "hokstnator",
+   "licence": "CC-BY-3.0",
+   "title": "balfron thunder F.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 552328,
+   "lufs": -29.67,
+   "peak_db": -6.57,
+   "gain_db": 5.57,
+   "stream": true
+  },
+  {
+   "id": "fsd-151198-thunder",
+   "path": "fsd50k/clips/dev/151198.wav",
+   "bytes": 459160,
+   "sha256": "2673460e49df04778049713f6369f7f440684fd5c4914f57269bcfe43a767a0d",
+   "role": "thunder",
+   "source": "FSD50K",
+   "freesound_id": 151198,
+   "uploader": "hokstnator",
+   "licence": "CC-BY-3.0",
+   "title": "balfron thunder I.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 229541,
+   "lufs": -36.89,
+   "peak_db": -15.91,
+   "gain_db": 12.89,
+   "stream": false
+  },
+  {
+   "id": "fsd-151194-thunder",
+   "path": "fsd50k/clips/dev/151194.wav",
+   "bytes": 683176,
+   "sha256": "af9fd5e540086632d0f14a571e2307ffbf07b791ccaad91f5602c2b03c56f696",
+   "role": "thunder",
+   "source": "FSD50K",
+   "freesound_id": 151194,
+   "uploader": "hokstnator",
+   "licence": "CC-BY-3.0",
+   "title": "balfron thunder G.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 341549,
+   "lufs": -32.89,
+   "peak_db": -8.73,
+   "gain_db": 7.73,
+   "stream": false
+  },
+  {
+   "id": "fsd-151193-thunder",
+   "path": "fsd50k/clips/dev/151193.wav",
+   "bytes": 481506,
+   "sha256": "d15ebe2e39530c02e7a2e8283e6e8b3e7abf05cd86925a431047be0a47770ec4",
+   "role": "thunder",
+   "source": "FSD50K",
+   "freesound_id": 151193,
+   "uploader": "hokstnator",
+   "licence": "CC-BY-3.0",
+   "title": "balfron thunder H.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 240714,
+   "lufs": -37.78,
+   "peak_db": -11.58,
+   "gain_db": 10.58,
+   "stream": false
+  },
+  {
+   "id": "fsd-30823-siren",
+   "path": "fsd50k/clips/eval/30823.wav",
+   "bytes": 1428456,
+   "sha256": "8fa21305f051c2ca4608daddcdad3233559a5debbf7b27d9b96a92277085e62b",
+   "role": "siren",
+   "source": "FSD50K",
+   "freesound_id": 30823,
+   "uploader": "Heigh-hoo",
+   "licence": "CC0-1.0",
+   "title": "highway_patrol.aif",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 714189,
+   "lufs": -29.83,
+   "peak_db": -8.38,
+   "gain_db": 5.83,
+   "stream": true
+  },
+  {
+   "id": "fsd-162719-siren",
+   "path": "fsd50k/clips/dev/162719.wav",
+   "bytes": 1282126,
+   "sha256": "0956c9c96adbeec0ae3b9f2fad2bd3bf0964913cf87753b08138927591f6e321",
+   "role": "siren",
+   "source": "FSD50K",
+   "freesound_id": 162719,
+   "uploader": "synthetic-oz",
+   "licence": "CC-BY-3.0",
+   "title": "City Sidewalk Nose with Background Police Siren.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 641024,
+   "lufs": -19.99,
+   "peak_db": -3.04,
+   "gain_db": -4.01,
+   "stream": true
+  },
+  {
+   "id": "fsd-117181-siren",
+   "path": "fsd50k/clips/eval/117181.wav",
+   "bytes": 2635854,
+   "sha256": "d61f60d7821ac81a9d17815f98c4cc6c1c264b6032cbbe857d41c71ecfed5361",
+   "role": "siren",
+   "source": "FSD50K",
+   "freesound_id": 117181,
+   "uploader": "drewkelly",
+   "licence": "CC0-1.0",
+   "title": "SIRENS.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1317888,
+   "lufs": -22.5,
+   "peak_db": -6.93,
+   "gain_db": -1.5,
+   "stream": true
+  },
+  {
+   "id": "fsd-156868-siren",
+   "path": "fsd50k/clips/dev/156868.wav",
+   "bytes": 762702,
+   "sha256": "f52e7530b62496a8a630082405e30b8bedf4edf27a1652f07482f45ed93760fa",
+   "role": "siren",
+   "source": "FSD50K",
+   "freesound_id": 156868,
+   "uploader": "MultiMax2121",
+   "licence": "CC0-1.0",
+   "title": "Police Siren Yelp.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 381312,
+   "lufs": -17.91,
+   "peak_db": -2.5,
+   "gain_db": -6.09,
+   "stream": true
+  },
+  {
+   "id": "fsd-159750-siren",
+   "path": "fsd50k/clips/dev/159750.wav",
+   "bytes": 2003176,
+   "sha256": "99d79f36b7d46d71a1955e2d2af2ed957cc7c7ac757e30ca271a8c8d85943bbf",
+   "role": "siren",
+   "source": "FSD50K",
+   "freesound_id": 159750,
+   "uploader": "conleec",
+   "licence": "CC0-1.0",
+   "title": "MISC_Police_Siren_Start_Away_001.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1001549,
+   "lufs": -18.45,
+   "peak_db": -3.93,
+   "gain_db": -5.55,
+   "stream": true
+  },
+  {
+   "id": "fsd-159753-siren",
+   "path": "fsd50k/clips/dev/159753.wav",
+   "bytes": 1512274,
+   "sha256": "aaa1bf7a5a568900a9b79ec456726cb4be64329ee44e48c19a4144ad3a03b443",
+   "role": "siren",
+   "source": "FSD50K",
+   "freesound_id": 159753,
+   "uploader": "conleec",
+   "licence": "CC0-1.0",
+   "title": "MISC_Police_Siren_Wailer_Static_001.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 756098,
+   "lufs": -22.95,
+   "peak_db": -13.43,
+   "gain_db": -1.05,
+   "stream": true
+  },
+  {
+   "id": "fsd-159754-siren",
+   "path": "fsd50k/clips/dev/159754.wav",
+   "bytes": 1858686,
+   "sha256": "ff603bb3618bfc421aafe2942a8654b956013c91022e9c70e78383492e5c9c8b",
+   "role": "siren",
+   "source": "FSD50K",
+   "freesound_id": 159754,
+   "uploader": "conleec",
+   "licence": "CC0-1.0",
+   "title": "MISC_Police_Siren_Various_Stationary_001.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 929304,
+   "lufs": -17.61,
+   "peak_db": -5.87,
+   "gain_db": -6.39,
+   "stream": true
+  },
+  {
+   "id": "fsd-159755-siren",
+   "path": "fsd50k/clips/dev/159755.wav",
+   "bytes": 1755982,
+   "sha256": "d34921abc2da065dfd6d39fc81eda0ecf5a1b8464203d5a99d26fd3727ae94d9",
+   "role": "siren",
+   "source": "FSD50K",
+   "freesound_id": 159755,
+   "uploader": "conleec",
+   "licence": "CC0-1.0",
+   "title": "MISC_Police_Siren_In_Stop_Officer_001.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 877952,
+   "lufs": -21.71,
+   "peak_db": -7.54,
+   "gain_db": -2.29,
+   "stream": true
+  },
+  {
+   "id": "fsd-223824-siren",
+   "path": "fsd50k/clips/dev/223824.wav",
+   "bytes": 1541548,
+   "sha256": "7f9e382d8a292d5ce8fcb0418213382c163c6c692f9b3efe8abb1d2e18f89fb0",
+   "role": "siren",
+   "source": "FSD50K",
+   "freesound_id": 223824,
+   "uploader": "WBJB1",
+   "licence": "CC0-1.0",
+   "title": "Wail and Yelp.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 770735,
+   "lufs": -12.45,
+   "peak_db": -8.2,
+   "gain_db": -11.55,
+   "stream": true
+  },
+  {
+   "id": "fsd-320767-siren",
+   "path": "fsd50k/clips/dev/320767.wav",
+   "bytes": 1397988,
+   "sha256": "a8c276c982aeeb1043347b5a48e18378fee74078c1692d6ebebb9c0a6c545d3b",
+   "role": "siren",
+   "source": "FSD50K",
+   "freesound_id": 320767,
+   "uploader": "wittte",
+   "licence": "CC-BY-3.0",
+   "title": "NYC Ambience.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 698955,
+   "lufs": -14.4,
+   "peak_db": -0.19,
+   "gain_db": -9.6,
+   "stream": true
+  },
+  {
+   "id": "fsd-393662-siren",
+   "path": "fsd50k/clips/dev/393662.wav",
+   "bytes": 459426,
+   "sha256": "111783c640cd584ca078bff92cb17359d1c702ead1ed74da2e8c3bf884e3ba31",
+   "role": "siren",
+   "source": "FSD50K",
+   "freesound_id": 393662,
+   "uploader": "chripei",
+   "licence": "CC0-1.0",
+   "title": "WaHi Siren Blast short.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 229674,
+   "lufs": -12.99,
+   "peak_db": -0.64,
+   "gain_db": -11.01,
+   "stream": false
+  },
+  {
+   "id": "fsd-393667-siren",
+   "path": "fsd50k/clips/dev/393667.wav",
+   "bytes": 1417956,
+   "sha256": "424fc855ee3872c20817b82702954e06889dcf53874185b9568be2925516ff59",
+   "role": "siren",
+   "source": "FSD50K",
+   "freesound_id": 393667,
+   "uploader": "chripei",
+   "licence": "CC0-1.0",
+   "title": "WaHi siren chirps.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 708939,
+   "lufs": -19.5,
+   "peak_db": -0.75,
+   "gain_db": -4.5,
+   "stream": true
+  },
+  {
+   "id": "fsd-58014-siren",
+   "path": "fsd50k/clips/eval/58014.wav",
+   "bytes": 1421948,
+   "sha256": "d25b52a95c11f2457cf41cefa57ea512b134d3ef1cdd38128f3530fc361773d9",
+   "role": "siren",
+   "source": "FSD50K",
+   "freesound_id": 58014,
+   "uploader": "guitarguy1985",
+   "licence": "CC0-1.0",
+   "title": "wail.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 710935,
+   "lufs": -6.78,
+   "peak_db": -3.58,
+   "gain_db": -17.22,
+   "stream": true
+  },
+  {
+   "id": "fsd-58015-siren",
+   "path": "fsd50k/clips/eval/58015.wav",
+   "bytes": 462190,
+   "sha256": "0f60987cfa3ad0cc274f85492bb57cc9368be530abcb3b98c18f3786d6cd3735",
+   "role": "siren",
+   "source": "FSD50K",
+   "freesound_id": 58015,
+   "uploader": "guitarguy1985",
+   "licence": "CC0-1.0",
+   "title": "yelp.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 231056,
+   "lufs": -5.8,
+   "peak_db": -2.2,
+   "gain_db": -18,
+   "stream": false
+  },
+  {
+   "id": "fsd-70936-siren",
+   "path": "fsd50k/clips/eval/70936.wav",
+   "bytes": 2424814,
+   "sha256": "368a45a7cc9ebf9719c5e01856fb75b4005745efad709174d5e0dbacc80fa61a",
+   "role": "siren",
+   "source": "FSD50K",
+   "freesound_id": 70936,
+   "uploader": "guitarguy1985",
+   "licence": "CC0-1.0",
+   "title": "police.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1212368,
+   "lufs": -14.78,
+   "peak_db": -5.24,
+   "gain_db": -9.22,
+   "stream": true
+  },
+  {
+   "id": "fsd-70938-siren",
+   "path": "fsd50k/clips/eval/70938.wav",
+   "bytes": 380694,
+   "sha256": "44668741b53e7c805e8dc5de2a6b9d5e53f1c9416b859813686f29de05ce1641",
+   "role": "siren",
+   "source": "FSD50K",
+   "freesound_id": 70938,
+   "uploader": "guitarguy1985",
+   "licence": "CC0-1.0",
+   "title": "police2.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 190308,
+   "lufs": -15.81,
+   "peak_db": -5.08,
+   "gain_db": -8.19,
+   "stream": false
+  },
+  {
+   "id": "fsd-70939-siren",
+   "path": "fsd50k/clips/eval/70939.wav",
+   "bytes": 2393738,
+   "sha256": "692b4cdf422c1a4ec591cbc7baf1930aeb294b3f8434a074eab1d265fa7041e0",
+   "role": "siren",
+   "source": "FSD50K",
+   "freesound_id": 70939,
+   "uploader": "guitarguy1985",
+   "licence": "CC0-1.0",
+   "title": "police3.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1196830,
+   "lufs": -12.49,
+   "peak_db": -5.27,
+   "gain_db": -11.51,
+   "stream": true
+  },
+  {
+   "id": "fsd-116664-siren",
+   "path": "fsd50k/clips/dev/116664.wav",
+   "bytes": 1774670,
+   "sha256": "58e2d8708cba3a78fc59dda325a646722a0f22a36dc538a6491ad6869ea57819",
+   "role": "siren",
+   "source": "FSD50K",
+   "freesound_id": 116664,
+   "uploader": "fenniless",
+   "licence": "CC-BY-3.0",
+   "title": "newark.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 887296,
+   "lufs": -37.58,
+   "peak_db": -19.98,
+   "gain_db": 13.58,
+   "stream": true
+  },
+  {
+   "id": "fsd-159743-siren",
+   "path": "fsd50k/clips/dev/159743.wav",
+   "bytes": 1797636,
+   "sha256": "661b761989e75a2aed2da5f1d3217fe406030ea4628f06329119e46cd629960d",
+   "role": "siren",
+   "source": "FSD50K",
+   "freesound_id": 159743,
+   "uploader": "conleec",
+   "licence": "CC0-1.0",
+   "title": "AMB_Siren_Police_Misc_Stationary_001.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 898779,
+   "lufs": -26.69,
+   "peak_db": -16.17,
+   "gain_db": 2.69,
+   "stream": true
+  },
+  {
+   "id": "fsd-159745-siren",
+   "path": "fsd50k/clips/dev/159745.wav",
+   "bytes": 1816394,
+   "sha256": "6e43ea64c19f2408a5ad87f2940c98826eb94b484d278e229e9c32d07ffeb780",
+   "role": "siren",
+   "source": "FSD50K",
+   "freesound_id": 159745,
+   "uploader": "conleec",
+   "licence": "CC0-1.0",
+   "title": "MISC_Police_Siren_Start_Away_002.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 908158,
+   "lufs": -14.71,
+   "peak_db": -0.92,
+   "gain_db": -9.29,
+   "stream": true
+  },
+  {
+   "id": "fsd-99630-foghorn",
+   "path": "fsd50k/clips/dev/99630.wav",
+   "bytes": 705678,
+   "sha256": "23d7dcbfb77ded868e876197879fdca6c8b1cd40eb7b09dbce990b1736d280b2",
+   "role": "foghorn",
+   "source": "FSD50K",
+   "freesound_id": 99630,
+   "uploader": "tec studios",
+   "licence": "CC0-1.0",
+   "title": "foghorn.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 352800,
+   "lufs": -11.4,
+   "peak_db": -3.28,
+   "gain_db": -12.6,
+   "stream": false
+  },
+  {
+   "id": "fsd-371290-foghorn",
+   "path": "fsd50k/clips/dev/371290.wav",
+   "bytes": 1612878,
+   "sha256": "b2e14574ab062e2ab771f24058e6502d82d0811a88594bdfce1bbd9947ee85c2",
+   "role": "foghorn",
+   "source": "FSD50K",
+   "freesound_id": 371290,
+   "uploader": "mlppeace",
+   "licence": "CC0-1.0",
+   "title": "foghorn.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 806400,
+   "lufs": -8.05,
+   "peak_db": 0,
+   "gain_db": -15.95,
+   "stream": true
+  },
+  {
+   "id": "fsd-234681-foghorn",
+   "path": "fsd50k/clips/eval/234681.wav",
+   "bytes": 830900,
+   "sha256": "b9adb58fd98a2881be01aa217680fac77120c5a3a12f7c7a3d6f060535b97ff9",
+   "role": "foghorn",
+   "source": "FSD50K",
+   "freesound_id": 234681,
+   "uploader": "odilonmarcenaro",
+   "licence": "CC-BY-3.0",
+   "title": "nash point foghorn",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 415411,
+   "lufs": -14.82,
+   "peak_db": -4.29,
+   "gain_db": -9.18,
+   "stream": true
+  },
+  {
+   "id": "fsd-37915-foghorn",
+   "path": "fsd50k/clips/dev/37915.wav",
+   "bytes": 417558,
+   "sha256": "8315c9e4dd07076eff334618242d7c9c60de5a1adf847a3be05b119fa73a6f3e",
+   "role": "foghorn",
+   "source": "FSD50K",
+   "freesound_id": 37915,
+   "uploader": "kathol",
+   "licence": "CC0-1.0",
+   "title": "fog horn sample(wet).wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 208740,
+   "lufs": -15.92,
+   "peak_db": -5.13,
+   "gain_db": -8.08,
+   "stream": false
+  },
+  {
+   "id": "fsd-128093-foghorn",
+   "path": "fsd50k/clips/dev/128093.wav",
+   "bytes": 2519234,
+   "sha256": "b7d0e3405f5ae88a93428ea0b11488b605536bec42d4e2ef9cbf467544e18269",
+   "role": "foghorn",
+   "source": "FSD50K",
+   "freesound_id": 128093,
+   "uploader": "shepardr",
+   "licence": "CC0-1.0",
+   "title": "Ocean and Fog Horn.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1259578,
+   "lufs": -25.79,
+   "peak_db": -8.96,
+   "gain_db": 1.79,
+   "stream": true
+  },
+  {
+   "id": "fsd-69663-ship_horn",
+   "path": "fsd50k/clips/dev/69663.wav",
+   "bytes": 1202766,
+   "sha256": "2ca48b31961398c3b4e12d53441db4dd94b9a2fc3467e0b6bec02ab8d59c157b",
+   "role": "ship_horn",
+   "source": "FSD50K",
+   "freesound_id": 69663,
+   "uploader": "schaarsen",
+   "licence": "CC-BY-3.0",
+   "title": "sfx nebelhorn.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 601344,
+   "lufs": -14.98,
+   "peak_db": -3.9,
+   "gain_db": -9.02,
+   "stream": true
+  },
+  {
+   "id": "fsd-325542-ship_horn",
+   "path": "fsd50k/clips/dev/325542.wav",
+   "bytes": 2218758,
+   "sha256": "f8aa9f3a3a7fa168dec8540e27e602b89e344f3a04abe5cbc3261959237f72af",
+   "role": "ship_horn",
+   "source": "FSD50K",
+   "freesound_id": 325542,
+   "uploader": "YleArkisto",
+   "licence": "CC-BY-3.0",
+   "title": "Sumusireeni, laiva / Big boat in the harbour, foghorn signal at some distance 3x, siren",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1109340,
+   "lufs": -15.07,
+   "peak_db": -1.76,
+   "gain_db": -8.93,
+   "stream": true
+  },
+  {
+   "id": "fsd-352374-ship_horn",
+   "path": "fsd50k/clips/eval/352374.wav",
+   "bytes": 2469678,
+   "sha256": "70e67ba8b3e6fad21e3b0bb87612e3b66ff0cb735a80528e94cf9bc4e35b59b5",
+   "role": "ship_horn",
+   "source": "FSD50K",
+   "freesound_id": 352374,
+   "uploader": "Kinoton",
+   "licence": "CC0-1.0",
+   "title": "Cruise Ship Horn, 3x",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1234800,
+   "lufs": -16.43,
+   "peak_db": -3.96,
+   "gain_db": -7.57,
+   "stream": true
+  },
+  {
+   "id": "fsd-420716-ship_horn",
+   "path": "fsd50k/clips/dev/420716.wav",
+   "bytes": 536656,
+   "sha256": "57ef5ae11f9b15aff2cced62945d099b4e901788971c75cee48ae9e0b189f402",
+   "role": "ship_horn",
+   "source": "FSD50K",
+   "freesound_id": 420716,
+   "uploader": "tierrafilm@gmail.com",
+   "licence": "CC0-1.0",
+   "title": "ship horn very close",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 268289,
+   "lufs": -15.16,
+   "peak_db": -4.62,
+   "gain_db": -8.84,
+   "stream": false
+  },
+  {
+   "id": "fsd-237471-streetcar",
+   "path": "fsd50k/clips/eval/237471.wav",
+   "bytes": 1689822,
+   "sha256": "d9a3889256fbbe62c7f214ebab8f2914fc22950ae93be07af13b0f34f641a20b",
+   "role": "streetcar",
+   "source": "FSD50K",
+   "freesound_id": 237471,
+   "uploader": "mhtaylor67",
+   "licence": "CC0-1.0",
+   "title": "Tram Passing on Market Street, San Francisco",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 844872,
+   "lufs": -22.25,
+   "peak_db": -3.17,
+   "gain_db": -1.75,
+   "stream": true
+  },
+  {
+   "id": "fsd-237501-streetcar",
+   "path": "fsd50k/clips/eval/237501.wav",
+   "bytes": 1884814,
+   "sha256": "d50de2d37eb19954e470170186243dcd69f7c42e39e3c14975e60c87cbd2bd1d",
+   "role": "streetcar",
+   "source": "FSD50K",
+   "freesound_id": 237501,
+   "uploader": "mhtaylor67",
+   "licence": "CC0-1.0",
+   "title": "Tram on San Francisco's Market Street",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 942368,
+   "lufs": -27.1,
+   "peak_db": -0.1,
+   "gain_db": -0.9,
+   "stream": true
+  },
+  {
+   "id": "fsd-341569-streetcar",
+   "path": "fsd50k/clips/eval/341569.wav",
+   "bytes": 1952698,
+   "sha256": "ce6235220c69aa1765c107fa955057a43d96f143a1199e6ab9b760facfa35b97",
+   "role": "streetcar",
+   "source": "FSD50K",
+   "freesound_id": 341569,
+   "uploader": "dggrunzweig",
+   "licence": "CC0-1.0",
+   "title": "Street_Car.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 976310,
+   "lufs": -25.48,
+   "peak_db": -4.33,
+   "gain_db": 1.48,
+   "stream": true
+  },
+  {
+   "id": "fsd-38731-subway",
+   "path": "fsd50k/clips/eval/38731.wav",
+   "bytes": 1925200,
+   "sha256": "33c57d0d1cf11ec876a57c5cf08c7c85969a124f3e38ebb2e33715b7b7bd7c56",
+   "role": "subway",
+   "source": "FSD50K",
+   "freesound_id": 38731,
+   "uploader": "metamorphmuses",
+   "licence": "CC-BY-3.0",
+   "title": "bart arrival.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 962561,
+   "lufs": -17.64,
+   "peak_db": -0.6,
+   "gain_db": -6.36,
+   "stream": true
+  },
+  {
+   "id": "fsd-38732-subway",
+   "path": "fsd50k/clips/eval/38732.wav",
+   "bytes": 1925200,
+   "sha256": "84a46a6fdac1283d12f24862bb7e9aed3722ea7eb53109f8e71b1f392e05d3f1",
+   "role": "subway",
+   "source": "FSD50K",
+   "freesound_id": 38732,
+   "uploader": "metamorphmuses",
+   "licence": "CC-BY-3.0",
+   "title": "bart departure.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 962561,
+   "lufs": -17.17,
+   "peak_db": -0.21,
+   "gain_db": -6.83,
+   "stream": true
+  },
+  {
+   "id": "fsd-85110-foot_concrete",
+   "path": "fsd50k/clips/dev/85110.wav",
+   "bytes": 805638,
+   "sha256": "2cabf9de72d8728f89e33e6b87869e138ec16bbfed03626d25e3fcd76b668858",
+   "role": "foot_concrete",
+   "source": "FSD50K",
+   "freesound_id": 85110,
+   "uploader": "cmusounddesign",
+   "licence": "CC-BY-3.0",
+   "title": "JK Clogs on Concrete.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 402780,
+   "lufs": -31.61,
+   "peak_db": -0.62,
+   "gain_db": -5.38,
+   "stream": false,
+   "slices": [
+    [
+     14476,
+     7700
+    ],
+    [
+     42636,
+     7700
+    ],
+    [
+     63316,
+     7700
+    ],
+    [
+     71236,
+     15434
+    ],
+    [
+     92136,
+     15434
+    ],
+    [
+     138996,
+     15434
+    ],
+    [
+     163416,
+     7700
+    ],
+    [
+     187616,
+     15434
+    ],
+    [
+     207636,
+     7700
+    ],
+    [
+     235136,
+     15434
+    ],
+    [
+     258456,
+     15434
+    ]
+   ],
+   "decode_frames": 273906
+  },
+  {
+   "id": "fsd-270257-foot_concrete",
+   "path": "fsd50k/clips/dev/270257.wav",
+   "bytes": 307410,
+   "sha256": "545a5492affb92a98d758dc6c7cbdc179c002e25cc8d43a6da87f3b4972c6dcb",
+   "role": "foot_concrete",
+   "source": "FSD50K",
+   "freesound_id": 270257,
+   "uploader": "Jagadamba",
+   "licence": "CC-BY-3.0",
+   "title": "Footsteps 02_4",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 153666,
+   "lufs": -26.1,
+   "peak_db": -2.02,
+   "gain_db": -3.98,
+   "stream": false,
+   "slices": [
+    [
+     616,
+     14740
+    ],
+    [
+     24816,
+     11660
+    ],
+    [
+     46156,
+     15434
+    ],
+    [
+     64856,
+     15400
+    ],
+    [
+     80476,
+     15180
+    ],
+    [
+     95876,
+     7700
+    ],
+    [
+     103796,
+     15434
+    ]
+   ],
+   "decode_frames": 119246
+  },
+  {
+   "id": "fsd-418545-foot_concrete",
+   "path": "fsd50k/clips/eval/418545.wav",
+   "bytes": 1109988,
+   "sha256": "c3b7de38e61d8cd557ae004c10216b17646b3e0e538aef58d54ae4c85a2f99f3",
+   "role": "foot_concrete",
+   "source": "FSD50K",
+   "freesound_id": 418545,
+   "uploader": "14FPanskaBubik_Lukas",
+   "licence": "CC0-1.0",
+   "title": "Running on concrete.WAV",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 554955,
+   "lufs": -41.13,
+   "peak_db": -7.93,
+   "gain_db": 1.93,
+   "stream": false,
+   "slices": [
+    [
+     43956,
+     7700
+    ],
+    [
+     61776,
+     10560
+    ],
+    [
+     80476,
+     7700
+    ],
+    [
+     97416,
+     7700
+    ],
+    [
+     105336,
+     7700
+    ],
+    [
+     146916,
+     7700
+    ],
+    [
+     170676,
+     7700
+    ],
+    [
+     218856,
+     8360
+    ],
+    [
+     241296,
+     10780
+    ],
+    [
+     252296,
+     12100
+    ],
+    [
+     264616,
+     7700
+    ],
+    [
+     280456,
+     9020
+    ],
+    [
+     289696,
+     11220
+    ],
+    [
+     301136,
+     7700
+    ],
+    [
+     325996,
+     15180
+    ],
+    [
+     341396,
+     8360
+    ]
+   ],
+   "decode_frames": 349772
+  },
+  {
+   "id": "fsd-270251-foot_concrete",
+   "path": "fsd50k/clips/dev/270251.wav",
+   "bytes": 474380,
+   "sha256": "f262b5d3ca2d5e1034477c2656fc694a807e94a35016ec8bd23374eb77d37cba",
+   "role": "foot_concrete",
+   "source": "FSD50K",
+   "freesound_id": 270251,
+   "uploader": "Jagadamba",
+   "licence": "CC-BY-3.0",
+   "title": "Footsteps 01_2",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 237151,
+   "lufs": -28.23,
+   "peak_db": -4.74,
+   "gain_db": -1.26,
+   "stream": false,
+   "slices": [
+    [
+     616,
+     15434
+    ],
+    [
+     24156,
+     12540
+    ],
+    [
+     47696,
+     8580
+    ],
+    [
+     66616,
+     7700
+    ],
+    [
+     74536,
+     15434
+    ],
+    [
+     92136,
+     7700
+    ],
+    [
+     100056,
+     14300
+    ],
+    [
+     114576,
+     7700
+    ],
+    [
+     122496,
+     11660
+    ]
+   ],
+   "decode_frames": 134172
+  },
+  {
+   "id": "fsd-218292-foot_concrete",
+   "path": "fsd50k/clips/dev/218292.wav",
+   "bytes": 1012710,
+   "sha256": "6ae23eca2fa184c5360821d6e2deb9846de5147624fe79bdf4f12193ae8f24f2",
+   "role": "foot_concrete",
+   "source": "FSD50K",
+   "freesound_id": 218292,
+   "uploader": "SpliceSound",
+   "licence": "CC0-1.0",
+   "title": "01-17 Footsteps, Tile, Female Heels, Running V1.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 506316,
+   "lufs": -32.01,
+   "peak_db": -3.85,
+   "gain_db": -2.15,
+   "stream": false,
+   "slices": [
+    [
+     49236,
+     15434
+    ],
+    [
+     65076,
+     14300
+    ],
+    [
+     79596,
+     14960
+    ],
+    [
+     94776,
+     14300
+    ],
+    [
+     109296,
+     15434
+    ],
+    [
+     125356,
+     14300
+    ],
+    [
+     139876,
+     14740
+    ],
+    [
+     170236,
+     15434
+    ],
+    [
+     200156,
+     15180
+    ],
+    [
+     215556,
+     15400
+    ],
+    [
+     231176,
+     15434
+    ],
+    [
+     247676,
+     13860
+    ],
+    [
+     261756,
+     10780
+    ],
+    [
+     272756,
+     7700
+    ],
+    [
+     292556,
+     14520
+    ],
+    [
+     321156,
+     15400
+    ]
+   ],
+   "decode_frames": 336572
+  },
+  {
+   "id": "fsd-348749-foot_concrete",
+   "path": "fsd50k/clips/dev/348749.wav",
+   "bytes": 120552,
+   "sha256": "9d6e24cc8fd5efa7ff4fa84d7f6278814e541524f35f64e87ee5ead3ca34074a",
+   "role": "foot_concrete",
+   "source": "FSD50K",
+   "freesound_id": 348749,
+   "uploader": "scriotxstudios",
+   "licence": "CC-BY-3.0",
+   "title": "Running in High-Heels on Tile",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 60237,
+   "lufs": -32.36,
+   "peak_db": -4.05,
+   "gain_db": -1.95,
+   "stream": false,
+   "slices": [
+    [
+     3036,
+     15400
+    ],
+    [
+     18656,
+     14300
+    ],
+    [
+     33176,
+     14960
+    ],
+    [
+     48356,
+     11881
+    ]
+   ],
+   "decode_frames": 60237
+  },
+  {
+   "id": "fsd-218291-foot_concrete",
+   "path": "fsd50k/clips/dev/218291.wav",
+   "bytes": 1599820,
+   "sha256": "d6ff296e90cda4b40bc424b6700efe8c73b70debb77d5d55e6b5ec1ddee05216",
+   "role": "foot_concrete",
+   "source": "FSD50K",
+   "freesound_id": 218291,
+   "uploader": "SpliceSound",
+   "licence": "CC0-1.0",
+   "title": "01-18 Footsteps, Tile, Female Heels, Running V2.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 799871,
+   "lufs": -31.09,
+   "peak_db": -2.59,
+   "gain_db": -3.41,
+   "stream": false,
+   "slices": [
+    [
+     19536,
+     13420
+    ],
+    [
+     33176,
+     11660
+    ],
+    [
+     45056,
+     12100
+    ],
+    [
+     57376,
+     12760
+    ],
+    [
+     70356,
+     12540
+    ],
+    [
+     83116,
+     12100
+    ],
+    [
+     95436,
+     11660
+    ],
+    [
+     107316,
+     13200
+    ],
+    [
+     120736,
+     11880
+    ],
+    [
+     132836,
+     12980
+    ],
+    [
+     146036,
+     11440
+    ],
+    [
+     157696,
+     13640
+    ],
+    [
+     171556,
+     11880
+    ],
+    [
+     183656,
+     12760
+    ],
+    [
+     196636,
+     12760
+    ],
+    [
+     209616,
+     12320
+    ]
+   ],
+   "decode_frames": 221952
+  },
+  {
+   "id": "fsd-170505-foot_concrete",
+   "path": "fsd50k/clips/dev/170505.wav",
+   "bytes": 1088322,
+   "sha256": "dd48a784d556fcef05b7e18efae523872c97ba79a4aa6205a9003ca5d1cf3485",
+   "role": "foot_concrete",
+   "source": "FSD50K",
+   "freesound_id": 170505,
+   "uploader": "SpliceSound",
+   "licence": "CC0-1.0",
+   "title": "Footsteps, Tile, Male Sneakers, Fast Pace.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 544122,
+   "lufs": -41.45,
+   "peak_db": -6.51,
+   "gain_db": 0.51,
+   "stream": false,
+   "slices": [
+    [
+     4356,
+     7700
+    ],
+    [
+     20196,
+     7920
+    ],
+    [
+     59136,
+     10560
+    ],
+    [
+     69916,
+     7700
+    ],
+    [
+     93016,
+     11660
+    ],
+    [
+     104896,
+     7700
+    ],
+    [
+     120736,
+     7700
+    ],
+    [
+     144716,
+     15434
+    ],
+    [
+     162756,
+     12760
+    ],
+    [
+     175736,
+     7700
+    ],
+    [
+     192676,
+     7700
+    ],
+    [
+     214676,
+     15434
+    ],
+    [
+     231836,
+     15434
+    ],
+    [
+     261096,
+     7700
+    ],
+    [
+     278476,
+     7700
+    ],
+    [
+     296736,
+     7700
+    ]
+   ],
+   "decode_frames": 304452
+  },
+  {
+   "id": "fsd-243794-foot_concrete",
+   "path": "fsd50k/clips/dev/243794.wav",
+   "bytes": 1258708,
+   "sha256": "6499f963ec3acbb31690ecb553075022df2aa045d6c66497c9623ea3c33f5cb3",
+   "role": "foot_concrete",
+   "source": "FSD50K",
+   "freesound_id": 243794,
+   "uploader": "Iberian_Runa",
+   "licence": "CC-BY-3.0",
+   "title": "Footsteps of soldier on ground.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 629315,
+   "lufs": -23.09,
+   "peak_db": -1.87,
+   "gain_db": -4.13,
+   "stream": false,
+   "slices": [
+    [
+     93896,
+     7920
+    ],
+    [
+     245476,
+     9680
+    ],
+    [
+     267476,
+     7700
+    ],
+    [
+     289696,
+     7700
+    ],
+    [
+     311916,
+     11000
+    ],
+    [
+     334356,
+     7700
+    ],
+    [
+     356796,
+     7700
+    ],
+    [
+     379236,
+     8140
+    ],
+    [
+     401236,
+     12540
+    ],
+    [
+     423016,
+     7700
+    ],
+    [
+     445676,
+     7700
+    ],
+    [
+     465256,
+     7700
+    ],
+    [
+     473176,
+     7700
+    ],
+    [
+     481096,
+     10340
+    ],
+    [
+     491656,
+     7700
+    ],
+    [
+     499576,
+     8140
+    ]
+   ],
+   "decode_frames": 507732
+  },
+  {
+   "id": "fsd-348751-foot_concrete",
+   "path": "fsd50k/clips/dev/348751.wav",
+   "bytes": 211934,
+   "sha256": "e041978bc97a5f8341fcbe3df98dbbfc56f6f8b79671004e3b1effbc48cc4146",
+   "role": "foot_concrete",
+   "source": "FSD50K",
+   "freesound_id": 348751,
+   "uploader": "scriotxstudios",
+   "licence": "CC-BY-3.0",
+   "title": "Human Run in Sneaks",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 105928,
+   "lufs": -42.08,
+   "peak_db": -8.26,
+   "gain_db": 2.26,
+   "stream": false,
+   "slices": [
+    [
+     4796,
+     7700
+    ],
+    [
+     20636,
+     15434
+    ],
+    [
+     59136,
+     10560
+    ],
+    [
+     69916,
+     7700
+    ],
+    [
+     93016,
+     12912
+    ]
+   ],
+   "decode_frames": 105928
+  },
+  {
+   "id": "fsd-418545-foot_asphalt",
+   "path": "fsd50k/clips/eval/418545.wav",
+   "bytes": 1109988,
+   "sha256": "c3b7de38e61d8cd557ae004c10216b17646b3e0e538aef58d54ae4c85a2f99f3",
+   "role": "foot_asphalt",
+   "source": "FSD50K",
+   "freesound_id": 418545,
+   "uploader": "14FPanskaBubik_Lukas",
+   "licence": "CC0-1.0",
+   "title": "Running on concrete.WAV",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 554955,
+   "lufs": -41.13,
+   "peak_db": -7.93,
+   "gain_db": 1.93,
+   "stream": false,
+   "slices": [
+    [
+     43956,
+     7700
+    ],
+    [
+     61776,
+     10560
+    ],
+    [
+     80476,
+     7700
+    ],
+    [
+     97416,
+     7700
+    ],
+    [
+     105336,
+     7700
+    ],
+    [
+     146916,
+     7700
+    ],
+    [
+     170676,
+     7700
+    ],
+    [
+     218856,
+     8360
+    ],
+    [
+     241296,
+     10780
+    ],
+    [
+     252296,
+     12100
+    ],
+    [
+     264616,
+     7700
+    ],
+    [
+     280456,
+     9020
+    ],
+    [
+     289696,
+     11220
+    ],
+    [
+     301136,
+     7700
+    ],
+    [
+     325996,
+     15180
+    ],
+    [
+     341396,
+     8360
+    ]
+   ],
+   "decode_frames": 349772
+  },
+  {
+   "id": "fsd-420400-foot_asphalt",
+   "path": "fsd50k/clips/dev/420400.wav",
+   "bytes": 703196,
+   "sha256": "475eddf5904e2f31cbdef8acb3d5ed743c6feac5caa702660bb19a8b9293be49",
+   "role": "foot_asphalt",
+   "source": "FSD50K",
+   "freesound_id": 420400,
+   "uploader": "Magdaadga",
+   "licence": "CC0-1.0",
+   "title": "Run along the road.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 351559,
+   "lufs": -40.19,
+   "peak_db": -6.59,
+   "gain_db": 0.59,
+   "stream": false,
+   "slices": [
+    [
+     94776,
+     14960
+    ],
+    [
+     138116,
+     11000
+    ],
+    [
+     149336,
+     15434
+    ],
+    [
+     166056,
+     11880
+    ],
+    [
+     178156,
+     15434
+    ],
+    [
+     223916,
+     12760
+    ],
+    [
+     236896,
+     9240
+    ],
+    [
+     254276,
+     15434
+    ]
+   ],
+   "decode_frames": 269726
+  },
+  {
+   "id": "fsd-316922-foot_asphalt",
+   "path": "fsd50k/clips/dev/316922.wav",
+   "bytes": 218108,
+   "sha256": "7bc50a587460ec11646ef58bf02f1c299af26f05ce8f0826b696e3c6a01459f6",
+   "role": "foot_asphalt",
+   "source": "FSD50K",
+   "freesound_id": 316922,
+   "uploader": "Rudmer_Rotteveel",
+   "licence": "CC0-1.0",
+   "title": "Footsteps Running Away Fading 2",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 109015,
+   "lufs": -34.68,
+   "peak_db": -4.89,
+   "gain_db": -1.11,
+   "stream": false,
+   "slices": [
+    [
+     1716,
+     7700
+    ],
+    [
+     9636,
+     8580
+    ],
+    [
+     26356,
+     7700
+    ],
+    [
+     34276,
+     12760
+    ],
+    [
+     47256,
+     8140
+    ]
+   ],
+   "decode_frames": 55412
+  },
+  {
+   "id": "fsd-316924-foot_asphalt",
+   "path": "fsd50k/clips/dev/316924.wav",
+   "bytes": 226576,
+   "sha256": "fa68998ffe1007c8531b36ac117f4b9897e45e4d840805a5f742ddbb5662f2eb",
+   "role": "foot_asphalt",
+   "source": "FSD50K",
+   "freesound_id": 316924,
+   "uploader": "Rudmer_Rotteveel",
+   "licence": "CC0-1.0",
+   "title": "Footsteps Running Away Fading",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 113249,
+   "lufs": -40.84,
+   "peak_db": -9.82,
+   "gain_db": 3.82,
+   "stream": false,
+   "slices": [
+    [
+     1716,
+     7920
+    ],
+    [
+     9856,
+     12100
+    ],
+    [
+     22176,
+     12760
+    ],
+    [
+     44396,
+     10560
+    ],
+    [
+     73876,
+     15434
+    ]
+   ],
+   "decode_frames": 89326
+  },
+  {
+   "id": "fsd-174936-foot_asphalt",
+   "path": "fsd50k/clips/eval/174936.wav",
+   "bytes": 1812060,
+   "sha256": "34f74ea5feb40613f89bff36e2fe248dc6225c8b406898647ca2f95c49965879",
+   "role": "foot_asphalt",
+   "source": "FSD50K",
+   "freesound_id": 174936,
+   "uploader": "ABouch",
+   "licence": "CC0-1.0",
+   "title": "running on gravel.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 905991,
+   "lufs": -28.82,
+   "peak_db": 0,
+   "gain_db": -6,
+   "stream": false,
+   "slices": [
+    [
+     14696,
+     7700
+    ],
+    [
+     44396,
+     7700
+    ],
+    [
+     63316,
+     7700
+    ],
+    [
+     71236,
+     7700
+    ],
+    [
+     87076,
+     7700
+    ],
+    [
+     103576,
+     7700
+    ],
+    [
+     119636,
+     10560
+    ],
+    [
+     130416,
+     9900
+    ],
+    [
+     150216,
+     7700
+    ],
+    [
+     166056,
+     13640
+    ],
+    [
+     179916,
+     8140
+    ],
+    [
+     188276,
+     7700
+    ],
+    [
+     235136,
+     13420
+    ],
+    [
+     248776,
+     11440
+    ],
+    [
+     260436,
+     7700
+    ],
+    [
+     268356,
+     7700
+    ]
+   ],
+   "decode_frames": 276072
+  },
+  {
+   "id": "fsd-364443-foot_asphalt",
+   "path": "fsd50k/clips/dev/364443.wav",
+   "bytes": 876026,
+   "sha256": "2fe1c6d22da939fa4cce8621e6684c12a13aa9adb6720e8853a130b617dcd014",
+   "role": "foot_asphalt",
+   "source": "FSD50K",
+   "freesound_id": 364443,
+   "uploader": "Samusasi",
+   "licence": "CC-BY-3.0",
+   "title": "Caminata_Lenta_Individuo_s.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 437974,
+   "lufs": -32.8,
+   "peak_db": -8.5,
+   "gain_db": 2.5,
+   "stream": false,
+   "slices": [
+    [
+     23936,
+     10560
+    ],
+    [
+     73216,
+     7920
+    ],
+    [
+     120076,
+     10340
+    ],
+    [
+     173096,
+     13860
+    ],
+    [
+     268576,
+     7700
+    ],
+    [
+     314996,
+     7700
+    ],
+    [
+     355916,
+     7700
+    ]
+   ],
+   "decode_frames": 363632
+  },
+  {
+   "id": "fsd-243794-foot_asphalt",
+   "path": "fsd50k/clips/dev/243794.wav",
+   "bytes": 1258708,
+   "sha256": "6499f963ec3acbb31690ecb553075022df2aa045d6c66497c9623ea3c33f5cb3",
+   "role": "foot_asphalt",
+   "source": "FSD50K",
+   "freesound_id": 243794,
+   "uploader": "Iberian_Runa",
+   "licence": "CC-BY-3.0",
+   "title": "Footsteps of soldier on ground.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 629315,
+   "lufs": -23.09,
+   "peak_db": -1.87,
+   "gain_db": -4.13,
+   "stream": false,
+   "slices": [
+    [
+     93896,
+     7920
+    ],
+    [
+     245476,
+     9680
+    ],
+    [
+     267476,
+     7700
+    ],
+    [
+     289696,
+     7700
+    ],
+    [
+     311916,
+     11000
+    ],
+    [
+     334356,
+     7700
+    ],
+    [
+     356796,
+     7700
+    ],
+    [
+     379236,
+     8140
+    ],
+    [
+     401236,
+     12540
+    ],
+    [
+     423016,
+     7700
+    ],
+    [
+     445676,
+     7700
+    ],
+    [
+     465256,
+     7700
+    ],
+    [
+     473176,
+     7700
+    ],
+    [
+     481096,
+     10340
+    ],
+    [
+     491656,
+     7700
+    ],
+    [
+     499576,
+     8140
+    ]
+   ],
+   "decode_frames": 507732
+  },
+  {
+   "id": "fsd-430708-foot_asphalt",
+   "path": "fsd50k/clips/dev/430708.wav",
+   "bytes": 520472,
+   "sha256": "990a27001778e55eb57d64db598d928b3f1014cb8250814ff97482abdb651ef7",
+   "role": "foot_asphalt",
+   "source": "FSD50K",
+   "freesound_id": 430708,
+   "uploader": "Juandamb",
+   "licence": "CC0-1.0",
+   "title": "Running",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 260197,
+   "lufs": -39.91,
+   "peak_db": -11.8,
+   "gain_db": 5.8,
+   "stream": false,
+   "slices": [
+    [
+     8316,
+     12320
+    ],
+    [
+     20856,
+     11880
+    ],
+    [
+     32956,
+     13420
+    ],
+    [
+     46596,
+     12980
+    ],
+    [
+     59796,
+     11880
+    ],
+    [
+     71896,
+     12540
+    ],
+    [
+     84656,
+     13420
+    ],
+    [
+     98296,
+     11440
+    ],
+    [
+     109956,
+     11660
+    ],
+    [
+     121836,
+     14080
+    ],
+    [
+     136136,
+     11660
+    ],
+    [
+     148016,
+     13200
+    ],
+    [
+     161436,
+     12320
+    ],
+    [
+     173976,
+     12540
+    ],
+    [
+     186736,
+     12540
+    ],
+    [
+     199496,
+     12320
+    ]
+   ],
+   "decode_frames": 211832
+  },
+  {
+   "id": "fsd-172364-foot_asphalt",
+   "path": "fsd50k/clips/eval/172364.wav",
+   "bytes": 2307928,
+   "sha256": "62954145f1e85f412c6c38043e6561b753bc10af07055fedb4df29419ac1bc11",
+   "role": "foot_asphalt",
+   "source": "FSD50K",
+   "freesound_id": 172364,
+   "uploader": "avakas",
+   "licence": "CC-BY-3.0",
+   "title": "Metal door closing, locking and leaving",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1153925,
+   "lufs": -41.4,
+   "peak_db": -8.02,
+   "gain_db": 2.02,
+   "stream": false,
+   "slices": [
+    [
+     146476,
+     7700
+    ],
+    [
+     285516,
+     15434
+    ],
+    [
+     427416,
+     15434
+    ],
+    [
+     597036,
+     10120
+    ],
+    [
+     633996,
+     15434
+    ],
+    [
+     656216,
+     15434
+    ],
+    [
+     849376,
+     15180
+    ],
+    [
+     878636,
+     15434
+    ],
+    [
+     914936,
+     7700
+    ],
+    [
+     930776,
+     8360
+    ],
+    [
+     947276,
+     7700
+    ]
+   ],
+   "decode_frames": 954992
+  },
+  {
+   "id": "fsd-153282-foot_asphalt",
+   "path": "fsd50k/clips/dev/153282.wav",
+   "bytes": 423132,
+   "sha256": "9feb0d73ac0fbde3c680176bd6cb37abbf409af836dfd3cbd6ecc9904d6eee29",
+   "role": "foot_asphalt",
+   "source": "FSD50K",
+   "freesound_id": 153282,
+   "uploader": "gerardcatala",
+   "licence": "CC0-1.0",
+   "title": "High-heeled shoes walking",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 211527,
+   "lufs": -22.82,
+   "peak_db": -0.2,
+   "gain_db": -5.8,
+   "stream": false,
+   "slices": [
+    [
+     16236,
+     7920
+    ],
+    [
+     24376,
+     8800
+    ],
+    [
+     33396,
+     8140
+    ],
+    [
+     41756,
+     8580
+    ],
+    [
+     50556,
+     7920
+    ],
+    [
+     58696,
+     7700
+    ],
+    [
+     66616,
+     7700
+    ],
+    [
+     74536,
+     7700
+    ],
+    [
+     82456,
+     9460
+    ],
+    [
+     92136,
+     11660
+    ],
+    [
+     104016,
+     7920
+    ],
+    [
+     112156,
+     9680
+    ],
+    [
+     122056,
+     7700
+    ],
+    [
+     129976,
+     7920
+    ],
+    [
+     138116,
+     7700
+    ],
+    [
+     146036,
+     10120
+    ]
+   ],
+   "decode_frames": 156172
+  },
+  {
+   "id": "fsd-85655-foot_wood",
+   "path": "fsd50k/clips/dev/85655.wav",
+   "bytes": 449358,
+   "sha256": "12fdb295b68c6fa4eae68a654a446e3ecac22ffcc1cc2847fff099579346995b",
+   "role": "foot_wood",
+   "source": "FSD50K",
+   "freesound_id": 85655,
+   "uploader": "CGEffex",
+   "licence": "CC-BY-3.0",
+   "title": "Walk_Wood_NormalSpeed.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 224640,
+   "lufs": -30.86,
+   "peak_db": 0,
+   "gain_db": -6,
+   "stream": false,
+   "slices": [
+    [
+     33396,
+     7700
+    ],
+    [
+     93456,
+     9460
+    ],
+    [
+     176396,
+     7700
+    ],
+    [
+     184316,
+     7920
+    ],
+    [
+     212696,
+     8140
+    ]
+   ],
+   "decode_frames": 220852
+  },
+  {
+   "id": "fsd-152785-foot_wood",
+   "path": "fsd50k/clips/dev/152785.wav",
+   "bytes": 973252,
+   "sha256": "2d5b5ebaa98c760c3ee72c8544e8a6e09bb734a6566799b7104656f6215bbbde",
+   "role": "foot_wood",
+   "source": "FSD50K",
+   "freesound_id": 152785,
+   "uploader": "D W",
+   "licence": "CC-BY-3.0",
+   "title": "Footsteps-Stairs-Wooden-Hollow-08.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 486587,
+   "lufs": -30.71,
+   "peak_db": -0.27,
+   "gain_db": -5.73,
+   "stream": false,
+   "slices": [
+    [
+     1056,
+     8140
+    ],
+    [
+     40876,
+     9020
+    ],
+    [
+     75636,
+     11000
+    ],
+    [
+     86856,
+     7700
+    ],
+    [
+     104236,
+     7700
+    ],
+    [
+     121836,
+     7700
+    ],
+    [
+     173316,
+     7700
+    ],
+    [
+     190036,
+     7700
+    ],
+    [
+     206316,
+     7700
+    ],
+    [
+     214236,
+     11220
+    ],
+    [
+     320056,
+     8360
+    ],
+    [
+     353936,
+     15434
+    ],
+    [
+     388256,
+     15434
+    ],
+    [
+     454476,
+     8360
+    ]
+   ],
+   "decode_frames": 462852
+  },
+  {
+   "id": "fsd-205749-foot_wood",
+   "path": "fsd50k/clips/dev/205749.wav",
+   "bytes": 794172,
+   "sha256": "26e17e7408ab876f4f59db39369aa40f756916867e6f76b19f1cf8abb138b33f",
+   "role": "foot_wood",
+   "source": "FSD50K",
+   "freesound_id": 205749,
+   "uploader": "Yuval",
+   "licence": "CC0-1.0",
+   "title": "footsteps staircase carpet",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 397047,
+   "lufs": -35.02,
+   "peak_db": -8.64,
+   "gain_db": 2.64,
+   "stream": false,
+   "slices": [
+    [
+     6996,
+     8360
+    ],
+    [
+     87076,
+     7700
+    ],
+    [
+     127776,
+     7700
+    ],
+    [
+     167156,
+     8360
+    ],
+    [
+     208956,
+     7700
+    ],
+    [
+     243716,
+     7700
+    ],
+    [
+     283976,
+     9460
+    ],
+    [
+     325556,
+     8580
+    ],
+    [
+     367356,
+     12100
+    ]
+   ],
+   "decode_frames": 379472
+  },
+  {
+   "id": "fsd-427683-foot_wood",
+   "path": "fsd50k/clips/eval/427683.wav",
+   "bytes": 754702,
+   "sha256": "48befe50e24c0df07a8f19fdcdb3e7f939b918514d5296424ba5e1457d863550",
+   "role": "foot_wood",
+   "source": "FSD50K",
+   "freesound_id": 427683,
+   "uploader": "efsdcnveoi",
+   "licence": "CC0-1.0",
+   "title": "02-Pasos tacon apresurado.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 377312,
+   "lufs": -28.42,
+   "peak_db": -0.17,
+   "gain_db": -5.83,
+   "stream": false,
+   "slices": [
+    [
+     19756,
+     15434
+    ],
+    [
+     36256,
+     7700
+    ],
+    [
+     52976,
+     15434
+    ],
+    [
+     69036,
+     15400
+    ],
+    [
+     84656,
+     15434
+    ],
+    [
+     100936,
+     7700
+    ],
+    [
+     117216,
+     15434
+    ],
+    [
+     133276,
+     15180
+    ],
+    [
+     148676,
+     14740
+    ],
+    [
+     163636,
+     7700
+    ],
+    [
+     179916,
+     7700
+    ],
+    [
+     195976,
+     15400
+    ],
+    [
+     211596,
+     15434
+    ],
+    [
+     228316,
+     15434
+    ],
+    [
+     244156,
+     15434
+    ],
+    [
+     260436,
+     15434
+    ]
+   ],
+   "decode_frames": 275886
+  },
+  {
+   "id": "fsd-369638-foot_wood",
+   "path": "fsd50k/clips/dev/369638.wav",
+   "bytes": 752168,
+   "sha256": "b0ef1dd31e8754e6f5a14eaf8e5d6a3de6abb1fb377f33fe5e91705a230aea24",
+   "role": "foot_wood",
+   "source": "FSD50K",
+   "freesound_id": 369638,
+   "uploader": "SpliceSound",
+   "licence": "CC0-1.0",
+   "title": "01-30 Footsteps, Wood, Barefoot, Running 2.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 376045,
+   "lufs": -30.18,
+   "peak_db": -6.96,
+   "gain_db": 0.96,
+   "stream": false,
+   "slices": [
+    [
+     19536,
+     9020
+    ],
+    [
+     28776,
+     7700
+    ],
+    [
+     48356,
+     8580
+    ],
+    [
+     57156,
+     7700
+    ],
+    [
+     76516,
+     7920
+    ],
+    [
+     92576,
+     7700
+    ],
+    [
+     100496,
+     7700
+    ],
+    [
+     108416,
+     7700
+    ],
+    [
+     116336,
+     7700
+    ],
+    [
+     124256,
+     8800
+    ],
+    [
+     133276,
+     7700
+    ],
+    [
+     141196,
+     7920
+    ],
+    [
+     149336,
+     7700
+    ],
+    [
+     165176,
+     7700
+    ],
+    [
+     184096,
+     8800
+    ],
+    [
+     201036,
+     9020
+    ]
+   ],
+   "decode_frames": 210072
+  },
+  {
+   "id": "fsd-52377-foot_wood",
+   "path": "fsd50k/clips/dev/52377.wav",
+   "bytes": 2302156,
+   "sha256": "c9ad9c1dc68a887cf28782fd850c1ee9a39d58bae401483cef737e2e1d96e626",
+   "role": "foot_wood",
+   "source": "FSD50K",
+   "freesound_id": 52377,
+   "uploader": "DJPhizz",
+   "licence": "CC-BY-3.0",
+   "title": "Running on Wood.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1151039,
+   "lufs": -36,
+   "peak_db": -1.7,
+   "gain_db": -4.3,
+   "stream": false,
+   "slices": [
+    [
+     56716,
+     11880
+    ],
+    [
+     68816,
+     11220
+    ],
+    [
+     80256,
+     12100
+    ],
+    [
+     92576,
+     9460
+    ],
+    [
+     102256,
+     10780
+    ],
+    [
+     124696,
+     9680
+    ],
+    [
+     146256,
+     11440
+    ],
+    [
+     198836,
+     10120
+    ],
+    [
+     270116,
+     9680
+    ],
+    [
+     453816,
+     7700
+    ],
+    [
+     469656,
+     7700
+    ],
+    [
+     477576,
+     9460
+    ],
+    [
+     487256,
+     7920
+    ],
+    [
+     503316,
+     7700
+    ],
+    [
+     606056,
+     7920
+    ],
+    [
+     614196,
+     7700
+    ]
+   ],
+   "decode_frames": 621912
+  },
+  {
+   "id": "fsd-354061-foot_wood",
+   "path": "fsd50k/clips/dev/354061.wav",
+   "bytes": 855968,
+   "sha256": "e9decd0bd6ebb57a14722ccac2f3480ce6ed471d8223027587a5fac8e0b5d257",
+   "role": "foot_wood",
+   "source": "FSD50K",
+   "freesound_id": 354061,
+   "uploader": "tec studios",
+   "licence": "CC0-1.0",
+   "title": "Foley_Walking_down_stairs.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 427945,
+   "lufs": -19.49,
+   "peak_db": -2.3,
+   "gain_db": -3.7,
+   "stream": false,
+   "slices": [
+    [
+     7876,
+     7700
+    ],
+    [
+     15796,
+     15434
+    ],
+    [
+     39336,
+     7700
+    ],
+    [
+     47256,
+     10560
+    ],
+    [
+     58036,
+     9460
+    ],
+    [
+     67716,
+     12100
+    ],
+    [
+     80036,
+     10120
+    ],
+    [
+     90376,
+     15434
+    ],
+    [
+     123156,
+     12980
+    ],
+    [
+     136356,
+     11220
+    ],
+    [
+     147796,
+     7700
+    ],
+    [
+     155716,
+     15434
+    ],
+    [
+     174636,
+     7700
+    ],
+    [
+     182556,
+     7700
+    ],
+    [
+     190476,
+     12980
+    ],
+    [
+     203676,
+     8360
+    ]
+   ],
+   "decode_frames": 212052
+  },
+  {
+   "id": "fsd-427684-foot_wood",
+   "path": "fsd50k/clips/eval/427684.wav",
+   "bytes": 823074,
+   "sha256": "3b4fea8d827ef7ea19989836da9ce59398c2d4f9e56cd787d172834a5a251bda",
+   "role": "foot_wood",
+   "source": "FSD50K",
+   "freesound_id": 427684,
+   "uploader": "efsdcnveoi",
+   "licence": "CC0-1.0",
+   "title": "03-Pasos Zapato.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 411498,
+   "lufs": -36.99,
+   "peak_db": -8.56,
+   "gain_db": 2.56,
+   "stream": false,
+   "slices": [
+    [
+     1716,
+     7700
+    ],
+    [
+     25696,
+     7700
+    ],
+    [
+     33616,
+     15434
+    ],
+    [
+     103356,
+     15434
+    ],
+    [
+     120956,
+     7700
+    ],
+    [
+     143836,
+     7700
+    ],
+    [
+     168696,
+     15434
+    ],
+    [
+     198396,
+     15434
+    ],
+    [
+     215116,
+     7700
+    ],
+    [
+     239976,
+     7920
+    ],
+    [
+     260876,
+     7700
+    ],
+    [
+     284856,
+     15434
+    ],
+    [
+     308396,
+     7700
+    ],
+    [
+     333916,
+     15434
+    ],
+    [
+     354816,
+     15434
+    ],
+    [
+     375936,
+     7700
+    ]
+   ],
+   "decode_frames": 383652
+  },
+  {
+   "id": "fsd-51145-foot_wood",
+   "path": "fsd50k/clips/dev/51145.wav",
+   "bytes": 1909972,
+   "sha256": "8ea345ef1f3d58162ebf661c8c4b38a0f1d5cfd5e383f18badcc5849240e9586",
+   "role": "foot_wood",
+   "source": "FSD50K",
+   "freesound_id": 51145,
+   "uploader": "RutgerMuller",
+   "licence": "CC0-1.0",
+   "title": "Footsteps Walking on Wooden Floor Bare Feet 2.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 954947,
+   "lufs": -29.26,
+   "peak_db": -1.03,
+   "gain_db": -4.97,
+   "stream": false,
+   "slices": [
+    [
+     616,
+     14960
+    ],
+    [
+     24816,
+     9240
+    ],
+    [
+     43956,
+     12100
+    ],
+    [
+     64416,
+     9240
+    ],
+    [
+     83336,
+     15434
+    ],
+    [
+     102696,
+     13860
+    ],
+    [
+     124916,
+     15434
+    ],
+    [
+     143616,
+     15434
+    ],
+    [
+     160776,
+     7700
+    ],
+    [
+     184316,
+     15434
+    ],
+    [
+     202796,
+     15434
+    ],
+    [
+     225236,
+     13200
+    ],
+    [
+     238656,
+     7700
+    ],
+    [
+     265496,
+     7700
+    ],
+    [
+     311696,
+     15434
+    ],
+    [
+     329516,
+     15434
+    ]
+   ],
+   "decode_frames": 344966
+  },
+  {
+   "id": "fsd-172361-foot_wood",
+   "path": "fsd50k/clips/eval/172361.wav",
+   "bytes": 598218,
+   "sha256": "5c22861a22b23c77a9f4271c8270ca2a4345fae85ed9ccda8b3c21af96fe3dbf",
+   "role": "foot_wood",
+   "source": "FSD50K",
+   "freesound_id": 172361,
+   "uploader": "avakas",
+   "licence": "CC-BY-3.0",
+   "title": "High heels on wooden floor, approaching",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 299070,
+   "lufs": -38.47,
+   "peak_db": -14.82,
+   "gain_db": 8.82,
+   "stream": false,
+   "slices": [
+    [
+     48136,
+     13640
+    ],
+    [
+     78716,
+     15434
+    ],
+    [
+     101816,
+     7700
+    ],
+    [
+     135696,
+     15434
+    ],
+    [
+     167156,
+     9680
+    ],
+    [
+     198176,
+     7700
+    ]
+   ],
+   "decode_frames": 205892
+  },
+  {
+   "id": "fsd-422687-foot_metal",
+   "path": "fsd50k/clips/dev/422687.wav",
+   "bytes": 220578,
+   "sha256": "a8c02d7763bf0a07b7a193a259dc641c8104e47bfa907126af1f23206f102602",
+   "role": "foot_metal",
+   "source": "FSD50K",
+   "freesound_id": 422687,
+   "uploader": "niamhd00145229",
+   "licence": "CC0-1.0",
+   "title": "footsteps on metal floor.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 110250,
+   "lufs": -33.38,
+   "peak_db": -9.73,
+   "gain_db": 3.73,
+   "stream": false,
+   "slices": [
+    [
+     16456,
+     7700
+    ],
+    [
+     24376,
+     7700
+    ],
+    [
+     32296,
+     7700
+    ],
+    [
+     40216,
+     7700
+    ],
+    [
+     48136,
+     8360
+    ],
+    [
+     56716,
+     8360
+    ]
+   ],
+   "decode_frames": 65092
+  },
+  {
+   "id": "fsd-152792-foot_metal",
+   "path": "fsd50k/clips/dev/152792.wav",
+   "bytes": 715024,
+   "sha256": "eac8bfbf22f84efa1d4ab10d5289d47ef62df0398c78419943159176cccb5ad3",
+   "role": "foot_metal",
+   "source": "FSD50K",
+   "freesound_id": 152792,
+   "uploader": "D W",
+   "licence": "CC-BY-3.0",
+   "title": "Footsteps-Step_Ladder-Metal-02.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 357473,
+   "lufs": -27.71,
+   "peak_db": -0.03,
+   "gain_db": -5.97,
+   "stream": false,
+   "slices": [
+    [
+     36256,
+     7700
+    ],
+    [
+     44176,
+     11440
+    ],
+    [
+     86856,
+     10340
+    ],
+    [
+     133496,
+     15434
+    ],
+    [
+     198836,
+     15180
+    ],
+    [
+     225896,
+     12540
+    ],
+    [
+     256916,
+     15434
+    ],
+    [
+     284196,
+     12760
+    ],
+    [
+     313456,
+     12100
+    ]
+   ],
+   "decode_frames": 325572
+  },
+  {
+   "id": "fsd-219303-foot_metal",
+   "path": "fsd50k/clips/eval/219303.wav",
+   "bytes": 1917006,
+   "sha256": "eabe2b8101b9e960680d0c6ddc8db5bd620f4022b5586b17af1d10b5d4d59a39",
+   "role": "foot_metal",
+   "source": "FSD50K",
+   "freesound_id": 219303,
+   "uploader": "laurenmartin236",
+   "licence": "CC0-1.0",
+   "title": "running on metal.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 958464,
+   "lufs": -20.69,
+   "peak_db": -5.99,
+   "gain_db": -0.01,
+   "stream": false,
+   "slices": [
+    [
+     103356,
+     9020
+    ],
+    [
+     112596,
+     7920
+    ],
+    [
+     120736,
+     12980
+    ],
+    [
+     133936,
+     7700
+    ],
+    [
+     141856,
+     8140
+    ],
+    [
+     150216,
+     7700
+    ],
+    [
+     158136,
+     12760
+    ],
+    [
+     171116,
+     15434
+    ],
+    [
+     187176,
+     12980
+    ],
+    [
+     200376,
+     8140
+    ],
+    [
+     208736,
+     10340
+    ],
+    [
+     219296,
+     11220
+    ],
+    [
+     230736,
+     7700
+    ],
+    [
+     238656,
+     8140
+    ],
+    [
+     247016,
+     14520
+    ],
+    [
+     261756,
+     7700
+    ]
+   ],
+   "decode_frames": 269472
+  },
+  {
+   "id": "fsd-392303-foot_metal",
+   "path": "fsd50k/clips/eval/392303.wav",
+   "bytes": 325086,
+   "sha256": "a989fd06bf1bfff1e83854af742766d3c6759d195663751b8a045235972786b4",
+   "role": "foot_metal",
+   "source": "FSD50K",
+   "freesound_id": 392303,
+   "uploader": "Viliguis",
+   "licence": "CC0-1.0",
+   "title": "Pasos sobre metal.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 162504,
+   "lufs": -26.9,
+   "peak_db": -4.38,
+   "gain_db": -1.62,
+   "stream": false,
+   "slices": [
+    [
+     49896,
+     7700
+    ],
+    [
+     74096,
+     8580
+    ],
+    [
+     98736,
+     7700
+    ],
+    [
+     130636,
+     7700
+    ],
+    [
+     138556,
+     10560
+    ]
+   ],
+   "decode_frames": 149132
+  },
+  {
+   "id": "fsd-50724-foot_metal",
+   "path": "fsd50k/clips/dev/50724.wav",
+   "bytes": 498856,
+   "sha256": "b4be95ffc59cb027025164564ebc5936898c31b79a768b309cdb8280b7126145",
+   "role": "foot_metal",
+   "source": "FSD50K",
+   "freesound_id": 50724,
+   "uploader": "RutgerMuller",
+   "licence": "CC0-1.0",
+   "title": "Footsteps Metallic Muffled Louder.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 249389,
+   "lufs": -21.82,
+   "peak_db": -0.1,
+   "gain_db": -5.9,
+   "stream": false,
+   "slices": [
+    [
+     23716,
+     7700
+    ],
+    [
+     31636,
+     15434
+    ],
+    [
+     55616,
+     9460
+    ],
+    [
+     73216,
+     7700
+    ],
+    [
+     81136,
+     15400
+    ],
+    [
+     96756,
+     7920
+    ],
+    [
+     104896,
+     7700
+    ],
+    [
+     112816,
+     7700
+    ],
+    [
+     120736,
+     7700
+    ],
+    [
+     128656,
+     8360
+    ],
+    [
+     137236,
+     9900
+    ],
+    [
+     147356,
+     7700
+    ],
+    [
+     155276,
+     9240
+    ],
+    [
+     173976,
+     9680
+    ]
+   ],
+   "decode_frames": 183672
+  },
+  {
+   "id": "fsd-172364-foot_metal",
+   "path": "fsd50k/clips/eval/172364.wav",
+   "bytes": 2307928,
+   "sha256": "62954145f1e85f412c6c38043e6561b753bc10af07055fedb4df29419ac1bc11",
+   "role": "foot_metal",
+   "source": "FSD50K",
+   "freesound_id": 172364,
+   "uploader": "avakas",
+   "licence": "CC-BY-3.0",
+   "title": "Metal door closing, locking and leaving",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1153925,
+   "lufs": -41.4,
+   "peak_db": -8.02,
+   "gain_db": 2.02,
+   "stream": false,
+   "slices": [
+    [
+     146476,
+     7700
+    ],
+    [
+     285516,
+     15434
+    ],
+    [
+     427416,
+     15434
+    ],
+    [
+     597036,
+     10120
+    ],
+    [
+     633996,
+     15434
+    ],
+    [
+     656216,
+     15434
+    ],
+    [
+     849376,
+     15180
+    ],
+    [
+     878636,
+     15434
+    ],
+    [
+     914936,
+     7700
+    ],
+    [
+     930776,
+     8360
+    ],
+    [
+     947276,
+     7700
+    ]
+   ],
+   "decode_frames": 954992
+  },
+  {
+   "id": "fsd-390242-foot_metal",
+   "path": "fsd50k/clips/eval/390242.wav",
+   "bytes": 2586336,
+   "sha256": "a26470d7d8d6e8fae6c017e8ed22fbdb7694865fc61a513d056f111a710fc997",
+   "role": "foot_metal",
+   "source": "FSD50K",
+   "freesound_id": 390242,
+   "uploader": "loullipop",
+   "licence": "CC0-1.0",
+   "title": "scissor2.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 1293129,
+   "lufs": -30.33,
+   "peak_db": 0,
+   "gain_db": -6,
+   "stream": false,
+   "slices": [
+    [
+     0,
+     9636
+    ],
+    [
+     9856,
+     15434
+    ],
+    [
+     1146596,
+     7700
+    ],
+    [
+     1154516,
+     15434
+    ]
+   ],
+   "decode_frames": 1169966
+  },
+  {
+   "id": "fsd-258140-foot_metal",
+   "path": "fsd50k/clips/dev/258140.wav",
+   "bytes": 261538,
+   "sha256": "15bba8d6c13096e279befaab42a4ca2c70dedd3182e342405ee670f7ad5514c8",
+   "role": "foot_metal",
+   "source": "FSD50K",
+   "freesound_id": 258140,
+   "uploader": "SOUNDSCAPE_HUMFAK",
+   "licence": "CC0-1.0",
+   "title": "20141119_stairs_H2nextXY.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 130730,
+   "lufs": -37.36,
+   "peak_db": -16.62,
+   "gain_db": 10.62,
+   "stream": false,
+   "slices": [
+    [
+     7876,
+     9240
+    ],
+    [
+     17336,
+     7700
+    ],
+    [
+     25256,
+     8580
+    ],
+    [
+     34056,
+     15434
+    ],
+    [
+     55176,
+     15434
+    ],
+    [
+     72556,
+     12980
+    ],
+    [
+     85756,
+     15434
+    ]
+   ],
+   "decode_frames": 101206
+  },
+  {
+   "id": "fsd-160362-foot_metal",
+   "path": "fsd50k/clips/eval/160362.wav",
+   "bytes": 788584,
+   "sha256": "a2950be6663f7c1817bbd1d8c7d1e2c51f352d16102b7e33d390190da9ca43e1",
+   "role": "foot_metal",
+   "source": "FSD50K",
+   "freesound_id": 160362,
+   "uploader": "laurent",
+   "licence": "CC-BY-3.0",
+   "title": "Metallic door opens and close.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 394253,
+   "lufs": -28.88,
+   "peak_db": -5.45,
+   "gain_db": -0.55,
+   "stream": false,
+   "slices": [
+    [
+     20416,
+     15434
+    ],
+    [
+     331496,
+     7700
+    ],
+    [
+     339416,
+     7920
+    ],
+    [
+     347556,
+     11660
+    ],
+    [
+     359436,
+     15434
+    ]
+   ],
+   "decode_frames": 374886
+  },
+  {
+   "id": "fsd-232664-foot_metal",
+   "path": "fsd50k/clips/dev/232664.wav",
+   "bytes": 666102,
+   "sha256": "e6baa4dfe3e1fb93b5a3358df6a9e27490fd1135f16944c3aea758040c35807c",
+   "role": "foot_metal",
+   "source": "FSD50K",
+   "freesound_id": 232664,
+   "uploader": "renatofarabeuf",
+   "licence": "CC-BY-3.0",
+   "title": "Corriendo en escaleras de metal.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 333012,
+   "lufs": -30.64,
+   "peak_db": -8.06,
+   "gain_db": 2.06,
+   "stream": false,
+   "slices": [
+    [
+     12276,
+     11880
+    ],
+    [
+     24376,
+     10340
+    ],
+    [
+     34936,
+     9900
+    ],
+    [
+     45056,
+     9680
+    ],
+    [
+     54956,
+     10340
+    ],
+    [
+     65516,
+     11000
+    ],
+    [
+     76736,
+     14300
+    ],
+    [
+     91256,
+     15434
+    ]
+   ],
+   "decode_frames": 106706
+  },
+  {
+   "id": "fsd-30934-foot_gravel",
+   "path": "fsd50k/clips/dev/30934.wav",
+   "bytes": 528462,
+   "sha256": "126caa51966756946080c3dc46ecc042d5fe1c5eb078bdf6b150889809003344",
+   "role": "foot_gravel",
+   "source": "FSD50K",
+   "freesound_id": 30934,
+   "uploader": "aust_paul",
+   "licence": "CC0-1.0",
+   "title": "mud of jungle footsteps by paul.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 264192,
+   "lufs": -20.88,
+   "peak_db": -0.02,
+   "gain_db": -5.98,
+   "stream": false,
+   "slices": [
+    [
+     0,
+     8096
+    ],
+    [
+     40876,
+     7920
+    ],
+    [
+     49016,
+     15434
+    ],
+    [
+     87076,
+     8140
+    ],
+    [
+     95436,
+     7700
+    ],
+    [
+     103356,
+     15434
+    ],
+    [
+     138556,
+     15434
+    ],
+    [
+     170456,
+     7700
+    ],
+    [
+     178376,
+     7700
+    ],
+    [
+     186296,
+     15434
+    ],
+    [
+     218856,
+     9900
+    ],
+    [
+     228976,
+     7920
+    ],
+    [
+     237116,
+     15434
+    ]
+   ],
+   "decode_frames": 252566
+  },
+  {
+   "id": "fsd-353799-foot_gravel",
+   "path": "fsd50k/clips/dev/353799.wav",
+   "bytes": 555738,
+   "sha256": "b55fe1014d72754e66b61e6c392f1a4d607b8748490cdf340a4442146cd37e1c",
+   "role": "foot_gravel",
+   "source": "FSD50K",
+   "freesound_id": 353799,
+   "uploader": "monte32",
+   "licence": "CC0-1.0",
+   "title": "Footsteps_6_Dirt_shoe.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 277830,
+   "lufs": -40.7,
+   "peak_db": -15.97,
+   "gain_db": 9.97,
+   "stream": false,
+   "slices": [
+    [
+     13156,
+     8580
+    ],
+    [
+     21956,
+     8580
+    ],
+    [
+     30756,
+     15434
+    ],
+    [
+     56936,
+     7920
+    ],
+    [
+     100056,
+     7700
+    ],
+    [
+     140316,
+     7700
+    ],
+    [
+     148236,
+     15434
+    ],
+    [
+     183876,
+     7700
+    ],
+    [
+     191796,
+     15434
+    ],
+    [
+     225016,
+     7700
+    ],
+    [
+     232936,
+     8140
+    ],
+    [
+     241296,
+     15434
+    ]
+   ],
+   "decode_frames": 256746
+  },
+  {
+   "id": "fsd-174936-foot_gravel",
+   "path": "fsd50k/clips/eval/174936.wav",
+   "bytes": 1812060,
+   "sha256": "34f74ea5feb40613f89bff36e2fe248dc6225c8b406898647ca2f95c49965879",
+   "role": "foot_gravel",
+   "source": "FSD50K",
+   "freesound_id": 174936,
+   "uploader": "ABouch",
+   "licence": "CC0-1.0",
+   "title": "running on gravel.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 905991,
+   "lufs": -28.82,
+   "peak_db": 0,
+   "gain_db": -6,
+   "stream": false,
+   "slices": [
+    [
+     14696,
+     7700
+    ],
+    [
+     44396,
+     7700
+    ],
+    [
+     63316,
+     7700
+    ],
+    [
+     71236,
+     7700
+    ],
+    [
+     87076,
+     7700
+    ],
+    [
+     103576,
+     7700
+    ],
+    [
+     119636,
+     10560
+    ],
+    [
+     130416,
+     9900
+    ],
+    [
+     150216,
+     7700
+    ],
+    [
+     166056,
+     13640
+    ],
+    [
+     179916,
+     8140
+    ],
+    [
+     188276,
+     7700
+    ],
+    [
+     235136,
+     13420
+    ],
+    [
+     248776,
+     11440
+    ],
+    [
+     260436,
+     7700
+    ],
+    [
+     268356,
+     7700
+    ]
+   ],
+   "decode_frames": 276072
+  },
+  {
+   "id": "fsd-210866-foot_gravel",
+   "path": "fsd50k/clips/eval/210866.wav",
+   "bytes": 352878,
+   "sha256": "53eb40b7b4f57dda4258962420fcf4fcc4e3d4bd58eabbfecc260927d1731b2c",
+   "role": "foot_gravel",
+   "source": "FSD50K",
+   "freesound_id": 210866,
+   "uploader": "FocusBay",
+   "licence": "CC0-1.0",
+   "title": "Running On Dirt.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 176400,
+   "lufs": -35.22,
+   "peak_db": -8.18,
+   "gain_db": 2.18,
+   "stream": false,
+   "slices": [
+    [
+     29876,
+     7700
+    ],
+    [
+     45716,
+     7920
+    ],
+    [
+     61776,
+     8580
+    ],
+    [
+     70576,
+     7700
+    ],
+    [
+     78496,
+     8140
+    ],
+    [
+     86856,
+     7700
+    ],
+    [
+     94776,
+     7700
+    ],
+    [
+     102696,
+     7700
+    ],
+    [
+     110616,
+     7700
+    ],
+    [
+     126456,
+     7920
+    ],
+    [
+     134596,
+     7700
+    ],
+    [
+     142516,
+     11660
+    ],
+    [
+     154396,
+     7700
+    ]
+   ],
+   "decode_frames": 162112
+  },
+  {
+   "id": "fsd-156847-foot_gravel",
+   "path": "fsd50k/clips/dev/156847.wav",
+   "bytes": 1574364,
+   "sha256": "6d578e3078c2b1707dd8619dd6468daff3cf17eac09c88d9736f874d1774270a",
+   "role": "foot_gravel",
+   "source": "FSD50K",
+   "freesound_id": 156847,
+   "uploader": "rjbrown85",
+   "licence": "CC-BY-3.0",
+   "title": "Footsteps Gravel Trainers Running 96Hz 24 Bit.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 787143,
+   "lufs": -32.78,
+   "peak_db": -1.69,
+   "gain_db": -4.31,
+   "stream": false,
+   "slices": [
+    [
+     176,
+     8140
+    ],
+    [
+     16676,
+     10560
+    ],
+    [
+     44836,
+     7700
+    ],
+    [
+     79596,
+     7700
+    ],
+    [
+     121176,
+     7920
+    ],
+    [
+     129316,
+     7700
+    ],
+    [
+     234916,
+     9020
+    ],
+    [
+     267916,
+     9020
+    ],
+    [
+     340516,
+     9460
+    ],
+    [
+     421696,
+     7700
+    ],
+    [
+     429616,
+     7700
+    ],
+    [
+     454476,
+     8580
+    ],
+    [
+     562936,
+     7700
+    ],
+    [
+     570856,
+     7700
+    ],
+    [
+     578776,
+     9680
+    ],
+    [
+     601876,
+     8140
+    ]
+   ],
+   "decode_frames": 610032
+  },
+  {
+   "id": "fsd-401346-foot_gravel",
+   "path": "fsd50k/clips/dev/401346.wav",
+   "bytes": 909274,
+   "sha256": "1acb1da3f75b4ed883d4cc90dd70ce88678e4a83106ba1e0d527e160987fceaf",
+   "role": "foot_gravel",
+   "source": "FSD50K",
+   "freesound_id": 401346,
+   "uploader": "GiocoSound",
+   "licence": "CC0-1.0",
+   "title": "SFX_Steps_Gravel_Run.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 454598,
+   "lufs": -26.78,
+   "peak_db": 0,
+   "gain_db": -6,
+   "stream": false,
+   "slices": [
+    [
+     3476,
+     15400
+    ],
+    [
+     19096,
+     15434
+    ],
+    [
+     36036,
+     11880
+    ],
+    [
+     48136,
+     7700
+    ],
+    [
+     69476,
+     15434
+    ],
+    [
+     86636,
+     15434
+    ],
+    [
+     105116,
+     15434
+    ],
+    [
+     136796,
+     8140
+    ],
+    [
+     157036,
+     15434
+    ],
+    [
+     175516,
+     7700
+    ],
+    [
+     183436,
+     9020
+    ],
+    [
+     192676,
+     15434
+    ],
+    [
+     210496,
+     8140
+    ],
+    [
+     218856,
+     9460
+    ],
+    [
+     228536,
+     12980
+    ],
+    [
+     259336,
+     7700
+    ]
+   ],
+   "decode_frames": 267052
+  },
+  {
+   "id": "fsd-394859-foot_gravel",
+   "path": "fsd50k/clips/dev/394859.wav",
+   "bytes": 1847980,
+   "sha256": "dd1fbb7abd40e7ea4dbccf88ccbca8bd3d5e5719e7054e1129297f91e4b88910",
+   "role": "foot_gravel",
+   "source": "FSD50K",
+   "freesound_id": 394859,
+   "uploader": "islandan",
+   "licence": "CC0-1.0",
+   "title": "tlf-walking_running_gravel_02.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 923951,
+   "lufs": -27.06,
+   "peak_db": -0.03,
+   "gain_db": -5.97,
+   "stream": false,
+   "slices": [
+    [
+     836,
+     8580
+    ],
+    [
+     17556,
+     7700
+    ],
+    [
+     25476,
+     9020
+    ],
+    [
+     45936,
+     8140
+    ],
+    [
+     54296,
+     7700
+    ],
+    [
+     62216,
+     8140
+    ],
+    [
+     70576,
+     14520
+    ],
+    [
+     97856,
+     14080
+    ],
+    [
+     124916,
+     15434
+    ],
+    [
+     142076,
+     14300
+    ],
+    [
+     172656,
+     10120
+    ],
+    [
+     182996,
+     15434
+    ],
+    [
+     224356,
+     8140
+    ],
+    [
+     232716,
+     14740
+    ],
+    [
+     247676,
+     14520
+    ],
+    [
+     262416,
+     10120
+    ]
+   ],
+   "decode_frames": 272552
+  },
+  {
+   "id": "fsd-249922-foot_gravel",
+   "path": "fsd50k/clips/dev/249922.wav",
+   "bytes": 1847624,
+   "sha256": "8e56268529db1924290d58eebdec8e5f9f53f47eeba412edca9a630d9632e15f",
+   "role": "foot_gravel",
+   "source": "FSD50K",
+   "freesound_id": 249922,
+   "uploader": "hintringer",
+   "licence": "CC0-1.0",
+   "title": "walking fast on stones",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 923773,
+   "lufs": -29.54,
+   "peak_db": -5.48,
+   "gain_db": -0.52,
+   "stream": false,
+   "slices": [
+    [
+     19976,
+     14740
+    ],
+    [
+     48356,
+     7700
+    ],
+    [
+     56276,
+     11660
+    ],
+    [
+     68156,
+     11220
+    ],
+    [
+     79596,
+     13640
+    ],
+    [
+     101376,
+     13640
+    ],
+    [
+     115236,
+     13200
+    ],
+    [
+     128656,
+     14080
+    ],
+    [
+     142956,
+     7700
+    ],
+    [
+     150876,
+     8360
+    ],
+    [
+     159456,
+     8800
+    ],
+    [
+     179256,
+     15434
+    ],
+    [
+     198176,
+     12540
+    ],
+    [
+     230296,
+     7920
+    ],
+    [
+     246356,
+     13200
+    ],
+    [
+     259776,
+     11660
+    ]
+   ],
+   "decode_frames": 271452
+  },
+  {
+   "id": "fsd-157040-foot_gravel",
+   "path": "fsd50k/clips/dev/157040.wav",
+   "bytes": 653160,
+   "sha256": "085fd83ff44be3f879d0036b6a42da31e6241592cb84ae23b4fb41c8ff30420d",
+   "role": "foot_gravel",
+   "source": "FSD50K",
+   "freesound_id": 157040,
+   "uploader": "Slave2theLight",
+   "licence": "CC-BY-3.0",
+   "title": "Running foley performance 3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 326541,
+   "lufs": -25.6,
+   "peak_db": -0.77,
+   "gain_db": -5.23,
+   "stream": false,
+   "slices": [
+    [
+     1056,
+     7920
+    ],
+    [
+     9196,
+     7700
+    ],
+    [
+     17116,
+     8800
+    ],
+    [
+     26136,
+     12980
+    ],
+    [
+     39336,
+     12760
+    ],
+    [
+     52316,
+     12320
+    ],
+    [
+     64856,
+     15434
+    ],
+    [
+     89936,
+     9240
+    ],
+    [
+     99396,
+     7700
+    ],
+    [
+     107316,
+     7920
+    ],
+    [
+     124256,
+     10780
+    ],
+    [
+     148016,
+     9020
+    ],
+    [
+     157256,
+     12320
+    ],
+    [
+     169796,
+     10340
+    ],
+    [
+     180356,
+     8140
+    ],
+    [
+     196636,
+     13200
+    ]
+   ],
+   "decode_frames": 209852
+  },
+  {
+   "id": "fsd-157039-foot_gravel",
+   "path": "fsd50k/clips/dev/157039.wav",
+   "bytes": 1548092,
+   "sha256": "2e24485b4f2eeb96d01cf72c69abf5ed8b720b4a41028170c9134edf05e9de04",
+   "role": "foot_gravel",
+   "source": "FSD50K",
+   "freesound_id": 157039,
+   "uploader": "Slave2theLight",
+   "licence": "CC-BY-3.0",
+   "title": "Running foley performance 2",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 774007,
+   "lufs": -27.45,
+   "peak_db": -0.06,
+   "gain_db": -5.94,
+   "stream": false,
+   "slices": [
+    [
+     2156,
+     13640
+    ],
+    [
+     16016,
+     7920
+    ],
+    [
+     24156,
+     11440
+    ],
+    [
+     43736,
+     12760
+    ],
+    [
+     56716,
+     9680
+    ],
+    [
+     83556,
+     9460
+    ],
+    [
+     93236,
+     15434
+    ],
+    [
+     110836,
+     12760
+    ],
+    [
+     123816,
+     9900
+    ],
+    [
+     133936,
+     15434
+    ],
+    [
+     151756,
+     7700
+    ],
+    [
+     159676,
+     15434
+    ],
+    [
+     182336,
+     12760
+    ],
+    [
+     195316,
+     7700
+    ],
+    [
+     217976,
+     14300
+    ],
+    [
+     232496,
+     15434
+    ]
+   ],
+   "decode_frames": 247946
+  },
+  {
+   "id": "fsd-368283-foot_generic",
+   "path": "fsd50k/clips/dev/368283.wav",
+   "bytes": 321380,
+   "sha256": "d589ac8911c4d7f3f428db206656668a3c68d1a5d5ca4a849d93c388f833f563",
+   "role": "foot_generic",
+   "source": "FSD50K",
+   "freesound_id": 368283,
+   "uploader": "Duv22",
+   "licence": "CC0-1.0",
+   "title": "Pasitos.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 160651,
+   "lufs": -28.92,
+   "peak_db": -2.27,
+   "gain_db": -3.73,
+   "stream": false,
+   "slices": [
+    [
+     14256,
+     9020
+    ],
+    [
+     45056,
+     7700
+    ],
+    [
+     84876,
+     9240
+    ],
+    [
+     102916,
+     7700
+    ],
+    [
+     110836,
+     15434
+    ]
+   ],
+   "decode_frames": 126286
+  },
+  {
+   "id": "fsd-85110-foot_generic",
+   "path": "fsd50k/clips/dev/85110.wav",
+   "bytes": 805638,
+   "sha256": "2cabf9de72d8728f89e33e6b87869e138ec16bbfed03626d25e3fcd76b668858",
+   "role": "foot_generic",
+   "source": "FSD50K",
+   "freesound_id": 85110,
+   "uploader": "cmusounddesign",
+   "licence": "CC-BY-3.0",
+   "title": "JK Clogs on Concrete.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 402780,
+   "lufs": -31.61,
+   "peak_db": -0.62,
+   "gain_db": -5.38,
+   "stream": false,
+   "slices": [
+    [
+     14476,
+     7700
+    ],
+    [
+     42636,
+     7700
+    ],
+    [
+     63316,
+     7700
+    ],
+    [
+     71236,
+     15434
+    ],
+    [
+     92136,
+     15434
+    ],
+    [
+     138996,
+     15434
+    ],
+    [
+     163416,
+     7700
+    ],
+    [
+     187616,
+     15434
+    ],
+    [
+     207636,
+     7700
+    ],
+    [
+     235136,
+     15434
+    ],
+    [
+     258456,
+     15434
+    ]
+   ],
+   "decode_frames": 273906
+  },
+  {
+   "id": "fsd-418545-foot_generic",
+   "path": "fsd50k/clips/eval/418545.wav",
+   "bytes": 1109988,
+   "sha256": "c3b7de38e61d8cd557ae004c10216b17646b3e0e538aef58d54ae4c85a2f99f3",
+   "role": "foot_generic",
+   "source": "FSD50K",
+   "freesound_id": 418545,
+   "uploader": "14FPanskaBubik_Lukas",
+   "licence": "CC0-1.0",
+   "title": "Running on concrete.WAV",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 554955,
+   "lufs": -41.13,
+   "peak_db": -7.93,
+   "gain_db": 1.93,
+   "stream": false,
+   "slices": [
+    [
+     43956,
+     7700
+    ],
+    [
+     61776,
+     10560
+    ],
+    [
+     80476,
+     7700
+    ],
+    [
+     97416,
+     7700
+    ],
+    [
+     105336,
+     7700
+    ],
+    [
+     146916,
+     7700
+    ],
+    [
+     170676,
+     7700
+    ],
+    [
+     218856,
+     8360
+    ],
+    [
+     241296,
+     10780
+    ],
+    [
+     252296,
+     12100
+    ],
+    [
+     264616,
+     7700
+    ],
+    [
+     280456,
+     9020
+    ],
+    [
+     289696,
+     11220
+    ],
+    [
+     301136,
+     7700
+    ],
+    [
+     325996,
+     15180
+    ],
+    [
+     341396,
+     8360
+    ]
+   ],
+   "decode_frames": 349772
+  },
+  {
+   "id": "fsd-316922-foot_generic",
+   "path": "fsd50k/clips/dev/316922.wav",
+   "bytes": 218108,
+   "sha256": "7bc50a587460ec11646ef58bf02f1c299af26f05ce8f0826b696e3c6a01459f6",
+   "role": "foot_generic",
+   "source": "FSD50K",
+   "freesound_id": 316922,
+   "uploader": "Rudmer_Rotteveel",
+   "licence": "CC0-1.0",
+   "title": "Footsteps Running Away Fading 2",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 109015,
+   "lufs": -34.68,
+   "peak_db": -4.89,
+   "gain_db": -1.11,
+   "stream": false,
+   "slices": [
+    [
+     1716,
+     7700
+    ],
+    [
+     9636,
+     8580
+    ],
+    [
+     26356,
+     7700
+    ],
+    [
+     34276,
+     12760
+    ],
+    [
+     47256,
+     8140
+    ]
+   ],
+   "decode_frames": 55412
+  },
+  {
+   "id": "fsd-151208-foot_generic",
+   "path": "fsd50k/clips/dev/151208.wav",
+   "bytes": 824886,
+   "sha256": "bc2ad584535352d9520257c56db25e5f98fcbfd9d735d3eee8e0a8d25f5c832e",
+   "role": "foot_generic",
+   "source": "FSD50K",
+   "freesound_id": 151208,
+   "uploader": "OwlStorm",
+   "licence": "CC-BY-3.0",
+   "title": "Womens Shoes (2)",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 412404,
+   "lufs": -37.5,
+   "peak_db": -8.1,
+   "gain_db": 2.1,
+   "stream": false,
+   "slices": [
+    [
+     7436,
+     9020
+    ],
+    [
+     34276,
+     7920
+    ],
+    [
+     59576,
+     10120
+    ],
+    [
+     84216,
+     8580
+    ],
+    [
+     113916,
+     15434
+    ],
+    [
+     145596,
+     7920
+    ],
+    [
+     173316,
+     8580
+    ],
+    [
+     203016,
+     9460
+    ],
+    [
+     230736,
+     15434
+    ],
+    [
+     258456,
+     8800
+    ],
+    [
+     288816,
+     9460
+    ],
+    [
+     315656,
+     10560
+    ],
+    [
+     343596,
+     10340
+    ],
+    [
+     365156,
+     7700
+    ],
+    [
+     373076,
+     9020
+    ],
+    [
+     397936,
+     14468
+    ]
+   ],
+   "decode_frames": 412404
+  },
+  {
+   "id": "fsd-392483-foot_generic",
+   "path": "fsd50k/clips/eval/392483.wav",
+   "bytes": 315942,
+   "sha256": "3403708c8bdb1dc48b69bbeacd498b2907d576c92a0d55ec887560b0a29c299c",
+   "role": "foot_generic",
+   "source": "FSD50K",
+   "freesound_id": 392483,
+   "uploader": "gpag1",
+   "licence": "CC0-1.0",
+   "title": "Footsteps boots.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 157932,
+   "lufs": -26.45,
+   "peak_db": -0.68,
+   "gain_db": -5.32,
+   "stream": false,
+   "slices": [
+    [
+     616,
+     8580
+    ],
+    [
+     9416,
+     7700
+    ],
+    [
+     17336,
+     7700
+    ],
+    [
+     25256,
+     8360
+    ],
+    [
+     33836,
+     8140
+    ],
+    [
+     42196,
+     7700
+    ],
+    [
+     58036,
+     8140
+    ],
+    [
+     66396,
+     8800
+    ],
+    [
+     75416,
+     7700
+    ],
+    [
+     92136,
+     9240
+    ],
+    [
+     101596,
+     7920
+    ],
+    [
+     109736,
+     7700
+    ]
+   ],
+   "decode_frames": 117452
+  },
+  {
+   "id": "fsd-218292-foot_generic",
+   "path": "fsd50k/clips/dev/218292.wav",
+   "bytes": 1012710,
+   "sha256": "6ae23eca2fa184c5360821d6e2deb9846de5147624fe79bdf4f12193ae8f24f2",
+   "role": "foot_generic",
+   "source": "FSD50K",
+   "freesound_id": 218292,
+   "uploader": "SpliceSound",
+   "licence": "CC0-1.0",
+   "title": "01-17 Footsteps, Tile, Female Heels, Running V1.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 506316,
+   "lufs": -32.01,
+   "peak_db": -3.85,
+   "gain_db": -2.15,
+   "stream": false,
+   "slices": [
+    [
+     49236,
+     15434
+    ],
+    [
+     65076,
+     14300
+    ],
+    [
+     79596,
+     14960
+    ],
+    [
+     94776,
+     14300
+    ],
+    [
+     109296,
+     15434
+    ],
+    [
+     125356,
+     14300
+    ],
+    [
+     139876,
+     14740
+    ],
+    [
+     170236,
+     15434
+    ],
+    [
+     200156,
+     15180
+    ],
+    [
+     215556,
+     15400
+    ],
+    [
+     231176,
+     15434
+    ],
+    [
+     247676,
+     13860
+    ],
+    [
+     261756,
+     10780
+    ],
+    [
+     272756,
+     7700
+    ],
+    [
+     292556,
+     14520
+    ],
+    [
+     321156,
+     15400
+    ]
+   ],
+   "decode_frames": 336572
+  },
+  {
+   "id": "fsd-210195-foot_generic",
+   "path": "fsd50k/clips/dev/210195.wav",
+   "bytes": 237306,
+   "sha256": "6830601b62b3db3c7288f9b16d3adead2b9e04331bd6b6494a231489de64f5bb",
+   "role": "foot_generic",
+   "source": "FSD50K",
+   "freesound_id": 210195,
+   "uploader": "Augdog",
+   "licence": "CC-BY-3.0",
+   "title": "dude steps.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 118614,
+   "lufs": -43.14,
+   "peak_db": -14.71,
+   "gain_db": 8.71,
+   "stream": false,
+   "slices": [
+    [
+     27456,
+     15434
+    ],
+    [
+     46156,
+     15434
+    ],
+    [
+     62876,
+     15434
+    ],
+    [
+     80696,
+     15434
+    ],
+    [
+     98736,
+     15434
+    ]
+   ],
+   "decode_frames": 114186
+  },
+  {
+   "id": "fsd-348749-foot_generic",
+   "path": "fsd50k/clips/dev/348749.wav",
+   "bytes": 120552,
+   "sha256": "9d6e24cc8fd5efa7ff4fa84d7f6278814e541524f35f64e87ee5ead3ca34074a",
+   "role": "foot_generic",
+   "source": "FSD50K",
+   "freesound_id": 348749,
+   "uploader": "scriotxstudios",
+   "licence": "CC-BY-3.0",
+   "title": "Running in High-Heels on Tile",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 60237,
+   "lufs": -32.36,
+   "peak_db": -4.05,
+   "gain_db": -1.95,
+   "stream": false,
+   "slices": [
+    [
+     3036,
+     15400
+    ],
+    [
+     18656,
+     14300
+    ],
+    [
+     33176,
+     14960
+    ],
+    [
+     48356,
+     11881
+    ]
+   ],
+   "decode_frames": 60237
+  },
+  {
+   "id": "fsd-218291-foot_generic",
+   "path": "fsd50k/clips/dev/218291.wav",
+   "bytes": 1599820,
+   "sha256": "d6ff296e90cda4b40bc424b6700efe8c73b70debb77d5d55e6b5ec1ddee05216",
+   "role": "foot_generic",
+   "source": "FSD50K",
+   "freesound_id": 218291,
+   "uploader": "SpliceSound",
+   "licence": "CC0-1.0",
+   "title": "01-18 Footsteps, Tile, Female Heels, Running V2.wav",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 799871,
+   "lufs": -31.09,
+   "peak_db": -2.59,
+   "gain_db": -3.41,
+   "stream": false,
+   "slices": [
+    [
+     19536,
+     13420
+    ],
+    [
+     33176,
+     11660
+    ],
+    [
+     45056,
+     12100
+    ],
+    [
+     57376,
+     12760
+    ],
+    [
+     70356,
+     12540
+    ],
+    [
+     83116,
+     12100
+    ],
+    [
+     95436,
+     11660
+    ],
+    [
+     107316,
+     13200
+    ],
+    [
+     120736,
+     11880
+    ],
+    [
+     132836,
+     12980
+    ],
+    [
+     146036,
+     11440
+    ],
+    [
+     157696,
+     13640
+    ],
+    [
+     171556,
+     11880
+    ],
+    [
+     183656,
+     12760
+    ],
+    [
+     196636,
+     12760
+    ],
+    [
+     209616,
+     12320
+    ]
+   ],
+   "decode_frames": 221952
+  },
+  {
+   "id": "fsd-249930-foot_wet",
+   "path": "fsd50k/clips/dev/249930.wav",
+   "bytes": 348802,
+   "sha256": "a640d75f48e44ca213eaed23a853938134f4ab23306fad10adba2e60f33277c3",
+   "role": "foot_wet",
+   "source": "FSD50K",
+   "freesound_id": 249930,
+   "uploader": "hintringer",
+   "licence": "CC0-1.0",
+   "title": "running through a puddle",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 174362,
+   "lufs": -34.32,
+   "peak_db": -6.28,
+   "gain_db": 0.28,
+   "stream": false,
+   "slices": [
+    [
+     28336,
+     8140
+    ],
+    [
+     45496,
+     7700
+    ],
+    [
+     77176,
+     10780
+    ],
+    [
+     88176,
+     9020
+    ],
+    [
+     97416,
+     7700
+    ],
+    [
+     105336,
+     8140
+    ],
+    [
+     113696,
+     8800
+    ],
+    [
+     122716,
+     8360
+    ],
+    [
+     139216,
+     14080
+    ]
+   ],
+   "decode_frames": 153312
+  },
+  {
+   "id": "fsd-173596-foot_wet",
+   "path": "fsd50k/clips/dev/173596.wav",
+   "bytes": 815046,
+   "sha256": "af6f63775e4c7d5ee63d4ddb088ae26fcdb12af7968e4344d4e6e7150a8b584f",
+   "role": "foot_wet",
+   "source": "FSD50K",
+   "freesound_id": 173596,
+   "uploader": "WarcakeStudios",
+   "licence": "CC0-1.0",
+   "title": "Running",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 407484,
+   "lufs": -34.05,
+   "peak_db": -1.61,
+   "gain_db": -4.39,
+   "stream": false,
+   "slices": [
+    [
+     24816,
+     7700
+    ],
+    [
+     32736,
+     7700
+    ],
+    [
+     48576,
+     7700
+    ],
+    [
+     56496,
+     7700
+    ],
+    [
+     64416,
+     8800
+    ],
+    [
+     91476,
+     8360
+    ],
+    [
+     132836,
+     11220
+    ],
+    [
+     180136,
+     13640
+    ],
+    [
+     208516,
+     13860
+    ],
+    [
+     324016,
+     9680
+    ],
+    [
+     354596,
+     8800
+    ],
+    [
+     387816,
+     15434
+    ]
+   ],
+   "decode_frames": 403266
+  },
+  {
+   "id": "fsd-194993-foot_wet",
+   "path": "fsd50k/clips/eval/194993.wav",
+   "bytes": 484824,
+   "sha256": "c95ade8df8fbc0edeba0db6be7a926c30de4ae1e699fc95830107eabc15d1f07",
+   "role": "foot_wet",
+   "source": "FSD50K",
+   "freesound_id": 194993,
+   "uploader": "soundmary",
+   "licence": "CC-BY-3.0",
+   "title": "splashing footsteps.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 242373,
+   "lufs": -36.31,
+   "peak_db": -9.05,
+   "gain_db": 3.05,
+   "stream": false,
+   "slices": [
+    [
+     49896,
+     15434
+    ],
+    [
+     74976,
+     7700
+    ],
+    [
+     103796,
+     12760
+    ],
+    [
+     140316,
+     15434
+    ],
+    [
+     161436,
+     7700
+    ],
+    [
+     169356,
+     15434
+    ],
+    [
+     189156,
+     15434
+    ],
+    [
+     229856,
+     12517
+    ]
+   ],
+   "decode_frames": 242373
+  },
+  {
+   "id": "fsd-194991-foot_wet",
+   "path": "fsd50k/clips/eval/194991.wav",
+   "bytes": 590664,
+   "sha256": "535087c5695f9f940a9ee6a44a341096832109770d2496df490a957b1dc83796",
+   "role": "foot_wet",
+   "source": "FSD50K",
+   "freesound_id": 194991,
+   "uploader": "soundmary",
+   "licence": "CC-BY-3.0",
+   "title": "splashing footsteps1.mp3",
+   "rate": 44100,
+   "channels": 1,
+   "frames": 295293,
+   "lufs": -33.5,
+   "peak_db": -1.26,
+   "gain_db": -4.74,
+   "stream": false,
+   "slices": [
+    [
+     50336,
+     12320
+    ],
+    [
+     79816,
+     15434
+    ],
+    [
+     143836,
+     15434
+    ],
+    [
+     168476,
+     11880
+    ],
+    [
+     215996,
+     8580
+    ],
+    [
+     242176,
+     12320
+    ],
+    [
+     264616,
+     15434
+    ]
+   ],
+   "decode_frames": 280066
+  },
+  {
+   "id": "kit-click-hover-soft-ui_hover",
+   "path": "sfx-kit/sounds/interface/click-hover-soft.wav",
+   "bytes": 2140,
+   "sha256": "6f58da1b9d8e958f24b5b8f653b9f159c2f0c7497c3c0cd54d317234b6108b54",
+   "role": "ui_hover",
+   "source": "wyzowl/sfx-kit",
+   "freesound_id": null,
+   "uploader": "Wyzowl",
+   "licence": "CC0-1.0",
+   "title": "Hover tick, soft",
+   "rate": 48000,
+   "channels": 1,
+   "frames": 648,
+   "lufs": -99,
+   "peak_db": -10.38,
+   "gain_db": -1.62,
+   "stream": false
+  },
+  {
+   "id": "kit-click-hover-medium-ui_hover",
+   "path": "sfx-kit/sounds/interface/click-hover-medium.wav",
+   "bytes": 2214,
+   "sha256": "b45ea8ca25527930f707e3e6b06efcae39535267877f32dd69379f43efacb604",
+   "role": "ui_hover",
+   "source": "wyzowl/sfx-kit",
+   "freesound_id": null,
+   "uploader": "Wyzowl",
+   "licence": "CC0-1.0",
+   "title": "Hover tick, medium",
+   "rate": 48000,
+   "channels": 1,
+   "frames": 672,
+   "lufs": -99,
+   "peak_db": -7.58,
+   "gain_db": -4.42,
+   "stream": false
+  },
+  {
+   "id": "kit-click-tap-soft-ui_move",
+   "path": "sfx-kit/sounds/interface/click-tap-soft.wav",
+   "bytes": 2498,
+   "sha256": "e870f882b03aed3036011235a06350e626ae69a92dd5c138eb370d87194c6784",
+   "role": "ui_move",
+   "source": "wyzowl/sfx-kit",
+   "freesound_id": null,
+   "uploader": "Wyzowl",
+   "licence": "CC0-1.0",
+   "title": "Tap, soft",
+   "rate": 48000,
+   "channels": 1,
+   "frames": 768,
+   "lufs": -99,
+   "peak_db": -8.7,
+   "gain_db": -3.3,
+   "stream": false
+  },
+  {
+   "id": "kit-click-tap-medium-ui_move",
+   "path": "sfx-kit/sounds/interface/click-tap-medium.wav",
+   "bytes": 3292,
+   "sha256": "d9354a3293aa0dca0fd9824a830f593a154535e829317b16ce5cd4256a61ec0a",
+   "role": "ui_move",
+   "source": "wyzowl/sfx-kit",
+   "freesound_id": null,
+   "uploader": "Wyzowl",
+   "licence": "CC0-1.0",
+   "title": "Tap, medium",
+   "rate": 48000,
+   "channels": 1,
+   "frames": 1032,
+   "lufs": -99,
+   "peak_db": -6.59,
+   "gain_db": -5.41,
+   "stream": false
+  },
+  {
+   "id": "kit-click-button-medium-ui_confirm",
+   "path": "sfx-kit/sounds/interface/click-button-medium.wav",
+   "bytes": 2646,
+   "sha256": "7ce9dde81146c6791f90e2dcc09c9be90be31e51fd604a2b580b967289605a7f",
+   "role": "ui_confirm",
+   "source": "wyzowl/sfx-kit",
+   "freesound_id": null,
+   "uploader": "Wyzowl",
+   "licence": "CC0-1.0",
+   "title": "Button click, medium",
+   "rate": 48000,
+   "channels": 1,
+   "frames": 816,
+   "lufs": -99,
+   "peak_db": -9.14,
+   "gain_db": -2.86,
+   "stream": false
+  },
+  {
+   "id": "kit-click-button-firm-ui_confirm",
+   "path": "sfx-kit/sounds/interface/click-button-firm.wav",
+   "bytes": 3004,
+   "sha256": "8a6c8ac46b9d5434ba195d267817d67056d5309db1a3e26b50fff59bb4b02b67",
+   "role": "ui_confirm",
+   "source": "wyzowl/sfx-kit",
+   "freesound_id": null,
+   "uploader": "Wyzowl",
+   "licence": "CC0-1.0",
+   "title": "Button click, firm",
+   "rate": 48000,
+   "channels": 1,
+   "frames": 936,
+   "lufs": -99,
+   "peak_db": -5.67,
+   "gain_db": -6.33,
+   "stream": false
+  },
+  {
+   "id": "kit-click-latch-soft-ui_back",
+   "path": "sfx-kit/sounds/interface/click-latch-soft.wav",
+   "bytes": 5668,
+   "sha256": "9be52bdbef1acf987d666b520820c7bb8c339b8e52eb6c00e25a0771db0d0bc3",
+   "role": "ui_back",
+   "source": "wyzowl/sfx-kit",
+   "freesound_id": null,
+   "uploader": "Wyzowl",
+   "licence": "CC0-1.0",
+   "title": "Push latch, soft",
+   "rate": 48000,
+   "channels": 1,
+   "frames": 1824,
+   "lufs": -99,
+   "peak_db": -8.7,
+   "gain_db": -3.3,
+   "stream": false
+  },
+  {
+   "id": "kit-click-toggle-on-medium-ui_toggle",
+   "path": "sfx-kit/sounds/interface/click-toggle-on-medium.wav",
+   "bytes": 5026,
+   "sha256": "18e1a177e69d9a6884a5fee9658452f50627dce62adeb86c214ddf37bb0f6f55",
+   "role": "ui_toggle",
+   "source": "wyzowl/sfx-kit",
+   "freesound_id": null,
+   "uploader": "Wyzowl",
+   "licence": "CC0-1.0",
+   "title": "Toggle on, medium",
+   "rate": 48000,
+   "channels": 1,
+   "frames": 1608,
+   "lufs": -99,
+   "peak_db": -10.44,
+   "gain_db": -1.56,
+   "stream": false
+  },
+  {
+   "id": "kit-click-toggle-off-medium-ui_toggle",
+   "path": "sfx-kit/sounds/interface/click-toggle-off-medium.wav",
+   "bytes": 7474,
+   "sha256": "39a4bea830b740a426a7930073ee001ab83a426a081585760b96493645cba8c2",
+   "role": "ui_toggle",
+   "source": "wyzowl/sfx-kit",
+   "freesound_id": null,
+   "uploader": "Wyzowl",
+   "licence": "CC0-1.0",
+   "title": "Toggle off, medium",
+   "rate": 48000,
+   "channels": 1,
+   "frames": 2424,
+   "lufs": -99,
+   "peak_db": -10.97,
+   "gain_db": -1.03,
+   "stream": false
+  },
+  {
+   "id": "kit-notification-success-warm-ui_start",
+   "path": "sfx-kit/sounds/notifications/notification-success-warm.wav",
+   "bytes": 98060,
+   "sha256": "0700101e75de508ffc58d7f9e3ee007da63bd86535c3594e5d02ae1bc71550ca",
+   "role": "ui_start",
+   "source": "wyzowl/sfx-kit",
+   "freesound_id": null,
+   "uploader": "Wyzowl",
+   "licence": "CC0-1.0",
+   "title": "Success, warm",
+   "rate": 48000,
+   "channels": 1,
+   "frames": 32616,
+   "lufs": -32.57,
+   "peak_db": -14.64,
+   "gain_db": 2.64,
+   "stream": false
+  },
+  {
+   "id": "kit-whoosh-fast-soft-ui_open",
+   "path": "sfx-kit/sounds/whooshes/whoosh-fast-soft.wav",
+   "bytes": 72198,
+   "sha256": "ecc83a9cab2342eba9fa71dc321776156ffefbdcda2c672298fda385a4e0a103",
+   "role": "ui_open",
+   "source": "wyzowl/sfx-kit",
+   "freesound_id": null,
+   "uploader": "Wyzowl",
+   "licence": "CC0-1.0",
+   "title": "Whoosh, fast and soft",
+   "rate": 48000,
+   "channels": 2,
+   "frames": 12000,
+   "lufs": -99,
+   "peak_db": -13.55,
+   "gain_db": 1.55,
+   "stream": false
+  }
+ ]
+}

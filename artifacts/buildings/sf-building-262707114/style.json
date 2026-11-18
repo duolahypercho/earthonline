@@ -1,0 +1,85 @@
+{
+ "seed": 11,
+ "notes": "1916 four-storey flats. Colour taken from the blur (warm taupe-brown), everything else is the block's 1910s pattern: painted stucco, two cant bays from storey 1 to the roof, a bracketed cornice, a centre stair entry and one garage door at street level. Wall darkened toward the blur's medium warm brown-taupe, the rest stays the block fallback. Medium-dark brown stucco with dark brown trim, frames, cornice brackets and shop frames; the white roll-up garage and plain door are replaced by two large dark-framed ground windows either side of a centre stair entry under a brown canvas awning with a valance; the small light-well jogs on the side (edges 1, 5, 6, 7) are treated as blind party returns so no sills or hoods float in the notches. Wall re-tinted toward the blur's mauve grey-brown (6f5c58). Geometry unchanged (shopfront/hood claims unverifiable either way). SvS shows a brown corner building whose awning/bays match 262707054 (identity doubt), so only colours applied: medium brown 7a5f52, dark brown trim 4e3a30, dark awning 3e2a22. Geometry unchanged, no basement band (no key/verified). Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-white",
+ "wallTint": "#957f75",
+ "trim": "painted-white@4e3a30",
+ "frame": "painted-white@4e3a30",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@4e3a30",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@957f75",
+ "cornice": true,
+ "corniceProjectionM": 0.45,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.4,
+ "upperWindows": [
+  0.5
+ ],
+ "bays": [
+  {
+   "at": 0.21,
+   "widthM": 2.7,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#957f75"
+  },
+  {
+   "at": 0.79,
+   "widthM": 2.7,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#957f75"
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.06,
+    "to": 0.36,
+    "kind": "window",
+    "headM": 2.4
+   },
+   {
+    "from": 0.43,
+    "to": 0.57,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-white@3e2a22"
+   },
+   {
+    "from": 0.64,
+    "to": 0.94,
+    "kind": "window",
+    "headM": 2.4
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "awning": "canvas-plain@3e2a22",
+ "awningSpans": [
+  {
+   "from": 0.39,
+   "to": 0.61,
+   "depthM": 1.1,
+   "valanceM": 0.35
+  }
+ ],
+ "edgeRoles": {
+  "1": "party",
+  "5": "party",
+  "6": "party",
+  "7": "party"
+ },
+ "streetStills": true
+}

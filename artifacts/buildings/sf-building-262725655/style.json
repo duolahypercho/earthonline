@@ -1,0 +1,131 @@
+{
+ "seed": 7,
+ "notes": "Slate grey sided Edwardian corner flats at Hyde and Chestnut over a dark navy base storey. Round turret-bay (storeys 1-2) at the corner end of the Hyde face, single cream-cased sash windows, belt courses under each storey, dark projecting eave cornice. Chestnut face (edges 5 and 6) carries sash windows over the same dark base; small side door on Hyde. Moved to the Chestnut corner (at 0.16), windows and the side door mirrored with it, fewer turret facets for wider curved sashes. Wall dark slate purple-grey with cream trim. Lower ground storey (2.8 m) removes the mezzanine band: a near-black raised basement plinth capped by a cream water-table band, then 2 tall main storeys. Corner turret is a true round bay (half-cylinder ends) from the plinth to the eave; a second smaller round bay uphill on Hyde. Flat wall: fewer, wider sashes with cream heads. The bracketed cornice is replaced by a continuous dark navy eave band with a cream cap; a small hipped dormer on the Hyde face. Entry moved to the uphill side. Turret curves drawn with fewer, wider facets so each carries a real sash window instead of a sliver. Wall pushed from lavender to dark slate grey, basement plinth near-black, both round bays drawn with more facets so they read round, not canted. Wall tint pushed further toward dark slate. Both bays drawn rounder (three facets per quarter, deeper and wider so each curved facet still carries a sash); cream double bands at every storey sill and head line across the flat walls; a deeper navy frieze with a cream coping at the eave; a small basement door on the side face; bays keep their corbel base just above the cream water table. Wall shifted to a neutral charcoal slate; a cream stepped bracketed cornice over a dark navy frieze replaces the flat blue slab edge; the small roof ornament between the bays sits on the wall line with a cream cap. Not doable: navy spandrel panels on the bay faces and a moulded band at the bay base (bay prisms take one material). Bays kept at 5 facets with a sash per facet (the 3 tall windows across each bow storey, so the sash count is about right). Not doable: a smooth cylinder, navy spandrels wrapping the bows and the cornice following their curve (kit bays carry only thin plates in the wall colour). Trim/belts a touch creamier. Wall/base tones were already game-calibrated slate in rework 2. Not drawable: smooth round bays, navy spandrels on bays, bellcast cornice. Slate wall, cream casings, navy belt bands, round bows with three sashes per storey; all already present and game-calibrated. Base band deepened to #3a3d48. Not drawable: smooth curved bows, curved cornice, navy spandrels on bays. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k). GroundBand lift (2026-10-03): groundBand tint #3a3d48 -> #585a63 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-white",
+ "wallTint": "#797d8d",
+ "trim": "painted-white@f6eec6",
+ "frame": "painted-white@f6eec6",
+ "glass": "glass-clear",
+ "cornice": true,
+ "beltCourse": true,
+ "windowHoods": true,
+ "windowW": 1.1,
+ "windowSillM": 0.7,
+ "windowHeadM": 2.6,
+ "floorsM": {
+  "groundM": 2.8,
+  "upperM": 3.5
+ },
+ "fascia": {
+  "heightM": 1.1,
+  "projectionM": 0.1,
+  "material": "painted-white",
+  "tint": "#323855"
+ },
+ "coping": null,
+ "upperWindows": [
+  0.45,
+  0.86
+ ],
+ "bays": [
+  {
+   "at": 0.18,
+   "widthM": 4.2,
+   "projectionM": 1.6,
+   "roundCorners": 2,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#797d8d"
+  },
+  {
+   "at": 0.62,
+   "widthM": 3.2,
+   "projectionM": 1.1,
+   "roundCorners": 2,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#797d8d"
+  }
+ ],
+ "roofBlocks": [
+  {
+   "at": 0.42,
+   "widthM": 1.6,
+   "depthM": 1.2,
+   "setbackM": 0.0,
+   "hipRiseM": 0.7,
+   "eaveM": 0.15,
+   "material": "painted-white",
+   "tint": "#575c70",
+   "hipMaterial": "painted-white@fffee8"
+  }
+ ],
+ "storefrontFrame": "painted-steel",
+ "bulkhead": "painted-white@585a63",
+ "groundBand": {
+  "material": "painted-white",
+  "tint": "#585a63",
+  "topM": 2.8
+ },
+ "storefront": {
+  "bulkheadM": 0.9,
+  "transomM": 0.2,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.89,
+    "to": 0.96,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel"
+   }
+  ]
+ },
+ "streetEdges": {
+  "5": {
+   "upperWindows": [
+    0.3,
+    0.62,
+    0.85
+   ],
+   "roofBlocks": [],
+   "storefront": {
+    "layout": [
+     {
+      "from": 0.46,
+      "to": 0.53,
+      "kind": "door",
+      "leaf": "painted-steel",
+      "headM": 2.2
+     }
+    ]
+   }
+  },
+  "6": {
+   "upperWindows": [
+    0.25,
+    0.6
+   ],
+   "roofBlocks": [],
+   "storefront": {
+    "layout": []
+   }
+  }
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "stripes": {
+  "material": "painted-white",
+  "tint": "#f6eec6",
+  "heightM": 0.12,
+  "offsetsM": [
+   0.42,
+   0.58,
+   2.7,
+   2.86
+  ],
+  "fromStorey": 1
+ },
+ "corniceProjectionM": 0.4
+}

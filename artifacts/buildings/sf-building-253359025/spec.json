@@ -1,0 +1,127 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-253359025",
+  "slug": "b253359025",
+  "walkIndex": 5259,
+  "street": "Polk Street",
+  "address": null,
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (lidar-over-roll)"
+  },
+  "heightM": 7.55,
+  "storeys": 2,
+  "floors": {
+    "groundM": 4.45,
+    "upperM": 2.5,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1910,
+  "use": "COMR",
+  "usage": "mixed",
+  "amenity": "nightclub",
+  "shop": null,
+  "facade": "shopfront",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 0,
+    "center": {
+      "x": -29,
+      "z": 1056.45
+    },
+    "heading": -1.733241,
+    "width": 36.483,
+    "depth": 41.445
+  },
+  "frameMirrored": true,
+  "polygonWinding": "cw",
+  "polygon": [
+    {
+      "x": 18.242,
+      "z": 20.723
+    },
+    {
+      "x": -18.239,
+      "z": 20.723
+    },
+    {
+      "x": -18.242,
+      "z": -20.723
+    },
+    {
+      "x": 18.14,
+      "z": -20.706
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 18.242,
+        "z": 20.723
+      },
+      "b": {
+        "x": -18.239,
+        "z": 20.723
+      },
+      "lengthM": 36.48,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -18.239,
+        "z": 20.723
+      },
+      "b": {
+        "x": -18.242,
+        "z": -20.723
+      },
+      "lengthM": 41.445,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -18.242,
+        "z": -20.723
+      },
+      "b": {
+        "x": 18.14,
+        "z": -20.706
+      },
+      "lengthM": 36.382,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 18.14,
+        "z": -20.706
+      },
+      "b": {
+        "x": 18.242,
+        "z": 20.723
+      },
+      "lengthM": 41.429,
+      "role": "rear",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

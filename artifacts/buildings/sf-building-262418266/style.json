@@ -1,0 +1,191 @@
+{
+ "seed": 8,
+ "notes": "1956 narrow three-storey office infill. Pale sage stucco scored into large panels (horizontal joints per storey + three vertical joints); four narrow dark-framed single sashes a storey, irregularly spaced; ground: three tall narrow black grilled windows and a grilled dark door at the south end; moulded hood near the south end over the ground storey; thin parapet ledge. Low confidence: straight-on view is tree-covered. One row of five narrow tall windows at storey 2 only, top storey left blank (tree-covered), ground blank wall with two grilled panels near the left and the stair door, deeper projecting ledge plus a moulded ledge piece above the window row. Street walls cut to 7.9 m via floorsM 4.0/1.9 + wallTopM (LiDAR 12.2 m is the rear wing), window row at storey 2, greener sage. Removed the three rooftop masts (they were 12 m vertical joint plaques poking above the 7.9 m wall; now 7.5 m). Wall #dcdfd8, four evenly spaced 0.7 m sashes. Grilles kept. Wing right of the front is footprint data, unchanged. Kept. Applied: three evenly spaced 0.9 m upper sashes, three evenly spaced grilled ground windows + grilled door, thin ledge under the coping. Long uniform wall to the right is neighbouring parcels/party wall, not this 6.4 m front. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-stucco",
+ "wallTint": "#eeefec",
+ "trim": "painted-white@e4e8e2",
+ "frame": "painted-steel@2a2c2a",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-steel@2a2c2a",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-stucco@eeefec",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.7,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.6,
+ "floorsM": {
+  "groundM": 4.0,
+  "upperM": 1.9
+ },
+ "upperWindows": [],
+ "bays": [],
+ "stripes": {
+  "material": "painted-stucco",
+  "tint": "#b9c0b8",
+  "heightM": 0.05,
+  "fromStorey": 1,
+  "offsetsM": [
+   0.3,
+   0.6
+  ]
+ },
+ "coping": {
+  "heightM": 0.5,
+  "projectionM": 0.5,
+  "material": "painted-white",
+  "tint": "#d4dad0"
+ },
+ "storefront": {
+  "bulkheadM": 0.6,
+  "transomM": 0.2,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.09,
+    "to": 0.145,
+    "kind": "window",
+    "headM": 2.4,
+    "grille": true
+   },
+   {
+    "from": 0.36,
+    "to": 0.415,
+    "kind": "window",
+    "headM": 2.4,
+    "grille": true
+   },
+   {
+    "from": 0.6,
+    "to": 0.655,
+    "kind": "window",
+    "headM": 2.4,
+    "grille": true
+   },
+   {
+    "from": 0.84,
+    "to": 0.96,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel@2c2e2c",
+    "grille": true
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "office",
+ "plaques": [
+  {
+   "at": 0.5,
+   "y": 4.0,
+   "w": 6.4,
+   "h": 0.05,
+   "face": "painted-stucco@b9c0b8"
+  },
+  {
+   "at": 0.5,
+   "y": 4.6,
+   "w": 6.4,
+   "h": 0.05,
+   "face": "painted-stucco@b9c0b8"
+  },
+  {
+   "at": 0.21,
+   "y": 3.75,
+   "w": 0.05,
+   "h": 7.5,
+   "face": "painted-stucco@b9c0b8"
+  },
+  {
+   "at": 0.5,
+   "y": 3.75,
+   "w": 0.05,
+   "h": 7.5,
+   "face": "painted-stucco@b9c0b8"
+  },
+  {
+   "at": 0.8,
+   "y": 3.75,
+   "w": 0.05,
+   "h": 7.5,
+   "face": "painted-stucco@b9c0b8"
+  },
+  {
+   "at": 0.79,
+   "y": 7.0,
+   "w": 2.4,
+   "h": 0.3,
+   "face": "painted-white@dde2da"
+  },
+  {
+   "at": 0.79,
+   "y": 6.8,
+   "w": 2.0,
+   "h": 0.14,
+   "face": "painted-stucco@b9c0b8"
+  },
+  {
+   "at": 0.5,
+   "y": 1.3,
+   "w": 6.4,
+   "h": 0.05,
+   "face": "painted-stucco@b9c0b8"
+  },
+  {
+   "at": 0.5,
+   "y": 2.6,
+   "w": 6.4,
+   "h": 0.05,
+   "face": "painted-stucco@b9c0b8"
+  },
+  {
+   "at": 0.5,
+   "y": 5.3,
+   "w": 6.4,
+   "h": 0.05,
+   "face": "painted-stucco@b9c0b8"
+  },
+  {
+   "at": 0.5,
+   "y": 6.6,
+   "w": 6.4,
+   "h": 0.05,
+   "face": "painted-stucco@b9c0b8"
+  },
+  {
+   "at": 0.5,
+   "y": 7.45,
+   "w": 6.6,
+   "h": 0.14,
+   "face": "painted-white@e4e8e2"
+  }
+ ],
+ "grilleMaterial": "painted-steel@1e1e1e",
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.11,
+     0.25
+    ],
+    [
+     0.43,
+     0.57
+    ],
+    [
+     0.73,
+     0.87
+    ]
+   ],
+   "sillM": 0.2,
+   "headM": 1.8
+  },
+  "2": {
+   "spans": []
+  }
+ },
+ "wallTopM": 7.9,
+ "streetStills": true
+}

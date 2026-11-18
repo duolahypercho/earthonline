@@ -1,0 +1,143 @@
+{
+ "seed": 5,
+ "notes": "Civic block: blank grey stone plinth about one storey high carrying a long continuous mural band, an ashlar course, set-back dark green-framed glazing under shallow sloped glass ridges, stone-clad ashlar storeys above. GroundBand lift (2026-10-03): groundBand tint #a9a7a1 -> #d4d3d0 (same rule as walls; it was missed by the first colour pass).",
+ "streetStills": true,
+ "glass": "glass-reflective",
+ "storefrontGlass": "glass-storefront",
+ "wall": "limestone-ashlar",
+ "windowW": 1.2,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "cornice": true,
+ "corniceProjectionM": 0.3,
+ "beltCourse": true,
+ "ground": "vacant",
+ "upper": "office",
+ "wallTint": "#b9b6ac",
+ "trim": "painted-white@b4b2ab",
+ "frame": "painted-steel@2c5a4a",
+ "upperWindows": [],
+ "floorsM": {
+  "groundM": 4.2,
+  "upperM": 3.0
+ },
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.03,
+     0.48
+    ],
+    [
+     0.52,
+     0.97
+    ]
+   ],
+   "sillM": 0.3,
+   "headM": 2.9
+  },
+  "2": {
+   "spans": [
+    [
+     0.03,
+     0.48
+    ],
+    [
+     0.52,
+     0.97
+    ]
+   ],
+   "sillM": 0.3,
+   "headM": 2.9
+  },
+  "3": {
+   "spans": [
+    [
+     0.1,
+     0.9
+    ]
+   ],
+   "sillM": 1.0,
+   "headM": 2.2
+  },
+  "4": {
+   "spans": [
+    [
+     0.1,
+     0.9
+    ]
+   ],
+   "sillM": 1.0,
+   "headM": 2.2
+  },
+  "5": {
+   "spans": [
+    [
+     0.1,
+     0.9
+    ]
+   ],
+   "sillM": 1.0,
+   "headM": 2.2
+  },
+  "6": {
+   "spans": [
+    [
+     0.1,
+     0.9
+    ]
+   ],
+   "sillM": 1.0,
+   "headM": 2.2
+  }
+ },
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#d4d3d0",
+  "topM": 4.0
+ },
+ "mural": {
+  "from": 0.06,
+  "to": 0.96,
+  "bottomM": 0.45,
+  "topM": 3.1,
+  "seed": 3,
+  "shapes": 60,
+  "palette": [
+   "#3f8ad8",
+   "#3f9a5a",
+   "#d9402a",
+   "#e8d9b0",
+   "#f0b531",
+   "#7a4aa0",
+   "#d86a2a"
+  ]
+ },
+ "storefront": {
+  "bulkheadM": 0.3,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.02,
+    "to": 0.98,
+    "kind": "blank",
+    "material": "painted-stucco",
+    "tint": "#b0aea8",
+    "headM": 4.0
+   }
+  ]
+ },
+ "bayM": 9.0,
+ "hbSignBands": [
+  {
+   "from": 0.0,
+   "to": 1.0,
+   "bottomM": 4.0,
+   "topM": 4.9,
+   "material": "limestone-ashlar",
+   "tint": "#b4b1a6"
+  }
+ ]
+}

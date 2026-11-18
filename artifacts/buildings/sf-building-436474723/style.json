@@ -1,0 +1,196 @@
+{
+ "seed": 1,
+ "wall": "concrete-precast",
+ "wallTint": "#d8cdb8",
+ "trim": "concrete-precast@bfb5a0",
+ "frame": "painted-steel@3a3a3a",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-steel@3a3a3a",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "concrete-precast@cfc6b2",
+ "cornice": true,
+ "corniceProjectionM": 0.3,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 1.3,
+ "windowSillM": 1.0,
+ "windowHeadM": 3.4,
+ "upperWindows": [
+  0.0417,
+  0.125,
+  0.2083,
+  0.2917,
+  0.375,
+  0.4583,
+  0.5417,
+  0.625,
+  0.7083,
+  0.7917,
+  0.875,
+  0.9583
+ ],
+ "storefront": {
+  "bulkheadM": 1.4,
+  "transomM": 0.3,
+  "pierM": 0.5,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.0185,
+    "to": 0.0725,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.1094,
+    "to": 0.1634,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.2003,
+    "to": 0.2543,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.2912,
+    "to": 0.3452,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.3821,
+    "to": 0.4361,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.473,
+    "to": 0.527,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.5639,
+    "to": 0.6179,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.6548,
+    "to": 0.7088,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.7457,
+    "to": 0.7997,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.8366,
+    "to": 0.8906,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.9275,
+    "to": 0.9815,
+    "kind": "window",
+    "headM": 3.3
+   }
+  ]
+ },
+ "ground": "vacant",
+ "upper": "office",
+ "streetStills": true,
+ "notes": "1968 twelve-storey cream precast concrete office. Street front shows a two-storey podium with recessed square windows and a balcony loggia above; modelled as cream concrete with a regular window grid, recessed ground windows, no ornament. Podium/tower setback not expressed. Triangle budget rejected (rear walls); bayM 9 thins the rear windows, 8 front windows. Vacant ground, sparser rear windows. A two-storey cream precast podium (blank plinth with recessed square windows, loggia with dark rails above) with the tower set back behind; floorsM 4.6/4.6 so the podium top is 9.2 m, 11 ground windows, 12 loggia openings (storey 1 ribbon spans), upperSetback steps the front wing back above the podium. TINT-REQUEST d8cdb8 applied (2026-10-03) as #d8cdb8.",
+ "bayM": 16,
+ "floorsM": {
+  "groundM": 4.6,
+  "upperM": 4.6
+ },
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.0117,
+     0.0717
+    ],
+    [
+     0.095,
+     0.155
+    ],
+    [
+     0.1783,
+     0.2383
+    ],
+    [
+     0.2617,
+     0.3217
+    ],
+    [
+     0.345,
+     0.405
+    ],
+    [
+     0.4283,
+     0.4883
+    ],
+    [
+     0.5117,
+     0.5717
+    ],
+    [
+     0.595,
+     0.655
+    ],
+    [
+     0.6783,
+     0.7383
+    ],
+    [
+     0.7617,
+     0.8217
+    ],
+    [
+     0.845,
+     0.905
+    ],
+    [
+     0.9283,
+     0.9883
+    ]
+   ],
+   "sillM": 0.9,
+   "headM": 3.7
+  }
+ },
+ "upperSetback": [
+  {
+   "fromM": 9.2,
+   "depthM": 12,
+   "bandM": 13,
+   "edges": [
+    15
+   ],
+   "ledge": {
+    "heightM": 0.4,
+    "projectionM": 0.3,
+    "material": "concrete-precast",
+    "tint": "#cfc6b2"
+   },
+   "deck": {
+    "material": "concrete-precast",
+    "tint": "#cfc6b2"
+   },
+   "railing": {
+    "heightM": 1.0,
+    "material": "painted-steel",
+    "postM": 1.6
+   }
+  }
+ ]
+}

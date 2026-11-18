@@ -1,0 +1,104 @@
+{
+ "seed": 119,
+ "notes": "Round 4: 1913 caramel stucco flats, garage ground (very dark green frame, tan panels; panels are wall-coloured not glazed in the photo), wide dark iron lattice gate with house numerals above; two shallow canted bays with solid stucco faces and separate punched windows; thin white stripe at each bay's left edge. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. Colour re-apply (2026-10-03): a rework re-sampled wallTint #b97e5a from the photo; lifted/converted once to #c7987b.",
+ "wall": "painted-stucco",
+ "wallTint": "#c7987b",
+ "trim": "painted-white@e8dcc6",
+ "frame": "painted-white@1e1f22",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@10241a",
+ "storefrontGlass": "glass-storefront",
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.6,
+  "upperM": 3.3
+ },
+ "windowW": 0.05,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.3,
+ "upperWindows": [
+  0.25
+ ],
+ "bays": [
+  {
+   "at": 0.22,
+   "widthM": 2.8,
+   "projectionM": 0.65,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#b97e5a"
+  },
+  {
+   "at": 0.8,
+   "widthM": 2.8,
+   "projectionM": 0.65,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#b97e5a"
+  }
+ ],
+ "hbBayGlazing": {
+  "marginM": 0.22,
+  "maxW": 1.1,
+  "sillM": 0.6,
+  "headM": 0.45,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#1e1f22",
+  "sashM": 0.08,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "garagePanels": {
+  "material": "painted-white",
+  "tint": "#b07650",
+  "rows": 4,
+  "cols": 2,
+  "railM": 0.07,
+  "surroundM": 0.1,
+  "surroundTint": "#10241a"
+ },
+ "storefront": {
+  "bulkheadM": 0,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.25,
+    "to": 0.53,
+    "kind": "glazed-garage",
+    "headM": 2.55,
+    "material": "painted-white",
+    "tint": "#10241a"
+   },
+   {
+    "from": 0.61,
+    "to": 0.93,
+    "kind": "gate",
+    "headM": 2.7,
+    "material": "painted-steel",
+    "tint": "#141516",
+    "lattice": true
+   }
+  ]
+ },
+ "ground": "garage",
+ "upper": "apartment",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "streetStills": true,
+ "pilasters": {
+  "at": [
+   0.03,
+   0.605
+  ],
+  "widthM": 0.3,
+  "projectionM": 0.08,
+  "fromM": 0.4,
+  "material": "painted-white",
+  "tint": "#ece4d4"
+ },
+ "latticeMaterial": "painted-steel@141516"
+}

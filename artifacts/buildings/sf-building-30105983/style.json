@@ -1,0 +1,613 @@
+{
+  "seed": 1,
+  "notes": "1907 four-storey Edwardian flats over a continuous run of shopfronts; pale warm-grey stucco, twelve 3-sided bays on storeys 2-4, two steel fire escapes, tall ground storey with a divided transom band, flat parapet with a thin cornice. Shopfront run held 2.2 m clear of both acute wedge corners (frame returns poked through the flank edges). Cool pale-grey and off-white painted stucco per unit (four flats fronts, wallZones), crisp white trim and window heads, bays 0.6 m deep with moulded white crowns, brackets and frieze panels (kit bayCrown), a separate cornice per unit (kit corniceZones), cream shop piers with dark red-brown trim pilasters and a red-brown fascia band, dark tiled bulkheads, dark red-brown shop frames, a deep blue awning pair over the widest shop at the north-west end, two fire escapes (middle and four-fifths from the south-east end) with stringers, balusters and a drop ladder (kit fireEscapes), dark room tones and drawn blinds behind the sashes (glassBacking), cafe fit-out on the ground storey. Four flats read as separate buildings - zone lines moved onto the piers (0.236/0.486/0.736) with projecting seam strips, parapets stepped per flat (0 / 0.45 / 0.2 / 0.5 m) with their cornices and paired brackets, crisp painted finish instead of the speckled stucco; six shop tenancies (cbShopUnits) with their own frame colours, blank fascia sign bands, window graphics, a small tricolour flag, green-framed shop with an orange door, navy scalloped awning pair; shop fit-outs with dark back walls (no see-through to the rear); storeys 3.7 m + 3 x 2.85 m with taller sashes (0.6-2.45 m); curtains and sheers per window; heavier fire escapes (continuous stringers, knee braces, kick plates, stowed ladder); upper flats along the front, one room per bay, fit-out differing per room and storey.",
+  "storeysSeen": {
+    "count": 4,
+    "groundM": 3.7,
+    "upperM": 2.85
+  },
+  "wall": "painted-white",
+  "wallTint": "#f2efe8",
+  "trim": "painted-white",
+  "beltCourse": false,
+  "windowHoods": true,
+  "cornice": true,
+  "corniceProjectionM": 0.3,
+  "upperWindows": [
+    0.0833,
+    0.1667,
+    0.25,
+    0.3333,
+    0.4167,
+    0.5,
+    0.5833,
+    0.6667,
+    0.75,
+    0.8333,
+    0.9167
+  ],
+  "windowW": 1.0,
+  "bays": [
+    {
+      "at": 0.0417,
+      "widthM": 2.7,
+      "projectionM": 0.8,
+      "fromStorey": 1,
+      "material": "painted-white",
+      "tint": "#e8e6e0"
+    },
+    {
+      "at": 0.125,
+      "widthM": 2.7,
+      "projectionM": 0.8,
+      "fromStorey": 1,
+      "material": "painted-white",
+      "tint": "#e8e6e0"
+    },
+    {
+      "at": 0.2083,
+      "widthM": 2.7,
+      "projectionM": 0.8,
+      "fromStorey": 1,
+      "material": "painted-white",
+      "tint": "#e8e6e0"
+    },
+    {
+      "at": 0.2917,
+      "widthM": 2.7,
+      "projectionM": 0.8,
+      "fromStorey": 1,
+      "material": "painted-white",
+      "tint": "#fbf0da"
+    },
+    {
+      "at": 0.375,
+      "widthM": 2.7,
+      "projectionM": 0.8,
+      "fromStorey": 1,
+      "material": "painted-white",
+      "tint": "#fbf0da"
+    },
+    {
+      "at": 0.4583,
+      "widthM": 2.7,
+      "projectionM": 0.8,
+      "fromStorey": 1,
+      "material": "painted-white",
+      "tint": "#fbf0da"
+    },
+    {
+      "at": 0.5417,
+      "widthM": 2.7,
+      "projectionM": 0.8,
+      "fromStorey": 1,
+      "material": "float-finish-stucco",
+      "tint": "#e2e0da"
+    },
+    {
+      "at": 0.625,
+      "widthM": 2.7,
+      "projectionM": 0.8,
+      "fromStorey": 1,
+      "material": "float-finish-stucco",
+      "tint": "#e2e0da"
+    },
+    {
+      "at": 0.7083,
+      "widthM": 2.7,
+      "projectionM": 0.8,
+      "fromStorey": 1,
+      "material": "float-finish-stucco",
+      "tint": "#e2e0da"
+    },
+    {
+      "at": 0.7917,
+      "widthM": 2.7,
+      "projectionM": 0.8,
+      "fromStorey": 1,
+      "material": "painted-white",
+      "tint": "#f6f6f4"
+    },
+    {
+      "at": 0.875,
+      "widthM": 2.7,
+      "projectionM": 0.8,
+      "fromStorey": 1,
+      "material": "painted-white",
+      "tint": "#f6f6f4"
+    },
+    {
+      "at": 0.9583,
+      "widthM": 2.7,
+      "projectionM": 0.8,
+      "fromStorey": 1,
+      "material": "painted-white",
+      "tint": "#f6f6f4"
+    }
+  ],
+  "storefront": {
+    "awning": false,
+    "bulkheadM": 0.5,
+    "transomM": 1.0,
+    "transomPaneM": 0.5,
+    "pierM": 0.4,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.035,
+        "to": 0.06
+      },
+      {
+        "kind": "double-door",
+        "from": 0.065,
+        "to": 0.1,
+        "leaf": "painted-steel"
+      },
+      {
+        "kind": "garage",
+        "from": 0.12,
+        "to": 0.16
+      },
+      {
+        "kind": "gate",
+        "from": 0.17,
+        "to": 0.195
+      },
+      {
+        "kind": "window",
+        "from": 0.21,
+        "to": 0.27
+      },
+      {
+        "kind": "door",
+        "from": 0.275,
+        "to": 0.3,
+        "leaf": "painted-steel"
+      },
+      {
+        "kind": "window",
+        "from": 0.305,
+        "to": 0.35
+      },
+      {
+        "kind": "gate",
+        "from": 0.36,
+        "to": 0.385
+      },
+      {
+        "kind": "window",
+        "from": 0.4,
+        "to": 0.43
+      },
+      {
+        "kind": "door",
+        "from": 0.435,
+        "to": 0.46,
+        "leaf": "wood-siding"
+      },
+      {
+        "kind": "window",
+        "from": 0.465,
+        "to": 0.5
+      },
+      {
+        "kind": "door",
+        "from": 0.515,
+        "to": 0.535,
+        "leaf": "painted-steel"
+      },
+      {
+        "kind": "window",
+        "from": 0.54,
+        "to": 0.56
+      },
+      {
+        "kind": "window",
+        "from": 0.575,
+        "to": 0.61
+      },
+      {
+        "kind": "door",
+        "from": 0.615,
+        "to": 0.635,
+        "leaf": "painted-white@8e241c"
+      },
+      {
+        "kind": "gate",
+        "from": 0.65,
+        "to": 0.675
+      },
+      {
+        "kind": "door",
+        "from": 0.685,
+        "to": 0.705,
+        "leaf": "wood-siding",
+        "stair": true
+      },
+      {
+        "kind": "window",
+        "from": 0.72,
+        "to": 0.79
+      },
+      {
+        "kind": "double-door",
+        "from": 0.795,
+        "to": 0.83,
+        "leaf": "painted-white@e0762a"
+      },
+      {
+        "kind": "window",
+        "from": 0.835,
+        "to": 0.9
+      },
+      {
+        "kind": "window",
+        "from": 0.905,
+        "to": 0.935
+      },
+      {
+        "kind": "door",
+        "from": 0.94,
+        "to": 0.965,
+        "leaf": "painted-white@27365e"
+      }
+    ]
+  },
+  "storefrontFrame": "painted-steel@3b1e19",
+  "bulkhead": "terracotta@4e2b25",
+  "ground": "restaurant",
+  "upper": "apartment",
+  "innerRectFit": {
+    "minDepthM": 10
+  },
+  "wallZones": [
+    {
+      "from": 0.0,
+      "to": 1.0,
+      "fromY": -1.0,
+      "toY": 3.3,
+      "material": "painted-white",
+      "tint": "#efe4cc"
+    },
+    {
+      "from": 0.0,
+      "to": 1.0,
+      "fromY": 3.3,
+      "toY": 3.74,
+      "material": "painted-white",
+      "tint": "#6a2a22"
+    },
+    {
+      "from": 0.0,
+      "to": 0.236,
+      "fromY": 3.74,
+      "material": "painted-white",
+      "tint": "#f2efe8"
+    },
+    {
+      "from": 0.236,
+      "to": 0.486,
+      "fromY": 3.74,
+      "material": "painted-white",
+      "tint": "#fff3dc"
+    },
+    {
+      "from": 0.486,
+      "to": 0.736,
+      "fromY": 3.74,
+      "material": "float-finish-stucco",
+      "tint": "#e9e6df"
+    },
+    {
+      "from": 0.736,
+      "to": 1.0,
+      "fromY": 3.74,
+      "material": "painted-white",
+      "tint": "#ffffff"
+    }
+  ],
+  "bayCrown": {
+    "heightM": 0.6,
+    "projectionM": 0.26,
+    "brackets": 4,
+    "material": "painted-white",
+    "tint": "#eeede8",
+    "frieze": {
+      "material": "painted-stucco",
+      "tint": "#bfc7cb"
+    }
+  },
+  "corniceZones": [
+    {
+      "from": 0.0,
+      "to": 0.236,
+      "heightM": 0.5,
+      "projectionM": 0.34,
+      "dentils": 18,
+      "tint": "#ffffff",
+      "dropM": -0.0
+    },
+    {
+      "from": 0.236,
+      "to": 0.486,
+      "heightM": 0.42,
+      "projectionM": 0.3,
+      "tint": "#fff8ea",
+      "dropM": -0.45
+    },
+    {
+      "from": 0.486,
+      "to": 0.736,
+      "heightM": 0.55,
+      "projectionM": 0.36,
+      "dentils": 22,
+      "tint": "#ffffff",
+      "dropM": -0.2
+    },
+    {
+      "from": 0.736,
+      "to": 1.0,
+      "heightM": 0.45,
+      "projectionM": 0.3,
+      "tint": "#ffffff",
+      "dropM": -0.5
+    },
+    {
+      "from": 0.035,
+      "to": 0.965,
+      "heightM": 0.44,
+      "projectionM": 0.22,
+      "dropM": 8.64,
+      "tint": "#6a2a22",
+      "material": "painted-white"
+    }
+  ],
+  "fireEscapes": [
+    {
+      "at": 0.5,
+      "widthM": 3.4,
+      "depthM": 0.9,
+      "cbHeavy": true,
+      "cbLadderM": 1.0
+    },
+    {
+      "at": 0.8333,
+      "widthM": 3.4,
+      "depthM": 0.9,
+      "cbHeavy": true,
+      "cbLadderM": 1.0
+    }
+  ],
+  "awning": "awning-canvas@1d3160",
+  "pilasters": {
+    "at": [
+      0.03,
+      0.11,
+      0.165,
+      0.2025,
+      0.3525,
+      0.3925,
+      0.5075,
+      0.5675,
+      0.6425,
+      0.68,
+      0.7125,
+      0.8325,
+      0.97
+    ],
+    "fromM": 0.0,
+    "toM": 3.32,
+    "widthM": 0.3,
+    "projectionM": 0.08,
+    "material": "painted-white",
+    "tint": "#5a2620",
+    "capital": true
+  },
+  "glassBacking": {
+    "material": "painted-white",
+    "kinds": [
+      "punched",
+      "bay"
+    ],
+    "depthM": 0.35,
+    "tints": [
+      "#3d3a36",
+      "#57504a",
+      "#2f2e2d",
+      "#6a5e50",
+      "#474340",
+      "#5a4a3c"
+    ],
+    "blindTint": "#e7e1d2",
+    "blindMax": 0.5
+  },
+  "windowSillM": 0.6,
+  "windowHeadM": 2.45,
+  "cbParapetZones": [
+    {
+      "from": 0.0,
+      "to": 0.236,
+      "raiseM": 0.0,
+      "material": "painted-white",
+      "tint": "#f2efe8",
+      "brackets": 8,
+      "corniceM": 0.5,
+      "bracketTint": "#ffffff"
+    },
+    {
+      "from": 0.236,
+      "to": 0.486,
+      "raiseM": 0.45,
+      "material": "painted-white",
+      "tint": "#fff3dc",
+      "brackets": 7,
+      "corniceM": 0.42,
+      "bracketTint": "#ffffff"
+    },
+    {
+      "from": 0.486,
+      "to": 0.736,
+      "raiseM": 0.2,
+      "material": "float-finish-stucco",
+      "tint": "#e9e6df",
+      "brackets": 9,
+      "corniceM": 0.55,
+      "bracketTint": "#ffffff"
+    },
+    {
+      "from": 0.736,
+      "to": 1.0,
+      "raiseM": 0.5,
+      "material": "painted-white",
+      "tint": "#ffffff",
+      "brackets": 7,
+      "corniceM": 0.45,
+      "bracketTint": "#ffffff"
+    }
+  ],
+  "cbUnitSeams": {
+    "at": [
+      0.236,
+      0.486,
+      0.736
+    ],
+    "widthM": 0.34,
+    "projectionM": 0.06,
+    "material": "painted-white",
+    "tint": "#f7f5ef"
+  },
+  "cbShopUnits": [
+    {
+      "from": 0.03,
+      "to": 0.2025,
+      "frameTint": "#2e2d2c",
+      "sign": {
+        "tint": "#3a3938",
+        "board": "#d9d4c8"
+      },
+      "bulkheadTint": "#4a4643",
+      "fitout": "shop",
+      "backTint": "#5b4f45"
+    },
+    {
+      "from": 0.2025,
+      "to": 0.3525,
+      "frameTint": "#6a2a22",
+      "sign": {
+        "tint": "#e9dfc8",
+        "board": "#6a2a22"
+      },
+      "bulkheadTint": "#3d2a24",
+      "fitout": "shop",
+      "backTint": "#6d5646"
+    },
+    {
+      "from": 0.3525,
+      "to": 0.5075,
+      "frameTint": "#5c1f1a",
+      "sign": {
+        "tint": "#5c1f1a",
+        "board": "#efe6cf"
+      },
+      "bulkheadTint": "#2f2826",
+      "fitout": "deli",
+      "backTint": "#6b4a36"
+    },
+    {
+      "from": 0.5075,
+      "to": 0.68,
+      "frameTint": "#9e2219",
+      "sign": {
+        "tint": "#9e2219",
+        "board": "#f4efe4"
+      },
+      "graphics": "#b8261c",
+      "flag": [
+        "#2f7a3a",
+        "#f4f1ea",
+        "#b8261c"
+      ],
+      "bulkheadTint": "#8e241c",
+      "fitout": "cafe",
+      "backTint": "#5a3a2c"
+    },
+    {
+      "from": 0.7125,
+      "to": 0.8325,
+      "frameTint": "#2f5a34",
+      "sign": {
+        "tint": "#2f5a34",
+        "board": "#f0e2c0"
+      },
+      "bulkheadTint": "#2f5a34",
+      "fitout": "deli",
+      "backTint": "#6f5a40"
+    },
+    {
+      "from": 0.8325,
+      "to": 0.97,
+      "frameTint": "#1f2c4c",
+      "sign": {
+        "tint": "#1f2c4c",
+        "board": "#e9e4d6"
+      },
+      "bulkheadTint": "#26314f",
+      "fitout": "coffee",
+      "backTint": "#4b3a30",
+      "awnings": [
+        {
+          "from": 0.836,
+          "to": 0.9,
+          "depthM": 1.2,
+          "tint": "#2c3c70",
+          "material": "painted-white"
+        },
+        {
+          "from": 0.904,
+          "to": 0.966,
+          "depthM": 1.2,
+          "tint": "#2c3c70",
+          "material": "painted-white"
+        }
+      ]
+    }
+  ],
+  "cbCurtains": {
+    "tints": [
+      "#f3ead6",
+      "#dcc9a6",
+      "#cdbba0",
+      "#f7f4ec",
+      "#b9a78c",
+      "#9a4a3a",
+      "#8a9aa6"
+    ],
+    "sheer": "#faf7f0"
+  },
+  "cbFrontFlats": {
+    "depthM": 5.8,
+    "cutsAt": [
+      0.0,
+      0.0694,
+      0.1527,
+      0.2361,
+      0.3194,
+      0.4027,
+      0.4861,
+      0.5694,
+      0.6527,
+      0.7361,
+      0.8194,
+      0.9027,
+      1.0
+    ],
+    "tints": [
+      "#efe7d8",
+      "#e3e6e2",
+      "#f1e4cf",
+      "#dfe3e8",
+      "#ece9e1",
+      "#e8dcc8"
+    ]
+  }
+}

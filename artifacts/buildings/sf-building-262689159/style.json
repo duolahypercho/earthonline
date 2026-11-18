@@ -1,0 +1,132 @@
+{
+ "seed": 5,
+ "notes": "Round 9: grey recessed centre and base #b5b5b0, white stucco side piers, thin steel balcony slabs, wide flat segmental garage arches with dark wood slat doors, plain arched entry. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k) - photo-sampled tints rendered dark/olive in game.",
+ "wall": "painted-stucco",
+ "wallTint": "#dadad8",
+ "trim": "painted-stucco@b5b5b0",
+ "frame": "painted-steel@22262a",
+ "glass": "glass-clear",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "frameGrid": {
+  "columns": [
+   0.0,
+   0.12,
+   0.88,
+   1.0
+  ],
+  "columnW": 0.2,
+  "slabEdgeH": 0.1,
+  "projectionM": 0.03,
+  "fromStorey": 1,
+  "storeyPatterns": [
+   [
+    "wall",
+    "balcony",
+    "wall"
+   ],
+   [
+    "wall",
+    "balcony",
+    "wall"
+   ],
+   [
+    "wall",
+    "balcony",
+    "wall"
+   ]
+  ],
+  "recessM": 0.45,
+  "rail": "bars",
+  "mullionM": 2.3,
+  "railMaterial": "painted-steel@151515",
+  "material": "painted-stucco",
+  "tint": "#e6e6e3",
+  "frameMaterial": "painted-steel@1c1c1e",
+  "balconyMaterial": "perforated-metal",
+  "balconyTint": "#8a8c8a",
+  "balconyLipM": 0.6,
+  "mullionW": 0.12
+ },
+ "storefront": {
+  "bulkheadM": 0.0,
+  "transomM": 0.0,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.07,
+    "to": 0.35,
+    "kind": "garage",
+    "material": "wood-siding",
+    "tint": "#8a4a2e",
+    "headM": 2.7,
+    "arch": {
+     "type": "segmental",
+     "riseM": 0.5
+    }
+   },
+   {
+    "from": 0.41,
+    "to": 0.49,
+    "kind": "door",
+    "stair": true,
+    "leaf": "wood-siding@9a5a36",
+    "headM": 3.2,
+    "arch": {
+     "type": "segmental",
+     "riseM": 0.25
+    }
+   },
+   {
+    "from": 0.49,
+    "to": 0.53,
+    "kind": "window",
+    "headM": 3.2
+   },
+   {
+    "from": 0.56,
+    "to": 0.9,
+    "kind": "garage",
+    "material": "wood-siding",
+    "tint": "#8a4a2e",
+    "headM": 2.7,
+    "arch": {
+     "type": "segmental",
+     "riseM": 0.5
+    }
+   }
+  ]
+ },
+ "storefrontFrame": "painted-steel@2a2a2a",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-stucco@dadad8",
+ "ground": "lobby",
+ "upper": "apartment",
+ "glassBacking": {
+  "material": "painted-white",
+  "kinds": [
+   "grid-balcony",
+   "grid"
+  ],
+  "depthM": 0.3,
+  "tints": [
+   "#1c1e22",
+   "#26221f",
+   "#181a1e"
+  ],
+  "blindTint": "#d8d2c4",
+  "blindMax": 0.3
+ },
+ "wallZones": [
+  {
+   "from": 0.0,
+   "to": 1.0,
+   "fromY": 3.93,
+   "tint": "#e6e6e3"
+  }
+ ],
+ "hbArchDoors": [],
+ "streetStills": true
+}

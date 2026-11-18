@@ -1,0 +1,393 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-8001805055",
+  "slug": "b8001805055",
+  "walkIndex": 7010,
+  "street": "La Playa Street",
+  "address": "1464 La Playa",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 11.66,
+  "storeys": 3,
+  "floors": {
+    "groundM": 4.793,
+    "upperM": 3.134,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1971,
+  "use": "MRES",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "edwardian",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 12,
+    "center": {
+      "x": -7862.082,
+      "z": -2083.431
+    },
+    "heading": -1.62869,
+    "width": 22.949,
+    "depth": 36.109
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": 9.401,
+      "z": -15.312
+    },
+    {
+      "x": 7.939,
+      "z": -15.307
+    },
+    {
+      "x": 4.663,
+      "z": -15.308
+    },
+    {
+      "x": 3.267,
+      "z": -15.367
+    },
+    {
+      "x": 0.703,
+      "z": -15.369
+    },
+    {
+      "x": -0.566,
+      "z": -15.315
+    },
+    {
+      "x": -3.15,
+      "z": -15.306
+    },
+    {
+      "x": -4.631,
+      "z": -18.055
+    },
+    {
+      "x": -7.797,
+      "z": -18.052
+    },
+    {
+      "x": -7.755,
+      "z": -14.568
+    },
+    {
+      "x": -8.859,
+      "z": -15.305
+    },
+    {
+      "x": -11.474,
+      "z": -15.314
+    },
+    {
+      "x": -11.353,
+      "z": 18.055
+    },
+    {
+      "x": 11.114,
+      "z": 18.055
+    },
+    {
+      "x": 11.149,
+      "z": 12.093
+    },
+    {
+      "x": 11.034,
+      "z": -3.727
+    },
+    {
+      "x": 10.965,
+      "z": -11.837
+    },
+    {
+      "x": 11.474,
+      "z": -15.312
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 9.401,
+        "z": -15.312
+      },
+      "b": {
+        "x": 7.939,
+        "z": -15.307
+      },
+      "lengthM": 1.462,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 7.939,
+        "z": -15.307
+      },
+      "b": {
+        "x": 4.663,
+        "z": -15.308
+      },
+      "lengthM": 3.276,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 4.663,
+        "z": -15.308
+      },
+      "b": {
+        "x": 3.267,
+        "z": -15.367
+      },
+      "lengthM": 1.397,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 3.267,
+        "z": -15.367
+      },
+      "b": {
+        "x": 0.703,
+        "z": -15.369
+      },
+      "lengthM": 2.564,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": 0.703,
+        "z": -15.369
+      },
+      "b": {
+        "x": -0.566,
+        "z": -15.315
+      },
+      "lengthM": 1.27,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": -0.566,
+        "z": -15.315
+      },
+      "b": {
+        "x": -3.15,
+        "z": -15.306
+      },
+      "lengthM": 2.584,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": -3.15,
+        "z": -15.306
+      },
+      "b": {
+        "x": -4.631,
+        "z": -18.055
+      },
+      "lengthM": 3.123,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": -4.631,
+        "z": -18.055
+      },
+      "b": {
+        "x": -7.797,
+        "z": -18.052
+      },
+      "lengthM": 3.165,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 8,
+      "a": {
+        "x": -7.797,
+        "z": -18.052
+      },
+      "b": {
+        "x": -7.755,
+        "z": -14.568
+      },
+      "lengthM": 3.484,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 9,
+      "a": {
+        "x": -7.755,
+        "z": -14.568
+      },
+      "b": {
+        "x": -8.859,
+        "z": -15.305
+      },
+      "lengthM": 1.328,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 10,
+      "a": {
+        "x": -8.859,
+        "z": -15.305
+      },
+      "b": {
+        "x": -11.474,
+        "z": -15.314
+      },
+      "lengthM": 2.615,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 11,
+      "a": {
+        "x": -11.474,
+        "z": -15.314
+      },
+      "b": {
+        "x": -11.353,
+        "z": 18.055
+      },
+      "lengthM": 33.369,
+      "role": "party",
+      "partyShare": 0.94
+    },
+    {
+      "index": 12,
+      "a": {
+        "x": -11.353,
+        "z": 18.055
+      },
+      "b": {
+        "x": 11.114,
+        "z": 18.055
+      },
+      "lengthM": 22.468,
+      "role": "front",
+      "partyShare": 0.13
+    },
+    {
+      "index": 13,
+      "a": {
+        "x": 11.114,
+        "z": 18.055
+      },
+      "b": {
+        "x": 11.149,
+        "z": 12.093
+      },
+      "lengthM": 5.962,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 14,
+      "a": {
+        "x": 11.149,
+        "z": 12.093
+      },
+      "b": {
+        "x": 11.034,
+        "z": -3.727
+      },
+      "lengthM": 15.82,
+      "role": "rear",
+      "partyShare": 0.13
+    },
+    {
+      "index": 15,
+      "a": {
+        "x": 11.034,
+        "z": -3.727
+      },
+      "b": {
+        "x": 10.965,
+        "z": -11.837
+      },
+      "lengthM": 8.11,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 16,
+      "a": {
+        "x": 10.965,
+        "z": -11.837
+      },
+      "b": {
+        "x": 11.474,
+        "z": -15.312
+      },
+      "lengthM": 3.513,
+      "role": "rear",
+      "partyShare": 0.25
+    },
+    {
+      "index": 17,
+      "a": {
+        "x": 11.474,
+        "z": -15.312
+      },
+      "b": {
+        "x": 9.401,
+        "z": -15.312
+      },
+      "lengthM": 2.073,
+      "role": "rear",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

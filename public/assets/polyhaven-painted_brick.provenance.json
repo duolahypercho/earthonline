@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "asset": "polyhaven-painted_brick-2k",
+  "license": "CC0-1.0",
+  "author": "Amal Kumar",
+  "assetPage": "https://polyhaven.com/a/painted_brick",
+  "physicalWidthMetres": 1.8,
+  "intent": "wall material cell 2 (brick) of facade-atlas-v2; the 2k source is not shipped, only the packed cell",
+  "sources": {
+    "diffuse": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/painted_brick/painted_brick_diff_2k.jpg",
+      "md5": "512a7cccab9caf88e7a7833fb0f28d81",
+      "downloadedMd5": "512a7cccab9caf88e7a7833fb0f28d81",
+      "downloadedSha256": "d76623127649e0878aecdfe8159bb3f6ec3b89d1b9160b6fd6036fc33737e842"
+    },
+    "normalGl": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/painted_brick/painted_brick_nor_gl_2k.jpg",
+      "md5": "cde7d331b58b9f426102ebb2259180bf",
+      "downloadedMd5": "cde7d331b58b9f426102ebb2259180bf",
+      "downloadedSha256": "3e3330b5ec7e44323de78c9f5571549e215cf95130e4df8ce033ab2587614b9e"
+    },
+    "arm": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/painted_brick/painted_brick_arm_2k.jpg",
+      "md5": "ced105acd5cb6f26ee69bde680f0bfa1",
+      "downloadedMd5": "ced105acd5cb6f26ee69bde680f0bfa1",
+      "downloadedSha256": "4bd7fac360f619b11324380c2a43f33bb133d15e4d1c5b92a3e4c24611613f63"
+    }
+  },
+  "outputs": {
+    "albedo": {
+      "path": "public/assets/facade-atlas-v2-albedo.jpg",
+      "sha256": "4bf15707ee8eb7bee1887a6149742070260b86ca48c63643bde39668f277f13b",
+      "encoding": "sRGB base color, 4:4:4 jpeg",
+      "atlasCell": 2
+    },
+    "normal": {
+      "path": "public/assets/facade-atlas-v2-normal-rough.jpg",
+      "sha256": "5e0c89718fe981f96bf0c7ca1ecad67146afc04582b07abb6349e5411ee5d804",
+      "encoding": "RG OpenGL tangent-space normal xy (z rebuilt in shader), B Poly Haven roughness; linear/no-color, 4:4:4 jpeg",
+      "atlasCell": 2
+    }
+  },
+  "generator": {
+    "path": "scripts/assets/pack-facade-atlas-v2.mjs",
+    "sha256": "2d5051ca01c786d3b4e0766c611d5ba83b3322b8b14dc272c4e55b6b5710e3ad",
+    "algorithm": "md5-verified 2k jpg sources; LANCZOS to 960 px content; 32 px wrapped ring; row 0 at image bottom (flipY); roughness packed into the normal sheet B channel; libjpeg q90 4:4:4",
+    "pillow": "11.3.0",
+    "numpy": "2.0.2"
+  }
+}

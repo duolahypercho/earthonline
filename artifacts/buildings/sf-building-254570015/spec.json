@@ -1,0 +1,128 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-254570015",
+  "slug": "b254570015",
+  "walkIndex": 5174,
+  "street": "Hyde Street",
+  "address": "1705;1707;1709 Hyde Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "street count 4 (style storeysSeen) overrides Assessor roll (assessor) 3"
+  },
+  "storeysRoll": 3,
+  "heightM": 13.71,
+  "storeys": 4,
+  "floors": {
+    "groundM": 2.8,
+    "upperM": 3.5,
+    "roofM": 0.41
+  },
+  "yearBuilt": 1908,
+  "use": "MRES",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "bay-window",
+  "material": "painted",
+  "frame": {
+    "edgeIndex": 0,
+    "center": {
+      "x": 55.25,
+      "z": 2051.3
+    },
+    "heading": 1.4029,
+    "width": 6.29,
+    "depth": 21.552
+  },
+  "frameMirrored": true,
+  "polygonWinding": "cw",
+  "polygon": [
+    {
+      "x": 3.145,
+      "z": 10.776
+    },
+    {
+      "x": -2.839,
+      "z": 10.776
+    },
+    {
+      "x": -3.145,
+      "z": -10.776
+    },
+    {
+      "x": 2.807,
+      "z": -10.365
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 3.145,
+        "z": 10.776
+      },
+      "b": {
+        "x": -2.839,
+        "z": 10.776
+      },
+      "lengthM": 5.984,
+      "role": "front",
+      "partyShare": 0.13
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -2.839,
+        "z": 10.776
+      },
+      "b": {
+        "x": -3.145,
+        "z": -10.776
+      },
+      "lengthM": 21.554,
+      "role": "rear",
+      "partyShare": 0.44
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -3.145,
+        "z": -10.776
+      },
+      "b": {
+        "x": 2.807,
+        "z": -10.365
+      },
+      "lengthM": 5.967,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 2.807,
+        "z": -10.365
+      },
+      "b": {
+        "x": 3.145,
+        "z": 10.776
+      },
+      "lengthM": 21.144,
+      "role": "rear",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

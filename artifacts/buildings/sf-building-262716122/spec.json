@@ -1,0 +1,127 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-262716122",
+  "slug": "b262716122",
+  "walkIndex": 5219,
+  "street": "Hyde Street",
+  "address": "1201 Greenwich Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 38.82,
+  "storeys": 11,
+  "floors": {
+    "groundM": 4.517,
+    "upperM": 3.37,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1923,
+  "use": "MRES",
+  "usage": "office",
+  "amenity": null,
+  "shop": null,
+  "facade": "art-deco",
+  "material": "stone",
+  "frame": {
+    "edgeIndex": 3,
+    "center": {
+      "x": -24.804,
+      "z": 2531.426
+    },
+    "heading": 1.419294,
+    "width": 13.252,
+    "depth": 25.5
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": 6.626,
+      "z": 12.75
+    },
+    {
+      "x": 6.579,
+      "z": -12.735
+    },
+    {
+      "x": -6.574,
+      "z": -12.75
+    },
+    {
+      "x": -6.626,
+      "z": 12.75
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 6.626,
+        "z": 12.75
+      },
+      "b": {
+        "x": 6.579,
+        "z": -12.735
+      },
+      "lengthM": 25.485,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 6.579,
+        "z": -12.735
+      },
+      "b": {
+        "x": -6.574,
+        "z": -12.75
+      },
+      "lengthM": 13.153,
+      "role": "rear",
+      "partyShare": 0.06
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -6.574,
+        "z": -12.75
+      },
+      "b": {
+        "x": -6.626,
+        "z": 12.75
+      },
+      "lengthM": 25.5,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -6.626,
+        "z": 12.75
+      },
+      "b": {
+        "x": 6.626,
+        "z": 12.75
+      },
+      "lengthM": 13.252,
+      "role": "front",
+      "partyShare": 0.06
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

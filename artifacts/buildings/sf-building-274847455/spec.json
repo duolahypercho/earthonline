@@ -1,0 +1,127 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-274847455",
+  "slug": "b274847455",
+  "walkIndex": 5258,
+  "street": "Geary Boulevard",
+  "address": "389 9th Avenue",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (lidar)"
+  },
+  "heightM": 16.8,
+  "storeys": 5,
+  "floors": {
+    "groundM": 4.212,
+    "upperM": 2.997,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1900,
+  "use": "COMO",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "modern-grid",
+  "material": "stone",
+  "frame": {
+    "edgeIndex": 3,
+    "center": {
+      "x": -4263.553,
+      "z": 351.95
+    },
+    "heading": 3.08594,
+    "width": 36.06,
+    "depth": 30.741
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": 18.03,
+      "z": 15.371
+    },
+    {
+      "x": 17.92,
+      "z": -15.371
+    },
+    {
+      "x": -18.03,
+      "z": -15.271
+    },
+    {
+      "x": -17.926,
+      "z": 15.371
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 18.03,
+        "z": 15.371
+      },
+      "b": {
+        "x": 17.92,
+        "z": -15.371
+      },
+      "lengthM": 30.742,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 17.92,
+        "z": -15.371
+      },
+      "b": {
+        "x": -18.03,
+        "z": -15.271
+      },
+      "lengthM": 35.95,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -18.03,
+        "z": -15.271
+      },
+      "b": {
+        "x": -17.926,
+        "z": 15.371
+      },
+      "lengthM": 30.642,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -17.926,
+        "z": 15.371
+      },
+      "b": {
+        "x": 18.03,
+        "z": 15.371
+      },
+      "lengthM": 35.956,
+      "role": "front",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

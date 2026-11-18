@@ -1,0 +1,48 @@
+{
+  "seed": 7,
+  "notes": "Round 1: two-storey red-painted wood-sided bar building. Upper: horizontal clapboard in red, dark brown battens between 7 evenly spaced double-hung windows with dark casings. Ground: left red brick veneer with red door, small display window and recessed glazed double door; right red clapboard with narrow window, bay display window, red double door under a flat dark canopy and a display window. Dark belt band and a shallow dark-grey sloped eave.",
+  "wall": "painted-clapboard",
+  "wallTint": "#a83a30",
+  "trim": "cast-stone-trim@3f2a24",
+  "frame": "painted-white@3a2a24",
+  "glass": "glass-clear",
+  "storefrontGlass": "glass-storefront",
+  "storefrontFrame": "painted-steel@3a2a24",
+  "bulkhead": "painted-white@7a2a22",
+  "awning": "painted-steel@4a2e26",
+  "cornice": false,
+  "beltCourse": true,
+  "windowHoods": false,
+  "windowW": 1.15,
+  "windowSillM": 1.0,
+  "windowHeadM": 2.5,
+  "floorsM": {"groundM": 3.7, "upperM": 3.0},
+  "upperWindows": [0.169, 0.273, 0.377, 0.481, 0.583, 0.684, 0.78],
+  "wallZones": [
+    {"from": 0.02, "to": 0.455, "fromY": -1.0, "toY": 3.7, "material": "brick-running-bond", "tint": "#b0583f"}
+  ],
+  "pilasters": {
+    "at": [0.114, 0.219, 0.325, 0.428, 0.53, 0.632, 0.73, 0.828],
+    "widthM": 0.14, "projectionM": 0.04, "fromM": 3.7, "toM": 7.0,
+    "material": "painted-white", "tint": "#3f2a24"
+  },
+  "tileEave": {"edges": [5], "projectionM": 0.4, "dropM": 0.3, "material": "asphalt-roof@4b4f55"},
+  "storefront": {
+    "bulkheadM": 0.6,
+    "transomM": 0.45,
+    "pierM": 0.2,
+    "awning": false,
+    "layout": [
+      {"from": 0.075, "to": 0.145, "kind": "door", "leaf": "painted-white@8a2b25"},
+      {"from": 0.18, "to": 0.27, "kind": "window", "headM": 2.1},
+      {"from": 0.31, "to": 0.42, "kind": "double-door", "leaf": "painted-white@8a2b25"},
+      {"from": 0.49, "to": 0.54, "kind": "window", "headM": 2.1},
+      {"from": 0.575, "to": 0.71, "kind": "window", "headM": 2.8},
+      {"from": 0.73, "to": 0.82, "kind": "double-door", "leaf": "painted-white@8a2b25"},
+      {"from": 0.83, "to": 0.97, "kind": "window", "headM": 2.8}
+    ]
+  },
+  "awningSpans": [
+    {"from": 0.715, "to": 0.925, "profile": "box", "depthM": 1.2, "valanceM": 0.45, "topM": 3.15}
+  ]
+}

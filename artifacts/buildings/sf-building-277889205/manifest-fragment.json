@@ -1,0 +1,72 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-277889205",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-277889205",
+    "walkIndex": 7101,
+    "builder": "blender",
+    "street": "Judah Street",
+    "side": "S",
+    "addr": "4321 Judah Street",
+    "sourceHeight": 9,
+    "sourceLevels": null,
+    "frontEdge": 0,
+    "status": "review",
+    "lidarHeightM": 8.94,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b277889205.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b277889205.js"
+  },
+  "base": {
+    "id": "sf-building-277889205",
+    "walkIndex": 7101,
+    "builder": "blender",
+    "street": "Judah Street",
+    "side": "S",
+    "addr": "4321 Judah Street",
+    "sourceHeight": 9,
+    "sourceLevels": null,
+    "frontEdge": 0,
+    "status": "review",
+    "lidarHeightM": 8.94,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b277889205.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b277889205.js"
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b277889205.js",
+    "sha256": "f3e6d132af50b45d7cfacbd10a1e506bc01b8da375bff94878285912549b0817",
+    "pass": "b277889205-blender-80f56942-b98822"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-277889205/provenance.json",
+    "sha256": "6cff14e046dc32b846b658dad824d275f6fc649f265771b69f2d2f980df09bd9",
+    "pass": "b277889205-blender-80f56942-b98822"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-277889205/exterior.glb",
+      "sha256": "7c4037aeee185185d19ad69534a3f9d4b849138f88bc6d6b47c015680cd91e28",
+      "bytes": 338752
+    },
+    {
+      "role": "interior",
+      "url": "/assets/buildings/sf-building-277889205/interior.glb",
+      "sha256": "befd4b99e0134d707cb555291c48eecae7bd0fe573be95031ec68489719400da",
+      "bytes": 95032
+    },
+    {
+      "role": "fine-s0",
+      "url": "/assets/buildings/sf-building-277889205/fine-s0.glb",
+      "sha256": "89d3443639b77fe4c34e18af84d2f15f046a0efbcadcfb0bf985cc629c88802d",
+      "bytes": 17516
+    },
+    {
+      "role": "fine-s1",
+      "url": "/assets/buildings/sf-building-277889205/fine-s1.glb",
+      "sha256": "9c2faba794c43c0f63e6e8568cd21c70448f21e5c02cef7344f2c34e0635002c",
+      "bytes": 66668
+    }
+  ],
+  "generatedAt": "2026-09-29T23:18:37.433Z"
+}

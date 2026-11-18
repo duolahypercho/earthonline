@@ -1,0 +1,127 @@
+{
+ "seed": 3,
+ "notes": "1925 three-storey corner flats at North Point, off-white stucco over a mid-grey street storey. Bays are shallow one-storey box oriels on brackets: corner (south) end at the top storey only, north end at storey 2 only and wider; two single sashes a storey between; small railed balcony at the north end; dark roll-up at the north end of the ground, gated entry left of centre. Fractions from the real viewer's left. Three sashes a storey between the bays, whiter walls over a darker grey street storey, mid-grey roll-up, grilles on both pedestrian doors. Mirror claims skipped. Applied: 2 singles a storey between bays, divided-light sashes, twin-sash bay faces, wide storey-2 bay, moulding line under the coping. Plain sashes (no muntin grid), bay faces one wide 2-light window, black steel fire escape up to storey 2. Applied whiter wall #f0efea, windowW 1.15, heavier 0.5 m cornice projecting 0.4, plain dark stair door. SKIPPED darker ground, second top-storey bay (blank wall beside the balcony). Applied wall #efefed, ground band #666869 (lum >0.10), thin 0.35 m cornice, dark metal ground doors/garage. Roof railing at the right not expressible beyond the existing fire escape. Bay storeys again confirmed as modelled (skipped move-up); ground #666869 kept; thin cornice already; balcony+escape is the roof-deck read. Applied: both ground doors now dark metal openings (no pale panel behind grilles). Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k). GroundBand lift (2026-10-03): groundBand tint #666869 -> #858687 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#f7f7f6",
+ "trim": "painted-white@f2f2ee",
+ "frame": "painted-white",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f2f2ee",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@a5a5a3",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 1.15,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "floorsM": {
+  "groundM": 3.5,
+  "upperM": 3.4
+ },
+ "upperWindows": [
+  0.36,
+  0.53
+ ],
+ "bays": [
+  {
+   "at": 0.13,
+   "widthM": 2.6,
+   "projectionM": 0.35,
+   "fromStorey": 2,
+   "toStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#f7f7f6",
+   "sash": {
+    "footM": 0.3,
+    "fillFrac": 0.9,
+    "maxWidthM": 1.4,
+    "sillM": 0.7,
+    "headGapM": 0.3,
+    "lightM": 1.1,
+    "upperRows": 1,
+    "upperCols": 2,
+    "meetingFrac": 0.5
+   }
+  },
+  {
+   "at": 0.8,
+   "widthM": 4.2,
+   "projectionM": 0.35,
+   "fromStorey": 1,
+   "toStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f7f7f6",
+   "sash": {
+    "footM": 0.3,
+    "fillFrac": 0.9,
+    "maxWidthM": 1.4,
+    "sillM": 0.7,
+    "headGapM": 0.3,
+    "lightM": 1.1,
+    "upperRows": 1,
+    "upperCols": 2,
+    "meetingFrac": 0.5
+   }
+  }
+ ],
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#858687",
+  "topM": 3.5
+ },
+ "coping": {
+  "heightM": 0.35,
+  "projectionM": 0.3,
+  "material": "painted-white",
+  "tint": "#f6f6f2"
+ },
+ "storefront": {
+  "bulkheadM": 0.3,
+  "transomM": 0.3,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.36,
+    "to": 0.44,
+    "kind": "garage",
+    "material": "painted-steel",
+    "tint": "#2e3033"
+   },
+   {
+    "from": 0.74,
+    "to": 0.785,
+    "kind": "garage",
+    "material": "painted-steel",
+    "tint": "#2e3033"
+   },
+   {
+    "from": 0.8,
+    "to": 0.95,
+    "kind": "garage",
+    "material": "painted-steel",
+    "tint": "#3a3c3e"
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "fireEscape": {
+  "at": 0.97,
+  "widthM": 1.4,
+  "depthM": 0.6,
+  "toStorey": 2,
+  "material": "painted-steel@1c1c1e"
+ },
+ "plaques": [
+  {
+   "at": 0.5,
+   "y": 11.05,
+   "w": 16.0,
+   "h": 0.12,
+   "face": "painted-white@dcdad4"
+  }
+ ],
+ "streetStills": true
+}

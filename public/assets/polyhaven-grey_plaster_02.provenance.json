@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "asset": "polyhaven-grey_plaster_02-2k",
+  "license": "CC0-1.0",
+  "author": "Rob Tuytel",
+  "assetPage": "https://polyhaven.com/a/grey_plaster_02",
+  "physicalWidthMetres": 1,
+  "intent": "wall material cell 3 (plaster) of facade-atlas-v2; the 2k source is not shipped, only the packed cell",
+  "sources": {
+    "diffuse": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/grey_plaster_02/grey_plaster_02_diff_2k.jpg",
+      "md5": "416e8ab093cb28128b8ecc0c1439e927",
+      "downloadedMd5": "416e8ab093cb28128b8ecc0c1439e927",
+      "downloadedSha256": "2094a17962b352299d8e6b01848acf2496deed0c283f96fdb373128334356d8e"
+    },
+    "normalGl": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/grey_plaster_02/grey_plaster_02_nor_gl_2k.jpg",
+      "md5": "a45e547c197eb311423460225d8e616b",
+      "downloadedMd5": "a45e547c197eb311423460225d8e616b",
+      "downloadedSha256": "cab8e86d685fd306868b838700ffb02e876ca8d322e6dd7deb5a93e3cdad366c"
+    },
+    "arm": {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/grey_plaster_02/grey_plaster_02_arm_2k.jpg",
+      "md5": "a0318742e73d955055d27bd46094ad7d",
+      "downloadedMd5": "a0318742e73d955055d27bd46094ad7d",
+      "downloadedSha256": "092c7e567aac0a6e092cf591a3e4773326d138a5847e82063ec4763731551298"
+    }
+  },
+  "outputs": {
+    "albedo": {
+      "path": "public/assets/facade-atlas-v2-albedo.jpg",
+      "sha256": "4bf15707ee8eb7bee1887a6149742070260b86ca48c63643bde39668f277f13b",
+      "encoding": "sRGB base color, 4:4:4 jpeg",
+      "atlasCell": 3
+    },
+    "normal": {
+      "path": "public/assets/facade-atlas-v2-normal-rough.jpg",
+      "sha256": "5e0c89718fe981f96bf0c7ca1ecad67146afc04582b07abb6349e5411ee5d804",
+      "encoding": "RG OpenGL tangent-space normal xy (z rebuilt in shader), B Poly Haven roughness; linear/no-color, 4:4:4 jpeg",
+      "atlasCell": 3
+    }
+  },
+  "generator": {
+    "path": "scripts/assets/pack-facade-atlas-v2.mjs",
+    "sha256": "2d5051ca01c786d3b4e0766c611d5ba83b3322b8b14dc272c4e55b6b5710e3ad",
+    "algorithm": "md5-verified 2k jpg sources; LANCZOS to 960 px content; 32 px wrapped ring; row 0 at image bottom (flipY); roughness packed into the normal sheet B channel; libjpeg q90 4:4:4",
+    "pillow": "11.3.0",
+    "numpy": "2.0.2"
+  }
+}

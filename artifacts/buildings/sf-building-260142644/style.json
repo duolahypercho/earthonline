@@ -1,0 +1,94 @@
+{
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.95,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.25,
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "bays": [],
+ "upperWindows": [
+  0.14,
+  0.4,
+  0.78
+ ],
+ "seed": 16,
+ "notes": "Charcoal painted masonry, regular grid of dark-framed sashes, black fire escape, gold fascia band over dark shopfront, gold-accent bracketed cornice. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Base fix (2026-10-03): wallTint = target / painted-stucco base so the slate grey is not warmed pink by the stucco albedo. Rework 2 (2026-10-03): charcoal slate wall (tint #626a7a, luminance above the 0.18 floor), black fascia base under the gold band, light curtains in dark frames, deeper reveals. Lifted/converted once to #98a8c9. Tint = #4a4e58 / painted-stucco base, no lift. GroundBand lift (2026-10-03): groundBand tint #232326 -> #444447 (same rule as walls; it was missed by the first colour pass). Neutral #46464a. Neutral #46464a still rendered warm (painted-stucco base #d9cfbd x tint = #3c3937, R > G > B); wallTint #424651 renders a slightly cool charcoal #38393c (B - R = +4 of 255; the lavender #575f77 rendered +14), groundBand #444447 -> #404450 the same way.",
+ "wall": "painted-stucco",
+ "wallTint": "#424651",
+ "trim": "painted-white@4e5058",
+ "frame": "painted-white@2a2a30",
+ "bulkhead": "painted-stucco@2a2a2e",
+ "corniceProjectionM": 0.4,
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.06,
+    "to": 0.32,
+    "kind": "window",
+    "headM": 2.5
+   },
+   {
+    "from": 0.38,
+    "to": 0.6,
+    "kind": "door",
+    "stair": false,
+    "headM": 2.8
+   },
+   {
+    "from": 0.65,
+    "to": 0.92,
+    "kind": "window",
+    "headM": 2.5
+   }
+  ]
+ },
+ "fireEscape": {
+  "at": 0.26,
+  "widthM": 2.4,
+  "depthM": 0.9,
+  "material": "painted-steel"
+ },
+ "hbSignBands": [
+  {
+   "from": 0.02,
+   "to": 0.98,
+   "bottomM": 3.1,
+   "topM": 3.7,
+   "material": "painted-stucco",
+   "tint": "#b08a2e"
+  }
+ ],
+ "hbCorniceBrackets": {
+  "spacingM": 1.3,
+  "heightM": 0.4,
+  "depthM": 0.25,
+  "widthM": 0.22,
+  "material": "painted-stucco",
+  "tint": "#a07a28"
+ },
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#404450",
+  "topM": 3.1
+ },
+ "windowDepthM": 0.25,
+ "windowCurtains": {
+  "tints": [
+   "e8e4d8",
+   "cfd2e0",
+   "f0ece0"
+  ],
+  "every": 1,
+  "widthFrac": 0.55
+ },
+ "storefrontFrame": "painted-steel@222226"
+}

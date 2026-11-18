@@ -1,0 +1,89 @@
+{
+  "builder": "house",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "painted-stucco",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "seed": 31,
+  "storeysSeen": 2,
+  "groundM": 2.7,
+  "roofLevelM": 5.85,
+  "notes": "1500 Great Highway at Kirkham (1948), from the street-level reference by eye (words only): a plain two-storey corner building in beige stucco with a flat roof and a thin parapet; ground: an entry door on the left and a white panelled garage door on the right half; upper: two small windows toward the south and a wider one to the north.",
+  "wall": "painted-stucco",
+  "wallTint": "#e0d4bd",
+  "roofForm": {
+    "form": "flat",
+    "eaveM": 0.0
+  },
+  "parapetM": 0.45,
+  "entry": {
+    "from": 0.25,
+    "to": 0.34,
+    "headM": 2.2,
+    "material": "painted-white",
+    "glass": false,
+    "recessM": 0.15
+  },
+  "garages": [
+    {
+      "from": 0.55,
+      "to": 0.82,
+      "headM": 2.2,
+      "material": "painted-white",
+      "pattern": "panel",
+      "lites": 4
+    }
+  ],
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.12,
+      "to": 0.36,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        2,
+        2
+      ]
+    },
+    {
+      "storey": 1,
+      "from": 0.5,
+      "to": 0.62,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        1,
+        2
+      ]
+    },
+    {
+      "storey": 1,
+      "from": 0.72,
+      "to": 0.84,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        1,
+        2
+      ]
+    }
+  ]
+}

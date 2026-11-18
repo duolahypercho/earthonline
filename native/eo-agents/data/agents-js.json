@@ -1,0 +1,979 @@
+{
+ "generated_by": "native/tools/export-agents-manifest.mjs",
+ "vehicles": {
+  "compactHatch": {
+   "length_m": 4.06,
+   "wheel_radius_m": 0.315,
+   "type_ids": [
+    "compactHatch"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/fleet-v3/compactHatch-lod0.glb",
+     "sha256": "efaf1c110d837b85596aab5b716d9a6441aee6b1ba1e95fdef9cb0efe7e87525",
+     "bytes": 4254084
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/compactHatch-lod1.glb",
+     "sha256": "be198fe786774a97a72534d145a682740e68a7bfbd28141cfea6787710a00766",
+     "bytes": 697820
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/compactHatch-lod2.glb",
+     "sha256": "82f44db3908e9fa25a3a3fa36a154f6523b6ccabfb2eb021d39796e70e17ed06",
+     "bytes": 158844
+    }
+   ]
+  },
+  "sedan": {
+   "length_m": 4.85,
+   "wheel_radius_m": 0.34,
+   "type_ids": [
+    "sedan"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/fleet-v3/sedan-lod0.glb",
+     "sha256": "e6bd920461d350be3a2ef92b1a520c1fdf0ab8b1d71ecf153728841c45003a58",
+     "bytes": 4025912
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/sedan-lod1.glb",
+     "sha256": "747a021d1b6f5365447c258e5e97fd033da859c9ec291d009b99a6b48bdd7312",
+     "bytes": 615940
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/sedan-lod2.glb",
+     "sha256": "cbffa0acfb6b9dd2cc809d6c7d39d761547d0a0798cdb80078b26f4f75f42fb6",
+     "bytes": 166756
+    }
+   ]
+  },
+  "wagon": {
+   "length_m": 4.76,
+   "wheel_radius_m": 0.335,
+   "type_ids": [
+    "wagon"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/fleet-v3/wagon-lod0.glb",
+     "sha256": "4b11ee2bc019e2660d8c8a10205f096d459fd494b886545174865eb4bde6354b",
+     "bytes": 3968900
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/wagon-lod1.glb",
+     "sha256": "72c24ed4a0e091fac02cc6255e9b7afb3059bc75652ba9d77e5c838ebec97397",
+     "bytes": 739784
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/wagon-lod2.glb",
+     "sha256": "6e4a95b72bdc29a8facaa4f4a1e83c787b46c2b21ef5da62917acd72249e9aae",
+     "bytes": 162496
+    }
+   ]
+  },
+  "coupe": {
+   "length_m": 4.5,
+   "wheel_radius_m": 0.345,
+   "type_ids": [
+    "coupe"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/fleet-v3/coupe-lod0.glb",
+     "sha256": "469d395e89c8b9018df103c4ff841c2a5ed716a8d0619197841b4c6adc20aa2c",
+     "bytes": 4635728
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/coupe-lod1.glb",
+     "sha256": "00c712304986dae9044b7691dea63cc16f9b1fa35593d6443d7a7940acf27d3f",
+     "bytes": 661280
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/coupe-lod2.glb",
+     "sha256": "9300e70d2d22617997c15dc759c43030fedc598eeb972ea570612a6b43520574",
+     "bytes": 170228
+    }
+   ]
+  },
+  "compactSuv": {
+   "length_m": 4.55,
+   "wheel_radius_m": 0.36,
+   "type_ids": [
+    "compactSuv"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/fleet-v3/compactSuv-lod0.glb",
+     "sha256": "54eec6c040af6c8c7de0aed9b1f773028bb8987e2dcb606e9519084704fbb810",
+     "bytes": 4332072
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/compactSuv-lod1.glb",
+     "sha256": "0d5ac259590de81632cb2ab4d617f18c3b2b35647d623a1624b3cf0415f53d9d",
+     "bytes": 707904
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/compactSuv-lod2.glb",
+     "sha256": "84b47f0c08645a7c75f1b86f25dc862217ca06acf915fcc2d12e68eb4ac51c89",
+     "bytes": 168288
+    }
+   ]
+  },
+  "pickup": {
+   "length_m": 5.89,
+   "wheel_radius_m": 0.39,
+   "type_ids": [
+    "pickup"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/fleet-v3/pickup-lod0.glb",
+     "sha256": "5b07aebfbb705d0774819abb720e11cb028a8147a92e2a4021ea170af5dec9bb",
+     "bytes": 4462440
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/pickup-lod1.glb",
+     "sha256": "2f44981c126f11feedffc513f147f11eecae3edf8c168b1850ea88eacd99e92a",
+     "bytes": 829340
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/pickup-lod2.glb",
+     "sha256": "2a1eda455f4ebef5d954bd59678958be7e38780d33fc83cef89d841de571641f",
+     "bytes": 192672
+    }
+   ]
+  },
+  "deliveryVan": {
+   "length_m": 5.53,
+   "wheel_radius_m": 0.375,
+   "type_ids": [
+    "deliveryVan"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/fleet-v3/deliveryVan-lod0.glb",
+     "sha256": "0a1496a0b677c29176ae6b88c70fcc729725136b04a8e887ba02d5bfdd8ee94b",
+     "bytes": 3514332
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/deliveryVan-lod1.glb",
+     "sha256": "1bc3bead486fa0d30c4fcdd26e6579795a9c1e68767902e02c866f833caadca0",
+     "bytes": 648928
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/deliveryVan-lod2.glb",
+     "sha256": "15cbd930ced186d45a1c3cc2cadac996edf1c84c32ca0d8fe0fcb57f113e6a71",
+     "bytes": 150464
+    }
+   ]
+  },
+  "boxTruck": {
+   "length_m": 7.62,
+   "wheel_radius_m": 0.46,
+   "type_ids": [
+    "boxTruck"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/fleet-v3/boxTruck-lod0.glb",
+     "sha256": "249c32771c235ad7efc4f2e23587d05f2a1791f693d7db42b286b20be3abcf81",
+     "bytes": 3796200
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/boxTruck-lod1.glb",
+     "sha256": "5b2f133cddd366963530ccac252da9b765dd7c2f0ee390e456e3619fb2ae8a06",
+     "bytes": 784372
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/boxTruck-lod2.glb",
+     "sha256": "f66c3a5675d294cbbf08c2f2077a629e0576dfde00c04c374b043089fd6916e1",
+     "bytes": 261368
+    }
+   ]
+  },
+  "cityBus": {
+   "length_m": 12.5,
+   "wheel_radius_m": 0.48,
+   "type_ids": [
+    "cityBus"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/fleet-v3/cityBus-lod0.glb",
+     "sha256": "39d7eeaa029f7cbe552f668ddef97625ebb40c17729158280eeb7b170c3c5161",
+     "bytes": 4871672
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/cityBus-lod1.glb",
+     "sha256": "6d2e36c09fade11922f398c2804ab2c330a99b418d54a0ddb1f1f43d84fe5d5c",
+     "bytes": 886444
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/cityBus-lod2.glb",
+     "sha256": "f8301dfef22a6b9de49a66a8418e3ed8d4f4e14059738ad9e4003cbbf116f6d1",
+     "bytes": 333488
+    }
+   ]
+  },
+  "taxi": {
+   "length_m": 4.92,
+   "wheel_radius_m": 0.345,
+   "type_ids": [
+    "taxi"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/fleet-v3/taxi-lod0.glb",
+     "sha256": "5a041db4317e7994ac3ad18d933716c25527f8be0ad21dfa9db100390439ad3f",
+     "bytes": 4329232
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/taxi-lod1.glb",
+     "sha256": "cf0b2c699ff67eb4aeb115faf8769b5b728edcd6d93f1626cdef8c24bdb3e728",
+     "bytes": 740640
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/taxi-lod2.glb",
+     "sha256": "ab72f5d4b95afe313cbad36b89eab49113d9a9de7a4ecceebb6f32415d7c936a",
+     "bytes": 161800
+    }
+   ]
+  },
+  "minivan": {
+   "length_m": 4.55,
+   "wheel_radius_m": 0.36,
+   "type_ids": [
+    "minivan"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/fleet-v3/minivan-lod0.glb",
+     "sha256": "663bf89c44c14d06261f845e9ae88fcefb0857dc1746ccf70088017748050f7a",
+     "bytes": 4255484
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/minivan-lod1.glb",
+     "sha256": "602fc76abc745e70bdfacd848dba88b2fdd944a16dcc72cad13d46e6b728eb8f",
+     "bytes": 737024
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/minivan-lod2.glb",
+     "sha256": "dabd1b4783daacd9a78ccbe1223ebf2cc9a93f341ab3eb7b369438d0e0eba641",
+     "bytes": 172976
+    }
+   ]
+  },
+  "fullSizeSuv": {
+   "length_m": 5.7,
+   "wheel_radius_m": 0.39,
+   "type_ids": [
+    "fullSizeSuv"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/fleet-v3/fullSizeSuv-lod0.glb",
+     "sha256": "5ada06ff62004a58d6f865ce927ac52f60bf1d8becc4a4d1f6a14123d2329a4d",
+     "bytes": 3994036
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/fullSizeSuv-lod1.glb",
+     "sha256": "8150c52bea876e5d1638b156676cfdadfdee896ca2360b6756e729d1d27b9b68",
+     "bytes": 740984
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/fullSizeSuv-lod2.glb",
+     "sha256": "18eabffae908c41e0b12da3d0b15fbe1733be316881515a9d890f64cc35dffa5",
+     "bytes": 159756
+    }
+   ]
+  },
+  "compactHatchSport": {
+   "length_m": 4.06,
+   "wheel_radius_m": 0.315,
+   "type_ids": [
+    "compactHatchSport"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/fleet-v3/compactHatchSport-lod0.glb",
+     "sha256": "cc70a4c5686c4e3aca8771b2a5c01e8aa3cad59adb1229d488aabbce900a091d",
+     "bytes": 4147144
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/compactHatchSport-lod1.glb",
+     "sha256": "ebd103cb014de50d15cff0778bf0bdb6e04c651e0912f0f15199ba6d2fd87854",
+     "bytes": 712624
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/compactHatchSport-lod2.glb",
+     "sha256": "b196f5ace64d21127fb6cdf76d15a67f5ce3727ee7921190cd8d867be9cdd654",
+     "bytes": 168000
+    }
+   ]
+  },
+  "compactHatchCross": {
+   "length_m": 4.06,
+   "wheel_radius_m": 0.315,
+   "type_ids": [
+    "compactHatchCross"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/fleet-v3/compactHatchCross-lod0.glb",
+     "sha256": "f7afef7cb7492e1ee6f34e833ee8df3453ab651973e11b297885baad04e40f53",
+     "bytes": 4132892
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/compactHatchCross-lod1.glb",
+     "sha256": "d50e6552791709e8c351bfaf093780c4292c2c67d289827c95b5a407d26cbdca",
+     "bytes": 736188
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/compactHatchCross-lod2.glb",
+     "sha256": "85c9952556ef1f505a00b068db03414808357b0bbd3ded0a2e931db35f8bd153",
+     "bytes": 179712
+    }
+   ]
+  },
+  "patrolSedan": {
+   "length_m": 5.05,
+   "wheel_radius_m": 0.36,
+   "type_ids": [
+    "patrolSedan"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/fleet-v3/patrolSedan-lod0.glb",
+     "sha256": "d94d64192a7c9d0855fa2237e4b9ba5642292ccd5e4a4967da5c0af3cebee994",
+     "bytes": 4144452
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/patrolSedan-lod1.glb",
+     "sha256": "f2eab431edb01a789784a983d1246954fc762d004e9323b8cb1f24f754503e91",
+     "bytes": 730712
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/patrolSedan-lod2.glb",
+     "sha256": "f6389763d64b32c1c554afe766c475d06883d9f4ce8385251d7d63fd0ca8b75f",
+     "bytes": 185412
+    }
+   ]
+  },
+  "sedanSport": {
+   "length_m": 4.85,
+   "wheel_radius_m": 0.34,
+   "type_ids": [
+    "sedanSport"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/fleet-v3/sedanSport-lod0.glb",
+     "sha256": "d9ee48b6a5913f28e58c6e46c83cc67780bcb86d60a64dcdafe82936390db763",
+     "bytes": 4012232
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/sedanSport-lod1.glb",
+     "sha256": "51b9573747f24aeea84fdb65706709de6f4f87e824262df9a0776ffbf8adc4aa",
+     "bytes": 652876
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/sedanSport-lod2.glb",
+     "sha256": "3e4b7c3e7fab0499fd982d227081b49a7322ce3eb3ea960434d2fbe76c80fb9c",
+     "bytes": 169196
+    }
+   ]
+  },
+  "sedanLuxe": {
+   "length_m": 4.85,
+   "wheel_radius_m": 0.34,
+   "type_ids": [
+    "sedanLuxe"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/fleet-v3/sedanLuxe-lod0.glb",
+     "sha256": "d002f13614495fdc2efcc42b5af6bcc7c52a32e3b4ad638194d0453467d83303",
+     "bytes": 4016212
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/sedanLuxe-lod1.glb",
+     "sha256": "5328934abaecc8b736470fc79e1a29e671030dad61e99007ce3b0c5b96143b2b",
+     "bytes": 650332
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/sedanLuxe-lod2.glb",
+     "sha256": "6df4d252084dd2e8fa244cf0100feef7b666bd7a1ef8c0080c8b2e51184ea840",
+     "bytes": 166948
+    }
+   ]
+  },
+  "taxiCheckered": {
+   "length_m": 4.92,
+   "wheel_radius_m": 0.345,
+   "type_ids": [
+    "taxiCheckered"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/fleet-v3/taxiCheckered-lod0.glb",
+     "sha256": "8afaf1ea4acf45f650c8fc21177844ee59b57125dc940b7d300ed87c3365f542",
+     "bytes": 4377128
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/taxiCheckered-lod1.glb",
+     "sha256": "e40e720f349d7bd422b500ec39f055993c0005a2554c800497506e625ce19804",
+     "bytes": 750472
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/taxiCheckered-lod2.glb",
+     "sha256": "5a522fe69141afca413359827c403549c3a04cfe3ed98e71b05b6b776f326ded",
+     "bytes": 181648
+    }
+   ]
+  },
+  "taxiAdBoard": {
+   "length_m": 4.92,
+   "wheel_radius_m": 0.345,
+   "type_ids": [
+    "taxiAdBoard"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/fleet-v3/taxiAdBoard-lod0.glb",
+     "sha256": "e104d1823b696824edd31b5164f58cd69e696a903d1cf317e91bfab0508a726f",
+     "bytes": 4337588
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/taxiAdBoard-lod1.glb",
+     "sha256": "942fea92f567b21c54d41a1c313336723c375eaab3c5deebf0ff51278035dcbf",
+     "bytes": 743280
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/taxiAdBoard-lod2.glb",
+     "sha256": "c5e3b62d3ec42227c4b134fdcb53b832fd50eeaf6e6127f9077ac674794a7533",
+     "bytes": 182592
+    }
+   ]
+  },
+  "exoticCoupe": {
+   "length_m": 4.39,
+   "wheel_radius_m": 0.3275,
+   "type_ids": [
+    "exoticCoupe"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/fleet-v3/exoticCoupe-lod0.glb",
+     "sha256": "1b65f98227d05b98780e8cbbe66ac81f29750bec6b6c505b893f61df6350e523",
+     "bytes": 4915040
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/exoticCoupe-lod1.glb",
+     "sha256": "43abc39209bd3fb9ccd63bbf4d196cb366f299d030d95f1d7c88322686efea3f",
+     "bytes": 608712
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/exoticCoupe-lod2.glb",
+     "sha256": "27d7d64f0c24521cdc940a2fd97c766d9be0244f24025975d902b4201143ddfb",
+     "bytes": 179200
+    }
+   ]
+  },
+  "patrolSuv": {
+   "length_m": 4.55,
+   "wheel_radius_m": 0.36,
+   "type_ids": [
+    "patrolSuv"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/fleet-v3/patrolSuv-lod0.glb",
+     "sha256": "e118ff2195068566633448950ef26cd6be220990caf0a2e014f31096d7c8c41d",
+     "bytes": 4303828
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/patrolSuv-lod1.glb",
+     "sha256": "f247d3670c8c98c6a4582485d1b7debb6e3e8139ae9853e4c2d117f95ad1143b",
+     "bytes": 721304
+    },
+    {
+     "url": "/assets/vehicles/fleet-v3/patrolSuv-lod2.glb",
+     "sha256": "84f8e9179ab3295e12b6b0de9e6ea4a28e100d87fc31fa9d8f61427f43d3c7c7",
+     "bytes": 194440
+    }
+   ]
+  },
+  "roboCab": {
+   "length_m": 4.5115,
+   "wheel_radius_m": 0.4,
+   "type_ids": [
+    "roboCab"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/generated/robo-cab-v1/roboCab-lod0.glb",
+     "sha256": "010a8795217f62e0048445abe7797ea7a2c46e8128bf84864908a11417537f85",
+     "bytes": 2893572
+    },
+    {
+     "url": "/assets/vehicles/generated/robo-cab-v1/roboCab-lod1.glb",
+     "sha256": "aa40bd41a981f60e8c87aaa6c29e0364909d000d710e096427d00ccac7cd47aa",
+     "bytes": 789584
+    },
+    {
+     "url": "/assets/vehicles/generated/robo-cab-v1/roboCab-lod2.glb",
+     "sha256": "8d04aa4f17e66a4974866843fd1d13d1af7fbc6b903147881dcde7e597779ba0",
+     "bytes": 284672
+    }
+   ]
+  },
+  "urbanUtility": {
+   "length_m": 4.7,
+   "wheel_radius_m": 0.34,
+   "type_ids": [
+    "urbanUtility"
+   ],
+   "lods": [
+    {
+     "url": "/assets/vehicles/generated/urban-utility-v1/urbanUtility-lod0.glb",
+     "sha256": "263ff8c6ea34afd2beab7195f24dd76faf4a3ada10c5ff8195be0646c52c6d36",
+     "bytes": 3675712
+    },
+    {
+     "url": "/assets/vehicles/generated/urban-utility-v1/urbanUtility-lod1.glb",
+     "sha256": "902ff7bd28f881ce85fda04eb09b3e3f5029d2bb7655e0eb919d3c861eb3b473",
+     "bytes": 698924
+    },
+    {
+     "url": "/assets/vehicles/generated/urban-utility-v1/urbanUtility-lod2.glb",
+     "sha256": "cb5a13d04ed53a3ad54b1601772664ca343e95dea3283e3677e69084aa74b3be",
+     "bytes": 162260
+    }
+   ]
+  }
+ },
+ "traffic_kind_map": {
+  "sedan": [
+   "sedan",
+   "sedan",
+   "sedanSport",
+   "sedanSport",
+   "compactHatch",
+   "compactHatch",
+   "compactHatchCross",
+   "compactHatchCross",
+   "wagon",
+   "wagon",
+   "wagon",
+   "wagon",
+   "compactSuv",
+   "compactSuv",
+   "minivan",
+   "minivan",
+   "sedanLuxe",
+   "sedanLuxe",
+   "sedan",
+   "sedan",
+   "coupe",
+   "coupe",
+   "coupe",
+   "coupe",
+   "compactHatchSport",
+   "compactHatchSport",
+   "compactHatch",
+   "compactHatch",
+   "urbanUtility"
+  ],
+  "taxi": [
+   "taxi",
+   "taxiCheckered",
+   "taxiAdBoard",
+   "taxi",
+   "taxiCheckered",
+   "taxi"
+  ],
+  "truck": [
+   "pickup",
+   "deliveryVan",
+   "fullSizeSuv",
+   "boxTruck"
+  ],
+  "bus": [
+   "cityBus"
+  ],
+  "police": [
+   "patrolSedan",
+   "patrolSuv"
+  ]
+ },
+ "paint_sets": {
+  "civilian": [
+   {
+    "hex": "#e6e7e3",
+    "weight": 16,
+    "name": "white"
+   },
+   {
+    "hex": "#d4d5cd",
+    "weight": 8,
+    "name": "pearl-white"
+   },
+   {
+    "hex": "#17191c",
+    "weight": 9,
+    "name": "black"
+   },
+   {
+    "hex": "#282c31",
+    "weight": 4,
+    "name": "graphite"
+   },
+   {
+    "hex": "#6a6f74",
+    "weight": 9,
+    "name": "mid-grey"
+   },
+   {
+    "hex": "#a6abaf",
+    "weight": 10,
+    "name": "silver"
+   },
+   {
+    "hex": "#c0c4c6",
+    "weight": 6,
+    "name": "light-silver"
+   },
+   {
+    "hex": "#23334a",
+    "weight": 3,
+    "name": "navy"
+   },
+   {
+    "hex": "#35577d",
+    "weight": 6,
+    "name": "blue"
+   },
+   {
+    "hex": "#8a2b26",
+    "weight": 5,
+    "name": "dark-red"
+   },
+   {
+    "hex": "#a8332b",
+    "weight": 5,
+    "name": "red"
+   },
+   {
+    "hex": "#2c4437",
+    "weight": 2,
+    "name": "dark-green"
+   },
+   {
+    "hex": "#b2a48f",
+    "weight": 4,
+    "name": "beige"
+   },
+   {
+    "hex": "#5a4637",
+    "weight": 2,
+    "name": "brown"
+   },
+   {
+    "hex": "#4b2029",
+    "weight": 1,
+    "name": "burgundy"
+   },
+   {
+    "hex": "#2a4a4e",
+    "weight": 2,
+    "name": "teal"
+   },
+   {
+    "hex": "#baa87e",
+    "weight": 3,
+    "name": "champagne"
+   },
+   {
+    "hex": "#a9542a",
+    "weight": 2,
+    "name": "orange"
+   },
+   {
+    "hex": "#3d4a52",
+    "weight": 3,
+    "name": "slate"
+   }
+  ],
+  "commercial": [
+   {
+    "hex": "#e9eae6",
+    "weight": 46,
+    "name": "fleet-white"
+   },
+   {
+    "hex": "#d6d7d1",
+    "weight": 12,
+    "name": "off-white"
+   },
+   {
+    "hex": "#a6abaf",
+    "weight": 8,
+    "name": "silver"
+   },
+   {
+    "hex": "#2f4a68",
+    "weight": 9,
+    "name": "fleet-blue"
+   },
+   {
+    "hex": "#5a4637",
+    "weight": 6,
+    "name": "brown"
+   },
+   {
+    "hex": "#2c4437",
+    "weight": 5,
+    "name": "fleet-green"
+   },
+   {
+    "hex": "#8a2b26",
+    "weight": 5,
+    "name": "fleet-red"
+   },
+   {
+    "hex": "#6a6f74",
+    "weight": 6,
+    "name": "grey"
+   },
+   {
+    "hex": "#17191c",
+    "weight": 3,
+    "name": "black"
+   }
+  ],
+  "livery": [
+   {
+    "hex": "#ffffff",
+    "weight": 6,
+    "name": "as-painted"
+   },
+   {
+    "hex": "#f4f4f2",
+    "weight": 3,
+    "name": "sun-faded"
+   },
+   {
+    "hex": "#e8e9e6",
+    "weight": 1,
+    "name": "worn"
+   }
+  ]
+ },
+ "rim_finishes": [
+  {
+   "hex": "#b2b7bb",
+   "weight": 34,
+   "name": "alloy-silver"
+  },
+  {
+   "hex": "#9ba1a5",
+   "weight": 20,
+   "name": "alloy-grey"
+  },
+  {
+   "hex": "#878d93",
+   "weight": 16,
+   "name": "dark-alloy"
+  },
+  {
+   "hex": "#a9aeb2",
+   "weight": 18,
+   "name": "steel-cover"
+  },
+  {
+   "hex": "#6b7278",
+   "weight": 8,
+   "name": "gunmetal"
+  },
+  {
+   "hex": "#c2c6c8",
+   "weight": 4,
+   "name": "polished"
+  }
+ ],
+ "specs": {
+  "compactHatch": {
+   "paint_set": "civilian",
+   "length_m": 4.06,
+   "wheel_radius_m": 0.315
+  },
+  "sedan": {
+   "paint_set": "civilian",
+   "length_m": 4.85,
+   "wheel_radius_m": 0.34
+  },
+  "coupe": {
+   "paint_set": "civilian",
+   "length_m": 4.5,
+   "wheel_radius_m": 0.345
+  },
+  "exoticCoupe": {
+   "paint_set": "livery",
+   "length_m": 4.39,
+   "wheel_radius_m": 0.3275
+  },
+  "wagon": {
+   "paint_set": "civilian",
+   "length_m": 4.76,
+   "wheel_radius_m": 0.335
+  },
+  "compactSuv": {
+   "paint_set": "civilian",
+   "length_m": 4.55,
+   "wheel_radius_m": 0.36
+  },
+  "urbanUtility": {
+   "paint_set": "commercial",
+   "length_m": 4.7,
+   "wheel_radius_m": 0.34
+  },
+  "pickup": {
+   "paint_set": "civilian",
+   "length_m": 5.89,
+   "wheel_radius_m": 0.39
+  },
+  "deliveryVan": {
+   "paint_set": "commercial",
+   "length_m": 5.53,
+   "wheel_radius_m": 0.375
+  },
+  "boxTruck": {
+   "paint_set": "commercial",
+   "length_m": 7.62,
+   "wheel_radius_m": 0.46
+  },
+  "cityBus": {
+   "paint_set": "livery",
+   "length_m": 12.5,
+   "wheel_radius_m": 0.53
+  },
+  "taxi": {
+   "paint_set": "livery",
+   "length_m": 4.92,
+   "wheel_radius_m": 0.345
+  },
+  "patrolSedan": {
+   "paint_set": "livery",
+   "length_m": 5.05,
+   "wheel_radius_m": 0.36
+  },
+  "patrolSuv": {
+   "paint_set": "livery",
+   "length_m": 4.55,
+   "wheel_radius_m": 0.36
+  },
+  "minivan": {
+   "paint_set": "civilian",
+   "length_m": 4.55,
+   "wheel_radius_m": 0.36
+  },
+  "fullSizeSuv": {
+   "paint_set": "civilian",
+   "length_m": 5.7,
+   "wheel_radius_m": 0.39
+  },
+  "sedanSport": {
+   "paint_set": "civilian",
+   "length_m": 4.85,
+   "wheel_radius_m": 0.34
+  },
+  "sedanLuxe": {
+   "paint_set": "civilian",
+   "length_m": 4.85,
+   "wheel_radius_m": 0.34
+  },
+  "compactHatchSport": {
+   "paint_set": "civilian",
+   "length_m": 4.06,
+   "wheel_radius_m": 0.315
+  },
+  "compactHatchCross": {
+   "paint_set": "civilian",
+   "length_m": 4.06,
+   "wheel_radius_m": 0.315
+  },
+  "taxiCheckered": {
+   "paint_set": "livery",
+   "length_m": 4.92,
+   "wheel_radius_m": 0.345
+  },
+  "taxiAdBoard": {
+   "paint_set": "livery",
+   "length_m": 4.92,
+   "wheel_radius_m": 0.345
+  },
+  "roboCab": {
+   "paint_set": "civilian",
+   "length_m": 4.53,
+   "wheel_radius_m": 0.4
+  }
+ },
+ "hero_overlay": {
+  "near_radius": 22,
+  "near_max": 2,
+  "radius": 60,
+  "max": 10,
+  "far_radius": 240,
+  "far_max": 40
+ },
+ "hero_lamp": {
+  "head": {
+   "hex": "#ffffff",
+   "day": 0,
+   "night": 3
+  },
+  "tail": {
+   "hex": "#ff2a16",
+   "day": 0,
+   "night": 7.5
+  },
+  "brake": {
+   "hex": "#ff2410",
+   "day": 1.8,
+   "night": 11
+  },
+  "reverse": {
+   "hex": "#ffffff",
+   "day": 2,
+   "night": 2
+  },
+  "indicator": {
+   "hex": "#ff9a20",
+   "day": 1.9,
+   "night": 3.2
+  }
+ },
+ "hero_lamp_day_running_floor": 0.16,
+ "crowd": {
+  "band_distances": {
+   "skinned": 34,
+   "instanced": 145,
+   "far": 240
+  },
+  "budget": {
+   "skinned": 24,
+   "instanced": 104,
+   "far": 320
+  }
+ },
+ "sources": {
+  "src/vehicles/hero-vehicle-manifest.js": "dcd630bba60250f6b39663b8c01004af6c4e9deafce987e1f336dd12fdf9782e",
+  "src/vehicles/vehicle-catalogue.js": "4d3368b5c4e50eaeae6d7f8264b8886ac6a8a17ddd427f1e6139ff830dcb2601",
+  "src/render/passes/vehicle-hero-overlay.js": "936d024443592142cf73748c61cac6c97466247e9a52b2dac27d48e5e99a1645",
+  "src/simulation/pedestrians/pedestrian-presentation.js": "e7fcc22ddf3df079c75ea855d65396bdb4def48611668a8288f6e7a7da3557f1",
+  "src/render/characters/civilian-motion.js": "ca1f34fe68e9938647faf22f9bda47f4b9e7ca4699b8743e852c4e5aa2f85f6a",
+  "src/player/clay-player-avatar.js": "324390ccb592c2291b101cbac0e5a853e4f2faaaacda3f9f21db2926de987193"
+ }
+}

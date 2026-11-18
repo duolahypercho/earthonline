@@ -1,0 +1,133 @@
+{
+ "seed": 35,
+ "notes": "Rework r3: near-black rusticated base with arched window, arched recessed entry and gate; mint-cream wall with off-white frames; shallow bays with grouped sashes; fire escape centre kept; residential base only. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. GroundBand lift (2026-10-03): groundBand tint #26282a -> #47484a (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#eef2e6",
+ "trim": "painted-white@7c8c7e",
+ "frame": "painted-white@eeeee2",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@1c1e20",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-stucco@47484a",
+ "cornice": true,
+ "corniceProjectionM": 0.8,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.4,
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "bays": [
+  {
+   "at": 0.19,
+   "widthM": 2.9,
+   "projectionM": 0.35,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#eef2e6",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.81,
+   "widthM": 2.7,
+   "projectionM": 0.35,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#eef2e6",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "upperWindows": [
+  0.5
+ ],
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#47484a",
+  "topM": 3.6
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.04,
+    "to": 0.22,
+    "kind": "window",
+    "headM": 3.0,
+    "arch": {
+     "type": "round"
+    }
+   },
+   {
+    "from": 0.36,
+    "to": 0.6,
+    "kind": "double-door",
+    "stair": true,
+    "leaf": "painted-steel@1e1e20",
+    "headM": 3.0,
+    "arch": {
+     "type": "round"
+    }
+   },
+   {
+    "from": 0.66,
+    "to": 0.96,
+    "kind": "gate",
+    "headM": 2.4
+   }
+  ]
+ },
+ "fireEscape": {
+  "at": 0.5,
+  "widthM": 3.0,
+  "depthM": 0.9,
+  "material": "painted-steel"
+ },
+ "hyDRubble": {
+  "toM": 3.6,
+  "courseM": 0.5,
+  "blockM": 0.9,
+  "projM": 0.03,
+  "shade": 0.7,
+  "seed": 7,
+  "maxTris": 6000
+ }
+}

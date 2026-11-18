@@ -1,0 +1,56 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-259222532",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-259222532",
+    "walkIndex": 5131,
+    "builder": "blender",
+    "street": "Hyde Street",
+    "side": "E",
+    "addr": "1328 Hyde Street",
+    "sourceHeight": 12,
+    "sourceLevels": null,
+    "frontEdge": 8,
+    "status": "review",
+    "lidarHeightM": 11.79,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b259222532.js",
+    "interiorModule": null,
+    "interior": false
+  },
+  "base": {
+    "id": "sf-building-259222532",
+    "walkIndex": 5131,
+    "builder": "blender",
+    "street": "Hyde Street",
+    "side": "E",
+    "addr": "1328 Hyde Street",
+    "sourceHeight": 12,
+    "sourceLevels": null,
+    "frontEdge": 8,
+    "status": "review",
+    "lidarHeightM": 11.79,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b259222532.js",
+    "interiorModule": null,
+    "interior": false
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b259222532.js",
+    "sha256": "90fd7f4671e1d54a61d586ab114884f8770d489a1e089f023d637f823f8d4776",
+    "pass": "b259222532-blender-118d18ab-550373-ext"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-259222532/provenance.json",
+    "sha256": "38b15f8afde78264cd7b5182ee16c3ad821715898e139e4aa5b4226993afcc90",
+    "pass": "b259222532-blender-118d18ab-550373-ext"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-259222532/exterior.glb",
+      "sha256": "46d8ac59eeb4941c000f4b511c985c532ac4294e9130230b5d8205ea6a4be58c",
+      "bytes": 560736
+    }
+  ],
+  "generatedAt": "2026-10-10T04:17:16.639Z"
+}

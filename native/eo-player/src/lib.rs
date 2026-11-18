@@ -1,0 +1,22 @@
+//! Earth Online player, ported from the JS game: on-foot character
+//! controller, walk and drive cameras, the player's car, input mapping, and
+//! the collision world streamed per tile. No GPU dependency.
+//!
+//! Engine: Rapier (`rapier3d`), as the JS game uses Rapier for the same jobs.
+//! See `world.rs` for the tile stream, `character.rs` for the walk,
+//! `vehicle.rs` for the car, `camera.rs` for the rigs, `routes.rs` for the
+//! scripted walk and drive the bench and tests run.
+
+pub mod camera;
+pub mod character;
+pub mod input;
+pub mod momentum;
+pub mod player;
+pub mod routes;
+pub mod street_ground;
+pub mod tuning;
+pub mod vehicle;
+pub mod world;
+
+pub use player::{CameraView, Mode, Player, PlayerState, StepInput}; // + PlayerState
+pub use world::{BuildingSet, CollisionWorld, ElevationGround, GroundProvider, SurfaceMesh, TileFeed, TileKey}; // + TileFeed

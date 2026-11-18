@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "kind": "generated-vehicle",
+  "vehicleId": "robo-cab-v1",
+  "body": "roboCab",
+  "lengthM": 4.5115,
+  "wheelRadiusM": 0.4,
+  "typeIds": [
+    "roboCab"
+  ],
+  "lods": [
+    {
+      "file": "generated/robo-cab-v1/roboCab-lod0.glb",
+      "sha256": "010a8795217f62e0048445abe7797ea7a2c46e8128bf84864908a11417537f85",
+      "bytes": 2893572
+    },
+    {
+      "file": "generated/robo-cab-v1/roboCab-lod1.glb",
+      "sha256": "aa40bd41a981f60e8c87aaa6c29e0364909d000d710e096427d00ccac7cd47aa",
+      "bytes": 789584
+    },
+    {
+      "file": "generated/robo-cab-v1/roboCab-lod2.glb",
+      "sha256": "8d04aa4f17e66a4974866843fd1d13d1af7fbc6b903147881dcde7e597779ba0",
+      "bytes": 284672
+    }
+  ],
+  "source": {
+    "method": "Normals repair of the shipped runtime GLB (scripts/assets/repair-vehicle-glb-normals.py)",
+    "sha256": "e29effaff2ad100563fa545d1b207711ef3348489d6318f93c6310f7f0a145cb",
+    "bytes": 2254840,
+    "file": "roboCab-lod0.glb"
+  },
+  "donor": {
+    "path": "shipped-runtime-glb:generated/robo-cab-v1/roboCab-lod0.glb",
+    "sha256": "e29effaff2ad100563fa545d1b207711ef3348489d6318f93c6310f7f0a145cb",
+    "bytes": 2254840,
+    "kind": "shipped-runtime-glb"
+  },
+  "upstream": {
+    "method": "Authored study source; Blender rig conversion",
+    "sha256": "a46665430bb1d2e1abdbbc0732d513ddbd548a7a7c349be0cbcda4929d7d6fab",
+    "bytes": 38579853,
+    "file": "cybercab-study.blend"
+  },
+  "assembly": {
+    "generator": "scripts/assets/repair-vehicle-glb-normals.py",
+    "reportSha256": "092aefcbf2153a821c9324744619452e057acfb7606253b99b75885151a42c49",
+    "upstreamGenerator": "scripts/assets/build-robo-cab-v1.py"
+  },
+  "acceptance": {
+    "verdict": "accepted",
+    "lodSha256": [
+      "010a8795217f62e0048445abe7797ea7a2c46e8128bf84864908a11417537f85",
+      "aa40bd41a981f60e8c87aaa6c29e0364909d000d710e096427d00ccac7cd47aa",
+      "8d04aa4f17e66a4974866843fd1d13d1af7fbc6b903147881dcde7e597779ba0"
+    ],
+    "evidence": [
+      {
+        "sha256": "b00072d6038911d39a5a9366f2ca9a4bc0ebe7584e748aa73735027beea5cd8c",
+        "bytes": 1507491
+      },
+      {
+        "sha256": "781bbb19d4f84a9269f0321f4b923ea5afb4be4d2e69f8318b8413dcc3c9315a",
+        "bytes": 1307424
+      },
+      {
+        "sha256": "39975e0b9fa5a5fc9e9fbe51787950199186d45a0b37590d6b90ccbba45034c6",
+        "bytes": 1400410
+      },
+      {
+        "sha256": "18b0cf9e39bf5c935a47e1ba894004b2a30eafb434563e8b5cfa09c985f0e6a8",
+        "bytes": 1173973
+      },
+      {
+        "sha256": "ca24a23a024691d71e5ca13f23c21f897c4fd471b870a4de6a46bd4b4b3242ac",
+        "bytes": 93428
+      }
+    ]
+  }
+}

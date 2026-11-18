@@ -1,0 +1,76 @@
+{
+ "seed": 6,
+ "notes": "1904 three-storey flats on a raised basement. Tan painted stucco, dark brown window frames; north-end arched-look recessed entry up a stoop, two tall raised-floor windows; a square box bay over the entry on both upper storeys with two punched sashes beside it; short red clay-tile pent as the parapet cap. Claims skipped. Only change: streetStills for street-oriented renders. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-stucco",
+ "wallTint": "#eae0d2",
+ "trim": "painted-white@d8c6ac",
+ "frame": "painted-white@4a3a2c",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@4a3a2c",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-stucco@eae0d2",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.4,
+ "upperWindows": [
+  0.62,
+  0.84
+ ],
+ "bays": [
+  {
+   "at": 0.27,
+   "widthM": 2.6,
+   "projectionM": 0.55,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#eae0d2"
+  }
+ ],
+ "coping": {
+  "heightM": 0.4,
+  "projectionM": 0.3,
+  "material": "ceramic-tile",
+  "tint": "#a8583a"
+ },
+ "storefront": {
+  "bulkheadM": 1.7,
+  "transomM": 0.3,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.06,
+    "to": 0.24,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel@2c2a28",
+    "headM": 3.6
+   },
+   {
+    "from": 0.4,
+    "to": 0.54,
+    "kind": "window",
+    "headM": 4.2
+   },
+   {
+    "from": 0.62,
+    "to": 0.76,
+    "kind": "window",
+    "headM": 4.2
+   },
+   {
+    "from": 0.84,
+    "to": 0.92,
+    "kind": "door",
+    "leaf": "painted-steel@5a4a3c",
+    "headM": 1.9
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true
+}

@@ -1,0 +1,150 @@
+{
+ "seed": 12,
+ "notes": "1930 three-storey mid-grey stucco building. A round bow bay over the north (viewer's right) half on both upper storeys, five narrow white-framed sashes around the bow; one round-arched dark window at the left of storey 2; white moulded belt over the street storey; red clay-tile parapet pent; ground (viewer's left to right): plain wood panel door, recessed dark double entry, small grey service door. Fractions from the real viewer's left. Street storey same mid-grey under the white belt; storey-2 arch reads as a deep dark round-headed opening (dark arch glazing + dark infill); boarded brown door and small grey panel as closed panels, dark double entry. Mid/dark grey stucco #7c7d80 (lum ~0.16). Wall lifted to #7c7d80; mirror skipped; lancet tracery and string course on the bow not expressible. Bow rebuilt through hyB swell (true curved plan, five casement panes a storey with a lower-sash/upper-sash bar, corbel foot), continuous thin white string course across the full width, storey-3 flat window removed (blank wall). Gothic tracery only approximated by bars. Wall #808385; bow underside corbel removed so the bay sits flush on the belt; centre double door is a closed dark leaf. Gothic casement tracery still not expressible. Wall #808385, flush bay foot and arch already. Applied: centre recessed entry a dark blank #2a2b2e (no pale panel), red lamp dot left of it, belt/trim lighter grey #d2d3d4. Gothic arched casement heads on the bow not expressible (hyB swell has flat heads); arch at storey 2 kept. Clapboard fix (2026-10-02): painted siding moved from the stained-timber wood-siding base to painted-clapboard so the tint renders as paint, not olive. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k). Base fix (2026-10-03): cool/grey wallTint = target / painted-stucco base so the warm stucco albedo does not turn it pink. GroundBand lift (2026-10-03): groundBand tint #808385 -> #999c9d (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#b4c0d4",
+ "trim": "painted-white@d2d3d4",
+ "frame": "painted-white@f0f0ec",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@c8c8c4",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-stucco@dcdcda",
+ "cornice": false,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.8,
+ "windowSillM": 0.8,
+ "windowHeadM": 2.3,
+ "floorsM": {
+  "groundM": 3.6,
+  "upperM": 3.1
+ },
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.64,
+   "widthM": 3.0,
+   "projectionM": 0.95,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#b4c0d4",
+   "hyB": {
+    "plan": "swell",
+    "arc": "segmental",
+    "panes": 5,
+    "facetsPerPane": 2,
+    "sillM": 0.7,
+    "headGapM": 0.3,
+    "muntins": {
+     "upperRows": 2,
+     "upperCols": 1,
+     "lowerRows": 1,
+     "lowerCols": 1
+    },
+    "corbel": {
+     "tiers": 0,
+     "stepM": 0.05,
+     "brackets": 0
+    },
+    "cornice": {
+     "projectionM": 0.1,
+     "roofRiseM": 0
+    }
+   }
+  }
+ ],
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#999c9d",
+  "topM": 3.6
+ },
+ "coping": {
+  "heightM": 0.35,
+  "projectionM": 0.3,
+  "material": "ceramic-tile",
+  "tint": "#a8583a"
+ },
+ "storefront": {
+  "bulkheadM": 0.4,
+  "transomM": 0.3,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.06,
+    "to": 0.17,
+    "kind": "blank",
+    "material": "painted-clapboard",
+    "tint": "#6a625a",
+    "headM": 2.5
+   },
+   {
+    "from": 0.5,
+    "to": 0.72,
+    "kind": "blank",
+    "material": "painted-steel",
+    "tint": "#2a2b2e",
+    "headM": 2.7
+   },
+   {
+    "from": 0.86,
+    "to": 0.96,
+    "kind": "blank",
+    "material": "painted-steel",
+    "tint": "#5e6062",
+    "headM": 2.3
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "office",
+ "archHeads": [
+  {
+   "from": 0.122,
+   "to": 0.218,
+   "storey": 1,
+   "riseM": 0.45,
+   "glass": "painted-steel@1c1c1e",
+   "frame": "painted-steel@1c1c1e"
+  }
+ ],
+ "plaques": [
+  {
+   "at": 0.17,
+   "y": 4.9,
+   "w": 0.84,
+   "h": 2.0,
+   "face": "painted-steel@1c1c1e"
+  },
+  {
+   "at": 0.5,
+   "y": 3.66,
+   "w": 8.4,
+   "h": 0.1,
+   "face": "painted-white@f0f0ec"
+  },
+  {
+   "at": 0.47,
+   "y": 2.2,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-white@c8302a"
+  }
+ ],
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.122,
+     0.218
+    ]
+   ],
+   "sillM": 0.8,
+   "headM": 2.3
+  },
+  "2": {
+   "spans": []
+  }
+ },
+ "streetStills": true
+}

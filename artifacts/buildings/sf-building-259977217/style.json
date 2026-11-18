@@ -1,0 +1,175 @@
+{
+ "seed": 217,
+ "wall": "brick-buff",
+ "wallTint": "#ffffff",
+ "trim": "painted-white@e2d8b8",
+ "frame": "painted-white@e6dec4",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@3b3a36",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "corniceProjectionM": 0.6,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.9,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.27,
+  0.335,
+  0.665,
+  0.74
+ ],
+ "bays": [
+  {
+   "at": 0.1,
+   "widthM": 2.8,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#eee7d6",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.5,
+   "widthM": 6.4,
+   "projectionM": 0.8,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#eee7d6",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 1.6,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.95,
+   "widthM": 2.4,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#eee7d6",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.9,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.02,
+    "to": 0.29,
+    "kind": "window",
+    "headM": 3.3,
+    "grille": true
+   },
+   {
+    "from": 0.315,
+    "to": 0.425,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel@2c2b2a",
+    "headM": 3.2
+   },
+   {
+    "from": 0.44,
+    "to": 0.78,
+    "kind": "blank",
+    "material": "painted-white",
+    "tint": "#ece9e2",
+    "headM": 3.5
+   },
+   {
+    "from": 0.56,
+    "to": 0.62,
+    "kind": "window",
+    "headM": 3.1
+   },
+   {
+    "from": 0.79,
+    "to": 0.9,
+    "kind": "window",
+    "headM": 3.2
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "notes": "1917 cream-buff brick flats, four storeys. Ground (cream brick to 4.1 m): grilled laundromat shopfront left, recessed gated entry porch, a long blank painted-white brick wall with one high small window, a second shopfront right. Uppers: left bay, a wide central splayed bay carrying the steel fire escape, right-hand bay, paired small sash windows between, bracketed cornice. Cream trim. Rework r-eddy: red sign board over the shopfront at the left end. Storey count kept at 4: LiDAR 15.4 m with a 4.1 m ground leaves three 3.7 m uppers, a fifth storey does not fit. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour.",
+ "groundBand": {
+  "material": "brick-buff",
+  "tint": "#ffffff",
+  "topM": 4.1
+ },
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 4.1
+ },
+ "fireEscape": {
+  "at": 0.52,
+  "widthM": 3.2,
+  "depthM": 0.9,
+  "material": "painted-steel@c8a04a"
+ },
+ "hbSignBands": [
+  {
+   "from": 0,
+   "to": 0.29,
+   "bottomM": 2.95,
+   "topM": 3.85,
+   "material": "painted-stucco",
+   "tint": "#c8352c"
+  }
+ ]
+}

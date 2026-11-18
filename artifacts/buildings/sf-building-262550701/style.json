@@ -1,0 +1,205 @@
+{
+ "seed": 6,
+ "notes": "1979 light warm grey board-sided condo, stepped Hyde frontage over edges 1 and 2 (collinear), flat roof with no cornice, large dark-framed windows in pairs, recessed entry among hedges and a low brick plinth. Darkened to the mid warm grey of the readable adjoining planes. The punched double-hung grid is gone. Light-to-mid grey board siding; the long Hyde plane is a banded frame of large dark-framed window walls with darker grey floor bands, two recessed steel-railed balconies and interior shutters/blinds behind the glass. The short front plane carries a glazed projecting box bay over the recessed entry. The side plane gets wide picture windows. Pink base removed: a low brick planter band and a dark garage in the podium. Siding and floor bands cooled to neutral light/mid grey, garage moved between two frame posts, brick planter band deeper. Brick planter band deep red-brown and raised to planter height; floor bands project less. Taupe warm-grey board siding, the concrete slab and pilaster grid on the long plane is gone for an irregular rhythm of narrow tall single windows and wider two-light windows in thin dark frames (interior shutters behind); the glass canted bay on the short front becomes a flat projecting box face with one window per floor and a small steel-railed balcony on the second upper storey; ground: low brick planters, a recessed dark entry and short garden-level windows (no roll-up garage, no blank infills, no pink band); lower plates leave room for a set-back dark-glazed penthouse block. The front box frame is kept to the short front only; the long and side planes are plain siding with punched windows. Rework B: warm grey-taupe siding (neutral tint on the stained base), terracotta base band removed. The long Hyde plane is one wall-coloured frame (thin seams only) holding an irregular pattern: narrow recessed slit windows and wide 2-3 lite dark-framed windows with pale shutter backing grouped per bay, different on each storey, a small bar-railed balcony with a projecting deck in the right-hand wide bay at storey 3, and a continuous ribbon on the top storey. The narrow front return (edge 1) loses its slab/balcony stack for one wide window per storey. Not doable: real projecting/recessed bays and a setback top storey (no key moves wall planes), brick forecourt and hedges. Rework 2: siding tint set so the game draws a mid warm-cool grey (~#7a7873; the old #5c5c5c on the wood-siding kit drew near-black in game); tan louvred blinds (#c9b27a) drawn behind the glazing at up to full height, visible in sv3; the storey-3 balcony slab lip deepened to 1.0 m so it projects past the wall (a recess under 0.6 m drops the balcony in the kit). Not doable: a set-back top storey (no key), diagonal steel brackets under the balcony, the recessed dark ground storey and planters. Top-storey continuous ribbon broken into the bay rhythm of the storey below, second slab balcony stacked on storey 2, siding a step lighter. Set-back planted forecourt not drawable. Siding stepped darker/cooler toward the grey the readable edge shows (#c2c4cb -> #aeb0b8); slab bands and balconies already present each floor; shutters, brick planters and hedge forecourt not drawable/hidden by blur. Clapboard fix (2026-10-02): painted siding moved from the stained-timber wood-siding base to painted-clapboard so the tint renders as paint, not olive. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-clapboard",
+ "wallTint": "#d6d8dc",
+ "trim": "painted-steel",
+ "frame": "painted-steel",
+ "glass": "glass-clear",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "bayM": 3.4,
+ "windowW": 1.4,
+ "windowSillM": 0.8,
+ "windowHeadM": 2.3,
+ "upperSillM": 0.6,
+ "upperHeadM": 2.2,
+ "sashMaterial": "painted-steel",
+ "mullionM": 1,
+ "glassBacking": {
+  "material": "painted-white",
+  "tints": [
+   "#e8e2d4",
+   "#d8d0c0"
+  ],
+  "depthM": 0.25,
+  "kinds": [
+   "grid",
+   "grid-balcony",
+   "ribbon",
+   "bay"
+  ],
+  "blindTint": "#dcc488",
+  "blindMax": 1.0
+ },
+ "storefrontFrame": "painted-steel",
+ "bulkhead": "painted-clapboard@d2d2d6",
+ "storefront": {
+  "bulkheadM": 0.9,
+  "transomM": 0.3,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.25,
+    "to": 0.75,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel"
+   }
+  ]
+ },
+ "streetEdges": {
+  "2": {
+   "storefront": {
+    "bulkheadM": 1.2,
+    "layout": [
+     {
+      "from": 0.1,
+      "to": 0.2,
+      "kind": "window",
+      "headM": 2.3
+     },
+     {
+      "from": 0.44,
+      "to": 0.5,
+      "kind": "door",
+      "leaf": "painted-steel"
+     },
+     {
+      "from": 0.7,
+      "to": 0.82,
+      "kind": "window",
+      "headM": 2.3
+     }
+    ]
+   },
+   "upperWindowSpans": [
+    [
+     0.06,
+     0.11
+    ],
+    [
+     0.18,
+     0.3
+    ],
+    [
+     0.38,
+     0.43
+    ],
+    [
+     0.52,
+     0.66
+    ],
+    [
+     0.74,
+     0.79
+    ],
+    [
+     0.85,
+     0.95
+    ]
+   ],
+   "frameGrid": {
+    "columns": [
+     0.03,
+     0.07,
+     0.12,
+     0.3,
+     0.35,
+     0.39,
+     0.5,
+     0.66,
+     0.71,
+     0.75,
+     0.8,
+     0.95
+    ],
+    "fromStorey": 1,
+    "storeyPatterns": [
+     [
+      "glass",
+      "wall",
+      "glass",
+      "wall",
+      "glass",
+      "wall",
+      "wall",
+      "wall",
+      "glass",
+      "wall",
+      "glass"
+     ],
+     [
+      "balcony",
+      "wall",
+      "wall",
+      "wall",
+      "glass",
+      "wall",
+      "glass",
+      "wall",
+      "balcony",
+      "wall",
+      "wall"
+     ],
+     [
+      "glass",
+      "wall",
+      "glass",
+      "wall",
+      "glass",
+      "wall",
+      "wall",
+      "wall",
+      "glass",
+      "wall",
+      "glass"
+     ]
+    ],
+    "columnW": 0.05,
+    "slabEdgeH": 0.8,
+    "projectionM": 0.02,
+    "mullionM": 0.9,
+    "recessM": 0.6,
+    "balconyLipM": 1.0,
+    "rail": "bars",
+    "material": "painted-clapboard",
+    "tint": "#a6a9b4",
+    "balconyMaterial": "wood-siding",
+    "balconyTint": "#a8a8a8",
+    "frameMaterial": "painted-steel",
+    "glassRecessM": 0.25
+   }
+  },
+  "3": {
+   "upperWindowSpans": [
+    [
+     0.15,
+     0.45
+    ],
+    [
+     0.6,
+     0.8
+    ]
+   ],
+   "storefront": {
+    "layout": []
+   },
+   "frameGrid": null
+  }
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "floorsM": {
+  "groundM": 2.9,
+  "upperM": 2.55
+ },
+ "upperWindowSpans": [
+  [
+   0.25,
+   0.75
+  ]
+ ]
+}

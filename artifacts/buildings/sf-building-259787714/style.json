@@ -1,0 +1,224 @@
+{
+ "seed": 21,
+ "notes": "Round 2: 1974 flats over an open carport: warm tan stucco, four canted bays with one large centre pane and angled side lights sitting directly on the parking slab, flat piers, stacked balconies and paired windows at the right end; carport = dark blue-grey 1.5 m tile wall, steel picket rail (hand.py), square piers, dark behind. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. Colour re-apply (2026-10-03): a rework re-sampled wallTint #d4bc9c from the photo; lifted/converted once to #eadece. GroundBand lift (2026-10-03): groundBand tint #3f5560 -> #5c6e78 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#eadece",
+ "trim": "painted-white@a08868",
+ "frame": "painted-white@222426",
+ "glass": "glass-reflective",
+ "storefrontFrame": "painted-steel@3a4044",
+ "storefrontGlass": "glass-clear",
+ "storeysSeen": {
+  "count": 5,
+  "groundM": 3.9,
+  "upperM": 2.85
+ },
+ "windowW": 0.9,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.4,
+ "upperWindows": [
+  0.9
+ ],
+ "bays": [
+  {
+   "at": 0.1,
+   "widthM": 3.9,
+   "projectionM": 0.75,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#d4bc9c",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.8,
+    "marginM": 0.2,
+    "cornice": {
+     "projectionM": 0.1,
+     "roofRiseM": 0.0
+    },
+    "corbel": {
+     "tiers": 0,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.28,
+   "widthM": 3.9,
+   "projectionM": 0.75,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#d4bc9c",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.8,
+    "marginM": 0.2,
+    "cornice": {
+     "projectionM": 0.1,
+     "roofRiseM": 0.0
+    },
+    "corbel": {
+     "tiers": 0,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.46,
+   "widthM": 3.9,
+   "projectionM": 0.75,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#d4bc9c",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.8,
+    "marginM": 0.2,
+    "cornice": {
+     "projectionM": 0.1,
+     "roofRiseM": 0.0
+    },
+    "corbel": {
+     "tiers": 0,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.64,
+   "widthM": 3.9,
+   "projectionM": 0.75,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#d4bc9c",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.8,
+    "marginM": 0.2,
+    "cornice": {
+     "projectionM": 0.1,
+     "roofRiseM": 0.0
+    },
+    "corbel": {
+     "tiers": 0,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#5c6e78",
+  "topM": 1.5
+ },
+ "storefront": {
+  "bulkheadM": 1.5,
+  "transomM": 0.3,
+  "pierM": 0.5,
+  "awning": false,
+  "paneM": 99,
+  "layout": [
+   {
+    "from": 0.02,
+    "to": 0.16,
+    "kind": "gate",
+    "lattice": false,
+    "headM": 3.7,
+    "material": "painted-steel",
+    "tint": "#16191b"
+   },
+   {
+    "from": 0.18,
+    "to": 0.32,
+    "kind": "gate",
+    "lattice": false,
+    "headM": 3.7,
+    "material": "painted-steel",
+    "tint": "#16191b"
+   },
+   {
+    "from": 0.34,
+    "to": 0.48000000000000004,
+    "kind": "gate",
+    "lattice": false,
+    "headM": 3.7,
+    "material": "painted-steel",
+    "tint": "#16191b"
+   },
+   {
+    "from": 0.5,
+    "to": 0.64,
+    "kind": "gate",
+    "lattice": false,
+    "headM": 3.7,
+    "material": "painted-steel",
+    "tint": "#16191b"
+   },
+   {
+    "from": 0.66,
+    "to": 0.8,
+    "kind": "gate",
+    "lattice": false,
+    "headM": 3.7,
+    "material": "painted-steel",
+    "tint": "#16191b"
+   },
+   {
+    "from": 0.82,
+    "to": 0.96,
+    "kind": "gate",
+    "lattice": false,
+    "headM": 3.7,
+    "material": "painted-steel",
+    "tint": "#16191b"
+   }
+  ]
+ },
+ "hbBayGlazing": {
+  "marginM": 0.15,
+  "maxW": 2.6,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-reflective",
+  "frame": "painted-white",
+  "frameTint": "#1c1e20",
+  "sashM": 0.08,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "ground": "garage",
+ "upper": "apartment",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "streetStills": true,
+ "bulkhead": "painted-stucco@5c6e78",
+ "upperOpenings": [
+  {
+   "at": 0.775,
+   "w": 1.0,
+   "kind": "single"
+  },
+  {
+   "at": 0.925,
+   "w": 2.6,
+   "kind": "balcony"
+  }
+ ],
+ "railMaterial": "painted-steel@1a1c1e"
+}

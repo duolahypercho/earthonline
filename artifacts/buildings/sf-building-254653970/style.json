@@ -1,0 +1,186 @@
+{
+ "seed": 11,
+ "notes": "Segmental brick-arched wide windows with pale surrounds on the brick storey, open recessed garage at the left, varnished arched entry. Storey-1 wide windows now real ribbon windows with segmental arch + white surround (were shopBays panes). Brick base stays lifted (645850) for the luminance floor. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-clapboard",
+ "wallTint": "#ccd6cc",
+ "trim": "painted-white@eeeae0",
+ "frame": "painted-white@eeeae0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@2a2420",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "brick-running-bond@beffff",
+ "cornice": true,
+ "corniceProjectionM": 0.55,
+ "beltCourse": false,
+ "windowHoods": true,
+ "windowW": 0.95,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.5,
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 2.8,
+  "upperM": 3.52
+ },
+ "upperWindows": [
+  0.595,
+  0.41
+ ],
+ "bays": [
+  {
+   "at": 0.215,
+   "widthM": 3.0,
+   "projectionM": 0.6,
+   "fromStorey": 2,
+   "material": "painted-clapboard",
+   "tint": "#ccd6cc"
+  },
+  {
+   "at": 0.79,
+   "widthM": 3.0,
+   "projectionM": 0.6,
+   "fromStorey": 2,
+   "material": "painted-clapboard",
+   "tint": "#ccd6cc"
+  }
+ ],
+ "wallZones": [
+  {
+   "from": 0.0,
+   "to": 1.0,
+   "toY": 5.9,
+   "material": "brick-running-bond",
+   "tint": "#baffff"
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.6,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.09,
+    "to": 0.375,
+    "kind": "garage",
+    "material": "painted-steel",
+    "tint": "#2e2824",
+    "headM": 2.6
+   },
+   {
+    "from": 0.425,
+    "to": 0.59,
+    "kind": "door",
+    "stair": true,
+    "leaf": "wood-siding@7a4a2c",
+    "headM": 2.9
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.075,
+     0.31
+    ],
+    [
+     0.69,
+     0.925
+    ]
+   ],
+   "sillM": 0.9,
+   "headM": 2.3
+  }
+ },
+ "plaques": [
+  {
+   "at": 0.5,
+   "y": 6.15,
+   "w": 11.8,
+   "h": 0.5,
+   "face": "painted-white@eeeae0"
+  },
+  {
+   "at": 0.5,
+   "y": 5.96,
+   "w": 11.9,
+   "h": 0.12,
+   "face": "painted-white@d8d4c6"
+  }
+ ],
+ "hbArchDoors": [
+  {
+   "from": 0.425,
+   "to": 0.59,
+   "material": "brick-running-bond",
+   "tint": "#baffff",
+   "ringTint": "#7c665c",
+   "fillTint": "#2a1e18"
+  }
+ ],
+ "shopBays": [
+  {
+   "edge": 5,
+   "from": 0.0,
+   "to": 1.0,
+   "windows": [
+    {
+     "from": 0.555,
+     "to": 0.585,
+     "sillM": 3.9,
+     "headM": 4.6,
+     "cols": 1,
+     "rows": 1,
+     "frameTint": "#2a2420"
+    },
+    {
+     "from": 0.5,
+     "to": 0.53,
+     "sillM": 3.9,
+     "headM": 4.6,
+     "cols": 1,
+     "rows": 1,
+     "frameTint": "#2a2420"
+    },
+    {
+     "from": 0.445,
+     "to": 0.475,
+     "sillM": 3.9,
+     "headM": 4.6,
+     "cols": 1,
+     "rows": 1,
+     "frameTint": "#2a2420"
+    }
+   ]
+  }
+ ],
+ "hbFrieze": {
+  "heightM": 0.4,
+  "material": "painted-white",
+  "tint": "#eeeae0"
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.8,
+  "heightM": 0.45,
+  "depthM": 0.25,
+  "widthM": 0.14,
+  "material": "painted-white",
+  "tint": "#eeeae0"
+ },
+ "streetStills": true,
+ "upperWindowArch": {
+  "type": "segmental",
+  "riseM": 0.22,
+  "storeys": [
+   1
+  ],
+  "surround": {
+   "widthM": 0.12,
+   "projectionM": 0.04,
+   "material": "painted-white",
+   "tint": "#eeeae0"
+  }
+ }
+}

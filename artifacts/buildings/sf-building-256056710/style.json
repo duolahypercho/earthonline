@@ -1,0 +1,119 @@
+{
+ "seed": 39,
+ "notes": "1917 five-storey flats, pale cream glazed brick over a dark brick shop base with a decorated frieze at the first-floor line. Three-column rhythm of small paired-sash windows with lintels, two steel fire escapes with open balconies, cornice. Ground: a large shop window at the Geary-end left, dark brick, a recessed door, shop fronts with a dark awning right. Applied: charcoal tile base (lifted), cream glazed brick, deep bracketed cornice with frieze, windows grouped in pairs beside the fire escapes, cream belt via hand.py, salon sign band (no lettering). Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Warm cream wall, near-black brown base, thicker belt frieze (hand.py), taller frieze under the cornice, taller sash. Salon sign band kept. Lifted/converted once to #f8eed8. GroundBand lift (2026-10-03): groundBand tint #3a2e28 -> #584d48 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-white",
+ "wallTint": "#f8eed8",
+ "trim": "painted-white@efe8d8",
+ "frame": "painted-white@efe8d8",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@efe8d8",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "corniceProjectionM": 0.9,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.9,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.5,
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "bulkhead": "painted-steel@3a2e28",
+ "groundBand": {
+  "material": "painted-white",
+  "tint": "#584d48",
+  "topM": 4.0
+ },
+ "upperWindows": [
+  0.1,
+  0.18,
+  0.38,
+  0.46,
+  0.7,
+  0.78
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.03,
+    "to": 0.21,
+    "kind": "window",
+    "headM": 3.0
+   },
+   {
+    "from": 0.62,
+    "to": 0.7,
+    "kind": "door",
+    "leaf": "painted-steel@2a2f2c"
+   },
+   {
+    "from": 0.72,
+    "to": 0.84,
+    "kind": "window",
+    "headM": 2.8
+   },
+   {
+    "from": 0.86,
+    "to": 0.97,
+    "kind": "window",
+    "headM": 2.8
+   }
+  ]
+ },
+ "awningSpans": [
+  {
+   "from": 0.84,
+   "to": 0.98,
+   "depthM": 1.1,
+   "valanceM": 0.3
+  }
+ ],
+ "awning": "canvas-plain@2a2a30",
+ "fireEscapes": [
+  {
+   "at": 0.34,
+   "widthM": 3.0,
+   "depthM": 0.9,
+   "material": "painted-steel"
+  },
+  {
+   "at": 0.84,
+   "widthM": 3.0,
+   "depthM": 0.9,
+   "material": "painted-steel"
+  }
+ ],
+ "hbCorniceDentils": {
+  "spacingM": 0.25,
+  "sizeM": 0.1,
+  "tint": "#d8cfbc"
+ },
+ "edgeRoles": {},
+ "hbCorniceBrackets": {
+  "spacingM": 1.3,
+  "heightM": 0.7,
+  "depthM": 0.35,
+  "widthM": 0.28,
+  "material": "painted-white",
+  "tint": "#e6dcc8"
+ },
+ "hbFrieze": {
+  "heightM": 0.6,
+  "material": "painted-white",
+  "tint": "#e6dcc8"
+ },
+ "hbSignBands": [
+  {
+   "from": 0.6,
+   "to": 0.76,
+   "bottomM": 3.0,
+   "topM": 3.6,
+   "material": "painted-white",
+   "tint": "#d8b860"
+  }
+ ]
+}

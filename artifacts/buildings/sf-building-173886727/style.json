@@ -1,0 +1,84 @@
+{
+  "seed": 1,
+  "notes": "Round 1: narrow charcoal-painted two-storey: two steel-sash multi-pane upper windows, a blank dark sign band, black-framed shop glazing with a door. Round 16 (lane GS vs t50S): charcoal read warm brown; near-black cooler paint. Round 19 (t50S): darker shop glass so the black-framed storefront reads glazed, not flat blue. Round 23 (t22S/t50S): opaque dark reflective glass so no lit interior shows behind upper or shop panes.",
+  "wall": "painted-stucco",
+  "wallTint": "#2a2d31",
+  "trim": "painted-steel",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "coping": {
+    "heightM": 0.25,
+    "projectionM": 0.05,
+    "material": "painted-steel"
+  },
+  "stripes": {
+    "fromStorey": 1,
+    "offsetsM": [
+      -0.85
+    ],
+    "heightM": 0.7,
+    "material": "signage"
+  },
+  "upperWindowSpans": [
+    [
+      0.08,
+      0.46
+    ],
+    [
+      0.54,
+      0.92
+    ]
+  ],
+  "upperSillM": 0.35,
+  "upperHeadM": 1.95,
+  "mullionM": 1.4,
+  "sashRows": 2,
+  "sashCols": 3,
+  "sashMaterial": "painted-steel",
+  "storefrontFrame": "painted-steel",
+  "bulkhead": "painted-steel",
+  "ground": "shop",
+  "upper": "office",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.4,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.05,
+        "to": 0.4
+      },
+      {
+        "kind": "door",
+        "from": 0.42,
+        "to": 0.56,
+        "leaf": "painted-steel",
+        "stair": true
+      },
+      {
+        "kind": "window",
+        "from": 0.58,
+        "to": 0.95
+      }
+    ]
+  },
+  "weathering": {
+    "patches": {
+      "strength": 0.07,
+      "metres": 1.6,
+      "top": 4.0,
+      "mottle": 0.05
+    },
+    "grime": {
+      "strength": 0.12,
+      "metres": 3.0
+    }
+  },
+  "storefrontGlass": "glass-dark",
+  "glass": "glass-shell",
+  "glassModel": {
+    "upper": "glass-reflective@6e635c",
+    "street": "glass-reflective@5b524c"
+  }
+}

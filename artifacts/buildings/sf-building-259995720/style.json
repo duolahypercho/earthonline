@@ -1,0 +1,157 @@
+{
+ "seed": 720,
+ "wall": "painted-stucco",
+ "wallTint": "#a3d5ff",
+ "trim": "painted-white@e4e0d0",
+ "frame": "painted-white@ece8dc",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@e4e0d0",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "corniceProjectionM": 0.5,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.9,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.065,
+  0.405,
+  0.545,
+  0.93
+ ],
+ "bays": [
+  {
+   "at": 0.22,
+   "widthM": 2.7,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#a3d5ff",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.76,
+   "widthM": 2.9,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#a3d5ff",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.9,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.03,
+    "to": 0.1,
+    "kind": "door",
+    "leaf": "painted-white@dcdad4",
+    "headM": 2.7
+   },
+   {
+    "from": 0.145,
+    "to": 0.3,
+    "kind": "window",
+    "headM": 3.2,
+    "grille": true
+   },
+   {
+    "from": 0.36,
+    "to": 0.54,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel@2a2c30",
+    "headM": 3.9,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.25,
+      "tint": "#ecebe4"
+     },
+     "keystone": true
+    }
+   },
+   {
+    "from": 0.57,
+    "to": 0.62,
+    "kind": "window",
+    "headM": 2.6
+   },
+   {
+    "from": 0.7,
+    "to": 0.86,
+    "kind": "window",
+    "headM": 3.2,
+    "grille": true
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "notes": "1925 flats, five storeys. Sky-blue painted wood/stucco uppers, grey stucco ground storey. Two splayed bays (left of centre and right), single windows between, a railed steel fire escape in the middle, shallow cornice. Ground: small door left, grilled window, wide round-arched entry with a white surround, two windows right. Painted shields on the bay spandrels are not modelled. Rework r-eddy: brighter sky blue, navy spandrel plaques with gold medallions in both bays, gold line at the base cornice, light-blue fire escape. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Base fix (2026-10-03): cool/grey wallTint = target / painted-stucco base so the warm stucco albedo does not turn it pink. GroundBand lift (2026-10-03): groundBand tint #9a9ea6 -> #ccced2 (same rule as walls; it was missed by the first colour pass).",
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#ccced2",
+  "topM": 4.3
+ },
+ "storeysSeen": {
+  "count": 5,
+  "groundM": 4.3
+ },
+ "fireEscape": {
+  "at": 0.52,
+  "widthM": 3.6,
+  "depthM": 0.95,
+  "material": "painted-steel@a9c4e6"
+ },
+ "hbSignBands": [
+  {
+   "from": 0,
+   "to": 1,
+   "bottomM": 4.2,
+   "topM": 4.34,
+   "material": "painted-stucco",
+   "tint": "#d6a82c"
+  }
+ ]
+}

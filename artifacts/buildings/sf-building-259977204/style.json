@@ -1,0 +1,116 @@
+{
+ "seed": 204,
+ "wall": "painted-stucco",
+ "wallTint": "#f0ece2",
+ "trim": "painted-white@e6dfcb",
+ "frame": "painted-white@ece6d4",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@ece6d4",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "corniceProjectionM": 0.55,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.9,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.28,
+   "widthM": 2.5,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f0ece2",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.76,
+   "widthM": 2.5,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f0ece2",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.11,
+    "to": 0.4,
+    "kind": "garage",
+    "leaf": "painted-steel@2a2a2c",
+    "headM": 2.6
+   },
+   {
+    "from": 0.59,
+    "to": 0.92,
+    "kind": "gate",
+    "headM": 2.7,
+    "leaf": "painted-steel@2b2b2d"
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "notes": "1915 flats. Cream painted stucco, four storeys read off the street still (data: three), two splayed bays with white-painted sashes, a small railed balcony, cream cornice. Ground: dark garage door left, iron gate entry right; the upper storeys are taller than the frame so the count is the best reading. Rework r-eddy: bolder cream cornice brackets. Ground already a dark garage left and a recessed gate right. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. GroundBand lift (2026-10-03): groundBand tint #ddd4bc -> #eeeade (same rule as walls; it was missed by the first colour pass).",
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#eeeade",
+  "topM": 3.4
+ },
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.4,
+  "upperM": 2.9
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.7,
+  "heightM": 0.45,
+  "depthM": 0.32,
+  "widthM": 0.2,
+  "material": "painted-white",
+  "tint": "#e6dfcb"
+ }
+}

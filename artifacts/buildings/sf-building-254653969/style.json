@@ -1,0 +1,153 @@
+{
+ "seed": 2,
+ "notes": "Cream stucco e6dccb, tan rubble base, garage and arched entry. Added: entry porch with 7 risers, taller red-tile bay hoods b24a36. Not applied: full-width stone base (stone only at the ends; centre is stucco and stair); curvilinear parapet has no key (roofBlocks are one flat height). Clapboard fix (2026-10-02): painted siding moved from the stained-timber wood-siding base to painted-clapboard so the tint renders as paint, not olive. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-stucco",
+ "wallTint": "#f2eee5",
+ "trim": "painted-white@c0a888",
+ "frame": "painted-white@8c6a52",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@8c6a52",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "cast-stone@a89a80",
+ "cornice": false,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.8,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.4,
+ "upperWindows": [
+  0.565,
+  0.43
+ ],
+ "bays": [
+  {
+   "at": 0.15,
+   "widthM": 2.6,
+   "projectionM": 0.55,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#f2eee5"
+  },
+  {
+   "at": 0.77,
+   "widthM": 2.6,
+   "projectionM": 0.55,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#f2eee5"
+  }
+ ],
+ "groundBand": {
+  "material": "cast-stone",
+  "tint": "#a89a80",
+  "topM": 1.0
+ },
+ "storefront": {
+  "bulkheadM": 0.9,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.1,
+    "to": 0.25,
+    "kind": "garage",
+    "material": "painted-clapboard",
+    "tint": "#8a6a48",
+    "headM": 2.5
+   },
+   {
+    "from": 0.4,
+    "to": 0.58,
+    "kind": "double-door",
+    "stair": true,
+    "leaf": "wood-siding@6a4630",
+    "headM": 3.6,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.22,
+      "projectionM": 0.06,
+      "material": "cast-stone",
+      "tint": "#b5a688"
+     },
+     "keystone": true,
+     "porch": {
+      "steps": 7,
+      "riseM": 0.14,
+      "treadM": 0.22,
+      "material": "cast-stone",
+      "tint": "#b5a688"
+     }
+    }
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "mullionM": 0.7,
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.08,
+     0.26
+    ],
+    [
+     0.32,
+     0.37
+    ],
+    [
+     0.63,
+     0.67
+    ],
+    [
+     0.71,
+     0.92
+    ]
+   ],
+   "sillM": 0.6,
+   "headM": 2.0
+  }
+ },
+ "hbBayCrown": {
+  "dropM": 0.3,
+  "hipRiseM": 0.85,
+  "hipMaterial": "terracotta",
+  "hipTint": "#b24a36",
+  "corbelTiers": 1,
+  "corbelStepM": 0.2,
+  "panels": false
+ },
+ "garagePanel": {
+  "leaves": 2,
+  "cols": 1,
+  "rows": 3,
+  "tint": "#8a6a48",
+  "panelTint": "#7a5c3e"
+ },
+ "roofBlocks": [
+  {
+   "at": 0.5,
+   "widthM": 3.6,
+   "depthM": 0.3,
+   "setbackM": 0.0,
+   "material": "painted-stucco",
+   "tint": "#e6dccb"
+  }
+ ],
+ "hyDRubble": {
+  "toM": 1.0,
+  "courseM": 0.3,
+  "blockM": 0.6,
+  "projM": 0.03,
+  "shade": 0.6,
+  "seed": 4
+ },
+ "coping": {
+  "projectionM": 0.1,
+  "heightM": 0.2,
+  "tint": "#b24a36"
+ },
+ "streetStills": true
+}

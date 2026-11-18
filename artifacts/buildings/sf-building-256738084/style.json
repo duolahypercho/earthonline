@@ -1,0 +1,100 @@
+{
+ "seed": 38,
+ "notes": "1925 corner piece of a cream clapboard three-storey flats block. Ground: glazed corner wine-bar front under a deep maroon fabric awning, narrow door. Storeys 2-3: a stacked canted bay at the corner side with two sash windows per face, plain windows beside it. The clapboard mass to its right is the neighbour (617104). Cream lap siding, corner bay stack moved to the corner end, the maroon awning now runs the whole front and sits at the head of the shopfront, maroon belt stripe on the wall right of the bar. Skipped: filling windows on the long return (it is the party wall to the neighbour in the data; the photographed windows are on the Hyde front, already modelled) and the heavy cornice now a plain eave cap. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Lit wall warmed to cream-tan e6d2a8; maroon stripe band at the sill line via hand.py; awning deepened. The blank slab in the 3/4 still is edge 1, a 100% party wall 21.7 m long (data), not a street face: left blank. Corner awning wrap, timber patio rail and arched entry not added (no key). The long blank face is the party wall shared with the next building, so it stays blank; no change. Lifted/converted once to #f2e8d4. Sashes (2026-10-10, one-map/hyde-detail): corner bay front facet 1 -> 2 sashes.",
+ "wall": "painted-clapboard",
+ "wallTint": "#f2e8d4",
+ "trim": "painted-white@efe8d4",
+ "frame": "painted-white@efe8d4",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@efe8d4",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-clapboard@e6d2a8",
+ "cornice": true,
+ "corniceProjectionM": 0.15,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.72,
+  0.9
+ ],
+ "bays": [
+  {
+   "at": 0.17,
+   "widthM": 2.6,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "toStorey": 2,
+   "material": "painted-clapboard",
+   "tint": "#e6d2a8",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "hbBayGlazing": {
+  "marginM": 0.2,
+  "maxW": 1.05,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#efe8d4",
+  "sashM": 0.09,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.04,
+    "to": 0.58,
+    "kind": "window",
+    "headM": 2.4
+   },
+   {
+    "from": 0.68,
+    "to": 0.8,
+    "kind": "door",
+    "leaf": "wood-siding@3a2a20"
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "awning": "canvas-plain@8a3040",
+ "awningSpans": [
+  {
+   "from": 0.0,
+   "to": 0.98,
+   "depthM": 1.8,
+   "valanceM": 0.35
+  }
+ ],
+ "hyDLap": {
+  "pitchM": 0.15,
+  "fromM": 4.9
+ }
+}

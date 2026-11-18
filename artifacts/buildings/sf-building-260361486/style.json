@@ -1,0 +1,449 @@
+{
+    "seed": 4,
+    "notes": "Wall deepened to slate blue 7488b8, rust 6-trim (a4503c) replaces salmon, fine siding, cream cornice panels, dentil dots removed, grated fire escapes. Periwinkle wall, faint siding, raised salmon floor bands, deeper cornice with cream modillions, larger crowned turret, thicker casings, sparser graffiti strokes. Wall muted slate blue-grey 7e8a9c (was 9aa6c4), crisp white trim, lap-siding shadow lines on street walls and the turret drum (vcSiding, vcTurret.sidingM), navy band with a salmon stripe at every upper storey line (vcFloorBands, vcTurret.bandTint), salmon casing heads (vcCasing.headTint), blue frieze panels between white brackets and a thin salmon band under the cornice (vcCornice.panelTint, vcAccentBand), bay pediment tympana in wall blue, reflective upper glass with blinds and curtains inside the sash (glassModel, vcBlinds), turret slim cornice ring and no cream crown drum (vcTurret.slim, crownM 0), abstract letter blocks on muted sign panels, graffiti patches on the plywood, trimmed pilasters (vcShopFront.letterBars/graffiti/pilasterTrim), black fire escapes, rooftop vents, stacks and hatches (vcRoofClutter). Flagpoles still omitted (LiDAR + 0.6 m cap). Wall, bay, turret and shop-band tint desaturated 7aa2ec -> 7e8a9c. Wall is painted sky blue (painted-white@7e8a9c; the wood-siding kit base is warm grey and cannot tint to this blue), Valencia rhythm from the corner = turret, flat bay with fire escape, two cant bays, flat run with the second fire escape; 16th = turret, fire escape bay, five cant bays; pedimented gable hoods with painted tympana over every cant bay (vcBayPediments), deep paired cornice brackets, gold frieze panels and dentils (vcCornice), turret crown drum (vcTurret.crownM), roof gooseneck and drop ladders on every fire escape, varied shop fronts (per-unit sign colours, two boarded units, grilles, dark pilasters, blue shop band), room-tone panes and drawn blinds behind upper glass (glassBacking). Flagpoles omitted: the 0.6 m above-LiDAR allowance forbids them. 16th Street face gets its own five cant bays and a fire escape (streetEdges.0.bays, vcFireEscapes), a round two-storey corner turret with a low dome cap replaces the sharp corner and the square corner bay (vcTurret), Valencia gets four cant bays with two fire escapes, eared pedimented casings on every sash window (vcCasing), a shop sign fascia with a projecting shop cornice and pilasters between units (vcShopFront), a warm accent band under the cornice (vcAccentBand), 16th wall powder slate blue and Valencia grey-lilac, rooftop boxes. North face tint desaturated. 1907 three-storey flats over shops, SW corner of Valencia Street and 16th Street (500-510 Valencia).",
+    "wall": "painted-white",
+    "wallTint": "#7488b8",
+    "trim": "painted-white@f4f1ea",
+    "frame": "painted-white",
+    "glass": "glass-clear",
+    "storefrontGlass": "glass-storefront",
+    "storefrontFrame": "painted-steel",
+    "bulkhead": "painted-steel@1f2a24",
+    "cornice": true,
+    "corniceProjectionM": 1.1,
+    "beltCourse": true,
+    "windowHoods": false,
+    "windowW": 0.8,
+    "windowSillM": 0.8,
+    "windowHeadM": 2.5,
+    "edgeRoles": {
+        "0": "flank",
+        "1": "front"
+    },
+    "upperWindows": [
+        0.05,
+        0.11,
+        0.17,
+        0.25,
+        0.33,
+        0.54,
+        0.73,
+        0.8
+    ],
+    "bays": [
+        {
+            "at": 0.62,
+            "widthM": 2.8,
+            "projectionM": 0.75,
+            "fromStorey": 1,
+            "material": "painted-white",
+            "tint": "#7488b8"
+        },
+        {
+            "at": 0.46,
+            "widthM": 2.8,
+            "projectionM": 0.75,
+            "fromStorey": 1,
+            "material": "painted-white",
+            "tint": "#7488b8"
+        }
+    ],
+    "storefront": {
+        "bulkheadM": 0.6,
+        "transomM": 0.9,
+        "pierM": 0.4,
+        "awning": false,
+        "layout": [
+            {
+                "from": 0.02,
+                "to": 0.12,
+                "kind": "window"
+            },
+            {
+                "from": 0.12,
+                "to": 0.165,
+                "kind": "door",
+                "leaf": "painted-steel"
+            },
+            {
+                "from": 0.17,
+                "to": 0.3,
+                "kind": "window"
+            },
+            {
+                "from": 0.31,
+                "to": 0.355,
+                "kind": "door",
+                "stair": true,
+                "leaf": "wood-siding"
+            },
+            {
+                "from": 0.37,
+                "to": 0.51,
+                "kind": "window"
+            },
+            {
+                "from": 0.51,
+                "to": 0.555,
+                "kind": "door",
+                "leaf": "painted-steel"
+            },
+            {
+                "from": 0.56,
+                "to": 0.68,
+                "kind": "window"
+            },
+            {
+                "from": 0.7,
+                "to": 0.83,
+                "kind": "window"
+            },
+            {
+                "from": 0.83,
+                "to": 0.875,
+                "kind": "door",
+                "leaf": "painted-steel"
+            },
+            {
+                "from": 0.88,
+                "to": 0.99,
+                "kind": "window"
+            }
+        ]
+    },
+    "streetEdges": {
+        "0": {
+            "upperWindows": [
+                0.13,
+                0.19,
+                0.375,
+                0.525,
+                0.675,
+                0.825
+            ],
+            "storefront": {
+                "layout": [
+                    {
+                        "from": 0.01,
+                        "to": 0.14,
+                        "kind": "window"
+                    },
+                    {
+                        "from": 0.14,
+                        "to": 0.185,
+                        "kind": "door",
+                        "leaf": "painted-steel"
+                    },
+                    {
+                        "from": 0.19,
+                        "to": 0.4,
+                        "kind": "window"
+                    },
+                    {
+                        "from": 0.42,
+                        "to": 0.55,
+                        "kind": "window"
+                    },
+                    {
+                        "from": 0.56,
+                        "to": 0.605,
+                        "kind": "door",
+                        "stair": true,
+                        "leaf": "wood-siding"
+                    },
+                    {
+                        "from": 0.62,
+                        "to": 0.8,
+                        "kind": "window"
+                    },
+                    {
+                        "from": 0.8,
+                        "to": 0.845,
+                        "kind": "door",
+                        "leaf": "painted-steel"
+                    },
+                    {
+                        "from": 0.85,
+                        "to": 0.97,
+                        "kind": "window"
+                    }
+                ]
+            },
+            "wallTint": "#a9c4e6",
+            "bays": [
+                {
+                    "at": 0.3,
+                    "widthM": 2.6,
+                    "projectionM": 0.75,
+                    "fromStorey": 1,
+                    "material": "painted-white",
+                    "tint": "#a9c4e6"
+                },
+                {
+                    "at": 0.45,
+                    "widthM": 2.6,
+                    "projectionM": 0.75,
+                    "fromStorey": 1,
+                    "material": "painted-white",
+                    "tint": "#a9c4e6"
+                },
+                {
+                    "at": 0.6,
+                    "widthM": 2.6,
+                    "projectionM": 0.75,
+                    "fromStorey": 1,
+                    "material": "painted-white",
+                    "tint": "#a9c4e6"
+                },
+                {
+                    "at": 0.75,
+                    "widthM": 2.6,
+                    "projectionM": 0.75,
+                    "fromStorey": 1,
+                    "material": "painted-white",
+                    "tint": "#a9c4e6"
+                },
+                {
+                    "at": 0.9,
+                    "widthM": 2.6,
+                    "projectionM": 0.75,
+                    "fromStorey": 1,
+                    "material": "painted-white",
+                    "tint": "#a9c4e6"
+                }
+            ]
+        }
+    },
+    "ground": "restaurant",
+    "upper": "apartment",
+    "vcFireEscapes": [
+        {
+            "edge": 1,
+            "at": 0.77,
+            "widthM": 3.0,
+            "depthM": 1.1,
+            "ladder": true,
+            "roofLadder": true,
+            "dropLadder": true,
+            "material": "painted-steel@18191b",
+            "roofLadderAboveM": 0.3,
+            "grating": true,
+            "braces": true
+        },
+        {
+            "edge": 1,
+            "at": 0.2,
+            "widthM": 3.4,
+            "depthM": 1.1,
+            "ladder": true,
+            "roofLadder": true,
+            "dropLadder": true,
+            "material": "painted-steel@18191b",
+            "roofLadderAboveM": 0.3,
+            "grating": true,
+            "braces": true
+        },
+        {
+            "edge": 0,
+            "at": 0.16,
+            "widthM": 3.0,
+            "depthM": 1.1,
+            "ladder": true,
+            "roofLadder": true,
+            "dropLadder": true,
+            "material": "painted-steel@18191b",
+            "roofLadderAboveM": 0.3,
+            "grating": true,
+            "braces": true
+        }
+    ],
+    "vcTurret": {
+        "vertex": 1,
+        "radiusM": 2.3,
+        "insetM": 1.2,
+        "fromStorey": 1,
+        "segments": 16,
+        "windows": 5,
+        "windowW": 0.74,
+        "material": "painted-white",
+        "tint": "#7488b8",
+        "domeM": 0.4,
+        "domeMaterial": "painted-steel-mid",
+        "crownM": 0.55,
+        "slim": true,
+        "sidingM": 0.19,
+        "sidingTint": "#6a7eae",
+        "bandTint": "#a4503c",
+        "trim": "painted-white@f4f1ea"
+    },
+    "vcCasing": {
+        "widthM": 0.17,
+        "projM": 0.07,
+        "headM": 0.26,
+        "pediment": true,
+        "apronM": 0.16,
+        "headTint": "#a4503c"
+    },
+    "vcAccentBand": {
+        "material": "painted-white",
+        "tint": "#b8603f",
+        "heightM": 0.26,
+        "belowTopM": 0.96
+    },
+    "vcShopFront": {
+        "fromM": 3.45,
+        "fasciaM": 0.85,
+        "corniceM": 0.22,
+        "corniceProjM": 0.36,
+        "band": "painted-steel@2a2e36",
+        "panels": [
+            "painted-steel@26382c",
+            "painted-steel@4a1f1c",
+            "painted-steel@22262c",
+            "painted-steel@3a3322"
+        ],
+        "pilasterW": 0.32,
+        "pilasterProjM": 0.1,
+        "pilaster": "painted-steel@24282e",
+        "panelsByEdge": {
+            "1": [
+                "painted-white@2f5a40",
+                "painted-white@8c3a32",
+                "painted-white@8c3a32",
+                "painted-white@e6e0d0",
+                "painted-white@7a2c28",
+                "painted-steel@22262c"
+            ],
+            "0": [
+                "painted-white@e6e0d0",
+                "painted-steel@22262c",
+                "painted-white@3a5270",
+                "painted-white@7a2c28",
+                "painted-steel@3a3322",
+                "painted-white@2f5a40"
+            ]
+        },
+        "boarded": {
+            "1": [
+                1,
+                2
+            ]
+        },
+        "grilles": {
+            "1": [
+                4,
+                5
+            ],
+            "0": [
+                3
+            ]
+        },
+        "letterBars": {
+            "tints": [
+                "#f2eee4",
+                "#f2eee4",
+                "#f2eee4",
+                "#1e2024",
+                "#f2eee4",
+                "#f2eee4"
+            ]
+        },
+        "graffiti": [
+            "#2a2a2e",
+            "#3a3a44",
+            "#5a2a2a",
+            "#2a3a5a",
+            "#1e1e22",
+            "#4a4a52"
+        ],
+        "boardStain": "#8e7a5e",
+        "boardMaterial": "painted-white@c9ae84",
+        "pilasterTrim": "painted-steel@4a5058",
+        "stripeTint": "#d99684",
+        "stripeM": 0.05
+    },
+    "rooftop": {
+        "units": 4,
+        "seed": 7,
+        "material": "painted-steel-light"
+    },
+    "vcEdgeBays": true,
+    "vcCornice": {
+        "everyM": 0.6,
+        "bracketW": 0.24,
+        "bracketH": 0.8,
+        "panelTint": "#ecdcb8",
+        "dentils": false,
+        "soffitTint": "#3c4868"
+    },
+    "glassBacking": {
+        "material": "painted-white",
+        "tints": [
+            "#3a3430",
+            "#6a5a48",
+            "#2a2c30",
+            "#8a7a64",
+            "#1e2024",
+            "#9a8a70"
+        ],
+        "depthM": 0.3,
+        "kinds": [
+            "punched",
+            "bay"
+        ],
+        "blindTint": "#e8dcc0",
+        "blindMax": 0.6
+    },
+    "vcSiding": {
+        "everyM": 0.5,
+        "tint": "#6b7fae",
+        "fromStorey": 1,
+        "topBelowM": 1.05,
+        "heightM": 0.012,
+        "depthM": 0.006,
+        "cornerBoards": {
+            "widthM": 0.2,
+            "depthM": 0.05
+        }
+    },
+    "vcFloorBands": {
+        "tint": "#a4503c",
+        "heightM": 0.34,
+        "stripeTint": "#f4ecd6",
+        "stripeM": 0.08
+    },
+    "vcBlinds": {
+        "tints": [
+            "#e8e0cc",
+            "#d9d2c2",
+            "#f0ece2",
+            "#b8a890",
+            "#c9c2b4"
+        ],
+        "max": 1.0
+    },
+    "vcRoofClutter": {
+        "vents": 6,
+        "hatches": 2,
+        "stacks": 6,
+        "seed": 7,
+        "material": "painted-steel-light",
+        "darkMaterial": "painted-steel",
+        "insetM": 1.3
+    },
+    "glassModel": {
+        "upper": "glass-reflective@c0c8d0",
+        "street": "glass-storefront",
+        "backing": false,
+        "bays": true
+    },
+    "vcBayDress": {
+        "casingW": 0.17,
+        "casingProjM": 0.07,
+        "material": "painted-white",
+        "tint": "#f2ecdc",
+        "headM": 0.24,
+        "headTint": "#a4503c",
+        "blinds": true
+    }
+}

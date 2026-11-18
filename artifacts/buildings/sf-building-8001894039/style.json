@@ -1,0 +1,84 @@
+{
+  "builder": "house",
+  "trim": "painted-steel",
+  "frame": "painted-steel",
+  "rearWall": "painted-stucco",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "seed": 33,
+  "storeysSeen": 2,
+  "groundM": 2.6,
+  "roofLevelM": 5.3,
+  "notes": "1516 Great Highway (1948), by eye: a dark slate blue-grey two-storey house with a low hipped roof in grey composition shingle over the front and a flat roof behind; ground: a wide dark garage door and an entry to its right; upper: one large square picture window on the left and a smaller window right.",
+  "wall": "painted-clapboard",
+  "wallTint": "#46525e",
+  "roofForm": {
+    "form": "front-hip",
+    "depthM": 6.0,
+    "eaveM": 0.22,
+    "sideOverhangM": 0.12,
+    "material": "asphalt-roof",
+    "tint": "#5f5f5f"
+  },
+  "garages": [
+    {
+      "from": 0.08,
+      "to": 0.58,
+      "headM": 2.2,
+      "material": "painted-white",
+      "pattern": "panel",
+      "tint": "#48545f"
+    }
+  ],
+  "entry": {
+    "from": 0.68,
+    "to": 0.8,
+    "headM": 2.2,
+    "material": "painted-white",
+    "tint": "#3a3f46",
+    "glass": false,
+    "recessM": 0.3
+  },
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.1,
+      "to": 0.46,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        1,
+        1
+      ],
+      "frameTint": "#dde0e0"
+    },
+    {
+      "storey": 1,
+      "from": 0.62,
+      "to": 0.84,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        1,
+        2
+      ],
+      "frameTint": "#dde0e0"
+    }
+  ]
+}

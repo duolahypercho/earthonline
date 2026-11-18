@@ -1,0 +1,203 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-32609888",
+  "slug": "b32609888",
+  "walkIndex": 108,
+  "street": "Columbus Avenue",
+  "address": "1455 Stockton Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (lidar-over-roll)"
+  },
+  "heightM": 8.83,
+  "storeys": 2,
+  "floors": {
+    "groundM": 5.35,
+    "upperM": 2.88,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1929,
+  "use": "COMR",
+  "usage": "mixed",
+  "amenity": "bank",
+  "shop": null,
+  "facade": "shopfront",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 1,
+    "center": {
+      "x": 892.829,
+      "z": 2354.885
+    },
+    "heading": 1.418147,
+    "width": 22.375,
+    "depth": 27.256
+  },
+  "frameMirrored": true,
+  "polygonWinding": "cw",
+  "polygon": [
+    {
+      "x": 10.944,
+      "z": -10.313
+    },
+    {
+      "x": 11.188,
+      "z": 13.628
+    },
+    {
+      "x": -11.172,
+      "z": 13.628
+    },
+    {
+      "x": -11.188,
+      "z": -10.146
+    },
+    {
+      "x": -3.311,
+      "z": -10.245
+    },
+    {
+      "x": -3.319,
+      "z": -13.583
+    },
+    {
+      "x": 6.185,
+      "z": -13.628
+    },
+    {
+      "x": 6.208,
+      "z": -10.192
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 10.944,
+        "z": -10.313
+      },
+      "b": {
+        "x": 11.188,
+        "z": 13.628
+      },
+      "lengthM": 23.943,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 11.188,
+        "z": 13.628
+      },
+      "b": {
+        "x": -11.172,
+        "z": 13.628
+      },
+      "lengthM": 22.36,
+      "role": "front",
+      "partyShare": 0.06
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -11.172,
+        "z": 13.628
+      },
+      "b": {
+        "x": -11.188,
+        "z": -10.146
+      },
+      "lengthM": 23.774,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -11.188,
+        "z": -10.146
+      },
+      "b": {
+        "x": -3.311,
+        "z": -10.245
+      },
+      "lengthM": 7.877,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": -3.311,
+        "z": -10.245
+      },
+      "b": {
+        "x": -3.319,
+        "z": -13.583
+      },
+      "lengthM": 3.338,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": -3.319,
+        "z": -13.583
+      },
+      "b": {
+        "x": 6.185,
+        "z": -13.628
+      },
+      "lengthM": 9.504,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": 6.185,
+        "z": -13.628
+      },
+      "b": {
+        "x": 6.208,
+        "z": -10.192
+      },
+      "lengthM": 3.437,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": 6.208,
+        "z": -10.192
+      },
+      "b": {
+        "x": 10.944,
+        "z": -10.313
+      },
+      "lengthM": 4.738,
+      "role": "rear",
+      "partyShare": 0.19
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

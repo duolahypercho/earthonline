@@ -1,0 +1,29 @@
+{
+  "task_id": "227642c0-4b03-4e3e-8c0d-518b56bd2ae7",
+  "type": "text_to_model",
+  "status": "success",
+  "input": {
+    "pbr": true,
+    "prompt": "full-height single-space parking meter: a slim grey steel pole about one meter tall standing on the pavement, with a compact grey electronic meter head on top that has a small screen and card slot, entire object from ground to top, tall and narrow, realistic, no text",
+    "texture": true,
+    "export_uv": true,
+    "model_version": "v3.1-20260211",
+    "texture_quality": "detailed",
+    "geometry_quality": "standard",
+    "texture_alignment": "geometry"
+  },
+  "output_fields": [
+    "model_url",
+    "rendered_image_url",
+    "generated_image_url"
+  ],
+  "credits_consumed": 30,
+  "created_at": "2026-09-22T19:38:29.180416Z",
+  "completed_at": "2026-09-22T19:41:22.681312Z",
+  "files": [
+    "model.glb",
+    "rendered_image.webp",
+    "generated_image.jpeg",
+    "preview.png"
+  ]
+}

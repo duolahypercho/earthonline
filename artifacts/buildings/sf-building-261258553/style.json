@@ -1,0 +1,109 @@
+{
+ "seed": 2,
+ "wall": "limestone-ashlar",
+ "wallTint": "#e2d6bb",
+ "trim": "cast-stone-trim@efe6d0",
+ "frame": "painted-white@4a2f22",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@3a2a20",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "limestone-ashlar@c9b08a",
+ "cornice": true,
+ "corniceProjectionM": 0.6,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 1.3,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.9,
+ "upperWindows": [
+  0.1,
+  0.25,
+  0.4,
+  0.55,
+  0.7,
+  0.85
+ ],
+ "groundBand": {
+  "material": "limestone-ashlar",
+  "tint": "#c9b08a",
+  "topM": 5.2
+ },
+ "storefront": {
+  "bulkheadM": 0.6,
+  "transomM": 0.4,
+  "pierM": 0.5,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.04,
+    "to": 0.2,
+    "kind": "window",
+    "headM": 3.0
+   },
+   {
+    "from": 0.26,
+    "to": 0.33,
+    "kind": "window",
+    "headM": 3.6,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   },
+   {
+    "from": 0.42,
+    "to": 0.55,
+    "kind": "double-door",
+    "stair": true,
+    "leaf": "painted-white@3a2a20",
+    "headM": 3.4,
+    "arch": {
+     "type": "segmental",
+     "surround": true
+    }
+   },
+   {
+    "from": 0.66,
+    "to": 0.72,
+    "kind": "window",
+    "headM": 3.6,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   },
+   {
+    "from": 0.76,
+    "to": 0.82,
+    "kind": "window",
+    "headM": 3.6,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   },
+   {
+    "from": 0.86,
+    "to": 0.92,
+    "kind": "window",
+    "headM": 3.6,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "office",
+ "streetStills": true,
+ "notes": "Round 1: 1926 six-storey office. Tan rusticated base (groundBand 5.2 m) with round-arched windows and a segmental-arched central entry, cream stone uppers with six brown-framed windows per storey, belt and cornice. Entry jamb carving not modelled. Round 2: rusticated courses on the base via hyDRubble.",
+ "hyDRubble": {
+  "toM": 5.2,
+  "courseM": 0.5,
+  "blockM": 5.0,
+  "projM": 0.03,
+  "shade": 0.7,
+  "seed": 3
+ }
+}

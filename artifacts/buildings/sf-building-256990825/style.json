@@ -1,0 +1,162 @@
+{
+ "seed": 5,
+ "notes": "GLB already carries sage clapboard 8a8a74 and near-black 1e1e1e frames (greyscale stills do not show tints). Bays now hyB cant with tall portrait dark sashes; lap relief added; plinth 0.6 m lighter. Compare -street.png. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k). GroundBand lift (2026-10-03): groundBand tint #b4b29c -> #dad8ce (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-clapboard",
+ "wallTint": "#a1a190",
+ "trim": "painted-white@1e1e1e",
+ "frame": "painted-white@1e1e1e",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@1e1e1e",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-clapboard@a5a99b",
+ "cornice": false,
+ "corniceProjectionM": 0.1,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.8,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.45,
+ "upperWindows": [
+  0.94,
+  0.52,
+  0.05
+ ],
+ "bays": [
+  {
+   "at": 0.75,
+   "widthM": 2.8,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#a1a190",
+   "soffit": {
+    "tint": "#1e1e1e",
+    "depthM": 0.7
+   },
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "sillM": 0.55,
+    "cornice": {
+     "projectionM": 0.05,
+     "roofRiseM": 0
+    }
+   },
+   "frame": "painted-white@1e1e1e"
+  },
+  {
+   "at": 0.3,
+   "widthM": 2.8,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#a1a190",
+   "soffit": {
+    "tint": "#1e1e1e",
+    "depthM": 0.7
+   },
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "sillM": 0.55,
+    "cornice": {
+     "projectionM": 0.05,
+     "roofRiseM": 0
+    }
+   },
+   "frame": "painted-white@1e1e1e"
+  }
+ ],
+ "groundBand": {
+  "material": "painted-white",
+  "tint": "#dad8ce",
+  "topM": 0.6
+ },
+ "storefront": {
+  "bulkheadM": 1.0,
+  "transomM": 0.4,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.455,
+    "to": 0.545,
+    "kind": "door",
+    "stair": true,
+    "leaf": "wood-siding@3a3228"
+   }
+  ]
+ },
+ "edgeRoles": {
+  "1": "flank"
+ },
+ "streetEdges": {
+  "1": {
+   "upperWindows": [
+    0.3,
+    0.7
+   ],
+   "bays": []
+  }
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "shopBays": [
+  {
+   "edge": 2,
+   "from": 0.0,
+   "to": 1.0,
+   "windows": [
+    {
+     "from": 0.705,
+     "to": 0.795,
+     "sillM": 0.9,
+     "headM": 2.5,
+     "cols": 2,
+     "rows": 2,
+     "frameTint": "#1e1e1e"
+    },
+    {
+     "from": 0.255,
+     "to": 0.345,
+     "sillM": 0.9,
+     "headM": 2.5,
+     "cols": 2,
+     "rows": 2,
+     "frameTint": "#1e1e1e"
+    },
+    {
+     "from": 0.89,
+     "to": 0.98,
+     "sillM": 0.9,
+     "headM": 2.5,
+     "cols": 2,
+     "rows": 2,
+     "frameTint": "#1e1e1e"
+    },
+    {
+     "from": 0.02,
+     "to": 0.11,
+     "sillM": 0.9,
+     "headM": 2.5,
+     "cols": 2,
+     "rows": 2,
+     "frameTint": "#1e1e1e"
+    }
+   ]
+  }
+ ],
+ "streetStills": true,
+ "hyDLap": {
+  "pitchM": 0.15,
+  "fromM": 0.7
+ }
+}

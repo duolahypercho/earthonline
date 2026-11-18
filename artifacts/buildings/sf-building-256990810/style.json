@@ -1,0 +1,164 @@
+{
+ "seed": 37,
+ "notes": "1909 four-storey flats in dark green-grey shingle/stucco over a painted brick base. Ground: dark garage door left, stair to an arched entry right, small dark door. Storey 2: a window group; storeys 3-4: two canted bays with a fire escape between them. Dark bracketed cornice. Whole building now one charcoal-green paint (lit tint, luminance floor), black trim and frames, base painted the same (red brick removed), dark garage with the stair to the arched dark door kept, black iron fire escape, thin dark cap cornice. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Upper wall dark green-grey 6f8473 (lum 0.21) with square shingle courses, dark green-black base 5f7066, black panelled garage (glazed-garage + garagePanels); fire escape and bay layout kept. Base fix (2026-10-03): cool/grey wallTint = target / painted-stucco base so the warm stucco albedo does not turn it pink. Dark green-black base (4a5a50) and the arched entry as a solid near-black door infill (a dark arched entry on stairs). Lifted/converted once to #a1cad4. GroundBand lift (2026-10-03): groundBand tint #4a5a50 -> #65736a (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#a1cad4",
+ "trim": "painted-white@2a2f2c",
+ "frame": "painted-white@1e2220",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@3d4a40",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-stucco@4a5a50",
+ "cornice": true,
+ "corniceProjectionM": 0.2,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.2,
+  0.5,
+  0.8
+ ],
+ "bays": [
+  {
+   "at": 0.27,
+   "widthM": 2.6,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#6c8d84",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   },
+   "toStorey": 3
+  },
+  {
+   "at": 0.73,
+   "widthM": 2.6,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#6c8d84",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   },
+   "toStorey": 3
+  }
+ ],
+ "hbBayGlazing": {
+  "marginM": 0.2,
+  "maxW": 1.05,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#1e2220",
+  "sashM": 0.09,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.03,
+    "to": 0.4,
+    "kind": "glazed-garage",
+    "material": "painted-white",
+    "tint": "#262d28"
+   },
+   {
+    "from": 0.55,
+    "to": 0.78,
+    "kind": "blank",
+    "arch": {
+     "type": "round"
+    },
+    "material": "wood-siding",
+    "tint": "#1e2220",
+    "headM": 2.5
+   },
+   {
+    "from": 0.82,
+    "to": 0.92,
+    "kind": "door",
+    "leaf": "painted-steel@222222"
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#65736a",
+  "topM": 3.2
+ },
+ "fireEscape": {
+  "at": 0.5,
+  "widthM": 1.3,
+  "depthM": 0.8,
+  "standoffM": 0.34,
+  "ladder": true,
+  "material": "painted-steel@25282a",
+  "levels": [
+   2,
+   3
+  ],
+  "dropLadder": false,
+  "roofLadder": true,
+  "braces": true,
+  "roofLadderAboveM": 0.0
+ },
+ "hyDShingle": {
+  "kind": "square",
+  "rowM": 0.16,
+  "shingleM": 0.14,
+  "projM": 0.014,
+  "shade": 0.75,
+  "fromM": 3.2,
+  "toM": 10.8,
+  "maxTris": 14000
+ },
+ "garagePanels": {
+  "material": "painted-white",
+  "tint": "#262d28",
+  "rows": 3,
+  "cols": 4
+ }
+}

@@ -1,0 +1,84 @@
+{
+ "seed": 5,
+ "notes": "1931 two-storey deco office, warm tan stucco over a darker brown base course: near full-width multi-pane steel-sash bay between piers, tall round-headed slit window in the left pier, glazed double-door entry under a grille transom with a sign band and plaque, stepped crest with relief panels (hand.py). Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. GroundBand lift (2026-10-03): groundBand tint #8f7050 -> #a58d73 (same rule as walls; it was missed by the first colour pass).",
+ "streetStills": true,
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-storefront",
+ "wall": "painted-stucco",
+ "windowW": 0.5,
+ "windowSillM": 0.9,
+ "windowHeadM": 3.0,
+ "cornice": false,
+ "corniceProjectionM": 0.4,
+ "beltCourse": true,
+ "ground": "lobby",
+ "upper": "apartment",
+ "wallTint": "#e6d8c4",
+ "trim": "painted-stucco@c0a27c",
+ "frame": "painted-white@4a4038",
+ "storefrontFrame": "painted-steel@3a3a3a",
+ "upperWindows": [
+  0.1,
+  0.9
+ ],
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.3,
+     0.95
+    ]
+   ],
+   "sillM": 0.9,
+   "headM": 3.0
+  }
+ },
+ "floorsM": {
+  "groundM": 4.4,
+  "upperM": 3.4
+ },
+ "storefront": {
+  "bulkheadM": 0.4,
+  "transomM": 0.8,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.07,
+    "to": 0.15,
+    "kind": "window",
+    "headM": 2.0,
+    "grille": true
+   },
+   {
+    "from": 0.3,
+    "to": 0.95,
+    "kind": "double-door",
+    "headM": 3.0,
+    "stair": true
+   },
+   {
+    "from": 0.85,
+    "to": 0.93,
+    "kind": "window",
+    "headM": 2.0,
+    "grille": true
+   }
+  ]
+ },
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#a58d73",
+  "topM": 1.2
+ },
+ "hbSignBands": [
+  {
+   "from": 0.26,
+   "to": 0.9,
+   "bottomM": 3.3,
+   "topM": 3.95,
+   "material": "cast-stone-trim",
+   "tint": "#bfa27c"
+  }
+ ]
+}

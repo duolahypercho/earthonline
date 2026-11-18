@@ -1,0 +1,143 @@
+{
+ "seed": 40,
+ "notes": "1900 three-storey flats with commercial ground, cream painted stucco upper storeys with pale window surrounds over a tan brick ground storey and a dusty-pink brick base. Ground: two small windows left, a boarded door centre, a large shopfront window right. Storeys 2-3: window pairs and triple window groups under shallow hoods, bracketed cornice band between ground and storey 2. Ground storey is now buff brick (brick-buff kit) over a maroon-pink brick plinth, with segmental arched windows, an arched door and one large arched shopfront window; upper floors: white stucco with shallow canted 3-light bay groups and a modest cap. Skipped: the rounded corner bay. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Upper wall warmed to cream f4e4b8, ground storey buff brick with a stronger warm tint (ffe0a0), plinth deepened to dusty rose a8646e (was brick red salmon). Storeys, shallow bays and arched ground windows kept. Buff brick ground storey tint deepened to d9ab6c so it reads buff/tan in the render rather than cream. Lifted/converted once to #faf2dc.",
+ "wall": "painted-stucco",
+ "wallTint": "#faf2dc",
+ "trim": "painted-white@f4efe0",
+ "frame": "painted-white@f4efe0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f4efe0",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-stucco@a8646e",
+ "cornice": true,
+ "corniceProjectionM": 0.2,
+ "beltCourse": true,
+ "windowHoods": true,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.35,
+  0.45,
+  0.8,
+  0.95
+ ],
+ "bays": [
+  {
+   "at": 0.13,
+   "widthM": 3.4,
+   "projectionM": 0.3,
+   "fromStorey": 1,
+   "toStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#f4e4b8",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.4,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.63,
+   "widthM": 3.4,
+   "projectionM": 0.3,
+   "fromStorey": 1,
+   "toStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#f4e4b8",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.4,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "hbBayGlazing": {
+  "marginM": 0.2,
+  "maxW": 1.05,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#f4efe0",
+  "sashM": 0.09,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "storefront": {
+  "bulkheadM": 1.2,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.12,
+    "to": 0.2,
+    "kind": "window",
+    "headM": 3.0,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.34,
+    "to": 0.45,
+    "kind": "window",
+    "headM": 2.6
+   },
+   {
+    "from": 0.58,
+    "to": 0.68,
+    "kind": "door",
+    "leaf": "painted-white@e8e0d0",
+    "headM": 3.4,
+    "arch": {
+     "type": "segmental"
+    }
+   },
+   {
+    "from": 0.74,
+    "to": 0.96,
+    "kind": "window",
+    "headM": 3.4,
+    "arch": {
+     "type": "segmental"
+    }
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "groundBand": {
+  "material": "brick-buff",
+  "tint": "#d9ab6c",
+  "topM": 4.5
+ }
+}

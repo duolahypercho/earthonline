@@ -1,0 +1,84 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-30105983",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-30105983",
+    "walkIndex": 7534,
+    "builder": "blender",
+    "street": "Columbus Avenue",
+    "side": "A",
+    "addr": null,
+    "sourceHeight": 12,
+    "sourceLevels": null,
+    "frontEdge": 6,
+    "status": "review",
+    "lidarHeightM": 12.42,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b30105983.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b30105983.js"
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b30105983.js",
+    "sha256": "11457af97f3e99d3d69654111dfe0ce6c97c135bacbc2b8d2efea492f743703f",
+    "pass": "b30105983-blender-07936e72-8f282d"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-30105983/provenance.json",
+    "sha256": "83aad143e37216258ec0b78df76f3c4eae588c351c55a0b08fd4d1e59026a3c1",
+    "pass": "b30105983-blender-07936e72-8f282d"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-30105983/exterior.glb",
+      "sha256": "cdc4e85a8746242615080325e5f5d671226fbe0e909202e3014182be95eec3e6",
+      "bytes": 2734328
+    },
+    {
+      "role": "interior",
+      "url": "/assets/buildings/sf-building-30105983/interior.glb",
+      "sha256": "fb3f549095af5447b98d4bccf88e3ac61d75edfdcedac2d59741c3388d579fa2",
+      "bytes": 425040
+    },
+    {
+      "role": "fine-s0",
+      "url": "/assets/buildings/sf-building-30105983/fine-s0.glb",
+      "sha256": "4e8f4802fbbb3e1ca5a8987f65284e5dbe190a8d53eb883a4fd1cc12a69fc828",
+      "bytes": 164420
+    },
+    {
+      "role": "fine-s1",
+      "url": "/assets/buildings/sf-building-30105983/fine-s1.glb",
+      "sha256": "6ea13a4262b09cd70de776ad8c8dc03b6e81127035b7d63f24a44dce9e5b6b32",
+      "bytes": 485432
+    },
+    {
+      "role": "fine-s2",
+      "url": "/assets/buildings/sf-building-30105983/fine-s2.glb",
+      "sha256": "f05e6d9c8533999c3a65482420eeab2e0e00378cc0af4cdb58733df9146292d1",
+      "bytes": 509560
+    },
+    {
+      "role": "fine-s3",
+      "url": "/assets/buildings/sf-building-30105983/fine-s3.glb",
+      "sha256": "6804f6bcc5ae1238d0e42014e0917e19c07cd50ad3ba4c69626966818185de87",
+      "bytes": 497340
+    }
+  ],
+  "generatedAt": "2026-09-29T10:19:19.451Z",
+  "base": {
+    "id": "sf-building-30105983",
+    "walkIndex": 7534,
+    "builder": "blender",
+    "street": "Columbus Avenue",
+    "side": "A",
+    "addr": null,
+    "sourceHeight": 12,
+    "sourceLevels": null,
+    "frontEdge": 6,
+    "status": "review",
+    "lidarHeightM": 12.42,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b30105983.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b30105983.js"
+  }
+}

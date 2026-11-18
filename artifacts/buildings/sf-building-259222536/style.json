@@ -1,0 +1,102 @@
+{
+ "seed": 7,
+ "notes": "Rework r7: pale grey-white siding, salmon trim, maroon garage surround; clay-tile cap on the bay (hand.py). 3.1 m diagonal sliver front: a second bay does not fit. Rework r12: stronger brick-red trim, red base band, two white sectional garage doors with red surround, red storey bands (hand.py); second bay and accent windows skipped: front edge is only 3.1 m. GroundBand lift (2026-10-03): groundBand tint #a8402f -> #b55d4e (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-clapboard",
+ "wallTint": "#f0eee8",
+ "trim": "painted-white@b04a38",
+ "frame": "painted-white@b04a38",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@b04a38",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@9a3a30",
+ "cornice": true,
+ "corniceProjectionM": 0.45,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.5,
+   "widthM": 2.2,
+   "projectionM": 0.55,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f0eee8",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.05,
+    "to": 0.48,
+    "kind": "glazed-garage"
+   },
+   {
+    "from": 0.52,
+    "to": 0.95,
+    "kind": "glazed-garage"
+   }
+  ]
+ },
+ "ground": "vacant",
+ "upper": "rooms",
+ "streetStills": true,
+ "sashFrames": {
+  "material": "painted-white@b04a38",
+  "stileM": 0.06
+ },
+ "hbBayGlazing": {
+  "marginM": 0.2,
+  "maxW": 1.05,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#b04a38",
+  "sashM": 0.08,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 2.9,
+  "upperM": 2.85
+ },
+ "clipInteriorToFootprint": true,
+ "groundBand": {
+  "material": "painted-white",
+  "tint": "#b55d4e",
+  "topM": 1.0
+ },
+ "garagePanels": {
+  "material": "painted-white",
+  "tint": "#f2efe8",
+  "rows": 4,
+  "cols": 2
+ }
+}

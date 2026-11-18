@@ -1,0 +1,228 @@
+{
+ "seed": 5,
+ "notes": "Seven-storey concrete block: tall blank board-formed plinth with scored horizontal and vertical joints, then six storeys of ribbon windows with reddish-brown frames recessed between deep projecting vertical concrete fins (hand.py). Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. GroundBand lift (2026-10-03): groundBand tint #cdc5b3 -> #e6e2d9 (same rule as walls; it was missed by the first colour pass).",
+ "streetStills": true,
+ "glass": "glass-reflective",
+ "storefrontGlass": "glass-storefront",
+ "wall": "painted-stucco",
+ "windowW": 0.85,
+ "windowSillM": 0.95,
+ "windowHeadM": 2.45,
+ "cornice": false,
+ "corniceProjectionM": 0.4,
+ "beltCourse": true,
+ "ground": "lobby",
+ "upper": "apartment",
+ "wallTint": "#ece6da",
+ "trim": "painted-white@c4bba8",
+ "frame": "painted-white@653f37",
+ "upperWindows": [],
+ "floorsM": {
+  "groundM": 5.0,
+  "upperM": 3.1
+ },
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.012,
+     0.1547
+    ],
+    [
+     0.1787,
+     0.3213
+    ],
+    [
+     0.3453,
+     0.488
+    ],
+    [
+     0.512,
+     0.6547
+    ],
+    [
+     0.6787,
+     0.8213
+    ],
+    [
+     0.8453,
+     0.988
+    ]
+   ],
+   "sillM": 0.95,
+   "headM": 2.45
+  },
+  "2": {
+   "spans": [
+    [
+     0.012,
+     0.1547
+    ],
+    [
+     0.1787,
+     0.3213
+    ],
+    [
+     0.3453,
+     0.488
+    ],
+    [
+     0.512,
+     0.6547
+    ],
+    [
+     0.6787,
+     0.8213
+    ],
+    [
+     0.8453,
+     0.988
+    ]
+   ],
+   "sillM": 0.95,
+   "headM": 2.45
+  },
+  "3": {
+   "spans": [
+    [
+     0.012,
+     0.1547
+    ],
+    [
+     0.1787,
+     0.3213
+    ],
+    [
+     0.3453,
+     0.488
+    ],
+    [
+     0.512,
+     0.6547
+    ],
+    [
+     0.6787,
+     0.8213
+    ],
+    [
+     0.8453,
+     0.988
+    ]
+   ],
+   "sillM": 0.95,
+   "headM": 2.45
+  },
+  "4": {
+   "spans": [
+    [
+     0.012,
+     0.1547
+    ],
+    [
+     0.1787,
+     0.3213
+    ],
+    [
+     0.3453,
+     0.488
+    ],
+    [
+     0.512,
+     0.6547
+    ],
+    [
+     0.6787,
+     0.8213
+    ],
+    [
+     0.8453,
+     0.988
+    ]
+   ],
+   "sillM": 0.95,
+   "headM": 2.45
+  },
+  "5": {
+   "spans": [
+    [
+     0.012,
+     0.1547
+    ],
+    [
+     0.1787,
+     0.3213
+    ],
+    [
+     0.3453,
+     0.488
+    ],
+    [
+     0.512,
+     0.6547
+    ],
+    [
+     0.6787,
+     0.8213
+    ],
+    [
+     0.8453,
+     0.988
+    ]
+   ],
+   "sillM": 0.95,
+   "headM": 2.45
+  },
+  "6": {
+   "spans": [
+    [
+     0.012,
+     0.1547
+    ],
+    [
+     0.1787,
+     0.3213
+    ],
+    [
+     0.3453,
+     0.488
+    ],
+    [
+     0.512,
+     0.6547
+    ],
+    [
+     0.6787,
+     0.8213
+    ],
+    [
+     0.8453,
+     0.988
+    ]
+   ],
+   "sillM": 0.95,
+   "headM": 2.45
+  }
+ },
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#e6e2d9",
+  "topM": 5.0
+ },
+ "storefront": {
+  "bulkheadM": 0.3,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.02,
+    "to": 0.98,
+    "kind": "blank",
+    "material": "painted-stucco",
+    "tint": "#cdc5b3",
+    "headM": 4.8
+   }
+  ]
+ },
+ "bayM": 7.0
+}

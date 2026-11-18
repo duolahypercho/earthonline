@@ -1,0 +1,53 @@
+{
+  "kind": "blender-building",
+  "id": "sf-building-259922724",
+  "pass": "b259922724-blender-6facb6b9-9cf0c2",
+  "generator": "scripts/blender-buildings/build_building.py",
+  "generatorSha256": "6facb6b980e5966bff381f1088766095f94c593f58d833334af51d6578efa055",
+  "blender": "Blender 5.1.2",
+  "inputs": {
+    "spec": "artifacts/buildings/sf-building-259922724/spec.json",
+    "specSha256": "8823a816b057d354c2dc5dae5ca101d314c95d8556475d9d1afe5dd153e6ceb4",
+    "style": "artifacts/buildings/sf-building-259922724/style.json",
+    "styleSha256": "9cf0c2423650df27b3ba55a76c1015fc091b93b8a9303a465aab43beebb889c7"
+  },
+  "sources": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "license": "Original geometry generated from open data (DataSF footprints, LiDAR, Assessor roll). No third-party meshes or textures.",
+  "furniture": [],
+  "assets": {
+    "exterior": {
+      "url": "/assets/buildings/sf-building-259922724/exterior.glb",
+      "sha256": "9d423d74c675b88a20cbf7b33ee5e91ad60948b1996d483991e937d51bd4a425",
+      "bytes": 265368
+    },
+    "interior": {
+      "url": "/assets/buildings/sf-building-259922724/interior.glb",
+      "sha256": "c8f5ad6940d623e92fc25727f673204b37eef63ad32518af43e9a4ea3ef8122b",
+      "bytes": 98692
+    },
+    "fine": [
+      {
+        "storey": 0,
+        "url": "/assets/buildings/sf-building-259922724/fine-s0.glb",
+        "sha256": "2c6b657d3317c26c118708d56a9c3d03efa13efc928f689a5c19d2366bccafaf",
+        "bytes": 10960
+      },
+      {
+        "storey": 1,
+        "url": "/assets/buildings/sf-building-259922724/fine-s1.glb",
+        "sha256": "bad62d73d7702c6ebc61c4cf0bd29d997c8211f0423ae22ae1fadabbb0deda9e",
+        "bytes": 214620
+      },
+      {
+        "storey": 2,
+        "url": "/assets/buildings/sf-building-259922724/fine-s2.glb",
+        "sha256": "21cf304f8e51ff7f877b47a8f2e5b2e1bd7cf4b021c96bd308bc1845b1f13017",
+        "bytes": 193336
+      }
+    ]
+  }
+}

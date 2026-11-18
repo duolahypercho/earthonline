@@ -1,0 +1,104 @@
+{
+ "seed": 12,
+ "notes": "Wall deeper brown 725542, upper sash frames dark bronze 4b392d, ground window band split into smaller divided lights (0.9 m panes, 0.35 m transom lights). Bays kept: the a projecting bay block at the upper right. Rework 5: wall dark umber-brown 735947 (lifted from 6a5242 to keep luminance >= 0.10); storefront frames dark brown 3a2d24 with a two-row transom band of small lights (transomPaneM 0.45) over the large panes; far-right bay is a pale lattice screen. Rework 4: dark bronze storefront frames, low base, white upper window frames on the brown wall; brown kept at the 0.10 luminance floor; lattice grille kept (no separate gate in the model). Rework 3: storefront is a band of wide windows (1.5 m panes) set above a solid 1.3 m base, framed in light grey-beige metal instead of dark bronze, with the pale lattice panel at the right end; wall stays dark brown #6e5646 (already at the luminance floor). Upper storeys mostly hidden by trees: no new upper detail. Rework 2: wall is a dark chocolate-brown smooth stucco, storefront frames dark bronze. Skipped: 'lattice at the right, not a gate at the left'; flat box bays (the kit bay is always three-sided; the partly hidden bay in sv2 heading 051 is kept shallow). Rework 1: wall dark brown stained board (wood-siding, lifted to keep luminance above 0.10); ground storey a continuous band of wood-framed multi-light windows with transom lights over a solid base (bulkhead 1.0 m); bracket cornice removed - a plain dark wood fascia at the top; the right-end panel is a light timber lattice, not a dark roll-up gate. 1906 eleven-unit flats over a restaurant at the SE corner of Hyde and Green. Green return (edge 0) dressed as a flank. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-white",
+ "wallTint": "#8e7768",
+ "trim": "painted-white@5a4638",
+ "frame": "painted-white@4b392d",
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-storefront",
+ "storefrontFrame": "painted-white@3a2d24",
+ "bulkhead": "painted-white@736256",
+ "cornice": false,
+ "corniceProjectionM": 0.4,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.8,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.45,
+ "ground": "restaurant",
+ "upper": "apartment",
+ "upperWindows": [
+  0.13,
+  0.5,
+  0.87
+ ],
+ "bays": [
+  {
+   "at": 0.3,
+   "widthM": 2.6,
+   "projectionM": 0.45,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#8e7768"
+  },
+  {
+   "at": 0.7,
+   "widthM": 2.6,
+   "projectionM": 0.45,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#8e7768"
+  }
+ ],
+ "edgeRoles": {
+  "0": "flank"
+ },
+ "storefront": {
+  "bulkheadM": 0.6,
+  "transomM": 0.55,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.03,
+    "to": 0.2,
+    "kind": "window"
+   },
+   {
+    "from": 0.21,
+    "to": 0.38,
+    "kind": "window"
+   },
+   {
+    "from": 0.4,
+    "to": 0.46,
+    "kind": "door",
+    "leaf": "wood-siding"
+   },
+   {
+    "from": 0.48,
+    "to": 0.66,
+    "kind": "window"
+   },
+   {
+    "from": 0.67,
+    "to": 0.84,
+    "kind": "window"
+   },
+   {
+    "from": 0.86,
+    "to": 0.96,
+    "kind": "blank",
+    "material": "painted-white",
+    "tint": "#efece4",
+    "lattice": true,
+    "latticeTopM": 2.6
+   }
+  ],
+  "headDropM": 0.6,
+  "paneM": 0.9,
+  "transomRows": 2,
+  "transomPaneM": 0.35
+ },
+ "fascia": {
+  "material": "painted-white",
+  "tint": "#5a4638",
+  "heightM": 0.6,
+  "projectionM": 0.15
+ },
+ "grilleMaterial": "painted-white@efece4",
+ "streetStills": true,
+ "latticeMaterial": "painted-white@efece4",
+ "sashMaterial": "painted-white@4b392d"
+}

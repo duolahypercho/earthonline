@@ -1,0 +1,29 @@
+{
+  "task_id": "1a0f4d1a-e781-47fa-a7ce-3a5c2d066a10",
+  "type": "text_to_model",
+  "status": "success",
+  "input": {
+    "pbr": true,
+    "prompt": "A bus stop sign post: a single thin grey steel pole standing full height from the ground, about three metres tall and ten times taller than the sign is wide, with one small rectangular blue sign plate at the top carrying a white bus pictogram, and a narrow white route placard under it. Realistic, clean, game-ready street prop, no brand names, no logos.",
+    "texture": true,
+    "export_uv": true,
+    "model_version": "v3.1-20260211",
+    "texture_quality": "detailed",
+    "geometry_quality": "standard",
+    "texture_alignment": "geometry"
+  },
+  "output_fields": [
+    "model_url",
+    "rendered_image_url",
+    "generated_image_url"
+  ],
+  "credits_consumed": 30,
+  "created_at": "2026-09-26T16:05:04.556288Z",
+  "completed_at": "2026-09-26T16:07:57.672112Z",
+  "files": [
+    "model.glb",
+    "rendered_image.webp",
+    "generated_image.jpeg",
+    "preview.png"
+  ]
+}

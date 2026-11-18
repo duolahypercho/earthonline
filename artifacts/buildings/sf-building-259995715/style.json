@@ -1,0 +1,117 @@
+{
+ "seed": 715,
+ "wall": "brick-buff",
+ "wallTint": "#e2ffff",
+ "trim": "painted-white@d6cdb0",
+ "frame": "painted-white@744b42",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@744b42",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "corniceProjectionM": 0.55,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.9,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.23,
+   "widthM": 2.8,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#eae5d8",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.75,
+   "widthM": 2.6,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#eae5d8",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.9,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.1,
+    "to": 0.4,
+    "kind": "window",
+    "headM": 3.2
+   },
+   {
+    "from": 0.6,
+    "to": 0.9,
+    "kind": "gate",
+    "headM": 3.4,
+    "leaf": "painted-steel@2b2b2d"
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "notes": "1915 flats, four storeys. Tan-buff brick with cream-painted splayed bays (left and right), a railed steel fire escape across the right bay and the wall between, cream cornice. Ground: tan brick with a large red-framed window left and a gated entry porch right under a cream surround. Rework r-eddy: darker taupe brick, rusticated base courses. Upper frames stay brown-red: the red-brown sashes on the bays. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour.",
+ "groundBand": {
+  "material": "brick-buff",
+  "tint": "#e2ffff",
+  "topM": 4.3
+ },
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 4.3
+ },
+ "fireEscape": {
+  "at": 0.55,
+  "widthM": 3.4,
+  "depthM": 0.9,
+  "material": "painted-steel@c4c0b4"
+ },
+ "hyDRubble": {
+  "toM": 4.3,
+  "courseM": 0.45,
+  "blockM": 0.9
+ }
+}

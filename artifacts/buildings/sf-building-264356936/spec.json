@@ -1,0 +1,280 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-264356936",
+  "slug": "b264356936",
+  "walkIndex": 109,
+  "street": "Haight Street",
+  "address": "1427;1429;1431;1433 Haight Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 10.93,
+  "storeys": 3,
+  "floors": {
+    "groundM": 4.476,
+    "upperM": 2.927,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1905,
+  "use": "MRES",
+  "usage": "mixed",
+  "amenity": "cannabis",
+  "shop": null,
+  "facade": "bay-window",
+  "material": "brick",
+  "materialBasis": "street view (style materialSeen) overrides dataset clapboard",
+  "frame": {
+    "edgeIndex": 11,
+    "center": {
+      "x": -2333.168,
+      "z": -887.81
+    },
+    "heading": -0.152188,
+    "width": 16.521,
+    "depth": 20.96
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": 8.252,
+      "z": 10.48
+    },
+    {
+      "x": 8.26,
+      "z": -7.934
+    },
+    {
+      "x": 6.649,
+      "z": -7.889
+    },
+    {
+      "x": 6.695,
+      "z": -10.223
+    },
+    {
+      "x": 3.669,
+      "z": -10.164
+    },
+    {
+      "x": 3.706,
+      "z": -7.944
+    },
+    {
+      "x": -3.562,
+      "z": -7.841
+    },
+    {
+      "x": -3.561,
+      "z": -10.471
+    },
+    {
+      "x": -6.8,
+      "z": -10.48
+    },
+    {
+      "x": -6.846,
+      "z": -8.146
+    },
+    {
+      "x": -8.26,
+      "z": -8.132
+    },
+    {
+      "x": -8.239,
+      "z": 10.48
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 8.252,
+        "z": 10.48
+      },
+      "b": {
+        "x": 8.26,
+        "z": -7.934
+      },
+      "lengthM": 18.414,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 8.26,
+        "z": -7.934
+      },
+      "b": {
+        "x": 6.649,
+        "z": -7.889
+      },
+      "lengthM": 1.612,
+      "role": "rear",
+      "partyShare": 0.56
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 6.649,
+        "z": -7.889
+      },
+      "b": {
+        "x": 6.695,
+        "z": -10.223
+      },
+      "lengthM": 2.335,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 6.695,
+        "z": -10.223
+      },
+      "b": {
+        "x": 3.669,
+        "z": -10.164
+      },
+      "lengthM": 3.027,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": 3.669,
+        "z": -10.164
+      },
+      "b": {
+        "x": 3.706,
+        "z": -7.944
+      },
+      "lengthM": 2.22,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": 3.706,
+        "z": -7.944
+      },
+      "b": {
+        "x": -3.562,
+        "z": -7.841
+      },
+      "lengthM": 7.269,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": -3.562,
+        "z": -7.841
+      },
+      "b": {
+        "x": -3.561,
+        "z": -10.471
+      },
+      "lengthM": 2.631,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": -3.561,
+        "z": -10.471
+      },
+      "b": {
+        "x": -6.8,
+        "z": -10.48
+      },
+      "lengthM": 3.239,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 8,
+      "a": {
+        "x": -6.8,
+        "z": -10.48
+      },
+      "b": {
+        "x": -6.846,
+        "z": -8.146
+      },
+      "lengthM": 2.335,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 9,
+      "a": {
+        "x": -6.846,
+        "z": -8.146
+      },
+      "b": {
+        "x": -8.26,
+        "z": -8.132
+      },
+      "lengthM": 1.414,
+      "role": "party",
+      "partyShare": 0.63
+    },
+    {
+      "index": 10,
+      "a": {
+        "x": -8.26,
+        "z": -8.132
+      },
+      "b": {
+        "x": -8.239,
+        "z": 10.48
+      },
+      "lengthM": 18.612,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 11,
+      "a": {
+        "x": -8.239,
+        "z": 10.48
+      },
+      "b": {
+        "x": 8.252,
+        "z": 10.48
+      },
+      "lengthM": 16.491,
+      "role": "front",
+      "partyShare": 0.13
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

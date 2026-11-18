@@ -1,0 +1,553 @@
+{
+  "seed": 1,
+  "notes": "1922 two-storey movie palace on Castro Street. Street face (sheet: front elevation): cream painted stucco screen facade the full height with cast ornament, a tall central bay with one large gridded window over a deep recessed tiled forecourt under a projecting coloured marquee, one window with a small balcony rail in each flank bay, a tall red vertical blade sign on the viewer's left of centre from above the marquee to near the parapet, dark maroon painted ground-floor piers with a dark tile base, one shopfront in each flank bay (left with a fabric awning, right with a dark awning). Sides (sheet: flanks): plain cream stucco auditorium walls above the lower neighbours; flat roof. The survey footprint's front bump is the marquee plan (frontChord). Ground storey 5.4 m (spec floors), all five street faces carry the cornice (flank role), both flank bays get shopfronts with doors, the centre bay a glazed entry wall at the back of the forecourt under the marquee, one tall gridded window over the centre, one window per flank bay. Auditorium hall behind the front block (stage, screen, drapes, raked orchestra rows in three sections, balcony lip) replaces the generic shop programme there. TheatreFront relief - scalloped parapet crest and curved coping over the centre, pilasters at the bay lines, a round-headed gridded centre window with an archivolt and keystone, carved panels either side, crested aedicule surrounds with balconies on the flank windows, a patterned marquee (diamond band, chevron band, stepped crest with a blank plate, soffit bulbs, three globes), a projecting framed blade sign on a bracket, a tiled forecourt with a terracotta grid and an octagonal ticket booth, a dark arcade band with lit lunettes over the entry doors, dark entry doors, awnings on both flank shops (blue left, dark green right), tile bulkheads, warmer cream stucco, a skylight curb on the hall roof. No lettering anywhere. A wall closes the taller hall behind the lower block and the hall gets its own roof deck (the civic record's peak is 23.5 m against a 16.97 m median; the authored allowance caps anything at 0.6 m over the median, so the crest peak stays low). Relief depth x2.2, a cast cartouche over the arch, finer arch glazing grid, warmer ivory stucco, oxblood ground band. Marquee: pinker red, softer pattern colours, bulb chase along both borders, larger soffit bulbs, coffered soffit, round globe lamps, blank cream letter tiles on the red crest plate and dark message rows on the reader board (no text anywhere). Blade sign 0.5 m thick, 1.9 m projection, six stacked blank letter blocks outlined in bulbs on both faces. Flank shops: sloped fabric awnings with a valance band (blue north, dark green south) at 3.2-4.0 m under an oxblood head panel, dark shop glass. Forecourt: larger warm grey tile with wide terracotta bands; booth with a low tiled cap; arcade lunettes glazed with radial bars on an oxblood band. Raked orchestra (0.14 m per row), one upholstered chair per place with armrests and standards, gilt pilasters with sconces and draped wall panels on the hall walls, a framed proscenium with an arched gilt header, a ceiling medallion with ribs; lobby: glass candy cases on the counters, a gilt back panel, gilt pilasters on the hall wall and three pendant globes. The centre screen box stops at 15.0 m and a shaped gable stands on it - flat shoulders, a concave scroll up to a step, then a round dome to the peak 0.55 m over the LiDAR top, with a terracotta coping, a moulding following the outline and finials on the steps; the arch window gets two stone mullions (three lights) and lighter glazing behind the grid. Warm ivory stucco and ornament tints (the old tint multiplied the stucco base to khaki); marquee: small diamonds on the red upper band with cream studs and blue rules, a row of small blue-outlined gems on a red lower band (no chevrons), a taller crest with gold edging and narrower blank tiles, smaller globes; blade sign angled 28 deg off the wall so its face reads along the street, 2.2 m projection, flush blank tiles (no cut-outs), no lettering; aedicule windows 1.45 m wide at 6.4-9.6 m beside the arch window (balconette just above the shop head panels); lit shop-room backing with shelves behind the flank shop windows; closed dark glazed leaves in the entry doors (visual only, physics opening unchanged); white-framed right shopfront. Organ grilles (gilt lattice on dark cloth under an arched hood) on both hall side walls beside the proscenium and a coffered gilt ceiling grid. Warmer ivory stucco (#ffe8c6) and lighter cream ornament; brighter maroon base band, head panels, arcade band and forecourt walls; faded blue north awning; arch window lowered to sit on the marquee (sill 6.9, spring 11.4) with a deep stepped reveal, an outer hood moulding with label stops and cast filigree chains with urn finials climbing both sides; cartouche moved to 13.75-15.1 over the arch; relief depth 2.8; relief panels 1.8 m wide from 6.9 to 14.4; the centre screen box stops at 14.2 so the gable rises about 3.2 m, with a framed oval medallion, scrolled wings and garlands; aedicule pediments 1.6x with volutes and a shell boss, balconettes lower and lighter; blade sign blank tiles cover the middle half of the face (red face dominates) with a gold frame; marquee lower band blue ground with orange-outlined red gems, sparser bulbs (0.6 m), softer reader board. Lobby terrazzo floor with a maroon border and gilt inlays round a narrower carpet, a three-tier crystal chandelier, lit poster cases on both side walls, lit candy-case fronts. Narrower tall centre crest with shoulder finials, pier finials, scalloped marquee crest with gem bands (name panel blank, no lettering), flat light soffit, 8 transoms, signboard awnings, tiled plinth + framed poster cases, finer terrazzo, red gathered drapes, return-wall panel joints. Marquee 1.9 m tall so the crest (rise x0.7) stays under the arch sill (6.9 m), dark flat soffit with three globes recessed 0.2 m (no stems), lit chase/soffit/blade bulbs and globes (emissive), blade sign stops at 14.0 m under the parapet, solid (unstriped) awnings - blue north, near-black south - with blank light band strips, ticket kiosk heights x0.8, softer terracotta forecourt grid, less saturated oxblood base, candy-case fronts no longer emissive. Lettering on the marquee/readerboard/blade stays blank by the project rule (no sign text in tracked files). Marquee edge chase bulbs off, ticket booth dark green tile with ochre trim, the two flank shops get distinct backing tones and goods. Muted marquee palette - coral fascia and crest plate, teal band and gem ground, ochre outlines and studs, bright white reader board; dark green south awning; brighter multi-light arch glazing with a pale grille; smaller, lower ticket booth set further back in a darker forecourt cavern; smaller, closer-pitched blade bulbs.",
+  "specSeen": {
+    "facade": "ornamental-stucco",
+    "material": "stucco"
+  },
+  "wall": "painted-stucco",
+  "wallTint": "#ffe8c6",
+  "trim": "cast-stone-trim",
+  "cornice": true,
+  "corniceProjectionM": 0.3,
+  "beltCourse": true,
+  "windowHoods": true,
+  "edgeRoles": {
+    "7": "party",
+    "8": "flank",
+    "9": "flank",
+    "10": "flank",
+    "11": "flank",
+    "3": "party",
+    "4": "party",
+    "5": "party"
+  },
+  "frontChord": {
+    "vertices": [
+      10,
+      11
+    ],
+    "marquee": {
+      "bottomM": 4.3,
+      "heightM": 1.9,
+      "material": "painted-white@c8675a",
+      "soffit": "painted-white@2a2428",
+      "insetM": 0.05,
+      "board": {
+        "material": "painted-white@f8f6f0",
+        "fromM": 0.45,
+        "toM": 1.15
+      }
+    },
+    "forecourtWalls": {
+      "material": "painted-stucco@3e1c22",
+      "topM": 4.3,
+      "thickM": 0.35,
+      "posterCase": true,
+      "plinth": {
+        "material": "glazed-tile@1a1e26",
+        "hM": 0.7,
+        "cap": "cast-stone-trim@d8c8a0"
+      },
+      "caseFrame": "painted-white@c9a24a",
+      "poster": "painted-white@5a3a5a"
+    }
+  },
+  "groundBand": {
+    "material": "painted-stucco",
+    "tint": "#6e3036"
+  },
+  "bulkhead": "glazed-tile@1c2733",
+  "storefrontFrame": "painted-steel@242424",
+  "upperWindows": [
+    0.5
+  ],
+  "windowW": 1.45,
+  "storefront": {
+    "bulkheadM": 0.5,
+    "transomM": 0.7,
+    "pierM": 0.5,
+    "awning": false,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.1,
+        "to": 0.4
+      },
+      {
+        "kind": "door",
+        "from": 0.42,
+        "to": 0.55
+      },
+      {
+        "kind": "window",
+        "from": 0.57,
+        "to": 0.72
+      },
+      {
+        "kind": "door",
+        "from": 0.78,
+        "to": 0.9
+      }
+    ]
+  },
+  "ground": "shop",
+  "upper": "office",
+  "streetEdges": {
+    "8": {
+      "upperWindows": [
+        0.5
+      ],
+      "windowW": 1.45,
+      "windowSillM": 1.0,
+      "windowHeadM": 4.2,
+      "storefront": {
+        "awning": false,
+        "layout": [
+          {
+            "kind": "window",
+            "from": 0.08,
+            "to": 0.42
+          },
+          {
+            "kind": "door",
+            "from": 0.44,
+            "to": 0.58
+          },
+          {
+            "kind": "window",
+            "from": 0.6,
+            "to": 0.92
+          }
+        ]
+      },
+      "bulkhead": "glazed-tile@23417a",
+      "storefrontFrame": "painted-white@ece6d8",
+      "awning": "awning-canvas@4a74a8",
+      "storefrontGlass": "glass-dark"
+    },
+    "9": {
+      "upperWindows": [],
+      "storefront": {
+        "awning": false,
+        "layout": []
+      }
+    },
+    "10": {
+      "upperWindows": [
+        0.5
+      ],
+      "windowW": 3.2,
+      "windowSillM": 1.5,
+      "windowHeadM": 6.0,
+      "storefront": {
+        "awning": false,
+        "layout": [
+          {
+            "kind": "door",
+            "from": 0.1,
+            "to": 0.28
+          },
+          {
+            "kind": "door",
+            "from": 0.32,
+            "to": 0.5
+          },
+          {
+            "kind": "door",
+            "from": 0.5,
+            "to": 0.68
+          },
+          {
+            "kind": "door",
+            "from": 0.72,
+            "to": 0.9
+          }
+        ]
+      },
+      "windowHoods": false,
+      "storefrontGlass": "glass-dark",
+      "storefrontFrame": "painted-steel-mid@2a1c1e"
+    },
+    "11": {
+      "upperWindows": [],
+      "storefront": {
+        "awning": false,
+        "layout": []
+      }
+    },
+    "0": {
+      "storefrontFrame": "painted-white@ece6d8",
+      "bulkhead": "glazed-tile@1c2733"
+    }
+  },
+  "windowSillM": 1.0,
+  "windowHeadM": 4.2,
+  "storeyHeights": {
+    "groundM": 5.4,
+    "upperM": 8.6
+  },
+  "auditorium": {
+    "frontZ": 2.0,
+    "balconyZ": -4.0,
+    "stageDepthM": 4.5,
+    "rowPitchM": 0.95,
+    "risePerRowM": 0.14,
+    "aisleM": 1.2,
+    "seatW": 0.56,
+    "seat": "int-fabric-red",
+    "screenW": 13.0,
+    "screenH": 5.8,
+    "lobby": true,
+    "concessionM": 4.0,
+    "stairInFront": true,
+    "carpet": "int-rug",
+    "chairs": true,
+    "seatTrim": "int-wood",
+    "dress": {
+      "wall": "int-plaster@8a3a3a",
+      "gilt": "int-plaster@c8983a",
+      "panel": "int-curtain@5a1a22",
+      "pilasterM": 4.0,
+      "organ": {
+        "widthM": 3.2,
+        "offsetM": 2.8,
+        "fromM": 3.2,
+        "toM": 10.5,
+        "cofferM": 3.0
+      }
+    },
+    "lobbyDress": {
+      "gilt": "int-plaster@d8b56a",
+      "case": "glass",
+      "panel": "int-plaster@3a1a1e",
+      "terrazzo": {
+        "base": "int-plaster@c9b89a",
+        "band": "int-plaster@7a2a2a",
+        "inlay": "int-plaster@d8b56a",
+        "pitchM": 1.8
+      },
+      "chandelier": {
+        "rM": 0.8,
+        "tiers": 3
+      },
+      "posters": 3,
+      "caseFront": "int-plaster@b89a5a"
+    },
+    "carpetW": 7.0,
+    "screenMat": "int-plaster@a8a8a4",
+    "drape": "int-curtain@7a1422",
+    "drapeFolds": 8
+  },
+  "awning": "awning-canvas@1f3a2c",
+  "theatreFront": {
+    "ornament": "cast-stone-trim@fff2dc",
+    "crest": {
+      "edges": [
+        9,
+        10,
+        11
+      ],
+      "riseM": 0.55,
+      "lobes": 5,
+      "curveFromM": 15.2,
+      "cap": "terracotta@a8402e",
+      "profile": "gable",
+      "shoulderM": 1.2,
+      "medallion": {
+        "rM": 0.55,
+        "at": 0.66
+      },
+      "spanF": 0.52,
+      "sideFinials": {
+        "hM": 1.0,
+        "wM": 0.6
+      }
+    },
+    "pilasters": [
+      {
+        "edge": 8,
+        "at": 0.05
+      },
+      {
+        "edge": 9,
+        "at": 0.3
+      },
+      {
+        "edge": 11,
+        "at": 0.7
+      },
+      {
+        "edge": 0,
+        "at": 0.95
+      }
+    ],
+    "archWindow": {
+      "edge": 10,
+      "widthM": 3.2,
+      "sillM": 6.9,
+      "springM": 11.4,
+      "gridM": 0.3,
+      "barM": 0.07,
+      "grid": "painted-steel@f0ebdf",
+      "mullions": 2,
+      "fill": "painted-steel-mid@8a948f",
+      "reveal": {
+        "material": "painted-stucco@e2c89e",
+        "depthM": 0.35
+      },
+      "hood": {
+        "widthM": 0.25,
+        "depthM": 0.3
+      },
+      "vines": {
+        "offsetM": 0.35,
+        "pitchM": 0.55,
+        "widthM": 0.55
+      }
+    },
+    "panels": {
+      "edge": 10,
+      "offsetM": 3.05,
+      "widthM": 1.8,
+      "fromM": 6.9,
+      "toM": 14.4
+    },
+    "aedicules": [
+      {
+        "edge": 8,
+        "at": 0.5,
+        "widthM": 1.45,
+        "sillM": 6.4,
+        "headM": 9.6,
+        "crestScale": 1.6,
+        "rail": "painted-steel@4a4038",
+        "railH": 0.55,
+        "railPitchM": 0.16
+      },
+      {
+        "edge": 0,
+        "at": 0.5,
+        "widthM": 1.45,
+        "sillM": 6.4,
+        "headM": 9.6,
+        "crestScale": 1.6,
+        "rail": "painted-steel@4a4038",
+        "railH": 0.55,
+        "railPitchM": 0.16
+      }
+    ],
+    "marqueeDress": {
+      "globes": 3,
+      "globeR": 0.2,
+      "diamonds": [
+        "painted-white@d8a24a",
+        "painted-white@3f8a86",
+        "painted-white@f2e6c8"
+      ],
+      "band": "painted-white@3f7f7c",
+      "chevron": "painted-white@d8a24a",
+      "border": "painted-white@d8ad52",
+      "bulbM": 0.08,
+      "bulbPitchM": 0.6,
+      "chase": false,
+      "boardLines": 0,
+      "letterTiles": 0,
+      "plate": "painted-white@c8675a",
+      "diamondScale": 0.42,
+      "diamondPitchM": 0.9,
+      "lowerGems": {
+        "ground": "painted-white@3f7f7c",
+        "outline": "painted-white@d8a24a",
+        "core": "painted-white@c8675a",
+        "stud": "painted-white@e8c878",
+        "pitchM": 0.8
+      },
+      "crestRiseScale": 0.7,
+      "crestHalfM": 2.6,
+      "crestTrim": "painted-white@e8c060",
+      "tileFrac": 0.55,
+      "lineColor": "painted-steel@3a3a3a",
+      "crestScallops": 7,
+      "plateGems": 3,
+      "bulb": "int-light",
+      "globeDropM": 0.2
+    },
+    "blade": {
+      "edge": 9,
+      "at": 0.5,
+      "bottomM": 6.4,
+      "topM": 14.0,
+      "projectM": 2.2,
+      "thickM": 0.5,
+      "face": "painted-white@c42a3e",
+      "frame": "painted-white@e8c060",
+      "letterTiles": 6,
+      "bulbM": 0.07,
+      "bulbPitchM": 0.22,
+      "yawDeg": -28,
+      "flushTiles": true,
+      "tileF": 0.5,
+      "tile": "painted-white@f4e6c4",
+      "bulb": "int-light"
+    },
+    "forecourt": {
+      "floor": "glazed-tile@b8a88e",
+      "grid": "terracotta@9a5040",
+      "pitchM": 0.9,
+      "booth": {
+        "depthF": 0.25,
+        "capOnly": true,
+        "base": "glazed-tile@2f4a38",
+        "crown": "cast-stone-trim@b8903a",
+        "hScale": 0.7,
+        "mullion": "painted-white@b8903a",
+        "plinth": "glazed-tile@1e2420",
+        "cap": "cast-stone-trim@c9a24a",
+        "radiusM": 0.65
+      },
+      "stripM": 0.2
+    },
+    "arcade": {
+      "edge": 10,
+      "fromM": 2.5,
+      "toM": 4.3,
+      "lunettes": 8,
+      "band": "painted-stucco@3e1c22",
+      "glow": "glass-dark",
+      "trim": "painted-white@d0ad62",
+      "bars": 3,
+      "sill": true
+    },
+    "roofCurb": {
+      "center": [
+        0.0,
+        -12.0
+      ],
+      "sizeM": [
+        4.0,
+        8.0
+      ]
+    },
+    "reliefDepth": 2.8,
+    "massing": {
+      "lowEdges": [
+        7,
+        8,
+        0,
+        1,
+        2,
+        6
+      ],
+      "lowTopM": 14.6,
+      "screen": {
+        "edges": [
+          9,
+          10,
+          11
+        ],
+        "depthM": 3.0,
+        "topM": 13.4
+      },
+      "stepWall": [
+        3,
+        6
+      ],
+      "hallRoof": [
+        3,
+        4,
+        5,
+        6
+      ]
+    },
+    "cartouche": {
+      "edge": 10,
+      "fromM": 13.75,
+      "toM": 15.1,
+      "widthM": 2.2
+    },
+    "shopAwnings": [
+      {
+        "edge": 8,
+        "from": 0.03,
+        "to": 0.97,
+        "bottomM": 3.2,
+        "depthM": 1.6,
+        "riseM": 0.35,
+        "valanceM": 0.9,
+        "material": "painted-white@2c5a9a",
+        "band": "painted-white@ece6d8",
+        "headPanel": {
+          "fromM": 4.0,
+          "toM": 5.3,
+          "material": "painted-stucco@7a2a3a"
+        }
+      },
+      {
+        "edge": 0,
+        "from": 0.05,
+        "to": 0.95,
+        "bottomM": 3.2,
+        "depthM": 1.3,
+        "riseM": 0.7,
+        "valanceM": 0.7,
+        "material": "painted-white@1f3a2c",
+        "band": "painted-white@d8d2c4",
+        "headPanel": {
+          "fromM": 4.0,
+          "toM": 5.3,
+          "material": "painted-stucco@7a2a3a"
+        }
+      }
+    ],
+    "shopBacking": [
+      {
+        "edge": 8,
+        "fromM": 0.55,
+        "toM": 3.1,
+        "depthM": 0.9,
+        "material": "painted-white@e6d6b8",
+        "shelf": "int-wood",
+        "goods": [
+          "painted-white@6a3a24",
+          "painted-white@d8c8a0",
+          "painted-white@8a5a3a",
+          "painted-white@3a2a20"
+        ]
+      },
+      {
+        "edge": 0,
+        "fromM": 0.55,
+        "toM": 3.1,
+        "depthM": 0.9,
+        "material": "painted-white@f4ece0",
+        "goods": [
+          "painted-white@c86a8a",
+          "painted-white@e8e0d8",
+          "painted-white@6a8ab0",
+          "painted-white@d8a0b8"
+        ],
+        "shelves": 2
+      }
+    ],
+    "entryLeaves": {
+      "edge": 10,
+      "headM": 2.45,
+      "depthM": 0.12
+    },
+    "pilasterFinial": {
+      "baseM": 14.6,
+      "hM": 1.1
+    },
+    "returnPanels": {
+      "edges": [
+        1,
+        7
+      ],
+      "fromM": 6.0,
+      "pitchM": 3.0,
+      "stripM": 0.6
+    }
+  },
+  "storefrontGlass": "glass-dark"
+}

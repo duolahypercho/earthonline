@@ -1,0 +1,127 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-173886668",
+  "slug": "b173886668",
+  "walkIndex": 47,
+  "street": "Clementina Street",
+  "address": "844 Folsom Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 7.51,
+  "storeys": 2,
+  "floors": {
+    "groundM": 4.41,
+    "upperM": 2.5,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1923,
+  "use": "IND",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "loft",
+  "material": "concrete",
+  "frame": {
+    "edgeIndex": 1,
+    "center": {
+      "x": 1483.45,
+      "z": 378.85
+    },
+    "heading": 2.362646,
+    "width": 11.49,
+    "depth": 49.142
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -5.357,
+      "z": -24.571
+    },
+    {
+      "x": -5.745,
+      "z": 24.571
+    },
+    {
+      "x": 5.216,
+      "z": 24.571
+    },
+    {
+      "x": 5.745,
+      "z": -24.57
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -5.357,
+        "z": -24.571
+      },
+      "b": {
+        "x": -5.745,
+        "z": 24.571
+      },
+      "lengthM": 49.144,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -5.745,
+        "z": 24.571
+      },
+      "b": {
+        "x": 5.216,
+        "z": 24.571
+      },
+      "lengthM": 10.96,
+      "role": "front",
+      "partyShare": 0.13
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 5.216,
+        "z": 24.571
+      },
+      "b": {
+        "x": 5.745,
+        "z": -24.57
+      },
+      "lengthM": 49.144,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 5.745,
+        "z": -24.57
+      },
+      "b": {
+        "x": -5.357,
+        "z": -24.571
+      },
+      "lengthM": 11.102,
+      "role": "rear",
+      "partyShare": 0.13
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

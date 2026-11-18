@@ -1,0 +1,1021 @@
+{
+ "schema": "eo-native-kit-material-specs-v1",
+ "generatedBy": "native/tools/export-kit-specs.mjs",
+ "source": {
+  "materials": {
+   "path": "src/world/buildings/authored/kit/materials.js",
+   "sha256": "d9ca7099ffaaa7be534f599a5084f3ed1accf283fe0ea2b2e7cae8210850a5de"
+  },
+  "bake": {
+   "path": "src/world/buildings/authored/kit/material-bake.js",
+   "sha256": "5520ec03b06e83e2c06bff50ccbd38504a71482d46a6e3cb6dea17445fca956e"
+  }
+ },
+ "mapsVersion": "authored-kit-materials-v1",
+ "seed": "authored-slice-v1",
+ "qualityResolution": {
+  "high": 512,
+  "medium": 256,
+  "low": 128
+ },
+ "referenceBakes": [
+  {
+   "name": "brick-running-bond",
+   "seed": "authored-slice-v1",
+   "res": 128,
+   "albedo": "50cac5f17b15d88c5e8d429b0b6f17001637983fac540ffbf0b1ee764f992fa7",
+   "normal": "b4d17b086642e5495b488c2251f0d8a6ae7bd3e289f502894b3fbff85c7064c5",
+   "orm": "bc1371753a6e43ad311076d817bb1ffb44097c388733c5e7645c337813a692bd",
+   "sums": [
+    9579859,
+    12508497,
+    11428393
+   ]
+  },
+  {
+   "name": "painted-stucco",
+   "seed": "authored-slice-v1",
+   "res": 128,
+   "albedo": "586d65e467234db37945210fade12b5c7e98662a1157c9b36abf27d868e62fa4",
+   "normal": "1553534055f7f8f2404ac39eaaa771390d1958c3fc0f91489d414f9d686d4bea",
+   "orm": "9b73fc35195121ea648cbcc996d77f7e507342717bed08d2ed12870b297ba4cf",
+   "sums": [
+    14088332,
+    12533759,
+    11840947
+   ]
+  },
+  {
+   "name": "asphalt-roof",
+   "seed": "authored-slice-v1",
+   "res": 128,
+   "albedo": "6af31bd40373962ca0a4a17f22bda6a67104d7ff11b5e10a7a9d7eab40a67f78",
+   "normal": "6c59e2ea746daf038b409522394b8591c7f3d6c242acaaced9ebfa7342951f7f",
+   "orm": "79b7168abdf872c2532233566073fb097749631111bbaab01053b727b5d6bb86",
+   "sums": [
+    7707644,
+    12433331,
+    11315200
+   ]
+  },
+  {
+   "name": "wood-siding",
+   "seed": "authored-slice-v1",
+   "res": 128,
+   "albedo": "b6b88cdf0dd2ce024502c97216b84d11faac0bfc3b354105467148dde7285baa",
+   "normal": "fbb5f78ac11c879990e700b80cb5be255b647bd79e0250178d62db8328f7f50e",
+   "orm": "f2722a4c6b6cf587871539dcb049a9d52194c7ac58518777e026fd45ed94fdbb",
+   "sums": [
+    11733650,
+    12450209,
+    11139240
+   ]
+  },
+  {
+   "name": "cast-stone",
+   "seed": "authored-slice-v1",
+   "res": 128,
+   "albedo": "d6bc99db4f2638a6660c34694b9589a0045b814207d3b93a0aa989d4ce449638",
+   "normal": "441d21024839af6ef68c412393ea3ed6c0324508d21d34a9f3d89d26f311c537",
+   "orm": "b264deceff39591b467343fc3add98459b7e493aae1fa4b1a187497090b8379e",
+   "sums": [
+    13300196,
+    12531208,
+    11269202
+   ]
+  },
+  {
+   "name": "painted-steel-mid",
+   "seed": "authored-slice-v1",
+   "res": 512,
+   "albedo": "e660dff71c7ed86784534111ed7fe920ed27dff42bd658ba1a9cc016c40d3b90",
+   "normal": "05ba10757e93862d030fe18d19a9dc49ebb22db61b5f523a704d91b37fcd48aa",
+   "orm": "cf2c37501e574663133af6c40f1043cae56bdbd0c2722282144a537d216ca94f",
+   "sums": [
+    156271298,
+    200540210,
+    167190889
+   ]
+  },
+  {
+   "name": "canvas-plain",
+   "seed": "authored-slice-v1",
+   "res": 128,
+   "albedo": "a3a8e43d6cf119ab44418cd9a98e6d8605371b491e74a1b8720fc0f545e8784b",
+   "normal": "812055c0b27f310ecb67d70b632efe84a2a854987b448c254073c7e4422cb2bb",
+   "orm": "eb2369195066bd50471aae6bd73f7b45518bc9f3f88c77e9a765e314f126eaae",
+   "sums": [
+    12624121,
+    12550144,
+    12206080
+   ]
+  },
+  {
+   "name": "concrete-precast",
+   "seed": "authored-slice-v1",
+   "res": 128,
+   "albedo": "595384bf4a7bb2ec01e40096ee11ec95a94e0043904fd1c68d1d01958f7e1887",
+   "normal": "4dcfbe1ce11e452a24947647e8ee1490af3687e4b270bf3e552ec0efab428f42",
+   "orm": "e2e617233c4f98e28c83e9c0ae4f686db2953d6894cb03d4f20aaba4e17f425c",
+   "sums": [
+    12736326,
+    12525139,
+    11476160
+   ]
+  },
+  {
+   "name": "membrane-roof",
+   "seed": "authored-slice-v1",
+   "res": 128,
+   "albedo": "5388aa076d68daf225ff06613beb6fc53f32ebb41d8e9e3665eb89405ee5c16d",
+   "normal": "0f2d30fab4afee0c080089b6d660920efadb0913b1e6187cbfeb4f3fe99d7e95",
+   "orm": "b93286c20884e2f4c723fdb1d5ce076e618627004e17528e9c7ddd3b45e70747",
+   "sums": [
+    13695709,
+    12533800,
+    11706215
+   ]
+  },
+  {
+   "name": "painted-shingle",
+   "seed": "authored-slice-v1",
+   "res": 128,
+   "albedo": "8535731d9e9342baddf0563d9810f8e0c775202b4a52fe2d9d02e4f133356852",
+   "normal": "070a30a2e7029ac47ea80145f700165769b45394dd77a2e18fb95917a7b6f4be",
+   "orm": "72fed011347916b05628b4f2f91bc80a3ea7ab26edd26525684441a45c16f8f2",
+   "sums": [
+    15203978,
+    12524131,
+    11243745
+   ]
+  }
+ ],
+ "specs": {
+  "brick-running-bond": {
+   "kind": "brick",
+   "metresPerTile": 1.24,
+   "height": 0.006,
+   "rough": 0.82,
+   "metal": 0,
+   "envClass": "facade-masonry",
+   "p": {
+    "bond": "running",
+    "courses": 16,
+    "perRow": 6,
+    "colors": [
+     "#8a5243",
+     "#97604e",
+     "#7b493d",
+     "#a26b57",
+     "#6d4238"
+    ],
+    "mortar": "#b9b0a2",
+    "mortarMetres": 0.011
+   }
+  },
+  "brick-common-bond": {
+   "kind": "brick",
+   "metresPerTile": 1.24,
+   "height": 0.006,
+   "rough": 0.84,
+   "metal": 0,
+   "envClass": "facade-masonry",
+   "p": {
+    "bond": "common",
+    "courses": 16,
+    "perRow": 6,
+    "colors": [
+     "#9c6452",
+     "#8f5847",
+     "#aa7462",
+     "#7f4d3f",
+     "#b2826c"
+    ],
+    "mortar": "#c4bbad",
+    "mortarMetres": 0.012
+   }
+  },
+  "painted-stucco": {
+   "kind": "stucco",
+   "metresPerTile": 1.15,
+   "height": 0.0005,
+   "worldTileM": 2.6,
+   "normalStrength": 0.06,
+   "roughFlatten": 0.6,
+   "rough": 0.86,
+   "metal": 0,
+   "envClass": "facade-painted",
+   "borrow": "plaster",
+   "p": {
+    "color": "#d9cfbd"
+   }
+  },
+  "float-finish-stucco": {
+   "kind": "stucco",
+   "metresPerTile": 1.15,
+   "height": 0.0008,
+   "worldTileM": 3.3,
+   "normalStrength": 0.2,
+   "roughFlatten": 0.5,
+   "rough": 0.86,
+   "metal": 0,
+   "envClass": "facade-painted",
+   "p": {
+    "color": "#e2ddd2"
+   }
+  },
+  "scanned-painted-plaster": {
+   "kind": "stucco",
+   "atlasId": "painted_plaster_wall",
+   "atlasMeanLinear": [
+    0.408529,
+    0.36521,
+    0.351051
+   ],
+   "metresPerTile": 2,
+   "normalStrength": 0.75,
+   "rough": 0.86,
+   "metal": 0,
+   "envClass": "facade-painted",
+   "p": {
+    "color": "#e2ddd2"
+   }
+  },
+  "painted-white": {
+   "kind": "flat",
+   "metresPerTile": 1,
+   "height": 0.0006,
+   "rough": 0.8,
+   "metal": 0,
+   "envClass": "facade-painted",
+   "p": {
+    "color": "#e6e3dc"
+   }
+  },
+  "painted-block": {
+   "kind": "ashlar",
+   "metresPerTile": 1.624,
+   "height": 0.004,
+   "rough": 0.82,
+   "metal": 0,
+   "envClass": "facade-painted",
+   "p": {
+    "color": "#e3e0d8",
+    "blockW": 0.406,
+    "blockH": 0.203,
+    "joint": 0.0095,
+    "toneJitter": 0.025,
+    "grain": 0.25
+   }
+  },
+  "signal-red": {
+   "kind": "flat",
+   "metresPerTile": 0.6,
+   "height": 0.0006,
+   "rough": 0.5,
+   "metal": 0,
+   "envClass": "facade-painted",
+   "p": {
+    "color": "#a32820"
+   }
+  },
+  "cast-stone": {
+   "kind": "ashlar",
+   "metresPerTile": 1.8,
+   "height": 0.007,
+   "rough": 0.72,
+   "metal": 0,
+   "envClass": "facade-masonry",
+   "p": {
+    "color": "#c9bfae",
+    "blockW": 0.9,
+    "blockH": 0.45,
+    "joint": 0.006,
+    "toneJitter": 0.05,
+    "grain": 0.3
+   }
+  },
+  "cast-stone-trim": {
+   "kind": "ashlar",
+   "metresPerTile": 1.8,
+   "height": 0.001,
+   "normalStrength": 0.25,
+   "rough": 0.72,
+   "metal": 0,
+   "envClass": "facade-masonry",
+   "p": {
+    "color": "#c9bfae",
+    "blockW": 1.8,
+    "blockH": 1.8,
+    "joint": 0,
+    "toneJitter": 0,
+    "grain": 0.1
+   }
+  },
+  "limestone-ashlar": {
+   "kind": "ashlar",
+   "metresPerTile": 2.7,
+   "height": 0.01,
+   "rough": 0.68,
+   "metal": 0,
+   "envClass": "facade-masonry",
+   "p": {
+    "color": "#d6cbb6",
+    "blockW": 1.35,
+    "blockH": 0.45,
+    "joint": 0.008,
+    "toneJitter": 0.08,
+    "grain": 0.55
+   }
+  },
+  "concrete-precast": {
+   "kind": "precast",
+   "metresPerTile": 2.4,
+   "height": 0.012,
+   "rough": 0.78,
+   "metal": 0,
+   "envClass": "facade-masonry",
+   "p": {
+    "color": "#b8b5ad",
+    "panel": 1.2,
+    "joint": 0.012
+   }
+  },
+  "corrugated-metal": {
+   "kind": "corrugated",
+   "metresPerTile": 0.912,
+   "height": 0.018,
+   "rough": 0.48,
+   "metal": 1,
+   "envClass": "facade-metal",
+   "p": {
+    "color": "#9aa0a4",
+    "pitch": 0.076
+   }
+  },
+  "standing-seam-metal": {
+   "kind": "seam",
+   "metresPerTile": 1.8,
+   "height": 0.025,
+   "rough": 0.42,
+   "metal": 1,
+   "envClass": "facade-metal",
+   "p": {
+    "color": "#4f565b",
+    "panel": 0.45,
+    "seam": 0.02
+   }
+  },
+  "glazed-tile": {
+   "kind": "tile",
+   "metresPerTile": 0.6,
+   "height": 0.003,
+   "rough": 0.18,
+   "metal": 0,
+   "envClass": "facade-masonry",
+   "borrow": "ceramic-tile",
+   "p": {
+    "color": "#5a7c74",
+    "tile": 0.15,
+    "grout": 0.004,
+    "groutColor": "#b9b4a8"
+   }
+  },
+  "terracotta": {
+   "kind": "terracotta",
+   "metresPerTile": 1.2,
+   "height": 0.008,
+   "rough": 0.34,
+   "metal": 0,
+   "envClass": "facade-masonry",
+   "p": {
+    "color": "#c98a5a",
+    "block": 0.3,
+    "joint": 0.006
+   }
+  },
+  "wood-siding": {
+   "kind": "siding",
+   "metresPerTile": 1.2,
+   "height": 0.014,
+   "rough": 0.7,
+   "metal": 0,
+   "envClass": "facade-painted",
+   "p": {
+    "color": "#a9a292",
+    "board": 0.15
+   }
+  },
+  "asphalt-roof": {
+   "kind": "gravel",
+   "metresPerTile": 1,
+   "height": 0.01,
+   "rough": 0.95,
+   "metal": 0,
+   "envClass": "asphalt",
+   "p": {
+    "color": "#4a4845"
+   },
+   "roofMacro": {
+    "drift": 0.07,
+    "speckle": 0.06,
+    "pondCellM": 11,
+    "pondShare": 0.32,
+    "pondRadiusM": [
+     1.2,
+     3
+    ],
+    "pondDarken": 0.12,
+    "pondRing": 0.14,
+    "pondSmooth": 0.08,
+    "scourCellM": 2.2,
+    "scourClusterM": 14,
+    "scourShare": 0.14,
+    "scourDarken": 0.32
+   }
+  },
+  "membrane-roof": {
+   "kind": "membrane",
+   "metresPerTile": 12,
+   "height": 0.004,
+   "rough": 0.82,
+   "metal": 0,
+   "envClass": "asphalt",
+   "p": {
+    "color": "#cfccc5",
+    "colorB": "#6f6a61"
+   },
+   "roofMacro": {
+    "drift": 0.04,
+    "speckle": 0.025,
+    "pondCellM": 12,
+    "pondShare": 0.25,
+    "pondRadiusM": [
+     1.2,
+     3
+    ],
+    "pondDarken": 0.08,
+    "pondRing": 0.1,
+    "pondSmooth": 0.04,
+    "scourShare": 0
+   }
+  },
+  "glass-clear": {
+   "kind": "glass",
+   "metresPerTile": 2,
+   "height": 0.0002,
+   "rough": 0.07,
+   "metal": 0,
+   "envClass": "facade-glass",
+   "p": {
+    "color": "#b4c8cc"
+   },
+   "physical": {
+    "transparent": true,
+    "opacity": 0.28,
+    "depthWrite": false,
+    "clearcoat": 0,
+    "ior": 1.5
+   }
+  },
+  "glass-low-iron": {
+   "kind": "glass",
+   "metresPerTile": 2,
+   "height": 0.0002,
+   "rough": 0.045,
+   "metal": 0,
+   "envClass": "facade-glass",
+   "p": {
+    "color": "#ffffff",
+    "smudgeRoughness": 0.035,
+    "thinAbsorption": 0.012
+   },
+   "physical": {
+    "transparent": true,
+    "opacity": 1,
+    "depthWrite": false,
+    "clearcoat": 0,
+    "ior": 1.5
+   }
+  },
+  "glass-door": {
+   "kind": "glass",
+   "metresPerTile": 2,
+   "height": 0.0002,
+   "rough": 0.14,
+   "metal": 0.02,
+   "envClass": "facade-glass",
+   "p": {
+    "color": "#d5e2e2"
+   },
+   "physical": {
+    "transparent": true,
+    "opacity": 0.17,
+    "depthWrite": false,
+    "clearcoat": 0.28,
+    "clearcoatRoughness": 0.22,
+    "ior": 1.5
+   }
+  },
+  "glass-dark": {
+   "kind": "glass",
+   "metresPerTile": 2,
+   "height": 0.0002,
+   "rough": 0.1,
+   "metal": 0.02,
+   "envClass": "facade-glass",
+   "p": {
+    "color": "#2a3138",
+    "slatPitchM": 0.05,
+    "slatDepth": 0.4
+   },
+   "physical": {
+    "transparent": true,
+    "opacity": 0.9,
+    "depthWrite": false,
+    "clearcoat": 0.7,
+    "clearcoatRoughness": 0.1,
+    "ior": 1.5
+   }
+  },
+  "glass-film": {
+   "kind": "glass",
+   "metresPerTile": 2,
+   "height": 0.0002,
+   "rough": 0.08,
+   "metal": 0.02,
+   "envClass": "facade-glass",
+   "p": {
+    "color": "#1b2126"
+   },
+   "physical": {
+    "transparent": true,
+    "opacity": 0.78,
+    "depthWrite": false,
+    "clearcoat": 0.85,
+    "clearcoatRoughness": 0.08,
+    "ior": 1.5
+   }
+  },
+  "glass-shell": {
+   "kind": "glass",
+   "metresPerTile": 2,
+   "height": 0.0002,
+   "rough": 0.08,
+   "metal": 0.02,
+   "envClass": "facade-glass",
+   "p": {
+    "color": "#3a4550"
+   },
+   "physical": {
+    "transparent": false,
+    "opacity": 1,
+    "depthWrite": true,
+    "clearcoat": 0.85,
+    "clearcoatRoughness": 0.08,
+    "ior": 1.5
+   }
+  },
+  "glass-shop": {
+   "kind": "glass",
+   "metresPerTile": 2,
+   "height": 0.0002,
+   "rough": 0.05,
+   "metal": 0.02,
+   "envClass": "facade-glass",
+   "p": {
+    "color": "#39434d"
+   },
+   "physical": {
+    "transparent": false,
+    "opacity": 1,
+    "depthWrite": true,
+    "clearcoat": 0,
+    "ior": 1.52,
+    "specularIntensity": 0.35
+   }
+  },
+  "glass-shop-food": {
+   "kind": "glass",
+   "metresPerTile": 2,
+   "height": 0.0002,
+   "rough": 0.05,
+   "metal": 0.02,
+   "envClass": "facade-glass",
+   "p": {
+    "color": "#39434d"
+   },
+   "physical": {
+    "transparent": false,
+    "opacity": 1,
+    "depthWrite": true,
+    "clearcoat": 0,
+    "ior": 1.52,
+    "specularIntensity": 0.35
+   }
+  },
+  "glass-shop-garments": {
+   "kind": "glass",
+   "metresPerTile": 2,
+   "height": 0.0002,
+   "rough": 0.05,
+   "metal": 0.02,
+   "envClass": "facade-glass",
+   "p": {
+    "color": "#39434d"
+   },
+   "physical": {
+    "transparent": false,
+    "opacity": 1,
+    "depthWrite": true,
+    "clearcoat": 0,
+    "ior": 1.52,
+    "specularIntensity": 0.35
+   }
+  },
+  "glass-shop-studio": {
+   "kind": "glass",
+   "metresPerTile": 2,
+   "height": 0.0002,
+   "rough": 0.05,
+   "metal": 0.02,
+   "envClass": "facade-glass",
+   "p": {
+    "color": "#39434d"
+   },
+   "physical": {
+    "transparent": false,
+    "opacity": 1,
+    "depthWrite": true,
+    "clearcoat": 0,
+    "ior": 1.52,
+    "specularIntensity": 0.35
+   }
+  },
+  "glass-shop-flowers": {
+   "kind": "glass",
+   "metresPerTile": 2,
+   "height": 0.0002,
+   "rough": 0.05,
+   "metal": 0.02,
+   "envClass": "facade-glass",
+   "p": {
+    "color": "#39434d"
+   },
+   "physical": {
+    "transparent": false,
+    "opacity": 1,
+    "depthWrite": true,
+    "clearcoat": 0,
+    "ior": 1.52,
+    "specularIntensity": 0.35
+   }
+  },
+  "glass-frosted": {
+   "kind": "glass",
+   "metresPerTile": 2,
+   "height": 0.0002,
+   "rough": 0.5,
+   "metal": 0,
+   "envClass": "facade-glass",
+   "p": {
+    "color": "#d4dbe0",
+    "smudgeRoughness": 0.06
+   },
+   "physical": {
+    "transparent": true,
+    "opacity": 0.88,
+    "depthWrite": false,
+    "clearcoat": 0.2,
+    "clearcoatRoughness": 0.4,
+    "ior": 1.5
+   }
+  },
+  "glass-reflective": {
+   "kind": "glass",
+   "metresPerTile": 2,
+   "height": 0.0002,
+   "rough": 0.06,
+   "metal": 0.45,
+   "envClass": "facade-glass",
+   "p": {
+    "color": "#9fb0bd",
+    "smudgeRoughness": 0.03
+   },
+   "physical": {
+    "transparent": false,
+    "opacity": 1,
+    "depthWrite": true,
+    "clearcoat": 1,
+    "clearcoatRoughness": 0.05,
+    "ior": 1.5
+   }
+  },
+  "glass-storefront": {
+   "kind": "glass",
+   "metresPerTile": 2,
+   "height": 0.0002,
+   "rough": 0.05,
+   "metal": 0.8,
+   "envClass": "facade-glass",
+   "p": {
+    "color": "#9aa6ae",
+    "smudgeRoughness": 0.05
+   },
+   "physical": {
+    "transparent": true,
+    "opacity": 0.86,
+    "depthWrite": false,
+    "clearcoat": 1,
+    "clearcoatRoughness": 0.05,
+    "ior": 1.5
+   }
+  },
+  "glass-sky": {
+   "kind": "glass",
+   "metresPerTile": 2,
+   "height": 0.0002,
+   "rough": 0.2,
+   "metal": 0.08,
+   "envClass": "facade-glass",
+   "p": {
+    "color": "#c3d2de",
+    "smudgeRoughness": 0.03
+   },
+   "physical": {
+    "transparent": false,
+    "opacity": 1,
+    "depthWrite": true,
+    "clearcoat": 0.35,
+    "clearcoatRoughness": 0.15,
+    "ior": 1.5
+   }
+  },
+  "glass-louvre": {
+   "kind": "glass",
+   "metresPerTile": 2,
+   "height": 0.0002,
+   "rough": 0.22,
+   "metal": 0.05,
+   "envClass": "facade-glass",
+   "p": {
+    "color": "#b4c9da",
+    "slatPitchM": 0.11,
+    "slatDepth": 0.35
+   },
+   "physical": {
+    "transparent": false,
+    "opacity": 1,
+    "depthWrite": true,
+    "clearcoat": 0.5,
+    "clearcoatRoughness": 0.2,
+    "ior": 1.5
+   }
+  },
+  "glass-shutter": {
+   "kind": "glass",
+   "metresPerTile": 2,
+   "height": 0.0002,
+   "rough": 0.38,
+   "metal": 0.35,
+   "envClass": "painted-metal",
+   "p": {
+    "color": "#c9ced2",
+    "slatPitchM": 0.08,
+    "slatDepth": 0.5
+   },
+   "physical": {
+    "transparent": false,
+    "opacity": 1,
+    "depthWrite": true,
+    "clearcoat": 0.2,
+    "clearcoatRoughness": 0.3,
+    "ior": 1.5
+   }
+  },
+  "painted-steel": {
+   "kind": "flat",
+   "metresPerTile": 1,
+   "height": 0.0008,
+   "rough": 0.46,
+   "metal": 0,
+   "envClass": "painted-metal",
+   "p": {
+    "color": "#2b3236"
+   }
+  },
+  "perforated-metal": {
+   "kind": "flat",
+   "metresPerTile": 1,
+   "height": 0.0008,
+   "rough": 0.64,
+   "metal": 0,
+   "envClass": "painted-metal",
+   "p": {
+    "color": "#b1b5b8",
+    "holePitchM": 0.012,
+    "holeRadius": 0.3
+   }
+  },
+  "painted-steel-light": {
+   "kind": "flat",
+   "metresPerTile": 1,
+   "height": 0.0008,
+   "rough": 0.52,
+   "metal": 0,
+   "envClass": "painted-metal",
+   "p": {
+    "color": "#9aa0a3"
+   }
+  },
+  "painted-steel-mid": {
+   "kind": "flat",
+   "metresPerTile": 1,
+   "height": 0.0008,
+   "rough": 0.5,
+   "metal": 0,
+   "envClass": "painted-metal",
+   "p": {
+    "color": "#6e7478"
+   }
+  },
+  "anodized-aluminium": {
+   "kind": "flat",
+   "metresPerTile": 1,
+   "height": 0.0006,
+   "rough": 0.36,
+   "metal": 1,
+   "envClass": "facade-metal",
+   "borrow": "dark-anodised",
+   "p": {
+    "color": "#3a3d40"
+   }
+  },
+  "awning-canvas": {
+   "kind": "canvas",
+   "metresPerTile": 0.96,
+   "height": 0.0006,
+   "rough": 0.92,
+   "metal": 0,
+   "envClass": "fabric",
+   "p": {
+    "colorA": "#7a2e2a",
+    "colorB": "#e9e2d3",
+    "stripe": 0.12
+   }
+  },
+  "canvas-plain": {
+   "kind": "canvas",
+   "metresPerTile": 0.96,
+   "height": 0.0006,
+   "rough": 0.92,
+   "metal": 0,
+   "envClass": "fabric",
+   "p": {
+    "colorA": "#c9b48a",
+    "colorB": "#c9b48a",
+    "stripe": 0
+   }
+  },
+  "canvas-rust": {
+   "kind": "canvas",
+   "metresPerTile": 0.96,
+   "height": 0.0006,
+   "rough": 0.92,
+   "metal": 0,
+   "envClass": "fabric",
+   "p": {
+    "colorA": "#b4502c",
+    "colorB": "#b4502c",
+    "stripe": 0
+   }
+  },
+  "cedar-shingle": {
+   "kind": "shingle",
+   "metresPerTile": 1.2,
+   "height": 0.012,
+   "rough": 0.82,
+   "metal": 0,
+   "envClass": "facade-painted",
+   "p": {
+    "color": "#6a5646",
+    "course": 0.14,
+    "width": 0.2,
+    "vary": 0.34
+   }
+  },
+  "painted-shingle": {
+   "kind": "shingle",
+   "metresPerTile": 1.2,
+   "height": 0.01,
+   "rough": 0.74,
+   "metal": 0,
+   "envClass": "facade-painted",
+   "p": {
+    "color": "#e9e7e2",
+    "course": 0.14,
+    "width": 0.2,
+    "vary": 0.06
+   }
+  },
+  "signage": {
+   "kind": "flat",
+   "metresPerTile": 1,
+   "height": 0.0005,
+   "rough": 0.55,
+   "metal": 0,
+   "envClass": "facade-painted",
+   "p": {
+    "color": "#1f2a33"
+   }
+  },
+  "lamp-lens": {
+   "kind": "flat",
+   "metresPerTile": 0.5,
+   "height": 0.0005,
+   "rough": 0.38,
+   "metal": 0,
+   "envClass": "painted-metal",
+   "p": {
+    "color": "#efe6d3"
+   },
+   "emissive": "#ffd2a0",
+   "emissiveIntensity": 1.35
+  },
+  "brick-buff": {
+   "kind": "brick",
+   "metresPerTile": 1.24,
+   "height": 0.006,
+   "rough": 0.84,
+   "metal": 0,
+   "envClass": "facade-masonry",
+   "p": {
+    "bond": "common",
+    "courses": 16,
+    "perRow": 6,
+    "colors": [
+     "#b08a62",
+     "#a37b54",
+     "#bc9870",
+     "#96704c",
+     "#c2a27a"
+    ],
+    "mortar": "#cfc6b6",
+    "mortarMetres": 0.012
+   }
+  },
+  "painted-clapboard": {
+   "kind": "siding",
+   "metresPerTile": 1.2,
+   "height": 0.014,
+   "rough": 0.72,
+   "metal": 0,
+   "envClass": "facade-painted",
+   "p": {
+    "color": "#e8e5de",
+    "board": 0.15
+   }
+  },
+  "clay-barrel-tile": {
+   "kind": "shingle",
+   "mapsFrom": "painted-shingle",
+   "worldTileM": 2.2,
+   "baseTint": "#c56c48",
+   "metresPerTile": 1.2,
+   "height": 0.01,
+   "rough": 0.7,
+   "metal": 0,
+   "envClass": "facade-masonry",
+   "p": {
+    "color": "#b4613f"
+   }
+  },
+  "composition-shingle": {
+   "kind": "shingle",
+   "mapsFrom": "painted-shingle",
+   "baseTint": "#575756",
+   "metresPerTile": 1.2,
+   "height": 0.01,
+   "rough": 0.86,
+   "metal": 0,
+   "envClass": "facade-painted",
+   "p": {
+    "color": "#4f4e4b"
+   }
+  },
+  "sectional-garage-door": {
+   "kind": "siding",
+   "mapsFrom": "painted-clapboard",
+   "worldTileM": 4.2,
+   "metresPerTile": 1.2,
+   "height": 0.014,
+   "rough": 0.6,
+   "metal": 0,
+   "envClass": "facade-painted",
+   "p": {
+    "color": "#e8e5de",
+    "board": 0.53
+   }
+  }
+ }
+}

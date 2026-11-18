@@ -1,0 +1,86 @@
+{
+  "builder": "house",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "painted-stucco",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "groundM": 2.6,
+  "roofLevelM": 5.25,
+  "storeysSeen": 2,
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "seed": 16,
+  "notes": "Kirkham S, 1948: charcoal-painted stucco with white trim, a small front gable over a flat roof behind; red shutters beside the upper window, a small red awning over the entry at the east end, a ground window with red shutters to the west. Two street faces (edges 3 and 4): the entry is on the east face (edgeFront).",
+  "wall": "painted-stucco",
+  "wallTint": "#44474d",
+  "roofForm": {
+    "form": "front-gable",
+    "depthM": 5.0,
+    "eaveM": 0.3,
+    "material": "asphalt-roof",
+    "tint": "#3f3e3c",
+    "pediment": false
+  },
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.2,
+      "to": 0.8,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        3,
+        2
+      ],
+      "shutters": {
+        "tint": "#9e3a32"
+      }
+    },
+    {
+      "storey": 0,
+      "from": 0.25,
+      "to": 0.75,
+      "sill": 0.9,
+      "head": 2.1,
+      "panes": [
+        3,
+        2
+      ],
+      "shutters": {
+        "tint": "#9e3a32"
+      }
+    }
+  ],
+  "streetEdges": {
+    "4": {}
+  },
+  "edgeFront": {
+    "4": {
+      "entry": {
+        "from": 0.1,
+        "to": 0.4,
+        "headM": 2.2,
+        "material": "painted-white",
+        "tint": "#b8462e",
+        "glass": false,
+        "recessM": 0.2
+      }
+    }
+  },
+  "entry": null
+}

@@ -1,0 +1,16 @@
+[package]
+name = "eo-ui"
+version = "0.1.0"
+edition = "2024"
+description = "Earth Online interface on wgpu: title, loading, pause, settings, HUD and map, with the JS game's design tokens"
+publish = false
+
+[dependencies]
+ab_glyph = "0.2.32"
+anyhow = "1.0.104"
+bytemuck = { version = "1.25.2", features = ["derive"] }
+earcut = "0.4.12"
+eo-data = { path = "../eo-data" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+wgpu = "30.0.2"

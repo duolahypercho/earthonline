@@ -1,0 +1,96 @@
+{
+ "seed": 24,
+ "notes": "Warm cream-buff wall (e2cc86); dark sashes with cream trim; shorter ground storey, belt course dropped; ground has a shop window left and a recessed entry up a flight of concrete steps right (arch porch stair). Mural glass not modelled. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Warm pale-yellow stucco, wider (half-frontage) 3-light bay, 8-step stoop to recessed door, plain frieze instead of bracket cornice.",
+ "wall": "painted-white",
+ "wallTint": "#f2dc8e",
+ "trim": "painted-white@f2e6b4",
+ "frame": "painted-white@2a1e18",
+ "glass": "glass-reflective@2c3239",
+ "storefrontFrame": "painted-white@efe9d6",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@d8c070",
+ "cornice": false,
+ "corniceProjectionM": 0.5,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.76
+ ],
+ "bays": [
+  {
+   "at": 0.28,
+   "widthM": 4.2,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f2dc8e",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "storefront": {
+  "bulkheadM": 0.6,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.04,
+    "to": 0.46,
+    "kind": "window",
+    "headM": 2.5
+   },
+   {
+    "from": 0.58,
+    "to": 0.8,
+    "kind": "door",
+    "stair": true,
+    "leaf": "wood-siding@4a3828",
+    "headM": 3.0,
+    "arch": {
+     "type": "basket",
+     "riseM": 0.08,
+     "cornerM": 0.1,
+     "porch": {
+      "steps": 8,
+      "riseM": 0.17,
+      "treadM": 0.28,
+      "material": "concrete-precast",
+      "tint": "#bdb8ae"
+     }
+    }
+   }
+  ]
+ },
+ "hbFloors": {
+  "groundM": 3.9,
+  "upperM": 3.685
+ },
+ "hbFrieze": {
+  "heightM": 0.45,
+  "material": "painted-white",
+  "tint": "#f2e6b4"
+ }
+}

@@ -1,0 +1,127 @@
+{
+ "seed": 89,
+ "notes": "Corner 1914 flats: tall brown stucco street storey (blank, one window at the corner end, vents) under four red-brick storeys with cream trim, a cream cant bay at the corner end, paired sash windows with sills, white fire escape right of centre. Brick darkened and desaturated to a red-brown (kept above the luminance floor), brown base with louvred vents, wider paired windows, cream fire escape, lozenge panels (hand.py). Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. GroundBand lift (2026-10-03): groundBand tint #7c5f4e -> #967f71 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "brick-common-bond",
+ "wallTint": "#ffffff",
+ "trim": "painted-white@e8dcc0",
+ "frame": "painted-white@ece4d0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@ece4d0",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@b98572",
+ "cornice": true,
+ "corniceProjectionM": 0.45,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 1.5,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.25,
+  0.39,
+  0.54,
+  0.68,
+  0.83
+ ],
+ "bays": [
+  {
+   "at": 0.09,
+   "widthM": 2.4,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f4eee0",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.03,
+    "to": 0.14,
+    "kind": "window",
+    "headM": 2.6
+   },
+   {
+    "from": 0.14,
+    "to": 0.4,
+    "kind": "blank",
+    "material": "painted-stucco",
+    "tint": "#7c5f4e",
+    "headM": 2.5
+   },
+   {
+    "from": 0.4,
+    "to": 0.43,
+    "kind": "garage",
+    "material": "louvre",
+    "tint": "#3a2a20",
+    "headM": 0.9
+   },
+   {
+    "from": 0.43,
+    "to": 0.8,
+    "kind": "blank",
+    "material": "painted-stucco",
+    "tint": "#7c5f4e",
+    "headM": 2.5
+   },
+   {
+    "from": 0.8,
+    "to": 0.83,
+    "kind": "garage",
+    "material": "louvre",
+    "tint": "#3a2a20",
+    "headM": 0.9
+   },
+   {
+    "from": 0.83,
+    "to": 0.99,
+    "kind": "blank",
+    "material": "painted-stucco",
+    "tint": "#7c5f4e",
+    "headM": 2.5
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#967f71",
+  "topM": 4.8
+ },
+ "fireEscape": {
+  "at": 0.7,
+  "widthM": 1.8,
+  "depthM": 0.9,
+  "material": "painted-white@efe8d8"
+ },
+ "hbCorniceDentils": {
+  "spacingM": 0.25,
+  "sizeM": 0.1,
+  "tint": "#efe4cc"
+ }
+}

@@ -1,0 +1,73 @@
+{
+ "seed": 24,
+ "notes": "Pale blue horizontal clapboard gate house with white trim, upper storey white siding set back/white. Ground: a French-style double door framed in white at the left, a narrow door, and a small covered booth bay. Ground storey now sky-blue clapboard (groundBand, lit tint) with white trim, white French double doors, a narrow door and a small gabled shingle porch on white square posts; the upper storey is white siding behind a white fascia ledge (upperSetback). The footprint is a 21-edge pier outline, so the stepped multi-tower massing comes from data; the roof-deck railing and red window band have no key. Skipped: red trim and pitched roof. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Ground storey saturated to a mid sky-blue clapboard (4f9fcf, lum 0.31); upper window frames red; double door leaves blue in white casing. Not added: rooftop railing and larger shingle hip porch. GroundBand lift (2026-10-03): groundBand tint #4f9fcf -> #72b2d9 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-clapboard",
+ "wallTint": "#f8f6f4",
+ "trim": "painted-white@f6f4ee",
+ "frame": "painted-white@c24a40",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f4f2ec",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-clapboard@4f9fcf",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.6,
+ "windowSillM": 0.6,
+ "windowHeadM": 1.6,
+ "upperWindows": [
+  0.3,
+  0.7
+ ],
+ "bays": [],
+ "streetStills": true,
+ "ground": "lobby",
+ "upper": "rooms",
+ "storefront": {
+  "bulkheadM": 0.8,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.06,
+    "to": 0.5,
+    "kind": "double-door",
+    "leaf": "painted-white@5aa0cc"
+   },
+   {
+    "from": 0.58,
+    "to": 0.68,
+    "kind": "door",
+    "leaf": "painted-white@5aa0cc",
+    "headM": 2.2
+   },
+   {
+    "from": 0.74,
+    "to": 0.94,
+    "kind": "window",
+    "headM": 2.2
+   }
+  ]
+ },
+ "groundBand": {
+  "material": "painted-clapboard",
+  "tint": "#72b2d9",
+  "topM": 4.86
+ },
+ "upperSetback": [
+  {
+   "fromM": 4.86,
+   "depthM": 1.4,
+   "edges": [
+    14
+   ],
+   "ledge": {
+    "heightM": 0.18,
+    "projectionM": 0.2,
+    "material": "painted-white",
+    "tint": "#f6f4ee"
+   }
+  }
+ ]
+}

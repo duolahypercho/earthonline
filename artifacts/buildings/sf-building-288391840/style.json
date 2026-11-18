@@ -1,0 +1,73 @@
+{
+ "seed": 21,
+ "notes": "Two-storey commercial pier-side building, pale painted siding, shopfront windows below a row of small upper windows. The beige stucco shopfront block had no support, so it is now a dark grey-brown board shed with a sloped shingle lean-to on posts, small upper windows and dark barn doors, copied from the neighbouring pier shed on the same compound. Plausible plain version, no invented ornament. Wall lit tint lifted to 7e786a (relative luminance 0.19, was 0.15) so the game's shading keeps the dark grey-brown board reading. Clapboard fix (2026-10-02): painted siding moved from the stained-timber wood-siding base to painted-clapboard so the tint renders as paint, not olive. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Lit wall lowered to 7e786b (lum 0.19) so it reads grey-brown not near-white; ground floor cut back to one small window plus two dark green-black barn doors on solid board wall. No key for pitched roof or eave overhang; parapet-free already (cornice false). No key for a pitched roof, so a deep dark fascia/eave band 0.55 m proud is added in hand.py at the roof line to read as the overhanging eave. Lifted/converted once to #989389. Tint = #4c4b48 / painted-clapboard base, no lift (the lift washes dark wood to tan).",
+ "wall": "painted-clapboard",
+ "wallTint": "#53534f",
+ "trim": "painted-white@e8e4d8",
+ "frame": "painted-white@e8e4d8",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@e8e4d8",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-clapboard@7e786b",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.8,
+ "windowSillM": 1.0,
+ "windowHeadM": 1.9,
+ "upperWindows": [
+  0.05,
+  0.15,
+  0.25,
+  0.35,
+  0.45,
+  0.55,
+  0.65,
+  0.75,
+  0.85,
+  0.95
+ ],
+ "bays": [],
+ "streetStills": true,
+ "ground": "lobby",
+ "upper": "rooms",
+ "storefront": {
+  "bulkheadM": 0.9,
+  "transomM": 0.3,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.06,
+    "to": 0.14,
+    "kind": "window",
+    "headM": 2.3
+   },
+   {
+    "from": 0.4,
+    "to": 0.6,
+    "kind": "blank",
+    "material": "wood-siding",
+    "tint": "#2f3a36",
+    "headM": 2.4
+   },
+   {
+    "from": 0.72,
+    "to": 0.92,
+    "kind": "blank",
+    "material": "wood-siding",
+    "tint": "#2f3a36",
+    "headM": 2.4
+   }
+  ]
+ },
+ "awning": "asphalt-roof@5c5a56",
+ "awningSpans": [
+  {
+   "from": 0.0,
+   "to": 1.0,
+   "depthM": 2.4,
+   "valanceM": 0.25
+  }
+ ]
+}

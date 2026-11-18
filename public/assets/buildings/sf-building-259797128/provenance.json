@@ -1,0 +1,53 @@
+{
+  "kind": "blender-building",
+  "id": "sf-building-259797128",
+  "pass": "b259797128-blender-6facb6b9-417b46",
+  "generator": "scripts/blender-buildings/build_building.py",
+  "generatorSha256": "6facb6b980e5966bff381f1088766095f94c593f58d833334af51d6578efa055",
+  "blender": "Blender 5.1.2",
+  "inputs": {
+    "spec": "artifacts/buildings/sf-building-259797128/spec.json",
+    "specSha256": "2673dbda632ab3b4883e7ce81af46d5dad56f7e18a500e2a2c532814d32ffd78",
+    "style": "artifacts/buildings/sf-building-259797128/style.json",
+    "styleSha256": "417b46a053499a5c7d66bc598e9d346cc085dfc2d775c39b2af8ebc619ecb9d2"
+  },
+  "sources": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "license": "Original geometry generated from open data (DataSF footprints, LiDAR, Assessor roll). No third-party meshes or textures.",
+  "furniture": [],
+  "assets": {
+    "exterior": {
+      "url": "/assets/buildings/sf-building-259797128/exterior.glb",
+      "sha256": "a07e3fb03c2846fa56700a63941e09153ee92c909060131c1c436c086c15de15",
+      "bytes": 604384
+    },
+    "interior": {
+      "url": "/assets/buildings/sf-building-259797128/interior.glb",
+      "sha256": "97f1eb7df6f09d0b8d2a4b1e3d07d935e852807891f178016c211a6d76335ffc",
+      "bytes": 229944
+    },
+    "fine": [
+      {
+        "storey": 0,
+        "url": "/assets/buildings/sf-building-259797128/fine-s0.glb",
+        "sha256": "6725d72df4fbfdc736a6fbac07688f5527643709ca9380bd0e1cabcdefba7540",
+        "bytes": 30992
+      },
+      {
+        "storey": 1,
+        "url": "/assets/buildings/sf-building-259797128/fine-s1.glb",
+        "sha256": "a0ccfcf1a2fde30a415df57fe46347bb33f5242f9bfd1f68bc1e4b400239bb16",
+        "bytes": 175108
+      },
+      {
+        "storey": 2,
+        "url": "/assets/buildings/sf-building-259797128/fine-s2.glb",
+        "sha256": "d802a46ed863779f3c84b7c0efead058a5393b4198a6ee19197918a65600123e",
+        "bytes": 175100
+      }
+    ]
+  }
+}

@@ -1,0 +1,113 @@
+{
+ "seed": 6,
+ "notes": "1911 flats W side: red brick through the garage storey and the first upper storey, green painted siding on the top storey with a canted bay at the right, a red brick belt course under it. Ground: a white person door at the left, a white panelled garage door, a barred gate at the right. Storey 1: two flat triple-sash window groups with cream surrounds. Brick through storey 1 kept; storey-1 windows now two wide tripartite lights (storeyWindowSpans); upper storey pale sage clapboard (lifted tint) with the canted bay on the right. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour.",
+ "wall": "painted-clapboard",
+ "wallTint": "#e1e7da",
+ "trim": "painted-white@efe9d6",
+ "frame": "painted-white@efe9d6",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@efe9d6",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "brick-running-bond@ffffff",
+ "cornice": true,
+ "corniceProjectionM": 0.55,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 1.5,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.25
+ ],
+ "bays": [
+  {
+   "at": 0.72,
+   "widthM": 2.6,
+   "projectionM": 0.6,
+   "fromStorey": 2,
+   "material": "painted-clapboard",
+   "tint": "#e1e7da",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.18,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.04,
+    "to": 0.14,
+    "kind": "door",
+    "headM": 2.3,
+    "leaf": "painted-white@efe9d8",
+    "stair": true
+   },
+   {
+    "from": 0.2,
+    "to": 0.55,
+    "kind": "garage",
+    "headM": 2.5,
+    "leaf": "painted-white@ece6d8"
+   },
+   {
+    "from": 0.63,
+    "to": 0.9,
+    "kind": "gate",
+    "headM": 2.4
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "groundBand": {
+  "material": "brick-running-bond",
+  "tint": "#ffffff",
+  "topM": 7.2
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.8,
+  "heightM": 0.3,
+  "depthM": 0.3,
+  "widthM": 0.2,
+  "material": "painted-white",
+  "tint": "#9a3a2a"
+ },
+ "hbFloors": {
+  "groundM": 3.6,
+  "upperM": 4.5
+ },
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.1,
+     0.4
+    ],
+    [
+     0.6,
+     0.9
+    ]
+   ],
+   "sillM": 0.9,
+   "headM": 2.5
+  }
+ }
+}

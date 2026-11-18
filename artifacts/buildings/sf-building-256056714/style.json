@@ -1,0 +1,62 @@
+{
+ "seed": 35,
+ "notes": "1907 three-storey flats, flat ochre-yellow stucco with cream trim. Two sash windows per upper storey, three small pilaster brackets under a plain cornice. Ground storey: a barred gate-door left, a small gated window, a sash window right. No bays. Applied: ochre-yellow stucco with cream trim, paired windows (two sashes side by side) in two bays each upper storey, stronger bracketed cornice with frieze, iron lattice entry gate (the vertical-bar gate swapped). Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. More saturated ochre tint, wider sash windows, taller brackets. SKIPPED third upper storey: the ground (4.8 m, gate door plus the high window) and two upper window rows, matching the data. Lifted/converted once to #fff0b8.",
+ "wall": "painted-stucco",
+ "wallTint": "#fff0b8",
+ "trim": "painted-white@f6ecd0",
+ "frame": "painted-white@f6ecd0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f1e6c4",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "corniceProjectionM": 0.45,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.95,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "bulkhead": "painted-stucco@ffe070",
+ "upperWindows": [
+  0.2,
+  0.32,
+  0.62,
+  0.74
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.13,
+    "to": 0.35,
+    "kind": "gate",
+    "lattice": true
+   },
+   {
+    "from": 0.56,
+    "to": 0.84,
+    "kind": "window",
+    "headM": 2.2
+   }
+  ]
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 1.3,
+  "heightM": 0.7,
+  "depthM": 0.2,
+  "widthM": 0.3,
+  "material": "painted-white",
+  "tint": "#f6ecd0"
+ },
+ "edgeRoles": {},
+ "hbFrieze": {
+  "heightM": 0.35,
+  "material": "painted-white",
+  "tint": "#f6ecd0"
+ }
+}

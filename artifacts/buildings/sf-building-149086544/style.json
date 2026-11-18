@@ -1,0 +1,406 @@
+{
+  "seed": 1,
+  "notes": "Nine-storey 2001 live/work block: exposed concrete frame (columns + slab edges), bays alternating light-blue sliding screen panels, recessed balconies with glass guards and full-height glazing; ground: glazed bays under a pale grey band, concrete walls with steel garage doors and a glazed lobby in the recessed courts. Frosted translucent screen leaves (glass-frosted) covering most of each screen bay, neutral grey concrete frame and recess reveals, no balcony planters, frosted ground-floor glazing. Tints re-derived cool, blue-grey louvred screen leaves standing proud of the frame, dark reflective ground-floor/lobby glazing. Recess/balcony walls a darker grey of the same hue; screen leaves blue-grey (not lilac, not saturated); street glazing frosted white; roll-up garage doors light grey steel (a metal finish read brown in the recess); now clear glass over room-tone backing with blinds (kit glassBacking, kind grid). They take a warmer returnWallTint. Opaque metal-tinted pane over a dark room, no room-tone backing; darker street glass). Screen leaves are opaque pale blue-grey painted slats (painted-white tint, 9 blades a leaf) at seeded slide positions per bay (panelCoverageRange); the frame projects further and the glass, balconies and screens sit deeper behind it; dark steel-and-glass balcony guards and planters. Now bays ~2.7 m (square cells), two full-height louvre leaves per screen bay standing at the frame face (kit panelSlide leaf / panelOutM), one or both closed per bay, pale steel-blue frosted-glass louvres (glass-louvre, slats drawn in the material); open bays recessed with a dark solid steel guard; the two court faces are glazed white-framed loggias with balcony decks out to the frame line, dark glass guards and planters (kit kind loggia); ground: white-framed pale blue-grey milky shop glass under a pale band, dark lobby glass in the court, dark grey corrugated garage gates, round wall lamps. Leaves tinted steel-blue, upper glass glass-sky, loggia guards dark film, shop glass darker blue-grey. LiDAR (3DEP 2023) shows the rear strip along the rear street is a four-storey wing at ~12 m; the SW end is full height. LowParts steps it. The NE-end ground floor was shop glass; the frame read dark slate with black voids in 7 stations; light grey/white concrete, glass balcony guards, blue glass and a glazed lobby with a canopy. Frame, walls and ground band now painted light cool grey (painted-white, the precast albedo could not reach it), lighter soffits, glass guards, brighter blue recess glass, reflective shop glass in place of frosted blank panels, a glass canopy over the court lobby, slatted silver roll-up shutters (glass-shutter) and a gridded gate at the NE garages, less soot. No balconies/glass guards read, flat mullions, flat entry canopy, garages flat painted doors. Open balcony bays now have deck slabs projecting ~1 m past the wall line (as far as the footprint allowance permits per bay) with the glass guard at the lip; 16 cm deep mullions; an opaque pale glass canopy over the lobby; the NE garage shutters set 1.4 m back in dark mouths under a slatted screen. Leaf tint paler/greyer; a blank dark plaque over the court lobby where the building number hangs (no digits). NE ground columns aligned to the garage piers (explicit column positions on that face). A faint grime pass (weathering.grime 0.07). Ground band a step darker concrete. NE garage face frame tint mid concrete grey so the recessed bays read shadowed. Deeper balcony lip 1.2 (footprint-capped) and 24 cm mullions. NE-face left glazed garage replaced by a tan slatted gate. NE balcony rails perforated dark mesh. More open glass (closed leaves 30%), deeper glass recess 1.6, darker balcony slabs and frame, saturated blue-sky upper glass, muted grey-green shop glass, warm lit lobby glass on the court-9 face. Left garage back to the light gridded glazed-garage gate. NE face frame darker for deeper-reading bays. Frame/wall/ground band/balcony tints one step darker (concrete mid grey), plinth 0.55 m, shop pane 0.9 m; glass tones unchanged. Street-level shop/lobby glass back to dark opaque reflective (no lit beige interiors through it).",
+  "wall": "painted-white",
+  "wallTint": "#aeb3b9",
+  "trim": "painted-white",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "groundBand": {
+    "material": "painted-white",
+    "tint": "#8e9398"
+  },
+  "glass": "glass-clear@dde6ec",
+  "storefrontFrame": "painted-white@eef2f4",
+  "storefrontGlass": "glass-frosted@aab4bb",
+  "bulkhead": "anodized-aluminium",
+  "frameGrid": {
+    "bayM": 2.7,
+    "columnW": 0.32,
+    "slabEdgeH": 0.34,
+    "projectionM": 0.4,
+    "fromStorey": 1,
+    "storeyPatterns": [
+      [
+        "panel",
+        "panel",
+        "balcony",
+        "panel",
+        "panel",
+        "panel",
+        "balcony"
+      ],
+      [
+        "panel",
+        "balcony",
+        "panel",
+        "panel",
+        "balcony",
+        "panel",
+        "panel"
+      ],
+      [
+        "balcony",
+        "panel",
+        "panel",
+        "panel",
+        "panel",
+        "balcony",
+        "panel"
+      ]
+    ],
+    "recessM": 1.6,
+    "rail": "glass",
+    "mullionM": 2.4,
+    "material": "painted-white",
+    "tint": "#9ca1a7",
+    "frameMaterial": "anodized-aluminium",
+    "panelMaterial": "glass-louvre",
+    "panelTint": "#d2dce6",
+    "panelFrame": "painted-white@eef2f4",
+    "panelLouvres": 0,
+    "panelLeaves": 2,
+    "balconyMaterial": "painted-white",
+    "balconyTint": "#868c94",
+    "glassRecessM": 1.6,
+    "panelInsetM": 0.08,
+    "railMaterial": "painted-steel-mid",
+    "panelRail": true,
+    "balconyPlanters": true,
+    "shift": 0,
+    "panelSlide": "leaf",
+    "panelOutM": 0.2,
+    "panelClosedShare": 0.3,
+    "railGlass": "glass-storefront@c8d0d6",
+    "balconyLipM": 1.2,
+    "mullionDepthM": 0.24,
+    "mullionW": 0.08
+  },
+  "bayM": 8.0,
+  "windowW": 1.4,
+  "ground": "restaurant",
+  "upper": "apartment",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.9,
+    "bulkheadM": 0.55,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.0093,
+        "to": 0.1018
+      },
+      {
+        "kind": "window",
+        "from": 0.1204,
+        "to": 0.2129
+      },
+      {
+        "kind": "window",
+        "from": 0.2315,
+        "to": 0.324
+      },
+      {
+        "kind": "door",
+        "from": 0.3426,
+        "to": 0.4351,
+        "stair": true,
+        "leaf": "anodized-aluminium"
+      },
+      {
+        "kind": "window",
+        "from": 0.4538,
+        "to": 0.5462
+      },
+      {
+        "kind": "window",
+        "from": 0.5649,
+        "to": 0.6574
+      },
+      {
+        "kind": "window",
+        "from": 0.676,
+        "to": 0.7685
+      },
+      {
+        "kind": "window",
+        "from": 0.7871,
+        "to": 0.8796
+      },
+      {
+        "kind": "window",
+        "from": 0.8982,
+        "to": 0.9907
+      }
+    ],
+    "headDropM": 0.85,
+    "paneM": 0.9
+  },
+  "streetEdges": {
+    "5": {
+      "frameGrid": {
+        "storeyPatterns": [
+          [
+            "loggia"
+          ]
+        ],
+        "loggiaFrame": "painted-white@eef2f4",
+        "loggiaMullionM": 1.0,
+        "loggiaRailGlass": "glass-storefront@c8d0d6",
+        "loggiaRecessM": 0.3,
+        "bayM": 4.1,
+        "loggiaOutM": 2.85
+      },
+      "storefront": {
+        "layout": [
+          {
+            "kind": "window",
+            "from": 0.06,
+            "to": 0.46
+          },
+          {
+            "kind": "door",
+            "from": 0.54,
+            "to": 0.72,
+            "leaf": "anodized-aluminium"
+          },
+          {
+            "kind": "window",
+            "from": 0.74,
+            "to": 0.94
+          }
+        ]
+      },
+      "glassModel": {
+        "upper": "glass-sky@a8c8ea",
+        "street": "glass-reflective@a39389"
+      }
+    },
+    "7": {
+      "storefront": {
+        "layout": [
+          {
+            "kind": "window",
+            "from": 0.0132,
+            "to": 0.1535
+          },
+          {
+            "kind": "window",
+            "from": 0.1799,
+            "to": 0.3201
+          },
+          {
+            "kind": "window",
+            "from": 0.3465,
+            "to": 0.4868
+          },
+          {
+            "kind": "window",
+            "from": 0.5132,
+            "to": 0.6535
+          },
+          {
+            "kind": "window",
+            "from": 0.6799,
+            "to": 0.8201
+          },
+          {
+            "kind": "window",
+            "from": 0.8465,
+            "to": 0.9868
+          }
+        ]
+      },
+      "frameGrid": {}
+    },
+    "9": {
+      "frameGrid": {
+        "storeyPatterns": [
+          [
+            "loggia"
+          ]
+        ],
+        "loggiaFrame": "painted-white@eef2f4",
+        "loggiaMullionM": 1.0,
+        "loggiaRailGlass": "glass-storefront@c8d0d6",
+        "loggiaRecessM": 0.3,
+        "bayM": 4.3,
+        "loggiaOutM": 2.45
+      },
+      "storefront": {
+        "layout": [
+          {
+            "kind": "window",
+            "from": 0.05,
+            "to": 0.38
+          },
+          {
+            "kind": "double-door",
+            "from": 0.42,
+            "to": 0.58,
+            "leaf": "anodized-aluminium"
+          },
+          {
+            "kind": "window",
+            "from": 0.62,
+            "to": 0.95
+          }
+        ]
+      },
+      "glassModel": {
+        "upper": "glass-sky@9cc0e6",
+        "street": "glass-reflective@a39389"
+      },
+      "awning": "glass-sky@e4eaf0",
+      "awningSpans": [
+        {
+          "from": 0.3,
+          "to": 0.7,
+          "depthM": 1.6
+        }
+      ],
+      "plaques": [
+        {
+          "at": 0.5,
+          "y": 3.3,
+          "w": 1.3,
+          "h": 0.45,
+          "face": "painted-steel"
+        }
+      ]
+    },
+    "11": {
+      "storefront": {
+        "layout": [
+          {
+            "kind": "door",
+            "from": 0.02,
+            "to": 0.07,
+            "leaf": "painted-steel"
+          },
+          {
+            "kind": "glazed-garage",
+            "from": 0.085,
+            "to": 0.165,
+            "material": "painted-steel-mid",
+            "tint": "#d8cfae"
+          },
+          {
+            "kind": "garage",
+            "from": 0.19,
+            "to": 0.305,
+            "material": "glass-shutter",
+            "headM": 3.4,
+            "recessM": 2.0,
+            "doorM": 2.6
+          },
+          {
+            "kind": "garage",
+            "from": 0.32,
+            "to": 0.435,
+            "material": "glass-shutter",
+            "headM": 3.4,
+            "recessM": 2.0,
+            "doorM": 2.6
+          },
+          {
+            "kind": "garage",
+            "from": 0.465,
+            "to": 0.6,
+            "material": "painted-steel-mid",
+            "tint": "#c8ccd0",
+            "headM": 3.5,
+            "ribs": "vertical",
+            "recessM": 0.5
+          },
+          {
+            "kind": "window",
+            "from": 0.63,
+            "to": 0.8
+          },
+          {
+            "kind": "window",
+            "from": 0.82,
+            "to": 0.98
+          }
+        ]
+      },
+      "wallLamps": [
+        {
+          "at": 0.18,
+          "y": 2.9,
+          "d": 0.36
+        },
+        {
+          "at": 0.45,
+          "y": 2.9,
+          "d": 0.36
+        }
+      ],
+      "frameGrid": {
+        "columns": [
+          0.0,
+          0.075,
+          0.175,
+          0.3125,
+          0.45,
+          0.615,
+          0.711,
+          0.807,
+          0.904,
+          1.0
+        ],
+        "tint": "#787b80",
+        "railGlass": "perforated-metal@30363a"
+      }
+    }
+  },
+  "weathering": {
+    "soot": {
+      "height": 1.0,
+      "strength": 0.08
+    },
+    "streak": {
+      "strength": 0.12,
+      "columnMetres": 0.4,
+      "drop": 1.0
+    },
+    "grime": {
+      "strength": 0.07,
+      "metres": 2.8
+    }
+  },
+  "rooftop": {
+    "units": 14,
+    "seed": 5
+  },
+  "glassBacking": {
+    "material": "painted-white",
+    "kinds": [
+      "grid"
+    ],
+    "depthM": 0.3,
+    "tints": [
+      "#9aa3aa",
+      "#b8bcbc",
+      "#7f878e",
+      "#c9c6be"
+    ],
+    "blindTint": "#dcdad4",
+    "blindMax": 0.5
+  },
+  "returnWallTint": "#b2b6ba",
+  "glassModel": {
+    "upper": "glass-sky@9cc0e6",
+    "street": "glass-reflective@a39389"
+  },
+  "lowParts": [
+    {
+      "zMax": -12.0,
+      "heightM": 12.07,
+      "toleranceM": 0.5,
+      "source": "USGS 3DEP Lidar Point Cloud CA_SanFrancisco_B23 tile 05200270 (2023 survey, public domain): returns inside the DataSF footprint gridded at 1 m above the median ground return beside it; the rear 12.9 m strip along the rear edge reads 12.07 m (median of 96-cell rows, whole length), the rest 26.6 m. Step between spec-frame z -13 and -12."
+    }
+  ]
+}

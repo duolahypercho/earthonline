@@ -1,0 +1,22 @@
+{
+ "extends": "sedan",
+ "id": "sedanLuxe",
+ "label": "Executive sedan v3, luxury trim",
+ "typeIds": [
+  "sedanLuxe"
+ ],
+ "wheelStyle": "multi10",
+ "rimRatio": 0.73,
+ "dloTrim": "chrome",
+ "roofDelta": 0.012,
+ "note": "Trim of sedan: chrome window surround, polished multi-spoke wheels, fuller roof line. Collision box and body shared with sedan.",
+ "grilleStyle": {
+  "insert": "none",
+  "bars": 6,
+  "barMat": "chrome",
+  "barFill": 0.3,
+  "barInset": -0.005,
+  "frame": "chrome",
+  "frameW": 0.014
+ }
+}

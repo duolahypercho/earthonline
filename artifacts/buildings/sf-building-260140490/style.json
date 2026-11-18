@@ -1,0 +1,148 @@
+{
+ "seed": 5,
+ "notes": "1922 two-storey deep-navy building with two cant bays, dark bracketed cornice with small cream medallions, painted-brick centre, sloped grey fabric awnings over a glazed shop and over a maroon panelled door beside a roll-up shutter. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. Base fix (2026-10-03): cool/grey wallTint = target / painted-stucco base so the warm stucco albedo does not turn it pink. GroundBand lift (2026-10-03): groundBand tint #445d7c -> #697d96 (same rule as walls; it was missed by the first colour pass).",
+ "streetStills": true,
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-storefront",
+ "wall": "painted-stucco",
+ "windowW": 0.9,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.5,
+ "cornice": true,
+ "corniceProjectionM": 0.8,
+ "beltCourse": true,
+ "ground": "lobby",
+ "upper": "apartment",
+ "wallTint": "#87a9dc",
+ "trim": "painted-white@3d5878",
+ "frame": "painted-white@e8e8e4",
+ "storefrontFrame": "painted-white@2e3a4a",
+ "bulkhead": "painted-stucco@6b7f98",
+ "windowHoods": false,
+ "upperWindows": [
+  0.38,
+  0.5,
+  0.62
+ ],
+ "hbCorniceBrackets": {
+  "spacingM": 0.8,
+  "heightM": 0.4,
+  "depthM": 0.3,
+  "widthM": 0.2,
+  "material": "painted-white",
+  "tint": "#3d5878"
+ },
+ "floorsM": {
+  "groundM": 4.3,
+  "upperM": 3.6
+ },
+ "bays": [
+  {
+   "at": 0.15,
+   "widthM": 3.0,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#87a9dc",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 1,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.85,
+   "widthM": 3.0,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#87a9dc",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 1,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#697d96",
+  "topM": 4.3
+ },
+ "awningSpans": [
+  {
+   "from": 0.0,
+   "to": 0.4,
+   "depthM": 1.2,
+   "valanceM": 0.5,
+   "riseM": 0.62,
+   "dropM": 1.0
+  },
+  {
+   "from": 0.57,
+   "to": 1.0,
+   "depthM": 1.2,
+   "valanceM": 0.5,
+   "riseM": 0.62,
+   "dropM": 1.0
+  }
+ ],
+ "awning": "canvas-plain@6a6c70",
+ "storefront": {
+  "bulkheadM": 0.6,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.04,
+    "to": 0.36,
+    "kind": "window",
+    "headM": 2.9
+   },
+   {
+    "from": 0.62,
+    "to": 0.71,
+    "kind": "door",
+    "headM": 2.6,
+    "leaf": "painted-white@4a1018",
+    "leafClosed": {
+     "panelRows": 4,
+     "panelCols": 2
+    }
+   },
+   {
+    "from": 0.74,
+    "to": 0.95,
+    "kind": "garage",
+    "headM": 2.9
+   }
+  ]
+ }
+}

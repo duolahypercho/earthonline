@@ -1,0 +1,197 @@
+{
+ "seed": 6,
+ "notes": "Wall f3f3f1 (brighter), bay projection 0.8->0.5 so the soffit wedge shrinks to a shallow flat underside, sash frames thickened (0.10), address plaque moved between door and garage, door lamp added. Garage lite grid left at the kit's panel grid (no smaller-lite key). Rework 5: wall clean white ecebe6; bays projection 0.8 (cant, black-framed single lights per facet kept); garage = white panelled glazed-garage with thick white surround, two rows of small square lights across its upper half and a pale grey kerb apron; black grille door kept, darker address plaque above it; ground stays plain (no belt). Rework 4: wall brightened to eceeee; ground stays gated door left / white garage right; house-number plaque over the gate kept. Rework 3: bay faces now carry one tall single black-framed light each (hbBayGlazing, no meeting rail) with a deeper solid apron (sill 0.62 m); wall stays white; number plaque kept at the gate. Skipped: 'ground floor mirrored'; 'garage in a deep white reveal' (the recessed garage kind draws dark reveals only). Rework 2: window frames darkened to near-black steel, house-number plaque above the gated entry. Skipped: 'ground floor mirrored'; centre-face single pane with transom has no kit option. Rework 1: the sectional garage door is a flat painted panel with a row of small glazed lights near the top (the kit's carriage leaf is steel, which a tint only darkens). Rework 1: garage drawn as a white panel sectional door with a glazed top row (no roll-up shutter); bracket cornice removed - plain flat parapet coping flush with the bay tops; no belt course on the smooth ground storey; wall kept very light grey-white. Frames and sashes stay black; the bay centre face keeps the kit's single sash (no transom option). 1914 four-storey house, Hyde east side mid-block. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-white",
+ "wallTint": "#f9f9f8",
+ "trim": "painted-white",
+ "frame": "painted-steel@1c1c1c",
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-clear",
+ "storefrontFrame": "painted-white@2a2a2a",
+ "bulkhead": "painted-white@f9f9f8",
+ "cornice": false,
+ "corniceProjectionM": 0.25,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.8,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.45,
+ "ground": "lobby",
+ "upper": "apartment",
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.26,
+   "widthM": 2.7,
+   "projectionM": 0.5,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f9f9f8"
+  },
+  {
+   "at": 0.74,
+   "widthM": 2.7,
+   "projectionM": 0.5,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f9f9f8"
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.4,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.07,
+    "to": 0.28,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel@222222",
+    "grille": true
+   },
+   {
+    "from": 0.44,
+    "to": 0.8,
+    "kind": "glazed-garage",
+    "material": "painted-white",
+    "tint": "#f4f5f2",
+    "headM": 2.5
+   }
+  ],
+  "headDropM": 1.25
+ },
+ "coping": {
+  "material": "painted-white",
+  "tint": "#f3f3f1",
+  "heightM": 0.25,
+  "projectionM": 0.05
+ },
+ "plaques": [
+  {
+   "at": 0.487,
+   "y": 2.0,
+   "w": 0.2,
+   "h": 0.17,
+   "face": "glass-reflective@7d868c"
+  },
+  {
+   "at": 0.54,
+   "y": 2.0,
+   "w": 0.2,
+   "h": 0.17,
+   "face": "glass-reflective@7d868c"
+  },
+  {
+   "at": 0.593,
+   "y": 2.0,
+   "w": 0.2,
+   "h": 0.17,
+   "face": "glass-reflective@7d868c"
+  },
+  {
+   "at": 0.647,
+   "y": 2.0,
+   "w": 0.2,
+   "h": 0.17,
+   "face": "glass-reflective@7d868c"
+  },
+  {
+   "at": 0.7,
+   "y": 2.0,
+   "w": 0.2,
+   "h": 0.17,
+   "face": "glass-reflective@7d868c"
+  },
+  {
+   "at": 0.753,
+   "y": 2.0,
+   "w": 0.2,
+   "h": 0.17,
+   "face": "glass-reflective@7d868c"
+  },
+  {
+   "at": 0.487,
+   "y": 1.72,
+   "w": 0.2,
+   "h": 0.17,
+   "face": "glass-reflective@7d868c"
+  },
+  {
+   "at": 0.54,
+   "y": 1.72,
+   "w": 0.2,
+   "h": 0.17,
+   "face": "glass-reflective@7d868c"
+  },
+  {
+   "at": 0.593,
+   "y": 1.72,
+   "w": 0.2,
+   "h": 0.17,
+   "face": "glass-reflective@7d868c"
+  },
+  {
+   "at": 0.647,
+   "y": 1.72,
+   "w": 0.2,
+   "h": 0.17,
+   "face": "glass-reflective@7d868c"
+  },
+  {
+   "at": 0.7,
+   "y": 1.72,
+   "w": 0.2,
+   "h": 0.17,
+   "face": "glass-reflective@7d868c"
+  },
+  {
+   "at": 0.753,
+   "y": 1.72,
+   "w": 0.2,
+   "h": 0.17,
+   "face": "glass-reflective@7d868c"
+  },
+  {
+   "at": 0.62,
+   "y": 0.04,
+   "w": 2.6,
+   "h": 0.08,
+   "face": "painted-white@b8b9b6"
+  },
+  {
+   "at": 0.36,
+   "y": 1.65,
+   "w": 0.2,
+   "h": 0.28,
+   "face": "painted-white@4a4a48"
+  },
+  {
+   "at": 0.31,
+   "y": 2.45,
+   "w": 0.1,
+   "h": 0.2,
+   "face": "glass-reflective@e8e2c8"
+  }
+ ],
+ "hbBayGlazing": {
+  "marginM": 0.3,
+  "maxW": 1.2,
+  "sillM": 0.62,
+  "headM": 0.3,
+  "sashM": 0.1,
+  "revealM": 0.1,
+  "meetingRail": false
+ },
+ "streetStills": true,
+ "garagePanels": {
+  "material": "painted-white",
+  "tint": "#f4f5f2",
+  "rows": 2,
+  "cols": 3,
+  "railM": 0.07,
+  "surroundM": 0.2,
+  "surroundTint": "#f2f2ee"
+ }
+}

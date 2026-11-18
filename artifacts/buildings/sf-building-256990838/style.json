@@ -1,0 +1,175 @@
+{
+ "seed": 34,
+ "notes": "1910 white painted-brick flats, seven units. Garage level read as the ground storey plus three upper storeys. Ground: recessed entry with a cast-stone frame at left, an open roll-door bay centre, a plain side door. Storeys 2-3: three window groups with canted bays left/centre and round bays right. Cornice plain. Ground fixed: recessed glazed double entry with steps, a small shopfront with a white awning, a white panel door and a small window; no garage doors. Cornice cut to a modest cap. NOT applied: bays on every upper storey and a full-height corner bay (the round bay already runs both bay storeys). Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. No garage in the model's ground floor (recessed entry now a dark wood door). Heavier bracketed cornice added (projection 0.35 plus brackets).",
+ "wall": "painted-white",
+ "wallTint": "#f5f3ee",
+ "trim": "painted-white@dcd8cc",
+ "frame": "painted-white@dcd8cc",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@dcd8cc",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@f5f3ee",
+ "cornice": true,
+ "corniceProjectionM": 0.35,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.2,
+  0.5,
+  0.85
+ ],
+ "bays": [
+  {
+   "at": 0.17,
+   "widthM": 2.9,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-white",
+   "tint": "#f5f3ee",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   },
+   "toStorey": 3
+  },
+  {
+   "at": 0.5,
+   "widthM": 2.9,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-white",
+   "tint": "#f5f3ee",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   },
+   "toStorey": 3
+  },
+  {
+   "at": 0.85,
+   "widthM": 2.9,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-white",
+   "tint": "#f5f3ee",
+   "hyB": {
+    "plan": "swell",
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2,
+    "cornice": {
+     "projectionM": 0.18,
+     "dentils": false,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   },
+   "toStorey": 3
+  }
+ ],
+ "hbBayGlazing": {
+  "marginM": 0.2,
+  "maxW": 1.05,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#dcd8cc",
+  "sashM": 0.09,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.05,
+    "to": 0.25,
+    "kind": "door",
+    "stair": true,
+    "leaf": "wood-siding@5a3a28"
+   },
+   {
+    "from": 0.3,
+    "to": 0.48,
+    "kind": "window",
+    "headM": 2.3
+   },
+   {
+    "from": 0.55,
+    "to": 0.63,
+    "kind": "door",
+    "leaf": "painted-white@f2efe8"
+   },
+   {
+    "from": 0.82,
+    "to": 0.89,
+    "kind": "window",
+    "headM": 1.6
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.0,
+  "upperM": 3.126
+ },
+ "awning": "canvas-plain@ece8de",
+ "awningSpans": [
+  {
+   "from": 0.29,
+   "to": 0.48,
+   "depthM": 0.9,
+   "valanceM": 0.2
+  }
+ ],
+ "hbCorniceBrackets": {
+  "spacingM": 1.1,
+  "heightM": 0.35,
+  "depthM": 0.25,
+  "widthM": 0.18,
+  "material": "painted-white",
+  "tint": "#f5f3ee"
+ }
+}

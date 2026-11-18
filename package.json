@@ -1,0 +1,14 @@
+{
+  "name": "san-francisco-realtime",
+  "private": true,
+  "version": "0.1.0",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "assets:lock": "node scripts/assets/build-lock.mjs",
+    "assets:lock:merge": "node scripts/assets/build-lock.mjs --merge",
+    "assets:push": "node scripts/assets/assets-push.mjs",
+    "assets:pull": "node scripts/assets/assets-pull.mjs",
+    "verify:asset-lock": "node scripts/verify/verify-asset-lock.mjs"
+  }
+}

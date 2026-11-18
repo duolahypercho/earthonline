@@ -1,0 +1,188 @@
+{
+ "seed": 18,
+ "wall": "painted-stucco",
+ "wallTint": "#9ab6f6",
+ "trim": "painted-white@e4dcc4",
+ "frame": "painted-white@e8e2d0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@3a3f4c",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "corniceProjectionM": 0.55,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.9,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.335,
+  0.63,
+  0.755
+ ],
+ "bays": [
+  {
+   "at": 0.148,
+   "widthM": 2.9,
+   "projectionM": 0.65,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#9ab6f6",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.48,
+   "widthM": 2.9,
+   "projectionM": 0.65,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#9ab6f6",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.89,
+   "widthM": 2.6,
+   "projectionM": 0.65,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#9ab6f6",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.6,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.05,
+    "to": 0.36,
+    "kind": "window",
+    "headM": 3.2,
+    "grille": true
+   },
+   {
+    "from": 0.45,
+    "to": 0.51,
+    "kind": "window",
+    "headM": 2.7
+   },
+   {
+    "from": 0.595,
+    "to": 0.735,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel@2a2c33",
+    "headM": 3.3,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.2,
+      "tint": "#d8d2c0"
+     },
+     "keystone": true
+    }
+   },
+   {
+    "from": 0.76,
+    "to": 0.8,
+    "kind": "window",
+    "headM": 2.6
+   },
+   {
+    "from": 0.84,
+    "to": 0.955,
+    "kind": "window",
+    "headM": 2.6
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "notes": "Eddy-corner flats, slate-blue painted stucco (lifted to the lit tone), six storeys read off the street still: tall dark ground storey with a grilled shopfront left, a dark red frieze above it, three splayed bays (left, centre, right) up every upper storey, a railed steel fire escape right of centre, window pairs between. Ground right of the shop: small window, round-arched stone entry with a keystone between two columns (columns not modelled, surround only), then two windows. Cream trim, shallow cornice. Rework r-eddy: wall deepened to a mid steel blue (lit lum ~0.17), near-charcoal ground storey, red frieze with a thin gold line, white portal columns via hand.py. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Base fix (2026-10-03): cool/grey wallTint = target / painted-stucco base so the warm stucco albedo does not turn it pink. GroundBand lift (2026-10-03): groundBand tint #41444d -> #5e6068 (same rule as walls; it was missed by the first colour pass).",
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#5e6068",
+  "topM": 4.5
+ },
+ "storeysSeen": {
+  "count": 6,
+  "groundM": 4.5
+ },
+ "fireEscape": {
+  "at": 0.7,
+  "widthM": 4,
+  "depthM": 1,
+  "material": "painted-steel@3a3d46"
+ },
+ "hbSignBands": [
+  {
+   "from": 0,
+   "to": 1,
+   "bottomM": 4,
+   "topM": 4.48,
+   "material": "painted-stucco",
+   "tint": "#b03a30"
+  },
+  {
+   "from": 0,
+   "to": 1,
+   "bottomM": 3.9,
+   "topM": 4,
+   "material": "painted-stucco",
+   "tint": "#d4a830"
+  }
+ ]
+}

@@ -1,0 +1,157 @@
+{
+  "builder": "house",
+  "trim": "painted-steel",
+  "frame": "painted-steel",
+  "rearWall": "painted-stucco",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "seed": 22,
+  "storeysSeen": 3,
+  "groundM": 2.7,
+  "roofLevelM": 8.3,
+  "notes": "1496 La Playa at Kirkham (1944 roll, 3 storeys; LiDAR 8.8 m), by eye: a remodelled three-storey corner house in charcoal board-and-batten siding with black-framed windows and a flat roof with a thin dark fascia; ground: a glazed entry door with the house number on the left of a dark panelled garage door, a black slat screen at the corner; upper floors: a large two-light window and a small window per floor on La Playa, stacked windows on the Kirkham side.",
+  "wall": "painted-clapboard",
+  "wallTint": "#3a3d42",
+  "roofForm": {
+    "form": "flat",
+    "eaveM": 0.2,
+    "fasciaM": 0.3,
+    "sideOverhangM": 0.1,
+    "fascia": "painted-steel"
+  },
+  "parapetM": 0.3,
+  "entry": {
+    "from": 0.12,
+    "to": 0.26,
+    "headM": 2.3,
+    "material": "painted-white",
+    "glass": true,
+    "recessM": 0.2
+  },
+  "garages": [
+    {
+      "from": 0.4,
+      "to": 0.82,
+      "headM": 2.2,
+      "material": "painted-steel",
+      "pattern": "panel"
+    }
+  ],
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.12,
+      "to": 0.55,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        2,
+        1
+      ],
+      "frameTint": "#161616"
+    },
+    {
+      "storey": 1,
+      "from": 0.68,
+      "to": 0.86,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        1,
+        2
+      ],
+      "frameTint": "#161616"
+    },
+    {
+      "storey": 2,
+      "from": 0.12,
+      "to": 0.55,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        2,
+        1
+      ],
+      "frameTint": "#161616"
+    },
+    {
+      "storey": 2,
+      "from": 0.68,
+      "to": 0.86,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        1,
+        2
+      ],
+      "frameTint": "#161616"
+    }
+  ],
+  "edgeItems": {
+    "0": [
+      {
+        "storey": 1,
+        "from": 0.2,
+        "to": 0.4,
+        "sill": 0.9,
+        "head": 2.2,
+        "panes": [
+          1,
+          2
+        ]
+      },
+      {
+        "storey": 1,
+        "from": 0.6,
+        "to": 0.8,
+        "sill": 0.9,
+        "head": 2.2,
+        "panes": [
+          1,
+          2
+        ]
+      },
+      {
+        "storey": 2,
+        "from": 0.2,
+        "to": 0.4,
+        "sill": 0.9,
+        "head": 2.2,
+        "panes": [
+          1,
+          2
+        ]
+      },
+      {
+        "storey": 2,
+        "from": 0.6,
+        "to": 0.8,
+        "sill": 0.9,
+        "head": 2.2,
+        "panes": [
+          1,
+          2
+        ]
+      }
+    ]
+  },
+  "streetEdges": {
+    "0": {}
+  }
+}

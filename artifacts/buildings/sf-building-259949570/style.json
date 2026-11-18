@@ -1,0 +1,101 @@
+{
+ "seed": 11,
+ "notes": "Rework r3: off-white wall, dark brown-red window frames, light fire escape, pilasters with capitals between the arches and a full-width balcony slab with white railing over the arcade (hand.py). Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game.",
+ "wall": "painted-stucco",
+ "wallTint": "#f4f2ee",
+ "trim": "painted-white@ece6d6",
+ "frame": "painted-white@5a3e34",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@ece6d6",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@f4f2ee",
+ "cornice": true,
+ "corniceProjectionM": 0.4,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.22
+ ],
+ "bays": [
+  {
+   "at": 0.75,
+   "widthM": 3.4,
+   "projectionM": 0.8,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f4f2ee",
+   "hyB": {
+    "plan": "swell",
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2,
+    "cornice": {
+     "projectionM": 0.2,
+     "dentils": true,
+     "roofRiseM": 0.15
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0,
+     "beltBrackets": true
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.12,
+    "to": 0.3,
+    "kind": "gate",
+    "headM": 3.0,
+    "arch": {
+     "type": "round"
+    }
+   },
+   {
+    "from": 0.36,
+    "to": 0.67,
+    "kind": "window",
+    "headM": 3.0,
+    "arch": {
+     "type": "round"
+    }
+   },
+   {
+    "from": 0.72,
+    "to": 0.91,
+    "kind": "gate",
+    "headM": 3.0,
+    "arch": {
+     "type": "round"
+    }
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.6,
+  "upperM": 3.5
+ },
+ "hbLadderEscape": {
+  "at": 0.2,
+  "widthM": 2.6,
+  "depthM": 0.8,
+  "ladderOffM": 0.7,
+  "dropM": 2.5,
+  "gooseneckM": 0.8,
+  "material": "painted-white@e0dccf"
+ }
+}

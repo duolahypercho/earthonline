@@ -1,0 +1,132 @@
+{
+ "seed": 5,
+ "notes": "r4: rear stair/lift towers (roofBlocks) and rooftop plant units added from the oblique aerials.",
+ "storeysSeen": {
+  "count": 3,
+  "groundM": 5.4,
+  "upperM": 5.4
+ },
+ "wall": "brick-running-bond",
+ "wallTint": "#ffffff",
+ "trim": "cast-stone-trim",
+ "frame": "painted-white@cfd6c4",
+ "glass": "glass-clear",
+ "cornice": true,
+ "corniceProjectionM": 0.4,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 1.3,
+ "windowSillM": 0.95,
+ "windowHeadM": 4.0,
+ "endPierM": 1.3,
+ "upperWindows": [
+  0.115,
+  0.228,
+  0.296,
+  0.398,
+  0.462,
+  0.538,
+  0.602,
+  0.704,
+  0.772,
+  0.885
+ ],
+ "pilasters": {
+  "at": [
+   0.0,
+   1.0
+  ],
+  "widthM": 1.3,
+  "projectionM": 0.12,
+  "material": "limestone-ashlar",
+  "tint": "#ffffff"
+ },
+ "groundBand": {
+  "material": "cast-stone",
+  "tint": "#ffffff",
+  "topM": 1.6
+ },
+ "hbCorniceDentils": {
+  "spacingM": 0.32,
+  "sizeM": 0.16,
+  "tint": "#d8d0bc"
+ },
+ "storefront": {
+  "awning": false,
+  "bulkheadM": 1.6,
+  "transomM": 0.3,
+  "pierM": 0.05,
+  "headDropM": 1.3,
+  "layout": [
+   {
+    "kind": "door",
+    "from": 0.478,
+    "to": 0.522,
+    "leaf": "painted-steel@3a3a38"
+   }
+  ]
+ },
+ "bulkhead": "cast-stone@ffffff",
+ "ground": "office",
+ "upper": "office",
+ "streetEdges": {
+  "2": {
+   "upperWindows": [
+    0.1,
+    0.235,
+    0.37,
+    0.5,
+    0.63,
+    0.765,
+    0.9
+   ],
+   "windowW": 1.3,
+   "endPierM": 1.3,
+   "storefront": {
+    "awning": false,
+    "bulkheadM": 0.3,
+    "transomM": 0.5,
+    "pierM": 0.05,
+    "headDropM": 1.0,
+    "layout": [
+     {
+      "kind": "door",
+      "from": 0.47,
+      "to": 0.53
+     }
+    ]
+   },
+   "groundPunched": {
+    "sillM": 1.7,
+    "headM": 4.2
+   }
+  }
+ },
+ "groundPunched": {
+  "sillM": 1.7,
+  "headM": 4.2
+ },
+ "roofBlocks": [
+  {
+   "at": 0.08,
+   "widthM": 5.0,
+   "depthM": 4.5,
+   "setbackM": 24.0,
+   "material": "painted-stucco",
+   "tint": "#d8cbb0"
+  },
+  {
+   "at": 0.72,
+   "widthM": 5.0,
+   "depthM": 4.5,
+   "setbackM": 24.0,
+   "material": "painted-stucco",
+   "tint": "#d8cbb0"
+  }
+ ],
+ "rooftop": {
+  "units": 5,
+  "seed": 7,
+  "material": "painted-steel-light"
+ }
+}

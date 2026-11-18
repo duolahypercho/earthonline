@@ -1,0 +1,127 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-173886702",
+  "slug": "b173886702",
+  "walkIndex": 9,
+  "street": "Folsom Street",
+  "address": "880;882 Folsom Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 6.02,
+  "storeys": 2,
+  "floors": {
+    "groundM": 2.92,
+    "upperM": 2.5,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1924,
+  "use": "IND",
+  "usage": "commercial",
+  "amenity": null,
+  "shop": null,
+  "facade": "shopfront",
+  "material": "concrete",
+  "frame": {
+    "edgeIndex": 0,
+    "center": {
+      "x": 1436.75,
+      "z": 315.65
+    },
+    "heading": 2.356194,
+    "width": 14.849,
+    "depth": 24.89
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -7.425,
+      "z": 12.445
+    },
+    {
+      "x": 7.425,
+      "z": 12.445
+    },
+    {
+      "x": 7.425,
+      "z": -12.445
+    },
+    {
+      "x": -7.354,
+      "z": -12.374
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -7.425,
+        "z": 12.445
+      },
+      "b": {
+        "x": 7.425,
+        "z": 12.445
+      },
+      "lengthM": 14.849,
+      "role": "front",
+      "partyShare": 0.06
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 7.425,
+        "z": 12.445
+      },
+      "b": {
+        "x": 7.425,
+        "z": -12.445
+      },
+      "lengthM": 24.89,
+      "role": "rear",
+      "partyShare": 0.06
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 7.425,
+        "z": -12.445
+      },
+      "b": {
+        "x": -7.354,
+        "z": -12.374
+      },
+      "lengthM": 14.779,
+      "role": "rear",
+      "partyShare": 0.13
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -7.354,
+        "z": -12.374
+      },
+      "b": {
+        "x": -7.425,
+        "z": 12.445
+      },
+      "lengthM": 24.82,
+      "role": "party",
+      "partyShare": 1
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

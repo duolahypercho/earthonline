@@ -1,0 +1,381 @@
+{
+ "seed": 11,
+ "notes": "1954 six-unit midcentury stucco block at the Bay Street corner, E side of Hyde. Three storeys, flat roof with a thin plain coping, smooth pale khaki-green painted stucco (lit #d4cf9f), white aluminium frames. Hyde front: a wide two-light window near the corner on the upper storeys, a centre window, a narrow stair stack of multi-pane windows at centre-right, a wide window at the far right; ground: small windows and a dark glazed entry door under the stair stack, no garage, no shop. Bay Street face (edge 0) is a windowed flank. The small railed balcony on storey 2 has no key. Wider two-light windows (1.5 m); wall a touch greener (#d0cd94); ground window sills raised; entry leaf dark. Slim metal cap instead of the coping slab; two-light windows with no meeting rail (sashRows 1, sashCols 2); black railed juliet balcony on storey 2 at the centre window (fireEscape to storey 1 only); the stair stack at 0.66 drawn as three closely stacked multi-light windows (flat panels) between the landings over the dark entry door; ground: two small windows and the dark door, with stucco panels under the sills; far-right window kept. The stepped grade has no key. Wall shifted yellow-green (#d3cf96); upper windows are now flush two-light sliders (upperWindowSpans ribbon, mullionM 0.75, no meeting rail, slim sill, 1.1 m tall); stair stack redrawn as a tall 3x4-light window over a small 3x3-light window between the landings; ground windows plain single-light (no mullion, near-zero transom), different sill heights, wider stucco panels hide the frame legs; dark brackets under the storey-2 cage; light coping instead of the dark cap. Mirror claim skipped again; wall nudged yellow-green (#d7d395); tall stair window split into two stacked units by a white rail; leg posts under the storey-2 cage removed; entry door widened to ~0.95 m with an opaque near-black leaf. Steep grade has no key. Wall warmed to lit khaki-olive #d7d395 CONFIRMED; horizontal meeting rail on the twin windows CONFIRMED (sashRows 2); ground windows/door and no far-right window already match; parapet unchanged. Rework: wall d8d4a2, upper windows raised (sill 1.1/head 2.6), fire-escape platform raised to the window sill via fireEscapeLanding, dark entry glazing, taller downhill plinth under the small ground window. Wall nudged to d6d194; left windows shifted/widened (0.035-0.175); storey-1 centre window replaced by a door-height dark French door (plaque) behind the balcony, deck lowered to the floor line, drop ladder removed; ground stucco plaques (seam lines) removed. Diagonal slab brackets have no key. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-stucco",
+ "wallTint": "#eae8ca",
+ "trim": "painted-white@f0efe8",
+ "frame": "painted-white@f0efe8",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f0efe8",
+ "storefrontGlass": "glass-dark",
+ "bulkhead": "painted-stucco@eae8ca",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 1.5,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.3,
+ "bays": [],
+ "storefront": {
+  "bulkheadM": 1.2,
+  "transomM": 0.05,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.16,
+    "to": 0.23,
+    "kind": "window",
+    "headM": 2.9
+   },
+   {
+    "from": 0.43,
+    "to": 0.51,
+    "kind": "window",
+    "headM": 2.5
+   },
+   {
+    "from": 0.615,
+    "to": 0.705,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel@1c1e22",
+    "headM": 2.3
+   }
+  ],
+  "paneM": 9.0
+ },
+ "edgeRoles": {
+  "0": "flank"
+ },
+ "streetEdges": {
+  "0": {
+   "upperWindows": [
+    0.15,
+    0.4,
+    0.62,
+    0.85
+   ],
+   "bays": [],
+   "storefront": {
+    "bulkheadM": 0.9,
+    "transomM": 0.2,
+    "pierM": 0.3,
+    "awning": false,
+    "layout": [
+     {
+      "from": 0.2,
+      "to": 0.3,
+      "kind": "window",
+      "headM": 2.2
+     },
+     {
+      "from": 0.6,
+      "to": 0.7,
+      "kind": "window",
+      "headM": 2.2
+     }
+    ]
+   },
+   "plaques": [],
+   "upperWindowSpans": []
+  }
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "coping": {
+  "heightM": 0.1,
+  "projectionM": 0.03,
+  "material": "painted-stucco",
+  "tint": "#e6e3cc"
+ },
+ "floorsM": {
+  "groundM": 3.9,
+  "upperM": 3.3
+ },
+ "sashRows": 2,
+ "sashCols": 1,
+ "plaques": [
+  {
+   "at": 0.66,
+   "y": 8.14,
+   "w": 1.01,
+   "h": 0.08,
+   "face": "painted-white@f0efe8"
+  },
+  {
+   "at": 0.66,
+   "y": 5.66,
+   "w": 1.01,
+   "h": 0.08,
+   "face": "painted-white@f0efe8"
+  },
+  {
+   "at": 0.6163,
+   "y": 6.9,
+   "w": 0.08,
+   "h": 2.56,
+   "face": "painted-white@f0efe8"
+  },
+  {
+   "at": 0.7037,
+   "y": 6.9,
+   "w": 0.08,
+   "h": 2.56,
+   "face": "painted-white@f0efe8"
+  },
+  {
+   "at": 0.6321,
+   "y": 5.985,
+   "w": 0.257,
+   "h": 0.57,
+   "face": "painted-steel@2e3338"
+  },
+  {
+   "at": 0.6321,
+   "y": 6.595,
+   "w": 0.257,
+   "h": 0.57,
+   "face": "painted-steel@2e3338"
+  },
+  {
+   "at": 0.6321,
+   "y": 7.205,
+   "w": 0.257,
+   "h": 0.57,
+   "face": "painted-steel@2e3338"
+  },
+  {
+   "at": 0.6321,
+   "y": 7.815,
+   "w": 0.257,
+   "h": 0.57,
+   "face": "painted-steel@2e3338"
+  },
+  {
+   "at": 0.66,
+   "y": 5.985,
+   "w": 0.257,
+   "h": 0.57,
+   "face": "painted-steel@2e3338"
+  },
+  {
+   "at": 0.66,
+   "y": 6.595,
+   "w": 0.257,
+   "h": 0.57,
+   "face": "painted-steel@2e3338"
+  },
+  {
+   "at": 0.66,
+   "y": 7.205,
+   "w": 0.257,
+   "h": 0.57,
+   "face": "painted-steel@2e3338"
+  },
+  {
+   "at": 0.66,
+   "y": 7.815,
+   "w": 0.257,
+   "h": 0.57,
+   "face": "painted-steel@2e3338"
+  },
+  {
+   "at": 0.6879,
+   "y": 5.985,
+   "w": 0.257,
+   "h": 0.57,
+   "face": "painted-steel@2e3338"
+  },
+  {
+   "at": 0.6879,
+   "y": 6.595,
+   "w": 0.257,
+   "h": 0.57,
+   "face": "painted-steel@2e3338"
+  },
+  {
+   "at": 0.6879,
+   "y": 7.205,
+   "w": 0.257,
+   "h": 0.57,
+   "face": "painted-steel@2e3338"
+  },
+  {
+   "at": 0.6879,
+   "y": 7.815,
+   "w": 0.257,
+   "h": 0.57,
+   "face": "painted-steel@2e3338"
+  },
+  {
+   "at": 0.66,
+   "y": 5.29,
+   "w": 1.01,
+   "h": 0.08,
+   "face": "painted-white@f0efe8"
+  },
+  {
+   "at": 0.66,
+   "y": 4.51,
+   "w": 1.01,
+   "h": 0.08,
+   "face": "painted-white@f0efe8"
+  },
+  {
+   "at": 0.6163,
+   "y": 4.9,
+   "w": 0.08,
+   "h": 0.86,
+   "face": "painted-white@f0efe8"
+  },
+  {
+   "at": 0.7037,
+   "y": 4.9,
+   "w": 0.08,
+   "h": 0.86,
+   "face": "painted-white@f0efe8"
+  },
+  {
+   "at": 0.6321,
+   "y": 4.653,
+   "w": 0.257,
+   "h": 0.207,
+   "face": "painted-steel@2e3338"
+  },
+  {
+   "at": 0.6321,
+   "y": 4.9,
+   "w": 0.257,
+   "h": 0.207,
+   "face": "painted-steel@2e3338"
+  },
+  {
+   "at": 0.6321,
+   "y": 5.147,
+   "w": 0.257,
+   "h": 0.207,
+   "face": "painted-steel@2e3338"
+  },
+  {
+   "at": 0.66,
+   "y": 4.653,
+   "w": 0.257,
+   "h": 0.207,
+   "face": "painted-steel@2e3338"
+  },
+  {
+   "at": 0.66,
+   "y": 4.9,
+   "w": 0.257,
+   "h": 0.207,
+   "face": "painted-steel@2e3338"
+  },
+  {
+   "at": 0.66,
+   "y": 5.147,
+   "w": 0.257,
+   "h": 0.207,
+   "face": "painted-steel@2e3338"
+  },
+  {
+   "at": 0.6879,
+   "y": 4.653,
+   "w": 0.257,
+   "h": 0.207,
+   "face": "painted-steel@2e3338"
+  },
+  {
+   "at": 0.6879,
+   "y": 4.9,
+   "w": 0.257,
+   "h": 0.207,
+   "face": "painted-steel@2e3338"
+  },
+  {
+   "at": 0.6879,
+   "y": 5.147,
+   "w": 0.257,
+   "h": 0.207,
+   "face": "painted-steel@2e3338"
+  },
+  {
+   "at": 0.66,
+   "y": 6.9,
+   "w": 1.01,
+   "h": 0.1,
+   "face": "painted-white@f0efe8"
+  },
+  {
+   "at": 0.47,
+   "y": 5.1,
+   "w": 0.9,
+   "h": 2.25,
+   "face": "painted-steel@22262b"
+  },
+  {
+   "at": 0.47,
+   "y": 6.3,
+   "w": 1.06,
+   "h": 0.1,
+   "face": "painted-white@f0efe8"
+  },
+  {
+   "at": 0.4235,
+   "y": 5.1,
+   "w": 0.08,
+   "h": 2.3,
+   "face": "painted-white@f0efe8"
+  },
+  {
+   "at": 0.5165,
+   "y": 5.1,
+   "w": 0.08,
+   "h": 2.3,
+   "face": "painted-white@f0efe8"
+  }
+ ],
+ "upperWindowSpans": [
+  [
+   0.035,
+   0.175
+  ],
+  [
+   0.4,
+   0.54
+  ],
+  [
+   0.83,
+   0.97
+  ]
+ ],
+ "upperSillM": 1.1,
+ "upperHeadM": 2.6,
+ "mullionM": 0.75,
+ "sashMaterial": "painted-white@f0efe8",
+ "streetStills": true,
+ "fireEscapeLanding": {
+  "at": 0.47,
+  "widthM": 1.7,
+  "depthM": 0.45,
+  "yM": 4.0,
+  "material": "painted-steel@1e1e1e",
+  "ladderToM": 4.95
+ },
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.035,
+     0.175
+    ],
+    [
+     0.83,
+     0.97
+    ]
+   ],
+   "sillM": 1.1,
+   "headM": 2.6
+  }
+ }
+}

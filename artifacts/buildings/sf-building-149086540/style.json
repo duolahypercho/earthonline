@@ -1,0 +1,155 @@
+{
+  "seed": 1,
+  "notes": "Four-storey 2000 loft: grey metal-framed glazing with mesh balcony guards over a steel roll-up garage door and a recessed entry on the left half; muted yellow stucco with large dark windows on the right half. West 60% a white-grey glazed loft (continuous steel-framed glazing over the silver roll-up), east 40% an olive-yellow stucco panel; no green ground band; reflective glass. East panel muted khaki-tan, not saturated yellow. Stacked recessed balconies with bar railings in a white frame (frameGrid, balcony bays 0.1-0.58, the khaki east panel a wall bay); white on painted-white (painted-stucco read tan). Frame columns moved off the roll-up door (a full-height column split it into two). Street grime: soot at the base, grime, faint wide streaks. Olive-yellow textured stucco ground under peach upper storeys with balconies. Aluminium-grey frame/zone, pale green upper glass.",
+  "wall": "painted-stucco",
+  "wallTint": "#d9ceb2",
+  "trim": "painted-steel-light",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "coping": {
+    "heightM": 0.3,
+    "projectionM": 0.1,
+    "material": "painted-steel-light"
+  },
+  "upperWindowSpans": [
+    [
+      0.12,
+      0.56
+    ],
+    [
+      0.7,
+      0.8
+    ]
+  ],
+  "upperSillM": 0.15,
+  "upperHeadM": 2.3,
+  "mullionM": 1.2,
+  "sashRows": 2,
+  "sashMaterial": "painted-steel-light",
+  "glass": "glass-clear",
+  "storefrontFrame": "anodized-aluminium",
+  "bulkhead": "painted-steel-mid",
+  "ground": "lobby",
+  "upper": "apartment",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.5,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.03,
+        "to": 0.1
+      },
+      {
+        "kind": "garage",
+        "from": 0.12,
+        "to": 0.36,
+        "material": "painted-steel-light",
+        "headM": 3.4
+      },
+      {
+        "kind": "door",
+        "from": 0.38,
+        "to": 0.45,
+        "leaf": "anodized-aluminium",
+        "stair": true
+      },
+      {
+        "kind": "window",
+        "from": 0.47,
+        "to": 0.55
+      },
+      {
+        "kind": "door",
+        "from": 0.62,
+        "to": 0.69,
+        "leaf": "painted-steel"
+      },
+      {
+        "kind": "window",
+        "from": 0.73,
+        "to": 0.79,
+        "headM": 2.6
+      }
+    ]
+  },
+  "weathering": {
+    "patches": {
+      "strength": 0.08,
+      "metres": 1.6,
+      "top": 3.5,
+      "mottle": 0.06
+    },
+    "grime": {
+      "strength": 0.22,
+      "metres": 2.4
+    },
+    "soot": {
+      "height": 1.1,
+      "strength": 0.26
+    },
+    "streak": {
+      "strength": 0.035,
+      "columnMetres": 2.2,
+      "drop": 0.7
+    },
+    "bandStrength": 0.1,
+    "axis": "wall"
+  },
+  "storefrontGlass": "glass-film",
+  "wallZones": [
+    {
+      "from": 0.0,
+      "to": 0.6,
+      "material": "painted-white",
+      "tint": "#c4c8c8"
+    },
+    {
+      "from": 0.6,
+      "to": 1.0,
+      "toY": 4.04,
+      "material": "painted-stucco",
+      "tint": "#cbc47c"
+    },
+    {
+      "from": 0.6,
+      "to": 1.0,
+      "fromY": 4.04,
+      "material": "painted-stucco",
+      "tint": "#dcae86"
+    }
+  ],
+  "glassModel": {
+    "upper": "glass-reflective@a9c9bb",
+    "street": "glass-storefront@8e979d"
+  },
+  "frameGrid": {
+    "columns": [
+      0.1,
+      0.37,
+      0.46,
+      0.58,
+      0.8,
+      1.0
+    ],
+    "columnW": 0.3,
+    "slabEdgeH": 0.15,
+    "projectionM": 0.1,
+    "fromStorey": 1,
+    "pattern": [
+      "balcony",
+      "balcony",
+      "balcony",
+      "wall",
+      "balcony"
+    ],
+    "recessM": 1.2,
+    "rail": "bars",
+    "mullionM": 1.2,
+    "material": "painted-white",
+    "tint": "#b8bcbd",
+    "balconyTint": "#a4a9aa",
+    "frameMaterial": "anodized-aluminium"
+  }
+}

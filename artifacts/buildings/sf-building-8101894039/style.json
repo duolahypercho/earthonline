@@ -1,0 +1,109 @@
+{
+  "builder": "house",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "painted-stucco",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "seed": 32,
+  "storeysSeen": 3,
+  "groundM": 2.7,
+  "roofLevelM": 8.4,
+  "notes": "1512 Great Highway (1948), by eye: a three-storey streamline stucco house in cream with salmon-pink trim at each floor line and a salmon coping on the flat parapet roof; ground: a white panelled garage on the left, a straight exterior stair on the right rising to a recessed entry on the first living storey; upper: large three-light windows over the garage on both floors.",
+  "wall": "painted-stucco",
+  "wallTint": "#ecdcc3",
+  "belts": [
+    1,
+    2
+  ],
+  "beltMaterial": "painted-white",
+  "beltTint": "#d28a78",
+  "coping": "painted-stucco",
+  "roofForm": {
+    "form": "flat",
+    "eaveM": 0.0
+  },
+  "parapetM": 0.47,
+  "streetEdges": {
+    "4": {}
+  },
+  "garages": [
+    {
+      "from": 0.06,
+      "to": 0.55,
+      "headM": 2.2,
+      "material": "painted-white",
+      "pattern": "panel",
+      "lites": 4
+    }
+  ],
+  "gate": {
+    "from": 0.66,
+    "to": 0.9,
+    "headM": 1.1,
+    "material": "painted-steel",
+    "tint": "#e8e2d6"
+  },
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.08,
+      "to": 0.55,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        3,
+        2
+      ]
+    },
+    {
+      "storey": 2,
+      "from": 0.08,
+      "to": 0.55,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        3,
+        2
+      ]
+    },
+    {
+      "storey": 1,
+      "from": 0.68,
+      "to": 0.9,
+      "sill": 0.0,
+      "head": 2.2,
+      "panes": [
+        1,
+        2
+      ]
+    },
+    {
+      "storey": 2,
+      "from": 0.68,
+      "to": 0.9,
+      "sill": 0.85,
+      "head": 2.2,
+      "panes": [
+        1,
+        2
+      ]
+    }
+  ]
+}

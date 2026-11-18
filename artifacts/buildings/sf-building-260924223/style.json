@@ -1,0 +1,1418 @@
+{
+  "seed": 1,
+  "notes": "One DataSF footprint on the Grant/Clay corner that carries two street buildings. South 40% (the Clay corner): grey scored stucco with a deep cream marquee canopy wrapping onto Clay, roller shutters and small shops, fire escape on the Clay face. North 60%: white smooth stucco, ground + 3 storeys of regular punched wood windows, a steel fire escape, a continuous brown canopy over packed souvenir shopfronts with scissor gates and an arched lobby door. Height and storeys from LiDAR + roll (the corner part reads taller on the street; known gap). The corner part gets its deep cream boxed marquee canopy wrapping onto Clay (marqueeSpans, replaces the canvas awning there), a red clay-tile pent eave along its top on both faces with two stepped cream parapet gables on the Grant face (eaveSpans, gables), and a balustraded balcony belt under the top storey (balustradeSpans), and the Clay-face fire escape (sideFireEscapes; the base builder draws the front one only). The white part's continuous canopy becomes a deep brown sheet marquee with a scalloped white valance and soffit lamps (marqueeSpans + canopyValance) instead of a thin awning; every shop window and open scissor gate gets tiered stands packed with colourful stock behind the glass (windowDisplays); the stair lobby door gets its cream plaster arch surround (archBays); gold vertical trim strips at the corner and on the party line between the two street buildings (cornerPilasters); upper windows get warm room backing and part-drawn cream blinds (glassBacking). Stock, brown canopy and shutters rendered near-black because a `@tint` multiplies the kit base and painted-steel is #2b3236 - stock and canopy now multiply painted-white; the two full-bay slatted gates on Grant become open stocked shopfronts with folded scissor gates at their jambs and hanging merchandise. Clay-face and corner shutters are grey horizontal roll-ups (painted-steel-light); the corner marquee reads gold/cream with stepped cornice, gilt beads and rosettes (marqueeTrim); the canopy valance is a fine fringe; the lobby arch is 24-segment with an outer moulding ring; scored joints on the grey corner part; upper windows drop the opaque backing planes for side drapes, sill furniture and pictures (windowDressing); gondola shelving inside the shops (shopGondolas). Typeset sign lettering (Blender built-in DejaVu Sans and bundled Noto Sans CJK, both free licences; generic trade words only), deeper brown Grant canopy with finer valance, muted stock, slim arch, Clay shopfront, lanterns, AC units, grime. The corner part's crown - deeper red clay-tile pent eave on both faces with gold brackets, larger cream scrolled gables, a recessed dark loggia storey with columns behind the balustrade on Grant, and a 0.3 m parapet step (the LiDAR median 15.73 m caps the shell; the footprint's LiDAR peak 21.74 m supports a taller corner that the single-height gate cannot express). White part: paired window groups (7 per storey), one fire escape near 0.72 with a drop ladder, the extra corner-block Grant escape removed, fewer AC units. Coffered ribs on the cream marquee, two projecting blade signs. The corner part repainted pale cream-grey stucco with faint scoring (was reading brown/brick), lighter grime; its crown becomes a tall steep red clay-tile pent roof from the parapet top (1.35 m drop) over a second bracketed tile tier, larger scrolled cream gables standing proud of the tiles, terracotta coping on the parapet step; the white part whiter; the marquee cream/gold instead of saturated yellow; two raised skylight monitors and a few roof units on the deck; upper floors furnished as residential flats (bed, sofa, dresser) instead of the office kit. The red clay-tile pent over the corner part is 2.3 m tall (was 1.35) with its bracket tier moved under it, the cream parapet gables are 25% wider and rise from 2.9 m below the top to the LiDAR +0.5 m cap, and three shop boards take green, cream and blue grounds so the frontage is not one repeated yellow placard. The corner part still cannot stand taller than the white part: the height gate caps every part at the footprint's LiDAR median + 0.5 m. north 60% neutral painted-white (was painted-stucco whose warm kit base read tan/brown), corner part pale grey painted-white@dedede with the scored lines; tone step at 0.40 marks the two buildings. gold corner marquee with rafter soffit, bracketed gold balcony soffits, red corner crests, dark-brown fascia and deeper valance on the white canopy, roll-up shutters and grey scored wall on Clay, dark sash frames, lace curtains, more AC units, goods and grilles, white fire escapes, dark recessed lobby arch.",
+  "wall": "painted-white",
+  "wallTint": "#ffffff",
+  "trim": "cast-stone-trim",
+  "frame": "painted-white@3e2a1c",
+  "glass": "glass-clear",
+  "storefrontGlass": "glass-low-iron",
+  "storefrontFrame": "painted-steel",
+  "bulkhead": "painted-steel-mid",
+  "awning": "painted-steel@5e4632",
+  "cornice": true,
+  "corniceProjectionM": 0.4,
+  "beltCourse": false,
+  "windowHoods": true,
+  "windowW": 1.0,
+  "windowSillM": 0.85,
+  "windowHeadM": 2.4,
+  "wallZones": [
+    {
+      "from": 0.0,
+      "to": 0.4,
+      "material": "painted-white",
+      "tint": "#dedede"
+    }
+  ],
+  "upperWindows": [
+    0.04,
+    0.1,
+    0.17,
+    0.24,
+    0.31,
+    0.37,
+    0.4545,
+    0.4855,
+    0.5295,
+    0.5605,
+    0.6045,
+    0.6355,
+    0.6795,
+    0.7105,
+    0.7545,
+    0.7855,
+    0.8295,
+    0.8605,
+    0.9045,
+    0.9355
+  ],
+  "fireEscape": {
+    "at": 0.72,
+    "widthM": 3.0,
+    "depthM": 0.9,
+    "material": "painted-white@f0efe8"
+  },
+  "storefront": {
+    "bulkheadM": 0.35,
+    "transomM": 0.6,
+    "pierM": 0.4,
+    "awning": false,
+    "layout": [
+      {
+        "from": 0.01,
+        "to": 0.12,
+        "kind": "garage",
+        "material": "painted-steel-light"
+      },
+      {
+        "from": 0.135,
+        "to": 0.2,
+        "kind": "window"
+      },
+      {
+        "from": 0.21,
+        "to": 0.26,
+        "kind": "door"
+      },
+      {
+        "from": 0.27,
+        "to": 0.33,
+        "kind": "window"
+      },
+      {
+        "from": 0.34,
+        "to": 0.395,
+        "kind": "window"
+      },
+      {
+        "from": 0.41,
+        "to": 0.515,
+        "kind": "double-door"
+      },
+      {
+        "from": 0.525,
+        "to": 0.565,
+        "kind": "window"
+      },
+      {
+        "from": 0.575,
+        "to": 0.61,
+        "kind": "door",
+        "stair": true,
+        "leaf": "wood-siding"
+      },
+      {
+        "from": 0.62,
+        "to": 0.735,
+        "kind": "window"
+      },
+      {
+        "from": 0.745,
+        "to": 0.875,
+        "kind": "window"
+      },
+      {
+        "from": 0.885,
+        "to": 0.99,
+        "kind": "window"
+      }
+    ]
+  },
+  "streetEdges": {
+    "1": {
+      "wallTint": "#bdbbb4",
+      "upperWindows": [
+        0.12,
+        0.3,
+        0.48,
+        0.66,
+        0.86
+      ],
+      "storefront": {
+        "layout": [
+          {
+            "from": 0.03,
+            "to": 0.28,
+            "kind": "garage",
+            "material": "painted-steel-light"
+          },
+          {
+            "from": 0.31,
+            "to": 0.54,
+            "kind": "garage",
+            "material": "painted-steel-light"
+          },
+          {
+            "from": 0.56,
+            "to": 0.62,
+            "kind": "door"
+          },
+          {
+            "from": 0.64,
+            "to": 0.79,
+            "kind": "garage",
+            "material": "painted-steel-light"
+          },
+          {
+            "from": 0.82,
+            "to": 0.97,
+            "kind": "garage",
+            "material": "painted-steel-light"
+          }
+        ]
+      }
+    }
+  },
+  "ground": "shop",
+  "upper": "rooms",
+  "upperFit": true,
+  "marqueeSpans": [
+    {
+      "edge": 0,
+      "from": 0.0,
+      "to": 0.4,
+      "depthM": 2.3,
+      "fasciaM": 0.8,
+      "material": "cast-stone-trim@c8952e",
+      "soffit": "cast-stone-trim@e0b050",
+      "ribEveryM": 0.3
+    },
+    {
+      "edge": 1,
+      "from": 0.42,
+      "to": 1.0,
+      "depthM": 2.3,
+      "fasciaM": 0.8,
+      "material": "cast-stone-trim@c8952e",
+      "soffit": "cast-stone-trim@e0b050",
+      "ribEveryM": 0.3
+    },
+    {
+      "edge": 0,
+      "from": 0.405,
+      "to": 1.0,
+      "depthM": 2.2,
+      "fasciaM": 0.75,
+      "material": "painted-white@3e2a1c",
+      "soffit": "cast-stone-trim@e8e0cc",
+      "ribEveryM": 0.9
+    }
+  ],
+  "eaveSpans": [
+    {
+      "edge": 0,
+      "from": 0.0,
+      "to": 0.4,
+      "belowTopM": 0.0,
+      "projectionM": 0.44,
+      "dropM": 2.3,
+      "soffit": "cast-stone-trim@d4a62a",
+      "material": "terracotta@a8321e",
+      "ribEveryM": 0.22
+    },
+    {
+      "edge": 0,
+      "from": 0.0,
+      "to": 0.4,
+      "belowTopM": 2.45,
+      "projectionM": 0.42,
+      "dropM": 0.3,
+      "soffit": "cast-stone-trim@d4a62a",
+      "bracket": "cast-stone-trim@d4a62a",
+      "bracketEveryM": 0.35,
+      "material": "terracotta@a8321e",
+      "ribEveryM": 0.22
+    },
+    {
+      "edge": 1,
+      "from": 0.0,
+      "to": 1.0,
+      "belowTopM": 0.0,
+      "projectionM": 0.44,
+      "dropM": 2.3,
+      "soffit": "cast-stone-trim@d4a62a",
+      "material": "terracotta@a8321e",
+      "ribEveryM": 0.22
+    },
+    {
+      "edge": 1,
+      "from": 0.0,
+      "to": 1.0,
+      "belowTopM": 2.45,
+      "projectionM": 0.42,
+      "dropM": 0.3,
+      "soffit": "cast-stone-trim@d4a62a",
+      "bracket": "cast-stone-trim@d4a62a",
+      "bracketEveryM": 0.35,
+      "material": "terracotta@a8321e",
+      "ribEveryM": 0.22
+    },
+    {
+      "edge": 0,
+      "from": 0.0,
+      "to": 0.4,
+      "belowTopM": 4.05,
+      "projectionM": 0.4,
+      "dropM": 0.35,
+      "soffit": "cast-stone-trim@d4a62a",
+      "bracket": "cast-stone-trim@c8952e",
+      "bracketEveryM": 0.4,
+      "material": "cast-stone-trim@d6d2c8",
+      "ribEveryM": 0.22
+    },
+    {
+      "edge": 1,
+      "from": 0.0,
+      "to": 1.0,
+      "belowTopM": 4.05,
+      "projectionM": 0.4,
+      "dropM": 0.35,
+      "soffit": "cast-stone-trim@d4a62a",
+      "bracket": "cast-stone-trim@c8952e",
+      "bracketEveryM": 0.4,
+      "material": "cast-stone-trim@d6d2c8",
+      "ribEveryM": 0.22
+    }
+  ],
+  "gables": [
+    {
+      "edge": 0,
+      "at": 0.12,
+      "widthM": 6.5,
+      "riseM": 3.4,
+      "fromBelowTopM": 2.9,
+      "material": "cast-stone-trim@f2e8cc",
+      "depthM": 0.36
+    },
+    {
+      "edge": 0,
+      "at": 0.3,
+      "widthM": 6.5,
+      "riseM": 3.4,
+      "fromBelowTopM": 2.9,
+      "material": "cast-stone-trim@f2e8cc",
+      "depthM": 0.36
+    },
+    {
+      "edge": 0,
+      "at": 0.02,
+      "widthM": 4.0,
+      "riseM": 3.4,
+      "fromBelowTopM": 2.9,
+      "material": "terracotta@b8302a",
+      "depthM": 0.36
+    },
+    {
+      "edge": 1,
+      "at": 0.97,
+      "widthM": 4.0,
+      "riseM": 3.4,
+      "fromBelowTopM": 2.9,
+      "material": "terracotta@b8302a",
+      "depthM": 0.36
+    }
+  ],
+  "balustradeSpans": [
+    {
+      "edge": 0,
+      "from": 0.0,
+      "to": 0.4,
+      "y": 11.73,
+      "heightM": 0.9,
+      "projectionM": 0.38,
+      "material": "cast-stone-trim@d6d2c8"
+    },
+    {
+      "edge": 1,
+      "from": 0.0,
+      "to": 1.0,
+      "y": 11.73,
+      "heightM": 0.9,
+      "projectionM": 0.38,
+      "material": "cast-stone-trim@d6d2c8"
+    }
+  ],
+  "sideFireEscapes": [
+    {
+      "edge": 1,
+      "at": 0.74,
+      "widthM": 3.0,
+      "depthM": 0.9,
+      "material": "painted-white@f0efe8"
+    }
+  ],
+  "canopyValance": [
+    {
+      "edge": 0,
+      "from": 0.405,
+      "to": 1.0,
+      "depthM": 2.2,
+      "bottomM": 4.317,
+      "dropM": 0.22,
+      "tabEveryM": 0.16,
+      "material": "painted-white@efece4",
+      "lightsEveryM": 1.2
+    },
+    {
+      "edge": 0,
+      "from": 0.0,
+      "to": 0.4,
+      "depthM": 2.2,
+      "bottomM": 4.317,
+      "dropM": 0.0,
+      "material": "cast-stone-trim@c8952e",
+      "lightsEveryM": 1.2
+    },
+    {
+      "edge": 1,
+      "from": 0.42,
+      "to": 1.0,
+      "depthM": 2.2,
+      "bottomM": 4.317,
+      "dropM": 0.0,
+      "material": "cast-stone-trim@c8952e",
+      "lightsEveryM": 1.2
+    }
+  ],
+  "windowDisplays": [
+    {
+      "edge": 0,
+      "from": 0.135,
+      "to": 0.2,
+      "backM": 0.45,
+      "depthM": 0.9,
+      "tiers": 4,
+      "heightM": 2.2,
+      "palette": [
+        "#8a5a3c",
+        "#cbbd98",
+        "#6a7686",
+        "#a2463a",
+        "#ddd5c2",
+        "#4e5a4a",
+        "#b8995a",
+        "#7a6a80",
+        "#ece6d8",
+        "#3c3c40",
+        "#c07a4a",
+        "#9aa4a0"
+      ],
+      "seed": 1,
+      "stockBase": "painted-white",
+      "standMaterial": "painted-white@8a6a4a"
+    },
+    {
+      "edge": 0,
+      "from": 0.27,
+      "to": 0.33,
+      "backM": 0.45,
+      "depthM": 0.9,
+      "tiers": 4,
+      "heightM": 2.2,
+      "palette": [
+        "#8a5a3c",
+        "#cbbd98",
+        "#6a7686",
+        "#a2463a",
+        "#ddd5c2",
+        "#4e5a4a",
+        "#b8995a",
+        "#7a6a80",
+        "#ece6d8",
+        "#3c3c40",
+        "#c07a4a",
+        "#9aa4a0"
+      ],
+      "seed": 2,
+      "stockBase": "painted-white",
+      "standMaterial": "painted-white@8a6a4a"
+    },
+    {
+      "edge": 0,
+      "from": 0.34,
+      "to": 0.395,
+      "backM": 0.45,
+      "depthM": 0.9,
+      "tiers": 4,
+      "heightM": 2.2,
+      "palette": [
+        "#8a5a3c",
+        "#cbbd98",
+        "#6a7686",
+        "#a2463a",
+        "#ddd5c2",
+        "#4e5a4a",
+        "#b8995a",
+        "#7a6a80",
+        "#ece6d8",
+        "#3c3c40",
+        "#c07a4a",
+        "#9aa4a0"
+      ],
+      "seed": 3,
+      "stockBase": "painted-white",
+      "standMaterial": "painted-white@8a6a4a"
+    },
+    {
+      "edge": 0,
+      "from": 0.525,
+      "to": 0.565,
+      "backM": 0.45,
+      "depthM": 0.9,
+      "tiers": 4,
+      "heightM": 2.2,
+      "palette": [
+        "#8a5a3c",
+        "#cbbd98",
+        "#6a7686",
+        "#a2463a",
+        "#ddd5c2",
+        "#4e5a4a",
+        "#b8995a",
+        "#7a6a80",
+        "#ece6d8",
+        "#3c3c40",
+        "#c07a4a",
+        "#9aa4a0"
+      ],
+      "seed": 4,
+      "stockBase": "painted-white",
+      "standMaterial": "painted-white@8a6a4a"
+    },
+    {
+      "edge": 0,
+      "from": 0.62,
+      "to": 0.735,
+      "backM": 0.45,
+      "depthM": 0.9,
+      "tiers": 4,
+      "heightM": 2.2,
+      "palette": [
+        "#8a5a3c",
+        "#cbbd98",
+        "#6a7686",
+        "#a2463a",
+        "#ddd5c2",
+        "#4e5a4a",
+        "#b8995a",
+        "#7a6a80",
+        "#ece6d8",
+        "#3c3c40",
+        "#c07a4a",
+        "#9aa4a0"
+      ],
+      "seed": 5,
+      "stockBase": "painted-white",
+      "standMaterial": "painted-white@8a6a4a"
+    },
+    {
+      "edge": 0,
+      "from": 0.745,
+      "to": 0.875,
+      "backM": 0.45,
+      "depthM": 0.9,
+      "tiers": 4,
+      "heightM": 2.2,
+      "palette": [
+        "#8a5a3c",
+        "#cbbd98",
+        "#6a7686",
+        "#a2463a",
+        "#ddd5c2",
+        "#4e5a4a",
+        "#b8995a",
+        "#7a6a80",
+        "#ece6d8",
+        "#3c3c40",
+        "#c07a4a",
+        "#9aa4a0"
+      ],
+      "seed": 6,
+      "stockBase": "painted-white",
+      "standMaterial": "painted-white@8a6a4a"
+    },
+    {
+      "edge": 0,
+      "from": 0.885,
+      "to": 0.99,
+      "backM": 0.45,
+      "depthM": 0.9,
+      "tiers": 4,
+      "heightM": 2.2,
+      "palette": [
+        "#8a5a3c",
+        "#cbbd98",
+        "#6a7686",
+        "#a2463a",
+        "#ddd5c2",
+        "#4e5a4a",
+        "#b8995a",
+        "#7a6a80",
+        "#ece6d8",
+        "#3c3c40",
+        "#c07a4a",
+        "#9aa4a0"
+      ],
+      "seed": 7,
+      "stockBase": "painted-white",
+      "standMaterial": "painted-white@8a6a4a"
+    },
+    {
+      "edge": 1,
+      "from": 0.82,
+      "to": 0.97,
+      "backM": 0.45,
+      "depthM": 0.9,
+      "tiers": 4,
+      "heightM": 2.2,
+      "palette": [
+        "#8a5a3c",
+        "#cbbd98",
+        "#6a7686",
+        "#a2463a",
+        "#ddd5c2",
+        "#4e5a4a",
+        "#b8995a",
+        "#7a6a80",
+        "#ece6d8",
+        "#3c3c40",
+        "#c07a4a",
+        "#9aa4a0"
+      ],
+      "seed": 8,
+      "stockBase": "painted-white",
+      "standMaterial": "painted-white@8a6a4a"
+    },
+    {
+      "edge": 1,
+      "from": 0.33,
+      "to": 0.47,
+      "backM": 0.45,
+      "depthM": 0.9,
+      "tiers": 4,
+      "heightM": 2.2,
+      "palette": [
+        "#8a5a3c",
+        "#cbbd98",
+        "#6a7686",
+        "#a2463a",
+        "#ddd5c2",
+        "#4e5a4a",
+        "#b8995a",
+        "#7a6a80",
+        "#ece6d8",
+        "#3c3c40",
+        "#c07a4a",
+        "#9aa4a0"
+      ],
+      "seed": 31,
+      "stockBase": "painted-white",
+      "standMaterial": "painted-white@8a6a4a"
+    }
+  ],
+  "archBays": [
+    {
+      "edge": 0,
+      "at": 0.5925,
+      "widthM": 1.45,
+      "springM": 2.55,
+      "bandM": 0.12,
+      "depthM": 0.15,
+      "material": "cast-stone-trim@4a3222",
+      "segments": 32,
+      "rings": [
+        {
+          "offM": 0.0,
+          "bandM": 0.04,
+          "depthM": 0.1,
+          "material": "cast-stone-trim@c9a24a"
+        }
+      ]
+    }
+  ],
+  "cornerPilasters": [
+    {
+      "edge": 0,
+      "at": 0.0,
+      "widthM": 0.4,
+      "fromM": 4.9,
+      "toM": 15.2,
+      "projM": 0.1,
+      "material": "cast-stone-trim@d8c38a"
+    },
+    {
+      "edge": 1,
+      "at": 1.0,
+      "widthM": 0.4,
+      "fromM": 4.9,
+      "toM": 15.2,
+      "projM": 0.1,
+      "material": "cast-stone-trim@d8c38a"
+    },
+    {
+      "edge": 0,
+      "at": 0.4,
+      "widthM": 0.3,
+      "fromM": 4.9,
+      "toM": 15.0,
+      "projM": 0.08,
+      "material": "cast-stone-trim@d8ccb0"
+    }
+  ],
+  "windowDressing": {
+    "curtain": [
+      "#f2efe6",
+      "#e8e2d2",
+      "#ddd6c4"
+    ],
+    "furniture": [
+      "#7a5a3c",
+      "#5a4030",
+      "#9a7a58",
+      "#e0dcd2"
+    ],
+    "frames": true,
+    "seed": 11
+  },
+  "marqueeTrim": [
+    {
+      "edge": 0,
+      "from": 0.0,
+      "to": 0.4,
+      "depthM": 2.3,
+      "fasciaM": 0.8,
+      "material": "cast-stone-trim@d9a640",
+      "accent": "painted-white@8a2a1e",
+      "rosetteEveryM": 0.9
+    },
+    {
+      "edge": 1,
+      "from": 0.42,
+      "to": 1.0,
+      "depthM": 2.3,
+      "fasciaM": 0.8,
+      "material": "cast-stone-trim@d9a640",
+      "accent": "painted-white@8a2a1e",
+      "rosetteEveryM": 0.9
+    }
+  ],
+  "scissorStacks": [
+    {
+      "edge": 0,
+      "at": 0.529,
+      "widthM": 0.45,
+      "heightM": 3.0,
+      "material": "painted-steel"
+    },
+    {
+      "edge": 0,
+      "at": 0.561,
+      "widthM": 0.45,
+      "heightM": 3.0,
+      "material": "painted-steel"
+    },
+    {
+      "edge": 0,
+      "at": 0.749,
+      "widthM": 0.45,
+      "heightM": 3.0,
+      "material": "painted-steel"
+    },
+    {
+      "edge": 0,
+      "at": 0.871,
+      "widthM": 0.45,
+      "heightM": 3.0,
+      "material": "painted-steel"
+    },
+    {
+      "edge": 0,
+      "at": 0.624,
+      "widthM": 0.45,
+      "heightM": 3.0,
+      "material": "painted-steel"
+    }
+  ],
+  "hangingGoods": [
+    {
+      "edge": 0,
+      "at": 0.435,
+      "cols": 3,
+      "levels": 4,
+      "topM": 3.15,
+      "offM": 0.25,
+      "seed": 1,
+      "palette": [
+        "#2a2a30",
+        "#8a2a2a",
+        "#d8d0c0",
+        "#43506e",
+        "#6a6a60",
+        "#b8a080",
+        "#b85a64",
+        "#f0ece2"
+      ]
+    },
+    {
+      "edge": 0,
+      "at": 0.49,
+      "cols": 3,
+      "levels": 4,
+      "topM": 3.15,
+      "offM": 0.25,
+      "seed": 2,
+      "palette": [
+        "#2a2a30",
+        "#8a2a2a",
+        "#d8d0c0",
+        "#43506e",
+        "#6a6a60",
+        "#b8a080",
+        "#b85a64",
+        "#f0ece2"
+      ]
+    },
+    {
+      "edge": 0,
+      "at": 0.66,
+      "cols": 3,
+      "levels": 4,
+      "topM": 3.15,
+      "offM": 0.25,
+      "seed": 3,
+      "palette": [
+        "#2a2a30",
+        "#8a2a2a",
+        "#d8d0c0",
+        "#43506e",
+        "#6a6a60",
+        "#b8a080",
+        "#b85a64",
+        "#f0ece2"
+      ]
+    },
+    {
+      "edge": 0,
+      "at": 0.8,
+      "cols": 3,
+      "levels": 4,
+      "topM": 3.15,
+      "offM": 0.25,
+      "seed": 4,
+      "palette": [
+        "#2a2a30",
+        "#8a2a2a",
+        "#d8d0c0",
+        "#43506e",
+        "#6a6a60",
+        "#b8a080",
+        "#b85a64",
+        "#f0ece2"
+      ]
+    },
+    {
+      "edge": 0,
+      "at": 0.845,
+      "cols": 3,
+      "levels": 4,
+      "topM": 3.15,
+      "offM": 0.25,
+      "seed": 5,
+      "palette": [
+        "#2a2a30",
+        "#8a2a2a",
+        "#d8d0c0",
+        "#43506e",
+        "#6a6a60",
+        "#b8a080",
+        "#b85a64",
+        "#f0ece2"
+      ]
+    },
+    {
+      "edge": 0,
+      "at": 0.95,
+      "cols": 3,
+      "levels": 4,
+      "topM": 3.15,
+      "offM": 0.25,
+      "seed": 6,
+      "palette": [
+        "#2a2a30",
+        "#8a2a2a",
+        "#d8d0c0",
+        "#43506e",
+        "#6a6a60",
+        "#b8a080",
+        "#b85a64",
+        "#f0ece2"
+      ]
+    },
+    {
+      "edge": 0,
+      "at": 0.16,
+      "cols": 3,
+      "levels": 4,
+      "topM": 3.15,
+      "offM": 0.25,
+      "seed": 20,
+      "palette": [
+        "#2a2a30",
+        "#8a2a2a",
+        "#d8d0c0",
+        "#43506e",
+        "#6a6a60",
+        "#b8a080",
+        "#b85a64",
+        "#f0ece2"
+      ]
+    },
+    {
+      "edge": 0,
+      "at": 0.3,
+      "cols": 3,
+      "levels": 4,
+      "topM": 3.15,
+      "offM": 0.25,
+      "seed": 21,
+      "palette": [
+        "#2a2a30",
+        "#8a2a2a",
+        "#d8d0c0",
+        "#43506e",
+        "#6a6a60",
+        "#b8a080",
+        "#b85a64",
+        "#f0ece2"
+      ]
+    },
+    {
+      "edge": 0,
+      "at": 0.36,
+      "cols": 3,
+      "levels": 4,
+      "topM": 3.15,
+      "offM": 0.25,
+      "seed": 22,
+      "palette": [
+        "#2a2a30",
+        "#8a2a2a",
+        "#d8d0c0",
+        "#43506e",
+        "#6a6a60",
+        "#b8a080",
+        "#b85a64",
+        "#f0ece2"
+      ]
+    },
+    {
+      "edge": 0,
+      "at": 0.7,
+      "cols": 3,
+      "levels": 4,
+      "topM": 3.15,
+      "offM": 0.25,
+      "seed": 23,
+      "palette": [
+        "#2a2a30",
+        "#8a2a2a",
+        "#d8d0c0",
+        "#43506e",
+        "#6a6a60",
+        "#b8a080",
+        "#b85a64",
+        "#f0ece2"
+      ]
+    },
+    {
+      "edge": 0,
+      "at": 0.9,
+      "cols": 3,
+      "levels": 4,
+      "topM": 3.15,
+      "offM": 0.25,
+      "seed": 24,
+      "palette": [
+        "#2a2a30",
+        "#8a2a2a",
+        "#d8d0c0",
+        "#43506e",
+        "#6a6a60",
+        "#b8a080",
+        "#b85a64",
+        "#f0ece2"
+      ]
+    }
+  ],
+  "scoreLines": [
+    {
+      "edge": 0,
+      "from": 0.0,
+      "to": 0.4,
+      "fromM": 5.3,
+      "toM": 11.5,
+      "everyM": 0.62,
+      "material": "painted-white@c4c3be"
+    },
+    {
+      "edge": 1,
+      "from": 0.0,
+      "to": 1.0,
+      "fromM": 0.6,
+      "toM": 11.5,
+      "everyM": 0.62,
+      "material": "painted-white@c4c3be"
+    }
+  ],
+  "shopGondolas": [
+    {
+      "edge": 0,
+      "from": 0.135,
+      "to": 0.2,
+      "offsets": [
+        2.4,
+        4.0
+      ],
+      "heightM": 1.7,
+      "tiers": 4,
+      "depthM": 0.7,
+      "palette": [
+        "#8a5a3c",
+        "#cbbd98",
+        "#6a7686",
+        "#a2463a",
+        "#ddd5c2",
+        "#4e5a4a",
+        "#b8995a",
+        "#7a6a80",
+        "#ece6d8",
+        "#3c3c40",
+        "#c07a4a",
+        "#9aa4a0"
+      ],
+      "stockBase": "painted-white",
+      "standMaterial": "painted-white@9a9a96",
+      "seed": 20
+    },
+    {
+      "edge": 0,
+      "from": 0.27,
+      "to": 0.395,
+      "offsets": [
+        2.4,
+        4.0
+      ],
+      "heightM": 1.7,
+      "tiers": 4,
+      "depthM": 0.7,
+      "palette": [
+        "#8a5a3c",
+        "#cbbd98",
+        "#6a7686",
+        "#a2463a",
+        "#ddd5c2",
+        "#4e5a4a",
+        "#b8995a",
+        "#7a6a80",
+        "#ece6d8",
+        "#3c3c40",
+        "#c07a4a",
+        "#9aa4a0"
+      ],
+      "stockBase": "painted-white",
+      "standMaterial": "painted-white@9a9a96",
+      "seed": 21
+    },
+    {
+      "edge": 0,
+      "from": 0.62,
+      "to": 0.735,
+      "offsets": [
+        2.4,
+        4.0
+      ],
+      "heightM": 1.7,
+      "tiers": 4,
+      "depthM": 0.7,
+      "palette": [
+        "#8a5a3c",
+        "#cbbd98",
+        "#6a7686",
+        "#a2463a",
+        "#ddd5c2",
+        "#4e5a4a",
+        "#b8995a",
+        "#7a6a80",
+        "#ece6d8",
+        "#3c3c40",
+        "#c07a4a",
+        "#9aa4a0"
+      ],
+      "stockBase": "painted-white",
+      "standMaterial": "painted-white@9a9a96",
+      "seed": 22
+    },
+    {
+      "edge": 0,
+      "from": 0.745,
+      "to": 0.875,
+      "offsets": [
+        2.4,
+        4.0
+      ],
+      "heightM": 1.7,
+      "tiers": 4,
+      "depthM": 0.7,
+      "palette": [
+        "#8a5a3c",
+        "#cbbd98",
+        "#6a7686",
+        "#a2463a",
+        "#ddd5c2",
+        "#4e5a4a",
+        "#b8995a",
+        "#7a6a80",
+        "#ece6d8",
+        "#3c3c40",
+        "#c07a4a",
+        "#9aa4a0"
+      ],
+      "stockBase": "painted-white",
+      "standMaterial": "painted-white@9a9a96",
+      "seed": 23
+    },
+    {
+      "edge": 0,
+      "from": 0.885,
+      "to": 0.99,
+      "offsets": [
+        2.4,
+        4.0
+      ],
+      "heightM": 1.7,
+      "tiers": 4,
+      "depthM": 0.7,
+      "palette": [
+        "#8a5a3c",
+        "#cbbd98",
+        "#6a7686",
+        "#a2463a",
+        "#ddd5c2",
+        "#4e5a4a",
+        "#b8995a",
+        "#7a6a80",
+        "#ece6d8",
+        "#3c3c40",
+        "#c07a4a",
+        "#9aa4a0"
+      ],
+      "stockBase": "painted-white",
+      "standMaterial": "painted-white@9a9a96",
+      "seed": 24
+    }
+  ],
+  "windowUnits": [
+    {
+      "edge": 0,
+      "at": 0.6045,
+      "floor": 1
+    },
+    {
+      "edge": 1,
+      "at": 0.48,
+      "floor": 1
+    },
+    {
+      "edge": 0,
+      "at": 0.17,
+      "floor": 2
+    },
+    {
+      "edge": 0,
+      "at": 0.7105,
+      "floor": 1
+    },
+    {
+      "edge": 0,
+      "at": 0.8605,
+      "floor": 2
+    },
+    {
+      "edge": 1,
+      "at": 0.3,
+      "floor": 2
+    },
+    {
+      "edge": 1,
+      "at": 0.66,
+      "floor": 1
+    }
+  ],
+  "grimeStreaks": {
+    "edges": [
+      0,
+      1
+    ],
+    "color": "#a8a397",
+    "lintelColor": "#9c978b",
+    "lengthM": 0.9
+  },
+  "signText": [
+    {
+      "edge": 0,
+      "from": 0.44,
+      "to": 0.575,
+      "y": 3.72,
+      "heightM": 0.95,
+      "standoffM": 0.18,
+      "color": "#f4cc1c",
+      "border": "#c02a1e",
+      "textColor": "#c02a1e",
+      "lines": [
+        "GIFTS  IMPORTS",
+        "禮品百貨"
+      ],
+      "vertical": false
+    },
+    {
+      "edge": 0,
+      "from": 0.404,
+      "to": 0.432,
+      "y": 2.95,
+      "heightM": 2.3,
+      "standoffM": 0.3,
+      "color": "#f4cc1c",
+      "border": "#c02a1e",
+      "textColor": "#c02a1e",
+      "lines": [
+        "中國藝品"
+      ],
+      "vertical": true
+    },
+    {
+      "edge": 0,
+      "from": 0.885,
+      "to": 0.99,
+      "y": 3.7,
+      "heightM": 0.8,
+      "standoffM": 0.18,
+      "color": "#c42a22",
+      "border": "#f0e6d0",
+      "textColor": "#f6f0e2",
+      "lines": [
+        "ARTS & CRAFTS"
+      ],
+      "vertical": false
+    },
+    {
+      "edge": 0,
+      "from": 0.135,
+      "to": 0.26,
+      "y": 3.65,
+      "heightM": 0.6,
+      "standoffM": 0.18,
+      "color": "#1f5a3a",
+      "border": "#e8dcb0",
+      "textColor": "#f2e8c8",
+      "lines": [
+        "SOUVENIRS"
+      ],
+      "vertical": false
+    },
+    {
+      "edge": 0,
+      "from": 0.27,
+      "to": 0.395,
+      "y": 3.65,
+      "heightM": 0.6,
+      "standoffM": 0.18,
+      "color": "#5a2a6a",
+      "border": "#e8d8a0",
+      "textColor": "#f0e8d0",
+      "lines": [
+        "JEWELRY"
+      ],
+      "vertical": false
+    },
+    {
+      "edge": 1,
+      "from": 0.57,
+      "to": 0.79,
+      "y": 3.72,
+      "heightM": 0.9,
+      "standoffM": 0.18,
+      "color": "#f6f2ea",
+      "border": "#3a3a3a",
+      "textColor": "#1e1e1e",
+      "lines": [
+        "BOUTIQUE"
+      ],
+      "vertical": false
+    },
+    {
+      "edge": 1,
+      "from": 0.8,
+      "to": 0.87,
+      "y": 3.35,
+      "heightM": 1.3,
+      "standoffM": 0.22,
+      "color": "#e0582a",
+      "border": "#f2d24a",
+      "textColor": "#fff4d8",
+      "lines": [
+        "雜貨"
+      ],
+      "vertical": true
+    },
+    {
+      "edge": 1,
+      "from": 0.88,
+      "to": 0.97,
+      "y": 3.7,
+      "heightM": 0.7,
+      "standoffM": 0.18,
+      "color": "#f2c21e",
+      "border": "#b8261c",
+      "textColor": "#b8261c",
+      "lines": [
+        "GROCERY"
+      ],
+      "vertical": false
+    },
+    {
+      "edge": 1,
+      "from": 0.33,
+      "to": 0.54,
+      "y": 3.72,
+      "heightM": 0.7,
+      "standoffM": 0.18,
+      "color": "#2a4a8a",
+      "border": "#f0e6d0",
+      "textColor": "#f6f0e2",
+      "lines": [
+        "LUGGAGE  BAGS"
+      ],
+      "vertical": false
+    },
+    {
+      "edge": 0,
+      "from": 0.615,
+      "to": 0.74,
+      "y": 3.72,
+      "heightM": 0.95,
+      "standoffM": 0.18,
+      "color": "#f2ece0",
+      "border": "#8a2a22",
+      "textColor": "#8a2a22",
+      "lines": [
+        "T-SHIRTS  CAPS",
+        "服裝"
+      ],
+      "vertical": false
+    }
+  ],
+  "canopyLanterns": [
+    {
+      "edge": 0,
+      "from": 0.41,
+      "to": 0.99,
+      "everyM": 3.0,
+      "offM": 2.05,
+      "topM": 4.317,
+      "dropM": 0.08
+    },
+    {
+      "edge": 0,
+      "from": 0.01,
+      "to": 0.39,
+      "everyM": 3.0,
+      "offM": 2.05,
+      "topM": 4.317,
+      "dropM": 0.08
+    }
+  ],
+  "fireLadder": {
+    "edge": 0,
+    "at": 0.75,
+    "bottomM": 3.2,
+    "widthM": 0.45,
+    "offM": 0.8,
+    "material": "painted-white@f0efe8"
+  },
+  "crownParapet": [
+    {
+      "edge": 0,
+      "from": 0.0,
+      "to": 0.4,
+      "riseM": 0.3,
+      "thickM": 0.3,
+      "material": "painted-white@dedede",
+      "cap": "terracotta@a8321e"
+    },
+    {
+      "edge": 1,
+      "from": 0.0,
+      "to": 1.0,
+      "riseM": 0.3,
+      "thickM": 0.3,
+      "material": "painted-white@dedede",
+      "cap": "terracotta@a8321e"
+    }
+  ],
+  "loggiaSpans": [
+    {
+      "edge": 0,
+      "from": 0.012,
+      "to": 0.392,
+      "y0": 12.0,
+      "y1": 13.95,
+      "recessColor": "#2a241e",
+      "columnEveryM": 1.9,
+      "columnM": 0.32,
+      "material": "cast-stone-trim@e6dcc0",
+      "capital": "cast-stone-trim@c9a24a"
+    }
+  ],
+  "bladeSigns": [
+    {
+      "edge": 0,
+      "at": 0.405,
+      "bottomM": 0.15,
+      "heightM": 2.2,
+      "face": "painted-white@f4cc1c"
+    },
+    {
+      "edge": 0,
+      "at": 0.985,
+      "bottomM": 0.15,
+      "heightM": 1.8,
+      "face": "painted-white@c42a22"
+    }
+  ],
+  "roofMonitors": [
+    {
+      "u": 0.62,
+      "v": 0.45,
+      "widthM": 3.2,
+      "depthM": 2.0,
+      "heightM": 0.55
+    },
+    {
+      "u": 0.3,
+      "v": 0.55,
+      "widthM": 2.2,
+      "depthM": 1.6,
+      "heightM": 0.5
+    }
+  ],
+  "rooftop": {
+    "units": 6,
+    "seed": 7,
+    "material": "painted-steel-light"
+  },
+  "upperFlats": {
+    "count": 5,
+    "corridorM": 1.3
+  }
+}

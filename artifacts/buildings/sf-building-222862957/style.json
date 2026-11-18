@@ -1,0 +1,561 @@
+{
+ "seed": 3,
+ "notes": "Bays back to canted three-sash bays (glass drums removed); warmer mustard ochre wall #b08a48; warm brown tile bulkheads with fine grout; cornice brackets smaller and further apart under the dentil course; bays bowed (roundCorners 3) and glazed with sash-bar panes (paneM 0.45) in white frames; partCornice deeper (1.6 m, proj 0.6) with smaller, closer paired brackets; floor stack 4.2 ground / 4.1 upper (~1:1 storeys, same 8.3 m); stucco repaint patches removed (even colour, only sill streaks and soot); sign fascias in varied deep tones (green, cream-edged dark, oxblood, navy) instead of four black boxes; interior: salon and bar rebuilt with fitted kits (unitKits19: mirrors at styling stations, basin, product shelves, reception; back bar with bottle shelves, stone counter, stools) and the plant/lounge-chair strays that rendered as floating shards removed; picture rails walnut not black. Data: spec/style keep 2 storeys + LiDAR 9.79 m; spec material stays as generated (painted stucco is the style wall). Tile pent lowered (rise 0.4 -> 0.26, bay 0.16); window frames and corner sashes white with the red kept on the surrounds and cornice (were solid red); fewer, irregular upper openings (two removed); a yellow awning on the middle shop and a deeper blue one; wider blade sign. Identity resolved against data: the DataSF footprint is ONE 21 m polygon and one assessor record, so the tile corner part and the bracketed-bay part both belong to this building (dossier line about a separate bay neighbour was wrong). Dark red sash frames with divided upper lights, a mullioned sash pair and curtains; upper-left volume reset to a single, a small balcony window and a wide sash pair with more plain wall; storefront doors in 1.0 m recessed entries with tiled floors and glazed returns; grout-lined tile bulkheads; bays project 0.8 m and stop lower under the frieze; heavier paired brackets; library furniture embedded in the fine storeys (the runtime ignores lib: empties); a rug in every flat. Floor stack 4.5 m ground / 3.8 m upper; two volumes along Castro: the corner-side ~46 % keeps the clay-tile pent roof, a plain wall and a thin band, the far ~54 % alone carries the bays under a deeper bracketed eave; rounded corner bay with more facets and tall arch-headed sashes under the wrapping tile eave; upper sashes shorter (sill 0.8, head 2.75) with darker room-tone backing (fewer pale blinds) so the white double-hung frames and meeting rails read; brighter green shopfront piers; divan base under every bed (no lifted mattress). Upper windows shorter and wider (sill 1.05, head 3.15 over the 4.2 upper storey, 1.2 m wide) under a deep plain frieze; the two Castro bays are lower (bayRoofDropM 0.55) and shallower so they sit under the frieze, not up into the roofline; the bracketed cornice is a deep plain frieze with one thin oxblood moulding and small paired brackets (pairGapM), no drop blocks, no dentils; the tile part (corner third + 17th face + corner bay) is a separate lower volume: tile lip 8.05 m and hipped rise, so the two-part composition reads; ground floor gets a tall black sign board per unit (boardM 1.0, head drop 1.25) with the awnings hung under the board; dark stone bulkheads; darker rooms and curtains behind the upper glass; corner door dark green; stronger weathering contrast. Interiors: oak/tile floors and a ceiling in every unit and flat, stools on the pizzeria counter, lounge corner in the bar, nightstand/lamp/frames/coffee table in the flats. Sill streaks, soot band under the cornice, faded repaint patches); raised barrel-tile rows on the pent and the corner-bay eave (tileBarrels) with a taller rise so the tile hip has relief; the two Castro bays are deeper canted three-sash bays (0.8 m, 2.9 m wide) under heavier scroll brackets with no dentil teeth; corner bay gets plain square-headed sashes; awnings over four of the five units, deep-red corner-bar door; deeper window surrounds; mixed room tones behind the glass (curtains and dark rooms, not uniform bright panes). Interiors: per-unit wall paint, wainscot and picture rail (unitDress), the units become a market, a hair salon, a pizzeria counter and the corner bar; flats get painted walls and a desk / armchair / dresser each (flatDress). Floor stack stays the photograph-fitted 4.1/4.2 (spec 5.97/3.22 is make-spec's heuristic, not a measurement. LiDAR 9.79 shellTop is the only measured height and still holds). Not fixable in this building: missing south neighbour, 17th St context, trolley wires. The kit's awning-canvas is a fixed red/cream stripe in the runtime (tint ignored), so both unit awnings went back to tinted painted-white; wall toned from #a88541 (read chrome-yellow in game) to #9a7a40. The tile corner part is now t 0.0.45 with only three irregular openings (a small high single, a single, one wide triple) instead of an even grid; the bracketed-cornice part t 0.45.1 reads window, balconette, canted three-light bay, a narrow sash, canted bay against the theatre (the bays no longer touch). Warmer saturated ochre wall. Tile pent faded red-brown (not salmon, not crimson) with a lower lip (8.8 m) so the slope reads as depth. Storefront: navy canvas awning and a mustard canvas awning on separate units, two blade signs, lighter stone bulkheads, glazed corner-bar entry on the chamfer (was a blank panel door). Corner bay: four wider facets so the windows read as tall round-headed sashes, not lancets. DATA RECONCILIATION: spec floors (ground 5.97 / upper 3.22) come from make-spec's civic tallGround heuristic, not a measurement; the only measured height is LiDAR shellTop 9.79 m, which the build still hits exactly. The Castro frontage is the spec frame width 20.84 m (earlier notes' '19 m' was the storefront run, not the lot). The exposed south return wall is the world gap W1 (the neighbouring two-storey Italianate is not built yet); in reality that neighbour abuts it. The 19 m Castro front is two frontages on one footprint - the corner part (edge 4, t 0.0.47 from the corner) keeps the clay-tile pent (weathered brown-red, lip 9.0 m, small rise) over the corner bay and the 17th face; the south part (t 0.47.1) gets two canted three-light bays on the upper storey under a flat bracketed cornice (partCornice) with a balconette and a single sash beside them; the cornice returns on the exposed south wall, which gets its own weathered render skin, flashing, plinth and downpipe (returnWall). Warmer ochre wall, near-black continuous sign fascias, cast-stone bulkheads, one navy awning, taller and wider upper sashes, floor stack 4.1/4.2, rounder six-facet corner bay. Thin low-pitch clay-tile pent (lip 9.30 m, no rise; ~0.5 m band, was ~2.3 m) over the slim dentil cornice; floor stack 4.3/3.9 so the belt and upper windows sit lower and the frieze reads slim; muted ochre wall; cornice and pent return onto the exposed south side wall; ground units cafe/cafe/fast-food/bar (no grocery shelving); upper storey as five small flats. Squat floor stack (ground 4.0 m, upper 3.7 m); tall sloped clay-tile band in two steps (higher corner section over 17th and the corner bay, lower run to the south) with tile courses, ridge roll and rafter tails; projecting cornice band with dentils under it; irregular upper openings (single double-hungs at uneven spacing, a wide triple window, a small balcony with a wrought-iron railing; two balconies on 17th) in heavy dark-red surrounds with moulded heads; wider four-facet corner bay with arched windows; per-unit shopfronts with separate sign boards, a yellow and a blue canvas awning, two blank blade signs, gooseneck lamps, brown tile bulkheads; house-number plaque, door lamp, conduit and meter box; float-finish stucco; a fast-food counter unit. Mission-revival clay-tile pent eave on both street faces and around the corner bay (tileEave); bowed corner bay across the chamfer with tall arch-headed windows (cornerBay); dark green storefront piers (storefrontPiers); denser taller upper windows; muted ochre wall with red trim; ground split into a corner bar, two small shops and a small cafe (groundUnits); upper storey as four small flats plus a hall off a rear corridor (upperFlats). 2-storey 1901 corner mixed-use, SE corner of Castro Street and 17th Street. Mustard-ochre smooth stucco, Mission-revival red clay-tile pent eave along both street faces, flat roof. Upper storey: irregular punched double-hung windows in white frames and a rounded corner bay with tall windows at the chamfer; 17th Street face two windows. Ground: continuous shopfronts with dark green piers and frames, dark sign fascia band over them, dark tile bulkheads, a corner bar glazed around the chamfer, a blue canvas awning mid-run, a stair door to the flats near the south end. Signage kind only.",
+ "wall": "float-finish-stucco",
+ "wallTint": "#b08a48",
+ "trim": "terracotta@8e3427",
+ "cornice": false,
+ "corniceProjectionM": 0.4,
+ "beltCourse": true,
+ "windowHoods": false,
+ "frame": "painted-steel@ece6d8",
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-storefront",
+ "storefrontFrame": "painted-steel@2c4636",
+ "bulkhead": "cast-stone@6e4630",
+ "awning": "awning-canvas@1f3f8a",
+ "windowW": 1.2,
+ "windowSillM": 0.8,
+ "windowHeadM": 2.75,
+ "upperWindows": [
+  0.1,
+  0.215,
+  0.33,
+  0.445,
+  0.56,
+  0.675,
+  0.79,
+  0.93
+ ],
+ "edgeRoles": {
+  "0": "party",
+  "1": "party",
+  "2": "flank",
+  "3": "flank"
+ },
+ "glassBacking": {
+  "material": "painted-white",
+  "kinds": [
+   "punched",
+   "bay"
+  ],
+  "tints": [
+   "#3a332e",
+   "#4a4038",
+   "#2e2824",
+   "#6e5f4e",
+   "#3a332e"
+  ],
+  "depthM": 0.35,
+  "blindTint": "#cfc6b4",
+  "blindMax": 0.3
+ },
+ "ground": "restaurant",
+ "upper": "apartment",
+ "storefront": {
+  "awning": false,
+  "headDropM": 1.25,
+  "bulkheadM": 0.7,
+  "transomM": 0.55,
+  "pierM": 0.35,
+  "layout": [
+   {
+    "kind": "window",
+    "from": 0.0,
+    "to": 0.12
+   },
+   {
+    "kind": "door",
+    "from": 0.125,
+    "to": 0.18,
+    "leaf": "painted-steel@2c4636"
+   },
+   {
+    "kind": "window",
+    "from": 0.2,
+    "to": 0.34
+   },
+   {
+    "kind": "door",
+    "from": 0.345,
+    "to": 0.4,
+    "leaf": "painted-steel@2c4636"
+   },
+   {
+    "kind": "window",
+    "from": 0.42,
+    "to": 0.56
+   },
+   {
+    "kind": "door",
+    "from": 0.565,
+    "to": 0.62,
+    "leaf": "painted-steel@2c4636"
+   },
+   {
+    "kind": "window",
+    "from": 0.63,
+    "to": 0.72
+   },
+   {
+    "kind": "door",
+    "from": 0.725,
+    "to": 0.78,
+    "leaf": "painted-steel@2c4636"
+   },
+   {
+    "kind": "door",
+    "from": 0.83,
+    "to": 0.88,
+    "leaf": "wood-siding@5a3a24",
+    "stair": true
+   },
+   {
+    "kind": "window",
+    "from": 0.9,
+    "to": 0.99
+   }
+  ]
+ },
+ "streetEdges": {
+  "2": {
+   "upperWindows": [
+    0.3,
+    0.72
+   ],
+   "storefront": {
+    "layout": [
+     {
+      "kind": "window",
+      "from": 0.05,
+      "to": 0.45
+     },
+     {
+      "kind": "door",
+      "from": 0.5,
+      "to": 0.62,
+      "leaf": "painted-steel@2c4636"
+     },
+     {
+      "kind": "window",
+      "from": 0.66,
+      "to": 0.98
+     }
+    ]
+   },
+   "upperOpenings": [
+    {
+     "at": 0.42,
+     "w": 0.9,
+     "kind": "balcony"
+    },
+    {
+     "at": 0.78,
+     "w": 0.9,
+     "kind": "balcony"
+    }
+   ],
+   "bays": []
+  },
+  "3": {
+   "upperWindows": [],
+   "storefront": {
+    "layout": [
+     {
+      "kind": "window",
+      "from": 0.02,
+      "to": 0.3
+     },
+     {
+      "kind": "door",
+      "from": 0.34,
+      "to": 0.66,
+      "leaf": "painted-steel@233a2c"
+     },
+     {
+      "kind": "window",
+      "from": 0.7,
+      "to": 0.98
+     }
+    ]
+   },
+   "upperOpenings": null,
+   "bays": []
+  }
+ },
+ "floorStack": {
+  "groundM": 4.2,
+  "upperM": 4.1
+ },
+ "cornerBay": {
+  "edge": 3,
+  "extendM": 1.0,
+  "sagittaM": 1.25,
+  "segments": 6,
+  "windowW": 1.0,
+  "sillM": 0.75,
+  "headM": 2.85,
+  "corbelM": 0.45,
+  "belowTopM": 0.95,
+  "frame": "painted-steel",
+  "frameTint": "#ece6d8",
+  "archWindows": true
+ },
+ "storefrontPiers": {
+  "material": "painted-steel",
+  "tint": "#2f5540",
+  "widthM": 0.42,
+  "depthM": 0.1
+ },
+ "upperFlats": {
+  "count": 5,
+  "corridorM": 1.3
+ },
+ "groundUnits": {
+  "splitAt": [
+   0.19,
+   0.41,
+   0.625
+  ],
+  "kinds": [
+   "shop",
+   "shop",
+   "fastfood",
+   "bar"
+  ]
+ },
+ "upperOpenings": [
+  {
+   "at": 0.075,
+   "w": 0.75,
+   "sillM": 1.05
+  },
+  {
+   "at": 0.2,
+   "w": 0.8,
+   "kind": "balcony",
+   "sillM": 0.95,
+   "depthM": 0.3
+  },
+  {
+   "at": 0.345,
+   "w": 1.9
+  },
+  {
+   "at": 0.6,
+   "w": 1.05,
+   "kind": "balcony"
+  }
+ ],
+ "windowSurrounds": {
+  "widthM": 0.18,
+  "projM": 0.1,
+  "headM": 0.32,
+  "headProjM": 0.2
+ },
+ "tileRoof": {
+  "sections": [
+   {
+    "edge": 4,
+    "from": 0.0,
+    "to": 0.46,
+    "lipM": 8.05,
+    "riseM": 0.26
+   },
+   {
+    "edge": 2,
+    "from": 0.0,
+    "to": 1.0,
+    "lipM": 8.05,
+    "riseM": 0.26
+   }
+  ],
+  "bay": {
+   "lipM": 8.05,
+   "riseM": 0.16
+  },
+  "projectionM": 0.32,
+  "material": "terracotta@8e5a48",
+  "courseMaterial": "terracotta@62382b",
+  "courseEveryM": 0.14,
+  "ribEveryM": 0.2,
+  "bracket": "wood-siding@4a2e1c",
+  "bracketEveryM": 0.9
+ },
+ "corniceBand": {
+  "belowLipM": 0.08,
+  "heightM": 0.3,
+  "projM": 0.2,
+  "dentilEveryM": 99
+ },
+ "shopUnits": [
+  {
+   "from": 0.0,
+   "to": 0.19,
+   "fascia": "#2f5540",
+   "panel": "#23201c",
+   "blade": {
+    "at": 0.03,
+    "face": "#e8dcc0"
+   },
+   "boardM": 1.0
+  },
+  {
+   "from": 0.19,
+   "to": 0.41,
+   "fascia": "#3a2f26",
+   "boardM": 1.0,
+   "awning": "painted-white@1d3378",
+   "awningDepthM": 1.2,
+   "awningDropM": 0.05
+  },
+  {
+   "from": 0.41,
+   "to": 0.625,
+   "fascia": "#6a2a24",
+   "panel": "#1c1c1c",
+   "boardM": 1.0,
+   "awning": "painted-white@d4a020",
+   "awningDepthM": 1.1,
+   "awningDropM": 0.05
+  },
+  {
+   "from": 0.625,
+   "to": 0.8,
+   "fascia": "#1f3355",
+   "panel": "#201d1a",
+   "blade": {
+    "at": 0.7,
+    "face": "#d9d2c2",
+    "edge": "#1a1a1a"
+   },
+   "boardM": 1.0
+  },
+  {
+   "from": 0.89,
+   "to": 1.0,
+   "fascia": "#2a2a2a",
+   "boardM": 1.0
+  }
+ ],
+ "streetDetail": {
+  "plaqueAt": 0.855,
+  "conduitAt": 0.795,
+  "meterAt": 0.81
+ },
+ "bays": [
+  {
+   "at": 0.705,
+   "widthM": 2.7,
+   "projectionM": 0.8,
+   "fromStorey": 1,
+   "toStorey": 1,
+   "material": "float-finish-stucco",
+   "tint": "#b08a48",
+   "frame": "painted-steel",
+   "frameTint": "#ece6d8"
+  },
+  {
+   "at": 0.915,
+   "widthM": 2.7,
+   "projectionM": 0.8,
+   "fromStorey": 1,
+   "toStorey": 1,
+   "material": "float-finish-stucco",
+   "tint": "#b08a48",
+   "frame": "painted-steel",
+   "frameTint": "#ece6d8"
+  }
+ ],
+ "partCornice": [
+  {
+   "edge": 4,
+   "from": 0.46,
+   "to": 1.0,
+   "heightM": 1.5,
+   "projM": 0.6,
+   "bracketEveryM": 1.1,
+   "material": "float-finish-stucco",
+   "tint": "#b08a48",
+   "bandMaterial": "terracotta@7a2c22",
+   "bracketW": 0.12,
+   "bracketH": 0.3,
+   "pairGapM": 0.16,
+   "mouldM": 0.12
+  },
+  {
+   "edge": 0,
+   "from": 0.0,
+   "to": 1.0,
+   "heightM": 1.45,
+   "projM": 0.28,
+   "bracketEveryM": 0.8,
+   "material": "float-finish-stucco",
+   "tint": "#b08a48",
+   "bandMaterial": "terracotta@7a2c22",
+   "bracketW": 0.08,
+   "bracketH": 0.28,
+   "pairGapM": 0.22,
+   "mouldM": 0.07
+  }
+ ],
+ "returnWall": {
+  "edge": 0,
+  "material": "painted-stucco",
+  "tint": "#8c7a5e",
+  "plinthTint": "#5b4f40",
+  "flashingM": 0.16,
+  "downpipeAt": 0.12
+ },
+ "tileBarrels": {
+  "everyM": 0.21,
+  "heightM": 0.065,
+  "widthM": 0.13,
+  "material": "terracotta@9a6450",
+  "noseMaterial": "terracotta@5e3528"
+ },
+ "wallWeather": {
+  "edges": [
+   4,
+   2
+  ],
+  "seed": 12,
+  "streakTint": "#6c5c44",
+  "sootTint": "#554837",
+  "sootTopM": 8.45,
+  "sootM": 0.5,
+  "patchTints": [
+   "#bb9a5c",
+   "#9d8350",
+   "#b3935a"
+  ],
+  "patchesPerGap": 0
+ },
+ "unitDress": [
+  {
+   "kind": "market",
+   "wallMat": "int-r12-cream",
+   "wainscotMat": "int-r12-green",
+   "railMat": "int-r12-walnut",
+   "floorMat": "int-r13-tile"
+  },
+  {
+   "kind": "salon19",
+   "wallMat": "int-r12-rose",
+   "railMat": "int-r12-walnut"
+  },
+  {
+   "wallMat": "int-r12-terracotta",
+   "wainscotMat": "int-r12-walnut",
+   "railMat": "int-r12-walnut",
+   "stools": true
+  },
+  {
+   "wallMat": "int-r12-oxblood",
+   "wainscotMat": "int-r12-walnut",
+   "railMat": "int-r12-walnut",
+   "more": []
+  }
+ ],
+ "flatDress": [
+  {
+   "wallMat": "int-r12-sage",
+   "extra": "desk",
+   "more": [
+    "nightstand",
+    "desk-lamp",
+    "coffee-table",
+    "frame-a"
+   ]
+  },
+  {
+   "wallMat": "int-r12-blue",
+   "extra": "lounge",
+   "more": [
+    "nightstand",
+    "frame-c",
+    "coffee-table",
+    "frame-b"
+   ]
+  },
+  {
+   "wallMat": "int-r12-cream",
+   "extra": "dresser",
+   "more": [
+    "nightstand",
+    "desk-lamp",
+    "sofa",
+    "frame-c"
+   ]
+  },
+  {
+   "wallMat": "int-r12-rose",
+   "extra": "desk",
+   "more": [
+    "nightstand",
+    "frame-c",
+    "coffee-table",
+    "frame-a"
+   ]
+  },
+  {
+   "wallMat": "int-r12-sage",
+   "extra": "lounge",
+   "more": [
+    "nightstand",
+    "side-table",
+    "coffee-table",
+    "frame-b"
+   ]
+  }
+ ],
+ "bayRoofDropM": 0.95,
+ "interiorFloor": {
+  "unitMat": "int-r13-oak",
+  "flatMat": "int-r13-oak",
+  "ceilingMat": "int-r13-ceiling"
+ },
+ "bedDivan": {
+  "material": "int-wood",
+  "heightM": 0.34,
+  "insetM": 0.04
+ },
+ "embedFurniture": true,
+ "flattenLibMaterials": true,
+ "sashLights": {
+  "upperCols": 2,
+  "upperRows": 1,
+  "lowerCols": 1,
+  "barM": 0.035,
+  "mullionMinW": 1.5,
+  "mullionM": 0.16,
+  "curtains": {
+   "tints": [
+    "#e8dfcc",
+    "#d6c3a0",
+    "#b79f7a",
+    "#efe8da"
+   ],
+   "widthFrac": 0.26
+  }
+ },
+ "entryRecess": {
+  "depthM": 1.0,
+  "floor": "cast-stone@7d766c"
+ },
+ "bulkheadTile": {
+  "everyM": 0.15,
+  "rowsM": [
+   0.35
+  ],
+  "grout": "painted-steel@2e2822"
+ },
+ "flatRug": {
+  "material": "int-rug-border",
+  "marginM": 0.9
+ },
+ "unitKits19": {
+  "salon": 1,
+  "bar": 3
+ }
+}

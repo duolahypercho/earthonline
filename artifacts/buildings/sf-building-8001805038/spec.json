@@ -1,0 +1,241 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-8001805038",
+  "slug": "b8001805038",
+  "walkIndex": 7005,
+  "street": "La Playa Street",
+  "address": "1424 La Playa",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 7.28,
+  "storeys": 2,
+  "floors": {
+    "groundM": 4.18,
+    "upperM": 2.5,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1908,
+  "use": "MRES",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "bay-window",
+  "material": "painted",
+  "frame": {
+    "edgeIndex": 6,
+    "center": {
+      "x": -7873.464,
+      "z": -2018.708
+    },
+    "heading": -1.583919,
+    "width": 10.949,
+    "depth": 13.67
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -5.272,
+      "z": -6.835
+    },
+    {
+      "x": -5.475,
+      "z": -1.662
+    },
+    {
+      "x": -3.173,
+      "z": -1.572
+    },
+    {
+      "x": -3.433,
+      "z": 0.721
+    },
+    {
+      "x": -3.632,
+      "z": 3.074
+    },
+    {
+      "x": -3.547,
+      "z": 6.493
+    },
+    {
+      "x": 0.137,
+      "z": 6.835
+    },
+    {
+      "x": 3.948,
+      "z": 6.835
+    },
+    {
+      "x": 4.344,
+      "z": -1.831
+    },
+    {
+      "x": 5.475,
+      "z": -6.366
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -5.272,
+        "z": -6.835
+      },
+      "b": {
+        "x": -5.475,
+        "z": -1.662
+      },
+      "lengthM": 5.177,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -5.475,
+        "z": -1.662
+      },
+      "b": {
+        "x": -3.173,
+        "z": -1.572
+      },
+      "lengthM": 2.303,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -3.173,
+        "z": -1.572
+      },
+      "b": {
+        "x": -3.433,
+        "z": 0.721
+      },
+      "lengthM": 2.308,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -3.433,
+        "z": 0.721
+      },
+      "b": {
+        "x": -3.632,
+        "z": 3.074
+      },
+      "lengthM": 2.361,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": -3.632,
+        "z": 3.074
+      },
+      "b": {
+        "x": -3.547,
+        "z": 6.493
+      },
+      "lengthM": 3.42,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": -3.547,
+        "z": 6.493
+      },
+      "b": {
+        "x": 0.137,
+        "z": 6.835
+      },
+      "lengthM": 3.701,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": 0.137,
+        "z": 6.835
+      },
+      "b": {
+        "x": 3.948,
+        "z": 6.835
+      },
+      "lengthM": 3.81,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": 3.948,
+        "z": 6.835
+      },
+      "b": {
+        "x": 4.344,
+        "z": -1.831
+      },
+      "lengthM": 8.675,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 8,
+      "a": {
+        "x": 4.344,
+        "z": -1.831
+      },
+      "b": {
+        "x": 5.475,
+        "z": -6.366
+      },
+      "lengthM": 4.674,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 9,
+      "a": {
+        "x": 5.475,
+        "z": -6.366
+      },
+      "b": {
+        "x": -5.272,
+        "z": -6.835
+      },
+      "lengthM": 10.757,
+      "role": "rear",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

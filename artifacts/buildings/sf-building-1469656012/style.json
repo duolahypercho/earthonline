@@ -1,0 +1,295 @@
+{
+ "seed": 12,
+ "notes": "Round 7: mid-grey stucco #9d9fa0 with darker charcoal-grey bows, white-surround arched portal, hedge stand-in, grey garage at right. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k) - photo-sampled tints rendered dark/olive in game. Base fix (2026-10-03): cool/grey wallTint = target / painted-stucco base so the warm stucco albedo does not turn it pink.",
+ "wall": "painted-stucco",
+ "wallTint": "#f2ffff",
+ "trim": "painted-stucco@b4b6b8",
+ "frame": "painted-steel@3a3d42",
+ "glass": "glass-clear",
+ "cornice": true,
+ "corniceProjectionM": 0.5,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.9,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.4,
+ "upperWindows": [
+  0.28,
+  0.34,
+  0.8,
+  0.86
+ ],
+ "bays": [
+  {
+   "at": 0.13,
+   "widthM": 3.0,
+   "projectionM": 0.9,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#8c9093",
+   "hyB": {
+    "plan": "swell",
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2,
+    "cornice": {
+     "projectionM": 0.08,
+     "roofRiseM": 0.15
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0,
+     "dropM": 0.5
+    }
+   }
+  },
+  {
+   "at": 0.51,
+   "widthM": 2.2,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#8c9093",
+   "hyB": {
+    "plan": "swell",
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2,
+    "cornice": {
+     "projectionM": 0.08,
+     "roofRiseM": 0.15
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0,
+     "dropM": 0.5
+    }
+   }
+  },
+  {
+   "at": 0.65,
+   "widthM": 2.2,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#8c9093",
+   "hyB": {
+    "plan": "swell",
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2,
+    "cornice": {
+     "projectionM": 0.08,
+     "roofRiseM": 0.15
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0,
+     "dropM": 0.5
+    }
+   }
+  },
+  {
+   "at": 0.94,
+   "widthM": 2.4,
+   "projectionM": 0.8,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#8c9093",
+   "hyB": {
+    "plan": "swell",
+    "arc": "segmental",
+    "panes": 3,
+    "facetsPerPane": 2,
+    "cornice": {
+     "projectionM": 0.08,
+     "roofRiseM": 0.15
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0,
+     "dropM": 0.5
+    }
+   }
+  }
+ ],
+ "edgeRoles": {
+  "0": "flank",
+  "1": "front"
+ },
+ "streetEdges": {
+  "0": {
+   "upperWindows": [
+    0.12,
+    0.22,
+    0.32,
+    0.42,
+    0.52,
+    0.62,
+    0.72,
+    0.82,
+    0.9
+   ],
+   "storefront": {
+    "layout": [
+     {
+      "from": 0.3,
+      "to": 0.36,
+      "kind": "window"
+     },
+     {
+      "from": 0.6,
+      "to": 0.66,
+      "kind": "window"
+     }
+    ]
+   }
+  }
+ },
+ "storefront": {
+  "bulkheadM": 1.0,
+  "transomM": 0.7,
+  "transomPaneM": 0.4,
+  "transomRows": 2,
+  "paneM": 0.55,
+  "pierM": 0.4,
+  "awning": false,
+  "headDropM": 0.8,
+  "layout": [
+   {
+    "from": 0.16,
+    "to": 0.222,
+    "kind": "window",
+    "headM": 3.2
+   },
+   {
+    "from": 0.228,
+    "to": 0.29,
+    "kind": "window",
+    "headM": 3.2
+   },
+   {
+    "from": 0.47,
+    "to": 0.625,
+    "kind": "double-door",
+    "stair": true,
+    "leaf": "wood-siding@4a2c1e",
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.3,
+      "projectionM": 0.08,
+      "material": "painted-white",
+      "tint": "#e8e8e4"
+     },
+     "porch": {
+      "steps": 3
+     }
+    }
+   },
+   {
+    "from": 0.77,
+    "to": 0.85,
+    "kind": "window",
+    "headM": 3.2
+   },
+   {
+    "from": 0.89,
+    "to": 0.98,
+    "kind": "garage",
+    "material": "painted-white",
+    "tint": "#b8b6b0",
+    "headM": 3.0
+   }
+  ]
+ },
+ "storefrontFrame": "painted-steel@4a4d52",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-stucco@cecfd0",
+ "ground": "lobby",
+ "upper": "apartment",
+ "pilasters": {
+  "at": [
+   0.455,
+   0.64
+  ],
+  "widthM": 0.5,
+  "projectionM": 0.15,
+  "fromM": 0.0,
+  "toM": 3.9,
+  "material": "painted-white",
+  "capital": true
+ },
+ "plaques": [
+  {
+   "at": 0.548,
+   "y": 3.85,
+   "w": 1.4,
+   "h": 0.4,
+   "face": "painted-white"
+  }
+ ],
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.06,
+     0.12
+    ],
+    [
+     0.18,
+     0.24
+    ],
+    [
+     0.42,
+     0.53
+    ],
+    [
+     0.63,
+     0.74
+    ],
+    [
+     0.8,
+     0.86
+    ]
+   ],
+   "sillM": 0.85,
+   "headM": 2.4
+  }
+ },
+ "hbArchDoors": [
+  {
+   "from": 0.16,
+   "to": 0.222,
+   "material": "painted-stucco",
+   "tint": "#9d9fa0",
+   "ringTint": "#c9cacc"
+  },
+  {
+   "from": 0.228,
+   "to": 0.29,
+   "material": "painted-stucco",
+   "tint": "#9d9fa0",
+   "ringTint": "#c9cacc"
+  },
+  {
+   "from": 0.77,
+   "to": 0.85,
+   "material": "painted-stucco",
+   "tint": "#9d9fa0",
+   "ringTint": "#c9cacc"
+  }
+ ],
+ "sashMaterial": "painted-steel@4a4d52",
+ "plinth": {
+  "material": "painted-stucco",
+  "tint": "#48683c",
+  "heightM": 0.8,
+  "projectionM": 0.45
+ },
+ "streetStills": true
+}

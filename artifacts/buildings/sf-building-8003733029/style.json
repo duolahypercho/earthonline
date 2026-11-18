@@ -1,0 +1,135 @@
+{
+  "seed": 1,
+  "notes": "NE corner of 5th & Folsom, 1998 2-storey stucco building (DataSF footprint, no OSM way). Ochre smooth render, rust-brown frames, bronze roll grilles; tall solid parapet, no upper windows on the street; a corner window-and-door bay on Folsom, a wide bronze roll grille further along, and grilled windows on 5th. Ochre muted (less orange), grime and soot at the base. Two shop bays behind bronze-brown roll grilles with a brown door between (was one grey slat gate). Dark wood-framed shop bays behind grilles with a high glazed transom band (was two roll-up doors). Less saturated ochre. Less saturated ochre. Street grime: soot at the base, grime, faint wide streaks. The street-face roll grilles on the other edges are the same bronze-brown as the west bay, not grey. A tall dark glass clerestory band over the west bay, carriage-width grille bay and door, a wide blank stucco pier, a narrower east grille bay.",
+  "wall": "painted-stucco",
+  "wallTint": "#d4c49a",
+  "trim": "painted-stucco",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "blankUpper": true,
+  "coping": {
+    "heightM": 0.3,
+    "projectionM": 0.06,
+    "material": "painted-stucco",
+    "tint": "#8a4c34"
+  },
+  "frame": "painted-steel-mid",
+  "storefrontFrame": "wood-siding@4a3222",
+  "bulkhead": "painted-stucco",
+  "storefrontGlass": "glass-dark",
+  "ground": "shop",
+  "upper": "apartment",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.9,
+    "layout": [
+      {
+        "kind": "garage",
+        "from": 0.04,
+        "to": 0.4,
+        "material": "painted-steel-light",
+        "tint": "#7a5236",
+        "headM": 2.5
+      },
+      {
+        "kind": "door",
+        "from": 0.42,
+        "to": 0.5,
+        "leaf": "painted-steel-light@6b3f2a",
+        "stair": true
+      },
+      {
+        "kind": "garage",
+        "from": 0.78,
+        "to": 0.97,
+        "material": "painted-steel-light",
+        "tint": "#7a5236",
+        "headM": 2.5
+      }
+    ],
+    "paneM": 0.9
+  },
+  "streetEdges": {
+    "6": {
+      "storefront": {
+        "layout": [
+          {
+            "kind": "garage",
+            "from": 0.12,
+            "to": 0.82,
+            "material": "painted-steel-light",
+            "headM": 2.9,
+            "tint": "#7a5236"
+          }
+        ]
+      },
+      "plaques": []
+    },
+    "8": {
+      "storefront": {
+        "layout": [
+          {
+            "kind": "gate",
+            "from": 0.2,
+            "to": 0.75,
+            "material": "painted-steel-light",
+            "headM": 2.6,
+            "tint": "#7a5236"
+          }
+        ]
+      },
+      "plaques": []
+    },
+    "9": {
+      "storefront": {
+        "layout": [
+          {
+            "kind": "window",
+            "from": 0.15,
+            "to": 0.45
+          },
+          {
+            "kind": "door",
+            "from": 0.6,
+            "to": 0.72,
+            "leaf": "painted-steel-light@6b3f2a"
+          }
+        ]
+      },
+      "plaques": []
+    }
+  },
+  "weathering": {
+    "patches": {
+      "strength": 0.08,
+      "metres": 1.6,
+      "top": 3.5,
+      "mottle": 0.06
+    },
+    "grime": {
+      "strength": 0.22,
+      "metres": 2.4
+    },
+    "soot": {
+      "height": 1.1,
+      "strength": 0.26
+    },
+    "streak": {
+      "strength": 0.035,
+      "columnMetres": 2.2,
+      "drop": 0.7
+    },
+    "bandStrength": 0.1,
+    "axis": "wall"
+  },
+  "plaques": [
+    {
+      "at": 0.22,
+      "y": 3.95,
+      "w": 4.4,
+      "h": 1.15,
+      "face": "glass-dark"
+    }
+  ]
+}

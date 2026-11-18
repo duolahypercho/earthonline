@@ -1,0 +1,201 @@
+{
+ "schema": 1,
+ "generatedBy": "native/tools/export-street-material.mjs",
+ "sources": {
+  "src/world/streets/street-surface-v2.js": "031b896afc235ea9b93ae13c72e06bf55c13a49912d546c55fbcbbd44a0c941c",
+  "src/world/streets/street-surface-v2-render.js": "5fad49d69e6e438224fc41a3c5cc1010998ae613f84c52c123d59199c663f52b",
+  "src/render/environment-ibl.js": "b96e866d9382befff24754b6cfdd7c94fc71d748afe9330b7ccf09b869eb936f",
+  "src/world/streets/street-surface-age.js": "190ed422ef220755bad2c78dbfbed6fc94c0b42e17a7604817c46f2473740812"
+ },
+ "palette": {
+  "asphalt": {
+   "motorway": "#d0d6de",
+   "trunk": "#d4dae0",
+   "primary": "#d9dfe3",
+   "secondary": "#dee2e5",
+   "tertiary": "#e1e3e6",
+   "residential": "#e5e8e9",
+   "service": "#eaeae9",
+   "default": "#e5e8e9"
+  },
+  "junction": "#dbe0e2",
+  "gutter": "#c2c6c8",
+  "curbFace": "#c9cbcc",
+  "curbTop": "#dadcdd",
+  "sidewalk": "#eceeef",
+  "ramp": "#f7f8f8",
+  "path": "#e1e3e4",
+  "plazaBrick": "#c48a72",
+  "plazaConcrete": "#dcdad4",
+  "plazaStone": "#b3b5b7",
+  "plazaBand": "#e6e6e3",
+  "verge": "#9a9384",
+  "markingWhite": "#c5c8cb",
+  "markingYellow": "#c9a03a",
+  "markingBikeGreen": "#85ac74",
+  "crosswalk": "#c8cbce",
+  "gutterPan": "#b4b3ae"
+ },
+ "uvMetersPerRepeat": {
+  "carriageway": 4,
+  "concrete": 2.6,
+  "marking": 3.2
+ },
+ "gutterWidth": 0.45,
+ "concreteBaseMeanLinear": 0.45595588809575105,
+ "envClasses": {
+  "carriageway": "asphalt",
+  "concrete": "sidewalk",
+  "markings": "painted-metal"
+ },
+ "surfaceAge": {
+  "bleachFresh": 0.72,
+  "bleachAged": 0.86,
+  "cycleOverrun": 1.25,
+  "samples": [
+   {
+    "key": "way-123",
+    "bleach": 0.7799899503014909
+   },
+   {
+    "key": "456789",
+    "bleach": 0.86
+   },
+   {
+    "key": "osm-way-24680",
+    "bleach": 0.7628019659410218
+   },
+   {
+    "key": "seg:1:2",
+    "bleach": 0.86
+   },
+   {
+    "key": "",
+    "bleach": 0.86
+   }
+  ]
+ },
+ "roughness": {
+  "carriageway": 0.94,
+  "concrete": 0.92,
+  "markings": 0.58
+ },
+ "envBase": {
+  "asphalt": 0.92,
+  "sidewalk": 0.55,
+  "painted-metal": 0.9
+ },
+ "pbrSets": {
+  "carriageway": {
+   "id": "polyhaven-asphalt-02",
+   "provenance": "public/assets/polyhaven-asphalt-02.provenance.json",
+   "diffuse": "/assets/polyhaven-asphalt-02-diffuse-2k.jpg",
+   "nra": "/assets/polyhaven-asphalt-02-nra-2k.png",
+   "tileMetres": 3,
+   "baseMeanLinear": [
+    0.44,
+    0.44,
+    0.44
+   ],
+   "meanLinear": [
+    0.1162,
+    0.1143,
+    0.102
+   ],
+   "meanAo": 0.72,
+   "meanRoughness": 0.77,
+   "albedoContrast": 0.36,
+   "albedoClamp": [
+    0.3,
+    2.4
+   ],
+   "roughnessGain": 0.9,
+   "roughnessClamp": [
+    0.9,
+    1.25
+   ],
+   "normalStrength": 0.18,
+   "aoStrength": 0.2,
+   "detailNearM": 28,
+   "detailFarM": 110,
+   "farContrast": 0.35,
+   "wetFill": 0.85,
+   "patch": {
+    "frequency": 0.031,
+    "phase": 12.7,
+    "start": 0.57,
+    "full": 0.63,
+    "scale": 0.71,
+    "offset": [
+     0.37,
+     0.61
+    ],
+    "tone": 1.32,
+    "roughness": 0.94
+   },
+   "aggregate": {
+    "tileMetres": 18,
+    "albedoContrast": 0.14,
+    "albedoClamp": [
+     0.45,
+     1.9
+    ],
+    "normalStrength": 0.14,
+    "roughnessGain": 0.55,
+    "roughnessClamp": [
+     0.95,
+     1.18
+    ],
+    "nearM": 24,
+    "farM": 85,
+    "farContrast": 0.3,
+    "reliefNearM": 14,
+    "reliefFarM": 34,
+    "cutGain": 0.45
+   }
+  },
+  "concrete": {
+   "id": "polyhaven-brushed-concrete-03",
+   "provenance": "public/assets/polyhaven-brushed-concrete-03.provenance.json",
+   "diffuse": "/assets/polyhaven-brushed-concrete-03-diffuse-2k.jpg",
+   "nra": "/assets/polyhaven-brushed-concrete-03-nra-2k.png",
+   "tileMetres": 2,
+   "baseMeanLinear": null,
+   "meanLinear": [
+    0.1507,
+    0.114,
+    0.0763
+   ],
+   "meanAo": 0.898,
+   "meanRoughness": 0.856,
+   "albedoContrast": 0.55,
+   "albedoClamp": [
+    0.55,
+    1.45
+   ],
+   "roughnessGain": 0.8,
+   "roughnessClamp": [
+    0.8,
+    1.15
+   ],
+   "normalStrength": 0.3,
+   "aoStrength": 0.35,
+   "detailNearM": 24,
+   "detailFarM": 90,
+   "farContrast": 0.45,
+   "wetFill": 0.9,
+   "patch": null
+  }
+ },
+ "shading": {
+  "macroCoarse": 0.045,
+  "macroFine": 0.16,
+  "macroAmplitude": 0.11,
+  "crossFallDarken": 0.16,
+  "crossFallReachM": 5,
+  "gutterSiltReachM": 1.15,
+  "gutterSiltDarken": 0.3,
+  "gutterPanPourSilt": 0.16,
+  "concreteScanPeriodM": 3.31
+ }
+}

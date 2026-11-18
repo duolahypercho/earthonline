@@ -1,0 +1,162 @@
+{
+ "seed": 36,
+ "notes": "1902 cream-khaki shingled flats, three storeys, two stacked canted bays on the upper storeys under a deep bracketed cornice. Ground: arched stair entry at the left, a window with a bay sill, dark side door. Raised rusticated buff base with leaded ground windows and a side stair to a recessed arched entry, two canted bays per bay storey with an ornate balcony between, green-trimmed sashes, dentil cornice, cream horizontal siding. Applied with four levels via storeysSeen (3.2 base + three storeys). The storefront glazing and tall arched door are replaced. Balcony hand.py heights follow. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Uppers tinted greige with square shingle courses, base tan, large shop window replaced by two small basement windows, heavier bracketed cornice. Balconette railings not added (no key; positions uncertain). GroundBand lift (2026-10-03): groundBand tint #c9b484 -> #e4dac2 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-clapboard",
+ "wallTint": "#c0b898",
+ "trim": "painted-white@f0e8cc",
+ "frame": "painted-white@4f7048",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@efe6c8",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-stucco@c9b484",
+ "cornice": true,
+ "corniceProjectionM": 0.7,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.6,
+ "windowHeadM": 1.95,
+ "upperWindows": [
+  0.5
+ ],
+ "bays": [
+  {
+   "at": 0.2,
+   "widthM": 1.9,
+   "projectionM": 0.55,
+   "fromStorey": 2,
+   "toStorey": 3,
+   "material": "painted-clapboard",
+   "tint": "#c0b898",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.35,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.8,
+   "widthM": 1.9,
+   "projectionM": 0.55,
+   "fromStorey": 2,
+   "toStorey": 3,
+   "material": "painted-clapboard",
+   "tint": "#c0b898",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.35,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "hbBayGlazing": {
+  "marginM": 0.2,
+  "maxW": 1.05,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#4f7048",
+  "sashM": 0.09,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.06,
+    "to": 0.22,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel@2a2a2a",
+    "arch": {
+     "type": "round"
+    }
+   },
+   {
+    "from": 0.3,
+    "to": 0.38,
+    "kind": "window",
+    "headM": 1.7
+   },
+   {
+    "from": 0.52,
+    "to": 0.6,
+    "kind": "window",
+    "headM": 1.7
+   },
+   {
+    "from": 0.84,
+    "to": 0.92,
+    "kind": "door",
+    "leaf": "painted-steel@1c1c1c"
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "hbCorniceDentils": {
+  "spacingM": 0.14,
+  "sizeM": 0.08,
+  "tint": "#f0e8cc"
+ },
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.0,
+  "upperM": 2.7
+ },
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#e4dac2",
+  "topM": 3.0
+ },
+ "hyDShingle": {
+  "kind": "square",
+  "rowM": 0.16,
+  "shingleM": 0.14,
+  "projM": 0.014,
+  "shade": 0.8,
+  "fromM": 3.0,
+  "toM": 10.5,
+  "maxTris": 14000
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.7,
+  "heightM": 0.4,
+  "depthM": 0.3,
+  "widthM": 0.2,
+  "material": "painted-white",
+  "tint": "#e8dfc0"
+ }
+}

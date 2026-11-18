@@ -1,0 +1,148 @@
+{
+  "seed": 1,
+  "notes": "Olive-beige painted concrete loft: pilasters between two bays, framed spandrel panels, steel-sash multi-pane windows above, tall shop windows with a multi-pane transom band, glazed entry door right of centre. Khaki cast-concrete tints (warm, R>G) instead of olive-green; reflective glazing that passes some interior (glass-dark uppers, glass-film shopfront). Milky whitewashed shop glass instead of a deep dark room; olive-painted slim storefront members; the panelled spandrel band between the shop head and the upper sash now has room to draw (upper sill raised, shop head dropped); moulded pilasters with capitals and a deeper parapet band; one blank blue leasing banner straddling the spandrel at the entry bay. Storefront members on a painted-white base with an olive tint (a tint on painted-steel only darkens it to black). Smooth painted cast stone (cast-stone-trim, olive-tan) for wall, pilasters (no flutes), spandrels with moulded square panels and coping; weathering without vertical streak columns; reflection-dominant glass (glassModel: reflective uppers, dark storefront glass). Smooth painted stucco (no cast-stone grain) in pale khaki-cream, frosted white-backed shop glass on aluminium members, dark steel multi-pane sashes, darker reflective uppers, no streak weathering. Shop glass opaque dark reflective (the frosted glass read as a lit empty room); the leasing banner hangs as a flag on a steel arm turned 40 degrees (bladeSigns.flagDeg). Soot at the base, grime, faint wide streaks.",
+  "wall": "painted-stucco",
+  "wallTint": "#dde8b4",
+  "trim": "painted-stucco",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "coping": {
+    "heightM": 0.55,
+    "projectionM": 0.14,
+    "material": "painted-stucco",
+    "tint": "#d3dfa8"
+  },
+  "pilasters": {
+    "at": "spans",
+    "widthM": 0.6,
+    "projectionM": 0.22,
+    "capital": true,
+    "tint": "#efecd8",
+    "material": "painted-stucco"
+  },
+  "spandrels": {
+    "tint": "#e6e3cc",
+    "squares": 4,
+    "squaresTint": "#d3cfb3",
+    "material": "painted-stucco"
+  },
+  "upperWindowSpans": [
+    [
+      0.06,
+      0.47
+    ],
+    [
+      0.53,
+      0.94
+    ]
+  ],
+  "upperSillM": 0.85,
+  "upperHeadM": 2.55,
+  "mullionM": 1.0,
+  "sashRows": 3,
+  "sashCols": 3,
+  "sashMaterial": "painted-steel",
+  "storefrontFrame": "painted-steel-mid",
+  "bulkhead": "painted-stucco@d8d4bb",
+  "ground": "vacant",
+  "upper": "office",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.6,
+    "headDropM": 0.45,
+    "transomPaneM": 0.42,
+    "paneM": 1.3,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.05,
+        "to": 0.47
+      },
+      {
+        "kind": "window",
+        "from": 0.53,
+        "to": 0.68
+      },
+      {
+        "kind": "door",
+        "from": 0.69,
+        "to": 0.8,
+        "leaf": "painted-steel",
+        "stair": true
+      },
+      {
+        "kind": "window",
+        "from": 0.81,
+        "to": 0.95
+      }
+    ],
+    "transomRows": 1
+  },
+  "weathering": {
+    "patches": {
+      "strength": 0.08,
+      "metres": 1.6,
+      "top": 3.5,
+      "mottle": 0.06
+    },
+    "grime": {
+      "strength": 0.22,
+      "metres": 2.4
+    },
+    "soot": {
+      "height": 1.1,
+      "strength": 0.26
+    },
+    "streak": {
+      "strength": 0.035,
+      "columnMetres": 2.2,
+      "drop": 0.7
+    },
+    "bandStrength": 0.1,
+    "axis": "wall"
+  },
+  "storefrontGlass": "glass-frosted",
+  "glass": "glass-dark",
+  "rooftop": {
+    "units": 3,
+    "seed": 2
+  },
+  "bladeSigns": [
+    {
+      "at": 0.62,
+      "bottomM": -1.3,
+      "heightM": 1.9,
+      "face": "painted-white@2f64b8",
+      "flagDeg": 40,
+      "widthM": 0.75
+    }
+  ],
+  "plaques": [
+    {
+      "at": 0.745,
+      "y": 2.75,
+      "w": 0.42,
+      "h": 0.16,
+      "face": "painted-white"
+    },
+    {
+      "at": 0.66,
+      "y": 1.3,
+      "w": 0.16,
+      "h": 0.16,
+      "face": "painted-white@2f64b8"
+    },
+    {
+      "at": 0.88,
+      "y": 1.7,
+      "w": 0.6,
+      "h": 0.85,
+      "face": "painted-white@2f64b8"
+    }
+  ],
+  "glassModel": {
+    "upper": "glass-reflective@9aa4aa",
+    "street": "glass-reflective@7d868c"
+  }
+}

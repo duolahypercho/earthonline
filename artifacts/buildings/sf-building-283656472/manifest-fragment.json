@@ -1,0 +1,78 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-283656472",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-283656472",
+    "walkIndex": 5261,
+    "builder": "blender",
+    "street": "Noriega Street",
+    "side": "S",
+    "addr": "1801 21st Avenue",
+    "sourceHeight": 9,
+    "sourceLevels": null,
+    "frontEdge": 2,
+    "status": "review",
+    "lidarHeightM": 9.42,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b283656472.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b283656472.js"
+  },
+  "base": {
+    "id": "sf-building-283656472",
+    "walkIndex": 5261,
+    "builder": "blender",
+    "street": "Noriega Street",
+    "side": "S",
+    "addr": "1801 21st Avenue",
+    "sourceHeight": 9,
+    "sourceLevels": null,
+    "frontEdge": 2,
+    "status": "review",
+    "lidarHeightM": 9.42,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b283656472.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b283656472.js"
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b283656472.js",
+    "sha256": "b37d124f36e894afad05ebd6935ca9677035c87379c2dc72661ce5e19748bd49",
+    "pass": "b283656472-blender-6facb6b9-bae3eb"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-283656472/provenance.json",
+    "sha256": "2cd08d256db69730c88c9d93ce81f725959a46e4706dc29c8d0bbf97c35eeff6",
+    "pass": "b283656472-blender-6facb6b9-bae3eb"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-283656472/exterior.glb",
+      "sha256": "f9f4c7370a0247bd12b29b92c2d30fe45f18e37d8a8205c76969b225652fb043",
+      "bytes": 655352
+    },
+    {
+      "role": "interior",
+      "url": "/assets/buildings/sf-building-283656472/interior.glb",
+      "sha256": "f298b50918f22d5d36998fc2e235e927c99a99aab69150922319c2f99f50624f",
+      "bytes": 237672
+    },
+    {
+      "role": "fine-s0",
+      "url": "/assets/buildings/sf-building-283656472/fine-s0.glb",
+      "sha256": "c4036d8c771778618fd6287fc55ce06c3ce779ee06117eee21d1c404081f8239",
+      "bytes": 23724
+    },
+    {
+      "role": "fine-s1",
+      "url": "/assets/buildings/sf-building-283656472/fine-s1.glb",
+      "sha256": "e313c77aaa35006a901034111c1af14d607eadf9150c08354aa56fc2c59914cd",
+      "bytes": 147316
+    },
+    {
+      "role": "fine-s2",
+      "url": "/assets/buildings/sf-building-283656472/fine-s2.glb",
+      "sha256": "2ba94c973528e1da631ed07cabc2a49bc2e2ac8a12ecbc2985e498e8deb57284",
+      "bytes": 147352
+    }
+  ],
+  "generatedAt": "2026-10-02T19:52:49.783Z"
+}

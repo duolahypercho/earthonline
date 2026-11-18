@@ -1,0 +1,72 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-8101805023",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-8101805023",
+    "walkIndex": 7016,
+    "builder": "blender",
+    "street": "La Playa Street",
+    "side": "E",
+    "addr": "1492 La Playa",
+    "sourceHeight": 6.07,
+    "sourceLevels": null,
+    "frontEdge": 1,
+    "status": "review",
+    "lidarHeightM": 6.07,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b8101805023.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b8101805023.js"
+  },
+  "base": {
+    "id": "sf-building-8101805023",
+    "walkIndex": 7016,
+    "builder": "blender",
+    "street": "La Playa Street",
+    "side": "E",
+    "addr": "1492 La Playa",
+    "sourceHeight": 6.07,
+    "sourceLevels": null,
+    "frontEdge": 1,
+    "status": "review",
+    "lidarHeightM": 6.07,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b8101805023.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b8101805023.js"
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b8101805023.js",
+    "sha256": "993f68979a75bd8bda34905440361174bc34674e80416d341247c503fb03b2e8",
+    "pass": "b8101805023-blender-38c455b0-ccf7a5"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-8101805023/provenance.json",
+    "sha256": "31b0dca9baccb0474190496720df617409d1edd9e123ac0c338369060d864931",
+    "pass": "b8101805023-blender-38c455b0-ccf7a5"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-8101805023/exterior.glb",
+      "sha256": "1ab6a6ef42b98cbd2667080a2e61d1d1653fbe3b4d52f1fb3da35c82232444f5",
+      "bytes": 76296
+    },
+    {
+      "role": "interior",
+      "url": "/assets/buildings/sf-building-8101805023/interior.glb",
+      "sha256": "0cb23ab0f821ce13333ccbe1996cda752a0da56e002870e4d72aa338bfd42166",
+      "bytes": 67840
+    },
+    {
+      "role": "fine-s0",
+      "url": "/assets/buildings/sf-building-8101805023/fine-s0.glb",
+      "sha256": "2c6d895eda4e115555dec296d67462debb289215bd133a77c31a3e095cc2bc72",
+      "bytes": 12348
+    },
+    {
+      "role": "fine-s1",
+      "url": "/assets/buildings/sf-building-8101805023/fine-s1.glb",
+      "sha256": "32a86be3bea5c864252ecb0e21387c88b347a0a1a4e937b1e731a8e9d5e7e296",
+      "bytes": 47060
+    }
+  ],
+  "generatedAt": "2026-10-02T06:18:01.905Z"
+}

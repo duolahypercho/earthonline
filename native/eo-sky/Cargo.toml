@@ -1,0 +1,9 @@
+[package]
+name = "eo-sky"
+version = "0.1.0"
+edition = "2024"
+description = "Earth Online native: sky, weather, night and camera-finish models as pure functions (weather schedule, cloud decks, moon, night practicals, exposure, photometric references, street lamp records). No GPU."
+publish = false
+
+[dependencies]
+eo-look = { path = "../eo-look" }

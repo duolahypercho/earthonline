@@ -1,0 +1,114 @@
+{
+ "seed": 212,
+ "wall": "painted-stucco",
+ "wallTint": "#f9ffff",
+ "trim": "painted-white@c0c4c8",
+ "frame": "painted-white@8a9096",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@8a9096",
+ "storefrontGlass": "glass-storefront",
+ "cornice": false,
+ "corniceProjectionM": 0.5,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 1.4,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.2,
+  0.5
+ ],
+ "bays": [],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.52,
+    "to": 0.97,
+    "kind": "garage",
+    "leaf": "painted-steel@b8bcc0",
+    "headM": 2.9
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "notes": "2004 infill, five storeys. Light grey painted stucco, full-height glazing at the right third, steel grated fire-escape balconies across the left two thirds on each upper storey, roll-up garage door and plain concrete ground. Plain; no ornament. Rework r-eddy: glazing now runs across the left two thirds behind the balconies as well as the right-hand glass column. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Base fix (2026-10-03): cool/grey wallTint = target / painted-stucco base so the warm stucco albedo does not turn it pink.",
+ "groundBand": {
+  "material": "concrete-precast",
+  "tint": "#b0b0ac",
+  "topM": 3.6
+ },
+ "storeysSeen": {
+  "count": 5,
+  "groundM": 3.6
+ },
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.05,
+     0.7
+    ],
+    [
+     0.74,
+     0.97
+    ]
+   ],
+   "sillM": 0.15,
+   "headM": 2.9
+  },
+  "2": {
+   "spans": [
+    [
+     0.05,
+     0.7
+    ],
+    [
+     0.74,
+     0.97
+    ]
+   ],
+   "sillM": 0.15,
+   "headM": 2.9
+  },
+  "3": {
+   "spans": [
+    [
+     0.05,
+     0.7
+    ],
+    [
+     0.74,
+     0.97
+    ]
+   ],
+   "sillM": 0.15,
+   "headM": 2.9
+  },
+  "4": {
+   "spans": [
+    [
+     0.05,
+     0.7
+    ],
+    [
+     0.74,
+     0.97
+    ]
+   ],
+   "sillM": 0.15,
+   "headM": 2.9
+  }
+ },
+ "fireEscape": {
+  "at": 0.46,
+  "widthM": 3.8,
+  "depthM": 1,
+  "material": "painted-steel@e0e4e8"
+ }
+}

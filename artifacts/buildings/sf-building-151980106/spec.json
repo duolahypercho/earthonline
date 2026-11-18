@@ -1,0 +1,260 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-151980106",
+  "slug": "b151980106",
+  "walkIndex": 50,
+  "street": "Clementina Street",
+  "address": "317;321;325 Clementina Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 25.65,
+  "storeys": 9,
+  "floors": {
+    "groundM": 3.618,
+    "upperM": 2.679,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1984,
+  "use": "MRES",
+  "usage": "office",
+  "amenity": null,
+  "shop": null,
+  "facade": "edwardian",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 10,
+    "center": {
+      "x": 1518.651,
+      "z": 435.791
+    },
+    "heading": -0.780681,
+    "width": 60.107,
+    "depth": 17.905
+  },
+  "frameMirrored": true,
+  "polygonWinding": "cw",
+  "polygon": [
+    {
+      "x": -30.054,
+      "z": 8.952
+    },
+    {
+      "x": -29.904,
+      "z": -7.806
+    },
+    {
+      "x": -20.865,
+      "z": -5.217
+    },
+    {
+      "x": -18.733,
+      "z": -7.47
+    },
+    {
+      "x": -3.169,
+      "z": -8.952
+    },
+    {
+      "x": -0.777,
+      "z": -6.537
+    },
+    {
+      "x": 6.506,
+      "z": -6.432
+    },
+    {
+      "x": 8.196,
+      "z": -4.868
+    },
+    {
+      "x": 24.812,
+      "z": -4.719
+    },
+    {
+      "x": 30.054,
+      "z": -6.533
+    },
+    {
+      "x": 29.91,
+      "z": 8.952
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -30.054,
+        "z": 8.952
+      },
+      "b": {
+        "x": -29.904,
+        "z": -7.806
+      },
+      "lengthM": 16.759,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -29.904,
+        "z": -7.806
+      },
+      "b": {
+        "x": -20.865,
+        "z": -5.217
+      },
+      "lengthM": 9.402,
+      "role": "rear",
+      "partyShare": 0.13
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -20.865,
+        "z": -5.217
+      },
+      "b": {
+        "x": -18.733,
+        "z": -7.47
+      },
+      "lengthM": 3.102,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -18.733,
+        "z": -7.47
+      },
+      "b": {
+        "x": -3.169,
+        "z": -8.952
+      },
+      "lengthM": 15.634,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": -3.169,
+        "z": -8.952
+      },
+      "b": {
+        "x": -0.777,
+        "z": -6.537
+      },
+      "lengthM": 3.4,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": -0.777,
+        "z": -6.537
+      },
+      "b": {
+        "x": 6.506,
+        "z": -6.432
+      },
+      "lengthM": 7.284,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": 6.506,
+        "z": -6.432
+      },
+      "b": {
+        "x": 8.196,
+        "z": -4.868
+      },
+      "lengthM": 2.302,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": 8.196,
+        "z": -4.868
+      },
+      "b": {
+        "x": 24.812,
+        "z": -4.719
+      },
+      "lengthM": 16.617,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 8,
+      "a": {
+        "x": 24.812,
+        "z": -4.719
+      },
+      "b": {
+        "x": 30.054,
+        "z": -6.533
+      },
+      "lengthM": 5.546,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 9,
+      "a": {
+        "x": 30.054,
+        "z": -6.533
+      },
+      "b": {
+        "x": 29.91,
+        "z": 8.952
+      },
+      "lengthM": 15.486,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 10,
+      "a": {
+        "x": 29.91,
+        "z": 8.952
+      },
+      "b": {
+        "x": -30.054,
+        "z": 8.952
+      },
+      "lengthM": 59.963,
+      "role": "front",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

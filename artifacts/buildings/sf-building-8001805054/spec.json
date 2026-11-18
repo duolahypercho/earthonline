@@ -1,0 +1,146 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-8001805054",
+  "slug": "b8001805054",
+  "walkIndex": 7012,
+  "street": "La Playa Street",
+  "address": "1472 La Playa",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 6.42,
+  "storeys": 2,
+  "floors": {
+    "groundM": 3.32,
+    "upperM": 2.5,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1957,
+  "use": "MRES",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "edwardian",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 1,
+    "center": {
+      "x": -7868.135,
+      "z": -2105.59
+    },
+    "heading": -1.621696,
+    "width": 5.569,
+    "depth": 21.581
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -2.742,
+      "z": -10.779
+    },
+    {
+      "x": -2.785,
+      "z": 10.791
+    },
+    {
+      "x": 2.522,
+      "z": 10.791
+    },
+    {
+      "x": 2.762,
+      "z": 1.747
+    },
+    {
+      "x": 2.785,
+      "z": -10.791
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -2.742,
+        "z": -10.779
+      },
+      "b": {
+        "x": -2.785,
+        "z": 10.791
+      },
+      "lengthM": 21.57,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -2.785,
+        "z": 10.791
+      },
+      "b": {
+        "x": 2.522,
+        "z": 10.791
+      },
+      "lengthM": 5.307,
+      "role": "front",
+      "partyShare": 0.19
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 2.522,
+        "z": 10.791
+      },
+      "b": {
+        "x": 2.762,
+        "z": 1.747
+      },
+      "lengthM": 9.047,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 2.762,
+        "z": 1.747
+      },
+      "b": {
+        "x": 2.785,
+        "z": -10.791
+      },
+      "lengthM": 12.537,
+      "role": "rear",
+      "partyShare": 0.06
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": 2.785,
+        "z": -10.791
+      },
+      "b": {
+        "x": -2.742,
+        "z": -10.779
+      },
+      "lengthM": 5.527,
+      "role": "rear",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

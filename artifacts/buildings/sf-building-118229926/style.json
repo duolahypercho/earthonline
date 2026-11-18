@@ -1,0 +1,209 @@
+{
+  "seed": 1,
+  "notes": "1984 five-storey cream precast office at the 4th and Folsom corner: horizontal ribbon windows with green-tinted glass on both street faces, a two-storey curved glass rotunda cut into the corner under the overhanging upper floors, square columns at street level, blank coloured banners on the 4th Street face. Rotunda mullions light grey (not yellow) with transoms every 0.75 m and a warm-lit pane; two blank banners on the Folsom face beside it. Rotunda glazed in reflective (not lit) glass on 28 facets so the curve reads by its reflection gradient, three columns under the overhang. Ribbon glazing reads as continuous pale blue-grey reflective bands instead of dark square holes; rotunda panes warm-lit, round columns kept under the overhang. Rotunda glazed in reflective glass on mustard-yellow mullions and transoms; its pilotis are true round columns (rotunda.round kit block) under a closed overhang soffit with a fascia lip; ribbon windows reflective blue-green (glassModel, no room-tone backing); banners muted; weathering without streak columns. Rotunda back to light-grey mullions, transoms 1.1 m, darker reflective drum set 1.6 m behind both wall lines under the overhang (rotunda.round.insetM) with a warm lit band across the lower panes; darker blue-green ribbon glass; wall a touch less orange. No square pilaster at the rotunda corner (it stood inside the cut); rooms stop behind the set-back drum. Smooth beige stucco (no precast panel joints) a touch cooler; taller continuous ribbon glass (sill 0.55, head 2.55, 1.25 m mullions) in darker green-tinted reflective glass; drum set 2.6 m back under the overhang so it reads as a separate curved glass drum; lit band dropped (it read as a white bar). Edge-2 override adds a steel sash grid (3 panes high, 2 per 1.25 m light) and a pale sky-blue pane. Edge-2 override: painted-white wall in a pink-cream tint, white storefront frames, lighter reflective shop glass. Folsom-face shop glass in white-framed panes (paneM 1.1, a transom row) and less mirror-like glass. Edge 2 upper glazing band taller (sill 0.7, head 2.0).",
+  "supersedesAuthored": true,
+  "wall": "painted-stucco",
+  "wallTint": "#f6f2ea",
+  "trim": "painted-stucco",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "coping": {
+    "heightM": 0.35,
+    "projectionM": 0.1,
+    "material": "painted-stucco",
+    "tint": "#efe9dc"
+  },
+  "upperWindowSpans": [
+    [
+      0.05,
+      0.95
+    ]
+  ],
+  "upperSillM": 0.55,
+  "upperHeadM": 2.55,
+  "mullionM": 1.25,
+  "glass": "glass-clear@cfdde2",
+  "storefrontGlass": "glass-film",
+  "storefrontFrame": "painted-steel-light",
+  "bulkhead": "concrete-precast",
+  "pilasters": {
+    "at": [
+      0.0,
+      0.5
+    ],
+    "widthM": 0.8,
+    "projectionM": 0.2,
+    "toM": 4.0,
+    "tint": "#d9d6cf",
+    "material": "concrete-precast"
+  },
+  "rotunda": {
+    "vertex": 3,
+    "radiusM": 6.5,
+    "storeys": 2,
+    "segments": 28,
+    "glass": "glass-reflective@867971",
+    "frame": "painted-steel-light",
+    "columns": 0,
+    "columnD": 0.75,
+    "columnMaterial": "concrete-precast",
+    "columnTint": "#c9c7c2",
+    "transomM": 1.1,
+    "round": {
+      "columns": 3,
+      "diameterM": 0.62,
+      "sides": 18,
+      "material": "concrete-precast@c4c3c0",
+      "towardCorner": 0.8,
+      "soffit": "concrete-precast@d6ccb8",
+      "fascia": "concrete-precast@eadfc8",
+      "fasciaM": 0.55,
+      "insetM": 2.6
+    }
+  },
+  "bladeSigns": [
+    {
+      "at": 0.72,
+      "bottomM": 0.6,
+      "heightM": 2.6,
+      "face": "painted-white@9c5a6e"
+    },
+    {
+      "at": 0.9,
+      "bottomM": 0.6,
+      "heightM": 2.6,
+      "face": "painted-white@56778f"
+    },
+    {
+      "edge": 2,
+      "at": 0.38,
+      "bottomM": 0.4,
+      "heightM": 2.4,
+      "face": "painted-white@4d5d7a"
+    },
+    {
+      "edge": 2,
+      "at": 0.45,
+      "bottomM": 0.4,
+      "heightM": 2.4,
+      "face": "painted-white@94544f"
+    }
+  ],
+  "ground": "lobby",
+  "upper": "office",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.6,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.05,
+        "to": 0.42
+      },
+      {
+        "kind": "door",
+        "from": 0.45,
+        "to": 0.56,
+        "leaf": "anodized-aluminium",
+        "stair": true
+      },
+      {
+        "kind": "window",
+        "from": 0.59,
+        "to": 0.95
+      }
+    ]
+  },
+  "streetEdges": {
+    "2": {
+      "upperWindowSpans": [
+        [
+          0.04,
+          0.96
+        ]
+      ],
+      "pilasters": {
+        "at": [
+          0.33,
+          0.66,
+          1.0
+        ],
+        "widthM": 0.7,
+        "projectionM": 0.2,
+        "toM": 4.0,
+        "tint": "#d9d6cf",
+        "material": "concrete-precast"
+      },
+      "storefront": {
+        "layout": [
+          {
+            "kind": "window",
+            "from": 0.04,
+            "to": 0.31
+          },
+          {
+            "kind": "window",
+            "from": 0.36,
+            "to": 0.64
+          },
+          {
+            "kind": "window",
+            "from": 0.69,
+            "to": 0.96
+          }
+        ],
+        "paneM": 1.1,
+        "transomPaneM": 1.1
+      },
+      "sashRows": 3,
+      "sashCols": 2,
+      "sashMaterial": "painted-steel-mid",
+      "glassModel": {
+        "upper": "glass-sky@a9c3e4",
+        "street": "glass-clear@bccbd0"
+      },
+      "wall": "painted-white",
+      "wallTint": "#f6e4dc",
+      "storefrontFrame": "painted-white@f2f2f0",
+      "upperSillM": 0.7,
+      "upperHeadM": 2.0,
+      "mullionM": 1.3
+    }
+  },
+  "weathering": {
+    "soot": {
+      "height": 1.0,
+      "strength": 0.18
+    },
+    "streak": {
+      "strength": 0.05,
+      "columnMetres": 1.0,
+      "drop": 0.8
+    },
+    "grime": {
+      "strength": 0.12,
+      "metres": 3.0
+    },
+    "axis": "wall"
+  },
+  "glassBacking": {
+    "material": "painted-white",
+    "kinds": [
+      "ribbon"
+    ],
+    "depthM": 0.35,
+    "tints": [
+      "#b7c3c8",
+      "#a9b6bc",
+      "#c4ccce",
+      "#9fadb4"
+    ],
+    "blindTint": "#d9d8d2",
+    "blindMax": 0.5
+  },
+  "glassModel": {
+    "upper": "glass-reflective@8d7f77",
+    "street": "glass-storefront@7e878d"
+  }
+}

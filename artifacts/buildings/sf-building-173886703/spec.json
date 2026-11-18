@@ -1,0 +1,127 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-173886703",
+  "slug": "b173886703",
+  "walkIndex": 36,
+  "street": "5th Street",
+  "address": "301;307;315 5th Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 7.51,
+  "storeys": 2,
+  "floors": {
+    "groundM": 4.41,
+    "upperM": 2.5,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1987,
+  "use": "COMR",
+  "usage": "commercial",
+  "amenity": "deli",
+  "shop": null,
+  "facade": "shopfront",
+  "material": "concrete",
+  "frame": {
+    "edgeIndex": 2,
+    "center": {
+      "x": 1440.2,
+      "z": 241.8
+    },
+    "heading": -2.358239,
+    "width": 34.664,
+    "depth": 7.707
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": 17.246,
+      "z": -3.854
+    },
+    {
+      "x": -17.332,
+      "z": -3.854
+    },
+    {
+      "x": -17.246,
+      "z": 3.854
+    },
+    {
+      "x": 17.332,
+      "z": 3.854
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 17.246,
+        "z": -3.854
+      },
+      "b": {
+        "x": -17.332,
+        "z": -3.854
+      },
+      "lengthM": 34.578,
+      "role": "party",
+      "partyShare": 0.81
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -17.332,
+        "z": -3.854
+      },
+      "b": {
+        "x": -17.246,
+        "z": 3.854
+      },
+      "lengthM": 7.708,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -17.246,
+        "z": 3.854
+      },
+      "b": {
+        "x": 17.332,
+        "z": 3.854
+      },
+      "lengthM": 34.578,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 17.332,
+        "z": 3.854
+      },
+      "b": {
+        "x": 17.246,
+        "z": -3.854
+      },
+      "lengthM": 7.708,
+      "role": "rear",
+      "partyShare": 0.13
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

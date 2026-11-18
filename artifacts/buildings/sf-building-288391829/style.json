@@ -1,0 +1,85 @@
+{
+ "seed": 22,
+ "notes": "Two-storey pier-side shed clad in dark brown board-and-batten, a row of eight small white-framed square windows in the upper storey, a shallow shingled porch roof across the ground storey on posts, ground: window pair at left, open dark service opening centre, dark garage-type door at right. Wall darkened to grey-brown (lit tint, luminance floor), ten small upper windows evenly spaced close under the eave, ground: two white-framed multi-pane windows plus two large dark barn doors, sloped shingle lean-to now on visible timber posts. Skipped: the 'taller corner block' (one even wall height in the data), true vertical battens and a pitched roof (no key; horizontal siding texture stays), sill removal (no key). Wall lit tint lifted to 7e786a (relative luminance 0.19, was 0.15) so the game's shading keeps the dark grey-brown board reading. Clapboard fix (2026-10-02): painted siding moved from the stained-timber wood-siding base to painted-clapboard so the tint renders as paint, not olive. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Lit wall lowered to 7e786b (lum 0.19); glazing cut back to three white multi-pane windows at left and dark barn doors at right on solid board wall; upper ten small windows kept. No key for pitched roof/eave overhang. No key for a pitched roof, so a deep dark fascia/eave band 0.55 m proud is added in hand.py at the roof line to read as the overhanging eave. Lifted/converted once to #989389. Tint = #4c4b48 / painted-clapboard base, no lift (the lift washes dark wood to tan).",
+ "wall": "painted-clapboard",
+ "wallTint": "#53534f",
+ "trim": "painted-white@e8e4d8",
+ "frame": "painted-white@e8e4d8",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@e8e4d8",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-clapboard@7e786b",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.8,
+ "windowSillM": 1.0,
+ "windowHeadM": 1.9,
+ "upperWindows": [
+  0.05,
+  0.15,
+  0.25,
+  0.35,
+  0.45,
+  0.55,
+  0.65,
+  0.75,
+  0.85,
+  0.95
+ ],
+ "bays": [],
+ "streetStills": true,
+ "ground": "lobby",
+ "upper": "rooms",
+ "awning": "asphalt-roof@5c5a56",
+ "awningSpans": [
+  {
+   "from": 0.0,
+   "to": 1.0,
+   "depthM": 2.4,
+   "valanceM": 0.25
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.9,
+  "transomM": 0.3,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.06,
+    "to": 0.12,
+    "kind": "window",
+    "headM": 2.3
+   },
+   {
+    "from": 0.15,
+    "to": 0.27,
+    "kind": "window",
+    "headM": 2.3
+   },
+   {
+    "from": 0.31,
+    "to": 0.37,
+    "kind": "window",
+    "headM": 2.3
+   },
+   {
+    "from": 0.45,
+    "to": 0.62,
+    "kind": "blank",
+    "material": "wood-siding",
+    "tint": "#2a2622",
+    "headM": 2.4
+   },
+   {
+    "from": 0.78,
+    "to": 0.92,
+    "kind": "blank",
+    "material": "wood-siding",
+    "tint": "#2f3a36",
+    "headM": 2.4
+   }
+  ]
+ }
+}

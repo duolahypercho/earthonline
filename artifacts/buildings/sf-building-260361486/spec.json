@@ -1,0 +1,203 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-260361486",
+  "slug": "b260361486",
+  "walkIndex": 109,
+  "street": "Valencia Street",
+  "address": "500, 504, 508, 510 Valencia Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 12.05,
+  "storeys": 3,
+  "floors": {
+    "groundM": 4.962,
+    "upperM": 3.244,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1907,
+  "use": "COMH",
+  "usage": "mixed",
+  "amenity": "restaurant",
+  "shop": null,
+  "facade": "art-deco",
+  "material": "stone",
+  "frame": {
+    "edgeIndex": 0,
+    "center": {
+      "x": -243.265,
+      "z": -1472.422
+    },
+    "heading": -0.096819,
+    "width": 28.194,
+    "depth": 28.252
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -13.834,
+      "z": 14.126
+    },
+    {
+      "x": 14.097,
+      "z": 14.126
+    },
+    {
+      "x": 13.262,
+      "z": -14.126
+    },
+    {
+      "x": -11.278,
+      "z": -13.35
+    },
+    {
+      "x": -10.875,
+      "z": -0.931
+    },
+    {
+      "x": -12.975,
+      "z": -0.827
+    },
+    {
+      "x": -12.793,
+      "z": 5.183
+    },
+    {
+      "x": -14.097,
+      "z": 5.209
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -13.834,
+        "z": 14.126
+      },
+      "b": {
+        "x": 14.097,
+        "z": 14.126
+      },
+      "lengthM": 27.931,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 14.097,
+        "z": 14.126
+      },
+      "b": {
+        "x": 13.262,
+        "z": -14.126
+      },
+      "lengthM": 28.264,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 13.262,
+        "z": -14.126
+      },
+      "b": {
+        "x": -11.278,
+        "z": -13.35
+      },
+      "lengthM": 24.552,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -11.278,
+        "z": -13.35
+      },
+      "b": {
+        "x": -10.875,
+        "z": -0.931
+      },
+      "lengthM": 12.426,
+      "role": "rear",
+      "partyShare": 0.06
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": -10.875,
+        "z": -0.931
+      },
+      "b": {
+        "x": -12.975,
+        "z": -0.827
+      },
+      "lengthM": 2.102,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": -12.975,
+        "z": -0.827
+      },
+      "b": {
+        "x": -12.793,
+        "z": 5.183
+      },
+      "lengthM": 6.013,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": -12.793,
+        "z": 5.183
+      },
+      "b": {
+        "x": -14.097,
+        "z": 5.209
+      },
+      "lengthM": 1.304,
+      "role": "party",
+      "partyShare": 0.63
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": -14.097,
+        "z": 5.209
+      },
+      "b": {
+        "x": -13.834,
+        "z": 14.126
+      },
+      "lengthM": 8.92,
+      "role": "party",
+      "partyShare": 1
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

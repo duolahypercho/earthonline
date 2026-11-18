@@ -1,0 +1,78 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-260361486",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-260361486",
+    "walkIndex": 7527,
+    "builder": "blender",
+    "street": "Valencia Street",
+    "side": null,
+    "addr": "500, 504, 508, 510 Valencia Street",
+    "sourceHeight": 12,
+    "sourceLevels": 3,
+    "frontEdge": 0,
+    "status": "review",
+    "lidarHeightM": 12.05,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b260361486.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b260361486.js"
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b260361486.js",
+    "sha256": "da4fc4b67ee9721e0831611cbeae69a79a34d3fb6761576245aa81905d5432f8",
+    "pass": "b260361486-blender-45eccad2-b82ea8"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-260361486/provenance.json",
+    "sha256": "c4fd26bec8e537f623469b9ca94488ce38758fa9e2b86e425fc48e37205e53ce",
+    "pass": "b260361486-blender-45eccad2-b82ea8"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-260361486/exterior.glb",
+      "sha256": "6bc07feb3c8657bf7ef5a4606ecd172401d4e8b359ed0a0d92ade8250ebcdeb8",
+      "bytes": 2483548
+    },
+    {
+      "role": "interior",
+      "url": "/assets/buildings/sf-building-260361486/interior.glb",
+      "sha256": "ea1eb729d63afbdf52dbde759884291e5d3ee7038363362f7f6ef0c7b56bb1ea",
+      "bytes": 241560
+    },
+    {
+      "role": "fine-s0",
+      "url": "/assets/buildings/sf-building-260361486/fine-s0.glb",
+      "sha256": "40f648e12f9608392a625efb9b6aa757ac9b66d256589399ee4e3a90df81ed9c",
+      "bytes": 55264
+    },
+    {
+      "role": "fine-s1",
+      "url": "/assets/buildings/sf-building-260361486/fine-s1.glb",
+      "sha256": "fe6d58785e65064593a59de8eb7ba6fccab9e75b58619a7a91080aeeff69f650",
+      "bytes": 145176
+    },
+    {
+      "role": "fine-s2",
+      "url": "/assets/buildings/sf-building-260361486/fine-s2.glb",
+      "sha256": "ab27f6f090ec7a0d90bd693fd33e89a1a2b01a464f71059a00e7812c3d445fa3",
+      "bytes": 144132
+    }
+  ],
+  "generatedAt": "2026-09-30T17:22:02.351Z",
+  "base": {
+    "id": "sf-building-260361486",
+    "walkIndex": 7527,
+    "builder": "blender",
+    "street": "Valencia Street",
+    "side": null,
+    "addr": "500, 504, 508, 510 Valencia Street",
+    "sourceHeight": 12,
+    "sourceLevels": 3,
+    "frontEdge": 0,
+    "status": "review",
+    "lidarHeightM": 12.05,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b260361486.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b260361486.js"
+  }
+}

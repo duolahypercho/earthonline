@@ -1,0 +1,90 @@
+{
+  "seed": 1,
+  "notes": "2-storey 1915 timber industrial front (DataSF footprint; its rear footprint is the OSM Clementina building). Dark green horizontal clapboard, a pair of tall black carriage doors with a glazed top row on the left, an orange steel-grille door and a small window right; upper storey four double-hung windows in white-grey frames. Lighter grey-green clapboard (read near-black olive). Paired black carriage doors with a glazed top row (garage material \"carriage\") instead of a roll-up; cornice. Painted-clapboard in grey-green with visible board lines. Greyer green clapboard (read saturated green). Street grime: soot at the base, grime, faint wide streaks. Darker slate green-grey clapboard. No cream belt course between storeys, sash frames the same dark green as the boards. A closed orange-red door behind a diamond scissor gate (the open recess with a curtain read wrong).",
+  "wall": "painted-clapboard",
+  "wallTint": "#5b6661",
+  "trim": "painted-clapboard",
+  "cornice": true,
+  "beltCourse": false,
+  "windowHoods": false,
+  "coping": {
+    "heightM": 0.2,
+    "projectionM": 0.06,
+    "material": "painted-clapboard",
+    "tint": "#565f5b"
+  },
+  "upperWindows": [
+    0.14,
+    0.38,
+    0.62,
+    0.86
+  ],
+  "windowW": 1.0,
+  "frame": "painted-white@4d5853",
+  "storefrontFrame": "painted-steel",
+  "bulkhead": "painted-clapboard@6f847c",
+  "storefrontGlass": "glass-film",
+  "ground": "shop",
+  "upper": "office",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.5,
+    "layout": [
+      {
+        "kind": "garage",
+        "from": 0.06,
+        "to": 0.58,
+        "material": "carriage",
+        "headM": 3.2,
+        "tint": "#1f2123"
+      },
+      {
+        "kind": "blank",
+        "from": 0.63,
+        "to": 0.76,
+        "material": "painted-steel",
+        "tint": "#cf4a2b"
+      },
+      {
+        "kind": "window",
+        "from": 0.8,
+        "to": 0.95
+      }
+    ]
+  },
+  "weathering": {
+    "patches": {
+      "strength": 0.08,
+      "metres": 1.6,
+      "top": 3.5,
+      "mottle": 0.06
+    },
+    "grime": {
+      "strength": 0.22,
+      "metres": 2.4
+    },
+    "soot": {
+      "height": 1.1,
+      "strength": 0.26
+    },
+    "streak": {
+      "strength": 0.035,
+      "columnMetres": 2.2,
+      "drop": 0.7
+    },
+    "bandStrength": 0.1,
+    "axis": "wall"
+  },
+  "scissorGrilles": [
+    {
+      "from": 0.63,
+      "to": 0.76,
+      "bottomM": 0.05,
+      "topM": 3.0,
+      "material": "painted-steel",
+      "tint": "#7d2417",
+      "pitchM": 0.3,
+      "slope": 1.4
+    }
+  ]
+}

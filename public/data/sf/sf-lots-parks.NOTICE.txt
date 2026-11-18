@@ -1,0 +1,24 @@
+sf-lots-parks.json.gz - San Francisco surface car parks and green areas
+
+Contains information from OpenStreetMap, which is made available here under the
+Open Database License (ODbL) 1.0: https://opendatacommons.org/licenses/odbl/1-0/
+© OpenStreetMap contributors - https://www.openstreetmap.org/copyright
+
+Source extract: https://download.bbbike.org/osm/bbbike/SanFrancisco/SanFrancisco.osm.pbf
+Source sha256:  7192f9cf2daa76efbbf7184d2d8ee63417ce37fcf554cab22c1b579d8c9d7dcc
+Produced by:    scripts/build-sf-lots-parks.mjs (sf-lots-parks-v3-3-inland-sand)
+Output sha256:  c790343c892594a51f0e426dcd45d6fc27826251abb923e9b41ddb31fd4b5d69 (sf-lots-parks.json.gz)
+
+This file is a Derivative Database of OpenStreetMap: amenity=parking areas,
+leisure/landuse/natural green areas and inland standing water (lakes, ponds,
+open reservoirs, lagoons), re-projected to world metres. No names are
+carried. Any public use must keep this attribution and share derivative
+databases under the ODbL.
+
+Inland water is kept only where its middle stands on the land of sf-shoreline.geojson
+(DataSF, PDDL 1.0; sha256 a3023288edff7a91f84f20ca54fc55693b2f6a4fa4fb396807378f31be80f01d), so the bay's channels stay the sea's. Nothing of that file is copied.
+Cross-check (not shipped): USGS National Hydrography Dataset, large-scale waterbodies
+  (public domain), nhd-waterbody-large-sf-2026-11-10.geojson, sha256 989308ffebce24ece30b7aba4bbfc333b938aecab5aa9ad023860b0f27a44b44,
+  queried 2026-11-10 from https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer/12 over the city:
+  27 of 72 OSM water bodies lie in an NHD waterbody; 31 of 34
+  NHD lakes and reservoirs of 0.002 km2 or more lie in OSM water or a mapped covered reservoir.

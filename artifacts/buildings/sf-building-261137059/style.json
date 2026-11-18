@@ -1,0 +1,145 @@
+{
+ "seed": 98,
+ "notes": "1909 flats, grey-blue textured stucco with cream trim, four storeys. Ground: darker grey base with small vents and a small door, arched iron gate at right. First upper: one wide window group in a shallow box bay. Upper two storeys: two cant bays with a railed fire-escape balcony between. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. Base fix (2026-10-03): cool/grey wallTint = target / painted-stucco base so the warm stucco albedo does not turn it pink. GroundBand lift (2026-10-03): groundBand tint #8b93a0 -> #a2a9b3 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#f0ffff",
+ "trim": "painted-white@eee8d8",
+ "frame": "painted-white@eee8d8",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@eee8d8",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@ccd0d5",
+ "cornice": true,
+ "corniceProjectionM": 0.45,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.31,
+   "widthM": 4.6,
+   "projectionM": 0.35,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f6f4ec",
+   "hyB": {
+    "plan": "box",
+    "sashes": {
+     "front": 4,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   },
+   "toStorey": 1
+  },
+  {
+   "at": 0.22,
+   "widthM": 2.5,
+   "projectionM": 0.6,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#f6f4ec",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.78,
+   "widthM": 2.5,
+   "projectionM": 0.6,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#f6f4ec",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.03,
+    "to": 0.12,
+    "kind": "door",
+    "leaf": "painted-steel@5a6068",
+    "headM": 2.2
+   },
+   {
+    "from": 0.8,
+    "to": 0.97,
+    "kind": "gate",
+    "headM": 3.0,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.2,
+  "upperM": 2.95
+ },
+ "fireEscape": {
+  "at": 0.5,
+  "widthM": 3.0,
+  "depthM": 0.9,
+  "material": "painted-steel"
+ },
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#a2a9b3",
+  "topM": 2.8
+ }
+}

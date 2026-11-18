@@ -1,0 +1,19 @@
+[package]
+name = "eo-audio"
+version = "0.1.0"
+edition = "2024"
+description = "Earth Online native: the sound system (bank, real-time mixer with 3D sources, buses, Doppler and a voice limit; device, null and offline outputs) and the city's sound director. No GPU."
+publish = false
+
+[dependencies]
+eo-data = { path = "../eo-data" } # groundscale: the sound places on the scaled ground plan
+anyhow = "1.0.104"
+cpal = "0.18.2"   # the output device (WASAPI on Windows), on its own thread
+hound = "3.5.1"   # WAV decode (every clip is PCM WAV) and the offline mixes
+rtrb = "0.3.6"    # wait-free single-producer rings: commands in, stream chunks in
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+
+[dev-dependencies]
+ebur128 = "0.1.10" # examples/screen.rs: integrated loudness (EBU R 128 / ITU-R BS.1770)

@@ -1,0 +1,140 @@
+{
+ "seed": 41,
+ "notes": "Medium grey stucco (now 8a8a86, above the luminance floor), a second grey sectional door at the right end (was a white flush door; now a garage leaf), triple/pair storey-1 windows kept, bays with flat deep soffits (corbel removed, soffit as deep as the bay). Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-stucco",
+ "wallTint": "#a1a19e",
+ "trim": "painted-white@dcdad4",
+ "frame": "painted-white@f0efea",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@6a6864",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-stucco@989693",
+ "cornice": false,
+ "corniceProjectionM": 0.12,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.8,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.3,
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.0,
+  "upperM": 2.92
+ },
+ "upperWindows": [
+  0.28
+ ],
+ "bays": [
+  {
+   "at": 0.28,
+   "widthM": 2.8,
+   "projectionM": 0.6,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#a1a19e",
+   "soffit": {
+    "tint": "#6e6c68",
+    "depthM": 0.6
+   }
+  },
+  {
+   "at": 0.74,
+   "widthM": 2.7,
+   "projectionM": 0.6,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#a1a19e",
+   "soffit": {
+    "tint": "#6e6c68",
+    "depthM": 0.6
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.6,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.68,
+    "to": 0.92,
+    "kind": "garage",
+    "material": "painted-white",
+    "tint": "#a4a29c",
+    "headM": 2.5
+   },
+   {
+    "from": 0.1,
+    "to": 0.63,
+    "kind": "garage",
+    "material": "painted-white",
+    "tint": "#a4a29c",
+    "headM": 2.5
+   }
+  ]
+ },
+ "edgeRoles": {
+  "1": "flank"
+ },
+ "streetEdges": {
+  "1": {
+   "upperWindows": [
+    0.15,
+    0.35,
+    0.55,
+    0.75,
+    0.9
+   ],
+   "bays": []
+  }
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.4,
+     0.5
+    ],
+    [
+     0.28,
+     0.38
+    ],
+    [
+     0.16,
+     0.26
+    ],
+    [
+     0.79,
+     0.92
+    ],
+    [
+     0.64,
+     0.77
+    ]
+   ],
+   "sillM": 0.75,
+   "headM": 1.85
+  }
+ },
+ "hbBayCrown": {
+  "dropM": 0.0,
+  "hipRiseM": 0.05,
+  "hipMaterial": "painted-stucco",
+  "hipTint": "#8a8a86",
+  "corbelTiers": 0,
+  "corbelStepM": 0.15,
+  "panels": false
+ },
+ "garagePanel": {
+  "doorM": 2.6,
+  "cols": 1,
+  "rows": 5,
+  "leaves": 1,
+  "tint": "#a4a29c",
+  "panelTint": "#9a9892"
+ },
+ "streetStills": true
+}

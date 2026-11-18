@@ -1,0 +1,478 @@
+{
+  "builder": "house",
+  "seed": 5,
+  "notes": "1400 La Playa, 1960 twelve-unit flats on the Judah corner (assessor), from the street-level reference by eye (words only): deep blue painted stucco, three storeys, an L around a court open to the north and west. The La Playa face has two garage doors (one yellow panelled, one painted with a colourful mural), a steel gate at the court corner, and two stacked window columns joined by pale blue spandrel panels. The court faces carry open access galleries with pale blue solid balustrades, steel posts and unit doors; a slatted pale-wood screen closes the stair at the court corner. Flat roof with a thin projecting eave. The south wall abuts the neighbouring house.",
+  "storeysSeen": 3,
+  "groundM": 2.7,
+  "roofLevelM": 8.35,
+  "wall": "painted-stucco",
+  "wallTint": "#5b6f9c",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "painted-stucco",
+  "rearTint": "#5b6f9c",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "edgeRoles": {
+    "8": "party"
+  },
+  "rect": [
+    -12.55,
+    -4.62,
+    -14.0,
+    15.6
+  ],
+  "wings": [
+    {
+      "rect": [
+        -4.45,
+        11.9,
+        -14.55,
+        -6.15
+      ],
+      "units": 2,
+      "room": "flat"
+    }
+  ],
+  "roofForm": {
+    "form": "flat",
+    "eaveM": 0.4,
+    "fasciaM": 0.22,
+    "sideOverhangM": 0.0,
+    "eaveEdges": [
+      3,
+      4,
+      6,
+      7
+    ],
+    "fascia": "painted-white"
+  },
+  "parapetM": 0.47,
+  "garages": [
+    {
+      "from": 0.19,
+      "to": 0.49,
+      "headM": 2.25,
+      "material": "painted-white",
+      "tint": "#fde37b",
+      "pattern": "panel"
+    },
+    {
+      "from": 0.53,
+      "to": 0.83,
+      "headM": 2.25,
+      "material": "painted-white",
+      "pattern": "mural",
+      "fields": [
+        [
+          0.0,
+          0.45,
+          0.0,
+          1.0,
+          "#e0a35a"
+        ],
+        [
+          0.45,
+          1.0,
+          0.0,
+          0.55,
+          "#6fa0d8"
+        ],
+        [
+          0.45,
+          1.0,
+          0.55,
+          1.0,
+          "#f2d06b"
+        ],
+        [
+          0.25,
+          0.6,
+          0.3,
+          0.8,
+          "#d8584a"
+        ]
+      ]
+    }
+  ],
+  "gate": {
+    "from": 0.02,
+    "to": 0.15,
+    "headM": 2.2,
+    "material": "painted-steel"
+  },
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.16,
+      "to": 0.43,
+      "sill": 0.9,
+      "head": 2.3,
+      "panes": [
+        2,
+        1
+      ]
+    },
+    {
+      "storey": 1,
+      "from": 0.6,
+      "to": 0.87,
+      "sill": 0.9,
+      "head": 2.3,
+      "panes": [
+        2,
+        1
+      ]
+    },
+    {
+      "storey": 2,
+      "from": 0.16,
+      "to": 0.43,
+      "sill": 0.9,
+      "head": 2.3,
+      "panes": [
+        2,
+        1
+      ]
+    },
+    {
+      "storey": 2,
+      "from": 0.6,
+      "to": 0.87,
+      "sill": 0.9,
+      "head": 2.3,
+      "panes": [
+        2,
+        1
+      ]
+    }
+  ],
+  "panels": [
+    {
+      "storey": 1,
+      "from": 0.16,
+      "to": 0.43,
+      "y0": 2.4,
+      "y1": 3.72,
+      "material": "painted-white",
+      "tint": "#b0ddff"
+    },
+    {
+      "storey": 1,
+      "from": 0.6,
+      "to": 0.87,
+      "y0": 2.4,
+      "y1": 3.72,
+      "material": "painted-white",
+      "tint": "#b0ddff"
+    }
+  ],
+  "edgeItems": {
+    "3": [
+      {
+        "kind": "door",
+        "storey": 0,
+        "from": 0.1,
+        "to": 0.16
+      },
+      {
+        "kind": "window",
+        "storey": 0,
+        "from": 0.4,
+        "to": 0.5
+      },
+      {
+        "kind": "window",
+        "storey": 0,
+        "from": 0.75,
+        "to": 0.85
+      },
+      {
+        "kind": "door",
+        "storey": 1,
+        "from": 0.12,
+        "to": 0.18,
+        "material": "painted-white",
+        "tint": "#fde37b"
+      },
+      {
+        "kind": "window",
+        "storey": 1,
+        "from": 0.21,
+        "to": 0.33,
+        "panes": [
+          2,
+          1
+        ]
+      },
+      {
+        "kind": "door",
+        "storey": 1,
+        "from": 0.45,
+        "to": 0.51,
+        "material": "painted-white",
+        "tint": "#fde37b"
+      },
+      {
+        "kind": "window",
+        "storey": 1,
+        "from": 0.54,
+        "to": 0.66,
+        "panes": [
+          2,
+          1
+        ]
+      },
+      {
+        "kind": "door",
+        "storey": 1,
+        "from": 0.78,
+        "to": 0.84,
+        "material": "painted-white",
+        "tint": "#fde37b"
+      },
+      {
+        "kind": "window",
+        "storey": 1,
+        "from": 0.87,
+        "to": 0.97,
+        "panes": [
+          2,
+          1
+        ]
+      },
+      {
+        "kind": "door",
+        "storey": 2,
+        "from": 0.12,
+        "to": 0.18,
+        "material": "painted-white",
+        "tint": "#fde37b"
+      },
+      {
+        "kind": "window",
+        "storey": 2,
+        "from": 0.21,
+        "to": 0.33,
+        "panes": [
+          2,
+          1
+        ]
+      },
+      {
+        "kind": "door",
+        "storey": 2,
+        "from": 0.45,
+        "to": 0.51,
+        "material": "painted-white",
+        "tint": "#fde37b"
+      },
+      {
+        "kind": "window",
+        "storey": 2,
+        "from": 0.54,
+        "to": 0.66,
+        "panes": [
+          2,
+          1
+        ]
+      },
+      {
+        "kind": "door",
+        "storey": 2,
+        "from": 0.78,
+        "to": 0.84,
+        "material": "painted-white",
+        "tint": "#fde37b"
+      },
+      {
+        "kind": "window",
+        "storey": 2,
+        "from": 0.87,
+        "to": 0.97,
+        "panes": [
+          2,
+          1
+        ]
+      }
+    ],
+    "4": [
+      {
+        "kind": "door",
+        "storey": 0,
+        "from": 0.15,
+        "to": 0.24
+      },
+      {
+        "kind": "window",
+        "storey": 0,
+        "from": 0.3,
+        "to": 0.45
+      },
+      {
+        "kind": "door",
+        "storey": 0,
+        "from": 0.6,
+        "to": 0.69
+      },
+      {
+        "kind": "window",
+        "storey": 0,
+        "from": 0.75,
+        "to": 0.9
+      },
+      {
+        "kind": "door",
+        "storey": 1,
+        "from": 0.15,
+        "to": 0.24,
+        "material": "painted-white",
+        "tint": "#fde37b"
+      },
+      {
+        "kind": "window",
+        "storey": 1,
+        "from": 0.3,
+        "to": 0.45,
+        "panes": [
+          2,
+          1
+        ]
+      },
+      {
+        "kind": "door",
+        "storey": 1,
+        "from": 0.6,
+        "to": 0.69,
+        "material": "painted-white",
+        "tint": "#fde37b"
+      },
+      {
+        "kind": "window",
+        "storey": 1,
+        "from": 0.75,
+        "to": 0.9,
+        "panes": [
+          2,
+          1
+        ]
+      },
+      {
+        "kind": "door",
+        "storey": 2,
+        "from": 0.15,
+        "to": 0.24,
+        "material": "painted-white",
+        "tint": "#fde37b"
+      },
+      {
+        "kind": "window",
+        "storey": 2,
+        "from": 0.3,
+        "to": 0.45,
+        "panes": [
+          2,
+          1
+        ]
+      },
+      {
+        "kind": "door",
+        "storey": 2,
+        "from": 0.6,
+        "to": 0.69,
+        "material": "painted-white",
+        "tint": "#fde37b"
+      },
+      {
+        "kind": "window",
+        "storey": 2,
+        "from": 0.75,
+        "to": 0.9,
+        "panes": [
+          2,
+          1
+        ]
+      }
+    ]
+  },
+  "galleries": [
+    {
+      "edge": 3,
+      "fromStorey": 1,
+      "projectionM": 0.42,
+      "material": "painted-white",
+      "tint": "#b0ddff",
+      "postMaterial": "painted-steel"
+    },
+    {
+      "edge": 4,
+      "fromStorey": 1,
+      "projectionM": 0.42,
+      "material": "painted-white",
+      "tint": "#b0ddff",
+      "postMaterial": "painted-steel"
+    }
+  ],
+  "fences": [
+    {
+      "edge": 1,
+      "from": 0.0,
+      "to": 1.0,
+      "heightM": 7.6,
+      "offsetM": 0.2,
+      "gapM": 0.05,
+      "material": "wood-siding",
+      "tint": "#e8d8c0"
+    }
+  ],
+  "stairFrontM": 7.0,
+  "programme": "flats",
+  "rearCorridor": true,
+  "rear": {
+    "windowsPerStorey": 3,
+    "windowW": 1.2,
+    "panes": [
+      2,
+      1
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.3,
+        0.3
+      ],
+      [
+        0.5,
+        0.7
+      ],
+      [
+        0.4,
+        0.15
+      ]
+    ]
+  },
+  "floors": {
+    "1": {
+      "front": "flat",
+      "rooms": [
+        "bath",
+        "flat",
+        "flat"
+      ]
+    },
+    "2": {
+      "front": "flat",
+      "rooms": [
+        "bath",
+        "flat",
+        "flat"
+      ]
+    }
+  },
+  "groundRooms": [
+    "laundry",
+    "flat",
+    "flat"
+  ]
+}

@@ -1,0 +1,224 @@
+{
+  "seed": 7,
+  "notes": "Round 3: single stone belt with drip, dark-bulkhead shopfronts, blank sign boards over corner and Union shops, taller ~1:2 upper windows, oriel with panels and stepped corbel, denser eave brackets, one brick band. Round 2: buff brick with darker banding, heavy stone belt course + stone sills/hoods, deep reveals, doubled eave brackets, dark-sash transomed shopfronts, clear glass over room backing. Round 1c (Union gets its own 14 upper openings) (chamfer is the front so the oriel builds; Union dressed as a street edge with explicit shop layout): 1914 three-storey corner block, Union face (edge 0) and 6 m corner chamfer (edge 1, faces the intersection). Buff brick, cast-stone belt course over a tall shopfront storey, deep oxide-red bracketed eave, red-painted polygonal corner oriel over storeys 2-3, ~14 regular square-headed openings per upper storey on Union, upper windows boarded with plywood (newest street-level reference). Ground shops, apartments above.",
+  "wall": "brick-buff",
+  "trim": "wood-siding@8c3b2c",
+  "frame": "painted-steel@4a2a22",
+  "glass": "glass-clear",
+  "storefrontGlass": "glass-storefront",
+  "storefrontFrame": "painted-steel",
+  "bulkhead": "painted-steel",
+  "roof": "asphalt-roof",
+  "cornice": true,
+  "corniceProjectionM": 0.45,
+  "beltCourse": true,
+  "windowHoods": true,
+  "bayM": 2.6,
+  "windowW": 1.0,
+  "windowSillM": 0.7,
+  "windowHeadM": 2.9,
+  "endPierM": 0.9,
+  "storefront": {
+    "bulkheadM": 0.9,
+    "transomM": 1.0,
+    "pierM": 0.5,
+    "awning": false,
+    "layout": [
+      {
+        "from": 0.06,
+        "to": 0.33,
+        "kind": "window"
+      },
+      {
+        "from": 0.36,
+        "to": 0.64,
+        "kind": "door"
+      },
+      {
+        "from": 0.67,
+        "to": 0.94,
+        "kind": "window"
+      }
+    ],
+    "transomPaneM": 0.55,
+    "transomRows": 1,
+    "sashRows": 2,
+    "sashCols": 1
+  },
+  "ground": "shop",
+  "upper": "apartment",
+  "edgeRoles": {
+    "0": "flank",
+    "1": "front",
+    "4": "party"
+  },
+  "streetEdges": {
+    "0": {
+      "storefront": {
+        "layout": [
+          {
+            "from": 0.03,
+            "to": 0.145,
+            "kind": "window"
+          },
+          {
+            "from": 0.155,
+            "to": 0.19,
+            "kind": "door"
+          },
+          {
+            "from": 0.195,
+            "to": 0.206,
+            "kind": "window"
+          },
+          {
+            "from": 0.218,
+            "to": 0.333,
+            "kind": "window"
+          },
+          {
+            "from": 0.343,
+            "to": 0.378,
+            "kind": "door"
+          },
+          {
+            "from": 0.383,
+            "to": 0.394,
+            "kind": "window"
+          },
+          {
+            "from": 0.406,
+            "to": 0.476,
+            "kind": "window"
+          },
+          {
+            "from": 0.486,
+            "to": 0.521,
+            "kind": "door",
+            "stair": true
+          },
+          {
+            "from": 0.531,
+            "to": 0.582,
+            "kind": "window"
+          },
+          {
+            "from": 0.594,
+            "to": 0.709,
+            "kind": "window"
+          },
+          {
+            "from": 0.719,
+            "to": 0.754,
+            "kind": "door"
+          },
+          {
+            "from": 0.759,
+            "to": 0.77,
+            "kind": "window"
+          },
+          {
+            "from": 0.782,
+            "to": 0.897,
+            "kind": "window"
+          },
+          {
+            "from": 0.907,
+            "to": 0.942,
+            "kind": "door"
+          },
+          {
+            "from": 0.947,
+            "to": 0.958,
+            "kind": "window"
+          }
+        ]
+      },
+      "upperWindows": [
+        0.068,
+        0.135,
+        0.201,
+        0.268,
+        0.334,
+        0.4,
+        0.467,
+        0.533,
+        0.6,
+        0.666,
+        0.733,
+        0.799,
+        0.865,
+        0.932
+      ],
+      "stripes": {
+        "fromStorey": 1,
+        "offsetsM": [
+          2.95
+        ],
+        "heightM": 0.28,
+        "material": "brick-buff",
+        "tint": "7a5a3c"
+      }
+    }
+  },
+  "bays": [
+    {
+      "at": 0.5,
+      "widthM": 3.4,
+      "projectionM": 0.6,
+      "fromStorey": 1,
+      "material": "painted-stucco",
+      "tint": "#8c2f22",
+      "frame": "painted-steel",
+      "frameTint": "#4a2a22",
+      "panelTint": "#a83a2b",
+      "corbelSteps": 3
+    }
+  ],
+  "upperWindows": [
+    0.5
+  ],
+  "stoneTrim": "cast-stone-trim",
+  "beltCourseHeightM": 0.42,
+  "beltCourseProjM": 0.2,
+  "bracketPitchM": 0.4,
+  "revealDepthM": 0.26,
+  "sashMaterial": "painted-steel",
+  "glassBacking": {
+    "material": "painted-white",
+    "tints": [
+      "#3a3129",
+      "#5b4a38",
+      "#2a2622",
+      "#6b5b48"
+    ],
+    "depthM": 0.5,
+    "kinds": [
+      "punched",
+      "bay"
+    ],
+    "blindTint": "#8a7a62",
+    "blindMax": 0.35
+  },
+  "beltDripM": 0.1,
+  "signBand": {
+    "heightM": 0.6,
+    "projM": 0.07,
+    "material": "painted-white",
+    "tint": "#d8d0bb",
+    "edges": {
+      "0": [
+        [
+          0.03,
+          0.3
+        ]
+      ],
+      "1": [
+        [
+          0.08,
+          0.92
+        ]
+      ]
+    }
+  }
+}

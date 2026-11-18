@@ -1,0 +1,242 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-263347480",
+  "slug": "b263347480",
+  "walkIndex": 109,
+  "street": "Chestnut Street",
+  "address": "1925 Chestnut Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "street count 4 (style storeysSeen) overrides Assessor roll (assessor) 3"
+  },
+  "storeysRoll": 3,
+  "heightM": 12.11,
+  "storeys": 4,
+  "floors": {
+    "groundM": 3.4,
+    "upperM": 2.7,
+    "roofM": 0.61
+  },
+  "yearBuilt": 1927,
+  "use": "MRES",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "bay-window",
+  "material": "painted",
+  "frame": {
+    "edgeIndex": 0,
+    "center": {
+      "x": -1373.55,
+      "z": 2519.6
+    },
+    "heading": -0.153154,
+    "width": 15.218,
+    "depth": 21.372
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -7.609,
+      "z": 10.686
+    },
+    {
+      "x": 7.468,
+      "z": 10.686
+    },
+    {
+      "x": 5.575,
+      "z": -2.884
+    },
+    {
+      "x": 7.598,
+      "z": -2.893
+    },
+    {
+      "x": 7.609,
+      "z": -10.686
+    },
+    {
+      "x": -7.566,
+      "z": -10.671
+    },
+    {
+      "x": -7.562,
+      "z": -2.779
+    },
+    {
+      "x": -5.441,
+      "z": -2.803
+    },
+    {
+      "x": -5.545,
+      "z": 3.082
+    },
+    {
+      "x": -7.567,
+      "z": 3.091
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -7.609,
+        "z": 10.686
+      },
+      "b": {
+        "x": 7.468,
+        "z": 10.686
+      },
+      "lengthM": 15.076,
+      "role": "front",
+      "partyShare": 0.06
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 7.468,
+        "z": 10.686
+      },
+      "b": {
+        "x": 5.575,
+        "z": -2.884
+      },
+      "lengthM": 13.701,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 5.575,
+        "z": -2.884
+      },
+      "b": {
+        "x": 7.598,
+        "z": -2.893
+      },
+      "lengthM": 2.022,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 7.598,
+        "z": -2.893
+      },
+      "b": {
+        "x": 7.609,
+        "z": -10.686
+      },
+      "lengthM": 7.793,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": 7.609,
+        "z": -10.686
+      },
+      "b": {
+        "x": -7.566,
+        "z": -10.671
+      },
+      "lengthM": 15.175,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": -7.566,
+        "z": -10.671
+      },
+      "b": {
+        "x": -7.562,
+        "z": -2.779
+      },
+      "lengthM": 7.892,
+      "role": "rear",
+      "partyShare": 0.56
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": -7.562,
+        "z": -2.779
+      },
+      "b": {
+        "x": -5.441,
+        "z": -2.803
+      },
+      "lengthM": 2.121,
+      "role": "rear",
+      "partyShare": 0.44
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": -5.441,
+        "z": -2.803
+      },
+      "b": {
+        "x": -5.545,
+        "z": 3.082
+      },
+      "lengthM": 5.886,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 8,
+      "a": {
+        "x": -5.545,
+        "z": 3.082
+      },
+      "b": {
+        "x": -7.567,
+        "z": 3.091
+      },
+      "lengthM": 2.022,
+      "role": "rear",
+      "partyShare": 0.44
+    },
+    {
+      "index": 9,
+      "a": {
+        "x": -7.567,
+        "z": 3.091
+      },
+      "b": {
+        "x": -7.609,
+        "z": 10.686
+      },
+      "lengthM": 7.595,
+      "role": "party",
+      "partyShare": 1
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

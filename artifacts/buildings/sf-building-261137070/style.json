@@ -1,0 +1,161 @@
+{
+ "seed": 99,
+ "notes": "1914 flats, light grey stucco with cream trim over a white-painted brick base, four storeys. Ground: low brick base with a barred dark door at left. First upper: barred window groups. Upper two storeys: two wide box bays over a shallow bracketed canopy. Warm greige, wide three-light windows on the first upper storey, rough stone base with vents, multi-light bay sashes, bracketed cornice. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. GroundBand lift (2026-10-03): groundBand tint #d8d2c4 -> #ece8e2 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#b1aca2",
+ "trim": "painted-white@e8e2d2",
+ "frame": "painted-white@e8e2d2",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@e8e2d2",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@b1aca2",
+ "cornice": true,
+ "corniceProjectionM": 0.45,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.28,
+   "widthM": 3.2,
+   "projectionM": 0.5,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#b1aca2",
+   "hyB": {
+    "plan": "box",
+    "sashes": {
+     "front": 3,
+     "sides": 0
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "muntins": {
+     "upperRows": 2,
+     "upperCols": 2,
+     "lowerRows": 1,
+     "lowerCols": 1
+    }
+   }
+  },
+  {
+   "at": 0.72,
+   "widthM": 3.2,
+   "projectionM": 0.5,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#b1aca2",
+   "hyB": {
+    "plan": "box",
+    "sashes": {
+     "front": 3,
+     "sides": 0
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "muntins": {
+     "upperRows": 2,
+     "upperCols": 2,
+     "lowerRows": 1,
+     "lowerCols": 1
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.07,
+    "to": 0.19,
+    "kind": "door",
+    "leaf": "painted-steel@26282c",
+    "headM": 2.3,
+    "stair": true
+   },
+   {
+    "from": 0.5,
+    "to": 0.53,
+    "kind": "garage",
+    "material": "louvre",
+    "tint": "#3a3a38",
+    "headM": 0.6
+   },
+   {
+    "from": 0.8,
+    "to": 0.83,
+    "kind": "garage",
+    "material": "louvre",
+    "tint": "#3a3a38",
+    "headM": 0.6
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 2.8,
+  "upperM": 3.01
+ },
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#ece8e2",
+  "topM": 2.8
+ },
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.1,
+     0.45
+    ],
+    [
+     0.55,
+     0.92
+    ]
+   ],
+   "sillM": 0.85,
+   "headM": 2.35
+  }
+ },
+ "hyDRubble": {
+  "toM": 2.8,
+  "courseM": 0.3,
+  "blockM": 0.6,
+  "projM": 0.03,
+  "shade": 0.75,
+  "seed": 7
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 1.0,
+  "heightM": 0.5,
+  "depthM": 0.35,
+  "widthM": 0.14
+ }
+}

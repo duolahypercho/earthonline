@@ -1,0 +1,338 @@
+{
+ "seed": 2,
+ "notes": "Cream stucco Mediterranean-revival corner apartment at Hyde and Lombard, set behind a garden hedge. Hyde face runs over two collinear edges (6 and 5): paired and tripled casements per storey, one shallow bay at storey 1, a deep dark-red eave cornice standing in for the tile overhang, arched entry at the north end with a stair door, no garage. The Lombard end carries the fire escape. Wall pushed to a warmer butter cream, the single-storey bay drew as a blank panel so it is dropped for a window pair, ground windows shortened (raised garden level behind the hedge). Mediterranean-revival reading. Bracketed cornice removed; lower storey plates (3.5/3.1 m) leave the LiDAR allowance for a low red-tile hipped roof over the main block with ~0.6 m eaves. Lombard corner is the south (x-) end: steel fire escape on the corner stack and a top-storey loggia with a terracotta solid balustrade beside it. Ground floor is a raised residential floor: short windows over a stucco dado (no shopfront glazing), small tile pent roofs over the Hyde ground windows, entry at the north end. Upper windows in irregular pairs/triples with tile hoods. Wall pushed to butter cream. Storey count stays the data's 3 (spec). Top storey on the Hyde face drawn as casement groups (pair/triple/pair) plus the corner loggia; ground window frames in the wall colour so the dado reads as wall. The glazed door mid-facade (edge 5/6 junction) becomes an ordinary window; the entry with its stair moves to the north end of the Hyde face; ground sills raised (raised garden floor); tile eaves deepened to 0.9 m; wall a more saturated butter cream. Storey count stays the data 3 (spec, no style key can add a storey). Pilaster/spandrel frame grid removed from the long Hyde plane, every upper storey now plain butter-cream stucco with paired casements; window heads and sills toned to cream (trim cream, tile colour kept only on roof, hoods and the lattice panel); a terracotta lattice panel under the top-floor window pair at the fire-escape corner; hipped tile roof pitched steeper (lower plates, 2.5 m rise, 1.0 m eave); fire escape white-painted and wider; ground windows short with wall-coloured sill panels under tile pent hoods. Storey count stays the data 3 (spec-locked). Ground window posts and sill panels in the wall colour so ground windows read as short punched windows; tile pent hoods over every ground window on both street planes. Lombard-corner tower storey as a flush roof block over the Lombard third of the Hyde face (walls to ~11.4 m, low tile hip) with paired top windows over a terracotta lattice panel; the rest of the Hyde face is a flat roof deck behind a deep red tile eave band at 9.4 m (every roof block peaks at the LiDAR allowance, so a second hip hid the tower), so the corner tower steps up. Upper windows become casement ribbons (trios/pairs, white sashes, thin sills, no lintel caps). Wall retoned to a less saturated warm cream. Ground tile pent hoods merged into two continuous strips on the long Hyde plane. Fire escape stays at the Lombard end of the Hyde face. Arched fanlight over the north-end entry. Barrel-tile texture and rafter tails (no kit material/key), planting-bed wall (site landscape), multi-mass step down the hill (no key beyond the tower step). Rework B: wall warmed to a pale yellow-cream; a long low hipped red tile roof (0.6 m eaves) now covers the main Hyde mass (one block spanning both collinear Hyde edges, 24 deg), the Lombard-end tower is a full 6.4 m flush block rising to ~12 m with paired tall windows over a solid terracotta lattice panel and its own small hip; the flat tile eave coping is dropped. Tile pent hoods flattened (0.4 m deep, low slope) so they stop reading as striped awnings. Ground windows sit over a 1.6 m stucco sill (frame and bulkhead in the wall colour) on a 0.9 m plinth; the kit grille runs the full opening down to the pavement and read as a barred door, so it is left off. Upper casements get 3x2 muntin lites and 0.3 m reveals. Not doable with style keys: rafter tails/bracketed soffit, corbels under the hoods, planting in front of the base. The tower's paired windows drawn as pale glass in white frames instead of dark panels; the lattice panel a darker clay; casements now two leaves of 2x3 lites in 0.4 m reveals. Not doable with style keys: fire-escape landings on the tower and ground (the kit draws landings on storeys 1.top only; the tower is a roof block), the rooftop railing, corbels under the hoods, the lattice pattern. Wall warmed a step (#fff2b4); ground window sills lowered from 1.6 m to 1.1 m so the openings read as ordinary raised-plinth windows, not French doors. Ground window heads lowered to 2.4 m so the sill-to-head glass is 1.3 m (ordinary window, not door height). Plinth is raised to 1.45 m so ground openings read as small windows over a stucco plinth, not French doors; upper sash muntin rows cut to 2 (sparse grouped casements). Wall/roof/tower/fire escape claims already applied. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k). GroundBand lift (2026-10-03): groundBand tint #f2e6b8 -> #f8f2dc (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-white",
+ "wallTint": "#fff8da",
+ "trim": "painted-white@f8ecc8",
+ "frame": "painted-white",
+ "glass": "glass-clear",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.8,
+ "windowSillM": 0.8,
+ "windowHeadM": 2.35,
+ "floorsM": {
+  "groundM": 3.3,
+  "upperM": 3
+ },
+ "wallTopM": 9.4,
+ "edgeRoles": {
+  "5": "front"
+ },
+ "awning": "terracotta@d19cac",
+ "fireEscape": {
+  "at": 0.955,
+  "widthM": 2.2,
+  "depthM": 1.0,
+  "material": "painted-white@f4f0e8"
+ },
+ "storefrontFrame": "painted-white@fff7ca",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-white@fffbe4",
+ "storefront": {
+  "bulkheadM": 1.45,
+  "transomM": 0.25,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.03,
+    "to": 0.12,
+    "kind": "door",
+    "stair": true,
+    "leaf": "wood-siding"
+   },
+   {
+    "from": 0.25,
+    "to": 0.42,
+    "kind": "window",
+    "headM": 2.4
+   },
+   {
+    "from": 0.6,
+    "to": 0.78,
+    "kind": "window",
+    "headM": 2.4
+   }
+  ]
+ },
+ "streetEdges": {
+  "4": {
+   "storefront": {
+    "layout": [
+     {
+      "from": 0.3,
+      "to": 0.4,
+      "kind": "window",
+      "headM": 2.4
+     },
+     {
+      "from": 0.62,
+      "to": 0.72,
+      "kind": "window",
+      "headM": 2.4
+     }
+    ]
+   },
+   "awningSpans": [
+    {
+     "from": 0.3,
+     "to": 0.4,
+     "depthM": 0.4,
+     "riseM": 0.08,
+     "dropM": 0.1
+    },
+    {
+     "from": 0.62,
+     "to": 0.72,
+     "depthM": 0.4,
+     "riseM": 0.08,
+     "dropM": 0.1
+    }
+   ],
+   "upperWindowSpans": [
+    [
+     0.3,
+     0.4
+    ],
+    [
+     0.48,
+     0.62
+    ],
+    [
+     0.72,
+     0.84
+    ]
+   ],
+   "roofBlocks": []
+  },
+  "5": {
+   "awningSpans": [
+    {
+     "from": 0.17,
+     "to": 0.38,
+     "depthM": 0.4,
+     "riseM": 0.08,
+     "dropM": 0.1
+    },
+    {
+     "from": 0.5,
+     "to": 0.71,
+     "depthM": 0.4,
+     "riseM": 0.08,
+     "dropM": 0.1
+    }
+   ],
+   "roofBlocks": [
+    {
+     "at": 0.07,
+     "widthM": 16.6,
+     "depthM": 12.0,
+     "setbackM": 0.0,
+     "hipRiseM": 3.0,
+     "eaveM": 0.8,
+     "material": "painted-white",
+     "tint": "#fff7ca",
+     "hipMaterial": "terracotta@d19cac"
+    },
+    {
+     "at": 0.8,
+     "widthM": 6.4,
+     "depthM": 9.0,
+     "setbackM": 0.0,
+     "hipRiseM": 0.6,
+     "eaveM": 0.8,
+     "material": "painted-white",
+     "tint": "#fff7ca",
+     "hipMaterial": "terracotta@d19cac"
+    }
+   ],
+   "storefront": {
+    "layout": [
+     {
+      "from": 0.02,
+      "to": 0.09,
+      "kind": "window",
+      "headM": 2.4
+     },
+     {
+      "from": 0.19,
+      "to": 0.26,
+      "kind": "window",
+      "headM": 2.4
+     },
+     {
+      "from": 0.29,
+      "to": 0.36,
+      "kind": "window",
+      "headM": 2.4
+     },
+     {
+      "from": 0.52,
+      "to": 0.59,
+      "kind": "window",
+      "headM": 2.4
+     },
+     {
+      "from": 0.62,
+      "to": 0.69,
+      "kind": "window",
+      "headM": 2.4
+     }
+    ]
+   },
+   "plaques": [
+    {
+     "at": 0.765,
+     "y": 10.95,
+     "w": 0.66,
+     "h": 1.16,
+     "face": "painted-white@b8c8d2"
+    },
+    {
+     "at": 0.742,
+     "y": 10.95,
+     "w": 0.08,
+     "h": 1.32,
+     "face": "painted-white"
+    },
+    {
+     "at": 0.788,
+     "y": 10.95,
+     "w": 0.08,
+     "h": 1.32,
+     "face": "painted-white"
+    },
+    {
+     "at": 0.765,
+     "y": 11.57,
+     "w": 0.66,
+     "h": 0.08,
+     "face": "painted-white"
+    },
+    {
+     "at": 0.765,
+     "y": 10.33,
+     "w": 0.66,
+     "h": 0.08,
+     "face": "painted-white"
+    },
+    {
+     "at": 0.835,
+     "y": 10.95,
+     "w": 0.66,
+     "h": 1.16,
+     "face": "painted-white@b8c8d2"
+    },
+    {
+     "at": 0.812,
+     "y": 10.95,
+     "w": 0.08,
+     "h": 1.32,
+     "face": "painted-white"
+    },
+    {
+     "at": 0.858,
+     "y": 10.95,
+     "w": 0.08,
+     "h": 1.32,
+     "face": "painted-white"
+    },
+    {
+     "at": 0.835,
+     "y": 11.57,
+     "w": 0.66,
+     "h": 0.08,
+     "face": "painted-white"
+    },
+    {
+     "at": 0.835,
+     "y": 10.33,
+     "w": 0.66,
+     "h": 0.08,
+     "face": "painted-white"
+    },
+    {
+     "at": 0.8,
+     "y": 9.95,
+     "w": 2.5,
+     "h": 0.55,
+     "face": "terracotta@c48e9f"
+    }
+   ],
+   "upperWindowSpans": [
+    [
+     0.04,
+     0.17
+    ],
+    [
+     0.27,
+     0.4
+    ],
+    [
+     0.5,
+     0.59
+    ],
+    [
+     0.7,
+     0.79
+    ],
+    [
+     0.86,
+     0.95
+    ]
+   ],
+   "archHeads": []
+  }
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "awningSpans": [
+  {
+   "from": 0.25,
+   "to": 0.42,
+   "depthM": 0.4,
+   "riseM": 0.08,
+   "dropM": 0.1
+  },
+  {
+   "from": 0.6,
+   "to": 0.78,
+   "depthM": 0.4,
+   "riseM": 0.08,
+   "dropM": 0.1
+  }
+ ],
+ "sashMaterial": "painted-white@f8f0dc",
+ "mullionM": 1.0,
+ "sashRows": 2,
+ "upperWindowSpans": [
+  [
+   0.2,
+   0.48
+  ],
+  [
+   0.62,
+   0.82
+  ]
+ ],
+ "archHeads": [
+  {
+   "from": 0.03,
+   "to": 0.12,
+   "storey": 0,
+   "riseM": 0.55,
+   "ring": "painted-white@f8ecc8"
+  }
+ ],
+ "coping": null,
+ "groundBand": {
+  "material": "painted-white",
+  "tint": "#f8f2dc",
+  "topM": 0.9
+ },
+ "windowDepthM": 0.4,
+ "_L5": null,
+ "sashCols": 2
+}

@@ -1,0 +1,148 @@
+{
+ "seed": 200,
+ "wall": "painted-stucco",
+ "wallTint": "#f4f0e6",
+ "trim": "painted-white@97453a",
+ "frame": "painted-white@97453a",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@97453a",
+ "storefrontGlass": "glass-storefront",
+ "cornice": true,
+ "corniceProjectionM": 0.55,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.9,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.22,
+   "widthM": 3.1,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f4f0e6",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.77,
+   "widthM": 3.1,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#f4f0e6",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.9,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.08,
+    "to": 0.4,
+    "kind": "gate",
+    "headM": 3.4,
+    "leaf": "painted-steel@2b2b2d",
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.15,
+      "tint": "#e8e0cc"
+     }
+    }
+   },
+   {
+    "from": 0.58,
+    "to": 0.9,
+    "kind": "window",
+    "headM": 3.2,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.16,
+      "tint": "#c23a28"
+     }
+    }
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "notes": "1917 flats, three storeys. Cream-white stucco with red-painted trim, two splayed bays with paired sashes and a small steel fire escape between them, red bracketed cornice and belt. Ground: round-arched iron gate left, round-headed window with red surround right. Rework r-eddy: vermilion trim, tan stone base, red bands at the base and between the tiers. Storey count kept at 3. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. GroundBand lift (2026-10-03): groundBand tint #d6c39a -> #eae1cc (same rule as walls; it was missed by the first colour pass).",
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#eae1cc",
+  "topM": 4
+ },
+ "fireEscape": {
+  "at": 0.5,
+  "widthM": 2.6,
+  "depthM": 0.8,
+  "material": "painted-steel@d8d2c2"
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.7,
+  "heightM": 0.35,
+  "depthM": 0.25,
+  "widthM": 0.18,
+  "material": "painted-white",
+  "tint": "#c23a28"
+ },
+ "hbSignBands": [
+  {
+   "from": 0,
+   "to": 1,
+   "bottomM": 3.9,
+   "topM": 4.4,
+   "material": "painted-stucco",
+   "tint": "#c23a28"
+  },
+  {
+   "from": 0,
+   "to": 1,
+   "bottomM": 7.9,
+   "topM": 8.35,
+   "material": "painted-stucco",
+   "tint": "#c23a28"
+  }
+ ]
+}

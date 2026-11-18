@@ -1,0 +1,38 @@
+{
+  "builder": "house",
+  "seed": 4,
+  "notes": "1450 La Playa, 1970 six-unit flats (assessor), from the street-level reference by eye (words only): three storeys, tan painted horizontal lap siding over a smooth tan ground storey, white window trim and a white belt at the first floor line, a wide garage door of weathered grey horizontal wood slats under a brick lintel band, a black steel bar gate to a side passage at the south end, two wide sliding windows per living storey, flat roof with a thin fascia. A side light court runs along the south flank.",
+  "storeysSeen": 3,
+  "groundM": 2.8,
+  "roofLevelM": 8.4,
+  "wall": "painted-clapboard",
+  "wallTint": "#b6a89b",
+  "groundBand": { "material": "painted-stucco", "tint": "#c2b4a2", "topM": 2.8 },
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "rearWall": "painted-stucco",
+  "rearTint": "#d8d0c4",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "edgeRoles": { "3": "party", "7": "party" },
+  "belts": [1],
+  "roofForm": { "form": "flat", "eaveM": 0.18, "fasciaM": 0.22, "sideOverhangM": 0.0 },
+  "parapetM": 0.42,
+  "garages": [ { "from": 0.04, "to": 0.68, "headM": 2.25, "material": "painted-clapboard", "pattern": "slat", "slatTints": ["#78746e", "#6b675f", "#85807a", "#716c66"], "lintel": { "material": "brick-running-bond", "heightM": 0.32 } } ],
+  "gate": { "from": 0.73, "to": 0.93, "headM": 2.3, "material": "painted-steel" },
+  "windows": [
+    { "storey": 1, "from": 0.1, "to": 0.46, "sill": 0.8, "head": 2.3, "panes": [3, 1] },
+    { "storey": 1, "from": 0.58, "to": 0.9, "sill": 0.8, "head": 2.3, "panes": [2, 1] },
+    { "storey": 2, "from": 0.1, "to": 0.46, "sill": 0.8, "head": 2.3, "panes": [3, 1] },
+    { "storey": 2, "from": 0.58, "to": 0.9, "sill": 0.8, "head": 2.3, "panes": [2, 1] }
+  ],
+  "stairFrontM": 12.5,
+  "programme": "flats",
+  "rear": { "windowsPerStorey": 2, "windowW": 1.2, "panes": [2, 1] },
+  "rooftop": { "vents": [[0.3, 0.3], [0.6, 0.6], [0.4, 0.85]], "skylights": [[0.5, 0.5, 1.0, 1.0]] },
+  "floors": {
+    "1": { "front": "flat", "rooms": ["bath", "flat"] },
+    "2": { "front": "flat", "rooms": ["bath", "flat"] }
+  },
+  "groundRooms": ["laundry", "flat"]
+}

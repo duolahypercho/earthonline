@@ -1,0 +1,137 @@
+{
+ "seed": 7,
+ "notes": "Rework r5: deep red-brown brick ground, violet-blue string course on top of the brick (hand.py), wider cream-surround arched windows, white door left, deep arched stair entry right, white cant bays with two-light sashes and dentilled cap, light dentil course at the main cornice.",
+ "wall": "painted-white",
+ "wallTint": "#f7f6f2",
+ "trim": "painted-white@f4f2ec",
+ "frame": "painted-white@dcdaec",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@dcdaec",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "brick-running-bond@8e6560",
+ "cornice": true,
+ "corniceProjectionM": 0.5,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.3,
+ "upperWindows": [
+  0.3
+ ],
+ "bays": [
+  {
+   "at": 0.82,
+   "widthM": 3.0,
+   "projectionM": 0.55,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f7f6f2",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.18,
+     "dentils": true,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.4,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.08,
+    "to": 0.18,
+    "kind": "door"
+   },
+   {
+    "from": 0.21,
+    "to": 0.31,
+    "kind": "window",
+    "headM": 2.4,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.12,
+      "tint": "#e3d8bf"
+     }
+    }
+   },
+   {
+    "from": 0.34,
+    "to": 0.44,
+    "kind": "window",
+    "headM": 2.4,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.12,
+      "tint": "#e3d8bf"
+     }
+    }
+   },
+   {
+    "from": 0.67,
+    "to": 0.9,
+    "kind": "door",
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.2,
+      "tint": "#a8573c"
+     }
+    },
+    "stair": true
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "sashFrames": {
+  "material": "painted-white@dcdaec",
+  "stileM": 0.06
+ },
+ "hbBayGlazing": {
+  "marginM": 0.2,
+  "maxW": 1.05,
+  "sillM": 0.5,
+  "headM": 0.3,
+  "glass": "glass-clear",
+  "frame": "painted-white",
+  "frameTint": "#dcdaec",
+  "sashM": 0.08,
+  "revealM": 0.06,
+  "meetingRail": true
+ },
+ "groundBand": {
+  "material": "brick-running-bond",
+  "tint": "#8e6560",
+  "topM": 3.4
+ },
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 3.4,
+  "upperM": 3.0
+ },
+ "hbCorniceDentils": {
+  "spacingM": 0.18,
+  "sizeM": 0.09,
+  "tint": "#ece8e0"
+ }
+}

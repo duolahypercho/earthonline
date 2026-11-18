@@ -1,0 +1,49 @@
+{
+  "kind": "blender-building",
+  "id": "sf-building-260146977",
+  "pass": "b260146977-blender-6facb6b9-ad54b3-hddaaaa",
+  "generator": "scripts/blender-buildings/build_building.py",
+  "generatorSha256": "6facb6b980e5966bff381f1088766095f94c593f58d833334af51d6578efa055",
+  "blender": "Blender 5.1.2",
+  "inputs": {
+    "spec": "artifacts/buildings/sf-building-260146977/spec.json",
+    "specSha256": "21ae0cef2202e3e1bf83adff718aa2ed82b6a0c2b53a0e28d5586aaca0b7708f",
+    "style": "artifacts/buildings/sf-building-260146977/style.json",
+    "styleSha256": "ad54b3f23ce93076f5bebfdfd17f7a48dfe1671c4577e446dd75bd69f6d0caf4",
+    "hand": "artifacts/buildings/sf-building-260146977/hand.py",
+    "handSha256": "ddaaaaea8443686983233697cab2ca27711563df11068b9e333d9bdae6752cee"
+  },
+  "sources": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "license": "Original geometry generated from open data (DataSF footprints, LiDAR, Assessor roll). No third-party meshes or textures.",
+  "furniture": [],
+  "assets": {
+    "exterior": {
+      "url": "/assets/buildings/sf-building-260146977/exterior.glb",
+      "sha256": "98cf356bcce05a1bd8a82d701cf98c4f69643553e6b87b519964cd09dd73b9a3",
+      "bytes": 107420
+    },
+    "interior": {
+      "url": "/assets/buildings/sf-building-260146977/interior.glb",
+      "sha256": "dddcfbdbb78df8adb58dd77da351ca8550fcd499ab93236df0b7bd67a639b6d3",
+      "bytes": 146240
+    },
+    "fine": [
+      {
+        "storey": 0,
+        "url": "/assets/buildings/sf-building-260146977/fine-s0.glb",
+        "sha256": "f28836f4565ad430c09bb9274cd6095b5403b4d19c65d959c2ab6afa705b4d43",
+        "bytes": 30080
+      },
+      {
+        "storey": 1,
+        "url": "/assets/buildings/sf-building-260146977/fine-s1.glb",
+        "sha256": "797892d1c208bab988ec1a2ebca2343152f8490f61870c36220e6fed489ef030",
+        "bytes": 159340
+      }
+    ]
+  }
+}

@@ -1,0 +1,68 @@
+{
+ "seed": 7,
+ "notes": "1926 six-storey flats, white painted stucco upper storeys over a green glazed-tile base. Ground: a round-arched entry with a stone surround at the left, a narrow dark door, a barred window. Tree hides most of the uppers; plain windows from the data, no ornament invented. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Dark green tile ground band up to the belt course, cream upper wall. Bays: the tree hides the upper storeys, so the claim of bays is unsupported and none are added. Round-arched entry left and grilled window kept. Lifted/converted once to #f6f0e0. GroundBand lift (2026-10-03): groundBand tint #2f6f50 -> #598c73 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-stucco",
+ "wallTint": "#f6f0e0",
+ "trim": "painted-white@e6e2d4",
+ "frame": "painted-white@f4f0e6",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f4f0e6",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@2f6f50",
+ "cornice": true,
+ "corniceProjectionM": 0.65,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.14,
+  0.4,
+  0.66,
+  0.88
+ ],
+ "bays": [],
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#598c73",
+  "topM": 4.58
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.03,
+    "to": 0.33,
+    "kind": "double-door",
+    "leaf": "painted-steel@2a2622",
+    "headM": 3.3,
+    "stair": true,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   },
+   {
+    "from": 0.4,
+    "to": 0.47,
+    "kind": "door",
+    "leaf": "painted-steel@3a2a24",
+    "headM": 2.4
+   },
+   {
+    "from": 0.54,
+    "to": 0.84,
+    "kind": "window",
+    "headM": 2.3,
+    "grille": true
+   }
+  ]
+ }
+}

@@ -1,0 +1,25 @@
+sf-map-citywide.json.gz - citywide UI cartography (pause map, corner map, GPS)
+Built by scripts/map/build-citywide-map.mjs (sf-map-citywide-v1). Coordinates: world metres, x east, z south, metres.
+
+Derived from:
+- sf-city.json.gz (sha256 f1f41c398c24f6636c593a1aefb14e8e4d016b0a800d8f81d0fe7ad522639f1d)
+  roads, extract footprints, land boundary, POI tags
+  Licence: ODbL 1.0 (OSM) + PDDL 1.0 (DataSF shoreline); see its meta.sources
+- sf-footprints.json.gz (sha256 e2e5ab9f27acf0a83bbc9a0ed15f88d64fe9645b0dd6c8cfc893f908107eeb74)
+  citywide building footprints and heights
+  Licence: PDDL-1.0 (DataSF Building Footprints ynuv-fyni)
+- sf-lots-parks.json.gz (sha256 df73f6bad02853ca4345347d95c2798ca9abe47fe8732e2ec92156cadbd95a5a)
+  greens and beaches
+  Licence: ODbL 1.0, (c) OpenStreetMap contributors
+- sf-elevation.bin.gz (sha256 0781798a1b3241ceba84664b53e348cac09ea578f25e48ddd5559d4258cae021)
+  ground heights under the elevated collider, for the GPS capability
+  Licence: Public domain (USGS 3DEP)
+- SanFrancisco.osm.pbf (sha256 7192f9cf2daa76efbbf7184d2d8ee63417ce37fcf554cab22c1b579d8c9d7dcc)
+  piers, inland water, place names, POI areas
+  Licence: ODbL 1.0, (c) OpenStreetMap contributors
+
+Attribution: (c) OpenStreetMap contributors (ODbL 1.0, https://opendatacommons.org/licenses/odbl/1-0/);
+City and County of San Francisco, DataSF (PDDL 1.0); U.S. Geological Survey 3DEP (public domain).
+This derived database is offered under ODbL 1.0.
+Neighbourhood labels are OSM place nodes plus 12 public place and water names
+listed in the build script (CURATED_PLACES).

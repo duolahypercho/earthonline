@@ -1,0 +1,29 @@
+{
+  "task_id": "07b0beb8-cebf-4476-b7dc-4d9d33e745ed",
+  "type": "text_to_model",
+  "status": "success",
+  "input": {
+    "pbr": true,
+    "prompt": "A modern city bus stop shelter: four slim dark grey steel posts, a thin flat roof canopy, a clear glass back wall and one short glass end panel, a simple metal bench inside, open front. Wide and shallow, about four times wider than deep and a little taller than a person. No advertising panels, no text, no logos. Realistic, clean, game-ready street prop.",
+    "texture": true,
+    "export_uv": true,
+    "model_version": "v3.1-20260211",
+    "texture_quality": "detailed",
+    "geometry_quality": "standard",
+    "texture_alignment": "geometry"
+  },
+  "output_fields": [
+    "model_url",
+    "rendered_image_url",
+    "generated_image_url"
+  ],
+  "credits_consumed": 30,
+  "created_at": "2026-09-26T16:14:50.346277Z",
+  "completed_at": "2026-09-26T16:17:11.879822Z",
+  "files": [
+    "model.glb",
+    "rendered_image.webp",
+    "generated_image.jpeg",
+    "preview.png"
+  ]
+}

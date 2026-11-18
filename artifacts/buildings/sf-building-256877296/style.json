@@ -1,0 +1,141 @@
+{
+ "seed": 28,
+ "notes": "Clean white stucco kept; two shallow bays on storeys 2-3 with black multi-light frames; storey 1 has two wide paired window groups; ground: round-arched recessed vestibule left, one white panelled garage door, narrow plain door right; thin belt line. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour.",
+ "wall": "painted-white",
+ "wallTint": "#f8f6f0",
+ "trim": "painted-white@dedad0",
+ "frame": "painted-white@202226",
+ "glass": "glass-reflective@2c3239",
+ "storefrontFrame": "painted-white@f2eee0",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@ae574d",
+ "cornice": true,
+ "corniceProjectionM": 0.35,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.22,
+   "widthM": 2.8,
+   "projectionM": 0.45,
+   "fromStorey": 2,
+   "material": "painted-white",
+   "tint": "#f8f6f0",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   },
+   "toStorey": 3
+  },
+  {
+   "at": 0.78,
+   "widthM": 2.8,
+   "projectionM": 0.45,
+   "fromStorey": 2,
+   "material": "painted-white",
+   "tint": "#f8f6f0",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 3,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   },
+   "toStorey": 3
+  }
+ ],
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "storefront": {
+  "bulkheadM": 0.6,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.03,
+    "to": 0.24,
+    "kind": "door",
+    "stair": true,
+    "leaf": "wood-siding@6a3a2a",
+    "headM": 3.0,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.1,
+      "projectionM": 0.04,
+      "tint": "#f4f0e4"
+     }
+    }
+   },
+   {
+    "from": 0.36,
+    "to": 0.8,
+    "kind": "garage",
+    "material": "painted-white",
+    "tint": "#f2eee0",
+    "headM": 2.5
+   },
+   {
+    "from": 0.86,
+    "to": 0.95,
+    "kind": "door",
+    "leaf": "wood-siding@7a5a3a",
+    "headM": 2.4
+   }
+  ]
+ },
+ "garagePanel": {
+  "doorM": 2.5,
+  "cols": 4,
+  "rows": 3,
+  "tint": "#f2eee0",
+  "panelTint": "#e4dccc"
+ },
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.07,
+     0.37
+    ],
+    [
+     0.63,
+     0.93
+    ]
+   ],
+   "sillM": 0.85,
+   "headM": 2.3
+  }
+ }
+}

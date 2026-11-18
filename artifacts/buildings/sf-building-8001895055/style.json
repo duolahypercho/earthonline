@@ -1,0 +1,113 @@
+{
+  "builder": "house",
+  "seed": 82,
+  "storeysSeen": 3,
+  "groundM": 2.7,
+  "roofLevelM": 8.55,
+  "programme": "flats",
+  "notes": "1686 Great Highway (1971 flats; LiDAR 9.0 m), by eye: the paired twin of 1682, its upper two storeys painted slate blue with white-framed windows, the same rough stone-veneer ground storey with a white garage door and a recessed entry, a flat roof with a thin fascia.",
+  "wall": "painted-clapboard",
+  "wallTint": "#7d93ad",
+  "trim": "painted-white",
+  "frame": "painted-white",
+  "groundBand": {
+    "material": "cast-stone",
+    "tint": "#8a7f72",
+    "topM": 2.7
+  },
+  "roofForm": {
+    "form": "flat",
+    "eaveM": 0.12,
+    "fasciaM": 0.25,
+    "sideOverhangM": 0.05
+  },
+  "parapetM": 0.45,
+  "garages": [
+    {
+      "from": 0.45,
+      "to": 0.92,
+      "headM": 2.2,
+      "material": "painted-white",
+      "pattern": "sectional"
+    }
+  ],
+  "entry": {
+    "from": 0.12,
+    "to": 0.3,
+    "headM": 2.2,
+    "material": "painted-white",
+    "glass": false,
+    "recessM": 0.9
+  },
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.1,
+      "to": 0.42,
+      "sill": 0.8,
+      "head": 2.25,
+      "panes": [
+        2,
+        2
+      ]
+    },
+    {
+      "storey": 1,
+      "from": 0.56,
+      "to": 0.9,
+      "sill": 0.8,
+      "head": 2.25,
+      "panes": [
+        2,
+        2
+      ]
+    },
+    {
+      "storey": 2,
+      "from": 0.1,
+      "to": 0.42,
+      "sill": 0.8,
+      "head": 2.25,
+      "panes": [
+        2,
+        2
+      ]
+    },
+    {
+      "storey": 2,
+      "from": 0.56,
+      "to": 0.9,
+      "sill": 0.8,
+      "head": 2.25,
+      "panes": [
+        2,
+        2
+      ]
+    }
+  ],
+  "panels": [],
+  "rearWall": "painted-stucco",
+  "rearTint": "#d8d2c6",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "rear": {
+    "windowsPerStorey": 3,
+    "windowW": 1.1,
+    "panes": [
+      2,
+      1
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.3,
+        0.4
+      ],
+      [
+        0.7,
+        0.6
+      ]
+    ]
+  }
+}

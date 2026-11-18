@@ -1,0 +1,100 @@
+{
+ "seed": 53,
+ "notes": "Entry now a double-door with round arch surround and 5-riser stoop instead of a dark-filled arch; bay sashes taller/narrower with dark bronze 3a3530 frames. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-stucco",
+ "wallTint": "#f1f0ed",
+ "trim": "painted-white@6a6a66",
+ "frame": "painted-white@3a3530",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@3a3530",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-stucco@eeecea",
+ "cornice": true,
+ "corniceProjectionM": 0.55,
+ "beltCourse": false,
+ "windowHoods": true,
+ "windowW": 0.85,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.5,
+ "upperWindows": [
+  0.73
+ ],
+ "bays": [
+  {
+   "at": 0.25,
+   "widthM": 3.0,
+   "projectionM": 0.65,
+   "fromStorey": 0,
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.6,
+    "sillM": 0.9,
+    "headGapM": 0.35,
+    "cornice": {
+     "projectionM": 0.05,
+     "roofRiseM": 0
+    },
+    "marginM": 0.4
+   },
+   "material": "painted-stucco",
+   "tint": "#f1f0ed",
+   "frame": "painted-white@3a3530"
+  }
+ ],
+ "groundBand": {
+  "material": "cast-stone",
+  "tint": "#b8b4aa",
+  "topM": 1.3
+ },
+ "storefront": {
+  "bulkheadM": 1.4,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.59,
+    "to": 0.91,
+    "kind": "double-door",
+    "leaf": "wood-siding@a06a3a",
+    "headM": 3.6,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.22,
+      "projectionM": 0.05,
+      "material": "painted-stucco",
+      "tint": "#d2cfc6"
+     },
+     "porch": {
+      "steps": 5,
+      "riseM": 0.2,
+      "treadM": 0.25,
+      "material": "cast-stone",
+      "tint": "#b8b4aa"
+     }
+    }
+   }
+  ]
+ },
+ "ground": "vacant",
+ "upper": "apartment",
+ "hbCorniceDentils": {
+  "spacingM": 0.16,
+  "sizeM": 0.1,
+  "tint": "#3a3a38"
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.75,
+  "heightM": 0.4,
+  "depthM": 0.3,
+  "widthM": 0.14,
+  "material": "painted-white",
+  "tint": "#b8b4aa"
+ },
+ "streetStills": true
+}

@@ -1,0 +1,16 @@
+[package]
+name = "eo-player"
+version = "0.1.0"
+edition = "2024"
+description = "Earth Online player: on-foot controller, cameras, driving and the tile-streamed collision world (no GPU)"
+publish = false
+
+[dependencies]
+anyhow = "1.0.104"
+earcut = "0.4.12"
+eo-data = { path = "../eo-data" }
+eo-street = { path = "../eo-street" }
+glam = "0.34.3"
+rapier3d = { version = "0.36.1", features = ["enhanced-determinism"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"

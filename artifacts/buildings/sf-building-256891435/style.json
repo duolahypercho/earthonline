@@ -1,0 +1,160 @@
+{
+ "seed": 21,
+ "notes": "Wall to saturated ochre-yellow (d9b038), cream bay sashes kept, dark glazing; trim/belt/cornice dark oxblood; closely packed upper rhythm (two wider bays + paired flat windows); ground is a full-width run of piers and dark glazed shopfronts under a sign fascia with green awning. Corner wrap not modelled. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. Butter-yellow wall f0cf62, mustard piers, grey-beige corner sign fascia (green awning only on right bay), oxblood trim/belt, darker glazing, red leaf.",
+ "wall": "painted-white",
+ "wallTint": "#f0cf62",
+ "trim": "painted-white@4a1214",
+ "frame": "painted-white@efe4c8",
+ "glass": "glass-reflective@2c3239",
+ "storefrontFrame": "painted-white@3a1416",
+ "storefrontGlass": "glass-storefront@0c0f13",
+ "bulkhead": "painted-white@c9a020",
+ "cornice": true,
+ "corniceProjectionM": 0.5,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.95,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.4,
+  0.5,
+  0.84,
+  0.93
+ ],
+ "bays": [
+  {
+   "at": 0.18,
+   "widthM": 3.0,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f0cf62",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.66,
+   "widthM": 3.0,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f0cf62",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.14,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "storefront": {
+  "bulkheadM": 0.6,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.04,
+    "to": 0.17,
+    "kind": "window",
+    "headM": 2.7
+   },
+   {
+    "from": 0.18,
+    "to": 0.34,
+    "kind": "window",
+    "headM": 2.7
+   },
+   {
+    "from": 0.42,
+    "to": 0.54,
+    "kind": "door",
+    "stair": true,
+    "leaf": "wood-siding@8a1e1a",
+    "headM": 3.0
+   },
+   {
+    "from": 0.6,
+    "to": 0.77,
+    "kind": "window",
+    "headM": 2.7
+   },
+   {
+    "from": 0.78,
+    "to": 0.96,
+    "kind": "window",
+    "headM": 2.7
+   }
+  ]
+ },
+ "awning": "canvas-plain@2a4a34",
+ "awningSpans": [
+  {
+   "from": 0.58,
+   "to": 0.98,
+   "depthM": 1.2,
+   "valanceM": 0.3
+  }
+ ],
+ "edgeRoles": {
+  "0": "flank"
+ },
+ "streetEdges": {
+  "0": {
+   "upperWindows": [
+    0.2,
+    0.5,
+    0.8
+   ]
+  }
+ },
+ "hbFloors": {
+  "groundM": 4.3,
+  "upperM": 3.495
+ },
+ "storefrontPiers": {
+  "material": "painted-white",
+  "tint": "#c8921a",
+  "widthM": 0.45,
+  "depthM": 0.1
+ },
+ "shopFascia": {
+  "heightM": 0.6,
+  "projectionM": 0.1,
+  "material": "painted-white",
+  "tint": "#b5a68a",
+  "topM": 0.25
+ }
+}

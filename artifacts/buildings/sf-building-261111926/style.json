@@ -1,0 +1,121 @@
+{
+ "seed": 7,
+ "notes": "1912 flats W side: pale yellow-cream painted wood with dark blue trim and a blue base, raised entry reached by a broad stair, a window group beside it. Two stacked cant bays (blue-edged) on the two upper storeys with bracketed eave cornices; plain wall between them. Window now a raised-sill clear-glass group; bay storeys stay at two; bays one large sash per face; navy frieze + ochre brackets. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour. GroundBand lift (2026-10-03): groundBand tint #2c4a8a -> #4c659c (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-white",
+ "wallTint": "#eee8d0",
+ "trim": "painted-white@495e89",
+ "frame": "painted-white@495e89",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@495e89",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-white@4c659c",
+ "cornice": true,
+ "corniceProjectionM": 0.55,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 1.5,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.62
+ ],
+ "bays": [
+  {
+   "at": 0.17,
+   "widthM": 2.2,
+   "projectionM": 0.6,
+   "fromStorey": 2,
+   "material": "painted-white",
+   "tint": "#eee8d0",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.18,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    }
+   }
+  },
+  {
+   "at": 0.82,
+   "widthM": 2.2,
+   "projectionM": 0.6,
+   "fromStorey": 2,
+   "material": "painted-white",
+   "tint": "#eee8d0",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.18,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.95,
+  "transomM": 0.35,
+  "pierM": 0.5,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.3,
+    "to": 0.5,
+    "kind": "door",
+    "headM": 2.5,
+    "leaf": "painted-white@2a2420",
+    "stair": true
+   },
+   {
+    "from": 0.55,
+    "to": 0.92,
+    "kind": "window",
+    "headM": 2.3,
+    "grille": false
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "groundBand": {
+  "material": "painted-white",
+  "tint": "#4c659c",
+  "topM": 1.5
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.55,
+  "heightM": 0.5,
+  "depthM": 0.3,
+  "widthM": 0.2,
+  "material": "painted-white",
+  "tint": "#c9a24a"
+ },
+ "storeysSeen": {
+  "count": 4,
+  "groundM": 2.6,
+  "upperM": 3.25
+ },
+ "hbFrieze": {
+  "heightM": 0.4,
+  "material": "painted-white",
+  "tint": "#26427c"
+ }
+}

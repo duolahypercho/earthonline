@@ -1,0 +1,34 @@
+{
+  "kind": "blender-building",
+  "id": "sf-building-112072207",
+  "pass": "b112072207-blender-4f4d8efc-aa6ae2-ext",
+  "generator": "scripts/blender-buildings/build_fort.py",
+  "generatorInputs": [
+    "scripts/blender-buildings/build_building.py",
+    "scripts/blender-buildings/build_fort.py"
+  ],
+  "generatorSha256": "4f4d8efceffd87da88063bf349cace3090f55e8e047e28ebafe691202e7a9790",
+  "scope": "exterior",
+  "blender": "Blender 5.1.2",
+  "inputs": {
+    "spec": "artifacts/buildings/sf-building-112072207/spec.json",
+    "specSha256": "77335fda5e4214d40f9ad20aeae64f9581e6ffe7404deb4fcfa3c8b6eba3b67f",
+    "style": "artifacts/buildings/sf-building-112072207/style.json",
+    "styleSha256": "aa6ae285c172b74dd220df974e609aff275f0a2af2730a645b02d39d4d68369c"
+  },
+  "sources": {
+    "footprint": "OpenStreetMap (ODbL-1.0) building way (via public/data/sf/sf-city.json)",
+    "height": "no measured height: the runtime fallback (src/citygen/sf-data.js resolveSourceHeight, levels x 3.2 m)",
+    "storeys": "dataset levels"
+  },
+  "license": "Original geometry generated from open data (DataSF footprints, LiDAR, Assessor roll). No third-party meshes or textures.",
+  "furniture": [],
+  "assets": {
+    "exterior": {
+      "url": "/assets/buildings/sf-building-112072207/exterior.glb",
+      "sha256": "9f34f8cde79b2b19fdcea0b8d3bcbdd7a601d87cb05b8a978e755a157d5110e7",
+      "bytes": 53932
+    },
+    "fine": []
+  }
+}

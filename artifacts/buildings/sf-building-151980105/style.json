@@ -1,0 +1,168 @@
+{
+  "seed": 1,
+  "notes": "Ten-storey 1980s office in banded precast: alternating pale pink and tan bands, recessed ribbon windows with light glazing; ground: dark green tiled base with a recessed glass shopfront and entry. The banded frame with glazed bays now wraps them (was a blank party wall read from 4th & Folsom). Bays glazed in reflective pale blue glass (the opaque dark glass-shell read as black punched holes from 4th & Folsom), flank frame in tan bands (deeper slab edges) so the tower reads as a banded pale modern block. A dark canopy over the entry. Salmon-peach banded block with a long dark green fascia canopy across the ground floor.",
+  "wall": "painted-white",
+  "wallTint": "#ddc3ab",
+  "trim": "painted-white",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "groundBand": {
+    "material": "glazed-tile",
+    "tint": "#58806c"
+  },
+  "stripes": {
+    "fromStorey": 1,
+    "offsetsM": [
+      0.0,
+      2.55
+    ],
+    "heightM": 0.55,
+    "material": "painted-white",
+    "tint": "#c8a88f"
+  },
+  "upperSillM": 0.95,
+  "upperHeadM": 2.4,
+  "mullionM": 1.5,
+  "glass": "glass-shell",
+  "storefrontFrame": "anodized-aluminium",
+  "storefrontGlass": "glass-dark",
+  "bulkhead": "glazed-tile",
+  "ground": "shop",
+  "upper": "office",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.6,
+    "layout": [
+      {
+        "kind": "window",
+        "from": 0.03,
+        "to": 0.3
+      },
+      {
+        "kind": "door",
+        "from": 0.32,
+        "to": 0.41,
+        "leaf": "anodized-aluminium",
+        "stair": true
+      },
+      {
+        "kind": "window",
+        "from": 0.43,
+        "to": 0.97
+      }
+    ]
+  },
+  "weathering": {
+    "patches": {
+      "strength": 0.07,
+      "metres": 1.6,
+      "top": 4.0,
+      "mottle": 0.05
+    },
+    "grime": {
+      "strength": 0.12,
+      "metres": 3.0
+    }
+  },
+  "frameGrid": {
+    "bayM": 4.9,
+    "columnW": 0.5,
+    "slabEdgeH": 0.55,
+    "projectionM": 0.15,
+    "fromStorey": 1,
+    "pattern": [
+      "balcony"
+    ],
+    "recessM": 1.1,
+    "rail": "glass",
+    "railGlass": "glass-clear",
+    "railMaterial": "painted-steel",
+    "mullionM": 1.6,
+    "material": "painted-white",
+    "tint": "#dcc2aa",
+    "balconyTint": "#c9d6e8",
+    "frameMaterial": "anodized-aluminium"
+  },
+  "edgeRoles": {
+    "1": "flank",
+    "3": "flank",
+    "4": "flank"
+  },
+  "streetEdges": {
+    "1": {
+      "frameGrid": {
+        "pattern": [
+          "glass"
+        ],
+        "fromStorey": 4,
+        "recessM": 0.3,
+        "glassRecessM": 0.3,
+        "tint": "#d9ccb2",
+        "material": "painted-white",
+        "slabEdgeH": 1.1
+      },
+      "storefront": {
+        "layout": []
+      },
+      "awningSpans": []
+    },
+    "3": {
+      "frameGrid": {
+        "pattern": [
+          "glass"
+        ],
+        "fromStorey": 4,
+        "recessM": 0.3,
+        "glassRecessM": 0.3,
+        "tint": "#d9ccb2",
+        "material": "painted-white",
+        "slabEdgeH": 1.1
+      },
+      "storefront": {
+        "layout": []
+      },
+      "awningSpans": []
+    },
+    "4": {
+      "frameGrid": {
+        "pattern": [
+          "glass"
+        ],
+        "fromStorey": 4,
+        "recessM": 0.3,
+        "glassRecessM": 0.3,
+        "tint": "#d9ccb2",
+        "material": "painted-white",
+        "slabEdgeH": 1.1
+      },
+      "storefront": {
+        "layout": []
+      },
+      "awningSpans": []
+    }
+  },
+  "glassModel": {
+    "upper": "glass-reflective@a3b8c6",
+    "street": "glass-storefront@8e979d"
+  },
+  "awningSpans": [
+    {
+      "from": 0.03,
+      "to": 0.3,
+      "profile": "box",
+      "depthM": 1.3,
+      "valanceM": 0.5,
+      "topM": 4.1
+    },
+    {
+      "from": 0.44,
+      "to": 0.99,
+      "profile": "box",
+      "depthM": 1.3,
+      "valanceM": 0.5,
+      "topM": 4.1
+    }
+  ],
+  "awning": "canvas-plain@26362f"
+}

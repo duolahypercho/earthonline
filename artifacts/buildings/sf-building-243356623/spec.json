@@ -1,0 +1,127 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-243356623",
+  "slug": "b243356623",
+  "walkIndex": 7,
+  "street": "Folsom Street",
+  "address": "915;917;919 Folsom Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 14.32,
+  "storeys": 4,
+  "floors": {
+    "groundM": 4.459,
+    "upperM": 3.087,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1907,
+  "use": "COMH",
+  "usage": "commercial",
+  "amenity": "restaurant",
+  "shop": null,
+  "facade": "shopfront",
+  "material": "stone",
+  "frame": {
+    "edgeIndex": 3,
+    "center": {
+      "x": 1388.901,
+      "z": 197.849
+    },
+    "heading": -0.76298,
+    "width": 16.079,
+    "depth": 26.307
+  },
+  "frameMirrored": true,
+  "polygonWinding": "cw",
+  "polygon": [
+    {
+      "x": -8.04,
+      "z": 13.154
+    },
+    {
+      "x": -7.874,
+      "z": -13.154
+    },
+    {
+      "x": 8.04,
+      "z": -13.15
+    },
+    {
+      "x": 7.733,
+      "z": 13.154
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -8.04,
+        "z": 13.154
+      },
+      "b": {
+        "x": -7.874,
+        "z": -13.154
+      },
+      "lengthM": 26.308,
+      "role": "party",
+      "partyShare": 0.94
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -7.874,
+        "z": -13.154
+      },
+      "b": {
+        "x": 8.04,
+        "z": -13.15
+      },
+      "lengthM": 15.914,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 8.04,
+        "z": -13.15
+      },
+      "b": {
+        "x": 7.733,
+        "z": 13.154
+      },
+      "lengthM": 26.306,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 7.733,
+        "z": 13.154
+      },
+      "b": {
+        "x": -8.04,
+        "z": 13.154
+      },
+      "lengthM": 15.772,
+      "role": "front",
+      "partyShare": 0.06
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

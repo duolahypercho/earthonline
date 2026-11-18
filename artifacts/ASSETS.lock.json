@@ -1,0 +1,1421 @@
+{
+  "version": 1,
+  "note": "Binary pipeline sources stored off-repo. Run `npm run assets:pull` to fetch. See Docs/ASSET-STORE.md.",
+  "files": [
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-f-01/basecolor-2048.png",
+      "sha256": "00dbc738c6f67734eb0c08b8108994baef1e6fe4792d85174c00e9d15f13e29a",
+      "bytes": 3297200
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-f-01/civilian-f-01.blend",
+      "sha256": "1b378e290da0978b7f1489fb54d10354d55b5b30ac95c3b3e19221a7df97f224",
+      "bytes": 37886179
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-f-01/normal-2048.png",
+      "sha256": "274c34815b2eed1b44bd22885ae960276de01cb869759e5cb3cc985a2ebe2234",
+      "bytes": 2023612
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-f-01/orm-2048.png",
+      "sha256": "37794b69d1b8e0c28cf3a572875faa7ef46e95a4fe3eb2a286e1af393888a203",
+      "bytes": 1296533
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-f-02/basecolor-2048.png",
+      "sha256": "79a44ccf50111b90cb5a97c0ae6b17efc4f5660c041b1ab61ece98f0ed4d059c",
+      "bytes": 3250044
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-f-02/civilian-f-02.blend",
+      "sha256": "f7163dad2d23fa511f730f3bef30e5f17ff96b2d7d9235b0248e1f3df6713e53",
+      "bytes": 34940165
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-f-02/normal-2048.png",
+      "sha256": "7a5697f644a5951306b2a2aa54a8d9d6429b30bf7bd4b79a4207138f072dfe3a",
+      "bytes": 2424521
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-f-02/orm-2048.png",
+      "sha256": "57c8e369a1e26842188e4f9a7cc78ec79bd39d3bb075467718e9662d80002de6",
+      "bytes": 201527
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-f-03/basecolor-2048.png",
+      "sha256": "24f4a040c513c587bbf6a56250c9f5f5f6c91ea02aff4ee6f4b72c34a460bf10",
+      "bytes": 3822950
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-f-03/civilian-f-03.blend",
+      "sha256": "9478442f558015b0bd1bf2649e8cc9cfa947cd6c922567b467883cdd2b21c014",
+      "bytes": 33960606
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-f-03/normal-2048.png",
+      "sha256": "6745cba8e1c14a80038766cd803ab2caf44121d512d64385b06dc3d66bb70a34",
+      "bytes": 1791699
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-f-03/orm-2048.png",
+      "sha256": "0dc2d61245e611e3402dd87bd2645fa8b8c809095603ae3355e5e48619354730",
+      "bytes": 1235990
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-f-04/basecolor-2048.png",
+      "sha256": "3d494508d41827939a77daca2950c1f5ec8103f15f6360080a5358d0d9e98342",
+      "bytes": 3161822
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-f-04/civilian-f-04.blend",
+      "sha256": "b5e0ad12788511729a9b94d089656204f6948810ac0d96cb155920ac8f2b9bd2",
+      "bytes": 34944702
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-f-04/normal-2048.png",
+      "sha256": "58556e1485368782a1a58e383de1798cfa0ab0975d5572a0376b673a36480e7f",
+      "bytes": 2424522
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-f-04/orm-2048.png",
+      "sha256": "57c8e369a1e26842188e4f9a7cc78ec79bd39d3bb075467718e9662d80002de6",
+      "bytes": 201527
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-m-01/basecolor-2048.png",
+      "sha256": "108d194b9afbc50e0115835d91fa84b3ea5c1982d8b7c1922117ac5b44f905ea",
+      "bytes": 3291963
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-m-01/civilian-m-01.blend",
+      "sha256": "1c8cca1928179b891f85801f683fff015fedbd13723bebaf8e1d8c01158bd21d",
+      "bytes": 47673753
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-m-01/normal-2048.png",
+      "sha256": "73de470d8f2827dd57ef1ea327ef55816d2b500503a9e0b75da9f632c8cf16a2",
+      "bytes": 2793460
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-m-01/orm-2048.png",
+      "sha256": "677996cfc3efe3b715359cd686c24e4d4a65bbda1cd99669995005fa2c2ddf7b",
+      "bytes": 203194
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-m-02/basecolor-2048.png",
+      "sha256": "0827daa51c7348540b787d0a6604265d8cf1fc7078f5a6351dc80d4e6b7901db",
+      "bytes": 2830469
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-m-02/civilian-m-02.blend",
+      "sha256": "3b6491c14fd6a120bde0dc258eda1d72671ee0c1454179297040cdec6808ed30",
+      "bytes": 44052639
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-m-02/normal-2048.png",
+      "sha256": "1bb26fe9bb5ae92b1cc6df259203926b908feb2c947341b76005d7bccfa22f4d",
+      "bytes": 1705565
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-m-02/orm-2048.png",
+      "sha256": "fa20c79621d584ea5c4c92f6a908af1f6a24963e3970dd7c5fc3386b43ca1762",
+      "bytes": 1331400
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-m-03/basecolor-2048.png",
+      "sha256": "1d615d86fbdda18fe02b33c054493cdaee768433a15ae41a346048163209f03f",
+      "bytes": 3373288
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-m-03/civilian-m-03.blend",
+      "sha256": "92d5f9125f0becaffc74749dad1a9500e3e6ef9b1021ca757d7823a49cbbf54a",
+      "bytes": 43331274
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-m-03/normal-2048.png",
+      "sha256": "8b36164fc06a5584020b9164d767978f9fa43484c08ce502d53db1276522ff51",
+      "bytes": 2049960
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-m-03/orm-2048.png",
+      "sha256": "fbae358cf72f8c773d5a4c58f4288bad9a8bfdb7be90f299248bd04426e12bfc",
+      "bytes": 1195268
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-m-04/basecolor-2048.png",
+      "sha256": "773f1e7725ada97c0f7645305582eca22619d607ae9446b0100645ebbad69f1d",
+      "bytes": 3495094
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-m-04/civilian-m-04.blend",
+      "sha256": "7c44127a4379dcb24bfa7383a7eaef47055553ce4a31a17d40a390e866618f6b",
+      "bytes": 43077589
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-m-04/normal-2048.png",
+      "sha256": "ceadbfea868d5a97fea45053ceb2d4de2a0b7f8e7b2c755112ea9a4e5c47b2a7",
+      "bytes": 2445775
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-m-04/orm-2048.png",
+      "sha256": "3fe70823a76fa57abc10370c6dbe890ca5b02b087a5e63225aba8e81daf49c88",
+      "bytes": 1355391
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-police-f/basecolor-2048.png",
+      "sha256": "a4b630d4c7bbb66c433344b92a5c477da9d6ea27865e97e5327e19b19547e30e",
+      "bytes": 2775100
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-police-f/civilian-police-f.blend",
+      "sha256": "93218b85619a15bb246da03f085410093eb854eb9fccb96f9114addff34e5094",
+      "bytes": 35170213
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-police-f/normal-2048.png",
+      "sha256": "0d231e3ea4ca60f811d125fa6fca37e98924ffe7a46bb2d85a5390a2795eff86",
+      "bytes": 2323995
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-police-f/orm-2048.png",
+      "sha256": "9b6a7922d469612cc0df60ad8aec97db514da8b3fe627c053148db03d656b39e",
+      "bytes": 203962
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-police-m/basecolor-2048.png",
+      "sha256": "1406a81e548a80a3e7005761d72a7f831ad3defe3059cb369bb05c7fbda5cd01",
+      "bytes": 2876447
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-police-m/civilian-police-m.blend",
+      "sha256": "0efb07da03cd6cf75c90f302df6df0cf0826f2ab624a849905db87e82c75e6fd",
+      "bytes": 43315541
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-police-m/normal-2048.png",
+      "sha256": "5c15a83fef64fcc7ce7e75dfdea0da10b8cb3f3e097561e37ebbaee7ff901cfb",
+      "bytes": 2365413
+    },
+    {
+      "path": "artifacts/characters/civilian-v1/civilian-police-m/orm-2048.png",
+      "sha256": "7c23567644e087b25dabcc10f729dadd9e4bee636a0ea706ad644a6da79f9990",
+      "bytes": 233295
+    },
+    {
+      "path": "artifacts/characters/motion/earthonline-humanoid-motion-v1.glb",
+      "sha256": "5968967801db850e97a138f20f5a74803f3e8be0a66e3a22c4950f191cf22366",
+      "bytes": 30120
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/bench-lo1k/tripo-out/decimate-14-da649a62/model.glb",
+      "sha256": "629889474ddd9de233fab29dc5e6865ce8c73c357a10632d6d33b14dd1d10a80",
+      "bytes": 8286092
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/bench-lo1k/tripo-out/decimate-14-da649a62/preview.png",
+      "sha256": "8f162546cec727cef1c51e8bb593b0173b99f444788af965b6928810ed9e9f39",
+      "bytes": 258144
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/bench/hi/tripo-out/city-sidewalk-bench-black-powder-10b0880c/generated_image.jpeg",
+      "sha256": "7350b38fba58e6765b0e52bb34ab07cdf61d7ec5da041ca55a71881b249a8b47",
+      "bytes": 133191
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/bench/hi/tripo-out/city-sidewalk-bench-black-powder-10b0880c/model.glb",
+      "sha256": "94be64886c26998cfbf49c291fc89c4168aad3320938aa838ea1328c5fab7dc6",
+      "bytes": 44532092
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/bench/hi/tripo-out/city-sidewalk-bench-black-powder-10b0880c/preview.png",
+      "sha256": "1198732b6734a6b64fd1f5ced02b0bdb254bed9ca4dff508f3aee9193179fe85",
+      "bytes": 258949
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/bench/lo/tripo-out/decimate-4-7e9d4f38/model.glb",
+      "sha256": "c1df7d905031ee9bcdfb8e70dd02724cf26abde360e0865732c70208548f9369",
+      "bytes": 8045852
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/bench/lo/tripo-out/decimate-4-7e9d4f38/preview.png",
+      "sha256": "51f2edfc88c64f2b742be21bea7c0c3e70e393017117e1fc9abce476a615a5da",
+      "bytes": 257475
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/bikeRack/hi/tripo-out/inverted-u-bicycle-rack-two-galv-779b363f/generated_image.jpeg",
+      "sha256": "49256a321db152d47611b41c3eb8c23d786ceb67490b905f8f6d35692fa4d16b",
+      "bytes": 250207
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/bikeRack/hi/tripo-out/inverted-u-bicycle-rack-two-galv-779b363f/model.glb",
+      "sha256": "aaca7d79227516501e675dfd60f866892b688d83620df14bae321c8217529e4a",
+      "bytes": 43734916
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/bikeRack/hi/tripo-out/inverted-u-bicycle-rack-two-galv-779b363f/preview.png",
+      "sha256": "7693f3cdc6f5279199ce73ecb81813b74b3e568eddebe94516987e9d40ec4114",
+      "bytes": 158722
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/bikeRack/lo/tripo-out/decimate-10-7cad8b4f/model.glb",
+      "sha256": "a7f530da06b707be7a76069aaddc82582d54046165ebeeecdf0278b041906236",
+      "bytes": 4676440
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/bikeRack/lo/tripo-out/decimate-10-7cad8b4f/preview.png",
+      "sha256": "1143458515b7ab8fc23e3c40b8ff4bc6df281b19a22ed31d023164932150674e",
+      "bytes": 152970
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/bollard/hi/tripo-out/black-cast-iron-street-bollard-c-2d3cfd04/generated_image.jpeg",
+      "sha256": "26a91ca9464308c92a01ffde0fea6112c6fb2b5d7b4e7e64a1667abf2fab1476",
+      "bytes": 124648
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/bollard/hi/tripo-out/black-cast-iron-street-bollard-c-2d3cfd04/model.glb",
+      "sha256": "279020114c84895950f60ebfdf0d0eb700511110596c330b96ac123bd4a0f892",
+      "bytes": 42999892
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/bollard/hi/tripo-out/black-cast-iron-street-bollard-c-2d3cfd04/preview.png",
+      "sha256": "09fd8e4b4a194c54e6ba5dbbd31b5a31575ee6a4b16978dd2c61c26bbf53e1f1",
+      "bytes": 214052
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/bollard/lo/tripo-out/decimate-8-6823e704/model.glb",
+      "sha256": "b6a3bcdefd7d84e6f8ad45073cff27458a7100c7704d6d751f66b5e2b8c59c9d",
+      "bytes": 6677948
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/bollard/lo/tripo-out/decimate-8-6823e704/preview.png",
+      "sha256": "73ab897f346e15e3a5da1722f3b1636c55bd6fadf5264b47bce0b96a44744f07",
+      "bytes": 215162
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/bollard2/hi/tripo-out/tall-slender-black-cast-iron-str-d8fbc4ab/generated_image.jpeg",
+      "sha256": "5c9093a3911e7f2f61c642336a9c06080af3c804eebfd59c0f144922c70ba3a4",
+      "bytes": 101446
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/bollard2/hi/tripo-out/tall-slender-black-cast-iron-str-d8fbc4ab/model.glb",
+      "sha256": "1323889e56241042627fef5c9aea81d8334d9797a73f63c78d9bc4421ae86c50",
+      "bytes": 36271236
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/bollard2/hi/tripo-out/tall-slender-black-cast-iron-str-d8fbc4ab/preview.png",
+      "sha256": "d73053806664770b9308a8431a4ef6034ed5763cfaaf5fe97dc5e97bb8f098c3",
+      "bytes": 64052
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/bollard2/lo/tripo-out/decimate-12-47363727/model.glb",
+      "sha256": "b30c812bf4882d50706d2e394c7d9cf8a3cb18306f3cd3574731c8211a1cdf34",
+      "bytes": 5436092
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/bollard2/lo/tripo-out/decimate-12-47363727/preview.png",
+      "sha256": "3770e5a02df3f52c780ac040d774d0e93b5de493c8a1b8b06e7a8afcdb1e2c52",
+      "bytes": 65381
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/busStopFlag/hi/generated_image.jpeg",
+      "sha256": "f1a94e9548ecdedab90ad90a52956ba620cdecc0144538aaf4a25711ce32d2e0",
+      "bytes": 72645
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/busStopFlag/hi/model.glb",
+      "sha256": "d0d7838c8bda1216316ea3c4c2bde56f91068bf8cb6c02b7a492f75fd90d4cb2",
+      "bytes": 28272152
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/busStopFlag/hi/preview.png",
+      "sha256": "bc146e8c15b24af4114d6eab1ac29acf540aa35c81e7b849e0054f6cf67d7a21",
+      "bytes": 50114
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/busStopFlag/lo/model.glb",
+      "sha256": "c00a79906057bc959ff0e5042f728c52a7fc167ba858aabf165c8721be05205e",
+      "bytes": 3617732
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/busStopFlag/lo/preview.png",
+      "sha256": "e9c031f6958f09a5499ce35c971c9faefc70043a50137f07141a5d67afd7e41d",
+      "bytes": 51127
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/hydrant-hi/dc7b4721-c614-4226-8977-3720fbf6dafe-generated-image.jpeg",
+      "sha256": "68d21baf00ca7a7548cbb8944bba08841eb84af022a368ffa758d817a32050be",
+      "bytes": 109242
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/hydrant-hi/dc7b4721-c614-4226-8977-3720fbf6dafe-pbr-model.glb",
+      "sha256": "627646adf86a2b145eee04fc907fcb8ef928b1b0d15dedbbf8e106bdab101cd8",
+      "bytes": 2425036
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/hydrant-lo1k/tripo-out/decimate-13-178db154/model.glb",
+      "sha256": "397b01ed3692cd80175862a47105c6b5c0fb9053d0c07b9d9dd6e648f0679a2c",
+      "bytes": 5680144
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/hydrant-lo1k/tripo-out/decimate-13-178db154/preview.png",
+      "sha256": "733c4f05594ea6d6c1ecca70611d8bedabb2b942065c77dea0c6cac6a83913cf",
+      "bytes": 233021
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/hydrant-lo2k/tripo-out/decimate-6dac3e23/model.glb",
+      "sha256": "a82e1a42e2ed3bbfa9108b6e1100b5671df20b4b483ce84497d0d62e17adec45",
+      "bytes": 6452944
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/hydrant-lo2k/tripo-out/decimate-6dac3e23/preview.png",
+      "sha256": "c80aada36f43fcaf1f029ee1bad20164ac5e998a0bbef9f899c5b55792783c58",
+      "bytes": 182849
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/hydrant/3c81e7d4-b301-42b7-920e-dbcef9cfa76b-generated-image.jpeg",
+      "sha256": "8a52ed6d96a7662bce248733dfb3d8650b367153295e98cba94711705441f452",
+      "bytes": 95559
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/hydrant/3c81e7d4-b301-42b7-920e-dbcef9cfa76b-pbr-model.glb",
+      "sha256": "1916a5862d8509bb597711aab30c99a88f532b13f67c7d741a2029074fb9b8e5",
+      "bytes": 621716
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/mailbox/hi/tripo-out/public-mail-collection-box-dark-5ec3c8af/generated_image.jpeg",
+      "sha256": "d776f4c3b89db8e1c27c81c649d5e00f144af1e2a132fc49729c0b4820988a25",
+      "bytes": 132287
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/mailbox/hi/tripo-out/public-mail-collection-box-dark-5ec3c8af/model.glb",
+      "sha256": "7bd4288ff43cc223ef57ea0680de18d629f2996ead45806c42932012685524b5",
+      "bytes": 43967748
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/mailbox/hi/tripo-out/public-mail-collection-box-dark-5ec3c8af/preview.png",
+      "sha256": "34f68a4d896d871f4802962c6d8a5bcf4fb90687620732f1f0d86617685e0498",
+      "bytes": 249087
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/mailbox/lo/tripo-out/decimate-6-0aa9d897/model.glb",
+      "sha256": "4b92b1e72058fcd47d81957ae85bef51f3ad42f712e47b0553401ab65bd7a1fa",
+      "bytes": 4838164
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/mailbox/lo/tripo-out/decimate-6-0aa9d897/preview.png",
+      "sha256": "f36a803df9f96198d0a10f909e779bf7c4997a1a994cc72ae0ba3f8b404598cf",
+      "bytes": 244689
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/newsBox/hi/tripo-out/sidewalk-newspaper-vending-box-p-19ab8cde/generated_image.jpeg",
+      "sha256": "af113f1ef72118c6c632b6c5863d3ae1322ae5c6e03a3f01bb640bde27cd88cf",
+      "bytes": 120066
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/newsBox/hi/tripo-out/sidewalk-newspaper-vending-box-p-19ab8cde/model.glb",
+      "sha256": "099a2ae49add192ca4eaf6ad1c645863ad86649250dea2e7c495dad3bd4c596c",
+      "bytes": 43004576
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/newsBox/hi/tripo-out/sidewalk-newspaper-vending-box-p-19ab8cde/preview.png",
+      "sha256": "f9dac73fca1b0c2b603f8bd4ad708f2a582da815ee226f23b22f12929316c87b",
+      "bytes": 219845
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/newsBox/lo/tripo-out/decimate-3-97c3558e/model.glb",
+      "sha256": "81133912196b84291cc473bbcf6cf305e70a2463c0b0b8bd110496bbb871b90d",
+      "bytes": 4381764
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/newsBox/lo/tripo-out/decimate-3-97c3558e/preview.png",
+      "sha256": "2bb682e7ab8083189e662fa8e30e4974ba970da1d4bba06176b0667036a72c55",
+      "bytes": 229265
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/parkingMeter/hi/tripo-out/single-space-smart-parking-meter-6ffc98c3/generated_image.jpeg",
+      "sha256": "54137d6b448b83c0b779263f55f348c7ff5e38bd4c0d8c31199c77d943133759",
+      "bytes": 97133
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/parkingMeter/hi/tripo-out/single-space-smart-parking-meter-6ffc98c3/model.glb",
+      "sha256": "919483668d7e646ba88a95e40e318e1515eca3df185a95fe50eb13e46a2b814a",
+      "bytes": 42541556
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/parkingMeter/hi/tripo-out/single-space-smart-parking-meter-6ffc98c3/preview.png",
+      "sha256": "8735ff885879f76df77b3cb1bfa3efc02c4e6cf9b988062ca3f168d16d5d0d21",
+      "bytes": 147517
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/parkingMeter/lo/tripo-out/decimate-5-47e9dbbe/model.glb",
+      "sha256": "2bf6cd86b529e1fea2c5d52fd53a22f3e194008d174941b16b2cf97c466078de",
+      "bytes": 5878164
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/parkingMeter/lo/tripo-out/decimate-5-47e9dbbe/preview.png",
+      "sha256": "e3c5255f581402b5df5b7c62c628b2f1c9ec97a28a59af0c74d9175e5ef19d6b",
+      "bytes": 145244
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/parkingMeter2/hi/tripo-out/full-height-single-space-parking-227642c0/generated_image.jpeg",
+      "sha256": "79f0822c7f8a2c82893e91685f68cddb6e328193055ef032f8a572bb9be912ca",
+      "bytes": 118760
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/parkingMeter2/hi/tripo-out/full-height-single-space-parking-227642c0/model.glb",
+      "sha256": "64eb1dad9ac2c33243ea29db04174ac9838628ffb0300f14496bd76630208494",
+      "bytes": 40593668
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/parkingMeter2/hi/tripo-out/full-height-single-space-parking-227642c0/preview.png",
+      "sha256": "4bc739796c2eb170ea192b7265a1dab3dc00e6e62ec5681d8bfe70d56537b6ca",
+      "bytes": 60830
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/parkingMeter2/lo/tripo-out/decimate-11-f26b6aa2/model.glb",
+      "sha256": "c1fd5bc751ff84d3aa9dff35d99378e63371e59cf7319ddb8d68c1f1f2358370",
+      "bytes": 3730372
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/parkingMeter2/lo/tripo-out/decimate-11-f26b6aa2/preview.png",
+      "sha256": "bc7efd8298b536b15d51f916715bf8dfbc5ca2a22bee555f4566a20b066cdfa4",
+      "bytes": 57390
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/payStation/hi/tripo-out/multi-space-parking-pay-station-3ecd2799/generated_image.jpeg",
+      "sha256": "17cd3d570dc30594f3ddfcca79d862c666cc268e59ca51d131a53b0bf17fabd6",
+      "bytes": 99475
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/payStation/hi/tripo-out/multi-space-parking-pay-station-3ecd2799/model.glb",
+      "sha256": "0e094dea3353e5b0aeef518e0f140f91c308e2fc52c5ea13601a5561a09ecdc9",
+      "bytes": 43380676
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/payStation/hi/tripo-out/multi-space-parking-pay-station-3ecd2799/preview.png",
+      "sha256": "c05a08666cb78e974f60c2a17560f7aafe005636f571ed4095275b726bdb65be",
+      "bytes": 177853
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/payStation/lo/tripo-out/decimate-9-d90d469d/model.glb",
+      "sha256": "329a3ba41865c503d42b1e28f4b87624911239cd4956d626918a0d9615a3fcb3",
+      "bytes": 4349004
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/payStation/lo/tripo-out/decimate-9-d90d469d/preview.png",
+      "sha256": "8f561d2295cc3fe5b8720483db1a145e728e03a256f42cfe61b1c9f28ecf1d12",
+      "bytes": 191703
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/planter/hi/tripo-out/square-precast-concrete-sidewalk-93508223/generated_image.jpeg",
+      "sha256": "74438b98d51a899a8be03d2f166d374de4ea2dd45e528afbab2f854eba73cd9c",
+      "bytes": 187195
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/planter/hi/tripo-out/square-precast-concrete-sidewalk-93508223/model.glb",
+      "sha256": "58078755b9d1bce51d14b2403910c4625fc22d10797c3fb1af92f7f7a59bc0fd",
+      "bytes": 45432816
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/planter/hi/tripo-out/square-precast-concrete-sidewalk-93508223/preview.png",
+      "sha256": "829721ecd451e06c5268d7fe7a8ce5d12b12e047cf88176ea71e37ed3399f3b0",
+      "bytes": 302709
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/planter/lo/tripo-out/decimate-7-4b3bbd91/model.glb",
+      "sha256": "776df27175f794c902dd2b54f6214719e1a6972216b19fab07d1af88f7df4cfd",
+      "bytes": 5873904
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/planter/lo/tripo-out/decimate-7-4b3bbd91/preview.png",
+      "sha256": "1f5f80ff3de7f4ac9459840778773355897d42bf7e7a7446600328bf1fa52615",
+      "bytes": 274606
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/signPole/hi/generated_image.jpeg",
+      "sha256": "4291885954dfdc31e27643827cb7b106fa5e663b3d32d71796132a4bc585ab3b",
+      "bytes": 80712
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/signPole/hi/model.glb",
+      "sha256": "84fe31fe7bf48efd5dfc5d5d365d49ee1e3e376a6aaed339f0c8d57d5e0878ae",
+      "bytes": 40159540
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/signPole/hi/preview.png",
+      "sha256": "3741ce495149e32ce23988a7c407968eb4d14ed9e991116a60ed5b219b99f334",
+      "bytes": 43082
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/signPole/lo/model.glb",
+      "sha256": "bbb2ccf4298e81d331ed44fd4150353dce63dcb297e83426e5df3020878bf014",
+      "bytes": 5642836
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/signPole/lo/preview.png",
+      "sha256": "18be75c506ddbb9e4d6a688055239565c1431cc3894ca9e91078b05e1c153d0b",
+      "bytes": 43331
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/signalHead/hi/tripo-out/eo-signal-head-1e896490/generated_image.jpeg",
+      "sha256": "0c7c4e3c72d4ac01a7847c429ef5594ac84a9b4b4016970f425e88765ce5bb16",
+      "bytes": 97253
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/signalHead/hi/tripo-out/eo-signal-head-1e896490/model.glb",
+      "sha256": "0a7fa24d556b3d96c425c9763509b12bdff71763d985252696a69bfc40eb6979",
+      "bytes": 45477272
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/signalHead/hi/tripo-out/eo-signal-head-1e896490/preview.png",
+      "sha256": "790f5705871d051446d31e2b7755e107ef0a4b96236b6d2361409af70d716a2d",
+      "bytes": 161425
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/signalHead/lo/tripo-out/eo-signalhead-lo-2d2e00cb/model.glb",
+      "sha256": "6bc286ae4333e2fa244096339d3ca8bce0587a9f22bbe91822fc2237f8fd6754",
+      "bytes": 4913556
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/signalHead/lo/tripo-out/eo-signalhead-lo-2d2e00cb/preview.png",
+      "sha256": "a2784205e459e0f3dfbda54402fc3d3ab371aa1978fb40f756178d6a29a2ec65",
+      "bytes": 160274
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/transitShelter/hi/generated_image.jpeg",
+      "sha256": "85eda492ec7bc4bac37416ad938dcfd7b791ea877fdda1898ed06dd25005513d",
+      "bytes": 92958
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/transitShelter/hi/model.glb",
+      "sha256": "490585e3aa6ad39349316e2526aa55532d923238c3757174246848a3d73a91c8",
+      "bytes": 48567768
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/transitShelter/hi/preview.png",
+      "sha256": "414e3a284b15994b1fcae8aa339b0cc8825d26ce9b385e6954c55c55b54a9a02",
+      "bytes": 105963
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/transitShelter/lo/model.glb",
+      "sha256": "02c6f00ced194fa15c0f39851be520928871ae85eda0ee92bab0fda32b828c91",
+      "bytes": 4408580
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/transitShelter/lo/preview.png",
+      "sha256": "2b01b80d145eb3bce189c136e4d3774be09847dd8be852b7fc1a8085198bb799",
+      "bytes": 89983
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/wasteBin/hi/tripo-out/public-sidewalk-litter-bin-dark-772d8e8b/generated_image.jpeg",
+      "sha256": "d1c58c20ca52fb94784b0f98816cf15cf33be12aee741d44015d7089e0215ce9",
+      "bytes": 217084
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/wasteBin/hi/tripo-out/public-sidewalk-litter-bin-dark-772d8e8b/model.glb",
+      "sha256": "1d803ee110d3b74e09056e3cbc6722fd8bda42b8fcb73f6c78443015d4c2f862",
+      "bytes": 41947596
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/wasteBin/hi/tripo-out/public-sidewalk-litter-bin-dark-772d8e8b/preview.png",
+      "sha256": "d619568c2aea9c943bdcc45f996bed13e48fc8808a33d5387ca085c6f3a1fb4f",
+      "bytes": 144197
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/wasteBin/lo/tripo-out/decimate-2-73aaba9b/model.glb",
+      "sha256": "63fb6d60d3e6c7642030c32b398e9bb1648ee05b5e55ab3911914e21e0ec8a72",
+      "bytes": 3040876
+    },
+    {
+      "path": "artifacts/tripo/street-furniture-v1/wasteBin/lo/tripo-out/decimate-2-73aaba9b/preview.png",
+      "sha256": "c57dbf34a3142ebe5260a9bd81ea461c6822e4c5f5d272eb69235426f1d5cdbf",
+      "bytes": 142628
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/cobraArm/hi/tripo-out/cobraarm-hi-66042b42/generated_image.jpeg",
+      "sha256": "eb0dc88f369b94afecd437c4c761588a5c9b8ce962ac30b75092d9d7b183ab80",
+      "bytes": 85644
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/cobraArm/hi/tripo-out/cobraarm-hi-66042b42/model.glb",
+      "sha256": "6eddd1bd5dd48cbcfb31217f242dee3195284deadc976155d0c859a329e2d358",
+      "bytes": 57722044
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/cobraArm/hi/tripo-out/cobraarm-hi-66042b42/preview.png",
+      "sha256": "efc0d765a32204b4f36392d36b51d3dbe73476d502fa1bd347531139eca08232",
+      "bytes": 115507
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/cobraArm/lo/tripo-out/cobraarm-lo-178ade30/model.glb",
+      "sha256": "45a4b725466bc6171edba84047c3e936f50ba1b8e95c12cd0ef83ed59db064ce",
+      "bytes": 8937484
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/cobraArm/lo/tripo-out/cobraarm-lo-178ade30/preview.png",
+      "sha256": "79436d1d69c3d945f378e94a0fd51390ab7a8812dbb928504504b412fe910189",
+      "bytes": 113968
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/lampCobraBanner/hi/tripo-out/lampcobrabanner-hi-6ccb9c7f/generated_image.jpeg",
+      "sha256": "af5ab30acae4cab3288588430e1df5ea97de29f181c0a14c16fb459827b0a59a",
+      "bytes": 85071
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/lampCobraBanner/hi/tripo-out/lampcobrabanner-hi-6ccb9c7f/model.glb",
+      "sha256": "e0b8d92df057a1e0170c9a5ec48fce8c4a19e9eecf6ccfc33b21692ffb0e71fd",
+      "bytes": 39395244
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/lampCobraBanner/hi/tripo-out/lampcobrabanner-hi-6ccb9c7f/preview.png",
+      "sha256": "a41451d9394ccc5ff73075dabe46e16b22f9afaa34ebeb1aa59b73fca803190c",
+      "bytes": 61242
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/lampCobraBanner/lo/tripo-out/lampcobrabanner-lo-91edaf49/model.glb",
+      "sha256": "c7427bd744d59003f8d903e7e6629ae169e0aac9cb443df66cb51d62f0682212",
+      "bytes": 3678564
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/lampCobraBanner/lo/tripo-out/lampcobrabanner-lo-91edaf49/preview.png",
+      "sha256": "a65dea80c95138b102450bbd3a72f8f4a8e4dff97c29f6ba2049911738aa57f1",
+      "bytes": 61145
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/lampHistoricTwin/hi/tripo-out/lamphistorictwin-hi-89c0ff1a/generated_image.jpeg",
+      "sha256": "06ac74ed089966f58818d71c92e84f1b881acb535899cabab9a86327da6dab2a",
+      "bytes": 88446
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/lampHistoricTwin/hi/tripo-out/lamphistorictwin-hi-89c0ff1a/model.glb",
+      "sha256": "71d55d9818758bbbaf1c9be7bbcf676d3957a92251710bed5ccd2ab975fb6db0",
+      "bytes": 47441332
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/lampHistoricTwin/hi/tripo-out/lamphistorictwin-hi-89c0ff1a/preview.png",
+      "sha256": "a4fad0051c2e096163dc99e13f956097eb800ca5d811c0fe64c4192da7a2763d",
+      "bytes": 73149
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/lampHistoricTwin/lo/tripo-out/lamphistorictwin-lo-39a373c9/model.glb",
+      "sha256": "06eee30b8247de4a993a57d431c67f0cfd8458c2b95baee79bcc2d483cfe5637",
+      "bytes": 7135168
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/lampHistoricTwin/lo/tripo-out/lamphistorictwin-lo-39a373c9/preview.png",
+      "sha256": "2f85bfe5b331dd04d6028e1a40d2692c55e1195b739515ee7e95ab42fc99d594",
+      "bytes": 71644
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/lantern/hi/tripo-out/lantern-hi-607be67b/generated_image.jpeg",
+      "sha256": "49ac914de03a07ddba1917600a30b05079548ab74b12591868f8b03e194d3b0d",
+      "bytes": 128460
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/lantern/hi/tripo-out/lantern-hi-607be67b/model.glb",
+      "sha256": "417fd410de13125d35d339e8c5618a8e7439b51104fadb800ca250cc1fb9d69c",
+      "bytes": 53370980
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/lantern/hi/tripo-out/lantern-hi-607be67b/preview.png",
+      "sha256": "77c75e5eee0418caea33da3ee532700093ad15b2046ea41e8a2969f0a630eb5a",
+      "bytes": 258006
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/lantern/lo/tripo-out/lantern-lo-d3e2edda/model.glb",
+      "sha256": "55bdf200ca7f4da8def9e2f8f631536b0207dbabe7ed2b72d9ddc222f0f8e121",
+      "bytes": 6992952
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/lantern/lo/tripo-out/lantern-lo-d3e2edda/preview.png",
+      "sha256": "dd1023d505482eaec12a96e6aadbf2d1dfa1aa81e3b40036fa4196fdac95ea14",
+      "bytes": 248276
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/palmPhoenix/far1k/tripo-out/palmphoenix-far1k-677ec34f/model.glb",
+      "sha256": "85a24de8041765dc1d38914be640d2cf300c9625cdda624711431093cc202a65",
+      "bytes": 10040628
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/palmPhoenix/far1k/tripo-out/palmphoenix-far1k-677ec34f/preview.png",
+      "sha256": "68bbb9d2a96417628640a892d97b7397e322d716e381426af8c7e55741949c7d",
+      "bytes": 175873
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/palmPhoenix/hi/tripo-out/palmphoenix-hi-fbc67a62/generated_image.jpeg",
+      "sha256": "529d8e6c8a776ddcdb650919ab256f4f945cddc9911b7f135dc72129901703f1",
+      "bytes": 188686
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/palmPhoenix/hi/tripo-out/palmphoenix-hi-fbc67a62/model.glb",
+      "sha256": "80ad2b46fc3b6905d599f95641be1ac48df183d7f18db04c1aa67d203fbb4208",
+      "bytes": 55313320
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/palmPhoenix/hi/tripo-out/palmphoenix-hi-fbc67a62/preview.png",
+      "sha256": "443129e0b45eea9a338f397285c6de7ada7d772afdad8c760fabcb731292c61a",
+      "bytes": 254576
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/palmPhoenix/lo/tripo-out/palmphoenix-lo-48b92af5/model.glb",
+      "sha256": "a7e6826ae2c740fc6a492adca6246b127fa01be710b31a14ad3f3781f2be3270",
+      "bytes": 10191532
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/palmPhoenix/lo/tripo-out/palmphoenix-lo-48b92af5/preview.png",
+      "sha256": "83af61b20ca9831de65f032d29db168f9276ac14a0ccc16a08e93154c4a3aaf7",
+      "bytes": 197925
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/palmPhoenix/mid/tripo-out/palmphoenix-mid-3c0aea85/model.glb",
+      "sha256": "00912d0fed7b1a1b0fc9af7a3c3c864e41288e23bef2aa267fde86168b0b1410",
+      "bytes": 11543776
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/palmPhoenix/mid/tripo-out/palmphoenix-mid-3c0aea85/preview.png",
+      "sha256": "8f347e89fb530832c1230313e8255c41b8bd3bc65a7d742b5f5f41ea555f9ef8",
+      "bytes": 240938
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/palmPhoenix/near5k/tripo-out/palmphoenix-near5k-6b246947/model.glb",
+      "sha256": "a64f0bef81a8ea3520e80b75b18d74080c02c996b606fbf219fa26a47eb19e99",
+      "bytes": 10844132
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/palmPhoenix/near5k/tripo-out/palmphoenix-near5k-6b246947/preview.png",
+      "sha256": "4ded0e63d3e693ecabb55f92f1390302eb554843eae7086221eda2315bd0b367",
+      "bytes": 239417
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/signPost/hi/tripo-out/signpost-hi-dd9e1d2f/generated_image.jpeg",
+      "sha256": "b4b3860f41b7f9077a1047c0906124fa1f498e33a2a9350108a4981fd58b2bf1",
+      "bytes": 258081
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/signPost/hi/tripo-out/signpost-hi-dd9e1d2f/model.glb",
+      "sha256": "2b40f5cf5837d4992e60d1ed0dfba4b8951d4ee6f56ef89ffea5aad400b9904e",
+      "bytes": 48698932
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/signPost/hi/tripo-out/signpost-hi-dd9e1d2f/preview.png",
+      "sha256": "fe00eabb3fc980eb86bc00667da0f74e211de82b2f6d369df0e36ba8f514aa34",
+      "bytes": 64697
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/utilityPole/hi/tripo-out/utilitypole-hi-490cdb48/generated_image.jpeg",
+      "sha256": "eefa445f71181575ebf4936b3e87c3f42a20f427ffc7d082b39bf734525818d3",
+      "bytes": 75113
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/utilityPole/hi/tripo-out/utilitypole-hi-490cdb48/model.glb",
+      "sha256": "ee22b824b9768289ef07807d3516aac5c0075094fd331d0cc4b07845e52f51e1",
+      "bytes": 42222088
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/utilityPole/hi/tripo-out/utilitypole-hi-490cdb48/preview.png",
+      "sha256": "947047c57bf21cdcac8118a32db9127b6136073ea7daf86b7bd6236990af8154",
+      "bytes": 66838
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/utilityPole/lo/tripo-out/utilitypole-lo-7a5775b1/model.glb",
+      "sha256": "ab3a78fecf22b43b47137f5330fee1d92187b275b22d9a0e2038eee7f07d5176",
+      "bytes": 8466808
+    },
+    {
+      "path": "artifacts/tripo/street-kerbside-v1/utilityPole/lo/tripo-out/utilitypole-lo-7a5775b1/preview.png",
+      "sha256": "aa74dfc802c78fc9fc4c96dc62e015f047be5f169f1b5256ed661899786d87f6",
+      "bytes": 67293
+    },
+    {
+      "path": "artifacts/vehicles/cable-car-v1/refs/cablecar_front.png",
+      "sha256": "a699f0a6b0b9f3481e98508038b139e38d4a29b71b8cfc9e9f2bea56b439db3a",
+      "bytes": 1924683
+    },
+    {
+      "path": "artifacts/vehicles/cable-car-v1/refs/cablecar_front34.png",
+      "sha256": "695718afa8ac8257224904f9207cd7a82b8cb756a0a2f0cc0105e5b45f64f646",
+      "bytes": 2213737
+    },
+    {
+      "path": "artifacts/vehicles/cable-car-v1/refs/cablecar_interior.png",
+      "sha256": "356b2cda075fce2fade760a516837ab28948a794660dd641a34b603a6f663631",
+      "bytes": 2657566
+    },
+    {
+      "path": "artifacts/vehicles/cable-car-v1/refs/cablecar_over34.png",
+      "sha256": "d2563e18e78b33c91e0e9deab3fb259bda4575af228fef82796a3c25f03bcb98",
+      "bytes": 2631871
+    },
+    {
+      "path": "artifacts/vehicles/cable-car-v1/refs/cablecar_rear.png",
+      "sha256": "ae8103e5b2ba5ca826a03231b7a98b029ae9f9cd2e7cbb41e775c2baad740d6e",
+      "bytes": 1650771
+    },
+    {
+      "path": "artifacts/vehicles/cable-car-v1/refs/cablecar_side.png",
+      "sha256": "880a106c18c0676d8a2d0242fee5771cd3dab85ee0b6b22a69217a56c7b8a8f5",
+      "bytes": 1831413
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out-r4/compactHatch-lod2.glb",
+      "sha256": "9ae0c4623f95c78cb32ea6ae4cbdf47c62778f6d5af623e280433c1a53152b5e",
+      "bytes": 165916
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out-r4/compactSuv-lod2.glb",
+      "sha256": "612b8d8b3fb6655f6467eaf2bb24ea63a768e5cb5b9a84639e01c35f6797f63b",
+      "bytes": 172164
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out-r4/deliveryVan-lod2.glb",
+      "sha256": "55f694e8285590ec4e55bbd4b40466e013c09c5723fdfc8755f6f83b9cdbd0bc",
+      "bytes": 150176
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out-r4/pickup-lod2.glb",
+      "sha256": "c2c8ad78bb1a44eab82836394eb96ec05f494824bb7ab4e79baf65ce515881ed",
+      "bytes": 185036
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out-r4/taxi-lod2.glb",
+      "sha256": "ffc7b82d7033914ba6804de9320a7ed5dffdc986e063882ba5e295f01dba602e",
+      "bytes": 174800
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/compactHatch-lod0.glb",
+      "sha256": "abb3ab7b55b4117ae16e92c3ff78aa857a07bcb078966c1823afde5053b26436",
+      "bytes": 1307140
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/compactHatch-lod1.glb",
+      "sha256": "138a77cbbaa560f05b16024445cba8dc012da2286557b80b3acf407f1cca40d3",
+      "bytes": 547764
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/compactHatch-lod2.glb",
+      "sha256": "9ae0c4623f95c78cb32ea6ae4cbdf47c62778f6d5af623e280433c1a53152b5e",
+      "bytes": 165916
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/compactHatch_front34.png",
+      "sha256": "069ade3ab0c120867334700cea949439d5c9e65ff8c6ee2a5434c9720fe0b6e4",
+      "bytes": 1006045
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/compactHatch_lod2_front34.png",
+      "sha256": "900a54d188bf71910accdddcd8095a9cda99f452031bf98c1ad44c7abb40a3ce",
+      "bytes": 979008
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/compactHatch_rear34.png",
+      "sha256": "bf4eaae9d4b73922c93ea97b4e8cfae86e8259a273b1eed64d4f0d4706223375",
+      "bytes": 1015217
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/compactSuv-lod0.glb",
+      "sha256": "2b16496d38f5d5d78564c3d6b04e5ad1818c6b61b9a4ccbe19a5ff9edbd9329d",
+      "bytes": 1490008
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/compactSuv-lod1.glb",
+      "sha256": "97137752d4f54df82e789680b8beddce5a5f0662a36a0fa4748b08c3ca7ba4fd",
+      "bytes": 620264
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/compactSuv-lod2.glb",
+      "sha256": "612b8d8b3fb6655f6467eaf2bb24ea63a768e5cb5b9a84639e01c35f6797f63b",
+      "bytes": 172164
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/compactSuv_front34.png",
+      "sha256": "9bed884be483a8db5791a32d771fd47bf0a68aefdfb0eccc6d0481294b7d9167",
+      "bytes": 1041637
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/compactSuv_lod2_front34.png",
+      "sha256": "71aa32fab4fbc0712b0b7a54f37dc0a0771a819db9b40e89289e2d5effb0fdef",
+      "bytes": 1007298
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/compactSuv_rear34.png",
+      "sha256": "7fcdcc2fff7b575dccb3a7b05cd9f3c2a0be6eca45f22e277cb72870e5333fb3",
+      "bytes": 1035188
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/deliveryVan-lod0.glb",
+      "sha256": "e11a21caf2a9bb2d6cf63edee71c170ad011abeac5ca25a5bfa61d7aa6657e99",
+      "bytes": 1225212
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/deliveryVan-lod1.glb",
+      "sha256": "86e33b3b1fa39254473e9c0cde9fc3667e08efa125f6a3d34342ba94425bcd5b",
+      "bytes": 508544
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/deliveryVan-lod2.glb",
+      "sha256": "55f694e8285590ec4e55bbd4b40466e013c09c5723fdfc8755f6f83b9cdbd0bc",
+      "bytes": 150176
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/deliveryVan_front34.png",
+      "sha256": "73015f3b8163727b198a36add5e775fe598f3ee95ce691b64152c9aaeeaf9ce7",
+      "bytes": 1009826
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/deliveryVan_lod2_front34.png",
+      "sha256": "f3652ccd6955d84ab1122dde87140f4321ec1341d5337d0b009c3048a1266118",
+      "bytes": 983886
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/deliveryVan_rear34.png",
+      "sha256": "a3b97ad573b5b619acb217d6558bb0b06b87fe0fb628fe2b8c64a692c2603f9f",
+      "bytes": 1014007
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/pickup-lod0.glb",
+      "sha256": "cdc29e9f172b7aec9a1b73ae9d315aa9dd6b4429d5fef91bafbba8a858782e8e",
+      "bytes": 1574224
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/pickup-lod1.glb",
+      "sha256": "0b84f073c1ee8d01c090b29c62def2ef6b8d0bdd71f5f41a236c8c89a1ea92b0",
+      "bytes": 640248
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/pickup-lod2.glb",
+      "sha256": "c2c8ad78bb1a44eab82836394eb96ec05f494824bb7ab4e79baf65ce515881ed",
+      "bytes": 185036
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/pickup_front34.png",
+      "sha256": "2e4c624886c93cd2b6d2eae51b90ebc9ba6494df5b3503ee3950612d47acae55",
+      "bytes": 1027103
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/pickup_lod2_front34.png",
+      "sha256": "97a22f5b3f1b4938bfd3c5479499212c76e93bb964cb1d7ccd52151d8fd29400",
+      "bytes": 985047
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/pickup_rear34.png",
+      "sha256": "dbdcd6a2aa4a8199b78ff7db20cd29bb4169fe488e6d61b74455a4038f096254",
+      "bytes": 1026784
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/taxi-lod0.glb",
+      "sha256": "284de438e7de24c140ec3154cdf2752480877616ca324bc74c5ccc33bcc3093a",
+      "bytes": 1437524
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/taxi-lod1.glb",
+      "sha256": "ecc556c6ebd0110d1b5ed24820789b1befcaed09bf7e12afcae19a545568b56e",
+      "bytes": 588212
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/taxi-lod2.glb",
+      "sha256": "ffc7b82d7033914ba6804de9320a7ed5dffdc986e063882ba5e295f01dba602e",
+      "bytes": 174800
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/taxi_front34.png",
+      "sha256": "ccddeb34785270220838454370022740924330b24410e4e2e9f4850980c21dca",
+      "bytes": 1012054
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/taxi_lod2_front34.png",
+      "sha256": "3c2e83e58223d0103050abbca2c10b525ef9656715449c14113c593e20df6fed",
+      "bytes": 986167
+    },
+    {
+      "path": "artifacts/vehicles/fleet-v1/out/taxi_rear34.png",
+      "sha256": "af26ff1da5ce2edd887959e17142344c7596769093df16e8a64e2e7851c1c1f1",
+      "bytes": 1032581
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/out-lod1/project-sedan-v1-lod1.glb",
+      "sha256": "b0e69bad51f8a42ba050574a51c5f70a0497d0b6a83705b4a5512d81bff8627b",
+      "bytes": 686488
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/out-lod2/project-sedan-v1-lod2.glb",
+      "sha256": "4577dfdc9535522931c7ceda2671ed312111683f39000c7c66c07214e291633f",
+      "bytes": 258108
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/out/project-sedan-v1.blend",
+      "sha256": "6656e4b7f9e39a1eece0fcbd949a61827506361019b5ac1c2b021e1d77f78130",
+      "bytes": 1769242
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/out/project-sedan-v1.glb",
+      "sha256": "1f0a07b3156dabfb0e42a87fee048c12f90981d98411ed942bc1b8cb49400cd4",
+      "bytes": 3638444
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/out/r2_cabin.png",
+      "sha256": "21be9162055ae0be45552aa0c1f6fde1ba6bbbe9e57c3d71a5392a586a5254cd",
+      "bytes": 1089893
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/out/r2_dusk_front34.png",
+      "sha256": "a5e1ba95c85901e252e44cc3dc0246cc6b72ca9070e6efa011dbe350f951d226",
+      "bytes": 1017036
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/out/r2_dusk_rear34.png",
+      "sha256": "e9704cc5584853a323d928435f62662a652bb1289f7d3b7273a8854ef720d621",
+      "bytes": 1026148
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/out/r2_front34.png",
+      "sha256": "f85d41f6412dd7cc33facdeb4f20f6a1cef8e309d56af135b654457111e01bf7",
+      "bytes": 1054896
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/out/r2_inside.png",
+      "sha256": "b33414d1ae77c0437d6e94dd76a3704540f80b7263bf0cefcfd257b28ec74f9b",
+      "bytes": 1083554
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/out/r2_open_cabin.png",
+      "sha256": "fbfccee351a321f92681a238a277ef8c318cd9b2a70a639e84e3788268f98538",
+      "bytes": 1113465
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/out/r2_open_cutaway.png",
+      "sha256": "2e8930f6e3b51e1972b8c7bb9c3c0c020ad53e96298d0d2848ab3ac14ce95767",
+      "bytes": 1158713
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/out/r2_open_cutaway_dash.png",
+      "sha256": "6646f2d7c1dc6a398f7f720f9e46d89c6605335968e070867474f006bd39aeb4",
+      "bytes": 1084427
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/out/r2_open_front34.png",
+      "sha256": "971100e2e6f6d0711cca752912373d99cab074a936324b21aa6ba0c58db9e6a6",
+      "bytes": 1072246
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/out/r2_open_rear34.png",
+      "sha256": "cff089fd9ae2e0c8594bdbf1cdb497984664a757dbcde1761a5aefc08615532c",
+      "bytes": 1123739
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/out/r2_open_side.png",
+      "sha256": "c7182cb8db1e3c79fefa2fcd90c9878c2b284bdf6192da44df18a696dfe5113c",
+      "bytes": 1167326
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/out/r2_side_close.png",
+      "sha256": "8a26165d478c3101d984b177cd931706ce9df29591bafa26930e36d7be2dd666",
+      "bytes": 1064385
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/project-sedan-v1-dressed.blend",
+      "sha256": "395b8801e22e1a80e6cb5a308aab814e43d934d6576f64aaf495169cf1e6f216",
+      "bytes": 26465519
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/project-sedan-v1-dressed.glb",
+      "sha256": "8d9b31b282592fd2b41eb1e5b01d60b1d9fed4cbae37cc5145e3490962d57463",
+      "bytes": 6055276
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/project-sedan-v1-lod1-full.glb",
+      "sha256": "a6906c98e9abc60d42e98dcbc4e4535289b2ba6ce2ece6a63675b6994a3cc467",
+      "bytes": 1443584
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/project-sedan-v1-lod1.glb",
+      "sha256": "b0e69bad51f8a42ba050574a51c5f70a0497d0b6a83705b4a5512d81bff8627b",
+      "bytes": 686488
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/project-sedan-v1-lod2.glb",
+      "sha256": "4577dfdc9535522931c7ceda2671ed312111683f39000c7c66c07214e291633f",
+      "bytes": 258108
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/project-sedan-v1.blend",
+      "sha256": "03ac7cd30a703f0d7dc1a0c5d3b9ec7f99ec644e12d030331df2e6dc1fa98b6c",
+      "bytes": 1782625
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/project-sedan-v1.glb",
+      "sha256": "879bf51076da29d95f4e313e4e02b82917e26a0f8c9b59d568225f5553ad49db",
+      "bytes": 3669808
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/cabin.png",
+      "sha256": "e421061117dc308cad45fc1b754defadf4e90a9e3bff3f311f05e9ed4179f3c6",
+      "bytes": 1088836
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/close/c_apillar.png",
+      "sha256": "24eed1e40f04fbc75b249f8a8c76c863cccb197a1e72eac73bba4b51e130cc44",
+      "bytes": 1054142
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/close/c_arch.png",
+      "sha256": "6b011e787774010af0d94c7da25abc39806a3694d38b360b020c863a2d1dd2eb",
+      "bytes": 1134435
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/close/c_bpillar.png",
+      "sha256": "8405f690cc6c7e8b18893387c010158a3ad7f9c40fbde147521cca9c5af2ef8f",
+      "bytes": 968183
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/close/c_cpillar.png",
+      "sha256": "af62c3f408695b2787967fc6ede5f46a7d53a0f0732ea6b86223eb28544b9df8",
+      "bytes": 985911
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/close/c_hoodgap.png",
+      "sha256": "ab92ef1305e42ac67377228c32b303123deeeb964ad98c0ca10fb52c741a1acc",
+      "bytes": 1025986
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/close/c_nose.png",
+      "sha256": "6f116b95828a9d34ae10fde46e4edc6eb1e5c2e0a017ae91f70fecfe5dc49934",
+      "bytes": 925630
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/close/c_tail.png",
+      "sha256": "ef642ad098f91159bd27ac12cb6cd70757a2b2d6bc9bd360f55b072f30ea7dbd",
+      "bytes": 888378
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/close/c_trunkgap.png",
+      "sha256": "7c2ab1c1230c79a28125d129ebd4b30b6baddb83cb77d4393d18dcd40e1c9861",
+      "bytes": 1045319
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/close/o_doorjamb.png",
+      "sha256": "b96c7b870715958ba83c786c2f86d3f6bee2673b4565f3a0fcae151a2bd2b722",
+      "bytes": 1001766
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/close/o_fuel.png",
+      "sha256": "41db351abe489f4bb4c89006ba306bbe8af92edcdff73f65c9443657ec660855",
+      "bytes": 968521
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/close/o_glovebox.png",
+      "sha256": "bcb725eb12fe90d701e64ee8441f442c6e6233897bcc8d69f53b3cc5663b0d5f",
+      "bytes": 1093502
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/close/o_hoodbay.png",
+      "sha256": "843828313a909cf2ddea6e840bca194c3ffa0687f6cee93856b6478b2b7dda5b",
+      "bytes": 1012840
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/close/o_trunkbay.png",
+      "sha256": "6a87c2d0f3cd2c384139eb8464d5424e51a575ef06f762fc79b19abd0e479243",
+      "bytes": 1064153
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/close/o_window_in.png",
+      "sha256": "3cefff10481917e38b0f939600a6cbb8ebbd7f513e49995905508e0ed35b7bb2",
+      "bytes": 1113395
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/dressed/cabin.png",
+      "sha256": "2216a2927366f27f3104ab1e5071f46543576babe7a57416935e58dc25de50ab",
+      "bytes": 1731335
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/dressed/door_open.png",
+      "sha256": "53e6b22ae44564c12e39808e06b1a6b49da27e27cf76b79edcf8e72f64a45e0b",
+      "bytes": 1773220
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/dressed/engine_bay.png",
+      "sha256": "8946a1321e400dd060e98c755973c82bba7d6dee741a2588edbfd04a35b2c275",
+      "bytes": 1813122
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/dressed/front34.png",
+      "sha256": "3ab2ec8d6166d0e80623cf1a2b315dfcad1b97a033c90e51a62698d74eaf1410",
+      "bytes": 1881875
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/dressed/open.png",
+      "sha256": "8641a3e26fe1298fd4917d4a76c6541fdb1a05efd8531482b9766bd677a598cf",
+      "bytes": 1728546
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/dressed/rear34.png",
+      "sha256": "e04ae1ab92125d688874d9034e9eec575cfede8c9d931412be3ebf68d269db3a",
+      "bytes": 1643356
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/dressed/side.png",
+      "sha256": "8ac32fc1fff21680a352879b4e0e0d3f1c7a8aa129fe4afb983355f763f4b4f4",
+      "bytes": 1900270
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/dressed/trunk.png",
+      "sha256": "cc67dd3ee51bd9635d969062720c75b379ef8a6a491cb7d6187e6b2197e2969d",
+      "bytes": 1721976
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/dressed/underbody.png",
+      "sha256": "f7a12d197b1c4208798db44a1e8e426edec9ad4664972f942822ad1d56909ecc",
+      "bytes": 1748038
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/dusk_front34.png",
+      "sha256": "23f28083e04e445e0fd670976608fde7142e386b3f76bd87716afe1a6c12fe58",
+      "bytes": 1017745
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/dusk_rear34.png",
+      "sha256": "3d5fc11333f8bac806168b42fd3461509db7303478fead6468c5ddc06e0b8a0f",
+      "bytes": 1025176
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/front34.png",
+      "sha256": "b034b78854da6827aff7ef8d67397189cd7ade9057bdd2e96dc2aa603bef2303",
+      "bytes": 1055749
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/inside.png",
+      "sha256": "35d83dbd586de3803332e3b28d385dbab8c89218250b37d2c78d4560256ca34a",
+      "bytes": 1084686
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/open_cabin.png",
+      "sha256": "dd6ed5fac1c12acda0f00d816805a6d5aa231cb55d7796289a70b11443e68734",
+      "bytes": 1112604
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/open_cutaway.png",
+      "sha256": "313fb20f6a775dabfe91da5051e3c826fdba0e052744ff4384e1150ee8c3f2a2",
+      "bytes": 1156539
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/open_cutaway_dash.png",
+      "sha256": "ba7be80b8d7d5139b00ccd8cb2dee2bcf5ff6b551679a51cfdedd55706ceaf2b",
+      "bytes": 1084315
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/open_front34.png",
+      "sha256": "3111df131ea7bd5de4abfa9402ed2000a2d45d70b0f144204266d0018cb99afa",
+      "bytes": 1072224
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/open_rear34.png",
+      "sha256": "f4756f1659e7e3f549e22f54e5ea457ee032b3c4f537f390a3fe27f6b100fcbd",
+      "bytes": 1121668
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/open_side.png",
+      "sha256": "1a8c5f479d6bf4a385450e6c052ade99b695b628a2bac72c92ccfc500ac06fb2",
+      "bytes": 1165755
+    },
+    {
+      "path": "artifacts/vehicles/project-sedan-v1/renders/side_close.png",
+      "sha256": "311a2755502ccb5b4585b2431365a83bd17b9057081b51356d815223b9a88d7b",
+      "bytes": 1062941
+    },
+    {
+      "path": "artifacts/vehicles/sf-patrol-sedan-v1/out/renders/sf-patrol-sedan-v1-doors-open.png",
+      "sha256": "a18d04704a15cd3c7701de8aaf68760f8b42eb7be8787362e5c72c513d3080eb",
+      "bytes": 1701285
+    },
+    {
+      "path": "artifacts/vehicles/sf-patrol-sedan-v1/out/renders/sf-patrol-sedan-v1-driver-cabin.png",
+      "sha256": "2b78bc3fff24b0357128eaa6c45232b95a7726e64bb33ee0b4195f3d22686433",
+      "bytes": 1738190
+    },
+    {
+      "path": "artifacts/vehicles/sf-patrol-sedan-v1/out/renders/sf-patrol-sedan-v1-emergency-lights.png",
+      "sha256": "882c00dc58959721d852f6b797737075991332d27f30877b2c3f4229a081bc6e",
+      "bytes": 1588290
+    },
+    {
+      "path": "artifacts/vehicles/sf-patrol-sedan-v1/out/renders/sf-patrol-sedan-v1-front34.png",
+      "sha256": "6a628d9bb2140df1e6a775f562705da475bf871f102c6644070fe25b28ac4e25",
+      "bytes": 1645574
+    },
+    {
+      "path": "artifacts/vehicles/sf-patrol-sedan-v1/out/renders/sf-patrol-sedan-v1-rear34.png",
+      "sha256": "85ab681ca3aadc5efe952fb9d85e1bd86097e264f97eae624ba19e68996e03a4",
+      "bytes": 1627199
+    },
+    {
+      "path": "artifacts/vehicles/sf-patrol-sedan-v1/out/renders/sf-patrol-sedan-v1-side.png",
+      "sha256": "c338d026290c96f342e47b1a9605a1221d1907f31e376db0aa04c7ea67553e2b",
+      "bytes": 1555555
+    },
+    {
+      "path": "artifacts/vehicles/sf-patrol-sedan-v1/out/renders/sf-patrol-sedan-v1-top.png",
+      "sha256": "b7d1ada86a32190a10631b22a936e135650e1cea3c05c56555b0deeccf4f57d3",
+      "bytes": 1538330
+    },
+    {
+      "path": "artifacts/vehicles/sf-patrol-sedan-v1/out/renders/sf-patrol-sedan-v1-underbody.png",
+      "sha256": "1b91cee7e16bb0b943af612a6b2b77080b27eb16082bec9f65e48a5b649701cf",
+      "bytes": 1298324
+    },
+    {
+      "path": "artifacts/vehicles/sf-patrol-sedan-v1/out/sf-patrol-sedan-v1.blend",
+      "sha256": "6d41c6d76787b864eaa5729da970628d218230e02a8c9132ea99d2a2f8ce3e27",
+      "bytes": 6835595
+    },
+    {
+      "path": "artifacts/vehicles/sf-patrol-sedan-v1/out/sf-patrol-sedan-v1.glb",
+      "sha256": "4a4a0b4af5b01df485b8d61f93b6af3ba5f3e1056c25d3850070c42a5d9a468f",
+      "bytes": 7293536
+    },
+    {
+      "path": "artifacts/vehicles/sf-police-helicopter-v1/out/renders/sf-police-helicopter-v1-below.png",
+      "sha256": "99d08a42c5949a10667195aff9ff7194d4cc64bf3d6aca84c087ef3bccd87951",
+      "bytes": 1134659
+    },
+    {
+      "path": "artifacts/vehicles/sf-police-helicopter-v1/out/renders/sf-police-helicopter-v1-front34.png",
+      "sha256": "1719904ab029d68c9bceea8288cea7afd58a86c052f8a2ac98ade192dff584d6",
+      "bytes": 1103232
+    },
+    {
+      "path": "artifacts/vehicles/sf-police-helicopter-v1/out/renders/sf-police-helicopter-v1-rear34.png",
+      "sha256": "e09a6035733e0c0498b0d57e1af114285ba359cfee4b7be0ff2393d0583d8ff5",
+      "bytes": 1107325
+    },
+    {
+      "path": "artifacts/vehicles/sf-police-helicopter-v1/out/renders/sf-police-helicopter-v1-side.png",
+      "sha256": "424313994493942da46941ce60f38e12c5780762a4f5c124850ebc00bb90f667",
+      "bytes": 1063422
+    },
+    {
+      "path": "artifacts/vehicles/sf-police-helicopter-v1/out/renders/sf-police-helicopter-v1-top.png",
+      "sha256": "8e61bb223ea534e2256298e366fd8f6f1a28b85b9417d6475a99b1f206bd6fc8",
+      "bytes": 1043047
+    },
+    {
+      "path": "artifacts/vehicles/sf-police-helicopter-v1/out/sf-police-helicopter-v1.blend",
+      "sha256": "ac9a634b703cac504d00f18d4e23222b51258b5f0bdfda52a4298df20eafaf50",
+      "bytes": 308685
+    },
+    {
+      "path": "artifacts/vehicles/sf-police-helicopter-v1/out/sf-police-helicopter-v1.glb",
+      "sha256": "da760833b9c5235b5840da71942e7f5c21efa89710b4787144b633a322898fe8",
+      "bytes": 2829548
+    },
+    {
+      "path": "artifacts/vehicles/urban-utility-v1/urban-utility-study.blend",
+      "sha256": "b0bf98e30e48f48197fdbd0d86e1489c4ec54989677f7e857c11bd0d6b1fcf48",
+      "bytes": 1781948
+    },
+    {
+      "path": "artifacts/vehicles/urban-utility-v1/urban-utility.blend",
+      "sha256": "7371e1daed116156b1ed05f48eb3c4865fb217ef3f2ca78e239d282050969178",
+      "bytes": 1241161
+    }
+  ]
+}

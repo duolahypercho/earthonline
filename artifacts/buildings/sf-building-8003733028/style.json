@@ -1,0 +1,87 @@
+{
+  "seed": 1,
+  "notes": "r12 M: 2-storey 1925 commercial building (DataSF footprint, no OSM way), re-fronted: lime/olive-green smooth render, a white steel roll-up garage door, a pedestrian door and a narrow barred door; upper storey a tall strip of glass-block/steel sash on the right half, blank on the left; thin cap. Round 13 (lane G2): grime and soot; reflective glass.",
+  "wall": "painted-stucco",
+  "wallTint": "#a9b85a",
+  "trim": "painted-stucco",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "coping": {
+    "heightM": 0.25,
+    "projectionM": 0.05,
+    "material": "painted-stucco",
+    "tint": "#98a650"
+  },
+  "upperWindowSpans": [
+    [
+      0.5,
+      0.92
+    ]
+  ],
+  "upperSillM": 0.3,
+  "upperHeadM": 2.4,
+  "sashRows": 4,
+  "sashCols": 3,
+  "sashMaterial": "painted-steel-mid",
+  "frame": "painted-steel-mid",
+  "storefrontFrame": "painted-steel-mid",
+  "bulkhead": "painted-stucco",
+  "storefrontGlass": "glass-frosted",
+  "ground": "shop",
+  "upper": "office",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.4,
+    "layout": [
+      {
+        "kind": "door",
+        "from": 0.08,
+        "to": 0.22,
+        "leaf": "painted-steel-light",
+        "stair": true
+      },
+      {
+        "kind": "garage",
+        "from": 0.3,
+        "to": 0.66,
+        "material": "painted-white",
+        "headM": 3.3
+      },
+      {
+        "kind": "door",
+        "from": 0.72,
+        "to": 0.9,
+        "leaf": "painted-steel",
+        "grille": true
+      }
+    ]
+  },
+  "weathering": {
+    "patches": {
+      "strength": 0.09,
+      "metres": 1.5,
+      "top": 3.2,
+      "mottle": 0.07
+    },
+    "grime": {
+      "strength": 0.18,
+      "metres": 2.4
+    },
+    "soot": {
+      "height": 1.2,
+      "strength": 0.32
+    },
+    "streak": {
+      "strength": 0.08,
+      "columnMetres": 0.8,
+      "drop": 0.8
+    },
+    "bandStrength": 0.1,
+    "axis": "wall"
+  },
+  "glassModel": {
+    "upper": "glass-reflective@c0c8ce",
+    "street": "glass-storefront@8e979d"
+  }
+}

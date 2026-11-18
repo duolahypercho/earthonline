@@ -1,0 +1,184 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-264356957",
+  "slug": "b264356957",
+  "walkIndex": 108,
+  "street": "Haight Street",
+  "address": "1401;1405;1409;1415;1419 Haight Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (lidar-over-roll)"
+  },
+  "heightM": 5.87,
+  "storeys": 1,
+  "floors": {
+    "groundM": 5.27,
+    "upperM": 0,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1906,
+  "use": "COMR",
+  "usage": "mixed",
+  "amenity": "clothes",
+  "shop": null,
+  "facade": "shopfront",
+  "material": "brick",
+  "frame": {
+    "edgeIndex": 0,
+    "center": {
+      "x": -2309.867,
+      "z": -883.502
+    },
+    "heading": -0.14921,
+    "width": 30.924,
+    "depth": 19.645
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -0.074,
+      "z": 9.823
+    },
+    {
+      "x": 15.398,
+      "z": 9.823
+    },
+    {
+      "x": 15.462,
+      "z": -6.569
+    },
+    {
+      "x": -0.01,
+      "z": -6.569
+    },
+    {
+      "x": 0.009,
+      "z": -9.808
+    },
+    {
+      "x": -15.364,
+      "z": -9.823
+    },
+    {
+      "x": -15.462,
+      "z": 9.709
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -0.074,
+        "z": 9.823
+      },
+      "b": {
+        "x": 15.398,
+        "z": 9.823
+      },
+      "lengthM": 15.472,
+      "role": "front",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 15.398,
+        "z": 9.823
+      },
+      "b": {
+        "x": 15.462,
+        "z": -6.569
+      },
+      "lengthM": 16.392,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 15.462,
+        "z": -6.569
+      },
+      "b": {
+        "x": -0.01,
+        "z": -6.569
+      },
+      "lengthM": 15.472,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -0.01,
+        "z": -6.569
+      },
+      "b": {
+        "x": 0.009,
+        "z": -9.808
+      },
+      "lengthM": 3.239,
+      "role": "rear",
+      "partyShare": 0.06
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": 0.009,
+        "z": -9.808
+      },
+      "b": {
+        "x": -15.364,
+        "z": -9.823
+      },
+      "lengthM": 15.373,
+      "role": "rear",
+      "partyShare": 0.56
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": -15.364,
+        "z": -9.823
+      },
+      "b": {
+        "x": -15.462,
+        "z": 9.709
+      },
+      "lengthM": 19.532,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": -15.462,
+        "z": 9.709
+      },
+      "b": {
+        "x": -0.074,
+        "z": 9.823
+      },
+      "lengthM": 15.388,
+      "role": "rear",
+      "partyShare": 0.06
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-260361488",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-260361488",
+    "walkIndex": 7528,
+    "builder": "blender",
+    "street": "Valencia Street",
+    "side": "A",
+    "addr": "518, 522 Valencia Street",
+    "sourceHeight": 11,
+    "sourceLevels": 3,
+    "frontEdge": 1,
+    "status": "review",
+    "lidarHeightM": 10.77,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b260361488.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b260361488.js"
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b260361488.js",
+    "sha256": "dee2d6d8d0a3440b41b1ffab039017d86336c9903f65276abbb83002175bb270",
+    "pass": "b260361488-blender-e12f685a-1e539b"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-260361488/provenance.json",
+    "sha256": "c447684b7d252df115867d7410e96d5bc3e708331433dd5e804def6fde5e7ea2",
+    "pass": "b260361488-blender-e12f685a-1e539b"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-260361488/exterior.glb",
+      "sha256": "609971e0cc0e0006045188c038096dec265b55536f76789de7ed2f48f5729eb7",
+      "bytes": 269544
+    },
+    {
+      "role": "interior",
+      "url": "/assets/buildings/sf-building-260361488/interior.glb",
+      "sha256": "497c15eb3c199a3510d9dc4a07652db331cd98c61906122dc97713463d4c6e23",
+      "bytes": 198576
+    },
+    {
+      "role": "fine-s0",
+      "url": "/assets/buildings/sf-building-260361488/fine-s0.glb",
+      "sha256": "6143e320b69434fa25f6e63ab2f25f2805e44b2c2a2a6ae43dc20105a25505f9",
+      "bytes": 19712
+    },
+    {
+      "role": "fine-s1",
+      "url": "/assets/buildings/sf-building-260361488/fine-s1.glb",
+      "sha256": "b7caaaeefdb78f13cbd5198a839ec2bf3eb3d6b9d7bfd1631083d924a3e43f8d",
+      "bytes": 96872
+    },
+    {
+      "role": "fine-s2",
+      "url": "/assets/buildings/sf-building-260361488/fine-s2.glb",
+      "sha256": "47a773c2f5393fd6a11c891ccac18b4e8ebb99b8a8cd46fbf589b31b836142c6",
+      "bytes": 107748
+    }
+  ],
+  "generatedAt": "2026-09-30T15:01:58.389Z",
+  "base": {
+    "id": "sf-building-260361488",
+    "walkIndex": 7528,
+    "builder": "blender",
+    "street": "Valencia Street",
+    "side": "A",
+    "addr": "518, 522 Valencia Street",
+    "sourceHeight": 11,
+    "sourceLevels": 3,
+    "frontEdge": 1,
+    "status": "review",
+    "lidarHeightM": 10.77,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b260361488.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b260361488.js"
+  }
+}

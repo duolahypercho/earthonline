@@ -1,0 +1,90 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-259974357",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-259974357",
+    "walkIndex": 5035,
+    "builder": "blender",
+    "street": "Hyde Street",
+    "side": "W",
+    "addr": "425 Hyde Street",
+    "sourceHeight": 19,
+    "sourceLevels": null,
+    "frontEdge": 11,
+    "status": "review",
+    "lidarHeightM": 18.5,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b259974357.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b259974357.js"
+  },
+  "base": {
+    "id": "sf-building-259974357",
+    "walkIndex": 5035,
+    "builder": "blender",
+    "street": "Hyde Street",
+    "side": "W",
+    "addr": "425 Hyde Street",
+    "sourceHeight": 19,
+    "sourceLevels": null,
+    "frontEdge": 11,
+    "status": "review",
+    "lidarHeightM": 18.5,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b259974357.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b259974357.js"
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b259974357.js",
+    "sha256": "976a738e5720dfc750a4048274514f726e3ff1ab240ea60da193396960cb948a",
+    "pass": "b259974357-blender-6facb6b9-efc6f7-ha3db36"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-259974357/provenance.json",
+    "sha256": "01b7a635b7679b44414c772d842eac67d65c0d9c3a9b154d9826de317e77c065",
+    "pass": "b259974357-blender-6facb6b9-efc6f7-ha3db36"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-259974357/exterior.glb",
+      "sha256": "2ffd462bd81e761580177ea6d07ba74c097e85e8fe407d872c836c54b86da04e",
+      "bytes": 868768
+    },
+    {
+      "role": "interior",
+      "url": "/assets/buildings/sf-building-259974357/interior.glb",
+      "sha256": "36d831400240b5fdf9e45f8970b93ad372cd7f61f2dc13b97cf7c77e9765d33d",
+      "bytes": 352492
+    },
+    {
+      "role": "fine-s0",
+      "url": "/assets/buildings/sf-building-259974357/fine-s0.glb",
+      "sha256": "bdd0b4b8a866916d0340d1bc45542561704469506de7d40757974eacdefc32af",
+      "bytes": 29680
+    },
+    {
+      "role": "fine-s1",
+      "url": "/assets/buildings/sf-building-259974357/fine-s1.glb",
+      "sha256": "cb017e2b723033728b0e676c3b60727c6c2a4ad5326f0c0f1884da3e3ceb55aa",
+      "bytes": 142716
+    },
+    {
+      "role": "fine-s2",
+      "url": "/assets/buildings/sf-building-259974357/fine-s2.glb",
+      "sha256": "23b70856d957a1a32c70bebc8f713ce410ac68267d7ebac517b54df6416f0206",
+      "bytes": 142668
+    },
+    {
+      "role": "fine-s3",
+      "url": "/assets/buildings/sf-building-259974357/fine-s3.glb",
+      "sha256": "195c54fbf46c59b2d370bddedfec78a4976bd59186802757357b525e786f7e3e",
+      "bytes": 142732
+    },
+    {
+      "role": "fine-s4",
+      "url": "/assets/buildings/sf-building-259974357/fine-s4.glb",
+      "sha256": "6cf5ce7ad0c804518d37b9e06468cfed7693c80baa4e4f0c6fac37f601444860",
+      "bytes": 142732
+    }
+  ],
+  "generatedAt": "2026-10-03T07:27:46.998Z"
+}

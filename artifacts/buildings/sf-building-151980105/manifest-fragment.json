@@ -1,0 +1,120 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-151980105",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-151980105",
+    "walkIndex": 49,
+    "builder": "blender",
+    "street": "Clementina Street",
+    "side": "B",
+    "addr": "832 Folsom Street",
+    "sourceHeight": 37,
+    "sourceLevels": null,
+    "frontEdge": 2,
+    "status": "approved",
+    "lidarHeightM": 37.36,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b151980105.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b151980105.js"
+  },
+  "base": {
+    "id": "sf-building-151980105",
+    "walkIndex": 49,
+    "builder": "blender",
+    "street": "Clementina Street",
+    "side": "B",
+    "addr": "832 Folsom Street",
+    "sourceHeight": 37,
+    "sourceLevels": null,
+    "frontEdge": 2,
+    "status": "approved",
+    "lidarHeightM": 37.36,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b151980105.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b151980105.js"
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b151980105.js",
+    "sha256": "952c5172e18942019e03924790550a68133c8777c51a76312d07e097c5fcb891",
+    "pass": "b151980105-blender-80f56942-d8fabb"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-151980105/provenance.json",
+    "sha256": "66c9102fe7fc62030c958b8d6bdfeec6bfea753862b4b266163a6442ab769d1c",
+    "pass": "b151980105-blender-80f56942-d8fabb"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-151980105/exterior.glb",
+      "sha256": "2067505a35252240d82ad606200def46aaf6101a0fec5e148ef777f0eca03afd",
+      "bytes": 1867036
+    },
+    {
+      "role": "interior",
+      "url": "/assets/buildings/sf-building-151980105/interior.glb",
+      "sha256": "ffcf63f42cf403d2bd73729ab64c3fb437fddf2047921d0be5d45d2753d494a9",
+      "bytes": 462296
+    },
+    {
+      "role": "fine-s0",
+      "url": "/assets/buildings/sf-building-151980105/fine-s0.glb",
+      "sha256": "decbae7dd37a65c48cec099e94fd776bf765b7c03c65216e0108f01cb7868acb",
+      "bytes": 35856
+    },
+    {
+      "role": "fine-s1",
+      "url": "/assets/buildings/sf-building-151980105/fine-s1.glb",
+      "sha256": "bca97cd693117c62092844f4415e7fd5ee01ba180ec1d590c82d90a5f82a7b67",
+      "bytes": 226856
+    },
+    {
+      "role": "fine-s2",
+      "url": "/assets/buildings/sf-building-151980105/fine-s2.glb",
+      "sha256": "3d1d78e1b9333ed4848917d488e774e18d3b386c358e8ed4c8507b9d18cd1b83",
+      "bytes": 240412
+    },
+    {
+      "role": "fine-s3",
+      "url": "/assets/buildings/sf-building-151980105/fine-s3.glb",
+      "sha256": "c28add5450ea451f2fa501c601e413d066e76d29b25a98b29b6e5505ec3bac76",
+      "bytes": 221104
+    },
+    {
+      "role": "fine-s4",
+      "url": "/assets/buildings/sf-building-151980105/fine-s4.glb",
+      "sha256": "01e4b5d4f9d407c7e9adf3e5c8f94d5ea8f9956332c03939e6061859bba54dde",
+      "bytes": 237920
+    },
+    {
+      "role": "fine-s5",
+      "url": "/assets/buildings/sf-building-151980105/fine-s5.glb",
+      "sha256": "3d9d7f9d0cda722c6b5ad9dfa13340038652954cdd5b7281d8df62a571b65c92",
+      "bytes": 239588
+    },
+    {
+      "role": "fine-s6",
+      "url": "/assets/buildings/sf-building-151980105/fine-s6.glb",
+      "sha256": "a57354d3d15101d77dbf0a90935092d6565df367c56fe494c398208898ca1573",
+      "bytes": 226548
+    },
+    {
+      "role": "fine-s7",
+      "url": "/assets/buildings/sf-building-151980105/fine-s7.glb",
+      "sha256": "5e8b78c54e4626bc5cd38cc22f5d3206122b1a22b1890cce575f213a6ccd2d27",
+      "bytes": 240440
+    },
+    {
+      "role": "fine-s8",
+      "url": "/assets/buildings/sf-building-151980105/fine-s8.glb",
+      "sha256": "f821b02a01e1bbdadf846478559fdaa6d6954e95d75784e8a26078d0c8d9866b",
+      "bytes": 237920
+    },
+    {
+      "role": "fine-s9",
+      "url": "/assets/buildings/sf-building-151980105/fine-s9.glb",
+      "sha256": "78f1097edfd70bb0232abd7ad0550e75f361c07f089dc967b28abee391126db8",
+      "bytes": 227700
+    }
+  ],
+  "generatedAt": "2026-09-29T21:27:54.299Z"
+}

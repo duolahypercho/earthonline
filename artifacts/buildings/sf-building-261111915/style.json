@@ -1,0 +1,130 @@
+{
+ "seed": 3,
+ "notes": "1910 flats W side. Pale grey-cream stucco with red and green painted trim over a red-brown brick ground storey. Two stacked cant bays over storeys 1-2 with red-trimmed sashes, bracketed cornice with a red frieze. Ground: a round-arched gated entry left, two barred windows in a brick surround, a red panel door right. Applied dark green trim/bands, red sash frames, one large sash per bay face, deeper brick. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour.",
+ "wall": "painted-white",
+ "wallTint": "#eee9dd",
+ "trim": "painted-white@3d6046",
+ "frame": "painted-white@82433a",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@82433a",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "brick-running-bond@ffffff",
+ "cornice": true,
+ "corniceProjectionM": 0.55,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "bays": [
+  {
+   "at": 0.28,
+   "widthM": 3.0,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#eee9dd",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.18,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    }
+   }
+  },
+  {
+   "at": 0.76,
+   "widthM": 3.0,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#eee9dd",
+   "hyB": {
+    "plan": "cant",
+    "cornice": {
+     "projectionM": 0.18,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 0
+    },
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.14,
+    "to": 0.38,
+    "kind": "gate",
+    "headM": 2.7,
+    "arch": {
+     "type": "round",
+     "surround": true
+    }
+   },
+   {
+    "from": 0.5,
+    "to": 0.62,
+    "kind": "window",
+    "headM": 1.9,
+    "grille": true
+   },
+   {
+    "from": 0.64,
+    "to": 0.76,
+    "kind": "window",
+    "headM": 1.9,
+    "grille": true
+   },
+   {
+    "from": 0.84,
+    "to": 0.94,
+    "kind": "door",
+    "headM": 2.3,
+    "leaf": "painted-white@b0392b",
+    "stair": true
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "groundBand": {
+  "material": "brick-running-bond",
+  "tint": "#ffffff",
+  "topM": 3.2
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.6,
+  "heightM": 0.4,
+  "depthM": 0.3,
+  "widthM": 0.2,
+  "material": "painted-white",
+  "tint": "#3d6046"
+ },
+ "hbFloors": {
+  "groundM": 3.4,
+  "upperM": 4.3105
+ }
+}

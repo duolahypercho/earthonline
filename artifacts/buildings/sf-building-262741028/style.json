@@ -1,0 +1,225 @@
+{
+ "seed": 7,
+ "notes": "Claim check. Applied: wall e9e4d6 (warm off-white), piers 9b968a grey stone. Already true/skipped: silver frames, glass corner stacks on both faces, thick flat spandrel bands, glass lobby + travertine piers + thin flat canopy, plain roofline, louvre + brown service doors on the wing. SKIPPED: projecting bay stack, podium terrace with railing and more garage doors, stills that show the ground floor. Louvre vents on the wing, dark brown flush service doors (not grey roll-up), no barred grille at the lobby level, piers grey-beige. Applied: grille removed, wing garage -> flush brown 735848 panel (lifted above near-black), two louvre vents, piers b8ae9c. Already true (skipped): cream wall e6e0d2, wide/narrow window rhythm, spandrel bands, glass lobby + flat canopy; the railed roof deck stands north of this footprint. Skipped again: podium garage doors and roof terrace (stand north of this footprint), 0.4 m projecting bay column (flush units), stills without ground floor. Fewer, wider lights per window unit (3 lights, mullionM 1.3 instead of 0.85); dark sill strips off (windowSills false); spandrel bands thickened to 0.6 m; glass 6f8e9a; corner piers travertine cbbfa8; canopy 1.5 m; wall warmer e8e2d2. Skipped: podium terrace with railing and second garage doors, single-slab claim already true. Wall warmed to cream e4dcc8; continuous proud cream floor bands between window rows (stripes, from storey 2 so the lobby canopy line stays clean); the single windows beside the wide corner stacks widened to about 1.6-1.8 m so they read near-square, not tall and narrow; the wide corner stacks pushed right to the Hyde/Chestnut corner on both faces. Skipped: glass wrapping the corner (the a thin wall strip at the corner), roof-terrace railing on a podium (that podium stands north of this footprint), transom at the top of each unit (sash rows split evenly, not expressible). Ground (glass lobby, travertine piers, flat canopy, louvre, garage) was already modelled; an extra street-level still is rendered. Warm cream smooth panel wall (painted-stucco e4dfd0, was cool painted white); taller near-square window units (2.2 m) with green-grey tinted glass and silver frames, so the spandrel bands read about 0.8 m; wider travertine-grey stone piers at the corner lobby under a thin flat metal canopy at the storey-1 line. Kept: the L footprint's set-back Hyde wing (forced by the footprint, so the notch stays), 14 storeys (LiDAR 44 m), flush windows. Earlier: 1955 fourteen-storey apartment tower at the NW corner of Hyde and Chestnut, flat roof with a plain parapet; wide three-light picture-window stacks at the corner, small single windows elsewhere; glazed lobby behind stone piers, louvre and garage under the set-back wing. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-stucco",
+ "wallTint": "#f4f2ea",
+ "trim": "painted-stucco@ece5d2",
+ "frame": "painted-white@b8bcc0",
+ "sashMaterial": "painted-white@b8bcc0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-steel@8e9294",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "limestone-ashlar@b4afa4",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 1,
+ "windowSillM": 0.8,
+ "windowHeadM": 2.4,
+ "upperSillM": 0.45,
+ "upperHeadM": 2.65,
+ "mullionM": 1.3,
+ "upperWindowSpans": [
+  [
+   0.01,
+   0.3
+  ],
+  [
+   0.52,
+   0.65
+  ],
+  [
+   0.76,
+   0.96
+  ]
+ ],
+ "edgeRoles": {
+  "7": "flank"
+ },
+ "pilasters": {
+  "at": [
+   0.04,
+   0.2,
+   0.36,
+   0.52
+  ],
+  "widthM": 0.8,
+  "projectionM": 0.3,
+  "fromM": 0,
+  "toM": 3.7,
+  "material": "limestone-ashlar",
+  "tint": "#9b968a"
+ },
+ "storefront": {
+  "bulkheadM": 0.3,
+  "transomM": 0.4,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.05,
+    "to": 0.19,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.21,
+    "to": 0.35,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.37,
+    "to": 0.5,
+    "kind": "double-door",
+    "leaf": "painted-steel"
+   },
+   {
+    "from": 0.62,
+    "to": 0.68,
+    "kind": "window",
+    "headM": 2.2
+   },
+   {
+    "from": 0.8,
+    "to": 0.9,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel"
+   }
+  ]
+ },
+ "streetEdges": {
+  "4": {
+   "upperWindowSpans": [
+    [
+     0.05,
+     0.24
+    ],
+    [
+     0.3,
+     0.4
+    ],
+    [
+     0.48,
+     0.58
+    ],
+    [
+     0.66,
+     0.76
+    ],
+    [
+     0.84,
+     0.94
+    ]
+   ],
+   "pilasters": null,
+   "storefront": {
+    "layout": [
+     {
+      "from": 0.3,
+      "to": 0.36,
+      "kind": "window",
+      "headM": 2.2
+     },
+     {
+      "from": 0.6,
+      "to": 0.72,
+      "kind": "blank",
+      "material": "painted-steel-light",
+      "tint": "#735848",
+      "headM": 2.4
+     }
+    ]
+   }
+  },
+  "7": {
+   "upperWindowSpans": [
+    [
+     0.06,
+     0.2
+    ],
+    [
+     0.28,
+     0.39
+    ],
+    [
+     0.45,
+     0.56
+    ],
+    [
+     0.61,
+     0.71
+    ],
+    [
+     0.78,
+     0.99
+    ]
+   ],
+   "pilasters": null,
+   "storefront": {
+    "layout": [
+     {
+      "from": 0.12,
+      "to": 0.18,
+      "kind": "window",
+      "headM": 2.2
+     },
+     {
+      "from": 0.44,
+      "to": 0.5,
+      "kind": "window",
+      "headM": 2.2
+     },
+     {
+      "from": 0.8,
+      "to": 0.95,
+      "kind": "window",
+      "headM": 3.3
+     }
+    ]
+   }
+  }
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "glassModel": {
+  "upper": "glass-reflective@5f7486",
+  "street": "glass-storefront"
+ },
+ "awning": "painted-steel-light@c4c6c6",
+ "awningSpans": [
+  {
+   "from": 0.02,
+   "to": 0.55,
+   "depthM": 1.5,
+   "riseM": 0.0,
+   "dropM": 0.0
+  }
+ ],
+ "stripes": {
+  "material": "painted-stucco",
+  "tint": "#e8e2d3",
+  "heightM": 0.3,
+  "offsetsM": [
+   -0.15
+  ],
+  "fromStorey": 2
+ },
+ "windowSills": false,
+ "wallVents": [
+  {
+   "at": 0.45,
+   "yM": 1.3,
+   "widthM": 0.9,
+   "heightM": 0.7
+  },
+  {
+   "at": 0.47,
+   "yM": 2.3,
+   "widthM": 0.9,
+   "heightM": 0.7
+  }
+ ],
+ "streetStills": true
+}

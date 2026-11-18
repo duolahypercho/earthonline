@@ -1,0 +1,178 @@
+{
+  "note": "Curated CC0 furniture (Poly Haven). `kind` is the name build_building.py places; `triangles` is the decimation target per piece (instances count against the 40k interior budget); `fit` scales the piece so its footprint matches `sizeM` [x, height, z] when given. `textures` are CC0 surface sets (1k diff/arm/nor_gl) for interior floors, walls and fabrics.",
+  "assets": [
+    {
+      "kind": "cafe-chair",
+      "polyhaven": "dining_chair_02",
+      "triangles": 350
+    },
+    {
+      "kind": "bar-stool",
+      "polyhaven": "bar_chair_round_01",
+      "triangles": 300
+    },
+    {
+      "kind": "pendant",
+      "polyhaven": "hanging_industrial_lamp",
+      "triangles": 200
+    },
+    {
+      "kind": "plant-tall",
+      "polyhaven": "potted_plant_01",
+      "triangles": 900
+    },
+    {
+      "kind": "plant-small",
+      "polyhaven": "potted_plant_04",
+      "triangles": 500
+    },
+    {
+      "kind": "frame-a",
+      "polyhaven": "hanging_picture_frame_01",
+      "triangles": 60
+    },
+    {
+      "kind": "frame-b",
+      "polyhaven": "hanging_picture_frame_02",
+      "triangles": 60
+    },
+    {
+      "kind": "frame-c",
+      "polyhaven": "hanging_picture_frame_03",
+      "triangles": 60
+    },
+    {
+      "kind": "wine-bottles",
+      "polyhaven": "wine_bottles_01",
+      "triangles": 300
+    },
+    {
+      "kind": "bed-frame",
+      "polyhaven": "old_bed_frame",
+      "triangles": 700
+    },
+    {
+      "kind": "nightstand",
+      "polyhaven": "painted_wooden_nightstand",
+      "triangles": 250
+    },
+    {
+      "kind": "dresser",
+      "polyhaven": "painted_wooden_cabinet",
+      "triangles": 350
+    },
+    {
+      "kind": "lounge-chair",
+      "polyhaven": "mid_century_lounge_chair",
+      "triangles": 500,
+      "sizeM": [
+        0.82,
+        0.95,
+        0.96
+      ]
+    },
+    {
+      "kind": "side-table",
+      "polyhaven": "side_table_01",
+      "triangles": 200
+    },
+    {
+      "kind": "writing-desk",
+      "polyhaven": "small_wooden_table_01",
+      "triangles": 250
+    },
+    {
+      "kind": "desk-lamp",
+      "polyhaven": "desk_lamp_arm_01",
+      "triangles": 200
+    },
+    {
+      "kind": "ceiling-lamp",
+      "polyhaven": "modern_ceiling_lamp_01",
+      "triangles": 150
+    },
+    {
+      "kind": "pillows",
+      "polyhaven": "throw_pillows_01",
+      "triangles": 300
+    },
+    {
+      "kind": "wall-sconce",
+      "polyhaven": "industrial_wall_sconce",
+      "triangles": 120
+    },
+    {
+      "kind": "plant-medium",
+      "polyhaven": "potted_plant_02",
+      "triangles": 600
+    },
+    {
+      "kind": "office-desk-real",
+      "polyhaven": "metal_office_desk",
+      "triangles": 400
+    },
+    {
+      "kind": "office-chair-real",
+      "polyhaven": "modern_arm_chair_01",
+      "triangles": 400
+    },
+    {
+      "kind": "shelving",
+      "polyhaven": "steel_frame_shelves_01",
+      "triangles": 300,
+      "sizeM": [
+        1.0,
+        1.95,
+        0.45
+      ]
+    },
+    {
+      "kind": "laptop",
+      "polyhaven": "classic_laptop",
+      "triangles": 150,
+      "sizeM": [
+        0.34,
+        0.24,
+        0.26
+      ]
+    },
+    {
+      "kind": "sofa",
+      "polyhaven": "sofa_02",
+      "triangles": 700
+    },
+    {
+      "kind": "coffee-table",
+      "polyhaven": "modern_coffee_table_01",
+      "triangles": 250
+    },
+    {
+      "kind": "cardboard-box",
+      "polyhaven": "cardboard_box_01",
+      "triangles": 60
+    },
+    {
+      "kind": "crate",
+      "polyhaven": "wooden_crate_01",
+      "triangles": 150
+    },
+    {
+      "kind": "cafe-table",
+      "polyhaven": "round_wooden_table_01",
+      "triangles": 400,
+      "sizeM": [
+        0.8,
+        0.75,
+        0.8
+      ],
+      "fit": "stretch"
+    }
+  ],
+  "textures": [
+    "herringbone_parquet",
+    "brushed_concrete",
+    "beige_wall_001",
+    "poly_wool_herringbone",
+    "rough_linen"
+  ]
+}

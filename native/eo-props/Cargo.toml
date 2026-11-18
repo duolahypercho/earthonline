@@ -1,0 +1,21 @@
+[package]
+name = "eo-props"
+version = "0.1.0"
+edition = "2024"
+description = "Earth Online native: what stands on and beside the street (signals, signs, trees, tactile pads, parked cars), placed by a Rust port of the browser game's rules. No GPU."
+publish = false
+
+[dependencies]
+anyhow = "1.0.104"
+eo-data = { path = "../eo-data" }
+eo-street = { path = "../eo-street" }
+flate2 = "1.1.11"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+ab_glyph = "0.2.32" # props2: sign legends (glyph outlines)
+tiny-skia = { version = "0.11.4", default-features = false, features = ["std", "simd"] } # props2: sign atlas rasterisation
+png = "0.18.1" # props2: cooked sign atlas cache
+
+[dev-dependencies]
+serde_json = { version = "1.0.154", features = ["float_roundtrip"] }

@@ -1,0 +1,365 @@
+{
+ "seed": 9,
+ "notes": "1900 Victorian two-flat, E side of Hyde mid-block Bergen Alley to North Point. Raised basement behind a tan planter wall (ground band), two main storeys of pale grey-white painted wood (lit d9dbd8), one cant bay with three sashes a storey left of centre, hooded window heads, a moulded cornice and a steep grey-blue front gable (roof block with a pitched cap). The long stoop and arched porch at the right have no key: a dark door under the stoop line at the right and an arched head over the right-hand upper sash stand in. The raised basement is furnished as a bare store (ground vacant). The model already has the bay at the left and the entry at the right. Applied: pale wall e6e7e4, a pale stucco planter/retaining base d9d6c8, the grilled street window removed, a straight stoop of 13 steps rising to the storey-1 entry on the right covering the street door (plaques), a lattice panel over the arched entry, a grey-blue shingle gable (roof block tinted 8e9aab, steeper cap) over a heavy grey-blue frieze band. A true gable pediment, the arched portico and the curved corner window have no key. The grey-blue top frieze sat behind the cornice's own frieze (trim-coloured, no tint key), so the grey-blue band moves to the storey-1/2 line; the pitched cap stays a hip (no gable key) and is foreshortened from the street. Body is grey-blue, not pale white (shaded wall samples 64707b, gable 708296) -> wall and bay a9b2bf with white trim, frieze band deepened to 7f8b9c. Bay-left/entry-right is already the game hand. Not applied (no keys): true front gable pediment, projecting open stair with cheek walls, curved corner bay, arched porch with lattice spandrels. Rework: body now cream e4e1d8 (was grey), grey-blue 8793a3 frieze bands between storeys, italianate cornice and the storey-1 arch hood removed (neither), taller narrower front-facing gable (roofBlock bw<depth gives a triangle end). Stair of ~15 risers, porch turned posts, balcony balustrade: no key. Cream retaining base e3dcc6, body e7e6e2, gable/frieze accents 8f98a6, arched head over the porch door and the storey-2 bay window. Skipped: 20-riser wide stair, ivy planter, spindle screen (no key); gable already the front roof block. Applied: the fan-crested window over the stair becomes a floor-to-head arched porch opening (storeyWindowSpans storey 1 + upperWindowArch round with white surround), bay rebuilt as hyB cant with a wide curtained front sash and narrow cant sashes, white cheek-wall plaques either side of the stair. Skipped: 18-20 riser stair (storey heights allow ~13), ivy planter and turned columns (no key). Rework bay-northpoint rd2: hip/gable roofBlock and wallTopM removed, flat roof behind a bracketed Italianate cornice (hbFrieze + hbCorniceBrackets + dentils), bay hood deeper with dentils and console brackets. Skipped: projecting exposed stair (builder stair is recessed, no key), turned posts/lattice screen, garden wall planting, hoods on small windows (windowHoods already on). Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k). GroundBand lift (2026-10-03): groundBand tint #e3dcc6 -> #f1eee2 (same rule as walls; it was missed by the first colour pass).",
+ "wall": "painted-white",
+ "wallTint": "#f3f2f0",
+ "trim": "painted-white@f2f2ee",
+ "frame": "painted-white@f4f4f0",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f4f4f0",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-white@eceae4",
+ "cornice": true,
+ "corniceProjectionM": 0.6,
+ "beltCourse": true,
+ "windowHoods": true,
+ "windowW": 0.85,
+ "windowSillM": 0.8,
+ "windowHeadM": 2.5,
+ "upperWindows": [
+  0.78
+ ],
+ "bays": [
+  {
+   "at": 0.3,
+   "widthM": 2.7,
+   "projectionM": 0.6,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#f3f2f0",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.6,
+    "marginM": 0.1,
+    "sillM": 0.8,
+    "headGapM": 0.3,
+    "cornice": {
+     "projectionM": 0.22,
+     "roofRiseM": 0.18,
+     "dentils": true
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 2,
+     "dropM": 0.3
+    }
+   }
+  }
+ ],
+ "groundBand": {
+  "material": "painted-white",
+  "tint": "#f1eee2",
+  "topM": 1.3
+ },
+ "storefront": {
+  "bulkheadM": 0.9,
+  "transomM": 0.2,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.72,
+    "to": 0.86,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel@3a3430",
+    "headM": 2.3
+   }
+  ]
+ },
+ "ground": "vacant",
+ "upper": "apartment",
+ "floorsM": {
+  "groundM": 2.6,
+  "upperM": 3.2
+ },
+ "plaques": [
+  {
+   "at": 0.3,
+   "y": 5.2,
+   "w": 2.7,
+   "h": 0.28,
+   "face": "painted-white@8f98a6"
+  },
+  {
+   "at": 0.5,
+   "y": 2.05,
+   "w": 6.66,
+   "h": 0.32,
+   "face": "painted-white@8f98a6"
+  },
+  {
+   "at": 0.5,
+   "y": 5.75,
+   "w": 6.66,
+   "h": 0.4,
+   "face": "painted-white@7f8b9c"
+  },
+  {
+   "at": 0.5,
+   "y": 5.5,
+   "w": 6.66,
+   "h": 0.08,
+   "face": "painted-white@f4f4f0"
+  },
+  {
+   "at": 0.79,
+   "y": 4.95,
+   "w": 1.1,
+   "h": 0.35,
+   "face": "painted-white@f4f4f0"
+  },
+  {
+   "at": 0.79,
+   "y": 0.08,
+   "w": 1.45,
+   "h": 0.16,
+   "face": "limestone-ashlar@d8d4cc"
+  },
+  {
+   "at": 0.79,
+   "y": 0.18,
+   "w": 1.51,
+   "h": 0.04,
+   "face": "limestone-ashlar@8a867e"
+  },
+  {
+   "at": 0.79,
+   "y": 0.28,
+   "w": 1.45,
+   "h": 0.16,
+   "face": "limestone-ashlar@d8d4cc"
+  },
+  {
+   "at": 0.79,
+   "y": 0.38,
+   "w": 1.51,
+   "h": 0.04,
+   "face": "limestone-ashlar@8a867e"
+  },
+  {
+   "at": 0.79,
+   "y": 0.48,
+   "w": 1.45,
+   "h": 0.16,
+   "face": "limestone-ashlar@d8d4cc"
+  },
+  {
+   "at": 0.79,
+   "y": 0.58,
+   "w": 1.51,
+   "h": 0.04,
+   "face": "limestone-ashlar@8a867e"
+  },
+  {
+   "at": 0.79,
+   "y": 0.68,
+   "w": 1.45,
+   "h": 0.16,
+   "face": "limestone-ashlar@d8d4cc"
+  },
+  {
+   "at": 0.79,
+   "y": 0.78,
+   "w": 1.51,
+   "h": 0.04,
+   "face": "limestone-ashlar@8a867e"
+  },
+  {
+   "at": 0.79,
+   "y": 0.88,
+   "w": 1.45,
+   "h": 0.16,
+   "face": "limestone-ashlar@d8d4cc"
+  },
+  {
+   "at": 0.79,
+   "y": 0.98,
+   "w": 1.51,
+   "h": 0.04,
+   "face": "limestone-ashlar@8a867e"
+  },
+  {
+   "at": 0.79,
+   "y": 1.08,
+   "w": 1.45,
+   "h": 0.16,
+   "face": "limestone-ashlar@d8d4cc"
+  },
+  {
+   "at": 0.79,
+   "y": 1.18,
+   "w": 1.51,
+   "h": 0.04,
+   "face": "limestone-ashlar@8a867e"
+  },
+  {
+   "at": 0.79,
+   "y": 1.28,
+   "w": 1.45,
+   "h": 0.16,
+   "face": "limestone-ashlar@d8d4cc"
+  },
+  {
+   "at": 0.79,
+   "y": 1.38,
+   "w": 1.51,
+   "h": 0.04,
+   "face": "limestone-ashlar@8a867e"
+  },
+  {
+   "at": 0.79,
+   "y": 1.48,
+   "w": 1.45,
+   "h": 0.16,
+   "face": "limestone-ashlar@d8d4cc"
+  },
+  {
+   "at": 0.79,
+   "y": 1.58,
+   "w": 1.51,
+   "h": 0.04,
+   "face": "limestone-ashlar@8a867e"
+  },
+  {
+   "at": 0.79,
+   "y": 1.68,
+   "w": 1.45,
+   "h": 0.16,
+   "face": "limestone-ashlar@d8d4cc"
+  },
+  {
+   "at": 0.79,
+   "y": 1.78,
+   "w": 1.51,
+   "h": 0.04,
+   "face": "limestone-ashlar@8a867e"
+  },
+  {
+   "at": 0.79,
+   "y": 1.88,
+   "w": 1.45,
+   "h": 0.16,
+   "face": "limestone-ashlar@d8d4cc"
+  },
+  {
+   "at": 0.79,
+   "y": 1.98,
+   "w": 1.51,
+   "h": 0.04,
+   "face": "limestone-ashlar@8a867e"
+  },
+  {
+   "at": 0.79,
+   "y": 2.08,
+   "w": 1.45,
+   "h": 0.16,
+   "face": "limestone-ashlar@d8d4cc"
+  },
+  {
+   "at": 0.79,
+   "y": 2.18,
+   "w": 1.51,
+   "h": 0.04,
+   "face": "limestone-ashlar@8a867e"
+  },
+  {
+   "at": 0.79,
+   "y": 2.28,
+   "w": 1.45,
+   "h": 0.16,
+   "face": "limestone-ashlar@d8d4cc"
+  },
+  {
+   "at": 0.79,
+   "y": 2.38,
+   "w": 1.51,
+   "h": 0.04,
+   "face": "limestone-ashlar@8a867e"
+  },
+  {
+   "at": 0.79,
+   "y": 2.48,
+   "w": 1.45,
+   "h": 0.16,
+   "face": "limestone-ashlar@d8d4cc"
+  },
+  {
+   "at": 0.79,
+   "y": 2.58,
+   "w": 1.51,
+   "h": 0.04,
+   "face": "limestone-ashlar@8a867e"
+  },
+  {
+   "at": 0.655,
+   "y": 1.3,
+   "w": 0.1,
+   "h": 2.6,
+   "face": "painted-white@f4f4f0"
+  },
+  {
+   "at": 0.925,
+   "y": 1.3,
+   "w": 0.1,
+   "h": 2.6,
+   "face": "painted-white@f4f4f0"
+  }
+ ],
+ "archHeads": [
+  {
+   "from": 0.16,
+   "to": 0.44,
+   "storey": 2,
+   "riseM": 0.3
+  }
+ ],
+ "streetStills": true,
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.73,
+     0.85
+    ]
+   ],
+   "sillM": 0.1,
+   "headM": 2.6
+  }
+ },
+ "upperWindowArch": {
+  "type": "round",
+  "riseM": 0.45,
+  "surround": {
+   "widthM": 0.12,
+   "projectionM": 0.05,
+   "tint": "#f4f4f0"
+  },
+  "storeys": [
+   1
+  ]
+ },
+ "hbFrieze": {
+  "heightM": 0.45,
+  "material": "painted-white",
+  "tint": "#ddddd8"
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.6,
+  "heightM": 0.45,
+  "depthM": 0.25,
+  "widthM": 0.14,
+  "material": "painted-white",
+  "tint": "#f0efea"
+ },
+ "hbCorniceDentils": {
+  "spacingM": 0.16,
+  "sizeM": 0.1,
+  "tint": "#e4e3de"
+ }
+}

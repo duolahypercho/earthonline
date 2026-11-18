@@ -1,0 +1,898 @@
+{
+ "seed": 1,
+ "notes": "Base #9a9c9a, deeper modillion cornice, larger garland blocks on the belt. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-white",
+ "wallTint": "#f2f1ee",
+ "trim": "painted-white@efe9dc",
+ "frame": "painted-white",
+ "glass": "glass-clear",
+ "cornice": true,
+ "corniceProjectionM": 0.95,
+ "beltCourse": true,
+ "windowHoods": true,
+ "windowW": 1.0,
+ "windowSillM": 0.8,
+ "windowHeadM": 2.4,
+ "groundBand": {
+  "material": "cast-stone",
+  "tint": "#9a9c9a",
+  "topM": 8.1
+ },
+ "storefrontFrame": "painted-white@efe9dc",
+ "bulkhead": "cast-stone@9a9c9a",
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.6,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.02,
+    "to": 0.13,
+    "kind": "garage",
+    "material": "painted-steel-light",
+    "tint": "#9a9d9c",
+    "headM": 3.6
+   },
+   {
+    "from": 0.17,
+    "to": 0.39,
+    "kind": "garage",
+    "material": "painted-steel-light",
+    "tint": "#9a9d9c",
+    "headM": 3.6
+   },
+   {
+    "from": 0.46,
+    "to": 0.55,
+    "kind": "double-door",
+    "stair": true,
+    "leaf": "wood-siding",
+    "headM": 3.8
+   },
+   {
+    "from": 0.64,
+    "to": 0.92,
+    "kind": "garage",
+    "material": "painted-steel-light",
+    "tint": "#9a9d9c",
+    "headM": 3.6
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "upperWindowSpans": [
+  [
+   0.065,
+   0.195
+  ],
+  [
+   0.275,
+   0.345
+  ],
+  [
+   0.415,
+   0.585
+  ],
+  [
+   0.655,
+   0.725
+  ],
+  [
+   0.805,
+   0.935
+  ]
+ ],
+ "mullionM": 1.25,
+ "upperSillM": 0.9,
+ "upperHeadM": 2.45,
+ "plaques": [
+  {
+   "at": 0.5,
+   "y": 8.3,
+   "w": 14.9,
+   "h": 0.55,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.5,
+   "y": 7.98,
+   "w": 14.9,
+   "h": 0.12,
+   "face": "cast-stone@8a8b88"
+  },
+  {
+   "at": 0.5,
+   "y": 26.95,
+   "w": 14.9,
+   "h": 0.3,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.5,
+   "y": 29.95,
+   "w": 14.9,
+   "h": 0.5,
+   "face": "painted-white@e2d6c0"
+  },
+  {
+   "at": 0.5,
+   "y": 29.62,
+   "w": 14.9,
+   "h": 0.3,
+   "face": "painted-white@e8e2d4"
+  },
+  {
+   "at": 0.02,
+   "y": 8.32,
+   "w": 0.62,
+   "h": 0.44,
+   "face": "painted-white@cfc6b0"
+  },
+  {
+   "at": 0.084,
+   "y": 8.32,
+   "w": 0.62,
+   "h": 0.44,
+   "face": "painted-white@cfc6b0"
+  },
+  {
+   "at": 0.148,
+   "y": 8.32,
+   "w": 0.62,
+   "h": 0.44,
+   "face": "painted-white@cfc6b0"
+  },
+  {
+   "at": 0.212,
+   "y": 8.32,
+   "w": 0.62,
+   "h": 0.44,
+   "face": "painted-white@cfc6b0"
+  },
+  {
+   "at": 0.276,
+   "y": 8.32,
+   "w": 0.62,
+   "h": 0.44,
+   "face": "painted-white@cfc6b0"
+  },
+  {
+   "at": 0.34,
+   "y": 8.32,
+   "w": 0.62,
+   "h": 0.44,
+   "face": "painted-white@cfc6b0"
+  },
+  {
+   "at": 0.404,
+   "y": 8.32,
+   "w": 0.62,
+   "h": 0.44,
+   "face": "painted-white@cfc6b0"
+  },
+  {
+   "at": 0.468,
+   "y": 8.32,
+   "w": 0.62,
+   "h": 0.44,
+   "face": "painted-white@cfc6b0"
+  },
+  {
+   "at": 0.532,
+   "y": 8.32,
+   "w": 0.62,
+   "h": 0.44,
+   "face": "painted-white@cfc6b0"
+  },
+  {
+   "at": 0.596,
+   "y": 8.32,
+   "w": 0.62,
+   "h": 0.44,
+   "face": "painted-white@cfc6b0"
+  },
+  {
+   "at": 0.66,
+   "y": 8.32,
+   "w": 0.62,
+   "h": 0.44,
+   "face": "painted-white@cfc6b0"
+  },
+  {
+   "at": 0.724,
+   "y": 8.32,
+   "w": 0.62,
+   "h": 0.44,
+   "face": "painted-white@cfc6b0"
+  },
+  {
+   "at": 0.788,
+   "y": 8.32,
+   "w": 0.62,
+   "h": 0.44,
+   "face": "painted-white@cfc6b0"
+  },
+  {
+   "at": 0.852,
+   "y": 8.32,
+   "w": 0.62,
+   "h": 0.44,
+   "face": "painted-white@cfc6b0"
+  },
+  {
+   "at": 0.916,
+   "y": 8.32,
+   "w": 0.62,
+   "h": 0.44,
+   "face": "painted-white@cfc6b0"
+  },
+  {
+   "at": 0.98,
+   "y": 8.32,
+   "w": 0.62,
+   "h": 0.44,
+   "face": "painted-white@cfc6b0"
+  },
+  {
+   "at": 0.015,
+   "y": 30.45,
+   "w": 0.26,
+   "h": 0.44,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.061,
+   "y": 30.45,
+   "w": 0.26,
+   "h": 0.44,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.107,
+   "y": 30.45,
+   "w": 0.26,
+   "h": 0.44,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.154,
+   "y": 30.45,
+   "w": 0.26,
+   "h": 0.44,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.2,
+   "y": 30.45,
+   "w": 0.26,
+   "h": 0.44,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.246,
+   "y": 30.45,
+   "w": 0.26,
+   "h": 0.44,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.292,
+   "y": 30.45,
+   "w": 0.26,
+   "h": 0.44,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.338,
+   "y": 30.45,
+   "w": 0.26,
+   "h": 0.44,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.385,
+   "y": 30.45,
+   "w": 0.26,
+   "h": 0.44,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.431,
+   "y": 30.45,
+   "w": 0.26,
+   "h": 0.44,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.477,
+   "y": 30.45,
+   "w": 0.26,
+   "h": 0.44,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.523,
+   "y": 30.45,
+   "w": 0.26,
+   "h": 0.44,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.569,
+   "y": 30.45,
+   "w": 0.26,
+   "h": 0.44,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.615,
+   "y": 30.45,
+   "w": 0.26,
+   "h": 0.44,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.662,
+   "y": 30.45,
+   "w": 0.26,
+   "h": 0.44,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.708,
+   "y": 30.45,
+   "w": 0.26,
+   "h": 0.44,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.754,
+   "y": 30.45,
+   "w": 0.26,
+   "h": 0.44,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.8,
+   "y": 30.45,
+   "w": 0.26,
+   "h": 0.44,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.846,
+   "y": 30.45,
+   "w": 0.26,
+   "h": 0.44,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.893,
+   "y": 30.45,
+   "w": 0.26,
+   "h": 0.44,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.939,
+   "y": 30.45,
+   "w": 0.26,
+   "h": 0.44,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.985,
+   "y": 30.45,
+   "w": 0.26,
+   "h": 0.44,
+   "face": "painted-white@efe9dc"
+  },
+  {
+   "at": 0.01,
+   "y": 0.6,
+   "w": 0.298,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.01,
+   "y": 1.2,
+   "w": 0.298,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.01,
+   "y": 1.8,
+   "w": 0.298,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.01,
+   "y": 2.4,
+   "w": 0.298,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.01,
+   "y": 3.0,
+   "w": 0.298,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.01,
+   "y": 3.6,
+   "w": 0.298,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.01,
+   "y": 4.2,
+   "w": 0.298,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.01,
+   "y": 4.8,
+   "w": 0.298,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.01,
+   "y": 5.4,
+   "w": 0.298,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.01,
+   "y": 6.0,
+   "w": 0.298,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.01,
+   "y": 6.6,
+   "w": 0.298,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.01,
+   "y": 7.2,
+   "w": 0.298,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.01,
+   "y": 7.8,
+   "w": 0.298,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.15,
+   "y": 0.6,
+   "w": 0.596,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.15,
+   "y": 1.2,
+   "w": 0.596,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.15,
+   "y": 1.8,
+   "w": 0.596,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.15,
+   "y": 2.4,
+   "w": 0.596,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.15,
+   "y": 3.0,
+   "w": 0.596,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.15,
+   "y": 3.6,
+   "w": 0.596,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.15,
+   "y": 4.2,
+   "w": 0.596,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.15,
+   "y": 4.8,
+   "w": 0.596,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.15,
+   "y": 5.4,
+   "w": 0.596,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.15,
+   "y": 6.0,
+   "w": 0.596,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.15,
+   "y": 6.6,
+   "w": 0.596,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.15,
+   "y": 7.2,
+   "w": 0.596,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.15,
+   "y": 7.8,
+   "w": 0.596,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.4175,
+   "y": 0.6,
+   "w": 0.819,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.4175,
+   "y": 1.2,
+   "w": 0.819,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.4175,
+   "y": 1.8,
+   "w": 0.819,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.4175,
+   "y": 2.4,
+   "w": 0.819,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.4175,
+   "y": 3.0,
+   "w": 0.819,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.4175,
+   "y": 3.6,
+   "w": 0.819,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.4175,
+   "y": 4.2,
+   "w": 0.819,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.4175,
+   "y": 4.8,
+   "w": 0.819,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.4175,
+   "y": 5.4,
+   "w": 0.819,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.4175,
+   "y": 6.0,
+   "w": 0.819,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.4175,
+   "y": 6.6,
+   "w": 0.819,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.4175,
+   "y": 7.2,
+   "w": 0.819,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.4175,
+   "y": 7.8,
+   "w": 0.819,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.6025,
+   "y": 0.6,
+   "w": 1.118,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.6025,
+   "y": 1.2,
+   "w": 1.118,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.6025,
+   "y": 1.8,
+   "w": 1.118,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.6025,
+   "y": 2.4,
+   "w": 1.118,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.6025,
+   "y": 3.0,
+   "w": 1.118,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.6025,
+   "y": 3.6,
+   "w": 1.118,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.6025,
+   "y": 4.2,
+   "w": 1.118,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.6025,
+   "y": 4.8,
+   "w": 1.118,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.6025,
+   "y": 5.4,
+   "w": 1.118,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.6025,
+   "y": 6.0,
+   "w": 1.118,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.6025,
+   "y": 6.6,
+   "w": 1.118,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.6025,
+   "y": 7.2,
+   "w": 1.118,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.6025,
+   "y": 7.8,
+   "w": 1.118,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.96,
+   "y": 0.6,
+   "w": 1.192,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.96,
+   "y": 1.2,
+   "w": 1.192,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.96,
+   "y": 1.8,
+   "w": 1.192,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.96,
+   "y": 2.4,
+   "w": 1.192,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.96,
+   "y": 3.0,
+   "w": 1.192,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.96,
+   "y": 3.6,
+   "w": 1.192,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.96,
+   "y": 4.2,
+   "w": 1.192,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.96,
+   "y": 4.8,
+   "w": 1.192,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.96,
+   "y": 5.4,
+   "w": 1.192,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.96,
+   "y": 6.0,
+   "w": 1.192,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.96,
+   "y": 6.6,
+   "w": 1.192,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.96,
+   "y": 7.2,
+   "w": 1.192,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  },
+  {
+   "at": 0.96,
+   "y": 7.8,
+   "w": 1.192,
+   "h": 0.05,
+   "face": "cast-stone@6c6e6c"
+  }
+ ],
+ "pilasters": {
+  "at": [
+   0.445,
+   0.565
+  ],
+  "widthM": 0.45,
+  "projectionM": 0.25,
+  "fromM": 0.0,
+  "toM": 4.2,
+  "capital": true,
+  "material": "cast-stone",
+  "tint": "#d8d2c4"
+ },
+ "coping": {
+  "material": "painted-white",
+  "tint": "#efe9dc",
+  "projectionM": 0.4,
+  "heightM": 0.5
+ },
+ "garagePanel": {
+  "cols": 2,
+  "rows": 5,
+  "tint": "#9a9d9c",
+  "panelTint": "#8f9291",
+  "leaves": 1,
+  "doorM": 3.5
+ },
+ "hbFrieze": {
+  "heightM": 1.0,
+  "material": "painted-white",
+  "tint": "#d6d0c2"
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.6,
+  "heightM": 0.95,
+  "depthM": 0.55,
+  "widthM": 0.26,
+  "material": "painted-white",
+  "tint": "#e6e2d6"
+ },
+ "hbFloors": {
+  "groundM": 4.4,
+  "upperM": 3.77
+ },
+ "storeyWindowSpans": {
+  "1": {
+   "spans": []
+  }
+ },
+ "streetStills": true
+}

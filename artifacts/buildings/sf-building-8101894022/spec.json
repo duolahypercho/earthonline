@@ -1,0 +1,184 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-8101894022",
+  "slug": "b8101894022",
+  "walkIndex": 7412,
+  "street": "Great Highway",
+  "address": "1590 Great Highway",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor+ground)"
+  },
+  "heightM": 5.98,
+  "storeys": 2,
+  "floors": {
+    "groundM": 2.88,
+    "upperM": 2.5,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1949,
+  "use": "SRES",
+  "usage": "mixed",
+  "amenity": null,
+  "shop": null,
+  "facade": "edwardian",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 3,
+    "center": {
+      "x": -7856.74,
+      "z": -2343.476
+    },
+    "heading": -1.628521,
+    "width": 7.968,
+    "depth": 17.289
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -2.672,
+      "z": -8.551
+    },
+    {
+      "x": -2.64,
+      "z": -6.269
+    },
+    {
+      "x": -3.984,
+      "z": -5.951
+    },
+    {
+      "x": -3.481,
+      "z": 8.645
+    },
+    {
+      "x": 0.506,
+      "z": 8.645
+    },
+    {
+      "x": 3.947,
+      "z": 7.885
+    },
+    {
+      "x": 3.984,
+      "z": -8.645
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -2.672,
+        "z": -8.551
+      },
+      "b": {
+        "x": -2.64,
+        "z": -6.269
+      },
+      "lengthM": 2.282,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -2.64,
+        "z": -6.269
+      },
+      "b": {
+        "x": -3.984,
+        "z": -5.951
+      },
+      "lengthM": 1.381,
+      "role": "party",
+      "partyShare": 0.63
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -3.984,
+        "z": -5.951
+      },
+      "b": {
+        "x": -3.481,
+        "z": 8.645
+      },
+      "lengthM": 14.604,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -3.481,
+        "z": 8.645
+      },
+      "b": {
+        "x": 0.506,
+        "z": 8.645
+      },
+      "lengthM": 3.987,
+      "role": "front",
+      "partyShare": 0.13
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": 0.506,
+        "z": 8.645
+      },
+      "b": {
+        "x": 3.947,
+        "z": 7.885
+      },
+      "lengthM": 3.525,
+      "role": "rear",
+      "partyShare": 0.25
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": 3.947,
+        "z": 7.885
+      },
+      "b": {
+        "x": 3.984,
+        "z": -8.645
+      },
+      "lengthM": 16.53,
+      "role": "party",
+      "partyShare": 0.88
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": 3.984,
+        "z": -8.645
+      },
+      "b": {
+        "x": -2.672,
+        "z": -8.551
+      },
+      "lengthM": 6.656,
+      "role": "rear",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

@@ -1,0 +1,127 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-79377180",
+  "slug": "b79377180",
+  "walkIndex": 5260,
+  "street": "Mission Street",
+  "address": "611;615 Mission Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 25.63,
+  "storeys": 7,
+  "floors": {
+    "groundM": 4.648,
+    "upperM": 3.397,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1907,
+  "use": "COMO",
+  "usage": "office",
+  "amenity": null,
+  "shop": null,
+  "facade": "art-deco",
+  "material": "stone",
+  "frame": {
+    "edgeIndex": 1,
+    "center": {
+      "x": 1719.95,
+      "z": 1051.1
+    },
+    "heading": -0.785398,
+    "width": 14.354,
+    "depth": 48.578
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -6.965,
+      "z": -24.148
+    },
+    {
+      "x": -7.177,
+      "z": 24.289
+    },
+    {
+      "x": 6.965,
+      "z": 24.289
+    },
+    {
+      "x": 7.177,
+      "z": -24.289
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -6.965,
+        "z": -24.148
+      },
+      "b": {
+        "x": -7.177,
+        "z": 24.289
+      },
+      "lengthM": 48.437,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -7.177,
+        "z": 24.289
+      },
+      "b": {
+        "x": 6.965,
+        "z": 24.289
+      },
+      "lengthM": 14.142,
+      "role": "front",
+      "partyShare": 0.13
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": 6.965,
+        "z": 24.289
+      },
+      "b": {
+        "x": 7.177,
+        "z": -24.289
+      },
+      "lengthM": 48.579,
+      "role": "party",
+      "partyShare": 1
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 7.177,
+        "z": -24.289
+      },
+      "b": {
+        "x": -6.965,
+        "z": -24.148
+      },
+      "lengthM": 14.143,
+      "role": "rear",
+      "partyShare": 0.13
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

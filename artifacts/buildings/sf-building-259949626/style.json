@@ -1,0 +1,137 @@
+{
+ "seed": 9,
+ "notes": "Rework r3: lit wall slate blue-grey, cream trim, lap courses over the whole front incl. ground, cream arch surround on the gate, heavy projecting belt cornice, white cartouches on bay spandrels (hand.py). Wall kept above lum 0.18 so it does not render black. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game.",
+ "wall": "painted-clapboard",
+ "wallTint": "#8995a3",
+ "trim": "painted-white@ece6d6",
+ "frame": "painted-white@ece6d6",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@ece6d6",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@8995a3",
+ "cornice": true,
+ "corniceProjectionM": 0.6,
+ "beltCourse": true,
+ "windowHoods": true,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [
+  0.115,
+  0.18,
+  0.245,
+  0.4,
+  0.59
+ ],
+ "bays": [
+  {
+   "at": 0.19,
+   "widthM": 2.8,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-clapboard",
+   "tint": "#8995a3",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.2,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  },
+  {
+   "at": 0.795,
+   "widthM": 2.8,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-clapboard",
+   "tint": "#8995a3",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.2,
+     "roofRiseM": 0.1
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.12,
+     "brackets": 0
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.04,
+    "to": 0.11,
+    "kind": "garage",
+    "material": "painted-steel",
+    "tint": "#2a2f38",
+    "headM": 2.3
+   },
+   {
+    "from": 0.44,
+    "to": 0.56,
+    "kind": "window",
+    "headM": 1.5,
+    "grille": true
+   },
+   {
+    "from": 0.74,
+    "to": 0.89,
+    "kind": "gate",
+    "headM": 3.2,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.25,
+      "projectionM": 0.06,
+      "material": "painted-white",
+      "tint": "#ece6d6"
+     },
+     "keystone": true
+    }
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "streetStills": true,
+ "hbLadderEscape": {
+  "at": 0.5,
+  "widthM": 3.0,
+  "depthM": 0.8,
+  "ladderOffM": 0.8,
+  "dropM": 3.0,
+  "gooseneckM": 1.0
+ },
+ "hyDLap": {
+  "pitchM": 0.22,
+  "fromM": 0.3,
+  "projM": 0.03,
+  "heightM": 0.07,
+  "shade": 0.6
+ }
+}

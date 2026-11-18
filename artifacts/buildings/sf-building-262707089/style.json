@@ -1,0 +1,483 @@
+{
+ "seed": 13,
+ "notes": "1921 three-storey flats in cream smooth stucco, no bays. Two wide flat picture windows per upper storey with a relief panel group under each top window, a thin flat parapet cap, and at street level two cream panelled garage doors in arched recesses with a small glazed entry door beside the right one. Adds the narrow centre slot window on each upper storey (a thin ribbon span). Dark bronze window sash with a horizontal transom bar; relief panels under the top windows now read as framed panels (raised frame bars, a centre garland group flanked by two rosette squares) and sit just under the top windows; two small bracket knobs under a deeper parapet cap; the garage infills are cream panelled doors (a panel grid on a cream leaf) rather than roll-up slats; the entry door is door height inside the right-hand recess beside the garage. Round-arched heads and the storey-2 railing have no style key. Shorter garage storey (floorsM 3.3 / 3.45) so the blank band between the garage heads and the first window storey shrinks; relief panels and parapet knobs moved down with the storeys; warmer cream wall; the garage openings run to 2.9 m with a shadowed recess head band over beige doors of four rows of horizontal panels and a small dark vent grille, the glazed entry door beside the right garage in the same recess; dark window frames with a transom bar across the top band of every upper window. Round-arched heads still have no style key. Applied: round-arched garage heads (hbArchDoors, semicircle approximates the segmental arch), flat header band removed, 4x5 raised-panel grid, slightly warmer cream. Not expressible: Juliet railing, narrow-wide-narrow casement split, round medallions. Door-mirror claim SKIPPED. Applied: arch ring tinted as the wall so the smooth basket arches lose the stone-surround look, garage panel lines darkened to read as raised panels. 3-light windows have no key (mullion already reads). Applied: warm cream ece3cf; removed the round arch/voussoir surrounds; garage openings now rectangular with slightly rounded (basket) upper corners. Medallion frieze already sits only under the storey-2 windows (no duplicate in the style). Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-white",
+ "wallTint": "#f6f1e7",
+ "trim": "painted-white@f6f1e6",
+ "frame": "painted-steel@2c2620",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f6f1e6",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-white@faf2de",
+ "cornice": false,
+ "coping": {
+  "heightM": 0.32,
+  "projectionM": 0.2,
+  "material": "painted-white",
+  "tint": "#f6efdc"
+ },
+ "beltCourse": false,
+ "windowHoods": false,
+ "upperWindowSpans": [
+  [
+   0.05,
+   0.34
+  ],
+  [
+   0.425,
+   0.465
+  ],
+  [
+   0.56,
+   0.87
+  ]
+ ],
+ "upperSillM": 0.8,
+ "upperHeadM": 2.35,
+ "plaques": [
+  {
+   "at": 0.0819,
+   "y": 7.39,
+   "w": 0.5810904000000001,
+   "h": 0.06,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.0819,
+   "y": 6.95,
+   "w": 0.5810904000000001,
+   "h": 0.06,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.05384277558190602,
+   "y": 7.17,
+   "w": 0.06,
+   "h": 0.38,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.109957224418094,
+   "y": 7.17,
+   "w": 0.06,
+   "h": 0.38,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.0819,
+   "y": 7.17,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-white@d8ccb0"
+  },
+  {
+   "at": 0.195,
+   "y": 7.39,
+   "w": 1.3206600000000002,
+   "h": 0.06,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.195,
+   "y": 6.95,
+   "w": 1.3206600000000002,
+   "h": 0.06,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.12634277558190604,
+   "y": 7.17,
+   "w": 0.06,
+   "h": 0.38,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.26365722441809397,
+   "y": 7.17,
+   "w": 0.06,
+   "h": 0.38,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.195,
+   "y": 7.17,
+   "w": 0.7263630000000002,
+   "h": 0.12,
+   "face": "painted-white@d8ccb0"
+  },
+  {
+   "at": 0.195,
+   "y": 7.19,
+   "w": 0.16,
+   "h": 0.22,
+   "face": "painted-white@d8ccb0"
+  },
+  {
+   "at": 0.30810000000000004,
+   "y": 7.39,
+   "w": 0.5810903999999998,
+   "h": 0.06,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.30810000000000004,
+   "y": 6.95,
+   "w": 0.5810903999999998,
+   "h": 0.06,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.2800427755819061,
+   "y": 7.17,
+   "w": 0.06,
+   "h": 0.38,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.336157224418094,
+   "y": 7.17,
+   "w": 0.06,
+   "h": 0.38,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.30810000000000004,
+   "y": 7.17,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-white@d8ccb0"
+  },
+  {
+   "at": 0.5841000000000001,
+   "y": 7.39,
+   "w": 0.6211656000000004,
+   "h": 0.06,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.5841000000000001,
+   "y": 6.95,
+   "w": 0.6211656000000004,
+   "h": 0.06,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.5538427755819061,
+   "y": 7.17,
+   "w": 0.06,
+   "h": 0.38,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.614357224418094,
+   "y": 7.17,
+   "w": 0.06,
+   "h": 0.38,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.5841000000000001,
+   "y": 7.17,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-white@d8ccb0"
+  },
+  {
+   "at": 0.7050000000000001,
+   "y": 7.39,
+   "w": 1.4117399999999993,
+   "h": 0.06,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.7050000000000001,
+   "y": 6.95,
+   "w": 1.4117399999999993,
+   "h": 0.06,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.6313427755819061,
+   "y": 7.17,
+   "w": 0.06,
+   "h": 0.38,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.7786572244180939,
+   "y": 7.17,
+   "w": 0.06,
+   "h": 0.38,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.7050000000000001,
+   "y": 7.17,
+   "w": 0.7764569999999997,
+   "h": 0.12,
+   "face": "painted-white@d8ccb0"
+  },
+  {
+   "at": 0.7050000000000001,
+   "y": 7.19,
+   "w": 0.16,
+   "h": 0.22,
+   "face": "painted-white@d8ccb0"
+  },
+  {
+   "at": 0.8259000000000001,
+   "y": 7.39,
+   "w": 0.6211655999999994,
+   "h": 0.06,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.8259000000000001,
+   "y": 6.95,
+   "w": 0.6211655999999994,
+   "h": 0.06,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.7956427755819061,
+   "y": 7.17,
+   "w": 0.06,
+   "h": 0.38,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.8561572244180939,
+   "y": 7.17,
+   "w": 0.06,
+   "h": 0.38,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.8259000000000001,
+   "y": 7.17,
+   "w": 0.2,
+   "h": 0.2,
+   "face": "painted-white@d8ccb0"
+  },
+  {
+   "at": 0.195,
+   "y": 9.5,
+   "w": 0.2,
+   "h": 0.28,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.705,
+   "y": 9.5,
+   "w": 0.2,
+   "h": 0.28,
+   "face": "painted-white@fbf6ea"
+  },
+  {
+   "at": 0.195,
+   "y": 5.15,
+   "w": 2.639,
+   "h": 0.05,
+   "face": "painted-steel@2c2620"
+  },
+  {
+   "at": 0.195,
+   "y": 8.6,
+   "w": 2.639,
+   "h": 0.05,
+   "face": "painted-steel@2c2620"
+  },
+  {
+   "at": 0.715,
+   "y": 5.15,
+   "w": 2.821,
+   "h": 0.05,
+   "face": "painted-steel@2c2620"
+  },
+  {
+   "at": 0.715,
+   "y": 8.6,
+   "w": 2.821,
+   "h": 0.05,
+   "face": "painted-steel@2c2620"
+  },
+  {
+   "at": 0.105,
+   "y": 1.3,
+   "w": 0.05,
+   "h": 2.6,
+   "face": "painted-white@b09a68"
+  },
+  {
+   "at": 0.18,
+   "y": 1.3,
+   "w": 0.05,
+   "h": 2.6,
+   "face": "painted-white@b09a68"
+  },
+  {
+   "at": 0.255,
+   "y": 1.3,
+   "w": 0.05,
+   "h": 2.6,
+   "face": "painted-white@b09a68"
+  },
+  {
+   "at": 0.27,
+   "y": 0.3,
+   "w": 0.4,
+   "h": 0.14,
+   "face": "painted-steel@2c2620"
+  },
+  {
+   "at": 0.6025,
+   "y": 1.3,
+   "w": 0.05,
+   "h": 2.6,
+   "face": "painted-white@b09a68"
+  },
+  {
+   "at": 0.645,
+   "y": 1.3,
+   "w": 0.05,
+   "h": 2.6,
+   "face": "painted-white@b09a68"
+  },
+  {
+   "at": 0.6875,
+   "y": 1.3,
+   "w": 0.05,
+   "h": 2.6,
+   "face": "painted-white@b09a68"
+  },
+  {
+   "at": 0.696,
+   "y": 0.3,
+   "w": 0.4,
+   "h": 0.14,
+   "face": "painted-steel@2c2620"
+  },
+  {
+   "at": 0.18,
+   "y": 0.5,
+   "w": 2.73,
+   "h": 0.05,
+   "face": "painted-white@b09a68"
+  },
+  {
+   "at": 0.18,
+   "y": 1.0,
+   "w": 2.73,
+   "h": 0.05,
+   "face": "painted-white@b09a68"
+  },
+  {
+   "at": 0.18,
+   "y": 1.5,
+   "w": 2.73,
+   "h": 0.05,
+   "face": "painted-white@b09a68"
+  },
+  {
+   "at": 0.18,
+   "y": 2.0,
+   "w": 2.73,
+   "h": 0.05,
+   "face": "painted-white@b09a68"
+  },
+  {
+   "at": 0.18,
+   "y": 2.5,
+   "w": 2.73,
+   "h": 0.05,
+   "face": "painted-white@b09a68"
+  },
+  {
+   "at": 0.645,
+   "y": 0.5,
+   "w": 1.547,
+   "h": 0.05,
+   "face": "painted-white@b09a68"
+  },
+  {
+   "at": 0.645,
+   "y": 1.0,
+   "w": 1.547,
+   "h": 0.05,
+   "face": "painted-white@b09a68"
+  },
+  {
+   "at": 0.645,
+   "y": 1.5,
+   "w": 1.547,
+   "h": 0.05,
+   "face": "painted-white@b09a68"
+  },
+  {
+   "at": 0.645,
+   "y": 2.0,
+   "w": 1.547,
+   "h": 0.05,
+   "face": "painted-white@b09a68"
+  },
+  {
+   "at": 0.645,
+   "y": 2.5,
+   "w": 1.547,
+   "h": 0.05,
+   "face": "painted-white@b09a68"
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.03,
+    "to": 0.33,
+    "kind": "blank",
+    "material": "painted-white",
+    "tint": "#e8d4a4",
+    "headM": 2.9,
+    "arch": {
+     "type": "basket",
+     "riseM": 0.4,
+     "cornerM": 0.45
+    }
+   },
+   {
+    "from": 0.56,
+    "to": 0.73,
+    "kind": "blank",
+    "material": "painted-white",
+    "tint": "#e8d4a4",
+    "headM": 2.9,
+    "arch": {
+     "type": "basket",
+     "riseM": 0.4,
+     "cornerM": 0.45
+    }
+   },
+   {
+    "from": 0.735,
+    "to": 0.825,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-white@f6f1e6",
+    "headM": 2.4
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "sashMaterial": "painted-steel@2c2620",
+ "sashRows": 1,
+ "floorsM": {
+  "groundM": 3.3,
+  "upperM": 3.45
+ },
+ "wallTopM": 10.6,
+ "streetStills": true
+}

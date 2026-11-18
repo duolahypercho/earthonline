@@ -1,0 +1,108 @@
+{
+  "kind": "blender-building",
+  "id": "sf-building-436474723",
+  "pass": "b436474723-blender-6facb6b9-23dfd1",
+  "generator": "scripts/blender-buildings/build_building.py",
+  "generatorSha256": "6facb6b980e5966bff381f1088766095f94c593f58d833334af51d6578efa055",
+  "blender": "Blender 5.1.2",
+  "inputs": {
+    "spec": "artifacts/buildings/sf-building-436474723/spec.json",
+    "specSha256": "2882b4bb704453cf872da31da7399c6c8388eb9a4c5ea80622f0d8fb8afe17c5",
+    "style": "artifacts/buildings/sf-building-436474723/style.json",
+    "styleSha256": "81330e9fd60dbbfc8779b7f09aa3d028f238d9264e331f59f259e07cf1e4485a",
+    "styleNotesRevised": "notes text reworded for publication after the build; geometry inputs unchanged"
+  },
+  "sources": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor-tower)"
+  },
+  "license": "Original geometry generated from open data (DataSF footprints, LiDAR, Assessor roll). No third-party meshes or textures.",
+  "furniture": [],
+  "assets": {
+    "exterior": {
+      "url": "/assets/buildings/sf-building-436474723/exterior.glb",
+      "sha256": "95864d2109904197bd24b75157cd7237d54da1664be3110bd5b48d210d11485f",
+      "bytes": 2232900
+    },
+    "interior": {
+      "url": "/assets/buildings/sf-building-436474723/interior.glb",
+      "sha256": "a110e0ef83052389096dbaab854d32c53b91a07fbb67198f6731f82e99d4977e",
+      "bytes": 582500
+    },
+    "fine": [
+      {
+        "storey": 0,
+        "url": "/assets/buildings/sf-building-436474723/fine-s0.glb",
+        "sha256": "5fa8e48b5accfc1611d462f996bccaa6530ab4eada75c9f72837e57bc1395b26",
+        "bytes": 10960
+      },
+      {
+        "storey": 1,
+        "url": "/assets/buildings/sf-building-436474723/fine-s1.glb",
+        "sha256": "c2de9c903140d8d251c59745e13ecd9948a289b00e04b2b97a1b4c87589227c5",
+        "bytes": 226808
+      },
+      {
+        "storey": 2,
+        "url": "/assets/buildings/sf-building-436474723/fine-s2.glb",
+        "sha256": "2bdf96542c62eb13c75d3e20117fd970cab7e2d3c9ce02972081a925fac46e7f",
+        "bytes": 240364
+      },
+      {
+        "storey": 3,
+        "url": "/assets/buildings/sf-building-436474723/fine-s3.glb",
+        "sha256": "25b8a697062657671d0d9a5a23fa0883bba4f2df580872fa6e2f93f6f6a0ab09",
+        "bytes": 221020
+      },
+      {
+        "storey": 4,
+        "url": "/assets/buildings/sf-building-436474723/fine-s4.glb",
+        "sha256": "f6a414ea9512e406883780941db16c6072ba176f1addeca2ac7beb2c0c6dd72a",
+        "bytes": 237896
+      },
+      {
+        "storey": 5,
+        "url": "/assets/buildings/sf-building-436474723/fine-s5.glb",
+        "sha256": "5ad85b3cd88bb89ea35047157c5f5132c1eb5aed8139238b640f79089026e9b0",
+        "bytes": 239220
+      },
+      {
+        "storey": 6,
+        "url": "/assets/buildings/sf-building-436474723/fine-s6.glb",
+        "sha256": "70c78822109bbf8f1cf8d6f4fca6a1e2dc5fd6265c6f5159e06f916f2c2e16ff",
+        "bytes": 226536
+      },
+      {
+        "storey": 7,
+        "url": "/assets/buildings/sf-building-436474723/fine-s7.glb",
+        "sha256": "c5b686849eb55cd0343711438b74bfcd91aad1535aceca70c8b4b2f982f7b135",
+        "bytes": 240388
+      },
+      {
+        "storey": 8,
+        "url": "/assets/buildings/sf-building-436474723/fine-s8.glb",
+        "sha256": "18a0f2dec8c28c6e2a7a5ddc70a118e3499f3e8055421665060b97f184cb235c",
+        "bytes": 237800
+      },
+      {
+        "storey": 9,
+        "url": "/assets/buildings/sf-building-436474723/fine-s9.glb",
+        "sha256": "72a72adf4165dd6bca7aec58ab918ab6f119e9d00e6a3fef5290e8004f17936b",
+        "bytes": 227676
+      },
+      {
+        "storey": 10,
+        "url": "/assets/buildings/sf-building-436474723/fine-s10.glb",
+        "sha256": "f42815ba13a3d96efed8e4da8b16aa3fb851fb14c27a3e97219ace85665c5d5e",
+        "bytes": 240884
+      },
+      {
+        "storey": 11,
+        "url": "/assets/buildings/sf-building-436474723/fine-s11.glb",
+        "sha256": "269b1741cdc6cbc125b4de30f759654ede3aa7ebf23a788cd50e4fbc31d3a6f2",
+        "bytes": 250476
+      }
+    ]
+  }
+}

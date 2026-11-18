@@ -1,0 +1,31 @@
+{
+  "seed": 1,
+  "notes": "Pale grey painted upper storeys over a charcoal ground band, two 3-sided bays on storeys 2-4, centred steel fire escape, blank blade sign, charcoal storefront with transoms and wood doors.",
+  "wall": "painted-stucco",
+  "wallTint": "#c4c2bb",
+  "groundBand": { "material": "painted-stucco", "tint": "#3a3c3f" },
+  "trim": "cast-stone-trim",
+  "beltCourse": true,
+  "windowHoods": false,
+  "upperWindows": [0.115, 0.53, 0.89],
+  "bays": [
+    { "at": 0.35, "widthM": 3.3, "projectionM": 0.6, "fromStorey": 1, "material": "painted-stucco", "tint": "#45484c" },
+    { "at": 0.685, "widthM": 3.1, "projectionM": 0.6, "fromStorey": 1, "material": "painted-stucco", "tint": "#45484c" }
+  ],
+  "fireEscape": { "at": 0.53, "widthM": 3.6, "depthM": 0.9 },
+  "bladeSign": { "at": 0.79, "bottomM": 0.9, "heightM": 3.4 },
+  "storefront": {
+    "awning": false,
+    "transomM": 0.75,
+    "layout": [
+      { "kind": "double-door", "from": 0.08, "to": 0.2, "leaf": "wood-siding" },
+      { "kind": "window", "from": 0.22, "to": 0.43 },
+      { "kind": "door", "from": 0.48, "to": 0.57, "leaf": "painted-steel" },
+      { "kind": "window", "from": 0.62, "to": 0.7 },
+      { "kind": "door", "from": 0.72, "to": 0.78, "leaf": "wood-siding", "stair": true },
+      { "kind": "window", "from": 0.86, "to": 0.96 }
+    ]
+  },
+  "storefrontFrame": "painted-steel",
+  "bulkhead": "painted-steel-mid"
+}

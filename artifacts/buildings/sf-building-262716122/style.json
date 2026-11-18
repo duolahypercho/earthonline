@@ -1,0 +1,182 @@
+{
+ "seed": 13,
+ "notes": "Round 7: warm ivory #e9dfc6, cream-painted window frames, rusticated 2-storey base with small round ground windows and arched storey-1 windows, cant bays from storey 2 on corbels, cream zigzag escape. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k) - photo-sampled tints rendered dark/olive in game.",
+ "wall": "painted-stucco",
+ "wallTint": "#f4efe2",
+ "trim": "painted-white@ece3cf",
+ "frame": "painted-white@ece3cf",
+ "glass": "glass-clear",
+ "cornice": true,
+ "corniceProjectionM": 0.6,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.9,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.4,
+ "groundBand": {
+  "material": "limestone-ashlar",
+  "tint": "#e6dac0",
+  "topM": 7.85
+ },
+ "upperWindows": [
+  0.2,
+  0.5,
+  0.8
+ ],
+ "bays": [
+  {
+   "at": 0.2,
+   "widthM": 3.0,
+   "projectionM": 0.55,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#f6f1e7",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "cornice": {
+     "projectionM": 0.1,
+     "dentils": true,
+     "roofRiseM": 0.15
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.08,
+     "brackets": 2,
+     "dropM": 0.5,
+     "beltBrackets": true
+    }
+   }
+  },
+  {
+   "at": 0.8,
+   "widthM": 3.0,
+   "projectionM": 0.55,
+   "fromStorey": 2,
+   "material": "painted-stucco",
+   "tint": "#f6f1e7",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "cornice": {
+     "projectionM": 0.1,
+     "dentils": true,
+     "roofRiseM": 0.15
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.08,
+     "brackets": 2,
+     "dropM": 0.5,
+     "beltBrackets": true
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 1.5,
+  "transomM": 0.6,
+  "transomPaneM": 0.3,
+  "transomRows": 2,
+  "paneM": 0.45,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.15,
+    "to": 0.21,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.46,
+    "to": 0.52,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.78,
+    "to": 0.84,
+    "kind": "window",
+    "headM": 3.3
+   },
+   {
+    "from": 0.9,
+    "to": 0.99,
+    "kind": "door",
+    "stair": true,
+    "leaf": "wood-siding",
+    "headM": 2.8
+   }
+  ],
+  "headDropM": 1.2
+ },
+ "storefrontFrame": "painted-white@ece3cf",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "limestone-ashlar@e6dac0",
+ "ground": "lobby",
+ "upper": "apartment",
+ "hbArchDoors": [
+  {
+   "from": 0.15,
+   "to": 0.21,
+   "material": "limestone-ashlar",
+   "tint": "#e6dac0",
+   "ringTint": "#efe6cf"
+  },
+  {
+   "from": 0.46,
+   "to": 0.52,
+   "material": "limestone-ashlar",
+   "tint": "#e6dac0",
+   "ringTint": "#efe6cf"
+  },
+  {
+   "from": 0.78,
+   "to": 0.84,
+   "material": "limestone-ashlar",
+   "tint": "#e6dac0",
+   "ringTint": "#efe6cf"
+  }
+ ],
+ "archHeads": [
+  {
+   "from": 0.14,
+   "to": 0.26,
+   "storey": 1,
+   "riseM": 0.5,
+   "dropM": 0.4
+  },
+  {
+   "from": 0.74,
+   "to": 0.86,
+   "storey": 1,
+   "riseM": 0.5,
+   "dropM": 0.4
+  }
+ ],
+ "fireEscape": {
+  "at": 0.5,
+  "widthM": 3.6,
+  "depthM": 0.8,
+  "zigzag": true,
+  "material": "painted-stucco",
+  "tint": "#d9ceb4"
+ },
+ "hyDRubble": {
+  "toM": 7.85,
+  "courseM": 0.75,
+  "blockM": 2.4,
+  "projM": 0.015,
+  "shade": 0.78,
+  "seed": 7,
+  "maxTris": 12000
+ },
+ "streetStills": true
+}

@@ -1,0 +1,237 @@
+{
+ "seed": 3,
+ "notes": "Olive sage #9ca184, warm cream #efe8d4 trim, lap siding (hyDLap), portico columns + entablature + door plaque + 8-step stair bands raised to the storey-1 floor line, full-width belt, basement windows. Proportions are footprint data. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-clapboard",
+ "wallTint": "#ced0c2",
+ "trim": "painted-white@efe8d4",
+ "frame": "painted-white@efe8d4",
+ "glass": "glass-clear",
+ "cornice": true,
+ "corniceProjectionM": 1.2,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 1.0,
+ "windowSillM": 1.3,
+ "windowHeadM": 2.05,
+ "upperWindows": [
+  0.5
+ ],
+ "bays": [
+  {
+   "at": 0.2,
+   "widthM": 2.9,
+   "projectionM": 0.7,
+   "fromStorey": 2,
+   "material": "painted-clapboard",
+   "tint": "#ced0c2",
+   "plaques": {
+    "material": "painted-white",
+    "tint": "#efe8d4",
+    "heightM": 0.36,
+    "widthFrac": 1.0
+   }
+  },
+  {
+   "at": 0.83,
+   "widthM": 2.9,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-clapboard",
+   "tint": "#ced0c2",
+   "plaques": {
+    "material": "painted-white",
+    "tint": "#efe8d4",
+    "heightM": 0.36,
+    "widthFrac": 1.0
+   }
+  }
+ ],
+ "pilasters": {
+  "at": [
+   0.045,
+   0.265
+  ],
+  "widthM": 0.24,
+  "projectionM": 0.26,
+  "fromM": 2.95,
+  "toM": 5.55,
+  "capital": true,
+  "material": "painted-white",
+  "tint": "#efe8d4"
+ },
+ "plaques": [
+  {
+   "at": 0.41,
+   "y": 0.93,
+   "w": 1.1,
+   "h": 0.1,
+   "face": "painted-white@ece4c8"
+  },
+  {
+   "at": 0.67,
+   "y": 0.93,
+   "w": 1.1,
+   "h": 0.1,
+   "face": "painted-white@ece4c8"
+  },
+  {
+   "at": 0.5,
+   "y": 6.3,
+   "w": 2.7,
+   "h": 0.24,
+   "face": "painted-white@ece4c8"
+  },
+  {
+   "at": 0.15,
+   "y": 5.68,
+   "w": 2.9,
+   "h": 0.36,
+   "face": "painted-white@efe8d4"
+  },
+  {
+   "at": 0.155,
+   "y": 4.25,
+   "w": 1.25,
+   "h": 2.3,
+   "face": "wood-siding@3a2a20"
+  },
+  {
+   "at": 0.5,
+   "y": 2.93,
+   "w": 8.6,
+   "h": 0.26,
+   "face": "painted-white@efe8d4"
+  },
+  {
+   "at": 0.15,
+   "y": 2.93,
+   "w": 2.9,
+   "h": 0.3,
+   "face": "painted-white@efe8d4"
+  },
+  {
+   "at": 0.155,
+   "y": 0.17,
+   "w": 1.5,
+   "h": 0.08,
+   "face": "painted-white@d9d0b6"
+  },
+  {
+   "at": 0.155,
+   "y": 0.51,
+   "w": 1.5,
+   "h": 0.08,
+   "face": "painted-white@d9d0b6"
+  },
+  {
+   "at": 0.155,
+   "y": 0.85,
+   "w": 1.5,
+   "h": 0.08,
+   "face": "painted-white@d9d0b6"
+  },
+  {
+   "at": 0.155,
+   "y": 1.19,
+   "w": 1.5,
+   "h": 0.08,
+   "face": "painted-white@d9d0b6"
+  },
+  {
+   "at": 0.155,
+   "y": 1.53,
+   "w": 1.5,
+   "h": 0.08,
+   "face": "painted-white@d9d0b6"
+  },
+  {
+   "at": 0.155,
+   "y": 1.87,
+   "w": 1.5,
+   "h": 0.08,
+   "face": "painted-white@d9d0b6"
+  },
+  {
+   "at": 0.155,
+   "y": 2.21,
+   "w": 1.5,
+   "h": 0.08,
+   "face": "painted-white@d9d0b6"
+  },
+  {
+   "at": 0.155,
+   "y": 2.55,
+   "w": 1.5,
+   "h": 0.08,
+   "face": "painted-white@d9d0b6"
+  }
+ ],
+ "storefrontFrame": "painted-white@efe8d4",
+ "bulkhead": "painted-clapboard@d1d5c2",
+ "storefront": {
+  "bulkheadM": 1.0,
+  "transomM": 0.35,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.09,
+    "to": 0.23,
+    "kind": "double-door",
+    "stair": true,
+    "leaf": "wood-siding"
+   },
+   {
+    "from": 0.39,
+    "to": 0.46,
+    "kind": "window",
+    "headM": 1.6
+   },
+   {
+    "from": 0.61,
+    "to": 0.75,
+    "kind": "window",
+    "headM": 1.95
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "floorsM": {
+  "groundM": 2.9,
+  "upperM": 3.45
+ },
+ "hbFrieze": {
+  "heightM": 0.8,
+  "material": "painted-white",
+  "tint": "#8a2a2a"
+ },
+ "hbCorniceBrackets": {
+  "spacingM": 0.5,
+  "heightM": 0.9,
+  "depthM": 0.5,
+  "widthM": 0.26,
+  "material": "painted-white",
+  "tint": "#efe8d4"
+ },
+ "streetStills": true,
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.3,
+     0.4
+    ]
+   ],
+   "sillM": 1.0,
+   "headM": 2.1
+  }
+ },
+ "hyDLap": {
+  "pitchM": 0.15,
+  "fromM": 0.3,
+  "projM": 0.022,
+  "heightM": 0.05,
+  "shade": 0.6
+ }
+}

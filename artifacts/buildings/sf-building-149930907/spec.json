@@ -1,0 +1,241 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-149930907",
+  "slug": "b149930907",
+  "walkIndex": 5079,
+  "street": "Hyde Street",
+  "address": "835 Hyde Street",
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "Assessor roll (assessor)"
+  },
+  "heightM": 17.49,
+  "storeys": 5,
+  "floors": {
+    "groundM": 4.391,
+    "upperM": 3.125,
+    "roofM": 0.6
+  },
+  "yearBuilt": 1913,
+  "use": "COMH",
+  "usage": "mixed",
+  "amenity": "hotel",
+  "shop": null,
+  "facade": "loft",
+  "material": "plaster",
+  "frame": {
+    "edgeIndex": 7,
+    "center": {
+      "x": 187.134,
+      "z": 1174.948
+    },
+    "heading": 1.42528,
+    "width": 11.877,
+    "depth": 39.673
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": -4.88,
+      "z": -19.836
+    },
+    {
+      "x": -2.668,
+      "z": -10.256
+    },
+    {
+      "x": -0.151,
+      "z": -10.322
+    },
+    {
+      "x": -0.152,
+      "z": 4.839
+    },
+    {
+      "x": -5.923,
+      "z": 4.775
+    },
+    {
+      "x": -5.897,
+      "z": 11.846
+    },
+    {
+      "x": -4.384,
+      "z": 11.826
+    },
+    {
+      "x": -5.939,
+      "z": 19.836
+    },
+    {
+      "x": 5.785,
+      "z": 19.836
+    },
+    {
+      "x": 5.939,
+      "z": -19.805
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": -4.88,
+        "z": -19.836
+      },
+      "b": {
+        "x": -2.668,
+        "z": -10.256
+      },
+      "lengthM": 9.833,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": -2.668,
+        "z": -10.256
+      },
+      "b": {
+        "x": -0.151,
+        "z": -10.322
+      },
+      "lengthM": 2.518,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -0.151,
+        "z": -10.322
+      },
+      "b": {
+        "x": -0.152,
+        "z": 4.839
+      },
+      "lengthM": 15.16,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": -0.152,
+        "z": 4.839
+      },
+      "b": {
+        "x": -5.923,
+        "z": 4.775
+      },
+      "lengthM": 5.771,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": -5.923,
+        "z": 4.775
+      },
+      "b": {
+        "x": -5.897,
+        "z": 11.846
+      },
+      "lengthM": 7.071,
+      "role": "rear",
+      "partyShare": 0.31
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": -5.897,
+        "z": 11.846
+      },
+      "b": {
+        "x": -4.384,
+        "z": 11.826
+      },
+      "lengthM": 1.513,
+      "role": "rear",
+      "partyShare": 0.56
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": -4.384,
+        "z": 11.826
+      },
+      "b": {
+        "x": -5.939,
+        "z": 19.836
+      },
+      "lengthM": 8.16,
+      "role": "rear",
+      "partyShare": 0.56
+    },
+    {
+      "index": 7,
+      "a": {
+        "x": -5.939,
+        "z": 19.836
+      },
+      "b": {
+        "x": 5.785,
+        "z": 19.836
+      },
+      "lengthM": 11.724,
+      "role": "front",
+      "partyShare": 0.13
+    },
+    {
+      "index": 8,
+      "a": {
+        "x": 5.785,
+        "z": 19.836
+      },
+      "b": {
+        "x": 5.939,
+        "z": -19.805
+      },
+      "lengthM": 39.642,
+      "role": "party",
+      "partyShare": 0.88
+    },
+    {
+      "index": 9,
+      "a": {
+        "x": 5.939,
+        "z": -19.805
+      },
+      "b": {
+        "x": -4.88,
+        "z": -19.836
+      },
+      "lengthM": 10.819,
+      "role": "rear",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

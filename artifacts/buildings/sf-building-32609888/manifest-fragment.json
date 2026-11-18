@@ -1,0 +1,72 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-32609888",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-32609888",
+    "walkIndex": 7535,
+    "builder": "blender",
+    "street": "Columbus Avenue",
+    "side": null,
+    "addr": "1455 Stockton Street",
+    "sourceHeight": 9,
+    "sourceLevels": null,
+    "frontEdge": 1,
+    "status": "review",
+    "lidarHeightM": 8.83,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b32609888.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b32609888.js"
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b32609888.js",
+    "sha256": "df202126a5a47dba3de9f42e1ce0819cf97e7613c702c021de178a7d0e29f5c3",
+    "pass": "b32609888-blender-7b4f6662-cea0bd"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-32609888/provenance.json",
+    "sha256": "8cfe89e0b05175299813b2e93c66f8221b70f6fd4bfb80c31b6a18be6648a8d0",
+    "pass": "b32609888-blender-7b4f6662-cea0bd"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-32609888/exterior.glb",
+      "sha256": "c454ecdd35af60d6db51f89233e9407809a0795e2628d03f96dbf6dd12b00a5c",
+      "bytes": 1118800
+    },
+    {
+      "role": "interior",
+      "url": "/assets/buildings/sf-building-32609888/interior.glb",
+      "sha256": "5df0105b35845e1fdc286e907cc00e9cb0a423836acc278aff775be13a08a254",
+      "bytes": 119444
+    },
+    {
+      "role": "fine-s0",
+      "url": "/assets/buildings/sf-building-32609888/fine-s0.glb",
+      "sha256": "71ef8ff866f7ea941f9bc5ae895b471e3420eb316b68ebb70cb8ff6c7ea7aeb9",
+      "bytes": 42012
+    },
+    {
+      "role": "fine-s1",
+      "url": "/assets/buildings/sf-building-32609888/fine-s1.glb",
+      "sha256": "988feac265f3d69b188d89e5fcc6a59ae303043be08c5b63e88daee22762d0ad",
+      "bytes": 226464
+    }
+  ],
+  "generatedAt": "2026-09-29T12:30:04.897Z",
+  "base": {
+    "id": "sf-building-32609888",
+    "walkIndex": 7535,
+    "builder": "blender",
+    "street": "Columbus Avenue",
+    "side": null,
+    "addr": "1455 Stockton Street",
+    "sourceHeight": 9,
+    "sourceLevels": null,
+    "frontEdge": 1,
+    "status": "review",
+    "lidarHeightM": 8.83,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b32609888.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b32609888.js"
+  }
+}

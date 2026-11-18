@@ -1,0 +1,1577 @@
+{
+  "version": "civilian-candidate-export-v3",
+  "previewOnly": true,
+  "productionAuthorized": false,
+  "visualApproval": false,
+  "characterId": "civilian-f-03",
+  "source": {
+    "path": "$CIVILIAN_STAGE/source/outfit-civilian-f-03/civilian-f-03.blend",
+    "bytes": 33960606,
+    "sha256": "9478442f558015b0bd1bf2649e8cc9cfa947cd6c922567b467883cdd2b21c014"
+  },
+  "sourceManifest": {
+    "path": "$CIVILIAN_STAGE/source/outfit-civilian-f-03/source-manifest.json",
+    "bytes": 69101,
+    "sha256": "7a00b893c4af3043b89a52ceab0f61fec0bdc3a7902f00361802b7c73157f7e6"
+  },
+  "sourceUnchanged": true,
+  "build": {
+    "blender": "5.1.2",
+    "script": {
+      "path": "$REPO/scripts/character-assets/civilian-v1/export-candidate.py",
+      "bytes": 54395,
+      "sha256": "e6010f1700748244c0afa6df62ac4182c2405a3eec84b1cbc86c9111b4900864"
+    },
+    "normalizer": {
+      "path": "$REPO/scripts/character-assets/civilian-v1/normalize-candidate.mjs",
+      "bytes": 21038,
+      "sha256": "0378079c40204ff38c96b2f6dbe01d0087e72475b731b7fd041feccb6c69290b"
+    },
+    "torsoConform": {
+      "path": "$REPO/scripts/character-assets/civilian-v1/torso-conform.mjs",
+      "bytes": 2928,
+      "sha256": "36b579c9e8544e05e5d13035115fb65d353486394242da1b74f69db17a12b7db"
+    },
+    "verifier": {
+      "path": "$REPO/scripts/verify/verify-civilian-asset.mjs",
+      "bytes": 21106,
+      "sha256": "03a978a75a0f67fbef0c2a14eed9c5929ddc8bac2afd3de83b9c1080e2a8ff83"
+    }
+  },
+  "status": "NUMERICALLY_VERIFIED_VISUALLY_UNREVIEWED",
+  "assets": [
+    {
+      "lod": "player",
+      "limit": 23000,
+      "presentationVariant": null,
+      "profile": null,
+      "output": {
+        "path": "$CIVILIAN_STAGE/candidate/outfits/civilian-f-03/player.glb",
+        "bytes": 12830752,
+        "sha256": "d23c196a3384f00ed1f9090add298663f7bee15e2a096c8a36d7d1da360773ba"
+      },
+      "intermediate": {
+        "path": "$CIVILIAN_STAGE/candidate/outfits/civilian-f-03/player.source.glb",
+        "bytes": 12841016,
+        "sha256": "86448f13d51a8ed708fab18489f05cc2fb5f3c01f8fe31a1e70e4434314515c4"
+      },
+      "reductions": [
+        {
+          "mesh": "EO02.Body.007.AuthoredCage.player",
+          "before": 18548,
+          "after": 12972,
+          "reduced": true,
+          "faceHandsGuard": true,
+          "facialTopologyProtection": {
+            "eyelidBandVertices": 462,
+            "lipBandVertices": 150,
+            "cutBoundaryVertices": 224,
+            "materialBoundaryVertices": 7,
+            "lipSeamVertices": 43,
+            "neckBandVertices": 266,
+            "neckBandMetres": [
+              1.3218335247039794,
+              1.4265609550476075
+            ],
+            "mouthCentreMetres": [
+              -4.967772838426754e-06,
+              -0.14867758750915527,
+              1.4956234693527222
+            ],
+            "method": "authored-cage-surface-boundaries-v4",
+            "lockedVerticesRetained": 692,
+            "lockedEdgesRetained": 896,
+            "positionToleranceObjectUnits": 1e-07,
+            "morphTransfer": "exact source deltas on locked vertices"
+          },
+          "maxFaceProjectionDistanceObjectUnits": 0.0003365588781889528,
+          "neckSurfaceAudit": {
+            "samples": 4697,
+            "newOverlapColumns": 0,
+            "examples": []
+          },
+          "maxSourceSurfaceDistanceObjectUnits": 0.0747361108660698,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.Eyes.007.player",
+          "before": 2040,
+          "after": 1080,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.00014143367297947407,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.Eyebrows.007.player",
+          "before": 192,
+          "after": 192,
+          "reduced": false
+        },
+        {
+          "mesh": "EO02.Eyelashes.007.player",
+          "before": 368,
+          "after": 368,
+          "reduced": false
+        },
+        {
+          "mesh": "EO02.Teeth.007.player",
+          "before": 7120,
+          "after": 810,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.0013241554843261838,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.Tongue.007.player",
+          "before": 448,
+          "after": 270,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.00017337490862701088,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.Hair.007.player",
+          "before": 8800,
+          "after": 1890,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.00028447763179428875,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.Sneakers.007.player",
+          "before": 12256,
+          "after": 2162,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.00068947410909459,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.TeeShorts.player",
+          "before": 21952,
+          "after": 3243,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.0008843712857924402,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        }
+      ],
+      "omittedDetails": [],
+      "numericVerification": {
+        "version": "civilian-asset-verifier-v1",
+        "ok": true,
+        "visualApproval": false,
+        "productionAuthorized": false,
+        "metrics": {
+          "lod": "player",
+          "triangles": 22987,
+          "vertices": 13358,
+          "primitives": 1,
+          "materials": 1,
+          "skinCount": 1,
+          "joints": 56,
+          "morphTargets": 16,
+          "maxWeightSumError": 4.6566128730773926e-08,
+          "minWeight": 0,
+          "maxInfluences": 4,
+          "maxNormalLengthError": 4.627575589388755e-08,
+          "maxBindError": 5.7220459037665705e-08,
+          "maxRestErrorMetres": 1.3877787807814457e-17,
+          "min": [
+            -0.25617262721061707,
+            -0.005600162781774998,
+            -0.1277405023574829
+          ],
+          "max": [
+            0.2561723589897156,
+            1.75,
+            0.1928849071264267
+          ],
+          "uvMin": [
+            0.00390625,
+            0.00390625
+          ],
+          "uvMax": [
+            0.9961013793945312,
+            0.9960944056510925
+          ],
+          "textures": [
+            {
+              "index": 0,
+              "name": "normal-2048",
+              "mimeType": "image/png",
+              "size": [
+                2048,
+                2048
+              ],
+              "bytes": 1791699,
+              "sha256": "6745cba8e1c14a80038766cd803ab2caf44121d512d64385b06dc3d66bb70a34"
+            },
+            {
+              "index": 1,
+              "name": "orm-2048",
+              "mimeType": "image/png",
+              "size": [
+                2048,
+                2048
+              ],
+              "bytes": 1235990,
+              "sha256": "0dc2d61245e611e3402dd87bd2645fa8b8c809095603ae3355e5e48619354730"
+            },
+            {
+              "index": 2,
+              "name": "basecolor-2048",
+              "mimeType": "image/png",
+              "size": [
+                2048,
+                2048
+              ],
+              "bytes": 3822950,
+              "sha256": "24f4a040c513c587bbf6a56250c9f5f5f6c91ea02aff4ee6f4b72c34a460bf10"
+            }
+          ]
+        },
+        "errors": [],
+        "warnings": [
+          "Numeric acceptance does not prove anatomy, clothing clearance, identity continuity, motion, or visual quality."
+        ]
+      },
+      "visualStatus": "UNREVIEWED",
+      "productionAuthorized": false
+    },
+    {
+      "lod": "hero",
+      "limit": 11500,
+      "presentationVariant": null,
+      "profile": null,
+      "output": {
+        "path": "$CIVILIAN_STAGE/candidate/outfits/civilian-f-03/hero.glb",
+        "bytes": 5105564,
+        "sha256": "9e326d6a8967e0c9019aafdc1b224deb1147f4fb129926e0209c27233cff6e7c"
+      },
+      "intermediate": {
+        "path": "$CIVILIAN_STAGE/candidate/outfits/civilian-f-03/hero.source.glb",
+        "bytes": 5115832,
+        "sha256": "e2a4b552d41e17b311869842e7d24a1a23fcd9c4ba09719bc3033e57dca496e3"
+      },
+      "reductions": [
+        {
+          "mesh": "EO02.Body.007.AuthoredCage.hero",
+          "before": 18548,
+          "after": 6320,
+          "reduced": true,
+          "faceHandsGuard": true,
+          "facialTopologyProtection": {
+            "eyelidBandVertices": 462,
+            "lipBandVertices": 150,
+            "cutBoundaryVertices": 224,
+            "materialBoundaryVertices": 7,
+            "lipSeamVertices": 43,
+            "neckBandVertices": 266,
+            "neckBandMetres": [
+              1.3218335247039794,
+              1.4265609550476075
+            ],
+            "mouthCentreMetres": [
+              -4.967772838426754e-06,
+              -0.14867758750915527,
+              1.4956234693527222
+            ],
+            "method": "authored-cage-surface-boundaries-v4",
+            "lockedVerticesRetained": 692,
+            "lockedEdgesRetained": 896,
+            "positionToleranceObjectUnits": 1e-07,
+            "morphTransfer": "exact source deltas on locked vertices"
+          },
+          "maxFaceProjectionDistanceObjectUnits": 0.0011229327647015452,
+          "neckSurfaceAudit": {
+            "samples": 4697,
+            "newOverlapColumns": 0,
+            "examples": []
+          },
+          "maxSourceSurfaceDistanceObjectUnits": 0.0747361108660698,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.Eyes.007.hero",
+          "before": 2040,
+          "after": 526,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.00042643488268367946,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.Eyebrows.007.hero",
+          "before": 192,
+          "after": 192,
+          "reduced": false
+        },
+        {
+          "mesh": "EO02.Eyelashes.007.hero",
+          "before": 368,
+          "after": 368,
+          "reduced": false
+        },
+        {
+          "mesh": "EO02.Teeth.007.hero",
+          "before": 7120,
+          "after": 394,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.0019432043191045523,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.Tongue.007.hero",
+          "before": 448,
+          "after": 130,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.0006824172451160848,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.Hair.007.hero",
+          "before": 8800,
+          "after": 920,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.0007162256515584886,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.Sneakers.007.hero",
+          "before": 12256,
+          "after": 1052,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.0009269269648939371,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.TeeShorts.hero",
+          "before": 21952,
+          "after": 1580,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.001559666357934475,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        }
+      ],
+      "omittedDetails": [],
+      "numericVerification": {
+        "version": "civilian-asset-verifier-v1",
+        "ok": true,
+        "visualApproval": false,
+        "productionAuthorized": false,
+        "metrics": {
+          "lod": "hero",
+          "triangles": 11482,
+          "vertices": 7121,
+          "primitives": 1,
+          "materials": 1,
+          "skinCount": 1,
+          "joints": 56,
+          "morphTargets": 16,
+          "maxWeightSumError": 4.6566128730773926e-08,
+          "minWeight": 0,
+          "maxInfluences": 4,
+          "maxNormalLengthError": 4.4524385178768e-08,
+          "maxBindError": 5.7220459037665705e-08,
+          "maxRestErrorMetres": 1.3877787807814457e-17,
+          "min": [
+            -0.256052166223526,
+            -0.005803531035780907,
+            -0.12807977199554443
+          ],
+          "max": [
+            0.25632554292678833,
+            1.75,
+            0.1928587257862091
+          ],
+          "uvMin": [
+            0.004299337975680828,
+            0.00390625
+          ],
+          "uvMax": [
+            0.99609375,
+            0.9960944056510925
+          ],
+          "textures": [
+            {
+              "index": 0,
+              "name": "hero-normal-1024",
+              "mimeType": "image/png",
+              "size": [
+                1024,
+                1024
+              ],
+              "bytes": 465649,
+              "sha256": "237da47af5a9a477e35983805bd6242440c6d95e3e0fb6132a66f1664b88b5dd"
+            },
+            {
+              "index": 1,
+              "name": "hero-orm-1024",
+              "mimeType": "image/png",
+              "size": [
+                1024,
+                1024
+              ],
+              "bytes": 403828,
+              "sha256": "5e2cac75f9bdb952a320b217e331afe778dd4ef3305c32676f93084f398bdd9b"
+            },
+            {
+              "index": 2,
+              "name": "hero-basecolor-1024",
+              "mimeType": "image/png",
+              "size": [
+                1024,
+                1024
+              ],
+              "bytes": 1044418,
+              "sha256": "cd97e383f9f3bbf0b91309be6e10283d28487b8ad5f8972e42a577ff1052e363"
+            }
+          ]
+        },
+        "errors": [],
+        "warnings": [
+          "Numeric acceptance does not prove anatomy, clothing clearance, identity continuity, motion, or visual quality."
+        ]
+      },
+      "visualStatus": "UNREVIEWED",
+      "productionAuthorized": false
+    },
+    {
+      "lod": "near",
+      "limit": 1900,
+      "presentationVariant": null,
+      "profile": null,
+      "output": {
+        "path": "$CIVILIAN_STAGE/candidate/outfits/civilian-f-03/near.glb",
+        "bytes": 640600,
+        "sha256": "3dcdf259066ba40c2eb4911d106524d20d3c6ede96b6e1da5b0495305fc5ef77"
+      },
+      "intermediate": {
+        "path": "$CIVILIAN_STAGE/candidate/outfits/civilian-f-03/near.source.glb",
+        "bytes": 650384,
+        "sha256": "c8c545975e63a8059fb68cc8ba4733a5d836b360945b06857f42c2fa51ab083f"
+      },
+      "reductions": [
+        {
+          "mesh": "EO02.Body.007.near",
+          "before": 74192,
+          "after": 1107,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.07572883367538452,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.Eyes.007.near",
+          "before": 2040,
+          "after": 91,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.0020286792423576117,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.Eyebrows.007.near",
+          "before": 192,
+          "after": 22,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.0014512452762573957,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.Eyelashes.007.near",
+          "before": 368,
+          "after": 23,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.0016274021472781897,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.Tongue.007.near",
+          "before": 448,
+          "after": 22,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.002562048379331827,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.Hair.007.near",
+          "before": 8800,
+          "after": 161,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.0022998356726020575,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.Sneakers.007.near",
+          "before": 12256,
+          "after": 183,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.006454865913838148,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.TeeShorts.near",
+          "before": 21952,
+          "after": 276,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.008494796231389046,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        }
+      ],
+      "omittedDetails": [
+        "EO02.Teeth.007"
+      ],
+      "numericVerification": {
+        "version": "civilian-asset-verifier-v1",
+        "ok": true,
+        "visualApproval": false,
+        "productionAuthorized": false,
+        "metrics": {
+          "lod": "near",
+          "triangles": 1885,
+          "vertices": 1417,
+          "primitives": 1,
+          "materials": 1,
+          "skinCount": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "maxWeightSumError": 4.470348358154297e-08,
+          "minWeight": 0,
+          "maxInfluences": 4,
+          "maxNormalLengthError": 4.08097400317331e-08,
+          "maxBindError": 5.7220459037665705e-08,
+          "maxRestErrorMetres": 1.3877787807814457e-17,
+          "min": [
+            -0.25667309761047363,
+            -0.006273582577705383,
+            -0.1315644383430481
+          ],
+          "max": [
+            0.25562548637390137,
+            1.75,
+            0.19263063371181488
+          ],
+          "uvMin": [
+            0.005439765751361847,
+            0.00390625
+          ],
+          "uvMax": [
+            0.9960936903953552,
+            0.9954070448875427
+          ],
+          "textures": [
+            {
+              "index": 0,
+              "name": "near-normal-512",
+              "mimeType": "image/png",
+              "size": [
+                512,
+                512
+              ],
+              "bytes": 130886,
+              "sha256": "1c93205c3909c46da5f30e49190259fea51ec05eac21f4e122bff2fe741ffea4"
+            },
+            {
+              "index": 1,
+              "name": "near-orm-512",
+              "mimeType": "image/png",
+              "size": [
+                512,
+                512
+              ],
+              "bytes": 123032,
+              "sha256": "be310bd889ffeafec6bab32880fb737f188bd27ccbf85f16d2a23d4a655cd44d"
+            },
+            {
+              "index": 2,
+              "name": "near-basecolor-512",
+              "mimeType": "image/png",
+              "size": [
+                512,
+                512
+              ],
+              "bytes": 290619,
+              "sha256": "ca6d229d6befa6ae4fd636b778d810f5926ff16bbd025db588ff8004d6f62dac"
+            }
+          ]
+        },
+        "errors": [],
+        "warnings": [
+          "Numeric acceptance does not prove anatomy, clothing clearance, identity continuity, motion, or visual quality."
+        ]
+      },
+      "visualStatus": "UNREVIEWED",
+      "productionAuthorized": false
+    },
+    {
+      "lod": "mid",
+      "limit": 360,
+      "presentationVariant": null,
+      "profile": null,
+      "output": {
+        "path": "$CIVILIAN_STAGE/candidate/outfits/civilian-f-03/mid.glb",
+        "bytes": 202100,
+        "sha256": "6fe302da9a427b1505fdcc3e54555fea0e18f101d6c6650ce3a39e2f2449cfae"
+      },
+      "intermediate": {
+        "path": "$CIVILIAN_STAGE/candidate/outfits/civilian-f-03/mid.source.glb",
+        "bytes": 211876,
+        "sha256": "612d0dae08e297ba947cd047d1d233524832acf19bab359f0819b23afc7c964b"
+      },
+      "reductions": [
+        {
+          "mesh": "EO02.Body.007.mid",
+          "before": 74192,
+          "after": 214,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.07572883367538452,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.Eyes.007.mid",
+          "before": 2040,
+          "after": 16,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.0060190968215465546,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.Hair.007.mid",
+          "before": 8800,
+          "after": 30,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.00985843874514103,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.Sneakers.007.mid",
+          "before": 12256,
+          "after": 35,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.022073039785027504,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.TeeShorts.mid",
+          "before": 21952,
+          "after": 53,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.030393213033676147,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        }
+      ],
+      "omittedDetails": [
+        "EO02.Eyebrows.007",
+        "EO02.Eyelashes.007",
+        "EO02.Teeth.007",
+        "EO02.Tongue.007"
+      ],
+      "numericVerification": {
+        "version": "civilian-asset-verifier-v1",
+        "ok": true,
+        "visualApproval": false,
+        "productionAuthorized": false,
+        "metrics": {
+          "lod": "mid",
+          "triangles": 348,
+          "vertices": 379,
+          "primitives": 1,
+          "materials": 1,
+          "skinCount": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "maxWeightSumError": 3.91155481338501e-08,
+          "minWeight": 0,
+          "maxInfluences": 4,
+          "maxNormalLengthError": 4.189361346718101e-08,
+          "maxBindError": 5.7220459037665705e-08,
+          "maxRestErrorMetres": 1.3877787807814457e-17,
+          "min": [
+            -0.25204232335090637,
+            -0.0076314895413815975,
+            -0.13449439406394958
+          ],
+          "max": [
+            0.25589168071746826,
+            1.75,
+            0.19613464176654816
+          ],
+          "uvMin": [
+            0.007453425787389278,
+            0.013011693954467773
+          ],
+          "uvMax": [
+            0.99332594871521,
+            0.9915433526039124
+          ],
+          "textures": [
+            {
+              "index": 0,
+              "name": "mid-normal-256",
+              "mimeType": "image/png",
+              "size": [
+                256,
+                256
+              ],
+              "bytes": 39195,
+              "sha256": "1822599cae45673e2601f41233c224d6accaf7cc42b971af14cdb01e20cce3a4"
+            },
+            {
+              "index": 1,
+              "name": "mid-orm-256",
+              "mimeType": "image/png",
+              "size": [
+                256,
+                256
+              ],
+              "bytes": 44946,
+              "sha256": "171c0bb939f914a97e3a04fa90bea4e2d6824cee745330db9d1e222beb955568"
+            },
+            {
+              "index": 2,
+              "name": "mid-basecolor-256",
+              "mimeType": "image/png",
+              "size": [
+                256,
+                256
+              ],
+              "bytes": 85112,
+              "sha256": "ade4418c7208d79417cd65f4a67a1225e57cd857283b3f803cd5004bee730455"
+            }
+          ]
+        },
+        "errors": [],
+        "warnings": [
+          "Numeric acceptance does not prove anatomy, clothing clearance, identity continuity, motion, or visual quality."
+        ]
+      },
+      "visualStatus": "UNREVIEWED",
+      "productionAuthorized": false
+    },
+    {
+      "lod": "far",
+      "limit": 128,
+      "presentationVariant": null,
+      "profile": null,
+      "output": {
+        "path": "$CIVILIAN_STAGE/candidate/outfits/civilian-f-03/far.glb",
+        "bytes": 76288,
+        "sha256": "ed5fd6d8b175ccba4d61c2b602a86c6ddaa9699db0c287de7a24233da40a2206"
+      },
+      "intermediate": {
+        "path": "$CIVILIAN_STAGE/candidate/outfits/civilian-f-03/far.source.glb",
+        "bytes": 86072,
+        "sha256": "25f1ce512cb68b2fedadfa21f541af86c12ca6f30f28da98948af1faac57e3ee"
+      },
+      "reductions": [
+        {
+          "mesh": "EO02.Body.007.far",
+          "before": 74192,
+          "after": 74,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.07572883367538452,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.Eyes.007.far",
+          "before": 2040,
+          "after": 6,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.0074234697967767715,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.Hair.007.far",
+          "before": 8800,
+          "after": 10,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.012572496198117733,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.Sneakers.007.far",
+          "before": 12256,
+          "after": 11,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.06385248899459839,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        },
+        {
+          "mesh": "EO02.TeeShorts.far",
+          "before": 21952,
+          "after": 18,
+          "reduced": true,
+          "faceHandsGuard": false,
+          "facialTopologyProtection": null,
+          "maxFaceProjectionDistanceObjectUnits": 0,
+          "neckSurfaceAudit": null,
+          "maxSourceSurfaceDistanceObjectUnits": 0.04172864928841591,
+          "morphTransfer": "source triangle barycentric deltas",
+          "visualStatus": "UNREVIEWED"
+        }
+      ],
+      "omittedDetails": [
+        "EO02.Eyebrows.007",
+        "EO02.Eyelashes.007",
+        "EO02.Teeth.007",
+        "EO02.Tongue.007"
+      ],
+      "numericVerification": {
+        "version": "civilian-asset-verifier-v1",
+        "ok": true,
+        "visualApproval": false,
+        "productionAuthorized": false,
+        "metrics": {
+          "lod": "far",
+          "triangles": 119,
+          "vertices": 163,
+          "primitives": 1,
+          "materials": 1,
+          "skinCount": 1,
+          "joints": 56,
+          "morphTargets": 0,
+          "maxWeightSumError": 3.166496753692627e-08,
+          "minWeight": 0,
+          "maxInfluences": 4,
+          "maxNormalLengthError": 3.6422522775581e-08,
+          "maxBindError": 5.7220459037665705e-08,
+          "maxRestErrorMetres": 1.3877787807814457e-17,
+          "min": [
+            -0.24356912076473236,
+            0.0019504539668560028,
+            -0.10662349313497543
+          ],
+          "max": [
+            0.2408265322446823,
+            1.75,
+            0.21631374955177307
+          ],
+          "uvMin": [
+            0.011267786845564842,
+            0.013011693954467773
+          ],
+          "uvMax": [
+            0.9925288558006287,
+            0.986624002456665
+          ],
+          "textures": [
+            {
+              "index": 0,
+              "name": "far-normal-128",
+              "mimeType": "image/png",
+              "size": [
+                128,
+                128
+              ],
+              "bytes": 12125,
+              "sha256": "1b54939363c0d068906282b8906837af1f773063b7f8e26cd864bfcd9d59621c"
+            },
+            {
+              "index": 1,
+              "name": "far-orm-128",
+              "mimeType": "image/png",
+              "size": [
+                128,
+                128
+              ],
+              "bytes": 17414,
+              "sha256": "efc9a380381e6807dd60a26effe444e5a6e6b54f7ee32509e8baf1c8904c0c49"
+            },
+            {
+              "index": 2,
+              "name": "far-basecolor-128",
+              "mimeType": "image/png",
+              "size": [
+                128,
+                128
+              ],
+              "bytes": 26514,
+              "sha256": "59e58fce58659f57e6f10a8d84610aadac92201b8ec97fec4d1bec9e380b5a5e"
+            }
+          ]
+        },
+        "errors": [],
+        "warnings": [
+          "Numeric acceptance does not prove anatomy, clothing clearance, identity continuity, motion, or visual quality."
+        ]
+      },
+      "visualStatus": "UNREVIEWED",
+      "productionAuthorized": false
+    }
+  ],
+  "limitations": [
+    "Candidate only. Numeric checks cannot approve anatomy, likeness, garment clearance, or animation quality.",
+    "Decimated LODs require visual inspection at their intended distance; a budget pass is not a visual pass.",
+    "Packed ORM contains geometric AO (0.06 m rays, strength 0.65), source roughness, metallic and glTF specular weight in alpha."
+  ],
+  "closeGeometryCage": {
+    "name": "EO02.Body.007.AuthoredCage",
+    "role": "body",
+    "sourceTriangles": 36972,
+    "evaluatedTriangles": 18548,
+    "vertices": 9413,
+    "morphs": [
+      "jawOpen",
+      "mouthSmileLeft",
+      "mouthSmileRight",
+      "mouthFrownLeft",
+      "mouthFrownRight",
+      "browInnerUp",
+      "browDownLeft",
+      "browDownRight",
+      "eyeBlinkLeft",
+      "eyeBlinkRight",
+      "eyeWideLeft",
+      "eyeWideRight",
+      "cheekPuff",
+      "viseme_aa",
+      "viseme_PP",
+      "viseme_O"
+    ]
+  },
+  "evaluatedSource": [
+    {
+      "name": "EO02.Body.007",
+      "role": "body",
+      "sourceTriangles": 36972,
+      "evaluatedTriangles": 74192,
+      "vertices": 37373,
+      "morphs": [
+        "jawOpen",
+        "mouthSmileLeft",
+        "mouthSmileRight",
+        "mouthFrownLeft",
+        "mouthFrownRight",
+        "browInnerUp",
+        "browDownLeft",
+        "browDownRight",
+        "eyeBlinkLeft",
+        "eyeBlinkRight",
+        "eyeWideLeft",
+        "eyeWideRight",
+        "cheekPuff",
+        "viseme_aa",
+        "viseme_PP",
+        "viseme_O"
+      ]
+    },
+    {
+      "name": "EO02.Eyes.007",
+      "role": "eyes",
+      "sourceTriangles": 2040,
+      "evaluatedTriangles": 2040,
+      "vertices": 1064,
+      "morphs": []
+    },
+    {
+      "name": "EO02.Eyebrows.007",
+      "role": "brows",
+      "sourceTriangles": 192,
+      "evaluatedTriangles": 192,
+      "vertices": 124,
+      "morphs": [
+        "jawOpen",
+        "mouthSmileLeft",
+        "mouthSmileRight",
+        "browInnerUp",
+        "browDownLeft",
+        "browDownRight",
+        "eyeBlinkLeft",
+        "eyeBlinkRight",
+        "eyeWideLeft",
+        "eyeWideRight",
+        "cheekPuff",
+        "viseme_aa"
+      ]
+    },
+    {
+      "name": "EO02.Eyelashes.007",
+      "role": "lashes",
+      "sourceTriangles": 368,
+      "evaluatedTriangles": 368,
+      "vertices": 250,
+      "morphs": [
+        "mouthSmileLeft",
+        "mouthSmileRight",
+        "browDownLeft",
+        "browDownRight",
+        "eyeBlinkLeft",
+        "eyeBlinkRight",
+        "eyeWideLeft",
+        "eyeWideRight",
+        "cheekPuff"
+      ]
+    },
+    {
+      "name": "EO02.Teeth.007",
+      "role": "teeth",
+      "sourceTriangles": 7120,
+      "evaluatedTriangles": 7120,
+      "vertices": 3868,
+      "morphs": [
+        "jawOpen",
+        "viseme_aa",
+        "viseme_PP",
+        "viseme_O"
+      ]
+    },
+    {
+      "name": "EO02.Tongue.007",
+      "role": "accessory",
+      "sourceTriangles": 448,
+      "evaluatedTriangles": 448,
+      "vertices": 226,
+      "morphs": [
+        "jawOpen",
+        "viseme_aa",
+        "viseme_PP",
+        "viseme_O"
+      ]
+    },
+    {
+      "name": "EO02.Hair.007",
+      "role": "hair",
+      "sourceTriangles": 2200,
+      "evaluatedTriangles": 8800,
+      "vertices": 4475,
+      "morphs": [
+        "jawOpen",
+        "mouthSmileLeft",
+        "mouthSmileRight",
+        "mouthFrownLeft",
+        "mouthFrownRight",
+        "browDownLeft",
+        "browDownRight",
+        "cheekPuff",
+        "viseme_aa",
+        "viseme_PP",
+        "viseme_O"
+      ]
+    },
+    {
+      "name": "EO02.Sneakers.007",
+      "role": "shoes",
+      "sourceTriangles": 3064,
+      "evaluatedTriangles": 12256,
+      "vertices": 6250,
+      "morphs": []
+    },
+    {
+      "name": "EO02.TeeShorts",
+      "role": "top",
+      "sourceTriangles": 5488,
+      "evaluatedTriangles": 21952,
+      "vertices": 11246,
+      "morphs": []
+    }
+  ],
+  "atlas": {
+    "size": 2048,
+    "sourceMaterials": [
+      {
+        "material": "EO02.Skin.PBR.007",
+        "role": "body",
+        "weight": 8,
+        "sourceImages": [
+          {
+            "name": "young_lightskinned_female_diffuse.png",
+            "size": [
+              2048,
+              2048
+            ],
+            "colorSpace": "sRGB",
+            "decodedPixelsSha256": "a2e42d0fe4c15128ca142142093c257c293cd2f876991b99c80f8181a0753cec"
+          }
+        ],
+        "roughness": 0.550000011920929,
+        "metallic": 0.0,
+        "specularIorLevel": 0.2199999988079071,
+        "tile": [
+          1177,
+          443,
+          871,
+          443
+        ],
+        "sourceUvBounds": [
+          0.00920800119638443,
+          0.01105399988591671,
+          0.7630011439323425,
+          0.958299994468689
+        ]
+      },
+      {
+        "material": "EO02.Face.PBR.007",
+        "role": "body",
+        "weight": 36,
+        "sourceImages": [
+          {
+            "name": "young_lightskinned_female_diffuse.png",
+            "size": [
+              2048,
+              2048
+            ],
+            "colorSpace": "sRGB",
+            "decodedPixelsSha256": "a2e42d0fe4c15128ca142142093c257c293cd2f876991b99c80f8181a0753cec"
+          }
+        ],
+        "roughness": 0.550000011920929,
+        "metallic": 0.0,
+        "specularIorLevel": 0.2199999988079071,
+        "tile": [
+          0,
+          0,
+          1177,
+          1475
+        ],
+        "sourceUvBounds": [
+          0.011808999814093113,
+          0.011863001622259617,
+          0.9935150146484375,
+          0.9738560914993286
+        ]
+      },
+      {
+        "material": "EO02.BrownEyes.PBR.007",
+        "role": "eyes",
+        "weight": 6,
+        "sourceImages": [
+          {
+            "name": "brown_eye.png.017",
+            "size": [
+              1024,
+              1024
+            ],
+            "colorSpace": "sRGB",
+            "decodedPixelsSha256": "156cd4437da48926d655a4bcc93ed26675793c26996c685c89732598a19330dd"
+          }
+        ],
+        "roughness": 0.12999999523162842,
+        "metallic": 0.0,
+        "specularIorLevel": 0.3199999928474426,
+        "tile": [
+          1177,
+          1329,
+          402,
+          719
+        ],
+        "sourceUvBounds": [
+          0.03620000183582306,
+          0.010999999940395355,
+          0.991100013256073,
+          0.9763000011444092
+        ]
+      },
+      {
+        "material": "EO02.Brows.PBR.007",
+        "role": "brows",
+        "weight": 2,
+        "sourceImages": [
+          {
+            "name": "civilian-brows-v1.png.009",
+            "size": [
+              1254,
+              1254
+            ],
+            "colorSpace": "sRGB",
+            "decodedPixelsSha256": "3446b279df7b027ce9d46af856bd4b9410506f5654d424b8a3d3ba47a81ed508"
+          }
+        ],
+        "roughness": 0.9200000166893005,
+        "metallic": 0.0,
+        "specularIorLevel": 0.019999999552965164,
+        "tile": [
+          1579,
+          1329,
+          234,
+          411
+        ],
+        "sourceUvBounds": [
+          0.011900000274181366,
+          0.03550000116229057,
+          0.9830999970436096,
+          0.7822999954223633
+        ]
+      },
+      {
+        "material": "EO02.Lashes.PBR.007",
+        "role": "lashes",
+        "weight": 1,
+        "sourceImages": [
+          {
+            "name": "eyelashes01.png.015",
+            "size": [
+              512,
+              512
+            ],
+            "colorSpace": "sRGB",
+            "decodedPixelsSha256": "9cf36fefe307e955313d43d8e9054c5392cc8591274bf968e69a621fc9ecae08"
+          }
+        ],
+        "roughness": 0.6600000262260437,
+        "metallic": 0.0,
+        "specularIorLevel": 0.3199999928474426,
+        "tile": [
+          1892,
+          1740,
+          156,
+          308
+        ],
+        "sourceUvBounds": [
+          0.06547699868679047,
+          0.029293999075889587,
+          0.9770050048828125,
+          0.9627190232276917
+        ]
+      },
+      {
+        "material": "EO02.teeth_base.007",
+        "role": "teeth",
+        "weight": 2,
+        "sourceImages": [
+          {
+            "name": "teeth.png.011",
+            "size": [
+              2048,
+              2048
+            ],
+            "colorSpace": "sRGB",
+            "decodedPixelsSha256": "36bdda4df82c48a63cfae6c6eea61576f796bb8b69c8ad8b7b3274b1f1184226"
+          }
+        ],
+        "roughness": 0.699999988079071,
+        "metallic": 0.0,
+        "specularIorLevel": 0.5,
+        "tile": [
+          1813,
+          1329,
+          235,
+          411
+        ],
+        "sourceUvBounds": [
+          0.006899999920278788,
+          0.006899999920278788,
+          0.9800000190734863,
+          0.9930999875068665
+        ]
+      },
+      {
+        "material": "EO02.tongue01.007",
+        "role": "accessory",
+        "weight": 2,
+        "sourceImages": [
+          {
+            "name": "tongue01_diffuse.png.011",
+            "size": [
+              1024,
+              1024
+            ],
+            "colorSpace": "sRGB",
+            "decodedPixelsSha256": "7bc9ef8a0e4d7c1ddb46bbab981d8785fb0a0e10b6dbb48ff68acda42312c1a9"
+          }
+        ],
+        "roughness": 0.699999988079071,
+        "metallic": 0.0,
+        "specularIorLevel": 0.5,
+        "tile": [
+          1579,
+          1740,
+          313,
+          308
+        ],
+        "sourceUvBounds": [
+          0.02889999933540821,
+          0.029400000348687172,
+          0.96670001745224,
+          0.967199981212616
+        ]
+      },
+      {
+        "material": "EO02.RefinedHairCap.PBR.006",
+        "role": "hair",
+        "weight": 8,
+        "sourceImages": [
+          {
+            "name": "civilian-hair-cap-v1.png.012",
+            "size": [
+              1254,
+              1254
+            ],
+            "colorSpace": "sRGB",
+            "decodedPixelsSha256": "d91a71fcf496bb97046427d246212bce0f25c52fea5c5ece8ad78de5bf06bec5"
+          }
+        ],
+        "roughness": 0.9200000166893005,
+        "metallic": 0.0,
+        "specularIorLevel": 0.019999999552965164,
+        "tile": [
+          1177,
+          0,
+          871,
+          443
+        ],
+        "sourceUvBounds": [
+          0.019100001081824303,
+          0.03070000372827053,
+          0.6994000673294067,
+          0.9190000295639038
+        ]
+      },
+      {
+        "material": "EO02.Sneakers.PBR.007",
+        "role": "shoes",
+        "weight": 8,
+        "sourceImages": [
+          {
+            "name": "shoes05_diffuse.png.017",
+            "size": [
+              1024,
+              1024
+            ],
+            "colorSpace": "sRGB",
+            "decodedPixelsSha256": "13cd64d6e4f495b3f832e95ad9ed4baefc30d76001d63e81eb2a2063c7381664"
+          }
+        ],
+        "roughness": 0.6499999761581421,
+        "metallic": 0.0,
+        "specularIorLevel": 0.2800000011920929,
+        "tile": [
+          1177,
+          886,
+          871,
+          443
+        ],
+        "sourceUvBounds": [
+          0.03670000284910202,
+          0.002199999988079071,
+          0.9980001449584961,
+          0.98089998960495
+        ]
+      },
+      {
+        "material": "EO02.TeeShorts.PBR",
+        "role": "top",
+        "weight": 14,
+        "sourceImages": [
+          {
+            "name": "female_casualsuit02_diffuse.png",
+            "size": [
+              2048,
+              2048
+            ],
+            "colorSpace": "sRGB",
+            "decodedPixelsSha256": "109bf68c58f5f344b2faa11223da23beb7785281262d3558c340090e5c5bc38e"
+          },
+          {
+            "name": "female_casualsuit02_normal.png",
+            "size": [
+              4096,
+              4096
+            ],
+            "colorSpace": "Non-Color",
+            "decodedPixelsSha256": "6602a0f4689dd33301a9d17c8569bc981d8fe7ab8132937b5af4a62fdead7bd3"
+          }
+        ],
+        "roughness": 0.7799999713897705,
+        "metallic": 0.0,
+        "specularIorLevel": 0.2800000011920929,
+        "tile": [
+          0,
+          1475,
+          1177,
+          573
+        ],
+        "sourceUvBounds": [
+          0.02449999935925007,
+          0.015799999237060547,
+          0.9867001175880432,
+          0.9557000994682312
+        ]
+      }
+    ],
+    "images": {
+      "basecolor": {
+        "path": "$CIVILIAN_STAGE/candidate/outfits/civilian-f-03/basecolor-2048.png",
+        "bytes": 3822950,
+        "sha256": "24f4a040c513c587bbf6a56250c9f5f5f6c91ea02aff4ee6f4b72c34a460bf10",
+        "size": [
+          2048,
+          2048
+        ],
+        "colorSpace": "sRGB"
+      },
+      "orm": {
+        "path": "$CIVILIAN_STAGE/candidate/outfits/civilian-f-03/orm-2048.png",
+        "bytes": 1235990,
+        "sha256": "0dc2d61245e611e3402dd87bd2645fa8b8c809095603ae3355e5e48619354730",
+        "size": [
+          2048,
+          2048
+        ],
+        "colorSpace": "Non-Color"
+      },
+      "normal": {
+        "path": "$CIVILIAN_STAGE/candidate/outfits/civilian-f-03/normal-2048.png",
+        "bytes": 1791699,
+        "sha256": "6745cba8e1c14a80038766cd803ab2caf44121d512d64385b06dc3d66bb70a34",
+        "size": [
+          2048,
+          2048
+        ],
+        "colorSpace": "Non-Color"
+      }
+    },
+    "encoding": "linear-bake-srgb-byte-v1",
+    "layout": "visible-material-uv-bounds-v2",
+    "materialContract": "civilian-pbr-orm-specular-v1",
+    "method": "Cycles emission channel and tangent normal baking from original shader graph",
+    "ao": {
+      "mode": "geometric",
+      "rayDistanceMetres": 0.06,
+      "strength": 0.65
+    }
+  }
+}

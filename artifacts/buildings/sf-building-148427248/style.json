@@ -1,0 +1,72 @@
+{
+ "seed": 7,
+ "notes": "Round 2: modern pharmacy/market box (data footprint at the street; the photo shows an open parking-lot entrance with the store set far back under a swept canopy). Plain light-grey flat-roofed volume, no historic cornice, no street shop glazing; red sign band under a deep flat grey canopy that cantilevers forward; one entrance. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. Base fix (2026-10-03): cool/grey wallTint = target / painted-stucco base so the warm stucco albedo does not turn it pink. Rework r5 lane2: glazed shop front under a flat canopy (parking lot in front, store set back); no garage/punched windows; red limited to a narrow fascia; flat roof.",
+ "wall": "painted-stucco",
+ "wallTint": "#ffffff",
+ "trim": "painted-white@c6c8c9",
+ "frame": "painted-white@5a5a58",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-steel@4a4a48",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "painted-stucco@d4d1cc",
+ "cornice": false,
+ "corniceProjectionM": 0.3,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "streetStills": true,
+ "storefront": {
+  "bulkheadM": 0.35,
+  "transomM": 0.6,
+  "pierM": 0.45,
+  "awning": false,
+  "headDropM": 2.5,
+  "layout": [
+   {
+    "from": 0.03,
+    "to": 0.45,
+    "kind": "window",
+    "headM": 6.2
+   },
+   {
+    "from": 0.47,
+    "to": 0.55,
+    "kind": "double-door",
+    "headM": 3.2
+   },
+   {
+    "from": 0.57,
+    "to": 0.97,
+    "kind": "window",
+    "headM": 6.2
+   }
+  ]
+ },
+ "signBands": [
+  {
+   "from": 0.04,
+   "to": 0.96,
+   "material": "painted-white",
+   "tint": "#b0282b",
+   "heightM": 0.5,
+   "bottomM": 7.3,
+   "projectionM": 0.1
+  }
+ ],
+ "ground": "shop",
+ "upper": "office",
+ "awning": "painted-white@dfe1e2",
+ "awningSpans": [
+  {
+   "from": 0.0,
+   "to": 1.0,
+   "profile": "box",
+   "depthM": 3.2,
+   "riseM": 0.05,
+   "dropM": 0.0
+  }
+ ]
+}

@@ -1,0 +1,185 @@
+{
+  "kind": "blender-building-spec",
+  "version": 1,
+  "id": "sf-building-30105983",
+  "slug": "b30105983",
+  "walkIndex": 109,
+  "street": "Columbus Avenue",
+  "address": null,
+  "source": {
+    "footprint": "DataSF building footprints (via public/data/sf/sf-city.json)",
+    "height": "DataSF LiDAR",
+    "storeys": "street count 4 (style storeysSeen) overrides Assessor roll (assessor) 3"
+  },
+  "storeysRoll": 3,
+  "heightM": 12.42,
+  "storeys": 4,
+  "floors": {
+    "groundM": 3.7,
+    "upperM": 2.85,
+    "roofM": 0.17
+  },
+  "yearBuilt": 1907,
+  "use": "MRES",
+  "usage": "mixed",
+  "amenity": "cafe",
+  "shop": null,
+  "facade": "bay-window",
+  "material": "clapboard",
+  "frame": {
+    "edgeIndex": 6,
+    "center": {
+      "x": 849.819,
+      "z": 2394.098
+    },
+    "heading": 0.712468,
+    "width": 62.108,
+    "depth": 31.456
+  },
+  "frameMirrored": true,
+  "polygonWinding": "ccw",
+  "polygon": [
+    {
+      "x": 31.054,
+      "z": 15.728
+    },
+    {
+      "x": 5.501,
+      "z": -15.728
+    },
+    {
+      "x": -6.84,
+      "z": -5.113
+    },
+    {
+      "x": 1.453,
+      "z": 4.561
+    },
+    {
+      "x": -1.888,
+      "z": 7.358
+    },
+    {
+      "x": -10.105,
+      "z": -2.251
+    },
+    {
+      "x": -31.054,
+      "z": 15.728
+    }
+  ],
+  "edges": [
+    {
+      "index": 0,
+      "a": {
+        "x": 31.054,
+        "z": 15.728
+      },
+      "b": {
+        "x": 5.501,
+        "z": -15.728
+      },
+      "lengthM": 40.527,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 1,
+      "a": {
+        "x": 5.501,
+        "z": -15.728
+      },
+      "b": {
+        "x": -6.84,
+        "z": -5.113
+      },
+      "lengthM": 16.278,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 2,
+      "a": {
+        "x": -6.84,
+        "z": -5.113
+      },
+      "b": {
+        "x": 1.453,
+        "z": 4.561
+      },
+      "lengthM": 12.742,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 3,
+      "a": {
+        "x": 1.453,
+        "z": 4.561
+      },
+      "b": {
+        "x": -1.888,
+        "z": 7.358
+      },
+      "lengthM": 4.357,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 4,
+      "a": {
+        "x": -1.888,
+        "z": 7.358
+      },
+      "b": {
+        "x": -10.105,
+        "z": -2.251
+      },
+      "lengthM": 12.644,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 5,
+      "a": {
+        "x": -10.105,
+        "z": -2.251
+      },
+      "b": {
+        "x": -31.054,
+        "z": 15.728
+      },
+      "lengthM": 27.606,
+      "role": "rear",
+      "partyShare": 0
+    },
+    {
+      "index": 6,
+      "a": {
+        "x": -31.054,
+        "z": 15.728
+      },
+      "b": {
+        "x": 31.054,
+        "z": 15.728
+      },
+      "lengthM": 62.108,
+      "role": "front",
+      "partyShare": 0
+    }
+  ],
+  "edgeOrder": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "doorAlong": 0.5,
+  "lonLat": {
+    "lat": 37.778,
+    "note": "lat/lon are derived from dataset centroid + meta.center; see manifest notes"
+  }
+}

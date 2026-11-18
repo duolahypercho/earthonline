@@ -1,0 +1,28 @@
+sf-elevation.bin.gz - San Francisco ground and seabed elevation, 8 m grid, NAVD88
+
+Ground: USGS 3D Elevation Program (3DEP) 1 meter DEM
+  U.S. Geological Survey, 3D Elevation Program. Public domain (U.S. Government work).
+  https://www.usgs.gov/3d-elevation-program
+  USGS_1M_10_x54y418_CA_SanFrancisco_B23.tif  sha256 ff3afb13eb3bc64996aa3318825efef82b34ead35ad4c8342b7136e04ca4d07f (primary)
+  USGS_1M_10_x54y419_CA_SanFrancisco_B23.tif  sha256 34ade3c7249f61ac8d8eaf7973f67c9e5c3304ec9d4500dcb79d11b332cb9957 (primary)
+  USGS_1M_10_x55y418_CA_SanFrancisco_B23.tif  sha256 a7bdf929446234f06642452bb43600cc650e93ccf8713d6f479becf848c69781 (primary)
+  USGS_1M_10_x55y419_CA_SanFrancisco_B23.tif  sha256 9cc9c03f4ddaf8ec6712951b980157ea02293c7723761466e6e60f21147a9424 (primary)
+  USGS_1M_10_x54y418_CA_CaliforniaGaps_B23.tif  sha256 80e0f3dcb177f5749454eda17b66b6e890834f788c2f53fbe5bdbc5812b3d75a (gap-fill)
+  USGS_1M_10_x55y418_CA_CaliforniaGaps_B23.tif  sha256 fc84e32680626ec372b7615aaece93fef483b2614a412ffcb71930b0de72c645 (gap-fill)
+
+Seabed: NOAA NCEI Continuously Updated Digital Elevation Model (CUDEM), 1/9 arc-second topobathymetric tiles
+  Cite as: Cooperative Institute for Research in Environmental Sciences (CIRES) at the University of Colorado, Boulder. 2014: Continuously Updated Digital Elevation Model (CUDEM) - 1/9 Arc-Second Resolution Bathymetric-Topographic Tiles. NOAA National Centers for Environmental Information. https://doi.org/10.25921/ds9v-ky35
+  Public domain (U.S. Government work; not subject to copyright protection within the United States).
+  Not to be used for navigation. NOAA and NCEI give no warranty as to the
+  accuracy, reliability or completeness of these data, and do not endorse
+  this product.
+  Vertical status: NAVD88 as delivered by NCEI from surveys transformed with VDatum; accuracy varies by source survey; not for navigation; provisional, not certified.
+  ncei19_n37x75_w122x50_2022v1.tif  sha256 97fb7f85d11c9722dc21e7010e1980a99a945739783a27f48c6c6037851323be
+  ncei19_n37x75_w122x75_2022v1.tif  sha256 c79eada19053a6b0dbb3ef1a90b1a776e8e921cc6da3684d73831775680dd7db
+  ncei19_n38x00_w122x50_2022v1.tif  sha256 fb1cdf1ac43801fc4d4eb0e380f0e67a20e281c0520dff4a81d87567ab4c35b8
+  ncei19_n38x00_w122x75_2022v1.tif  sha256 6ffe0ae75fb9634d18bdffcb2dffa61834b630089905acd32908c5aa43f4d2a4
+
+Merge: lidar wherever it has ground; topobathy in cells the lidar leaves empty or holds as a hydro-flattened sea surface; the runtime sampler reads topobathy only where no bilinear neighbour is lidar ground.
+Hydro-flattened sea surface: 145566 cells over a CUDEM bed.
+Produced by:   scripts/build-sf-elevation.mjs (sf-elevation-3dep-cudem-v2)
+Output sha256: 0781798a1b3241ceba84664b53e348cac09ea578f25e48ddd5559d4258cae021 (sf-elevation.bin.gz)

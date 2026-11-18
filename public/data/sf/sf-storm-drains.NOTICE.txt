@@ -1,0 +1,16 @@
+sf-storm-drains.json.gz - San Francisco street storm drains
+
+Source: DataSF "Stormwater inlets, drains and catch basins" (jtgq-b7c5),
+maintained by the San Francisco Public Utilities Commission.
+License: Open Data Commons Public Domain Dedication and License (PDDL) 1.0
+         http://opendatacommons.org/licenses/pddl/1.0/
+Retrieved: 2026-09-28T07:23:21.776Z from https://data.sf.gov/resource/jtgq-b7c5.json?$select=location,drain_type&$limit=50000
+Produced by:   scripts/build-sf-storm-drains.mjs (sf-storm-drains-v1)
+Output sha256: 9c318caa02858963ac14154f1bf604bfb60283d237fd0c90d2532e48784e6fb3 (sf-storm-drains.json.gz)
+
+Kept: drains that sit in a street gutter (23118 of 23845 rows):
+  catch-basin  23009
+  curb-inlet   54
+  square-curb  30
+  rect-grate   25
+Only the location and a drawn kind are carried; no asset ids.

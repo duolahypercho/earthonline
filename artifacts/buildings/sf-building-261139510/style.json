@@ -1,0 +1,124 @@
+{
+ "seed": 7,
+ "notes": "Round 2: 1914 three-storey flats, 6.7 m front. Darker sage-olive stucco with cream frames over rock-faced grey-green stone; segmental arched window with grille, small window, arched gated door; red/green painted belt over the stone; light fire escape across the bay. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game.",
+ "wall": "painted-stucco",
+ "wallTint": "#93a18a",
+ "trim": "painted-white@e8e0c8",
+ "frame": "painted-white@e8e0c8",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@562f2a",
+ "storefrontGlass": "glass-storefront",
+ "bulkhead": "limestone-ashlar@7f8a7c",
+ "cornice": true,
+ "corniceProjectionM": 0.5,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.85,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.35,
+ "upperWindows": [],
+ "streetStills": true,
+ "groundBand": {
+  "material": "limestone-ashlar",
+  "tint": "#7f8a7c",
+  "topM": 5.15
+ },
+ "bays": [
+  {
+   "at": 0.5,
+   "widthM": 3.4,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-white",
+   "tint": "#93a18a",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 2,
+     "sides": 1
+    },
+    "sideRunM": 0.5,
+    "marginM": 0.15,
+    "cornice": {
+     "projectionM": 0.2,
+     "dentils": false,
+     "roofRiseM": 0.12
+    },
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 3,
+     "dropM": 0.4
+    }
+   }
+  }
+ ],
+ "fireEscape": {
+  "at": 0.5,
+  "widthM": 2.7,
+  "depthM": 0.9,
+  "standoffM": 0.3,
+  "ladder": true,
+  "material": "painted-white@d2d2cc",
+  "roofLadder": true,
+  "braces": true
+ },
+ "storefront": {
+  "bulkheadM": 0.5,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.01,
+    "to": 0.09,
+    "kind": "gate",
+    "headM": 2.4
+   },
+   {
+    "from": 0.1,
+    "to": 0.41,
+    "kind": "window",
+    "headM": 2.5,
+    "arch": {
+     "type": "segmental",
+     "surround": {
+      "widthM": 0.16,
+      "projectionM": 0.06,
+      "tint": "#e8e0c8"
+     }
+    }
+   },
+   {
+    "from": 0.51,
+    "to": 0.59,
+    "kind": "window",
+    "headM": 1.9
+   },
+   {
+    "from": 0.7,
+    "to": 0.99,
+    "kind": "door",
+    "headM": 3.0,
+    "arch": {
+     "type": "segmental",
+     "surround": {
+      "widthM": 0.16,
+      "projectionM": 0.06,
+      "tint": "#e8e0c8"
+     }
+    }
+   }
+  ]
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "hyDRubble": {
+  "toM": 5.15,
+  "courseM": 0.3,
+  "blockM": 0.6,
+  "projM": 0.045,
+  "shade": 0.62,
+  "seed": 3
+ }
+}

@@ -1,0 +1,70 @@
+{
+  "seed": 1,
+  "notes": "Round 16 (lane GS): new building on the NE part of the 1925 workshop parcel (DataSF footprint, second part of the parcel whose SW part is 173886683; added via the footprint supplement). Continues 173886683's face as the photos show (t22S, t50S): flat mid blue-grey painted wall under the same deep navy fascia; a white-framed glazed sectional garage door, a glazed door and shop glass; a dark ribbon window upstairs over the SW half. Round 23 (t22S/t50S): opaque dark reflective glass so no lit interior shows behind upper or shop panes.",
+  "wall": "painted-stucco",
+  "wallTint": "#8e9cb4",
+  "trim": "painted-steel-mid",
+  "cornice": false,
+  "beltCourse": false,
+  "windowHoods": false,
+  "fascia": {
+    "heightM": 1.55,
+    "projectionM": 0.25,
+    "material": "painted-steel-light",
+    "tint": "#5a6690"
+  },
+  "upperWindowSpans": [
+    [
+      0.55,
+      0.97
+    ]
+  ],
+  "upperSillM": 0.25,
+  "upperHeadM": 1.45,
+  "mullionM": 1.5,
+  "glass": "glass-film",
+  "storefrontGlass": "glass-storefront@8a939a",
+  "storefrontFrame": "painted-steel-mid",
+  "bulkhead": "painted-steel-mid",
+  "ground": "vacant",
+  "upper": "office",
+  "storefront": {
+    "awning": false,
+    "transomM": 0.4,
+    "layout": [
+      {
+        "kind": "glazed-garage",
+        "from": 0.12,
+        "to": 0.37,
+        "material": "painted-white",
+        "tint": "#f2f4f5",
+        "headM": 3.4
+      },
+      {
+        "kind": "door",
+        "from": 0.58,
+        "to": 0.67,
+        "leaf": "painted-steel-mid",
+        "stair": true
+      },
+      {
+        "kind": "window",
+        "from": 0.69,
+        "to": 0.97
+      }
+    ]
+  },
+  "plaques": [
+    {
+      "at": 0.05,
+      "y": 4.9,
+      "w": 0.5,
+      "h": 0.4,
+      "face": "painted-white@e8e2d8"
+    }
+  ],
+  "glassModel": {
+    "upper": "glass-reflective@5c6672",
+    "street": "glass-reflective@4e5964"
+  }
+}

@@ -1,0 +1,32 @@
+ez-vegetation-v1 asset licences
+
+Leaf sprig textures, grass clump texture and mesh, flower meshes and the
+flower leaf texture come from ez-tree by Daniel Greenheck
+(https://github.com/dgreenheck/ez-tree, commit dcf309bd86bd521083d9c70f01f2de45fdc7c457) under the MIT
+licence reproduced below.
+
+Bark texture: ambientCG Bark001 (https://ambientcg.com/a/Bark001), CC0 1.0
+Universal (public domain dedication). Attribution given as a courtesy.
+
+----------------------------------------------------------------------
+MIT License
+
+Copyright (c) 2024 Daniel Greenheck
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

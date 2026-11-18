@@ -1,0 +1,76 @@
+{
+ "seed": 5,
+ "notes": "1930 three-storey medium blue-grey deco on a darker slate base: tall multi-pane steel-sash windows filling the bays between fluted fins that rise past the roof as stepped fins with a dark cap, deep round-arched entry with dark ironwork fan and a relief panel above. Tint lift (2026-10-02): paint tints lifted toward the sunlit paint (t' = 1-(1-t)k); brick tints converted to target / kit colour - photo-sampled tints rendered dark, olive or over-red in game. Base fix (2026-10-03): cool/grey wallTint = target / painted-stucco base so the warm stucco albedo does not turn it pink. GroundBand lift (2026-10-03): groundBand tint #566a85 -> #78889d (same rule as walls; it was missed by the first colour pass).",
+ "streetStills": true,
+ "glass": "glass-clear",
+ "storefrontGlass": "glass-storefront",
+ "wall": "painted-stucco",
+ "windowW": 2.3,
+ "windowSillM": 0.8,
+ "windowHeadM": 2.5,
+ "cornice": false,
+ "corniceProjectionM": 0.4,
+ "beltCourse": false,
+ "ground": "lobby",
+ "upper": "apartment",
+ "wallTint": "#afcbfa",
+ "trim": "painted-stucco@62768f",
+ "frame": "painted-white@222833",
+ "storefrontFrame": "painted-steel@2a2f38",
+ "upperWindows": [
+  0.21,
+  0.5,
+  0.8
+ ],
+ "floorsM": {
+  "groundM": 3.8,
+  "upperM": 3.7
+ },
+ "storefront": {
+  "bulkheadM": 0.4,
+  "transomM": 0.6,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.12,
+    "to": 0.4,
+    "kind": "window",
+    "headM": 2.9
+   },
+   {
+    "from": 0.42,
+    "to": 0.58,
+    "kind": "door",
+    "headM": 2.9,
+    "stair": true,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.2,
+      "tint": "#4a5d78"
+     },
+     "fan": {
+      "rays": 7,
+      "rings": 1,
+      "tint": "#1c2028"
+     },
+     "spandrel": {
+      "material": "painted-stucco",
+      "tint": "#3f5068"
+     },
+     "revealM": 0.35
+    }
+   }
+  ]
+ },
+ "sashFrames": {
+  "material": "painted-white@222833",
+  "stileM": 0.07
+ },
+ "groundBand": {
+  "material": "painted-stucco",
+  "tint": "#78889d",
+  "topM": 3.8
+ }
+}

@@ -1,0 +1,78 @@
+{
+  "builder": "house",
+  "trim": "painted-steel",
+  "frame": "painted-steel",
+  "rearWall": "painted-stucco",
+  "partyWall": "painted-stucco",
+  "partyTint": "#cfccc4",
+  "rear": {
+    "windowsPerStorey": 2,
+    "windowW": 1.0,
+    "panes": [
+      1,
+      2
+    ]
+  },
+  "rooftop": {
+    "vents": [
+      [
+        0.5,
+        0.7
+      ]
+    ]
+  },
+  "seed": 21,
+  "storeysSeen": 2,
+  "groundM": 2.6,
+  "roofLevelM": 5.4,
+  "notes": "1492 La Playa (1944 roll, 2 storeys; LiDAR 6.1 m), from the street-level reference by eye (words only): charcoal-grey horizontal lap siding with black window frames, a low street-facing gable in dark composition shingle over a flat rear roof; ground: a warm cedar horizontal-slat garage door on the right (south) half, the entry on the left behind a cedar slat screen; upper: one wide dark-framed picture window.",
+  "wall": "painted-clapboard",
+  "wallTint": "#4c5055",
+  "roofForm": {
+    "form": "front-gable",
+    "depthM": 5.0,
+    "eaveM": 0.3,
+    "material": "asphalt-roof",
+    "tint": "#3e3d3b",
+    "pediment": false
+  },
+  "garages": [
+    {
+      "from": 0.5,
+      "to": 0.9,
+      "headM": 2.2,
+      "material": "painted-white",
+      "tint": "#9a6a45",
+      "pattern": "slat",
+      "slatTints": [
+        "#9a6a45",
+        "#8d603e",
+        "#a4734c",
+        "#93653f"
+      ]
+    }
+  ],
+  "entry": {
+    "from": 0.14,
+    "to": 0.28,
+    "headM": 2.2,
+    "material": "painted-white",
+    "tint": "#6f8f3a",
+    "glass": false,
+    "recessM": 0.3
+  },
+  "windows": [
+    {
+      "storey": 1,
+      "from": 0.3,
+      "to": 0.78,
+      "sill": 0.7,
+      "head": 2.3,
+      "panes": [
+        2,
+        1
+      ],
+      "frameTint": "#1c1c1c"
+    }
+  ]
+}

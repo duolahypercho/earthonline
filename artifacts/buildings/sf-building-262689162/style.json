@@ -1,0 +1,154 @@
+{
+ "seed": 10,
+ "notes": "Round 6: warm tan-peach stucco, square box bays with picture windows, round arched entry lobby (left) and garage (right) with thick white mouldings, tan zigzag fire escape left of centre, heavier entablature bands. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k) - photo-sampled tints rendered dark/olive in game. Containment fix (2026-10-02): upper programme 'rooms' - the apartment layout put a ceiling lamp / rug past the notched footprint and the interior gate rejected every build. Interior clip (2026-10-02): clipInteriorToFootprint - the room planner put furniture past this narrow/notched footprint and the containment gate rejected every build.",
+ "wall": "painted-stucco",
+ "wallTint": "#ead8c4",
+ "trim": "painted-white@efe6d2",
+ "frame": "painted-white@efe6d2",
+ "glass": "glass-clear",
+ "cornice": true,
+ "corniceProjectionM": 0.55,
+ "beltCourse": true,
+ "windowHoods": false,
+ "windowW": 0.8,
+ "windowSillM": 0.85,
+ "windowHeadM": 2.4,
+ "upperWindows": [
+  0.5
+ ],
+ "bays": [
+  {
+   "at": 0.2,
+   "widthM": 3.0,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#ead8c4",
+   "hyB": {
+    "plan": "box",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "marginM": 0.12,
+    "cornice": {
+     "projectionM": 0.1,
+     "dentils": true,
+     "roofRiseM": 0.15
+    },
+    "corbel": {
+     "tiers": 1,
+     "stepM": 0.06,
+     "brackets": 0,
+     "dropM": 0.3
+    }
+   }
+  },
+  {
+   "at": 0.78,
+   "widthM": 3.0,
+   "projectionM": 0.7,
+   "fromStorey": 1,
+   "material": "painted-stucco",
+   "tint": "#ead8c4",
+   "hyB": {
+    "plan": "box",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "marginM": 0.12,
+    "cornice": {
+     "projectionM": 0.1,
+     "dentils": true,
+     "roofRiseM": 0.15
+    },
+    "corbel": {
+     "tiers": 1,
+     "stepM": 0.06,
+     "brackets": 0,
+     "dropM": 0.3
+    }
+   }
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 1.0,
+  "transomM": 0.5,
+  "pierM": 0.4,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.06,
+    "to": 0.36,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-steel@1c1c1e",
+    "headM": 3.2,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.24,
+      "projectionM": 0.07,
+      "material": "painted-white",
+      "tint": "#f4ecd8"
+     }
+    }
+   },
+   {
+    "from": 0.6,
+    "to": 0.93,
+    "kind": "garage",
+    "material": "painted-white",
+    "tint": "#cdb08a",
+    "headM": 3.2,
+    "arch": {
+     "type": "round",
+     "surround": {
+      "widthM": 0.24,
+      "projectionM": 0.07,
+      "material": "painted-white",
+      "tint": "#f4ecd8"
+     }
+    }
+   }
+  ]
+ },
+ "storefrontFrame": "painted-white@efe6d2",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-stucco@ead8c4",
+ "ground": "lobby",
+ "upper": "rooms",
+ "stripes": {
+  "fromStorey": 1,
+  "offsetsM": [
+   -0.35
+  ],
+  "heightM": 0.7,
+  "material": "painted-white",
+  "tint": "#efe6d2"
+ },
+ "hbCorniceDentils": {
+  "spacingM": 0.3,
+  "sizeM": 0.12,
+  "tint": "#efe6d2"
+ },
+ "garagePanel": {
+  "leaves": 1,
+  "cols": 1,
+  "rows": 5,
+  "tint": "#cdb89c",
+  "panelTint": "#bfa98a"
+ },
+ "fireEscape": {
+  "at": 0.46,
+  "widthM": 2.6,
+  "depthM": 0.7,
+  "zigzag": true,
+  "material": "painted-stucco",
+  "tint": "#c08a5a"
+ },
+ "flatRooms": true,
+ "streetStills": true,
+ "clipInteriorToFootprint": true
+}

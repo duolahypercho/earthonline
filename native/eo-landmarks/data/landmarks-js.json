@@ -1,0 +1,1926 @@
+{
+ "version": "landmarks-js-v1",
+ "sources": {
+  "src/world/landmarks/landmark-geometry.js": "2a542a826d2fbc04472a7939cadcab356aee3cddbab676fe2e1bd783ca756bb4",
+  "src/world/landmarks/landmark-registry.js": "1ce873b081391d85ef053ba7228c7a6da45e56e1bd1b45b0242ab45dbc09263b",
+  "src/world/landmarks/suspension-bridge.js": "f428ce16c21aeed68fadb88b8c01441fa6a4a00dd9856f7daf4df85a68635d3e",
+  "src/world/landmarks/golden-gate-bridge-site.js": "c2403ea186ba1a5057e0e70167fbc3c4d40da97146ba3284abd476b0937958bf",
+  "src/world/landmarks/golden-gate-bridge.js": "dfdbf9bfbaa377f2a78273d149b00dff5deb8afdf7963d4c1bb1c697e0e6be50",
+  "src/world/landmarks/bay-bridge-west-site.js": "f85829243ea8fd68db7baf99a15bfc3f4fefbbe18f924540c6dfb0b35a90035c",
+  "src/world/landmarks/bay-bridge-west.js": "b499d65092bad7216be49a03cbea2ad1f3f92e8d806770db288cc6e4882d5a28",
+  "src/render/materials/landmark-surface.js": "2e0274b295c8e8b8d71b8f56d36ad8275667a1d497b8c8c0060b702a35bd62b9",
+  "src/world/streets/ground-datum.js": "515343ef73910cd003347e92f17c8bbb66aadd78ceb58989f23a6973f87d1e6f",
+  "src/citygen/shoreline.js": "19575448f0549de3935a71225dc0d6c4a35d3f6bd1b579864fb0ea1dddb06b11",
+  "src/world/landmarks/landmark-generators.js": "91e4f114ecbecb437e0ffe30372199d09600c868c556e7f6b7261917fbe41722",
+  "src/world/landmarks/transamerica-pyramid.js": "6ffcce174e8ed7eee2e4a1556b5a752faa3353ef760808b5f4a6be6d44fd0ac8",
+  "src/world/landmarks/transamerica-pyramid-site.js": "2e042eadd8793a757543034c5d5b05572164e184d1272ed784688a3477d4fae8",
+  "src/world/landmarks/salesforce-tower.js": "e37935c754cd390a690f203f285d0ca7e77d1848575559516aaaa5aa32027b17",
+  "src/world/landmarks/salesforce-tower-site.js": "2aa5f70427eb41d243560e05d33e4f99c3ddafaa7dc34e0e7e21c6acb8dc939b",
+  "src/world/landmarks/coit-tower.js": "9a6967b246768502553c28c315773bd11d946837668ffa0af1c00d2760dbb473",
+  "src/world/landmarks/coit-tower-site.js": "83ed599cd5927f8e779633b2fda02dd788107175c583fe16ca1cc68c4f471b4a",
+  "src/world/landmarks/sutro-tower.js": "35f2a711af4289f0b93db49d2d672e268cbf1f1a86360d417f0714a1a6032c01",
+  "src/world/landmarks/sutro-tower-site.js": "e45c141c57ffceda62827e8df4616a54006f19eebafa9bfb0ef96a4c4e713fa5",
+  "src/world/landmarks/city-hall.js": "1958f050092889ee26c5c797e321bbce9f3e4320b9739a4180a1b0cb8fa0bdaa",
+  "src/world/landmarks/city-hall-site.js": "d07b5dee16e338a852bb7256dd91e500cda38badbfbedaf261739ddf017e9924",
+  "src/render/materials/beach-surface.js": "3c236ae7e73286acee81b37725ca1eab86da507b60518bff38d186529471c121",
+  "src/realmap/hero-waterfront-structures.js": "120ba0a28de7b9f6c3ff2972d97d38bdd09f76160a253e26082c55ade7ba95d3",
+  "src/citygen/renderer.js": "4b65d69dd60db61240a1e31f06fa175d46347cddb1660ca334977fee319e1c7e",
+  "src/render/ocean-beach-seawall.js": "836880f07492a71a4bf4be0450847af408c03f01bebb535735125db2046fcf46",
+  "src/render/sunset-dunes-seawall.js": "b655ee165ec9eecd6e581d4d33ee206c6a0ac5ace56139293a9f786126c23361",
+  "src/world/streets/elevated-structures.js": "65ab89916bdc66161df670fe109ed4bc36bd7b2201f4ba2829b68dbdaefc7c32",
+  "src/world/streets/plaza-paving.js": "d2c53435ecd61f52cab9cece73358c358342eee2d066de3e6742befcafa6927c",
+  "src/world/streets/street-surface-v2.js": "f0ec85d6a1ecd280f3585ae9217ec93e219be6f560cf03899d216f97c88e2404"
+ },
+ "data": {
+  "public/data/sf/sf-elevation.bin.gz": "0781798a1b3241ceba84664b53e348cac09ea578f25e48ddd5559d4258cae021"
+ },
+ "seaLevelY": -0.55,
+ "seabedY": -2.6,
+ "defaultRoadLiftM": 0.45,
+ "wireDrawnRadiusM": 1,
+ "rules": {
+  "nearM": 1500,
+  "projectionRadiusM": 2300,
+  "hysteresisM": 40,
+  "placementErrorRad": 0.001,
+  "occlusionStepM": 25,
+  "occlusionSamplesPerFrame": 320,
+  "occlusionBudgetMs": 0.5,
+  "teleportM": 150,
+  "occlusionHoldFrames": 12,
+  "fogCapM": 1000,
+  "farProbeCellM": 20,
+  "horizonBins": 48
+ },
+ "limits": {
+  "mainDrawsMin": 1,
+  "mainDrawsMax": 4,
+  "shadowDraws": 1
+ },
+ "registry": {
+  "sutro-tower": {
+   "id": "sutro-tower",
+   "name": "Sutro Tower",
+   "version": "sutro-tower-v2-ac-bands",
+   "anchor": {
+    "x": -2943.4010039538275,
+    "z": 2516.4946931999057
+   },
+   "radiusM": 33.396454307349686,
+   "heightM": 297.7896,
+   "excludes": [
+    "ds9087",
+    "ds62170"
+   ],
+   "carriesWays": [],
+   "materials": {
+    "steel": {
+     "roughness": 0.62,
+     "metalness": 0.25,
+     "envClass": "painted-metal",
+     "surface": "painted-steel"
+    },
+    "concrete": {
+     "roughness": 0.92,
+     "metalness": 0,
+     "envClass": "facade-masonry",
+     "surface": "concrete"
+    }
+   },
+   "budget": {
+    "mainDraws": 2,
+    "shadowDraws": 1,
+    "triangles": 60000,
+    "farTriangles": 4000
+   },
+   "ground": {
+    "origin": [
+     -2979.4010039538275,
+     2480.4946931999057
+    ],
+    "u": [
+     1,
+     0
+    ],
+    "v": [
+     0,
+     1
+    ],
+    "cell": [
+     3,
+     3
+    ],
+    "nu": 25,
+    "nv": 25
+   },
+   "water": false,
+   "claims": []
+  },
+  "golden-gate-bridge": {
+   "id": "golden-gate-bridge",
+   "name": "Golden Gate Bridge",
+   "version": "golden-gate-bridge-v2-frame-sizes",
+   "anchor": {
+    "x": -5209.25,
+    "z": -4661.775
+   },
+   "radiusM": 1376.4824212090552,
+   "heightM": 227.38080000000002,
+   "excludes": [],
+   "carriesWays": [
+    537838948,
+    595194543,
+    368049578,
+    970229713,
+    1267474226
+   ],
+   "materials": {
+    "orange": {
+     "roughness": 0.55,
+     "metalness": 0.2,
+     "envClass": "painted-metal",
+     "surface": "painted-steel"
+    },
+    "deck": {
+     "roughness": 0.9,
+     "metalness": 0,
+     "envClass": "facade-masonry",
+     "draw": "concrete"
+    },
+    "concrete": {
+     "roughness": 0.92,
+     "metalness": 0,
+     "envClass": "facade-masonry",
+     "surface": "concrete"
+    },
+    "cables": {
+     "roughness": 0.5,
+     "metalness": 0.2,
+     "envClass": "painted-metal",
+     "wire": true
+    }
+   },
+   "budget": {
+    "mainDraws": 3,
+    "shadowDraws": 1,
+    "triangles": 220000,
+    "farTriangles": 6000
+   },
+   "ground": {
+    "origin": [
+     -5159.419218051963,
+     -3257.94582760653
+    ],
+    "u": [
+     -0.09257945273259219,
+     -0.9957053002428649
+    ],
+    "v": [
+     0.9957053002428649,
+     -0.09257945273259219
+    ],
+    "cell": [
+     5,
+     10
+    ],
+    "nu": 561,
+    "nv": 17
+   },
+   "water": true,
+   "claims": []
+  },
+  "bay-bridge-west": {
+   "id": "bay-bridge-west",
+   "name": "Bay Bridge (west span)",
+   "version": "bay-bridge-west-v3-weathered-grey",
+   "anchor": {
+    "x": 3683.45,
+    "z": -2268.65
+   },
+   "radiusM": 1409.4475628937937,
+   "heightM": 160,
+   "excludes": [
+    "432712476"
+   ],
+   "carriesWays": [
+    8921938,
+    661905446
+   ],
+   "materials": {
+    "steel": {
+     "roughness": 0.6,
+     "metalness": 0.1,
+     "envClass": "painted-metal",
+     "surface": "painted-steel"
+    },
+    "deck": {
+     "roughness": 0.9,
+     "metalness": 0,
+     "envClass": "facade-masonry",
+     "draw": "concrete"
+    },
+    "concrete": {
+     "roughness": 0.92,
+     "metalness": 0,
+     "envClass": "facade-masonry",
+     "surface": "concrete"
+    },
+    "cables": {
+     "roughness": 0.45,
+     "metalness": 0.35,
+     "envClass": "painted-metal",
+     "wire": true
+    }
+   },
+   "budget": {
+    "mainDraws": 3,
+    "shadowDraws": 1,
+    "triangles": 260000,
+    "farTriangles": 6000
+   },
+   "ground": {
+    "origin": [
+     2736.888137584026,
+     -1201.3170612979188
+    ],
+    "u": [
+     0.6485926354645746,
+     -0.7611357258867288
+    ],
+    "v": [
+     0.7611357258867288,
+     0.6485926354645746
+    ],
+    "cell": [
+     5,
+     10
+    ],
+    "nu": 573,
+    "nv": 7
+   },
+   "water": true,
+   "claims": []
+  },
+  "transamerica-pyramid": {
+   "id": "transamerica-pyramid",
+   "name": "Transamerica Pyramid",
+   "version": "transamerica-pyramid-v1",
+   "anchor": {
+    "x": 1461.85,
+    "z": -1898.1499999999999
+   },
+   "radiusM": 40.444375401351,
+   "heightM": 259.99440000000004,
+   "excludes": [],
+   "carriesWays": [],
+   "materials": {
+    "precast": {
+     "roughness": 0.78,
+     "metalness": 0,
+     "envClass": "facade-masonry",
+     "surface": "precast",
+     "surfaceOptions": {
+      "bayM": 3,
+      "storeyM": 4.065381818181819
+     }
+    },
+    "glass": {
+     "roughness": 0.12,
+     "metalness": 0.6,
+     "envClass": "facade-glass"
+    },
+    "metal": {
+     "roughness": 0.35,
+     "metalness": 0.85,
+     "envClass": "facade-metal"
+    }
+   },
+   "budget": {
+    "mainDraws": 3,
+    "shadowDraws": 1,
+    "triangles": 60000,
+    "farTriangles": 1500
+   },
+   "ground": {
+    "origin": [
+     1419.405624598649,
+     -1940.5943754013508
+    ],
+    "u": [
+     1,
+     0
+    ],
+    "v": [
+     0,
+     1
+    ],
+    "cell": [
+     4,
+     4
+    ],
+    "nu": 23,
+    "nv": 23
+   },
+   "water": false,
+   "claims": [
+    "24222973"
+   ]
+  },
+  "coit-tower": {
+   "id": "coit-tower",
+   "name": "Coit Tower",
+   "version": "coit-tower-v1",
+   "anchor": {
+    "x": 1192.6999999999998,
+    "z": -2697.909090909091
+   },
+   "radiusM": 16,
+   "heightM": 67.05,
+   "excludes": [],
+   "carriesWays": [],
+   "materials": {
+    "concrete": {
+     "roughness": 0.85,
+     "metalness": 0,
+     "envClass": "facade-masonry",
+     "surface": "concrete"
+    },
+    "openings": {
+     "roughness": 0.6,
+     "metalness": 0,
+     "envClass": "facade-masonry"
+    }
+   },
+   "budget": {
+    "mainDraws": 2,
+    "shadowDraws": 1,
+    "triangles": 20000,
+    "farTriangles": 600
+   },
+   "ground": {
+    "origin": [
+     1172.6999999999998,
+     -2717.909090909091
+    ],
+    "u": [
+     1,
+     0
+    ],
+    "v": [
+     0,
+     1
+    ],
+    "cell": [
+     2,
+     2
+    ],
+    "nu": 21,
+    "nv": 21
+   },
+   "water": false,
+   "claims": [
+    "28824850"
+   ]
+  },
+  "salesforce-tower": {
+   "id": "salesforce-tower",
+   "name": "Salesforce Tower",
+   "version": "salesforce-tower-v2-pale-banded",
+   "anchor": {
+    "x": 1980.0529411764708,
+    "z": -1302.2882352941178
+   },
+   "radiusM": 40,
+   "heightM": 326.136,
+   "excludes": [],
+   "carriesWays": [],
+   "materials": {
+    "glass": {
+     "roughness": 0.5,
+     "metalness": 0.12,
+     "envClass": "facade-glass",
+     "surface": "fin-curtain"
+    },
+    "crown": {
+     "roughness": 0.7,
+     "metalness": 0.1,
+     "envClass": "facade-metal"
+    }
+   },
+   "budget": {
+    "mainDraws": 2,
+    "shadowDraws": 1,
+    "triangles": 20000,
+    "farTriangles": 600
+   },
+   "ground": {
+    "origin": [
+     1938.0529411764708,
+     -1344.2882352941178
+    ],
+    "u": [
+     1,
+     0
+    ],
+    "v": [
+     0,
+     1
+    ],
+    "cell": [
+     4,
+     4
+    ],
+    "nu": 22,
+    "nv": 22
+   },
+   "water": false,
+   "claims": [
+    "431972186"
+   ]
+  },
+  "city-hall": {
+   "id": "city-hall",
+   "name": "San Francisco City Hall",
+   "version": "city-hall-v3-cladding-and-bays",
+   "anchor": {
+    "x": 4.198214285714286,
+    "z": -140.50357142857143
+   },
+   "radiusM": 86,
+   "heightM": 93.726,
+   "excludes": [],
+   "carriesWays": [],
+   "materials": {
+    "stone": {
+     "roughness": 0.82,
+     "metalness": 0,
+     "envClass": "facade-masonry",
+     "surface": "precast",
+     "surfaceOptions": {
+      "bayM": 1.6,
+      "storeyM": 0.8
+     }
+    },
+    "dome": {
+     "roughness": 0.55,
+     "metalness": 0.3,
+     "envClass": "facade-metal",
+     "surface": "gilded-cladding"
+    },
+    "windows": {
+     "roughness": 0.2,
+     "metalness": 0.3,
+     "envClass": "facade-glass"
+    }
+   },
+   "budget": {
+    "mainDraws": 3,
+    "shadowDraws": 1,
+    "triangles": 30000,
+    "farTriangles": 1200
+   },
+   "ground": {
+    "origin": [
+     -77.80178571428571,
+     -222.50357142857143
+    ],
+    "u": [
+     1,
+     0
+    ],
+    "v": [
+     0,
+     1
+    ],
+    "cell": [
+     4,
+     4
+    ],
+    "nu": 42,
+    "nv": 42
+   },
+   "water": false,
+   "claims": [
+    "ds41"
+   ]
+  }
+ },
+ "surfaces": {
+  "version": "landmark-surface-v2-gilt-no-clip",
+  "wireMinPixels": 1.25,
+  "kinds": {
+   "painted-steel": {
+    "patchM": 9,
+    "patchTone": 0.07,
+    "finePatchM": 2.6,
+    "finePatchTone": 0.035,
+    "grimeHeightM": 24,
+    "grimeTone": 0.78,
+    "streakTone": 0.08,
+    "chalkTone": 0.06,
+    "roughnessSpread": 0.22,
+    "chalkRoughness": 0.12,
+    "plateM": [
+     1.2,
+     2.4
+    ],
+    "seamDepthM": 0.006,
+    "rivetPitchM": 0.16,
+    "rivetRadiusM": 0.016,
+    "rivetHeightM": 0.008
+   },
+   "concrete": {
+    "patchM": 7,
+    "patchTone": 0.06,
+    "liftM": 1.5,
+    "formM": 2.4,
+    "jointDepthM": 0.008,
+    "wetBandM": 2.2,
+    "wetTone": 0.62,
+    "streakTone": 0.12,
+    "roughnessSpread": 0.08
+   },
+   "precast": {
+    "patchM": 5,
+    "patchTone": 0.035,
+    "jointDepthM": 0.006,
+    "streakTone": 0.05,
+    "roughnessSpread": 0.1
+   },
+   "fin-curtain": {
+    "moduleM": 1.524,
+    "finShare": 0.22,
+    "finSrgb": 14210766,
+    "finRoughness": 0.7,
+    "glassRoughness": 0.5,
+    "glassMetalness": 0.12
+   },
+   "gilded-cladding": {
+    "giltRoughness": 0.5,
+    "giltMetalness": 0.8,
+    "warmFrom": 0.25,
+    "warmTo": 0.45,
+    "patchM": 4,
+    "patchTone": 0.05
+   }
+  }
+ },
+ "goldenGate": {
+  "id": "golden-gate-bridge",
+  "version": "golden-gate-bridge-v2-frame-sizes",
+  "towerLegs": {
+   "south": {
+    "east": [
+     -5132.75,
+     -3983.53
+    ],
+    "west": [
+     -5160.09,
+     -3980.99
+    ]
+   },
+   "north": {
+    "east": [
+     -5250.86,
+     -5253.82
+    ],
+    "west": [
+     -5278.2,
+     -5251.28
+    ]
+   }
+  },
+  "carriageways": [
+   [
+    -5389.3,
+    -5984,
+    -5361.8,
+    -5942.6,
+    -5341.9,
+    -5900.4,
+    -5321.6,
+    -5814.1,
+    -5104.3,
+    -3485.9,
+    -5093.8,
+    -3439.1,
+    -5078.1,
+    -3400,
+    -5030.6,
+    -3324
+   ],
+   [
+    -5021.7,
+    -3331.6,
+    -5056.5,
+    -3380.8,
+    -5075.5,
+    -3418,
+    -5088.8,
+    -3456,
+    -5097.4,
+    -3502.9,
+    -5315.1,
+    -5834.3,
+    -5339.3,
+    -5920,
+    -5361.3,
+    -5961.1,
+    -5395.4,
+    -6007.5
+   ]
+  ],
+  "supports": {
+   "southPier": {
+    "centre": [
+     -5146.41,
+     -3982.27
+    ],
+    "extent": [
+     42.05,
+     20.19
+    ],
+    "topM": 13
+   },
+   "northPier": {
+    "centre": [
+     -5264.52,
+     -5252.56
+    ],
+    "extent": [
+     42.05,
+     20.19
+    ],
+    "topM": 13
+   },
+   "archSouth": {
+    "centre": [
+     -5105.23,
+     -3532.76
+    ],
+    "extent": [
+     37.35,
+     10.88
+    ]
+   },
+   "archNorth": {
+    "centre": [
+     -5114.09,
+     -3638.49
+    ],
+    "extent": [
+     37.37,
+     10.94
+    ]
+   },
+   "northAnchor": {
+    "centre": [
+     -5296.79,
+     -5596.23
+    ],
+    "extent": [
+     33.2,
+     8.95
+    ]
+   }
+  },
+  "legStages": [
+   [
+    13,
+    21,
+    9.61,
+    15.59
+   ],
+   [
+    21,
+    74,
+    7.53,
+    13.77
+   ],
+   [
+    74,
+    123,
+    7.53,
+    11.64
+   ],
+   [
+    123,
+    162,
+    7.53,
+    9.76
+   ],
+   [
+    162,
+    195,
+    5.38,
+    9.76
+   ],
+   [
+    195,
+    225,
+    3.23,
+    7.46
+   ]
+  ],
+  "struts": [
+   [
+    24,
+    26,
+    3.76
+   ],
+   [
+    50,
+    52,
+    3.76
+   ],
+   [
+    111,
+    121,
+    3.76
+   ],
+   [
+    151,
+    161,
+    3.76
+   ],
+   [
+    185,
+    193,
+    3.73
+   ],
+   [
+    215,
+    223,
+    3.7
+   ]
+  ],
+  "keepClear": [
+   {
+    "id": 8920698,
+    "name": "Battery East Road",
+    "half": 6,
+    "points": [
+     -5068.5,
+     -3428.2,
+     -5005.4,
+     -3400.4,
+     -4949.6,
+     -3398.3
+    ]
+   }
+  ],
+  "wayEnds": {
+   "south": [
+    -5026.15,
+    -3327.8
+   ],
+   "north": [
+    -5392.35,
+    -5995.75
+   ]
+  },
+  "dimensions": {
+   "mainSpanM": 1280.16,
+   "sideSpanM": 342.90000000000003,
+   "widthM": 27.432000000000002,
+   "roadwayM": 18.8976,
+   "sidewalkM": 3.048,
+   "clearanceM": 67.056,
+   "towerAboveWaterM": 227.38080000000002,
+   "towerAboveRoadwayM": 152.4,
+   "roadwayAtTowerM": 74.9808,
+   "cableDiameterM": 0.923925,
+   "suspenderSpacingM": 15.24,
+   "suspenderDiameterM": 0.0682625,
+   "archSpanM": 96.9264,
+   "trussDepthM": 7.62,
+   "orangeSrgb": 15747584,
+   "panelM": 7.62,
+   "railingM": 1.22,
+   "innerBarrierM": 1,
+   "curbM": 0.2,
+   "saddleBelowTopM": 2,
+   "cableLowAboveDeckM": 2,
+   "pylonAboveDeckM": 14,
+   "bentSpacingMaxM": 50,
+   "bentColumnM": [
+    1.8,
+    2.4
+   ],
+   "vehicleClearanceM": 4.9,
+   "lanesPerDirection": 3,
+   "asphaltSrgb": 2829100,
+   "sidewalkSrgb": 9341829,
+   "concreteSrgb": 10196620,
+   "barrierSrgb": 10986651,
+   "whiteSrgb": 15329764,
+   "yellowSrgb": 14263296
+  },
+  "carriedWays": [
+   537838948,
+   595194543,
+   368049578,
+   970229713,
+   1267474226
+  ]
+ },
+ "shore": {
+  "seawall": {
+   "COPING_STONE_M": 1.5,
+   "COPING_PROUD_M": 0.03,
+   "JOINT_GAP_M": 0.02,
+   "CONTROL_JOINT_M": 6,
+   "CONTROL_GAP_M": 0.025,
+   "PANEL_PROUD_M": 0.012,
+   "BLOCK_L_M": 0.8,
+   "BLOCK_H_M": 0.4,
+   "BLOCK_COURSES": 2,
+   "BLOCK_MARGIN_M": 0.06,
+   "BLOCK_DRAFT_M": 0.06,
+   "BLOCK_JOINT_M": 0.015,
+   "BAND_H_M": 0.22,
+   "BAND_RECESS_M": 0.09,
+   "DRIP_RISE_M": 0.02,
+   "LEDGE_ABOVE_SEA_M": 0.25,
+   "LEDGE_H_M": 0.1,
+   "LEDGE_D_M": 0.12,
+   "LEDGE_ROOM_M": 0.15,
+   "SEAWALL_RELIEF_TRIANGLE_BUDGET": 400000,
+   "RELIEF_TRIS_PER_M_BLOCKS": 43,
+   "RELIEF_TRIS_PER_M_COPING": 11.5
+  },
+  "crestAboveRoadM": 0.04,
+  "bottomBelowSeaM": 1.6,
+  "roadLift": 0.45,
+  "beachWallReachM": 70,
+  "wideForeshoreSources": [
+   "relation/2165532",
+   "relation/2165533"
+  ],
+  "wideForeshoreReachM": 100,
+  "ferryPier": {
+   "sourceWayId": 661723975,
+   "outline": [
+    [
+     2388.615451989805,
+     -1855.2437441998431
+    ],
+    [
+     2379.66725062129,
+     -1867.8934097999613
+    ],
+    [
+     2479.8483919983164,
+     -1966.912426799807
+    ],
+    [
+     2444.7418792550898,
+     -2014.1385822001523
+    ],
+    [
+     2414.9409372347995,
+     -1996.9443252003516
+    ],
+    [
+     2414.333832126995,
+     -1998.0721800001752
+    ],
+    [
+     2412.9084549187246,
+     -1997.4087360002789
+    ],
+    [
+     2410.3128606172218,
+     -1995.8385852000006
+    ],
+    [
+     2404.17142054412,
+     -1991.2387068004575
+    ],
+    [
+     2363.803330201585,
+     -1968.6926682001836
+    ],
+    [
+     2359.6679765706317,
+     -1966.3927290000192
+    ],
+    [
+     2355.2070738233374,
+     -1963.7500103997775
+    ],
+    [
+     2333.544859694072,
+     -1951.631100000362
+    ],
+    [
+     2322.1682378955875,
+     -1945.2509802004424
+    ],
+    [
+     2283.3047123856018,
+     -1998.0390077997877
+    ],
+    [
+     2289.410957960552,
+     -2002.616771399858
+    ],
+    [
+     2288.416713364328,
+     -2003.9215446001776
+    ],
+    [
+     2292.0505453844316,
+     -2006.652722399882
+    ],
+    [
+     2288.7510611048947,
+     -2010.987223200252
+    ],
+    [
+     2285.1524235829424,
+     -2008.2892176001499
+    ],
+    [
+     2283.8062339964513,
+     -2010.0584016003972
+    ],
+    [
+     2277.7791760445302,
+     -2005.5359250001873
+    ],
+    [
+     2251.629663294044,
+     -2041.0191216000107
+    ],
+    [
+     2257.8062978665475,
+     -2045.5858277999519
+    ],
+    [
+     2252.791081760551,
+     -2052.2755548003465
+    ],
+    [
+     2202.4101564557236,
+     -2015.1669204003845
+    ],
+    [
+     2199.9201456524265,
+     -2013.353506800406
+    ],
+    [
+     2324.825422569168,
+     -1843.8656796004427
+    ],
+    [
+     2367.0236268593435,
+     -1800.8413362004883
+    ],
+    [
+     2400.344018778557,
+     -1824.8248368002758
+    ],
+    [
+     2421.944642534494,
+     -1795.8212765999635
+    ],
+    [
+     2442.6390079402113,
+     -1768.0340304005088
+    ],
+    [
+     2416.454300691574,
+     -1748.926843200352
+    ],
+    [
+     2417.606920533856,
+     -1747.3788072003322
+    ],
+    [
+     2418.9267142451704,
+     -1745.5985657999556
+    ],
+    [
+     2444.970643498701,
+     -1764.6062364005206
+    ],
+    [
+     2448.850837012117,
+     -1759.3650287997684
+    ],
+    [
+     2450.0474499780257,
+     -1758.1266000002238
+    ],
+    [
+     2451.6575983075304,
+     -1757.4742134004566
+    ],
+    [
+     2453.39092738244,
+     -1757.5073856000586
+    ],
+    [
+     2454.965881212543,
+     -1758.2150592004718
+    ],
+    [
+     2456.12729967905,
+     -1759.4977176005332
+    ],
+    [
+     2456.681613037752,
+     -1761.1342128000156
+    ],
+    [
+     2456.53203641717,
+     -1762.8481098004024
+    ],
+    [
+     2455.7137643154547,
+     -1764.374031000164
+    ],
+    [
+     2452.8718085218898,
+     -1768.2330636004776
+    ],
+    [
+     2462.8670462357313,
+     -1775.5198901999934
+    ],
+    [
+     2460.5354106772415,
+     -1778.6933640001523
+    ],
+    [
+     2458.3621503648096,
+     -1781.6014602003524
+    ],
+    [
+     2448.375711276444,
+     -1774.314633600051
+    ],
+    [
+     2447.2054941844613,
+     -1775.8847844003294
+    ],
+    [
+     2424.5138409608203,
+     -1806.6354137998449
+    ],
+    [
+     2423.1148596252265,
+     -1808.526229199942
+    ],
+    [
+     2433.3036670832776,
+     -1815.9568020003521
+    ],
+    [
+     2431.060017773292,
+     -1819.0639314005214
+    ],
+    [
+     2428.8163684620567,
+     -1822.0162572004529
+    ],
+    [
+     2418.6275610040057,
+     -1814.596741800172
+    ],
+    [
+     2417.3429617908428,
+     -1816.2664092000418
+    ],
+    [
+     2394.633711317501,
+     -1847.138670000193
+    ],
+    [
+     2393.4370983515923,
+     -1848.719878199815
+    ],
+    [
+     2404.101031546567,
+     -1856.471115600044
+    ],
+    [
+     2401.93656985836,
+     -1859.5119006002235
+    ],
+    [
+     2399.2969824332304,
+     -1862.9949816000722
+    ]
+   ],
+   "presentation": {
+    "deckLiftM": 0.08,
+    "deckThicknessM": 0.16,
+    "collision": false,
+    "verticalStatus": "presentation-only; vertically uncertified",
+    "exclusions": [
+     "not bathymetry",
+     "not a seawall",
+     "not a boat",
+     "no railings",
+     "no piles"
+    ],
+    "renderBudget": {
+     "meshes": 1,
+     "maxTriangles": 256,
+     "shadowCasters": 0
+    }
+   },
+   "sheds": {
+    "widthM": 16,
+    "depthM": 9,
+    "heightM": 8.6,
+    "insetM": 9,
+    "minSeparationM": 28,
+    "collision": false,
+    "verticalStatus": "presentation-only; vertically uncertified",
+    "renderBudget": {
+     "meshes": 4,
+     "maxTriangles": 48,
+     "shadowCasters": 0
+    }
+   },
+   "deckSrgb": 5988700,
+   "shedSrgb": 7169884
+  },
+  "wallSrgb": 9604484
+ },
+ "promenades": {
+  "structureAlbedo": {
+   "asphalt": [
+    0.06,
+    0.06,
+    0.064
+   ],
+   "barrier": [
+    0.4,
+    0.395,
+    0.38
+   ],
+   "fascia": [
+    0.34,
+    0.335,
+    0.32
+   ],
+   "soffit": [
+    0.22,
+    0.215,
+    0.205
+   ],
+   "pier": [
+    0.31,
+    0.305,
+    0.29
+   ],
+   "pierFoot": [
+    0.2,
+    0.195,
+    0.185
+   ]
+  },
+  "oceanBeach": {
+   "ESPLANADE": [
+    {
+     "x": -8089.3,
+     "z": 866.8
+    },
+    {
+     "x": -8027,
+     "z": 1498.6
+    }
+   ],
+   "STAIRS_Z": [
+    917.1,
+    962.5,
+    1007.8,
+    1053.1,
+    1098.5,
+    1143.8,
+    1189.1,
+    1234.4,
+    1279.8,
+    1325.2,
+    1370.4,
+    1415.3,
+    1455.1
+   ],
+   "SECTION": {
+    "parapetSea": -2.75,
+    "parapetLand": -2.35,
+    "parapetH": 0.95,
+    "capOver": 0.05,
+    "capH": 0.09,
+    "walkLand": 2.3,
+    "walkH": 0.12,
+    "plantLand": 4.2,
+    "plantH": 0.22,
+    "kerbLand": 4.45,
+    "kerbH": 0.15,
+    "stepRise": 0.42,
+    "stepRun": 0.55,
+    "stairRiseMax": 0.178,
+    "stairTread": 0.28,
+    "maxDrop": 3.6
+   },
+   "STAIR_GAP_M": 3.2,
+   "STATION_M": 1.5,
+   "PANEL_M": 6,
+   "WALK_PANEL_M": 3
+  },
+  "sunsetDunes": {
+   "steps": [
+    {
+     "osm": 48435287,
+     "handrail": false,
+     "pts": [
+      [
+       -7879,
+       2922.9
+      ],
+      [
+       -7882.2,
+       2926.3
+      ],
+      [
+       -7881.1,
+       2937
+      ],
+      [
+       -7883,
+       2937.1
+      ]
+     ]
+    },
+    {
+     "osm": 48435303,
+     "handrail": false,
+     "pts": [
+      [
+       -7864.9,
+       3059.9
+      ],
+      [
+       -7868,
+       3063.9
+      ],
+      [
+       -7867,
+       3073.5
+      ],
+      [
+       -7869,
+       3073.7
+      ]
+     ]
+    },
+    {
+     "osm": 48435299,
+     "handrail": true,
+     "pts": [
+      [
+       -7850.7,
+       3197
+      ],
+      [
+       -7853.9,
+       3200.2
+      ],
+      [
+       -7852.9,
+       3210.1
+      ],
+      [
+       -7854.5,
+       3210.3
+      ]
+     ]
+    },
+    {
+     "osm": 48435297,
+     "handrail": false,
+     "pts": [
+      [
+       -7836.6,
+       3334.1
+      ],
+      [
+       -7840,
+       3338.3
+      ],
+      [
+       -7839,
+       3348.6
+      ],
+      [
+       -7840.5,
+       3348.7
+      ]
+     ]
+    },
+    {
+     "osm": 48435296,
+     "handrail": true,
+     "pts": [
+      [
+       -7822.4,
+       3471.5
+      ],
+      [
+       -7825.9,
+       3474.4
+      ],
+      [
+       -7824.8,
+       3485.2
+      ],
+      [
+       -7826.5,
+       3485.3
+      ]
+     ]
+    },
+    {
+     "osm": 48435293,
+     "handrail": true,
+     "pts": [
+      [
+       -7808.3,
+       3608.5
+      ],
+      [
+       -7811.8,
+       3611.5
+      ],
+      [
+       -7810.8,
+       3621.9
+      ],
+      [
+       -7812.7,
+       3622.1
+      ]
+     ]
+    }
+   ],
+   "AXIS": {
+    "a": [
+     -8011.2,
+     1553.9
+    ],
+    "b": [
+     -7699.3,
+     4561.4
+    ]
+   },
+   "WALL_OFFSET_M": 12.7,
+   "WALL_Z": [
+    2832,
+    3768
+   ],
+   "WALL_MIN_DROP_M": 1.8,
+   "CAP_M": 0.4,
+   "STATION_M": 2,
+   "RISER_MAX": 0.178,
+   "TREAD_MIN": 0.279,
+   "FLIGHT_W": 1.118
+  }
+ },
+ "openSpace": {
+  "plaza": {
+   "plazaKinds": [
+    "park",
+    "common",
+    "recreation_ground",
+    "village_green"
+   ],
+   "elevatedShare": 0.5,
+   "elevatedSampleCount": 400,
+   "styles": [
+    "brick",
+    "concrete",
+    "stone"
+   ],
+   "surfaceStyle": {
+    "bricks": "brick",
+    "brick": "brick",
+    "paving_stones": "stone",
+    "sett": "stone",
+    "unhewn_cobblestone": "stone",
+    "cobblestone": "stone",
+    "granite": "stone",
+    "concrete": "concrete",
+    "concrete:plates": "concrete",
+    "paved": null
+   }
+  },
+  "plazaUnit": 1.2,
+  "plazaBayUnits": 4,
+  "plazaBandUnits": 0.5,
+  "plazaUnitTone": 0.055,
+  "palette": "sf",
+  "colors": {
+   "plazaBrick": "#c48a72",
+   "plazaConcrete": "#dcdad4",
+   "plazaStone": "#b3b5b7",
+   "plazaBand": "#e6e6e3",
+   "path": "#e1e3e4"
+  }
+ },
+ "buildings": {
+  "transamerica-pyramid": {
+   "version": "transamerica-pyramid-v1",
+   "record": {
+    "id": "24222973",
+    "points": [
+     1430.7,
+     -1920.7,
+     1439.3,
+     -1867.1,
+     1493,
+     -1875.6,
+     1484.4,
+     -1929.2
+    ]
+   },
+   "dimensions": {
+    "heightM": 259.99440000000004,
+    "spireM": 64.61760000000001,
+    "baseSideM": 53.34,
+    "floors": 48,
+    "wingsFromFloor": 29,
+    "baseStoreysM": 16.5,
+    "floorM": 4.065381818181819,
+    "wingWidthM": 11,
+    "windowBandM": 1.7,
+    "windowPitchM": 3,
+    "precastSrgb": 14276043,
+    "glassSrgb": 2699834,
+    "metalSrgb": 12896459
+   },
+   "frame": {
+    "cx": 1461.85,
+    "cz": -1898.1499999999999,
+    "u": [
+     0.15842155729939153,
+     0.9873715664241276
+    ],
+    "v": [
+     -0.9873715664241276,
+     0.15842155729939153
+    ],
+    "half": 27.184278544776593
+   }
+  },
+  "salesforce-tower": {
+   "version": "salesforce-tower-v2-pale-banded",
+   "record": {
+    "id": "431972186",
+    "points": [
+     1945,
+     -1301.5,
+     1958.5,
+     -1282.4,
+     1972.2,
+     -1271.7,
+     1976.7,
+     -1270.2,
+     1986.3,
+     -1274.6,
+     2005,
+     -1293.4,
+     2006.8,
+     -1291.6,
+     2011.9,
+     -1296.9,
+     2008.4,
+     -1300.6,
+     2007,
+     -1307.8,
+     1996,
+     -1321.5,
+     1987.5,
+     -1329,
+     1977.8,
+     -1333.8,
+     1972.9,
+     -1332.9,
+     1957.7,
+     -1321.1,
+     1946.3,
+     -1307.2,
+     1944.9,
+     -1302.7
+    ]
+   },
+   "dimensions": {
+    "heightM": 326.136,
+    "floors": 61,
+    "topFloorM": 277.9776,
+    "scaleAtTopFloor": 0.8,
+    "scaleAtTop": 0.66,
+    "glassSrgb": 9411749,
+    "spandrelSrgb": 12896716,
+    "crownSrgb": 13225164,
+    "crownGapSrgb": 9344409
+   }
+  },
+  "coit-tower": {
+   "version": "coit-tower-v1",
+   "record": {
+    "id": "28824850",
+    "points": [
+     1185.2,
+     -2704.3,
+     1196.2,
+     -2707.1,
+     1196.8,
+     -2704.6,
+     1200,
+     -2705.4,
+     1203.7,
+     -2700.3,
+     1204.3,
+     -2688.9,
+     1194.9,
+     -2683.9,
+     1187.3,
+     -2684.5,
+     1182.4,
+     -2695.2,
+     1183,
+     -2701,
+     1185.9,
+     -2701.8
+    ]
+   },
+   "dimensions": {
+    "lidarMedianM": 5.97,
+    "lidarPeakM": 55.05,
+    "taperDiameterM": 0.4572,
+    "shaftRadiusM": 5.6,
+    "flutes": 18,
+    "fluteDepth": 0.035,
+    "belvedereFromM": 43,
+    "belvedereToM": 49,
+    "arches": 12,
+    "corniceM": 1.5,
+    "lanternRadiusM": 3,
+    "concreteSrgb": 14209215,
+    "openingSrgb": 1974564
+   },
+   "centre": [
+    1192.6999999999998,
+    -2697.909090909091
+   ]
+  },
+  "sutro-tower": {
+   "version": "sutro-tower-v2-ac-bands",
+   "centre": {
+    "x": -2943.4010039538275,
+    "z": 2516.4946931999057
+   },
+   "legDirections": [
+    [
+     -0.9999996553820489,
+     0.0008302022544021203
+    ],
+    [
+     0.5071865597021747,
+     -0.8618362916804282
+    ],
+    [
+     0.5019610554339685,
+     0.8648902235703769
+    ]
+   ],
+   "dimensions": {
+    "heightM": 297.7896,
+    "publishedBaseElevationM": 254.2032,
+    "baseSideM": 45.72,
+    "waistSideM": 18.288,
+    "topSideM": 30.48,
+    "platformM": 228.90480000000002,
+    "waistM": 140,
+    "legWidthM": 3.4,
+    "mastWidthM": 2,
+    "footingSideM": 7,
+    "footingTopM": 2.5,
+    "footingBuryM": 2,
+    "panelM": 6,
+    "ringFramesM": [
+     30,
+     60,
+     90,
+     115,
+     140,
+     170,
+     200
+    ],
+    "bands": 11,
+    "orangeSrgb": 16731904,
+    "whiteSrgb": 15921902,
+    "concreteSrgb": 10130828
+   },
+   "excludedRecords": [
+    "ds9087",
+    "ds62170"
+   ]
+  },
+  "city-hall": {
+   "version": "city-hall-v3-cladding-and-bays",
+   "record": {
+    "id": "ds41",
+    "points": [
+     48.7,
+     -207.4,
+     55.8,
+     -163.2,
+     57.4,
+     -163.4,
+     57.9,
+     -160.4,
+     60.5,
+     -160.9,
+     61.2,
+     -156.7,
+     64.4,
+     -136.7,
+     61.7,
+     -136.2,
+     62.2,
+     -133,
+     60.7,
+     -132.8,
+     67.7,
+     -88.9,
+     66.3,
+     -88.6,
+     65,
+     -86.5,
+     65,
+     -85.1,
+     46.8,
+     -82.1,
+     46.5,
+     -83.7,
+     3.9,
+     -76.7,
+     4,
+     -75.2,
+     -13.7,
+     -72.4,
+     -13.9,
+     -73.7,
+     -16.2,
+     -75.4,
+     -17.7,
+     -75.2,
+     -17.9,
+     -76.9,
+     -18.7,
+     -76.8,
+     -20.3,
+     -87,
+     -19.6,
+     -87.1,
+     -24.7,
+     -119.2,
+     -26.3,
+     -118.9,
+     -26.4,
+     -120.1,
+     -28,
+     -121.3,
+     -29.3,
+     -121.1,
+     -29.4,
+     -121.6,
+     -32.4,
+     -121.1,
+     -36.3,
+     -145.2,
+     -33.3,
+     -145.7,
+     -33.4,
+     -146.5,
+     -32.2,
+     -146.6,
+     -31.1,
+     -148.3,
+     -31.3,
+     -149.4,
+     -29.6,
+     -149.6,
+     -34.7,
+     -181.6,
+     -35.6,
+     -181.5,
+     -36.4,
+     -186.5,
+     -37.2,
+     -191.6,
+     -36.3,
+     -191.7,
+     -36.6,
+     -193.6,
+     -34.4,
+     -194,
+     -33.7,
+     -195.3,
+     -33.6,
+     -197.6,
+     -15.8,
+     -200.5,
+     -15.4,
+     -198.7,
+     27.4,
+     -205.5,
+     27.2,
+     -207.3,
+     44.6,
+     -210,
+     44.8,
+     -208.8,
+     46.8,
+     -207.4
+    ]
+   },
+   "dimensions": {
+    "domeTopM": 93.726,
+    "domeDiameterM": 34.1376,
+    "floors": 5,
+    "corniceM": 26.41,
+    "lidarTopM": 87.99,
+    "baseStoreyM": 8.5,
+    "colonnadeTopM": 21.5,
+    "entablatureTopM": 24,
+    "bayM": 4.6,
+    "columnRadiusM": 0.75,
+    "loggiaDepthM": 2.2,
+    "porticoWidthM": 34,
+    "porticoDepthM": 5,
+    "porticoColumns": 6,
+    "pedimentRiseM": 7,
+    "endPavilionWidthM": 15,
+    "endPavilionDepthM": 1.5,
+    "endPavilionLiftM": 1.8,
+    "balustradeM": 1,
+    "domeRibs": 16,
+    "rotundaSideM": 44,
+    "rotundaTopM": 32,
+    "drumRadiusM": 18.6,
+    "drumTopM": 52,
+    "entablatureM": 3,
+    "columns": 32,
+    "domeRiseM": 26,
+    "lanternRadiusM": 4,
+    "lanternTopM": 85,
+    "ribWidthM": 0.5,
+    "stoneSrgb": 11381410,
+    "stoneShadeSrgb": 9407621,
+    "domeSrgb": 5857899,
+    "goldSrgb": 13215050,
+    "windowSrgb": 2303787,
+    "loggiaShadeFoot": 0.55,
+    "loggiaShadeHead": 0.35,
+    "soffitShade": 0.55
+   },
+   "frame": {
+    "cx": 14.039789925401067,
+    "cz": -141.0529979291934,
+    "u": [
+     0.15860032478648847,
+     0.9873428669806759
+    ],
+    "v": [
+     -0.9873428669806759,
+     0.15860032478648847
+    ],
+    "hu": 63.427173831725575,
+    "hv": 49.04491663283025
+   }
+  }
+ },
+ "bayBridgeWest": {
+  "id": "bay-bridge-west",
+  "version": "bay-bridge-west-v3-weathered-grey",
+  "towers": [
+   {
+    "ref": "W2",
+    "centre": [
+     2954.3,
+     -1410.2
+    ]
+   },
+   {
+    "ref": "W3",
+    "centre": [
+     3409.7,
+     -1944.8
+    ]
+   },
+   {
+    "ref": "W5",
+    "centre": [
+     3899.6,
+     -2519.7
+    ]
+   },
+   {
+    "ref": "W6",
+    "centre": [
+     4355.3,
+     -3054.3
+    ]
+   }
+  ],
+  "towerTopAboveWaterM": 160,
+  "towerPlanM": [
+   29.7,
+   9.6
+  ],
+  "centerAnchorage": {
+   "centre": [
+    3654.9,
+    -2232.5
+   ],
+   "planM": {
+    "along": 69,
+    "across": 39.8
+   },
+   "heightM": 67
+  },
+  "deckEnds": {
+   "sf": {
+    "x": 2807.9,
+    "z": -1241.8,
+    "clearance": 18.6
+   },
+   "island": {
+    "x": 4559,
+    "z": -3295.5,
+    "clearance": 49.5
+   }
+  },
+  "deckStepM": 6.42,
+  "dimensions": {
+   "mainSpanM": 704.0880000000001,
+   "clearanceM": 67.056,
+   "lanesPerDeck": 5,
+   "roadwayM": 17.526,
+   "halfPlaneM": 11.85,
+   "trussDepthM": 9.5,
+   "panelM": 15.2,
+   "approachGrade": 0.05,
+   "pierTopAboveWaterM": 8,
+   "pierPlanM": [
+    25,
+    45.7
+   ],
+   "saddleBelowTopM": 3,
+   "cableLowAboveDeckM": 3,
+   "cableDiameterM": 0.73,
+   "suspenderSpacingM": 15.2,
+   "suspenderDiameterM": 0.07,
+   "portalAboveDeckM": 12,
+   "anchorage": {
+    "plinthM": 6,
+    "batter": 0.03333333333333333,
+    "corniceM": 2.5,
+    "corniceProudM": 0.6,
+    "pilasterM": 2.4,
+    "pilasterProudM": 0.8,
+    "pilastersAlong": 6,
+    "pilastersAcross": 3,
+    "housingHalfAlongM": 13,
+    "housingTaperM": 1.5,
+    "housingWallM": 3.85,
+    "deckClearanceM": 6,
+    "collarM": 2.6
+   },
+   "steelSrgb": 6054502,
+   "trussSrgb": 4935764,
+   "steelDarkSrgb": 3685439,
+   "steelShadeDown": 0.5,
+   "steelShadeInward": 0.55,
+   "asphaltSrgb": 2829100,
+   "concreteSrgb": 10196620,
+   "concreteLightSrgb": 11183514,
+   "whiteSrgb": 15329764,
+   "yellowSrgb": 14263296
+  },
+  "carriedWays": [
+   8921938,
+   661905446
+  ],
+  "excludedRecords": [
+   "432712476"
+  ]
+ }
+}

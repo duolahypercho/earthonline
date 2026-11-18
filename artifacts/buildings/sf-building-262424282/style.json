@@ -1,0 +1,267 @@
+{
+ "seed": 5,
+ "notes": "1913 three flats on the Bay Street corner, E side of Hyde. Brown shingle (wood siding tinted mid brown) over a white painted base/garage storey; the Bay corner end (right fifth) is white clapboard up to the second storey with a large picture window; one shallow bracketed bay on the top storey right of centre; white-cased sashes in an irregular rhythm; ground: small entry door and a white sectional garage door at the downhill north end, blank white base elsewhere. Bay Street face (edge 0) is a windowed flank. Gable end at the north roofline has no key. Plain eaves instead of the bracketed cornice (the none), shingle brown a shade deeper (7e624c), white base band a little lower. Garage and entry already sit at the real left (0.02-0.26) and the top-storey bay at 0.63-0.77. Applied: lit shingle brown 8a6f58 (no shingle kit material: wood-siding), window rhythm 0.075/0.43/0.55 with a small square window at 0.49 and a large fixed picture window in the white corner block on storey 1 (plaques), a small vent in the white base at 0.6, a steep pitched roof end at the north (left) end (roofBlocks hip, walls stop at 9.9 m). The corner volume's forward projection has no key. The flank inherited the roof block and plaques (a second hip at the corner); cleared on edge 0; the picture window and small square window are single dark glass plates (overlapping frame plates z-fought). Rework: base coursing via cast-stone blocks tinted white (painted block courses); top storey window rhythm via storeyWindowSpans (single window at 0.5, no pair). Kept. Shingle = wood-siding (no shingle kit). Oriel projection 0.65 (deeper soffit); annex picture window 2.0x1.45 with wider white sill (12% of front); base joint colour e9e6df. Skipped: shingle texture, gabled eave and low panel fence (no key), 'two equal windows + dark square' already tall+square+small. HyDShingle (square courses) over the wood-siding brown 8a6f5c; panelled sectional garage via garagePanel 4x4 flush white; base e9e6df->eeeee9; oriel rebuilt as hyB box bay 3.0 m wide, 2 front sashes, corbel soffit; small square window now a light glass pane with white frame strips. Skipped: sill projection (no key; sills), street-left gable (only hip roofBlocks exist), base block joints already cast-stone coursing. Rework bay-northpoint rd2: base stepped down toward the uphill right via wallZones over a low band; oriel now a narrow cant bay (2.0 m, 1 front + 2 side sashes); top-storey pair at 0.25 and window moved to 0.555; storey-1 windows taller, wide one at 0.36-0.47; tint 9a7d66. Clapboard fix (2026-10-02): painted siding moved from the stained-timber wood-siding base to painted-clapboard so the tint renders as paint, not olive. Tint lift (2026-10-02): wall tints lifted toward the sunlit paint (t' = 1-(1-t)k).",
+ "wall": "painted-clapboard",
+ "wallTint": "#ae9785",
+ "trim": "painted-white@eeeae0",
+ "frame": "painted-white@f2efe8",
+ "glass": "glass-clear",
+ "storefrontFrame": "painted-white@f2efe8",
+ "storefrontGlass": "glass-clear",
+ "bulkhead": "painted-white@f6f5f2",
+ "cornice": false,
+ "beltCourse": false,
+ "windowHoods": false,
+ "windowW": 0.9,
+ "windowSillM": 0.9,
+ "windowHeadM": 2.4,
+ "upperWindows": [
+  0.075,
+  0.415,
+  0.555
+ ],
+ "bays": [
+  {
+   "at": 0.7,
+   "widthM": 2.0,
+   "projectionM": 0.65,
+   "fromStorey": 2,
+   "material": "painted-clapboard",
+   "tint": "#ae9785",
+   "hyB": {
+    "plan": "cant",
+    "sashes": {
+     "front": 1,
+     "sides": 1
+    },
+    "sillM": 0.7,
+    "corbel": {
+     "tiers": 2,
+     "stepM": 0.1,
+     "brackets": 3,
+     "dropM": 0.35
+    },
+    "sideRunM": 0.55
+   }
+  }
+ ],
+ "groundBand": {
+  "material": "cast-stone",
+  "tint": "#eeeee9",
+  "topM": 1.0
+ },
+ "wallZones": [
+  {
+   "from": 0.0,
+   "to": 0.3,
+   "fromY": 0.9,
+   "toY": 2.7,
+   "material": "painted-white",
+   "tint": "#eeece6"
+  },
+  {
+   "from": 0.3,
+   "to": 0.42,
+   "fromY": 0.9,
+   "toY": 2.3,
+   "material": "painted-white",
+   "tint": "#eeece6"
+  },
+  {
+   "from": 0.42,
+   "to": 0.56,
+   "fromY": 0.9,
+   "toY": 1.9,
+   "material": "painted-white",
+   "tint": "#eeece6"
+  },
+  {
+   "from": 0.56,
+   "to": 0.74,
+   "fromY": 0.9,
+   "toY": 1.45,
+   "material": "painted-white",
+   "tint": "#eeece6"
+  },
+  {
+   "from": 0.74,
+   "to": 1.0,
+   "fromY": 0.0,
+   "toY": 6.6,
+   "material": "painted-white",
+   "tint": "#eeece6"
+  }
+ ],
+ "storefront": {
+  "bulkheadM": 0.6,
+  "transomM": 0.3,
+  "pierM": 0.3,
+  "awning": false,
+  "layout": [
+   {
+    "from": 0.02,
+    "to": 0.075,
+    "kind": "door",
+    "stair": true,
+    "leaf": "painted-white@efede6",
+    "headM": 2.3
+   },
+   {
+    "from": 0.13,
+    "to": 0.26,
+    "kind": "garage",
+    "material": "painted-white",
+    "tint": "#eeece6",
+    "headM": 2.4
+   }
+  ]
+ },
+ "edgeRoles": {
+  "0": "flank"
+ },
+ "streetEdges": {
+  "0": {
+   "upperWindows": [
+    0.3,
+    0.7
+   ],
+   "bays": [],
+   "storefront": {
+    "bulkheadM": 0.9,
+    "transomM": 0.3,
+    "pierM": 0.3,
+    "awning": false,
+    "layout": [
+     {
+      "from": 0.45,
+      "to": 0.6,
+      "kind": "window",
+      "headM": 2.2
+     }
+    ]
+   },
+   "plaques": [],
+   "roofBlocks": []
+  }
+ },
+ "ground": "lobby",
+ "upper": "apartment",
+ "floorsM": {
+  "groundM": 3.0,
+  "upperM": 3.3
+ },
+ "wallTopM": 9.9,
+ "roofBlocks": [
+  {
+   "at": 0.1,
+   "widthM": 3.2,
+   "depthM": 8.0,
+   "setbackM": 0.0,
+   "material": "painted-clapboard",
+   "tint": "#9a7d66",
+   "hipRiseM": 1.8,
+   "eaveM": 0.25,
+   "hipMaterial": "asphalt-roof@6a625c"
+  }
+ ],
+ "plaques": [
+  {
+   "at": 0.505,
+   "y": 4.55,
+   "w": 0.44,
+   "h": 0.44,
+   "face": "painted-steel-mid@5a6068"
+  },
+  {
+   "at": 0.905,
+   "y": 4.45,
+   "w": 2.0,
+   "h": 1.45,
+   "face": "painted-steel-mid@5a6068"
+  },
+  {
+   "at": 0.905,
+   "y": 3.82,
+   "w": 2.2,
+   "h": 0.12,
+   "face": "painted-white@f8f6f0"
+  },
+  {
+   "at": 0.6,
+   "y": 0.7,
+   "w": 0.5,
+   "h": 0.3,
+   "face": "painted-steel-mid@5a5c5e"
+  },
+  {
+   "at": 0.505,
+   "y": 4.84,
+   "w": 0.66,
+   "h": 0.07,
+   "face": "painted-white@f2efe8"
+  },
+  {
+   "at": 0.505,
+   "y": 4.26,
+   "w": 0.66,
+   "h": 0.07,
+   "face": "painted-white@f2efe8"
+  }
+ ],
+ "storeyWindowSpans": {
+  "1": {
+   "spans": [
+    [
+     0.04,
+     0.105
+    ],
+    [
+     0.36,
+     0.47
+    ],
+    [
+     0.535,
+     0.575
+    ]
+   ],
+   "sillM": 0.7,
+   "headM": 2.6
+  },
+  "2": {
+   "spans": [
+    [
+     0.215,
+     0.25
+    ],
+    [
+     0.26,
+     0.295
+    ],
+    [
+     0.535,
+     0.575
+    ]
+   ],
+   "sillM": 0.9,
+   "headM": 2.4
+  }
+ },
+ "streetStills": true,
+ "hyDShingle": {
+  "kind": "square",
+  "rowM": 0.16,
+  "shingleM": 0.14,
+  "projM": 0.014,
+  "shade": 0.72,
+  "fromM": 1.0,
+  "marginM": 0.1
+ },
+ "garagePanel": {
+  "doorM": 4.0,
+  "leaves": 1,
+  "cols": 4,
+  "rows": 4,
+  "tint": "#eeece6",
+  "panelTint": "#e6e3dc"
+ }
+}

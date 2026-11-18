@@ -1,0 +1,78 @@
+{
+  "schema": "building-manifest-fragment-v2",
+  "id": "sf-building-8001895059",
+  "generator": "scripts/city/manifest.mjs",
+  "entry": {
+    "id": "sf-building-8001895059",
+    "walkIndex": 7520,
+    "builder": "blender",
+    "street": "Great Highway",
+    "side": "E",
+    "addr": "1682 Great Highway",
+    "sourceHeight": 9.03,
+    "sourceLevels": null,
+    "frontEdge": 1,
+    "status": "review",
+    "lidarHeightM": 9.03,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b8001895059.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b8001895059.js"
+  },
+  "base": {
+    "id": "sf-building-8001895059",
+    "walkIndex": 7520,
+    "builder": "blender",
+    "street": "Great Highway",
+    "side": "E",
+    "addr": "1682 Great Highway",
+    "sourceHeight": 9.03,
+    "sourceLevels": null,
+    "frontEdge": 1,
+    "status": "review",
+    "lidarHeightM": 9.03,
+    "exteriorModule": "src/world/buildings/authored/blender/generated/b8001895059.js",
+    "interiorModule": "src/world/buildings/authored/blender/generated/b8001895059.js"
+  },
+  "module": {
+    "path": "src/world/buildings/authored/blender/generated/b8001895059.js",
+    "sha256": "c421888753c6957703889e4d99648f1b7a2f08fe9f50286c375336d26339d6bb",
+    "pass": "b8001895059-blender-38c455b0-46af6d"
+  },
+  "provenance": {
+    "path": "public/assets/buildings/sf-building-8001895059/provenance.json",
+    "sha256": "fcedf53c1fb5fb7b589154c60eeed027af0a5b6e5915ba6d76c9133d1f861634",
+    "pass": "b8001895059-blender-38c455b0-46af6d"
+  },
+  "assets": [
+    {
+      "role": "exterior",
+      "url": "/assets/buildings/sf-building-8001895059/exterior.glb",
+      "sha256": "6889aba1cdf03252daa27b31bd7712db9daabae2c3f4257958adc31b204851d3",
+      "bytes": 121736
+    },
+    {
+      "role": "interior",
+      "url": "/assets/buildings/sf-building-8001895059/interior.glb",
+      "sha256": "7b38832659d838562caa49793b57c001f3ed92abddd7ed3c20d1041811ecbdbb",
+      "bytes": 136836
+    },
+    {
+      "role": "fine-s0",
+      "url": "/assets/buildings/sf-building-8001895059/fine-s0.glb",
+      "sha256": "ffd0657a86bf39ec62c47445e013899c95d87406b1ff34bcdb46ecc9620ef874",
+      "bytes": 26736
+    },
+    {
+      "role": "fine-s1",
+      "url": "/assets/buildings/sf-building-8001895059/fine-s1.glb",
+      "sha256": "8c9f8cd05d413dc27b4eb1fcb88ae5cf8c212c062b352951fe6eabe763f1f7c7",
+      "bytes": 67944
+    },
+    {
+      "role": "fine-s2",
+      "url": "/assets/buildings/sf-building-8001895059/fine-s2.glb",
+      "sha256": "23a58dea171bccc6d89bd1b43822b3571ad98b0f6c9c6c5563137f99a0ae294c",
+      "bytes": 65332
+    }
+  ],
+  "generatedAt": "2026-10-02T06:11:15.698Z"
+}
