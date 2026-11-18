@@ -306,7 +306,7 @@ fn parse_args() -> Result<Args> {
             "--no-atlas2" => a.look.facade &= !eo_render::facade::RUN_ATLAS2, // facade
             "--no-probe" => a.look.facade &= !eo_render::facade::RUN_PROBE, // facade
             "--no-rooms" => a.look.facade &= !eo_render::facade::RUN_ROOMS, // no room behind kit glazing
-            "--no-room-frames" | "--no-room-dim" | "--no-room-blind-runs" => {} // read by eo_render::rooms::wgsl_constants
+            "--no-room-frames" | "--no-room-dim" | "--no-room-blind-runs" | "--no-pane-transmittance" => {} // read by eo_render::rooms (wgsl_constants, pane_tv_flags)
             // near kit buildings as their envelope box ("box"), or the box with the shader-only facade ("shader").
             "--facade-test" => match val()?.as_str() {
                 "box" => eo_render::kit::FACADE_TEST.store(1, std::sync::atomic::Ordering::Relaxed),

@@ -296,7 +296,7 @@ selection:
 | Content | `--no-models`, `--no-kit`, `--no-streets`, `--no-props`, `--no-agents`, `--no-landmarks`, `--no-water`, `--no-farshore`, `--no-sky` |
 | People | `--no-rocketbox`, `--no-rocketbox-motions` (either one: no people) |
 | Props | `--no-props2`, `--no-furniture`, `--no-eztree`, `--no-wires`, `--no-overhead`, `--no-lamp-sprites` |
-| Buildings | `--no-facade-detail`, `--no-facade-age`, `--no-rooms`, `--no-room-frames`, `--no-room-dim`, `--no-roof-colours`, `--no-roof-plant`, `--no-roof-parapet`, `--no-roof-patches`, `--no-roof-neutral`, `--no-wall-paint`, `--no-period-paint`, `--no-wall-chroma`, `--no-facade-typology`, `--no-room-blind-runs`, `--no-far-facade`, `--no-far-roofs` |
+| Buildings | `--no-facade-detail`, `--no-facade-age`, `--no-rooms`, `--no-room-frames`, `--no-room-dim`, `--no-roof-colours`, `--no-roof-plant`, `--no-roof-parapet`, `--no-roof-patches`, `--no-roof-neutral`, `--no-wall-paint`, `--no-period-paint`, `--no-wall-chroma`, `--no-facade-typology`, `--no-room-blind-runs`, `--no-pane-transmittance`, `--no-far-facade`, `--no-far-roofs` |
 | Ground | `--no-ground-hills`, `--no-ground-green`, `--no-ground-contact`, `--no-terrain-lod` |
 | Scanned surfaces | `--no-cc0` (all), `--no-cc0-street`, `--no-cc0-walls`, `--no-cc0-ground`, `--no-cc0-decals`, `--no-cc0-grime`, `--no-cc0-stains`, `--no-cc0-pom`, `--no-cc0-tiling` |
 | Lighting and sky | `--no-shadows`, `--no-ao`, `--no-contact-shadows`, `--no-atmosphere`, `--no-fog`, `--no-clouds`, `--no-cloud-shadows`, `--no-shafts`, `--no-moon-stars`, `--no-lights` |
@@ -450,11 +450,15 @@ cached. Each building draws its own window module (bay pitch, window
 width, sill and head), and a tower its own facade system (unitised or
 stick curtain wall, ribbon, punched or finned precast, masonry piers) with
 its glass coating and stone tone, known towers their recorded one
-(`eo-kit` `typology`); Queen Anne rows carry their front gable. Wall
-bodies are held to a muted chroma, with a Chinatown front's accent on its
-trim. Facades carry a detail atlas, weathering and age, window rooms
-behind the glass (an office's blinds by tenant run), and roofs coloured
-from the measured aerial table with the imagery's colour cast taken off.
+(`eo-kit` `typology`), glazed on every face off a lot line; Queen Anne
+rows carry their front gable, a "Victorian" front taller than a Victorian
+house is drawn as an apartment house, and the timber rows take the city's
+pastels with white trim (the Postcard Row a pastel each). Wall bodies are
+held to a muted chroma, with a Chinatown front's accent on its trim.
+Facades carry a detail atlas, weathering and age, window rooms behind the
+glass (an office's blinds by tenant run, seen through the pane's own
+visible transmittance), and roofs coloured from the measured aerial table
+with the imagery's colour cast taken off.
 
 **Far city.** Past the near bands, buildings are drawn from merged meshes
 prepared ahead of time: 256 m neighbourhood cells with a facade atlas, then
