@@ -102,3 +102,48 @@ pub fn rebuild_player(cw: &mut CollisionWorld, state: &eo_player::PlayerState, c
     player.set_state(cw, state);
     player
 }
+
+/// The state a player has on arriving by fast travel at (x, z) facing `yaw`:
+/// standing on the walkable surface there, still, on foot, its cars parked
+/// beside it in a row (4 m to its left, then 6 m apart behind), wheels on the
+/// ground. The tiles there are made resident first (the stream asked for
+/// them when the trip was accepted), and the broad phase is brought up to
+/// date so the surface below can be found (no dynamics step is taken).
+pub fn arrival_state(player: &Player, cw: &mut CollisionWorld, x: f64, z: f64, yaw: f64) -> eo_player::PlayerState {
+    let here = DVec3::new(x, cw.ground.ground_y(x, z), z);
+    cw.ensure_step_tiles(here);
+    cw.physics.detect_collisions(&(), &());
+    let feet = DVec3::new(x, cw.surface_y(x, z), z);
+    let mut s = player.state(cw);
+    let fresh = eo_player::character::Character::new(feet);
+    s.character = eo_player::character::CharacterState { position: fresh.position.to_array(), grounded: true, crouched: false, ..fresh.state() };
+    s.momentum = [0.0; 4];
+    s.momentum_last = None;
+    s.plant_yaw = None;
+    s.yaw = yaw;
+    s.facing_yaw = yaw;
+    s.sprint_held_s = 0.0;
+    s.sprint = 0.0;
+    s.ground_speed = 0.0;
+    s.driving = None;
+    let spec = eo_player::vehicle::VehicleSpec::sedan();
+    let rot = glam::DQuat::from_rotation_y(yaw);
+    for (k, v) in s.vehicles.iter_mut().enumerate() {
+        let c = car_spawn(x, z, yaw, false);
+        let back = 6.0 * k as f64;
+        let (cx, cz) = (c[0] - yaw.sin() * back, c[1] - yaw.cos() * back);
+        let datum = DVec3::new(cx, cw.surface_y(cx, cz), cz);
+        let centre = datum + rot * DVec3::new(0.0, spec.height / 2.0, 0.0);
+        v.translation = [centre.x as f32, centre.y as f32, centre.z as f32];
+        let q = glam::Quat::from_rotation_y(yaw as f32);
+        v.rotation = [q.x, q.y, q.z, q.w];
+        v.linvel = [0.0; 3];
+        v.angvel = [0.0; 3];
+        v.sleeping = false;
+        v.time_since_can_sleep = 0.0;
+        v.steer_normalized = 0.0;
+        v.controls = [0.0; 3];
+        v.handbrake = true;
+    }
+    s
+}

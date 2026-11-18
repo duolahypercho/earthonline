@@ -87,6 +87,9 @@ pub enum Event {
 /// The world to draw this frame: two snapshots and where between them.
 #[derive(Clone)]
 pub struct View {
+    /// The snapshot before `a` and the one after `b`, when held (the other players' smooth path).
+    pub pa: Option<Arc<Decoded>>,
+    pub pb: Option<Arc<Decoded>>,
     pub a: Arc<Decoded>,
     pub b: Arc<Decoded>,
     /// Render tick (server ticks, fractional).
@@ -240,6 +243,16 @@ impl NetClient {
         g.dirty = true;
     }
 
+    /// Send an application message on the reliable channel (an emote, a
+    /// fast-travel request: `proto::msg`); it rides the next input packets.
+    pub fn command(&self, m: Vec<u8>) {
+        let mut g = self.inner.lock().unwrap();
+        if g.phase == Phase::Connected {
+            g.conn.send_reliable(m);
+            g.dirty = true;
+        }
+    }
+
     pub fn take_events(&self) -> Vec<Event> {
         self.inner.lock().unwrap().events.drain(..).collect()
     }
@@ -278,15 +291,18 @@ impl NetClient {
             return None;
         }
         // a.tick <= tick < b.tick; before the oldest: the oldest; past the newest: extrapolate from it.
-        let (a, b) = match g.frames.iter().rposition(|f| f.header.tick as f64 <= tick) {
-            None => (g.frames[0].clone(), g.frames[0].clone()),
-            Some(i) if i + 1 < n => (g.frames[i].clone(), g.frames[i + 1].clone()),
-            Some(i) => (g.frames[i.saturating_sub(1)].clone(), g.frames[i].clone()),
+        let (ia, ib) = match g.frames.iter().rposition(|f| f.header.tick as f64 <= tick) {
+            None => (0, 0),
+            Some(i) if i + 1 < n => (i, i + 1),
+            Some(i) => (i.saturating_sub(1), i),
         };
+        let (a, b) = (g.frames[ia].clone(), g.frames[ib].clone());
+        let pa = ia.checked_sub(1).map(|i| g.frames[i].clone());
+        let pb = g.frames.get(ib + 1).cloned();
         let (ta, tb) = (a.header.tick as f64, b.header.tick as f64);
         let u = if tb > ta { ((tick - ta) / (tb - ta)).clamp(0.0, 1.0) } else { 0.0 };
         let sim_time = if tick > tb { b.header.sim_time + (tick - tb) / proto::TICK_HZ as f64 } else { a.header.sim_time + (b.header.sim_time - a.header.sim_time) * u };
-        Some(View { a, b, tick, sim_time })
+        Some(View { pa, pb, a, b, tick, sim_time })
     }
 
     pub fn player_id(&self) -> u32 {

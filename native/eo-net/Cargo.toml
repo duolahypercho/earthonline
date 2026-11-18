@@ -11,3 +11,5 @@ eo-assets = { path = "../eo-assets" }
 eo-data = { path = "../eo-data" }
 eo-player = { path = "../eo-player" }
 glam = "0.34.3"
+serde = { version = "1.0.229", features = ["derive"] } # the landmark viewpoint table
+serde_json = "1.0.154"

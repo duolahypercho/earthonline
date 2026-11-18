@@ -1,0 +1,17 @@
+landmark-viewpoints.json
+
+What: named places a visitor stands at San Francisco landmarks (fast
+travel arrivals, bot destinations), as WGS84 latitude and longitude with
+the bearing a visitor faces and a spread radius.
+
+Source: every coordinate is derived from OpenStreetMap data already in this
+repository (public/data/sf/sf-city.json.gz: the named ways and building
+footprints each entry's "source" field names, by OSM id), converted with
+that file's projection (meta.center 37.778 N, 122.4194 W; 110574 m per
+degree of latitude, 87986.25 m per degree of longitude). The Crissy Field
+entry's bearing faces the Golden Gate Bridge's south tower, 37.8107 N,
+122.4776 W.
+
+Licence: Open Database License 1.0 (ODbL), (c) OpenStreetMap contributors,
+https://www.openstreetmap.org/copyright. The derivation is described in
+each entry; no imagery was used.

@@ -31,7 +31,9 @@ use crate::bits::{ByteReader, PutLe, Truncated};
 /// "EON" + protocol generation 1.
 pub const MAGIC: u32 = 0x454F_4E01;
 /// 2: the handshake carries the ground plan (groundscale).
-pub const PROTOCOL_VERSION: u16 = 2;
+/// 3: snapshots carry the server's sky clock; player entities their emote
+/// and more state flags; emote and fast-travel commands, the player roster.
+pub const PROTOCOL_VERSION: u16 = 3;
 
 /// this process's ground-plan scale in parts per million (the
 /// handshake's ground plan; 1,250,000 by default). hills: when the ground
@@ -280,7 +282,99 @@ pub fn begin_connected(kind: Kind, connection: u64, out: &mut Vec<u8>) {
 
 /// Reliable-channel messages (application level).
 pub mod msg {
+    /// Server to client: u32 player id, then the display name (UTF-8). Sent
+    /// for every player already in when a client joins, and to everyone
+    /// when one joins.
     pub const PLAYER_JOINED: u8 = 1;
+    /// Server to client: u32 player id.
     pub const PLAYER_LEFT: u8 = 2;
     pub const NOTICE: u8 = 3;
+    /// Client to server: u8 `presence::Emote` (0 ends one).
+    pub const EMOTE: u8 = 4;
+    /// Client to server: u16 index into `presence::viewpoints()`.
+    pub const TRAVEL: u8 = 5;
+    /// Server to client: u16 viewpoint, u8 `TravelResult`, then f32 x, z,
+    /// yaw of the arrival and u32 the server tick it lands on.
+    pub const TRAVEL_REPLY: u8 = 6;
+}
+
+/// The server's answer to a fast-travel request.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TravelResult {
+    Accepted = 0,
+    /// No such viewpoint.
+    Unknown = 1,
+    /// Not on foot (get out of the car first).
+    Driving = 2,
+    /// Too soon after the last one.
+    Cooldown = 3,
+    /// One already under way.
+    Busy = 4,
+}
+
+impl TravelResult {
+    pub fn from_u8(v: u8) -> Self {
+        match v {
+            0 => TravelResult::Accepted,
+            2 => TravelResult::Driving,
+            3 => TravelResult::Cooldown,
+            4 => TravelResult::Busy,
+            _ => TravelResult::Unknown,
+        }
+    }
+}
+
+/// A decoded fast-travel reply.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TravelReply {
+    pub viewpoint: u16,
+    pub result: TravelResult,
+    pub arrival: [f32; 3],
+    pub tick: u32,
+}
+
+impl TravelReply {
+    pub fn write(&self) -> Vec<u8> {
+        let mut m = vec![msg::TRAVEL_REPLY];
+        m.put_u16(self.viewpoint);
+        m.put_u8(self.result as u8);
+        for v in self.arrival {
+            m.put_f32(v);
+        }
+        m.put_u32(self.tick);
+        m
+    }
+
+    /// From a reliable message (its first byte `msg::TRAVEL_REPLY`).
+    pub fn read(m: &[u8]) -> Option<Self> {
+        if m.first() != Some(&msg::TRAVEL_REPLY) {
+            return None;
+        }
+        let mut r = ByteReader::new(&m[1..]);
+        Some(TravelReply { viewpoint: r.u16().ok()?, result: TravelResult::from_u8(r.u8().ok()?), arrival: [r.f32().ok()?, r.f32().ok()?, r.f32().ok()?], tick: r.u32().ok()? })
+    }
+}
+
+/// A roster message: (player id, name) for `PLAYER_JOINED`, (id, "") for `PLAYER_LEFT`.
+pub fn read_roster(m: &[u8]) -> Option<(bool, u32, String)> {
+    let (&k, rest) = m.split_first()?;
+    if (k != msg::PLAYER_JOINED && k != msg::PLAYER_LEFT) || rest.len() < 4 {
+        return None;
+    }
+    let id = u32::from_le_bytes(rest[..4].try_into().ok()?);
+    Some((k == msg::PLAYER_JOINED, id, String::from_utf8_lossy(&rest[4..]).chars().take(32).collect()))
+}
+
+pub fn roster_joined(id: u32, name: &str) -> Vec<u8> {
+    let mut m = vec![msg::PLAYER_JOINED];
+    m.put_u32(id);
+    m.extend_from_slice(name.as_bytes());
+    m
+}
+
+pub fn roster_left(id: u32) -> Vec<u8> {
+    let mut m = vec![msg::PLAYER_LEFT];
+    m.put_u32(id);
+    m
 }
