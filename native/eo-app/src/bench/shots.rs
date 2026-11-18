@@ -768,6 +768,13 @@ pub fn shoot(io: &mut Io, common: &Map<String, Value>, shot: &Shot, dir: &Path, 
     let agents = io.place_agents(shot.focus);
     io.agents.extras = shot.extras.clone();
     let settle = io.settle(&cam, timeout_s)?;
+    // the look frame, and the daylight's ground albedo with it, is made on an hour or weather
+    // change from the camera drawn last (the shot before's): once this shot's camera has
+    // been drawn, make it again so the ground is this eye's (eo-look `phys::ground_albedo_at`).
+    if eo_look::features::daylight().ground_albedo {
+        io.renderer.look.set_time_of_day(shot.hour + 1e-9);
+        io.renderer.look.set_time_of_day(shot.hour);
+    }
     let mut notes = shot.notes.clone();
     if settle["settled"] != json!(true) {
         notes.push(format!("streaming did not settle within {timeout_s} s: {}", settle["unsettled"]));
