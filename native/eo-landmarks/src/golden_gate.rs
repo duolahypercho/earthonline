@@ -363,8 +363,12 @@ impl Ctx<'_> {
             let top = w + pier.top_m.unwrap_or(0.0);
             let floor = w + NEAR_FLOOR_ABOVE_SEA_M;
             let bed = (self.ground)(cx, cz).min(w - 2.0);
-            concrete.box_(cx, cz, floor, top, half_along, half_across, yaw, k.concrete, NO_BOTTOM);
-            skirt.box_(cx, cz, bed, floor, half_along, half_across, yaw, k.concrete, NO_TOP);
+            if self.fender2 && key == "south" {
+                self.south_pier(concrete, skirt, [cx, cz], half_across, half_along, bed, floor, top);
+            } else {
+                concrete.box_(cx, cz, floor, top, half_along, half_across, yaw, k.concrete, NO_BOTTOM);
+                skirt.box_(cx, cz, bed, floor, half_along, half_across, yaw, k.concrete, NO_TOP);
+            }
             far.box_(cx, cz, bed, top, half_along, half_across, yaw, k.concrete, ALL);
             let legs = &g.tower_legs[key];
             for [lx, lz] in [legs.east, legs.west] {
@@ -486,6 +490,50 @@ impl Ctx<'_> {
             member(f.P(c, -sa, ya + depth / 2.0), f.P(c, sb, yb - depth / 2.0), depth);
             member(f.P(c, sa, ya + depth / 2.0), f.P(c, -sb, yb - depth / 2.0), depth);
         }
+    }
+
+    /// The south pier's shaft (`BridgeFeatures::fender2`): its plan "with
+    /// rounded and pointed ends" (Strauss 1937, of the caisson under it; the
+    /// shaft above the water takes the same ends, INFERRED) on the
+    /// export's size, its long axis across the bridge; a stepped top (the
+    /// set-back motif of the towers, Strauss 1937; INFERRED: one step,
+    /// PIER_STEP_M high and in); in the weathered concrete.
+    #[allow(clippy::too_many_arguments)]
+    fn south_pier(&self, concrete: &mut MeshArrays, skirt: &mut MeshArrays, centre: [f64; 2], half_across: f64, half_along: f64, bed: f64, floor: f64, top: f64) {
+        let h = self.h;
+        let colour = shade(self.k.concrete, PIER_WEATHERED);
+        let ring = |inset: f64| -> Vec<[f64; 2]> {
+            let (ha, hb) = (half_across - inset, half_along - inset);
+            let end = hb * PIER_END_RATIO;
+            let core = ha - end;
+            let n = 12;
+            let mut pts = Vec::new();
+            for side in [1.0, -1.0] {
+                for i in 0..=n {
+                    // from (core, +hb) out to the tip (ha, 0) and back to (core, -hb) (mirrored on the other end).
+                    let v = 1.0 - 2.0 * i as f64 / n as f64;
+                    let along = side * hb * v;
+                    let across = side * (core + end * (1.0 - v.abs().powf(PIER_END_POWER)).max(0.0).sqrt());
+                    pts.push([centre[0] + self.site.axis[0] * along + self.site.across[0] * across, centre[1] + self.site.axis[1] * along + self.site.across[1] * across]);
+                }
+            }
+            crate::geometry::orient_ring(&pts)
+        };
+        let walls = |m: &mut MeshArrays, r: &[[f64; 2]], y0: f64, y1: f64, cap: bool| {
+            let n = r.len();
+            for i in 0..n {
+                let (a, b) = (r[i], r[(i + 1) % n]);
+                m.quad([a[0], y0, a[1]], [b[0], y0, b[1]], [b[0], y1, b[1]], [a[0], y1, a[1]], colour);
+                if cap {
+                    m.tri([a[0], y1, a[1]], [b[0], y1, b[1]], [centre[0], y1, centre[1]], colour);
+                }
+            }
+        };
+        let step = PIER_STEP_M * h;
+        let base = ring(0.0);
+        walls(skirt, &base, bed, floor, false);
+        walls(concrete, &base, floor, top - step, true);
+        walls(concrete, &ring(step), top - step, top, true);
     }
 
     /// The leg stage (h0, h1, across, along; heights over the water) at a height over the water.
@@ -1139,8 +1187,19 @@ impl Ctx<'_> {
         // sea; the wall drawn at its sea-level thickness.
         let pier = &g.supports["southPier"];
         let [cx, cz] = pier.centre;
-        let (ra, rb) = (FENDER_OUTER_M[0] / 2.0, FENDER_OUTER_M[1] / 2.0);
-        let wall = FENDER_WALL_TOP_M;
+        let (mut ra, mut rb) = (FENDER_OUTER_M[0] / 2.0, FENDER_OUTER_M[1] / 2.0);
+        let mut wall = FENDER_WALL_TOP_M;
+        let mut fender_top = FENDER_TOP_M;
+        let mut fender_colour = k.concrete;
+        if self.fender2 {
+            // (`fender2`) the published fender: 311 x 170 ft outside, its wall 10 ft at the top, its top
+            // at +15 ft MLLW (Strauss 1937), on the ground plan and the structure's scales; weathered.
+            let gs = eo_data::groundscale::scale();
+            (ra, rb) = (FENDER_FT[0] * 0.3048 * gs / 2.0, FENDER_FT[1] * 0.3048 * gs / 2.0);
+            wall = FENDER_FT[2] * 0.3048 * gs;
+            fender_top = (FENDER_FT[3] * 0.3048 - pylons::MSL_OVER_MLLW_M) * h;
+            fender_colour = shade(k.concrete, PIER_WEATHERED);
+        }
         let n = 64;
         let ring = |r_across: f64, r_along: f64| -> Vec<[f64; 2]> {
             (0..n)
@@ -1153,19 +1212,19 @@ impl Ctx<'_> {
         };
         let outer = crate::geometry::orient_ring(&ring(ra, rb));
         let inner = crate::geometry::orient_ring(&ring(ra - wall, rb - wall));
-        let (floor, top_y) = (w + NEAR_FLOOR_ABOVE_SEA_M, w + FENDER_TOP_M);
+        let (floor, top_y) = (w + NEAR_FLOOR_ABOVE_SEA_M, w + fender_top);
         let bed = (self.ground)(cx, cz).min(w - 2.0);
         for i in 0..n {
             let j = (i + 1) % n;
             let (o0, o1, i0, i1) = (outer[i], outer[j], inner[i], inner[j]);
             // outer face, inner face, top.
-            concrete.quad([o0[0], floor, o0[1]], [o1[0], floor, o1[1]], [o1[0], top_y, o1[1]], [o0[0], top_y, o0[1]], k.concrete);
-            concrete.quad([i1[0], floor, i1[1]], [i0[0], floor, i0[1]], [i0[0], top_y, i0[1]], [i1[0], top_y, i1[1]], k.concrete);
-            concrete.quad([o0[0], top_y, o0[1]], [o1[0], top_y, o1[1]], [i1[0], top_y, i1[1]], [i0[0], top_y, i0[1]], k.concrete);
-            skirt.quad([o0[0], bed, o0[1]], [o1[0], bed, o1[1]], [o1[0], floor, o1[1]], [o0[0], floor, o0[1]], k.concrete);
-            skirt.quad([i1[0], bed, i1[1]], [i0[0], bed, i0[1]], [i0[0], floor, i0[1]], [i1[0], floor, i1[1]], k.concrete);
-            far.quad([o0[0], bed, o0[1]], [o1[0], bed, o1[1]], [o1[0], top_y, o1[1]], [o0[0], top_y, o0[1]], k.concrete);
-            far.quad([o0[0], top_y, o0[1]], [o1[0], top_y, o1[1]], [i1[0], top_y, i1[1]], [i0[0], top_y, i0[1]], k.concrete);
+            concrete.quad([o0[0], floor, o0[1]], [o1[0], floor, o1[1]], [o1[0], top_y, o1[1]], [o0[0], top_y, o0[1]], fender_colour);
+            concrete.quad([i1[0], floor, i1[1]], [i0[0], floor, i0[1]], [i0[0], top_y, i0[1]], [i1[0], top_y, i1[1]], fender_colour);
+            concrete.quad([o0[0], top_y, o0[1]], [o1[0], top_y, o1[1]], [i1[0], top_y, i1[1]], [i0[0], top_y, i0[1]], fender_colour);
+            skirt.quad([o0[0], bed, o0[1]], [o1[0], bed, o1[1]], [o1[0], floor, o1[1]], [o0[0], floor, o0[1]], fender_colour);
+            skirt.quad([i1[0], bed, i1[1]], [i0[0], bed, i0[1]], [i0[0], floor, i0[1]], [i1[0], floor, i1[1]], fender_colour);
+            far.quad([o0[0], bed, o0[1]], [o1[0], bed, o1[1]], [o1[0], top_y, o1[1]], [o0[0], top_y, o0[1]], fender_colour);
+            far.quad([o0[0], top_y, o0[1]], [o1[0], top_y, o1[1]], [i1[0], top_y, i1[1]], [i0[0], top_y, i0[1]], fender_colour);
         }
         // Lamp standards at the deck luminaires (lights.rs `bridge_lights`: their pitch and head),
         // on the curb line, the arm reaching over the roadway; none where the curb passes a tower leg.
@@ -1249,6 +1308,18 @@ const PILASTER_TOP_CLEAR_M: f64 = 5.5;
 const FENDER_OUTER_M: [f64; 2] = [110.0, 52.0];
 const FENDER_WALL_TOP_M: f64 = 10.0 * 0.3048;
 const FENDER_TOP_M: f64 = 4.5;
+/// `BridgeFeatures::fender2`: the south fender's outside across and along
+/// the bridge, its wall at the top and its top's elevation over MLLW, feet
+/// (Strauss 1937: "170 x 311 ft outside", "10 ft at the top", "el. +15").
+/// INFERRED: the pier and fender's weathered concrete at 0.72 of the export's
+/// grey (marine concrete darkened by spray and algae); the south pier's ends
+/// (each end's reach PIER_END_RATIO of its half width, rounded to a point by
+/// PIER_END_POWER) and its top's step.
+const FENDER_FT: [f64; 4] = [311.0, 170.0, 10.0, 15.0];
+const PIER_WEATHERED: f64 = 0.72;
+const PIER_END_RATIO: f64 = 1.3;
+const PIER_END_POWER: f64 = 1.35;
+const PIER_STEP_M: f64 = 1.5;
 
 /// A lamp standard on a bridge's curb line (`BridgeFeatures::members`): a
 /// pole from its base `head` metres up, a short arm reaching `toward` (+-1
