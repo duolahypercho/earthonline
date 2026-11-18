@@ -10,6 +10,7 @@
 
 pub mod aerial;
 pub mod atmosphere;
+pub mod features;
 pub mod ground_field;
 pub mod look;
 pub mod math;

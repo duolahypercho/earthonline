@@ -15,7 +15,7 @@
 use crate::LookFrame;
 use crate::atmosphere::{self, Atmosphere, Tables, URBAN_GROUND_ALBEDO};
 use crate::math::*;
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
 /// How much of the frame the physical daylight takes at a solar altitude:
 /// all of it from 3 deg up, none from 2 deg under the horizon (there the
@@ -80,18 +80,119 @@ pub type GroundClasses = Box<dyn Fn(f64, f64) -> u8 + Send + Sync>;
 static GROUND_CLASSES: RwLock<Option<GroundClasses>> = RwLock::new(None);
 
 /// Install the land-cover lookup the ground's albedo is read from (eo-app
-/// main.rs, `LandCover::class_at`). Stored only: `ground_albedo_at` does not
-/// read it yet.
+/// main.rs, `LandCover::class_at`; 0 off the raster).
 pub fn set_ground_classes(f: GroundClasses) {
     if let Ok(mut g) = GROUND_CLASSES.write() {
         *g = Some(f);
     }
+    if let Ok(mut c) = GROUND_CACHE.lock() {
+        *c = None;
+    }
+}
+
+/// The open sea's albedo under a clear sky: 0.06 (Payne 1972, "Albedo of the
+/// sea surface", J. Atmos. Sci. 29, 959-970: the monthly mean of the measured
+/// ocean albedo, 0.06, at solar altitudes over about 30 deg; Jin et al. 2004,
+/// "A parameterization of ocean surface albedo", GRL 31, L22301: 0.066 under a
+/// diffuse sky). Neutral: the surface's Fresnel reflection is grey.
+pub const SEA_ALBEDO: f64 = 0.06;
+
+/// Tree cover's visible-band albedo: 0.05, between the MODIS MCD43 white-sky
+/// visible means of evergreen needleleaf (0.046) and evergreen broadleaf
+/// (0.053) forest over the contiguous US (He, Gao, Liang and Peng 2019,
+/// "Mapping climatological bare soil albedos over the contiguous United States
+/// using MODIS data", Remote Sens. 11, 666, its per-IGBP-class table). The
+/// visible band, not the shortwave: the renderer's light is visible light,
+/// and a canopy's near-infrared reflectance does not light a wall.
+pub const TREE_ALBEDO: f64 = 0.05;
+
+/// Grass, shrub, crop and wetland cover's visible-band albedo: 0.06, the
+/// MODIS MCD43 visible mean of temperate grassland, 0.062 (Davidson and Wang
+/// 2005, "Spatiotemporal variations in land surface albedo across Canada from
+/// MODIS observations", Can. J. Remote Sens. 31; as quoted, the full text not
+/// checked). INFERRED for the shrubs, crops and wetland (0.2 % of the raster),
+/// and for the San Francisco hills' summer-dry grass, which is lighter.
+pub const LOW_VEGETATION_ALBEDO: f64 = 0.06;
+
+/// Bare or sparse ground's visible-band albedo: INFERRED as the city's mean,
+/// `URBAN_GROUND_ALBEDO` (beaches, dunes and rock; 1.3 % of the raster).
+pub const BARE_ALBEDO: Rgb = URBAN_GROUND_ALBEDO;
+
+/// The radius round the eye the ground's albedo is the area mean over (m):
+/// the strait, the shores and the hills the near scene's shaded faces look
+/// down on.
+pub const GROUND_ALBEDO_RADIUS_M: f64 = 2000.0;
+/// The sample pitch of that mean (m), and the eye cell it is cached on.
+const GROUND_ALBEDO_STEP_M: f64 = 100.0;
+
+/// The visible-band albedo of an ESA WorldCover class (None: off the raster,
+/// or a class the city has none of).
+pub fn class_albedo(class: u8) -> Option<Rgb> {
+    match class {
+        80 => Some([SEA_ALBEDO; 3]),
+        10 => Some([TREE_ALBEDO; 3]),
+        20 | 30 | 40 | 90 => Some([LOW_VEGETATION_ALBEDO; 3]),
+        50 => Some(URBAN_GROUND_ALBEDO),
+        60 => Some(BARE_ALBEDO),
+        _ => None,
+    }
+}
+
+static GROUND_CACHE: Mutex<Option<((i64, i64), Rgb)>> = Mutex::new(None);
+
+/// The area-weighted mean albedo of the land cover within
+/// `GROUND_ALBEDO_RADIUS_M` of a ground-plan point; `URBAN_GROUND_ALBEDO` with
+/// no land cover installed or none under the disc.
+pub fn ground_albedo_mean(x: f64, z: f64) -> Rgb {
+    let Ok(g) = GROUND_CLASSES.read() else { return URBAN_GROUND_ALBEDO };
+    let Some(f) = g.as_ref() else { return URBAN_GROUND_ALBEDO };
+    albedo_mean_over(f.as_ref(), x, z)
+}
+
+/// `ground_albedo_mean` over a given class lookup.
+pub fn albedo_mean_over(f: &dyn Fn(f64, f64) -> u8, x: f64, z: f64) -> Rgb {
+    let n = (GROUND_ALBEDO_RADIUS_M / GROUND_ALBEDO_STEP_M).round() as i64;
+    let mut sum = [0.0; 3];
+    let mut count = 0.0;
+    for j in -n..=n {
+        for i in -n..=n {
+            if i * i + j * j > n * n {
+                continue;
+            }
+            if let Some(a) = class_albedo(f(x + i as f64 * GROUND_ALBEDO_STEP_M, z + j as f64 * GROUND_ALBEDO_STEP_M)) {
+                for c in 0..3 {
+                    sum[c] += a[c];
+                }
+                count += 1.0;
+            }
+        }
+    }
+    if count < 1.0 {
+        return URBAN_GROUND_ALBEDO;
+    }
+    sum.map(|v| v / count)
 }
 
 /// The broadband albedo of the ground the sky light sees from an eye (game
-/// metres): `URBAN_GROUND_ALBEDO` everywhere for now.
-pub fn ground_albedo_at(_eye: [f64; 3]) -> Rgb {
-    URBAN_GROUND_ALBEDO
+/// metres): the land cover's mean round it (`ground_albedo_mean`, cached per
+/// 100 m eye cell), or `URBAN_GROUND_ALBEDO` everywhere with
+/// `--no-ground-albedo`.
+pub fn ground_albedo_at(eye: [f64; 3]) -> Rgb {
+    if !crate::features::daylight().ground_albedo {
+        return URBAN_GROUND_ALBEDO;
+    }
+    let cell = ((eye[0] / GROUND_ALBEDO_STEP_M).floor() as i64, (eye[2] / GROUND_ALBEDO_STEP_M).floor() as i64);
+    if let Ok(c) = GROUND_CACHE.lock()
+        && let Some((k, a)) = *c
+        && k == cell
+    {
+        return a;
+    }
+    let a = ground_albedo_mean((cell.0 as f64 + 0.5) * GROUND_ALBEDO_STEP_M, (cell.1 as f64 + 0.5) * GROUND_ALBEDO_STEP_M);
+    if let Ok(mut c) = GROUND_CACHE.lock() {
+        *c = Some((cell, a));
+    }
+    a
 }
 
 /// Daylight for one sun direction, haze density and weather weight.
@@ -107,9 +208,29 @@ pub struct Daylight {
     pub key: Rgb,
     /// the sky's and the ground's irradiance (look units), cosine-convolved SH9.
     pub env_sh: [Rgb; 9],
+    /// the ground's share of `env_sh` alone.
+    pub env_sh_ground: [Rgb; 9],
+    /// the ground's albedo the environment was made over.
+    pub ground: Rgb,
     /// the illuminance on a horizontal surface, sun and sky (look units, luminance).
     pub e_h: f64,
     tables: Arc<Tables>,
+}
+
+/// One face's light by source (`Daylight::face_split`).
+#[derive(Clone, Copy, Debug)]
+pub struct FaceLight {
+    pub sun: Rgb,
+    pub sky: Rgb,
+    pub ground: Rgb,
+}
+
+static LAST: Mutex<Option<Daylight>> = Mutex::new(None);
+
+/// The daylight made last in this process (the renderer's frame's, while
+/// the physical daylight is on): what a shot's light split is logged from.
+pub fn last_daylight() -> Option<Daylight> {
+    LAST.lock().ok().and_then(|l| l.clone())
 }
 
 impl std::fmt::Debug for Daylight {
@@ -135,8 +256,24 @@ impl Daylight {
         let sun_toa = c.map(|v| v * e);
         let key = [0, 1, 2].map(|i| sun_toa[i] * l.sun[i]);
         let env_sh = l.sh.map(|k| [k[0] * sun_toa[0], k[1] * sun_toa[1], k[2] * sun_toa[2]]);
+        let env_sh_ground = l.sh_ground.map(|k| [k[0] * sun_toa[0], k[1] * sun_toa[1], k[2] * sun_toa[2]]);
         let e_h = luminance(key) * sun[1].max(0.0) + luminance([0, 1, 2].map(|i| l.sky_h[i] * sun_toa[i]));
-        Self { weight, density, sun, sun_toa, key, env_sh, e_h, tables }
+        let d = Self { weight, density, sun, sun_toa, key, env_sh, env_sh_ground, ground, e_h, tables };
+        if let Ok(mut last) = LAST.lock() {
+            *last = Some(d.clone());
+        }
+        d
+    }
+
+    /// A face's light by source (look units, irradiance on the face, before
+    /// shadow, occlusion and the material): the sun's direct beam, the sky's
+    /// diffuse light and the ground's. The specular and the scene's bounce
+    /// are view- and scene-dependent and drawn on the GPU only.
+    pub fn face_split(&self, n: [f64; 3]) -> FaceLight {
+        let ground = atmosphere::sh_eval(&self.env_sh_ground, n);
+        let all = atmosphere::sh_eval(&self.env_sh, n);
+        let cos = (n[0] * self.sun[0] + n[1] * self.sun[1] + n[2] * self.sun[2]).max(0.0);
+        FaceLight { sun: self.key.map(|k| k * cos), sky: [0, 1, 2].map(|c| (all[c] - ground[c]).max(0.0)), ground }
     }
 
     /// The sky's radiance (look units) along a direction from an eye `eye_m` up.
@@ -202,6 +339,46 @@ mod tests {
         assert_eq!(a.key, b.key);
         assert_eq!(a.env_sh, b.env_sh);
         assert_eq!(a.e_h, b.e_h);
+    }
+
+    #[test]
+    fn the_ground_over_the_strait_is_the_sea_and_lights_a_shaded_wall_less() {
+        // a disc that is all water reads the sea's albedo; half city, half water the mean
+        let sea = albedo_mean_over(&|_, _| 80, 0.0, 0.0);
+        assert!(sea.iter().all(|a| (a - SEA_ALBEDO).abs() < 1e-12), "{sea:?}");
+        let half = albedo_mean_over(&|x, _| if x < 0.0 { 80 } else { 50 }, 0.0, 0.0);
+        assert!(half[1] > SEA_ALBEDO && half[1] < URBAN_GROUND_ALBEDO[1], "{half:?}");
+        // off the raster (class 0) everywhere: the city's
+        assert_eq!(albedo_mean_over(&|_, _| 0, 0.0, 0.0), URBAN_GROUND_ALBEDO);
+        // a north wall in shade over the sea gets less light, and the sun : shade ratio on a
+        // lit west wall at 17 h rises
+        let s = crate::sun::sun_direction(17.0);
+        let city = Daylight::new_with_ground(s.dir(), 1.0, 1.0, URBAN_GROUND_ALBEDO);
+        let water = Daylight::new_with_ground(s.dir(), 1.0, 1.0, sea);
+        let north = [0.0, 0.0, -1.0];
+        let (sc, sw) = (city.face_split(north), water.face_split(north));
+        assert!(luminance(sw.ground) < 0.5 * luminance(sc.ground), "{sw:?} {sc:?}");
+        assert!((luminance(sw.sky) - luminance(sc.sky)).abs() < 1e-9);
+        let west = [-1.0, 0.0, 0.0];
+        let ratio = |d: &Daylight| {
+            let f = d.face_split(west);
+            let g = d.face_split(north);
+            luminance(f.sun) / luminance([0, 1, 2].map(|c| g.sky[c] + g.ground[c]))
+        };
+        assert!(ratio(&water) > 1.2 * ratio(&city), "{} {}", ratio(&water), ratio(&city));
+    }
+
+    #[test]
+    fn the_face_split_adds_up_to_the_environment() {
+        let s = crate::sun::sun_direction(10.0);
+        let d = Daylight::new(s.dir(), 1.0, 1.0);
+        for n in [[0.0, 0.0, 1.0], [1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 1.0, 0.0]] {
+            let f = d.face_split(n);
+            let e = atmosphere::sh_eval(&d.env_sh, n);
+            for c in 0..3 {
+                assert!((f.sky[c] + f.ground[c] - e[c].max(0.0)).abs() < 1e-6 * (1.0 + e[c].abs()), "{n:?} {f:?} {e:?}");
+            }
+        }
     }
 
     #[test]
