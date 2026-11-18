@@ -31,6 +31,52 @@ pub const ROOM_AUTO: u32 = 1;
 pub const ROOM_SHOP: u32 = 2;
 pub const ROOM_SHIFT: u32 = 8;
 
+/// A kit glass's visible transmittance (centre of glass, the manufacturers'
+/// published performance data), for what is seen through it by day
+/// (`--no-pane-transmittance`: one transmission for every pane):
+///
+/// * `glass-clear`: a clear insulating unit, two 6 mm clear float lites of
+///   about 0.89 each (Viracon, 1/4 in monolithic clear), 0.89^2, about 0.79;
+/// * `glass-sky`: the blue-grey and neutral low-e units of the 2000s, Tv
+///   0.64 (Vitro, Solarban 70 on clear in a 1 in unit); `glass-shell` (a
+///   hollow building's stand-in for its clear, door and film glass) as one;
+/// * `glass-dark`: the grey and bronze body tints of the 1960s-80s, Tv 0.40
+///   in a 1 in unit with clear (Vitro, Solargray; Viracon's 1 in grey unit
+///   0.39; Solargray monolithic 0.44, Solarbronze 1/4 in 0.53);
+/// * `glass-film`: a dark tint behind a solar film, Tv about 0.30 (an estimate);
+/// * `glass-reflective`: the silver and grey reflective coatings of the
+///   1970s-80s, about 0.25 (an estimate inside the coatings' range of about
+///   0.1-0.35 by coating and substrate).
+///
+/// A room is lit through the pane and seen back through it, so what shows
+/// goes as Tv squared; `PANE_TV_REFERENCE` (the clear unit) is what
+/// `DAY_THROUGH` was set for, so a clear pane reads as before. The far box
+/// already scales its coated and tinted panes this way (far_box.wgsl).
+pub fn pane_transmittance(name: &str) -> Option<f32> {
+    Some(match name {
+        "glass-clear" => 0.79,
+        "glass-sky" => 0.64,
+        "glass-shell" => 0.64,
+        "glass-dark" => 0.4,
+        "glass-film" => 0.3,
+        "glass-reflective" => 0.25,
+        _ => return None,
+    })
+}
+
+/// The clear insulating unit's Tv (`pane_transmittance`): a pane at it reads as before.
+pub const PANE_TV_REFERENCE: f32 = 0.79;
+/// The material flag bits a glass's Tv is stored in (4 bits, Tv x 15; 0 none).
+pub const PANE_TV_SHIFT: u32 = 20;
+
+/// The flag bits for a kit glass's Tv (none with `--no-pane-transmittance`).
+pub fn pane_tv_flags(name: &str) -> u32 {
+    if !RoomFixes::from_args().pane_tv {
+        return 0;
+    }
+    pane_transmittance(name).map(|t| ((t * 15.0).round().clamp(1.0, 15.0) as u32) << PANE_TV_SHIFT).unwrap_or(0)
+}
+
 /// `NIGHT_INTERIOR_KIT_GLASS`: which kit glass draws a room, and how. The shop
 /// families (`glass-shop-*`) draw the shop room; their trade fittings are not
 /// ported (the room shell only).
@@ -272,11 +318,13 @@ pub fn wgsl_constants() -> String {
     // the switches of the room fixes (see `RoomFixes`).
     let f = RoomFixes::from_args();
     s.push_str(&format!(
-        "const RM_FRAMES: bool = {};\nconst RM_DAY_DEPTH: f32 = {:?};\nconst RM_DAY_THROUGH: f32 = {:?};\nconst RM_BLIND_RUNS: bool = {};\n",
+        "const RM_FRAMES: bool = {};\nconst RM_DAY_DEPTH: f32 = {:?};\nconst RM_DAY_THROUGH: f32 = {:?};\nconst RM_BLIND_RUNS: bool = {};\nconst RM_PANE_TV_SHIFT: u32 = {}u;\nconst RM_PANE_TV_REFERENCE: f32 = {:?};\n",
         f.frames,
         if f.dim { DAY_DEPTH } else { 1.0 },
         if f.dim { DAY_THROUGH } else { 1.0 },
-        f.blind_runs
+        f.blind_runs,
+        PANE_TV_SHIFT,
+        PANE_TV_REFERENCE
     ));
     s
 }
@@ -292,11 +340,15 @@ pub fn wgsl_constants() -> String {
 /// (`DAY_THROUGH`) (`--no-room-dim`). An office's blinds go by tenant, a
 /// run of 3-7 room cells along a floor at one of a few levels, not cell by
 /// cell (the scatter of pale cells over a dark tower) (`--no-room-blind-runs`).
+/// What a pane lets through goes by its glass (`pane_transmittance`), so a
+/// tinted or reflective tower reads dark and its blinds faint, as through
+/// real tinted glass (`--no-pane-transmittance`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RoomFixes {
     pub frames: bool,
     pub dim: bool,
     pub blind_runs: bool,
+    pub pane_tv: bool,
 }
 
 pub const DAY_DEPTH: f32 = 0.5;
@@ -311,6 +363,7 @@ impl RoomFixes {
             frames: !args.iter().any(|a| a == "--no-room-frames"),
             dim: !args.iter().any(|a| a == "--no-room-dim"),
             blind_runs: !args.iter().any(|a| a == "--no-room-blind-runs"),
+            pane_tv: !args.iter().any(|a| a == "--no-pane-transmittance"),
         }
     }
 }
@@ -375,6 +428,8 @@ mod tests {
         assert!((w - 1.3).abs() < 0.07 && (h - 1.4).abs() < 0.07, "{w} x {h}");
         assert_eq!(out[1].0[2], out[4].0[2], "both sashes share one window");
         assert_eq!(out[0].0[2] & 128, 0, "a 1.3 m window 3 m up is not a shop");
+        assert!(pane_transmittance("glass-reflective").unwrap() < pane_transmittance("glass-dark").unwrap() && pane_transmittance("glass-dark").unwrap() < PANE_TV_REFERENCE);
+        assert!(pane_transmittance("glass-shop").is_none());
         assert!(kit_glass_room("glass-shell") == ROOM_AUTO && kit_glass_room("glass-shop-food") == ROOM_SHOP && kit_glass_room("glass-low-iron") == 0);
     }
 

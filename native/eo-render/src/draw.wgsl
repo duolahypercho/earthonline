@@ -839,7 +839,12 @@ fn shade(in: VOut) -> vec4<f32> {
     if ((m.flags & F_GLASS) != 0u && room != 0u && kit_object && frame.copy_step.z < 0.5 && (fa_run() & 32u) != 0u) {
         let ng_out = select(face, normalize(in.normal), dot(in.normal, in.normal) > 0.25);
         let r = rm_kit_pane(vec4<f32>(in.color, in.aux.y), in.world, ng_out, frame.cam_pos.xyz, room, look.rooms_env, look.rooms_work);
-        s.albedo = mix(s.albedo, r.day.xyz, r.day.w);
+        // By day the room is lit through the pane and seen back through it:
+        // its share goes as the glass's Tv squared against the clear unit's
+        // (rooms.rs `pane_transmittance`; no Tv bits: as before).
+        let tv = f32((m.flags >> RM_PANE_TV_SHIFT) & 15u) / 15.0;
+        let through = select(1.0, min(tv * tv / (RM_PANE_TV_REFERENCE * RM_PANE_TV_REFERENCE), 1.0), tv > 0.0);
+        s.albedo = mix(s.albedo, r.day.xyz * through, r.day.w);
         s.metal = mix(s.metal, s.metal * 0.3, r.day.w);
         // A blended pane's room reads at full strength after the blend (1 / opacity, floored at 0.25).
         let transmission = select(1.0, 1.0 / max(0.25, m.base.a), (m.flags & F_BLEND) != 0u);
