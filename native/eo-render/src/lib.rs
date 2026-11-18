@@ -1388,10 +1388,12 @@ impl Renderer {
     }
 
     /// the sea is drawn by the water pass this frame (attached, on, and
-    /// on the path it needs: compacted lists, single-sample, no debug ids);
-    /// otherwise the flat sea quad draws as before.
+    /// on the path it needs: single-sample, no debug ids; its patches are one
+    /// instanced indirect draw, so it needs no multi-draw-indirect-count unless
+    /// `--no-water-instanced` asks for the earlier rule); otherwise the flat
+    /// sea quad draws as before.
     pub fn water_active(&self) -> bool {
-        self.compact && self.sample_count == 1 && !self.debug_ids && self.water.get().is_some_and(|w| w.on())
+        self.sample_count == 1 && !self.debug_ids && self.water.get().is_some_and(|w| w.on() && (self.compact || w.instanced()))
     }
 
     /// allocate the street's scanned-set arrays at their size, write
@@ -1845,7 +1847,12 @@ impl Renderer {
                 pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
                 pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint32);
                 pass.set_pipeline(&self.blend_pipeline);
-                pass.multi_draw_indexed_indirect_count(&self.draw_buf, self.object_count as u64 * DRAW_ARGS_BYTES, &self.counter_buf, 4, self.object_count);
+                if self.compact {
+                    pass.multi_draw_indexed_indirect_count(&self.draw_buf, self.object_count as u64 * DRAW_ARGS_BYTES, &self.counter_buf, 4, self.object_count);
+                } else if self.object_count > self.blend_first {
+                    // without the count, the glass list's slots from `blend_first` on (as the city pass draws it)
+                    pass.multi_draw_indexed_indirect(&self.draw_buf, self.object_count as u64 * DRAW_ARGS_BYTES, self.object_count - self.blend_first);
+                }
                 if let Some(a) = self.agents.get() {
                     a.draw_glass(pass, &self.look);
                 }

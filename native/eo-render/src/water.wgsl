@@ -36,6 +36,8 @@
 // the sky slice's atmosphere tables (sky view, transmittance)
 @group(0) @binding(11) var w_atmo_view: texture_2d<f32>;
 @group(0) @binding(12) var w_atmo_trans: texture_2d<f32>;
+// the patches the cull kept this frame (water_cull.wgsl), one per instance
+@group(0) @binding(13) var<storage, read> w_patches: array<u32>;
 
 // the sky as the sky slice now draws it where nothing covers it: the
 // look's graded dome blended toward the atmosphere tables (`at_sky`, its
@@ -89,6 +91,8 @@ fn wv_vertex_slope(base: vec2<f32>, spacing: f32) -> vec4<f32> {
 
 // the gain this fragment uses (`w_atmo_dome`)
 var<private> w_atmo_g: f32 = 0.0;
+// this fragment's pixel (w_shade sets it; the reflection march's dither)
+var<private> w_frag_px: vec2<f32> = vec2<f32>(0.0);
 
 // the table's gain so its zenith matches the drawn one (sky_volume.wgsl `vol_atmo_gain`)
 fn w_atmo_gain() -> f32 {
@@ -323,6 +327,35 @@ fn fs_far_mirror(r: vec3<f32>, dome: vec3<f32>) -> vec3<f32> {
     return mix(dome, textureSampleLevel(sky_prev, sky_rep, uv, 0.0).rgb, 0.65);
 }
 
+// (brdf) the land standing in the mirror past the reflection march: whatever
+// the frame shows at the mirror direction's vanishing point that lies well
+// beyond this water (by its view depth, whichever depth form it was drawn
+// with: the city's or the far layer's 1e-9 / view depth), so a far shore's
+// mirror image is continuous along it (the depth form alone keyed it by the
+// far terrain's nodes, and its reflection stood in rectangles), fading at the
+// screen's edge; the sky elsewhere.
+fn fs_far_mirror2(r: vec3<f32>, dome: vec3<f32>, view_dist: f32) -> vec3<f32> {
+    if (skyu.flags.x == 0u || skyu.taa.y < 0.5) {
+        return dome;
+    }
+    let d = normalize(vec3<f32>(r.x, max(r.y, 0.002), r.z));
+    let c = skyu.prev_vp * vec4<f32>(d, 0.0);
+    if (c.w <= 1e-4) {
+        return dome;
+    }
+    let uv = vec2<f32>(c.x / c.w * 0.5 + 0.5, 0.5 - c.y / c.w * 0.5);
+    let e = w_edge(uv);
+    if (e <= 0.0) {
+        return dome;
+    }
+    let sd = w_scene_depth(uv);
+    if (sd > 1e8) {
+        return dome; // sky there
+    }
+    let beyond = wg_smooth(view_dist * 1.5, view_dist * 3.0, sd);
+    return mix(dome, textureSampleLevel(sky_prev, sky_rep, uv, 0.0).rgb, 0.85 * beyond * e);
+}
+
 // the dome for a direction off the last frame, carried by what the sky
 // slice made of the dome at the nearest sky the frame shows (its haze, cloud
 // cover, rain tint: per channel, drawn over dome, at the screen point nearest
@@ -359,7 +392,8 @@ fn w_sky_ratio(d: vec3<f32>, dome: vec3<f32>, uv: vec2<f32>, ahead: bool) -> vec
 }
 
 @vertex
-fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) pid: u32) -> VsOut {
+fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VsOut {
+    let pid = w_patches[ii];
     let side = WG_PATCH_QUADS + 1u;
     let gi = f32((pid % WG_PATCHES) * WG_PATCH_QUADS + vi % side);
     let gj = f32((pid / WG_PATCHES) * WG_PATCH_QUADS + vi / side);
@@ -509,6 +543,44 @@ fn wo_fresnel(cos_i: f32, eta: f32) -> f32 {
     let a = (g - c) / (g + c);
     let b = (c * (g + c) - 1.0) / (c * (g - c) + 1.0);
     return a * a * 0.5 * (b * b + 1.0);
+}
+
+// the Fresnel reflectance averaged over the visible facets of a surface whose
+// unresolved slopes have standard deviation `sigma` in the view's plane
+// (Bruneton, Neyret and Holzschuch 2010, their fit), over water's normal
+// reflectance: a rough sea at a grazing view sees the facets tilted toward
+// the eye, which reflect less (eo-water optics.rs `mean_fresnel`).
+fn wo_mean_fresnel(cos_v: f32, sigma: f32) -> f32 {
+    let c = clamp(cos_v, 0.0, 1.0);
+    let m = pow(1.0 - c, 5.0 * exp(-2.69 * sigma)) / (1.0 + 22.7 * pow(max(sigma, 0.0), 1.5));
+    return WO_F0 + (1.0 - WO_F0) * m;
+}
+
+// Smith's masking for a Beckmann surface of mean square slope m2 (the
+// rational fit of Walter et al. 2007), seen at cosine c.
+fn wo_beckmann_lambda(c: f32, m2: f32) -> f32 {
+    let a = c / max(sqrt(m2 * max(1.0 - c * c, 1e-6)), 1e-6);
+    if (a >= 1.6) {
+        return 0.0;
+    }
+    return (1.0 - 1.259 * a + 0.396 * a * a) / (3.535 * a + 2.181 * a * a);
+}
+
+// the sun's specular lobe of a sea whose unresolved slopes are Gaussian of
+// mean square slope m2 (Cox and Munk 1954: a Beckmann distribution of that
+// variance), with height-correlated Smith masking: D G F / (4 n.v).
+fn wo_beckmann_spec(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, m2: f32) -> f32 {
+    let h = normalize(l + v);
+    let ndh = max(dot(n, h), 1e-4);
+    let ndv = max(dot(n, v), 1e-4);
+    let ndl = max(dot(n, l), 0.0);
+    if (ndl <= 0.0) {
+        return 0.0;
+    }
+    let c2 = ndh * ndh;
+    let d = exp(-(1.0 - c2) / (c2 * m2)) / (WG_PI * m2 * c2 * c2);
+    let g = 1.0 / (1.0 + wo_beckmann_lambda(ndv, m2) + wo_beckmann_lambda(ndl, m2));
+    return d * g * wo_fresnel(max(dot(v, h), 0.0), WO_IOR) / (4.0 * ndv);
 }
 
 fn wo_phase(cos_t: f32) -> f32 {
@@ -708,6 +780,97 @@ fn w_march(origin: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
     return vec3<f32>(s.xy, w_edge(s.xy) * facing * touch * above_sea * in_reach);
 }
 
+// (brdf) the reflection march in even steps across the screen (the
+// perspective-correct screen-space traversal of McGuire and Mara 2014, JCGT
+// 3(4)): the mirror ray from the surface to where it leaves the frame, its
+// depth carried as 1/w (linear on the screen), 20 steps started at a
+// per-pixel offset that moves with the frame's jitter (the temporal resolve
+// averages the step pattern away) and a bisection. The
+// march above grows its steps with distance, so from a high eye a far shore
+// was hit or missed by whole steps, and its mirror image stood in screen-aligned
+// blocks; even screen steps find a hill or a tower wherever its image lies.
+// Returns (uv, weight).
+fn w_march2(origin: vec3<f32>, r: vec3<f32>) -> vec3<f32> {
+    let dir = normalize(vec3<f32>(r.x, max(r.y, 0.002), r.z)); // (a ray below the horizon meets the next wave, not the bottom)
+    let range = w_view_depth(origin);
+    let c0 = wu.view_proj * vec4<f32>(origin, 1.0);
+    var c1 = wu.view_proj * vec4<f32>(origin + dir * (range * 40.0 + 4000.0), 1.0);
+    if (c0.w <= 0.05) {
+        return vec3<f32>(0.5, 0.5, 0.0);
+    }
+    // the segment clipped to the near side and to the frame (clip coordinates are linear along it)
+    var u_end = 1.0;
+    if (c1.w < 0.05) {
+        u_end = (c0.w - 0.05) / max(c0.w - c1.w, 1e-6);
+    }
+    let dc = c1 - c0;
+    for (var k = 0; k < 2; k = k + 1) {
+        let a0 = select(c0.x, c0.y, k == 1);
+        let da = select(dc.x, dc.y, k == 1);
+        // a0 + u da = +-(c0.w + u dw)
+        let up = (c0.w - a0) / (da - dc.w);
+        let dn = (-c0.w - a0) / (da + dc.w);
+        if (up > 0.0 && (da - dc.w) > 0.0) {
+            u_end = min(u_end, up);
+        }
+        if (dn > 0.0 && (da + dc.w) < 0.0) {
+            u_end = min(u_end, dn);
+        }
+    }
+    let ce = c0 + dc * u_end;
+    let k0 = 1.0 / c0.w;
+    let k1 = 1.0 / ce.w;
+    let n0 = c0.xy * k0;
+    let n1 = ce.xy * k1;
+    let steps = 20;
+    // (interleaved gradient noise, Jimenez 2014, on the pixel, shifted by this frame's jitter)
+    let px = floor(w_frag_px) + skyu.jitter.xy * 977.0;
+    let jit = fract(52.9829189 * fract(0.06711056 * px.x + 0.00583715 * px.y));
+    var prev_s = 0.0;
+    var hit_s = -1.0;
+    for (var i = 1; i <= steps; i = i + 1) {
+        let sp = min((f32(i) - jit) / f32(steps), 1.0);
+        let nd = mix(n0, n1, sp);
+        let uv = vec2<f32>(nd.x * 0.5 + 0.5, 0.5 - nd.y * 0.5);
+        let rz = 1.0 / mix(k0, k1, sp);
+        let sz = w_scene_depth(uv);
+        let dz = rz - sz;
+        // behind the surface there, by less than the surface's own spread over the step
+        let thick = max(abs(rz - 1.0 / mix(k0, k1, prev_s)) * 1.5, rz * 0.03 + 0.5);
+        if (sz < 1e8 && dz > 0.0 && dz < thick) {
+            hit_s = sp;
+            break;
+        }
+        prev_s = sp;
+    }
+    if (hit_s < 0.0) {
+        return vec3<f32>(0.5, 0.5, 0.0);
+    }
+    var a = prev_s;
+    var b = hit_s;
+    for (var i = 0; i < 4; i = i + 1) {
+        let m = 0.5 * (a + b);
+        let nd = mix(n0, n1, m);
+        let uv = vec2<f32>(nd.x * 0.5 + 0.5, 0.5 - nd.y * 0.5);
+        if (1.0 / mix(k0, k1, m) > w_scene_depth(uv)) {
+            b = m;
+        } else {
+            a = m;
+        }
+    }
+    let nd = mix(n0, n1, b);
+    let uv = vec2<f32>(nd.x * 0.5 + 0.5, 0.5 - nd.y * 0.5);
+    // the point the ray reached (its view depth along the ray's own line), over the sea
+    let kz = mix(k0, k1, b);
+    let cp = mix(c0, ce, (b * k1) / mix(k0, k1, b) * 1.0); // (clip point at that screen place: u = s k1 / k(s))
+    let hp = (wu.inv_view_proj * vec4<f32>(cp.xyz / cp.w, 1.0));
+    let hy = hp.y / hp.w;
+    let above_sea = wg_smooth(wu.grid.z - 0.15, wu.grid.z + 0.35, hy);
+    let gap = abs(w_scene_depth(uv) - 1.0 / kz);
+    let touch = wg_smooth(max(0.06 / kz, 1.0), max(0.03 / kz, 0.5), gap);
+    return vec3<f32>(uv, w_edge(uv) * above_sea * touch);
+}
+
 // The frame at the reflected ray's vanishing point, depth-tested
 // (`buildVanishingPointTap`).
 fn w_far_tap(origin: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
@@ -751,6 +914,7 @@ struct Shade {
 
 fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) -> Shade {
     let t = wu.cam.w;
+    w_frag_px = frag.xy;
     let footprint = clamp(max(length(dpdx(world.xz)), length(dpdy(world.xz))), 0.0, 64.0);
     let fs = w_field_at(base);
     let signed = fs.x;
@@ -854,20 +1018,40 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     var sz = 0.0;
     let amp = wg_cascade_amp(world.x);
     var whitecap = 0.0;
+    // the spectrum's slope variance (all of it, and what this pixel's normal carries)
+    var wv_var_all = 0.0;
+    var wv_var_res = 0.0;
+    let brdf = wv_feat(1u);
     if (wu.flags.w > 0.5) {
         // The gusts and slicks scale the two finest cascades, the third finest by 40 % of it.
         let rg = rough / wv_ripple(p.x); // the cascades carry the wind themselves
         let fb = wg_band(footprint); // waves
         var wv_raw = 0.0; // the whitecap foam and the fine chop that tears it
         var wv_fine = 0.0;
-        let wb = fb * amp * vec4<f32>(1.0, mix(1.0, rg, 0.4), rg, rg);
+        let ab = amp * vec4<f32>(1.0, mix(1.0, rg, 0.4), rg, rg);
+        let wb = fb * ab;
+        // (foam cover: each cascade's foam only while the pixel spans under
+        // about two of its texels; past that its mean cover, not one texel's foam)
+        let foam_mean = wv_feat(4u);
+        var kres = 0.0;
         for (var c = 0u; c < 4u; c = c + 1u) {
+            // the slope variance this cascade carries here and the share the normal keeps
+            // (cascades 0 and 1 stand in from the vertex where the pixel's own fade)
+            let vc = ab[c] * ab[c] * wu.wv_mss[c];
+            let kept = select(fb[c] * swell_fade, fb[c] * swell_fade + (1.0 - fb[c]), c < 2u);
+            wv_var_all = wv_var_all + vc;
+            wv_var_res = wv_var_res + vc * min(kept * kept, 1.0);
+            var kc = 1.0;
+            if (foam_mean && c < 3u) {
+                kc = 1.0 - wg_smooth(0.5, 2.0, wv_lod(footprint, c));
+                kres = kres + kc * (1.0 / 3.0);
+            }
             if (wb[c] > 0.0) {
                 let uv = w_casc_uv(p, c);
                 let d = textureSampleLevel(w_deriv, w_repeat, uv, c, 0.0);
                 sx = sx + d.x * wb[c] * swell_fade;
                 sz = sz + d.y * wb[c] * swell_fade;
-                wv_raw = max(wv_raw, wv_foam(d, p.x, det.y) * fb[c]); // the place's whitecap foam of this cascade
+                wv_raw = max(wv_raw, wv_foam(d, p.x, det.y) * fb[c] * kc); // the place's whitecap foam of this cascade
                 wv_fine = wv_fine + select(0.0, (d.x + d.y) * wb[c], c >= 2u);
             }
         }
@@ -875,12 +1059,15 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         sx = sx + wv_far_slope.x * (1.0 - fb.x) + wv_far_slope.z * (1.0 - fb.y);
         sz = sz + wv_far_slope.y * (1.0 - fb.x) + wv_far_slope.w * (1.0 - fb.y);
         // the whitecap: a fresh core, lace as it ages, the mean cover far off
-        let wv_farness = wg_smooth(2.0, 3.5, wv_lod(footprint, 1u)); // (r2b: as cascade 1 fades with the footprint)
+        var wv_farness = wg_smooth(2.0, 3.5, wv_lod(footprint, 1u)); // (r2b: as cascade 1 fades with the footprint)
+        if (foam_mean) {
+            wv_farness = 1.0 - kres; // (the share of the foam's cascades the pixel no longer resolves)
+        }
         var wv_lace = 0.0;
         if (wv_raw > 0.02 && wv_farness < 0.98) {
             wv_lace = mx_noise(vec3<f32>(p * 0.9, t * 0.05)) * 0.65 + mx_noise(vec3<f32>(p * 2.6, t * 0.11 + 3.0)) * 0.35;
         }
-        whitecap = wv_edge(wv_raw, wv_fine, wv_lace * 1.6, wv_farness, p.x);
+        whitecap = wv_edge(wv_raw, wv_fine, wv_lace * 1.6, wv_farness, p.x, foam_mean);
         // Near-field capillary ripples: the finest cascade re-read at ~1 m and
         // ~2.3 m tiles, rotated, where a pixel is under 4 cm (tidewater).
         let near = wg_smooth(0.04, 0.01, footprint) * rough;
@@ -995,6 +1182,26 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         sx = sx + (r1 - relief) / rs * rg;
         sz = sz + (r2 - relief) / rs * rg;
     }
+    // (brdf) the facets a grazing eye sees: a slope turned away from the eye
+    // past the view's own elevation is hidden behind the crest in front of it,
+    // and what the pixel sees there is that crest's face, turned toward the
+    // eye. Slopes turned away by more than a quarter of the view's elevation
+    // are mirrored about that line (continuous, the spread of slopes kept), so
+    // no back-facing normal mirrors the bright horizon as a pale dash on every
+    // crest at a grazing view (Bruneton et al. 2010 weigh the facets by what
+    // the eye sees the same way); the lowest sky a facet then mirrors is half
+    // the view's own elevation.
+    let vlen = length(v.xz);
+    if (brdf && vlen > 1e-3) {
+        let vh = v.xz / vlen;
+        let lim = -0.25 * v.y / vlen;
+        let ta = -(sx * vh.x + sz * vh.y); // the slope toward the eye
+        if (ta < lim) {
+            let d = 2.0 * (lim - ta);
+            sx = sx - d * vh.x;
+            sz = sz - d * vh.y;
+        }
+    }
     // the groundswell's slope (it tilts whole patches of the wind sea)
     let n = normalize(vec3<f32>(-sx, 1.0, -sz));
 
@@ -1002,8 +1209,30 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     let kpx = WG_PI / max(footprint, 1e-4);
     let unresolved = clamp(log2(110.0 / kpx) / 9.0, 0.0, 1.0);
     // (+ rain's splashes freckle the surface matte)
-    let alpha2 = WO_ROUGHNESS * WO_ROUGHNESS + unresolved * rough * rough * WS_MSS * 2.0 + foam * 0.2 + rain * 0.08 + storm * 0.03; // (rain and storm matte) // (rain's splashes make the far water matte)
-    let sigma_unres = sqrt(unresolved * rough * rough * WS_MSS);
+    var alpha2 = WO_ROUGHNESS * WO_ROUGHNESS + unresolved * rough * rough * WS_MSS * 2.0 + foam * 0.2 + rain * 0.08 + storm * 0.03; // (rain and storm matte) // (rain's splashes make the far water matte)
+    var sigma_unres = sqrt(unresolved * rough * rough * WS_MSS);
+    // (brdf) the slope variance the pixel does not resolve, from the sea
+    // itself (Bruneton et al. 2010's split of one slope distribution between
+    // the geometry and the BRDF): the Cox-Munk total for the wind here
+    // (clean 0.003 + 0.00512 U, under a slick 0.008 + 0.00156 U; Cox and Munk
+    // 1954) is conserved at every range. What the cascades carry and the
+    // pixel's normal no longer shows (faded with the footprint) joins the
+    // capillary slopes under the spectrum's 10 cm cut (the total less the
+    // spectrum, at least a quarter of it, as the gusts and slicks modulate
+    // it); foam, rain and a storm's spray make it matte as before.
+    var m2 = alpha2;
+    if (brdf) {
+        // (the gusts carry the wind 40 % either side of its mean; Cox and Munk's
+        // slick law where the sea detail lays a slick)
+        let u10 = wv_u10(p.x) * mix(0.6, 1.4, det.y);
+        let cm = mix(0.003 + 0.00512 * u10, 0.008 + 0.00156 * u10, det.z);
+        let near_taps = wg_smooth(0.04, 0.01, footprint) * rough; // (the capillary taps resolve a share of it near the eye)
+        let sub = max(cm - wv_var_all, 0.25 * cm) * (1.0 - 0.5 * near_taps);
+        let unres = sub + max(wv_var_all - wv_var_res, 0.0);
+        m2 = max(unres + foam * 0.2 + rain * 0.08 + storm * 0.03, 4e-4);
+        sigma_unres = sqrt(unres);
+        alpha2 = m2; // (the probe's blur follows it too)
+    }
     let roughness = clamp(sqrt(sqrt(alpha2)), 0.02, 0.95);
 
     // --- Fresnel and the reflected sky (raised by the unresolved slope, the
@@ -1013,7 +1242,11 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // so its reflectance near the horizon stays under about 0.72: the far band
     // reads darker than the sky over it instead of a clipped white strip.
     // (the cap only far out: near the eye a grazing view is a mirror, the bottom unseen)
-    let fres = min(wo_fresnel(max(dot_nv, 1e-4), WO_IOR), mix(0.97, 0.72, wg_smooth(150.0, 1500.0, dist)));
+    var fres = min(wo_fresnel(max(dot_nv, 1e-4), WO_IOR), mix(0.97, 0.72, wg_smooth(150.0, 1500.0, dist)));
+    if (brdf) {
+        // (the mean over the visible facets, the unresolved slopes' spread in the view's plane: half the variance)
+        fres = wo_mean_fresnel(dot_nv, sqrt(0.5 * m2));
+    }
     let r = reflect(-v, n);
     let rise = sigma_unres * 1.3 * (1.0 - max(r.y, 0.0));
     let rup = normalize(vec3<f32>(r.x, max(r.y, 0.004) + rise, r.z));
@@ -1022,7 +1255,11 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // probe for what stands in it (buildings round the viewer), told apart
     // from its sky as fa_glazing tells them apart.
     var dome = w_drawn_sky(rup, w_atmo_dome(rup)); // the sky as drawn (the atmosphere sky)
-    dome = fs_far_mirror(r, dome); // the far land (1e-9 / view depth, DEPTH_K) in the mirror under it
+    if (brdf) {
+        dome = fs_far_mirror2(r, dome, view_dist); // the far land in the mirror under it, by its distance
+    } else {
+        dome = fs_far_mirror(r, dome); // the far land (1e-9 / view depth, DEPTH_K) in the mirror under it
+    }
     if (wu.flags.y > 0.5) {
         let lod = clamp(log2(128.0) + 2.0 * log2(max(1.16 * roughness, 1e-4)), 0.0, 4.0);
         let pr = w_probe_sample(rup, lod);
@@ -1126,6 +1363,9 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         let gl = ndv * sqrt(ndl_g * ndl_g * (1.0 - alpha2) + alpha2);
         let vis = 0.5 / max(gv + gl, 1e-5);
         var spec = dggx * vis * wo_fresnel(vdh, WO_IOR) * ndl_g;
+        if (brdf) {
+            spec = wo_beckmann_spec(n, v, lg, m2 + WO_ROUGHNESS * WO_ROUGHNESS); // the glitter path's width is the sea's own slope spread
+        }
         // the share of the glint from facets finer than a pixel lands on a
         // few of them, each a sharp point (same mean): sparkles over dark water,
         // not a smooth sheen.
@@ -1245,6 +1485,38 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // crosses the turbid bay on a long slant): the body dims toward a third by
     // 3 degrees (the aerial bay read as bronze mud at golden hour)
     vol.inscatter = vol.inscatter * mix(0.35, 1.0, wg_smooth(0.05, 0.45, l.y));
+    if (wv_feat(2u)) {
+        // (body) the light the water body sends up, as ocean optics measures
+        // it: the deep body's remote-sensing reflectance (eo-water optics.rs
+        // `deep_rrs`: Gordon et al. 1988 and Lee et al. 2002 on the bay's and the
+        // coast's absorption and backscatter, the surf zone's silt) times the
+        // downwelling irradiance the city's diffuse surfaces get (the sun
+        // through its entry Fresnel and the body's soft shadow, the sky as the
+        // city's ambient terms), filling in over the first metres of column
+        // (2 (a + bb) per metre). Leaving the surface at this angle it is
+        // carried by (1 - F) below, so it is divided by the normal transmission
+        // its Rrs already holds.
+        var rrs = mix(WO_BAY_RRS, WO_COAST_RRS, ocean);
+        var fill_k = mix(WO_BAY_FILL, WO_COAST_FILL, ocean);
+        rrs = mix(rrs, WO_SILT_RRS, silt);
+        fill_k = mix(fill_k, WO_SILT_FILL, silt);
+        let t_in = (1.0 - wo_fresnel(max(l.y, 0.0), WO_IOR)) / (1.0 - WO_F0);
+        let up = vec3<f32>(0.0, 1.0, 0.0);
+        let e_sky = look.hemi_sky.xyz + look.ambient.xyz + w_sh(up) * look.ambient.w * look.env_class.w;
+        let e_d = look.key.xyz * max(l.y, 0.0) * vol_shadow * t_in + e_sky;
+        // (the ground under open water is the carpet pressed to the seabed 2 m
+        // down, not the bay's 10-100 m: past the waterline the column is taken as
+        // at least the shore's slope gives, a sandy foreshore's 1:20 at a beach
+        // (Bascom 1951: 1:10 to 1:50 with grain size) and 5 m plus 1:4 off a
+        // seawall or a rocky shore; under it the drawn column)
+        let deep = max(column, mix(5.0 + 0.25 * max(signed, 0.0), 0.05 * max(signed, 0.0), beach));
+        let fill = vec3<f32>(1.0) - exp(-2.0 * fill_k * deep);
+        vol.inscatter = rrs * e_d * fill / (1.0 - WO_F0);
+        // the bottom through the same water, down and back up (what it does
+        // not send back, the body above has); the clear constants' underwater
+        // light stands down below
+        vol.tview = vec3<f32>(1.0) - fill;
+    }
     // Crest translucency: sun through thin wave tips.
     let vh = normalize(v.xz + vec2<f32>(1e-5, 0.0));
     let lh = normalize(l.xz + vec2<f32>(1e-5));
@@ -1300,12 +1572,14 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     let k_t = (1.0 - fres) * water;
     s.own = ((vol.inscatter + sss) * k_t + foam_rad * foam_w + glint) * (1.0 - fog) + look.fog_color.xyz * fog;
     // sand under a thin sheet is wet sand (darker: water fills its pores).
-    s.through = vol.tview * wo_underwater(bottom_depth, l) * k_t * (1.0 - fog) * (1.0 - 0.4 * film);
+    s.through = vol.tview * select(wo_underwater(bottom_depth, l), vec3<f32>(1.0), wv_feat(2u)) * k_t * (1.0 - fog) * (1.0 - 0.4 * film);
     s.uv = uv_f;
     s.refl_k = fres * water * (1.0 - fog);
     // wind patches and slicks read from afar: a slick (its capillaries
     // damped) mirrors more of the sky, a gust patch less and is darker.
-    s.refl_k = s.refl_k * (1.0 + 0.3 * det.z - 0.12 * det.y);
+    if (!brdf) {
+        s.refl_k = s.refl_k * (1.0 + 0.3 * det.z - 0.12 * det.y); // (brdf: the slick's and the gust's slopes set the mean Fresnel instead)
+    }
     // rain-pocked water scatters the grey sky back from every angle: about
     // twice the mirror's share near the eye (the near water read twice too dark in rain)
     s.refl_k = min(s.refl_k * (1.0 + 0.9 * rain), 0.85);
@@ -1353,7 +1627,12 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     s.side = dot(n.xz, normalize(vec2<f32>(-v.z, v.x) + vec2<f32>(1e-5, 0.0)));
     s.sun_near = wg_smooth(0.9, 0.995, dot(rup, normalize(look.sun.xyz))) * wg_smooth(-0.03, 0.02, look.sun.y) * (1.0 - wg_smooth(0.3, 0.6, skyu.night.z));
     if (with_copy && r.y < WS_MARCH_MAX_SIN && fres > WS_MARCH_MIN_F && sf_inj.rough < 0.5) { // no mirror march in the strip's churned water
-        let m = w_march(world, r);
+        var m = vec3<f32>(0.0);
+        if (brdf) {
+            m = w_march2(world, r);
+        } else {
+            m = w_march(world, r);
+        }
         let far = w_far_tap(world, r);
         if (m.z >= far.z) {
             s.mirror_uv = m.xy;
