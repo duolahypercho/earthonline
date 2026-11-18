@@ -273,7 +273,40 @@ struct Ctx<'a> {
     wires: bool,
     /// `BridgeFeatures::members`.
     members: bool,
+    /// The fourth pass's `BridgeFeatures` (`haunch`, `bracing`, `pylons`, `arch2`, `fender2`, `collar`).
+    haunch: bool,
+    bracing: bool,
+    pylons: bool,
+    arch2: bool,
+    fender2: bool,
+    collar: bool,
 }
+
+/// A portal strut's casing (`BridgeFeatures::haunch`): which exported strut,
+/// its bottom and top (world heights), its thickness along the span, and
+/// whether a haunch stands over it (another casing above).
+struct PortalCasing {
+    index: usize,
+    y0: f64,
+    y1: f64,
+    along: f64,
+    top_haunch: bool,
+}
+
+/// INFERRED (`BridgeFeatures::haunch`; no drawing of the casings is
+/// published, and the export's strut heights are the bracing's): the
+/// casing's faces stand half a cell (the legs' 3.5 ft cell, Strauss 1937)
+/// inside the legs' faces along the span; a casing grows top and bottom to
+/// stand 0.45 of the opening under it (estimated from the Battery Spencer
+/// photograph against the exported 0.33-0.36: the owner must accept it);
+/// the haunch brackets reach 0.15 of the opening's width out from each leg
+/// and as far along it, in five steps; the lip is 0.6 m high and 0.3 m proud.
+/// Each is times the structure scale where it is a length.
+const CASING_SETBACK_M: f64 = 3.5 * 0.3048 / 2.0;
+const PORTAL_DEPTH_RATIO: f64 = 0.45;
+const HAUNCH_RATIO: f64 = 0.15;
+const HAUNCH_STEPS: usize = 5;
+const CASING_LIP_M: [f64; 2] = [0.6, 0.3];
 
 impl Ctx<'_> {
     fn in_tower_zone(&self, c0: f64, c1: f64) -> bool {
@@ -332,9 +365,14 @@ impl Ctx<'_> {
             }
             let ([ex, ez], [wx, wz]) = (legs.east, legs.west);
             let c = self.site.chainage(ex, ez);
-            for &[h0, h1, along] in &g.struts {
+            let portals = self.portals();
+            for (i, &[h0, h1, along]) in g.struts.iter().enumerate() {
                 let (mx, mz) = ((ex + wx) / 2.0, (ez + wz) / 2.0);
                 let span = (ex - wx).hypot(ez - wz);
+                if let Some(p) = portals.iter().find(|p| p.index == i) {
+                    self.portal(orange, far, c, mx, mz, span, p);
+                    continue;
+                }
                 orange.box_(mx, mz, w + h0, w + h1, along / 2.0, span / 2.0, yaw, k.orange_dark, ALL);
                 far.box_(mx, mz, w + h0, w + h1, along / 2.0, span / 2.0, yaw, k.orange_dark, ALL);
                 if self.detail && w + h0 > self.plan.y_tower {
@@ -347,6 +385,87 @@ impl Ctx<'_> {
             let xb = 1.4 * self.h;
             orange.beam(self.P(c, -s, w + lo), self.P(c, s, w + hi), xb, xb, k.orange_dark);
             orange.beam(self.P(c, s, w + lo), self.P(c, -s, w + hi), xb, xb, k.orange_dark);
+        }
+    }
+
+    /// The leg stage (h0, h1, across, along; heights over the water) at a height over the water.
+    fn stage_at(&self, y: f64) -> [f64; 4] {
+        let st = &self.g.leg_stages;
+        *st.iter().find(|s| y >= s[0] && y < s[1]).unwrap_or(if y < st[0][0] { &st[0] } else { &st[st.len() - 1] })
+    }
+
+    /// The portal struts above the roadway as their steel casings
+    /// (`BridgeFeatures::haunch`, with `detail`): see `PortalCasing`.
+    fn portals(&self) -> Vec<PortalCasing> {
+        if !(self.haunch && self.detail) {
+            return Vec::new();
+        }
+        let (g, w, h) = (self.g, self.water, self.h);
+        let above: Vec<usize> = (0..g.struts.len()).filter(|&i| w + g.struts[i][0] > self.plan.y_tower).collect();
+        let mut out = Vec::new();
+        for (k, &i) in above.iter().enumerate() {
+            let [h0, h1, _] = g.struts[i];
+            // the opening under the strut: down to the next strut, or to the roadway.
+            let below = if k > 0 { g.struts[above[k - 1]][1] } else { self.plan.y_tower - w };
+            let (height, opening) = (h1 - h0, h0 - below);
+            // grow the casing top and bottom so it stands PORTAL_DEPTH_RATIO of the opening under it.
+            let grow = ((PORTAL_DEPTH_RATIO * opening - height) / (2.0 + 2.0 * PORTAL_DEPTH_RATIO)).max(0.0);
+            let stage = self.stage_at((h0 + h1) / 2.0);
+            out.push(PortalCasing {
+                index: i,
+                y0: w + h0 - grow,
+                y1: w + h1 + grow,
+                along: stage[3] - 2.0 * CASING_SETBACK_M * h,
+                top_haunch: k + 1 < above.len(),
+            });
+        }
+        out
+    }
+
+    /// One portal strut's casing (`BridgeFeatures::haunch`): the steel facia
+    /// plates that case the bracing ("transverse cross strut steel façade
+    /// covers": the District's 2025 retrofit scope; "facia plates" blending
+    /// with the stepped lines of the legs: Strauss 1937) as a box between the
+    /// legs nearly flush with their faces, a lip projecting along its top,
+    /// the vertical ribbing on both faces, and the "angular, stepped brackets
+    /// on the horizontal struts" (goldengate.org, "Art Deco on a Grand
+    /// Scale") as stepped haunches in the openings' corners, under every
+    /// casing and over every casing with another above it. The far item takes
+    /// the casing and one block a haunch.
+    #[allow(clippy::too_many_arguments)]
+    fn portal(&self, orange: &mut MeshArrays, far: &mut MeshArrays, c: f64, mx: f64, mz: f64, span: f64, p: &PortalCasing) {
+        let (k, h, yaw, w) = (&self.k, self.h, self.yaw, self.water);
+        orange.box_(mx, mz, p.y0, p.y1, p.along / 2.0, span / 2.0, yaw, k.orange, ALL);
+        far.box_(mx, mz, p.y0, p.y1, p.along / 2.0, span / 2.0, yaw, k.orange, ALL);
+        let hp = self.site.half_plane;
+        // the lip, between the legs' inner faces at the casing's top.
+        let top_stage = self.stage_at(p.y1 - w - 0.01);
+        let clear_top = hp - top_stage[2] / 2.0;
+        let (lip_h, lip_out) = (CASING_LIP_M[0] * h, CASING_LIP_M[1] * h);
+        orange.box_(mx, mz, p.y1 - lip_h, p.y1, p.along / 2.0 + lip_out, clear_top, yaw, k.orange, ALL);
+        self.portal_ribs(orange, c, p.y0, p.y1 - lip_h, p.along);
+        // the haunches: HAUNCH_STEPS steps, each 1 / HAUNCH_STEPS of the reach out from the leg and down (or up) the leg.
+        let recess = CASING_SETBACK_M * h;
+        let mut corner = |y_face: f64, dir: f64| {
+            let stage = self.stage_at(y_face - w + dir * 0.5);
+            let inner = hp - stage[2] / 2.0;
+            let r = HAUNCH_RATIO * 2.0 * inner;
+            let n = HAUNCH_STEPS;
+            for sgn in [-1.0, 1.0] {
+                for i in 0..n {
+                    let reach = r * (n - i) as f64 / n as f64;
+                    let (ya, yb) = (y_face + dir * r * i as f64 / n as f64, y_face + dir * r * (i + 1) as f64 / n as f64);
+                    let [x, z] = self.site.axis_point(c, sgn * (inner - reach / 2.0));
+                    orange.box_(x, z, ya.min(yb), ya.max(yb), p.along / 2.0 - recess, reach / 2.0, yaw, k.orange, ALL);
+                }
+                let [x, z] = self.site.axis_point(c, sgn * (inner - r / 4.0));
+                let (ya, yb) = (y_face, y_face + dir * r * 0.75);
+                far.box_(x, z, ya.min(yb), ya.max(yb), p.along / 2.0 - recess, r / 4.0, yaw, k.orange, ALL);
+            }
+        };
+        corner(p.y0, -1.0);
+        if p.top_haunch {
+            corner(p.y1, 1.0);
         }
     }
 
@@ -961,7 +1080,7 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
     };
     let tower_zone_half = g.leg_stages.iter().map(|s| s[3]).fold(f64::MIN, f64::max) / 2.0 + 1.0;
     let tower_frame = Frame::new(site.axis_point(0.0, 0.0), site.axis);
-    let ctx = Ctx { g, d, site: &site, plan: &plan, frame: &frame, tower_frame: &tower_frame, ground: &ground_at, k, yaw: site.axis[1].atan2(site.axis[0]), water: js.sea_level_y, tower_zone_half, h: structure_scale(), detail: features.detail, wires: features.wires, members: features.members };
+    let ctx = Ctx { g, d, site: &site, plan: &plan, frame: &frame, tower_frame: &tower_frame, ground: &ground_at, k, yaw: site.axis[1].atan2(site.axis[0]), water: js.sea_level_y, tower_zone_half, h: structure_scale(), detail: features.detail, wires: features.wires, members: features.members, haunch: features.haunch, bracing: features.bracing, pylons: features.pylons, arch2: features.arch2, fender2: features.fender2, collar: features.collar };
     let mut orange_m = MeshArrays::new("golden-gate-bridge:orange");
     let mut deck_m = MeshArrays::new("golden-gate-bridge:deck");
     let mut concrete_m = MeshArrays::new("golden-gate-bridge:concrete");
