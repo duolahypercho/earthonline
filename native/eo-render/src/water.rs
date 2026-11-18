@@ -69,11 +69,42 @@ pub const GATE_NEAR_M: f32 = 1500.0;
 ///   without multi-draw-indirect-count (its patches are one instanced
 ///   indirect draw); off, it needs the count as before, and without it the
 ///   flat sea quad draws.
+/// - `FEAT_GLINT` (`--no-water-glint`): the sun's glints counted per pixel
+///   (a Poisson count of the facets that mirror the sun's disc, from the
+///   slope distribution), so the glitter path tapers and feathers by itself
+///   and merges into a sheen far off; each pixel's glint held under a
+///   screen-referred ceiling (no fireflies) and the water's output kept finite.
+/// - `FEAT_TURBID` (`--no-water-turbid`): the body's reflectance and
+///   attenuation integrated over the visible spectrum for the bay's sediment
+///   (eo-water `BAY_TURBID_IOP`) and the coast.
+/// - `FEAT_SHORE` (`--no-water-shore`): the shoreline contact: the waterline
+///   fades over the last decimetres of column, foam lines where the water
+///   meets a wall, a pier or a pile, the water darkened against them.
+/// - `FEAT_FOAM_LIT` (`--no-water-foam-lit`): whitecaps as lit, lacy foam
+///   (a coverage-threshold dissolve of bubble cells, wind-aligned residual
+///   streaks, each crest its own size) at measured foam albedo under the
+///   light the city is lit with.
+/// - `FEAT_PPR` (`--no-water-ppr`): the frame's own geometry projected across
+///   the sea plane (pixel-projected reflection), so the bridge decks, cables
+///   and the skyline stand in the water; the march stays for what it misses.
+/// - `FEAT_WIND` (`--no-water-wind-texture`): cat's-paw gust patches, the
+///   tidal current's rough water through the Golden Gate and a rotated
+///   re-read of the chop cascade against the wind's ribbons.
+/// - `FEAT_GRAZE` (`--no-water-grazing`): the sky reflection integrated over
+///   the unresolved facets the eye sees (each tilt's own Fresnel and sky), so
+///   a grazing view's far water mirrors the bright low sky as it should.
 pub const FEAT_BRDF: u32 = 1;
 pub const FEAT_BODY: u32 = 2;
 pub const FEAT_FOAM: u32 = 4;
 pub const FEAT_INSTANCED: u32 = 8;
-pub const FEAT_ALL: u32 = FEAT_BRDF | FEAT_BODY | FEAT_FOAM | FEAT_INSTANCED;
+pub const FEAT_GLINT: u32 = 16;
+pub const FEAT_TURBID: u32 = 32;
+pub const FEAT_SHORE: u32 = 64;
+pub const FEAT_FOAM_LIT: u32 = 128;
+pub const FEAT_PPR: u32 = 256;
+pub const FEAT_WIND: u32 = 512;
+pub const FEAT_GRAZE: u32 = 1024;
+pub const FEAT_ALL: u32 = FEAT_BRDF | FEAT_BODY | FEAT_FOAM | FEAT_INSTANCED | FEAT_GLINT | FEAT_TURBID | FEAT_SHORE | FEAT_FOAM_LIT | FEAT_PPR | FEAT_WIND | FEAT_GRAZE;
 
 /// The cull's counters: drawn, in the frustum, land, occluded, nearest drawn (m), pad.
 const COUNT_BYTES: u64 = 32;
@@ -307,6 +338,13 @@ pub struct WaterGpu {
     clamp: wgpu::Sampler,
     probe_sampler: wgpu::Sampler,
     scene: Mutex<Option<(u32, u32, wgpu::Texture, wgpu::TextureView)>>,
+    /// (ppr) the projected reflection's target buffer (one u32 per pixel of the
+    /// frame; 16 bytes while `FEAT_PPR` is off) and its pass.
+    ppr: Mutex<Option<(u32, u32, wgpu::Buffer)>>,
+    ppr_bgl: wgpu::BindGroupLayout,
+    ppr_pipe: wgpu::ComputePipeline,
+    /// the projection's bind group, made when the depth or the buffer is new.
+    ppr_bg: Mutex<Option<(wgpu::Texture, wgpu::Buffer, wgpu::BindGroup)>>,
     /// per probe front cube, both made when the depth or the frame copy is new.
     draw_bg: Mutex<Option<(wgpu::Texture, wgpu::Texture, [wgpu::BindGroup; 2])>>,
     readbacks: Mutex<Vec<Readback>>,
@@ -564,8 +602,23 @@ impl WaterGpu {
                 entry(12, fs, tex(filt, wgpu::TextureViewDimension::D2)),
                 // the patch list the cull wrote (the vertex shader's `w_patches`)
                 entry(13, vf, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }),
+                // (ppr) the projected reflection's sources (water_ppr.wgsl)
+                entry(14, fs, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }),
             ],
         });
+        // (ppr) the projection pass: the uniform, the opaque depth, the target buffer.
+        let cs = wgpu::ShaderStages::COMPUTE;
+        let ppr_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("water-ppr-bgl"),
+            entries: &[
+                entry(0, cs, ubuf),
+                entry(1, cs, tex(wgpu::TextureSampleType::Depth, wgpu::TextureViewDimension::D2)),
+                entry(2, cs, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: false }, has_dynamic_offset: false, min_binding_size: None }),
+            ],
+        });
+        let ppr_module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("water_ppr.wgsl"), source: wgpu::ShaderSource::Wgsl(format!("{common}\n{}", include_str!("water_ppr.wgsl")).into()) });
+        let ppr_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("water-ppr"), bind_group_layouts: &[Some(&ppr_bgl)], immediate_size: 0 });
+        let ppr_pipe = d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some("ppr_project"), layout: Some(&ppr_layout), module: &ppr_module, entry_point: Some("ppr_project"), compilation_options: Default::default(), cache: None });
         let draw_src = format!("{common}\n{}\n{}\n{}\n{}", crate::look::look_common_source(), include_str!("sky_light_core.wgsl"), include_str!("water.wgsl"), include_str!("water_surf.wgsl")) + include_str!("water_spray.wgsl"); // + the spray, the cloud shadow and the fog depth
         let draw_module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("water.wgsl"), source: wgpu::ShaderSource::Wgsl(draw_src.into()) });
         let draw_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("water-draw"), bind_group_layouts: &[Some(&draw_bgl), Some(look.main_bind_group_layout())], immediate_size: 0 });
@@ -675,6 +728,10 @@ impl WaterGpu {
             clamp: sampler("water-clamp", wgpu::AddressMode::ClampToEdge),
             probe_sampler: sampler("water-probe", wgpu::AddressMode::ClampToEdge),
             scene: Mutex::new(None),
+            ppr: Mutex::new(None),
+            ppr_bgl,
+            ppr_pipe,
+            ppr_bg: Mutex::new(None),
             draw_bg: Mutex::new(None),
             readbacks: Mutex::new(readbacks),
             state: Mutex::new(State {
@@ -1132,6 +1189,43 @@ impl WaterGpu {
             }
             (s.2.clone(), s.3.clone())
         };
+        // (ppr) the target buffer at the depth's size (16 bytes while the feature is off)
+        let ppr_on = self.features & FEAT_PPR != 0;
+        let (dw, dh) = (depth.texture().width(), depth.texture().height());
+        let ppr_buf = {
+            let mut pb = self.ppr.lock().unwrap();
+            if pb.as_ref().is_none_or(|p| p.0 != dw || p.1 != dh) {
+                let size = if ppr_on { dw as u64 * dh as u64 * 4 } else { 16 };
+                let b = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("water-ppr"), size, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+                *pb = Some((dw, dh, b));
+            }
+            pb.as_ref().unwrap().2.clone()
+        };
+        if copy && ppr_on && !fogged {
+            let pbg = {
+                let mut cache = self.ppr_bg.lock().unwrap();
+                let dt = depth.texture();
+                if cache.as_ref().is_none_or(|(d, b, _)| d != dt || *b != ppr_buf) {
+                    crate::hitch::mark(crate::hitch::Mark::BindGroupCreated, 2);
+                    let g = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("water-ppr-bg"),
+                        layout: &self.ppr_bgl,
+                        entries: &[
+                            wgpu::BindGroupEntry { binding: 0, resource: self.uniform_buf.as_entire_binding() },
+                            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(depth) },
+                            wgpu::BindGroupEntry { binding: 2, resource: ppr_buf.as_entire_binding() },
+                        ],
+                    });
+                    *cache = Some((dt.clone(), ppr_buf.clone(), g));
+                }
+                cache.as_ref().unwrap().2.clone()
+            };
+            enc.clear_buffer(&ppr_buf, 0, None);
+            let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("water-ppr"), timestamp_writes: None });
+            pass.set_pipeline(&self.ppr_pipe);
+            pass.set_bind_group(0, &pbg, &[]);
+            pass.dispatch_workgroups(dw.div_ceil(8), dh.div_ceil(8), 1);
+        }
         let bg = {
             let mut cache = self.draw_bg.lock().unwrap();
             let dt = depth.texture();
@@ -1156,6 +1250,7 @@ impl WaterGpu {
                         wgpu::BindGroupEntry { binding: 11, resource: wgpu::BindingResource::TextureView(look.sky.atmo_tables().0) },
                         wgpu::BindGroupEntry { binding: 12, resource: wgpu::BindingResource::TextureView(look.sky.atmo_tables().1) },
                         wgpu::BindGroupEntry { binding: 13, resource: self.draw_buf.as_entire_binding() },
+                        wgpu::BindGroupEntry { binding: 14, resource: ppr_buf.as_entire_binding() },
                     ],
                 }));
                 *cache = Some((dt.clone(), scene_view.0.clone(), g)); // one per probe cube

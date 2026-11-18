@@ -38,6 +38,8 @@
 @group(0) @binding(12) var w_atmo_trans: texture_2d<f32>;
 // the patches the cull kept this frame (water_cull.wgsl), one per instance
 @group(0) @binding(13) var<storage, read> w_patches: array<u32>;
+// (ppr) the projected reflection's sources (water_ppr.wgsl), one per pixel
+@group(0) @binding(14) var<storage, read> w_ppr: array<u32>;
 
 // the sky as the sky slice now draws it where nothing covers it: the
 // look's graded dome blended toward the atmosphere tables (`at_sky`, its
@@ -179,6 +181,161 @@ fn w_hash(c: vec2<f32>, k: f32) -> f32 {
     let b = bitcast<u32>(i32(c.y)) * 19349663u;
     let d = bitcast<u32>(i32(k)) * 83492791u;
     return sky_hash1(a ^ b ^ d);
+}
+
+// ---- water r2 (water.rs FEAT_GLINT, FEAT_SHORE, FEAT_FOAM_LIT, FEAT_WIND) ----
+
+// this fragment's footprint across and along the camera's forward axis (m), set by w_shade
+var<private> w_fp_lat: f32 = 0.0;
+var<private> w_fp_along: f32 = 0.0;
+// (diagnostics) the body's downwelling light: sun part, sky part, shadow (EO_WATER_DEBUG=10)
+var<private> w_dbg_ed: vec3<f32> = vec3<f32>(0.0);
+
+// (glint) the sun's disc: pi (0.2667 deg)^2 sr.
+const WO_SUN_SR: f32 = 6.80e-5;
+// (glint) the facets that flash the sun, per square metre: the short
+// gravity-capillary wavelets of a few centimetres that carry most of the
+// unresolved slope (Cox and Munk's slopes are mostly in waves of 2-30 cm;
+// the ripples under the 1.7 cm phase-speed minimum are too small to hold the
+// sun's disc in one facet), one facet per 5 cm square.
+const WS_GLINT_FACETS: f32 = 400.0;
+// (glint) no pixel of glint brighter than this on the display (the
+// exposure's scale): the core of a glitter path is blinding white well under
+// it, and a brighter single pixel only fed the bloom and the temporal resolve a firefly.
+const WS_GLINT_DISPLAY_MAX: f32 = 24.0;
+
+// a Poisson draw of mean lam from two uniforms (by its CDF under 12, the
+// normal approximation over).
+fn w_poisson(lam: f32, u: f32, u2: f32) -> f32 {
+    if (lam > 12.0) {
+        let g = sqrt(-2.0 * log(max(u, 1e-7))) * cos(6.2831853 * u2);
+        return max(lam + sqrt(lam) * g, 0.0);
+    }
+    var p = exp(-lam);
+    var cdf = p;
+    var k = 0.0;
+    for (var i = 1; i < 40; i = i + 1) {
+        if (u <= cdf) {
+            break;
+        }
+        p = p * lam / f32(i);
+        cdf = cdf + p;
+        k = f32(i);
+    }
+    return k;
+}
+
+// (glint) how many of the facets in this pixel mirror the sun, over how many
+// are expected (Zirr and Kaplanyan 2016, "Real-time rendering of procedural
+// multiscale materials": a stochastic count of the microfacets that reflect
+// the light into the pixel). `dens` is the expected glinting facets per
+// square metre (the facet density x the probability that a facet's normal
+// falls in the sun's disc). The pixel's sea is cut into world cells of its
+// footprint (about 1.5 pixels, so the temporal jitter keeps a cell; along
+// the view they stretch by the footprint's own ratio, in powers of two), at
+// the two power-of-two sizes round it, blended: each cell draws a Poisson
+// count of its expected facets. Near the eye a pixel holds a fraction of one
+// glint (rare, brilliant sparkles); a kilometre off it holds hundreds (a
+// sheen with a little grain); the path's sides, where the slope distribution
+// thins, thin into scattered sparkles by themselves. Mean 1 everywhere.
+fn w_glints(p: vec2<f32>, lat: f32, along: f32, dens: f32, t: f32) -> f32 {
+    let ea = normalize(wu.fwd.xz + vec2<f32>(1e-5, 0.0));
+    let ec = vec2<f32>(-ea.y, ea.x);
+    let q = vec2<f32>(dot(p, ec), dot(p, ea));
+    let lv = log2(max(lat * 1.5, 2e-3) / 2e-3);
+    let l0 = floor(lv);
+    let fl = lv - l0;
+    let asp = exp2(clamp(round(log2(max(along / max(lat, 1e-5), 1.0))), 0.0, 9.0));
+    // (a glint lasts about a tenth of a second: the ripples turn their facets through it)
+    let step = floor(t * 10.0);
+    var m = 0.0;
+    for (var i = 0; i < 2; i = i + 1) {
+        let lev = l0 + f32(i);
+        let s = 2e-3 * exp2(lev);
+        let cs = vec2<f32>(s, s * asp);
+        let cell = floor(q / cs);
+        let lam = max(dens * cs.x * cs.y, 1e-7);
+        let h1 = w_hash(cell, step * 7.0 + 131.0 * lev);
+        let h2 = w_hash(cell + vec2<f32>(17.0, 3.0), step * 7.0 + 131.0 * lev + 57.0);
+        m = m + select(1.0 - fl, fl, i == 1) * w_poisson(lam, h1, h2) / lam;
+    }
+    return m;
+}
+
+// the direction the wind sea runs here (eo-water waves.rs BAY_DIR, 10 deg
+// south of east through the Gate; PACIFIC_DIR, 40 deg, off Ocean Beach)
+fn w_sea_wind_dir(x: f32) -> vec2<f32> {
+    return normalize(mix(vec2<f32>(0.98481, 0.17365), vec2<f32>(0.76604, 0.64279), wg_ocean(x)));
+}
+
+// (foam lit) the foam's own texture at a world point, 0 in a bubble cell's
+// middle, 1 on its walls: rafts of 0.9 m cells stretched four to one along
+// the wind (the residual streaks a breaking crest leaves downwind), over
+// 0.28 m bubble cells, the seeds drifting. `near` fades it to its mean (0.5)
+// where a pixel spans the cells.
+fn w_foam_tex(p: vec2<f32>, t: f32, near: f32) -> f32 {
+    if (near <= 0.0) {
+        return 0.5;
+    }
+    let wd = w_sea_wind_dir(p.x);
+    let q = vec2<f32>(dot(p, wd), dot(p, vec2<f32>(-wd.y, wd.x)));
+    let l1 = 1.0 - clamp(w_cells(vec2<f32>(q.x / 3.6, q.y / 0.9) + vec2<f32>(-t * 0.04, 0.0), t, 61.0) * 1.7, 0.0, 1.0);
+    var l2 = 0.5;
+    let k2 = wg_smooth(0.12, 0.03, w_fp_lat);
+    if (k2 > 0.0) {
+        l2 = mix(0.5, 1.0 - clamp(w_cells(p / 0.28, t * 1.4, 67.0) * 2.2, 0.0, 1.0), k2);
+    }
+    return mix(0.5, l1 * 0.62 + l2 * 0.38, near);
+}
+
+// (foam lit) a whitecap from the cascades' foam `raw` (1 fresh, fading as it
+// ages) and the fine chop under it: each crest its own size (a random scale
+// per 9 m x 6 m cell along the wind and a slow patchiness), then the
+// coverage-threshold dissolve of the foam texture: a dense fresh core, the
+// aging foam a lace of cell walls and wind streaks that thins until it is
+// gone, with a soft edge. Far off (the cells under a pixel) the expected
+// cover, never a solid blob. Returns the foam's coverage of the pixel.
+fn w_whitecap(raw: f32, fine: f32, p: vec2<f32>, t: f32, gust: f32, far: f32) -> f32 {
+    let wd = w_sea_wind_dir(p.x);
+    let q = vec2<f32>(dot(p, wd), dot(p, vec2<f32>(-wd.y, wd.x)));
+    let size = 0.5 + 0.9 * w_hash(floor(q / vec2<f32>(9.0, 6.0)), 41.0);
+    // (the cascades' foam stands at about 0.55 on a fresh crest: a solid core there; aged foam a few tenths of that, lace)
+    let c = clamp(raw * size * (1.0 + 2.0 * clamp(fine, -0.25, 0.25)) * 1.8, 0.0, 1.0);
+    if (c <= 0.004) {
+        return 0.0;
+    }
+    let near = 1.0 - wg_smooth(0.15, 0.6, w_fp_lat);
+    // (the texture spread over 0..1, so a cover c leaves about c of the area foam)
+    let tex = clamp((w_foam_tex(p, t, near) - 0.18) / 0.62, 0.0, 1.0);
+    let thr = 1.0 - c;
+    let w = mix(0.3, 0.08, near);
+    let a = wg_smooth(thr - w, thr + w, tex);
+    // the visible cover where the texture is resolved; its mean where it is not (and where the foam's own texels are not)
+    return mix(a, c, max(far, 1.0 - near));
+}
+
+// (wind texture) the Golden Gate's tidal current: the jet through the
+// narrows (about 1.6 km wide at the bridge) on the strait's axis, from 2-5 km
+// inside the bay to 3-7 km out past the bridge, its edges wandering. The ebb
+// there runs at 4-5 knots (2-2.5 m/s, NOAA's tidal current predictions for
+// the Golden Gate); wind waves running against it steepen and break, so the
+// jet reads as rougher water with current lines along it. Returns (mask,
+// rip lines), each 0..1.
+fn w_tidal(p: vec2<f32>, t: f32) -> vec2<f32> {
+    // mid-span of the Golden Gate Bridge (game m) and the strait's seaward axis (heading 255 deg)
+    let o = vec2<f32>(-6478.0, -5791.0);
+    let ax = vec2<f32>(-0.966, 0.259);
+    let d = p - o;
+    let along = dot(d, ax);
+    let across = dot(d, vec2<f32>(-ax.y, ax.x));
+    let wob = mx_noise(vec3<f32>(along / 1400.0, 0.3, t * 0.002)) * 260.0;
+    let m = wg_smooth(1000.0, 450.0, abs(across + wob)) * wg_smooth(-5000.0, -2500.0, along) * wg_smooth(7000.0, 3000.0, along);
+    if (m <= 0.0) {
+        return vec2<f32>(0.0);
+    }
+    // current lines: long streaks along the axis, a few tens of metres across
+    let n = mx_noise(vec3<f32>(along / 700.0, across / 45.0, t * 0.004)) * 0.65 + mx_noise(vec3<f32>(along / 260.0, across / 18.0, 2.0 + t * 0.006)) * 0.35;
+    return vec2<f32>(m, m * wg_smooth(0.05, 0.45, n));
 }
 
 // the swash on a beach. Each bore of the surf model reaches the still
@@ -888,6 +1045,97 @@ fn w_far_tap(origin: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
     return vec3<f32>(inside, beyond * ahead * rising * w_edge(uv) * valid);
 }
 
+// ---- (ppr) the projected reflection (water_ppr.wgsl) ----
+
+// the source pixel of the mirror image at pixel q, or x -1
+fn w_ppr_src(q: vec2<i32>) -> vec2<i32> {
+    let dims = vec2<i32>(textureDimensions(w_depth));
+    if (any(q < vec2<i32>(0)) || any(q >= dims)) {
+        return vec2<i32>(-1);
+    }
+    let v = w_ppr[u32(q.y) * u32(dims.x) + u32(q.x)];
+    if (v == 0u) {
+        return vec2<i32>(-1);
+    }
+    return vec2<i32>(q.x + i32(v & 1023u) - 512, q.y - i32((v >> 10u) & 2047u));
+}
+
+// the same with the one-pixel holes of a one-to-one projection filled from below or above
+fn w_ppr_src3(q: vec2<i32>) -> vec2<i32> {
+    var s = w_ppr_src(q);
+    if (s.x < 0) {
+        s = w_ppr_src(q + vec2<i32>(0, 1));
+    }
+    if (s.x < 0) {
+        s = w_ppr_src(q - vec2<i32>(0, 1));
+    }
+    return s;
+}
+
+// the world point the frame holds at a pixel (the far layer's depth form included)
+fn w_px_world(q: vec2<i32>) -> vec3<f32> {
+    let dims = vec2<f32>(textureDimensions(w_depth));
+    let d = max(textureLoad(w_depth, q, 0), 1e-30);
+    let uv = (vec2<f32>(q) + 0.5) / dims;
+    let w = wu.inv_view_proj * vec4<f32>(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, d, 1.0);
+    var p = w.xyz / w.w;
+    let rel = p - wu.cam.xyz;
+    let vd = dot(rel, wu.fwd.xyz);
+    if (1e-9 / d > vd * 1.001) {
+        let dir = normalize(rel);
+        p = wu.cam.xyz + dir * (1e-9 / d / max(dot(dir, wu.fwd.xyz), 1e-3));
+    }
+    return p;
+}
+
+// What the mirror shows of the frame's geometry along the reflected ray r
+// from the water at `world` (this fragment at `frag`): the flat mirror's
+// source here gives the distance to what stands in the mirror; the wave-tilted
+// ray carried that far and mirrored under the sea is where its image lies, and
+// the source written there is what this facet reflects. Four taps down the
+// frame from it over the reflection's smear (the chop the pixel does not
+// resolve stretches an image down the water), each its own source, read in the
+// resolved last frame (its haze and fog) as the march's taps are. Returns
+// (rgb, coverage of the taps x the screen-edge fade).
+fn w_ppr_reflect(world: vec3<f32>, r: vec3<f32>, frag: vec2<f32>, smear: f32) -> vec4<f32> {
+    let dims = vec2<f32>(textureDimensions(w_depth));
+    let s0 = w_ppr_src3(vec2<i32>(frag));
+    let rm = vec3<f32>(r.x, -max(r.y, 0.002), r.z);
+    var c = wu.view_proj * vec4<f32>(rm, 0.0);
+    if (s0.x >= 0) {
+        let t0 = length(w_px_world(s0) - world);
+        c = wu.view_proj * vec4<f32>(world + rm * t0, 1.0);
+    }
+    if (c.w <= 1e-4) {
+        return vec4<f32>(0.0);
+    }
+    let uvq = vec2<f32>(c.x / c.w * 0.5 + 0.5, 0.5 - c.y / c.w * 0.5);
+    let wts = array<f32, 4>(0.4, 0.27, 0.2, 0.13);
+    var col = vec3<f32>(0.0);
+    var hits = 0.0;
+    let prev_ok = skyu.flags.x != 0u && skyu.taa.y > 0.5;
+    for (var k = 0; k < 4; k = k + 1) {
+        let uk = uvq + vec2<f32>(0.0, smear * f32(k) * 0.5);
+        let sk = w_ppr_src3(vec2<i32>(floor(uk * dims)));
+        if (sk.x >= 0) {
+            let su = (vec2<f32>(sk) + 0.5) / dims;
+            var tap = textureSampleLevel(w_scene, w_clamp, su, 0.0).rgb;
+            if (prev_ok) {
+                let pu = w_prev_uv(su);
+                if (all(pu > vec2<f32>(0.0)) && all(pu < vec2<f32>(1.0))) {
+                    tap = textureSampleLevel(sky_prev, sky_rep, pu, 0.0).rgb;
+                }
+            }
+            col = col + tap * wts[k];
+            hits = hits + wts[k];
+        }
+    }
+    if (hits <= 0.0) {
+        return vec4<f32>(0.0);
+    }
+    return vec4<f32>(col / hits, hits * w_edge(uvq));
+}
+
 // ---- the surface ----
 
 struct Shade {
@@ -910,12 +1158,27 @@ struct Shade {
     side: f32,
     // how near the mirror direction is to the sun (the glare round it)
     sun_near: f32,
+    // (ppr) the reflected ray
+    r: vec3<f32>,
+    // (diagnostics, EO_WATER_DEBUG 6 to 8) the body's light, the glint, (Fresnel, reflection weight, fog)
+    body: vec3<f32>,
+    gl: vec3<f32>,
+    terms: vec3<f32>,
 };
 
 fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) -> Shade {
     let t = wu.cam.w;
     w_frag_px = frag.xy;
-    let footprint = clamp(max(length(dpdx(world.xz)), length(dpdy(world.xz))), 0.0, 64.0);
+    let wdx = dpdx(world.xz);
+    let wdy = dpdy(world.xz);
+    let footprint = clamp(max(length(wdx), length(wdy)), 0.0, 64.0);
+    {
+        // (water r2) the footprint across and along the camera's forward axis
+        let ea = normalize(wu.fwd.xz + vec2<f32>(1e-5, 0.0));
+        let ec = vec2<f32>(-ea.y, ea.x);
+        w_fp_lat = clamp(max(abs(dot(wdx, ec)), abs(dot(wdy, ec))), 1e-5, 64.0);
+        w_fp_along = clamp(max(abs(dot(wdx, ea)), abs(dot(wdy, ea))), 1e-5, 4096.0);
+    }
     let fs = w_field_at(base);
     let signed = fs.x;
     let beach = fs.y;
@@ -955,8 +1218,21 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // where the water actually meets something: the column under the pixel,
     // as a distance on a 1:15 face (a wall or a steep bank).
     let shore = column * 15.0;
-    let det = w_sea_detail(p, t);
+    var det = w_sea_detail(p, t);
     let storm = w_storm(); // a storm roughens the whole sea
+    // (wind texture) cat's paws: the gusts also come in patches of tens of
+    // metres running downwind over the sea detail's hundreds-of-metres field,
+    // and the tidal jet through the Golden Gate is rougher water with current lines
+    let wind_tex = wv_feat(512u);
+    var tide = vec2<f32>(0.0);
+    if (wind_tex) {
+        let wd = w_sea_wind_dir(p.x);
+        let pg = p - wd * (t * wv_u10(p.x) * 0.8);
+        let paws = mx_noise(vec3<f32>(pg / 95.0, t * 0.011)) * 0.62 + mx_noise(vec3<f32>(pg / 38.0 + vec2<f32>(5.3, 1.9), t * 0.023)) * 0.38;
+        det.y = clamp(det.y + 0.55 * paws, 0.0, 1.0);
+        tide = w_tidal(p, t);
+        det.x = det.x * mix(0.75, 1.25, wg_smooth(-0.35, 0.35, paws)) * (1.0 + 0.3 * tide.x + 0.45 * tide.y);
+    }
     // the sun-keyed westerly, the swell banding and the storm's noise caps are
     // retired: the waves simulation carries the wind, the swell and the whitecaps
     let rough = det.x * wv_ripple(p.x); // x the wind's ripples (glassy in a calm)
@@ -982,6 +1258,52 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         let shore_foam = wg_smooth(WS_COLLAR.x, WS_COLLAR.y, grain * 0.86 + 0.42);
         let torn = wg_smooth(WS_DRIFT_TEAR.x, WS_DRIFT_TEAR.y, grain);
         drift = torn * shore_foam * exp(-max(shore - break_line, 0.0) / WS_DRIFT_CARRY) * WS_DRIFT_TAKE;
+    }
+
+    // (shore) where the water meets a wall, a pier's deck or a pile: the
+    // wash's foam against the face, the width of the column the slap reaches
+    // (0.3-0.6 m of water over what stands behind it, rising and falling with
+    // the surge), torn by the foam texture with a soft edge, and the water
+    // against the face shaded from half its sky (`contact_occ`).
+    let shore_feat = wv_feat(64u);
+    var contact_occ = 0.0;
+    // (shore) a wall or a coping between the eye and this water hides its own
+    // foot: three taps down the frame (3, 9 and 20 pixels) for a surface above
+    // the sea nearer the eye than this water and within 3.5 m of it across the
+    // ground, so the slap and the shade run along a seawall seen over its coping too.
+    var wall_near = 0.0;
+    if (shore_feat && view_dist < 400.0) {
+        let dimsi = vec2<i32>(textureDimensions(w_depth));
+        let taps = array<f32, 3>(3.0, 9.0, 20.0);
+        for (var k = 0; k < 3; k = k + 1) {
+            let q = vec2<i32>(frag.xy + vec2<f32>(0.0, taps[k]));
+            if (q.y >= dimsi.y) {
+                break;
+            }
+            if (textureLoad(w_depth, q, 0) <= 0.0) {
+                continue;
+            }
+            let pw = w_px_world(q);
+            if (pw.y > wu.grid.z + 0.1 && w_view_depth(pw) < view_dist) {
+                wall_near = max(wall_near, wg_smooth(3.5, 0.3, length(pw.xz - world.xz)));
+            }
+        }
+    }
+    // (and round whatever stands out of open water: a tower's footing, a pile, a pier's head)
+    let emergent = wg_smooth(15.0, 30.0, signed);
+    if (shore_feat && ((max(1.0 - beach, emergent) > 0.01 && column < 2.5) || wall_near > 0.0)) {
+        let wall = max(1.0 - beach, emergent);
+        let reach = 0.3 + 0.3 * surge;
+        let cov = max(wg_smooth(reach, 0.0, column) * wall * select(1.0, 0.0, column >= 2.5), wall_near * mix(0.35, 0.75, surge));
+        if (cov > 0.002) {
+            let near_c = 1.0 - wg_smooth(0.08, 0.5, w_fp_lat);
+            let tex = clamp((w_foam_tex(p * 1.7 + vec2<f32>(t * 0.21, -t * 0.13), t * 1.3, near_c) - 0.18) / 0.62, 0.0, 1.0);
+            // (where the texture is not resolved its mean, a third of the band, in patches along the face: no ruled outline)
+            let patches = wg_smooth(-0.25, 0.45, mx_noise(vec3<f32>(p * 0.12, t * 0.15)));
+            let cf = mix(wg_smooth(1.0 - cov - 0.12, 1.0 - cov + 0.12, tex), cov * 0.35 * patches, 1.0 - near_c);
+            collar = max(collar, cf * 0.85);
+        }
+        contact_occ = max(wg_smooth(2.5, 0.0, column) * wall * select(1.0, 0.0, column >= 2.5), wall_near);
     }
 
     // the swash sheet on a beach: a lacy foam front where the film runs
@@ -1049,8 +1371,24 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
             if (wb[c] > 0.0) {
                 let uv = w_casc_uv(p, c);
                 let d = textureSampleLevel(w_deriv, w_repeat, uv, c, 0.0);
-                sx = sx + d.x * wb[c] * swell_fade;
-                sz = sz + d.y * wb[c] * swell_fade;
+                var dsl = d.xy;
+                if (wind_tex && c == 1u) {
+                    // (wind texture) a share of the wind sea's cascade re-read turned 24 degrees
+                    // off the wind at 0.37 of its scale (a 147 m tile, prime to the 397 m one):
+                    // its slopes in the same proportions (0.75^2 + 0.66^2 ~ 1, the variance kept),
+                    // so the crests stop running in one ribbon and the tile's rhythm breaks.
+                    let ca = 0.9135;
+                    let sa = 0.4067;
+                    let rp = vec2<f32>(p.x * ca - p.y * sa, p.x * sa + p.y * ca) / 0.37;
+                    let fr = wg_band(footprint / 0.37).y;
+                    if (fr > 0.0) {
+                        let d2 = textureSampleLevel(w_deriv, w_repeat, w_casc_uv(rp, 1u), 1u, 0.0).xy;
+                        let d2r = vec2<f32>(d2.x * ca + d2.y * sa, -d2.x * sa + d2.y * ca);
+                        dsl = d.xy * mix(1.0, 0.75, fr) + d2r * (0.66 * fr);
+                    }
+                }
+                sx = sx + dsl.x * wb[c] * swell_fade;
+                sz = sz + dsl.y * wb[c] * swell_fade;
                 wv_raw = max(wv_raw, wv_foam(d, p.x, det.y) * fb[c] * kc); // the place's whitecap foam of this cascade
                 wv_fine = wv_fine + select(0.0, (d.x + d.y) * wb[c], c >= 2u);
             }
@@ -1064,10 +1402,14 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
             wv_farness = 1.0 - kres; // (the share of the foam's cascades the pixel no longer resolves)
         }
         var wv_lace = 0.0;
-        if (wv_raw > 0.02 && wv_farness < 0.98) {
+        if (wv_raw > 0.02 && wv_farness < 0.98 && !wv_feat(128u)) {
             wv_lace = mx_noise(vec3<f32>(p * 0.9, t * 0.05)) * 0.65 + mx_noise(vec3<f32>(p * 2.6, t * 0.11 + 3.0)) * 0.35;
         }
         whitecap = wv_edge(wv_raw, wv_fine, wv_lace * 1.6, wv_farness, p.x, foam_mean);
+        if (wv_feat(128u)) {
+            // (foam lit) the crest's foam dissolved through its own texture: lace, streaks, sizes
+            whitecap = w_whitecap(wv_raw, wv_fine, p, t, det.y, wv_farness); // (wv_raw already gathered into the gusts)
+        }
         // Near-field capillary ripples: the finest cascade re-read at ~1 m and
         // ~2.3 m tiles, rotated, where a pixel is under 4 cm (tidewater).
         let near = wg_smooth(0.04, 0.01, footprint) * rough;
@@ -1224,7 +1566,11 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     if (brdf) {
         // (the gusts carry the wind 40 % either side of its mean; Cox and Munk's
         // slick law where the sea detail lays a slick)
-        let u10 = wv_u10(p.x) * mix(0.6, 1.4, det.y);
+        var u10 = wv_u10(p.x) * mix(0.6, 1.4, det.y);
+        if (wind_tex) {
+            // (wind texture: the paws darker and lighter than the sea detail alone; over the tidal jet the slopes steepen)
+            u10 = wv_u10(p.x) * mix(0.45, 1.6, wg_smooth(0.1, 0.9, det.y)) * (1.0 + 0.5 * tide.x + 0.7 * tide.y);
+        }
         let cm = mix(0.003 + 0.00512 * u10, 0.008 + 0.00156 * u10, det.z);
         let near_taps = wg_smooth(0.04, 0.01, footprint) * rough; // (the capillary taps resolve a share of it near the eye)
         let sub = max(cm - wv_var_all, 0.25 * cm) * (1.0 - 0.5 * near_taps);
@@ -1256,7 +1602,9 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // from its sky as fa_glazing tells them apart.
     var dome = w_drawn_sky(rup, w_atmo_dome(rup)); // the sky as drawn (the atmosphere sky)
     if (brdf) {
-        dome = fs_far_mirror2(r, dome, view_dist); // the far land in the mirror under it, by its distance
+        if (!(with_copy && wv_feat(256u))) {
+            dome = fs_far_mirror2(r, dome, view_dist); // the far land in the mirror under it, by its distance (ppr: the projected reflection carries it)
+        }
     } else {
         dome = fs_far_mirror(r, dome); // the far land (1e-9 / view depth, DEPTH_K) in the mirror under it
     }
@@ -1274,7 +1622,51 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         dome = mix(pr, dome, sky_like);
     }
     // the dark sea a below-horizon ray stands in for, from the sky this mirror shows.
-    let sky0 = mix(dome * 0.35, dome, wg_smooth(-0.12, 0.08, r.y));
+    var sky0 = mix(dome * 0.35, dome, wg_smooth(-0.12, 0.08, r.y));
+    if (brdf && wv_feat(1024u)) {
+        // (grazing) the reflection integrated over the unresolved facets the
+        // eye sees, in the view's plane (where the tilt changes what the mirror
+        // shows; across it the sky barely changes): six tilts of the resolved
+        // normal toward and away from the eye at -2 .. 2 of the slopes' spread
+        // in that plane (Gaussian weights), each weighted by the area the eye
+        // sees of it (n.v, a facet turned away is hidden) and by its own exact
+        // Fresnel, reflecting the sky in its own direction (a ray under the
+        // horizon meets the next wave: the dark sea's stand-in, as above). So a
+        // grazing view's facets that mirror the bright low sky at nearly
+        // total reflection count as much as they should, instead of one mean
+        // Fresnel times the sky one raised direction shows (Bruneton et al.
+        // 2010 integrate the same product over the slope distribution).
+        // The drawn sky's ratio to the dome at the main direction (its clouds,
+        // haze and far land) carries over to every tilt.
+        let sig = max(sqrt(0.5 * m2), 1e-3);
+        let vh = normalize(v.xz + vec2<f32>(1e-5, 0.0));
+        let dome_main = w_atmo_dome(rup);
+        let carry = dome / max(dome_main, vec3<f32>(1e-5));
+        let nodes = array<f32, 6>(-2.0, -1.2, -0.4, 0.4, 1.2, 2.0);
+        var acc = vec3<f32>(0.0);
+        var acc_f = 0.0;
+        var acc_w = 0.0;
+        for (var k = 0; k < 6; k = k + 1) {
+            let a = nodes[k] * sig;
+            let nk = normalize(vec3<f32>(n.x + vh.x * a * n.y, n.y, n.z + vh.y * a * n.y));
+            let cv = dot(nk, v);
+            if (cv <= 0.0) {
+                continue;
+            }
+            let wk = exp(-0.5 * nodes[k] * nodes[k]) * cv;
+            let fk = wo_fresnel(cv, WO_IOR);
+            let rk = reflect(-v, nk);
+            let dk = normalize(vec3<f32>(rk.x, max(rk.y, 0.004), rk.z));
+            let lk = w_atmo_dome(dk) * carry * mix(0.35, 1.0, wg_smooth(-0.12, 0.08, rk.y));
+            acc = acc + lk * (wk * fk);
+            acc_f = acc_f + wk * fk;
+            acc_w = acc_w + wk;
+        }
+        if (acc_w > 1e-6 && acc_f > 1e-7) {
+            sky0 = acc / acc_f;
+            fres = acc_f / acc_w;
+        }
+    }
     // a wind-roughened surface mixes each pixel's mirror with the paler
     // sky around it: the reflected sky a fifth less saturated (the bay read pool-blue)
     // (more at dusk, when the low sky's belt and afterglow turned the bay magenta)
@@ -1366,29 +1758,44 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         if (brdf) {
             spec = wo_beckmann_spec(n, v, lg, m2 + WO_ROUGHNESS * WO_ROUGHNESS); // the glitter path's width is the sea's own slope spread
         }
-        // the share of the glint from facets finer than a pixel lands on a
-        // few of them, each a sharp point (same mean): sparkles over dark water,
-        // not a smooth sheen.
-        let cell = floor(world.xz / max(footprint * 1.2, 0.012));
-        let spark = select(0.0, 1.0 / 0.2, w_hash(cell, floor(t * 6.0)) < 0.2);
-        // (sea r2: only where a glint is about a pixel; where a pixel holds
-        // metres of sea its many glints average to a smooth sheen, not confetti)
-        let sparkle = 0.9 * clamp(unresolved * 1.6, 0.0, 1.0) * (1.0 - wg_smooth(0.06, 0.35, footprint));
-        // inside the glitter path (where the glint is bright) every
-        // pixel is a few facets: about a third of them flash, clipped, and the
-        // rest are dark water, at any range (outside the path, where the glint
-        // is faint, the smooth sheen stays: no confetti off the path).
-        // (by how bright the glint stands against the low sky, not by the raw lobe:
-        // under a low sun the sun is so bright that a faint lobe was the whole strip)
-        // (r11b: a wide soft envelope; toward its sides the sparkles thin out rather
-        // than dim, so the path has no hard edge)
-        let in_path = wg_smooth(0.05, 1.5, lk_luma(key_g) * spec / max(lk_luma(look.horizon.xyz), 1e-6));
-        // (world cells about three pixels wide, so the temporal resolve keeps them: one-pixel flashes averaged out)
-        let gh = w_hash(floor(world.xz / max(footprint * 1.5, 0.02)), floor(t * 8.0) + 3.0);
-        let fp = 0.01 + 0.156 * in_path;
-        let flash = select(0.0, 1.0 / fp, gh < fp); // (fewer, brighter; r11b: thinning at the envelope's edge)
-        // (not under the moon: they read as grey noise on the night water)
-        spec = min(spec * mix(mix(1.0, spark, sparkle * (1.0 - skyu.night.z)), flash, wg_smooth(0.0, 0.15, in_path) * (1.0 - skyu.night.z)), WO_SPEC_CEILING);
+        if (wv_feat(16u)) {
+            // (glint) the mean lobe times this pixel's count of glinting facets
+            // over the count expected: the probability that one of the
+            // unresolved facets (Beckmann, the lobe's own slope variance about the
+            // resolved normal) has its normal inside the sun's disc as seen in
+            // half-vector space, D cos(theta_h) x the disc's solid angle / (4 v.h),
+            // times the facets per square metre.
+            let mg = select(alpha2, m2 + WO_ROUGHNESS * WO_ROUGHNESS, brdf);
+            let ch = max(ndh, 1e-3);
+            let ch2 = ch * ch;
+            let d_b = exp(-(1.0 - ch2) / (ch2 * mg)) / (WG_PI * mg * ch2 * ch2);
+            let dens = WS_GLINT_FACETS * d_b * ch * WO_SUN_SR / (4.0 * max(vdh, 0.05));
+            spec = min(spec, WO_SPEC_CEILING) * w_glints(world.xz, w_fp_lat, w_fp_along, dens, t);
+        } else {
+            // the share of the glint from facets finer than a pixel lands on a
+            // few of them, each a sharp point (same mean): sparkles over dark water,
+            // not a smooth sheen.
+            let cell = floor(world.xz / max(footprint * 1.2, 0.012));
+            let spark = select(0.0, 1.0 / 0.2, w_hash(cell, floor(t * 6.0)) < 0.2);
+            // (sea r2: only where a glint is about a pixel; where a pixel holds
+            // metres of sea its many glints average to a smooth sheen, not confetti)
+            let sparkle = 0.9 * clamp(unresolved * 1.6, 0.0, 1.0) * (1.0 - wg_smooth(0.06, 0.35, footprint));
+            // inside the glitter path (where the glint is bright) every
+            // pixel is a few facets: about a third of them flash, clipped, and the
+            // rest are dark water, at any range (outside the path, where the glint
+            // is faint, the smooth sheen stays: no confetti off the path).
+            // (by how bright the glint stands against the low sky, not by the raw lobe:
+            // under a low sun the sun is so bright that a faint lobe was the whole strip)
+            // (r11b: a wide soft envelope; toward its sides the sparkles thin out rather
+            // than dim, so the path has no hard edge)
+            let in_path = wg_smooth(0.05, 1.5, lk_luma(key_g) * spec / max(lk_luma(look.horizon.xyz), 1e-6));
+            // (world cells about three pixels wide, so the temporal resolve keeps them: one-pixel flashes averaged out)
+            let gh = w_hash(floor(world.xz / max(footprint * 1.5, 0.02)), floor(t * 8.0) + 3.0);
+            let fp = 0.01 + 0.156 * in_path;
+            let flash = select(0.0, 1.0 / fp, gh < fp); // (fewer, brighter; r11b: thinning at the envelope's edge)
+            // (not under the moon: they read as grey noise on the night water)
+            spec = min(spec * mix(mix(1.0, spark, sparkle * (1.0 - skyu.night.z)), flash, wg_smooth(0.0, 0.15, in_path) * (1.0 - skyu.night.z)), WO_SPEC_CEILING);
+        }
         // past the shadow cascades, a sun the frame shows hidden behind the
         // skyline (geometry at the sun's own screen point) is hidden from the far water too
         let sc = wu.view_proj * vec4<f32>(lg, 0.0);
@@ -1425,6 +1832,11 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         // lit; drive this (and the low-sun body light) from the sky slice's sun radiance
         // through the atmosphere when it lands as a sky uniform.
         glint = key_g * spec * shadow * (1.0 - sun_hidden) * (1.0 - sf_inj.spec_cut) * sf_glint_cut(foam, sf_foam_share(foam, surf_cov, beach, p.x)); // no glint on the surf's foam (water_surf.wgsl); the sea's own foam is a diffuser too, and foam drawn over the strip takes no mirror glint
+        if (wv_feat(16u)) {
+            // (glint) no firefly: the pixel's glint under the display ceiling
+            let gl = lk_luma(glint) * max(look.key.w, 1e-4);
+            glint = glint * min(1.0, WS_GLINT_DISPLAY_MAX / max(gl, 1e-6));
+        }
     }
 
     // --- the water column: refracted view ray, path to the bottom in the frame.
@@ -1500,16 +1912,33 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         var fill_k = mix(WO_BAY_FILL, WO_COAST_FILL, ocean);
         rrs = mix(rrs, WO_SILT_RRS, silt);
         fill_k = mix(fill_k, WO_SILT_FILL, silt);
+        if (wv_feat(32u)) {
+            // (turbid) the bay with its sediment and the coast, over the whole
+            // spectrum; the fill rate the diffuse attenuation (eo-water optics.rs
+            // `deep_rrs_spectral`, `fill_rate_spectral`)
+            rrs = mix(mix(WO_BAY2_RRS, WO_COAST2_RRS, ocean), WO_SILT2_RRS, silt);
+            fill_k = mix(mix(WO_BAY2_FILL, WO_COAST2_FILL, ocean), WO_SILT2_FILL, silt);
+        }
         let t_in = (1.0 - wo_fresnel(max(l.y, 0.0), WO_IOR)) / (1.0 - WO_F0);
         let up = vec3<f32>(0.0, 1.0, 0.0);
-        let e_sky = look.hemi_sky.xyz + look.ambient.xyz + w_sh(up) * look.ambient.w * look.env_class.w;
+        var e_sky = look.hemi_sky.xyz + look.ambient.xyz + w_sh(up) * look.ambient.w * look.env_class.w;
+        e_sky = e_sky * (1.0 - 0.45 * contact_occ); // (shore) a face beside the water hides half its sky
         let e_d = look.key.xyz * max(l.y, 0.0) * vol_shadow * t_in + e_sky;
+        w_dbg_ed = vec3<f32>(lk_luma(look.key.xyz) * max(l.y, 0.0), lk_luma(e_sky), vol_shadow);
         // (the ground under open water is the carpet pressed to the seabed 2 m
         // down, not the bay's 10-100 m: past the waterline the column is taken as
         // at least the shore's slope gives, a sandy foreshore's 1:20 at a beach
         // (Bascom 1951: 1:10 to 1:50 with grain size) and 5 m plus 1:4 off a
         // seawall or a rocky shore; under it the drawn column)
-        let deep = max(column, mix(5.0 + 0.25 * max(signed, 0.0), 0.05 * max(signed, 0.0), beach));
+        var deep = max(column, mix(5.0 + 0.25 * max(signed, 0.0), 0.05 * max(signed, 0.0), beach));
+        if (shore_feat) {
+            // (shore) within the last 20 m of the mapped shore the drawn column is the
+            // water's own (the waterline, a wall's foot): the floor off a rocky shore
+            // there, mixed in where the beach weight is fractional, drew the
+            // waterline as an ink line; past it the open water's floor as before (the
+            // carpet under the drawn ground, a pier's ridge in the survey raster)
+            deep = max(column, mix(5.0 + 0.25 * max(signed, 0.0), 0.05 * max(signed, 0.0), beach) * wg_smooth(4.0, 20.0, signed));
+        }
         let fill = vec3<f32>(1.0) - exp(-2.0 * fill_k * deep);
         vol.inscatter = rrs * e_d * fill / (1.0 - WO_F0);
         // the bottom through the same water, down and back up (what it does
@@ -1544,7 +1973,23 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // (a white diffuser under the whole sky sits near the sky's own brightness, a little under it)
     // (under an overcast the zenith is brighter than the horizon, so foam lit by the whole dome sits a little over the horizon sky)
     let foam_amb = amb_raw * (mix(0.92, 1.2, clamp(look.wx.x, 0.0, 1.0)) * max(lk_luma(dome), lk_luma(look.horizon.xyz)) / max(lk_luma(amb_raw), 1e-6));
-    let foam_rad = sf_foam_light(foam_tone * 0.88 * (look.key.xyz * ndl * shadow * (1.0 - 0.85 * clamp(look.wx.x, 0.0, 1.0)) / WG_PI + foam_amb), foam, sf_foam_share(foam, surf_cov, beach, p.x), n, shadow, relief, v); // the surf's foam lit by the light it receives (water_surf.wgsl)
+    var foam_own = foam_tone * 0.88 * (look.key.xyz * ndl * shadow * (1.0 - 0.85 * clamp(look.wx.x, 0.0, 1.0)) / WG_PI + foam_amb);
+    if (wv_feat(128u)) {
+        // (foam lit) foam is a diffuser lit as the city's surfaces are: the
+        // key through the shadows and the sky's irradiance (hemisphere, ambient,
+        // the environment's SH) on its lumpy top, over pi, at measured foam
+        // reflectance: about 0.55 in the visible for fresh dense whitecap foam
+        // (Whitlock, Bartlett and Gurganus 1982, Geophys. Res. Lett. 9(6), 719),
+        // 0.4 as it thins (Frouin, Schwindling and Deschamps 1996, J. Geophys.
+        // Res. 101(C6), 14361). Never brighter than what lights it, so at
+        // golden hour it takes the low sun's warmth and in shade the sky's.
+        let alb = mix(0.4, 0.58, wg_smooth(0.3, 0.9, foam)) * (relief * 0.2 + 0.9);
+        let nf = normalize(vec3<f32>(n.x * 0.5, 1.0, n.z * 0.5));
+        let e_sun = look.key.xyz * max(dot(nf, l), 0.0) * shadow * (1.0 - 0.85 * clamp(look.wx.x, 0.0, 1.0));
+        let e_amb = mix(look.hemi_ground.xyz, look.hemi_sky.xyz, nf.y * 0.5 + 0.5) + look.ambient.xyz + w_sh(nf) * look.ambient.w * look.env_class.x;
+        foam_own = alb * (e_sun + e_amb) / WG_PI;
+    }
+    let foam_rad = sf_foam_light(foam_own, foam, sf_foam_share(foam, surf_cov, beach, p.x), n, shadow, relief, v); // the surf's foam lit by the light it receives (water_surf.wgsl)
 
     // --- the fog (three's range fog on view depth).
     let fog = lk_smooth(look.fog.x, look.fog.y, sky_fog_depth(view_dist, world.y - look.cam_pos.y)); // the city's aerial path density
@@ -1571,6 +2016,9 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     let water = 1.0 - foam_w;
     let k_t = (1.0 - fres) * water;
     s.own = ((vol.inscatter + sss) * k_t + foam_rad * foam_w + glint) * (1.0 - fog) + look.fog_color.xyz * fog;
+    s.body = (vol.inscatter + sss) * k_t;
+    s.gl = glint;
+    s.terms = vec3<f32>(fres, fres * water * (1.0 - fog), fog);
     // sand under a thin sheet is wet sand (darker: water fills its pores).
     s.through = vol.tview * select(wo_underwater(bottom_depth, l), vec3<f32>(1.0), wv_feat(2u)) * k_t * (1.0 - fog) * (1.0 - 0.4 * film);
     s.uv = uv_f;
@@ -1619,14 +2067,26 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         s.through = s.through * (1.0 - hz);
         s.refl_k = s.refl_k * (1.0 - hz);
     }
+    if (shore_feat && beach > 0.01) {
+        // (shore) the waterline on a beach: over the last 25 cm of column the
+        // water's own light, its mirror and its veil fade into the sand under
+        // it (a soft wet edge, no ink line where the thin sheet's ragged edge is
+        // cut), the swash's foam front kept.
+        let e = mix(1.0, wg_smooth(0.0, 0.25, column), beach);
+        let sw_k = swash_foam * (1.0 - e) * (1.0 - fog);
+        s.own = s.own * e + foam_rad * sw_k;
+        s.refl_k = s.refl_k * e;
+        s.through = mix(vec3<f32>(1.0), s.through, e) * (1.0 - sw_k);
+    }
     s.sky = sky;
+    s.r = r;
     s.mirror_w = 0.0;
     s.mirror_uv = uv_here;
     s.smear = min(sigma_unres * WS_SMEAR_GAIN, WS_SMEAR_MAX);
     s.dash = wg_smooth(-0.02, 0.04, dot(n.xz, normalize(v.xz + vec2<f32>(1e-5, 0.0))));
     s.side = dot(n.xz, normalize(vec2<f32>(-v.z, v.x) + vec2<f32>(1e-5, 0.0)));
     s.sun_near = wg_smooth(0.9, 0.995, dot(rup, normalize(look.sun.xyz))) * wg_smooth(-0.03, 0.02, look.sun.y) * (1.0 - wg_smooth(0.3, 0.6, skyu.night.z));
-    if (with_copy && r.y < WS_MARCH_MAX_SIN && fres > WS_MARCH_MIN_F && sf_inj.rough < 0.5) { // no mirror march in the strip's churned water
+    if (with_copy && r.y < WS_MARCH_MAX_SIN && fres > WS_MARCH_MIN_F && sf_inj.rough < 0.5 && !wv_feat(256u)) { // no mirror march in the strip's churned water (ppr: the projected reflection instead, fs_copy)
         var m = vec3<f32>(0.0);
         if (brdf) {
             m = w_march2(world, r);
@@ -1661,6 +2121,18 @@ fn fs_copy(i: VsOut) -> @location(0) vec4<f32> {
     let s = w_shade(i.world, i.base, i.clip, true);
     let bottom = textureSampleLevel(w_scene, w_clamp, s.uv, 0.0).rgb;
     var refl = s.sky;
+    if (wv_feat(256u) && s.refl_k > 0.002 && sf_inj.rough < 0.5) {
+        // (ppr) the frame's own geometry in the mirror
+        let pr = w_ppr_reflect(i.world, s.r, i.clip.xy, s.smear);
+        if (wu.screen.x > 10.5) {
+            // EO_WATER_DEBUG=11: the projected reflection's coverage (r) over its image (g, b)
+            return vec4<f32>(pr.w, lk_luma(pr.rgb) * 0.3, 0.0, 1.0);
+        }
+        if (pr.w > 0.0) {
+            let scene = min(max(pr.rgb, vec3<f32>(0.0)), max(s.sky * WS_SCENE_CEIL, vec3<f32>(WS_SCENE_CEIL_FLOOR)));
+            refl = mix(s.sky, scene, pr.w);
+        }
+    }
     if (s.mirror_w > 0.0) {
         // A short vertical smear up the frame (the chop the eye cannot resolve).
         let u = s.mirror_uv;
@@ -1693,7 +2165,7 @@ fn fs_copy(i: VsOut) -> @location(0) vec4<f32> {
     // pixel: flashes over dark water, not a smooth strip.
     // (r11b: gated by the direction to the sun alone, its soft envelope: a brightness
     // threshold cut a hard-edged block where the mirror read the drawn sky's glare)
-    let glare = s.sun_near;
+    let glare = select(s.sun_near, 0.0, wv_feat(16u)); // (glint: the sun's own glints are counted; the glare round it mirrors smooth)
     if (glare > 0.0) {
         // (fewer, smaller, brighter: one cell in six, 1.5 px, at six times; between
         // them the water keeps the plain low sky, not the sun's glare)
@@ -1743,12 +2215,18 @@ fn fs_copy(i: VsOut) -> @location(0) vec4<f32> {
         let brk = 0.55 + 0.45 * sin(i.world.z * 0.7 + i.world.x * 0.23 + mx_noise(vec3<f32>(i.world.xz * 0.15, wu.cam.w * 0.3)) * 4.0);
         refl = refl + (col * 0.4 + twr * 0.6) * (s.dash * skyu.night.z * brk);
     }
-    // EO_WATER_DEBUG=3: the water's own light only; 4: the reflection only; 5: the bottom only.
+    // EO_WATER_DEBUG=3: the water's own light only; 4: the reflection only; 5: the bottom only; 6 the body's light; 7 the glint;
+    // 8 (Fresnel, the reflection's weight before haze, the fog) as colour; 9 the reflected radiance unweighted.
     if (wu.screen.x > 2.5) {
-        let parts = array<vec3<f32>, 3>(s.own, refl * s.refl_k, bottom * s.through);
-        return vec4<f32>(parts[min(u32(wu.screen.x + 0.5) - 3u, 2u)], 1.0);
+        let parts = array<vec3<f32>, 8>(s.own, refl * s.refl_k, bottom * s.through, s.body, s.gl, s.terms, refl, w_dbg_ed * 0.01);
+        return vec4<f32>(parts[min(u32(wu.screen.x + 0.5) - 3u, 7u)], 1.0);
     }
-    return vec4<f32>(s.own + refl * s.refl_k + bottom * s.through, 1.0);
+    var out = s.own + refl * s.refl_k + bottom * s.through;
+    if (wv_feat(16u)) {
+        // (glint) never a NaN or an infinity into the frame (min / max keep the finite operand)
+        out = min(max(out, vec3<f32>(0.0)), vec3<f32>(6.0e4));
+    }
+    return vec4<f32>(out, 1.0);
 }
 
 @fragment
@@ -1758,5 +2236,9 @@ fn fs_blend(i: VsOut) -> @location(0) vec4<f32> {
     let s = w_shade(i.world, i.base, i.clip, false);
     // Premultiplied: own + reflection, the frame behind through one scalar.
     let through = clamp(dot(s.through, vec3<f32>(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
-    return vec4<f32>(s.own + s.sky * s.refl_k, 1.0 - through);
+    var out = s.own + s.sky * s.refl_k;
+    if (wv_feat(16u)) {
+        out = min(max(out, vec3<f32>(0.0)), vec3<f32>(6.0e4));
+    }
+    return vec4<f32>(out, 1.0 - through);
 }
