@@ -10,6 +10,7 @@
 
 use crate::shoreline::Oracle;
 use anyhow::{Context, Result, bail};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// `FIELD_CAP_M`.
 pub const FIELD_CAP_M: f64 = 400.0;
@@ -21,6 +22,20 @@ pub const FAR_SHORE_REACH_M: f64 = 4.0;
 pub const MAX_TEXELS: usize = 2048;
 /// Bumped when the bake or the cache layout changes.
 pub const FIELD_VERSION: &str = "water-field-v1-citywide-chamfer";
+
+/// (water r2) Whether ring land a pier's width across that the surveyed
+/// ground puts under the sea is pressed to the seabed instead of lifted 10 cm
+/// over it. The DataSF shoreline rings draw the piers that stand on piles
+/// (Torpedo Wharf off Crissy Field, the Municipal Pier, Pier 7) as land, but
+/// a bare-earth survey sees the bay floor under their decks, so the lift laid
+/// a flat sand slab at the waterline where the pier stands; the water now
+/// draws over it (eo-render FEAT_SHORE). Off with `--no-water-shore`.
+pub static PIERS_OVER_WATER: AtomicBool = AtomicBool::new(true);
+/// The deepest a point lies inside a pier's footprint (m): half the widest
+/// pier taken as one (about 30 m).
+pub const PIER_MAX_HALF_M: f64 = 15.0;
+/// How far past the far side of a pier the probe looks for the sea (m).
+pub const PIER_PROBE_M: f64 = 10.0;
 
 // the beach foreshore. The shoreline rings put a beach's waterline on the
 // surveyed high-water line, but the surveyed sand only meets `SEA_LEVEL_Y`
@@ -372,11 +387,42 @@ impl ShoreField {
         if s > 0.0 && y > crate::shoreline::SEABED_Y && self.beach_at(x, z) < 0.5 {
             return crate::shoreline::SEABED_Y;
         }
+        if s > 0.0 && s < PIER_PROBE_M && y > crate::shoreline::SEABED_Y && PIERS_OVER_WATER.load(Ordering::Relaxed) {
+            // the water beside a pier where the nearest shore is otherwise a
+            // beach (Torpedo Wharf off Crissy Field): its flanks in the survey
+            // raster are the pier's deck smeared under the sea, not a foreshore
+            let g = [self.signed_exact(x + 1.0, z) - self.signed_exact(x - 1.0, z), self.signed_exact(x, z + 1.0) - self.signed_exact(x, z - 1.0)];
+            let gl = g[0].hypot(g[1]);
+            if gl > 1e-6 {
+                let (lx, lz) = (x - g[0] / gl * (s + 2.0), z - g[1] / gl * (s + 2.0));
+                let ls = self.signed_exact(lx, lz);
+                if ls <= 0.0 && self.is_pier(lx, lz, ls) {
+                    return crate::shoreline::SEABED_Y;
+                }
+            }
+        }
         let sea = crate::shoreline::SEA_LEVEL_Y;
         if s <= 0.0 && s > -LAND_LIFT_REACH_M && y < sea + LAND_LIFT_M && self.beach_at(x, z) < 0.5 {
+            if PIERS_OVER_WATER.load(Ordering::Relaxed) && self.is_pier(x, z, s) {
+                // a pier's footprint: the sea under its deck (see `PIERS_OVER_WATER`)
+                return y.min(crate::shoreline::SEABED_Y);
+            }
             return sea + LAND_LIFT_M;
         }
         y
+    }
+
+    /// Whether ring land at `(x, z)` (signed distance `s`, at most 0) is a
+    /// pier's footprint: no deeper than `PIER_MAX_HALF_M` into the land, and
+    /// the sea again on both sides of it along one of four directions within
+    /// twice that depth plus `PIER_PROBE_M` (a strip under about 40 m wide).
+    pub fn is_pier(&self, x: f64, z: f64, s: f64) -> bool {
+        if -s > PIER_MAX_HALF_M {
+            return false;
+        }
+        let d = 2.0 * -s + PIER_PROBE_M;
+        const DIRS: [[f64; 2]; 4] = [[1.0, 0.0], [0.0, 1.0], [std::f64::consts::FRAC_1_SQRT_2, std::f64::consts::FRAC_1_SQRT_2], [std::f64::consts::FRAC_1_SQRT_2, -std::f64::consts::FRAC_1_SQRT_2]];
+        DIRS.iter().any(|u| self.signed_exact(x + u[0] * d, z + u[1] * d) > 0.0 && self.signed_exact(x - u[0] * d, z - u[1] * d) > 0.0)
     }
 
     /// The signed distance at a world point, texel centres at origin + step i (as baked).
@@ -485,6 +531,45 @@ impl ShoreField {
 mod sea_tests {
     use super::*;
     use crate::shoreline::{SEABED_Y, SEA_LEVEL_Y};
+
+    // a field with a mainland (z < 0) and a 12 m wide pier running out along
+    // +z from it, 1 m texels: the signed distance to the nearest of the two
+    fn pier_field() -> ShoreField {
+        let (w, h) = (161usize, 161usize);
+        let mut half = vec![0u16; w * h * 2];
+        for r in 0..h {
+            for c in 0..w {
+                let (x, z) = (c as f64 - 80.0, r as f64 - 40.0);
+                // the mainland's edge at z = 0; the pier x in [-6, 6], z in [0, 100]
+                let d_main = z;
+                let (dx, dz) = (x.abs() - 6.0, (z - 50.0).abs() - 50.0);
+                let d_pier = if dx <= 0.0 && dz <= 0.0 { dx.max(dz) } else { dx.max(0.0).hypot(dz.max(0.0)) };
+                half[(r * w + c) * 2] = to_half_three(d_main.min(d_pier));
+            }
+        }
+        ShoreField { origin: [-80.0, -40.0], size: [160.0, 160.0], width: w, height: h, half, range: [-40.0, 120.0], beach_texels: 0, bake_ms: 0.0 }
+    }
+
+    // a pier's footprint the survey puts under the sea is pressed to the
+    // seabed (the water draws over it); the mainland's edge keeps the lift
+    #[test]
+    fn a_sunken_pier_footprint_is_sea_and_the_seawall_keeps_its_lift() {
+        let f = pier_field();
+        let y = SEA_LEVEL_Y - 0.3;
+        // on the pier's axis, 60 m out: the sea's floor under the deck
+        assert_eq!(f.press_ground_rings(0.0, 60.0, y), y.min(SEABED_Y));
+        // beside it in the water, where the field's shore is the pier: the seabed
+        assert_eq!(f.press_ground_rings(9.0, 60.0, -1.0), SEABED_Y);
+        // the mainland 5 m in from its seawall, away from the pier: lifted over the sea as before
+        assert!((f.press_ground_rings(-50.0, -5.0, y) - (SEA_LEVEL_Y + 0.1)).abs() < 1e-9);
+        // ground standing above the sea is never touched
+        assert_eq!(f.press_ground_rings(0.0, 60.0, 2.0), 2.0);
+        // with the switch off, the earlier lift on the pier too
+        PIERS_OVER_WATER.store(false, Ordering::Relaxed);
+        let off = f.press_ground_rings(0.0, 60.0, y);
+        PIERS_OVER_WATER.store(true, Ordering::Relaxed);
+        assert!((off - (SEA_LEVEL_Y + 0.1)).abs() < 1e-9);
+    }
 
     // the foreshore meets the sea at the ring line, never raises the
     // ground, reaches the seabed offshore and hands back to the surveyed ground inland.

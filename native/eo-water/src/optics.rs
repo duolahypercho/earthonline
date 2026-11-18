@@ -361,6 +361,8 @@ pub fn wgsl_constants() -> String {
     s.push_str(&format!("const WO_BAY2_FILL: vec3<f32> = {};\n", v3e(fill_rate_spectral(&BAY_TURBID_IOP))));
     s.push_str(&format!("const WO_COAST2_FILL: vec3<f32> = {};\n", v3e(fill_rate_spectral(&COAST_IOP))));
     s.push_str(&format!("const WO_SILT2_FILL: vec3<f32> = {};\n", v3e(fill_rate_spectral(&SILT_IOP))));
+    // the column over the ground carpet pressed under open water (shoreline.rs SEA_LEVEL_Y - SEABED_Y)
+    s.push_str(&format!("const WO_CARPET_DEPTH_M: f32 = {:.4};\n", crate::shoreline::SEA_LEVEL_Y - crate::shoreline::SEABED_Y));
     s
 }
 
