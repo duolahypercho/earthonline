@@ -16,7 +16,6 @@ use crate::suspension::{self, CableSpec, DeckColours, DeckSpec, DeckStandards, F
 use serde_json::json;
 
 mod pylons;
-pub use pylons::published_dimensions;
 
 /// Near geometry stays this far above the sea; below it is the far batch's skirt.
 const NEAR_FLOOR_ABOVE_SEA_M: f64 = 1.0;
@@ -174,6 +173,28 @@ pub const ROADWAY_MIDSPAN_MLLW_FT: f64 = 270.9;
 /// 9414290 (0.951 m, epoch 1983-2001).
 pub fn midspan_roadway_m() -> f64 {
     (ROADWAY_MIDSPAN_MLLW_FT * 0.3048 - pylons::MSL_OVER_MLLW_M) * structure_scale()
+}
+
+/// The fourth pass's published dimensions (`BridgeFeatures`'s fourth-pass
+/// features) as (what, real metres, drawn metres): the plan widths and
+/// spans times the ground plan's scale, the heights and member sizes times
+/// the structure's, for the scale audit's tests.
+pub fn published_dimensions() -> Vec<(&'static str, f64, f64)> {
+    let (gs, h, ft) = (eo_data::groundscale::scale(), structure_scale(), 0.3048);
+    let mut out = pylons::published_dimensions();
+    out.extend([
+        ("roadway at midspan over MSL (270.9 ft MLLW)", ROADWAY_MIDSPAN_MLLW_FT * ft - pylons::MSL_OVER_MLLW_M, midspan_roadway_m()),
+        ("fender across (311 ft)", FENDER_FT[0] * ft, FENDER_FT[0] * ft * gs),
+        ("fender along (170 ft)", FENDER_FT[1] * ft, FENDER_FT[1] * ft * gs),
+        ("fender top over MSL (+15 ft MLLW)", FENDER_FT[3] * ft - pylons::MSL_OVER_MLLW_M, (FENDER_FT[3] * ft - pylons::MSL_OVER_MLLW_M) * h),
+        ("arch span (319 ft 7 in)", ARCH_SPAN_FT * ft, ARCH_SPAN_FT * ft * gs),
+        ("arch rise (113 ft)", ARCH_RISE_FT * ft, ARCH_RISE_FT * ft * h),
+        ("arch inner ribs apart (42.5 ft)", ARCH_RIBS_FT[0] * ft, ARCH_RIBS_FT[0] * ft * gs),
+        ("arch outer ribs apart (102.5 ft)", ARCH_RIBS_FT[1] * ft, ARCH_RIBS_FT[1] * ft * gs),
+        ("bracing width (10.5 ft)", BRACING_WIDTH_M, BRACING_WIDTH_M * h),
+        ("casing set-back (half a 3.5 ft cell)", CASING_SETBACK_M, CASING_SETBACK_M * h),
+    ]);
+    out
 }
 
 /// `goldenGatePlan`.

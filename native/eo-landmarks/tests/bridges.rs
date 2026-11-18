@@ -156,3 +156,29 @@ fn the_fourth_pass_switches_turn_their_features_off() {
         assert!(one(n).finish && one(n).members, "{n} keeps the third pass");
     }
 }
+
+/// The scale audit (rule: every published dimension the fourth pass adds is
+/// drawn through the ground plan's or the structure's scale): each drawn
+/// value is its real one times one of the two, and the key ones are what
+/// the 1.25 plan and heights make of them.
+#[test]
+fn the_fourth_pass_dimensions_are_on_the_drawn_scales() {
+    let (gs, h) = (eo_data::groundscale::scale(), eo_landmarks::golden_gate::structure_scale());
+    let dims = eo_landmarks::golden_gate::published_dimensions();
+    for (what, real, drawn) in &dims {
+        println!("{what}: {real:.3} m real, {drawn:.3} m drawn");
+        assert!(((drawn / real) - gs).abs() < 1e-9 || ((drawn / real) - h).abs() < 1e-9, "{what}: {drawn} is not {real} x {gs} or x {h}");
+    }
+    let get = |k: &str| dims.iter().find(|d| d.0.starts_with(k)).unwrap_or_else(|| panic!("{k}")).2;
+    if gs == 1.25 && h == 1.25 {
+        assert!((get("fender across") - 118.5).abs() < 0.1, "{}", get("fender across"));
+        assert!((get("fender along") - 64.8).abs() < 0.1, "{}", get("fender along"));
+        assert!((get("roadway at midspan") - 102.03).abs() < 0.05, "{}", get("roadway at midspan"));
+        assert!((get("arch outer ribs") - 39.05).abs() < 0.05, "{}", get("arch outer ribs"));
+        assert!((get("pylon shaft across") - 12.19).abs() < 0.01 && (get("pylon shaft along") - 13.72).abs() < 0.01);
+        // the outer ribs stand 6 ft 3 in outside the cable planes (Strauss 1937), on the drawn plan.
+        let g = eo_landmarks::golden_gate::data(LandmarksJs::get());
+        let site = eo_landmarks::golden_gate::Site::new(&g);
+        assert!((get("arch outer ribs") / 2.0 - site.half_plane - 6.25 * 0.3048 * gs).abs() < 0.05);
+    }
+}
