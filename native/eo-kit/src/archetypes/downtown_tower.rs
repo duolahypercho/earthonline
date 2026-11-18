@@ -210,8 +210,24 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
     let drawn_crown = CROWN_FINISHES[(random.next() * CROWN_FINISHES.len() as f64).floor() as usize];
     let drawn_base = BASE_FINISHES[(random.next() * BASE_FINISHES.len() as f64).floor() as usize];
     let prewar = (c.template == "downtown-tower" && c.variant == "prewar") || c.template == "art-deco-midrise";
-    let family_key = if prewar { "prewar-masonry" } else { drawn_family };
-    let fam = family(family_key);
+    let port_family = if prewar { "prewar-masonry" } else { drawn_family };
+    // The facade system per tower (typology.rs; off: the family's own module).
+    let system = crate::typology::tower(c, port_family);
+    let family_key = system.as_ref().map(|t| t.family).unwrap_or(port_family);
+    let mut fam = family(family_key);
+    if let Some(t) = &system {
+        fam = Family {
+            wall: t.wall,
+            spandrel: t.spandrel,
+            glass: t.glass,
+            reveal: t.reveal,
+            spandrel_band: t.spandrel_band,
+            pier_width: t.pier_width,
+            pier_projection: t.pier_projection,
+            pier_spacing: t.pier_spacing,
+            band_projection: t.band_projection,
+        };
+    }
     let crown_finish = if prewar { "cast-stone" } else { drawn_crown };
     let base_finish = if prewar { "limestone-ashlar" } else { drawn_base };
     let retail = c.has_retail_ground;
@@ -243,7 +259,8 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
     let mut ground_plan = Map::new();
     for edge in &frame.edges {
         if !facades.contains(&edge.index) {
-            by_edge.insert(edge.index.to_string(), json!("blind"));
+            // A blind side on a lot line (typology.rs on) is a party wall in its own finish: exposed brick on a prewar tower, cast concrete on a later one.
+            by_edge.insert(edge.index.to_string(), if system.is_some() && edge.party { json!({ "window": "blind", "wallSlot": "party" }) } else { json!("blind") });
             continue;
         }
         let end_pier = 1.1f64.min(0.1f64.max(edge.length * 0.05));
@@ -290,7 +307,7 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
     }
 
     let storeys: Vec<J> = stack.storeys.iter().map(|h| json!({ "height": h })).collect();
-    json!({
+    let mut spec = json!({
         "id": format!("sf-archetype-{}", c.seed),
         "seed": c.seed,
         "height": c.height,
@@ -305,7 +322,7 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
             "coping": "cast-stone",
             "base": base_finish,
             "bulkhead": base_finish,
-            "trim": "cast-stone-trim",
+            "trim": system.as_ref().map(|t| t.trim).unwrap_or("cast-stone-trim"),
             "glass": fam.glass,
             "frame": "anodized-aluminium",
             "storefront": "anodized-aluminium",
@@ -342,8 +359,24 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
             "groundPlan": ground_plan,
             "arcade": prewar,
             "penthouse": frame.polygon.len() <= 12 && frame.area >= 220.0,
+            "system": system.as_ref().map(|t| json!(t.system)).unwrap_or(J::Null),
+            "stoneTints": system.as_ref().and_then(|t| t.stone_tint.map(|k| {
+                let mut m = Map::new();
+                for name in [t.wall, t.spandrel, t.trim] {
+                    if !name.starts_with("glass") && !matches!(name, "anodized-aluminium" | "painted-steel-mid" | "perforated-metal" | "painted-steel-light") {
+                        m.insert(name.to_string(), json!(k));
+                    }
+                }
+                J::Object(m)
+            })).unwrap_or(J::Null),
         },
-    })
+    });
+    // the party walls' finish (typology.rs on): exposed brick on a prewar tower, cast concrete on a later one.
+    if system.is_some() {
+        let party = if family_key == "prewar-masonry" { "brick-common-bond" } else { "concrete-precast" };
+        set(obj_mut(&mut spec, "materials"), "party", json!(party));
+    }
+    spec
 }
 
 /// `archInfill` from stucco-row.js (private copy, see the file comment).
@@ -578,6 +611,11 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
             "facadeEdges": meta.at("facadeEdges"),
             "entryEdge": meta.at("entryEdge"),
             "garage": garage,
+            "system": meta.at("system"),
         }),
     );
+    // the stone's per-tower tone (typology.rs), drawn after the paint (pipeline.rs `drawn_materials`).
+    if let Some(t) = meta.get_nn("stoneTints").filter(|v| v.is_object()) {
+        plan.extra.insert("stoneTints".into(), t.clone());
+    }
 }

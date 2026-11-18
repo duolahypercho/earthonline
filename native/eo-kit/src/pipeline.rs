@@ -696,6 +696,15 @@ pub fn drawn_materials(planned: &Planned, rung: u32) -> DrawnMaterials {
     if crate::wall_paint::enabled() {
         crate::wall_paint::apply(c, &materials, matches!(plan.extra.get("tints"), Some(J::Object(_))), &mut tints);
     }
+    // a stone or precast face's per-building tone (typology.rs: a tower's stone), not a paint.
+    if let Some(J::Object(st)) = plan.extra.get("stoneTints") {
+        for (name, t) in st {
+            if let Some(t) = tint_of(t) {
+                tints.insert(name.clone(), t);
+                tints.insert(format!("{name}{FENESTRATED_SUFFIX}"), t);
+            }
+        }
+    }
     let mut finish = None;
     if !skip {
         if let Some(id) = roof_finish_id_for(c.archetype, c.seed) {
