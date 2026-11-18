@@ -144,6 +144,23 @@ percent) impairs a client's link in both directions. `eo-server bench`,
 `eo-server bandwidth` and `eo-server predict` measure the server, the
 bandwidth on a busy street and client prediction.
 
+Presence at landmarks (`eo_net::presence`): the server owns the hour, how
+fast it runs and the weather, and every snapshot carries them (a client
+eases toward the server's clock, so friends see the same sunset;
+`--time-of-day`, `--day-rate` and `--weather` set a local server's).
+Other players are drawn as Rocketbox people moved from their replicated
+speed and state (walk, stop on a planted foot, step through a turn on the
+spot, emotes), on a smooth path through the snapshots, with name tags that
+fade with distance and hide behind buildings. In the window, 1 to 4 wave,
+point, crouch and take a photo, 0 stops, and T fast-travels to the next
+landmark viewpoint (`assets/landmark-viewpoints.json`; the server checks
+the request and lands the player there half a second later).
+
+```sh
+./target/release/eo-server bots --connect 127.0.0.1:47800 --count 12 --landmarks   # bots that walk up to the viewpoints, emote, travel on
+./target/release/eo-app --connect local --net-shots scenes.json --out DIR --width 1600 --height 900   # landmark captures (eo-app/src/net.rs)
+```
+
 ## Command-line switches
 
 `eo-app --help` prints the main bench and streaming options. The most useful
@@ -304,6 +321,7 @@ selection:
 | Camera finish | `--no-taa`, `--no-bloom`, `--no-adaptation`, `--no-ssr` |
 | Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count` |
 | Interface and sound | `--no-hud`, `--no-audio`, `--audio-null` (mix to a null output) |
+| Online (`--connect`) | `--no-remote-bodies` (other players drawn as before: first walk style and idle, linear path, no emotes), `--no-name-tags`, `--no-shared-sky` (the client's own hour and weather) |
 
 A new visual feature should come with its own switch, defaulting to on only
 once it has been reviewed.
