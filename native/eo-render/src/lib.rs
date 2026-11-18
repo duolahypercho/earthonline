@@ -1488,7 +1488,7 @@ impl Renderer {
         self.look.sky.begin_frame(self.look.out_size());
         let jittered = Camera { jitter: self.look.sky.jitter(), ..*cam };
         let cam = &jittered;
-        self.photo.update(queue, cam, self.look.out_size(), self.look.sky.options().bloom); // photo mode (nothing without a photo set)
+        self.photo.update(queue, cam, self.look.out_size(), self.look.sky.options().bloom, self.look.sky.drawn_exposure().unwrap_or(1.0)); // photo mode (nothing without a photo set)
         if let Some(f) = self.farshore.get().filter(|_| self.farshore_active()) {
             f.update(queue, cam, self.water_active()); // the far terrain's nodes and camera (jittered, as the city), and where the sea is drawn
         }
