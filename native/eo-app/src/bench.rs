@@ -421,7 +421,7 @@ fn percentile(v: &[f64], p: f64) -> f64 {
         return f64::NAN;
     }
     let mut s = v.to_vec();
-    s.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    s.sort_by(f64::total_cmp); // a NaN (no thread clock) sorts last instead of panicking
     let rank = (p / 100.0 * (s.len() - 1) as f64).round() as usize;
     s[rank.min(s.len() - 1)]
 }
