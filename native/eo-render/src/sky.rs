@@ -90,6 +90,26 @@ pub struct SkyOptions {
     /// The fair-weather cumulus field, off by default (a clear sky keeps the high sheet
     /// alone; the overcast, fog and rain decks are drawn either way); `EO_CUMULUS=1` draws it.
     pub cumulus: bool,
+    /// The physical daylight (`--no-phys-sky`): the sun, the sky and the ground's light from
+    /// the clear coastal atmosphere (eo-look `atmosphere`, `phys`), the sky tables drawn at
+    /// the sun's own scale and the city's reflections read from them, in place of the
+    /// browser game's rig, aerosol and dome anchor.
+    pub phys_sky: bool,
+    /// The aerial-perspective volume (`--no-ap-lut`): the in-scattered light and
+    /// transmittance of the atmosphere's own medium over the view distance, from a
+    /// precomputed table, in place of the haze toward the horizon's colour.
+    pub ap_lut: bool,
+    /// The filmic display transform (`--no-filmic`): eo-look `tone::display_filmic`
+    /// in place of the ACES fit with the post chain's shoulder, grade and finish.
+    pub filmic: bool,
+    /// The incident meter's exposure in EV100 while the sun is up (`--no-ev100`: the JS curve).
+    pub ev100: bool,
+    /// The canyon-scale sky visibility and wall bounce of the occlusion pass (`--no-sky-vis`:
+    /// the 4 m contact term alone).
+    pub sky_vis: bool,
+    /// The night lit by its sky and its practicals alone (`--no-night-shaping`: the rig's rim
+    /// fill stays on at night; eo-sky `frame::apply_night_shaping`).
+    pub night_shaping: bool,
     pub weather: WeatherMode,
     pub seed: u32,
     /// The world clock at the first frame (seconds since the world's epoch).
@@ -119,6 +139,12 @@ impl Default for SkyOptions {
             atmosphere: true,
             contact: true,
             cumulus: std::env::var("EO_CUMULUS").is_ok_and(|v| v == "1"),
+            phys_sky: true,
+            ap_lut: true,
+            filmic: true,
+            ev100: true,
+            sky_vis: true,
+            night_shaping: true,
             weather: WeatherMode::Preset(eo_sky::Kind::Clear),
             seed: eo_sky::world_seed(),
             world_time_s: 0.0,
@@ -150,6 +176,12 @@ impl SkyOptions {
             atmosphere: false,
             contact: false,
             cumulus: false,
+            phys_sky: false,
+            ap_lut: false,
+            filmic: false,
+            ev100: false,
+            sky_vis: false,
+            night_shaping: false,
             ..Self::default()
         }
     }
@@ -238,7 +270,24 @@ pub struct SkyUniform {
     // aerial perspective: x the weather veils (1/0: its visibility under clear air's), y clear air's aerosol extinction at the ground (1/m), z, w the weather's range-fog near / far (m)
     atmo3: [f32; 4],
     sun_glint: [f32; 4],
+    // the physical daylight: rgb a white sun at the top of the atmosphere x the Sun's colour
+    // (look units; the sky tables are per unit solar illuminance), w its weight (0: the dome anchor)
+    atmo4: [f32; 4],
+    // the medium the tables integrate: x aerosol scattering, y aerosol absorption (1/km at the
+    // ground, 550 nm, x the haze density), z the aerosol's scale height (km), w the
+    // aerial-perspective volume on (1/0)
+    atmo_m: [f32; 4],
+    // rgb the aerosol's spectral factor per channel, w the aerial-perspective volume's reach (km)
+    atmo_s: [f32; 4],
+    // rgb Rayleigh scattering at sea level (1/km), w its scale height (km)
+    atmo_r: [f32; 4],
+    // rgb ozone's peak absorption (1/km), w unused
+    atmo_o: [f32; 4],
 }
+
+/// The aerial-perspective volume: texels (azimuth about the sun, elevation, distance) and reach.
+pub const AP_SIZE: [u32; 3] = [32, 32, 32];
+pub const AP_REACH_KM: f32 = 40.0;
 
 /// One light as the GPU reads it (sky_light.wgsl `SkyLight`), 64 bytes.
 #[repr(C)]
@@ -342,8 +391,10 @@ struct State {
     meter_fwd: Option<glam::Vec3>,
     /// the aerosol density the transmittance and multiple-scattering
     /// tables were built for (they depend on the medium only; rebuilt on a change).
-    atmo_built: Option<f32>,
+    atmo_built: Option<[[f32; 4]; 4]>,
     atmo_haze: f32,
+    /// the medium the tables are built for (`atmo_m`, `atmo_s`, `atmo_r`, `atmo_o`), the rebuild key.
+    atmo_medium: [[f32; 4]; 4],
     /// the (hour, weather) the histories were made under; frames left to discard after a change; frames of history since the last cut.
     hist_look: Option<(f64, (i64, i64, i64))>,
     recut: u32,
@@ -380,6 +431,10 @@ pub struct SkyGpu {
     atmo_pipes: [wgpu::ComputePipeline; 3],
     atmo_bgs: [wgpu::BindGroup; 3],
     atmo_sizes: [(u32, u32); 3],
+    /// the aerial-perspective volume (in-scattered light, transmittance) and its pass
+    ap_views: [wgpu::TextureView; 2],
+    ap_pipe: wgpu::ComputePipeline,
+    ap_bg: wgpu::BindGroup,
     noise_ready: AtomicBool,
     /// the cloud noise, the blue-noise tile and the cloud-shadow map (clouds.rs).
     pub(crate) clouds: crate::clouds::CloudGpu,
@@ -624,6 +679,9 @@ impl SkyGpu {
                 entry(17, cs, t2(true)),
                 entry(18, cs, t2(true)),
                 entry(19, cs, t2(true)),
+                // the aerial-perspective volume: in-scattered light, transmittance
+                entry(20, cs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D3, multisampled: false }),
+                entry(21, cs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D3, multisampled: false }),
             ],
         });
         let atmo_src = include_str!("sky_atmo.wgsl");
@@ -680,6 +738,42 @@ impl SkyGpu {
             })
         };
         let atmo_bgs = [atmo_bg(0, &dummy_view, &dummy_view), atmo_bg(1, &atmo_views[0], &dummy_view), atmo_bg(2, &atmo_views[0], &atmo_views[1])];
+        // the aerial-perspective volume (sky_atmo_luts.wgsl `at_ap_main`): two 3D tables, written
+        // after the sky view from the same transmittance and multiple-scattering tables.
+        let ap_tex: Vec<wgpu::Texture> = ["sky-ap-inscatter", "sky-ap-transmittance"]
+            .iter()
+            .map(|l| {
+                d.create_texture(&wgpu::TextureDescriptor {
+                    label: Some(l),
+                    size: wgpu::Extent3d { width: AP_SIZE[0], height: AP_SIZE[1], depth_or_array_layers: AP_SIZE[2] },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D3,
+                    format: wgpu::TextureFormat::Rgba16Float,
+                    usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
+                })
+            })
+            .collect();
+        let ap_views: [wgpu::TextureView; 2] = std::array::from_fn(|i| ap_tex[i].create_view(&Default::default()));
+        let store3 = wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: wgpu::TextureFormat::Rgba16Float, view_dimension: wgpu::TextureViewDimension::D3 };
+        let ap_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("sky-ap-bgl"),
+            entries: &[entry(0, cs, ubuf), entry(2, cs, t2(true)), entry(3, cs, t2(true)), entry(4, cs, samp), entry(5, cs, store3), entry(6, cs, store3)],
+        });
+        let ap_bg = d.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("sky-ap-bg"),
+            layout: &ap_bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: uniform.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&atmo_views[0]) },
+                wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&atmo_views[1]) },
+                wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::Sampler(&lin) },
+                wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(&ap_views[0]) },
+                wgpu::BindGroupEntry { binding: 6, resource: wgpu::BindingResource::TextureView(&ap_views[1]) },
+            ],
+        });
+        let ap_pipe = compute("sky_atmo_ap", &layout("sky-ap-layout", &ap_bgl), &am, "at_ap_main");
         let volume_pipe = compute("sky_volume", &layout("sky-volume-layout", &volume_bgl), &vm, "vol_main");
         // the cloud noise, blue noise and cloud-shadow map (the shadow pass is the volume module's `cl_shadow_main`)
         let clouds = crate::clouds::CloudGpu::new(d, crate::clouds::ShadowInputs { module: &vm, look_buf: init.look_buf, sky_uniform: &uniform, sheet: &sheet_view, repeat: &rep, sky_view: &atmo_views[2], linear: &lin });
@@ -832,6 +926,9 @@ impl SkyGpu {
             atmo_pipes,
             atmo_bgs,
             atmo_sizes,
+            ap_views,
+            ap_pipe,
+            ap_bg,
             resolve_bgl,
             resolve_pipe,
             bloom_bgl,
@@ -858,6 +955,7 @@ impl SkyGpu {
                 meter_fwd: None,
                 atmo_built: None,
                 atmo_haze: 0.0,
+                atmo_medium: [[0.0; 4]; 4],
                 hist_look: None,
                 recut: 0,
                 cut_hold: false,
@@ -1042,7 +1140,8 @@ impl SkyGpu {
     /// The weather, the decks and the night for this frame, and the uniform.
     /// `f` is the look frame (already built for this weather), `cam` the
     /// unjittered camera.
-    pub(crate) fn update(&self, queue: &wgpu::Queue, cam: &Camera, f: &eo_look::LookFrame, terms: &eo_sky::SkyTerms, out_size: (u32, u32), depth_ok: bool) -> f64 {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn update(&self, queue: &wgpu::Queue, cam: &Camera, f: &eo_look::LookFrame, terms: &eo_sky::SkyTerms, out_size: (u32, u32), depth_ok: bool, daylight: Option<&eo_look::phys::Daylight>) -> f64 {
         if !self.sheet_ready.swap(true, Ordering::Relaxed) {
             let sheet = eo_sky::clouds::bake_sheet(0x5eed_c10d);
             for (mip, level) in eo_sky::clouds::sheet_mips(&sheet).iter().enumerate() {
@@ -1100,7 +1199,21 @@ impl SkyGpu {
                     dirs.push(([d.x as f64, d.y as f64, d.z as f64], 1.5 - 0.5 * (x * x + y * y) as f64));
                 }
             }
-            eo_sky::night::meter(f, &terms.weather, &dirs)
+            match daylight.filter(|d| d.weight > 0.0) {
+                // the physical daylight's sky and card where it lights the frame (by its weight)
+                Some(d) => {
+                    let wt = d.weight;
+                    let card_js = 0.18 * (eo_sky::night::key_on_ground(f) * eo_sky::night::mean_beam(&terms.weather) + eo_sky::night::ground_fill(f, eo_sky::night::SIDEWALK_ENV)) / std::f64::consts::PI;
+                    let card_ph = 0.18 * eo_sky::night::horizontal_illuminance(f, &terms.weather, wt) / std::f64::consts::PI;
+                    let card = card_js + (card_ph - card_js) * wt;
+                    let eye_m = cam.eye.y as f64;
+                    eo_sky::night::meter_with(f, &dirs, card, &|dd| {
+                        let js = eo_look::math::luminance(f.model.dome(dd));
+                        js + (eo_look::math::luminance(d.sky(dd, eye_m)) - js) * wt
+                    })
+                }
+                None => eo_sky::night::meter(f, &terms.weather, &dirs),
+            }
         } else {
             1.0
         };
@@ -1210,6 +1323,32 @@ impl SkyGpu {
         };
         let atmo_haze = (ATMO_HAZE * (1.0 + 2.0 * w.profile.haze)) as f32;
         s.atmo_haze = atmo_haze;
+        // the medium the tables integrate: the clear coastal air (eo-look `atmosphere`) with the
+        // physical daylight, else the standard aerosol x ATMO_HAZE as before; both x the weather's haze.
+        // With the physical daylight the medium moves from the old one to the coastal air by
+        // the daylight's weight (the sun up: all of it; the twilight and the night keep the
+        // tables they were tuned on). The haze density folds into the aerosol's coefficients.
+        let legacy = eo_look::atmosphere::Atmosphere::legacy();
+        let legacy = eo_look::atmosphere::Atmosphere { aerosol_scat: legacy.aerosol_scat * atmo_haze as f64, aerosol_abs: legacy.aerosol_abs * atmo_haze as f64, ..legacy };
+        let atm = match daylight.filter(|_| o.phys_sky) {
+            Some(d) => {
+                let c = eo_look::atmosphere::Atmosphere::coastal_clear();
+                let dens = eo_sky::frame::daylight_density(w);
+                let c = eo_look::atmosphere::Atmosphere { aerosol_scat: c.aerosol_scat * dens, aerosol_abs: c.aerosol_abs * dens, ..c };
+                eo_look::atmosphere::Atmosphere::lerp(&legacy, &c, d.weight.clamp(0.0, 1.0))
+            }
+            None => legacy,
+        };
+        let atmo_m = [atm.aerosol_scat as f32, atm.aerosol_abs as f32, atm.aerosol_h_km as f32, if o.ap_lut { 1.0 } else { 0.0 }];
+        let atmo_s = [atm.aerosol_spectral[0] as f32, atm.aerosol_spectral[1] as f32, atm.aerosol_spectral[2] as f32, AP_REACH_KM];
+        let atmo_r = [atm.rayleigh[0] as f32, atm.rayleigh[1] as f32, atm.rayleigh[2] as f32, atm.rayleigh_h_km as f32];
+        let atmo_o = [atm.ozone[0] as f32, atm.ozone[1] as f32, atm.ozone[2] as f32, 0.0];
+        // the transmittance and multiple-scattering tables are rebuilt when any of the medium moves
+        s.atmo_medium = [[atmo_m[0], atmo_m[1], atmo_m[2], 0.0], atmo_s, atmo_r, atmo_o];
+        let atmo4 = match daylight.filter(|_| o.phys_sky) {
+            Some(d) => [d.sun_toa[0] as f32, d.sun_toa[1] as f32, d.sun_toa[2] as f32, d.weight as f32],
+            None => [0.0; 4],
+        };
         let fwd = cam.forward();
         let right = cam.right();
         let up = right.cross(fwd);
@@ -1284,6 +1423,11 @@ impl SkyGpu {
                 // rain veil, so the far hills stood out of the fog in front of them).
                 [if o.atmosphere && far < far_clear * 0.97 { 1.0 } else { 0.0 }, (AP_HAZE_PER_KM * 0.001 * (1.0 + 2.0 * w.profile.haze)) as f32, f.aerial.near as f32, far as f32]
             },
+            atmo4,
+            atmo_m,
+            atmo_s,
+            atmo_r,
+            atmo_o,
         };
         queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&u));
         // The lights' scales: candela -> irradiance units, on with the lamps.
@@ -1616,6 +1760,8 @@ impl SkyGpu {
                         wgpu::BindGroupEntry { binding: 17, resource: wgpu::BindingResource::TextureView(&self.clouds.curl_view) },
                         wgpu::BindGroupEntry { binding: 18, resource: wgpu::BindingResource::TextureView(&self.clouds.shadow_view) },
                         wgpu::BindGroupEntry { binding: 19, resource: wgpu::BindingResource::TextureView(&self.clouds.blue_view) },
+                        wgpu::BindGroupEntry { binding: 20, resource: wgpu::BindingResource::TextureView(&self.ap_views[0]) },
+                        wgpu::BindGroupEntry { binding: 21, resource: wgpu::BindingResource::TextureView(&self.ap_views[1]) },
                     ],
                 })
             };
@@ -1667,8 +1813,8 @@ impl SkyGpu {
             // The transmittance and multiple-scattering tables only when the medium changed (0.3-0.4 ms each frame otherwise).
             let first = {
                 let mut s = self.state.lock().unwrap();
-                let rebuild = s.atmo_built != Some(s.atmo_haze);
-                s.atmo_built = Some(s.atmo_haze);
+                let rebuild = s.atmo_built != Some(s.atmo_medium);
+                s.atmo_built = Some(s.atmo_medium);
                 if rebuild { 0 } else { 2 }
             };
             let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("sky-atmosphere"), timestamp_writes: None });
@@ -1676,6 +1822,11 @@ impl SkyGpu {
                 pass.set_pipeline(&self.atmo_pipes[k]);
                 pass.set_bind_group(0, &self.atmo_bgs[k], &[]);
                 pass.dispatch_workgroups(self.atmo_sizes[k].0.div_ceil(8), self.atmo_sizes[k].1.div_ceil(8), 1);
+            }
+            if o.ap_lut {
+                pass.set_pipeline(&self.ap_pipe);
+                pass.set_bind_group(0, &self.ap_bg, &[]);
+                pass.dispatch_workgroups(AP_SIZE[0].div_ceil(8), AP_SIZE[1].div_ceil(8), 1);
             }
         }
         // Volume.

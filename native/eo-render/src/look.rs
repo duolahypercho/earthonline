@@ -100,6 +100,12 @@ struct LookUniform {
     // the weather's dome (`upperFromRow`): overcast, isotropy, desaturation; tint.
     wx: [f32; 4],
     wx_tint: [f32; 4],
+    // the filmic display transform (eo-look `tone::filmic_curve`): contrast a, shoulder d, b, c
+    tone: [f32; 4],
+    // x filmic on (1/0), y chroma gain, z, w unused
+    tone2: [f32; 4],
+    // the filmic transform's white balance (eo-look `tone::filmic_white_balance`), rows
+    wb: [[f32; 4]; 3],
 }
 
 #[repr(C)]
@@ -182,6 +188,8 @@ struct State {
     weather_key: (i64, i64, i64),
     /// the weather frame before its fill (hour, sky profile, frame): `eo_sky::frame::base_frame`.
     sky_base: Option<(f64, String, LookFrame)>,
+    /// the physical daylight of the frame in force (`--no-phys-sky`: None), and what it was made for (hour, density, weight).
+    daylight: Option<((u64, u64, u64), std::sync::Arc<eo_look::phys::Daylight>)>,
 }
 
 struct PostTarget {
@@ -490,6 +498,8 @@ impl LookGpu {
                 entry(9, fs, sbuf(true)),
                 entry(10, fs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
                 entry(11, fs, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
+                // the atmosphere's sky-view table (the physical daylight's sky in reflections)
+                entry(12, fs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
             ],
         });
         let ao_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -723,6 +733,7 @@ impl LookGpu {
                 terms: None,                // sky
                 weather_key: (i64::MIN, 0, 0), // sky
                 sky_base: None,
+                daylight: None,
             }),
             cmp_sampler,
             device: device.clone(),
@@ -760,6 +771,7 @@ impl LookGpu {
                 wgpu::BindGroupEntry { binding: 9, resource: sky.clusters.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 10, resource: wgpu::BindingResource::TextureView(prev) },
                 wgpu::BindGroupEntry { binding: 11, resource: wgpu::BindingResource::Sampler(&sky.rep) },
+                wgpu::BindGroupEntry { binding: 12, resource: wgpu::BindingResource::TextureView(sky.atmo_tables().0) },
             ],
         })
     }
@@ -870,6 +882,8 @@ impl LookGpu {
 
     /// change the sky stages or the weather at run time (A/B, captures).
     pub fn set_sky_options(&self, o: crate::sky::SkyOptions) {
+        // the night exposure solve meets the display transform the frame is drawn with
+        eo_look::tone::set_filmic(o.filmic);
         if self.sky.options() != o {
             self.sky.set_options(o);
             let mut s = self.state.lock().unwrap();
@@ -972,7 +986,27 @@ impl LookGpu {
                 if s.sky_base.as_ref().is_none_or(|(bh, bp, _)| *bh != h || *bp != profile) {
                     s.sky_base = Some((h, profile, eo_sky::frame::base_frame(&c, t)));
                 }
-                let (f, terms) = eo_sky::frame::look_frame_from(&s.sky_base.as_ref().unwrap().2, &c, t);
+                let (mut f, mut terms) = eo_sky::frame::look_frame_from(&s.sky_base.as_ref().unwrap().2, &c, t);
+                // the physical daylight (eo-look `phys`) in place of the rig while the sun is
+                // up, and the incident meter's exposure (EV100).
+                if opts.phys_sky {
+                    let density = eo_sky::frame::daylight_density(&w);
+                    let weight = eo_sky::frame::daylight_weight(&f, &w);
+                    let key = (h.to_bits(), density.to_bits(), weight.to_bits());
+                    if s.daylight.as_ref().is_none_or(|(k, _)| *k != key) {
+                        s.daylight = Some((key, std::sync::Arc::new(eo_look::phys::Daylight::new(f.model.sun.dir(), density, weight))));
+                    }
+                    let d = s.daylight.as_ref().unwrap().1.clone();
+                    eo_sky::frame::apply_daylight(&mut f, &mut terms, &d);
+                } else {
+                    s.daylight = None;
+                }
+                if opts.ev100 {
+                    eo_sky::frame::apply_ev100(&mut f, &mut terms);
+                }
+                if opts.night_shaping {
+                    eo_sky::frame::apply_night_shaping(&mut f, &terms);
+                }
                 s.frame = Some(f);
                 s.terms = Some(terms);
             }
@@ -1044,13 +1078,14 @@ impl LookGpu {
         let ao_made = if self.options.ao { st.ao_made } else { None };
         st.cur_cam = Some((cam.view_proj(), cam.eye, fwd, cam.fov_y_deg.to_radians()));
         let terms = st.terms; // sky
+        let daylight = st.daylight.as_ref().map(|d| d.1.clone());
         drop(st);
         // the sky passes' uniform (unjittered camera) and the exposure, adapted.
         let out_size = self.post.lock().unwrap().as_ref().map(|t| t.size).unwrap_or((1920, 1080));
         let exposure = match terms {
             Some(t) => {
                 let _span = crate::hitch::span(crate::hitch::Phase::SkyUpdate);
-                self.sky.update(queue, &Camera { jitter: [0.0; 2], ..*cam }, &f, &t, out_size, self.sky_depth_ok.load(std::sync::atomic::Ordering::Relaxed))
+                self.sky.update(queue, &Camera { jitter: [0.0; 2], ..*cam }, &f, &t, out_size, self.sky_depth_ok.load(std::sync::atomic::Ordering::Relaxed), daylight.as_deref())
             }
             None => f.exposure,
         };
@@ -1092,7 +1127,8 @@ impl LookGpu {
             key: v4(f.key, exposure), // adapted (f.exposure with every sky stage off)
             rim_dir: v4(f.rim_dir, 0.0),
             rim: v4(f.rim, 0.0),
-            hemi_sky: v4(f.hemi_sky, 0.0),
+            // w: the physical daylight's weight (look_light.wgsl: the environment at its own intensity)
+            hemi_sky: v4(f.hemi_sky, terms.map(|t| t.daylight_weight).unwrap_or(0.0)),
             hemi_ground: v4(f.hemi_ground, 0.0),
             ambient: v4(f.ambient, f.rig.environment_intensity),
             env_class: [f.rig.env_painted as f32, f.rig.env_glass as f32, f.rig.env_asphalt as f32, f.rig.env_ground as f32],
@@ -1142,7 +1178,8 @@ impl LookGpu {
                 if ao_made.is_some() { 1.0 } else { 0.0 },
                 1.0 / focal_px,
                 std::env::var("EO_AO_DEBUG").ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0),
-                0.0,
+                // the canyon-scale sky visibility (surfaces_ao.wgsl `AO_FAR_*`)
+                if self.sky.options().sky_vis { 1.0 } else { 0.0 },
             ],
             field: {
                 // makeGroundField's practicals ramps on the sun's altitude (dry, model exposure 1).
@@ -1159,6 +1196,12 @@ impl LookGpu {
             rooms_work: crate::rooms::drive(m.sun.altitude_deg, self.time_of_day()).1,
             wx: [(m.profile.overcast * wx_keep) as f32, (m.profile.isotropy * wx_keep) as f32, (m.profile.desaturation * wx_keep) as f32, if m.ext.on { 1.0 } else { 0.0 }], // eo-look `SkyExt`
             wx_tint: v4(m.profile.tint.map(|v| 1.0 + (v - 1.0) * wx_keep), m.ext.afterglow), // w the afterglow arch
+            tone: {
+                let (b, c) = tone::filmic_coefficients(tone::FILMIC_CONTRAST, tone::FILMIC_SHOULDER, tone::FILMIC_WHITE, tone::FILMIC_MID_IN, tone::FILMIC_MID_OUT);
+                [tone::FILMIC_CONTRAST as f32, tone::FILMIC_SHOULDER as f32, b as f32, c as f32]
+            },
+            wb: tone::filmic_white_balance().map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, 0.0]),
+            tone2: [if self.sky.options().filmic { 1.0 } else { 0.0 }, tone::FILMIC_CHROMA as f32, 0.0, 0.0],
         };
         queue.write_buffer(&self.look_buf, 0, bytemuck::bytes_of(&u));
         let mut planes = [[0f32; 4]; 18];

@@ -24,6 +24,10 @@
 // the atmosphere's transmittance and sky-view tables (sky_atmo.wgsl).
 @group(0) @binding(13) var vol_at_trans: texture_2d<f32>;
 @group(0) @binding(14) var vol_at_view: texture_2d<f32>;
+// the aerial-perspective volume (sky_atmo_luts.wgsl `at_ap_main`): in-scattered light per
+// unit solar illuminance and transmittance, by direction about the sun and distance.
+@group(0) @binding(20) var vol_ap_in: texture_3d<f32>;
+@group(0) @binding(21) var vol_ap_tr: texture_3d<f32>;
 
 /// the atmosphere's sky radiance along a direction (look units).
 /// Its zenith is held to the look's own zenith luminance (the JS sky model's,
@@ -45,8 +49,24 @@ fn vol_atmo_gain() -> f32 {
     return clamp(tgt / max(lz, 1e-9), 0.2 * skyu.atmo.w, 400.0 * skyu.atmo.w);
 }
 
+/// the scale the tables are drawn at (look units per unit solar illuminance): the
+/// look's dome anchor (`vol_atmo_gain`), or with the physical daylight the sun's
+/// own irradiance above the atmosphere in its colour (`atmo4`), by its weight.
+fn vol_atmo_scale() -> vec3<f32> {
+    let ph = skyu.atmo4.w;
+    if (ph <= 0.0) {
+        return vec3<f32>(vol_atmo_gain());
+    }
+    if (ph >= 1.0) {
+        return skyu.atmo4.rgb;
+    }
+    return mix(vec3<f32>(vol_atmo_gain()), skyu.atmo4.rgb, ph);
+}
+
 fn vol_atmo_sky(d: vec3<f32>) -> vec3<f32> {
     let uv = at_view_uv(d, skyu.atmo.xyz);
+    let gs = vol_atmo_scale();
+    let ph = clamp(skyu.atmo4.w, 0.0, 1.0);
     // the gain that holds the tables' zenith to the look's (`vol_atmo_gain`) scaled the
     // whole low-sun sky, its aureole too: with the look's zenith brighter than the tables' at a
     // low sun, the aureole clipped over 10-20 deg and veiled what stood before the sun. From
@@ -58,11 +78,12 @@ fn vol_atmo_sky(d: vec3<f32>) -> vec3<f32> {
     let g_model = clamp(dot(look.dome_zenith.xyz, vec3<f32>(0.2126, 0.7152, 0.0722)) / max(dot(z, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-9), 0.2 * skyu.atmo.w, 400.0 * skyu.atmo.w);
     let ang = acos(clamp(dot(d, skyu.atmo.xyz), -1.0, 1.0)) * 57.29578;
     let near_sun = smoothstep(0.5, 1.5, ang) * (1.0 - smoothstep(18.0, 30.0, ang)) * (1.0 - smoothstep(10.0, 15.0, asin(clamp(skyu.atmo.y, -1.0, 1.0)) * 57.29578));
-    var c = textureSampleLevel(vol_at_view, vol_lin, uv, 0.0).rgb * g_look;
+    var c = at_spectral(textureSampleLevel(vol_at_view, vol_lin, uv, 0.0).rgb * gs, ph);
     // Only the excess over the sky 40 deg round in azimuth at the same elevation is scaled (a
     // straight gain switch drew a dark ring round the sun): the glare never falls below the
     // sky beside it.
-    if (near_sun > 0.0) {
+    // (the physical daylight's sky is at the sun's own scale: no anchor to undo)
+    if (near_sun > 0.0 && ph < 1.0) {
         let sh = normalize(skyu.atmo.xz + vec2<f32>(1e-5, 0.0));
         let ca = 0.766;
         let sa = 0.643;
@@ -72,7 +93,7 @@ fn vol_atmo_sky(d: vec3<f32>) -> vec3<f32> {
         let lref = dot(textureSampleLevel(vol_at_view, vol_lin, at_view_uv(dref, skyu.atmo.xyz), 0.0).rgb * g_look, vec3<f32>(0.2126, 0.7152, 0.0722));
         let l = dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
         if (l > lref) {
-            let k = mix(1.0, min(g_model / max(g_look, 1e-9), 1.0), near_sun);
+            let k = mix(1.0, min(g_model / max(g_look, 1e-9), 1.0), near_sun * (1.0 - ph));
             c = c * ((lref + (l - lref) * k) / l);
         }
     }
@@ -88,7 +109,7 @@ fn vol_atmo_sky(d: vec3<f32>) -> vec3<f32> {
     if (d.y > -0.02 && d.y < 0.0698) {
         let hd4 = sqrt(max(1.0 - d.y * d.y, 1e-6));
         let d4 = vec3<f32>(d.x / hd4 * 0.99756, 0.0698, d.z / hd4 * 0.99756);
-        let l4 = dot(textureSampleLevel(vol_at_view, vol_lin, at_view_uv(d4, skyu.atmo.xyz), 0.0).rgb * g_look, vec3<f32>(0.2126, 0.7152, 0.0722));
+        let l4 = dot(textureSampleLevel(vol_at_view, vol_lin, at_view_uv(d4, skyu.atmo.xyz), 0.0).rgb * gs, vec3<f32>(0.2126, 0.7152, 0.0722));
         let lh = dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
         let cap = 1.25 * l4;
         if (lh > cap) {
@@ -136,6 +157,30 @@ fn vol_atmo_sky(d: vec3<f32>) -> vec3<f32> {
 /// tables by day, the weather's or the night's dome as they take over), so a
 /// far hill fades to the sky behind it, warm toward a low sun, blue-grey away
 /// from it. Replaces the range fog (45 % at 4.2 km on a clear noon).
+/// the aerial-perspective volume along a direction over a distance (m): (in-scattered
+/// light per unit solar illuminance, transmittance), both rgb. Slice k of n ends at
+/// reach x ((k + 1) / n)^2; under the first slice the light grows from none.
+struct VolAp {
+    ins: vec3<f32>,
+    tr: vec3<f32>,
+};
+
+fn vol_ap(dir: vec3<f32>, dist: f32) -> VolAp {
+    let uv = at_view_uv(dir, skyu.atmo.xyz);
+    let n = f32(textureDimensions(vol_ap_in).z);
+    let s = sqrt(clamp(dist * 0.001 / skyu.atmo_s.w, 0.0, 1.0)) * n;
+    let w = clamp((s - 0.5) / n, 0.5 / n, 1.0 - 0.5 / n);
+    var o: VolAp;
+    o.ins = textureSampleLevel(vol_ap_in, vol_lin, vec3<f32>(uv, w), 0.0).rgb;
+    o.tr = textureSampleLevel(vol_ap_tr, vol_lin, vec3<f32>(uv, w), 0.0).rgb;
+    if (s < 1.0) {
+        let k = s * s;
+        o.ins = o.ins * k;
+        o.tr = mix(vec3<f32>(1.0), o.tr, k);
+    }
+    return o;
+}
+
 fn vol_aerial(dir: vec3<f32>, dist: f32, eye_y: f32) -> vec4<f32> {
     let dh = dir.y * dist;
     let dens = sky_path_density(dh);
@@ -194,6 +239,15 @@ fn vol_aerial(dir: vec3<f32>, dist: f32, eye_y: f32) -> vec4<f32> {
     // too (grey, not the clear sky's blue: the part of a far object the veil left showed
     // bluer and lighter than the fog round it).
     let colc = mix(col, colw, skyu.atmo3.x * wk);
+    if (skyu.atmo_m.w > 0.5 && skyu.atmo2.x > 0.5) {
+        // the aerial-perspective volume: the medium's own in-scatter (the sun's phase, the
+        // planet's shadow, the multiple scattering) at the sky's scale, its transmittance, in
+        // place of the fade toward the horizon's colour; the weather's veil as above.
+        let ap = vol_ap(dir, dist);
+        let ta = dot(ap.tr, vec3<f32>(0.2126, 0.7152, 0.0722));
+        let ins = mix(at_spectral(ap.ins * vol_atmo_scale(), clamp(skyu.atmo4.w, 0.0, 1.0)), colw * (1.0 - ta), skyu.atmo3.x * wk);
+        return vec4<f32>(ins * (1.0 - wv) + colw * wv, ta * (1.0 - wv));
+    }
     return vec4<f32>(colc * (1.0 - tl) * (1.0 - wv) + colw * wv, tl * (1.0 - wv));
 }
 
