@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // download the aerial imagery the roof survey measures (USDA NAIP
-// through the USGS National Map image service, public domain) into a folder
-// OUTSIDE the repository, and write its manifest (source, licence, date, and
-// per file: URL, bytes, SHA-256).
+// through the USGS National Map image service, public domain) into
+// `<repo>/external/aerial` (git-ignored) or a folder outside the repository
+// (any other folder inside it is refused, target-folder.mjs), and write its
+// manifest (source, licence, date, and per file: URL, bytes, SHA-256).
 //
 //   cargo run --release -p eo-kit --example roof_survey -- plan   # writes <root>/tiles.json
 //   node native/tools/fetch-aerial.mjs <root>                     # or EO_AERIAL_DIR
@@ -17,11 +18,13 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { checkTarget } from './target-folder.mjs';
 
 const UA = 'Mozilla/5.0 (compatible; image-tile-client/1.0)';
 const HOST = 'imagery.nationalmap.gov';
 const CAP = 3 * 1024 ** 3;
 const root = process.argv[2] || process.env.EO_AERIAL_DIR || (() => { console.error('usage: fetch-aerial.mjs <root> (or set EO_AERIAL_DIR)'); process.exit(2); })();
+checkTarget(root, 'aerial');
 const plan = JSON.parse(readFileSync(join(root, 'tiles.json'), 'utf8'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

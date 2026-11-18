@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // download the official sign artwork and the sign font the native sign
-// atlases read, into a folder OUTSIDE the repository, and write the `files`
+// atlases read, into `<repo>/external/sign-art` (git-ignored) or a folder
+// outside the repository (any other folder inside it is refused,
+// target-folder.mjs), and write the `files`
 // list of the provenance manifest `native/eo-props/data/sign-art-manifest.json`
 // (per file: source URL and the ZIP entry it came from, licence or
 // public-domain basis, retrieval date, bytes, SHA-256). The manifest's other
@@ -32,6 +34,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { inflateRawSync } from 'node:zlib';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { checkTarget } from './target-folder.mjs';
 
 const UA = 'sign-art-fetch/1.0';
 const here = dirname(fileURLToPath(import.meta.url));
@@ -191,8 +194,7 @@ const rel = (p) => relative(root, p).split(sep).join('/');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
-  const repo = resolve(here, '..', '..').toLowerCase();
-  if (root.toLowerCase() === repo || root.toLowerCase().startsWith(repo + sep)) throw new Error(`refusing to download into the repository (${root})`);
+  checkTarget(root, 'sign-art');
   mkdirSync(root, { recursive: true });
   const old = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : {};
   const prev = new Map((old.files || []).map((f) => [f.id, f]));
