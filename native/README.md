@@ -299,7 +299,7 @@ selection:
 | Buildings | `--no-facade-detail`, `--no-facade-age`, `--no-rooms`, `--no-room-frames`, `--no-room-dim`, `--no-roof-colours`, `--no-roof-plant`, `--no-roof-parapet`, `--no-roof-patches`, `--no-wall-paint` |
 | Ground | `--no-ground-hills`, `--no-ground-green`, `--no-ground-contact`, `--no-terrain-lod` |
 | Scanned surfaces | `--no-cc0` (all), `--no-cc0-street`, `--no-cc0-walls`, `--no-cc0-ground`, `--no-cc0-decals`, `--no-cc0-grime`, `--no-cc0-stains`, `--no-cc0-pom`, `--no-cc0-tiling` |
-| Lighting and sky | `--no-shadows`, `--no-ao`, `--no-sky-vis`, `--no-contact-shadows`, `--no-atmosphere`, `--no-phys-sky`, `--no-ap-lut`, `--no-fog`, `--no-clouds`, `--no-cloud-shadows`, `--no-shafts`, `--no-moon-stars`, `--no-lights` |
+| Lighting and sky | `--no-shadows`, `--no-ao`, `--no-sky-vis`, `--no-contact-shadows`, `--no-atmosphere`, `--no-phys-sky`, `--no-ap-lut`, `--no-night-shaping`, `--no-fog`, `--no-clouds`, `--no-cloud-shadows`, `--no-shafts`, `--no-moon-stars`, `--no-lights` |
 | Weather | `--no-rain`, `--no-wet`, `--no-wind` |
 | Camera finish | `--no-taa`, `--no-bloom`, `--no-adaptation`, `--no-ev100`, `--no-filmic`, `--no-ssr` |
 | Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count` |
@@ -318,7 +318,9 @@ keeps the ACES fit with the post chain's shoulder, grade and finish in place
 of the filmic curve, the daylight white balance and the chroma gain;
 `--no-ev100` keeps the JS exposure curve in place of the incident meter's
 EV100; `--no-sky-vis` keeps the occlusion pass's 4 m contact term in place of
-the canyon-scale sky visibility and wall bounce. All five together give the
+the canyon-scale sky visibility and wall bounce; `--no-night-shaping` keeps
+the rig's rim light on at night (without it an unlit wall at night is lit by
+the night sky's fill and the practicals alone). All six together give the
 previous output.
 
 ### Scale of the ground plan
