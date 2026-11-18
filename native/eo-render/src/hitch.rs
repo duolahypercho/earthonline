@@ -347,7 +347,8 @@ mod win {
     pub const THREAD_PRIORITY_HIGHEST: i32 = 2;
 }
 
-/// CPU cycles this thread has run (0 where unsupported).
+/// CPU cycles this thread has run (on macOS its CPU time in nanoseconds,
+/// which `cycles_per_ms` calibrates the same way; 0 where unsupported).
 pub fn thread_cycles() -> u64 {
     #[cfg(windows)]
     {
@@ -358,7 +359,18 @@ pub fn thread_cycles() -> u64 {
         }
         c
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        // libSystem's `clock_gettime_nsec_np` (macOS 10.12+) with
+        // CLOCK_THREAD_CPUTIME_ID (16 in <time.h>): the calling thread's CPU time.
+        unsafe extern "C" {
+            fn clock_gettime_nsec_np(clock_id: u32) -> u64;
+        }
+        const CLOCK_THREAD_CPUTIME_ID: u32 = 16;
+        // SAFETY: a plain libSystem call that takes no pointers.
+        unsafe { clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) }
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         0
     }
