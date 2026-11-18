@@ -291,11 +291,12 @@ impl B {
         }
     }
 
-    /// A warm-white lamp (3,000 K) hanging at `pos`, pointing down: `candela`
-    /// on its axis, a cone of `angle` half-angle (INFERRED interior downlights).
-    fn lamp(&mut self, pos: V3, candela: f64, range: f64, angle: f64) {
+    /// A warm-white lamp (3,000 K) at `pos`: `candela`, radiating as a point
+    /// (the gather's point kind: a pendant or a wall lamp, INFERRED; a street
+    /// lamp's cone is the street lamps' own photometry, which these are not).
+    fn lamp(&mut self, pos: V3, candela: f64, range: f64) {
         let base = [pos[0], pos[1] - 3.0, pos[2]];
-        self.lights.push(crate::lights::light(pos, base, crate::lights::unit_luminance(crate::lights::WARM_WHITE_SRGB), candela, range, angle, 0.5));
+        self.lights.push(crate::lights::light(pos, base, crate::lights::unit_luminance(crate::lights::WARM_WHITE_SRGB), candela, range, PI / 2.0, 0.0));
     }
 
     /// The deck, moved by `shift` (a landmark building's plan shift).
@@ -573,7 +574,7 @@ fn coit(js: &LandmarksJs, height_at: &dyn Fn(f64, f64) -> Option<f64>) -> Deck {
     }
     for k in 0..6 {
         let a = (k as f64 + 0.5) / 6.0 * TAU;
-        b.lamp(p(a, (r_core + r_in) / 2.0, bel1 - 0.1), 600.0, 9.0, PI / 3.0);
+        b.lamp(p(a, (r_core + r_in) / 2.0, bel1 - 0.1), 600.0, 9.0);
     }
     b.walk_annulus(cx, cz, r_core, r_in, floor, 48);
     // The arcade is open: an invisible guard stands in the arches' plane over the sills.
@@ -701,7 +702,7 @@ fn salesforce(js: &LandmarksJs, height_at: &dyn Fn(f64, f64) -> Option<f64>) -> 
     for k in 0..12 {
         let a = (k as f64 + 0.5) / 12.0 * TAU;
         let r = (h * 1.2 + r_mean * scale_at(y_lo)) / 2.0;
-        b.lamp([cx + a.cos() * r, ceil - 0.05, cz - a.sin() * r], 900.0, 9.0, PI / 3.0);
+        b.lamp([cx + a.cos() * r, ceil - 0.05, cz - a.sin() * r], 900.0, 9.0);
     }
     b.walk_ring(&plate, floor + 0.02);
     // The glazing stops the walker; the core too.
@@ -878,7 +879,7 @@ fn transamerica(js: &LandmarksJs, height_at: &dyn Fn(f64, f64) -> Option<f64>) -
     slab(b.m("interior"), &square(dc), base + yb, 0.25, srgb_hex(0xe2dfd8), srgb_hex(0xe2dfd8));
     for (a, c) in [(-3.0, -3.0), (3.0, -3.0), (3.0, 3.0), (-3.0, 3.0)] {
         let p = at(a, c, yb - 0.3);
-        b.lamp(p, 700.0, 7.0, PI / 3.0);
+        b.lamp(p, 700.0, 7.0);
     }
     // The walkable room: the square less the two wings' cores (|a| < wing, |b| > wing_in).
     let w = wing_w;
@@ -1352,7 +1353,7 @@ fn city_hall(js: &LandmarksJs, height_at: &dyn Fn(f64, f64) -> Option<f64>) -> D
     }
     for k in 0..4 {
         let a = k as f64 / 4.0 * TAU;
-        b.lamp([cx + a.cos() * (r_in + 0.1), floor + 2.4, cz - a.sin() * (r_in + 0.1)], 400.0, 6.0, PI / 2.5);
+        b.lamp([cx + a.cos() * (r_in + 0.1), floor + 2.4, cz - a.sin() * (r_in + 0.1)], 400.0, 6.0);
     }
     b.walk_annulus(cx, cz, r_in, r_out, floor, 48);
     b.wall_cylinder(cx, cz, r_rail, floor - 0.2, floor + GUARD_COLLIDE_M, 48);
