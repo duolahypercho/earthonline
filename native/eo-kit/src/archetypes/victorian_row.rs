@@ -31,6 +31,30 @@ const AT_GRADE_ALLOWANCE_M: f64 = 0.45;
 const BRACKET_PITCH_M: f64 = 1.15;
 const DENTIL_PITCH_M: f64 = 0.34;
 
+/// The Queen Anne front gable (typology.rs on): the share of each variant
+/// that carries one. Queen Anne (about 1880-1906) is the gabled style; a
+/// Stick front sometimes has one, an Italianate (before 1880) has the flat
+/// false front with its bracketed cornice (SF Planning, Historic Context
+/// Statement, Victorian-era residential styles; Mullen, "Victorian
+/// Houses", San Francisco Architectural Heritage).
+fn gable_share(variant: &str) -> f64 {
+    match variant {
+        "queen-anne" => 0.85,
+        "stick" => 0.35,
+        "undated" => 0.4,
+        _ => 0.0,
+    }
+}
+/// The roof's pitch over the gable (rise over run): Queen Anne roofs are
+/// steep, 10:12 to 12:12.
+const GABLE_PITCH: [f64; 2] = [10.0 / 12.0, 12.0 / 12.0];
+/// The widest front one gable spans (a 25-30 ft lot's house, with a little over).
+const GABLE_MAX_FRONT_M: f64 = 11.0;
+/// The row at 710-720 Steiner Street (the "Postcard Row" Painted Ladies,
+/// Queen Anne houses built 1892-1896 by Matthew Kavanaugh; Wikipedia,
+/// Painted ladies): drawn gabled whatever their variant.
+const STEINER_ROW: [&str; 7] = ["261412887", "261412899", "261412879", "261412894", "261412900", "261412895", "261412896"];
+
 const WALL_FINISHES: [&str; 6] = ["wood-siding", "wood-siding", "wood-siding", "wood-siding", "painted-stucco", "wood-siding"];
 const TRIM_FINISHES: [&str; 5] = ["painted-white", "painted-white", "cast-stone-trim", "painted-white", "signal-red"];
 const BAY_SHAPES: [&str; 5] = ["square", "square", "canted", "canted", "round"];
@@ -122,6 +146,24 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
     if bay_start as i64 > storey_count as i64 - 1 {
         oriel_indices.clear();
     }
+    // The front gable (typology.rs on): the record's own row, else its variant's share.
+    let key = c.record_id.strip_prefix("sf-building-").unwrap_or(&c.record_id);
+    let mut gr = Rng::new(&format!("{}|victorian-gable", c.seed));
+    let (g_roll, g_pitch) = (gr.next(), gr.next());
+    // the front's true width (the plan is drawn at the ground scale, heights are not): one house's
+    // front gable spans one lot, at most about 36 ft (GABLE_MAX_FRONT_M); a wider front is a row of them, not one.
+    let width = front_length / eo_data::groundscale::resolve().unwrap_or(1.0);
+    let gable = crate::typology::enabled()
+        && storey_count >= 2
+        && front_length >= 4.5
+        && width <= GABLE_MAX_FRONT_M
+        && !retail
+        && (STEINER_ROW.contains(&key) || g_roll < gable_share(&c.variant));
+    let gable_meta = if gable {
+        json!({ "rise": 0.5 * width * (GABLE_PITCH[0] + (GABLE_PITCH[1] - GABLE_PITCH[0]) * g_pitch) })
+    } else {
+        J::Null
+    };
     let ground = if retail { "storefront" } else { "entrance" };
     let bays: Vec<J> = widths
         .iter()
@@ -178,7 +220,7 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
         }
         e
     };
-    json!({
+    let mut spec = json!({
         "id": format!("sf-archetype-{}", c.seed),
         "seed": c.seed,
         "height": c.height,
@@ -219,7 +261,8 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
             },
             "default": { "window": "blind", "cornice": false },
         },
-        "roof": { "slab": 0.3 },
+        // a gable stands over the roof's plane: the build clamp's allowance above it (mesh.rs `Clamp`).
+        "roof": if gable { json!({ "slab": 0.3, "plantAllowance": gable_meta.num("rise").max(3.0) + 0.5 }) } else { json!({ "slab": 0.3 }) },
         "archetype": {
             "kind": KIND,
             "version": VICTORIAN_ROW_VERSION,
@@ -234,8 +277,14 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
             "retail": retail,
             "wall": wall,
             "trim": trim,
+            "gable": gable_meta,
         },
-    })
+    });
+    if gable {
+        // the gable's roof (a dark composition shingle, toward the measured roof colour).
+        set(obj_mut(&mut spec, "materials"), "pitchedRoof", json!("composition-shingle"));
+    }
+    spec
 }
 
 fn bay_plan_polygon(basis: &Basis, shape: &str, s0: f64, s1: f64, p: f64) -> Vec<P2> {
@@ -277,8 +326,23 @@ fn bay_front_sash(plan: &mut Plan, basis: &Basis, edge: usize, s0: f64, s1: f64,
     plan.add_box(basis, b(s1 - f, s1, y0, y1, wf0, wf1));
     plan.add_box(basis, b(s0, s1, y1 - f, y1, wf0, wf1));
     plan.add_box(basis, b(s0, s1, y0, y0 + f, wf0, wf1));
-    let mid = (s0 + s1) / 2.0;
-    plan.add_box(basis, b(mid - 0.026, mid + 0.026, y0, y1, wf0 + 0.01, wf1 - 0.01));
+    // The bay's front lights: a timber-era bay front is two or three tall
+    // sashes of about 0.8-1.0 m between posts (typology.rs on), else one
+    // light with a meeting stile.
+    let lights = if crate::typology::enabled() { ((s1 - s0) / 0.95).round().clamp(1.0, 3.0) as usize } else { 1 };
+    if lights > 1 {
+        // the posts are kept a rung further than the sash (lod.rs drops `bay-sash` past 65 m).
+        for k in 1..lights {
+            let x = s0 + (s1 - s0) * k as f64 / lights as f64;
+            plan.add_box(basis, PartArgs::new("bay-post", "frame", x - 0.06, x + 0.06, y0, y1, wf0, wf1 + 0.01).edge(edge).meta(meta.clone()));
+        }
+        // the meeting rails of the double-hung sashes.
+        let rail = y0 + (y1 - y0) * 0.55;
+        plan.add_box(basis, b(s0, s1, rail - 0.025, rail + 0.025, wf0 + 0.01, wf1 - 0.01));
+    } else {
+        let mid = (s0 + s1) / 2.0;
+        plan.add_box(basis, b(mid - 0.026, mid + 0.026, y0, y1, wf0 + 0.01, wf1 - 0.01));
+    }
     plan.add_box(
         basis,
         PartArgs::new("glass", "glass", s0 + f * 0.5, s1 - f * 0.5, y0 + f * 0.5, y1 - f * 0.5, w + 0.004, w + 0.014)
@@ -474,6 +538,62 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
                     .meta(json!({ "archetype": kind })),
             );
         }
+    }
+    // -- The Queen Anne front gable: the gable end over the cornice and the
+    // pitched roof behind it running back over the lot.
+    if let Some(rise) = meta.get_nn("gable").and_then(|g| g.f("rise")).filter(|r| *r > 0.5) {
+        let l = front.length;
+        let [ox, oz] = basis.origin;
+        let [nx, nz] = basis.n;
+        let depth = frame.polygon.iter().map(|p| -((p.x - ox) * nx + (p.z - oz) * nz)).fold(0.0f64, f64::max).max(2.0);
+        let y0 = wall_top;
+        let eave = 0.28;
+        // the roof: a prism over the depth, its rakes past the gable end.
+        plan.add_plate(
+            &basis,
+            PartArgs {
+                kind: "roof-gable".into(),
+                slot: "pitchedRoof".into(),
+                edge: Some(front.index),
+                profile: vec![[-eave, y0 - 0.12], [l + eave, y0 - 0.12], [l / 2.0, y0 + rise + 0.16]],
+                w0: -depth + 0.3,
+                w1: -0.04,
+                cast_shadow: Some(true),
+                receive_shadow: Some(true),
+                meta: Some(json!({ "archetype": kind, "part": "gable-roof", "roof": true })),
+                ..Default::default()
+            },
+        );
+        // the gable end in the wall's finish, a little proud of the front.
+        plan.add_plate(
+            &basis,
+            PartArgs {
+                kind: "gable".into(),
+                slot: "wall".into(),
+                edge: Some(front.index),
+                profile: vec![[0.0, y0], [l, y0], [l / 2.0, y0 + rise]],
+                w0: -0.06,
+                w1: 0.12,
+                cast_shadow: Some(true),
+                receive_shadow: Some(true),
+                meta: Some(json!({ "archetype": kind, "part": "gable-end", "roof": true })),
+                ..Default::default()
+            },
+        );
+        // its trim: a frieze board along the foot and the attic window.
+        plan.add_box(&basis, PartArgs::new("gable-frieze", "trim", 0.0, l, y0, y0 + 0.24, 0.1, 0.2).edge(front.index).meta(json!({ "archetype": kind, "roof": true })));
+        let ww = 0.9f64.min(l * 0.18);
+        let wy0 = y0 + 0.55;
+        let wy1 = (y0 + rise * 0.62).min(wy0 + 1.5);
+        if wy1 - wy0 > 0.7 {
+            let m = l / 2.0;
+            plan.add_box(&basis, PartArgs::new("gable-window-frame", "frame", m - ww / 2.0 - 0.08, m + ww / 2.0 + 0.08, wy0 - 0.08, wy1 + 0.08, 0.1, 0.16).edge(front.index).meta(json!({ "archetype": kind, "roof": true })));
+            plan.add_box(
+                &basis,
+                PartArgs::new("glass", "glass", m - ww / 2.0, m + ww / 2.0, wy0, wy1, 0.16, 0.175).edge(front.index).shadow(false).meta(json!({ "archetype": kind, "face": "gable", "roof": true })),
+            );
+        }
+        plan.extra.insert("archetype".into(), json!({ "kind": kind, "pitched": true }));
     }
     let tints = super::period_paint::period_paint_tints(&plan.seed, plan.material("wall")).unwrap_or_else(|| json!({}));
     plan.extra.insert("tints".into(), tints);
