@@ -193,6 +193,97 @@ switch it does not take.
 | `--check-max` | Exit 1 if any path's median, p95 or worst frame reaches the budget |
 | `--worst-frames N` | How many of the worst frames to report |
 | `--pace realtime\|60hz\|all-60hz\|none` | How the bench paces its frames |
+| `--shots FILE.json --out DIR` | Offscreen stills instead of the timing: one PNG per shot of the file, and `DIR/<name>.json` beside it (below) |
+| `--scene-cards --out DIR` | The eight scene cards of [the visual gate](../Docs/VISUAL_QUALITY_GATE.md) at the Ferry Building and The Embarcadero, 2560 x 1440 unless `--width`/`--height` are given (below) |
+| `--shots-only a,b` | Only the shots or cards whose name contains `a` or `b` |
+| `--settle-timeout S` | The most a shot waits for streaming to settle (600 s) |
+| `--card8-seconds S`, `--card8-fps N`, `--card8-speed M` | Card 8's length (30 s), frames written per second (10) and speed (the player's run, 5.6 m/s) |
+
+Neither needs `--bench`. Every world switch and kill switch applies, and
+`--time-of-day` and `--weather` set the hour and weather of a shot that
+does not give its own.
+
+**Shots.** The file is a JSON array; each shot has a `name` (letters,
+digits, `-`, `_`, `.`; it names the files) and one pose:
+
+```json
+[
+  { "name": "transamerica_oblique",
+    "geo": { "lat": 37.7952, "lon": -122.4028, "alt": 110, "range": 800, "heading": 30, "tilt": 75, "fov": 35 },
+    "time_of_day": 13, "weather": "clear" },
+  { "name": "embarcadero", "eye": [2830.9, 4.5, -2366.9], "yaw": 314, "pitch": -2, "fov": 52 },
+  { "name": "salesforce", "eye": [2830.9, 4.5, -2366.9], "look_at": [2475.1, 160.0, -1627.9] }
+]
+```
+
+- `geo` is the look-at pose of the common web-globe URL convention:
+  (`lat`, `lon`, `alt`) is the target, `alt` in metres above mean sea level;
+  the camera stands `range` metres from it; `heading` is the compass bearing
+  the camera faces (0 north, 90 east); `tilt` is the angle from straight down
+  (0 looks straight down, 90 at the horizon); `fov` is the vertical field of
+  view in degrees. The camera is `target - range * forward` on the WGS84
+  ellipsoid, `forward = (sin tilt sin heading, sin tilt cos heading, -cos tilt)`
+  (east, north, up). The same keys at the top level of a shot are read as a
+  `geo` pose too.
+- `eye` with `yaw` and `pitch` (degrees; yaw 0 looks north, -z, and 90 east,
+  +x; pitch up positive), or `eye` with `look_at`, are game metres (x east,
+  y up, z south).
+- Optional: `fov` (degrees, default 52, the game camera's), `far` (metres;
+  default `--far` if given, else 20000 m so a view across the city is not
+  cut short), `time_of_day`, `weather` (`clear`, `overcast`, `fog`,
+  `drizzle`, `rain`, `storm`), `what`, and keys starting with `_` (comments).
+  Any other key is an error.
+
+Latitude, longitude and height go to game coordinates through
+`eo_data::geo`: the city's projection (`sf-city.json` `meta`: centre and
+metres per degree) times the ground-plan scale (below), and the height as
+height above the surveyed ground kept over the drawn ground (the elevation
+grid is NAVD88; mean sea level is game y -0.55; the drawn ground lifts
+heights above mean sea level by the height scale, and buildings and
+landmarks stand on it at their real size). Both the target and the camera
+are converted and the game camera looks at the target, so the bearing is
+kept and the tilt and distance change with the plan scale; the manifest
+records both.
+
+Before each PNG is written the hour and weather are set with the cloud and
+water clocks held still, the traffic is rebuilt round the shot from the
+simulation's seeded warm-up and stepped 2 s, streaming settles for that view
+(the upload queue empty and every tile, model, far cell and prop the view
+wants resident, up to `--settle-timeout`), and the temporal resolve is drawn
+to convergence under the still camera (two frames one jitter cycle apart
+under 0.5 RMS in 8-bit levels, or a difference that has stopped changing
+over three comparisons: what is left changes every frame, such as the post
+pass's display dither; 48 to 320 frames). `DIR/<name>.json` records
+the input, the resolved eye and orientation in game coordinates (and the
+eye's latitude, longitude and height), the commit the binary was built from
+and the checkout's state, the full command line, the size, the hour, the
+weather, every switch, the traffic, how the settle and the convergence went,
+and notes (an eye inside a building or under the ground, a view against a
+wall, a settle that timed out).
+
+**Scene cards.** `--scene-cards` takes the gate's eight cards at the Ferry
+Building / Embarcadero corridor, each placed from the data (the street
+plan's runs and junctions by name, the shore field, the Ferry Building's
+anchor): 1 Market Street's footway at noon; 2 the painted junction on The
+Embarcadero where Market Street meets it, across the crosswalk; 3 California
+Street among the towers at 18.5 h; 4 the Embarcadero promenade over the bay;
+5 The Embarcadero by the Ferry Building in drizzle at 16 h; 6 card 1's
+street at 21 h; 7 a third-person character standing, walking toward and
+stopped at The Embarcadero's kerb (7a, 7b, 7c) with the on-foot camera rig;
+8 the promenade south-east of the Ferry Building at the player's run,
+rendered every frame at 60 Hz of wall time with streaming and traffic
+running, written as `DIR/card8-traversal/0000.png`, ... and placed so a
+128 m tile boundary is crossed halfway (the frames that cross it are in
+`card8-traversal.json`). Each card's manifest is the shots manifest plus
+the card's number, category and place, and `honoured: false` with the
+reason when the run cannot give what the card needs (no people without the
+optional people assets, so no pedestrians and no character; no traffic with
+`--no-agents`).
+
+```sh
+EO_NATIVE_CACHE=... ./target/release/eo-app --shots views.json --out shots-out --width 1600 --height 900 --time-of-day 13 --weather clear
+EO_NATIVE_CACHE=... ./target/release/eo-app --scene-cards --out cards-out
+```
 
 ### Kill switches
 

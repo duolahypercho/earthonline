@@ -103,11 +103,15 @@ brief, never with a copied image file:
 7. third-person character standing, walking, and stopping at a curb;
 8. moving traversal clip (30 seconds) crossing a tile boundary.
 
-In the native build, frames are captured offscreen with
-`eo-app --bench --capture` (PNGs in `native/bench-out/`), with the time of
-day, weather and switches given on the command line. There is no dedicated
-scene-card capture tool yet; until one exists, record the exact command
-line, commit hash and settings with every card.
+In the native build, the eight cards are captured offscreen with
+`eo-app --scene-cards --out DIR` (2560 x 1440 by default) at the Ferry
+Building / Embarcadero corridor; card 8 is a numbered frame sequence that
+crosses a 128 m tile boundary. Each card's PNG has a manifest beside it with
+the build's commit, the exact command line, the resolved camera and every
+setting, and says when the run could not honour the card (for example no
+people without the optional people assets). Any other view is captured with
+`eo-app --shots FILE.json --out DIR` and the same manifest; see the Bench
+section of `native/README.md`.
 
 An independent reviewer (critic) receives randomized A/B labels and the
 common category brief, but no product name, implementation label, or prior

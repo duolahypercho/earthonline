@@ -36,7 +36,7 @@ use std::sync::Arc;
 use std::sync::mpsc::Receiver;
 use std::time::Instant;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Args {
     pub bench: bool,
     pub frames: usize,
@@ -224,6 +224,8 @@ fn parse_args() -> Result<Args> {
         landmarks: true,          // landmarks
         landmarks2: true,
     };
+    // `--scene-cards` renders at 2560 x 1440 unless a size is given.
+    let (mut sized, mut scene_cards) = (false, false);
     let mut it = std::env::args().skip(1);
     while let Some(s) = it.next() {
         let mut val = || it.next().ok_or_else(|| anyhow::anyhow!("{s} needs a value"));
@@ -231,8 +233,26 @@ fn parse_args() -> Result<Args> {
             "--bench" => a.bench = true,
             "--frames" => a.frames = val()?.parse()?,
             "--warmup" => a.warmup = val()?.parse()?,
-            "--width" => a.width = val()?.parse()?,
-            "--height" => a.height = val()?.parse()?,
+            "--width" => {
+                a.width = val()?.parse()?;
+                sized = true;
+            }
+            "--height" => {
+                a.height = val()?.parse()?;
+                sized = true;
+            }
+            // offscreen shots and the visual-gate scene cards (bench/shots.rs reads the values).
+            "--shots" => {
+                val()?;
+                a.bench = true;
+            }
+            "--scene-cards" => {
+                a.bench = true;
+                scene_cards = true;
+            }
+            "--shots-only" | "--card8-fps" | "--card8-seconds" | "--card8-speed" | "--settle-timeout" => {
+                val()?;
+            }
             "--msaa" => a.msaa = val()?.parse()?,
             "--no-indirect-validation" => a.indirect_validation = false,
             "--no-indirect-count" => a.no_indirect_count = true,
@@ -406,12 +426,24 @@ fn parse_args() -> Result<Args> {
             }
             "-h" | "--help" => {
                 println!(
-                    "eo-app [--bench] [--frames N=720] [--warmup N=60] [--width 1920] [--height 1080] [--msaa 1|4]\n       [--no-indirect-validation] [--no-indirect-count] [--no-vsync] [--out DIR] [--label NAME] [--capture] [--far M=4200]\n       [--multiply N=1] [--check-budget] [--budget-ms 10 (self-test only)]\n       [--no-models] [--no-terrain-lod] [--no-kit] [--slice1] [--slice2] [--cache DIR] [--no-cache] [--stream-threads N=6] [--stream-radius M=inf]\n       [--kit-threads N=6] [--kit-split-materials] [--upload-budget-mb 4] [--kit-arena-vertices N] [--kit-arena-indices N] [--kit-arena-objects N]\n       [--kit-near-load M=110] [--kit-mid-load M=520] [--drive-frames N=3600]\n       [--time-of-day H=12] [--shadow-map N=3072] [--no-shadows] [--no-agents] [--agent-density N=1] [--no-rocketbox]\n       [--no-occlusion] [--occlusion-check] [--no-thread-priority] [--pace realtime|60hz|all-60hz|none] [--worst-frames N=12] [--check-max]\n       [--no-view-detail] [--view-margin-deg 35] [--view-predict-s 0.3] [--view-hold-s 2.5] [--stream-all-paths] [--full-arenas]\n       [--segments street_walk,elevated_sweep,city_overview,authored_street,kit_street,drive,turn_around,turn_around_authored]"
+                    "eo-app [--bench] [--frames N=720] [--warmup N=60] [--width 1920] [--height 1080] [--msaa 1|4]\n       [--no-indirect-validation] [--no-indirect-count] [--no-vsync] [--out DIR] [--label NAME] [--capture] [--far M=4200]\n       [--multiply N=1] [--check-budget] [--budget-ms 10 (self-test only)]\n       [--no-models] [--no-terrain-lod] [--no-kit] [--slice1] [--slice2] [--cache DIR] [--no-cache] [--stream-threads N=6] [--stream-radius M=inf]\n       [--kit-threads N=6] [--kit-split-materials] [--upload-budget-mb 4] [--kit-arena-vertices N] [--kit-arena-indices N] [--kit-arena-objects N]\n       [--kit-near-load M=110] [--kit-mid-load M=520] [--drive-frames N=3600]\n       [--time-of-day H=12] [--shadow-map N=3072] [--no-shadows] [--no-agents] [--agent-density N=1] [--no-rocketbox]\n       [--no-occlusion] [--occlusion-check] [--no-thread-priority] [--pace realtime|60hz|all-60hz|none] [--worst-frames N=12] [--check-max]\n       [--no-view-detail] [--view-margin-deg 35] [--view-predict-s 0.3] [--view-hold-s 2.5] [--stream-all-paths] [--full-arenas]\n       [--segments street_walk,elevated_sweep,city_overview,authored_street,kit_street,drive,turn_around,turn_around_authored]\n\n\
+eo-app --shots FILE.json --out DIR [--width W --height H] [--time-of-day H] [--weather KIND] [--shots-only a,b] [--settle-timeout S=600] [any world or kill switch]\n\
+       offscreen: one settled, converged PNG per shot of FILE.json, and DIR/<name>.json (resolved pose, build, command line, switches).\n\
+       A shot is {{\"name\", \"geo\": {{\"lat\", \"lon\", \"alt\" (m above mean sea level), \"range\" (m), \"heading\" (deg, 0 north, 90 east),\n\
+       \"tilt\" (deg from straight down), \"fov\" (vertical deg)}}}} (the target is looked at from range metres), or {{\"eye\": [x, y, z],\n\
+       \"yaw\" (deg, 0 north (-z), 90 east (+x)), \"pitch\" (deg, up +)}} or {{\"eye\", \"look_at\": [x, y, z]}} in game metres; optional \"fov\",\n\
+       \"far\", \"time_of_day\", \"weather\", \"what\".\n\
+eo-app --scene-cards --out DIR [--width 2560 --height 1440] [--shots-only a,b] [--card8-fps 10] [--card8-seconds 30] [--card8-speed 5.6] [any world or kill switch]\n\
+       offscreen: the eight scene cards of Docs/VISUAL_QUALITY_GATE.md at the Ferry Building and the Embarcadero, a manifest per card;\n\
+       card 8 is a numbered frame sequence across a 128 m tile boundary."
                 );
                 std::process::exit(0);
             }
             other => anyhow::bail!("unknown argument {other} (try --help)"),
         }
+    }
+    if scene_cards && !sized {
+        (a.width, a.height) = (2560, 1440);
     }
     if a.frames + a.warmup > 1024 {
         // 4 timestamp queries per frame; one query set holds at most 4096.

@@ -132,6 +132,8 @@ mod street_bench;
 mod view_bench;
 mod water_bench; // water
 mod sign_shots; // signs
+mod scene_cards; // the visual gate's eight scene cards (`--scene-cards`)
+mod shots; // offscreen geo-referenced shots (`--shots FILE.json`)
 
 struct Segment {
     name: &'static str,
@@ -468,6 +470,7 @@ fn settle_p(ctx: &GpuContext, renderer: &Renderer, world: &World, models: &mut M
 }
 
 pub fn run(args: &Args, process_start: Instant) -> Result<()> {
+    shots::preflight()?; // a shots file that does not parse stops here, before the world loads
     // the render thread above normal (workers lower themselves when started).
     let raised = args.perf.thread_priority && hitch::raise_render_thread();
     eo_render::alloc::claim_render_thread(); // this thread allocates from a heap no worker takes
@@ -528,7 +531,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     if let Some(only) = &args.segments {
         segs.retain(|s| only.iter().any(|o| o == s.name));
     }
-    let first_cam = (segs[0].camera)(0, args.warmup + segs[0].frames);
+    // `--shots` / `--scene-cards`: stream in at the first shot, not at the first path.
+    let first_cam = shots::first_camera(&world, args, aspect)?.unwrap_or_else(|| (segs[0].camera)(0, args.warmup + segs[0].frames));
     let mut models = ModelRuntime::start(&mut world, args, bases, first_cam.eye, process_start);
     // the simulation, feed and agent library, live while the paths run.
     let mut agents = crate::agents::AgentRuntime::start(&world, args, crate::agents::AgentRuntime::focus_of(first_cam.eye, first_cam.forward()));
@@ -669,6 +673,12 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     if hlod_shots::requested() {
         let dir = args.out_dir.clone().unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bench-out"));
         return hlod_shots::run(&ctx, &renderer, &world, &mut models, &mut props, &mut agents, &segs, args, &color, attach, resolve, &targets, &dir, args.label.as_deref().unwrap_or("shots"));
+    }
+    // `--shots FILE.json` and `--scene-cards` write their settled shots instead of the timing.
+    if let Some(mode) = shots::requested() {
+        let dir = args.out_dir.clone().unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bench-out").join(mode.default_dir()));
+        let mut io = shots::Io { ctx: &ctx, renderer: &renderer, world: &world, models: &mut models, props: &mut props, agents: &mut agents, args, color: &color, attach, resolve, targets: &targets };
+        return shots::run(&mut io, mode, &dir);
     }
     // `--occlusion-check` runs the ground-truth test instead of the timing.
     if args.perf.occlusion_check {
@@ -1918,6 +1928,29 @@ fn capture(
         // a frame from inside a building, or against a wall, shows its back faces or a blank wall, not the street.
         println!("capture: BLOCKED VIEW: {why} at eye ({:.1}, {:.1}, {:.1}) for {}", cam.eye.x, cam.eye.y, cam.eye.z, path.display());
     }
+    // Two frames: the first settles the LOD hysteresis for this camera.
+    // twenty: the scene probe captures at most one cube face a frame
+    // (six faces and the levels after a move of more than 16 m; a face waits
+    // on a frame that refreshes a middle or far cascade), so with two frames
+    // every capture reflected the probe of the previous camera, often a
+    // kilometre away; the occlusion/bounce history settles with it.
+    for _ in 0..20 {
+        draw(ctx, renderer, attach, resolve, depth, cam);
+    }
+    let rgba = read_color(ctx, color)?;
+    write_png(path, color.width(), color.height(), &rgba)
+}
+
+/// Draw `cam` once into the offscreen target.
+fn draw(ctx: &GpuContext, renderer: &Renderer, attach: &wgpu::TextureView, resolve: Option<&wgpu::TextureView>, depth: &wgpu::TextureView, cam: &Camera) {
+    renderer.update(&ctx.queue, cam);
+    let mut enc = ctx.device.create_command_encoder(&Default::default());
+    renderer.encode(&mut enc, attach, resolve, depth, None);
+    eo_render::pace::submit(&ctx.queue, [enc.finish()]); // counted
+}
+
+/// The offscreen colour target read back, tightly packed RGBA8 rows.
+fn read_color(ctx: &GpuContext, color: &wgpu::Texture) -> Result<Vec<u8>> {
     let (w, h) = (color.width(), color.height());
     let row = (w * 4).div_ceil(256) * 256;
     let buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {
@@ -1926,18 +1959,6 @@ fn capture(
         usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
-    // Two frames: the first settles the LOD hysteresis for this camera.
-    // twenty: the scene probe captures at most one cube face a frame
-    // (six faces and the levels after a move of more than 16 m; a face waits
-    // on a frame that refreshes a middle or far cascade), so with two frames
-    // every capture reflected the probe of the previous camera, often a
-    // kilometre away; the occlusion/bounce history settles with it.
-    for _ in 0..20 {
-        renderer.update(&ctx.queue, cam);
-        let mut enc = ctx.device.create_command_encoder(&Default::default());
-        renderer.encode(&mut enc, attach, resolve, depth, None);
-        eo_render::pace::submit(&ctx.queue, [enc.finish()]); // counted
-    }
     let mut enc = ctx.device.create_command_encoder(&Default::default());
     enc.copy_texture_to_buffer(
         color.as_image_copy(),
@@ -1950,11 +1971,16 @@ fn capture(
     for y in 0..h as usize {
         rgba.extend_from_slice(&bytes[y * row as usize..y * row as usize + w as usize * 4]);
     }
+    Ok(rgba)
+}
+
+/// Write tightly packed RGBA8 rows as a PNG.
+fn write_png(path: &std::path::Path, w: u32, h: u32, rgba: &[u8]) -> Result<()> {
     let file = std::io::BufWriter::new(std::fs::File::create(path)?);
     let mut enc = png::Encoder::new(file, w, h);
     enc.set_color(png::ColorType::Rgba);
     enc.set_depth(png::BitDepth::Eight);
-    enc.write_header()?.write_image_data(&rgba)?;
+    enc.write_header()?.write_image_data(rgba)?;
     Ok(())
 }
 

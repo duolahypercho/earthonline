@@ -31,7 +31,7 @@ fn signed(world: &World, x: f32, z: f32) -> Option<f32> {
     world.water.as_ref().map(|w| w.field.signed_at(x as f64, z as f64) as f32)
 }
 
-fn ground(world: &World, x: f32, z: f32) -> f32 {
+pub(super) fn ground(world: &World, x: f32, z: f32) -> f32 {
     match &world.street {
         Some(s) => s.world.surface_at(x as f64, z as f64, None) as f32,
         None => world.elevation.ground(x as f64, z as f64) as f32,
@@ -41,7 +41,7 @@ fn ground(world: &World, x: f32, z: f32) -> f32 {
 /// The Embarcadero's points nearest the Ferry Building, as a polyline sorted
 /// along it (both carriageways' points, ordered on their principal axis), and
 /// that axis (pointing south-east, away from the Ferry Building's north).
-fn embarcadero(world: &World) -> (Vec<Vec3>, Vec3) {
+pub(super) fn embarcadero(world: &World) -> (Vec<Vec3>, Vec3) {
     let fb = glam::Vec2::from(ferry_building());
     let mut pts: Vec<glam::Vec2> = world
         .city
@@ -87,7 +87,7 @@ fn embarcadero(world: &World) -> (Vec<Vec3>, Vec3) {
 
 /// From a road point, the promenade: walk toward the water until the shore
 /// is `inland` metres away; returns that point and the unit direction to the water.
-fn promenade_point(world: &World, p: Vec3, along: Vec3, inland: f32) -> Option<(Vec3, Vec3)> {
+pub(super) fn promenade_point(world: &World, p: Vec3, along: Vec3, inland: f32) -> Option<(Vec3, Vec3)> {
     let n = Vec3::new(-along.z, 0.0, along.x);
     let s_plus = signed(world, p.x + n.x * 120.0, p.z + n.z * 120.0)?;
     let s_minus = signed(world, p.x - n.x * 120.0, p.z - n.z * 120.0)?;
@@ -101,7 +101,7 @@ fn promenade_point(world: &World, p: Vec3, along: Vec3, inland: f32) -> Option<(
     None
 }
 
-fn polyline_at(path: &[Vec3], s: f32) -> (Vec3, Vec3) {
+pub(super) fn polyline_at(path: &[Vec3], s: f32) -> (Vec3, Vec3) {
     let mut left = s.max(0.0);
     for w in path.windows(2) {
         let d = w[1] - w[0];
@@ -121,7 +121,7 @@ fn polyline_at(path: &[Vec3], s: f32) -> (Vec3, Vec3) {
 const WALK_CENTRE_SE_M: f32 = 320.0;
 
 /// The road point (arc length) nearest a world point.
-fn arc_nearest(road: &[Vec3], p: Vec3) -> f32 {
+pub(super) fn arc_nearest(road: &[Vec3], p: Vec3) -> f32 {
     let mut best = (f32::MAX, 0.0f32);
     let mut acc = 0.0;
     for w in road.windows(2) {
