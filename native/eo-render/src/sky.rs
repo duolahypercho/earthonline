@@ -1802,7 +1802,7 @@ fn smoothstep_f(a: f64, b: f64, x: f64) -> f64 {
     t * t * (3.0 - 2.0 * t)
 }
 
-pub const ATMO_HAZE: f64 = 0.8; // 0.8 (r8 0.95, 1.2 before): the low sun's glare plateau
+pub const ATMO_HAZE: f64 = 0.55; // aerosol density scale; at 0.8 the long horizontal path drew a clipped white band ~1.5 deg tall along the horizon ~30 deg either side of a low sun
 pub const ATMO_CLOUD_SUN: f64 = 12.0; // 12 (8): a sunlit cumulus face was 1-1.9 x the sky beside it
 /// the aerosol extinction of clear coastal air at the ground for the
 /// aerial perspective, per km (visibility ~ 3.912 / (0.06 + Rayleigh 0.013) ~ 55

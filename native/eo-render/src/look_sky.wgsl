@@ -45,11 +45,14 @@ fn sky_stars(d: vec3<f32>) -> vec3<f32> {
         return vec3<f32>(0.0);
     }
     let pos = vec2<f32>(sky_hash1(id * 4u + 2u), sky_hash1(id * 4u + 3u)) * 0.7 + 0.15;
-    let b = 0.12 + 0.88 * pow(sky_hash1(id * 4u + 4u), 3.4);
+    // a power-law spread with more bright stars (pow 3.4 left nearly all of them faint)
+    let b = 0.15 + 0.85 * pow(sky_hash1(id * 4u + 4u), 2.2);
     let r = length(g - cell - pos);
     // ~1 px at 1080p: a cell spans ~10 px.
     let core = exp(-r * r / 0.012);
-    let urban = clamp(look.tw2.z * look.tw.x / 0.5, 0.0, 1.0);
+    // how far the city glow washes this part of the sky (directional: the sky over the open sea
+    // keeps its stars where the sky over the city loses the faint ones)
+    let urban = clamp(look.tw2.z * look.tw.x / 0.5, 0.0, 1.0) * clamp(lk_luma(sky_city_glow(d, look.cam_pos.xyz, skyu.amb_top.w)) / 0.012, 0.0, 1.0);
     // the city glow dims the fainter stars to 0.3, not out (nine stars over the Pacific)
     // over the city the fainter stars go out (r8 kept them at 0.3: too many stars
     // over a lit city); away from it they stay
@@ -57,7 +60,7 @@ fn sky_stars(d: vec3<f32>) -> vec3<f32> {
     let t = h / 0.03;
     let tint = mix(vec3<f32>(0.78, 0.86, 1.0), vec3<f32>(1.0, 0.96, 0.84), t);
     // x 0.6 (0.35: about ten faint stars over the open sea)
-    return tint * (b * limit * core * 0.6);
+    return tint * (b * limit * core * 1.3);
 }
 
 // the moon's disc (0.5181 deg), lit by the sun across it (the phase),
@@ -107,6 +110,9 @@ fn sky_color(ndc: vec2<f32>) -> vec4<f32> {
     let p = look.inv_view_proj * vec4<f32>(ndc, 1.0, 1.0);
     let d = normalize(p.xyz / p.w);
     var rgb = lk_sky_dome(d);
+    // A clear night sky away from the city glow is a deep blue-black, not a neutral grey: the dark
+    // dome takes a blue cast with the night (the glow added over it keeps its warm colour).
+    rgb = rgb * mix(vec3<f32>(1.0), vec3<f32>(0.78, 0.9, 1.35), smoothstep(0.85, 1.0, skyu.night.z) * clamp(1.0 - skyu.cloud0.z, 0.0, 1.0));
     if (dot(d, look.sun.xyz) > look.disc.w) {
         rgb = rgb + look.disc.xyz * smoothstep(0.15, 0.6, skyu.cloud1.w); // not through a rain deck
     }

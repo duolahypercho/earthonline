@@ -82,6 +82,19 @@ fn vol_atmo_sky(d: vec3<f32>) -> vec3<f32> {
     // green-led hues (reddened sun x the Rayleigh blue peaks in green: an olive band
     // between the blue and the warm low sky) go toward a warm neutral of the same luminance,
     // not into red and blue (that shift drew a magenta stripe).
+    // The lowest 4 deg of sky rise at most 25 % over the sky at 4 deg in the same azimuth: the long
+    // aerosol path near the horizon drew a clipped white band ~1 deg tall running ~30 deg either
+    // side of a low sun with no fall-off.
+    if (d.y > -0.02 && d.y < 0.0698) {
+        let hd4 = sqrt(max(1.0 - d.y * d.y, 1e-6));
+        let d4 = vec3<f32>(d.x / hd4 * 0.99756, 0.0698, d.z / hd4 * 0.99756);
+        let l4 = dot(textureSampleLevel(vol_at_view, vol_lin, at_view_uv(d4, skyu.atmo.xyz), 0.0).rgb * g_look, vec3<f32>(0.2126, 0.7152, 0.0722));
+        let lh = dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
+        let cap = 1.25 * l4;
+        if (lh > cap) {
+            c = c * mix(cap / lh, 1.0, smoothstep(0.035, 0.0698, d.y));
+        }
+    }
     let lc = dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
     let gex = clamp((c.g - max(c.r, c.b)) / max(c.g, 1e-6) * 12.0, 0.0, 0.9);
     c = mix(c, lc * vec3<f32>(1.08, 0.99, 0.86), gex);
@@ -166,11 +179,14 @@ fn vol_aerial(dir: vec3<f32>, dist: f32, eye_y: f32) -> vec4<f32> {
     let cl = dot(lk_sky_dome(dh_dir), vec3<f32>(0.2126, 0.7152, 0.0722));
     // x 0.7: measured against the fog bank drawn over the strait (golden-gate-fog), the
     // dome's low sky is ~1.4 x as bright as the bank the volume draws there.
-    var colw = mix(cw0, vec3<f32>(cl) * vec3<f32>(0.98, 1.0, 1.02), 0.7) * 0.7;
+    // x 0.6: at 0.7 fogged far land read ~1.4 x (linear) the fog sky drawn just above it, at 0.5
+    // it stood dark against it.
+    var colw = mix(cw0, vec3<f32>(cl) * vec3<f32>(0.98, 1.0, 1.02), 0.7) * 0.6;
     // seen from above, the fog is its sunlit top: the dome's low-sky brightness, neutral
     if (skyu.atmo2.x > 0.5) {
-        let ct = dot(vol_atmo_sky(dh_dir), vec3<f32>(0.2126, 0.7152, 0.0722));
-        colw = mix(colw, vec3<f32>(mix(cl, ct, skyu.atmo2.y)) * vec3<f32>(0.99, 1.0, 1.01), above_top);
+        // the sky's own horizon colour (its blue-white), so the fog sea meets the sky with no hue step
+        let cs = vol_atmo_sky(dh_dir);
+        colw = mix(colw, mix(vec3<f32>(cl), cs, skyu.atmo2.y), above_top);
     } else {
         colw = mix(colw, vec3<f32>(cl) * vec3<f32>(0.99, 1.0, 1.01), above_top);
     }

@@ -187,7 +187,9 @@ fn resolve_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
             // x the weather's beam (a disc showed through the rain deck)
             // at least 0.35 through a thin low bank on a clear day (the sun setting into the
             // offshore bank at 19.1 h drew no disc at all: 1.15 x the sky round it)
-            let td = max(clamp(-textureLoad(rs_volz, q, 0).r - 1.0, 0.0, 1.0), 0.35 * (1.0 - smoothstep(0.3, 0.75, skyu.cloud0.z))) * smoothstep(0.15, 0.6, skyu.cloud1.w);
+            // The share of the disc that reaches the eye, at least 0.35 under anything short of a
+            // continuous deck (a low bank or a broken cumulus field still shows a reddened disc).
+            let td = max(clamp(-textureLoad(rs_volz, q, 0).r - 1.0, 0.0, 1.0), 0.35 * (1.0 - smoothstep(0.75, 0.9, skyu.cloud0.z))) * smoothstep(0.15, 0.6, skyu.cloud1.w);
             let x = clamp(ang / r, 0.0, 1.0);
             let limb = 1.0 - 0.6 * (1.0 - sqrt(max(1.0 - x * x, 0.0)));
             // white-hot over a few degrees of altitude (the look's tinted disc tone-mapped
@@ -201,7 +203,12 @@ fn resolve_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
             // at least 40 x the sky round it, its hue kept (at sunset the air's
             // transmittance alone left a disc no brighter than its glow: a smudge, not a sun).
             let dl = lk_luma(dc);
-            let dc2 = dc * (max(dl, 40.0 * lk_luma(c)) / max(dl, 1e-6));
+            // At least 80 x the sky round it (a disc on the horizon is 10-100 x the sky beside it,
+            // so it clips with a hard limb), and toward white in its middle: the clipped core of a
+            // low sun is yellow-white or orange-white, its colour held at the limb.
+            var dc2 = dc * (max(dl, 80.0 * lk_luma(c)) / max(dl, 1e-6));
+            let pk = max(max(dc2.r, dc2.g), dc2.b);
+            dc2 = mix(dc2, vec3<f32>(pk), 0.55 * (1.0 - smoothstep(0.3, 0.9, x)));
             c = c + select(dc2, vec3<f32>(0.0), dl <= 0.0) * limb * smoothstep(r + px, r - px, ang) * td;
         }
     }
