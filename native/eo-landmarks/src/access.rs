@@ -1177,7 +1177,9 @@ fn transamerica(js: &LandmarksJs, height_at: &dyn Fn(f64, f64) -> Option<f64>) -
             .filter(|(t0, t1)| !(winged(side) && (t0 * h0).abs().min((t1 * h0).abs()) < wing_w + 0.3))
             .collect()
     };
-    let glass_tint = shade(hexc(d, "glassSrgb"), 1.6);
+    // the panes in the facade's own dark glass (towers.rs draws its windows
+    // in `glassSrgb`), so the top row reads as the rows under it from outside.
+    let glass_tint = shade(hexc(d, "glassSrgb"), 0.35);
     let mut portals: Vec<Portal> = vec![];
     let mut outward: Vec<(Portal, V3)> = vec![];
     let mut window_m2 = 0.0;
