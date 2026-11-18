@@ -4,8 +4,8 @@
 //! Nothing else in the native build draws a rail.
 //!
 //! Where: the `railWays` of public/data/sf/sf-city.json.gz (OpenStreetMap
-//! `railway=tram|light_rail`, ODbL; see sf-city.NOTICE.txt), every way with a
-//! vertex within `CORRIDOR_M` of the Ferry Building's tower, on the scaled
+//! `railway=tram|light_rail`, ODbL; see sf-city.NOTICE.txt), each way's
+//! segments with an end within `CORRIDOR_M` of the Ferry Building's tower, on the scaled
 //! ground plan (`groundscale`: the street plan they run in is scaled; the
 //! gauge and the rail sections stay real). An OSM tram way is one track.
 //!
@@ -37,7 +37,7 @@ pub const PIECE_M: f64 = 2.5;
 pub const HEAD_LINEAR: Rgb = [0.56, 0.57, 0.58];
 pub const GROOVE_LINEAR: Rgb = [0.02, 0.019, 0.018];
 
-/// The OSM tram and light-rail ways near the corridor, on the scaled plan.
+/// The OSM tram and light-rail ways' runs within the corridor, on the scaled plan.
 pub fn load_corridor_ways(repo_root: &std::path::Path, centre_surveyed: [f64; 2]) -> Result<Vec<Vec<[f64; 2]>>> {
     use std::io::Read;
     #[derive(serde::Deserialize)]
@@ -63,10 +63,30 @@ pub fn load_corridor_ways(repo_root: &std::path::Path, centre_surveyed: [f64; 2]
             continue;
         }
         let pts: Vec<[f64; 2]> = w.points.chunks_exact(2).map(|c| [c[0], c[1]]).collect();
-        if !pts.iter().any(|p| (p[0] - centre_surveyed[0]).hypot(p[1] - centre_surveyed[1]) <= CORRIDOR_M) {
-            continue;
+        // the way's runs of segments with an end inside the corridor (a line
+        // way runs on for kilometres: only the corridor's part is drawn).
+        let inside = |p: &[f64; 2]| (p[0] - centre_surveyed[0]).hypot(p[1] - centre_surveyed[1]) <= CORRIDOR_M;
+        let mut run: Vec<[f64; 2]> = Vec::new();
+        for seg in pts.windows(2) {
+            if inside(&seg[0]) || inside(&seg[1]) {
+                if run.is_empty() {
+                    run.push(seg[0]);
+                }
+                run.push(seg[1]);
+            } else if run.len() >= 2 {
+                out.push(std::mem::take(&mut run));
+            } else {
+                run.clear();
+            }
         }
-        out.push(pts.into_iter().map(|p| [p[0] * k, p[1] * k]).collect());
+        if run.len() >= 2 {
+            out.push(run);
+        }
+    }
+    for line in &mut out {
+        for p in line.iter_mut() {
+            *p = [p[0] * k, p[1] * k];
+        }
     }
     Ok(out)
 }

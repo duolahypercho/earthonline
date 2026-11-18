@@ -84,6 +84,15 @@ fn the_corridor_has_its_streetcar_tracks() {
     let ways = eo_landmarks::tram::load_corridor_ways(&paths.repo_root, fb::spec().tower.centre_surveyed).unwrap();
     assert!(ways.len() >= 10, "{} tram ways", ways.len());
     let t = eo_landmarks::tram::build(&ways, &|_, _| 2.0, 0.018);
-    assert!(t.metres > 5_000.0, "{:.0} m of track", t.metres);
+    // the corridor's share of the network only (its runs end within a segment of the corridor's edge).
+    let s = eo_data::groundscale::scale();
+    assert!(t.metres > 5_000.0 && t.metres < 60_000.0, "{:.0} m of track", t.metres);
+    let c = eo_data::groundscale::plan(fb::spec().tower.centre_surveyed);
+    for line in &ways {
+        for seg in line.windows(2) {
+            let near = seg.iter().map(|p| dist(*p, c)).fold(f64::INFINITY, f64::min);
+            assert!(near <= eo_landmarks::tram::CORRIDOR_M * s + 1e-6, "a segment {near:.0} m off the tower");
+        }
+    }
     assert_eq!(t.heads.triangles(), t.grooves.triangles());
 }
