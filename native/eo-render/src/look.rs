@@ -29,6 +29,8 @@ use std::sync::Mutex;
 /// the camera look's switches and table (eo-look `tone::camera`).
 pub mod camera_look;
 pub use camera_look::CameraSwitches;
+/// the scene meter (`--no-scene-meter`).
+pub mod scene_meter;
 
 pub const HDR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 /// 16-bit is enough along the light (900 m range: 1.4 cm steps against
@@ -245,6 +247,9 @@ pub struct LookGpu {
     /// the camera look's table and switches (`--no-camera-look`, `--no-gg2-camera`).
     cam_lut: camera_look::CameraLut,
     pub cam_switches: CameraSwitches,
+    meter: scene_meter::SceneMeter,
+    /// the prior exposure (the incident meter's target) this frame's meter pass bins about.
+    meter_prior: Mutex<f64>,
     state: Mutex<State>,
     pub(crate) cmp_sampler: wgpu::Sampler, // pub(crate)
     pub(crate) device: wgpu::Device, // pub(crate) (the probe rebinds group 0)
@@ -724,7 +729,8 @@ impl LookGpu {
         });
         let cam_lut = camera_look::CameraLut::new(device);
         let cam_switches = CameraSwitches::from_env();
-        let bytes = shadow_bytes + draws_bytes + (SHADOW_COUNTER_WORDS * 4) as u64 + look_buf.size() + cull_buf.size() + view_buf.size() + sky.bytes + cam_lut.bytes; // sky
+        let meter = scene_meter::SceneMeter::new(device);
+        let bytes = meter.bytes + shadow_bytes + draws_bytes + (SHADOW_COUNTER_WORDS * 4) as u64 + look_buf.size() + cull_buf.size() + view_buf.size() + sky.bytes + cam_lut.bytes; // sky
         Self {
             sky, // sky
             sky_depth_ok: std::sync::atomic::AtomicBool::new(false), // sky
@@ -758,6 +764,8 @@ impl LookGpu {
             post: Mutex::new(None),
             cam_lut,
             cam_switches,
+            meter,
+            meter_prior: Mutex::new(1.0),
             state: Mutex::new(State {
                 hour: DEFAULT_HOUR,
                 transfer: None,
@@ -1086,6 +1094,18 @@ impl LookGpu {
         (&self.cam_lut.view, &self.cam_lut.sampler)
     }
 
+    /// whether the scene meter sets the exposure: its switch, with the sky's meter on.
+    pub fn scene_meter_active(&self) -> bool {
+        self.cam_switches.meter && self.sky.options().meter
+    }
+
+    /// the display transform's shoulder as a scene value (eo-sky `night::display_shoulder`), per transform.
+    fn display_shoulder(&self) -> f64 {
+        static CAMERA: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
+        static OTHER: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
+        if eo_look::tone::camera::camera_look_on() { *CAMERA.get_or_init(eo_sky::night::display_shoulder) } else { *OTHER.get_or_init(eo_sky::night::display_shoulder) }
+    }
+
     /// whether the post pass draws through the camera look: its switch, over the filmic stage.
     pub fn camera_look_active(&self) -> bool {
         self.cam_switches.look && self.sky.options().filmic
@@ -1144,7 +1164,21 @@ impl LookGpu {
         let exposure = match terms {
             Some(t) => {
                 let _span = crate::hitch::span(crate::hitch::Phase::SkyUpdate);
-                self.sky.update(queue, &Camera { jitter: [0.0; 2], ..*cam }, &f, &t, out_size, self.sky_depth_ok.load(std::sync::atomic::Ordering::Relaxed), daylight.as_deref())
+                // the scene meter's latest reading (`--no-scene-meter`: the dome estimate)
+                let scene = if self.scene_meter_active() {
+                    self.meter.poll(&self.device, self.sky.meter_snap_pending());
+                    *self.meter_prior.lock().unwrap() = t.exposure_target;
+                    self.meter.set_prior(queue, t.exposure_target);
+                    Some((self.meter.latest(), self.display_shoulder()))
+                } else {
+                    None
+                };
+                let e = self.sky.update(queue, &Camera { jitter: [0.0; 2], ..*cam }, &f, &t, out_size, self.sky_depth_ok.load(std::sync::atomic::Ordering::Relaxed), daylight.as_deref(), scene);
+                if self.scene_meter_active() {
+                    // this frame's meter pass needs a free readback slot
+                    self.meter.ensure_free(&self.device);
+                }
+                e
             }
             None => f.exposure,
         };
@@ -1424,6 +1458,7 @@ impl LookGpu {
             let h0 = self.sky.history_view(0).unwrap_or_else(|| self.sky.dummy_hist.clone());
             let h1 = self.sky.history_view(1).unwrap_or_else(|| self.sky.dummy_hist.clone());
             let bind = [make(&view), make(&h0), make(&h1)];
+            self.meter.bind_sources(device, (w, h), [&view, &h0, &h1]);
             *p = Some(PostTarget { size: (w, h), view, bind });
             drop(p);
             self.rebuild_main_bg(); // the city pass reads the new histories
@@ -1456,6 +1491,12 @@ impl LookGpu {
     ) {
         let p = self.post.lock().unwrap();
         let t = p.as_ref().expect("hdr_target before encode_post");
+        if self.scene_meter_active() {
+            // the scene meter reads the frame post reads, before post
+            let src = self.post_source.load(std::sync::atomic::Ordering::Relaxed) as usize;
+            let prior = *self.meter_prior.lock().unwrap();
+            self.meter.encode(enc, src, t.size, prior, self.sky.frame_index());
+        }
         let tw = ts.map(|(q, b)| wgpu::RenderPassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b + Q_POST), end_of_pass_write_index: Some(b + Q_POST + 1) });
         let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("post"),
