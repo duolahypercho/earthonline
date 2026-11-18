@@ -118,7 +118,7 @@ fn front_bay_plan(front_length: f64, random: &mut Rng) -> (Vec<f64>, Vec<usize>,
 pub fn spec(c: &Classified, frame: &Frame) -> J {
     let mut random = Rng::from_num(c.seed as f64);
     let wall = pick(&mut random, &WALL_FINISHES);
-    let trim = pick(&mut random, &TRIM_FINISHES);
+    let trim = crate::typology::period_trim(pick(&mut random, &TRIM_FINISHES));
     let bay_shape = pick(&mut random, &BAY_SHAPES);
     let projection = BAY_PROJECTION_MIN + random.next() * (BAY_PROJECTION_MAX - BAY_PROJECTION_MIN);
     let dentils = random.next() < 0.55;
@@ -278,6 +278,8 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
             "wall": wall,
             "trim": trim,
             "gable": gable_meta,
+            // a house of the Postcard Row: its place in the row (its own pastel, period_paint.rs).
+            "postcard": STEINER_ROW.iter().position(|id| *id == key).filter(|_| crate::typology::enabled()).map(|i| json!(i)).unwrap_or(J::Null),
         },
     });
     if gable {
@@ -595,6 +597,7 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
         }
         plan.extra.insert("archetype".into(), json!({ "kind": kind, "pitched": true }));
     }
-    let tints = super::period_paint::period_paint_tints(&plan.seed, plan.material("wall")).unwrap_or_else(|| json!({}));
+    let postcard = meta.at("postcard").and_then(|v| v.as_u64()).map(|i| i as usize);
+    let tints = super::period_paint::period_paint_tints_at(&plan.seed, plan.material("wall"), postcard).unwrap_or_else(|| json!({}));
     plan.extra.insert("tints".into(), tints);
 }

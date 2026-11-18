@@ -225,7 +225,8 @@ fn own_tints(c: &Classified, spec: &J) -> Option<J> {
                 Some(J::String(s)) => s.clone(),
                 _ => return Some(json!({})),
             };
-            Some(archetypes::period_paint::period_paint_tints(&seed, wall).unwrap_or_else(|| json!({})))
+            let postcard = meta.at("postcard").and_then(|v| v.as_u64()).map(|i| i as usize);
+            Some(archetypes::period_paint::period_paint_tints_at(&seed, wall, postcard).unwrap_or_else(|| json!({})))
         }
         classify::STUCCO_ROW => {
             let mut m = Map::new();

@@ -39,6 +39,9 @@
 //!   sides off a lot line (the port glazed its four longest only).
 //! * *Victorian height* (`reclassify`): a "Victorian row" front taller than a
 //!   Victorian house stands is drawn as the apartment house it is.
+//! * *Period paint and trim* (`PERIOD_BODY`, `period_trim`): the timber
+//!   rows' bodies take the city's pastels as well as its period colours, and
+//!   their trim is a white or a stone, not a signal red.
 //!
 //! Switch: `EO_FACADE_TYPOLOGY=off` (eo-app `--no-facade-typology`): every
 //! spec as the port writes it. On, `cache_tag` names the kit tile cache.
@@ -100,6 +103,53 @@ pub fn reclassify(c: &mut Classified) {
         c.reason = format!("{} (typology: {:.1} m is past a Victorian house's {VICTORIAN_MAX_HEIGHT_M} m)", c.reason, c.height);
     }
 }
+
+/// A timber row's trim finish: the port's signal red (#a32820, CIELAB C*
+/// about 55) round every cornice, sill and surround drew red cages on dark
+/// bodies; the period's polychrome puts its strong colour on small details,
+/// with the trim white or a body tone (Pomada and Larsen, Painted Ladies:
+/// San Francisco's Resplendent Victorians, 1978). Drawn as the white trim.
+pub fn period_trim(trim: &'static str) -> &'static str {
+    if enabled() && trim == "signal-red" {
+        "painted-white"
+    } else {
+        trim
+    }
+}
+
+/// The timber rows' painted bodies with the typology on (tint, weight): the
+/// port's whites and period colours, fewer of the dark ones, and the pastels
+/// that the city's Victorian and Edwardian streets are known for (the
+/// colourist repaintings from the 1960s on: Pomada and Larsen, Painted
+/// Ladies: San Francisco's Resplendent Victorians, 1978). Every body is
+/// under the wall chroma cap (wall_paint.rs, C* 25; unit tested).
+pub const PERIOD_BODY: [(u32, f64); 18] = [
+    (0xffffff, 2.6), // white
+    (0xf1e7d2, 1.6), // cream
+    (0xc8cacc, 1.4), // pale grey
+    (0xecdfb3, 1.3), // butter yellow
+    (0xc0d2de, 1.3), // pale blue
+    (0xa9c4cc, 0.8), // robin's egg
+    (0xebcbb8, 0.9), // peach
+    (0xe4c6c4, 0.6), // blush
+    (0xc9d7bf, 1.0), // mint
+    (0xd8d2c0, 0.8), // putty
+    (0xa2ad90, 1.0), // sage
+    (0x7f91a4, 0.8), // slate blue
+    (0x5c6066, 0.7), // charcoal
+    (0x5d6b80, 0.7), // slate navy
+    (0x858b66, 0.4), // olive
+    (0x7c9894, 0.5), // teal
+    (0x8a6763, 0.4), // oxblood, weathered
+    (0xc4b38a, 0.6), // ochre
+];
+
+/// The Postcard Row's bodies, house by house (710-720 Steiner Street): a
+/// different pastel on each, the row's famous run of colours (its
+/// polychrome: a body, a white trim and the detail colours; Wikipedia,
+/// Painted ladies). The hues are the row's kind of colours, not a survey of
+/// its present paint.
+pub const POSTCARD_BODIES: [u32; 7] = [0xc0d2de, 0xecdfb3, 0xc9d7bf, 0xebcbb8, 0xd3e0e6, 0xe5d7ab, 0xe4c6c4];
 
 fn lerp(a: f64, b: f64, t: f64) -> f64 {
     a + (b - a) * t
@@ -531,6 +581,23 @@ mod tests {
         flats.height = 24.0;
         reclassify(&mut flats);
         assert_eq!(flats.archetype, crate::classify::EDWARDIAN_FLATS);
+    }
+
+    #[test]
+    fn period_bodies_are_muted_and_trim_is_never_signal_red() {
+        if !enabled() {
+            return;
+        }
+        assert_eq!(period_trim("signal-red"), "painted-white");
+        assert_eq!(period_trim("cast-stone-trim"), "cast-stone-trim");
+        let lin = |c: u32| [(c >> 16) & 255, (c >> 8) & 255, c & 255].map(|v| eo_data::roof_colours::srgb_to_linear(v as f32 / 255.0));
+        for c in PERIOD_BODY.iter().map(|e| e.0).chain(POSTCARD_BODIES.iter().copied()) {
+            let lab = crate::wall_paint::cielab(lin(c));
+            assert!(lab[1].hypot(lab[2]) <= crate::wall_paint::WALL_CHROMA_MAX as f32 + 0.5, "{c:06x} {lab:?}");
+        }
+        // the Postcard Row's seven houses: seven different bodies.
+        let set: std::collections::BTreeSet<u32> = POSTCARD_BODIES.iter().copied().collect();
+        assert_eq!(set.len(), POSTCARD_BODIES.len());
     }
 
     #[test]

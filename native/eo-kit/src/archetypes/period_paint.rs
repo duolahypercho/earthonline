@@ -34,10 +34,23 @@ fn pick_weighted(roll: f64, list: &[(u32, f64)]) -> u32 {
 }
 
 /// `periodPaintTints(seed, wall)`: `{ [wall]: tint }` or None for white.
+/// With the facade typology on, a body draws from `typology::PERIOD_BODY`
+/// (the pastels as well), and a house of the Postcard Row (`postcard`, its
+/// place in the row) takes its own (`typology::POSTCARD_BODIES`).
 pub fn period_paint_tints(seed: &str, wall: Option<&str>) -> Option<J> {
+    period_paint_tints_at(seed, wall, None)
+}
+
+/// `period_paint_tints` for a house of the Postcard Row at `postcard`.
+pub fn period_paint_tints_at(seed: &str, wall: Option<&str>, postcard: Option<usize>) -> Option<J> {
     let wall = wall.filter(|w| !w.is_empty())?;
     let roll = Rng::new(&format!("{seed}|period-paint")).next();
-    let tint = pick_weighted(roll, if wall == "painted-shingle" { &SHINGLE } else { &BODY });
+    let typology = crate::typology::enabled();
+    let body: &[(u32, f64)] = if typology { &crate::typology::PERIOD_BODY } else { &BODY };
+    let mut tint = pick_weighted(roll, if wall == "painted-shingle" { &SHINGLE } else { body });
+    if let (true, Some(i)) = (typology, postcard) {
+        tint = crate::typology::POSTCARD_BODIES[i % crate::typology::POSTCARD_BODIES.len()];
+    }
     if tint == 0xffffff {
         return None;
     }
