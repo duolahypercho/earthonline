@@ -100,6 +100,10 @@ struct LookUniform {
     // the weather's dome (`upperFromRow`): overcast, isotropy, desaturation; tint.
     wx: [f32; 4],
     wx_tint: [f32; 4],
+    // the landmark decks (interior_meter.rs `uniform`): the player's room (min, w its sky visibility; max) and the player's feet (w height).
+    deck_room_min: [f32; 4],
+    deck_room_max: [f32; 4],
+    deck_player: [f32; 4],
 }
 
 #[repr(C)]
@@ -283,6 +287,7 @@ pub fn look_common_source() -> String {
     s.push_str(include_str!("sky_common.wgsl")); // sky
     s.push_str(include_str!("sky_atmo.wgsl")); // the atmosphere tables' sampling helpers
     s.push_str(&crate::sky::sea_wgsl()); // sky
+    s.push_str(include_str!("landmarks_deck.wgsl")); // the landmark decks' room and the player's contact occlusion
     s
 }
 
@@ -1087,6 +1092,8 @@ impl LookGpu {
         // pass (the far land and other late passes take it too).
         // every weather: the veiling weathers' fog is the volume's too (sky.rs `atmo3.x`).
         let atmo_ap = self.sky.options().atmosphere && terms.is_some();
+        // the landmark decks: the player's room and body (interior_meter.rs; none with `--no-landmark-access`).
+        let deck = crate::interior_meter::uniform([cam.eye.x as f64, cam.eye.y as f64, cam.eye.z as f64]);
         let u = LookUniform {
             key_dir: v4(f.key_dir, if shadows_on { f.shadow_strength } else { 0.0 }),
             key: v4(f.key, exposure), // adapted (f.exposure with every sky stage off)
@@ -1159,6 +1166,9 @@ impl LookGpu {
             rooms_work: crate::rooms::drive(m.sun.altitude_deg, self.time_of_day()).1,
             wx: [(m.profile.overcast * wx_keep) as f32, (m.profile.isotropy * wx_keep) as f32, (m.profile.desaturation * wx_keep) as f32, if m.ext.on { 1.0 } else { 0.0 }], // eo-look `SkyExt`
             wx_tint: v4(m.profile.tint.map(|v| 1.0 + (v - 1.0) * wx_keep), m.ext.afterglow), // w the afterglow arch
+            deck_room_min: deck.0,
+            deck_room_max: deck.1,
+            deck_player: deck.2,
         };
         queue.write_buffer(&self.look_buf, 0, bytemuck::bytes_of(&u));
         let mut planes = [[0f32; 4]; 18];

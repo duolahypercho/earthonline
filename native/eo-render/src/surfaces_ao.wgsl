@@ -141,7 +141,10 @@ fn ao_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 if (tighter) {
                     let ch = clamp(cand, n - 0.5 * LK_PI, n + 0.5 * LK_PI);
                     let w = abs(ao_arc(h, n) - ao_arc(ch, n));
-                    let rad = min(textureLoad(ao_hdr_in, clamp(sp, vec2<i32>(0), dims - 1), 0).rgb, vec3<f32>(AO_RADIANCE_CAP));
+                    var rad = min(textureLoad(ao_hdr_in, clamp(sp, vec2<i32>(0), dims - 1), 0).rgb, vec3<f32>(AO_RADIANCE_CAP));
+                    if (deck_in_player(S.xyz + look.cam_pos.xyz)) {
+                        rad = vec3<f32>(0.0); // the player's body on a landmark deck (landmarks_deck.wgsl)
+                    }
                     slice_b = slice_b + w * rad;
                     h = ch;
                 }

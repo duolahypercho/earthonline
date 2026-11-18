@@ -20,8 +20,8 @@
 //! where the glass is drawn (after the water when the water pass is on) and
 //! write no depth.
 
-use crate::authored::{F_VERTEX_COLOUR, GpuLodGroup, GpuMaterial, MaterialTable};
-use crate::scene::{GpuObject, ObjectKind, Scene, Vertex};
+use crate::authored::{F_BLEND, F_GLASS, F_VERTEX_COLOUR, GpuLodGroup, GpuMaterial, MaterialTable};
+use crate::scene::{BLEND_BIT, GpuObject, ObjectKind, Scene, Vertex};
 use bytemuck::{Pod, Zeroable};
 use eo_landmarks::{LandmarkSet, Role};
 use glam::Vec3;
@@ -42,6 +42,18 @@ pub const SURFACE_CONCRETE: u32 = 2;
 pub const GROUP_KIND: u32 = 3;
 /// Plan cell the draws are split into for culling, metres.
 pub const CHUNK_M: f64 = 128.0;
+
+/// Landmark access (eo-landmarks access.rs, `--no-landmark-access` clears
+/// it before the wire pipeline is built): the wire members write the depth
+/// of the point on their axis the view ray passes nearest, so a railing in
+/// front hides a rope behind it, and are shaded round across their width.
+/// Off, a rope keeps its envelope prism's depth and faces the eye flat, as before.
+pub static ROUND_WIRES: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// A landmark structure drawn as a glazed pane (eo-landmarks access.rs: the
+/// decks' glazing): `Material::draw` names it, `surface_options.opacity` its
+/// normal-incidence opacity.
+pub const DRAW_GLASS_PANE: &str = "glass-pane";
 
 /// The quay wall's concrete (renderer.js's seawall colour node).
 pub const SURFACE_SEAWALL: u32 = 3;
@@ -100,6 +112,9 @@ pub struct LandmarkStatic {
     pub boxes: Vec<(String, [f32; 3], [f32; 3])>,
     /// (cutting the plan cells, growing the scene's arrays, pushing) in ms.
     pub append_ms: [f64; 3],
+    /// The first object of the decks' glazing (blended; pushed after every
+    /// other landmark object), so the renderer's transparent list reaches it.
+    pub blend_first: Option<u32>,
 }
 
 fn srgb_byte(c: f32) -> u32 {
@@ -126,6 +141,14 @@ pub fn material(m: &eo_landmarks::data::Material, anchor: [f64; 2], landmark: bo
         g.rough_flatten = o.and_then(|o| o["bayM"].as_f64()).unwrap_or(2.0) as f32;
         g.thin_absorption = o.and_then(|o| o["storeyM"].as_f64()).unwrap_or(3.9) as f32;
     }
+    if m.draw.as_deref() == Some(DRAW_GLASS_PANE) {
+        // a deck's glazing: blended glass (look_light's glass branch: the
+        // glazing environment class, opacity rising to 1 with Schlick's
+        // Fresnel), its vertex colour the pane's tint.
+        let o = m.surface_options.as_ref();
+        g.flags = F_VERTEX_COLOUR | F_GLASS | F_BLEND;
+        g.base[3] = o.and_then(|o| o["opacity"].as_f64()).unwrap_or(0.12) as f32;
+    }
     g
 }
 
@@ -133,6 +156,8 @@ pub fn material(m: &eo_landmarks::data::Material, anchor: [f64; 2], landmark: bo
 /// materials to `materials`; their LOD groups numbered from `group_base`.
 pub fn append(scene: &mut Scene, set: &LandmarkSet, materials: &mut MaterialTable, group_base: u32) -> LandmarkStatic {
     let mut out = LandmarkStatic { group_base, lights: set.lights.clone(), ..Default::default() };
+    // the decks' rooms for the camera meter (none with `--no-landmark-access`).
+    crate::interior_meter::set_from(set.access.as_deref());
     // The terrain (the vertex-colour material, kind 1) takes the wet margin.
     if let Some(m0) = materials.gpu.first_mut() {
         m0.flags |= F_WET_GROUND;
@@ -149,7 +174,10 @@ pub fn append(scene: &mut Scene, set: &LandmarkSet, materials: &mut MaterialTabl
             meshes.push(&w.far);
         }
     }
-    meshes.extend(set.structures.iter().filter(|s| !s.mesh.is_empty()).map(|s| &s.mesh));
+    // the glazing last (access.rs): blended objects must stand at the end of the static table.
+    let is_glass = |s: &&eo_landmarks::set::Structure| s.material.draw.as_deref() == Some(DRAW_GLASS_PANE);
+    meshes.extend(set.structures.iter().filter(|s| !s.mesh.is_empty()).filter(|s| !is_glass(s)).map(|s| &s.mesh));
+    meshes.extend(set.structures.iter().filter(|s| !s.mesh.is_empty()).filter(is_glass).map(|s| &s.mesh));
     let t = std::time::Instant::now();
     let chunks = chunk_meshes(&meshes);
     out.append_ms[0] = t.elapsed().as_secs_f64() * 1e3;
@@ -228,7 +256,19 @@ pub fn append(scene: &mut Scene, set: &LandmarkSet, materials: &mut MaterialTabl
             out.wall_far_triangles += w.far.triangles();
         }
     }
-    for s in set.structures.iter().filter(|s| !s.mesh.is_empty()) {
+    let ordered: Vec<&eo_landmarks::set::Structure> = set.structures.iter().filter(|s| !s.mesh.is_empty()).filter(|s| !is_glass(s)).chain(set.structures.iter().filter(|s| !s.mesh.is_empty()).filter(is_glass)).collect();
+    for s in ordered {
+        if is_glass(&s) {
+            let mat = materials.named(&format!("structure:{}", s.name), material(&s.material, [0.0, 0.0], false));
+            let first = scene.objects.len();
+            out.blend_first.get_or_insert(first as u32);
+            out.objects += push_chunks(scene, next_chunks(), ObjectKind::LandmarkNoShadow, crate::scene::LOD_ALWAYS, crate::scene::NO_GROUP, mat);
+            for o in &mut scene.objects[first..] {
+                o.kind |= BLEND_BIT;
+            }
+            out.always_triangles += s.mesh.triangles();
+            continue;
+        }
         if s.footway {
             // The plaza paving: the street surface's material (its concrete
             // scan) in the footway class, the JS palette tone as its tint.
@@ -359,10 +399,15 @@ pub fn chunk_mesh(m: &eo_landmarks::Frozen) -> Vec<Chunk> {
         for &i in tris {
             if remap[i as usize] == u32::MAX {
                 let v = i as usize;
+                let mut color = pack(&m.colors[3 * v..3 * v + 3]);
+                if let Some(sky) = &m.sky {
+                    // a deck interior's baked sky visibility in the alpha byte (0..254; 255: none), draw.wgsl `shade`.
+                    color = (color & 0x00ff_ffff) | (((sky[v].clamp(0.0, 1.0) * 254.0).round() as u32) << 24);
+                }
                 verts.push(Vertex {
                     pos: [m.positions[3 * v], m.positions[3 * v + 1], m.positions[3 * v + 2]],
                     normal: eo_assets::glb::pack_normal(Vec3::new(m.normals[3 * v], m.normals[3 * v + 1], m.normals[3 * v + 2])),
-                    color: pack(&m.colors[3 * v..3 * v + 3]),
+                    color,
                 });
                 remap[v] = (verts.len() - 1) as u32;
                 used.push(i);
@@ -556,7 +601,8 @@ impl LandmarksGpu {
             }],
         });
         let bg = d.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("landmark-wires-bg"), layout: &bgl, entries: &[wgpu::BindGroupEntry { binding: 0, resource: w.group_buf.as_entire_binding() }] });
-        let src = format!("{}\n{}", crate::look::city_shader_source(), include_str!("landmarks_wire.wgsl"));
+        let round = ROUND_WIRES.load(std::sync::atomic::Ordering::Relaxed);
+        let src = format!("{}\nconst LM_WIRE_ROUND: bool = {round};\n{}", crate::look::city_shader_source(), include_str!("landmarks_wire.wgsl"));
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("landmarks_wire.wgsl"), source: wgpu::ShaderSource::Wgsl(src.into()) });
         let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("landmark-wires-layout"), bind_group_layouts: &[Some(w.draw_bgl), Some(w.main_bgl), Some(&bgl)], immediate_size: 0 });
         let attrs = [

@@ -149,6 +149,8 @@ fn ag_shade(in: AgOut) -> vec4<f32> {
         m.emissive = vec4<f32>(m.emissive.rgb * ag_lamp(a.flags, m.flags, in.local.x), 0.0);
     }
     s.rough = clamp(s.rough, 0.03, 1.0);
+    // in a landmark deck's room, the room's sky (landmarks_deck.wgsl).
+    s.ao = s.ao * deck_room_vis(in.world);
     return look_light(s, m, v, in.world, n, 0u);
 }
 

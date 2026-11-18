@@ -855,6 +855,18 @@ fn shade(in: VOut) -> vec4<f32> {
         rm_emit = rm_emit + sky_far_windows(in.world, n, in.object, dpx, dpy); // lit windows on the far boxes
     }
 
+    // a landmark deck's interior (eo-landmarks access_sky.rs): the sky it
+    // sees through its openings, baked per vertex into the alpha byte (255:
+    // none), on the indirect light only (the sun's cascades cast the patches).
+    let lm_kind = objects[in.object].kind & 255u;
+    if ((lm_kind == 9u || lm_kind == 10u) && in.aux.x < 254.5) {
+        s.ao = s.ao * (in.aux.x / 254.0);
+    }
+    // the player's body on a landmark deck: its contact occlusion (landmarks_deck.wgsl).
+    if (lm_kind == 9u || lm_kind == 10u) {
+        s.ao = s.ao * deck_player_occlusion(in.world, n);
+    }
+
     // Lighting, shadows and fog: the JS game's light rig (look_light.wgsl).
     return look_light(s, m, v, in.world, n, in.object);
 }

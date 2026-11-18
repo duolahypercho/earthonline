@@ -885,6 +885,16 @@ impl SkyGpu {
     pub fn atmo_tables(&self) -> (&wgpu::TextureView, &wgpu::TextureView) {
         (&self.atmo_views[2], &self.atmo_views[0])
     }
+    /// A new shot (eo-app `--shots`, its clock stopped): the exposure
+    /// meters afresh instead of adapting from the last shot's (a camera's
+    /// first frame after a cut), so a view does not inherit the exposure
+    /// of a room shot taken a few metres away.
+    pub fn snap_adaptation(&self) {
+        let mut s = self.state.lock().unwrap();
+        s.adapt.current = None;
+        s.meter_fwd = None;
+    }
+
     /// the exposure the last frame was drawn with (the target, metered and adapted), None before the first.
     pub fn drawn_exposure(&self) -> Option<f64> {
         let s = self.state.lock().unwrap();
@@ -1100,7 +1110,12 @@ impl SkyGpu {
                     dirs.push(([d.x as f64, d.y as f64, d.z as f64], 1.5 - 0.5 * (x * x + y * y) as f64));
                 }
             }
-            eo_sky::night::meter(f, &terms.weather, &dirs)
+            // inside a landmark deck's room (interior_meter.rs), the room's own surfaces meter too.
+            let e = cam.eye;
+            match crate::interior_meter::classify([e.x as f64, e.y as f64, e.z as f64], &dirs.iter().map(|d| d.0).collect::<Vec<_>>()) {
+                Some(k) => eo_sky::night::meter_room(f, &terms.weather, &dirs.iter().zip(k).map(|(d, k)| (d.0, d.1, k)).collect::<Vec<_>>()),
+                None => eo_sky::night::meter(f, &terms.weather, &dirs),
+            }
         } else {
             1.0
         };

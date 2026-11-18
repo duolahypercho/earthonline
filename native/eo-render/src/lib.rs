@@ -29,6 +29,7 @@ pub mod hlod_lights; // hlod
 pub mod hlod_trees; // hlod
 pub mod kit;
 pub mod landmarks; // landmarks
+pub mod interior_meter; // the landmark decks' rooms for the camera meter
 pub mod look;
 pub mod occlusion; // occlusion
 pub mod pace;

@@ -75,6 +75,12 @@ struct Look {
     // the weather's dome (eo-look `upperFromRow`): overcast, isotropy, desaturation, directional horizon band (1/0); tint.
     wx: vec4<f32>,
     wx_tint: vec4<f32>,
+    // the landmark decks (interior_meter.rs, landmarks_deck.wgsl): the room
+    // the player stands in (min xyz, w its sky visibility, < 0 none; max
+    // xyz), and the player's feet (xyz, w the body's height, 0 none).
+    deck_room_min: vec4<f32>,
+    deck_room_max: vec4<f32>,
+    deck_player: vec4<f32>,
 };
 
 // wet-surface-reflection.js `skyDomeRadiance`: the sky model's horizon
