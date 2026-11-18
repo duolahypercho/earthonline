@@ -173,7 +173,9 @@ pub fn authored_constants_wgsl() -> String {
 /// Append the set's static draws to the scene's arrays and table; their
 /// materials to `materials`; their LOD groups numbered from `group_base`.
 pub fn append(scene: &mut Scene, set: &LandmarkSet, materials: &mut MaterialTable, group_base: u32) -> LandmarkStatic {
-    let mut out = LandmarkStatic { group_base, lights: set.lights.clone(), ..Default::default() };
+    // the bridges' lights and the towers' (eo-landmarks set.rs `tower_lights`).
+    let lights = set.lights.iter().chain(&set.tower_lights).copied().collect();
+    let mut out = LandmarkStatic { group_base, lights, ..Default::default() };
     // The terrain (the vertex-colour material, kind 1) takes the wet margin.
     if let Some(m0) = materials.gpu.first_mut() {
         m0.flags |= F_WET_GROUND;
