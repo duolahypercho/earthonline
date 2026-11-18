@@ -25,7 +25,10 @@ Sources consulted (public descriptions; nothing reproduced beyond short facts):
     SOM and Wikipedia on 555 California's polished carnelian granite;
     SFYIMBY on Embarcadero Center's protruding vertical concrete stripes;
     Wikipedia, Salesforce Tower, on the crown's light sculpture (Day for
-    Night, Jim Campbell, 2018); Wikipedia, 181 Fremont, on its screen and spire
+    Night, Jim Campbell, 2018); Wikipedia, 181 Fremont, on its screen and spire;
+    Guardian Glass, Salesforce Tower project page (neutral-looking double
+    glazing); WBDG (Whole Building Design Guide), curtain walls: spandrel
+    panels between vision glass
 
 Plans: each entry names its footprint record in public/data/sf/sf-city.json
 (OpenStreetMap, ODbL 1.0; see sf-city.NOTICE.txt); the plan is read from that

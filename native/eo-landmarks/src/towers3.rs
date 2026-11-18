@@ -9,6 +9,7 @@
 //! | Transamerica Pyramid | the base's inclined columns drawn with a triangular section (a prow outward), thinner, so the row of A and V frames reads; the precast a neutral white; the aluminium spire glowing from within (an interior rig: the light reaches the skin from inside) | Wikipedia, Transamerica Pyramid: 'the aluminum cap is indirectly illuminated from within'; a base 'web of diagonal trusses' four storeys tall (ASCE Civil Engineering, 2022, on the pyramid's renovation); the member section (0.75 m face, 0.85 m prow) INFERRED |
 //! | Coit Tower | the shaft's 18 flutes cut crisp (a rib, two cheeks, a hollow) and deeper; a coping at the base's roof | the export's 18 flutes (landmarks-js.json coit-tower `flutes`); Wikipedia, Coit Tower: 'an unpainted reinforced concrete' fluted column. Flute depth 0.45 m INFERRED (the export's 0.035 of the radius, 0.2 m, read as a smooth cylinder from 450 m) |
 //! | City Hall | the granite a light, cool grey; the dome's cladding a mid grey under its gilded ribs; floodlit facades, drum and dome | Wikipedia, San Francisco City Hall: granite from Madera County (the light grey 'Raymond' granite); albedo 0.5 INFERRED within light grey granite's 0.4-0.55 |
+//! | Salesforce Tower | the fins and sunshades a painted (dielectric) pearl white; the spandrel between floors' vision glass opaque behind them (skyline-buildings.json salesforce-curtain v3 `glazeY`) | Pelli Clarke Pelli: 'clear glass with pearlescent metal accents'; Guardian Glass, Salesforce Tower project: 'neutral-looking' double glazing with high solar protection; vision glass to a 10 ft (3.05 m) ceiling of the 4.557 m storey, the rest spandrel (WBDG, curtain walls: spandrel panels hide the areas between vision glass) INFERRED |
 //! | Sutro Tower | the legs' panels split at the paint bands' edges, so each band is one block of orange or white from chord to lacing; the masts' top posts thinner | the export's 11 alternating bands of international orange and white over the height (landmarks-js.json sutro-tower `bands`; FAA AC 70/7460-1M, aviation orange and white bands); post width 0.7 m INFERRED (the export's 1.8 m read as a thick red stick) |
 //!
 //! Every new group's material is the generator's own (`Out::materials`).
@@ -370,8 +371,20 @@ pub fn transamerica(site: &Value, g: &GroundGrid) -> Out {
     o
 }
 
+/// The fins' and sunshades' finish: 'pearlescent metal accents' (Pelli
+/// Clarke Pelli) are a painted aluminium, a dielectric paint film over the
+/// metal (metalness 0; a satin finish, roughness 0.35, INFERRED), in place
+/// of towers2's partly metallic 0.42 / 0.25, which dimmed them to grey.
+pub const SALESFORCE_FIN_ROUGHNESS: f64 = 0.35;
+
 pub fn salesforce(site: &Value, g: &GroundGrid) -> Out {
     let mut o = crate::towers2::salesforce(site, g);
+    let origin = o.stats["baseY"].as_f64().unwrap_or(0.0);
+    for key in ["glass", "far"] {
+        if let Some((_, m)) = o.materials.iter_mut().find(|(k, _)| k == key) {
+            *m = with_origin(facade_material("salesforce-curtain", SALESFORCE_FIN_ROUGHNESS, 0.0, None), origin);
+        }
+    }
     o.version = o.version.replace("+towers2", "+towers3");
     o
 }
