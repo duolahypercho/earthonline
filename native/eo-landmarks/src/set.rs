@@ -256,7 +256,7 @@ pub fn build_landmark(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: &Deck
 pub fn build_landmark_opened(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: &DeckStandards, open: bool) -> Result<Landmark> {
     let t0 = Instant::now();
     let built: Built = match id {
-        "golden-gate-bridge" => golden_gate::build(js, ground, ca),
+        "golden-gate-bridge" => golden_gate::build_opened(js, ground, ca, open),
         "bay-bridge-west" => bay_bridge::build(js, ground, ca),
         // the landmark buildings (towers.rs).
         other => match crate::towers::build_opened(other, &js.buildings[other], ground, open) {
@@ -338,7 +338,7 @@ impl LandmarkSet {
                         let d = ground_scale_shift(js, id);
                         let shifted = |x: f64, z: f64| height_at(x + d[0], z + d[1]);
                         let ground = if d == [0.0, 0.0] { ground_of(js, id, height_at) } else { ground_of(js, id, &shifted) };
-                        let mut l = build_landmark_opened(js, id, &ground, std, opts.access)?;
+                        let mut l = build_landmark_opened(js, id, &ground, std, opts.access && opts.buildings)?;
                         l.translate(d);
                         Ok::<Landmark, anyhow::Error>(l)
                     })

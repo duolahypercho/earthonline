@@ -149,3 +149,85 @@ fn with_access_off_the_set_is_built_as_before() {
     // the belvedere's twelve painted arches (two triangles and one more each) go; the lantern's eight stay.
     assert_eq!(openings(coit_off) - openings(coit_on), 12 * 3, "Coit's painted arches with access off only");
 }
+
+/// Whether the ray from `o` along `d` crosses the planar quad `q` ahead of `o`.
+fn crosses(o: [f64; 3], d: [f64; 3], q: &[[f64; 3]; 4]) -> bool {
+    let sub = |a: [f64; 3], b: [f64; 3]| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+    let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    let cross = |a: [f64; 3], b: [f64; 3]| [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    let n = cross(sub(q[1], q[0]), sub(q[3], q[0]));
+    let den = dot(n, d);
+    if den.abs() < 1e-12 {
+        return false;
+    }
+    let t = dot(n, sub(q[0], o)) / den;
+    if t <= 0.0 {
+        return false;
+    }
+    let p = [o[0] + d[0] * t, o[1] + d[1] * t, o[2] + d[2] * t];
+    let s: Vec<f64> = (0..4).map(|i| dot(cross(sub(q[(i + 1) % 4], q[i]), sub(p, q[i])), n)).collect();
+    s.iter().all(|v| *v >= -1e-9) || s.iter().all(|v| *v <= 1e-9)
+}
+
+#[test]
+fn the_enclosed_decks_meter_as_rooms_their_views_leave_by_an_opening() {
+    let set = access();
+    for id in ["coit-gallery", "salesforce-ohana", "transamerica-48"] {
+        let d = set.decks.iter().find(|d| d.id == id).unwrap();
+        let room = d.interior.as_ref().unwrap_or_else(|| panic!("{id}: no room for the camera meter"));
+        assert!(room.sky > 0.05 && room.sky < 0.6, "{id}: the room's mean sky visibility {:.3}", room.sky);
+        assert!(!room.portals.is_empty(), "{id}: no openings");
+        // the view's eye stands in the room, and its look leaves through an opening.
+        let [x, y, z] = d.view.feet;
+        let eye = [x, y + eo_landmarks::access::EYE_M, z];
+        assert!(eye[1] > room.y0 && eye[1] < room.y1, "{id}: the eye's height is outside the room");
+        let h = d.view.heading_deg.to_radians();
+        let dir = [h.sin(), 0.0, -h.cos()];
+        assert!(room.portals.iter().any(|q| crosses(eye, dir, q)), "{id}: the view does not leave by an opening");
+    }
+    // the open-air decks have no room.
+    for id in ["golden-gate-east-sidewalk", "golden-gate-south-tower", "bay-bridge-w2", "sutro-platform", "city-hall-lantern"] {
+        assert!(set.decks.iter().find(|d| d.id == id).unwrap().interior.is_none(), "{id}: an open deck metered as a room");
+    }
+}
+
+#[test]
+fn interior_surfaces_carry_their_baked_sky_and_coit_is_glazed_but_its_view_arch() {
+    let set = access();
+    let coit = set.decks.iter().find(|d| d.id == "coit-gallery").unwrap();
+    let baked: Vec<&eo_landmarks::set::Structure> = coit.structures.iter().filter(|s| s.mesh.sky.is_some()).collect();
+    assert!(!baked.is_empty(), "the gallery's interior is not baked");
+    for s in baked {
+        let sky = s.mesh.sky.as_ref().unwrap();
+        assert_eq!(sky.len() * 3, s.mesh.positions.len(), "{}: one visibility per vertex", s.name);
+        assert!(sky.iter().all(|v| (0.0..=1.0).contains(v)), "{}: a visibility outside 0..1", s.name);
+    }
+    // the acrylic panes: eleven glazed arches of twelve.
+    let glass = coit.structures.iter().find(|s| s.material.draw.as_deref() == Some("glass-pane")).expect("Coit's panes");
+    assert!(!glass.cast, "glass casts no sun shadow");
+    let v = coit.vantage.expect("the view's vantage at the arch's face");
+    // the vantage looks out of the open arch: no pane between it and the view.
+    let h = coit.view.heading_deg.to_radians();
+    let dir = [h.sin() as f32, 0.0f32, -h.cos() as f32];
+    let m = &glass.mesh;
+    let hit = m.indices.chunks_exact(3).any(|t| {
+        let p = |i: u32| [m.positions[3 * i as usize], m.positions[3 * i as usize + 1], m.positions[3 * i as usize + 2]];
+        let (a, b, c) = (p(t[0]), p(t[1]), p(t[2]));
+        // Moller-Trumbore, a hit within 3 m.
+        let e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        let e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+        let pv = [dir[1] * e2[2] - dir[2] * e2[1], dir[2] * e2[0] - dir[0] * e2[2], dir[0] * e2[1] - dir[1] * e2[0]];
+        let det = e1[0] * pv[0] + e1[1] * pv[1] + e1[2] * pv[2];
+        if det.abs() < 1e-9 {
+            return false;
+        }
+        let o = [v[0] as f32, v[1] as f32, v[2] as f32];
+        let tv = [o[0] - a[0], o[1] - a[1], o[2] - a[2]];
+        let u = (tv[0] * pv[0] + tv[1] * pv[1] + tv[2] * pv[2]) / det;
+        let qv = [tv[1] * e1[2] - tv[2] * e1[1], tv[2] * e1[0] - tv[0] * e1[2], tv[0] * e1[1] - tv[1] * e1[0]];
+        let w = (dir[0] * qv[0] + dir[1] * qv[1] + dir[2] * qv[2]) / det;
+        let t = (e2[0] * qv[0] + e2[1] * qv[1] + e2[2] * qv[2]) / det;
+        (0.0..=1.0).contains(&u) && w >= 0.0 && u + w <= 1.0 && t > 0.0 && t < 3.0
+    });
+    assert!(!hit, "a pane stands in the view's arch");
+}

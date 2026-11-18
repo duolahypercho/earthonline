@@ -207,6 +207,8 @@ struct Ctx<'a> {
     yaw: f64,
     water: f64,
     tower_zone_half: f64,
+    /// Landmark access (access.rs) draws the east sidewalk's railing.
+    east_railing_by_deck: bool,
 }
 
 impl Ctx<'_> {
@@ -368,6 +370,8 @@ impl Ctx<'_> {
                 gap: &|a, b| self.in_tower_zone(a, b),
                 colours: DeckColours { asphalt: k.asphalt, sidewalk: k.sidewalk, soffit: shade(k.asphalt, 0.6), barrier: k.barrier, white: k.white, yellow: k.yellow, rail: k.orange },
                 markings: true,
+                // the east sidewalk's railing is the landmark deck's (access.rs) when it is built.
+                outer_railing_elsewhere: self.east_railing_by_deck.then_some(1.0),
             },
         );
     }
@@ -629,6 +633,12 @@ fn polyline_distance(x: f64, z: f64, pts: &[f64]) -> f64 {
 
 /// `buildGoldenGateBridge`.
 pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built {
+    build_opened(js, ground, ca, false)
+}
+
+/// `build`; `open` (landmark access, access.rs): the east sidewalk's
+/// railing is left to the deck, which draws the real picket railing.
+pub fn build_opened(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards, open: bool) -> Built {
     let g = &js.golden_gate;
     let d = &g.dimensions;
     let site = Site::new(g);
@@ -649,7 +659,7 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
         yellow: srgb_hex(hex(d, "yellowSrgb")),
     };
     let tower_zone_half = g.leg_stages.iter().map(|s| s[3]).fold(f64::MIN, f64::max) / 2.0 + 1.0;
-    let ctx = Ctx { g, d, site: &site, plan: &plan, frame: &frame, ground: &ground_at, k, yaw: site.axis[1].atan2(site.axis[0]), water: js.sea_level_y, tower_zone_half };
+    let ctx = Ctx { g, d, site: &site, plan: &plan, frame: &frame, ground: &ground_at, k, yaw: site.axis[1].atan2(site.axis[0]), water: js.sea_level_y, tower_zone_half, east_railing_by_deck: open };
     let mut orange_m = MeshArrays::new("golden-gate-bridge:orange");
     let mut deck_m = MeshArrays::new("golden-gate-bridge:deck");
     let mut concrete_m = MeshArrays::new("golden-gate-bridge:concrete");

@@ -346,6 +346,7 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
                 gap: &|_, _| false,
                 colours,
                 markings: true,
+                outer_railing_elsewhere: None,
             },
         );
     }

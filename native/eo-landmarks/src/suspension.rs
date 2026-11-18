@@ -272,6 +272,9 @@ pub struct DeckSpec<'a> {
     pub gap: &'a dyn Fn(f64, f64) -> bool,
     pub colours: DeckColours,
     pub markings: bool,
+    /// The side (+1 or -1 across) whose sidewalk railing another builder
+    /// draws (eo-landmarks access.rs: the Golden Gate's east sidewalk), else None.
+    pub outer_railing_elsewhere: Option<f64>,
 }
 
 /// `roadDeck`: the roadway, sidewalks behind curbs, the plate's underside, a
@@ -361,7 +364,7 @@ pub fn road_deck(deck: &mut MeshArrays, rail: &mut MeshArrays, frame: &Frame, ca
                 continue;
             }
             rail.beam(frame.P(b, si, tb - o.curb_m), frame.P(b, si, tb - o.curb_m + o.inner_barrier_m), 0.2, 0.2, colours.rail);
-            if o.sidewalk_m <= 0.0 {
+            if o.sidewalk_m <= 0.0 || o.outer_railing_elsewhere == Some(sgn) {
                 continue;
             }
             let s = sgn * (o.half_width - 0.15);

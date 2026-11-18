@@ -15,6 +15,7 @@
 //! (the decks' barrier and markings) through `eo_data::CaStandards`.
 
 pub mod access;
+pub mod access_sky;
 pub mod bay_bridge;
 pub mod data;
 pub mod geometry;
