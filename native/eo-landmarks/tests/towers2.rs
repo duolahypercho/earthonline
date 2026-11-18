@@ -126,3 +126,23 @@ fn the_second_generators_build_the_five() {
     let n = shrink.len();
     assert!(shrink[n / 2 - 1] < shrink[n - 5], "the crown rounds in toward its top");
 }
+
+/// The towers' aviation lights stand beside the bridges' (`tower_lights`):
+/// one on each tall skyline tower, Transamerica's apex, Salesforce's top and
+/// six on Sutro; none with both off.
+#[test]
+fn the_towers_carry_their_aviation_lights() {
+    let paths = eo_data::DataPaths::discover().unwrap();
+    let elevation = eo_data::ElevationGrid::load(&paths).unwrap();
+    let ca = eo_data::CaStandards::load(&paths).unwrap();
+    let on = eo_landmarks::set::Options { towers2: true, skyline: true, ..eo_landmarks::set::Options::default() };
+    let set = eo_landmarks::LandmarkSet::build_with(&paths.repo_root, &|x, z| elevation.sample(x, z), &ca, on).unwrap();
+    let sky = skyline::data().buildings.iter().filter(|b| b.aviation).count();
+    assert_eq!(set.tower_lights.len(), sky + 1 + 1 + 6);
+    for l in &set.tower_lights {
+        assert!(l.pos[1] > 100.0, "an aviation light on a tower top, not at {}", l.pos[1]);
+    }
+    let off = eo_landmarks::set::Options { towers2: false, skyline: false, ..eo_landmarks::set::Options::default() };
+    let set = eo_landmarks::LandmarkSet::build_with(&paths.repo_root, &|x, z| elevation.sample(x, z), &ca, off).unwrap();
+    assert!(set.tower_lights.is_empty());
+}

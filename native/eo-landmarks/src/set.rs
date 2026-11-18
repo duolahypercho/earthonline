@@ -68,7 +68,10 @@ pub struct Landmark {
 #[derive(Clone, Debug, Default)]
 pub struct LandmarkSet {
     pub landmarks: Vec<Landmark>,
+    /// The bridges' night lights (lights.rs).
     pub lights: Vec<LandmarkLight>,
+    /// The towers' aviation lights (towers2.rs, skyline.rs); the renderer gathers them with `lights`.
+    pub tower_lights: Vec<LandmarkLight>,
     /// The citywide quay wall (shore.rs), chunked.
     pub walls: Vec<crate::shore::WallChunk>,
     /// The seawall material (renderer.js: 0x928d84, roughness 0.93, metalness 0).
@@ -455,7 +458,7 @@ impl LandmarkSet {
             walls
         };
         // the bridges' night lights (lights.rs), on the grounds they were built on.
-        let mut lights = if opts.lights {
+        let lights = if opts.lights {
             // (the bridges' plan is scaled with the ground, so are their lights.)
             let gg = ground_of(js, "golden-gate-bridge", height_at);
             let bb = ground_of(js, "bay-bridge-west", height_at);
@@ -463,11 +466,10 @@ impl LandmarkSet {
         } else {
             Vec::new()
         };
-        // the towers' aviation lights (towers2.rs, skyline.rs).
-        lights.extend(tower_lights);
         Ok(Self {
             landmarks,
             lights,
+            tower_lights,
             walls,
             wall_material: Some(Material { surface: Some("seawall".into()), ..plain_material(0.93, 0.0, "sidewalk") }),
             structures,
