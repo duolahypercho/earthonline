@@ -96,6 +96,38 @@ fn vegetation_share(x: f64, z: f64) -> Option<f64> {
     eo_render::ground2::grid().and_then(|g| eo_render::ground2::sample(g, x / s, z / s, false))
 }
 
+/// The far land's ground (beyond the city's rings: the Marin headlands) in
+/// the far layer's palette and season (`--no-season-seam`: the JS tones by
+/// WorldCover class, which stayed spring-green beside the far layer's golden
+/// grass at the grid's edge): grass from green to golden by `dry` (eo-render
+/// farshore `season_dryness`, one curve on the sun model's date), scrub on
+/// the steeper open faces and rock on the steepest (farshore.wgsl's slope
+/// weights), woodland, marsh and the built flats by the WorldCover class,
+/// mottled as the far layer's noise is (its mean).
+pub fn far_land_season_tone(class: u8, slope: f64, dry: f64, x: f64, z: f64) -> [f64; 3] {
+    use eo_render::farshore as fs;
+    let c = |v: [f32; 3]| v.map(|k| k as f64);
+    let mix = |a: [f64; 3], b: [f64; 3], t: f64| [0, 1, 2].map(|k| a[k] + (b[k] - a[k]) * t);
+    let ss = |a: f64, b: f64, v: f64| {
+        let t = ((v - a) / (b - a)).clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t)
+    };
+    let m = eo_landmarks::ground_cover::ground_mottle(x, z);
+    let grass = mix(c(fs::FAR_GRASS_GREEN), c(fs::FAR_GRASS_GOLDEN), dry).map(|v| v * (0.85 + 0.3 * m));
+    let base = match class {
+        10 => c(fs::FAR_TREE).map(|v| v * (0.85 + 0.35 * m)),
+        50 => c(fs::FAR_TOWN),
+        60 => c(fs::FAR_ROCK),
+        90 | 95 => c(fs::FAR_MARSH),
+        _ => {
+            let scrub_w = ss(0.2, 0.55, slope) * (0.55 + 0.45 * m);
+            let a = mix(grass, c(fs::FAR_SCRUB), scrub_w * 0.7);
+            mix(a, c(fs::FAR_ROCK), ss(0.75, 1.3, slope))
+        }
+    };
+    base
+}
+
 /// A linear colour as the terrain's sRGB vertex bytes (draw.wgsl decodes them
 /// with a 2.2 power), with `a` in the alpha byte.
 fn pack(c: [f64; 3], a: u8) -> u32 {
@@ -126,6 +158,8 @@ pub fn far_land<'a>(cover: Option<&'a GroundCover>, water: Option<&'a WaterData>
 pub fn ground_tone<'a>(cover: Option<&'a GroundCover>, water: Option<&'a WaterData>, elev: &'a ElevationGrid, land: Option<&'a LandCover>) -> impl Fn(f32, f32) -> Option<u32> + Sync + 'a {
     let far_land_fn = far_land(cover, water, elev);
     let sand_limit = eo_landmarks::features::shore_ground("beach-sand-limit");
+    let season_seam = eo_landmarks::features::shore_ground("season-seam");
+    let dryness = eo_render::farshore::season_dryness() as f64;
     move |x: f32, z: f32| -> Option<u32> {
         let cover = cover?;
         let (x, z) = (x as f64, z as f64);
@@ -133,6 +167,9 @@ pub fn ground_tone<'a>(cover: Option<&'a GroundCover>, water: Option<&'a WaterDa
         // `DERIVED_TONES`: unmapped open ground, wild grass or coastal scrub; under trees understorey).
         if far_land_fn(x, z).is_some() {
             let class = land.map(|l| l.class_at(x, z)).unwrap_or(0);
+            if season_seam {
+                return Some(pack(far_land_season_tone(class, slope_at(elev, x, z).unwrap_or(0.0), dryness, x, z), 255));
+            }
             return Some(pack(eo_landmarks::ground_cover::far_land_tone(class, x, z), 255));
         }
         let slope = slope_at(elev, x, z).unwrap_or(0.0);
@@ -202,6 +239,16 @@ mod tests {
         assert!((h99 - BERM_CREST_SURVEYED_M).abs() < 0.5, "height p99 {h99} m surveyed");
         // drawn: the berm at the 1.25 height scale (the approved deviation)
         assert!((BERM_CREST_SURVEYED_M * 1.25 - 15.625).abs() < 1e-9);
+    }
+
+    #[test]
+    fn the_far_land_follows_the_far_layers_season() {
+        let luma = |c: [f64; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+        let (spring, autumn) = (far_land_season_tone(30, 0.05, 0.0, 8.0, 8.0), far_land_season_tone(30, 0.05, 1.0, 8.0, 8.0));
+        assert!(spring[1] > spring[0], "green in spring: {spring:?}");
+        assert!(autumn[0] > autumn[1] && luma(autumn) > luma(spring), "golden in autumn: {autumn:?}");
+        // the game's date (22 Sep, day 265) is the far layer's golden season
+        assert!((eo_render::farshore::dryness_for_day(265.0) - 1.0).abs() < 1e-6);
     }
 
     #[test]
