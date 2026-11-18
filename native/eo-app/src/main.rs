@@ -374,7 +374,7 @@ fn parse_args() -> Result<Args> {
             "--no-cc0-stains" => a.look.cc0 &= !eo_render::cc0::RUN_STAINS,
             "--cc0-shots" => {}
             "--no-landmarks2" => a.landmarks2 = false,
-            "--no-bridges2" | "--no-bridge-scale" | "--no-bridge-paint" | "--no-bridge-detail" | "--no-bridge-wires" | "--no-bridge-night" => {} // read by eo_landmarks::suspension::features (the bridges)
+            s if eo_landmarks::suspension::SWITCHES.contains(&s) => {} // read by eo_landmarks::suspension::features (the bridges)
             "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
             s if a.props2.parse_flag(s) => {} // --no-props2, --no-furniture, --no-eztree, --no-overhead, --no-wires, --no-props2-shading, --capture-props2
             "--agents-bench" | "--agents-capture" | "--people-capture" | "--people-lineup" => {} // + --people-capture, --people-lineup

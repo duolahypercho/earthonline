@@ -162,7 +162,7 @@ fn parse(raw: &[String]) -> Result<(Args, NetOpts)> {
                 val()?;
             }
             "--low-camera" | "--default-camera" => {}
-            "--no-bridges2" | "--no-bridge-scale" | "--no-bridge-paint" | "--no-bridge-detail" | "--no-bridge-wires" | "--no-bridge-night" => {} // eo_landmarks::suspension::features
+            s if eo_landmarks::suspension::SWITCHES.contains(&s) => {} // eo_landmarks::suspension::features
             other => anyhow::bail!("--connect: unknown argument {other} (see native/eo-app/src/net.rs)"),
         }
     }
