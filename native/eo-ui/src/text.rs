@@ -108,6 +108,8 @@ fn font_dirs() -> Vec<PathBuf> {
         v.push(PathBuf::from("/usr/share/fonts/truetype"));
         v.push(PathBuf::from("/usr/share/fonts"));
         v.push(PathBuf::from("/System/Library/Fonts"));
+        // macOS keeps Arial and the other single-face files here (the folder above holds collections).
+        v.push(PathBuf::from("/System/Library/Fonts/Supplemental"));
         v.push(PathBuf::from("/Library/Fonts"));
     }
     v
@@ -145,9 +147,9 @@ fn resolve_family(name: &str, weight: u16, stretch: u16, dirs: &[PathBuf]) -> Op
             };
             find(dirs, &[file, "segoeui.ttf"]).map(|p| (p, vec![]))
         }
-        "arial narrow" => find(dirs, if bold { &["ARIALNB.TTF", "arialnb.ttf"] } else { &["ARIALN.TTF", "arialn.ttf"] }).map(|p| (p, vec![])),
+        "arial narrow" => find(dirs, if bold { &["ARIALNB.TTF", "arialnb.ttf", "Arial Narrow Bold.ttf"] } else { &["ARIALN.TTF", "arialn.ttf", "Arial Narrow.ttf"] }).map(|p| (p, vec![])),
         "consolas" | "ui-monospace" | "monospace" => find(dirs, if bold { &["consolab.ttf"] } else { &["consola.ttf"] }).map(|p| (p, vec![])),
-        "sans-serif" => find(dirs, if bold { &["arialbd.ttf", "DejaVuSans-Bold.ttf"] } else { &["arial.ttf", "DejaVuSans.ttf"] }).map(|p| (p, vec![])),
+        "sans-serif" => find(dirs, if bold { &["arialbd.ttf", "DejaVuSans-Bold.ttf", "Arial Bold.ttf"] } else { &["arial.ttf", "DejaVuSans.ttf", "Arial.ttf"] }).map(|p| (p, vec![])),
         _ => None,
     }
 }

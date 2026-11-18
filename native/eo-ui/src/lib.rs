@@ -178,6 +178,23 @@ impl Default for HudState {
     }
 }
 
+/// A label over another player (online): the screen point it hangs from
+/// (the top of the head, projected, window pixels), the name, and how
+/// opaque and how large the host wants it (distance fade, occlusion and the
+/// size by distance are decided by the host, which has the camera and the
+/// collision world). Drawn under the HUD's plates, nearest last.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NameTag {
+    pub x: f32,
+    pub y: f32,
+    pub name: String,
+    /// A second, smaller line (what the player is doing: "waving"), or none.
+    pub detail: Option<String>,
+    pub alpha: f32,
+    /// Text size, CSS pixels.
+    pub size: f32,
+}
+
 /// Boot progress (`setLoadingStatus` in title-menu.js).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Loading {
@@ -295,6 +312,12 @@ pub struct Ui {
     settings_path: Option<PathBuf>,
     pub loading: Loading,
     pub hud: HudState,
+    /// Name tags over the other players (the HUD screen draws them).
+    pub tags: Vec<NameTag>,
+    last_tags: Vec<NameTag>,
+    /// The HUD's plates (radar, objective, clock); false leaves only the
+    /// name tags (captures of a scene, a photo).
+    pub hud_chrome: bool,
     pub(crate) hud_mem: HudMemory,
     pub(crate) hits: Vec<Hit>,
     pub(crate) focus: Option<usize>,
@@ -361,6 +384,9 @@ impl Ui {
             settings_path,
             loading: Loading::default(),
             hud: HudState::default(),
+            tags: vec![],
+            last_tags: vec![],
+            hud_chrome: true,
             hud_mem: HudMemory::default(),
             hits: Vec::with_capacity(64),
             focus: Some(0),
@@ -491,7 +517,7 @@ impl Ui {
                 moving = true;
             }
         }
-        if self.screen == Screen::Hud && self.last_hud.as_ref() != Some(&self.hud) {
+        if self.screen == Screen::Hud && (self.last_hud.as_ref() != Some(&self.hud) || self.tags != self.last_tags) {
             self.dirty = true;
         }
         self.update_maps(device, queue, enc);
@@ -504,6 +530,7 @@ impl Ui {
             self.dirty = false;
             if self.screen == Screen::Hud {
                 self.last_hud = Some(self.hud.clone());
+                self.last_tags.clone_from(&self.tags);
             }
         }
         self.write_globals(queue);
@@ -649,6 +676,8 @@ impl Ui {
             animating: false,
             pause_pane: Rect::new(0.0, 0.0, 0.0, 0.0),
             fmt: &mut self.fmt,
+            tags: &self.tags,
+            chrome: self.hud_chrome,
         };
         screens::build(&mut p, &mut ctx);
         self.animating = ctx.animating;

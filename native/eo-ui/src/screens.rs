@@ -6,7 +6,7 @@ use crate::map::{MapView, StreetIndex};
 use crate::settings::{self, Settings};
 use crate::text::{Stack, TextStyle};
 use crate::theme::{self, Bezier, Color, Len, Viewport, hud, pause, perf, rgba, title};
-use crate::{Action, Hit, HudMemory, HudMode, HudState, Loading, PauseTab, Screen, TitleView, WeaponKind};
+use crate::{Action, Hit, HudMemory, HudMode, HudState, Loading, NameTag, PauseTab, Screen, TitleView, WeaponKind};
 use std::fmt::Write as _;
 
 pub(crate) struct MapRefs<'a> {
@@ -43,6 +43,9 @@ pub(crate) struct Ctx<'a> {
     /// Where the pause map's image goes (read back by the Ui).
     pub pause_pane: Rect,
     pub fmt: &'a mut String,
+    /// The other players' name tags, and whether the HUD's plates are drawn.
+    pub tags: &'a [NameTag],
+    pub chrome: bool,
 }
 
 impl Ctx<'_> {
@@ -85,7 +88,43 @@ pub(crate) fn build(p: &mut Painter, c: &mut Ctx) {
     match c.screen {
         Screen::Title | Screen::Loading => title_screen(p, c),
         Screen::Pause => pause_screen(p, c),
-        Screen::Hud => hud_screen(p, c),
+        Screen::Hud => {
+            name_tags(p, c);
+            if c.chrome {
+                hud_screen(p, c);
+            }
+        }
+    }
+}
+
+/// The plate behind a name tag: the HUD's surface ink, lighter (it sits on the scene, not on a panel).
+const TAG_PLATE: Color = rgba(5, 10, 17, 0.52);
+
+/// Name tags over the other players: a rounded plate with the name in the
+/// HUD's sans, a small pointer down to the head, an optional second line.
+fn name_tags(p: &mut Painter, c: &mut Ctx) {
+    for t in c.tags {
+        if !(t.alpha > 0.01) || !t.x.is_finite() || !t.y.is_finite() {
+            continue;
+        }
+        let fs = t.size.clamp(8.0, 40.0);
+        let ts = st(Stack::HudSans, 600, fs).tracking(0.02);
+        let w = p.text_width(&t.name, ts);
+        let (padx, h) = (fs * 0.62, fs * 1.55);
+        let point = fs * 0.32;
+        let r = Rect::new(t.x - w * 0.5 - padx, t.y - point - h, w + 2.0 * padx, h);
+        p.opacity = t.alpha.min(1.0);
+        p.rrect(r, h * 0.5, TAG_PLATE);
+        p.polygon(&[[t.x - point, r.bottom()], [t.x + point, r.bottom()], [t.x, r.bottom() + point]], TAG_PLATE);
+        let b = p.text.baseline(ts, r.y + (h - fs * 1.15) * 0.5, 1.15);
+        p.text(r.x + padx, b, &t.name, ts, hud::INK);
+        if let Some(d) = &t.detail {
+            let ds = st(Stack::HudSans, 500, fs * 0.78).tracking(0.06);
+            let dw = p.text_width(d, ds);
+            let b = p.text.baseline(ds, r.y - fs * 0.95, 1.15);
+            p.text(t.x - dw * 0.5, b, d, ds, hud::INK_MUTED);
+        }
+        p.opacity = 1.0;
     }
 }
 
