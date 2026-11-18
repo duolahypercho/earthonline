@@ -308,6 +308,16 @@ const HAUNCH_RATIO: f64 = 0.15;
 const HAUNCH_STEPS: usize = 5;
 const CASING_LIP_M: [f64; 2] = [0.6, 0.3];
 
+/// `BridgeFeatures::bracing`: the bracing members' width along the span,
+/// "approximately the width of three cells, or 10 1/2 ft" (Strauss 1937).
+/// INFERRED: strut 5's top this far under the stiffening truss's bottom
+/// chord; a diagonal's depth in the tower's plane; the lacing's chord, bar
+/// and pitch (chord, bar, pitch). Each is times the structure scale.
+const BRACING_WIDTH_M: f64 = 10.5 * 0.3048;
+const BRACING_DECK_GAP_M: f64 = 0.5;
+const BRACING_DIAGONAL_M: f64 = 2.4;
+const BRACING_LACING_M: [f64; 3] = [0.5, 0.3, 1.4];
+
 impl Ctx<'_> {
     fn in_tower_zone(&self, c0: f64, c1: f64) -> bool {
         [0.0, self.plan.l].iter().any(|&t| c1 > t - self.tower_zone_half && c0 < t + self.tower_zone_half)
@@ -373,11 +383,20 @@ impl Ctx<'_> {
                     self.portal(orange, far, c, mx, mz, span, p);
                     continue;
                 }
+                if self.bracing && w + h1 < self.plan.y_tower {
+                    // (drawn laced by `lower_bracing`; the far item keeps the box)
+                    far.box_(mx, mz, w + h0, w + h1, along / 2.0, span / 2.0, yaw, k.orange_dark, ALL);
+                    continue;
+                }
                 orange.box_(mx, mz, w + h0, w + h1, along / 2.0, span / 2.0, yaw, k.orange_dark, ALL);
                 far.box_(mx, mz, w + h0, w + h1, along / 2.0, span / 2.0, yaw, k.orange_dark, ALL);
                 if self.detail && w + h0 > self.plan.y_tower {
                     self.portal_ribs(orange, c, w + h0, w + h1, along);
                 }
+            }
+            if self.bracing {
+                self.lower_bracing(orange, far, c);
+                continue;
             }
             // INFERRED: X bracing between the two lowest struts (the JS's 26 and 50 m: their facing chords).
             let s = self.site.half_plane - 3.0 * self.h;
@@ -385,6 +404,81 @@ impl Ctx<'_> {
             let xb = 1.4 * self.h;
             orange.beam(self.P(c, -s, w + lo), self.P(c, s, w + hi), xb, xb, k.orange_dark);
             orange.beam(self.P(c, s, w + lo), self.P(c, -s, w + hi), xb, xb, k.orange_dark);
+        }
+    }
+
+    /// The towers' bracing below the roadway (`BridgeFeatures::bracing`):
+    /// "two panels of diagonals" between the legs, separated by horizontal
+    /// struts, with a strut immediately below the roadway where the
+    /// suspended spans' lateral forces pass to the tower (Strauss 1937; the
+    /// District's 2025 retrofit scope names "Tower Strut 5" and its "bottom
+    /// lacing"), read as struts 5 (under the deck), 6 and 7 (the export's two
+    /// lower struts) with an X panel between 5 and 6 and between 6 and 7. The
+    /// members are latticed ("riveted from many small pieces": goldengate.org,
+    /// "Seismic Retrofits and Historic Preservation"): each is two laced faces,
+    /// one each side of its width along the span (the bracing members'
+    /// "approximately the width of three cells, or 10 1/2 ft": Strauss 1937),
+    /// open between them. INFERRED: strut 5's height (strut 6's) and its top
+    /// at the stiffening truss's bottom chord, the members' depths in the
+    /// tower's plane, their chords, lacing and pitch.
+    fn lower_bracing(&self, orange: &mut MeshArrays, far: &mut MeshArrays, c: f64) {
+        let (g, w, h, k) = (self.g, self.water, self.h, &self.k);
+        let f = self.tower_frame;
+        let hp = self.site.half_plane;
+        let truss = num(self.d, "trussDepthM");
+        let (s7, s6) = (g.struts[0], g.struts[1]);
+        let s5_top = self.plan.y_tower - truss - BRACING_DECK_GAP_M * h;
+        let s5 = [s5_top - w - (s6[1] - s6[0]), s5_top - w, s6[2]];
+        let width = BRACING_WIDTH_M * h;
+        let (chord, lace, pitch) = (BRACING_LACING_M[0] * h, BRACING_LACING_M[1] * h, BRACING_LACING_M[2] * h);
+        let axis = [f.axis[0], 0.0, f.axis[1]];
+        // one member: two flanges the member's full width along the span, `depth`
+        // apart in the tower's plane, laced on both faces, battened at its ends.
+        let mut member = |a: [f64; 3], b: [f64; 3], depth: f64| {
+            let (dx, dy, dz) = (b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+            let l = (dx * dx + dy * dy + dz * dz).sqrt();
+            let d = [dx / l, dy / l, dz / l];
+            // in the tower's plane, perpendicular to the member: axis x d.
+            let mut up = [axis[1] * d[2] - axis[2] * d[1], axis[2] * d[0] - axis[0] * d[2], axis[0] * d[1] - axis[1] * d[0]];
+            let ul = (up[0] * up[0] + up[1] * up[1] + up[2] * up[2]).sqrt();
+            up = [up[0] / ul, up[1] / ul, up[2] / ul];
+            let at = |p: [f64; 3], o: f64, along: f64| [p[0] + up[0] * o + axis[0] * along, p[1] + up[1] * o, p[2] + up[2] * o + axis[2] * along];
+            let half = (depth - chord) / 2.0;
+            for o in [-half, half] {
+                orange.beam_up(at(a, o, 0.0), at(b, o, 0.0), width, chord, k.orange, Some(up));
+            }
+            let n = ((l / pitch).round() as usize).max(1);
+            let p = |t: f64, o: f64, along: f64| at([a[0] + dx * t, a[1] + dy * t, a[2] + dz * t], o, along);
+            for face in [-1.0, 1.0] {
+                let along = face * (width / 2.0 - lace / 2.0);
+                for i in 0..n {
+                    let (t0, t1) = (i as f64 / n as f64, (i + 1) as f64 / n as f64);
+                    let (o0, o1) = if i % 2 == 0 { (-half, half) } else { (half, -half) };
+                    orange.beam_up(p(t0, o0, along), p(t1, o1, along), lace, lace * 0.5, k.orange, Some(axis));
+                }
+            }
+            for t in [0.0, 1.0] {
+                orange.beam_up(p(t, -half, 0.0), p(t, half, 0.0), width, chord, k.orange, Some(d));
+            }
+        };
+        let inner_at = |y: f64| hp - self.stage_at(y - w)[2] / 2.0;
+        // the struts, between the legs' inner faces at their mid-height.
+        for st in [s5, s6, s7] {
+            let ym = w + (st[0] + st[1]) / 2.0;
+            let s = inner_at(ym);
+            member(f.P(c, -s, ym), f.P(c, s, ym), st[1] - st[0]);
+            if st[1] == s5[1] {
+                let [x, z] = f.point(c, 0.0);
+                far.box_(x, z, w + st[0], w + st[1], width / 2.0, hp, self.yaw, k.orange, ALL);
+            }
+        }
+        // the diagonals, corner to corner of each panel (the struts' facing faces at the legs).
+        for (lo, hi) in [(s7[1], s6[0]), (s6[1], s5[0])] {
+            let (ya, yb) = (w + lo, w + hi);
+            let depth = BRACING_DIAGONAL_M * h;
+            let (sa, sb) = (inner_at(ya) - depth / 2.0, inner_at(yb) - depth / 2.0);
+            member(f.P(c, -sa, ya + depth / 2.0), f.P(c, sb, yb - depth / 2.0), depth);
+            member(f.P(c, sa, ya + depth / 2.0), f.P(c, -sb, yb - depth / 2.0), depth);
         }
     }
 
