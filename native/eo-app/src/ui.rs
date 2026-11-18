@@ -82,6 +82,7 @@ impl Flags {
                 "--low-camera" | "--default-camera" => {}
                 "--no-roof-colours" | "--no-roof-contrast" | "--no-roof-parapet" | "--no-roof-patches" | "--no-roof-plant" => {} // main's `roofs_flags`
                 "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" => {} // main's `roofs_flags`
+                "--no-bridges2" | "--no-bridge-scale" | "--no-bridge-paint" | "--no-bridge-detail" | "--no-bridge-wires" | "--no-bridge-night" => {} // eo_landmarks::suspension::features
                 other => anyhow::bail!("unknown argument {other} with --ui (see native/eo-app/src/ui.rs)"),
             }
         }
