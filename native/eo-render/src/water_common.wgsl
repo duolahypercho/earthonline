@@ -13,7 +13,7 @@ struct WaterU {
     field: vec4<f32>,
     // where the water draws (the terrain grid, as the flat sea did): min x, min z, max x, max z
     extent: vec4<f32>,
-    // x: debug view (EO_WATER_DEBUG), 0 off
+    // x: debug view (EO_WATER_DEBUG), 0 off; y the surf strip draws; z the shading features (water.rs `FEAT_*`)
     screen: vec4<f32>,
     // x scene copy taken this frame (1/0), y probe on (1/0), z land mask (m below which the field is land), w FFT live (1/0)
     flags: vec4<f32>,
@@ -31,6 +31,8 @@ struct WaterU {
     wv_sea: vec4<f32>,
     // x storm 0..1, y the sine groundswell's gain (0: the spectrum carries the swell)
     wv_misc: vec4<f32>,
+    // per cascade, the GPU spectrum's mean square slope (eo-water Plan `mss_gpu`)
+    wv_mss: vec4<f32>,
 };
 
 // 1024 segments and the two-zone axis of eo-water grid.rs.
@@ -137,10 +139,16 @@ fn wv_lod(footprint: f32, c: u32) -> f32 {
 // solid bright core, torn at its rim by the chop; older foam is a lace of
 // filaments along the noise's zero lines that thin out as it fades; far off
 // the place's foam cover, an even whitening.
-fn wv_edge(raw: f32, fine: f32, lace: f32, far: f32, x: f32) -> f32 {
+fn wv_edge(raw: f32, fine: f32, lace: f32, far: f32, x: f32, torn: bool) -> f32 {
     let f = clamp(raw * (1.0 + 2.5 * clamp(fine, -0.3, 0.3)), 0.0, 1.0);
     // (a graded rim: the sea draws lower foam greyer and thinner)
-    let core = smoothstep(0.22, 0.56, f);
+    var core = smoothstep(0.22, 0.56, f);
+    if (torn) {
+        // (foam cover: a breaking crest's foam is a dense patch torn at its
+        // edges into streaks and holes by the turbulence, solid only where it is
+        // thick and fresh; the foam texels' bilinear shapes cut paper blobs)
+        core = core * smoothstep(-0.45, 0.3, lace + 2.2 * (f - 0.62));
+    }
     let ridge = 1.0 - abs(lace);
     let filaments = smoothstep(1.0 - f * 1.35, 1.1 - f * 1.35, ridge) * smoothstep(0.03, 0.1, f);
     let near = max(core, filaments * 0.85);
@@ -159,4 +167,9 @@ fn wv_u10(x: f32) -> f32 {
 fn wv_ripple(x: f32) -> f32 {
     let u = wv_u10(x);
     return clamp(mix(0.15, 1.0, smoothstep(1.0, 6.0, u)) + 0.5 * smoothstep(8.0, 17.0, u), 0.15, 1.5);
+}
+
+// a shading feature is on (water.rs `FEAT_*`: 1 the slope-variance BRDF, 2 the body's optics, 4 the foam cover)
+fn wv_feat(bit: u32) -> bool {
+    return (u32(wu.screen.z + 0.5) & bit) != 0u;
 }

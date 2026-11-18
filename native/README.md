@@ -300,6 +300,7 @@ selection:
 | Bridges | `--no-bridges2` (all of these), `--no-bridge-scale`, `--no-bridge-paint`, `--no-bridge-detail`, `--no-bridge-wires`, `--no-bridge-night`; the second pass: `--no-bridges3` (all of its), `--no-bridge-air`, `--no-bridge-finish`, `--no-bridge-members`, `--no-bridge-floods`, `--no-bridge-curtain` |
 | Buildings | `--no-facade-detail`, `--no-facade-age`, `--no-rooms`, `--no-room-frames`, `--no-room-dim`, `--no-roof-colours`, `--no-roof-plant`, `--no-roof-parapet`, `--no-roof-patches`, `--no-wall-paint` |
 | Ground | `--no-ground-hills`, `--no-ground-green`, `--no-ground-contact`, `--no-terrain-lod` |
+| Water | `--no-water` (the flat sea plane), `--no-water-instanced` (the pass needs multi-draw-indirect-count, as before; without it the flat sea plane), `--no-water-brdf` (the earlier Fresnel, roughness, sun lobe and reflection march), `--no-water-body` (the earlier body colour), `--no-water-foam-cover` (the earlier whitecap cover and foam sampling), `--no-water-glint` (the earlier hashed sparkle), `--no-water-turbid` (the earlier three-wavelength body), `--no-water-shore` (the earlier waterline, wall collar and the lift under piers), `--no-water-foam-lit` (the earlier whitecap shapes and foam light), `--no-water-ppr` (the reflection march alone), `--no-water-wind-texture` (no gust patches, tidal current or rotated chop), `--no-water-grazing` (one mean Fresnel times the sky in one direction) |
 | Scanned surfaces | `--no-cc0` (all), `--no-cc0-street`, `--no-cc0-walls`, `--no-cc0-ground`, `--no-cc0-decals`, `--no-cc0-grime`, `--no-cc0-stains`, `--no-cc0-pom`, `--no-cc0-tiling` |
 | Lighting and sky | `--no-shadows`, `--no-ao`, `--no-contact-shadows`, `--no-atmosphere`, `--no-fog`, `--no-clouds`, `--no-cloud-shadows`, `--no-shafts`, `--no-moon-stars`, `--no-lights` |
 | Weather | `--no-rain`, `--no-wet`, `--no-wind` |
@@ -471,7 +472,22 @@ entrances are fitted to the drawn street.
 **Water.** A camera-following grid displaced by a cascaded FFT ocean
 spectrum, masked by a citywide shore field, with its own optics per body of
 water, screen-space reflection, surf on the mapped beaches and a shore
-collar. `--no-water` draws a flat sea plane.
+collar. Its patches are one instanced indirect draw, so it draws on adapters
+without multi-draw-indirect-count too. The slope variance a pixel does not
+resolve goes to the BRDF (the Cox-Munk total for the wind kept at every
+range), with the Fresnel averaged over the visible facets and a Beckmann sun
+lobe; the body's colour is the water-leaving reflectance of the bay's and
+the coast's optical properties under the city's own irradiance
+(`eo-water` `optics`, integrated over the visible spectrum for the bay's
+sediment); whitecaps cover what the Monahan and O'Muircheartaigh fit gives,
+drawn as lit foam patches that dissolve as they age. The sun's glints are a
+per-pixel count of the facets that mirror its disc, so the glitter path
+tapers by itself; the sky reflection is integrated over the facets the eye
+sees; the frame's own geometry is projected across the sea plane
+(pixel-projected reflection) for decks, cables and the skyline. At the shore
+the beach sheet fades into the sand, a seawall sends the chop back
+(clapotis), and piers on piles stand over the sea (`eo-water` `field`
+`PIERS_OVER_WATER`). `--no-water` draws a flat sea plane.
 
 **Sky and weather.** Analytic sky and atmosphere, volumetric clouds and the
 marine layer, a weather schedule (clear to storm) with rain, wet ground and

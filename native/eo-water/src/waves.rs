@@ -81,8 +81,18 @@ pub const SWELL_SPREAD: [f64; 2] = [25.0, 10.0];
 pub const SWELL_LEAK_BAY: f64 = 0.03;
 /// Short-wave fade exp(-(k l)^2) (l in m).
 pub const SHORT_FADE_M: f64 = 0.012;
-/// Visible foam over active whitecaps (the foam trails and streaks they leave).
+/// Visible foam over active whitecaps (the foam trails and streaks they
+/// leave): the earlier reading, which took the Monahan and O'Muircheartaigh
+/// fit for the active crests alone (kept for `--no-water-foam-cover`).
 pub const FOAM_OVER_ACTIVE: f64 = 2.5;
+/// The visible foam over the fit (water r1): 1. Monahan and O'Muircheartaigh
+/// 1980 (J. Phys. Oceanogr. 10(12), 2094) fit W = 3.84e-6 U^3.41 to
+/// photographic whitecap coverage from Monahan (1971) and Toba and Chaen
+/// (1973), which counts every whitecap in the frame, the active crests
+/// (stage A) and the decaying foam patches they leave (stage B), so it is
+/// already the visible foam; multiplying it by the trails a second time drew
+/// two and a half times the foam the wind gives (a 6 m/s bay read as confetti).
+pub const FOAM_OVER_TOTAL: f64 = 1.0;
 /// Visible foam coverage (foam over 0.3) over the instantaneous fraction
 /// below the threshold, per cascade, at a 3.3 s lifetime: the trail each
 /// breaking crest leaves (longer for the faster-moving pattern of the finer
@@ -195,9 +205,15 @@ pub fn active_whitecaps(u10: f64) -> f64 {
 }
 
 /// The visible foam coverage the plan aims for at U10 (none under a gentle
-/// breeze: crests start to break at about 4 m/s).
+/// breeze: crests start to break at about 4 m/s), by the earlier reading.
 pub fn foam_cover(u10: f64) -> f64 {
-    (FOAM_OVER_ACTIVE * active_whitecaps(u10) * smooth(3.0, 4.5, u10)).min(0.45)
+    foam_cover_over(u10, FOAM_OVER_ACTIVE)
+}
+
+/// The visible foam coverage at U10 for `over` times the fit
+/// (`FOAM_OVER_TOTAL` or the earlier `FOAM_OVER_ACTIVE`).
+pub fn foam_cover_over(u10: f64, over: f64) -> f64 {
+    (over * active_whitecaps(u10) * smooth(3.0, 4.5, u10)).min(0.45)
 }
 
 /// One JONSWAP system: S(w) = scale w^-5 exp(-1.25 (wp/w)^4) gamma^r, times a
@@ -358,7 +374,14 @@ pub struct Plan {
 }
 
 impl Plan {
+    /// The plan with the earlier foam reading (`FOAM_OVER_ACTIVE`).
     pub fn new(state: &SeaState) -> Self {
+        Self::with_foam(state, FOAM_OVER_ACTIVE)
+    }
+
+    /// The plan whose whitecaps cover `foam_over` times the Monahan and
+    /// O'Muircheartaigh fit (`FOAM_OVER_TOTAL`: the fit itself).
+    pub fn with_foam(state: &SeaState, foam_over: f64) -> Self {
         let st = *state;
         let sw = &st.swell;
         let lead_amp = (2.0 * LEAD_SHARE).sqrt() * sw.hs / 4.0;
@@ -384,7 +407,7 @@ impl Plan {
             amp_bay: [1.0; CASCADES],
             mss_gpu: [0.0; CASCADES],
             chop: -(CHOP + CHOP_STORM * st.storm),
-            cover: [foam_cover(st.pacific.u10), foam_cover(st.bay.u10)],
+            cover: [foam_cover_over(st.pacific.u10, foam_over), foam_cover_over(st.bay.u10, foam_over)],
             thr: [[-1e3; CASCADES]; 2],
             soft: [[1.0; CASCADES]; 2],
             foam_tau: [lerp(FOAM_TAU_S[0], FOAM_TAU_S[1], smooth(9.0, 16.0, st.pacific.u10)), lerp(FOAM_TAU_S[0], FOAM_TAU_S[1], smooth(9.0, 16.0, st.bay.u10))],

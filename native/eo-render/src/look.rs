@@ -137,13 +137,15 @@ pub struct LookOptions {
     pub sky: crate::sky::SkyOptions,
     /// the water pass (`--no-water`: the flat sea quad, as before).
     pub water: bool,
+    /// the water pass's features (water.rs `FEAT_*`; `--no-water-instanced`, `--no-water-brdf`, `--no-water-body`, `--no-water-foam-cover`).
+    pub water_features: u32,
     /// the CC0 scanned sets' switches (`cc0::RUN_*`; `--no-cc0` and the per-feature `--no-cc0-*`).
     pub cc0: u32,
 }
 
 impl Default for LookOptions {
     fn default() -> Self {
-        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT } // + rooms, agent pyramid test, probe deferral // water // sky
+        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_features: crate::water::FEAT_ALL, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT } // + rooms, agent pyramid test, probe deferral // water // sky
     }
 }
 

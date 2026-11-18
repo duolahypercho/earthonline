@@ -159,11 +159,14 @@ pub struct Spec {
     pub hour: Option<f64>,
     pub weather: Option<Kind>,
     pub what: Option<String>,
+    /// The water's clock for this still (s; `WATER_CLOCK_S` when absent): a
+    /// run of shots a fraction of a second apart is a clip of the moving sea.
+    pub water_clock: Option<f64>,
     /// The entry as written.
     pub input: Value,
 }
 
-const SHOT_KEYS: &[&str] = &["name", "geo", "lat", "lon", "alt", "range", "heading", "tilt", "fov", "eye", "yaw", "pitch", "look_at", "far", "time_of_day", "weather", "what", "note"];
+const SHOT_KEYS: &[&str] = &["name", "geo", "lat", "lon", "alt", "range", "heading", "tilt", "fov", "eye", "yaw", "pitch", "look_at", "far", "time_of_day", "weather", "what", "note", "water_clock"];
 const GEO_KEYS: &[&str] = &["lat", "lon", "alt", "range", "heading", "tilt", "fov"];
 
 fn unknown_keys(o: &Map<String, Value>, known: &[&str]) -> Vec<String> {
@@ -261,7 +264,11 @@ pub fn parse_specs(v: &Value) -> Result<Vec<Spec>> {
             bail!("shot \"{name}\": far {far:?} is too near");
         }
         let what = o.get("what").and_then(Value::as_str).map(String::from);
-        out.push(Spec { name, pose, fov, far, hour, weather, what, input: e.clone() });
+        let water_clock = num(o, "water_clock")?;
+        if water_clock.is_some_and(|c| !(0.0..=1.0e6).contains(&c)) {
+            bail!("shot \"{name}\": water_clock {water_clock:?} is not 0 to 1e6 s");
+        }
+        out.push(Spec { name, pose, fov, far, hour, weather, what, water_clock, input: e.clone() });
     }
     if out.is_empty() {
         bail!("no shots");
@@ -384,6 +391,7 @@ pub fn resolve(spec: &Spec, world: &World, gf: &GeoFrame, args: &Args, aspect: f
     if let Some(w) = &spec.what {
         info.insert("what".into(), json!(w));
     }
+    info.insert("water_clock_s".into(), json!(spec.water_clock.unwrap_or(WATER_CLOCK_S)));
     let f = cam.forward();
     let focus = match look_at {
         Some(p) => [p.x, p.z, (f.x as f64).atan2(f.z as f64)],
@@ -688,6 +696,10 @@ pub fn shoot(io: &mut Io, common: &Map<String, Value>, shot: &Shot, dir: &Path, 
     let cam = shot.cam;
     eprintln!("shots: {}: eye ({:.1}, {:.1}, {:.1}), heading {:.1}, pitch {:.1}, {} h, {}", shot.name, cam.eye.x, cam.eye.y, cam.eye.z, compass(cam.yaw as f64), (cam.pitch as f64).to_degrees(), shot.hour, weather_name(shot.weather));
     io.set_look(shot.hour, shot.weather);
+    // the shot's own water clock (a clip's frames), else the stills' (the foam re-warms on a jump, so each still is a function of its clock)
+    if let Some(w) = io.renderer.water.get() {
+        w.set_time(shot.info.get("water_clock_s").and_then(Value::as_f64).unwrap_or(WATER_CLOCK_S));
+    }
     let agents = io.place_agents(shot.focus);
     io.agents.extras = shot.extras.clone();
     let settle = io.settle(&cam, timeout_s)?;
@@ -722,7 +734,7 @@ pub fn shoot(io: &mut Io, common: &Map<String, Value>, shot: &Shot, dir: &Path, 
     m.insert("time_of_day".into(), json!(shot.hour));
     m.insert("weather".into(), json!(weather_name(shot.weather)));
     m.insert("sky".into(), super::sky_shots::describe(io.renderer));
-    m.insert("water_clock_s".into(), json!(WATER_CLOCK_S));
+    m.insert("water_clock_s".into(), shot.info.get("water_clock_s").cloned().unwrap_or(json!(WATER_CLOCK_S)));
     m.insert("cloud_clock_s".into(), json!(io.args.look.sky.world_time_s));
     m.insert("agents".into(), agents);
     m.insert("settle".into(), settle);

@@ -358,6 +358,17 @@ fn parse_args() -> Result<Args> {
             "--so-shots" => {} // so: bench/so_shots.rs reads it (the sky and ocean review cards)
             "--no-farshore" => {} // farshore.rs reads it (no far terrain)
             "--no-water" => a.look.water = false, // the flat sea quad, as before
+            "--no-water-instanced" => a.look.water_features &= !eo_render::water::FEAT_INSTANCED, // the water pass needs multi-draw-indirect-count again (without it, the flat sea)
+            "--no-water-brdf" => a.look.water_features &= !eo_render::water::FEAT_BRDF, // the earlier Fresnel, roughness and sun lobe
+            "--no-water-body" => a.look.water_features &= !eo_render::water::FEAT_BODY, // the earlier body colour
+            "--no-water-foam-cover" => a.look.water_features &= !eo_render::water::FEAT_FOAM, // the earlier whitecap cover and foam sampling
+            "--no-water-glint" => a.look.water_features &= !eo_render::water::FEAT_GLINT, // the earlier hashed sparkle and glare flashes
+            "--no-water-turbid" => a.look.water_features &= !eo_render::water::FEAT_TURBID, // the earlier three-wavelength body optics
+            "--no-water-shore" => a.look.water_features &= !eo_render::water::FEAT_SHORE, // the earlier waterline and wall collar
+            "--no-water-foam-lit" => a.look.water_features &= !eo_render::water::FEAT_FOAM_LIT, // the earlier whitecap shapes and foam light
+            "--no-water-ppr" => a.look.water_features &= !eo_render::water::FEAT_PPR, // the reflection march alone
+            "--no-water-wind-texture" => a.look.water_features &= !eo_render::water::FEAT_WIND, // the earlier gusts, no tidal current, no rotated chop
+            "--no-water-grazing" => a.look.water_features &= !eo_render::water::FEAT_GRAZE, // one mean Fresnel times the sky in one raised direction
             // agents
             "--no-agents" => a.agents = false,
             "--no-props" => a.props = false, // props
@@ -712,6 +723,8 @@ pub fn load_world(args: &Args) -> Result<World> {
         None => None,
     };
     let press = water.clone().filter(|_| args.look.water);
+    // (water r2) piers on piles over the water, unless --no-water-shore
+    eo_water::field::PIERS_OVER_WATER.store(args.look.water_features & eo_render::water::FEAT_SHORE != 0, std::sync::atomic::Ordering::Relaxed);
     // the beach foreshore goes into the street world's carpet, which the
     // drawn ground, the collision ground (eo-player StreetGround) and the
     // agents all read, so they agree on the lowered beach.

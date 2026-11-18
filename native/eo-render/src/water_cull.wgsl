@@ -4,17 +4,19 @@
 // pyramid of the shore field below the land mask), and, with occlusion on,
 // not hidden behind this frame's early depth (`hzb_occluded`, the city's own
 // test: the water is a receiver, never an occluder, so it is tested against
-// the pyramid and never drawn into it). Survivors become one
-// DrawIndexedIndirect each (first_instance = the patch) for one multi-draw.
+// the pyramid and never drawn into it). Survivors are listed (`wdraws[slot]` =
+// the patch) for ONE instanced indirect draw whose instance count the cull
+// counts (`wcount[9]`): a single draw call on every adapter, with or without
+// multi-draw-indirect-count (the vertex shader reads its patch from the list).
 
 @group(0) @binding(0) var<uniform> wu: WaterU;
 @group(0) @binding(1) var<storage, read_write> wdraws: array<u32>;
 // [0] patches drawn, [1] in the frustum, [2] culled as land, [3] culled as
-// occluded, [4] the nearest drawn patch's distance (m, the gate), [5..8) pad
-@group(0) @binding(2) var<storage, read_write> wcount: array<atomic<u32>, 8>;
+// occluded, [4] the nearest drawn patch's distance (m, the gate), [5..8) pad,
+// [8..13) the draw's DrawIndexedIndirect (index count, instance count = the
+// patches drawn, first index, base vertex, first instance), [13..16) pad
+@group(0) @binding(2) var<storage, read_write> wcount: array<atomic<u32>, 16>;
 @group(0) @binding(3) var land_max: texture_2d<f32>;
-
-const PATCH_INDICES: u32 = 1536u;
 
 // The largest signed shore distance over a world rectangle (field texels).
 fn land_max_over(lo: vec2<f32>, hi: vec2<f32>) -> f32 {
@@ -89,13 +91,9 @@ fn cull_patch(id: u32) {
     }
     let near = distance(clamp(wu.cam.xyz, mn, mx), wu.cam.xyz);
     atomicMin(&wcount[4], u32(min(near, 1e9)));
-    let slot = atomicAdd(&wcount[0], 1u);
-    let b = slot * 5u;
-    wdraws[b] = PATCH_INDICES;
-    wdraws[b + 1u] = 1u;
-    wdraws[b + 2u] = 0u;
-    wdraws[b + 3u] = 0u;
-    wdraws[b + 4u] = id;
+    atomicAdd(&wcount[0], 1u);
+    let slot = atomicAdd(&wcount[9], 1u);
+    wdraws[slot] = id;
 }
 
 @compute @workgroup_size(64)
