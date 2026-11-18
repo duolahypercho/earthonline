@@ -3,9 +3,16 @@
 //! drive along the city's streets, many to a thread and a socket. They do
 //! not predict (no physics on the bot side): each steers from the position
 //! the server reports for it. Used by the server bench and the tests.
+//!
+//! VISITS (landmark presence, for testing and captures): a bot can instead
+//! walk a given path to a spot, turn to a given bearing, and hold an emote
+//! there (`Visit`); `Spawn::Landmarks` sends bots to every landmark
+//! viewpoint in turn, walking up to the group there, emoting, and moving on
+//! by fast travel (the server-validated command) after a while.
 
 use eo_net::conn::Connection;
 use eo_net::link::{Conditions, Dice, Link};
+use eo_net::presence::Emote;
 use eo_net::proto::{self, Accept, Challenge, Hello, Kind, SpawnHint};
 use eo_net::snapshot::{CLASS_PLAYER_CAR, Store, net_id};
 use eo_net::wire::{InputPacket, MAX_INPUTS, NetInput};
@@ -71,6 +78,65 @@ pub enum Spawn {
     Spread,
     /// Within `radius` of a point.
     Around { x: f64, z: f64, radius: f64 },
+    /// At the landmark viewpoints, in turn (`BotConfig::visits` is filled by `landmark_visits`).
+    Landmarks,
+}
+
+/// One bot's walk to a spot at a landmark: it stands at `spawn` until
+/// `start_s`, walks (or with `sprint`, runs) through `path`, turns to face
+/// `face` (game yaw) and, `emote_after_s` after it stops, starts `emote`.
+/// With `tour`, it then moves on to the next viewpoint by fast travel every
+/// `dwell_s` and emotes again on arrival.
+#[derive(Clone, Debug)]
+pub struct Visit {
+    pub name: String,
+    pub spawn: [f64; 3],
+    pub path: Vec<[f64; 2]>,
+    pub face: f64,
+    pub emote: Emote,
+    pub start_s: f64,
+    pub emote_after_s: f64,
+    pub sprint: bool,
+    pub tour: Option<Tour>,
+    /// The walk waits until this opens (a capture starts its scene's bots together); None: at once.
+    pub gate: Option<Arc<AtomicBool>>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Tour {
+    pub viewpoint: u16,
+    pub count: u16,
+    pub dwell_s: f64,
+}
+
+/// Bots for `Spawn::Landmarks`: `n` bots spread over the viewpoints, each
+/// starting a few metres out and walking up to its place in the group.
+pub fn landmark_visits(gf: &eo_data::geo::GeoFrame, n: usize, seed: u64) -> anyhow::Result<Vec<Visit>> {
+    let vps = eo_net::presence::viewpoints()?;
+    let mut dice = Dice::new(seed.wrapping_add(41));
+    Ok((0..n)
+        .map(|i| {
+            let vi = i % vps.len();
+            let k = (i / vps.len()) as u32;
+            let at = vps[vi].arrival(gf, k + 1);
+            // Start 6-10 m out behind the group (against the bearing it faces), walk up.
+            let back = 6.0 + 4.0 * dice.next_f64();
+            let side = (dice.next_f64() - 0.5) * 4.0;
+            let (sx, sz) = (at[0] - at[2].sin() * back + at[2].cos() * side, at[1] - at[2].cos() * back - at[2].sin() * side);
+            Visit {
+                name: format!("visitor{i}"),
+                spawn: [sx, sz, at[2]],
+                path: vec![[at[0] - at[2].sin() * 1.2, at[1] - at[2].cos() * 1.2], [at[0], at[1]]],
+                face: at[2],
+                emote: Emote::ALL[i % Emote::ALL.len()],
+                start_s: dice.next_f64() * 2.0,
+                emote_after_s: 0.8,
+                sprint: false,
+                tour: Some(Tour { viewpoint: vi as u16, count: vps.len() as u16, dwell_s: 20.0 + 10.0 * dice.next_f64() }),
+                gate: None,
+            }
+        })
+        .collect())
 }
 
 #[derive(Clone, Debug)]
@@ -87,6 +153,8 @@ pub struct BotConfig {
     pub conditions: Conditions,
     /// Input packets a second per bot (each carries every unacknowledged input).
     pub send_hz: f64,
+    /// Scripted walks to landmark spots instead of the street wander (one bot each; `count` is ignored).
+    pub visits: Vec<Visit>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -137,6 +205,14 @@ struct Bot {
     reverse_for: f64,
     sprint: bool,
     toggle_at: f64,
+    /// The scripted walk, if any, and its progress.
+    visit: Option<Visit>,
+    leg: usize,
+    clock: f64,
+    stopped_for: f64,
+    emoted: bool,
+    toured_at: f64,
+    emote_at: f64,
 }
 
 fn bot_salt(seed: u64, i: usize) -> u64 {
@@ -185,7 +261,7 @@ pub struct BotRun {
 
 impl BotRun {
     pub fn start(cfg: BotConfig, graph: Arc<RoadGraph>) -> std::io::Result<Self> {
-        let spawns = plan_spawns(&graph, cfg.count, cfg.spawn, cfg.seed);
+        let spawns: Vec<(u32, usize, [f64; 2])> = if cfg.visits.is_empty() { plan_spawns(&graph, cfg.count, cfg.spawn, cfg.seed) } else { cfg.visits.iter().map(|v| (0, 0, [v.spawn[0], v.spawn[1]])).collect() };
         let stop = Arc::new(AtomicBool::new(false));
         let stats = Arc::new(Mutex::new(BotStats { positions: vec![[0.0; 3]; spawns.len()], driving: vec![false; spawns.len()], speeds: vec![0.0; spawns.len()], ..Default::default() }));
         let mut threads = vec![];
@@ -200,10 +276,16 @@ impl BotRun {
                 .enumerate()
                 .map(|(k, &(road, vertex, p))| {
                     let i = base + k;
-                    let pts = &graph.roads[road as usize];
+                    // A visit needs no road (it walks its own path).
+                    let here = [p];
+                    let pts: &[[f64; 2]] = graph.roads.get(road as usize).map(|r| r.as_slice()).unwrap_or(&here);
                     let q = pts[(vertex + 1).min(pts.len() - 1)];
-                    let yaw = (q[0] - p[0]).atan2(q[1] - p[1]);
-                    let driving = dice.next_f64() < cfg.drive_share;
+                    let visit = cfg.visits.get(i).cloned();
+                    let yaw = match &visit {
+                        Some(v) => v.spawn[2],
+                        None => (q[0] - p[0]).atan2(q[1] - p[1]),
+                    };
+                    let driving = visit.is_none() && dice.next_f64() < cfg.drive_share;
                     Bot {
                         salt: bot_salt(cfg.seed, i),
                         phase: Phase::Hello,
@@ -234,6 +316,13 @@ impl BotRun {
                         reverse_for: 0.0,
                         sprint: false,
                         toggle_at: 0.0,
+                        visit,
+                        leg: 0,
+                        clock: 0.0,
+                        stopped_for: 0.0,
+                        emoted: false,
+                        toured_at: 0.0,
+                        emote_at: 0.0,
                     }
                 })
                 .collect();
@@ -354,7 +443,11 @@ fn drive_bots(mut bots: Vec<Bot>, base: usize, link: Link, cfg: BotConfig, graph
         for b in bots.iter_mut().filter(|b| b.phase == Phase::Hello) {
             if b.last_hello.is_none_or(|t| now - t > Duration::from_millis(250)) {
                 b.last_hello = Some(now);
-                let h = Hello { client_salt: b.salt, version: proto::PROTOCOL_VERSION, ground: proto::ground_scale_ppm(), token: format!("dev:bot{}", base + by_salt.get(&b.salt).copied().unwrap_or(0)).into_bytes(), spawn: Some(b.spawn), resume: None, server_salt: 0, cookie: 0 };
+                let token = match &b.visit {
+                    Some(v) => format!("dev:{}", v.name),
+                    None => format!("dev:bot{}", base + by_salt.get(&b.salt).copied().unwrap_or(0)),
+                };
+                let h = Hello { client_salt: b.salt, version: proto::PROTOCOL_VERSION, ground: proto::ground_scale_ppm(), token: token.into_bytes(), spawn: Some(b.spawn), resume: None, server_salt: 0, cookie: 0 };
                 let mut out = Vec::with_capacity(proto::REQUEST_PAD);
                 match &b.challenge {
                     Some(c) => Hello { server_salt: c.server_salt, cookie: c.cookie, ..h }.write(Kind::Response, &mut out),
@@ -457,8 +550,72 @@ impl Bot {
         }
     }
 
+    /// A scripted walk: wait, walk the legs, stop, face the view, emote; on a tour, travel on.
+    fn visit_step(&mut self) -> NetInput {
+        let dt = 1.0 / 60.0;
+        self.clock += dt;
+        let v = self.visit.as_ref().unwrap();
+        let here = [self.pos[0], self.pos[2]];
+        let shut = v.gate.as_ref().is_some_and(|g| !g.load(Ordering::Relaxed));
+        if shut {
+            self.clock = 0.0;
+        }
+        if shut || self.clock < v.start_s || self.player_id == 0 {
+            return NetInput::quantize(&StepInput::default(), v.spawn[2]);
+        }
+        // Walking: toward the current leg's end, then the next.
+        while self.leg < v.path.len() {
+            let t = v.path[self.leg];
+            let d = (t[0] - here[0]).hypot(t[1] - here[1]);
+            if d > 0.35 {
+                let yaw = (t[0] - here[0]).atan2(t[1] - here[1]);
+                // Ease into the last metre so the stop does not overshoot.
+                let last = self.leg + 1 == v.path.len();
+                let m = if last { (d / 1.2).clamp(0.35, 1.0) } else { 1.0 };
+                return NetInput::quantize(&StepInput { move_y: m, sprint: v.sprint && !(last && d < 4.0), ..Default::default() }, yaw);
+            }
+            self.leg += 1;
+        }
+        // Standing: half a second of aim turns the body to the view, then the emote.
+        self.stopped_for += dt;
+        let face = v.face;
+        let aim = self.stopped_for > 0.3 && self.stopped_for < 0.8;
+        if !self.emoted && self.stopped_for >= v.emote_after_s.max(0.8) {
+            self.emoted = true;
+            if v.emote != Emote::None {
+                self.conn.send_reliable(vec![proto::msg::EMOTE, v.emote as u8]);
+            }
+            self.toured_at = self.clock;
+            self.emote_at = self.clock;
+        }
+        // A timed emote (a wave) is started again just before the server ends it.
+        if self.emoted && v.emote.seconds() > 0.0 && self.clock - self.emote_at > v.emote.seconds() - 0.5 {
+            self.conn.send_reliable(vec![proto::msg::EMOTE, v.emote as u8]);
+            self.emote_at = self.clock;
+        }
+        if let Some(t) = v.tour {
+            if self.emoted && self.clock - self.toured_at > t.dwell_s {
+                let next = (t.viewpoint + 1) % t.count.max(1);
+                let mut m = vec![proto::msg::TRAVEL];
+                m.extend_from_slice(&next.to_le_bytes());
+                self.conn.send_reliable(m);
+                let v = self.visit.as_mut().unwrap();
+                v.tour = Some(Tour { viewpoint: next, ..t });
+                // On arrival: stand, face the view, emote again (the trip is the walk).
+                v.path.clear();
+                self.toured_at = self.clock;
+                self.stopped_for = -1.0;
+                self.emoted = false;
+            }
+        }
+        NetInput::quantize(&StepInput { aim, ..Default::default() }, face)
+    }
+
     fn steer(&mut self, graph: &RoadGraph, cfg: &BotConfig) -> NetInput {
         let dt = 1.0 / 60.0;
+        if self.visit.is_some() {
+            return self.visit_step();
+        }
         if self.driving {
             let t = self.target(graph, 14.0);
             let want = (t[0] - self.pos[0]).atan2(t[1] - self.pos[2]);

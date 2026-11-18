@@ -206,7 +206,7 @@ impl LocalServer {
         };
         let bots = if bot_count > 0 {
             let graph = Arc::new(eo_server::bots::RoadGraph::new(eo_server::bots::bot_roads(&world.city)));
-            let cfg = eo_server::bots::BotConfig { server: addr, count: bot_count, threads: 1, spawn: eo_server::bots::Spawn::Around { x: around[0], z: around[1], radius: 120.0 }, drive_share: 0.5, drive_mps: 9.0, seed: 3, conditions: Conditions::NONE, send_hz: 30.0 };
+            let cfg = eo_server::bots::BotConfig { server: addr, count: bot_count, threads: 1, spawn: eo_server::bots::Spawn::Around { x: around[0], z: around[1], radius: 120.0 }, drive_share: 0.5, drive_mps: 9.0, seed: 3, conditions: Conditions::NONE, send_hz: 30.0, visits: vec![] };
             Some(eo_server::bots::BotRun::start(cfg, graph)?)
         } else {
             None

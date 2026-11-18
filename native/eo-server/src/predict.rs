@@ -23,6 +23,8 @@ use std::time::{Duration, Instant};
 pub struct Ctl {
     pub addr: Option<SocketAddr>,
     pub shove: Option<DVec3>,
+    /// Set the sky clock (hour, game hours per real hour, weather code, seed) on the next tick.
+    pub sky: Option<(f64, f64, u8, u32)>,
     pub stop: bool,
     pub stats: Option<serde_json::Value>,
 }
@@ -46,6 +48,9 @@ pub fn spawn_server(cfg: ServerConfig, game: Arc<GameWorld>, source: Arc<eo_sim:
                         let run: u64 = server.sessions.iter().map(|s| s.stats.inputs_run).sum();
                         c.stats = Some(json!({ "inputs_run": run, "inputs_stood_in": stood, "mismatches": mism, "corrections_sent": corr }));
                         return;
+                    }
+                    if let Some((h, r, w, seed)) = c.sky.take() {
+                        server.set_sky(h, r, w, seed);
                     }
                     if let Some(d) = c.shove.take() {
                         for s in server.sessions.iter_mut() {
