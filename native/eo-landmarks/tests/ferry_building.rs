@@ -94,5 +94,12 @@ fn the_corridor_has_its_streetcar_tracks() {
             assert!(near <= eo_landmarks::tram::CORRIDOR_M * s + 1e-6, "a segment {near:.0} m off the tower");
         }
     }
-    assert_eq!(t.heads.triangles(), t.grooves.triangles());
+    // a groove a head; with the polish, each band split round its burnished
+    // strip and each rail's two sealant joints in the grooves' mesh as well.
+    if t.polished {
+        assert_eq!(t.grooves.triangles(), t.polish.triangles() * 3);
+        assert_eq!(t.heads.triangles(), t.polish.triangles() * 2);
+    } else {
+        assert_eq!(t.heads.triangles(), t.grooves.triangles());
+    }
 }

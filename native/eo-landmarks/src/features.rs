@@ -97,3 +97,46 @@ pub fn pier_sheds() -> bool {
 pub fn set_pier_sheds(on: bool) {
     PIER_SHEDS.store(on, Ordering::Relaxed);
 }
+
+static RAIL_POLISH: AtomicBool = AtomicBool::new(true);
+
+/// The rails' polish (tram.rs): the running band burnished bare steel
+/// (metalness 1, roughness 0.2) and bituminous sealant joints either side of
+/// each rail (`--no-rail-polish`: the second pass's worn band, as before).
+pub fn rail_polish() -> bool {
+    RAIL_POLISH.load(Ordering::Relaxed)
+}
+
+pub fn set_rail_polish(on: bool) {
+    RAIL_POLISH.store(on, Ordering::Relaxed);
+}
+
+static FERRY_BUILDING_RELIEF: AtomicBool = AtomicBool::new(true);
+
+/// The Ferry Building's third pass (ferry_building.rs `Relief`): the cornices'
+/// occlusion on the wall under them, darker reveals, the glazing one pane per
+/// light with its own room tone or a blind and at a near-mirror roughness,
+/// frames standing proud of the glass round the fanlights too, and voussoirs
+/// of their own tone in the archivolts (`--no-facade-relief`: the second pass, as before).
+pub fn ferry_building_relief() -> bool {
+    FERRY_BUILDING_RELIEF.load(Ordering::Relaxed)
+}
+
+pub fn set_ferry_building_relief(on: bool) {
+    FERRY_BUILDING_RELIEF.store(on, Ordering::Relaxed);
+}
+
+static PALM_DETAIL: AtomicBool = AtomicBool::new(true);
+
+/// The corridor palms' second pass (palms.rs): a tree well of decomposed
+/// granite with its edge and the trunk's occlusion, root initials at the
+/// foot, the leaf-base scars as a diamond lattice in the trunk, senescent
+/// lower leaves and the spear, and unsurveyed palms varied in size and lean
+/// (`--no-palm-detail`: the first pass, as before).
+pub fn palm_detail() -> bool {
+    PALM_DETAIL.load(Ordering::Relaxed)
+}
+
+pub fn set_palm_detail(on: bool) {
+    PALM_DETAIL.store(on, Ordering::Relaxed);
+}

@@ -66,6 +66,26 @@ pub const OXIDE_ROUGHNESS: f64 = 0.75;
 /// The grit packed in the flangeway (road dust and brake fines, darker than the paving), linear.
 pub const GRIT_LINEAR: Rgb = [0.075, 0.068, 0.06];
 
+/// The rail's polish (`features::rail_polish`; off: the worn band whole at
+/// `BAND_ROUGHNESS` / `BAND_METALNESS`, as before). The wheels burnish the
+/// middle of the running band to bare steel, `POLISH_M` wide (the contact
+/// patch's own width, INFERRED from the 10-15 mm patch of a tram wheel): a
+/// metal (metalness 1) whose colour is iron's F0 (`HEAD_LINEAR`), smooth
+/// enough at roughness 0.2 to carry a thin highlight of the sun, the sky or
+/// a street light along the track, the line a street rail reads by
+/// (INFERRED: rolled steel polished by traffic but scored by grit, between a
+/// mirror at 0.05 and the band's 0.4); the band's edges either side stay as
+/// the second pass drew them. Where
+/// the rail meets the paving a joint of bituminous sealant 6 mm wide (the
+/// rail-embedment joints of grooved street track are poured 5-10 mm wide,
+/// INFERRED) outlines the rail on both sides: a black dielectric (bitumen,
+/// albedo about 0.04), rough.
+pub const POLISH_M: f64 = 0.014;
+pub const POLISH_ROUGHNESS: f64 = 0.2;
+pub const POLISH_METALNESS: f64 = 1.0;
+pub const SEALANT_M: f64 = 0.006;
+pub const SEALANT_LINEAR: Rgb = [0.032, 0.031, 0.03];
+
 /// The OSM tram and light-rail ways' runs within the corridor, on the scaled plan.
 pub fn load_corridor_ways(repo_root: &std::path::Path, centre_surveyed: [f64; 2]) -> Result<Vec<Vec<[f64; 2]>>> {
     use std::io::Read;
@@ -156,6 +176,10 @@ pub struct Tracks {
     pub grooves: Frozen,
     /// With the finish: the oxidised field shoulders, gauge corners and keeper lips (else empty).
     pub sides: Frozen,
+    /// With the polish: the burnished strip down the middle of each band (else empty).
+    pub polish: Frozen,
+    /// The burnished strips and the sealant joints are drawn (`features::rail_polish`).
+    pub polished: bool,
     pub tracks: usize,
     pub metres: f64,
 }
@@ -165,13 +189,20 @@ pub struct Tracks {
 /// finish (`features::rail_finish`) the head's worn band, its oxidised edges
 /// and the keeper lip, and a grit-filled groove.
 pub fn build(ways: &[Vec<[f64; 2]>], surface_at: &dyn Fn(f64, f64) -> f64, lift: f64) -> Tracks {
-    build_with(ways, surface_at, lift, crate::features::rail_finish())
+    let finish = crate::features::rail_finish();
+    build_polished(ways, surface_at, lift, finish, finish && crate::features::rail_polish())
 }
 
 pub fn build_with(ways: &[Vec<[f64; 2]>], surface_at: &dyn Fn(f64, f64) -> f64, lift: f64, finish: bool) -> Tracks {
+    build_polished(ways, surface_at, lift, finish, false)
+}
+
+/// `build_with`, and with `polish` (the finish's second pass) the sealant joints either side of each rail.
+pub fn build_polished(ways: &[Vec<[f64; 2]>], surface_at: &dyn Fn(f64, f64) -> f64, lift: f64, finish: bool, polish: bool) -> Tracks {
     let mut heads = MeshArrays::new("tram:heads");
     let mut grooves = MeshArrays::new("tram:grooves");
     let mut sides = MeshArrays::new("tram:sides");
+    let mut polished = MeshArrays::new("tram:polish");
     let mut metres = 0.0;
     let half = GAUGE_M / 2.0;
     // lateral strips (from, to) off the centreline: each rail's head outside
@@ -186,7 +217,38 @@ pub fn build_with(ways: &[Vec<[f64; 2]>], surface_at: &dyn Fn(f64, f64) -> f64, 
     } else {
         (vec![(-half - HEAD_M, -half), (half, half + HEAD_M)], vec![(-half, -half + GROOVE_M), (half - GROOVE_M, half)], vec![])
     };
-    let (head_col, groove_col) = if finish { (BAND_LINEAR, GRIT_LINEAR) } else { (HEAD_LINEAR, GROOVE_LINEAR) };
+    let (head_col, groove_col) = if finish {
+        (BAND_LINEAR, GRIT_LINEAR)
+    } else {
+        (HEAD_LINEAR, GROOVE_LINEAR)
+    };
+    // the sealant joints: outside each rail's field face and past its keeper lip.
+    let seal_strips: Vec<(f64, f64)> = if polish {
+        let (s, k) = (SEALANT_M, KEEPER_LIP_M);
+        vec![(-half - HEAD_M - s, -half - HEAD_M), (-half + GROOVE_M + k, -half + GROOVE_M + k + s), (half - GROOVE_M - k - s, half - GROOVE_M - k), (half + HEAD_M, half + HEAD_M + s)]
+    } else {
+        vec![]
+    };
+    // with the polish each band splits round its burnished middle strip.
+    let (head_strips, polish_strips): (Vec<(f64, f64)>, Vec<(f64, f64)>) = if polish {
+        let mut band = Vec::new();
+        let mut mid = Vec::new();
+        for (a, b) in head_strips {
+            let c = (a + b) / 2.0;
+            band.extend([(a, c - POLISH_M / 2.0), (c + POLISH_M / 2.0, b)]);
+            mid.push((c - POLISH_M / 2.0, c + POLISH_M / 2.0));
+        }
+        (band, mid)
+    } else {
+        (head_strips, vec![])
+    };
+    // each mesh's strips with their colours (the grooves' mesh carries the sealant joints too).
+    let tagged = |v: &[(f64, f64)], c: Rgb| v.iter().map(|&(a, b)| (a, b, c)).collect::<Vec<_>>();
+    let head_strips = tagged(&head_strips, head_col);
+    let polish_strips = tagged(&polish_strips, HEAD_LINEAR);
+    let mut groove_strips = tagged(&groove_strips, groove_col);
+    groove_strips.extend(tagged(&seal_strips, SEALANT_LINEAR));
+    let side_strips = tagged(&side_strips, OXIDE_LINEAR);
     for line in ways {
         let pts = resample(line, PIECE_M);
         for w in line.windows(2) {
@@ -198,8 +260,9 @@ pub fn build_with(ways: &[Vec<[f64; 2]>], surface_at: &dyn Fn(f64, f64) -> f64, 
                 let (x, z) = (p[0] + n[0] * o, p[1] + n[1] * o);
                 [x, surface_at(x, z) + lift, z]
             };
-            for (strips, m, col) in [(&head_strips, &mut heads, head_col), (&groove_strips, &mut grooves, groove_col), (&side_strips, &mut sides, OXIDE_LINEAR)] {
-                for (o0, o1) in strips.iter() {
+            for (strips, m) in [(&head_strips, &mut heads), (&polish_strips, &mut polished), (&groove_strips, &mut grooves), (&side_strips, &mut sides)] {
+                for &(o0, o1, col) in strips.iter() {
+                    let (o0, o1) = (&o0, &o1);
                     let q = [at(p0, n0, *o0), at(p1, n1, *o0), at(p1, n1, *o1), at(p0, n0, *o1)];
                     // facing up whichever way the line runs
                     let e1 = [q[1][0] - q[0][0], q[1][2] - q[0][2]];
@@ -210,7 +273,7 @@ pub fn build_with(ways: &[Vec<[f64; 2]>], surface_at: &dyn Fn(f64, f64) -> f64, 
             }
         }
     }
-    Tracks { heads: heads.freeze(), grooves: grooves.freeze(), sides: sides.freeze(), tracks: ways.len(), metres }
+    Tracks { heads: heads.freeze(), grooves: grooves.freeze(), sides: sides.freeze(), polish: polished.freeze(), polished: polish, tracks: ways.len(), metres }
 }
 
 #[cfg(test)]
@@ -254,5 +317,29 @@ mod tests {
         assert!(w(&b.heads) < w(&a.heads));
         assert!(((w(&a.heads) - w(&b.heads)) as f64 - 2.0 * FIELD_SHOULDER_M).abs() < 1e-5, "the band loses the field shoulders on the outside");
         assert!(b.sides.normals.chunks_exact(3).all(|n| n[1] == 1.0));
+    }
+
+    #[test]
+    fn the_polish_adds_sealant_joints_outside_the_rail_only() {
+        let line = [vec![[0.0, 0.0], [10.0, 0.0]]];
+        let (a, b) = (build_polished(&line, &|_, _| 1.0, 0.02, true, false), build_polished(&line, &|_, _| 1.0, 0.02, true, true));
+        assert!(b.polished && !a.polished && a.polish.is_empty());
+        // the same sides; four joints more in the grooves' mesh, per piece.
+        assert_eq!(a.sides.positions, b.sides.positions);
+        assert_eq!(b.grooves.triangles(), a.grooves.triangles() * 3);
+        // the band split round its burnished strip: the same span, a strip of POLISH_M each rail.
+        let span = |m: &[&Frozen]| {
+            let zs: Vec<f32> = m.iter().flat_map(|f| f.positions.chunks_exact(3).map(|p| p[2])).collect();
+            (zs.iter().cloned().fold(f32::MAX, f32::min), zs.iter().cloned().fold(f32::MIN, f32::max))
+        };
+        assert_eq!(span(&[&a.heads]), span(&[&b.heads]));
+        assert_eq!(b.polish.triangles() * 2, b.heads.triangles());
+        let width: f64 = b.polish.positions.chunks_exact(3).map(|p| p[2] as f64).fold(f64::MIN, f64::max) - b.polish.positions.chunks_exact(3).map(|p| p[2] as f64).filter(|z| *z > 0.0).fold(f64::MAX, f64::min);
+        assert!((width - POLISH_M).abs() < 1e-5, "strip {width}");
+        // the joints reach SEALANT_M past the head's field face and no further.
+        let z = |f: &Frozen| f.positions.chunks_exact(3).map(|p| p[2]).fold(f32::MIN, f32::max);
+        assert!(((z(&b.grooves) - z(&a.heads).max(z(&a.sides))) as f64 - SEALANT_M).abs() < 1e-5);
+        // the burnished strip is iron's F0.
+        assert!(b.polish.colors.chunks_exact(3).all(|c| (c[0] as f64 - HEAD_LINEAR[0]).abs() < 1e-6));
     }
 }

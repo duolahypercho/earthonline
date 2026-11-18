@@ -107,5 +107,18 @@
     "balusterDiameterM": 0.2,
     "urnM": 1.1,
     "shopToneSpread": [0.9, 2.4]
+  },
+  "relief": {
+    "source": "INFERRED: no published elevation, window schedule or glazing record was available. The float glass's roughness is the near-mirror of drawn glass (F0 4 %, n = 1.52, the same dielectric the second pass names); the frame sizes are those of a period steel or timber sash with its glazing bars standing proud of the glass. --no-facade-relief draws without this block.",
+    "corniceOcclusionTone": 0.5,
+    "corniceOcclusionM": 0.75,
+    "revealDeepTone": 0.42,
+    "glassRoughness": 0.04,
+    "frameWidthM": 0.14,
+    "frameProudM": 0.12,
+    "lightToneSpread": [0.7, 1.7],
+    "blindShare": 0.16,
+    "blindLinear": [0.17, 0.155, 0.13],
+    "voussoirToneSpread": 0.07
   }
 }

@@ -188,6 +188,33 @@ impl Detail {
     }
 }
 
+/// The third pass (`relief` in the spec; INFERRED unless named): the facade's
+/// relief read in light at any distance. Drawn while
+/// `features::ferry_building_relief` is on (and the second pass).
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Relief {
+    /// The wall's tone right under a cornice's bed mould (the sky the corona
+    /// hides from it), rising to 1 over `cornice_occlusion_m`: the shadow line
+    /// a cornice draws on its frieze in any light, kept at any distance.
+    pub cornice_occlusion_tone: f64,
+    pub cornice_occlusion_m: f64,
+    /// A reveal's tone at the glass (in place of the second pass's `revealDeepTone`).
+    pub reveal_deep_tone: f64,
+    /// The glazing's roughness (float glass, nearly a mirror) and its frame:
+    /// the perimeter frame's width and how far frame and bars stand off the glass.
+    pub glass_roughness: f64,
+    pub frame_width_m: f64,
+    pub frame_proud_m: f64,
+    /// Each light of a window its own room tone (the spread of its multiplier),
+    /// a share of them with a pale blind or shade drawn behind the glass and its tone (linear).
+    pub light_tone_spread: [f64; 2],
+    pub blind_share: f64,
+    pub blind_linear: [f64; 3],
+    /// The archivolts' voussoirs: each stone's tone within this spread of the band's.
+    pub voussoir_tone_spread: f64,
+}
+
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Spec {
@@ -199,6 +226,7 @@ pub struct Spec {
     pub stone: Stone,
     pub inferred: Inferred,
     pub detail: Detail,
+    pub relief: Relief,
 }
 
 /// The stone finish with the detail pass: the kit finish's scan at the
@@ -438,6 +466,8 @@ struct B {
     stone: Rgb,
     /// The second pass (None: the first pass, `--no-ferry-building-detail`).
     dt: Option<Detail>,
+    /// The third pass (None: the second pass's output, `--no-facade-relief`).
+    rl: Option<Relief>,
 }
 
 impl B {
@@ -630,8 +660,65 @@ impl B {
         }
     }
 
+    /// The glazing of a window with the third pass: one pane per light (the
+    /// mullions' quarter columns and their rails; the fanlight's three sectors
+    /// between its radial bars), each its own room tone or a drawn blind.
+    fn glass_lights(&mut self, w: &Wall, o: &Op, d: f64, rl: &Relief) {
+        let want = self.wn(w, 1.0);
+        let base = self.tone(F::Glass);
+        let c = self.p(w, o.s, o.spring, 0.0);
+        let pick = |i: i64| -> Rgb {
+            let h = h01(c[0], c[2], 101 + i);
+            if h < rl.blind_share {
+                rl.blind_linear
+            } else {
+                let t = h01(c[0], c[2], 211 + 3 * i);
+                mul(base, rl.light_tone_spread[0] + (rl.light_tone_spread[1] - rl.light_tone_spread[0]) * t)
+            }
+        };
+        let cols = [o.l(), o.s - o.w / 4.0, o.s, o.s + o.w / 4.0, o.rt()];
+        let n = ((o.spring - o.sill) / 0.95).round().max(1.0) as usize;
+        let mut quads: Vec<([V3; 4], Rgb)> = Vec::new();
+        let mut tris: Vec<([V3; 3], Rgb)> = Vec::new();
+        let mut i = 0;
+        for r in 0..n {
+            let (y0, y1) = (o.sill + (o.spring - o.sill) * r as f64 / n as f64, o.sill + (o.spring - o.sill) * (r + 1) as f64 / n as f64);
+            for cc in cols.windows(2) {
+                let q = [self.p(w, cc[0], y0, d), self.p(w, cc[1], y0, d), self.p(w, cc[1], y1, d), self.p(w, cc[0], y1, d)];
+                quads.push((q, pick(i)));
+                i += 1;
+            }
+        }
+        if o.arch {
+            let ctr = self.p(w, o.s, o.spring, d);
+            for k in 0..ARC {
+                // the radial bars at 45 and 135 degrees split the fan in three.
+                let sector = if 4 * k < ARC { 0 } else if 4 * k < 3 * ARC { 1 } else { 2 };
+                let col = pick(100 + sector);
+                let at = |b: &B, j: usize| {
+                    let th = PI - PI * j as f64 / ARC as f64;
+                    b.p(w, o.s + o.r() * th.cos(), o.spring + o.r() * th.sin(), d)
+                };
+                tris.push(([ctr, at(self, k), at(self, k + 1)], col));
+            }
+        }
+        let m = self.mesh(F::Glass);
+        for (q, col) in quads {
+            quad(m, q[0], q[1], q[2], q[3], col, want);
+        }
+        for (t, col) in tris {
+            tri(m, t[0], t[1], t[2], col, want);
+        }
+    }
+
     /// The opening's own shape as a flat pane at `d` facing out (rectangle and half-disc fan).
     fn pane(&mut self, k: F, w: &Wall, o: &Op, d: f64, tone: f64) {
+        if let (F::Glass, Some(rl)) = (k, self.rl.clone()) {
+            if (tone - 1.0).abs() < 1e-9 && o.spring - o.sill > 0.5 && o.w > 1.2 {
+                self.glass_lights(w, o, d, &rl);
+                return;
+            }
+        }
         let col = mul(self.tone(k), tone);
         let want = self.wn(w, 1.0);
         let r = [self.p(w, o.l(), o.sill, d), self.p(w, o.rt(), o.sill, d), self.p(w, o.rt(), o.spring, d), self.p(w, o.l(), o.spring, d)];
@@ -658,6 +745,12 @@ impl B {
         let want = self.wn(w, 1.0);
         let (r0, r1) = (o.r(), o.r() + band);
         let mut faces: Vec<([V3; 4], V3)> = Vec::new();
+        // with the third pass each voussoir (one per arc step) its own stone's tone.
+        let vt: Vec<f64> = {
+            let c = self.p(w, o.s, o.spring, 0.0);
+            let spread = self.rl.as_ref().map(|r| r.voussoir_tone_spread).unwrap_or(0.0);
+            (0..ARC).map(|i| 1.0 + spread * (h01(c[0], c[2], 300 + i as i64) - 0.5) * 2.0 - if i % 2 == 1 { spread * 0.5 } else { 0.0 }).collect()
+        };
         for i in 0..ARC {
             let (a0, a1) = (PI - PI * i as f64 / ARC as f64, PI - PI * (i + 1) as f64 / ARC as f64);
             let at = |b: &B, th: f64, r: f64, dd: f64| b.p(w, o.s + r * th.cos(), o.spring + r * th.sin(), dd);
@@ -671,8 +764,8 @@ impl B {
             faces.push(([at(self, a0, r0, d), at(self, a1, r0, d), at(self, a1, r0, d + proud), at(self, a0, r0, d + proud)], [-out[0], -out[1], -out[2]]));
         }
         let m = &mut self.m[F::Trim as usize];
-        for ([a, b, c, e], n) in faces {
-            quad(m, a, b, c, e, col, n);
+        for (j, ([a, b, c, e], n)) in faces.into_iter().enumerate() {
+            quad(m, a, b, c, e, mul(col, vt[j / 3]), n);
         }
         // the keystone, and the impost blocks the band springs from.
         let kw = (o.w * 0.11).clamp(0.3, 0.7);
@@ -692,7 +785,9 @@ impl B {
 
     /// Mullions and transoms of a glazed or shop opening at the pane's depth `d`.
     fn mullions(&mut self, w: &Wall, o: &Op, d: f64, shop: bool) {
-        let (bw, dd) = (0.08, [d, d + 0.07]);
+        let proud = self.rl.as_ref().map(|r| r.frame_proud_m).unwrap_or(0.07);
+        let fw = self.rl.as_ref().map(|r| r.frame_width_m).unwrap_or(0.1);
+        let (bw, dd) = (0.08, [d, d + proud]);
         // divided lights (INFERRED: quarter-width lights about a metre tall); a shop front's door and side lights.
         let verticals = if shop { vec![o.s - o.w * 0.32, o.s, o.s + o.w * 0.32] } else { vec![o.s - o.w / 4.0, o.s, o.s + o.w / 4.0] };
         let arc_y = |x: f64| if o.arch { o.spring + (o.r() * o.r() - (x - o.s).powi(2)).max(0.0).sqrt() } else { o.spring };
@@ -712,8 +807,24 @@ impl B {
             }
         }
         // perimeter frame
-        self.wbox(F::Frame, w, [o.l(), o.l() + 0.1], [o.sill, o.spring], dd, false, false, 1.0);
-        self.wbox(F::Frame, w, [o.rt() - 0.1, o.rt()], [o.sill, o.spring], dd, false, false, 1.0);
+        self.wbox(F::Frame, w, [o.l(), o.l() + fw], [o.sill, o.spring], dd, false, false, 1.0);
+        self.wbox(F::Frame, w, [o.rt() - fw, o.rt()], [o.sill, o.spring], dd, false, false, 1.0);
+        if self.rl.is_some() {
+            // the sill rail of the frame, and the frame round the fanlight's curve.
+            self.wbox(F::Frame, w, [o.l(), o.rt()], [o.sill, o.sill + fw], dd, false, true, 1.0);
+            if o.arch {
+                let col = self.tone(F::Frame);
+                let up = self.wn(w, 1.0);
+                for i in 0..ARC {
+                    let at = |b: &B, j: usize, r: f64| {
+                        let th = PI - PI * j as f64 / ARC as f64;
+                        b.p(w, o.s + r * th.cos(), o.spring + r * th.sin(), d + proud / 2.0)
+                    };
+                    let (a, c) = (at(self, i, o.r() - fw / 2.0), at(self, i + 1, o.r() - fw / 2.0));
+                    self.mesh(F::Frame).beam_up(a, c, fw, proud, col, Some(up));
+                }
+            }
+        }
         if o.arch {
             // two radial bars in the fanlight
             for th in [PI / 4.0, 3.0 * PI / 4.0] {
@@ -731,7 +842,7 @@ impl B {
     fn opening(&mut self, w: &Wall, o: &Op, depth: f64, back: Back, band: f64, sill_trim: bool, reveal_sill: bool) {
         let at = self.mark(F::Stone);
         self.reveal(F::Stone, w, o, 0.0, -depth, reveal_sill, 0.8);
-        if let Some(deep) = self.dt.as_ref().map(|d| d.reveal_deep_tone) {
+        if let Some(deep) = self.rl.as_ref().map(|r| r.reveal_deep_tone).or(self.dt.as_ref().map(|d| d.reveal_deep_tone)) {
             // the sky a reveal sees falls off into the wall: darkest at the glass.
             let r = self.wref(w);
             self.shade_from(F::Stone, at, &move |p| 1.0 - (1.0 - deep) * smooth(-r.d(p) / depth));
@@ -850,6 +961,38 @@ impl B {
             if (m.positions[3 * i + 1] - q[2][1]).abs() < 1e-6 {
                 for c in 0..3 {
                     m.colors[3 * i + c] *= dark;
+                }
+            }
+        }
+    }
+
+    /// The cornice's occlusion on the wall under it with the third pass (in place
+    /// of the second pass's dirt sheet there, `stain`): darkest under the bed
+    /// mould at `cornice_occlusion_tone`, rising to the dirt's own tone over
+    /// `cornice_occlusion_m` and to 1 at `y_bot`. Without the third pass, `stain`.
+    fn under_cornice(&mut self, w: &Wall, s: [f64; 2], y_top: f64, y_bot: f64) {
+        let (Some(dt), Some(rl)) = (self.dt.clone(), self.rl.clone()) else {
+            self.stain(F::Stone, w, s, y_top, y_bot, 0.0, 1.0);
+            return;
+        };
+        if !(s[1] - s[0] > 0.02 && y_top - y_bot > 0.02) {
+            return;
+        }
+        let col = self.tone(F::Stone);
+        let want = self.wn(w, 1.0);
+        let d = 0.004;
+        let y_mid = (y_top - rl.cornice_occlusion_m).max(y_bot + 0.01);
+        let rows = [(y_top, rl.cornice_occlusion_tone), (y_mid, dt.weather_tone + (1.0 - dt.weather_tone) * (y_top - y_mid) / (y_top - y_bot)), (y_bot, 1.0)];
+        for r in rows.windows(2) {
+            let ((ya, ka), (yb, kb)) = (r[0], r[1]);
+            let q = [self.p(w, s[0], yb, d), self.p(w, s[1], yb, d), self.p(w, s[1], ya, d), self.p(w, s[0], ya, d)];
+            let m = &mut self.m[F::Stone as usize];
+            let v = m.positions.len() / 3;
+            quad(m, q[0], q[1], q[2], q[3], col, want);
+            for i in v..v + 4 {
+                let k = if (m.positions[3 * i + 1] - ya).abs() < 1e-6 { ka } else { kb };
+                for c in 0..3 {
+                    m.colors[3 * i + c] *= k;
                 }
             }
         }
@@ -995,7 +1138,8 @@ pub fn build_with(level_at: &dyn Fn(f64, f64) -> f64, paved_at: &dyn Fn(f64, f64
         _ => "limestone-ashlar",
     };
     let dt = crate::features::ferry_building_detail().then(|| sp.detail.clone());
-    let mut b = B { f, m: PARTS.iter().map(|(k, ..)| MeshArrays::new(&format!("ferry-building:{k}"))).collect(), stone: sp.stone.tint_linear, dt: dt.clone() };
+    let rl = (dt.is_some() && crate::features::ferry_building_relief()).then(|| sp.relief.clone());
+    let mut b = B { f, m: PARTS.iter().map(|(k, ..)| MeshArrays::new(&format!("ferry-building:{k}"))).collect(), stone: sp.stone.tint_linear, dt: dt.clone(), rl: rl.clone() };
     // the upper windows' reveal (the second pass sets the glazing deeper)
     let upper_reveal = dt.as_ref().map(|d| d.upper_reveal_m).unwrap_or(inf.upper_reveal_m);
 
@@ -1073,7 +1217,7 @@ pub fn build_with(level_at: &dyn Fn(f64, f64) -> f64, paved_at: &dyn Fn(f64, f64
         // dirt the cornice's drip washes down the frieze and the pilasters' heads.
         b.modillions(&w, [0.3, w.len - 0.3], c0 + (c1 - c0) * 0.45, 0.45, pr);
         b.crown(&w, ext(pr + 0.06), c1, pr);
-        b.stain(F::Stone, &w, [0.0, w.len], c0, upper.first().map(|o| o.top() + 0.05).unwrap_or(c0 - 1.0), 0.0, 1.0);
+        b.under_cornice(&w, [0.0, w.len], c0, upper.first().map(|o| o.top() + 0.05).unwrap_or(c0 - 1.0));
         b.wbox(F::Stone, &w, [0.0, w.len], [c1, top - 0.12], [-0.5, 0.0], true, false, 1.0);
         b.wbox(F::Trim, &w, ext(0.1), [top - 0.12, top], [-0.6, 0.1], true, true, 1.0);
         // the gallery behind the arcade
@@ -1172,7 +1316,7 @@ pub fn build_with(level_at: &dyn Fn(f64, f64) -> f64, paved_at: &dyn Fn(f64, f64
         b.modillions(&w, [0.4, w.len - 0.4], pc0 + 0.35, 0.45, 1.0);
         b.crown(&w, [-1.06, w.len + 1.06], pc1, 1.0);
         let heads = upper.iter().map(|o| o.top()).fold(scy + 0.5, f64::max);
-        b.stain(F::Stone, &w, [0.0, w.len], pc0, heads + 0.05, 0.0, 1.0);
+        b.under_cornice(&w, [0.0, w.len], pc0, heads + 0.05);
         b.wbox(F::Trim, &w, [-0.5, w.len + 0.5], [ptop - 0.6, ptop - 0.3], [0.0, 0.5], false, true, 1.0);
         b.wbox(F::Stone, &w, [0.0, w.len], [ptop - 0.3, ptop], [-0.5, 0.0], true, false, 1.0);
         // the paired Corinthian columns either side of the main bays, on their pedestals
@@ -1517,7 +1661,11 @@ pub fn build_with(level_at: &dyn Fn(f64, f64) -> f64, paved_at: &dyn Fn(f64, f64
         }
         triangles += mesh.triangles();
         let kit = if *key == "stone" { Some(if dt.is_some() { detail_stone_kit() } else { stone_kit }) } else { *kit };
-        parts.push(Part { key, kit, cast: *cast, footway: *footway, rough: *rough, metal: *metal, mesh });
+        let rough = match (&rl, *key) {
+            (Some(r), "glass") => r.glass_roughness,
+            _ => *rough,
+        };
+        parts.push(Part { key, kit, cast: *cast, footway: *footway, rough, metal: *metal, mesh });
     }
     Built { parts, base_y: f.base, length_m: length, depth_m: depth, bays: counts, triangles }
 }
@@ -1544,6 +1692,7 @@ mod tests {
 
     #[test]
     fn the_detail_pass_adds_to_the_first_and_names_its_scaled_ashlar() {
+        let _g = PASSES.lock().unwrap_or_else(|e| e.into_inner());
         crate::features::set_ferry_building_detail(false);
         let a = build(&|_, _| 3.0);
         crate::features::set_ferry_building_detail(true);
@@ -1557,6 +1706,30 @@ mod tests {
         // the second pass's pieces stay on the building: nothing below its foot or over the flagstaff.
         let (lo, hi) = b.parts.iter().flat_map(|p| p.mesh.positions.chunks_exact(3).map(|v| v[1] as f64)).fold((f64::MAX, f64::MIN), |(l, h), y| (l.min(y), h.max(y)));
         assert!(lo > 3.0 - 6.0 && hi <= 3.0 + spec().tower.flagstaff_top_m + 1e-3, "{lo} .. {hi}");
+    }
+
+    /// The passes' switches are process-wide: the tests that flip them take turns.
+    static PASSES: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn the_relief_pass_splits_the_glazing_into_lights_within_the_budget() {
+        let _g = PASSES.lock().unwrap_or_else(|e| e.into_inner());
+        crate::features::set_ferry_building_detail(true);
+        crate::features::set_ferry_building_relief(false);
+        let a = build(&|_, _| 3.0);
+        crate::features::set_ferry_building_relief(true);
+        let b = build(&|_, _| 3.0);
+        let part = |x: &Built, k: &str| x.parts.iter().find(|p| p.key == k).map(|p| (p.mesh.triangles(), p.rough)).unwrap();
+        let (ga, gb) = (part(&a, "glass"), part(&b, "glass"));
+        // a pane a light (the fanlights stay fans): more than twice the glazing's triangles; the glass a near-mirror.
+        assert!(gb.0 > 2 * ga.0, "glass {} -> {} triangles", ga.0, gb.0);
+        assert!((ga.1 - 0.08).abs() < 1e-9 && (gb.1 - spec().relief.glass_roughness).abs() < 1e-9);
+        // the frames round the fanlights, and the budget.
+        assert!(part(&b, "frame").0 > part(&a, "frame").0);
+        assert!(b.triangles < 150_000, "{} triangles", b.triangles);
+        // the cornices' occlusion darkens the wall under them past the second pass's dirt.
+        let darkest = |x: &Built| x.parts.iter().find(|p| p.key == "stone").unwrap().mesh.colors.chunks_exact(3).map(|c| c[1] as f64).fold(f64::MAX, f64::min);
+        assert!(darkest(&b) <= darkest(&a) + 1e-9);
     }
 
     #[test]

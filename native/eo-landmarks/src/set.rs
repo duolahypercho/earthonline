@@ -697,7 +697,7 @@ impl LandmarkSet {
         }
         let ways = crate::tram::load_corridor_ways(repo_root, crate::ferry_building::spec().tower.centre_surveyed)?;
         let t = crate::tram::build(&ways, surface_at, lift);
-        let tris = t.heads.triangles() + t.grooves.triangles() + t.sides.triangles();
+        let tris = t.heads.triangles() + t.grooves.triangles() + t.sides.triangles() + t.polish.triangles();
         // the polished heads as bare steel; the grooves a matte dark. With the
         // finish (tram.rs): the worn band less glossy, the oxidised edges a rough dielectric.
         let (band_rough, band_metal) = if t.sides.is_empty() { (0.36, 1.0) } else { (crate::tram::BAND_ROUGHNESS, crate::tram::BAND_METALNESS) };
@@ -705,6 +705,10 @@ impl LandmarkSet {
         self.structures.push(Structure { cast: false, footway: false, kit: None, name: "tram:grooves".into(), material: plain_material(if t.sides.is_empty() { 0.9 } else { 0.95 }, 0.0, "asphalt"), mesh: t.grooves });
         if !t.sides.is_empty() {
             self.structures.push(Structure { cast: false, footway: false, kit: None, name: "tram:sides".into(), material: plain_material(crate::tram::OXIDE_ROUGHNESS, 0.0, "painted-metal"), mesh: t.sides });
+        }
+        // the polish (tram.rs): the burnished middle of each band, bare steel.
+        if !t.polish.is_empty() {
+            self.structures.push(Structure { cast: false, footway: false, kit: None, name: "tram:polish".into(), material: plain_material(crate::tram::POLISH_ROUGHNESS, crate::tram::POLISH_METALNESS, "facade-metal"), mesh: t.polish });
         }
         Ok(Some((t.tracks, t.metres, tris)))
     }
