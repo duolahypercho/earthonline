@@ -3,11 +3,11 @@
 //! Per frame, when attached and on (`Renderer::water_active`):
 //!
 //! 1. **Patch cull** (`water_cull.wgsl`): one invocation per patch of the
-//!    camera-following grid (32 x 32 patches of 16 x 16 quads); frustum,
+//!    camera-following grid; frustum,
 //!    terrain extent, "wholly over land" from the shore field's max pyramid,
 //!    and with occlusion on the city's hierarchical-Z test inside the city's
 //!    own pyramid pass (the water is never drawn into that depth: a receiver,
-//!    not an occluder). Survivors become indirect draws for ONE multi-draw.
+//!    not an occluder). Survivors become instances of one indexed patch mesh.
 //! 2. **FFT** (`water_fft.wgsl`, two dispatches), only while water within
 //!    `GATE_NEAR_M` was drawn in the last `SEEN_HOLD_FRAMES` frames (the cull's
 //!    counters, read back without waiting).
@@ -259,7 +259,8 @@ pub struct WaterGpu {
     field_view: wgpu::TextureView,
     detail_view: wgpu::TextureView,
     index_buf: wgpu::Buffer,
-    draw_buf: wgpu::Buffer,
+    visible_patches: wgpu::Buffer,
+    patch_draw: wgpu::Buffer,
     count_buf: wgpu::Buffer,
     cull_plain: wgpu::ComputePipeline,
     cull_hzb: wgpu::ComputePipeline,
@@ -464,13 +465,15 @@ impl WaterGpu {
         bytes += (detail_size * detail_size * 8) as u64;
         let detail_view = detail_tex.create_view(&Default::default());
 
-        // The grid: one patch's index list, the indirect list, its counters.
+        // The grid: one shared index list and a compact stream of visible patch IDs.
         let idx = eo_water::grid::patch_indices();
         let index_buf = buffer("water-patch-indices", (idx.len() * 4) as u64, wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST);
         queue.write_buffer(&index_buf, 0, bytemuck::cast_slice(&idx));
-        let draw_buf = buffer("water-draws", PATCH_COUNT as u64 * crate::DRAW_ARGS_BYTES, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT);
-        let count_buf = buffer("water-counts", COUNT_BYTES, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST);
-        bytes += idx.len() as u64 * 4 + PATCH_COUNT as u64 * crate::DRAW_ARGS_BYTES + COUNT_BYTES;
+        let visible_patches = buffer("water-visible-patches", PATCH_COUNT as u64 * 4, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::VERTEX);
+        let patch_draw = buffer("water-patch-draw", crate::DRAW_ARGS_BYTES, wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_DST);
+        queue.write_buffer(&patch_draw, 0, bytemuck::cast_slice(&[idx.len() as u32, 0, 0, 0, 0]));
+        let count_buf = buffer("water-counts", COUNT_BYTES, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST);
+        bytes += idx.len() as u64 * 4 + visible_patches.size() + patch_draw.size() + COUNT_BYTES;
 
         // Patch cull: with the city's pyramid (group 1) and without.
         let tex_unfiltered = wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false };
@@ -483,7 +486,7 @@ impl WaterGpu {
             layout: &cull_bgl,
             entries: &[
                 wgpu::BindGroupEntry { binding: 0, resource: uniform_buf.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: draw_buf.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: visible_patches.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 2, resource: count_buf.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&land_view) },
             ],
@@ -538,7 +541,16 @@ impl WaterGpu {
             d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(entry),
                 layout: Some(&draw_layout),
-                vertex: wgpu::VertexState { module: &draw_module, entry_point: Some("vs"), compilation_options: Default::default(), buffers: &[] },
+                vertex: wgpu::VertexState {
+                    module: &draw_module,
+                    entry_point: Some("vs"),
+                    compilation_options: Default::default(),
+                    buffers: &[Some(wgpu::VertexBufferLayout {
+                        array_stride: 4,
+                        step_mode: wgpu::VertexStepMode::Instance,
+                        attributes: &wgpu::vertex_attr_array![0 => Uint32],
+                    })],
+                },
                 primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleList, cull_mode: None, ..Default::default() },
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: crate::DEPTH_FORMAT,
@@ -643,7 +655,8 @@ impl WaterGpu {
             field_view,
             detail_view,
             index_buf,
-            draw_buf,
+            visible_patches,
+            patch_draw,
             count_buf,
             cull_plain,
             cull_hzb,
@@ -1161,6 +1174,11 @@ impl WaterGpu {
             }
             cache.as_ref().unwrap().2[probe_front].clone()
         };
+        if !fogged {
+            // The cull appended exactly this many IDs. All other indirect
+            // arguments are static, including first_instance = 0.
+            enc.copy_buffer_to_buffer(&self.count_buf, 0, &self.patch_draw, 4, 4);
+        }
         {
             let tw = ts.map(|(q, b)| wgpu::RenderPassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b), end_of_pass_write_index: Some(b + 1) });
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -1182,7 +1200,8 @@ impl WaterGpu {
                 pass.set_bind_group(0, &bg, &[]);
                 look.bind_main(&mut pass);
                 pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint32);
-                pass.multi_draw_indexed_indirect_count(&self.draw_buf, 0, &self.count_buf, 0, PATCH_COUNT);
+                pass.set_vertex_buffer(0, self.visible_patches.slice(..));
+                pass.draw_indexed_indirect(&self.patch_draw, 0);
                 if spray {
                     // the spray, same bind groups
                     pass.set_pipeline(&self.spray);

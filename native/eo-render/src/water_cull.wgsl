@@ -1,20 +1,18 @@
-// one invocation per grid patch (32 x 32 patches of 16 x 16 quads).
+// One invocation per grid patch.
 // A patch is drawn when its box (the displaced surface's reach) is inside the
 // frustum and the terrain grid, not wholly over land (the max-reduction
 // pyramid of the shore field below the land mask), and, with occlusion on,
 // not hidden behind this frame's early depth (`hzb_occluded`, the city's own
 // test: the water is a receiver, never an occluder, so it is tested against
-// the pyramid and never drawn into it). Survivors become one
-// DrawIndexedIndirect each (first_instance = the patch) for one multi-draw.
+// the pyramid and never drawn into it). Survivors append their IDs to the
+// instance stream of the shared patch mesh.
 
 @group(0) @binding(0) var<uniform> wu: WaterU;
-@group(0) @binding(1) var<storage, read_write> wdraws: array<u32>;
+@group(0) @binding(1) var<storage, read_write> wvisible: array<u32>;
 // [0] patches drawn, [1] in the frustum, [2] culled as land, [3] culled as
 // occluded, [4] the nearest drawn patch's distance (m, the gate), [5..8) pad
 @group(0) @binding(2) var<storage, read_write> wcount: array<atomic<u32>, 8>;
 @group(0) @binding(3) var land_max: texture_2d<f32>;
-
-const PATCH_INDICES: u32 = 1536u;
 
 // The largest signed shore distance over a world rectangle (field texels).
 fn land_max_over(lo: vec2<f32>, hi: vec2<f32>) -> f32 {
@@ -90,12 +88,7 @@ fn cull_patch(id: u32) {
     let near = distance(clamp(wu.cam.xyz, mn, mx), wu.cam.xyz);
     atomicMin(&wcount[4], u32(min(near, 1e9)));
     let slot = atomicAdd(&wcount[0], 1u);
-    let b = slot * 5u;
-    wdraws[b] = PATCH_INDICES;
-    wdraws[b + 1u] = 1u;
-    wdraws[b + 2u] = 0u;
-    wdraws[b + 3u] = 0u;
-    wdraws[b + 4u] = id;
+    wvisible[slot] = id;
 }
 
 @compute @workgroup_size(64)

@@ -406,7 +406,7 @@ fn w_displacement(base: vec2<f32>, spacing: f32, f: vec2<f32>) -> vec3<f32> {
 }
 
 @vertex
-fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) pid: u32) -> VsOut {
+fn vs(@builtin(vertex_index) vi: u32, @location(0) pid: u32) -> VsOut {
     let side = WG_PATCH_QUADS + 1u;
     let gi = f32((pid % WG_PATCHES) * WG_PATCH_QUADS + vi % side);
     let gj = f32((pid / WG_PATCHES) * WG_PATCH_QUADS + vi / side);
