@@ -249,6 +249,7 @@ pub fn city_shader_source() -> String {
         + "\n" + include_str!("sky_light_core.wgsl") + "\n" + include_str!("sky_light.wgsl") // sky
         + &crate::landmarks::city_wgsl() // landmarks
         + "\n" + include_str!("cc0.wgsl") + &crate::cc0::wgsl_constants(crate::cc0::scoring_pitch_m()) // cc0
+        + "\n" + include_str!("far_box.wgsl") // the far box's facade
 }
 
 /// look_common.wgsl with (surfaces) the street field's constants (GF_*), from

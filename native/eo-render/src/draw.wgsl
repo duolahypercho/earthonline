@@ -852,7 +852,11 @@ fn shade(in: VOut) -> vec4<f32> {
         ft_facade(&s, &m, in.world, normalize(in.normal), in.ft, ft_du, in.object, cc0_drx, cc0_dry);
     }
     if ((objects[in.object].kind & 255u) == 0u) {
-        rm_emit = rm_emit + sky_far_windows(in.world, n, in.object, dpx, dpy); // lit windows on the far boxes
+        if (fb_on(in)) {
+            rm_emit = rm_emit + fb_apply(&s, in, n, v, dpx, dpy, cc0_daux * 127.0); // the far box's facade (far_box.wgsl)
+        } else {
+            rm_emit = rm_emit + sky_far_windows(in.world, n, in.object, dpx, dpy); // lit windows on the far boxes
+        }
     }
 
     // Lighting, shadows and fog: the JS game's light rig (look_light.wgsl).

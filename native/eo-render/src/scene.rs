@@ -155,6 +155,8 @@ pub struct SceneStats {
     pub authored_footprints: usize,
     /// Footprints that are a kit building's far box (role KIT_BOX).
     pub kit_boxes: usize,
+    /// Boxes drawn with their facade (far_box.rs; 0 with `--no-far-facade`).
+    pub far_facades: usize,
     pub terrain_tiles: usize,
     pub terrain_triangles: u64,
     pub terrain_coarse_triangles: u64,
@@ -348,6 +350,8 @@ pub fn build_scene(inp: &SceneInputs) -> anyhow::Result<Scene> {
             hs.into_iter().flat_map(|h| h.join().unwrap()).collect()
         })
     };
+    // the far box's facade per building (far_box.rs), on every core; none with `--no-far-facade`.
+    let far_facades: Vec<Option<crate::far_box::FarBox>> = if eo_kit::far_facade::enabled() { crate::far_box::facades(inp.city) } else { vec![] };
     let mut ear = earcut::Earcut::<f64>::new();
     let mut tri: Vec<u32> = Vec::new();
     let mut verts: Vec<Vertex> = Vec::new();
@@ -373,24 +377,36 @@ pub fn build_scene(inp: &SceneInputs) -> anyhow::Result<Scene> {
         let wall_bottom = rgba(foot[0], foot[1], foot[2]);
         verts.clear();
         idx.clear();
-        for p in ring {
-            verts.push(v([p[0], base, p[1]], wall_bottom));
-        }
-        for p in ring {
-            verts.push(v([p[0], top, p[1]], wall_top));
-        }
-        for a in 0..n {
-            let c = (a + 1) % n;
-            let (ba, bc, ta, tc) = (a as u32, c as u32, (a + n) as u32, (c + n) as u32);
-            idx.extend_from_slice(&[ba, bc, tc, ba, tc, ta]);
-        }
-        flat.clear();
-        flat.extend(ring.iter().map(|p| [p[0] as f64, p[1] as f64]));
-        ear.earcut(flat.iter().copied(), &[] as &[u32], &mut tri);
-        for t in &tri {
-            idx.push(*t + n as u32);
+        let far = far_facades.get(i).and_then(|f| f.as_ref()).filter(|_| n >= 3);
+        if let Some(fb) = far {
+            crate::far_box::mesh(ring, base, top, fb, &mut verts, &mut idx, &mut ear, &mut tri);
+        } else {
+            for p in ring {
+                verts.push(v([p[0], base, p[1]], wall_bottom));
+            }
+            for p in ring {
+                verts.push(v([p[0], top, p[1]], wall_top));
+            }
+            for a in 0..n {
+                let c = (a + 1) % n;
+                let (ba, bc, ta, tc) = (a as u32, c as u32, (a + n) as u32, (c + n) as u32);
+                idx.extend_from_slice(&[ba, bc, tc, ba, tc, ta]);
+            }
+            flat.clear();
+            flat.extend(ring.iter().map(|p| [p[0] as f64, p[1] as f64]));
+            ear.earcut(flat.iter().copied(), &[] as &[u32], &mut tri);
+            for t in &tri {
+                idx.push(*t + n as u32);
+            }
         }
         if let Some(o) = b.push(ObjectKind::Building, &verts, &idx) {
+            if let Some(fb) = far {
+                // the facade's words in the two a box never used (far_box.rs `pack`).
+                let (w0, w1) = crate::far_box::pack(&fb.facade, floor - base);
+                b.objects[o].far_first_index = w0;
+                b.objects[o].far_index_count = w1;
+                stats.far_facades += 1;
+            }
             stats.buildings += 1;
             stats.building_triangles += (idx.len() / 3) as u64;
             tile_used[keys[i]] = true;

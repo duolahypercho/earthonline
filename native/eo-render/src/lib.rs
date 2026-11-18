@@ -20,6 +20,7 @@ pub mod clouds; // the cloud noise, blue noise and cloud-shadow map
 pub mod cc0; // the CC0 scanned sets
 pub mod cc0_decals; // street wear decals
 pub mod facade; // facade
+pub mod far_box; // the far box's facade
 pub mod ground2; // the open ground from the measured ground-green table
 pub mod hitch; // hitch
 pub mod hlod; // hlod
