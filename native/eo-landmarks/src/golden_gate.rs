@@ -15,6 +15,9 @@ use crate::geometry::{ALL, GroundGrid, MeshArrays, NO_BOTTOM, NO_TOP, Rgb, shade
 use crate::suspension::{self, CableSpec, DeckColours, DeckSpec, DeckStandards, Frame, Run, SuspenderSpec, TrussSpec, stations};
 use serde_json::json;
 
+mod pylons;
+pub use pylons::published_dimensions;
+
 /// Near geometry stays this far above the sea; below it is the far batch's skirt.
 const NEAR_FLOOR_ABOVE_SEA_M: f64 = 1.0;
 /// Width of each arch pylon column across the bridge (INFERRED).
@@ -332,6 +335,9 @@ impl Ctx<'_> {
         let saddle = self.water + num(d, "towerAboveWaterM") - num(d, "saddleBelowTopM");
         let low = p.y_mid + num(d, "cableLowAboveDeckM");
         let sag_main = saddle - low;
+        if self.pylons {
+            return self.cable_runs4(saddle, sag_main);
+        }
         let south_top = p.deck_top(p.arch_north_c) + num(d, "pylonAboveDeckM");
         let north_top = p.deck_top(p.anchor_north_c) + num(d, "pylonAboveDeckM");
         vec![
@@ -743,9 +749,11 @@ impl Ctx<'_> {
     fn bent_columns(&self, c: f64) -> [[f64; 4]; 2] {
         let hp = self.site.half_plane;
         let top = self.plan.deck_top(c) - num(self.d, "trussDepthM");
+        // (`pylons`) a bent over an anchorage housing stands on its roof.
+        let roof = self.housing_under(c);
         [-hp, hp].map(|s| {
             let [x, z] = self.site.deck_point(c, s);
-            [x, z, (self.ground)(x, z), top]
+            [x, z, roof.map_or((self.ground)(x, z), |r| r.max((self.ground)(x, z))), top]
         })
     }
 
@@ -986,7 +994,7 @@ impl Ctx<'_> {
         );
         // The pylons' pilasters: three proud strips on each column's two faces along the span and its outer face.
         for (name, [x, z, y0, y1, hx, hz, yaw], cap) in self.pylon_parts() {
-            if cap {
+            if cap || self.pylons {
                 continue;
             }
             let (cy, sy) = (yaw.cos(), yaw.sin());
@@ -1074,8 +1082,11 @@ impl Ctx<'_> {
                 yaw: self.yaw,
             });
         }
+        if self.pylons {
+            out.extend(self.pylon_colliders());
+        }
         for (part, [x, z, y0, y1, hx, hz, yaw], cap_only) in self.pylon_parts() {
-            if cap_only {
+            if cap_only || self.pylons {
                 continue;
             }
             out.push(Collider { part, x, z, y0, y1: y1.min(y0 + 30.0), hx, hz, yaw });
@@ -1194,9 +1205,14 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
     if ctx.members {
         ctx.members(&mut orange_m, &mut concrete_m, &mut skirt, &mut wires, &mut far);
     }
-    for (_, [x, z, y0, y1, hx, hz, yaw], _) in ctx.pylon_parts() {
-        concrete_m.box_(x, z, y0, y1, hx, hz, yaw, ctx.k.concrete, NO_BOTTOM);
-        far.box_(x, z, y0, y1, hx, hz, yaw, ctx.k.concrete, ALL);
+    if ctx.pylons {
+        ctx.draw_pylons(&mut concrete_m, &mut far);
+        ctx.tie_downs(&mut wires, &mut concrete_m, &ctx.cable_runs());
+    } else {
+        for (_, [x, z, y0, y1, hx, hz, yaw], _) in ctx.pylon_parts() {
+            concrete_m.box_(x, z, y0, y1, hx, hz, yaw, ctx.k.concrete, NO_BOTTOM);
+            far.box_(x, z, y0, y1, hx, hz, yaw, ctx.k.concrete, ALL);
+        }
     }
     // Past the sun's shadow reach the structure's own occlusion is baked in.
     // With `shade2` nothing is baked: the bake darkened the albedo, so the

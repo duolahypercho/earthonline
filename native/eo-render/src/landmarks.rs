@@ -538,6 +538,16 @@ fn bridges_wgsl(js: &eo_landmarks::LandmarksJs) -> String {
     // ground's there, the land's stays outside.
     let site = eo_landmarks::golden_gate::Site::new(&g);
     let ch = |k: &str| site.chainage(g.supports[k].centre[0], g.supports[k].centre[1]);
+    // the rough-board-formed concrete (`pylons`; eo-landmarks golden_gate/pylons.rs): INFERRED a
+    // nominal 1 x 6 board (5.5 in) 8 ft long, at the structure's scale, its tone within 6 %, the
+    // joints' ridge 4 mm.
+    let h = eo_landmarks::golden_gate::structure_scale();
+    s.push_str(&format!(
+        "const LM_BOARDFORM_ON: bool = {};\nconst LM_GG_BOARD_M: vec2<f32> = vec2<f32>({:.4}, {:.4});\nconst LM_GG_BOARD_TONE: f32 = 0.06;\nconst LM_GG_BOARD_RIDGE_M: f32 = 0.004;\n",
+        feat.pylons && feat.finish,
+        5.5 * 0.0254 * h,
+        8.0 * 0.3048 * h
+    ));
     s.push_str(&format!("const LM_GG_WATER_C: vec2<f32> = vec2<f32>({:.3}, {:.3});\n", ch("archNorth"), ch("northAnchor")));
     s.push_str(&format!(
         "const LM_SHADE2_ON: bool = {};\nconst LM_DIELECTRIC_ON: bool = {};\nconst LM_GG_STAGE_N: u32 = {}u;\nconst LM_GG_STAGES: array<vec4<f32>, {}> = array<vec4<f32>, {}>({});\n",

@@ -170,10 +170,34 @@ fn lm_surface(s: ptr<function, Surface>, m: Material, world: vec3<f32>, n: vec3<
         (*s).rough = clamp(((*s).rough + lm_noise(local / 3.1 + vec3<f32>(1.7, 8.2, 4.4)) * LM_CO_ROUGH_SPREAD)
             * mix(0.75, 1.0, lm_ss(0.0, LM_CO_WET_BAND_M, world.y)), 0.4, 1.0);
         let fj = lm_fade(footprint, LM_CO_LIFT_M);
-        if (fj > 0.0) {
-            (*s).n = lm_bump(n, dpx, dpy, lm_concrete_height(uv) * fj, lm_concrete_height(uv + du) * fj, lm_concrete_height(uv + dv) * fj);
+        // (`pylons`) the Golden Gate's rough-board-formed concrete on its walls.
+        let board = bridge && LM_BOARDFORM_ON && vertical > 0.7 && lm_is_gg(world);
+        let fb = select(0.0, lm_fade(footprint, LM_GG_BOARD_M[0]), board);
+        if (fb > 0.0) {
+            (*s).albedo = (*s).albedo * (1.0 + lm_board(world, n).x * fb);
+        }
+        if (fj > 0.0 || fb > 0.0) {
+            let h0 = lm_concrete_height(uv) * fj + lm_board(world, n).y * fb;
+            let hx = lm_concrete_height(uv + du) * fj + lm_board(world + dpx, n).y * fb;
+            let hy = lm_concrete_height(uv + dv) * fj + lm_board(world + dpy, n).y * fb;
+            (*s).n = lm_bump(n, dpx, dpy, h0, hx, hy);
         }
     }
+}
+
+// The Golden Gate's concrete cast in "form lumber with the rough side
+// against the concrete" (Strauss 1937; `pylons`): horizontal boards
+// LM_GG_BOARD_M[0] wide and [1] long, their ends staggered row by row, each
+// its own tone (the lumber's grain and its water take-up), the joints
+// between rows a shallow ridge. Returns (tone, height) at a point of a wall.
+fn lm_board(p: vec3<f32>, n: vec3<f32>) -> vec2<f32> {
+    let side = normalize(vec2<f32>(-n.z, n.x) + vec2<f32>(1e-5, 0.0));
+    let h = dot(p.xz, side);
+    let row = floor(p.y / LM_GG_BOARD_M[0]);
+    let seg = floor(h / LM_GG_BOARD_M[1] + fract(row * 0.618));
+    let tone = (lm_cell_hash(vec3<f32>(row, seg, 11.0)) - 0.5) * 2.0 * LM_GG_BOARD_TONE;
+    let joint = 1.0 - lm_ss(0.0, 0.008, lm_line(p.y, LM_GG_BOARD_M[0]));
+    return vec2<f32>(tone, joint * LM_GG_BOARD_RIDGE_M);
 }
 
 // the Golden Gate towers' floodlighting at night (eo-landmarks lights.rs
