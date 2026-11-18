@@ -58,7 +58,8 @@ Other folders:
   buildings.
 - `tools/` holds the Node scripts that made the optional assets'
   provenance manifests from their sources. Inside the repository they
-  write only into `external/<set>`.
+  download only into `external/<set>`; the manifests they rewrite are the
+  tracked ones in `assets/` and `eo-props/data/`.
 - `*/data/` folders hold reference answers and tables that the crates and
   their tests read. Some were exported from the earlier browser
   implementation of the game, whose exporters are no longer in this
@@ -359,9 +360,10 @@ The Node scripts in `tools/` are how the manifests were made:
 `fetch-cc0.mjs` and `fetch-sign-art.mjs` fetch their sets and rewrite
 their manifests, and `write-people-manifest.mjs` and
 `write-motion-manifests.mjs` regenerate the people and motion manifests
-from a local copy. Inside the repository they accept only `external/<set>`
-as a target; they send nothing about the user in their requests and never
-execute what they download.
+from a local copy. Inside the repository they download only into
+`external/<set>` (the manifests they rewrite are tracked files in `assets/`
+and `eo-props/data/`); they send nothing about the user in their requests
+and never execute what they download.
 
 Without all three people and motion sets there are no street people.
 Without the sound clips the game is silent; without the scanned sets, sign
