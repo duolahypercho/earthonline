@@ -30,6 +30,7 @@ pub mod shore;
 pub mod suspension;
 pub mod towers;
 pub mod tram;
+pub mod vegetation; // the coastal tree stands, ground vegetation and hill rock (empty for now)
 pub mod waterfront;
 
 pub use data::LandmarksJs;
