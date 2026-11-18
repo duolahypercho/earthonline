@@ -191,6 +191,7 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
             r.bytes.index += b[1];
             r.bytes.textures += b[2];
             r.bytes.draws += b[3];
+            eprintln!("far layer: attached, drawn on the {:?} path", eo_render::hlod::draw_path());
         }
     }
     r.set_view_detail(args.perf.view_detail); // the best-quality layer by view (`--no-view-detail`)
@@ -697,7 +698,7 @@ impl ModelRuntime {
             h.update(renderer, &ctx.queue, cam); // the far layer, its own upload budget
             if self.hlod_drawn && renderer.hlod.get().is_none() {
                 self.hlod_drawn = false;
-                eprintln!("far layer: not attached to the renderer (the adapter has no multi-draw-indirect-count); nothing of it is drawn, so settles do not wait for it");
+                eprintln!("far layer: not attached to the renderer (the adapter has no multi-draw-indirect-count, and --no-far-fallback or --no-gg2-far is given); nothing of it is drawn, so settles do not wait for it");
             }
         }
         // the distant trees' list, once gathered, written in a slice a frame.

@@ -36,7 +36,7 @@ use bytemuck::{Pod, Zeroable};
 use glam::Vec3;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicUsize, Ordering};
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -61,6 +61,29 @@ pub const HLOD_LEVEL: u32 = 4;
 /// building's LOD group, so two far buildings meeting at a pixel are told
 /// apart (hlod_draw.wgsl `hlod_fs_ids`). Not an object-table index.
 pub const FAR_ID_BASE: u32 = 0xC000_0000;
+
+/// How the far layer is drawn (set when it is attached; every shot's
+/// manifest names it through `HlodOptions::path`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FarPath {
+    /// Not attached to the renderer (yet, or the adapter lacks multi-draw-indirect-count and `--no-far-fallback`).
+    NotAttached,
+    /// The compacted lists (`multi_draw_indexed_indirect_count`).
+    Compact,
+    /// Fixed-size lists without the count (`multi_draw_indexed_indirect`; one draw for the trees).
+    Fallback,
+}
+
+/// `FarPath` as attached (0 not attached, 1 compact, 2 fallback).
+pub static DRAW_PATH: AtomicU8 = AtomicU8::new(0);
+
+pub fn draw_path() -> FarPath {
+    match DRAW_PATH.load(Ordering::Relaxed) {
+        1 => FarPath::Compact,
+        2 => FarPath::Fallback,
+        _ => FarPath::NotAttached,
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HlodOptions {
@@ -90,6 +113,8 @@ pub struct HlodOptions {
     /// and a tower's panes tilted panel by panel with the city reflected below the horizon (`--no-tower-panels`).
     pub night: bool,
     pub panels: bool,
+    /// How the far layer is drawn (as attached when this was read; not an option).
+    pub path: FarPath,
 }
 
 impl Default for HlodOptions {
@@ -113,6 +138,7 @@ impl Default for HlodOptions {
             tower_glass: true,
             night: true,
             panels: true,
+            path: FarPath::NotAttached,
         }
     }
 }
@@ -140,6 +166,7 @@ impl HlodOptions {
     /// From the command line (see `FLAGS`) and `EO_HLOD=0`.
     pub fn from_env() -> Self {
         let mut o = Self::default();
+        o.path = draw_path();
         if std::env::var("EO_HLOD").is_ok_and(|v| v == "0") {
             o.on = false;
         }
@@ -262,6 +289,8 @@ pub struct HlodInit<'a> {
     pub sample_count: u32,
     pub debug_ids: bool,
     pub opts: HlodOptions,
+    /// No multi-draw-indirect-count: a fixed-size list (`draw`).
+    pub fallback: bool,
 }
 
 pub struct HlodGpu {
@@ -286,6 +315,13 @@ pub struct HlodGpu {
     far_a: f32,
     /// The cull drops the district chunks the resident cells draw instead (off: tests).
     chunk_skip: AtomicBool,
+    /// Without multi-draw-indirect-count: the cull still appends its commands,
+    /// and the pass draws the first `live` slots (zeroed each frame) without a count.
+    fallback: bool,
+    /// Table entries the cull can keep (resident, with indices): no frame has more commands.
+    live: AtomicU32,
+    /// Which entries `live` counts.
+    live_set: Mutex<Vec<bool>>,
     device: wgpu::Device,
 }
 
@@ -319,7 +355,7 @@ impl HlodGpu {
         let index_buf = buf("hlod-indices", o.indices as u64 * 4, U::INDEX | U::COPY_DST);
         let cell_buf = buf("hlod-cells", MAX_CELLS as u64 * std::mem::size_of::<GpuCell>() as u64, U::STORAGE | U::COPY_DST);
         let params_buf = buf("hlod-cull-params", std::mem::size_of::<CullParams>() as u64, U::UNIFORM | U::COPY_DST);
-        let cmd_buf = buf("hlod-draws", MAX_CELLS as u64 * 20, U::STORAGE | U::INDIRECT);
+        let cmd_buf = buf("hlod-draws", MAX_CELLS as u64 * 20, if i.fallback { U::STORAGE | U::INDIRECT | U::COPY_DST } else { U::STORAGE | U::INDIRECT });
         let count_buf = buf("hlod-counts", 16, U::STORAGE | U::INDIRECT | U::COPY_SRC | U::COPY_DST);
         let layers = o.pages.max(1);
         let bc = d.features().contains(wgpu::Features::TEXTURE_COMPRESSION_BC);
@@ -374,6 +410,7 @@ impl HlodGpu {
             d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some(label), layout: Some(l), module: m, entry_point: Some("hlod_cull"), compilation_options: Default::default(), cache: None })
         };
         let cull_plain = compute(&pm, &lay_p, "hlod_cull");
+        DRAW_PATH.store(if i.fallback { 2 } else { 1 }, Ordering::Relaxed);
         let cull_hzb = compute(&hm, &lay_h, "hlod_cull (hzb)");
         // Draw: groups 0 and 1 the city's, group 2 the far layer's.
         let vs = wgpu::ShaderStages::VERTEX;
@@ -463,6 +500,9 @@ impl HlodGpu {
             bytes,
             far_a: o.far_band[0],
             chunk_skip: AtomicBool::new(true),
+            fallback: i.fallback,
+            live: AtomicU32::new(0),
+            live_set: Mutex::new(vec![false; MAX_CELLS as usize]),
             device: d.clone(),
         }
     }
@@ -479,6 +519,16 @@ impl HlodGpu {
 
     pub fn clear(&self, enc: &mut wgpu::CommandEncoder) {
         enc.clear_buffer(&self.count_buf, 0, None);
+        let live = self.live.load(Ordering::Relaxed) as u64;
+        if self.fallback && live > 0 {
+            // The slots the cull leaves empty draw nothing (index count 0).
+            enc.clear_buffer(&self.cmd_buf, 0, Some(live * 20));
+        }
+    }
+
+    /// Commands the fallback draws a frame (the entries the cull can keep).
+    pub fn live_entries(&self) -> u32 {
+        self.live.load(Ordering::Relaxed)
     }
 
     /// Whether the cull drops the district chunks the resident cells draw
@@ -509,6 +559,15 @@ impl HlodGpu {
         pass.set_bind_group(2, &self.draw_bg, &[]);
         pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
         pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint32);
+        if self.fallback {
+            // No count on the GPU: the cull's commands are compacted to the
+            // front of the list, and every slot up to `live` is drawn (the rest zeroed).
+            let live = self.live.load(Ordering::Relaxed);
+            if live > 0 {
+                pass.multi_draw_indexed_indirect(&self.cmd_buf, 0, live);
+            }
+            return;
+        }
         pass.multi_draw_indexed_indirect_count(&self.cmd_buf, 0, &self.count_buf, 0, MAX_CELLS);
     }
 
@@ -529,6 +588,19 @@ impl HlodGpu {
 
     pub fn write_entry(&self, queue: &wgpu::Queue, entry: u32, c: &GpuCell) {
         queue.write_buffer(&self.cell_buf, entry as u64 * std::mem::size_of::<GpuCell>() as u64, bytemuck::bytes_of(c));
+        // the cull keeps a resident entry with indices (hlod_cull.wgsl)
+        let keep = c.flags & ENTRY_RESIDENT != 0 && c.index_count > 0;
+        let mut set = self.live_set.lock().unwrap();
+        if let Some(was) = set.get_mut(entry as usize) {
+            if *was != keep {
+                *was = keep;
+                if keep {
+                    self.live.fetch_add(1, Ordering::Relaxed);
+                } else {
+                    self.live.fetch_sub(1, Ordering::Relaxed);
+                }
+            }
+        }
     }
 }
 

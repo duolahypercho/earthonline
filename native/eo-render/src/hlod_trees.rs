@@ -182,6 +182,8 @@ struct CullParams {
 
 pub const WGSL: &str = include_str!("hlod_trees.wgsl");
 pub const CULL_WGSL: &str = include_str!("hlod_trees_cull.wgsl");
+/// The cull without multi-draw-indirect-count (appended to `CULL_WGSL`).
+pub const LIST_WGSL: &str = include_str!("hlod_trees_list.wgsl");
 
 /// Instances the buffer holds (the city has about 155,000).
 pub const CAPACITY: u32 = 262_144;
@@ -200,6 +202,9 @@ pub struct FarTrees {
     cull_plain: wgpu::ComputePipeline,
     cull_hzb: wgpu::ComputePipeline,
     cull_bg: wgpu::BindGroup,
+    /// Without multi-draw-indirect-count: the cull that lists the kept trees,
+    /// and the one draw (6 vertices, the kept trees) it fills (`draw`).
+    list: Option<(wgpu::ComputePipeline, wgpu::Buffer)>,
     /// Trees and blocks drawn (set once the whole list is on the GPU).
     count: std::sync::atomic::AtomicU32,
     blocks: std::sync::atomic::AtomicU32,
@@ -216,6 +221,8 @@ pub struct FarTreesInit<'a> {
     pub late_bgl: &'a wgpu::BindGroupLayout,
     pub sample_count: u32,
     pub debug_ids: bool,
+    /// No multi-draw-indirect-count: one draw over a list the cull writes.
+    pub fallback: bool,
 }
 
 impl FarTrees {
@@ -234,36 +241,45 @@ impl FarTrees {
         let cmd_buf = buffer("hlod-far-tree-draws", MAX_BLOCKS as u64 * 16, U::STORAGE | U::INDIRECT);
         let count_buf = buffer("hlod-far-tree-counts", 16, U::STORAGE | U::INDIRECT | U::COPY_DST);
         let vf = wgpu::ShaderStages::VERTEX_FRAGMENT;
-        let bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("hlod-far-trees-bgl"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry { binding: 0, visibility: vf, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }, count: None },
-                wgpu::BindGroupLayoutEntry { binding: 1, visibility: vf, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }, count: None },
-            ],
+        // the fallback's list of kept trees (one index each) and its one draw
+        let list_buf = i.fallback.then(|| buffer("hlod-far-tree-list", CAPACITY as u64 * 4, U::STORAGE));
+        let draw_buf = i.fallback.then(|| {
+            use wgpu::util::DeviceExt;
+            d.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some("hlod-far-tree-draw"), contents: bytemuck::cast_slice(&[6u32, 0, 0, 0]), usage: U::STORAGE | U::INDIRECT | U::COPY_DST })
         });
-        let bg = d.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("hlod-far-trees-bg"),
-            layout: &bgl,
-            entries: &[wgpu::BindGroupEntry { binding: 0, resource: buf.as_entire_binding() }, wgpu::BindGroupEntry { binding: 1, resource: params.as_entire_binding() }],
-        });
+        let ro = wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None };
+        let mut draw_entries = vec![
+            wgpu::BindGroupLayoutEntry { binding: 0, visibility: vf, ty: ro, count: None },
+            wgpu::BindGroupLayoutEntry { binding: 1, visibility: vf, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }, count: None },
+        ];
+        if i.fallback {
+            draw_entries.push(wgpu::BindGroupLayoutEntry { binding: 2, visibility: wgpu::ShaderStages::VERTEX, ty: ro, count: None });
+        }
+        let bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("hlod-far-trees-bgl"), entries: &draw_entries });
+        let mut bg_entries = vec![wgpu::BindGroupEntry { binding: 0, resource: buf.as_entire_binding() }, wgpu::BindGroupEntry { binding: 1, resource: params.as_entire_binding() }];
+        if let Some(l) = &list_buf {
+            bg_entries.push(wgpu::BindGroupEntry { binding: 2, resource: l.as_entire_binding() });
+        }
+        let bg = d.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("hlod-far-trees-bg"), layout: &bgl, entries: &bg_entries });
         // Cull: group 0 its own, group 1 the pyramid (the hzb variant), as the far cells' (hlod.rs).
         let cs = wgpu::ShaderStages::COMPUTE;
         let entry = |binding, ty| wgpu::BindGroupLayoutEntry { binding, visibility: cs, ty: wgpu::BindingType::Buffer { ty, has_dynamic_offset: false, min_binding_size: None }, count: None };
         let st = |read_only| wgpu::BufferBindingType::Storage { read_only };
-        let cull_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("hlod-far-tree-cull-bgl"),
-            entries: &[entry(0, wgpu::BufferBindingType::Uniform), entry(1, st(true)), entry(2, st(false)), entry(3, st(false))],
-        });
-        let cull_bg = d.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("hlod-far-tree-cull-bg"),
-            layout: &cull_bgl,
-            entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: cull_params.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: block_buf.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 2, resource: cmd_buf.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 3, resource: count_buf.as_entire_binding() },
-            ],
-        });
+        let mut cull_entries = vec![entry(0, wgpu::BufferBindingType::Uniform), entry(1, st(true)), entry(2, st(false)), entry(3, st(false))];
+        if i.fallback {
+            cull_entries.extend([entry(4, st(false)), entry(5, st(false))]);
+        }
+        let cull_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("hlod-far-tree-cull-bgl"), entries: &cull_entries });
+        let mut cull_bind = vec![
+            wgpu::BindGroupEntry { binding: 0, resource: cull_params.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 1, resource: block_buf.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 2, resource: cmd_buf.as_entire_binding() },
+            wgpu::BindGroupEntry { binding: 3, resource: count_buf.as_entire_binding() },
+        ];
+        if let (Some(l), Some(dr)) = (&list_buf, &draw_buf) {
+            cull_bind.extend([wgpu::BindGroupEntry { binding: 4, resource: l.as_entire_binding() }, wgpu::BindGroupEntry { binding: 5, resource: dr.as_entire_binding() }]);
+        }
+        let cull_bg = d.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("hlod-far-tree-cull-bg"), layout: &cull_bgl, entries: &cull_bind });
         let plain_src = format!("{CULL_WGSL}\nfn tc_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return false; }}\n");
         let hzb_src = format!(
             "{CULL_WGSL}\nstruct HzbInfo {{ screen: vec4<f32> }};\n@group(1) @binding(0) var hzb: texture_2d<f32>;\n@group(1) @binding(1) var<uniform> hzb_info: HzbInfo;\n{}\nfn tc_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return hzb_occluded(mn, mx, tc.view_proj, hzb_info.screen.xy); }}\n",
@@ -278,7 +294,18 @@ impl FarTrees {
         };
         let cull_plain = compute(&pm, &lay_p, "hlod_tree_cull");
         let cull_hzb = compute(&hm, &lay_h, "hlod_tree_cull (hzb)");
-        let module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("hlod_trees.wgsl"), source: wgpu::ShaderSource::Wgsl(format!("{}\n{WGSL}", crate::look::city_shader_source()).into()) });
+        let list = draw_buf.map(|dr| {
+            let lm = cmod("hlod_trees_list.wgsl", format!("{CULL_WGSL}\n{LIST_WGSL}\nfn tc_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return false; }}\n"));
+            let p = d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some("hlod_tree_cull (list)"), layout: Some(&lay_p), module: &lm, entry_point: Some("tree_cull_list"), compilation_options: Default::default(), cache: None });
+            (p, dr)
+        });
+        // a tree's index: the instance's own, or (the fallback) the cull's list
+        let index_fn = if i.fallback {
+            "@group(2) @binding(2) var<storage, read> ft_list: array<u32>;\nfn ft_index(ii: u32) -> u32 { return ft_list[ii]; }\n"
+        } else {
+            "fn ft_index(ii: u32) -> u32 { return ii; }\n"
+        };
+        let module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("hlod_trees.wgsl"), source: wgpu::ShaderSource::Wgsl(format!("{}\n{WGSL}\n{index_fn}", crate::look::city_shader_source()).into()) });
         let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("hlod-far-trees-layout"), bind_group_layouts: &[Some(i.draw_bgl), Some(i.main_bgl), Some(&bgl)], immediate_size: 0 });
         let color = wgpu::ColorTargetState { format: crate::look::HDR_FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL };
         let ids = wgpu::ColorTargetState { format: crate::IDS_FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL };
@@ -306,7 +333,7 @@ impl FarTrees {
             multiview_mask: None,
             cache: None,
         });
-        let bytes = size + block_bytes + MAX_BLOCKS as u64 * 16 + 16 + 16 + std::mem::size_of::<CullParams>() as u64;
+        let bytes = size + block_bytes + MAX_BLOCKS as u64 * 16 + 16 + 16 + std::mem::size_of::<CullParams>() as u64 + if i.fallback { CAPACITY as u64 * 4 + 16 } else { 0 };
         Self {
             pipeline,
             bg,
@@ -319,6 +346,7 @@ impl FarTrees {
             cull_plain,
             cull_hzb,
             cull_bg,
+            list,
             count: std::sync::atomic::AtomicU32::new(0),
             blocks: std::sync::atomic::AtomicU32::new(0),
             pending: std::sync::Mutex::new(None),
@@ -384,6 +412,9 @@ impl FarTrees {
 
     pub fn clear(&self, enc: &mut wgpu::CommandEncoder) {
         enc.clear_buffer(&self.count_buf, 0, None);
+        if let Some((_, dr)) = &self.list {
+            enc.clear_buffer(dr, 4, Some(4)); // the kept trees; the vertex count stays 6
+        }
     }
 
     /// Frustum, near-distance and (after the pyramid) occlusion test of every block.
@@ -392,13 +423,18 @@ impl FarTrees {
         if n == 0 {
             return;
         }
-        match hzb {
-            Some(h) => {
+        match (hzb, &self.list) {
+            // without the count there is no occlusion pass either (lib.rs)
+            (_, Some((p, _))) => {
+                pass.set_pipeline(p);
+                pass.set_bind_group(0, &self.cull_bg, &[]);
+            }
+            (Some(h), None) => {
                 pass.set_pipeline(&self.cull_hzb);
                 pass.set_bind_group(0, &self.cull_bg, &[]);
                 pass.set_bind_group(1, h, &[]);
             }
-            None => {
+            (None, None) => {
                 pass.set_pipeline(&self.cull_plain);
                 pass.set_bind_group(0, &self.cull_bg, &[]);
             }
@@ -414,6 +450,10 @@ impl FarTrees {
         }
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(2, &self.bg, &[]);
+        if let Some((_, dr)) = &self.list {
+            pass.draw_indirect(dr, 0); // the kept trees as one draw
+            return;
+        }
         pass.multi_draw_indirect_count(&self.cmd_buf, 0, &self.count_buf, 0, n);
     }
 }

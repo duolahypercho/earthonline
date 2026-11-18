@@ -44,7 +44,7 @@ fn far_tree_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32)
     if (ft.range.z < 0.5) {
         return out;
     }
-    let t = ft_trees[ii];
+    let t = ft_trees[ft_index(ii)];
     let rel = t.pos - frame.cam_pos.xyz;
     let d = length(rel.xz);
     if (d < ft.range.x || dot(rel, look.cam_fwd.xyz) < 0.0) {
