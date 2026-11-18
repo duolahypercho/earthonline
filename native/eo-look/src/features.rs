@@ -17,16 +17,11 @@ pub struct DaylightFeatures {
     pub clear_sky_state: bool,
     /// A cirrus day's high deck is fibrous ice cloud at cirrus height. `--no-cirrus`.
     pub cirrus: bool,
-    /// The sun's shadow lookup offsets the receiver along its normal by the
-    /// slope (look_light.wgsl `lk_shadow`). `--no-terminator-bias`.
-    pub terminator_bias: bool,
-    /// Reserved: the spectral sky tables. `--no-spectral-sky`.
-    pub spectral_sky: bool,
 }
 
 impl DaylightFeatures {
-    pub const ALL: Self = Self { ground_albedo: true, photo_date: true, clear_sky_state: true, cirrus: true, terminator_bias: true, spectral_sky: true };
-    pub const NONE: Self = Self { ground_albedo: false, photo_date: false, clear_sky_state: false, cirrus: false, terminator_bias: false, spectral_sky: false };
+    pub const ALL: Self = Self { ground_albedo: true, photo_date: true, clear_sky_state: true, cirrus: true };
+    pub const NONE: Self = Self { ground_albedo: false, photo_date: false, clear_sky_state: false, cirrus: false };
 
     pub fn from_args(args: &[String]) -> Self {
         let has = |s: &str| args.iter().any(|a| a == s);
@@ -38,8 +33,6 @@ impl DaylightFeatures {
             photo_date: !has("--no-photo-date"),
             clear_sky_state: !has("--no-clear-sky-state"),
             cirrus: !has("--no-cirrus"),
-            terminator_bias: !has("--no-terminator-bias"),
-            spectral_sky: !has("--no-spectral-sky"),
         }
     }
 }
@@ -58,7 +51,7 @@ pub fn pin_daylight(f: DaylightFeatures) -> bool {
 }
 
 /// The switches `daylight` reads (eo-app accepts them).
-pub const SWITCHES: &[&str] = &["--no-gg2-daylight", "--no-ground-albedo", "--no-photo-date", "--no-clear-sky-state", "--no-cirrus", "--no-terminator-bias", "--no-spectral-sky"];
+pub const SWITCHES: &[&str] = &["--no-gg2-daylight", "--no-ground-albedo", "--no-photo-date", "--no-clear-sky-state", "--no-cirrus"];
 
 #[cfg(test)]
 mod tests {
