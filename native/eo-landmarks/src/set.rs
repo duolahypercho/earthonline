@@ -385,8 +385,9 @@ impl LandmarkSet {
             let mut skyline = sky.map(|h| h.join().expect("skyline build thread panicked"));
             if let Some(g) = grove.map(|h| h.join().expect("grove build thread panicked")) {
                 skyline = Some(match (skyline, g) {
-                    (Some(Ok((mut a, b))), Ok((ga, _))) => {
+                    (Some(Ok((mut a, mut b))), Ok((ga, gl))) => {
                         a.extend(ga);
+                        b.extend(gl); // the groves' lights (grove.rs `loop_lamps`, the fourth pass)
                         Ok((a, b))
                     }
                     (None, g) => g,

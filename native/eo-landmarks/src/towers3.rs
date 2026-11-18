@@ -13,6 +13,15 @@
 //! | Sutro Tower | the legs' panels split at the paint bands' edges, so each band is one block of orange or white from chord to lacing; the masts' top posts thinner | the export's 11 alternating bands of international orange and white over the height (landmarks-js.json sutro-tower `bands`; FAA AC 70/7460-1M, aviation orange and white bands); post width 0.7 m INFERRED (the export's 1.8 m read as a thick red stick) |
 //!
 //! Every new group's material is the generator's own (`Out::materials`).
+//!
+//! The fourth pass (`crate::towers4_on`; `eo-app --no-towers4` builds the
+//! third, the previous output) over it:
+//!
+//! | Building | What changes | Source |
+//! | --- | --- | --- |
+//! | Salesforce Tower | the crown as its parts: fins a module round it 0.61 m proud and a sunshade ring each storey (pearl painted aluminium), the perforated panels behind them to 0.82 of the crown (Day for Night's walkers through them at night, eo-render `lm_led4`), open lattice and a dark well over them | Wikipedia, Salesforce Tower (fins and sunshades up to two feet beyond the glass; the sculpture's 11,000 LEDs on the top six floors); KQED, 2018 (the LEDs light the building, seen through perforated aluminium panels); Pelli Clarke Pelli ('a transparent crown that appears to dissolve into the sky'); fin thickness and the panels' top INFERRED |
+//! | Transamerica Pyramid | the spire coated aluminium (metalness 0.6, roughness 0.35) of aluminium's F0 weathered | Wikipedia ('the aluminum cap'); Real-Time Rendering 4th ed., table 9.2 (aluminium F0) |
+//! | City Hall | the gilding gold leaf (metal of gold's F0, roughness 0.38); the drum's floods aimed at the colonnade's middle at 0.42 of the bright aim, so the drum's cornice no longer clips | Wikipedia, San Francisco City Hall (gilded dome trim); Real-Time Rendering 4th ed., table 9.2 (gold F0); the floods' aim INFERRED |
 
 use crate::data::{LandmarksJs, Material};
 use crate::geometry::{ALL, GroundGrid, MeshArrays, Rgb, V3, pairs, ring_centroid};
@@ -199,10 +208,40 @@ fn anchor_of(js: &LandmarksJs, id: &str) -> [f64; 2] {
     [a["x"].as_f64().unwrap_or(0.0), a["z"].as_f64().unwrap_or(0.0)]
 }
 
-/// Every rig, in the WGSL table's order.
+/// Every rig, in the WGSL table's order (City Hall's drum floods as the
+/// switches set the pass: `crate::towers4_on`).
 pub fn rigs() -> Vec<(&'static str, Vec<Projector>)> {
     let js = LandmarksJs::get();
-    vec![("coit-tower", coit_rig(js)), ("city-hall", city_hall_rig(js)), ("transamerica-spire", transamerica_rig(js))]
+    let mut ch = city_hall_rig(js);
+    if crate::towers4_on() {
+        drum4(js, &mut ch);
+    }
+    vec![("coit-tower", coit_rig(js)), ("city-hall", ch), ("transamerica-spire", transamerica_rig(js))]
+}
+
+/// v4: City Hall's eight drum floods aimed at the colonnade's middle (the
+/// drum's top less `DRUM4_AIM_DOWN_M`) at `DRUM4_LUX_SHARE` of the bright aim
+/// in place of 0.6 aimed 4 m under the drum's top: there, with the dome
+/// shell's eight floods' fringe, the cornice band took two beams' cores and
+/// clipped (INFERRED: the colonnade lit, the cornice in the beams' fall-off).
+pub const DRUM4_AIM_DOWN_M: f64 = 11.0;
+pub const DRUM4_LUX_SHARE: f64 = 0.42;
+
+fn drum4(js: &LandmarksJs, rig: &mut [Projector]) {
+    let site = &js.buildings["city-hall"];
+    let d = &site["dimensions"];
+    let fr = &site["frame"];
+    let anchor = anchor_of(js, "city-hall");
+    let (cx, cz) = (n(fr, "cx") - anchor[0], n(fr, "cz") - anchor[1]);
+    let (drum_r, drum_top) = (n(d, "drumRadiusM"), n(d, "drumTopM"));
+    // the drum's floods follow the facades' (the facade rows are 11 m apart along each side).
+    let first = rig.iter().position(|p| (p.at[0] - cx).hypot(p.at[2] - cz) > drum_r + 8.5 && (p.at[0] - cx).hypot(p.at[2] - cz) < drum_r + 9.5);
+    let Some(first) = first else { return };
+    for p in rig.iter_mut().skip(first).take(8) {
+        let (dx, dz) = ((p.at[0] - cx) / (drum_r + 9.0), (p.at[2] - cz) / (drum_r + 9.0));
+        let target = [cx + dx * drum_r, drum_top - DRUM4_AIM_DOWN_M, cz + dz * drum_r];
+        *p = aimed(p.at, target, [dx, 0.0, dz], AIM_LUX_BRIGHT * DRUM4_LUX_SHARE, 18.0, 36.0, 0.03);
+    }
 }
 
 /// The projectors as three rows each of the WGSL table (eo-render
@@ -707,8 +746,24 @@ pub fn sutro(site: &Value, g: &GroundGrid) -> Out {
     }
 }
 
-/// The third pass of a registered landmark building, by id.
+/// The third pass of a registered landmark building, by id, with the
+/// fourth over it when the switches leave it on (`crate::towers4_on`).
 pub fn build(id: &str, site: &Value, g: &GroundGrid) -> Option<Out> {
+    build_v(id, site, g, crate::towers4_on())
+}
+
+/// `build` with the fourth pass on or off (`v4`; off: the third pass alone).
+pub fn build_v(id: &str, site: &Value, g: &GroundGrid, v4: bool) -> Option<Out> {
+    if v4 {
+        return Some(match id {
+            "transamerica-pyramid" => transamerica4(site, g),
+            "salesforce-tower" => salesforce4(site, g),
+            "city-hall" => city_hall4(site, g),
+            "coit-tower" => coit(site, g),
+            "sutro-tower" => sutro(site, g),
+            _ => return None,
+        });
+    }
     Some(match id {
         "transamerica-pyramid" => transamerica(site, g),
         "salesforce-tower" => salesforce(site, g),
@@ -717,4 +772,240 @@ pub fn build(id: &str, site: &Value, g: &GroundGrid) -> Option<Out> {
         "city-hall" => city_hall(site, g),
         _ => return None,
     })
+}
+
+// ---- the fourth pass (`crate::towers4_on`; `eo-app --no-towers4` builds the third) ----
+
+/// The spire's aluminium cladding: coated aluminium as the skyline towers'
+/// (skyline.rs METAL4_*: metalness 0.6, roughness 0.35) of aluminium's
+/// reflectance, F0 linear (0.913, 0.922, 0.924) (Real-Time Rendering, 4th
+/// ed., table 9.2), weathered to 0.85 of it, in place of the precast-grey 0.85 metal.
+pub const ALUMINIUM_F0: [f64; 3] = [0.913, 0.922, 0.924];
+pub const SPIRE4_WEATHER: f64 = 0.85;
+pub const SPIRE4_ROUGHNESS: f64 = crate::skyline::METAL4_ROUGHNESS;
+pub const SPIRE4_METALNESS: f64 = crate::skyline::METAL4_METALNESS;
+
+pub fn transamerica4(site: &Value, g: &GroundGrid) -> Out {
+    let mut o = transamerica(site, g);
+    // the spire's vertex colour (the export's metalSrgb) to aluminium's F0.
+    if let Some((_, f)) = o.groups.iter_mut().find(|(k, _)| k == "metal") {
+        for c in f.colors.chunks_exact_mut(3) {
+            for k in 0..3 {
+                c[k] = (ALUMINIUM_F0[k] * SPIRE4_WEATHER) as f32;
+            }
+        }
+    }
+    if let Some((_, m)) = o.materials.iter_mut().find(|(k, _)| k == "metal") {
+        m.roughness = SPIRE4_ROUGHNESS;
+        m.metalness = SPIRE4_METALNESS;
+        m.env_class = "facade-metal".into();
+    }
+    o.version = o.version.replace("+towers3", "+towers4");
+    o
+}
+
+/// Salesforce's crown as its parts: the shaft's fins carried up the crown
+/// (pearl painted aluminium, 2 ft (0.61 m) proud: Wikipedia, 'white aluminum
+/// fins and perforated sunshades, which reach up to two feet beyond the glass
+/// skin'), one a facade module (5 ft, 1.524 m, skyline-buildings.json
+/// salesforce-curtain) round the crown, `CROWN_FIN_THICK_M` thick, and its
+/// sunshades a ring each storey (4.557 m); behind them the perforated
+/// aluminium panels (Wikipedia: Day for Night's LEDs on the top six floors;
+/// KQED, 2018: over a hundred perforated aluminium panels, the LEDs' light
+/// reflected out through them) up to `CROWN_SCREEN_TOP` of the crown, the
+/// facade style salesforce-screen (their open share over the dark
+/// structure; the sculpture at night); over it the fins and rings alone,
+/// open to the sky (Pelli Clarke Pelli: 'a transparent crown that appears
+/// to dissolve into the sky'), round a dark well. Thickness and the screen's
+/// top INFERRED.
+pub const CROWN_FIN_DEPTH_M: f64 = 0.61;
+pub const CROWN_FIN_THICK_M: f64 = 0.12;
+pub const CROWN_SCREEN_TOP: f64 = 0.82;
+pub const CROWN_SHADE_THICK_M: f64 = 0.15;
+/// The structure seen inside the crown and its well: a dark painted steel grey (sRGB #33383d, INFERRED).
+pub const CROWN_WELL_SRGB: u32 = 0x33383d;
+
+/// A point of a closed ring at `t` of its perimeter (by length) and the ring's outward normal there.
+fn ring_at(ring: &[[f64; 2]], c: [f64; 2], t: f64) -> ([f64; 2], [f64; 2]) {
+    let n = ring.len();
+    let lens: Vec<f64> = (0..n).map(|i| {
+        let (a, b) = (ring[i], ring[(i + 1) % n]);
+        (b[0] - a[0]).hypot(b[1] - a[1])
+    }).collect();
+    let total: f64 = lens.iter().sum();
+    let mut s = t.rem_euclid(1.0) * total;
+    for i in 0..n {
+        if s <= lens[i] || i == n - 1 {
+            let (a, b) = (ring[i], ring[(i + 1) % n]);
+            let f = (s / lens[i].max(1e-9)).clamp(0.0, 1.0);
+            let p = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+            let tg = [(b[0] - a[0]) / lens[i].max(1e-9), (b[1] - a[1]) / lens[i].max(1e-9)];
+            let mut nn = [-tg[1], tg[0]];
+            if (p[0] - c[0]) * nn[0] + (p[1] - c[1]) * nn[1] < 0.0 {
+                nn = [-nn[0], -nn[1]];
+            }
+            return (p, nn);
+        }
+        s -= lens[i];
+    }
+    (ring[0], [1.0, 0.0])
+}
+
+fn ring_length(ring: &[[f64; 2]]) -> f64 {
+    let n = ring.len();
+    (0..n).map(|i| (ring[(i + 1) % n][0] - ring[i][0]).hypot(ring[(i + 1) % n][1] - ring[i][1])).sum()
+}
+
+/// A ring pushed out by `d` along each vertex's outward normal (the mean of its edges').
+fn offset_ring(ring: &[[f64; 2]], c: [f64; 2], d: f64) -> Vec<[f64; 2]> {
+    let n = ring.len();
+    (0..n)
+        .map(|i| {
+            let (p, a, b) = (ring[i], ring[(i + n - 1) % n], ring[(i + 1) % n]);
+            let mut nn = [-(b[1] - a[1]), b[0] - a[0]];
+            let l = nn[0].hypot(nn[1]).max(1e-9);
+            nn = [nn[0] / l, nn[1] / l];
+            if (p[0] - c[0]) * nn[0] + (p[1] - c[1]) * nn[1] < 0.0 {
+                nn = [-nn[0], -nn[1]];
+            }
+            [p[0] + nn[0] * d, p[1] + nn[1] * d]
+        })
+        .collect()
+}
+
+pub fn salesforce4(site: &Value, g: &GroundGrid) -> Out {
+    use crate::geometry::{scale_ring, srgb_hex};
+    let mut o = salesforce(site, g);
+    let d = &site["dimensions"];
+    let fin_c = srgb_hex(crate::towers2::SALESFORCE_PEARL_SRGB);
+    let well_c = srgb_hex(CROWN_WELL_SRGB);
+    let crown_c = hex(d, "crownSrgb");
+    let ring = pairs(&flat(&site["record"]["points"]));
+    let c = ring_centroid(&ring);
+    let base = base_y(&ring, g);
+    let (h_total, top_floor) = (n(d, "heightM"), n(d, "topFloorM"));
+    let (k_tf, k_top) = (n(d, "scaleAtTopFloor"), n(d, "scaleAtTop"));
+    let crown_h = h_total - top_floor;
+    let p = crate::towers2::SALESFORCE_CROWN_P;
+    let scale_at = |y: f64| {
+        let t = ((y - top_floor) / crown_h).clamp(0.0, 1.0);
+        k_top + (k_tf - k_top) * (1.0 - t.powf(p)).max(0.0).powf(1.0 / p)
+    };
+    let at = |y: f64| scale_ring(&ring, c[0], c[1], scale_at(y));
+    let bands = 18;
+    let ty = |i: usize| top_floor + crown_h * ((i as f64 / bands as f64) * std::f64::consts::FRAC_PI_2).sin();
+    let mut fins = MeshArrays::new("salesforce:crown");
+    let mut screen = MeshArrays::new("salesforce:screen");
+    // the fins: one a module round the top floor's perimeter, following the crown's profile.
+    let module = crate::skyline::data().facades.get("salesforce-curtain").map(|f| f.module_m).unwrap_or(1.524);
+    let nf = (ring_length(&at(top_floor)) / module).round().max(8.0) as usize;
+    for f in 0..nf {
+        let t = (f as f64 + 0.5) / nf as f64;
+        for i in 0..bands {
+            let (y0, y1) = (ty(i), ty(i + 1));
+            let (p0, n0) = ring_at(&at(y0), c, t);
+            let (p1, n1) = ring_at(&at(y1), c, t);
+            let side = |nn: [f64; 2], k: f64| [-nn[1] * k, nn[0] * k];
+            let hw = CROWN_FIN_THICK_M / 2.0;
+            let corner = |pp: [f64; 2], nn: [f64; 2], out: f64, s: f64, y: f64| -> V3 {
+                let sd = side(nn, s * hw);
+                [pp[0] + nn[0] * out + sd[0], base + y, pp[1] + nn[1] * out + sd[1]]
+            };
+            let (r0, r1) = (-0.05, CROWN_FIN_DEPTH_M);
+            // the two cheeks and the outer edge.
+            for (s, (oa, ob)) in [(1.0, (r0, r1)), (-1.0, (r1, r0))] {
+                fins.quad(corner(p0, n0, oa, s, y0), corner(p0, n0, ob, s, y0), corner(p1, n1, ob, s, y1), corner(p1, n1, oa, s, y1), fin_c);
+            }
+            fins.quad(corner(p0, n0, r1, 1.0, y0), corner(p0, n0, r1, -1.0, y0), corner(p1, n1, r1, -1.0, y1), corner(p1, n1, r1, 1.0, y1), fin_c);
+            if i + 1 == bands {
+                fins.quad(corner(p1, n1, r0, 1.0, y1), corner(p1, n1, r1, 1.0, y1), corner(p1, n1, r1, -1.0, y1), corner(p1, n1, r0, -1.0, y1), fin_c);
+            }
+        }
+    }
+    // the sunshades: a ring each storey, from the panels out to the fins' edge.
+    let storey = crate::skyline::data().facades.get("salesforce-curtain").map(|f| f.storey_m).unwrap_or(4.557);
+    let mut y = top_floor + storey;
+    while y < h_total - 1.0 {
+        let inner = at(y);
+        let outer = offset_ring(&inner, c, CROWN_FIN_DEPTH_M);
+        let nr = inner.len();
+        let (ya, yb) = (base + y - CROWN_SHADE_THICK_M / 2.0, base + y + CROWN_SHADE_THICK_M / 2.0);
+        for k in 0..nr {
+            let j = (k + 1) % nr;
+            let (ia, ib, oa, ob) = (inner[k], inner[j], outer[k], outer[j]);
+            // top, outer edge, underside (each wound to face out).
+            let q = |a: [f64; 2], b: [f64; 2], yy: f64| -> (V3, V3) { ([a[0], yy, a[1]], [b[0], yy, b[1]]) };
+            let (t0, t1) = q(ia, ib, yb);
+            let (t3, t2) = q(oa, ob, yb);
+            let mut add = |a: V3, b: V3, cc: V3, dd: V3, want: [f64; 3]| {
+                let nn = cross3(sub3(b, a), sub3(dd, a));
+                if dot3(nn, want) >= 0.0 {
+                    fins.quad(a, b, cc, dd, fin_c);
+                } else {
+                    fins.quad(dd, cc, b, a, fin_c);
+                }
+            };
+            add(t0, t1, t2, t3, [0.0, 1.0, 0.0]);
+            let (b0, b1) = q(ia, ib, ya);
+            let (b3, b2) = q(oa, ob, ya);
+            add(b0, b3, b2, b1, [0.0, -1.0, 0.0]);
+            let mid = [(oa[0] + ob[0]) / 2.0 - c[0], 0.0, (oa[1] + ob[1]) / 2.0 - c[1]];
+            add([oa[0], ya, oa[1]], [ob[0], ya, ob[1]], [ob[0], yb, ob[1]], [oa[0], yb, oa[1]], mid);
+        }
+        y += storey;
+    }
+    // the perforated panels, a hair inside the fins' roots, up to the screen's top.
+    let screen_top = top_floor + CROWN_SCREEN_TOP * crown_h;
+    for i in 0..bands {
+        let (y0, y1) = (ty(i), ty(i + 1).min(screen_top));
+        if y0 >= screen_top {
+            break;
+        }
+        screen.loft(&scale_ring(&at(y0), c[0], c[1], 0.997), base + y0, &scale_ring(&at(y1), c[0], c[1], 0.997), base + y1, fin_c, false);
+    }
+    // the structure inside, seen over the panels' top: a dark floor at their top, the lip and the well as towers2.
+    crate::skyline::cap(&mut screen, &scale_ring(&at(screen_top), c[0], c[1], 0.99), base + screen_top, well_c);
+    let top = at(h_total);
+    fins.loft(&top, base + h_total, &scale_ring(&top, c[0], c[1], 0.9), base + h_total, crown_c, false);
+    o.groups.retain(|(k, _)| k != "crown");
+    o.groups.push(("crown".into(), fins.freeze()));
+    o.groups.push(("screen".into(), screen.freeze()));
+    o.materials.retain(|(k, _)| k != "crown");
+    o.materials.push(("crown".into(), crate::skyline::plain_material(SALESFORCE_FIN_ROUGHNESS, 0.0, "facade-masonry", None)));
+    o.materials.push(("screen".into(), with_origin(facade_material("salesforce-screen", 0.4, 0.0, None), base + top_floor)));
+    o.version = o.version.replace("+towers3", "+towers4");
+    o.stats["crownFins"] = serde_json::json!(nf);
+    o
+}
+
+/// City Hall's gilding: gold leaf a metal (metalness 1) of gold's
+/// reflectance, F0 linear (1.000, 0.766, 0.336) (Real-Time Rendering, 4th
+/// ed., table 9.2), weathered to 0.9 of it, at roughness 0.38 (leaf laid over
+/// a ground's texture, INFERRED) in place of the export's 0.5 and metalness
+/// 0.8, so the ribs and the lantern catch the sun;
+/// the lead-grey cladding between them keeps its roughness (0.55).
+/// San Francisco City Hall's dome trim is gilded (Wikipedia, San Francisco
+/// City Hall: re-gilded in the 1999 restoration).
+pub const GOLD_F0: [f64; 3] = [1.0, 0.766, 0.336];
+pub const GILT4_WEATHER: f64 = 0.9;
+pub const GILT4_ROUGHNESS: f64 = 0.38;
+
+pub fn city_hall4(site: &Value, g: &GroundGrid) -> Out {
+    let mut o = city_hall(site, g);
+    let gold = crate::geometry::srgb_hex(n(&site["dimensions"], "goldSrgb") as u32);
+    if let Some((_, f)) = o.groups.iter_mut().find(|(k, _)| k == "dome") {
+        for c in f.colors.chunks_exact_mut(3) {
+            // the gilt by its vertex colour (the export's goldSrgb); the cladding stays.
+            let warm = (c[0] as f64 - c[2] as f64) / (c[0] as f64).max(1e-3);
+            let gw = (gold[0] - gold[2]) / gold[0].max(1e-3);
+            if warm > 0.6 * gw {
+                for k in 0..3 {
+                    c[k] = (GOLD_F0[k] * GILT4_WEATHER) as f32;
+                }
+            }
+        }
+    }
+    // (the gilt's metalness and roughness: eo-render landmarks_surface.wgsl `LM_GILT4_*`.)
+    o.version = format!("{}+towers4", o.version);
+    o
 }

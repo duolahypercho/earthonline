@@ -103,10 +103,10 @@ fn the_second_generators_build_the_five() {
             _ => assert!(v2.materials.iter().any(|(_, m)| m.surface_options.as_ref().is_some_and(|o| o["flood"].is_array())), "{id}: floodlit"),
         }
     }
-    // Salesforce: the crown's half-widths, bottom to top.
+    // Salesforce: the crown's half-widths, bottom to top (the third pass's lofted crown; the fourth's fins below).
     let id = "salesforce-tower";
     let ground = js.registry[id].ground.sampled(&|x, z| g.sample(x, z));
-    let o = eo_landmarks::towers2::build(id, &js.buildings[id], &ground).unwrap();
+    let o = eo_landmarks::towers3::build_v(id, &js.buildings[id], &ground, false).unwrap();
     let crown = &o.groups.iter().find(|(k, _)| k == "crown").unwrap().1;
     let flat: Vec<f64> = js.buildings[id]["record"]["points"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect();
     let c = eo_landmarks::geometry::ring_centroid(&eo_landmarks::geometry::pairs(&flat));
@@ -127,6 +127,22 @@ fn the_second_generators_build_the_five() {
     assert!(shrink.iter().take(shrink.len() - 3).all(|d| *d > -1e-3), "the crown narrows upward");
     let n = shrink.len();
     assert!(shrink[n / 2 - 1] < shrink[n - 5], "the crown rounds in toward its top");
+    // the fourth pass: its fins stand their depth proud of that crown at every height, its panels stop under the top.
+    let o4 = eo_landmarks::towers3::build_v(id, &js.buildings[id], &ground, true).unwrap();
+    assert!(o4.version.ends_with("+towers4"));
+    let fins = &o4.groups.iter().find(|(k, _)| k == "crown").unwrap().1;
+    let screen = &o4.groups.iter().find(|(k, _)| k == "screen").unwrap().1;
+    let base = o4.stats["baseY"].as_f64().unwrap();
+    let (top_floor, h) = (js.buildings[id]["dimensions"]["topFloorM"].as_f64().unwrap(), js.buildings[id]["dimensions"]["heightM"].as_f64().unwrap());
+    let r_max = |m: &eo_landmarks::Frozen, y0: f64, y1: f64| m.positions.chunks_exact(3).filter(|p| (p[1] as f64) >= y0 && (p[1] as f64) <= y1).map(|p| (p[0] as f64 - c[0]).hypot(p[2] as f64 - c[1])).fold(0.0, f64::max);
+    for f in [0.1, 0.4, 0.7] {
+        let y = base + top_floor + f * (h - top_floor);
+        let (a, b) = (r_max(crown, y - 1.5, y + 1.5), r_max(fins, y - 1.5, y + 1.5));
+        assert!(b > a + 0.3 && b < a + eo_landmarks::towers3::CROWN_FIN_DEPTH_M + 0.6, "fins {b} beside the crown {a} at {f}");
+    }
+    let screen_top = screen.positions.chunks_exact(3).map(|p| p[1] as f64).fold(f64::MIN, f64::max);
+    assert!((screen_top - (base + top_floor + eo_landmarks::towers3::CROWN_SCREEN_TOP * (h - top_floor))).abs() < 0.5, "the panels stop under the top");
+    assert!(o4.stats["crownFins"].as_u64().unwrap() > 80, "a fin a module round the crown");
 }
 
 /// The towers' aviation lights stand beside the bridges' (`tower_lights`):
@@ -140,13 +156,17 @@ fn the_towers_carry_their_aviation_lights() {
     let on = eo_landmarks::set::Options { towers2: true, skyline: true, ..eo_landmarks::set::Options::default() };
     let set = eo_landmarks::LandmarkSet::build_with(&paths.repo_root, &|x, z| elevation.sample(x, z), &ca, on).unwrap();
     let sky = skyline::data().buildings.iter().filter(|b| b.aviation).count();
-    assert_eq!(set.tower_lights.len(), sky + 1 + 1 + 6);
-    for l in &set.tower_lights {
+    // the aviation lights by their red (the fourth pass adds the grove's white loop lamps round Coit Tower).
+    let (red, white): (Vec<&eo_landmarks::LandmarkLight>, Vec<&eo_landmarks::LandmarkLight>) = set.tower_lights.iter().partition(|l| l.colour_linear[1] < 0.3 * l.colour_linear[0]);
+    assert_eq!(red.len(), sky + 1 + 1 + 6);
+    for l in &red {
         assert!(l.pos[1] > 100.0, "an aviation light on a tower top, not at {}", l.pos[1]);
     }
+    assert_eq!(white.is_empty(), !eo_landmarks::towers4_on(), "{} loop lamps", white.len());
     let off = eo_landmarks::set::Options { towers2: false, skyline: false, ..eo_landmarks::set::Options::default() };
     let set = eo_landmarks::LandmarkSet::build_with(&paths.repo_root, &|x, z| elevation.sample(x, z), &ca, off).unwrap();
-    assert!(set.tower_lights.is_empty());
+    // no aviation light (the groves are their own switch: their loop lamps may stay).
+    assert!(set.tower_lights.iter().all(|l| l.colour_linear[1] >= 0.3 * l.colour_linear[0]));
 }
 
 /// The third pass (towers3.rs, `eo-app --no-towers3` off) builds the five

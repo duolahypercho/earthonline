@@ -57,6 +57,29 @@ pub struct FacadeStyle {
     pub bay_modules: f64,
     #[serde(default)]
     pub window_cd: f64,
+    /// v4: the spandrel band's tone (between one floor's vision glass and
+    /// the next, under the glass columns) as a share of the frame's (1: the
+    /// frame's own), so a curtain wall's floor lines read apart from its fins.
+    #[serde(default = "one")]
+    pub spandrel_tone: f64,
+    /// v4: 1 when the frame's depth shades the glass and the frame's own
+    /// reveals from the sun (the fins', sunshades' and reveals' shadow lines).
+    #[serde(default)]
+    pub reveal_shadow: f64,
+    /// v4: the share of each frame pier that is polished (its centre), its
+    /// roughness, and the rest's (honed or flamed) tone over the frame's and roughness.
+    #[serde(default)]
+    pub polish_share: f64,
+    #[serde(default)]
+    pub polish_roughness: f64,
+    #[serde(default = "one")]
+    pub honed_tone: f64,
+    #[serde(default)]
+    pub honed_roughness: f64,
+}
+
+fn one() -> f64 {
+    1.0
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -99,11 +122,12 @@ pub struct Skyline {
     pub night: Option<Value>,
 }
 
-/// Each facade style's and building's `v3` object laid over its own keys
-/// (the third pass's values; the previous ones stay for `--no-towers3`).
-fn overlay_v3(v: &mut Value) {
+/// Each facade style's and building's `pass` object (`v3`, `v4`) laid over
+/// its own keys (that pass's values; the earlier ones stay for the switches
+/// that restore them), and the pass's night (`v3Night`, `v4Night`).
+fn overlay(v: &mut Value, pass: &str) {
     let lay = |o: &mut Value| {
-        if let Some(Value::Object(over)) = o.get("v3").cloned() {
+        if let Some(Value::Object(over)) = o.get(pass).cloned() {
             for (k, x) in over {
                 if k != "source" {
                     o[k.as_str()] = x;
@@ -121,28 +145,36 @@ fn overlay_v3(v: &mut Value) {
             lay(e);
         }
     }
-    if let Some(n) = v.get("v3Night").cloned() {
+    if let Some(n) = v.get(format!("{pass}Night").as_str()).cloned() {
         v["night"] = n;
     }
 }
 
-/// The parsed table (compiled in), with the third pass's values when `v3`.
-pub fn data_for(v3: bool) -> &'static Skyline {
-    static D2: OnceLock<Skyline> = OnceLock::new();
-    static D3: OnceLock<Skyline> = OnceLock::new();
-    let parse = |v3: bool| {
+/// The parsed table (compiled in) at a pass: 2 (as written), 3 (`v3` over
+/// it) or 4 (`v4` over that).
+pub fn data_at(level: u8) -> &'static Skyline {
+    static D: [OnceLock<Skyline>; 3] = [OnceLock::new(), OnceLock::new(), OnceLock::new()];
+    let level = level.clamp(2, 4);
+    D[(level - 2) as usize].get_or_init(|| {
         let mut v: Value = serde_json::from_str(SKYLINE_JSON).expect("eo-landmarks: data/skyline-buildings.json does not parse");
-        if v3 {
-            overlay_v3(&mut v);
+        if level >= 3 {
+            overlay(&mut v, "v3");
+        }
+        if level >= 4 {
+            overlay(&mut v, "v4");
         }
         serde_json::from_value::<Skyline>(v).expect("eo-landmarks: data/skyline-buildings.json does not parse")
-    };
-    if v3 { D3.get_or_init(|| parse(true)) } else { D2.get_or_init(|| parse(false)) }
+    })
 }
 
-/// The table as the switches set it (`crate::towers3_on`).
+/// The parsed table with the third pass's values when `v3` (no fourth).
+pub fn data_for(v3: bool) -> &'static Skyline {
+    data_at(if v3 { 3 } else { 2 })
+}
+
+/// The table as the switches set it (`crate::towers_level`).
 pub fn data() -> &'static Skyline {
-    data_for(crate::towers3_on())
+    data_at(crate::towers_level())
 }
 
 /// The index of a facade style in the generated WGSL table (`LM_FACADES`, in the table's key order).
@@ -166,15 +198,22 @@ pub fn pane_albedo_metal(r: f64, d: f64) -> (f64, f64) {
     (d / x, 1.0 - x)
 }
 
-/// Each facade style as four rows of the WGSL table: (module, storey,
+/// Rows of the WGSL table a style (`LM_FACADE_ROWS`).
+pub const FACADE_ROWS: usize = 6;
+
+/// Each facade style as six rows of the WGSL table: (module, storey,
 /// glaze x, glaze y), (glass linear rgb, glass roughness), (pattern code,
 /// night lit share, led, frame depth), (v3: the pane's metalness, its tilt
-/// in radians, the night bay in modules, a lit window's cd/m2). Pattern 0 a
-/// window grid, 1 an open screen. With a `reflectance` the glass row is the
-/// pane's albedo (`pane_albedo_metal`, the tint's chroma at the reflectance)
-/// and its metalness in the fourth; without one the tint as before.
-pub fn facade_rows_for(v3: bool) -> Vec<[f32; 16]> {
-    data_for(v3)
+/// in radians, the night bay in modules, a lit window's cd/m2), (v4: the
+/// spandrel's tone, the reveal shadow 0/1, the polished share of a pier,
+/// its roughness), (v4: the honed rest's tone and roughness, 0, 0). Pattern 0
+/// a window grid, 1 an open screen. With a `reflectance` the glass row is
+/// the pane's albedo (`pane_albedo_metal`, the tint's chroma at the
+/// reflectance) and its metalness in the fourth; without one the tint as
+/// before. The fifth and sixth rows are what the fourth pass reads (the
+/// earlier passes' shaders never do).
+pub fn facade_rows_at(level: u8) -> Vec<[f32; 4 * FACADE_ROWS]> {
+    data_at(level)
         .facades
         .values()
         .map(|f| {
@@ -190,30 +229,44 @@ pub fn facade_rows_for(v3: bool) -> Vec<[f32; 16]> {
             }
             let pattern = if f.pattern == "screen" { 1.0 } else { 0.0 };
             [
-                f.module_m as f32,
-                f.storey_m as f32,
-                f.glaze_x as f32,
-                f.glaze_y as f32,
-                g[0] as f32,
-                g[1] as f32,
-                g[2] as f32,
-                f.glass_roughness as f32,
+                f.module_m,
+                f.storey_m,
+                f.glaze_x,
+                f.glaze_y,
+                g[0],
+                g[1],
+                g[2],
+                f.glass_roughness,
                 pattern,
-                f.night_lit as f32,
-                f.led as f32,
-                f.fin_depth_m as f32,
-                metal as f32,
-                f.jitter_deg.to_radians() as f32,
-                f.bay_modules as f32,
-                f.window_cd as f32,
+                f.night_lit,
+                f.led,
+                f.fin_depth_m,
+                metal,
+                f.jitter_deg.to_radians(),
+                f.bay_modules,
+                f.window_cd,
+                f.spandrel_tone,
+                f.reveal_shadow,
+                f.polish_share,
+                f.polish_roughness,
+                f.honed_tone,
+                f.honed_roughness,
+                0.0,
+                0.0,
             ]
+            .map(|x| x as f32)
         })
         .collect()
 }
 
-/// `facade_rows_for` as the switches set it.
+/// The first four rows of each style (`facade_rows_at`), at the second pass or the third.
+pub fn facade_rows_for(v3: bool) -> Vec<[f32; 16]> {
+    facade_rows_at(if v3 { 3 } else { 2 }).iter().map(|r| std::array::from_fn(|k| r[k])).collect()
+}
+
+/// `facade_rows_for` as the switches set it (the first four rows).
 pub fn facade_rows() -> Vec<[f32; 16]> {
-    facade_rows_for(crate::towers3_on())
+    facade_rows_at(crate::towers_level()).iter().map(|r| std::array::from_fn(|k| r[k])).collect()
 }
 
 /// v3: the crown sculpture's colour wash and its figures' peak, cd/m2 (`night`).
@@ -382,6 +435,12 @@ fn pyramid(m: &mut MeshArrays, ring: &[[f64; 2]], y0: f64, y1: f64, colour: Rgb)
         m.tri([p[0], y0, p[1]], [q[0], y0, q[1]], apex, colour);
     }
 }
+
+/// v4: the skyline towers' metal parts: architectural aluminium cladding
+/// carries a metallic coating (a fluoropolymer with metal flake: part mirror,
+/// part diffuse), drawn at metalness 0.6 and roughness 0.35 (INFERRED).
+pub const METAL4_ROUGHNESS: f64 = 0.35;
+pub const METAL4_METALNESS: f64 = 0.6;
 
 /// What one skyline tower adds to the set.
 pub struct BuiltTower {
@@ -552,7 +611,9 @@ pub fn build_tower(e: &Entry, points: &[f64], ground_at: &dyn Fn(f64, f64) -> f6
         Draw { key: "roof".into(), role: Role::Near, material: plain_material(0.9, 0.0, "facade-masonry", None), mesh: roof.freeze() },
     ];
     if !metal.indices.is_empty() {
-        draws.push(Draw { key: "metal".into(), role: Role::Near, material: plain_material(0.35, 0.7, "facade-metal", None), mesh: metal.freeze() });
+        // v4: the spires and braces clad in coated aluminium: a metallic coating (metalness METAL4_METALNESS: its flake mirrors, its binder scatters) of the entries' v4 `spireSrgb`, aluminium's F0 weathered.
+        let mm = if crate::towers4_on() { plain_material(METAL4_ROUGHNESS, METAL4_METALNESS, "facade-metal", None) } else { plain_material(0.35, 0.7, "facade-metal", None) };
+        draws.push(Draw { key: "metal".into(), role: Role::Near, material: mm, mesh: metal.freeze() });
     }
     let (mut mn, mut mx) = ([f32::MAX; 3], [f32::MIN; 3]);
     for d in &draws {

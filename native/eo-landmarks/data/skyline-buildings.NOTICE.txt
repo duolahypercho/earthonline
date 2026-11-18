@@ -30,6 +30,15 @@ Sources consulted (public descriptions; nothing reproduced beyond short facts):
     glazing); WBDG (Whole Building Design Guide), curtain walls: spandrel
     panels between vision glass
 
+  Fourth pass (each facade's and building's "v4" object, and "v4Night"):
+    Wikipedia, 555 California Street ('polished or rough carnelian granite');
+    PCAD (pcad.lib.washington.edu), 555 California Street (polished carnelian
+    red granite); KQED (2018) and LEDs Magazine (2018) on Day for Night (the
+    LEDs pointed back at the building, their light reflected out through
+    perforated aluminium panels; visible up to 20 miles); Real-Time Rendering,
+    4th ed., table 9.2 (the F0 of aluminium and gold); SFYIMBY on Embarcadero
+    Center's concrete and glass panels
+
 Plans: each entry names its footprint record in public/data/sf/sf-city.json
 (OpenStreetMap, ODbL 1.0; see sf-city.NOTICE.txt); the plan is read from that
 file at load, not copied here.

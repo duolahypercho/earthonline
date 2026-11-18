@@ -206,7 +206,7 @@ pub const SALESFORCE_PEARL_SRGB: u32 = 0xd9dcde;
 
 /// The crown's curve: from the top floor's scale to the top's, the walls
 /// rounding in to the top (a superellipse quarter, exponent `P`).
-const SALESFORCE_CROWN_P: f64 = 2.4;
+pub(crate) const SALESFORCE_CROWN_P: f64 = 2.4;
 
 pub fn salesforce(site: &Value, g: &GroundGrid) -> Out {
     let d = &site["dimensions"];
@@ -481,13 +481,17 @@ pub fn sutro(site: &Value, g: &GroundGrid) -> Out {
 /// The second generator of a registered landmark building, by id, with
 /// the third pass when the switches leave it on (`crate::towers3_on`).
 pub fn build(id: &str, site: &Value, g: &GroundGrid) -> Option<Out> {
-    build_v(id, site, g, crate::towers3_on())
+    if crate::towers3_on() {
+        // the third pass, and the fourth over it unless `--no-towers4`.
+        return crate::towers3::build_v(id, site, g, crate::towers4_on());
+    }
+    build_v(id, site, g, false)
 }
 
 /// `build` with the third pass on or off (`v3`; off: the previous output).
 pub fn build_v(id: &str, site: &Value, g: &GroundGrid, v3: bool) -> Option<Out> {
     if v3 {
-        return crate::towers3::build(id, site, g);
+        return crate::towers3::build_v(id, site, g, false);
     }
     Some(match id {
         "transamerica-pyramid" => transamerica(site, g),
