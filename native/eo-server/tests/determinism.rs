@@ -33,17 +33,19 @@ fn every_landmark_lift_through_the_server_agrees_bit_for_bit() {
     assert!(lifts.len() >= 7, "the server's world has {} lifts", lifts.len());
     let tiles = SharedTiles::start(g.ground.clone(), g.buildings.clone(), 3);
     for l in &lifts {
+        // Both ends on foot at the stop with no car: a parked car settling on
+        // uneven ground (the Bay Bridge entrance is on the quay's edge) has no
+        // contact history in a freshly rebuilt world and drifts apart by
+        // 1e-5 m (the cross-world car defect the known rewind test records);
+        // the ride is the subject here.
+        let feet = glam::DVec3::new(l.bottom.x, l.bottom.y.max(g.ground.ground_y(l.bottom.x, l.bottom.z)) + 0.05, l.bottom.z);
         let mut server_cw = CollisionWorld::fed(g.ground.clone(), g.buildings.clone(), tiles.clone());
-        let (mut server, cars) = spawn_player(&mut server_cw, l.bottom.x, l.bottom.z, l.bottom_yaw, false);
-        // On the stop itself (a deck over the ground: the Golden Gate's sidewalk).
-        let mut st = server.state(&server_cw);
-        let feet_y = l.bottom.y.max(g.ground.ground_y(l.bottom.x, l.bottom.z)) + 0.05;
-        st.character.position = [l.bottom.x, feet_y + eo_player::tuning::capsule::HALF_HEIGHT_M + eo_player::tuning::capsule::RADIUS_M + eo_player::tuning::capsule::CONTROLLER_OFFSET_M, l.bottom.z];
-        server.set_state(&mut server_cw, &st);
+        server_cw.load_blocking(feet, eo_player::world::LOAD_RADIUS_M);
+        let mut server = eo_player::Player::new(feet, l.bottom_yaw);
         let mut bytes = vec![];
         write_player_state(&server.state(&server_cw), &mut bytes);
         let mut client_cw = g.collision_world(2);
-        let mut client = rebuild_player(&mut client_cw, &read_player_state(&bytes).unwrap(), &cars);
+        let mut client = rebuild_player(&mut client_cw, &read_player_state(&bytes).unwrap(), &[]);
         assert_eq!(client.state(&client_cw), server.state(&server_cw), "{}: the client starts where the server is", l.name);
         let ride = RIDE_STEPS as usize;
         let script: Vec<(usize, StepInput)> = vec![
