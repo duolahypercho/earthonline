@@ -3,7 +3,8 @@
 //! Mount Diablo), cooked from the USGS 3DEP 1 arc-second DEM.
 //!
 //! * Source: the six 1 x 1 degree tiles named in `native/assets/dem-manifest.json`,
-//!   read from the folder `EO_DEM_ROOT` names (no default), each
+//!   read from `<repo>/external/dem` (git-ignored, filled by
+//!   `scripts/setup-assets.py`) or the folder `EO_DEM_ROOT` names instead, each
 //!   checked against its SHA-256 before it is decoded. Never in the game's
 //!   runtime path: the game reads only the cooked file.
 //! * Frame: the city's own (`eo_data::Frame::sf()`, an equirectangular
@@ -152,9 +153,10 @@ impl DemManifest {
     }
 }
 
-/// The folder `EO_DEM_ROOT` names; None when it is not set (only a cached cook is used).
+/// The DEM's folder this run: the one `EO_DEM_ROOT` names, else
+/// `<repo>/external/dem`; None when neither is known (only a cached cook is used).
 pub fn dem_root() -> Option<PathBuf> {
-    std::env::var_os("EO_DEM_ROOT").filter(|v| !v.is_empty()).map(PathBuf::from)
+    eo_data::external::DEM.root()
 }
 
 fn sha256_file(path: &Path) -> Result<String> {
@@ -676,19 +678,20 @@ pub fn load_or_bake(repo_root: &Path, cache: Option<&Path>) -> Result<Option<Far
         }
     }
     let Some(dem) = dem_root() else {
-        eprintln!("farshore: no far terrain: EO_DEM_ROOT is not set and no cooked file is cached");
+        eprintln!("farshore: no far terrain: no DEM folder ({}) and no cooked file is cached", eo_data::external::DEM.looked_in());
         return Ok(None);
     };
     let manifest = DemManifest::get();
     let missing: Vec<&str> = manifest.tiles.iter().filter(|t| !dem.join(&t.file).is_file()).map(|t| t.id.as_str()).collect();
     if !missing.is_empty() {
         eprintln!(
-            "farshore: no far terrain: the USGS DEM tiles {} are not under {} (set EO_DEM_ROOT) and no cooked file is cached",
+            "farshore: no far terrain: the USGS DEM tiles {} are not under {} (fetch them with `python3 scripts/setup-assets.py --only dem`, or set EO_DEM_ROOT) and no cooked file is cached",
             missing.join(", "),
             dem.display()
         );
         return Ok(None);
     }
+    eprintln!("farshore: cooking the far terrain from the USGS DEM tiles under {}", dem.display());
     let grid = ElevationGrid::decode(&eo_data::read_maybe_gzip(&grid_path)?)?;
     let land_cover = lc_bytes.as_ref().and_then(|_| eo_data::read_maybe_gzip(&lc_path).ok()).and_then(|b| LandCover::decode(&b, Frame::sf()).ok());
     let t = bake(&dem, &grid, &grid_sha, land_cover.as_ref())?;
