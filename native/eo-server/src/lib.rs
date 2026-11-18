@@ -973,6 +973,14 @@ impl Server {
 }
 
 /// A player's body and cars as entities.
+/// A player's body and car paint (the entity's `kind`): from the account,
+/// so a player keeps the same body every session and every client draws
+/// the same one (not from the session's player id, which depends on the
+/// order of joining).
+pub fn look_of(a: &eo_net::auth::Account) -> u8 {
+    (a.id % 251) as u8
+}
+
 fn player_entities(s: &Session, tick: u32, ents: &mut Vec<(u32, QState)>) {
     let p = &s.player;
     let driving = matches!(p.mode, Mode::Driving(_));
@@ -995,7 +1003,7 @@ fn player_entities(s: &Session, tick: u32, ents: &mut Vec<(u32, QState)>) {
             z: q_pos(feet.z),
             yaw: q_angle(p.facing_yaw),
             speed: q_speed(p.ground_speed),
-            kind: (s.player_id % 251) as u8,
+            kind: look_of(&s.account),
             flags: driving as u16 | (p.character.crouched as u16) << 1 | (!s.online as u16) << 2 | more,
             anim: pack_anim(s.emote, s.emote_count),
             ..Default::default()
@@ -1017,7 +1025,7 @@ fn player_entities(s: &Session, tick: u32, ents: &mut Vec<(u32, QState)>) {
                 yaw: q_angle(yaw),
                 tilt: q_angle(pitch) as u32 | (q_angle(roll) as u32) << 16,
                 speed: q_speed(v.forward_speed(&s.cw)),
-                kind: (s.player_id % 251) as u8,
+                kind: look_of(&s.account),
                 flags: braking as u16 | (driven as u16) << 1,
                 steer: (steer / 0.6 * 127.0).round().clamp(-127.0, 127.0) as i8,
                 ..Default::default()
