@@ -240,12 +240,14 @@ pub fn meter(f: &LookFrame, w: &WeatherState, dirs: &[([f64; 3], f64)]) -> f64 {
 }
 
 /// The most the meter opens up for a camera inside a room (eo-render
-/// `interior_meter`: a landmark deck's room), 2 EV. A reflected-light meter
-/// pointed into a room lit through its windows opens up until the room's
-/// surfaces read toward middle grey and the windows go bright; held to 2 EV
-/// (INFERRED: the windows keep their view, as a bracketed interior with a
-/// view is exposed, instead of clipping to white).
-pub const METER_ROOM_MAX: f64 = 4.0;
+/// `interior_meter`: a landmark deck's room), 2.3 EV. A reflected-light
+/// meter pointed into a room lit through its windows opens up until the
+/// room's surfaces read toward middle grey and the windows go bright (an
+/// office's 500 lx against a clear sky's 20 klx of diffuse light outside is
+/// over 5 EV); held to 2.3 EV (INFERRED: the windows keep some of their
+/// view, as a bracketed interior with a view is exposed, instead of
+/// clipping to white).
+pub const METER_ROOM_MAX: f64 = 5.0;
 
 /// `meter` for a camera inside a room: a direction whose third member is
 /// `Some(k)` meets the room's own surfaces, not the sky or the open ground,
