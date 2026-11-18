@@ -25,6 +25,7 @@ pub mod lights;
 pub mod palms;
 pub mod plaza;
 pub mod promenade;
+pub mod rocks; // the shore's boulders and the seawall's armour stone
 pub mod set;
 pub mod shore;
 pub mod suspension;

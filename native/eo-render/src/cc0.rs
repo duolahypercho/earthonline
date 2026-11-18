@@ -134,6 +134,13 @@ pub fn structure_class(key: &str) -> Option<ClassUse> {
     if key == "seawall" || key.contains("seawall") || key == "structure:waterfront:concrete" {
         return Some(cu("wood_textured_concrete", None, MODE_DETAIL, DRIVE_NONE, 0.8, 0.0, 0.3, 0.8));
     }
+    // the shore's rock (eo-landmarks rocks.rs): the armour's quarried stone and the boulders, the scan's detail round the vertex tone
+    if key == "structure:shore-rocks:armour" {
+        return Some(cu("granite_wall", None, MODE_DETAIL, DRIVE_NONE, 1.0, 0.0, 0.4, 0.9));
+    }
+    if key == "structure:shore-rocks:boulders" {
+        return Some(cu("seaside_rock", None, MODE_DETAIL, DRIVE_NONE, 1.0, 0.0, 0.4, 0.9));
+    }
     if key.contains("ferry-pier-deck") {
         return Some(cu("concrete_wall_008", None, MODE_DETAIL, DRIVE_NONE, 0.8, 0.0, 0.3, 0.8));
     }
