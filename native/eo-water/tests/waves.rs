@@ -289,3 +289,30 @@ fn plan_build_is_cheap() {
     eprintln!("waves: a plan builds in {ms:.3} ms");
     assert!(ms < 2.0, "a plan takes {ms} ms");
 }
+
+/// (water r1) the whitecaps cover what the Monahan and O'Muircheartaigh fit
+/// gives, the whole photographed cover, and no more: fewer crests break than
+/// under the earlier reading (2.5 times the fit), every threshold lower.
+#[test]
+fn whitecaps_cover_the_fit_itself() {
+    for (hour, wind, sev) in [(13.0, [0.0, 0.0], 0.0), (16.0, [0.0, 0.0], 0.0), (15.0, [11.5, 4.2], 4.0)] {
+        let state = waves::sea_state(hour, wind, sev);
+        let total = Plan::with_foam(&state, waves::FOAM_OVER_TOTAL);
+        let earlier = Plan::new(&state);
+        for place in 0..2 {
+            let u = if place == 0 { state.pacific.u10 } else { state.bay.u10 };
+            let fit = (waves::active_whitecaps(u) * if u > 4.5 { 1.0 } else { 0.0 }).min(0.45);
+            if u > 4.5 {
+                assert!((total.cover[place] - fit).abs() < 1e-12, "cover {} against the fit {fit} at {u} m/s", total.cover[place]);
+            }
+            assert!(total.cover[place] <= earlier.cover[place] + 1e-12);
+            for c in 0..waves::WHITECAP_CASCADES {
+                assert!(total.thr[place][c] <= earlier.thr[place][c] + 1e-12, "cascade {c} breaks more often under the fit than under the earlier reading");
+            }
+        }
+    }
+    // at the bay's 13 h breeze (about 6 m/s) the fit is a fifth of a percent
+    let st = waves::sea_state(13.0, [0.0, 0.0], 0.0);
+    let p = Plan::with_foam(&st, waves::FOAM_OVER_TOTAL);
+    assert!(p.cover[1] > 0.001 && p.cover[1] < 0.003, "bay cover {}", p.cover[1]);
+}
