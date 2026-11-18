@@ -70,6 +70,7 @@ fn base_args() -> Args {
         msaa: 1,
         indirect_validation: true,
         no_indirect_count: false,
+        no_bounded_draws: false,
         vsync: true,
         out_dir: None,
         label: None,
@@ -288,7 +289,7 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
     eprintln!("play bench: data at {:.0} ms, routes {:.0} ms", process_start.elapsed().as_secs_f64() * 1e3, routes_ms);
     let aspect = args.width as f32 / args.height as f32;
     // GPU (optional).
-    let gpu_opts = GpuOptions { indirect_validation: args.indirect_validation, force_no_indirect_count: args.no_indirect_count, ..Default::default() };
+    let gpu_opts = GpuOptions { indirect_validation: args.indirect_validation, force_no_indirect_count: args.no_indirect_count, force_no_bounded_draws: args.no_bounded_draws, ..Default::default() };
     let mut gpu_state = None;
     if opts.render {
         let ctx = GpuContext::new(GpuContext::create_instance(&gpu_opts), None, gpu_opts)?;
@@ -647,7 +648,7 @@ mod window {
         fn init(&mut self, el: &ActiveEventLoop) -> Result<()> {
             let attrs = Window::default_attributes().with_title("Earth Online native - play").with_inner_size(PhysicalSize::new(self.args.width, self.args.height));
             let window = Arc::new(el.create_window(attrs)?);
-            let opts = GpuOptions { indirect_validation: self.args.indirect_validation, force_no_indirect_count: self.args.no_indirect_count, ..Default::default() };
+            let opts = GpuOptions { indirect_validation: self.args.indirect_validation, force_no_indirect_count: self.args.no_indirect_count, force_no_bounded_draws: self.args.no_bounded_draws, ..Default::default() };
             let instance = GpuContext::create_instance(&opts);
             let surface = instance.create_surface(window.clone())?;
             let ctx = GpuContext::new(instance, Some(&surface), opts)?;

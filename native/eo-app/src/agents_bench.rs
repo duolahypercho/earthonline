@@ -128,7 +128,7 @@ fn settle(g: &Gpu, world: &World, models: &mut ModelRuntime, cam: &Camera) -> Re
 
 pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     let mut world = load_world(args)?;
-    let opts = GpuOptions { indirect_validation: args.indirect_validation, force_no_indirect_count: args.no_indirect_count, ..Default::default() };
+    let opts = GpuOptions { indirect_validation: args.indirect_validation, force_no_indirect_count: args.no_indirect_count, force_no_bounded_draws: args.no_bounded_draws, ..Default::default() };
     let ctx = GpuContext::new(GpuContext::create_instance(&opts), None, opts)?;
     let format = wgpu::TextureFormat::Rgba8UnormSrgb;
     let (renderer, bases) = make_renderer(&ctx, &world, args, format, false)?;

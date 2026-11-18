@@ -46,6 +46,9 @@ pub struct Args {
     pub msaa: u32,
     pub indirect_validation: bool,
     pub no_indirect_count: bool,
+    /// `--no-bounded-draws`: without the indirect count, the one-slot-per-object
+    /// lists (no far layer, occlusion, probe, water pass or distant trees).
+    pub no_bounded_draws: bool,
     pub vsync: bool,
     pub out_dir: Option<std::path::PathBuf>,
     pub label: Option<String>,
@@ -188,6 +191,7 @@ fn parse_args() -> Result<Args> {
         msaa: 1,
         indirect_validation: true,
         no_indirect_count: false,
+        no_bounded_draws: false,
         vsync: true,
         out_dir: None,
         label: None,
@@ -256,6 +260,7 @@ fn parse_args() -> Result<Args> {
             "--msaa" => a.msaa = val()?.parse()?,
             "--no-indirect-validation" => a.indirect_validation = false,
             "--no-indirect-count" => a.no_indirect_count = true,
+            "--no-bounded-draws" => a.no_bounded_draws = true,
             "--no-vsync" => a.vsync = false,
             "--out" => a.out_dir = Some(val()?.into()),
             "--label" => a.label = Some(val()?),
@@ -426,7 +431,7 @@ fn parse_args() -> Result<Args> {
             }
             "-h" | "--help" => {
                 println!(
-                    "eo-app [--bench] [--frames N=720] [--warmup N=60] [--width 1920] [--height 1080] [--msaa 1|4]\n       [--no-indirect-validation] [--no-indirect-count] [--no-vsync] [--out DIR] [--label NAME] [--capture] [--far M=4200]\n       [--multiply N=1] [--check-budget] [--budget-ms 10 (self-test only)]\n       [--no-models] [--no-terrain-lod] [--no-kit] [--slice1] [--slice2] [--cache DIR] [--no-cache] [--stream-threads N=6] [--stream-radius M=inf]\n       [--kit-threads N=6] [--kit-split-materials] [--upload-budget-mb 4] [--kit-arena-vertices N] [--kit-arena-indices N] [--kit-arena-objects N]\n       [--kit-near-load M=110] [--kit-mid-load M=520] [--drive-frames N=3600]\n       [--time-of-day H=12] [--shadow-map N=3072] [--no-shadows] [--no-agents] [--agent-density N=1] [--no-rocketbox]\n       [--no-occlusion] [--occlusion-check] [--no-thread-priority] [--pace realtime|60hz|all-60hz|none] [--worst-frames N=12] [--check-max]\n       [--no-view-detail] [--view-margin-deg 35] [--view-predict-s 0.3] [--view-hold-s 2.5] [--stream-all-paths] [--full-arenas]\n       [--segments street_walk,elevated_sweep,city_overview,authored_street,kit_street,drive,turn_around,turn_around_authored]\n\n\
+                    "eo-app [--bench] [--frames N=720] [--warmup N=60] [--width 1920] [--height 1080] [--msaa 1|4]\n       [--no-indirect-validation] [--no-indirect-count] [--no-bounded-draws] [--no-vsync] [--out DIR] [--label NAME] [--capture] [--far M=4200]\n       [--multiply N=1] [--check-budget] [--budget-ms 10 (self-test only)]\n       [--no-models] [--no-terrain-lod] [--no-kit] [--slice1] [--slice2] [--cache DIR] [--no-cache] [--stream-threads N=6] [--stream-radius M=inf]\n       [--kit-threads N=6] [--kit-split-materials] [--upload-budget-mb 4] [--kit-arena-vertices N] [--kit-arena-indices N] [--kit-arena-objects N]\n       [--kit-near-load M=110] [--kit-mid-load M=520] [--drive-frames N=3600]\n       [--time-of-day H=12] [--shadow-map N=3072] [--no-shadows] [--no-agents] [--agent-density N=1] [--no-rocketbox]\n       [--no-occlusion] [--occlusion-check] [--no-thread-priority] [--pace realtime|60hz|all-60hz|none] [--worst-frames N=12] [--check-max]\n       [--no-view-detail] [--view-margin-deg 35] [--view-predict-s 0.3] [--view-hold-s 2.5] [--stream-all-paths] [--full-arenas]\n       [--segments street_walk,elevated_sweep,city_overview,authored_street,kit_street,drive,turn_around,turn_around_authored]\n\n\
 eo-app --shots FILE.json --out DIR [--width W --height H] [--time-of-day H] [--weather KIND] [--shots-only a,b] [--settle-timeout S=600] [any world or kill switch]\n\
        offscreen: one settled, converged PNG per shot of FILE.json, and DIR/<name>.json (resolved pose, build, command line, switches).\n\
        A shot is {{\"name\", \"geo\": {{\"lat\", \"lon\", \"alt\" (m above mean sea level), \"range\" (m), \"heading\" (deg, 0 north, 90 east),\n\

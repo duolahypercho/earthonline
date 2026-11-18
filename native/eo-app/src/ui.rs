@@ -100,6 +100,7 @@ fn default_args() -> Args {
         msaa: 1,
         indirect_validation: true,
         no_indirect_count: false,
+        no_bounded_draws: false,
         vsync: true,
         out_dir: None,
         label: None,

@@ -500,6 +500,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     let opts = GpuOptions {
         indirect_validation: args.indirect_validation,
         force_no_indirect_count: args.no_indirect_count,
+        force_no_bounded_draws: args.no_bounded_draws,
         ..Default::default()
     };
     let ctx = GpuContext::new(GpuContext::create_instance(&opts), None, opts)?;
@@ -802,6 +803,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let mut warmup = args.warmup;
         let mut cam_last = 0;
         let mut idle_ms = 0.0; // the last frame's wait for the GPU (prepay included)
+        let bounds_before = renderer.bound_stats(); // the bounded lists over this path (warm-up included)
         let mut resolved = 0; // timestamp chunks resolved so far
         let seg_start = Instant::now();
         for i in 0..total {
@@ -1502,8 +1504,21 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             percentile(&kit_tris, 50.0),
             percentile(&kit_tris, 95.0),
         );
-        // the far layer after the path, and its last frame's counters (entries drawn, triangles, entries in the frustum, entries occluded).
+        // the bounded lists over the path (no indirect count): commands drawn, guards used, overflows.
         let mut report = report;
+        if let (Some(now), Some(before)) = (renderer.bound_stats(), &bounds_before) {
+            let lists: Vec<(&str, eo_render::bounds::BoundStats)> = now.iter().zip(before.iter()).map(|((n, a), (_, b))| (*n, a.since(b))).collect();
+            let total_cmds = lists.iter().map(|(_, s)| s.drawn as f64).sum::<f64>() / lists[0].1.frames.max(1) as f64;
+            let overflows: u64 = lists.iter().map(|(_, s)| s.overflows).sum();
+            let at_cap: u64 = lists.iter().map(|(_, s)| s.at_capacity).sum();
+            println!(
+                "    bounded lists (no indirect count; warm-up included): {:.0} commands/frame in all ({}), list-frames at capacity {at_cap}, overflows {overflows}",
+                total_cmds,
+                lists.iter().filter(|(_, s)| s.frames > 0).map(|(n, s)| format!("{n} {:.0}", s.drawn as f64 / s.frames as f64)).collect::<Vec<_>>().join(", ")
+            );
+            report["bounded_lists"] = json!(lists.iter().map(|(n, s)| (n.to_string(), s.json())).collect::<serde_json::Map<String, serde_json::Value>>());
+        }
+        // the far layer after the path, and its last frame's counters (entries drawn, triangles, entries in the frustum, entries occluded).
         report["hlod_after"] = json!(models.hlod.as_ref().map(|h| h.stats_json()));
         report["hlod_last_frame"] = json!(renderer.hlod.get().map(|h| h.readback(&ctx.queue)));
         seg_reports.push(report);
@@ -1543,7 +1558,9 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         "adapter": { "name": info.name, "backend": format!("{:?}", info.backend), "device_type": format!("{:?}", info.device_type), "driver": info.driver, "driver_info": info.driver_info },
         "features": {
             "multi_draw_indirect_count_available": ctx.adapter_features.contains(wgpu::Features::MULTI_DRAW_INDIRECT_COUNT),
-            "multi_draw_indirect_count_used": renderer.compact,
+            "multi_draw_indirect_count_used": ctx.indirect_count,
+            "compacted_lists": renderer.compact,
+            "draw_lists": ctx.draw_lists(),
             "indirect_first_instance": ctx.first_instance,
             "texture_arrays_used": true,
             "timestamp_query": ctx.timestamps,

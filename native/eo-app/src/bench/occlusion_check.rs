@@ -188,7 +188,7 @@ pub fn run(ctx: &GpuContext, renderer: &Renderer, world: &World, models: &mut Mo
         return Err(anyhow!("--occlusion-check needs a renderer made with debug ids"));
     }
     if !renderer.compact {
-        return Err(anyhow!("--occlusion-check needs MULTI_DRAW_INDIRECT_COUNT (occlusion is off without it)"));
+        return Err(anyhow!("--occlusion-check needs the compacted lists (occlusion is off with --no-bounded-draws on an adapter without MULTI_DRAW_INDIRECT_COUNT)"));
     }
     let t = targets(ctx, w, h);
     let mut cameras = vec![];
