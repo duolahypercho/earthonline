@@ -22,7 +22,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// Columns along the shore per strip.
 pub const COLUMNS: u32 = 448;
 /// Rows per wave: the Pacific, the bay.
-/// (surf r5: 26 on the Pacific, not 30: the crest rows stay under 0.15 m and the vertex work drops by an eighth)
+/// (26 on the Pacific keeps the crest rows under 0.15 m at an eighth less vertex work than 30)
 pub const ROWS_PER_WAVE: [u32; 2] = [26, 12];
 /// How strongly the rows crowd at a crest (0: even; the density ratio is (1 + w) / (1 - w)).
 pub const CREST_WARP: f32 = 0.88;

@@ -127,7 +127,7 @@ mod far_shots;
 mod landmarks_bench; // landmarks
 mod occlusion_check; // occlusion
 mod sky_shots; // sky
-mod so_shots; // so: the sky and ocean review cards
+mod so_shots; // the sky and ocean review cards
 mod street_bench;
 mod view_bench;
 mod water_bench; // water
@@ -650,7 +650,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let dir = args.out_dir.clone().unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bench-out"));
         return sky_shots::run(&ctx, &renderer, &world, &mut models, &mut props, &mut agents, &segs, args, &color, attach, resolve, &targets, &dir, args.label.as_deref().unwrap_or("shots"));
     }
-    // so: `--so-shots` writes the sky and ocean review cards instead of the timing.
+    // `--so-shots` writes the sky and ocean review cards instead of the timing.
     if so_shots::requested() {
         let dir = args.out_dir.clone().unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bench-out"));
         return so_shots::run(&ctx, &renderer, &world, &mut models, &mut props, &mut agents, &segs, args, &color, attach, resolve, &targets, &dir, args.label.as_deref().unwrap_or("so"));

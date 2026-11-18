@@ -262,7 +262,7 @@ pub fn run(
         cards.push(("sky-street".into(), cam, "a residential street (Castro Street) at eye height".into(), vec![NOON, GOLDEN, BLUE, NIGHT]));
     }
 
-    // the beach cards' water clock (marked; the coordinator's leave): each Ocean Beach card
+    // the beach cards' water clock: each Ocean Beach card
     // is taken when the swash there has just drained back to the waterline (0.75 of its cycle,
     // the wet glaze behind it in the foreground), at the clock nearest 20 s; the other cards keep 20 s.
     let surf_strips = world.water.as_ref().map(|w| eo_water::surf_strip::build_strips(&w.field, &eo_water::load_beaches(&world.paths.repo_root).unwrap_or_default())).unwrap_or_default();

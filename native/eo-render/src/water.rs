@@ -524,7 +524,7 @@ impl WaterGpu {
                 entry(12, fs, tex(filt, wgpu::TextureViewDimension::D2)),
             ],
         });
-        let draw_src = format!("{common}\n{}\n{}\n{}\n{}", crate::look::look_common_source(), include_str!("sky_light_core.wgsl"), include_str!("water.wgsl"), include_str!("water_surf.wgsl")) + include_str!("water_spray.wgsl"); // + the spray // sky: + the cloud shadow and the fog depth
+        let draw_src = format!("{common}\n{}\n{}\n{}\n{}", crate::look::look_common_source(), include_str!("sky_light_core.wgsl"), include_str!("water.wgsl"), include_str!("water_surf.wgsl")) + include_str!("water_spray.wgsl"); // + the spray, the cloud shadow and the fog depth
         let draw_module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("water.wgsl"), source: wgpu::ShaderSource::Wgsl(draw_src.into()) });
         let draw_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("water-draw"), bind_group_layouts: &[Some(&draw_bgl), Some(look.main_bind_group_layout())], immediate_size: 0 });
         let make = |entry: &str, blend: Option<wgpu::BlendState>| {
