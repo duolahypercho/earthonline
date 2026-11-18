@@ -170,7 +170,7 @@ impl Session {
                 self.gap_since = None;
                 self.stats.inputs_stood_in += 1;
                 let mut i = self.last_input;
-                i.buttons &= !(eo_net::wire::button::JUMP | eo_net::wire::button::VEHICLE_TOGGLE);
+                i.buttons &= !eo_net::wire::button::TAPS;
                 i
             } else {
                 break;

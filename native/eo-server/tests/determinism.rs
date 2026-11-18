@@ -20,6 +20,63 @@ fn game() -> &'static Arc<GameWorld> {
 
 const STEPS: usize = 2400;
 
+/// Every landmark lift through the server's step: a client stands at the
+/// bottom stop, taps interact, rides up, walks the deck, comes back to the
+/// stop and rides down; the server runs the same quantised inputs in its fed
+/// world (the shared tiles, the same decks) and the two agree on every step.
+#[test]
+fn every_landmark_lift_through_the_server_agrees_bit_for_bit() {
+    use eo_player::StepInput;
+    use eo_player::lift::RIDE_STEPS;
+    let g = game();
+    let lifts = g.buildings.decks.lifts.clone();
+    assert!(lifts.len() >= 7, "the server's world has {} lifts", lifts.len());
+    let tiles = SharedTiles::start(g.ground.clone(), g.buildings.clone(), 3);
+    for l in &lifts {
+        let mut server_cw = CollisionWorld::fed(g.ground.clone(), g.buildings.clone(), tiles.clone());
+        let (mut server, cars) = spawn_player(&mut server_cw, l.bottom.x, l.bottom.z, l.bottom_yaw, false);
+        // On the stop itself (a deck over the ground: the Golden Gate's sidewalk).
+        let mut st = server.state(&server_cw);
+        let feet_y = l.bottom.y.max(g.ground.ground_y(l.bottom.x, l.bottom.z)) + 0.05;
+        st.character.position = [l.bottom.x, feet_y + eo_player::tuning::capsule::HALF_HEIGHT_M + eo_player::tuning::capsule::RADIUS_M + eo_player::tuning::capsule::CONTROLLER_OFFSET_M, l.bottom.z];
+        server.set_state(&mut server_cw, &st);
+        let mut bytes = vec![];
+        write_player_state(&server.state(&server_cw), &mut bytes);
+        let mut client_cw = g.collision_world(2);
+        let mut client = rebuild_player(&mut client_cw, &read_player_state(&bytes).unwrap(), &cars);
+        assert_eq!(client.state(&client_cw), server.state(&server_cw), "{}: the client starts where the server is", l.name);
+        let ride = RIDE_STEPS as usize;
+        let script: Vec<(usize, StepInput)> = vec![
+            (30, StepInput::default()),
+            (1, StepInput { interact: true, ..Default::default() }),
+            (ride + 30, StepInput::default()),
+            (40, StepInput { move_y: 1.0, ..Default::default() }),
+            (40, StepInput { move_y: -1.0, ..Default::default() }),
+            (40, StepInput::default()),
+            (1, StepInput { interact: true, ..Default::default() }),
+            (ride + 60, StepInput::default()),
+        ];
+        let (mut was_up, mut k) = (false, 0);
+        for (n, input) in script {
+            for _ in 0..n {
+                let i = NetInput::quantize(&input, client.yaw);
+                step_player(&mut server, &mut server_cw, &i);
+                step_player(&mut client, &mut client_cw, &i);
+                server_cw.pump(server.position(&server_cw));
+                client_cw.pump(client.position(&client_cw));
+                assert_eq!(server.state(&server_cw), client.state(&client_cw), "{}: step {k}: the client's replay differs from the server", l.name);
+                let f = server.position(&server_cw);
+                was_up |= server.lift.is_none() && (f - l.top).length() < 2.5;
+                k += 1;
+            }
+        }
+        let end = server.position(&server_cw);
+        assert!(was_up, "{}: the server never had the player on the deck", l.name);
+        assert!((end.x - l.bottom.x).hypot(end.z - l.bottom.z) < 1.0 && (end.y - l.bottom.y).abs() < 4.0, "{}: not back at the entrance: {end:?} (stop {:?})", l.name, l.bottom);
+        println!("{}: up and down through the server, bit for bit over {k} steps", l.name);
+    }
+}
+
 #[test]
 fn server_and_client_agree_bit_for_bit_walking_and_driving() {
     let g = game();
