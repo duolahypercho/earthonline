@@ -238,6 +238,10 @@ fn assign(@builtin(global_invocation_id) gid: vec3<u32>) {
                 }
             }
             lod = max(lod, by_distance);
+            // a corridor vehicle past the box tier keeps its box (the frustum's far plane ends it).
+            if (lod >= 4u && cls == 0u && (a.flags & AG_CORRIDOR) != 0u && ag.misc.y != 0u) {
+                lod = 3u;
+            }
         }
         if (lod < 4u) {
             ag_records[i * AG_VIEWS] = ag_take(0u, m.meshes[lod], lod);
