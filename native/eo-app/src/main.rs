@@ -374,6 +374,9 @@ fn parse_args() -> Result<Args> {
             "--no-cc0-stains" => a.look.cc0 &= !eo_render::cc0::RUN_STAINS,
             "--cc0-shots" => {}
             "--no-landmarks2" => a.landmarks2 = false,
+            "--no-ferry-building" => eo_landmarks::features::set_ferry_building(false), // its record's box, as before
+            "--no-tram-tracks" => eo_landmarks::features::set_tram_tracks(false), // no streetcar rails, as before
+            "--no-quay-railing" => eo_landmarks::features::set_quay_railing(false), // no guard on the quay wall, as before
             "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
             s if a.props2.parse_flag(s) => {} // --no-props2, --no-furniture, --no-eztree, --no-overhead, --no-wires, --no-props2-shading, --capture-props2
             "--agents-bench" | "--agents-capture" | "--people-capture" | "--people-lineup" => {} // + --people-capture, --people-lineup
@@ -582,6 +585,22 @@ pub fn load_world(args: &Args) -> Result<World> {
                 let r = s.add_plazas_with(&root, &|x, z| sw.buildings.contains(x, z), &fps, &|x, z| sw.ground(x, z) + o.footway_lift, &|x, z| sw.paved_at(x, z), o.verge_max_drop, bay_tones)?; // bay tones
                 let carpet = |x: f64, z: f64| sw.carpet_y(x, z);
                 let pr = s.add_promenades(&carpet, &carpet);
+                // the Ferry Building on the footway datum (eo-landmarks ferry_building.rs) and the
+                // corridor's streetcar rails in the drawn paving, a paint step over the junction paint.
+                if bay_tones {
+                    let trace = std::env::var("EO_TRACE_LOAD").is_ok();
+                    if let Some(fb) = s.add_ferry_building(&|x, z| sw.ground(x, z) + o.footway_lift, &|x, z| sw.paved_at(x, z), &|x, z| sw.carpet_y(x, z)) {
+                        if trace {
+                            eprintln!("landmarks: Ferry Building floor {:.2} m, {:.1} x {:.1} m, bays {:?}, {} triangles, {:.0} ms", fb.base_y, fb.length_m, fb.depth_m, fb.bays, fb.triangles, fb.ms);
+                        }
+                    }
+                    let lift = o.junction_paint_lift + (o.junction_paint_lift - o.marking_lift).abs();
+                    match s.add_tram_tracks(&root, &|x, z| sw.surface_at(x, z, None), lift) {
+                        Ok(Some((n, m, tris))) if trace => eprintln!("landmarks: streetcar rails {n} tracks, {m:.0} m, {tris} triangles"),
+                        Err(e) => eprintln!("warning: streetcar rails not built ({e:#})"),
+                        _ => {}
+                    }
+                }
                 Ok((s, r, pr))
             }))
         }
@@ -883,6 +902,9 @@ pub fn load_world(args: &Args) -> Result<World> {
             pr
         } else {
             let ground = |x: f64, z: f64| elevation.ground(x, z);
+            if args.landmarks2 {
+                set.add_ferry_building(&ground, &|_, _| None, &|_, _| f64::NEG_INFINITY);
+            }
             set.add_promenades(&ground, &ground)
         };
         if std::env::var("EO_TRACE_LOAD").is_ok() {
