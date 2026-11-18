@@ -65,9 +65,32 @@ pub fn street_trees(js: &eo_props::JsProps, ground: &dyn Fn(f64, f64) -> f64) ->
     out
 }
 
-/// The park trees of the ground cover over [x0, x1) x [z0, z1), in 512 m blocks.
+/// The ground cover's block before `--no-far-tree-density`: 512 m, where its
+/// cap of 150 trees a call (ground_cover.rs `MAX_NEAR`) held every stand to
+/// about 5.7 trees a hectare.
+pub const PARK_BLOCK_OLD_M: f64 = 512.0;
+/// The block the distant park trees are sampled in: small enough that the
+/// cap never binds (the 14 m lattice puts at most (128 / 14)^2, about 84,
+/// trees in it), so a stand has its class rule's density, at most one tree
+/// per 196 m2 (51 a hectare; class 1 woods about 40). For scale: the
+/// Presidio Trust's forestry fact sheet (June 2023) gives the historic forest
+/// as about 75,000 trees on 306 acres (about 600 a hectare today) and thins
+/// reforested stands to about 50 trees an acre (about 124 a hectare) when
+/// mature, so the lattice stays below either; its cards' crowns (4.7-11 m half
+/// widths for the big classes) close the canopy at 14 m spacing.
+pub const PARK_BLOCK_M: f64 = 128.0;
+
+/// The park trees of the ground cover over [x0, x1) x [z0, z1), in
+/// `PARK_BLOCK_M` blocks (`PARK_BLOCK_OLD_M` with `--no-far-tree-density`).
 pub fn park_trees(cover: &eo_landmarks::ground_cover::GroundCover, x0: f64, z0: f64, x1: f64, z1: f64, y_at: &(dyn Fn(f64, f64) -> f64 + Sync), blocked: &(dyn Fn(f64, f64) -> bool + Sync)) -> Vec<FarTree> {
-    const B: f64 = 512.0;
+    park_trees_in(cover, x0, z0, x1, z1, y_at, blocked, if crate::far_city::FarCity::current().tree_density { PARK_BLOCK_M } else { PARK_BLOCK_OLD_M })
+}
+
+/// `park_trees` with block side `b`.
+#[allow(clippy::too_many_arguments)]
+pub fn park_trees_in(cover: &eo_landmarks::ground_cover::GroundCover, x0: f64, z0: f64, x1: f64, z1: f64, y_at: &(dyn Fn(f64, f64) -> f64 + Sync), blocked: &(dyn Fn(f64, f64) -> bool + Sync), b: f64) -> Vec<FarTree> {
+    #[allow(non_snake_case)]
+    let B = b;
     let mut blocks = vec![];
     let mut z = (z0 / B).floor() * B;
     while z < z1 {
@@ -461,6 +484,17 @@ impl FarTrees {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_park_block_is_too_small_for_the_ground_covers_cap() {
+        // ground_cover.rs park_trees: a 14 m lattice, at most 150 trees a call.
+        const LATTICE_M: f64 = 14.0;
+        const MAX_NEAR: f64 = 150.0;
+        let per_axis = (PARK_BLOCK_M / LATTICE_M).ceil() + 1.0;
+        assert!(per_axis * per_axis < MAX_NEAR, "{per_axis}^2 lattice points can reach the cap");
+        let old = (PARK_BLOCK_OLD_M / LATTICE_M).floor();
+        assert!(MAX_NEAR / (PARK_BLOCK_OLD_M * PARK_BLOCK_OLD_M / 1e4) < 6.0 && old * old > MAX_NEAR, "the old block was capped at about 5.7 a hectare");
+    }
 
     #[test]
     fn blocks_hold_every_tree_in_one_contiguous_run() {
