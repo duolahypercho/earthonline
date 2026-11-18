@@ -49,7 +49,7 @@ use eo_data::roof_colours as rc;
 use std::collections::BTreeMap;
 
 /// Bump when what a far facade summarises changes.
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2; // 2: tower systems, lots
 
 /// `EO_FAR_FACADE=off` (or 0) turns the far facade off (eo-app `--no-far-facade`).
 pub fn enabled() -> bool {
@@ -127,6 +127,47 @@ pub struct FarFacade {
     pub shop_ground: bool,
     /// A narrow row lot: walls along this direction (unit, x z) are lot-line walls.
     pub lot_axis: Option<[f64; 2]>,
+    /// A tower's facade system (typology.rs; `TowerSystem::None` elsewhere or with it off).
+    pub system: TowerSystem,
+    /// The width of one lot's front where a residential footprint spans
+    /// several (the far shader steps the paint and parapet per lot), metres; 0: one lot.
+    pub lot_m: f32,
+    /// The record's seed (its roof plant is drawn from it).
+    pub seed: u32,
+    /// Storeys above the ground (the roof plant a building carries).
+    pub storeys: f32,
+    /// A tower's roof penthouse (the kit's rule: a ring of at most 12 corners, 220 m2 or more).
+    pub penthouse: bool,
+}
+
+/// A tower's facade system (typology.rs `Tower::system`), as the far shader reads it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[repr(u8)]
+pub enum TowerSystem {
+    #[default]
+    None = 0,
+    CurtainFlush = 1,
+    CurtainMullion = 2,
+    RibbonBand = 3,
+    PrecastPunched = 4,
+    PrecastFin = 5,
+    MasonryPier = 6,
+    GraniteBay = 7,
+}
+
+impl TowerSystem {
+    pub fn of(name: Option<&str>) -> Self {
+        match name {
+            Some("curtain-flush") => Self::CurtainFlush,
+            Some("curtain-mullion") => Self::CurtainMullion,
+            Some("ribbon-band") => Self::RibbonBand,
+            Some("precast-punched") => Self::PrecastPunched,
+            Some("precast-fin") => Self::PrecastFin,
+            Some("masonry-pier") => Self::MasonryPier,
+            Some("granite-bay") => Self::GraniteBay,
+            _ => Self::None,
+        }
+    }
 }
 
 /// A row lot is at most this wide (SF Planning: the historical increment of
@@ -308,7 +349,37 @@ fn summarise(rec: &LoadedRecord, c: &Classified, spec: &J) -> FarFacade {
         _ => FacadeClass::Punched,
     };
     let mut glass = GlassKind::Office;
+    let tower_system = TowerSystem::of(meta.s("system"));
     match c.archetype {
+        classify::DOWNTOWN_TOWER if tower_system != TowerSystem::None => {
+            // The tower's own facade system (typology.rs): its pane or pier module as the kit draws it.
+            let spacing = meta.f("pierSpacing").unwrap_or(4.4).max(0.6);
+            let pier = meta.f("pierWidth").unwrap_or(0.6);
+            let band = meta.f("spandrelBand").unwrap_or(1.3);
+            wh = ((storey - band) / storey).clamp(0.3, 0.85);
+            sill_share = (0.5 * band / storey).clamp(0.0, 0.4);
+            bay = spacing;
+            ww = ((spacing - pier) / spacing).clamp(0.3, 0.97);
+            glass = GlassKind::Office;
+            match tower_system {
+                TowerSystem::CurtainFlush | TowerSystem::CurtainMullion => {
+                    class = FacadeClass::Curtain;
+                    lights = 1;
+                }
+                TowerSystem::MasonryPier | TowerSystem::GraniteBay => {
+                    class = FacadeClass::MasonryGrid;
+                    lights = if tower_system == TowerSystem::GraniteBay { 1 } else { 2 };
+                }
+                TowerSystem::PrecastPunched => {
+                    class = FacadeClass::Ribbon;
+                    lights = ((spacing - pier) / 1.2).round().clamp(1.0, 4.0) as u8;
+                }
+                _ => {
+                    class = FacadeClass::Ribbon;
+                    lights = 1;
+                }
+            }
+        }
         classify::DOWNTOWN_TOWER => {
             let spacing = meta.f("pierSpacing").unwrap_or(4.4);
             let pier = meta.f("pierWidth").unwrap_or(0.6);
@@ -383,7 +454,7 @@ fn summarise(rec: &LoadedRecord, c: &Classified, spec: &J) -> FarFacade {
     }
     let shop_ground = el.s("ground") == Some("storefront")
         || el.arr("storeys").and_then(|s| s.first()).and_then(|s| s.as_str()) == Some("storefront")
-        || (tower && c.has_retail_ground);
+        || (tower && (c.has_retail_ground || tower_system != TowerSystem::None));
 
     // Paint, as `drawn_materials` paints the rung.
     let mut materials: BTreeMap<String, String> = mats.obj_entries();
@@ -392,6 +463,14 @@ fn summarise(rec: &LoadedRecord, c: &Classified, spec: &J) -> FarFacade {
     let mut tints = if c.civic.is_some() { pipeline::painted_timber_as_clapboard(&mut materials, paint) } else { paint }.unwrap_or_default();
     if crate::wall_paint::enabled() {
         crate::wall_paint::apply(c, &materials, matches!(own, Some(J::Object(_))), &mut tints);
+    }
+    // a tower's stone tone (typology.rs), as `drawn_materials` lays it over the paint.
+    if let Some(st) = meta.at("stoneTints").and_then(|v| v.as_object()) {
+        for (name, t) in st {
+            if let Some(t) = t.as_f64() {
+                tints.insert(name.clone(), t as u32);
+            }
+        }
     }
     let wall_name = materials.get("wall").cloned().unwrap_or_else(|| "brick-running-bond".into());
     let wall = drawn_colour(&wall_name, &tints).unwrap_or([0.5; 3]);
@@ -428,16 +507,15 @@ fn summarise(rec: &LoadedRecord, c: &Classified, spec: &J) -> FarFacade {
     if let Some(m) = rc::table().and_then(|t| t.get(&rec.key)) {
         let w = crate::roof_measured::weight(m.confidence);
         if w > 0.0 {
-            let mut target = rc::rgb8_linear(m.rgb);
-            if crate::roof_measured::feature_on("contrast") {
-                target = crate::roof_measured::separated(target, Some(wall));
-            }
+            let target = crate::roof_measured::target(&m, Some(wall));
             roof = [0, 1, 2].map(|k| roof[k] + (target[k] - roof[k]) * w);
         }
     }
 
     // A narrow row lot's side walls are on its lot lines.
     let lot_axis = ROW_ARCHETYPES.contains(&c.archetype).then(|| row_lot_axis(&rec.polygon)).flatten();
+    // A residential footprint wider than a lot or two spans several lots (typology.rs on).
+    let lot_m = if crate::typology::enabled() && lot_axis.is_none() && ROW_ARCHETYPES.contains(&c.archetype) { lot_front_m(c.frontage) } else { 0.0 };
 
     FarFacade {
         archetype: c.archetype,
@@ -456,7 +534,257 @@ fn summarise(rec: &LoadedRecord, c: &Classified, spec: &J) -> FarFacade {
         lights,
         shop_ground,
         lot_axis,
+        system: tower_system,
+        lot_m,
+        seed: c.seed,
+        storeys: (1.0 + ((c.height - ground - top) / storey).floor().max(0.0)) as f32,
+        penthouse: tower && meta.truthy("penthouse"),
     }
+}
+
+// ---------------------------------------------------------------------------
+// The far roof: coping width and roof plant (far_box.rs meshes them).
+// ---------------------------------------------------------------------------
+
+/// `EO_FAR_ROOFS=off` (or 0): the far box's roof as before, a flat cap (eo-app `--no-far-roofs`).
+pub fn roofs_enabled() -> bool {
+    !matches!(std::env::var("EO_FAR_ROOFS").as_deref(), Ok("off") | Ok("0"))
+}
+
+/// What a box of roof plant is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlantKind {
+    /// A packaged rooftop unit (air handler, condenser).
+    Unit,
+    /// A stair bulkhead (the roof access of a building of four storeys or more).
+    Bulkhead,
+    /// An elevator's machine room or overrun.
+    Overrun,
+}
+
+/// One box of roof plant: centre, unit axis (x z), half extents along the axis and across it, height above the roof.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PlantBox {
+    pub kind: PlantKind,
+    pub centre: [f64; 2],
+    pub axis: [f64; 2],
+    pub half: [f64; 2],
+    pub height: f64,
+}
+
+/// Packaged rooftop units per roof area and at most (roof_plant.rs
+/// `M2_PER_UNIT`, `MAX_UNITS`: the kit's own rule), kept from the roof edge
+/// (roof_plant.rs `EDGE_MARGIN_M`).
+const PLANT_M2_PER_UNIT: f64 = 170.0;
+const PLANT_MAX_UNITS: usize = 9;
+const PLANT_EDGE_MARGIN_M: f64 = 1.2;
+/// A packaged rooftop unit's plan and height (a 5-15 ton single-package
+/// rooftop unit is about 1.3-2.3 m by 1.8-3.5 m and 1.0-1.4 m tall,
+/// manufacturers' dimension sheets).
+const UNIT_SIZE: ([f64; 2], [f64; 2], [f64; 2]) = ([1.3, 2.3], [1.8, 3.5], [1.0, 1.4]);
+/// A stair bulkhead: two 44 in (1.12 m) flights side by side (CBC 1011.2
+/// minimum stair width) in about 2.7 m by 5.2 m, its roof over the 80 in
+/// (2.03 m) headroom (CBC 1011.3) and its structure, about 2.8 m.
+const BULKHEAD_SIZE: [f64; 3] = [2.7, 5.2, 2.8];
+/// An elevator overrun or machine room over its shaft (a car of about 2 m
+/// by 1.6 m in a 2.5 m by 2.6 m shaft), standing about 3.6 m over the roof.
+const OVERRUN_SIZE: [f64; 3] = [2.5, 2.6, 3.6];
+/// Storeys from which a building carries a stair bulkhead (roof_plant.rs
+/// `BULKHEAD_MIN_STOREYS`; CBC 1011.12: a stair to the roof in a building of
+/// four or more storeys) and from which it has an elevator overrun.
+const BULKHEAD_MIN_STOREYS: f32 = 4.0;
+const OVERRUN_MIN_STOREYS: f32 = 6.0;
+
+fn ring_area(ring: &[[f32; 2]]) -> f64 {
+    let n = ring.len();
+    (0..n).map(|i| (ring[i][0] as f64) * (ring[(i + 1) % n][1] as f64) - (ring[(i + 1) % n][0] as f64) * (ring[i][1] as f64)).sum::<f64>() / 2.0
+}
+
+/// Distance from (x, z) to the ring's nearest edge (positive inside).
+fn inside_distance(ring: &[[f32; 2]], x: f64, z: f64) -> f64 {
+    let n = ring.len();
+    let mut d = f64::MAX;
+    let mut inside = false;
+    for i in 0..n {
+        let (a, b) = (ring[i], ring[(i + 1) % n]);
+        let (ax, az, bx, bz) = (a[0] as f64, a[1] as f64, b[0] as f64, b[1] as f64);
+        if (az > z) != (bz > z) && x < (bx - ax) * (z - az) / (bz - az) + ax {
+            inside = !inside;
+        }
+        let (ex, ez) = (bx - ax, bz - az);
+        let l2 = ex * ex + ez * ez;
+        let t = if l2 > 0.0 { (((x - ax) * ex + (z - az) * ez) / l2).clamp(0.0, 1.0) } else { 0.0 };
+        d = d.min((x - ax - ex * t).hypot(z - az - ez * t));
+    }
+    if inside { d } else { -d }
+}
+
+/// The ring's principal axis (unit), its corner centroid and its extents along the axis and across it about that centre.
+fn principal_frame(ring: &[[f32; 2]]) -> ([f64; 2], [f64; 2], [f64; 4]) {
+    let n = ring.len();
+    let (mut sxx, mut sxz, mut szz) = (0.0, 0.0, 0.0);
+    let (mut cx, mut cz) = (0.0, 0.0);
+    for i in 0..n {
+        let (a, b) = (ring[i], ring[(i + 1) % n]);
+        let (dx, dz) = ((b[0] - a[0]) as f64, (b[1] - a[1]) as f64);
+        let l = dx.hypot(dz);
+        cx += a[0] as f64;
+        cz += a[1] as f64;
+        if l < 1e-6 {
+            continue;
+        }
+        sxx += dx * dx / l;
+        sxz += dx * dz / l;
+        szz += dz * dz / l;
+    }
+    let (cx, cz) = (cx / n as f64, cz / n as f64);
+    let theta = 0.5 * (2.0 * sxz).atan2(sxx - szz);
+    let axis = [theta.cos(), theta.sin()];
+    let mut e = [f64::MAX, f64::MIN, f64::MAX, f64::MIN];
+    for p in ring {
+        let (x, z) = (p[0] as f64 - cx, p[1] as f64 - cz);
+        let a = x * axis[0] + z * axis[1];
+        let c = -x * axis[1] + z * axis[0];
+        e = [e[0].min(a), e[1].max(a), e[2].min(c), e[3].max(c)];
+    }
+    (axis, [cx, cz], e)
+}
+
+/// The coping band's width on a far roof (0: none): the parapet's coping
+/// and its inner face, drawn by the far shader along the roof's edge.
+pub fn coping_width(ring: &[[f32; 2]], f: &FarFacade) -> f64 {
+    if !roofs_enabled() || ring.len() < 3 || f.top_m < 0.2 {
+        return 0.0;
+    }
+    let (_, _, e) = principal_frame(ring);
+    let across = (e[1] - e[0]).min(e[3] - e[2]);
+    let area = ring_area(ring).abs();
+    (0.1 * area.sqrt()).clamp(0.5, 1.6).min(0.2 * across)
+}
+
+/// The roof plant one far box carries (none with `EO_FAR_ROOFS=off`, on a
+/// roof with no parapet or a small one): a commercial roof's packaged units
+/// by its area, a stair bulkhead from four storeys, an elevator overrun from
+/// six, each kept `PLANT_EDGE_MARGIN_M` inside the roof's edge and off the
+/// others, placed by the record's seed along the roof's own axes.
+pub fn far_roof_plant(ring: &[[f32; 2]], f: &FarFacade) -> Vec<PlantBox> {
+    let mut out = vec![];
+    if !roofs_enabled() || ring.len() < 3 || f.top_m < 0.2 || f.penthouse || matches!(f.class, FacadeClass::Blind) {
+        return out;
+    }
+    let area = ring_area(ring).abs();
+    if area < 60.0 {
+        return out;
+    }
+    let (axis, centre, e) = principal_frame(ring);
+    let mut r = crate::rng::Rng::new(&format!("{}|far-roof-plant", f.seed));
+    let commercial = f.glass != GlassKind::Domestic || matches!(f.archetype, classify::RETAIL_STRIP | classify::SOMA_WAREHOUSE | classify::INDUSTRIAL_SHED | classify::CIVIC_CONCRETE);
+    let mut want: Vec<(PlantKind, [f64; 3])> = vec![];
+    if f.storeys >= BULKHEAD_MIN_STOREYS && area >= 120.0 {
+        want.push((PlantKind::Bulkhead, BULKHEAD_SIZE));
+    }
+    if f.storeys >= OVERRUN_MIN_STOREYS && area >= 250.0 {
+        want.push((PlantKind::Overrun, OVERRUN_SIZE));
+    }
+    let units = if commercial {
+        ((area / PLANT_M2_PER_UNIT).floor() as usize).min(PLANT_MAX_UNITS)
+    } else if area >= 300.0 {
+        1 + (r.next() < 0.5) as usize
+    } else {
+        0
+    };
+    for _ in 0..units {
+        let w = UNIT_SIZE.0[0] + r.next() * (UNIT_SIZE.0[1] - UNIT_SIZE.0[0]);
+        let l = UNIT_SIZE.1[0] + r.next() * (UNIT_SIZE.1[1] - UNIT_SIZE.1[0]);
+        let h = UNIT_SIZE.2[0] + r.next() * (UNIT_SIZE.2[1] - UNIT_SIZE.2[0]);
+        want.push((PlantKind::Unit, [w, l, h]));
+    }
+    let to_world = |a: f64, c: f64| [centre[0] + a * axis[0] - c * axis[1], centre[1] + a * axis[1] + c * axis[0]];
+    let mut placed: Vec<(f64, f64, f64, f64)> = vec![];
+    for (kind, size) in want {
+        // Along or across the roof's axis, half the time.
+        let turn = r.next() < 0.5;
+        let (ha, hc) = if turn { (size[1] * 0.5, size[0] * 0.5) } else { (size[0] * 0.5, size[1] * 0.5) };
+        for _ in 0..10 {
+            let a = e[0] + ha + PLANT_EDGE_MARGIN_M + r.next() * ((e[1] - e[0]) - 2.0 * (ha + PLANT_EDGE_MARGIN_M)).max(0.0);
+            let c = e[2] + hc + PLANT_EDGE_MARGIN_M + r.next() * ((e[3] - e[2]) - 2.0 * (hc + PLANT_EDGE_MARGIN_M)).max(0.0);
+            if placed.iter().any(|p| (a - p.0).abs() < ha + p.2 + 0.8 && (c - p.1).abs() < hc + p.3 + 0.8) {
+                continue;
+            }
+            let ok = [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0), (0.0, 0.0)].iter().all(|(sa, sc)| {
+                let w = to_world(a + sa * ha, c + sc * hc);
+                inside_distance(ring, w[0], w[1]) >= PLANT_EDGE_MARGIN_M
+            });
+            if !ok {
+                continue;
+            }
+            placed.push((a, c, ha, hc));
+            out.push(PlantBox { kind, centre: to_world(a, c), axis, half: [ha, hc], height: size[2] });
+            break;
+        }
+    }
+    out
+}
+
+/// The ring moved `w` metres inward (mitred, the mitre held to 2.5 w), or
+/// None when the inset ring would fold (its area under a quarter of the
+/// ring's, a corner nearer the edge than half of `w`, or turned over).
+pub fn inset_ring(ring: &[[f32; 2]], w: f64) -> Option<Vec<[f32; 2]>> {
+    let n = ring.len();
+    if n < 3 || w <= 0.0 {
+        return None;
+    }
+    let area = ring_area(ring);
+    let sign = if area > 0.0 { 1.0 } else { -1.0 };
+    let inward = |a: [f32; 2], b: [f32; 2]| -> Option<[f64; 2]> {
+        let (dx, dz) = ((b[0] - a[0]) as f64, (b[1] - a[1]) as f64);
+        let l = dx.hypot(dz);
+        (l > 1e-4).then(|| [-dz / l * sign, dx / l * sign])
+    };
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        let (p, c, q) = (ring[(i + n - 1) % n], ring[i], ring[(i + 1) % n]);
+        let (n1, n2) = (inward(p, c)?, inward(c, q)?);
+        let b = [n1[0] + n2[0], n1[1] + n2[1]];
+        let bl = b[0].hypot(b[1]);
+        let d = if bl < 1e-6 { n1 } else { [b[0] / bl, b[1] / bl] };
+        let m = w / (d[0] * n1[0] + d[1] * n1[1]).max(0.4);
+        out.push([(c[0] as f64 + d[0] * m) as f32, (c[1] as f64 + d[1] * m) as f32]);
+    }
+    let a2 = ring_area(&out);
+    if a2 * area <= 0.0 || a2.abs() < 0.25 * area.abs() {
+        return None;
+    }
+    if out.iter().any(|p| inside_distance(ring, p[0] as f64, p[1] as f64) < 0.5 * w) {
+        return None;
+    }
+    Some(out)
+}
+
+/// A tower's roof penthouse ring (the kit's: the footprint scaled to 0.52
+/// about its centroid, downtown_tower.rs) and its height over the roof (the
+/// kit's top: the crown plus a rise, at most 2.6 m over the roof).
+pub fn penthouse(ring: &[[f32; 2]], f: &FarFacade) -> Option<(Vec<[f32; 2]>, f32)> {
+    if !roofs_enabled() || !f.penthouse || ring.len() < 3 {
+        return None;
+    }
+    let n = ring.len() as f32;
+    let (cx, cz) = ring.iter().fold((0.0f32, 0.0f32), |a, p| (a.0 + p[0] / n, a.1 + p[1] / n));
+    Some((ring.iter().map(|p| [cx + (p[0] - cx) * 0.52, cz + (p[1] - cz) * 0.52]).collect(), 2.6))
+}
+
+
+/// The city's standard lot front, 25 ft (7.62 m; SB 9 Objective Design
+/// Standards, SF Planning), drawn at the ground plan's scale.
+pub const LOT_FRONT_M: f64 = 7.62;
+
+/// One lot's front along a residential frontage spanning several (0: one or two lots).
+pub fn lot_front_m(frontage: f64) -> f32 {
+    let lot = LOT_FRONT_M * eo_data::groundscale::resolve().unwrap_or(1.0);
+    if !(frontage.is_finite() && frontage > 2.6 * lot) {
+        return 0.0;
+    }
+    (frontage / (frontage / lot).round().max(1.0)) as f32
 }
 
 trait ObjEntries {
@@ -591,6 +919,11 @@ mod tests {
             lights: 2,
             shop_ground: false,
             lot_axis: Some(ax),
+            system: TowerSystem::None,
+            lot_m: 0.0,
+            seed: 1,
+            storeys: 3.0,
+            penthouse: false,
         };
         let ring: Vec<[f32; 2]> = poly.iter().take(4).map(|p| [p.x as f32, p.z as f32]).collect();
         assert_eq!(edge_bays(&ring, &f), vec![2, 0, 2, 0]);
@@ -599,7 +932,36 @@ mod tests {
     }
 
     #[test]
+    fn far_roof_plant_stays_inside_the_roof_and_apart() {
+        if !roofs_enabled() {
+            return;
+        }
+        let ring: Vec<[f32; 2]> = vec![[0.0, 0.0], [40.0, 0.0], [40.0, 25.0], [0.0, 25.0]];
+        let pts = rect(40.0, 25.0);
+        let mut f = far_facade(&src("4242", &pts, "office", Some(8.0), Some(30.0))).expect("a facade");
+        f.storeys = 8.0;
+        f.penthouse = false;
+        f.top_m = f.top_m.max(0.5);
+        let boxes = far_roof_plant(&ring, &f);
+        assert!(boxes.iter().any(|b| b.kind == PlantKind::Bulkhead), "{boxes:?}");
+        for b in &boxes {
+            for (sa, sc) in [(-1.0, -1.0), (1.0, 1.0), (1.0, -1.0), (-1.0, 1.0)] {
+                let x = b.centre[0] + sa * b.half[0] * b.axis[0] - sc * b.half[1] * b.axis[1];
+                let z = b.centre[1] + sa * b.half[0] * b.axis[1] + sc * b.half[1] * b.axis[0];
+                assert!(inside_distance(&ring, x, z) >= PLANT_EDGE_MARGIN_M - 1e-6, "{b:?}");
+            }
+        }
+        let w = coping_width(&ring, &f);
+        assert!(w > 0.4);
+        let inner = inset_ring(&ring, w).expect("a rectangle insets");
+        assert!(inner.iter().all(|p| (inside_distance(&ring, p[0] as f64, p[1] as f64) - w).abs() < 1e-3));
+        // A sliver does not.
+        assert!(inset_ring(&[[0.0, 0.0], [20.0, 0.0], [20.0, 1.0], [0.0, 1.0]], 0.6).is_none());
+    }
+
+    #[test]
     fn residential_walls_are_painted_light_on_average() {
+
         // The kit's paint on the primer: SF's painted fronts read light (the
         // mean over many lots well above mid grey), not the far ring's dark palette.
         let pts = rect(7.6, 25.0);
