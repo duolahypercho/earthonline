@@ -93,6 +93,11 @@ fn lm_surface(s: ptr<function, Surface>, m: Material, world: vec3<f32>, n: vec3<
         lm_seawall(s, world, n);
         return;
     }
+    if (kind == 7u) {
+        // the Golden Gate's far item: only the towers' floodlighting.
+        rm_emit = rm_emit + lm_floodlit(world, n, (*s).albedo);
+        return;
+    }
     if (kind >= 4u) {
         lm_building_surface(s, m, kind, world, n, dpx, dpy);
         return;
@@ -123,6 +128,7 @@ fn lm_surface(s: ptr<function, Surface>, m: Material, world: vec3<f32>, n: vec3<
             let hy = lm_steel_height(uv + dv);
             (*s).n = lm_bump(n, dpx, dpy, h0.x * fs + h0.y * fr2, hx.x * fs + hx.y * fr2, hy.x * fs + hy.y * fr2);
         }
+        rm_emit = rm_emit + lm_floodlit(world, (*s).n, (*s).albedo);
     } else if (kind == 2u) {
         let tone = lm_noise(local / LM_CO_PATCH_M) * LM_CO_PATCH_TONE;
         let wet = mix(LM_CO_WET_TONE, 1.0, lm_ss(0.0, LM_CO_WET_BAND_M, world.y));
@@ -135,6 +141,30 @@ fn lm_surface(s: ptr<function, Surface>, m: Material, world: vec3<f32>, n: vec3<
             (*s).n = lm_bump(n, dpx, dpy, lm_concrete_height(uv) * fj, lm_concrete_height(uv + du) * fj, lm_concrete_height(uv + dv) * fj);
         }
     }
+}
+
+// the Golden Gate towers' floodlighting at night (eo-landmarks lights.rs
+// `gg_floodlit`): on the towers above the deck (the legs and the portal
+// struts between them, inside the tower's plan box), the floods' mean
+// illuminance LM_FLOOD_LUX from 1.4 x at the deck to 0.6 x at the top, on the
+// vertical faces and the undersides (the floods stand below), none on the
+// tops; diffuse, in the lamps' scale, with the lamps' switch-on.
+fn lm_floodlit(p: vec3<f32>, n: vec3<f32>, albedo: vec3<f32>) -> vec3<f32> {
+    let lamps = skyu.night.x;
+    if (!LM_FLOOD_ON || lamps <= 0.0 || p.y < LM_GG_DECK_Y || p.y > LM_GG_TOP_Y + 1.0) {
+        return vec3<f32>(0.0);
+    }
+    let rel = p.xz - LM_GG_ORIGIN;
+    let c = dot(rel, LM_GG_AXIS);
+    let sl = dot(rel, vec2<f32>(-LM_GG_AXIS.y, LM_GG_AXIS.x));
+    let ct = select(0.0, LM_GG_SPAN, c > LM_GG_SPAN * 0.5);
+    if (abs(c - ct) > LM_GG_HALF_ALONG + 1.0 || abs(sl) > LM_GG_HP + LM_GG_HALF_ACROSS + 1.0) {
+        return vec3<f32>(0.0);
+    }
+    let h = clamp((p.y - LM_GG_DECK_Y) / max(LM_GG_TOP_Y - LM_GG_DECK_Y, 1.0), 0.0, 1.0);
+    let facing = max(1.0 - abs(n.y), -n.y);
+    let e = LM_FLOOD_LUX * (1.4 - 0.8 * h) * facing;
+    return albedo * (e / 3.14159265) * skyu.bloom_w2.z * lamps * LM_FLOOD_RGB;
 }
 
 // the landmark buildings' surfaces (landmark-surface.js):

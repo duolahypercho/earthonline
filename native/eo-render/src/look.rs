@@ -1267,6 +1267,16 @@ impl LookGpu {
         pass.set_bind_group(1, &bg, &[]);
     }
 
+    /// `bind_main` for a pass drawing into `resolved_view` after the resolve
+    /// (which flipped the parity): the bind group this frame's city pass took,
+    /// which reads the history before the one being drawn into.
+    pub fn bind_main_resolved(&self, pass: &mut wgpu::RenderPass<'_>) {
+        let resolved = self.post_source.load(std::sync::atomic::Ordering::Relaxed) != 0;
+        let p = if resolved { 1 - self.sky.parity() } else { self.sky.parity() };
+        let bg = self.main_bg.lock().unwrap()[p].clone();
+        pass.set_bind_group(1, &bg, &[]);
+    }
+
     /// The sky, inside the city pass, after the opaque list.
     pub fn draw_sky(&self, pass: &mut wgpu::RenderPass<'_>) {
         pass.set_pipeline(&self.sky_pipeline);
@@ -1315,6 +1325,14 @@ impl LookGpu {
             return self.post.lock().unwrap().as_ref().unwrap().view.clone();
         }
         p.as_ref().unwrap().view.clone()
+    }
+
+    /// The frame the post reads this frame when the sky resolve ran (its
+    /// resolved history), else None (the HDR target): the bridges' wire
+    /// members are drawn over it (landmarks.rs `draw_overlay`).
+    pub fn resolved_view(&self) -> Option<wgpu::TextureView> {
+        let src = self.post_source.load(std::sync::atomic::Ordering::Relaxed) as usize;
+        if src == 0 { None } else { self.sky.history_view(src - 1) }
     }
 
     /// Bytes of the HDR target, once it exists.

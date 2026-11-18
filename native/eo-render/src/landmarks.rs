@@ -51,6 +51,9 @@ pub const SURFACE_SEAWALL: u32 = 3;
 pub const SURFACE_PRECAST: u32 = 4;
 pub const SURFACE_FIN_CURTAIN: u32 = 5;
 pub const SURFACE_GILDED_CLADDING: u32 = 6;
+/// the Golden Gate's far item: no surface of its own, only the towers'
+/// floodlighting at night (`BridgeFeatures::night`).
+pub const SURFACE_FLOODLIT_FAR: u32 = 7;
 
 pub fn surface_code(kind: Option<&str>) -> u32 {
     match kind {
@@ -171,20 +174,31 @@ pub fn append(scene: &mut Scene, set: &LandmarkSet, materials: &mut MaterialTabl
         // words, bit cast (cull.wgsl `lod`, kind 3).
         out.groups.push(GpuLodGroup { center: c.to_array(), radius: h.x, ready: h.y.to_bits(), detailed: 0, kind: GROUP_KIND, level: h.z.to_bits() });
         out.boxes.push((l.id.clone(), l.box_min, l.box_max));
+        let features = eo_landmarks::suspension::features();
         for d in &l.draws {
-            let mat = materials.named(&format!("landmark:{}:{}", l.id, d.key), material(&d.material, l.anchor, true));
+            let mut gm = material(&d.material, l.anchor, true);
+            if features.night && d.key == "far" && l.id == "golden-gate-bridge" {
+                gm.flags |= SURFACE_FLOODLIT_FAR << SURFACE_SHIFT;
+            }
+            let mat = materials.named(&format!("landmark:{}:{}", l.id, d.key), gm);
             let m = &d.mesh;
             if d.material.wire {
                 let (axes, dirs, radii) = (m.axes.as_ref().unwrap(), m.dirs.as_ref().unwrap(), m.radii.as_ref().unwrap());
                 let base = out.wire_vertices.len() as u32;
+                // the west span's suspender ropes carry its LEDs (alpha 0: lm_wire2_fs's mark).
+                let leds = features.night && features.wires && l.id == "bay-bridge-west";
                 for v in 0..m.vertices() {
+                    let mut color = pack_colour(&m.colors[3 * v..3 * v + 3]);
+                    if leds && radii[v] > 0.0 && radii[v] < LED_ROPE_MAX_RADIUS_M {
+                        color &= 0x00ff_ffff;
+                    }
                     out.wire_vertices.push(WireVertex {
                         pos: [m.positions[3 * v], m.positions[3 * v + 1], m.positions[3 * v + 2]],
                         radius: radii[v],
                         axis: [axes[3 * v], axes[3 * v + 1], axes[3 * v + 2]],
                         group,
                         dir: [dirs[3 * v], dirs[3 * v + 1], dirs[3 * v + 2]],
-                        color: pack_colour(&m.colors[3 * v..3 * v + 3]),
+                        color,
                         material: mat,
                     });
                 }
@@ -256,6 +270,10 @@ pub fn append(scene: &mut Scene, set: &LandmarkSet, materials: &mut MaterialTabl
     out.append_ms[2] = t.elapsed().as_secs_f64() * 1e3;
     out
 }
+
+/// A wire member under this radius is a suspender rope (the main cables are
+/// 0.37 m and over), metres.
+const LED_ROPE_MAX_RADIUS_M: f32 = 0.1;
 
 /// One plan cell of a mesh as GPU vertices and indices, with its bounds.
 pub struct Chunk {
@@ -451,6 +469,35 @@ pub fn landmarks_constants_wgsl() -> String {
         let ty = if v.ends_with('u') { "u32" } else { "f32" };
         s.push_str(&format!("const {name}: {ty} = {v};\n"));
     }
+    s.push_str(&bridges_wgsl(js));
+    s
+}
+
+/// the bridges' night constants (eo-landmarks lights.rs): the Golden Gate
+/// towers' floodlighting and the west span's suspender LEDs.
+fn bridges_wgsl(js: &eo_landmarks::LandmarksJs) -> String {
+    let feat = eo_landmarks::suspension::features();
+    let fl = eo_landmarks::lights::gg_floodlit(js);
+    let (bo, ba) = eo_landmarks::lights::bay_axis(js);
+    let v2 = |p: [f64; 2]| format!("vec2<f32>({:.6}, {:.6})", p[0], p[1]);
+    let mut s = String::new();
+    s.push_str(&format!("const LM_FLOOD_ON: bool = {};\nconst LM_LED_ON: bool = {};\n", feat.night, feat.night && feat.wires));
+    s.push_str(&format!("const LM_GG_ORIGIN: vec2<f32> = {};\nconst LM_GG_AXIS: vec2<f32> = {};\n", v2(fl.origin), v2(fl.axis)));
+    for (name, v) in [
+        ("LM_GG_SPAN", fl.span),
+        ("LM_GG_HP", fl.half_plane),
+        ("LM_GG_DECK_Y", fl.deck_y),
+        ("LM_GG_TOP_Y", fl.top_y),
+        ("LM_GG_HALF_ALONG", fl.half_along),
+        ("LM_GG_HALF_ACROSS", fl.half_across),
+        ("LM_FLOOD_LUX", fl.lux),
+        ("LM_LED_CD", eo_landmarks::lights::LED_CD),
+        ("LM_LED_PITCH_M", eo_landmarks::lights::LED_PITCH_M),
+    ] {
+        s.push_str(&format!("const {name}: f32 = {v:.6};\n"));
+    }
+    s.push_str(&format!("const LM_FLOOD_RGB: vec3<f32> = vec3<f32>({:.6}, {:.6}, {:.6});\n", fl.colour[0], fl.colour[1], fl.colour[2]));
+    s.push_str(&format!("const LM_BAY_ORIGIN: vec2<f32> = {};\nconst LM_BAY_AXIS: vec2<f32> = {};\n", v2(bo), v2(ba)));
     s
 }
 
@@ -523,6 +570,9 @@ pub struct LandmarksGpu {
     ibuf: wgpu::Buffer,
     index_count: u32,
     pipeline: wgpu::RenderPipeline,
+    /// `BridgeFeatures::wires`: the members over the resolved frame (single
+    /// sample, depth read only), instead of `pipeline` in the glass pass.
+    overlay: Option<wgpu::RenderPipeline>,
     bg: wgpu::BindGroup,
     pub bytes: u64,
 }
@@ -595,8 +645,54 @@ impl LandmarksGpu {
             multiview_mask: None,
             cache: None,
         });
+        // the overlay: one sample (the resolved frame), the same groups and vertices.
+        let overlay = eo_landmarks::suspension::features().wires.then(|| {
+            d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("landmark-wires-overlay"),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState {
+                    module: &module,
+                    entry_point: Some("lm_wire2_vs"),
+                    compilation_options: Default::default(),
+                    buffers: &[Some(wgpu::VertexBufferLayout { array_stride: std::mem::size_of::<WireVertex>() as u64, step_mode: wgpu::VertexStepMode::Vertex, attributes: &attrs })],
+                },
+                primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleList, cull_mode: None, ..Default::default() },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: crate::DEPTH_FORMAT,
+                    depth_write_enabled: Some(false),
+                    depth_compare: Some(wgpu::CompareFunction::Greater),
+                    stencil: Default::default(),
+                    bias: Default::default(),
+                }),
+                multisample: wgpu::MultisampleState { count: 1, ..Default::default() },
+                fragment: Some(wgpu::FragmentState {
+                    module: &module,
+                    entry_point: Some("lm_wire2_fs"),
+                    compilation_options: Default::default(),
+                    targets: &[Some(wgpu::ColorTargetState { format: crate::look::HDR_FORMAT, blend: Some(wgpu::BlendState::ALPHA_BLENDING), write_mask: wgpu::ColorWrites::COLOR })],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        });
         let bytes = vbuf.size() + ibuf.size();
-        Some(Self { vbuf, ibuf, index_count: w.indices.len() as u32, pipeline, bg, bytes })
+        Some(Self { vbuf, ibuf, index_count: w.indices.len() as u32, pipeline, overlay, bg, bytes })
+    }
+
+    /// The members are drawn after the atmosphere (`draw_overlay`) rather than in the glass pass.
+    pub fn overlay(&self) -> bool {
+        self.overlay.is_some()
+    }
+
+    /// In a single-sample pass over the resolved frame whose groups 0 and 1
+    /// are the city's: the members at every distance (`lm_wire2_fs`).
+    pub fn draw_overlay(&self, pass: &mut wgpu::RenderPass<'_>) {
+        let Some(p) = &self.overlay else { return };
+        pass.set_pipeline(p);
+        pass.set_bind_group(2, &self.bg, &[]);
+        pass.set_vertex_buffer(0, self.vbuf.slice(..));
+        pass.set_index_buffer(self.ibuf.slice(..), wgpu::IndexFormat::Uint32);
+        pass.draw_indexed(0..self.index_count, 0, 0..1);
     }
 
     /// Inside a city or water pass whose groups 0 and 1 are the city's: the

@@ -1658,6 +1658,9 @@ impl Renderer {
         let keep_depth = (self.look.options.ao || self.look.sky_wants_depth()) && depth.texture().usage().contains(wgpu::TextureUsages::TEXTURE_BINDING) && depth.texture().sample_count() == 1; // + the sky passes
         // the wire pass after the late city pass depth-tests against it.
         let keep_depth = keep_depth || self.props.get().is_some_and(|p| p.wires_pending());
+        // the bridges' wire members over the resolved frame (single-sample depth only), not in the glass pass.
+        let wire_overlay = !self.debug_ids && depth.texture().sample_count() == 1 && self.landmarks.get().is_some_and(|l| l.overlay());
+        let keep_depth = keep_depth || wire_overlay;
         let draw_bg = self.draw_bg.lock().unwrap()[self.probe.front().0].clone(); // the front cube's
         // with occlusion on the city is two passes, the early
         // (objects visible last frame, depth kept for the pyramid) and the
@@ -1780,7 +1783,7 @@ impl Renderer {
                 if let Some(a) = self.agents.get() {
                     a.draw_glass(&mut pass, &self.look); // glass and lenses after the city glass
                 }
-                if let Some(l) = self.landmarks.get() {
+                if let Some(l) = self.landmarks.get().filter(|_| !wire_overlay) {
                     // the wire members where the glass is drawn.
                     pass.set_bind_group(0, &draw_bg, &[]);
                     self.look.bind_main(&mut pass);
@@ -1849,7 +1852,7 @@ impl Renderer {
                 if let Some(a) = self.agents.get() {
                     a.draw_glass(pass, &self.look);
                 }
-                if let Some(l) = self.landmarks.get() {
+                if let Some(l) = self.landmarks.get().filter(|_| !wire_overlay) {
                     // the wire members over the water, with the glass.
                     pass.set_bind_group(0, &draw_bg, &[]);
                     self.look.bind_main(pass);
@@ -1879,6 +1882,21 @@ impl Renderer {
         }
         self.look.encode_ao(enc, depth, &hdr, ts); // surfaces
         self.look.encode_sky_after(enc, depth, &hdr, self.agents.get(), ts); // rain, luminaires, velocity, volume, resolve, bloom
+        if let Some(l) = self.landmarks.get().filter(|_| wire_overlay) {
+            // the bridges' cables and suspenders over the frame the post reads (after the atmosphere, which wiped them over the sky).
+            let target = self.look.resolved_view().unwrap_or_else(|| hdr.clone());
+            let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("landmark-wires-overlay"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &target, depth_slice: None, resolve_target: None, ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store } })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: depth, depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store }), stencil_ops: None }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_bind_group(0, &draw_bg, &[]);
+            self.look.bind_main_resolved(&mut pass);
+            l.draw_overlay(&mut pass);
+        }
         self.look.encode_post(enc, output, ts); // look
     }
 
