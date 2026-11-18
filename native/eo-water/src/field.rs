@@ -376,6 +376,13 @@ impl ShoreField {
         if b <= 0.0 {
             return y;
         }
+        // (iteration 2, beach profiles) each beach's measured slope (crate::beaches), unless --no-beach-profiles
+        if crate::switches::is_on(crate::switches::BEACH_PROFILES)
+            && let Some(v) = crate::beaches::installed()
+        {
+            let slope = crate::beaches::slope_at(v, x, z, BEACH_FORESHORE_SLOPE);
+            return y + (crate::beaches::foreshore_with(s, y, slope) - y) * smooth(0.25, 0.6, b);
+        }
         y + (beach_foreshore(s, y) - y) * smooth(0.25, 0.6, b)
     }
 

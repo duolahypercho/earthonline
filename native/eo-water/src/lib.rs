@@ -14,6 +14,7 @@
 //! `tests/js_oracle.rs` compares against node-run JS answers
 //! (the earlier browser version's exporter -> `data/water-oracle.json.gz`).
 
+pub mod beaches; // each beach's measured foreshore slope (iteration 2)
 pub mod climate; // the Gate's measured wind and tidal current (iteration 2)
 pub mod exposure; // the sea's exposure to the swell and the wind (iteration 2)
 pub mod field;
@@ -163,6 +164,16 @@ pub fn load(repo_root: &Path, cache: Option<&Path>) -> Result<WaterData> {
         match exposure::load(repo_root, cache, &field, &key) {
             Ok(e) => eprintln!("water: exposure {} x {} cells of {} m ({})", e.width, e.height, e.cell_m, if e.from_cache { "from the cache".to_string() } else { format!("baked in {:.0} ms", e.bake_ms) }),
             Err(e) => eprintln!("water: no exposure field ({e:#}); the earlier ramp across the Gate stands"),
+        }
+    }
+    // (iteration 2, water-3) each beach's own foreshore slope, unless --no-beach-profiles
+    if switches::is_on(switches::BEACH_PROFILES) {
+        match beaches::load(repo_root, &field) {
+            Ok(v) => eprintln!(
+                "water: beach slopes measured: {}",
+                v.iter().map(|b| format!("1:{:.0} ({} transects) at ({:.0}, {:.0})", 1.0 / b.slope, b.transects, 0.5 * (b.bbox[0] + b.bbox[2]), 0.5 * (b.bbox[1] + b.bbox[3]))).collect::<Vec<_>>().join(", ")
+            ),
+            Err(e) => eprintln!("water: no beach slopes ({e:#}); the 1:55 foreshore stands"),
         }
     }
     Ok(WaterData { field, field_from_cache: from_cache, ms: t.elapsed().as_secs_f64() * 1e3 })
