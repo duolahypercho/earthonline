@@ -82,6 +82,8 @@ const MAX_PITCH_DEG: f64 = 89.9;
 pub enum Mode {
     File(PathBuf),
     SceneCards,
+    /// `--clip FILE.json`: moving clips along camera paths (clip.rs).
+    Clip(PathBuf),
 }
 
 impl Mode {
@@ -90,6 +92,7 @@ impl Mode {
         match self {
             Mode::File(_) => "shots",
             Mode::SceneCards => "scene-cards",
+            Mode::Clip(_) => "clip",
         }
     }
 }
@@ -106,6 +109,9 @@ pub fn arg_f64(name: &str) -> Result<Option<f64>> {
 pub fn requested() -> Option<Mode> {
     if let Some(f) = arg("--shots") {
         return Some(Mode::File(f.into()));
+    }
+    if let Some(f) = arg("--clip") {
+        return Some(Mode::Clip(f.into()));
     }
     std::env::args().any(|a| a == "--scene-cards").then_some(Mode::SceneCards)
 }
@@ -409,6 +415,7 @@ pub fn first_camera(world: &World, args: &Args, aspect: f32) -> Result<Option<Ca
             Ok(specs.iter().find(|s| wanted(&s.name)).map(|s| resolve(s, world, &gf, args, aspect, file_far(args)).cam))
         }
         Some(Mode::SceneCards) => Ok(super::scene_cards::first_camera(world, args, aspect)),
+        Some(Mode::Clip(p)) => super::clip::first_camera(&p, args.far.max(SHOTS_FAR_M), aspect),
         None => Ok(None),
     }
 }
@@ -755,6 +762,7 @@ pub fn run(io: &mut Io, mode: Mode, dir: &Path) -> Result<()> {
             Ok(())
         }
         Mode::SceneCards => super::scene_cards::run(io, dir, timeout),
+        Mode::Clip(path) => super::clip::run(io, &path, dir, timeout),
     };
     let base = io.args.look.sky;
     io.renderer.look.set_time_of_day(io.args.time_of_day);

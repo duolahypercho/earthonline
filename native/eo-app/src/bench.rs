@@ -133,6 +133,7 @@ mod view_bench;
 mod water_bench; // water
 mod sign_shots; // signs
 mod scene_cards; // the visual gate's eight scene cards (`--scene-cards`)
+mod clip; // moving clips along camera paths (`--clip FILE.json`)
 mod shots; // offscreen geo-referenced shots (`--shots FILE.json`)
 
 struct Segment {

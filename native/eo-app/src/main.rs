@@ -242,7 +242,7 @@ fn parse_args() -> Result<Args> {
                 sized = true;
             }
             // offscreen shots and the visual-gate scene cards (bench/shots.rs reads the values).
-            "--shots" => {
+            "--shots" | "--clip" => {
                 val()?;
                 a.bench = true;
             }
@@ -436,7 +436,10 @@ eo-app --shots FILE.json --out DIR [--width W --height H] [--time-of-day H] [--w
        \"far\", \"time_of_day\", \"weather\", \"what\".\n\
 eo-app --scene-cards --out DIR [--width 2560 --height 1440] [--shots-only a,b] [--card8-fps 10] [--card8-seconds 30] [--card8-speed 5.6] [any world or kill switch]\n\
        offscreen: the eight scene cards of Docs/VISUAL_QUALITY_GATE.md at the Ferry Building and the Embarcadero, a manifest per card;\n\
-       card 8 is a numbered frame sequence across a 128 m tile boundary."
+       card 8 is a numbered frame sequence across a 128 m tile boundary.\n\
+eo-app --clip FILE.json --out DIR [--width W --height H] [--shots-only a,b] [any world or kill switch]\n\
+       offscreen: moving clips at 60 Hz of wall time along camera paths, every 60 / fps-th frame written as DIR/<name>/NNNN.png;\n\
+       FILE.json holds {{\"name\", \"seconds\", \"fps\", \"time_of_day\", \"fov\", \"keys\": [{{\"t\", \"eye\": [x, y, z], \"look_at\": [x, y, z]}}]}} (bench/clip.rs)."
                 );
                 std::process::exit(0);
             }
