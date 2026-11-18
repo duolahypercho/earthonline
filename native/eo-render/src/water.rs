@@ -158,6 +158,12 @@ struct WaterUniform {
     wv_misc: [f32; 4],
     // per cascade, the GPU spectrum's mean square slope (eo-water Plan `mss_gpu`, before each place's amplitude)
     wv_mss: [f32; 4],
+    // (iteration 2) the exposure field's frame: origin x, z, 1 / extent x, z
+    wv_expo: [f32; 4],
+    // (iteration 2) x the tidal current (m/s, + flood), y the parts on (eo-water switches), z 1 with an exposure field
+    wv_gg2: [f32; 4],
+    // (iteration 2) per cascade, the wind sea's amplitude on the tidal jet (`doppler_gain`)
+    wv_dop: [f32; 4],
 }
 
 #[repr(C)]
@@ -258,6 +264,8 @@ struct State {
     // the sea in force, its plan, and this frame's work
     sea_in: SeaInput,
     sea_key: Option<[i64; 4]>,
+    /// (iteration 2) the day of the year the plan was made for (the station's wind by month).
+    sea_day: f64,
     plan: Option<eo_water::waves::Plan>,
     /// The spectrum must be rebuilt on the GPU this frame.
     init: bool,
@@ -356,6 +364,12 @@ pub struct WaterGpu {
     on: std::sync::atomic::AtomicBool,
     /// the shading features in force (`FEAT_*`, from `LookOptions::water_features`).
     features: u32,
+    /// (iteration 2) the exposure field (a 1 x 1 stand-in without one) and its frame.
+    expo_view: wgpu::TextureView,
+    expo_frame: [f32; 4],
+    expo_on: bool,
+    /// (iteration 2) the parts on (eo-water `switches`).
+    gg2: u32,
 }
 
 /// `EO_WATER_DEBUG`: the water pass draws its terms instead of the water (diagnostics).
@@ -387,8 +401,44 @@ fn sea_override() -> Option<eo_water::waves::SeaState> {
 /// The water shaders' shared WGSL (constants generated from eo-water, the
 /// grid and the uniform).
 fn common_source() -> String {
-    format!("{}\n{}\n{}", eo_water::optics::wgsl_constants(), eo_water::surface::wgsl_constants(), include_str!("water_common.wgsl"))
+    // (iteration 2, lean) each cascade's middle wavelength (m), the geometric mean of its band's edges (eo-water `CUT_M`)
+    let c = eo_water::waves::CUT_M;
+    let mid = |i: usize| (c[i].min(1e4) * c[i + 1]).sqrt();
+    let lean = format!("const WV_MID_M: vec4<f32> = vec4<f32>({:.4}, {:.4}, {:.4}, {:.4});\n", mid(0), mid(1), mid(2), mid(3));
+    format!("{}\n{}\n{lean}{}", eo_water::optics::wgsl_constants(), eo_water::surface::wgsl_constants(), include_str!("water_common.wgsl"))
 }
+
+/// (iteration 2, current) the wind sea's amplitude gain per cascade on the
+/// Golden Gate's tidal jet for a current (m/s, + flood): wave action conserved
+/// on a current along the waves (Longuet-Higgins and Stewart 1961, J. Fluid
+/// Mech. 10(4), 529: a/a0 = c0 / sqrt(c (c + 2U)), c = c0 (1 + sqrt(1 + 4U/c0)) / 2,
+/// deep water), for each cascade's middle wavelength and the bay's wind sea
+/// (`waves::BAY_DIR`) against the flood's axis (`climate::current_axis_deg`).
+/// Against the ebb the short waves steepen toward blocking and break: the gain
+/// is held to `DOPPLER_MAX` (INFERRED: past it the crests spill). Cascade 0
+/// (the swell) and 3 (the ripples, which the wind remakes in seconds) keep 1.
+pub fn doppler_gain(current: f64) -> [f64; 4] {
+    use eo_water::waves::{BAY_DIR, CUT_M};
+    let a = eo_water::climate::current_axis_deg().to_radians();
+    let flood = (a.sin(), -a.cos()); // compass to (x east, z south)
+    let u = current * (flood.0 * BAY_DIR.cos() + flood.1 * BAY_DIR.sin());
+    let mut g = [1.0; 4];
+    for (c, gc) in g.iter_mut().enumerate().take(3).skip(1) {
+        let lam = (CUT_M[c] * CUT_M[c + 1]).sqrt();
+        let c0 = (9.81 * lam / std::f64::consts::TAU).sqrt();
+        let q = 1.0 + 4.0 * u / c0;
+        *gc = if q <= 0.0 {
+            DOPPLER_MAX
+        } else {
+            let cc = 0.5 * c0 * (1.0 + q.sqrt());
+            (c0 / (cc * (cc + 2.0 * u)).max(1e-6).sqrt()).clamp(0.5, DOPPLER_MAX)
+        };
+    }
+    g
+}
+
+/// (current) the most the ebb steepens the wind sea (INFERRED: see `doppler_gain`).
+pub const DOPPLER_MAX: f64 = 2.0;
 
 impl WaterGpu {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, look: &crate::look::LookGpu, late_bgl: &wgpu::BindGroupLayout, init: &WaterInit) -> Self {
@@ -538,6 +588,37 @@ impl WaterGpu {
         );
         bytes += (detail_size * detail_size * 8) as u64;
         let detail_view = detail_tex.create_view(&Default::default());
+        // (iteration 2, exposure) the sea's exposure (eo-water exposure.rs), RGBA8,
+        // clamp-sampled; a 1 x 1 stand-in without one (the shader then keeps the ramp)
+        let gg2 = eo_water::switches::on();
+        let expo = eo_water::exposure::installed().filter(|_| gg2 & eo_water::switches::EXPOSURE != 0);
+        let (ew, eh, etex): (u32, u32, Vec<[u8; 4]>) = match expo {
+            Some(e) => (e.width as u32, e.height as u32, e.texels.clone()),
+            None => (1, 1, vec![[0, 128, 255, 255]]),
+        };
+        let expo_tex = d.create_texture(&wgpu::TextureDescriptor {
+            label: Some("water-exposure"),
+            size: wgpu::Extent3d { width: ew, height: eh, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo { texture: &expo_tex, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+            bytemuck::cast_slice(&etex),
+            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(ew * 4), rows_per_image: Some(eh) },
+            wgpu::Extent3d { width: ew, height: eh, depth_or_array_layers: 1 },
+        );
+        bytes += (ew * eh * 4) as u64;
+        let expo_view = expo_tex.create_view(&Default::default());
+        let expo_on = expo.is_some();
+        let expo_frame = match expo {
+            Some(e) => [e.origin[0] as f32, e.origin[1] as f32, (1.0 / (e.width as f64 * e.cell_m)) as f32, (1.0 / (e.height as f64 * e.cell_m)) as f32],
+            None => [0.0, 0.0, 0.0, 0.0],
+        };
 
         // The grid: one shared index list and a compact stream of visible patch IDs.
         let idx = eo_water::grid::patch_indices();
@@ -606,6 +687,8 @@ impl WaterGpu {
                 entry(13, vf, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }),
                 // (ppr) the projected reflection's sources (water_ppr.wgsl)
                 entry(14, fs, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }),
+                // (iteration 2) the exposure field
+                entry(15, vf, tex(filt, wgpu::TextureViewDimension::D2)),
             ],
         });
         // (ppr) the projection pass: the uniform, the opaque depth, the target buffer.
@@ -777,6 +860,7 @@ impl WaterGpu {
                 slot: None,
                 sea_in: SeaInput::Weather { hour: 16.0, wind: [0.0, 0.0], severity: 0.0 },
                 sea_key: None,
+                sea_day: f64::NAN,
                 plan: None,
                 init: false,
                 reset_foam: false,
@@ -793,6 +877,10 @@ impl WaterGpu {
             field_frame: [fld.origin[0] as f32, fld.origin[1] as f32, fld.size[0] as f32, fld.size[1] as f32],
             on: std::sync::atomic::AtomicBool::new(true),
             features: look.options.water_features,
+            expo_view,
+            expo_frame,
+            expo_on,
+            gg2,
         }
     }
 
@@ -864,11 +952,15 @@ impl WaterGpu {
         let (state, key) = match st.sea_in {
             SeaInput::Weather { hour, wind, severity } => {
                 let key = waves::quantise(hour, wind, severity);
-                if st.sea_key == Some(key) && st.plan.is_some() {
+                // (iteration 2) the station's wind by the day of the year
+                let day = eo_look::sun::day_of_year().round();
+                if st.sea_key == Some(key) && st.plan.is_some() && st.sea_day == day {
                     return;
                 }
+                st.sea_day = day;
                 let (h, w, sev) = waves::unquantise(key);
-                (waves::sea_state(h, w, sev), key)
+                let on = eo_water::switches::on();
+                (waves::sea_state_on(day, h, w, sev, on & eo_water::switches::EXPOSURE != 0, on & eo_water::switches::STREAK_CAPS != 0), key)
             }
             SeaInput::Fixed(s) => {
                 if st.plan.as_ref().is_some_and(|p| p.state == s) {
@@ -887,6 +979,10 @@ impl WaterGpu {
     }
 
     fn install_plan(st: &mut State, key: [i64; 4], plan: eo_water::waves::Plan) {
+        if std::env::var("EO_WATER_LOG").is_ok_and(|v| v == "1") {
+            let s = &plan.state;
+            eprintln!("water: sea plan key {key:?} day {}: bay U10 {:.2} m/s Hs {:.2} m, Pacific U10 {:.2} m/s, swell Hs {:.2} m, amp bay {:?}", st.sea_day, s.bay.u10, s.bay.hs(), s.pacific.u10, s.swell.hs, plan.amp_bay);
+        }
         st.sea_key = Some(key);
         st.plan_gpu = Some(PlanGpu::of(&plan));
         st.plan = Some(plan);
@@ -1074,6 +1170,11 @@ impl WaterGpu {
         planes[4] = [0.0, 0.0, 0.0, 1.0];
         let s = &eo_water::waves::SIZES; // the sea state's cascades
         let pg = st.plan_gpu.expect("waves: a plan");
+        // (iteration 2, current) the tidal current at the Gate for the sea's hour and the day
+        let current = match st.sea_in {
+            SeaInput::Weather { hour, .. } if self.gg2 & eo_water::switches::CURRENT != 0 => eo_water::climate::tidal_current(eo_look::sun::day_of_year(), hour),
+            _ => 0.0,
+        };
         let u = WaterUniform {
             view_proj: vp.to_cols_array_2d(),
             inv_view_proj: vp.inverse().to_cols_array_2d(),
@@ -1094,6 +1195,9 @@ impl WaterGpu {
             wv_sea: pg.wv[2],
             wv_misc: pg.wv[3],
             wv_mss: pg.wv[4],
+            wv_expo: self.expo_frame,
+            wv_gg2: [current as f32, self.gg2 as f32, self.expo_on as u32 as f32, 0.0],
+            wv_dop: doppler_gain(current).map(|g| g as f32),
         };
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&u));
         queue.write_buffer(&self.count_buf, 0, bytemuck::cast_slice(&[0u32, 0, 0, 0, u32::MAX, 0, 0, 0, self.index_count, 0, 0, 0, 0, 0, 0, 0]));
@@ -1302,6 +1406,7 @@ impl WaterGpu {
                         wgpu::BindGroupEntry { binding: 12, resource: wgpu::BindingResource::TextureView(look.sky.atmo_tables().1) },
                         wgpu::BindGroupEntry { binding: 13, resource: self.draw_buf.as_entire_binding() },
                         wgpu::BindGroupEntry { binding: 14, resource: ppr_buf.as_entire_binding() },
+                        wgpu::BindGroupEntry { binding: 15, resource: wgpu::BindingResource::TextureView(&self.expo_view) },
                     ],
                 }));
                 *cache = Some((dt.clone(), scene_view.0.clone(), g)); // one per probe cube

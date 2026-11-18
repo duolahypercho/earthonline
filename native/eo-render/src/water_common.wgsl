@@ -33,6 +33,14 @@ struct WaterU {
     wv_misc: vec4<f32>,
     // per cascade, the GPU spectrum's mean square slope (eo-water Plan `mss_gpu`)
     wv_mss: vec4<f32>,
+    // (iteration 2) the exposure field's frame: origin x, z, 1 / extent x, z (eo-water exposure.rs)
+    wv_expo: vec4<f32>,
+    // (iteration 2) x the tidal current at the Gate (m/s, + flood), y the parts on
+    // (eo-water switches.rs bits), z 1 with an exposure field, w 0
+    wv_gg2: vec4<f32>,
+    // (iteration 2) per cascade, the wind sea's amplitude on the tidal jet (wave
+    // action against the current, Longuet-Higgins and Stewart 1961)
+    wv_dop: vec4<f32>,
 };
 
 // 1024 segments and the two-zone axis of eo-water grid.rs.
@@ -90,16 +98,55 @@ fn wg_smooth(e0: f32, e1: f32, x: f32) -> f32 {
     return t * t * (3.0 - 2.0 * t);
 }
 
+// (iteration 2) an iteration-2 water part is on (eo-water switches.rs bits)
+fn wg_gg2(bit: u32) -> bool {
+    return (u32(wu.wv_gg2.y + 0.5) & bit) != 0u;
+}
+
+// (iteration 2, exposure) the exposure here, set by the water pass for the
+// point it shades (water.wgsl `w_expo_set`): x the open Pacific's swell share,
+// y the wind over the strait's (the lee and the Gate's channelling), z the
+// fetch factor, w 1 over water. x below 0: none (the earlier ramp across the Gate).
+var<private> wg_ex: vec4<f32> = vec4<f32>(-1.0, 1.0, 1.0, 1.0);
+
 // The open Pacific's share west of the Golden Gate (ocean-water-optics.js GOLDEN_GATE_X).
-fn wg_ocean(x: f32) -> f32 {
+fn wg_ocean_x(x: f32) -> f32 {
     // widened westward to 3 km (the JS's 800 m drew a seam across the Gate from the air)
     return wg_smooth(WO_GATE_X.x, WO_GATE_X.y - 2200.0, x);
+}
+
+// The open Pacific's share here: the exposure field's swell share where it is
+// set, else the ramp across the Gate.
+fn wg_ocean(x: f32) -> f32 {
+    if (wg_ex.x >= 0.0) {
+        return wg_ex.x;
+    }
+    return wg_ocean_x(x);
+}
+
+// (exposure) the wind here over the strait's (1 without the field)
+fn wg_wind_k() -> f32 {
+    return select(1.0, wg_ex.y, wg_ex.x >= 0.0);
+}
+
+// (exposure) the bay's wind sea here over the plan's (fetch-limited growth:
+// height in proportion to the wind and the square root of the fetch)
+fn wg_sea_k() -> f32 {
+    return select(1.0, clamp(wg_ex.y * wg_ex.z, 0.04, 1.6), wg_ex.x >= 0.0);
+}
+
+// (exposure) the bay's whitecap foam here over the plan's: coverage grows as
+// the wind to the 3.41 (Monahan and O'Muircheartaigh 1980), and a short fetch's young sea breaks less
+fn wg_foam_k() -> f32 {
+    return select(1.0, clamp(pow(max(wg_ex.y, 0.0), 3.41) * wg_ex.z, 0.0, 3.0), wg_ex.x >= 0.0);
 }
 
 // Per-cascade amplitude here: the bay keeps the short wind sea and only a
 // trace of the open-ocean swell (see water.rs `BAY_SWELL`).
 fn wg_cascade_amp(x: f32) -> vec4<f32> {
-    return mix(wu.wv_bay, wu.wv_pac, wg_ocean(x)); // each place's share of each cascade (the sea state's plan)
+    let k = wg_sea_k();
+    let bay = wu.wv_bay * vec4<f32>(1.0, k, k, k);
+    return mix(bay, wu.wv_pac, wg_ocean(x)); // each place's share of each cascade (the sea state's plan)
 }
 
 // `cascadeBandWeights`: band c fades out as the footprint grows from half its
@@ -124,7 +171,7 @@ fn wg_band(footprint: f32) -> vec4<f32> {
 // the sea detail's: whitecaps cluster where the wind is strongest, and the
 // cascades' tiles stop repeating).
 fn wv_foam(d: vec4<f32>, x: f32, gust: f32) -> f32 {
-    return mix(d.w, d.z, wg_ocean(x)) * mix(0.45, 1.3, smoothstep(0.2, 0.75, gust));
+    return mix(d.w * wg_foam_k(), d.z, wg_ocean(x)) * mix(0.45, 1.3, smoothstep(0.2, 0.75, gust));
 }
 
 // How many of cascade c's texels a footprint (m) spans, as a log2 (0 at one).
@@ -152,13 +199,13 @@ fn wv_edge(raw: f32, fine: f32, lace: f32, far: f32, x: f32, torn: bool) -> f32 
     let ridge = 1.0 - abs(lace);
     let filaments = smoothstep(1.0 - f * 1.35, 1.1 - f * 1.35, ridge) * smoothstep(0.03, 0.1, f);
     let near = max(core, filaments * 0.85);
-    let cover = mix(wu.wv_sea.z, wu.wv_sea.w, wg_ocean(x));
+    let cover = mix(wu.wv_sea.z * wg_foam_k(), wu.wv_sea.w, wg_ocean(x));
     return mix(near, cover * 0.6 * smoothstep(0.02, 0.05, cover), far);
 }
 
 // The wind over the water here (m/s).
 fn wv_u10(x: f32) -> f32 {
-    return mix(wu.wv_sea.x, wu.wv_sea.y, wg_ocean(x));
+    return mix(wu.wv_sea.x * wg_wind_k(), wu.wv_sea.y, wg_ocean(x));
 }
 
 // The short ripples' share for the wind (the shading's chop and unresolved
