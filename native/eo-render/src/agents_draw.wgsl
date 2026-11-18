@@ -87,6 +87,143 @@ fn ag_lamp(flags: u32, mflags: u32, local_x: f32) -> f32 {
     return i;
 }
 
+// ---- another player's ground contact (eo-agents `rig::contact_instances`,
+// material flag M_CONTACT; the glass pass only). The instance is a quad on
+// the ground around one box of the body (a shoe, half a shin or thigh, a
+// crouch's seat): `anim` half width, `steer` half length, `speed` top,
+// `clip_phase` bottom (metres over the ground), `color` the weight (low
+// byte) and the sun bit (bit 8). The patch darkens the ground under it
+// (blended black: the ground times 1 - alpha) by the share of its light the
+// box takes away: the sky the box hides (its exact view factor, mirrored by
+// `rig::box_view_factor`) of the indirect and rim light, and for a low box
+// the sun it blocks (a ray to the sun against the box), out of all the
+// light this renderer puts there (the key with its cascades, clouds and
+// screen-space contact ray, the rim, the sky and ambient with the
+// screen-space occlusion). Physical in sun and in shade alike: a sole's
+// edge loses the sun only on its shadow side.
+const AG_M_CONTACT: u32 = 1048576u;
+const AG_INV_2PI: f32 = 0.15915494;
+
+// Howell's catalogue: a plane element to a rectangle in a plane at 90 degrees
+// to it, h high and b wide, its bottom corner at the foot of the element's
+// perpendicular, c away.
+fn ag_vf_wall(c: f32, h: f32, b: f32) -> f32 {
+    if (h <= 0.0 || b <= 0.0) {
+        return 0.0;
+    }
+    let x = h / b;
+    let y = max(c, 1e-4) / b;
+    let s = sqrt(x * x + y * y);
+    return AG_INV_2PI * (atan(1.0 / y) - y / s * atan(1.0 / s));
+}
+
+// Howell's catalogue: a plane element to a parallel rectangle a by b, c over
+// it, the element's normal through one corner.
+fn ag_vf_ceiling(c: f32, a: f32, b: f32) -> f32 {
+    if (a <= 0.0 || b <= 0.0) {
+        return 0.0;
+    }
+    let x = a / max(c, 1e-4);
+    let y = b / max(c, 1e-4);
+    let sx = sqrt(1.0 + x * x);
+    let sy = sqrt(1.0 + y * y);
+    return AG_INV_2PI * (x / sx * atan(y / sx) + y / sy * atan(x / sy));
+}
+
+// A wall face from h0 to h1, its lateral edge `e` from the foot (signed).
+fn ag_vf_wall_band(c: f32, h0: f32, h1: f32, e: f32) -> f32 {
+    let u = abs(e);
+    var f = ag_vf_wall(c, h1, u);
+    if (h0 > 0.002) {
+        f = f - ag_vf_wall(c, h0, u);
+    }
+    return select(-f, f, e >= 0.0);
+}
+
+fn ag_vf_side(c: f32, t: f32, half_w: f32, h0: f32, h1: f32) -> f32 {
+    return ag_vf_wall_band(c, h0, h1, half_w - t) - ag_vf_wall_band(c, h0, h1, -half_w - t);
+}
+
+fn ag_vf_corner(c: f32, u: f32, v: f32) -> f32 {
+    return sign(u) * sign(v) * ag_vf_ceiling(c, abs(u), abs(v));
+}
+
+fn ag_box_view_factor(px: f32, pz: f32, hx: f32, hz: f32, h0: f32, h1: f32) -> f32 {
+    if (abs(px) <= hx && abs(pz) <= hz && h0 < 0.002) {
+        // Under the sole: all of it, but a shoe is round at the toe and heel,
+        // so the box's corners (outside a rounded footprint, corner radius
+        // 0.9 of the half width) keep the value at its faces (about 0.45).
+        let r = 0.9 * min(hx, hz);
+        let e = vec2<f32>(abs(px) - hx + r, abs(pz) - hz + r);
+        let sd = length(max(e, vec2<f32>(0.0))) + min(max(e.x, e.y), 0.0) - r;
+        return mix(0.45, 1.0, 1.0 - smoothstep(-0.01, 0.0, sd));
+    }
+    var f = 0.0;
+    if (h0 > 0.002) {
+        f = f + ag_vf_corner(h0, hx - px, hz - pz) - ag_vf_corner(h0, -hx - px, hz - pz) - ag_vf_corner(h0, hx - px, -hz - pz) + ag_vf_corner(h0, -hx - px, -hz - pz);
+    }
+    if (px > hx) {
+        f = f + ag_vf_side(px - hx, pz, hz, h0, h1);
+    }
+    if (px < -hx) {
+        f = f + ag_vf_side(-hx - px, pz, hz, h0, h1);
+    }
+    if (pz > hz) {
+        f = f + ag_vf_side(pz - hz, px, hx, h0, h1);
+    }
+    if (pz < -hz) {
+        f = f + ag_vf_side(-hz - pz, px, hx, h0, h1);
+    }
+    return clamp(f, 0.0, 1.0);
+}
+
+// Whether the ray from p along d meets the box lo..hi (slabs).
+fn ag_ray_box(p: vec3<f32>, d: vec3<f32>, lo: vec3<f32>, hi: vec3<f32>) -> bool {
+    let dd = select(d, vec3<f32>(1e-6), abs(d) < vec3<f32>(1e-6));
+    let inv = 1.0 / dd;
+    let t0 = (lo - p) * inv;
+    let t1 = (hi - p) * inv;
+    let tn = min(t0, t1);
+    let tf = max(t0, t1);
+    let near = max(max(tn.x, tn.y), tn.z);
+    let far = min(min(tf.x, tf.y), tf.z);
+    return far >= max(near, 0.0);
+}
+
+fn ag_contact(in: AgOut, a: AgAgent) -> vec4<f32> {
+    let inv = vec4<f32>(-a.rot.xyz, a.rot.w);
+    let q = ag_rotate(inv, in.world - a.pos);
+    let reach = max(a.scale, 1e-3);
+    let window = 1.0 - smoothstep(0.75, 1.0, max(abs(q.x), abs(q.z)) / reach);
+    let hx = a.anim;
+    let hz = a.steer;
+    let h1 = a.speed;
+    let h0 = a.clip_phase;
+    let f = ag_box_view_factor(q.x, q.z, hx, hz, h0, h1);
+    let up = vec3<f32>(0.0, 1.0, 0.0);
+    let lum = vec3<f32>(0.2126, 0.7152, 0.0722);
+    let l = look.key_dir.xyz;
+    var e_key = 0.0;
+    var blocked = 0.0;
+    if (l.y > 0.0) {
+        e_key = dot(look.key.xyz, lum) * l.y * lk_shadow(in.world, up) * sky_cloud_transmittance(in.world) * sky_contact_shadow(in.world, up);
+        if (((a.color >> 8u) & 1u) != 0u && ag_ray_box(vec3<f32>(q.x, 0.0, q.z), ag_rotate(inv, l), vec3<f32>(-hx, h0, -hz), vec3<f32>(hx, h1, hz))) {
+            // Only the first few centimetres past the footprint: beyond them
+            // the cascades and the screen-space ray draw the shadow (taking
+            // it again there would cut a box's shape into theirs).
+            let o = max(abs(q.xz) - vec2<f32>(hx, hz), vec2<f32>(0.0));
+            blocked = 1.0 - smoothstep(0.01, 0.05, length(o));
+        }
+    }
+    let e_rim = dot(look.rim.xyz, lum) * max(look.rim_dir.y, 0.0);
+    let env_i = look.ambient.w * look.env_class.w;
+    let e_ind = dot(look.hemi_sky.xyz + look.ambient.xyz + lk_sh(up) * env_i, lum) * ao_multi_bounce(ao_fetch(in.world).a);
+    let total = e_key + e_rim + e_ind;
+    let share = (f * (e_rim + e_ind) + blocked * e_key) / max(total, 1e-6);
+    let weight = f32(a.color & 255u) / 255.0;
+    return vec4<f32>(0.0, 0.0, 0.0, clamp(share * weight * window, 0.0, 0.98));
+}
+
 fn ag_shade(in: AgOut) -> vec4<f32> {
     var m = materials[in.material];
     let a = ag_agents[in.agent];
@@ -95,6 +232,9 @@ fn ag_shade(in: AgOut) -> vec4<f32> {
     // Derivatives first, in uniform control flow.
     let duvx = dpdx(in.uv);
     let duvy = dpdy(in.uv);
+    if ((m.flags & AG_M_CONTACT) != 0u) {
+        return ag_contact(in, a);
+    }
     let v = normalize(frame.cam_pos.xyz - in.world);
     var n = normalize(in.normal);
     if (dot(in.normal, in.normal) < 1e-8) {
