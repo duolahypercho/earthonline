@@ -72,6 +72,14 @@ pub fn far_land_tone(class: u8, x: f64, z: f64) -> Linear {
     [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
 }
 
+/// A named tone pair (`pair`) mixed by the ground mottle at (x, z), linear; None for an unknown name.
+pub fn named_tone(name: &str, x: f64, z: f64) -> Option<Linear> {
+    let (a, b) = pair(name)?;
+    let (a, b) = (hex(a), hex(b));
+    let t = ground_mottle(x, z);
+    Some([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t])
+}
+
 /// `greenSurfaceTone(g)`: the surveyed surface a green's own ground takes, or None.
 pub fn surface_tone(g: &Area) -> Option<&'static str> {
     match g.ground.as_str() {
@@ -391,6 +399,27 @@ impl GroundCover {
             }
         }
         false
+    }
+
+    /// Whether (x, z) lies inside a mapped beach's ring (OSM `natural=beach`),
+    /// not merely within `BEACH_SAND_REACH_M` of one.
+    pub fn in_mapped_beach(&self, x: f64, z: f64) -> bool {
+        let Some(list) = self.beach_cells.get(&((x / CELL).floor() as i64, (z / CELL).floor() as i64)) else { return false };
+        list.iter().any(|&i| {
+            let (ring, mn, mx) = &self.beaches[i as usize];
+            x >= mn[0] && x <= mx[0] && z >= mn[1] && z <= mx[1] && in_ring(ring, x, z)
+        })
+    }
+
+    /// Whether (x, z) lies within `BEACH_SAND_REACH_M` of a mapped beach (at
+    /// any distance from the sea): the cliffs and bluffs over the beaches.
+    pub fn near_mapped_beach(&self, x: f64, z: f64) -> bool {
+        let Some(list) = self.beach_cells.get(&((x / CELL).floor() as i64, (z / CELL).floor() as i64)) else { return false };
+        list.iter().any(|&i| {
+            let (ring, mn, mx) = &self.beaches[i as usize];
+            let r = BEACH_SAND_REACH_M;
+            x >= mn[0] - r && x <= mx[0] + r && z >= mn[1] - r && z <= mx[1] + r && (in_ring(ring, x, z) || crate::waterfront::ring_distance(ring, x, z) <= r)
+        })
     }
 
     /// tile-trees.js `plantTileTrees` over [x0, x1) x [z0, z1) (near tier): the
