@@ -158,9 +158,17 @@ fn fb_glass_sky(n: vec3<f32>, v: vec3<f32>, f0: vec3<f32>, cov: f32) -> vec3<f32
     let f = f0 + (vec3<f32>(1.0) - f0) * fres;
     let extra = max(f - vec3<f32>(0.04 + 0.96 * fres), vec3<f32>(0.0));
     let r = reflect(-v, n);
-    let up = lk_sky_sample(vec3<f32>(r.x, max(r.y, 0.0), r.z));
-    let horizon = lk_sky_sample(normalize(vec3<f32>(r.x, 0.0, r.z) + vec3<f32>(1e-5, 0.0, 0.0)));
-    let sky = mix(up, horizon * 0.25, smoothstep(-0.02, 0.2, -r.y));
+    // One sky read where only one side of the horizon shows (most pixels), two in the band between.
+    let w = smoothstep(-0.02, 0.2, -r.y);
+    var up = vec3<f32>(0.0);
+    var horizon = vec3<f32>(0.0);
+    if (w < 1.0) {
+        up = lk_sky_sample(vec3<f32>(r.x, max(r.y, 0.0), r.z));
+    }
+    if (w > 0.0) {
+        horizon = lk_sky_sample(normalize(vec3<f32>(r.x, 0.0, r.z) + vec3<f32>(1e-5, 0.0, 0.0)));
+    }
+    let sky = mix(up, horizon * 0.25, w);
     let env_i = look.ambient.w * look.env_class.y;
     return sky * env_i * extra * cov;
 }
