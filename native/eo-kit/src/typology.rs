@@ -37,6 +37,8 @@
 //!
 //! * *Every face glazed* (`glaze_every_face`): a tower is windowed on all its
 //!   sides off a lot line (the port glazed its four longest only).
+//! * *Victorian height* (`reclassify`): a "Victorian row" front taller than a
+//!   Victorian house stands is drawn as the apartment house it is.
 //!
 //! Switch: `EO_FACADE_TYPOLOGY=off` (eo-app `--no-facade-typology`): every
 //! spec as the port writes it. On, `cache_tag` names the kit tile cache.
@@ -73,6 +75,30 @@ pub fn cache_tag() -> String {
 /// A tower glazes every face off a lot line (downtown_tower.rs `glazed_edges`).
 pub fn glaze_every_face() -> bool {
     enabled()
+}
+
+/// The tallest front a Victorian row house stands, metres. San Francisco's
+/// Victorian-era row houses and flats (Italianate, Stick and Queen Anne,
+/// 1860s-1900; SF Planning Department, Alamo Square Landmark District
+/// walking tour: "houses and flats" in Victorian- and Edwardian-era styles)
+/// are wood-framed houses of up to three storeys over a raised basement, at
+/// the period's 10-12 ft (3.0-3.7 m) storeys: three of 3.7 m over a 1.5 m
+/// basement and a 2 m cornice or gable is about 15 m. A taller front the
+/// classifier calls a Victorian row is a later apartment house (the six- and
+/// seven-storey walk-ups of the 1900s-1920s), drawn as one.
+pub const VICTORIAN_MAX_HEIGHT_M: f64 = 15.5;
+
+/// Correct a classification the facade rules know better: a Victorian row
+/// taller than a Victorian house is drawn as a bay-window apartment house.
+/// Runs on every classification (the kit and the far box agree).
+pub fn reclassify(c: &mut Classified) {
+    if !enabled() {
+        return;
+    }
+    if c.archetype == crate::classify::VICTORIAN_ROW && c.height > VICTORIAN_MAX_HEIGHT_M {
+        c.archetype = crate::classify::BAY_WINDOW_APARTMENT;
+        c.reason = format!("{} (typology: {:.1} m is past a Victorian house's {VICTORIAN_MAX_HEIGHT_M} m)", c.reason, c.height);
+    }
 }
 
 fn lerp(a: f64, b: f64, t: f64) -> f64 {
@@ -486,6 +512,25 @@ mod tests {
         let s = f["windowSpec"]["sillHeight"].as_f64().unwrap();
         assert!((0.6..=1.1).contains(&s), "{s}");
         assert_eq!(spec["elevations"]["default"], json!("blind"));
+    }
+
+    #[test]
+    fn a_victorian_taller_than_a_house_is_an_apartment_house() {
+        if !enabled() {
+            return;
+        }
+        let mut tall = classified(crate::classify::VICTORIAN_ROW, 7);
+        tall.height = 24.0;
+        reclassify(&mut tall);
+        assert_eq!(tall.archetype, crate::classify::BAY_WINDOW_APARTMENT);
+        let mut house = classified(crate::classify::VICTORIAN_ROW, 7);
+        house.height = 11.0;
+        reclassify(&mut house);
+        assert_eq!(house.archetype, crate::classify::VICTORIAN_ROW);
+        let mut flats = classified(crate::classify::EDWARDIAN_FLATS, 7);
+        flats.height = 24.0;
+        reclassify(&mut flats);
+        assert_eq!(flats.archetype, crate::classify::EDWARDIAN_FLATS);
     }
 
     #[test]

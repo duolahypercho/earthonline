@@ -172,6 +172,7 @@ pub fn classify_loaded(rec: &LoadedRecord) -> Option<Classified> {
     };
     let mut c = classify::classify(&input);
     c.record_id = rec.id.clone();
+    crate::typology::reclassify(&mut c);
     Some(c)
 }
 
