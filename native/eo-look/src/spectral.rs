@@ -28,6 +28,21 @@
 //!   Gaussian fit of Wyman, Sloan and Shirley 2013 ("Simple Analytic
 //!   Approximations to the CIE XYZ Color Matching Functions", JCGT 2(2),
 //!   1-11), within about 1 % of the tabulated functions.
+//!
+//! What this is not: a validation against published clear-sky spectra. The
+//! beam is integrated on this model's own medium, with a Planckian sun and an
+//! INFERRED Chappuis shape, and compared only with the model's three
+//! channels (a self-consistency check). By day the two differ by about as
+//! much as a Planckian sun differs from the measured extraterrestrial
+//! spectrum. No published direct-normal spectrum or chromaticity table (for
+//! example SMARTS or SPCTRAL2 output at a stated AOD and ozone column) is
+//! compared yet.
+//!
+//! Only the beam's chromaticity is taken from here (phys.rs); its luminance
+//! stays the three channels', which every exposure and brightness is scaled
+//! on. At a 3 deg sun the spectral luminance is 22 % lower (Y 0.083 against
+//! 0.107); the effect of taking it on the sunset frames' exposure has not
+//! been measured.
 
 use crate::atmosphere::{Atmosphere, R_GROUND_KM, R_TOP_KM, SUN_EFFECTIVE_TEMPERATURE_K, ground_hit, sphere, xy_to_srgb};
 use crate::math::*;
