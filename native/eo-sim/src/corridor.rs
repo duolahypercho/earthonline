@@ -19,9 +19,16 @@
 //!     lane when the next lane lets them go faster and its follower keeps a
 //!     safe gap (the incentive and safety tests of MOBIL, Kesting, Treiber and
 //!     Helbing 2007, Transp. Res. Rec. 1999, 86-94), and leave at its end;
-//!   * at a change of hour (or at the start) every lane is filled at the
-//!     hour's equilibrium spacing, so a still taken a second after a jump has
-//!     the road's traffic on it and not a front advancing from the start.
+//!   * at the start, and when the clock jumps by more than `REFILL_JUMP_H`
+//!     between two steps, every lane is filled at the hour's equilibrium
+//!     spacing, so a still taken a second after a jump has the road's traffic
+//!     on it and not a front advancing from the start; a clock that runs on
+//!     (or moves by less) only changes the arrival rate;
+//!   * a way may continue onto another (`WaySpec::next`, a road whose count
+//!     changes at a junction): at its end a mover goes on along the next way
+//!     at the share of the flow the next way carries on from it (the rest
+//!     leave by the junction's other branch), and the next way's own arrivals
+//!     are what its flow adds to that.
 //!
 //! Output: one `CorridorInstance` per vehicle or walker, in world metres
 //! with its height (the caller's centreline carries it), heading and pitch.
@@ -64,7 +71,29 @@ pub struct WaySpec {
     pub hidden: Vec<bool>,
     /// The local simulation also drives this way: inside its window the local cars are drawn instead.
     pub handover: bool,
+    /// The way (an index into the specs given to `Corridors::new`) whose start
+    /// is this way's end: movers go on along it (see the module notes).
+    pub next: Option<usize>,
 }
+
+/// A clock jump (hours, either way, across midnight too) between two steps
+/// that refills the lanes. INFERRED: a quarter of the hourly flow's step, so
+/// a set clock (a shot's hour, a time picked in the menu) refills and a
+/// running one never does.
+pub const REFILL_JUMP_H: f64 = 0.25;
+/// Walkers on the walk. INFERRED, not counted: a walker's length along the
+/// walk (0.6 m, a body ellipse's long axis, about the HCM's 0.6 x 0.5 m
+/// pedestrian body), the gap below which a walker slows behind the one ahead
+/// (1.5 m, a step and a half), the share of a vehicle's following gap the
+/// fill spaces walkers by (0.3), and the clear length a walker needs at the
+/// walk's start to enter (0.5 m).
+const WALKER_LEN_M: f64 = 0.6;
+const WALKER_SLOW_GAP_M: f64 = 1.5;
+const WALKER_FILL_GAP_SHARE: f64 = 0.3;
+const WALKER_ENTRY_CLEAR_M: f64 = 0.5;
+/// The clear length a vehicle needs at a way's start to enter: half its
+/// equilibrium following gap (INFERRED, a merge that brakes its follower a little).
+const VEHICLE_ENTRY_GAP_SHARE: f64 = 0.5;
 
 /// The car-following parameters.
 #[derive(Clone, Copy, Debug)]
@@ -118,6 +147,9 @@ struct Way {
     len: f64,
     movers: Vec<Mover>,
     next_arrival_s: f64,
+    /// The way movers go on along (an index into `Corridors::ways`), and the ways that feed this one.
+    next: Option<usize>,
+    fed_by: Vec<usize>,
 }
 
 /// The corridor layer.
@@ -129,6 +161,8 @@ pub struct Corridors {
     next_id: u32,
     /// The hour the lanes were last filled at (NaN: never).
     filled_hour: f64,
+    /// The hour the last step ran at (NaN: none yet).
+    last_hour: f64,
     /// The hour to run at, written by the caller from any thread (f64 bits).
     hour: Arc<AtomicU64>,
     pub out: Vec<CorridorInstance>,
@@ -184,7 +218,7 @@ impl Way {
         let mut hidden = spec.hidden.clone();
         hidden.resize(n, false);
         let spec = WaySpec { hidden, ..spec };
-        Some(Way { spec, cum, normal, len, movers: vec![], next_arrival_s: 0.0 })
+        Some(Way { spec, cum, normal, len, movers: vec![], next_arrival_s: 0.0, next: None, fed_by: vec![] })
     }
 
     /// (segment, t) at arc `s`.
@@ -212,7 +246,12 @@ impl Way {
     }
 
     fn flow_at(&self, hour: f64) -> f64 {
-        // hourly values at the hours' centres, linear between them.
+        // walkers: the hour's own value (the walk opens and closes on the
+        // hour; between hours it would leak past the gate's times).
+        if self.spec.travel == Travel::Walkers {
+            return self.spec.flow_vph[(hour.rem_euclid(24.0).floor() as usize) % 24].max(0.0);
+        }
+        // vehicles: hourly values at the hours' centres, linear between them.
         let h = (hour - 0.5).rem_euclid(24.0);
         let (i, t) = (h.floor() as usize % 24, h - h.floor());
         lerp(self.spec.flow_vph[i], self.spec.flow_vph[(i + 1) % 24], t).max(0.0)
@@ -239,8 +278,50 @@ fn equilibrium_gap(p: &Params, v: f64) -> f64 {
 
 impl Corridors {
     pub fn new(specs: Vec<WaySpec>, params: Params, seed: u32) -> Self {
-        let ways = specs.into_iter().filter_map(Way::new).collect();
-        Corridors { ways, params, seed, rng: Mulberry32::new(seed.wrapping_add(0x5eed)), next_id: 1, filled_hour: f64::NAN, hour: Arc::new(AtomicU64::new(12f64.to_bits())), out: vec![], time: 0.0 }
+        // the specs' indices to the kept ways' (a way too short to drive is left out).
+        let mut index = vec![None; specs.len()];
+        let mut ways: Vec<Way> = vec![];
+        let mut nexts = vec![];
+        for (i, spec) in specs.into_iter().enumerate() {
+            let next = spec.next;
+            if let Some(w) = Way::new(spec) {
+                index[i] = Some(ways.len());
+                nexts.push(next);
+                ways.push(w);
+            }
+        }
+        for (wi, next) in nexts.into_iter().enumerate() {
+            let to = next.and_then(|j| index.get(j).copied().flatten()).filter(|&j| j != wi && ways[j].spec.travel == ways[wi].spec.travel);
+            ways[wi].next = to;
+            if let Some(j) = to {
+                ways[j].fed_by.push(wi);
+            }
+        }
+        Corridors { ways, params, seed, rng: Mulberry32::new(seed.wrapping_add(0x5eed)), next_id: 1, filled_hour: f64::NAN, last_hour: f64::NAN, hour: Arc::new(AtomicU64::new(12f64.to_bits())), out: vec![], time: 0.0 }
+    }
+
+    /// Seconds stepped since the layer was built (its own clock: the walkers' clip phase).
+    pub fn time(&self) -> f64 {
+        self.time
+    }
+
+    /// The share of way `wi`'s movers that go on along its next way at `hour`
+    /// (the next way's flow over this one's, at most all of them).
+    fn carry_share(&self, wi: usize, hour: f64) -> f64 {
+        let w = &self.ways[wi];
+        match w.next {
+            Some(j) => {
+                let (q, qn) = (w.flow_at(hour), self.ways[j].flow_at(hour));
+                if q > 0.0 { (qn / q).min(1.0) } else { 0.0 }
+            }
+            None => 0.0,
+        }
+    }
+
+    /// Way `wi`'s own arrivals per hour at its start: its flow less what its feeding ways carry onto it.
+    fn own_arrivals(&self, wi: usize, hour: f64) -> f64 {
+        let fed: f64 = self.ways[wi].fed_by.iter().map(|&k| self.ways[k].flow_at(hour) * self.carry_share(k, hour)).sum();
+        (self.ways[wi].flow_at(hour) - fed).max(0.0)
     }
 
     /// The handle the caller writes the hour through (local time, hours).
@@ -254,6 +335,11 @@ impl Corridors {
 
     pub fn movers(&self) -> usize {
         self.ways.iter().map(|w| w.movers.len()).sum()
+    }
+
+    /// Per way: its name, its movers and its length, m.
+    pub fn way_movers(&self) -> Vec<(String, usize, f64)> {
+        self.ways.iter().map(|w| (w.spec.name.clone(), w.movers.len(), w.len)).collect()
     }
 
     fn hour(&self) -> f64 {
@@ -281,7 +367,7 @@ impl Corridors {
             Travel::Walkers => {
                 // the crowd's cruise range (`PED_CRUISE_MIN`..`MAX`).
                 let v = PED_CRUISE_MIN + (PED_CRUISE_MAX - PED_CRUISE_MIN) * self.rng.next_f64();
-                (KIND_WALKER_BASE, 0.6, v)
+                (KIND_WALKER_BASE, WALKER_LEN_M, v)
             }
         };
         let gait = self.rng.next_f64() * std::f64::consts::TAU;
@@ -308,7 +394,7 @@ impl Corridors {
                     let mut s = self.rng.next_f64() * mean_h * speed;
                     while s < len {
                         let m = self.new_mover(travel, &mix, speed, k as u16, lat, s);
-                        let min_space = m.len + equilibrium_gap(&p, m.v0) * if travel == Travel::Walkers { 0.3 } else { 1.0 };
+                        let min_space = m.len + equilibrium_gap(&p, m.v0) * if travel == Travel::Walkers { WALKER_FILL_GAP_SHARE } else { 1.0 };
                         let min_h = min_space / m.v0.max(0.1);
                         movers.push(m);
                         let h = min_h + -(1.0 - self.rng.next_f64()).ln() * (mean_h - min_h).max(0.0);
@@ -323,17 +409,75 @@ impl Corridors {
         self.filled_hour = hour;
     }
 
+    /// The lane of way `wi` whose last mover has cleared `need` metres at its start, from `k0` on.
+    fn clear_lane(&self, wi: usize, k0: usize, need: f64) -> Option<usize> {
+        let w = &self.ways[wi];
+        let nl = w.spec.lanes.len();
+        let clear = |k: usize| w.movers.iter().filter(|o| o.lane == k as u16).map(|o| o.s - o.len).fold(f64::INFINITY, f64::min) >= need;
+        (0..nl).map(|j| (k0 + j) % nl).find(|&k| clear(k))
+    }
+
+    /// The clear length a mover needs at a way's start.
+    fn entry_need(&self, m: &Mover) -> f64 {
+        m.len + if m.kind >= KIND_WALKER_BASE { WALKER_ENTRY_CLEAR_M } else { equilibrium_gap(&self.params, m.v0) * VEHICLE_ENTRY_GAP_SHARE }
+    }
+
+    /// Movers past their way's end: on along the next way (at its carry
+    /// share, into the lane nearest where they are, easing across from
+    /// there), else they leave.
+    fn hand_on(&mut self, hour: f64) {
+        for wi in 0..self.ways.len() {
+            let len = self.ways[wi].len;
+            if !self.ways[wi].movers.iter().any(|m| m.s >= len) {
+                continue;
+            }
+            let (done, keep): (Vec<Mover>, Vec<Mover>) = std::mem::take(&mut self.ways[wi].movers).into_iter().partition(|m| m.s >= len);
+            self.ways[wi].movers = keep;
+            let Some(j) = self.ways[wi].next else { continue };
+            let share = self.carry_share(wi, hour);
+            for mut m in done {
+                if self.rng.next_f64() >= share {
+                    continue;
+                }
+                // where it is (the end of this way) across the next way's start.
+                let lat_end = self.lane_at(wi, &m);
+                let (p, _, _, _) = self.ways[wi].pose(len, lat_end);
+                let nw = &self.ways[j];
+                let (a, n) = (nw.spec.points[0], nw.normal[0]);
+                let lat = (p[0] - a[0]) * n[0] + (p[2] - a[2]) * n[1];
+                let nearest = (0..nw.spec.lanes.len()).min_by(|&x, &y| (nw.spec.lanes[x] - lat).abs().total_cmp(&(nw.spec.lanes[y] - lat).abs())).unwrap_or(0);
+                let need = self.entry_need(&m);
+                let Some(k) = self.clear_lane(j, nearest, need) else { continue };
+                m.s -= len;
+                m.lane = k as u16;
+                m.lat_from = lat;
+                m.change_t = 0.0;
+                self.ways[j].movers.push(m);
+            }
+        }
+    }
+
+    /// A mover's lateral offset now (across a lane change).
+    fn lane_at(&self, wi: usize, m: &Mover) -> f64 {
+        let to = self.ways[wi].spec.lanes[m.lane as usize];
+        let t = m.change_t * m.change_t * (3.0 - 2.0 * m.change_t);
+        lerp(m.lat_from, to, t)
+    }
+
     /// One fixed step. `focus`: the local simulation's focus (x, z), for the hand-over.
     pub fn step(&mut self, dt: f64, focus: Option<[f64; 2]>) {
         self.time += dt;
         let hour = self.hour();
-        if !(self.filled_hour - hour).abs().is_finite() || (self.filled_hour - hour).abs() > 0.05 {
+        // a jump of the clock refills (wrapped across midnight); a running clock only moves the rates.
+        let jump = ((hour - self.last_hour + 12.0).rem_euclid(24.0) - 12.0).abs();
+        if !self.filled_hour.is_finite() || !(jump <= REFILL_JUMP_H) {
             self.fill(hour);
         }
+        self.last_hour = hour;
         let p = self.params;
         for wi in 0..self.ways.len() {
-            // arrivals at the start, exponential gaps at the hour's flow.
-            let flow = self.ways[wi].flow_at(hour);
+            // arrivals at the start, exponential gaps at the hour's own flow.
+            let flow = self.own_arrivals(wi, hour);
             if flow > 0.0 {
                 while self.ways[wi].next_arrival_s <= self.time {
                     let (lanes, speed, travel, mix) = {
@@ -342,11 +486,9 @@ impl Corridors {
                     };
                     let k0 = ((self.rng.next_f64() * lanes.len() as f64) as usize).min(lanes.len() - 1);
                     let mut m = self.new_mover(travel, &mix, speed, k0 as u16, lanes[k0], 0.0);
-                    let w = &mut self.ways[wi];
                     // the drawn lane, else the next lane whose last mover has cleared the entry.
-                    let need = m.len + if travel == Travel::Walkers { 0.5 } else { equilibrium_gap(&p, m.v0) * 0.5 };
-                    let clear = |k: usize| w.movers.iter().filter(|o| o.lane == k as u16).map(|o| o.s - o.len).fold(f64::INFINITY, f64::min) >= need;
-                    let free = (0..lanes.len()).map(|j| (k0 + j) % lanes.len()).find(|&k| clear(k));
+                    let free = self.clear_lane(wi, k0, self.entry_need(&m));
+                    let w = &mut self.ways[wi];
                     if let Some(k) = free {
                         m.lane = k as u16;
                         m.lat_from = lanes[k];
@@ -375,7 +517,7 @@ impl Corridors {
                 acc[i] = if w.spec.travel == Travel::Walkers {
                     // walkers keep their cruise and slow behind a slower one.
                     match gap {
-                        Some((g, _)) if g < 1.5 => -1.0,
+                        Some((g, _)) if g < WALKER_SLOW_GAP_M => -1.0,
                         _ => (m.v0 - m.v).clamp(-1.0, 1.0),
                     }
                 } else {
@@ -442,9 +584,8 @@ impl Corridors {
                     m.change_t = (m.change_t + dt / p.change_s).min(1.0);
                 }
             }
-            let len = w.len;
-            w.movers.retain(|m| m.s < len);
         }
+        self.hand_on(hour);
         self.write_out(focus);
     }
 
@@ -505,7 +646,9 @@ pub fn mix_with_heavy(two_axle_share: f64, multi_axle_share: f64) -> [f64; 4] {
 /// peak at 07-09 h, the PM peak at 16-18 h, the night (22-05 h) at a tenth of
 /// the larger peak, linear shoulders 05-07 h and 18-22 h, and a midday plateau
 /// (09-16 h) whose level is solved so the day sums to the 24-hour volume
-/// (clamped between the night level and the smaller peak).
+/// (clamped between the night level and the larger peak: a count's peak hour
+/// is the two-way peak, and the other direction's share of it can be under
+/// its own midday, as on US-101 at Broderick Street).
 pub fn hourly_profile(day_volume: f64, am_peak: f64, pm_peak: f64) -> [f64; 24] {
     let night = 0.1 * am_peak.max(pm_peak);
     let mut q = [0.0f64; 24];
@@ -527,7 +670,7 @@ pub fn hourly_profile(day_volume: f64, am_peak: f64, pm_peak: f64) -> [f64; 24] 
     };
     build(0.0, &mut q);
     let rest: f64 = q.iter().sum();
-    let plateau = ((day_volume - rest) / 7.0).clamp(night, am_peak.min(pm_peak).max(night));
+    let plateau = ((day_volume - rest) / 7.0).clamp(night, am_peak.max(pm_peak).max(night));
     build(plateau, &mut q);
     q
 }
@@ -547,6 +690,7 @@ mod tests {
             travel: Travel::Vehicles,
             hidden: vec![],
             handover: false,
+            next: None,
         }
     }
 
@@ -621,6 +765,70 @@ mod tests {
         c.step(1.0 / 60.0, None);
         assert!(!c.out.is_empty());
         assert!(c.out.iter().all(|o| o.pos[2] <= -500.0));
+    }
+
+    fn ids(c: &Corridors) -> Vec<u32> {
+        let mut v: Vec<u32> = c.out.iter().map(|o| o.id).collect();
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn a_running_clock_keeps_its_traffic_and_a_jump_refills() {
+        let mut c = Corridors::new(vec![straight(3000.0, 3, 3000.0)], Params::with_time_gap(3.0), 1);
+        let set = |c: &Corridors, h: f64| c.hour_handle().store(h.to_bits(), Ordering::Relaxed);
+        set(&c, 16.0);
+        c.step(1.0 / 60.0, None);
+        let first = ids(&c);
+        // the clock runs on by a minute a step (much faster than the game's): nobody is replaced.
+        for k in 1..=10 {
+            set(&c, 16.0 + k as f64 / 60.0);
+            c.step(1.0 / 60.0, None);
+        }
+        let kept = ids(&c).iter().filter(|i| first.binary_search(i).is_ok()).count();
+        assert!(kept + 5 >= first.len(), "kept {kept} of {}", first.len());
+        // across midnight is not a jump either.
+        set(&c, 23.99);
+        c.step(1.0 / 60.0, None);
+        let before = ids(&c);
+        set(&c, 0.01);
+        c.step(1.0 / 60.0, None);
+        assert!(ids(&c).iter().filter(|i| before.binary_search(i).is_ok()).count() + 5 >= before.len());
+        // a jump of an hour refills every lane (new movers).
+        let before = ids(&c);
+        set(&c, 1.01);
+        c.step(1.0 / 60.0, None);
+        assert_eq!(ids(&c).iter().filter(|i| before.binary_search(i).is_ok()).count(), 0);
+    }
+
+    #[test]
+    fn a_way_runs_on_into_its_next() {
+        // a 1 km way north, then a 1 km way on from its end carrying half its flow.
+        let mut a = straight(1000.0, 2, 2000.0);
+        a.next = Some(1);
+        let mut b = straight(1000.0, 2, 1000.0);
+        b.points = vec![[0.0, 10.0, -1000.0], [0.0, 10.0, -2000.0]];
+        let mut c = Corridors::new(vec![a, b], Params::with_time_gap(3.0), 9);
+        c.step(1.0 / 60.0, None);
+        assert!((c.carry_share(0, 12.0) - 0.5).abs() < 1e-9);
+        assert_eq!(c.own_arrivals(1, 12.0), 0.0);
+        let on_a: Vec<u32> = c.ways[0].movers.iter().map(|m| m.id).collect();
+        for _ in 0..(60 * 40) {
+            c.step(1.0 / 60.0, None);
+        }
+        // movers that started on the first way are now on the second (about half of those that reached its end).
+        let carried = c.ways[1].movers.iter().filter(|m| on_a.contains(&m.id)).count();
+        assert!(carried > 5, "carried {carried}");
+        for _ in 0..(60 * 80) {
+            c.step(1.0 / 60.0, None);
+        }
+        // and the second way holds about its own flow (half the first's), fed only from the first.
+        let (na, nb) = (c.ways[0].movers.len() as f64, c.ways[1].movers.len() as f64);
+        assert!(nb > 0.3 * na && nb < 0.75 * na, "first {na}, second {nb}");
+        // nobody jumps sideways at the joint: every instance is on a lane or easing between lanes.
+        for o in &c.out {
+            assert!(o.pos[0] > 0.5 && o.pos[0] < 6.0, "x {}", o.pos[0]);
+        }
     }
 
     #[test]
