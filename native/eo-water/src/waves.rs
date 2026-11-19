@@ -112,6 +112,18 @@ pub const FOAM_SPREAD: f64 = 1.5;
 pub const FOAM_DRIFT: f64 = 0.03;
 /// Whitecap cascades: 0..WHITECAP_CASCADES break (the ripples do not).
 pub const WHITECAP_CASCADES: usize = 3;
+/// (iteration 2, exposure) the fetch factors (B = sqrt(F / `BAY_FETCH_M`),
+/// from the exposure field's floor to 1) and the wind ratios (G, from the
+/// full lee at the narrowest gain to the most the exposure texture holds, 2;
+/// exposure.rs `FETCH_FLOOR`, `LEE_TAKE`, `GAIN_RANGE`) at which
+/// `Plan::expo_amp` tabulates the bay's wind sea per cascade.
+/// Eight of each: the spectrum's peak moving through a cascade's band makes
+/// its amplitude bend between nodes (four left 20 % between 0.8 and 1.3).
+pub const EXPO_FETCH_NODES: [f64; 8] = [crate::exposure::FETCH_FLOOR, 0.25, 0.35, 0.45, 0.55, 0.7, 0.85, 1.0];
+pub const EXPO_WIND_NODES: [f64; 8] = [(1.0 - crate::exposure::LEE_TAKE) * crate::exposure::GAIN_RANGE[0], 0.5, 0.7, 0.85, 1.0, 1.25, 1.6, 2.0];
+/// The most a place's cascade may carry of the GPU field (the earlier cap:
+/// `amp_bay`'s 1.4 times the exposure's 1.6).
+pub const EXPO_AMP_CAP: f64 = 1.4 * 1.6;
 
 fn smooth(e0: f64, e1: f64, x: f64) -> f64 {
     let t = ((x - e0) / (e1 - e0)).clamp(0.0, 1.0);
@@ -175,6 +187,28 @@ fn blend_dir(a: f64, b: f64, t: f64) -> f64 {
 /// direction the air moves, x east, z south; eo-sky `WeatherState::wind`) and
 /// its severity (0 clear, 1 fog, 2 drizzle, 3 rain, 4 storm).
 pub fn sea_state(hour: f64, wind: [f64; 2], severity: f64) -> SeaState {
+    sea_state_with(hour, wind, severity, None)
+}
+
+/// The sea state with the strait's measured wind (iteration 2): the bay's
+/// breeze at least the mean wind at NOAA station 9414290 for the day and hour
+/// (`climate::strait_wind`: a morning floor of 2-3 m/s, so the strait is never
+/// glassy in daylight; the glassy calm is left to the lee the exposure field
+/// finds) with `floor`, and in place of the `BAY_WESTERLY` 10 m/s afternoon
+/// peak (about 5-6 m/s measured) with `measured_peak`.
+pub fn sea_state_on(day_of_year: f64, hour: f64, wind: [f64; 2], severity: f64, floor: bool, measured_peak: bool) -> SeaState {
+    if !floor && !measured_peak {
+        return sea_state(hour, wind, severity);
+    }
+    let breeze = smooth(10.5, 15.0, hour) * (1.0 - smooth(19.5, 22.5, hour));
+    let old = lerp(BAY_CALM, BAY_WESTERLY, breeze);
+    let station = crate::climate::strait_wind(day_of_year, hour);
+    let u = if measured_peak { station } else { old.max(station) };
+    sea_state_with(hour, wind, severity, Some(u))
+}
+
+/// `sea_state` with the bay's own breeze (m/s, before the weather) given.
+pub fn sea_state_with(hour: f64, wind: [f64; 2], severity: f64, bay_wind: Option<f64>) -> SeaState {
     // The summer sea breeze: calm until late morning, the westerly from
     // noon, strongest from mid-afternoon to sunset, easing in the evening.
     let breeze = smooth(10.5, 15.0, hour) * (1.0 - smooth(19.5, 22.5, hour));
@@ -183,7 +217,7 @@ pub fn sea_state(hour: f64, wind: [f64; 2], severity: f64) -> SeaState {
     let ww = wind[0].hypot(wind[1]) * OVER_WATER;
     let wdir = wind[1].atan2(wind[0]);
     let storm = smooth(9.0, 16.0, ww);
-    let bay_breeze = lerp(BAY_CALM, BAY_WESTERLY, breeze) * clearish;
+    let bay_breeze = bay_wind.unwrap_or_else(|| lerp(BAY_CALM, BAY_WESTERLY, breeze)) * clearish;
     let pac_breeze = lerp(PACIFIC_WIND[0], PACIFIC_WIND[1], breeze) * clearish + PACIFIC_WIND[2] * (1.0 - clearish);
     let take = |own: f64| smooth(0.8, 1.25, ww / own.max(0.1));
     SeaState {
@@ -371,6 +405,15 @@ pub struct Plan {
     pub soft: [[f64; CASCADES]; 2],
     /// Foam lifetime (s) per place.
     pub foam_tau: [f64; 2],
+    /// (iteration 2, exposure) the bay's amplitude per cascade where the wind
+    /// is `EXPO_WIND_NODES[g]` of the strait's and the fetch factor
+    /// `EXPO_FETCH_NODES[b]`: `[g][b][c]`. Each place's wind sea grows by the
+    /// fetch law (`WindSea::hs`, `tp`) at its own wind and fetch, so a short
+    /// fetch takes the long waves and moves the peak to shorter ones, while the
+    /// short waves above the peak keep their level (in the JONSWAP fit a young
+    /// sea's tail is, if anything, higher: alpha = 0.076 (g F / U^2)^-0.22,
+    /// Hasselmann et al. 1973), and a lee's lighter wind lowers them all.
+    pub expo_amp: [[[f64; CASCADES]; EXPO_FETCH_NODES.len()]; EXPO_WIND_NODES.len()],
 }
 
 impl Plan {
@@ -411,6 +454,7 @@ impl Plan {
             thr: [[-1e3; CASCADES]; 2],
             soft: [[1.0; CASCADES]; 2],
             foam_tau: [lerp(FOAM_TAU_S[0], FOAM_TAU_S[1], smooth(9.0, 16.0, st.pacific.u10)), lerp(FOAM_TAU_S[0], FOAM_TAU_S[1], smooth(9.0, 16.0, st.bay.u10))],
+            expo_amp: [[[1.0; CASCADES]; EXPO_FETCH_NODES.len()]; EXPO_WIND_NODES.len()],
         };
         let lead_k = TAU / SIZES[0] * ((LEAD[0] * LEAD[0] + LEAD[1] * LEAD[1]) as f64).sqrt();
         let mut kc = [[0.0; CASCADES]; 2];
@@ -429,6 +473,19 @@ impl Plan {
             if gpu_e > 1e-14 {
                 p.amp_pac[c] = (p.e_pac[c] / gpu_e).sqrt().min(1.4);
                 p.amp_bay[c] = (p.e_bay[c] / gpu_e).sqrt().min(1.4);
+            }
+        }
+        // (exposure) the bay's wind sea at each node's wind and fetch, over the same GPU field
+        for (g, &gk) in EXPO_WIND_NODES.iter().enumerate() {
+            for (b, &bk) in EXPO_FETCH_NODES.iter().enumerate() {
+                let ws = WindSea { u10: st.bay.u10 * gk, dir: st.bay.dir, fetch_m: BAY_FETCH_M * bk * bk };
+                let sys = System::new(ws.hs(), ws.tp(), ws.dir, 3.3, 0.0, 0b1111);
+                for c in 1..CASCADES {
+                    let leak = p.e_bay[c] - band_moments(&bay, c).0;
+                    let e = band_moments(&sys, c).0 + leak.max(0.0);
+                    p.expo_amp[g][b][c] = if p.e_gpu[c] > 1e-14 { (e / p.e_gpu[c]).sqrt().min(EXPO_AMP_CAP) } else { 1.0 };
+                }
+                p.expo_amp[g][b][0] = p.amp_bay[0];
             }
         }
         // Whitecaps: each place's foam target shared over the breaking
@@ -452,6 +509,24 @@ impl Plan {
             }
         }
         p
+    }
+
+    /// (exposure) `expo_amp` at wind ratio `g` and fetch factor `b`, bilinear
+    /// between the nodes and held to their ends (water_common.wgsl `wg_bay_amp`).
+    pub fn expo_amp_at(&self, g: f64, b: f64) -> [f64; CASCADES] {
+        fn node(v: f64, n: &[f64; 8]) -> (usize, f64) {
+            let x = v.clamp(n[0], n[7]);
+            let i = (1..7).filter(|k| x > n[*k]).count();
+            (i, ((x - n[i]) / (n[i + 1] - n[i]).max(1e-6)).clamp(0.0, 1.0))
+        }
+        let (gi, gt) = node(g, &EXPO_WIND_NODES);
+        let (bi, bt) = node(b, &EXPO_FETCH_NODES);
+        let a = &self.expo_amp;
+        std::array::from_fn(|c| {
+            let lo = a[gi][bi][c] + (a[gi][bi + 1][c] - a[gi][bi][c]) * bt;
+            let hi = a[gi + 1][bi][c] + (a[gi + 1][bi + 1][c] - a[gi + 1][bi][c]) * bt;
+            lo + (hi - lo) * gt
+        })
     }
 
     /// Significant height (m) a place carries (amplitudes `amp`) per the plan's band integrals.
@@ -644,6 +719,24 @@ mod tests {
         assert!((0.04..0.1).contains(&active_whitecaps(17.0)));
     }
 
+    // (iteration 2) the strait at the measured wind: never glassy by day, and
+    // the afternoon at the station's 5-6 m/s, not the 10 m/s westerly
+    #[test]
+    fn the_strait_has_its_measured_wind() {
+        let m = sea_state_on(265.0, 10.0, [0.0, 0.0], 0.0, true, false);
+        assert!(m.bay.u10 > 2.0, "a morning strait at {} m/s", m.bay.u10);
+        assert!(m.bay.hs() > 0.08, "a morning chop of {} m", m.bay.hs());
+        let a = sea_state_on(265.0, 16.4, [0.0, 0.0], 0.0, true, true);
+        assert!((4.5..6.5).contains(&a.bay.u10), "afternoon {}", a.bay.u10);
+        // the measured afternoon breaks few crests: well under a percent of whitecaps
+        assert!(foam_cover_over(a.bay.u10, FOAM_OVER_TOTAL) < 0.003);
+        // the floor alone keeps the earlier afternoon westerly
+        let f = sea_state_on(265.0, 16.4, [0.0, 0.0], 0.0, true, false);
+        assert!(f.bay.u10 > 9.0);
+        // both off: the earlier sea state exactly
+        assert_eq!(sea_state_on(265.0, 10.0, [1.0, 2.0], 0.0, false, false), sea_state(10.0, [1.0, 2.0], 0.0));
+    }
+
     #[test]
     fn plan_scales_each_place() {
         let p = Plan::new(&clear_afternoon());
@@ -659,5 +752,42 @@ mod tests {
         assert!(p.thr[1][1] > -10.0 && p.thr[1][1] < 1.0, "{:?}", p.thr);
         let calm = Plan::new(&sea_state(7.5, [0.0, 0.0], 0.0));
         assert!(calm.thr[1].iter().all(|t| *t < -10.0), "a calm bay has no whitecaps {:?}", calm.thr);
+    }
+
+    // (iteration 2, exposure) a short fetch takes the long wind sea, not the
+    // ripples: off Crissy Field (fetch factor about 0.37 at the station's own
+    // wind) the ripples keep their height while the long cascade loses most of it
+    #[test]
+    fn a_short_fetch_takes_the_long_waves_not_the_ripples() {
+        for (day, hour) in [(265.0, 13.0), (265.0, 17.0), (265.0, 10.0)] {
+            let p = Plan::new(&sea_state_on(day, hour, [0.0, 0.0], 0.0, true, true));
+            // the plan's own wind and fetch (ratio 1, factor 1, both nodes) is the plan's bay
+            let own = p.expo_amp_at(1.0, 1.0);
+            for c in 0..CASCADES {
+                assert!((own[c].min(1.4) - p.amp_bay[c]).abs() < 1e-6, "{c}: {own:?} vs {:?}", p.amp_bay);
+            }
+            // between the nodes the table reads within 10 % of the fetch law's own (and 0.03 of the GPU field's amplitude)
+            for (g, b) in [(0.6, 0.3), (0.92, 0.5), (1.4, 0.8), (1.1, 0.4)] {
+                let p2 = WindSea { u10: p.state.bay.u10 * g, dir: p.state.bay.dir, fetch_m: BAY_FETCH_M * b * b };
+                let sys = System::new(p2.hs(), p2.tp(), p2.dir, 3.3, 0.0, 0b1111);
+                let got = p.expo_amp_at(g, b);
+                for c in 1..CASCADES {
+                    let e = band_moments(&sys, c).0 + SWELL_LEAK_BAY * SWELL_LEAK_BAY * band_moments(&p.systems[0], c).0; // (and the swell's leak)
+                    let want = (e / p.e_gpu[c]).sqrt().min(EXPO_AMP_CAP);
+                    assert!((got[c] - want).abs() <= 0.1 * want + 0.03, "{hour} h, g {g} b {b}, cascade {c}: {} want {want}", got[c]);
+                }
+            }
+            let crissy = p.expo_amp_at(1.0, 0.37);
+            let ratio = [1, 2, 3].map(|c| crissy[c] / own[c].max(1e-9));
+            // the ripples (cascade 3) keep over three quarters (a single factor on every cascade gave 0.37)
+            assert!(ratio[2] > 0.75, "{hour} h: ripples {ratio:?}");
+            // the long wind sea (cascade 1) loses more than the ripples do
+            assert!(ratio[0] < ratio[2], "{hour} h: {ratio:?}");
+            // a calmer place has lower waves in every cascade at the same fetch, a windier one higher
+            let (calm, windy) = (p.expo_amp_at(0.5, 1.0), p.expo_amp_at(1.7, 1.0));
+            for c in 1..CASCADES {
+                assert!(calm[c] <= own[c] + 1e-9 && windy[c] + 1e-9 >= own[c].min(EXPO_AMP_CAP), "{c}: {calm:?} {own:?} {windy:?}");
+            }
+        }
     }
 }

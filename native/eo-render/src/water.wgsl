@@ -40,6 +40,50 @@
 @group(0) @binding(13) var<storage, read> w_patches: array<u32>;
 // (ppr) the projected reflection's sources (water_ppr.wgsl), one per pixel
 @group(0) @binding(14) var<storage, read> w_ppr: array<u32>;
+// (iteration 2, exposure) the sea's exposure (eo-water exposure.rs): R swell share, G wind ratio / 2, B fetch factor, A water
+@group(0) @binding(15) var w_expo: texture_2d<f32>;
+
+// (exposure) set this point's exposure (`wg_ex`, water_common.wgsl) from the
+// field, when there is one and --no-water-exposure is not given
+fn w_expo_set(xz: vec2<f32>) {
+    let on_e = wu.wv_gg2.z > 0.5 && wg_gg2(1u);
+    let on_b = wu.wv_gg2.w > 0.5 && wg_gg2(16u);
+    if (on_e || on_b) {
+        let e = textureSampleLevel(w_expo, w_clamp, (xz - wu.wv_expo.xy) * wu.wv_expo.zw, 0.0);
+        if (on_e) {
+            wg_ex = vec4<f32>(e.x, e.y * 2.0, e.z, 1.0);
+        }
+        if (on_b) {
+            w_surf_k = max(e.w * 10.0, 0.1);
+        }
+    }
+}
+
+// (iteration 2, beach profiles) the surf model's offshore distance over the
+// world's here: its foreshore is the drawn 1:55, a beach's measured one is
+// steeper (eo-water beaches.rs; the exposure texture's A holds 55 x the slope / 10),
+// so the bores break and run up that much nearer the sand
+var<private> w_surf_k: f32 = 1.0;
+
+// (iteration 2, beach profiles) the surf model at signed shore distance `s`:
+// its offshore distance compressed onto the drawn 1:55 (`w_surf_k`), and only
+// over the surf zone, out to where the model's water is twice the depth its
+// largest wave (`sf_wave_amp`'s top set, `SF_AMPLITUDE` x 1.15 x `amp`)
+// breaks at (`sf_break`'s depth, McCowan's 0.78 breaker index): seaward of
+// that a wave has not begun to steepen and the sea's own spectrum carries the
+// swell, while the model's crests follow the shore field's distance, not the
+// seabed, so they drew contour rings round piers, a tower's fender and the
+// headlands. Unchanged with --no-beach-profiles.
+fn w_surf(time: f32, s: f32, along: f32, beach: f32, amp: f32) -> Surf {
+    if (!(wu.wv_gg2.w > 0.5 && wg_gg2(16u))) {
+        return surf_at(time, s, along, beach, amp);
+    }
+    let off = s * w_surf_k;
+    let a_top = SF_AMPLITUDE * 1.15 * amp;
+    let db = pow(a_top * 3.556 / SF_GAMMA, 0.8);
+    let zone = wg_smooth(2.5 * db, 1.5 * db, sf_model_depth(off));
+    return surf_at(time, off, along, beach * zone, amp);
+}
 
 // the sky as the sky slice now draws it where nothing covers it: the
 // look's graded dome blended toward the atmosphere tables (`at_sky`, its
@@ -190,6 +234,8 @@ var<private> w_fp_lat: f32 = 0.0;
 var<private> w_fp_along: f32 = 0.0;
 // (diagnostics) the body's downwelling light: sun part, sky part, shadow (EO_WATER_DEBUG=10)
 var<private> w_dbg_ed: vec3<f32> = vec3<f32>(0.0);
+// (diagnostics, EO_WATER_DEBUG=14) the projected reflection's facet-weighted cover, and whether the flat mirror found a source
+var<private> w_dbg_ppr: vec2<f32> = vec2<f32>(0.0);
 
 // (glint) the sun's disc: pi (0.2667 deg)^2 sr.
 const WO_SUN_SR: f32 = 6.80e-5;
@@ -360,7 +406,12 @@ fn w_tidal(p: vec2<f32>, t: f32) -> vec2<f32> {
     let along = dot(d, ax);
     let across = dot(d, vec2<f32>(-ax.y, ax.x));
     let wob = mx_noise(vec3<f32>(along / 1400.0, 0.3, t * 0.002)) * 260.0;
-    let m = wg_smooth(1000.0, 450.0, abs(across + wob)) * wg_smooth(-5000.0, -2500.0, along) * wg_smooth(7000.0, 3000.0, along);
+    var m = wg_smooth(1000.0, 450.0, abs(across + wob)) * wg_smooth(-5000.0, -2500.0, along) * wg_smooth(7000.0, 3000.0, along);
+    if (wg_gg2(2u)) {
+        // (iteration 2, current) the jet runs with the tide (NOAA SFB1203's
+        // harmonic constants on the game's clock, eo-water climate.rs): gone at slack water
+        m = m * wg_smooth(0.15, 1.0, abs(wu.wv_gg2.x));
+    }
     if (m <= 0.0) {
         return vec2<f32>(0.0);
     }
@@ -610,7 +661,7 @@ fn w_displacement(base: vec2<f32>, spacing: f32, f: vec2<f32>) -> vec3<f32> {
     let surf_vw = 1.0 - wg_smooth(1.0, 2.5, spacing);
     if (f.y > 0.01 && f.x > -2.0 && f.x < 420.0 && surf_vw > 0.0) {
         let fr = w_shore_frame(base);
-        let s = surf_at(wu.cam.w, f.x, fr.z, f.y, sf_amp_scale(base.x));
+        let s = w_surf(wu.cam.w, f.x, fr.z, f.y, sf_amp_scale(base.x));
         // (sea r4: half the shoreward throw: on the 0.8 m grid the full curl folded the face over itself, and the folded triangles read as dark boxes on the breaker line)
         disp = disp + vec3<f32>(fr.x * s.shoreward * 0.5, s.height, fr.y * s.shoreward * 0.5) * surf_vw;
     }
@@ -649,6 +700,7 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VsOut
         local.y = local.y * sk;
     }
     let base = wu.grid.xy + local;
+    w_expo_set(base); // (exposure)
     let f = w_field_at(base);
     let spacing = max(wg_spacing(local.x, r), wg_spacing(local.y, r));
     let disp = w_displacement(base, spacing, f);
@@ -1195,6 +1247,52 @@ fn w_ppr_reflect(world: vec3<f32>, r: vec3<f32>, frag: vec2<f32>, smear: f32) ->
     return vec4<f32>(col / hits, hits * w_edge(uvq));
 }
 
+// (iteration 2, beach profiles) the diffuse attenuation the stirred-up sand
+// adds over a beach's shallows (1/m): with the bay's own, the sand under a
+// metre of swash water is about a tenth seen (both ways), as a Secchi depth of
+// about a metre gives (Kd ~ 1.7 / Secchi depth, Poole and Atkins 1929, J. Mar.
+// Biol. Assoc. UK 16, 297; the metre INFERRED for a beach's swash zone)
+const WB_NEAR_KD: f32 = 1.2;
+
+// (iteration 2, ppr blur) one facet's tap of the mirror: the reflected ray
+// `r` from the water at `world` carried `t0` (the distance to what the flat
+// mirror shows here, from the projected reflection's source) to the point it
+// reaches there, read where the frame shows that point above the water when the
+// frame's surface there stands at that distance (within a quarter of it: the
+// facet's ray meets what the flat mirror met, a little higher or lower on it),
+// in the resolved last frame. A ray that passes over it (a tower's top) or
+// meets nothing in the frame is the sky's. The frame above the water holds
+// what the mirror image under it may not (a tall tower's image runs off the
+// bottom of the frame). Returns (rgb, cover x the screen-edge fade).
+fn w_ppr_tap(world: vec3<f32>, r: vec3<f32>, t0: f32) -> vec4<f32> {
+    if (t0 <= 0.0) {
+        return vec4<f32>(0.0);
+    }
+    let q = world + vec3<f32>(r.x, max(r.y, 0.002), r.z) * t0;
+    let c = wu.view_proj * vec4<f32>(q, 1.0);
+    if (c.w <= 1e-4) {
+        return vec4<f32>(0.0);
+    }
+    let uvq = vec2<f32>(c.x / c.w * 0.5 + 0.5, 0.5 - c.y / c.w * 0.5);
+    if (any(uvq <= vec2<f32>(0.0)) || any(uvq >= vec2<f32>(1.0))) {
+        return vec4<f32>(0.0);
+    }
+    let qd = w_view_depth(q);
+    let sd = w_scene_depth(uvq);
+    let near = 1.0 - wg_smooth(0.15, 0.3, abs(sd - qd) / max(qd, 1e-3));
+    if (near <= 0.0) {
+        return vec4<f32>(0.0);
+    }
+    var tap = textureSampleLevel(w_scene, w_clamp, uvq, 0.0).rgb;
+    if (skyu.flags.x != 0u && skyu.taa.y > 0.5) {
+        let pu = w_prev_uv(uvq);
+        if (all(pu > vec2<f32>(0.0)) && all(pu < vec2<f32>(1.0))) {
+            tap = textureSampleLevel(sky_prev, sky_rep, pu, 0.0).rgb;
+        }
+    }
+    return vec4<f32>(max(tap, vec3<f32>(0.0)), near * w_edge(uvq));
+}
+
 // ---- the surface ----
 
 struct Shade {
@@ -1211,6 +1309,8 @@ struct Shade {
     refl_k: f32,
     sky: vec3<f32>,
     smear: f32,
+    // (iteration 2, ppr blur) 1 when the projected reflection is already in `sky` (each facet's own tap)
+    ppr_in: f32,
     // this facet faces the eye enough to show a light above it (a column's dash)
     dash: f32,
     // the facet's tilt across the view (its normal's screen-sideways part)
@@ -1287,6 +1387,7 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         w_fp_lat = clamp(max(abs(dot(wdx, ec)), abs(dot(wdy, ec))), 1e-5, 64.0);
         w_fp_along = clamp(max(abs(dot(wdx, ea)), abs(dot(wdy, ea))), 1e-5, 4096.0);
     }
+    w_expo_set(base); // (exposure)
     let fs = w_field_at(base);
     let signed = fs.x;
     let beach = fs.y;
@@ -1356,6 +1457,26 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         det.y = clamp(det.y + 0.55 * paws, 0.0, 1.0);
         tide = w_tidal(p, t);
         det.x = det.x * mix(0.75, 1.25, wg_smooth(-0.35, 0.35, paws)) * (1.0 + 0.3 * tide.x + 0.45 * tide.y);
+    }
+    if (wg_gg2(64u)) {
+        // (iteration 2, far calm: water-11) the gust patches' contrast fades with
+        // range (the far strait from a height read as kilometre blotches: each
+        // patch's roughness and darkening is averaged over the many a far pixel
+        // spans), and the slicks lie as long narrow current lines along the
+        // Golden Gate's tidal axis (heading 255 degrees through the bridge's
+        // mid-span, as `w_tidal`), a few tens of metres across and kilometres long,
+        // where the wind leaves them
+        let far_k = wg_smooth(250.0, 2500.0, view_dist);
+        det.y = mix(det.y, 0.5, 0.75 * far_k);
+        det.x = mix(det.x, 1.0, 0.6 * far_k);
+        let ax = vec2<f32>(-0.966, 0.259);
+        let d0 = p - vec2<f32>(-6478.0, -5791.0);
+        let al = dot(d0, ax);
+        let wob = mx_noise(vec3<f32>(al / 1800.0, 0.7, t * 0.001)) * 120.0;
+        let ac = dot(d0, vec2<f32>(-ax.y, ax.x)) + wob;
+        let ln = textureSampleLevel(w_detail, w_repeat, vec2<f32>(al / 2600.0, ac / 28.0) + vec2<f32>(0.37, 0.11), 0.0).z;
+        let lines = wg_smooth(0.66, 0.78, ln) * (1.0 - det.y * 0.7) * wg_smooth(9.0, 3.0, wv_u10(p.x));
+        det.z = max(det.z * (1.0 - far_k), lines);
     }
     // the sun-keyed westerly, the swell banding and the storm's noise caps are
     // retired: the waves simulation carries the wind, the swell and the whitecaps
@@ -1474,11 +1595,18 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // --- slopes: the FFT cascades, the capillary taps, the chop octaves.
     var sx = 0.0;
     var sz = 0.0;
-    let amp = wg_cascade_amp(world.x);
+    var amp = wg_cascade_amp(world.x);
+    if (wg_gg2(2u)) {
+        // (iteration 2, current) the wind sea on the tidal jet: steepened running
+        // against the ebb, eased on the flood (water.rs `doppler_gain`)
+        amp = amp * mix(vec4<f32>(1.0), wu.wv_dop, tide.x);
+    }
     var whitecap = 0.0;
     // the spectrum's slope variance (all of it, and what this pixel's normal carries)
     var wv_var_all = 0.0;
     var wv_var_res = 0.0;
+    // (ppr blur) the share of the cascades' slope variance across the view the pixel does not resolve
+    var wv_var_lat_un = 0.0;
     let brdf = wv_feat(1u);
     if (wu.flags.w > 0.5) {
         // The gusts and slicks scale the two finest cascades, the third finest by 40 % of it.
@@ -1488,6 +1616,28 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         var wv_fine = 0.0;
         let ab = amp * vec4<f32>(1.0, mix(1.0, rg, 0.4), rg, rg);
         let wb = fb * ab;
+        // (iteration 2, lean: water-4) each band fades on the pixel's own
+        // footprint across the view and along it, not on the larger of the two:
+        // at a grazing view a pixel is centimetres across and metres along, so a
+        // band whose waves the pixel still resolves across the view keeps the
+        // slopes it shows there (the dense horizontal dashes of wind chop seen
+        // from the shore), its slopes along the view fading on the long footprint;
+        // the variance neither keeps goes to the BRDF below (`wv_var_res`).
+        // (each pixel's own: the eye's line to this point across the ground, not
+        // the camera's axis, which off the middle of the frame turns the long
+        // footprint sideways)
+        let lean = wg_gg2(4u);
+        let fwd_h = normalize(-v.xz + vec2<f32>(1e-5, 0.0));
+        let crs_h = vec2<f32>(-fwd_h.y, fwd_h.x);
+        let fb_lat = wg_band(clamp(max(abs(dot(wdx, crs_h)), abs(dot(wdy, crs_h))), 1e-5, 64.0));
+        let fp_alg = clamp(max(abs(dot(wdx, fwd_h)), abs(dot(wdy, fwd_h))), 1e-5, 4096.0);
+        // (lean) along the view a pixel spans N = footprint / wavelength crests of
+        // a band: their mean slope is not zero but varies from pixel to pixel by
+        // the band's spread over the square root of N (independent crests), the
+        // dashes chop draws in a grazing view; that share of the slopes along the
+        // view stays (at least the band's own fade)
+        let fb_alg = max(wg_band(fp_alg), min(vec4<f32>(1.0), sqrt(WV_MID_M / fp_alg)));
+        let wb_s = select(wb, max(fb_lat, fb) * ab, lean);
         // (foam cover: each cascade's foam only while the pixel spans under
         // about two of its texels; past that its mean cover, not one texel's foam)
         let foam_mean = wv_feat(4u);
@@ -1498,13 +1648,23 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
             let vc = ab[c] * ab[c] * wu.wv_mss[c];
             let kept = select(fb[c] * swell_fade, fb[c] * swell_fade + (1.0 - fb[c]), c < 2u);
             wv_var_all = wv_var_all + vc;
-            wv_var_res = wv_var_res + vc * min(kept * kept, 1.0);
+            if (lean) {
+                // (lean) half the slope variance in each axis, each kept as far as its footprint resolves it
+                let vtx = select(0.0, 1.0 - fb[c], c < 2u);
+                let kl = min(fb_lat[c] * swell_fade + vtx, 1.0);
+                let ka = min(fb_alg[c] * swell_fade + vtx, 1.0);
+                wv_var_res = wv_var_res + vc * 0.5 * (kl * kl + ka * ka);
+                wv_var_lat_un = wv_var_lat_un + vc * 0.5 * (1.0 - kl * kl);
+            } else {
+                wv_var_res = wv_var_res + vc * min(kept * kept, 1.0);
+                wv_var_lat_un = wv_var_lat_un + vc * 0.5 * (1.0 - min(kept * kept, 1.0));
+            }
             var kc = 1.0;
             if (foam_mean && c < 3u) {
                 kc = 1.0 - wg_smooth(0.5, 2.0, wv_lod(footprint, c));
                 kres = kres + kc * (1.0 / 3.0);
             }
-            if (wb[c] > 0.0) {
+            if (wb_s[c] > 0.0) {
                 let uv = w_casc_uv(p, c);
                 let d = textureSampleLevel(w_deriv, w_repeat, uv, c, 0.0);
                 var dsl = d.xy;
@@ -1523,9 +1683,34 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
                         dsl = d.xy * mix(1.0, 0.75, fr) + d2r * (0.66 * fr);
                     }
                 }
-                sx = sx + dsl.x * wb[c] * swell_fade;
-                sz = sz + dsl.y * wb[c] * swell_fade;
-                wv_raw = max(wv_raw, wv_foam(d, p.x, det.y) * fb[c] * kc); // the place's whitecap foam of this cascade
+                if (lean) {
+                    // (lean) the slope along the view on that footprint, across it on the narrow one
+                    let al = dot(dsl, fwd_h);
+                    let sl = ((dsl - fwd_h * al) * fb_lat[c] + fwd_h * (al * fb_alg[c])) * ab[c] * swell_fade;
+                    sx = sx + sl.x;
+                    sz = sz + sl.y;
+                } else {
+                    sx = sx + dsl.x * wb[c] * swell_fade;
+                    sz = sz + dsl.y * wb[c] * swell_fade;
+                }
+                var dop_foam = 1.0;
+                if (wg_gg2(2u)) {
+                    // (current) crests steepened against the ebb break more (the coverage as the slope variance)
+                    dop_foam = mix(1.0, wu.wv_dop.y * wu.wv_dop.y, tide.x);
+                }
+                wv_raw = max(wv_raw, wv_foam(d, p.x, det.y) * fb[c] * kc * dop_foam); // the place's whitecap foam of this cascade
+                if (wg_gg2(32u) && (c == 1u || c == 2u) && fb[c] * kc > 0.02) {
+                    // (iteration 2, streak caps: water-10) a whitecap's foam is combed
+                    // downwind into a streak four to eight times as long as it is wide
+                    // (the residual foam of a breaking crest trails the crest): the
+                    // crest foam read upwind of here over 2 of the cascade's middle
+                    // wavelengths in six steps, fading along the trail
+                    let wdc = w_sea_wind_dir(p.x);
+                    for (var k = 1; k <= 6; k = k + 1) {
+                        let dk = textureSampleLevel(w_deriv, w_repeat, w_casc_uv(p - wdc * (f32(k) * WV_MID_M[c] * 0.33), c), c, 0.0);
+                        wv_raw = max(wv_raw, wv_foam(dk, p.x, det.y) * fb[c] * kc * dop_foam * (1.0 - f32(k) * 0.12));
+                    }
+                }
                 wv_fine = wv_fine + select(0.0, (d.x + d.y) * wb[c], c >= 2u);
             }
         }
@@ -1603,8 +1788,8 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     var surf_bored = 0.0;
     if (beach > 0.01 && signed > -4.0 && signed < 420.0) {
         let sa = sf_amp_scale(base.x);
-        let s0 = surf_at(t, signed, fr.z, beach, sa);
-        let s1 = surf_at(t, signed - 0.6, fr.z, beach, sa);
+        let s0 = w_surf(t, signed, fr.z, beach, sa);
+        let s1 = w_surf(t, signed - 0.6, fr.z, beach, sa);
         let dhds = (s1.height - s0.height) / 0.6;
         sx = sx + fr.x * dhds;
         sz = sz + fr.y * dhds;
@@ -1726,6 +1911,7 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // probe for what stands in it (buildings round the viewer), told apart
     // from its sky as fa_glazing tells them apart.
     var dome = w_drawn_sky(rup, w_atmo_dome(rup)); // the sky as drawn (the atmosphere sky)
+    var ppr_in = 0.0; // (ppr blur) the projected reflection read per facet below
     if (brdf) {
         if (!(with_copy && wv_feat(256u))) {
             dome = fs_far_mirror2(r, dome, view_dist); // the far land in the mirror under it, by its distance (ppr: the projected reflection carries it)
@@ -1771,6 +1957,30 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         var acc = vec3<f32>(0.0);
         var acc_f = 0.0;
         var acc_w = 0.0;
+        // (iteration 2, ppr blur: water-5) the frame's geometry in the mirror read
+        // per facet too: each tilt's own reflected ray carried to the distance of
+        // what the flat mirror shows here and read in the projected reflection, so
+        // the mirror image is filtered by the slopes the pixel does not resolve
+        // (sharp on glassy water, a broken streak in chop, nothing coherent where
+        // the facets spread it over the sky), each facet turned across the view
+        // too, by the spread across the view the pixel does not resolve (the
+        // footprint across a grazing view is centimetres, so most of the
+        // sideways slopes are the normal's own and break the image into dashes
+        // pixel by pixel): a fixed kernel, the tilts alternately that spread to
+        // either side (zero mean, the spread's variance, no reseeding from frame
+        // to frame for the temporal resolve to average)
+        let ppr_blur = with_copy && wv_feat(256u) && wg_gg2(8u) && sf_inj.rough < 0.5;
+        var t0 = -1.0;
+        if (ppr_blur) {
+            let s0 = w_ppr_src3(vec2<i32>(frag.xy));
+            if (s0.x >= 0) {
+                t0 = length(w_px_world(s0) - world);
+            }
+            ppr_in = 1.0;
+        }
+        let crs = vec2<f32>(-vh.y, vh.x);
+        // the unresolved spread across the view: half the isotropic part (under the spectrum's cut, foam, rain) and the cascades' own
+        let sig_l = sqrt(max(0.5 * (m2 - max(wv_var_all - wv_var_res, 0.0)) + wv_var_lat_un, 1e-6));
         for (var k = 0; k < 6; k = k + 1) {
             let a = nodes[k] * sig;
             let nk = normalize(vec3<f32>(n.x + vh.x * a * n.y, n.y, n.z + vh.y * a * n.y));
@@ -1782,7 +1992,17 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
             let fk = wo_fresnel(cv, WO_IOR);
             let rk = reflect(-v, nk);
             let dk = normalize(vec3<f32>(rk.x, max(rk.y, 0.004), rk.z));
-            let lk = w_atmo_dome(dk) * carry * mix(0.35, 1.0, wg_smooth(-0.12, 0.08, rk.y));
+            var lk = w_atmo_dome(dk) * carry * mix(0.35, 1.0, wg_smooth(-0.12, 0.08, rk.y));
+            if (ppr_blur && rk.y > -0.02) {
+                // (ppr blur) the sideways turn: + and - the spread across the view on alternate tilts
+                let jl = select(-sig_l, sig_l, (k & 1) == 0);
+                let nj = normalize(vec3<f32>(nk.x + crs.x * jl * nk.y, nk.y, nk.z + crs.y * jl * nk.y));
+                let tap = w_ppr_tap(world, reflect(-v, nj), t0);
+                if (tap.w > 0.0) {
+                    lk = mix(lk, min(tap.rgb, max(lk * WS_SCENE_CEIL, vec3<f32>(WS_SCENE_CEIL_FLOOR))), tap.w);
+                }
+                w_dbg_ppr = w_dbg_ppr + vec2<f32>(tap.w * wk * fk, select(0.0, 1.0, t0 > 0.0));
+            }
             acc = acc + lk * (wk * fk);
             acc_f = acc_f + wk * fk;
             acc_w = acc_w + wk;
@@ -1790,6 +2010,7 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         if (acc_w > 1e-6 && acc_f > 1e-7) {
             sky0 = acc / acc_f;
             fres = acc_f / acc_w;
+            w_dbg_ppr.x = w_dbg_ppr.x / acc_f;
         }
     }
     // a wind-roughened surface mixes each pixel's mirror with the paler
@@ -2081,6 +2302,17 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
             let carpet_w = wg_smooth(0.6, 0.97, column / WO_CARPET_DEPTH_M);
             deep = max(deep, (WS_WALL_FLOOR_M + 0.25 * max(signed, 0.0)) * max(wall_w, carpet_w));
         }
+        if (wg_gg2(16u)) {
+            // (iteration 2, beach profiles: water-3) on a beach the ground is the
+            // measured foreshore down to the seabed (eo-water beaches.rs), so the
+            // column is the water's own: no 1:20 floor and no carpet hand-over
+            // (its seam drew a line across the shallows); the nearshore water
+            // carries the sand the swash stirs up, so the bottom fades within
+            // about a metre (`WB_NEAR_KD`)
+            let bk = wg_smooth(0.35, 0.6, beach);
+            deep = mix(deep, column, bk);
+            fill_k = fill_k + vec3<f32>(WB_NEAR_KD * bk);
+        }
         let fill = vec3<f32>(1.0) - exp(-2.0 * fill_k * deep);
         vol.inscatter = rrs * e_d * fill / (1.0 - WO_F0);
         // the bottom through the same water, down and back up (what it does
@@ -2144,6 +2376,47 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
             dbg = vec3<f32>(beach, surf_cov, collar);
         }
         s.own = dbg;
+        s.through = vec3<f32>(0.0);
+        s.uv = uv_here;
+        s.refl_k = 0.0;
+        s.sky = vec3<f32>(0.0);
+        s.mirror_w = 0.0;
+        s.mirror_uv = uv_here;
+        s.smear = 0.0;
+        s.dash = 0.0;
+        s.side = 0.0;
+        return s;
+    }
+    if (wu.screen.x > 13.5 && wu.screen.x < 14.5) {
+        // EO_WATER_DEBUG=14: r the projected reflection's facet-weighted cover, g the flat mirror's source found
+        s.own = vec3<f32>(w_dbg_ppr.x, min(w_dbg_ppr.y, 1.0), 0.0) * 0.25 / max(look.key.w, 1e-6);
+        s.through = vec3<f32>(0.0);
+        s.uv = uv_here;
+        s.refl_k = 0.0;
+        s.sky = vec3<f32>(0.0);
+        return s;
+    }
+    if (wu.screen.x > 12.5 && wu.screen.x < 13.5) {
+        // EO_WATER_DEBUG=13: thresholds: r the slope along the view over 0.03, g across it over 0.03, b the unresolved spread over 0.08
+        let fh = normalize(wu.fwd.xz + vec2<f32>(1e-5, 0.0));
+        let sl = vec2<f32>(-n.x, -n.z) / max(n.y, 1e-3);
+        let al = dot(sl, fh);
+        let ac = dot(sl, vec2<f32>(-fh.y, fh.x));
+        s.own = vec3<f32>(select(0.0, 1.0, abs(al) > 0.03), select(0.0, 1.0, abs(ac) > 0.03), select(0.0, 1.0, sigma_unres > 0.08)) * 0.25 / max(look.key.w, 1e-6);
+        s.through = vec3<f32>(0.0);
+        s.uv = uv_here;
+        s.refl_k = 0.0;
+        s.sky = vec3<f32>(0.0);
+        s.mirror_w = 0.0;
+        s.mirror_uv = uv_here;
+        s.smear = 0.0;
+        s.dash = 0.0;
+        s.side = 0.0;
+        return s;
+    }
+    if (wu.screen.x > 11.5 && wu.screen.x < 12.5) {
+        // EO_WATER_DEBUG=12: the shading normal's slopes (r x, g z, 0.5 flat, 0.1 per 0.02 of slope) and the unresolved spread (b)
+        s.own = vec3<f32>(clamp(0.5 - n.x * 5.0, 0.0, 1.0), clamp(0.5 - n.z * 5.0, 0.0, 1.0), clamp(sigma_unres * 5.0, 0.0, 1.0)) * 0.25 / max(look.key.w, 1e-6);
         s.through = vec3<f32>(0.0);
         s.uv = uv_here;
         s.refl_k = 0.0;
@@ -2225,6 +2498,7 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         s.through = mix(vec3<f32>(1.0), s.through, e) * (1.0 - sw_k);
     }
     s.sky = sky;
+    s.ppr_in = ppr_in;
     s.r = r;
     s.mirror_w = 0.0;
     s.mirror_uv = uv_here;
@@ -2267,7 +2541,7 @@ fn fs_copy(i: VsOut) -> @location(0) vec4<f32> {
     let s = w_shade(i.world, i.base, i.clip, true);
     let bottom = textureSampleLevel(w_scene, w_clamp, s.uv, 0.0).rgb;
     var refl = s.sky;
-    if (wv_feat(256u) && s.refl_k > 0.002 && sf_inj.rough < 0.5) {
+    if (wv_feat(256u) && s.refl_k > 0.002 && sf_inj.rough < 0.5 && s.ppr_in < 0.5) {
         // (ppr) the frame's own geometry in the mirror
         let pr = w_ppr_reflect(i.world, s.r, i.clip.xy, s.smear);
         if (wu.screen.x > 10.5) {
@@ -2363,7 +2637,7 @@ fn fs_copy(i: VsOut) -> @location(0) vec4<f32> {
     }
     // EO_WATER_DEBUG=3: the water's own light only; 4: the reflection only; 5: the bottom only; 6 the body's light; 7 the glint;
     // 8 (Fresnel, the reflection's weight before haze, the fog) as colour; 9 the reflected radiance unweighted.
-    if (wu.screen.x > 2.5) {
+    if (wu.screen.x > 2.5 && wu.screen.x < 11.5) {
         let parts = array<vec3<f32>, 8>(s.own, refl * s.refl_k, bottom * s.through, s.body, s.gl, s.terms, refl, w_dbg_ed * 0.01);
         return vec4<f32>(parts[min(u32(wu.screen.x + 0.5) - 3u, 7u)], 1.0);
     }
