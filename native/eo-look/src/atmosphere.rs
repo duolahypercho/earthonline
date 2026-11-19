@@ -655,7 +655,8 @@ mod cie_sky_tests {
     /// Known to fail (an open sky defect): away from the horizon too the
     /// model's sky is 1.03-1.58x brighter relative to its zenith than every
     /// clear type, most toward the antisolar side at a high sun; its nearest
-    /// cloudless type is 14 (turbid) at every sun from 3 to 46 deg. Either
+    /// cloudless type is 14 (turbid) at suns of 10, 31 and 46 deg (12 at
+    /// 3 deg). Either
     /// the zenith is too dark or the rest of the sky too bright for the
     /// medium; which is not yet known.
     #[test]
