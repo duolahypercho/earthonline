@@ -7,7 +7,7 @@ use eo_sky::night::{SCENE_METER_BINS, SCENE_METER_BINS_PER_EV, SCENE_METER_LO_EV
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 
-const RING: usize = 3;
+const RING: usize = 4;
 const HIST_BYTES: u64 = (SCENE_METER_BINS * 4) as u64;
 
 struct Slot {
@@ -126,10 +126,13 @@ impl SceneMeter {
         self.collect(device);
     }
 
-    /// Make sure the coming frame has a free readback slot: with every slot in
-    /// flight (an unpaced loop running ahead of the GPU) wait for them.
-    pub fn ensure_free(&self, device: &wgpu::Device) {
-        if self.slots.iter().any(|s| s.lock().unwrap().stage.load(Ordering::Acquire) == 0) {
+    /// Make sure the coming frame has a free readback slot when its reading is
+    /// needed (`must`: the first frame of a new view): with every slot in flight
+    /// (a loop running ahead of the GPU) wait for them. Otherwise a frame with no
+    /// free slot is simply not metered (the exposure keeps the last reading), so a
+    /// paced frame never waits on the GPU for the meter.
+    pub fn ensure_free(&self, device: &wgpu::Device, must: bool) {
+        if !must || self.slots.iter().any(|s| s.lock().unwrap().stage.load(Ordering::Acquire) == 0) {
             return;
         }
         for s in &self.slots {

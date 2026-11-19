@@ -1179,8 +1179,8 @@ impl LookGpu {
                 };
                 let e = self.sky.update(queue, &Camera { jitter: [0.0; 2], ..*cam }, &f, &t, out_size, self.sky_depth_ok.load(std::sync::atomic::Ordering::Relaxed), daylight.as_deref(), scene);
                 if self.scene_meter_active() {
-                    // this frame's meter pass needs a free readback slot
-                    self.meter.ensure_free(&self.device);
+                    // the first frame of a new view must be metered (a free readback slot)
+                    self.meter.ensure_free(&self.device, self.sky.meter_snap_pending().is_some());
                 }
                 e
             }
