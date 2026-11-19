@@ -54,16 +54,6 @@ aces-output), Copyright Contributors to the ACES Project, Apache License 2.0
 file digests and the changes made are in
 [native/eo-look/data/camera/ACES.NOTICE.txt](native/eo-look/data/camera/ACES.NOTICE.txt).
 
-### ColorChecker reference values (test data)
-
-`COLORCHECKER_XYY_D50` in `native/eo-look/src/tone/camera.rs` holds the 24
-BabelColor average ColorChecker xyY values (Copyright (C) 2004-2012 Danny
-Pascale, www.babelcolor.com), transcribed from the colour-science package's
-tabulation (BSD-3-Clause), where they are reproduced by permission of
-BabelColor. Unit tests read them; nothing of them reaches a rendered frame.
-Their redistribution terms are not yet confirmed for this repository; see
-[native/eo-look/data/camera/COLORCHECKER.NOTICE.txt](native/eo-look/data/camera/COLORCHECKER.NOTICE.txt).
-
 ### Weather and tide data in the native crates
 
 - **NOAA / National Weather Service ASOS METAR reports** of San Francisco
