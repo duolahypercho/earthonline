@@ -436,6 +436,8 @@ pub struct SkyLight {
     /// ground below the horizon (a Lambertian ground of `ground_albedo` under
     /// the sun and the sky): E(n) = sum c_i Y_i(n).
     pub sh: [Rgb; 9],
+    /// the ground's share of `sh` alone (the sky's is `sh` less it).
+    pub sh_ground: [Rgb; 9],
 }
 
 /// Integrate the sky's light at the ground (24 x 48 directions, the upper half marched).
@@ -478,13 +480,15 @@ pub fn sky_light(t: &Tables, sun: [f64; 3], ground_albedo: Rgb) -> SkyLight {
     let l_g = [0, 1, 2].map(|c| ground_albedo[c] * e_h[c] / pi);
     let band = [pi, 2.0 * pi / 3.0, pi / 4.0];
     let mut sh = [[0.0; 3]; 9];
+    let mut sh_ground = [[0.0; 3]; 9];
     for k in 0..9 {
         let a = band[if k == 0 { 0 } else if k < 4 { 1 } else { 2 }];
         for c in 0..3 {
             sh[k][c] = (sky_c[k][c] + gnd_c[k] * l_g[c]) * a;
+            sh_ground[k][c] = gnd_c[k] * l_g[c] * a;
         }
     }
-    SkyLight { sun: spectral_chroma(ts), sky_h: spectral_chroma(sky_h), sh: sh.map(spectral_chroma) }
+    SkyLight { sun: spectral_chroma(ts), sky_h: spectral_chroma(sky_h), sh: sh.map(spectral_chroma), sh_ground: sh_ground.map(spectral_chroma) }
 }
 
 /// Evaluate a cosine-convolved SH9.
