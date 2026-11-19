@@ -316,6 +316,15 @@ selection:
 | Far layer | `--no-gg2-far` (all of these), `--no-far-fallback`, `--no-landmark-far-models`, `--no-far-tree-density`, `--no-presidio-rule`; reserved: `--no-far-paint` |
 | Corridor traffic | `--no-corridor-traffic` (the whole layer), `--no-deck-walkers` |
 | Coastal vegetation | `--no-gg2-vegetation` (all of these), `--no-coastal-trees`, `--no-ground-cover`, `--no-hill-rock` |
+| Round 3, all tracks | `--no-gg3` turns every round-3 track's roll-up on (restores round 2's output) |
+| Frame budget | `--no-gg3-perf` (all of these), `--no-draw-ranges` |
+| Photo dates and sky | `--no-gg3-sky` (all of these), `--no-photo-season`, `--no-cirrus2`, `--no-sky-day-fade`, `--no-live-calendar` |
+| Colour and camera | `--no-gg3-colour` (all of these), `--no-sun-spectrum2`, `--no-meter-highlights`; reserved: `--no-sky-calibration`, `--no-camera-style`, `--no-haze-visibility` |
+| Terrain surface | `--no-gg3-ground` (all of these), `--no-facet-normal-fix`, `--no-terrain-detail`, `--no-terrain-materials`, `--no-sand-detail2`; reserved: `--no-bluff-soil`, `--no-bank-grade` |
+| Scanned rock | `--no-gg3-rock` (all of these), `--no-scan-rocks`, `--no-cliff-dressing`, `--no-surf-rocks`, `--no-scan-riprap`, `--no-rock-geology` |
+| Coastal vegetation, round 3 | `--no-gg3-vegetation` (all of these), `--no-naip-planting`, `--no-cliff-rock-cover`, `--no-far-species`, `--no-far-tree-light`, `--no-bloom-date`; reserved: `--no-veg-scans` |
+| Surf and bathymetry | `--no-gg3-water` (all of these), `--no-bathymetry`, `--no-surf-break`, `--no-swash-foam`, `--no-obstacle-foam`, `--no-water-body2`; reserved: `--no-ppr-dash` |
+| Golden Gate, fifth pass | `--no-gg3-bridge` or `--no-bridges5` (all of these), `--no-paint-brdf2`, `--no-paint-weathering`, `--no-concrete2`, `--no-leg-cells`, `--no-cable-detail` |
 | Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count` |
 | Interface and sound | `--no-hud`, `--no-audio`, `--audio-null` (mix to a null output) |
 
@@ -420,6 +429,96 @@ ground cover and hill rock on the props tiles. `--no-coastal-trees` keeps the
 park species in the mapped woods; `--no-ground-cover` leaves out the grass,
 tufts, flowers and scrub; `--no-hill-rock` the rock outcrops.
 `--no-gg2-vegetation` turns all three off.
+
+The round-3 switches. `--no-gg3` turns every round-3 track off at once and
+gives round 2's output; each track also has its own roll-up.
+
+The frame budget (`--no-gg3-perf`, eo-render `pace`): `--no-draw-ranges`. On
+an adapter without multi-draw-indirect-count, the camera's opaque and glass
+lists and each refreshed shadow cascade keep one slot per object, and the
+cull pass writes instance count 0 or 1 into each slot. By default only the
+blocks of 64 slots that this frame's cull can fill are issued, in slot
+order. The renderer keeps a CPU copy of the object table and the far layer's
+residency to decide this; a block written in the last 8 frames is issued
+whole. The frame is the same either way. With `--no-draw-ranges` every slot
+is issued as before: about 640 k Metal draws a frame and 26 ms of
+render-thread time on golden_gate, plus wgpu's indirect-validation pass
+before the water pass. The bench also reports `fixed_slot_lists` (slots
+issued per frame), `gpu_serial_ms` (each pass's end minus the previous
+pass's end, which adds up to the frame; begin-to-end pass windows overlap
+on Apple GPUs), the PPR and scene-meter passes, and a budget verdict of
+"not run" when no standard path ran.
+
+The photo-date sky (`--no-gg3-sky`, eo-look `season`): `--no-photo-season`
+keeps round 2's season curve, read once at load, instead of the cited
+grassland phenology the far layer reads every frame; `--no-cirrus2` keeps
+round 2's one high deck and its streaks instead of the second cirrus deck,
+which takes its METAR amount (FEW/SCT/BKN from KSFO, or a shot's
+`sky_oktas`) and covers that share of the plane at every mip;
+`--no-sky-day-fade` lets a clear day's sky flip at the game day boundary
+instead of giving way to the next day's over the world clock's 21-24 h;
+`--no-live-calendar` keeps the date on 22 September instead of advancing one
+day each game day (the renderer's sky tells the calendar the world clock).
+
+The colour and camera (`--no-gg3-colour`, eo-look `features`):
+`--no-sun-spectrum2` draws the direct sun's colour from the atmosphere's
+three channels instead of its spectrum; `--no-meter-highlights` restores the
+scene meter's 2 % highlight hold and its centre weighting (by default the
+meter averages the whole frame, ISO 2720's K = 12.5). `--no-sky-calibration`,
+`--no-camera-style` and `--no-haze-visibility` are reserved and change
+nothing. `EO_LOOK_DEBUG=10..17` (also read as `EO_AO_DEBUG`) draws one term
+of a surface's scene radiance, log2-encoded over 2^-14..2^4: 10 all, 11 sun
+diffuse, 12 sun specular, 13 sky diffuse, 14 sky specular, 15 bounce, 16
+none (aerial in-scatter only), 17 unit white; decode with eo-look
+`probe::decode_level`. (The colour track's ACES 1.3 option is not in this
+build until its licence text is approved.)
+
+The terrain surface (`--no-gg3-ground`, eo-landmarks `features::gg3_ground`;
+the survey readers need `EO_SURVEY_ROOT`, and without it the ground draws as
+round 2): `--no-facet-normal-fix` keeps round 2's two-sided flip of the
+interpolated normal instead of orienting it by the triangle and bending it
+toward the eye's horizon; `--no-terrain-detail` leaves out the 1-2 m relief
+from the 1 m DEM (published through eo-data `detail_ground`, which the
+plants and rocks sit on); `--no-terrain-materials` the ground materials on
+the NAIP land cover; `--no-sand-detail2` keys the damp band, wrack and
+footprints to round 2's constant slope instead of each beach's measured
+foreshore. `--no-bluff-soil` and `--no-bank-grade` are reserved.
+
+The scanned rock (`--no-gg3-rock`, eo-landmarks `rocks::scan`; the Poly Haven
+scans under `EO_SURVEY_ROOT`, cooked under `EO_NATIVE_CACHE`): `--no-scan-rocks`
+leaves out every scan (round 2's procedural rock); `--no-cliff-dressing` the
+cliff band's rock faces; `--no-surf-rocks` the intertidal rock field from the
+imagery and the bed; `--no-scan-riprap` the
+revetment's armour as scanned stone; `--no-rock-geology` keeps round 2's
+colours instead of tints from the mapped geologic units.
+
+The coastal vegetation, round 3 (`--no-gg3-vegetation`, eo-landmarks
+`vegetation::Gg3`): `--no-naip-planting` keeps round 2's placement instead of
+scrub, trees and grass placed from the 0.6 m NAIP image; `--no-cliff-rock-cover`
+lets plants stand on a cliff over a beach, mapped bare rock or a sand cliff;
+`--no-far-species` keeps round 2's far tree forms instead of the near tier's
+coastal species; `--no-far-tree-light` keeps round 2's far card light instead
+of a leaf volume with transmission; `--no-bloom-date` leaves out the cited
+bloom window and the flower heads' own colour. `--no-veg-scans` is reserved.
+
+The surf and bathymetry (`--no-gg3-water`, eo-water `switches`; the CUDEM
+tiles under `EO_SURVEY_ROOT`): `--no-bathymetry` keeps the geometric exposure
+instead of the measured sea bed and the swell refracted and shoaled over it;
+`--no-surf-break` the surf breaking where the depth says; `--no-swash-foam`
+the bay beaches' thin swash line; `--no-obstacle-foam` the white water at
+rocks, the fender and walls; `--no-water-body2` keeps round 2's constant
+grey in the reflected sky. `--no-ppr-dash` is reserved. `--no-gg2-water`
+turns these off too.
+
+The Golden Gate's fifth pass (`--no-gg3-bridge` or `--no-bridges5`, eo-landmarks
+`suspension`): `--no-paint-brdf2` keeps the fourth pass's paint instead of
+the District's named colour match as a dielectric film; `--no-paint-weathering`
+the chalking, touch-up patches, rust bloom at rivet rows and dirt on ledges;
+`--no-concrete2` the pylons', housings', piers' and fender's weathered
+concrete with its pour lifts and zero-mean staining; `--no-leg-cells` the
+tower legs' cellular section and the portal casings' own shadow;
+`--no-cable-detail` the cable bands, four-rope suspender groups, spacing
+clamps and the lamp standards at the published 150 ft pitch.
 
 ### Scale of the ground plan
 
