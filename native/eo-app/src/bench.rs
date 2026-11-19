@@ -416,8 +416,23 @@ const TS_FRAMES: usize = (4096 / QUERIES_PER_FRAME) as usize;
 
 /// The whole-frame target at 1920x1080 on the reference desktop GPU.
 pub const FRAME_BUDGET_MS: f64 = 10.0;
+/// set by the device-lost callback (`run`).
+static DEVICE_LOST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// Segments the budget check enforces (median frame total).
 const STANDARD_SEGMENTS: &[&str] = &["street_walk", "elevated_sweep", "authored_street", "kit_street", "sidewalk_walk"];
+
+/// The budget check's verdict: "not run" when none of `STANDARD_SEGMENTS` ran,
+/// else PASS or FAIL over the ones that did.
+fn budget_verdict(ran: &[&str], failures: &[String]) -> &'static str {
+    if ran.is_empty() {
+        "not run"
+    } else if failures.is_empty() {
+        "PASS"
+    } else {
+        "FAIL"
+    }
+}
 
 fn percentile(v: &[f64], p: f64) -> f64 {
     if v.is_empty() {
@@ -701,10 +716,21 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         return Ok(());
     }
 
+    // a lost device (a GPU fault or timeout) fails every later submission silently and the
+    // next wait reports a "submission index" error: say what happened, and when, instead.
+    {
+        let t0 = Instant::now();
+        ctx.device.set_device_lost_callback(move |r, m| {
+            DEVICE_LOST.store(true, std::sync::atomic::Ordering::Relaxed);
+            eprintln!("bench: the GPU device was lost {:.1} s into the run ({r:?}: {m})", t0.elapsed().as_secs_f64());
+        });
+    }
     let period_ns = ctx.queue.get_timestamp_period() as f64;
     let mut seg_reports = vec![];
     let mut budget_failures: Vec<String> = vec![];
     let mut max_failures: Vec<String> = vec![]; // hitch
+    // the standard segments that ran (the budget line says "not run" when none did).
+    let mut standard_ran: Vec<&str> = vec![];
     let budget_ms = args.budget_ms.unwrap_or(FRAME_BUDGET_MS);
     let cw = COUNTER_WORDS as u64 * 4;
     let mut kit_after_paths = vec![];
@@ -774,6 +800,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let mut pump_bytes = Vec::with_capacity(total);
         let mut starts = Vec::with_capacity(total + 1);
         let mut subs: Vec<wgpu::SubmissionIndex> = Vec::with_capacity(total);
+        // (fixed-slot lists) the slots issued per frame and the slots the lists hold (eo-render draw_ranges).
+        let mut range_slots: Vec<(f64, f64)> = Vec::with_capacity(total);
         // per-frame breakdown, the thread's on-CPU time, the wait for
         // the frame two back, and (EO_HITCH_ALLOC=1) the allocator's blocks.
         let mut traces: Vec<FrameRecord> = Vec::with_capacity(total);
@@ -811,7 +839,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             if i >= 2 {
                 ctx.device
                     .poll(wgpu::PollType::Wait { submission_index: Some(subs[i - 2].clone()), timeout: None })
-                    .map_err(|e| anyhow!("{e}"))?;
+                    .map_err(|e| if DEVICE_LOST.load(std::sync::atomic::Ordering::Relaxed) { anyhow!("[{}] the GPU device was lost before frame {i} (see the line above): {e}", seg.name) } else { anyhow!("{e}") })?;
             }
             let wait_ms = tw.elapsed().as_secs_f64() * 1e3;
             let overran = prepay.submissions > 0 && wait_ms < PREPAY_FREE_WAIT_MS;
@@ -862,6 +890,9 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 enc.copy_buffer_to_buffer(w.counter_buffer(), 0, &water_stats_buf, i as u64 * 16, 16); // water
             }
             drop(enc_span);
+            if let Some((issued, slots)) = renderer.draw_range_stats() {
+                range_slots.push((issued as f64, slots as f64));
+            }
             let cmd = hitch::timed(hitch::Phase::Finish, || enc.finish());
             let t1 = Instant::now();
             subs.push(hitch::timed(hitch::Phase::Submit, || eo_render::pace::submit(&ctx.queue, [cmd]))); // counted
@@ -1376,8 +1407,11 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             "shortest_wait_after_taken_spike_ms": if min_wait_after.is_finite() { json!(min_wait_after) } else { json!(null) },
             "prepays_charged_to_their_frame": charged,
         });
-        if STANDARD_SEGMENTS.contains(&seg.name) && tot_med >= budget_ms {
-            budget_failures.push(format!("{} median {tot_med:.3} ms", seg.name));
+        if STANDARD_SEGMENTS.contains(&seg.name) {
+            standard_ran.push(seg.name);
+            if tot_med >= budget_ms {
+                budget_failures.push(format!("{} median {tot_med:.3} ms", seg.name));
+            }
         }
         // the MAX check (every path), enforced with --check-max.
         if tot_max >= budget_ms {
@@ -1397,6 +1431,15 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             })
         });
         kit_after_paths.push(json!({ "after": seg.name, "kit": kit_now }));
+        let fixed_slot_json = if range_slots.is_empty() {
+            json!(null)
+        } else {
+            let from = args.warmup.min(range_slots.len());
+            json!({
+                "slots_issued_per_frame": summary(&range_slots[from..].iter().map(|r| r.0).collect::<Vec<_>>()),
+                "slots_in_the_lists_per_frame": summary(&range_slots[from..].iter().map(|r| r.1).collect::<Vec<_>>()),
+            })
+        };
         let mut report = json!({
             "name": seg.name,
             "budget": budget,
@@ -1416,6 +1459,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             "gpu": gpu,
             "objects_drawn_per_frame": summary(&drawn_objects),
             "transparent_objects_drawn_per_frame": summary(&drawn_blend),
+            // without multi-draw-indirect-count: slots the fixed-slot lists issued (draw_ranges) and held, per frame
             "triangles_drawn_per_frame": summary(&drawn_tris),
             "model_parts_drawn_per_frame": summary(&model_parts),
             "model_triangles_drawn_per_frame": summary(&model_tris),
@@ -1468,6 +1512,11 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         });
         report["view_detail"] = vd_json; // outside the json! above: its recursion limit
         println!("  street objects/frame   median {:.0}  p95 {:.0}  (street triangles median {:.0}, p95 {:.0})", percentile(&street_objs, 50.0), percentile(&street_objs, 95.0), percentile(&street_tris, 50.0), percentile(&street_tris, 95.0));
+        if range_slots.len() > args.warmup {
+            let m: Vec<f64> = range_slots[args.warmup..].iter().map(|r| r.0).collect();
+            let all: Vec<f64> = range_slots[args.warmup..].iter().map(|r| r.1).collect();
+            println!("  fixed-slot draws/frame median {:.0}  p95 {:.0}  of {:.0} slots in the lists (draw_ranges)", percentile(&m, 50.0), percentile(&m, 95.0), percentile(&all, 50.0));
+        }
         println!(
             "\n[{}] {} frames after {} warm-up (settle {:.0} ms)\n  CPU pump+encode+submit ms median {:.3}  p95 {:.3}  max {:.3}\n  wall ms/frame          median {:.3}  p95 {:.3}\n  GPU ms (cull->draw)    median {}  p95 {}\n  objects drawn/frame    median {:.0}  p95 {:.0}  (transparent median {:.0})\n  triangles drawn/frame  median {:.0}  p95 {:.0}\n  model parts/frame      median {:.0}  (model triangles median {:.0}, footprint stand-ins median {:.0})\n  kit objects/frame      median {:.0}  p95 {:.0}  (kit triangles median {:.0}, p95 {:.0})",
             seg.name,
@@ -1496,6 +1545,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         );
         // the far layer after the path, and its last frame's counters (entries drawn, triangles, entries in the frustum, entries occluded).
         let mut report = report;
+        report["fixed_slot_lists"] = fixed_slot_json; // without multi-draw-indirect-count: slots issued (draw_ranges) and held, per frame
         report["hlod_after"] = json!(models.hlod.as_ref().map(|h| h.stats_json()));
         report["hlod_last_frame"] = json!(renderer.hlod.get().map(|h| h.readback(&ctx.queue)));
         seg_reports.push(report);
@@ -1619,7 +1669,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             "process_start_to_first_path_settled": streamed_ms,
         },
         "segments": seg_reports,
-        "budget_check": { "budget_ms": budget_ms, "enforced_on": STANDARD_SEGMENTS, "rule": "median frame total (CPU pump+encode+submit + GPU) under the budget", "failures": budget_failures },
+        "budget_check": { "budget_ms": budget_ms, "enforced_on": STANDARD_SEGMENTS, "ran": standard_ran, "verdict": budget_verdict(&standard_ran, &budget_failures), "rule": "median frame total (CPU pump+encode+submit + GPU) under the budget", "failures": budget_failures },
         // every path's worst frame against the budget (enforced with --check-max).
         "max_check": { "budget_ms": budget_ms, "enforced": args.perf.check_max, "failures": max_failures },
     });
@@ -1662,8 +1712,11 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     std::fs::write(&path, serde_json::to_string_pretty(&out)?)?;
     println!("wrote {}", path.display());
     audio.final_report(); // audio
-    if budget_failures.is_empty() {
-        println!("budget check: PASS (median frame total under {budget_ms} ms on {STANDARD_SEGMENTS:?})");
+    if standard_ran.is_empty() {
+        // nothing it enforces ran: no verdict (a PASS here would claim paths that were not measured)
+        println!("budget check: not run (none of {STANDARD_SEGMENTS:?} ran)");
+    } else if budget_failures.is_empty() {
+        println!("budget check: PASS (median frame total under {budget_ms} ms on {standard_ran:?} of {STANDARD_SEGMENTS:?})");
     } else {
         println!("budget check: FAIL {budget_failures:?}");
     }
@@ -2011,4 +2064,16 @@ const PREPAY_FREE_WAIT_MS: f64 = eo_render::pace::PREPAY_FREE_WAIT_MS; // one va
 
 fn fmt_opt(v: &[f64], p: f64) -> String {
     if v.is_empty() { "n/a".into() } else { format!("{:.3}", percentile(v, p)) }
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use super::budget_verdict;
+
+    #[test]
+    fn the_budget_line_has_no_verdict_when_no_standard_segment_ran() {
+        assert_eq!(budget_verdict(&[], &[]), "not run");
+        assert_eq!(budget_verdict(&["street_walk"], &[]), "PASS");
+        assert_eq!(budget_verdict(&["street_walk"], &["street_walk median 12.000 ms".into()]), "FAIL");
+    }
 }
