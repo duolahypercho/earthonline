@@ -15,6 +15,8 @@ use crate::geometry::{ALL, GroundGrid, MeshArrays, NO_BOTTOM, NO_TOP, Rgb, shade
 use crate::suspension::{self, CableSpec, DeckColours, DeckSpec, DeckStandards, Frame, Run, SuspenderSpec, TrussSpec, stations};
 use serde_json::json;
 
+mod pylons;
+
 /// Near geometry stays this far above the sea; below it is the far batch's skirt.
 const NEAR_FLOOR_ABOVE_SEA_M: f64 = 1.0;
 /// Width of each arch pylon column across the bridge (INFERRED).
@@ -158,6 +160,43 @@ impl Site {
     }
 }
 
+/// The roadway at midspan, el. 270.9 ft MLLW in the 1992 survey
+/// (goldengate.org, "FAQs"; 266.70 ft as designed, Strauss 1937), against
+/// the export's midspan of the 220 ft clearance plus the truss's depth: that
+/// clearance is the War Department's minimum over MHHW under live load at
+/// 110 F, not the roadway's height, and drew a sag where the deck crests
+/// (`BridgeFeatures::crest`).
+pub const ROADWAY_MIDSPAN_MLLW_FT: f64 = 270.9;
+
+/// The roadway at midspan over mean sea level, times the structure scale:
+/// the survey's MLLW elevation less MSL's height over MLLW at NOAA station
+/// 9414290 (0.951 m, epoch 1983-2001).
+pub fn midspan_roadway_m() -> f64 {
+    (ROADWAY_MIDSPAN_MLLW_FT * 0.3048 - pylons::MSL_OVER_MLLW_M) * structure_scale()
+}
+
+/// The fourth pass's published dimensions (`BridgeFeatures`'s fourth-pass
+/// features) as (what, real metres, drawn metres): the plan widths and
+/// spans times the ground plan's scale, the heights and member sizes times
+/// the structure's, for the scale audit's tests.
+pub fn published_dimensions() -> Vec<(&'static str, f64, f64)> {
+    let (gs, h, ft) = (eo_data::groundscale::scale(), structure_scale(), 0.3048);
+    let mut out = pylons::published_dimensions();
+    out.extend([
+        ("roadway at midspan over MSL (270.9 ft MLLW)", ROADWAY_MIDSPAN_MLLW_FT * ft - pylons::MSL_OVER_MLLW_M, midspan_roadway_m()),
+        ("fender across (311 ft)", FENDER_FT[0] * ft, FENDER_FT[0] * ft * gs),
+        ("fender along (170 ft)", FENDER_FT[1] * ft, FENDER_FT[1] * ft * gs),
+        ("fender top over MSL (+15 ft MLLW)", FENDER_FT[3] * ft - pylons::MSL_OVER_MLLW_M, (FENDER_FT[3] * ft - pylons::MSL_OVER_MLLW_M) * h),
+        ("arch span (319 ft 7 in)", ARCH_SPAN_FT * ft, ARCH_SPAN_FT * ft * gs),
+        ("arch rise (113 ft)", ARCH_RISE_FT * ft, ARCH_RISE_FT * ft * h),
+        ("arch inner ribs apart (42.5 ft)", ARCH_RIBS_FT[0] * ft, ARCH_RIBS_FT[0] * ft * gs),
+        ("arch outer ribs apart (102.5 ft)", ARCH_RIBS_FT[1] * ft, ARCH_RIBS_FT[1] * ft * gs),
+        ("bracing width (10.5 ft)", BRACING_WIDTH_M, BRACING_WIDTH_M * h),
+        ("casing set-back (half a 3.5 ft cell)", CASING_SETBACK_M, CASING_SETBACK_M * h),
+    ]);
+    out
+}
+
 /// `goldenGatePlan`.
 pub struct Plan<'a> {
     pub l: f64,
@@ -200,7 +239,7 @@ pub fn plan<'a>(js: &LandmarksJs, site: &'a Site, ground: &dyn Fn(f64, f64) -> f
     let y_south = ground(ws[0], ws[1]) + road_lift;
     let y_north = ground(wn[0], wn[1]) + road_lift;
     let y_tower = water + num(d, "roadwayAtTowerM");
-    let y_mid = water + num(d, "clearanceM") + num(d, "trussDepthM");
+    let y_mid = if suspension::features().crest { water + midspan_roadway_m() } else { water + num(d, "clearanceM") + num(d, "trussDepthM") };
     let sup = |k: &str| g.supports[k].centre;
     let mut p = Plan {
         l,
@@ -273,7 +312,114 @@ struct Ctx<'a> {
     wires: bool,
     /// `BridgeFeatures::members`.
     members: bool,
+    /// The fourth pass's `BridgeFeatures` (`haunch`, `bracing`, `pylons`, `arch2`, `fender2`, `collar`).
+    haunch: bool,
+    bracing: bool,
+    pylons: bool,
+    arch2: bool,
+    fender2: bool,
+    collar: bool,
 }
+
+/// A portal strut's casing (`BridgeFeatures::haunch`): which exported strut,
+/// its bottom and top (world heights), its thickness along the span, and
+/// whether a haunch stands over it (another casing above).
+struct PortalCasing {
+    index: usize,
+    y0: f64,
+    y1: f64,
+    along: f64,
+    top_haunch: bool,
+}
+
+/// INFERRED (`BridgeFeatures::haunch`; no drawing of the casings is
+/// published, and the export's strut heights are the bracing's): the
+/// casing's faces stand half a cell (the legs' 3.5 ft cell, Strauss 1937)
+/// inside the legs' faces along the span; a casing grows top and bottom to
+/// stand 0.45 of the opening under it (estimated from the Battery Spencer
+/// photograph against the exported 0.33-0.36: the owner must accept it);
+/// the haunch brackets reach 0.15 of the opening's width out from each leg
+/// and as far along it, in five steps; the lip is 0.6 m high and 0.3 m proud.
+/// Each is times the structure scale where it is a length.
+const CASING_SETBACK_M: f64 = 3.5 * 0.3048 / 2.0;
+const PORTAL_DEPTH_RATIO: f64 = 0.45;
+const HAUNCH_RATIO: f64 = 0.15;
+const HAUNCH_STEPS: usize = 5;
+const CASING_LIP_M: [f64; 2] = [0.6, 0.3];
+
+/// The leg stage (h0, h1, across, along; heights over the water) at a height over the water.
+fn stage_at(g: &GoldenGate, y: f64) -> [f64; 4] {
+    let st = &g.leg_stages;
+    *st.iter().find(|s| y >= s[0] && y < s[1]).unwrap_or(if y < st[0][0] { &st[0] } else { &st[st.len() - 1] })
+}
+
+/// The portal struts above the roadway (`y_tower`) as their casings: see `PortalCasing`.
+fn portal_casings(g: &GoldenGate, w: f64, y_tower: f64, h: f64) -> Vec<PortalCasing> {
+    let above: Vec<usize> = (0..g.struts.len()).filter(|&i| w + g.struts[i][0] > y_tower).collect();
+    let mut out = Vec::new();
+    for (k, &i) in above.iter().enumerate() {
+        let [h0, h1, _] = g.struts[i];
+        // the opening under the strut: down to the next strut, or to the roadway.
+        let below = if k > 0 { g.struts[above[k - 1]][1] } else { y_tower - w };
+        let (height, opening) = (h1 - h0, h0 - below);
+        // grow the casing top and bottom so it stands PORTAL_DEPTH_RATIO of the opening under it.
+        let grow = ((PORTAL_DEPTH_RATIO * opening - height) / (2.0 + 2.0 * PORTAL_DEPTH_RATIO)).max(0.0);
+        let stage = stage_at(g, (h0 + h1) / 2.0);
+        out.push(PortalCasing {
+            index: i,
+            y0: w + h0 - grow,
+            y1: w + h1 + grow,
+            along: stage[3] - 2.0 * CASING_SETBACK_M * h,
+            top_haunch: k + 1 < above.len(),
+        });
+    }
+    out
+}
+
+/// The towers' struts as they are drawn, for the night floods' strut
+/// shadowing (eo-render landmarks.rs `gg_floods_wgsl`): each as (bottom,
+/// top, thickness along the span), world heights, bottom up. With `haunch`
+/// (and `detail`) the struts over the roadway are their casings, deeper and
+/// nearly flush with the legs; with `bracing` the struts under it are the
+/// laced members (`lower_bracing`: strut 5 added, each member the bracing's
+/// width along the span, its flanges closing it top and bottom). The
+/// haunches, lips and lacing are left out (the table is boxes). With both
+/// off, the export's struts.
+pub fn drawn_struts(js: &LandmarksJs) -> Vec<[f64; 3]> {
+    let f = suspension::features();
+    let g = data(js);
+    let (w, h) = (js.sea_level_y, structure_scale());
+    let y_tower = w + num(&g.dimensions, "roadwayAtTowerM");
+    let casings = if f.haunch && f.detail { portal_casings(&g, w, y_tower, h) } else { Vec::new() };
+    let mut out: Vec<[f64; 3]> = Vec::new();
+    if f.bracing {
+        let truss = num(&g.dimensions, "trussDepthM");
+        let s6 = g.struts[1];
+        let s5_top = y_tower - truss - BRACING_DECK_GAP_M * h;
+        out.push([s5_top - (s6[1] - s6[0]), s5_top, BRACING_WIDTH_M * h]);
+    }
+    for (i, &[h0, h1, along]) in g.struts.iter().enumerate() {
+        if let Some(p) = casings.iter().find(|p| p.index == i) {
+            out.push([p.y0, p.y1, p.along]);
+        } else if f.bracing && w + h1 < y_tower {
+            out.push([w + h0, w + h1, BRACING_WIDTH_M * h]);
+        } else {
+            out.push([w + h0, w + h1, along]);
+        }
+    }
+    out.sort_by(|a, b| a[0].total_cmp(&b[0]));
+    out
+}
+
+/// `BridgeFeatures::bracing`: the bracing members' width along the span,
+/// "approximately the width of three cells, or 10 1/2 ft" (Strauss 1937).
+/// INFERRED: strut 5's top this far under the stiffening truss's bottom
+/// chord; a diagonal's depth in the tower's plane; the lacing's chord, bar
+/// and pitch (chord, bar, pitch). Each is times the structure scale.
+const BRACING_WIDTH_M: f64 = 10.5 * 0.3048;
+const BRACING_DECK_GAP_M: f64 = 0.5;
+const BRACING_DIAGONAL_M: f64 = 2.4;
+const BRACING_LACING_M: [f64; 3] = [0.5, 0.3, 1.4];
 
 impl Ctx<'_> {
     fn in_tower_zone(&self, c0: f64, c1: f64) -> bool {
@@ -289,6 +435,9 @@ impl Ctx<'_> {
         let saddle = self.water + num(d, "towerAboveWaterM") - num(d, "saddleBelowTopM");
         let low = p.y_mid + num(d, "cableLowAboveDeckM");
         let sag_main = saddle - low;
+        if self.pylons {
+            return self.cable_runs4(saddle, sag_main);
+        }
         let south_top = p.deck_top(p.arch_north_c) + num(d, "pylonAboveDeckM");
         let north_top = p.deck_top(p.anchor_north_c) + num(d, "pylonAboveDeckM");
         vec![
@@ -314,8 +463,12 @@ impl Ctx<'_> {
             let top = w + pier.top_m.unwrap_or(0.0);
             let floor = w + NEAR_FLOOR_ABOVE_SEA_M;
             let bed = (self.ground)(cx, cz).min(w - 2.0);
-            concrete.box_(cx, cz, floor, top, half_along, half_across, yaw, k.concrete, NO_BOTTOM);
-            skirt.box_(cx, cz, bed, floor, half_along, half_across, yaw, k.concrete, NO_TOP);
+            if self.fender2 && key == "south" {
+                self.south_pier(concrete, skirt, [cx, cz], half_across, half_along, bed, floor, top);
+            } else {
+                concrete.box_(cx, cz, floor, top, half_along, half_across, yaw, k.concrete, NO_BOTTOM);
+                skirt.box_(cx, cz, bed, floor, half_along, half_across, yaw, k.concrete, NO_TOP);
+            }
             far.box_(cx, cz, bed, top, half_along, half_across, yaw, k.concrete, ALL);
             let legs = &g.tower_legs[key];
             for [lx, lz] in [legs.east, legs.west] {
@@ -332,14 +485,28 @@ impl Ctx<'_> {
             }
             let ([ex, ez], [wx, wz]) = (legs.east, legs.west);
             let c = self.site.chainage(ex, ez);
-            for &[h0, h1, along] in &g.struts {
+            let portals = self.portals();
+            for (i, &[h0, h1, along]) in g.struts.iter().enumerate() {
                 let (mx, mz) = ((ex + wx) / 2.0, (ez + wz) / 2.0);
                 let span = (ex - wx).hypot(ez - wz);
+                if let Some(p) = portals.iter().find(|p| p.index == i) {
+                    self.portal(orange, far, c, mx, mz, span, p);
+                    continue;
+                }
+                if self.bracing && w + h1 < self.plan.y_tower {
+                    // (drawn laced by `lower_bracing`; the far item keeps the box)
+                    far.box_(mx, mz, w + h0, w + h1, along / 2.0, span / 2.0, yaw, k.orange_dark, ALL);
+                    continue;
+                }
                 orange.box_(mx, mz, w + h0, w + h1, along / 2.0, span / 2.0, yaw, k.orange_dark, ALL);
                 far.box_(mx, mz, w + h0, w + h1, along / 2.0, span / 2.0, yaw, k.orange_dark, ALL);
                 if self.detail && w + h0 > self.plan.y_tower {
                     self.portal_ribs(orange, c, w + h0, w + h1, along);
                 }
+            }
+            if self.bracing {
+                self.lower_bracing(orange, far, c);
+                continue;
             }
             // INFERRED: X bracing between the two lowest struts (the JS's 26 and 50 m: their facing chords).
             let s = self.site.half_plane - 3.0 * self.h;
@@ -347,6 +514,186 @@ impl Ctx<'_> {
             let xb = 1.4 * self.h;
             orange.beam(self.P(c, -s, w + lo), self.P(c, s, w + hi), xb, xb, k.orange_dark);
             orange.beam(self.P(c, s, w + lo), self.P(c, -s, w + hi), xb, xb, k.orange_dark);
+        }
+    }
+
+    /// The towers' bracing below the roadway (`BridgeFeatures::bracing`):
+    /// "two panels of diagonals" between the legs, separated by horizontal
+    /// struts, with a strut immediately below the roadway where the
+    /// suspended spans' lateral forces pass to the tower (Strauss 1937; the
+    /// District's 2025 retrofit scope names "Tower Strut 5" and its "bottom
+    /// lacing"), read as struts 5 (under the deck), 6 and 7 (the export's two
+    /// lower struts) with an X panel between 5 and 6 and between 6 and 7. The
+    /// members are latticed ("riveted from many small pieces": goldengate.org,
+    /// "Seismic Retrofits and Historic Preservation"): each is two laced faces,
+    /// one each side of its width along the span (the bracing members'
+    /// "approximately the width of three cells, or 10 1/2 ft": Strauss 1937),
+    /// open between them. INFERRED: strut 5's height (strut 6's) and its top
+    /// at the stiffening truss's bottom chord, the members' depths in the
+    /// tower's plane, their chords, lacing and pitch.
+    fn lower_bracing(&self, orange: &mut MeshArrays, far: &mut MeshArrays, c: f64) {
+        let (g, w, h, k) = (self.g, self.water, self.h, &self.k);
+        let f = self.tower_frame;
+        let hp = self.site.half_plane;
+        let truss = num(self.d, "trussDepthM");
+        let (s7, s6) = (g.struts[0], g.struts[1]);
+        let s5_top = self.plan.y_tower - truss - BRACING_DECK_GAP_M * h;
+        let s5 = [s5_top - w - (s6[1] - s6[0]), s5_top - w, s6[2]];
+        let width = BRACING_WIDTH_M * h;
+        let (chord, lace, pitch) = (BRACING_LACING_M[0] * h, BRACING_LACING_M[1] * h, BRACING_LACING_M[2] * h);
+        let axis = [f.axis[0], 0.0, f.axis[1]];
+        // one member: two flanges the member's full width along the span, `depth`
+        // apart in the tower's plane, laced on both faces, battened at its ends.
+        let mut member = |a: [f64; 3], b: [f64; 3], depth: f64| {
+            let (dx, dy, dz) = (b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+            let l = (dx * dx + dy * dy + dz * dz).sqrt();
+            let d = [dx / l, dy / l, dz / l];
+            // in the tower's plane, perpendicular to the member: axis x d.
+            let mut up = [axis[1] * d[2] - axis[2] * d[1], axis[2] * d[0] - axis[0] * d[2], axis[0] * d[1] - axis[1] * d[0]];
+            let ul = (up[0] * up[0] + up[1] * up[1] + up[2] * up[2]).sqrt();
+            up = [up[0] / ul, up[1] / ul, up[2] / ul];
+            let at = |p: [f64; 3], o: f64, along: f64| [p[0] + up[0] * o + axis[0] * along, p[1] + up[1] * o, p[2] + up[2] * o + axis[2] * along];
+            let half = (depth - chord) / 2.0;
+            for o in [-half, half] {
+                orange.beam_up(at(a, o, 0.0), at(b, o, 0.0), width, chord, k.orange, Some(up));
+            }
+            let n = ((l / pitch).round() as usize).max(1);
+            let p = |t: f64, o: f64, along: f64| at([a[0] + dx * t, a[1] + dy * t, a[2] + dz * t], o, along);
+            for face in [-1.0, 1.0] {
+                let along = face * (width / 2.0 - lace / 2.0);
+                for i in 0..n {
+                    let (t0, t1) = (i as f64 / n as f64, (i + 1) as f64 / n as f64);
+                    let (o0, o1) = if i % 2 == 0 { (-half, half) } else { (half, -half) };
+                    orange.beam_up(p(t0, o0, along), p(t1, o1, along), lace, lace * 0.5, k.orange, Some(axis));
+                }
+            }
+            for t in [0.0, 1.0] {
+                orange.beam_up(p(t, -half, 0.0), p(t, half, 0.0), width, chord, k.orange, Some(d));
+            }
+        };
+        let inner_at = |y: f64| hp - self.stage_at(y - w)[2] / 2.0;
+        // the struts, between the legs' inner faces at their mid-height.
+        for st in [s5, s6, s7] {
+            let ym = w + (st[0] + st[1]) / 2.0;
+            let s = inner_at(ym);
+            member(f.P(c, -s, ym), f.P(c, s, ym), st[1] - st[0]);
+            if st[1] == s5[1] {
+                let [x, z] = f.point(c, 0.0);
+                far.box_(x, z, w + st[0], w + st[1], width / 2.0, hp, self.yaw, k.orange, ALL);
+            }
+        }
+        // the diagonals, corner to corner of each panel (the struts' facing faces at the legs).
+        for (lo, hi) in [(s7[1], s6[0]), (s6[1], s5[0])] {
+            let (ya, yb) = (w + lo, w + hi);
+            let depth = BRACING_DIAGONAL_M * h;
+            let (sa, sb) = (inner_at(ya) - depth / 2.0, inner_at(yb) - depth / 2.0);
+            member(f.P(c, -sa, ya + depth / 2.0), f.P(c, sb, yb - depth / 2.0), depth);
+            member(f.P(c, sa, ya + depth / 2.0), f.P(c, -sb, yb - depth / 2.0), depth);
+        }
+    }
+
+    /// The south pier's shaft (`BridgeFeatures::fender2`): its plan "with
+    /// rounded and pointed ends" (Strauss 1937, of the caisson under it; the
+    /// shaft above the water takes the same ends, INFERRED) on the
+    /// export's size, its long axis across the bridge; a stepped top (the
+    /// set-back motif of the towers, Strauss 1937; INFERRED: one step,
+    /// PIER_STEP_M high and in); in the weathered concrete.
+    #[allow(clippy::too_many_arguments)]
+    fn south_pier(&self, concrete: &mut MeshArrays, skirt: &mut MeshArrays, centre: [f64; 2], half_across: f64, half_along: f64, bed: f64, floor: f64, top: f64) {
+        let h = self.h;
+        let colour = shade(self.k.concrete, PIER_WEATHERED);
+        let ring = |inset: f64| -> Vec<[f64; 2]> {
+            let (ha, hb) = (half_across - inset, half_along - inset);
+            let end = hb * PIER_END_RATIO;
+            let core = ha - end;
+            let n = 12;
+            let mut pts = Vec::new();
+            for side in [1.0, -1.0] {
+                for i in 0..=n {
+                    // from (core, +hb) out to the tip (ha, 0) and back to (core, -hb) (mirrored on the other end).
+                    let v = 1.0 - 2.0 * i as f64 / n as f64;
+                    let along = side * hb * v;
+                    let across = side * (core + end * (1.0 - v.abs().powf(PIER_END_POWER)).max(0.0).sqrt());
+                    pts.push([centre[0] + self.site.axis[0] * along + self.site.across[0] * across, centre[1] + self.site.axis[1] * along + self.site.across[1] * across]);
+                }
+            }
+            crate::geometry::orient_ring(&pts)
+        };
+        let walls = |m: &mut MeshArrays, r: &[[f64; 2]], y0: f64, y1: f64, cap: bool| {
+            let n = r.len();
+            for i in 0..n {
+                let (a, b) = (r[i], r[(i + 1) % n]);
+                m.quad([a[0], y0, a[1]], [b[0], y0, b[1]], [b[0], y1, b[1]], [a[0], y1, a[1]], colour);
+                if cap {
+                    m.tri([a[0], y1, a[1]], [b[0], y1, b[1]], [centre[0], y1, centre[1]], colour);
+                }
+            }
+        };
+        let step = PIER_STEP_M * h;
+        let base = ring(0.0);
+        walls(skirt, &base, bed, floor, false);
+        walls(concrete, &base, floor, top - step, true);
+        walls(concrete, &ring(step), top - step, top, true);
+    }
+
+    /// The leg stage (h0, h1, across, along; heights over the water) at a height over the water.
+    fn stage_at(&self, y: f64) -> [f64; 4] {
+        stage_at(self.g, y)
+    }
+
+    /// The portal struts above the roadway as their steel casings
+    /// (`BridgeFeatures::haunch`, with `detail`): see `PortalCasing`.
+    fn portals(&self) -> Vec<PortalCasing> {
+        if !(self.haunch && self.detail) {
+            return Vec::new();
+        }
+        portal_casings(self.g, self.water, self.plan.y_tower, self.h)
+    }
+
+    /// One portal strut's casing (`BridgeFeatures::haunch`): the steel facia
+    /// plates that case the bracing ("transverse cross strut steel façade
+    /// covers": the District's 2025 retrofit scope; "facia plates" blending
+    /// with the stepped lines of the legs: Strauss 1937) as a box between the
+    /// legs nearly flush with their faces, a lip projecting along its top,
+    /// the vertical ribbing on both faces, and the "angular, stepped brackets
+    /// on the horizontal struts" (goldengate.org, "Art Deco on a Grand
+    /// Scale") as stepped haunches in the openings' corners, under every
+    /// casing and over every casing with another above it. The far item takes
+    /// the casing and one block a haunch.
+    #[allow(clippy::too_many_arguments)]
+    fn portal(&self, orange: &mut MeshArrays, far: &mut MeshArrays, c: f64, mx: f64, mz: f64, span: f64, p: &PortalCasing) {
+        let (k, h, yaw, w) = (&self.k, self.h, self.yaw, self.water);
+        orange.box_(mx, mz, p.y0, p.y1, p.along / 2.0, span / 2.0, yaw, k.orange, ALL);
+        far.box_(mx, mz, p.y0, p.y1, p.along / 2.0, span / 2.0, yaw, k.orange, ALL);
+        let hp = self.site.half_plane;
+        // the lip, between the legs' inner faces at the casing's top.
+        let top_stage = self.stage_at(p.y1 - w - 0.01);
+        let clear_top = hp - top_stage[2] / 2.0;
+        let (lip_h, lip_out) = (CASING_LIP_M[0] * h, CASING_LIP_M[1] * h);
+        orange.box_(mx, mz, p.y1 - lip_h, p.y1, p.along / 2.0 + lip_out, clear_top, yaw, k.orange, ALL);
+        self.portal_ribs(orange, c, p.y0, p.y1 - lip_h, p.along);
+        // the haunches: HAUNCH_STEPS steps, each 1 / HAUNCH_STEPS of the reach out from the leg and down (or up) the leg.
+        let recess = CASING_SETBACK_M * h;
+        let mut corner = |y_face: f64, dir: f64| {
+            let stage = self.stage_at(y_face - w + dir * 0.5);
+            let inner = hp - stage[2] / 2.0;
+            let r = HAUNCH_RATIO * 2.0 * inner;
+            let n = HAUNCH_STEPS;
+            for sgn in [-1.0, 1.0] {
+                for i in 0..n {
+                    let reach = r * (n - i) as f64 / n as f64;
+                    let (ya, yb) = (y_face + dir * r * i as f64 / n as f64, y_face + dir * r * (i + 1) as f64 / n as f64);
+                    let [x, z] = self.site.axis_point(c, sgn * (inner - reach / 2.0));
+                    orange.box_(x, z, ya.min(yb), ya.max(yb), p.along / 2.0 - recess, reach / 2.0, yaw, k.orange, ALL);
+                }
+                let [x, z] = self.site.axis_point(c, sgn * (inner - r / 4.0));
+                let (ya, yb) = (y_face, y_face + dir * r * 0.75);
+                far.box_(x, z, ya.min(yb), ya.max(yb), p.along / 2.0 - recess, r / 4.0, yaw, k.orange, ALL);
+            }
+        };
+        corner(p.y0, -1.0);
+        if p.top_haunch {
+            corner(p.y1, 1.0);
         }
     }
 
@@ -526,13 +873,77 @@ impl Ctx<'_> {
         }
     }
 
+    /// The stiffening truss and the walkways where they meet the towers
+    /// (`BridgeFeatures::collar`). The truss's panels in the tower zone were
+    /// dropped whole, leaving a gap of up to a panel and a half before each
+    /// leg: the last panel is drawn clipped at the leg's face, closed by an
+    /// end vertical and a housing over the rocker links that carry the main
+    /// span's trusses at the towers ("25 ft rocker links": Strauss 1937; the
+    /// District's 2025 retrofit scope: windlocks and links at the towers).
+    /// The balconies round the legs get the painted steel they are: a fascia
+    /// plate along their outer edge and knee brackets under them off the
+    /// legs' outer faces. INFERRED: the housing's and fascia's sections and
+    /// the brackets' pitch.
+    fn tower_collar(&self, orange: &mut MeshArrays) {
+        let (d, p, k, h, w) = (self.d, self.plan, &self.k, self.h, self.water);
+        let (truss, panel) = (num(d, "trussDepthM"), num(d, "panelM"));
+        let hp = self.site.half_plane;
+        let stage = self.stage_at(p.y_tower - w + 0.5);
+        let (leg_half_across, leg_half_along) = (stage[2] / 2.0, stage[3] / 2.0);
+        let st = stations(p.c_start, p.c_end, panel);
+        let top = 0.5 * h;
+        for t in [0.0, p.l] {
+            for dir in [-1.0, 1.0] {
+                // the last whole panel's end on this side of the tower, and the leg's face.
+                let face = t + dir * (leg_half_along + 0.3);
+                let Some(&e) = st.iter().filter(|&&c| (c - t) * dir > 0.0).filter(|&&c| !self.in_tower_zone(c.min(c + dir * panel), c.max(c + dir * panel))).min_by(|a, b| ((*a - t).abs()).total_cmp(&(*b - t).abs())) else { continue };
+                if (e - face) * dir <= 0.5 {
+                    continue;
+                }
+                let (te, tf) = (p.deck_top(e), p.deck_top(face));
+                for s in [-hp, hp] {
+                    orange.beam(self.P(e, s, te - top), self.P(face, s, tf - top), 0.9 * h, 1.0 * h, k.orange);
+                    orange.beam(self.P(e, s, te - truss), self.P(face, s, tf - truss), 0.9 * h, 1.0 * h, k.orange);
+                    orange.beam(self.P(e, s, te - truss), self.P(face, s, tf - top), 0.45 * h, 0.5 * h, k.orange);
+                    // the end vertical and the rocker links' housing against the leg.
+                    orange.beam(self.P(face + dir * 0.6 * h, s, tf - truss), self.P(face + dir * 0.6 * h, s, tf - top), 1.2 * h, 1.2 * h, k.orange);
+                    let [x, z] = self.frame.point(face + dir * COLLAR_HOUSING_M[0] * h / 2.0, s);
+                    orange.box_(x, z, tf - truss - 0.3 * h, tf - top + 0.2 * h, COLLAR_HOUSING_M[0] * h / 2.0, COLLAR_HOUSING_M[1] * h / 2.0, self.yaw, k.orange, ALL);
+                }
+                orange.beam(self.P(e, -hp, te - truss), self.P(face, hp, tf - truss), 0.35 * h, 0.35 * h, k.orange);
+                orange.beam(self.P(e, hp, te - truss), self.P(face, -hp, tf - truss), 0.35 * h, 0.35 * h, k.orange);
+            }
+            // the balconies' fascia and brackets.
+            let walk_outer = hp + leg_half_across + num(d, "sidewalkM");
+            let zone = self.tower_zone_half;
+            let curb = num(d, "curbM");
+            let deck_at = |c: f64| p.deck_top(c) + curb - 0.5;
+            let fh = COLLAR_FASCIA_M * h;
+            for sgn in [-1.0, 1.0] {
+                let s = sgn * (walk_outer + 0.05);
+                orange.beam(self.P(t - zone, s, deck_at(t - zone) - fh / 2.0 + 0.5), self.P(t + zone, s, deck_at(t + zone) - fh / 2.0 + 0.5), 0.1, fh, k.orange);
+                let leg_outer = sgn * (hp + leg_half_across);
+                let n = ((2.0 * leg_half_along) / (COLLAR_BRACKET_PITCH_M * h)).floor().max(1.0) as i64;
+                for i in 0..=n {
+                    let c = t - leg_half_along + 2.0 * leg_half_along * i as f64 / n as f64;
+                    let y = deck_at(c);
+                    let drop = (walk_outer - hp - leg_half_across) * 0.9;
+                    orange.beam(self.P(c, leg_outer, y - drop), self.P(c, s - sgn * 0.15, y - 0.05), 0.25 * h, 0.3 * h, k.orange);
+                    orange.beam(self.P(c, leg_outer, y - 0.15), self.P(c, s - sgn * 0.15, y - 0.15), 0.25 * h, 0.3 * h, k.orange);
+                }
+            }
+        }
+    }
+
     /// `bentColumns`: (x, z, ground, top) of a two-column bent at chainage c.
     fn bent_columns(&self, c: f64) -> [[f64; 4]; 2] {
         let hp = self.site.half_plane;
         let top = self.plan.deck_top(c) - num(self.d, "trussDepthM");
+        // (`pylons`) a bent over an anchorage housing stands on its roof.
+        let roof = self.housing_under(c);
         [-hp, hp].map(|s| {
             let [x, z] = self.site.deck_point(c, s);
-            [x, z, (self.ground)(x, z), top]
+            [x, z, roof.map_or((self.ground)(x, z), |r| r.max((self.ground)(x, z))), top]
         })
     }
 
@@ -646,6 +1057,10 @@ impl Ctx<'_> {
     }
 
     fn arch_ribs(&self, orange: &mut MeshArrays, far: &mut MeshArrays) {
+        if self.arch2 {
+            self.arch4(orange, far);
+            return;
+        }
         let (g, d, p, k) = (self.g, self.d, self.plan, &self.k);
         let s_c = p.arch_south_c + g.supports["archSouth"].extent[1] / 2.0;
         let n_c = p.arch_north_c - g.supports["archNorth"].extent[1] / 2.0;
@@ -738,6 +1153,119 @@ impl Ctx<'_> {
         }
     }
 
+    /// The Fort Point arch as built (`BridgeFeatures::arch2`): a steel,
+    /// two-hinged arch of four ribs, the inner pair 42 ft 6 in apart and the
+    /// outer pair 102 ft 6 in apart (6 ft 3 in outside the cable backstays),
+    /// spanning 319 ft 7 in between the bearings' centres with a rise of
+    /// 113 ft, the roadway 185 ft over the springing (Strauss 1937; the plan
+    /// widths and the span times the ground plan's scale, the heights times
+    /// the structure's). Each rib an open-web arch truss (its bottom chord on
+    /// the rib's parabola, its top chord ARCH_TRUSS_DEPTH_M over it at the
+    /// crown, closing to the hinges), verticals and alternating diagonals at
+    /// every half panel; spandrel bents (a post on each rib at every panel
+    /// point, up to the stiffening truss's bottom chord, X-braced across
+    /// between the ribs); laterals (X between neighbouring ribs' top chords,
+    /// struts across all four at the bottom chords). The springing line is
+    /// level, 185 ft under the roadway at the north bearing. INFERRED: the
+    /// ribs' depth, the members' sections, the bracing's pattern.
+    fn arch4(&self, orange: &mut MeshArrays, far: &mut MeshArrays) {
+        let (d, p, k, h) = (self.d, self.plan, &self.k, self.h);
+        let gs = eo_data::groundscale::scale();
+        let ft = 0.3048;
+        let mid = (p.arch_south_c + p.arch_north_c) / 2.0;
+        let half_span = ARCH_SPAN_FT * ft * gs / 2.0;
+        let (b0, b1) = (mid - half_span, mid + half_span);
+        let truss = num(d, "trussDepthM");
+        let spring = p.deck_top(b1) - ARCH_ROADWAY_OVER_SPRINGING_FT * ft * h;
+        let rise = ARCH_RISE_FT * ft * h;
+        let rib_y = |c: f64| {
+            let t = ((c - b0) / (b1 - b0)).clamp(0.0, 1.0);
+            spring + rise * 4.0 * t * (1.0 - t)
+        };
+        let depth = ARCH_TRUSS_DEPTH_M * h;
+        let floor = |c: f64| p.deck_top(c) - truss;
+        let top_at = |c: f64| {
+            let t = ((c - b0) / (b1 - b0)).clamp(0.0, 1.0);
+            (rib_y(c) + depth * (std::f64::consts::PI * t).sin().sqrt()).min(floor(c) - 0.3)
+        };
+        let ribs = ARCH_RIBS_FT.map(|f| f * ft * gs / 2.0);
+        let ss = [-ribs[1], -ribs[0], ribs[0], ribs[1]];
+        let panel = num(d, "panelM");
+        let cs = stations(b0, b1, panel / 2.0);
+        let (chord_w, chord_d) = (1.2 * h, 1.4 * h);
+        for &s in &ss {
+            for i in 0..cs.len() - 1 {
+                let (a, b) = (cs[i], cs[i + 1]);
+                orange.beam(self.P(a, s, rib_y(a)), self.P(b, s, rib_y(b)), chord_w, chord_d, k.orange);
+                orange.beam(self.P(a, s, top_at(a)), self.P(b, s, top_at(b)), chord_w, chord_d * 0.8, k.orange);
+                if top_at(b) - rib_y(b) > 0.6 {
+                    orange.beam(self.P(b, s, rib_y(b)), self.P(b, s, top_at(b)), 0.5 * h, 0.6 * h, k.orange);
+                }
+                let (ya, yb) = if i % 2 == 0 { (rib_y(a), top_at(b)) } else { (top_at(a), rib_y(b)) };
+                if (top_at(a) - rib_y(a)).min(top_at(b) - rib_y(b)) > 0.3 {
+                    orange.beam(self.P(a, s, ya), self.P(b, s, yb), 0.4 * h, 0.5 * h, k.orange);
+                }
+            }
+            let fcs = stations(b0, b1, 16.0);
+            for i in 0..fcs.len() - 1 {
+                far.beam(self.P(fcs[i], s, rib_y(fcs[i])), self.P(fcs[i + 1], s, rib_y(fcs[i + 1])), 2.0, 2.6, k.orange);
+            }
+        }
+        // laterals: X between neighbouring ribs' top chords in every other panel, struts across at the bottom chords.
+        for (i, w) in cs.windows(2).enumerate() {
+            let (a, b) = (w[0], w[1]);
+            if i % 2 == 0 && i > 0 && i + 2 < cs.len() {
+                for j in 0..3 {
+                    let (s0, s1) = (ss[j], ss[j + 1]);
+                    orange.beam(self.P(a, s0, top_at(a) - 0.4 * h), self.P(b, s1, top_at(b) - 0.4 * h), 0.3 * h, 0.4 * h, k.orange);
+                    orange.beam(self.P(a, s1, top_at(a) - 0.4 * h), self.P(b, s0, top_at(b) - 0.4 * h), 0.3 * h, 0.4 * h, k.orange);
+                }
+                orange.beam(self.P(a, ss[0], rib_y(a) + 0.4 * h), self.P(a, ss[3], rib_y(a) + 0.4 * h), 0.4 * h, 0.5 * h, k.orange);
+            }
+        }
+        // spandrel bents at the panel points: a post on each rib, X-braced across between the ribs.
+        for c in stations(b0 + panel, b1 - panel, panel) {
+            let (y0, y1) = (top_at(c), floor(c));
+            if y1 - y0 < 1.0 {
+                continue;
+            }
+            for &s in &ss {
+                orange.beam(self.P(c, s, y0), self.P(c, s, y1), 0.7 * h, 0.8 * h, k.orange);
+            }
+            if y1 - y0 > 3.0 {
+                for j in 0..3 {
+                    let (s0, s1) = (ss[j], ss[j + 1]);
+                    orange.beam(self.P(c, s0, y0 + 0.5), self.P(c, s1, y1 - 0.5), 0.3 * h, 0.35 * h, k.orange);
+                    orange.beam(self.P(c, s1, y0 + 0.5), self.P(c, s0, y1 - 0.5), 0.3 * h, 0.35 * h, k.orange);
+                }
+            }
+            // the bent's cap under the deck truss.
+            orange.beam(self.P(c, ss[0], y1 - 0.4 * h), self.P(c, ss[3], y1 - 0.4 * h), 0.6 * h, 0.8 * h, k.orange);
+        }
+    }
+
+    /// The arch's bearings (`BridgeFeatures::arch2`): a concrete pedestal
+    /// under each rib's hinge, from the ground up to the springing line.
+    /// INFERRED: its plan, 3 m square at the structure's scale.
+    fn arch_bearings(&self, concrete: &mut MeshArrays) {
+        let p = self.plan;
+        let (gs, h, ft) = (eo_data::groundscale::scale(), self.h, 0.3048);
+        let mid = (p.arch_south_c + p.arch_north_c) / 2.0;
+        let half_span = ARCH_SPAN_FT * ft * gs / 2.0;
+        let spring = p.deck_top(mid + half_span) - ARCH_ROADWAY_OVER_SPRINGING_FT * ft * h;
+        let ribs = ARCH_RIBS_FT.map(|f| f * ft * gs / 2.0);
+        let half = 1.5 * h;
+        for c in [mid - half_span, mid + half_span] {
+            for s in [-ribs[1], -ribs[0], ribs[0], ribs[1]] {
+                let [x, z] = self.frame.point(c, s);
+                let ground = (self.ground)(x, z);
+                if spring - ground > 0.1 {
+                    concrete.box_(x, z, ground - 1.0, spring, half, half, self.yaw, self.k.concrete, NO_BOTTOM);
+                }
+            }
+        }
+    }
+
     /// The parts the second pass adds (`BridgeFeatures::members`): the
     /// cable saddles' housings, the cable bands and the ropes' sockets, the
     /// pylons' Art Deco pilasters, the south pier's fender and the lamp
@@ -773,7 +1301,7 @@ impl Ctx<'_> {
         );
         // The pylons' pilasters: three proud strips on each column's two faces along the span and its outer face.
         for (name, [x, z, y0, y1, hx, hz, yaw], cap) in self.pylon_parts() {
-            if cap {
+            if cap || self.pylons {
                 continue;
             }
             let (cy, sy) = (yaw.cos(), yaw.sin());
@@ -801,8 +1329,19 @@ impl Ctx<'_> {
         // sea; the wall drawn at its sea-level thickness.
         let pier = &g.supports["southPier"];
         let [cx, cz] = pier.centre;
-        let (ra, rb) = (FENDER_OUTER_M[0] / 2.0, FENDER_OUTER_M[1] / 2.0);
-        let wall = FENDER_WALL_TOP_M;
+        let (mut ra, mut rb) = (FENDER_OUTER_M[0] / 2.0, FENDER_OUTER_M[1] / 2.0);
+        let mut wall = FENDER_WALL_TOP_M;
+        let mut fender_top = FENDER_TOP_M;
+        let mut fender_colour = k.concrete;
+        if self.fender2 {
+            // (`fender2`) the published fender: 311 x 170 ft outside, its wall 10 ft at the top, its top
+            // at +15 ft MLLW (Strauss 1937), on the ground plan and the structure's scales; weathered.
+            let gs = eo_data::groundscale::scale();
+            (ra, rb) = (FENDER_FT[0] * 0.3048 * gs / 2.0, FENDER_FT[1] * 0.3048 * gs / 2.0);
+            wall = FENDER_FT[2] * 0.3048 * gs;
+            fender_top = (FENDER_FT[3] * 0.3048 - pylons::MSL_OVER_MLLW_M) * h;
+            fender_colour = shade(k.concrete, PIER_WEATHERED);
+        }
         let n = 64;
         let ring = |r_across: f64, r_along: f64| -> Vec<[f64; 2]> {
             (0..n)
@@ -815,19 +1354,19 @@ impl Ctx<'_> {
         };
         let outer = crate::geometry::orient_ring(&ring(ra, rb));
         let inner = crate::geometry::orient_ring(&ring(ra - wall, rb - wall));
-        let (floor, top_y) = (w + NEAR_FLOOR_ABOVE_SEA_M, w + FENDER_TOP_M);
+        let (floor, top_y) = (w + NEAR_FLOOR_ABOVE_SEA_M, w + fender_top);
         let bed = (self.ground)(cx, cz).min(w - 2.0);
         for i in 0..n {
             let j = (i + 1) % n;
             let (o0, o1, i0, i1) = (outer[i], outer[j], inner[i], inner[j]);
             // outer face, inner face, top.
-            concrete.quad([o0[0], floor, o0[1]], [o1[0], floor, o1[1]], [o1[0], top_y, o1[1]], [o0[0], top_y, o0[1]], k.concrete);
-            concrete.quad([i1[0], floor, i1[1]], [i0[0], floor, i0[1]], [i0[0], top_y, i0[1]], [i1[0], top_y, i1[1]], k.concrete);
-            concrete.quad([o0[0], top_y, o0[1]], [o1[0], top_y, o1[1]], [i1[0], top_y, i1[1]], [i0[0], top_y, i0[1]], k.concrete);
-            skirt.quad([o0[0], bed, o0[1]], [o1[0], bed, o1[1]], [o1[0], floor, o1[1]], [o0[0], floor, o0[1]], k.concrete);
-            skirt.quad([i1[0], bed, i1[1]], [i0[0], bed, i0[1]], [i0[0], floor, i0[1]], [i1[0], floor, i1[1]], k.concrete);
-            far.quad([o0[0], bed, o0[1]], [o1[0], bed, o1[1]], [o1[0], top_y, o1[1]], [o0[0], top_y, o0[1]], k.concrete);
-            far.quad([o0[0], top_y, o0[1]], [o1[0], top_y, o1[1]], [i1[0], top_y, i1[1]], [i0[0], top_y, i0[1]], k.concrete);
+            concrete.quad([o0[0], floor, o0[1]], [o1[0], floor, o1[1]], [o1[0], top_y, o1[1]], [o0[0], top_y, o0[1]], fender_colour);
+            concrete.quad([i1[0], floor, i1[1]], [i0[0], floor, i0[1]], [i0[0], top_y, i0[1]], [i1[0], top_y, i1[1]], fender_colour);
+            concrete.quad([o0[0], top_y, o0[1]], [o1[0], top_y, o1[1]], [i1[0], top_y, i1[1]], [i0[0], top_y, i0[1]], fender_colour);
+            skirt.quad([o0[0], bed, o0[1]], [o1[0], bed, o1[1]], [o1[0], floor, o1[1]], [o0[0], floor, o0[1]], fender_colour);
+            skirt.quad([i1[0], bed, i1[1]], [i0[0], bed, i0[1]], [i0[0], floor, i0[1]], [i1[0], floor, i1[1]], fender_colour);
+            far.quad([o0[0], bed, o0[1]], [o1[0], bed, o1[1]], [o1[0], top_y, o1[1]], [o0[0], top_y, o0[1]], fender_colour);
+            far.quad([o0[0], top_y, o0[1]], [o1[0], top_y, o1[1]], [i1[0], top_y, i1[1]], [i0[0], top_y, i0[1]], fender_colour);
         }
         // Lamp standards at the deck luminaires (lights.rs `bridge_lights`: their pitch and head),
         // on the curb line, the arm reaching over the roadway; none where the curb passes a tower leg.
@@ -861,8 +1400,11 @@ impl Ctx<'_> {
                 yaw: self.yaw,
             });
         }
+        if self.pylons {
+            out.extend(self.pylon_colliders());
+        }
         for (part, [x, z, y0, y1, hx, hz, yaw], cap_only) in self.pylon_parts() {
-            if cap_only {
+            if cap_only || self.pylons {
                 continue;
             }
             out.push(Collider { part, x, z, y0, y1: y1.min(y0 + 30.0), hx, hz, yaw });
@@ -889,6 +1431,20 @@ impl Ctx<'_> {
 /// over the sea. The fender's wall: 10 ft at sea level (the District's 2025
 /// statement on the NTSB's report).
 const ARCH_TRUSS_DEPTH_M: f64 = 4.5;
+/// INFERRED (`BridgeFeatures::collar`): the rocker links' housing along the
+/// span and across it; the balconies' fascia depth; their brackets' pitch
+/// (each times the structure scale).
+const COLLAR_HOUSING_M: [f64; 2] = [1.6, 2.0];
+const COLLAR_FASCIA_M: f64 = 0.9;
+const COLLAR_BRACKET_PITCH_M: f64 = 2.4;
+/// The Fort Point arch (`BridgeFeatures::arch2`; Strauss 1937): the span
+/// between the bearings' centres (319 ft 7 in), its rise (113 ft), the
+/// roadway over the springing at the north end (185 ft), the ribs' spacings
+/// (inner pair, outer pair), feet.
+const ARCH_SPAN_FT: f64 = 319.0 + 7.0 / 12.0;
+const ARCH_RISE_FT: f64 = 113.0;
+const ARCH_ROADWAY_OVER_SPRINGING_FT: f64 = 185.0;
+const ARCH_RIBS_FT: [f64; 2] = [42.5, 102.5];
 const SADDLE_PLINTH_M: f64 = 0.8;
 const CABLE_BAND_LEN_M: f64 = 1.2;
 const CABLE_BAND_WALL_M: f64 = 0.08;
@@ -900,6 +1456,18 @@ const PILASTER_TOP_CLEAR_M: f64 = 5.5;
 const FENDER_OUTER_M: [f64; 2] = [110.0, 52.0];
 const FENDER_WALL_TOP_M: f64 = 10.0 * 0.3048;
 const FENDER_TOP_M: f64 = 4.5;
+/// `BridgeFeatures::fender2`: the south fender's outside across and along
+/// the bridge, its wall at the top and its top's elevation over MLLW, feet
+/// (Strauss 1937: "170 x 311 ft outside", "10 ft at the top", "el. +15").
+/// INFERRED: the pier and fender's weathered concrete at 0.72 of the export's
+/// grey (marine concrete darkened by spray and algae); the south pier's ends
+/// (each end's reach PIER_END_RATIO of its half width, rounded to a point by
+/// PIER_END_POWER) and its top's step.
+const FENDER_FT: [f64; 4] = [311.0, 170.0, 10.0, 15.0];
+const PIER_WEATHERED: f64 = 0.72;
+const PIER_END_RATIO: f64 = 1.3;
+const PIER_END_POWER: f64 = 1.35;
+const PIER_STEP_M: f64 = 1.5;
 
 /// A lamp standard on a bridge's curb line (`BridgeFeatures::members`): a
 /// pole from its base `head` metres up, a short arm reaching `toward` (+-1
@@ -949,7 +1517,9 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
     let orange = srgb_hex(if features.paint { INTERNATIONAL_ORANGE_SRGB } else { hex(d, "orangeSrgb") });
     let k = Colours {
         orange,
-        orange_dark: shade(orange, DARK),
+        // `shade2`: every painted member in the one paint (the JS's 0.62 stood
+        // for shade the renderer now draws: the struts read as dark grilles).
+        orange_dark: if features.shade2 { orange } else { shade(orange, DARK) },
         asphalt: srgb_hex(hex(d, "asphaltSrgb")),
         sidewalk: srgb_hex(hex(d, "sidewalkSrgb")),
         concrete: srgb_hex(hex(d, "concreteSrgb")),
@@ -959,7 +1529,7 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
     };
     let tower_zone_half = g.leg_stages.iter().map(|s| s[3]).fold(f64::MIN, f64::max) / 2.0 + 1.0;
     let tower_frame = Frame::new(site.axis_point(0.0, 0.0), site.axis);
-    let ctx = Ctx { g, d, site: &site, plan: &plan, frame: &frame, tower_frame: &tower_frame, ground: &ground_at, k, yaw: site.axis[1].atan2(site.axis[0]), water: js.sea_level_y, tower_zone_half, h: structure_scale(), detail: features.detail, wires: features.wires, members: features.members };
+    let ctx = Ctx { g, d, site: &site, plan: &plan, frame: &frame, tower_frame: &tower_frame, ground: &ground_at, k, yaw: site.axis[1].atan2(site.axis[0]), water: js.sea_level_y, tower_zone_half, h: structure_scale(), detail: features.detail, wires: features.wires, members: features.members, haunch: features.haunch, bracing: features.bracing, pylons: features.pylons, arch2: features.arch2, fender2: features.fender2, collar: features.collar };
     let mut orange_m = MeshArrays::new("golden-gate-bridge:orange");
     let mut deck_m = MeshArrays::new("golden-gate-bridge:deck");
     let mut concrete_m = MeshArrays::new("golden-gate-bridge:concrete");
@@ -974,22 +1544,41 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
     ctx.approach_span(&mut orange_m, &mut concrete_m, &mut far, plan.c_south, plan.c_start, plan.c_south);
     ctx.approach_span(&mut orange_m, &mut concrete_m, &mut far, plan.c_end, plan.c_north, plan.c_north);
     ctx.tower_walkways(&mut deck_m, &mut orange_m);
+    if ctx.collar {
+        ctx.tower_collar(&mut orange_m);
+    }
     ctx.approaches(&mut orange_m, &mut concrete_m, &mut far);
     ctx.arch_ribs(&mut orange_m, &mut far);
+    if ctx.arch2 {
+        ctx.arch_bearings(&mut concrete_m);
+    }
     if ctx.members {
         ctx.members(&mut orange_m, &mut concrete_m, &mut skirt, &mut wires, &mut far);
     }
-    for (_, [x, z, y0, y1, hx, hz, yaw], _) in ctx.pylon_parts() {
-        concrete_m.box_(x, z, y0, y1, hx, hz, yaw, ctx.k.concrete, NO_BOTTOM);
-        far.box_(x, z, y0, y1, hx, hz, yaw, ctx.k.concrete, ALL);
+    if ctx.pylons {
+        ctx.draw_pylons(&mut concrete_m, &mut far);
+        ctx.tie_downs(&mut wires, &mut concrete_m, &ctx.cable_runs());
+    } else {
+        for (_, [x, z, y0, y1, hx, hz, yaw], _) in ctx.pylon_parts() {
+            concrete_m.box_(x, z, y0, y1, hx, hz, yaw, ctx.k.concrete, NO_BOTTOM);
+            far.box_(x, z, y0, y1, hx, hz, yaw, ctx.k.concrete, ALL);
+        }
     }
     // Past the sun's shadow reach the structure's own occlusion is baked in.
-    let inward = frame.inward();
-    let (dn, inw) = suspension::occlusion(0.62, 0.74);
-    orange_m.shade_occlusion(Some(&inward), dn, inw, 1.5);
-    concrete_m.shade_occlusion(Some(&inward), dn, suspension::occlusion(0.62, 0.86).1, 1.5);
-    deck_m.shade_occlusion(None, dn, inw, 1.5);
-    far.shade_occlusion(Some(&inward), dn, inw, 1.5);
+    // With `shade2` nothing is baked: the bake darkened the albedo, so the
+    // sun on an inward face lost it too, and a face turned down was darkened
+    // twice (the environment's irradiance on it already holds no sky). The
+    // renderer takes what the screen-space occlusion misses at a bridge's
+    // distance, the sky the deck and the opposite leg hide from a face, off
+    // the indirect light alone (eo-render landmarks_surface.wgsl `lm_bridge_sky_vis`).
+    if !(features.shade2 && features.finish) {
+        let inward = frame.inward();
+        let (dn, inw) = suspension::occlusion(0.62, 0.74);
+        orange_m.shade_occlusion(Some(&inward), dn, inw, 1.5);
+        concrete_m.shade_occlusion(Some(&inward), dn, suspension::occlusion(0.62, 0.86).1, 1.5);
+        deck_m.shade_occlusion(None, dn, inw, 1.5);
+        far.shade_occlusion(Some(&inward), dn, inw, 1.5);
+    }
 
     let r1 = |v: f64| (v * 10.0).round() / 10.0;
     let r2 = |v: f64| (v * 100.0).round() / 100.0;

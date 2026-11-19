@@ -528,6 +528,36 @@ fn bridges_wgsl(js: &eo_landmarks::LandmarksJs) -> String {
         arr(bay),
         eo_landmarks::bay_bridge::CORNER_ROUNDING_M
     ));
+    // the fourth pass's shading (`shade2`, `dielectric`): the Golden Gate's own sky
+    // occlusion (its deck line and its legs' stages) and its sea light counted once.
+    let g = eo_landmarks::golden_gate::data(js);
+    let w = js.sea_level_y;
+    let stages = g.leg_stages.iter().map(|st| format!("vec4<f32>({:.4}, {:.4}, {:.4}, {:.4})", w + st[0], w + st[1], st[2] / 2.0, st[3] / 2.0)).collect::<Vec<_>>();
+    // the chainages between which the Golden Gate stands over the strait (the
+    // shore-end pylon S1 to the Marin anchorage): the sea's light replaces the
+    // ground's there, the land's stays outside.
+    let site = eo_landmarks::golden_gate::Site::new(&g);
+    let ch = |k: &str| site.chainage(g.supports[k].centre[0], g.supports[k].centre[1]);
+    // the rough-board-formed concrete (`pylons`; eo-landmarks golden_gate/pylons.rs): INFERRED a
+    // nominal 1 x 6 board (5.5 in) 8 ft long, at the structure's scale, its tone within 6 %, the
+    // joints' ridge 4 mm.
+    let h = eo_landmarks::golden_gate::structure_scale();
+    s.push_str(&format!(
+        "const LM_BOARDFORM_ON: bool = {};\nconst LM_GG_BOARD_M: vec2<f32> = vec2<f32>({:.4}, {:.4});\nconst LM_GG_BOARD_TONE: f32 = 0.06;\nconst LM_GG_BOARD_RIDGE_M: f32 = 0.004;\n",
+        feat.pylons && feat.finish,
+        5.5 * 0.0254 * h,
+        8.0 * 0.3048 * h
+    ));
+    s.push_str(&format!("const LM_GG_WATER_C: vec2<f32> = vec2<f32>({:.3}, {:.3});\n", ch("archNorth"), ch("northAnchor")));
+    s.push_str(&format!(
+        "const LM_SHADE2_ON: bool = {};\nconst LM_DIELECTRIC_ON: bool = {};\nconst LM_GG_STAGE_N: u32 = {}u;\nconst LM_GG_STAGES: array<vec4<f32>, {}> = array<vec4<f32>, {}>({});\n",
+        feat.shade2 && feat.finish && gg.is_some(),
+        feat.dielectric && feat.finish,
+        stages.len(),
+        stages.len(),
+        stages.len(),
+        stages.join(", ")
+    ));
     s
 }
 
@@ -541,12 +571,13 @@ fn gg_floods_wgsl(js: &eo_landmarks::LandmarksJs) -> String {
     let list = |f: &dyn Fn(&eo_landmarks::lights::Flood) -> [f64; 3]| floods.iter().map(|x| v3(f(x))).collect::<Vec<_>>().join(", ");
     let n = floods.len();
     let n_above = floods.iter().filter(|x| !x.below).count();
-    let g = eo_landmarks::golden_gate::data(js);
-    let w = js.sea_level_y;
-    // the portal struts (with `floods`, the ones under the deck too: the below-roadway lights'):
-    // (y0, y1, half along, half span between the legs' centre planes, less half a leg).
+    // the portal struts as drawn (golden_gate.rs `drawn_struts`: the casings and the laced
+    // bracing with the fourth pass; with `floods`, the ones under the deck too: the
+    // below-roadway lights'): (y0, y1, half along, half span between the legs' centre
+    // planes, less half a leg).
     let all = eo_landmarks::suspension::features().floods;
-    let struts: Vec<String> = g.struts.iter().filter(|st| all || w + st[0] > fl.deck_y).map(|st| format!("vec4<f32>({:.4}, {:.4}, {:.4}, {:.4})", w + st[0], w + st[1], st[2] / 2.0, fl.half_plane - 0.5 * fl.half_across)).collect();
+    let drawn = eo_landmarks::golden_gate::drawn_struts(js);
+    let struts: Vec<String> = drawn.iter().filter(|st| all || st[0] > fl.deck_y).map(|st| format!("vec4<f32>({:.4}, {:.4}, {:.4}, {:.4})", st[0], st[1], st[2] / 2.0, fl.half_plane - 0.5 * fl.half_across)).collect();
     let ns = struts.len().max(1);
     let struts = if struts.is_empty() { "vec4<f32>(0.0, 0.0, 0.0, 0.0)".to_string() } else { struts.join(", ") };
     let mut s = String::new();

@@ -63,11 +63,85 @@ pub struct BridgeFeatures {
     /// pixels on screen, so a receding curtain sums to its true mean cover
     /// (a partition of unity) instead of beating in moire bands.
     pub curtain: bool,
+    /// `--no-bridge-shade2`: the Golden Gate's painted members in the one
+    /// paint (no `DARK` bake on the struts, fins, bracing and floor beams),
+    /// and the baked occlusion replaced by the sky the deck and the opposite
+    /// tower leg take from a face (eo-render landmarks_surface.wgsl
+    /// `lm_bridge_sky_vis`), on the indirect light only.
+    pub shade2: bool,
+    /// `--no-bridge-dielectric`: the paint's diffuse light counted as a
+    /// dielectric film's under the physical daylight: the sea's reflected
+    /// light replaces the environment's ground share (counted once), the
+    /// sky's share at the environment's own intensity.
+    pub dielectric: bool,
+    /// `--no-bridge-haunch`: the Golden Gate's portal struts as casings
+    /// nearly flush with the legs, with stepped haunch brackets in the
+    /// openings' corners and a projecting top lip.
+    pub haunch: bool,
+    /// `--no-bridge-bracing`: the towers' bracing under the roadway: strut 5
+    /// under the deck and two laced X panels down to strut 7.
+    pub bracing: bool,
+    /// `--no-bridge-pylons`: the concrete pylons S1, S2, N1 and N2 as two
+    /// massive fluted shafts each, the side spans' tie-downs near deck level,
+    /// the backstays and the anchorage housings.
+    pub pylons: bool,
+    /// `--no-bridge-arch2`: the Fort Point arch's four laced ribs, spandrel
+    /// bents and laterals.
+    pub arch2: bool,
+    /// `--no-bridge-fender2`: the south pier's fender at its published size
+    /// and the pier's rounded, pointed ends and stepped top.
+    pub fender2: bool,
+    /// `--no-bridge-crest`: the roadway's crest at midspan at its surveyed
+    /// height (the cable's low point raised with it).
+    pub crest: bool,
+    /// `--no-bridge-collar`: the stiffening truss closed at the tower legs
+    /// (end verticals, rocker-link housings) and the balconies' steel fascia.
+    pub collar: bool,
 }
 
 impl BridgeFeatures {
-    pub const ALL: Self = Self { scale: true, paint: true, detail: true, wires: true, night: true, air: true, finish: true, members: true, floods: true, curtain: true };
-    pub const OFF: Self = Self { scale: false, paint: false, detail: false, wires: false, night: false, air: false, finish: false, members: false, floods: false, curtain: false };
+    pub const ALL: Self = Self {
+        scale: true,
+        paint: true,
+        detail: true,
+        wires: true,
+        night: true,
+        air: true,
+        finish: true,
+        members: true,
+        floods: true,
+        curtain: true,
+        shade2: true,
+        dielectric: true,
+        haunch: true,
+        bracing: true,
+        pylons: true,
+        arch2: true,
+        fender2: true,
+        crest: true,
+        collar: true,
+    };
+    pub const OFF: Self = Self {
+        scale: false,
+        paint: false,
+        detail: false,
+        wires: false,
+        night: false,
+        air: false,
+        finish: false,
+        members: false,
+        floods: false,
+        curtain: false,
+        shade2: false,
+        dielectric: false,
+        haunch: false,
+        bracing: false,
+        pylons: false,
+        arch2: false,
+        fender2: false,
+        crest: false,
+        collar: false,
+    };
 
     /// The features a command line leaves on.
     pub fn from_args<S: AsRef<str>>(args: &[S]) -> Self {
@@ -76,7 +150,9 @@ impl BridgeFeatures {
             return Self::OFF;
         }
         let first = has("--no-bridges3");
-        let has = |f: &str| first || has(f);
+        let third = first || has("--no-bridges4");
+        let has3 = |f: &str| first || has(f);
+        let has4 = |f: &str| third || has(f);
         let keep = |f: &str| !args.iter().any(|a| a.as_ref() == f);
         Self {
             scale: keep("--no-bridge-scale"),
@@ -84,16 +160,28 @@ impl BridgeFeatures {
             detail: keep("--no-bridge-detail"),
             wires: keep("--no-bridge-wires"),
             night: keep("--no-bridge-night"),
-            air: !has("--no-bridge-air"),
-            finish: !has("--no-bridge-finish"),
-            members: !has("--no-bridge-members"),
-            floods: !has("--no-bridge-floods"),
-            curtain: !has("--no-bridge-curtain"),
+            air: !has3("--no-bridge-air"),
+            finish: !has3("--no-bridge-finish"),
+            members: !has3("--no-bridge-members"),
+            floods: !has3("--no-bridge-floods"),
+            curtain: !has3("--no-bridge-curtain"),
+            shade2: !has4("--no-bridge-shade2"),
+            dielectric: !has4("--no-bridge-dielectric"),
+            haunch: !has4("--no-bridge-haunch"),
+            bracing: !has4("--no-bridge-bracing"),
+            pylons: !has4("--no-bridge-pylons"),
+            arch2: !has4("--no-bridge-arch2"),
+            fender2: !has4("--no-bridge-fender2"),
+            crest: !has4("--no-bridge-crest"),
+            collar: !has4("--no-bridge-collar"),
         }
     }
 
     /// The second pass's features off (`--no-bridges3`): the first pass's output.
-    pub const FIRST: Self = Self { air: false, finish: false, members: false, floods: false, curtain: false, ..Self::ALL };
+    pub const FIRST: Self = Self { air: false, finish: false, members: false, floods: false, curtain: false, ..Self::THIRD };
+
+    /// The fourth pass's features off (`--no-bridges4`): the third pass's output.
+    pub const THIRD: Self = Self { shade2: false, dielectric: false, haunch: false, bracing: false, pylons: false, arch2: false, fender2: false, crest: false, collar: false, ..Self::ALL };
 }
 
 static FEATURES: OnceLock<BridgeFeatures> = OnceLock::new();
@@ -110,7 +198,30 @@ pub fn pin_features(f: BridgeFeatures) -> bool {
 }
 
 /// The kill switches `features` reads (eo-app accepts them).
-pub const SWITCHES: &[&str] = &["--no-bridges2", "--no-bridges3", "--no-bridge-scale", "--no-bridge-paint", "--no-bridge-detail", "--no-bridge-wires", "--no-bridge-night", "--no-bridge-air", "--no-bridge-finish", "--no-bridge-members", "--no-bridge-floods", "--no-bridge-curtain"];
+pub const SWITCHES: &[&str] = &[
+    "--no-bridges2",
+    "--no-bridges3",
+    "--no-bridges4",
+    "--no-bridge-scale",
+    "--no-bridge-paint",
+    "--no-bridge-detail",
+    "--no-bridge-wires",
+    "--no-bridge-night",
+    "--no-bridge-air",
+    "--no-bridge-finish",
+    "--no-bridge-members",
+    "--no-bridge-floods",
+    "--no-bridge-curtain",
+    "--no-bridge-shade2",
+    "--no-bridge-dielectric",
+    "--no-bridge-haunch",
+    "--no-bridge-bracing",
+    "--no-bridge-pylons",
+    "--no-bridge-arch2",
+    "--no-bridge-fender2",
+    "--no-bridge-crest",
+    "--no-bridge-collar",
+];
 
 /// A frame along a bridge: chainage c along `axis` from `origin`, offset s to
 /// its right; `offset`, when given, adds a lateral offset per chainage (the
@@ -666,7 +777,8 @@ pub fn finish_material(id: &str, key: &str, m: &mut crate::data::Material) {
 /// shadowed or enclosed, so the bake keeps only what those miss (the sky a
 /// face turned down does not see, the interior's inter-reflection deficit).
 /// INFERRED: 0.82 down, 0.88 in, from the first pass's 0.62 / 0.74 (the
-/// struts' undersides were crushed to black).
+/// struts' undersides were crushed to black). The Golden Gate with `shade2`
+/// bakes none (golden_gate.rs `build`); the west span keeps this.
 pub fn occlusion(down: f64, inward: f64) -> (f64, f64) {
     if features().finish { (down.max(0.82), inward.max(0.88)) } else { (down, inward) }
 }
