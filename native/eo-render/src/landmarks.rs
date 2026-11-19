@@ -548,6 +548,7 @@ fn bridges_wgsl(js: &eo_landmarks::LandmarksJs) -> String {
         5.5 * 0.0254 * h,
         8.0 * 0.3048 * h
     ));
+    s.push_str(&bridges5_wgsl(js));
     s.push_str(&format!("const LM_GG_WATER_C: vec2<f32> = vec2<f32>({:.3}, {:.3});\n", ch("archNorth"), ch("northAnchor")));
     s.push_str(&format!(
         "const LM_SHADE2_ON: bool = {};\nconst LM_DIELECTRIC_ON: bool = {};\nconst LM_GG_STAGE_N: u32 = {}u;\nconst LM_GG_STAGES: array<vec4<f32>, {}> = array<vec4<f32>, {}>({});\n",
@@ -557,6 +558,43 @@ fn bridges_wgsl(js: &eo_landmarks::LandmarksJs) -> String {
         stages.len(),
         stages.len(),
         stages.join(", ")
+    ));
+    s
+}
+
+/// The fifth pass's constants (round 3's bridge finish; eo-landmarks
+/// suspension.rs `BridgeFeatures::paint2` .. `cable_detail`): the paint's
+/// weathering, the concrete's, the legs' cells and the casings as drawn (for
+/// their own shadow and occlusion past the shadow maps), and the radiance
+/// probe (`EO_BRIDGE_PROBE`, a debugging view, off unless set: a mask of the
+/// terms a Golden Gate painted surface keeps, landmarks_surface.wgsl `lm_probe`).
+fn bridges5_wgsl(js: &eo_landmarks::LandmarksJs) -> String {
+    let f = eo_landmarks::suspension::features();
+    let h = eo_landmarks::golden_gate::structure_scale();
+    let cell = eo_landmarks::golden_gate::cell_m(h);
+    let (casings, members) = eo_landmarks::golden_gate::drawn_casings(js);
+    let probe: u32 = std::env::var("EO_BRIDGE_PROBE").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(0);
+    let mut s = String::new();
+    s.push_str(&format!(
+        "const LM_WEATHER_ON: bool = {};\nconst LM_CONCRETE2_ON: bool = {};\nconst LM_LEGCELLS_ON: bool = {};\nconst LM_PROBE: u32 = {}u;\n",
+        f.weathering && f.finish,
+        f.concrete2 && f.finish,
+        f.leg_cells && f.detail && f.finish,
+        probe
+    ));
+    s.push_str(&format!(
+        "const LM_GG_CELL_M: f32 = {:.5};\nconst LM_GG_RECESS_M: f32 = {:.5};\nconst LM_GG_NOTCH_M: f32 = {:.5};\nconst LM_GG_PANEL_MAX: f32 = {:.3};\n",
+        cell,
+        eo_landmarks::golden_gate::legs_recess_cells() * cell,
+        eo_landmarks::golden_gate::legs_notch_cells() * cell,
+        eo_landmarks::golden_gate::legs_panel_max_cells()
+    ));
+    let n = casings.len().max(1);
+    let list = if casings.is_empty() { "vec4<f32>(0.0, -1.0, 0.0, 0.0)".to_string() } else { casings.iter().map(|c| format!("vec4<f32>({:.4}, {:.4}, {:.4}, {:.4})", c[0], c[1], c[2], c[3])).collect::<Vec<_>>().join(", ") };
+    s.push_str(&format!("const LM_GG_CASING_N: u32 = {}u;\nconst LM_GG_CASINGS: array<vec4<f32>, {n}> = array<vec4<f32>, {n}>({list});\n", casings.len()));
+    s.push_str(&format!(
+        "const LM_GG_CASE_SET: f32 = {:.4};\nconst LM_GG_LIP: vec2<f32> = vec2<f32>({:.4}, {:.4});\nconst LM_GG_RIB: vec3<f32> = vec3<f32>({:.4}, {:.4}, {:.4});\n",
+        members[0], members[1], members[2], members[3], members[4], members[5]
     ));
     s
 }
