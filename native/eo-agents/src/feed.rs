@@ -229,7 +229,8 @@ impl Feeder {
                 let w = self.walker_entry(lib, key, a.id);
                 let secs = lib.meta.clip_seconds[CLIP_IDLE as usize].max(0.1) as f64;
                 let mut anim = fract(a.anim as f64 / std::f64::consts::TAU) as f32;
-                let clip_phase = fract(frame.time / secs + w.offset as f64) as f32;
+                // the corridor layer's own clock (it replays; the regions' may drop time).
+                let clip_phase = fract(frame.corridor_time / secs + w.offset as f64) as f32;
                 let mo = &lib.meta.motion;
                 if mo.any() && mo.styled() {
                     if let Some(ws) = self.walkers.get_mut(&key) {
