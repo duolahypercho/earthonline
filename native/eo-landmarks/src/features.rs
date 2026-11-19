@@ -148,8 +148,23 @@ pub fn set_palm_detail(on: bool) {
 pub const SHORE_GROUND_SWITCHES: [&str; 7] = ["beach-sand-limit", "sand-albedo", "rocks", "riprap", "pier-lines", "ground-steps", "season-seam"];
 
 /// The terrain-surface track's switch names (the roll-up first, full
-/// `--no-` names); eo-app accepts them. Reserved: nothing reads them yet.
+/// `--no-` names); eo-app accepts them. `gg3_ground(<name without --no->)`
+/// reads one; `--no-gg3-ground` and `--no-gg3` turn every part off.
 pub const GG3_SWITCHES: &[&str] = &["--no-gg3-ground", "--no-facet-normal-fix", "--no-terrain-detail", "--no-terrain-materials", "--no-bluff-soil", "--no-bank-grade", "--no-sand-detail2"];
+
+/// Whether the terrain-surface part `name` (a `GG3_SWITCHES` name without
+/// `--no-`, not the roll-up) is on: off with `--no-<name>`, the roll-up
+/// `--no-gg3-ground` or every track's `--no-gg3`.
+pub fn gg3_ground(name: &str) -> bool {
+    static ARGS: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    gg3_ground_in(ARGS.get_or_init(|| std::env::args().collect()), name)
+}
+
+/// `gg3_ground` over a given argument list.
+pub fn gg3_ground_in(args: &[String], name: &str) -> bool {
+    debug_assert!(GG3_SWITCHES[1..].iter().any(|s| s.strip_prefix("--no-") == Some(name)), "unknown terrain-surface switch {name}");
+    !args.iter().any(|a| a == "--no-gg3-ground" || a == "--no-gg3" || a.strip_prefix("--no-") == Some(name))
+}
 
 /// Whether the shore-ground part `name` (one of `SHORE_GROUND_SWITCHES`) is on.
 pub fn shore_ground(name: &str) -> bool {
@@ -195,6 +210,21 @@ mod tests {
             assert!(!shore_ground_in(&args(&["eo-app", &format!("--no-{n}")]), n));
         }
         assert!(shore_ground_in(&args(&["eo-app", "--no-rocks"]), "riprap"));
+    }
+
+    #[test]
+    fn the_terrain_surface_switches_turn_off_alone_or_together() {
+        let args = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        for full in &GG3_SWITCHES[1..] {
+            let n = full.strip_prefix("--no-").unwrap();
+            assert!(gg3_ground_in(&args(&["eo-app"]), n));
+            assert!(!gg3_ground_in(&args(&["eo-app", "--no-gg3-ground"]), n));
+            assert!(!gg3_ground_in(&args(&["eo-app", "--no-gg3"]), n));
+            assert!(!gg3_ground_in(&args(&["eo-app", full]), n));
+            // another part's switch, or round 2's roll-up, leaves it on
+            assert!(gg3_ground_in(&args(&["eo-app", "--no-gg2-ground"]), n));
+        }
+        assert!(gg3_ground_in(&args(&["eo-app", "--no-terrain-detail"]), "facet-normal-fix"));
     }
 
     #[test]
