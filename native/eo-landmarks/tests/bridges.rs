@@ -182,3 +182,118 @@ fn the_fourth_pass_dimensions_are_on_the_drawn_scales() {
         assert!((get("arch outer ribs") / 2.0 - site.half_plane - 6.25 * 0.3048 * gs).abs() < 0.05);
     }
 }
+
+/// The scale audit on the built geometry (golden_gate.rs `build`): the
+/// fourth pass's published dimensions measured on what is drawn, against
+/// the real values (feet, here) times the ground plan's or the structure's
+/// scale, not against the list `published_dimensions` makes of them. The
+/// pylon shafts and anchorage housings from their colliders, the crest from
+/// the plan, the build's stats and the deck mesh, the fender from its ring
+/// in the concrete mesh, the arch from its ribs in the orange mesh.
+#[test]
+fn the_fourth_pass_geometry_is_drawn_at_its_published_size() {
+    let f = eo_landmarks::suspension::features();
+    if !(f.pylons && f.crest && f.fender2 && f.arch2 && f.members) {
+        return; // a run with the fourth pass off draws the third pass's sizes
+    }
+    let (gs, h, ft) = (eo_data::groundscale::scale(), eo_landmarks::golden_gate::structure_scale(), 0.3048);
+    let paths = eo_data::DataPaths::discover().unwrap();
+    let el = eo_data::ElevationGrid::load(&paths).unwrap();
+    let ca = eo_data::CaStandards::load(&paths).unwrap();
+    let std = eo_landmarks::suspension::DeckStandards::load(&ca).unwrap();
+    let js = LandmarksJs::get();
+    let id = "golden-gate-bridge";
+    let shift = eo_landmarks::set::ground_scale_shift(js, id);
+    let height_at = |x: f64, z: f64| el.sample(x + shift[0], z + shift[1]);
+    let ground = eo_landmarks::set::ground_of(js, id, &height_at);
+    let built = eo_landmarks::golden_gate::build(js, &ground, &std);
+    let g = eo_landmarks::golden_gate::data(js);
+    let site = eo_landmarks::golden_gate::Site::new(&g);
+    let plan = eo_landmarks::golden_gate::plan(js, &site, &|x, z| ground.at(x, z));
+    let w = js.sea_level_y;
+    let msl_over_mllw = 0.951; // NOAA 9414290, epoch 1983-2001
+    let near = |a: f64, b: f64, tol: f64, what: &str| assert!((a - b).abs() < tol, "{what}: drawn {a:.3}, published x scale {b:.3}");
+
+    // pylons S1, S2, N1, N2: each shaft 32 x 36 ft (across, along) on the plan.
+    for name in ["S1", "S2", "N1", "N2"] {
+        for side in ["west", "east"] {
+            let c = built.colliders.iter().find(|c| c.part == format!("{name}-{side}")).unwrap_or_else(|| panic!("{name}-{side}"));
+            near(2.0 * c.hz, 32.0 * ft * gs, 1e-6, &format!("{name} shaft across"));
+            near(2.0 * c.hx, 36.0 * ft * gs, 1e-6, &format!("{name} shaft along"));
+        }
+    }
+    // the anchorage housings: 235 ft (south) and 347 ft (north) along the span.
+    let housing = |i: usize| 2.0 * built.colliders.iter().find(|c| c.part == format!("anchorage-housing-{i}")).unwrap().hx;
+    near(housing(0), 235.0 * ft * gs, 1e-6, "south housing length");
+    near(housing(1), 347.0 * ft * gs, 1e-6, "north housing length");
+
+    // the crest: the roadway at midspan 270.9 ft MLLW less MSL's height over MLLW, on the height scale.
+    let crest = (270.9 * ft - msl_over_mllw) * h;
+    near(plan.y_mid - w, crest, 1e-6, "roadway at midspan over the sea (plan)");
+    near(built.stats["deckTopMid"].as_f64().unwrap() - w, crest, 0.01, "roadway at midspan over the sea (stats)");
+    // the deck mesh near midspan: its roadway on the crested line, nothing on it over the railing's height.
+    let deck = &built.groups.iter().find(|(k, _)| k == "deck").unwrap().1;
+    let (mut on_line, mut top) = (0, f64::MIN);
+    for p in deck.positions.chunks_exact(3) {
+        let c = site.chainage(p[0] as f64, p[2] as f64);
+        if (c - plan.l / 2.0).abs() < 30.0 {
+            let dy = p[1] as f64 - plan.deck_top(c);
+            on_line += usize::from(dy.abs() < 0.01);
+            top = top.max(dy);
+        }
+    }
+    println!("crest: plan {:.3} m over the sea; the deck mesh within 30 m of midspan: {on_line} vertices on the roadway line, its top {top:.3} m over it", plan.y_mid - w);
+    assert!(on_line >= 8 && (0.0..3.0).contains(&top), "{on_line} vertices on the deck line, top {top} m over it");
+
+    // the fender: the ring's top at +15 ft MLLW, 311 x 170 ft outside (across, along).
+    let concrete = &built.groups.iter().find(|(k, _)| k == "concrete").unwrap().1;
+    let pier = g.supports["southPier"].centre;
+    let fender_top = w + (15.0 * ft - msl_over_mllw) * h;
+    let (mut across, mut along, mut n) = (0.0f64, 0.0f64, 0);
+    for p in concrete.positions.chunks_exact(3) {
+        let (dx, dz) = (p[0] as f64 - pier[0], p[2] as f64 - pier[1]);
+        if (p[1] as f64 - fender_top).abs() < 0.01 && dx.hypot(dz) < 100.0 {
+            across = across.max((dx * site.across[0] + dz * site.across[1]).abs());
+            along = along.max((dx * site.axis[0] + dz * site.axis[1]).abs());
+            n += 1;
+        }
+    }
+    println!("fender: {n} vertices on its top, {:.2} x {:.2} m outside", 2.0 * across, 2.0 * along);
+    assert!(n >= 64, "{n} vertices at the fender's top");
+    near(2.0 * across, 311.0 * ft * gs, 0.01, "fender across");
+    near(2.0 * along, 170.0 * ft * gs, 0.01, "fender along");
+
+    // the arch: its ribs' bottom chords at the springing, 42.5 and 102.5 ft apart, 319 ft 7 in from springing to springing.
+    let orange = &built.groups.iter().find(|(k, _)| k == "orange").unwrap().1;
+    let mid = (plan.arch_south_c + plan.arch_north_c) / 2.0;
+    let half_span = (319.0 + 7.0 / 12.0) * ft * gs / 2.0;
+    let spring = plan.deck_top(mid + half_span) - 185.0 * ft * h;
+    let lateral = |x: f64, z: f64| {
+        let c = site.chainage(x, z);
+        let a = site.axis_point(c, 0.0);
+        (x - a[0]) * site.across[0] + (z - a[1]) * site.across[1] - site.centre_offset(c)
+    };
+    let (inner, outer) = (42.5 * ft * gs / 2.0, 102.5 * ft * gs / 2.0);
+    let mut bands = [Vec::new(), Vec::new()];
+    let (mut c_lo, mut c_hi) = (f64::MAX, f64::MIN);
+    for p in orange.positions.chunks_exact(3) {
+        let (x, y, z) = (p[0] as f64, p[1] as f64, p[2] as f64);
+        let c = site.chainage(x, z);
+        if (c - mid).abs() > half_span + 3.0 || (y - spring).abs() > 2.0 * h {
+            continue;
+        }
+        let s = lateral(x, z).abs();
+        bands[usize::from(s > (inner + outer) / 2.0)].push(s);
+        if s > (inner + outer) / 2.0 {
+            (c_lo, c_hi) = (c_lo.min(c), c_hi.max(c));
+        }
+    }
+    let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len().max(1) as f64;
+    let (mi, mo) = (mean(&bands[0]), mean(&bands[1]));
+    println!("arch: ribs {:.2} and {:.2} m apart ({} and {} vertices), springings {:.2} m apart", 2.0 * mi, 2.0 * mo, bands[0].len(), bands[1].len(), c_hi - c_lo);
+    assert!(bands[0].len() >= 16 && bands[1].len() >= 16);
+    near(2.0 * mi, 2.0 * inner, 0.05, "arch inner ribs apart");
+    near(2.0 * mo, 2.0 * outer, 0.05, "arch outer ribs apart");
+    // the bottom chord's ends: the springings, within the chord's own depth.
+    near(c_hi - c_lo, 2.0 * half_span, 2.0 * h, "arch span");
+}
