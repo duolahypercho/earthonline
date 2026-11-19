@@ -77,8 +77,12 @@ pub fn arm_calendar() {
     ARMED.store(true, Ordering::Relaxed);
 }
 
-/// Tell the live calendar the world clock (s) (eo-sky's weather at a world
-/// clock does, each frame in live play); ignored until `arm_calendar`.
+/// Tell the live calendar the world clock (s); ignored until `arm_calendar`.
+/// The one caller in live play is the renderer's weather at the frame's world
+/// clock (eo-render sky.rs `weather_of`, a hand-off: until it lands the live
+/// calendar stays on game day 0's date everywhere); the shot tool tells it a
+/// shot's `world_time_s`. Nothing that asks for the weather of another time (a
+/// forecast, a lookahead, eo-sky `weather::state_at`) moves it.
 pub fn set_calendar_clock(world_s: f64) {
     if ARMED.load(Ordering::Relaxed) {
         CLOCK.store(world_s.to_bits(), Ordering::Relaxed);

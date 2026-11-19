@@ -27,13 +27,17 @@
 //! window. No published NDVI phenology of the Marin headlands themselves was
 //! found; the central-coast dates are used as they stand.
 //!
-//! `dryness` maps that onto 0 green .. 1 golden: golden from the mean end of
-//! senescence until the mean green-up initiation; down to green over the
-//! green-up (INFERRED: from 20 days before the mean initiation, when the
-//! earliest years start, to 45 days after it, when last year's thatch is
-//! under new growth); up to golden over the senescence (from 15 days before
-//! the mean initiation, as the 80 % point is already past the peak, to the
-//! mean end).
+//! `dryness` maps that onto 0 green .. 1 golden, for the mean year (the
+//! spread between years, green-up starting from October in the earliest, about
+//! 65 days before the mean, is not modelled): golden from the mean end of
+//! senescence until the green-up ramp; down to green over the green-up
+//! (INFERRED: from 20 days before the mean initiation, so that on the mean
+//! initiation date the curve has come about a fifth of the way to green, as
+//! the TIMESAT 20 % of amplitude point that defines the date says, to 45 days
+//! after it, when last year's thatch is under new growth); up to golden over
+//! the senescence (from 15 days before the mean initiation, so that on that
+//! date, the 80 % point, the curve has gone about a seventh of the way to
+//! golden, to the mean end).
 
 use std::sync::OnceLock;
 
@@ -98,8 +102,9 @@ pub const GREEN_UP_DAY: f64 = 342.0;
 pub const SENESCENCE_DAY: f64 = 121.0;
 /// Mean end of senescence: 19 June (17 and 21 June at the two sites).
 pub const SENESCENCE_END_DAY: f64 = 170.0;
-/// The green-up ramp about `GREEN_UP_DAY`: from 20 days before to 45 after
-/// (INFERRED, see the module).
+/// The green-up ramp about `GREEN_UP_DAY`: from 20 days before (so the mean
+/// initiation date, the 20 % of NDVI amplitude point, falls about a fifth of
+/// the way down the ramp) to 45 after (INFERRED, see the module).
 pub const GREEN_UP_LEAD_D: f64 = 20.0;
 pub const GREEN_UP_TAIL_D: f64 = 45.0;
 /// The senescence ramp starts this long before its initiation (INFERRED).
@@ -157,7 +162,7 @@ mod tests {
         for f in [dryness_phenology, dryness_r2] {
             assert!(f(265.0) > 0.99); // the game's date (22 Sep)
             assert!(f(45.0) < 0.01); // mid-February
-            assert!(f(130.0) > 0.03 && f(130.0) < 0.8); // May: browning
+            assert!(f(130.0) > 0.2 && f(130.0) < 0.8); // May: browning
             assert!(f(103.0) < 0.05); // 13 Apr (the headland photograph): still green
             assert!((f(400.0) - f(35.0)).abs() < 1e-6); // wraps by the year
         }
