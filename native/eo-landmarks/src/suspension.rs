@@ -97,6 +97,31 @@ pub struct BridgeFeatures {
     /// `--no-bridge-collar`: the stiffening truss closed at the tower legs
     /// (end verticals, rocker-link housings) and the balconies' steel fascia.
     pub collar: bool,
+    /// `--no-paint-brdf2` (the fifth pass, `--no-bridges5` / `--no-gg3-bridge`
+    /// turn every one off): the Golden Gate's paint in the chromaticity of the
+    /// District's named match for its formula (golden_gate.rs
+    /// `INTERNATIONAL_ORANGE2_SRGB`), a dielectric film of the acrylic
+    /// binder's Fresnel reflectance.
+    pub paint2: bool,
+    /// `--no-paint-weathering`: the paint's chalking, touch-up patches of
+    /// fresher paint, rust bloom at rivet rows and dirt on ledges and under
+    /// set-backs (landmarks_surface.wgsl `lm_weather`).
+    pub weathering: bool,
+    /// `--no-concrete2`: the Golden Gate's concrete (pylons, housings, piers,
+    /// fender) in a weathered portland-cement albedo, its form-tie holes,
+    /// lift lines and run-off staining.
+    pub concrete2: bool,
+    /// `--no-leg-cells`: the tower legs' cellular section (stepped corners and
+    /// recessed panels between cell-wide pilasters on every face) and the
+    /// portal casings' own shadow and sky occlusion from the legs, the lip
+    /// and the ribs past the shadow maps' reach.
+    pub leg_cells: bool,
+    /// `--no-cable-detail`: the cable bands' collars, the four rope legs of
+    /// each suspender group looped over the band and straddling the cable,
+    /// the spacing clamps round the four legs, and the lamp standards (and
+    /// the night's deck luminaires) at the published 150 ft pitch, in a lean,
+    /// angled form.
+    pub cable_detail: bool,
 }
 
 impl BridgeFeatures {
@@ -120,6 +145,11 @@ impl BridgeFeatures {
         fender2: true,
         crest: true,
         collar: true,
+        paint2: true,
+        weathering: true,
+        concrete2: true,
+        leg_cells: true,
+        cable_detail: true,
     };
     pub const OFF: Self = Self {
         scale: false,
@@ -141,6 +171,11 @@ impl BridgeFeatures {
         fender2: false,
         crest: false,
         collar: false,
+        paint2: false,
+        weathering: false,
+        concrete2: false,
+        leg_cells: false,
+        cable_detail: false,
     };
 
     /// The features a command line leaves on.
@@ -153,6 +188,9 @@ impl BridgeFeatures {
         let third = first || has("--no-bridges4");
         let has3 = |f: &str| first || has(f);
         let has4 = |f: &str| third || has(f);
+        // the fifth pass (round 3's bridge finish): its roll-ups, every track's roll-up, and the earlier passes'.
+        let fourth = third || has("--no-bridges5") || has("--no-gg3-bridge") || has("--no-gg3");
+        let has5 = |f: &str| fourth || has(f);
         let keep = |f: &str| !args.iter().any(|a| a.as_ref() == f);
         Self {
             scale: keep("--no-bridge-scale"),
@@ -174,6 +212,11 @@ impl BridgeFeatures {
             fender2: !has4("--no-bridge-fender2"),
             crest: !has4("--no-bridge-crest"),
             collar: !has4("--no-bridge-collar"),
+            paint2: !has5("--no-paint-brdf2"),
+            weathering: !has5("--no-paint-weathering"),
+            concrete2: !has5("--no-concrete2"),
+            leg_cells: !has5("--no-leg-cells"),
+            cable_detail: !has5("--no-cable-detail"),
         }
     }
 
@@ -181,7 +224,10 @@ impl BridgeFeatures {
     pub const FIRST: Self = Self { air: false, finish: false, members: false, floods: false, curtain: false, ..Self::THIRD };
 
     /// The fourth pass's features off (`--no-bridges4`): the third pass's output.
-    pub const THIRD: Self = Self { shade2: false, dielectric: false, haunch: false, bracing: false, pylons: false, arch2: false, fender2: false, crest: false, collar: false, ..Self::ALL };
+    pub const THIRD: Self = Self { shade2: false, dielectric: false, haunch: false, bracing: false, pylons: false, arch2: false, fender2: false, crest: false, collar: false, ..Self::FOURTH };
+
+    /// The fifth pass's features off (`--no-bridges5`, `--no-gg3-bridge`, `--no-gg3`): the fourth pass's (round 2's) output.
+    pub const FOURTH: Self = Self { paint2: false, weathering: false, concrete2: false, leg_cells: false, cable_detail: false, ..Self::ALL };
 }
 
 static FEATURES: OnceLock<BridgeFeatures> = OnceLock::new();
@@ -221,12 +267,19 @@ pub const SWITCHES: &[&str] = &[
     "--no-bridge-fender2",
     "--no-bridge-crest",
     "--no-bridge-collar",
+    "--no-gg3-bridge",
+    "--no-bridges5",
+    "--no-paint-brdf2",
+    "--no-paint-weathering",
+    "--no-concrete2",
+    "--no-leg-cells",
+    "--no-cable-detail",
 ];
 
 /// The bridge-finish track's switch names (the roll-up `--no-gg3-bridge`,
-/// also `--no-bridges5`, first); eo-app accepts them. Reserved: nothing reads
-/// them yet. They join `SWITCHES` when `BridgeFeatures::from_args` reads them
-/// (tests/bridges.rs holds that every name in `SWITCHES` turns a feature off).
+/// also `--no-bridges5`, first), all read by `BridgeFeatures::from_args` and
+/// so also in `SWITCHES`; eo-app accepts them (`--no-gg3`, every track's
+/// roll-up, is in eo-render pace.rs's list and read here too).
 pub const GG3_SWITCHES: &[&str] = &["--no-gg3-bridge", "--no-bridges5", "--no-paint-brdf2", "--no-paint-weathering", "--no-concrete2", "--no-leg-cells", "--no-cable-detail"];
 
 /// A frame along a bridge: chainage c along `axis` from `origin`, offset s to

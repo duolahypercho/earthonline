@@ -297,3 +297,70 @@ fn the_fourth_pass_geometry_is_drawn_at_its_published_size() {
     // the bottom chord's ends: the springings, within the chord's own depth.
     near(c_hi - c_lo, 2.0 * half_span, 2.0 * h, "arch span");
 }
+
+/// The fifth pass's switches (round 3's bridge finish): each turns its own
+/// feature off and leaves the rest on; the roll-ups `--no-gg3-bridge`,
+/// `--no-bridges5` and `--no-gg3` are the fourth pass's (round 2's) output,
+/// and the earlier passes' roll-ups take the fifth pass off with their own.
+#[test]
+fn the_fifth_pass_switches_turn_their_features_off() {
+    let one = |f: &str| BridgeFeatures::from_args(&[f]);
+    for roll in ["--no-gg3-bridge", "--no-bridges5", "--no-gg3"] {
+        assert_eq!(one(roll), BridgeFeatures::FOURTH, "{roll}");
+    }
+    let five = |f: BridgeFeatures| [f.paint2, f.weathering, f.concrete2, f.leg_cells, f.cable_detail];
+    for roll in ["--no-bridges4", "--no-bridges3", "--no-bridges2"] {
+        assert!(five(one(roll)).iter().all(|on| !on), "{roll}");
+    }
+    assert!(BridgeFeatures::FOURTH.pylons && BridgeFeatures::FOURTH.haunch && BridgeFeatures::FOURTH.crest);
+    let names = ["--no-paint-brdf2", "--no-paint-weathering", "--no-concrete2", "--no-leg-cells", "--no-cable-detail"];
+    for (i, n) in names.iter().enumerate() {
+        assert!(SWITCHES.contains(n) && eo_landmarks::suspension::GG3_SWITCHES.contains(n), "{n} is accepted");
+        let f = five(one(n));
+        for (j, on) in f.iter().enumerate() {
+            assert_eq!(*on, i != j, "{n}: feature {j}");
+        }
+        assert!(one(n).pylons && one(n).collar, "{n} keeps the fourth pass");
+    }
+}
+
+/// The fifth pass's dimensions on the drawn scales: the legs' cell (3.5 ft,
+/// Strauss 1937) times the structure scale, the lamp posts' pitch (150 ft)
+/// times the ground plan's, the suspender legs' spacing from the drawn cable
+/// and rope; the paint's and the concrete's cited luminance factors.
+#[test]
+fn the_fifth_pass_values_are_on_the_drawn_scales() {
+    let (gs, h, ft) = (eo_data::groundscale::scale(), eo_landmarks::golden_gate::structure_scale(), 0.3048);
+    let cell = eo_landmarks::golden_gate::cell_m(h);
+    assert!((cell - 3.5 * ft * h).abs() < 1e-12);
+    if h == 1.25 {
+        assert!((cell - 1.3335).abs() < 1e-4, "{cell}");
+    }
+    let f = eo_landmarks::suspension::features();
+    let pitch = eo_landmarks::lights::gg_deck_pitch_m();
+    if f.cable_detail {
+        assert!((pitch - 150.0 * ft * gs).abs() < 1e-9, "{pitch}");
+        if gs == 1.25 {
+            assert!((pitch - 57.15).abs() < 1e-6);
+        }
+    } else {
+        assert_eq!(pitch, eo_landmarks::lights::DECK_PITCH_M);
+    }
+    // the legs' faces: whole cells, the base's 15-cell face and the top's 3-cell face on the drawn stages.
+    let g = eo_landmarks::golden_gate::data(LandmarksJs::get());
+    for st in &g.leg_stages {
+        for half in [st[2] / 2.0, st[3] / 2.0] {
+            let runs = eo_landmarks::golden_gate::face_runs(half, cell);
+            let n = (2.0 * half / cell).round();
+            assert!((3.0..=16.0).contains(&n), "{n} cells across a face of {:.2} m", 2.0 * half);
+            assert!((runs[0].0 + half).abs() < 1e-9 && (runs[runs.len() - 1].1 - half).abs() < 1e-9);
+        }
+    }
+    // the paint and the concrete: the cited luminance factors (Rec. 709).
+    let y = |c: [f64; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    let io = eo_landmarks::golden_gate::international_orange2();
+    assert!((y(io) - eo_landmarks::golden_gate::PAINT2_LUMINANCE).abs() < 1e-9);
+    assert!(io[1] / io[2] > 1.5 && io[0] > io[1], "{io:?}: green over blue, as the District's named match");
+    let c = eo_landmarks::geometry::srgb_hex(0x9B968C);
+    assert!((y(eo_landmarks::golden_gate::weathered_concrete(c, 0.25)) - 0.25).abs() < 1e-9);
+}

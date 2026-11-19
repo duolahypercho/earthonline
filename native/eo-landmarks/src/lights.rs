@@ -31,6 +31,16 @@ pub const AVIATION_RED_CD: f64 = 2000.0;
 /// Deck luminaire head over the deck, and the pitch along it, metres (INFERRED).
 pub const DECK_HEAD_M: f64 = 10.0;
 pub const DECK_PITCH_M: f64 = 50.0;
+/// The Golden Gate's lamp posts, 1937: "150 ft, opposite each other on both
+/// sides" (Strauss 1937; 128 posts: goldengate.org, "Color & Art Deco
+/// Styling"), on the ground plan (`BridgeFeatures::cable_detail`).
+pub const GG_LAMP_PITCH_FT: f64 = 150.0;
+
+/// The Golden Gate deck luminaires' pitch: the published 150 ft on the ground
+/// plan with `cable_detail`, else `DECK_PITCH_M`.
+pub fn gg_deck_pitch_m() -> f64 {
+    if crate::suspension::features().cable_detail { GG_LAMP_PITCH_FT * 0.3048 * eo_data::groundscale::scale() } else { DECK_PITCH_M }
+}
 /// Necklace lamp intensity (candela) and pitch along a main cable (metres), INFERRED.
 pub const NECKLACE_CD: f64 = 600.0;
 pub const NECKLACE_PITCH_M: f64 = 15.0;
@@ -91,13 +101,14 @@ pub fn bridge_lights(js: &LandmarksJs, gg_ground: &GroundGrid, bb_ground: &Groun
     let ground = |x: f64, z: f64| gg_ground.at(x, z);
     let plan = crate::golden_gate::plan(js, &site, &ground);
     let half = crate::data::num(&g.dimensions, "roadwayM") / 2.0;
-    let mut c = plan.c_start + DECK_PITCH_M / 2.0;
+    let pitch = gg_deck_pitch_m();
+    let mut c = plan.c_start + pitch / 2.0;
     while c < plan.c_end {
         let y = plan.deck_top(c);
         for s in [-half, half] {
             out.push(deck_lamp(site.deck_point(c, s), y));
         }
-        c += DECK_PITCH_M;
+        c += pitch;
     }
     // The Bay Bridge west span: its towers' leg tops, its upper deck's edges, the necklace on its main cables.
     let b = &crate::bay_bridge::data(js);
