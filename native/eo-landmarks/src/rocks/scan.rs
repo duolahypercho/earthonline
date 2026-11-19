@@ -2,10 +2,12 @@
 //! set (group S1, CC0 1.0; provenance and digests in
 //! native/assets/survey-manifest.json, read where `EO_SURVEY_ROOT` names),
 //! each cut to four levels of detail with meshopt (about 20 000, 5 000,
-//! 1 200 and 300 triangles, UVs kept; eo_farshore::survey::scan
-//! `lod_chain_cached`, cooked under the native cache by the scans' digests)
-//! and kept over the vertices those levels use, with its 2k diffuse,
-//! OpenGL normal and ARM (occlusion, roughness, metalness) maps decoded.
+//! 1 200 and 300 triangles, each within an error bound, UVs kept;
+//! eo_farshore::survey::scan `lod_chain_cached`, cooked under the native
+//! cache by the scans' digests) and kept over the vertices those levels
+//! use, with each vertex's distance to the scan's cut rim and its 2k
+//! diffuse, OpenGL normal and ARM (occlusion, roughness, metalness) maps
+//! decoded.
 //!
 //! Nothing here touches the GPU: eo-render's ground cover (`groundcover.rs`)
 //! uploads the library once it is loaded and draws the placed pieces
@@ -19,6 +21,7 @@
 //! stones), and each placement scales them further within its stated law.
 
 use eo_farshore::survey::scan::{Compact, RimPlane, Scan};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::Instant;
 
@@ -34,6 +37,36 @@ pub const CLIFF: u8 = 6;
 
 /// The levels of detail, triangles per piece (the plan's 20k, 5k, 1.2k, 300).
 pub const LOD_TRIANGLES: [usize; 4] = [20_000, 5_000, 1_200, 300];
+/// Each level's error bound, relative to the scan's extent (meshopt's
+/// measure): a level keeps more triangles than its target rather than
+/// bend further (INFERRED: each level twice the one before, so the
+/// renderer's level edges, `lod_edges`, fall about an octave apart).
+pub const LOD_ERRORS: [f32; 4] = [0.01, 0.02, 0.04, 0.08];
+/// The silhouette error a level may show, in pixels at the nominal 1080
+/// rows (INFERRED: a level change under a pixel does not pop).
+pub const LOD_PX_ERROR: f32 = 1.0;
+
+/// The projected radii (pixels) under which levels 1, 2 and 3 are drawn,
+/// from the levels' measured errors (`errors[l]`, relative to the extent):
+/// a level whose error is `e` of the extent, on a piece whose bounding
+/// sphere (radius at least half the extent) projects to `R` pixels, is off
+/// by at most `2 e R` pixels, so level `l` is drawn under
+/// `LOD_PX_ERROR / (2 e_l)`; each edge at most the one before (a coarser
+/// level never wins over a finer one closer in).
+pub fn lod_edges(errors: &[f32]) -> [f32; 3] {
+    let mut out = [0.0f32; 3];
+    let mut cap = f32::MAX;
+    for (l, o) in out.iter_mut().enumerate() {
+        let e = errors.get(l + 1).copied().unwrap_or(1.0).max(1e-4);
+        cap = cap.min(LOD_PX_ERROR / (2.0 * e));
+        *o = cap;
+    }
+    out
+}
+
+/// How far from a scan's cut rim the renderer frays and sinks its edge
+/// (scan metres; the distances past it are kept as this).
+pub const RIM_RANGE_M: f32 = 2.0;
 
 /// How a scan stands on the ground.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -85,6 +118,9 @@ pub struct Kind {
     pub role: Role,
     /// The four levels over the vertices they use.
     pub mesh: Compact,
+    /// Per vertex of `mesh`: its distance to the scan's cut rim (scan
+    /// metres, `RIM_RANGE_M` where farther or where there is no rim).
+    pub rim_dist: Vec<f32>,
     /// meshopt's error per level (relative to the scan's extent).
     pub lod_errors: Vec<f32>,
     pub source_triangles: usize,
@@ -223,9 +259,12 @@ fn load_kind(root: &eo_farshore::survey::Root, kind: u8, name: &'static str, cac
     use eo_farshore::survey::scan;
     let s = Scan::load(root, "S1", name)?;
     anyhow::ensure!(s.pieces.len() == 1, "{name}: {} pieces (one expected)", s.pieces.len());
-    let chains = scan::lod_chain_cached(&s, &LOD_TRIANGLES, cache)?;
+    let chains = scan::lod_chain_cached(&s, &LOD_TRIANGLES, &LOD_ERRORS, cache)?;
     let p = &s.pieces[0];
     let mesh = p.compact(&chains[0]);
+    let role = role(kind);
+    let rim_points = if role == Role::Boulder { vec![] } else { p.rim_points() };
+    let rim_dist = scan::rim_distance(&rim_points, &mesh.positions, RIM_RANGE_M);
     let (mut min, mut max) = ([f32::MAX; 3], [f32::MIN; 3]);
     for q in &mesh.positions {
         for k in 0..3 {
@@ -233,8 +272,7 @@ fn load_kind(root: &eo_farshore::survey::Root, kind: u8, name: &'static str, cac
             max[k] = max[k].max(q[k]);
         }
     }
-    let role = role(kind);
-    let rim = if role == Role::Boulder { None } else { p.rim_plane() };
+    let rim = RimPlane::fit(&rim_points);
     let (bed_normal, bed_point) = match (role, rim) {
         (Role::Boulder, _) | (_, None) => ([0.0, 1.0, 0.0], [0.5 * (min[0] + max[0]) as f64, min[1] as f64 + BOULDER_BED_SHARE * (max[1] - min[1]) as f64, 0.5 * (min[2] + max[2]) as f64]),
         (_, Some(r)) => {
@@ -282,6 +320,7 @@ fn load_kind(root: &eo_farshore::survey::Root, kind: u8, name: &'static str, cac
         lod_errors: chains[0].iter().map(|l| l.error).collect(),
         source_triangles: p.indices.len() / 3,
         mesh,
+        rim_dist,
         min,
         max,
         rim,
@@ -330,8 +369,56 @@ pub enum Source {
 /// props' hill rock.
 pub struct Placed {
     pub pieces: Vec<Piece>,
-    /// Boxes (x0, z0, x1, z1, game metres) where the scans replace the hill rock.
-    pub claims: Vec<[f64; 4]>,
+    /// Where the scans replace the hill rock: the placed slope pieces' footprints.
+    pub claims: Claims,
+}
+
+/// Where the scans stand in for the props' hill rock: the footprints of
+/// the pieces placed on the slopes, as discs (x, z, radius; game metres),
+/// hashed on a square grid of `cell` metres. Only where a piece stands: the
+/// hill rock plants as before in the gaps between them, and everywhere when
+/// no slope piece is placed (`--no-cliff-dressing` leaves the cliff band to it).
+#[derive(Clone, Debug, Default)]
+pub struct Claims {
+    cell: f64,
+    discs: Vec<[f64; 3]>,
+    cells: HashMap<(i64, i64), Vec<u32>>,
+}
+
+impl Claims {
+    pub fn new(cell: f64, discs: Vec<[f64; 3]>) -> Claims {
+        let mut cells: HashMap<(i64, i64), Vec<u32>> = HashMap::new();
+        for (i, d) in discs.iter().enumerate() {
+            let (i0, i1) = (((d[0] - d[2]) / cell).floor() as i64, ((d[0] + d[2]) / cell).floor() as i64);
+            let (j0, j1) = (((d[1] - d[2]) / cell).floor() as i64, ((d[1] + d[2]) / cell).floor() as i64);
+            for a in i0..=i1 {
+                for b in j0..=j1 {
+                    cells.entry((a, b)).or_default().push(i as u32);
+                }
+            }
+        }
+        Claims { cell, discs, cells }
+    }
+
+    /// Whether (x, z) lies inside a claimed footprint.
+    pub fn covers(&self, x: f64, z: f64) -> bool {
+        if self.discs.is_empty() {
+            return false;
+        }
+        let key = ((x / self.cell).floor() as i64, (z / self.cell).floor() as i64);
+        self.cells.get(&key).is_some_and(|v| v.iter().any(|&i| {
+            let d = self.discs[i as usize];
+            (x - d[0]).hypot(z - d[1]) < d[2]
+        }))
+    }
+
+    pub fn len(&self) -> usize {
+        self.discs.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.discs.is_empty()
+    }
 }
 
 static PLACED: RwLock<Option<Arc<Placed>>> = RwLock::new(None);
@@ -353,7 +440,7 @@ pub fn revision() -> u64 {
 
 /// Whether the scans stand in for the hill rock at (x, z).
 pub fn claims(x: f64, z: f64) -> bool {
-    placed().is_some_and(|p| p.claims.iter().any(|b| x >= b[0] && x < b[2] && z >= b[1] && z < b[3]))
+    placed().is_some_and(|p| p.claims.covers(x, z))
 }
 
 /// Quaternion helpers (x, y, z, w).
@@ -434,6 +521,28 @@ mod tests {
     }
 
     #[test]
+    fn claims_cover_only_their_discs() {
+        let c = Claims::new(5.0, vec![[10.0, 10.0, 3.0], [-40.0, 7.0, 6.5]]);
+        assert!(c.covers(10.0, 10.0) && c.covers(12.9, 10.0) && !c.covers(13.1, 10.0));
+        assert!(c.covers(-46.0, 7.0) && !c.covers(-47.0, 7.0) && c.covers(-40.0, 1.0));
+        assert!(!c.covers(0.0, 0.0) && !c.covers(100.0, 100.0));
+        assert!(!Claims::default().covers(10.0, 10.0));
+    }
+
+    #[test]
+    fn level_edges_keep_the_error_under_a_pixel() {
+        // the edges fall with the error, never rise toward a coarser level
+        let e = lod_edges(&[0.0, 0.005, 0.02, 0.4]);
+        assert_eq!(e, [100.0, 25.0, 1.25]);
+        let e = lod_edges(&[0.0, 0.02, 0.01, 0.08]);
+        assert_eq!(e, [25.0, 25.0, 6.25]);
+        for (l, edge) in e.iter().enumerate() {
+            let err = [0.02f32, 0.01, 0.08][l];
+            assert!(2.0 * err * edge <= LOD_PX_ERROR + 1e-6);
+        }
+    }
+
+    #[test]
     fn frames_turn_onto_frames() {
         let n = |v: [f64; 3]| {
             let l = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
@@ -467,9 +576,23 @@ mod tests {
         assert_eq!(lib.kinds.len(), 7);
         for k in &lib.kinds {
             let tris: Vec<usize> = k.mesh.lods.iter().map(|l| l.len() / 3).collect();
-            println!("{}: {} source, levels {tris:?}, errors {:?}, bed {:?} face {:?} mean {:?} rim {:?}", k.name, k.source_triangles, k.lod_errors, k.bed_normal, k.face, k.mean_albedo, k.rim);
+            println!("{}: {} source, levels {tris:?}, errors {:?}, edges {:?}, extent {:?}, bed {:?} face {:?} mean {:?} rim {:?}", k.name, k.source_triangles, k.lod_errors, lod_edges(&k.lod_errors), [0, 1, 2].map(|i| k.max[i] - k.min[i]), k.bed_normal, k.face, k.mean_albedo, k.rim);
             assert!(tris.windows(2).all(|w| w[0] >= w[1]));
-            assert!(tris[0] <= LOD_TRIANGLES[0] + 2000 && tris[3] <= 2 * LOD_TRIANGLES[3] + 200, "{tris:?}");
+            // each level within its bound (a level that met its target first is under it),
+            // and drawn only where that error is under a pixel
+            for (l, e) in k.lod_errors.iter().enumerate() {
+                assert!(*e <= LOD_ERRORS[l] * 1.05 + 1e-4, "{} level {l}: error {e} over {}", k.name, LOD_ERRORS[l]);
+            }
+            let edges = lod_edges(&k.lod_errors);
+            for l in 1..4 {
+                assert!(2.0 * k.lod_errors[l] * edges[l - 1] <= LOD_PX_ERROR * 1.001, "{} level {l}", k.name);
+            }
+            assert_eq!(k.rim_dist.len(), k.mesh.positions.len());
+            if k.role == Role::Boulder {
+                assert!(k.rim_dist.iter().all(|d| *d == RIM_RANGE_M));
+            } else {
+                assert!(k.rim_dist.iter().any(|d| *d < 0.05) && k.rim_dist.iter().any(|d| *d > 0.5), "{} rim", k.name);
+            }
             assert_eq!(k.tex_res, 2048);
             match k.role {
                 Role::Face => assert!(k.face[2] < -0.5 && k.face[1] > 0.4, "{} uphill {:?}", k.name, k.face),

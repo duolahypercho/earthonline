@@ -7,7 +7,12 @@
 //!   the mean high water, and whose NAIP pixel reads as dark rock; the
 //!   pixels are grouped into connected rocks, each drawn as a scanned
 //!   cluster or stone of its own footprint, wet and dark, with stones of the
-//!   boulder size law (rocks.rs `boulder_d`) beside it.
+//!   boulder size law (rocks.rs `boulder_d`) beside it. Each rock is seated
+//!   against the drawn shore, not the surveyed one: its distance seaward of
+//!   the CUDEM's mean-sea-level contour is laid off from the drawn
+//!   waterline (the shore field's zero) along the field's gradient
+//!   ([`seat_on_drawn_shore`]), so a rock in the surveyed surf stands in
+//!   the drawn surf wherever the drawn shoreline lies.
 //! * **The slopes** ([`slopes`]): on a 4 m lattice inside the claimed boxes,
 //!   ground steeper than [`FACE_SLOPE_DEG`] on the 1 m DEM (and on the drawn
 //!   ground) whose aerial colour is bare rock gets a rock face turned down
@@ -50,6 +55,12 @@ pub const FIELD_FLOOR_NAVD88_M: f64 = MLLW_NAVD88_M - 1.5;
 /// How far a rock of the field may stand over the high water itself (m, INFERRED: the
 /// largest of Baker's surf rocks stand a few metres out of the water).
 pub const FIELD_ROCK_TOP_M: f64 = 6.0;
+/// A rock of the field stands at least this far over the mean sea level
+/// (m, INFERRED: the aerial reads it as rock, so it was out of the water
+/// at the flight's tide; a summer midday flight's tide is about the mean,
+/// and the CUDEM's metre-scale grid smooths a rock's own top into the
+/// ground round it, so its surveyed top alone would leave it awash).
+pub const FIELD_EXPOSED_OVER_MSL_M: f64 = 0.3;
 
 /// NAIP classes (see the module notes; INFERRED).
 pub const EXG_VEG: i32 = 12;
@@ -254,6 +265,74 @@ pub struct World<'a> {
     pub hs: f64,
 }
 
+/// A rock's distance from the surveyed waterline is searched this far
+/// (real m) and its seat moved at most this far onto the drawn shore
+/// (drawn m; INFERRED: farther, the drawn and surveyed shores are different
+/// shores, and the rock keeps its surveyed place).
+pub const SHORE_SEARCH_M: f64 = 120.0;
+pub const SEAT_SHIFT_MAX_M: f64 = 150.0;
+
+/// The CUDEM ground at (lon, lat) under a rock: the lowest of the point and
+/// a ring of eight 6 m out (a rock's own top is not the shore it stands on).
+pub fn cudem_base(bathy: &Bathy, lon: f64, lat: f64, mlat: f64, mlon: f64) -> Option<f64> {
+    let mut m = bathy.height(lon, lat)? as f64;
+    for k in 0..8 {
+        let a = k as f64 * std::f64::consts::FRAC_PI_4;
+        if let Some(v) = bathy.height(lon + a.cos() * 6.0 / mlon, lat + a.sin() * 6.0 / mlat) {
+            m = m.min(v as f64);
+        }
+    }
+    Some(m)
+}
+
+/// The signed distance (real m, positive seaward) from the CUDEM's mean
+/// sea level contour at (lon, lat), on the rock's base ground
+/// (`cudem_base`): the nearest crossing along 16 bearings, searched outward
+/// in 1 m rings to `SHORE_SEARCH_M`. None when no crossing is that near.
+pub fn cudem_signed(bathy: &Bathy, lon: f64, lat: f64, mlat: f64, mlon: f64) -> Option<f64> {
+    let wet = |lo: f64, la: f64| cudem_base(bathy, lo, la, mlat, mlon).map(|e| e < MSL_OVER_NAVD88_M);
+    let here = wet(lon, lat)?;
+    let dirs: Vec<(f64, f64)> = (0..16).map(|k| (k as f64 * std::f64::consts::TAU / 16.0).sin_cos()).collect();
+    let mut t = 1.0;
+    while t <= SHORE_SEARCH_M {
+        for &(sn, cs) in &dirs {
+            if wet(lon + cs * t / mlon, lat + sn * t / mlat).is_some_and(|w| w != here) {
+                let d = t - 0.5;
+                return Some(if here { d } else { -d });
+            }
+        }
+        t += 1.0;
+    }
+    None
+}
+
+/// Where a rock surveyed `signed_real` metres seaward of the surveyed
+/// waterline stands on the drawn shore: from (x, z), along the shore
+/// field's gradient (Newton steps on its signed distance) to the point
+/// whose drawn signed distance is `signed_real` on the ground plan. None
+/// where the field has no clear gradient or the move passes
+/// `SEAT_SHIFT_MAX_M`.
+pub fn seat_on_drawn_shore(w: &World, x: f64, z: f64, signed_real: f64) -> Option<(f64, f64)> {
+    let target = signed_real * w.plan;
+    let (mut px, mut pz) = (x, z);
+    for _ in 0..8 {
+        let s = (w.signed)(px, pz);
+        let d = target - s;
+        if d.abs() < 0.25 {
+            break;
+        }
+        let g = [((w.signed)(px + 1.0, pz) - (w.signed)(px - 1.0, pz)) * 0.5, ((w.signed)(px, pz + 1.0) - (w.signed)(px, pz - 1.0)) * 0.5];
+        let gl = g[0].hypot(g[1]);
+        if gl < 0.3 {
+            return None;
+        }
+        // the field is a distance: its gradient about unit; a step of d along it
+        px += g[0] / gl * d.clamp(-40.0, 40.0);
+        pz += g[1] / gl * d.clamp(-40.0, 40.0);
+    }
+    (((w.signed)(px, pz) - target).abs() < 2.0 && (px - x).hypot(pz - z) <= SEAT_SHIFT_MAX_M).then_some((px, pz))
+}
+
 /// Game (x, z) from (lon, lat) and back (the SF frame on the ground plan).
 pub fn game_xz(lon: f64, lat: f64, plan: f64) -> (f64, f64) {
     let f = eo_data::Frame::sf();
@@ -273,16 +352,29 @@ pub fn lon_lat(x: f64, z: f64, plan: f64) -> (f64, f64) {
 /// spots' ground).
 pub const REGIONS: [[f64; 4]; 2] = [[-122.4875, 37.7870, -122.4740, 37.8115], [-122.4900, 37.8195, -122.4730, 37.8340]];
 
-pub fn region_boxes(plan: f64) -> Vec<[f64; 4]> {
-    REGIONS
+/// The footprints the slope pieces (the cliff band's faces and the
+/// outcrops) claim from the props' hill rock (`scan::Claims`): a disc about
+/// each piece's bounding sphere's centre, `CLAIM_SHARE` of its radius (a
+/// piece's sphere holds its corners; its rock covers less), plus
+/// `CLAIM_MARGIN_M` so a hill-rock block (2.25 m or more across its half)
+/// does not grow through the scan.
+pub fn claim_discs(lib: &Library, pieces: &[Piece]) -> Vec<[f64; 3]> {
+    pieces
         .iter()
-        .map(|r| {
-            let (x0, z1) = game_xz(r[0], r[1], plan);
-            let (x1, z0) = game_xz(r[2], r[3], plan);
-            [x0, z0, x1, z1]
+        .filter(|p| matches!(p.source, Source::Cliff | Source::Outcrop))
+        .map(|p| {
+            let k = &lib.kinds[p.kind as usize];
+            let (c, r) = k.sphere();
+            let cw = scan::quat_rotate(p.rot, [c[0] as f64 * p.scale[0], c[1] as f64 * p.scale[1], c[2] as f64 * p.scale[2]]);
+            let smax = p.scale[0].max(p.scale[1]).max(p.scale[2]);
+            [p.pos[0] + cw[0], p.pos[2] + cw[2], CLAIM_SHARE * r as f64 * smax + CLAIM_MARGIN_M]
         })
         .collect()
 }
+
+/// INFERRED (see `claim_discs`).
+pub const CLAIM_SHARE: f64 = 0.7;
+pub const CLAIM_MARGIN_M: f64 = 1.0;
 
 fn hash(a: i64, b: i64, salt: u32) -> f64 {
     crate::rocks::hash(a, b, salt)
@@ -336,6 +428,14 @@ fn norm(v: [f64; 3]) -> [f64; 3] {
 /// (a stone rests level-ish; a patch and a face follow the ground). Returns
 /// the piece's origin, turn and the ground height under it.
 pub fn seat(lib: &Library, kind: u8, w: &World, x: f64, z: f64, s: [f64; 3], dir: Option<[f64; 2]>, yaw: f64, lean: f64, sink: f64) -> Option<([f64; 3], [f64; 4], f64)> {
+    seat_twisted(lib, kind, w, x, z, s, dir, yaw, lean, sink, [0.0, 0.0])
+}
+
+/// `seat`, the seated frame then turned by `twist` (radians): a yaw about
+/// its bed's normal and a roll about its face's direction, so pieces on
+/// one lattice turned to one slope do not stand in rows.
+#[allow(clippy::too_many_arguments)]
+pub fn seat_twisted(lib: &Library, kind: u8, w: &World, x: f64, z: f64, s: [f64; 3], dir: Option<[f64; 2]>, yaw: f64, lean: f64, sink: f64, twist: [f64; 2]) -> Option<([f64; 3], [f64; 4], f64)> {
     let k = &lib.kinds[kind as usize];
     let half = 0.5 * ((k.max[0] - k.min[0]) as f64 * s[0]).max((k.max[2] - k.min[2]) as f64 * s[2]);
     let (y, n, res) = ground_plane(w, x, z, half.max(0.5))?;
@@ -357,7 +457,17 @@ pub fn seat(lib: &Library, kind: u8, w: &World, x: f64, z: f64, s: [f64; 3], dir
         None => [yaw.sin(), 0.0, yaw.cos()],
     };
     let d = f0[0] * bb[0] + f0[1] * bb[1] + f0[2] * bb[2];
-    let ff = norm([f0[0] - d * bb[0], f0[1] - d * bb[1], f0[2] - d * bb[2]]);
+    let mut ff = norm([f0[0] - d * bb[0], f0[1] - d * bb[1], f0[2] - d * bb[2]]);
+    if twist != [0.0, 0.0] {
+        // roll the bed about the face's direction, then yaw the face about the rolled bed
+        let cr = |a: [f64; 3], b: [f64; 3]| [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+        let (sr, cr_) = twist[1].sin_cos();
+        let fb = cr(ff, bb);
+        bb = norm([0, 1, 2].map(|i| bb[i] * cr_ + fb[i] * sr));
+        let (sy, cy) = twist[0].sin_cos();
+        let bf = cr(bb, ff);
+        ff = norm([0, 1, 2].map(|i| ff[i] * cy + bf[i] * sy));
+    }
     // the scan's frame: its face across its bed
     let b = k.bed_normal;
     let fd = k.face[0] * b[0] + k.face[1] * b[1] + k.face[2] * b[2];
@@ -370,6 +480,13 @@ pub fn seat(lib: &Library, kind: u8, w: &World, x: f64, z: f64, s: [f64; 3], dir
 
 /// How much steeper than the drawn slope a face stands (INFERRED).
 pub const FACE_STEEPEN_DEG: f64 = 6.0;
+/// A face's turn off its slope's own: up to this yaw about its bed's normal
+/// and roll about its downhill direction, either way (INFERRED: a broken
+/// face's joints do not run parallel to the slope's contour; enough that
+/// pieces on one lattice do not line up in rows, within the 20 degrees the
+/// review asked for).
+pub const FACE_YAW_JITTER_DEG: f64 = 22.0;
+pub const FACE_ROLL_JITTER_DEG: f64 = 12.0;
 
 /// The round-2 colours (`--no-rock-geology`): rocks.rs's boulder albedo for
 /// the shore and the armour's, the hill rock's lithology box elsewhere.
@@ -470,6 +587,12 @@ pub const OUTCROP_STONE_SLOPE: f64 = 0.8;
 
 /// The intertidal rock field over the claimed boxes (see the module notes).
 pub fn surf_field(lib: &Library, w: &World, sv: &Survey, geology: bool) -> Vec<Piece> {
+    surf_field_with(lib, w, sv, geology, &mut vec![])
+}
+
+/// `surf_field`, also listing each rock's move onto the drawn shore (game
+/// metres: dx, dz; NaN and a reason where it kept its surveyed place).
+pub fn surf_field_with(lib: &Library, w: &World, sv: &Survey, geology: bool, shifts: &mut Vec<[f64; 2]>) -> Vec<Piece> {
     let (Some(bathy), Some(naip)) = (&sv.bathy, &sv.naip) else { return vec![] };
     let mut out = vec![];
     for r in REGIONS {
@@ -574,6 +697,18 @@ pub fn surf_field(lib: &Library, w: &World, sv: &Survey, geology: bool) -> Vec<P
             let lat = r[3] - (cj_ + 0.5) * dlat;
             let seed = (ci as i64) * 7919 + (lon * 1e6) as i64;
             let u = |k: i64| hash(seed, k, 4111);
+            // its seat on the drawn shore: the same distance from the drawn waterline as
+            // from the surveyed one; the rock's pieces and stones all move with it
+            let (x0, z0) = game_xz(lon, lat, w.plan);
+            let surveyed = cudem_signed(bathy, lon, lat, mlat, mlon);
+            let drawn = surveyed.and_then(|d| seat_on_drawn_shore(w, x0, z0, d));
+            let shift = drawn.map(|(x, z)| [x - x0, z - z0]).unwrap_or([0.0, 0.0]);
+            // the list: the move, or why there was none (NaN, then 0: no surveyed waterline near; 1: no seat on the drawn shore)
+            shifts.push(match (surveyed, drawn) {
+                (None, _) => [f64::NAN, 0.0],
+                (Some(_), None) => [f64::NAN, 1.0],
+                _ => shift,
+            });
             // a large rock is tiled: pieces about 4 m apart over its cells
             let mut sites: Vec<(f64, f64, f64)> = vec![]; // lon, lat, footprint (real m)
             if area <= 16.0 {
@@ -594,6 +729,7 @@ pub fn surf_field(lib: &Library, w: &World, sv: &Survey, geology: bool) -> Vec<P
             for (si, &(lo, la, foot)) in sites.iter().enumerate() {
                 let uu = |k: i64| hash(seed + si as i64 * 31, k, 4127);
                 let (x, z) = game_xz(lo, la, w.plan);
+                let (x, z) = (x + shift[0], z + shift[1]);
                 let e = bathy.height(lo, la).map(|v| v as f64).unwrap_or(0.0);
                 // the stone: small rocks the boulder, the rest the scanned clusters (angular)
                 let kind = if foot < 1.6 { BOULDER } else if uu(1) < 0.25 { LAND_ROCKS } else { COAST_ROCKS };
@@ -604,12 +740,17 @@ pub fn surf_field(lib: &Library, w: &World, sv: &Survey, geology: bool) -> Vec<P
                 let s0 = (span / ext).clamp(0.25, 3.0);
                 let mut s = [s0, s0 * (0.9 + 0.35 * uu(2)), s0];
                 // its height: the topobathy's highest point over its footprint (the rock's
-                // own top) on the drawn height scale, from the drawn ground it sits on
+                // own top) over the ground round it, on the drawn height scale; where the
+                // drawn ground lies deeper than the surveyed, as far over the sea as surveyed
                 let rr = 0.4 * foot;
                 let e_top = [(0.0, 0.0), (rr, 0.0), (-rr, 0.0), (0.0, rr), (0.0, -rr)].iter().filter_map(|(dx, dy)| bathy.height(lo + dx / mlon, la + dy / mlat)).fold(e, |m, v| m.max(v as f64));
+                let e_base = cudem_base(bathy, lo, la, mlat, mlon).unwrap_or(e);
                 let tall = (k.max[1] as f64 - k.bed_point[1]).max(0.1);
                 if let Some(g) = (w.ground)(x, z) {
-                    let want = w.sea + (e_top - MSL_OVER_NAVD88_M) * w.hs - g;
+                    let over_ground = (e_top - e_base) * w.hs;
+                    let over_sea = w.sea + (e_top - MSL_OVER_NAVD88_M) * w.hs - g;
+                    let exposed = w.sea + FIELD_EXPOSED_OVER_MSL_M * w.hs - g;
+                    let want = over_ground.max(over_sea).max(exposed);
                     if want > 0.0 {
                         s[1] = (want / tall).clamp(0.6 * s0, 2.5 * s0);
                     }
@@ -626,6 +767,7 @@ pub fn surf_field(lib: &Library, w: &World, sv: &Survey, geology: bool) -> Vec<P
                 let rr = area.sqrt() * (0.6 + 0.9 * u(20 + k as i64));
                 let (lo, la) = (lon + a.cos() * rr / mlon, lat + a.sin() * rr / mlat);
                 let (x, z) = game_xz(lo, la, w.plan);
+                let (x, z) = (x + shift[0], z + shift[1]);
                 let d = crate::rocks::boulder_d(u(30 + k as i64)) * w.plan;
                 let kk = &lib.kinds[BOULDER as usize];
                 let ext = (kk.max[0] - kk.min[0]).max(kk.max[2] - kk.min[2]) as f64;
@@ -698,8 +840,9 @@ pub fn slopes(lib: &Library, w: &World, sv: &Survey, geology: bool, cliff_dressi
                                     for i in 0..nx {
                                         let salt = if cliff { 5300 } else { 5400 } + ri as u32 * 7;
                                         let u = |k: u32| hash(i, j, salt + k);
-                                        let lon = r[0] + (i as f64 + 0.3 + 0.4 * u(0)) * dlon;
-                                        let lat = r[3] - (j as f64 + 0.3 + 0.4 * u(1)) * dlat;
+                                        // anywhere in its cell (a lattice point's rows would show as rows of rock)
+                                        let lon = r[0] + (i as f64 + u(0)) * dlon;
+                                        let lat = r[3] - (j as f64 + u(1)) * dlat;
                                         let (x, z) = game_xz(lon, lat, w.plan);
                                         let sd = (w.signed)(x, z);
                                         // on land (the far shore counts: north of the strait the field is positive), not in the sea
@@ -779,7 +922,8 @@ pub fn slopes(lib: &Library, w: &World, sv: &Survey, geology: bool, cliff_dressi
                                         let k = &lib.kinds[kind as usize];
                                         let face_dir = if scan::role(kind) == Role::Face { dir } else { None };
                                         let sink = if kind == FACE_1 || kind == FACE_2 { 0.03 * s[1] } else { 0.0 };
-                                        if let Some((pos, rot, g)) = seat(lib, kind, w, x, z, s, face_dir, u(8) * std::f64::consts::TAU, lean, sink) {
+                                        let twist = if face_dir.is_some() { [(2.0 * u(11) - 1.0) * FACE_YAW_JITTER_DEG.to_radians(), (2.0 * u(12) - 1.0) * FACE_ROLL_JITTER_DEG.to_radians()] } else { [0.0, 0.0] };
+                                        if let Some((pos, rot, g)) = seat_twisted(lib, kind, w, x, z, s, face_dir, u(8) * std::f64::consts::TAU, lean, sink, twist) {
                                             v.push(Piece { kind, pos, rot, scale: s, tint: tint_to(k, tone, 0.85 + 0.3 * u(9)), wet: wetness(w, g), source });
                                         }
                                     }

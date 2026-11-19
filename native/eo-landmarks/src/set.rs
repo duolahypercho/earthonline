@@ -233,18 +233,24 @@ fn shore_rocks(
     use crate::rocks;
     let (plan, hs) = (eo_data::groundscale::scale(), eo_data::groundscale::height_scale());
     let tide = [MHHW_OVER_MSL_M, MHW_OVER_MSL_M].map(|v| v * hs);
-    let t = Instant::now();
-    // the armour: quarried granite.
     // the scanned rock (rocks/scan.rs): the library, waiting for its load (started with the build)
     let sw = rocks::scan::switches();
     let lib = if sw.scan { rocks::scan::library() } else { None };
+    // the shore field from the cache main.rs's water load writes (read, not baked again, once it is there)
+    let t = Instant::now();
+    let field = if boulders || lib.is_some() { eo_water::load(repo_root, crate::features::cache_dir().as_deref()).ok() } else { None };
+    let field_ms = t.elapsed().as_secs_f64() * 1e3;
+    // the scans are placed only with both the library and the field: without either, round 2's meshes
+    let scans_on = lib.is_some() && field.is_some();
+    // the armour: quarried granite.
+    let t = Instant::now();
     let mut armour_stones: Vec<rocks::Stone> = vec![];
     let armour = riprap.then(|| {
         let list: Vec<([f64; 2], [f64; 2], [f64; 2])> = edges.iter().filter(|e| e.pier.is_none() && rocks::on_revetment([(e.a[0] + e.b[0]) / 2.0, (e.a[1] + e.b[1]) / 2.0], plan)).map(|e| (e.a, e.b, e.land)).collect();
         let stones = rocks::revetment(&list, crest_at, sea, plan, hs, &|u| rocks::stone_tone(rocks::ARMOUR_ALBEDO, u));
         let mut m = MeshArrays::new("shore-rocks:armour");
         rocks::armour_bed(&mut m, &list, crest_at, sea, plan, hs, rocks::ARMOUR_ALBEDO);
-        if lib.is_some() && sw.riprap {
+        if scans_on && sw.riprap {
             // the stones are drawn as scans (`--no-scan-riprap`: as round 2's quarried blocks)
             armour_stones = stones.clone();
         } else {
@@ -256,10 +262,8 @@ fn shore_rocks(
     });
     let armour_ms = t.elapsed().as_secs_f64() * 1e3;
     let t = Instant::now();
-    // the shore field from the cache main.rs's water load writes (read, not baked again, once it is there)
-    let field = if boulders || lib.is_some() { eo_water::load(repo_root, crate::features::cache_dir().as_deref()).ok() } else { None };
     let cover = if boulders { crate::ground_cover::GroundCover::load(repo_root).ok() } else { None };
-    let load_ms = t.elapsed().as_secs_f64() * 1e3;
+    let load_ms = field_ms + t.elapsed().as_secs_f64() * 1e3;
     let t = Instant::now();
     let stones = match (&field, &cover) {
         (Some(w), Some(cover)) => {
@@ -326,7 +330,7 @@ fn shore_rocks(
     let t = Instant::now();
     let mut scan_report = None;
     let mut boulder_stones = stones;
-    if let (Some(lib), Some(w)) = (&lib, &field) {
+    if let (Some(lib), Some(w), true) = (&lib, &field, scans_on) {
         use rocks::{place, scan};
         let f = &w.field;
         // the drawn ground: the detail ground where one is set, else the terrain as the scene
@@ -344,9 +348,10 @@ fn shore_rocks(
             pieces.extend(place::from_stones(lib, &world, &st, scan::Source::Boulder, sw.geology, sw.cliff));
         }
         pieces.extend(place::from_stones(lib, &world, &armour_stones, scan::Source::Armour, sw.geology, false));
+        let mut shifts = vec![];
         if let Some(sv) = place::Survey::open() {
             if sw.surf {
-                pieces.extend(place::surf_field(lib, &world, &sv, sw.geology));
+                pieces.extend(place::surf_field_with(lib, &world, &sv, sw.geology, &mut shifts));
             }
             pieces.extend(place::slopes(lib, &world, &sv, sw.geology, sw.cliff));
         }
@@ -364,12 +369,30 @@ fn shore_rocks(
             // a diagnostic list of the pieces (lon, lat, scan, source, scale), for a map over the imagery
             let rows: Vec<String> = pieces.iter().map(|p| {
                 let (lon, lat) = place::lon_lat(p.pos[0], p.pos[2], plan);
-                format!("{lon:.7},{lat:.7},{},{:?},{:.3},{:.3}", scan::KINDS[p.kind as usize], p.source, p.scale[0], p.wet)
+                // and the drawn shore field's signed distance and ground over the sea there
+                format!("{lon:.7},{lat:.7},{},{:?},{:.3},{:.3},{:.2},{:.2}", scan::KINDS[p.kind as usize], p.source, p.scale[0], p.wet, signed(p.pos[0], p.pos[2]), ground(p.pos[0], p.pos[2]).map(|g| g - sea).unwrap_or(f64::NAN))
             }).collect();
             std::fs::write(path, rows.join("\n")).ok();
         }
-        scan::publish(scan::Placed { pieces, claims: place::region_boxes(plan) });
-        scan_report = Some((n, format!("{counts:?}, {n_obs} surf obstacles"), 0.0));
+        let claims = scan::Claims::new(crate::hill_rock::ROCK_PITCH_M, place::claim_discs(lib, &pieces));
+        // the intertidal rocks' moves onto the drawn shore (drawn m): how far the surveyed shore is from the drawn
+        let mut moved: Vec<f64> = shifts.iter().filter(|d| !d[0].is_nan()).map(|d| d[0].hypot(d[1])).collect();
+        moved.sort_by(f64::total_cmp);
+        let pct = |f: f64| moved.get(((moved.len().max(1) - 1) as f64 * f).round() as usize).copied().unwrap_or(0.0);
+        let why = |k: f64| shifts.iter().filter(|d| d[0].is_nan() && d[1] == k).count();
+        let shift_note = format!(
+            "{} of {} intertidal rocks seated on the drawn shore (moved median {:.1} m, p90 {:.1} m); kept in place: {} with no surveyed waterline within {} m, {} with no seat on the drawn shore",
+            moved.len(),
+            shifts.len(),
+            pct(0.5),
+            pct(0.9),
+            why(0.0),
+            place::SHORE_SEARCH_M,
+            why(1.0)
+        );
+        let n_claims = claims.len();
+        scan::publish(scan::Placed { pieces, claims });
+        scan_report = Some((n, format!("{counts:?}, {n_obs} surf obstacles, {n_claims} hill-rock footprints; {shift_note}"), 0.0));
     }
     let boulders = boulder_stones.map(|stones| {
         let (mut cast, mut small) = (MeshArrays::new("shore-rocks:boulders"), MeshArrays::new("shore-rocks:boulders"));
