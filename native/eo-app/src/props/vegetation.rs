@@ -116,6 +116,23 @@ fn game_xz(lat: f64, lon: f64) -> (f64, f64) {
     ((lon - f.center_lon) * f.m_per_deg_lon * s, (f.center_lat - lat) * f.m_per_deg_lat * s)
 }
 
+/// Longitude and latitude of a game point (the inverse of `game_xz`).
+pub fn lon_lat(x: f64, z: f64) -> (f64, f64) {
+    let f = eo_data::Frame::sf();
+    let s = eo_data::groundscale::scale();
+    (f.center_lon + x / (f.m_per_deg_lon * s), f.center_lat - z / (f.m_per_deg_lat * s))
+}
+
+/// The annual grass's colour on the season model's day (linear): the far
+/// layer's green and cured-grass albedos (`eo_render::farshore`) mixed by
+/// `eo_look::season::current()`, mottled +-15 % as the far land's tone is.
+pub fn season_grass(x: f64, z: f64) -> [f32; 3] {
+    let d = eo_look::season::current();
+    let m = 0.85 + 0.3 * eo_landmarks::ground_cover::ground_mottle(x, z) as f32;
+    let (g, c) = (eo_render::farshore::FAR_GRASS_GREEN, eo_render::farshore::FAR_GRASS_GOLDEN);
+    [0, 1, 2].map(|k| (g[k] + (c[k] - g[k]) * d) * m)
+}
+
 /// A box round the Presidio of San Francisco (lat 37.7865..37.8105 N, lon
 /// -122.4870..-122.4460 W, rounded, INFERRED): only a bound. The park itself is
 /// its mapped polygon in the greens (`PRESIDIO_POINT`); the box takes in the
@@ -170,6 +187,11 @@ pub struct VegGround {
     pub land: Option<eo_data::LandCover>,
     pub water: Option<Arc<eo_water::WaterData>>,
     pub switches: Switches,
+    /// The round-3 switches (`eo_landmarks::vegetation::gg3`).
+    pub g3: eo_landmarks::vegetation::Gg3,
+    /// The 0.6 m NAIP image (survey group A1, read through `EO_SURVEY_ROOT`;
+    /// None without it or with `--no-naip-planting`: the round-2 rules).
+    naip: Option<eo_farshore::survey::naip::Naip>,
     presidio: (f64, f64, f64, f64),
     /// The Presidio's mapped park polygon (game metres), if the greens were read.
     presidio_ring: Option<Vec<[f64; 2]>>,
@@ -196,7 +218,19 @@ impl VegGround {
         if presidio_ring.is_none() {
             eprintln!("vegetation: the Presidio's park polygon not found in the greens; its coastal stands follow the mapped woods only");
         }
-        let g = VegGround { grid, street, land, water, switches, presidio: presidio(), presidio_ring, baker_south_z: game_xz(BAKER_STRIP_SOUTH_LAT, -122.48).1, serpentine: serpentine_bound(), tiles };
+        let g3 = eo_landmarks::vegetation::gg3();
+        let naip = if g3.naip_planting {
+            match eo_farshore::survey::Root::discover() {
+                Some(root) => Some(eo_farshore::survey::naip::Naip::open(&root)),
+                None => {
+                    eprintln!("vegetation: {} not set or not a folder; planting by the round-2 rules (no NAIP image)", eo_farshore::survey::ROOT_ENV);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        let g = VegGround { grid, street, land, water, switches, g3, naip, presidio: presidio(), presidio_ring, baker_south_z: game_xz(BAKER_STRIP_SOUTH_LAT, -122.48).1, serpentine: serpentine_bound(), tiles };
         g.probe_from_env();
         g
     }
@@ -248,6 +282,75 @@ impl VegGround {
         eo_data::detail_ground::height(x, z).or_else(|| self.grid.height(x, z))
     }
 
+    /// The cliff over a beach (`--no-cliff-rock-cover`: never): the ground the
+    /// sand limit takes from a beach and draws as cliff (eo-app ground_tone:
+    /// steeper than `SAND_SLOPE_MAX` across 12 m, inland of the shoreline,
+    /// within `BEACH_SAND_REACH_M` of a mapped beach). Rock cover: nothing grows
+    /// on it (`vegetation::plantable`). `s` is the signed shore distance.
+    pub fn cliff_band(&self, x: f64, z: f64, s: f64) -> bool {
+        if !self.g3.cliff_rock_cover || s >= 0.0 || !eo_landmarks::features::shore_ground("beach-sand-limit") {
+            return false;
+        }
+        let h = |dx: f64, dz: f64| self.grid.height(x + dx, z + dz);
+        let slope = match (h(-6.0, 0.0), h(6.0, 0.0), h(0.0, -6.0), h(0.0, 6.0)) {
+            (Some(a), Some(b), Some(c), Some(d)) => (b - a).hypot(d - c) / 12.0,
+            _ => return false,
+        };
+        slope > eo_landmarks::ground_cover::SAND_SLOPE_MAX && eo_landmarks::ground_cover::installed().is_some_and(|c| c.near_mapped_beach(x, z))
+    }
+
+    /// The NAIP shares in a box of side `side` m round (x, z) (None: no image there,
+    /// or `--no-naip-planting`): one pixel in every 0.6 m, at most 11 x 11.
+    pub fn naip_at(&self, x: f64, z: f64, side: f64) -> Option<eo_landmarks::vegetation::Naip> {
+        let n = self.naip.as_ref()?;
+        let (lon, lat) = lon_lat(x, z);
+        use eo_farshore::survey::naip::GRID;
+        let k = ((side / 1.25 / 0.6).round() as i64).clamp(1, 11);
+        let mut px = Vec::with_capacity((k * k) as usize);
+        for j in 0..k {
+            for i in 0..k {
+                let (di, dj) = (i as f64 - (k - 1) as f64 / 2.0, j as f64 - (k - 1) as f64 / 2.0);
+                if let Some(p) = n.sample_rgb(lon + di * GRID.dlon, lat - dj * GRID.dlat) {
+                    px.push(p);
+                }
+            }
+        }
+        if px.len() < (k * k) as usize / 2 {
+            return None;
+        }
+        let slope = self.site_slope_deg(x, z).unwrap_or(0.0);
+        eo_landmarks::vegetation::naip_shares(&px, slope)
+    }
+
+    /// Whether (x, z) is inside the NAIP image and the image is read (`--no-naip-planting`: never).
+    pub fn in_naip(&self, x: f64, z: f64) -> bool {
+        let (lon, lat) = lon_lat(x, z);
+        self.naip.is_some() && eo_farshore::survey::naip::GRID.pixel(lon, lat).is_some()
+    }
+
+    /// The drawn ground's slope at (x, z) across one grid cell (degrees).
+    fn site_slope_deg(&self, x: f64, z: f64) -> Option<f64> {
+        let c = self.grid.cell;
+        let y = self.ground_y(x, z)?;
+        let h = |dx: f64, dz: f64| self.ground_y(x + dx, z + dz).unwrap_or(y);
+        let (gx, gz) = ((h(c, 0.0) - h(-c, 0.0)) / (2.0 * c), (h(0.0, c) - h(0.0, -c)) / (2.0 * c));
+        Some((gx * gx + gz * gz).sqrt().atan().to_degrees())
+    }
+
+    /// The round-3 planting context for `plant_coarse_with` / `plant_fine_with`.
+    pub fn extra(&self) -> eo_landmarks::vegetation::Extra<'_> {
+        eo_landmarks::vegetation::Extra { g3: self.g3, naip: Box::new(move |x, z, side| self.naip_at(x, z, side)) }
+    }
+
+    /// Whether a park tree may stand at (x, z) (round 3): on plantable ground
+    /// (`--no-cliff-rock-cover`), under canopy in the NAIP image (`--no-naip-planting`).
+    pub fn tree_ground_ok(&self, x: f64, z: f64) -> bool {
+        if self.g3.cliff_rock_cover && self.site(x, z).is_some_and(|s| s.cover.is_some_and(|c| !eo_landmarks::vegetation::plantable(c, self.g3))) {
+            return false;
+        }
+        eo_landmarks::vegetation::naip_tree_ok(&self.extra(), x, z)
+    }
+
     /// The drawn ground at (x, z) and what grows there (None: nothing can).
     pub fn site(&self, x: f64, z: f64) -> Option<Site> {
         let sea = eo_water::SEA_LEVEL_Y;
@@ -284,7 +387,7 @@ impl VegGround {
         let class = self.land.as_ref().map(|l| l.class_at(x, z)).unwrap_or(0);
         let cover = if mapped_rock {
             Some(Cover::Rock)
-        } else if sand_cliff {
+        } else if sand_cliff || self.cliff_band(x, z, s) {
             Some(Cover::Cliff)
         } else if far {
             match class {
@@ -335,6 +438,15 @@ impl VegGround {
             Lithology::Serpentinite
         } else {
             Lithology::Sandstone
+        };
+        // round 3 (`--no-naip-planting`): on the open ground the NAIP image plants, the blades
+        // take the season's grass (eo_look::season on the day, the far layer's green and
+        // cured-grass albedos, which the terrain's far land uses too), not the drawn
+        // ground's tone: that is a paved grey or a summer straw wherever the terrain's
+        // own classes or its load-time season disagree with the image and the date.
+        let ground = match cover {
+            Some(Cover::WildGrass | Cover::Scrub | Cover::TallScrub | Cover::DuneScrub | Cover::Bare) if self.in_naip(x, z) => season_grass(x, z),
+            _ => ground,
         };
         Some(Site { y, normal, ground, cover, lithology, shore_m: s.abs(), hollow_m: ring - y })
     }

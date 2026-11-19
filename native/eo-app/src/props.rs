@@ -900,6 +900,37 @@ fn fine_distance(k: Key, eye: Vec3) -> f32 {
     (dx * dx + dz * dz).sqrt()
 }
 
+/// `EO_VEG_NEAR="x,z x,z ..."`: print every plant (but grass and tufts)
+/// within 30 m of those points with the ground it stands on (a diagnostic:
+/// the near view cones of the shot eyes).
+fn trace_near(v: &vegetation::VegGround, plants: &[eo_landmarks::vegetation::Plant]) {
+    static EYES: std::sync::OnceLock<Vec<(f64, f64)>> = std::sync::OnceLock::new();
+    let eyes = EYES.get_or_init(|| {
+        std::env::var("EO_VEG_NEAR")
+            .map(|s| {
+                s.split_whitespace()
+                    .filter_map(|p| {
+                        let c: Vec<f64> = p.split(',').filter_map(|t| t.parse().ok()).collect();
+                        (c.len() == 2).then(|| (c[0], c[1]))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    });
+    for p in plants {
+        if matches!(p.kind, eo_landmarks::vegetation::Kind::Grass | eo_landmarks::vegetation::Kind::Tuft) {
+            continue;
+        }
+        for &(ex, ez) in eyes {
+            let d = (p.pos[0] - ex).hypot(p.pos[2] - ez);
+            if d <= 30.0 {
+                let s = v.site(p.pos[0], p.pos[2]);
+                eprintln!("vegetation near ({ex:.1}, {ez:.1}): {:?} at ({:.1}, {:.1}) {d:.1} m, cover {:?} slope {:.0} naip {:?}", p.kind, p.pos[0], p.pos[2], s.and_then(|s| s.cover), s.map(|s| s.slope_deg()).unwrap_or(f64::NAN), v.naip_at(p.pos[0], p.pos[2], 3.0));
+            }
+        }
+    }
+}
+
 /// Plant one fine cell (grass, tufts, wildflowers) as instances (worker thread).
 fn cook_fine(veg: Option<&vegetation::VegGround>, key: Key) -> TilePack {
     let t0 = Instant::now();
@@ -909,7 +940,8 @@ fn cook_fine(veg: Option<&vegetation::VegGround>, key: Key) -> TilePack {
         let c = vegetation::FINE_CELL_M;
         let (x0, z0) = (key.0 as f64 * c, key.1 as f64 * c);
         let mut plants = vec![];
-        eo_landmarks::vegetation::plant_fine(x0, z0, x0 + c, z0 + c, &|x, z| v.site(x, z), eo_look::sun::day_of_year(), v.switches, &mut plants);
+        eo_landmarks::vegetation::plant_fine_with(x0, z0, x0 + c, z0 + c, &|x, z| v.site(x, z), eo_look::sun::day_of_year(), v.switches, &v.extra(), &mut plants);
+        trace_near(v, &plants);
         vegetation::instances(&plants, &mut instances, &mut extra_counts);
         if std::env::var("EO_TRACE_VEG").is_ok() {
             eprintln!("vegetation: fine cell {key:?} {extra_counts:?}");
@@ -948,6 +980,10 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
                 if site.is_none_or(|s| s.cover == Some(eo_landmarks::vegetation::Cover::Wood)) {
                     continue;
                 }
+                // round 3: not on rock cover (a cliff over a beach, bare rock), and only under the NAIP image's canopy.
+                if !v.tree_ground_ok(tr.x, tr.z) {
+                    continue;
+                }
                 let (sp, sc, hf) = eo_landmarks::vegetation::coastal_tree(tr.x, tr.z, v.shore_m(tr.x, tr.z), eo_landmarks::vegetation::hash((tr.x * 8.0) as i64, (tr.z * 8.0) as i64, 91));
                 let k = 0.85 + 0.3 * eo_landmarks::vegetation::hash((tr.x * 8.0) as i64, (tr.z * 8.0) as i64, 92) as f32;
                 let tint = eo_landmarks::vegetation::TREE_LEAF_TINT[sp as usize].map(|c| c * k);
@@ -968,7 +1004,8 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
     if let Some(v) = veg {
         let t = eo_street::STREET_TILE_M;
         let (x0, z0) = (key.0 as f64 * t, key.1 as f64 * t);
-        eo_landmarks::vegetation::plant_coarse(x0, z0, x0 + t, z0 + t, &|x, z| v.site(x, z), v.switches, &mut plants);
+        eo_landmarks::vegetation::plant_coarse_with(x0, z0, x0 + t, z0 + t, &|x, z| v.site(x, z), v.switches, &v.extra(), &mut plants);
+        trace_near(v, &plants);
     }
     if std::env::var("EO_TRACE_VEG").is_ok() && !plants.is_empty() {
         let mut by: std::collections::BTreeMap<String, usize> = Default::default();
