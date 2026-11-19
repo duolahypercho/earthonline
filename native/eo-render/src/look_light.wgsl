@@ -300,7 +300,10 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
 // irradiance), 14 the sky's specular, 15 the bounce (the scene's and the
 // sea's reflected light, emission), 16 none (what is left is the aerial
 // in-scatter over the surface), 17 a unit white (the aerial transmittance
-// plus the in-scatter).
+// plus the in-scatter). Not split: the street lamps and headlamps
+// (`sky_local_lights`), the glass clearcoat and the set's capped-sight fog are
+// in term 10 only, so the single terms do not add up to it at night, on glass,
+// or under thick set fog.
 fn lk_probe(term: i32, all: vec3<f32>, sun_d: vec3<f32>, sun_s: vec3<f32>, sky_d: vec3<f32>, sky_s: vec3<f32>, bounce: vec3<f32>) -> vec3<f32> {
     switch (term) {
         case 11: { return sun_d; }

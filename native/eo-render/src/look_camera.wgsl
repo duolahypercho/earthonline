@@ -15,8 +15,9 @@ fn cam_shaper(v: vec3<f32>) -> vec3<f32> {
 
 // The radiance probe's read-back (look_light.wgsl `lk_probe`, EO_AO_DEBUG >= 10):
 // the scene radiance in the look's units, log2-encoded per channel over
-// 2^-14 .. 2^4 (an 8-bit level is 0.07 stop), no white balance, exposure or dither;
-// eo-look `probe::decode` inverts it.
+// 2^-14 .. 2^4 (an 8-bit level is 0.07 stop), no white balance, exposure or dither:
+// encoded = clamp((log2(radiance) + 14) / 18, 0, 1). eo-look `probe::decode_level`
+// inverts it (`probe::LOG2_MIN`, `probe::LOG2_SPAN` must match these numbers).
 fn cam_probe_encode(radiance: vec3<f32>) -> vec3<f32> {
     return clamp((log2(max(radiance, vec3<f32>(1e-9))) + 14.0) / 18.0, vec3<f32>(0.0), vec3<f32>(1.0));
 }

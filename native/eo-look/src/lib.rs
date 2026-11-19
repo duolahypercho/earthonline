@@ -15,6 +15,7 @@ pub mod ground_field;
 pub mod look;
 pub mod math;
 pub mod phys;
+pub mod probe; // the radiance probe's encoding (EO_AO_DEBUG = 10 + term)
 pub mod rig;
 pub mod season; // the grass's dryness by the day of the year (one curve for every land layer)
 pub mod shadow;
