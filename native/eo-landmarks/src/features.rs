@@ -140,3 +140,65 @@ pub fn palm_detail() -> bool {
 pub fn set_palm_detail(on: bool) {
     PALM_DETAIL.store(on, Ordering::Relaxed);
 }
+
+/// The Golden Gate shore-ground pass (iteration 2) and its parts, read from
+/// the command line (`eo-app --no-<name>`; main.rs passes the names through):
+/// `--no-gg2-ground` turns every part off at once, restoring the ground,
+/// beaches and waterfront as they were before the pass.
+pub const SHORE_GROUND_SWITCHES: [&str; 7] = ["beach-sand-limit", "sand-albedo", "rocks", "riprap", "pier-lines", "ground-steps", "season-seam"];
+
+/// Whether the shore-ground part `name` (one of `SHORE_GROUND_SWITCHES`) is on.
+pub fn shore_ground(name: &str) -> bool {
+    static ARGS: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    shore_ground_in(ARGS.get_or_init(|| std::env::args().collect()), name)
+}
+
+/// The native cache folder as eo-app's `cache_dir` finds it (`--no-cache`:
+/// none; `--cache <dir>`; else `EO_NATIVE_CACHE`, else the workspace's
+/// `cache`, as eo-assets `default_cache_dir`), read from the command line,
+/// for the loads the landmark build repeats beside main.rs's (the shore field).
+pub fn cache_dir() -> Option<std::path::PathBuf> {
+    cache_dir_in(&std::env::args().collect::<Vec<_>>(), std::env::var_os("EO_NATIVE_CACHE"))
+}
+
+/// `cache_dir` over a given argument list and `EO_NATIVE_CACHE`.
+pub fn cache_dir_in(args: &[String], env: Option<std::ffi::OsString>) -> Option<std::path::PathBuf> {
+    if args.iter().any(|a| a == "--no-cache") {
+        return None;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--cache") {
+        return args.get(i + 1).map(std::path::PathBuf::from);
+    }
+    Some(env.map(std::path::PathBuf::from).unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../cache")))
+}
+
+/// `shore_ground` over a given argument list.
+pub fn shore_ground_in(args: &[String], name: &str) -> bool {
+    debug_assert!(SHORE_GROUND_SWITCHES.contains(&name), "unknown shore-ground switch {name}");
+    !args.iter().any(|a| a == "--no-gg2-ground" || a.strip_prefix("--no-") == Some(name))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_shore_ground_switches_turn_off_alone_or_together() {
+        let args = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        for n in SHORE_GROUND_SWITCHES {
+            assert!(shore_ground_in(&args(&["eo-app"]), n));
+            assert!(!shore_ground_in(&args(&["eo-app", "--no-gg2-ground"]), n));
+            assert!(!shore_ground_in(&args(&["eo-app", &format!("--no-{n}")]), n));
+        }
+        assert!(shore_ground_in(&args(&["eo-app", "--no-rocks"]), "riprap"));
+    }
+
+    #[test]
+    fn the_cache_folder_follows_the_app() {
+        let args = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(cache_dir_in(&args(&["eo-app", "--no-cache"]), Some("e".into())), None);
+        assert_eq!(cache_dir_in(&args(&["eo-app", "--cache", "c"]), Some("e".into())), Some("c".into()));
+        assert_eq!(cache_dir_in(&args(&["eo-app"]), Some("e".into())), Some("e".into()));
+        assert!(cache_dir_in(&args(&["eo-app"]), None).is_some_and(|p| p.ends_with("../cache")));
+    }
+}

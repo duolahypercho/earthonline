@@ -202,6 +202,123 @@ pub fn flat_mesh(name: &str, positions: &[[f64; 3]], indices: &[u32], colour: [f
     f
 }
 
+/// The shore's rock meshes (rocks.rs).
+struct ShoreRocks {
+    /// The revetment's armour stone and its bed, and the stone count.
+    armour: Option<(crate::geometry::MeshArrays, usize)>,
+    /// The boulders that cast a shadow (`rocks::CAST_MIN_D_M` and over), those
+    /// that do not, and the stone count.
+    boulders: Option<(crate::geometry::MeshArrays, crate::geometry::MeshArrays, usize)>,
+    /// Load and build times, ms: the shore field and ground cover, the armour, the boulders.
+    ms: [f64; 3],
+}
+
+/// The shore's rock meshes (rocks.rs): the revetment's armour stone on the
+/// Fort Point and Marine Drive wall edges, and the boulders (bare rock, cliff
+/// toes, steep faces over the sea) on the drawn ground (the surveyed ground
+/// pressed as the carpet is: the beach foreshore and the rings' seabed).
+fn shore_rocks(
+    repo_root: &std::path::Path,
+    height_at: &(dyn Fn(f64, f64) -> Option<f64> + Sync),
+    edges: &[crate::waterfront::ShoreEdge],
+    crest_at: &dyn Fn(f64, f64) -> f64,
+    sea: f64,
+    riprap: bool,
+    boulders: bool,
+) -> ShoreRocks {
+    use crate::geometry::MeshArrays;
+    use crate::ground_cover::{MHHW_OVER_MSL_M, MHW_OVER_MSL_M};
+    use crate::rocks;
+    let (plan, hs) = (eo_data::groundscale::scale(), eo_data::groundscale::height_scale());
+    let tide = [MHHW_OVER_MSL_M, MHW_OVER_MSL_M].map(|v| v * hs);
+    let t = Instant::now();
+    // the armour: quarried granite.
+    let armour = riprap.then(|| {
+        let list: Vec<([f64; 2], [f64; 2], [f64; 2])> = edges.iter().filter(|e| e.pier.is_none() && rocks::on_revetment([(e.a[0] + e.b[0]) / 2.0, (e.a[1] + e.b[1]) / 2.0], plan)).map(|e| (e.a, e.b, e.land)).collect();
+        let stones = rocks::revetment(&list, crest_at, sea, plan, hs, &|u| rocks::stone_tone(rocks::ARMOUR_ALBEDO, u));
+        let mut m = MeshArrays::new("shore-rocks:armour");
+        rocks::armour_bed(&mut m, &list, crest_at, sea, plan, hs, rocks::ARMOUR_ALBEDO);
+        for s in &stones {
+            rocks::stone_mesh(&mut m, s, sea, tide);
+        }
+        (m, stones.len())
+    });
+    let armour_ms = t.elapsed().as_secs_f64() * 1e3;
+    let t = Instant::now();
+    // the shore field from the cache main.rs's water load writes (read, not baked again, once it is there)
+    let field = if boulders { eo_water::load(repo_root, crate::features::cache_dir().as_deref()).ok() } else { None };
+    let cover = if boulders { crate::ground_cover::GroundCover::load(repo_root).ok() } else { None };
+    let load_ms = t.elapsed().as_secs_f64() * 1e3;
+    let t = Instant::now();
+    let stones = match (&field, &cover) {
+        (Some(w), Some(cover)) => {
+            let f = &w.field;
+            let ground = |x: f64, z: f64| height_at(x, z).map(|y| f.press_ground(x, z, y));
+            let slope = |x: f64, z: f64| match (ground(x - 6.0, z), ground(x + 6.0, z), ground(x, z - 6.0), ground(x, z + 6.0)) {
+                (Some(a), Some(b), Some(c), Some(d)) => (b - a).hypot(d - c) / 12.0,
+                _ => 0.0,
+            };
+            let bare_at = |x: f64, z: f64| cover.tone_name_at(x, z) == Some("bareRock");
+            let near_bare = |x: f64, z: f64| {
+                bare_at(x, z)
+                    || (0..8).any(|k| {
+                        let a = k as f64 * std::f64::consts::FRAC_PI_4;
+                        [0.5, 1.0].iter().any(|r| bare_at(x + a.cos() * rocks::BARE_SPREAD_M * r, z + a.sin() * rocks::BARE_SPREAD_M * r))
+                    })
+            };
+            let ground_min = |x: f64, z: f64, r: f64| [(0.0, 0.0), (r, 0.0), (-r, 0.0), (0.0, r), (0.0, -r)].iter().filter_map(|(dx, dz)| ground(x + dx, z + dz)).fold(f64::INFINITY, f64::min);
+            // a cliff over the point: ground `TOE_DROP_MIN_M` (surveyed) higher within `TOE_REACH_M`
+            let under_cliff = |x: f64, z: f64, g: f64| {
+                (0..8).any(|k| {
+                    let a = k as f64 * std::f64::consts::FRAC_PI_4;
+                    ground(x + a.cos() * rocks::TOE_REACH_M, z + a.sin() * rocks::TOE_REACH_M).is_some_and(|h| h - g >= rocks::TOE_DROP_MIN_M * hs)
+                })
+            };
+            // the candidate boxes: the beaches and the mapped bare rock, padded by the rocks' reach
+            let mut boxes: Vec<[f64; 4]> = crate::shore::load_beaches(repo_root).unwrap_or_default().iter().map(|b| b.polygon.iter().fold([f64::MAX, f64::MAX, f64::MIN, f64::MIN], |m, p| [m[0].min(p[0]), m[1].min(p[1]), m[2].max(p[0]), m[3].max(p[1])])).collect();
+            if let Ok((greens, _)) = crate::plaza::load_areas(repo_root) {
+                boxes.extend(greens.iter().filter(|g| crate::ground_cover::surface_tone(g) == Some("bareRock")).map(|g| g.polygon.iter().fold([f64::MAX, f64::MAX, f64::MIN, f64::MIN], |m, p| [m[0].min(p[0]), m[1].min(p[1]), m[2].max(p[0]), m[3].max(p[1])])));
+            }
+            let pad = rocks::INLAND_REACH_M;
+            let l = rocks::LATTICE_M;
+            let mut seen = std::collections::HashSet::new();
+            let mut out = Vec::new();
+            for bx in boxes {
+                for j in ((bx[1] - pad) / l).floor() as i64..=((bx[3] + pad) / l).ceil() as i64 {
+                    for i in ((bx[0] - pad) / l).floor() as i64..=((bx[2] + pad) / l).ceil() as i64 {
+                        if !seen.insert((i, j)) || rocks::hash(i, j, 101) >= 1.6 * rocks::DENSITY_BARE.max(rocks::DENSITY_TOE).max(rocks::DENSITY_OUTCROP) {
+                            continue;
+                        }
+                        let (x, z) = ((i as f64 + 0.5) * l, (j as f64 + 0.5) * l);
+                        let s = f.signed_at(x, z);
+                        if !(-rocks::INLAND_REACH_M..=rocks::BARE_SPREAD_M).contains(&s) {
+                            continue;
+                        }
+                        let Some(g) = ground(x, z) else { continue };
+                        let sl = slope(x, z);
+                        let bare = near_bare(x, z);
+                        let toe = !bare && sl <= rocks::SAND_SLOPE_MAX && cover.beach_sand(x, z, s.abs()) && [(5.0, 0.0), (-5.0, 0.0), (0.0, 5.0), (0.0, -5.0)].iter().any(|(dx, dz)| slope(x + dx, z + dz) > rocks::SAND_SLOPE_MAX) && under_cliff(x, z, g);
+                        let Some(zn) = rocks::zone(s, g - sea, sl, bare, toe) else { continue };
+                        if let Some(st) = rocks::boulder(i, j, x, z, zn, g - sea > tide[0], &ground_min, plan, &|u| rocks::stone_tone(rocks::BOULDER_ALBEDO, u)) {
+                            out.push(st);
+                        }
+                    }
+                }
+            }
+            Some(out)
+        }
+        _ => None,
+    };
+    let boulders = stones.map(|stones| {
+        let (mut cast, mut small) = (MeshArrays::new("shore-rocks:boulders"), MeshArrays::new("shore-rocks:boulders"));
+        for s in &stones {
+            rocks::stone_mesh(if s.diameter() >= rocks::CAST_MIN_D_M { &mut cast } else { &mut small }, s, sea, tide);
+        }
+        (cast, small, stones.len())
+    });
+    ShoreRocks { armour, boulders, ms: [load_ms, armour_ms, t.elapsed().as_secs_f64() * 1e3] }
+}
+
 /// The far batch's material (landmark-set.js `admit`).
 pub fn far_material() -> Material {
     Material { roughness: 0.8, metalness: 0.1, env_class: "facade-masonry".into(), surface: None, draw: None, wire: false, surface_options: None }
@@ -415,7 +532,11 @@ impl LandmarkSet {
             // piers of the citywide map as decks over the water, the quay wall
             // without its landward side under the apron, and the terrain press.
             use crate::waterfront as wf;
-            let rings = wf::load_pier_rings(repo_root)?;
+            let mut rings = wf::load_pier_rings(repo_root)?;
+            // the piers the citywide map draws as lines (Torpedo Wharf, the Coast Guard walkway)
+            let line_rings = if crate::features::shore_ground("pier-lines") { wf::load_pier_line_rings(repo_root, &rings)? } else { Vec::new() };
+            let first_line_pier = rings.len();
+            rings.extend(line_rings.iter().cloned());
             let piers = wf::plan_piers(&rings, &oracle, height_at, js.sea_level_y, sh.road_lift);
             let (edges, c) = wf::classify_edges(&oracle, height_at, js.sea_level_y, &rule, &piers);
             let wall_edges: Vec<[f64; 4]> = edges.iter().filter(|e| e.pier.is_none()).map(|e| [e.a[0], e.a[1], e.b[0], e.b[1]]).collect();
@@ -436,8 +557,28 @@ impl LandmarkSet {
             // promenade is Herb Caen Way's paving), the piers in the JS pier deck's.
             let hex = |s: &str| crate::geometry::srgb_hex(u32::from_str_radix(s.trim_start_matches('#'), 16).unwrap_or(0x808080));
             let apron = hex(js.open_space.colors.get("path").map(|s| s.as_str()).unwrap_or("#e1e3e4"));
-            let m = wf::build_meshes(&edges, &piers, &oracle, &crest_at, js.sea_level_y, 0.42, concrete, wf::UNDER_DECK_LINEAR, apron, crate::geometry::srgb_hex(fp.deck_srgb));
+            // the decks the citywide map draws as lines are asphalt (Torpedo Wharf: OSM
+            // surface=asphalt): the promenades' asphalt albedo (landmarks-js.json
+            // `promenades.structureAlbedo.asphalt`); every other pier the ferry pier's deck tone
+            let pier_deck = crate::geometry::srgb_hex(fp.deck_srgb);
+            let asphalt = {
+                let a = &js.promenades["structureAlbedo"]["asphalt"];
+                [0, 1, 2].map(|k| a[k].as_f64().unwrap_or(pier_deck[k]))
+            };
+            let deck_of = |i: usize| if line_rings.iter().any(|r| r == &piers[i].ring) { asphalt } else { pier_deck };
+            let m = wf::build_meshes_with(&edges, &piers, &oracle, &crest_at, js.sea_level_y, 0.42, concrete, wf::UNDER_DECK_LINEAR, apron, &deck_of);
             piers_built = (m.decks, m.piles);
+            // their guard on the water edges (the decks the citywide map draws as lines)
+            if !line_rings.is_empty() {
+                let mut g = crate::geometry::MeshArrays::new("waterfront:pier-guard");
+                for p in piers.iter().filter(|p| line_rings.iter().any(|r| r == &p.ring)) {
+                    wf::pier_guard(&mut g, p, &|x, z| oracle.is_water(x, z), crate::geometry::srgb_hex(wf::RAIL_PAINT_SRGB));
+                }
+                eprintln!("pier lines: {} rings ({} piers before them), guard {} triangles", line_rings.len(), first_line_pier, g.triangles());
+                if g.triangles() > 0 {
+                    structures.push(Structure { cast: true, footway: false, kit: Some(wf::RAILING_KIT.into()), name: "waterfront:pier-guard".into(), material: plain_material(0.5, 0.0, "painted-metal"), mesh: g.freeze() });
+                }
+            }
             structures.push(Structure { cast: false, footway: true, kit: None, name: "waterfront:paving".into(), material: plain_material(0.9, 0.0, "sidewalk"), mesh: m.paving });
             structures.push(Structure { cast: true, footway: false, kit: None, name: "waterfront:concrete".into(), material: Material { surface: Some("concrete".into()), ..plain_material(0.92, 0.0, "facade-masonry") }, mesh: m.concrete });
             structures.push(Structure { cast: false, footway: false, kit: None, name: "waterfront:under-deck".into(), material: plain_material(0.95, 0.0, "facade-masonry"), mesh: m.under_deck });
@@ -461,7 +602,7 @@ impl LandmarkSet {
                 let reach = wf::RAILING_CORRIDOR_M * eo_data::groundscale::scale();
                 let detail = crate::features::guard_detail();
                 // (the pickets' wire record carries the kit finish's colour: the wire pass reads its vertex colour.)
-                let paint = crate::geometry::srgb_hex(0x6e7478);
+                let paint = crate::geometry::srgb_hex(wf::RAIL_PAINT_SRGB);
                 let r = wf::quay_railing_with(&edges, &crest_at, fb, reach, if detail { paint } else { [1.0; 3] }, detail);
                 if detail {
                     // a landmark: the rails and posts near and far (in the paint's own colour), the pickets near.
@@ -471,6 +612,32 @@ impl LandmarkSet {
                 } else if !r.solid.is_empty() {
                     structures.push(Structure { cast: true, footway: false, kit: Some(wf::RAILING_KIT.into()), name: "waterfront:railing".into(), material: plain_material(0.5, 0.0, "painted-metal"), mesh: r.solid });
                 }
+            }
+            // the shore's rock (rocks.rs): the armour against the Fort Point
+            // and Marine Drive seawall, the boulders on the bare rock, at the
+            // cliff toes and on the steep faces over the sea.
+            let (riprap, boulders) = (crate::features::shore_ground("riprap"), crate::features::shore_ground("rocks"));
+            if riprap || boulders {
+                let t = Instant::now();
+                let r = shore_rocks(repo_root, height_at, &edges, &crest_at, js.sea_level_y, riprap, boulders);
+                let (nr, nr_s) = r.armour.as_ref().map(|m| (m.0.triangles(), m.1)).unwrap_or((0, 0));
+                let (nb, nb_small, nb_s) = r.boulders.as_ref().map(|m| (m.0.triangles(), m.1.triangles(), m.2)).unwrap_or((0, 0, 0));
+                if let Some((m, _)) = r.armour {
+                    structures.push(Structure { cast: true, footway: false, kit: None, name: "shore-rocks:armour".into(), material: plain_material(0.82, 0.0, "facade-masonry"), mesh: m.freeze() });
+                }
+                if let Some((cast, small, _)) = r.boulders {
+                    // one material (cc0.rs `structure_class` keys on the name): the large stones cast, the small do not
+                    structures.push(Structure { cast: true, footway: false, kit: None, name: "shore-rocks:boulders".into(), material: plain_material(0.86, 0.0, "facade-masonry"), mesh: cast.freeze() });
+                    structures.push(Structure { cast: false, footway: false, kit: None, name: "shore-rocks:boulders".into(), material: plain_material(0.86, 0.0, "facade-masonry"), mesh: small.freeze() });
+                }
+                eprintln!(
+                    "rocks: armour {nr_s} stones {nr} triangles, boulders {nb_s} stones {} triangles ({nb_small} casting none), {:.0} ms (field and cover {:.0}, armour {:.0}, boulders {:.0})",
+                    nb + nb_small,
+                    t.elapsed().as_secs_f64() * 1e3,
+                    r.ms[0],
+                    r.ms[1],
+                    r.ms[2]
+                );
             }
             press = Some(std::sync::Arc::new(wf::ShorePress::new(js.sea_level_y, &edges, &piers)));
             census = Some(c);

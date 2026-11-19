@@ -345,6 +345,170 @@ pub fn load_pier_rings(repo_root: &std::path::Path) -> Result<Vec<Vec<[f64; 2]>>
     Ok(out)
 }
 
+/// The citywide map's `pierLines` (OSM `man_made=pier` mapped as lines:
+/// outlines drawn as open ways, a walkway as its two edges) on the Presidio
+/// shore (`PIER_LINES_BOX_SURVEYED`), closed into rings: a way whose ends
+/// meet within `PIER_LINE_CLOSE_M` is a ring; ways sharing an end are joined
+/// first. Torpedo Wharf (an L of asphalt on piles, OSM relation 8346136's
+/// outline) and the Coast Guard pier's walkway (its two edges) come out of
+/// it; the `piers` layer has neither. Rings inside an existing pier ring are
+/// dropped. World metres at the scaled ground plan.
+pub fn load_pier_line_rings(repo_root: &std::path::Path, existing: &[Vec<[f64; 2]>]) -> Result<Vec<Vec<[f64; 2]>>> {
+    use std::io::Read;
+    #[derive(serde::Deserialize)]
+    struct Meta {
+        quantum: f64,
+    }
+    #[derive(serde::Deserialize)]
+    struct Layer {
+        len: Vec<usize>,
+        xy: Vec<i64>,
+    }
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Map {
+        meta: Meta,
+        pier_lines: Layer,
+    }
+    let bytes = std::fs::read(repo_root.join("public/data/sf/sf-map-citywide.json.gz"))?;
+    let mut s = String::new();
+    flate2::read::GzDecoder::new(&bytes[..]).read_to_string(&mut s)?;
+    let m: Map = serde_json::from_str(&s)?;
+    let q = m.meta.quantum;
+    let b = PIER_LINES_BOX_SURVEYED;
+    let mut ways: Vec<Vec<[f64; 2]>> = Vec::new();
+    let mut k = 0usize;
+    for &n in &m.pier_lines.len {
+        if n == 0 || k + 2 * n > m.pier_lines.xy.len() {
+            break;
+        }
+        let (mut x, mut z) = (m.pier_lines.xy[k], m.pier_lines.xy[k + 1]);
+        let mut w = vec![[x as f64 * q, z as f64 * q]];
+        for v in 1..n {
+            x += m.pier_lines.xy[k + 2 * v];
+            z += m.pier_lines.xy[k + 2 * v + 1];
+            w.push([x as f64 * q, z as f64 * q]);
+        }
+        k += 2 * n;
+        if w.iter().all(|p| p[0] >= b[0] && p[0] <= b[2] && p[1] >= b[1] && p[1] <= b[3]) && w.len() >= 2 {
+            ways.push(w);
+        }
+    }
+    let rings = close_pier_lines(ways);
+    let gs = eo_data::groundscale::scale();
+    Ok(rings
+        .into_iter()
+        .map(|r| r.into_iter().map(|p| [p[0] * gs, p[1] * gs]).collect::<Vec<_>>())
+        .filter(|r| {
+            let c = ring_centroid(r);
+            !existing.iter().any(|e| e.len() >= 3 && point_in_ring(e, c[0], c[1]))
+        })
+        .collect())
+}
+
+/// Ways joined at shared ends (within `PIER_LINE_JOIN_M`) into chains, the
+/// chains whose ends meet within `PIER_LINE_CLOSE_M` as rings of at least
+/// `PIER_MIN_AREA_M2`.
+pub fn close_pier_lines(mut ways: Vec<Vec<[f64; 2]>>) -> Vec<Vec<[f64; 2]>> {
+    let d = |a: [f64; 2], b: [f64; 2]| (a[0] - b[0]).hypot(a[1] - b[1]);
+    let mut out = Vec::new();
+    while let Some(mut chain) = ways.pop() {
+        loop {
+            let (head, tail) = (chain[0], *chain.last().unwrap());
+            if d(head, tail) < PIER_LINE_CLOSE_M && chain.len() >= 3 {
+                break;
+            }
+            let Some((i, rev, front)) = ways.iter().enumerate().find_map(|(i, w)| {
+                let (a, b) = (w[0], *w.last().unwrap());
+                if d(tail, a) < PIER_LINE_JOIN_M {
+                    Some((i, false, false))
+                } else if d(tail, b) < PIER_LINE_JOIN_M {
+                    Some((i, true, false))
+                } else if d(head, b) < PIER_LINE_JOIN_M {
+                    Some((i, false, true))
+                } else if d(head, a) < PIER_LINE_JOIN_M {
+                    Some((i, true, true))
+                } else {
+                    None
+                }
+            }) else {
+                break;
+            };
+            let mut w = ways.swap_remove(i);
+            if rev {
+                w.reverse();
+            }
+            if front {
+                w.pop();
+                w.extend(chain);
+                chain = w;
+            } else {
+                chain.extend(w.into_iter().skip(1));
+            }
+        }
+        if chain.len() >= 3 && d(chain[0], *chain.last().unwrap()) < PIER_LINE_CLOSE_M {
+            if d(chain[0], *chain.last().unwrap()) < 1e-6 {
+                chain.pop();
+            }
+            if signed_area(&chain).abs() >= PIER_MIN_AREA_M2 {
+                out.push(chain);
+            }
+        }
+    }
+    out
+}
+
+/// The Presidio shore the pier lines are built on (surveyed metres in the
+/// city frame: west, north, east, south): Crissy Field's west end, from the
+/// Warming Hut's wharf to the Coast Guard station.
+pub const PIER_LINES_BOX_SURVEYED: [f64; 4] = [-4600.0, -3600.0, -4000.0, -3000.0];
+/// Pier-line ends this close are one point; a chain whose ends are this close is closed. Metres.
+pub const PIER_LINE_JOIN_M: f64 = 1.0;
+pub const PIER_LINE_CLOSE_M: f64 = 8.0;
+/// The quay railing's paint, sRGB: the grey steel of the guard rail on the
+/// quay wall (set.rs, the Ferry Building corridor's railing, the value it
+/// has had since its port) and of the pier-line decks' guard.
+pub const RAIL_PAINT_SRGB: u32 = 0x6e7478;
+
+/// The guard on a pier-line deck's water edges: 42 in (1.067 m) over the deck,
+/// California Building Code section 1015.3 (guards); people are drawn at real
+/// size (`groundscale::people`, 1.0), so this is not scaled. Posts at 8 ft
+/// (2.44 m, INFERRED), a 4 in (0.1 m) post and rail section (INFERRED).
+pub const PIER_GUARD_M: f64 = 1.067;
+pub const PIER_GUARD_POST_PITCH_M: f64 = 2.44;
+pub const PIER_GUARD_SECTION_M: f64 = 0.1;
+
+/// The guard along a pier deck's outline edges over the water (`water_at`):
+/// posts, a top rail and a mid rail, in `colour`.
+pub fn pier_guard(m: &mut MeshArrays, p: &Pier, water_at: &dyn Fn(f64, f64) -> bool, colour: Rgb) {
+    let inward = if signed_area(&p.ring) > 0.0 { 1.0 } else { -1.0 };
+    for i in 0..p.ring.len() {
+        let (a, b) = (p.ring[i], p.ring[(i + 1) % p.ring.len()]);
+        let l = (b[0] - a[0]).hypot(b[1] - a[1]);
+        if l < 1.0 {
+            continue;
+        }
+        let n = [-(b[1] - a[1]) / l * inward, (b[0] - a[0]) / l * inward];
+        let (mx, mz) = ((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0);
+        let n = if point_in_ring(&p.ring, mx + n[0], mz + n[1]) { n } else { [-n[0], -n[1]] };
+        if !water_at(mx - n[0] * 2.0, mz - n[1] * 2.0) {
+            continue;
+        }
+        let inset = PIER_GUARD_SECTION_M;
+        let (a, b) = ([a[0] + n[0] * inset, a[1] + n[1] * inset], [b[0] + n[0] * inset, b[1] + n[1] * inset]);
+        let y = p.deck_y;
+        let posts = (l / PIER_GUARD_POST_PITCH_M).ceil().max(1.0) as usize;
+        for k in 0..=posts {
+            let t = k as f64 / posts as f64;
+            let q = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+            m.beam([q[0], y, q[1]], [q[0], y + PIER_GUARD_M, q[1]], PIER_GUARD_SECTION_M, PIER_GUARD_SECTION_M, colour);
+        }
+        for h in [PIER_GUARD_M, PIER_GUARD_M * 0.5] {
+            m.beam([a[0], y + h, a[1]], [b[0], y + h, b[1]], PIER_GUARD_SECTION_M, PIER_GUARD_SECTION_M * 0.6, colour);
+        }
+    }
+}
+
 /// The piers the city draws: every ring of `PIER_MIN_AREA_M2` or more within
 /// `PIER_MAX_SHORE_M` of a shoreline ring edge, its deck at the median LiDAR
 /// ground inside it plus the road lift (less `PIER_UNDER_ROAD_M`), or
@@ -628,6 +792,23 @@ pub fn build_meshes(
     apron: Rgb,
     deck: Rgb,
 ) -> WaterfrontMeshes {
+    build_meshes_with(edges, piers, oracle, crest_at, sea, coping_land, concrete, dark, apron, &|_| deck)
+}
+
+/// `build_meshes` with each pier's deck tone given by its index (`deck_of`).
+#[allow(clippy::too_many_arguments)]
+pub fn build_meshes_with(
+    edges: &[ShoreEdge],
+    piers: &[Pier],
+    oracle: &eo_water::shoreline::Oracle,
+    crest_at: &dyn Fn(f64, f64) -> f64,
+    sea: f64,
+    coping_land: f64,
+    concrete: Rgb,
+    dark: Rgb,
+    apron: Rgb,
+    deck_of: &dyn Fn(usize) -> Rgb,
+) -> WaterfrontMeshes {
     let mut paving = MeshArrays::new("waterfront:paving");
     let mut conc = MeshArrays::new("waterfront:concrete");
     let mut under = MeshArrays::new("waterfront:under-deck");
@@ -640,7 +821,7 @@ pub fn build_meshes(
         let at = |p: [f64; 2], o: f64, y: f64| [p[0] + n[0] * o, y, p[1] + n[1] * o];
         let (ya, yb, inner, tone) = match e.pier {
             None => (crest_at(a[0], a[1]), crest_at(b[0], b[1]), coping_land, apron),
-            Some(i) => (piers[i].deck_y, piers[i].deck_y, 0.0, deck),
+            Some(i) => (piers[i].deck_y, piers[i].deck_y, 0.0, deck_of(i)),
         };
         // The strip: from the coping (or the waterline) to CAP_W_M inland, facing up.
         let w = CAP_W_M + coping_land;
@@ -680,7 +861,8 @@ pub fn build_meshes(
     }
     // Pier slabs over their outlines, and fascias on outline edges over open water.
     let mut decks = 0usize;
-    for p in piers {
+    for (pi, p) in piers.iter().enumerate() {
+        let deck = deck_of(pi);
         let mut ear = earcut::Earcut::<f64>::new();
         let mut tri: Vec<u32> = Vec::new();
         ear.earcut(p.ring.iter().copied(), &[] as &[u32], &mut tri);
@@ -916,4 +1098,25 @@ pub fn quay_railing_with(edges: &[ShoreEdge], crest_at: &dyn Fn(f64, f64) -> f64
         }
     }
     Railing { solid: m.freeze(), pickets: wires.freeze(), pieces }
+}
+
+#[cfg(test)]
+mod pier_line_tests {
+    use super::*;
+
+    #[test]
+    fn pier_lines_close_into_rings() {
+        // an outline drawn as one open way, and a walkway as its two edges sharing their ends
+        let outline = vec![[0.0, 0.0], [0.0, -100.0], [60.0, -100.0], [60.0, -90.0], [6.0, -90.0], [6.0, -2.0]];
+        let left = vec![[100.0, 0.0], [100.0, -60.0], [103.0, -60.0]];
+        let right = vec![[103.0, -60.0], [103.0, 0.0], [100.5, 0.0]];
+        let rings = close_pier_lines(vec![outline, left, right]);
+        assert_eq!(rings.len(), 2, "{rings:?}");
+        let mut areas: Vec<f64> = rings.iter().map(|r| signed_area(r).abs()).collect();
+        areas.sort_by(|a, b| a.total_cmp(b));
+        assert!((areas[0] - 180.0).abs() < 20.0, "{areas:?}");
+        // a short open stub is no pier
+        assert!(close_pier_lines(vec![vec![[0.0, 0.0], [3.0, 0.0]]]).is_empty());
+        assert!((PIER_GUARD_M - 42.0 * 0.0254).abs() < 1e-3);
+    }
 }

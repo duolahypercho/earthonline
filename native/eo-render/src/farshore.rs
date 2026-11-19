@@ -68,6 +68,26 @@ pub fn dryness_for_day(doy: f64) -> f32 {
     (s(95.0, 165.0, d) * (1.0 - s(305.0, 345.0, d))) as f32
 }
 
+/// The season's dryness both land layers read (`EO_FARSHORE_DRY`, else
+/// `dryness_for_day` on the sun model's date): the far layer's grass and the
+/// city terrain's far land (eo-app ground_tone), so they meet at the city
+/// grid's edge in one season.
+pub fn season_dryness() -> f32 {
+    env_f32("EO_FARSHORE_DRY").map(|v| v.clamp(0.0, 1.0)).unwrap_or_else(|| dryness_for_day(eo_look::sun::day_of_year()))
+}
+
+/// The far layer's land albedos (farshore.wgsl, linear), shared with the city
+/// terrain's far land (eo-app ground_tone `far_land_season_tone`): the annual
+/// grass green and golden, coastal scrub, woodland (open and north face),
+/// marsh, bare rock and the built flats.
+pub const FAR_GRASS_GREEN: [f32; 3] = [0.065, 0.100, 0.034];
+pub const FAR_GRASS_GOLDEN: [f32; 3] = [0.215, 0.165, 0.092];
+pub const FAR_SCRUB: [f32; 3] = [0.075, 0.074, 0.046];
+pub const FAR_TREE: [f32; 3] = [0.036, 0.046, 0.026];
+pub const FAR_MARSH: [f32; 3] = [0.065, 0.075, 0.048];
+pub const FAR_ROCK: [f32; 3] = [0.17, 0.155, 0.13];
+pub const FAR_TOWN: [f32; 3] = [0.092, 0.094, 0.088];
+
 impl Default for FarOptions {
     fn default() -> Self {
         Self {
@@ -76,7 +96,7 @@ impl Default for FarOptions {
             tail: env_f32("EO_FARSHORE_TAIL").unwrap_or(6.0).clamp(0.05, 50.0),
             self_shadow: std::env::var("EO_FARSHORE_SHADOW").map_or(true, |v| v.trim() != "0"),
             debug: std::env::var("EO_FARSHORE_DEBUG").is_ok_and(|v| v.trim() == "1"),
-            dryness: env_f32("EO_FARSHORE_DRY").map(|v| v.clamp(0.0, 1.0)).unwrap_or_else(|| dryness_for_day(eo_look::sun::day_of_year())),
+            dryness: season_dryness(),
         }
     }
 }
@@ -601,5 +621,25 @@ mod tests {
         assert!(dryness_for_day(265.0) > 0.99); // the sun model's date (September 22)
         assert!(dryness_for_day(45.0) < 0.01); // mid-February
         assert!(dryness_for_day(130.0) > 0.2 && dryness_for_day(130.0) < 0.8); // May: browning
+    }
+}
+
+#[cfg(test)]
+mod palette_tests {
+    #[test]
+    fn the_shared_palette_is_the_far_layers() {
+        // every vec3<f32>(a, b, c) literal of the shader, parsed
+        let w = include_str!("farshore.wgsl");
+        let lits: Vec<[f32; 3]> = w
+            .split("vec3<f32>(")
+            .skip(1)
+            .filter_map(|t| {
+                let v: Vec<f32> = t.split(')').next()?.split(',').map(|x| x.trim().parse::<f32>()).collect::<Result<_, _>>().ok()?;
+                (v.len() == 3).then(|| [v[0], v[1], v[2]])
+            })
+            .collect();
+        for c in [super::FAR_GRASS_GREEN, super::FAR_GRASS_GOLDEN, super::FAR_SCRUB, super::FAR_TREE, super::FAR_MARSH, super::FAR_ROCK, super::FAR_TOWN] {
+            assert!(lits.contains(&c), "{c:?} not in farshore.wgsl");
+        }
     }
 }

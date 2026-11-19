@@ -72,6 +72,14 @@ pub fn far_land_tone(class: u8, x: f64, z: f64) -> Linear {
     [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
 }
 
+/// A named tone pair (`pair`) mixed by the ground mottle at (x, z), linear; None for an unknown name.
+pub fn named_tone(name: &str, x: f64, z: f64) -> Option<Linear> {
+    let (a, b) = pair(name)?;
+    let (a, b) = (hex(a), hex(b));
+    let t = ground_mottle(x, z);
+    Some([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t])
+}
+
 /// `greenSurfaceTone(g)`: the surveyed surface a green's own ground takes, or None.
 pub fn surface_tone(g: &Area) -> Option<&'static str> {
     match g.ground.as_str() {
@@ -219,6 +227,46 @@ pub fn installed() -> Option<&'static std::sync::Arc<GroundCover>> {
 /// city-tile-derive.js `GROUND_SAND` / `GROUND_SAND_DARK` (linear).
 pub const GROUND_SAND: Linear = [0.366, 0.337, 0.275];
 pub const GROUND_SAND_DARK: Linear = [0.305, 0.275, 0.216];
+/// The dry beach sand's broadband albedo (`--no-sand-albedo`: the JS tones
+/// above, whose mean luminance is 0.31): Ångström's pyranometer measurement
+/// of dry sand, 0.182 (wet: 0.091), as tabulated in J. Lekner and M. C. Dorf,
+/// "Why some things are darker when wet", Applied Optics 27, 1278 (1988).
+/// The JS pair keeps its hue and mottle and is scaled to this mean luminance.
+pub const DRY_SAND_ALBEDO: f64 = 0.182;
+/// Wet over dry sand albedo, the same measurement: 0.091 / 0.182.
+pub const WET_SAND_RATIO: f64 = 0.5;
+
+/// San Francisco tide station 9414290 (Golden Gate), NOAA CO-OPS datums,
+/// epoch 1983-2001 (api.tidesandcurrents.noaa.gov mdapi `datums`, metres on
+/// station datum): MHHW 3.602, MHW 3.416, MSL 2.773. Real metres over mean
+/// sea level (drawn at the height scale). The beach's strand line lies at the
+/// higher high water and the sand stays damp below the high water
+/// (eo-render cc0.rs `shore_ground_wgsl`); the shore's stones carry the same
+/// stain and wetting (rocks.rs `tide_tone`). The one definition both read.
+pub const MHW_OVER_MSL_M: f64 = 3.416 - 2.773;
+pub const MHHW_OVER_MSL_M: f64 = 3.602 - 2.773;
+
+/// Sand stops at the beach (`--no-beach-sand-limit`): the steepest ground,
+/// rise over run across 12 m of the drawn grid (eo-app ground_tone
+/// `slope_at`), that still carries sand. Derived from the 1 m 3DEP DEM
+/// through the 8 m elevation grid: the 99th percentile of that slope at the
+/// terrain vertices inside the mapped beaches (OSM `natural=beach`), 0.356
+/// (eo-app ground_tone `the_sand_limits_match_the_mapped_beaches`
+/// re-measures it). The ground plan and the heights are both scaled 1.25, so
+/// the slope is the surveyed one. The sand limit (eo-app ground_tone) and the
+/// cliff-toe boulders (rocks.rs) both read it.
+pub const SAND_SLOPE_MAX: f64 = 0.36;
+
+fn luma(c: Linear) -> f64 {
+    0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+}
+
+/// The factor that takes the JS sand pair to `DRY_SAND_ALBEDO` (the mean of
+/// its two tones' luminance, as the mottle mixes them half and half).
+pub fn sand_albedo_scale() -> f64 {
+    DRY_SAND_ALBEDO / (0.5 * (luma(GROUND_SAND) + luma(GROUND_SAND_DARK)))
+}
+
 /// beach-sand.js: how far past a mapped beach the sand runs, and how near the sea it must be.
 pub const BEACH_SAND_REACH_M: f64 = 150.0;
 pub const BEACH_SAND_SHORE_M: f64 = 90.0;
@@ -393,6 +441,27 @@ impl GroundCover {
         false
     }
 
+    /// Whether (x, z) lies inside a mapped beach's ring (OSM `natural=beach`),
+    /// not merely within `BEACH_SAND_REACH_M` of one.
+    pub fn in_mapped_beach(&self, x: f64, z: f64) -> bool {
+        let Some(list) = self.beach_cells.get(&((x / CELL).floor() as i64, (z / CELL).floor() as i64)) else { return false };
+        list.iter().any(|&i| {
+            let (ring, mn, mx) = &self.beaches[i as usize];
+            x >= mn[0] && x <= mx[0] && z >= mn[1] && z <= mx[1] && in_ring(ring, x, z)
+        })
+    }
+
+    /// Whether (x, z) lies within `BEACH_SAND_REACH_M` of a mapped beach (at
+    /// any distance from the sea): the cliffs and bluffs over the beaches.
+    pub fn near_mapped_beach(&self, x: f64, z: f64) -> bool {
+        let Some(list) = self.beach_cells.get(&((x / CELL).floor() as i64, (z / CELL).floor() as i64)) else { return false };
+        list.iter().any(|&i| {
+            let (ring, mn, mx) = &self.beaches[i as usize];
+            let r = BEACH_SAND_REACH_M;
+            x >= mn[0] - r && x <= mx[0] + r && z >= mn[1] - r && z <= mx[1] + r && (in_ring(ring, x, z) || crate::waterfront::ring_distance(ring, x, z) <= r)
+        })
+    }
+
     /// tile-trees.js `plantTileTrees` over [x0, x1) x [z0, z1) (near tier): the
     /// world-anchored 14 m lattice jittered by `hash2`, a tree where the green
     /// painted there has a tree class, its rule's chance (times the grove
@@ -447,9 +516,34 @@ impl GroundCover {
         out.into_iter().map(|(t, _)| t).collect()
     }
 
-    /// The beach sand's colour at (x, z): `GROUND_SAND` to `GROUND_SAND_DARK` by the mottle.
+    /// The beach sand's colour at (x, z): `GROUND_SAND` to `GROUND_SAND_DARK`
+    /// by the mottle, scaled to the measured dry-sand albedo (`sand_albedo_scale`)
+    /// unless `--no-sand-albedo`.
     pub fn sand_at(&self, x: f64, z: f64) -> Linear {
-        let t = ground_mottle(x, z);
-        [0, 1, 2].map(|k| GROUND_SAND[k] + (GROUND_SAND_DARK[k] - GROUND_SAND[k]) * t)
+        sand_tone(x, z, crate::features::shore_ground("sand-albedo"))
+    }
+}
+
+/// `GroundCover::sand_at` with the albedo switch given.
+pub fn sand_tone(x: f64, z: f64, measured: bool) -> Linear {
+    let t = ground_mottle(x, z);
+    let k = if measured { sand_albedo_scale() } else { 1.0 };
+    [0, 1, 2].map(|i| (GROUND_SAND[i] + (GROUND_SAND_DARK[i] - GROUND_SAND[i]) * t) * k)
+}
+
+#[cfg(test)]
+mod sand_tests {
+    use super::*;
+
+    #[test]
+    fn the_sand_has_the_measured_albedo() {
+        // mean over the mottle: the measured dry albedo; the JS tones without the switch
+        let mean = |on: bool| (0..400).map(|i| luma(sand_tone(i as f64 * 7.3, i as f64 * 3.1, on))).sum::<f64>() / 400.0;
+        assert!((mean(true) - DRY_SAND_ALBEDO).abs() < 0.015, "{}", mean(true));
+        assert!((mean(false) - 0.31).abs() < 0.02, "{}", mean(false));
+        assert_eq!(sand_tone(5.0, 9.0, false)[0], GROUND_SAND[0] + (GROUND_SAND_DARK[0] - GROUND_SAND[0]) * ground_mottle(5.0, 9.0));
+        // the hue is the JS pair's
+        let (a, b) = (sand_tone(5.0, 9.0, true), sand_tone(5.0, 9.0, false));
+        assert!((a[0] / a[2] - b[0] / b[2]).abs() < 1e-9);
     }
 }
