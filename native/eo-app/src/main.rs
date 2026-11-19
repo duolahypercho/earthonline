@@ -181,6 +181,11 @@ impl Default for PerfArgs {
 }
 
 fn parse_args() -> Result<Args> {
+    parse_args_from(std::env::args().skip(1))
+}
+
+/// `parse_args` over the given arguments (the program name left out).
+fn parse_args_from(args: impl IntoIterator<Item = String>) -> Result<Args> {
     let mut a = Args {
         bench: false,
         start_underwater: false,
@@ -229,7 +234,7 @@ fn parse_args() -> Result<Args> {
     };
     // `--scene-cards` renders at 2560 x 1440 unless a size is given.
     let (mut sized, mut scene_cards) = (false, false);
-    let mut it = std::env::args().skip(1);
+    let mut it = args.into_iter();
     while let Some(s) = it.next() {
         let mut val = || it.next().ok_or_else(|| anyhow::anyhow!("{s} needs a value"));
         match s.as_str() {
@@ -445,7 +450,16 @@ fn parse_args() -> Result<Args> {
             "--no-gg2-ground" | "--no-beach-sand-limit" | "--no-sand-albedo" | "--no-rocks" | "--no-riprap" | "--no-pier-lines" | "--no-ground-steps" | "--no-season-seam" => {} // read by its crate (the shore ground)
             "--no-gg2-far" | "--no-far-fallback" | "--no-landmark-far-models" | "--no-far-tree-density" | "--no-presidio-rule" | "--no-far-paint" => {} // read by its crate (the far layer)
             "--no-corridor-traffic" | "--no-deck-walkers" => {} // read by its crate (the corridor traffic)
-            "--no-gg2-vegetation" | "--no-coastal-trees" | "--no-ground-cover" | "--no-hill-rock" => {} // read by its crate (the vegetation and hill rock)
+            "--no-gg2-vegetation" | "--no-coastal-trees" | "--no-ground-cover" => {} // read by its crate (the vegetation)
+            // the round-3 tracks' switches: one list per track, each in a file the track owns (read by its crate)
+            s if eo_render::pace::GG3_SWITCHES.contains(&s) => {} // read by its crate (the frame budget; --no-gg3 every track's roll-up)
+            s if eo_look::season::SWITCHES.contains(&s) => {} // read by its crate (the photo dates, season and sky)
+            s if eo_look::features::GG3_SWITCHES.contains(&s) => {} // read by its crate (the colour and camera)
+            s if eo_landmarks::vegetation::GG3_SWITCHES.contains(&s) => {} // read by its crate (the coastal vegetation)
+            s if eo_landmarks::features::GG3_SWITCHES.contains(&s) => {} // read by its crate (the terrain surface)
+            s if eo_landmarks::hill_rock::SWITCHES.contains(&s) => {} // read by its crate (the scanned rock; --no-hill-rock)
+            s if eo_water::switches::GG3_SWITCHES.contains(&s) => {} // read by its crate (the surf and bathymetry)
+            s if eo_landmarks::suspension::GG3_SWITCHES.contains(&s) => {} // read by its crate (the bridge finish)
             "--segments" => a.segments = Some(val()?.split(',').map(|s| s.trim().to_string()).collect()),
             // occlusion / hitch
             "--no-occlusion" => a.perf.occlusion = false,
@@ -1128,4 +1142,37 @@ fn main() -> Result<()> {
         return agents_bench::run(&args, process_start);
     }
     if args.bench { bench::run(&args, process_start) } else { window::run(&args, process_start) }
+}
+
+#[cfg(test)]
+mod tests {
+    /// Every round-3 track's lists, as main.rs accepts them.
+    const GG3_LISTS: [&[&str]; 8] = [
+        eo_render::pace::GG3_SWITCHES,
+        eo_look::season::SWITCHES,
+        eo_look::features::GG3_SWITCHES,
+        eo_landmarks::vegetation::GG3_SWITCHES,
+        eo_landmarks::features::GG3_SWITCHES,
+        eo_landmarks::hill_rock::SWITCHES,
+        eo_water::switches::GG3_SWITCHES,
+        eo_landmarks::suspension::GG3_SWITCHES,
+    ];
+
+    #[test]
+    fn every_listed_switch_parses() {
+        let mut seen = std::collections::HashSet::new();
+        for list in GG3_LISTS.iter().chain([&eo_landmarks::suspension::SWITCHES]) {
+            for name in list.iter() {
+                assert!(name.starts_with("--no-"), "{name}");
+                assert!(seen.insert(*name), "{name} is in two lists");
+                if let Err(e) = super::parse_args_from([name.to_string()]) {
+                    panic!("{name} does not parse: {e}");
+                }
+            }
+        }
+        for name in ["--no-gg3", "--no-gg3-perf", "--no-gg3-sky", "--no-gg3-colour", "--no-gg3-vegetation", "--no-gg3-ground", "--no-gg3-rock", "--no-gg3-water", "--no-gg3-bridge", "--no-bridges5", "--no-hill-rock"] {
+            assert!(seen.contains(name), "{name} is reserved");
+        }
+        assert!(super::parse_args_from(["--no-such-switch".to_string()]).is_err());
+    }
 }

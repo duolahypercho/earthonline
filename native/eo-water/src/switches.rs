@@ -36,6 +36,10 @@ pub const SWITCHES: [(&str, u32); 9] = [
     ("--no-baker-surf", BAKER_SURF),
 ];
 
+/// The surf and bathymetry track's switch names (the roll-up first); eo-app
+/// accepts them. Reserved: nothing reads them yet.
+pub const GG3_SWITCHES: &[&str] = &["--no-gg3-water", "--no-bathymetry", "--no-surf-break", "--no-swash-foam", "--no-obstacle-foam", "--no-water-body2", "--no-ppr-dash"];
+
 /// The parts on for these arguments.
 pub fn from_args<I: IntoIterator<Item = S>, S: AsRef<str>>(args: I) -> u32 {
     let mut on = ALL;

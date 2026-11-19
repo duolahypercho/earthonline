@@ -147,6 +147,10 @@ pub fn set_palm_detail(on: bool) {
 /// beaches and waterfront as they were before the pass.
 pub const SHORE_GROUND_SWITCHES: [&str; 7] = ["beach-sand-limit", "sand-albedo", "rocks", "riprap", "pier-lines", "ground-steps", "season-seam"];
 
+/// The terrain-surface track's switch names (the roll-up first, full
+/// `--no-` names); eo-app accepts them. Reserved: nothing reads them yet.
+pub const GG3_SWITCHES: &[&str] = &["--no-gg3-ground", "--no-facet-normal-fix", "--no-terrain-detail", "--no-terrain-materials", "--no-bluff-soil", "--no-bank-grade", "--no-sand-detail2"];
+
 /// Whether the shore-ground part `name` (one of `SHORE_GROUND_SWITCHES`) is on.
 pub fn shore_ground(name: &str) -> bool {
     static ARGS: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();

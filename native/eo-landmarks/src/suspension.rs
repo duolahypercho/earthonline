@@ -223,6 +223,12 @@ pub const SWITCHES: &[&str] = &[
     "--no-bridge-collar",
 ];
 
+/// The bridge-finish track's switch names (the roll-up `--no-gg3-bridge`,
+/// also `--no-bridges5`, first); eo-app accepts them. Reserved: nothing reads
+/// them yet. They join `SWITCHES` when `BridgeFeatures::from_args` reads them
+/// (tests/bridges.rs holds that every name in `SWITCHES` turns a feature off).
+pub const GG3_SWITCHES: &[&str] = &["--no-gg3-bridge", "--no-bridges5", "--no-paint-brdf2", "--no-paint-weathering", "--no-concrete2", "--no-leg-cells", "--no-cable-detail"];
+
 /// A frame along a bridge: chainage c along `axis` from `origin`, offset s to
 /// its right; `offset`, when given, adds a lateral offset per chainage (the
 /// Golden Gate's deck follows its carriageways' curve at each end).

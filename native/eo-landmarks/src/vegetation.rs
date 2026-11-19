@@ -191,6 +191,10 @@ pub fn switches() -> Switches {
 /// also reads, is in `hill_rock::SWITCHES`).
 pub const SWITCHES: &[&str] = &["--no-gg2-vegetation", "--no-coastal-trees", "--no-ground-cover"];
 
+/// The coastal-vegetation track's switch names (the roll-up first); eo-app
+/// accepts them. Reserved: nothing reads them yet.
+pub const GG3_SWITCHES: &[&str] = &["--no-gg3-vegetation", "--no-naip-planting", "--no-veg-scans", "--no-cliff-rock-cover", "--no-far-species", "--no-far-tree-light", "--no-bloom-date"];
+
 /// The bloom window, days of the year (see the module notes).
 pub const BLOOM_DAYS: (f64, f64) = (60.0, 170.0);
 /// Cypress dominate the stands this near the shore (m, INFERRED).

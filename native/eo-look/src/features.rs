@@ -53,6 +53,10 @@ pub fn pin_daylight(f: DaylightFeatures) -> bool {
 /// The switches `daylight` reads (eo-app accepts them).
 pub const SWITCHES: &[&str] = &["--no-gg2-daylight", "--no-ground-albedo", "--no-photo-date", "--no-clear-sky-state", "--no-cirrus"];
 
+/// The colour and camera track's switch names (the roll-up first); eo-app
+/// accepts them. Reserved: nothing reads them yet.
+pub const GG3_SWITCHES: &[&str] = &["--no-gg3-colour", "--no-sun-spectrum2", "--no-sky-calibration", "--no-camera-style", "--no-meter-highlights", "--no-haze-visibility"];
+
 #[cfg(test)]
 mod tests {
     use super::*;
