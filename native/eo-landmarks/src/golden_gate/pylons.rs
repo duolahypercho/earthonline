@@ -238,31 +238,34 @@ impl Ctx<'_> {
         let hp = self.site.half_plane;
         for py in self.pylons() {
             let deck = p.deck_top(py.c);
+            // (`concrete2`) S1 and S2 in the retrofit's renewed concrete.
+            let colour = if py.name.starts_with('S') { k.concrete_south } else { k.concrete };
             let (open0, open1) = (deck - 0.35, deck + WALK_OPENING_M * h);
             let (step, inset) = (TOP_STEP_M[0] * h, TOP_STEP_M[1] * h);
             for sgn in [-1.0, 1.0] {
                 let s = sgn * hp;
                 let ring = self.fluted_ring(py.c, s, py.half_along, py.half_across, sgn);
-                Self::extrude(concrete, &ring, py.foot, open0, false, k.concrete);
+                Self::extrude(concrete, &ring, py.foot, open0, false, colour);
                 // the outer part beside the opening, from short of the cable plane out (the cable passes in it).
                 let (s0, s1) = (s - sgn * WALK_CABLE_COVER_M, s + sgn * py.half_across);
                 let [x, z] = self.frame.point(py.c, (s0 + s1) / 2.0);
-                concrete.box_(x, z, open0, open1, py.half_along, (s1 - s0).abs() / 2.0, self.yaw, k.concrete, NO_BOTTOM);
+                concrete.box_(x, z, open0, open1, py.half_along, (s1 - s0).abs() / 2.0, self.yaw, colour, NO_BOTTOM);
                 // over the opening (its soffit), then the three tiers.
                 let [x, z] = self.frame.point(py.c, s);
-                concrete.box_(x, z, open1 - 0.01, open1 + 0.4 * h, py.half_along, py.half_across, self.yaw, k.concrete, ALL);
+                concrete.box_(x, z, open1 - 0.01, open1 + 0.4 * h, py.half_along, py.half_across, self.yaw, colour, ALL);
                 let tiers = [(open1 + 0.4 * h, py.top - 2.0 * step, 0.0), (py.top - 2.0 * step, py.top - step, inset), (py.top - step, py.top, 2.0 * inset)];
                 for (y0, y1, i) in tiers {
                     if y1 - y0 < 0.05 {
                         continue;
                     }
                     let ring = self.fluted_ring(py.c, s, py.half_along - i, py.half_across - i, sgn);
-                    Self::extrude(concrete, &ring, y0, y1, true, k.concrete);
+                    Self::extrude(concrete, &ring, y0, y1, true, colour);
                 }
-                far.box_(x, z, py.foot, py.top, py.half_along, py.half_across, self.yaw, k.concrete, ALL);
+                far.box_(x, z, py.foot, py.top, py.half_along, py.half_across, self.yaw, colour, ALL);
             }
         }
         for hs in self.housings() {
+            let colour = if hs.north { k.concrete } else { k.concrete_south };
             let n = ((hs.c1 - hs.c0) / 12.0).ceil().max(1.0) as usize;
             let mut foot = f64::INFINITY;
             for i in 0..=8 {
@@ -276,8 +279,8 @@ impl Ctx<'_> {
                 let (a, b) = (hs.c0 + (hs.c1 - hs.c0) * i as f64 / n as f64, hs.c0 + (hs.c1 - hs.c0) * (i + 1) as f64 / n as f64);
                 let top = self.housing_top(&hs, (a + b) / 2.0);
                 let [x, z] = self.frame.point((a + b) / 2.0, 0.0);
-                concrete.box_(x, z, foot - 1.0, top, (b - a) / 2.0 + 0.01, hs.half, self.yaw, k.concrete, NO_BOTTOM);
-                far.box_(x, z, foot - 1.0, top, (b - a) / 2.0, hs.half, self.yaw, k.concrete, ALL);
+                concrete.box_(x, z, foot - 1.0, top, (b - a) / 2.0 + 0.01, hs.half, self.yaw, colour, NO_BOTTOM);
+                far.box_(x, z, foot - 1.0, top, (b - a) / 2.0, hs.half, self.yaw, colour, ALL);
             }
         }
     }
@@ -335,6 +338,17 @@ impl Ctx<'_> {
                     continue;
                 }
                 for s in [-hp, hp] {
+                    if self.cable_detail {
+                        // (`cable_detail`) the clamp round the four legs: a bar along each pair of legs, one across each rope.
+                        let r = super::cables::leg_half_across(num(d, "cableDiameterM"), super::CABLE_BAND_WALL_M, num(d, "suspenderDiameterM"));
+                        for side in [-r, r] {
+                            wires.wire_segment(self.frame.P(c - gap / 2.0 - 0.12, s + side, y), self.frame.P(c + gap / 2.0 + 0.12, s + side, y), 0.14, k.orange);
+                        }
+                        for dc in [-gap / 2.0, gap / 2.0] {
+                            wires.wire_segment(self.frame.P(c + dc, s - r - 0.1, y), self.frame.P(c + dc, s + r + 0.1, y), 0.1, k.orange);
+                        }
+                        continue;
+                    }
                     wires.wire_segment(self.frame.P(c - gap / 2.0 - 0.12, s, y), self.frame.P(c + gap / 2.0 + 0.12, s, y), 0.14, k.orange);
                 }
             }

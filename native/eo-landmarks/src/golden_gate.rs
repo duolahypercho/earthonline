@@ -15,7 +15,22 @@ use crate::geometry::{ALL, GroundGrid, MeshArrays, NO_BOTTOM, NO_TOP, Rgb, shade
 use crate::suspension::{self, CableSpec, DeckColours, DeckSpec, DeckStandards, Frame, Run, SuspenderSpec, TrussSpec, stations};
 use serde_json::json;
 
+mod cables;
+pub use cables::{LAMP2_CURB_OFFSET_M, lamp2_luminaire};
+mod legs;
 mod pylons;
+pub use legs::{CELL_FT, cell_m, cell_outline, face_runs};
+
+/// The legs' cell rule's INFERRED proportions (golden_gate/legs.rs), for the renderer's mirror of it.
+pub fn legs_recess_cells() -> f64 {
+    legs::RECESS_CELLS
+}
+pub fn legs_notch_cells() -> f64 {
+    legs::NOTCH_CELLS
+}
+pub fn legs_panel_max_cells() -> f64 {
+    legs::PANEL_MAX_CELLS
+}
 
 /// Near geometry stays this far above the sea; below it is the far batch's skirt.
 const NEAR_FLOOR_ABOVE_SEA_M: f64 = 1.0;
@@ -49,6 +64,89 @@ const STRUCTURE_KEYS: &[&str] = &["towerAboveWaterM", "towerAboveRoadwayM", "roa
 /// Fireweed's 0.07 and the naive 0.23) is the bridge's widely published
 /// screen equivalent.
 pub const INTERNATIONAL_ORANGE_SRGB: u32 = 0xC0362C;
+
+/// `BridgeFeatures::paint2`: the District names three printed matches for
+/// its International Orange formula and gives each one's process values:
+/// "PMS 173 (CYMK = 0%, 80%, 94%, 1%)", "PMS 174 (CYMK 8%, 85%, 100%, 34%)",
+/// "Pantone 180 (CYMK 19.4%, 77.9%, 79.6%, 3.6%)" (goldengate.org, "Color &
+/// Art Deco Styling"); the first is its closest. Those process values, printed
+/// (the macOS ColorSync "Generic CMYK Profile", relative colorimetric, to
+/// sRGB), reflect as #DC5432 (PMS 173; h 12, luminance factor 0.218), #8A3321
+/// (PMS 174; h 10, 0.079), #B45444 (Pantone 180; h 9, 0.165), and the
+/// formula itself (C 0 M 69 Y 100 K 6) as #D6662B (h 21, 0.240): every one
+/// redder in green over blue than #C0362C (h 4), whose blue was 0.68 of its
+/// green. The paint takes PMS 173's chromaticity (its linear RGB in
+/// proportion). Its luminance factor stays #C0362C's (`PAINT2_LUMINANCE`):
+/// INFERRED inside the published bracket, the stock match Fireweed's LRV 7
+/// (Sherwin-Williams) below and the prints' 0.08-0.24 about it; a measured
+/// reflectance of the coat was not found.
+pub const PMS_173_PRINT_SRGB: u32 = 0xDC5432;
+pub const PAINT2_LUMINANCE: f64 = 0.1403;
+
+/// `BridgeFeatures::concrete2`: the albedo of weathered portland-cement
+/// concrete, 0.20-0.30 (new 0.35-0.40: US EPA, "Reducing Urban Heat Islands:
+/// Compendium of Strategies", Cool Pavements chapter, 2008, table 1, after
+/// Levinson and Akbari 2002, "Effects of composition and exposure on the
+/// solar reflectance of portland cement concrete", Cement and Concrete
+/// Research 32). The Marin pylons N1 and N2, the Marin housing, the piers
+/// and the fender are the 1930s board-formed concrete under salt fog: the
+/// weathered range's middle, 0.25. The San Francisco pylons S1 and S2 and the
+/// south housing were renewed in the Phase II retrofit (2001-2008): wrapped in
+/// steel plate under "a new concrete cover", the west wall "cast in forms
+/// replicating the original rough-lumber finish" (goldengate.org, "Seismic
+/// Retrofit Phase 2"; Construction Innovation Forum 2008): the weathered
+/// range's top, 0.30, for concrete cast some two decades ago (not new
+/// concrete's 0.35-0.40; how near white S1 reads in a photograph is the
+/// exposure's, not this albedo's). A solar albedo stands for the visible one (concrete's reflectance
+/// is near flat over the visible and near infrared); the chromaticity is the
+/// export's warm grey (#9B968C; the structure sheet's "light buff-grey").
+pub const CONCRETE2_LUMINANCE: f64 = 0.25;
+pub const CONCRETE2_SOUTH_LUMINANCE: f64 = 0.30;
+
+/// The Golden Gate's concrete colours (linear): the Marin side's (N1, N2, the
+/// Marin housing, the north pier's footing), the retrofit's south side's (S1,
+/// S2, the south housing) and the south pier's and the fender's. With
+/// `concrete2` each is its cited albedo (`CONCRETE2_LUMINANCE`, the piers and
+/// the fender the Marin side's: the cited range is weathered concrete's, so no
+/// further darkening); without it, round 2's: the export's grey, the pier and
+/// fender at `PIER_WEATHERED` of it.
+#[derive(Clone, Copy, Debug)]
+pub struct ConcreteColours {
+    pub marin: Rgb,
+    pub south: Rgb,
+    pub pier: Rgb,
+}
+pub fn concrete_colours(js: &LandmarksJs, features: &suspension::BridgeFeatures) -> ConcreteColours {
+    let grey = srgb_hex(hex(&data(js).dimensions, "concreteSrgb"));
+    if features.concrete2 {
+        let marin = weathered_concrete(grey, CONCRETE2_LUMINANCE);
+        ConcreteColours { marin, south: weathered_concrete(grey, CONCRETE2_SOUTH_LUMINANCE), pier: marin }
+    } else {
+        ConcreteColours { marin: grey, south: grey, pier: shade(grey, PIER_WEATHERED) }
+    }
+}
+
+/// The four rope legs' spacing across the bridge at a band
+/// (`cable_detail`): twice `cables::leg_half_across` on the export's cable
+/// and rope diameters (drawn at their real size, as round 2's wires are).
+pub fn suspender_leg_spacing_m(js: &LandmarksJs) -> f64 {
+    let d = &data(js).dimensions;
+    2.0 * cables::leg_half_across(num(d, "cableDiameterM"), CABLE_BAND_WALL_M, num(d, "suspenderDiameterM"))
+}
+
+/// The export's concrete at a luminance factor (Rec. 709 weights).
+pub fn weathered_concrete(c: Rgb, luminance: f64) -> Rgb {
+    let y = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    shade(c, luminance / y.max(1e-6))
+}
+
+/// The fifth pass's International Orange (`paint2`), linear: PMS 173's print
+/// chromaticity at `PAINT2_LUMINANCE` (Rec. 709 luminance weights).
+pub fn international_orange2() -> Rgb {
+    let c = srgb_hex(PMS_173_PRINT_SRGB);
+    let y = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    shade(c, PAINT2_LUMINANCE / y)
+}
 
 /// The structure's own scale on the drawn world: the drawn terrain's height
 /// scale with `BridgeFeatures::scale` (the plan is the ground plan's already),
@@ -286,6 +384,10 @@ struct Colours {
     asphalt: Rgb,
     sidewalk: Rgb,
     concrete: Rgb,
+    /// (`concrete2`) the south pylons' and the south housing's concrete, renewed in the retrofit.
+    concrete_south: Rgb,
+    /// The south pier's and the fender's concrete (`ConcreteColours::pier`).
+    pier: Rgb,
     barrier: Rgb,
     white: Rgb,
     yellow: Rgb,
@@ -319,6 +421,9 @@ struct Ctx<'a> {
     arch2: bool,
     fender2: bool,
     collar: bool,
+    /// The fifth pass's geometry (`leg_cells`, `cable_detail`).
+    leg_cells: bool,
+    cable_detail: bool,
 }
 
 /// A portal strut's casing (`BridgeFeatures::haunch`): which exported strut,
@@ -411,6 +516,40 @@ pub fn drawn_struts(js: &LandmarksJs) -> Vec<[f64; 3]> {
     out
 }
 
+/// The portal casings over the roadway as drawn (`haunch` with `detail`),
+/// for the casings' own sun shadow and sky occlusion past the shadow maps'
+/// reach (`leg_cells`; eo-render landmarks_surface.wgsl `lm_casing_shade`):
+/// each as (bottom, top, half its thickness along the span, half the clear
+/// width between the legs' inner faces at its foot), world heights; and the
+/// members that stand proud of its faces (the legs' faces by
+/// `CASING_SETBACK_M`, the lip, the ribs), as (legs' set-back, lip height,
+/// lip proud, rib proud, rib width, rib pitch), metres drawn. Empty when the
+/// casings are not drawn.
+pub fn drawn_casings(js: &LandmarksJs) -> (Vec<[f64; 4]>, [f64; 6]) {
+    let f = suspension::features();
+    let g = data(js);
+    let (w, h) = (js.sea_level_y, structure_scale());
+    let members = [CASING_SETBACK_M * h, CASING_LIP_M[0] * h, CASING_LIP_M[1] * h, RIB_M[1] * h, RIB_M[0] * h, RIB_M[2] * h];
+    if !(f.haunch && f.detail) {
+        return (Vec::new(), members);
+    }
+    let y_tower = w + num(&g.dimensions, "roadwayAtTowerM");
+    let hp = (g.tower_legs["south"].east[0] - g.tower_legs["south"].west[0]).hypot(g.tower_legs["south"].east[1] - g.tower_legs["south"].west[1]) / 2.0;
+    let out = portal_casings(&g, w, y_tower, h)
+        .iter()
+        .map(|p| {
+            // (the ribs' spacing is laid on the clear width at the casing's foot, as `portal_ribs` lays it)
+            let st = stage_at(&g, p.y0 - w);
+            [p.y0, p.y1, p.along / 2.0, hp - st[2] / 2.0]
+        })
+        .collect();
+    (out, members)
+}
+
+/// The portal casings' ribbing (`portal_ribs`), INFERRED: fin width, how
+/// proud, pitch, metres before the structure scale.
+const RIB_M: [f64; 3] = [1.2, 0.35, 3.0];
+
 /// `BridgeFeatures::bracing`: the bracing members' width along the span,
 /// "approximately the width of three cells, or 10 1/2 ft" (Strauss 1937).
 /// INFERRED: strut 5's top this far under the stiffening truss's bottom
@@ -475,7 +614,9 @@ impl Ctx<'_> {
                 for &[h0, h1, across, along] in stages {
                     let y1 = if h1 == top_h1 { num(d, "towerAboveWaterM") } else { h1 };
                     let faces = crate::geometry::Faces { top: true, bottom: h0 == foot_h0 };
-                    if self.detail {
+                    if self.detail && self.leg_cells {
+                        legs::cell_stage(orange, lx, lz, w + h0, w + y1, along / 2.0, across / 2.0, yaw, legs::cell_m(self.h), k.orange, faces);
+                    } else if self.detail {
                         suspension::notched_box(orange, lx, lz, w + h0, w + y1, along / 2.0, across / 2.0, yaw, k.orange, faces);
                     } else {
                         orange.box_(lx, lz, w + h0, w + y1, along / 2.0, across / 2.0, yaw, k.orange, faces);
@@ -601,7 +742,7 @@ impl Ctx<'_> {
     #[allow(clippy::too_many_arguments)]
     fn south_pier(&self, concrete: &mut MeshArrays, skirt: &mut MeshArrays, centre: [f64; 2], half_across: f64, half_along: f64, bed: f64, floor: f64, top: f64) {
         let h = self.h;
-        let colour = shade(self.k.concrete, PIER_WEATHERED);
+        let colour = self.k.pier;
         let ring = |inset: f64| -> Vec<[f64; 2]> {
             let (ha, hb) = (half_across - inset, half_along - inset);
             let end = hb * PIER_END_RATIO;
@@ -708,7 +849,7 @@ impl Ctx<'_> {
         let h = self.h;
         let stage = g.leg_stages.iter().find(|st| y0 - w >= st[0] && y0 - w < st[1]).unwrap_or(&g.leg_stages[g.leg_stages.len() - 1]);
         let clear = self.site.half_plane - stage[2] / 2.0;
-        let (fin_w, proud, pitch, lip) = (1.2 * h, 0.35 * h, 3.0 * h, 0.4 * h);
+        let (fin_w, proud, pitch, lip) = (RIB_M[0] * h, RIB_M[1] * h, RIB_M[2] * h, 0.4 * h);
         let n = ((2.0 * clear - fin_w) / pitch).floor().max(1.0) as i64;
         let first = -(n as f64) * pitch / 2.0;
         for side in [-1.0, 1.0] {
@@ -725,6 +866,23 @@ impl Ctx<'_> {
         let d = self.d;
         suspension::main_cables(wires, far, self.frame, &runs, &CableSpec { half_plane: self.site.half_plane, diameter: num(d, "cableDiameterM"), colour: self.k.orange, far_beams: !self.wires });
         let p = self.plan;
+        if self.cable_detail {
+            let attach = |c: f64| p.deck_top(c) - 0.5;
+            return cables::suspender_groups(
+                wires,
+                self.frame,
+                &runs,
+                &attach,
+                self.site.half_plane,
+                num(d, "suspenderSpacingM"),
+                num(d, "suspenderDiameterM"),
+                num(d, "cableDiameterM"),
+                CABLE_BAND_LEN_M,
+                CABLE_BAND_WALL_M,
+                [SOCKET_LEN_M, SOCKET_D_M],
+                self.k.orange,
+            );
+        }
         suspension::suspender_pairs(
             wires,
             self.frame,
@@ -1280,9 +1438,9 @@ impl Ctx<'_> {
                 suspension::saddle_housing(orange, self.tower_frame, tc, sgn * self.site.half_plane, top, last[3] / 2.0 * 0.92, last[2] / 2.0 * 0.95, SADDLE_PLINTH_M * h, k.orange);
             }
         }
-        // Cable bands and sockets.
+        // Cable bands and sockets (`cable_detail`: drawn with the four-leg groups, `cables`).
         let runs = self.cable_runs();
-        suspension::cable_bands(
+        if !self.cable_detail { suspension::cable_bands(
             wires,
             self.frame,
             &runs,
@@ -1298,7 +1456,7 @@ impl Ctx<'_> {
                 socket_d: SOCKET_D_M,
                 colour: k.orange,
             },
-        );
+        ); }
         // The pylons' pilasters: three proud strips on each column's two faces along the span and its outer face.
         for (name, [x, z, y0, y1, hx, hz, yaw], cap) in self.pylon_parts() {
             if cap || self.pylons {
@@ -1340,7 +1498,7 @@ impl Ctx<'_> {
             (ra, rb) = (FENDER_FT[0] * 0.3048 * gs / 2.0, FENDER_FT[1] * 0.3048 * gs / 2.0);
             wall = FENDER_FT[2] * 0.3048 * gs;
             fender_top = (FENDER_FT[3] * 0.3048 - pylons::MSL_OVER_MLLW_M) * h;
-            fender_colour = shade(k.concrete, PIER_WEATHERED);
+            fender_colour = k.pier;
         }
         let n = 64;
         let ring = |r_across: f64, r_along: f64| -> Vec<[f64; 2]> {
@@ -1372,6 +1530,10 @@ impl Ctx<'_> {
         // on the curb line, the arm reaching over the roadway; none where the curb passes a tower leg.
         let half = num(d, "roadwayM") / 2.0;
         let head = crate::lights::DECK_HEAD_M;
+        if self.cable_detail {
+            self.lamp_standards2(orange);
+            return;
+        }
         let mut c = p.c_start + crate::lights::DECK_PITCH_M / 2.0;
         while c < p.c_end {
             if !self.in_tower_zone(c - 2.0, c + 2.0) {
@@ -1501,6 +1663,31 @@ fn polyline_distance(x: f64, z: f64, pts: &[f64]) -> f64 {
     best
 }
 
+/// Half the deck's length either side of a tower's centre line where the
+/// curb passes the tower legs (the widest leg stage's half, and a metre).
+pub fn tower_zone_half(g: &GoldenGate) -> f64 {
+    g.leg_stages.iter().map(|s| s[3]).fold(f64::MIN, f64::max) / 2.0 + 1.0
+}
+
+/// The deck's lamp stations along the span (`cable_detail`): every
+/// `lights::gg_deck_pitch_m` from half a pitch past the structure's south
+/// end, none where the curb passes a tower's legs. The lamp standards stand
+/// there and lights.rs `bridge_lights` hangs the night's luminaires in their
+/// heads, so every luminaire has its standard.
+pub fn lamp_stations(g: &GoldenGate, plan: &Plan) -> Vec<f64> {
+    let (pitch, zone) = (crate::lights::gg_deck_pitch_m(), tower_zone_half(g));
+    let clear = |c: f64| [0.0, plan.l].iter().all(|&t| !(c + 2.0 > t - zone && c - 2.0 < t + zone));
+    let mut out = Vec::new();
+    let mut c = plan.c_start + pitch / 2.0;
+    while c < plan.c_end {
+        if clear(c) {
+            out.push(c);
+        }
+        c += pitch;
+    }
+    out
+}
+
 /// `buildGoldenGateBridge`.
 pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built {
     let features = suspension::features();
@@ -1514,7 +1701,8 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
     let offset = |c: f64| site.centre_offset(c);
     let mut frame = Frame::new(site.axis_point(0.0, 0.0), site.axis);
     frame.offset = Some(&offset);
-    let orange = srgb_hex(if features.paint { INTERNATIONAL_ORANGE_SRGB } else { hex(d, "orangeSrgb") });
+    let orange = if features.paint && features.paint2 { international_orange2() } else { srgb_hex(if features.paint { INTERNATIONAL_ORANGE_SRGB } else { hex(d, "orangeSrgb") }) };
+    let concrete = concrete_colours(js, &features);
     let k = Colours {
         orange,
         // `shade2`: every painted member in the one paint (the JS's 0.62 stood
@@ -1522,14 +1710,16 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
         orange_dark: if features.shade2 { orange } else { shade(orange, DARK) },
         asphalt: srgb_hex(hex(d, "asphaltSrgb")),
         sidewalk: srgb_hex(hex(d, "sidewalkSrgb")),
-        concrete: srgb_hex(hex(d, "concreteSrgb")),
+        concrete: concrete.marin,
+        concrete_south: concrete.south,
+        pier: concrete.pier,
         barrier: srgb_hex(hex(d, "barrierSrgb")),
         white: srgb_hex(hex(d, "whiteSrgb")),
         yellow: srgb_hex(hex(d, "yellowSrgb")),
     };
-    let tower_zone_half = g.leg_stages.iter().map(|s| s[3]).fold(f64::MIN, f64::max) / 2.0 + 1.0;
+    let tower_zone_half = tower_zone_half(g);
     let tower_frame = Frame::new(site.axis_point(0.0, 0.0), site.axis);
-    let ctx = Ctx { g, d, site: &site, plan: &plan, frame: &frame, tower_frame: &tower_frame, ground: &ground_at, k, yaw: site.axis[1].atan2(site.axis[0]), water: js.sea_level_y, tower_zone_half, h: structure_scale(), detail: features.detail, wires: features.wires, members: features.members, haunch: features.haunch, bracing: features.bracing, pylons: features.pylons, arch2: features.arch2, fender2: features.fender2, collar: features.collar };
+    let ctx = Ctx { g, d, site: &site, plan: &plan, frame: &frame, tower_frame: &tower_frame, ground: &ground_at, k, yaw: site.axis[1].atan2(site.axis[0]), water: js.sea_level_y, tower_zone_half, h: structure_scale(), detail: features.detail, wires: features.wires, members: features.members, haunch: features.haunch, bracing: features.bracing, pylons: features.pylons, arch2: features.arch2, fender2: features.fender2, collar: features.collar, leg_cells: features.leg_cells, cable_detail: features.cable_detail };
     let mut orange_m = MeshArrays::new("golden-gate-bridge:orange");
     let mut deck_m = MeshArrays::new("golden-gate-bridge:deck");
     let mut concrete_m = MeshArrays::new("golden-gate-bridge:concrete");

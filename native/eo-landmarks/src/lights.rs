@@ -6,7 +6,7 @@
 //! | Light | Where | Value | Source |
 //! | --- | --- | --- | --- |
 //! | Aviation obstruction lights | each tower leg's top, both bridges | 2,000 cd, aviation red, omni | FAA Advisory Circular 70/7460-1M, "Obstruction Marking and Lighting": the L-864 red obstruction beacon's night effective intensity, 2,000 cd. The beacon flashes (20-40 a minute); drawn steady here |
-//! | Deck luminaires | both roadway edges, Golden Gate deck and the Bay Bridge's upper deck | a full-cutoff street luminaire: 30 lux pool peak (eo_sky photometry `LAMP_POOL_PEAK_LUX`, the street lamps' own value) from a 10 m head, 3,000 cd at the nadir; the street lamp role's colour | INFERRED head (10 m, a usual highway pole of 30-40 ft) and pitch (50 m, 5 mounting heights, the usual highway spacing ratio); the lamp model is the street slice's |
+//! | Deck luminaires | both roadway edges, Golden Gate deck and the Bay Bridge's upper deck | a full-cutoff street luminaire: 30 lux pool peak (eo_sky photometry `LAMP_POOL_PEAK_LUX`, the street lamps' own value) from a 10 m head, 3,000 cd at the nadir; the street lamp role's colour | INFERRED head (10 m, a usual highway pole of 30-40 ft) and pitch (50 m, 5 mounting heights, the usual highway spacing ratio); the lamp model is the street slice's. The Golden Gate with `cable_detail`: the published 150 ft pitch on the ground plan (`gg_deck_pitch_m`), at the lamp standards' stations (none by the tower legs), in their heads |
 //! | Necklace lights | along the Bay Bridge west span's two main cables | 600 cd each, warm white (3,000 K), every 15 m | The west span's cable ("necklace") lights, strung on its suspension cables for the bridge's 50th anniversary in 1986. INFERRED: pitch and intensity (a 7,500 lm source radiating evenly, 7,500 / 4 pi = 600 cd; at 160 cd, a 2,000 lm lamp, the string did not show from the Embarcadero at the night exposure) |
 //!
 //! | Tower floodlights (`BridgeFeatures::night`) | the Golden Gate towers above the deck | 24 x 400 W HPS, 6 a leg at the sidewalk, aimed up; a flux-conserving mean on the legs (`gg_floodlit`) | goldengate.org "Color & Art Deco Styling" (24 sidewalk-level lights, lit 22 June 1987); ANSI C78.42 S51 (50,000 lm) |
@@ -31,6 +31,16 @@ pub const AVIATION_RED_CD: f64 = 2000.0;
 /// Deck luminaire head over the deck, and the pitch along it, metres (INFERRED).
 pub const DECK_HEAD_M: f64 = 10.0;
 pub const DECK_PITCH_M: f64 = 50.0;
+/// The Golden Gate's lamp posts, 1937: "150 ft, opposite each other on both
+/// sides" (Strauss 1937; 128 posts: goldengate.org, "Color & Art Deco
+/// Styling"), on the ground plan (`BridgeFeatures::cable_detail`).
+pub const GG_LAMP_PITCH_FT: f64 = 150.0;
+
+/// The Golden Gate deck luminaires' pitch: the published 150 ft on the ground
+/// plan with `cable_detail`, else `DECK_PITCH_M`.
+pub fn gg_deck_pitch_m() -> f64 {
+    if crate::suspension::features().cable_detail { GG_LAMP_PITCH_FT * 0.3048 * eo_data::groundscale::scale() } else { DECK_PITCH_M }
+}
 /// Necklace lamp intensity (candela) and pitch along a main cable (metres), INFERRED.
 pub const NECKLACE_CD: f64 = 600.0;
 pub const NECKLACE_PITCH_M: f64 = 15.0;
@@ -91,13 +101,28 @@ pub fn bridge_lights(js: &LandmarksJs, gg_ground: &GroundGrid, bb_ground: &Groun
     let ground = |x: f64, z: f64| gg_ground.at(x, z);
     let plan = crate::golden_gate::plan(js, &site, &ground);
     let half = crate::data::num(&g.dimensions, "roadwayM") / 2.0;
-    let mut c = plan.c_start + DECK_PITCH_M / 2.0;
-    while c < plan.c_end {
-        let y = plan.deck_top(c);
-        for s in [-half, half] {
-            out.push(deck_lamp(site.deck_point(c, s), y));
+    let curb = crate::data::num(&g.dimensions, "curbM");
+    if crate::suspension::features().cable_detail {
+        // (`cable_detail`) at the lamp standards' stations (none by the tower legs), each luminaire where its
+        // standard's head holds it (golden_gate.rs `lamp_stations`, `lamp_standard`).
+        let (across, up) = crate::golden_gate::lamp2_luminaire(DECK_HEAD_M);
+        for c in crate::golden_gate::lamp_stations(g, &plan) {
+            let y = plan.deck_top(c);
+            for s in [-half, half] {
+                let mut l = deck_lamp(site.deck_point(c, s.signum() * (half + crate::golden_gate::LAMP2_CURB_OFFSET_M - across)), y);
+                l.pos[1] = y + curb + up;
+                out.push(l);
+            }
         }
-        c += DECK_PITCH_M;
+    } else {
+        let mut c = plan.c_start + DECK_PITCH_M / 2.0;
+        while c < plan.c_end {
+            let y = plan.deck_top(c);
+            for s in [-half, half] {
+                out.push(deck_lamp(site.deck_point(c, s), y));
+            }
+            c += DECK_PITCH_M;
+        }
     }
     // The Bay Bridge west span: its towers' leg tops, its upper deck's edges, the necklace on its main cables.
     let b = &crate::bay_bridge::data(js);
