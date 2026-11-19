@@ -22,7 +22,7 @@
 use crate::hash::{hash01, lattice01};
 use crate::weather::{Kind, WeatherState};
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicU32, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, AtomicU8, Ordering};
 
 pub const SHEET_RES: usize = 256;
 /// World metres one sheet tile spans (sky-atmosphere.js tile sizes).
@@ -125,6 +125,76 @@ pub fn sheet_mips(level0: &[[u8; 4]]) -> Vec<Vec<[u8; 4]>> {
     out
 }
 
+/// The seed the renderer bakes its sheet with (eo-render sky.rs `update`).
+pub const SHEET_SEED: u32 = 0x5eed_c10d;
+
+/// A bilinear, wrapping read of channel `c` (0..1) of one sheet mip level,
+/// `res` texels square, at `uv` in tiles: what the GPU's linear, repeating
+/// sampler returns from that level.
+pub fn sheet_sample(level: &[[u8; 4]], res: usize, uv: [f64; 2], c: usize) -> f64 {
+    let (x, y) = (uv[0] * res as f64 - 0.5, uv[1] * res as f64 - 0.5);
+    let (x0, y0) = (x.floor(), y.floor());
+    let (fx, fy) = (x - x0, y - y0);
+    let n = res as i64;
+    let t = |i: f64, j: f64| level[(j as i64).rem_euclid(n) as usize * res + (i as i64).rem_euclid(n) as usize][c] as f64 / 255.0;
+    let a = t(x0, y0) + (t(x0 + 1.0, y0) - t(x0, y0)) * fx;
+    let b = t(x0, y0 + 1.0) + (t(x0 + 1.0, y0 + 1.0) - t(x0, y0 + 1.0)) * fx;
+    a + (b - a) * fy
+}
+
+/// The cirrus deck's cover field (sky_volume.wgsl `vol_cirrus2`): the high
+/// channel plus `edge` x the detail channel's departure from its middle (a
+/// zero-mean term that breaks a patch's edge), read in one sample. The values
+/// of it the shader can read at mip `lod`, sorted: four bilinear reads a texel
+/// each way, so the interpolation between texels is in the distribution.
+pub fn cirrus_cover_values(mips: &[Vec<[u8; 4]>], lod: usize, edge: f64) -> Vec<f64> {
+    let res = (SHEET_RES >> lod).max(1);
+    let n = res * 4;
+    let mut v: Vec<f64> = (0..n * n)
+        .map(|k| {
+            let uv = [((k % n) as f64 + 0.5) / n as f64, ((k / n) as f64 + 0.5) / n as f64];
+            sheet_sample(&mips[lod], res, uv, 1) + edge * (sheet_sample(&mips[lod], res, uv, 3) - 0.5)
+        })
+        .collect();
+    v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    v
+}
+
+/// The mips the cirrus cut has a row for (sky_volume.wgsl `VOL_CI2_CUT`): the
+/// shader reads the cover field at a mip of 1 to 4 by the pixel's footprint
+/// (mip 4's texel is 5 km across the wind, about the widest footprint the
+/// shader's grazing clamp gives; mips 5 and 6, 8 and 4 texels square, are too
+/// coarse for a quantile between eighths).
+pub const CIRRUS2_CUT_LODS: std::ops::RangeInclusive<usize> = 1..=4;
+
+/// The cirrus deck's cut: for each mip of `CIRRUS2_CUT_LODS` and each amount
+/// in eighths 0..8, the cover-field value over which the deck is: the
+/// quantile at `1 - eighths / 8` of the field at that mip, so that the deck is
+/// seen over its METAR share of the plane at every mip (box-filtered mips
+/// squeeze the field toward its middle, so one cut `1 - amount` for all of
+/// them covered more of the plane far away). No eighths: over the field's
+/// top; eight: `ramp` under its bottom, so the whole plane is fully in
+/// (`smoothstep(cut, cut + ramp, field)`).
+pub fn cirrus_cut_table(edge: f64, ramp: f64) -> Vec<[f64; 9]> {
+    let mips = sheet_mips(&bake_sheet(SHEET_SEED));
+    CIRRUS2_CUT_LODS
+        .map(|lod| {
+            let v = cirrus_cover_values(&mips, lod, edge);
+            let n = v.len();
+            let mut row = [0.0; 9];
+            for (k, r) in row.iter_mut().enumerate() {
+                *r = match k {
+                    // (a thousandth beyond the field, so the rounded table keeps it)
+                    0 => v[n - 1] + 1e-3,
+                    8 => v[0] - ramp - 1e-3,
+                    _ => v[((1.0 - k as f64 / 8.0) * n as f64).round() as usize],
+                };
+            }
+            row
+        })
+        .collect()
+}
+
 /// The decks for one weather.
 #[derive(Clone, Copy, Debug)]
 pub struct Decks {
@@ -149,10 +219,20 @@ pub struct Decks {
     pub marine_top_m: f64,
     pub marine_swing_m: f64,
     pub marine_drift: [f64; 2],
+    /// The second high deck, the cirrus (`--no-cirrus2`: none, the cirrus is
+    /// drawn in the high deck above): its height (m; 0 when off) and its
+    /// amount, the share of the sky it covers (the METAR eighths / 8) x its
+    /// fade (`Decks::cirrus`).
+    pub cirrus_alt_m: f64,
+    pub cirrus_amount: f64,
 }
 
-/// The second high deck (`Decks::cirrus`): its height (m) and the opacity of
-/// its densest streak.
+/// The second high deck (`Decks::cirrus`), as the sky uniform carries it
+/// (sky_common.wgsl `cirrus`, read by sky_volume.wgsl `vol_cirrus2`): its
+/// height (m; 0: no second deck, round 2's one high deck) and its opacity in
+/// the sense of the METAR sky cover, the share of the sky the deck hides: the
+/// cloud amount in eighths / 8 x its fade. How thick the cloud is where it
+/// covers is fixed (`CIRRUS_TAU`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CirrusDeck {
     pub alt_m: f64,
@@ -243,6 +323,54 @@ pub fn ksfo_clear_day_shares() -> &'static [[f64; 3]; 12] {
         t
     })
 }
+/// The KSFO cirrus-day amounts, generated by eo-look/data/ksfo-clear-day-sky.py
+/// --amount from the same METARs (see ksfo-cirrus-amount.NOTICE.txt): per
+/// month, the cirrus days by their high-cloud code FEW, SCT, BKN, OVC.
+const KSFO_CIRRUS_AMOUNT_CSV: &str = include_str!("../../eo-look/data/ksfo-cirrus-amount.csv");
+
+/// The eighths each METAR cover code stands for, the middle of its range:
+/// FEW 1-2 oktas, SCT 3-4, BKN 5-7, OVC 8 (WMO-No. 306, FM 15 METAR
+/// regulation 15.9.1.1; NWS Federal Meteorological Handbook No. 1, chapter 9).
+pub const COVER_OKTAS: [f64; 4] = [1.5, 3.5, 6.0, 8.0];
+
+/// The share of a month's cirrus days (January first) whose high cloud is
+/// FEW, SCT, BKN and OVC (`KSFO_CIRRUS_AMOUNT_CSV`).
+pub fn ksfo_cirrus_amounts() -> &'static [[f64; 4]; 12] {
+    static T: OnceLock<[[f64; 4]; 12]> = OnceLock::new();
+    T.get_or_init(|| {
+        let mut t = [[0.0; 4]; 12];
+        for l in KSFO_CIRRUS_AMOUNT_CSV.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#') && !l.starts_with("month")) {
+            let v: Vec<f64> = l.split(',').map(|x| x.trim().parse().expect("ksfo-cirrus-amount.csv: a number")).collect();
+            let n = v[1] + v[2] + v[3] + v[4];
+            t[v[0] as usize - 1] = [v[1] / n, v[2] / n, v[3] / n, v[4] / n];
+        }
+        t
+    })
+}
+
+/// The month's most frequent cirrus amount, eighths: a held cirrus sky (a
+/// shot's `sky`) without its own `sky_oktas`.
+pub fn modal_oktas(day_of_year: f64) -> f64 {
+    let a = ksfo_cirrus_amounts()[month_of(day_of_year)];
+    let k = (0..4).fold(0, |b, i| if a[i] > a[b] { i } else { b });
+    COVER_OKTAS[k]
+}
+
+/// A cirrus day's amount, eighths, drawn from the month's amounts with a hash
+/// of the date and the game day (as `drawn_state`).
+pub fn drawn_oktas(day_of_year: f64, game_day: u32) -> f64 {
+    let u = hash01(SKY_DRAW_SEED ^ 0x0c7a_5eed ^ game_day.wrapping_mul(0x9e37_79b9), day_of_year.floor().max(0.0) as u32, 29);
+    let a = ksfo_cirrus_amounts()[month_of(day_of_year)];
+    let mut acc = 0.0;
+    for k in 0..4 {
+        acc += a[k];
+        if u < acc {
+            return COVER_OKTAS[k];
+        }
+    }
+    COVER_OKTAS[3]
+}
+
 const MONTH_DAYS: [f64; 12] = [31.0, 28.0, 31.0, 30.0, 31.0, 30.0, 31.0, 31.0, 30.0, 31.0, 30.0, 31.0];
 
 /// The month (0 = January) of a day of a common year (1 = 1 January).
@@ -285,6 +413,21 @@ pub fn set_sky_state(s: Option<SkyState>) {
     STATE.store(SkyState::code(s), Ordering::Relaxed);
 }
 
+/// The held cirrus amount (eighths), as f64 bits; NaN: none.
+static OKTAS: AtomicU64 = AtomicU64::new(0x7ff8_0000_0000_0000);
+
+/// Hold a cirrus sky's amount in eighths (a shot's `sky_oktas`, from the day's
+/// METAR), or None (a held cirrus sky takes the month's most frequent,
+/// `modal_oktas`; a drawn one its own draw, `drawn_oktas`).
+pub fn set_sky_oktas(o: Option<f64>) {
+    OKTAS.store(o.map_or(f64::NAN, |v| v.clamp(0.0, 8.0)).to_bits(), Ordering::Relaxed);
+}
+
+/// The held cirrus amount, if any.
+pub fn held_sky_oktas() -> Option<f64> {
+    Some(f64::from_bits(OKTAS.load(Ordering::Relaxed))).filter(|v| !v.is_nan())
+}
+
 /// The held sky, if any.
 pub fn held_sky_state() -> Option<SkyState> {
     match STATE.load(Ordering::Relaxed) {
@@ -323,6 +466,101 @@ pub fn sky_state_for(w: &WeatherState) -> SkyState {
     sky_state(game_day_of(w))
 }
 
+/// The date a game day's clear sky is drawn for: the held date (a shot's), or
+/// the live calendar's date of that game day (eo-look `sun::date_of_game_day`;
+/// the game's 22 September with `--no-live-calendar`).
+pub fn draw_date(game_day: u32) -> f64 {
+    if eo_look::sun::day_held() { eo_look::sun::day_of_year() } else { eo_look::sun::date_of_game_day(game_day) }
+}
+
+/// A game day's clear sky and, on a cirrus day, its amount in eighths.
+pub fn day_sky(game_day: u32) -> (SkyState, f64) {
+    let date = draw_date(game_day);
+    if !eo_look::features::daylight().clear_sky_state {
+        return (SkyState::FairCumulus, 0.0);
+    }
+    let (state, oktas) = match held_sky_state() {
+        Some(s) => (s, held_sky_oktas().unwrap_or_else(|| modal_oktas(date))),
+        None => (drawn_state(date, game_day), held_sky_oktas().unwrap_or_else(|| drawn_oktas(date, game_day))),
+    };
+    (state, if state == SkyState::Cirrus { oktas } else { 0.0 })
+}
+
+/// The clear rung's sky as weights of its three states (they sum to 1) and
+/// the cirrus's amount (the share of the sky it covers, weighted the same):
+/// one state on most of a game day; across the world clock's night window
+/// (eo-look `sun::day_change`, quantised to `SKY_CHANGE_STEPS`) the game day's
+/// state gives way to the next one's.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SkyMix {
+    pub cloudless: f64,
+    pub cirrus: f64,
+    pub fair: f64,
+    pub cirrus_amount: f64,
+}
+
+/// The sky change's steps through its window (the look frame, and its decks,
+/// are made again on each: a 1/64 step of a faint deck's opacity is invisible).
+pub const SKY_CHANGE_STEPS: f64 = 64.0;
+
+impl SkyMix {
+    pub fn pure(state: SkyState, oktas: f64) -> Self {
+        let mut m = SkyMix { cloudless: 0.0, cirrus: 0.0, fair: 0.0, cirrus_amount: 0.0 };
+        m.add(state, oktas, 1.0);
+        m
+    }
+    fn add(&mut self, state: SkyState, oktas: f64, w: f64) {
+        match state {
+            SkyState::Cloudless => self.cloudless += w,
+            SkyState::Cirrus => {
+                self.cirrus += w;
+                self.cirrus_amount += w * oktas / 8.0;
+            }
+            SkyState::FairCumulus => self.fair += w,
+        }
+    }
+    /// The state with the most weight (the first of a tie, the game day's own).
+    pub fn dominant(&self) -> SkyState {
+        if self.cirrus > self.cloudless.max(self.fair) {
+            SkyState::Cirrus
+        } else if self.fair > self.cloudless {
+            SkyState::FairCumulus
+        } else {
+            SkyState::Cloudless
+        }
+    }
+}
+
+/// The clear rung's sky for a weather (`SkyMix`): a held sky or game day (a
+/// shot's) and `--no-sky-day-fade` give the game day's own state.
+pub fn sky_mix(w: &WeatherState) -> SkyMix {
+    let g = game_day_of(w);
+    let (s0, o0) = day_sky(g);
+    let held = held_sky_state().is_some() || GAME_DAY.load(Ordering::Relaxed) != u32::MAX;
+    if held || !eo_look::season::features().sky_day_fade {
+        return SkyMix::pure(s0, o0);
+    }
+    let f = (eo_look::sun::day_change(w.clock_s) * SKY_CHANGE_STEPS).round() / SKY_CHANGE_STEPS;
+    if f <= 0.0 {
+        return SkyMix::pure(s0, o0);
+    }
+    let (s1, o1) = day_sky(g.saturating_add(1));
+    let mut m = SkyMix { cloudless: 0.0, cirrus: 0.0, fair: 0.0, cirrus_amount: 0.0 };
+    m.add(s0, o0, 1.0 - f);
+    m.add(s1, o1, f);
+    m
+}
+
+/// What the look frame's decks depend on beyond the weather's own key
+/// (eo-render sky.rs `weather_key`): the sun's date and the clear sky's mix,
+/// quantised as they step. A look frame made under another key is stale (the
+/// hand-off to eo-render look.rs `frame` compares it).
+pub fn sky_key(w: &WeatherState) -> [i64; 5] {
+    let m = sky_mix(w);
+    let q = |v: f64| (v * 4096.0).round() as i64;
+    [q(eo_look::sun::day_of_year()), q(m.cloudless), q(m.cirrus), q(m.fair), q(m.cirrus_amount)]
+}
+
 /// How much a weather is the clear rung, 0..1: 1 under an overcast of 0.1,
 /// 0 from 0.3 (the rung's old hard edge), smooth between, so that the clear
 /// sky's state fades as the schedule's severity carries clear into fog
@@ -345,6 +583,9 @@ pub const CIRRUS_ALT_M: f64 = 9500.0;
 /// into an opacity, 1 - exp(-tau x the streak's shape) (sky_volume.wgsl
 /// `vol_cirrus`).
 pub const CIRRUS_TAU: f64 = 0.3;
+/// The cirrus deck's peak optical depth in the second deck (sky_volume.wgsl
+/// `VOL_CI2_TAU`): a sheet's core, the same thin-cirrus 0.3.
+pub const CIRRUS2_TAU: f64 = CIRRUS_TAU;
 /// The fair-weather high sheet's height (the port's 5.2 km), and the band
 /// above it that carries the sheet's fade while the clear sky's state
 /// changes: the deck uniform has one altitude and one opacity, and the
@@ -409,13 +650,22 @@ fn raw_decks(w: &WeatherState, smooth: bool) -> Decks {
         marine_top_m: marine_top,
         marine_swing_m: 110.0,
         marine_drift: [3.0 * dir[0], 3.0 * dir[1]],
+        cirrus_alt_m: 0.0,
+        cirrus_amount: 0.0,
     }
 }
 
 pub fn decks(w: &WeatherState) -> Decks {
     let f = eo_look::features::daylight();
     let wc = if f.clear_sky_state { clear_weight(w.profile.overcast) } else { 0.0 };
-    raw_decks(w, f.clear_sky_state).with_sky(wc, sky_state_for(w), f.cirrus)
+    let m = sky_mix(w);
+    if eo_look::season::features().cirrus2 {
+        raw_decks(w, f.clear_sky_state).with_sky_mix(wc, m, f.cirrus)
+    } else {
+        // round 2's one high deck draws one state: across a day's change, the
+        // one with the most weight
+        raw_decks(w, f.clear_sky_state).with_sky(wc, m.dominant(), f.cirrus)
+    }
 }
 
 impl Decks {
@@ -450,11 +700,38 @@ impl Decks {
         self
     }
 
-    /// The second high deck (the cirrus beside the 5.2 km sheet, so the two
-    /// can cross-fade each at its own height): none yet, opacity 0 at
-    /// `CIRRUS_ALT_M`. The sky uniform carries it; nothing draws it.
+    /// The clear rung's sky as a mix of its states (`SkyMix`), with the
+    /// cirrus in its own deck (`--no-cirrus2` keeps `with_sky`): by how much
+    /// the weather is that rung (`wc`), the cloudless and cirrus shares take
+    /// the low deck and the 5.2 km sheet away, each sheet at its own height,
+    /// and the cirrus share brings the cirrus deck in at its METAR amount. The
+    /// sheet's opacity floor (sky_volume.wgsl's fair branch, `0.10` while the
+    /// low cover is under 0.3) is applied here, before the fade, and the
+    /// shader takes the opacity as it is when the second deck is on. Every
+    /// field is continuous in `wc` and in the mix.
+    pub fn with_sky_mix(mut self, wc: f64, m: SkyMix, cirrus: bool) -> Self {
+        let wc = wc.clamp(0.0, 1.0);
+        let (gone_ci, amount) = if cirrus { (m.cirrus, m.cirrus_amount) } else { (0.0, 0.0) };
+        let gone = (wc * (m.cloudless + gone_ci)).clamp(0.0, 1.0);
+        let raw_cover = self.coverage;
+        self.coverage *= 1.0 - gone;
+        if self.high_opacity > 0.0 && raw_cover > 0.0 {
+            let ci = ((0.3 - self.coverage) / 0.3).clamp(0.0, 1.0);
+            self.high_opacity = self.high_opacity.max(0.10 * ci) * (1.0 - gone);
+        } else {
+            // (the volume pass draws no high sheet without a low cover)
+            self.high_opacity = 0.0;
+        }
+        self.cirrus_alt_m = CIRRUS_ALT_M;
+        self.cirrus_amount = (wc * amount).clamp(0.0, 1.0);
+        self
+    }
+
+    /// The second high deck (the cirrus beside the 5.2 km sheet, each at its
+    /// own height): `CIRRUS_ALT_M` and the amount with `with_sky_mix`; height
+    /// 0 (none: the shader's round-2 high deck) otherwise.
     pub fn cirrus(&self) -> CirrusDeck {
-        CirrusDeck { alt_m: CIRRUS_ALT_M, opacity: 0.0 }
+        CirrusDeck { alt_m: self.cirrus_alt_m, opacity: self.cirrus_amount }
     }
 
     /// The fair sheet at `f` (0..1) of its opacity (`FADE_BAND_M`).
@@ -467,20 +744,231 @@ impl Decks {
     }
 }
 
-/// Where the drift has moved a deck at `world_s`, wrapped to the tile (so
-/// the GPU's f32 offset stays small).
+/// The high deck's drift wraps here with the second deck on (`--no-cirrus2`: at
+/// `HIGH_TILE_M`): a whole number of every tile the second deck and the 5.2 km
+/// sheet read along the wind (x) and across it (z) (sky_volume.wgsl `VOL_CI2_*`,
+/// `SKY_HIGH_TILE`), so the wrap moves no texture. At the tile itself the deck
+/// jumped every 10 km of drift (9 minutes at 18 m/s): the textures are read
+/// stretched and, in round 2, turned. (In f32 the offset keeps 1 cm.)
+pub const CIRRUS2_WRAP_M: f64 = 160_000.0;
+
+/// Where the drift has moved a deck at `world_s`, wrapped to the tile (so the
+/// GPU's f32 offset stays small); the high deck at `CIRRUS2_WRAP_M` with the
+/// second deck on.
 pub fn drift_offset(drift: [f64; 2], world_s: f64, tile_m: f64) -> [f64; 2] {
+    let tile_m = if tile_m == HIGH_TILE_M && eo_look::season::features().cirrus2 { CIRRUS2_WRAP_M } else { tile_m };
     [(drift[0] * world_s).rem_euclid(tile_m), (drift[1] * world_s).rem_euclid(tile_m)]
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A `const NAME: f32 = v;` of sky_volume.wgsl.
+    fn wgsl_const(name: &str) -> f64 {
+        let wgsl = include_str!("../../eo-render/src/sky_volume.wgsl");
+        let l = wgsl.lines().find(|l| l.starts_with(&format!("const {name}: f32 = "))).unwrap_or_else(|| panic!("{name} in sky_volume.wgsl"));
+        l.split('=').nth(1).unwrap().trim().trim_end_matches(';').parse().unwrap()
+    }
+
+    /// sky_volume.wgsl's `VOL_CI2_CUT` table, row by row.
+    fn wgsl_cut() -> Vec<f64> {
+        let wgsl = include_str!("../../eo-render/src/sky_volume.wgsl");
+        let at = wgsl.find("const VOL_CI2_CUT").expect("VOL_CI2_CUT in sky_volume.wgsl");
+        let body = &wgsl[at..];
+        let body = &body[body.find(">(").unwrap() + 2..body.find(");").unwrap()];
+        body.split(',').map(str::trim).filter(|s| !s.is_empty()).map(|s| s.parse().unwrap()).collect()
+    }
+
+    /// The shader's cut (`vol_ci2_cut`) at an amount 0..1 and a mip.
+    fn shader_cut(t: &[f64], amt: f64, lod: f64) -> f64 {
+        let a = amt.clamp(0.0, 1.0) * 8.0;
+        let k = (a as usize).min(7);
+        let fa = a - k as f64;
+        let l = lod.clamp(1.0, 4.0) - 1.0;
+        let r = (l as usize).min(2);
+        let fl = l - r as f64;
+        let (i0, i1) = (r * 9 + k, (r + 1) * 9 + k);
+        let t0 = t[i0] + (t[i0 + 1] - t[i0]) * fa;
+        let t1 = t[i1] + (t[i1 + 1] - t[i1]) * fa;
+        t0 + (t1 - t0) * fl
+    }
+
     #[test]
-    fn the_second_high_deck_is_empty_for_now() {
-        for k in [crate::Kind::Clear, crate::Kind::Overcast, crate::Kind::Rain] {
-            let c = decks(&crate::weather::preset(k)).cirrus();
-            assert_eq!(c, CirrusDeck { alt_m: CIRRUS_ALT_M, opacity: 0.0 });
+    fn the_cirrus_covers_its_metar_share_of_the_plane() {
+        let (edge, ramp) = (wgsl_const("VOL_CI2_EDGE"), wgsl_const("VOL_CI2_RAMP"));
+        let table = cirrus_cut_table(edge, ramp);
+        // the shader's table is this bake's (printed for pasting when the bake or the constants change)
+        let printed: Vec<String> = table.iter().map(|r| r.iter().map(|v| format!("{v:.4}")).collect::<Vec<_>>().join(", ")).collect();
+        let t = wgsl_cut();
+        assert_eq!(t.len(), table.len() * 9, "VOL_CI2_CUT rows:\n{}", printed.join(",\n"));
+        for (i, v) in table.iter().flatten().enumerate() {
+            assert!((t[i] - v).abs() < 1e-3, "VOL_CI2_CUT[{i}] {} against the bake's {v}; rows:\n{}", t[i], printed.join(",\n"));
+        }
+        // the renderer bakes this seed
+        assert!(include_str!("../../eo-render/src/sky.rs").contains("bake_sheet(0x5eed_c10d)"));
+        // integrated over the tile at each mip, through the shader's interpolated cut: FEW, SCT, BKN
+        // are seen over their share of the plane (cover > 0), and the mean cover is under it
+        let mips = sheet_mips(&bake_sheet(SHEET_SEED));
+        for lod in CIRRUS2_CUT_LODS {
+            let v = cirrus_cover_values(&mips, lod, edge);
+            let n = v.len() as f64;
+            for oktas in COVER_OKTAS[..3].iter().copied().chain([1.0, 2.0, 4.0]) {
+                let amt = oktas / 8.0;
+                let thr = shader_cut(&t, amt, lod as f64);
+                let seen = v.iter().filter(|x| **x > thr).count() as f64 / n;
+                let mean = v
+                    .iter()
+                    .map(|x| {
+                        let s = ((x - thr) / ramp).clamp(0.0, 1.0);
+                        s * s * (3.0 - 2.0 * s)
+                    })
+                    .sum::<f64>()
+                    / n;
+                assert!((seen - amt).abs() < 0.02, "mip {lod}, {oktas} oktas: seen over {seen}");
+                assert!(mean <= amt && mean > 0.5 * amt, "mip {lod}, {oktas} oktas: mean cover {mean}");
+            }
+            // none and all
+            assert_eq!(v.iter().filter(|x| **x > shader_cut(&t, 0.0, lod as f64)).count(), 0);
+            assert!(v.iter().all(|x| *x >= shader_cut(&t, 1.0, lod as f64) + ramp));
+        }
+        // between two mips the interpolated cut stays within the two mips' shares
+        let v1 = cirrus_cover_values(&mips, 1, edge);
+        let v2 = cirrus_cover_values(&mips, 2, edge);
+        let thr = shader_cut(&t, 1.5 / 8.0, 1.5);
+        let s1 = v1.iter().filter(|x| **x > thr).count() as f64 / v1.len() as f64;
+        let s2 = v2.iter().filter(|x| **x > thr).count() as f64 / v2.len() as f64;
+        assert!((0.5 * (s1 + s2) - 1.5 / 8.0).abs() < 0.02, "mip 1.5: {s1} / {s2}");
+    }
+
+    #[test]
+    fn the_second_high_deck_carries_the_cirrus() {
+        let w = crate::weather::preset(Kind::Clear);
+        let d = raw_decks(&w, true);
+        // round 2's path: no second deck
+        assert_eq!(d.with_sky(1.0, SkyState::Cirrus, true).cirrus(), CirrusDeck { alt_m: 0.0, opacity: 0.0 });
+        // a held SCT cirrus day: the cirrus at its height with 3.5 / 8 of the sky, no sheet, no low deck
+        let ci = d.with_sky_mix(1.0, SkyMix::pure(SkyState::Cirrus, 3.5), true);
+        assert_eq!(ci.cirrus(), CirrusDeck { alt_m: CIRRUS_ALT_M, opacity: 3.5 / 8.0 });
+        assert_eq!((ci.coverage, ci.high_opacity, ci.high_alt_m), (0.0, 0.0, FAIR_HIGH_ALT_M));
+        // a fair day keeps the round-2 decks (the sheet's floor applied on the CPU)
+        let fair = d.with_sky_mix(1.0, SkyMix::pure(SkyState::FairCumulus, 0.0), true);
+        let ci0 = ((0.3 - d.coverage) / 0.3).clamp(0.0, 1.0);
+        assert_eq!((fair.coverage, fair.high_alt_m, fair.cirrus().opacity), (d.coverage, FAIR_HIGH_ALT_M, 0.0));
+        assert!((fair.high_opacity - d.high_opacity.max(0.10 * ci0)).abs() < 1e-12);
+        // cloudless: nothing
+        let none = d.with_sky_mix(1.0, SkyMix::pure(SkyState::Cloudless, 0.0), true);
+        assert_eq!((none.coverage, none.high_opacity, none.cirrus().opacity), (0.0, 0.0, 0.0));
+        // --no-cirrus: a cirrus day is the fair sky
+        let off = d.with_sky_mix(1.0, SkyMix::pure(SkyState::Cirrus, 3.5), false);
+        assert_eq!((off.coverage, off.high_opacity, off.cirrus().opacity), (fair.coverage, fair.high_opacity, 0.0));
+        // other weathers: the sheet as round 2 drew it, no cirrus
+        for k in [Kind::Overcast, Kind::Fog, Kind::Rain] {
+            let w = crate::weather::preset(k);
+            let r = raw_decks(&w, true);
+            let m = r.with_sky_mix(clear_weight(w.profile.overcast), SkyMix::pure(SkyState::Cirrus, 6.0), true);
+            let ci = ((0.3 - r.coverage) / 0.3).clamp(0.0, 1.0);
+            assert_eq!((m.coverage, m.cirrus().opacity), (r.coverage, 0.0), "{k:?}");
+            assert!((m.high_opacity - if r.high_opacity > 0.0 { r.high_opacity.max(0.10 * ci) } else { 0.0 }).abs() < 1e-12, "{k:?}");
+        }
+    }
+
+    #[test]
+    fn the_second_deck_drifts_without_a_jump() {
+        // every tile the second deck and its 5.2 km sheet read is a whole part of the wrap
+        let wgsl = include_str!("../../eo-render/src/sky_volume.wgsl");
+        let c = |name: &str| -> f64 {
+            let l = wgsl.lines().find(|l| l.starts_with(&format!("const {name}: f32 = "))).unwrap_or_else(|| panic!("{name} in sky_volume.wgsl"));
+            l.split('=').nth(1).unwrap().trim().trim_end_matches(';').parse().unwrap()
+        };
+        let whole = |a: f64| (a - a.round()).abs() < 1e-9 && a.round() >= 1.0;
+        for k in ["ENV", "BODY", "BEND", "FIBRE"] {
+            let (m, x) = (c(&format!("VOL_CI2_{k}_M")), c(&format!("VOL_CI2_{k}_X")));
+            assert!(whole(CIRRUS2_WRAP_M / (m * x)), "{k} along: {} m", m * x);
+            assert!(whole(CIRRUS2_WRAP_M / m), "{k} across: {m} m");
+        }
+        assert!(whole(CIRRUS2_WRAP_M / (HIGH_TILE_M / 0.5)) && whole(CIRRUS2_WRAP_M / HIGH_TILE_M));
+        // the wrap: (the process's features have the second deck on)
+        let d = [DRIFT_HIGH_MS, 2.0];
+        let a = drift_offset(d, CIRRUS2_WRAP_M / DRIFT_HIGH_MS - 0.5, HIGH_TILE_M);
+        assert!(a[0] > CIRRUS2_WRAP_M - 10.0, "{a:?}");
+        // the low deck keeps its own tile
+        assert!(drift_offset([7.0, 0.0], 1000.0, LOW_TILE_M)[0] < LOW_TILE_M);
+    }
+
+    #[test]
+    fn the_cirrus_amounts_come_from_the_metars() {
+        let t = ksfo_cirrus_amounts();
+        for (m, a) in t.iter().enumerate() {
+            assert!((a.iter().sum::<f64>() - 1.0).abs() < 1e-9, "month {m}: {a:?}");
+        }
+        // the generated table: April 38 / 54 / 49 / 1, June 50 / 33 / 20 / 0
+        assert!((t[3][1] - 54.0 / 142.0).abs() < 1e-12);
+        // the photographs' months: April's most frequent is SCT (the headland's METAR: SCT200),
+        // June's FEW (Crissy's: FEW200)
+        assert_eq!(modal_oktas(103.0), 3.5);
+        assert_eq!(modal_oktas(157.0), 1.5);
+        // the draws follow the month's amounts
+        let n = 4000;
+        let few = (0..n).filter(|g| drawn_oktas(265.0, *g) == 1.5).count() as f64 / n as f64;
+        assert!((few - t[8][0]).abs() < 0.03, "{few} against {}", t[8][0]);
+        assert!(COVER_OKTAS.windows(2).all(|p| p[0] < p[1]) && COVER_OKTAS[3] == 8.0);
+    }
+
+    /// A clock `h` hours into game day `d`.
+    fn clock(d: u32, h: f64) -> f64 {
+        d as f64 * 86400.0 + h * 3600.0
+    }
+
+    #[test]
+    fn a_clear_day_gives_way_to_the_next_over_the_night() {
+        // two neighbouring game days with different skies (on the live calendar's dates)
+        let g = (0..200).find(|g| day_sky(*g).0 != day_sky(g + 1).0).expect("a change of sky");
+        let w = |t: f64| WeatherState { day: crate::weather::game_day(t), clock_s: t, ..crate::weather::preset(Kind::Clear) };
+        // the day's own sky until the window, the next day's from midnight
+        assert_eq!(sky_mix(&w(clock(g, 12.0))), SkyMix::pure(day_sky(g).0, day_sky(g).1));
+        assert_eq!(sky_mix(&w(clock(g, 20.9))), SkyMix::pure(day_sky(g).0, day_sky(g).1));
+        assert_eq!(sky_mix(&w(clock(g + 1, 0.0))), SkyMix::pure(day_sky(g + 1).0, day_sky(g + 1).1));
+        // through the window no drawn field steps by more than a small amount
+        let raw = raw_decks(&crate::weather::preset(Kind::Clear), true);
+        let drawn = |t: f64| {
+            let d = raw.with_sky_mix(1.0, sky_mix(&w(t)), true);
+            (d.coverage, d.high_opacity, d.cirrus().opacity)
+        };
+        let mut prev = drawn(clock(g, 20.0));
+        let mut moved = 0.0;
+        for k in 1..=5 * 360 {
+            let t = clock(g, 20.0) + k as f64 * 10.0;
+            let d = drawn(t);
+            let step = (d.0 - prev.0).abs().max((d.1 - prev.1).abs()).max((d.2 - prev.2).abs());
+            assert!(step < 0.02, "a step of {step} at {t} s: {prev:?} -> {d:?}");
+            moved += step;
+            prev = d;
+        }
+        assert!(moved > 0.01, "the sky did not change across the night: {moved}");
+        // with the fade held off by a shot's game day: the day's own sky throughout
+        set_game_day(Some(g));
+        assert_eq!(sky_mix(&w(clock(g, 22.5))), SkyMix::pure(day_sky(g).0, day_sky(g).1));
+        set_game_day(None);
+    }
+
+    #[test]
+    fn the_second_deck_fades_with_the_weather_without_a_jump() {
+        for m in [SkyMix::pure(SkyState::Cloudless, 0.0), SkyMix::pure(SkyState::Cirrus, 6.0), SkyMix::pure(SkyState::FairCumulus, 0.0)] {
+            let at = |s: f64| {
+                let p = crate::weather::profile_for_severity(s);
+                let w = WeatherState { severity: s, profile: p, ..crate::weather::preset(Kind::Clear) };
+                raw_decks(&w, true).with_sky_mix(clear_weight(p.overcast), m, true)
+            };
+            let mut prev = at(0.0);
+            for k in 1..=1000 {
+                let d = at(k as f64 * 0.001);
+                assert!((d.coverage - prev.coverage).abs() < 0.01, "{m:?} at {k}");
+                assert!((d.high_opacity - prev.high_opacity).abs() < 0.01, "{m:?} at {k}: sheet {} -> {}", prev.high_opacity, d.high_opacity);
+                assert!((d.cirrus().opacity - prev.cirrus().opacity).abs() < 0.01, "{m:?} at {k}: cirrus");
+                assert_eq!(d.high_alt_m, FAIR_HIGH_ALT_M);
+                prev = d;
+            }
         }
     }
 
