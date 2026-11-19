@@ -41,7 +41,7 @@ use crate::rng::hash_seed;
 use std::collections::BTreeMap;
 
 /// Bump when the boundary, palette or rule changes (part of the kit cache key).
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 
 /// OSM relation 8346137 (Presidio of San Francisco), Nominatim's 0.001
 /// degree simplification: (lon, lat), closed.
@@ -61,7 +61,10 @@ pub const BOUNDARY_LON_LAT: [(f64, f64); 12] = [
 ];
 
 /// The off-white and cream the post was repainted in (sRGB albedo targets,
-/// weights). Original values in the range the sources name; under the primer.
+/// weights). INFERRED: the sources name the colours ("off-white", "white",
+/// cream stucco) but give no numbers; these are pale near-neutrals chosen to
+/// read as those words (OKLab L above 0.88, a slight warm cast for cream and
+/// weathering) and to fit under the kit's primer, as the city's paint does.
 pub const PALETTE: [([u8; 3], f32); 4] = [
     ([238, 236, 228], 4.0), // off-white
     ([234, 228, 212], 2.5), // cream
@@ -127,6 +130,16 @@ pub fn inside(ring: &[[f64; 2]], x: f64, z: f64) -> bool {
         j = i;
     }
     c
+}
+
+/// Whether a record is on the post: listed in `OVERRIDES`, or its footprint
+/// centroid (plan x, z) is inside `ring`. The listed records are taken by id
+/// because the simplified ring is coarse at the shore: the Warming Hut's
+/// centroid falls about 19 m (plan) north of the ring's edge from
+/// (-122.4632, 37.8051) to (-122.4778, 37.8110), on the Crissy Field shore
+/// the relation itself includes.
+pub fn on_post(ring: &[[f64; 2]], record_id: &str, x: f64, z: f64) -> bool {
+    OVERRIDES.iter().any(|o| o.0 == record_id) || inside(ring, x, z)
 }
 
 /// The boundary on the drawn ground plan (game x, z) of `city`.
@@ -241,10 +254,9 @@ mod tests {
 
     #[test]
     fn on_the_post_walls_turn_off_white_and_low_roofs_red_tile() {
+        crate::wall_paint::pin(true);
         pin(true);
-        if !enabled() {
-            return; // the wall paint is off in this environment
-        }
+        assert!(enabled());
         let mut m: BTreeMap<String, String> = [("wall".to_string(), "painted-stucco".to_string()), ("roof".to_string(), "membrane-roof".to_string())].into();
         let mut t = Tints::new();
         assert!(apply(true, "sf-building-1", "bay-window-apartment", 2.0, 7, &mut m, &mut t));

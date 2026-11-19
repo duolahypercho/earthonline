@@ -49,13 +49,14 @@ impl KitCity {
         let streets = StreetIndex::build(city.roads.iter().map(|r| (r.highway.as_str(), r.points64.as_slice())));
         let occlusion = OcclusionIndex::build(records.iter().enumerate().map(|(i, r)| (i as u32, r.polygon.clone(), r.height)));
         let excluded = records.iter().enumerate().filter(|(_, r)| exclusions.contains(&r.id)).map(|(i, _)| i).collect();
-        // the Presidio rule's records: the footprint's centroid inside the post's boundary (presidio.rs)
+        // the Presidio rule's records: the footprint's centroid inside the post's
+        // boundary, or a record the rule documents by id (presidio.rs `on_post`)
         let mut records = records;
         let ring = crate::presidio::boundary(&city.meta);
         for r in records.iter_mut() {
             let n = r.polygon.len().max(1) as f64;
             let (x, z) = r.polygon.iter().fold((0.0, 0.0), |a, p| (a.0 + p.x, a.1 + p.z));
-            r.presidio = crate::presidio::inside(&ring, x / n, z / n);
+            r.presidio = crate::presidio::on_post(&ring, &r.id, x / n, z / n);
         }
         Self { world: KitWorld { streets, occlusion }, records, excluded, build_ms: t.elapsed().as_secs_f64() * 1e3 }
     }
