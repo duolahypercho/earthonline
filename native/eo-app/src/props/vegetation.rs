@@ -123,6 +123,99 @@ pub fn lon_lat(x: f64, z: f64) -> (f64, f64) {
     (f.center_lon + x / (f.m_per_deg_lon * s), f.center_lat - z / (f.m_per_deg_lat * s))
 }
 
+/// The NAIP tiles' true geometry. Each tile was cut by the image service's
+/// `exportImage` from a box 2048 x `GRID.dlon` wide by 2048 x `GRID.dlat`
+/// high into 2048 x 2048 pixels, and the service keeps a pixel square in
+/// degrees: it widened each box north-south about its centre, so a tile's
+/// pixel is `GRID.dlon` degrees in latitude too and neighbouring tile rows
+/// overlap by 2048 (1 - dlat / dlon) = 424 rows. Measured: tile r001's first
+/// row is tile r000's row 1624 (mean absolute difference 1.5 grey levels over
+/// 60 x 800 pixels; the same 1624 between r001/r002 and r002/r003), as the
+/// widening predicts. The seam's `GRID.pixel` reads latitude with `GRID.dlat`
+/// (up to 212 rows, 160 m, off at a tile's north and south edges; hand-off
+/// to the survey reader's owner): this finds the right pixel and names it in
+/// `GRID`'s rows so `Naip::sample_rgb` reads it. (column, row) or None outside
+/// the delivered tile rows.
+pub fn naip_pixel(lon: f64, lat: f64) -> Option<(i64, i64)> {
+    use eo_farshore::survey::naip::GRID;
+    let n = GRID.tile as f64;
+    let tile_lat = n * GRID.dlat;
+    let t = ((GRID.north - lat) / tile_lat).floor();
+    let c = ((lon - GRID.west) / GRID.dlon).floor();
+    if t < 0.0 || t >= GRID.rows as f64 || c < 0.0 || c >= (GRID.cols * GRID.tile) as f64 {
+        return None;
+    }
+    let centre = GRID.north - (t + 0.5) * tile_lat;
+    let r = (n / 2.0 + (centre - lat) / GRID.dlon).floor().clamp(0.0, n - 1.0);
+    Some((c as i64, t as i64 * GRID.tile as i64 + r as i64))
+}
+
+/// The NAIP pixel's north-south size on the ground (m): `GRID.dlon` degrees
+/// of latitude (see [`naip_pixel`]), 0.754 m; east-west it is 0.6 m.
+pub const NAIP_ROW_M: f64 = 6.816516843464343e-06 * 110_574.0;
+pub const NAIP_COL_M: f64 = 0.6;
+
+/// A NAIP box of `side` game metres at ground-plan scale `scale`: (columns,
+/// rows), each odd, 1 to 15.
+pub fn naip_box(side: f64, scale: f64) -> (i64, i64) {
+    let odd = |v: f64| {
+        let k = (v.round() as i64).clamp(1, 15);
+        if k % 2 == 0 { k + 1 } else { k }
+    };
+    let real = side / scale;
+    (odd(real / NAIP_COL_M), odd(real / NAIP_ROW_M))
+}
+
+/// The NAIP shares (`eo_landmarks::vegetation::naip_shares`) in a box of
+/// side `side` game metres round (x, z) on ground of `slope_deg`: odd in
+/// columns and rows ([`naip_box`]) about the pixel holding (x, z), with the
+/// two-pixel margin the classifier's 5 x 5 brightness reads (None outside the
+/// image). The planting reads it; so can the terrain's tone.
+pub fn naip_shares_at(n: &eo_farshore::survey::naip::Naip, x: f64, z: f64, side: f64, slope_deg: f64) -> Option<eo_landmarks::vegetation::Naip> {
+    let (lon, lat) = lon_lat(x, z);
+    let (c0, r0) = naip_pixel(lon, lat)?;
+    let (kc, kr) = naip_box(side, eo_data::groundscale::scale());
+    let (w, h) = (kc + 4, kr + 4);
+    let mut px = Vec::with_capacity((w * h) as usize);
+    for j in 0..h {
+        for i in 0..w {
+            px.push(naip_rgb(n, c0 + i - w / 2, r0 + j - h / 2));
+        }
+    }
+    if px.iter().filter(|p| p.is_some()).count() < px.len() / 2 {
+        return None;
+    }
+    eo_landmarks::vegetation::naip_shares(&px, w as usize, h as usize, slope_deg)
+}
+
+/// Whether the survey reader's `GRID.pixel` already reads the widened tiles
+/// (the hand-off applied): it then agrees with [`naip_pixel`] at tile r001's
+/// first row, which the unwidened grid puts 157 rows away.
+fn reader_registered() -> bool {
+    use eo_farshore::survey::naip::GRID;
+    let lon = GRID.west + 100.5 * GRID.dlon;
+    let lat = GRID.north - 1.5 * GRID.tile as f64 * GRID.dlat + 1023.5 * GRID.dlon;
+    GRID.pixel(lon, lat).map(|(c, r)| (c as i64, r as i64)) == naip_pixel(lon, lat)
+}
+
+/// One NAIP pixel by its (column, `GRID` row) of [`naip_pixel`] (None outside the image).
+fn naip_rgb(n: &eo_farshore::survey::naip::Naip, c: i64, r: i64) -> Option<[u8; 3]> {
+    use eo_farshore::survey::naip::GRID;
+    static REGISTERED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if c < 0 || r < 0 {
+        return None;
+    }
+    let lon = GRID.west + (c as f64 + 0.5) * GRID.dlon;
+    let lat = if *REGISTERED.get_or_init(reader_registered) {
+        // the pixel's true latitude: its tile's centre, square pixels of dlon degrees.
+        let (t, rr) = ((r / GRID.tile as i64) as f64, (r % GRID.tile as i64) as f64);
+        GRID.north - (t + 0.5) * GRID.tile as f64 * GRID.dlat + (GRID.tile as f64 / 2.0 - rr - 0.5) * GRID.dlon
+    } else {
+        GRID.north - (r as f64 + 0.5) * GRID.dlat
+    };
+    n.sample_rgb(lon, lat)
+}
+
 /// The annual grass's colour on the season model's day (linear): the far
 /// layer's green and cured-grass albedos (`eo_render::farshore`) mixed by
 /// `eo_look::season::current()`, mottled +-15 % as the far land's tone is.
@@ -214,6 +307,12 @@ impl VegGround {
                 }
             }
         }
+        // the shore distance the coastal trees' species mix and the trees' sand test read
+        // (eo_landmarks::vegetation: the first install wins; the far tier estimates it
+        // from the drawn sea until then, eo-render hlod_trees `shore_estimate`).
+        if let Some(w) = water.clone() {
+            eo_landmarks::vegetation::install_shore_distance(Box::new(move |x, z| w.field.signed_at(x, z).abs()));
+        }
         let presidio_ring = presidio_ring(repo_root);
         if presidio_ring.is_none() {
             eprintln!("vegetation: the Presidio's park polygon not found in the greens; its coastal stands follow the mapped woods only");
@@ -250,10 +349,11 @@ impl VegGround {
             let class = self.land.as_ref().map(|l| l.class_at(x, z));
             let green = eo_landmarks::ground_cover::installed().map(|c| (c.tone_name_at(x, z), c.tree_class_at(x, z)));
             eprintln!(
-                "vegetation probe ({x:.1}, {z:.1}): y {y:?} colour {col:?} shore {s:?} class {class:?} green {green:?} building {} paved {:?} street tile {} -> {:?}",
+                "vegetation probe ({x:.1}, {z:.1}): y {y:?} colour {col:?} shore {s:?} class {class:?} green {green:?} building {} paved {:?} street tile {} naip {:?} -> {:?}",
                 self.street.buildings.contains(x, z),
                 self.street.paved_at(x, z),
                 self.street.tiles.contains_key(&eo_street::tile_key(x, z)),
+                self.naip_at(x, z, eo_landmarks::vegetation::NAIP_PLANT_BOX_M),
                 self.site(x, z)
             );
         }
@@ -299,33 +399,20 @@ impl VegGround {
         slope > eo_landmarks::ground_cover::SAND_SLOPE_MAX && eo_landmarks::ground_cover::installed().is_some_and(|c| c.near_mapped_beach(x, z))
     }
 
-    /// The NAIP shares in a box of side `side` m round (x, z) (None: no image there,
-    /// or `--no-naip-planting`): one pixel in every 0.6 m, at most 11 x 11.
+    /// The NAIP shares in a box of side `side` m (game) round (x, z) (None: no
+    /// image there, or `--no-naip-planting`): the box in real metres (the
+    /// ground-plan scale), odd in columns (0.6 m) and rows ([`NAIP_ROW_M`]) so it
+    /// is centred on the pixel holding (x, z), at most 15 a side, with the two-pixel
+    /// margin the classifier's 5 x 5 brightness reads.
     pub fn naip_at(&self, x: f64, z: f64, side: f64) -> Option<eo_landmarks::vegetation::Naip> {
         let n = self.naip.as_ref()?;
-        let (lon, lat) = lon_lat(x, z);
-        use eo_farshore::survey::naip::GRID;
-        let k = ((side / 1.25 / 0.6).round() as i64).clamp(1, 11);
-        let mut px = Vec::with_capacity((k * k) as usize);
-        for j in 0..k {
-            for i in 0..k {
-                let (di, dj) = (i as f64 - (k - 1) as f64 / 2.0, j as f64 - (k - 1) as f64 / 2.0);
-                if let Some(p) = n.sample_rgb(lon + di * GRID.dlon, lat - dj * GRID.dlat) {
-                    px.push(p);
-                }
-            }
-        }
-        if px.len() < (k * k) as usize / 2 {
-            return None;
-        }
-        let slope = self.site_slope_deg(x, z).unwrap_or(0.0);
-        eo_landmarks::vegetation::naip_shares(&px, slope)
+        naip_shares_at(n, x, z, side, self.site_slope_deg(x, z).unwrap_or(0.0))
     }
 
     /// Whether (x, z) is inside the NAIP image and the image is read (`--no-naip-planting`: never).
     pub fn in_naip(&self, x: f64, z: f64) -> bool {
         let (lon, lat) = lon_lat(x, z);
-        self.naip.is_some() && eo_farshore::survey::naip::GRID.pixel(lon, lat).is_some()
+        self.naip.is_some() && naip_pixel(lon, lat).is_some()
     }
 
     /// The drawn ground's slope at (x, z) across one grid cell (degrees).
@@ -525,6 +612,41 @@ mod tests {
         let w = pack_grad([1.0, -2.0]);
         let un = |v: u32| (v as u16 as i16) as f32 / 32767.0 * 4.0;
         assert!((un(w & 0xffff) - 1.0).abs() < 1e-3 && (un(w >> 16) + 2.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn naip_rows_follow_the_widened_tiles() {
+        use eo_farshore::survey::naip::GRID;
+        let tl = GRID.tile as f64 * GRID.dlat;
+        let lon = GRID.west + 100.5 * GRID.dlon;
+        // a tile's requested centre is its middle row.
+        let centre = |t: f64| GRID.north - (t + 0.5) * tl;
+        assert_eq!(naip_pixel(lon, centre(0.0)), Some((100, 1024)));
+        assert_eq!(naip_pixel(lon, centre(3.0)), Some((100, 3 * 2048 + 1024)));
+        // tile r001's first row (its centre plus 1023.5 square pixels) is r000's row 1624.
+        assert_eq!(naip_pixel(lon, centre(1.0) + 1023.5 * GRID.dlon), Some((100, 1624)));
+        // a tile's requested north edge is its row 211 (1024 (1 - dlat / dlon), half the overlap).
+        assert_eq!(naip_pixel(lon, GRID.north - 1e-9).map(|p| p.1), Some(211));
+        assert_eq!(naip_pixel(lon, GRID.north + 1e-6), None);
+        assert_eq!(naip_pixel(GRID.west - 1e-6, centre(0.0)), None);
+    }
+
+    #[test]
+    fn naip_boxes_are_odd_and_in_real_metres() {
+        // the 3 m (game) plant box at the 1.25 ground scale: 2.4 m real, 4 columns of
+        // 0.6 m (odd: 5) by 3.2 rows of 0.754 m (3); at scale 1.0: 5 by 4 (odd: 5).
+        assert_eq!(naip_box(3.0, 1.25), (5, 3));
+        assert_eq!(naip_box(3.0, 1.0), (5, 5));
+        // the 6 m tree box: 4.8 m real, 8 by 6.4 (9, 7); at 1.0: 10 by 8 (11, 9).
+        assert_eq!(naip_box(6.0, 1.25), (9, 7));
+        assert_eq!(naip_box(6.0, 1.0), (11, 9));
+        assert_eq!(naip_box(100.0, 1.25), (15, 15));
+        assert!((NAIP_ROW_M - 0.7537).abs() < 1e-3);
+    }
+
+    #[test]
+    fn the_tree_sand_berm_is_the_ground_tones() {
+        assert_eq!(eo_landmarks::ground_cover::SAND_BERM_SURVEYED_M, crate::ground_tone::BERM_CREST_SURVEYED_M);
     }
 
     #[test]
