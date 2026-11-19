@@ -42,6 +42,14 @@
 //!   Baker Beach and Serpentinite). Colours are the Munsell chips those words
 //!   name (chert 10R 3/3 dusky red, serpentinite 5G 4/2 greyish green, the
 //!   Franciscan sandstone elsewhere 5Y 5/2 olive grey), as sRGB, INFERRED.
+//!
+//! Scale: every plant and rock is drawn at its real (published) size, not at
+//! the 1.25 height scale of the terrain under it, as every model in the game is
+//! (`eo_data::groundscale`: the plan and the terrain heights are scaled, the
+//! models stay real size). So a 16 m cypress on a Marin hill drawn 1.25 times
+//! its real height reads a fifth smaller against the hill than in life; scaling
+//! the vegetation with the terrain is the owner's call (the plan's rule 4). The
+//! test `plants_stand_at_real_size` holds it.
 
 /// What the drawn ground carries at a point.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -64,6 +72,9 @@ pub enum Cover {
     Bare,
     /// Mapped bare rock: outcrops.
     Rock,
+    /// A face too steep for sand that the beach's sand tone runs up (Baker
+    /// Beach's and Marshall's cliffs): outcrop with scrub between.
+    Cliff,
 }
 
 /// The rock a slope is cut in (its colour).
@@ -190,14 +201,18 @@ pub const TREE_PITCH_M: f64 = 14.0;
 pub const SHRUB_PITCH_M: f64 = 3.4;
 /// The rock lattice (m).
 pub const ROCK_PITCH_M: f64 = 5.0;
+/// How far a grass bunch, tuft or flower clump stands into the ground (m).
+pub const GRASS_SINK_M: f64 = 0.07;
 /// The fine layer's lattice (m): one grass patch (1.1 m across) a cell, so the
 /// patches overlap into a sward.
 pub const GRASS_PITCH_M: f64 = 1.0;
 /// Grass blade tint over the ground tone: 1 / (the atlas grass cell's mean
-/// linear albedo 0.309 x the card's mean linear vertex shade, about 0.45 with
-/// its dark base), so a bunch's mean albedo is the ground tone's (the ground's
-/// tone is what the grass is) and its lit tips a little over it.
-pub const GRASS_GAIN: f32 = 7.2;
+/// linear albedo 0.311, measured over its texels with alpha over 0.5, x the
+/// card's mean linear vertex shade, about 0.57: tips at sRGB 200-255, the base
+/// at three quarters of that, `vegetation_models::GRASS_BASE_SHADE_PER_4`), so
+/// a bunch's mean albedo is the ground tone's (the ground's tone is what the
+/// grass is) and its lit tips a little over it.
+pub const GRASS_GAIN: f32 = 5.6;
 /// Leaf tints of the coastal trees and shrubs (`Kind::Tree`, `Kind::Shrub`
 /// order): what brings each species' mean leaf albedo (its cooked leaf
 /// vertex colour times the atlas cell's mean linear colour, measured with
@@ -207,11 +222,32 @@ pub const GRASS_GAIN: f32 = 7.2;
 /// glaucous leaf and the sage's grey hairs bluer and lighter: INFERRED).
 /// Targets (linear r, g, b): cypress 0.035/0.060/0.030, pine 0.040/0.065/0.030,
 /// blue gum 0.050/0.075/0.060, coyote brush 0.040/0.075/0.030, sage 0.070/0.085/0.050.
+///
+/// The shrubs' blue is then cut to what the frame needs (calibrated in the
+/// render, not from a photograph): a shrub's leaves sit mostly in its own
+/// shade, lit by the blue sky, so the albedo targets drew coyote brush at
+/// sRGB (87, 104, 88) and the sage, whose atlas cell (the pine needles, mean
+/// linear 0.118/0.181/0.030) needs a blue gain near three to reach its target,
+/// lavender at (124, 125, 142) on the Marin slopes (linear r/g 0.67 and 0.99,
+/// b/g 0.69 and 1.32, against the targets' 0.53 and 0.82, 0.40 and 0.59). Each
+/// channel's gain is scaled by target ratio over drawn ratio (green kept), so
+/// blue gain over green gain falls from 3.3 to 1.9 for coyote brush and from 2.4
+/// to 1.1 for the sage (see the test `shrub_leaves_are_green_not_blue`).
 pub const TREE_LEAF_TINT: [[f32; 3]; 3] = [[1.19, 1.08, 3.31], [1.13, 1.04, 2.88], [1.58, 1.00, 2.96]];
-pub const SHRUB_LEAF_TINT: [[f32; 3]; 2] = [[1.60, 0.98, 3.26], [1.56, 1.15, 2.78]];
+pub const SHRUB_LEAF_TINT: [[f32; 3]; 2] = [[1.27, 0.98, 1.89], [1.30, 1.15, 1.24]];
+/// The shrubs' measured mean leaf albedo before their tint (`Kind::Shrub`
+/// order): the cooked leaf vertex colour (`eo-props --example coastal_preview`,
+/// near tier; coarse and distant within 3 %) times the atlas cell's mean linear
+/// colour over its texels with alpha over 0.5 (coyote brush: aspen
+/// 0.083/0.214/0.030 x vertex 0.295/0.354/0.295; sage: pine 0.118/0.181/0.030
+/// x vertex 0.377/0.406/0.580).
+pub const SHRUB_LEAF_ALBEDO: [[f32; 3]; 2] = [[0.0246, 0.0756, 0.0090], [0.0445, 0.0733, 0.0176]];
 
-/// Rock colours, sRGB (see the module notes).
-pub const CHERT_SRGB: [u8; 3] = [98, 64, 57];
+/// Rock colours, sRGB (see the module notes). The chert is 10R 3/2, the USGS
+/// "dull brownish red" at a lower chroma than the 10R 3/3 first used, which drew
+/// salmon-pink under the frame's light: 10R 3/3 (98, 64, 57) taken two thirds of
+/// the way to the neutral of the same value in linear light (INFERRED).
+pub const CHERT_SRGB: [u8; 3] = [90, 67, 62];
 pub const SERPENTINITE_SRGB: [u8; 3] = [88, 104, 95];
 pub const SANDSTONE_SRGB: [u8; 3] = [128, 122, 101];
 /// The rock mesh's mean vertex shade (vegetation_models.rs `rock`: 0.78 + up light,
@@ -309,8 +345,10 @@ pub fn plant_coarse(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f64) 
                 Cover::WildGrass => (smoothstep(0.38, 0.72, patch) * 0.8 + shelter * 0.8).max(0.0),
                 Cover::Wood | Cover::WoodGreen => 0.12 + 0.12 * patch,
                 Cover::Bare | Cover::Rock => 0.05,
+                // scrub in the cliff's gaps between the outcrops (the rock layer's patches).
+                Cover::Cliff => 0.45 * (1.0 - outcrop_patch(x, z, cover)) * (0.6 + 0.4 * patch),
                 Cover::Lawn => 0.0,
-            } * (1.0 - smoothstep(38.0, 55.0, slope));
+            } * (1.0 - smoothstep(38.0, 55.0, slope) * if cover == Cover::Cliff { 0.6 } else { 1.0 });
             if hash(ix, iz, 3) >= chance {
                 return;
             }
@@ -340,12 +378,15 @@ pub fn plant_coarse(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f64) 
             let Some(s) = site(x, z) else { return };
             let Some(cover) = s.cover else { return };
             let slope = s.slope_deg();
-            // outcrops on steep slopes (cliffs), on mapped bare rock; a few stones on bare earth;
-            // grouped by a field so they read as outcrops, not a scatter.
-            let group = field(x, z, 22.0, 31);
             let steep = smoothstep(30.0, 50.0, slope);
+            let outcrop = matches!(cover, Cover::Rock | Cover::Cliff);
+            // outcrops (mapped bare rock, the cliffs over the beaches): whole patches of the
+            // 22 m field filled with large overlapping blocks, a few loose blocks between;
+            // elsewhere single blocks on steep slopes (grouped by the same field) and a few
+            // stones on bare earth.
+            let group = field(x, z, 22.0, 31);
             let chance = match cover {
-                Cover::Rock => 0.4 + 0.45 * group,
+                Cover::Rock | Cover::Cliff => 0.12 + 0.86 * outcrop_patch(x, z, cover),
                 Cover::Bare => 0.06 + 0.5 * steep,
                 Cover::Lawn => 0.0,
                 _ => steep * steep * smoothstep(0.35, 0.75, group) * 0.9,
@@ -353,9 +394,9 @@ pub fn plant_coarse(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f64) 
             if hash(ix, iz, 3) >= chance {
                 return;
             }
-            // mapped bare rock is outcrop: blocks of 1.6-6 m that overlap into rock faces; elsewhere
-            // single blocks and stones (sizes INFERRED).
-            let size = if cover == Cover::Rock { 1.6 + 4.4 * hash(ix, iz, 4).powf(1.3) } else { 0.8 + 2.6 * hash(ix, iz, 4).powf(1.6) * (0.6 + 0.8 * steep) } as f32;
+            // outcrop blocks of 4.5-9.5 m on the 5 m lattice, so they overlap into rock faces;
+            // elsewhere 0.8-3.4 m (sizes INFERRED).
+            let size = if outcrop { 4.5 + 5.0 * hash(ix, iz, 4).powf(1.2) } else { 0.8 + 2.6 * hash(ix, iz, 4).powf(1.6) * (0.6 + 0.8 * steep) } as f32;
             let shape = (hash(ix, iz, 5) * 4.0) as u8 % 4;
             let shape = match s.lithology {
                 Lithology::Chert => shape % 2,
@@ -369,21 +410,56 @@ pub fn plant_coarse(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f64) 
             };
             let v = 0.85 + 0.3 * hash(ix, iz, 6) as f32;
             let tint = base.map(|c| srgb_to_linear(c) / ROCK_SHADE * v);
-            // proud of a steep face (a slab lying flush with the slope reads as a stain).
-            let flat = 0.7 + 0.6 * hash(ix, iz, 9) as f32 + 0.6 * steep as f32;
-            // the block lies on the slope (the shear); a tenth of it further into the ground.
-            let sink = 0.1 * size as f64;
+            // a block stands proud of its slope (the mesh is about 0.6 as tall as wide at
+            // scale 1): a loose block 0.5-0.7 as tall as wide, an outcrop's 0.65-0.95, so the
+            // overlapping blocks stand as a broken face rather than a bed of flat pillows; the
+            // bedded chert a fifth taller so its slabs break the skyline rather than lying
+            // as one smooth slab.
+            let tall = if outcrop { 1.1 + 0.5 * hash(ix, iz, 9) } else { 0.85 + 0.35 * hash(ix, iz, 9) } as f32 * if s.lithology == Lithology::Chert { 1.2 } else { 1.0 };
+            let (grad, sink) = rock_seat(s.grad(), size, tall);
             out.push(Plant {
                 kind: Kind::Rock(shape),
                 pos: [x, s.y - sink, z],
                 yaw: hash(ix, iz, 7) * std::f64::consts::TAU,
-                scale: [size * (0.9 + 0.4 * hash(ix, iz, 10) as f32), size * flat, size],
+                scale: [size * (0.9 + 0.4 * hash(ix, iz, 10) as f32), size * tall, size],
                 rank: hash(ix, iz, 8) as f32,
                 tint,
-                grad: s.grad(),
+                grad,
             });
         });
     }
+}
+
+/// How much of a rock block follows its slope (the shear): a block sheared
+/// fully onto a steep face lies flat on it like a disc; one standing plumb
+/// stands out of the face. A third of the slope (INFERRED).
+pub const ROCK_SHEAR: f32 = 0.35;
+
+/// The block's half width over its scale (the rock mesh: unit sphere cut by
+/// joint planes at 0.62-0.92, times its stretch 0.95-1.35, times a half).
+const ROCK_HALF_WIDTH: f32 = 0.42;
+
+/// The seat of a rock block on its slope (gradient `g`, block `size` m across,
+/// `tall` its height scale): the shear it takes (`ROCK_SHEAR` of the slope)
+/// and how far its origin sinks below the ground so its downhill edge meets
+/// the ground (the rest of the slope across its half width, less the fifth of
+/// its height the mesh already sets below its origin), plus a twentieth of its
+/// size so no edge floats.
+pub fn rock_seat(g: [f32; 2], size: f32, tall: f32) -> ([f32; 2], f64) {
+    let steep = (g[0] * g[0] + g[1] * g[1]).sqrt();
+    let rest = steep * (1.0 - ROCK_SHEAR);
+    let height = size * tall * 0.6;
+    let drop = ROCK_HALF_WIDTH * size * rest - 0.2 * height;
+    ([g[0] * ROCK_SHEAR, g[1] * ROCK_SHEAR], (drop.max(0.0) + 0.05 * size) as f64)
+}
+
+/// The outcrop field's share at (x, z) on mapped rock and cliff ground: 1 in
+/// a patch of the 22 m field, 0 between, over a narrow band so a patch fills
+/// whole. About half a cliff face is outcrop and mapped rock three quarters
+/// (INFERRED: the Baker and Marshall's faces are rock with scrub between).
+pub fn outcrop_patch(x: f64, z: f64, cover: Cover) -> f64 {
+    let t = if cover == Cover::Rock { 0.32 } else { 0.48 };
+    smoothstep(t, t + 0.06, field(x, z, 22.0, 31))
 }
 
 /// The fine layer over [x0, x1) x [z0, z1): grass bunches, short tufts and,
@@ -412,6 +488,7 @@ pub fn plant_fine(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f64) ->
             Cover::Wood | Cover::WoodGreen => (0.06, 0.18 * patch, 0.0),
             Cover::Bare => (0.04, 0.1 * patch, 0.01),
             Cover::Rock => (0.1, 0.08, 0.02),
+            Cover::Cliff => (0.12 * (1.0 - outcrop_patch(x, z, cover)), 0.12, 0.01),
         };
         let steep = 1.0 - 0.6 * smoothstep(40.0, 60.0, slope);
         let r = hash(ix, iz, 3);
@@ -428,15 +505,18 @@ pub fn plant_fine(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f64) ->
         let sc = 0.75 + 0.55 * hash(ix, iz, 4) as f32;
         let tall = 0.8 + 0.45 * hash(ix, iz, 9) as f32;
         // the blade takes the ground's tone (see GRASS_GAIN), each bunch a little different.
-        // value +-20 %, and a drier (redder) or greener cast per bunch (INFERRED spread).
-        let w = 0.8 + 0.4 * hash(ix, iz, 20) as f32;
+        // value +-28 %, and a drier (redder) or greener cast per bunch (INFERRED spread): past
+        // 25 m a bunch is the ground's tone (props_draw.wgsl) and this its only mark.
+        let w = 0.72 + 0.56 * hash(ix, iz, 20) as f32;
         let dry = (hash(ix, iz, 24) as f32 - 0.5) * 0.24;
         let tint = [s.ground[0] * GRASS_GAIN * w * (1.0 + dry), s.ground[1] * GRASS_GAIN * w, s.ground[2] * GRASS_GAIN * w * (1.0 - dry)];
         let tint = match kind {
             Kind::Flower(_) => tint.map(|c| c.min(4.0)),
             _ => tint,
         };
-        out.push(Plant { kind, pos: [x, s.y - 0.03, z], yaw: hash(ix, iz, 7) * std::f64::consts::TAU, scale: [sc, sc * tall, sc], rank: hash(ix, iz, 8) as f32, tint, grad: s.grad() });
+        // sunk 7 cm: the atlas cell's root rows (a third of the tips' value) go under the
+        // ground instead of drawing a dark crescent round the bunch's foot.
+        out.push(Plant { kind, pos: [x, s.y - GRASS_SINK_M, z], yaw: hash(ix, iz, 7) * std::f64::consts::TAU, scale: [sc, sc * tall, sc], rank: hash(ix, iz, 8) as f32, tint, grad: s.grad() });
     });
 }
 
@@ -549,6 +629,70 @@ mod tests {
         }
         // inland: blue gum the largest share (about 0.45).
         assert!(m[2] > m[0] && m[2] > m[1] && (800..1000).contains(&m[2]), "{m:?}");
+    }
+
+    #[test]
+    fn plants_stand_at_real_size() {
+        // the trees' scale is natural spread about the published size (0.78-1.18), not the
+        // terrain's 1.25 height scale (see the module notes).
+        let mut sum = 0.0;
+        for i in 0..4000 {
+            let (_, s, h) = coastal_tree(i as f64 * 2.3, i as f64 * 0.7, 2000.0, hash(i, 3, 1));
+            assert!((0.78..=1.18).contains(&s) && h == 1.0);
+            sum += s as f64;
+        }
+        assert!((sum / 4000.0 - 0.98).abs() < 0.02);
+    }
+
+    #[test]
+    fn shrub_leaves_are_green_not_blue() {
+        // the measured albedo times the tint: green over red over blue, the sage greyer
+        // (its red and blue nearer its green) than the coyote brush.
+        let lit: Vec<[f32; 3]> = (0..2).map(|k| [0, 1, 2].map(|c| SHRUB_LEAF_ALBEDO[k][c] * SHRUB_LEAF_TINT[k][c])).collect();
+        for c in &lit {
+            assert!(c[1] > c[0] && c[0] > c[2], "{c:?}");
+        }
+        assert!(lit[1][0] / lit[1][1] > lit[0][0] / lit[0][1] && lit[1][2] / lit[1][1] > lit[0][2] / lit[0][1]);
+        // blue held under a third of green before the sky's blue fill (it lit lavender at
+        // the target's 0.59).
+        assert!(lit[1][2] / lit[1][1] < 0.34, "{:?}", lit[1]);
+    }
+
+    #[test]
+    fn outcrops_fill_whole_patches_with_proud_blocks() {
+        let cliff = |_x: f64, _z: f64| {
+            let a = 45f64.to_radians();
+            Some(Site { y: 20.0, normal: [a.sin(), a.cos(), 0.0], ground: [0.3; 3], cover: Some(Cover::Cliff), lithology: Lithology::Serpentinite, shore_m: 60.0, hollow_m: 0.0 })
+        };
+        let mut out = vec![];
+        plant_coarse(0.0, 0.0, 256.0, 256.0, &cliff, Switches::ALL, &mut out);
+        let rocks: Vec<_> = out.iter().filter(|p| matches!(p.kind, Kind::Rock(_))).collect();
+        // inside the patches nearly every 5 m cell carries a block of 3.2 m or more (they overlap).
+        let (mut inside, mut hit) = (0, 0);
+        for iz in 0..51 {
+            for ix in 0..51 {
+                let (x, z) = (ix as f64 * 5.0 + 2.5, iz as f64 * 5.0 + 2.5);
+                if outcrop_patch(x, z, Cover::Cliff) > 0.99 {
+                    inside += 1;
+                    if rocks.iter().any(|p| (p.pos[0] - x).abs() < 5.0 && (p.pos[2] - z).abs() < 5.0) {
+                        hit += 1;
+                    }
+                }
+            }
+        }
+        assert!(inside > 300 && hit as f64 > 0.95 * inside as f64, "{hit} of {inside}");
+        for p in &rocks {
+            // a third of the slope sheared, the block taller than half its width.
+            let g = (p.grad[0] * p.grad[0] + p.grad[1] * p.grad[1]).sqrt();
+            assert!((g - ROCK_SHEAR).abs() < 0.01, "{g}");
+            assert!(p.scale[1] > 0.5 * p.scale[2] && p.scale[2] >= 4.5);
+            // sunk at least so the downhill edge meets the ground.
+            let (_, sink) = rock_seat([1.0, 0.0], p.scale[2], p.scale[1] / p.scale[2]);
+            assert!(((20.0 - p.pos[1]) - sink).abs() < 1e-6 && sink > 0.0);
+        }
+        // scrub grows in the gaps, not on the blocks' patches.
+        let shrubs: Vec<_> = out.iter().filter(|p| matches!(p.kind, Kind::Shrub(_))).collect();
+        assert!(!shrubs.is_empty() && shrubs.iter().all(|p| outcrop_patch(p.pos[0], p.pos[2], Cover::Cliff) < 1.0));
     }
 
     #[test]
