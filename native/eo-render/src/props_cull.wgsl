@@ -50,8 +50,9 @@ struct PrSphere {
 
 fn pr_sphere(i: PrInstance, m: PrModel) -> PrSphere {
     var s: PrSphere;
-    s.c = i.pos + pr_rot(i.yaw, m.center * i.scale);
-    s.r = m.radius * max(max(i.scale.x, i.scale.y), i.scale.z);
+    let v = pr_veg_scale(i);
+    s.c = i.pos + pr_rot(i.yaw, m.center * i.scale * v);
+    s.r = m.radius * max(max(i.scale.x, i.scale.y), i.scale.z) * v * (1.0 + length(pr_veg_grad(i)));
     return s;
 }
 
@@ -151,6 +152,9 @@ fn classify(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let m = pr_models[inst.model];
+    if (pr_veg_scale(inst) <= 0.0) {
+        return; // thinned out at this distance (vegetation)
+    }
     let s = pr_sphere(inst, m);
     let d = max(distance(s.c, pr.cam.xyz) - s.r, 0.0);
     if (d >= m.lod.w) {

@@ -28,6 +28,8 @@ use eo_props::{JsProps, Model};
 
 /// Street furniture drawn in code where a kind's GLB is missing (`--no-furniture-models`: boxes).
 pub mod furniture_models;
+/// The Golden Gate's coastal trees, scrub, grass, wildflowers and hill rock (render ids from `VEG_BASE`).
+pub mod vegetation_models;
 
 /// Render model ids past `eo_props::MODEL_COUNT` (instances carry these).
 pub const TREE_BASE: u32 = eo_props::MODEL_COUNT as u32;
@@ -42,7 +44,7 @@ pub const OH_CORNER_SIGN: u32 = OH_BASE + 5;
 pub const OH_LANTERN: u32 = OH_BASE + 6;
 pub const OH_SIGN_BASE: u32 = OH_BASE + 7;
 pub const MAX_SIGN_VARIANTS: u32 = 32;
-pub const RENDER_MODEL_COUNT: usize = (OH_SIGN_BASE + MAX_SIGN_VARIANTS) as usize;
+pub const RENDER_MODEL_COUNT: usize = (vegetation_models::VEG_BASE + vegetation_models::COUNT) as usize;
 /// Nominal size of the cabinet mesh (width X, height, depth Z), the JS `signalCabinetNear` shell.
 pub const CABINET_NOMINAL: [f32; 3] = [0.74, 1.43, 0.5];
 /// The fraction of a level's edge distance over which two levels cross-fade (dithered).
@@ -933,6 +935,8 @@ pub(crate) fn cook_extras(out: &mut Out, repo: &std::path::Path, js: &JsProps, x
         }
         out.sources.push(format!("street overhead: {} sign variants, poles, cabinets, corner signs (procedural, street-overhead.js)", oh.sign_variants.len().min(MAX_SIGN_VARIANTS as usize)));
     }
+    // --- the Golden Gate's vegetation and hill rock (nothing draws until the app plants it).
+    vegetation_models::cook(out, x.ez, m_bark, m_leaf);
     info
 }
 
