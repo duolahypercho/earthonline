@@ -12,7 +12,9 @@
 //!   ground: Marshall's Beach's serpentinite), its foreshore and the sea in
 //!   front of it to the low water;
 //! - the cliff toes: beach sand within a few metres of ground steeper than
-//!   sand holds (eo-app ground_tone `SAND_SLOPE_MAX`, mirrored here);
+//!   sand holds (ground_cover `SAND_SLOPE_MAX`, which the sand limit reads)
+//!   and at least `TOE_DROP_MIN_M` lower than it (a cliff, not a promenade
+//!   or dune bank);
 //! - ground over the sea steeper than 45 degrees (rise over run 1) within the
 //!   sand's reach of the shoreline: outcrops, set deep into the slope;
 //! - the quay wall's edges (waterfront.rs) on the Fort Point and Marine
@@ -29,11 +31,13 @@ use std::sync::OnceLock;
 /// The armour stone's median diameter, metres (real size). INFERRED: Hudson's
 /// formula (USACE EM 1110-2-1614, Design of Coastal Revetments, Seawalls and
 /// Bulkheads, 1995, eq. 2-21), W50 = rho H^3 / (K_D (rho/rho_w - 1)^3 cot a),
-/// for a 2 m design wave on the strait's shore (INFERRED: no wave record was
-/// read), quarrystone of 2650 kg/m3 in sea water (1025 kg/m3), K_D 2 (rough
+/// for a `DESIGN_WAVE_M` design wave on the strait's shore, quarrystone of 2650 kg/m3 in sea water (1025 kg/m3), K_D 2 (rough
 /// angular stone, two layers, breaking waves) and a 1:2 slope: W50 = 1.34 t,
 /// D50 = (W50 / rho)^(1/3) = 0.80 m.
 pub const ARMOUR_D50_M: f64 = 0.80;
+/// The revetment's design wave height, real metres (INFERRED: no wave record
+/// of the Fort Point shore was read).
+pub const DESIGN_WAVE_M: f64 = 2.0;
 /// The armour's gradation: 0.75 W50 to 1.25 W50 (EM 1110-2-1614's
 /// recommended band), as diameters (the cube roots).
 pub const ARMOUR_GRADATION: [f64; 2] = [0.909, 1.077];
@@ -41,8 +45,9 @@ pub const ARMOUR_GRADATION: [f64; 2] = [0.909, 1.077];
 /// slopes of 1V:1.5H to 1V:3H; 1:2 taken, as in the D50 above).
 pub const REVETMENT_SLOPE_H: f64 = 2.0;
 /// The armour's crest over mean sea level, real metres: the station's mean
-/// higher high water (0.829 m, NOAA 9414290) plus the design wave (INFERRED).
-pub const ARMOUR_CREST_OVER_MSL_M: f64 = 0.829 + 2.0;
+/// higher high water (ground_cover `MHHW_OVER_MSL_M`, NOAA 9414290) plus the
+/// design wave.
+pub const ARMOUR_CREST_OVER_MSL_M: f64 = crate::ground_cover::MHHW_OVER_MSL_M + DESIGN_WAVE_M;
 /// The armour's toe under mean sea level, real metres (one D50 under the
 /// lowest tide's reach, INFERRED; the station's MLLW is 0.95 m under MSL).
 pub const ARMOUR_TOE_UNDER_MSL_M: f64 = 1.8;
@@ -71,8 +76,14 @@ pub fn stone_tone(base: Rgb, u: f64) -> Rgb {
 /// stones was read).
 pub const BOULDER_D_M: [f64; 2] = [0.45, 3.2];
 pub const BOULDER_POWER: f64 = 2.0;
-/// The steepest ground sand holds (eo-app ground_tone `SAND_SLOPE_MAX`).
-pub const SAND_SLOPE_MAX: f64 = 0.36;
+/// The steepest ground sand holds (ground_cover `SAND_SLOPE_MAX`, the one
+/// value the sand limit reads too).
+pub const SAND_SLOPE_MAX: f64 = crate::ground_cover::SAND_SLOPE_MAX;
+/// A cliff toe: the ground within `TOE_REACH_M` (drawn) of the sand stands at
+/// least this much higher (surveyed metres, drawn at the height scale), so a
+/// promenade kerb or a dune bank beside the sand is no cliff (INFERRED).
+pub const TOE_DROP_MIN_M: f64 = 3.0;
+pub const TOE_REACH_M: f64 = 10.0;
 /// A face steeper than 45 degrees.
 pub const OUTCROP_SLOPE: f64 = 1.0;
 /// The lattice the boulders are drawn on, drawn metres.
@@ -88,8 +99,13 @@ pub const BARE_SPREAD_M: f64 = 24.0;
 pub const INLAND_REACH_M: f64 = 150.0;
 /// The deepest a boulder stands in the sea (its foot), drawn metres.
 pub const SEA_FOOT_M: f64 = 1.2;
-/// A stone over this diameter gets the finer sphere (320 triangles, else 80).
-pub const FINE_D_M: f64 = 1.9;
+/// A boulder over this diameter (drawn) gets the finer sphere (320 triangles,
+/// else 80). The armour stones are quarried blocks (`broken_block`: 12 flat
+/// shaded faces), whatever their size.
+pub const FINE_D_M: f64 = 3.0;
+/// A boulder under this diameter (drawn) casts no shadow (its own contact
+/// darkening is baked in its tone; at its size the cascades resolve little of it).
+pub const CAST_MIN_D_M: f64 = 1.0;
 /// Mapped bare rock carries boulders only on ground a boulder rests on (no
 /// steeper than this, rise over run: about 31 degrees, a talus's repose).
 pub const BOULDER_REST_SLOPE: f64 = 0.6;
@@ -111,8 +127,10 @@ pub struct Stone {
     pub tilt: [f64; 2],
     pub seed: u32,
     pub tone: Rgb,
-    /// Quarried (more and flatter cuts) or a weathered boulder.
+    /// Quarried or broken (more and flatter cuts) or a weathered boulder.
     pub angular: bool,
+    /// Faceted: a quarried block (`broken_block`), flat shaded (the armour).
+    pub faceted: bool,
     /// The bed it lies in (a point on it and its upward unit normal: the
     /// ground, or the revetment's face): the faces wholly under it are not
     /// built (buried), and the stone is occluded toward it.
@@ -126,6 +144,13 @@ pub struct Stone {
 /// darkening reaches.
 pub const BED_OCCLUSION_MIN: f64 = 0.35;
 pub const CREVICE_REACH_D: f64 = 0.35;
+
+impl Stone {
+    /// Its largest diameter.
+    pub fn diameter(&self) -> f64 {
+        2.0 * self.r[0].max(self.r[1]).max(self.r[2])
+    }
+}
 
 pub fn hash(a: i64, b: i64, salt: u32) -> f64 {
     let mut h = (a as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (b as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F) ^ (salt as u64).wrapping_mul(0x1656_67B1_9E37_79F9);
@@ -172,6 +197,39 @@ pub fn icosphere(level: usize) -> &'static (Vec<V3>, Vec<[u32; 3]>) {
     })
 }
 
+/// A quarried block in its own frame, about the unit sphere's extent: a box
+/// (corners at `BLOCK_CORNER` of the unit radius on each axis) whose corners
+/// are broken back toward its centre by a random 0 to `BLOCK_BREAK` and
+/// jittered, each face split along a random diagonal (two broken facets):
+/// eight corners, twelve faces (vertices, triangles; outward winding).
+pub fn broken_block(seed: u32) -> (Vec<V3>, Vec<[u32; 3]>) {
+    let h = |k: i64| hash(seed as i64, k, 577);
+    let v: Vec<V3> = (0..8)
+        .map(|i| {
+            let c = [if i & 1 == 0 { -1.0 } else { 1.0 }, if i & 2 == 0 { -1.0 } else { 1.0 }, if i & 4 == 0 { -1.0 } else { 1.0 }];
+            let pull = 1.0 - BLOCK_BREAK * h(i);
+            [0, 1, 2].map(|k| c[k] * BLOCK_CORNER * pull + (h(10 + i * 3 + k as i64) - 0.5) * 0.12)
+        })
+        .collect();
+    // the six faces as corner quads, counter-clockwise seen from outside
+    let quads: [[u32; 4]; 6] = [[0, 2, 3, 1], [4, 5, 7, 6], [0, 1, 5, 4], [2, 6, 7, 3], [0, 4, 6, 2], [1, 3, 7, 5]];
+    let mut t = Vec::with_capacity(12);
+    for (f, q) in quads.iter().enumerate() {
+        if h(40 + f as i64) < 0.5 {
+            t.extend_from_slice(&[[q[0], q[1], q[2]], [q[0], q[2], q[3]]]);
+        } else {
+            t.extend_from_slice(&[[q[0], q[1], q[3]], [q[1], q[2], q[3]]]);
+        }
+    }
+    (v, t)
+}
+
+/// The block's corners on each axis (of the stone's semi-axes: a box of the
+/// ellipsoid's half-extents has about twice its volume, so its corners come
+/// in), and the deepest a corner is broken back (a share of its reach).
+pub const BLOCK_CORNER: f64 = 0.8;
+pub const BLOCK_BREAK: f64 = 0.35;
+
 /// Smooth value noise on a point (unit-ish scale), [-1, 1].
 fn noise3(p: V3, seed: u32) -> f64 {
     let (ix, iy, iz) = (p[0].floor(), p[1].floor(), p[2].floor());
@@ -209,8 +267,15 @@ pub fn tide_tone(tone: Rgb, y: f64, sea: f64, mhhw: f64, mhw: f64, rag: f64) -> 
 /// Append one stone to `m`: an icosphere scaled to the semi-axes, cut by
 /// fracture planes, roughened, turned and placed; vertex tones through the tide.
 pub fn stone_mesh(m: &mut MeshArrays, s: &Stone, sea: f64, tide: [f64; 2]) {
-    let d = 2.0 * s.r[0].max(s.r[1]).max(s.r[2]);
-    let (verts, tris) = icosphere(if d > FINE_D_M { 2 } else { 1 });
+    let d = s.diameter();
+    let block;
+    let (verts, tris) = if s.faceted {
+        block = broken_block(s.seed);
+        (&block.0, &block.1)
+    } else {
+        let (v, t) = icosphere(if d > FINE_D_M { 2 } else { 1 });
+        (v, t)
+    };
     let lumpy = if s.angular { 0.08 } else { 0.2 };
     let h = |k: u32| hash(s.seed as i64, k as i64, 991);
     // fracture planes (in the stone's own frame): a quarried stone has five
@@ -238,6 +303,10 @@ pub fn stone_mesh(m: &mut MeshArrays, s: &Stone, sea: f64, tide: [f64; 2]) {
         .iter()
         .enumerate()
         .map(|(i, v)| {
+            if s.faceted {
+                // the block's faces are its broken planes already
+                return [v[0] * s.r[0], v[1] * s.r[1], v[2] * s.r[2]];
+            }
             let mut q = *v;
             for (n, off) in &cuts {
                 let e = dot(q, *n) - off;
@@ -287,6 +356,24 @@ pub fn stone_mesh(m: &mut MeshArrays, s: &Stone, sea: f64, tide: [f64; 2]) {
         t * t * (3.0 - 2.0 * t)
     };
     let rag = (hash(s.seed as i64, 3, 5) - 0.5) * 0.25;
+    let tone_at = |w: V3, n: V3, k: i64| {
+        let jitter = 0.94 + 0.12 * hash(s.seed as i64, k, 17);
+        // toward the bed: faces turned into it, and the crevice just over it
+        let facing = 0.5 + 0.5 * dot(n, bn);
+        let ao = (BED_OCCLUSION_MIN + (1.0 - BED_OCCLUSION_MIN) * facing) * (BED_OCCLUSION_MIN + (1.0 - BED_OCCLUSION_MIN) * ss(0.0, CREVICE_REACH_D * d, over(w)));
+        tide_tone(s.tone.map(|v| v * jitter * ao), w[1], sea, tide[0], tide[1], rag)
+    };
+    if s.faceted {
+        // one normal per face (its broken plane), the corners unshared
+        for (fi, t) in kept.iter().enumerate() {
+            let (a, b, c) = (world[t[0] as usize], world[t[1] as usize], world[t[2] as usize]);
+            let (u, v) = ([b[0] - a[0], b[1] - a[1], b[2] - a[2]], [c[0] - a[0], c[1] - a[1], c[2] - a[2]]);
+            let n = norm([u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]);
+            let i: Vec<u32> = [a, b, c].iter().enumerate().map(|(k, w)| m.vertex(*w, n, tone_at(*w, n, (fi * 3 + k) as i64))).collect();
+            m.tri_idx(i[0], i[1], i[2]);
+        }
+        return;
+    }
     for t in &kept {
         for i in t.iter() {
             let i = *i as usize;
@@ -295,12 +382,7 @@ pub fn stone_mesh(m: &mut MeshArrays, s: &Stone, sea: f64, tide: [f64; 2]) {
             }
             let w = world[i];
             let n = norm(rot(nrm[i]));
-            let jitter = 0.94 + 0.12 * hash(s.seed as i64, i as i64, 17);
-            // toward the bed: faces turned into it, and the crevice just over it
-            let facing = 0.5 + 0.5 * dot(n, bn);
-            let ao = (BED_OCCLUSION_MIN + (1.0 - BED_OCCLUSION_MIN) * facing) * (BED_OCCLUSION_MIN + (1.0 - BED_OCCLUSION_MIN) * ss(0.0, CREVICE_REACH_D * d, over(w)));
-            let c = tide_tone(s.tone.map(|v| v * jitter * ao), w[1], sea, tide[0], tide[1], rag);
-            remap[i] = m.vertex(w, n, c);
+            remap[i] = m.vertex(w, n, tone_at(w, n, i as i64));
         }
     }
     for t in kept {
@@ -371,6 +453,10 @@ pub fn revetment(edges: &[([f64; 2], [f64; 2], [f64; 2])], crest_at: &dyn Fn(f64
                 let z = a[1] + u[1] * len * t + out_n[1] * (off + jit);
                 let s = (seed * 4.0e9) as u32;
                 let bed_n = norm([out_n[0], REVETMENT_SLOPE_H, out_n[1]]);
+                // a stone wholly under the visible depth is hidden by the sea: not built
+                if y_face - 0.15 * d + 0.5 * d < sea - ARMOUR_VISIBLE_UNDER_M {
+                    continue;
+                }
                 out.push(Stone {
                     bed: ([x, y_face - 0.3 * d, z], bed_n),
                     c: [x, y_face - 0.15 * d, z],
@@ -381,6 +467,7 @@ pub fn revetment(edges: &[([f64; 2], [f64; 2], [f64; 2])], crest_at: &dyn Fn(f64
                     seed: s,
                     tone: tone(hash(s as i64, 6, 3)),
                     angular: true,
+                    faceted: true,
                 });
             }
         }
@@ -468,7 +555,11 @@ pub fn boulder(i: i64, j: i64, x: f64, z: f64, zone: Zone, dry: bool, ground_min
         tilt: [(hash(i, j, 109) - 0.5) * 0.5, (hash(i, j, 110) - 0.5) * 0.5],
         seed: s,
         tone: tone(hash(i, j, 111)),
-        angular: false,
+        // the bare rock's and the outcrops' stones are broken rock (the
+        // serpentinite and sandstone fracture into blocks; INFERRED), the
+        // cliff toes' rounded by the surf
+        angular: zone != Zone::Toe,
+        faceted: false,
     })
 }
 
@@ -479,7 +570,7 @@ mod tests {
     #[test]
     fn the_armour_follows_hudson_and_the_ground_plan() {
         // Hudson: W50 = rho H^3 / (K_D Delta^3 cot a), D50 = (W50 / rho)^(1/3)
-        let (rho, rho_w, h, kd) = (2650.0f64, 1025.0f64, 2.0f64, 2.0f64);
+        let (rho, rho_w, h, kd) = (2650.0f64, 1025.0f64, DESIGN_WAVE_M, 2.0f64);
         let delta = rho / rho_w - 1.0;
         let w = rho * h.powi(3) / (kd * delta.powi(3) * REVETMENT_SLOPE_H);
         let d = (w / rho).cbrt();
@@ -494,7 +585,10 @@ mod tests {
             assert!(dmax <= ARMOUR_D50_M * 1.25 * ARMOUR_GRADATION[1] * 0.65 * 2.0 + 1e-9);
             assert!(s.c[2] > 0.0, "the stones lie seaward of the wall: {:?}", s.c);
             assert!(s.c[1] < 0.829 * 1.25 + 2.0 * 1.25, "under the armour's crest");
+            assert!(s.c[1] + 0.5 * dmax >= -ARMOUR_VISIBLE_UNDER_M, "no stone wholly under the visible depth: {:?}", s.c);
+            assert!(s.faceted && s.angular);
         }
+        assert!((ARMOUR_CREST_OVER_MSL_M - (0.829 + 2.0)).abs() < 1e-9);
         assert!((ARMOUR_D50_M * 1.25 - 1.0).abs() < 1e-9);
     }
 
@@ -523,13 +617,29 @@ mod tests {
     #[test]
     fn a_stone_is_closed_and_wet_below_the_tide() {
         let mut m = MeshArrays::new("t");
-        let s = Stone { c: [0.0, 0.0, 0.0], r: [1.0, 0.6, 0.8], yaw: 0.3, tilt: [0.1, -0.2], seed: 42, tone: [0.2, 0.2, 0.2], angular: true, bed: ([0.0, -10.0, 0.0], [0.0, 1.0, 0.0]) };
+        let s = Stone { c: [0.0, 0.0, 0.0], r: [1.0, 0.6, 0.8], yaw: 0.3, tilt: [0.1, -0.2], seed: 42, tone: [0.2, 0.2, 0.2], angular: true, faceted: false, bed: ([0.0, -10.0, 0.0], [0.0, 1.0, 0.0]) };
         stone_mesh(&mut m, &s, 0.0, [0.3, 0.1]);
-        assert_eq!(m.triangles(), 320);
+        assert_eq!(m.triangles(), 80, "a 2 m boulder: the 80-face sphere");
+        let mut big = MeshArrays::new("b");
+        stone_mesh(&mut big, &Stone { r: [1.6, 1.0, 1.2], ..s }, 0.0, [0.3, 0.1]);
+        assert_eq!(big.triangles(), 320, "over FINE_D_M: the 320-face sphere");
+        let mut armour = MeshArrays::new("a");
+        stone_mesh(&mut armour, &Stone { faceted: true, ..s }, 0.0, [0.3, 0.1]);
+        assert_eq!(armour.triangles(), 12, "a quarried block: 12 faces");
+        assert_eq!(armour.positions.len() / 3, 36, "flat shaded: its corners unshared");
+        // the block's faces turn outward
+        let (bv, bt) = broken_block(7);
+        for t in &bt {
+            let (a, b, c) = (bv[t[0] as usize], bv[t[1] as usize], bv[t[2] as usize]);
+            let (u, v) = ([b[0] - a[0], b[1] - a[1], b[2] - a[2]], [c[0] - a[0], c[1] - a[1], c[2] - a[2]]);
+            let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+            let mid = [(a[0] + b[0] + c[0]) / 3.0, (a[1] + b[1] + c[1]) / 3.0, (a[2] + b[2] + c[2]) / 3.0];
+            assert!(dot(n, mid) > 0.0, "{t:?}");
+        }
         // bedded at its middle: the faces under the bed are not built
         let mut half = MeshArrays::new("h");
         stone_mesh(&mut half, &Stone { bed: ([0.0, 0.0, 0.0], [0.0, 1.0, 0.0]), ..s }, 0.0, [0.3, 0.1]);
-        assert!(half.triangles() < 220 && half.triangles() > 120, "{}", half.triangles());
+        assert!(half.triangles() < 60 && half.triangles() > 25, "{}", half.triangles());
         let ys: Vec<f64> = m.positions.chunks(3).map(|p| p[1]).collect();
         assert!(ys.iter().all(|y| y.abs() <= 0.7));
         // the wet foot is darker than the dry top
