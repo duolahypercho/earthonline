@@ -252,7 +252,17 @@ impl Daylight {
         let e = e_toa_units();
         let c = atmosphere::sun_colour_toa();
         let sun_toa = c.map(|v| v * e);
-        let key = [0, 1, 2].map(|i| sun_toa[i] * l.sun[i]);
+        let mut key = [0, 1, 2].map(|i| sun_toa[i] * l.sun[i]);
+        // the beam's colour from its spectrum (`spectral`), at the three channels' luminance
+        // (the exposure and every brightness keep their scale): `--no-sun-spectrum2`.
+        if crate::features::colour().sun_spectrum2
+            && let Some(b) = crate::spectral::beam_srgb(&tables.atm, density, 2.0, sun[1])
+        {
+            let (lk, lb) = (luminance(key), luminance(b));
+            if lb > 1e-12 {
+                key = b.map(|v| v / lb * lk);
+            }
+        }
         let env_sh = l.sh.map(|k| [k[0] * sun_toa[0], k[1] * sun_toa[1], k[2] * sun_toa[2]]);
         let env_sh_ground = l.sh_ground.map(|k| [k[0] * sun_toa[0], k[1] * sun_toa[1], k[2] * sun_toa[2]]);
         let e_h = luminance(key) * sun[1].max(0.0) + luminance([0, 1, 2].map(|i| l.sky_h[i] * sun_toa[i]));

@@ -595,3 +595,138 @@ mod tests {
         assert!((luminance(up) - luminance(l.sky_h)).abs() < 0.15 * luminance(l.sky_h), "{up:?} {:?}", l.sky_h);
     }
 }
+
+/// The CIE standard general sky's relative luminance (ISO 15469:2004 / CIE S
+/// 011/E:2003, Darula and Kittler 2002): L / L_zenith for a direction at
+/// zenith angle `z` and angle `chi` from the sun, the sun at zenith angle
+/// `zs` (radians), for gradation (a, b) and indicatrix (c, d, e).
+pub fn cie_sky_relative(z: f64, chi: f64, zs: f64, abcde: [f64; 5]) -> f64 {
+    let [a, b, c, d, e] = abcde;
+    let phi = |z: f64| 1.0 + a * (b / z.cos().max(1e-6)).exp();
+    let f = |x: f64| 1.0 + c * ((d * x).exp() - (d * std::f64::consts::FRAC_PI_2).exp()) + e * x.cos() * x.cos();
+    f(chi) * phi(z) / (f(zs) * phi(0.0))
+}
+
+/// The CIE standard general sky's cloudless types (ISO 15469:2004 / CIE S
+/// 011/E:2003, table 1; gradation groups IV-VI, indicatrix groups 4-6), as
+/// (type, [a, b, c, d, e]): 11 white-blue sky with distinct solar corona, 12
+/// clear with low luminance turbidity, 13 clear in a polluted atmosphere,
+/// 14 cloudless turbid with a broader corona, 15 white-blue turbid with a
+/// wide corona.
+pub const CIE_SKY_11: [f64; 5] = [-1.0, -0.55, 10.0, -3.0, 0.45];
+pub const CIE_SKY_12: [f64; 5] = [-1.0, -0.32, 10.0, -3.0, 0.45];
+pub const CIE_SKY_13: [f64; 5] = [-1.0, -0.32, 16.0, -3.0, 0.30];
+pub const CIE_SKY_14: [f64; 5] = [-1.0, -0.15, 16.0, -3.0, 0.30];
+pub const CIE_SKY_15: [f64; 5] = [-1.0, -0.15, 24.0, -2.8, 0.15];
+pub const CIE_CLOUDLESS_SKIES: [(u32, [f64; 5]); 5] = [(11, CIE_SKY_11), (12, CIE_SKY_12), (13, CIE_SKY_13), (14, CIE_SKY_14), (15, CIE_SKY_15)];
+
+#[cfg(test)]
+mod cie_sky_tests {
+    use super::*;
+
+    /// The model's luminance over the zenith's, and each cloudless CIE type's,
+    /// at one direction (azimuth from the sun, elevation) for a sun elevation.
+    fn point(t: &Tables, sun_el: f64, az: f64, el: f64) -> (f64, [f64; 5]) {
+        let s = [(sun_el * DEG).cos(), (sun_el * DEG).sin(), 0.0];
+        let zen = luminance(spectral_chroma(t.sky_radiance([0.0, 1.0, 0.0], s, 2.0)));
+        let d = [(el * DEG).cos() * (az * DEG).cos(), (el * DEG).sin(), (el * DEG).cos() * (az * DEG).sin()];
+        let m = luminance(spectral_chroma(t.sky_radiance(d, s, 2.0))) / zen;
+        let chi = (d[0] * s[0] + d[1] * s[1] + d[2] * s[2]).clamp(-1.0, 1.0).acos();
+        let (z, zs) = ((90.0 - el) * DEG, (90.0 - sun_el) * DEG);
+        (m, CIE_CLOUDLESS_SKIES.map(|(_, p)| cie_sky_relative(z, chi, zs, p)))
+    }
+
+    /// How far (a factor, 1 inside) the model's value lies outside the band
+    /// spanned by the clear types 11, 12 and 13.
+    fn outside_clear_band(m: f64, cie: &[f64; 5]) -> f64 {
+        let (lo, hi) = (cie[0].min(cie[1]).min(cie[2]), cie[0].max(cie[1]).max(cie[2]));
+        if m < lo { lo / m } else if m > hi { m / hi } else { 1.0 }
+    }
+
+    /// The clear sky's luminance distribution (each point over the zenith)
+    /// against the CIE clear skies, away from the horizon (elevation 20 and 45
+    /// deg, 90 and 180 deg from the sun) at the photographs' suns of 10 deg and
+    /// more. The band is the span of types 11-13, the clear (not turbid)
+    /// cloudless skies, with no tolerance added: the medium's aerosol optical
+    /// depth (0.04, Smirnov 2002's clean maritime value) is a clean, unturbid
+    /// air mass (INFERRED: the standard names 14 and 15 turbid). The nearest
+    /// type over all points is printed for each sun.
+    ///
+    /// Known to fail (an open sky defect): away from the horizon too the
+    /// model's sky is 1.03-1.58x brighter relative to its zenith than every
+    /// clear type, most toward the antisolar side at a high sun; its nearest
+    /// cloudless type is 14 (turbid) at suns of 10, 31 and 46 deg (12 at
+    /// 3 deg). Either
+    /// the zenith is too dark or the rest of the sky too bright for the
+    /// medium; which is not yet known.
+    #[test]
+    fn the_sky_gradient_away_from_the_horizon_within_the_cie_clear_skies() {
+        let t = tables(&Atmosphere::coastal_clear(), 1.0);
+        let mut fails = Vec::new();
+        for sun_el in [3.0f64, 10.0, 31.0, 46.0] {
+            let mut err = [0.0f64; 5];
+            for az in [90.0f64, 180.0] {
+                for el in [5.0f64, 20.0, 45.0] {
+                    let (m, cie) = point(&t, sun_el, az, el);
+                    for k in 0..5 {
+                        err[k] += (m / cie[k]).ln().powi(2);
+                    }
+                    eprintln!("sun {sun_el:4.1} az {az:5.1} el {el:4.1}: model {m:5.2}  CIE 11-15 {:5.2} {:5.2} {:5.2} {:5.2} {:5.2}", cie[0], cie[1], cie[2], cie[3], cie[4]);
+                    let off = outside_clear_band(m, &cie);
+                    if sun_el >= 10.0 && el >= 20.0 && off > 1.0 {
+                        fails.push(format!("sun {sun_el} az {az} el {el}: model {m:.2} outside CIE 11-13 by x{off:.2}"));
+                    }
+                }
+            }
+            let k = (0..5).min_by(|&a, &b| err[a].total_cmp(&err[b])).unwrap();
+            eprintln!("sun {sun_el:4.1}: nearest cloudless CIE type {} (rms log ratio {:.2})", CIE_CLOUDLESS_SKIES[k].0, (err[k] / 6.0).sqrt());
+        }
+        assert!(fails.is_empty(), "{fails:#?}");
+    }
+
+    /// The clear sky near the horizon (elevation 5 deg, 90 and 180 deg from
+    /// the sun) against the same band, suns of 10 deg and more.
+    ///
+    /// Known to fail (an open sky defect): the model's low sky is 1.4-2.0x
+    /// brighter, relative to its zenith, than every clear type (11-13), close
+    /// to the turbid types 14 and 15: a hazier, whiter low sky than the
+    /// medium's AOD 0.04 should give.
+    #[test]
+    fn the_sky_near_the_horizon_within_the_cie_clear_skies() {
+        let t = tables(&Atmosphere::coastal_clear(), 1.0);
+        let mut fails = Vec::new();
+        for sun_el in [10.0f64, 31.0, 46.0] {
+            for az in [90.0f64, 180.0] {
+                let (m, cie) = point(&t, sun_el, az, 5.0);
+                let off = outside_clear_band(m, &cie);
+                eprintln!("horizon, sun {sun_el:4.1} az {az:5.1}: model {m:5.2}, CIE 11-13 {:.2}..{:.2}, 14 {:.2}, 15 {:.2}: x{off:.2}", cie[0].min(cie[1]).min(cie[2]), cie[0].max(cie[1]).max(cie[2]), cie[3], cie[4]);
+                if off > 1.0 {
+                    fails.push(format!("sun {sun_el} az {az} el 5: model {m:.2} outside CIE 11-13 by x{off:.2}"));
+                }
+            }
+        }
+        assert!(fails.is_empty(), "{fails:#?}");
+    }
+
+    /// The zenith's colour and luminance at suns of 31 and 46 deg, printed.
+    /// The assertion is a sanity bound only (a clear zenith is far bluer than
+    /// daylight, CCT over 10000 K), not a validation: no measured zenith
+    /// series is compared here. The San Francisco series (Karayel, Navvab,
+    /// Neeman and Selkowitz 1984, Energy and Buildings 6, 283-291: zenith
+    /// luminance against solar altitude and turbidity, measured 1979-1982)
+    /// is the one to compare once its text is at hand.
+    #[test]
+    fn the_clear_zenith_is_blue() {
+        let t = tables(&Atmosphere::coastal_clear(), 1.0);
+        for sun_el in [10.0f64, 31.0, 46.0] {
+            let s = [(sun_el * DEG).cos(), (sun_el * DEG).sin(), 0.0];
+            let z = spectral_chroma(t.sky_radiance([0.0, 1.0, 0.0], s, 2.0));
+            let xy = crate::spectral::srgb_xy(z);
+            let lz = luminance(z) * LUMINOUS_SOLAR_CONSTANT_LX;
+            eprintln!("sun {sun_el}: zenith xy {:.3} {:.3}, {:.0} cd/m2", xy[0], xy[1], lz);
+            if sun_el >= 31.0 {
+                assert!(xy[0] < 0.28 && xy[1] < 0.29, "{xy:?}");
+            }
+        }
+    }
+}

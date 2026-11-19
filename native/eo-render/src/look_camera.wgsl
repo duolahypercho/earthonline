@@ -13,7 +13,23 @@ fn cam_shaper(v: vec3<f32>) -> vec3<f32> {
     return select(u, vec3<f32>(0.0), v <= vec3<f32>(0.0));
 }
 
+// The radiance probe's read-back (look_light.wgsl `lk_probe`, EO_AO_DEBUG >= 10):
+// the scene radiance in the look's units, log2-encoded per channel over
+// 2^-14 .. 2^4 (an 8-bit level is 0.07 stop), no white balance, exposure or dither:
+// encoded = clamp((log2(radiance) + 14) / 18, 0, 1). eo-look `probe::decode_level`
+// inverts it (`probe::LOG2_MIN`, `probe::LOG2_SPAN` must match these numbers).
+fn cam_probe_encode(radiance: vec3<f32>) -> vec3<f32> {
+    return clamp((log2(max(radiance, vec3<f32>(1e-9))) + 14.0) / 18.0, vec3<f32>(0.0), vec3<f32>(1.0));
+}
+
 fn finish_camera(radiance: vec3<f32>, pos: vec4<f32>) -> vec4<f32> {
+    if (look.ao_params.z > 9.5) {
+        var p = cam_probe_encode(max(radiance, vec3<f32>(0.0)));
+        if (look.post2.z > 0.5) {
+            p = from_srgb(p);
+        }
+        return vec4<f32>(p, 1.0);
+    }
     let c = finish_mesopic(radiance);
     let exposure = look.key.w;
     let cw = vec3<f32>(dot(look.wb[0].xyz, c), dot(look.wb[1].xyz, c), dot(look.wb[2].xyz, c));

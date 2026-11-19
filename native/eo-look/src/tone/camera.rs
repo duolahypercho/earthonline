@@ -22,10 +22,18 @@
 //!    a Bradford D65-to-D60 conversion (Lib.Academy.ColorSpaces).
 //! 4. **Encoding**: sRGB piecewise (IEC 61966-2-1).
 //!
-//! No picture-style matrix and no hue skew are added: no published,
-//! citable camera picture style was found, and the ACES transform keeps
-//! hue by design. Adding either from the reference photographs would be a
-//! fit to screenshots (stop-and-ask).
+//!    Opt-in (`EO_CAMERA_RENDERING=aces13`): the ACES 1.3 RRT and sRGB 100-nit dim ODT
+//!    (`aces13`) in its place, at the same SOS placement: a per-channel tone
+//!    scale in AP1 that keeps more chroma (0.94 of colorimetric on the
+//!    virtual chart's saturated patches against ACES 2.0's 0.80; 0.98 and
+//!    0.75 on its C* 25 patches) at the cost of hue skews (up to 18 deg on
+//!    the saturated light blues and violets; ACES 2.0 2.4 deg).
+//!
+//! No picture-style matrix and no hue skew are added: no published camera
+//! picture style or JPEG tone curve under a licence this repository can
+//! take was found (the measured camera base curves that exist are GPL or
+//! under a vendor SDK licence), and adding either from the reference
+//! photographs would be a fit to screenshots (stop-and-ask).
 //!
 //! The table: `LUT_SIZE`^3 RGBA texels over a per-channel log2 shaper of the
 //! post pass's input (radiance x white balance x exposure / 0.6), from
@@ -55,18 +63,37 @@ pub const SHAPER_LO_EV: f64 = -14.0;
 pub const SHAPER_HI_EV: f64 = 10.0;
 const SHAPER_MID: f64 = 0.18;
 
+/// The tone and gamut rendering the camera look bakes (step 3 above).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Rendering {
+    /// The ACES 2.0 output transform, Rec.709 100 nits, sRGB (`aces2`; the default).
+    Aces2,
+    /// The ACES 1.3 RRT and the sRGB 100-nit dim-surround ODT (`aces13`;
+    /// opt-in, `EO_CAMERA_RENDERING=aces13`): the per-channel AP1 tone scale.
+    Aces13,
+}
+
 pub struct Camera {
-    odt: OdtParams,
+    odt: Option<OdtParams>,
     to_ap0: aces2::M33,
+    pub rendering: Rendering,
     /// the scene gain that puts `SOS_SCENE_VALUE` at sRGB 118.
     pub gain: f64,
 }
 
 impl Camera {
     fn build() -> Self {
-        let odt = OdtParams::new(100.0, &REC709);
+        Self::with(if crate::features::colour().aces13 { Rendering::Aces13 } else { Rendering::Aces2 })
+    }
+
+    /// The camera with a given rendering (the process's is `camera()`).
+    pub fn with(rendering: Rendering) -> Self {
+        let odt = match rendering {
+            Rendering::Aces2 => Some(OdtParams::new(100.0, &REC709)),
+            Rendering::Aces13 => None,
+        };
         let to_ap0 = aces2::rgb_to_rgb(&REC709, &aces2::AP0);
-        let mut c = Self { odt, to_ap0, gain: 1.0 };
+        let mut c = Self { odt, to_ap0, rendering, gain: 1.0 };
         // bisect the neutral axis for display Y = sRGB 118
         let target = sos_display_y();
         let (mut lo, mut hi) = (0.0f64, 8.0f64.ln());
@@ -83,7 +110,10 @@ impl Camera {
     /// 0.18) to display-linear Rec.709, clamped to 0..1.
     pub fn display_linear(&self, x: Rgb) -> Rgb {
         let a = aces2::mul_v(x.map(|v| v.max(0.0) * self.gain), &self.to_ap0);
-        self.odt.forward(a).map(|v| v.clamp(0.0, 1.0))
+        match &self.odt {
+            Some(odt) => odt.forward(a).map(|v| v.clamp(0.0, 1.0)),
+            None => super::aces13::forward(a),
+        }
     }
 
     /// As `display_linear`, sRGB encoded.
@@ -177,49 +207,67 @@ pub fn display_camera(c: Rgb, exposure: f64) -> Rgb {
     camera().display_srgb(w.map(|v| v * exposure / 0.6))
 }
 
-/// The BabelColor average of 30 ColorChecker Classic charts (CIE xyY, ICC
-/// D50, 2 deg observer; BabelColor 2012, "ColorChecker RGB and spectra",
-/// as tabulated in the colour-science package's `CCS_BABELCOLOR_AVERAGE`;
-/// see eo-look/data/camera/COLORCHECKER.NOTICE.txt). Patches 1-24 in chart order.
-pub const COLORCHECKER_XYY_D50: [[f64; 3]; 24] = [
-    [0.4325, 0.3788, 0.1034],
-    [0.4191, 0.3748, 0.3525],
-    [0.2761, 0.3004, 0.1847],
-    [0.3700, 0.4501, 0.1335],
-    [0.3020, 0.2877, 0.2324],
-    [0.2856, 0.3910, 0.4174],
-    [0.5291, 0.4075, 0.3117],
-    [0.2339, 0.2155, 0.1140],
-    [0.5008, 0.3293, 0.1979],
-    [0.3326, 0.2556, 0.0644],
-    [0.3989, 0.4998, 0.4435],
-    [0.4962, 0.4428, 0.4358],
-    [0.2040, 0.1696, 0.0579],
-    [0.3270, 0.5033, 0.2307],
-    [0.5709, 0.3298, 0.1268],
-    [0.4694, 0.4732, 0.6081],
-    [0.4177, 0.2704, 0.2007],
-    [0.2151, 0.3037, 0.1903],
-    [0.3488, 0.3628, 0.9129],
-    [0.3451, 0.3596, 0.5885],
-    [0.3446, 0.3590, 0.3595],
-    [0.3438, 0.3589, 0.1912],
-    [0.3423, 0.3576, 0.0893],
-    [0.3439, 0.3565, 0.0320],
-];
+/// The virtual test chart's neutral ramp: six reflectances from a near-white
+/// to a near-black card, halving about every stop and a quarter (0.90 to
+/// 0.03, the span of a printed grey scale; INFERRED, analytic, no measured
+/// chart data).
+pub const NEUTRAL_RAMP: [f64; 6] = [0.90, 0.59, 0.36, 0.19, 0.09, 0.031];
 
-/// ICC D50 white (x, y).
-pub const ICC_D50_XY: [f64; 2] = [0.3457, 0.3585];
+/// The virtual test chart's chromatic patches, defined analytically in
+/// CIELAB (D65 white): twelve hues 30 deg apart at L* 50 and at L* 70, each
+/// at chroma C* 25 (inside the Rec.709 gamut as a reflectance for every hue;
+/// INFERRED, analytic, no measured chart data). Linear Rec.709 reflectance.
+pub fn chart_patches() -> Vec<(f64, f64, Rgb)> {
+    let mut v = Vec::new();
+    for l in [50.0, 70.0] {
+        for k in 0..12 {
+            let h = k as f64 * 30.0;
+            v.push((l, h, lab_to_rec709([l, 25.0 * h.to_radians().cos(), 25.0 * h.to_radians().sin()])));
+        }
+    }
+    v
+}
 
-/// A patch's reflectance as linear Rec.709 under a D65-balanced capture
-/// (Bradford D50 to D65, IEC 61966-2-1 primaries).
-pub fn colorchecker_rgb(i: usize) -> Rgb {
-    let [x, y, yy] = COLORCHECKER_XYY_D50[i];
-    let xyz = [x * yy / y, yy, (1.0 - x - y) * yy / y];
-    let cat = aces2::cat_matrix(ICC_D50_XY, [0.3127, 0.3290]);
-    let xyz65 = aces2::mul_v(xyz, &cat);
-    let to_rgb = aces2::xyz_to_rgb(&REC709, 1.0);
-    aces2::mul_v(xyz65, &to_rgb)
+/// The virtual test chart's saturated patches, defined analytically in
+/// CIELAB (D65 white): the same twelve hues at L* 50 and 70, each at C* 50,
+/// or at the largest C* whose Rec.709 reflectance stays inside 0..1 where 50
+/// is out of gamut (found by bisection). A printed chart's saturated patches
+/// sit at about this chroma (INFERRED: C* 50 is chosen as the upper end of a
+/// print's reflective gamut for most hues, not fitted to any rendering; no
+/// measured chart data). These carry the chroma gate.
+pub fn chart_patches_saturated() -> Vec<(f64, f64, Rgb)> {
+    let at = |l: f64, h: f64, c: f64| lab_to_rec709([l, c * h.to_radians().cos(), c * h.to_radians().sin()]);
+    let inside = |v: Rgb| v.iter().all(|&x| (0.0..=1.0).contains(&x));
+    let mut v = Vec::new();
+    for l in [50.0, 70.0] {
+        for k in 0..12 {
+            let h = k as f64 * 30.0;
+            let mut c = SATURATED_CHROMA;
+            if !inside(at(l, h, c)) {
+                let (mut lo, mut hi) = (0.0, SATURATED_CHROMA);
+                for _ in 0..60 {
+                    let m = 0.5 * (lo + hi);
+                    if inside(at(l, h, m)) { lo = m } else { hi = m }
+                }
+                c = lo;
+            }
+            v.push((l, h, at(l, h, c)));
+        }
+    }
+    v
+}
+
+/// The saturated patches' target chroma (CIELAB C*), `chart_patches_saturated`.
+pub const SATURATED_CHROMA: f64 = 50.0;
+
+/// CIELAB (D65 white) to linear Rec.709 (IEC 61966-2-1 primaries).
+pub fn lab_to_rec709(lab: Rgb) -> Rgb {
+    let w = [0.3127 / 0.3290, 1.0, (1.0 - 0.3127 - 0.3290) / 0.3290];
+    let fy = (lab[0] + 16.0) / 116.0;
+    let (fx, fz) = (fy + lab[1] / 500.0, fy - lab[2] / 200.0);
+    let inv = |t: f64| if t > 6.0 / 29.0 { t * t * t } else { 3.0 * (6.0f64 / 29.0).powi(2) * (t - 4.0 / 29.0) };
+    let xyz = [w[0] * inv(fx), w[1] * inv(fy), w[2] * inv(fz)];
+    aces2::mul_v(xyz, &aces2::xyz_to_rgb(&REC709, 1.0))
 }
 
 #[cfg(test)]
@@ -246,49 +294,99 @@ mod tests {
         assert!((1.2..2.0).contains(&g), "{g}");
     }
 
-    /// The virtual ColorChecker: the 24 BabelColor patches lit by an even
-    /// daylight that an incident meter reads (the card of reflectance rho at
-    /// scene 0.18 x rho / 0.157, the meter's grey at 0.18), white-balanced.
-    /// The camera must render the neutral ramp neutral, ordered, unclipped and
-    /// with the SOS grey near L* 50, and keep each chromatic patch's hue.
+    /// The virtual chart (analytic patches: `NEUTRAL_RAMP`,
+    /// `chart_patches_saturated`, `chart_patches`) lit by an even daylight
+    /// that an incident meter reads (a card of reflectance rho at scene 0.18 x
+    /// rho / 0.157, the meter's grey at 0.18), white-balanced. The camera must
+    /// render the neutral ramp neutral, ordered, unclipped and with the SOS
+    /// grey near L* 50, keep each chromatic patch's hue, and keep a mean
+    /// chroma of 0.85..1.6 of a colorimetric rendering on the saturated
+    /// patches (the bound the measured chart carried before its data was
+    /// removed, unchanged). Every failure is listed together.
+    ///
+    /// Known to fail (open, for the owner): ACES 2.0 renders the saturated
+    /// patches at 0.80 of colorimetric chroma, and ACES 1.3 turns the L* 70
+    /// blue and violet patches (h 240, 270) 18 deg toward purple.
     #[test]
-    fn the_virtual_colorchecker_renders_neutral_greys_and_keeps_hues() {
-        let cam = camera();
-        // incident meter (C = 250) and reflected meter (K = 12.5): the metered grey of an
-        // illuminance E is K E / C, so a card of reflectance rho has scene value 0.18 rho / (pi K / C)
-        let k = 0.18 / (std::f64::consts::PI * ISO_K / 250.0);
-        let mut last_l = 200.0;
-        for i in 18..24 {
-            let rho = colorchecker_rgb(i);
-            let d = cam.display_linear(rho.map(|v| v * k));
-            let l = lab(d);
-            assert!(l[1].abs() < 1.5 && l[2].abs() < 2.5, "patch {}: {l:?}", i + 1);
-            assert!(l[0] < last_l, "ramp order at {}", i + 1);
-            last_l = l[0];
-            assert!(d.iter().all(|&v| v < 0.98), "patch {} clips: {d:?}", i + 1);
+    fn the_virtual_chart_renders_neutral_greys_and_keeps_hues() {
+        let mut fails = Vec::new();
+        for r in [Rendering::Aces2, Rendering::Aces13] {
+            let cam = Camera::with(r);
+            // incident meter (C = 250) and reflected meter (K = 12.5): the metered grey of an
+            // illuminance E is K E / C, so a card of reflectance rho has scene value 0.18 rho / (pi K / C)
+            let k = 0.18 / (std::f64::consts::PI * ISO_K / 250.0);
+            let mut last_l = 200.0;
+            for (i, &rho) in NEUTRAL_RAMP.iter().enumerate() {
+                let d = cam.display_linear([rho * k; 3]);
+                let l = lab(d);
+                assert!(l[1].abs() < 1.5 && l[2].abs() < 2.5, "{r:?} grey {}: {l:?}", i + 1);
+                assert!(l[0] < last_l, "{r:?} ramp order at {}", i + 1);
+                last_l = l[0];
+                assert!(d.iter().all(|&v| v < 0.98), "{r:?} grey {} clips: {d:?}", i + 1);
+            }
+            // the 0.19 card (the ramp's fourth) at about the SOS grey
+            let n5 = lab(cam.display_linear([NEUTRAL_RAMP[3] * k; 3]));
+            assert!((45.0..56.0).contains(&n5[0]), "{r:?} 0.19 card L* {}", n5[0]);
+            // the 0.031 card keeps tone above the flare toe
+            let blk = lab(cam.display_linear([NEUTRAL_RAMP[5] * k; 3]));
+            assert!(blk[0] > 8.0, "{r:?} black L* {}", blk[0]);
+            // chromatic patches keep their CIELAB hue: within 8 deg under ACES 2.0 (hue-preserving
+            // by design, and the old measured chart's bound); ACES 1.3's per-channel tone scale
+            // skews hue (its known skews: blues toward purple), bounded at 15.
+            let hue_tol = if r == Rendering::Aces2 { 8.0 } else { 15.0 };
+            // (mean chroma ratio over a colorimetric rendering, worst hue shift) of a patch set
+            let mut run = |patches: &[(f64, f64, Rgb)]| {
+                let mut worst_dh: f64 = 0.0;
+                let mut gain = 0.0;
+                for (lp, hp, rho) in patches {
+                    assert!(rho.iter().all(|&v| (0.0..=1.0).contains(&v)), "{lp} {hp}: {rho:?}");
+                    let rr = lab(*rho);
+                    let d = lab(cam.display_linear(rho.map(|v| v * k)));
+                    let hr = rr[2].atan2(rr[1]).to_degrees();
+                    let hd = d[2].atan2(d[1]).to_degrees();
+                    let dh = ((hd - hr + 540.0) % 360.0 - 180.0).abs();
+                    if dh >= hue_tol {
+                        fails.push(format!("{r:?} L* {lp} h {hp} C* {:.0}: hue {hr:.1} -> {hd:.1}", rr[1].hypot(rr[2])));
+                    }
+                    worst_dh = worst_dh.max(dh);
+                    gain += (d[1].hypot(d[2]) / rr[1].hypot(rr[2])) / patches.len() as f64;
+                }
+                (gain, worst_dh)
+            };
+            // the gate: on the saturated patches (comparable in chroma to the old measured
+            // chart's), the mean chroma ratio is 0.85..1.6, the old chart's bound unchanged
+            let (chroma_gain, worst_dh) = run(&chart_patches_saturated());
+            // diagnostic only (no chroma bound): the weak patches (C* 25), where a chroma
+            // compression takes the most
+            let (weak_gain, weak_dh) = run(&chart_patches());
+            eprintln!("virtual chart, {r:?}: 0.19 card L* {:.1}, 0.031 card L* {:.1}; saturated patches: mean chroma ratio {chroma_gain:.3}, worst hue shift {worst_dh:.1} deg; C* 25 patches (report only): {weak_gain:.3}, {weak_dh:.1} deg", n5[0], blk[0]);
+            if !(0.85..1.6).contains(&chroma_gain) {
+                fails.push(format!("{r:?} mean chroma ratio on the saturated patches {chroma_gain:.3}, outside 0.85..1.6"));
+            }
         }
-        // neutral 5 (patch 22, Y ~0.19) at about the SOS grey
-        let n5 = lab(cam.display_linear(colorchecker_rgb(21).map(|v| v * k)));
-        assert!((45.0..56.0).contains(&n5[0]), "neutral 5 L* {}", n5[0]);
-        // black (patch 24, Y 0.032) keeps tone above the flare toe
-        let blk = lab(cam.display_linear(colorchecker_rgb(23).map(|v| v * k)));
-        assert!(blk[0] > 8.0, "black L* {}", blk[0]);
-        // chromatic patches keep their CIELAB hue (within 8 deg) and gain chroma
-        // over a colorimetric rendering of the same lightness (a camera's look)
-        let mut chroma_gain = 0.0;
-        for i in 0..18 {
-            let rho = colorchecker_rgb(i);
-            let r = lab(rho);
-            let d = lab(cam.display_linear(rho.map(|v| v * k)));
-            let hr = r[2].atan2(r[1]).to_degrees();
-            let hd = d[2].atan2(d[1]).to_degrees();
-            let dh = ((hd - hr + 540.0) % 360.0 - 180.0).abs();
-            assert!(dh < 8.0, "patch {}: hue {hr:.1} -> {hd:.1}", i + 1);
-            eprintln!("patch {:2}: L* {:5.1} -> {:5.1}, C* {:5.1} -> {:5.1}, h {hr:6.1} -> {hd:6.1}", i + 1, r[0], d[0], r[1].hypot(r[2]), d[1].hypot(d[2]));
-            chroma_gain += (d[1].hypot(d[2]) / r[1].hypot(r[2])) / 18.0;
+        assert!(fails.is_empty(), "{fails:#?}");
+    }
+
+    #[test]
+    fn the_aces13_rendering_meets_the_same_placement_and_keeps_greys_neutral() {
+        let cam = Camera::with(Rendering::Aces13);
+        let d = cam.display_srgb([SOS_SCENE_VALUE; 3]);
+        assert!((d[1] * 255.0 - 118.0).abs() < 0.2, "{}", d[1] * 255.0);
+        for ev in [-6.0, -3.0, 0.0, 2.0, 4.0] {
+            let g = cam.display_linear([0.18 * 2f64.powf(ev); 3]);
+            assert!((g[0] - g[1]).abs() < 3e-3 && (g[2] - g[1]).abs() < 3e-3, "{ev}: {g:?}");
         }
-        assert!((0.85..1.6).contains(&chroma_gain), "mean chroma ratio {chroma_gain}");
-        eprintln!("virtual ColorChecker: neutral 5 L* {:.1}, black L* {:.1}, mean chroma ratio {chroma_gain:.2}", n5[0], blk[0]);
+        // the per-channel AP1 tone scale keeps more chroma through the mid-tones than
+        // ACES 2.0: a clear-sky blue (Rec.709 (0.33, 0.6, 1.0) x 0.1) renders more saturated
+        let a2 = Camera::with(Rendering::Aces2);
+        let sky = [0.33, 0.6, 1.0].map(|v| v * 0.1);
+        let sat = |c: Rgb| {
+            let mx = c[0].max(c[1]).max(c[2]);
+            (mx - c[0].min(c[1]).min(c[2])) / mx
+        };
+        let (s13, s2) = (sat(cam.display_srgb(sky)), sat(a2.display_srgb(sky)));
+        eprintln!("clear-sky blue: HSV S {s13:.2} (ACES 1.3) against {s2:.2} (ACES 2.0)");
+        assert!(s13 > s2, "{s13} {s2}");
     }
 
     #[test]

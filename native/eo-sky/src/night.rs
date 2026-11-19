@@ -431,7 +431,35 @@ pub fn display_shoulder() -> f64 {
 
 /// The exposure factor over the prior a reading asks for (1 with nothing
 /// binned), before the night blend. `shoulder`: `display_shoulder()`.
+///
+/// With the colour track's metering (eo-look `features::colour().meter_highlights`,
+/// `--no-meter-highlights` keeps the hold) the meter is an averaging
+/// reflected-light meter alone: the frame's mean luminance at the meter's
+/// grey, within `SCENE_METER_RANGE_EV` of the incident prior. ISO 2720
+/// supplies the calibration constant (K = 12.5), not the averaging: a
+/// whole-frame average is one meter type among those the standard covers,
+/// chosen here because it has no free parameter. The highlight hold
+/// (`SCENE_METER_HIGHLIGHT_SHARE` under the shoulder) had no published basis.
+/// Measured on the acceptance views, the hold never bound (the top 2 % sat
+/// about one stop over grey by day, three stops at Baker's sunset, all under
+/// the shoulder), so removing it changes no capture beyond the noise floor.
 pub fn scene_meter_factor(hist: &[u32], shoulder: f64) -> f64 {
+    scene_meter_factor_with(hist, shoulder, !eo_look::features::colour().meter_highlights)
+}
+
+/// Whether the scene meter's pass should average the whole frame rather
+/// than weight its centre (the meter uniform's `grey.y`, look_meter.wgsl):
+/// the centre-weighted pattern (4x at the centre, a Gaussian of 0.25 frame
+/// heights) had no published basis. Nothing reads this yet: the uniform is
+/// written by eo-render look/scene_meter.rs (another track's file; the
+/// hand-off writes `grey.y` from it), so the centre weighting is still live
+/// whatever `--no-meter-highlights` says.
+pub fn meter_averaging() -> bool {
+    eo_look::features::colour().meter_highlights
+}
+
+/// `scene_meter_factor` with the highlight hold on or off.
+pub fn scene_meter_factor_with(hist: &[u32], shoulder: f64, highlight_hold: bool) -> f64 {
     let total: f64 = hist.iter().map(|&w| w as f64).sum();
     if total <= 0.0 {
         return 1.0;
@@ -441,6 +469,9 @@ pub fn scene_meter_factor(hist: &[u32], shoulder: f64) -> f64 {
     let mean: f64 = hist.iter().enumerate().map(|(b, &w)| w as f64 * centre(b).exp2()).sum::<f64>() / total;
     let range = SCENE_METER_RANGE_EV.exp2();
     let mut k = (1.0 / mean.max(1e-9)).clamp(1.0 / range, range);
+    if !highlight_hold {
+        return k;
+    }
     // the highlight hold: the level the top share starts at, under the shoulder
     let mut acc = 0.0;
     let mut top = centre(hist.len() - 1);
@@ -482,17 +513,17 @@ mod scene_meter_tests {
 
     #[test]
     fn a_grey_card_frame_keeps_the_prior() {
-        let k = scene_meter_factor(&hist_of(&[(0.0, 1000)]), 2.0);
+        let k = scene_meter_factor_with(&hist_of(&[(0.0, 1000)]), 2.0, true);
         assert!((k.log2()).abs() < 0.1, "{k}");
     }
 
     #[test]
     fn dark_water_opens_up_and_sand_closes_down_within_the_range() {
         // a frame of open water, 2.5 stops under the card: the meter opens up, to the bound
-        let k = scene_meter_factor(&hist_of(&[(-2.5, 1000)]), 100.0);
+        let k = scene_meter_factor_with(&hist_of(&[(-2.5, 1000)]), 100.0, true);
         assert!((k.log2() - SCENE_METER_RANGE_EV).abs() < 0.05, "{k}");
         // a frame of bright sand 1.5 stops over the card: down by about 1.5
-        let k = scene_meter_factor(&hist_of(&[(1.5, 1000)]), 100.0);
+        let k = scene_meter_factor_with(&hist_of(&[(1.5, 1000)]), 100.0, true);
         assert!((k.log2() + 1.5).abs() < 0.1, "{k}");
     }
 
@@ -502,8 +533,17 @@ mod scene_meter_tests {
         // the cloud keeps it where the cloud sits at the shoulder
         let h = hist_of(&[(-2.0, 950), (2.0, 50)]);
         let shoulder = 0.18 * 4.0 * 1.5;
-        let k = scene_meter_factor(&h, shoulder);
+        let k = scene_meter_factor_with(&h, shoulder, true);
         assert!((k - 1.5).abs() < 0.1, "{k}");
+    }
+
+    #[test]
+    fn the_averaging_meter_puts_the_mean_at_grey_whatever_the_highlights() {
+        // the same frame: the mean (0.95 x 2^-2 + 0.05 x 2^2 = 0.4375 of the grey) asks for
+        // log2(1 / 0.4375) = 1.19 stops, and the lit cloud does not hold it back
+        let h = hist_of(&[(-2.0, 950), (2.0, 50)]);
+        let k = scene_meter_factor_with(&h, 0.18 * 4.0 * 1.5, false);
+        assert!((k.log2() - 1.19).abs() < 0.08, "{}", k.log2());
     }
 
     #[test]
