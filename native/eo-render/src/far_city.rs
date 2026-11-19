@@ -10,7 +10,7 @@
 //! - `--no-far-tree-density`: the park trees of the distant layer are
 //!   sampled in 512 m blocks again (hlod_trees.rs).
 //! - `--no-presidio-rule`: read by eo-kit itself (the district palette).
-//! - `--no-far-paint`: the district and cell rungs' paint as before (hlod_bake.rs).
+//! - `--no-far-paint`: reserved; no far-paint change has landed, so it changes nothing yet.
 //! - `--no-gg2-far`: all of the above at once.
 
 /// Which of this pass's far-layer changes are on (all, unless switched off).
@@ -20,6 +20,7 @@ pub struct FarCity {
     pub landmark_models: bool,
     pub tree_density: bool,
     pub presidio_rule: bool,
+    /// Reserved (`--no-far-paint`): nothing reads it yet.
     pub far_paint: bool,
 }
 
