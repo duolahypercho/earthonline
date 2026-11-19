@@ -100,7 +100,7 @@ fn lm_beach(s: ptr<function, Surface>, wp: vec3<f32>, shore: f32) {
     var damp = lm_ss(reach + 5.0, reach - 6.0, shore) * 0.62;
     var wet_ratio = 0.58;
     if (GG2_SAND) {
-        damp = gg2_damp(gh);
+        damp = gg2_damp(gg2_damp_h(wp, shore));
         wet_ratio = GG2_WET_SAND_RATIO;
     }
     let margin = lm_ss(LM_SEA_LEVEL_Y + 0.35, LM_SEA_LEVEL_Y + 0.02, wp.y) * 0.6;
@@ -156,13 +156,28 @@ fn lm_beach_swash_wet(s: ptr<function, Surface>, wp: vec3<f32>) {
 // follow the 8 m grid's diagonals and the blend back to the surveyed ground,
 // and a band edge keyed to them is a sawtooth.
 fn gg2_foreshore_h(wp: vec3<f32>, shore: f32) -> f32 {
-    // a ragged edge: a slow wander of a few metres along the shore and a finer fray
-    let rag = lm_mx_noise(vec3<f32>(wp.x * 0.025, wp.z * 0.025, 6.3)) * 0.12 + lm_mx_noise(vec3<f32>(wp.x * 0.11, wp.z * 0.11, 2.7)) * 0.07;
     var slope = GG2_FORESHORE_SLOPE;
     if (GG3_SAND2 && gg3_sand_slope > 0.0) {
         slope = gg3_sand_slope; // the beach's own measured foreshore slope (its vertices carry it)
     }
+    return gg2_foreshore_h_at(wp, shore, slope);
+}
+
+fn gg2_foreshore_h_at(wp: vec3<f32>, shore: f32, slope: f32) -> f32 {
+    // a ragged edge: a slow wander of a few metres along the shore and a finer fray
+    let rag = lm_mx_noise(vec3<f32>(wp.x * 0.025, wp.z * 0.025, 6.3)) * 0.12 + lm_mx_noise(vec3<f32>(wp.x * 0.11, wp.z * 0.11, 2.7)) * 0.07;
     return max(shore, 0.0) * slope + rag;
+}
+
+// The height the damp band is keyed to: the round-2 1:55 foreshore's
+// (GG2_FORESHORE_SLOPE), not the beach's measured slope (the wrack and the
+// prints follow that, `gg2_foreshore_h`). On the steep Crissy foreshore
+// (1:10) the mean-high-water contour lies about 8 m from the waterline, but
+// the damp sand also reaches over the swash's run-up and the capillary
+// fringe over the water table (INFERRED), which the tide's height alone does
+// not give; until a cited run-up source keys the band, it keeps round 2's width.
+fn gg2_damp_h(wp: vec3<f32>, shore: f32) -> f32 {
+    return gg2_foreshore_h_at(wp, shore, GG2_FORESHORE_SLOPE);
 }
 
 // The beach's measured foreshore slope at the fragment (GG3_SAND2, `--no-sand-detail2`;
