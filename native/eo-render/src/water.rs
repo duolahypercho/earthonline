@@ -689,9 +689,7 @@ impl WaterGpu {
         let vf = wgpu::ShaderStages::VERTEX_FRAGMENT;
         let tex = |sample_type, view_dimension| wgpu::BindingType::Texture { sample_type, view_dimension, multisampled: false };
         let filt = wgpu::TextureSampleType::Float { filterable: true };
-        let draw_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("water-draw-bgl"),
-            entries: &[
+        let mut draw_entries = vec![
                 entry(0, vf, ubuf),
                 entry(1, vf, tex(filt, wgpu::TextureViewDimension::D2)),
                 entry(2, vf, tex(filt, wgpu::TextureViewDimension::D2Array)),
@@ -712,8 +710,14 @@ impl WaterGpu {
                 entry(14, fs, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }),
                 // (iteration 2) the exposure field
                 entry(15, vf, tex(filt, wgpu::TextureViewDimension::D2)),
-            ],
-        });
+        ];
+        if look.options.water_optics {
+            // (submerged camera) the camera look's table and sampler (look_camera.wgsl), so a
+            // submerged frame finishes through the same transform as the post pass.
+            draw_entries.push(entry(16, fs, tex(filt, wgpu::TextureViewDimension::D3)));
+            draw_entries.push(entry(17, fs, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)));
+        }
+        let draw_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("water-draw-bgl"), entries: &draw_entries });
         // (ppr) the projection pass: the uniform, the opaque depth, the target buffer.
         let cs = wgpu::ShaderStages::COMPUTE;
         let ppr_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -729,7 +733,7 @@ impl WaterGpu {
         let ppr_pipe = d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some("ppr_project"), layout: Some(&ppr_layout), module: &ppr_module, entry_point: Some("ppr_project"), compilation_options: Default::default(), cache: None });
         let draw_src = format!("{common}\n{}\n{}\n{}\n{}", crate::look::look_common_source(), include_str!("sky_light_core.wgsl"), include_str!("water.wgsl"), include_str!("water_surf.wgsl")) + include_str!("water_spray.wgsl"); // + the spray, the cloud shadow and the fog depth
         let draw_src = if look.options.water_optics {
-            draw_src + include_str!("look_finish.wgsl") + include_str!("underwater.wgsl")
+            draw_src + include_str!("look_finish.wgsl") + &crate::look::camera_wgsl_at(0, 16, 17) + include_str!("underwater.wgsl")
         } else {
             draw_src
         };
@@ -1414,10 +1418,8 @@ impl WaterGpu {
             let stale = cache.as_ref().is_none_or(|(d, s, _)| d != dt || *s != scene_view.0);
             if stale {
                 crate::hitch::mark(crate::hitch::Mark::BindGroupCreated, 2);
-                let g = probe_views.map(|probe_view| self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("water-draw-bg"),
-                    layout: &self.draw_bgl,
-                    entries: &[
+                let g = probe_views.map(|probe_view| {
+                    let mut entries = vec![
                         wgpu::BindGroupEntry { binding: 0, resource: self.uniform_buf.as_entire_binding() },
                         wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&self.field_view) },
                         wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&self.disp_view) },
@@ -1434,8 +1436,14 @@ impl WaterGpu {
                         wgpu::BindGroupEntry { binding: 13, resource: self.draw_buf.as_entire_binding() },
                         wgpu::BindGroupEntry { binding: 14, resource: ppr_buf.as_entire_binding() },
                         wgpu::BindGroupEntry { binding: 15, resource: wgpu::BindingResource::TextureView(&self.expo_view) },
-                    ],
-                }));
+                    ];
+                    if self.submerged.is_some() {
+                        let (lut, samp) = look.camera_lut();
+                        entries.push(wgpu::BindGroupEntry { binding: 16, resource: wgpu::BindingResource::TextureView(lut) });
+                        entries.push(wgpu::BindGroupEntry { binding: 17, resource: wgpu::BindingResource::Sampler(samp) });
+                    }
+                    self.device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("water-draw-bg"), layout: &self.draw_bgl, entries: &entries })
+                });
                 *cache = Some((dt.clone(), scene_view.0.clone(), g)); // one per probe cube
             }
             cache.as_ref().unwrap().2[probe_front].clone()

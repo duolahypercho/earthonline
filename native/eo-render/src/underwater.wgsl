@@ -199,5 +199,9 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
     let grains = uw_grains(origin, ray, path, lk_luma(ext));
     let radiance = boundary * exp(-ext * path) + vol
         + grains * scatter * (ambient + direct * 0.25) * exp(-ext * down0 / 0.75);
+    if (look.tone2.z > 0.5) {
+        // the camera look (look_camera.wgsl), as the post pass finishes the drawn frame
+        return finish_camera(max(radiance, vec3<f32>(0.0)), i.clip);
+    }
     return finish_color(max(radiance, vec3<f32>(0.0)), i.clip, dims);
 }
