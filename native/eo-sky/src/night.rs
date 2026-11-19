@@ -440,9 +440,9 @@ pub fn display_shoulder() -> f64 {
 /// whole-frame average is one meter type among those the standard covers,
 /// chosen here because it has no free parameter. The highlight hold
 /// (`SCENE_METER_HIGHLIGHT_SHARE` under the shoulder) had no published basis.
-/// Measured on the acceptance views, the hold never bound by day (the top
-/// 2 % sat about one stop over grey), so removing it changes no capture
-/// beyond the noise floor.
+/// Measured on the acceptance views, the hold never bound (the top 2 % sat
+/// about one stop over grey by day, three stops at Baker's sunset, all under
+/// the shoulder), so removing it changes no capture beyond the noise floor.
 pub fn scene_meter_factor(hist: &[u32], shoulder: f64) -> f64 {
     scene_meter_factor_with(hist, shoulder, !eo_look::features::colour().meter_highlights)
 }
