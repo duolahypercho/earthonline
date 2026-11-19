@@ -147,6 +147,114 @@ impl Feeder {
         Ok(Self { lib, js: AgentsJs::load()?, ground, seed_int, cars: HashMap::new(), walkers: HashMap::new(), carriageways: None, moved_to_footway: 0, last_ms: 0.0 })
     }
 
+    /// The car drawn for `key`: its body, paint and wheel, kept while its kind holds.
+    fn car_entry(&mut self, lib: &Library, key: (usize, u32), id: u32, kind: u16, heading: f32, time: f64) -> Option<Car> {
+        if let Some(c) = self.cars.get(&key) {
+            if c.kind == kind {
+                return Some(*c);
+            }
+        }
+        let mut body = self.js.pick_body(self.seed_int, id, kind).unwrap_or("sedan");
+        if lib.model(body).is_none() {
+            // A body not in this checkout: another of the kind's pool that is.
+            let present: Vec<&str> = self.js.pool(kind).iter().map(|s| s.as_str()).filter(|b| lib.model(b).is_some()).collect();
+            if let Some(&b) = present.get(id as usize % present.len().max(1)) {
+                body = b;
+            }
+        }
+        let model = lib.model(body).or_else(|| lib.model("sedan"))?;
+        let paint = self.js.pick_paint(self.seed_int, id, body);
+        let m = &lib.models[model as usize];
+        let wb = (m.wheel[0][2] - m.wheel[2][2]).abs() as f64;
+        let c = Car {
+            kind,
+            model,
+            color: hex_packed(&paint.hex),
+            wheel_radius: (m.wheel_radius as f64).max(0.2),
+            half_base: if wb > 0.5 { wb / 2.0 } else { 1.4 },
+            heading,
+            time,
+            steer: 0.0,
+        };
+        self.cars.insert(key, c);
+        Some(c)
+    }
+
+    /// The walker drawn for `key`: its family, height and clip offset.
+    fn walker_entry(&mut self, lib: &Library, key: (usize, u32), id: u32) -> Walker {
+        *self.walkers.entry(key).or_insert_with(|| {
+            let k = format!("ambient-{}", id);
+            let fams = &lib.meta.people_models;
+            let f = ((eo_sim::rng::keyed_random(&k, "civilian-family") * fams.len() as f64) as usize).min(fams.len() - 1);
+            // `NPC_HEIGHT_SHAPE_RANGE`: height x (1 +- 0.04 shape).
+            let shape = eo_sim::rng::keyed_random(&k, "civilian-height") * 2.0 - 1.0;
+            Walker { model: fams[f], scale: ((1.0 + 0.04 * shape) * eo_data::groundscale::people()) as f32, offset: eo_sim::rng::keyed_random(&k, "civilian-clip") as f32, pool: f, motion: Default::default() } // * people(), the trial's visual people scale, 1.0 unless set
+        })
+    }
+
+    /// The corridor layer's vehicles and walkers (eo-sim `corridor`): placed
+    /// where the corridor puts them (its centreline carries the height and
+    /// grade; nothing is grounded here), marked `AGENT_CORRIDOR`.
+    fn build_corridor(&mut self, frame: &Frame, lib: &Library, blink: bool, out: &mut Vec<GpuAgent>) {
+        const REGION: usize = usize::MAX;
+        for a in &frame.corridor {
+            let key = (REGION, a.id);
+            let (x, y, z) = (a.pos[0], a.pos[1], a.pos[2]);
+            if a.kind < KIND_WALKER_BASE {
+                let Some(car) = self.car_entry(lib, key, a.id, a.kind, a.heading, frame.time) else { continue };
+                if let Some(cs) = self.cars.get_mut(&key) {
+                    cs.heading = a.heading;
+                    cs.time = frame.time;
+                }
+                let rot = Quat::from_rotation_y(a.heading) * Quat::from_rotation_x(-a.pitch);
+                let spin = (a.anim as f64 / car.wheel_radius).rem_euclid(std::f64::consts::TAU) as f32;
+                let mut flags = a.flags as u32 | crate::AGENT_CORRIDOR;
+                if blink && a.flags & (FLAG_TURN_LEFT | FLAG_TURN_RIGHT) != 0 {
+                    flags |= AGENT_BLINK_ON;
+                }
+                out.push(GpuAgent {
+                    pos: [x, y, z],
+                    model: car.model,
+                    rot: rot.to_array(),
+                    color: car.color,
+                    flags,
+                    anim: spin,
+                    steer: 0.0,
+                    speed: a.speed,
+                    scale: eo_data::groundscale::vehicles() as f32,
+                    clip_phase: 0.0,
+                    clip: 0,
+                });
+            } else if !lib.meta.people_models.is_empty() {
+                let w = self.walker_entry(lib, key, a.id);
+                let secs = lib.meta.clip_seconds[CLIP_IDLE as usize].max(0.1) as f64;
+                let mut anim = fract(a.anim as f64 / std::f64::consts::TAU) as f32;
+                // the corridor layer's own clock (it replays; the regions' may drop time).
+                let clip_phase = fract(frame.corridor_time / secs + w.offset as f64) as f32;
+                let mo = &lib.meta.motion;
+                if mo.any() && mo.styled() {
+                    if let Some(ws) = self.walkers.get_mut(&key) {
+                        let gait = a.anim as f64 / std::f64::consts::TAU;
+                        anim = crate::motion::walk_step(mo, &mut ws.motion, w.pool, a.id, gait, a.speed as f64, w.scale, false);
+                    }
+                }
+                out.push(GpuAgent {
+                    pos: [x, y, z],
+                    model: w.model,
+                    rot: Quat::from_rotation_y(a.heading).to_array(),
+                    color: 0xffffffff,
+                    flags: a.flags as u32 | crate::AGENT_CORRIDOR,
+                    anim,
+                    steer: 0.0,
+                    speed: a.speed,
+                    scale: w.scale,
+                    clip_phase,
+                    clip: CLIP_IDLE,
+                });
+            }
+        }
+    }
+
     /// Build the instances of one simulation frame (appended to `out`).
     pub fn build(&mut self, frame: &Frame, out: &mut Vec<GpuAgent>) {
         let t0 = Instant::now();
@@ -162,35 +270,7 @@ impl Feeder {
             let [ox, oz] = r.origin;
             for a in &r.vehicles {
                 let key = (ri, a.id);
-                let car = match self.cars.get(&key) {
-                    Some(c) if c.kind == a.kind => *c,
-                    _ => {
-                        let mut body = self.js.pick_body(self.seed_int, a.id, a.kind).unwrap_or("sedan");
-                        if lib.model(body).is_none() {
-                            // A body not in this checkout: another of the kind's pool that is.
-                            let present: Vec<&str> = self.js.pool(a.kind).iter().map(|s| s.as_str()).filter(|b| lib.model(b).is_some()).collect();
-                            if let Some(&b) = present.get(a.id as usize % present.len().max(1)) {
-                                body = b;
-                            }
-                        }
-                        let Some(model) = lib.model(body).or_else(|| lib.model("sedan")) else { continue };
-                        let paint = self.js.pick_paint(self.seed_int, a.id, body);
-                        let m = &lib.models[model as usize];
-                        let wb = (m.wheel[0][2] - m.wheel[2][2]).abs() as f64;
-                        let c = Car {
-                            kind: a.kind,
-                            model,
-                            color: hex_packed(&paint.hex),
-                            wheel_radius: (m.wheel_radius as f64).max(0.2),
-                            half_base: if wb > 0.5 { wb / 2.0 } else { 1.4 },
-                            heading: a.heading,
-                            time: frame.time,
-                            steer: 0.0,
-                        };
-                        self.cars.insert(key, c);
-                        c
-                    }
-                };
+                let Some(car) = self.car_entry(&lib, key, a.id, a.kind, a.heading, frame.time) else { continue };
                 let (x, z) = (ox + a.pos[0] as f64, oz + a.pos[2] as f64);
                 let (s, c) = (a.heading as f64).sin_cos();
                 let (fx, fz) = (s, c);
@@ -245,14 +325,7 @@ impl Feeder {
             }
             for a in &r.walkers {
                 let key = (ri, a.id);
-                let w = *self.walkers.entry(key).or_insert_with(|| {
-                    let k = format!("ambient-{}", a.id);
-                    let fams = &lib.meta.people_models;
-                    let f = ((eo_sim::rng::keyed_random(&k, "civilian-family") * fams.len() as f64) as usize).min(fams.len() - 1);
-                    // `NPC_HEIGHT_SHAPE_RANGE`: height x (1 +- 0.04 shape).
-                    let shape = eo_sim::rng::keyed_random(&k, "civilian-height") * 2.0 - 1.0;
-                    Walker { model: fams[f], scale: ((1.0 + 0.04 * shape) * eo_data::groundscale::people()) as f32, offset: eo_sim::rng::keyed_random(&k, "civilian-clip") as f32, pool: f, motion: Default::default() } // * people(), the trial's visual people scale, 1.0 unless set
-                });
+                let w = self.walker_entry(&lib, key, a.id);
                 let (mut x, mut z) = (ox + a.pos[0] as f64, oz + a.pos[2] as f64);
                 // The simulation's footways come from the class street model
                 // (eo-sim `native`), narrower than the surveyed street the
@@ -304,6 +377,9 @@ impl Feeder {
                     clip,
                 });
             }
+        }
+        if !frame.corridor.is_empty() {
+            self.build_corridor(frame, &lib, blink, out);
         }
         // Forget agents not seen for a while (ids are recycled).
         if self.cars.len() > 8 * out.len().max(64) {

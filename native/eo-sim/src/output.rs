@@ -50,6 +50,26 @@ pub const FLAG_KERB_WAIT: u16 = 32;
 pub const FLAG_FAR: u16 = 64;
 pub const FLAG_CORNERING: u16 = 128;
 
+/// One corridor vehicle or walker (`corridor`): absolute world metres with
+/// its height (the corridor's centreline carries it; nothing grounds it),
+/// heading as `AgentInstance`, and the grade it rides, radians (nose up +).
+/// 36 bytes, `Pod`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Pod, Zeroable, PartialEq)]
+pub struct CorridorInstance {
+    pub pos: [f32; 3],
+    pub heading: f32,
+    pub pitch: f32,
+    pub speed: f32,
+    /// vehicles: metres travelled; walkers: gait phase, radians.
+    pub anim: f32,
+    pub kind: u16,
+    pub flags: u16,
+    pub id: u32,
+}
+
+const _: () = assert!(std::mem::size_of::<CorridorInstance>() == 36);
+
 /// One region's agents after a step.
 #[derive(Clone, Debug, Default)]
 pub struct AgentBuffer {
