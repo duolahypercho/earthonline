@@ -256,6 +256,10 @@ pub const MHHW_OVER_MSL_M: f64 = 3.602 - 2.773;
 /// the slope is the surveyed one. The sand limit (eo-app ground_tone) and the
 /// cliff-toe boulders (rocks.rs) both read it.
 pub const SAND_SLOPE_MAX: f64 = 0.36;
+/// The steepest ground a park tree stands on (rise over run across 12 m):
+/// tan 42 degrees, the near tier's coastal-stand limit (`vegetation::plant_coarse`),
+/// INFERRED (steeper faces on the bluffs are bare rock or scrub).
+pub const TREE_SLOPE_MAX: f64 = 0.90;
 
 fn luma(c: Linear) -> f64 {
     0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
@@ -462,6 +466,34 @@ impl GroundCover {
         })
     }
 
+    /// Whether a tree may stand at (x, z) on the drawn ground `y_at`: not
+    /// inside a mapped beach, not on the cliff over one (the sand limit's
+    /// band: steeper than `SAND_SLOPE_MAX` across 12 m within
+    /// `BEACH_SAND_REACH_M` of a mapped beach, eo-app ground_tone), and not
+    /// on a face steeper than [`TREE_SLOPE_MAX`] anywhere.
+    pub fn tree_ground_ok(&self, x: f64, z: f64, y_at: &dyn Fn(f64, f64) -> f64) -> bool {
+        if self.in_mapped_beach(x, z) {
+            return false;
+        }
+        let slope = (y_at(x + 6.0, z) - y_at(x - 6.0, z)).hypot(y_at(x, z + 6.0) - y_at(x, z - 6.0)) / 12.0;
+        if !slope.is_finite() {
+            return true;
+        }
+        !(slope > TREE_SLOPE_MAX || (slope > SAND_SLOPE_MAX && self.near_mapped_beach(x, z)))
+    }
+
+    /// The largest park green (OSM `leisure=park`) whose ring holds (px, pz):
+    /// its index for [`GroundCover::in_green`].
+    pub fn largest_park_holding(&self, px: f64, pz: f64) -> Option<usize> {
+        let area = |r: &[[f64; 2]]| (0..r.len()).map(|i| r[i][0] * r[(i + 1) % r.len()][1] - r[(i + 1) % r.len()][0] * r[i][1]).sum::<f64>().abs() / 2.0;
+        self.greens.iter().enumerate().filter(|(_, g)| g.order.0 == 0 && g.ring.len() >= 3 && in_ring(&g.ring, px, pz)).max_by(|a, b| area(&a.1.ring).total_cmp(&area(&b.1.ring))).map(|(i, _)| i)
+    }
+
+    /// Whether (x, z) lies in green `i`'s ring (its holes left out).
+    pub fn in_green(&self, i: usize, x: f64, z: f64) -> bool {
+        self.greens.get(i).is_some_and(|g| x >= g.min[0] && x <= g.max[0] && z >= g.min[1] && z <= g.max[1] && in_ring(&g.ring, x, z) && !g.holes.iter().any(|h| h.len() >= 3 && in_ring(h, x, z)))
+    }
+
     /// tile-trees.js `plantTileTrees` over [x0, x1) x [z0, z1) (near tier): the
     /// world-anchored 14 m lattice jittered by `hash2`, a tree where the green
     /// painted there has a tree class, its rule's chance (times the grove
@@ -501,6 +533,11 @@ impl GroundCover {
                 }
                 let y = y_at(x, z);
                 if !y.is_finite() {
+                    continue;
+                }
+                // round 3 (`--no-cliff-rock-cover`): no park tree on a mapped beach, on the
+                // cliff over one or on a face too steep for a tree (both tiers read this lattice).
+                if crate::vegetation::gg3().cliff_rock_cover && !self.tree_ground_ok(x, z, y_at) {
                     continue;
                 }
                 let n = rule.species.len();
