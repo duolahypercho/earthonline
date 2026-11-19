@@ -224,7 +224,98 @@ struct Surf {
 fn sf_amp_scale(x: f32) -> f32 {
     // a storm's surf is bigger (1.8 x at the storm preset's wind).
     // (sea r3: the Pacific's surf 1.9 x the JS's 0.55 m: breaking crests about 2 m over the sea at Ocean Beach, on the horizon line from the sand)
-    return mix(wu.bay.x, 1.9, wg_ocean_surf(x)) * (1.0 + 0.8 * w_storm());
+    let old = mix(wu.bay.x, 1.9, wg_ocean_surf(x)) * (1.0 + 0.8 * w_storm());
+    if (wb.on > 0.0 && wg_gg3(512u)) {
+        // (iteration 3, surf break) on the measured bed: the open Pacific's surf times
+        // the refraction coefficient the swell reaches here with (eo-water
+        // bathymetry.rs; its shoaling is `sf_break`'s), never under the bay's own
+        let k = clamp(wb.kr, 0.0, 1.5);
+        return mix(old, max(1.9 * k, wu.bay.x) * (1.0 + 0.8 * w_storm()), wb.on);
+    }
+    return old;
+}
+
+// (iteration 3, surf break) the crest lines break in sections (peaks and shoulders 50-300 m long)
+fn sf_sections(along: f32) -> f32 {
+    return 0.22 * sin(along * 0.011 + 0.4) + 0.14 * sin(along * 0.037 + 1.3) + 0.08 * sin(along * 0.083 + 2.2);
+}
+
+// (iteration 3, surf break) two surfs blended (the measured bed's edge)
+fn sf_mix(a: Surf, b: Surf, k: f32) -> Surf {
+    var o: Surf;
+    o.height = mix(a.height, b.height, k);
+    o.shoreward = mix(a.shoreward, b.shoreward, k);
+    o.foam = mix(a.foam, b.foam, k);
+    o.whitewater = mix(a.whitewater, b.whitewater, k);
+    o.face = mix(a.face, b.face, k);
+    o.depth = mix(a.depth, b.depth, k);
+    o.age = select(a.age, b.age, k > 0.5);
+    o.bored = mix(a.bored, b.bored, k);
+    return o;
+}
+
+// (iteration 3, surf break) the surf on the measured sea bed (eo-water
+// bathymetry.rs, `wb`): each bore breaks where its height, shoaled by Green's
+// law from 10 m (`sf_break`), reaches McCowan's 0.78 of the surveyed depth, not
+// of the 1:55 model's; its crests are the swell's refracted arrival time (the
+// eikonal's level sets: `time / WB_PERIOD_S - wb.t` whole), not the shore
+// field's distance, so they bend round the points and over the bars as the
+// survey has them; the wave length the local one at the period. Seaward the
+// zone ends at twice the depth its largest wave breaks at (as `w_surf`);
+// landward at the shore field's waterline (`signed`), where the swash takes over.
+// The along-shore sections, lobes and wave sets are the model's (`surf_at`).
+fn surf_at_bathy(time: f32, signed: f32, along: f32, weight: f32, amp: f32) -> Surf {
+    var o: Surf;
+    let d = max(wb.depth, 0.0);
+    let ocean_back = clamp((amp / (1.0 + 0.8 * w_storm()) - wu.bay.x) / (1.9 - wu.bay.x), 0.0, 1.0);
+    let a_top = SF_AMPLITUDE * 1.15 * amp;
+    let db_top = pow(a_top * 3.556 / SF_GAMMA, 0.8);
+    // (landward by the surveyed depth, not the ring's distance: where the ring
+    // lies seaward of the surveyed waterline the last metres of water are
+    // inside it, and that is where the bores run in)
+    let w = weight * wg_smooth(-0.2, 0.15, wb.depth) * wg_smooth(-40.0, -20.0, signed) * wg_smooth(2.5 * db_top, 1.5 * db_top, d) * (1.0 - surf_cover_at(ocean_back, signed, weight));
+    let dl = max(d, SF_TOE);
+    o.depth = dl;
+    if (w <= 0.0) {
+        o.height = 0.0;
+        o.shoreward = 0.0;
+        o.foam = 0.0;
+        o.whitewater = 0.0;
+        o.face = 0.0;
+        o.age = 0.0;
+        o.bored = 0.0;
+        return o;
+    }
+    let lam = WB_PERIOD_S * sqrt(dl * SF_G);
+    let phase0 = time / WB_PERIOD_S - wb.t + sf_sections(along);
+    let m0 = floor(phase0 + 0.5);
+    let u0 = phase0 - m0;
+    let lob_own = sf_crest_lobes(along, m0);
+    let lob = mix(lob_own, 0.5 * (lob_own + sf_crest_lobes(along, m0 + select(-1.0, 1.0, u0 > 0.0))), wg_smooth(0.3, 0.5, abs(u0)));
+    let phase = phase0 + lob * wg_smooth(0.0, 0.8, d);
+    let m = floor(phase + 0.5);
+    let u = phase - m;
+    let a_own = sf_wave_amp(m, along) * amp;
+    let a_other = sf_wave_amp(m + select(-1.0, 1.0, u > 0.0), along) * amp;
+    let a = mix(a_own, (a_own + a_other) * 0.5, wg_smooth(SF_TROUGH_BLEND_FROM, 0.5, abs(u)));
+    let bk = sf_break(a, dl);
+    let prof = sf_profile(u, lam, bk);
+    let since = max(u, 0.0) * WB_PERIOD_S;
+    let bored = wg_smooth(0.9, 1.3, bk.b);
+    let persist = bored * exp(since / -4.5) * 0.8;
+    let patch_w = wg_smooth(-0.5, 0.45, mx_noise2(vec2<f32>(along * 0.06 + time * 0.05, m * 2.9 + 0.4)));
+    var ww = prof.z * mix(0.25, 1.0, patch_w);
+    if (ocean_back > 0.35) {
+        ww = sf_tatter(ww, along, u * lam, m);
+    }
+    o.height = max(prof.y, -0.7 * dl) * w;
+    o.shoreward = 0.0;
+    o.foam = max(ww, persist) * w;
+    o.whitewater = ww * w;
+    o.face = prof.w * w;
+    o.age = fract(phase) * WB_PERIOD_S;
+    o.bored = bored * w;
+    return o;
 }
 
 // `surfAt(P, time, offshore, along, weight)` (no bed depth: the 1:55 model),
@@ -346,6 +437,9 @@ fn sf_inject(sx: ptr<function, f32>, sz: ptr<function, f32>, whitecap: ptr<funct
             let wob = mx_noise(vec3<f32>(p * 0.35, wu.cam.w * 0.2)) * 0.6 + mx_noise(vec3<f32>(p * 1.7, wu.cam.w * 0.5 + 3.0)) * 0.4;
             let edge = wg_smooth(0.012 + 0.03 * (0.5 + 0.5 * wob), 0.003, column);
             *swash_foam = edge * wg_smooth(-0.25, 0.3, wob) * 0.7 * f.y;
+            if (wg_gg3(1024u)) {
+                *swash_foam = max(*swash_foam, sf_swash_line(p, column, f.y));
+            }
         }
         return;
     }
@@ -357,6 +451,29 @@ fn sf_inject(sx: ptr<function, f32>, sz: ptr<function, f32>, whitecap: ptr<funct
     *surf_ww = max(*surf_ww, sf_inj.ww);
     *surf_bored = max(*surf_bored, sf_inj.bored);
     *swash_foam = sf_inj.swash;
+}
+
+// (iteration 3, swash foam: water-8) the thin bright bubble line a bay
+// beach's small waves leave at the swash edge: a band `SF_SWASH_LINE_M` wide
+// on the sand from the water's edge out (INFERRED: the leading edge's bubbles
+// and the backwash's foam, 20-50 cm), continuous with a mild
+// variation along the shore. Its horizontal distance from the edge is the
+// column over the beach's slope (eo-water beaches.rs, `w_surf_k` x 1/55); the
+// pixel's share of the band is its overlap with the pixel's footprint across
+// the shore, so a line far narrower than a pixel still draws as a faint
+// continuous line, not a dotted one.
+const SF_SWASH_LINE_M: f32 = 0.35;
+
+fn sf_swash_line(p: vec2<f32>, column: f32, beach: f32) -> f32 {
+    let slope = max(w_surf_k, 0.1) / 55.0;
+    let x = column / slope;
+    let fr = w_shore_frame(p);
+    let fp = clamp(max(abs(dot(w_wdx, fr.xy)), abs(dot(w_wdy, fr.xy))), 0.01, 8.0);
+    let lo = max(0.0, x - 0.5 * fp);
+    let hi = min(SF_SWASH_LINE_M, x + 0.5 * fp);
+    let cover = clamp((hi - lo) / fp, 0.0, 1.0);
+    let along = 0.8 + 0.2 * mx_noise(vec3<f32>(p * 0.6, wu.cam.w * 0.3));
+    return cover * along * wg_smooth(0.25, 0.6, beach);
 }
 
 // the surf zone's sediment (water.wgsl's silt): the bay's beaches carry a

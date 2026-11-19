@@ -308,3 +308,23 @@ fn submerged_camera_obeys_depth_critical_angle_and_shore() {
     let dry = view(-180.0, 0.5, 1.4);
     assert!((center(&on, dry) - center(&off, dry)).abs() < 2.0, "submerged optics on dry land");
 }
+
+// (iteration 3) The water shader's constants that mirror eo-water's: the swell
+// period the bathymetry's arrival time is counted in, and the clear-day swell
+// height the obstacle foam reads (water_common.wgsl `WB_PERIOD_S`, `WB_HS_CLEAR`).
+#[test]
+fn the_bathymetry_constants_match_eo_water() {
+    let src = include_str!("../src/water_common.wgsl");
+    let read = |name: &str| -> f64 {
+        let line = src.lines().find(|l| l.starts_with(&format!("const {name}: f32 = "))).unwrap_or_else(|| panic!("{name} not in water_common.wgsl"));
+        line.split('=').nth(1).unwrap().trim().trim_end_matches(';').parse().unwrap()
+    };
+    assert_eq!(read("WB_PERIOD_S"), eo_water::bathymetry::PERIOD_S);
+    assert_eq!(read("WB_HS_CLEAR"), eo_water::waves::SWELL_HS[0]);
+    // the switch bits the shader tests (water.wgsl, water_surf.wgsl) are eo-water's
+    let shader = [include_str!("../src/water.wgsl"), include_str!("../src/water_surf.wgsl"), include_str!("../src/water_common.wgsl")].concat();
+    for (bit, name) in [(eo_water::switches::BATHYMETRY, "256u"), (eo_water::switches::SURF_BREAK, "512u"), (eo_water::switches::SWASH_FOAM, "1024u"), (eo_water::switches::OBSTACLE_FOAM, "2048u"), (eo_water::switches::BODY2, "4096u")] {
+        assert_eq!(format!("{bit}u"), name);
+        assert!(shader.contains(&format!("wg_gg3({name})")), "{name}");
+    }
+}

@@ -57,6 +57,13 @@ fn w_expo_set(xz: vec2<f32>) {
             w_surf_k = max(e.w * 10.0, 0.1);
         }
     }
+    // (iteration 3, bathymetry) where the measured sea bed covers, the swell's
+    // share is the refraction coefficient the swell carried over it reaches
+    // here (eo-water bathymetry.rs) instead of the exposure's geometric stand-in
+    wb_set(xz);
+    if (wb.on > 0.0 && wg_ex.x >= 0.0) {
+        wg_ex.x = mix(wg_ex.x, clamp(wb.kr, 0.0, 1.0), wb.on);
+    }
 }
 
 // (iteration 2, beach profiles) the surf model's offshore distance over the
@@ -75,14 +82,32 @@ var<private> w_surf_k: f32 = 1.0;
 // seabed, so they drew contour rings round piers, a tower's fender and the
 // headlands. Unchanged with --no-beach-profiles.
 fn w_surf(time: f32, s: f32, along: f32, beach: f32, amp: f32) -> Surf {
-    if (!(wu.wv_gg2.w > 0.5 && wg_gg2(16u))) {
-        return surf_at(time, s, along, beach, amp);
+    // (iteration 3, surf break) on the measured bed where it covers (water_surf.wgsl)
+    let on_b = select(0.0, wb.on, wg_gg3(512u));
+    if (on_b >= 0.999) {
+        return surf_at_bathy(time, s, along, beach, amp);
     }
-    let off = s * w_surf_k;
-    let a_top = SF_AMPLITUDE * 1.15 * amp;
-    let db = pow(a_top * 3.556 / SF_GAMMA, 0.8);
-    let zone = wg_smooth(2.5 * db, 1.5 * db, sf_model_depth(off));
-    return surf_at(time, off, along, beach * zone, amp);
+    var o: Surf;
+    if (!(wu.wv_gg2.w > 0.5 && wg_gg2(16u))) {
+        o = surf_at(time, s, along, beach, amp);
+    } else {
+        let off = s * w_surf_k;
+        let a_top = SF_AMPLITUDE * 1.15 * amp;
+        let db = pow(a_top * 3.556 / SF_GAMMA, 0.8);
+        let zone = wg_smooth(2.5 * db, 1.5 * db, sf_model_depth(off));
+        o = surf_at(time, off, along, beach * zone, amp);
+    }
+    if (on_b > 0.0) {
+        o = sf_mix(o, surf_at_bathy(time, s, along, beach, amp), on_b);
+    }
+    return o;
+}
+
+// (iteration 3, surf break) how far inside the ring (m, negative) the surf
+// may run: on the measured bed as far as the surveyed water reaches
+// (`surf_at_bathy` fades by depth there), else 2 m as before
+fn w_surf_inland() -> f32 {
+    return select(-2.0, -40.0, wb.on > 0.0 && wg_gg3(512u));
 }
 
 // the sky as the sky slice now draws it where nothing covers it: the
@@ -229,11 +254,18 @@ fn w_hash(c: vec2<f32>, k: f32) -> f32 {
 
 // ---- water r2 (water.rs FEAT_GLINT, FEAT_SHORE, FEAT_FOAM_LIT, FEAT_WIND) ----
 
+// (iteration 3) this fragment's world step per pixel in x and y (dpdx, dpdy of world.xz), set by w_shade
+var<private> w_wdx: vec2<f32> = vec2<f32>(0.0);
+var<private> w_wdy: vec2<f32> = vec2<f32>(0.0);
 // this fragment's footprint across and along the camera's forward axis (m), set by w_shade
 var<private> w_fp_lat: f32 = 0.0;
 var<private> w_fp_along: f32 = 0.0;
 // (diagnostics) the body's downwelling light: sun part, sky part, shadow (EO_WATER_DEBUG=10)
 var<private> w_dbg_ed: vec3<f32> = vec3<f32>(0.0);
+// (diagnostics, EO_WATER_DEBUG=17) the obstacle foam: its cover, the band's weight, the wave height there (m)
+var<private> w_dbg_obs: vec3<f32> = vec3<f32>(0.0, 0.0, -1.0);
+// (diagnostics, EO_WATER_DEBUG=16) the surf here: its fresh whitewater, its bore, its offshore amplitude scale
+var<private> w_dbg_surf: vec3<f32> = vec3<f32>(0.0);
 // (diagnostics, EO_WATER_DEBUG=14) the projected reflection's facet-weighted cover, and whether the flat mirror found a source
 var<private> w_dbg_ppr: vec2<f32> = vec2<f32>(0.0);
 
@@ -429,7 +461,12 @@ fn w_tidal(p: vec2<f32>, t: f32) -> vec2<f32> {
 fn w_swash(along: f32, t: f32, amp: f32) -> vec2<f32> {
     // the bores reach different stretches of the beach at different times
     let stagger = 0.22 * sin(along * 0.043 + 0.8) + 0.13 * sin(along * 0.117 + 2.9) + 0.06 * sin(along * 0.31 + 1.4);
-    let phase = t / SF_PERIOD + sf_wobble(along) + stagger;
+    var phase = t / SF_PERIOD + sf_wobble(along) + stagger;
+    if (wg_gg3(512u) && wb.on > 0.999) {
+        // (iteration 3, surf break) the bores the measured bed brings in (`surf_at_bathy`'s
+        // crests at the waterline, its along-shore sections)
+        phase = t / WB_PERIOD_S - wb.t + sf_sections(along);
+    }
     let m = floor(phase);
     let u = phase - m;
     let a = min(sf_wave_amp(m, along) * amp, 0.7); // a dissipative beach's run-up stays under about 0.6 m
@@ -659,7 +696,7 @@ fn w_displacement(base: vec2<f32>, spacing: f32, f: vec2<f32>) -> vec3<f32> {
     // vertex spacing the face drew as a row of sawtooth triangles (the JS's
     // grid shows the same), so there the surf is shading and foam only.
     let surf_vw = 1.0 - wg_smooth(1.0, 2.5, spacing);
-    if (f.y > 0.01 && f.x > -2.0 && f.x < 420.0 && surf_vw > 0.0) {
+    if (f.y > 0.01 && f.x > w_surf_inland() && f.x < 420.0 && surf_vw > 0.0) {
         let fr = w_shore_frame(base);
         let s = w_surf(wu.cam.w, f.x, fr.z, f.y, sf_amp_scale(base.x));
         // (sea r4: half the shoreward throw: on the 0.8 m grid the full curl folded the face over itself, and the folded triangles read as dark boxes on the breaker line)
@@ -1379,6 +1416,8 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     w_frag_px = frag.xy;
     let wdx = dpdx(world.xz);
     let wdy = dpdy(world.xz);
+    w_wdx = wdx;
+    w_wdy = wdy;
     let footprint = clamp(max(length(wdx), length(wdy)), 0.0, 64.0);
     {
         // (water r2) the footprint across and along the camera's forward axis
@@ -1552,6 +1591,64 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
             collar = max(collar, cf * 0.85);
         }
         contact_occ = max(wg_smooth(2.5, 0.0, column) * wall * select(1.0, 0.0, column >= 2.5), wall_near);
+    }
+    // (iteration 3, obstacle foam) white water where the waves meet what stands
+    // out of the water: the surveyed land's distance (eo-water bathymetry.rs,
+    // the field's A: the south pier's fender, the rocks and rocky shores B1
+    // resolves, and the obstacles registered in eo-water obstacles.rs) inside
+    // a band that grows with the waves arriving there: the swell's height, the
+    // clear-day Hs times the refraction coefficient (a storm's more), and the
+    // wind sea's (Pierson-Moskowitz 0.0246 U10^2 m, held to 0.6 m by the bay's
+    // fetch, INFERRED). The band is a run-up and reflection zone about one to
+    // three wave heights wide plus a couple of metres of wash against a wall
+    // (INFERRED; the field's 6 m texels place it within a few metres), torn into patches, whiter as each
+    // swell crest arrives (its phase from the arrival time) and slowly drifting.
+    // Not on a mapped beach (the surf there has its own foam).
+    // (the field's beach weight reaches 400 m out to sea; a beach's own surf is its last 30-80 m)
+    let on_beach = beach * wg_smooth(80.0, 30.0, signed);
+    if (wg_gg3(2048u) && wb.on > 0.0 && wb.land < 60.0 && on_beach < 0.6 && view_dist < 3000.0) {
+        let h_sw = WB_HS_CLEAR * clamp(wb.kr, 0.0, 1.5) * (1.0 + 0.67 * storm);
+        let u10 = wv_u10(p.x);
+        let h_ws = min(0.0246 * u10 * u10, 0.6);
+        let h = h_sw + h_ws;
+        let band = 2.0 + 3.0 * h;
+        let crest = 0.5 + 0.5 * cos(6.2831853 * (t / WB_PERIOD_S - wb.t));
+        let pulse = mix(1.0, mix(0.45, 1.0, crest), clamp(h_sw / max(h, 1e-3), 0.0, 1.0));
+        let reach = band * pulse;
+        // the band's share of the pixel (a far band narrower than a pixel's
+        // footprint along the view draws as a faint continuous line, not nothing)
+        let fp = clamp(w_fp_along, 0.05, 40.0);
+        // (the foam's own texture only where the pixel resolves the band and the texture)
+        let near_o = (1.0 - wg_smooth(0.15, 2.0, w_fp_lat)) * (1.0 - wg_smooth(0.3 * reach, reach, fp));
+        let tex = clamp((w_foam_tex(p * 0.9 + vec2<f32>(t * 0.17, -t * 0.11), t * 1.1, near_o) - 0.12) / 0.66, 0.0, 1.0);
+        let patches = wg_smooth(-0.35, 0.35, mx_noise(vec3<f32>(p * 0.08, t * 0.07)));
+        let cover = clamp((reach - max(wb.land - 0.5 * fp, 0.0)) / fp, 0.0, 1.0);
+        let k = max(wg_smooth(reach, reach * 0.25, wb.land), cover) * wg_smooth(0.05, 0.3, h) * wb.on * (1.0 - wg_smooth(0.35, 0.6, on_beach));
+        var obf = mix(wg_smooth(1.0 - k - 0.15, 1.0 - k + 0.15, tex), k * 0.6, 1.0 - near_o) * mix(0.55, 1.0, patches);
+        // the tidal current's wake behind what stands in it: water read upstream
+        // along the flow (the Gate's tidal axis, heading 255 degrees as `w_tidal`,
+        // the current's sign from the clock) at 15-160 m; where that point lies
+        // against the obstacle this water is in its wake, a turbulent white trail
+        // widening and fading downstream (INFERRED: visible white water over a few
+        // obstacle widths in a current over about 0.5 m/s)
+        let cur = wu.wv_gg2.x;
+        if (wg_gg2(2u) && abs(cur) > 0.3 && wb.land < 60.0) {
+            let flow = vec2<f32>(0.966, -0.259) * sign(cur);
+            let strength = wg_smooth(0.3, 1.5, abs(cur));
+            var wake = 0.0;
+            let steps = array<f32, 4>(15.0, 40.0, 80.0, 160.0);
+            for (var i = 0; i < 4; i = i + 1) {
+                let q = p - flow * steps[i];
+                let uvq = (q - wu.wv_extra.xy) * wu.wv_extra.zw;
+                let dq = textureSampleLevel(w_extra, w_extra_samp, uvq, 0.0).w;
+                wake = max(wake, wg_smooth(3.0 + 0.12 * steps[i], 0.5, dq) * exp(-steps[i] / 90.0));
+            }
+            let streaks = wg_smooth(-0.2, 0.5, mx_noise(vec3<f32>(dot(p, flow) * 0.02, dot(p, vec2<f32>(-flow.y, flow.x)) * 0.15, t * 0.05)));
+            let wk = wake * strength * (0.4 + 0.6 * streaks) * wb.on;
+            obf = max(obf, mix(wg_smooth(1.0 - wk - 0.2, 1.0 - wk + 0.2, tex), wk * 0.5, 1.0 - near_o));
+        }
+        collar = max(collar, obf * 0.85);
+        w_dbg_obs = vec3<f32>(obf, k, h);
     }
 
     // the swash sheet on a beach: a lacy foam front where the film runs
@@ -1786,9 +1883,10 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     var surf_face = 0.0;
     var surf_ww = 0.0;
     var surf_bored = 0.0;
-    if (beach > 0.01 && signed > -4.0 && signed < 420.0) {
+    if (beach > 0.01 && signed > min(-4.0, w_surf_inland()) && signed < 420.0) {
         let sa = sf_amp_scale(base.x);
         let s0 = w_surf(t, signed, fr.z, beach, sa);
+        w_dbg_surf = vec3<f32>(s0.whitewater, s0.bored, sa);
         let s1 = w_surf(t, signed - 0.6, fr.z, beach, sa);
         let dhds = (s1.height - s0.height) / 0.6;
         sx = sx + fr.x * dhds;
@@ -1797,16 +1895,38 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         // torn into lace that thins as it ages (most of it gone before the
         // next bore, so the lines of breakers stand apart over darker water).
         // (in the last metres the bore is a thin sheet: its foam a lace, no solid band)
-        let inner = mix(0.45, 1.0, wg_smooth(2.0, 18.0, signed));
+        var inner = mix(0.45, 1.0, wg_smooth(2.0, 18.0, signed));
+        // (iteration 3, surf break) on the measured bed: the thin sheet over its last 0.1-0.6 m of depth
+        let bed_surf = wb.on > 0.0 && wg_gg3(512u);
+        if (bed_surf) {
+            inner = mix(inner, mix(0.45, 1.0, wg_smooth(0.1, 0.6, wb.depth)), wb.on);
+        }
         // (sea r2: as much foam as the waves have height: a sheltered bay beach
         // keeps a thin swash line, not the Pacific's surf lace)
-        let sized = wg_smooth(0.12, 0.7, sa);
+        var sized = wg_smooth(0.12, 0.7, sa);
+        // (iteration 3, surf break) residual foam left between the bores
+        var residual = 0.06;
+        if (bed_surf) {
+            // on the measured bed a breaker's foam follows its own height, not the
+            // open coast's: a wave under about 10 cm breaks without entraining air
+            // (micro-breaking), one of 30 cm and more throws a full white bore
+            // (INFERRED: the mean wave amplitude, `SF_AMPLITUDE` x `sa`, from 2 to 12 cm);
+            // and the foam a dissipative surf zone keeps between its bores, a lace
+            // over a fifth to a third of the water in shore video (INFERRED, 0.25)
+            sized = mix(sized, wg_smooth(0.02, 0.12, SF_AMPLITUDE * sa), wb.on);
+            residual = mix(residual, 0.25, wb.on);
+        }
         let fresh = sf_fresh_foam(s0.whitewater, lace, p, fr.xy, t, inner) * sized; // broken behind the roller, torn into lace near the sand (water_surf.wgsl)
         // (in a storm the whole surf zone churns: whitewater stays dense between the bores)
         let churn = storm * sized * wg_smooth(-2.0, 25.0, signed) * wg_smooth(520.0, 260.0, signed) * 0.95; // (denser, wider)
-        let old = clamp(max(sf_aged_patches((s0.bored * (0.8 * exp(-s0.age / 2.6) + 0.06) * sized + whitecap * (0.3 + 0.5 * storm)) * inner, p, fr.xy, t), churn), 0.0, 1.0); // aged foam in rafts and clearings (water_surf.wgsl)
+        let old = clamp(max(sf_aged_patches((s0.bored * (0.8 * exp(-s0.age / 2.6) + residual) * sized + whitecap * (0.3 + 0.5 * storm)) * inner, p, fr.xy, t), churn), 0.0, 1.0); // aged foam in rafts and clearings (water_surf.wgsl)
         let torn = wg_smooth(1.0 - old, 1.14 - old, lace);
-        surf_cov = max(fresh, torn) * wg_smooth(-4.0, 0.5, signed) * sf_hand; // x sf_hand
+        var landward = wg_smooth(-4.0, 0.5, signed);
+        if (bed_surf) {
+            // (iteration 3, surf break) to the surveyed waterline, wherever the ring lies
+            landward = mix(landward, wg_smooth(-40.0, -20.0, signed) * wg_smooth(-0.2, 0.1, wb.depth), wb.on);
+        }
+        surf_cov = max(fresh, torn) * landward * sf_hand; // x sf_hand
         surf_face = clamp(s0.face * 1.5, 0.0, 1.0) * sized;
         surf_ww = s0.whitewater * sized;
         surf_bored = s0.bored * sized;
@@ -2017,7 +2137,15 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // sky around it: the reflected sky a fifth less saturated (the bay read pool-blue)
     // (more at dusk, when the low sky's belt and afterglow turned the bay magenta)
     let dusk_d = wg_smooth(0.25, 0.0, look.sun.y) * (1.0 - wg_smooth(0.6, 0.95, skyu.night.z));
-    var sky = mix(sky0, vec3<f32>(lk_luma(sky0)), 0.28 + 0.3 * dusk_d); // (0.28: the Embarcadero read clean cobalt)
+    var grey_k = 0.28 + 0.3 * dusk_d; // (0.28: the Embarcadero read clean cobalt)
+    if (wg_gg3(4096u) && brdf && wv_feat(1024u)) {
+        // (iteration 3, water body) with the grazing integral on, the mirror is
+        // already the sky averaged over the facets the eye sees (Bruneton et al.
+        // 2010): the constant fifth of grey on top of it, a stand-in for that
+        // mixing from before the integral, counted it twice. The dusk share stays.
+        grey_k = 0.3 * dusk_d;
+    }
+    var sky = mix(sky0, vec3<f32>(lk_luma(sky0)), grey_k);
     // what the mirror cannot see in the frame but stands over the
     // water (the pier deck over its own shade): the reflected ray a few metres
     // up hidden behind nearer geometry is inside it, so the sky is not there.
@@ -2376,6 +2504,48 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
             dbg = vec3<f32>(beach, surf_cov, collar);
         }
         s.own = dbg;
+        s.through = vec3<f32>(0.0);
+        s.uv = uv_here;
+        s.refl_k = 0.0;
+        s.sky = vec3<f32>(0.0);
+        s.mirror_w = 0.0;
+        s.mirror_uv = uv_here;
+        s.smear = 0.0;
+        s.dash = 0.0;
+        s.side = 0.0;
+        return s;
+    }
+    if (wu.screen.x > 16.5 && wu.screen.x < 17.5) {
+        // (iteration 3) EO_WATER_DEBUG=17: r the obstacle foam, g its band weight, b the wave height there (0..1 m; 0 where not evaluated)
+        s.own = vec3<f32>(w_dbg_obs.x, w_dbg_obs.y, max(w_dbg_obs.z, 0.0)) * 0.25 / max(look.key.w, 1e-6);
+        s.through = vec3<f32>(0.0);
+        s.uv = uv_here;
+        s.refl_k = 0.0;
+        s.sky = vec3<f32>(0.0);
+        s.mirror_w = 0.0;
+        s.mirror_uv = uv_here;
+        s.smear = 0.0;
+        s.dash = 0.0;
+        s.side = 0.0;
+        return s;
+    }
+    if (wu.screen.x > 15.5 && wu.screen.x < 16.5) {
+        // (iteration 3) EO_WATER_DEBUG=16: r the surf's whitewater, g its bore, b its amplitude scale / 2
+        s.own = vec3<f32>(w_dbg_surf.x, w_dbg_surf.y, w_dbg_surf.z * 0.5) * 0.25 / max(look.key.w, 1e-6);
+        s.through = vec3<f32>(0.0);
+        s.uv = uv_here;
+        s.refl_k = 0.0;
+        s.sky = vec3<f32>(0.0);
+        s.mirror_w = 0.0;
+        s.mirror_uv = uv_here;
+        s.smear = 0.0;
+        s.dash = 0.0;
+        s.side = 0.0;
+        return s;
+    }
+    if (wu.screen.x > 14.5 && wu.screen.x < 15.5) {
+        // (iteration 3) EO_WATER_DEBUG=15: the bathymetry here: r depth (0..10 m), g K_r (0..1), b nearness to surveyed land (1 at it, 0 from 20 m)
+        s.own = vec3<f32>(clamp(wb.depth / 10.0, 0.0, 1.0), clamp(wb.kr, 0.0, 1.0), 1.0 - clamp(wb.land / 20.0, 0.0, 1.0)) * wb.on * 0.25 / max(look.key.w, 1e-6);
         s.through = vec3<f32>(0.0);
         s.uv = uv_here;
         s.refl_k = 0.0;
