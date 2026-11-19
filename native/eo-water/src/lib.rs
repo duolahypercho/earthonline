@@ -14,10 +14,11 @@
 //! `tests/js_oracle.rs` compares against node-run JS answers
 //! (the earlier browser version's exporter -> `data/water-oracle.json.gz`).
 
+pub mod bathymetry; // the measured sea bed and the swell over it (iteration 3)
 pub mod beaches; // each beach's measured foreshore slope (iteration 2)
 pub mod climate; // the Gate's measured wind and tidal current (iteration 2)
 pub mod exposure; // the sea's exposure to the swell and the wind (iteration 2)
-pub mod extra; // the water's extra field (none yet; eo-render binds it unread)
+pub mod extra; // the water's extra field (iteration 3: the bathymetry)
 pub mod field;
 pub mod grid;
 pub mod obstacles; // rocks and piers in the surf, for foam (nobody registers any yet)
@@ -176,6 +177,23 @@ pub fn load(repo_root: &Path, cache: Option<&Path>) -> Result<WaterData> {
                 v.iter().map(|b| format!("1:{:.0} ({} transects) at ({:.0}, {:.0})", 1.0 / b.slope, b.transects, 0.5 * (b.bbox[0] + b.bbox[2]), 0.5 * (b.bbox[1] + b.bbox[3]))).collect::<Vec<_>>().join(", ")
             ),
             Err(e) => eprintln!("water: no beach slopes ({e:#}); the 1:55 foreshore stands"),
+        }
+    }
+    // (iteration 3) the bridge's south fender, for the white water against it, unless --no-obstacle-foam
+    if switches::is_on(switches::OBSTACLE_FOAM) {
+        match obstacles::south_fender(repo_root) {
+            Ok(v) => obstacles::set_named("golden-gate-south-fender", v),
+            Err(e) => eprintln!("water: no fender outline ({e:#})"),
+        }
+    }
+    // (iteration 3) the measured sea bed and the swell over it, unless --no-bathymetry
+    if switches::is_on(switches::BATHYMETRY) {
+        match bathymetry::load(cache) {
+            Ok(b) => {
+                let f = extra::install(b.field);
+                eprintln!("water: bathymetry {} x {} cells of {} m ({})", f.width, f.height, f.cell_m, if b.from_cache { "from the cache".to_string() } else { format!("cooked from B1 in {:.0} ms", b.ms) });
+            }
+            Err(e) => eprintln!("water: no bathymetry ({e:#}); the geometric exposure stands"),
         }
     }
     Ok(WaterData { field, field_from_cache: from_cache, ms: t.elapsed().as_secs_f64() * 1e3 })

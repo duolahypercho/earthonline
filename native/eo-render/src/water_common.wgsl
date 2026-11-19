@@ -53,9 +53,77 @@ struct WaterU {
 
 // (iteration 3) the extra field (eo-water extra.rs, RGBA16F; a 1 x 1 zero texel
 // without one) and its sampler, in group 0 of the water, underwater, spray and
-// surf pipelines (water.rs `draw_bgl`). Declared for the passes to come; unused.
+// surf pipelines (water.rs `draw_bgl`): the measured sea bed and the swell over
+// it (eo-water bathymetry.rs), read by `wb_set`, in the texture's upper half,
+// and the obstacles' layer (extra.rs `with_obstacles`), read by `wb_obstacle`, in its lower half.
 @group(0) @binding(18) var w_extra: texture_2d<f32>;
 @group(0) @binding(19) var w_extra_samp: sampler;
+
+// (iteration 3, bathymetry) the swell period the arrival time is counted in
+// (eo-water bathymetry.rs `PERIOD_S`; tests/water.rs checks they agree).
+const WB_PERIOD_S: f32 = 14.2;
+// (iteration 3, obstacle foam) the clear-day swell's significant height (m; eo-water waves.rs `SWELL_HS[0]`, tests/water.rs checks)
+const WB_HS_CLEAR: f32 = 1.8;
+
+// (iteration 3, bathymetry) the extra field at the point being drawn (`wb_set`):
+// `on` 1 inside the field (fading to 0 over its last 200 m and without one or
+// with --no-bathymetry); depth below mean sea level (m, negative on land); K_r
+// the refraction coefficient (the swell's height over the open sea's, before
+// shoaling); t the swell's arrival time in periods (its crests are where
+// time / period - t is whole); land the distance to surveyed land standing
+// above the sea (m, 60 and over far from it).
+struct WbAt {
+    on: f32,
+    depth: f32,
+    kr: f32,
+    t: f32,
+    land: f32,
+};
+
+var<private> wb: WbAt = WbAt(0.0, 0.0, 1.0, 0.0, 60.0);
+
+// (iteration 3) an iteration-3 water part is on (eo-water switches.rs bits, carried in the same word)
+fn wg_gg3(bit: u32) -> bool {
+    return wg_gg2(bit);
+}
+
+// (iteration 3) the extra field's layer `layer` (0 the measured bed, 1 the
+// obstacles: eo-water extra.rs `LAYERS`, stacked down the texture) at the
+// layer coordinate `uv` (0..1), held half a texel inside the layer.
+fn wb_layer(uv: vec2<f32>, layer: f32) -> vec4<f32> {
+    let hh = 0.5 / f32(textureDimensions(w_extra).y);
+    let v = clamp(uv.y * 0.5, hh, 0.5 - hh) + 0.5 * layer;
+    return textureSampleLevel(w_extra, w_extra_samp, vec2<f32>(uv.x, v), 0.0);
+}
+
+// (iteration 3, obstacle foam) the obstacles' layer at `xz`: x the distance to
+// the nearest registered obstacle's rim (m, 60 and over far from any), y and z
+// the tidal current's wake behind them on the flood and on the ebb (0..1);
+// none outside the field.
+fn wb_obstacle(xz: vec2<f32>) -> vec3<f32> {
+    let uv = (xz - wu.wv_extra.xy) * wu.wv_extra.zw;
+    if (wu.wv_extra.z >= 0.5 || any(uv <= vec2<f32>(0.0)) || any(uv >= vec2<f32>(1.0))) {
+        return vec3<f32>(60.0, 0.0, 0.0);
+    }
+    return wb_layer(uv, 1.0).xyz;
+}
+
+// (iteration 3, bathymetry) read the field at `xz` into `wb`.
+fn wb_set(xz: vec2<f32>) {
+    wb = WbAt(0.0, 0.0, 1.0, 0.0, 60.0);
+    // (a field's inverse extent is under 0.5 / m; the identity frame's is 1)
+    if (wu.wv_extra.z >= 0.5 || !wg_gg3(256u)) {
+        return;
+    }
+    let uv = (xz - wu.wv_extra.xy) * wu.wv_extra.zw;
+    if (any(uv <= vec2<f32>(0.0)) || any(uv >= vec2<f32>(1.0))) {
+        return;
+    }
+    let e = wb_layer(uv, 0.0);
+    let ext = 1.0 / wu.wv_extra.zw;
+    let edge = min(min(uv.x, 1.0 - uv.x) * ext.x, min(uv.y, 1.0 - uv.y) * ext.y);
+    wb = WbAt(wg_smooth(0.0, 200.0, edge), e.x, e.y, e.z, e.w);
+}
 
 // 1024 segments and the two-zone axis of eo-water grid.rs.
 const WG_SEGMENTS: f32 = 1024.0;
