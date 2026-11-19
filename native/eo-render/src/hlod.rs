@@ -542,11 +542,16 @@ impl HlodGpu {
 
     pub fn clear(&self, enc: &mut wgpu::CommandEncoder) {
         enc.clear_buffer(&self.count_buf, 0, None);
-        let live = self.frame_live.load(Ordering::Relaxed) as u64;
+        let live = self.frame_bound() as u64;
         if self.fallback && live > 0 {
             // The slots the cull leaves empty draw nothing (index count 0).
             enc.clear_buffer(&self.cmd_buf, 0, Some(live * 20));
         }
+    }
+
+    /// The fallback's slots this frame: the count, at most the list's length.
+    fn frame_bound(&self) -> u32 {
+        self.frame_live.load(Ordering::Relaxed).min(MAX_CELLS)
     }
 
     /// Commands the fallback draws a frame (the entries the cull can keep).
@@ -585,7 +590,7 @@ impl HlodGpu {
         if self.fallback {
             // No count on the GPU: the cull's commands are compacted to the
             // front of the list, and every slot up to this frame's bound is drawn (the rest zeroed).
-            let live = self.frame_live.load(Ordering::Relaxed);
+            let live = self.frame_bound();
             if live > 0 {
                 pass.multi_draw_indexed_indirect(&self.cmd_buf, 0, live);
             }
@@ -623,6 +628,11 @@ impl HlodGpu {
                 }
                 (true, false) => {
                     self.live.fetch_sub(1, Ordering::Relaxed);
+                }
+                (true, true) if *was != keep => {
+                    // a kept entry with a new box: this frame's count used the
+                    // old one, so count it again (an extra slot is zeroed)
+                    self.frame_live.fetch_add(1, Ordering::Relaxed);
                 }
                 _ => {}
             }
