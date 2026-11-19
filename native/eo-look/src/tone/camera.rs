@@ -22,7 +22,7 @@
 //!    a Bradford D65-to-D60 conversion (Lib.Academy.ColorSpaces).
 //! 4. **Encoding**: sRGB piecewise (IEC 61966-2-1).
 //!
-//!    Opt-in (`--camera-aces13`): the ACES 1.3 RRT and sRGB 100-nit dim ODT
+//!    Opt-in (`EO_CAMERA_RENDERING=aces13`): the ACES 1.3 RRT and sRGB 100-nit dim ODT
 //!    (`aces13`) in its place, at the same SOS placement: a per-channel tone
 //!    scale in AP1 that keeps more chroma (0.98 of colorimetric on the
 //!    virtual chart against ACES 2.0's 0.75) at the cost of hue skews (up to
@@ -68,7 +68,7 @@ pub enum Rendering {
     /// The ACES 2.0 output transform, Rec.709 100 nits, sRGB (`aces2`; the default).
     Aces2,
     /// The ACES 1.3 RRT and the sRGB 100-nit dim-surround ODT (`aces13`;
-    /// opt-in, `--camera-aces13`): the per-channel AP1 tone scale.
+    /// opt-in, `EO_CAMERA_RENDERING=aces13`): the per-channel AP1 tone scale.
     Aces13,
 }
 
