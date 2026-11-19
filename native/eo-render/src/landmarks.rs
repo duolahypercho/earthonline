@@ -549,6 +549,7 @@ fn bridges_wgsl(js: &eo_landmarks::LandmarksJs) -> String {
         8.0 * 0.3048 * h
     ));
     s.push_str(&bridges5_wgsl(js));
+    s.push_str(&bridges6_wgsl(js));
     s.push_str(&format!("const LM_GG_WATER_C: vec2<f32> = vec2<f32>({:.3}, {:.3});\n", ch("archNorth"), ch("northAnchor")));
     s.push_str(&format!(
         "const LM_SHADE2_ON: bool = {};\nconst LM_DIELECTRIC_ON: bool = {};\nconst LM_GG_STAGE_N: u32 = {}u;\nconst LM_GG_STAGES: array<vec4<f32>, {}> = array<vec4<f32>, {}>({});\n",
@@ -596,6 +597,86 @@ fn bridges5_wgsl(js: &eo_landmarks::LandmarksJs) -> String {
         "const LM_GG_CASE_SET: f32 = {:.4};\nconst LM_GG_LIP: vec2<f32> = vec2<f32>({:.4}, {:.4});\nconst LM_GG_RIB: vec3<f32> = vec3<f32>({:.4}, {:.4}, {:.4});\n",
         members[0], members[1], members[2], members[3], members[4], members[5]
     ));
+    s
+}
+
+/// The sixth pass's constants (the Golden Gate's aging; eo-landmarks
+/// golden_gate/aging.rs, where each value's source is given, and suspension.rs
+/// `BridgeFeatures::matte` .. `concrete_age`): every switch needs `finish`
+/// (the bridges' own coat and concrete), the paint's need round 3's
+/// weathering and the concrete's round 3's concrete.
+fn bridges6_wgsl(js: &eo_landmarks::LandmarksJs) -> String {
+    use eo_landmarks::golden_gate::aging as a;
+    let f = eo_landmarks::suspension::features();
+    let v3 = |c: [f64; 3]| format!("vec3<f32>({:.4}, {:.4}, {:.4})", c[0], c[1], c[2]);
+    let v2 = |c: [f64; 2]| format!("vec2<f32>({:.4}, {:.4})", c[0], c[1]);
+    let pylons = a::pylons().unwrap_or(&[]);
+    let n = pylons.len().max(1);
+    let list = if pylons.is_empty() { "vec4<f32>(0.0, -1e4, 0.0, -1e4)".to_string() } else { pylons.iter().map(|p| format!("vec4<f32>({:.3}, {:.3}, {:.3}, {:.3})", p[0], p[1], p[2], p[3])).collect::<Vec<_>>().join(", ") };
+    let paint = f.finish && f.weathering;
+    let mut s = String::new();
+    s.push_str(&format!(
+        "const LM_AGE_MATTE_ON: bool = {};\nconst LM_AGE_FADE_ON: bool = {};\nconst LM_AGE_GRIME_ON: bool = {};\nconst LM_AGE_UNDER_ON: bool = {};\nconst LM_AGE_CONCRETE_ON: bool = {};\n",
+        f.matte && f.finish,
+        f.fade && paint,
+        f.grime && paint,
+        f.underside && paint,
+        f.concrete_age && f.concrete2 && f.finish
+    ));
+    s.push_str(&format!(
+        "const LM_AGE_ROUGH: f32 = {:.3};\nconst LM_AGE_CHALK: f32 = {:.3};\nconst LM_AGE_CHALK_RGB: vec3<f32> = {};\nconst LM_AGE_CHALK_SHELTER: f32 = {:.3};\n",
+        a::PAINT_AGED_ROUGHNESS,
+        a::CHALK_SHARE,
+        v3(a::CHALK_LINEAR),
+        a::CHALK_SHELTERED
+    ));
+    s.push_str(&format!(
+        "const LM_AGE_PATCH_M: vec2<f32> = {};\nconst LM_AGE_TONE: f32 = {:.3};\nconst LM_AGE_REPAINT_M: vec2<f32> = {};\nconst LM_AGE_REPAINT_SHARE: f32 = {:.3};\nconst LM_AGE_REPAINT_TONE: f32 = {:.3};\n",
+        v2(a::AGE_PATCH_M),
+        a::AGE_TONE,
+        v2(a::REPAINT_M),
+        a::REPAINT_SHARE,
+        a::REPAINT_TONE
+    ));
+    s.push_str(&format!(
+        "const LM_AGE_STREAK_M: vec2<f32> = vec2<f32>({:.3}, {:.3});\nconst LM_AGE_STREAK_TONE: f32 = {:.3};\nconst LM_AGE_STREAK_DECAY_M: f32 = {:.3};\nconst LM_AGE_STREAK_RUST: f32 = {:.3};\nconst LM_AGE_BASE_M: f32 = {:.3};\nconst LM_AGE_BASE_TONE: f32 = {:.3};\n",
+        a::STREAK_PITCH_M,
+        a::STREAK_RUN_M,
+        a::STREAK_TONE,
+        a::STREAK_DECAY_M,
+        a::STREAK_RUST,
+        a::BASE_M,
+        a::BASE_TONE
+    ));
+    s.push_str(&format!(
+        "const LM_AGE_LATTICE_T: f32 = {:.3};\nconst LM_AGE_UNDER_SKY: f32 = {:.3};\nconst LM_AGE_UNDER_DIRT: f32 = {:.3};\nconst LM_AGE_UNDER_OUTER: f32 = {:.3};\nconst LM_AGE_SEA_FOOT_M: f32 = {:.3};\nconst LM_AGE_SEA_FOOT_RGB: vec3<f32> = {};\n",
+        a::LATTICE_TRANSMIT,
+        a::UNDER_SKY,
+        a::UNDER_DIRT,
+        a::UNDER_OUTER,
+        a::SEA_FOOT_M,
+        v3(a::SEA_FOOT_LINEAR)
+    ));
+    s.push_str(&format!(
+        "const LM_AGE_RUNOFF: vec3<f32> = vec3<f32>({:.3}, {:.3}, {:.3});\nconst LM_AGE_WALL: vec2<f32> = vec2<f32>({:.3}, {:.3});\nconst LM_AGE_EFFLOR: f32 = {:.3};\nconst LM_AGE_EFFLOR_RGB: vec3<f32> = {};\nconst LM_AGE_FOOT: vec2<f32> = vec2<f32>({:.3}, {:.3});\n",
+        a::RUNOFF_PITCH_M,
+        a::RUNOFF_TONE,
+        a::RUNOFF_DECAY_M,
+        a::WALL_PITCH_M,
+        a::WALL_TONE,
+        a::EFFLOR_SHARE,
+        v3(a::EFFLOR_LINEAR),
+        a::FOOT_M,
+        a::FOOT_TONE
+    ));
+    // the deck's centre line off the straight frame (the approaches' curve, golden_gate.rs
+    // `Site::centre_offset`), sampled over the deck's length: the truss planes stand either side of it.
+    let site = eo_landmarks::golden_gate::Site::new(&eo_landmarks::golden_gate::data(js));
+    let (c0, c1) = eo_landmarks::suspension::deck_line("golden-gate-bridge").map_or((0.0, 1.0), |d| (d[0], d[5]));
+    const OFFSET_N: usize = 96;
+    let offsets = (0..OFFSET_N).map(|i| format!("{:.3}", site.centre_offset(c0 + (c1 - c0) * i as f64 / (OFFSET_N - 1) as f64))).collect::<Vec<_>>().join(", ");
+    s.push_str(&format!("const LM_GG_OFFSET_C: vec2<f32> = vec2<f32>({c0:.3}, {c1:.3});\nconst LM_GG_OFFSET: array<f32, {OFFSET_N}> = array<f32, {OFFSET_N}>({offsets});\n"));
+    s.push_str(&format!("const LM_GG_PYLON_N: u32 = {}u;\nconst LM_GG_PYLONS: array<vec4<f32>, {n}> = array<vec4<f32>, {n}>({list});\n", pylons.len()));
     s
 }
 
