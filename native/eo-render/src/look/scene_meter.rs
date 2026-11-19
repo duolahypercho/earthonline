@@ -179,7 +179,10 @@ impl SceneMeter {
     /// The prior exposure the coming frame's pass bins about (its grey is 0.18 x 0.6 / prior).
     pub fn set_prior(&self, queue: &wgpu::Queue, prior: f64) {
         let grey = (0.18 * 0.6 / prior.max(1e-12)) as f32;
-        queue.write_buffer(&self.uniform, 0, bytemuck::cast_slice(&[grey, 0.0f32, 0.0, 0.0]));
+        // grey.y: 1 = the averaging meter (no centre weighting; eo-sky `night::meter_averaging`,
+        // off with `--no-meter-highlights` / `--no-gg3-colour`), 0 = round 2's centre weighting
+        let avg = if eo_sky::night::meter_averaging() { 1.0f32 } else { 0.0 };
+        queue.write_buffer(&self.uniform, 0, bytemuck::cast_slice(&[grey, avg, 0.0, 0.0]));
     }
 
     pub fn latest(&self) -> Option<SceneMeterReading> {
