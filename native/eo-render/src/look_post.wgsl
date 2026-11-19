@@ -29,5 +29,9 @@ fn post_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     if (skyu.bloom.w > 0.5) {
         c = c + max(textureSampleLevel(bloom_tex, bloom_samp, pos.xy / dims, 0.0).rgb, vec3<f32>(0.0)); // sky
     }
+    // the camera look (look_camera.wgsl) in place of the filmic or the ACES-fit chain
+    if (look.tone2.z > 0.5) {
+        return finish_camera(c, pos);
+    }
     return finish_color(c, pos, dims);
 }

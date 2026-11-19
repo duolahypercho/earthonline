@@ -389,6 +389,9 @@ struct State {
     adapt: eo_sky::night::Adaptation,
     /// the forward the meter last metered (a turn of more than ~30 deg snaps the adaptation, as a cut does).
     meter_fwd: Option<glam::Vec3>,
+    /// the scene meter (`--no-scene-meter`): after a cut or a turn, the frame
+    /// from which a reading counts as the new view's (its first snaps the adaptation).
+    meter_snap_after: Option<u32>,
     /// the aerosol density the transmittance and multiple-scattering
     /// tables were built for (they depend on the medium only; rebuilt on a change).
     atmo_built: Option<[[f32; 4]; 4]>,
@@ -953,6 +956,7 @@ impl SkyGpu {
                 parity: 0,
                 adapt: Default::default(),
                 meter_fwd: None,
+                meter_snap_after: None,
                 atmo_built: None,
                 atmo_haze: 0.0,
                 atmo_medium: [[0.0; 4]; 4],
@@ -983,6 +987,16 @@ impl SkyGpu {
     pub fn atmo_tables(&self) -> (&wgpu::TextureView, &wgpu::TextureView) {
         (&self.atmo_views[2], &self.atmo_views[0])
     }
+    /// the frame whose scene-meter reading the exposure waits on (after a cut or a turn), if any.
+    pub fn meter_snap_pending(&self) -> Option<u32> {
+        self.state.lock().unwrap().meter_snap_after
+    }
+
+    /// the frame counter `update` advances (the scene meter tags its readings with it).
+    pub fn frame_index(&self) -> u32 {
+        self.state.lock().unwrap().frame
+    }
+
     /// the exposure the last frame was drawn with (the target, metered and adapted), None before the first.
     pub fn drawn_exposure(&self) -> Option<f64> {
         let s = self.state.lock().unwrap();
@@ -1140,8 +1154,10 @@ impl SkyGpu {
     /// The weather, the decks and the night for this frame, and the uniform.
     /// `f` is the look frame (already built for this weather), `cam` the
     /// unjittered camera.
+    /// `scene`: the scene meter's latest reading and the display's shoulder
+    /// (`--no-scene-meter`: None, the dome estimate below meters the frame).
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn update(&self, queue: &wgpu::Queue, cam: &Camera, f: &eo_look::LookFrame, terms: &eo_sky::SkyTerms, out_size: (u32, u32), depth_ok: bool, daylight: Option<&eo_look::phys::Daylight>) -> f64 {
+    pub(crate) fn update(&self, queue: &wgpu::Queue, cam: &Camera, f: &eo_look::LookFrame, terms: &eo_sky::SkyTerms, out_size: (u32, u32), depth_ok: bool, daylight: Option<&eo_look::phys::Daylight>, scene: Option<(Option<eo_sky::night::SceneMeterReading>, f64)>) -> f64 {
         if !self.sheet_ready.swap(true, Ordering::Relaxed) {
             let sheet = eo_sky::clouds::bake_sheet(0x5eed_c10d);
             for (mip, level) in eo_sky::clouds::sheet_mips(&sheet).iter().enumerate() {
@@ -1186,7 +1202,29 @@ impl SkyGpu {
         // the camera meter (eo-sky `night::meter`) over a 5 x 3 grid of
         // the view, centre-weighted; a cut or a turn of more than ~30 deg
         // snaps the adaptation (a new shot, not a pan).
-        let meter = if o.meter {
+        let turned = s.meter_fwd.is_some_and(|p| p.dot(cam.forward()) < 0.87);
+        let meter = if o.meter && let Some((reading, shoulder)) = &scene {
+            // the scene meter: a reading of this view (taken after the last cut or
+            // turn) sets the exposure; its first snaps the adaptation (a new shot).
+            if cut || turned {
+                s.meter_snap_after = Some(s.frame);
+            }
+            match reading {
+                Some(r) if s.meter_snap_after.is_none_or(|a| r.frame >= a) => {
+                    if s.meter_snap_after.take().is_some() {
+                        s.adapt.current = None;
+                    }
+                    let k = eo_sky::night::scene_meter(f.model.sun.altitude_deg, &r.hist, *shoulder);
+                    let range = eo_sky::night::SCENE_METER_RANGE_EV.exp2();
+                    let m = (r.prior * k / terms.exposure_target.max(1e-12)).clamp(1.0 / range, range);
+                    if std::env::var_os("EO_SCENE_METER_LOG").is_some() {
+                        eprintln!("scene meter: frame {} reading {} factor {:+.2} EV (prior {:.4})", s.frame, r.frame, m.log2(), terms.exposure_target);
+                    }
+                    m
+                }
+                _ => 1.0,
+            }
+        } else if o.meter {
             let (fw, rt) = (cam.forward(), cam.right());
             let up = rt.cross(fw);
             let ty = (0.5 * cam.fov_y_deg.to_radians()).tan();
@@ -1217,7 +1255,6 @@ impl SkyGpu {
         } else {
             1.0
         };
-        let turned = s.meter_fwd.is_some_and(|p| p.dot(cam.forward()) < 0.87);
         s.meter_fwd = Some(cam.forward());
         if cut || turned {
             s.adapt.current = None;
