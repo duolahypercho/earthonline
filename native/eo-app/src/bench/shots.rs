@@ -530,7 +530,7 @@ impl Io<'_> {
         if base != SkyOptions::off() {
             self.renderer.look.set_sky_options(SkyOptions { weather, ..base });
         }
-        self.renderer.look.sky.set_clock(base.world_time_s, 0.0);
+        set_world_clock(self.renderer, base.world_time_s, 0.0);
     }
 
     /// The traffic and people rebuilt round `focus` from the simulation's
@@ -761,6 +761,14 @@ fn weather_name(w: WeatherMode) -> String {
     }
 }
 
+/// The world clock for the sky and the live calendar together (eo-look
+/// `sun::set_calendar_clock`; in live play the renderer's weather tells the
+/// calendar, eo-render sky.rs `weather_of`).
+fn set_world_clock(renderer: &eo_render::Renderer, world_s: f64, dt: f64) {
+    renderer.look.sky.set_clock(world_s, dt);
+    eo_look::sun::set_calendar_clock(world_s);
+}
+
 /// Place the sun on the shot's `day_of_year` (the game's date without it, or
 /// with `--no-photo-date`; the live calendar's at the shot's clock with
 /// `"calendar": "live"`), hold its clear-day `sky` and `sky_oktas` (drawn from
@@ -834,7 +842,7 @@ pub fn shoot(io: &mut Io, common: &Map<String, Value>, shot: &Shot, dir: &Path, 
     eprintln!("shots: {}: eye ({:.1}, {:.1}, {:.1}), heading {:.1}, pitch {:.1}, {} h, {}", shot.name, cam.eye.x, cam.eye.y, cam.eye.z, compass(cam.yaw as f64), (cam.pitch as f64).to_degrees(), shot.hour, weather_name(shot.weather));
     // the shot's world clock first (its weather, game day and live date follow it)
     if let Some(t) = shot.info.get("world_time_s").and_then(Value::as_f64) {
-        io.renderer.look.sky.set_clock(t, 0.0);
+        set_world_clock(io.renderer, t, 0.0);
     }
     if set_day_and_sky(shot, io.renderer) {
         if eo_look::season::features().photo_season {
@@ -847,7 +855,7 @@ pub fn shoot(io: &mut Io, common: &Map<String, Value>, shot: &Shot, dir: &Path, 
     }
     io.set_look(shot.hour, shot.weather);
     if let Some(t) = shot.info.get("world_time_s").and_then(Value::as_f64) {
-        io.renderer.look.sky.set_clock(t, 0.0);
+        set_world_clock(io.renderer, t, 0.0);
     }
     // the shot's own water clock (a clip's frames), else the stills' (the foam re-warms on a jump, so each still is a function of its clock)
     if let Some(w) = io.renderer.water.get() {
@@ -945,7 +953,7 @@ pub fn run(io: &mut Io, mode: Mode, dir: &Path) -> Result<()> {
     eo_sky::clouds::set_game_day(None);
     io.renderer.look.set_time_of_day(io.args.time_of_day);
     io.renderer.look.set_sky_options(base);
-    io.renderer.look.sky.set_clock(io.renderer.look.sky.world_time(), FRAME_S);
+    set_world_clock(io.renderer, io.renderer.look.sky.world_time(), FRAME_S);
     r
 }
 
