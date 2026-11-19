@@ -164,6 +164,12 @@ struct WaterUniform {
     wv_gg2: [f32; 4],
     // (iteration 2) per cascade, the wind sea's amplitude on the tidal jet (`doppler_gain`)
     wv_dop: [f32; 4],
+    // (iteration 2, exposure) the fetch factors and wind ratios the bay's wind sea is tabulated at
+    // (eo-water waves.rs `EXPO_FETCH_NODES`, `EXPO_WIND_NODES`), and per wind node g, fetch node b
+    // (at 8 g + b) the bay's amplitude per cascade there (`Plan::expo_amp`)
+    wv_xn: [[f32; 4]; 2],
+    wv_gn: [[f32; 4]; 2],
+    wv_xa: [[f32; 4]; 64],
 }
 
 #[repr(C)]
@@ -297,6 +303,8 @@ struct PlanGpu {
     step: FftParams,
     wv: [[f32; 4]; 5],
     spec: SpecParams,
+    // (exposure) `Plan::expo_amp`, at 8 g + b
+    xa: [[f32; 4]; 64],
 }
 
 impl PlanGpu {
@@ -307,6 +315,7 @@ impl PlanGpu {
             step: WaterGpu::step_params(plan, 0.0, 0.0),
             wv: [f4(plan.amp_bay), f4(plan.amp_pac), [st.bay.u10 as f32, st.pacific.u10 as f32, plan.cover[1] as f32, plan.cover[0] as f32], [st.storm as f32, 0.0, 0.0, 0.0], f4(plan.mss_gpu)],
             spec: SpecParams::from(plan.spec_params()),
+            xa: std::array::from_fn(|i| f4(plan.expo_amp[i / 8][i % 8])),
         }
     }
 }
@@ -1213,6 +1222,9 @@ impl WaterGpu {
             wv_expo: self.expo_frame,
             wv_gg2: [current as f32, self.gg2 as f32, self.expo_on as u32 as f32, self.slopes_on as u32 as f32],
             wv_dop: doppler_gain(current).map(|g| g as f32),
+            wv_xn: { let n = eo_water::waves::EXPO_FETCH_NODES.map(|v| v as f32); [[n[0], n[1], n[2], n[3]], [n[4], n[5], n[6], n[7]]] },
+            wv_gn: { let n = eo_water::waves::EXPO_WIND_NODES.map(|v| v as f32); [[n[0], n[1], n[2], n[3]], [n[4], n[5], n[6], n[7]]] },
+            wv_xa: pg.xa,
         };
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&u));
         queue.write_buffer(&self.count_buf, 0, bytemuck::cast_slice(&[0u32, 0, 0, 0, u32::MAX, 0, 0, 0, self.index_count, 0, 0, 0, 0, 0, 0, 0]));

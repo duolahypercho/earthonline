@@ -41,6 +41,12 @@ struct WaterU {
     // (iteration 2) per cascade, the wind sea's amplitude on the tidal jet (wave
     // action against the current, Longuet-Higgins and Stewart 1961)
     wv_dop: vec4<f32>,
+    // (iteration 2, exposure) the fetch factors and wind ratios the bay's wind
+    // sea is tabulated at (eight each), and at 8 g + b its amplitude per
+    // cascade at wind node g, fetch node b (eo-water waves.rs `Plan::expo_amp`)
+    wv_xn: array<vec4<f32>, 2>,
+    wv_gn: array<vec4<f32>, 2>,
+    wv_xa: array<vec4<f32>, 64>,
 };
 
 // 1024 segments and the two-zone axis of eo-water grid.rs.
@@ -140,24 +146,50 @@ fn wg_wind_k() -> f32 {
     return select(1.0, wg_ex.y, wg_ex.x >= 0.0);
 }
 
-// (exposure) the bay's wind sea here over the plan's (fetch-limited growth:
-// height in proportion to the wind and the square root of the fetch)
-fn wg_sea_k() -> f32 {
-    return select(1.0, clamp(wg_ex.y * wg_ex.z, 0.04, 1.6), wg_ex.x >= 0.0);
+// (exposure) where `v` falls among eight ascending nodes (two vec4s): (the lower node's index, the fraction to the next)
+fn wg_node(v: f32, a: vec4<f32>, b: vec4<f32>) -> vec2<f32> {
+    let x = clamp(v, a.x, b.w);
+    let n = array<f32, 8>(a.x, a.y, a.z, a.w, b.x, b.y, b.z, b.w);
+    var i = 0u;
+    for (var k = 1u; k < 7u; k = k + 1u) {
+        if (x > n[k]) {
+            i = k;
+        }
+    }
+    return vec2<f32>(f32(i), clamp((x - n[i]) / max(n[i + 1u] - n[i], 1e-6), 0.0, 1.0));
+}
+
+// (exposure) the bay's wind sea per cascade here: the plan's tabulated at this
+// place's wind ratio and fetch factor (bilinear). Each cascade by its own
+// growth: a short fetch takes the long waves and keeps the ripples, which
+// follow the local wind (eo-water waves.rs `Plan::expo_amp`); the plan's bay without the field.
+fn wg_bay_amp() -> vec4<f32> {
+    if (wg_ex.x < 0.0) {
+        return wu.wv_bay;
+    }
+    let g = wg_node(wg_ex.y, wu.wv_gn[0], wu.wv_gn[1]);
+    let b = wg_node(wg_ex.z, wu.wv_xn[0], wu.wv_xn[1]);
+    let i = u32(g.x) * 8u + u32(b.x);
+    let lo = mix(wu.wv_xa[i], wu.wv_xa[i + 1u], b.y);
+    let hi = mix(wu.wv_xa[i + 8u], wu.wv_xa[i + 9u], b.y);
+    return mix(lo, hi, g.y);
 }
 
 // (exposure) the bay's whitecap foam here over the plan's: coverage grows as
-// the wind to the 3.41 (Monahan and O'Muircheartaigh 1980), and a short fetch's young sea breaks less
+// the wind to the 3.41 (Monahan and O'Muircheartaigh 1980), and a short
+// fetch's young sea breaks less: at one wind the coverage goes as the breaking
+// parameter u*^2 / (nu omega_p) to the 1.09 (Zhao and Toba 2001, J. Oceanogr.
+// 57, 603), and the peak frequency as the fetch to the -1/3 (waves.rs
+// `WindSea::tp`), so as the fetch to the 0.36: the fetch factor (its square
+// root) to the 0.72
 fn wg_foam_k() -> f32 {
-    return select(1.0, clamp(pow(max(wg_ex.y, 0.0), 3.41) * wg_ex.z, 0.0, 3.0), wg_ex.x >= 0.0);
+    return select(1.0, clamp(pow(max(wg_ex.y, 0.0), 3.41) * pow(max(wg_ex.z, 0.0), 0.72), 0.0, 3.0), wg_ex.x >= 0.0);
 }
 
 // Per-cascade amplitude here: the bay keeps the short wind sea and only a
 // trace of the open-ocean swell (see water.rs `BAY_SWELL`).
 fn wg_cascade_amp(x: f32) -> vec4<f32> {
-    let k = wg_sea_k();
-    let bay = wu.wv_bay * vec4<f32>(1.0, k, k, k);
-    return mix(bay, wu.wv_pac, wg_ocean(x)); // each place's share of each cascade (the sea state's plan)
+    return mix(wg_bay_amp(), wu.wv_pac, wg_ocean(x)); // each place's share of each cascade (the sea state's plan)
 }
 
 // `cascadeBandWeights`: band c fades out as the footprint grows from half its

@@ -31,7 +31,8 @@ fn wsp_unit(x: u32) -> f32 {
 fn wsp_foam(p: vec2<f32>) -> f32 {
     let a = textureSampleLevel(w_deriv, w_repeat, w_casc_uv(p, 1u), 1u, 0.0);
     let b = textureSampleLevel(w_deriv, w_repeat, w_casc_uv(p, 2u), 2u, 0.0);
-    return max(mix(a.w, a.z, wg_ocean(p.x)), mix(b.w, b.z, wg_ocean(p.x)) * 0.8);
+    // (iteration 2, exposure) the bay's foam as the surface draws it there (`wg_foam_k`)
+    return max(mix(a.w * wg_foam_k(), a.z, wg_ocean(p.x)), mix(b.w * wg_foam_k(), b.z, wg_ocean(p.x)) * 0.8);
 }
 
 @vertex
@@ -56,6 +57,7 @@ fn vs_wspray(@builtin(vertex_index) vi: u32) -> SprayV {
     let r = WSP_RADIUS_M * sqrt(wsp_unit(seed + 1u));
     let a = 6.2831853 * wsp_unit(seed + 2u);
     let p0 = wu.cam.xz + fw * (WSP_RADIUS_M * 0.55) + r * vec2<f32>(cos(a), sin(a));
+    w_expo_set(p0); // (iteration 2, exposure) this place's wind, waves and foam, as the surface's
     let u = wv_u10(p0.x);
     let amount = smoothstep(9.0, 17.0, u);
     if (amount <= 0.0) {

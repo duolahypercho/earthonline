@@ -65,6 +65,26 @@ fn w_expo_set(xz: vec2<f32>) {
 // so the bores break and run up that much nearer the sand
 var<private> w_surf_k: f32 = 1.0;
 
+// (iteration 2, beach profiles) the surf model at signed shore distance `s`:
+// its offshore distance compressed onto the drawn 1:55 (`w_surf_k`), and only
+// over the surf zone, out to where the model's water is twice the depth its
+// largest wave (`sf_wave_amp`'s top set, `SF_AMPLITUDE` x 1.15 x `amp`)
+// breaks at (`sf_break`'s depth, McCowan's 0.78 breaker index): seaward of
+// that a wave has not begun to steepen and the sea's own spectrum carries the
+// swell, while the model's crests follow the shore field's distance, not the
+// seabed, so they drew contour rings round piers, a tower's fender and the
+// headlands. Unchanged with --no-beach-profiles.
+fn w_surf(time: f32, s: f32, along: f32, beach: f32, amp: f32) -> Surf {
+    if (!(wu.wv_gg2.w > 0.5 && wg_gg2(16u))) {
+        return surf_at(time, s, along, beach, amp);
+    }
+    let off = s * w_surf_k;
+    let a_top = SF_AMPLITUDE * 1.15 * amp;
+    let db = pow(a_top * 3.556 / SF_GAMMA, 0.8);
+    let zone = wg_smooth(2.5 * db, 1.5 * db, sf_model_depth(off));
+    return surf_at(time, off, along, beach * zone, amp);
+}
+
 // the sky as the sky slice now draws it where nothing covers it: the
 // look's graded dome blended toward the atmosphere tables (`at_sky`, its
 // zenith held to the geometric mean of the graded and the model zenith, as
@@ -641,7 +661,7 @@ fn w_displacement(base: vec2<f32>, spacing: f32, f: vec2<f32>) -> vec3<f32> {
     let surf_vw = 1.0 - wg_smooth(1.0, 2.5, spacing);
     if (f.y > 0.01 && f.x > -2.0 && f.x < 420.0 && surf_vw > 0.0) {
         let fr = w_shore_frame(base);
-        let s = surf_at(wu.cam.w, f.x * w_surf_k, fr.z, f.y, sf_amp_scale(base.x));
+        let s = w_surf(wu.cam.w, f.x, fr.z, f.y, sf_amp_scale(base.x));
         // (sea r4: half the shoreward throw: on the 0.8 m grid the full curl folded the face over itself, and the folded triangles read as dark boxes on the breaker line)
         disp = disp + vec3<f32>(fr.x * s.shoreward * 0.5, s.height, fr.y * s.shoreward * 0.5) * surf_vw;
     }
@@ -1585,6 +1605,8 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // the spectrum's slope variance (all of it, and what this pixel's normal carries)
     var wv_var_all = 0.0;
     var wv_var_res = 0.0;
+    // (ppr blur) the share of the cascades' slope variance across the view the pixel does not resolve
+    var wv_var_lat_un = 0.0;
     let brdf = wv_feat(1u);
     if (wu.flags.w > 0.5) {
         // The gusts and slicks scale the two finest cascades, the third finest by 40 % of it.
@@ -1632,8 +1654,10 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
                 let kl = min(fb_lat[c] * swell_fade + vtx, 1.0);
                 let ka = min(fb_alg[c] * swell_fade + vtx, 1.0);
                 wv_var_res = wv_var_res + vc * 0.5 * (kl * kl + ka * ka);
+                wv_var_lat_un = wv_var_lat_un + vc * 0.5 * (1.0 - kl * kl);
             } else {
                 wv_var_res = wv_var_res + vc * min(kept * kept, 1.0);
+                wv_var_lat_un = wv_var_lat_un + vc * 0.5 * (1.0 - min(kept * kept, 1.0));
             }
             var kc = 1.0;
             if (foam_mean && c < 3u) {
@@ -1764,8 +1788,8 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     var surf_bored = 0.0;
     if (beach > 0.01 && signed > -4.0 && signed < 420.0) {
         let sa = sf_amp_scale(base.x);
-        let s0 = surf_at(t, signed * w_surf_k, fr.z, beach, sa);
-        let s1 = surf_at(t, (signed - 0.6) * w_surf_k, fr.z, beach, sa);
+        let s0 = w_surf(t, signed, fr.z, beach, sa);
+        let s1 = w_surf(t, signed - 0.6, fr.z, beach, sa);
         let dhds = (s1.height - s0.height) / 0.6;
         sx = sx + fr.x * dhds;
         sz = sz + fr.y * dhds;
@@ -1938,8 +1962,13 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         // what the flat mirror shows here and read in the projected reflection, so
         // the mirror image is filtered by the slopes the pixel does not resolve
         // (sharp on glassy water, a broken streak in chop, nothing coherent where
-        // the facets spread it over the sky), each facet a little turned across the
-        // view too (a jitter of the same spread the temporal resolve averages)
+        // the facets spread it over the sky), each facet turned across the view
+        // too, by the spread across the view the pixel does not resolve (the
+        // footprint across a grazing view is centimetres, so most of the
+        // sideways slopes are the normal's own and break the image into dashes
+        // pixel by pixel): a fixed kernel, the tilts alternately that spread to
+        // either side (zero mean, the spread's variance, no reseeding from frame
+        // to frame for the temporal resolve to average)
         let ppr_blur = with_copy && wv_feat(256u) && wg_gg2(8u) && sf_inj.rough < 0.5;
         var t0 = -1.0;
         if (ppr_blur) {
@@ -1950,6 +1979,8 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
             ppr_in = 1.0;
         }
         let crs = vec2<f32>(-vh.y, vh.x);
+        // the unresolved spread across the view: half the isotropic part (under the spectrum's cut, foam, rain) and the cascades' own
+        let sig_l = sqrt(max(0.5 * (m2 - max(wv_var_all - wv_var_res, 0.0)) + wv_var_lat_un, 1e-6));
         for (var k = 0; k < 6; k = k + 1) {
             let a = nodes[k] * sig;
             let nk = normalize(vec3<f32>(n.x + vh.x * a * n.y, n.y, n.z + vh.y * a * n.y));
@@ -1963,10 +1994,8 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
             let dk = normalize(vec3<f32>(rk.x, max(rk.y, 0.004), rk.z));
             var lk = w_atmo_dome(dk) * carry * mix(0.35, 1.0, wg_smooth(-0.12, 0.08, rk.y));
             if (ppr_blur && rk.y > -0.02) {
-                // (ppr blur) a sideways turn from the spread's own distribution (Box-Muller of two hashes)
-                let h1 = max(w_hash(frag.xy + vec2<f32>(f32(k) * 31.0, 7.0), floor(t * 30.0)), 1e-4);
-                let h2 = w_hash(frag.xy + vec2<f32>(13.0, f32(k) * 17.0), floor(t * 30.0) + 5.0);
-                let jl = sqrt(-2.0 * log(h1)) * cos(6.2831853 * h2) * sig;
+                // (ppr blur) the sideways turn: + and - the spread across the view on alternate tilts
+                let jl = select(-sig_l, sig_l, (k & 1) == 0);
                 let nj = normalize(vec3<f32>(nk.x + crs.x * jl * nk.y, nk.y, nk.z + crs.y * jl * nk.y));
                 let tap = w_ppr_tap(world, reflect(-v, nj), t0);
                 if (tap.w > 0.0) {

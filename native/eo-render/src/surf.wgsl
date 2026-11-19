@@ -330,6 +330,7 @@ fn sp_sea_disp(base: vec2<f32>, f: vec2<f32>, cov: f32) -> vec3<f32> {
     let local = base - wu.grid.xy;
     let spacing = max(wg_spacing(local.x, r), wg_spacing(local.y, r));
     var disp = vec3<f32>(0.0);
+    w_expo_set(base); // (iteration 2, exposure) the place's waves, as the sea's vertex (water.wgsl `vs`)
     if (wu.flags.w > 0.5) {
         let ramp = wg_smooth(50.0, 220.0, f.x) * (1.0 - 0.6 * f.y) + 0.25 * f.y * wg_smooth(0.0, 60.0, f.x);
         if (ramp > 0.0) {
@@ -346,7 +347,7 @@ fn sp_sea_disp(base: vec2<f32>, f: vec2<f32>, cov: f32) -> vec3<f32> {
     let surf_vw = 1.0 - wg_smooth(1.0, 2.5, spacing);
     if (cov < 0.999 && f.y > 0.01 && f.x > -2.0 && f.x < 420.0 && surf_vw > 0.0) {
         let fr = w_shore_frame(base);
-        let s = surf_at(wu.cam.w, f.x, fr.z, f.y, sf_amp_scale(base.x));
+        let s = w_surf(wu.cam.w, f.x, fr.z, f.y, sf_amp_scale(base.x)); // (the beach's measured foreshore and surf zone, as the sea's vertex)
         disp = disp + vec3<f32>(fr.x * s.shoreward * 0.5, s.height, fr.y * s.shoreward * 0.5) * surf_vw;
     }
     // (the groundswell's sines are retired (`w_swell` is 0): the lead mode is in the cascades)
