@@ -1043,6 +1043,9 @@ impl SkyGpu {
     /// few thousand steps).
     pub fn weather(&self) -> eo_sky::WeatherState {
         let mut s = self.state.lock().unwrap();
+        // the live calendar's date follows the world clock this sky draws (eo-look
+        // `sun::set_calendar_clock`; eo-sky's weather functions stay pure)
+        eo_look::sun::set_calendar_clock(s.world_s);
         if let WeatherMode::Schedule = s.opts.weather {
             let sec = s.world_s.floor();
             if let Some((t, w)) = s.weather_cache {
