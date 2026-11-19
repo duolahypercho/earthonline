@@ -449,7 +449,14 @@ impl VegGround {
         let c = self.grid.cell;
         let h = |dx: f64, dz: f64| self.ground_y(x + dx, z + dz).unwrap_or(y);
         let (gx, gz) = ((h(c, 0.0) - h(-c, 0.0)) / (2.0 * c), (h(0.0, c) - h(0.0, -c)) / (2.0 * c));
-        let slope = (gx * gx + gz * gz).sqrt().atan().to_degrees();
+        // what grows is classified on the 8 m grid's slope (the mapped cover and the land cover
+        // are drawn at that scale, and a lawn is mown whatever its 2 m relief); the detail ground
+        // (eo_data::detail_ground) gives the seat, its height and gradient, only
+        let g8 = |dx: f64, dz: f64| self.grid.height(x + dx, z + dz);
+        let slope = match (g8(c, 0.0), g8(-c, 0.0), g8(0.0, c), g8(0.0, -c)) {
+            (Some(a), Some(b), Some(d), Some(e)) => ((a - b) / (2.0 * c)).hypot((d - e) / (2.0 * c)).atan().to_degrees(),
+            _ => (gx * gx + gz * gz).sqrt().atan().to_degrees(),
+        };
         // beach sand (ground_tone.rs puts the shore distance in the alpha byte): nothing grows,
         // but a steep face over the beach is a cliff the sand tone runs up (the sand limit is
         // the shore ground's to draw): rock there (INFERRED: steeper than a dune's 34 degree
