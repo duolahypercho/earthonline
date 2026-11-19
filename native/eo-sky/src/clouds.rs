@@ -125,6 +125,76 @@ pub fn sheet_mips(level0: &[[u8; 4]]) -> Vec<Vec<[u8; 4]>> {
     out
 }
 
+/// The seed the renderer bakes its sheet with (eo-render sky.rs `update`).
+pub const SHEET_SEED: u32 = 0x5eed_c10d;
+
+/// A bilinear, wrapping read of channel `c` (0..1) of one sheet mip level,
+/// `res` texels square, at `uv` in tiles: what the GPU's linear, repeating
+/// sampler returns from that level.
+pub fn sheet_sample(level: &[[u8; 4]], res: usize, uv: [f64; 2], c: usize) -> f64 {
+    let (x, y) = (uv[0] * res as f64 - 0.5, uv[1] * res as f64 - 0.5);
+    let (x0, y0) = (x.floor(), y.floor());
+    let (fx, fy) = (x - x0, y - y0);
+    let n = res as i64;
+    let t = |i: f64, j: f64| level[(j as i64).rem_euclid(n) as usize * res + (i as i64).rem_euclid(n) as usize][c] as f64 / 255.0;
+    let a = t(x0, y0) + (t(x0 + 1.0, y0) - t(x0, y0)) * fx;
+    let b = t(x0, y0 + 1.0) + (t(x0 + 1.0, y0 + 1.0) - t(x0, y0 + 1.0)) * fx;
+    a + (b - a) * fy
+}
+
+/// The cirrus deck's cover field (sky_volume.wgsl `vol_cirrus2`): the high
+/// channel plus `edge` x the detail channel's departure from its middle (a
+/// zero-mean term that breaks a patch's edge), read in one sample. The values
+/// of it the shader can read at mip `lod`, sorted: four bilinear reads a texel
+/// each way, so the interpolation between texels is in the distribution.
+pub fn cirrus_cover_values(mips: &[Vec<[u8; 4]>], lod: usize, edge: f64) -> Vec<f64> {
+    let res = (SHEET_RES >> lod).max(1);
+    let n = res * 4;
+    let mut v: Vec<f64> = (0..n * n)
+        .map(|k| {
+            let uv = [((k % n) as f64 + 0.5) / n as f64, ((k / n) as f64 + 0.5) / n as f64];
+            sheet_sample(&mips[lod], res, uv, 1) + edge * (sheet_sample(&mips[lod], res, uv, 3) - 0.5)
+        })
+        .collect();
+    v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    v
+}
+
+/// The mips the cirrus cut has a row for (sky_volume.wgsl `VOL_CI2_CUT`): the
+/// shader reads the cover field at a mip of 1 to 4 by the pixel's footprint
+/// (mip 4's texel is 5 km across the wind, about the widest footprint the
+/// shader's grazing clamp gives; mips 5 and 6, 8 and 4 texels square, are too
+/// coarse for a quantile between eighths).
+pub const CIRRUS2_CUT_LODS: std::ops::RangeInclusive<usize> = 1..=4;
+
+/// The cirrus deck's cut: for each mip of `CIRRUS2_CUT_LODS` and each amount
+/// in eighths 0..8, the cover-field value over which the deck is: the
+/// quantile at `1 - eighths / 8` of the field at that mip, so that the deck is
+/// seen over its METAR share of the plane at every mip (box-filtered mips
+/// squeeze the field toward its middle, so one cut `1 - amount` for all of
+/// them covered more of the plane far away). No eighths: over the field's
+/// top; eight: `ramp` under its bottom, so the whole plane is fully in
+/// (`smoothstep(cut, cut + ramp, field)`).
+pub fn cirrus_cut_table(edge: f64, ramp: f64) -> Vec<[f64; 9]> {
+    let mips = sheet_mips(&bake_sheet(SHEET_SEED));
+    CIRRUS2_CUT_LODS
+        .map(|lod| {
+            let v = cirrus_cover_values(&mips, lod, edge);
+            let n = v.len();
+            let mut row = [0.0; 9];
+            for (k, r) in row.iter_mut().enumerate() {
+                *r = match k {
+                    // (a thousandth beyond the field, so the rounded table keeps it)
+                    0 => v[n - 1] + 1e-3,
+                    8 => v[0] - ramp - 1e-3,
+                    _ => v[((1.0 - k as f64 / 8.0) * n as f64).round() as usize],
+                };
+            }
+            row
+        })
+        .collect()
+}
+
 /// The decks for one weather.
 #[derive(Clone, Copy, Debug)]
 pub struct Decks {
@@ -693,6 +763,84 @@ pub fn drift_offset(drift: [f64; 2], world_s: f64, tile_m: f64) -> [f64; 2] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A `const NAME: f32 = v;` of sky_volume.wgsl.
+    fn wgsl_const(name: &str) -> f64 {
+        let wgsl = include_str!("../../eo-render/src/sky_volume.wgsl");
+        let l = wgsl.lines().find(|l| l.starts_with(&format!("const {name}: f32 = "))).unwrap_or_else(|| panic!("{name} in sky_volume.wgsl"));
+        l.split('=').nth(1).unwrap().trim().trim_end_matches(';').parse().unwrap()
+    }
+
+    /// sky_volume.wgsl's `VOL_CI2_CUT` table, row by row.
+    fn wgsl_cut() -> Vec<f64> {
+        let wgsl = include_str!("../../eo-render/src/sky_volume.wgsl");
+        let at = wgsl.find("const VOL_CI2_CUT").expect("VOL_CI2_CUT in sky_volume.wgsl");
+        let body = &wgsl[at..];
+        let body = &body[body.find(">(").unwrap() + 2..body.find(");").unwrap()];
+        body.split(',').map(str::trim).filter(|s| !s.is_empty()).map(|s| s.parse().unwrap()).collect()
+    }
+
+    /// The shader's cut (`vol_ci2_cut`) at an amount 0..1 and a mip.
+    fn shader_cut(t: &[f64], amt: f64, lod: f64) -> f64 {
+        let a = amt.clamp(0.0, 1.0) * 8.0;
+        let k = (a as usize).min(7);
+        let fa = a - k as f64;
+        let l = lod.clamp(1.0, 4.0) - 1.0;
+        let r = (l as usize).min(2);
+        let fl = l - r as f64;
+        let (i0, i1) = (r * 9 + k, (r + 1) * 9 + k);
+        let t0 = t[i0] + (t[i0 + 1] - t[i0]) * fa;
+        let t1 = t[i1] + (t[i1 + 1] - t[i1]) * fa;
+        t0 + (t1 - t0) * fl
+    }
+
+    #[test]
+    fn the_cirrus_covers_its_metar_share_of_the_plane() {
+        let (edge, ramp) = (wgsl_const("VOL_CI2_EDGE"), wgsl_const("VOL_CI2_RAMP"));
+        let table = cirrus_cut_table(edge, ramp);
+        // the shader's table is this bake's (printed for pasting when the bake or the constants change)
+        let printed: Vec<String> = table.iter().map(|r| r.iter().map(|v| format!("{v:.4}")).collect::<Vec<_>>().join(", ")).collect();
+        let t = wgsl_cut();
+        assert_eq!(t.len(), table.len() * 9, "VOL_CI2_CUT rows:\n{}", printed.join(",\n"));
+        for (i, v) in table.iter().flatten().enumerate() {
+            assert!((t[i] - v).abs() < 1e-3, "VOL_CI2_CUT[{i}] {} against the bake's {v}; rows:\n{}", t[i], printed.join(",\n"));
+        }
+        // the renderer bakes this seed
+        assert!(include_str!("../../eo-render/src/sky.rs").contains("bake_sheet(0x5eed_c10d)"));
+        // integrated over the tile at each mip, through the shader's interpolated cut: FEW, SCT, BKN
+        // are seen over their share of the plane (cover > 0), and the mean cover is under it
+        let mips = sheet_mips(&bake_sheet(SHEET_SEED));
+        for lod in CIRRUS2_CUT_LODS {
+            let v = cirrus_cover_values(&mips, lod, edge);
+            let n = v.len() as f64;
+            for oktas in COVER_OKTAS[..3].iter().copied().chain([1.0, 2.0, 4.0]) {
+                let amt = oktas / 8.0;
+                let thr = shader_cut(&t, amt, lod as f64);
+                let seen = v.iter().filter(|x| **x > thr).count() as f64 / n;
+                let mean = v
+                    .iter()
+                    .map(|x| {
+                        let s = ((x - thr) / ramp).clamp(0.0, 1.0);
+                        s * s * (3.0 - 2.0 * s)
+                    })
+                    .sum::<f64>()
+                    / n;
+                assert!((seen - amt).abs() < 0.02, "mip {lod}, {oktas} oktas: seen over {seen}");
+                assert!(mean <= amt && mean > 0.5 * amt, "mip {lod}, {oktas} oktas: mean cover {mean}");
+            }
+            // none and all
+            assert_eq!(v.iter().filter(|x| **x > shader_cut(&t, 0.0, lod as f64)).count(), 0);
+            assert!(v.iter().all(|x| *x >= shader_cut(&t, 1.0, lod as f64) + ramp));
+        }
+        // between two mips the interpolated cut stays within the two mips' shares
+        let v1 = cirrus_cover_values(&mips, 1, edge);
+        let v2 = cirrus_cover_values(&mips, 2, edge);
+        let thr = shader_cut(&t, 1.5 / 8.0, 1.5);
+        let s1 = v1.iter().filter(|x| **x > thr).count() as f64 / v1.len() as f64;
+        let s2 = v2.iter().filter(|x| **x > thr).count() as f64 / v2.len() as f64;
+        assert!((0.5 * (s1 + s2) - 1.5 / 8.0).abs() < 0.02, "mip 1.5: {s1} / {s2}");
+    }
+
     #[test]
     fn the_second_high_deck_carries_the_cirrus() {
         let w = crate::weather::preset(Kind::Clear);
