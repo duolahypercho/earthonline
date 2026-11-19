@@ -28,6 +28,9 @@
 use crate::geometry::{MeshArrays, Rgb, V3};
 use std::sync::OnceLock;
 
+pub mod place; // where the scanned rock stands (slope, geology, imagery)
+pub mod scan; // the scanned rock library (the survey set's S1 scans) and what is placed
+
 /// The armour stone's median diameter, metres (real size). INFERRED: Hudson's
 /// formula (USACE EM 1110-2-1614, Design of Coastal Revetments, Seawalls and
 /// Bulkheads, 1995, eq. 2-21), W50 = rho H^3 / (K_D (rho/rho_w - 1)^3 cot a),

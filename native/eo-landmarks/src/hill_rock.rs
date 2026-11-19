@@ -11,8 +11,8 @@
 use crate::vegetation::{Cover, Kind, Lithology, Plant, Site, field, hash, lattice, smoothstep, srgb_to_linear};
 
 /// The scanned-rock switch names (the roll-up first) and `--no-hill-rock`
-/// (read by `vegetation::Switches`); eo-app accepts them. The new names are
-/// reserved: nothing reads them yet.
+/// (read by `vegetation::Switches`); eo-app accepts them. The scanned rock's
+/// are read by `rocks::scan::Switches` (`--no-gg3` turns them all off too).
 pub const SWITCHES: &[&str] = &["--no-gg3-rock", "--no-scan-rocks", "--no-cliff-dressing", "--no-surf-rocks", "--no-scan-riprap", "--no-rock-geology", "--no-hill-rock"];
 
 /// The rock lattice (m).
@@ -31,8 +31,17 @@ pub const ROCK_SHADE: f32 = 0.8;
 
 /// The rock outcrops and blocks over [x0, x1) x [z0, z1) (the coarse
 /// layer's third part).
+///
+/// Where the scanned rock stands in for it (`rocks::scan::claims`: the
+/// coastal bluffs and the Marin shore the survey set covers, once the
+/// landmark build has placed the scans) nothing is planted: the scans dress
+/// those slopes from the DEM and the imagery instead.
 pub fn plant(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f64) -> Option<Site>, out: &mut Vec<Plant>) {
+    let claimed = crate::rocks::scan::placed().map(|p| p.claims.clone()).unwrap_or_default();
     lattice(x0, z0, x1, z1, ROCK_PITCH_M, 3, &mut |x, z, ix, iz| {
+        if claimed.iter().any(|b| x >= b[0] && x < b[2] && z >= b[1] && z < b[3]) {
+            return;
+        }
         let Some(s) = site(x, z) else { return };
         let Some(cover) = s.cover else { return };
         let slope = s.slope_deg();

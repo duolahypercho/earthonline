@@ -211,6 +211,8 @@ struct ShoreRocks {
     boulders: Option<(crate::geometry::MeshArrays, crate::geometry::MeshArrays, usize)>,
     /// Load and build times, ms: the shore field and ground cover, the armour, the boulders.
     ms: [f64; 3],
+    /// The scanned rock placed (rocks/scan.rs), its counts by source, and ms placing it.
+    scan: Option<(usize, String, f64)>,
 }
 
 /// The shore's rock meshes (rocks.rs): the revetment's armour stone on the
@@ -233,20 +235,29 @@ fn shore_rocks(
     let tide = [MHHW_OVER_MSL_M, MHW_OVER_MSL_M].map(|v| v * hs);
     let t = Instant::now();
     // the armour: quarried granite.
+    // the scanned rock (rocks/scan.rs): the library, waiting for its load (started with the build)
+    let sw = rocks::scan::switches();
+    let lib = if sw.scan { rocks::scan::library() } else { None };
+    let mut armour_stones: Vec<rocks::Stone> = vec![];
     let armour = riprap.then(|| {
         let list: Vec<([f64; 2], [f64; 2], [f64; 2])> = edges.iter().filter(|e| e.pier.is_none() && rocks::on_revetment([(e.a[0] + e.b[0]) / 2.0, (e.a[1] + e.b[1]) / 2.0], plan)).map(|e| (e.a, e.b, e.land)).collect();
         let stones = rocks::revetment(&list, crest_at, sea, plan, hs, &|u| rocks::stone_tone(rocks::ARMOUR_ALBEDO, u));
         let mut m = MeshArrays::new("shore-rocks:armour");
         rocks::armour_bed(&mut m, &list, crest_at, sea, plan, hs, rocks::ARMOUR_ALBEDO);
-        for s in &stones {
-            rocks::stone_mesh(&mut m, s, sea, tide);
+        if lib.is_some() && sw.riprap {
+            // the stones are drawn as scans (`--no-scan-riprap`: as round 2's quarried blocks)
+            armour_stones = stones.clone();
+        } else {
+            for s in &stones {
+                rocks::stone_mesh(&mut m, s, sea, tide);
+            }
         }
         (m, stones.len())
     });
     let armour_ms = t.elapsed().as_secs_f64() * 1e3;
     let t = Instant::now();
     // the shore field from the cache main.rs's water load writes (read, not baked again, once it is there)
-    let field = if boulders { eo_water::load(repo_root, crate::features::cache_dir().as_deref()).ok() } else { None };
+    let field = if boulders || lib.is_some() { eo_water::load(repo_root, crate::features::cache_dir().as_deref()).ok() } else { None };
     let cover = if boulders { crate::ground_cover::GroundCover::load(repo_root).ok() } else { None };
     let load_ms = t.elapsed().as_secs_f64() * 1e3;
     let t = Instant::now();
@@ -309,14 +320,66 @@ fn shore_rocks(
         }
         _ => None,
     };
-    let boulders = stones.map(|stones| {
+    let boulders_ms = t.elapsed().as_secs_f64() * 1e3;
+    // the scanned rock: round 2's stones as scans, the intertidal field, the slopes' faces and
+    // outcrops; published for the renderer, the surf's rocks handed to the water.
+    let t = Instant::now();
+    let mut scan_report = None;
+    let mut boulder_stones = stones;
+    if let (Some(lib), Some(w)) = (&lib, &field) {
+        use rocks::{place, scan};
+        let f = &w.field;
+        // the drawn ground: the detail ground where one is set, else the terrain as the scene
+        // lays it (pressed at the city's shore; the far land north of the strait, more than
+        // 60 m out from every ring and 2 m over the sea, unpressed: eo-app ground_tone `far_land`)
+        let ground = |x: f64, z: f64| {
+            eo_data::detail_ground::height(x, z).or_else(|| {
+                height_at(x, z).map(|y| if f.signed_at(x, z) > rocks::place::FAR_LAND_SHORE_M && y > sea + rocks::place::FAR_LAND_ABOVE_SEA_M { y } else { f.press_ground(x, z, y) })
+            })
+        };
+        let signed = |x: f64, z: f64| f.signed_at(x, z);
+        let world = place::World { ground: &ground, signed: &signed, sea, tide, plan, hs };
+        let mut pieces = vec![];
+        if let Some(st) = boulder_stones.take() {
+            pieces.extend(place::from_stones(lib, &world, &st, scan::Source::Boulder, sw.geology, sw.cliff));
+        }
+        pieces.extend(place::from_stones(lib, &world, &armour_stones, scan::Source::Armour, sw.geology, false));
+        if let Some(sv) = place::Survey::open() {
+            if sw.surf {
+                pieces.extend(place::surf_field(lib, &world, &sv, sw.geology));
+            }
+            pieces.extend(place::slopes(lib, &world, &sv, sw.geology, sw.cliff));
+        }
+        let mut counts: std::collections::BTreeMap<String, usize> = Default::default();
+        for p in &pieces {
+            *counts.entry(format!("{:?}", p.source)).or_default() += 1;
+        }
+        let obstacles = if sw.surf { place::obstacles(lib, &world, &pieces) } else { vec![] };
+        let n_obs = obstacles.len();
+        if !obstacles.is_empty() {
+            eo_water::obstacles::set(obstacles);
+        }
+        let n = pieces.len();
+        if let Some(path) = std::env::var_os("EO_ROCK_DUMP") {
+            // a diagnostic list of the pieces (lon, lat, scan, source, scale), for a map over the imagery
+            let rows: Vec<String> = pieces.iter().map(|p| {
+                let (lon, lat) = place::lon_lat(p.pos[0], p.pos[2], plan);
+                format!("{lon:.7},{lat:.7},{},{:?},{:.3},{:.3}", scan::KINDS[p.kind as usize], p.source, p.scale[0], p.wet)
+            }).collect();
+            std::fs::write(path, rows.join("\n")).ok();
+        }
+        scan::publish(scan::Placed { pieces, claims: place::region_boxes(plan) });
+        scan_report = Some((n, format!("{counts:?}, {n_obs} surf obstacles"), 0.0));
+    }
+    let boulders = boulder_stones.map(|stones| {
         let (mut cast, mut small) = (MeshArrays::new("shore-rocks:boulders"), MeshArrays::new("shore-rocks:boulders"));
         for s in &stones {
             rocks::stone_mesh(if s.diameter() >= rocks::CAST_MIN_D_M { &mut cast } else { &mut small }, s, sea, tide);
         }
         (cast, small, stones.len())
     });
-    ShoreRocks { armour, boulders, ms: [load_ms, armour_ms, t.elapsed().as_secs_f64() * 1e3] }
+    let scan = scan_report.map(|(n, c, _)| (n, c, t.elapsed().as_secs_f64() * 1e3));
+    ShoreRocks { armour, boulders, ms: [load_ms, armour_ms, boulders_ms], scan }
 }
 
 /// The far batch's material (landmark-set.js `admit`).
@@ -471,6 +534,7 @@ impl LandmarkSet {
     /// `build` with the landmarks2 parts chosen by `opts`.
     pub fn build_with(repo_root: &std::path::Path, height_at: &(dyn Fn(f64, f64) -> Option<f64> + Sync), ca: &eo_data::CaStandards, opts: Options) -> Result<Self> {
         let t0 = Instant::now();
+        crate::rocks::scan::start(); // the scanned rock library loads beside the build (rocks/scan.rs)
         let js = LandmarksJs::get();
         let std = DeckStandards::load(ca)?;
         let mut ids = vec!["golden-gate-bridge", "bay-bridge-west"];
@@ -617,7 +681,7 @@ impl LandmarkSet {
             // and Marine Drive seawall, the boulders on the bare rock, at the
             // cliff toes and on the steep faces over the sea.
             let (riprap, boulders) = (crate::features::shore_ground("riprap"), crate::features::shore_ground("rocks"));
-            if riprap || boulders {
+            if riprap || boulders || crate::rocks::scan::switches().scan {
                 let t = Instant::now();
                 let r = shore_rocks(repo_root, height_at, &edges, &crest_at, js.sea_level_y, riprap, boulders);
                 let (nr, nr_s) = r.armour.as_ref().map(|m| (m.0.triangles(), m.1)).unwrap_or((0, 0));
@@ -629,6 +693,9 @@ impl LandmarkSet {
                     // one material (cc0.rs `structure_class` keys on the name): the large stones cast, the small do not
                     structures.push(Structure { cast: true, footway: false, kit: None, name: "shore-rocks:boulders".into(), material: plain_material(0.86, 0.0, "facade-masonry"), mesh: cast.freeze() });
                     structures.push(Structure { cast: false, footway: false, kit: None, name: "shore-rocks:boulders".into(), material: plain_material(0.86, 0.0, "facade-masonry"), mesh: small.freeze() });
+                }
+                if let Some((n, counts, ms)) = &r.scan {
+                    eprintln!("rocks: scanned rock {n} pieces {counts}, placed in {ms:.0} ms");
                 }
                 eprintln!(
                     "rocks: armour {nr_s} stones {nr} triangles, boulders {nb_s} stones {} triangles ({nb_small} casting none), {:.0} ms (field and cover {:.0}, armour {:.0}, boulders {:.0})",
