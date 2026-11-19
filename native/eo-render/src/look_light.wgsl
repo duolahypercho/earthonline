@@ -224,7 +224,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     // The bounce is outgoing Lambert radiance (bounce x diffuse albedo), added
     // outside the occlusion multiply as the JS adds it on the emissive slot.
     let bounce = ao4.rgb * diffuse;
-    if (look.ao_params.z > 0.5) {
+    if (look.ao_params.z > 0.5 && look.ao_params.z < 9.5) {
         // EO_AO_DEBUG=1: visibility; =2: the bounce irradiance fraction.
         if (look.ao_params.z > 1.5) {
             return vec4<f32>(ao4.rgb, 1.0);
@@ -284,5 +284,32 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     }
     let fog = lk_smooth(look.fog.x, look.fog.y, lm_fog_depth(m, vd)); // the set's capped sight distance
     lit = mix(lit, look.fog_color.xyz, fog);
+    // the radiance probe (`lk_probe`): one term of the light in place of the whole
+    if (look.ao_params.z > 9.5) {
+        lit = lk_probe(i32(round(look.ao_params.z)), lit, direct_d, direct_s, indirect_d, indirect_s, bounce + m.emissive.rgb + rm_emit);
+    }
     return vec4<f32>(lit, alpha);
+}
+
+// The radiance probe (EO_AO_DEBUG = 10 + term; eo-look `probe`): a surface draws
+// one term of its scene-linear radiance in place of the whole, before the
+// aerial perspective and the camera, and the camera writes the radiance
+// log-encoded (look_camera.wgsl `cam_probe_encode`) so a capture reads back
+// in the look's units. Terms: 10 all (as drawn), 11 the sun's diffuse, 12 the
+// sun's specular, 13 the sky's and the ground's diffuse (the environment's
+// irradiance), 14 the sky's specular, 15 the bounce (the scene's and the
+// sea's reflected light, emission), 16 none (what is left is the aerial
+// in-scatter over the surface), 17 a unit white (the aerial transmittance
+// plus the in-scatter).
+fn lk_probe(term: i32, all: vec3<f32>, sun_d: vec3<f32>, sun_s: vec3<f32>, sky_d: vec3<f32>, sky_s: vec3<f32>, bounce: vec3<f32>) -> vec3<f32> {
+    switch (term) {
+        case 11: { return sun_d; }
+        case 12: { return sun_s; }
+        case 13: { return sky_d; }
+        case 14: { return sky_s; }
+        case 15: { return bounce; }
+        case 16: { return vec3<f32>(0.0); }
+        case 17: { return vec3<f32>(1.0); }
+        default: { return all; }
+    }
 }
