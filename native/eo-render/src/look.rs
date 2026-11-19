@@ -1291,7 +1291,7 @@ impl LookGpu {
             ao_params: [
                 if ao_made.is_some() { 1.0 } else { 0.0 },
                 1.0 / focal_px,
-                std::env::var("EO_AO_DEBUG").ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0),
+                std::env::var("EO_LOOK_DEBUG").or_else(|_| std::env::var("EO_AO_DEBUG")).ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0),
                 // the canyon-scale sky visibility (surfaces_ao.wgsl `AO_FAR_*`)
                 if self.sky.options().sky_vis { 1.0 } else { 0.0 },
             ],
