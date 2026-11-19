@@ -840,9 +840,11 @@ pub fn slopes(lib: &Library, w: &World, sv: &Survey, geology: bool, cliff_dressi
                                     for i in 0..nx {
                                         let salt = if cliff { 5300 } else { 5400 } + ri as u32 * 7;
                                         let u = |k: u32| hash(i, j, salt + k);
-                                        // anywhere in its cell (a lattice point's rows would show as rows of rock)
-                                        let lon = r[0] + (i as f64 + u(0)) * dlon;
-                                        let lat = r[3] - (j as f64 + u(1)) * dlat;
+                                        // a whole cliff anywhere in its 24 m cell (its lattice's rows showed as
+                                        // rows of slabs); a face or patch within the middle of its 4 m cell
+                                        let (lo, span) = if cliff { (0.0, 1.0) } else { (0.3, 0.4) };
+                                        let lon = r[0] + (i as f64 + lo + span * u(0)) * dlon;
+                                        let lat = r[3] - (j as f64 + lo + span * u(1)) * dlat;
                                         let (x, z) = game_xz(lon, lat, w.plan);
                                         let sd = (w.signed)(x, z);
                                         // on land (the far shore counts: north of the strait the field is positive), not in the sea
