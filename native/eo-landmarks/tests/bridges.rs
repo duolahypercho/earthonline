@@ -346,7 +346,8 @@ fn the_fifth_pass_values_are_on_the_drawn_scales() {
     } else {
         assert_eq!(pitch, eo_landmarks::lights::DECK_PITCH_M);
     }
-    // the legs' faces: whole cells, the base's 15-cell face and the top's 3-cell face on the drawn stages.
+    // the legs' faces: whole cells; the published section, 15 x 9 cells at the base and 7 x 3 at the top
+    // (structure sheet 2.2), on the drawn stages (the cell and the stages both on the structure scale).
     let g = eo_landmarks::golden_gate::data(LandmarksJs::get());
     for st in &g.leg_stages {
         for half in [st[2] / 2.0, st[3] / 2.0] {
@@ -356,6 +357,19 @@ fn the_fifth_pass_values_are_on_the_drawn_scales() {
             assert!((runs[0].0 + half).abs() < 1e-9 && (runs[runs.len() - 1].1 - half).abs() < 1e-9);
         }
     }
+    let cells = |st: &[f64; 4]| {
+        let (a, b) = ((st[2] / cell).round() as i64, (st[3] / cell).round() as i64);
+        (a.min(b), a.max(b))
+    };
+    let base = g.leg_stages.iter().min_by(|a, b| a[0].total_cmp(&b[0])).unwrap();
+    let top = g.leg_stages.iter().max_by(|a, b| a[1].total_cmp(&b[1])).unwrap();
+    assert_eq!(cells(base), (9, 15), "the base stage's section in cells");
+    assert_eq!(cells(top), (3, 7), "the top stage's section in cells");
+    // the four rope legs at a band: the loop's diameter over the cable (cable, two band walls, a rope), 1.152 m.
+    let d = &g.dimensions;
+    let spacing = eo_landmarks::golden_gate::suspender_leg_spacing_m(LandmarksJs::get());
+    assert!((spacing - (num(d, "cableDiameterM") + 2.0 * 0.08 + num(d, "suspenderDiameterM"))).abs() < 1e-12);
+    assert!((spacing - 1.152).abs() < 1e-3, "{spacing}");
     // the paint and the concrete: the cited luminance factors (Rec. 709).
     let y = |c: [f64; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
     let io = eo_landmarks::golden_gate::international_orange2();
@@ -363,4 +377,63 @@ fn the_fifth_pass_values_are_on_the_drawn_scales() {
     assert!(io[1] / io[2] > 1.5 && io[0] > io[1], "{io:?}: green over blue, as the District's named match");
     let c = eo_landmarks::geometry::srgb_hex(0x9B968C);
     assert!((y(eo_landmarks::golden_gate::weathered_concrete(c, 0.25)) - 0.25).abs() < 1e-9);
+}
+
+/// The Golden Gate's concrete (`concrete2`): every drawn concrete colour at
+/// its cited weathered albedo (golden_gate.rs `CONCRETE2_LUMINANCE`), the
+/// south pier and the fender not darkened again; without it, round 2's.
+#[test]
+fn the_concrete_colours_have_their_cited_luminance() {
+    let y = |c: [f64; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    let js = LandmarksJs::get();
+    let on = eo_landmarks::golden_gate::concrete_colours(js, &BridgeFeatures::ALL);
+    let (marin, south) = (eo_landmarks::golden_gate::CONCRETE2_LUMINANCE, eo_landmarks::golden_gate::CONCRETE2_SOUTH_LUMINANCE);
+    assert!((y(on.marin) - marin).abs() < 1e-9 && (y(on.pier) - marin).abs() < 1e-9, "{on:?}");
+    assert!((y(on.south) - south).abs() < 1e-9, "{on:?}");
+    // the cited range is weathered concrete's, 0.20-0.30.
+    for l in [marin, south] {
+        assert!((0.20..=0.30).contains(&l), "{l}");
+    }
+    let off = eo_landmarks::golden_gate::concrete_colours(js, &BridgeFeatures::FOURTH);
+    let grey = eo_landmarks::geometry::srgb_hex(0x9B968C);
+    assert_eq!((off.marin, off.south), (grey, grey));
+    assert!((y(off.pier) - 0.72 * y(grey)).abs() < 1e-9);
+}
+
+/// Every Golden Gate deck luminaire hangs in a lamp standard's head
+/// (`cable_detail`): its station is one the standards stand at
+/// (golden_gate.rs `lamp_stations`), none by the tower legs, two a station.
+#[test]
+fn every_deck_lamp_has_its_standard() {
+    if !eo_landmarks::suspension::features().cable_detail {
+        return;
+    }
+    let paths = eo_data::DataPaths::discover().unwrap();
+    let el = eo_data::ElevationGrid::load(&paths).unwrap();
+    let js = LandmarksJs::get();
+    // (as set.rs builds them: both on the unshifted ground.)
+    let height_at = |x: f64, z: f64| el.sample(x, z);
+    let (gg, bb) = (eo_landmarks::set::ground_of(js, "golden-gate-bridge", &height_at), eo_landmarks::set::ground_of(js, "bay-bridge-west", &height_at));
+    let lights = eo_landmarks::lights::bridge_lights(js, &gg, &bb);
+    let g = eo_landmarks::golden_gate::data(js);
+    let site = eo_landmarks::golden_gate::Site::new(&g);
+    let plan = eo_landmarks::golden_gate::plan(js, &site, &|x, z| gg.at(x, z));
+    let stations = eo_landmarks::golden_gate::lamp_stations(&g, &plan);
+    let zone = eo_landmarks::golden_gate::tower_zone_half(&g);
+    let o = site.axis_point(0.0, 0.0);
+    // (the approaches curve off the axis: a lamp within 200 m of it, the Bay Bridge's kilometres away.)
+    let half_road = num(&g.dimensions, "roadwayM") / 2.0;
+    let deck = lights
+        .iter()
+        .filter(|l| l.angle < 1.5)
+        .map(|l| ((l.pos[0] - o[0]) * site.axis[0] + (l.pos[2] - o[1]) * site.axis[1], (l.pos[0] - o[0]) * site.across[0] + (l.pos[2] - o[1]) * site.across[1]))
+        .filter(|&(c, s)| c > plan.c_start - 1.0 && c < plan.c_end + 1.0 && s.abs() < half_road + 200.0)
+        .map(|(c, _)| c)
+        .collect::<Vec<_>>();
+    assert!(!stations.is_empty());
+    assert_eq!(deck.len(), 2 * stations.len(), "two luminaires a station");
+    for c in &deck {
+        assert!(stations.iter().any(|s| (s - c).abs() < 0.5), "a luminaire at {c:.1} m with no standard");
+        assert!([0.0, plan.l].iter().all(|t| (c - t).abs() > zone), "a luminaire at {c:.1} m by a tower's legs");
+    }
 }

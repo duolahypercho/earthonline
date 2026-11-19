@@ -48,12 +48,11 @@ pub fn face_runs(half: f64, cell: f64) -> Vec<(f64, f64, bool)> {
     let wp = (n - (panels + 1.0)) / panels;
     let mut out = Vec::new();
     let mut x = -half;
-    for i in 0..panels as usize {
+    for _ in 0..panels as usize {
         out.push((x, x + m, false));
         x += m;
         out.push((x, x + wp * m, true));
         x += wp * m;
-        let _ = i;
     }
     out.push((x, half, false));
     out

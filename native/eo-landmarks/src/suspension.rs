@@ -100,7 +100,7 @@ pub struct BridgeFeatures {
     /// `--no-paint-brdf2` (the fifth pass, `--no-bridges5` / `--no-gg3-bridge`
     /// turn every one off): the Golden Gate's paint in the chromaticity of the
     /// District's named match for its formula (golden_gate.rs
-    /// `INTERNATIONAL_ORANGE2_SRGB`), a dielectric film of the acrylic
+    /// `PMS_173_PRINT_SRGB`, `international_orange2`), a dielectric film of the acrylic
     /// binder's Fresnel reflectance.
     pub paint2: bool,
     /// `--no-paint-weathering`: the paint's chalking, touch-up patches of
@@ -108,8 +108,10 @@ pub struct BridgeFeatures {
     /// set-backs (landmarks_surface.wgsl `lm_weather`).
     pub weathering: bool,
     /// `--no-concrete2`: the Golden Gate's concrete (pylons, housings, piers,
-    /// fender) in a weathered portland-cement albedo, its form-tie holes,
-    /// lift lines and run-off staining.
+    /// fender) in a weathered portland-cement albedo (golden_gate.rs
+    /// `concrete_colours`), each pour lift's tone, lime leached at the lift
+    /// joints and run-off staining, all zero-mean about that albedo
+    /// (landmarks_surface.wgsl `lm_concrete_age`).
     pub concrete2: bool,
     /// `--no-leg-cells`: the tower legs' cellular section (stepped corners and
     /// recessed panels between cell-wide pilasters on every face) and the
@@ -119,8 +121,8 @@ pub struct BridgeFeatures {
     /// `--no-cable-detail`: the cable bands' collars, the four rope legs of
     /// each suspender group looped over the band and straddling the cable,
     /// the spacing clamps round the four legs, and the lamp standards (and
-    /// the night's deck luminaires) at the published 150 ft pitch, in a lean,
-    /// angled form.
+    /// the night's deck luminaires in their heads) at the published 150 ft
+    /// pitch, none by the tower legs, in round 2's standard form.
     pub cable_detail: bool,
 }
 

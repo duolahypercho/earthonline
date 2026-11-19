@@ -14,12 +14,12 @@
 //! The lamp standards: "128 lamp posts", "lean, angled form", 1937 spacing
 //! "150 ft, opposite each other on both sides" (goldengate.org, "Color & Art
 //! Deco Styling"; Strauss 1937): placed at that pitch on the ground plan
-//! (lights.rs `gg_deck_pitch_m`, where the night's luminaires stand too).
-//! INFERRED: the band's collars, the standard's sections and the angle of
-//! its head (their heights and arm geometry were not found).
+//! (lights.rs `gg_deck_pitch_m`, where the night's luminaires stand too), in
+//! round 2's standard form: the 1937 standard's sections, head and arm were
+//! not found, so no new form is invented for it. INFERRED: the band's collars.
 
 use super::{Ctx, MeshArrays, PAIR_GAP_M, Rgb, num};
-use crate::suspension::{self, Frame, Run, cable_height_at};
+use crate::suspension::{Frame, Run, cable_height_at};
 
 /// INFERRED: a band's end collar (length, how much proud of the band), metres;
 /// the loop's segments over the band's half circle.
@@ -87,52 +87,29 @@ pub fn suspender_groups(wires: &mut MeshArrays, frame: &Frame, runs: &[Run], att
 }
 
 /// The pole's offset off the curb line and the luminaire's centre off the
-/// pole's base (across toward the roadway, up), for a standard of `head`
-/// (`lamp_standard2`; lights.rs places the night's luminaire there).
+/// pole's base (across toward the roadway, up), for a standard of `head`:
+/// round 2's standard (golden_gate.rs `lamp_standard`), whose housing runs
+/// 0.3-1.2 m over the roadway with its top `head` - 0.1 + 0.13 m up; the
+/// luminaire sits at the housing's middle and underside (lights.rs places
+/// the night's luminaire there).
 pub const LAMP2_CURB_OFFSET_M: f64 = 0.25;
 pub fn lamp2_luminaire(head: f64) -> (f64, f64) {
-    let (dx, dy) = (35f64.to_radians().sin(), 35f64.to_radians().cos());
-    let along = 1.6 + 0.3;
-    (along * dx, head - 1.6 + along * dy)
-}
-
-/// A lamp standard of the "lean, angled form" (`cable_detail`): a plinth, a
-/// tapering square pole from its base to `head` less the head's rise, and
-/// the head angled out over the roadway (`toward`, +-1 across) to the
-/// luminaire. INFERRED: every section, the head's angle (35 deg off the
-/// vertical) and length.
-#[allow(clippy::too_many_arguments)]
-pub fn lamp_standard2(m: &mut MeshArrays, frame: &Frame, c: f64, s: f64, toward: f64, y: f64, head: f64, colour: Rgb) {
-    let [x, z] = frame.point(c, s);
-    m.box_(x, z, y, y + 0.8, 0.28, 0.28, frame.yaw, colour, crate::geometry::NO_BOTTOM);
-    let bend = head - 1.6;
-    m.beam(frame.P(c, s, y + 0.8), frame.P(c, s, y + 0.55 * bend), 0.26, 0.26, colour);
-    m.beam(frame.P(c, s, y + 0.55 * bend), frame.P(c, s, y + bend), 0.19, 0.19, colour);
-    let (dx, dy) = (35f64.to_radians().sin(), 35f64.to_radians().cos());
-    let tip = (s + toward * 1.6 * dx, y + bend + 1.6 * dy);
-    m.beam(frame.P(c, s, y + bend - 0.05), frame.P(c, tip.0, tip.1), 0.16, 0.16, colour);
-    // the luminaire: a housing along the head's line, past its tip.
-    let lum = (tip.0 + toward * 0.75 * dx, tip.1 + 0.75 * dy);
-    m.beam(frame.P(c, tip.0 - toward * 0.15 * dx, tip.1 - 0.15 * dy), frame.P(c, lum.0, lum.1), 0.34, 0.24, colour);
+    (0.75, head - 0.1 - 0.13)
 }
 
 impl Ctx<'_> {
-    /// The deck's lamp standards at the published pitch (`cable_detail`).
+    /// The deck's lamp standards at the published pitch (`cable_detail`), in
+    /// round 2's form: the 1937 standard's sections were not found, so its
+    /// form stays the one round 2 drew (golden_gate.rs `lamp_standard`).
     pub(super) fn lamp_standards2(&self, orange: &mut MeshArrays) {
         let (d, p, k) = (self.d, self.plan, &self.k);
         let half = num(d, "roadwayM") / 2.0;
         let head = crate::lights::DECK_HEAD_M;
-        let pitch = crate::lights::gg_deck_pitch_m();
-        let mut c = p.c_start + pitch / 2.0;
-        while c < p.c_end {
-            if !self.in_tower_zone(c - 2.0, c + 2.0) {
-                let y = p.deck_top(c) + num(d, "curbM");
-                for sgn in [-1.0, 1.0] {
-                    lamp_standard2(orange, self.frame, c, sgn * (half + LAMP2_CURB_OFFSET_M), -sgn, y, head, k.orange);
-                }
+        for c in super::lamp_stations(self.g, p) {
+            let y = p.deck_top(c) + num(d, "curbM");
+            for sgn in [-1.0, 1.0] {
+                super::lamp_standard(orange, self.frame, c, sgn * (half + LAMP2_CURB_OFFSET_M), -sgn, y, head, k.orange);
             }
-            c += pitch;
         }
-        let _ = suspension::features();
     }
 }
