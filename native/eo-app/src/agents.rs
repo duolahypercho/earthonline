@@ -73,6 +73,7 @@ pub struct AgentRuntime {
     ground: Ground,
     last: Option<Arc<Vec<GpuAgent>>>,
     last_steps: u64,
+    last_corridor_steps: u64,
     scratch: Vec<GpuAgent>,
     /// Instances the caller adds this frame (the player and the player's car).
     pub extras: Vec<GpuAgent>,
@@ -136,6 +137,7 @@ impl AgentRuntime {
             ground,
             last: None,
             last_steps: 0,
+            last_corridor_steps: 0,
             scratch: vec![],
             extras: vec![],
             parked: vec![], // props
@@ -176,6 +178,7 @@ impl AgentRuntime {
         self.feed = None;
         self.last = None;
         self.last_steps = 0;
+        self.last_corridor_steps = 0;
         self.sim_ready_ms = None;
         self.opts.density = density;
         self.corridor_hour = None;
@@ -307,8 +310,10 @@ impl AgentRuntime {
             sim.post(dt, &[(0, Focus { x: focus[0], z: focus[1], yaw: focus[2] })]);
             let fr = sim.latest();
             self.sim_time = fr.time;
-            if fr.steps != self.last_steps {
+            // a new frame: the regions or the corridor layer stepped (it keeps its own count).
+            if fr.steps != self.last_steps || fr.corridor_steps != self.last_corridor_steps {
                 self.last_steps = fr.steps;
+                self.last_corridor_steps = fr.corridor_steps;
                 if let Some(feed) = &self.feed {
                     feed.post(fr.clone());
                 }

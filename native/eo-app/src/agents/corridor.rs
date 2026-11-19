@@ -3,12 +3,18 @@
 //! CA-1 through the Presidio (Veterans Boulevard), Marina Boulevard, and the
 //! walkers on the bridge's east walk.
 //!
+//! US-101 is two counts: the bridge's (its ways end at the toll plaza, where
+//! the ramps to CA-1 leave) and the Presidio Parkway's east of that split.
+//! The bridge's ways run on into the parkway's (`WaySpec::next`): southbound
+//! the parkway carries on its share and the rest leave by the CA-1 ramps;
+//! northbound the bridge adds what the CA-1 ramps bring.
+//!
 //! On the bridge the lanes are the deck's own: the centreline is the deck's
 //! alignment (`Site::deck_point`), the height `Plan::deck_top` (so a change to
 //! the deck's profile carries the traffic with it), and the lane centres the
-//! layout `suspension::road_deck` paints (half the median barrier and 0.3 m
-//! each side of it, then the lanes per direction sharing the rest of the
-//! half roadway). Off the deck the centreline is the surveyed way's (the
+//! layout `suspension::road_deck` paints (half the median barrier and its
+//! 0.3 m buffer each side of it, then the lanes per direction sharing the
+//! rest of the half roadway; a test holds them to the painted lines). Off the deck the centreline is the surveyed way's (the
 //! extract's road lines, chained by name), the lane width the street model's
 //! (`NativeSource::chains`, the scaled ground plan's), the height the drawn
 //! street surface under it, followed along the run so a viaduct stays on its
@@ -52,6 +58,14 @@ pub const US101_GGB_TRUCK_3AXLE_PLUS: f64 = (89.0 + 25.0 + 211.0) / 92_000.0;
 /// "Moveable Median Barrier", read 2026-11-18). INFERRED: the demand split
 /// the lane split was set for.
 pub const PEAK_DIRECTION_SHARE: f64 = 4.0 / 6.0;
+/// US-101 east of the CA-1 split (the Presidio Parkway, Richardson Avenue
+/// and Lombard Street): at SF 7.786 / 7.8 "BRODERICK ST", AADT 42,500 back and
+/// 45,000 ahead, peak hour 3,450 both (Caltrans "Traffic Volumes AADT", read
+/// 2026-11-18). "Ahead" is the side of rising postmiles, toward the bridge
+/// (SF R9.561); no station lies between the two, so the ahead count stands
+/// for the whole parkway.
+pub const US101_PRESIDIO_AADT: f64 = 45_000.0;
+pub const US101_PRESIDIO_PEAK_HOUR: f64 = 3_450.0;
 /// CA-1 at its junction with US-101 (SF 7.077): AADT 62,000, peak hour 5,900
 /// (Caltrans "Traffic Volumes AADT", "JCT. RTE. 101", read 2026-11-18).
 pub const CA1_AADT: f64 = 62_000.0;
@@ -69,6 +83,11 @@ pub const MARINA_EB: [f64; 3] = [9_774.0, 477.0, 1_178.0];
 /// directions (no hourly count is published).
 pub const PEDESTRIANS_SEPTEMBER: f64 = 199_462.0;
 pub const EAST_WALK_OPEN_H: [usize; 2] = [5, 21];
+
+/// A way end and a way start this close (metres) are one junction: the
+/// chains are cut at shared vertices of the extract, so they meet exactly
+/// (INFERRED tolerance, far under a lane's width).
+const JOIN_M: f64 = 0.5;
 
 /// The roads the corridor layer drives alone (the local simulation leaves them).
 pub const EXCLUSIVE: [&str; 4] = ["Golden Gate Bridge", "Presidio Parkway", "CA 1", "Veterans Boulevard"];
@@ -95,6 +114,21 @@ fn walker_flow() -> [f64; 24] {
 
 // ---------------------------------------------------------------- the deck
 
+/// `suspension::road_deck`'s clear buffer each side of the median barrier
+/// (its own literal; the test `deck_lanes_are_the_painted_lanes` fails if the
+/// paint moves). Hand-off to T3: a `suspension::lane_centres` that both read.
+const ROAD_DECK_MEDIAN_BUFFER_M: f64 = 0.3;
+/// How far beyond the deck's half width a way point still counts as on the
+/// deck (INFERRED: the extract's line may stray up to a lane off the drawn
+/// alignment at the way ends; 2 m holds every point of the bridge's ways).
+const ON_DECK_MARGIN_M: f64 = 2.0;
+/// A walker begins to step out round a tower leg this far before it
+/// (INFERRED: about two strides).
+const LEG_DETOUR_LEAD_M: f64 = 1.0;
+/// Each direction of walkers keeps this far right of the walk's middle
+/// (INFERRED: half of the HCM's 0.75 m pedestrian lane, so two people pass).
+const WALK_KEEP_RIGHT_M: f64 = 0.45;
+
 /// The deck's frame and the layout `road_deck` paints on it.
 pub struct Deck<'a> {
     pub plan: golden_gate::Plan<'a>,
@@ -115,7 +149,7 @@ impl<'a> Deck<'a> {
         // suspension::road_deck: median_half = k_width / 2 + 0.3, per = lanes / 2, lane_w = (curb - median_half) / per.
         let curb = num(d, "roadwayM") / 2.0;
         let per = num(d, "lanesPerDirection");
-        let median_half = k_width / 2.0 + 0.3;
+        let median_half = k_width / 2.0 + ROAD_DECK_MEDIAN_BUFFER_M;
         let lane_w = (curb - median_half) / per;
         let lanes = (0..per as usize).map(|k| median_half + (k as f64 + 0.5) * lane_w).collect();
         // golden_gate.rs tower_walkways: the leg stage at the roadway, the zone half length.
@@ -136,7 +170,7 @@ impl<'a> Deck<'a> {
         }
         let [ax, az] = site.deck_point(c, 0.0);
         let s = (x - ax) * site.across[0] + (z - az) * site.across[1];
-        (s.abs() <= self.half_width + 2.0).then_some(c)
+        (s.abs() <= self.half_width + ON_DECK_MARGIN_M).then_some(c)
     }
 
     /// The middle of the east walk at chainage c, detouring round the tower legs.
@@ -147,11 +181,11 @@ impl<'a> Deck<'a> {
         let mut s = open;
         for t in [0.0, self.plan.l] {
             let d = (c - t).abs();
-            if d < along + 1.0 {
+            if d < along + LEG_DETOUR_LEAD_M {
                 s = detour;
             } else if d < zone {
                 // across the zone's plate (curb .. walk outer) toward the detour.
-                let k = ((zone - d) / (zone - along - 1.0).max(0.1)).clamp(0.0, 1.0);
+                let k = ((zone - d) / (zone - along - LEG_DETOUR_LEAD_M).max(0.1)).clamp(0.0, 1.0);
                 s = open + (detour - open) * k * k * (3.0 - 2.0 * k);
             }
         }
@@ -279,6 +313,7 @@ fn way_of(chain: &Chain, s: &Surfaces, name: &str, flow: [f64; 24], mix: [f64; 4
         travel: Travel::Vehicles,
         hidden,
         handover,
+        next: None,
     }
 }
 
@@ -293,24 +328,37 @@ fn south_or_west(chain: &Chain) -> bool {
 pub fn ways(source: &NativeSource, s: &Surfaces, walkers: bool) -> Vec<WaySpec> {
     let mut out = vec![];
     let heavy = mix_with_heavy(US101_GGB_TRUCK_2AXLE, US101_GGB_TRUCK_3AXLE_PLUS);
+    // the chains each way was laid from (their raw road lines meet at the junctions).
+    let mut chains: Vec<Chain> = vec![];
     let (gg_south, gg_north) = commute_pair(US101_GGB_AADT, US101_GGB_PEAK_HOUR);
-    let gg: Vec<Chain> = source.chains(&["Golden Gate Bridge", "Presidio Parkway"], 400.0);
-    for c in &gg {
-        let sw = south_or_west(c);
-        out.push(way_of(c, s, if sw { "US-101 southbound" } else { "US-101 northbound" }, if sw { gg_south } else { gg_north }, heavy, false));
+    for c in source.chains(&["Golden Gate Bridge"], 400.0) {
+        let sw = south_or_west(&c);
+        out.push(way_of(&c, s, if sw { "US-101 bridge southbound" } else { "US-101 bridge northbound" }, if sw { gg_south } else { gg_north }, heavy, false));
+        chains.push(c);
+    }
+    // the parkway: INFERRED, the bridge's directional split and heavy share (it carries the bridge's traffic).
+    let (pk_south, pk_north) = commute_pair(US101_PRESIDIO_AADT, US101_PRESIDIO_PEAK_HOUR);
+    for c in source.chains(&["Presidio Parkway"], 400.0) {
+        // the parkway runs east-west: US-101 southbound (into the city) travels east on it.
+        let sw = c.points[c.points.len() - 1][0] > c.points[0][0];
+        out.push(way_of(&c, s, if sw { "US-101 Presidio Parkway southbound" } else { "US-101 Presidio Parkway northbound" }, if sw { pk_south } else { pk_north }, heavy, false));
+        chains.push(c);
     }
     // CA-1: INFERRED, the bridge's directional split and heavy share (it carries the bridge's traffic).
     let (ca_south, ca_north) = commute_pair(CA1_AADT, CA1_PEAK_HOUR);
-    for c in &source.chains(&["CA 1", "Veterans Boulevard"], 300.0) {
-        let sw = south_or_west(c);
-        out.push(way_of(c, s, if sw { "CA-1 southbound" } else { "CA-1 northbound" }, if sw { ca_south } else { ca_north }, heavy, false));
+    for c in source.chains(&["CA 1", "Veterans Boulevard"], 300.0) {
+        let sw = south_or_west(&c);
+        out.push(way_of(&c, s, if sw { "CA-1 southbound" } else { "CA-1 northbound" }, if sw { ca_south } else { ca_north }, heavy, false));
+        chains.push(c);
     }
     let wb = hourly_profile(MARINA_WB[0], MARINA_WB[1], MARINA_WB[2]);
     let eb = hourly_profile(MARINA_EB[0], MARINA_EB[1], MARINA_EB[2]);
-    for c in &source.chains(&["Marina Boulevard"], 300.0) {
-        let w = south_or_west(c);
-        out.push(way_of(c, s, if w { "Marina Boulevard westbound" } else { "Marina Boulevard eastbound" }, if w { wb } else { eb }, eo_sim::consts::TRAFFIC_KIND_MIX, true));
+    for c in source.chains(&["Marina Boulevard"], 300.0) {
+        let w = south_or_west(&c);
+        out.push(way_of(&c, s, if w { "Marina Boulevard westbound" } else { "Marina Boulevard eastbound" }, if w { wb } else { eb }, eo_sim::consts::TRAFFIC_KIND_MIX, true));
+        chains.push(c);
     }
+    link(&mut out, &chains);
     if walkers {
         if let Some(d) = s.deck {
             out.extend(walk_ways(d));
@@ -319,14 +367,41 @@ pub fn ways(source: &NativeSource, s: &Surfaces, walkers: bool) -> Vec<WaySpec> 
     out
 }
 
+/// Each way runs on into the way whose road line starts where its own ends,
+/// heading on (not back along the other carriageway); of several, the
+/// straightest.
+fn link(ways: &mut [WaySpec], chains: &[Chain]) {
+    let dir = |a: [f64; 2], b: [f64; 2]| {
+        let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+        let l = dx.hypot(dz).max(1e-9);
+        [dx / l, dz / l]
+    };
+    for i in 0..chains.len() {
+        let a = &chains[i].points;
+        let (end, d) = (a[a.len() - 1], dir(a[a.len() - 2], a[a.len() - 1]));
+        let next = (0..chains.len())
+            .filter(|&j| j != i)
+            .filter_map(|j| {
+                let b = &chains[j].points;
+                let e = dir(b[0], b[1]);
+                let along = d[0] * e[0] + d[1] * e[1];
+                ((b[0][0] - end[0]).hypot(b[0][1] - end[1]) < JOIN_M && along > 0.5).then_some((j, along))
+            })
+            .max_by(|x, y| x.1.total_cmp(&y.1))
+            .map(|(j, _)| j);
+        ways[i].next = next;
+    }
+}
+
 /// The east walk's two directions, each keeping to its right.
 fn walk_ways(d: &Deck) -> Vec<WaySpec> {
     let (c0, c1) = (d.plan.c_south, d.plan.c_north);
     let n = ((c1 - c0) / 4.0).ceil().max(2.0) as usize;
     let flow = walker_flow();
-    [(true, 0.45), (false, -0.45)]
+    [(true, 1.0), (false, -1.0)]
         .into_iter()
-        .map(|(north, keep)| {
+        .map(|(north, side)| {
+            let keep = side * WALK_KEEP_RIGHT_M;
             let mut pts: Vec<[f64; 3]> = (0..=n)
                 .map(|k| {
                     let c = c0 + (c1 - c0) * k as f64 / n as f64;
@@ -347,6 +422,7 @@ fn walk_ways(d: &Deck) -> Vec<WaySpec> {
                 travel: Travel::Walkers,
                 hidden: vec![],
                 handover: false,
+                next: None,
             }
         })
         .collect()
@@ -364,6 +440,108 @@ mod tests {
         // the evening peak runs north, at the peak hour's peak-direction share.
         assert!((n[17] - 5_000.0).abs() < 1e-6 && (s[17] - 2_500.0).abs() < 1e-6);
         assert!((s[8] - 5_000.0).abs() < 1e-6);
+        // every corridor's profile keeps its count's day.
+        let (a, b) = commute_pair(CA1_AADT, CA1_PEAK_HOUR);
+        assert!((a.iter().chain(b.iter()).sum::<f64>() - CA1_AADT).abs() < 2.0);
+        for m in [MARINA_WB, MARINA_EB] {
+            let q = hourly_profile(m[0], m[1], m[2]);
+            assert!((q.iter().sum::<f64>() - m[0]).abs() < 2.0, "{m:?}: {}", q.iter().sum::<f64>());
+        }
+    }
+
+    #[test]
+    fn the_parkway_keeps_the_broderick_count() {
+        let (s, n) = commute_pair(US101_PRESIDIO_AADT, US101_PRESIDIO_PEAK_HOUR);
+        let total: f64 = s.iter().chain(n.iter()).sum();
+        assert!((total - 45_000.0).abs() < 2.0, "total {total}");
+        // the peak hour, both ways: 3,450, split 2/3 to the commute direction.
+        assert!((n[17] + s[17] - 3_450.0).abs() < 1e-6 && (n[17] - 2_300.0).abs() < 1e-6);
+    }
+
+    fn deck_for_tests() -> (Site, f64) {
+        let js = LandmarksJs::get();
+        let ca = eo_data::CaStandards::load(&eo_data::DataPaths::discover().expect("repository")).expect("standards");
+        (Site::new(&golden_gate::data(js)), eo_landmarks::suspension::DeckStandards::load(&ca).expect("deck standards").k_width)
+    }
+
+    /// The deck's lanes are the lanes `suspension::road_deck` paints: its
+    /// broken lines lie halfway between neighbouring lane centres, the inner
+    /// lane's edge between the barrier's face and the yellow line, the outer
+    /// lane's edge on the curb.
+    #[test]
+    fn deck_lanes_are_the_painted_lanes() {
+        use eo_landmarks::suspension::{DeckColours, DeckSpec, Frame, road_deck};
+        let js = LandmarksJs::get();
+        let (site, k_width) = deck_for_tests();
+        let ca = eo_landmarks::suspension::DeckStandards::load(&eo_data::CaStandards::load(&eo_data::DataPaths::discover().unwrap()).unwrap()).unwrap();
+        let d = Deck::new(js, &site, &|_, _| 0.0, k_width);
+        let g = golden_gate::data(js);
+        let dims = &g.dimensions;
+        let (white, yellow) = ([0.9, 0.1, 0.2], [0.2, 0.9, 0.1]);
+        let mut deck = eo_landmarks::geometry::MeshArrays::new("deck");
+        let mut rail = eo_landmarks::geometry::MeshArrays::new("rail");
+        // a straight frame: chainage along +x, the across offset s along +z.
+        let frame = Frame::new([0.0, 0.0], [1.0, 0.0]);
+        let spec = DeckSpec {
+            y: &|_| 0.0,
+            c_start: 0.0,
+            c_end: 400.0,
+            half_width: num(dims, "widthM") / 2.0,
+            roadway_m: num(dims, "roadwayM"),
+            lanes: 2 * num(dims, "lanesPerDirection") as u32,
+            median: true,
+            sidewalk_m: 0.0,
+            curb_m: num(dims, "curbM"),
+            railings: false,
+            railing_m: 0.0,
+            inner_barrier_m: 0.0,
+            panel: 50.0,
+            gap: &|_, _| false,
+            colours: DeckColours { asphalt: [0.0; 3], sidewalk: [0.0; 3], soffit: [0.0; 3], barrier: [0.0; 3], white, yellow, rail: [0.0; 3] },
+            markings: true,
+        };
+        road_deck(&mut deck, &mut rail, &frame, &ca, &spec);
+        // each stripe's centre across the deck, on the +s side (the lanes' side).
+        let centres = |colour: [f64; 3]| {
+            let mut zs: Vec<f64> = (0..deck.positions.len() / 3).filter(|&i| deck.colors[3 * i..3 * i + 3] == colour).map(|i| deck.positions[3 * i + 2]).filter(|z| *z > 0.0).collect();
+            zs.sort_by(f64::total_cmp);
+            zs.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
+            // a stripe's two edges, line_w apart.
+            zs.chunks(2).map(|p| (p[0] + p[p.len() - 1]) / 2.0).collect::<Vec<f64>>()
+        };
+        let whites = centres(white);
+        let yellows = centres(yellow);
+        let l = &d.lanes;
+        let w = l[1] - l[0];
+        // the broken lines (every white line but the edge line nearest the curb).
+        let broken: Vec<f64> = whites.iter().copied().filter(|s| *s < d.curb - w / 4.0).collect();
+        assert_eq!(broken.len(), l.len() - 1, "painted lines {whites:?}");
+        for (k, s) in broken.iter().enumerate() {
+            assert!((s - (l[k] + l[k + 1]) / 2.0).abs() < 1e-6, "line {s} not between lanes {} and {}", l[k], l[k + 1]);
+        }
+        let inner = l[0] - w / 2.0;
+        assert!(inner > k_width / 2.0 && inner < yellows[0], "inner lane edge {inner}, yellow {yellows:?}");
+        assert!((l[l.len() - 1] + w / 2.0 - d.curb).abs() < 1e-6);
+    }
+
+    /// Fresh at 21:15 or 04:45 the walk has nobody on it (it is shut 21-05 h);
+    /// at 20:30 it has its walkers.
+    #[test]
+    fn the_closed_walk_draws_no_walkers() {
+        let js = LandmarksJs::get();
+        let (site, k_width) = deck_for_tests();
+        let d = Deck::new(js, &site, &|_, _| 0.0, k_width);
+        let walkers_at = |hour: f64| {
+            let mut c = eo_sim::corridor::Corridors::new(walk_ways(&d), eo_sim::corridor::Params::with_time_gap(3.0), 1);
+            c.hour_handle().store(hour.to_bits(), std::sync::atomic::Ordering::Relaxed);
+            for _ in 0..60 {
+                c.step(1.0 / 60.0, None);
+            }
+            c.out.len()
+        };
+        assert_eq!(walkers_at(21.25), 0);
+        assert_eq!(walkers_at(4.75), 0);
+        assert!(walkers_at(20.5) > 50);
     }
 
     #[test]
@@ -413,9 +591,17 @@ mod tests {
         let s = Surfaces { deck: Some(&deck), street: false, paved: &paved, ground: &ground };
         let ways = ways(&source, &s, true);
         let names: Vec<&str> = ways.iter().map(|w| w.name.as_str()).collect();
-        for n in ["US-101 southbound", "US-101 northbound", "east walk northbound", "east walk southbound"] {
+        for n in ["US-101 bridge southbound", "US-101 bridge northbound", "US-101 Presidio Parkway southbound", "US-101 Presidio Parkway northbound", "east walk northbound", "east walk southbound"] {
             assert!(names.contains(&n), "{n} missing from {names:?}");
         }
+        // US-101 is cut at the CA-1 split: the bridge runs on into the parkway southbound, the parkway into the bridge northbound.
+        let at = |n: &str| names.iter().position(|m| *m == n).unwrap();
+        assert_eq!(ways[at("US-101 bridge southbound")].next, Some(at("US-101 Presidio Parkway southbound")));
+        assert_eq!(ways[at("US-101 Presidio Parkway northbound")].next, Some(at("US-101 bridge northbound")));
+        // the parkway's flows keep the Broderick count, the bridge's its own.
+        let day = |a: &str, b: &str| ways[at(a)].flow_vph.iter().chain(ways[at(b)].flow_vph.iter()).sum::<f64>();
+        assert!((day("US-101 Presidio Parkway southbound", "US-101 Presidio Parkway northbound") - US101_PRESIDIO_AADT).abs() < 2.0);
+        assert!((day("US-101 bridge southbound", "US-101 bridge northbound") - US101_GGB_AADT).abs() < 2.0);
         let gap = eo_sim::Standards::load(&paths).expect("standards").metric("following-time-gap").expect("time gap");
         let mut c = eo_sim::corridor::Corridors::new(ways, eo_sim::corridor::Params::with_time_gap(gap), 1);
         c.hour_handle().store(16.4f64.to_bits(), std::sync::atomic::Ordering::Relaxed);
@@ -448,6 +634,13 @@ mod tests {
             if north_bound { north += 1 } else { south += 1 }
         }
         eprintln!("16:24 on the deck ({len_km:.2} km): {north} northbound, {south} southbound, {walkers} walkers");
+        for (name, n, len) in c.way_movers() {
+            eprintln!("  {name}: {n} on {:.2} km ({:.1} a km)", len / 1000.0, n as f64 / len * 1000.0);
+        }
+        // the parkway at its own count: at 16:24, near its PM peak (2,300 vph east to west and 1,150 the other way at 16-17 h).
+        let per_km = |n: &str| c.way_movers().into_iter().find(|w| w.0 == n).map(|(_, k, l)| k as f64 / l * 1000.0).unwrap();
+        let (pk_n, pk_s) = (per_km("US-101 Presidio Parkway northbound"), per_km("US-101 Presidio Parkway southbound"));
+        assert!(pk_n > pk_s && pk_n < 50.0 && pk_s > 5.0, "parkway {pk_n} / {pk_s} a km");
         // 3 lanes a way at the 3 s gap hold at most about 3 x 1060 vph; at 20 m/s that is
         // about 50 a kilometre a direction; the off-peak direction about 40.
         assert!(north as f64 / len_km > 25.0 && north as f64 / len_km < 70.0, "north {north}");
