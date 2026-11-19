@@ -15,6 +15,7 @@ use crate::geometry::{ALL, GroundGrid, MeshArrays, NO_BOTTOM, NO_TOP, Rgb, shade
 use crate::suspension::{self, CableSpec, DeckColours, DeckSpec, DeckStandards, Frame, Run, SuspenderSpec, TrussSpec, stations};
 use serde_json::json;
 
+pub mod aging;
 mod cables;
 pub use cables::{LAMP2_CURB_OFFSET_M, lamp2_luminaire};
 mod legs;
@@ -117,12 +118,14 @@ pub struct ConcreteColours {
     pub pier: Rgb,
 }
 pub fn concrete_colours(js: &LandmarksJs, features: &suspension::BridgeFeatures) -> ConcreteColours {
-    let grey = srgb_hex(hex(&data(js).dimensions, "concreteSrgb"));
+    let export = srgb_hex(hex(&data(js).dimensions, "concreteSrgb"));
+    // (`concrete_age`) the aged concrete's warm buff chromaticity at the same cited albedo (golden_gate/aging.rs).
+    let grey = if features.concrete2 && features.concrete_age { srgb_hex(aging::CONCRETE_BUFF_SRGB) } else { export };
     if features.concrete2 {
         let marin = weathered_concrete(grey, CONCRETE2_LUMINANCE);
         ConcreteColours { marin, south: weathered_concrete(grey, CONCRETE2_SOUTH_LUMINANCE), pier: marin }
     } else {
-        ConcreteColours { marin: grey, south: grey, pier: shade(grey, PIER_WEATHERED) }
+        ConcreteColours { marin: export, south: export, pier: shade(export, PIER_WEATHERED) }
     }
 }
 
@@ -1746,6 +1749,8 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
         ctx.members(&mut orange_m, &mut concrete_m, &mut skirt, &mut wires, &mut far);
     }
     if ctx.pylons {
+        // (`concrete_age`) the pylons as built, for the concrete's run-off from their copings.
+        aging::record_pylons(ctx.pylons().iter().map(|py| [py.c, py.top, py.half_along, py.foot]).collect());
         ctx.draw_pylons(&mut concrete_m, &mut far);
         ctx.tie_downs(&mut wires, &mut concrete_m, &ctx.cable_runs());
     } else {

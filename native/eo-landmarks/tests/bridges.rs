@@ -324,6 +324,31 @@ fn the_fifth_pass_switches_turn_their_features_off() {
     }
 }
 
+/// The sixth pass's switches (the Golden Gate's aging): each turns its own
+/// feature off and leaves the rest on; `--no-gg-aging` is the fifth pass's
+/// (round 3's bridge finish) output, and every earlier roll-up takes the
+/// aging off with its own.
+#[test]
+fn the_aging_switches_turn_their_features_off() {
+    use eo_landmarks::suspension::AGING_SWITCHES;
+    let one = |f: &str| BridgeFeatures::from_args(&[f]);
+    assert_eq!(one("--no-gg-aging"), BridgeFeatures::FIFTH);
+    let six = |f: BridgeFeatures| [f.matte, f.fade, f.grime, f.underside, f.concrete_age];
+    for roll in ["--no-gg3-bridge", "--no-bridges5", "--no-gg3", "--no-bridges4", "--no-bridges3", "--no-bridges2"] {
+        assert!(six(one(roll)).iter().all(|on| !on), "{roll}");
+    }
+    assert!(BridgeFeatures::FIFTH.weathering && BridgeFeatures::FIFTH.concrete2 && BridgeFeatures::FIFTH.leg_cells);
+    let names = ["--no-gg-matte", "--no-gg-fade", "--no-gg-grime", "--no-gg-underside", "--no-gg-concrete-age"];
+    for (i, n) in names.iter().enumerate() {
+        assert!(AGING_SWITCHES.contains(n) && !SWITCHES.contains(n) && !eo_landmarks::suspension::GG3_SWITCHES.contains(n), "{n} is accepted, from one list");
+        let f = six(one(n));
+        for (j, on) in f.iter().enumerate() {
+            assert_eq!(*on, i != j, "{n}: feature {j}");
+        }
+        assert!(one(n).weathering && one(n).concrete2, "{n} keeps the fifth pass");
+    }
+}
+
 /// The fifth pass's dimensions on the drawn scales: the legs' cell (3.5 ft,
 /// Strauss 1937) times the structure scale, the lamp posts' pitch (150 ft)
 /// times the ground plan's, the suspender legs' spacing from the drawn cable
@@ -398,6 +423,12 @@ fn the_concrete_colours_have_their_cited_luminance() {
     let grey = eo_landmarks::geometry::srgb_hex(0x9B968C);
     assert_eq!((off.marin, off.south), (grey, grey));
     assert!((y(off.pier) - 0.72 * y(grey)).abs() < 1e-9);
+    // (`concrete_age`) the aged concrete is warmer than round 3's grey at the same albedo; without it, round 3's.
+    let r3 = eo_landmarks::golden_gate::concrete_colours(js, &BridgeFeatures::FIFTH);
+    assert!((y(r3.south) - south).abs() < 1e-9 && (y(r3.marin) - marin).abs() < 1e-9);
+    let warmth = |c: [f64; 3]| c[0] / c[2];
+    assert!(warmth(on.south) > 1.3 * warmth(r3.south), "{:?} against {:?}", on.south, r3.south);
+    assert!((warmth(r3.south) - warmth(grey)).abs() < 1e-9);
 }
 
 /// Every Golden Gate deck luminaire hangs in a lamp standard's head
