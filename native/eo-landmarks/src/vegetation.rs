@@ -296,7 +296,8 @@ pub const NAIP_EXG_GREEN: f32 = 0.05;
 /// Green pixels darker than this mean brightness ((R + G + B) / 765) or with
 /// a local luma spread over [`NAIP_CANOPY_TEX`] are woody canopy (a shrub or
 /// tree crown is self-shaded and textured at 0.6 m; a grass sward is smooth
-/// and lighter): INFERRED.
+/// and lighter), and so are grey-green pixels this dark that miss the green
+/// test (the sage scrub; the summer's cured grass is a bright tan): INFERRED.
 pub const NAIP_CANOPY_V: f32 = 0.36;
 pub const NAIP_CANOPY_TEX: f32 = 0.035;
 /// Not green and brighter than this: bare (paving, pale rock, sand, the
@@ -326,6 +327,11 @@ pub fn naip_class(rgb: [u8; 3], tex: f32, slope_deg: f64) -> NaipClass {
     }
     if v < NAIP_DARK_V {
         return NaipClass::Unknown;
+    }
+    // dark and not reddish: the evergreen scrub's grey-green (California sage reads
+    // under the green test), where the summer's cured grass is a bright tan.
+    if v < NAIP_CANOPY_V && exg > 0.0 && b < g {
+        return NaipClass::Canopy;
     }
     // bright, or grey-blue (serpentinite, concrete in the sky's light): bare.
     if v > NAIP_BARE_V || (b >= g && b >= r) || slope_deg > NAIP_BARE_SLOPE_DEG {
@@ -918,6 +924,9 @@ mod tests {
         assert_eq!(naip_class([164, 152, 137], 0.01, 2.0), NaipClass::Bare);
         assert_eq!(naip_class([118, 133, 139], 0.02, 30.0), NaipClass::Bare);
         assert_eq!(naip_class([40, 50, 70], 0.02, 0.0), NaipClass::Unknown);
+        // Kirby Cove's grey sage scrub under the green test, and its slope's cured grass.
+        assert_eq!(naip_class([89, 95, 90], 0.016, 20.0), NaipClass::Canopy);
+        assert_eq!(naip_class([115, 113, 104], 0.022, 20.0), NaipClass::Low);
         let n = naip_shares(&[[78, 87, 78], [164, 152, 137], [40, 50, 70], [134, 127, 107]], 5.0).unwrap();
         assert!((n.canopy + n.low + n.bare - 1.0).abs() < 1e-6 && (n.canopy - 1.0 / 3.0).abs() < 1e-6);
         assert!(naip_shares(&[[40, 50, 70]], 0.0).is_none());
