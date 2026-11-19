@@ -194,16 +194,25 @@ mod tests {
 
     #[test]
     fn the_current_matches_noaa_predictions() {
+        let minute = 1.0 / 1440.0;
         for (doy, h, want) in NOAA {
             let d = days_from_j2000(2025, doy, h);
             let got = current_at_j2000(d) * 100.0;
             assert!((got - want).abs() < 10.0, "day {doy} {h:.2} h UT: {got:.1} cm/s, NOAA {want}");
-            if want.abs() > 50.0 {
-                // an extremum: within 6 minutes of NOAA's (the neighbours 6 minutes away are no larger)
-                let step = 6.0 / 1440.0;
-                let (a, b) = (current_at_j2000(d - step) * 100.0, current_at_j2000(d + step) * 100.0);
-                assert!(got.abs() + 0.5 >= a.abs().min(b.abs()), "not an extremum at {doy} {h:.2}: {a:.1} {got:.1} {b:.1}");
-            }
+            // when it happens: the reconstruction's own extremum (the largest
+            // speed) or slack (the sign change) nearest NOAA's, searched a minute
+            // at a time over an hour and a half either side, within 6 minutes of NOAA's
+            let at = |m: i32| current_at_j2000(d + m as f64 * minute);
+            let off = if want.abs() > 50.0 {
+                let best = (-90..=90).max_by(|a, b| (at(*a) * want.signum()).total_cmp(&(at(*b) * want.signum()))).unwrap();
+                assert!(best.abs() < 90, "no extremum near {doy} {h:.2}");
+                best
+            } else {
+                let cross = (-90..90).filter(|m| at(*m).signum() != at(m + 1).signum()).min_by_key(|m| m.abs());
+                cross.unwrap_or_else(|| panic!("no slack near {doy} {h:.2}"))
+            };
+            eprintln!("day {doy} {h:5.2} h UT: {got:6.1} cm/s (NOAA {want:6.1}), {off:+} min");
+            assert!(off.abs() <= 6, "day {doy} {h:.2} h UT: the reconstruction's {} is {off} minutes from NOAA's", if want.abs() > 50.0 { "extremum" } else { "slack" });
         }
     }
 

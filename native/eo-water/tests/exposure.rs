@@ -42,6 +42,8 @@ fn the_real_sea_is_exposed_where_it_should_be() {
     let alcatraz_e = at("east of Alcatraz", -122.405, 37.827);
     let aquatic = at("Aquatic Park", -122.4225, 37.8095);
     let marin = at("Marin Headlands (land)", -122.49, 37.835);
+    // the station's open water, 300 m north of NOAA 9414290 (where the ratio is taken)
+    let station = at("NOAA 9414290's open water", -122.4659, 37.8063 + 300.0 / 110_574.0);
     if let Ok(dir) = std::env::var("EO_WATER_EXPOSURE_DUMP") {
         for (c, name) in ["swell", "wind", "fetch", "water"].iter().enumerate() {
             let mut b = format!("P5\n{} {}\n255\n", e.width, e.height).into_bytes();
@@ -58,5 +60,7 @@ fn the_real_sea_is_exposed_where_it_should_be() {
     assert!(aquatic[1] < span[1], "the city's lee calmer than the Gate {aquatic:?} {span:?}");
     assert!(span[1] >= 0.95, "the Gate's wind at least the station's {span:?}");
     assert!(marin[3] < 0.5, "Marin is land {marin:?}");
+    // (1 at the station's cell; read bilinearly between the 100 m cells here)
+    assert!((station[1] - 1.0).abs() < 0.08, "the station's wind is the station's {station:?}");
     let _ = fort;
 }

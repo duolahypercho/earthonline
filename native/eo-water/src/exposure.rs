@@ -15,7 +15,8 @@
 //!   of the old x ramp across the Gate (`wg_ocean`) for each place's waves
 //!   and the body water.
 //! - **Wind ratio** (G): the wind over the water against the shore station's
-//!   (`climate::strait_wind`, NOAA 9414290): the lee of high ground upwind
+//!   (`climate::strait_wind`, NOAA 9414290; 1 at the station's open water,
+//!   which lies in a lee of its own): the lee of high ground upwind
 //!   (an upwind horizon steeper than `LEE_TAN`, a hill's wake reaching some
 //!   10-60 hill heights downwind; Kaimal and Finnigan 1994, "Atmospheric
 //!   Boundary Layer Flows", ch. 5, INFERRED thresholds) and the Gate's
@@ -43,7 +44,7 @@ use anyhow::{Context, Result, bail};
 use std::sync::OnceLock;
 
 /// Bumped when the bake changes (part of the cache key).
-pub const EXPOSURE_VERSION: &str = "water-exposure-v2";
+pub const EXPOSURE_VERSION: &str = "water-exposure-v3";
 /// The bake's cell (game metres) and extent (game x min, z min, x max, z max).
 pub const CELL_M: f64 = 100.0;
 pub const DOMAIN: [f64; 4] = [-40_000.0, -30_000.0, 20_000.0, 15_000.0];
@@ -277,6 +278,14 @@ pub fn bake(field: &ShoreField, ground: &dyn Ground, grid_box: Option<[f64; 4]>,
     blur(&mut raw, w, h, 0, DIFFRACT_M / CELL_M);
     blur(&mut raw, w, h, 1, FETCH_SPREAD_M / CELL_M);
     blur(&mut raw, w, h, 2, FETCH_SPREAD_M / CELL_M);
+    // the ratio is to the station's wind, so it is 1 at the station: its
+    // anemometer stands on the Crissy Field shore, itself in the lee the field
+    // finds under the Presidio's bluffs for the westerly, so the open strait's
+    // wind is the station's over that lee (the field read about 0.6 there before)
+    let g_station = raw[sj * w + si][1].max(0.2);
+    for v in raw.iter_mut() {
+        v[1] /= g_station;
+    }
     let q = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
     let texels = raw.iter().map(|v| [q(v[0]), q(v[1] * 0.5), q(v[2]), q(v[3])]).collect();
     Exposure { origin: [DOMAIN[0], DOMAIN[1]], cell_m: CELL_M, width: w, height: h, texels, bake_ms: t0.elapsed().as_secs_f64() * 1e3, from_cache: false }
