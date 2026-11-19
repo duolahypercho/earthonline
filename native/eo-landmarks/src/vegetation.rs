@@ -192,11 +192,228 @@ pub fn switches() -> Switches {
 pub const SWITCHES: &[&str] = &["--no-gg2-vegetation", "--no-coastal-trees", "--no-ground-cover"];
 
 /// The coastal-vegetation track's switch names (the roll-up first); eo-app
-/// accepts them. Reserved: nothing reads them yet.
+/// accepts them, [`Gg3::from_args`] reads them (`--no-veg-scans` is reserved:
+/// nothing reads it yet).
 pub const GG3_SWITCHES: &[&str] = &["--no-gg3-vegetation", "--no-naip-planting", "--no-veg-scans", "--no-cliff-rock-cover", "--no-far-species", "--no-far-tree-light", "--no-bloom-date"];
 
-/// The bloom window, days of the year (see the module notes).
+/// The round-3 vegetation features, each with its `--no-` switch
+/// ([`GG3_SWITCHES`]); `--no-gg3-vegetation` (or `--no-gg3`) turns them all off,
+/// which restores the round-2 planting and far trees.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Gg3 {
+    /// `--no-naip-planting`: where scrub, trees and grass stand from the 0.6 m NAIP image ([`naip_class`]).
+    pub naip_planting: bool,
+    /// `--no-cliff-rock-cover`: no plant on a cliff over a beach, mapped bare rock or a sand cliff ([`plantable`]).
+    pub cliff_rock_cover: bool,
+    /// `--no-far-species`: the far trees take the near tier's coastal species and forms.
+    pub far_species: bool,
+    /// `--no-far-tree-light`: the far tree cards lit as a leaf volume (sphere normal from the eye, leaf transmission).
+    pub far_tree_light: bool,
+    /// `--no-bloom-date`: the cited bloom window ([`BLOOM_DAYS_CITED`]) and the flower heads in their own colour.
+    pub bloom_date: bool,
+}
+
+impl Gg3 {
+    pub const ALL: Gg3 = Gg3 { naip_planting: true, cliff_rock_cover: true, far_species: true, far_tree_light: true, bloom_date: true };
+    pub const NONE: Gg3 = Gg3 { naip_planting: false, cliff_rock_cover: false, far_species: false, far_tree_light: false, bloom_date: false };
+
+    pub fn from_args(args: &[String]) -> Self {
+        let has = |s: &str| args.iter().any(|a| a == s);
+        if has("--no-gg3-vegetation") || has("--no-gg3") {
+            return Self::NONE;
+        }
+        Gg3 {
+            naip_planting: !has("--no-naip-planting"),
+            cliff_rock_cover: !has("--no-cliff-rock-cover"),
+            far_species: !has("--no-far-species"),
+            far_tree_light: !has("--no-far-tree-light"),
+            bloom_date: !has("--no-bloom-date"),
+        }
+    }
+}
+
+/// The round-3 switches of this process (read once from the command line).
+pub fn gg3() -> Gg3 {
+    static S: std::sync::OnceLock<Gg3> = std::sync::OnceLock::new();
+    *S.get_or_init(|| Gg3::from_args(&std::env::args().collect::<Vec<_>>()))
+}
+
+/// Whether a cover carries plants (`--no-cliff-rock-cover`: every cover but a
+/// lawn does, as in round 2). A cliff over a beach (eo-app's cliff band, the
+/// ground the sand limit takes from the beach: steeper than
+/// `ground_cover::SAND_SLOPE_MAX`) and mapped bare rock are rock cover: the
+/// rock layer dresses them, nothing grows on them. Sand, paving, paths,
+/// buildings and water never reach here (the site is None there).
+pub fn plantable(cover: Cover, g3: Gg3) -> bool {
+    match cover {
+        Cover::Lawn => false,
+        Cover::Cliff | Cover::Rock => !g3.cliff_rock_cover,
+        _ => true,
+    }
+}
+
+/// The bloom window, days of the year, before `--no-bloom-date` (round 2's,
+/// INFERRED from the NPS words "spring"; March to mid-June).
 pub const BLOOM_DAYS: (f64, f64) = (60.0, 170.0);
+/// The bloom window of the headlands' spring wildflowers, days of the year:
+/// 1 March to 31 May. The California Native Plant Society's Calscape pages
+/// (read 18 Nov 2026) give California poppy (Eschscholzia californica)
+/// flowers "from February to September, though primarily in spring" and sky
+/// lupine (Lupinus nanus) the season "Spring, Summer"; the window is the
+/// spring both share, taken as the meteorological spring, March to May
+/// (INFERRED: the month bounds of "spring"; the Jepson eFlora treatments
+/// could not be re-read past their bot check). The poppy's tail past May is
+/// sparse on the summer-dry headlands and is not drawn.
+pub const BLOOM_DAYS_CITED: (f64, f64) = (60.0, 151.0);
+
+/// How much of a 0.6 m NAIP box is tall woody canopy (scrub, tree crowns),
+/// low cover (grass, herbs; the summer image's cured annual grass), and bare
+/// ground (paving, rock, sand, eroded soil): shares of the pixels it could
+/// read (shadow and water are left out).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Naip {
+    pub canopy: f32,
+    pub low: f32,
+    pub bare: f32,
+}
+
+/// One NAIP pixel's class.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NaipClass {
+    Canopy,
+    Low,
+    Bare,
+    /// Shadow, water, too dark to read.
+    Unknown,
+}
+
+// The classifier. Green vegetation is excess green ExG = 2g - r - b over 0
+// on the chromatic coordinates (r = R / (R + G + B), ...; Woebbecke, Meyer,
+// Von Bargen and Mortensen 1995, Trans. ASAE 38(1) 259-269) with green over
+// red (the sign of VARI = (G - R) / (G + R - B), Gitelson, Kaufman, Stark
+// and Rundquist 2002, Remote Sens. Environ. 80, 76-87). What separates woody
+// canopy from grass in the summer image is brightness: a shrub or crown is
+// self-shaded, a sward is not. The brightness is V = (R + G + B) / 765,
+// averaged over the 5 x 5 pixels round the pixel (the JPEG's and the
+// canopy's pixel noise). The three brightness thresholds were chosen on a
+// hand-labelled set of NAIP cells (16 x 16 pixels, labelled from the image
+// only: Marin scrub, cypress and pine, cured grass, trails and the battery's
+// concrete; 316 cells) as the best mean pixel recall, and checked on a
+// held-out set (the Baker bluff, Lincoln Park, the chert faces west of
+// Kirby Cove; 72 cells). Held-out pixel recall: canopy 0.66, low 0.98, bare
+// 0.94 (round-3 first rule: 0.61, 0.92, 0.98); held-out cells (canopy where
+// its share is a third or more): canopy 43 of 54, low 4 of 4, bare 13 of 14.
+// The misses are sunlit scrub and crowns brighter than 0.38. A per-pixel
+// texture (luma spread in 3 x 3 or 5 x 5) does not separate the classes at
+// 0.6 m (5 x 5 spread medians: canopy 0.020-0.025, grass 0.010-0.023), so
+// none is used.
+
+/// A green pixel darker than this (5 x 5 mean V) is canopy, else low cover.
+pub const NAIP_CANOPY_V: f32 = 0.38;
+/// A pixel that misses the green test but is darker than this (5 x 5 mean V)
+/// and greener than blue (B < G) is canopy too: the evergreen sage scrub's
+/// grey-green, where the summer's cured grass is a brighter tan.
+pub const NAIP_SAGE_V: f32 = 0.39;
+/// Not green and brighter than this (5 x 5 mean V): bare (paving, pale rock,
+/// sand, the battery's concrete; the cured grass's median is 0.44-0.53).
+pub const NAIP_BARE_V: f32 = 0.55;
+/// Darker than this (one pixel) and not green: unknown (shadow, water);
+/// darker than [`NAIP_SHADOW_V`]: unknown whatever its hue (INFERRED: deep shadow).
+pub const NAIP_DARK_V: f32 = 0.30;
+pub const NAIP_SHADOW_V: f32 = 0.20;
+/// Not green on ground steeper than this (degrees): an eroded face or rock,
+/// not cured grass (INFERRED: the steepest grassland slopes of the headlands
+/// are about 35 degrees; the red-brown chert faces are steeper).
+pub const NAIP_BARE_SLOPE_DEG: f64 = 35.0;
+
+/// The class of one NAIP pixel (sRGB bytes as delivered), with the mean
+/// brightness of the 5 x 5 pixels round it (`v5`, 0-1) and the ground's
+/// slope (degrees). NAIP is a summer image: a tan, non-green pixel on gentle
+/// ground is cured annual grass (green in spring: the season model colours
+/// it, not this).
+pub fn naip_class(rgb: [u8; 3], v5: f32, slope_deg: f64) -> NaipClass {
+    let [r, g, b] = rgb.map(|c| c as f32);
+    let s = r + g + b;
+    if s < 1.0 {
+        return NaipClass::Unknown;
+    }
+    let exg = (2.0 * g - r - b) / s;
+    let v = s / 765.0;
+    if v < NAIP_SHADOW_V {
+        return NaipClass::Unknown;
+    }
+    if exg > 0.0 && g > r {
+        return if v5 < NAIP_CANOPY_V { NaipClass::Canopy } else { NaipClass::Low };
+    }
+    if b < g && v5 < NAIP_SAGE_V {
+        return NaipClass::Canopy;
+    }
+    if v < NAIP_DARK_V {
+        return NaipClass::Unknown;
+    }
+    // bright, or grey-blue (serpentinite, concrete in the sky's light): bare.
+    if v5 > NAIP_BARE_V || (b >= g && b >= r) || slope_deg > NAIP_BARE_SLOPE_DEG {
+        return NaipClass::Bare;
+    }
+    NaipClass::Low
+}
+
+/// The shares of a box of NAIP pixels (None: nothing readable). `px` is a
+/// `w` x `h` block, row-major, that holds the box and a margin of two pixels
+/// on every side (the 5 x 5 brightness windows); a pixel outside the image
+/// is None. Only the box's pixels are counted.
+pub fn naip_shares(px: &[Option<[u8; 3]>], w: usize, h: usize, slope_deg: f64) -> Option<Naip> {
+    if w < 5 || h < 5 || px.len() != w * h {
+        return None;
+    }
+    let v: Vec<Option<f32>> = px.iter().map(|p| p.map(|p| (p[0] as f32 + p[1] as f32 + p[2] as f32) / 765.0)).collect();
+    let mut n = [0u32; 4];
+    for j in 2..h - 2 {
+        for i in 2..w - 2 {
+            let Some(p) = px[j * w + i] else { continue };
+            let (mut sum, mut k) = (0.0f32, 0u32);
+            for dj in 0..5 {
+                for di in 0..5 {
+                    if let Some(x) = v[(j + dj - 2) * w + i + di - 2] {
+                        sum += x;
+                        k += 1;
+                    }
+                }
+            }
+            n[naip_class(p, sum / k as f32, slope_deg) as usize] += 1;
+        }
+    }
+    let known = (n[0] + n[1] + n[2]) as f32;
+    (known > 0.0).then(|| Naip { canopy: n[0] as f32 / known, low: n[1] as f32 / known, bare: n[2] as f32 / known })
+}
+
+/// What a planting pass reads besides the ground: the round-3 switches and
+/// the NAIP shares at a point (`naip`: None outside the image or without it).
+pub struct Extra<'a> {
+    pub g3: Gg3,
+    /// The shares round a point in a box of about the given side (m).
+    pub naip: Box<dyn Fn(f64, f64, f64) -> Option<Naip> + 'a>,
+}
+
+impl Extra<'_> {
+    /// Round 2's planting (no NAIP, every round-3 switch off).
+    pub fn none() -> Extra<'static> {
+        Extra { g3: Gg3::NONE, naip: Box::new(|_, _, _| None) }
+    }
+    fn at(&self, x: f64, z: f64, side: f64) -> Option<Naip> {
+        if self.g3.naip_planting { (self.naip)(x, z, side) } else { None }
+    }
+}
+
+/// A tree needs this much canopy in the NAIP box round its trunk (a 6 m box:
+/// a crown is 8-16 m across, so its trunk box is crown where a tree stands;
+/// INFERRED).
+pub const NAIP_TREE_CANOPY: f32 = 0.3;
+/// The box a tree's canopy is read in (m).
+pub const NAIP_TREE_BOX_M: f64 = 6.0;
+/// The box a shrub or grass bunch reads (m; at the 1.25 ground scale 2.4 m
+/// real: five NAIP columns by three rows, eo-app `naip_at`).
+pub const NAIP_PLANT_BOX_M: f64 = 3.0;
 /// Cypress dominate the stands this near the shore (m, INFERRED).
 pub const BLUFF_CYPRESS_M: f64 = 160.0;
 /// The coarse layer's tree lattice (m): the park-tree lattice's own pitch (tile-trees.js).
@@ -305,14 +522,82 @@ pub fn coastal_tree(x: f64, z: f64, shore_m: f64, draw: f64) -> (u8, f32, f32) {
     (species, s, h)
 }
 
+/// A point inside the Presidio: the Main Post's parade ground (37.7989 N,
+/// 122.4662 W, Presidio Trust maps); the largest park green round it is the
+/// Presidio's mapped polygon (eo-app props/vegetation.rs reads the same point).
+pub const PRESIDIO_POINT: (f64, f64) = (37.7989, -122.4662);
+
+/// Game x, z of a geographic point (lat, lon): the surveyed frame times the ground-plan scale.
+pub fn game_xz(lat: f64, lon: f64) -> (f64, f64) {
+    let f = eo_data::Frame::sf();
+    let s = eo_data::groundscale::scale();
+    ((lon - f.center_lon) * f.m_per_deg_lon * s, (f.center_lat - lat) * f.m_per_deg_lat * s)
+}
+
+type ShoreFn = Box<dyn Fn(f64, f64) -> f64 + Send + Sync>;
+static SHORE: std::sync::OnceLock<ShoreFn> = std::sync::OnceLock::new();
+
+/// Install the distance to the shoreline (m, at game x, z) for the far tier's
+/// bluff cypress (the first install wins). The app installs the citywide shore
+/// field's magnitude once the water is loaded.
+pub fn install_shore_distance(f: ShoreFn) {
+    let _ = SHORE.set(f);
+}
+
+/// The installed shore distance at (x, z), if any.
+pub fn shore_distance(x: f64, z: f64) -> Option<f64> {
+    SHORE.get().map(|f| f(x, z))
+}
+
+/// The near tier's coastal species' mature size at scale 1 (height, half
+/// crown, m; `Kind::Tree` order): eo-props eztree/coastal.rs (cypress 16 m and
+/// 10 m, pine 24 m and 7 m, blue gum 34 m and 7.5 m), so a far card is the
+/// tree the near tier draws.
+pub const FAR_TREE_SIZE: [(f32, f32); 3] = [(16.0, 10.0), (24.0, 7.0), (34.0, 7.5)];
+/// The species' leaf albedo targets (linear; [`TREE_LEAF_TINT`]'s notes): the
+/// far card's crown colour.
+pub const FAR_TREE_ALBEDO: [[f32; 3]; 3] = [[0.035, 0.060, 0.030], [0.040, 0.065, 0.030], [0.050, 0.075, 0.060]];
+
+/// A far card's form for a coastal tree (`--no-far-species`: not used): the
+/// species ([`coastal_tree`], the near tier's own draw), its size and crown
+/// colour (sRGB bytes) varied as the near tier's tint is.
+pub fn far_form(x: f64, z: f64, shore_m: f64, draw: f64) -> (u8, f32, f32, [u8; 3]) {
+    let (sp, s, hf) = coastal_tree(x, z, shore_m, draw);
+    let (h, c) = FAR_TREE_SIZE[sp as usize];
+    let v = 0.85 + 0.3 * hash((x * 8.0) as i64, (z * 8.0) as i64, 92) as f32;
+    let enc = |l: f32| {
+        let l = l.clamp(0.0, 1.0);
+        let e = if l <= 0.0031308 { l * 12.92 } else { 1.055 * l.powf(1.0 / 2.4) - 0.055 };
+        (e * 255.0).round() as u8
+    };
+    let a = FAR_TREE_ALBEDO[sp as usize];
+    (sp, h * s * hf, c * s, [enc(a[0] * v), enc(a[1] * v), enc(a[2] * v)])
+}
+
 /// The coarse layer over [x0, x1) x [z0, z1): coastal trees on unmapped tree
 /// cover, shrubs, rock outcrops.
 pub fn plant_coarse(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f64) -> Option<Site>, sw: Switches, out: &mut Vec<Plant>) {
+    plant_coarse_with(x0, z0, x1, z1, site, sw, &Extra::none(), out)
+}
+
+/// Whether the NAIP image lets a tree stand at (x, z) (no image there, or
+/// enough canopy round the trunk).
+pub fn naip_tree_ok(ex: &Extra, x: f64, z: f64) -> bool {
+    ex.at(x, z, NAIP_TREE_BOX_M).is_none_or(|n| n.canopy >= NAIP_TREE_CANOPY)
+}
+
+/// `plant_coarse` with the round-3 rules: nothing on rock cover
+/// ([`plantable`]); within the NAIP image, trees only under mapped canopy and
+/// the scrub where the image shows canopy (closed patches with open grass
+/// between, as the NPS describes the headlands), not by a noise field.
+#[allow(clippy::too_many_arguments)]
+pub fn plant_coarse_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f64) -> Option<Site>, sw: Switches, ex: &Extra, out: &mut Vec<Plant>) {
+    let g3 = ex.g3;
     // trees (the park-tree lattice's pitch, its jitter, a grove field).
     if sw.coastal_trees {
         lattice(x0, z0, x1, z1, TREE_PITCH_M, 1, &mut |x, z, ix, iz| {
             let Some(s) = site(x, z) else { return };
-            if s.cover != Some(Cover::Wood) || s.slope_deg() > 42.0 {
+            if s.cover != Some(Cover::Wood) || s.slope_deg() > 42.0 || !naip_tree_ok(ex, x, z) {
                 return;
             }
             let grove = 0.55 + 0.45 * field(x, z, 70.0, 11);
@@ -328,24 +613,38 @@ pub fn plant_coarse(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f64) 
         lattice(x0, z0, x1, z1, SHRUB_PITCH_M, 2, &mut |x, z, ix, iz| {
             let Some(s) = site(x, z) else { return };
             let Some(cover) = s.cover else { return };
+            if !plantable(cover, g3) {
+                return;
+            }
             let slope = s.slope_deg();
             // a patch field (about 30 m) so the scrub reads as a mosaic, darker and denser in hollows and on north faces.
             let patch = field(x, z, 30.0, 21);
             let shelter = (s.north() * 0.25 + (s.hollow_m * 0.35).clamp(-0.3, 0.4)) as f64;
-            let chance = match cover {
-                Cover::TallScrub => 0.62 + 0.3 * patch + shelter,
-                Cover::Scrub => 0.5 + 0.35 * patch + shelter,
-                Cover::DuneScrub => 0.2 + 0.35 * patch,
-                Cover::WildGrass => (smoothstep(0.38, 0.72, patch) * 0.8 + shelter * 0.8).max(0.0),
-                Cover::Wood | Cover::WoodGreen => 0.12 + 0.12 * patch,
-                Cover::Bare | Cover::Rock => 0.05,
-                // scrub in the cliff's gaps between the outcrops (the rock layer's patches).
-                Cover::Cliff => 0.45 * (1.0 - outcrop_patch(x, z, cover)) * (0.6 + 0.4 * patch),
-                Cover::Lawn => 0.0,
+            // within the NAIP image: the scrub where the image shows canopy, closed where
+            // it is dense (a shrub at nearly every 3.4 m point, grown to close the gaps),
+            // none on the open grass and bare ground between. Under the mapped woods the
+            // canopy is the trees': the understorey keeps its round-2 share there.
+            let naip = ex.at(x, z, NAIP_PLANT_BOX_M).filter(|_| !matches!(cover, Cover::Wood | Cover::WoodGreen));
+            let chance = if let Some(n) = naip {
+                0.02 + 0.98 * smoothstep(0.12, 0.55, n.canopy as f64)
+            } else {
+                match cover {
+                    Cover::TallScrub => 0.62 + 0.3 * patch + shelter,
+                    Cover::Scrub => 0.5 + 0.35 * patch + shelter,
+                    Cover::DuneScrub => 0.2 + 0.35 * patch,
+                    Cover::WildGrass => (smoothstep(0.38, 0.72, patch) * 0.8 + shelter * 0.8).max(0.0),
+                    Cover::Wood | Cover::WoodGreen => 0.12 + 0.12 * patch,
+                    Cover::Bare | Cover::Rock => 0.05,
+                    // scrub in the cliff's gaps between the outcrops (the rock layer's patches).
+                    Cover::Cliff => 0.45 * (1.0 - outcrop_patch(x, z, cover)) * (0.6 + 0.4 * patch),
+                    Cover::Lawn => 0.0,
+                }
             } * (1.0 - smoothstep(38.0, 55.0, slope) * if cover == Cover::Cliff { 0.6 } else { 1.0 });
             if hash(ix, iz, 3) >= chance {
                 return;
             }
+            // closed scrub: the mounds in a dense patch a third wider (not taller), so neighbours touch.
+            let close = naip.map(|n| 1.0 + 0.35 * smoothstep(0.4, 0.8, n.canopy as f64) as f32).unwrap_or(1.0);
             let sage = match cover {
                 Cover::DuneScrub => 0.7,
                 _ => 0.22 + 0.2 * field(x, z, 18.0, 23),
@@ -364,7 +663,7 @@ pub fn plant_coarse(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f64) 
             // the mound follows the slope (the shear); sunk a little so no edge floats.
             let sink = 0.06 + 0.06 * sc as f64;
             let base = SHRUB_LEAF_TINT[if kind == Kind::Shrub(1) { 1 } else { 0 }];
-            out.push(Plant { kind, pos: [x, s.y - sink, z], yaw: hash(ix, iz, 7) * std::f64::consts::TAU, scale: [sc * wide, sc, sc * wide], rank: hash(ix, iz, 8) as f32, tint: base.map(|c| c * v), grad: s.grad() });
+            out.push(Plant { kind, pos: [x, s.y - sink, z], yaw: hash(ix, iz, 7) * std::f64::consts::TAU, scale: [sc * wide * close, sc, sc * wide * close], rank: hash(ix, iz, 8) as f32, tint: base.map(|c| c * v), grad: s.grad() });
         });
     }
     // rock outcrops (crate::hill_rock), after the trees and scrub as before.
@@ -376,30 +675,54 @@ pub fn plant_coarse(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f64) 
 /// The fine layer over [x0, x1) x [z0, z1): grass bunches, short tufts and,
 /// on `day_of_year` inside the bloom window, wildflowers.
 pub fn plant_fine(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f64) -> Option<Site>, day_of_year: f64, sw: Switches, out: &mut Vec<Plant>) {
+    plant_fine_with(x0, z0, x1, z1, site, day_of_year, sw, &Extra::none(), out)
+}
+
+/// How far into its bloom window a day is (0 out of it, 1 in its middle;
+/// three-week ramps at each end).
+pub fn bloom(day_of_year: f64, g3: Gg3) -> f64 {
+    let (a, b) = if g3.bloom_date { BLOOM_DAYS_CITED } else { BLOOM_DAYS };
+    smoothstep(a, a + 21.0, day_of_year) * (1.0 - smoothstep(b - 21.0, b, day_of_year))
+}
+
+/// `plant_fine` with the round-3 rules: nothing on rock cover; within the
+/// NAIP image the sward on the low cover (and in the scrub's gaps), tufts on
+/// the bare ground, and in the bloom window the wildflowers on the open grass.
+#[allow(clippy::too_many_arguments)]
+pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f64) -> Option<Site>, day_of_year: f64, sw: Switches, ex: &Extra, out: &mut Vec<Plant>) {
     if !sw.ground_cover {
         return;
     }
-    let bloom = {
-        let (a, b) = BLOOM_DAYS;
-        // ramps of three weeks at each end of the window.
-        smoothstep(a, a + 21.0, day_of_year) * (1.0 - smoothstep(b - 21.0, b, day_of_year))
-    };
+    let g3 = ex.g3;
+    let bloom = bloom(day_of_year, g3);
     lattice(x0, z0, x1, z1, GRASS_PITCH_M, 4, &mut |x, z, ix, iz| {
         let Some(s) = site(x, z) else { return };
         let Some(cover) = s.cover else { return };
+        if !plantable(cover, g3) {
+            return;
+        }
         let slope = s.slope_deg();
         let patch = field(x, z, 9.0, 41);
-        // (grass, tuft, flower) chances by cover.
-        let (g, t, f) = match cover {
-            Cover::WildGrass => (0.6 + 0.3 * patch, 0.1, 0.06),
-            Cover::Scrub | Cover::TallScrub => (0.45 + 0.3 * patch, 0.1, 0.03),
-            Cover::DuneScrub => (0.08, 0.35 + 0.2 * patch, 0.02),
-            // a mown lawn carries nothing a bunch or tuft would draw (its blades are under 5 cm).
-            Cover::Lawn => return,
-            Cover::Wood | Cover::WoodGreen => (0.06, 0.18 * patch, 0.0),
-            Cover::Bare => (0.04, 0.1 * patch, 0.01),
-            Cover::Rock => (0.1, 0.08, 0.02),
-            Cover::Cliff => (0.12 * (1.0 - outcrop_patch(x, z, cover)), 0.12, 0.01),
+        let naip = ex.at(x, z, NAIP_PLANT_BOX_M).filter(|_| !matches!(cover, Cover::Wood | Cover::WoodGreen | Cover::Lawn));
+        // (grass, tuft, flower) chances by cover; within the NAIP image by what it shows:
+        // a near-continuous sward on the low cover (the 1.3 m patches overlap at 0.9),
+        // grass at the scrub's edges and gaps, sparse tufts on bare ground, and the
+        // spring flowers on the open grass (INFERRED shares).
+        let (g, t, f) = if let Some(n) = naip {
+            let (c, l, b) = (n.canopy as f64, n.low as f64, n.bare as f64);
+            (0.92 * l + 0.45 * c, 0.12 * b + 0.05 * l, 0.16 * l)
+        } else {
+            match cover {
+                Cover::WildGrass => (0.6 + 0.3 * patch, 0.1, 0.06),
+                Cover::Scrub | Cover::TallScrub => (0.45 + 0.3 * patch, 0.1, 0.03),
+                Cover::DuneScrub => (0.08, 0.35 + 0.2 * patch, 0.02),
+                // a mown lawn carries nothing a bunch or tuft would draw (its blades are under 5 cm).
+                Cover::Lawn => return,
+                Cover::Wood | Cover::WoodGreen => (0.06, 0.18 * patch, 0.0),
+                Cover::Bare => (0.04, 0.1 * patch, 0.01),
+                Cover::Rock => (0.1, 0.08, 0.02),
+                Cover::Cliff => (0.12 * (1.0 - outcrop_patch(x, z, cover)), 0.12, 0.01),
+            }
         };
         let steep = 1.0 - 0.6 * smoothstep(40.0, 60.0, slope);
         let r = hash(ix, iz, 3);
@@ -604,6 +927,109 @@ mod tests {
         // scrub grows in the gaps, not on the blocks' patches.
         let shrubs: Vec<_> = out.iter().filter(|p| matches!(p.kind, Kind::Shrub(_))).collect();
         assert!(!shrubs.is_empty() && shrubs.iter().all(|p| outcrop_patch(p.pos[0], p.pos[2], Cover::Cliff) < 1.0));
+    }
+
+    #[test]
+    fn round_three_switches_follow_the_command_line() {
+        let a = |v: &[&str]| Gg3::from_args(&v.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        assert_eq!(a(&["eo-app"]), Gg3::ALL);
+        assert_eq!(a(&["eo-app", "--no-gg3-vegetation"]), Gg3::NONE);
+        assert_eq!(a(&["eo-app", "--no-gg3"]), Gg3::NONE);
+        assert!(!a(&["--no-naip-planting"]).naip_planting && a(&["--no-naip-planting"]).cliff_rock_cover);
+        assert!(!a(&["--no-cliff-rock-cover"]).cliff_rock_cover);
+        assert!(!a(&["--no-far-species"]).far_species && !a(&["--no-far-tree-light"]).far_tree_light && !a(&["--no-bloom-date"]).bloom_date);
+        for s in GG3_SWITCHES {
+            assert!(s.starts_with("--no-"));
+        }
+    }
+
+    #[test]
+    fn naip_pixels_classify_by_index_brightness_and_slope() {
+        // the hand-labelled cells' median colours (A1, 0.6 m; the classifier notes),
+        // with their own brightness as the 5 x 5 mean.
+        let c = |p: [u8; 3], slope: f64| naip_class(p, (p[0] as f32 + p[1] as f32 + p[2] as f32) / 765.0, slope);
+        // Kirby Cove's grey-green scrub (the slope round-3's first rule called grass),
+        // the scrub west of it, the cypress and pine wood, the scrub by the battery.
+        assert_eq!(c([87, 93, 87], 25.0), NaipClass::Canopy);
+        assert_eq!(c([68, 83, 74], 20.0), NaipClass::Canopy);
+        assert_eq!(c([59, 76, 65], 20.0), NaipClass::Canopy);
+        assert_eq!(c([84, 91, 83], 15.0), NaipClass::Canopy);
+        // cured grass on Kirby's slope and by the road, green grass on the ridge.
+        assert_eq!(c([118, 116, 105], 25.0), NaipClass::Low);
+        assert_eq!(c([147, 134, 122], 15.0), NaipClass::Low);
+        assert_eq!(c([110, 115, 98], 20.0), NaipClass::Low);
+        // the battery's concrete, Lincoln Park's road, a chert face (by its slope).
+        assert_eq!(c([169, 157, 143], 15.0), NaipClass::Bare);
+        assert_eq!(c([172, 173, 176], 5.0), NaipClass::Bare);
+        assert_eq!(c([140, 124, 112], 40.0), NaipClass::Bare);
+        assert_eq!(c([140, 124, 112], 10.0), NaipClass::Low);
+        // a known miss: sunlit scrub on the Baker bluff reads as grass.
+        assert_eq!(c([100, 105, 89], 15.0), NaipClass::Low);
+        // the sea in shadow.
+        assert_eq!(c([40, 50, 70], 0.0), NaipClass::Unknown);
+        // shares count only the box inside the 2-pixel margin.
+        let (w, h) = (7, 5);
+        let mut px = vec![Some([68u8, 83, 74]); w * h];
+        px[0] = Some([169, 157, 143]); // in the margin: not counted
+        px[w - 1] = Some([169, 157, 143]);
+        px[2 * w + 4] = None;
+        let n = naip_shares(&px, w, h, 5.0).unwrap();
+        assert!((n.canopy - 1.0).abs() < 1e-6, "{n:?}");
+        assert!(naip_shares(&vec![Some([40, 50, 70]); 25], 5, 5, 0.0).is_none());
+        assert!(naip_shares(&vec![None; 9], 3, 3, 0.0).is_none());
+    }
+
+    #[test]
+    fn rock_cover_carries_no_plant_and_naip_places_the_scrub() {
+        let all = Switches::ALL;
+        let none = |_: f64, _: f64, _: f64| None;
+        // a cliff over a beach and mapped bare rock: rock only (hill_rock), no plant.
+        for cover in [Cover::Cliff, Cover::Rock] {
+            let mut out = vec![];
+            let ex = Extra { g3: Gg3::ALL, naip: Box::new(none) };
+            plant_coarse_with(0.0, 0.0, 128.0, 128.0, &flat(cover), all, &ex, &mut out);
+            plant_fine_with(0.0, 0.0, 32.0, 32.0, &flat(cover), 100.0, all, &ex, &mut out);
+            assert!(out.iter().all(|p| matches!(p.kind, Kind::Rock(_))), "{cover:?}");
+            // round 2 (the switch off) planted there.
+            let mut old = vec![];
+            plant_fine(0.0, 0.0, 32.0, 32.0, &flat(cover), 100.0, all, &mut old);
+            assert!(!old.is_empty());
+        }
+        // the image's canopy: closed scrub; its open grass: none.
+        let count = |n: Naip| {
+            let ex = Extra { g3: Gg3::ALL, naip: Box::new(move |_, _, _| Some(n)) };
+            let mut out = vec![];
+            plant_coarse_with(0.0, 0.0, 128.0, 128.0, &flat(Cover::TallScrub), all, &ex, &mut out);
+            out.iter().filter(|p| matches!(p.kind, Kind::Shrub(_))).count()
+        };
+        let cells = (128.0 * 128.0 / (SHRUB_PITCH_M * SHRUB_PITCH_M)) as usize;
+        assert!(count(Naip { canopy: 1.0, low: 0.0, bare: 0.0 }) > cells * 9 / 10);
+        assert!(count(Naip { canopy: 0.0, low: 1.0, bare: 0.0 }) < cells / 20);
+        // and the sward on the open grass.
+        let ex = Extra { g3: Gg3::ALL, naip: Box::new(|_, _, _| Some(Naip { canopy: 0.0, low: 1.0, bare: 0.0 })) };
+        let mut out = vec![];
+        plant_fine_with(0.0, 0.0, 32.0, 32.0, &flat(Cover::WildGrass), 265.0, all, &ex, &mut out);
+        assert!(out.iter().filter(|p| p.kind == Kind::Grass).count() > 32 * 32 * 8 / 10);
+    }
+
+    #[test]
+    fn the_cited_bloom_window_is_march_to_may() {
+        assert_eq!(bloom(103.0, Gg3::ALL), 1.0); // 13 Apr, the headland photograph
+        assert_eq!(bloom(40.0, Gg3::ALL), 0.0);
+        assert_eq!(bloom(160.0, Gg3::ALL), 0.0); // 9 Jun: past May
+        assert!(bloom(160.0, Gg3::NONE) > 0.0); // round 2's window ran to mid-June
+        assert_eq!(bloom(265.0, Gg3::ALL), 0.0);
+    }
+
+    #[test]
+    fn far_forms_are_the_near_tiers_trees() {
+        for i in 0..500 {
+            let (sp, h, c, rgb) = far_form(i as f64 * 7.3, 11.0, 2000.0, hash(i, 2, 3));
+            let (h0, c0) = FAR_TREE_SIZE[sp as usize];
+            assert!(h >= h0 * 0.78 - 1e-3 && h <= h0 * 1.18 + 1e-3 && c <= c0 * 1.18 + 1e-3);
+            // green over red over (or near) blue: a leaf, not a grey card.
+            assert!(rgb[1] > rgb[0] && rgb[1] > rgb[2], "{rgb:?}");
+        }
     }
 
     #[test]

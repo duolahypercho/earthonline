@@ -15,7 +15,7 @@
 //! instances. `--no-props` turns all of it off.
 
 mod hill_rock; // the hill rock's mid ring past the props tiles
-mod vegetation; // the Golden Gate's coastal trees, ground cover and hill rock on the props tiles
+pub(crate) mod vegetation; // the Golden Gate's coastal trees, ground cover and hill rock on the props tiles
 
 use eo_props::{Live, Model, ParkedCar, PropsWorld, TilePlacement};
 use eo_render::props::{EMPTY, GpuLampLight, GpuPropInstance, GpuWireSeg, INSTANCE_CAPACITY, LAMP_CAPACITY, LIGHT_CAPACITY, WIRE_CAPACITY};
@@ -198,7 +198,10 @@ pub struct PropsRuntime {
     camera: Arc<Mutex<Vec3>>,
     /// the widened view the tile workers order by (tiles stay radial).
     view: Arc<Mutex<Option<eo_render::view_detail::ViewCone>>>,
-    tiles_rx: Option<Receiver<TilePack>>,
+    /// the cooked tiles, each with the vegetation epoch it was cooked on (`veg_epoch`).
+    tiles_rx: Option<Receiver<(TilePack, u32)>>,
+    /// the vegetation epoch the resident fine cells were cooked on.
+    veg_epoch: u32,
     stop: Arc<AtomicBool>,
     in_flight: Arc<AtomicUsize>,
     threads: Vec<std::thread::JoinHandle<()>>,
@@ -236,6 +239,7 @@ impl PropsRuntime {
             camera: Arc::new(Mutex::new(Vec3::ZERO)),
             view: Arc::new(Mutex::new(None)),
             tiles_rx: None,
+            veg_epoch: veg_epoch(),
             stop: Arc::new(AtomicBool::new(false)),
             in_flight: Arc::new(AtomicUsize::new(0)),
             threads: vec![],
@@ -341,7 +345,7 @@ impl PropsRuntime {
     }
 
     fn start_workers(&mut self, world: Arc<PropsWorld>, source: Arc<eo_sim::native::NativeSource>, facts: LibFacts) {
-        let (tx, rx): (Sender<TilePack>, Receiver<TilePack>) = std::sync::mpsc::channel();
+        let (tx, rx): (Sender<(TilePack, u32)>, Receiver<(TilePack, u32)>) = std::sync::mpsc::channel();
         let junctions: Arc<Mutex<HashMap<eo_sim::TileKey, Arc<Vec<Arc<SignalJunction>>>>>> = Arc::new(Mutex::new(HashMap::new()));
         let p2 = self.p2;
         for _ in 0..WORKERS {
@@ -401,13 +405,14 @@ impl PropsRuntime {
                         std::thread::sleep(std::time::Duration::from_millis(4));
                         continue;
                     };
+                    let epoch = veg_epoch();
                     let pack = match ring {
                         RING_FINE => cook_fine(facts.veg.as_deref(), key),
                         RING_MID => hill_rock::cook_mid(facts.veg.as_deref(), key),
                         _ => cook(&world, &source, &junctions, key, &p2, &facts),
                     };
                     in_flight.fetch_sub(1, Ordering::SeqCst);
-                    if tx.send(pack).is_err() {
+                    if tx.send((pack, epoch)).is_err() {
                         break;
                     }
                 }
@@ -423,6 +428,7 @@ impl PropsRuntime {
                 && self.outbox.is_empty()
                 && self.pending.lock().unwrap().is_empty()
                 && self.in_flight.load(Ordering::SeqCst) == 0
+                && self.veg_epoch == veg_epoch()
                 && self.slots.values().all(|s| matches!(s, Slot::Resident { .. }))
                 && self.rings.iter().all(|r| r.outbox.is_empty() && r.pending.lock().unwrap().is_empty() && r.slots.values().all(|s| matches!(s, Slot::Resident { .. }))))
     }
@@ -553,16 +559,26 @@ impl PropsRuntime {
             }
         }
         self.outbox.flush(&self.pending); // try_lock only
-        self.pump_ring(RING_FINE, ctx, renderer, uploads, eye);
-        self.pump_ring(RING_MID, ctx, renderer, uploads, eye);
+        // a new date (a shot's day): the fine cells' grass colour and flowers were cooked
+        // on the old one; drop and re-plant them all (the coarse tiles' trees, shrubs and
+        // rock do not depend on the date).
+        let epoch = veg_epoch();
+        let evict_fine = epoch != self.veg_epoch;
+        self.veg_epoch = epoch;
+        self.pump_ring(RING_FINE, ctx, renderer, uploads, eye, evict_fine);
+        self.pump_ring(RING_MID, ctx, renderer, uploads, eye, false);
         if let Some(rx) = &self.tiles_rx {
-            while let Ok(mut pack) = rx.try_recv() {
+            while let Ok((mut pack, epoch)) = rx.try_recv() {
                 eo_render::hitch::count(eo_render::hitch::Event::Arrival, 1);
                 self.stats.tiles_planned += 1;
                 self.stats.plan_ms_total += pack.ms;
                 self.stats.plan_ms_max = self.stats.plan_ms_max.max(pack.ms);
                 let slots = if pack.ring > 0 { &mut self.rings[pack.ring as usize - 1].slots } else { &mut self.slots };
                 if !matches!(slots.get(&pack.key), Some(Slot::Requested)) {
+                    continue;
+                }
+                // a fine cell cooked on another date: its re-request is queued.
+                if pack.ring == RING_FINE && epoch != self.veg_epoch {
                     continue;
                 }
                 self.stats.overhead_ms_total += pack.overhead_ms;
@@ -688,7 +704,7 @@ impl PropsRuntime {
     /// `FINE_DROP_M`), the mid ring (128 m tiles of hill rock from the props
     /// tiles' reach out to `MID_LOAD_M`, dropped past `MID_DROP_M` or once well
     /// inside the props tiles, which plant the same rocks).
-    fn pump_ring(&mut self, ring: u8, ctx: &GpuContext, renderer: &Renderer, uploads: &mut UploadQueue, eye: Vec3) {
+    fn pump_ring(&mut self, ring: u8, ctx: &GpuContext, renderer: &Renderer, uploads: &mut UploadQueue, eye: Vec3, evict_all: bool) {
         let Some(veg) = self.veg.clone() else { return };
         let fine = ring == RING_FINE;
         if (fine && !veg.switches.ground_cover) || (!fine && !hill_rock::props_rock_enabled(&veg)) {
@@ -729,7 +745,7 @@ impl PropsRuntime {
             }
         }
         let tag_bit = if fine { TAG_FINE } else { TAG_MID };
-        let gone: Vec<Key> = r.slots.keys().filter(|k| !wanted.contains(k)).copied().collect();
+        let gone: Vec<Key> = r.slots.keys().filter(|k| evict_all || !wanted.contains(k)).copied().collect();
         if !gone.is_empty() {
             let gone_set: HashSet<Key> = gone.iter().copied().collect();
             for k in &gone_set {
@@ -900,6 +916,51 @@ fn fine_distance(k: Key, eye: Vec3) -> f32 {
     (dx * dx + dz * dz).sqrt()
 }
 
+/// `EO_VEG_NEAR="x,z x,z ..."`: print every plant (but grass and tufts)
+/// within 30 m of those points with the ground it stands on (a diagnostic:
+/// the near view cones of the shot eyes).
+fn trace_near(v: &vegetation::VegGround, plants: &[eo_landmarks::vegetation::Plant]) {
+    static EYES: std::sync::OnceLock<Vec<(f64, f64)>> = std::sync::OnceLock::new();
+    let eyes = EYES.get_or_init(|| {
+        std::env::var("EO_VEG_NEAR")
+            .map(|s| {
+                s.split_whitespace()
+                    .filter_map(|p| {
+                        let c: Vec<f64> = p.split(',').filter_map(|t| t.parse().ok()).collect();
+                        (c.len() == 2).then(|| (c[0], c[1]))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    });
+    for p in plants {
+        if matches!(p.kind, eo_landmarks::vegetation::Kind::Grass | eo_landmarks::vegetation::Kind::Tuft) {
+            continue;
+        }
+        for &(ex, ez) in eyes {
+            let d = (p.pos[0] - ex).hypot(p.pos[2] - ez);
+            if d <= 30.0 {
+                let s = v.site(p.pos[0], p.pos[2]);
+                eprintln!("vegetation near ({ex:.1}, {ez:.1}): {:?} at ({:.1}, {:.1}) {d:.1} m, cover {:?} slope {:.0} naip {:?}", p.kind, p.pos[0], p.pos[2], s.and_then(|s| s.cover), s.map(|s| s.slope_deg()).unwrap_or(f64::NAN), v.naip_at(p.pos[0], p.pos[2], 3.0));
+            }
+        }
+    }
+}
+
+/// What a fine cell's planting depends on besides the place: the season
+/// model's grass colour (`eo_look::season::current`, in 64 steps) and the
+/// bloom (`vegetation::bloom` on the sun's day, in 16 steps). A fine cell is
+/// cooked again when it changes (`PropsRuntime::pump`).
+fn veg_epoch() -> u32 {
+    veg_epoch_on(eo_look::sun::day_of_year(), eo_landmarks::vegetation::gg3())
+}
+
+fn veg_epoch_on(day: f64, g3: eo_landmarks::vegetation::Gg3) -> u32 {
+    let season = (eo_look::season::dryness(day).clamp(0.0, 1.0) * 64.0).round() as u32;
+    let bloom = (eo_landmarks::vegetation::bloom(day, g3).clamp(0.0, 1.0) * 16.0).round() as u32;
+    season * 17 + bloom
+}
+
 /// Plant one fine cell (grass, tufts, wildflowers) as instances (worker thread).
 fn cook_fine(veg: Option<&vegetation::VegGround>, key: Key) -> TilePack {
     let t0 = Instant::now();
@@ -909,7 +970,8 @@ fn cook_fine(veg: Option<&vegetation::VegGround>, key: Key) -> TilePack {
         let c = vegetation::FINE_CELL_M;
         let (x0, z0) = (key.0 as f64 * c, key.1 as f64 * c);
         let mut plants = vec![];
-        eo_landmarks::vegetation::plant_fine(x0, z0, x0 + c, z0 + c, &|x, z| v.site(x, z), eo_look::sun::day_of_year(), v.switches, &mut plants);
+        eo_landmarks::vegetation::plant_fine_with(x0, z0, x0 + c, z0 + c, &|x, z| v.site(x, z), eo_look::sun::day_of_year(), v.switches, &v.extra(), &mut plants);
+        trace_near(v, &plants);
         vegetation::instances(&plants, &mut instances, &mut extra_counts);
         if std::env::var("EO_TRACE_VEG").is_ok() {
             eprintln!("vegetation: fine cell {key:?} {extra_counts:?}");
@@ -948,6 +1010,10 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
                 if site.is_none_or(|s| s.cover == Some(eo_landmarks::vegetation::Cover::Wood)) {
                     continue;
                 }
+                // round 3: not on rock cover (a cliff over a beach, bare rock), and only under the NAIP image's canopy.
+                if !v.tree_ground_ok(tr.x, tr.z) {
+                    continue;
+                }
                 let (sp, sc, hf) = eo_landmarks::vegetation::coastal_tree(tr.x, tr.z, v.shore_m(tr.x, tr.z), eo_landmarks::vegetation::hash((tr.x * 8.0) as i64, (tr.z * 8.0) as i64, 91));
                 let k = 0.85 + 0.3 * eo_landmarks::vegetation::hash((tr.x * 8.0) as i64, (tr.z * 8.0) as i64, 92) as f32;
                 let tint = eo_landmarks::vegetation::TREE_LEAF_TINT[sp as usize].map(|c| c * k);
@@ -968,7 +1034,8 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
     if let Some(v) = veg {
         let t = eo_street::STREET_TILE_M;
         let (x0, z0) = (key.0 as f64 * t, key.1 as f64 * t);
-        eo_landmarks::vegetation::plant_coarse(x0, z0, x0 + t, z0 + t, &|x, z| v.site(x, z), v.switches, &mut plants);
+        eo_landmarks::vegetation::plant_coarse_with(x0, z0, x0 + t, z0 + t, &|x, z| v.site(x, z), v.switches, &v.extra(), &mut plants);
+        trace_near(v, &plants);
     }
     if std::env::var("EO_TRACE_VEG").is_ok() && !plants.is_empty() {
         let mut by: std::collections::BTreeMap<String, usize> = Default::default();
@@ -1490,4 +1557,19 @@ pub fn capture_cameras(world: &crate::World, aspect: f32, far: f32) -> Vec<(Stri
         out.push(("parked".into(), look_at(eye, at, far, aspect), format!("ribbon {} kerb {} with {} cars planned", e.id, c.side, cars.len())));
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_new_date_is_a_new_vegetation_epoch() {
+        let g3 = eo_landmarks::vegetation::Gg3::ALL;
+        // the headland photograph's 13 April (green, in bloom) and 22 September (cured, none).
+        assert_ne!(veg_epoch_on(103.0, g3), veg_epoch_on(265.0, g3));
+        assert_eq!(veg_epoch_on(103.0, g3), veg_epoch_on(103.0, g3));
+        // the bloom alone (same season step) changes it too: 1 June, the window just shut.
+        assert_ne!(veg_epoch_on(140.0, g3), veg_epoch_on(160.0, g3));
+    }
 }

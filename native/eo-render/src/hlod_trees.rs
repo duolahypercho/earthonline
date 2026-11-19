@@ -24,6 +24,8 @@ pub struct FarTree {
     /// sRGB crown tint.
     pub tint: u32,
     pub seed: u32,
+    /// The card's form: 0 the round park crown; 1 + `vegetation::Kind::Tree`
+    /// species (1 cypress, 2 pine, 3 blue gum, `--no-far-species`: never).
     pub pad: u32,
 }
 
@@ -94,6 +96,30 @@ pub fn park_trees(cover: &eo_landmarks::ground_cover::GroundCover, x0: f64, z0: 
 
 /// `park_trees` with block side `b`.
 #[allow(clippy::too_many_arguments)]
+/// How far the drawn sea is from (x, z) (m): the nearest of 16 rays, in
+/// 6 m steps out to `SHORE_REACH_M`, that meets ground under the sea plus
+/// 0.3 m (the far tier's `blocked` water test); 1 km when none does. The
+/// far tier reads it before the app installs the shore field
+/// (`eo_landmarks::vegetation::install_shore_distance`): the bluff cypress
+/// mix and the beach-sand test need only the first 240 m.
+pub const SHORE_REACH_M: f64 = 252.0;
+pub fn shore_estimate(x: f64, z: f64, y_at: &dyn Fn(f64, f64) -> f64) -> f64 {
+    let sea = eo_water::SEA_LEVEL_Y + 0.3;
+    let mut best = 1e3f64;
+    for k in 0..16 {
+        let (sn, cs) = (k as f64 * std::f64::consts::TAU / 16.0).sin_cos();
+        let mut d = 6.0;
+        while d <= SHORE_REACH_M.min(best) {
+            if y_at(x + cs * d, z + sn * d) < sea {
+                best = best.min(d);
+                break;
+            }
+            d += 6.0;
+        }
+    }
+    best
+}
+
 pub fn park_trees_in(cover: &eo_landmarks::ground_cover::GroundCover, x0: f64, z0: f64, x1: f64, z1: f64, y_at: &(dyn Fn(f64, f64) -> f64 + Sync), blocked: &(dyn Fn(f64, f64) -> bool + Sync), b: f64) -> Vec<FarTree> {
     #[allow(non_snake_case)]
     let B = b;
@@ -107,6 +133,16 @@ pub fn park_trees_in(cover: &eo_landmarks::ground_cover::GroundCover, x0: f64, z
         }
         z += B;
     }
+    // round 3 (`--no-far-species`): the coastal trees of the mapped woods and the
+    // Presidio as the near tier draws them (its species, sizes and leaf colour; the
+    // card's form by species, hlod_trees.wgsl), instead of round park trees.
+    let g3 = eo_landmarks::vegetation::gg3();
+    let presidio = g3.far_species.then(|| {
+        let (lat, lon) = eo_landmarks::vegetation::PRESIDIO_POINT;
+        let (px, pz) = eo_landmarks::vegetation::game_xz(lat, lon);
+        cover.largest_park_holding(px, pz)
+    });
+    let presidio = presidio.flatten();
     let threads = std::thread::available_parallelism().map(|p| p.get()).unwrap_or(4).clamp(1, 8);
     let chunk = blocks.len().div_ceil(threads).max(1);
     let parts: Vec<Vec<FarTree>> = std::thread::scope(|s| {
@@ -117,13 +153,28 @@ pub fn park_trees_in(cover: &eo_landmarks::ground_cover::GroundCover, x0: f64, z
                     let mut out = vec![];
                     for &(x, z) in c {
                         for t in cover.park_trees(x, z, x + B, z + B, y_at, blocked) {
+                            let seed = hash((t.x * 10.0) as i64 as u32 ^ ((t.z * 10.0) as i64 as u32).rotate_left(16));
+                            // the shore distance: the citywide shore field once the app installs it,
+                            // else the nearest drawn sea within the reach that matters here.
+                            let shore = || eo_landmarks::vegetation::shore_distance(t.x, t.z).unwrap_or_else(|| shore_estimate(t.x, t.z, y_at));
+                            // round 3 (`--no-cliff-rock-cover`): not on the beach sand the ground tone
+                            // draws past a mapped beach's ring (the near tier's own test).
+                            if g3.cliff_rock_cover && cover.near_mapped_beach(t.x, t.z) && cover.on_beach_sand(t.x, t.z, shore(), t.y) {
+                                continue;
+                            }
+                            if g3.far_species && (cover.tree_class_at(t.x, t.z) == 1 || presidio.is_some_and(|i| cover.in_green(i, t.x, t.z))) {
+                                let shore = shore();
+                                let draw = eo_landmarks::vegetation::hash((t.x * 8.0) as i64, (t.z * 8.0) as i64, 91);
+                                let (sp, h, cr, c) = eo_landmarks::vegetation::far_form(t.x, t.z, shore, draw);
+                                out.push(FarTree { pos: [t.x as f32, t.y as f32, t.z as f32], height: h, crown: cr, tint: rgb(c[0], c[1], c[2]), seed, pad: sp as u32 + 1 });
+                                continue;
+                            }
                             let (h, cr, tint) = match t.species {
                                 "park-pine" => (17.0, 3.6, rgb(44, 66, 44)),
                                 "park-oak" => (11.0, 5.0, rgb(62, 82, 46)),
                                 _ => (13.0, 4.2, rgb(70, 92, 50)),
                             };
                             let k = t.scale.clamp(0.4, 2.0) as f32;
-                            let seed = hash((t.x * 10.0) as i64 as u32 ^ ((t.z * 10.0) as i64 as u32).rotate_left(16));
                             out.push(FarTree { pos: [t.x as f32, t.y as f32, t.z as f32], height: h * k, crown: cr * k, tint, seed, pad: 0 });
                         }
                     }
@@ -255,6 +306,8 @@ pub struct FarTrees {
     /// The list (trees, then blocks) still to write, and how far it is written.
     pending: std::sync::Mutex<Option<(Vec<u8>, usize, u32, u32)>>,
     pub bytes: u64,
+    /// Frames updated (the fade dither's phase).
+    frame: std::sync::atomic::AtomicU32,
 }
 
 pub struct FarTreesInit<'a> {
@@ -389,6 +442,7 @@ impl FarTrees {
             blocks: std::sync::atomic::AtomicU32::new(0),
             pending: std::sync::Mutex::new(None),
             bytes,
+            frame: std::sync::atomic::AtomicU32::new(0),
         }
     }
 
@@ -442,7 +496,16 @@ impl FarTrees {
 
     /// The frame's camera (the city pass's jittered clip matrix and its planes).
     pub fn update(&self, queue: &wgpu::Queue, on: bool, view_proj: glam::Mat4, planes: [[f32; 4]; 6], eye: glam::Vec3) {
-        let p = Params { range: [NEAR_M, FULL_M, if on { 1.0 } else { 0.0 }, 0.0] };
+        // w: 0 the round-2 light and a fixed dither; with the far tree light
+        // (`--no-far-tree-light`) 1 + this frame's dither phase (a golden-ratio
+        // step a frame, so the temporal resolve averages the fade band's screen door).
+        let w = if eo_landmarks::vegetation::gg3().far_tree_light {
+            let f = self.frame.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            1.0 + (f as f32 * 0.618_034).fract()
+        } else {
+            0.0
+        };
+        let p = Params { range: [NEAR_M, FULL_M, if on { 1.0 } else { 0.0 }, w] };
         queue.write_buffer(&self.params, 0, bytemuck::bytes_of(&p));
         let c = CullParams { planes, view_proj: view_proj.to_cols_array_2d(), cam: [eye.x, eye.y, eye.z, NEAR_M], counts: [self.block_count(), 0, 0, 0] };
         queue.write_buffer(&self.cull_params, 0, bytemuck::bytes_of(&c));
