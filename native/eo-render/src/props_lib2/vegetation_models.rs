@@ -402,7 +402,12 @@ pub(crate) fn cook(out: &mut Out, ez: Option<&eo_props::eztree::EzLibrary>, m_ba
     // --- wildflowers: a bunch with heads; the far level the heads only, larger.
     // Head colours (sRGB, INFERRED from the species' published flower colour words):
     // yellow (the headlands' yellow composites and mustards), violet (lupine).
-    let m_head = push_mat(out.materials, [255, 255, 255], 0.6, 0.0, P_LEAF, 0);
+    // The heads take the instance tint (the ground's tone, for the bunch's
+    // blades) only before `--no-bloom-date`: it drew them a muddy olive. With
+    // the cited bloom window they keep their own colour (no leaf flag: the
+    // shader tints leaf and rock materials only).
+    let head_flags = if eo_landmarks::vegetation::gg3().bloom_date { 0 } else { P_LEAF };
+    let m_head = push_mat(out.materials, [255, 255, 255], 0.6, 0.0, head_flags, 0);
     for (k, col) in [[232u8, 196, 40], [120, 96, 196]].into_iter().enumerate() {
         let mut ids = [NONE; 3];
         bunch(&mut out.b, m_leaf, 7, 0.26, 0.25, 0.5, 0.9, 41 + k as u32);
