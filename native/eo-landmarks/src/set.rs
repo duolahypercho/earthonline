@@ -557,13 +557,22 @@ impl LandmarkSet {
             // promenade is Herb Caen Way's paving), the piers in the JS pier deck's.
             let hex = |s: &str| crate::geometry::srgb_hex(u32::from_str_radix(s.trim_start_matches('#'), 16).unwrap_or(0x808080));
             let apron = hex(js.open_space.colors.get("path").map(|s| s.as_str()).unwrap_or("#e1e3e4"));
-            let m = wf::build_meshes(&edges, &piers, &oracle, &crest_at, js.sea_level_y, 0.42, concrete, wf::UNDER_DECK_LINEAR, apron, crate::geometry::srgb_hex(fp.deck_srgb));
+            // the decks the citywide map draws as lines are asphalt (Torpedo Wharf: OSM
+            // surface=asphalt): the promenades' asphalt albedo (landmarks-js.json
+            // `promenades.structureAlbedo.asphalt`); every other pier the ferry pier's deck tone
+            let pier_deck = crate::geometry::srgb_hex(fp.deck_srgb);
+            let asphalt = {
+                let a = &js.promenades["structureAlbedo"]["asphalt"];
+                [0, 1, 2].map(|k| a[k].as_f64().unwrap_or(pier_deck[k]))
+            };
+            let deck_of = |i: usize| if line_rings.iter().any(|r| r == &piers[i].ring) { asphalt } else { pier_deck };
+            let m = wf::build_meshes_with(&edges, &piers, &oracle, &crest_at, js.sea_level_y, 0.42, concrete, wf::UNDER_DECK_LINEAR, apron, &deck_of);
             piers_built = (m.decks, m.piles);
             // their guard on the water edges (the decks the citywide map draws as lines)
             if !line_rings.is_empty() {
                 let mut g = crate::geometry::MeshArrays::new("waterfront:pier-guard");
                 for p in piers.iter().filter(|p| line_rings.iter().any(|r| r == &p.ring)) {
-                    wf::pier_guard(&mut g, p, &|x, z| oracle.is_water(x, z), crate::geometry::srgb_hex(0x6e7478));
+                    wf::pier_guard(&mut g, p, &|x, z| oracle.is_water(x, z), crate::geometry::srgb_hex(wf::RAIL_PAINT_SRGB));
                 }
                 eprintln!("pier lines: {} rings ({} piers before them), guard {} triangles", line_rings.len(), first_line_pier, g.triangles());
                 if g.triangles() > 0 {
@@ -593,7 +602,7 @@ impl LandmarkSet {
                 let reach = wf::RAILING_CORRIDOR_M * eo_data::groundscale::scale();
                 let detail = crate::features::guard_detail();
                 // (the pickets' wire record carries the kit finish's colour: the wire pass reads its vertex colour.)
-                let paint = crate::geometry::srgb_hex(0x6e7478);
+                let paint = crate::geometry::srgb_hex(wf::RAIL_PAINT_SRGB);
                 let r = wf::quay_railing_with(&edges, &crest_at, fb, reach, if detail { paint } else { [1.0; 3] }, detail);
                 if detail {
                     // a landmark: the rails and posts near and far (in the paint's own colour), the pickets near.

@@ -465,6 +465,11 @@ pub const PIER_LINES_BOX_SURVEYED: [f64; 4] = [-4600.0, -3600.0, -4000.0, -3000.
 /// Pier-line ends this close are one point; a chain whose ends are this close is closed. Metres.
 pub const PIER_LINE_JOIN_M: f64 = 1.0;
 pub const PIER_LINE_CLOSE_M: f64 = 8.0;
+/// The quay railing's paint, sRGB: the grey steel of the guard rail on the
+/// quay wall (set.rs, the Ferry Building corridor's railing, the value it
+/// has had since its port) and of the pier-line decks' guard.
+pub const RAIL_PAINT_SRGB: u32 = 0x6e7478;
+
 /// The guard on a pier-line deck's water edges: 42 in (1.067 m) over the deck,
 /// California Building Code section 1015.3 (guards); people are drawn at real
 /// size (`groundscale::people`, 1.0), so this is not scaled. Posts at 8 ft
@@ -787,6 +792,23 @@ pub fn build_meshes(
     apron: Rgb,
     deck: Rgb,
 ) -> WaterfrontMeshes {
+    build_meshes_with(edges, piers, oracle, crest_at, sea, coping_land, concrete, dark, apron, &|_| deck)
+}
+
+/// `build_meshes` with each pier's deck tone given by its index (`deck_of`).
+#[allow(clippy::too_many_arguments)]
+pub fn build_meshes_with(
+    edges: &[ShoreEdge],
+    piers: &[Pier],
+    oracle: &eo_water::shoreline::Oracle,
+    crest_at: &dyn Fn(f64, f64) -> f64,
+    sea: f64,
+    coping_land: f64,
+    concrete: Rgb,
+    dark: Rgb,
+    apron: Rgb,
+    deck_of: &dyn Fn(usize) -> Rgb,
+) -> WaterfrontMeshes {
     let mut paving = MeshArrays::new("waterfront:paving");
     let mut conc = MeshArrays::new("waterfront:concrete");
     let mut under = MeshArrays::new("waterfront:under-deck");
@@ -799,7 +821,7 @@ pub fn build_meshes(
         let at = |p: [f64; 2], o: f64, y: f64| [p[0] + n[0] * o, y, p[1] + n[1] * o];
         let (ya, yb, inner, tone) = match e.pier {
             None => (crest_at(a[0], a[1]), crest_at(b[0], b[1]), coping_land, apron),
-            Some(i) => (piers[i].deck_y, piers[i].deck_y, 0.0, deck),
+            Some(i) => (piers[i].deck_y, piers[i].deck_y, 0.0, deck_of(i)),
         };
         // The strip: from the coping (or the waterline) to CAP_W_M inland, facing up.
         let w = CAP_W_M + coping_land;
@@ -839,7 +861,8 @@ pub fn build_meshes(
     }
     // Pier slabs over their outlines, and fascias on outline edges over open water.
     let mut decks = 0usize;
-    for p in piers {
+    for (pi, p) in piers.iter().enumerate() {
+        let deck = deck_of(pi);
         let mut ear = earcut::Earcut::<f64>::new();
         let mut tri: Vec<u32> = Vec::new();
         ear.earcut(p.ring.iter().copied(), &[] as &[u32], &mut tri);
