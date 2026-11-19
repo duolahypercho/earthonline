@@ -347,6 +347,70 @@ const HAUNCH_RATIO: f64 = 0.15;
 const HAUNCH_STEPS: usize = 5;
 const CASING_LIP_M: [f64; 2] = [0.6, 0.3];
 
+/// The leg stage (h0, h1, across, along; heights over the water) at a height over the water.
+fn stage_at(g: &GoldenGate, y: f64) -> [f64; 4] {
+    let st = &g.leg_stages;
+    *st.iter().find(|s| y >= s[0] && y < s[1]).unwrap_or(if y < st[0][0] { &st[0] } else { &st[st.len() - 1] })
+}
+
+/// The portal struts above the roadway (`y_tower`) as their casings: see `PortalCasing`.
+fn portal_casings(g: &GoldenGate, w: f64, y_tower: f64, h: f64) -> Vec<PortalCasing> {
+    let above: Vec<usize> = (0..g.struts.len()).filter(|&i| w + g.struts[i][0] > y_tower).collect();
+    let mut out = Vec::new();
+    for (k, &i) in above.iter().enumerate() {
+        let [h0, h1, _] = g.struts[i];
+        // the opening under the strut: down to the next strut, or to the roadway.
+        let below = if k > 0 { g.struts[above[k - 1]][1] } else { y_tower - w };
+        let (height, opening) = (h1 - h0, h0 - below);
+        // grow the casing top and bottom so it stands PORTAL_DEPTH_RATIO of the opening under it.
+        let grow = ((PORTAL_DEPTH_RATIO * opening - height) / (2.0 + 2.0 * PORTAL_DEPTH_RATIO)).max(0.0);
+        let stage = stage_at(g, (h0 + h1) / 2.0);
+        out.push(PortalCasing {
+            index: i,
+            y0: w + h0 - grow,
+            y1: w + h1 + grow,
+            along: stage[3] - 2.0 * CASING_SETBACK_M * h,
+            top_haunch: k + 1 < above.len(),
+        });
+    }
+    out
+}
+
+/// The towers' struts as they are drawn, for the night floods' strut
+/// shadowing (eo-render landmarks.rs `gg_floods_wgsl`): each as (bottom,
+/// top, thickness along the span), world heights, bottom up. With `haunch`
+/// (and `detail`) the struts over the roadway are their casings, deeper and
+/// nearly flush with the legs; with `bracing` the struts under it are the
+/// laced members (`lower_bracing`: strut 5 added, each member the bracing's
+/// width along the span, its flanges closing it top and bottom). The
+/// haunches, lips and lacing are left out (the table is boxes). With both
+/// off, the export's struts.
+pub fn drawn_struts(js: &LandmarksJs) -> Vec<[f64; 3]> {
+    let f = suspension::features();
+    let g = data(js);
+    let (w, h) = (js.sea_level_y, structure_scale());
+    let y_tower = w + num(&g.dimensions, "roadwayAtTowerM");
+    let casings = if f.haunch && f.detail { portal_casings(&g, w, y_tower, h) } else { Vec::new() };
+    let mut out: Vec<[f64; 3]> = Vec::new();
+    if f.bracing {
+        let truss = num(&g.dimensions, "trussDepthM");
+        let s6 = g.struts[1];
+        let s5_top = y_tower - truss - BRACING_DECK_GAP_M * h;
+        out.push([s5_top - (s6[1] - s6[0]), s5_top, BRACING_WIDTH_M * h]);
+    }
+    for (i, &[h0, h1, along]) in g.struts.iter().enumerate() {
+        if let Some(p) = casings.iter().find(|p| p.index == i) {
+            out.push([p.y0, p.y1, p.along]);
+        } else if f.bracing && w + h1 < y_tower {
+            out.push([w + h0, w + h1, BRACING_WIDTH_M * h]);
+        } else {
+            out.push([w + h0, w + h1, along]);
+        }
+    }
+    out.sort_by(|a, b| a[0].total_cmp(&b[0]));
+    out
+}
+
 /// `BridgeFeatures::bracing`: the bracing members' width along the span,
 /// "approximately the width of three cells, or 10 1/2 ft" (Strauss 1937).
 /// INFERRED: strut 5's top this far under the stiffening truss's bottom
@@ -574,8 +638,7 @@ impl Ctx<'_> {
 
     /// The leg stage (h0, h1, across, along; heights over the water) at a height over the water.
     fn stage_at(&self, y: f64) -> [f64; 4] {
-        let st = &self.g.leg_stages;
-        *st.iter().find(|s| y >= s[0] && y < s[1]).unwrap_or(if y < st[0][0] { &st[0] } else { &st[st.len() - 1] })
+        stage_at(self.g, y)
     }
 
     /// The portal struts above the roadway as their steel casings
@@ -584,26 +647,7 @@ impl Ctx<'_> {
         if !(self.haunch && self.detail) {
             return Vec::new();
         }
-        let (g, w, h) = (self.g, self.water, self.h);
-        let above: Vec<usize> = (0..g.struts.len()).filter(|&i| w + g.struts[i][0] > self.plan.y_tower).collect();
-        let mut out = Vec::new();
-        for (k, &i) in above.iter().enumerate() {
-            let [h0, h1, _] = g.struts[i];
-            // the opening under the strut: down to the next strut, or to the roadway.
-            let below = if k > 0 { g.struts[above[k - 1]][1] } else { self.plan.y_tower - w };
-            let (height, opening) = (h1 - h0, h0 - below);
-            // grow the casing top and bottom so it stands PORTAL_DEPTH_RATIO of the opening under it.
-            let grow = ((PORTAL_DEPTH_RATIO * opening - height) / (2.0 + 2.0 * PORTAL_DEPTH_RATIO)).max(0.0);
-            let stage = self.stage_at((h0 + h1) / 2.0);
-            out.push(PortalCasing {
-                index: i,
-                y0: w + h0 - grow,
-                y1: w + h1 + grow,
-                along: stage[3] - 2.0 * CASING_SETBACK_M * h,
-                top_haunch: k + 1 < above.len(),
-            });
-        }
-        out
+        portal_casings(self.g, self.water, self.plan.y_tower, self.h)
     }
 
     /// One portal strut's casing (`BridgeFeatures::haunch`): the steel facia

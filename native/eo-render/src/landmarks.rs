@@ -571,12 +571,13 @@ fn gg_floods_wgsl(js: &eo_landmarks::LandmarksJs) -> String {
     let list = |f: &dyn Fn(&eo_landmarks::lights::Flood) -> [f64; 3]| floods.iter().map(|x| v3(f(x))).collect::<Vec<_>>().join(", ");
     let n = floods.len();
     let n_above = floods.iter().filter(|x| !x.below).count();
-    let g = eo_landmarks::golden_gate::data(js);
-    let w = js.sea_level_y;
-    // the portal struts (with `floods`, the ones under the deck too: the below-roadway lights'):
-    // (y0, y1, half along, half span between the legs' centre planes, less half a leg).
+    // the portal struts as drawn (golden_gate.rs `drawn_struts`: the casings and the laced
+    // bracing with the fourth pass; with `floods`, the ones under the deck too: the
+    // below-roadway lights'): (y0, y1, half along, half span between the legs' centre
+    // planes, less half a leg).
     let all = eo_landmarks::suspension::features().floods;
-    let struts: Vec<String> = g.struts.iter().filter(|st| all || w + st[0] > fl.deck_y).map(|st| format!("vec4<f32>({:.4}, {:.4}, {:.4}, {:.4})", w + st[0], w + st[1], st[2] / 2.0, fl.half_plane - 0.5 * fl.half_across)).collect();
+    let drawn = eo_landmarks::golden_gate::drawn_struts(js);
+    let struts: Vec<String> = drawn.iter().filter(|st| all || st[0] > fl.deck_y).map(|st| format!("vec4<f32>({:.4}, {:.4}, {:.4}, {:.4})", st[0], st[1], st[2] / 2.0, fl.half_plane - 0.5 * fl.half_across)).collect();
     let ns = struts.len().max(1);
     let struts = if struts.is_empty() { "vec4<f32>(0.0, 0.0, 0.0, 0.0)".to_string() } else { struts.join(", ") };
     let mut s = String::new();
