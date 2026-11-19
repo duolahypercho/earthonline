@@ -281,7 +281,9 @@ fn shore_rocks(
                         [0.5, 1.0].iter().any(|r| bare_at(x + a.cos() * rocks::BARE_SPREAD_M * r, z + a.sin() * rocks::BARE_SPREAD_M * r))
                     })
             };
-            let ground_min = |x: f64, z: f64, r: f64| [(0.0, 0.0), (r, 0.0), (-r, 0.0), (0.0, r), (0.0, -r)].iter().filter_map(|(dx, dz)| ground(x + dx, z + dz)).fold(f64::INFINITY, f64::min);
+            // the lowest drawn ground under the footprint: the detail ground (eo_data::detail_ground,
+            // the 2 m relief where it moved the ground) at each point where it has one
+            let ground_min = |x: f64, z: f64, r: f64| [(0.0, 0.0), (r, 0.0), (-r, 0.0), (0.0, r), (0.0, -r)].iter().filter_map(|(dx, dz)| eo_data::detail_ground::height(x + dx, z + dz).or_else(|| ground(x + dx, z + dz))).fold(f64::INFINITY, f64::min);
             // a cliff over the point: ground `TOE_DROP_MIN_M` (surveyed) higher within `TOE_REACH_M`
             let under_cliff = |x: f64, z: f64, g: f64| {
                 (0..8).any(|k| {

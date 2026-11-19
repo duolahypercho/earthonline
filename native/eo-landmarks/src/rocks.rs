@@ -548,8 +548,9 @@ pub fn boulder(i: i64, j: i64, x: f64, z: f64, zone: Zone, dry: bool, ground_min
     let r = [d * 0.5, d * 0.5 * flat, d * (0.4 + 0.15 * hash(i, j, 106))];
     // sunk into the ground: a third of its height, an outcrop half
     let sink = if zone == Zone::Outcrop { 0.55 } else { 0.38 };
-    // the detail ground where one is set (eo_data::detail_ground, none yet), else the drawn ground's lowest point under it.
-    let g = eo_data::detail_ground::height(x, z).unwrap_or_else(|| ground_min(x, z, r[0].max(r[2])));
+    // the drawn ground's lowest point under it (the caller's `ground_min` reads the detail ground,
+    // eo_data::detail_ground, at each of its points where one is set).
+    let g = ground_min(x, z, r[0].max(r[2]));
     let s = (hash(i, j, 107) * 4.0e9) as u32;
     Some(Stone {
         bed: ([x, g, z], [0.0, 1.0, 0.0]),
