@@ -45,6 +45,39 @@ Parts of the water model in `native/eo-water/` are ported from tidewater.
 MIT License, Copyright (c) 2026 DRG Software Solutions LLC. Full text:
 [native/eo-water/LICENSE-tidewater.md](native/eo-water/LICENSE-tidewater.md).
 
+### ACES 2.0 output transform (port)
+
+`native/eo-look/src/tone/aces2.rs` is a Rust translation of the Academy
+Color Encoding System 2.0 reference CTL (aces-aswf/aces-core and
+aces-output), Copyright Contributors to the ACES Project, Apache License 2.0
+([LICENSES/Apache-2.0.txt](LICENSES/Apache-2.0.txt)). The source commit,
+file digests and the changes made are in
+[native/eo-look/data/camera/ACES.NOTICE.txt](native/eo-look/data/camera/ACES.NOTICE.txt).
+
+### ColorChecker reference values (test data)
+
+`COLORCHECKER_XYY_D50` in `native/eo-look/src/tone/camera.rs` holds the 24
+BabelColor average ColorChecker xyY values (Copyright (C) 2004-2012 Danny
+Pascale, www.babelcolor.com), transcribed from the colour-science package's
+tabulation (BSD-3-Clause), where they are reproduced by permission of
+BabelColor. Unit tests read them; nothing of them reaches a rendered frame.
+Their redistribution terms are not yet confirmed for this repository; see
+[native/eo-look/data/camera/COLORCHECKER.NOTICE.txt](native/eo-look/data/camera/COLORCHECKER.NOTICE.txt).
+
+### Weather and tide data in the native crates
+
+- **NOAA / National Weather Service ASOS METAR reports** of San Francisco
+  International Airport (KSFO), 2014-2023, as archived by the Iowa
+  Environmental Mesonet (Iowa State University): public domain (U.S.
+  Government work). Summarised in
+  `native/eo-look/data/ksfo-clear-day-sky.csv`; source, query and digests in
+  its `.NOTICE.txt`.
+- **NOAA National Ocean Service CO-OPS**, station 9414290 hourly wind and
+  current station SFB1203 harmonic constants: public domain (U.S.
+  Government work). Summarised in
+  `native/eo-water/data/golden-gate-climate.json`; source and digests in its
+  `.NOTICE.txt`.
+
 ## Fonts
 
 - **kenpixel** (`native/assets/fonts/kenpixel.ttf`), from Kenney Fonts
