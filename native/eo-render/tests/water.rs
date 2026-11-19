@@ -328,3 +328,17 @@ fn the_bathymetry_constants_match_eo_water() {
         assert!(shader.contains(&format!("wg_gg3({name})")), "{name}");
     }
 }
+
+// (iteration 3, obstacle foam) the extra field's layout and the wake's flood
+// heading as the shader reads them (water_common.wgsl `wb_layer` halves the
+// texture into two layers; water.wgsl picks the flood or the ebb wake by the
+// current's sign along the same heading eo-water extra.rs cooks it on).
+#[test]
+fn the_obstacle_layer_matches_eo_water() {
+    assert_eq!(eo_water::extra::LAYERS, 2);
+    let common = include_str!("../src/water_common.wgsl");
+    assert!(common.contains("let v = clamp(uv.y * 0.5, hh, 0.5 - hh) + 0.5 * layer;"));
+    let water = include_str!("../src/water.wgsl");
+    let [fx, fz] = eo_water::extra::WAKE_FLOW;
+    assert!(water.contains(&format!("let flow = vec2<f32>({fx}, {fz}) * sign(cur);")), "the shader's flood heading is not ({fx}, {fz})");
+}

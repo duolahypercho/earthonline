@@ -567,7 +567,7 @@ pub fn field_of(m: &Model, domain: [f64; 4]) -> Result<ExtraField> {
     if t_max > 1000.0 {
         bail!("bathymetry: the arrival time spans {t_max:.0} periods, past what f16 carries");
     }
-    Ok(ExtraField { origin: [domain[0], domain[1]], cell_m: m.cell_m, width: w, height: h, texels })
+    Ok(ExtraField { origin: [domain[0], domain[1]], cell_m: m.cell_m, width: w, height: h, layers: 1, texels })
 }
 
 /// The cache key: this module's constants, the survey files' digests and the scales.
@@ -612,7 +612,7 @@ pub fn from_bytes(b: &[u8]) -> Result<ExtraField> {
         bail!("cooked extra field: {} bytes for {width} x {height}", b.len());
     }
     let texels = b[40..].chunks_exact(8).map(|c| [0, 1, 2, 3].map(|i| u16::from_le_bytes([c[2 * i], c[2 * i + 1]]))).collect();
-    Ok(ExtraField { origin: [f(8), f(16)], cell_m: f(24), width, height, texels })
+    Ok(ExtraField { origin: [f(8), f(16)], cell_m: f(24), width, height, layers: 1, texels })
 }
 
 /// A half float's value (for tests and the log).

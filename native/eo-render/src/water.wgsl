@@ -1603,52 +1603,68 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // three wave heights wide plus a couple of metres of wash against a wall
     // (INFERRED; the field's 6 m texels place it within a few metres), torn into patches, whiter as each
     // swell crest arrives (its phase from the arrival time) and slowly drifting.
-    // Not on a mapped beach (the surf there has its own foam).
+    // Not on a mapped beach (the surf there has its own foam), and not where the
+    // water lies within about a metre over drawn ground (`column`) or over
+    // ground the survey has above the sea (B1 land more than about half a metre
+    // over mean sea level, INFERRED: awash rock): there the sea is a film over
+    // an apron or a sunken footing, not water a wave breaks in.
     // (the field's beach weight reaches 400 m out to sea; a beach's own surf is its last 30-80 m)
     let on_beach = beach * wg_smooth(80.0, 30.0, signed);
-    if (wg_gg3(2048u) && wb.on > 0.0 && wb.land < 60.0 && on_beach < 0.6 && view_dist < 3000.0) {
-        let h_sw = WB_HS_CLEAR * clamp(wb.kr, 0.0, 1.5) * (1.0 + 0.67 * storm);
-        let u10 = wv_u10(p.x);
-        let h_ws = min(0.0246 * u10 * u10, 0.6);
-        let h = h_sw + h_ws;
-        let band = 2.0 + 3.0 * h;
-        let crest = 0.5 + 0.5 * cos(6.2831853 * (t / WB_PERIOD_S - wb.t));
-        let pulse = mix(1.0, mix(0.45, 1.0, crest), clamp(h_sw / max(h, 1e-3), 0.0, 1.0));
-        let reach = band * pulse;
-        // the band's share of the pixel (a far band narrower than a pixel's
-        // footprint along the view draws as a faint continuous line, not nothing)
-        let fp = clamp(w_fp_along, 0.05, 40.0);
-        // (the foam's own texture only where the pixel resolves the band and the texture)
-        let near_o = (1.0 - wg_smooth(0.15, 2.0, w_fp_lat)) * (1.0 - wg_smooth(0.3 * reach, reach, fp));
-        let tex = clamp((w_foam_tex(p * 0.9 + vec2<f32>(t * 0.17, -t * 0.11), t * 1.1, near_o) - 0.12) / 0.66, 0.0, 1.0);
-        let patches = wg_smooth(-0.35, 0.35, mx_noise(vec3<f32>(p * 0.08, t * 0.07)));
-        let cover = clamp((reach - max(wb.land - 0.5 * fp, 0.0)) / fp, 0.0, 1.0);
-        let k = max(wg_smooth(reach, reach * 0.25, wb.land), cover) * wg_smooth(0.05, 0.3, h) * wb.on * (1.0 - wg_smooth(0.35, 0.6, on_beach));
-        var obf = mix(wg_smooth(1.0 - k - 0.15, 1.0 - k + 0.15, tex), k * 0.6, 1.0 - near_o) * mix(0.55, 1.0, patches);
-        // the tidal current's wake behind what stands in it: water read upstream
-        // along the flow (the Gate's tidal axis, heading 255 degrees as `w_tidal`,
-        // the current's sign from the clock) at 15-160 m; where that point lies
-        // against the obstacle this water is in its wake, a turbulent white trail
-        // widening and fading downstream (INFERRED: visible white water over a few
-        // obstacle widths in a current over about 0.5 m/s)
+    let over_ground = wg_smooth(0.3, 1.0, column) * wg_smooth(-0.6, 0.0, wb.depth);
+    if (wg_gg3(2048u) && wb.on > 0.0 && on_beach < 0.6 && view_dist < 3000.0 && over_ground > 0.0) {
+        // the tidal current's wake behind a registered obstacle (eo-water extra.rs
+        // `wake_at`, cooked into the field's obstacle layer for the flood and the
+        // ebb and faded out near other land), its strength with the current's
+        // (the Gate's tidal axis, the current's sign from the clock)
         let cur = wu.wv_gg2.x;
-        if (wg_gg2(2u) && abs(cur) > 0.3 && wb.land < 60.0) {
-            let flow = vec2<f32>(0.966, -0.259) * sign(cur);
-            let strength = wg_smooth(0.3, 1.5, abs(cur));
-            var wake = 0.0;
-            let steps = array<f32, 4>(15.0, 40.0, 80.0, 160.0);
-            for (var i = 0; i < 4; i = i + 1) {
-                let q = p - flow * steps[i];
-                let uvq = (q - wu.wv_extra.xy) * wu.wv_extra.zw;
-                let dq = textureSampleLevel(w_extra, w_extra_samp, uvq, 0.0).w;
-                wake = max(wake, wg_smooth(3.0 + 0.12 * steps[i], 0.5, dq) * exp(-steps[i] / 90.0));
-            }
-            let streaks = wg_smooth(-0.2, 0.5, mx_noise(vec3<f32>(dot(p, flow) * 0.02, dot(p, vec2<f32>(-flow.y, flow.x)) * 0.15, t * 0.05)));
-            let wk = wake * strength * (0.4 + 0.6 * streaks) * wb.on;
-            obf = max(obf, mix(wg_smooth(1.0 - wk - 0.2, 1.0 - wk + 0.2, tex), wk * 0.5, 1.0 - near_o));
+        var wake = 0.0;
+        if (wg_gg2(2u) && abs(cur) > 0.3) {
+            let ob = wb_obstacle(p);
+            wake = select(ob.z, ob.y, cur > 0.0) * wg_smooth(0.3, 1.5, abs(cur));
         }
-        collar = max(collar, obf * 0.85);
-        w_dbg_obs = vec3<f32>(obf, k, h);
+        if (wb.land < 60.0 || wake > 0.002) {
+            let h_sw = WB_HS_CLEAR * clamp(wb.kr, 0.0, 1.5) * (1.0 + 0.67 * storm);
+            let u10 = wv_u10(p.x);
+            let h_ws = min(0.0246 * u10 * u10, 0.6);
+            let h = h_sw + h_ws;
+            let band = 2.0 + 3.0 * h;
+            // the pixel's footprint across the band (it runs along the shore: the
+            // larger of the two steps, as the band's direction is not known here)
+            let fp = clamp(w_fp_along, 0.05, 40.0);
+            // (a band narrower than the pixel's footprint is drawn at its mean width:
+            // its crest pulse unresolved, so no arcs of the swell's arrival time across the water)
+            let resolved = 1.0 - wg_smooth(0.5 * band, 2.0 * band, fp);
+            let crest = 0.5 + 0.5 * cos(6.2831853 * (t / WB_PERIOD_S - wb.t));
+            let pulse = mix(0.8, mix(1.0, mix(0.45, 1.0, crest), clamp(h_sw / max(h, 1e-3), 0.0, 1.0)), resolved);
+            let reach = band * pulse;
+            // (the foam's own texture only where the pixel resolves the band and the texture)
+            let near_o = (1.0 - wg_smooth(0.15, 2.0, w_fp_lat)) * (1.0 - wg_smooth(0.3 * reach, reach, fp));
+            let tex = clamp((w_foam_tex(p * 0.9 + vec2<f32>(t * 0.17, -t * 0.11), t * 1.1, near_o) - 0.12) / 0.66, 0.0, 1.0);
+            let patches = wg_smooth(-0.35, 0.35, mx_noise(vec3<f32>(p * 0.08, t * 0.07)));
+            // the band's share of the pixel: its overlap with the footprint across it
+            let lo = max(wb.land - 0.5 * fp, 0.0);
+            let hi = min(wb.land + 0.5 * fp, reach);
+            let cover = clamp((hi - lo) / fp, 0.0, 1.0);
+            let k = max(wg_smooth(reach, reach * 0.25, wb.land), cover) * wg_smooth(0.05, 0.3, h) * wb.on * (1.0 - wg_smooth(0.35, 0.6, on_beach)) * over_ground;
+            // (the wash covers at most 0.6 of the band, INFERRED: torn foam with
+            // water between, never a solid sheet; the texture's threshold edges sit
+            // at and above 1 - cover, so where the band is not (cover 0) no
+            // texture peak draws a fleck)
+            let kc = k * 0.6;
+            var obf = mix(wg_smooth(1.0 - kc, 1.0 - kc + 0.3, tex), kc, 1.0 - near_o) * mix(0.55, 1.0, patches);
+            if (wake > 0.002) {
+                let flow = vec2<f32>(0.966, -0.259) * sign(cur);
+                let across = vec2<f32>(-flow.y, flow.x);
+                // streaks along the flow, about 7 m across and 50 m long (INFERRED), at
+                // their mean where the pixel's step across the flow is wider than a streak
+                let fp_x = max(abs(dot(w_wdx, across)), abs(dot(w_wdy, across)));
+                let streaks = mix(wg_smooth(-0.2, 0.5, mx_noise(vec3<f32>(dot(p, flow) * 0.02, dot(p, across) * 0.15, t * 0.05))), 0.45, wg_smooth(1.5, 6.0, fp_x));
+                let wk = wake * (0.4 + 0.6 * streaks) * wb.on * over_ground;
+                obf = max(obf, mix(wg_smooth(1.0 - wk * 0.5, 1.0 - wk * 0.5 + 0.3, tex), wk * 0.5, 1.0 - near_o));
+            }
+            collar = max(collar, obf * 0.85);
+            w_dbg_obs = vec3<f32>(obf, k, h);
+        }
     }
 
     // the swash sheet on a beach: a lacy foam front where the film runs
