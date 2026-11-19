@@ -992,6 +992,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let water_frames = renderer.water.get().map(|w| w.stats()).zip(water_before).map(|(a, b)| (a.frames - b.frames, a.fft_frames - b.fft_frames, a.copy_frames - b.copy_frames, a.fogged_frames - b.fogged_frames));
 
         let mut gpu = json!(null);
+        let mut gpu_serial = json!(null);
         let mut gpu_total_ms = vec![];
         let (mut cull, mut draw) = (vec![], vec![]);
         let (mut sh_cull, mut sh_draw, mut post) = (vec![], vec![], vec![]);
@@ -999,6 +1000,18 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let mut probe_pass = vec![]; // facade
         let mut sky_passes: [Vec<f64>; 6] = Default::default(); // the sky passes, then the cloud-shadow map
         let (mut water_fft, mut water_copy, mut water_pass) = (vec![], vec![], vec![]); // water
+        let (mut water_ppr, mut scene_meter) = (vec![], vec![]); // the gap's projected-reflection pass, the scene meter
+        // each pass's serial share: its end minus the previous pass's end in the frame's
+        // order (Apple GPUs start a pass's clock while earlier passes still run, so
+        // begin-to-end windows overlap; the serial shares add up to the frame).
+        const SERIAL: [(&str, u32); 19] = [
+            ("cull", 0), ("shadow_cull", eo_render::look::Q_SHADOW_CULL), ("shadow_depth", eo_render::look::Q_SHADOW_DRAW), ("probe", eo_render::Q_PROBE),
+            ("cloud_shadow", eo_render::sky::Q_CLOUD_SHADOW), ("sky_lights", eo_render::sky::Q_SKY_LIGHTS), ("city", 2), ("pyramid_late_cull", eo_render::Q_OCCLUSION),
+            ("late_city", eo_render::Q_LATE_DRAW), ("water_fft", eo_render::Q_WATER_FFT), ("water_copy_and_ppr", eo_render::Q_WATER_PPR), ("water_and_glass", eo_render::Q_WATER),
+            ("ao", eo_render::look::Q_AO), ("sky_fx_and_velocity", eo_render::sky::Q_SKY_FX), ("sky_volume", eo_render::sky::Q_SKY_VOLUME), ("sky_resolve", eo_render::sky::Q_SKY_RESOLVE),
+            ("sky_bloom", eo_render::sky::Q_SKY_BLOOM), ("scene_meter", eo_render::Q_SCENE_METER), ("post", eo_render::look::Q_POST),
+        ];
+        let mut serial: Vec<Vec<f64>> = vec![vec![]; SERIAL.len()];
         let (mut occ_ms, mut late_draw, mut early_draw) = (vec![], vec![], vec![]); // occlusion
         if !qsets.is_empty() {
             let mut ts: Vec<u64> = vec![];
@@ -1047,14 +1060,28 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 let (qf, qw) = (eo_render::Q_WATER_FFT as usize, eo_render::Q_WATER as usize);
                 water_fft.push(ms(ts[b + qf], ts[b + qf + 1]));
                 water_copy.push(ms(ts[b + qf + 1], ts[b + qw]));
+                let (qr, qm) = (eo_render::Q_WATER_PPR as usize, eo_render::Q_SCENE_METER as usize);
+                water_ppr.push(ms(ts[b + qr], ts[b + qr + 1]));
+                scene_meter.push(ms(ts[b + qm], ts[b + qm + 1]));
                 water_pass.push(ms(ts[b + qw], ts[b + qw + 1]));
                 // Frame order: cull, shadow cull, shadow depth, city (early), pyramid + late cull, city (late) + sky, AO, post.
                 gpu_total_ms.push(ms(ts[b], ts[b + 9]));
+                let mut prev = ts[b];
+                for (k, &(_, q)) in SERIAL.iter().enumerate() {
+                    let end = ts[b + q as usize + 1];
+                    // (a pass that ended before the one before it counts 0)
+                    let d = if end.wrapping_sub(prev) as i64 > 0 { ms(prev, end) } else { 0.0 };
+                    serial[k].push(d);
+                    prev = prev.max(end);
+                }
             }
             let probe_json = {
                 let p = renderer.probe.stats(); // facade
                 json!({ "captures": p.captures, "faces": p.faces, "transfer": p.transfer, "frames_per_capture": p.last_capture_frames, "look_transfer_in_use": renderer.look.transfer() })
             };
+            let serial_json: serde_json::Map<String, serde_json::Value> = SERIAL.iter().zip(&serial).map(|((n, _), v)| (n.to_string(), json!(percentile(v, 50.0)))).collect();
+            println!("  GPU serial shares (median ms, end minus the previous pass's end): {}", SERIAL.iter().zip(&serial).map(|((n, _), v)| format!("{n} {:.2}", percentile(v, 50.0))).collect::<Vec<_>>().join(", "));
+            gpu_serial = json!(serial_json);
             gpu = json!({
                 "frame_ms_cull_begin_to_post_end": summary(&gpu_total_ms),
                 "cull_pass_ms (lod + cull dispatches)": summary(&cull),
@@ -1079,6 +1106,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 // water
                 "water_fft_pass_ms (FFT when water was seen lately, + the patch cull without occlusion)": summary(&water_fft),
                 "water_copy_ms (the frame copy: the gap before the water pass)": summary(&water_copy),
+                "water_ppr_pass_ms (the projected reflection, inside that gap)": summary(&water_ppr),
+                "scene_meter_pass_ms (the reflected-light meter's histogram, before post)": summary(&scene_meter),
                 "water_pass_ms (the sea, then the glass drawn after it)": summary(&water_pass),
                 "shadow_casters_drawn_per_frame (3 cascades summed)": summary(&shadow_cmds),
                 "shadow_triangles_drawn_per_frame (3 cascades summed)": summary(&shadow_tris),
@@ -1251,6 +1280,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 ("gpu_post", post[k]),
                 ("gpu_water_fft", water_fft[k]), // water
                 ("gpu_water_copy", water_copy[k]),
+                ("gpu_water_ppr", water_ppr[k]),
+                ("gpu_scene_meter", scene_meter[k]),
                 ("gpu_water_and_glass", water_pass[k]),
                 // every timed pass of the frame, and what no pass accounts for
                 ("gpu_probe", probe_pass[k]),
@@ -1264,7 +1295,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 ("gpu_props_casters", pr_casters.get(k).copied().unwrap_or(0.0)),
                 ("gpu_props_wires", pr_wires.get(k).copied().unwrap_or(0.0)),
             ];
-            let timed: f64 = v.iter().map(|p| p.1).sum();
+            let timed: f64 = v.iter().map(|p| p.1).sum::<f64>() - water_ppr[k]; // (the PPR pass lies inside the water gap)
             v.push(("gpu_untimed (agents compute/casters, gaps, other processes)", (gpu_total_ms[k] - timed).max(0.0)));
             v.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
             v
@@ -1545,7 +1576,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         );
         // the far layer after the path, and its last frame's counters (entries drawn, triangles, entries in the frustum, entries occluded).
         let mut report = report;
-        report["fixed_slot_lists"] = fixed_slot_json; // without multi-draw-indirect-count: slots issued (draw_ranges) and held, per frame
+        report["fixed_slot_lists"] = fixed_slot_json;
+        report["gpu_serial_ms"] = gpu_serial; // each pass's end minus the previous pass's end (frame order), median // without multi-draw-indirect-count: slots issued (draw_ranges) and held, per frame
         report["hlod_after"] = json!(models.hlod.as_ref().map(|h| h.stats_json()));
         report["hlod_last_frame"] = json!(renderer.hlod.get().map(|h| h.readback(&ctx.queue)));
         seg_reports.push(report);
