@@ -24,9 +24,10 @@
 //!
 //!    Opt-in (`EO_CAMERA_RENDERING=aces13`): the ACES 1.3 RRT and sRGB 100-nit dim ODT
 //!    (`aces13`) in its place, at the same SOS placement: a per-channel tone
-//!    scale in AP1 that keeps more chroma (0.98 of colorimetric on the
-//!    virtual chart against ACES 2.0's 0.75) at the cost of hue skews (up to
-//!    ~11 deg on the chart's blues; ACES 2.0 1.6 deg).
+//!    scale in AP1 that keeps more chroma (0.94 of colorimetric on the
+//!    virtual chart's saturated patches against ACES 2.0's 0.80; 0.98 and
+//!    0.75 on its C* 25 patches) at the cost of hue skews (up to 18 deg on
+//!    the saturated light blues and violets; ACES 2.0 2.4 deg).
 //!
 //! No picture-style matrix and no hue skew are added: no published camera
 //! picture style or JPEG tone curve under a licence this repository can
@@ -227,6 +228,38 @@ pub fn chart_patches() -> Vec<(f64, f64, Rgb)> {
     v
 }
 
+/// The virtual test chart's saturated patches, defined analytically in
+/// CIELAB (D65 white): the same twelve hues at L* 50 and 70, each at C* 50,
+/// or at the largest C* whose Rec.709 reflectance stays inside 0..1 where 50
+/// is out of gamut (found by bisection). A printed chart's saturated patches
+/// sit at about this chroma (INFERRED: C* 50 is chosen as the upper end of a
+/// print's reflective gamut for most hues, not fitted to any rendering; no
+/// measured chart data). These carry the chroma gate.
+pub fn chart_patches_saturated() -> Vec<(f64, f64, Rgb)> {
+    let at = |l: f64, h: f64, c: f64| lab_to_rec709([l, c * h.to_radians().cos(), c * h.to_radians().sin()]);
+    let inside = |v: Rgb| v.iter().all(|&x| (0.0..=1.0).contains(&x));
+    let mut v = Vec::new();
+    for l in [50.0, 70.0] {
+        for k in 0..12 {
+            let h = k as f64 * 30.0;
+            let mut c = SATURATED_CHROMA;
+            if !inside(at(l, h, c)) {
+                let (mut lo, mut hi) = (0.0, SATURATED_CHROMA);
+                for _ in 0..60 {
+                    let m = 0.5 * (lo + hi);
+                    if inside(at(l, h, m)) { lo = m } else { hi = m }
+                }
+                c = lo;
+            }
+            v.push((l, h, at(l, h, c)));
+        }
+    }
+    v
+}
+
+/// The saturated patches' target chroma (CIELAB C*), `chart_patches_saturated`.
+pub const SATURATED_CHROMA: f64 = 50.0;
+
 /// CIELAB (D65 white) to linear Rec.709 (IEC 61966-2-1 primaries).
 pub fn lab_to_rec709(lab: Rgb) -> Rgb {
     let w = [0.3127 / 0.3290, 1.0, (1.0 - 0.3127 - 0.3290) / 0.3290];
@@ -261,14 +294,22 @@ mod tests {
         assert!((1.2..2.0).contains(&g), "{g}");
     }
 
-    /// The virtual chart (analytic patches: `NEUTRAL_RAMP`, `chart_patches`)
-    /// lit by an even daylight that an incident meter reads (a card of
-    /// reflectance rho at scene 0.18 x rho / 0.157, the meter's grey at 0.18),
-    /// white-balanced. The camera must render the neutral ramp neutral,
-    /// ordered, unclipped and with the SOS grey near L* 50, and keep each
-    /// chromatic patch's hue.
+    /// The virtual chart (analytic patches: `NEUTRAL_RAMP`,
+    /// `chart_patches_saturated`, `chart_patches`) lit by an even daylight
+    /// that an incident meter reads (a card of reflectance rho at scene 0.18 x
+    /// rho / 0.157, the meter's grey at 0.18), white-balanced. The camera must
+    /// render the neutral ramp neutral, ordered, unclipped and with the SOS
+    /// grey near L* 50, keep each chromatic patch's hue, and keep a mean
+    /// chroma of 0.85..1.6 of a colorimetric rendering on the saturated
+    /// patches (the bound the measured chart carried before its data was
+    /// removed, unchanged). Every failure is listed together.
+    ///
+    /// Known to fail (open, for the owner): ACES 2.0 renders the saturated
+    /// patches at 0.80 of colorimetric chroma, and ACES 1.3 turns the L* 70
+    /// blue and violet patches (h 240, 270) 18 deg toward purple.
     #[test]
     fn the_virtual_chart_renders_neutral_greys_and_keeps_hues() {
+        let mut fails = Vec::new();
         for r in [Rendering::Aces2, Rendering::Aces13] {
             let cam = Camera::with(r);
             // incident meter (C = 250) and reflected meter (K = 12.5): the metered grey of an
@@ -290,31 +331,40 @@ mod tests {
             let blk = lab(cam.display_linear([NEUTRAL_RAMP[5] * k; 3]));
             assert!(blk[0] > 8.0, "{r:?} black L* {}", blk[0]);
             // chromatic patches keep their CIELAB hue: within 8 deg under ACES 2.0 (hue-preserving
-            // by design); ACES 1.3's per-channel tone scale skews hue (its known skews: blues
-            // toward purple, ~11 deg here), bounded at 15. The mean chroma ratio over a
-            // colorimetric rendering is reported (a camera's look).
+            // by design, and the old measured chart's bound); ACES 1.3's per-channel tone scale
+            // skews hue (its known skews: blues toward purple), bounded at 15.
             let hue_tol = if r == Rendering::Aces2 { 8.0 } else { 15.0 };
-            let mut worst_dh: f64 = 0.0;
-            let mut chroma_gain = 0.0;
-            let patches = chart_patches();
-            for (lp, hp, rho) in &patches {
-                assert!(rho.iter().all(|&v| (0.0..=1.0).contains(&v)), "{lp} {hp}: {rho:?}");
-                let rr = lab(*rho);
-                let d = lab(cam.display_linear(rho.map(|v| v * k)));
-                let hr = rr[2].atan2(rr[1]).to_degrees();
-                let hd = d[2].atan2(d[1]).to_degrees();
-                let dh = ((hd - hr + 540.0) % 360.0 - 180.0).abs();
-                assert!(dh < hue_tol, "{r:?} L* {lp} h {hp}: hue {hr:.1} -> {hd:.1}");
-                worst_dh = worst_dh.max(dh);
-                chroma_gain += (d[1].hypot(d[2]) / rr[1].hypot(rr[2])) / patches.len() as f64;
+            // (mean chroma ratio over a colorimetric rendering, worst hue shift) of a patch set
+            let mut run = |patches: &[(f64, f64, Rgb)]| {
+                let mut worst_dh: f64 = 0.0;
+                let mut gain = 0.0;
+                for (lp, hp, rho) in patches {
+                    assert!(rho.iter().all(|&v| (0.0..=1.0).contains(&v)), "{lp} {hp}: {rho:?}");
+                    let rr = lab(*rho);
+                    let d = lab(cam.display_linear(rho.map(|v| v * k)));
+                    let hr = rr[2].atan2(rr[1]).to_degrees();
+                    let hd = d[2].atan2(d[1]).to_degrees();
+                    let dh = ((hd - hr + 540.0) % 360.0 - 180.0).abs();
+                    if dh >= hue_tol {
+                        fails.push(format!("{r:?} L* {lp} h {hp} C* {:.0}: hue {hr:.1} -> {hd:.1}", rr[1].hypot(rr[2])));
+                    }
+                    worst_dh = worst_dh.max(dh);
+                    gain += (d[1].hypot(d[2]) / rr[1].hypot(rr[2])) / patches.len() as f64;
+                }
+                (gain, worst_dh)
+            };
+            // the gate: on the saturated patches (comparable in chroma to the old measured
+            // chart's), the mean chroma ratio is 0.85..1.6, the old chart's bound unchanged
+            let (chroma_gain, worst_dh) = run(&chart_patches_saturated());
+            // diagnostic only (no chroma bound): the weak patches (C* 25), where a chroma
+            // compression takes the most
+            let (weak_gain, weak_dh) = run(&chart_patches());
+            eprintln!("virtual chart, {r:?}: 0.19 card L* {:.1}, 0.031 card L* {:.1}; saturated patches: mean chroma ratio {chroma_gain:.3}, worst hue shift {worst_dh:.1} deg; C* 25 patches (report only): {weak_gain:.3}, {weak_dh:.1} deg", n5[0], blk[0]);
+            if !(0.85..1.6).contains(&chroma_gain) {
+                fails.push(format!("{r:?} mean chroma ratio on the saturated patches {chroma_gain:.3}, outside 0.85..1.6"));
             }
-            // the old chart's bound was 0.85 (the measured chart's saturated patches, 0.89 under
-            // ACES 2.0); these low-chroma patches (C* 25) render at 0.75 under ACES 2.0: its
-            // chroma compression takes more from weak colours. Reported, and bounded only
-            // against a rendering that greys colour out or overshoots.
-            assert!((0.7..1.6).contains(&chroma_gain), "{r:?} mean chroma ratio {chroma_gain}");
-            eprintln!("virtual chart, {r:?}: 0.19 card L* {:.1}, 0.031 card L* {:.1}, mean chroma ratio {chroma_gain:.2}, worst hue shift {worst_dh:.1} deg", n5[0], blk[0]);
         }
+        assert!(fails.is_empty(), "{fails:#?}");
     }
 
     #[test]
