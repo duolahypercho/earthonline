@@ -76,12 +76,6 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
     let crown = r < 0.92 + lobes;
     // The trunk: the lower part, a narrow column.
     let trunk = in.uv.y < 0.3 && abs(in.uv.x) < 0.07;
-    if (!(crown || trunk)) {
-        discard;
-    }
-    if (in.fade < 0.999 && hlod_dither(floor(in.clip.xy)) >= in.fade) {
-        discard;
-    }
     let v = normalize(frame.cam_pos.xyz - in.world);
     var n = vec3<f32>(0.0, 1.0, 0.0);
     var albedo = in.tint;
@@ -112,7 +106,15 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
     m.thin_absorption = 0.0;
     rm_emit = vec3<f32>(0.0);
     let face = normalize(cross(dpx, dpy));
-    return look_light(s, m, v, in.world, select(-face, face, dot(face, v) > 0.0), 0u);
+    let lit = look_light(s, m, v, in.world, select(-face, face, dot(face, v) > 0.0), 0u);
+    // the card's outline and the fade's screen door, after the lighting: the
+    // light reads screen derivatives, which are undefined after a discard on
+    // backends where discard ends the invocation (Metal), and the whole
+    // dithered band then shaded black.
+    if (!(crown || trunk) || (in.fade < 0.999 && hlod_dither(floor(in.clip.xy)) >= in.fade)) {
+        discard;
+    }
+    return lit;
 }
 
 @fragment
