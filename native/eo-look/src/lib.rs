@@ -16,6 +16,7 @@ pub mod look;
 pub mod math;
 pub mod phys;
 pub mod rig;
+pub mod season; // the grass's dryness by the day of the year (one curve for every land layer)
 pub mod shadow;
 pub mod sky;
 pub mod sun;

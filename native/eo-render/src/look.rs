@@ -108,7 +108,8 @@ struct LookUniform {
     wx_tint: [f32; 4],
     // the filmic display transform (eo-look `tone::filmic_curve`): contrast a, shoulder d, b, c
     tone: [f32; 4],
-    // x filmic on (1/0), y chroma gain, z, w unused
+    // x filmic on (1/0), y chroma gain, z the camera look on (1/0), w the season's dryness
+    // (eo_look::season::current, 0 green .. 1 golden; read by nothing yet)
     tone2: [f32; 4],
     // the filmic transform's white balance (eo-look `tone::filmic_white_balance`), rows
     wb: [[f32; 4]; 3],
@@ -1304,7 +1305,7 @@ impl LookGpu {
             },
             wb: tone::filmic_white_balance().map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, 0.0]),
             // z: the camera look (it takes the filmic stage's place; `--no-filmic` keeps the old chain)
-            tone2: [if self.sky.options().filmic { 1.0 } else { 0.0 }, tone::FILMIC_CHROMA as f32, if self.camera_look_active() { 1.0 } else { 0.0 }, 0.0],
+            tone2: [if self.sky.options().filmic { 1.0 } else { 0.0 }, tone::FILMIC_CHROMA as f32, if self.camera_look_active() { 1.0 } else { 0.0 }, eo_look::season::current()],
         };
         queue.write_buffer(&self.look_buf, 0, bytemuck::bytes_of(&u));
         let mut planes = [[0f32; 4]; 18];

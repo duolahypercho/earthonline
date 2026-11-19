@@ -55,25 +55,18 @@ fn env_f32(name: &str) -> Option<f32> {
     std::env::var(name).ok().and_then(|v| v.trim().parse::<f32>().ok()).filter(|v| v.is_finite())
 }
 
-/// How golden the annual grass is on a day of the year: green from the first
-/// winter rains to spring (Dec-Mar), browning through April-May, golden from
-/// June until the rains (Bay Area annual grassland, a Mediterranean climate).
+/// How golden the annual grass is on a day of the year (`eo_look::season::dryness`,
+/// the one season curve).
 pub fn dryness_for_day(doy: f64) -> f32 {
-    let d = doy.rem_euclid(365.0);
-    let s = |a: f64, b: f64, x: f64| {
-        let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
-        t * t * (3.0 - 2.0 * t)
-    };
-    // up from day 95 (Apr 5) to 165 (Jun 14); down from 305 (Nov 1) to 345 (Dec 11)
-    (s(95.0, 165.0, d) * (1.0 - s(305.0, 345.0, d))) as f32
+    eo_look::season::dryness(doy)
 }
 
 /// The season's dryness both land layers read (`EO_FARSHORE_DRY`, else
-/// `dryness_for_day` on the sun model's date): the far layer's grass and the
-/// city terrain's far land (eo-app ground_tone), so they meet at the city
-/// grid's edge in one season.
+/// `eo_look::season::current`, the season on the sun model's date): the far
+/// layer's grass and the city terrain's far land (eo-app ground_tone), so they
+/// meet at the city grid's edge in one season.
 pub fn season_dryness() -> f32 {
-    env_f32("EO_FARSHORE_DRY").map(|v| v.clamp(0.0, 1.0)).unwrap_or_else(|| dryness_for_day(eo_look::sun::day_of_year()))
+    env_f32("EO_FARSHORE_DRY").map(|v| v.clamp(0.0, 1.0)).unwrap_or_else(eo_look::season::current)
 }
 
 /// The far layer's land albedos (farshore.wgsl, linear), shared with the city
