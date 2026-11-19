@@ -74,6 +74,18 @@ pub enum FarPath {
     Fallback,
 }
 
+/// Metres the fallback's CPU frustum count grows each box by (hlod_cull.wgsl
+/// tests the same boxes with the same planes in f32; the margin covers rounding).
+pub const FALLBACK_MARGIN_M: f32 = 1.0;
+
+/// The cull's frustum test (hlod_cull.wgsl), the box grown by `margin`.
+pub fn in_frustum(planes: &[[f32; 4]; 6], mn: [f32; 3], mx: [f32; 3], margin: f32) -> bool {
+    planes.iter().all(|pl| {
+        let v = [0, 1, 2].map(|k| if pl[k] >= 0.0 { mx[k] + margin } else { mn[k] - margin });
+        pl[0] * v[0] + pl[1] * v[1] + pl[2] * v[2] + pl[3] >= 0.0
+    })
+}
+
 /// `FarPath` as attached (0 not attached, 1 compact, 2 fallback).
 pub static DRAW_PATH: AtomicU8 = AtomicU8::new(0);
 
@@ -318,10 +330,13 @@ pub struct HlodGpu {
     /// Without multi-draw-indirect-count: the cull still appends its commands,
     /// and the pass draws the first `live` slots (zeroed each frame) without a count.
     fallback: bool,
-    /// Table entries the cull can keep (resident, with indices): no frame has more commands.
+    /// Table entries the cull can keep (resident, with indices).
     live: AtomicU32,
-    /// Which entries `live` counts.
-    live_set: Mutex<Vec<bool>>,
+    /// Each entry's box while the cull can keep it (the CPU mirror `live` counts).
+    live_set: Mutex<Vec<Option<([f32; 3], [f32; 3])>>>,
+    /// Of those, the ones inside this frame's frustum (a box test as the
+    /// cull's, its boxes grown by `FALLBACK_MARGIN_M`): no frame has more commands.
+    frame_live: AtomicU32,
     device: wgpu::Device,
 }
 
@@ -502,7 +517,8 @@ impl HlodGpu {
             chunk_skip: AtomicBool::new(true),
             fallback: i.fallback,
             live: AtomicU32::new(0),
-            live_set: Mutex::new(vec![false; MAX_CELLS as usize]),
+            live_set: Mutex::new(vec![None; MAX_CELLS as usize]),
+            frame_live: AtomicU32::new(0),
             device: d.clone(),
         }
     }
@@ -515,11 +531,18 @@ impl HlodGpu {
     pub fn update(&self, queue: &wgpu::Queue, view_proj: glam::Mat4, planes: [[f32; 4]; 6], eye: Vec3) {
         let p = CullParams { planes, view_proj: view_proj.to_cols_array_2d(), counts: [MAX_CELLS, 0, 0, 0], cam: [eye.x, eye.y, eye.z, if self.chunk_skip.load(Ordering::Relaxed) { self.far_a } else { -1.0 }] };
         queue.write_buffer(&self.params_buf, 0, bytemuck::bytes_of(&p));
+        if self.fallback {
+            // the commands the cull can append this frame: the kept entries in
+            // the frustum (boxes grown, so the count is never below the GPU's).
+            let set = self.live_set.lock().unwrap();
+            let n = set.iter().flatten().filter(|(mn, mx)| in_frustum(&planes, *mn, *mx, FALLBACK_MARGIN_M)).count();
+            self.frame_live.store(n as u32, Ordering::Relaxed);
+        }
     }
 
     pub fn clear(&self, enc: &mut wgpu::CommandEncoder) {
         enc.clear_buffer(&self.count_buf, 0, None);
-        let live = self.live.load(Ordering::Relaxed) as u64;
+        let live = self.frame_live.load(Ordering::Relaxed) as u64;
         if self.fallback && live > 0 {
             // The slots the cull leaves empty draw nothing (index count 0).
             enc.clear_buffer(&self.cmd_buf, 0, Some(live * 20));
@@ -561,8 +584,8 @@ impl HlodGpu {
         pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint32);
         if self.fallback {
             // No count on the GPU: the cull's commands are compacted to the
-            // front of the list, and every slot up to `live` is drawn (the rest zeroed).
-            let live = self.live.load(Ordering::Relaxed);
+            // front of the list, and every slot up to this frame's bound is drawn (the rest zeroed).
+            let live = self.frame_live.load(Ordering::Relaxed);
             if live > 0 {
                 pass.multi_draw_indexed_indirect(&self.cmd_buf, 0, live);
             }
@@ -589,17 +612,21 @@ impl HlodGpu {
     pub fn write_entry(&self, queue: &wgpu::Queue, entry: u32, c: &GpuCell) {
         queue.write_buffer(&self.cell_buf, entry as u64 * std::mem::size_of::<GpuCell>() as u64, bytemuck::bytes_of(c));
         // the cull keeps a resident entry with indices (hlod_cull.wgsl)
-        let keep = c.flags & ENTRY_RESIDENT != 0 && c.index_count > 0;
+        let keep = (c.flags & ENTRY_RESIDENT != 0 && c.index_count > 0).then_some((c.min, c.max));
         let mut set = self.live_set.lock().unwrap();
         if let Some(was) = set.get_mut(entry as usize) {
-            if *was != keep {
-                *was = keep;
-                if keep {
+            match (was.is_some(), keep.is_some()) {
+                (false, true) => {
                     self.live.fetch_add(1, Ordering::Relaxed);
-                } else {
+                    // written after this frame's count: counted until the next `update`
+                    self.frame_live.fetch_add(1, Ordering::Relaxed);
+                }
+                (true, false) => {
                     self.live.fetch_sub(1, Ordering::Relaxed);
                 }
+                _ => {}
             }
+            *was = keep;
         }
     }
 }
