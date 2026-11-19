@@ -84,8 +84,8 @@ fn lm_beach(s: ptr<function, Surface>, wp: vec3<f32>, shore: f32) {
     dry = dry * ((ripples - 0.5) * 0.1 * ripple_k + 1.0);
     var wrack_band = lm_ss(LM_WRACK_A, LM_WRACK_A + 7.0, shore) * lm_ss(LM_WRACK_B, LM_WRACK_B - 9.0, shore);
     if (GG2_SAND) {
-        wrack_band = gg2_wrack_band(wp);
-        dry = dry * (1.0 - 0.18 * gg2_footprints(wp) * lm_ss(GG2_SAND_MHHW_M + 0.05, GG2_SAND_MHHW_M + 0.3, wp.y - LM_SEA_LEVEL_Y));
+        wrack_band = gg2_wrack_band(wp, shore);
+        dry = dry * (1.0 - 0.18 * gg2_footprints(wp) * lm_ss(GG2_SAND_MHHW_M + 0.05, GG2_SAND_MHHW_M + 0.3, gg2_foreshore_h(wp, shore)));
     }
     let wrack = wrack_band * lm_ss(0.56, 0.74, grain) * lm_ss(0.4, 0.6, macro_n);
     dry = mix(dry, vec3<f32>(0.27, 0.21, 0.14), wrack * 0.62);
@@ -93,7 +93,7 @@ fn lm_beach(s: ptr<function, Surface>, wp: vec3<f32>, shore: f32) {
     var damp = lm_ss(reach + 5.0, reach - 6.0, shore) * 0.62;
     var wet_ratio = 0.58;
     if (GG2_SAND) {
-        damp = gg2_damp(wp);
+        damp = gg2_damp(wp, shore);
         wet_ratio = GG2_WET_SAND_RATIO;
     }
     let margin = lm_ss(LM_SEA_LEVEL_Y + 0.35, LM_SEA_LEVEL_Y + 0.02, wp.y) * 0.6;
@@ -142,23 +142,32 @@ fn lm_beach_swash_wet(s: ptr<function, Surface>, wp: vec3<f32>) {
 // `--no-sand-albedo` off): bands keyed to the height over the sea, at the
 // drawn height scale, from the Golden Gate tide station's datums.
 //
+// The height is the foreshore's (`gg2_foreshore_h`): the beach ground the
+// carpet lays (eo-water `beach_foreshore`, the surf model's slope through the
+// sea level at the shoreline), from the shore distance the vertex carries.
+// Not the triangle's own height: on the near-flat foreshore its contours
+// follow the 8 m grid's diagonals and the blend back to the surveyed ground,
+// and a band edge keyed to them is a sawtooth.
+fn gg2_foreshore_h(wp: vec3<f32>, shore: f32) -> f32 {
+    // a ragged edge: a slow wander of a few metres along the shore and a finer fray
+    let rag = lm_mx_noise(vec3<f32>(wp.x * 0.025, wp.z * 0.025, 6.3)) * 0.12 + lm_mx_noise(vec3<f32>(wp.x * 0.11, wp.z * 0.11, 2.7)) * 0.06 + lm_mx_noise(vec3<f32>(wp.x * 0.5, wp.z * 0.5, 9.1)) * 0.02;
+    return max(shore, 0.0) * GG2_FORESHORE_SLOPE + rag;
+}
+
 // The damp band: the sand the high water covers twice a day stays damp below
 // it (mean high water), darkest where the swash keeps it wet (0.3 m over the
 // sea, where `lm_beach_swash_wet` takes over) and drying toward the high
-// water line, its edge ragged (a few centimetres of height).
-fn gg2_damp(wp: vec3<f32>) -> f32 {
-    let rag = lm_mx_noise(vec3<f32>(wp.x * 0.09, wp.z * 0.09, 6.3)) * 0.08;
-    let h = wp.y - LM_SEA_LEVEL_Y + rag;
-    return lm_ss(GG2_SAND_MHW_M, 0.3, h) * 0.8;
+// water line.
+fn gg2_damp(wp: vec3<f32>, shore: f32) -> f32 {
+    return lm_ss(GG2_SAND_MHW_M + 0.05, 0.3, gg2_foreshore_h(wp, shore)) * 0.8;
 }
 
 // The wrack (the strand line of kelp and eelgrass the higher high water
 // leaves): a ragged band round the mean higher high water line, a few
 // centimetres of height across (a couple of metres on the foreshore).
-fn gg2_wrack_band(wp: vec3<f32>) -> f32 {
-    let rag = lm_mx_noise(vec3<f32>(wp.x * 0.05, wp.z * 0.05, 3.7)) * 0.1 + lm_mx_noise(vec3<f32>(wp.x * 0.6, wp.z * 0.6, 8.9)) * 0.03;
-    let d = abs(wp.y - LM_SEA_LEVEL_Y - GG2_SAND_MHHW_M + rag);
-    return lm_ss(0.07, 0.025, d);
+fn gg2_wrack_band(wp: vec3<f32>, shore: f32) -> f32 {
+    let d = abs(gg2_foreshore_h(wp, shore) - GG2_SAND_MHHW_M + lm_mx_noise(vec3<f32>(wp.x * 0.6, wp.z * 0.6, 8.9)) * 0.02);
+    return lm_ss(0.05, 0.02, d);
 }
 
 // Footprints in the dry sand above the strand line: in walkers' trails (a

@@ -230,23 +230,25 @@ pub fn material_table(mt: &MaterialTable, kit_means: &[[f32; 3]], layers: &[Laye
     (v, mapped)
 }
 
-/// San Francisco tide station 9414290 (Golden Gate), NOAA CO-OPS datums,
-/// epoch 1983-2001 (api.tidesandcurrents.noaa.gov mdapi `datums`, metres on
-/// station datum): MHHW 3.602, MHW 3.416, MSL 2.773. The beach's strand line
-/// lies at the higher high water, the sand stays damp below the high water.
-pub const MHW_OVER_MSL_M: f64 = 3.416 - 2.773;
-pub const MHHW_OVER_MSL_M: f64 = 3.602 - 2.773;
+/// The Golden Gate tide station's high waters over mean sea level, real
+/// metres (NOAA 9414290; one definition, in eo-landmarks ground_cover, which
+/// the shore's stones read too).
+pub use eo_landmarks::ground_cover::{MHHW_OVER_MSL_M, MHW_OVER_MSL_M};
 
 /// The shore ground pass's sand constants (shore_surface.wgsl `lm_beach`,
 /// cc0.wgsl `cc0_beach`): on (`--no-sand-albedo` off), the measured wet-sand
-/// ratio, and the tide's high-water heights over the sea at the drawn height
-/// scale (the ground over the sea is drawn `height_scale` times its height).
+/// ratio, the tide's high-water heights over the sea at the drawn height
+/// scale (the ground over the sea is drawn `height_scale` times its height),
+/// and the foreshore's slope the bands' height is read on (eo-water
+/// `BEACH_FORESHORE_SLOPE`, the slope the carpet lays the beach at: rise over
+/// run in the drawn world).
 pub fn shore_ground_wgsl(on: bool, height_scale: f64) -> String {
     format!(
-        "const GG2_SAND: bool = {on};\nconst GG2_WET_SAND_RATIO: f32 = {:.4};\nconst GG2_SAND_MHW_M: f32 = {:.4};\nconst GG2_SAND_MHHW_M: f32 = {:.4};\n",
+        "const GG2_SAND: bool = {on};\nconst GG2_WET_SAND_RATIO: f32 = {:.4};\nconst GG2_SAND_MHW_M: f32 = {:.4};\nconst GG2_SAND_MHHW_M: f32 = {:.4};\nconst GG2_FORESHORE_SLOPE: f32 = {:.6};\n",
         eo_landmarks::ground_cover::WET_SAND_RATIO,
         MHW_OVER_MSL_M * height_scale,
-        MHHW_OVER_MSL_M * height_scale
+        MHHW_OVER_MSL_M * height_scale,
+        eo_water::field::BEACH_FORESHORE_SLOPE
     )
 }
 
@@ -745,6 +747,9 @@ mod tests {
         assert!(w.contains("GG2_SAND_MHHW_M: f32 = 1.03"), "{w}");
         assert!(w.contains("GG2_WET_SAND_RATIO: f32 = 0.5000"));
         assert!(shore_ground_wgsl(false, 1.25).contains("GG2_SAND: bool = false"));
+        // the bands read the carpet's foreshore (1:55): the high water 44 m drawn from the shoreline
+        assert!(w.contains("GG2_FORESHORE_SLOPE: f32 = 0.018182"), "{w}");
+        assert!((MHW_OVER_MSL_M * 1.25 / eo_water::field::BEACH_FORESHORE_SLOPE - 44.2).abs() < 0.1);
         // the ashlar's courses at the height scale, its blocks at the plan
         let a = ashlar_wgsl(true, 1.25, 1.25);
         assert!(a.contains("GG2_ASHLAR_COURSE_M: f32 = 0.7625"), "{a}");

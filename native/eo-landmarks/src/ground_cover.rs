@@ -236,6 +236,27 @@ pub const DRY_SAND_ALBEDO: f64 = 0.182;
 /// Wet over dry sand albedo, the same measurement: 0.091 / 0.182.
 pub const WET_SAND_RATIO: f64 = 0.5;
 
+/// San Francisco tide station 9414290 (Golden Gate), NOAA CO-OPS datums,
+/// epoch 1983-2001 (api.tidesandcurrents.noaa.gov mdapi `datums`, metres on
+/// station datum): MHHW 3.602, MHW 3.416, MSL 2.773. Real metres over mean
+/// sea level (drawn at the height scale). The beach's strand line lies at the
+/// higher high water and the sand stays damp below the high water
+/// (eo-render cc0.rs `shore_ground_wgsl`); the shore's stones carry the same
+/// stain and wetting (rocks.rs `tide_tone`). The one definition both read.
+pub const MHW_OVER_MSL_M: f64 = 3.416 - 2.773;
+pub const MHHW_OVER_MSL_M: f64 = 3.602 - 2.773;
+
+/// Sand stops at the beach (`--no-beach-sand-limit`): the steepest ground,
+/// rise over run across 12 m of the drawn grid (eo-app ground_tone
+/// `slope_at`), that still carries sand. Derived from the 1 m 3DEP DEM
+/// through the 8 m elevation grid: the 99th percentile of that slope at the
+/// terrain vertices inside the mapped beaches (OSM `natural=beach`), 0.356
+/// (eo-app ground_tone `the_sand_limits_match_the_mapped_beaches`
+/// re-measures it). The ground plan and the heights are both scaled 1.25, so
+/// the slope is the surveyed one. The sand limit (eo-app ground_tone) and the
+/// cliff-toe boulders (rocks.rs) both read it.
+pub const SAND_SLOPE_MAX: f64 = 0.36;
+
 fn luma(c: Linear) -> f64 {
     0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
 }
