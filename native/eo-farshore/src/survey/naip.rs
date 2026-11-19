@@ -5,10 +5,15 @@
 //! decoded, the whole grid 252 MB.
 //!
 //! Grid (the download's A1/manifest.json, copied into
-//! native/assets/survey-manifest.json): west -122.5065, north 37.8345, pixel
-//! 6.8165e-6 degrees of longitude by 5.4057e-6 of latitude (0.6 m), pixel
-//! (c, r) of tile (row, col) covering longitude `west + (col 2048 + c) dlon ..`
-//! and latitude `north - (row 2048 + r) dlat ..`.
+//! native/assets/survey-manifest.json): west -122.5065, north 37.8345, tile
+//! boxes 2048 x 6.8165e-6 degrees of longitude by 2048 x 5.4057e-6 of
+//! latitude. The image service delivered square pixels of `dlon` degrees
+//! (0.6 m east-west, 0.754 m north-south) about each requested box's centre,
+//! so each tile reaches 212 rows past its box north and south: tile r001's
+//! row 0 is tile r000's row 1624 (measured on the tiles). Column c of tile
+//! col covers longitude `west + (col 2048 + c) dlon ..`; row r of tile row
+//! covers latitude `centre(row) + (1024 - r) dlon ..`, centre(row) =
+//! `north - (row + 0.5) 2048 dlat`.
 
 use super::{Root, Window};
 use anyhow::{Context, Result, bail};
@@ -36,12 +41,20 @@ impl Grid {
         [self.west, self.north - self.rows as f64 * n * self.dlat, self.west + self.cols as f64 * n * self.dlon, self.north]
     }
 
-    /// The global pixel (column, row) holding (lon, lat), if inside.
+    /// The global pixel (column, tile row x 2048 + row) holding (lon, lat),
+    /// if inside: the tile whose box holds the latitude, the row in that
+    /// tile's square-pixel image about its box's centre (module doc).
     pub fn pixel(&self, lon: f64, lat: f64) -> Option<(usize, usize)> {
+        let n = self.tile as f64;
+        let tile_lat = n * self.dlat;
+        let t = ((self.north - lat) / tile_lat).floor();
         let c = ((lon - self.west) / self.dlon).floor();
-        let r = ((self.north - lat) / self.dlat).floor();
-        let (w, h) = ((self.cols * self.tile) as f64, (self.rows * self.tile) as f64);
-        (c >= 0.0 && r >= 0.0 && c < w && r < h).then_some((c as usize, r as usize))
+        if t < 0.0 || t >= self.rows as f64 || c < 0.0 || c >= (self.cols * self.tile) as f64 {
+            return None;
+        }
+        let centre = self.north - (t + 0.5) * tile_lat;
+        let r = (n / 2.0 + (centre - lat) / self.dlon).floor().clamp(0.0, n - 1.0);
+        Some((c as usize, t as usize * self.tile + r as usize))
     }
 
     /// The root-relative file of tile (row, col).
@@ -114,7 +127,12 @@ mod tests {
         assert!((GRID.west + 2048.0 * GRID.dlon - (-122.49253977350459)).abs() < 1e-9);
         assert!((GRID.north - 2048.0 * GRID.dlat - 37.82342912010431).abs() < 1e-9);
         assert!((b[2] - (-122.45065909401835)).abs() < 1e-9);
-        assert_eq!(GRID.pixel(GRID.west + 1e-9, GRID.north - 1e-9), Some((0, 0)));
+        // the box's north edge lies 212 rows into the first tile (square pixels about its centre)
+        assert_eq!(GRID.pixel(GRID.west + 1e-9, GRID.north - 1e-9), Some((0, 211)));
+        // tile r001's first row is tile r000's row 1624 (as measured on the tiles)
+        let centre1 = GRID.north - 1.5 * 2048.0 * GRID.dlat;
+        let lat = centre1 + 1023.5 * GRID.dlon;
+        assert_eq!(GRID.pixel(GRID.west + 1e-9, lat), Some((0, 1624)));
         assert_eq!(GRID.pixel(-122.6, 37.8), None);
         assert_eq!(Grid::file(4, 3), "A1/rgb/r004_c003.jpg");
     }
