@@ -5,6 +5,11 @@
 //! `ODT.Academy.sRGB_100nits_dim.ctl`; A.M.P.A.S. licence, see
 //! eo-look/data/camera/ACES13.NOTICE.txt). Forward direction only.
 //!
+//! The licence's terms are not yet met in this repository: its text
+//! (copyright notice, conditions, Disclaimer of Warranty) is not stored here
+//! and awaits the owner's approval (see the NOTICE). Do not merge or
+//! redistribute this file until it is.
+//!
 //! Unlike ACES 2.0 (`aces2`), the 1.x rendering applies its tone scale per
 //! channel in the AP1 rendering space, so a colour keeps more of its
 //! chroma through the mid-tones and gains it in the toe, and highlights
