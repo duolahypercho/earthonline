@@ -497,8 +497,9 @@ const VOL_CI2_FIBRE_X: f32 = 20.0;
 /// 2 south: the jet-level westerlies):
 ///
 /// * where the deck is: the high channel over 80 km, drawn out 2 : 1 along the wind and cut at
-///   `1 - amount`, so the deck covers its METAR share of the plane (an equalised channel over
-///   `1 - c` covers `c`), patches of 5-25 km with soft edges;
+///   `1 - amount`, so the deck covers about its METAR share of the plane (an equalised channel
+///   over `1 - c` covers `c`; the edge is broken by the sheets below with a zero-mean term),
+///   patches of 5-25 km with soft, ragged edges;
 /// * the sheets inside it: the low-deck channel over 10 km drawn out 8 : 1, read a mip soft,
 ///   so a patch is broad thick and thin bands 1-3 km across and 10-20 km long (cirrostratus
 ///   and cirrus spissatus), not lines;
@@ -507,9 +508,10 @@ const VOL_CI2_FIBRE_X: f32 = 20.0;
 ///   vanishing point; their across-wind coordinate is bent by the marine channel over 20 km
 ///   across and 80 km along the wind (a slow swing of up to 1.2 km) and by the sheet itself
 ///   (600 m from its thin to its thick parts), so the fibres curl where they leave a thick
-///   head, the fallstreak hooks of cirrus uncinus; seen end-on along the wind the bend and
-///   most of the fibres' contrast give way (perspective would squeeze the bend's swing into
-///   a marbled swirl);
+///   head, the fallstreak hooks of cirrus uncinus; the fibres carve up to 70 % out of the thin
+///   parts and 25 % out of the thick cores, which read as smooth sheets; seen end-on along the
+///   wind the bend and most of the fibres' contrast give way (perspective would squeeze the
+///   bend's swing into a marbled swirl);
 /// * the fibres' contrast fades as they shrink under a pixel (their mip's mean is not a
 ///   fibre), and the whole deck toward the horizon as the round-2 deck did.
 ///
@@ -532,12 +534,13 @@ fn vol_cirrus2(pxz: vec2<f32>, t: f32, dir: vec3<f32>) -> f32 {
     // where the deck is
     let env = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / VOL_CI2_ENV_X, v) / VOL_CI2_ENV_M, clamp(l2 - log2(VOL_CI2_ENV_M) - lt, 1.0, 6.0)).g;
     let thr = 1.0 - amt;
-    let cov = smoothstep(thr - 0.12, thr + 0.12, env) * smoothstep(0.0, 0.12, amt);
+    // the sheets (a mip soft)
+    let body = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / VOL_CI2_BODY_X, v) / VOL_CI2_BODY_M + vec2<f32>(0.31, 0.62), clamp(l2 - log2(VOL_CI2_BODY_M) - lt + 1.0, 1.0, 7.0)).r;
+    // a patch's edge broken along the sheets' bands (zero-mean, so the share stays about the amount)
+    let cov = smoothstep(thr - 0.18, thr + 0.18, env + 0.3 * (body - 0.5)) * smoothstep(0.0, 0.12, amt);
     if (cov <= 0.0) {
         return 0.0;
     }
-    // the sheets (a mip soft)
-    let body = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / VOL_CI2_BODY_X, v) / VOL_CI2_BODY_M + vec2<f32>(0.31, 0.62), clamp(l2 - log2(VOL_CI2_BODY_M) - lt + 1.0, 1.0, 7.0)).r;
     let thick = mix(0.25, 1.0, smoothstep(0.25, 0.85, body));
     // the bend
     let bend = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / VOL_CI2_BEND_X, v) / VOL_CI2_BEND_M + vec2<f32>(0.17, 0.83), clamp(l2 - log2(VOL_CI2_BEND_M) - lt + 1.0, 2.0, 7.0)).b - 0.5;
@@ -549,8 +552,10 @@ fn vol_cirrus2(pxz: vec2<f32>, t: f32, dir: vec3<f32>) -> f32 {
     let lf = clamp(l2 - log2(VOL_CI2_FIBRE_M) - lt, 0.0, 7.0);
     let fa = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / VOL_CI2_FIBRE_X, vf) / VOL_CI2_FIBRE_M + vec2<f32>(0.5, 0.25), lf).a;
     let ridge = smoothstep(0.3, 0.95, 1.0 - abs(2.0 * fa - 1.0));
+    // the fibres show where the sheet thins (its edges and wisps) and fade into the thick cores,
+    // which read as smooth sheets; under a pixel and end-on they give way
     let fc = (1.0 - smoothstep(2.5, 5.0, lf)) * mix(0.35, 1.0, side);
-    let fibre = mix(0.3, 1.0, mix(0.45, ridge, fc));
+    let fibre = 1.0 - fc * mix(0.7, 0.25, smoothstep(0.45, 0.85, body)) * (1.0 - ridge);
     return clamp(cov * thick * fibre, 0.0, 1.0);
 }
 
