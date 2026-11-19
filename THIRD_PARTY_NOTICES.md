@@ -225,6 +225,28 @@ the manifests named here pin every file.
 - **USGS 3DEP 1 arc-second DEM** for the far shore: public domain.
   Manifest: `native/assets/dem-manifest.json`.
 - **USDA NAIP aerial imagery** for the roof survey tool: public domain.
+- **The Golden Gate survey set** (`EO_SURVEY_ROOT`; read by the
+  `eo_farshore::survey` readers). Manifest, with path, bytes and SHA-256 per
+  file and each group's attribution: `native/assets/survey-manifest.json`
+  (written by `native/tools/survey-manifest.mjs`).
+  - **U.S. Geological Survey, 3D Elevation Program**, 1 m DEM GeoTIFFs
+    (projects CA_SanFrancisco_B23 and CA_NoCal_Wildfires_B5b_QL1_2018):
+    public domain (U.S. Government work). Credit: U.S. Geological Survey,
+    3D Elevation Program.
+  - **NOAA NCEI CUDEM** 1/9 arc-second topobathymetric tiles: public domain
+    (U.S. Government work). Cite as: Cooperative Institute for Research in
+    Environmental Sciences (CIRES) at the University of Colorado, Boulder,
+    2014, https://doi.org/10.25921/ds9v-ky35. Not for navigation; NOAA and
+    NCEI give no warranty and do not endorse this product.
+  - **USDA NAIP orthoimagery** (0.6 m RGB), through the USGS National Map
+    image service: public domain (U.S. Government work,
+    https://www.usa.gov/publicdomain/label/1.0/). Credit: Imagery: USDA NAIP,
+    via the U.S. Geological Survey National Map.
+  - **Poly Haven** scanned rocks and plants (glTF models and their 2k
+    texture maps): CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/);
+    no attribution required, credited to Poly Haven (polyhaven.com).
+  - The USGS lidar point clouds listed in the download were not fetched; the
+    manifest records them as such.
 
 The sign art and sign font are pinned, with source URL, licence basis and
 digest per file, in `native/eo-props/data/sign-art-manifest.json`. No

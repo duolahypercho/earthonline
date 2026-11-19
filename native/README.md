@@ -459,6 +459,7 @@ is turned off, the log says so in one line, and the game runs without it.
 | `EO_AUDIO_ROOT` | Sound clips | The game |
 | `EO_SIGN_ART_ROOT` | Official sign art and the sign font | The game, `tools/fetch-sign-art.mjs` |
 | `EO_DEM_ROOT` | Elevation tiles for the far shore | The game |
+| `EO_SURVEY_ROOT` | The Golden Gate survey set: NAIP 0.6 m aerial tiles, USGS 3DEP 1 m DEMs, NOAA CUDEM topobathy, Poly Haven scanned rocks and plants (`assets/survey-manifest.json`) | The game (`eo_farshore::survey`, read by nothing yet), `tools/survey-manifest.mjs` |
 | `EO_AERIAL_DIR` | Aerial imagery | Tools only (the roof survey and `tools/fetch-aerial.mjs`) |
 | `EO_POLYHAVEN_STORE` | Poly Haven downloads | The Blender building scripts |
 

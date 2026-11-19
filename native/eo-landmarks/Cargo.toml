@@ -9,6 +9,7 @@ publish = false
 anyhow = "1.0.104"
 earcut = "0.4.12"
 eo-data = { path = "../eo-data" }
+eo-farshore = { path = "../eo-farshore" } # the survey readers (eo_farshore::survey)
 eo-sky = { path = "../eo-sky" } # landmarks2: the bridges' lights in the street lamps' photometry
 eo-water = { path = "../eo-water" }
 flate2 = "1.1.11"

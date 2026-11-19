@@ -23,6 +23,7 @@
 //!   draws no far terrain, as before.
 
 pub mod dem;
+pub mod survey; // the Golden Gate survey set under EO_SURVEY_ROOT (NAIP, 1 m DEM, CUDEM, scans); called by nothing yet
 pub use half; // the far layer uploads its heights as half floats
 
 use anyhow::{Context, Result, anyhow, bail};
