@@ -1920,23 +1920,36 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         // (sea r2: as much foam as the waves have height: a sheltered bay beach
         // keeps a thin swash line, not the Pacific's surf lace)
         var sized = wg_smooth(0.12, 0.7, sa);
-        // (iteration 3, surf break) residual foam left between the bores
-        var residual = 0.06;
         if (bed_surf) {
             // on the measured bed a breaker's foam follows its own height, not the
             // open coast's: a wave under about 10 cm breaks without entraining air
             // (micro-breaking), one of 30 cm and more throws a full white bore
-            // (INFERRED: the mean wave amplitude, `SF_AMPLITUDE` x `sa`, from 2 to 12 cm);
-            // and the foam a dissipative surf zone keeps between its bores, a lace
-            // over a fifth to a third of the water in shore video (INFERRED, 0.25)
+            // (INFERRED: the mean wave amplitude, `SF_AMPLITUDE` x `sa`, from 2 to 12 cm)
             sized = mix(sized, wg_smooth(0.02, 0.12, SF_AMPLITUDE * sa), wb.on);
-            residual = mix(residual, 0.25, wb.on);
         }
         let fresh = sf_fresh_foam(s0.whitewater, lace, p, fr.xy, t, inner) * sized; // broken behind the roller, torn into lace near the sand (water_surf.wgsl)
         // (in a storm the whole surf zone churns: whitewater stays dense between the bores)
         let churn = storm * sized * wg_smooth(-2.0, 25.0, signed) * wg_smooth(520.0, 260.0, signed) * 0.95; // (denser, wider)
-        let old = clamp(max(sf_aged_patches((s0.bored * (0.8 * exp(-s0.age / 2.6) + residual) * sized + whitecap * (0.3 + 0.5 * storm)) * inner, p, fr.xy, t), churn), 0.0, 1.0); // aged foam in rafts and clearings (water_surf.wgsl)
-        let torn = wg_smooth(1.0 - old, 1.14 - old, lace);
+        let old = clamp(max(sf_aged_patches((s0.bored * (0.8 * exp(-s0.age / 2.6) + 0.06) * sized + whitecap * (0.3 + 0.5 * storm)) * inner, p, fr.xy, t), churn), 0.0, 1.0); // aged foam in rafts and clearings (water_surf.wgsl)
+        var torn = wg_smooth(1.0 - old, 1.14 - old, lace);
+        if (bed_surf) {
+            // (iteration 3, surf break) the foam a dissipative surf zone keeps between
+            // its bores (INFERRED: a quarter of the water inside the broken zone)
+            // lies in rafts tens of metres across drifting shoreward with clear
+            // water between them, each raft a foam sheet with irregular holes
+            // (the foam texture's blobs, not the lace's cells: a constant share
+            // through the lace's cell walls drew a regular net)
+            let q = p - fr.xy * (t * 0.6);
+            let raft = wg_smooth(-0.15, 0.35, mx_noise(vec3<f32>(q * 0.04, t * 0.02)));
+            let res = s0.bored * sized * inner * 0.25 * raft * wb.on;
+            if (res > 0.002) {
+                let near_r = 1.0 - wg_smooth(0.15, 2.0, w_fp_lat);
+                // (the texture spread over 0..1 as the obstacle foam's, so the share
+                // above the threshold 1 - res is about res, the far mean's)
+                let ftex = clamp((w_foam_tex(q * 1.3, t * 0.9, near_r) - 0.12) / 0.66, 0.0, 1.0);
+                torn = max(torn, mix(wg_smooth(1.0 - res - 0.1, 1.0 - res + 0.1, ftex), res, 1.0 - near_r));
+            }
+        }
         var landward = wg_smooth(-4.0, 0.5, signed);
         if (bed_surf) {
             // (iteration 3, surf break) to the surveyed waterline, wherever the ring lies

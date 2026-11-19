@@ -235,9 +235,14 @@ fn sf_amp_scale(x: f32) -> f32 {
     return old;
 }
 
-// (iteration 3, surf break) the crest lines break in sections (peaks and shoulders 50-300 m long)
+// (iteration 3, surf break) on the measured bed the refracted arrival time
+// already bends the crests round the points and over the bars; on top of it a
+// short-crested swell's crests wander a little along the shore. INFERRED: the
+// 1:55 model's three section periods (about 76, 170 and 570 m along the
+// shore) at a tenth of its phase, under 0.05 of a period in all (a few metres
+// of a 50-80 m surf-zone wave length), so a crest never snakes tens of metres
 fn sf_sections(along: f32) -> f32 {
-    return 0.22 * sin(along * 0.011 + 0.4) + 0.14 * sin(along * 0.037 + 1.3) + 0.08 * sin(along * 0.083 + 2.2);
+    return 0.022 * sin(along * 0.011 + 0.4) + 0.014 * sin(along * 0.037 + 1.3) + 0.008 * sin(along * 0.083 + 2.2);
 }
 
 // (iteration 3, surf break) two surfs blended (the measured bed's edge)
