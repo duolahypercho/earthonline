@@ -2168,10 +2168,12 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     let dusk_d = wg_smooth(0.25, 0.0, look.sun.y) * (1.0 - wg_smooth(0.6, 0.95, skyu.night.z));
     var grey_k = 0.28 + 0.3 * dusk_d; // (0.28: the Embarcadero read clean cobalt)
     if (wg_gg3(4096u) && brdf && wv_feat(1024u)) {
-        // (iteration 3, water body) with the grazing integral on, the mirror is
-        // already the sky averaged over the facets the eye sees (Bruneton et al.
-        // 2010): the constant fifth of grey on top of it, a stand-in for that
-        // mixing from before the integral, counted it twice. The dusk share stays.
+        // (iteration 3, water body) the constant 0.28 grey on the reflected sky
+        // was a look value with no source (round 2 set it so the Embarcadero read
+        // clean cobalt), so it goes (rule 7: every constant cites its source or
+        // is INFERRED with a reason). The dusk share, the same kind of value, is
+        // kept as round 2 had it (INFERRED, uncited: the low sky's belt and
+        // afterglow turned the bay magenta), pending a cited replacement.
         grey_k = 0.3 * dusk_d;
     }
     var sky = mix(sky0, vec3<f32>(lk_luma(sky0)), grey_k);

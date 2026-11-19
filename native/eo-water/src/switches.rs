@@ -35,9 +35,11 @@ pub const SURF_BREAK: u32 = 512;
 pub const SWASH_FOAM: u32 = 1024;
 /// (iteration 3) White water where the waves meet rocks, the fender and walls.
 pub const OBSTACLE_FOAM: u32 = 2048;
-/// (iteration 3) The water body's colour from the Gate's measured optics.
+/// (iteration 3) The reflected sky without round 2's uncited constant grey
+/// (0.28); no cited body term was added (the body's optics are round 2's).
 pub const BODY2: u32 = 4096;
-/// (iteration 3) The mirror image broken into the dashes the chop resolves.
+/// (iteration 3) Reserved for the mirror image broken into the dashes the chop
+/// resolves; nothing reads it yet (the switch is accepted and does nothing).
 pub const PPR_DASH: u32 = 8192;
 pub const GG3_ALL: u32 = BATHYMETRY | SURF_BREAK | SWASH_FOAM | OBSTACLE_FOAM | BODY2 | PPR_DASH;
 
