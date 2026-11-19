@@ -256,13 +256,14 @@ pub fn plantable(cover: Cover, g3: Gg3) -> bool {
 /// INFERRED from the NPS words "spring"; March to mid-June).
 pub const BLOOM_DAYS: (f64, f64) = (60.0, 170.0);
 /// The bloom window of the headlands' spring wildflowers, days of the year:
-/// 1 March to 31 May. The Jepson eFlora treatments give California poppy
-/// (Eschscholzia californica) "Feb-Sep" and sky lupine (Lupinus nanus)
-/// "Mar-May"; the spring display both make on the coastal grassland is the
-/// overlap, March to May (as recalled from the eFlora treatments; the pages
-/// put a bot check in front of this session, so the months were not
-/// re-read). The poppy's long tail past May is sparse on the summer-dry
-/// headlands and is not drawn.
+/// 1 March to 31 May. The California Native Plant Society's Calscape pages
+/// (read 18 Nov 2026) give California poppy (Eschscholzia californica)
+/// flowers "from February to September, though primarily in spring" and sky
+/// lupine (Lupinus nanus) the season "Spring, Summer"; the window is the
+/// spring both share, taken as the meteorological spring, March to May
+/// (INFERRED: the month bounds of "spring"; the Jepson eFlora treatments
+/// could not be re-read past their bot check). The poppy's tail past May is
+/// sparse on the summer-dry headlands and is not drawn.
 pub const BLOOM_DAYS_CITED: (f64, f64) = (60.0, 151.0);
 
 /// How much of a 0.6 m NAIP box is tall woody canopy (scrub, tree crowns),
@@ -286,35 +287,51 @@ pub enum NaipClass {
     Unknown,
 }
 
-/// Green vegetation: excess green ExG = 2g - r - b on the chromatic
-/// coordinates (r = R / (R + G + B), ...; Woebbecke, Meyer, Von Bargen and
-/// Mortensen 1995, Trans. ASAE 38(1) 259-269) over this, and green over red
-/// (the sign of VARI = (G - R) / (G + R - B), Gitelson, Kaufman, Stark and
-/// Rundquist 2002, Remote Sens. Environ. 80, 76-87). Soils, rock, paving and
-/// cured grass sit near ExG 0; 0.05 clears the JPEG's chroma noise (INFERRED).
-pub const NAIP_EXG_GREEN: f32 = 0.05;
-/// Green pixels darker than this mean brightness ((R + G + B) / 765) or with
-/// a local luma spread over [`NAIP_CANOPY_TEX`] are woody canopy (a shrub or
-/// tree crown is self-shaded and textured at 0.6 m; a grass sward is smooth
-/// and lighter), and so are grey-green pixels this dark that miss the green
-/// test (the sage scrub; the summer's cured grass is a bright tan): INFERRED.
-pub const NAIP_CANOPY_V: f32 = 0.36;
-pub const NAIP_CANOPY_TEX: f32 = 0.035;
-/// Not green and brighter than this: bare (paving, pale rock, sand, the
-/// battery's concrete); darker than [`NAIP_DARK_V`]: unknown (shadow, water).
-/// INFERRED.
-pub const NAIP_BARE_V: f32 = 0.52;
+// The classifier. Green vegetation is excess green ExG = 2g - r - b over 0
+// on the chromatic coordinates (r = R / (R + G + B), ...; Woebbecke, Meyer,
+// Von Bargen and Mortensen 1995, Trans. ASAE 38(1) 259-269) with green over
+// red (the sign of VARI = (G - R) / (G + R - B), Gitelson, Kaufman, Stark
+// and Rundquist 2002, Remote Sens. Environ. 80, 76-87). What separates woody
+// canopy from grass in the summer image is brightness: a shrub or crown is
+// self-shaded, a sward is not. The brightness is V = (R + G + B) / 765,
+// averaged over the 5 x 5 pixels round the pixel (the JPEG's and the
+// canopy's pixel noise). The three brightness thresholds were chosen on a
+// hand-labelled set of NAIP cells (16 x 16 pixels, labelled from the image
+// only: Marin scrub, cypress and pine, cured grass, trails and the battery's
+// concrete; 316 cells) as the best mean pixel recall, and checked on a
+// held-out set (the Baker bluff, Lincoln Park, the chert faces west of
+// Kirby Cove; 72 cells). Held-out pixel recall: canopy 0.66, low 0.98, bare
+// 0.94 (round-3 first rule: 0.61, 0.92, 0.98); held-out cells (canopy where
+// its share is a third or more): canopy 43 of 54, low 4 of 4, bare 13 of 14.
+// The misses are sunlit scrub and crowns brighter than 0.38. A per-pixel
+// texture (luma spread in 3 x 3 or 5 x 5) does not separate the classes at
+// 0.6 m (5 x 5 spread medians: canopy 0.020-0.025, grass 0.010-0.023), so
+// none is used.
+
+/// A green pixel darker than this (5 x 5 mean V) is canopy, else low cover.
+pub const NAIP_CANOPY_V: f32 = 0.38;
+/// A pixel that misses the green test but is darker than this (5 x 5 mean V)
+/// and greener than blue (B < G) is canopy too: the evergreen sage scrub's
+/// grey-green, where the summer's cured grass is a brighter tan.
+pub const NAIP_SAGE_V: f32 = 0.39;
+/// Not green and brighter than this (5 x 5 mean V): bare (paving, pale rock,
+/// sand, the battery's concrete; the cured grass's median is 0.44-0.53).
+pub const NAIP_BARE_V: f32 = 0.55;
+/// Darker than this (one pixel) and not green: unknown (shadow, water);
+/// darker than [`NAIP_SHADOW_V`]: unknown whatever its hue (INFERRED: deep shadow).
 pub const NAIP_DARK_V: f32 = 0.30;
+pub const NAIP_SHADOW_V: f32 = 0.20;
 /// Not green on ground steeper than this (degrees): an eroded face or rock,
 /// not cured grass (INFERRED: the steepest grassland slopes of the headlands
 /// are about 35 degrees; the red-brown chert faces are steeper).
 pub const NAIP_BARE_SLOPE_DEG: f64 = 35.0;
 
-/// The class of one NAIP pixel (sRGB bytes as delivered), with the luma
-/// spread of its box (`tex`, 0-1) and the ground's slope (degrees). NAIP is
-/// a summer image: a tan, non-green pixel on gentle ground is cured annual
-/// grass (green in spring: the season model colours it, not this).
-pub fn naip_class(rgb: [u8; 3], tex: f32, slope_deg: f64) -> NaipClass {
+/// The class of one NAIP pixel (sRGB bytes as delivered), with the mean
+/// brightness of the 5 x 5 pixels round it (`v5`, 0-1) and the ground's
+/// slope (degrees). NAIP is a summer image: a tan, non-green pixel on gentle
+/// ground is cured annual grass (green in spring: the season model colours
+/// it, not this).
+pub fn naip_class(rgb: [u8; 3], v5: f32, slope_deg: f64) -> NaipClass {
     let [r, g, b] = rgb.map(|c| c as f32);
     let s = r + g + b;
     if s < 1.0 {
@@ -322,35 +339,49 @@ pub fn naip_class(rgb: [u8; 3], tex: f32, slope_deg: f64) -> NaipClass {
     }
     let exg = (2.0 * g - r - b) / s;
     let v = s / 765.0;
-    if exg > NAIP_EXG_GREEN && g > r {
-        return if v < NAIP_CANOPY_V || tex > NAIP_CANOPY_TEX { NaipClass::Canopy } else { NaipClass::Low };
+    if v < NAIP_SHADOW_V {
+        return NaipClass::Unknown;
+    }
+    if exg > 0.0 && g > r {
+        return if v5 < NAIP_CANOPY_V { NaipClass::Canopy } else { NaipClass::Low };
+    }
+    if b < g && v5 < NAIP_SAGE_V {
+        return NaipClass::Canopy;
     }
     if v < NAIP_DARK_V {
         return NaipClass::Unknown;
     }
-    // dark and not reddish: the evergreen scrub's grey-green (California sage reads
-    // under the green test), where the summer's cured grass is a bright tan.
-    if v < NAIP_CANOPY_V && exg > 0.0 && b < g {
-        return NaipClass::Canopy;
-    }
     // bright, or grey-blue (serpentinite, concrete in the sky's light): bare.
-    if v > NAIP_BARE_V || (b >= g && b >= r) || slope_deg > NAIP_BARE_SLOPE_DEG {
+    if v5 > NAIP_BARE_V || (b >= g && b >= r) || slope_deg > NAIP_BARE_SLOPE_DEG {
         return NaipClass::Bare;
     }
     NaipClass::Low
 }
 
-/// The shares of a box of NAIP pixels (None: nothing readable).
-pub fn naip_shares(px: &[[u8; 3]], slope_deg: f64) -> Option<Naip> {
-    if px.is_empty() {
+/// The shares of a box of NAIP pixels (None: nothing readable). `px` is a
+/// `w` x `h` block, row-major, that holds the box and a margin of two pixels
+/// on every side (the 5 x 5 brightness windows); a pixel outside the image
+/// is None. Only the box's pixels are counted.
+pub fn naip_shares(px: &[Option<[u8; 3]>], w: usize, h: usize, slope_deg: f64) -> Option<Naip> {
+    if w < 5 || h < 5 || px.len() != w * h {
         return None;
     }
-    let luma: Vec<f32> = px.iter().map(|p| (0.299 * p[0] as f32 + 0.587 * p[1] as f32 + 0.114 * p[2] as f32) / 255.0).collect();
-    let mean = luma.iter().sum::<f32>() / luma.len() as f32;
-    let tex = (luma.iter().map(|l| (l - mean) * (l - mean)).sum::<f32>() / luma.len() as f32).sqrt();
+    let v: Vec<Option<f32>> = px.iter().map(|p| p.map(|p| (p[0] as f32 + p[1] as f32 + p[2] as f32) / 765.0)).collect();
     let mut n = [0u32; 4];
-    for p in px {
-        n[naip_class(*p, tex, slope_deg) as usize] += 1;
+    for j in 2..h - 2 {
+        for i in 2..w - 2 {
+            let Some(p) = px[j * w + i] else { continue };
+            let (mut sum, mut k) = (0.0f32, 0u32);
+            for dj in 0..5 {
+                for di in 0..5 {
+                    if let Some(x) = v[(j + dj - 2) * w + i + di - 2] {
+                        sum += x;
+                        k += 1;
+                    }
+                }
+            }
+            n[naip_class(p, sum / k as f32, slope_deg) as usize] += 1;
+        }
     }
     let known = (n[0] + n[1] + n[2]) as f32;
     (known > 0.0).then(|| Naip { canopy: n[0] as f32 / known, low: n[1] as f32 / known, bare: n[2] as f32 / known })
@@ -380,7 +411,8 @@ impl Extra<'_> {
 pub const NAIP_TREE_CANOPY: f32 = 0.3;
 /// The box a tree's canopy is read in (m).
 pub const NAIP_TREE_BOX_M: f64 = 6.0;
-/// The box a shrub or grass bunch reads (m): five NAIP pixels.
+/// The box a shrub or grass bunch reads (m; at the 1.25 ground scale 2.4 m
+/// real: five NAIP columns by three rows, eo-app `naip_at`).
 pub const NAIP_PLANT_BOX_M: f64 = 3.0;
 /// Cypress dominate the stands this near the shore (m, INFERRED).
 pub const BLUFF_CYPRESS_M: f64 = 160.0;
@@ -913,23 +945,38 @@ mod tests {
 
     #[test]
     fn naip_pixels_classify_by_index_brightness_and_slope() {
-        // the headland's surfaces as the image reads them (7 x 7 means of A1, 0.6 m):
-        // dense scrub, green herbs, the summer's cured grass, the eroded chert face, the
-        // battery's concrete, Baker's grey-blue serpentinite, the sea in shadow.
-        assert_eq!(naip_class([78, 87, 78], 0.02, 10.0), NaipClass::Canopy);
-        assert_eq!(naip_class([100, 111, 75], 0.02, 10.0), NaipClass::Low);
-        assert_eq!(naip_class([97, 105, 91], 0.042, 10.0), NaipClass::Canopy);
-        assert_eq!(naip_class([134, 127, 107], 0.03, 15.0), NaipClass::Low);
-        assert_eq!(naip_class([121, 113, 102], 0.03, 45.0), NaipClass::Bare);
-        assert_eq!(naip_class([164, 152, 137], 0.01, 2.0), NaipClass::Bare);
-        assert_eq!(naip_class([118, 133, 139], 0.02, 30.0), NaipClass::Bare);
-        assert_eq!(naip_class([40, 50, 70], 0.02, 0.0), NaipClass::Unknown);
-        // Kirby Cove's grey sage scrub under the green test, and its slope's cured grass.
-        assert_eq!(naip_class([89, 95, 90], 0.016, 20.0), NaipClass::Canopy);
-        assert_eq!(naip_class([115, 113, 104], 0.022, 20.0), NaipClass::Low);
-        let n = naip_shares(&[[78, 87, 78], [164, 152, 137], [40, 50, 70], [134, 127, 107]], 5.0).unwrap();
-        assert!((n.canopy + n.low + n.bare - 1.0).abs() < 1e-6 && (n.canopy - 1.0 / 3.0).abs() < 1e-6);
-        assert!(naip_shares(&[[40, 50, 70]], 0.0).is_none());
+        // the hand-labelled cells' median colours (A1, 0.6 m; the classifier notes),
+        // with their own brightness as the 5 x 5 mean.
+        let c = |p: [u8; 3], slope: f64| naip_class(p, (p[0] as f32 + p[1] as f32 + p[2] as f32) / 765.0, slope);
+        // Kirby Cove's grey-green scrub (the slope round-3's first rule called grass),
+        // the scrub west of it, the cypress and pine wood, the scrub by the battery.
+        assert_eq!(c([87, 93, 87], 25.0), NaipClass::Canopy);
+        assert_eq!(c([68, 83, 74], 20.0), NaipClass::Canopy);
+        assert_eq!(c([59, 76, 65], 20.0), NaipClass::Canopy);
+        assert_eq!(c([84, 91, 83], 15.0), NaipClass::Canopy);
+        // cured grass on Kirby's slope and by the road, green grass on the ridge.
+        assert_eq!(c([118, 116, 105], 25.0), NaipClass::Low);
+        assert_eq!(c([147, 134, 122], 15.0), NaipClass::Low);
+        assert_eq!(c([110, 115, 98], 20.0), NaipClass::Low);
+        // the battery's concrete, Lincoln Park's road, a chert face (by its slope).
+        assert_eq!(c([169, 157, 143], 15.0), NaipClass::Bare);
+        assert_eq!(c([172, 173, 176], 5.0), NaipClass::Bare);
+        assert_eq!(c([140, 124, 112], 40.0), NaipClass::Bare);
+        assert_eq!(c([140, 124, 112], 10.0), NaipClass::Low);
+        // a known miss: sunlit scrub on the Baker bluff reads as grass.
+        assert_eq!(c([100, 105, 89], 15.0), NaipClass::Low);
+        // the sea in shadow.
+        assert_eq!(c([40, 50, 70], 0.0), NaipClass::Unknown);
+        // shares count only the box inside the 2-pixel margin.
+        let (w, h) = (7, 5);
+        let mut px = vec![Some([68u8, 83, 74]); w * h];
+        px[0] = Some([169, 157, 143]); // in the margin: not counted
+        px[w - 1] = Some([169, 157, 143]);
+        px[2 * w + 4] = None;
+        let n = naip_shares(&px, w, h, 5.0).unwrap();
+        assert!((n.canopy - 1.0).abs() < 1e-6, "{n:?}");
+        assert!(naip_shares(&vec![Some([40, 50, 70]); 25], 5, 5, 0.0).is_none());
+        assert!(naip_shares(&vec![None; 9], 3, 3, 0.0).is_none());
     }
 
     #[test]

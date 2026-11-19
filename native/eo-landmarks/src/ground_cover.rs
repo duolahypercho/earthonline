@@ -260,6 +260,10 @@ pub const SAND_SLOPE_MAX: f64 = 0.36;
 /// tan 42 degrees, the near tier's coastal-stand limit (`vegetation::plant_coarse`),
 /// INFERRED (steeper faces on the bluffs are bare rock or scrub).
 pub const TREE_SLOPE_MAX: f64 = 0.90;
+/// The berm crest, surveyed metres over the sea: the highest ground the
+/// beach sand reaches (eo-app ground_tone `BERM_CREST_SURVEYED_M`, derived
+/// there from the mapped beaches; a test in eo-app keeps the two equal).
+pub const SAND_BERM_SURVEYED_M: f64 = 12.5;
 
 fn luma(c: Linear) -> f64 {
     0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
@@ -469,8 +473,12 @@ impl GroundCover {
     /// Whether a tree may stand at (x, z) on the drawn ground `y_at`: not
     /// inside a mapped beach, not on the cliff over one (the sand limit's
     /// band: steeper than `SAND_SLOPE_MAX` across 12 m within
-    /// `BEACH_SAND_REACH_M` of a mapped beach, eo-app ground_tone), and not
-    /// on a face steeper than [`TREE_SLOPE_MAX`] anywhere.
+    /// `BEACH_SAND_REACH_M` of a mapped beach, eo-app ground_tone), not on a
+    /// face steeper than [`TREE_SLOPE_MAX`] anywhere, and not on the sand the
+    /// ground tone draws past a mapped beach's ring ([`GroundCover::beach_sand`]
+    /// by the shore distance `vegetation::shore_distance`, no steeper than
+    /// `SAND_SLOPE_MAX` and no higher than the berm crest: ground_tone's
+    /// `sand_holds` without its seaward walk).
     pub fn tree_ground_ok(&self, x: f64, z: f64, y_at: &dyn Fn(f64, f64) -> f64) -> bool {
         if self.in_mapped_beach(x, z) {
             return false;
@@ -479,7 +487,18 @@ impl GroundCover {
         if !slope.is_finite() {
             return true;
         }
-        !(slope > TREE_SLOPE_MAX || (slope > SAND_SLOPE_MAX && self.near_mapped_beach(x, z)))
+        if slope > TREE_SLOPE_MAX || (slope > SAND_SLOPE_MAX && self.near_mapped_beach(x, z)) {
+            return false;
+        }
+        !crate::vegetation::shore_distance(x, z).is_some_and(|s| self.on_beach_sand(x, z, s, y_at(x, z)))
+    }
+
+    /// Whether the ground tone draws beach sand at (x, z) on ground no steeper
+    /// than `SAND_SLOPE_MAX` (the caller's test): [`GroundCover::beach_sand`]
+    /// at the shore distance `shore_m`, and the ground `y` (drawn) no higher
+    /// over the sea than the berm crest ([`SAND_BERM_SURVEYED_M`] at the height scale).
+    pub fn on_beach_sand(&self, x: f64, z: f64, shore_m: f64, y: f64) -> bool {
+        (y - eo_water::SEA_LEVEL_Y) / eo_data::groundscale::height_scale().max(1e-6) <= SAND_BERM_SURVEYED_M && self.beach_sand(x, z, shore_m)
     }
 
     /// The largest park green (OSM `leisure=park`) whose ring holds (px, pz):
