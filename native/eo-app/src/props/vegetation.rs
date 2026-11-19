@@ -121,22 +121,50 @@ fn game_xz(lat: f64, lon: f64) -> (f64, f64) {
     ((lon - f.center_lon) * f.m_per_deg_lon * s, (f.center_lat - lat) * f.m_per_deg_lat * s)
 }
 
-/// The Presidio of San Francisco's extent (lat 37.7865..37.8105 N, lon
-/// -122.4870..-122.4460 W: the park's mapped boundary from OSM with Baker
-/// Beach, rounded, INFERRED): south of the strait, tree cover outside the mapped woods is
-/// planted as coastal stands only inside it (elsewhere it is street and yard
-/// trees the street pass and the kit already draw).
+/// A box round the Presidio of San Francisco (lat 37.7865..37.8105 N, lon
+/// -122.4870..-122.4460 W, rounded, INFERRED): only a bound. The park itself is
+/// its mapped polygon in the greens (`PRESIDIO_POINT`); the box takes in the
+/// Presidio Heights and Lake Street blocks, whose yard trees are not the forest.
 fn presidio() -> (f64, f64, f64, f64) {
     let (x0, z1) = game_xz(37.7865, -122.4870);
     let (x1, z0) = game_xz(37.8105, -122.4460);
     (x0, z0, x1, z1)
 }
 
-/// West of this game x the SF side's coastal bluffs are serpentinite (the
-/// Fort Point to Baker Beach outcrops, lon -122.4770 and west: NPS Baker Beach,
-/// Presidio Trust Marshall's Beach).
-fn serpentine_west_x() -> f64 {
-    game_xz(37.80, -122.4770).0
+/// A point inside the Presidio: the Main Post's parade ground (37.7989 N,
+/// 122.4662 W, Presidio Trust maps). The largest park green round it is the
+/// Presidio's mapped polygon (OSM relation 8346137 in sf-lots-parks, 6.05 km2).
+const PRESIDIO_POINT: (f64, f64) = (37.7989, -122.4662);
+
+/// Baker Beach's strip, which the Presidio's mapped polygon leaves out but whose
+/// planted cypress stands behind the beach are the Presidio's (NPS Baker Beach):
+/// inside the box, within this of the shore and north of Lobos Creek's mouth,
+/// the Presidio's south-west corner (lat 37.7885 N, INFERRED), so Sea Cliff's
+/// yards stay out.
+const BAKER_STRIP_SHORE_M: f64 = 300.0;
+const BAKER_STRIP_SOUTH_LAT: f64 = 37.7885;
+
+/// The SF side's serpentinite: the coastal bluffs from Fort Point to Baker
+/// Beach (NPS Baker Beach, Presidio Trust Marshall's Beach): west of lon
+/// -122.4770, north of Baker Beach's south end (`BAKER_STRIP_SOUTH_LAT`) and
+/// within `SERPENTINE_SHORE_M` of the shore (the bluff band, INFERRED).
+/// Elsewhere south of the strait the rock is the Franciscan sandstone.
+fn serpentine_bound() -> (f64, f64) {
+    (game_xz(37.80, -122.4770).0, game_xz(BAKER_STRIP_SOUTH_LAT, -122.48).1)
+}
+pub const SERPENTINE_SHORE_M: f64 = 200.0;
+
+/// The Presidio's mapped park polygon: the largest park green holding
+/// `PRESIDIO_POINT` (None when the greens cannot be read).
+fn presidio_ring(repo_root: &std::path::Path) -> Option<Vec<[f64; 2]>> {
+    let (greens, _) = eo_landmarks::plaza::load_areas(repo_root).map_err(|e| eprintln!("vegetation: greens not read ({e:#})")).ok()?;
+    let (px, pz) = game_xz(PRESIDIO_POINT.0, PRESIDIO_POINT.1);
+    let area = |r: &[[f64; 2]]| (0..r.len()).map(|i| r[i][0] * r[(i + 1) % r.len()][1] - r[(i + 1) % r.len()][0] * r[i][1]).sum::<f64>().abs() / 2.0;
+    greens
+        .into_iter()
+        .filter(|g| g.kind == "park" && g.polygon.len() >= 3 && eo_landmarks::waterfront::point_in_ring(&g.polygon, px, pz))
+        .max_by(|a, b| area(&a.polygon).total_cmp(&area(&b.polygon)))
+        .map(|g| g.polygon)
 }
 
 /// What the plants read: the drawn terrain, the street world (footprints,
@@ -148,13 +176,16 @@ pub struct VegGround {
     pub water: Option<Arc<eo_water::WaterData>>,
     pub switches: Switches,
     presidio: (f64, f64, f64, f64),
-    serpentine_x: f64,
+    /// The Presidio's mapped park polygon (game metres), if the greens were read.
+    presidio_ring: Option<Vec<[f64; 2]>>,
+    baker_south_z: f64,
+    serpentine: (f64, f64),
     /// The 128 m props tiles with land on them (the ones without a street tile plant vegetation only).
     pub tiles: HashSet<(i32, i32)>,
 }
 
 impl VegGround {
-    pub fn new(grid: TerrainGrid, street: Arc<eo_street::StreetWorld>, land: Option<eo_data::LandCover>, water: Option<Arc<eo_water::WaterData>>, switches: Switches) -> Self {
+    pub fn new(grid: TerrainGrid, street: Arc<eo_street::StreetWorld>, land: Option<eo_data::LandCover>, water: Option<Arc<eo_water::WaterData>>, switches: Switches, repo_root: &std::path::Path) -> Self {
         let tm = eo_street::STREET_TILE_M;
         let mut tiles = HashSet::new();
         for j in 0..grid.h {
@@ -166,7 +197,11 @@ impl VegGround {
                 }
             }
         }
-        let g = VegGround { grid, street, land, water, switches, presidio: presidio(), serpentine_x: serpentine_west_x(), tiles };
+        let presidio_ring = presidio_ring(repo_root);
+        if presidio_ring.is_none() {
+            eprintln!("vegetation: the Presidio's park polygon not found in the greens; its coastal stands follow the mapped woods only");
+        }
+        let g = VegGround { grid, street, land, water, switches, presidio: presidio(), presidio_ring, baker_south_z: game_xz(BAKER_STRIP_SOUTH_LAT, -122.48).1, serpentine: serpentine_bound(), tiles };
         g.probe_from_env();
         g
     }
@@ -195,10 +230,16 @@ impl VegGround {
         }
     }
 
-    /// Inside the Presidio's extent.
+    /// Inside the Presidio: its mapped park polygon, or Baker Beach's strip.
     pub fn in_presidio(&self, x: f64, z: f64) -> bool {
         let (x0, z0, x1, z1) = self.presidio;
-        x >= x0 && x <= x1 && z >= z0 && z <= z1
+        if !(x >= x0 && x <= x1 && z >= z0 && z <= z1) {
+            return false;
+        }
+        if self.presidio_ring.as_ref().is_some_and(|r| eo_landmarks::waterfront::point_in_ring(r, x, z)) {
+            return true;
+        }
+        z < self.baker_south_z && self.shore_m(x, z) < BAKER_STRIP_SHORE_M
     }
 
     /// The shore distance at (x, z) (m; the shore field's magnitude, 1 km without it).
@@ -243,7 +284,7 @@ impl VegGround {
         let cover = if mapped_rock {
             Some(Cover::Rock)
         } else if sand_cliff {
-            Some(Cover::Bare)
+            Some(Cover::Cliff)
         } else if far {
             match class {
                 10 => Some(Cover::TallScrub),
@@ -289,7 +330,7 @@ impl VegGround {
         let ring: f64 = (0..8).map(|k| (k as f64 * std::f64::consts::FRAC_PI_4).sin_cos()).map(|(sn, cs)| h(cs * r, sn * r)).sum::<f64>() / 8.0;
         let lithology = if far {
             Lithology::Chert
-        } else if x < self.serpentine_x {
+        } else if x < self.serpentine.0 && z < self.serpentine.1 && s.abs() < SERPENTINE_SHORE_M {
             Lithology::Serpentinite
         } else {
             Lithology::Sandstone

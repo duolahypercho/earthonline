@@ -326,7 +326,7 @@ impl PropsRuntime {
                         .unwrap_or_default();
                     let veg = veg_grid.map(|g| {
                         let land = eo_data::LandCover::load(&paths).map_err(|e| eprintln!("vegetation: land cover not read ({e:#}); classes from the greens only")).ok();
-                        Arc::new(vegetation::VegGround::new(g, world.street.clone(), land, veg_water, veg_switches))
+                        Arc::new(vegetation::VegGround::new(g, world.street.clone(), land, veg_water, veg_switches, &paths.repo_root))
                     });
                     let facts = LibFacts { species: lib.tree_species.len(), tree_dims: lib.tree_dims.clone(), sign_variants: overhead_js.as_ref().map(|o| o.sign_variants.len()).unwrap_or(0), veg };
                     eprintln!("props2: library ready in {library_ms:.0} ms ({} meshes, {} tree species, {} sign variants)", lib.meshes.len(), facts.species, facts.sign_variants);
