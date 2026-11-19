@@ -67,18 +67,24 @@ pub fn street_trees(js: &eo_props::JsProps, ground: &dyn Fn(f64, f64) -> f64) ->
 
 /// The ground cover's block before `--no-far-tree-density`: 512 m, where its
 /// cap of 150 trees a call (ground_cover.rs `MAX_NEAR`) held every stand to
-/// about 5.7 trees a hectare.
+/// about 5.7 trees a game hectare (about 3.7 a real one).
 pub const PARK_BLOCK_OLD_M: f64 = 512.0;
-/// The block the distant park trees are sampled in: small enough that the
-/// cap never binds (the 14 m lattice puts at most (128 / 14)^2, about 84,
-/// trees in it), so a stand has its class rule's density, at most one tree
-/// per 196 m2 (51 a hectare; class 1 woods about 40). For scale: the
-/// Presidio Trust's forestry fact sheet (June 2023) gives the historic forest
-/// as about 75,000 trees on 306 acres (about 600 a hectare today) and thins
+/// The block the distant park trees are sampled in: the street tile
+/// (`eo_street::STREET_TILE_M`, 128 m), the block the near tier (eo-app
+/// props.rs) samples the same ground cover in, so both tiers sample the same
+/// world-anchored lattice in the same blocks. The 14 m lattice puts at most
+/// about 84 points in it, below the ground cover's cap (the test
+/// `the_street_tile_block_is_below_the_ground_covers_cap` reads the cap from
+/// ground_cover.rs's behaviour), so a stand keeps its class rule's density.
+///
+/// For scale, in real metres (the plan is drawn at 1.25, so a 14 m game
+/// lattice is 11.2 m real, one point per 125 real m2): at most about 80
+/// trees a real hectare, class 1 woods (chance 0.86) about 69. The Presidio
+/// Trust's forestry fact sheet (June 2023) gives the historic forest as
+/// about 75,000 trees on 306 acres (about 600 a hectare) and thins
 /// reforested stands to about 50 trees an acre (about 124 a hectare) when
-/// mature, so the lattice stays below either; its cards' crowns (4.7-11 m half
-/// widths for the big classes) close the canopy at 14 m spacing.
-pub const PARK_BLOCK_M: f64 = 128.0;
+/// mature, so the lattice stays below either.
+pub const PARK_BLOCK_M: f64 = eo_street::STREET_TILE_M;
 
 /// The park trees of the ground cover over [x0, x1) x [z0, z1), in
 /// `PARK_BLOCK_M` blocks (`PARK_BLOCK_OLD_M` with `--no-far-tree-density`).
@@ -507,15 +513,38 @@ mod tests {
         }
     }
 
+    /// One all-wood green over the test area (class 1, the densest rule).
+    fn all_wood() -> eo_landmarks::ground_cover::GroundCover {
+        let wood = eo_landmarks::plaza::Area {
+            id: "test-wood".into(),
+            kind: "wood".into(),
+            ground: "vegetated".into(),
+            surface: String::new(),
+            polygon: vec![[-2000.0, -2000.0], [2000.0, -2000.0], [2000.0, 2000.0], [-2000.0, 2000.0]],
+            holes: vec![],
+        };
+        eo_landmarks::ground_cover::GroundCover::new(&[wood], &[], &[])
+    }
+
     #[test]
-    fn the_park_block_is_too_small_for_the_ground_covers_cap() {
-        // ground_cover.rs park_trees: a 14 m lattice, at most 150 trees a call.
-        const LATTICE_M: f64 = 14.0;
-        const MAX_NEAR: f64 = 150.0;
-        let per_axis = (PARK_BLOCK_M / LATTICE_M).ceil() + 1.0;
-        assert!(per_axis * per_axis < MAX_NEAR, "{per_axis}^2 lattice points can reach the cap");
-        let old = (PARK_BLOCK_OLD_M / LATTICE_M).floor();
-        assert!(MAX_NEAR / (PARK_BLOCK_OLD_M * PARK_BLOCK_OLD_M / 1e4) < 6.0 && old * old > MAX_NEAR, "the old block was capped at about 5.7 a hectare");
+    fn the_street_tile_block_is_below_the_ground_covers_cap() {
+        assert_eq!(PARK_BLOCK_M, eo_street::STREET_TILE_M, "the near and far tiers sample in the same blocks");
+        let cover = all_wood();
+        let (flat, open) = (|_: f64, _: f64| 0.0, |_: f64, _: f64| false);
+        let n = |x: f64, z: f64, b: f64| cover.park_trees(x, z, x + b, z + b, &flat, &open).len();
+        // a block keeps every tree when it holds as many as its four quarters
+        // together, so ground_cover's cap does not bind in it
+        for (x, z) in [(0.0, 0.0), (128.0, -256.0), (-640.0, 384.0)] {
+            let h = PARK_BLOCK_M / 2.0;
+            let quarters = n(x, z, h) + n(x + h, z, h) + n(x, z + h, h) + n(x + h, z + h, h);
+            assert_eq!(n(x, z, PARK_BLOCK_M), quarters, "the cap binds in a {PARK_BLOCK_M} m block at ({x}, {z})");
+            assert!(quarters > 40, "{quarters}: the wood is not dense");
+        }
+        // the old block was capped: it holds fewer than its sixteen street tiles
+        let tiles: usize = (0..4).flat_map(|i| (0..4).map(move |j| (i, j))).map(|(i, j)| n(i as f64 * 128.0, j as f64 * 128.0, 128.0)).sum();
+        let old = n(0.0, 0.0, PARK_BLOCK_OLD_M);
+        assert!(old * 4 < tiles, "old block {old}, its street tiles {tiles}");
+        assert!(old as f64 / (PARK_BLOCK_OLD_M * PARK_BLOCK_OLD_M / 1e4) < 6.0, "the old block held {old}: more than about 5.7 a game hectare");
     }
 
     #[test]
