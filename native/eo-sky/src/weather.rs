@@ -476,6 +476,10 @@ pub struct WeatherState {
     /// preset without a clock): a clear day's sky is drawn per game day
     /// (clouds.rs `drawn_state`).
     pub day: u32,
+    /// The world clock the state was taken at (s; 0 for a preset without a
+    /// clock): a clear day's sky changes to the next game day's over the end
+    /// of the world clock's day (clouds.rs `sky_mix`).
+    pub clock_s: f64,
 }
 
 /// The game day of a world clock (s).
@@ -538,8 +542,12 @@ pub fn lightning(seed: u32, world_s: f64, rate_mm_h: f64) -> (f64, f64) {
 pub const GROUND_WINDOW_S: f64 = 3600.0;
 
 /// The scheduled weather at `world_s` (seconds since the world's epoch) for
-/// a world `seed`. Pure: the same inputs give the same state everywhere.
+/// a world `seed`. Pure: the same inputs give the same state everywhere. It
+/// also tells the live calendar the clock (`eo_look::sun::set_calendar_clock`):
+/// the renderer takes its weather at the world clock every frame, and that
+/// moves live play's date (eo-render sky.rs `weather_of`).
 pub fn state_at(seed: u32, world_s: f64) -> WeatherState {
+    eo_look::sun::set_calendar_clock(world_s);
     let mut sch = Schedule::new(seed, 0);
     let mut g = Ground::default();
     let start = (world_s - GROUND_WINDOW_S).max(0.0);
@@ -567,6 +575,7 @@ pub fn state_at(seed: u32, world_s: f64) -> WeatherState {
         flash,
         flash_distance_m: flash_d,
         day: game_day(world_s),
+        clock_s: world_s,
     }
 }
 
@@ -595,14 +604,17 @@ pub fn preset(kind: Kind) -> WeatherState {
         flash: 0.0,
         flash_distance_m: 0.0,
         day: 0,
+        clock_s: 0.0,
     }
 }
 
 /// A preset on the game day of a world clock (`preset` is day 0). The
 /// renderer's preset weather should come from this so a clear day's sky is
 /// drawn afresh each game day (eo-render sky.rs `weather_of`: a hand-off).
+/// It tells the live calendar the clock too (`state_at`).
 pub fn preset_at(kind: Kind, world_s: f64) -> WeatherState {
-    WeatherState { day: game_day(world_s), ..preset(kind) }
+    eo_look::sun::set_calendar_clock(world_s);
+    WeatherState { day: game_day(world_s), clock_s: world_s, ..preset(kind) }
 }
 
 #[cfg(test)]

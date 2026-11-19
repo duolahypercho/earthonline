@@ -465,6 +465,79 @@ fn vol_cirrus(pxz: vec2<f32>, t: f32, dir: vec3<f32>) -> f32 {
     return clamp(env * band * along * fibre, 0.0, 1.0);
 }
 
+/// The second high deck (eo-sky clouds.rs `Decks::cirrus`, sky_common.wgsl `cirrus`): x its
+/// height (m; 0: off, round 2's one high deck above), y its amount, the share of the sky it
+/// covers (the METAR eighths / 8) x its fade. With it on, the 5.2 km sheet's opacity
+/// (`cloud1.z`) comes already faded and floored from the CPU (clouds.rs `with_sky_mix`).
+fn vol_ci2_on() -> bool {
+    return skyu.cirrus.x > 0.0;
+}
+
+/// The cirrus deck's core optical depth (clouds.rs `CIRRUS2_TAU`).
+const VOL_CI2_TAU: f32 = 0.3;
+
+/// Cirrus as the second deck: how much of the core optical depth (`VOL_CI2_TAU`) a point of
+/// its plane carries, 0..1, `t` metres along the view `dir`. Four reads of the sheet, each
+/// a channel histogram-equalised at bake time (clouds.rs `bake_sheet`):
+///
+/// * where the deck is: the high channel over 64 km, drawn out 2.5 : 1 along the high wind
+///   and cut at `1 - amount`, so the deck covers its METAR share of the plane (an equalised
+///   channel over `1 - c` covers `c`), patches of 5-20 km with soft edges;
+/// * the sheets inside it: the low-deck channel over 12 km drawn out 6 : 1, read a mip soft,
+///   so a patch is broad thick and thin bands 1-3 km across and 10-20 km long (cirrostratus
+///   and cirrus spissatus), not lines;
+/// * the fibres: the detail channel over 2 km drawn out 14 : 1 along the wind (filaments
+///   of 60-250 m across, 1-3 km long), which perspective draws converging on the wind's
+///   vanishing point; their across-wind coordinate is bent by the marine channel over 24 km
+///   across and 96 km along the wind (a slow swing of up to 1.2 km) and by the sheet itself
+///   (600 m from its thin to its thick parts), so the fibres curl where they leave a thick
+///   head, the fallstreak hooks of cirrus uncinus; seen end-on along the wind the bend and
+///   most of the fibres' contrast give way (perspective would squeeze the bend's swing into
+///   a marbled swirl);
+/// * the fibres' contrast fades as they shrink under a pixel (their mip's mean is not a
+///   fibre), and the whole deck toward the horizon as the round-2 deck did.
+///
+/// The tiles, stretches and the bend are INFERRED: sizes in the range the WMO
+/// International Cloud Atlas (2017) describes for cirrus fibratus, uncinus and spissatus
+/// (filaments, hooks and dense patches of the high etage), set before the comparison;
+/// the photographs are the check, not the source.
+fn vol_cirrus2(pxz: vec2<f32>, t: f32, dir: vec3<f32>) -> f32 {
+    let amt = clamp(skyu.cirrus.y, 0.0, 1.0);
+    let w = pxz + skyu.cloud2.zw;
+    let ax = VOL_CIRRUS_AXIS;
+    let u = dot(w, ax);
+    let v = dot(w, vec2<f32>(-ax.y, ax.x));
+    // the pixel's footprint across the wind (as `vol_cirrus`)
+    let dh = dir.xz / max(length(dir.xz), 1e-4);
+    let endon = abs(dot(dh, ax));
+    let f0 = max(vol_footprint(t), 1.0);
+    let fv = f0 * max(endon, sqrt(max(1.0 - endon * endon, 0.0)) / max(abs(dir.y), 0.05));
+    let l2 = log2(fv);
+    // where the deck is (250 m texels)
+    let env = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / 2.5, v) / 64000.0, clamp(l2 - 7.97, 1.0, 6.0)).g;
+    let thr = 1.0 - amt;
+    let cov = smoothstep(thr - 0.12, thr + 0.12, env) * smoothstep(0.0, 0.12, amt);
+    if (cov <= 0.0) {
+        return 0.0;
+    }
+    // the sheets (35 m texels, a mip soft)
+    let body = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / 6.0, v) / 12000.0 + vec2<f32>(0.31, 0.62), clamp(l2 - 5.55 + 1.0, 1.0, 7.0)).r;
+    let thick = mix(0.25, 1.0, smoothstep(0.25, 0.85, body));
+    // the bend (94 m texels)
+    let bend = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / 4.0, v) / 24000.0 + vec2<f32>(0.17, 0.83), clamp(l2 - 6.55 + 1.0, 2.0, 7.0)).b - 0.5;
+    // seen end-on (along the wind) perspective squeezes the along-wind swing of the bend into a
+    // few pixels: it and the fibres' contrast give way there (as `vol_cirrus`'s `side`)
+    let side = 1.0 - smoothstep(0.8, 0.97, endon);
+    let vf = v + (bend * 2400.0 + (body - 0.5) * 600.0) * side;
+    // the fibres (10 m texels across)
+    let lf = clamp(l2 - 3.0, 0.0, 7.0);
+    let fa = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / 14.0, vf) / 2000.0 + vec2<f32>(0.5, 0.25), lf).a;
+    let ridge = smoothstep(0.3, 0.95, 1.0 - abs(2.0 * fa - 1.0));
+    let fc = (1.0 - smoothstep(2.5, 5.0, lf)) * mix(0.35, 1.0, side);
+    let fibre = mix(0.3, 1.0, mix(0.45, ridge, fc));
+    return clamp(cov * thick * fibre, 0.0, 1.0);
+}
+
 fn vol_remap(v: f32, lo: f32, hi: f32) -> f32 {
     return clamp((v - lo) / max(hi - lo, 1e-4), 0.0, 1.0);
 }
@@ -697,7 +770,7 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // under a heavy deck (rain, storm) no sun reaches the base or the high sheet
     let heavy = smoothstep(0.03, 0.18, skyu.cloud1.w);
     // (a cirrus day has no low deck: eo-sky clouds.rs `SkyState::Cirrus`)
-    if (sky_on(bits, SKY_CLOUDS) && (skyu.cloud0.z > 0.0 || vol_cirrus_day())) {
+    if (sky_on(bits, SKY_CLOUDS) && (skyu.cloud0.z > 0.0 || vol_cirrus_day() || (vol_ci2_on() && (skyu.cirrus.y > 0.0 || skyu.cloud1.z > 0.0)))) {
         let base = skyu.cloud0.x;
         let top = skyu.cloud0.y;
         let strat = cl_stratus();
@@ -730,7 +803,7 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
         t1 = min(min(min(t1, t0 + 16000.0), 45000.0), dist); // (past 45 km the field is >85 % haze)
         // no cumulus field unless EO_CUMULUS=1 (sky_clouds `cl_low_deck_on`)
         let march = t0 >= 0.0 && t1 > t0 && t0 < 60000.0 && cl_low_deck_on();
-        let high = dist > 1e8 && dir.y > 0.0 && skyu.cloud1.z > 0.0;
+        let high = dist > 1e8 && dir.y > 0.0 && (skyu.cloud1.z > 0.0 || (vol_ci2_on() && skyu.cirrus.y > 0.0));
         var a_top = skyu.amb_top.xyz;
         var a_side = skyu.amb_top.xyz;
         var a_bot = skyu.amb_base.xyz;
@@ -912,7 +985,49 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
         // (D) The high deck: one sheet at its altitude, sky only; lit by the same
         // sun as the low deck (the atmosphere's transmittance at its own height, the same
         // phase and octaves), so the two layers agree and the high one keeps the sun longest.
-        if (high) {
+        if (high && vol_ci2_on()) {
+            // two decks, each at its own height: the 5.2 km sheet (its opacity as the CPU faded
+            // and floored it), then the cirrus behind it
+            if (skyu.cloud1.z > 0.0) {
+                let t = cl_hit(eye.y, dir, skyu.cloud1.y, false);
+                if (t > 0.0) {
+                    let p = eye + dir * t;
+                    let q = (p.xz + skyu.cloud2.zw) / SKY_HIGH_TILE;
+                    let qs = vec2<f32>(0.95 * q.x + 0.31 * q.y, -0.31 * q.x + 0.95 * q.y) * vec2<f32>(0.5, 1.0);
+                    let s = textureSampleLevel(vol_sheet, vol_rep, qs, 0.0);
+                    let ci = clamp((0.3 - skyu.cloud0.z) / 0.3, 0.0, 1.0);
+                    let a = vol_remap(s.g, mix(1.0 - min(skyu.cloud0.z + 0.2, 1.0), 0.72, ci), 1.0) * skyu.cloud1.z * smoothstep(0.0, 0.1, dir.y) * (0.5 + 0.5 * s.a);
+                    let e_sun = cl_sun(skyu.cloud1.y) * heavy;
+                    let c = e_sun * cl_ms(0.6 * a, 0.6 * a, cl_cs) * CL_SUN_GAIN * 0.7 + a_top * 0.85;
+                    let fh = exp(-t * (1.0 - 0.85 * abs(dir.y)) / 60000.0);
+                    var behind_h = lk_sky_dome(dir);
+                    if (atmo_on) {
+                        behind_h = mix(behind_h, vol_atmo_sky(dir), skyu.atmo2.y);
+                    }
+                    L = L + T * a * (c * fh + behind_h * 0.4 * (1.0 - fh));
+                    T = T * (1.0 - 0.4 * a);
+                }
+            }
+            if (skyu.cirrus.y > 0.0) {
+                let t = cl_hit(eye.y, dir, skyu.cirrus.x, false);
+                if (t > 0.0) {
+                    let p = eye + dir * t;
+                    let tau = vol_cirrus2(p.xz, t, dir) * VOL_CI2_TAU * smoothstep(0.0, 0.08, dir.y);
+                    let a = 1.0 - exp(-tau);
+                    // lit as round 2's cirrus (below): the sun through the atmosphere to the
+                    // deck's height (warm at a low sun), the forward phase, half the top light
+                    let e_sun = cl_sun(skyu.cirrus.x) * heavy;
+                    let c = e_sun * cl_ms(0.6 * tau, 0.6 * tau, cl_cs) * CL_SUN_GAIN * 0.7 + a_top * 0.5;
+                    let fh = exp(-t * (1.0 - 0.85 * abs(dir.y)) / 60000.0);
+                    var behind_h = lk_sky_dome(dir);
+                    if (atmo_on) {
+                        behind_h = mix(behind_h, vol_atmo_sky(dir), skyu.atmo2.y);
+                    }
+                    L = L + T * a * (c * fh + behind_h * (1.0 - fh));
+                    T = T * (1.0 - a);
+                }
+            }
+        } else if (high) {
             // (the fair sheet stands at 5.2 km; above it, the uniform's height is its fade)
             let fair_fade = 1.0 - clamp((skyu.cloud1.y - VOL_FAIR_HIGH_M) / VOL_FAIR_FADE_M, 0.0, 1.0);
             let hh = select(min(skyu.cloud1.y, VOL_FAIR_HIGH_M), skyu.cloud1.y, vol_cirrus_day());

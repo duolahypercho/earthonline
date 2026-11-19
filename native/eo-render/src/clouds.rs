@@ -157,6 +157,9 @@ impl CloudNoise {
 
 impl CloudGpu {
     pub fn new(d: &wgpu::Device, inp: ShadowInputs) -> Self {
+        // the renderer's sky is made: from now on the weather taken at the world clock
+        // moves the live calendar's date (eo-look `sun::arm_calendar`)
+        eo_look::sun::arm_calendar();
         let noise = CloudNoise::new(d);
         let su = wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING;
         let blue = tex2(d, "clouds-blue-noise", BLUE_RES as u32, wgpu::TextureFormat::Rgba8Unorm, wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST);
