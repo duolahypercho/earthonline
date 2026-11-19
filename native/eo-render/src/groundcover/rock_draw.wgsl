@@ -5,10 +5,11 @@
 // piece is its scan turned, scaled and placed; its albedo the scan's
 // diffuse map times its tint, darkened and glossed where it is wet; its
 // occlusion and roughness the scan's ARM map; its normal the scan's
-// OpenGL-convention normal map on a tangent frame from the derivatives (as
-// the props' glTF maps). Open shells (faces, patches) are seen from both
-// sides. Lit by the city's own `look_light` (sun with the cascaded shadow,
-// sky, AO, fog).
+// OpenGL-convention normal map (two channels, z rebuilt) on a tangent
+// frame from the derivatives (as the props' glTF maps). Open shells (faces,
+// patches) are seen from both sides, their inner side shaded as the hollow
+// it is; their cut rim sinks and frays (rock_types.wgsl). Lit by the city's
+// own `look_light` (sun with the cascaded shadow, sky, AO, fog).
 
 @group(2) @binding(0) var<storage, read> gc_rocks: array<GcRock>;
 @group(2) @binding(1) var<storage, read> gc_visible: array<u32>;
@@ -20,6 +21,11 @@
 // not a mirror; a glossier film glitters on the scans' fine normal detail).
 const GC_WET_RATIO: f32 = 0.5;
 const GC_WET_ROUGH: f32 = 0.5;
+// An open shell's inner side: the hollow under a scanned face, which in
+// the ground it came from is never seen; drawn at this share of its albedo
+// so a piece turned to show it does not read as a bleached lit face
+// (INFERRED).
+const GC_INNER_SHADE: f32 = 0.35;
 
 struct GcOut {
     @builtin(position) clip: vec4<f32>,
@@ -28,6 +34,7 @@ struct GcOut {
     @location(2) uv: vec2<f32>,
     @location(3) local: vec3<f32>,
     @location(4) @interpolate(flat) inst: u32,
+    @location(5) rim: f32,
 };
 
 @vertex
@@ -39,7 +46,9 @@ fn rock_vs(
 ) -> GcOut {
     let idx = gc_visible[ii];
     let r = gc_rocks[idx];
-    let world = r.pos + gc_rotate(r.rot, pos * r.scale);
+    let k = gc_kinds[r.kind];
+    let rim = gc_rim_dist(k, normal.w);
+    let world = r.pos + gc_rotate(r.rot, gc_rim_sink(k, pos, rim) * r.scale);
     var out: GcOut;
     out.clip = frame.view_proj * vec4<f32>(world, 1.0);
     out.world = world;
@@ -47,6 +56,7 @@ fn rock_vs(
     out.uv = uv;
     out.local = pos;
     out.inst = idx;
+    out.rim = rim;
     return out;
 }
 
@@ -65,7 +75,8 @@ fn gc_shade(in: GcOut, front: bool) -> vec4<f32> {
     let ng = n;
     let albedo = textureSampleGrad(kit_albedo, kit_sampler, in.uv, layer, duvx, duvy).rgb;
     let arm = textureSampleGrad(kit_orm, kit_sampler, in.uv, layer, duvx, duvy).rgb;
-    let nt = textureSampleGrad(kit_normal, kit_sampler, in.uv, layer, duvx, duvy).xyz * 2.0 - 1.0;
+    let nxy = textureSampleGrad(kit_normal, kit_sampler, in.uv, layer, duvx, duvy).xy * 2.0 - 1.0;
+    let nt = vec3<f32>(nxy, sqrt(max(1.0 - dot(nxy, nxy), 0.0)));
     let r1 = cross(dpy, n);
     let r2 = cross(n, dpx);
     let t = r1 * duvx.x + r2 * duvy.x;
@@ -77,7 +88,7 @@ fn gc_shade(in: GcOut, front: bool) -> vec4<f32> {
     }
     var s: Surface;
     let wet = clamp(r.wet, 0.0, 1.0);
-    s.albedo = albedo * r.tint * mix(1.0, GC_WET_RATIO, wet);
+    s.albedo = albedo * r.tint * mix(1.0, GC_WET_RATIO, wet) * select(GC_INNER_SHADE, 1.0, front);
     s.rough = clamp(mix(arm.g, GC_WET_ROUGH, wet), 0.05, 1.0);
     s.metal = 0.0;
     s.ao = arm.r;
@@ -95,11 +106,13 @@ fn gc_shade(in: GcOut, front: bool) -> vec4<f32> {
     return look_light(s, m, v, in.world, ng, 0u);
 }
 
-// a scanned patch's own ground: cut away under its clip height over its rim plane.
+// a scanned patch's own ground: cut away under its clip height over its
+// rim plane; and any open scan's cut rim frayed.
 fn gc_clip(in: GcOut) {
-    let k = gc_kinds[gc_rocks[in.inst].kind].rim;
+    let kk = gc_kinds[gc_rocks[in.inst].kind];
+    let k = kk.rim;
     let h = in.local.y - (k.x * in.local.x + k.y * in.local.z + k.z);
-    if (h < k.w) {
+    if (h < k.w || gc_frayed(kk, in.local, in.rim)) {
         discard;
     }
 }

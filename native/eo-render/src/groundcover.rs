@@ -8,24 +8,48 @@
 //!
 //! Attached so far: the scanned rock (`rock`): once the landmark build has
 //! placed the survey set's rock scans (eo-landmarks `rocks::scan::placed`),
-//! the first `update` after it uploads them (the library's meshes, its
-//! texture arrays, the pieces) on the look's device and from then on culls
-//! and draws them. Without the survey root, or with `--no-scan-rocks`
-//! (`--no-gg3-rock`, `--no-gg3`), nothing is placed and nothing is attached.
+//! the first `update` after it starts a worker thread that builds their GPU
+//! state (the library's meshes, its texture arrays and their mips, the
+//! pieces, the pipelines) on the look's device, and the hooks draw them
+//! from the first frame after it is done: the build (about a second) never
+//! runs on the render thread. A capture waits for it (`settled`). Without
+//! the survey root, or with `--no-scan-rocks` (`--no-gg3-rock`, `--no-gg3`),
+//! nothing is placed and nothing is attached.
 
 mod rock;
 
 use crate::camera::Camera;
 use crate::look::LookGpu;
-use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::{Arc, OnceLock};
 
-pub use rock::{CAST_DISTANCE_M, LOD_PX, MAX_DISTANCE_M, MIN_PX};
+pub use rock::{CAST_DISTANCE_M, MAX_DISTANCE_M, MIN_PX};
 
 /// The ground cover's renderer state.
 #[derive(Default)]
 pub struct GroundCover {
-    /// The scanned rock, once placed (None: placed, but nothing to draw).
-    rock: OnceLock<Option<rock::RockGpu>>,
+    /// The scanned rock, once built (None: placed, but nothing to draw).
+    rock: Arc<OnceLock<Option<rock::RockGpu>>>,
+    /// Whether the worker that builds it has been started.
+    started: AtomicBool,
+    /// Whether the city pass writes the debug ids target (0 not told: read
+    /// from the command line; 1 no; 2 yes), `set_debug_ids`.
+    debug_ids: AtomicU8,
+}
+
+/// Whether this run's renderer writes the debug ids (the only eo-app path
+/// that makes one is `--bench --occlusion-check`): the stand-in until the
+/// renderer calls `set_debug_ids`.
+fn debug_ids_from_args() -> bool {
+    std::env::args().any(|a| a == "--occlusion-check")
+}
+
+/// Whether this run captures frames that must not depend on how fast the
+/// worker is (`--shots`, `--occlusion-check`): the first update after the
+/// placement then waits for the build. The stand-in until the captures'
+/// settle reads `GroundCover::settled`.
+fn waits_for_build() -> bool {
+    std::env::args().any(|a| a == "--shots" || a == "--occlusion-check")
 }
 
 impl GroundCover {
@@ -33,18 +57,57 @@ impl GroundCover {
         self.rock.get().and_then(|r| r.as_ref())
     }
 
+    /// Tell the ground cover whether the renderer's city pass writes the
+    /// debug ids target (its pipelines must match the pass). Call before
+    /// the first `update`.
+    pub fn set_debug_ids(&self, on: bool) {
+        self.debug_ids.store(if on { 2 } else { 1 }, Ordering::Relaxed);
+    }
+
+    fn debug_ids(&self) -> bool {
+        match self.debug_ids.load(Ordering::Relaxed) {
+            0 => debug_ids_from_args(),
+            v => v == 2,
+        }
+    }
+
     /// The scanned rock's GPU bytes (0 when none is attached).
     pub fn bytes(&self) -> u64 {
         self.rock().map(|r| r.bytes).unwrap_or(0)
     }
 
+    /// Whether everything placed so far is attached: no placement yet, or
+    /// its GPU state built (false while the worker runs).
+    pub fn settled(&self) -> bool {
+        !self.started.load(Ordering::Acquire) || self.rock.get().is_some()
+    }
+
     /// Per frame, before the passes: the camera and the look (beside the props' `update`).
     pub fn update(&self, queue: &wgpu::Queue, cam: &Camera, look: &LookGpu, occlusion: bool) {
-        if self.rock.get().is_none() {
-            // attach once the landmark build has placed the scans (polled: a cheap read until then)
+        if !self.started.load(Ordering::Acquire) {
+            // start the build once the landmark build has placed the scans (polled: a cheap read until then)
             if let Some(placed) = eo_landmarks::rocks::scan::placed() {
-                let gpu = eo_landmarks::rocks::scan::library().filter(|_| !placed.pieces.is_empty()).map(|lib| rock::RockGpu::new(&look.device, queue, look, &lib, &placed));
-                let _ = self.rock.set(gpu);
+                self.started.store(true, Ordering::Release);
+                let setup = rock::RockSetup::new(&look.device, queue, look, self.debug_ids());
+                let slot = self.rock.clone();
+                let h = std::thread::Builder::new()
+                    .name("gc-rock-build".into())
+                    .spawn(move || {
+                        let gpu = eo_landmarks::rocks::scan::library().filter(|_| !placed.pieces.is_empty()).map(|lib| rock::RockGpu::new(&setup, &lib, &placed));
+                        let _ = slot.set(gpu);
+                    })
+                    .ok();
+                match h {
+                    Some(h) if waits_for_build() => {
+                        if h.join().is_err() {
+                            let _ = self.rock.set(None);
+                        }
+                    }
+                    Some(_) => {} // it sets the slot when done
+                    None => {
+                        let _ = self.rock.set(None);
+                    }
+                }
             }
         }
         if let Some(r) = self.rock() {

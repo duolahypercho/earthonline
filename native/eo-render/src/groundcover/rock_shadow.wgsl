@@ -1,6 +1,7 @@
 // The scanned rock into a sun cascade (appended to rock_types.wgsl).
 // Group 0: the look's cascade view (dynamic offset); group 2 the pieces.
-// Depth only; a scanned patch's own ground is cut away as in the colour pass.
+// Depth only; a scanned patch's own ground is cut away, and an open scan's
+// rim sunk and frayed, as in the colour pass.
 
 struct GcShadowView {
     view_proj: mat4x4<f32>,
@@ -16,22 +17,27 @@ struct GcShadowOut {
     @builtin(position) clip: vec4<f32>,
     @location(0) local: vec3<f32>,
     @location(1) @interpolate(flat) kind: u32,
+    @location(2) rim: f32,
 };
 
 @vertex
-fn rock_shadow_vs(@location(0) pos: vec3<f32>, @builtin(instance_index) ii: u32) -> GcShadowOut {
+fn rock_shadow_vs(@location(0) pos: vec3<f32>, @location(1) normal: vec4<f32>, @builtin(instance_index) ii: u32) -> GcShadowOut {
     let r = gc_rocks[gc_visible[ii]];
+    let k = gc_kinds[r.kind];
+    let rim = gc_rim_dist(k, normal.w);
     var out: GcShadowOut;
-    out.clip = gc_sv.view_proj * vec4<f32>(r.pos + gc_rotate(r.rot, pos * r.scale), 1.0);
+    out.clip = gc_sv.view_proj * vec4<f32>(r.pos + gc_rotate(r.rot, gc_rim_sink(k, pos, rim) * r.scale), 1.0);
     out.local = pos;
     out.kind = r.kind;
+    out.rim = rim;
     return out;
 }
 
 @fragment
 fn rock_shadow_clip_fs(in: GcShadowOut) {
-    let k = gc_kinds[in.kind].rim;
-    if (in.local.y - (k.x * in.local.x + k.y * in.local.z + k.z) < k.w) {
+    let kk = gc_kinds[in.kind];
+    let k = kk.rim;
+    if (in.local.y - (k.x * in.local.x + k.y * in.local.z + k.z) < k.w || gc_frayed(kk, in.local, in.rim)) {
         discard;
     }
 }

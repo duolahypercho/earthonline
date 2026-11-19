@@ -1,9 +1,12 @@
 //! The scanned rock on the GPU: the seven survey scans (eo-landmarks
-//! `rocks::scan`) as one vertex and index buffer of their four levels each,
+//! `rocks::scan`) as one vertex and index buffer of their four levels each
+//! (a vertex's fourth normal byte its distance to the scan's cut rim),
 //! their diffuse, normal and ARM maps as three texture arrays (a layer a
-//! scan, 2k with mips), and the pieces the landmark build placed as one
-//! instance buffer (80 bytes a piece: origin, turn, scale, tint, wetness,
-//! bounding sphere), uploaded once.
+//! scan, 2k with mips; RGBA8 sRGB diffuse, the normal's x y and the ARM's
+//! occlusion and roughness as RG8), and the pieces the landmark build
+//! placed as one instance buffer (80 bytes a piece: origin, turn, scale,
+//! tint, wetness, bounding sphere), uploaded once. `RockGpu::new` runs on a
+//! worker thread (groundcover.rs): nothing of it touches the render thread.
 //!
 //! Per frame (rock_cull.wgsl), one invocation per piece:
 //! * before the city pass (`encode_pre`): the three sun cascades (their
@@ -13,10 +16,12 @@
 //! * inside the occlusion pass (`cull_camera`): the camera against this
 //!   frame's depth pyramid (the city's own `hzb_occluded`);
 //! each a slot in a (view, scan, level) bucket that is one indexed indirect
-//! draw. The level is the piece's projected radius in pixels; past
-//! `MAX_DISTANCE_M` or under a pixel nothing is drawn (the distance cull that
-//! replaces round 2's always-drawn shore rocks). The cascades get the
-//! pieces within `CAST_DISTANCE_M`, a level coarser.
+//! draw. The level is the piece's projected radius in pixels against its
+//! scan's edges (`scans::lod_edges`: each level drawn only where its
+//! measured error is under a pixel); past `MAX_DISTANCE_M` or under
+//! `MIN_PX` nothing is drawn (the distance cull that replaces round 2's
+//! always-drawn shore rocks). The cascades get the pieces within
+//! `CAST_DISTANCE_M`, a level coarser.
 
 use crate::camera::{Camera, frustum_planes};
 use crate::look::LookGpu;
@@ -31,12 +36,20 @@ const KINDS: u64 = 7;
 const LODS: u64 = 4;
 const ARGS_WORDS: u64 = 5;
 
-/// The level edges, projected radius in pixels (INFERRED: about a pixel of
-/// silhouette error at each level's meshopt error): level 0 (20k
-/// triangles) over 160 px, 1 (5k) over 70, 2 (1.2k) over 24, 3 (300) down
-/// to `MIN_PX`; nothing under it.
-pub const LOD_PX: [f32; 3] = [160.0, 70.0, 24.0];
+/// Under this projected radius (pixels) a piece is not drawn (INFERRED:
+/// under a pixel across it is a speck the temporal resolve averages away).
 pub const MIN_PX: f32 = 0.8;
+/// An open scan's cut rim (rock_types.wgsl `gc_frayed`, `gc_rim_sink`):
+/// frayed over `RIM_FRAY_SHARE` of the scan's middle extent (between
+/// `RIM_FRAY_MIN_M` and the stored range, scan metres), sunk under its rim
+/// plane by `RIM_SINK_SHARE` of that band, the fray's noise at
+/// `RIM_NOISE_PER_M` cycles a scan metre (all INFERRED: enough that the
+/// straight line where the scan stopped breaks into a ragged edge and
+/// tucks under the ground, not so much that the rock's face goes).
+pub const RIM_FRAY_SHARE: f32 = 0.2;
+pub const RIM_FRAY_MIN_M: f32 = 0.25;
+pub const RIM_SINK_SHARE: f32 = 0.5;
+pub const RIM_NOISE_PER_M: f32 = 1.6;
 /// The farthest a piece is drawn (m, the drawn world): the far terrain's
 /// band starts beyond it (INFERRED).
 pub const MAX_DISTANCE_M: f32 = 2600.0;
@@ -77,8 +90,8 @@ struct GcParams {
     cam: [f32; 4],
     view_proj: [[f32; 4]; 4],
     counts: [u32; 4],
-    lod: [f32; 4],
     dist: [f32; 4],
+    lod: [[f32; 4]; 8],
 }
 
 /// draw.wgsl's `Frame`.
@@ -94,9 +107,30 @@ struct GcFrame {
     copy_step: [f32; 4],
 }
 
+/// What the worker thread needs of the renderer to build `RockGpu`: the
+/// look's main bind group layout and its cascade-view buffer (both cheap
+/// handles), whether the city pass also writes the debug ids target, and
+/// the sample count.
+#[derive(Clone)]
+pub struct RockSetup {
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
+    pub main_bgl: wgpu::BindGroupLayout,
+    pub shadow_view: wgpu::Buffer,
+    pub debug_ids: bool,
+    pub sample_count: u32,
+}
+
+impl RockSetup {
+    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, look: &LookGpu, debug_ids: bool) -> RockSetup {
+        RockSetup { device: device.clone(), queue: queue.clone(), main_bgl: look.main_bind_group_layout().clone(), shadow_view: look.shadow_view_buffer().clone(), debug_ids, sample_count: msaa_from_args() }
+    }
+}
+
 pub struct RockGpu {
     pub count: u32,
     pub bytes: u64,
+    lod: [[f32; 4]; 8],
     vbuf: wgpu::Buffer,
     ibuf: wgpu::Buffer,
     args: wgpu::Buffer,
@@ -119,6 +153,8 @@ pub struct RockGpu {
     camera_late: AtomicBool,
     pub stats_on: bool,
     frames: AtomicU32,
+    /// Whether each scan draws through the clipped pipelines (an open scan: its rim frays).
+    clip_kind: [bool; KINDS as usize],
 }
 
 /// The pieces as the GPU reads them (the bounding sphere in the world).
@@ -152,10 +188,27 @@ fn msaa_from_args() -> u32 {
     a.iter().position(|s| s == "--msaa").and_then(|i| a.get(i + 1)).and_then(|v| v.parse().ok()).unwrap_or(1)
 }
 
+/// The fourth normal byte: the vertex's distance to its scan's cut rim, 127 at `RIM_RANGE_M`.
+pub fn rim_byte(d: f32) -> i8 {
+    ((d / scans::RIM_RANGE_M).clamp(0.0, 1.0) * 127.0).round() as i8
+}
+
+/// A scan's cut-rim treatment (rock_types.wgsl `GcKind::fray`): band, sink, noise, range.
+pub fn fray_of(kind: &scans::Kind) -> [f32; 4] {
+    if kind.rim.is_none() {
+        return [0.0, 0.0, 0.0, scans::RIM_RANGE_M];
+    }
+    let mut ext = [0, 1, 2].map(|i| kind.max[i] - kind.min[i]);
+    ext.sort_by(f32::total_cmp);
+    let band = (RIM_FRAY_SHARE * ext[1]).clamp(RIM_FRAY_MIN_M, scans::RIM_RANGE_M);
+    [band, RIM_SINK_SHARE * band, RIM_NOISE_PER_M, scans::RIM_RANGE_M]
+}
+
 impl RockGpu {
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, look: &LookGpu, lib: &Library, placed: &Placed) -> RockGpu {
+    pub fn new(setup: &RockSetup, lib: &Library, placed: &Placed) -> RockGpu {
         let t0 = std::time::Instant::now();
-        let d = device;
+        let d = &setup.device;
+        let queue = &setup.queue;
         use wgpu::BufferUsages as U;
         // geometry: every scan's vertices, its four levels' indices after one another
         let mut verts: Vec<GcVertex> = vec![];
@@ -166,7 +219,9 @@ impl RockGpu {
             let base = verts.len() as u32;
             for i in 0..kind.mesh.positions.len() {
                 let n = kind.mesh.normals[i];
-                verts.push(GcVertex { pos: kind.mesh.positions[i], normal: [n[0], n[1], n[2], 0.0].map(|v| (v.clamp(-1.0, 1.0) * 127.0).round() as i8), uv: kind.mesh.uvs[i] });
+                let q = |v: f32| (v.clamp(-1.0, 1.0) * 127.0).round() as i8;
+                let rim = kind.rim_dist.get(i).copied().unwrap_or(scans::RIM_RANGE_M);
+                verts.push(GcVertex { pos: kind.mesh.positions[i], normal: [q(n[0]), q(n[1]), q(n[2]), rim_byte(rim)], uv: kind.mesh.uvs[i] });
             }
             for (l, lod) in kind.mesh.lods.iter().enumerate().take(LODS as usize) {
                 lod_ranges[k * LODS as usize + l] = [lod.len() as u32, indices.len() as u32, base];
@@ -209,12 +264,20 @@ impl RockGpu {
         let args_template = init("gc-rock-args-template", bytemuck::cast_slice(&template), U::COPY_SRC);
         let stats = empty("gc-rock-stats", 32, U::STORAGE | U::COPY_DST | U::COPY_SRC);
         let tris_buf = init("gc-rock-triangles", bytemuck::cast_slice(&tris), U::STORAGE);
-        let mut kinds = [[0.0f32; 4]; 8];
+        // per scan: its rim plane (and a patch's clip height), its rim's fray; its level edges
+        let mut kinds = [[0.0f32; 4]; 16];
+        let mut lod = [[f32::MAX, f32::MAX, f32::MAX, MIN_PX]; 8];
+        let mut clip_kind = [false; KINDS as usize];
         for (k, kind) in lib.kinds.iter().enumerate() {
-            kinds[k] = match (kind.role, kind.rim) {
+            kinds[2 * k] = match (kind.role, kind.rim) {
                 (Role::Patch, Some(r)) => [r.a as f32, r.b as f32, r.c as f32, scans::clip_m(k as u8)],
+                (_, Some(r)) => [r.a as f32, r.b as f32, r.c as f32, -1.0e3],
                 _ => [0.0, 0.0, 0.0, -1.0e3],
             };
+            kinds[2 * k + 1] = fray_of(kind);
+            clip_kind[k] = kind.rim.is_some();
+            let e = scans::lod_edges(&kind.lod_errors);
+            lod[k] = [e[0], e[1], e[2], MIN_PX];
         }
         let kinds_buf = init("gc-rock-kinds", bytemuck::cast_slice(&kinds), U::UNIFORM);
         let params_s = empty("gc-rock-params-pre", std::mem::size_of::<GcParams>() as u64, U::UNIFORM | U::COPY_DST);
@@ -226,12 +289,21 @@ impl RockGpu {
         // the maps: three arrays, a layer a scan, with box-filtered mips (made in parallel)
         let res = lib.kinds[0].tex_res;
         let mips = res.ilog2() + 1;
+        // the normal's x y and the ARM's occlusion and roughness: two channels each (the normal's z is rebuilt, the metalness is 0)
         let chains: Vec<Vec<Vec<u8>>> = std::thread::scope(|s| {
-            let hs: Vec<_> = (0..3).flat_map(|m| lib.kinds.iter().map(move |k| (m, k))).map(|(m, k)| s.spawn(move || crate::authored::mip_chain(&k.textures[m], k.tex_res as usize, m == 0))).collect();
+            let hs: Vec<_> = (0..3)
+                .flat_map(|m| lib.kinds.iter().map(move |k| (m, k)))
+                .map(|(m, k)| {
+                    s.spawn(move || {
+                        let c = crate::authored::mip_chain(&k.textures[m], k.tex_res as usize, m == 0);
+                        if m == 0 { c } else { c.into_iter().map(|l| l.chunks_exact(4).flat_map(|p| [p[0], p[1]]).collect()).collect() }
+                    })
+                })
+                .collect();
             hs.into_iter().map(|h| h.join().expect("mip thread")).collect()
         });
         let mut tex_bytes = 0u64;
-        let make_array = |label: &str, format: wgpu::TextureFormat, map: usize| {
+        let make_array = |label: &str, format: wgpu::TextureFormat, map: usize, texel: u32| {
             let t = d.create_texture(&wgpu::TextureDescriptor {
                 label: Some(label),
                 size: wgpu::Extent3d { width: res, height: res, depth_or_array_layers: KINDS as u32 },
@@ -248,17 +320,17 @@ impl RockGpu {
                     queue.write_texture(
                         wgpu::TexelCopyTextureInfo { texture: &t, mip_level: mip as u32, origin: wgpu::Origin3d { x: 0, y: 0, z: layer as u32 }, aspect: wgpu::TextureAspect::All },
                         level,
-                        wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(r * 4), rows_per_image: Some(r) },
+                        wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(r * texel), rows_per_image: Some(r) },
                         wgpu::Extent3d { width: r, height: r, depth_or_array_layers: 1 },
                     );
                 }
             }
             t
         };
-        let t_alb = make_array("gc-rock-albedo", wgpu::TextureFormat::Rgba8UnormSrgb, 0);
-        let t_nor = make_array("gc-rock-normal", wgpu::TextureFormat::Rgba8Unorm, 1);
-        let t_arm = make_array("gc-rock-arm", wgpu::TextureFormat::Rgba8Unorm, 2);
-        tex_bytes += 3 * KINDS * (0..mips).map(|m| ((res >> m).max(1) as u64).pow(2) * 4).sum::<u64>();
+        let t_alb = make_array("gc-rock-albedo", wgpu::TextureFormat::Rgba8UnormSrgb, 0, 4);
+        let t_nor = make_array("gc-rock-normal", wgpu::TextureFormat::Rg8Unorm, 1, 2);
+        let t_arm = make_array("gc-rock-arm", wgpu::TextureFormat::Rg8Unorm, 2, 2);
+        tex_bytes += (4 + 2 + 2) * KINDS * (0..mips).map(|m| ((res >> m).max(1) as u64).pow(2)).sum::<u64>();
         let view = |t: &wgpu::Texture| t.create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() });
         let sampler = d.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("gc-rock-sampler"),
@@ -293,7 +365,7 @@ impl RockGpu {
         });
         let cascades = wgpu::BindGroupEntry {
             binding: 4,
-            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding { buffer: look.shadow_view_buffer(), offset: 0, size: Some(std::num::NonZeroU64::new(768).unwrap()) }),
+            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding { buffer: &setup.shadow_view, offset: 0, size: Some(std::num::NonZeroU64::new(768).unwrap()) }),
         };
         let cull_bg = |p: &wgpu::Buffer, label: &str| {
             d.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -369,17 +441,21 @@ impl RockGpu {
         });
         let draw_src = format!("{}\n{types}\n{}", crate::look::city_shader_source(), include_str!("rock_draw.wgsl"));
         let draw_mod = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("rock_draw.wgsl"), source: wgpu::ShaderSource::Wgsl(draw_src.into()) });
-        let draw_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("gc-rock-draw"), bind_group_layouts: &[Some(&draw_bgl), Some(look.main_bind_group_layout()), Some(&data_bgl)], immediate_size: 0 });
+        let draw_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("gc-rock-draw"), bind_group_layouts: &[Some(&draw_bgl), Some(&setup.main_bgl), Some(&data_bgl)], immediate_size: 0 });
         let attrs = [
             wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x3, offset: 0, shader_location: 0 },
             wgpu::VertexAttribute { format: wgpu::VertexFormat::Snorm8x4, offset: 12, shader_location: 1 },
             wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x2, offset: 16, shader_location: 2 },
         ];
         let stride = std::mem::size_of::<GcVertex>() as u64;
-        let sample_count = msaa_from_args();
+        let sample_count = setup.sample_count;
+        // the city pass's targets: colour, and the debug ids when the renderer writes them
         let make = |label: &str, fs_entry: &str| {
             let color = wgpu::ColorTargetState { format: crate::look::HDR_FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL };
-            let _ = IDS_FORMAT;
+            let ids = wgpu::ColorTargetState { format: IDS_FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL };
+            let targets_ids = [Some(color.clone()), Some(ids)];
+            let targets = [Some(color)];
+            let entry_name = if setup.debug_ids { format!("{fs_entry}_ids") } else { fs_entry.to_string() };
             d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
                 layout: Some(&draw_layout),
@@ -387,7 +463,7 @@ impl RockGpu {
                 primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleList, cull_mode: None, ..Default::default() },
                 depth_stencil: Some(wgpu::DepthStencilState { format: DEPTH_FORMAT, depth_write_enabled: Some(true), depth_compare: Some(wgpu::CompareFunction::Greater), stencil: Default::default(), bias: Default::default() }),
                 multisample: wgpu::MultisampleState { count: sample_count, ..Default::default() },
-                fragment: Some(wgpu::FragmentState { module: &draw_mod, entry_point: Some(fs_entry), compilation_options: Default::default(), targets: &[Some(color)] }),
+                fragment: Some(wgpu::FragmentState { module: &draw_mod, entry_point: Some(&entry_name), compilation_options: Default::default(), targets: if setup.debug_ids { &targets_ids } else { &targets } }),
                 multiview_mask: None,
                 cache: None,
             })
@@ -403,12 +479,12 @@ impl RockGpu {
         let view_bg = d.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("gc-rock-shadow-view-bg"),
             layout: &view_bgl,
-            entries: &[wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding { buffer: look.shadow_view_buffer(), offset: 0, size: Some(std::num::NonZeroU64::new(80).unwrap()) }) }],
+            entries: &[wgpu::BindGroupEntry { binding: 0, resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding { buffer: &setup.shadow_view, offset: 0, size: Some(std::num::NonZeroU64::new(80).unwrap()) }) }],
         });
         let shadow_src = format!("{types}\n{}", include_str!("rock_shadow.wgsl"));
         let shadow_mod = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("rock_shadow.wgsl"), source: wgpu::ShaderSource::Wgsl(shadow_src.into()) });
         let shadow_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("gc-rock-shadow"), bind_group_layouts: &[Some(&view_bgl), None, Some(&data_bgl)], immediate_size: 0 });
-        let shadow_attrs = [attrs[0]];
+        let shadow_attrs = [attrs[0], attrs[1]];
         let shadow_pipe = |label: &str, clip: bool| {
             d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
@@ -426,18 +502,21 @@ impl RockGpu {
         let shadow_clip = shadow_pipe("gc-rock-shadow-clip", true);
         let bytes = [&vbuf, &ibuf, &rocks_buf, &visible, &args, &args_template, &stats, &tris_buf, &kinds_buf, &params_s, &params_c, &frame].iter().map(|b| b.size()).sum::<u64>() + tex_bytes;
         let stats_on = std::env::var_os("EO_ROCK_STATS").is_some();
+        let build_ms = t0.elapsed().as_secs_f64() * 1e3;
         eprintln!(
-            "scanned rock: {} pieces drawn from {} scans, {} vertices, {} indices, {:.0} MB on the GPU, built in {:.0} ms",
+            "scanned rock: {} pieces drawn from {} scans, {} vertices, {} indices, {:.0} MB on the GPU, built in {:.0} ms on a worker thread; level edges (px) {:?}",
             rocks.len(),
             lib.kinds.len(),
             verts.len(),
             indices.len(),
             bytes as f64 / 1048576.0,
-            t0.elapsed().as_secs_f64() * 1e3
+            build_ms,
+            lod.iter().take(lib.kinds.len()).map(|e| [e[0].min(9999.0).round(), e[1].min(9999.0).round(), e[2].min(9999.0).round()]).collect::<Vec<_>>()
         );
         RockGpu {
             count: rocks.len() as u32,
             bytes,
+            lod,
             vbuf,
             ibuf,
             args,
@@ -460,6 +539,7 @@ impl RockGpu {
             camera_late: AtomicBool::new(false),
             stats_on,
             frames: AtomicU32::new(0),
+            clip_kind,
         }
     }
 
@@ -471,8 +551,8 @@ impl RockGpu {
             cam: [cam.eye.x, cam.eye.y, cam.eye.z, px_scale],
             view_proj: vp.to_cols_array_2d(),
             counts: [self.count, 0, self.stats_on as u32, 0],
-            lod: [LOD_PX[0], LOD_PX[1], LOD_PX[2], MIN_PX],
             dist: [MAX_DISTANCE_M, CAST_DISTANCE_M, CASCADE_MARGIN_M, 0.0],
+            lod: self.lod,
         };
         let s = GcParams { counts: [self.count, 0b1110 | if occlusion { 0 } else { 1 }, self.stats_on as u32, 0], ..base };
         let c = GcParams { counts: [self.count, 0b0001, self.stats_on as u32, 0], ..base };
@@ -539,7 +619,7 @@ impl RockGpu {
         for clip in [false, true] {
             pass.set_pipeline(if clip { clipped } else { opaque });
             for k in 0..KINDS {
-                if (scans::role(k as u8) == Role::Patch) != clip {
+                if self.clip_kind[k as usize] != clip {
                     continue;
                 }
                 for l in 0..LODS {

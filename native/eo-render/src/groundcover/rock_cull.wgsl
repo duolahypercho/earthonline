@@ -16,10 +16,11 @@ struct GcParams {
     view_proj: mat4x4<f32>,
     // x pieces, y views to classify (bits), z the stats' on bit
     counts: vec4<u32>,
-    // level edges in projected radius (pixels): level 0 over x, 1 over y, 2 over z; nothing under w
-    lod: vec4<f32>,
     // x the farthest drawn (m), y the farthest casting (m), z the cascades' margin (m)
     dist: vec4<f32>,
+    // per scan, its level edges in projected radius (pixels, from its levels'
+    // measured errors): level 0 over x, 1 over y, 2 over z; nothing under w
+    lod: array<vec4<f32>, 8>,
 };
 
 struct GcShadowViewPadded {
@@ -81,15 +82,16 @@ fn classify(@builtin(global_invocation_id) id: vec3<u32>) {
         return;
     }
     let px = r.radius * gc.cam.w / max(d - r.radius * 0.5, 0.5);
-    if (px < gc.lod.w) {
+    let edges = gc.lod[r.kind];
+    if (px < edges.w) {
         return;
     }
     var level = 3u;
-    if (px > gc.lod.x) {
+    if (px > edges.x) {
         level = 0u;
-    } else if (px > gc.lod.y) {
+    } else if (px > edges.y) {
         level = 1u;
-    } else if (px > gc.lod.z) {
+    } else if (px > edges.z) {
         level = 2u;
     }
     let views = gc.counts.y;
