@@ -818,6 +818,12 @@ pub fn load_world(args: &Args) -> Result<World> {
         Some(Err(_)) => anyhow::bail!("water thread panicked"),
         None => None,
     };
+    // the far tier's bluff cypress reads the citywide shore field's distance, as the near tier
+    // does (eo-landmarks `vegetation::install_shore_distance`; the first install wins, before the
+    // distant-tree thread below starts), not the drawn sea's estimate (hlod_trees `shore_estimate`)
+    if let Some(w) = water.clone() {
+        eo_landmarks::vegetation::install_shore_distance(Box::new(move |x, z| w.field.signed_at(x, z).abs()));
+    }
     let press = water.clone().filter(|_| args.look.water);
     // (water r2) piers on piles over the water, unless --no-water-shore
     eo_water::field::PIERS_OVER_WATER.store(args.look.water_features & eo_render::water::FEAT_SHORE != 0, std::sync::atomic::Ordering::Relaxed);
