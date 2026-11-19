@@ -1126,7 +1126,7 @@ impl HlodRuntime {
             self.flags_dirty = true;
         }
         if self.flags_dirty {
-            queue.write_buffer(&renderer.hlod_flags_buf, 0, bytemuck::cast_slice(&self.flags));
+            renderer.write_hlod_flags(queue, &self.flags); // (+ the CPU copy the fixed-slot lists' ranges read)
             bytes += self.flags.len() as u64 * 4;
             self.flags_dirty = false;
         }
