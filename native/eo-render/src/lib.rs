@@ -68,7 +68,7 @@ pub const DRAW_ARGS_BYTES: u64 = 20;
 /// shadow depth begin/end, post begin/end, (surfaces) AO begin/end, then
 /// (occlusion) pyramid + late cull begin/end and late city pass begin/end.
 /// Post is the last pass executed whatever its slot.
-pub const QUERIES_PER_FRAME: u32 = 34; // +2 (sky::Q_CLOUD_SHADOW, slots 32-33) // +10 (sky::Q_SKY_*, slots 22-31) // water: +4 (Q_WATER_FFT, Q_WATER) // facade: +2 for the scene probe (Q_PROBE) // surfaces: +2 for the AO pass (look::Q_AO); +4
+pub const QUERIES_PER_FRAME: u32 = 38; // +4 (Q_WATER_PPR, Q_SCENE_METER, slots 34-37) // +2 (sky::Q_CLOUD_SHADOW, slots 32-33) // +10 (sky::Q_SKY_*, slots 22-31) // water: +4 (Q_WATER_FFT, Q_WATER) // facade: +2 for the scene probe (Q_PROBE) // surfaces: +2 for the AO pass (look::Q_AO); +4
 /// timestamp slots of the pyramid + late cull pass and the late city pass.
 pub const Q_OCCLUSION: u32 = 12;
 pub const Q_LATE_DRAW: u32 = 14;
@@ -78,6 +78,10 @@ pub const Q_PROBE: u32 = 16;
 /// with the glass drawn after the water in it (the frame copy is the gap between the two).
 pub const Q_WATER_FFT: u32 = 18;
 pub const Q_WATER: u32 = 20;
+/// the water's projected-reflection pass (inside the gap between the FFT and the water pass).
+pub const Q_WATER_PPR: u32 = 34;
+/// the scene meter's histogram pass (before post).
+pub const Q_SCENE_METER: u32 = 36;
 /// Counter words (see cull.wgsl): opaque draws, blend draws, triangles, model
 /// parts drawn, model triangles, footprint stand-ins drawn, kit objects, kit
 /// triangles, street objects, street triangles, (occlusion) late opaque draws,
@@ -1922,7 +1926,7 @@ impl Renderer {
             w.encode_compute(enc, occlusion, ts.map(|(q, b)| (q, b + Q_WATER_FFT)));
             let (front, _) = self.probe.front();
             // The glass in the same pass, after the water (it tests the read-only depth, never writes it).
-            w.encode_draw(enc, &self.look, &hdr, depth, [&self.probe.cube_views[0], &self.probe.cube_views[1]], front, /* hitch2: both cubes */ ts.map(|(q, b)| (q, b + Q_WATER)), |pass| {
+            w.encode_draw(enc, &self.look, &hdr, depth, [&self.probe.cube_views[0], &self.probe.cube_views[1]], front, /* hitch2: both cubes */ ts.map(|(q, b)| (q, b + Q_WATER)), ts.map(|(q, b)| (q, b + Q_WATER_PPR)), |pass| {
                 pass.set_bind_group(0, &draw_bg, &[]);
                 self.look.bind_main(pass);
                 pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
@@ -1957,7 +1961,7 @@ impl Renderer {
             }
         } else if let Some((q, b)) = ts {
             // Every slot a frame resolves is written (empty passes).
-            for slot in [Q_WATER_FFT, Q_WATER] {
+            for slot in [Q_WATER_FFT, Q_WATER, Q_WATER_PPR] {
                 enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
                     label: Some("water off"),
                     timestamp_writes: Some(wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b + slot), end_of_pass_write_index: Some(b + slot + 1) }),

@@ -189,16 +189,23 @@ impl SceneMeter {
     /// Meter the frame post reads (`src`: 0 the HDR scene, 1 + p history p),
     /// binned about the prior exposure's grey, tagged with the frame. Skipped
     /// when every readback slot is still in flight.
-    pub fn encode(&self, enc: &mut wgpu::CommandEncoder, src: usize, size: (u32, u32), prior: f64, frame: u32) {
+    /// `ts`: the pass's timestamp pair (bench); an empty pass carries it when nothing is metered.
+    pub fn encode(&self, enc: &mut wgpu::CommandEncoder, src: usize, size: (u32, u32), prior: f64, frame: u32, ts: Option<(&wgpu::QuerySet, u32)>) {
+        let tw = ts.map(|(q, b)| wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b), end_of_pass_write_index: Some(b + 1) });
+        let empty = |enc: &mut wgpu::CommandEncoder, tw: Option<wgpu::ComputePassTimestampWrites<'_>>| {
+            if tw.is_some() {
+                enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("scene-meter (none)"), timestamp_writes: tw });
+            }
+        };
         let binds = self.binds.lock().unwrap();
-        let Some((bsize, bg)) = binds.as_ref() else { return };
+        let Some((bsize, bg)) = binds.as_ref() else { return empty(enc, tw) };
         if *bsize != size {
-            return;
+            return empty(enc, tw);
         }
-        let Some(slot) = self.slots.iter().find(|s| s.lock().unwrap().stage.load(Ordering::Acquire) == 0) else { return };
+        let Some(slot) = self.slots.iter().find(|s| s.lock().unwrap().stage.load(Ordering::Acquire) == 0) else { return empty(enc, tw) };
         enc.clear_buffer(&self.hist, 0, None);
         {
-            let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("scene-meter"), timestamp_writes: None });
+            let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("scene-meter"), timestamp_writes: tw });
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, &bg[src.min(2)], &[]);
             let (qx, qy) = (size.0.div_ceil(4), size.1.div_ceil(4));

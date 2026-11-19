@@ -1542,7 +1542,13 @@ impl LookGpu {
             // the scene meter reads the frame post reads, before post
             let src = self.post_source.load(std::sync::atomic::Ordering::Relaxed) as usize;
             let prior = *self.meter_prior.lock().unwrap();
-            self.meter.encode(enc, src, t.size, prior, self.sky.frame_index());
+            self.meter.encode(enc, src, t.size, prior, self.sky.frame_index(), ts.map(|(q, b)| (q, b + crate::Q_SCENE_METER)));
+        } else if let Some((q, b)) = ts {
+            // the slot is written every frame (an empty pass)
+            enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("scene-meter (off)"),
+                timestamp_writes: Some(wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b + crate::Q_SCENE_METER), end_of_pass_write_index: Some(b + crate::Q_SCENE_METER + 1) }),
+            });
         }
         let tw = ts.map(|(q, b)| wgpu::RenderPassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b + Q_POST), end_of_pass_write_index: Some(b + Q_POST + 1) });
         let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
