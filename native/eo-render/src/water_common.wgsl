@@ -115,6 +115,17 @@ fn wg_ocean_x(x: f32) -> f32 {
     return wg_smooth(WO_GATE_X.x, WO_GATE_X.y - 2200.0, x);
 }
 
+// (iteration 2, Baker surf: water-2) the open coast's share for the beaches'
+// surf model: the ramp across the Gate, or where the exposure field finds more
+// of the Pacific's swell (Baker, Marshall's and China beaches face it inside
+// the ramp), that share, unless --no-baker-surf
+fn wg_ocean_surf(x: f32) -> f32 {
+    if (wg_ex.x >= 0.0 && wg_gg2(128u)) {
+        return max(wg_ocean_x(x), wg_ex.x);
+    }
+    return wg_ocean_x(x);
+}
+
 // The open Pacific's share here: the exposure field's swell share where it is
 // set, else the ramp across the Gate.
 fn wg_ocean(x: f32) -> f32 {

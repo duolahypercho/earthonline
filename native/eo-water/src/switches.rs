@@ -18,10 +18,13 @@ pub const BEACH_PROFILES: u32 = 16;
 pub const STREAK_CAPS: u32 = 32;
 /// The far calm: gusts fading with range, slicks as current lines (water-11).
 pub const FAR_CALM: u32 = 64;
-pub const ALL: u32 = EXPOSURE | CURRENT | LEAN | PPR_BLUR | BEACH_PROFILES | STREAK_CAPS | FAR_CALM;
+/// The open coast's surf where the exposure field finds the Pacific's swell
+/// (Baker, Marshall's and China beaches), not only west of the Gate (water-2).
+pub const BAKER_SURF: u32 = 128;
+pub const ALL: u32 = EXPOSURE | CURRENT | LEAN | PPR_BLUR | BEACH_PROFILES | STREAK_CAPS | FAR_CALM | BAKER_SURF;
 
 /// The switch names, each with its part.
-pub const SWITCHES: [(&str, u32); 8] = [
+pub const SWITCHES: [(&str, u32); 9] = [
     ("--no-gg2-water", ALL),
     ("--no-water-exposure", EXPOSURE),
     ("--no-water-current", CURRENT),
@@ -30,6 +33,7 @@ pub const SWITCHES: [(&str, u32); 8] = [
     ("--no-beach-profiles", BEACH_PROFILES),
     ("--no-water-streak-caps", STREAK_CAPS),
     ("--no-water-far-calm", FAR_CALM),
+    ("--no-baker-surf", BAKER_SURF),
 ];
 
 /// The parts on for these arguments.
