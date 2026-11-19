@@ -247,16 +247,22 @@ impl VegGround {
         self.water.as_ref().map(|w| w.field.signed_at(x, z).abs()).unwrap_or(1e3)
     }
 
+    /// The drawn ground's height at (x, z): the detail ground where one is
+    /// set (`eo_data::detail_ground`, none yet), else the terrain triangle.
+    pub fn ground_y(&self, x: f64, z: f64) -> Option<f64> {
+        eo_data::detail_ground::height(x, z).or_else(|| self.grid.height(x, z))
+    }
+
     /// The drawn ground at (x, z) and what grows there (None: nothing can).
     pub fn site(&self, x: f64, z: f64) -> Option<Site> {
         let sea = eo_water::SEA_LEVEL_Y;
-        let y = self.grid.height(x, z)?;
+        let y = self.ground_y(x, z)?;
         if y < sea + 0.4 {
             return None;
         }
         let (ground, alpha) = self.grid.colour(x, z)?;
         let c = self.grid.cell;
-        let h = |dx: f64, dz: f64| self.grid.height(x + dx, z + dz).unwrap_or(y);
+        let h = |dx: f64, dz: f64| self.ground_y(x + dx, z + dz).unwrap_or(y);
         let (gx, gz) = ((h(c, 0.0) - h(-c, 0.0)) / (2.0 * c), (h(0.0, c) - h(0.0, -c)) / (2.0 * c));
         let slope = (gx * gx + gz * gz).sqrt().atan().to_degrees();
         // beach sand (ground_tone.rs puts the shore distance in the alpha byte): nothing grows,
