@@ -674,9 +674,19 @@ impl Decks {
     }
 }
 
-/// Where the drift has moved a deck at `world_s`, wrapped to the tile (so
-/// the GPU's f32 offset stays small).
+/// The high deck's drift wraps here with the second deck on (`--no-cirrus2`: at
+/// `HIGH_TILE_M`): a whole number of every tile the second deck and the 5.2 km
+/// sheet read along the wind (x) and across it (z) (sky_volume.wgsl `VOL_CI2_*`,
+/// `SKY_HIGH_TILE`), so the wrap moves no texture. At the tile itself the deck
+/// jumped every 10 km of drift (9 minutes at 18 m/s): the textures are read
+/// stretched and, in round 2, turned. (In f32 the offset keeps 1 cm.)
+pub const CIRRUS2_WRAP_M: f64 = 160_000.0;
+
+/// Where the drift has moved a deck at `world_s`, wrapped to the tile (so the
+/// GPU's f32 offset stays small); the high deck at `CIRRUS2_WRAP_M` with the
+/// second deck on.
 pub fn drift_offset(drift: [f64; 2], world_s: f64, tile_m: f64) -> [f64; 2] {
+    let tile_m = if tile_m == HIGH_TILE_M && eo_look::season::features().cirrus2 { CIRRUS2_WRAP_M } else { tile_m };
     [(drift[0] * world_s).rem_euclid(tile_m), (drift[1] * world_s).rem_euclid(tile_m)]
 }
 
@@ -713,6 +723,29 @@ mod tests {
             assert_eq!((m.coverage, m.cirrus().opacity), (r.coverage, 0.0), "{k:?}");
             assert!((m.high_opacity - if r.high_opacity > 0.0 { r.high_opacity.max(0.10 * ci) } else { 0.0 }).abs() < 1e-12, "{k:?}");
         }
+    }
+
+    #[test]
+    fn the_second_deck_drifts_without_a_jump() {
+        // every tile the second deck and its 5.2 km sheet read is a whole part of the wrap
+        let wgsl = include_str!("../../eo-render/src/sky_volume.wgsl");
+        let c = |name: &str| -> f64 {
+            let l = wgsl.lines().find(|l| l.starts_with(&format!("const {name}: f32 = "))).unwrap_or_else(|| panic!("{name} in sky_volume.wgsl"));
+            l.split('=').nth(1).unwrap().trim().trim_end_matches(';').parse().unwrap()
+        };
+        let whole = |a: f64| (a - a.round()).abs() < 1e-9 && a.round() >= 1.0;
+        for k in ["ENV", "BODY", "BEND", "FIBRE"] {
+            let (m, x) = (c(&format!("VOL_CI2_{k}_M")), c(&format!("VOL_CI2_{k}_X")));
+            assert!(whole(CIRRUS2_WRAP_M / (m * x)), "{k} along: {} m", m * x);
+            assert!(whole(CIRRUS2_WRAP_M / m), "{k} across: {m} m");
+        }
+        assert!(whole(CIRRUS2_WRAP_M / (HIGH_TILE_M / 0.5)) && whole(CIRRUS2_WRAP_M / HIGH_TILE_M));
+        // the wrap: (the process's features have the second deck on)
+        let d = [DRIFT_HIGH_MS, 2.0];
+        let a = drift_offset(d, CIRRUS2_WRAP_M / DRIFT_HIGH_MS - 0.5, HIGH_TILE_M);
+        assert!(a[0] > CIRRUS2_WRAP_M - 10.0, "{a:?}");
+        // the low deck keeps its own tile
+        assert!(drift_offset([7.0, 0.0], 1000.0, LOW_TILE_M)[0] < LOW_TILE_M);
     }
 
     #[test]

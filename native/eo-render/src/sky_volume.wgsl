@@ -476,20 +476,36 @@ fn vol_ci2_on() -> bool {
 /// The cirrus deck's core optical depth (clouds.rs `CIRRUS2_TAU`).
 const VOL_CI2_TAU: f32 = 0.3;
 
+/// The second deck's sheet reads, each a tile across the wind (m) and a stretch along it: the
+/// patches, the sheets, the bend and the fibres (`vol_cirrus2`). Along the wind (x) every tile is
+/// a whole part of 160 km and across it (z) of 80 km, and the high deck's drift wraps at 160 km
+/// with the second deck on (eo-sky clouds.rs `CIRRUS2_WRAP_M`, whose test reads these), so the
+/// wrap moves no texture and the drifting deck never jumps.
+const VOL_CI2_ENV_M: f32 = 80000.0;
+const VOL_CI2_ENV_X: f32 = 2.0;
+const VOL_CI2_BODY_M: f32 = 10000.0;
+const VOL_CI2_BODY_X: f32 = 8.0;
+const VOL_CI2_BEND_M: f32 = 20000.0;
+const VOL_CI2_BEND_X: f32 = 4.0;
+const VOL_CI2_FIBRE_M: f32 = 2000.0;
+const VOL_CI2_FIBRE_X: f32 = 20.0;
+
 /// Cirrus as the second deck: how much of the core optical depth (`VOL_CI2_TAU`) a point of
 /// its plane carries, 0..1, `t` metres along the view `dir`. Four reads of the sheet, each
-/// a channel histogram-equalised at bake time (clouds.rs `bake_sheet`):
+/// a channel histogram-equalised at bake time (clouds.rs `bake_sheet`), in the frame of the
+/// high wind, toward the east (x; the deck's drift, clouds.rs `DRIFT_HIGH_MS`, 18 m/s east and
+/// 2 south: the jet-level westerlies):
 ///
-/// * where the deck is: the high channel over 64 km, drawn out 2.5 : 1 along the high wind
-///   and cut at `1 - amount`, so the deck covers its METAR share of the plane (an equalised
-///   channel over `1 - c` covers `c`), patches of 5-20 km with soft edges;
-/// * the sheets inside it: the low-deck channel over 12 km drawn out 6 : 1, read a mip soft,
+/// * where the deck is: the high channel over 80 km, drawn out 2 : 1 along the wind and cut at
+///   `1 - amount`, so the deck covers its METAR share of the plane (an equalised channel over
+///   `1 - c` covers `c`), patches of 5-25 km with soft edges;
+/// * the sheets inside it: the low-deck channel over 10 km drawn out 8 : 1, read a mip soft,
 ///   so a patch is broad thick and thin bands 1-3 km across and 10-20 km long (cirrostratus
 ///   and cirrus spissatus), not lines;
-/// * the fibres: the detail channel over 2 km drawn out 14 : 1 along the wind (filaments
-///   of 60-250 m across, 1-3 km long), which perspective draws converging on the wind's
-///   vanishing point; their across-wind coordinate is bent by the marine channel over 24 km
-///   across and 96 km along the wind (a slow swing of up to 1.2 km) and by the sheet itself
+/// * the fibres: the detail channel over 2 km drawn out 20 : 1 along the wind (filaments of
+///   60-250 m across, 1-5 km long), which perspective draws converging on the wind's
+///   vanishing point; their across-wind coordinate is bent by the marine channel over 20 km
+///   across and 80 km along the wind (a slow swing of up to 1.2 km) and by the sheet itself
 ///   (600 m from its thin to its thick parts), so the fibres curl where they leave a thick
 ///   head, the fallstreak hooks of cirrus uncinus; seen end-on along the wind the bend and
 ///   most of the fibres' contrast give way (perspective would squeeze the bend's swing into
@@ -504,34 +520,34 @@ const VOL_CI2_TAU: f32 = 0.3;
 fn vol_cirrus2(pxz: vec2<f32>, t: f32, dir: vec3<f32>) -> f32 {
     let amt = clamp(skyu.cirrus.y, 0.0, 1.0);
     let w = pxz + skyu.cloud2.zw;
-    let ax = VOL_CIRRUS_AXIS;
-    let u = dot(w, ax);
-    let v = dot(w, vec2<f32>(-ax.y, ax.x));
+    let u = w.x;
+    let v = w.y;
     // the pixel's footprint across the wind (as `vol_cirrus`)
     let dh = dir.xz / max(length(dir.xz), 1e-4);
-    let endon = abs(dot(dh, ax));
+    let endon = abs(dh.x);
     let f0 = max(vol_footprint(t), 1.0);
     let fv = f0 * max(endon, sqrt(max(1.0 - endon * endon, 0.0)) / max(abs(dir.y), 0.05));
     let l2 = log2(fv);
-    // where the deck is (250 m texels)
-    let env = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / 2.5, v) / 64000.0, clamp(l2 - 7.97, 1.0, 6.0)).g;
+    let lt = log2(1.0 / 256.0);
+    // where the deck is
+    let env = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / VOL_CI2_ENV_X, v) / VOL_CI2_ENV_M, clamp(l2 - log2(VOL_CI2_ENV_M) - lt, 1.0, 6.0)).g;
     let thr = 1.0 - amt;
     let cov = smoothstep(thr - 0.12, thr + 0.12, env) * smoothstep(0.0, 0.12, amt);
     if (cov <= 0.0) {
         return 0.0;
     }
-    // the sheets (35 m texels, a mip soft)
-    let body = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / 6.0, v) / 12000.0 + vec2<f32>(0.31, 0.62), clamp(l2 - 5.55 + 1.0, 1.0, 7.0)).r;
+    // the sheets (a mip soft)
+    let body = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / VOL_CI2_BODY_X, v) / VOL_CI2_BODY_M + vec2<f32>(0.31, 0.62), clamp(l2 - log2(VOL_CI2_BODY_M) - lt + 1.0, 1.0, 7.0)).r;
     let thick = mix(0.25, 1.0, smoothstep(0.25, 0.85, body));
-    // the bend (94 m texels)
-    let bend = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / 4.0, v) / 24000.0 + vec2<f32>(0.17, 0.83), clamp(l2 - 6.55 + 1.0, 2.0, 7.0)).b - 0.5;
+    // the bend
+    let bend = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / VOL_CI2_BEND_X, v) / VOL_CI2_BEND_M + vec2<f32>(0.17, 0.83), clamp(l2 - log2(VOL_CI2_BEND_M) - lt + 1.0, 2.0, 7.0)).b - 0.5;
     // seen end-on (along the wind) perspective squeezes the along-wind swing of the bend into a
     // few pixels: it and the fibres' contrast give way there (as `vol_cirrus`'s `side`)
     let side = 1.0 - smoothstep(0.8, 0.97, endon);
     let vf = v + (bend * 2400.0 + (body - 0.5) * 600.0) * side;
-    // the fibres (10 m texels across)
-    let lf = clamp(l2 - 3.0, 0.0, 7.0);
-    let fa = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / 14.0, vf) / 2000.0 + vec2<f32>(0.5, 0.25), lf).a;
+    // the fibres
+    let lf = clamp(l2 - log2(VOL_CI2_FIBRE_M) - lt, 0.0, 7.0);
+    let fa = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / VOL_CI2_FIBRE_X, vf) / VOL_CI2_FIBRE_M + vec2<f32>(0.5, 0.25), lf).a;
     let ridge = smoothstep(0.3, 0.95, 1.0 - abs(2.0 * fa - 1.0));
     let fc = (1.0 - smoothstep(2.5, 5.0, lf)) * mix(0.35, 1.0, side);
     let fibre = mix(0.3, 1.0, mix(0.45, ridge, fc));
@@ -992,9 +1008,10 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 let t = cl_hit(eye.y, dir, skyu.cloud1.y, false);
                 if (t > 0.0) {
                     let p = eye + dir * t;
+                    // (the sheet read 2 : 1 along the high wind, east: round 2 turned it a little,
+                    // which made the drift's wrap at the tile a jump; at 160 km it is a whole number of tiles)
                     let q = (p.xz + skyu.cloud2.zw) / SKY_HIGH_TILE;
-                    let qs = vec2<f32>(0.95 * q.x + 0.31 * q.y, -0.31 * q.x + 0.95 * q.y) * vec2<f32>(0.5, 1.0);
-                    let s = textureSampleLevel(vol_sheet, vol_rep, qs, 0.0);
+                    let s = textureSampleLevel(vol_sheet, vol_rep, q * vec2<f32>(0.5, 1.0), 0.0);
                     let ci = clamp((0.3 - skyu.cloud0.z) / 0.3, 0.0, 1.0);
                     let a = vol_remap(s.g, mix(1.0 - min(skyu.cloud0.z + 0.2, 1.0), 0.72, ci), 1.0) * skyu.cloud1.z * smoothstep(0.0, 0.1, dir.y) * (0.5 + 0.5 * s.a);
                     let e_sun = cl_sun(skyu.cloud1.y) * heavy;
