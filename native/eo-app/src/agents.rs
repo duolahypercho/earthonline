@@ -187,6 +187,8 @@ impl AgentRuntime {
         }
         let gg_ground = self.gg_ground.clone().filter(|_| traffic);
         let ground = self.ground.clone();
+        // the deck the traffic rides is the drawn bridge's (none with `--no-landmarks`).
+        let deck_drawn = world.landmarks.is_some();
         let hour0 = if self.last_hour.is_finite() { self.last_hour } else { 12.0 };
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::Builder::new()
@@ -196,7 +198,7 @@ impl AgentRuntime {
                     let mut source = eo_sim::native::load(&paths)?;
                     // the corridor layer's ways, read before the local network leaves the roads it drives alone.
                     let corridors = match &gg_ground {
-                        Some(gg) => Some(build_corridors(&paths, &source, gg, &ground, walkers, hour0)?),
+                        Some(gg) => Some(build_corridors(&paths, &source, gg, &ground, walkers && deck_drawn, deck_drawn, hour0)?),
                         None => None,
                     };
                     if corridors.is_some() {
@@ -388,7 +390,7 @@ impl AgentRuntime {
 }
 
 /// The corridor layer on the drawn deck and streets (`corridor`), starting at `hour`.
-fn build_corridors(paths: &eo_data::DataPaths, source: &eo_sim::native::NativeSource, gg: &eo_landmarks::GroundGrid, ground: &Ground, walkers: bool, hour: f64) -> Result<eo_sim::corridor::Corridors> {
+fn build_corridors(paths: &eo_data::DataPaths, source: &eo_sim::native::NativeSource, gg: &eo_landmarks::GroundGrid, ground: &Ground, walkers: bool, deck_drawn: bool, hour: f64) -> Result<eo_sim::corridor::Corridors> {
     let js = eo_landmarks::LandmarksJs::get();
     let ca = eo_data::CaStandards::load(paths)?;
     let k_width = eo_landmarks::suspension::DeckStandards::load(&ca)?.k_width;
@@ -400,7 +402,7 @@ fn build_corridors(paths: &eo_data::DataPaths, source: &eo_sim::native::NativeSo
         _ => vec![],
     };
     let carpet = |x: f64, z: f64| ground.y(x, z);
-    let surfaces = corridor::Surfaces { deck: Some(&deck), street: matches!(ground, Ground::Street(_)), paved: &paved, ground: &carpet };
+    let surfaces = corridor::Surfaces { deck: deck_drawn.then_some(&deck), street: matches!(ground, Ground::Street(_)), paved: &paved, ground: &carpet };
     let ways = corridor::ways(source, &surfaces, walkers);
     let c = eo_sim::corridor::Corridors::new(ways, eo_sim::corridor::Params::with_time_gap(time_gap), SEED_INT);
     c.hour_handle().store(hour.to_bits(), Ordering::Relaxed);
