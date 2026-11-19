@@ -97,21 +97,18 @@ pub fn set_ground_classes(f: GroundClasses) {
 /// diffuse sky). Neutral: the surface's Fresnel reflection is grey.
 pub const SEA_ALBEDO: f64 = 0.06;
 
-/// Tree cover's visible-band albedo: 0.05, between the MODIS MCD43 white-sky
-/// visible means of evergreen needleleaf (0.046) and evergreen broadleaf
-/// (0.053) forest over the contiguous US (He, Gao, Liang and Peng 2019,
-/// "Mapping climatological bare soil albedos over the contiguous United States
-/// using MODIS data", Remote Sens. 11, 666, its per-IGBP-class table). The
-/// visible band, not the shortwave: the renderer's light is visible light,
-/// and a canopy's near-infrared reflectance does not light a wall.
+/// Tree cover's visible-band albedo: 0.05 (INFERRED). Meant as the MODIS
+/// MCD43 visible-band white-sky mean of the forest classes; the per-class
+/// table (Gao, Schaaf et al. 2005, J. Geophys. Res. 110, D01104) could not be
+/// read, so the value is owed a primary source (data/ground-albedo.NOTICE.txt).
+/// The visible band, not the plan's broadband: the renderer's light is
+/// visible light, and a canopy's near-infrared reflectance does not light a wall.
 pub const TREE_ALBEDO: f64 = 0.05;
 
-/// Grass, shrub, crop and wetland cover's visible-band albedo: 0.06, the
-/// MODIS MCD43 visible mean of temperate grassland, 0.062 (Davidson and Wang
-/// 2005, "Spatiotemporal variations in land surface albedo across Canada from
-/// MODIS observations", Can. J. Remote Sens. 31; as quoted, the full text not
-/// checked). INFERRED for the shrubs, crops and wetland (0.2 % of the raster),
-/// and for the San Francisco hills' summer-dry grass, which is lighter.
+/// Grass, shrub, crop and wetland cover's visible-band albedo: 0.06
+/// (INFERRED, as `TREE_ALBEDO`: the MCD43 grassland class's visible mean is
+/// owed a primary source). San Francisco's summer-dry grass is lighter; no
+/// seasonal value is applied (data/ground-albedo.NOTICE.txt).
 pub const LOW_VEGETATION_ALBEDO: f64 = 0.06;
 
 /// Bare or sparse ground's visible-band albedo: INFERRED as the city's mean,
@@ -120,7 +117,8 @@ pub const BARE_ALBEDO: Rgb = URBAN_GROUND_ALBEDO;
 
 /// The radius round the eye the ground's albedo is the area mean over (m):
 /// the strait, the shores and the hills the near scene's shaded faces look
-/// down on.
+/// down on (INFERRED: the plan's "about 2 km"; a wall 30 m up sees half its
+/// ground light from within ~30 m, so this is the scene's ground, not one face's).
 pub const GROUND_ALBEDO_RADIUS_M: f64 = 2000.0;
 /// The sample pitch of that mean (m), and the eye cell it is cached on.
 const GROUND_ALBEDO_STEP_M: f64 = 100.0;
