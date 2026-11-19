@@ -460,6 +460,7 @@ fn parse_args_from(args: impl IntoIterator<Item = String>) -> Result<Args> {
             s if eo_landmarks::hill_rock::SWITCHES.contains(&s) => {} // read by its crate (the scanned rock; --no-hill-rock)
             s if eo_water::switches::GG3_SWITCHES.contains(&s) => {} // read by its crate (the surf and bathymetry)
             s if eo_landmarks::suspension::GG3_SWITCHES.contains(&s) => {} // read by its crate (the bridge finish)
+            s if eo_landmarks::suspension::AGING_SWITCHES.contains(&s) => {} // read by its crate (the Golden Gate's aging)
             "--segments" => a.segments = Some(val()?.split(',').map(|s| s.trim().to_string()).collect()),
             // occlusion / hitch
             "--no-occlusion" => a.perf.occlusion = false,
@@ -1147,7 +1148,7 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     /// Every round-3 track's lists, as main.rs accepts them.
-    const GG3_LISTS: [&[&str]; 8] = [
+    const GG3_LISTS: [&[&str]; 9] = [
         eo_render::pace::GG3_SWITCHES,
         eo_look::season::SWITCHES,
         eo_look::features::GG3_SWITCHES,
@@ -1156,6 +1157,7 @@ mod tests {
         eo_landmarks::hill_rock::SWITCHES,
         eo_water::switches::GG3_SWITCHES,
         eo_landmarks::suspension::GG3_SWITCHES,
+        eo_landmarks::suspension::AGING_SWITCHES,
     ];
 
     #[test]
