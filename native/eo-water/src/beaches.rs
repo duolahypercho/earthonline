@@ -4,13 +4,24 @@
 //! the surf model's one 1:55 (`field::BEACH_FORESHORE_SLOPE`).
 //!
 //! For every texel of the shore field on a mapped beach's waterline, a transect
-//! along the field's gradient from `TRANSECT_M[0]` inland to `TRANSECT_M[1]`
-//! out; the ground's slope fitted (least squares) over the samples between
-//! `FIT_BAND_M` below and above the still sea (the foreshore between low water
-//! and the berm); each beach takes the median of its transects, held to
-//! `SLOPE_RANGE`. Crissy Field's comes out near 1:10 and Ocean Beach's near
-//! 1:50 (the grid's 8 m cells smooth a berm's crest, so a steep face reads a
-//! little gentler than a 1 m survey would).
+//! along the field's gradient (`transect_m`: far enough inland and out to
+//! cross the tidal band on the gentlest slope allowed); the ground's slope
+//! fitted (least squares) over the samples between mean lower low water and
+//! mean higher high water (`fit_band`: the intertidal foreshore, NOAA
+//! 9414290's datums); each beach takes the median of its transects, which
+//! must lie within `SLOPE_RANGE` (outside it the transects crossed a seawall
+//! or a back-beach flat, and that beach keeps the default 1:55). The log at
+//! load lists each beach's slope; with this band Crissy Field's comes out
+//! 1:10 to 1:11, Baker Beach's 1:17 to 1:19 and Ocean Beach's 1:42 to 1:46
+//! (the grid's 8 m cells smooth a berm's crest, so a steep face reads a
+//! little gentler than a finer survey would).
+//!
+//! **Source, and a deviation.** The plan asked for the 1 m DEM under
+//! `EO_DEM_ROOT`; what that folder holds on this machine is USGS 3DEP 1
+//! arc-second tiles (`USGS_1_n38w123.tif` and its neighbours, about 30 m
+//! cells), coarser than the repository's 8 m grid, so the 8 m grid is the
+//! finer survey at hand. A 1 m lidar raster would sharpen the steep beaches;
+//! it is owed through the data pipeline, not read here.
 //!
 //! Heights above the sea follow the approved 1.25 height scale and the plan the
 //! 1.25 ground-plan scale, so a slope above the sea is the surveyed one; the
@@ -20,13 +31,37 @@ use crate::field::{Beach, ShoreField};
 use crate::shoreline::{SEA_LEVEL_Y, SEABED_Y};
 use std::sync::OnceLock;
 
-/// The transect, game metres along the field's signed distance (negative inland).
-pub const TRANSECT_M: [f64; 2] = [-60.0, 40.0];
+/// The transect's step (game m): a quarter of the elevation grid's 8 m cell at the 1.25 plan.
 pub const TRANSECT_STEP_M: f64 = 2.0;
-/// The heights fitted: this far below and above the still sea (game m).
-pub const FIT_BAND_M: [f64; 2] = [1.0, 1.9];
-/// The slopes a beach may take (rise over run).
-pub const SLOPE_RANGE: [f64; 2] = [1.0 / 70.0, 1.0 / 6.0];
+/// NOAA CO-OPS station 9414290 (San Francisco) tidal datums, metres over its
+/// station datum, epoch 1983-2001 (api.tidesandcurrents.noaa.gov mdapi,
+/// read 2026-11-18): MLLW 1.822, MSL 2.773, MHHW 3.602 (NAVD88 1.804, so MSL
+/// is 0.969 m over NAVD88, as eo-data `NAVD88_TO_GAME_Y` takes it). The game's
+/// still sea is mean sea level.
+pub const MLLW_BELOW_MSL_M: f64 = 2.773 - 1.822;
+pub const MHHW_ABOVE_MSL_M: f64 = 3.602 - 2.773;
+/// The slopes a beach may take (rise over run): from the gentlest fine-sand
+/// beaches, about 1:100, to cobble beaches, about 1:4 (Bascom 1951, "The
+/// relationship between sand size and beach-face slope", Trans. AGU 32(6),
+/// 866; the bounds INFERRED as round numbers).
+pub const SLOPE_RANGE: [f64; 2] = [1.0 / 100.0, 1.0 / 4.0];
+
+/// The heights fitted, game metres below and above the still sea: the
+/// intertidal band from MLLW to MHHW at the height scale `hs` (1.25 drawn).
+pub fn fit_band_at(hs: f64) -> [f64; 2] {
+    [MLLW_BELOW_MSL_M * hs, MHHW_ABOVE_MSL_M * hs]
+}
+
+/// `fit_band_at` the drawn height scale.
+pub fn fit_band() -> [f64; 2] {
+    fit_band_at(eo_data::groundscale::height_scale())
+}
+
+/// The transect, game metres along the field's signed distance (negative
+/// inland): it crosses the band on the gentlest slope allowed, `SLOPE_RANGE[0]`.
+pub fn transect_m(band: [f64; 2]) -> [f64; 2] {
+    [-band[1] / SLOPE_RANGE[0], band[0] / SLOPE_RANGE[0]]
+}
 /// Transects a beach needs for its own slope.
 pub const MIN_TRANSECTS: usize = 3;
 
@@ -83,13 +118,14 @@ fn inside(poly: &[[f64; 2]], x: f64, z: f64) -> bool {
 
 /// Least-squares slope of the ground falling seaward along one transect (None
 /// without enough samples in the band).
-pub fn transect_slope(ground: &dyn Fn(f64, f64) -> Option<f64>, x: f64, z: f64, dir: [f64; 2]) -> Option<f64> {
+pub fn transect_slope(ground: &dyn Fn(f64, f64) -> Option<f64>, x: f64, z: f64, dir: [f64; 2], band: [f64; 2]) -> Option<f64> {
     let (mut n, mut sx, mut sy, mut sxx, mut sxy) = (0.0, 0.0, 0.0, 0.0, 0.0);
-    let mut s = TRANSECT_M[0];
-    while s <= TRANSECT_M[1] {
+    let reach = transect_m(band);
+    let mut s = reach[0];
+    while s <= reach[1] {
         if let Some(y) = ground(x + dir[0] * s, z + dir[1] * s) {
             let d = y - SEA_LEVEL_Y;
-            if d >= -FIT_BAND_M[0] && d <= FIT_BAND_M[1] {
+            if d >= -band[0] && d <= band[1] {
                 n += 1.0;
                 sx += s;
                 sy += y;
@@ -111,7 +147,7 @@ pub fn transect_slope(ground: &dyn Fn(f64, f64) -> Option<f64>, x: f64, z: f64, 
 }
 
 /// Measure every beach's slope on the field's waterline texels.
-pub fn measure(field: &ShoreField, beaches: &[Beach], ground: &dyn Fn(f64, f64) -> Option<f64>) -> Vec<BeachSlope> {
+pub fn measure(field: &ShoreField, beaches: &[Beach], ground: &dyn Fn(f64, f64) -> Option<f64>, band: [f64; 2]) -> Vec<BeachSlope> {
     let step = [field.size[0] / (field.width - 1) as f64, field.size[1] / (field.height - 1) as f64];
     let mut out = Vec::new();
     for b in beaches {
@@ -143,14 +179,20 @@ pub fn measure(field: &ShoreField, beaches: &[Beach], ground: &dyn Fn(f64, f64) 
                 if !inside(p, x - dir[0] * 15.0, z - dir[1] * 15.0) && !inside(p, x, z) {
                     continue;
                 }
-                if let Some(sl) = transect_slope(ground, x - dir[0] * s, z - dir[1] * s, dir) {
+                if let Some(sl) = transect_slope(ground, x - dir[0] * s, z - dir[1] * s, dir, band) {
                     slopes.push(sl);
                 }
             }
         }
         if slopes.len() >= MIN_TRANSECTS {
-            slopes.sort_by(|a, b| a.partial_cmp(b).unwrap());
-            let med = slopes[slopes.len() / 2].clamp(SLOPE_RANGE[0], SLOPE_RANGE[1]);
+            slopes.sort_by(|a, b| a.total_cmp(b));
+            let med = slopes[slopes.len() / 2];
+            // (a median outside the range is not a foreshore: the transects crossed a
+            // seawall's riprap or a back-beach flat; that beach keeps the default slope)
+            if !(SLOPE_RANGE[0]..=SLOPE_RANGE[1]).contains(&med) {
+                eprintln!("water: beach at ({:.0}, {:.0}): median slope 1:{:.0} over {} transects is outside 1:{:.0}..1:{:.0}; kept at the default", 0.5 * (x0 + x1), 0.5 * (z0 + z1), 1.0 / med.max(1e-6), slopes.len(), 1.0 / SLOPE_RANGE[1], 1.0 / SLOPE_RANGE[0]);
+                continue;
+            }
             out.push(BeachSlope { bbox: [x0 - BOX_MARGIN_M, z0 - BOX_MARGIN_M, x1 + BOX_MARGIN_M, z1 + BOX_MARGIN_M], slope: med, transects: slopes.len() });
         }
     }
@@ -167,7 +209,7 @@ pub fn load(repo_root: &std::path::Path, field: &ShoreField) -> anyhow::Result<&
     grid.meta.cell_size *= scale;
     grid.height_scale = eo_data::groundscale::height_scale();
     let ground = |x: f64, z: f64| grid.sample(x, z);
-    let v = measure(field, &beaches, &ground);
+    let v = measure(field, &beaches, &ground, fit_band());
     Ok(install(v))
 }
 
@@ -191,7 +233,7 @@ mod tests {
     fn a_transect_recovers_its_slope() {
         // a 1:12 foreshore through the sea level at s = 0, a flat berm 1.9 m up
         let g = |x: f64, _z: f64| Some((SEA_LEVEL_Y - x / 12.0).clamp(SEA_LEVEL_Y - 3.0, SEA_LEVEL_Y + 2.5));
-        let s = transect_slope(&g, 0.0, 0.0, [1.0, 0.0]).unwrap();
+        let s = transect_slope(&g, 0.0, 0.0, [1.0, 0.0], fit_band_at(1.25)).unwrap();
         assert!((s - 1.0 / 12.0).abs() < 1e-6, "{s}");
         // with the default slope the profile is the earlier one
         for s in [-80.0, -30.0, 0.0, 12.0, 300.0] {
@@ -202,5 +244,16 @@ mod tests {
         assert_eq!(slope_at(&v, 50.0, 50.0, 1.0), 0.1);
         assert_eq!(slope_at(&v, 500.0, 50.0, 1.0), 0.02);
         assert_eq!(slope_at(&v, 5000.0, 50.0, 1.0), 1.0);
+    }
+
+    // the band is NOAA's intertidal range at the drawn 1.25 height scale (rule 4: scaled values tested)
+    #[test]
+    fn the_fit_band_is_the_tidal_range_scaled() {
+        let b = fit_band_at(1.25);
+        assert!((b[0] - 0.951 * 1.25).abs() < 1e-9 && (b[1] - 0.829 * 1.25).abs() < 1e-9, "{b:?}");
+        // the great diurnal range (MLLW to MHHW) NOAA publishes, 1.78 m, drawn 1.25 x
+        assert!((b[0] + b[1] - 1.78 * 1.25).abs() < 0.01, "{b:?}");
+        let t = transect_m(b);
+        assert!((t[0] + 0.829 * 1.25 * 100.0).abs() < 1e-6 && (t[1] - 0.951 * 1.25 * 100.0).abs() < 1e-6, "{t:?}");
     }
 }
