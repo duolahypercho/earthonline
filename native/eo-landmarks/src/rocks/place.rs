@@ -398,7 +398,17 @@ pub fn target_albedo(geology: bool, source: Source, lon: f64, lat: f64, navd88: 
     if source == Source::Armour {
         return crate::rocks::ARMOUR_ALBEDO; // quarried granite, not the bluff's rock
     }
-    unit_srgb(unit_at(lon, lat, navd88)).map(lin)
+    let unit = unit_srgb(unit_at(lon, lat, navd88)).map(lin);
+    if matches!(source, Source::Surf | Source::Boulder) {
+        // the shore's loose stones are sea-worn rock, darker than the unit's dry
+        // outcrop colour (the colour words describe the outcrop): the measured
+        // luminance of the CC0 `seaside_rock` scan (rocks.rs `BOULDER_ALBEDO`,
+        // round 2's), in the unit's hue
+        let y = |c: [f64; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+        let k = y(crate::rocks::BOULDER_ALBEDO) / y(unit).max(1e-4);
+        return unit.map(|c| c * k);
+    }
+    unit
 }
 
 /// How wet a piece standing on ground `g` (drawn) is: through below the
