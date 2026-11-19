@@ -1936,7 +1936,9 @@ impl SkyGpu {
 /// The weather in force for options and a world clock.
 pub fn weather_of(o: &SkyOptions, world_s: f64) -> eo_sky::WeatherState {
     match o.weather {
-        WeatherMode::Preset(k) => eo_sky::weather::preset(k),
+        // the preset carries the world clock's game day, so a clear day's sky
+        // (eo-sky `clouds::sky_state`) is drawn afresh each game day in live play
+        WeatherMode::Preset(k) => eo_sky::weather::preset_at(k, world_s),
         WeatherMode::Schedule => eo_sky::weather::state_at(o.seed, world_s),
     }
 }
