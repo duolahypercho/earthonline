@@ -17,8 +17,10 @@
 pub mod beaches; // each beach's measured foreshore slope (iteration 2)
 pub mod climate; // the Gate's measured wind and tidal current (iteration 2)
 pub mod exposure; // the sea's exposure to the swell and the wind (iteration 2)
+pub mod extra; // the water's extra field (none yet; eo-render binds it unread)
 pub mod field;
 pub mod grid;
+pub mod obstacles; // rocks and piers in the surf, for foam (nobody registers any yet)
 pub mod optics;
 pub mod shoreline;
 pub mod spectrum;

@@ -47,7 +47,15 @@ struct WaterU {
     wv_xn: array<vec4<f32>, 2>,
     wv_gn: array<vec4<f32>, 2>,
     wv_xa: array<vec4<f32>, 64>,
+    // (iteration 3) the extra field's frame (eo-water extra.rs): origin x, z, 1 / extent x, z
+    wv_extra: vec4<f32>,
 };
+
+// (iteration 3) the extra field (eo-water extra.rs, RGBA16F; a 1 x 1 zero texel
+// without one) and its sampler, in group 0 of the water, underwater, spray and
+// surf pipelines (water.rs `draw_bgl`). Declared for the passes to come; unused.
+@group(0) @binding(18) var w_extra: texture_2d<f32>;
+@group(0) @binding(19) var w_extra_samp: sampler;
 
 // 1024 segments and the two-zone axis of eo-water grid.rs.
 const WG_SEGMENTS: f32 = 1024.0;

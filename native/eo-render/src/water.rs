@@ -170,6 +170,9 @@ struct WaterUniform {
     wv_xn: [[f32; 4]; 2],
     wv_gn: [[f32; 4]; 2],
     wv_xa: [[f32; 4]; 64],
+    // (iteration 3) the extra field's frame (eo-water extra.rs): origin x, z, 1 / extent x, z;
+    // the identity (0, 0, 1, 1) without a field
+    wv_extra: [f32; 4],
 }
 
 #[repr(C)]
@@ -377,6 +380,9 @@ pub struct WaterGpu {
     expo_view: wgpu::TextureView,
     expo_frame: [f32; 4],
     expo_on: bool,
+    /// (iteration 3) the extra field (eo-water `extra`; a 1 x 1 zero texture without one) and its frame.
+    extra_view: wgpu::TextureView,
+    extra_frame: [f32; 4],
     /// (iteration 2) the beaches' measured slopes are in the exposure texture's A.
     slopes_on: bool,
     /// (iteration 2) the parts on (eo-water `switches`).
@@ -642,6 +648,32 @@ impl WaterGpu {
         let expo_on = expo.is_some();
         let slopes_on = slopes.is_some();
         let expo_frame = if expo_on || slopes_on { [eorigin[0] as f32, eorigin[1] as f32, (1.0 / (ew as f64 * ecell)) as f32, (1.0 / (eh as f64 * ecell)) as f32] } else { [0.0; 4] };
+        // (iteration 3) the extra field (eo-water extra.rs), RGBA16F: none yet, so a 1 x 1
+        // zero texel and the identity frame; bound to every pipeline of group 0, read by none.
+        let extra = eo_water::extra::field().filter(|f| f.width > 0 && f.height > 0 && f.texels.len() == f.width * f.height);
+        let (xw, xh, xtex): (u32, u32, &[[u16; 4]]) = match extra {
+            Some(f) => (f.width as u32, f.height as u32, &f.texels),
+            None => (1, 1, &[[0u16; 4]]),
+        };
+        let extra_tex = d.create_texture(&wgpu::TextureDescriptor {
+            label: Some("water-extra"),
+            size: wgpu::Extent3d { width: xw, height: xh, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba16Float,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo { texture: &extra_tex, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+            bytemuck::cast_slice(xtex),
+            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(xw * 8), rows_per_image: Some(xh) },
+            wgpu::Extent3d { width: xw, height: xh, depth_or_array_layers: 1 },
+        );
+        bytes += (xw * xh * 8) as u64;
+        let extra_view = extra_tex.create_view(&Default::default());
+        let extra_frame = extra.map_or(eo_water::extra::IDENTITY_FRAME, |f| f.frame()).map(|v| v as f32);
 
         // The grid: one shared index list and a compact stream of visible patch IDs.
         let idx = eo_water::grid::patch_indices();
@@ -710,6 +742,9 @@ impl WaterGpu {
                 entry(14, fs, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }),
                 // (iteration 2) the exposure field
                 entry(15, vf, tex(filt, wgpu::TextureViewDimension::D2)),
+                // (iteration 3) the extra field and its sampler (eo-water extra.rs; read by nothing yet)
+                entry(18, vf, tex(filt, wgpu::TextureViewDimension::D2)),
+                entry(19, vf, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
         ];
         if look.options.water_optics {
             // (submerged camera) the camera look's table and sampler (look_camera.wgsl), so a
@@ -907,6 +942,8 @@ impl WaterGpu {
             expo_view,
             expo_frame,
             expo_on,
+            extra_view,
+            extra_frame,
             slopes_on,
             gg2,
         }
@@ -1229,6 +1266,7 @@ impl WaterGpu {
             wv_xn: { let n = eo_water::waves::EXPO_FETCH_NODES.map(|v| v as f32); [[n[0], n[1], n[2], n[3]], [n[4], n[5], n[6], n[7]]] },
             wv_gn: { let n = eo_water::waves::EXPO_WIND_NODES.map(|v| v as f32); [[n[0], n[1], n[2], n[3]], [n[4], n[5], n[6], n[7]]] },
             wv_xa: pg.xa,
+            wv_extra: self.extra_frame,
         };
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&u));
         queue.write_buffer(&self.count_buf, 0, bytemuck::cast_slice(&[0u32, 0, 0, 0, u32::MAX, 0, 0, 0, self.index_count, 0, 0, 0, 0, 0, 0, 0]));
@@ -1436,6 +1474,8 @@ impl WaterGpu {
                         wgpu::BindGroupEntry { binding: 13, resource: self.draw_buf.as_entire_binding() },
                         wgpu::BindGroupEntry { binding: 14, resource: ppr_buf.as_entire_binding() },
                         wgpu::BindGroupEntry { binding: 15, resource: wgpu::BindingResource::TextureView(&self.expo_view) },
+                        wgpu::BindGroupEntry { binding: 18, resource: wgpu::BindingResource::TextureView(&self.extra_view) },
+                        wgpu::BindGroupEntry { binding: 19, resource: wgpu::BindingResource::Sampler(&self.clamp) },
                     ];
                     if self.submerged.is_some() {
                         let (lut, samp) = look.camera_lut();
