@@ -208,6 +208,21 @@ pub const CULL_WGSL: &str = include_str!("hlod_trees_cull.wgsl");
 /// The cull without multi-draw-indirect-count (appended to `CULL_WGSL`).
 pub const LIST_WGSL: &str = include_str!("hlod_trees_list.wgsl");
 
+/// The far trees' draw shader: the city shader, hlod_trees.wgsl, and the
+/// path's part. A tree's index is the instance's own, or (the fallback) the
+/// cull's list. The card's discards sit before the lighting on the compact
+/// path (as they always did), and after it on the fallback, which is the path
+/// of the adapters (Metal) where a discard ends the invocation and leaves the
+/// light's screen derivatives undefined (ft_shade).
+pub fn draw_shader_source(fallback: bool) -> String {
+    let path = if fallback {
+        "@group(2) @binding(2) var<storage, read> ft_list: array<u32>;\nfn ft_index(ii: u32) -> u32 { return ft_list[ii]; }\nconst FT_LATE_DISCARD: bool = true;\n"
+    } else {
+        "fn ft_index(ii: u32) -> u32 { return ii; }\nconst FT_LATE_DISCARD: bool = false;\n"
+    };
+    format!("{}\n{WGSL}\n{path}", crate::look::city_shader_source())
+}
+
 /// Instances the buffer holds (the city has about 155,000).
 pub const CAPACITY: u32 = 262_144;
 /// Bytes of the tree list written a frame while it streams in.
@@ -322,13 +337,7 @@ impl FarTrees {
             let p = d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some("hlod_tree_cull (list)"), layout: Some(&lay_p), module: &lm, entry_point: Some("tree_cull_list"), compilation_options: Default::default(), cache: None });
             (p, dr)
         });
-        // a tree's index: the instance's own, or (the fallback) the cull's list
-        let index_fn = if i.fallback {
-            "@group(2) @binding(2) var<storage, read> ft_list: array<u32>;\nfn ft_index(ii: u32) -> u32 { return ft_list[ii]; }\n"
-        } else {
-            "fn ft_index(ii: u32) -> u32 { return ii; }\n"
-        };
-        let module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("hlod_trees.wgsl"), source: wgpu::ShaderSource::Wgsl(format!("{}\n{WGSL}\n{index_fn}", crate::look::city_shader_source()).into()) });
+        let module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("hlod_trees.wgsl"), source: wgpu::ShaderSource::Wgsl(draw_shader_source(i.fallback).into()) });
         let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("hlod-far-trees-layout"), bind_group_layouts: &[Some(i.draw_bgl), Some(i.main_bgl), Some(&bgl)], immediate_size: 0 });
         let color = wgpu::ColorTargetState { format: crate::look::HDR_FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL };
         let ids = wgpu::ColorTargetState { format: crate::IDS_FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL };
@@ -484,6 +493,19 @@ impl FarTrees {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Both paths' draw shaders parse and validate (naga, on the CPU).
+    #[test]
+    fn the_draw_shader_validates_on_both_paths() {
+        use wgpu::naga;
+        for fallback in [false, true] {
+            let src = draw_shader_source(fallback);
+            let module = naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("fallback {fallback}: {}", e.emit_to_string(&src)));
+            naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all())
+                .validate(&module)
+                .unwrap_or_else(|e| panic!("fallback {fallback}: {}", e.emit_to_string(&src)));
+        }
+    }
 
     #[test]
     fn the_park_block_is_too_small_for_the_ground_covers_cap() {
