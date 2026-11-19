@@ -19,6 +19,7 @@ pub mod data;
 pub mod features;
 pub mod ferry_building;
 pub mod geometry;
+pub mod hill_rock; // the hill rock outcrops and blocks (the coarse vegetation layer's third part)
 pub mod golden_gate;
 pub mod ground_cover;
 pub mod lights;

@@ -14,6 +14,7 @@
 //! `VEHICLE_RINGS` radii and caps) go to the agent renderer as static
 //! instances. `--no-props` turns all of it off.
 
+mod hill_rock; // the hill rock's mid ring past the props tiles
 mod vegetation; // the Golden Gate's coastal trees, ground cover and hill rock on the props tiles
 
 use eo_props::{Live, Model, ParkedCar, PropsWorld, TilePlacement};
@@ -402,7 +403,7 @@ impl PropsRuntime {
                     };
                     let pack = match ring {
                         RING_FINE => cook_fine(facts.veg.as_deref(), key),
-                        RING_MID => cook_mid(facts.veg.as_deref(), key),
+                        RING_MID => hill_rock::cook_mid(facts.veg.as_deref(), key),
                         _ => cook(&world, &source, &junctions, key, &p2, &facts),
                     };
                     in_flight.fetch_sub(1, Ordering::SeqCst);
@@ -690,12 +691,12 @@ impl PropsRuntime {
     fn pump_ring(&mut self, ring: u8, ctx: &GpuContext, renderer: &Renderer, uploads: &mut UploadQueue, eye: Vec3) {
         let Some(veg) = self.veg.clone() else { return };
         let fine = ring == RING_FINE;
-        if (fine && !veg.switches.ground_cover) || (!fine && !veg.switches.hill_rock) {
+        if (fine && !veg.switches.ground_cover) || (!fine && !hill_rock::props_rock_enabled(&veg)) {
             return;
         }
         let r = &mut self.rings[ring as usize - 1];
         let c = if fine { vegetation::FINE_CELL_M as f32 } else { eo_street::STREET_TILE_M as f32 };
-        let (load, drop) = if fine { (vegetation::FINE_LOAD_M, vegetation::FINE_DROP_M) } else { (vegetation::MID_LOAD_M, vegetation::MID_DROP_M) };
+        let (load, drop) = if fine { (vegetation::FINE_LOAD_M, vegetation::FINE_DROP_M) } else { (hill_rock::MID_LOAD_M, hill_rock::MID_DROP_M) };
         let reach = (drop / c).ceil() as i32 + 1;
         let (cx, cz) = ((eye.x / c).floor() as i32, (eye.z / c).floor() as i32);
         let mut wanted: HashSet<Key> = HashSet::new();
@@ -915,22 +916,6 @@ fn cook_fine(veg: Option<&vegetation::VegGround>, key: Key) -> TilePack {
         }
     }
     TilePack { key, ring: RING_FINE, instances, lives: vec![], parked: vec![], counts: HashMap::new(), ms: t0.elapsed().as_secs_f64() * 1e3, wires: vec![], lights: vec![], overhead_ms: 0.0, extra_counts }
-}
-
-/// Plant one mid-ring tile (hill rock only) as instances (worker thread).
-fn cook_mid(veg: Option<&vegetation::VegGround>, key: Key) -> TilePack {
-    let t0 = Instant::now();
-    let mut instances = vec![];
-    let mut extra_counts: HashMap<&'static str, usize> = HashMap::new();
-    if let Some(v) = veg {
-        let t = eo_street::STREET_TILE_M;
-        let (x0, z0) = (key.0 as f64 * t, key.1 as f64 * t);
-        let mut plants = vec![];
-        let rock_only = eo_landmarks::vegetation::Switches { coastal_trees: false, ground_cover: false, hill_rock: v.switches.hill_rock };
-        eo_landmarks::vegetation::plant_coarse(x0, z0, x0 + t, z0 + t, &|x, z| v.site(x, z), rock_only, &mut plants);
-        vegetation::instances(&plants, &mut instances, &mut extra_counts);
-    }
-    TilePack { key, ring: RING_MID, instances, lives: vec![], parked: vec![], counts: HashMap::new(), ms: t0.elapsed().as_secs_f64() * 1e3, wires: vec![], lights: vec![], overhead_ms: 0.0, extra_counts }
 }
 
 /// Plan one tile and build its instances (worker thread).

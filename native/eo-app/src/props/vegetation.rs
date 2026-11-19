@@ -20,11 +20,6 @@ pub const SAND_CLIFF_DEG: f64 = 34.0;
 pub const FINE_CELL_M: f64 = 32.0;
 pub const FINE_LOAD_M: f32 = 104.0;
 pub const FINE_DROP_M: f32 = 120.0;
-/// The mid ring (hill rock past the props tiles, `props::LOAD_M`): out to this
-/// (3D, m), dropped past the second; the rock models' draw distance
-/// (`vegetation_models::THIN`) is the drop distance.
-pub const MID_LOAD_M: f32 = 900.0;
-pub const MID_DROP_M: f32 = 1000.0;
 
 /// The terrain's drawn vertices (heights and colours) on the elevation grid:
 /// vertex (i, j) at (ox + (i + 0.5) cell, oz + (j + 0.5) cell), the cells
