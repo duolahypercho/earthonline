@@ -11,8 +11,8 @@
 use crate::vegetation::{Cover, Kind, Lithology, Plant, Site, field, hash, lattice, smoothstep, srgb_to_linear};
 
 /// The scanned-rock switch names (the roll-up first) and `--no-hill-rock`
-/// (read by `vegetation::Switches`); eo-app accepts them. The new names are
-/// reserved: nothing reads them yet.
+/// (read by `vegetation::Switches`); eo-app accepts them. The scanned rock's
+/// are read by `rocks::scan::Switches` (`--no-gg3` turns them all off too).
 pub const SWITCHES: &[&str] = &["--no-gg3-rock", "--no-scan-rocks", "--no-cliff-dressing", "--no-surf-rocks", "--no-scan-riprap", "--no-rock-geology", "--no-hill-rock"];
 
 /// The rock lattice (m).
@@ -31,8 +31,22 @@ pub const ROCK_SHADE: f32 = 0.8;
 
 /// The rock outcrops and blocks over [x0, x1) x [z0, z1) (the coarse
 /// layer's third part).
+///
+/// Where a scanned rock piece stands (`rocks::scan::Placed::claims`: the
+/// footprints of the slope pieces the landmark build placed from the DEM
+/// and the imagery) nothing is planted; between them, and everywhere when
+/// no slope piece is placed, the blocks plant as before.
 pub fn plant(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f64) -> Option<Site>, out: &mut Vec<Plant>) {
+    let placed = crate::rocks::scan::placed();
+    plant_with(placed.as_ref().map(|p| &p.claims), x0, z0, x1, z1, site, out);
+}
+
+/// `plant` with the scans' footprints given (None: nothing claimed).
+pub fn plant_with(claims: Option<&crate::rocks::scan::Claims>, x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f64) -> Option<Site>, out: &mut Vec<Plant>) {
     lattice(x0, z0, x1, z1, ROCK_PITCH_M, 3, &mut |x, z, ix, iz| {
+        if claims.is_some_and(|c| c.covers(x, z)) {
+            return;
+        }
         let Some(s) = site(x, z) else { return };
         let Some(cover) = s.cover else { return };
         let slope = s.slope_deg();
@@ -135,7 +149,7 @@ mod tests {
         };
         let key = |p: &Plant| (p.pos.map(|v| (v * 1e6) as i64), p.scale.map(|v| (v * 1e6) as i64), (p.yaw * 1e9) as i64);
         let mut alone = vec![];
-        plant(0.0, 0.0, 256.0, 256.0, &site, &mut alone);
+        plant_with(None, 0.0, 0.0, 256.0, 256.0, &site, &mut alone);
         assert!(alone.len() > 50, "{}", alone.len());
         let mut rock_only = vec![];
         plant_coarse(0.0, 0.0, 256.0, 256.0, &site, Switches { coastal_trees: false, ground_cover: false, hill_rock: true }, &mut rock_only);
@@ -145,5 +159,30 @@ mod tests {
         let tail = &all[all.len() - alone.len()..];
         assert_eq!(tail.iter().map(key).collect::<Vec<_>>(), alone.iter().map(key).collect::<Vec<_>>());
         assert!(SWITCHES.contains(&"--no-hill-rock") && SWITCHES[0] == "--no-gg3-rock");
+    }
+
+    /// The scans claim only where a piece stands: with two footprints the
+    /// blocks inside them go and every other block stays exactly as it was;
+    /// with no slope piece placed (the cliff band under `--no-cliff-dressing`)
+    /// nothing goes, inside the scans' regions or out.
+    #[test]
+    fn the_scans_claim_only_their_footprints() {
+        let site = |_x: f64, _z: f64| Some(Site { y: 15.0, normal: [0.6, 0.8, 0.0], ground: [0.2; 3], cover: Some(Cover::Cliff), lithology: Lithology::Serpentinite, shore_m: 40.0, hollow_m: 0.0 });
+        let key = |p: &Plant| (p.pos.map(|v| (v * 1e6) as i64), (p.yaw * 1e9) as i64);
+        let mut all = vec![];
+        plant_with(None, 0.0, 0.0, 200.0, 200.0, &site, &mut all);
+        assert!(all.len() > 200, "{}", all.len());
+        let discs = vec![[50.0, 50.0, 12.0], [150.0, 120.0, 8.0]];
+        let claims = crate::rocks::scan::Claims::new(ROCK_PITCH_M, discs.clone());
+        let mut some = vec![];
+        plant_with(Some(&claims), 0.0, 0.0, 200.0, 200.0, &site, &mut some);
+        let inside = |p: &Plant| discs.iter().any(|d| (p.pos[0] - d[0]).hypot(p.pos[2] - d[1]) < d[2]);
+        assert!(some.iter().all(|p| !inside(p)));
+        let kept: Vec<_> = all.iter().filter(|p| !inside(p)).map(key).collect();
+        assert_eq!(some.iter().map(key).collect::<Vec<_>>(), kept);
+        assert!(kept.len() < all.len() && kept.len() > all.len() * 3 / 4);
+        let mut none = vec![];
+        plant_with(Some(&crate::rocks::scan::Claims::default()), 0.0, 0.0, 200.0, 200.0, &site, &mut none);
+        assert_eq!(none.iter().map(key).collect::<Vec<_>>(), all.iter().map(key).collect::<Vec<_>>());
     }
 }
