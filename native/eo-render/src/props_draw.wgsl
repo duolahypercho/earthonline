@@ -243,6 +243,15 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         m.emissive = vec4<f32>(select(hue * 0.04, hue, lit) * pr.lens.x, 0.0);
         s.albedo = vec3<f32>(0.02);
     }
+    if (inst.model >= PR_VEG_BASE + PR_VEG_GRASS && inst.model < PR_VEG_BASE + PR_VEG_ROCK && (m.flags & PR_TEX) != 0u) {
+        // the ground cover's blades: the atlas cell's own shading near (blade by blade),
+        // its mean from 6 m to 25 m. What survives the alpha test far off is the
+        // cell's dark base clump (its rows run 0.3 of the tips' value at the root),
+        // which drew a dark stroke on the ground tone; the mean keeps a far bunch
+        // the ground's tone, its own value and cast (the instance tint) its only mark.
+        let t = smoothstep(6.0, 25.0, distance(in.world, frame.cam_pos.xyz));
+        s.albedo = in.color * m.base.rgb * mix(albedo_tex.rgb, vec3<f32>(PR_VEG_GRASS_CELL_MEAN), t);
+    }
     if (pr_is_veg(inst.model) && inst.lamp != 0u && (m.flags & (PR_LEAF | PR_ROCK)) != 0u) {
         // the vegetation's own colour on its leaves, blades and rock (the bark keeps its own): sRGB x 4 in the lamp word.
         s.albedo = s.albedo * srgb_decode(unpack4x8unorm(inst.lamp).rgb) * 4.0;
@@ -258,7 +267,9 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         // lichen and soil stain on the upward faces (grey-olive), darker in the coarse lows.
         let up = clamp(s.n.y, 0.0, 1.0);
         let stain = smoothstep(0.55, 0.8, pr_noise3(in.world * 1.1 + vec3<f32>(7.0))) * up * 0.6;
-        s.albedo = s.albedo * mix(1.0, 0.65 + 0.7 * g, k) * (0.7 + 0.6 * coarse);
+        // (a narrow spread, 0.82-1.18 fine and 0.85-1.15 coarse: a wider one reads as
+        // pockmarks on a smooth slab at 1.7 m.)
+        s.albedo = s.albedo * mix(1.0, 0.82 + 0.36 * g, k) * (0.85 + 0.3 * coarse);
         s.albedo = mix(s.albedo, vec3<f32>(dot(s.albedo, vec3<f32>(0.33))) * vec3<f32>(1.05, 1.08, 0.9), stain);
         let e = 0.04;
         let gx = pr_noise3((in.world + vec3<f32>(e, 0.0, 0.0)) * 9.0) - pr_noise3(in.world * 9.0);
@@ -307,12 +318,20 @@ fn pr_cut(in: PrOut) {
             a = textureSampleLevel(pr_big, kit_sampler, pr_face_uv(tile, in.local), 1, 0.0).a;
         }
     } else if ((m.flags & PR_BIG) != 0u) {
-        if (pr_is_veg(pr_instances[in.inst].model)) {
-            // the vegetation's cards (grass blades, sprigs): alpha from a sharper
-            // level (a quarter of the footprint, two mips finer) so thin blades
-            // keep their coverage at a distance instead of thinning to their
-            // base; the temporal resolve smooths the finer edge.
-            a = textureSampleGrad(pr_big, kit_sampler, in.uv, m.layer, duvx * 0.25, duvy * 0.25).a;
+        let vm = pr_instances[in.inst].model;
+        if (pr_is_veg(vm)) {
+            // the vegetation's cards (leaf sprigs, grass blades): alpha from a
+            // sharper level (a quarter of the footprint, two mips finer) so thin
+            // blades keep their coverage instead of thinning to their base; the
+            // temporal resolve smooths the finer edge. The ground cover (grass,
+            // tufts, flowers) goes back to the footprint's own level from 10 m
+            // to 40 m, so its far blades soften and fade into the ground tone
+            // instead of standing as sharp strokes.
+            var k = 0.25;
+            if (vm >= PR_VEG_BASE + PR_VEG_GRASS && vm < PR_VEG_BASE + PR_VEG_ROCK) {
+                k = mix(0.25, 1.0, smoothstep(10.0, 40.0, distance(in.world, pr.cam.xyz)));
+            }
+            a = textureSampleGrad(pr_big, kit_sampler, in.uv, m.layer, duvx * k, duvy * k).a;
         } else {
             a = textureSampleGrad(pr_big, kit_sampler, in.uv, m.layer, duvx, duvy).a;
         }

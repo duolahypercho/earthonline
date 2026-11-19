@@ -41,39 +41,41 @@ pub const COUNT: u32 = 13;
 /// A material flag of our own: procedural rock grain in the colour pass.
 pub const P_ROCK: u32 = 1 << 17;
 
-/// Per model offset: (thin from m, draw distance m); 0 thin = never thins.
-/// The draw distances are the models' `lod.w` (set below).
-pub const THIN: [(f32, f32); COUNT as usize] = [
-    (0.0, 360.0),
-    (0.0, 360.0),
-    (0.0, 360.0),
-    (90.0, 320.0),
-    (90.0, 320.0),
-    (14.0, 100.0),
-    (8.0, 30.0),
-    (12.0, 60.0),
-    (12.0, 60.0),
-    (0.0, 1000.0),
-    (0.0, 1000.0),
-    (0.0, 1000.0),
-    (0.0, 1000.0),
+/// Per model offset: (thin from m, draw distance m, the most a survivor
+/// grows); 0 thin = never thins. The draw distances are the models' `lod.w`
+/// (set below). The grass survivors grow little (1.1): a bunch grown by the
+/// full 1/sqrt(share) turns into a long dark stroke on the bare ground tone,
+/// where a shrub grown the same way still reads as a shrub.
+pub const THIN: [(f32, f32, f32); COUNT as usize] = [
+    (0.0, 360.0, 1.0),
+    (0.0, 360.0, 1.0),
+    (0.0, 360.0, 1.0),
+    (90.0, 320.0, 1.35),
+    (90.0, 320.0, 1.35),
+    (14.0, 100.0, 1.1),
+    (8.0, 30.0, 1.1),
+    (12.0, 60.0, 1.1),
+    (12.0, 60.0, 1.1),
+    (0.0, 1000.0, 1.0),
+    (0.0, 1000.0, 1.0),
+    (0.0, 1000.0, 1.0),
+    (0.0, 1000.0, 1.0),
 ];
-/// The share kept at the draw distance (thinned models), and the most a survivor grows.
+/// The share kept at the draw distance (thinned models).
 pub const THIN_FLOOR: f32 = 0.12;
-pub const THIN_GROW_MAX: f32 = 1.35;
 
 /// WGSL appended to props_types.wgsl: the vegetation range and its thinning
 /// (the same numbers as `THIN`, so the cull, colour and shadow passes agree).
 pub fn thin_wgsl() -> String {
-    let mut s = format!("const PR_VEG_BASE: u32 = {VEG_BASE}u;\nconst PR_VEG_COUNT: u32 = {COUNT}u;\nconst PR_VEG_TREES: u32 = {}u;\n", V_SHRUB - V_TREE);
-    s += &format!("const PR_VEG_FLOOR: f32 = {THIN_FLOOR:?};\nconst PR_VEG_GROW: f32 = {THIN_GROW_MAX:?};\n");
-    s += "fn pr_veg_thin(model: u32) -> vec2<f32> {\n    switch (model - PR_VEG_BASE) {\n";
-    for (k, (a, b)) in THIN.iter().enumerate() {
+    let mut s = format!("const PR_VEG_BASE: u32 = {VEG_BASE}u;\nconst PR_VEG_COUNT: u32 = {COUNT}u;\nconst PR_VEG_TREES: u32 = {}u;\nconst PR_VEG_GRASS: u32 = {}u;\nconst PR_VEG_ROCK: u32 = {}u;\n", V_SHRUB - V_TREE, V_GRASS - V_TREE, V_ROCK - V_TREE);
+    s += &format!("const PR_VEG_FLOOR: f32 = {THIN_FLOOR:?};\nconst PR_VEG_GRASS_CELL_MEAN: f32 = {GRASS_CELL_MEAN:?};\n");
+    s += "fn pr_veg_thin(model: u32) -> vec3<f32> {\n    switch (model - PR_VEG_BASE) {\n";
+    for (k, (a, b, g)) in THIN.iter().enumerate() {
         if *a > 0.0 {
-            s += &format!("        case {k}u: {{ return vec2<f32>({a:?}, {b:?}); }}\n");
+            s += &format!("        case {k}u: {{ return vec3<f32>({a:?}, {b:?}, {g:?}); }}\n");
         }
     }
-    s += "        default: { return vec2<f32>(0.0, 1.0); }\n    }\n}\n";
+    s += "        default: { return vec3<f32>(0.0, 1.0, 1.0); }\n    }\n}\n";
     s
 }
 
@@ -118,6 +120,13 @@ fn fbm(p: [f32; 3], seed: u32, octaves: u32) -> f32 {
 
 // ------------------------------------------------------------------ grass and flowers
 
+/// The atlas grass cell's mean linear albedo over its texels with alpha over
+/// 0.5 (`ez-vegetation-atlas-v1.png`, measured; the cell is grey).
+pub const GRASS_CELL_MEAN: f32 = 0.311;
+
+/// A card's base shade in quarters of its tip's (sRGB vertex byte).
+pub const GRASS_BASE_SHADE_PER_4: u32 = 3;
+
 /// The atlas grass cell in the builder's UVs (rows top first): `ez-vegetation-atlas-v1` `cells.grass`.
 const GRASS_UV: [f32; 4] = [0.752, 0.248, 0.998, 0.002];
 
@@ -130,8 +139,10 @@ fn card(b: &mut Builder, m: u32, x: f32, z: f32, a: f32, w: f32, h: f32, lean: f
     let n = [-s * 0.35, 1.0, c * 0.35];
     let (lx, lz) = (-s * lean, c * lean);
     let base = b.v.len() as u32;
-    // the base in the bunch's own shade (the canopy's deep part), the tips full.
-    let lo = (shade as u32 * 2 / 5) as u8;
+    // the base a little in the bunch's own shade, the tips full. Not darker than
+    // three quarters (sRGB) of the tip: a darker base reads as a dark crescent cut
+    // into the ground at 1.7 m, and as a dark stroke on the ground tone past 20 m.
+    let lo = (shade as u32 * GRASS_BASE_SHADE_PER_4 / 4) as u8;
     let col_lo = [lo, lo, lo];
     let col_hi = [shade, shade, shade];
     let u = GRASS_UV;
@@ -248,13 +259,13 @@ fn rock(b: &mut Builder, m: u32, subdiv: u32, seed: u32, bedded: bool) {
     // faces), sampled along each sphere direction (the nearest plane the ray meets), so
     // the faces are flat and the edges sharp; a little noise breaks the planes. The
     // bedded (chert) shapes add slabs parallel to the bedding.
-    const CUTS: u32 = 14;
+    const CUTS: u32 = 20;
     let mut planes: Vec<([f32; 3], f32)> = (0..CUTS)
         .map(|k| {
             let u = hash3(k as i32, 1, 3, seed) * 2.0 - 1.0;
             let a = hash3(k as i32, 2, 3, seed) * std::f32::consts::TAU;
             let r = (1.0 - u * u).max(0.0).sqrt();
-            ([r * a.cos(), u, r * a.sin()], 0.72 + 0.28 * hash3(k as i32, 4, 3, seed))
+            ([r * a.cos(), u, r * a.sin()], 0.62 + 0.3 * hash3(k as i32, 4, 3, seed))
         })
         .collect();
     if bedded {
@@ -340,7 +351,10 @@ fn rock(b: &mut Builder, m: u32, subdiv: u32, seed: u32, bedded: bool) {
 /// Add the vegetation models (`m_bark`, `m_leaf`: the library's atlas bark
 /// and leaf materials, also the grass cards').
 pub(crate) fn cook(out: &mut Out, ez: Option<&eo_props::eztree::EzLibrary>, m_bark: u32, m_leaf: u32) {
-    let thin = |k: u32| THIN[(k - VEG_BASE) as usize];
+    let thin = |k: u32| {
+        let t = THIN[(k - VEG_BASE) as usize];
+        (t.0, t.1)
+    };
     // --- the coastal trees and shrubs: near, coarse, distant from the cooked builds.
     if let Some(ez) = ez {
         let trees = eo_props::eztree::COASTAL_TREES.iter().enumerate().map(|(k, id)| (V_TREE + k as u32, *id, [70.0f32, 200.0], 3u32));
@@ -364,11 +378,15 @@ pub(crate) fn cook(out: &mut Out, ez: Option<&eo_props::eztree::EzLibrary>, m_ba
         out.sources.push(format!("coastal trees and scrub: {} ez-tree species (eo_props::eztree coastal.rs)", eo_props::eztree::COASTAL_TREES.len() + eo_props::eztree::COASTAL_SHRUBS.len()));
     }
     // --- grass: near (dense), mid, far.
-    // a patch of sward about 1.1 m across (the layer sets one a square metre, so they overlap).
-    let grass_lods: [(u32, f32); 3] = [(26, 0.9), (11, 1.1), (5, 1.3)];
+    // a patch of sward about 1.3 m across (the layer sets one a square metre, so
+    // they overlap). The mid and far levels are wider, lower cards, more of them
+    // than a plain decimation keeps: from 9 m a few tall cards read as single
+    // strokes, a low wide card as a stretch of sward.
+    // (cards, radius, lowest and tallest card m, width / height)
+    let grass_lods: [(u32, f32, f32, f32, f32); 3] = [(28, 0.65, 0.28, 0.65, 0.95), (16, 0.7, 0.22, 0.45, 1.7), (9, 0.7, 0.18, 0.34, 2.4)];
     let mut ids = [NONE; 3];
-    for (k, (n, a)) in grass_lods.iter().enumerate() {
-        bunch(&mut out.b, m_leaf, *n, 0.55, 0.3, 0.7, *a, 11 + k as u32);
+    for (k, (n, r, h0, h1, a)) in grass_lods.iter().enumerate() {
+        bunch(&mut out.b, m_leaf, *n, *r, *h0, *h1, *a, 11 + k as u32);
         ids[k] = out.finish();
     }
     let (z, w) = thin(V_GRASS);
@@ -423,12 +441,14 @@ mod tests {
     fn thin_table_matches_the_wgsl() {
         let w = thin_wgsl();
         assert!(w.contains(&format!("const PR_VEG_BASE: u32 = {VEG_BASE}u;")));
-        for (k, (a, b)) in THIN.iter().enumerate() {
+        for (k, (a, b, g)) in THIN.iter().enumerate() {
             if *a > 0.0 {
-                assert!(w.contains(&format!("case {k}u: {{ return vec2<f32>({a:?}, {b:?}); }}")), "{k}");
-                assert!(a < b);
+                assert!(w.contains(&format!("case {k}u: {{ return vec3<f32>({a:?}, {b:?}, {g:?}); }}")), "{k}");
+                assert!(a < b && *g >= 1.0 && *g <= 1.0 / THIN_FLOOR.sqrt());
             }
         }
+        // the grass survivors grow at most a tenth (no long strokes).
+        assert!(THIN[(V_GRASS - VEG_BASE) as usize].2 <= 1.1);
         assert_eq!(V_ROCK + V_ROCKS, VEG_BASE + COUNT);
     }
 

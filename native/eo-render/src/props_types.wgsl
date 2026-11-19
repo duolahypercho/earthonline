@@ -88,8 +88,8 @@ fn pr_is_veg(model: u32) -> bool {
 // share of a thinned model's instances kept falls linearly from 1 at the thin
 // distance to PR_VEG_FLOOR at the draw distance; an instance whose rank (its
 // `slope` word, uniform in [0, 1)) is over the share shrinks away over a short
-// band, and the survivors grow by 1/sqrt(share) to keep the cover. 1 for
-// everything else. A function of the instance and the eye only, so the cull,
+// band, and the survivors grow by 1/sqrt(share), at most the model's own
+// limit (`pr_veg_thin(..).z`), to keep the cover. 1 for everything else. A function of the instance and the eye only, so the cull,
 // colour and shadow passes agree.
 fn pr_veg_scale(i: PrInstance) -> f32 {
     if (!pr_is_veg(i.model)) {
@@ -106,7 +106,7 @@ fn pr_veg_scale(i: PrInstance) -> f32 {
     }
     let keep = mix(1.0, PR_VEG_FLOOR, f);
     let s = 1.0 - smoothstep(keep, keep + 0.06, i.slope);
-    return s * min(inverseSqrt(keep), PR_VEG_GROW);
+    return s * min(inverseSqrt(keep), t.z);
 }
 
 fn pr_local(i: PrInstance, p: vec3<f32>) -> vec3<f32> {
