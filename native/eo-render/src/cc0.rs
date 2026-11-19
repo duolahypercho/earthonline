@@ -271,6 +271,13 @@ pub fn ashlar_wgsl(on: bool, plan: f64, hs: f64) -> String {
     )
 }
 
+/// The terrain-surface pass's switches as WGSL constants (eo-landmarks
+/// `features::gg3_ground`; each `--no-<name>` restores the round-2 output):
+/// `GG3_FACET_FIX` (draw.wgsl `shade`'s normal orientation).
+pub fn gg3_ground_wgsl(on: &dyn Fn(&str) -> bool) -> String {
+    format!("const GG3_FACET_FIX: bool = {};\n", on("facet-normal-fix"))
+}
+
 /// WGSL constants: switches, layer indices, the decal grid's layout, the
 /// SF scoring grid (`caMetric('sidewalk-scoring-grid-sf')`).
 pub fn wgsl_constants(scoring_m: f32) -> String {
@@ -278,6 +285,7 @@ pub fn wgsl_constants(scoring_m: f32) -> String {
     s.push_str(&crate::ground2::wgsl_constants()); // the paving branch of cc0_ground_sets
     s.push_str(&shore_ground_wgsl(eo_landmarks::features::shore_ground("sand-albedo"), eo_data::groundscale::height_scale()));
     s.push_str(&ashlar_wgsl(eo_landmarks::features::shore_ground("riprap"), eo_data::groundscale::scale(), eo_data::groundscale::height_scale()));
+    s.push_str(&gg3_ground_wgsl(&|n| eo_landmarks::features::gg3_ground(n)));
     for (k, v) in [
         ("ON", RUN_ON),
         ("WALLS", RUN_WALLS),
