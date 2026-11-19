@@ -96,6 +96,30 @@ pub fn park_trees(cover: &eo_landmarks::ground_cover::GroundCover, x0: f64, z0: 
 
 /// `park_trees` with block side `b`.
 #[allow(clippy::too_many_arguments)]
+/// How far the drawn sea is from (x, z) (m): the nearest of 16 rays, in
+/// 6 m steps out to `SHORE_REACH_M`, that meets ground under the sea plus
+/// 0.3 m (the far tier's `blocked` water test); 1 km when none does. The
+/// far tier reads it before the app installs the shore field
+/// (`eo_landmarks::vegetation::install_shore_distance`): the bluff cypress
+/// mix and the beach-sand test need only the first 240 m.
+pub const SHORE_REACH_M: f64 = 252.0;
+pub fn shore_estimate(x: f64, z: f64, y_at: &dyn Fn(f64, f64) -> f64) -> f64 {
+    let sea = eo_water::SEA_LEVEL_Y + 0.3;
+    let mut best = 1e3f64;
+    for k in 0..16 {
+        let (sn, cs) = (k as f64 * std::f64::consts::TAU / 16.0).sin_cos();
+        let mut d = 6.0;
+        while d <= SHORE_REACH_M.min(best) {
+            if y_at(x + cs * d, z + sn * d) < sea {
+                best = best.min(d);
+                break;
+            }
+            d += 6.0;
+        }
+    }
+    best
+}
+
 pub fn park_trees_in(cover: &eo_landmarks::ground_cover::GroundCover, x0: f64, z0: f64, x1: f64, z1: f64, y_at: &(dyn Fn(f64, f64) -> f64 + Sync), blocked: &(dyn Fn(f64, f64) -> bool + Sync), b: f64) -> Vec<FarTree> {
     #[allow(non_snake_case)]
     let B = b;
@@ -130,8 +154,16 @@ pub fn park_trees_in(cover: &eo_landmarks::ground_cover::GroundCover, x0: f64, z
                     for &(x, z) in c {
                         for t in cover.park_trees(x, z, x + B, z + B, y_at, blocked) {
                             let seed = hash((t.x * 10.0) as i64 as u32 ^ ((t.z * 10.0) as i64 as u32).rotate_left(16));
+                            // the shore distance: the citywide shore field once the app installs it,
+                            // else the nearest drawn sea within the reach that matters here.
+                            let shore = || eo_landmarks::vegetation::shore_distance(t.x, t.z).unwrap_or_else(|| shore_estimate(t.x, t.z, y_at));
+                            // round 3 (`--no-cliff-rock-cover`): not on the beach sand the ground tone
+                            // draws past a mapped beach's ring (the near tier's own test).
+                            if g3.cliff_rock_cover && cover.near_mapped_beach(t.x, t.z) && cover.on_beach_sand(t.x, t.z, shore(), t.y) {
+                                continue;
+                            }
                             if g3.far_species && (cover.tree_class_at(t.x, t.z) == 1 || presidio.is_some_and(|i| cover.in_green(i, t.x, t.z))) {
-                                let shore = eo_landmarks::vegetation::shore_distance(t.x, t.z).unwrap_or(1e3);
+                                let shore = shore();
                                 let draw = eo_landmarks::vegetation::hash((t.x * 8.0) as i64, (t.z * 8.0) as i64, 91);
                                 let (sp, h, cr, c) = eo_landmarks::vegetation::far_form(t.x, t.z, shore, draw);
                                 out.push(FarTree { pos: [t.x as f32, t.y as f32, t.z as f32], height: h, crown: cr, tint: rgb(c[0], c[1], c[2]), seed, pad: sp as u32 + 1 });

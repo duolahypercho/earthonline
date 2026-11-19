@@ -145,6 +145,32 @@ fn ftv_species_crown(p: vec2<f32>, crown: f32, height: f32, sp: u32, seed: f32, 
     return best;
 }
 
+// Where a species' trunk ends (m over its base): at its lowest clump's centre,
+// so no bare bole shows in the gaps between the clumps above it.
+fn ftv_trunk_top(height: f32, sp: u32, seed: f32) -> f32 {
+    if (sp == 1u) {
+        return height * 0.42;
+    }
+    var lo = height;
+    if (sp == 2u) {
+        for (var k = 0; k < 6; k = k + 1) {
+            let kf = f32(k);
+            let a = mix(-1.1, 1.1, (kf + 0.5) / 6.0) + (ftv_hash(seed, kf) - 0.5) * 0.35;
+            lo = min(lo, height * (0.6 + 0.22 * cos(a)));
+        }
+    } else {
+        for (var k = 0; k < 5; k = k + 1) {
+            lo = min(lo, height * (0.5 + 0.34 * ftv_hash(seed, f32(k) + 5.0)));
+        }
+    }
+    return lo;
+}
+
+// A clump's radius over the crown's half width, for the chord the sun crosses
+// in it (the species forms above: about 0.36-0.5 for pine and gum clumps, the
+// cypress's flat layers wider but as thin; INFERRED).
+const FT_CLUMP_R: f32 = 0.4;
+
 fn ft_shade(in: FtOut) -> vec4<f32> {
     let dpx = dpdx(in.world);
     let dpy = dpdy(in.world);
@@ -171,7 +197,8 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
         let b = ftv_species_crown(p, in.dims.x, in.dims.y, sp, in.seed, lean);
         crown = b.w > 0.5;
         let tx = lean * in.dims.x * (in.uv.y - 0.3) * select(0.0, 1.0, in.uv.y > 0.3);
-        trunk = in.uv.y < select(0.62, 0.5, sp == 3u) && abs(p.x - tx) < max(0.25, 0.012 * in.dims.y);
+        let top = select(select(0.62, 0.5, sp == 3u) * in.dims.y, ftv_trunk_top(in.dims.y, sp, in.seed), light3);
+        trunk = p.y < top && abs(p.x - tx) < max(0.25, 0.012 * in.dims.y);
         cy = b.y;
         r = length(b.xy);
         if (crown) {
@@ -228,15 +255,25 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
     rm_emit = vec3<f32>(0.0);
     let face = normalize(cross(dpx, dpy));
     let fn_ = select(-face, face, dot(face, v) > 0.0);
-    var lit = look_light(s, m, v, in.world, fn_, 0u);
-    if (light3 && crown) {
+    // the leaf-volume light reads the shadow once per tree: at the crown's centre
+    // (its base recovered from the card point), moved a crown's half width toward
+    // the sun. A card is a flat stand-in for the crown, and the shadow read at each
+    // of its points drew the shadow map's texel rows across it as stripes. So the
+    // key light is left out of look_light (a geometric normal facing from the sun
+    // turns it off there) and added below with that one shadow.
+    let l = look.key_dir.xyz;
+    let vol_light = light3 && crown;
+    let ng = select(fn_, -l, vol_light);
+    var lit = look_light(s, m, v, in.world, ng, 0u);
+    if (vol_light) {
         // the leaf volume's light through it: the sun on the far side of the clump,
         // passed by its leaves (a diffuse transmission, FT_LEAF_T_OVER_R of the
         // reflectance), the term a sphere of opaque leaves leaves out. Shadowed
         // and fogged as the key light, the props' back-lit leaves' form (props_draw.wgsl).
-        let l = look.key_dir.xyz;
         let through = max(dot(-n, l), 0.0);
-        let sh = lk_shadow(in.world, n);
+        let base = in.world - in.right * (in.uv.x * in.dims.x) - vec3<f32>(0.0, in.uv.y * in.dims.y, 0.0);
+        let centre = base + vec3<f32>(0.0, 0.68 * in.dims.y, 0.0);
+        let sh = lk_shadow(centre + l * in.dims.x, l) * sky_cloud_transmittance(in.world);
         let vd = dot(in.world - look.cam_pos.xyz, look.cam_fwd.xyz);
         let fog = lk_smooth(look.fog.x, look.fog.y, vd);
         let trans = look.key.xyz * s.albedo * FT_LEAF_T_OVER_R * through * s.ao * sh / LK_PI;
@@ -249,10 +286,13 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
         // area density FT_LAD). The opaque sphere's n.l (look_light) becomes
         // G P + (1 - G) n.l on the lit side and G P on the far side.
         let nl = dot(n, l);
-        let chord = 2.0 * 0.4 * in.dims.x * max(-nl, 0.0);
+        let chord = 2.0 * FT_CLUMP_R * in.dims.x * max(-nl, 0.0);
         let pen = exp(-FT_ROSS_G * FT_LAD * chord);
         let vol = look.key.xyz * s.albedo * FT_ROSS_G * (pen - max(nl, 0.0)) * s.ao * sh / LK_PI;
-        lit = vec4<f32>(lit.rgb + (trans + vol) * (1.0 - fog), lit.a);
+        // the key light look_light left out: the opaque sphere's n.l (no specular on
+        // leaves this rough), with the tree's one shadow.
+        let key = look.key.xyz * s.albedo * max(nl, 0.0) * sh / LK_PI;
+        lit = vec4<f32>(lit.rgb + key * (1.0 - fog) + (trans + vol) * (1.0 - fog), lit.a);
     }
     // FT_LATE_DISCARD (the fallback path, set by hlod_trees.rs): the discards
     // after the lighting. The light reads screen derivatives, which are
