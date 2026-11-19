@@ -124,7 +124,8 @@ impl Ctx<'_> {
         };
         let s2 = like_s1("S2", p.arch_south_c);
         let n1 = like_s1("N1", p.anchor_north_c);
-        let n2_c = n1.c + n1.half_along + NORTH_HOUSING_FT * FT * gs - half_along;
+        // the housing runs from N1's south face to N2's north face, 347 ft.
+        let n2_c = n1.c - n1.half_along + NORTH_HOUSING_FT * FT * gs - half_along;
         let n2 = like_s1("N2", n2_c);
         vec![s2, s1, n1, n2]
     }
