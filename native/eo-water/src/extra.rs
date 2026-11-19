@@ -58,6 +58,19 @@ pub fn field() -> Option<&'static ExtraField> {
     )
 }
 
+/// The installed field composed afresh with the obstacles registered now and
+/// their revision (None without a field): for a renderer that re-uploads when
+/// `obstacles::revision()` passes `composed_revision()`.
+pub fn compose() -> Option<(ExtraField, u64)> {
+    let base = INSTALLED.get()?;
+    let rev = crate::obstacles::revision();
+    let list = crate::obstacles::get();
+    if list.is_empty() || !crate::switches::is_on(crate::switches::OBSTACLE_FOAM) {
+        return Some((base.clone(), rev));
+    }
+    Some((with_obstacles(base, &list), rev))
+}
+
 /// The obstacle list's revision the composed field holds (None before `field` is first called).
 pub fn composed_revision() -> Option<u64> {
     COMPOSED.get().map(|c| c.1)
