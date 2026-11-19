@@ -83,9 +83,16 @@ fn lm_beach(s: ptr<function, Surface>, wp: vec3<f32>, shore: f32) {
     let ripple_k = lm_ss(LM_SWASH_REACH_M + 4.0, LM_SWASH_REACH_M + 18.0, shore);
     dry = dry * ((ripples - 0.5) * 0.1 * ripple_k + 1.0);
     var wrack_band = lm_ss(LM_WRACK_A, LM_WRACK_A + 7.0, shore) * lm_ss(LM_WRACK_B, LM_WRACK_B - 9.0, shore);
+    var gh = 0.0; // the foreshore's height over the sea (GG2_SAND), read once
     if (GG2_SAND) {
-        wrack_band = gg2_wrack_band(wp, shore);
-        dry = dry * (1.0 - 0.18 * gg2_footprints(wp) * lm_ss(GG2_SAND_MHHW_M + 0.05, GG2_SAND_MHHW_M + 0.3, gg2_foreshore_h(wp, shore)));
+        gh = gg2_foreshore_h(wp, shore);
+        wrack_band = gg2_wrack_band(wp, gh);
+        // the prints over the strand line and within GG2_PRINTS_NEAR_M of the eye (a 0.28 m
+        // print is under a pixel or two past it): the cell search runs only there
+        let prints_k = lm_ss(GG2_SAND_MHHW_M + 0.05, GG2_SAND_MHHW_M + 0.3, gh) * lm_ss(GG2_PRINTS_NEAR_M, 0.75 * GG2_PRINTS_NEAR_M, distance(frame.cam_pos.xyz, wp));
+        if (prints_k > 0.0) {
+            dry = dry * (1.0 - 0.18 * gg2_footprints(wp) * prints_k);
+        }
     }
     let wrack = wrack_band * lm_ss(0.56, 0.74, grain) * lm_ss(0.4, 0.6, macro_n);
     dry = mix(dry, vec3<f32>(0.27, 0.21, 0.14), wrack * 0.62);
@@ -93,7 +100,7 @@ fn lm_beach(s: ptr<function, Surface>, wp: vec3<f32>, shore: f32) {
     var damp = lm_ss(reach + 5.0, reach - 6.0, shore) * 0.62;
     var wet_ratio = 0.58;
     if (GG2_SAND) {
-        damp = gg2_damp(wp, shore);
+        damp = gg2_damp(gh);
         wet_ratio = GG2_WET_SAND_RATIO;
     }
     let margin = lm_ss(LM_SEA_LEVEL_Y + 0.35, LM_SEA_LEVEL_Y + 0.02, wp.y) * 0.6;
@@ -150,25 +157,30 @@ fn lm_beach_swash_wet(s: ptr<function, Surface>, wp: vec3<f32>) {
 // and a band edge keyed to them is a sawtooth.
 fn gg2_foreshore_h(wp: vec3<f32>, shore: f32) -> f32 {
     // a ragged edge: a slow wander of a few metres along the shore and a finer fray
-    let rag = lm_mx_noise(vec3<f32>(wp.x * 0.025, wp.z * 0.025, 6.3)) * 0.12 + lm_mx_noise(vec3<f32>(wp.x * 0.11, wp.z * 0.11, 2.7)) * 0.06 + lm_mx_noise(vec3<f32>(wp.x * 0.5, wp.z * 0.5, 9.1)) * 0.02;
+    let rag = lm_mx_noise(vec3<f32>(wp.x * 0.025, wp.z * 0.025, 6.3)) * 0.12 + lm_mx_noise(vec3<f32>(wp.x * 0.11, wp.z * 0.11, 2.7)) * 0.07;
     return max(shore, 0.0) * GG2_FORESHORE_SLOPE + rag;
 }
 
 // The damp band: the sand the high water covers twice a day stays damp below
 // it (mean high water), darkest where the swash keeps it wet (0.3 m over the
 // sea, where `lm_beach_swash_wet` takes over) and drying toward the high
-// water line.
-fn gg2_damp(wp: vec3<f32>, shore: f32) -> f32 {
-    return lm_ss(GG2_SAND_MHW_M + 0.05, 0.3, gg2_foreshore_h(wp, shore)) * 0.8;
+// water line. `h`: the foreshore's height over the sea (`gg2_foreshore_h`).
+fn gg2_damp(h: f32) -> f32 {
+    return lm_ss(GG2_SAND_MHW_M + 0.05, 0.3, h) * 0.8;
 }
 
 // The wrack (the strand line of kelp and eelgrass the higher high water
 // leaves): a ragged band round the mean higher high water line, a few
 // centimetres of height across (a couple of metres on the foreshore).
-fn gg2_wrack_band(wp: vec3<f32>, shore: f32) -> f32 {
-    let d = abs(gg2_foreshore_h(wp, shore) - GG2_SAND_MHHW_M + lm_mx_noise(vec3<f32>(wp.x * 0.6, wp.z * 0.6, 8.9)) * 0.02);
+fn gg2_wrack_band(wp: vec3<f32>, h: f32) -> f32 {
+    let d = abs(h - GG2_SAND_MHHW_M + lm_mx_noise(vec3<f32>(wp.x * 0.6, wp.z * 0.6, 8.9)) * 0.02);
     return lm_ss(0.05, 0.02, d);
 }
+
+// How far from the eye the footprints are drawn, metres: at the 1920 px
+// capture's 50-60 degree field a 0.28 m print spans about 4 px here (none
+// past it worth its 3 x 3 cell search per pixel).
+const GG2_PRINTS_NEAR_M: f32 = 80.0;
 
 // Footprints in the dry sand above the strand line: in walkers' trails (a
 // slow field), one print per 0.8 m cell where a hash keeps it, each a
