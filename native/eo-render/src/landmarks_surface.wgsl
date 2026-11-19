@@ -786,8 +786,9 @@ fn lm_weather(s: ptr<function, Surface>, world: vec3<f32>, local: vec3<f32>, n: 
     let chalk = LM_WX_CHALK * (0.35 + 0.65 * age) * (0.65 + 0.35 * max(up, 0.0)) * (1.0 - touch);
     var c = mix(c0, c0 * 1.3 + vec3<f32>(0.010, 0.008, 0.007), chalk);
     c = mix(c, c0 * vec3<f32>(0.95, 0.86, 0.82), touch);
-    // (a fresher patch is glossier, but held over 0.55: under 0.5 the sky's sharp reflection mixes in and drew the clouds as pale blotches)
-    (*s).rough = clamp(max((*s).rough - 0.06 * touch, mix((*s).rough, 0.55, touch)) + 0.15 * chalk, 0.3, 0.95);
+    // (a fresher patch keeps the coat's roughness: a glossier one reflected the bright sky at grazing
+    // views as pale blotches, and no gloss value for the touch-up coat was found)
+    (*s).rough = clamp((*s).rough + 0.15 * chalk, 0.3, 0.95);
     // rust bloom is_on the rivet rows (6 cm either side of the horizontal seams), as stain bands 5 cm high.
     let fy = abs(du.y) + abs(dv.y);
     let fx = abs(du.x) + abs(dv.x);
@@ -839,8 +840,11 @@ fn lm_concrete_age(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, uv
     let fs = lm_fade(footprint, 0.6);
     let leach = mix(0.25, lm_ss(0.35, 0.9, lm_noise(vec3<f32>(uv.x * 2.1, lift * 1.7, 12.5)) * 0.5 + 0.5), fs) * pow(below, 3.0) * 0.10 * vertical;
     let dirt = mix(0.4, lm_ss(-0.2, 0.7, lm_noise(vec3<f32>(uv.x * 0.7, world.y * 0.018, 31.0))), lm_fade(footprint, 1.5)) * 0.22 * vertical;
+    // the same weathering at the wall's scale (bands some 5-10 m across, faded with height over 40 m), so a
+    // housing's wall seen from hundreds of metres keeps its staining where the fine streaks have gone to their mean.
+    let broad = lm_ss(-0.3, 0.8, lm_noise(vec3<f32>(uv.x * 0.12, world.y * 0.012, 47.0))) * 0.16 * vertical;
     let c = (*s).albedo;
-    (*s).albedo = c * (1.0 + lift_tone) * (1.0 - dirt) + vec3<f32>(0.05, 0.05, 0.048) * leach;
+    (*s).albedo = c * (1.0 + lift_tone) * (1.0 - dirt) * (1.0 - broad) + vec3<f32>(0.05, 0.05, 0.048) * leach;
 }
 
 // The share of a face's sky that two parallel fins `d` deep, standing `x0`
