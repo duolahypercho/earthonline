@@ -16,6 +16,7 @@ use crate::suspension::{self, CableSpec, DeckColours, DeckSpec, DeckStandards, F
 use serde_json::json;
 
 mod cables;
+pub use cables::{LAMP2_CURB_OFFSET_M, lamp2_luminaire};
 mod legs;
 mod pylons;
 pub use legs::{CELL_FT, cell_m, cell_outline, face_runs};

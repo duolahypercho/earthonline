@@ -102,10 +102,21 @@ pub fn bridge_lights(js: &LandmarksJs, gg_ground: &GroundGrid, bb_ground: &Groun
     let plan = crate::golden_gate::plan(js, &site, &ground);
     let half = crate::data::num(&g.dimensions, "roadwayM") / 2.0;
     let pitch = gg_deck_pitch_m();
+    let detail = crate::suspension::features().cable_detail;
+    let curb = crate::data::num(&g.dimensions, "curbM");
     let mut c = plan.c_start + pitch / 2.0;
     while c < plan.c_end {
         let y = plan.deck_top(c);
         for s in [-half, half] {
+            if detail {
+                // (`cable_detail`) the luminaire where the standard's head holds it (golden_gate.rs `lamp_standard2`).
+                let (across, up) = crate::golden_gate::lamp2_luminaire(DECK_HEAD_M);
+                let sl = s.signum() * (half + crate::golden_gate::LAMP2_CURB_OFFSET_M - across);
+                let mut l = deck_lamp(site.deck_point(c, sl), y);
+                l.pos[1] = y + curb + up;
+                out.push(l);
+                continue;
+            }
             out.push(deck_lamp(site.deck_point(c, s), y));
         }
         c += pitch;

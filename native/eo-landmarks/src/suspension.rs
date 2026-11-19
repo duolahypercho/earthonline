@@ -267,19 +267,13 @@ pub const SWITCHES: &[&str] = &[
     "--no-bridge-fender2",
     "--no-bridge-crest",
     "--no-bridge-collar",
-    "--no-gg3-bridge",
-    "--no-bridges5",
-    "--no-paint-brdf2",
-    "--no-paint-weathering",
-    "--no-concrete2",
-    "--no-leg-cells",
-    "--no-cable-detail",
 ];
 
-/// The bridge-finish track's switch names (the roll-up `--no-gg3-bridge`,
-/// also `--no-bridges5`, first), all read by `BridgeFeatures::from_args` and
-/// so also in `SWITCHES`; eo-app accepts them (`--no-gg3`, every track's
-/// roll-up, is in eo-render pace.rs's list and read here too).
+/// The bridge-finish track's switch names (the fifth pass: the roll-up
+/// `--no-gg3-bridge`, also `--no-bridges5`, first), all read by
+/// `BridgeFeatures::from_args`; eo-app accepts them from this list (each
+/// name in one list only: eo-app's `every_listed_switch_parses`). `--no-gg3`,
+/// every track's roll-up, is in eo-render pace.rs's list and read here too.
 pub const GG3_SWITCHES: &[&str] = &["--no-gg3-bridge", "--no-bridges5", "--no-paint-brdf2", "--no-paint-weathering", "--no-concrete2", "--no-leg-cells", "--no-cable-detail"];
 
 /// A frame along a bridge: chainage c along `axis` from `origin`, offset s to

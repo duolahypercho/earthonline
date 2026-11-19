@@ -86,6 +86,16 @@ pub fn suspender_groups(wires: &mut MeshArrays, frame: &Frame, runs: &[Run], att
     count
 }
 
+/// The pole's offset off the curb line and the luminaire's centre off the
+/// pole's base (across toward the roadway, up), for a standard of `head`
+/// (`lamp_standard2`; lights.rs places the night's luminaire there).
+pub const LAMP2_CURB_OFFSET_M: f64 = 0.25;
+pub fn lamp2_luminaire(head: f64) -> (f64, f64) {
+    let (dx, dy) = (35f64.to_radians().sin(), 35f64.to_radians().cos());
+    let along = 1.6 + 0.3;
+    (along * dx, head - 1.6 + along * dy)
+}
+
 /// A lamp standard of the "lean, angled form" (`cable_detail`): a plinth, a
 /// tapering square pole from its base to `head` less the head's rise, and
 /// the head angled out over the roadway (`toward`, +-1 across) to the
@@ -118,7 +128,7 @@ impl Ctx<'_> {
             if !self.in_tower_zone(c - 2.0, c + 2.0) {
                 let y = p.deck_top(c) + num(d, "curbM");
                 for sgn in [-1.0, 1.0] {
-                    lamp_standard2(orange, self.frame, c, sgn * (half + 0.25), -sgn, y, head, k.orange);
+                    lamp_standard2(orange, self.frame, c, sgn * (half + LAMP2_CURB_OFFSET_M), -sgn, y, head, k.orange);
                 }
             }
             c += pitch;

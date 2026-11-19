@@ -16,7 +16,7 @@ fn every_switch_turns_its_feature_off() {
     assert!(!one("--no-bridge-detail").detail && one("--no-bridge-detail").night);
     assert!(!one("--no-bridge-wires").wires && one("--no-bridge-wires").detail);
     assert!(!one("--no-bridge-night").night && one("--no-bridge-night").scale);
-    for s in SWITCHES {
+    for s in SWITCHES.iter().chain(eo_landmarks::suspension::GG3_SWITCHES) {
         assert_ne!(BridgeFeatures::from_args(&[*s]), BridgeFeatures::ALL, "{s} turns something off");
     }
 }
@@ -315,7 +315,7 @@ fn the_fifth_pass_switches_turn_their_features_off() {
     assert!(BridgeFeatures::FOURTH.pylons && BridgeFeatures::FOURTH.haunch && BridgeFeatures::FOURTH.crest);
     let names = ["--no-paint-brdf2", "--no-paint-weathering", "--no-concrete2", "--no-leg-cells", "--no-cable-detail"];
     for (i, n) in names.iter().enumerate() {
-        assert!(SWITCHES.contains(n) && eo_landmarks::suspension::GG3_SWITCHES.contains(n), "{n} is accepted");
+        assert!(eo_landmarks::suspension::GG3_SWITCHES.contains(n) && !SWITCHES.contains(n), "{n} is accepted, from one list");
         let f = five(one(n));
         for (j, on) in f.iter().enumerate() {
             assert_eq!(*on, i != j, "{n}: feature {j}");
