@@ -35,12 +35,17 @@ struct FarUniform {
     misc: [f32; 4],
     /// the sea's grid this frame: centre x, z, half size, drawn (1/0).
     sea: [f32; 4],
+    /// x: 1 when the grass reads the look uniform's per-frame season (`tone2.w`,
+    /// eo-look `season::current`, the season on the date in force), 0 when it
+    /// keeps `misc.x` (`--no-photo-season`, or `EO_FARSHORE_DRY` given); y, z, w unused.
+    season: [f32; 4],
 }
 
 /// Switches: `--no-farshore` / `EO_FARSHORE=0` (eo-app); `EO_FARSHORE_RANGE`
 /// (level-0 range, game m), `EO_FARSHORE_TAIL` (haze tail x the fog's far
 /// end), `EO_FARSHORE_SHADOW=0`, `EO_FARSHORE_DEBUG=1` (the class guesses),
-/// `EO_FARSHORE_DRY` (0 green .. 1 golden; default from the sun model's date).
+/// `EO_FARSHORE_DRY` (0 green .. 1 golden; default from the sun model's date,
+/// each frame: the look uniform's season, `--no-photo-season` reads it at load).
 #[derive(Clone, Copy, Debug)]
 pub struct FarOptions {
     pub range0: f32,
@@ -49,6 +54,10 @@ pub struct FarOptions {
     pub self_shadow: bool,
     pub debug: bool,
     pub dryness: f32,
+    /// The grass follows the date in force each frame (the look uniform's
+    /// season) instead of `dryness` read at load: on unless `--no-photo-season`
+    /// or `EO_FARSHORE_DRY` pins it.
+    pub season_per_frame: bool,
 }
 
 fn env_f32(name: &str) -> Option<f32> {
@@ -90,6 +99,7 @@ impl Default for FarOptions {
             self_shadow: std::env::var("EO_FARSHORE_SHADOW").map_or(true, |v| v.trim() != "0"),
             debug: std::env::var("EO_FARSHORE_DEBUG").is_ok_and(|v| v.trim() == "1"),
             dryness: season_dryness(),
+            season_per_frame: eo_look::season::features().photo_season && env_f32("EO_FARSHORE_DRY").is_none(),
         }
     }
 }
@@ -410,6 +420,7 @@ impl FarShoreGpu {
                 let c = eo_water::grid::offset_for(cam.eye.x as f64, cam.eye.z as f64, eo_water::grid::snap_for(r));
                 [c[0] as f32, c[1] as f32, r as f32, sea_on as u32 as f32]
             },
+            season: [o.season_per_frame as u32 as f32, 0.0, 0.0, 0.0],
         };
         queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&u));
     }
