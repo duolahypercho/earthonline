@@ -15,10 +15,11 @@
 @group(2) @binding(2) var<uniform> gc_kinds: array<GcKind, 8>;
 
 // Wet rock: the albedo over the dry (Lekner and Dorf 1988, the mineral
-// surface's measured ratio, ground_cover `WET_SAND_RATIO`) and the water
-// film's roughness (INFERRED: a glossy film, as look_light's wet film).
+// surface's measured ratio, ground_cover `WET_SAND_RATIO`) and the wet
+// rock's roughness (INFERRED: a film over rough rock, glossier than dry but
+// not a mirror; a glossier film glitters on the scans' fine normal detail).
 const GC_WET_RATIO: f32 = 0.5;
-const GC_WET_ROUGH: f32 = 0.35;
+const GC_WET_ROUGH: f32 = 0.5;
 
 struct GcOut {
     @builtin(position) clip: vec4<f32>,
