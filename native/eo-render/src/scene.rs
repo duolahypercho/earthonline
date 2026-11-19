@@ -467,8 +467,8 @@ pub fn build_scene(inp: &SceneInputs) -> anyhow::Result<Scene> {
     };
     if let Some(d) = &detail {
         eprintln!(
-            "terrain detail: {} patches of 64 m at 2 m ({} vertices), {} with relief (largest {:.2} m), {:.0} ms",
-            d.stats.patches, d.stats.vertices, d.stats.relieved, d.stats.max_relief_m, d.stats.ms
+            "terrain detail: {} patches of 64 m at 2 m ({} vertices; {} flat ones left to the tiles, {} rebuilt beside them), {} with relief (largest {:.2} m), {:.0} ms",
+            d.stats.patches, d.stats.vertices, d.stats.dropped, d.stats.rebuilt, d.stats.relieved, d.stats.max_relief_m, d.stats.ms
         );
     }
     // --- Terrain: 32 x 32-cell tiles over the whole elevation grid. ---------
@@ -498,6 +498,23 @@ pub fn build_scene(inp: &SceneInputs) -> anyhow::Result<Scene> {
         }
     }
     let coarse_count = b.indices.len() as u32 - coarse_first;
+    // the relief patches: the tiles' topology (33 x 33 vertices at 2 m), the coarse level every
+    // 4th (8 m). Pushed before the tiles: a reader that copies the terrain objects' vertices into
+    // the 8 m grid as tiles (eo-app props/vegetation.rs `TerrainGrid::from_scene`) then has every
+    // cell written last by the tile that holds it (the tiles keep all their vertices, the cells
+    // under a patch included), not by a patch's 2 m vertices.
+    if let Some(d) = &detail {
+        for p in &d.patches {
+            let o = b.push_shared(ObjectKind::Terrain, &p.verts, shared_first, shared_count);
+            if inp.terrain_lod {
+                b.objects[o].lod_role = LOD_TERRAIN;
+                b.objects[o].far_first_index = coarse_first;
+                b.objects[o].far_index_count = coarse_count;
+            }
+            stats.terrain_triangles += (shared_count / 3) as u64;
+            stats.terrain_coarse_triangles += (coarse_count / 3) as u64;
+        }
+    }
     // Vertex rows of every terrain tile, computed in parallel (the street
     // world's carpet answers per vertex and is not free).
     let tile_verts = |tx: usize, tz: usize| -> (Vec<Vertex>, bool) {
@@ -626,21 +643,11 @@ pub fn build_scene(inp: &SceneInputs) -> anyhow::Result<Scene> {
         }
     }
 
-    // the relief patches: the tiles' topology (33 x 33 vertices at 2 m), the coarse level every 4th (8 m)
     if let Some(d) = detail {
-        for p in &d.patches {
-            let o = b.push_shared(ObjectKind::Terrain, &p.verts, shared_first, shared_count);
-            if inp.terrain_lod {
-                b.objects[o].lod_role = LOD_TERRAIN;
-                b.objects[o].far_first_index = coarse_first;
-                b.objects[o].far_index_count = coarse_count;
-            }
-            stats.terrain_triangles += (shared_count / 3) as u64;
-            stats.terrain_coarse_triangles += (coarse_count / 3) as u64;
-        }
-        // the props and rocks seat on the drawn relief (eo_data::detail_ground)
+        // the props and rocks seat on the drawn relief (eo_data::detail_ground) where the relief
+        // moved the ground; elsewhere (None) on their own ground, which is the drawn 8 m surface there
         let d = std::sync::Arc::new(d);
-        eo_data::detail_ground::set_provider(Box::new(move |x, z| d.height(x, z)));
+        eo_data::detail_ground::set_provider(Box::new(move |x, z| d.relief_height(x, z)));
     }
 
     // --- Roads: carriageway ribbons on the terrain, grouped per tile. -------
