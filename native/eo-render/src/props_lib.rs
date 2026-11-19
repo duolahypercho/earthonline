@@ -425,6 +425,7 @@ impl PropLibrary {
         h.update(include_bytes!("props_lib2.rs"));
         // the procedural furniture kinds (and whether they draw: `--no-furniture-models`).
         h.update(include_bytes!("props_lib2/furniture_models.rs"));
+        h.update(include_bytes!("props_lib2/vegetation_models.rs"));
         h.update([crate::props_lib2::furniture_models::enabled() as u8]);
         for p in js.street_props.values() {
             h.update(p.sha256.as_bytes());
@@ -437,6 +438,19 @@ impl PropLibrary {
                 h.update(bytemuck::cast_slice(&m.mesh.positions));
                 h.update(bytemuck::cast_slice(&m.mesh.colors));
                 h.update(bytemuck::cast_slice(&m.mesh.indices));
+            }
+        }
+        if let Some(ez) = x.ez {
+            // the coastal species' builds (vegetation_models.rs).
+            for id in eo_props::eztree::COASTAL_TREES.iter().chain(eo_props::eztree::COASTAL_SHRUBS.iter()) {
+                for tier in ["near", "coarse", "distant"] {
+                    if let Some(m) = ez.get(id, tier, 0) {
+                        h.update(id.as_bytes());
+                        h.update(bytemuck::cast_slice(&m.positions));
+                        h.update(bytemuck::cast_slice(&m.colors));
+                        h.update(bytemuck::cast_slice(&m.indices));
+                    }
+                }
             }
         }
         if let Some(s) = x.signs {

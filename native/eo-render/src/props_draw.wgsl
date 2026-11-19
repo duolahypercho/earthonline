@@ -21,6 +21,7 @@ const PR_PLATE: u32 = 8192u;
 const PR_GLB_MAPS: u32 = 16384u;
 const PR_BIG: u32 = 32768u;
 const PR_LEAF: u32 = 65536u;
+const PR_ROCK: u32 = 131072u;
 
 @group(2) @binding(0) var<uniform> pr: PrParams;
 @group(2) @binding(1) var<storage, read> pr_instances: array<PrInstance>;
@@ -65,7 +66,11 @@ fn prop_vs(
     var out: PrOut;
     out.clip = frame.view_proj * vec4<f32>(world, 1.0);
     out.world = world;
-    out.normal = pr_rot(inst.yaw, normal.xyz / max(inst.scale, vec3<f32>(1e-3)));
+    var nw = pr_rot(inst.yaw, normal.xyz / max(inst.scale, vec3<f32>(1e-3)));
+    // the slope shear's inverse transpose (pr_veg_grad).
+    let g = pr_veg_grad(inst);
+    nw = vec3<f32>(nw.x - g.x * nw.y, nw.y, nw.z - g.y * nw.y);
+    out.normal = nw;
     out.uv = uv;
     out.color = srgb_decode(color.rgb);
     out.material = material;
@@ -74,6 +79,24 @@ fn prop_vs(
     let view = ii / max(pr.counts.z, 1u);
     out.fade = vec2<f32>(f32((word >> 17u) & 255u) / 255.0, select(0.0, 1.0, view == 5u));
     return out;
+}
+
+// value noise in [0, 1] (rock grain).
+fn pr_hash3(p: vec3<f32>) -> f32 {
+    var q = fract(p * 0.1031);
+    q = q + dot(q, q.yzx + 33.33);
+    return fract((q.x + q.y) * q.z);
+}
+
+fn pr_noise3(p: vec3<f32>) -> f32 {
+    let i = floor(p);
+    let f = fract(p);
+    let u = f * f * (3.0 - 2.0 * f);
+    let a = mix(pr_hash3(i), pr_hash3(i + vec3<f32>(1.0, 0.0, 0.0)), u.x);
+    let b = mix(pr_hash3(i + vec3<f32>(0.0, 1.0, 0.0)), pr_hash3(i + vec3<f32>(1.0, 1.0, 0.0)), u.x);
+    let c = mix(pr_hash3(i + vec3<f32>(0.0, 0.0, 1.0)), pr_hash3(i + vec3<f32>(1.0, 0.0, 1.0)), u.x);
+    let d = mix(pr_hash3(i + vec3<f32>(0.0, 1.0, 1.0)), pr_hash3(i + vec3<f32>(1.0, 1.0, 1.0)), u.x);
+    return mix(mix(a, b, u.y), mix(c, d, u.y), u.z);
 }
 
 // interleaved gradient noise, the dither of the cross-fade.
@@ -220,6 +243,33 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         m.emissive = vec4<f32>(select(hue * 0.04, hue, lit) * pr.lens.x, 0.0);
         s.albedo = vec3<f32>(0.02);
     }
+    if (pr_is_veg(inst.model) && inst.lamp != 0u && (m.flags & (PR_LEAF | PR_ROCK)) != 0u) {
+        // the vegetation's own colour on its leaves, blades and rock (the bark keeps its own): sRGB x 4 in the lamp word.
+        s.albedo = s.albedo * srgb_decode(unpack4x8unorm(inst.lamp).rgb) * 4.0;
+    }
+    if ((m.flags & PR_ROCK) != 0u) {
+        // rock grain: two octaves of value noise in world metres (mottle and
+        // pitting), on the albedo and as a bump on the normal, faded out where
+        // a pixel spans more than its cell.
+        let fw = length(dpx) + length(dpy);
+        let k = 1.0 - smoothstep(0.05, 0.4, fw);
+        let g = pr_noise3(in.world * 2.3) * 0.65 + pr_noise3(in.world * 9.0) * 0.35;
+        let coarse = pr_noise3(in.world * 0.6) * 0.6 + pr_noise3(in.world * 0.17) * 0.4;
+        // lichen and soil stain on the upward faces (grey-olive), darker in the coarse lows.
+        let up = clamp(s.n.y, 0.0, 1.0);
+        let stain = smoothstep(0.55, 0.8, pr_noise3(in.world * 1.1 + vec3<f32>(7.0))) * up * 0.6;
+        s.albedo = s.albedo * mix(1.0, 0.65 + 0.7 * g, k) * (0.7 + 0.6 * coarse);
+        s.albedo = mix(s.albedo, vec3<f32>(dot(s.albedo, vec3<f32>(0.33))) * vec3<f32>(1.05, 1.08, 0.9), stain);
+        let e = 0.04;
+        let gx = pr_noise3((in.world + vec3<f32>(e, 0.0, 0.0)) * 9.0) - pr_noise3(in.world * 9.0);
+        let gy = pr_noise3((in.world + vec3<f32>(0.0, e, 0.0)) * 9.0) - pr_noise3(in.world * 9.0);
+        let gz = pr_noise3((in.world + vec3<f32>(0.0, 0.0, e)) * 9.0) - pr_noise3(in.world * 9.0);
+        let grad = vec3<f32>(gx, gy, gz) / e;
+        let bump = normalize(s.n - (grad - s.n * dot(grad, s.n)) * 0.012 * k);
+        if (all(bump == bump)) {
+            s.n = bump;
+        }
+    }
     s.rough = clamp(s.rough, 0.03, 1.0);
     var c = look_light(s, m, v, in.world, n, 0u);
     if ((m.flags & PR_LEAF) != 0u && (pr.mode.z & PR_F_LEAF) != 0u) {
@@ -257,7 +307,15 @@ fn pr_cut(in: PrOut) {
             a = textureSampleLevel(pr_big, kit_sampler, pr_face_uv(tile, in.local), 1, 0.0).a;
         }
     } else if ((m.flags & PR_BIG) != 0u) {
-        a = textureSampleGrad(pr_big, kit_sampler, in.uv, m.layer, duvx, duvy).a;
+        if (pr_is_veg(pr_instances[in.inst].model)) {
+            // the vegetation's cards (grass blades, sprigs): alpha from a sharper
+            // level (a quarter of the footprint, two mips finer) so thin blades
+            // keep their coverage at a distance instead of thinning to their
+            // base; the temporal resolve smooths the finer edge.
+            a = textureSampleGrad(pr_big, kit_sampler, in.uv, m.layer, duvx * 0.25, duvy * 0.25).a;
+        } else {
+            a = textureSampleGrad(pr_big, kit_sampler, in.uv, m.layer, duvx, duvy).a;
+        }
     } else {
         a = textureSampleGrad(kit_albedo, kit_sampler, in.uv, m.layer, duvx, duvy).a;
     }

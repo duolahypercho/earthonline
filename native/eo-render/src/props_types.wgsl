@@ -79,8 +79,38 @@ fn pr_rot(yaw: f32, v: vec3<f32>) -> vec3<f32> {
     return vec3<f32>(v.x * c + v.z * s, v.y, -v.x * s + v.z * c);
 }
 
+fn pr_is_veg(model: u32) -> bool {
+    return model >= PR_VEG_BASE && model < PR_VEG_BASE + PR_VEG_COUNT;
+}
+
+// the vegetation's distance thinning (props_lib2/vegetation_models.rs, whose
+// `thin_wgsl` defines PR_VEG_* and `pr_veg_thin` ahead of this file): the
+// share of a thinned model's instances kept falls linearly from 1 at the thin
+// distance to PR_VEG_FLOOR at the draw distance; an instance whose rank (its
+// `slope` word, uniform in [0, 1)) is over the share shrinks away over a short
+// band, and the survivors grow by 1/sqrt(share) to keep the cover. 1 for
+// everything else. A function of the instance and the eye only, so the cull,
+// colour and shadow passes agree.
+fn pr_veg_scale(i: PrInstance) -> f32 {
+    if (!pr_is_veg(i.model)) {
+        return 1.0;
+    }
+    let t = pr_veg_thin(i.model);
+    if (t.x <= 0.0) {
+        return 1.0;
+    }
+    let d = distance(i.pos, pr.cam.xyz);
+    let f = clamp((d - t.x) / max(t.y - t.x, 1.0), 0.0, 1.0);
+    if (f <= 0.0) {
+        return 1.0;
+    }
+    let keep = mix(1.0, PR_VEG_FLOOR, f);
+    let s = 1.0 - smoothstep(keep, keep + 0.06, i.slope);
+    return s * min(inverseSqrt(keep), PR_VEG_GROW);
+}
+
 fn pr_local(i: PrInstance, p: vec3<f32>) -> vec3<f32> {
-    var l = p * i.scale;
+    var l = p * i.scale * pr_veg_scale(i);
     if (i.model == PR_TACTILE_PAD) {
         // The pad takes the ramp's running slope along its depth.
         l.y = l.y + l.z * i.slope;
@@ -103,6 +133,20 @@ fn pr_wind(i: PrInstance, p: vec3<f32>, w: f32) -> vec3<f32> {
     return vec3<f32>(pr.wind.x * a, -abs(a) * 0.05, pr.wind.y * a);
 }
 
+// the ground's gradient under a vegetation instance (dy/dx, dy/dz; its `pad`
+// word, two snorm16 of gradient / 4), zero for everything else and for the
+// trees (a trunk stands plumb): grass, scrub and rock follow the slope they
+// stand on by a shear (y += gradient . horizontal offset).
+fn pr_veg_grad(i: PrInstance) -> vec2<f32> {
+    if (!pr_is_veg(i.model) || i.model < PR_VEG_BASE + PR_VEG_TREES) {
+        return vec2<f32>(0.0);
+    }
+    return unpack2x16snorm(i.pad) * 4.0;
+}
+
 fn pr_world(i: PrInstance, p: vec3<f32>, w: f32) -> vec3<f32> {
-    return i.pos + pr_rot(i.yaw, pr_local(i, p)) + pr_wind(i, p, w);
+    let r = pr_rot(i.yaw, pr_local(i, p));
+    var o = i.pos + r + pr_wind(i, p, w);
+    o.y = o.y + dot(pr_veg_grad(i), r.xz);
+    return o;
 }
