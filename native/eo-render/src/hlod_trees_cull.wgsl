@@ -28,33 +28,42 @@ struct TcParams {
 // [0] commands, [1] trees, [2] blocks in the frustum, [3] blocks occluded
 @group(0) @binding(3) var<storage, read_write> tc_count: array<atomic<u32>, 4>;
 
+// Whether block `i` draws (and the frustum and occlusion counters).
+fn tc_keep(i: u32) -> bool {
+    let b = tc_blocks[i];
+    if (b.count == 0u) {
+        return false;
+    }
+    let fx = max(abs(tc.cam.x - b.min.x), abs(tc.cam.x - b.max.x));
+    let fz = max(abs(tc.cam.z - b.min.z), abs(tc.cam.z - b.max.z));
+    if (length(vec2<f32>(fx, fz)) < tc.cam.w) {
+        return false;
+    }
+    for (var p = 0u; p < 6u; p = p + 1u) {
+        let pl = tc.planes[p];
+        let v = select(b.min, b.max, pl.xyz >= vec3<f32>(0.0));
+        if (dot(pl.xyz, v) + pl.w < 0.0) {
+            return false;
+        }
+    }
+    atomicAdd(&tc_count[2], 1u);
+    if (tc_occluded(b.min, b.max)) {
+        atomicAdd(&tc_count[3], 1u);
+        return false;
+    }
+    return true;
+}
+
 @compute @workgroup_size(64)
 fn tree_cull(@builtin(global_invocation_id) gid: vec3<u32>) {
     let i = gid.x;
     if (i >= tc.counts.x) {
         return;
     }
+    if (!tc_keep(i)) {
+        return;
+    }
     let b = tc_blocks[i];
-    if (b.count == 0u) {
-        return;
-    }
-    let fx = max(abs(tc.cam.x - b.min.x), abs(tc.cam.x - b.max.x));
-    let fz = max(abs(tc.cam.z - b.min.z), abs(tc.cam.z - b.max.z));
-    if (length(vec2<f32>(fx, fz)) < tc.cam.w) {
-        return;
-    }
-    for (var p = 0u; p < 6u; p = p + 1u) {
-        let pl = tc.planes[p];
-        let v = select(b.min, b.max, pl.xyz >= vec3<f32>(0.0));
-        if (dot(pl.xyz, v) + pl.w < 0.0) {
-            return;
-        }
-    }
-    atomicAdd(&tc_count[2], 1u);
-    if (tc_occluded(b.min, b.max)) {
-        atomicAdd(&tc_count[3], 1u);
-        return;
-    }
     let slot = atomicAdd(&tc_count[0], 1u);
     let c = slot * 4u;
     tc_cmds[c] = 6u;

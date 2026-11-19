@@ -20,6 +20,7 @@ pub mod clouds; // the cloud noise, blue noise and cloud-shadow map
 pub mod cc0; // the CC0 scanned sets
 pub mod cc0_decals; // street wear decals
 pub mod facade; // facade
+pub mod far_city; // the far layer's fallback draw path and the built city's switches
 pub mod ground2; // the open ground from the measured ground-green table
 pub mod groundcover; // the ground vegetation and hill rock (hooks beside the props')
 pub mod hitch; // hitch
@@ -322,6 +323,10 @@ pub struct Renderer {
     pub base_object_count: u32,
     pub group_count: u32,
     pub compact: bool,
+    /// The far layer draws without the compacted lists (an adapter without
+    /// multi-draw-indirect-count, unless `--no-far-fallback`): fixed-size
+    /// lists, see `hlod::HlodGpu::draw` and `hlod_trees::FarTrees::draw`.
+    pub far_fallback: bool,
     pub color_format: wgpu::TextureFormat,
     pub sample_count: u32,
     pub debug_ids: bool,
@@ -956,6 +961,7 @@ impl Renderer {
             base_object_count: init.objects.len() as u32,
             group_count: init.groups.len() as u32,
             compact: ctx.indirect_count,
+            far_fallback: !ctx.indirect_count && far_city::FarCity::from_env().fallback,
             color_format: init.color_format,
             sample_count: init.sample_count,
             debug_ids: init.debug_ids,
@@ -1068,7 +1074,7 @@ impl Renderer {
     /// stage 4, the distant trees' pipeline and buffer (once; the list
     /// comes later: `hlod_trees.get()?.supply`). Returns the bytes allocated.
     pub fn attach_far_trees(&self, ctx: &GpuContext) -> u64 {
-        if self.hlod_trees.get().is_some() || !self.compact || !hlod::HlodOptions::from_env().on || !hlod::HlodOptions::from_env().trees {
+        if self.hlod_trees.get().is_some() || !(self.compact || self.far_fallback) || !hlod::HlodOptions::from_env().on || !hlod::HlodOptions::from_env().trees {
             return 0;
         }
         let t = hlod_trees::FarTrees::new(&hlod_trees::FarTreesInit {
@@ -1078,6 +1084,7 @@ impl Renderer {
             late_bgl: &self.occlusion.late_bgl,
             sample_count: self.sample_count,
             debug_ids: self.debug_ids,
+            fallback: !self.compact,
         });
         let b = t.bytes;
         let _ = self.hlod_trees.set(t);
@@ -1085,10 +1092,11 @@ impl Renderer {
     }
 
     /// build the far layer's GPU side (once; later calls are ignored).
-    /// Needs the compacted lists (multi-draw-indirect-count); without them the
-    /// far layer stays off and the boxes draw as before. Returns the bytes allocated.
+    /// Draws from the compacted lists (multi-draw-indirect-count), else from
+    /// fixed-size lists (`far_fallback`); with neither the far layer stays off
+    /// and the boxes draw as before. Returns the bytes allocated.
     pub fn attach_hlod(&self, ctx: &GpuContext, opts: &hlod::HlodOptions) -> u64 {
-        if self.hlod.get().is_some() || !self.compact || !opts.on {
+        if self.hlod.get().is_some() || !(self.compact || self.far_fallback) || !opts.on {
             return 0;
         }
         let h = hlod::HlodGpu::new(&hlod::HlodInit {
@@ -1101,6 +1109,7 @@ impl Renderer {
             sample_count: self.sample_count,
             debug_ids: self.debug_ids,
             opts: *opts,
+            fallback: !self.compact,
         });
         let b = h.total_bytes();
         let _ = self.hlod.set(h);

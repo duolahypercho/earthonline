@@ -44,7 +44,7 @@ fn far_tree_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32)
     if (ft.range.z < 0.5) {
         return out;
     }
-    let t = ft_trees[ii];
+    let t = ft_trees[ft_index(ii)];
     let rel = t.pos - frame.cam_pos.xyz;
     let d = length(rel.xz);
     if (d < ft.range.x || dot(rel, look.cam_fwd.xyz) < 0.0) {
@@ -76,10 +76,9 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
     let crown = r < 0.92 + lobes;
     // The trunk: the lower part, a narrow column.
     let trunk = in.uv.y < 0.3 && abs(in.uv.x) < 0.07;
-    if (!(crown || trunk)) {
-        discard;
-    }
-    if (in.fade < 0.999 && hlod_dither(floor(in.clip.xy)) >= in.fade) {
+    // the card's outline and the fade's screen door
+    let cut = !(crown || trunk) || (in.fade < 0.999 && hlod_dither(floor(in.clip.xy)) >= in.fade);
+    if (!FT_LATE_DISCARD && cut) {
         discard;
     }
     let v = normalize(frame.cam_pos.xyz - in.world);
@@ -112,7 +111,15 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
     m.thin_absorption = 0.0;
     rm_emit = vec3<f32>(0.0);
     let face = normalize(cross(dpx, dpy));
-    return look_light(s, m, v, in.world, select(-face, face, dot(face, v) > 0.0), 0u);
+    let lit = look_light(s, m, v, in.world, select(-face, face, dot(face, v) > 0.0), 0u);
+    // FT_LATE_DISCARD (the fallback path, set by hlod_trees.rs): the discards
+    // after the lighting. The light reads screen derivatives, which are
+    // undefined after a discard on backends where discard ends the invocation
+    // (Metal), and the whole dithered band then shaded black.
+    if (FT_LATE_DISCARD && cut) {
+        discard;
+    }
+    return lit;
 }
 
 @fragment
