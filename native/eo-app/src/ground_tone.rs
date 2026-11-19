@@ -13,14 +13,11 @@ use eo_water::WaterData;
 pub const FAR_LAND_ABOVE_SEA_M: f64 = 2.0;
 pub const FAR_LAND_SHORE_M: f64 = 60.0;
 
-/// Sand stops at the beach (`--no-beach-sand-limit`): the steepest ground,
-/// rise over run across 12 m of the drawn grid (the slope `ground_tone`
-/// measures), that still carries sand. Derived from the 1 m 3DEP DEM through
-/// the 8 m elevation grid: the 99th percentile of that slope at the terrain
-/// vertices inside the mapped beaches (OSM `natural=beach`), 0.356
-/// (`the_sand_limits_match_the_mapped_beaches` re-measures it). The ground
-/// plan and the heights are both scaled 1.25, so the slope is the surveyed one.
-pub const SAND_SLOPE_MAX: f64 = 0.36;
+/// Sand stops at the beach (`--no-beach-sand-limit`): the steepest ground
+/// that still carries sand, derived from the DEM at the mapped beaches
+/// (eo-landmarks ground_cover `SAND_SLOPE_MAX`, which the cliff-toe boulders
+/// read too; `the_sand_limits_match_the_mapped_beaches` re-measures it).
+pub use eo_landmarks::ground_cover::SAND_SLOPE_MAX;
 /// The berm crest: the highest ground over the sea that carries sand,
 /// surveyed metres (drawn at the height scale). Derived the same way: the
 /// 99th percentile of the height over the sea at the vertices inside the
@@ -74,16 +71,18 @@ pub fn sand_holds(elev: &ElevationGrid, field: &eo_water::field::ShoreField, x: 
 }
 
 /// The ground where the sand stopped (a cliff or the bluff over a beach):
-/// bare earth (tile-ground-cover.js `bareEarth`, the ochre of the bluffs'
-/// sandstone and weathered serpentinite) where the measured vegetation share
-/// (ground2's NAIP table) is low, coastal scrub (`wildScrub`) where it is
-/// high, split per vertex as ground2's `hill_tone` splits dry grass from
-/// scrub. Not the hills' straw: a slope too steep for sand is bare, not grass.
+/// bare earth (tile-ground-cover.js `bareEarth`, #7a7262 to #887f6d: a
+/// near-neutral grey-brown, the JS palette's bare ground, not a measured
+/// tone of the bluffs' rock) where the measured vegetation share (ground2's
+/// NAIP table) is low, coastal scrub (`wildScrub`) where it is high, split
+/// per vertex as ground2's `hill_tone` splits dry grass from scrub. Not the
+/// hills' straw: a slope too steep for sand is bare, not grass.
 /// `bare`: the mapped bare surface there (bare rock), else None for bare earth.
 pub fn cliff_tone(share: f64, bare: Option<[f64; 3]>, x: f64, z: f64) -> [f64; 3] {
     use eo_landmarks::ground_cover::named_tone;
-    let scrub = named_tone("wildScrub", x, z).unwrap_or([0.08, 0.09, 0.05]);
-    let earth = bare.or_else(|| named_tone("bareEarth", x, z)).unwrap_or([0.19, 0.17, 0.12]);
+    // (both names are in tile-ground-cover.js's table: `named_tone` is Some for them)
+    let scrub = named_tone("wildScrub", x, z).expect("tile-ground-cover.js wildScrub");
+    let earth = bare.unwrap_or_else(|| named_tone("bareEarth", x, z).expect("tile-ground-cover.js bareEarth"));
     let level = share * 2.2 + (eo_render::ground2::hash01(x, z, 7) - 0.5) * 0.9;
     let t = ((level - 0.4) / 0.35).clamp(0.0, 1.0);
     let t = t * t * (3.0 - 2.0 * t);
@@ -209,11 +208,17 @@ mod tests {
     /// The sand limits are the mapped beaches' own 99th percentiles of slope
     /// and height over the sea (the derivation `SAND_SLOPE_MAX` and
     /// `BERM_CREST_SURVEYED_M` state), at the drawn 1.25 plan and height
-    /// scales; skipped where the city data is not checked out.
+    /// scales; skipped only where the city data is not checked out (a loader
+    /// that fails on data that is there fails the test).
     #[test]
     fn the_sand_limits_match_the_mapped_beaches() {
-        let Ok(paths) = eo_data::DataPaths::discover() else { return };
-        let (Ok(elev), Ok(cover), Ok(water)) = (eo_data::ElevationGrid::load(&paths), eo_landmarks::ground_cover::GroundCover::load(&paths.repo_root), eo_water::load(&paths.repo_root, None)) else { return };
+        let Ok(paths) = eo_data::DataPaths::discover() else {
+            eprintln!("the_sand_limits_match_the_mapped_beaches: no city data checked out; skipped");
+            return;
+        };
+        let elev = eo_data::ElevationGrid::load(&paths).expect("elevation grid");
+        let cover = eo_landmarks::ground_cover::GroundCover::load(&paths.repo_root).expect("ground cover");
+        let water = eo_water::load(&paths.repo_root, None).expect("shore field");
         let (mut slopes, mut heights) = (vec![], vec![]);
         let cell = elev.meta.cell_size;
         for j in 0..elev.meta.height {
@@ -235,11 +240,13 @@ mod tests {
             v[(v.len() - 1) * 99 / 100]
         };
         let (s99, h99) = (p99(&mut slopes), p99(&mut heights));
+        eprintln!("mapped beaches: {} vertices, slope p99 {s99:.3}, height over the sea p99 {h99:.2} m surveyed", slopes.len());
         assert!((s99 - SAND_SLOPE_MAX).abs() < 0.02, "slope p99 {s99}");
         assert!((h99 - BERM_CREST_SURVEYED_M).abs() < 0.5, "height p99 {h99} m surveyed");
         // drawn: the berm at the 1.25 height scale (the approved deviation)
         assert!((BERM_CREST_SURVEYED_M * 1.25 - 15.625).abs() < 1e-9);
     }
+
 
     #[test]
     fn the_far_land_follows_the_far_layers_season() {
@@ -249,6 +256,12 @@ mod tests {
         assert!(autumn[0] > autumn[1] && luma(autumn) > luma(spring), "golden in autumn: {autumn:?}");
         // the game's date (22 Sep, day 265) is the far layer's golden season
         assert!((eo_render::farshore::dryness_for_day(265.0) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn the_sand_limit_and_the_toe_boulders_read_one_slope() {
+        assert_eq!(SAND_SLOPE_MAX, eo_landmarks::ground_cover::SAND_SLOPE_MAX);
+        assert_eq!(SAND_SLOPE_MAX, eo_landmarks::rocks::SAND_SLOPE_MAX);
     }
 
     #[test]
