@@ -30,6 +30,10 @@ pub struct SceneMeter {
     pub bytes: u64,
 }
 
+fn new_slot_buffer(device: &wgpu::Device) -> wgpu::Buffer {
+    device.create_buffer(&wgpu::BufferDescriptor { label: Some("scene-meter-read"), size: HIST_BYTES, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false })
+}
+
 pub fn wgsl() -> String {
     format!(
         "const MT_BINS: u32 = {}u;\nconst MT_BINS_PER_EV: f32 = {:.1};\nconst MT_LO_EV: f32 = {:.1};\n{}",
@@ -72,7 +76,7 @@ impl SceneMeter {
         let slots = (0..RING)
             .map(|_| {
                 Mutex::new(Slot {
-                    buf: device.create_buffer(&wgpu::BufferDescriptor { label: Some("scene-meter-read"), size: HIST_BYTES, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false }),
+                    buf: new_slot_buffer(device),
                     stage: Arc::new(AtomicU8::new(0)),
                     prior: 1.0,
                     frame: 0,
@@ -119,7 +123,7 @@ impl SceneMeter {
             }
         }
         let _ = device.poll(if waiting { wgpu::PollType::wait_indefinitely() } else { wgpu::PollType::Poll });
-        self.collect();
+        self.collect(device);
     }
 
     /// Make sure the coming frame has a free readback slot: with every slot in
@@ -137,12 +141,12 @@ impl SceneMeter {
             }
         }
         let _ = device.poll(wgpu::PollType::wait_indefinitely());
-        self.collect();
+        self.collect(device);
     }
 
-    fn collect(&self) {
+    fn collect(&self, device: &wgpu::Device) {
         for s in &self.slots {
-            let s = s.lock().unwrap();
+            let mut s = s.lock().unwrap();
             match s.stage.load(Ordering::Acquire) {
                 3 => {
                     let hist: Vec<u32> = match s.buf.slice(..).get_mapped_range() {
@@ -159,7 +163,9 @@ impl SceneMeter {
                     }
                 }
                 4 => {
-                    s.buf.unmap();
+                    // the map failed (the buffer was not mapped, and may no longer be
+                    // usable: seen once on the drive bench path): a fresh buffer, no reading
+                    s.buf = new_slot_buffer(device);
                     s.stage.store(0, Ordering::Release);
                 }
                 _ => {}
