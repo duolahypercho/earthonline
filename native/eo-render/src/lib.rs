@@ -1652,7 +1652,8 @@ impl Renderer {
         self.encode_cull(enc, ts);
         // sun shadow cull + depth passes; the city renders into the HDR
         // target (resolving MSAA into it) and post writes the output.
-        self.look.encode_shadows(enc, &self.vertex_buf, &self.index_buf, ts);
+        // the ground cover's casters go into each refreshed cascade's pass (nothing attached: none).
+        self.look.encode_shadows_with(enc, &self.vertex_buf, &self.index_buf, ts, &|pass, c| self.groundcover.draw_shadow(pass, c, &self.look));
         if let Some(a) = self.agents.get() {
             a.encode(enc, &self.look); // cull + LOD compute, casters into the refreshed cascades
         }

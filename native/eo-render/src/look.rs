@@ -1330,6 +1330,13 @@ impl LookGpu {
 
     /// Shadow cull + one depth pass per cascade (after the camera's cull pass).
     pub fn encode_shadows(&self, enc: &mut wgpu::CommandEncoder, vertex: &wgpu::Buffer, index: &wgpu::Buffer, ts: Option<(&wgpu::QuerySet, u32)>) {
+        self.encode_shadows_with(enc, vertex, index, ts, &|_, _| {});
+    }
+
+    /// `encode_shadows`, with `casters(pass, cascade)` called at the end of each
+    /// refreshed cascade's shadow-depth pass, after the city's casters (the
+    /// ground cover's hook: it may set its own pipeline and bind groups).
+    pub fn encode_shadows_with(&self, enc: &mut wgpu::CommandEncoder, vertex: &wgpu::Buffer, index: &wgpu::Buffer, ts: Option<(&wgpu::QuerySet, u32)>, casters: &dyn Fn(&mut wgpu::RenderPass<'_>, usize)) {
         let active = self.shadows_active();
         // Commit what the last update fitted: these boxes are what the maps
         // will hold after this encode.
@@ -1406,6 +1413,7 @@ impl LookGpu {
             } else {
                 pass.multi_draw_indexed_indirect(&self.shadow_draws, offset, n);
             }
+            casters(&mut pass, c);
         }
     }
 
