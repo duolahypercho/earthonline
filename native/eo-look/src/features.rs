@@ -53,9 +53,50 @@ pub fn pin_daylight(f: DaylightFeatures) -> bool {
 /// The switches `daylight` reads (eo-app accepts them).
 pub const SWITCHES: &[&str] = &["--no-gg2-daylight", "--no-ground-albedo", "--no-photo-date", "--no-clear-sky-state", "--no-cirrus"];
 
-/// The colour and camera track's switch names (the roll-up first); eo-app
-/// accepts them. Reserved: nothing reads them yet.
-pub const GG3_SWITCHES: &[&str] = &["--no-gg3-colour", "--no-sun-spectrum2", "--no-sky-calibration", "--no-camera-style", "--no-meter-highlights", "--no-haze-visibility"];
+/// The colour and camera track's switch names (the roll-up first, then the
+/// kill switches, then the opt-in renderings); eo-app accepts them.
+/// `--no-gg3` (every round-3 track's roll-up) turns the colour track off too.
+pub const GG3_SWITCHES: &[&str] =
+    &["--no-gg3-colour", "--no-sun-spectrum2", "--no-sky-calibration", "--no-camera-style", "--no-meter-highlights", "--no-haze-visibility", "--camera-aces13"];
+
+/// Which of the colour and camera track's features are on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ColourFeatures {
+    /// The direct sun's colour from its spectrum through the air
+    /// (`spectral::beam_srgb`), not the three channels. `--no-sun-spectrum2`.
+    pub sun_spectrum2: bool,
+    /// The scene meter averages the frame (ISO 2720's averaging reflected
+    /// meter) with no highlight hold. `--no-meter-highlights`.
+    pub meter_highlights: bool,
+    /// Opt-in: the camera look renders through the ACES 1.3 RRT and sRGB
+    /// 100-nit dim ODT (`tone::aces13`) in place of ACES 2.0. `--camera-aces13`.
+    pub aces13: bool,
+}
+
+impl ColourFeatures {
+    pub const ALL: Self = Self { sun_spectrum2: true, meter_highlights: true, aces13: false };
+    pub const NONE: Self = Self { sun_spectrum2: false, meter_highlights: false, aces13: false };
+
+    pub fn from_args(args: &[String]) -> Self {
+        let has = |s: &str| args.iter().any(|a| a == s);
+        if has("--no-gg3-colour") || has("--no-gg3") {
+            return Self::NONE;
+        }
+        Self { sun_spectrum2: !has("--no-sun-spectrum2"), meter_highlights: !has("--no-meter-highlights"), aces13: has("--camera-aces13") }
+    }
+}
+
+static COLOUR: OnceLock<ColourFeatures> = OnceLock::new();
+
+/// The process's colour features (from `std::env::args` on first use).
+pub fn colour() -> ColourFeatures {
+    *COLOUR.get_or_init(|| ColourFeatures::from_args(&std::env::args().collect::<Vec<_>>()))
+}
+
+/// Pin the colour features before anything reads them (a test, a tool).
+pub fn pin_colour(f: ColourFeatures) -> bool {
+    *COLOUR.get_or_init(|| f) == f
+}
 
 #[cfg(test)]
 mod tests {
@@ -68,5 +109,19 @@ mod tests {
         assert_eq!(DaylightFeatures::from_args(&a(&["eo-app", "--no-gg2-daylight"])), DaylightFeatures::NONE);
         let f = DaylightFeatures::from_args(&a(&["eo-app", "--no-cirrus"]));
         assert!(!f.cirrus && f.ground_albedo && f.clear_sky_state);
+    }
+
+    #[test]
+    fn the_colour_roll_ups_turn_every_colour_feature_off() {
+        let a = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(ColourFeatures::from_args(&a(&["eo-app"])), ColourFeatures::ALL);
+        assert_eq!(ColourFeatures::from_args(&a(&["eo-app", "--no-gg3-colour"])), ColourFeatures::NONE);
+        assert_eq!(ColourFeatures::from_args(&a(&["eo-app", "--no-gg3"])), ColourFeatures::NONE);
+        let f = ColourFeatures::from_args(&a(&["eo-app", "--no-sun-spectrum2", "--camera-aces13"]));
+        assert!(!f.sun_spectrum2 && f.meter_highlights && f.aces13);
+        // every name parses as one of the track's
+        for s in GG3_SWITCHES {
+            assert!(s.starts_with("--"), "{s}");
+        }
     }
 }
