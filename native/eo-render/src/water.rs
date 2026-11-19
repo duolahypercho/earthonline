@@ -403,11 +403,7 @@ fn sea_override() -> Option<eo_water::waves::SeaState> {
 /// The water shaders' shared WGSL (constants generated from eo-water, the
 /// grid and the uniform).
 fn common_source() -> String {
-    // (iteration 2, lean) each cascade's middle wavelength (m), the geometric mean of its band's edges (eo-water `CUT_M`)
-    let c = eo_water::waves::CUT_M;
-    let mid = |i: usize| (c[i].min(1e4) * c[i + 1]).sqrt();
-    let lean = format!("const WV_MID_M: vec4<f32> = vec4<f32>({:.4}, {:.4}, {:.4}, {:.4});\n", mid(0), mid(1), mid(2), mid(3));
-    format!("{}\n{}\n{lean}{}", eo_water::optics::wgsl_constants(), eo_water::surface::wgsl_constants(), include_str!("water_common.wgsl"))
+    format!("{}\n{}\n{}", eo_water::optics::wgsl_constants(), eo_water::surface::wgsl_constants(), include_str!("water_common.wgsl"))
 }
 
 /// (iteration 2, current) the wind sea's amplitude gain per cascade on the
