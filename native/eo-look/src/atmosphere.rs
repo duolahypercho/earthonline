@@ -595,3 +595,68 @@ mod tests {
         assert!((luminance(up) - luminance(l.sky_h)).abs() < 0.15 * luminance(l.sky_h), "{up:?} {:?}", l.sky_h);
     }
 }
+
+/// The CIE standard general sky's relative luminance (ISO 15469:2004 / CIE S
+/// 011/E:2003, Darula and Kittler 2002): L / L_zenith for a direction at
+/// zenith angle `z` and angle `chi` from the sun, the sun at zenith angle
+/// `zs` (radians), for gradation (a, b) and indicatrix (c, d, e).
+pub fn cie_sky_relative(z: f64, chi: f64, zs: f64, abcde: [f64; 5]) -> f64 {
+    let [a, b, c, d, e] = abcde;
+    let phi = |z: f64| 1.0 + a * (b / z.cos().max(1e-6)).exp();
+    let f = |x: f64| 1.0 + c * ((d * x).exp() - (d * std::f64::consts::FRAC_PI_2).exp()) + e * x.cos() * x.cos();
+    f(chi) * phi(z) / (f(zs) * phi(0.0))
+}
+
+/// CIE standard skies 12 (clear, low luminance turbidity) and 13 (clear, polluted atmosphere).
+pub const CIE_SKY_12: [f64; 5] = [-1.0, -0.32, 10.0, -3.0, 0.45];
+pub const CIE_SKY_13: [f64; 5] = [-1.0, -0.32, 16.0, -3.0, 0.30];
+
+#[cfg(test)]
+mod cie_sky_tests {
+    use super::*;
+
+    /// The clear sky's luminance distribution against the CIE standard clear
+    /// skies 12 and 13 at the photographs' suns (3, 10, 31, 46 deg): each
+    /// point's luminance over the zenith's.
+    #[test]
+    fn the_sky_gradient_against_the_cie_clear_skies() {
+        let t = tables(&Atmosphere::coastal_clear(), 1.0);
+        let mut worst: f64 = 1.0;
+        for sun_el in [3.0f64, 10.0, 31.0, 46.0] {
+            let s = [(sun_el * DEG).cos(), (sun_el * DEG).sin(), 0.0];
+            let zen = luminance(spectral_chroma(t.sky_radiance([0.0, 1.0, 0.0], s, 2.0)));
+            for az in [90.0f64, 180.0] {
+                for el in [5.0f64, 20.0, 45.0] {
+                    let d = [(el * DEG).cos() * (az * DEG).cos(), (el * DEG).sin(), (el * DEG).cos() * (az * DEG).sin()];
+                    let m = luminance(spectral_chroma(t.sky_radiance(d, s, 2.0))) / zen;
+                    let chi = (d[0] * s[0] + d[1] * s[1] + d[2] * s[2]).clamp(-1.0, 1.0).acos();
+                    let z = (90.0 - el) * DEG;
+                    let zs = (90.0 - sun_el) * DEG;
+                    let c12 = cie_sky_relative(z, chi, zs, CIE_SKY_12);
+                    let c13 = cie_sky_relative(z, chi, zs, CIE_SKY_13);
+                    eprintln!("sun {sun_el:4.1} az {az:5.1} el {el:4.1}: model {m:5.2}  CIE 12 {c12:5.2}  CIE 13 {c13:5.2}");
+                    if sun_el >= 10.0 {
+                        let r = m / c12.min(c13).max(1e-6);
+                        let r2 = m / c12.max(c13);
+                        let off = if r < 1.0 { 1.0 / r } else if r2 > 1.0 { r2 } else { 1.0 };
+                        worst = worst.max(off);
+                    }
+                }
+            }
+        }
+        eprintln!("worst factor outside the CIE 12-13 band (sun >= 10 deg): {worst:.2}");
+        // the model's sky keeps the CIE clear skies' shape within a factor of 2.1 (it is
+        // brighter toward the horizon than both: the aerosol's 1 km layer), so nothing in
+        // it is whitened or flattened against them
+        assert!(worst < 2.1, "{worst}");
+        // the zenith's colour: a clear zenith is far bluer than daylight (CCT over 10000 K)
+        for sun_el in [31.0f64, 46.0] {
+            let s = [(sun_el * DEG).cos(), (sun_el * DEG).sin(), 0.0];
+            let z = spectral_chroma(t.sky_radiance([0.0, 1.0, 0.0], s, 2.0));
+            let xy = crate::spectral::srgb_xy(z);
+            let lz = luminance(z) * LUMINOUS_SOLAR_CONSTANT_LX;
+            eprintln!("sun {sun_el}: zenith xy {:.3} {:.3}, {:.0} cd/m2", xy[0], xy[1], lz);
+            assert!(xy[0] < 0.28 && xy[1] < 0.29, "{xy:?}");
+        }
+    }
+}
