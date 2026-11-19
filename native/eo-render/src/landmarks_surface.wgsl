@@ -188,6 +188,9 @@ fn lm_surface(s: ptr<function, Surface>, m: Material, world: vec3<f32>, n: vec3<
         (*s).albedo = (*s).albedo * vec3<f32>((1.0 + tone - abs(streak)) * wet);
         if (bridge && LM_CONCRETE2_ON && lm_is_gg(world)) {
             lm_concrete_age(s, world, n, uv, du, dv, footprint, vertical);
+            if (LM_AGE_CONCRETE_ON) {
+                lm_gg_age_concrete(s, world, n, uv, footprint, vertical);
+            }
         }
         if (bridge) {
             (*s).ao = (*s).ao * lm_bridge_sky_vis(world, n);
@@ -1101,6 +1104,7 @@ fn lm_probe(s: ptr<function, Surface>, world: vec3<f32>, ng: vec3<f32>) {
 
 // The means of the value noise's smoothsteps the patterns use (2,000,000 samples).
 const LM_AGE_MEAN_SS_0_06: f32 = 0.2351; // E[ss(0.0, 0.6, noise)]
+const LM_AGE_MEAN_SS_03_08: f32 = 0.0823; // E[ss(0.3, 0.8, noise)]
 
 // Where a Golden Gate steel point stands under the roadway (`underside`):
 // (x) how far it is inside the truss or sheltered under the deck (1 inside
@@ -1220,4 +1224,56 @@ fn lm_gg_age_far(s: ptr<function, Surface>, n: vec3<f32>) {
         let k = LM_AGE_CHALK * (0.85 + 0.3 * max(n.y, 0.0));
         (*s).albedo = mix(a, LM_AGE_CHALK_RGB, k);
     }
+}
+
+// The Golden Gate concrete's age (`concrete_age`): run-off from the coping
+// above (a pylon's top in its plan along the span, else the deck's edge over
+// the point), a wall-scale tone, efflorescence and a dark foot (a pylon's own,
+// else the sea's). Normalised so a face's mean stays the cited albedo (the
+// foot, like the tide's band, is the foot's own).
+fn lm_gg_age_concrete(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, uv: vec2<f32>, footprint: f32, vertical: f32) {
+    let fid = floor(dot(n, vec3<f32>(1.0, 3.0, 7.0)) * 2.0 + 0.5);
+    let c0 = dot(world.xz - LM_GG_ORIGIN, LM_GG_AXIS);
+    var drop = 1e4;
+    var foot = LM_SEA_LEVEL_Y;
+    for (var i = 0u; i < LM_GG_PYLON_N; i = i + 1u) {
+        let py = LM_GG_PYLONS[i];
+        if (abs(c0 - py.x) < py.z + 0.6) {
+            drop = py.y - world.y;
+            foot = py.w;
+        }
+    }
+    if (drop > 1e3 && c0 > LM_GG_DECK[0] && c0 < LM_GG_DECK[5]) {
+        let deck = lm_gg_deck_top(c0);
+        if (deck > world.y) {
+            drop = deck - world.y;
+        }
+    }
+    drop = max(drop, 0.0);
+    // run-off: dark grey-brown streaks, strongest under the coping.
+    let fr = lm_fade(footprint, LM_AGE_RUNOFF.x);
+    let rn = lm_noise(vec3<f32>(uv.x / LM_AGE_RUNOFF.x, world.y / 14.0, fid + 61.0));
+    let run = mix(LM_AGE_MEAN_SS_0_06, lm_ss(0.0, 0.6, rn), fr);
+    let k_run = LM_AGE_RUNOFF.y * (0.35 + 0.65 * exp(-drop / LM_AGE_RUNOFF.z)) * vertical;
+    // the wall's own tone, a few metres across, zero-mean.
+    let fw = lm_fade(footprint, LM_AGE_WALL.x);
+    let wall = lm_noise(vec3<f32>(uv.x / LM_AGE_WALL.x, world.y / 30.0, fid + 67.0)) / 0.6 * LM_AGE_WALL.y * fw * vertical;
+    // efflorescence: pale streaks.
+    let fe = lm_fade(footprint, 0.8);
+    let ef = mix(LM_AGE_MEAN_SS_03_08, lm_ss(0.3, 0.8, lm_noise(vec3<f32>(uv.x / 0.8, world.y / 6.0, fid + 71.0))), fe) * LM_AGE_EFFLOR * vertical;
+    let c = (*s).albedo;
+    let dirt = vec3<f32>(0.92, 1.0, 1.12); // the run-off's dirt is brown: the blue goes first
+    var a = c * (1.0 + wall) * max(vec3<f32>(1.0) - dirt * (k_run * run), vec3<f32>(0.0));
+    a = mix(a, LM_AGE_EFFLOR_RGB, ef);
+    // the mean the staining moves a face by, taken off again (the run-off at its mean strength, the efflorescence at its mean).
+    let km = LM_AGE_RUNOFF.y * 0.5 * vertical * LM_AGE_MEAN_SS_0_06;
+    let em = LM_AGE_MEAN_SS_03_08 * LM_AGE_EFFLOR * vertical;
+    let mean = (c * (1.0 - km) * (1.0 - em) + LM_AGE_EFFLOR_RGB * em) / max(c, vec3<f32>(1e-4));
+    a = a / mean;
+    // the foot: splash and soil at a pylon's, salt and the marine growth at the sea's.
+    a = a * mix(LM_AGE_FOOT.y, 1.0, lm_ss(foot, foot + LM_AGE_FOOT.x, world.y));
+    if (foot == LM_SEA_LEVEL_Y) {
+        a = a * mix(LM_AGE_SEA_FOOT_RGB, vec3<f32>(1.0), lm_ss(LM_SEA_LEVEL_Y, LM_SEA_LEVEL_Y + LM_AGE_SEA_FOOT_M, world.y));
+    }
+    (*s).albedo = max(a, vec3<f32>(0.0));
 }
