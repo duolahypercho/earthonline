@@ -1383,8 +1383,10 @@ impl WaterGpu {
         probe_views: [&wgpu::TextureView; 2], // both cubes (bind groups made once, a capture flips the index)
         probe_front: usize,
         ts: Option<(&wgpu::QuerySet, u32)>,
+        ts_ppr: Option<(&wgpu::QuerySet, u32)>,
         then: impl FnOnce(&mut wgpu::RenderPass<'_>),
     ) {
+        let ppr_tw = ts_ppr.map(|(q, b)| wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b), end_of_pass_write_index: Some(b + 1) });
         let (copy, slot, fogged, spray) = {
             let st = self.state.lock().unwrap();
             (st.copy, st.slot, st.fogged, st.spray)
@@ -1445,10 +1447,12 @@ impl WaterGpu {
                 cache.as_ref().unwrap().2.clone()
             };
             enc.clear_buffer(&ppr_buf, 0, None);
-            let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("water-ppr"), timestamp_writes: None });
+            let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("water-ppr"), timestamp_writes: ppr_tw });
             pass.set_pipeline(&self.ppr_pipe);
             pass.set_bind_group(0, &pbg, &[]);
             pass.dispatch_workgroups(dw.div_ceil(8), dh.div_ceil(8), 1);
+        } else if ppr_tw.is_some() {
+            enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("water-ppr (none)"), timestamp_writes: ppr_tw });
         }
         let bg = {
             let mut cache = self.draw_bg.lock().unwrap();

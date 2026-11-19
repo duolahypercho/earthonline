@@ -225,6 +225,11 @@ pub struct LookGpu {
     view_buf: wgpu::Buffer,
     shadow_draws: wgpu::Buffer,
     shadow_counters: wgpu::Buffer,
+    /// the cascade planes and refresh mask the last `update` wrote for the shadow cull.
+    shadow_planes: Mutex<([[f32; 4]; 18], u32)>,
+    /// (fixed-slot lists) each cascade's slot ranges for this frame (`draw_ranges`, set by
+    /// the renderer after `update`; None: the whole list).
+    shadow_ranges: Mutex<Option<[crate::draw_ranges::Ranges; 3]>>,
     shadow_layers: Vec<wgpu::TextureView>,
     main_bgl: wgpu::BindGroupLayout,
     /// one per history parity (the previous resolved frame differs).
@@ -745,6 +750,8 @@ impl LookGpu {
             view_buf,
             shadow_draws,
             shadow_counters,
+            shadow_planes: Mutex::new(([[0.0; 4]; 18], 0)),
+            shadow_ranges: Mutex::new(None),
             shadow_layers,
             main_bgl,
             main_bg: Mutex::new(main_bg),
@@ -1321,6 +1328,8 @@ impl LookGpu {
         }
         let p = ShadowCullParams { planes, object_count: self.object_count, compact: self.compact as u32, mask, pad: 0 };
         queue.write_buffer(&self.cull_buf, 0, bytemuck::bytes_of(&p));
+        *self.shadow_planes.lock().unwrap() = (planes, mask);
+        *self.shadow_ranges.lock().unwrap() = None; // the renderer sets this update's (draw_ranges)
         for (c, cas) in cascades.iter().enumerate() {
             let mut bytes = [0f32; 20];
             for col in 0..4 {
@@ -1417,11 +1426,24 @@ impl LookGpu {
             let offset = c as u64 * n as u64 * crate::DRAW_ARGS_BYTES;
             if self.compact {
                 pass.multi_draw_indexed_indirect_count(&self.shadow_draws, offset, &self.shadow_counters, c as u64 * 4, n);
+            } else if let Some(r) = self.shadow_ranges.lock().unwrap().as_ref() {
+                // the blocks of slots the cascade's cull can fill, in slot order
+                crate::draw_ranges::draw(&mut pass, &self.shadow_draws, offset, &r[c]);
             } else {
                 pass.multi_draw_indexed_indirect(&self.shadow_draws, offset, n);
             }
             casters(&mut pass, c);
         }
+    }
+
+    /// the planes (6 per cascade) and the refresh mask the last `update` gave the shadow cull.
+    pub fn shadow_cull_planes(&self) -> ([[f32; 4]; 18], u32) {
+        *self.shadow_planes.lock().unwrap()
+    }
+
+    /// this frame's slot ranges per cascade for the fixed-slot lists (after `update`).
+    pub fn set_shadow_ranges(&self, ranges: Option<[crate::draw_ranges::Ranges; 3]>) {
+        *self.shadow_ranges.lock().unwrap() = ranges;
     }
 
     pub fn bind_main(&self, pass: &mut wgpu::RenderPass<'_>) {
@@ -1520,7 +1542,13 @@ impl LookGpu {
             // the scene meter reads the frame post reads, before post
             let src = self.post_source.load(std::sync::atomic::Ordering::Relaxed) as usize;
             let prior = *self.meter_prior.lock().unwrap();
-            self.meter.encode(enc, src, t.size, prior, self.sky.frame_index());
+            self.meter.encode(enc, src, t.size, prior, self.sky.frame_index(), ts.map(|(q, b)| (q, b + crate::Q_SCENE_METER)));
+        } else if let Some((q, b)) = ts {
+            // the slot is written every frame (an empty pass)
+            enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("scene-meter (off)"),
+                timestamp_writes: Some(wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b + crate::Q_SCENE_METER), end_of_pass_write_index: Some(b + crate::Q_SCENE_METER + 1) }),
+            });
         }
         let tw = ts.map(|(q, b)| wgpu::RenderPassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b + Q_POST), end_of_pass_write_index: Some(b + Q_POST + 1) });
         let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
