@@ -36,7 +36,8 @@
 //! service kept square degree pixels (dlat = dlon), so each 2048-row tile
 //! spans 2048 x 6.8165e-6 degrees about its box's centre, not its box (a tile's
 //! first 64 rows match the tile above at row 1624 in every column and row
-//! of the set). [`naip_rgb`] reads a true latitude through that layout.
+//! of the set). The survey reader (eo-farshore `naip::Grid::pixel`) reads a
+//! true latitude through that layout; [`naip_rgb`] passes it on.
 
 use super::scan::{self, BOULDER, CLIFF, COAST_ROCKS, FACE_1, FACE_2, Kind, LAND_ROCKS, Library, Piece, Role, SAND_ROCKS, Source};
 use eo_farshore::survey::{bathy::Bathy, dem1m::Dem1m, naip::Naip};
@@ -165,16 +166,7 @@ pub const TINT_CHROMA: f64 = 0.6;
 
 /// The NAIP colour at a true (lon, lat) (see the module notes).
 pub fn naip_rgb(naip: &Naip, lon: f64, lat: f64) -> Option<[u8; 3]> {
-    use eo_farshore::survey::naip::GRID;
-    let span = GRID.tile as f64 * GRID.dlat;
-    let r = ((GRID.north - lat) / span - 0.5).round().clamp(0.0, GRID.rows as f64 - 1.0);
-    let centre = GRID.north - (r + 0.5) * span;
-    let row = GRID.tile as f64 / 2.0 + (centre - lat) / GRID.dlon;
-    if !(0.0..GRID.tile as f64).contains(&row) {
-        return None;
-    }
-    let nominal = GRID.north - (r * GRID.tile as f64 + row.floor() + 0.5) * GRID.dlat;
-    naip.sample_rgb(lon, nominal)
+    naip.sample_rgb(lon, lat)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
