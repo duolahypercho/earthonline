@@ -28,8 +28,9 @@
 //! `--no-photo-date` ignores it), `weather` (`clear`, `overcast`, `fog`,
 //! `drizzle`, `rain`, `storm`), `sky` (a clear day's sky: `cloudless`,
 //! `cirrus` or `fair_cumulus`, the observation of the shot's day; drawn from
-//! the month's statistics without it, eo-sky `clouds::sky_state`) and `what`
-//! (a description):
+//! the month's statistics without it, eo-sky `clouds::sky_state`), `game_day`
+//! (the game day that draw is for, 0 and up; the weather's own, the world
+//! clock's day, without it) and `what` (a description):
 //!
 //! * `{"geo": {"lat", "lon", "alt", "range", "heading", "tilt", "fov"}}`: the
 //!   look-at pose of the common web-globe URL convention (`eo_data::geo`):
@@ -166,6 +167,8 @@ pub struct Spec {
     pub day: Option<f64>,
     /// A clear day's sky (`sky`).
     pub sky: Option<eo_sky::clouds::SkyState>,
+    /// The game day a clear day's sky is drawn for (`game_day`).
+    pub game_day: Option<u32>,
     pub weather: Option<Kind>,
     pub what: Option<String>,
     /// The water's clock for this still (s; `WATER_CLOCK_S` when absent): a
@@ -175,7 +178,7 @@ pub struct Spec {
     pub input: Value,
 }
 
-const SHOT_KEYS: &[&str] = &["name", "geo", "lat", "lon", "alt", "range", "heading", "tilt", "fov", "eye", "yaw", "pitch", "look_at", "far", "time_of_day", "day_of_year", "sky", "weather", "what", "note", "water_clock"];
+const SHOT_KEYS: &[&str] = &["name", "geo", "lat", "lon", "alt", "range", "heading", "tilt", "fov", "eye", "yaw", "pitch", "look_at", "far", "time_of_day", "day_of_year", "sky", "game_day", "weather", "what", "note", "water_clock"];
 const GEO_KEYS: &[&str] = &["lat", "lon", "alt", "range", "heading", "tilt", "fov"];
 
 fn unknown_keys(o: &Map<String, Value>, known: &[&str]) -> Vec<String> {
@@ -272,6 +275,11 @@ pub fn parse_specs(v: &Value) -> Result<Vec<Spec>> {
             Some(Value::String(k)) => Some(eo_sky::clouds::SkyState::parse(k).ok_or_else(|| anyhow!("shot \"{name}\": sky \"{k}\" is not cloudless, cirrus or fair_cumulus"))?),
             Some(_) => bail!("shot \"{name}\": sky is not a string"),
         };
+        let game_day = num(o, "game_day")?;
+        if game_day.is_some_and(|d| !(0.0..1.0e6).contains(&d) || d.fract() != 0.0) {
+            bail!("shot \"{name}\": game_day {game_day:?} is not a whole number 0 to 1e6");
+        }
+        let game_day = game_day.map(|d| d as u32);
         let weather = match o.get("weather") {
             None | Some(Value::Null) => None,
             Some(Value::String(w)) => Some(Kind::parse(w).ok_or_else(|| anyhow!("shot \"{name}\": weather \"{w}\" is not clear, overcast, fog, drizzle, rain or storm"))?),
@@ -286,7 +294,7 @@ pub fn parse_specs(v: &Value) -> Result<Vec<Spec>> {
         if water_clock.is_some_and(|c| !(0.0..=1.0e6).contains(&c)) {
             bail!("shot \"{name}\": water_clock {water_clock:?} is not 0 to 1e6 s");
         }
-        out.push(Spec { name, pose, fov, far, hour, day, sky, weather, what, water_clock, input: e.clone() });
+        out.push(Spec { name, pose, fov, far, hour, day, sky, game_day, weather, what, water_clock, input: e.clone() });
     }
     if out.is_empty() {
         bail!("no shots");
@@ -415,6 +423,9 @@ pub fn resolve(spec: &Spec, world: &World, gf: &GeoFrame, args: &Args, aspect: f
     }
     if let Some(k) = spec.sky {
         info.insert("sky_state_input".into(), json!(k.name()));
+    }
+    if let Some(d) = spec.game_day {
+        info.insert("game_day".into(), json!(d));
     }
     let f = cam.forward();
     let focus = match look_at {
@@ -715,11 +726,18 @@ fn weather_name(w: WeatherMode) -> String {
 }
 
 /// Place the sun on the shot's `day_of_year` (the game's date without it, or
-/// with `--no-photo-date`) and hold its clear-day `sky` (drawn from the day without it).
-fn set_day_and_sky(shot: &Shot) {
+/// with `--no-photo-date`), hold its clear-day `sky` (drawn from the day
+/// without it) and its `game_day`. True when the sun's date or the clear sky
+/// in force changed: the look frame (and the decks with it) is then stale
+/// even at an unchanged hour (eo-render look.rs rebuilds on an hour or
+/// weather change only).
+fn set_day_and_sky(shot: &Shot, w: &eo_sky::WeatherState) -> bool {
+    let before = (eo_look::sun::day_of_year(), eo_sky::clouds::sky_state_for(w), eo_sky::clouds::game_day_of(w));
     let day = shot.info.get("day_of_year").and_then(Value::as_f64).filter(|_| eo_look::features::daylight().photo_date);
     eo_look::sun::set_day_of_year(day.unwrap_or(eo_look::sun::DAY_OF_YEAR));
     eo_sky::clouds::set_sky_state(shot.info.get("sky_state_input").and_then(Value::as_str).and_then(eo_sky::clouds::SkyState::parse));
+    eo_sky::clouds::set_game_day(shot.info.get("game_day").and_then(Value::as_u64).map(|d| d as u32));
+    before != (eo_look::sun::day_of_year(), eo_sky::clouds::sky_state_for(w), eo_sky::clouds::game_day_of(w))
 }
 
 /// The shot's sun, its clear-day sky and the daylight's light on the four
@@ -727,15 +745,22 @@ fn set_day_and_sky(shot: &Shot) {
 /// shadow, occlusion and the material; eo-look `phys::Daylight::face_split`):
 /// the sun's beam, the sky's and the ground's diffuse light. The specular and
 /// the scene's bounce are drawn on the GPU and not split here.
-fn daylight_json(hour: f64, eye: Vec3) -> Value {
+fn daylight_json(hour: f64, eye: Vec3, renderer: &eo_render::Renderer) -> Value {
     let sun = eo_look::sun::sun_direction(hour);
+    let w = renderer.look.sky.weather();
     let mut v = json!({
         "day_of_year": eo_look::sun::day_of_year(),
         "sun_altitude_deg": sun.altitude_deg,
         "sun_azimuth_deg": sun.azimuth_deg,
-        "clear_sky_state": eo_sky::clouds::sky_state().name(),
+        "game_day": eo_sky::clouds::game_day_of(&w),
+        "clear_sky_state": eo_sky::clouds::sky_state_for(&w).name(),
+        "clear_weight": eo_sky::clouds::clear_weight(w.profile.overcast),
         "features": format!("{:?}", eo_look::features::daylight()),
     });
+    if let Some(t) = renderer.look.sky_terms() {
+        let d = t.decks;
+        v["decks"] = json!({ "low_coverage": d.coverage, "high_alt_m": d.high_alt_m, "high_opacity": d.high_opacity });
+    }
     if let Some(d) = eo_look::phys::last_daylight() {
         let r = |c: [f64; 3]| [c[0], c[1], c[2]].map(|x| (x * 1e5).round() / 1e5);
         let faces = [("north", [0.0, 0.0, -1.0]), ("east", [1.0, 0.0, 0.0]), ("south", [0.0, 0.0, 1.0]), ("west", [-1.0, 0.0, 0.0]), ("up", [0.0, 1.0, 0.0]), ("down", [0.0, -1.0, 0.0])];
@@ -759,7 +784,10 @@ pub fn shoot(io: &mut Io, common: &Map<String, Value>, shot: &Shot, dir: &Path, 
     let t0 = Instant::now();
     let cam = shot.cam;
     eprintln!("shots: {}: eye ({:.1}, {:.1}, {:.1}), heading {:.1}, pitch {:.1}, {} h, {}", shot.name, cam.eye.x, cam.eye.y, cam.eye.z, compass(cam.yaw as f64), (cam.pitch as f64).to_degrees(), shot.hour, weather_name(shot.weather));
-    set_day_and_sky(shot);
+    if set_day_and_sky(shot, &io.renderer.look.sky.weather()) {
+        // a new date or sky at the same hour: make the look frame again (`set_look` sets the hour back)
+        io.renderer.look.set_time_of_day(shot.hour + 1e-9);
+    }
     io.set_look(shot.hour, shot.weather);
     // the shot's own water clock (a clip's frames), else the stills' (the foam re-warms on a jump, so each still is a function of its clock)
     if let Some(w) = io.renderer.water.get() {
@@ -806,7 +834,7 @@ pub fn shoot(io: &mut Io, common: &Map<String, Value>, shot: &Shot, dir: &Path, 
     m.insert("time_of_day".into(), json!(shot.hour));
     m.insert("weather".into(), json!(weather_name(shot.weather)));
     m.insert("sky".into(), super::sky_shots::describe(io.renderer));
-    m.insert("daylight".into(), daylight_json(shot.hour, cam.eye));
+    m.insert("daylight".into(), daylight_json(shot.hour, cam.eye, io.renderer));
     m.insert("water_clock_s".into(), shot.info.get("water_clock_s").cloned().unwrap_or(json!(WATER_CLOCK_S)));
     m.insert("cloud_clock_s".into(), json!(io.args.look.sky.world_time_s));
     m.insert("agents".into(), agents);
@@ -852,6 +880,7 @@ pub fn run(io: &mut Io, mode: Mode, dir: &Path) -> Result<()> {
     let base = io.args.look.sky;
     eo_look::sun::set_day_of_year(eo_look::sun::DAY_OF_YEAR);
     eo_sky::clouds::set_sky_state(None);
+    eo_sky::clouds::set_game_day(None);
     io.renderer.look.set_time_of_day(io.args.time_of_day);
     io.renderer.look.set_sky_options(base);
     io.renderer.look.sky.set_clock(io.renderer.look.sky.world_time(), FRAME_S);
@@ -920,12 +949,13 @@ mod tests {
 
     #[test]
     fn a_shot_names_its_day_and_its_sky() {
-        let v: Value = serde_json::from_str(r#"[{"name": "a", "eye": [0, 2, 0], "yaw": 0, "pitch": 0, "day_of_year": 103, "sky": "cirrus"}, {"name": "b", "eye": [0, 2, 0], "yaw": 0, "pitch": 0}]"#).unwrap();
+        let v: Value = serde_json::from_str(r#"[{"name": "a", "eye": [0, 2, 0], "yaw": 0, "pitch": 0, "day_of_year": 103, "sky": "cirrus", "game_day": 2}, {"name": "b", "eye": [0, 2, 0], "yaw": 0, "pitch": 0}]"#).unwrap();
         let s = parse_specs(&v).unwrap();
         assert_eq!(s[0].day, Some(103.0));
         assert_eq!(s[0].sky, Some(eo_sky::clouds::SkyState::Cirrus));
-        assert_eq!((s[1].day, s[1].sky), (None, None));
-        for bad in [r#"[{"name": "a", "eye": [0, 2, 0], "yaw": 0, "pitch": 0, "day_of_year": 0}]"#, r#"[{"name": "a", "eye": [0, 2, 0], "yaw": 0, "pitch": 0, "sky": "storm"}]"#] {
+        assert_eq!(s[0].game_day, Some(2));
+        assert_eq!((s[1].day, s[1].sky, s[1].game_day), (None, None, None));
+        for bad in [r#"[{"name": "a", "eye": [0, 2, 0], "yaw": 0, "pitch": 0, "day_of_year": 0}]"#, r#"[{"name": "a", "eye": [0, 2, 0], "yaw": 0, "pitch": 0, "sky": "storm"}]"#, r#"[{"name": "a", "eye": [0, 2, 0], "yaw": 0, "pitch": 0, "game_day": 1.5}]"#] {
             assert!(parse_specs(&serde_json::from_str(bad).unwrap()).is_err(), "{bad}");
         }
     }
