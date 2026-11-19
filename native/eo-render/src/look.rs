@@ -200,7 +200,9 @@ struct State {
     ao_made: Option<(glam::Mat4, glam::Vec3, glam::Vec3)>,
     /// the weather and night terms of `frame`, and the weather they were built for.
     terms: Option<eo_sky::SkyTerms>,
-    weather_key: (i64, i64, i64),
+    /// the weather's key and the clear sky's (eo-sky `clouds::sky_key`: the live calendar's date, the
+    /// day-change mix and the cirrus amount, which move without the weather's own key)
+    weather_key: ((i64, i64, i64), [i64; 5]),
     /// the weather frame before its fill (hour, day of the year, sky profile, frame): `eo_sky::frame::base_frame`.
     sky_base: Option<(f64, f64, String, LookFrame)>,
     /// the physical daylight of the frame in force (`--no-phys-sky`: None), and what it was made for
@@ -788,7 +790,7 @@ impl LookGpu {
                 cur_cam: None,
                 ao_made: None,
                 terms: None,                // sky
-                weather_key: (i64::MIN, 0, 0), // sky
+                weather_key: ((i64::MIN, 0, 0), [0; 5]), // sky
                 sky_base: None,
                 daylight: None,
             }),
@@ -946,7 +948,7 @@ impl LookGpu {
             self.sky.set_options(o);
             let mut s = self.state.lock().unwrap();
             s.frame = None;
-            s.weather_key = (i64::MIN, 0, 0);
+            s.weather_key = ((i64::MIN, 0, 0), [0; 5]);
             s.force_all = true;
         }
     }
@@ -1036,7 +1038,7 @@ impl LookGpu {
         let mut s = self.state.lock().unwrap();
         let (h, t) = (s.hour, s.transfer);
         if let Some(w) = w {
-            let key = crate::sky::weather_key(&w);
+            let key = (crate::sky::weather_key(&w), eo_sky::clouds::sky_key(&w));
             if s.weather_key != key {
                 s.weather_key = key;
                 s.frame = None;
