@@ -62,6 +62,31 @@ pub const DRIVE_NONE: u32 = 0;
 pub const DRIVE_PAINT: u32 = 1;
 pub const DRIVE_WEAR: u32 = 2;
 
+/// The terrain surface pass's material sets, after the shared ones (layer
+/// `MATERIAL_SETS.len() + k`, CC0_L_<ID>): the CC0 coastal rock scan the
+/// steep ground draws (`--no-terrain-materials`: not loaded, the arrays as
+/// before). Not in `layer_of`: no other material draws them.
+pub const TERRAIN_SETS: [ac::SetDef; 1] = [ac::SetDef { id: "seaside_rock", kind: ac::SetKind::Material, scale: ac::Scale::Site, rough_default: 0.8 }];
+
+/// Whether the terrain's sets are loaded (the terrain materials are on).
+pub fn terrain_sets_on() -> bool {
+    eo_landmarks::features::gg3_ground("terrain-materials")
+}
+
+/// Material array layers: the shared sets, then the terrain's when on.
+pub fn material_layers() -> usize {
+    ac::MATERIAL_SETS.len() + if terrain_sets_on() { TERRAIN_SETS.len() } else { 0 }
+}
+
+/// Every set the runtime loads: eo-assets `all_sets`, then the terrain's.
+pub fn all_sets() -> Vec<(ac::SetKind, u32, ac::SetDef)> {
+    let mut v = ac::all_sets();
+    if terrain_sets_on() {
+        v.extend(TERRAIN_SETS.iter().enumerate().map(|(k, d)| (ac::SetKind::Material, (ac::MATERIAL_SETS.len() + k) as u32, *d)));
+    }
+    v
+}
+
 pub fn layer_of(id: &str) -> Option<u32> {
     ac::MATERIAL_SETS.iter().position(|d| d.id == id).map(|i| i as u32)
 }
@@ -271,6 +296,24 @@ pub fn ashlar_wgsl(on: bool, plan: f64, hs: f64) -> String {
     )
 }
 
+/// The terrain-surface pass's switches as WGSL constants (eo-landmarks
+/// `features::gg3_ground`; each `--no-<name>` restores the round-2 output):
+/// `GG3_FACET_FIX` (draw.wgsl `shade`'s normal orientation).
+/// `GG3_MATERIALS` (cc0.wgsl `gg3_terrain`, with the grass in the far
+/// layer's green and golden albedos, farshore.rs, by the season).
+pub fn gg3_ground_wgsl(on: &dyn Fn(&str) -> bool) -> String {
+    let (g, y) = (crate::farshore::FAR_GRASS_GREEN, crate::farshore::FAR_GRASS_GOLDEN);
+    format!(
+        "const GG3_FACET_FIX: bool = {};\nconst GG3_SAND2: bool = {};\nconst GG3_SAND_SLOPE_FULL: f32 = {:.4};\nconst GG3_MATERIALS: bool = {};\nconst GG3_GRASS_GREEN: vec3<f32> = vec3<f32>({:.4}, {:.4}, {:.4});\nconst GG3_GRASS_GOLDEN: vec3<f32> = vec3<f32>({:.4}, {:.4}, {:.4});\nconst GG3_MATERIAL_ALPHA: f32 = {:.1};\n",
+        on("facet-normal-fix"),
+        on("sand-detail2"),
+        crate::scene::terrain_detail::SAND_SLOPE_FULL,
+        on("terrain-materials"),
+        g[0], g[1], g[2], y[0], y[1], y[2],
+        crate::scene::terrain_detail::MATERIAL_ALPHA as f32
+    )
+}
+
 /// WGSL constants: switches, layer indices, the decal grid's layout, the
 /// SF scoring grid (`caMetric('sidewalk-scoring-grid-sf')`).
 pub fn wgsl_constants(scoring_m: f32) -> String {
@@ -278,6 +321,7 @@ pub fn wgsl_constants(scoring_m: f32) -> String {
     s.push_str(&crate::ground2::wgsl_constants()); // the paving branch of cc0_ground_sets
     s.push_str(&shore_ground_wgsl(eo_landmarks::features::shore_ground("sand-albedo"), eo_data::groundscale::height_scale()));
     s.push_str(&ashlar_wgsl(eo_landmarks::features::shore_ground("riprap"), eo_data::groundscale::scale(), eo_data::groundscale::height_scale()));
+    s.push_str(&gg3_ground_wgsl(&|n| eo_landmarks::features::gg3_ground(n)));
     for (k, v) in [
         ("ON", RUN_ON),
         ("WALLS", RUN_WALLS),
@@ -297,7 +341,11 @@ pub fn wgsl_constants(scoring_m: f32) -> String {
     for (i, d) in ac::DECAL_SETS.iter().enumerate() {
         s.push_str(&format!("const CC0_D_{}: i32 = {i};\n", d.id.to_uppercase()));
     }
-    s.push_str(&format!("const CC0_MAT_LAYERS: u32 = {}u;\n", ac::MATERIAL_SETS.len()));
+    for (k, d) in TERRAIN_SETS.iter().enumerate() {
+        // (a layer index past the arrays when the terrain's sets are off: never sampled then, GG3_MATERIALS false)
+        s.push_str(&format!("const CC0_L_{}: i32 = {};\n", d.id.to_uppercase(), ac::MATERIAL_SETS.len() + k));
+    }
+    s.push_str(&format!("const CC0_MAT_LAYERS: u32 = {}u;\n", material_layers()));
     s.push_str(&format!(
         "const CC0_SLOT_SIDE: i32 = {SLOT_SIDE};\nconst CC0_SLOTS: u32 = {SLOTS}u;\nconst CC0_CELLS: u32 = {}u;\nconst CC0_MAX_DECALS: u32 = {}u;\nconst CC0_TILE_M: f32 = {:.1};\n",
         CELLS,
@@ -582,10 +630,10 @@ impl Cc0Gpu {
         };
         let names = ["cc0-albedo", "cc0-normal", "cc0-rhm"];
         let dnames = ["cc0-decal-albedo", "cc0-decal-normal", "cc0-decal-rhm"];
-        let mat = [0, 1, 2].map(|k| tex(names[k], FORMATS[k], ac::MATERIAL_RES, ac::MATERIAL_SETS.len() as u32));
+        let mat = [0, 1, 2].map(|k| tex(names[k], FORMATS[k], ac::MATERIAL_RES, material_layers() as u32));
         let decal = [0, 1, 2].map(|k| tex(dnames[k], FORMATS[k], ac::DECAL_RES, ac::DECAL_SETS.len() as u32));
         let mats = (material_count.max(1) * MAT_VEC4 * 16) as u64;
-        let layers = ((ac::MATERIAL_SETS.len() + ac::DECAL_SETS.len()) * LAYER_VEC4 * 16) as u64;
+        let layers = ((material_layers() + ac::DECAL_SETS.len()) * LAYER_VEC4 * 16) as u64;
         let r = Res {
             mat,
             decal,
@@ -594,7 +642,7 @@ impl Cc0Gpu {
             grid: storage(d, "cc0-grid", GRID_VEC4 * 16),
             decals: storage(d, "cc0-decals", DECAL_VEC4 * 16),
         };
-        let bytes = 3 * (array_bytes(ac::MATERIAL_RES, ac::MATERIAL_SETS.len()) + array_bytes(ac::DECAL_RES, ac::DECAL_SETS.len())) + mats + layers + GRID_VEC4 * 16 + DECAL_VEC4 * 16;
+        let bytes = 3 * (array_bytes(ac::MATERIAL_RES, material_layers()) + array_bytes(ac::DECAL_RES, ac::DECAL_SETS.len())) + mats + layers + GRID_VEC4 * 16 + DECAL_VEC4 * 16;
         if self.res.set(r).is_err() {
             return 0;
         }
@@ -608,7 +656,7 @@ impl Cc0Gpu {
         if !self.attached() {
             return (0, 0, 0);
         }
-        let mat = 3 * array_bytes(ac::MATERIAL_RES, ac::MATERIAL_SETS.len());
+        let mat = 3 * array_bytes(ac::MATERIAL_RES, material_layers());
         let dec = 3 * array_bytes(ac::DECAL_RES, ac::DECAL_SETS.len());
         let total = self.bytes.load(Ordering::Relaxed);
         (mat, dec, total.saturating_sub(mat + dec))

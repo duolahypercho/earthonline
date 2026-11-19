@@ -475,6 +475,122 @@ fn cc0_ground(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, dpx: ve
     cc0_ground_apply(s, n, rel, mix(ta.rough, tb.rough, w), mix(ta.ao, tb.ao, w), mix(ta.n, tb.n, w) * near, f32(sets.z) / 100.0 * near);
 }
 
+// The terrain surface pass's ground (GG3_MATERIALS; terrain_detail.rs
+// `Materials`): a vertex marked GG3_MATERIAL_ALPHA carries its substrate's
+// colour (bare soil, or the litter under scrub) and its grass cover share
+// (`grass`, the normal's w). The grass is drawn in the season's colour (the
+// far layer's green to golden by the look uniform's dryness, eo_look::season)
+// over the green or the withered grass scan, the cover's share broken into
+// tufts and openings by a fine field; the substrate over the park-dirt scan
+// (the forest-floor scan where it is dark litter); steep faces (the
+// shading normal under GG3_ROCK_NY) over the coastal rock scan, planar on
+// the face's dominant axis, in the substrate's hue a shade darker.
+// GG3_ROCK_NY: rock from 41 degrees (cos 0.75), full at 57 (cos 0.55),
+// INFERRED: past the angle of repose of loose soil (about 35-40 degrees) a
+// face sheds its soil and shows its rock.
+const GG3_ROCK_NY: vec2<f32> = vec2<f32>(0.75, 0.55);
+// the rock a shade darker than its soil (INFERRED: chert fragments and the
+// soil they weather to share a hue; the outcrop's shadowed relief darkens it).
+const GG3_ROCK_SHADE: f32 = 0.8;
+// The fine ground detail's reach (gg3_terrain), m, and the share of the scans' albedo
+// contrast kept beyond it (their mean colour is the rest). INFERRED (see gg3_terrain).
+const GG3_FINE_M: vec2<f32> = vec2<f32>(40.0, 110.0);
+const GG3_FINE_KEEP: f32 = 0.2;
+
+fn gg3_rock_tap(world: vec3<f32>, n: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) -> Cc0Tap {
+    let l = CC0_L_SEASIDE_ROCK;
+    let inv = cc0_linv(l);
+    var uv = world.zy * inv;
+    var gx = dpx.zy * inv;
+    var gy = dpy.zy * inv;
+    if (abs(n.z) > abs(n.x)) {
+        uv = world.xy * inv;
+        gx = dpx.xy * inv;
+        gy = dpy.xy * inv;
+    }
+    if (abs(n.y) > max(abs(n.x), abs(n.z))) {
+        uv = world.xz * inv;
+        gx = dpx.xz * inv;
+        gy = dpy.xz * inv;
+    }
+    var t = cc0_tap2(uv, gx, gy, l);
+    let lm = cc0_lmean(l);
+    t.alb = vec4<f32>(t.alb.rgb / max(lm.rgb, vec3<f32>(1e-3)), t.alb.a);
+    return t;
+}
+
+// A ground scan with its repeat broken (the terrain's soil and grass): the
+// scan's albedo and normal at its own phase and at a second phase turned 0.62
+// rad and scaled 0.91 (cc0_turn, as cc0_ground_tap's anti-tiling), blended
+// over a slow 6-14 m field and by the two phases' relief, so the repeat's
+// regular grid does not show at 50-150 m. Albedo and normal taps only (as
+// cc0_ground_tap without its turn).
+fn gg3_ground_tap(world: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, l: i32, off: f32) -> Cc0Tap {
+    var t = cc0_ground_tap(world, dpx, dpy, l, off, false);
+    let inv = cc0_linv(l);
+    let uv = cc0_turn(world.xz * inv + off) + vec2<f32>(0.37, 0.71);
+    let gx = cc0_turn(dpx.xz * inv);
+    let gy = cc0_turn(dpy.xz * inv);
+    var alb = textureSampleGrad(cc0_albedo, cc0_samp, uv, l, gx, gy);
+    let lm = cc0_lmean(l);
+    alb = vec4<f32>(alb.rgb / max(lm.rgb, vec3<f32>(1e-3)), alb.a);
+    let n2r = textureSampleGrad(cc0_normal, cc0_samp, uv, l, gx, gy).xy * 2.0 - 1.0;
+    // its normal back in the first phase's frame
+    let n2 = vec2<f32>(n2r.x * 0.8139 - n2r.y * 0.5810, n2r.x * 0.5810 + n2r.y * 0.8139);
+    let h2 = clamp(dot(alb.rgb, CC0_LUMA) * 0.5, 0.0, 1.0);
+    let w = clamp((st_noise(world.xz / 9.7 + off * 13.0 + 5.3) - 0.5) * 3.0 + (h2 - t.h) * 1.5 + 0.5, 0.0, 1.0);
+    t.alb = mix(t.alb, alb, w);
+    t.n = mix(t.n, n2, w);
+    t.h = mix(t.h, h2, w);
+    return t;
+}
+
+fn gg3_terrain(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, grass_in: f32) {
+    let dry = clamp(look.tone2.w, 0.0, 1.0);
+    let sub = (*s).albedo;
+    let grass_col = mix(GG3_GRASS_GREEN, GG3_GRASS_GOLDEN, dry);
+    let grass = clamp(grass_in, 0.0, 1.0);
+    let dist = length(frame.cam_pos.xyz - world);
+    let near = 1.0 - smoothstep(130.0, 190.0, dist);
+    // the fine detail (the 1-3 m tufts field, the scans' albedo, each a lattice or a 2-3 m
+    // repeat) only where it is a few pixels or more: past GG3_FINE_M it gives way to its mean,
+    // or its period shows as a regular stipple (INFERRED: at 1920 px and 50-60 degrees a 2.5 m
+    // repeat spans under 10 px there)
+    let fine = 1.0 - smoothstep(GG3_FINE_M.x, GG3_FINE_M.y, dist);
+    let rock = smoothstep(GG3_ROCK_NY.x, GG3_ROCK_NY.y, n.y);
+    let rock_col = sub * GG3_ROCK_SHADE;
+    // the cover's share as tufts and openings (a 1-3 m field), the share itself far off
+    let field = st_noise(world.xz / 2.3 + 3.7) * 0.6 + st_noise(world.xz / 0.71 + 9.2) * 0.4;
+    let tufts = clamp((grass - field) * 3.0 + 0.5, 0.0, 1.0);
+    if (!cc0_on(CC0_RUN_GROUND) || near <= 0.0) {
+        let gc = mix(grass, tufts, near * fine);
+        (*s).albedo = mix(mix(sub, grass_col, gc * (1.0 - rock)), rock_col, rock);
+        return;
+    }
+    let litter = dot(sub, CC0_LUMA) < 0.075;
+    let soil_l = select(CC0_L_PARK_DIRT, CC0_L_FOREST_FLOOR, litter);
+    let grass_l = select(CC0_L_LEAFY_GRASS, CC0_L_WITHERED_GRASS, dry > 0.5);
+    var ts = gg3_ground_tap(world, dpx, dpy, soil_l, 0.0);
+    var tg = ts;
+    if (grass > 0.02) {
+        tg = gg3_ground_tap(world, dpx, dpy, grass_l, 0.41);
+    }
+    // the higher relief wins at the cover's edge
+    let gw = clamp(mix(grass, tufts, near * fine) + (tg.h - ts.h) * 0.6 * near * fine, 0.0, 1.0) * (1.0 - rock);
+    let detail = max(fine, GG3_FINE_KEEP);
+    var rel = mix(mix(vec3<f32>(1.0), ts.alb.rgb, detail) * sub, mix(vec3<f32>(1.0), tg.alb.rgb, detail) * grass_col, gw);
+    var tn = mix(ts.n, tg.n, gw);
+    if (rock > 0.0) {
+        let tr = gg3_rock_tap(world, n, dpx, dpy);
+        rel = mix(rel, tr.alb.rgb * rock_col, rock);
+        tn = mix(tn, tr.n, rock);
+    }
+    // (cc0_ground_apply multiplies the albedo by the detail: start from one)
+    (*s).albedo = vec3<f32>(1.0);
+    cc0_ground_apply(s, n, rel, 1.0, 1.0, tn * near * detail, 1.0);
+    (*s).rough = mix(0.92, 0.85, rock);
+}
+
 // landmarks2's beach sand (lm_beach: the tone, drifts, ripples, wrack, damp
 // and wet bands) with the dry and the damp sand scans under it by the same
 // bands (`shore`: metres inland of the shoreline).
@@ -493,7 +609,7 @@ fn cc0_beach(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, dpx: vec
     // softer, still steep enough that only its transition reads both scans (wd in -0.4..1.4)
     var steep = 3.0;
     if (GG2_SAND) {
-        damp_band = gg2_damp(gg2_foreshore_h(world, shore)) / 0.8; // keyed to the foreshore's height over the sea (shore_surface.wgsl)
+        damp_band = gg2_damp(gg2_damp_h(world, shore)) / 0.8; // keyed to the foreshore's height over the sea (shore_surface.wgsl)
         steep = 2.0;
     }
     let damp = max(damp_band, smoothstep(LM_SEA_LEVEL_Y + 0.35, LM_SEA_LEVEL_Y + 0.02, world.y));
