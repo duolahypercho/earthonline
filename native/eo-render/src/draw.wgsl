@@ -704,6 +704,7 @@ fn shade(in: VOut) -> vec4<f32> {
     cc0_wall_hit = false; // cc0
     cc0_reset_post(); // cc0
     let v = normalize(frame.cam_pos.xyz - in.world);
+    gg3_sand_slope = select(0.0, in.aux.y * GG3_SAND_SLOPE_FULL, in.aux.y > 0.004);
     var n = face;
     if (dot(in.normal, in.normal) > 0.25) {
         n = normalize(in.normal);
@@ -754,7 +755,11 @@ fn shade(in: VOut) -> vec4<f32> {
     // the terrain's ground scans around its tone (not the beach sand: below), before the wet margin.
     let cc0_terrain = (m.flags & F_VERTEX_COLOUR) != 0u && (objects[in.object].kind & 255u) == 1u;
     let cc0_sand = cc0_terrain && (m.flags & LM_F_WET_GROUND) != 0u && in.aux.x < 253.5;
-    if (cc0_terrain && !cc0_sand) {
+    // the terrain surface pass's ground (its vertices' alpha GG3_MATERIAL_ALPHA): cc0.wgsl gg3_terrain
+    let gg3_ground = GG3_MATERIALS && cc0_terrain && abs(in.aux.x - GG3_MATERIAL_ALPHA) < 0.5;
+    if (gg3_ground) {
+        gg3_terrain(&s, in.world, n, dpx, dpy, in.aux.y);
+    } else if (cc0_terrain && !cc0_sand) {
         cc0_ground(&s, in.world, n, dpx, dpy);
     }
     if (((m.flags >> LM_SURFACE_SHIFT) & 7u) != 0u) {

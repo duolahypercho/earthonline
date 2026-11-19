@@ -158,8 +158,17 @@ fn lm_beach_swash_wet(s: ptr<function, Surface>, wp: vec3<f32>) {
 fn gg2_foreshore_h(wp: vec3<f32>, shore: f32) -> f32 {
     // a ragged edge: a slow wander of a few metres along the shore and a finer fray
     let rag = lm_mx_noise(vec3<f32>(wp.x * 0.025, wp.z * 0.025, 6.3)) * 0.12 + lm_mx_noise(vec3<f32>(wp.x * 0.11, wp.z * 0.11, 2.7)) * 0.07;
-    return max(shore, 0.0) * GG2_FORESHORE_SLOPE + rag;
+    var slope = GG2_FORESHORE_SLOPE;
+    if (GG3_SAND2 && gg3_sand_slope > 0.0) {
+        slope = gg3_sand_slope; // the beach's own measured foreshore slope (its vertices carry it)
+    }
+    return max(shore, 0.0) * slope + rag;
 }
+
+// The beach's measured foreshore slope at the fragment (GG3_SAND2, `--no-sand-detail2`;
+// terrain_detail.rs `sand_slope_byte`: the normal's w byte as a share of GG3_SAND_SLOPE_FULL),
+// set by draw.wgsl `shade`; 0 where the vertex carries none.
+var<private> gg3_sand_slope: f32;
 
 // The damp band: the sand the high water covers twice a day stays damp below
 // it (mean high water), darkest where the swash keeps it wet (0.3 m over the
