@@ -89,6 +89,10 @@ struct Sky {
     atmo_r: vec4<f32>,
     // rgb ozone's peak absorption (1/km), w unused
     atmo_o: vec4<f32>,
+    // the second high deck (eo_sky::clouds::Decks::cirrus): x height (m), y opacity; unread
+    cirrus: vec4<f32>,
+    // spare; zero
+    spare: vec4<f32>,
 };
 
 const SKY_CLOUDS: u32 = 1u;

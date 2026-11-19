@@ -151,6 +151,14 @@ pub struct Decks {
     pub marine_drift: [f64; 2],
 }
 
+/// The second high deck (`Decks::cirrus`): its height (m) and the opacity of
+/// its densest streak.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CirrusDeck {
+    pub alt_m: f64,
+    pub opacity: f64,
+}
+
 /// Low-deck base and top per rung (clear, fog, drizzle, rain, storm) and
 /// for the dry overcast preset.
 /// In fog the deck IS the marine layer: stratus from 60 m to 300 m, so the
@@ -442,6 +450,13 @@ impl Decks {
         self
     }
 
+    /// The second high deck (the cirrus beside the 5.2 km sheet, so the two
+    /// can cross-fade each at its own height): none yet, opacity 0 at
+    /// `CIRRUS_ALT_M`. The sky uniform carries it; nothing draws it.
+    pub fn cirrus(&self) -> CirrusDeck {
+        CirrusDeck { alt_m: CIRRUS_ALT_M, opacity: 0.0 }
+    }
+
     /// The fair sheet at `f` (0..1) of its opacity (`FADE_BAND_M`).
     fn fade_high(&mut self, f: f64) {
         if f <= 0.0 {
@@ -461,6 +476,14 @@ pub fn drift_offset(drift: [f64; 2], world_s: f64, tile_m: f64) -> [f64; 2] {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn the_second_high_deck_is_empty_for_now() {
+        for k in [crate::Kind::Clear, crate::Kind::Overcast, crate::Kind::Rain] {
+            let c = decks(&crate::weather::preset(k)).cirrus();
+            assert_eq!(c, CirrusDeck { alt_m: CIRRUS_ALT_M, opacity: 0.0 });
+        }
+    }
+
     #[test]
     fn the_sheet_covers_exactly_its_coverage() {
         let s = bake_sheet(7);

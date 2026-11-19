@@ -283,6 +283,10 @@ pub struct SkyUniform {
     atmo_r: [f32; 4],
     // rgb ozone's peak absorption (1/km), w unused
     atmo_o: [f32; 4],
+    // the second high deck (eo_sky::clouds::Decks::cirrus): x its height (m), y its opacity, z, w unused; read by nothing yet
+    cirrus: [f32; 4],
+    // spare (the sky tracks' next field); zero
+    spare: [f32; 4],
 }
 
 /// The aerial-perspective volume: texels (azimuth about the sun, elevation, distance) and reach.
@@ -1465,6 +1469,11 @@ impl SkyGpu {
             atmo_s,
             atmo_r,
             atmo_o,
+            cirrus: {
+                let c = decks.cirrus();
+                [c.alt_m as f32, c.opacity as f32, 0.0, 0.0]
+            },
+            spare: [0.0; 4],
         };
         queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&u));
         // The lights' scales: candela -> irradiance units, on with the lamps.

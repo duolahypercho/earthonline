@@ -1009,6 +1009,13 @@ impl LookGpu {
         self.state.lock().unwrap().hour
     }
 
+    /// Drop the cached look frame, so the next `frame()` rebuilds it (for a
+    /// change the frame's weather key does not see, such as a shot's date or
+    /// sky). Called by nothing yet.
+    pub fn invalidate(&self) {
+        self.state.lock().unwrap().frame = None;
+    }
+
     /// The look frame in force (built on demand). sky: with any sky stage on,
     /// the frame of the weather in force (its sky model, the weather's fill,
     /// the moon key, the night exposure; eo-sky `frame::look_frame`), rebuilt
