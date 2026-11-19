@@ -70,8 +70,16 @@ pub struct ColourFeatures {
     /// The direct sun's colour from its spectrum through the air
     /// (`spectral::beam_srgb`), not the three channels. `--no-sun-spectrum2`.
     pub sun_spectrum2: bool,
-    /// The scene meter averages the frame (ISO 2720's averaging reflected
-    /// meter) with no highlight hold. `--no-meter-highlights`.
+    /// The scene meter drops its highlight hold (eo-sky
+    /// `night::scene_meter_factor`): it puts the frame's mean luminance at
+    /// the meter's grey, K = 12.5 (ISO 2720 gives K, the calibration
+    /// constant; averaging the whole frame is the averaging meter type, a
+    /// choice the standard does not prescribe). `--no-meter-highlights`
+    /// keeps the hold. The centre weighting goes too only once T1's
+    /// scene_meter.rs writes the meter uniform's `grey.y` from
+    /// `night::meter_averaging()` (a hand-off); until then this switch
+    /// changes the hold alone. Measured on the acceptance views: the hold
+    /// never bound by day, so on and off match within the noise floor.
     pub meter_highlights: bool,
     /// Opt-in: the camera look renders through the ACES 1.3 RRT and sRGB
     /// 100-nit dim ODT (`tone::aces13`) in place of ACES 2.0.

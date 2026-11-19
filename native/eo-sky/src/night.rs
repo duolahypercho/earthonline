@@ -433,21 +433,27 @@ pub fn display_shoulder() -> f64 {
 /// binned), before the night blend. `shoulder`: `display_shoulder()`.
 ///
 /// With the colour track's metering (eo-look `features::colour().meter_highlights`,
-/// `--no-meter-highlights` keeps the hold) the meter is ISO 2720's averaging
+/// `--no-meter-highlights` keeps the hold) the meter is an averaging
 /// reflected-light meter alone: the frame's mean luminance at the meter's
-/// grey (K = 12.5), within `SCENE_METER_RANGE_EV` of the incident prior. The
-/// highlight hold (`SCENE_METER_HIGHLIGHT_SHARE` under the shoulder) had no
-/// published basis: a reflected meter does not look at the brightest 2 %,
-/// and it held the bright skies' frames a stop or more under the average.
+/// grey, within `SCENE_METER_RANGE_EV` of the incident prior. ISO 2720
+/// supplies the calibration constant (K = 12.5), not the averaging: a
+/// whole-frame average is one meter type among those the standard covers,
+/// chosen here because it has no free parameter. The highlight hold
+/// (`SCENE_METER_HIGHLIGHT_SHARE` under the shoulder) had no published basis.
+/// Measured on the acceptance views, the hold never bound by day (the top
+/// 2 % sat about one stop over grey), so removing it changes no capture
+/// beyond the noise floor.
 pub fn scene_meter_factor(hist: &[u32], shoulder: f64) -> f64 {
     scene_meter_factor_with(hist, shoulder, !eo_look::features::colour().meter_highlights)
 }
 
-/// Whether the scene meter's pass averages the whole frame (ISO 2720's
-/// averaging reflected meter) rather than weighting its centre (the meter
-/// uniform's `grey.y`, look_meter.wgsl): the centre-weighted pattern (4x at
-/// the centre, a Gaussian of 0.25 frame heights) had no published basis.
-/// `--no-meter-highlights` keeps it.
+/// Whether the scene meter's pass should average the whole frame rather
+/// than weight its centre (the meter uniform's `grey.y`, look_meter.wgsl):
+/// the centre-weighted pattern (4x at the centre, a Gaussian of 0.25 frame
+/// heights) had no published basis. Nothing reads this yet: the uniform is
+/// written by eo-render look/scene_meter.rs (another track's file; the
+/// hand-off writes `grey.y` from it), so the centre weighting is still live
+/// whatever `--no-meter-highlights` says.
 pub fn meter_averaging() -> bool {
     eo_look::features::colour().meter_highlights
 }
