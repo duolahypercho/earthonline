@@ -192,6 +192,12 @@ mod tests {
             // a clear-sky beam is warmer than the Sun above the air and warms as the sun sinks
             assert!(cct(xs) < 5800.0);
         }
+        // its cost (once per new Daylight: an hour, weather or ground change)
+        let t0 = std::time::Instant::now();
+        for _ in 0..100 {
+            std::hint::black_box(beam_srgb(&atm, 1.0, 2.0, 0.5));
+        }
+        eprintln!("beam_srgb: {:.1} us", t0.elapsed().as_secs_f64() * 1e4);
         // the beam at the headland's 31 deg sun: about 4700-5400 K (INFERRED sanity band)
         let c31 = cct(srgb_xy(beam_srgb(&atm, 1.0, 2.0, (31.0 * DEG).sin()).unwrap()));
         assert!((4700.0..5400.0).contains(&c31), "{c31}");
