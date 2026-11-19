@@ -22,12 +22,9 @@
 //!    a Bradford D65-to-D60 conversion (Lib.Academy.ColorSpaces).
 //! 4. **Encoding**: sRGB piecewise (IEC 61966-2-1).
 //!
-//!    Opt-in (`EO_CAMERA_RENDERING=aces13`): the ACES 1.3 RRT and sRGB 100-nit dim ODT
-//!    (`aces13`) in its place, at the same SOS placement: a per-channel tone
-//!    scale in AP1 that keeps more chroma (0.94 of colorimetric on the
-//!    virtual chart's saturated patches against ACES 2.0's 0.80; 0.98 and
-//!    0.75 on its C* 25 patches) at the cost of hue skews (up to 18 deg on
-//!    the saturated light blues and violets; ACES 2.0 2.4 deg).
+//!    (The colour track's opt-in ACES 1.3 RRT and sRGB ODT port is held back
+//!    from this build until the owner approves storing the A.M.P.A.S. ACES
+//!    licence text; it is on the colour track's branch.)
 //!
 //! No picture-style matrix and no hue skew are added: no published camera
 //! picture style or JPEG tone curve under a licence this repository can
@@ -68,9 +65,6 @@ const SHAPER_MID: f64 = 0.18;
 pub enum Rendering {
     /// The ACES 2.0 output transform, Rec.709 100 nits, sRGB (`aces2`; the default).
     Aces2,
-    /// The ACES 1.3 RRT and the sRGB 100-nit dim-surround ODT (`aces13`;
-    /// opt-in, `EO_CAMERA_RENDERING=aces13`): the per-channel AP1 tone scale.
-    Aces13,
 }
 
 pub struct Camera {
@@ -83,14 +77,13 @@ pub struct Camera {
 
 impl Camera {
     fn build() -> Self {
-        Self::with(if crate::features::colour().aces13 { Rendering::Aces13 } else { Rendering::Aces2 })
+        Self::with(Rendering::Aces2)
     }
 
     /// The camera with a given rendering (the process's is `camera()`).
     pub fn with(rendering: Rendering) -> Self {
         let odt = match rendering {
             Rendering::Aces2 => Some(OdtParams::new(100.0, &REC709)),
-            Rendering::Aces13 => None,
         };
         let to_ap0 = aces2::rgb_to_rgb(&REC709, &aces2::AP0);
         let mut c = Self { odt, to_ap0, rendering, gain: 1.0 };
@@ -112,7 +105,7 @@ impl Camera {
         let a = aces2::mul_v(x.map(|v| v.max(0.0) * self.gain), &self.to_ap0);
         match &self.odt {
             Some(odt) => odt.forward(a).map(|v| v.clamp(0.0, 1.0)),
-            None => super::aces13::forward(a),
+            None => unreachable!("only ACES 2.0 is built (the ACES 1.3 port is held back)"),
         }
     }
 
@@ -305,12 +298,11 @@ mod tests {
     /// removed, unchanged). Every failure is listed together.
     ///
     /// Known to fail (open, for the owner): ACES 2.0 renders the saturated
-    /// patches at 0.80 of colorimetric chroma, and ACES 1.3 turns the L* 70
-    /// blue and violet patches (h 240, 270) 18 deg toward purple.
+    /// patches at 0.80 of colorimetric chroma.
     #[test]
     fn the_virtual_chart_renders_neutral_greys_and_keeps_hues() {
         let mut fails = Vec::new();
-        for r in [Rendering::Aces2, Rendering::Aces13] {
+        for r in [Rendering::Aces2] {
             let cam = Camera::with(r);
             // incident meter (C = 250) and reflected meter (K = 12.5): the metered grey of an
             // illuminance E is K E / C, so a card of reflectance rho has scene value 0.18 rho / (pi K / C)
@@ -331,9 +323,8 @@ mod tests {
             let blk = lab(cam.display_linear([NEUTRAL_RAMP[5] * k; 3]));
             assert!(blk[0] > 8.0, "{r:?} black L* {}", blk[0]);
             // chromatic patches keep their CIELAB hue: within 8 deg under ACES 2.0 (hue-preserving
-            // by design, and the old measured chart's bound); ACES 1.3's per-channel tone scale
-            // skews hue (its known skews: blues toward purple), bounded at 15.
-            let hue_tol = if r == Rendering::Aces2 { 8.0 } else { 15.0 };
+            // by design, and the old measured chart's bound).
+            let hue_tol = 8.0;
             // (mean chroma ratio over a colorimetric rendering, worst hue shift) of a patch set
             let mut run = |patches: &[(f64, f64, Rgb)]| {
                 let mut worst_dh: f64 = 0.0;
@@ -365,28 +356,6 @@ mod tests {
             }
         }
         assert!(fails.is_empty(), "{fails:#?}");
-    }
-
-    #[test]
-    fn the_aces13_rendering_meets_the_same_placement_and_keeps_greys_neutral() {
-        let cam = Camera::with(Rendering::Aces13);
-        let d = cam.display_srgb([SOS_SCENE_VALUE; 3]);
-        assert!((d[1] * 255.0 - 118.0).abs() < 0.2, "{}", d[1] * 255.0);
-        for ev in [-6.0, -3.0, 0.0, 2.0, 4.0] {
-            let g = cam.display_linear([0.18 * 2f64.powf(ev); 3]);
-            assert!((g[0] - g[1]).abs() < 3e-3 && (g[2] - g[1]).abs() < 3e-3, "{ev}: {g:?}");
-        }
-        // the per-channel AP1 tone scale keeps more chroma through the mid-tones than
-        // ACES 2.0: a clear-sky blue (Rec.709 (0.33, 0.6, 1.0) x 0.1) renders more saturated
-        let a2 = Camera::with(Rendering::Aces2);
-        let sky = [0.33, 0.6, 1.0].map(|v| v * 0.1);
-        let sat = |c: Rgb| {
-            let mx = c[0].max(c[1]).max(c[2]);
-            (mx - c[0].min(c[1]).min(c[2])) / mx
-        };
-        let (s13, s2) = (sat(cam.display_srgb(sky)), sat(a2.display_srgb(sky)));
-        eprintln!("clear-sky blue: HSV S {s13:.2} (ACES 1.3) against {s2:.2} (ACES 2.0)");
-        assert!(s13 > s2, "{s13} {s2}");
     }
 
     #[test]

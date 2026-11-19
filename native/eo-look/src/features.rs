@@ -55,14 +55,8 @@ pub const SWITCHES: &[&str] = &["--no-gg2-daylight", "--no-ground-albedo", "--no
 
 /// The colour and camera track's switch names (the roll-up first, then the
 /// kill switches); eo-app accepts them. `--no-gg3` (every round-3 track's
-/// roll-up) turns the colour track off too. The opt-in camera rendering is
-/// an environment variable, not a switch (the registry holds kill switches
-/// only): `EO_CAMERA_RENDERING=aces13`.
+/// roll-up) turns the colour track off too.
 pub const GG3_SWITCHES: &[&str] = &["--no-gg3-colour", "--no-sun-spectrum2", "--no-sky-calibration", "--no-camera-style", "--no-meter-highlights", "--no-haze-visibility"];
-
-/// The environment variable that selects the camera look's rendering
-/// (`aces13`: the ACES 1.3 RRT and sRGB ODT; anything else or unset: ACES 2.0).
-pub const CAMERA_RENDERING_ENV: &str = "EO_CAMERA_RENDERING";
 
 /// Which of the colour and camera track's features are on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -81,27 +75,19 @@ pub struct ColourFeatures {
     /// changes the hold alone. Measured on the acceptance views: the hold
     /// never bound by day, so on and off match within the noise floor.
     pub meter_highlights: bool,
-    /// Opt-in: the camera look renders through the ACES 1.3 RRT and sRGB
-    /// 100-nit dim ODT (`tone::aces13`) in place of ACES 2.0.
-    /// `EO_CAMERA_RENDERING=aces13` (`CAMERA_RENDERING_ENV`).
-    pub aces13: bool,
 }
 
 impl ColourFeatures {
-    pub const ALL: Self = Self { sun_spectrum2: true, meter_highlights: true, aces13: false };
-    pub const NONE: Self = Self { sun_spectrum2: false, meter_highlights: false, aces13: false };
+    pub const ALL: Self = Self { sun_spectrum2: true, meter_highlights: true };
+    pub const NONE: Self = Self { sun_spectrum2: false, meter_highlights: false };
 
-    /// From the command line and the rendering's environment value (`CAMERA_RENDERING_ENV`).
-    pub fn from_args_env(args: &[String], rendering: Option<&str>) -> Self {
+    /// From the command line.
+    pub fn from_args(args: &[String]) -> Self {
         let has = |s: &str| args.iter().any(|a| a == s);
         if has("--no-gg3-colour") || has("--no-gg3") {
             return Self::NONE;
         }
-        Self { sun_spectrum2: !has("--no-sun-spectrum2"), meter_highlights: !has("--no-meter-highlights"), aces13: rendering == Some("aces13") }
-    }
-
-    pub fn from_args(args: &[String]) -> Self {
-        Self::from_args_env(args, None)
+        Self { sun_spectrum2: !has("--no-sun-spectrum2"), meter_highlights: !has("--no-meter-highlights") }
     }
 }
 
@@ -109,7 +95,7 @@ static COLOUR: OnceLock<ColourFeatures> = OnceLock::new();
 
 /// The process's colour features (from `std::env::args` on first use).
 pub fn colour() -> ColourFeatures {
-    *COLOUR.get_or_init(|| ColourFeatures::from_args_env(&std::env::args().collect::<Vec<_>>(), std::env::var(CAMERA_RENDERING_ENV).ok().as_deref()))
+    *COLOUR.get_or_init(|| ColourFeatures::from_args(&std::env::args().collect::<Vec<_>>()))
 }
 
 /// Pin the colour features before anything reads them (a test, a tool).
@@ -136,9 +122,8 @@ mod tests {
         assert_eq!(ColourFeatures::from_args(&a(&["eo-app"])), ColourFeatures::ALL);
         assert_eq!(ColourFeatures::from_args(&a(&["eo-app", "--no-gg3-colour"])), ColourFeatures::NONE);
         assert_eq!(ColourFeatures::from_args(&a(&["eo-app", "--no-gg3"])), ColourFeatures::NONE);
-        let f = ColourFeatures::from_args_env(&a(&["eo-app", "--no-sun-spectrum2"]), Some("aces13"));
-        assert!(!f.sun_spectrum2 && f.meter_highlights && f.aces13);
-        assert!(!ColourFeatures::from_args_env(&a(&["eo-app", "--no-gg3-colour"]), Some("aces13")).aces13);
+        let f = ColourFeatures::from_args(&a(&["eo-app", "--no-sun-spectrum2"]));
+        assert!(!f.sun_spectrum2 && f.meter_highlights);
         // the registry holds kill switches only
         for s in GG3_SWITCHES {
             assert!(s.starts_with("--no-"), "{s}");

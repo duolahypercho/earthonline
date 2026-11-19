@@ -10,8 +10,6 @@ use crate::math::*;
 
 /// the ACES 2.0 output transform (a port of the Academy's reference CTL).
 pub mod aces2;
-/// the ACES 1.3 RRT and sRGB ODT (a port of the Academy's reference CTL; `EO_CAMERA_RENDERING=aces13`).
-pub mod aces13;
 /// the camera look (`--no-camera-look`): white balance, ISO 12232 placement, ACES 2.0, baked to a table.
 pub mod camera;
 
