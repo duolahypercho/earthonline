@@ -33,7 +33,7 @@ fn lm_seawall(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>) {
     let tide = lm_ss(sea + 1.25 + ragged, sea + 1.05 + ragged, world.y) * faceness;
     let splash = lm_ss(sea + 0.45, sea + 0.05, world.y) * faceness;
     if (GG2_ASHLAR) {
-        gg2_ashlar(s, world, n, faceness);
+        gg2_ashlar(s, world, n, faceness, base);
     }
     (*s).albedo = mix((*s).albedo, (*s).albedo * vec3<f32>(0.42, 0.44, 0.36), tide);
     (*s).albedo = mix((*s).albedo, (*s).albedo * vec3<f32>(0.45, 0.5, 0.42), splash * 0.7); // (sea r9: darkened, not black: it read as a gap at the wall foot)
@@ -204,13 +204,14 @@ fn gg2_footprints(wp: vec3<f32>) -> f32 {
 
 // The Fort Point seawall's coursed granite ashlar (GG2_ASHLAR, cc0.rs
 // `ashlar_wgsl`): on the wall faces inside the revetment's box, courses of
-// blocks of varied length, each its own shade of the granite's mean albedo
-// (the wall's mottle and streaks kept on it), darker recessed joints.
-fn gg2_ashlar(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, faceness: f32) {
+// blocks of varied length, each its own shade of the granite's mean albedo,
+// darker recessed joints. The wall's mottle and streaks (`lm_seawall`: its
+// tone over the plain concrete's, `base`) carry onto the granite. The joints'
+// footprint derivatives are taken in uniform control flow: the box and the
+// face gate the result, not the code path.
+fn gg2_ashlar(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, faceness: f32, base: vec3<f32>) {
     let b = GG2_ASHLAR_BOX;
-    if (world.x < b.x || world.x > b.z || world.z < b.y || world.z > b.w || faceness < 0.5) {
-        return;
-    }
+    let inside = world.x >= b.x && world.x <= b.z && world.z >= b.y && world.z <= b.w && faceness >= 0.5;
     let t = normalize(vec2<f32>(-n.z, n.x) + vec2<f32>(1e-5, 0.0));
     let u = dot(world.xz, t);
     let course = floor((world.y - LM_SEA_LEVEL_Y) / GG2_ASHLAR_COURSE_M);
@@ -228,7 +229,12 @@ fn gg2_ashlar(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, facenes
     let ju = 1.0 - smoothstep(jw_u, jw_u + fu, min(cu, 1.0 - cu));
     let joint = max(jv, ju);
     let shade = 0.85 + 0.3 * lm_cell_hash(vec3<f32>(course, block, 29.0));
-    let stone = GG2_GRANITE * shade * (0.9 + 0.2 * lm_mx_noise(world * 1.7));
+    // the wall's own variation (mottle, streaks, sky-catch) relative to its plain tone
+    let rel = clamp(dot((*s).albedo, vec3<f32>(0.2126, 0.7152, 0.0722)) / max(dot(base, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-4), 0.5, 1.6);
+    let stone = GG2_GRANITE * shade * (0.9 + 0.2 * lm_mx_noise(world * 1.7)) * rel;
+    if (!inside) {
+        return;
+    }
     (*s).albedo = mix(stone, GG2_GRANITE * 0.35, joint);
     (*s).rough = mix((*s).rough, 0.95, joint);
 }
