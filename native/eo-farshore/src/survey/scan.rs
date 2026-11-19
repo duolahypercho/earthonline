@@ -21,7 +21,7 @@ use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
 /// Bump when what the LOD cook writes changes (part of the cache key).
-pub const LOD_COOK_VERSION: &str = "survey-scan-lod-1";
+pub const LOD_COOK_VERSION: &str = "survey-scan-lod-2";
 
 /// One mesh of a scan.
 #[derive(Clone, Debug)]
@@ -175,7 +175,15 @@ impl Piece {
                 prev.clone()
             } else {
                 let mut err = 0.0f32;
-                let ix = meshopt::simplify_with_attributes_and_locks_decoder(&prev, &self.positions, &attrs, &weights, 5 * std::mem::size_of::<f32>(), &locks, t * 3, 1.0, meshopt::SimplifyOptions::None, Some(&mut err));
+                let mut ix = meshopt::simplify_with_attributes_and_locks_decoder(&prev, &self.positions, &attrs, &weights, 5 * std::mem::size_of::<f32>(), &locks, t * 3, 1.0, meshopt::SimplifyOptions::None, Some(&mut err));
+                // an open scan's rim stops the topology-keeping collapse near
+                // its rim's vertex count (about a thousand triangles for the
+                // scanned patches): past a third over the target, the
+                // clustering simplifier, which reaches any count (the far
+                // levels only; their UVs may stretch at a seam).
+                if ix.len() > t * 3 * 4 / 3 {
+                    ix = meshopt::simplify_sloppy_decoder(&prev, &self.positions, t, 1.0, Some(&mut err));
+                }
                 out.push(Lod { target: t, error: err, indices: ix.clone() });
                 prev = ix;
                 continue;
@@ -184,6 +192,135 @@ impl Piece {
         }
         out
     }
+}
+
+/// A piece's levels of detail over only the vertices they use: the
+/// simplified levels reference a few thousand of a scan's hundreds of
+/// thousands of vertices, so the drawn mesh keeps those alone (in first-use
+/// order over the levels, finest first) and each level's indices are
+/// renumbered onto them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Compact {
+    pub positions: Vec<[f32; 3]>,
+    pub normals: Vec<[f32; 3]>,
+    pub uvs: Vec<[f32; 2]>,
+    pub lods: Vec<Vec<u32>>,
+}
+
+impl Piece {
+    /// `lods` (from `lod_chain`) over the vertices they use.
+    pub fn compact(&self, lods: &[Lod]) -> Compact {
+        let mut map = vec![u32::MAX; self.positions.len()];
+        let mut c = Compact { positions: vec![], normals: vec![], uvs: vec![], lods: vec![] };
+        for l in lods {
+            let mut ix = Vec::with_capacity(l.indices.len());
+            for &i in &l.indices {
+                let i = i as usize;
+                if map[i] == u32::MAX {
+                    map[i] = c.positions.len() as u32;
+                    c.positions.push(self.positions[i]);
+                    c.normals.push(self.normals[i]);
+                    c.uvs.push(self.uvs[i]);
+                }
+                ix.push(map[i]);
+            }
+            c.lods.push(ix);
+        }
+        c
+    }
+
+    /// The plane the scan's open rim lies on (a scanned patch of ground or a
+    /// rock face is an open shell whose edge is where the scan stopped, on
+    /// the ground it stood on): least squares `y = a x + b z + c` through
+    /// the rim's vertices (the edges one triangle uses, positions welded at
+    /// 0.1 mm so a UV seam is no edge), with the rim's residual heights at
+    /// the 5th and 95th percentiles. None for a closed mesh (a boulder).
+    pub fn rim_plane(&self) -> Option<RimPlane> {
+        use std::collections::HashMap;
+        let q = |p: [f32; 3]| p.map(|v| (v as f64 * 1e4).round() as i64);
+        let mut weld: HashMap<[i64; 3], u32> = HashMap::new();
+        let ids: Vec<u32> = self.positions.iter().map(|p| {
+            let n = weld.len() as u32;
+            *weld.entry(q(*p)).or_insert(n)
+        }).collect();
+        let mut rep = vec![[0.0f32; 3]; weld.len()];
+        for (i, p) in self.positions.iter().enumerate() {
+            rep[ids[i] as usize] = *p;
+        }
+        let mut edges: HashMap<(u32, u32), u32> = HashMap::new();
+        for t in self.indices.chunks_exact(3) {
+            for k in 0..3 {
+                let (a, b) = (ids[t[k] as usize], ids[t[(k + 1) % 3] as usize]);
+                if a != b {
+                    *edges.entry((a.min(b), a.max(b))).or_insert(0) += 1;
+                }
+            }
+        }
+        let mut rim: Vec<u32> = edges.iter().filter(|(_, n)| **n == 1).flat_map(|(e, _)| [e.0, e.1]).collect();
+        rim.sort_unstable();
+        rim.dedup();
+        if rim.len() < 16 {
+            return None;
+        }
+        // normal equations of y = a x + b z + c
+        let mut m = [[0.0f64; 3]; 3];
+        let mut r = [0.0f64; 3];
+        for &v in &rim {
+            let p = rep[v as usize];
+            let row = [p[0] as f64, p[2] as f64, 1.0];
+            for i in 0..3 {
+                for j in 0..3 {
+                    m[i][j] += row[i] * row[j];
+                }
+                r[i] += row[i] * p[1] as f64;
+            }
+        }
+        let coef = solve3(m, r)?;
+        let mut res: Vec<f64> = rim.iter().map(|&v| {
+            let p = rep[v as usize];
+            p[1] as f64 - (coef[0] * p[0] as f64 + coef[1] * p[2] as f64 + coef[2])
+        }).collect();
+        res.sort_by(f64::total_cmp);
+        let pct = |f: f64| res[((res.len() - 1) as f64 * f).round() as usize];
+        Some(RimPlane { a: coef[0], b: coef[1], c: coef[2], low: pct(0.05), high: pct(0.95), rim_vertices: rim.len() })
+    }
+}
+
+/// The plane an open scan's rim lies on: `y = a x + b z + c` (the scan's
+/// frame), and its rim's residual heights (5th and 95th percentile).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RimPlane {
+    pub a: f64,
+    pub b: f64,
+    pub c: f64,
+    pub low: f64,
+    pub high: f64,
+    pub rim_vertices: usize,
+}
+
+impl RimPlane {
+    /// The plane's unit normal (up side).
+    pub fn normal(&self) -> [f64; 3] {
+        let l = (self.a * self.a + 1.0 + self.b * self.b).sqrt();
+        [-self.a / l, 1.0 / l, -self.b / l]
+    }
+}
+
+fn solve3(m: [[f64; 3]; 3], r: [f64; 3]) -> Option<[f64; 3]> {
+    let det = |m: &[[f64; 3]; 3]| m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+    let d = det(&m);
+    if d.abs() < 1e-12 {
+        return None;
+    }
+    let mut out = [0.0; 3];
+    for k in 0..3 {
+        let mut mk = m;
+        for i in 0..3 {
+            mk[i][k] = r[i];
+        }
+        out[k] = det(&mk) / d;
+    }
+    Some(out)
 }
 
 /// The native cache folder (`EO_NATIVE_CACHE`), if set.
@@ -358,6 +495,21 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
         let (w, h, px) = decode_jpeg(&rock.textures.diffuse).unwrap();
         assert_eq!((w, h, px.len()), (2048, 2048, 2048 * 2048 * 3));
+        // the levels over the vertices they use: fewer vertices, the same triangles
+        let c = p.compact(&chain);
+        assert!(c.positions.len() < p.positions.len());
+        for (l, ix) in chain.iter().zip(&c.lods) {
+            assert_eq!(l.indices.len(), ix.len());
+            for (a, b) in l.indices.iter().zip(ix) {
+                assert_eq!(p.positions[*a as usize], c.positions[*b as usize]);
+                assert_eq!(p.uvs[*a as usize], c.uvs[*b as usize]);
+            }
+        }
+        // a rock face is an open shell standing on its rim: the rim leans back
+        // (its plane's normal tilts toward the face, +z), the boulder is closed.
+        let rim = p.rim_plane().expect("rock_face_01 is open");
+        println!("rock_face_01 rim {rim:?}");
+        assert!(rim.normal()[2] > 0.3 && rim.normal()[1] > 0.3, "{:?}", rim.normal());
         let shrub = Scan::load(&root, "S2", "shrub_04").expect("shrub_04");
         println!("shrub_04: {} pieces, {} triangles", shrub.pieces.len(), shrub.triangles());
         assert!(!shrub.pieces.is_empty() && shrub.triangles() > 100);
