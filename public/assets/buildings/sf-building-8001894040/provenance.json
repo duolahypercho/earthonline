@@ -21,131 +21,13 @@
     "storeys": "Assessor roll (assessor+ground)"
   },
   "license": "Building geometry generated from open data (DataSF footprints, LiDAR, Assessor roll). Furniture in the fine-s*.glb storeys is decimated from the CC0 pieces listed under `furniture`.",
-  "furniture": [
-    {
-      "kind": "shelving",
-      "source": "https://polyhaven.com/a/steel_frame_shelves_01",
-      "name": "Steel Frame Shelves 01",
-      "authors": [
-        "James Ray Cock"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "cardboard-box",
-      "source": "https://polyhaven.com/a/cardboard_box_01",
-      "name": "Cardboard Box 01",
-      "authors": [
-        "Rahul Chaudhary"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "crate",
-      "source": "https://polyhaven.com/a/wooden_crate_01",
-      "name": "Wooden Crate 01",
-      "authors": [
-        "James Ray Cock"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "ceiling-lamp",
-      "source": "https://polyhaven.com/a/modern_ceiling_lamp_01",
-      "name": "Modern Ceiling Lamp 01",
-      "authors": [
-        "James Ray Cock"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "sofa",
-      "source": "https://polyhaven.com/a/sofa_02",
-      "name": "Sofa 02",
-      "authors": [
-        "Kirill Sannikov"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "pillows",
-      "source": "https://polyhaven.com/a/throw_pillows_01",
-      "name": "Throw Pillows 01",
-      "authors": [
-        "Serhii Khromov"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "coffee-table",
-      "source": "https://polyhaven.com/a/modern_coffee_table_01",
-      "name": "Modern Coffee Table 01",
-      "authors": [
-        "Amin"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "lounge-chair",
-      "source": "https://polyhaven.com/a/mid_century_lounge_chair",
-      "name": "Mid Century Lounge Chair",
-      "authors": [
-        "Kuutti Siitonen"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "side-table",
-      "source": "https://polyhaven.com/a/side_table_01",
-      "name": "Side Table 01",
-      "authors": [
-        "James Ray Cock"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "plant-medium",
-      "source": "https://polyhaven.com/a/potted_plant_02",
-      "name": "Potted Plant 02",
-      "authors": [
-        "Rico Cilliers"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "frame-b",
-      "source": "https://polyhaven.com/a/hanging_picture_frame_02",
-      "name": "Hanging Picture Frame 02",
-      "authors": [
-        "James Ray Cock"
-      ],
-      "license": "CC0-1.0"
-    }
-  ],
+  "furniture": [],
   "assets": {
     "exterior": {
       "url": "/assets/buildings/sf-building-8001894040/exterior.glb",
       "sha256": "6f7457ebf222fddb1ab3150439e6a5fc6f722a60bf7e3f8b174f248a0f2951b7",
       "bytes": 137596
     },
-    "interior": {
-      "url": "/assets/buildings/sf-building-8001894040/interior.glb",
-      "sha256": "352c27fd2a94b3026f5db8abeef42753a5ea1e06ec93aced93d11626de94aaac",
-      "bytes": 68656
-    },
-    "fine": [
-      {
-        "storey": 0,
-        "url": "/assets/buildings/sf-building-8001894040/fine-s0.glb",
-        "sha256": "f7590374c15f5468dcd9064c65ef5b2c2ffd39022d9ded496d8e877cc765bb61",
-        "bytes": 12404
-      },
-      {
-        "storey": 1,
-        "url": "/assets/buildings/sf-building-8001894040/fine-s1.glb",
-        "sha256": "c463632f1208168fc469ff32eeaa4c2de0558def3ec3352c63d88fa491b54689",
-        "bytes": 58940
-      }
-    ]
+    "fine": []
   }
 }

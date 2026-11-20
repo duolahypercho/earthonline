@@ -18,137 +18,13 @@
     "storeys": "Assessor roll (lidar-over-roll)"
   },
   "license": "Building geometry generated from open data (DataSF footprints, LiDAR, Assessor roll). Furniture in the fine-s*.glb storeys is decimated from the CC0 pieces listed under `furniture`.",
-  "furniture": [
-    {
-      "kind": "ceiling-lamp",
-      "source": "https://polyhaven.com/a/modern_ceiling_lamp_01",
-      "name": "Modern Ceiling Lamp 01",
-      "authors": [
-        "James Ray Cock"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "wall-sconce",
-      "source": "https://polyhaven.com/a/industrial_wall_sconce",
-      "name": "Industrial Wall Sconce",
-      "authors": [
-        "Ulan Cabanilla"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "shelving",
-      "source": "https://polyhaven.com/a/steel_frame_shelves_01",
-      "name": "Steel Frame Shelves 01",
-      "authors": [
-        "James Ray Cock"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "cardboard-box",
-      "source": "https://polyhaven.com/a/cardboard_box_01",
-      "name": "Cardboard Box 01",
-      "authors": [
-        "Rahul Chaudhary"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "office-desk-real",
-      "source": "https://polyhaven.com/a/metal_office_desk",
-      "name": "Metal Office Desk",
-      "authors": [
-        "Ulan Cabanilla"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "office-chair-real",
-      "source": "https://polyhaven.com/a/modern_arm_chair_01",
-      "name": "Modern Arm Chair 01",
-      "authors": [
-        "Vibrant Nordic"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "laptop",
-      "source": "https://polyhaven.com/a/classic_laptop",
-      "name": "Classic Laptop",
-      "authors": [
-        "Arrangemonk"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "pendant",
-      "source": "https://polyhaven.com/a/hanging_industrial_lamp",
-      "name": "Hanging Industrial Lamp",
-      "authors": [
-        "Kuutti Siitonen"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "sofa",
-      "source": "https://polyhaven.com/a/sofa_02",
-      "name": "Sofa 02",
-      "authors": [
-        "Kirill Sannikov"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "coffee-table",
-      "source": "https://polyhaven.com/a/modern_coffee_table_01",
-      "name": "Modern Coffee Table 01",
-      "authors": [
-        "Amin"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "plant-medium",
-      "source": "https://polyhaven.com/a/potted_plant_02",
-      "name": "Potted Plant 02",
-      "authors": [
-        "Rico Cilliers"
-      ],
-      "license": "CC0-1.0"
-    }
-  ],
+  "furniture": [],
   "assets": {
     "exterior": {
       "url": "/assets/buildings/sf-building-939458463/exterior.glb",
       "sha256": "604dc70d152972c6352f2f25f8b4977194ac7f434cccceb89f9e3b8454ba92ae",
       "bytes": 376560
     },
-    "interior": {
-      "url": "/assets/buildings/sf-building-939458463/interior.glb",
-      "sha256": "98d610a43c39ea53bc87c94f61019703af16e92c92fed446aba2fae6ae5e90d9",
-      "bytes": 135412
-    },
-    "fine": [
-      {
-        "storey": 0,
-        "url": "/assets/buildings/sf-building-939458463/fine-s0.glb",
-        "sha256": "aa5513a714d875541e62c3bf030bc6652b0d135f8f1d197887b178dafcf2872a",
-        "bytes": 21688
-      },
-      {
-        "storey": 1,
-        "url": "/assets/buildings/sf-building-939458463/fine-s1.glb",
-        "sha256": "aeb651e3376f2ab048c1550f5b9f1ee9b10357b69b274e6a803b7f3d4452dbf6",
-        "bytes": 191788
-      },
-      {
-        "storey": 2,
-        "url": "/assets/buildings/sf-building-939458463/fine-s2.glb",
-        "sha256": "b79a5a0f998682aaa54621d066dae3f6cbd5948faa758a5c0f0d8afd9b754666",
-        "bytes": 206792
-      }
-    ]
+    "fine": []
   }
 }
