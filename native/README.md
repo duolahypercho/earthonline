@@ -323,6 +323,7 @@ selection:
 | Terrain surface | `--no-gg3-ground` (all of these), `--no-facet-normal-fix`, `--no-terrain-detail`, `--no-terrain-materials`, `--no-sand-detail2`; reserved: `--no-bluff-soil`, `--no-bank-grade` |
 | Scanned rock | `--no-gg3-rock` (all of these), `--no-scan-rocks`, `--no-cliff-dressing`, `--no-surf-rocks`, `--no-scan-riprap`, `--no-rock-geology` |
 | Coastal vegetation, round 3 | `--no-gg3-vegetation` (all of these), `--no-naip-planting`, `--no-cliff-rock-cover`, `--no-far-species`, `--no-far-tree-light`, `--no-bloom-date`, `--no-grass-color-variety`; reserved: `--no-veg-scans` |
+| Grass, second pass | `--no-grass2` (all of these: run 1's meadow), `--no-meadow-cover`, `--no-meadow-types`, `--no-blade-shading` |
 | Surf and bathymetry | `--no-gg3-water` (all of these), `--no-bathymetry`, `--no-surf-break`, `--no-swash-foam`, `--no-obstacle-foam`, `--no-water-body2`; reserved: `--no-ppr-dash` |
 | Golden Gate, fifth pass | `--no-gg3-bridge` or `--no-bridges5` (all of these), `--no-paint-brdf2`, `--no-paint-weathering`, `--no-concrete2`, `--no-leg-cells`, `--no-cable-detail` |
 | Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count` |
@@ -504,6 +505,17 @@ keeps every grass bunch in the ground's tone (no meadow mosaic of green and
 cured patches by aspect, slope and hollow, no grey-green or brown patches, no
 lighter seed heads or flower-tinted tips, no olive to grey-green scrub).
 `--no-veg-scans` is reserved.
+
+The second grass pass (`--no-grass2`, eo-landmarks `vegetation::Grass2`):
+`--no-meadow-cover` keeps the scattered bunches and tufts instead of a meadow
+patch in every 1 m cell of grass, scrub and (inside the NAIP image) the bare
+class, each a matted thatch and short-sward mat with blades over it, and keeps
+the soil the terrain materials draw on the bare class; `--no-meadow-types`
+makes every patch short sward (no wild oats, fescue tussocks, clover and
+forbs, ice plant or thatch patches by slope, aspect, bluff edge and scrub, and
+no low scrub mounds in the scrub's gaps); `--no-blade-shading` leaves out the
+blades' leaf optics (transmission, keel and rolled-margin normals, clump
+occlusion, waxy sheen).
 
 The surf and bathymetry (`--no-gg3-water`, eo-water `switches`; the CUDEM
 tiles under `EO_SURVEY_ROOT`): `--no-bathymetry` keeps the geometric exposure

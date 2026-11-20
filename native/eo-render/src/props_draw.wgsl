@@ -22,6 +22,12 @@ const PR_GLB_MAPS: u32 = 16384u;
 const PR_BIG: u32 = 32768u;
 const PR_LEAF: u32 = 65536u;
 const PR_ROCK: u32 = 131072u;
+// the meadow patches (props_lib2/vegetation_models.rs P_MEADOW*, P_BLADE_PBR).
+const PR_MEADOW: u32 = 262144u;
+const PR_MEADOW_LIVE: u32 = 524288u;
+const PR_MEADOW_MAT: u32 = 1048576u;
+const PR_BLADE_PBR: u32 = 2097152u;
+const PR_MEADOW_THICK: u32 = 4194304u;
 
 @group(2) @binding(0) var<uniform> pr: PrParams;
 @group(2) @binding(1) var<storage, read> pr_instances: array<PrInstance>;
@@ -286,6 +292,114 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         }
         s.albedo = mix(s.albedo, tip_col, smoothstep(0.62, 0.92, up) * amount * 0.7 * fade);
     }
+    // a meadow blade's diffuse transmittance (linear; zero for everything else).
+    var blade_t = vec3<f32>(0.0);
+    var n_light = n;
+    if ((m.flags & PR_MEADOW) != 0u) {
+        let dist = distance(in.world, frame.cam_pos.xyz);
+        var live = in.color;
+        if ((m.flags & PR_MEADOW_LIVE) != 0u && inst.lamp != 0u) {
+            // the patch's cure (eo_landmarks::vegetation::meadow_patch_tint), sRGB x 4.
+            live = live * srgb_decode(unpack4x8unorm(inst.lamp).rgb) * 4.0;
+        }
+        if ((m.flags & PR_MEADOW_MAT) != 0u) {
+            // the mat under the blades: matted straw lying in two directions per
+            // patch (its yaw), the sward's green through it in tufts (share: uv.y),
+            // and dark pores between the straws. Each scale fades to its mean
+            // where a pixel spans it, so the far mat is its mean colour, not noise.
+            let fw = length(dpx) + length(dpy);
+            let q = in.world.xz;
+            let d1 = vec2<f32>(cos(inst.yaw), sin(inst.yaw));
+            let d2 = vec2<f32>(cos(inst.yaw + 1.1), sin(inst.yaw + 1.1));
+            let r1 = vec2<f32>(dot(q, d1), dot(q, vec2<f32>(-d1.y, d1.x)));
+            let r2 = vec2<f32>(dot(q, d2), dot(q, vec2<f32>(-d2.y, d2.x)));
+            let fine = 1.0 - smoothstep(0.003, 0.012, fw);
+            let mid = 1.0 - smoothstep(0.012, 0.05, fw);
+            let st = max(pr_noise3(vec3<f32>(r1.x * 5.0, r1.y * 70.0, 0.0)), pr_noise3(vec3<f32>(r2.x * 7.0, r2.y * 95.0, 3.0)));
+            let straw = mix(0.62, st, fine);
+            let coarse = 1.0 - smoothstep(0.03, 0.12, fw);
+            let tuft = mix(0.5, pr_noise3(vec3<f32>(q * 24.0, 7.0)), mid) * 0.6 + mix(0.5, pr_noise3(vec3<f32>(q * 9.0, 11.0)), coarse) * 0.4;
+            // far off every patch's mat goes to one share, so the types' mats do not
+            // tile the hill in blobs (the patch tint, smooth over the hill, stays).
+            let share = mix(in.uv.y, 0.5, smoothstep(15.0, 45.0, dist));
+            // a soft mix: the green shoots come up through the straw, not in islands.
+            let green = smoothstep(0.5 - share * 0.9 - 0.18, 0.5 - share * 0.9 + 0.62, tuft) * min(share * 1.6, 1.0);
+            let blades = mix(1.0, 0.7 + 0.6 * pr_noise3(vec3<f32>(q.x * 80.0, q.y * 80.0, 1.0)), fine);
+            let thatch_col = m.base.rgb * (0.55 + 0.7 * straw);
+            // the clumps' own shade at a few per metre (what reads as texture from 20 to 100 m).
+            let clump = mix(0.5, pr_noise3(vec3<f32>(q * 6.0, 5.0)), 1.0 - smoothstep(0.06, 0.25, fw));
+            // near, where the blades stand over it, the mat is the canopy's floor: lit
+            // through the blades, so darker (about 0.6; INFERRED from the photographs'
+            // dark gaps between blades). Farther the mat alone draws the canopy (the
+            // levels keep fewer blades), so it comes up to the canopy's mean.
+            let floor = mix(0.6, 1.0, smoothstep(5.0, 26.0, dist));
+            s.albedo = mix(thatch_col, live * blades, green) * (0.78 + 0.44 * clump) * floor;
+            s.ao = mix(1.0, 0.55 + 0.45 * smoothstep(0.25, 0.7, straw), fine) * mix(0.85, 1.0, green);
+            s.rough = 0.9;
+            // the mat lies on the ground: lit from above even where the eye grazes
+            // it from below its plane (a patch's sheared plane past a brow).
+            s.n = normalize(in.normal);
+            n_light = s.n;
+        } else {
+            if ((m.flags & PR_MEADOW_LIVE) != 0u) {
+                s.albedo = live;
+            } else {
+                // dead straw: its own colour, each patch a little lighter or darker.
+                s.albedo = in.color * (0.9 + 0.2 * f32(inst.variant & 255u) / 255.0);
+            }
+            if ((m.flags & PR_BLADE_PBR) != 0u) {
+                let along = clamp(in.uv.y, 0.0, 1.0);
+                let across = in.uv.x * 2.0 - 1.0;
+                let thick = (m.flags & PR_MEADOW_THICK) != 0u;
+                // clump occlusion: inside a clump the base sees little sun and a
+                // narrow cone of sky, so it is darker and cooler (sky-lit); the tips
+                // stand in the open. (A blade's position along itself stands in for
+                // its depth in the canopy.)
+                let open = clamp(0.3 + 0.7 * along, 0.0, 1.0);
+                s.albedo = s.albedo * mix(vec3<f32>(0.68, 0.75, 0.85), vec3<f32>(1.0), open);
+                s.ao = mix(0.45, 1.0, open);
+                // the blade's keel (a V fold at the midrib) and rolled margins as a
+                // normal map: the across direction from the screen derivatives of u.
+                let near = 1.0 - smoothstep(6.0, 18.0, dist);
+                let r1 = cross(dpy, n);
+                let r2 = cross(n, dpx);
+                let tq = r1 * duvx.x + r2 * duvy.x;
+                if (!thick && near > 0.0 && dot(tq, tq) > 1e-24) {
+                    let t = normalize(tq);
+                    let fold = sign(across) * 0.45 + across * abs(across) * 0.55;
+                    let nb = normalize(s.n - t * fold * near);
+                    if (all(nb == nb)) {
+                        s.n = nb;
+                    }
+                    // a paler midrib and faint parallel veins.
+                    s.albedo = s.albedo * (1.0 + near * (0.2 * exp(-across * across * 60.0) + 0.05 * cos(across * 28.0)));
+                }
+                // dry, paler tips in the sun.
+                s.albedo = s.albedo * (1.0 + 0.12 * smoothstep(0.75, 1.0, along));
+                // Leaf optics. A green leaf's visible transmittance is close to its
+                // reflectance in the green (about 0.1 at 550 nm) and far below it in
+                // the blue and red, where chlorophyll absorbs (PROSPECT: Jacquemoud
+                // and Baret 1990, Remote Sens. Environ. 34, 75-91; PROSPECT-D: Feret
+                // et al. 2017, Remote Sens. Environ. 193, 204-215; measured leaves:
+                // Woolley 1971, Plant Physiol. 47, 656-662), so light through a thin
+                // blade is a saturated yellow-green. Dry straw transmits less and
+                // warmer (brown pigments); a succulent leaf, thick and water-filled,
+                // little. The cuticle's wax gives a weak, broad specular lobe (leaf
+                // BRDF: Bousquet et al. 2005, Remote Sens. Environ. 98, 201-211):
+                // dielectric F0 0.04, rough 0.5 to 0.6, not a plastic sheen.
+                if (thick) {
+                    blade_t = s.albedo * vec3<f32>(0.5, 0.6, 0.2) * 0.3;
+                    s.rough = 0.38;
+                } else if ((m.flags & PR_MEADOW_LIVE) != 0u) {
+                    blade_t = s.albedo * vec3<f32>(0.95, 0.9, 0.3) * 0.9;
+                    s.rough = 0.55;
+                } else {
+                    blade_t = s.albedo * vec3<f32>(0.75, 0.6, 0.35) * 0.6;
+                    s.rough = 0.72;
+                }
+            }
+        }
+    }
     if ((m.flags & PR_ROCK) != 0u) {
         // rock grain: two octaves of value noise in world metres (mottle and
         // pitting), on the albedo and as a bump on the normal, faded out where
@@ -312,7 +426,7 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         }
     }
     s.rough = clamp(s.rough, 0.03, 1.0);
-    var c = look_light(s, m, v, in.world, n, 0u);
+    var c = look_light(s, m, v, in.world, n_light, 0u);
     if ((m.flags & PR_LEAF) != 0u && (pr.mode.z & PR_F_LEAF) != 0u) {
         // back-lit leaves. A thin leaf passes part of the sun it does not
         // reflect: a diffuse transmission through the card (the sun behind the
@@ -325,6 +439,19 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         let vd = dot(in.world - look.cam_pos.xyz, look.cam_fwd.xyz);
         let fog = lk_smooth(look.fog.x, look.fog.y, vd);
         let trans = look.key.xyz * s.albedo * (through * 0.35 + lobe * 0.6) * sh / LK_PI;
+        c = vec4<f32>(c.rgb + trans * (1.0 - fog), c.a);
+    }
+    if (blade_t.g > 0.0) {
+        // light through the blade: diffuse transmission when the sun is behind
+        // it (as seen from here) and a forward lobe toward the sun, shadowed and
+        // fogged as the key light. The geometric normal faces the eye.
+        let l = look.key_dir.xyz;
+        let through = max(dot(-n, l), 0.0);
+        let lobe = pow(max(dot(-v, l), 0.0), 4.0);
+        let sh = lk_shadow(in.world, n);
+        let vd = dot(in.world - look.cam_pos.xyz, look.cam_fwd.xyz);
+        let fog = lk_smooth(look.fog.x, look.fog.y, vd);
+        let trans = look.key.xyz * blade_t * (through + lobe * 0.8) * sh / LK_PI;
         c = vec4<f32>(c.rgb + trans * (1.0 - fog), c.a);
     }
     return c;

@@ -426,7 +426,7 @@ impl VegGround {
 
     /// The round-3 planting context for `plant_coarse_with` / `plant_fine_with`.
     pub fn extra(&self) -> eo_landmarks::vegetation::Extra<'_> {
-        eo_landmarks::vegetation::Extra { g3: self.g3, naip: Box::new(move |x, z, side| self.naip_at(x, z, side)) }
+        eo_landmarks::vegetation::Extra { g3: self.g3, g2: eo_landmarks::vegetation::grass2(), naip: Box::new(move |x, z, side| self.naip_at(x, z, side)) }
     }
 
     /// Whether a park tree may stand at (x, z) (round 3): on plantable ground
@@ -555,6 +555,7 @@ fn model_of(k: Kind) -> u32 {
         Kind::Tuft => vm::V_TUFT,
         Kind::Flower(i) => vm::V_FLOWER + i as u32,
         Kind::Rock(i) => vm::V_ROCK + (i as u32 % vm::V_ROCKS),
+        Kind::Meadow(i) => vm::V_MEADOW + (i as u32).min(vm::V_MEADOWS - 1),
     }
 }
 
@@ -584,6 +585,7 @@ pub fn instances(plants: &[Plant], out: &mut Vec<GpuPropInstance>, counts: &mut 
             Kind::Tuft => "grass tuft",
             Kind::Flower(_) => "wildflowers",
             Kind::Rock(_) => "hill rock",
+            Kind::Meadow(i) => ["meadow sward", "meadow wild oats", "meadow fescue", "meadow clover and forbs", "meadow ice plant", "meadow thatch"][(i as usize).min(5)],
         };
         *counts.entry(name).or_insert(0) += 1;
         out.push(GpuPropInstance {

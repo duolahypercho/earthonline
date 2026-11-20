@@ -934,7 +934,7 @@ fn trace_near(v: &vegetation::VegGround, plants: &[eo_landmarks::vegetation::Pla
             .unwrap_or_default()
     });
     for p in plants {
-        if matches!(p.kind, eo_landmarks::vegetation::Kind::Grass | eo_landmarks::vegetation::Kind::Tuft) {
+        if matches!(p.kind, eo_landmarks::vegetation::Kind::Grass | eo_landmarks::vegetation::Kind::Tuft | eo_landmarks::vegetation::Kind::Meadow(_)) {
             continue;
         }
         for &(ex, ez) in eyes {

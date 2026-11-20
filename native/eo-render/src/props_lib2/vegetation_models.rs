@@ -36,7 +36,10 @@ pub const V_FLOWER: u32 = VEG_BASE + 7;
 /// Rock outcrop blocks (four shapes; 0 and 1 bedded).
 pub const V_ROCK: u32 = VEG_BASE + 9;
 pub const V_ROCKS: u32 = 4;
-pub const COUNT: u32 = 13;
+/// Meadow patches (`eo_landmarks::vegetation::MEADOW_SWARD` .. `MEADOW_THATCH`; the second grass pass).
+pub const V_MEADOW: u32 = VEG_BASE + 13;
+pub const V_MEADOWS: u32 = eo_landmarks::vegetation::MEADOW_TYPES as u32;
+pub const COUNT: u32 = 13 + V_MEADOWS;
 
 /// A material flag of our own: procedural rock grain in the colour pass.
 pub const P_ROCK: u32 = 1 << 17;
@@ -60,6 +63,14 @@ pub const THIN: [(f32, f32, f32); COUNT as usize] = [
     (0.0, 1000.0, 1.0),
     (0.0, 1000.0, 1.0),
     (0.0, 1000.0, 1.0),
+    // the meadow patches: their mats are the cover, so they keep every patch to 70 m
+    // (the fine layer loads to 104 m) and the survivors grow a little to close the gaps.
+    (70.0, 110.0, 1.3),
+    (70.0, 110.0, 1.3),
+    (70.0, 110.0, 1.3),
+    (70.0, 110.0, 1.3),
+    (70.0, 110.0, 1.3),
+    (70.0, 110.0, 1.3),
 ];
 /// The share kept at the draw distance (thinned models).
 pub const THIN_FLOOR: f32 = 0.12;
@@ -67,7 +78,7 @@ pub const THIN_FLOOR: f32 = 0.12;
 /// WGSL appended to props_types.wgsl: the vegetation range and its thinning
 /// (the same numbers as `THIN`, so the cull, colour and shadow passes agree).
 pub fn thin_wgsl() -> String {
-    let mut s = format!("const PR_VEG_BASE: u32 = {VEG_BASE}u;\nconst PR_VEG_COUNT: u32 = {COUNT}u;\nconst PR_VEG_TREES: u32 = {}u;\nconst PR_VEG_GRASS: u32 = {}u;\nconst PR_VEG_ROCK: u32 = {}u;\n", V_SHRUB - V_TREE, V_GRASS - V_TREE, V_ROCK - V_TREE);
+    let mut s = format!("const PR_VEG_BASE: u32 = {VEG_BASE}u;\nconst PR_VEG_COUNT: u32 = {COUNT}u;\nconst PR_VEG_TREES: u32 = {}u;\nconst PR_VEG_GRASS: u32 = {}u;\nconst PR_VEG_ROCK: u32 = {}u;\nconst PR_VEG_MEADOW: u32 = {}u;\n", V_SHRUB - V_TREE, V_GRASS - V_TREE, V_ROCK - V_TREE, V_MEADOW - V_TREE);
     s += &format!("const PR_VEG_FLOOR: f32 = {THIN_FLOOR:?};\nconst PR_VEG_GRASS_CELL_MEAN: f32 = {GRASS_CELL_MEAN:?};\n");
     s += "fn pr_veg_thin(model: u32) -> vec3<f32> {\n    switch (model - PR_VEG_BASE) {\n";
     for (k, (a, b, g)) in THIN.iter().enumerate() {
@@ -435,7 +446,371 @@ pub(crate) fn cook(out: &mut Out, ez: Option<&eo_props::eztree::EzLibrary>, m_ba
         // the cascades see the near ones only (a block past 110 m casts a shadow under a texel).
         out.set(model, ids, [30.0, 110.0, z, w], 3, 0.0);
     }
-    out.sources.push("vegetation: grass, tufts, wildflowers, rock blocks (props_lib2/vegetation_models.rs)".into());
+    // --- the meadow patches (the second grass pass; drawn only where the app plants them).
+    let g2 = eo_landmarks::vegetation::grass2();
+    let pbr = if g2.blade_shading { P_BLADE_PBR } else { 0 };
+    let thatch = eo_landmarks::vegetation::MEADOW_THATCH_ALBEDO.map(to_srgb8);
+    let mats = MeadowMats {
+        live: push_mat(out.materials, [255, 255, 255], 0.55, 0.0, P_MEADOW | P_MEADOW_LIVE | pbr, 0),
+        dead: push_mat(out.materials, [255, 255, 255], 0.75, 0.0, P_MEADOW | pbr, 0),
+        mat: push_mat(out.materials, thatch, 0.9, 0.0, P_MEADOW | P_MEADOW_LIVE | P_MEADOW_MAT, 0),
+        flesh: push_mat(out.materials, [255, 255, 255], 0.35, 0.0, P_MEADOW | P_MEADOW_LIVE | P_MEADOW_THICK | pbr, 0),
+    };
+    for k in 0..V_MEADOWS {
+        let mut ids = [NONE; 3];
+        for (l, id) in ids.iter_mut().enumerate() {
+            meadow(&mut out.b, &mats, k as u8, l as u32, 700 + k * 13);
+            *id = out.finish();
+        }
+        let model = V_MEADOW + k;
+        let (z, w) = thin(model);
+        out.set(model, ids, [8.0, 24.0, z, w], 0, 0.1);
+    }
+    out.sources.push("vegetation: grass, tufts, wildflowers, rock blocks, meadow patches (props_lib2/vegetation_models.rs)".into());
+}
+
+// ------------------------------------------------------------------ meadow patches
+
+/// Material flags of the meadow (props_draw.wgsl `PR_MEADOW*`, `PR_BLADE_PBR`).
+pub const P_MEADOW: u32 = 1 << 18;
+/// Living tissue: takes the instance tint (its cure).
+pub const P_MEADOW_LIVE: u32 = 1 << 19;
+/// The patch's ground mat: matted thatch (the material's base colour) with the sward's green through it.
+pub const P_MEADOW_MAT: u32 = 1 << 20;
+/// The blades' leaf optics (`--no-blade-shading` leaves it out).
+pub const P_BLADE_PBR: u32 = 1 << 21;
+/// A fleshy leaf (ice plant): no keel or rolled margins, little transmission.
+pub const P_MEADOW_THICK: u32 = 1 << 22;
+
+struct MeadowMats {
+    live: u32,
+    dead: u32,
+    mat: u32,
+    flesh: u32,
+}
+
+/// Where a meadow plant's ground is in the model (the instance stands
+/// `GRASS_SINK_M` into the ground).
+const MEADOW_GROUND: f32 = eo_landmarks::vegetation::GRASS_SINK_M as f32;
+
+fn lin3_to_srgb(c: [f32; 3]) -> [u8; 3] {
+    c.map(to_srgb8)
+}
+
+fn mix3(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
+    [0, 1, 2].map(|k| a[k] + (b[k] - a[k]) * t)
+}
+
+/// One blade: a strip from `base` along a centre line that rises `h * (t -
+/// droop t^2 / 2)` (droop over 1 arcs over and down) and reaches `reach` out
+/// along `yaw` (t^1.5), `w` wide, parallel-sided then tapering to a point,
+/// `segs` segments. The colour runs `c0` (base) to `c1` (tip), linear. UVs:
+/// u across (0, 1; the midrib at 0.5), v along (0 base, 1 tip): the shader's
+/// keel, margins and clump occlusion. The wind weight rises to the tip by `flex`.
+#[allow(clippy::too_many_arguments)]
+fn blade(b: &mut Builder, m: u32, base: [f32; 3], yaw: f32, h: f32, w: f32, reach: f32, droop: f32, segs: u32, c0: [f32; 3], c1: [f32; 3], flex: f32) {
+    let (sy, cy) = yaw.sin_cos();
+    let side = [-sy, 0.0, cy];
+    let first = b.v.len() as u32;
+    for i in 0..=segs {
+        let t = i as f32 / segs as f32;
+        let out_d = reach * t * t.sqrt();
+        let p = [base[0] + cy * out_d, base[1] + h * (t - 0.5 * droop * t * t), base[2] + sy * out_d];
+        let dy = h * (1.0 - droop * t);
+        let dd = 1.5 * reach * t.sqrt();
+        let tan = [cy * dd, dy, sy * dd];
+        // the face normal (tangent x side), turned up a little so a sward shades as a canopy
+        // but each blade still catches or loses the sun by how it is turned.
+        let mut n = [tan[1] * side[2] - tan[2] * side[1], tan[2] * side[0] - tan[0] * side[2], tan[0] * side[1] - tan[1] * side[0]];
+        let l = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt().max(1e-6);
+        n = n.map(|v| v / l);
+        if n[1] < 0.0 {
+            n = n.map(|v| -v);
+        }
+        n[1] += 0.15;
+        let c = lin3_to_srgb(mix3(c0, c1, t));
+        let sway = (flex * t * t.sqrt()).to_bits();
+        if i < segs {
+            let hw = 0.5 * w * (1.0 - t.powf(2.2)).max(0.0).powf(0.6);
+            let a = b.vert([p[0] - side[0] * hw, p[1], p[2] - side[2] * hw], n, [0.0, t], c, m);
+            let bb = b.vert([p[0] + side[0] * hw, p[1], p[2] + side[2] * hw], n, [1.0, t], c, m);
+            b.v[a as usize].pad = sway;
+            b.v[bb as usize].pad = sway;
+        } else {
+            let tip = b.vert(p, n, [0.5, 1.0], c, m);
+            b.v[tip as usize].pad = sway;
+        }
+    }
+    for i in 0..segs {
+        let a = first + 2 * i;
+        if i + 1 < segs {
+            b.tri(false, a, a + 1, a + 3);
+            b.tri(false, a, a + 3, a + 2);
+        } else {
+            b.tri(false, a, a + 1, a + 2);
+        }
+    }
+}
+
+/// A fleshy three-sided leaf (ice plant): a tapered prism along a centre line
+/// lying out `reach` along `yaw` and curving up `h`, radius `r` at its base.
+#[allow(clippy::too_many_arguments)]
+fn fleshy(b: &mut Builder, m: u32, base: [f32; 3], yaw: f32, h: f32, reach: f32, r: f32, c0: [f32; 3], c1: [f32; 3]) {
+    let (sy, cy) = yaw.sin_cos();
+    let dir = [cy, 0.0, sy];
+    let side = [-sy, 0.0, cy];
+    let first = b.v.len() as u32;
+    const SEGS: u32 = 2;
+    for i in 0..=SEGS {
+        let t = i as f32 / SEGS as f32;
+        let p = [base[0] + dir[0] * reach * t, base[1] + h * t * t, base[2] + dir[2] * reach * t];
+        // red only toward the tip (the leaf's last quarter and its keel's end).
+        let c = lin3_to_srgb(mix3(c0, c1, ((t - 0.55) / 0.45).clamp(0.0, 1.0).powf(1.5)));
+        if i < SEGS {
+            let rr = r * (1.0 - 0.45 * t);
+            for k in 0..3 {
+                let a = k as f32 / 3.0 * std::f32::consts::TAU + std::f32::consts::FRAC_PI_2;
+                let (s, co) = a.sin_cos();
+                let off = [side[0] * co + 0.0, s, side[2] * co];
+                let v = b.vert([p[0] + off[0] * rr, p[1] + off[1] * rr, p[2] + off[2] * rr], off, [k as f32 / 2.0, t], c, m);
+                b.v[v as usize].pad = (0.15 * t).to_bits();
+            }
+        } else {
+            let v = b.vert(p, [dir[0], 0.4, dir[2]], [0.5, 1.0], c, m);
+            b.v[v as usize].pad = 0.15f32.to_bits();
+        }
+    }
+    for k in 0..3u32 {
+        let k1 = (k + 1) % 3;
+        b.tri(false, first + k, first + k1, first + 3 + k1);
+        b.tri(false, first + k, first + 3 + k1, first + 3 + k);
+        b.tri(false, first + 3 + k, first + 3 + k1, first + 6);
+    }
+}
+
+/// A flat leaflet (clover, a forb leaf): a fan of five points, an oval `len`
+/// long and `wid` wide from `base` along `yaw`, tilted up by `tilt` (rad).
+#[allow(clippy::too_many_arguments)]
+fn leaflet(b: &mut Builder, m: u32, base: [f32; 3], yaw: f32, len: f32, wid: f32, tilt: f32, c: [f32; 3]) {
+    let (sy, cy) = yaw.sin_cos();
+    let (st, ct) = tilt.sin_cos();
+    let along = [cy * ct, st, sy * ct];
+    let side = [-sy, 0.0, cy];
+    let n = [-cy * st, ct, -sy * st];
+    let col = lin3_to_srgb(c);
+    let at = |f: f32, g: f32| [base[0] + along[0] * f + side[0] * g, base[1] + along[1] * f, base[2] + along[2] * f + side[2] * g];
+    let first = b.v.len() as u32;
+    // base, left, far, right, the midrib's middle: u across, v along (the shader's midrib).
+    b.vert(at(0.0, 0.0), n, [0.5, 0.0], col, m);
+    b.vert(at(0.45 * len, -0.5 * wid), n, [0.0, 0.45], col, m);
+    b.vert(at(len, 0.0), n, [0.5, 1.0], col, m);
+    b.vert(at(0.45 * len, 0.5 * wid), n, [1.0, 0.45], col, m);
+    b.vert(at(0.5 * len, 0.0), n, [0.5, 0.5], col, m);
+    for k in 0..5 {
+        b.v[(first + k) as usize].pad = 0.05f32.to_bits();
+    }
+    for (i, j) in [(0, 1), (1, 2), (2, 3), (3, 0)] {
+        b.tri(false, first + 4, first + i, first + j);
+    }
+}
+
+/// The patch's ground mat: a disc `r` across (ragged edge) a little over the
+/// ground, slightly domed. UV v carries the sward's green share in the mat.
+fn mat(b: &mut Builder, m: u32, r: f32, share: f32, c: [f32; 3], seed: u32) {
+    const N: u32 = 12;
+    let col = lin3_to_srgb(c);
+    let y = MEADOW_GROUND + 0.015;
+    let centre = b.vert([0.0, y + 0.01, 0.0], [0.0, 1.0, 0.0], [0.5, share], col, m);
+    for k in 0..N {
+        let a = k as f32 / N as f32 * std::f32::consts::TAU;
+        let rr = r * (0.88 + 0.24 * hash3(k as i32, 1, 5, seed));
+        b.vert([rr * a.cos(), y, rr * a.sin()], [0.0, 1.0, 0.0], [0.5, share], col, m);
+    }
+    for k in 0..N {
+        b.tri(false, centre, centre + 1 + k, centre + 1 + (k + 1) % N);
+    }
+}
+
+/// A point in a disc of radius `r` (k-th of a seeded sequence).
+fn disc(k: u32, r: f32, seed: u32) -> (f32, f32) {
+    let u = hash3(k as i32, 11, 3, seed);
+    let a = hash3(k as i32, 12, 3, seed) * std::f32::consts::TAU;
+    let rr = r * u.sqrt();
+    (rr * a.cos(), rr * a.sin())
+}
+
+/// A blade colour round `c`: value +-30 % (a sward's blades differ by age,
+/// water and how they are turned), from yellow-green to blue-green.
+fn vary(c: [f32; 3], k: u32, seed: u32) -> [f32; 3] {
+    let v = 0.7 + 0.6 * hash3(k as i32, 21, 3, seed);
+    let h = hash3(k as i32, 22, 3, seed) - 0.5;
+    [c[0] * v * (1.0 + 0.5 * h), c[1] * v, c[2] * v * (1.0 - 0.5 * h)]
+}
+
+/// Short sward: `n` blades in a disc of `r`, `h0..h1` tall, `w` wide; a third
+/// with dry, paler tips.
+#[allow(clippy::too_many_arguments)]
+fn sward(b: &mut Builder, mats: &MeadowMats, n: u32, r: f32, h0: f32, h1: f32, w: f32, segs: u32, live: [f32; 3], seed: u32) {
+    let straw = eo_landmarks::vegetation::MEADOW_THATCH_ALBEDO;
+    for k in 0..n {
+        let (x, z) = disc(k, r, seed);
+        let h = h0 + (h1 - h0) * hash3(k as i32, 31, 3, seed);
+        let c = vary(live, k, seed);
+        let tip = if hash3(k as i32, 32, 3, seed) < 0.33 { mix3(c, straw, 0.45) } else { [c[0] * 1.06, c[1] * 1.06, c[2] * 1.0] };
+        let yaw = hash3(k as i32, 33, 3, seed) * std::f32::consts::TAU;
+        let reach = h * (0.1 + 0.35 * hash3(k as i32, 34, 3, seed));
+        let droop = 0.1 + 0.45 * hash3(k as i32, 35, 3, seed);
+        // a single tapered triangle (a 7 cm to 25 cm blade bends little), so a patch can carry hundreds.
+        let _ = segs;
+        blade(b, mats.live, [x, MEADOW_GROUND - 0.01, z], yaw, h, w * (0.8 + 0.4 * hash3(k as i32, 36, 3, seed)), reach, droop, 1, [c[0] * 0.92, c[1] * 0.92, c[2] * 0.95], tip, 0.6);
+    }
+}
+
+/// Dead thatch: `n` straws lying matted on the ground (a few half raised).
+fn thatch(b: &mut Builder, mats: &MeadowMats, n: u32, r: f32, len: f32, w: f32, seed: u32) {
+    let straw = eo_landmarks::vegetation::MEADOW_THATCH_ALBEDO;
+    // weathered thatch greys (INFERRED from the litter's look in the photographs).
+    let grey = [0.14, 0.138, 0.125];
+    for k in 0..n {
+        let (x, z) = disc(k, r, seed + 1);
+        let c = vary(mix3(straw, grey, hash3(k as i32, 41, 3, seed)), k, seed + 1);
+        let l = len * (0.6 + 0.8 * hash3(k as i32, 42, 3, seed));
+        let lift = 0.01 + 0.05 * hash3(k as i32, 43, 3, seed).powi(2);
+        let yaw = hash3(k as i32, 44, 3, seed) * std::f32::consts::TAU;
+        blade(b, mats.dead, [x, MEADOW_GROUND + 0.004, z], yaw, lift, w, l, 0.0, 2, [c[0] * 0.85, c[1] * 0.85, c[2] * 0.85], c, 0.1);
+    }
+}
+
+/// One meadow patch model: `kind` (`eo_landmarks::vegetation::MEADOW_*`) at
+/// level `lod` (0 near: the blades; 1 mid: fewer, wider; 2 far: the mat and
+/// the tall types' silhouettes). The live colours are the type's green state
+/// (`MEADOW_LIVE`); the instance tint carries its cure.
+fn meadow(b: &mut Builder, mats: &MeadowMats, kind: u8, lod: u32, seed: u32) {
+    use eo_landmarks::vegetation as v;
+    let live = v::MEADOW_LIVE[kind as usize];
+    let sward_live = v::MEADOW_LIVE[v::MEADOW_SWARD as usize];
+    let g = MEADOW_GROUND;
+    // (the mat's green share, then per level: sward blades, thatch straws)
+    let share = match kind {
+        v::MEADOW_THATCH => 0.3,
+        v::MEADOW_OATS => 0.4,
+        v::MEADOW_FESCUE => 0.35,
+        v::MEADOW_CLOVER => 0.7,
+        v::MEADOW_ICE_PLANT => 0.92,
+        _ => 0.55,
+    };
+    mat(b, mats.mat, 0.95, share, if kind == v::MEADOW_ICE_PLANT { live } else { sward_live }, seed);
+    let f = [1.0f32, 0.29, 0.04][lod as usize];
+    let wide = [1.0f32, 1.7, 3.2][lod as usize];
+    let segs = if lod == 0 { 2 } else { 1 };
+    let n = |c: u32| ((c as f32 * f).round() as u32).max(if f > 0.0 { 1 } else { 0 });
+    match kind {
+        v::MEADOW_SWARD => {
+            sward(b, mats, n(450), 0.85, 0.12, 0.34, 0.008 * wide, segs, live, seed);
+            thatch(b, mats, n(40), 0.8, 0.22, 0.007 * wide, seed);
+        }
+        v::MEADOW_THATCH => {
+            thatch(b, mats, n(110), 0.85, 0.26, 0.008 * wide, seed);
+            sward(b, mats, n(220), 0.8, 0.08, 0.22, 0.007 * wide, segs, live, seed);
+            // a few dead culms standing from last year.
+            for k in 0..n(6) {
+                let (x, z) = disc(k, 0.6, seed + 5);
+                let c = vary(v::MEADOW_THATCH_ALBEDO, k, seed + 5);
+                blade(b, mats.dead, [x, g - 0.01, z], hash3(k as i32, 51, 3, seed) * 6.283, 0.35 + 0.2 * hash3(k as i32, 52, 3, seed), 0.004 * wide, 0.08, 0.5, 2, c, c, 0.8);
+            }
+        }
+        v::MEADOW_OATS => {
+            sward(b, mats, n(260), 0.85, 0.1, 0.3, 0.008 * wide, segs, sward_live, seed);
+            thatch(b, mats, n(35), 0.8, 0.24, 0.007 * wide, seed);
+            let culms = [9u32, 6, 4][lod as usize];
+            let straw_head = [0.105, 0.135, 0.05];
+            for k in 0..culms {
+                let (x, z) = disc(k, 0.55, seed + 7);
+                let h = 0.6 + 0.35 * hash3(k as i32, 61, 3, seed);
+                let yaw = hash3(k as i32, 62, 3, seed) * std::f32::consts::TAU;
+                let reach = 0.05 + 0.12 * hash3(k as i32, 63, 3, seed);
+                let c = vary(live, k, seed + 7);
+                let cw = 0.0045 * [1.0f32, 1.5, 2.6][lod as usize];
+                let cs = [4u32, 3, 2][lod as usize];
+                blade(b, mats.live, [x, g - 0.01, z], yaw, h, cw, reach, 0.25, cs, [c[0] * 0.9, c[1] * 0.9, c[2] * 0.9], [c[0] * 1.15, c[1] * 1.1, c[2] * 1.0], 1.0);
+                // the panicle: spikelets hanging from the culm's top quarter on short pedicels.
+                let (sy, cy) = yaw.sin_cos();
+                let spk = [7u32, 4, 0][lod as usize];
+                for j in 0..spk {
+                    let t = 0.74 + 0.26 * j as f32 / spk.max(1) as f32;
+                    let out_d = reach * t * t.sqrt();
+                    let p = [x + cy * out_d, g - 0.01 + h * (t - 0.125 * t * t), z + sy * out_d];
+                    let a = hash3((k * 16 + j) as i32, 64, 3, seed) * std::f32::consts::TAU;
+                    let len = 0.022 * [1.0f32, 1.6, 1.0][lod as usize];
+                    let hc = vary(straw_head, k * 16 + j, seed);
+                    // droop 3: out a little, then down (the oat's nodding spikelets).
+                    blade(b, mats.live, p, a, len, 0.006 * [1.0f32, 1.6, 1.0][lod as usize], len * 0.7, 3.0, 2, hc, [hc[0] * 1.15, hc[1] * 1.1, hc[2]], 1.0);
+                }
+                // two arching leaves at the culm's foot.
+                if lod < 2 {
+                    for j in 0..2 {
+                        let a = yaw + 2.0 + 2.2 * j as f32;
+                        blade(b, mats.live, [x, g - 0.01, z], a, 0.22, 0.008 * wide, 0.12, 1.2, segs + 1, c, [c[0] * 1.05, c[1] * 1.05, c[2]], 0.6);
+                    }
+                }
+            }
+        }
+        v::MEADOW_FESCUE => {
+            sward(b, mats, n(160), 0.85, 0.08, 0.24, 0.007 * wide, segs, sward_live, seed);
+            thatch(b, mats, n(40), 0.8, 0.2, 0.007 * wide, seed);
+            // one or two tussocks: fine blades in a fountain from a tight crown, a quarter of them dead straw inside.
+            for t in 0..2u32 {
+                let (cx, cz) = if t == 0 { (0.0, 0.0) } else { disc(3, 0.45, seed + 9) };
+                let sz = if t == 0 { 1.0 } else { 0.7 };
+                let nb = [55u32, 22, 9][lod as usize];
+                for k in 0..nb {
+                    let (x, z) = disc(k, 0.06 * sz, seed + 11 + t);
+                    let yaw = hash3(k as i32, 71, 3, seed + t) * std::f32::consts::TAU;
+                    let dead = hash3(k as i32, 72, 3, seed + t) < 0.25;
+                    let c = if dead { vary(v::MEADOW_THATCH_ALBEDO, k, seed) } else { vary(live, k, seed + t) };
+                    let h = sz * (0.45 + 0.3 * hash3(k as i32, 73, 3, seed + t));
+                    let droop = 1.0 + 0.5 * hash3(k as i32, 74, 3, seed + t);
+                    let reach = sz * (0.12 + 0.2 * hash3(k as i32, 75, 3, seed + t));
+                    let w = 0.0028 * [1.0f32, 2.0, 3.2][lod as usize];
+                    blade(b, if dead { mats.dead } else { mats.live }, [cx + x, g - 0.01, cz + z], yaw, h, w, reach, droop, [3u32, 2, 2][lod as usize], [c[0] * 0.9, c[1] * 0.9, c[2] * 0.92], [c[0] * 1.08, c[1] * 1.06, c[2] * 1.04], 0.7);
+                }
+            }
+        }
+        v::MEADOW_CLOVER => {
+            sward(b, mats, n(220), 0.85, 0.07, 0.2, 0.007 * wide, segs, sward_live, seed);
+            thatch(b, mats, n(20), 0.8, 0.2, 0.007 * wide, seed);
+            let leaves = [26u32, 10, 0][lod as usize];
+            let big = [1.0f32, 1.7, 1.0][lod as usize];
+            for k in 0..leaves {
+                let (x, z) = disc(k, 0.72, seed + 13);
+                let h = 0.04 + 0.09 * hash3(k as i32, 81, 3, seed);
+                let c = vary(live, k, seed + 13);
+                if hash3(k as i32, 82, 3, seed) < 0.75 {
+                    // a trifoliate clover leaf on its petiole.
+                    blade(b, mats.live, [x, g - 0.01, z], hash3(k as i32, 83, 3, seed) * 6.283, h + 0.01, 0.0018 * big, 0.01, 0.0, 1, c, c, 0.3);
+                    let a0 = hash3(k as i32, 84, 3, seed) * std::f32::consts::TAU;
+                    for j in 0..3 {
+                        leaflet(b, mats.live, [x, g - 0.01 + h, z], a0 + j as f32 * 2.094, 0.018 * big, 0.016 * big, 0.25, c);
+                    }
+                } else {
+                    // a forb rosette leaf (plantain, filaree): broad, lanceolate, lying low.
+                    blade(b, mats.live, [x, g - 0.005, z], hash3(k as i32, 85, 3, seed) * 6.283, 0.035, 0.03 * big, 0.11, 0.6, segs + 1, [c[0] * 0.95, c[1] * 1.0, c[2] * 0.95], c, 0.2);
+                }
+            }
+        }
+        v::MEADOW_ICE_PLANT => {
+            let leaves = [80u32, 28, 0][lod as usize];
+            let big = [1.0f32, 1.5, 1.0][lod as usize];
+            let red = [0.22, 0.05, 0.035];
+            for k in 0..leaves {
+                let (x, z) = disc(k, 0.78, seed + 17);
+                let c = vary(live, k, seed + 17);
+                let tip = mix3(c, red, 0.55 + 0.45 * hash3(k as i32, 91, 3, seed));
+                fleshy(b, mats.flesh, [x, g + 0.005, z], hash3(k as i32, 92, 3, seed) * 6.283, 0.03 + 0.05 * hash3(k as i32, 93, 3, seed), (0.06 + 0.05 * hash3(k as i32, 94, 3, seed)) * big, 0.0065 * big, c, tip);
+            }
+        }
+        _ => {}
+    }
 }
 
 #[cfg(test)]
@@ -454,7 +829,29 @@ mod tests {
         }
         // the grass survivors grow at most a tenth (no long strokes).
         assert!(THIN[(V_GRASS - VEG_BASE) as usize].2 <= 1.1);
-        assert_eq!(V_ROCK + V_ROCKS, VEG_BASE + COUNT);
+        assert_eq!(V_ROCK + V_ROCKS, V_MEADOW);
+        assert_eq!(V_MEADOW + V_MEADOWS, VEG_BASE + COUNT);
+    }
+
+    /// The meadow patches' triangles per level (the cost the frame pays per
+    /// instance): dense near, a few hundred mid, the mat and a few strokes far.
+    #[test]
+    fn meadow_patches_are_dense_near_and_light_far() {
+        let mats = MeadowMats { live: 0, dead: 1, mat: 2, flesh: 3 };
+        for k in 0..V_MEADOWS as u8 {
+            let mut tris = [0usize; 3];
+            for (l, t) in tris.iter_mut().enumerate() {
+                let mut b = Builder::default();
+                meadow(&mut b, &mats, k, l as u32, 700);
+                assert!(b.cut.is_empty());
+                *t = b.opaque.len() / 3;
+                // every blade stands on the mat's disc (no stray vertex far off).
+                assert!(b.v.iter().all(|v| v.pos[0].hypot(v.pos[2]) < 1.4 && v.pos[1] > -0.05 && v.pos[1] < 1.2), "{k} {l}");
+            }
+            eprintln!("meadow {k}: triangles near {} mid {} far {}", tris[0], tris[1], tris[2]);
+            assert!(tris[0] > tris[1] && tris[1] > tris[2], "{k}: {tris:?}");
+            assert!(tris[0] <= 1400 && tris[1] <= 450 && tris[2] <= 80, "{k}: {tris:?}");
+        }
     }
 
     #[test]
