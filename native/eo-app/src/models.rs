@@ -25,6 +25,15 @@ pub struct Bases {
     pub model_arena: Option<(u32, u32)>,
     /// the near packs' own part of the kit arena (view detail on).
     pub kit_near: Option<(u32, u32, u32)>,
+    /// The far layer's GPU side is attached. It needs multi-draw-indirect-count
+    /// (absent on Metal); without it the far layer's CPU side is not started
+    /// either, since nothing would draw what it bakes and it would never settle.
+    pub far_layer: bool,
+    /// the grade-separated roads' part of the arenas, after the street's
+    /// (all zero unless `--structures` built a non-empty world; structures.rs).
+    pub structures: eo_render::structures::StructuresArena,
+    /// where their groups and materials are (default unless drawn).
+    pub structures_placement: eo_render::structures::Placement,
 }
 
 /// Slice 4 street arena (near packs): vertices, indices, objects.
@@ -94,6 +103,12 @@ pub fn model_arena_bound(set: &eo_render::authored::AuthoredSet) -> (u32, u32) {
     (best_v.min(set.vertex_capacity as u64) as u32, best_i.min(set.index_capacity as u64) as u32)
 }
 
+/// Threads baking the ambient volume (`--ambient-volume`; below the render thread).
+const AMBIENT_THREADS: usize = 4;
+/// (`--look cinematic`, stage L2) the street lamp palette's cell (m): fine
+/// enough that a lamp near a corner finds its own street, not the crossing one.
+const PALETTE_CELL_M: f64 = 16.0;
+
 pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu::TextureFormat, debug_ids: bool) -> Result<(Renderer, Bases)> {
     let set = &world.authored;
     let mut objects = world.scene.objects.clone();
@@ -149,6 +164,10 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
         };
         objects.extend(std::iter::repeat_n(GpuObject::zeroed_street(), street_arena.2 as usize));
     }
+    // the grade-separated roads' arena after the street's: reserved only with
+    // `--structures` and a non-empty world (else zero, and nothing above moves).
+    let structures = crate::structures::arena(world, models.vertex + model_v + kit.vertex_capacity + street.vertex_capacity, models.index + model_i + kit.index_capacity + street.index_capacity, objects.len() as u32);
+    objects.extend(std::iter::repeat_n(eo_render::structures::zeroed_object(), structures.object_capacity as usize));
     if let Some(l) = &world.landmarks {
         // one LOD group per landmark (the set's near/far switch), after the street's.
         assert_eq!(groups.len() as u32, l.group_base);
@@ -159,15 +178,47 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
         assert_eq!(groups.len() as u32, h.extra_group_base);
         groups.extend_from_slice(&h.extra_groups);
     }
+    // the grade-separated roads' groups after every other (no group above
+    // moves), their concrete materials after the set's, their static objects
+    // in the slots reserved above (only with `--structures` and a non-empty world).
+    let materials_with_structures: Vec<eo_render::authored::GpuMaterial>;
+    let mut materials: &[eo_render::authored::GpuMaterial] = &set.materials.gpu;
+    let mut structures_placement = eo_render::structures::Placement::default();
+    if let Some(p) = crate::structures::drawn(world) {
+        structures_placement = crate::structures::placement(world, groups.len() as u32, set.materials.gpu.len() as u32);
+        groups.extend(p.groups());
+        materials_with_structures = set.materials.gpu.iter().copied().chain(p.materials()).collect();
+        materials = &materials_with_structures;
+        let first = structures.object_base as usize;
+        objects.splice(first..first + structures.object_capacity as usize, p.objects(structures_placement, structures));
+    }
+    // the opt-in features' shader code: what is off at start is compiled out of every pipeline (stage P1;
+    // `EO_SHADER_FEATURES=all`, a diagnostic: every feature's code compiled in, as before the stage).
+    let features = eo_render::look::ShaderFeatures::of(&args.look, crate::structures::drawn(world).is_some(), args.structures.as_ref().is_some_and(|s| s.tunnels), args.facade_clutter > 0);
+    let mut features = if std::env::var("EO_SHADER_FEATURES").is_ok_and(|v| v == "all") { eo_render::look::ShaderFeatures::ALL } else { features };
+    for w in std::env::var("EO_SHADER_FEATURES").unwrap_or_default().split(',') {
+        match w {
+            "lx" => features.lx_bits = u32::MAX,
+            "grime" => features.grime = true,
+            "street_life" => features.street_life = true,
+            "structures" => features.structures = true,
+            "tunnels" => features.tunnels = true,
+            "shop_light" => features.shop_light = true,
+            "clutter" => features.facade_clutter = true,
+            "cinematic" => features.cinematic = true, // (`--look cinematic`, stage L0)
+            _ => {}
+        }
+    }
+    eo_render::look::set_shader_features(features);
     let mut r = Renderer::from_init(
         ctx,
         &RendererInit {
             vertices: &world.scene.vertices,
             indices: &world.scene.indices,
             objects: &objects,
-            extra_vertices: model_v + kit.vertex_capacity + street.vertex_capacity, // model_v / model_i
-            extra_indices: model_i + kit.index_capacity + street.index_capacity,
-            materials: &set.materials.gpu,
+            extra_vertices: model_v + kit.vertex_capacity + street.vertex_capacity + structures.vertex_capacity, // model_v / model_i
+            extra_indices: model_i + kit.index_capacity + street.index_capacity + structures.index_capacity,
+            materials,
             groups: &groups,
             hlod_enter_m: set.hlod_enter_m,
             hlod_exit_m: set.hlod_exit_m,
@@ -183,8 +234,10 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     r.kit_radii = eo_render::kit::DEFAULT_KIT_RADII;
     r.set_occlusion(args.perf.occlusion); // occlusion
     // the far layer's GPU side and every group's cell.
+    let mut far_layer = false;
     if let Some(h) = &world.hlod {
         if r.attach_hlod(ctx, &eo_render::hlod::HlodOptions::from_env()) > 0 {
+            far_layer = true;
             r.write_hlod_map(&ctx.queue, &h.group_cell);
             let b = r.hlod.get().map(|g| g.bytes).unwrap_or_default();
             r.bytes.vertex += b[0];
@@ -198,6 +251,10 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     // the clock and the shadow quality.
     r.look.set_time_of_day(args.time_of_day);
     r.look.set_options(&ctx.device, args.look);
+    // surface weathering (`--grime`): its street decals (kerb paint, building-line dirt) placed from the first tile on.
+    eo_render::cc0_decals::set_weathering(args.look.grime > 0);
+    // street life (`--street-life`): its level, and the land-use survey its decals place by (read beside the load).
+    crate::street_life::start(args.look.street_life, world.city.clone(), world.paths.repo_root.clone(), world.structures.clone());
     // the street's scanned sets (written once, before the first frame).
     if let Some((maps, _)) = &world.street_maps {
         r.bytes.textures += r.upload_street_maps(ctx, maps);
@@ -258,6 +315,41 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
         }
     }
     r.bytes.textures += crate::farshore::attach(ctx, &r, world); // the far terrain
+    r.bytes.vertex += crate::structures::attach(ctx, &r, world, structures_placement, structures); // the grade-separated roads' static levels (built during the load; nothing without them)
+    // the ambient volume (`--ambient-volume`): the sky's visibility baked round the camera and over the city (lighting).
+    if args.look.lighting.ambient_volume > 0 {
+        let lift = eo_assets::placement::PlacementConstants::load()?.construction_lift_m;
+        let inputs = eo_render::ambient::AmbientInputs::city(world.city.clone(), lift, std::sync::Arc::new(world.elevation.clone()), world.structures.clone(), cache_dir(args), AMBIENT_THREADS);
+        r.bytes.textures += r.ambient.attach(ctx, &r.look, inputs, [0.0, 0.0]);
+    }
+    // the far sun shadow maps (`--far-shadows`): a ring (two at level 2) past the cascades (lighting).
+    if args.look.lighting.far_shadows > 0 {
+        let b = r.attach_far_shadows(ctx, args.look.lighting.far_shadows);
+        r.bytes.textures += b;
+        eprintln!("far shadows: {} ring(s) of {} px, {:.1} MB of maps, lists and uniforms", r.far_shadow.rings(), eo_render::far_shadow::FAR_MAP_SIZE, b as f64 / 1e6);
+    }
+    // the probe grid (`--probe-grid`): reflection probes on the streets round the camera, in the single probe's place (lighting).
+    if args.look.lighting.probe_grid > 0 {
+        match &world.street {
+            Some(s) => {
+                let t = std::time::Instant::now();
+                let anchors = eo_render::probe_grid::Anchors::from_streets(&s.world);
+                let n = anchors.len();
+                let b = r.attach_probe_grid(ctx, args.look.lighting.probe_grid, anchors);
+                r.bytes.textures += b;
+                let lv = r.probe_grid.level();
+                eprintln!(
+                    "probe grid: {} probes of {} px in {} slots from {n} street anchors ({:.0} ms), {:.1} MB of cubes, face target and table",
+                    lv.map(|l| l.probes).unwrap_or(0),
+                    lv.map(|l| l.face).unwrap_or(0),
+                    lv.map(|l| l.slots).unwrap_or(0),
+                    t.elapsed().as_secs_f64() * 1e3,
+                    b as f64 / 1e6
+                );
+            }
+            None => eprintln!("probe grid: no streets to anchor it on; the single probe stays"),
+        }
+    }
     // the street lamps the city is lit by at night. Until the props slice
     // delivers its per-lamp records, the JS fallback placement (eo-sky lights)
     // on the street contract's segments, standing on the drawn surface.
@@ -287,8 +379,33 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
             lamps.splice(0..0, eo_render::landmarks::sky_lamps(&l.lights));
         }
         let n = r.look.sky.set_lamps(&ctx.queue, &lamps);
+        // (`--look cinematic`, stage L2) the street lamp palette (eo-sky
+        // `cine_lamps`): each lamp street's colour and axis on a grid from the
+        // elevation grid's corner, for the gather (near lamps) and here for the
+        // far lamps; made only with the look compiled in.
+        let mut far_lamps = None;
+        if eo_render::look::shader_features().cinematic {
+            let g = &world.elevation;
+            let corner = [g.meta.origin_x, g.meta.origin_z];
+            let span = (g.max_x() - corner[0]).max(g.max_z() - corner[1]);
+            let cell = PALETTE_CELL_M.max((span / eo_render::sky::PALETTE_CELLS_MAX as f64).ceil());
+            let cols = (((g.max_x() - corner[0]) / cell).ceil() as usize).min(eo_render::sky::PALETTE_CELLS_MAX);
+            let rows = (((g.max_z() - corner[1]) / cell).ceil() as usize).min(eo_render::sky::PALETTE_CELLS_MAX);
+            let streets: Vec<eo_sky::cine_lamps::StreetIn> = s
+                .world
+                .city
+                .segments
+                .iter()
+                .map(|g| eo_sky::cine_lamps::StreetIn { name: if g.street_name.is_empty() { g.id.as_str() } else { g.street_name.as_str() }, highway: g.highway.as_str(), width: g.width, points: &g.points })
+                .collect();
+            let grid = eo_sky::cine_lamps::PaletteGrid::build(corner, cell, cols, rows, &streets);
+            r.look.sky.set_lamp_palette(&ctx.queue, &grid);
+            if r.look.sky.options().cinematic {
+                far_lamps = Some(eo_sky::cine_lamps::recolour(&lamps, &grid));
+            }
+        }
         if world.hlod.is_some() {
-            r.bytes.draws += r.attach_far_lights(ctx, &lamps); // stage 3, the same lamps far away
+            r.bytes.draws += r.attach_far_lights(ctx, far_lamps.as_deref().unwrap_or(&lamps)); // stage 3, the same lamps far away
         }
         // By the water: the cells whose centre is within WATERSIDE_M of the
         // shore (eo-water's shore field, + over water); a lamp in one, the
@@ -324,7 +441,7 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     if world.hlod.is_some() && world.hlod_trees.is_some() {
         r.bytes.draws += r.attach_far_trees(ctx);
     }
-    Ok((r, Bases { models, kit, street, model_arena, kit_near })) // + model_arena, kit_near
+    Ok((r, Bases { models, kit, street, model_arena, kit_near, far_layer, structures, structures_placement })) // + model_arena, kit_near, far_layer, structures
 }
 
 #[derive(Clone, Debug, Default)]
@@ -417,11 +534,18 @@ pub struct ModelRuntime {
     model_wait_free: bool,
     streamer: Option<Streamer>,
     kit_rx: Option<std::sync::mpsc::Receiver<Result<(eo_render::KitUpload, f64), String>>>,
+    /// (`--shop-light`) the shop windows' lights, placed from the kit planner's
+    /// shop bays on a thread of their own once the kit city is there (handed
+    /// to the sky on arrival; None without the option or once handed over),
+    /// and (stage N2) the shops' fronts table for the rooms (empty: none).
+    shop_rx: Option<std::sync::mpsc::Receiver<(Vec<eo_render::shop_lights::GpuShopLight>, Vec<[u32; 4]>)>>,
     kit_ready: bool,
     kit_queued: bool,
     pub uploads: UploadQueue,
     pub kit: Option<KitRuntime>,
     pub street: Option<eo_render::street::StreetRuntime>,
+    /// the grade-separated roads' near packs (`--structures`).
+    pub structures: Option<eo_render::structures::StructuresRuntime>,
     /// the far layer's streamer (cells and districts).
     pub hlod: Option<eo_render::hlod::HlodRuntime>,
     /// the distant trees' list is still to arrive or to be written (0 none, 1 waiting, 2 writing).
@@ -439,6 +563,9 @@ pub struct ModelRuntime {
 
 const TAG_TEXTURES: u64 = 1 << 60;
 const TAG_MODEL: u64 = 1 << 61;
+/// (`--shop-light`) The shop windows' lights are placed on this many worker
+/// threads (the kit planner again for every retail ground floor: ~4 s on 8).
+const SHOP_LIGHT_THREADS: usize = 4;
 
 impl ModelRuntime {
     pub fn start(world: &mut World, args: &Args, bases: Bases, camera: Vec3, process_start: Instant) -> Self {
@@ -455,21 +582,48 @@ impl ModelRuntime {
                 gated,
             )
         });
-        // the planner's city goes to the kit's streamer and the far layer's.
-        let (kit_city_rx, hlod_city_rx) = match (world.kit_city_rx.take(), world.hlod.is_some()) {
-            (Some(rx), true) => {
+        // the planner's city goes to the kit's streamer and the far layer's
+        // (only when the renderer attached the far layer's GPU side).
+        // (and, `--shop-light`, to the shop windows' lights' placement)
+        let want_hlod = world.hlod.is_some() && bases.far_layer;
+        let want_shops = args.look.sky.shop_light > 0 && world.kit.is_some();
+        let (kit_city_rx, hlod_city_rx, shop_city_rx) = match world.kit_city_rx.take() {
+            Some(rx) if want_hlod || want_shops => {
                 let (a, ar) = std::sync::mpsc::channel();
                 let (b, br) = std::sync::mpsc::channel();
+                let (c, cr) = std::sync::mpsc::channel();
                 std::thread::spawn(move || {
                     if let Ok(v) = rx.recv() {
                         let _ = a.send(v.clone());
-                        let _ = b.send(v);
+                        if want_shops {
+                            let _ = c.send(v.clone());
+                        }
+                        if want_hlod {
+                            let _ = b.send(v);
+                        }
                     }
                 });
-                (Some(ar), Some(br))
+                (Some(ar), want_hlod.then_some(br), want_shops.then_some(cr))
             }
-            (rx, _) => (rx, None),
+            rx => (rx, None, None),
         };
+        let shop_rx = shop_city_rx.zip(world.kit.clone()).map(|(rx, set)| {
+            let level = args.look.sky.shop_light;
+            let (tx, out) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                eo_render::hitch::worker_started();
+                let Ok(Ok((kc, _))) = rx.recv() else { return };
+                let (lights, fronts, st) = eo_render::shop_lights::build_with_fronts(&kc, &set, level, SHOP_LIGHT_THREADS);
+                eprintln!(
+                    "shop lights: level {level}, {} lights in {} shop windows of {} shops in {} buildings ({} with a retail ground planned) in {:.0} ms; by kind {:?}; vacant {} ({} boarded, {} with a work light)",
+                    st.lights, st.bays, st.shops, st.with_bays, st.planned, st.ms, st.by_kind, st.vacant, st.boarded, st.work_lit
+                );
+                // (stage N2) the rooms' fronts table; `EO_SHOP_INTERIORS=0` (diagnostic) keeps N1's rooms.
+                let table = if std::env::var("EO_SHOP_INTERIORS").is_ok_and(|v| v == "0") { vec![] } else { eo_render::shop_lights::fronts_table(&fronts) };
+                let _ = tx.send((lights, table));
+            });
+            out
+        });
         let hlod = match (&world.hlod, &world.kit, hlod_city_rx) {
             (Some(set), Some(kit), Some(rx)) => {
                 let opts = eo_render::hlod::HlodOptions::from_env();
@@ -511,6 +665,16 @@ impl ModelRuntime {
             k.split_near(n.0, n.1, n.2);
         }
         let street = world.street.as_ref().map(|s| eo_render::street::StreetRuntime::start(s.clone(), bases.street, Default::default(), 2, camera));
+        // the grade-separated roads' arena (reserved only for a non-empty `--structures` world): the static levels, then the near packs.
+        let sa = bases.structures;
+        let structures = crate::structures::drawn(world).filter(|_| !sa.is_empty()).map(|p| {
+            let near = p.near_arena(sa);
+            eprintln!(
+                "structures: arena of {} vertices, {} indices, {} objects reserved after the street's (vertex base {}, object base {}); near packs {} / {} / {} of it",
+                sa.vertex_capacity, sa.index_capacity, sa.object_capacity, sa.vertex_base, sa.object_base, near.vertex_capacity, near.index_capacity, near.object_capacity
+            );
+            eo_render::structures::StructuresRuntime::start(p.set.clone(), bases.structures_placement, near, crate::structures::NEAR_THREADS, camera)
+        });
         let model_gated = gated && streamer.is_some();
         Self {
             model_state: vec![ModelState::Absent; world.authored.buildings.len()],
@@ -523,9 +687,11 @@ impl ModelRuntime {
             model_wait_free: false,
             streamer,
             street,
+            structures,
             hlod_trees: if world.hlod_trees.is_some() && hlod.is_some() { 1 } else { 0 }, // hlod
             hlod, // hlod
             kit_rx: world.kit_rx.take(),
+            shop_rx,
             kit_ready: false,
             kit_queued: false,
             // The kit's group and eviction writes (bounded per frame) come out of the same budget.
@@ -552,10 +718,21 @@ impl ModelRuntime {
     /// untextured), then write at most the budget.
     pub fn pump(&mut self, ctx: &GpuContext, renderer: &Renderer, world: &World, cam: Vec3) -> Result<PumpFrame> {
         let t = Instant::now();
+        // (`--shop-light`) the shop windows' lights, once placed: to the sky's light gather.
+        if let Some(rx) = &self.shop_rx {
+            if let Ok((lights, fronts)) = rx.try_recv() {
+                renderer.look.sky.set_shop_lights(&ctx.queue, &lights);
+                renderer.look.set_shop_fronts(eo_render::shop_lights::fronts_buffer(&ctx.device, &ctx.queue, &fronts).as_ref()); // (stage N2) the shops' rooms
+                self.shop_rx = None;
+            }
+        }
         if let Some(k) = &mut self.kit {
             k.begin_frame();
         }
         if let Some(s) = &mut self.street {
+            s.begin_frame();
+        }
+        if let Some(s) = &mut self.structures {
             s.begin_frame();
         }
         if !self.kit_queued {
@@ -689,6 +866,10 @@ impl ModelRuntime {
             let _s = hitch::span(hitch::Phase::StreetUpdate); // hitch
             s.update(renderer, &ctx.queue, &mut self.uploads, cam);
         }
+        if let Some(s) = &mut self.structures {
+            let _s = hitch::span(hitch::Phase::StreetUpdate); // the grade-separated roads' near packs, in the street's span
+            s.update(renderer, &ctx.queue, &mut self.uploads, cam);
+        }
         if let Some(h) = &mut self.hlod {
             h.update(renderer, &ctx.queue, cam); // the far layer, its own upload budget
         }
@@ -763,6 +944,10 @@ impl ModelRuntime {
             bytes += k.last_group_bytes;
         }
         if let Some(s) = &mut self.street {
+            s.after_pump(renderer, &ctx.queue, &done);
+            bytes += s.last_group_bytes;
+        }
+        if let Some(s) = &mut self.structures {
             s.after_pump(renderer, &ctx.queue, &done);
             bytes += s.last_group_bytes;
         }
@@ -904,12 +1089,16 @@ impl ModelRuntime {
     /// which part of `settled` is not true (for a settle that timed out).
     pub fn unsettled(&self) -> String {
         format!(
-            "kit maps ready {}, models done {}, uploads pending {}, kit settled {}, street settled {}, {}",
+            "kit maps ready {}, models done {}, uploads pending {}, kit settled {}, street settled {}, structures settled {}, far settled {}, far trees state {} (0 done), cc0 settled {}, {}",
             self.kit_ready,
             self.done(),
             self.uploads.pending(),
             self.kit.as_ref().map(|k| k.settled()).unwrap_or(true),
             self.street.as_ref().map(|s| s.settled()).unwrap_or(true),
+            self.structures.as_ref().is_none_or(|s| s.settled()),
+            self.hlod.as_ref().is_none_or(|h| h.settled()),
+            self.hlod_trees,
+            self.cc0.as_ref().map(|c| c.settled()).unwrap_or(true),
             self.hlod.as_ref().map(|h| h.unsettled()).unwrap_or_default() // hlod
         )
     }
@@ -917,8 +1106,10 @@ impl ModelRuntime {
     /// Models, maps and every kit pack wanted around the camera resident.
     pub fn settled(&self) -> bool {
         self.done() && self.uploads.pending() == 0 && self.kit.as_ref().map(|k| k.settled()).unwrap_or(true) && self.street.as_ref().map(|s| s.settled()).unwrap_or(true)
+            && self.structures.as_ref().is_none_or(|s| s.settled()) // the grade-separated roads' near packs
             && self.hlod.as_ref().is_none_or(|h| h.settled()) // the far cells around the camera and every district
             && self.hlod_trees == 0 // and the distant trees
             && self.cc0.as_ref().map(|c| c.settled()).unwrap_or(true) // cc0
+            && self.shop_rx.is_none() // (`--shop-light`) the shop windows' lights placed
     }
 }

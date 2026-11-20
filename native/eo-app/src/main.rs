@@ -19,9 +19,13 @@ mod cc0_runtime; // the CC0 scanned sets at run time
 mod farshore; // the far terrain's load and attach
 mod models;
 mod net; // net
+mod quality; // `--quality` tiers and the lighting switches
 mod streets;
+mod street_life; // litter, graffiti, posters (`--street-life`): the level and its survey
+mod structures; // grade-separated roads (`--structures`): build and attach
 mod window;
 mod audio; // the sound (eo-audio), see audio.rs
+mod ui; // the interface (eo-ui): `--ui`, `--capture-ui`, `--ui-bench`; at the crate root so its tests run
 
 use anyhow::Result;
 use eo_assets::kit::{self, KitLibrary};
@@ -30,16 +34,19 @@ use eo_data::{CaStandards, City, DataPaths, ElevationGrid, LandCover};
 use eo_render::KitUpload;
 use eo_render::authored::AuthoredSet;
 use eo_render::kit::{KitRadii, KitSet};
-use eo_render::scene::{Scene, SceneInputs, build_scene};
+use eo_render::scene::{Scene, SceneInputs, build_scene_with_cuts};
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::mpsc::Receiver;
 use std::time::Instant;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Args {
     pub bench: bool,
     pub start_underwater: bool,
+    /// `--quality` (default medium: today's frame); expanded into `look` once
+    /// every argument is read (quality.rs), and the bench's frame budget.
+    pub quality: quality::Quality,
     pub frames: usize,
     pub warmup: usize,
     pub width: u32,
@@ -47,6 +54,8 @@ pub struct Args {
     pub msaa: u32,
     pub indirect_validation: bool,
     pub no_indirect_count: bool,
+    /// Without MULTI_DRAW_INDIRECT_COUNT (Metal): the per-slot fallback instead of the count emulation.
+    pub no_count_emulation: bool,
     pub vsync: bool,
     pub out_dir: Option<std::path::PathBuf>,
     pub label: Option<String>,
@@ -108,6 +117,14 @@ pub struct Args {
     /// the waterfront, the landmark buildings, the park ground, the beach band and the bridges' lights
     /// (`--no-landmarks2` turns them all off, the A/B).
     pub landmarks2: bool,
+    /// the grade-separated roads (`--structures`; `--tunnels` for the bores
+    /// and portals): None (the default) builds none. A world switch: client
+    /// and server must agree. Set by `quality::Switches::apply`.
+    pub structures: Option<eo_structures::StructureOptions>,
+    /// the facade clutter (`--facade-clutter [1|2]`, stage W3; eo-kit
+    /// clutter.rs): fire escapes, awnings, signs, services and roof clutter on
+    /// the kit buildings; 0 (the default) none. Set by `quality::Switches::apply`.
+    pub facade_clutter: u8,
 }
 
 /// occlusion / hitch: one `Args` field, so `play.rs` and `ui.rs` name it once.
@@ -180,9 +197,14 @@ impl Default for PerfArgs {
 }
 
 fn parse_args() -> Result<Args> {
+    parse_args_from(&std::env::args().skip(1).collect::<Vec<_>>())
+}
+
+fn parse_args_from(raw: &[String]) -> Result<Args> {
     let mut a = Args {
         bench: false,
         start_underwater: false,
+        quality: Default::default(),
         frames: 720,
         warmup: 60,
         width: 1920,
@@ -190,6 +212,7 @@ fn parse_args() -> Result<Args> {
         msaa: 1,
         indirect_validation: true,
         no_indirect_count: false,
+        no_count_emulation: false,
         vsync: true,
         out_dir: None,
         label: None,
@@ -225,10 +248,17 @@ fn parse_args() -> Result<Args> {
         perf: Default::default(), // occlusion / hitch
         landmarks: true,          // landmarks
         landmarks2: true,
+        structures: None, // `--structures` (quality::Switches)
+        facade_clutter: 0, // `--facade-clutter` (quality::Switches)
     };
-    let mut it = std::env::args().skip(1);
+    let mut tier = quality::Switches::default(); // `--quality` and the lighting switches, applied after the loop
+    let mut it = raw.iter();
     while let Some(s) = it.next() {
-        let mut val = || it.next().ok_or_else(|| anyhow::anyhow!("{s} needs a value"));
+        if let Some(n) = tier.take(s, it.as_slice().first().map(String::as_str))? {
+            it.by_ref().take(n).for_each(drop); // the value it took, if any
+            continue;
+        }
+        let mut val = || it.next().cloned().ok_or_else(|| anyhow::anyhow!("{s} needs a value"));
         match s.as_str() {
             "--bench" => a.bench = true,
             "--frames" => a.frames = val()?.parse()?,
@@ -238,6 +268,7 @@ fn parse_args() -> Result<Args> {
             "--msaa" => a.msaa = val()?.parse()?,
             "--no-indirect-validation" => a.indirect_validation = false,
             "--no-indirect-count" => a.no_indirect_count = true,
+            "--no-count-emulation" => a.no_count_emulation = true,
             "--no-vsync" => a.vsync = false,
             "--out" => a.out_dir = Some(val()?.into()),
             "--label" => a.label = Some(val()?),
@@ -306,7 +337,7 @@ fn parse_args() -> Result<Args> {
                 let v = val()?;
                 a.look.sky.weather = match v.as_str() {
                     "schedule" | "auto" => eo_render::sky::WeatherMode::Schedule,
-                    k => eo_render::sky::WeatherMode::Preset(eo_sky::Kind::parse(k).ok_or_else(|| anyhow::anyhow!("--weather clear|overcast|fog|drizzle|rain|storm|schedule, not {k}"))?),
+                    k => eo_render::sky::WeatherMode::Preset(eo_sky::Kind::parse(k).ok_or_else(|| anyhow::anyhow!("--weather clear|overcast|fog|drizzle|rain|storm|damp|schedule, not {k}"))?),
                 }
             }
             "--weather-seed" => a.look.sky.seed = val()?.parse()?,
@@ -339,6 +370,9 @@ fn parse_args() -> Result<Args> {
             "--no-atmosphere" => a.look.sky.atmosphere = false, // the JS analytic dome instead of the atmosphere tables
             "--no-contact-shadows" => a.look.sky.contact = false,
             "--sky-shots" => {} // bench/sky_shots.rs reads it
+            "--light-shots" => {} // bench/light_shots.rs reads it (the lighting reference cards)
+            "--structures-shots" => {} // bench/structures_shots.rs reads it (the grade-separated roads' capture card)
+            "--dusk-strip" => {} // bench/light_shots.rs reads it (the drawn hour across sunset and sunrise)
             "--so-shots" => {} // so: bench/so_shots.rs reads it (the sky and ocean review cards)
             "--no-farshore" => {} // farshore.rs reads it (no far terrain)
             "--start-underwater" => a.start_underwater = true,
@@ -360,7 +394,9 @@ fn parse_args() -> Result<Args> {
             "--no-cc0-grime" => a.look.cc0 &= !eo_render::cc0::RUN_GRIME,
             "--no-cc0-stains" => a.look.cc0 &= !eo_render::cc0::RUN_STAINS,
             "--cc0-shots" => {}
+            "--clutter-shots" => {} // the facade clutter's capture card (bench/clutter_shots.rs)
             "--no-landmarks2" => a.landmarks2 = false,
+            "--bridge-detail" | "--no-bridge-detail" => {} // read where the landmark set is built (`bridge_detail`)
             "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
             s if a.props2.parse_flag(s) => {} // --no-props2, --no-furniture, --no-eztree, --no-overhead, --no-wires, --no-props2-shading, --capture-props2
             "--agents-bench" | "--agents-capture" | "--people-capture" | "--people-lineup" => {} // + --people-capture, --people-lineup
@@ -413,18 +449,26 @@ fn parse_args() -> Result<Args> {
             }
             "-h" | "--help" => {
                 println!(
-                    "eo-app [--bench] [--frames N=720] [--warmup N=60] [--width 1920] [--height 1080] [--msaa 1|4]\n       [--no-indirect-validation] [--no-indirect-count] [--no-vsync] [--out DIR] [--label NAME] [--capture] [--far M=4200]\n       [--multiply N=1] [--check-budget] [--budget-ms 10 (self-test only)]\n       [--no-models] [--no-terrain-lod] [--no-kit] [--slice1] [--slice2] [--cache DIR] [--no-cache] [--stream-threads N=6] [--stream-radius M=inf]\n       [--kit-threads N=6] [--kit-split-materials] [--upload-budget-mb 4] [--kit-arena-vertices N] [--kit-arena-indices N] [--kit-arena-objects N]\n       [--kit-near-load M=110] [--kit-mid-load M=520] [--drive-frames N=3600]\n       [--time-of-day H=12] [--shadow-map N=3072] [--no-shadows] [--no-agents] [--agent-density N=1] [--no-rocketbox]\n       [--no-occlusion] [--occlusion-check] [--no-thread-priority] [--pace realtime|60hz|all-60hz|none] [--worst-frames N=12] [--check-max]\n       [--no-view-detail] [--view-margin-deg 35] [--view-predict-s 0.3] [--view-hold-s 2.5] [--stream-all-paths] [--full-arenas]\n       [--segments street_walk,elevated_sweep,city_overview,authored_street,kit_street,drive,turn_around,turn_around_authored]"
+                    "eo-app [--bench] [--frames N=720] [--warmup N=60] [--width 1920] [--height 1080] [--msaa 1|4]\n       [--no-indirect-validation] [--no-indirect-count] [--no-count-emulation] [--no-vsync] [--out DIR] [--label NAME] [--capture] [--far M=4200]\n       [--multiply N=1] [--check-budget] [--budget-ms 10 (self-test only)]\n       [--no-models] [--no-terrain-lod] [--no-kit] [--slice1] [--slice2] [--cache DIR] [--no-cache] [--stream-threads N=6] [--stream-radius M=inf]\n       [--kit-threads N=6] [--kit-split-materials] [--upload-budget-mb 4] [--kit-arena-vertices N] [--kit-arena-indices N] [--kit-arena-objects N]\n       [--kit-near-load M=110] [--kit-mid-load M=520] [--drive-frames N=3600]\n       [--time-of-day H=12] [--shadow-map N=3072] [--no-shadows] [--no-agents] [--agent-density N=1] [--no-rocketbox]\n       [--no-occlusion] [--occlusion-check] [--no-thread-priority] [--pace realtime|60hz|all-60hz|none] [--worst-frames N=12] [--check-max]\n       [--no-view-detail] [--view-margin-deg 35] [--view-predict-s 0.3] [--view-hold-s 2.5] [--stream-all-paths] [--full-arenas]\n       [--segments street_walk,elevated_sweep,city_overview,authored_street,kit_street,drive,turn_around,turn_around_authored]\n       (with --structures and built decks also freeway_drive,under_viaduct) [--light-shots] (capture cards; EO_LIGHT_SHOTS=a,b; EO_LIGHT_SHOTS_HOUR=H every card at another hour; EO_LIGHT_SHOTS=hero the six key views, clock held)\n       [--cc0-shots] (the scanned sets' matched cards; EO_CC0_SHOTS=a,b; EO_CC0_SHOTS_HOUR=H every card at another hour)\n       [--clutter-shots] (the facade clutter's cards: the kit and authored streets, fronts with fire escapes and shop fronts the planner dresses, a roof; the same poses with or without --facade-clutter; EO_CLUTTER_SHOTS=a,b; EO_CLUTTER_SHOTS_HOUR=H, default 15)\n       [--structures-shots] (the grade-separated roads at four places, from the street and from above, 15:00 clear; the same poses with or without --structures; EO_STRUCTURES_SHOTS=a,b; EO_STRUCTURES_SHOTS_HOUR=H another hour; EO_STRUCTURES_SHOTS_HDR=1 the scene luminance too)\n       [--dusk-strip] (40 frames a clock minute apart across sunset and sunrise at one camera, a CSV of mean luminance; with --smooth-time through the soft path)\n       (--light-shots with EO_PROBE_STRIP=path[,frames[,m a frame[,turn]]]: the reflections along a street while probe captures finish, a CSV and the frames round each)\n\nQuality and lighting (opt-in; a switch wins over the tier wherever it stands; each has a --no- form):\n       [--quality low|medium|high|hyper] (default medium, today's frame; bench budget 8 / 10 / 16.6 / 33.3 ms;\n       low: a 2048 sun map, low sky, no SSR, contact shadows, AO, shafts or bloom; high: the lighting additions but the probe grid,\n       with grime, street life, stand-ins, photo finish, facade clutter and shop light at 1 and the cinematic look; hyper: high at level 2, 48 lamps, the probe grid 2)\n       [--cascade-blend] [--far-shadows [1|2]] [--ambient-volume [1|2]] [--probe-grid [1|2]] [--light-shadows [N lamps, 16..48]]\n       [--light-shadow-moving] [--headlight-shadows [N vehicles]] [--lit-fog [1|2]]\n       (--ambient-volume: narrow streets and the ground under decks get less sky light, baked round the camera and over the city)\n       [--ground-bounce] (with --ambient-volume, on unless --no-ground-bounce: light bounced up from the sunlit ground onto deck undersides and walls facing it)\n       [--smooth-time] (the drawn hour follows the simulation's clock, the exposure converges instead of snapping)\n       (--far-shadows: sun shadows past the cascades from cached maps round the camera, 1 a 2 km ring, 2 another to the far plane; --cascade-blend: the cascades hand over in a band instead of a line)\n       (--probe-grid: reflection probes on the streets round the camera, cross-faded, read by every lit surface, 1 four of 128 px, 2 nine of 256 px)\n       (--lit-fog: the fog lit by the street lamps and headlamps, a froxel volume added by the resolve; 1 160 x 90 x 64, 2 240 x 135 x 96; nothing by day)\n       (--light-shadows: the nearest N street lamps keep a shadow map, drawn once, at most 2 new a frame, and draw in SF's 3000 K LED colour; --light-shadow-moving: the 4 nearest redrawn every frame with the traffic; --headlight-shadows: the nearest N vehicles' low beams cast shadows; nothing by day)\n       [--shadow-slope-bias] (the sun cascades' casters with a slope-scaled depth bias: no self-shadow stripes where the sun grazes a surface; high and hyper turn it on)\n       [--grime [1|2]] (surface weathering that reads: soiled walks with gum and stains, chipped kerbs and faded kerb paint, patched and sealed carriageways, washed-down facades, dusty cars; high 1, hyper 2)\n       [--street-life [1|2]] (litter, butts, leaves and grit on the walks and in the gutters; graffiti, buffed patches and posters on ground floors and freeway columns; 2 adds stickers, utility marks, pigeon droppings; high 1, hyper 2)\n       [--stand-ins] (procedural models for street-prop kinds whose GLB is absent from the checkout, instead of grey boxes; high and hyper)\n       [--photo-finish [1|2]] (a camera instead of the JS display transform: highlights pale to white on their hue, ISO noise by the scene's light, lens fall-off and lateral colour, a lens's bloom; San Francisco's measured air in the sky and the haze; 2 smoother fringes and chroma noise; high 1, hyper 2)\n       [--facade-clutter [1|2]] (fire escapes, awnings, colour-field and neon signs, roll-down shutters, bars on older ground-floor windows, downspouts, meters and conduit, chimneys, vents, dishes and aerials on the kit buildings; signs lit by night where the shop is; 2 adds window air conditioners, front dishes, scaffolding, boarded shops; high 1, hyper 2)\n       [--shop-light [1|2]] (lit shop windows at night: a light behind every kit shop window in its trade's colour, at its window's luminance, by its opening hours, spilling onto the sidewalk and lighting the fog, the room behind the glass lit or dark with it; 1 within 160 m, 2 to 300 m with two lights a window; high 1, hyper 2)\n       [--look default|cinematic] (the look profile: default is today's frame on its physical references; cinematic a graded open-world look, its departures from those references listed in CINEMATIC_DEVIATIONS; high and hyper; --no-look is --look default)\n       (a level left out is the high tier's; --probe-grid, which high leaves off, takes 1)\n\nWorld (opt-in; client and server must agree, the handshake refuses a mismatch; each has a --no- form):\n       [--structures] (grade-separated roads: freeways, ramps, road bridges, drawn and cast in three levels of detail) [--tunnels] (bores and portals, with --structures)"
                 );
                 std::process::exit(0);
             }
             other => anyhow::bail!("unknown argument {other} (try --help)"),
         }
     }
+    tier.apply(&mut a); // the tier, then the lighting switches over it
     if a.frames + a.warmup > 1024 {
         // 4 timestamp queries per frame; one query set holds at most 4096.
         anyhow::bail!("--frames + --warmup must be <= 1024 per segment");
     }
     Ok(a)
+}
+
+/// `--bridge-detail`: the Golden Gate's detail pass, a preview that is off by
+/// default (`--no-bridge-detail` keeps it off whatever else is passed).
+pub fn bridge_detail() -> bool {
+    let has = |f: &str| std::env::args().any(|a| a == f);
+    has("--bridge-detail") && !has("--no-bridge-detail")
 }
 
 pub struct World {
@@ -454,6 +498,14 @@ pub struct World {
     pub hlod: Option<Arc<eo_render::hlod_bake::HlodSet>>,
     /// the distant trees, gathered on their own thread during the load.
     pub hlod_trees: Option<Receiver<eo_render::hlod_trees::FarTreeList>>,
+    /// the grade-separated roads (`--structures` with streets; built beside
+    /// the load, structures.rs), shared by the renderer, the player's ground,
+    /// the agents' feed, the props world and the in-process server. None without the switch.
+    pub structures: Option<Arc<eo_structures::StructureWorld>>,
+    /// what the renderer draws of them (groups, materials, the static far
+    /// and coarse levels, the arena they need); None without the switch or
+    /// for an empty world.
+    pub structures_drawn: Option<Arc<eo_render::structures::StructurePrepared>>,
 }
 
 /// the JS street ground materials' scanned sets, as
@@ -514,6 +566,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         let (g, p) = (elevation.clone(), paths.clone());
         // `--no-landmarks2` builds the set as the first landmarks slice did.
         let opts = if args.landmarks2 { eo_landmarks::set::Options::default() } else { eo_landmarks::set::Options::off() };
+        let opts = eo_landmarks::set::Options { bridge_detail: bridge_detail(), ..opts };
         std::thread::spawn(move || -> Result<eo_landmarks::LandmarkSet> {
             let ca = CaStandards::load(&p)?;
             eo_landmarks::LandmarkSet::build_with(&p.repo_root, &|x: f64, z: f64| g.sample(x, z), &ca, opts)
@@ -541,6 +594,17 @@ pub fn load_world(args: &Args) -> Result<World> {
         Some(j) => Some(j.join().map_err(|_| anyhow::anyhow!("street world thread panicked"))??),
         None => None,
     };
+    // the grade-separated roads over the street world (`--structures`), built beside the rest of the load.
+    let mut structures_job = street_world.as_ref().and_then(|sw| structures::spawn(args.structures, sw, &city, &standards));
+    // with them the street is built again with their joins (stage A6:
+    // junction legs, capped, raised and lowered stubs): that street world is
+    // the one everything below stands on (street tiles, kit floors, terrain
+    // carpet, plazas, shore, props, player, agents), as eo-net's server
+    // builds it. Without `--structures` the first one stands, untouched.
+    let street_world = match (structures_job.as_mut(), street_world) {
+        (Some(j), Some(sw)) => Some(j.streets(sw)?),
+        (_, sw) => sw,
+    };
     // the paved plazas, planned and laid at the street world's
     // footway datum (plaza-paving.js), and the Ocean Beach and Sunset Dunes
     // seawalls on the drawn land and beach (the carpet), beside the rest of the load.
@@ -563,7 +627,13 @@ pub fn load_world(args: &Args) -> Result<World> {
         _ => None,
     };
     // the building records the landmark buildings draw instead.
-    let landmark_claims: HashSet<String> = if args.landmarks && args.landmarks2 { eo_landmarks::set::claimed_records() } else { HashSet::new() };
+    let mut landmark_claims: HashSet<String> = if args.landmarks && args.landmarks2 { eo_landmarks::set::claimed_records() } else { HashSet::new() };
+    // stage A9 (`--tunnels`): a building over a tunnel's approach cut or portal canopy is
+    // left out as a claimed one (none without tunnels: the claims and every key as before).
+    if let Some(w) = structures_job.as_ref().and_then(|j| j.world()).filter(|w| !w.terrain_cuts().is_empty()) {
+        let rings: Vec<Vec<[f64; 2]>> = city.buildings.iter().map(|b| b.ring.iter().map(|p| [p[0] as f64, p[1] as f64]).collect()).collect();
+        landmark_claims.extend(w.buildings_over_cuts(&rings).into_iter().map(|i| city.buildings[i].id.trim_start_matches("sf-building-").to_string()));
+    }
     // Kit buildings: every building the authored registry does not draw.
     let t = Instant::now();
     let mut kit_set = None;
@@ -588,7 +658,11 @@ pub fn load_world(args: &Args) -> Result<World> {
                 }
             }
         }
-        kit_city_rx = Some(eo_render::kit::spawn_kit_city(city.clone(), paths.repo_root.clone(), set.palette.clone(), args.streets));
+        // (the joined street's tag keys its own tiles; none without `--structures`: the key is unchanged.)
+        let street_tag = street_world.as_ref().map(|w| w.o.structures_tag()).unwrap_or_default();
+        // the facade clutter the kit tiles are cooked with (`--facade-clutter`; 0: none, the tiles and their key as before).
+        eo_kit::clutter::set_level(args.facade_clutter);
+        kit_city_rx = Some(eo_render::kit::spawn_kit_city(city.clone(), paths.repo_root.clone(), set.palette.clone(), args.streets, street_tag));
         set.streets = street_world.clone();
         kit_set = Some(Arc::new(set));
     }
@@ -815,7 +889,9 @@ pub fn load_world(args: &Args) -> Result<World> {
         (None, Some(sp)) => Some(Box::new(move |x: f32, z: f32| sp.press(x as f64, z as f64, elev.ground(x as f64, z as f64)) as f32)),
         (f, None) => f,
     };
-    let mut scene = build_scene(&SceneInputs { // mut (the landmarks are appended)
+    // the tunnels' open cuts and portal canopies (`--structures --tunnels`; none otherwise) cut the terrain.
+    let terrain_cuts = structures_job.as_ref().and_then(|j| j.world()).map(|w| w.as_ref());
+    let mut scene = build_scene_with_cuts(&SceneInputs { // mut (the landmarks are appended)
         city: &city,
         elevation: &elevation,
         land: land.as_ref(),
@@ -830,7 +906,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         skip_building: if landmark_claims.is_empty() { None } else { Some(&skip_claimed) },
         ground_tone: if cover.is_some() { Some(&ground_tone_fn) } else { None },
         smooth_terrain: args.landmarks && args.landmarks2,
-    })?;
+    }, terrain_cuts)?;
     drop(carpet_fn); // water
     // the bridges (eo-landmarks, the JS generators ported) on the
     // drawn ground, appended to the static table; their LOD groups follow the street's.
@@ -937,7 +1013,15 @@ pub fn load_world(args: &Args) -> Result<World> {
         }
         Err(_) => anyhow::bail!("facade detail thread panicked"),
     };
-    Ok(World { paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, landmarks, hlod, hlod_trees }) // hlod
+    // the grade-separated roads (None without `--structures`); a failed build stops the load.
+    let (structures, structures_drawn) = match structures_job {
+        Some(j) => {
+            let b = j.join()?;
+            (Some(b.world), b.drawn)
+        }
+        None => (None, None),
+    };
+    Ok(World { paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, landmarks, hlod, hlod_trees, structures, structures_drawn }) // hlod
 }
 
 /// the street size. `--ground-scale S` (an explicit ground-plan
@@ -1025,8 +1109,6 @@ fn main() -> Result<()> {
     }
     // ==== end eo-player hook ====
     // ---- eo-ui (interface): --ui, --capture-ui SCREEN, --ui-bench; see ui.rs. Default paths untouched. ----
-    #[path = "ui.rs"]
-    mod ui;
     if let Some(flags) = ui::Flags::from_env() {
         return ui::run(flags, process_start);
     }

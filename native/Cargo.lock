@@ -624,6 +624,7 @@ dependencies = [
  "eo-sim",
  "eo-sky",
  "eo-street",
+ "eo-structures",
  "eo-ui",
  "eo-water",
  "glam 0.34.3",

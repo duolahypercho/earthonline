@@ -73,6 +73,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         opts: GpuOptions {
             indirect_validation: args.indirect_validation,
             force_no_indirect_count: args.no_indirect_count,
+            force_no_count_emulation: args.no_count_emulation,
             ..Default::default()
         },
         gfx: None,

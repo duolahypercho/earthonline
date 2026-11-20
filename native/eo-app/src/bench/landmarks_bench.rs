@@ -252,6 +252,56 @@ pub fn capture_cameras(world: &World, aspect: f32, far: f32) -> Vec<(&'static st
     let eye = Vec3::new(landing.x + 1500.0 * g, 1600.0, landing.z + 1900.0 * g);
     out.push(("bay-aerial", Camera { far: far.max(9000.0), ..look_at(eye, Vec3::new(w3.x - 700.0 * g, 0.0, w3.z + 200.0 * g), aspect, far) }, "the bay, the Bay Bridge and the city front from 1.6 km up".to_string()));
     out.extend(landmarks2_cameras(world, aspect, far));
+    out.extend(golden_gate_spots(world, aspect, far));
+    out
+}
+
+/// Camera far plane of the Golden Gate views that look the length of the
+/// strait or across the bay to the city.
+const LONG_VIEW_FAR_M: f32 = 14_000.0;
+
+/// The Golden Gate from the places it is photographed from. Each place is an
+/// offset in surveyed metres (x east, z south) from the south tower, laid on
+/// the scaled plan; the shore eyes are stepped onto the shore field.
+fn golden_gate_spots(world: &World, aspect: f32, far: f32) -> Vec<(&'static str, Camera, String)> {
+    let mut out = vec![];
+    let gg = &eo_landmarks::LandmarksJs::get().golden_gate;
+    let (south, mid) = golden_gate();
+    let g = super::gsf();
+    let dim = |k: &str| gg.dimensions[k].as_f64().unwrap_or(0.0) as f32;
+    let (deck_y, top_y) = (sea() + dim("roadwayAtTowerM"), sea() + dim("towerAboveWaterM"));
+    let off = |dx: f32, dz: f32| south + Vec3::new(dx, 0.0, dz) * g;
+    let stand = |q: Vec3| Vec3::new(q.x, ground(world, q.x, q.z).max(sea()) + EYE_HEIGHT_M, q.z);
+    let north = south + (mid - south) * 2.0;
+
+    // The shore east of the south anchorage, 10 m inland of the water: the arch, the side span and the south tower from below.
+    if let Some(q) = shore_point(world, off(260.0, 487.0), Vec3::NEG_Z, 10.0) {
+        let at = south + (v2(gg.supports["archNorth"].centre) - south) * 0.5;
+        out.push(("golden-gate-fort-point", look_at(stand(q), Vec3::new(at.x, deck_y, at.z), aspect, far), "the Golden Gate's south tower and side span from the shore east of the south anchorage, eye 1.7 m".to_string()));
+    }
+    // The shore at the west end of Crissy Field, about 870 m from the south tower: the whole bridge.
+    if let Some(q) = shore_point(world, off(606.0, 622.0), Vec3::NEG_Z, 4.0) {
+        out.push(("golden-gate-wharf", look_at(stand(q), Vec3::new(south.x, deck_y, south.z), aspect, far), "the Golden Gate from the shore at the west end of Crissy Field, eye 1.7 m".to_string()));
+    }
+    // Baker Beach, 2 km south-south-west of the south tower: the bridge end on, through a long lens.
+    if let Some(q) = shore_point(world, off(-430.0, 2010.0), Vec3::NEG_X, 12.0) {
+        let at = south + (mid - south) * 0.6;
+        let cam = Camera { fov_y_deg: 20.0, far: far.max(LONG_VIEW_FAR_M), ..look_at(stand(q), Vec3::new(at.x, deck_y, at.z), aspect, far) };
+        out.push(("golden-gate-baker-beach", cam, "the Golden Gate from the sand of Baker Beach, eye 1.7 m, a 20 degree lens".to_string()));
+    }
+    // The bluff east of the south anchorage, above the shore road: along the bridge's east side.
+    {
+        let eye = stand(off(130.0, 560.0));
+        out.push(("golden-gate-bluff", look_at(eye, Vec3::new(south.x, deck_y + 40.0, south.z), aspect, far.max(LONG_VIEW_FAR_M)), "the Golden Gate's arch, side span and towers from the bluff east of its south anchorage, eye 1.7 m over the ground".to_string()));
+    }
+    // Over the Marin headland north-west of the north tower, level with the
+    // tower tops (the far terrain is not sampled here): the bridge and the city behind it.
+    {
+        let e = off(-343.0, -1536.0);
+        let at = north + (mid - north) * 0.5;
+        let cam = look_at(Vec3::new(e.x, top_y, e.z), Vec3::new(at.x, deck_y, at.z), aspect, far.max(LONG_VIEW_FAR_M));
+        out.push(("golden-gate-headland", cam, format!("the Golden Gate and the city from over the Marin headland north-west of the north tower, eye {top_y:.0} m (the tower tops)")));
+    }
     out
 }
 

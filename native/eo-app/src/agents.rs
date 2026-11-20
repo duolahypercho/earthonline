@@ -58,6 +58,8 @@ pub struct AgentRuntime {
     pub sim: Option<AsyncSim>,
     feed: Option<FeedThread>,
     ground: Ground,
+    /// the grade-separated roads beside the ground (`--structures`), handed to the feed.
+    structures: Option<Arc<eo_structures::StructureWorld>>,
     last: Option<Arc<Vec<GpuAgent>>>,
     last_steps: u64,
     scratch: Vec<GpuAgent>,
@@ -75,6 +77,9 @@ pub struct AgentRuntime {
     /// leave the simulated people out of the upload (the people pass A/B; extras stay).
     pub hide_people: bool,
     remote_mode: bool, // net
+    /// `--smooth-time`: the drawn hour as anchored to the simulation's clock
+    /// (the look's hour then, the simulation time then, the hour last set).
+    clock: Option<(f64, f64, f64)>,
     /// groundscale (captures only, empty otherwise): simulated agents whose bounding
     /// radius comes within these (point, horizontal margin) of the point are not drawn
     /// (a traffic car driven through the player's car or the lens; the simulation does
@@ -118,6 +123,7 @@ impl AgentRuntime {
             sim: None,
             feed: None,
             ground,
+            structures: world.structures.clone(),
             last: None,
             last_steps: 0,
             scratch: vec![],
@@ -132,6 +138,7 @@ impl AgentRuntime {
             remote: None,  // net
             remote_mode,
             hide_people: false, // people
+            clock: None, // smooth time
         };
         if !opts.on {
             return rt;
@@ -163,12 +170,14 @@ impl AgentRuntime {
         self.sim_ready_ms = None;
         self.opts.density = density;
         let paths = world.paths.clone();
+        // The structure level of each way (`--structures`; empty otherwise, which leaves the sim as it was).
+        let levels = self.structures.as_ref().map(|s| s.way_levels().clone()).unwrap_or_default();
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::Builder::new()
             .name("eo-agents-sim-build".into())
             .spawn(move || {
                 let r = (|| -> Result<(SimWorld, Arc<eo_sim::native::NativeSource>)> {
-                    let source = eo_sim::native::load(&paths)?;
+                    let source = eo_sim::native::load(&paths)?.with_levels(levels);
                     let tiles = eo_sim::native::tiles_around(focus[0], focus[1], SIM_RADIUS_M);
                     let mut net = Network::new(source.timing.clone());
                     net.add(source.build(&tiles));
@@ -215,6 +224,13 @@ impl AgentRuntime {
                             self.errors.push(format!("agent renderer: {e:#}"));
                             eprintln!("agents: renderer failed: {e:#}");
                         }
+                        // (`--tunnels`) the cars in a tunnel's bore lit by the bore: their pipelines
+                        // (`EO_AGENTS_NO_BORE_LIGHT=1`, a diagnostic: lit by the sun and sky as before, the evidence's other side).
+                        if let (Some(a), true) = (renderer.agents.get(), self.structures.as_ref().is_some_and(|s| !s.bores().is_empty())) {
+                            if std::env::var_os("EO_AGENTS_NO_BORE_LIGHT").is_none() {
+                                a.enable_bores();
+                            }
+                        }
                         self.lib_ready_ms = Some(self.started.elapsed().as_secs_f64() * 1e3);
                         self.lib = Some(Arc::new(lib));
                     }
@@ -252,7 +268,7 @@ impl AgentRuntime {
         if self.feed.is_none() && (self.sim.is_some() || self.remote_mode) {
             // a remote runtime starts its feed without a local simulation
             if let Some(lib) = &self.lib {
-                match Feeder::new(lib.clone(), self.ground.clone(), SEED_INT) {
+                match Feeder::new(lib.clone(), self.ground.clone(), self.structures.clone(), SEED_INT) {
                     Ok(f) => self.feed = Some(FeedThread::start(f)),
                     Err(e) => self.errors.push(format!("{e:#}")),
                 }
@@ -262,10 +278,12 @@ impl AgentRuntime {
         if let Some(g) = gpu {
             g.set_enabled(self.opts.on);
         }
+        let mut clock_read = false; // smooth time
         if let Some(sim) = &mut self.sim {
             sim.post(dt, &[(0, Focus { x: focus[0], z: focus[1], yaw: focus[2] })]);
             let fr = sim.latest();
             self.sim_time = fr.time;
+            clock_read = true;
             if fr.steps != self.last_steps {
                 self.last_steps = fr.steps;
                 if let Some(feed) = &self.feed {
@@ -275,9 +293,13 @@ impl AgentRuntime {
         } else if let Some(fr) = self.remote.take() {
             // the server's world, interpolated by the online client.
             self.sim_time = fr.time;
+            clock_read = true;
             if let Some(feed) = &self.feed {
                 feed.post(fr);
             }
+        }
+        if clock_read {
+            self.follow_clock(renderer);
         }
         if let Some(feed) = &self.feed {
             let (out, ms) = feed.take();
@@ -324,6 +346,27 @@ impl AgentRuntime {
         st
     }
 
+    /// `--smooth-time`: the drawn hour follows the simulation's clock (eo-sim's
+    /// fixed-step `World::time`, the server's in an online client; nothing here
+    /// keeps time): the hour the look held when the clock was first read, plus
+    /// the simulation time since, through the look's soft path. An hour set
+    /// from elsewhere (a capture card, `--time-of-day` at start) or a
+    /// simulation started again (its time going back) anchors it anew. Without
+    /// a simulation (`--no-agents`) this is never called and the hour stays.
+    fn follow_clock(&mut self, renderer: &Renderer) {
+        if !renderer.look.options.lighting.smooth_time {
+            return;
+        }
+        let now = renderer.look.time_of_day();
+        let t = self.sim_time;
+        let (h0, t0) = match self.clock {
+            Some((h0, t0, last)) if last == now && t >= t0 => (h0, t0),
+            _ => (now, t),
+        };
+        renderer.look.set_time_of_day_smooth(h0 + (t - t0) / 3600.0);
+        self.clock = Some((h0, t0, renderer.look.time_of_day()));
+    }
+
     /// Walkers the feed moved off a drawn carriageway onto its footway (last build).
     pub fn moved_to_footway(&self) -> usize {
         self.feed.as_ref().map(|f| f.moved_to_footway()).unwrap_or(0)
@@ -339,6 +382,27 @@ impl AgentRuntime {
         self.extras.clear();
         if let Some(lib) = &self.lib {
             visual.instances(lib, player, cw, body_visible, dt, &mut self.extras);
+        }
+        self.mark_bores();
+    }
+
+    /// (captures) A sedan standing at `datum` facing `yaw` as this frame's only extra
+    /// instance (marked in a tunnel's bore as the player's car is).
+    pub fn show_car(&mut self, datum: [f64; 3], yaw: f32) {
+        self.extras.clear();
+        if let Some(lib) = &self.lib {
+            let q = glam::Quat::from_rotation_y(yaw);
+            if let Some(c) = eo_agents::feed::player_car(lib, PLAYER_CAR_BODY, datum, [q.x as f64, q.y as f64, q.z as f64, q.w as f64], 0.0, 0.0, 0.0, false, PLAYER_CAR_PAINT) {
+                self.extras.push(c);
+            }
+        }
+        self.mark_bores();
+    }
+
+    /// The player's body and cars in a tunnel's bore lit as the bore is (`--tunnels`; nothing without bores).
+    pub fn mark_bores(&mut self) {
+        for a in &mut self.extras {
+            eo_agents::feed::mark_in_bore(a, self.structures.as_deref());
         }
     }
 

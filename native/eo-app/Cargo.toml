@@ -21,6 +21,7 @@ eo-props = { path = "../eo-props" } # props
 eo-render = { path = "../eo-render" }
 eo-sky = { path = "../eo-sky" } # sky
 eo-street = { path = "../eo-street" }
+eo-structures = { path = "../eo-structures" } # structures: grade-separated roads (`--structures`)
 eo-ui = { path = "../eo-ui" }
 eo-water = { path = "../eo-water" } # water
 eo-landmarks = { path = "../eo-landmarks" } # landmarks
