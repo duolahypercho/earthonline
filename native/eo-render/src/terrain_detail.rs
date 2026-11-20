@@ -769,7 +769,15 @@ impl Materials<'_> {
             return (rgba, 0); // gravel, a path, a slab: the ground's own tone
         }
         let slope = (1.0 - ny * ny).max(0.0).sqrt() / ny.max(1e-3);
-        let (grass, canopy) = cover_shares(prior(tone, class), veg, dark_veg, pale, slope);
+        let mut pr = prior(tone, class);
+        // the second grass pass's continuous meadow (`--no-meadow-cover`;
+        // eo_landmarks::vegetation::meadow_ground): bare earth and the bare class in
+        // the NAIP image carry the meadow patches, so the ground under them is the
+        // sward's too, not soil (mapped bare rock stays rock).
+        if pr == Prior::Bare && tone != Some("bareRock") && eo_landmarks::vegetation::grass2().cover {
+            pr = Prior::Grass;
+        }
+        let (grass, canopy) = cover_shares(pr, veg, dark_veg, pale, slope);
         let (lat, _) = self.frame.lat_lon(x, z);
         let lin = |c: [u8; 3]| c.map(|v| srgb_lin(v));
         // the canopy: drawn as the coastal scrub's own albedo (the far layer's, farshore.rs
