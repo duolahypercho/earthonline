@@ -426,7 +426,7 @@ impl VegGround {
 
     /// The round-3 planting context for `plant_coarse_with` / `plant_fine_with`.
     pub fn extra(&self) -> eo_landmarks::vegetation::Extra<'_> {
-        eo_landmarks::vegetation::Extra { g3: self.g3, g2: eo_landmarks::vegetation::grass2(), g3x: eo_landmarks::vegetation::grass3(), naip: Box::new(move |x, z, side| self.naip_at(x, z, side)) }
+        eo_landmarks::vegetation::Extra { g3: self.g3, g2: eo_landmarks::vegetation::grass2(), g3x: eo_landmarks::vegetation::grass3(), fl: eo_landmarks::flora::flora(), naip: Box::new(move |x, z, side| self.naip_at(x, z, side)) }
     }
 
     /// Whether a park tree may stand at (x, z) (round 3): on plantable ground
@@ -585,7 +585,7 @@ pub fn instances(plants: &[Plant], out: &mut Vec<GpuPropInstance>, counts: &mut 
             Kind::Tuft => "grass tuft",
             Kind::Flower(_) => "wildflowers",
             Kind::Rock(_) => "hill rock",
-            Kind::Meadow(i) => ["meadow sward", "meadow wild oats", "meadow fescue", "meadow clover and forbs", "meadow ice plant", "meadow thatch", "scrub coyote brush", "scrub sagebrush", "scrub bush lupine", "bare soil"][(i as usize).min(9)],
+            Kind::Meadow(i) => ["meadow sward", "meadow wild oats", "meadow fescue", "meadow clover and forbs", "meadow ice plant", "meadow thatch", "scrub coyote brush", "scrub sagebrush", "scrub bush lupine", "bare soil", "scrub poison oak", "scrub monkeyflower", "scrub coffeeberry", "scrub toyon"][(i as usize).min(13)],
         };
         *counts.entry(name).or_insert(0) += 1;
         out.push(GpuPropInstance {

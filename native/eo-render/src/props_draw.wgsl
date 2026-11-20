@@ -155,6 +155,12 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
             albedo_tex = textureSampleGrad(kit_albedo, kit_sampler, in.uv, m.layer, duvx, duvy);
         }
     }
+    if ((m.flags & PR_LEAF) != 0u && m.params.w > 0.0) {
+        // the flora pass's leaf sprigs (vegetation_models.rs `SPRIG_LUMINANCE`): the atlas
+        // sprig drawn grey, its luminance over the cells' mean, so the vertex colour is
+        // the species' leaf albedo.
+        albedo_tex = vec4<f32>(vec3<f32>(dot(albedo_tex.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)) * m.params.w), albedo_tex.a);
+    }
     let v = normalize(frame.cam_pos.xyz - in.world);
     var n = normalize(in.normal);
     if (dot(in.normal, in.normal) < 1e-8) {
@@ -366,7 +372,7 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         } else {
             if ((m.flags & PR_MEADOW_LIVE) != 0u) {
                 s.albedo = live;
-                if (inst.model >= PR_VEG_BASE + PR_VEG_MOUND && inst.model < PR_VEG_BASE + PR_VEG_MOUND_END) {
+                if ((inst.model >= PR_VEG_BASE + PR_VEG_MOUND && inst.model < PR_VEG_BASE + PR_VEG_MOUND_END) || (inst.model >= PR_VEG_BASE + PR_VEG_SPECIES && inst.model < PR_VEG_BASE + PR_VEG_SPECIES_END)) {
                     // a scrub mound's leaf clusters as grain where its mesh draws none (the
                     // clump cores between the leaves, the far level's clumps): two scales of
                     // lit clusters and dark gaps on the albedo and as a bump on the normal,

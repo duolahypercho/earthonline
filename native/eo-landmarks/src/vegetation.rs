@@ -536,6 +536,8 @@ pub struct Extra<'a> {
     pub g2: Grass2,
     /// The third grass pass ([`Grass3`]).
     pub g3x: Grass3,
+    /// The flora pass ([`crate::flora::Flora`]).
+    pub fl: crate::flora::Flora,
     /// The shares round a point in a box of about the given side (m).
     pub naip: Box<dyn Fn(f64, f64, f64) -> Option<Naip> + 'a>,
 }
@@ -543,7 +545,7 @@ pub struct Extra<'a> {
 impl Extra<'_> {
     /// Round 2's planting (no NAIP, every round-3 switch off).
     pub fn none() -> Extra<'static> {
-        Extra { g3: Gg3::NONE, g2: Grass2::NONE, g3x: Grass3::NONE, naip: Box::new(|_, _, _| None) }
+        Extra { g3: Gg3::NONE, g2: Grass2::NONE, g3x: Grass3::NONE, fl: crate::flora::Flora::NONE, naip: Box::new(|_, _, _| None) }
     }
     fn at(&self, x: f64, z: f64, side: f64) -> Option<Naip> {
         if self.g3.naip_planting { (self.naip)(x, z, side) } else { None }
@@ -887,8 +889,8 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
                 // mounds with the eroded soil between: the photographs' foreground),
                 // not on its flatter top or on a steep face.
                 let flank = smoothstep(16.0, 26.0, slope) * (1.0 - smoothstep(36.0, 44.0, slope));
-                if ex.g3x.scrub && hash(ix, iz, 113) < scrub_share(x, z, &s, cover, naip, ex.g3x) * MOUNDS_PER_CELL * flank {
-                    plant_mound(x, z, ix, iz, &s, bloom, ex.g3x, out);
+                if ex.g3x.scrub && hash(ix, iz, 113) < scrub_share(x, z, &s, cover, naip, ex.g3x) * scrub_terrain(&s, ex.fl) * MOUNDS_PER_CELL * flank {
+                    plant_mound(x, z, ix, iz, &s, bloom, ex.g3x, ex.fl, day_of_year, out);
                 }
                 {
                     let cured = meadow_cured(x, z, &s, season, ex.g3x.breakup);
@@ -897,8 +899,8 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
                 }
                 return;
             }
-            if ex.g3x.scrub && hash(ix, iz, 113) < scrub_share(x, z, &s, cover, naip, ex.g3x) * MOUNDS_PER_CELL {
-                plant_mound(x, z, ix, iz, &s, bloom, ex.g3x, out);
+            if ex.g3x.scrub && hash(ix, iz, 113) < scrub_share(x, z, &s, cover, naip, ex.g3x) * scrub_terrain(&s, ex.fl) * MOUNDS_PER_CELL {
+                plant_mound(x, z, ix, iz, &s, bloom, ex.g3x, ex.fl, day_of_year, out);
                 return;
             }
             // the second pass: a continuous meadow (a patch in every cell), the
@@ -983,7 +985,8 @@ pub const MEADOW_LUPINE: u8 = 8;
 /// Bare eroded soil (`Grass3::bare`): a ragged mat of red-brown soil (the
 /// Tamalpais series' eroded horizon) with a few sparse tufts of short grass.
 pub const MEADOW_BARE: u8 = 9;
-pub const MEADOW_TYPES: u8 = 10;
+/// The flora pass's scrub species follow (`crate::flora::MEADOW_POISON_OAK` .. `MEADOW_TOYON`).
+pub const MEADOW_TYPES: u8 = 14;
 
 /// Each type's living tissue in its green state (linear albedo, the mean of its
 /// blades' vertex colours, eo-render) and cured (or, for ice plant, drought-
@@ -1009,6 +1012,11 @@ pub const MEADOW_LIVE: [[f32; 3]; MEADOW_TYPES as usize] = [
     [0.088, 0.112, 0.066],
     [0.070, 0.124, 0.046],
     [0.060, 0.095, 0.032],
+    // the flora pass's species (`crate::flora::SPECIES`, their leaf colours linear).
+    [0.127, 0.205, 0.038],
+    [0.053, 0.091, 0.021],
+    [0.040, 0.065, 0.021],
+    [0.032, 0.061, 0.021],
 ];
 pub const MEADOW_CURED: [[f32; 3]; MEADOW_TYPES as usize] = [
     [0.215, 0.178, 0.100],
@@ -1021,9 +1029,13 @@ pub const MEADOW_CURED: [[f32; 3]; MEADOW_TYPES as usize] = [
     [0.088, 0.112, 0.066],
     [0.070, 0.124, 0.046],
     [0.215, 0.178, 0.100],
+    [0.127, 0.205, 0.038],
+    [0.053, 0.091, 0.021],
+    [0.040, 0.065, 0.021],
+    [0.032, 0.061, 0.021],
 ];
 /// The scrub is evergreen (its summer dullness is the dust and the older leaves: not drawn).
-pub const MEADOW_CURE: [f32; MEADOW_TYPES as usize] = [1.0, 1.0, 0.55, 0.35, 0.4, 1.0, 0.0, 0.0, 0.0, 1.0];
+pub const MEADOW_CURE: [f32; MEADOW_TYPES as usize] = [1.0, 1.0, 0.55, 0.35, 0.4, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0];
 /// Dead thatch, weathered pale straw (linear albedo; dry grass litter 0.15-0.25
 /// in the visible, USGS v7 "dry grass" and litter spectra; INFERRED): the mat's
 /// and the lying blades' colour (eo-render bakes it in the dead material).
@@ -1155,6 +1167,12 @@ pub fn plant_meadow(x: f64, z: f64, ix: i64, iz: i64, s: &Site, cover: Cover, na
     }
 }
 
+/// The flora pass's ground-shape weight on the scrub share
+/// ([`crate::flora::terrain_weight`]; 1 without `Flora::species`).
+fn scrub_terrain(s: &Site, fl: crate::flora::Flora) -> f64 {
+    if fl.species { crate::flora::terrain_weight(s) } else { 1.0 }
+}
+
 /// Mounds a 1 m cell carries where the scrub is closed: a mound is 1.3-2.2 m
 /// across (2-3 m2), so half the cells give a closed canopy with dark gaps.
 pub const MOUNDS_PER_CELL: f64 = 0.5;
@@ -1224,8 +1242,20 @@ pub fn scrub_share(x: f64, z: f64, s: &Site, cover: Cover, naip: Option<Naip>, g
 /// sagebrush in its own patches, bush lupine in stands (in flower in the bloom
 /// window, `Grass3::bloom`; coyote brush out of it), 0.5-1.5 m tall.
 #[allow(clippy::too_many_arguments)]
-pub fn plant_mound(x: f64, z: f64, ix: i64, iz: i64, s: &Site, bloom: f64, g: Grass3, out: &mut Vec<Plant>) {
+pub fn plant_mound(x: f64, z: f64, ix: i64, iz: i64, s: &Site, bloom: f64, g: Grass3, fl: crate::flora::Flora, day_of_year: f64, out: &mut Vec<Plant>) {
     let lupine = g.bloom && bloom > 0.3 && warped(x, z, 11.0, 116) > 0.62;
+    if fl.species {
+        // the flora pass: the species by the ground, each its own form and height.
+        let (kind, h) = crate::flora::pick(x, z, ix, iz, s, lupine);
+        let form = crate::flora::species(kind).expect("a scrub species").form;
+        let sy = h / form.h;
+        let sx = sy * (0.85 + 0.3 * hash(ix, iz, 120) as f32);
+        let (jx, jz) = (hash(ix, iz, 121) - 0.5, hash(ix, iz, 122) - 0.5);
+        let v = (0.88 + 0.22 * hash(ix, iz, 123) + 0.16 * (field(x, z, 25.0, 124) - 0.5)) as f32;
+        let season = if kind == crate::flora::MEADOW_POISON_OAK { crate::flora::poison_oak_season(day_of_year) } else { [1.0; 3] };
+        out.push(Plant { kind: Kind::Meadow(kind), pos: [x + jx * 0.7, s.y - 0.12, z + jz * 0.7], yaw: hash(ix, iz, 125) * std::f64::consts::TAU, scale: [sx, sy, sx * (0.85 + 0.3 * hash(ix, iz, 126) as f32)], rank: hash(ix, iz, 127) as f32, tint: season.map(|c| c * v), grad: s.grad(), tip: TIP_NONE });
+        return;
+    }
     let sage = !lupine && warped(x, z, 16.0, 117) < 0.2;
     let kind = if lupine {
         MEADOW_LUPINE
@@ -1606,7 +1636,7 @@ mod tests {
         // a cliff over a beach and mapped bare rock: rock only (hill_rock), no plant.
         for cover in [Cover::Cliff, Cover::Rock] {
             let mut out = vec![];
-            let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, g3x: Grass3::NONE, naip: Box::new(none) };
+            let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, g3x: Grass3::NONE, fl: crate::flora::Flora::NONE, naip: Box::new(none) };
             plant_coarse_with(0.0, 0.0, 128.0, 128.0, &flat(cover), all, &ex, &mut out);
             plant_fine_with(0.0, 0.0, 32.0, 32.0, &flat(cover), 100.0, all, &ex, &mut out);
             assert!(out.iter().all(|p| matches!(p.kind, Kind::Rock(_))), "{cover:?}");
@@ -1617,7 +1647,7 @@ mod tests {
         }
         // the image's canopy: closed scrub; its open grass: none.
         let count = |n: Naip| {
-            let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, g3x: Grass3::NONE, naip: Box::new(move |_, _, _| Some(n)) };
+            let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, g3x: Grass3::NONE, fl: crate::flora::Flora::NONE, naip: Box::new(move |_, _, _| Some(n)) };
             let mut out = vec![];
             plant_coarse_with(0.0, 0.0, 128.0, 128.0, &flat(Cover::TallScrub), all, &ex, &mut out);
             out.iter().filter(|p| matches!(p.kind, Kind::Shrub(_))).count()
@@ -1626,7 +1656,7 @@ mod tests {
         assert!(count(Naip { canopy: 1.0, low: 0.0, bare: 0.0, ..Default::default() }) > cells * 9 / 10);
         assert!(count(Naip { canopy: 0.0, low: 1.0, bare: 0.0, ..Default::default() }) < cells / 20);
         // and the sward on the open grass.
-        let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, g3x: Grass3::NONE, naip: Box::new(|_, _, _| Some(Naip { canopy: 0.0, low: 1.0, bare: 0.0, ..Default::default() })) };
+        let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, g3x: Grass3::NONE, fl: crate::flora::Flora::NONE, naip: Box::new(|_, _, _| Some(Naip { canopy: 0.0, low: 1.0, bare: 0.0, ..Default::default() })) };
         let mut out = vec![];
         plant_fine_with(0.0, 0.0, 32.0, 32.0, &flat(Cover::WildGrass), 265.0, all, &ex, &mut out);
         assert!(out.iter().filter(|p| p.kind == Kind::Grass).count() > 32 * 32 * 8 / 10);

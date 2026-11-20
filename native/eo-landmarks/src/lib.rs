@@ -17,6 +17,7 @@
 pub mod bay_bridge;
 pub mod data;
 pub mod features;
+pub mod flora; // the flora pass: the scrub by species, the grassland's season, chert and serpentinite ground, flowers
 pub mod ferry_building;
 pub mod geometry;
 pub mod hill_rock; // the hill rock outcrops and blocks (the coarse vegetation layer's third part)

@@ -429,6 +429,10 @@ impl PropLibrary {
         h.update([crate::props_lib2::furniture_models::enabled() as u8]);
         // the meadow's materials follow `--no-blade-shading` (vegetation_models.rs).
         h.update([eo_landmarks::vegetation::grass2().blade_shading as u8]);
+        // the scrub's models follow the flora pass (`--no-scrub-species`, vegetation_models.rs).
+        h.update([eo_landmarks::flora::flora().species as u8]);
+        // (and their species' forms and colours, eo_landmarks::flora::SPECIES).
+        h.update(include_bytes!("../../eo-landmarks/src/flora.rs"));
         for p in js.street_props.values() {
             h.update(p.sha256.as_bytes());
         }

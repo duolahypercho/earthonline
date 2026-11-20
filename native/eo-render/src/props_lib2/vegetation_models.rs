@@ -77,6 +77,11 @@ pub const THIN: [(f32, f32, f32); COUNT as usize] = [
     (70.0, 110.0, 1.15),
     (70.0, 110.0, 1.15),
     (70.0, 110.0, 1.3),
+    // the flora pass's scrub species (eo_landmarks::flora).
+    (70.0, 110.0, 1.15),
+    (70.0, 110.0, 1.15),
+    (70.0, 110.0, 1.15),
+    (70.0, 110.0, 1.15),
 ];
 /// The share kept at the draw distance (thinned models).
 pub const THIN_FLOOR: f32 = 0.12;
@@ -90,8 +95,10 @@ pub fn thin_wgsl() -> String {
     // `pr_lod_dist`, props_draw.wgsl's lobed mat rims.
     s += &format!("const PR_MEADOW_BREAKUP: bool = {};\n", eo_landmarks::vegetation::grass3().breakup);
     // the scrub mounds' model range (props_draw.wgsl's leaf-cluster grain on them).
+    // (the flora pass's species follow the bare soil type: a second range.)
     let mound = V_MEADOW - V_TREE + eo_landmarks::vegetation::MEADOW_COYOTE as u32;
-    s += &format!("const PR_VEG_MOUND: u32 = {mound}u;\nconst PR_VEG_MOUND_END: u32 = {}u;\n", mound + 3);
+    let species = V_MEADOW - V_TREE + eo_landmarks::flora::MEADOW_POISON_OAK as u32;
+    s += &format!("const PR_VEG_MOUND: u32 = {mound}u;\nconst PR_VEG_MOUND_END: u32 = {}u;\nconst PR_VEG_SPECIES: u32 = {species}u;\nconst PR_VEG_SPECIES_END: u32 = {}u;\n", mound + 3, species + 4);
     s += "fn pr_veg_thin(model: u32) -> vec3<f32> {\n    switch (model - PR_VEG_BASE) {\n";
     for (k, (a, b, g)) in THIN.iter().enumerate() {
         if *a > 0.0 {
@@ -476,11 +483,23 @@ pub(crate) fn cook(out: &mut Out, ez: Option<&eo_props::eztree::EzLibrary>, m_ba
     // (terrain_detail.rs SOIL_ERODED_SRGB), drawn by the mat shader (its grain, a
     // little of the sward's green through it).
     let soil_mat = push_mat(out.materials, crate::scene::terrain_detail::SOIL_ERODED_SRGB, 0.95, 0.0, P_MEADOW | P_MEADOW_LIVE | P_MEADOW_MAT | P_MEADOW_SOIL, 0);
+    // the flora pass's leaf sprigs: the atlas's sprig cells drawn grey (their luminance
+    // over `SPRIG_LUMINANCE`, props_draw.wgsl) so the vertex colour is the species' leaf.
+    let species = eo_landmarks::flora::flora().species;
+    let m_sprig = if species {
+        let m = push_mat(out.materials, [255, 255, 255], 0.6, 0.0, P_TEX | P_CUT | P_BIG | P_LEAF, 0);
+        out.materials[m as usize].params[3] = 1.0 / SPRIG_LUMINANCE;
+        m
+    } else {
+        NONE
+    };
     for k in 0..V_MEADOWS {
         if k as u8 >= eo_landmarks::vegetation::MEADOW_COYOTE {
             let mut ids = [NONE; 3];
             for (l, id) in ids.iter_mut().enumerate() {
-                if k as u8 == eo_landmarks::vegetation::MEADOW_BARE {
+                if species && eo_landmarks::flora::is_shrub(k as u8) {
+                    species_shrub(&mut out.b, &mound_mats, m_sprig, k as u8, l as u32, 700 + k * 13);
+                } else if k as u8 == eo_landmarks::vegetation::MEADOW_BARE {
                     bare_tufts(&mut out.b, &mats, soil_mat, l as u32, 700 + k * 13);
                 } else {
                     mound(&mut out.b, &mound_mats, k as u8, l as u32, 700 + k * 13);
@@ -493,7 +512,9 @@ pub(crate) fn cook(out: &mut Out, ez: Option<&eo_props::eztree::EzLibrary>, m_ba
                 out.set(model, ids, [8.0, 24.0, z, w], 0, 0.1);
             } else {
                 // the mounds cast into the near cascade (the dark gaps between them).
-                out.set(model, ids, [10.0, 32.0, z, w], 1, 0.1);
+                // (the species' sprigs hold their leaves farther: their levels change at 14 and 40 m.)
+                let edges = if species && eo_landmarks::flora::is_shrub(k as u8) { [14.0, 40.0] } else { [10.0, 32.0] };
+                out.set(model, ids, [edges[0], edges[1], z, w], 1, 0.1);
             }
             continue;
         }
@@ -666,6 +687,174 @@ fn mound(b: &mut Builder, mats: &MoundMats, kind: u8, lod: u32, seed: u32) {
                         mound_leaf(b, mats.flower, p, n, std::f32::consts::FRAC_PI_2, h * 1.1, 0.05 * [1.0f32, 1.0, 1.4][lod as usize], col);
                     }
                 }
+            }
+        }
+    }
+}
+
+// ------------------------------------------------------------------ the flora pass's scrub species
+
+/// The vegetation atlas's sprig cells in the builder's UVs (rows top first:
+/// u0, v top, u1, v bottom; `ez-vegetation-atlas-v1`, 768 px cells of the
+/// 2048 px atlas, each sprig's stem at its cell's bottom edge, measured).
+fn sprig_cell(s: eo_landmarks::flora::Sprig) -> [f32; 4] {
+    use eo_landmarks::flora::Sprig;
+    match s {
+        Sprig::Round => [0.0, 0.0, 0.375, 0.375],
+        Sprig::Fine => [0.375, 0.0, 0.75, 0.375],
+        Sprig::Lobed => [0.0, 0.375, 0.375, 0.75],
+        Sprig::Oval => [0.375, 0.375, 0.75, 0.75],
+    }
+}
+
+/// The sprig cells' mean linear luminance over their opaque texels (measured
+/// on `ez-vegetation-atlas-v1.png`: 0.17-0.19): the sprig material draws the
+/// cell grey (its luminance over this), so the vertex colour is the leaf's albedo.
+pub const SPRIG_LUMINANCE: f32 = 0.18;
+
+/// One leaf sprig card: the cell `uv` on a quad `size` tall (`aspect` x as
+/// wide) whose stem is at `p`, rising along `up`, its face across `side`;
+/// shaded with `n` (the canopy's outward normal blended with the card's), the
+/// base `dark` x the tip's colour `c` (linear). The tip sways a little in the wind.
+#[allow(clippy::too_many_arguments)]
+fn sprig(b: &mut Builder, m: u32, uv: [f32; 4], p: [f32; 3], up: [f32; 3], side: [f32; 3], size: f32, aspect: f32, n: [f32; 3], c: [f32; 3], dark: f32) {
+    let w = size * aspect * 0.5;
+    let base = b.v.len() as u32;
+    let lo = lin3_to_srgb(c.map(|v| v * dark));
+    let hi = lin3_to_srgb(c);
+    let corners = [(-1.0f32, 0.0f32, uv[0], uv[3], lo), (1.0, 0.0, uv[2], uv[3], lo), (1.0, 1.0, uv[2], uv[1], hi), (-1.0, 1.0, uv[0], uv[1], hi)];
+    for (sx, t, u, v, col) in corners {
+        let q = [0, 1, 2].map(|k| p[k] + side[k] * sx * w + up[k] * t * size);
+        let id = b.vert(q, n, [u, v], col, m);
+        b.v[id as usize].pad = (0.25 * t).to_bits();
+    }
+    b.tri(true, base, base + 1, base + 2);
+    b.tri(true, base, base + 2, base + 3);
+}
+
+/// A scrub shrub of its species (`eo_landmarks::flora::SPECIES`) at level
+/// `lod`: the species' leaf masses (displaced spheres in its crown shape,
+/// drawn as the canopy's shadowed inside: dark, seen between the sprigs) and
+/// over them leaf sprig cards (`m_sprig`: the atlas sprig its leaf resembles,
+/// drawn grey and coloured with the species' leaf albedo) standing out of the
+/// masses' surfaces, lighter toward the top and outside, every sprig its own
+/// value. The far level keeps fewer, larger sprigs so the silhouette stays
+/// broken and the masses' grain (props_draw.wgsl) fills between them.
+fn species_shrub(b: &mut Builder, mats: &MoundMats, m_sprig: u32, kind: u8, lod: u32, seed: u32) {
+    use eo_landmarks::flora as fl;
+    let sp = fl::species(kind).expect("a scrub species");
+    let f = sp.form;
+    let live = fl::leaf_linear(kind);
+    let (unit, faces) = icosphere([2u32, 1, 0][lod as usize]);
+    let centre = [0.0f32, 0.35 * f.h, 0.0];
+    let clumps = (f.clumps * [3u32, 2, 1][lod as usize] / 3).max(4);
+    let mut balls: Vec<([f32; 3], f32)> = Vec::new();
+    for k in 0..clumps {
+        let (c, r) = if k == 0 {
+            ([0.0, 0.62 * f.h, 0.0], 0.42 * f.r)
+        } else {
+            let a = (k as f32 / (clumps - 1) as f32 + 0.3 * hash3(k as i32, 1, 9, seed)) * std::f32::consts::TAU;
+            let u = 0.4 + 0.55 * hash3(k as i32, 2, 9, seed);
+            let y = f.h * (0.64 - 0.4 * u * u) * (0.85 + 0.3 * hash3(k as i32, 3, 9, seed));
+            ([f.r * u * a.cos(), y, f.r * u * a.sin()], f.r * (0.3 + 0.16 * hash3(k as i32, 4, 9, seed)))
+        };
+        let r = r * [0.8f32, 0.88, 1.05][lod as usize];
+        balls.push((c, r));
+        let first = b.v.len() as u32;
+        for p in &unit {
+            let q = [p[0] * 2.2 + c[0] * 3.0, p[1] * 2.2 + c[1] * 3.0, p[2] * 2.2 + c[2] * 3.0];
+            let rr = r * (1.0 + 0.28 * fbm(q, seed + k, 2));
+            let mut pos = [c[0] + p[0] * rr, c[1] + p[1] * rr * f.upright, c[2] + p[2] * rr];
+            pos[1] = pos[1].max(-0.02);
+            let out_dir = norm3([pos[0] - centre[0], pos[1] - centre[1], pos[2] - centre[2]]);
+            let n = norm3([0, 1, 2].map(|i| 0.5 * p[i] + 0.5 * out_dir[i]));
+            let facing = (p[0] * out_dir[0] + p[1] * out_dir[1] + p[2] * out_dir[2]).clamp(-1.0, 1.0);
+            let ao = (0.35 + 0.65 * ((facing + 0.4) / 1.4).clamp(0.0, 1.0)) * (0.35 + 0.65 * (pos[1] / (0.75 * f.h)).clamp(0.0, 1.0));
+            // the canopy's inside, seen between the sprigs: darker near, the far level's
+            // masses closer to the canopy's mean (fewer sprigs over them).
+            let vary = (0.85 + 0.3 * hash3(k as i32, 5, 9, seed)) * [0.38f32, 0.5, 0.75][lod as usize];
+            let c = live.map(|v| v * ao * vary);
+            b.vert(pos, n, [0.5, 0.5], lin3_to_srgb(c), mats.leaf);
+        }
+        for t in &faces {
+            b.tri(false, first + t[0], first + t[1], first + t[2]);
+        }
+    }
+    // the sprigs, each on a mass weighted by its surface.
+    let uv = sprig_cell(f.sprig);
+    let n_cards = f.cards[lod as usize];
+    let size = f.card * [1.0f32, 1.7, 2.6][lod as usize];
+    let area: f32 = balls.iter().map(|b| b.1 * b.1).sum();
+    let mut k = 0u32;
+    let mut placed = 0u32;
+    while placed < n_cards && k < n_cards * 4 {
+        k += 1;
+        let mut pick = hash3(k as i32, 11, 9, seed) * area;
+        let mut ball = balls[0];
+        for bb in &balls {
+            if pick < bb.1 * bb.1 {
+                ball = *bb;
+                break;
+            }
+            pick -= bb.1 * bb.1;
+        }
+        let (c, r) = ball;
+        let d = norm3([hash3(k as i32, 12, 9, seed) * 2.0 - 1.0, hash3(k as i32, 13, 9, seed) * 2.0 - 0.8, hash3(k as i32, 14, 9, seed) * 2.0 - 1.0]);
+        // rooted a little inside the mass (depth in the canopy) to just past its surface.
+        let o = 0.7 + 0.35 * hash3(k as i32, 15, 9, seed);
+        let p = [c[0] + d[0] * r * o, (c[1] + d[1] * r * f.upright * o).max(0.03), c[2] + d[2] * r * o];
+        let out_dir = norm3([p[0] - centre[0], (p[1] - centre[1]) * 0.8, p[2] - centre[2]]);
+        if d[0] * out_dir[0] + d[1] * out_dir[1] + d[2] * out_dir[2] < -0.15 {
+            continue;
+        }
+        placed += 1;
+        // the sprig rises out of the canopy: along the outward direction, turned up
+        // (upright forms more), with its own lean.
+        let lean = [hash3(k as i32, 16, 9, seed) - 0.5, hash3(k as i32, 17, 9, seed) - 0.5, hash3(k as i32, 18, 9, seed) - 0.5];
+        let up = norm3([out_dir[0] * f.reach + lean[0] * 0.6, out_dir[1] * f.reach + 0.3 * f.upright + lean[1] * 0.4, out_dir[2] * f.reach + lean[2] * 0.6]);
+        let spin = hash3(k as i32, 19, 9, seed) * std::f32::consts::TAU;
+        let any = if up[1].abs() < 0.9 { [0.0, 1.0, 0.0] } else { [1.0, 0.0, 0.0] };
+        let t0 = norm3(cross3(up, any));
+        let t1 = cross3(up, t0);
+        let side = [0, 1, 2].map(|i| t0[i] * spin.cos() + t1[i] * spin.sin());
+        let mut face = norm3(cross3(side, up));
+        if face[0] * out_dir[0] + face[1] * out_dir[1] + face[2] * out_dir[2] < 0.0 {
+            face = face.map(|v| -v);
+        }
+        // the shading normal: mostly the canopy's (the shrub reads as one lit volume,
+        // its sunlit face brighter), a part the sprig's own (each catches the sun its way).
+        let n = norm3([0, 1, 2].map(|i| 0.6 * out_dir[i] + 0.4 * face[i] + if i == 1 { 0.15 } else { 0.0 }));
+        // lighter toward the top and outside (young growth), each sprig its own value.
+        let r20 = hash3(k as i32, 20, 9, seed);
+        let lift = (0.62 + 0.45 * (p[1] / f.h).clamp(0.0, 1.0)) * (0.72 + 0.5 * r20) * (0.8 + 0.25 * o);
+        let young = (r20 - 0.75).max(0.0) * 1.2;
+        let col = [live[0] * lift * (1.0 + young), live[1] * lift * (1.0 + 0.4 * young), live[2] * lift * (1.0 - 0.3 * young)];
+        let s = size * (0.7 + 0.6 * hash3(k as i32, 21, 9, seed));
+        sprig(b, m_sprig, uv, p, up, side, s, f.aspect, n, col, 0.62);
+    }
+    if kind == eo_landmarks::vegetation::MEADOW_LUPINE {
+        lupine_spikes(b, mats, &balls, lod, seed);
+    }
+}
+
+/// The bush lupine's flower spikes (the third pass's, `mound`): racemes 12-22 cm
+/// tall out of the top of two or three masses.
+fn lupine_spikes(b: &mut Builder, mats: &MoundMats, balls: &[([f32; 3], f32)], lod: u32, seed: u32) {
+    let yellow = [0.62f32, 0.50, 0.045];
+    let per = [6u32, 5, 4][lod as usize];
+    for g in 0..3u32 {
+        let (c, r) = balls[(1 + g * 3) as usize % balls.len()];
+        for j in 0..per {
+            let a = hash3((g * 16 + j) as i32, 31, 7, seed) * std::f32::consts::TAU;
+            let u = 0.7 * hash3((g * 16 + j) as i32, 32, 7, seed).sqrt();
+            let base = [c[0] + r * u * a.cos(), c[1] + r * (1.0 - 0.5 * u * u) * 0.85 - 0.02, c[2] + r * u * a.sin()];
+            let h = 0.12 + 0.1 * hash3((g * 16 + j) as i32, 33, 7, seed);
+            let col = [0, 1, 2].map(|i| yellow[i] * (0.85 + 0.3 * hash3((g * 16 + j) as i32, 34 + i as i32, 7, seed)));
+            for q in 0..2u32 {
+                let ya = a + q as f32 * std::f32::consts::FRAC_PI_2;
+                let n = [ya.cos(), 0.0, ya.sin()];
+                let p = [base[0], base[1] + h * 0.5, base[2]];
+                mound_leaf(b, mats.flower, p, n, std::f32::consts::FRAC_PI_2, h * 1.1, 0.05, col);
             }
         }
     }
