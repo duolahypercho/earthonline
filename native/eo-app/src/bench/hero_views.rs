@@ -295,10 +295,10 @@ mod tests {
         assert!(HEROES.iter().all(|h| h.name.starts_with("hero-") && find(h.name).is_some_and(|f| f.name == h.name)));
         let hour = |n: &str| find(n).unwrap().hour;
         assert_eq!((hour("hero-castro-night"), hour("hero-mission-wet"), hour("hero-downtown-golden"), hour("hero-viaduct-golden"), hour("hero-embarcadero-blue"), hour("hero-aerial-golden")), (21.0, 22.0, 18.5, 18.5, 19.25, 18.5));
-        // the wet card: wet ground, no rain falling; the others clear.
+        // the wet card: the damp preset, wet ground, no rain falling; the others clear.
         let wet = find("hero-mission-wet").unwrap();
         let s = sky(wet, SkyOptions::default());
-        assert_eq!((s.weather, s.rain, s.wet, s.seed, s.adaptation), (WeatherMode::Preset(Kind::Rain), false, true, SEED, false));
+        assert_eq!((s.weather, s.rain, s.wet, s.seed, s.adaptation), (WeatherMode::Preset(Kind::Damp), false, true, SEED, false));
         assert!(HEROES.iter().filter(|h| h.name != wet.name).all(|h| h.weather == Kind::Clear && sky(h, SkyOptions::default()).rain));
         assert!(find("hero-viaduct-golden").unwrap().structures);
         assert_eq!(find("hero-castro-night~b").map(|h| h.name), Some("hero-castro-night"), "a tuned variant runs as its card");
