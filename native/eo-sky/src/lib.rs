@@ -7,13 +7,18 @@
 //! it does to the clear-weather light rig (`frame`). Every module names the
 //! JS file or the physical source it follows.
 
+pub mod cine_lamps;
+pub mod cine_wet;
 pub mod clouds;
 pub mod frame;
 pub mod hash;
 pub mod lights;
+pub mod lit_fog;
 pub mod moon;
 pub mod night;
+pub mod photo;
 pub mod photometry;
+pub mod shops;
 pub mod weather;
 
 pub use frame::{Conditions, SkyTerms, apply};
