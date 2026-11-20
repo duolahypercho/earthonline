@@ -213,6 +213,11 @@ pub(crate) fn live_look(start: &eo_render::look::LookOptions, wanted: &eo_render
 /// The app's defaults (`parse_args` in main.rs with no flags).
 fn default_args() -> Args {
     Args {
+        interior_lighting: true,
+        house_finishes: false,
+        house_patina: false,
+        house_furniture: false,
+        beaver_house: false,
         bench: false,
         start_underwater: false,
         dive_site: None,

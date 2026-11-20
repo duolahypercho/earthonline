@@ -21,6 +21,7 @@ const ENV_SIDEWALK: i32 = 2;
 const ENV_PAINTED_METAL: i32 = 3;
 // A film of water over sand (the swash's wet band, landmarks_surface.wgsl): it reflects the environment strongly.
 const ENV_WET_FILM: i32 = 4;
+const ENV_KITCHEN: i32 = 5;
 // The water pass accounts for air-interface reflection on submerged terrain.
 const ENV_SUBMERGED: i32 = 6;
 // GLAZING_PROBE_ROUGHNESS_FLOOR (src/render/materials/glazing-environment.js:
@@ -146,6 +147,8 @@ fn lk_dfg(nv: f32, rough: f32) -> vec2<f32> {
 // the room behind kit glazing at night (rooms.wgsl), set by the city
 // shader before `look_light`: the pane's emission (kit/materials.js emissiveNode).
 var<private> rm_emit: vec3<f32>;
+// Set by the house vertices that select a local reflection, consumed only for ENV_KITCHEN.
+var<private> room_radiance: vec3<f32>;
 
 fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: vec3<f32>, object: u32) -> vec4<f32> {
     var s = s_in; // sky
@@ -194,7 +197,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     let rnl = max(dot(n, rl), 0.0);
     let rim = look.rim.xyz * rnl;
     direct_d = direct_d + rim * diffuse / LK_PI;
-    direct_s = direct_s + rim * lk_ggx(n, v, rl, f0, rough) * select(1.0, 0.0, s.env == ENV_WET_FILM); // the rig's rim light draws no false sun in a water film
+    direct_s = direct_s + rim * lk_ggx(n, v, rl, f0, rough) * select(1.0, 0.0, s.env == ENV_WET_FILM || s.env == ENV_KITCHEN); // the rig's rim light draws no false sun in a water film
 
     // Indirect diffuse.
     let hemi = mix(look.hemi_ground.xyz, look.hemi_sky.xyz, n.y * 0.5 + 0.5);
@@ -244,7 +247,9 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     let r = reflect(-v, n);
     var rad = lk_sh(r) / LK_PI;
     let sharp = 1.0 - lk_smooth(0.15, 0.5, rough);
-    if (fa_probe_on()) {
+    if (s.env == ENV_KITCHEN) {
+        rad = room_radiance;
+    } else if (fa_probe_on()) {
         // the scene probe is the specular environment (glass reads it
         // through the glazing floor and canyon parallax).
         if (glass) {
@@ -266,13 +271,22 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     // glossy (wet) ground reflects the previous frame where its ray finds it.
     // (`--look cinematic`, stage L3) on car paint the clearcoat's sharper reflection (below)
     let coat_on = SKY_CINE_FULL && sky_coat > 0.0;
-    let ssr = sky_ssr(world, select(n, ng, coat_on), v, select(rough, sky_coat_rough, coat_on));
-    var rad_e = rad * env_i;
-    if (amb) {
-        // the ambient volume: the environment by the sky seen along the
-        // reflection, what blocks it by its own radiance (ambient.wgsl).
-        let aw = amb_reflection(av, r);
-        rad_e = rad_e * aw.x + look.hemi_ground.xyz * (env_i * aw.y / LK_PI);
+    // the house's kitchen reflects its own captured room (draw.wgsl `kitchen_reflection`):
+    // no screen-space term, ambient volume or environment intensity over it.
+    let kitchen = s.env == ENV_KITCHEN;
+    var ssr = vec4<f32>(0.0);
+    if (!kitchen) {
+        ssr = sky_ssr(world, select(n, ng, coat_on), v, select(rough, sky_coat_rough, coat_on));
+    }
+    var rad_e = rad;
+    if (!kitchen) {
+        rad_e = rad * env_i;
+        if (amb) {
+            // the ambient volume: the environment by the sky seen along the
+            // reflection, what blocks it by its own radiance (ambient.wgsl).
+            let aw = amb_reflection(av, r);
+            rad_e = rad_e * aw.x + look.hemi_ground.xyz * (env_i * aw.y / LK_PI);
+        }
     }
     let indirect_s = mix(rad_e, ssr.rgb, ssr.a) * fss * spec_occ;
     // The bounce is outgoing Lambert radiance (bounce x diffuse albedo), added

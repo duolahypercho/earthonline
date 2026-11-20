@@ -13,7 +13,7 @@ use std::time::Instant;
 /// south) at 1:1; `spawn()` is where it is on the scaled ground plan.
 pub const SPAWN_SURVEYED: [f32; 2] = [1539.0, -366.0];
 /// Eye height above ground for the street walk.
-const EYE_HEIGHT_M: f32 = 1.7;
+pub(crate) const EYE_HEIGHT_M: f32 = 1.7;
 /// Walking speed, metres per frame at a nominal 60 frames per second.
 const WALK_M_PER_FRAME: f32 = 1.4 / 60.0;
 /// Length of the authored-street walk over one segment.
@@ -614,7 +614,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     if poses_env.is_some() || args.props2.capture {
         let dir = args.out_dir.clone().unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bench-out"));
         std::fs::create_dir_all(&dir)?;
-        let poses: Vec<(String, Camera)> = match &poses_env {
+        let poses = match &poses_env {
             Some(f) => crate::props::read_poses(std::path::Path::new(f))?,
             None => {
                 let mut list = vec![];
@@ -639,7 +639,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 for (n, c, w) in &list {
                     println!("  pose {n}: eye ({:.1}, {:.2}, {:.1}) yaw {:.3} pitch {:.3}: {w}", c.eye.x, c.eye.y, c.eye.z, c.yaw, c.pitch);
                 }
-                list.into_iter().map(|(n, c, _)| (n, c)).collect()
+                list.into_iter().map(|(name, camera, _)| crate::props::CapturePose { name, camera, player: None }).collect()
             }
         };
         let label = args.label.as_deref().unwrap_or("props2");
@@ -647,13 +647,25 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         // settles (the decks drift with the clock, and a pose's settle takes as many frames
         // as its streaming needs, so two runs met different clouds at one pose).
         let hold_sky = std::env::var_os("EO_CAPTURE_HOLD_SKY").is_some_and(|v| v == "1");
-        for (name, cam) in poses {
+        for crate::props::CapturePose { name, camera: cam, player } in poses {
             if hold_sky {
                 renderer.look.sky.set_clock(args.look.sky.world_time_s, 0.0);
+            }
+            let refresh_player = player.is_some() || !agents.extras.is_empty();
+            agents.extras.clear();
+            if let Some(p) = player {
+                let lib = agents.lib.as_ref().ok_or_else(|| anyhow!("player scale reference requires the people library"))?;
+                let body = eo_agents::feed::player_body(lib, p.feet, p.yaw, 0., 0., 0.)
+                    .ok_or_else(|| anyhow!("no verified player avatar available for scale reference"))?;
+                agents.extras.push(body);
+                println!("scale reference {name}: {} at {:?}, model height {:?} m, people scale {}", lib.meta.model_names[lib.meta.player_model as usize], p.feet, lib.meta.family_heights.first(), body.scale);
             }
             settle_p(&ctx, &renderer, &world, &mut models, Some(&mut props), &cam, 600.0)?;
             crate::props::sync_parked(&ctx, &renderer, &mut props, &mut agents, &cam);
             settle_p(&ctx, &renderer, &world, &mut models, Some(&mut props), &cam, 600.0)?;
+            if refresh_player {
+                agents.pump(&ctx, &renderer, crate::agents::AgentRuntime::focus_of(cam.eye, cam.forward()), 0.0);
+            }
             let p = dir.join(format!("capture-{label}-{name}.png"));
             capture(&ctx, &renderer, &color, attach, resolve, &targets.depth, &cam, &p)?;
             println!("wrote {}", p.display());

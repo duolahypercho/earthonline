@@ -68,6 +68,18 @@ pub const LOD_LANDMARK_NEAR: u32 = 10;
 /// a landmark's far item, drawn while its group is not near.
 pub const LOD_LANDMARK_FAR: u32 = 11;
 pub const BLEND_BIT: u32 = 1 << 8;
+/// Model with per-board coordinates for the photographic floor scan.
+pub const FLOOR_SCAN_BIT: u32 = 1 << 9;
+/// Loose mineral aggregate on a private lot.
+pub const GRAVEL_BIT: u32 = 1 << 10;
+/// Leaf-local coordinates for a swinging painted timber door.
+pub const DOOR_SCAN_BIT: u32 = 1 << 11;
+/// Camera-facing reflection in the actual front sash of the Beaver Street house.
+pub const FRONT_SASH_BIT: u32 = 1 << 12;
+/// Mineral plaster with locally baked exposure to splash and runoff.
+pub const LIMEWASH_BIT: u32 = 1 << 13;
+/// An entire carpet sampled once in its authored orientation.
+pub const RUG_SCAN_BIT: u32 = 1 << 14;
 
 /// Material 0: the vertex colour (footprints, terrain, roads, sea).
 pub const MATERIAL_VERTEX_COLOUR: u32 = 0;

@@ -166,6 +166,26 @@ struct PrimOut {
 
 /// Parse a (verified) GLB and flatten it.
 pub fn cook_glb(bytes: &[u8]) -> Result<CookedModel> {
+    cook_mesh(bytes, None, None, None)
+}
+
+/// Return the first texture coordinates in the same vertex order as the cooked mesh.
+pub fn cook_glb_with_uv0(bytes: &[u8]) -> Result<(CookedModel, Vec<[f32; 2]>)> {
+    let mut uv = Vec::new();
+    let model = cook_mesh(bytes, Some(&mut uv), None, None)?;
+    Ok((model, uv))
+}
+
+/// Preserve the light coordinates and optional near-field visibility in TEXCOORD_1.x.
+/// Older primitives without baked visibility receive a fully exposed ambient term.
+pub fn cook_glb_with_visibility(bytes: &[u8], placements: &std::collections::HashMap<String, Mat4>) -> Result<(CookedModel, Vec<[f32; 2]>, Vec<f32>)> {
+    let mut uv = Vec::new();
+    let mut visibility = Vec::new();
+    let model = cook_mesh(bytes, Some(&mut uv), Some(&mut visibility), Some(placements))?;
+    Ok((model, uv, visibility))
+}
+
+fn cook_mesh(bytes: &[u8], mut uv: Option<&mut Vec<[f32; 2]>>, mut visibility: Option<&mut Vec<f32>>, placements: Option<&std::collections::HashMap<String, Mat4>>) -> Result<CookedModel> {
     let gltf = gltf::Gltf::from_slice(bytes).map_err(|e| anyhow!("glTF parse: {e}"))?;
     let blob = gltf.blob.as_deref();
     let doc = &gltf.document;
@@ -184,7 +204,11 @@ pub fn cook_glb(bytes: &[u8]) -> Result<CookedModel> {
     };
     let mut stack: Vec<(gltf::Node, Mat4)> = scene.nodes().map(|n| (n, Mat4::IDENTITY)).collect();
     while let Some((node, parent)) = stack.pop() {
-        let world = parent * Mat4::from_cols_array_2d(&node.transform().matrix());
+        let mut world = parent * Mat4::from_cols_array_2d(&node.transform().matrix());
+        // World-space placement on the assembly root is inherited by every mesh and normal.
+        if let Some(m) = placements.and_then(|p| p.get(node.name().unwrap_or_default())) {
+            world = *m * world;
+        }
         for child in node.children() {
             stack.push((child, world));
         }
@@ -210,6 +234,23 @@ pub fn cook_glb(bytes: &[u8]) -> Result<CookedModel> {
             let positions: Vec<[f32; 3]> =
                 reader.read_positions().ok_or_else(|| anyhow!("primitive without POSITION"))?.collect();
             let normals: Option<Vec<[f32; 3]>> = reader.read_normals().map(|n| n.collect());
+            if let Some(uv) = uv.as_deref_mut() {
+                let coords = reader.read_tex_coords(0).ok_or_else(|| anyhow!("primitive without TEXCOORD_0"))?.into_f32();
+                anyhow::ensure!(coords.len() == positions.len(), "texture coordinate count differs from POSITION");
+                uv.extend(coords);
+            }
+            if let Some(values) = visibility.as_deref_mut() {
+                if let Some(coords) = reader.read_tex_coords(1) {
+                    let coords = coords.into_f32();
+                    anyhow::ensure!(coords.len() == positions.len(), "visibility count differs from POSITION");
+                    for [value, _] in coords {
+                        anyhow::ensure!((0.0..=1.0).contains(&value), "invalid near-field visibility");
+                        values.push(value);
+                    }
+                } else {
+                    values.resize(values.len() + positions.len(), 1.0);
+                }
+            }
             let base = model.positions.len() as u32;
             for (i, p3) in positions.iter().enumerate() {
                 let wp = world.transform_point3(Vec3::from(*p3));

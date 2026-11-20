@@ -11,6 +11,8 @@
 static ALLOC: eo_render::alloc::EoAlloc = eo_render::alloc::EoAlloc;
 
 mod agents; // agents
+mod house;
+mod play;
 mod props; // props
 mod agents_bench;
 mod people_capture; // people
@@ -44,6 +46,11 @@ use std::time::Instant;
 
 #[derive(Clone, Debug)]
 pub struct Args {
+    pub beaver_house: bool,
+    pub interior_lighting: bool,
+    pub house_finishes: bool,
+    pub house_patina: bool,
+    pub house_furniture: bool,
     pub bench: bool,
     pub start_underwater: bool,
     pub dive_site: Option<eo_render::seabed::Habitat>,
@@ -218,6 +225,11 @@ fn parse_args() -> Result<Args> {
 
 fn parse_args_from(raw: &[String]) -> Result<Args> {
     let mut a = Args {
+        interior_lighting: true,
+        house_finishes: false,
+        house_patina: false,
+        house_furniture: false,
+        beaver_house: false,
         bench: false,
         start_underwater: false,
         dive_site: None,
@@ -298,6 +310,15 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--multiply" => a.multiply = val()?.parse::<u32>()?.max(1),
             "--check-budget" => a.check_budget = true,
             "--budget-ms" => a.budget_ms = Some(val()?.parse()?),
+            "--beaver-house" => a.beaver_house = true,
+            "--no-interior-lighting" => a.interior_lighting = false,
+            "--house-finishes" => a.house_finishes = true,
+            "--house-patina" => { a.house_finishes = true; a.house_patina = true; }
+            "--no-house-patina" => { a.house_patina = false; a.house_furniture = false; }
+            "--house-furniture" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; }
+            "--no-house-furniture" => a.house_furniture = false,
+            "--no-house-finishes" => a.house_finishes = false,
+            "--no-beaver-house" => a.beaver_house = false,
             "--no-models" => a.models = false,
             "--no-terrain-lod" => a.terrain_lod = false,
             "--no-kit" => a.kit = false,
@@ -530,6 +551,8 @@ pub fn bridge_detail() -> bool {
 }
 
 pub struct World {
+    pub house_vertex_base: usize,
+    pub house: Option<Arc<house::House>>,
     pub paths: DataPaths,
     pub city: Arc<City>,
     pub elevation: ElevationGrid,
@@ -643,7 +666,7 @@ pub fn load_world(args: &Args) -> Result<World> {
     let street_job = street_plan.map(|p| streets::spawn(p, &city, &elevation));
     let standards = CaStandards::load(&paths)?;
     let mut kit_rx = None;
-    let kit_lib = if args.models || args.kit { Some(KitLibrary::load()?) } else { None };
+    let kit_lib = if args.models || args.kit || args.beaver_house { Some(KitLibrary::load()?) } else { None };
     let mut authored = if args.models {
         let constants = PlacementConstants::load()?;
         AuthoredSet::prepare(&paths.repo_root, &city, &elevation, kit_lib.as_ref().unwrap(), &constants)?
@@ -694,6 +717,15 @@ pub fn load_world(args: &Args) -> Result<World> {
         let rings: Vec<Vec<[f64; 2]>> = city.buildings.iter().map(|b| b.ring.iter().map(|p| [p[0] as f64, p[1] as f64]).collect()).collect();
         landmark_claims.extend(w.buildings_over_cuts(&rings).into_iter().map(|i| city.buildings[i].id.trim_start_matches("sf-building-").to_string()));
     }
+    let finishes = (args.beaver_house && args.house_finishes)
+        .then(|| house::Finishes::load(&paths.repo_root, args.house_patina, args.house_furniture))
+        .transpose()?;
+    let house = if args.beaver_house {
+        let record = city.buildings.iter().find(|b| house::owns(&b.id)).ok_or_else(|| anyhow::anyhow!("missing Beaver Street house footprint"))?;
+        landmark_claims.insert(house::ID.to_string());
+        let ground = |x, z| street_world.as_ref().map_or_else(|| elevation.ground(x, z), |w| w.surface_at(x, z, None));
+        Some(Arc::new(house::House::build(args.interior_lighting, finishes.as_ref(), record, &ground, street_world.as_deref(), &paths.repo_root, kit_lib.as_ref().unwrap(), &mut authored.materials)?))
+    } else { None };
     // Kit buildings: every building the authored registry does not draw.
     let t = Instant::now();
     let mut kit_set = None;
@@ -737,11 +769,16 @@ pub fn load_world(args: &Args) -> Result<World> {
     let mut rock_material = eo_render::scene::MATERIAL_VERTEX_COLOUR;
     if let Some(kit) = kit_lib {
         // The kit bake runs beside the first frames; models and kit packs wait for it.
+        if finishes.as_ref().is_some_and(|f| !f.scans.is_empty()) {
+            house::Scan::bind(&mut authored.materials);
+        }
         let layers = authored.materials.layers.clone();
+        // the house's scans take the layers right after the kit's bake; the rock follows them.
+        let house_scans = finishes.as_ref().map_or(0, |f| f.scans.len());
         let rock_maps = args.black_point_intertidal
             .then(|| eo_render::seabed::rock_maps::load(&paths.repo_root)).transpose()?;
         if let Some(maps) = &rock_maps {
-            rock_material = eo_render::seabed::rock_maps::register(&mut authored.materials, layers.len(), maps);
+            rock_material = eo_render::seabed::rock_maps::register(&mut authored.materials, layers.len() + house_scans, maps);
         }
         let cache = cache_dir(args);
         let (tx, rx) = std::sync::mpsc::channel();
@@ -763,7 +800,18 @@ pub fn load_world(args: &Args) -> Result<World> {
                             Err(e) => eprintln!("warning: facade atlas cell {cell} not loaded ({e:#}); {name} keeps its bake"),
                         }
                     }
+                    // the layers after the kit's bake: the house's scans, the shore rock
+                    // (`rock_maps::register` above), then the house's street reflections,
+                    // floorboards and atlas, which draw.wgsl reads from the array's end.
+                    let mut house_tail = vec![];
+                    if let Some(finishes) = finishes {
+                        maps.extend(finishes.scans.into_iter().map(|scan| scan.maps));
+                        house_tail.extend(finishes.street_reflections);
+                        house_tail.push(finishes.floorboards);
+                        house_tail.push(finishes.atlas);
+                    }
                     maps.extend(rock_maps);
+                    maps.extend(house_tail);
                     (KitUpload::build(&maps), t.elapsed().as_secs_f64() * 1e3)
                 })
                 .map_err(|e| format!("{e:#}"));
@@ -1004,6 +1052,8 @@ pub fn load_world(args: &Args) -> Result<World> {
         ground_tone: if cover.is_some() { Some(&ground_tone_fn) } else { None },
         smooth_terrain: args.landmarks && args.landmarks2,
     }, terrain_cuts)?;
+    let house_vertex_base = scene.vertices.len();
+    if let Some(house) = &house { house.append(&mut scene, &authored.materials); }
     let mut dive_sites = vec![];
     if args.look.water && (args.underwater_habitats || args.cove_detail || args.dive_site.is_some() || args.capture || args.bench)
         && let (Some(data), Some(height)) = (&water, &carpet_fn)
@@ -1126,7 +1176,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         }
         None => (None, None),
     };
-    Ok(World { paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, dive_sites, landmarks, hlod, hlod_trees, structures, structures_drawn }) // hlod
+    Ok(World { house_vertex_base, house, paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, dive_sites, landmarks, hlod, hlod_trees, structures, structures_drawn }) // hlod
 }
 
 /// the street size. `--ground-scale S` (an explicit ground-plan
@@ -1207,8 +1257,6 @@ fn main() -> Result<()> {
         return r;
     }
     // ==== eo-player: `--play` (window) and `--bench --play` (offscreen), see play.rs ====
-    #[path = "play.rs"]
-    mod play;
     if let Some(r) = play::intercept(process_start) {
         return r;
     }

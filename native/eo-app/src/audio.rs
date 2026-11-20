@@ -472,18 +472,16 @@ impl AudioRuntime {
             return;
         }
         let v: Vec<f64> = self.cost_ms.iter().skip(warmup).copied().collect();
-        let cpu: Vec<f64> = self.cpu_ms.iter().skip(warmup).copied().collect();
+        let cpu = on_cpu_summary(self.cpu_ms.iter().skip(warmup).copied());
         let c: Vec<f64> = self.commands.iter().skip(warmup).copied().collect();
         let st = &self.engine.stats;
         println!(
-            "    audio ({}): render-thread cost per frame median {:.4} / p95 {:.4} / max {:.4} ms wall, on-CPU {:.4} / {:.4} / {:.4} ms (budget 0.1); commands/frame median {:.0}; car voices {}, voices mixed now {} (max {}), sources {} (max {}), mixer load {:.2} % of a core, underruns {}, refused {}",
+            "    audio ({}): render-thread cost per frame median {:.4} / p95 {:.4} / max {:.4} ms wall, on-CPU {} (budget 0.1 ms); commands/frame median {:.0}; car voices {}, voices mixed now {} (max {}), sources {} (max {}), mixer load {:.2} % of a core, underruns {}, refused {}",
             self.engine.output.name(),
             pct(&v, 50.0),
             pct(&v, 95.0),
             pct(&v, 100.0),
-            pct(&cpu, 50.0),
-            pct(&cpu, 95.0),
-            pct(&cpu, 100.0),
+            cpu,
             pct(&c, 50.0),
             self.director.stats.car_voices,
             st.mixed.load(Ordering::Relaxed),
@@ -518,6 +516,27 @@ impl AudioRuntime {
             b.map(|b| b.load_ms).unwrap_or(0.0),
             b.map(|b| b.errors.len()).unwrap_or(0),
         );
+    }
+}
+
+// The per-thread clock is optional. Keep all wall times and the warmup
+// boundary even if this platform cannot supply an on-CPU sample.
+fn on_cpu_summary(samples: impl Iterator<Item = f64>) -> String {
+    let values: Vec<_> = samples.filter(|v| v.is_finite()).collect();
+    if values.is_empty() {
+        return "unavailable".to_owned();
+    }
+    format!("{:.4} / {:.4} / {:.4} ms", pct(&values, 50.0), pct(&values, 95.0), pct(&values, 100.0))
+}
+
+#[cfg(test)]
+mod timing_tests {
+    use super::on_cpu_summary;
+
+    #[test]
+    fn optional_cpu_counter_keeps_missing_readings_out_of_percentiles() {
+        assert_eq!(on_cpu_summary([f64::NAN; 2].into_iter()), "unavailable");
+        assert_eq!(on_cpu_summary([0.0, f64::NAN, 0.5, 1.0].into_iter()), "0.5000 / 1.0000 / 1.0000 ms");
     }
 }
 

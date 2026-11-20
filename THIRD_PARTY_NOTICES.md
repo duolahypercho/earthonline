@@ -201,6 +201,10 @@ trademark or brand logo is drawn on any sign face.
 - The earlier browser build and its JavaScript dependencies have been
   removed from the repository.
 
+The optional 21 Beaver Street floor finish uses Dimitrios Savva’s *Wood Floor Worn* for Poly Haven, released under CC0 1.0. Eight board strips were cropped from the diffuse, OpenGL normal and roughness maps. The [material provenance](public/assets/buildings/beaver-terrace/finishes/floorboards.provenance.json) records the original files and their checksums. [Asset](https://polyhaven.com/a/wood_floor_worn) · [Licence](https://polyhaven.com/license)
+
+The weathered 21 Beaver Street variant uses six CC0 photographic materials from Poly Haven. Amal Kumar photographed *Clay Roof Tiles 02*, Rob Tuytel created *Plaster Grey 04*, Dimitrios Savva created *White Stucco 02* and *Wood Floor Worn*, Charlotte Baglioni created *Gravel Floor 03*, and colormass and Rico Cilliers produced *Rough Linen*. The [surface manifests](public/assets/buildings/beaver-terrace/finishes/patina) list each input and its SHA-256. [CC0 licence](https://polyhaven.com/license)
+
 ## Rust crate licences
 
 <!-- BEGIN GENERATED: cargo-licences -->
@@ -236,3 +240,5 @@ grouped by that field exactly as each crate declares it. Regenerate it after a d
 <!-- END GENERATED: cargo-licences -->
 
 The Black Point shoreline uses *Seaside Rock* by Dimitrios Savva for Poly Haven under CC0 1.0. The game ships reduced colour, normal and roughness maps from this scan. [Source](https://polyhaven.com/a/seaside_rock) · [Licence](https://polyhaven.com/license) · [Provenance](public/assets/shore/seaside-rock.provenance.json)
+
+The optional 21 Beaver sitting-room carpet uses the public-domain recto photograph of *Carpet*, attributed to Turkey, first half of the nineteenth century, Bequest of Joseph V. McMullan, 1973, accession 1974.149.36. The material builder rectifies and resamples the photograph. [The Metropolitan Museum of Art object record](https://www.metmuseum.org/art/collection/search/452588) · [The Met Open Access policy](https://www.metmuseum.org/about-the-met/policies-and-documents/open-access).

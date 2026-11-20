@@ -102,3 +102,24 @@ fn cooked_models_round_trip_the_cache() {
     }
     let _ = std::fs::remove_dir_all(&tmp);
 }
+
+#[test]
+fn terrace_light_coordinates_follow_the_cooked_vertices() {
+    let data = std::fs::read(repo().join("public/assets/buildings/beaver-terrace/terrace.glb")).unwrap();
+    let (mesh, light) = glb::cook_glb_with_uv0(&data).unwrap();
+    assert_eq!(mesh, cook_glb(&data).unwrap());
+    assert_eq!(light.len(), mesh.positions.len());
+    let mut lit_table = false;
+    let mut upstairs_daylight = false;
+    for (&[x, y, z], [window, pendant]) in mesh.positions.iter().zip(light) {
+        assert!((0.0..=1.0).contains(&window) && (0.0..=1.0).contains(&pendant));
+        if (1.7..3.05).contains(&x) && (6.7..8.45).contains(&z) && (0.78..0.82).contains(&y) {
+            lit_table |= pendant > 0.2;
+        }
+        if y > 3.5 {
+            assert_eq!(pendant, 0.0, "the dining lamp leaked through the upstairs floor");
+            upstairs_daylight |= window > 0.2;
+        }
+    }
+    assert!(lit_table && upstairs_daylight);
+}

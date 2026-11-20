@@ -1,0 +1,41 @@
+{
+  "source": [
+    "https://polyhaven.com/a/gravel_floor_03"
+  ],
+  "license": "CC0-1.0",
+  "license_url": "https://polyhaven.com/license",
+  "attribution": [
+    "Charlotte Baglioni"
+  ],
+  "inputs": [
+    {
+      "asset": "gravel_floor_03",
+      "role": "albedo",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/gravel_floor_03/gravel_floor_03_diff_2k.jpg",
+      "sha256": "06465933a54619900230fe85bff4c29f83fd3237a76b600e9845def4a206aece"
+    },
+    {
+      "asset": "gravel_floor_03",
+      "role": "normal",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/gravel_floor_03/gravel_floor_03_nor_gl_2k.jpg",
+      "sha256": "27367a648385db57d6650c2a52c993245be084c1ca57686ba44a52925187d491"
+    },
+    {
+      "asset": "gravel_floor_03",
+      "role": "arm",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/gravel_floor_03/gravel_floor_03_arm_2k.jpg",
+      "sha256": "b8d007c6e75dee029b411f5f5ce96063a983f85469fcc5afe07ecd272c4e5398"
+    }
+  ],
+  "build": "scripts/blender-buildings/prepare_beaver_surfaces.py",
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/aggregate.png",
+  "sha256": "0c17147d7d592b9c0c87d388d2da0526ac0b796e4e723ca39275b98d8ad18943",
+  "bytes": 1714461,
+  "families": [
+    "decomposed-granite",
+    "garden-stone"
+  ],
+  "metres_per_tile": 2.5,
+  "normal_strength": 1.15,
+  "paint_mix": 0.22
+}

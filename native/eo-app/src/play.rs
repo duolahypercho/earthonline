@@ -42,6 +42,7 @@ const PLAYER_MEDIAN_BUDGET_MS: f64 = 0.5;
 const PLAYER_HITCH_BUDGET_MS: f64 = 2.0;
 
 struct PlayOpts {
+    interior_eye: bool,
     bench: bool,
     /// Frames per path (default: walk 7200, drive 3600).
     frames: Option<usize>,
@@ -62,6 +63,11 @@ pub fn intercept(process_start: Instant) -> Option<Result<()>> {
 /// main.rs's defaults (`parse_args`), field by field: `Args` has no Default.
 fn base_args() -> Args {
     Args {
+        interior_lighting: true,
+        house_finishes: false,
+        house_patina: false,
+        house_furniture: false,
+        beaver_house: false,
         bench: false,
         start_underwater: false,
         dive_site: None,
@@ -121,7 +127,7 @@ fn base_args() -> Args {
 
 fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
     let mut a = base_args();
-    let mut o = PlayOpts { bench: false, frames: None, segments: None, render: true, collision_threads: 2 };
+    let mut o = PlayOpts { interior_eye: true, bench: false, frames: None, segments: None, render: true, collision_threads: 2 };
     let mut tier = crate::quality::Switches::default(); // `--quality` and the lighting switches
     let mut it = raw.iter();
     while let Some(s) = it.next() {
@@ -132,6 +138,17 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
         let mut val = || it.next().cloned().ok_or_else(|| anyhow!("{s} needs a value"));
         match s.as_str() {
             "--play" => {}
+            "--house-eye-camera" => o.interior_eye = true,
+            "--no-house-eye-camera" => o.interior_eye = false,
+            "--beaver-house" => a.beaver_house = true,
+            "--no-interior-lighting" => a.interior_lighting = false,
+            "--house-finishes" => a.house_finishes = true,
+            "--house-patina" => { a.house_finishes = true; a.house_patina = true; }
+            "--no-house-patina" => { a.house_patina = false; a.house_furniture = false; }
+            "--house-furniture" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; }
+            "--no-house-furniture" => a.house_furniture = false,
+            "--no-house-finishes" => a.house_finishes = false,
+            "--no-beaver-house" => a.beaver_house = false,
             "--bench" => o.bench = true,
             "--frames" => o.frames = Some(val()?.parse()?),
             "--segments" => o.segments = Some(val()?.split(',').map(|s| s.trim().to_string()).collect()),
@@ -192,14 +209,43 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
 /// (lifted by the construction lift the renderer uses), standing on the drawn
 /// street surface (eo-street: carpet, carriageway, kerbs, sidewalks) when the
 /// streets are loaded, else on the elevation grid.
-fn collision_world(world: &World, threads: usize) -> Result<CollisionWorld> {
+fn collision_world(
+    world: &World,
+    threads: usize,
+) -> Result<(CollisionWorld, Option<crate::house::Door>)> {
     let lift = eo_assets::placement::PlacementConstants::load()?.construction_lift_m;
-    let buildings = Arc::new(BuildingSet::from_city(&world.city, lift));
+    let mut buildings = BuildingSet::from_city(&world.city, lift);
     let ground: Arc<dyn GroundProvider> = match &world.street {
         Some(s) => Arc::new(StreetGround::new(s.world.clone(), world.structures.clone())),
         None => Arc::new(ElevationGround(Arc::new(eo_data::ElevationGrid::load(&world.paths)?))),
     };
-    Ok(CollisionWorld::new(ground, buildings, threads))
+    if let Some(house) = &world.house {
+        let index = world.city.buildings.iter().position(|b| crate::house::owns(&b.id)).unwrap();
+        for ids in buildings.by_tile.values_mut() { ids.retain(|&id| id as usize != index); }
+        let ground = Arc::new(crate::house::HouseGround { base: ground, house: house.clone() });
+        let mut collision = CollisionWorld::new(ground, Arc::new(buildings), threads);
+        let door =
+            crate::house::Door::new(house, &world.scene, world.house_vertex_base, &mut collision)?;
+        return Ok((collision, Some(door)));
+    }
+    Ok((CollisionWorld::new(ground, Arc::new(buildings), threads), None))
+}
+
+/// Inside the furnished house the lens follows the character's head and posture.
+fn player_view(player: &mut Player, cw: &CollisionWorld, world: &World, eye_camera: bool, dt: f64, aspect: f64) -> CameraView {
+    let view = player.camera(cw, dt, aspect);
+    let feet = player.character.feet();
+    if eye_camera && player.mode == Mode::OnFoot && world.house.as_ref().is_some_and(|h| h.contains_feet(feet)) {
+        let crouch_drop = 2. * (eo_player::tuning::capsule::CENTER_FROM_FEET_M - player.character.half_extent_y());
+        CameraView {
+            eye: feet + DVec3::Y * (f64::from(crate::bench::EYE_HEIGHT_M) - crouch_drop),
+            forward: DVec3::new(player.yaw.sin() * player.pitch.cos(), -player.pitch.sin(), player.yaw.cos() * player.pitch.cos()),
+            body_visible: false,
+            ..view
+        }
+    } else {
+        view
+    }
 }
 
 /// The player's view as the renderer's camera.
@@ -362,7 +408,7 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
         let lead = if driving { 500.0 } else { 450.0 };
         let frames = opts.frames.unwrap_or(if driving { 3600 } else { 7200 });
         let path = from_arc(&path, (steep_s - lead).max(0.0));
-        let mut cw = collision_world(&world, opts.collision_threads)?;
+        let (mut cw, _door) = collision_world(&world, opts.collision_threads)?;
         let mut start = DVec3::new(path[0][0], world.elevation.ground(path[0][0], path[0][1]), path[0][1]);
         let t_spawn = Instant::now();
         cw.load_blocking(start, pworld::LOAD_RADIUS_M);
@@ -386,7 +432,7 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
         let mut drive_pilot = DrivePilot::new(path.clone(), 50.0 / 3.6);
         let dt = eo_player::tuning::FIXED_STEP_S;
         // Settle the renderer at the start.
-        let first = to_camera(&player.camera(&cw, dt, aspect as f64), aspect, args.far);
+        let first = to_camera(&player_view(&mut player, &cw, &world, args.house_finishes && args.house_furniture && opts.interior_eye, dt, aspect as f64), aspect, args.far);
         let mut settle_ms = 0.0;
         if let Some((ctx, renderer, _c, _view, _targets, models)) = &mut gpu_state {
             let g = Gpu { ctx, renderer };
@@ -443,7 +489,7 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
             let tp = Instant::now();
             cw.pump(pos);
             let tc = Instant::now();
-            let view = player.camera(&cw, dt, aspect as f64);
+            let view = player_view(&mut player, &cw, &world, args.house_finishes && args.house_furniture && opts.interior_eye, dt, aspect as f64);
             let t1 = Instant::now();
             let ran = eo_render::hitch::on_cpu_ms(c0, eo_render::hitch::thread_cycles()); // hitch
             player_off_cpu.push(((t1 - t0).as_secs_f64() * 1e3 - ran).max(0.0));
@@ -628,13 +674,16 @@ mod window {
     }
 
     struct App {
+        interior_eye: bool,
         world: World,
         args: Args,
         gfx: Option<Gfx>,
         cw: CollisionWorld,
+        door: Option<crate::house::Door>,
         player: Player,
         map: ActionMap,
         raw: RawInput,
+        interact_requested: bool,
         looking: bool,
         last: Instant,
         fps_frames: u32,
@@ -646,23 +695,27 @@ mod window {
 
     pub fn run(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
         let world = load_world(args)?;
-        let mut cw = collision_world(&world, opts.collision_threads)?;
+        let (mut cw, door) = collision_world(&world, opts.collision_threads)?;
         let s = crate::bench::spawn(); // the spawn on the scaled plan
         let mut feet = DVec3::new(s[0] as f64, world.elevation.ground(s[0] as f64, s[1] as f64), s[1] as f64);
+        if let Some(h) = &world.house { feet = h.entry_position(); }
         cw.load_blocking(feet, pworld::LOAD_RADIUS_M);
         feet.y = cw.surface_y(feet.x, feet.z);
-        let mut player = Player::new(feet, 0.0);
-        let yaw = player.yaw;
+        let yaw = world.house.as_ref().map_or(0., |h| h.entry_yaw());
+        let mut player = Player::new(feet, yaw);
         player.spawn_vehicle(&mut cw, feet.x - yaw.cos() * 4.0, feet.z + yaw.sin() * 4.0, yaw);
         let event_loop = EventLoop::new()?;
         let mut app = App {
+            interior_eye: args.house_finishes && args.house_furniture && opts.interior_eye,
             world,
             args: args.clone(),
             gfx: None,
             cw,
+            door,
             player,
             map: ActionMap::default(),
             raw: RawInput::default(),
+            interact_requested: false,
             looking: false,
             last: Instant::now(),
             fps_frames: 0,
@@ -722,12 +775,25 @@ mod window {
             // Player: input, fixed steps, collision streaming, camera.
             let t0 = Instant::now();
             let frame = self.map.resolve(&mut self.raw, dt, false);
+            let interact = std::mem::take(&mut self.interact_requested)
+                || frame.tapped(eo_player::input::Action::Interact);
+            if let Some(door) = &mut self.door {
+                let feet = self.player.position(&self.cw);
+                if self.player.mode == Mode::OnFoot && interact {
+                    door.toggle(feet);
+                }
+                if door.advance(dt, feet, &mut self.world.scene, &mut self.cw)
+                    && let Some(g) = &self.gfx
+                {
+                    door.upload(&self.world.scene, &g.renderer, &g.ctx.queue);
+                }
+            }
             self.player.look(frame.look_yaw, frame.look_pitch);
             let input = StepInput::from_frame(&frame);
             self.player.advance(&mut self.cw, &input, dt);
             let pos = self.player.position(&self.cw);
             self.cw.pump(pos);
-            let view = self.player.camera(&self.cw, dt, aspect);
+            let view = player_view(&mut self.player, &self.cw, &self.world, self.interior_eye, dt, aspect);
             let ms = t0.elapsed().as_secs_f64() * 1e3;
             self.player_ms_max = self.player_ms_max.max(ms);
             self.player_ms_sum += ms;
@@ -768,8 +834,14 @@ mod window {
                     Mode::OnFoot => ("on foot", self.player.ground_speed),
                     Mode::Driving(i) => ("driving", self.player.vehicles[i].forward_speed(&self.cw).abs()),
                 };
+                let door_hint = self
+                    .door
+                    .as_ref()
+                    .filter(|d| self.player.mode == Mode::OnFoot && d.in_reach(pos))
+                    .map_or("", |d| d.action_hint());
+                let bed_hint = if self.player.mode == Mode::OnFoot && self.world.house.as_ref().is_some_and(|h| h.by_bed(pos)) { " - R: sleep until 07:00" } else { "" };
                 g.window.set_title(&format!(
-                    "Earth Online native - play - {:.0} fps - {mode} {:.1} m/s - player {:.2} ms avg / {:.2} max - F: car, V: new car, Esc: mouse",
+                    "Earth Online native - play - {:.0} fps - {mode} {:.1} m/s - player {:.2} ms avg / {:.2} max - F: car, V: new car, Esc: mouse{door_hint}{bed_hint}",
                     self.fps_frames as f64 / el,
                     speed,
                     self.player_ms_sum / self.fps_frames.max(1) as f64,
@@ -826,6 +898,7 @@ mod window {
                 }
                 WindowEvent::Focused(false) => {
                     self.raw.held = HashSet::new();
+                    self.interact_requested = false;
                     self.set_looking(false);
                 }
                 WindowEvent::MouseInput { state, button, .. } => {
@@ -849,6 +922,10 @@ mod window {
                         let name = format!("{code:?}");
                         match event.state {
                             ElementState::Pressed => {
+                                // A quick tap may start and finish between redraws.
+                                if code == KeyCode::KeyE && !event.repeat {
+                                    self.interact_requested = true;
+                                }
                                 if code == KeyCode::Escape {
                                     if self.looking {
                                         self.set_looking(false);
@@ -856,6 +933,14 @@ mod window {
                                         el.exit();
                                     }
                                     return;
+                                }
+                                if code == KeyCode::KeyR && !event.repeat && self.player.mode == Mode::OnFoot {
+                                    if let (Some(house), Some(g)) = (&self.world.house, &self.gfx) {
+                                        if house.by_bed(self.player.character.feet()) {
+                                            g.renderer.look.set_time_of_day(7.0);
+                                            self.player.character.teleport_feet(house.wake_position());
+                                        }
+                                    }
                                 }
                                 if code == KeyCode::KeyV && !event.repeat {
                                     self.spawn_car_ahead();
@@ -887,5 +972,236 @@ mod window {
                 g.window.request_redraw();
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod house_tests {
+    use super::*;
+
+    #[test]
+    fn beaver_street_to_bed_and_top_floor() {
+        check_beaver_walk(false, false, false);
+    }
+
+    #[test]
+    fn furnished_variant_reaches_bed_and_top_floor() {
+        check_beaver_walk(true, false, false);
+    }
+
+    #[test]
+    fn weathered_variant_keeps_the_entry_and_stairs_clear() {
+        check_beaver_walk(true, true, false);
+    }
+
+    #[test]
+    fn sewn_furniture_keeps_the_door_and_upstairs_route_clear() {
+        check_beaver_walk(true, true, true);
+    }
+
+    fn check_beaver_walk(finishes: bool, patina: bool, furniture: bool) {
+        let mut args = base_args();
+        args.house_finishes = finishes;
+        args.house_patina = patina;
+        args.house_furniture = furniture;
+        args.beaver_house = true;
+        args.kit = false;
+        args.landmarks = false;
+        args.models = false;
+        let mut world = load_world(&args).unwrap();
+        let house = world.house.as_ref().unwrap();
+        if patina {
+            use eo_render::scene::{BLEND_BIT, FRONT_SASH_BIT};
+            let panes: Vec<_> = world.scene.objects.iter().filter(|o| o.kind & FRONT_SASH_BIT != 0).collect();
+            assert!(!panes.is_empty(), "the front windows lost their reflection");
+            assert!(panes.iter().all(|o| o.kind & BLEND_BIT != 0), "glass must still transmit the furnished rooms");
+        }
+        let (mut cw, door) = collision_world(&world, 2).unwrap();
+        let mut door = door.unwrap();
+        assert!(door.is_shut());
+        if furniture {
+            let floor = house.point(2., 0., 5.);
+            let mut resident = Player::new(floor, 0.);
+            assert!((2. * resident.character.half_extent_y() - 1.80).abs() < 1e-6);
+            for (crouch, height) in [(false, 1.70), (true, 1.10)] {
+                resident.character.set_crouched(&cw, crouch);
+                let view = player_view(&mut resident, &cw, &world, true, 1. / 60., 16. / 9.);
+                assert!((view.eye.y - floor.y - height).abs() < 1e-5 && !view.body_visible);
+            }
+            assert!(!house.contains_feet(house.entry_position()));
+        }
+        let mut start = house.entry_position();
+        if finishes {
+            assert!(
+                start.distance(house.point(5.95, 0., -3.3)) > 0.01,
+                "private path must reach the mapped paving"
+            );
+            let ground = &world.street.as_ref().unwrap().world;
+            for corner in house.lowest_tread_corners() {
+                assert!(
+                    corner.y > ground.surface_at(corner.x, corner.z, None) + 0.03,
+                    "the hillside cuts the lowest tread"
+                );
+            }
+        }
+        cw.load_blocking(start, pworld::LOAD_RADIUS_M);
+        start.y = cw.surface_y(start.x, start.z);
+        if furniture {
+            let origin = house.point(0., 0., 0.);
+            let x_axis = (house.point(1., 0., 0.) - origin).normalize();
+            let z_axis = x_axis.cross(DVec3::Y) * x_axis.cross(DVec3::Y).dot(house.point(0., 0., 1.) - origin).signum();
+            let dining = house.point(2.375, 0., 7.575);
+            let kitchen = house.point(0.15, 0., 12.72);
+            for (label, surface, height) in [
+                ("dining table", dining, 0.75),
+                ("chair seat", dining - z_axis * 1.233, 0.45),
+                ("kitchen counter", kitchen + x_axis * 0.4 - z_axis * 0.24, 0.92),
+                ("fridge", kitchen + x_axis * 1.50 - z_axis * 0.36, 1.8952),
+            ] {
+                let above = surface + DVec3::Y * (height + 0.10);
+                let hit = cw.raycast(above, DVec3::NEG_Y, 0.2, pworld::layer::WORLD, None)
+                    .unwrap_or_else(|| panic!("{label} has no collision at its authored height"));
+                assert!((hit.distance - 0.10).abs() < 0.003, "{label} collider is at the wrong height");
+            }
+        }
+        // Use the play window's controller and keyboard mapping for the
+        // approach, including its acceleration, slope and step handling.
+        let inside = house.point(5.95, 0., 1.05);
+        let mut player = Player::new(start, house.entry_yaw());
+        let mut raw = RawInput::default();
+        raw.held.insert("KeyW".to_owned());
+        let mut actions = ActionMap::default();
+        for _ in 0..360 {
+            let frame = actions.resolve(&mut raw, 1. / 60., false);
+            player.advance(&mut cw, &StepInput::from_frame(&frame), 1. / 60.);
+        }
+        let mut body = player.character;
+        assert!(
+            body.feet().distance(inside) > 1.0,
+            "walked through the shut front door"
+        );
+        raw.held.clear();
+        raw.held.insert("KeyE".to_owned());
+        assert!(
+            actions
+                .resolve(&mut raw, 1. / 60., false)
+                .tapped(eo_player::input::Action::Interact)
+        );
+        assert!(
+            door.toggle(body.feet()),
+            "cannot operate the front door from the stoop: {:?}",
+            body.feet()
+        );
+        for _ in 0..35 {
+            door.advance(1. / 60., body.feet(), &mut world.scene, &mut cw);
+            cw.physics.step();
+        }
+        let outside = house.point(5.89, 1.03, -0.35);
+        let ray = house.point(5.89, 1.03, 0.65) - outside;
+        assert!(
+            cw.raycast(
+                outside,
+                ray.normalize(),
+                ray.length(),
+                pworld::layer::WORLD,
+                None
+            )
+            .is_none(),
+            "open leaf still blocks the opening"
+        );
+        if furniture {
+            // Measure the installed opening at the player's shoulders and above the lintel.
+            let across = (house.point(1., 0., 0.) - house.point(0., 0., 0.)).normalize();
+            let clear = |offset, height| {
+                let start = house.point(5.95, height, -0.35) + across * offset;
+                cw.raycast(start, ray.normalize(), ray.length(), pworld::layer::WORLD, None)
+                    .is_none()
+            };
+            assert!(clear(-0.42, 1.4) && clear(0.42, 1.4), "shoulders catch the open door");
+            assert!(!clear(-0.53, 1.4) && !clear(0.53, 1.4), "missing fixed side returns");
+            assert!(clear(0., 2.03) && !clear(0., 2.11), "door head clearance changed");
+            // A whole standing character fits on level ground outside the shut leaf.
+            let approach = (house.point(0., 0., 1.) - house.point(0., 0., 0.)).normalize();
+            let shoulder = house.point(5.95, 1.4, -0.32);
+            let ground = house.point(5.95, 0., -0.32);
+            for travel in [0., 0.35, 0.70, 0.96] {
+                let above = ground + approach * travel + DVec3::Y * 0.10;
+                let hit = cw.raycast(above, DVec3::NEG_Y, 0.13, pworld::layer::WORLD, None)
+                    .expect("missing entrance landing surface");
+                assert!((hit.distance - 0.10).abs() < 0.015, "step in front of the latch");
+            }
+            let jamb = cw.raycast(shoulder - across * 0.54, approach, 1.2, pworld::layer::WORLD, None)
+                .expect("missing fixed wall beside the leaf");
+            assert!(jamb.distance >= 0.84, "player cannot stand inside the sheltered landing");
+        }
+        let mut walk = |x, z| {
+            let target = house.point(x, 0.0, z);
+            for _ in 0..1200 {
+                let p = body.feet();
+                let delta = glam::DVec2::new(target.x - p.x, target.z - p.z);
+                if delta.length() < 0.035 {
+                    return p;
+                }
+                let d = delta.clamp_length_max(0.033);
+                body.step(&cw, d.x, d.y, true);
+            }
+            panic!("blocked at {:?} walking to ({x}, {z})", body.feet());
+        };
+        if furniture {
+            // Walk both aisles between the sideboard, the six chairs, and the stairs.
+            for (x, z) in [(5.95, 1.3), (4.10, 1.3), (4.10, 5.60), (1.00, 5.60),
+                           (1.00, 9.35), (4.10, 9.35), (4.10, 2.10), (5.95, 2.10)] {
+                let feet = walk(x, z);
+                assert!((feet.y - house.point(x, 0., z).y).abs() < 0.06, "stepped onto furniture in dining aisle");
+            }
+        }
+        walk(5.95, 9.8);
+        walk(3.35, 9.8);
+        assert!(house.by_bed(walk(3.35, 10.8)));
+        walk(4.15, 10.8);
+        walk(4.15, 2.1);
+        walk(5.95, 2.1);
+        let loft = walk(5.95, 9.8);
+        assert!(loft.y > house.wake_position().y + 2.5);
+        walk(5.95, 2.1);
+        walk(4.15, 2.1);
+        walk(4.15, 9.8);
+        walk(5.95, 9.8);
+        let street = walk(5.95, -3.3);
+        assert!((street.y - start.y).abs() < 0.3);
+        // The open knob is on the inside. A resident can close the door,
+        // it then blocks the opening, and either side can operate it again.
+        let resident = house.point(5.24, 0., 1.42);
+        assert!(door.toggle(resident));
+        let in_swing = house.point(5.91, 0., 0.93);
+        for _ in 0..12 {
+            door.advance(0.1, in_swing, &mut world.scene, &mut cw);
+            cw.physics.step();
+        }
+        assert!(
+            !door.is_shut(),
+            "the door closed through a person standing in its swing"
+        );
+        for _ in 0..35 {
+            door.advance(1. / 60., resident, &mut world.scene, &mut cw);
+            cw.physics.step();
+        }
+        assert!(door.is_shut());
+        assert!(
+            cw.raycast(
+                outside,
+                ray.normalize(),
+                ray.length(),
+                pworld::layer::WORLD,
+                None
+            )
+            .is_some(),
+            "closed leaf no longer blocks the opening"
+        );
+        assert!(door.toggle(resident));
+        assert!(
+            !door.toggle(house.point(2., 6.7, 8.)),
+            "door can be operated from another floor"
+        );
     }
 }

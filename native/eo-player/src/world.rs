@@ -612,6 +612,35 @@ pub struct CollisionWorld {
     multi_level: bool,
 }
 
+/// A freestanding box whose pose can change without recooking its city tile.
+/// Its dimensions and transform are expressed in world metres and radians.
+pub struct MovableBox(ColliderHandle);
+
+impl MovableBox {
+    pub fn new(world: &mut CollisionWorld, half: DVec3, center: DVec3, yaw: f64) -> Self {
+        let shape = ColliderBuilder::cuboid(half.x as f32, half.y as f32, half.z as f32)
+            .position(Self::pose(center, yaw))
+            .collision_groups(InteractionGroups::new(
+                layer::WORLD,
+                Group::ALL,
+                InteractionTestMode::And,
+            ))
+            .build();
+        Self(world.physics.insert_collider(shape, None))
+    }
+
+    fn pose(center: DVec3, yaw: f64) -> Pose {
+        Pose::from_parts(
+            Vector::new(center.x as f32, center.y as f32, center.z as f32),
+            Rotation::from_rotation_y(yaw as f32),
+        )
+    }
+
+    pub fn move_to(&self, world: &mut CollisionWorld, center: DVec3, yaw: f64) {
+        world.physics.colliders[self.0].set_position(Self::pose(center, yaw));
+    }
+}
+
 fn new_physics() -> PhysicsWorld {
     let mut physics = PhysicsWorld::new();
     physics.gravity = Vector::new(0.0, -tuning::GRAVITY_MPS2 as f32, 0.0);

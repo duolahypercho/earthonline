@@ -77,6 +77,11 @@ pub fn intercept(process_start: Instant) -> Option<Result<()>> {
 /// main.rs's defaults, field by field (`Args` has no Default).
 fn base_args() -> Args {
     Args {
+        interior_lighting: true,
+        house_finishes: false,
+        house_patina: false,
+        house_furniture: false,
+        beaver_house: false,
         bench: false,
         start_underwater: false,
         dive_site: None,

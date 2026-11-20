@@ -1030,22 +1030,30 @@ pub fn pose_json(name: &str, c: &eo_render::camera::Camera, what: &str) -> serde
     serde_json::json!({ "name": name, "eye": [c.eye.x, c.eye.y, c.eye.z], "yaw": c.yaw, "pitch": c.pitch, "fov_y_deg": c.fov_y_deg, "near": c.near, "far": c.far, "aspect": c.aspect, "what": what })
 }
 
-pub fn read_poses(path: &std::path::Path) -> anyhow::Result<Vec<(String, eo_render::camera::Camera)>> {
+#[derive(serde::Deserialize)]
+pub struct ScaleReference {
+    pub feet: [f64; 3],
+    pub yaw: f64,
+}
+
+pub struct CapturePose {
+    pub name: String,
+    pub camera: eo_render::camera::Camera,
+    pub player: Option<ScaleReference>,
+}
+
+pub fn read_poses(path: &std::path::Path) -> anyhow::Result<Vec<CapturePose>> {
     let v: serde_json::Value = serde_json::from_slice(&std::fs::read(path)?)?;
     let f = |x: &serde_json::Value| x.as_f64().unwrap_or(0.0) as f32;
-    Ok(v.as_array()
-        .map(|a| {
-            a.iter()
-                .map(|p| {
-                    let e = &p["eye"];
-                    (
-                        p["name"].as_str().unwrap_or("pose").to_string(),
-                        eo_render::camera::Camera { eye: Vec3::new(f(&e[0]), f(&e[1]), f(&e[2])), yaw: f(&p["yaw"]), pitch: f(&p["pitch"]), fov_y_deg: f(&p["fov_y_deg"]), near: f(&p["near"]), far: f(&p["far"]), aspect: f(&p["aspect"]), jitter: [0.0; 2] }, // + jitter
-                    )
-                })
-                .collect()
+    v.as_array().ok_or_else(|| anyhow::anyhow!("expected an array of capture poses"))?.iter().map(|p| {
+        let e = &p["eye"];
+        let player = p.get("player").map(|value| serde_json::from_value(value.clone())).transpose()?;
+        Ok(CapturePose {
+            name: p["name"].as_str().unwrap_or("pose").to_string(),
+            camera: eo_render::camera::Camera { eye: Vec3::new(f(&e[0]), f(&e[1]), f(&e[2])), yaw: f(&p["yaw"]), pitch: f(&p["pitch"]), fov_y_deg: f(&p["fov_y_deg"]), near: f(&p["near"]), far: f(&p["far"]), aspect: f(&p["aspect"]), jitter: [0.0; 2] },
+            player,
         })
-        .unwrap_or_default())
+    }).collect()
 }
 
 /// the `--capture-props2` poses, chosen from the placement (the same with and
