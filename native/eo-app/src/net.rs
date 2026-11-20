@@ -81,6 +81,8 @@ fn base_args() -> Args {
         start_underwater: false,
         dive_site: None,
         underwater_habitats: false,
+        cove_detail: false,
+        surface_start: false,
         quality: Default::default(),
         frames: 720,
         warmup: 60,

@@ -234,6 +234,7 @@ selection:
 | Content | `--no-models`, `--no-kit`, `--no-streets`, `--no-props`, `--no-agents`, `--no-landmarks`, `--no-water`, `--no-farshore`, `--no-sky` |
 | Water optics | `--water-optics` enables the preview, `--no-water-optics` restores the original water shading |
 | Underwater habitats | `--underwater-habitats` adds the Bay and Pacific beds. `--no-underwater-habitats` removes them |
+| Aquatic Park Cove | `--cove-detail` enables the beach profile, cobbles, pier parapet, distant wooded slope, fair-weather clouds and cove optics. `--no-cove-detail` restores the previous scene. The Bay dive-site starts enable the preview. |
 | Dive exposure | `--dive-exposure` compensates for the loss of downwelling light at the eye. `--no-dive-exposure` restores the original exposure |
 | Bridge detail | `--bridge-detail` enables the Golden Gate detail preview (a darker paint tone, ribbed tower legs, framed portal struts, full arch pylons, lamp standards), `--no-bridge-detail` keeps the bridge as exported |
 | People | `--no-rocketbox`, `--no-rocketbox-motions` (either one: no people) |
@@ -535,6 +536,16 @@ Each feature has an independent off switch. Dive exposure compensates up
 to four stops as the light reaching the camera decreases and partially
 corrects the local colour cast. The `bay_grass` and `pacific_sand` bench
 paths swim across the same beds.
+
+For the view from the beach, use `--dive-site bay-surface`. Both Bay starts use
+the same terrain and water. Within the south beach, join mean water level to
+the first valid depth in the shipped NOAA topobathymetric grid, then preserve
+the measured offshore profile. The gaps between soundings are interpolated.
+The nearshore cobbles and suspended sediment are illustrative, with estimated
+optical properties. The `cove_descent` path crosses the waterline and travels
+112 game metres offshore. Municipal Pier follows the city map polygon and
+Black Point's far trees use the mapped woods and existing park-tree placement.
+The pier deck is carried on piles above the water. Its concrete parapet is described in the [National Park Service cultural landscape report](https://www.nps.gov/safr/learn/management/upload/cultural_ldscape_rpt_opimized.pdf).
 
 The placements illustrate regional habitats. Local shore distance and the
 drawn terrain determine where each patch fits. The eelgrass and ripples

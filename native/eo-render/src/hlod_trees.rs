@@ -65,6 +65,48 @@ pub fn street_trees(js: &eo_props::JsProps, ground: &dyn Fn(f64, f64) -> f64) ->
     out
 }
 
+fn park_tree(t: eo_landmarks::ground_cover::ParkTree) -> FarTree {
+    let (h, cr, tint) = match t.species {
+        "park-pine" => (17.0, 3.6, rgb(44, 66, 44)),
+        "park-oak" => (11.0, 5.0, rgb(62, 82, 46)),
+        _ => (13.0, 4.2, rgb(70, 92, 50)),
+    };
+    let k = t.scale.clamp(0.4, 2.0) as f32;
+    let seed = hash((t.x * 10.0) as i64 as u32 ^ ((t.z * 10.0) as i64 as u32).rotate_left(16));
+    FarTree { pos: [t.x as f32, t.y as f32, t.z as f32], height: h * k, crown: cr * k, tint, seed, pad: 0 }
+}
+
+/// Fill the mapped Black Point woods at the same sampling density as the near
+/// trees. A single 512 m gathering area otherwise shares its 150-tree limit
+/// between the entire hillside and the neighbouring park. Keep existing stems.
+pub fn fill_black_point(
+    trees: &mut Vec<FarTree>,
+    cover: &eo_landmarks::ground_cover::GroundCover,
+    ground: &dyn Fn(f64, f64) -> f64,
+    blocked: &dyn Fn(f64, f64) -> bool,
+) {
+    let [x0, z0] = eo_data::groundscale::plan([-905.0, -3349.0]);
+    let [x1, z1] = eo_data::groundscale::plan([-607.0, -3100.0]);
+    let key = |x: f32, z: f32| (x.to_bits(), z.to_bits());
+    let mut existing = std::collections::HashSet::new();
+    for t in trees.iter().filter(|t| (x0..x1).contains(&(t.pos[0] as f64)) && (z0..z1).contains(&(t.pos[2] as f64))) {
+        existing.insert(key(t.pos[0], t.pos[2]));
+    }
+    let mut z = z0;
+    while z < z1 {
+        let mut x = x0;
+        while x < x1 {
+            for t in cover.park_trees(x, z, (x + 64.0).min(x1), (z + 64.0).min(z1), ground, blocked) {
+                if cover.tree_class_at(t.x, t.z) == 1 && existing.insert(key(t.x as f32, t.z as f32)) {
+                    trees.push(park_tree(t));
+                }
+            }
+            x += 64.0;
+        }
+        z += 64.0;
+    }
+}
+
 /// The park trees of the ground cover over [x0, x1) x [z0, z1), in 512 m blocks.
 pub fn park_trees(cover: &eo_landmarks::ground_cover::GroundCover, x0: f64, z0: f64, x1: f64, z1: f64, y_at: &(dyn Fn(f64, f64) -> f64 + Sync), blocked: &(dyn Fn(f64, f64) -> bool + Sync)) -> Vec<FarTree> {
     const B: f64 = 512.0;
@@ -88,14 +130,7 @@ pub fn park_trees(cover: &eo_landmarks::ground_cover::GroundCover, x0: f64, z0: 
                     let mut out = vec![];
                     for &(x, z) in c {
                         for t in cover.park_trees(x, z, x + B, z + B, y_at, blocked) {
-                            let (h, cr, tint) = match t.species {
-                                "park-pine" => (17.0, 3.6, rgb(44, 66, 44)),
-                                "park-oak" => (11.0, 5.0, rgb(62, 82, 46)),
-                                _ => (13.0, 4.2, rgb(70, 92, 50)),
-                            };
-                            let k = t.scale.clamp(0.4, 2.0) as f32;
-                            let seed = hash((t.x * 10.0) as i64 as u32 ^ ((t.z * 10.0) as i64 as u32).rotate_left(16));
-                            out.push(FarTree { pos: [t.x as f32, t.y as f32, t.z as f32], height: h * k, crown: cr * k, tint, seed, pad: 0 });
+                            out.push(park_tree(t));
                         }
                     }
                     out

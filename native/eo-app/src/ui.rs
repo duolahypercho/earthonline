@@ -144,6 +144,8 @@ impl Flags {
                 "--no-shadows" => args.look.shadows = false,
                 "--no-settings-apply" => {} // read by `settings_apply`
                 "--water-optics" => args.look.water_optics = true,
+                "--cove-detail" => args.cove_detail = true,
+                "--no-cove-detail" => args.cove_detail = false,
                 "--underwater-habitats" => args.underwater_habitats = true,
                 "--no-underwater-habitats" => args.underwater_habitats = false,
                 "--no-water-optics" => args.look.water_optics = false,
@@ -165,6 +167,7 @@ impl Flags {
             }
         }
         tier.apply(&mut args);
+        crate::apply_cove_look(&mut args, raw);
         let apply = Self::settings_apply(&mode, raw);
         Ok(Flags { mode, args, raw: raw.to_vec(), apply })
     }
@@ -208,6 +211,8 @@ fn default_args() -> Args {
         start_underwater: false,
         dive_site: None,
         underwater_habitats: false,
+        cove_detail: false,
+        surface_start: false,
         quality: Default::default(),
         frames: 720,
         warmup: 60,

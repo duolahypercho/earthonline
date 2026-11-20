@@ -34,10 +34,11 @@ fn uw_vs(@builtin(vertex_index) vi: u32) -> UwView {
         // Open the camera for the downwelling light lost between the surface and eye.
         // Meter green-weighted luminance. Four stops of
         // travel preserve a dark deep field. At the interface the gain is exactly one.
-        let extinction = mix(WO_BAY_A + WO_BAY_S, WO_COAST_A + WO_COAST_S, wg_ocean(xz.x));
+        let cove = wo_cove(xz);
+        let extinction = mix(mix(WO_BAY_A + WO_BAY_S, WO_COAST_A + WO_COAST_S, wg_ocean(xz.x)), WO_COVE_A + WO_COVE_S, cove) * mix(1.0, 0.63, cove);
         let depth = max(y - wu.cam.y, 0.0);
         let light = exp(-extinction * depth / 0.75);
-        let meter = max(lk_luma(light), 1.0 / 16.0);
+        let meter = max(lk_luma(light), mix(1.0 / 16.0, 1.0 / 5.0, cove));
         // Partial chromatic adaptation to the local illuminant. The view path
         // still carries its full spectral extinction and distance-dependent cast.
         let balance = clamp(sqrt(meter / max(light, vec3<f32>(0.015))), vec3<f32>(0.8), vec3<f32>(1.6));
@@ -123,8 +124,11 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
     let start = select(0.0, max(d0 / min(rise, -1e-5), 0.0), d0 < 0.0);
     let origin = wu.cam.xyz + ray * start;
     let ocean = wg_ocean(origin.x);
-    let scatter = mix(WO_BAY_S, WO_COAST_S, ocean);
-    let ext = mix(WO_BAY_A, WO_COAST_A, ocean) + scatter;
+    let cove = wo_cove(origin.xz);
+    let scatter = mix(mix(WO_BAY_S, WO_COAST_S, ocean), WO_COVE_S, cove);
+    let ext = mix(mix(WO_BAY_A, WO_COAST_A, ocean), WO_COVE_A, cove) + scatter;
+    // Diffuse skylight penetrates suspended sediment farther than image contrast.
+    let diffuse_depth = mix(1.0, 0.63, cove);
     let limit = 10.0 / min(ext.r, min(ext.g, ext.b));
     let hit = w_scene_depth(uv) / max(dot(ray, wu.fwd.xyz), 1e-4);
     var path = min(max(hit - start, 0.0), limit);
@@ -147,14 +151,15 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
     // The entry hemisphere illuminates the suspended volume even in
     // bridge shadow. The diffuse irradiance includes sky and ambient fill.
     let ambient = w_sh(vec3<f32>(0.0, 1.0, 0.0)) * look.ambient.w * look.env_class.w + look.hemi_sky.xyz + look.ambient.xyz;
-    let back = scatter * mix(WO_BAY_BB, WO_COAST_BB, ocean);
+    let back = scatter * mix(mix(WO_BAY_BB, WO_COAST_BB, ocean), 0.045, cove);
     let multiple = 1.32 * back / (ext - scatter + back);
     // The same converging beam crosses the suspended material before it
     // lights the bed. Sample it within one optical mean free path of the eye.
     let scatter_t = min(0.5 * path, 1.0 / lk_luma(ext));
     let scatter_depth = mix(down0, down1, scatter_t / max(path, 1e-5));
-    let beam_focus = w_caustic(origin + ray * scatter_t, scatter_depth, sun_up);
-    let vol = ambient * (scatter * 0.25 + ext * multiple) * uw_integral(ext, path, down0, down1, 0.75)
+    // Suspended sediment blurs wave focusing as the direct beam loses coherence.
+    let beam_focus = mix(1.0, w_caustic(origin + ray * scatter_t, scatter_depth, sun_up), exp(-cove * scatter_depth * 1.5));
+    let vol = ambient * (scatter * 0.25 + ext * multiple) * uw_integral(ext, path, down0 * diffuse_depth, down1 * diffuse_depth, 0.75)
         + direct * (scatter * wo_phase(dot(ray, sun_up)) * beam_focus + ext * multiple / WG_PI)
           * uw_integral(ext, path, down0, down1, max(sun_up.y, 0.1));
     var boundary = vec3<f32>(0.0);
@@ -204,13 +209,13 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
     } else if (hit - start < limit) {
         // Only the incident sunlight is focused. Keep ambient in open shade.
         let direct_share = lk_luma(direct) / max(lk_luma(direct + ambient), 1e-5);
-        let focus = w_caustic(end, down1, sun_up);
-        let incident = mix(exp(-ext * down1 / 0.75),
+        let focus = mix(1.0, w_caustic(end, down1, sun_up), exp(-cove * down1 * 1.5));
+        let incident = mix(exp(-ext * diffuse_depth * down1 / 0.75),
             exp(-ext * down1 / max(sun_up.y, 0.1)) * focus, direct_share);
         boundary = textureLoad(w_scene, vec2<i32>(i.clip.xy), 0).rgb * incident;
     }
     let grains = uw_grains(origin, ray, path, lk_luma(ext));
     let radiance = boundary * exp(-ext * path) + vol
-        + grains * scatter * (ambient + direct * 0.25) * exp(-ext * down0 / 0.75);
+        + grains * scatter * (ambient + direct * 0.25) * exp(-ext * diffuse_depth * down0 / 0.75);
     return finish_color(max(radiance, vec3<f32>(0.0)) * i.exposure, i.clip, dims);
 }

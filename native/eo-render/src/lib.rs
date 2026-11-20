@@ -1718,6 +1718,9 @@ impl Renderer {
         // the probe's face for this frame (compacted lists only).
         {
             let sky_up = self.look.frame().sky_irradiance_up;
+            let probe_eye = if self.look.options.cove_detail && self.water_active() {
+                self.water.get().map_or(cam.eye, |w| w.cove_reflection_eye(cam.eye))
+            } else { cam.eye };
             let _span = hitch::span(hitch::Phase::ProbeUpdate);
             // (lighting) the probe grid captures in the single probe's place while it is on;
             // with far shadows or the grid, a camera jump starts a capture under way again
@@ -1726,9 +1729,9 @@ impl Renderer {
             let cut = self.probe_grid.observe_eye(cam.eye);
             let l = self.look.options.lighting;
             if cut && (l.far_shadows > 0 || l.probe_grid > 0) {
-                self.probe.restart_capture_at(cam.eye);
+                self.probe.restart_capture_at(probe_eye);
             }
-            self.probe.update(queue, cam.eye, self.look.time_of_day(), sky_up, probe_on && !grid, bytemuck::cast_ref(&frame));
+            self.probe.update(queue, probe_eye, self.look.time_of_day(), sky_up, probe_on && !grid, bytemuck::cast_ref(&frame));
             self.probe_grid.update(self, queue, cam, bytemuck::cast_ref(&frame), probe_on, cut);
         }
         // the rig is solved for the probe's measured transfer (keyFillBalance

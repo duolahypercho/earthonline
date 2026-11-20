@@ -76,6 +76,15 @@ fn the_waterfront_is_built() {
     let m = wf::build_meshes(&edges, &piers, &w.oracle, &crest, js.sea_level_y, 0.42, [0.5; 3], wf::UNDER_DECK_LINEAR, [0.7; 3], [0.1; 3]);
     println!("waterfront: {} decks, {} piles; paving {} / concrete {} / under-deck {} triangles", m.decks, m.piles, m.paving.triangles(), m.concrete.triangles(), m.under_deck.triangles());
     assert!(m.decks == piers.len() && m.piles > 5_000);
+    // Trace the parapet all the way from the Black Point approach to the
+    // curved head. This also catches accidentally picking a neighbouring pier.
+    let pier_bed = wf::ShorePress::new(js.sea_level_y, &edges, &piers).with_municipal_pier(&piers);
+    assert!(pier_bed.press(-598.0, -3546.0, 3.0) < js.sea_level_y);
+    assert_eq!(pier_bed.press(-598.0, -3546.0, -6.0), -6.0);
+    let rail = wf::municipal_parapet(&piers).expect("Municipal Pier in the city polygons");
+    for [x, z] in [[-645.5_f32, -3334.0_f32], [-598.0, -3546.0], [-437.0, -3587.5]] {
+        assert!(rail.positions.chunks_exact(3).any(|p| (p[0] - x).hypot(p[2] - z) < 7.0));
+    }
 }
 
 /// The open spaces' ground: a lawn in a park, a park the JS paves left to the

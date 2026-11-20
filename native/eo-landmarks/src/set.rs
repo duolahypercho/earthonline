@@ -90,6 +90,7 @@ pub struct LandmarkSet {
 pub struct Options {
     /// The waterfront (waterfront.rs): the shore-edge rule, piers, the apron, the terrain press.
     pub waterfront: bool,
+    pub cove_detail: bool,
     /// The registered landmark buildings (Transamerica, Salesforce, Coit, Sutro, City Hall).
     pub buildings: bool,
     /// The bridges' night lights.
@@ -102,14 +103,14 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Self {
-        Self { waterfront: true, buildings: true, lights: true, bridge_detail: false }
+        Self { cove_detail: false, waterfront: true, buildings: true, lights: true, bridge_detail: false }
     }
 }
 
 impl Options {
     /// As the first landmarks slice built the set.
     pub fn off() -> Self {
-        Self { waterfront: false, buildings: false, lights: false, bridge_detail: false }
+        Self { cove_detail: false, waterfront: false, buildings: false, lights: false, bridge_detail: false }
     }
 }
 
@@ -387,6 +388,9 @@ impl LandmarkSet {
             let hex = |s: &str| crate::geometry::srgb_hex(u32::from_str_radix(s.trim_start_matches('#'), 16).unwrap_or(0x808080));
             let apron = hex(js.open_space.colors.get("path").map(|s| s.as_str()).unwrap_or("#e1e3e4"));
             let m = wf::build_meshes(&edges, &piers, &oracle, &crest_at, js.sea_level_y, 0.42, concrete, wf::UNDER_DECK_LINEAR, apron, crate::geometry::srgb_hex(fp.deck_srgb));
+            if opts.cove_detail && let Some(mesh) = wf::municipal_parapet(&piers) {
+                structures.push(Structure { cast: true, footway: false, kit: None, name: "waterfront:municipal-pier-parapet".into(), material: plain_material(0.93, 0.0, "facade-masonry"), mesh });
+            }
             piers_built = (m.decks, m.piles);
             structures.push(Structure { cast: false, footway: true, kit: None, name: "waterfront:paving".into(), material: plain_material(0.9, 0.0, "sidewalk"), mesh: m.paving });
             structures.push(Structure { cast: true, footway: false, kit: None, name: "waterfront:concrete".into(), material: Material { surface: Some("concrete".into()), ..plain_material(0.92, 0.0, "facade-masonry") }, mesh: m.concrete });
@@ -399,7 +403,8 @@ impl LandmarkSet {
                 structures.push(Structure { cast: true, footway: false, kit: Some(wf::SHED_WALL_KIT.into()), name: format!("ferry-pier-sheds-{}", fp.source_way_id), material: plain_material(0.88, 0.03, "facade-masonry"), mesh: walls_m });
                 structures.push(Structure { cast: true, footway: false, kit: Some(wf::SHED_ROOF_KIT.into()), name: format!("ferry-pier-shed-roofs-{}", fp.source_way_id), material: plain_material(0.9, 0.0, "facade-masonry"), mesh: roofs_m });
             }
-            press = Some(std::sync::Arc::new(wf::ShorePress::new(js.sea_level_y, &edges, &piers)));
+            let waterfront_press = wf::ShorePress::new(js.sea_level_y, &edges, &piers);
+            press = Some(std::sync::Arc::new(if opts.cove_detail { waterfront_press.with_municipal_pier(&piers) } else { waterfront_press }));
             census = Some(c);
             walls
         };
