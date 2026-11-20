@@ -481,7 +481,7 @@ impl ModelRuntime {
                             authored: world.authored.clone(),
                             city: world.city.clone(),
                             repo_root: world.paths.repo_root.clone(),
-                            cache_dir: cache_dir(args),
+                            cache_dir: cache_dir(args).map(|dir| if args.beaver_house { dir.join("beaver-house") } else { dir }),
                         },
                         rx,
                         opts,

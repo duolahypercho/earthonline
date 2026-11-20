@@ -11,6 +11,8 @@
 static ALLOC: eo_render::alloc::EoAlloc = eo_render::alloc::EoAlloc;
 
 mod agents; // agents
+mod house;
+mod play;
 mod props; // props
 mod agents_bench;
 mod people_capture; // people
@@ -38,6 +40,7 @@ use std::time::Instant;
 
 #[derive(Clone)]
 pub struct Args {
+    pub beaver_house: bool,
     pub bench: bool,
     pub start_underwater: bool,
     pub frames: usize,
@@ -181,6 +184,7 @@ impl Default for PerfArgs {
 
 fn parse_args() -> Result<Args> {
     let mut a = Args {
+        beaver_house: false,
         bench: false,
         start_underwater: false,
         frames: 720,
@@ -246,6 +250,8 @@ fn parse_args() -> Result<Args> {
             "--multiply" => a.multiply = val()?.parse::<u32>()?.max(1),
             "--check-budget" => a.check_budget = true,
             "--budget-ms" => a.budget_ms = Some(val()?.parse()?),
+            "--beaver-house" => a.beaver_house = true,
+            "--no-beaver-house" => a.beaver_house = false,
             "--no-models" => a.models = false,
             "--no-terrain-lod" => a.terrain_lod = false,
             "--no-kit" => a.kit = false,
@@ -426,6 +432,7 @@ fn parse_args() -> Result<Args> {
 }
 
 pub struct World {
+    pub house: Option<Arc<house::House>>,
     pub paths: DataPaths,
     pub city: Arc<City>,
     pub elevation: ElevationGrid,
@@ -528,7 +535,7 @@ pub fn load_world(args: &Args) -> Result<World> {
     let street_job = street_plan.map(|p| streets::spawn(p, &city, &elevation));
     let standards = CaStandards::load(&paths)?;
     let mut kit_rx = None;
-    let kit_lib = if args.models || args.kit { Some(KitLibrary::load()?) } else { None };
+    let kit_lib = if args.models || args.kit || args.beaver_house { Some(KitLibrary::load()?) } else { None };
     let mut authored = if args.models {
         let constants = PlacementConstants::load()?;
         AuthoredSet::prepare(&paths.repo_root, &city, &elevation, kit_lib.as_ref().unwrap(), &constants)?
@@ -561,7 +568,13 @@ pub fn load_world(args: &Args) -> Result<World> {
         _ => None,
     };
     // the building records the landmark buildings draw instead.
-    let landmark_claims: HashSet<String> = if args.landmarks && args.landmarks2 { eo_landmarks::set::claimed_records() } else { HashSet::new() };
+    let mut landmark_claims: HashSet<String> = if args.landmarks && args.landmarks2 { eo_landmarks::set::claimed_records() } else { HashSet::new() };
+    let house = if args.beaver_house {
+        let record = city.buildings.iter().find(|b| house::owns(&b.id)).ok_or_else(|| anyhow::anyhow!("missing Beaver Street house footprint"))?;
+        landmark_claims.insert(house::ID.to_string());
+        let ground = |x, z| street_world.as_ref().map_or_else(|| elevation.ground(x, z), |w| w.surface_at(x, z, None));
+        Some(Arc::new(house::House::build(record, &ground, &paths.repo_root, kit_lib.as_ref().unwrap(), &mut authored.materials)?))
+    } else { None };
     // Kit buildings: every building the authored registry does not draw.
     let t = Instant::now();
     let mut kit_set = None;
@@ -829,6 +842,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         ground_tone: if cover.is_some() { Some(&ground_tone_fn) } else { None },
         smooth_terrain: args.landmarks && args.landmarks2,
     })?;
+    if let Some(house) = &house { house.append(&mut scene, &authored.materials); }
     drop(carpet_fn); // water
     // the bridges (eo-landmarks, the JS generators ported) on the
     // drawn ground, appended to the static table; their LOD groups follow the street's.
@@ -935,7 +949,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         }
         Err(_) => anyhow::bail!("facade detail thread panicked"),
     };
-    Ok(World { paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, landmarks, hlod, hlod_trees }) // hlod
+    Ok(World { house, paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, landmarks, hlod, hlod_trees }) // hlod
 }
 
 /// the street size. `--ground-scale S` (an explicit ground-plan
@@ -1016,8 +1030,6 @@ fn main() -> Result<()> {
         return r;
     }
     // ==== eo-player: `--play` (window) and `--bench --play` (offscreen), see play.rs ====
-    #[path = "play.rs"]
-    mod play;
     if let Some(r) = play::intercept(process_start) {
         return r;
     }

@@ -156,6 +156,7 @@ switch it does not take.
 | --- | --- |
 | (none) | Windowed fly-through |
 | `--start-underwater` | Start the fly camera just beneath the Bay, looking up toward the skyline |
+| `--beaver-house` / `--no-beaver-house` | Opt in to the furnished three-storey terrace at 21 Beaver Street (off by default). With `--play --beaver-house`, start outside the open front door. Walk up the stairs to the bedroom and press R beside the bed to wake at 07:00. The top floor is a workroom. |
 | `--play` | The player instead of the free camera |
 | `--ui` | The interface shell: title, loading, HUD, pause menu |
 | `--connect ADDR\|local` | Online client (with `--name`, `--spawn x,z,heading`) |
@@ -483,7 +484,7 @@ loosen them to make them pass.
 
 - The three failing tests above.
 - Some content and behaviour of the earlier browser game is not ported yet:
-  interiors, mantling and swimming, the car's full handling model, gamepad
+  general building interiors, mantling and swimming, the car's full handling model, gamepad
   input in the window, and more.
 - Linux and macOS builds are untested.
 - Several systems are first versions and change often; switches and

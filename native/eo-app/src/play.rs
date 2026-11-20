@@ -62,6 +62,7 @@ pub fn intercept(process_start: Instant) -> Option<Result<()>> {
 /// main.rs's defaults (`parse_args`), field by field: `Args` has no Default.
 fn base_args() -> Args {
     Args {
+        beaver_house: false,
         bench: false,
         start_underwater: false,
         frames: 720,
@@ -118,6 +119,8 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
         let mut val = || it.next().cloned().ok_or_else(|| anyhow!("{s} needs a value"));
         match s.as_str() {
             "--play" => {}
+            "--beaver-house" => a.beaver_house = true,
+            "--no-beaver-house" => a.beaver_house = false,
             "--bench" => o.bench = true,
             "--frames" => o.frames = Some(val()?.parse()?),
             "--segments" => o.segments = Some(val()?.split(',').map(|s| s.trim().to_string()).collect()),
@@ -165,12 +168,18 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
 /// streets are loaded, else on the elevation grid.
 fn collision_world(world: &World, threads: usize) -> Result<CollisionWorld> {
     let lift = eo_assets::placement::PlacementConstants::load()?.construction_lift_m;
-    let buildings = Arc::new(BuildingSet::from_city(&world.city, lift));
+    let mut buildings = BuildingSet::from_city(&world.city, lift);
     let ground: Arc<dyn GroundProvider> = match &world.street {
         Some(s) => Arc::new(StreetGround(s.world.clone())),
         None => Arc::new(ElevationGround(Arc::new(eo_data::ElevationGrid::load(&world.paths)?))),
     };
-    Ok(CollisionWorld::new(ground, buildings, threads))
+    if let Some(house) = &world.house {
+        let index = world.city.buildings.iter().position(|b| crate::house::owns(&b.id)).unwrap();
+        for ids in buildings.by_tile.values_mut() { ids.retain(|&id| id as usize != index); }
+        let ground = Arc::new(crate::house::HouseGround { base: ground, house: house.clone() });
+        return Ok(CollisionWorld::new(ground, Arc::new(buildings), threads));
+    }
+    Ok(CollisionWorld::new(ground, Arc::new(buildings), threads))
 }
 
 /// The player's view as the renderer's camera.
@@ -620,6 +629,7 @@ mod window {
         let mut cw = collision_world(&world, opts.collision_threads)?;
         let s = crate::bench::spawn(); // the spawn on the scaled plan
         let mut feet = DVec3::new(s[0] as f64, world.elevation.ground(s[0] as f64, s[1] as f64), s[1] as f64);
+        if let Some(h) = &world.house { feet = h.point(5.95, 0.0, -3.3); }
         cw.load_blocking(feet, pworld::LOAD_RADIUS_M);
         feet.y = cw.surface_y(feet.x, feet.z);
         let mut player = Player::new(feet, 0.0);
@@ -739,8 +749,9 @@ mod window {
                     Mode::OnFoot => ("on foot", self.player.ground_speed),
                     Mode::Driving(i) => ("driving", self.player.vehicles[i].forward_speed(&self.cw).abs()),
                 };
+                let bed_hint = if self.player.mode == Mode::OnFoot && self.world.house.as_ref().is_some_and(|h| h.by_bed(pos)) { " - R: sleep until 07:00" } else { "" };
                 g.window.set_title(&format!(
-                    "Earth Online native - play - {:.0} fps - {mode} {:.1} m/s - player {:.2} ms avg / {:.2} max - F: car, V: new car, Esc: mouse",
+                    "Earth Online native - play - {:.0} fps - {mode} {:.1} m/s - player {:.2} ms avg / {:.2} max - F: car, V: new car, Esc: mouse{bed_hint}",
                     self.fps_frames as f64 / el,
                     speed,
                     self.player_ms_sum / self.fps_frames.max(1) as f64,
@@ -828,6 +839,14 @@ mod window {
                                     }
                                     return;
                                 }
+                                if code == KeyCode::KeyR && !event.repeat && self.player.mode == Mode::OnFoot {
+                                    if let (Some(house), Some(g)) = (&self.world.house, &self.gfx) {
+                                        if house.by_bed(self.player.character.feet()) {
+                                            g.renderer.look.set_time_of_day(7.0);
+                                            self.player.character.teleport_feet(house.wake_position());
+                                        }
+                                    }
+                                }
                                 if code == KeyCode::KeyV && !event.repeat {
                                     self.spawn_car_ahead();
                                 }
@@ -858,5 +877,51 @@ mod window {
                 g.window.request_redraw();
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod house_tests {
+    use super::*;
+
+    #[test]
+    fn beaver_street_to_bed_and_top_floor() {
+        let mut args = base_args();
+        args.beaver_house = true;
+        args.kit = false;
+        args.landmarks = false;
+        args.models = false;
+        let world = load_world(&args).unwrap();
+        let house = world.house.as_ref().unwrap();
+        let mut cw = collision_world(&world, 2).unwrap();
+        let mut start = house.point(5.95, 0.0, -3.3);
+        cw.load_blocking(start, pworld::LOAD_RADIUS_M);
+        start.y = cw.surface_y(start.x, start.z);
+        let mut body = eo_player::character::Character::new(start);
+        let mut walk = |x, z| {
+            let target = house.point(x, 0.0, z);
+            for _ in 0..1200 {
+                let p = body.feet();
+                let delta = glam::DVec2::new(target.x-p.x, target.z-p.z);
+                if delta.length() < 0.035 { return p; }
+                let d = delta.clamp_length_max(0.033);
+                body.step(&cw, d.x, d.y, true);
+            }
+            panic!("blocked at {:?} walking to ({x}, {z})",body.feet());
+        };
+        walk(5.95, 9.8);
+        walk(3.35, 9.8);
+        assert!(house.by_bed(walk(3.35,10.8)));
+        walk(4.15,10.8);
+        walk(4.15,2.1);
+        walk(5.95,2.1);
+        let loft = walk(5.95,9.8);
+        assert!(loft.y > house.wake_position().y + 2.5);
+        walk(5.95,2.1);
+        walk(4.15,2.1);
+        walk(4.15,9.8);
+        walk(5.95,9.8);
+        let street = walk(5.95,-3.3);
+        assert!((street.y-start.y).abs()<0.3);
     }
 }
