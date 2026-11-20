@@ -124,6 +124,26 @@ pub struct BridgeFeatures {
     /// the night's deck luminaires in their heads) at the published 150 ft
     /// pitch, none by the tower legs, in round 2's standard form.
     pub cable_detail: bool,
+    /// `--no-gg-matte` (the sixth pass, the aging: `--no-gg-aging` turns every
+    /// one off, as do the earlier passes' roll-ups): the Golden Gate's coat
+    /// as a chalked flat finish (golden_gate/aging.rs `PAINT_AGED_ROUGHNESS`),
+    /// the far item's too.
+    pub matte: bool,
+    /// `--no-gg-fade`: the coat chalked toward a pale pink-grey, less where
+    /// it is sheltered, more on fresher-or-older sections by the age field
+    /// (landmarks_surface.wgsl `lm_gg_age_paint`).
+    pub fade: bool,
+    /// `--no-gg-grime`: the coat's age and tone wandering over sections a few
+    /// metres across (repainted stretches), run-off streaks down the vertical
+    /// faces and salt and soot at the towers' feet.
+    pub grime: bool,
+    /// `--no-gg-underside`: the steel under the roadway shaded by the truss's
+    /// own lattice (sun and sky) and dirtier than the faces in the open.
+    pub underside: bool,
+    /// `--no-gg-concrete-age`: the concrete in a warm buff at the cited
+    /// albedo, run-off streaks under the copings, wall-scale staining,
+    /// efflorescence and dark feet (landmarks_surface.wgsl `lm_gg_age_concrete`).
+    pub concrete_age: bool,
 }
 
 impl BridgeFeatures {
@@ -152,6 +172,11 @@ impl BridgeFeatures {
         concrete2: true,
         leg_cells: true,
         cable_detail: true,
+        matte: true,
+        fade: true,
+        grime: true,
+        underside: true,
+        concrete_age: true,
     };
     pub const OFF: Self = Self {
         scale: false,
@@ -178,6 +203,11 @@ impl BridgeFeatures {
         concrete2: false,
         leg_cells: false,
         cable_detail: false,
+        matte: false,
+        fade: false,
+        grime: false,
+        underside: false,
+        concrete_age: false,
     };
 
     /// The features a command line leaves on.
@@ -193,6 +223,9 @@ impl BridgeFeatures {
         // the fifth pass (round 3's bridge finish): its roll-ups, every track's roll-up, and the earlier passes'.
         let fourth = third || has("--no-bridges5") || has("--no-gg3-bridge") || has("--no-gg3");
         let has5 = |f: &str| fourth || has(f);
+        // the sixth pass (the aging): its roll-up and every earlier one.
+        let fifth = fourth || has("--no-gg-aging");
+        let has6 = |f: &str| fifth || has(f);
         let keep = |f: &str| !args.iter().any(|a| a.as_ref() == f);
         Self {
             scale: keep("--no-bridge-scale"),
@@ -219,6 +252,11 @@ impl BridgeFeatures {
             concrete2: !has5("--no-concrete2"),
             leg_cells: !has5("--no-leg-cells"),
             cable_detail: !has5("--no-cable-detail"),
+            matte: !has6("--no-gg-matte"),
+            fade: !has6("--no-gg-fade"),
+            grime: !has6("--no-gg-grime"),
+            underside: !has6("--no-gg-underside"),
+            concrete_age: !has6("--no-gg-concrete-age"),
         }
     }
 
@@ -229,7 +267,10 @@ impl BridgeFeatures {
     pub const THIRD: Self = Self { shade2: false, dielectric: false, haunch: false, bracing: false, pylons: false, arch2: false, fender2: false, crest: false, collar: false, ..Self::FOURTH };
 
     /// The fifth pass's features off (`--no-bridges5`, `--no-gg3-bridge`, `--no-gg3`): the fourth pass's (round 2's) output.
-    pub const FOURTH: Self = Self { paint2: false, weathering: false, concrete2: false, leg_cells: false, cable_detail: false, ..Self::ALL };
+    pub const FOURTH: Self = Self { paint2: false, weathering: false, concrete2: false, leg_cells: false, cable_detail: false, ..Self::FIFTH };
+
+    /// The sixth pass's features off (`--no-gg-aging`): the fifth pass's (round 3's bridge finish) output.
+    pub const FIFTH: Self = Self { matte: false, fade: false, grime: false, underside: false, concrete_age: false, ..Self::ALL };
 }
 
 static FEATURES: OnceLock<BridgeFeatures> = OnceLock::new();
@@ -277,6 +318,10 @@ pub const SWITCHES: &[&str] = &[
 /// name in one list only: eo-app's `every_listed_switch_parses`). `--no-gg3`,
 /// every track's roll-up, is in eo-render pace.rs's list and read here too.
 pub const GG3_SWITCHES: &[&str] = &["--no-gg3-bridge", "--no-bridges5", "--no-paint-brdf2", "--no-paint-weathering", "--no-concrete2", "--no-leg-cells", "--no-cable-detail"];
+
+/// The aging pass's switch names (the sixth pass: the roll-up `--no-gg-aging`
+/// first), read by `BridgeFeatures::from_args`; eo-app accepts them from this list.
+pub const AGING_SWITCHES: &[&str] = &["--no-gg-aging", "--no-gg-matte", "--no-gg-fade", "--no-gg-grime", "--no-gg-underside", "--no-gg-concrete-age"];
 
 /// A frame along a bridge: chainage c along `axis` from `origin`, offset s to
 /// its right; `offset`, when given, adds a lateral offset per chainage (the

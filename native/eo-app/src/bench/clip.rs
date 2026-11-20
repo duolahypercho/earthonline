@@ -9,8 +9,12 @@
 //!
 //! FILE.json is a clip or an array of clips:
 //! `{"name", "seconds", "fps" (10), "time_of_day" (13), "fov" (degrees),
+//! "day_of_year" (1-365), "sky" ("cloudless", "cirrus" or "fair_cumulus"),
 //! "keys": [{"t" (seconds), "eye": [x, y, z], "look_at": [x, y, z]}, ...]}`
-//! in game metres (x east, y up, z south). The eye and the target run
+//! in game metres (x east, y up, z south). `day_of_year` and `sky` are read
+//! and applied as a still's (shots.rs `day_and_sky`, `apply_day_and_sky`;
+//! `--no-photo-date` ignores the date); without them the clip is drawn on the
+//! game's date with the sky that date draws, as before. The eye and the target run
 //! through the keys on a Catmull-Rom spline (uniform in key index, timed by
 //! `t`), so the camera's speed is continuous through each key.
 
@@ -37,12 +41,20 @@ struct Clip {
     fps: f64,
     hour: f64,
     fov: f64,
+    /// The day of the year the sun is placed on (`day_of_year`).
+    day: Option<f64>,
+    /// A clear day's sky (`sky`).
+    sky: Option<eo_sky::clouds::SkyState>,
     keys: Vec<Key>,
 }
 
 fn load(path: &Path) -> Result<Vec<Clip>> {
     let text = std::fs::read_to_string(path).with_context(|| format!("{}", path.display()))?;
     let v: Value = serde_json::from_str(&text).with_context(|| format!("{} does not parse", path.display()))?;
+    parse(v).with_context(|| format!("clip file {}", path.display()))
+}
+
+fn parse(v: Value) -> Result<Vec<Clip>> {
     let list = match v {
         Value::Array(a) => a,
         o => vec![o],
@@ -64,7 +76,8 @@ fn load(path: &Path) -> Result<Vec<Clip>> {
         }
         let f = |k: &str, d: f64| c.get(k).and_then(Value::as_f64).unwrap_or(d);
         let seconds = f("seconds", keys[keys.len() - 1].t);
-        out.push(Clip { name, seconds: seconds.clamp(0.1, 600.0), fps: f("fps", 10.0).clamp(1.0, 60.0), hour: f("time_of_day", 13.0), fov: f("fov", eo_render::camera::GAME_FOV_Y_DEG as f64), keys });
+        let (day, sky) = shots::day_and_sky(c.as_object().ok_or_else(|| anyhow!("clip {name} is not an object"))?, &format!("clip {name}"))?;
+        out.push(Clip { name, seconds: seconds.clamp(0.1, 600.0), fps: f("fps", 10.0).clamp(1.0, 60.0), hour: f("time_of_day", 13.0), fov: f("fov", eo_render::camera::GAME_FOV_Y_DEG as f64), day, sky, keys });
     }
     Ok(out)
 }
@@ -114,6 +127,11 @@ fn one(io: &mut Io, c: &Clip, dir: &Path, timeout: f64, far: f32) -> Result<()> 
     std::fs::create_dir_all(&seq)?;
     let cam0 = cam_at(0);
     eprintln!("clip: {}: {frames} frames at 60 Hz, writing every {every}", c.name);
+    // the clip's date and sky (a still's, shots.rs); absent, the state is left as it is (the game's date)
+    if (c.day.is_some() || c.sky.is_some()) && shots::apply_day_and_sky(c.day, c.sky, None, &io.renderer.look.sky.weather()) {
+        // a new date or sky at the same hour: make the look frame again (`set_look` sets the hour back)
+        io.renderer.look.set_time_of_day(c.hour + 1e-9);
+    }
     io.set_look(c.hour, WeatherMode::Preset(Kind::Clear));
     let focus = crate::agents::AgentRuntime::focus_of(cam0.eye, cam0.forward());
     let agents = io.place_agents(focus);
@@ -200,6 +218,8 @@ fn one(io: &mut Io, c: &Clip, dir: &Path, timeout: f64, far: f32) -> Result<()> 
         }),
     );
     m.insert("time_of_day".into(), json!(c.hour));
+    m.insert("day_of_year".into(), json!(eo_look::sun::day_of_year()));
+    m.insert("sky_state_input".into(), json!(c.sky.map(|k| k.name())));
     m.insert("weather".into(), json!("clear"));
     m.insert("sky".into(), super::sky_shots::describe(io.renderer));
     m.insert("agents".into(), agents);
@@ -209,4 +229,24 @@ fn one(io: &mut Io, c: &Clip, dir: &Path, timeout: f64, far: f32) -> Result<()> 
     std::fs::write(&mp, serde_json::to_string_pretty(&Value::Object(m))?)?;
     println!("wrote {} frames to {} and {} ({achieved_fps:.1} Hz achieved)", records.len(), seq.display(), mp.display());
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const KEYS: &str = r#""keys": [{"t": 0, "eye": [0, 2, 0], "look_at": [0, 2, -1]}, {"t": 1, "eye": [0, 2, 0], "look_at": [1, 2, -1]}]"#;
+
+    #[test]
+    fn a_clip_names_its_day_and_its_sky() {
+        let v: Value = serde_json::from_str(&format!(r#"[{{"name": "a", "day_of_year": 148, "sky": "cloudless", {KEYS}}}, {{"name": "b", {KEYS}}}]"#)).unwrap();
+        let c = parse(v).unwrap();
+        assert_eq!((c[0].day, c[0].sky), (Some(148.0), Some(eo_sky::clouds::SkyState::Cloudless)));
+        // without the keys nothing is set: the clip is drawn as before
+        assert_eq!((c[1].day, c[1].sky), (None, None));
+        for bad in [r#""day_of_year": 0"#, r#""day_of_year": "may""#, r#""sky": "storm""#, r#""sky": 3"#] {
+            let v: Value = serde_json::from_str(&format!(r#"{{"name": "a", {bad}, {KEYS}}}"#)).unwrap();
+            assert!(parse(v).is_err(), "{bad}");
+        }
+    }
 }

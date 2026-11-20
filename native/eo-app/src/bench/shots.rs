@@ -277,15 +277,7 @@ pub fn parse_specs(v: &Value) -> Result<Vec<Spec>> {
         if hour.is_some_and(|h| !(0.0..=24.0).contains(&h)) {
             bail!("shot \"{name}\": time_of_day {hour:?} is not 0 to 24");
         }
-        let day = num(o, "day_of_year")?;
-        if day.is_some_and(|d| !(1.0..=365.0).contains(&d)) {
-            bail!("shot \"{name}\": day_of_year {day:?} is not 1 to 365");
-        }
-        let sky = match o.get("sky") {
-            None | Some(Value::Null) => None,
-            Some(Value::String(k)) => Some(eo_sky::clouds::SkyState::parse(k).ok_or_else(|| anyhow!("shot \"{name}\": sky \"{k}\" is not cloudless, cirrus or fair_cumulus"))?),
-            Some(_) => bail!("shot \"{name}\": sky is not a string"),
-        };
+        let (day, sky) = day_and_sky(o, &format!("shot \"{name}\""))?;
         let game_day = num(o, "game_day")?;
         if game_day.is_some_and(|d| !(0.0..1.0e6).contains(&d) || d.fract() != 0.0) {
             bail!("shot \"{name}\": game_day {game_day:?} is not a whole number 0 to 1e6");
@@ -327,6 +319,24 @@ pub fn parse_specs(v: &Value) -> Result<Vec<Spec>> {
         bail!("no shots");
     }
     Ok(out)
+}
+
+/// The optional `day_of_year` (1-365) and clear-day `sky` of a shot or a
+/// clip (`what` names it in errors); clip.rs reads its clips with this too.
+pub fn day_and_sky(o: &Map<String, Value>, what: &str) -> Result<(Option<f64>, Option<eo_sky::clouds::SkyState>)> {
+    let day = match o.get("day_of_year") {
+        None | Some(Value::Null) => None,
+        Some(x) => Some(x.as_f64().filter(|v| v.is_finite()).ok_or_else(|| anyhow!("{what}: \"day_of_year\" is not a number"))?),
+    };
+    if day.is_some_and(|d| !(1.0..=365.0).contains(&d)) {
+        bail!("{what}: day_of_year {day:?} is not 1 to 365");
+    }
+    let sky = match o.get("sky") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(k)) => Some(eo_sky::clouds::SkyState::parse(k).ok_or_else(|| anyhow!("{what}: sky \"{k}\" is not cloudless, cirrus or fair_cumulus"))?),
+        Some(_) => bail!("{what}: sky is not a string"),
+    };
+    Ok((day, sky))
 }
 
 // ---------------------------------------------------------------------------
@@ -790,6 +800,19 @@ fn set_day_and_sky(shot: &Shot, renderer: &eo_render::Renderer) -> bool {
     eo_sky::clouds::set_sky_oktas(shot.info.get("sky_oktas").and_then(Value::as_f64));
     eo_sky::clouds::set_game_day(shot.info.get("game_day").and_then(Value::as_u64).map(|d| d as u32));
     before != key(&renderer.look.sky.weather())
+}
+
+/// `set_day_and_sky` from the values themselves (a clip's, clip.rs): the sun
+/// on `day` (the game's date without it, or with `--no-photo-date`), the
+/// clear-day `sky` and `game_day` held. True when the sun's date or the clear
+/// sky in force changed (the caller makes the look frame again).
+pub fn apply_day_and_sky(day: Option<f64>, sky: Option<eo_sky::clouds::SkyState>, game_day: Option<u32>, w: &eo_sky::WeatherState) -> bool {
+    let before = (eo_look::sun::day_of_year(), eo_sky::clouds::sky_state_for(w), eo_sky::clouds::game_day_of(w));
+    let day = day.filter(|_| eo_look::features::daylight().photo_date);
+    eo_look::sun::set_day_of_year(day.unwrap_or(eo_look::sun::DAY_OF_YEAR));
+    eo_sky::clouds::set_sky_state(sky);
+    eo_sky::clouds::set_game_day(game_day);
+    before != (eo_look::sun::day_of_year(), eo_sky::clouds::sky_state_for(w), eo_sky::clouds::game_day_of(w))
 }
 
 /// The shot's sun, its clear-day sky and the daylight's light on the four
