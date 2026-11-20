@@ -1018,7 +1018,7 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
                 let k = 0.85 + 0.3 * eo_landmarks::vegetation::hash((tr.x * 8.0) as i64, (tr.z * 8.0) as i64, 92) as f32;
                 let tint = eo_landmarks::vegetation::TREE_LEAF_TINT[sp as usize].map(|c| c * k);
                 // on the park tree's own ground (the lattice's `y`, its root sink included).
-                plants.push(eo_landmarks::vegetation::Plant { kind: eo_landmarks::vegetation::Kind::Tree(sp), pos: [tr.x, tr.y, tr.z], yaw: tr.yaw, scale: [sc, sc * hf, sc], rank: 0.0, tint, grad: [0.0; 2] });
+                plants.push(eo_landmarks::vegetation::Plant { kind: eo_landmarks::vegetation::Kind::Tree(sp), pos: [tr.x, tr.y, tr.z], yaw: tr.yaw, scale: [sc, sc * hf, sc], rank: 0.0, tint, grad: [0.0; 2], tip: eo_landmarks::vegetation::TIP_NONE });
                 continue;
             }
             let variant = match tr.species {

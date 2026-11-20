@@ -151,6 +151,9 @@ pub struct Plant {
     /// The ground's gradient under it (dy/dx, dy/dz): everything but the trees
     /// is sheared onto its slope by the shader (props_types.wgsl `pr_veg_grad`).
     pub grad: [f32; 2],
+    /// The grass blades' tip colour (the lamp word's alpha, props_draw.wgsl): [`TIP_NONE`]
+    /// none (every other plant, and `--no-grass-color-variety`), else [`meadow_tip`].
+    pub tip: u8,
 }
 
 /// The kill switches this module's plants answer to.
@@ -194,7 +197,7 @@ pub const SWITCHES: &[&str] = &["--no-gg2-vegetation", "--no-coastal-trees", "--
 /// The coastal-vegetation track's switch names (the roll-up first); eo-app
 /// accepts them, [`Gg3::from_args`] reads them (`--no-veg-scans` is reserved:
 /// nothing reads it yet).
-pub const GG3_SWITCHES: &[&str] = &["--no-gg3-vegetation", "--no-naip-planting", "--no-veg-scans", "--no-cliff-rock-cover", "--no-far-species", "--no-far-tree-light", "--no-bloom-date"];
+pub const GG3_SWITCHES: &[&str] = &["--no-gg3-vegetation", "--no-naip-planting", "--no-veg-scans", "--no-cliff-rock-cover", "--no-far-species", "--no-far-tree-light", "--no-bloom-date", "--no-grass-color-variety"];
 
 /// The round-3 vegetation features, each with its `--no-` switch
 /// ([`GG3_SWITCHES`]); `--no-gg3-vegetation` (or `--no-gg3`) turns them all off,
@@ -211,11 +214,14 @@ pub struct Gg3 {
     pub far_tree_light: bool,
     /// `--no-bloom-date`: the cited bloom window ([`BLOOM_DAYS_CITED`]) and the flower heads in their own colour.
     pub bloom_date: bool,
+    /// `--no-grass-color-variety`: the meadow's colour mosaic ([`meadow_tint`]): off, every
+    /// bunch takes the ground's tone with the round-2 +-28 % value and cast.
+    pub grass_color_variety: bool,
 }
 
 impl Gg3 {
-    pub const ALL: Gg3 = Gg3 { naip_planting: true, cliff_rock_cover: true, far_species: true, far_tree_light: true, bloom_date: true };
-    pub const NONE: Gg3 = Gg3 { naip_planting: false, cliff_rock_cover: false, far_species: false, far_tree_light: false, bloom_date: false };
+    pub const ALL: Gg3 = Gg3 { naip_planting: true, cliff_rock_cover: true, far_species: true, far_tree_light: true, bloom_date: true, grass_color_variety: true };
+    pub const NONE: Gg3 = Gg3 { naip_planting: false, cliff_rock_cover: false, far_species: false, far_tree_light: false, bloom_date: false, grass_color_variety: false };
 
     pub fn from_args(args: &[String]) -> Self {
         let has = |s: &str| args.iter().any(|a| a == s);
@@ -228,6 +234,7 @@ impl Gg3 {
             far_species: !has("--no-far-species"),
             far_tree_light: !has("--no-far-tree-light"),
             bloom_date: !has("--no-bloom-date"),
+            grass_color_variety: !has("--no-grass-color-variety"),
         }
     }
 }
@@ -606,7 +613,7 @@ pub fn plant_coarse_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, 
             }
             let (sp, sc, hf) = coastal_tree(x, z, s.shore_m, hash(ix, iz, 4));
             let v = 0.85 + 0.3 * hash(ix, iz, 6) as f32;
-            out.push(Plant { kind: Kind::Tree(sp), pos: [x, s.y - 0.08, z], yaw: hash(ix, iz, 5) * std::f64::consts::TAU, scale: [sc, sc * hf, sc], rank: hash(ix, iz, 8) as f32, tint: TREE_LEAF_TINT[sp as usize].map(|c| c * v), grad: [0.0; 2] });
+            out.push(Plant { kind: Kind::Tree(sp), pos: [x, s.y - 0.08, z], yaw: hash(ix, iz, 5) * std::f64::consts::TAU, scale: [sc, sc * hf, sc], rank: hash(ix, iz, 8) as f32, tint: TREE_LEAF_TINT[sp as usize].map(|c| c * v), grad: [0.0; 2], tip: TIP_NONE });
         });
     }
     if sw.ground_cover {
@@ -662,8 +669,14 @@ pub fn plant_coarse_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, 
             let v = 0.82 + 0.3 * hash(ix, iz, 6) as f32 - (s.hollow_m.clamp(0.0, 1.0) * 0.1) as f32;
             // the mound follows the slope (the shear); sunk a little so no edge floats.
             let sink = 0.06 + 0.06 * sc as f64;
-            let base = SHRUB_LEAF_TINT[if kind == Kind::Shrub(1) { 1 } else { 0 }];
-            out.push(Plant { kind, pos: [x, s.y - sink, z], yaw: hash(ix, iz, 7) * std::f64::consts::TAU, scale: [sc * wide * close, sc, sc * wide * close], rank: hash(ix, iz, 8) as f32, tint: base.map(|c| c * v), grad: s.grad() });
+            let mut base = SHRUB_LEAF_TINT[if kind == Kind::Shrub(1) { 1 } else { 0 }];
+            if g3.grass_color_variety {
+                // the scrub's own mosaic: olive (warmer, coyote brush in sun) to grey-green
+                // (sage, lizardtail) by a 25 m patch and each mound (+-10 % red, +-12 % blue, INFERRED).
+                let o = (1.4 * (field(x, z, 25.0, 68) - 0.5) + 0.6 * (hash(ix, iz, 69) - 0.5)).clamp(-1.0, 1.0) as f32;
+                base = [base[0] * (1.0 + 0.1 * o), base[1], base[2] * (1.0 - 0.12 * o)];
+            }
+            out.push(Plant { kind, pos: [x, s.y - sink, z], yaw: hash(ix, iz, 7) * std::f64::consts::TAU, scale: [sc * wide * close, sc, sc * wide * close], rank: hash(ix, iz, 8) as f32, tint: base.map(|c| c * v), grad: s.grad(), tip: TIP_NONE });
         });
     }
     // rock outcrops (crate::hill_rock), after the trees and scrub as before.
@@ -695,6 +708,7 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
     }
     let g3 = ex.g3;
     let bloom = bloom(day_of_year, g3);
+    let season = eo_look::season::dryness(day_of_year) as f64;
     lattice(x0, z0, x1, z1, GRASS_PITCH_M, 4, &mut |x, z, ix, iz| {
         let Some(s) = site(x, z) else { return };
         let Some(cover) = s.cover else { return };
@@ -742,16 +756,122 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
         // value +-28 %, and a drier (redder) or greener cast per bunch (INFERRED spread): past
         // 25 m a bunch is the ground's tone (props_draw.wgsl) and this its only mark.
         let w = 0.72 + 0.56 * hash(ix, iz, 20) as f32;
-        let dry = (hash(ix, iz, 24) as f32 - 0.5) * 0.24;
-        let tint = [s.ground[0] * GRASS_GAIN * w * (1.0 + dry), s.ground[1] * GRASS_GAIN * w, s.ground[2] * GRASS_GAIN * w * (1.0 - dry)];
+        let (tint, tip) = if g3.grass_color_variety {
+            let m = meadow_tint(x, z, ix, iz, &s, cover, season, bloom);
+            (m.0.map(|c| c * GRASS_GAIN), m.1)
+        } else {
+            let dry = (hash(ix, iz, 24) as f32 - 0.5) * 0.24;
+            ([s.ground[0] * GRASS_GAIN * w * (1.0 + dry), s.ground[1] * GRASS_GAIN * w, s.ground[2] * GRASS_GAIN * w * (1.0 - dry)], TIP_NONE)
+        };
         let tint = match kind {
             Kind::Flower(_) => tint.map(|c| c.min(4.0)),
             _ => tint,
         };
         // sunk 7 cm: the atlas cell's root rows (a third of the tips' value) go under the
         // ground instead of drawing a dark crescent round the bunch's foot.
-        out.push(Plant { kind, pos: [x, s.y - GRASS_SINK_M, z], yaw: hash(ix, iz, 7) * std::f64::consts::TAU, scale: [sc, sc * tall, sc], rank: hash(ix, iz, 8) as f32, tint, grad: s.grad() });
+        out.push(Plant { kind, pos: [x, s.y - GRASS_SINK_M, z], yaw: hash(ix, iz, 7) * std::f64::consts::TAU, scale: [sc, sc * tall, sc], rank: hash(ix, iz, 8) as f32, tint, grad: s.grad(), tip });
     });
+}
+
+/// The lamp word's alpha for a plant with no tip colour (what every instance carried before).
+pub const TIP_NONE: u8 = 255;
+
+/// The meadow's end members (linear albedo). Green and cured annual grass are
+/// the far layer's (`eo_render::farshore::FAR_GRASS_GREEN` / `FAR_GRASS_GOLDEN`,
+/// repeated here: this crate does not depend on eo-render), so the near sward
+/// and the far land agree. Grey-green bunchgrass and sage-edge grass, and the
+/// brown of thatch and trampled soil, sit in the green-vegetation and dry
+/// grass / soil ranges of the USGS Spectral Library v7 (Kokaly et al. 2017,
+/// doi:10.5066/F7RR1WDJ: green grass visible reflectance about 0.04-0.10, dry
+/// grass 0.15-0.25 red over green, soils 0.10-0.20 with red over blue);
+/// the exact values are INFERRED inside those ranges.
+pub const MEADOW_GREEN: [f32; 3] = [0.065, 0.100, 0.034];
+pub const MEADOW_GOLDEN: [f32; 3] = [0.215, 0.165, 0.092];
+pub const MEADOW_SAGE: [f32; 3] = [0.080, 0.100, 0.050];
+pub const MEADOW_BROWN: [f32; 3] = [0.115, 0.085, 0.056];
+
+/// How far a bunch's dryness leans off the season's (0-1 green to golden):
+/// the spread measured on the NAIP summer image of the headlands
+/// (EO_SURVEY_ROOT/A1, 0.6 m, all 20 tiles at 1/8 resolution, open low
+/// vegetation only: shadow, water, bright bare ground and dark canopy left
+/// out): red over green p10 0.86, median 1.00, p90 1.09, and 28 % green
+/// (r/g under 0.95), 60 % olive, 12 % tan. The end members' r/g run 0.65 to
+/// 1.30, so the image's p10-p90 spread is about +-0.18 of dryness; the
+/// patch field carries most of it, slope, aspect and hollows the rest.
+pub const MEADOW_LEAN: f64 = 0.3;
+
+/// Linear luminance (Rec. 709).
+fn lum(c: [f32; 3]) -> f32 {
+    0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+}
+
+fn mix3(a: [f32; 3], b: [f32; 3], t: f32) -> [f32; 3] {
+    [0, 1, 2].map(|k| a[k] + (b[k] - a[k]) * t)
+}
+
+/// A grass bunch's colour in the meadow (`--no-grass-color-variety` off: the
+/// ground's tone with a per-bunch value and cast). `season` is the season
+/// model's dryness on the day (`eo_look::season::dryness`, 0 green .. 1
+/// golden): read as the share of the sward that has cured, not as one olive
+/// over all of it, so a patch is green or cured and the season moves the
+/// line between them (spring mostly green with the first cured patches,
+/// late summer golden with green left in the hollows). Where the line falls
+/// is leaned by a patch field of 11 m and 32 m octaves (whole areas greener or
+/// drier), the slope's aspect (south faces cure first, north faces and
+/// the fog side stay green: INFERRED), steepness (thinner soil) and hollows
+/// (wetter); then grey-green bunchgrass patches (more under the scrub),
+/// browner thatch patches where it is dry, and each bunch its own value and
+/// cast. The value follows the ground's tone (its mottle). Returns the linear
+/// albedo (before `GRASS_GAIN`) and its tip word ([`meadow_tip`]).
+#[allow(clippy::too_many_arguments)]
+pub fn meadow_tint(x: f64, z: f64, ix: i64, iz: i64, s: &Site, cover: Cover, season: f64, bloom: f64) -> ([f32; 3], u8) {
+    let g = s.ground;
+    let d0 = season.clamp(0.0, 1.0);
+    // patches: two octaves, sharpened so an area reads as one lean, not as noise.
+    let p = 0.65 * (field(x, z, 32.0, 61) - 0.5) + 0.35 * (field(x, z, 11.0, 62) - 0.5);
+    let patch = 2.0 * smoothstep(-0.22, 0.22, p) - 1.0;
+    let slope = s.slope_deg();
+    let lean = MEADOW_LEAN * patch - 0.1 * s.north() + 0.06 * smoothstep(10.0, 35.0, slope) - 0.12 * (s.hollow_m * 0.5).clamp(-1.0, 1.0) + 0.12 * (hash(ix, iz, 24) - 0.5);
+    // cured or green by patch (a soft line), part of the season's mean kept: in the
+    // green season only the driest patches on steep south faces begin to turn.
+    let cured = smoothstep(0.42, 0.7, d0 + lean);
+    let d = (0.35 * d0 + 0.65 * cured).clamp(0.0, 1.0);
+    let at = |d: f64| mix3(MEADOW_GREEN, MEADOW_GOLDEN, d as f32);
+    let mut c = at(d);
+    // grey-green bunchgrass (fescue, needlegrass) in patches, and at the scrub's edges.
+    let scrubby = matches!(cover, Cover::Scrub | Cover::TallScrub | Cover::DuneScrub);
+    let sage = smoothstep(0.62, 0.85, field(x, z, 15.0, 64)) * 0.4 + if scrubby { 0.15 } else { 0.0 };
+    c = mix3(c, MEADOW_SAGE, (sage * (1.0 - 0.5 * d)) as f32);
+    // brown thatch and trampled soil, a patch here and there, more where it is dry.
+    let brown = smoothstep(0.72, 0.88, field(x, z, 20.0, 63)) * (0.25 + 0.5 * d);
+    c = mix3(c, MEADOW_BROWN, brown as f32);
+    // relative to the ground: the ground's own tone where the bunch sits at the season's
+    // mean, shifted by the end members' ratios where it leans; the ground's value (its
+    // mottle) kept, the golden grass a little lighter than the green.
+    let m = at(d0);
+    let f = [0, 1, 2].map(|k| g[k] * c[k] / m[k].max(1e-4));
+    let v = lum(g) * (lum(c) / lum(m).max(1e-4)).powf(0.3) / lum(f).max(1e-5);
+    let w = 0.8 + 0.4 * hash(ix, iz, 20) as f32;
+    (f.map(|k| k * v * w), meadow_tip(ix, iz, d, bloom))
+}
+
+/// A grass bunch's tip word (the lamp alpha, props_draw.wgsl): kind in the top
+/// two bits (0 straw seed heads, 1 yellow, 2 purple, 3 white flowers), amount
+/// 0-62 in the low six (63 with kind 3 is [`TIP_NONE`]). Seed heads and
+/// awns are lighter than the stems, more so once the grass has cured; one
+/// bunch in about 60 carries flower tints (more in the bloom window): yellow
+/// (gumplant, mustards, poppies' gold), purple (lupine, asters), white
+/// (yarrow, cow parsnip), the headlands' common colours (NPS Golden Gate
+/// "Wildflowers", species list; shares INFERRED).
+pub fn meadow_tip(ix: i64, iz: i64, dryness: f64, bloom: f64) -> u8 {
+    let r = hash(ix, iz, 65);
+    let share = 0.012 + 0.03 * bloom;
+    if r < share {
+        let k = 1 + (hash(ix, iz, 66) * 3.0) as u8 % 3;
+        return (k << 6) | 40;
+    }
+    let a = (0.2 + 0.5 * dryness) * (0.7 + 0.6 * hash(ix, iz, 67));
+    (a.clamp(0.0, 1.0) * 62.0).round() as u8
 }
 
 /// A jittered lattice of pitch `p` over [x0, x1) x [z0, z1): `f(x, z, ix, iz)`
@@ -777,6 +897,36 @@ mod tests {
 
     fn flat(cover: Cover) -> impl Fn(f64, f64) -> Option<Site> {
         move |_x, _z| Some(Site { y: 10.0, normal: [0.0, 1.0, 0.0], ground: [0.1, 0.12, 0.06], cover: Some(cover), lithology: Lithology::Chert, shore_m: 500.0, hollow_m: 0.0 })
+    }
+
+    #[test]
+    fn meadow_follows_the_season_and_varies_in_patches() {
+        let site = |ground: [f32; 3]| Site { y: 10.0, normal: [0.0, 1.0, 0.0], ground, cover: Some(Cover::WildGrass), lithology: Lithology::Chert, shore_m: 500.0, hollow_m: 0.0 };
+        let mean_rg = |season: f64| {
+            let s = site(mix3(MEADOW_GREEN, MEADOW_GOLDEN, season as f32));
+            let (mut sum, mut lo, mut hi) = (0.0, f32::MAX, f32::MIN);
+            for k in 0..400 {
+                let (x, z) = ((k % 20) as f64 * 7.0, (k / 20) as f64 * 7.0);
+                let (c, tip) = meadow_tint(x, z, k % 20, k / 20, &s, Cover::WildGrass, season, 0.0);
+                assert_ne!(tip, TIP_NONE);
+                let rg = c[0] / c[1];
+                (sum, lo, hi) = (sum + rg, lo.min(rg), hi.max(rg));
+            }
+            (sum / 400.0, lo, hi)
+        };
+        let (spring, _, _) = mean_rg(0.0);
+        let (early, s_lo, s_hi) = mean_rg(0.4);
+        let (summer, _, _) = mean_rg(1.0);
+        assert!(spring < early && early < summer, "spring {spring} early summer {early} summer {summer}");
+        assert!(spring < summer, "spring {spring} summer {summer}");
+        assert!(s_hi - s_lo > 0.2, "a meadow has drier and greener patches: {s_lo}..{s_hi}");
+        // a south face cures sooner than a north face.
+        let face = |nz: f64| {
+            let mut s = site(mix3(MEADOW_GREEN, MEADOW_GOLDEN, 0.5));
+            s.normal = [0.0, 0.85, nz];
+            (0..100).map(|k| { let c = meadow_tint(k as f64 * 9.0, 0.0, k, 0, &s, Cover::WildGrass, 0.5, 0.0).0; c[0] / c[1] }).sum::<f32>()
+        };
+        assert!(face(0.5) > face(-0.5));
     }
 
     #[test]

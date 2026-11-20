@@ -322,7 +322,7 @@ selection:
 | Colour and camera | `--no-gg3-colour` (all of these), `--no-sun-spectrum2`, `--no-meter-highlights`; reserved: `--no-sky-calibration`, `--no-camera-style`, `--no-haze-visibility` |
 | Terrain surface | `--no-gg3-ground` (all of these), `--no-facet-normal-fix`, `--no-terrain-detail`, `--no-terrain-materials`, `--no-sand-detail2`; reserved: `--no-bluff-soil`, `--no-bank-grade` |
 | Scanned rock | `--no-gg3-rock` (all of these), `--no-scan-rocks`, `--no-cliff-dressing`, `--no-surf-rocks`, `--no-scan-riprap`, `--no-rock-geology` |
-| Coastal vegetation, round 3 | `--no-gg3-vegetation` (all of these), `--no-naip-planting`, `--no-cliff-rock-cover`, `--no-far-species`, `--no-far-tree-light`, `--no-bloom-date`; reserved: `--no-veg-scans` |
+| Coastal vegetation, round 3 | `--no-gg3-vegetation` (all of these), `--no-naip-planting`, `--no-cliff-rock-cover`, `--no-far-species`, `--no-far-tree-light`, `--no-bloom-date`, `--no-grass-color-variety`; reserved: `--no-veg-scans` |
 | Surf and bathymetry | `--no-gg3-water` (all of these), `--no-bathymetry`, `--no-surf-break`, `--no-swash-foam`, `--no-obstacle-foam`, `--no-water-body2`; reserved: `--no-ppr-dash` |
 | Golden Gate, fifth pass | `--no-gg3-bridge` or `--no-bridges5` (all of these), `--no-paint-brdf2`, `--no-paint-weathering`, `--no-concrete2`, `--no-leg-cells`, `--no-cable-detail` |
 | Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count` |
@@ -499,7 +499,11 @@ lets plants stand on a cliff over a beach, mapped bare rock or a sand cliff;
 `--no-far-species` keeps round 2's far tree forms instead of the near tier's
 coastal species; `--no-far-tree-light` keeps round 2's far card light instead
 of a leaf volume with transmission; `--no-bloom-date` leaves out the cited
-bloom window and the flower heads' own colour. `--no-veg-scans` is reserved.
+bloom window and the flower heads' own colour; `--no-grass-color-variety`
+keeps every grass bunch in the ground's tone (no meadow mosaic of green and
+cured patches by aspect, slope and hollow, no grey-green or brown patches, no
+lighter seed heads or flower-tinted tips, no olive to grey-green scrub).
+`--no-veg-scans` is reserved.
 
 The surf and bathymetry (`--no-gg3-water`, eo-water `switches`; the CUDEM
 tiles under `EO_SURVEY_ROOT`): `--no-bathymetry` keeps the geometric exposure

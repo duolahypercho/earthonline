@@ -256,6 +256,36 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         // the vegetation's own colour on its leaves, blades and rock (the bark keeps its own): sRGB x 4 in the lamp word.
         s.albedo = s.albedo * srgb_decode(unpack4x8unorm(inst.lamp).rgb) * 4.0;
     }
+    let tip_word = inst.lamp >> 24u;
+    if (inst.model >= PR_VEG_BASE + PR_VEG_GRASS && inst.model < PR_VEG_BASE + PR_VEG_ROCK && (m.flags & PR_TEX) != 0u && inst.lamp != 0u && tip_word != 255u) {
+        // the meadow's blades (eo_landmarks::vegetation::meadow_tip; 255, every instance
+        // before it and with --no-grass-color-variety, skips this): near the eye each blade
+        // column of each card its own value (+-14 %) and cast, and the top of the cell (the
+        // tallest blades' seed heads and awns) toward the bunch's tip colour: straw
+        // lighter than the stem, or one of the flower tints (yellow, purple, white; linear,
+        // INFERRED from the species' flower colour words) faded out by 30 m so a far
+        // meadow is not speckled.
+        let dist = distance(in.world, frame.cam_pos.xyz);
+        let near = 1.0 - smoothstep(6.0, 25.0, dist);
+        let h = pr_hash3(vec3<f32>(floor(in.uv.x * 48.0), floor(in.local.x * 5.0) + 37.0, floor(in.local.z * 5.0) + 11.0));
+        s.albedo = s.albedo * mix(vec3<f32>(1.0), vec3<f32>(0.86 + 0.28 * h) * vec3<f32>(1.0 + 0.1 * (h - 0.5), 1.0, 1.0 - 0.16 * (h - 0.5)), near);
+        let up = clamp((0.248 - in.uv.y) / 0.246, 0.0, 1.0);
+        let kind = tip_word >> 6u;
+        let amount = f32(tip_word & 63u) / 62.0;
+        var tip_col = s.albedo * vec3<f32>(1.4, 1.3, 1.1);
+        var fade = 1.0;
+        if (kind == 1u) {
+            tip_col = vec3<f32>(0.62, 0.42, 0.03);
+            fade = 1.0 - smoothstep(12.0, 30.0, dist);
+        } else if (kind == 2u) {
+            tip_col = vec3<f32>(0.20, 0.10, 0.42);
+            fade = 1.0 - smoothstep(12.0, 30.0, dist);
+        } else if (kind == 3u) {
+            tip_col = vec3<f32>(0.62, 0.62, 0.56);
+            fade = 1.0 - smoothstep(12.0, 30.0, dist);
+        }
+        s.albedo = mix(s.albedo, tip_col, smoothstep(0.62, 0.92, up) * amount * 0.7 * fade);
+    }
     if ((m.flags & PR_ROCK) != 0u) {
         // rock grain: two octaves of value noise in world metres (mottle and
         // pitting), on the albedo and as a bump on the normal, faded out where

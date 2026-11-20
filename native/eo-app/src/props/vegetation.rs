@@ -592,7 +592,8 @@ pub fn instances(plants: &[Plant], out: &mut Vec<GpuPropInstance>, counts: &mut 
             scale: p.scale,
             model: model_of(p.kind),
             variant: (p.rank * 255.0) as u32,
-            lamp: pack_tint(p.tint),
+            // the alpha byte carries the grass tip word (eo_landmarks::vegetation::meadow_tip; 255 none).
+            lamp: (pack_tint(p.tint) & 0x00ff_ffff) | ((p.tip as u32) << 24),
             slope: p.rank,
             pad: pack_grad(p.grad),
         });

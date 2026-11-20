@@ -714,6 +714,7 @@ dependencies = [
  "earcut",
  "eo-data",
  "eo-farshore",
+ "eo-look",
  "eo-sky",
  "eo-water",
  "flate2",

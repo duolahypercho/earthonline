@@ -97,6 +97,7 @@ pub fn plant_with(claims: Option<&crate::rocks::scan::Claims>, x0: f64, z0: f64,
             rank: hash(ix, iz, 8) as f32,
             tint,
             grad,
+            tip: crate::vegetation::TIP_NONE,
         });
     });
 }
