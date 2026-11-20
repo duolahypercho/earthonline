@@ -238,6 +238,7 @@ Experiments are not shipped defaults.
 | `EO_UI_FONT_DIR` | A font folder to use instead of the system font folder |
 | `EO_TRACE_LOAD` | Print timings of the world load |
 | `EO_CUMULUS` | `1` draws the fair-weather cumulus field under a clear sky (off by default; the overcast, fog and rain decks are drawn either way) |
+| `EO_CAPTURE_HOLD_SKY` | `1` holds the sky's clock at `--world-time` for every pose of an `EO_CAPTURE_POSES` file, so the drifting clouds are the same in two runs (matched captures) |
 
 The locations of the optional off-repository assets are read from the
 variables below.
