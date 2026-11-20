@@ -296,6 +296,7 @@ pub struct WaterGpu {
     draw_copy: wgpu::RenderPipeline,
     draw_blend: wgpu::RenderPipeline,
     submerged: Option<(wgpu::RenderPipeline, eo_water::field::ShoreField)>,
+    fallback_dive: std::sync::atomic::AtomicBool,
     /// the spray pass (water_spray.wgsl).
     spray: wgpu::RenderPipeline,
     draw_bgl: wgpu::BindGroupLayout,
@@ -559,7 +560,7 @@ impl WaterGpu {
         });
         let draw_src = format!("{common}\n{}\n{}\n{}\n{}\n{}", crate::look::look_common_source(), include_str!("sky_light_core.wgsl"), crate::look::LOOK_EXT_WGSL, include_str!("water.wgsl"), include_str!("water_surf.wgsl")) + include_str!("water_spray.wgsl") + "\n" + crate::far_shadow::WGSL + "\n" + &crate::probe_grid::wgsl(true); // + the spray, the cloud shadow and the fog depth; + group 1 bindings 12-18; + the far sun shadow map's lookup and the probe grid's (lighting)
         let draw_src = if look.options.water_optics {
-            draw_src + include_str!("look_finish.wgsl") + include_str!("underwater.wgsl")
+            draw_src + &format!("\nconst UW_DEPTH_EXPOSURE: bool = {};\n", look.options.dive_exposure) + include_str!("look_finish.wgsl") + include_str!("underwater.wgsl")
         } else {
             draw_src
         };
@@ -692,6 +693,7 @@ impl WaterGpu {
             draw_copy,
             draw_blend,
             submerged,
+            fallback_dive: std::sync::atomic::AtomicBool::new(false),
             spray,
             draw_bgl,
             repeat: sampler("water-repeat", wgpu::AddressMode::Repeat),
@@ -892,6 +894,19 @@ impl WaterGpu {
     /// this frame's group-0 bind group (made by `encode_draw`), for the surf strip's pass.
     pub fn surf_bind_group(&self, probe_front: usize) -> Option<wgpu::BindGroup> {
         self.draw_bg.lock().unwrap().as_ref().map(|c| c.2[probe_front].clone())
+    }
+
+    // On a device using fixed draw slots, keep the normal land renderer until
+    // the dive camera reaches water. Both media at the waterline then use
+    // the same displaced surface and the same opaque frame copy.
+    pub(crate) fn locate_fallback_dive(&self, cam: &Camera) {
+        let wet = self.submerged.as_ref().is_some_and(|(_, field)|
+            field.signed_at(cam.eye.x as f64, cam.eye.z as f64) > MASK_M as f64);
+        self.fallback_dive.store(wet, Ordering::Relaxed);
+    }
+
+    pub(crate) fn fallback_dive(&self) -> bool {
+        self.fallback_dive.load(Ordering::Relaxed)
     }
 
     pub(crate) fn draw_submerged(&self, pass: &mut wgpu::RenderPass<'_>, look: &crate::look::LookGpu, front: usize) {

@@ -399,6 +399,7 @@ fn segments(world: &World, args: &Args, aspect: f32, far: f32) -> Vec<Segment> {
     .chain(water_bench::waterfront_segment(world, frames, aspect, far)) // water
     .chain(water_bench::bay_segment(world, frames, aspect, far)) // water
     .chain(water_bench::dive_segment(world, frames, aspect, far))
+    .chain(water_bench::habitat_segments(world, args, frames, aspect, far))
     .chain(structures_bench::freeway_drive_segment(world, frames, aspect, far)) // structures: None without built decks
     .chain(structures_bench::under_viaduct_segment(world, frames, aspect, far))
     .chain(so_shots::surf_segment(world, frames, aspect, far)) // opt-in (EO_SURF_BENCH=1), Ocean Beach's surf in view
@@ -1566,6 +1567,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 "worst_frames": worst_frames,
             },
         });
+        report["water"]["underwater_habitats"] = args.underwater_habitats.into();
+        report["water"]["dive_exposure"] = args.look.dive_exposure.into();
         report["view_detail"] = vd_json; // outside the json! above: its recursion limit
         report["lighting_passes_ms"] = serde_json::Value::Object(lighting_passes); // on: whether this path timed them
         if renderer.structures.get().is_some() {

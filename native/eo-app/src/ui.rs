@@ -144,7 +144,11 @@ impl Flags {
                 "--no-shadows" => args.look.shadows = false,
                 "--no-settings-apply" => {} // read by `settings_apply`
                 "--water-optics" => args.look.water_optics = true,
+                "--underwater-habitats" => args.underwater_habitats = true,
+                "--no-underwater-habitats" => args.underwater_habitats = false,
                 "--no-water-optics" => args.look.water_optics = false,
+                "--dive-exposure" => args.look.dive_exposure = true,
+                "--no-dive-exposure" => args.look.dive_exposure = false,
                 "--bridge-detail" | "--no-bridge-detail" => {} // read by `crate::bridge_detail`
                 "--no-vsync" => args.vsync = false,
                 "--no-props" => args.props = false, // props in the UI's street
@@ -202,6 +206,8 @@ fn default_args() -> Args {
     Args {
         bench: false,
         start_underwater: false,
+        dive_site: None,
+        underwater_habitats: false,
         quality: Default::default(),
         frames: 720,
         warmup: 60,

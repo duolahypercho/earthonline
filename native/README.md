@@ -233,6 +233,8 @@ selection:
 | --- | --- |
 | Content | `--no-models`, `--no-kit`, `--no-streets`, `--no-props`, `--no-agents`, `--no-landmarks`, `--no-water`, `--no-farshore`, `--no-sky` |
 | Water optics | `--water-optics` enables the preview, `--no-water-optics` restores the original water shading |
+| Underwater habitats | `--underwater-habitats` adds the Bay and Pacific beds. `--no-underwater-habitats` removes them |
+| Dive exposure | `--dive-exposure` compensates for the loss of downwelling light at the eye. `--no-dive-exposure` restores the original exposure |
 | Bridge detail | `--bridge-detail` enables the Golden Gate detail preview (a darker paint tone, ribbed tower legs, framed portal struts, full arch pylons, lamp standards), `--no-bridge-detail` keeps the bridge as exported |
 | People | `--no-rocketbox`, `--no-rocketbox-motions` (either one: no people) |
 | Props | `--no-props2`, `--no-furniture`, `--no-eztree`, `--no-wires`, `--no-overhead`, `--no-lamp-sprites`, `--no-stand-ins` |
@@ -518,12 +520,26 @@ collar. `--no-water` draws a flat sea plane.
 
 Run `./target/release/eo-app --water-optics --start-underwater` for the
 submerged fly camera. Hold Ctrl for fine movement, E to surface and Q to
-descend. The preview requires the compact water pass and single-sample
-rendering (`--msaa 1`). It uses the displaced wave surface, refraction at the
+descend. The preview requires single-sample rendering (`--msaa 1`).
+It uses the displaced wave surface, refraction at the
 waterline, depth-dependent scattering and absorption, and moving light on
 shallow receivers. Visibility follows the Bay and Pacific water properties.
 Above the surface the preview integrates unresolved sun glitter over the
 pixel. The `bay_dive` bench path crosses the surface in both directions.
+
+Start beside swaying eelgrass in Aquatic Park Cove with
+`./target/release/eo-app --dive-site bay`, or above wave-rippled sand and
+partly buried shells off Ocean Beach with `--dive-site pacific`. Both fly
+camera starts enable water optics, underwater habitats and dive exposure.
+Each feature has an independent off switch. Dive exposure compensates up
+to four stops as the light reaching the camera decreases and partially
+corrects the local colour cast. The `bay_grass` and `pacific_sand` bench
+paths swim across the same beds.
+
+The placements illustrate regional habitats. Local shore distance and the
+drawn terrain determine where each patch fits. The eelgrass and ripples
+are original procedural geometry inspired by descriptions of [Bay eelgrass](https://www.epa.gov/sfbay-program/priorities-subtidal)
+and [the Ocean Beach nearshore bed](https://www.spn.usace.army.mil/Portals/68/docs/P%20and%20Programs/Navigation/SF-17_EA_and_Draft_FONSI_05062025.pdf).
 
 **Sky and weather.** Analytic sky and atmosphere, volumetric clouds and the
 marine layer, a weather schedule (clear to storm) with rain, wet ground and

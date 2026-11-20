@@ -116,7 +116,7 @@ fn shadow_cull(@builtin(global_invocation_id) gid: vec3<u32>) {
         caster = base_caster && kind == 9u && o.lod_role == 10u && groups[o.lod_group].detailed == 1u;
         mid_caster = caster;
         far_caster = caster;
-    } else if (kind == 10u) {
+    } else if (kind == 10u || kind == 13u) {
         caster = false; // open ground receives only
         mid_caster = false;
         far_caster = false;

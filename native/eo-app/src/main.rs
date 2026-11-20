@@ -15,6 +15,7 @@ mod props; // props
 mod agents_bench;
 mod people_capture; // people
 mod bench;
+mod dive_sites;
 mod cc0_runtime; // the CC0 scanned sets at run time
 mod farshore; // the far terrain's load and attach
 mod models;
@@ -44,6 +45,8 @@ use std::time::Instant;
 pub struct Args {
     pub bench: bool,
     pub start_underwater: bool,
+    pub dive_site: Option<eo_render::seabed::Habitat>,
+    pub underwater_habitats: bool,
     /// `--quality` (default medium: today's frame); expanded into `look` once
     /// every argument is read (quality.rs), and the bench's frame budget.
     pub quality: quality::Quality,
@@ -204,6 +207,8 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
     let mut a = Args {
         bench: false,
         start_underwater: false,
+        dive_site: None,
+        underwater_habitats: false,
         quality: Default::default(),
         frames: 720,
         warmup: 60,
@@ -376,8 +381,19 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--so-shots" => {} // so: bench/so_shots.rs reads it (the sky and ocean review cards)
             "--no-farshore" => {} // farshore.rs reads it (no far terrain)
             "--start-underwater" => a.start_underwater = true,
+            "--dive-site" => {
+                a.dive_site = Some(match val()?.as_str() {
+                    "bay" => eo_render::seabed::Habitat::Eelgrass,
+                    "pacific" => eo_render::seabed::Habitat::Sand,
+                    other => anyhow::bail!("unknown dive site {other}; choose bay or pacific"),
+                });
+            }
             "--water-optics" => a.look.water_optics = true,
+            "--underwater-habitats" => a.underwater_habitats = true,
+            "--no-underwater-habitats" => a.underwater_habitats = false,
             "--no-water-optics" => a.look.water_optics = false,
+            "--dive-exposure" => a.look.dive_exposure = true,
+            "--no-dive-exposure" => a.look.dive_exposure = false,
             "--no-water" => a.look.water = false, // the flat sea quad, as before
             // agents
             "--no-agents" => a.agents = false,
@@ -449,7 +465,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             }
             "-h" | "--help" => {
                 println!(
-                    "eo-app [--bench] [--frames N=720] [--warmup N=60] [--width 1920] [--height 1080] [--msaa 1|4]\n       [--no-indirect-validation] [--no-indirect-count] [--no-count-emulation] [--no-vsync] [--out DIR] [--label NAME] [--capture] [--far M=4200]\n       [--multiply N=1] [--check-budget] [--budget-ms 10 (self-test only)]\n       [--no-models] [--no-terrain-lod] [--no-kit] [--slice1] [--slice2] [--cache DIR] [--no-cache] [--stream-threads N=6] [--stream-radius M=inf]\n       [--kit-threads N=6] [--kit-split-materials] [--upload-budget-mb 4] [--kit-arena-vertices N] [--kit-arena-indices N] [--kit-arena-objects N]\n       [--kit-near-load M=110] [--kit-mid-load M=520] [--drive-frames N=3600]\n       [--time-of-day H=12] [--shadow-map N=3072] [--no-shadows] [--no-agents] [--agent-density N=1] [--no-rocketbox]\n       [--no-occlusion] [--occlusion-check] [--no-thread-priority] [--pace realtime|60hz|all-60hz|none] [--worst-frames N=12] [--check-max]\n       [--no-view-detail] [--view-margin-deg 35] [--view-predict-s 0.3] [--view-hold-s 2.5] [--stream-all-paths] [--full-arenas]\n       [--segments street_walk,elevated_sweep,city_overview,authored_street,kit_street,drive,turn_around,turn_around_authored]\n       (with --structures and built decks also freeway_drive,under_viaduct) [--light-shots] (capture cards; EO_LIGHT_SHOTS=a,b; EO_LIGHT_SHOTS_HOUR=H every card at another hour; EO_LIGHT_SHOTS=hero the six key views, clock held)\n       [--cc0-shots] (the scanned sets' matched cards; EO_CC0_SHOTS=a,b; EO_CC0_SHOTS_HOUR=H every card at another hour)\n       [--clutter-shots] (the facade clutter's cards: the kit and authored streets, fronts with fire escapes and shop fronts the planner dresses, a roof; the same poses with or without --facade-clutter; EO_CLUTTER_SHOTS=a,b; EO_CLUTTER_SHOTS_HOUR=H, default 15)\n       [--structures-shots] (the grade-separated roads at four places, from the street and from above, 15:00 clear; the same poses with or without --structures; EO_STRUCTURES_SHOTS=a,b; EO_STRUCTURES_SHOTS_HOUR=H another hour; EO_STRUCTURES_SHOTS_HDR=1 the scene luminance too)\n       [--dusk-strip] (40 frames a clock minute apart across sunset and sunrise at one camera, a CSV of mean luminance; with --smooth-time through the soft path)\n       (--light-shots with EO_PROBE_STRIP=path[,frames[,m a frame[,turn]]]: the reflections along a street while probe captures finish, a CSV and the frames round each)\n\nQuality and lighting (opt-in; a switch wins over the tier wherever it stands; each has a --no- form):\n       [--quality low|medium|high|hyper] (default medium, today's frame; bench budget 8 / 10 / 16.6 / 33.3 ms;\n       low: a 2048 sun map, low sky, no SSR, contact shadows, AO, shafts or bloom; high: the lighting additions but the probe grid,\n       with grime, street life, stand-ins, photo finish, facade clutter and shop light at 1 and the cinematic look; hyper: high at level 2, 48 lamps, the probe grid 2)\n       [--cascade-blend] [--far-shadows [1|2]] [--ambient-volume [1|2]] [--probe-grid [1|2]] [--light-shadows [N lamps, 16..48]]\n       [--light-shadow-moving] [--headlight-shadows [N vehicles]] [--lit-fog [1|2]]\n       (--ambient-volume: narrow streets and the ground under decks get less sky light, baked round the camera and over the city)\n       [--ground-bounce] (with --ambient-volume, on unless --no-ground-bounce: light bounced up from the sunlit ground onto deck undersides and walls facing it)\n       [--smooth-time] (the drawn hour follows the simulation's clock, the exposure converges instead of snapping)\n       (--far-shadows: sun shadows past the cascades from cached maps round the camera, 1 a 2 km ring, 2 another to the far plane; --cascade-blend: the cascades hand over in a band instead of a line)\n       (--probe-grid: reflection probes on the streets round the camera, cross-faded, read by every lit surface, 1 four of 128 px, 2 nine of 256 px)\n       (--lit-fog: the fog lit by the street lamps and headlamps, a froxel volume added by the resolve; 1 160 x 90 x 64, 2 240 x 135 x 96; nothing by day)\n       (--light-shadows: the nearest N street lamps keep a shadow map, drawn once, at most 2 new a frame, and draw in SF's 3000 K LED colour; --light-shadow-moving: the 4 nearest redrawn every frame with the traffic; --headlight-shadows: the nearest N vehicles' low beams cast shadows; nothing by day)\n       [--shadow-slope-bias] (the sun cascades' casters with a slope-scaled depth bias: no self-shadow stripes where the sun grazes a surface; high and hyper turn it on)\n       [--grime [1|2]] (surface weathering that reads: soiled walks with gum and stains, chipped kerbs and faded kerb paint, patched and sealed carriageways, washed-down facades, dusty cars; high 1, hyper 2)\n       [--street-life [1|2]] (litter, butts, leaves and grit on the walks and in the gutters; graffiti, buffed patches and posters on ground floors and freeway columns; 2 adds stickers, utility marks, pigeon droppings; high 1, hyper 2)\n       [--stand-ins] (procedural models for street-prop kinds whose GLB is absent from the checkout, instead of grey boxes; high and hyper)\n       [--photo-finish [1|2]] (a camera instead of the JS display transform: highlights pale to white on their hue, ISO noise by the scene's light, lens fall-off and lateral colour, a lens's bloom; San Francisco's measured air in the sky and the haze; 2 smoother fringes and chroma noise; high 1, hyper 2)\n       [--facade-clutter [1|2]] (fire escapes, awnings, colour-field and neon signs, roll-down shutters, bars on older ground-floor windows, downspouts, meters and conduit, chimneys, vents, dishes and aerials on the kit buildings; signs lit by night where the shop is; 2 adds window air conditioners, front dishes, scaffolding, boarded shops; high 1, hyper 2)\n       [--shop-light [1|2]] (lit shop windows at night: a light behind every kit shop window in its trade's colour, at its window's luminance, by its opening hours, spilling onto the sidewalk and lighting the fog, the room behind the glass lit or dark with it; 1 within 160 m, 2 to 300 m with two lights a window; high 1, hyper 2)\n       [--look default|cinematic] (the look profile: default is today's frame on its physical references; cinematic a graded open-world look, its departures from those references listed in CINEMATIC_DEVIATIONS; high and hyper; --no-look is --look default)\n       (a level left out is the high tier's; --probe-grid, which high leaves off, takes 1)\n\nWorld (opt-in; client and server must agree, the handshake refuses a mismatch; each has a --no- form):\n       [--structures] (grade-separated roads: freeways, ramps, road bridges, drawn and cast in three levels of detail) [--tunnels] (bores and portals, with --structures)"
+                    "eo-app [--dive-site bay|pacific] [--water-optics] [--dive-exposure|--no-dive-exposure] [--underwater-habitats|--no-underwater-habitats] [--bench] [--frames N=720] [--warmup N=60] [--width 1920] [--height 1080] [--msaa 1|4]\n       [--no-indirect-validation] [--no-indirect-count] [--no-count-emulation] [--no-vsync] [--out DIR] [--label NAME] [--capture] [--far M=4200]\n       [--multiply N=1] [--check-budget] [--budget-ms 10 (self-test only)]\n       [--no-models] [--no-terrain-lod] [--no-kit] [--slice1] [--slice2] [--cache DIR] [--no-cache] [--stream-threads N=6] [--stream-radius M=inf]\n       [--kit-threads N=6] [--kit-split-materials] [--upload-budget-mb 4] [--kit-arena-vertices N] [--kit-arena-indices N] [--kit-arena-objects N]\n       [--kit-near-load M=110] [--kit-mid-load M=520] [--drive-frames N=3600]\n       [--time-of-day H=12] [--shadow-map N=3072] [--no-shadows] [--no-agents] [--agent-density N=1] [--no-rocketbox]\n       [--no-occlusion] [--occlusion-check] [--no-thread-priority] [--pace realtime|60hz|all-60hz|none] [--worst-frames N=12] [--check-max]\n       [--no-view-detail] [--view-margin-deg 35] [--view-predict-s 0.3] [--view-hold-s 2.5] [--stream-all-paths] [--full-arenas]\n       [--segments street_walk,elevated_sweep,city_overview,authored_street,kit_street,drive,turn_around,turn_around_authored]\n       (with --structures and built decks also freeway_drive,under_viaduct) [--light-shots] (capture cards; EO_LIGHT_SHOTS=a,b; EO_LIGHT_SHOTS_HOUR=H every card at another hour; EO_LIGHT_SHOTS=hero the six key views, clock held)\n       [--cc0-shots] (the scanned sets' matched cards; EO_CC0_SHOTS=a,b; EO_CC0_SHOTS_HOUR=H every card at another hour)\n       [--clutter-shots] (the facade clutter's cards: the kit and authored streets, fronts with fire escapes and shop fronts the planner dresses, a roof; the same poses with or without --facade-clutter; EO_CLUTTER_SHOTS=a,b; EO_CLUTTER_SHOTS_HOUR=H, default 15)\n       [--structures-shots] (the grade-separated roads at four places, from the street and from above, 15:00 clear; the same poses with or without --structures; EO_STRUCTURES_SHOTS=a,b; EO_STRUCTURES_SHOTS_HOUR=H another hour; EO_STRUCTURES_SHOTS_HDR=1 the scene luminance too)\n       [--dusk-strip] (40 frames a clock minute apart across sunset and sunrise at one camera, a CSV of mean luminance; with --smooth-time through the soft path)\n       (--light-shots with EO_PROBE_STRIP=path[,frames[,m a frame[,turn]]]: the reflections along a street while probe captures finish, a CSV and the frames round each)\n\nQuality and lighting (opt-in; a switch wins over the tier wherever it stands; each has a --no- form):\n       [--quality low|medium|high|hyper] (default medium, today's frame; bench budget 8 / 10 / 16.6 / 33.3 ms;\n       low: a 2048 sun map, low sky, no SSR, contact shadows, AO, shafts or bloom; high: the lighting additions but the probe grid,\n       with grime, street life, stand-ins, photo finish, facade clutter and shop light at 1 and the cinematic look; hyper: high at level 2, 48 lamps, the probe grid 2)\n       [--cascade-blend] [--far-shadows [1|2]] [--ambient-volume [1|2]] [--probe-grid [1|2]] [--light-shadows [N lamps, 16..48]]\n       [--light-shadow-moving] [--headlight-shadows [N vehicles]] [--lit-fog [1|2]]\n       (--ambient-volume: narrow streets and the ground under decks get less sky light, baked round the camera and over the city)\n       [--ground-bounce] (with --ambient-volume, on unless --no-ground-bounce: light bounced up from the sunlit ground onto deck undersides and walls facing it)\n       [--smooth-time] (the drawn hour follows the simulation's clock, the exposure converges instead of snapping)\n       (--far-shadows: sun shadows past the cascades from cached maps round the camera, 1 a 2 km ring, 2 another to the far plane; --cascade-blend: the cascades hand over in a band instead of a line)\n       (--probe-grid: reflection probes on the streets round the camera, cross-faded, read by every lit surface, 1 four of 128 px, 2 nine of 256 px)\n       (--lit-fog: the fog lit by the street lamps and headlamps, a froxel volume added by the resolve; 1 160 x 90 x 64, 2 240 x 135 x 96; nothing by day)\n       (--light-shadows: the nearest N street lamps keep a shadow map, drawn once, at most 2 new a frame, and draw in SF's 3000 K LED colour; --light-shadow-moving: the 4 nearest redrawn every frame with the traffic; --headlight-shadows: the nearest N vehicles' low beams cast shadows; nothing by day)\n       [--shadow-slope-bias] (the sun cascades' casters with a slope-scaled depth bias: no self-shadow stripes where the sun grazes a surface; high and hyper turn it on)\n       [--grime [1|2]] (surface weathering that reads: soiled walks with gum and stains, chipped kerbs and faded kerb paint, patched and sealed carriageways, washed-down facades, dusty cars; high 1, hyper 2)\n       [--street-life [1|2]] (litter, butts, leaves and grit on the walks and in the gutters; graffiti, buffed patches and posters on ground floors and freeway columns; 2 adds stickers, utility marks, pigeon droppings; high 1, hyper 2)\n       [--stand-ins] (procedural models for street-prop kinds whose GLB is absent from the checkout, instead of grey boxes; high and hyper)\n       [--photo-finish [1|2]] (a camera instead of the JS display transform: highlights pale to white on their hue, ISO noise by the scene's light, lens fall-off and lateral colour, a lens's bloom; San Francisco's measured air in the sky and the haze; 2 smoother fringes and chroma noise; high 1, hyper 2)\n       [--facade-clutter [1|2]] (fire escapes, awnings, colour-field and neon signs, roll-down shutters, bars on older ground-floor windows, downspouts, meters and conduit, chimneys, vents, dishes and aerials on the kit buildings; signs lit by night where the shop is; 2 adds window air conditioners, front dishes, scaffolding, boarded shops; high 1, hyper 2)\n       [--shop-light [1|2]] (lit shop windows at night: a light behind every kit shop window in its trade's colour, at its window's luminance, by its opening hours, spilling onto the sidewalk and lighting the fog, the room behind the glass lit or dark with it; 1 within 160 m, 2 to 300 m with two lights a window; high 1, hyper 2)\n       [--look default|cinematic] (the look profile: default is today's frame on its physical references; cinematic a graded open-world look, its departures from those references listed in CINEMATIC_DEVIATIONS; high and hyper; --no-look is --look default)\n       (a level left out is the high tier's; --probe-grid, which high leaves off, takes 1)\n\nWorld (opt-in; client and server must agree, the handshake refuses a mismatch; each has a --no- form):\n       [--structures] (grade-separated roads: freeways, ramps, road bridges, drawn and cast in three levels of detail) [--tunnels] (bores and portals, with --structures)"
                 );
                 std::process::exit(0);
             }
@@ -457,6 +473,11 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
         }
     }
     tier.apply(&mut a); // the tier, then the lighting switches over it
+    if a.dive_site.is_some() {
+        a.look.water_optics = !raw.iter().any(|flag| flag == "--no-water-optics");
+        a.look.dive_exposure = !raw.iter().any(|flag| flag == "--no-dive-exposure");
+        a.underwater_habitats = !raw.iter().any(|flag| flag == "--no-underwater-habitats");
+    }
     if a.frames + a.warmup > 1024 {
         // 4 timestamp queries per frame; one query set holds at most 4096.
         anyhow::bail!("--frames + --warmup must be <= 1024 per segment");
@@ -492,6 +513,7 @@ pub struct World {
     pub facade_detail: Option<Arc<eo_assets::facade_detail::FacadeDetail>>,
     /// the citywide shore field and the FFT spectrum (drawn unless `--no-water`).
     pub water: Option<Arc<eo_water::WaterData>>,
+    pub dive_sites: Vec<dive_sites::Site>,
     /// what the scene build added (LOD groups after the street's, the wire members).
     pub landmarks: Option<Arc<eo_render::landmarks::LandmarkStatic>>,
     /// the far layer's cells (every building drawn as a building, in one cell each).
@@ -907,6 +929,12 @@ pub fn load_world(args: &Args) -> Result<World> {
         ground_tone: if cover.is_some() { Some(&ground_tone_fn) } else { None },
         smooth_terrain: args.landmarks && args.landmarks2,
     }, terrain_cuts)?;
+    let mut dive_sites = vec![];
+    if args.look.water && (args.underwater_habitats || args.dive_site.is_some() || args.capture || args.bench)
+        && let (Some(data), Some(height)) = (&water, &carpet_fn)
+    {
+        dive_sites = dive_sites::prepare(&mut scene, &data.field, elev, height.as_ref(), args.underwater_habitats);
+    }
     drop(carpet_fn); // water
     // the bridges (eo-landmarks, the JS generators ported) on the
     // drawn ground, appended to the static table; their LOD groups follow the street's.
@@ -1021,7 +1049,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         }
         None => (None, None),
     };
-    Ok(World { paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, landmarks, hlod, hlod_trees, structures, structures_drawn }) // hlod
+    Ok(World { paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, dive_sites, landmarks, hlod, hlod_trees, structures, structures_drawn }) // hlod
 }
 
 /// the street size. `--ground-scale S` (an explicit ground-plan

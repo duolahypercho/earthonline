@@ -298,6 +298,10 @@ fn lod_and_frustum(i: u32, o: Object) -> vec3<u32> {
             count = o.far_index_count;
         }
     }
+    if ((o.kind & 255u) == 13u) {
+        // The dive sites contain centimetre-scale relief, hidden at distance by water.
+        visible = distance(params.cam.xyz, clamp(params.cam.xyz, o.min, o.max)) < 58.0;
+    }
     if (count == 0u) {
         visible = false;
     }
