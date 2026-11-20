@@ -92,6 +92,10 @@ const SKY_SPRITES: u32 = 4096u;
 const SKY_CONTACT: u32 = 8192u;
 // the fair-weather cumulus field (off by default: `EO_CUMULUS=1`, sky.rs `SkyOptions::cumulus`)
 const SKY_CUMULUS: u32 = 16384u;
+// a low-deck cloud over the ground hazed by its own depth (`--cloud-depth-haze`, off by
+// default; off, the ground's whole aerial perspective is in front of it, as before; sky.rs
+// `SkyOptions::cloud_depth_haze`)
+const SKY_CLOUD_DEPTH_HAZE: u32 = 2048u;
 
 /// World metres one cloud-sheet tile spans (eo-sky clouds.rs).
 const SKY_LOW_TILE: f32 = 3200.0;

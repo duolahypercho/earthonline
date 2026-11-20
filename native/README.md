@@ -174,6 +174,7 @@ switch it does not take.
 | `--weather-seed N`, `--world-time S` | Seed and clock of the weather schedule |
 | `--moon-day D` | Day of the lunar cycle |
 | `--sky-quality low\|medium\|high` | Cloud and atmosphere quality |
+| `--cloud-depth-haze` | A low-deck cloud seen over the ground (below the horizon from inside or above the deck) takes the aerial perspective of its own depth and hides the haze behind it, instead of the haze of the whole path to the ground in front of it (a blue veil cut at the horizon). Not under a weather veil (fog, drizzle, rain, storm), where those frames stay as they were. Off by default until reviewed under the visual gate; `--no-cloud-depth-haze` restores the frame |
 | `--agent-density N` | Multiply the traffic and pedestrian population (1 to 64) |
 | `--width W --height H` | Frame size (default 1920 x 1080) |
 | `--msaa 1\|4` | Multisampling |
@@ -210,7 +211,7 @@ selection:
 | Buildings | `--no-facade-detail`, `--no-facade-age`, `--no-rooms`, `--no-room-frames`, `--no-room-dim`, `--no-roof-colours`, `--no-roof-plant`, `--no-roof-parapet`, `--no-roof-patches`, `--no-wall-paint` |
 | Ground | `--no-ground-hills`, `--no-ground-green`, `--no-ground-contact`, `--no-terrain-lod` |
 | Scanned surfaces | `--no-cc0` (all), `--no-cc0-street`, `--no-cc0-walls`, `--no-cc0-ground`, `--no-cc0-decals`, `--no-cc0-grime`, `--no-cc0-stains`, `--no-cc0-pom`, `--no-cc0-tiling` |
-| Lighting and sky | `--no-shadows`, `--no-ao`, `--no-contact-shadows`, `--no-atmosphere`, `--no-fog`, `--no-clouds`, `--no-cloud-shadows`, `--no-shafts`, `--no-moon-stars`, `--no-lights` |
+| Lighting and sky | `--no-shadows`, `--no-ao`, `--no-contact-shadows`, `--no-atmosphere`, `--no-fog`, `--no-clouds`, `--no-cloud-shadows`, `--no-cloud-depth-haze`, `--no-shafts`, `--no-moon-stars`, `--no-lights` |
 | Weather | `--no-rain`, `--no-wet`, `--no-wind` |
 | Camera finish | `--no-taa`, `--no-bloom`, `--no-adaptation`, `--no-ssr` |
 | Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count` |
@@ -238,6 +239,7 @@ Experiments are not shipped defaults.
 | `EO_UI_FONT_DIR` | A font folder to use instead of the system font folder |
 | `EO_TRACE_LOAD` | Print timings of the world load |
 | `EO_CUMULUS` | `1` draws the fair-weather cumulus field under a clear sky (off by default; the overcast, fog and rain decks are drawn either way) |
+| `EO_CAPTURE_HOLD_SKY` | `1` holds the sky's clock at `--world-time` for every pose of an `EO_CAPTURE_POSES` file, so the drifting clouds are the same in two runs (matched captures) |
 
 The locations of the optional off-repository assets are read from the
 variables below.

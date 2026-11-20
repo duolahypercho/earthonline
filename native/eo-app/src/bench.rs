@@ -601,7 +601,14 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             }
         };
         let label = args.label.as_deref().unwrap_or("props2");
+        // `EO_CAPTURE_HOLD_SKY=1`: every pose at the `--world-time` clock, held while it
+        // settles (the decks drift with the clock, and a pose's settle takes as many frames
+        // as its streaming needs, so two runs met different clouds at one pose).
+        let hold_sky = std::env::var_os("EO_CAPTURE_HOLD_SKY").is_some_and(|v| v == "1");
         for (name, cam) in poses {
+            if hold_sky {
+                renderer.look.sky.set_clock(args.look.sky.world_time_s, 0.0);
+            }
             settle_p(&ctx, &renderer, &world, &mut models, Some(&mut props), &cam, 600.0)?;
             crate::props::sync_parked(&ctx, &renderer, &mut props, &mut agents, &cam);
             settle_p(&ctx, &renderer, &world, &mut models, Some(&mut props), &cam, 600.0)?;

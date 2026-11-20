@@ -90,6 +90,11 @@ pub struct SkyOptions {
     /// The fair-weather cumulus field, off by default (a clear sky keeps the high sheet
     /// alone; the overcast, fog and rain decks are drawn either way); `EO_CUMULUS=1` draws it.
     pub cumulus: bool,
+    /// A low-deck cloud seen over the ground takes the aerial perspective of its own depth
+    /// and hides the haze behind it. Off by default until reviewed under the visual gate
+    /// (`--cloud-depth-haze` turns it on); off, the ground's whole aerial perspective is in
+    /// front of the cloud, a blue veil under the horizon, as before.
+    pub cloud_depth_haze: bool,
     pub weather: WeatherMode,
     pub seed: u32,
     /// The world clock at the first frame (seconds since the world's epoch).
@@ -119,6 +124,7 @@ impl Default for SkyOptions {
             atmosphere: true,
             contact: true,
             cumulus: std::env::var("EO_CUMULUS").is_ok_and(|v| v == "1"),
+            cloud_depth_haze: false,
             weather: WeatherMode::Preset(eo_sky::Kind::Clear),
             seed: eo_sky::world_seed(),
             world_time_s: 0.0,
@@ -150,6 +156,7 @@ impl SkyOptions {
             atmosphere: false,
             contact: false,
             cumulus: false,
+            cloud_depth_haze: false,
             ..Self::default()
         }
     }
@@ -177,6 +184,7 @@ impl SkyOptions {
             (self.sprites, 4096),
             (self.contact, 8192),
             (self.cumulus, 16384), // SKY_CUMULUS
+            (self.cloud_depth_haze, 2048), // SKY_CLOUD_DEPTH_HAZE
         ] {
             if on {
                 b |= bit;
