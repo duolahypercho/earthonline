@@ -16,11 +16,13 @@
 //!   lod.rs         lod.js (rungs 1-2 filters, wall-band collapse, envelope)
 //!   mesh.rs        kit/build.js emitters (box, profile, plate, prism; vertex clamp)
 //!   tenancy.rs     building-metadata ground-floor units
+//!   clutter.rs     facade clutter (fire escapes, awnings, signs, services, roofs; off by default)
 
 pub mod appearance; // facade
 pub mod archetypes;
 pub mod city;
 pub mod classify;
+pub mod clutter; // facade clutter (`--facade-clutter`): fire escapes, awnings, signs, services, roof clutter
 pub mod elevation;
 pub mod frame;
 pub mod js;
