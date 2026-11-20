@@ -57,12 +57,14 @@ pub fn plant_with(claims: Option<&crate::rocks::scan::Claims>, x0: f64, z0: f64,
         // elsewhere single blocks on steep slopes (grouped by the same field) and a few
         // stones on bare earth.
         let group = field(x, z, 22.0, 31);
+        // the flora pass (`--no-chert-ground`): ribbon-chert outcrops on the steep Marin faces.
+        let ribbon = crate::flora::flora().chert && s.lithology == Lithology::Chert && slope >= crate::flora::RIBBON_SLOPE_DEG && z < crate::vegetation::marin_z();
         let chance = match cover {
             Cover::Rock | Cover::Cliff => 0.12 + 0.86 * outcrop_patch(x, z, cover),
             Cover::Bare => 0.06 + 0.5 * steep,
             Cover::Lawn => 0.0,
             _ => steep * steep * smoothstep(0.35, 0.75, group) * 0.9,
-        };
+        } + if ribbon { 0.3 * smoothstep(0.3, 0.6, group) } else { 0.0 };
         if hash(ix, iz, 3) >= chance {
             return;
         }
@@ -76,6 +78,7 @@ pub fn plant_with(claims: Option<&crate::rocks::scan::Claims>, x0: f64, z0: f64,
             Lithology::Sandstone => shape,
         };
         let base = match s.lithology {
+            Lithology::Chert if ribbon => crate::flora::CHERT_RIBBON_SRGB,
             Lithology::Chert => CHERT_SRGB,
             Lithology::Serpentinite => SERPENTINITE_SRGB,
             Lithology::Sandstone => SANDSTONE_SRGB,
@@ -97,7 +100,7 @@ pub fn plant_with(claims: Option<&crate::rocks::scan::Claims>, x0: f64, z0: f64,
             rank: hash(ix, iz, 8) as f32,
             tint,
             grad,
-            tip: crate::vegetation::TIP_NONE,
+            tip: if ribbon { crate::flora::TIP_RIBBON } else { crate::vegetation::TIP_NONE },
         });
     });
 }

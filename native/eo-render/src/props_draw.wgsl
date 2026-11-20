@@ -359,7 +359,26 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
                 let clod = mix(0.5, pr_noise3(vec3<f32>(q * 3.0, 9.0)), coarse);
                 let grit = mix(0.5, pr_noise3(vec3<f32>(q * 40.0, 13.0)), fine);
                 let crust = smoothstep(0.55, 0.8, pr_noise3(vec3<f32>(q * 0.7, 15.0)));
-                let soil = m.base.rgb * (0.78 + 0.34 * clod + 0.22 * (grit - 0.5)) * mix(vec3<f32>(1.0), vec3<f32>(1.18, 1.12, 1.05), crust);
+                var soil = m.base.rgb * (0.78 + 0.34 * clod + 0.22 * (grit - 0.5)) * mix(vec3<f32>(1.0), vec3<f32>(1.18, 1.12, 1.05), crust);
+                if (PR_CHERT_GROUND) {
+                    // the flora pass's red chert soil (eo_landmarks::flora CHERT_TOP_SRGB,
+                    // CHERT_FACE_SRGB: the knoll's measured top and cut face) by the ground's
+                    // slope, with angular tabular chips of chert rubble (5-30 cm talus, the
+                    // guide's estimate; here the finer gravel, 4-8 cm), lighter or darker
+                    // than the soil, each faded to its mean where a pixel spans it.
+                    let up = clamp(normalize(in.normal).y, 0.0, 1.0);
+                    let base = mix(PR_CHERT_FACE, PR_CHERT_TOP, smoothstep(0.62, 0.85, up));
+                    soil = base * (0.86 + 0.24 * clod + 0.16 * (grit - 0.5)) * mix(vec3<f32>(1.0), vec3<f32>(1.06, 1.04, 1.02), crust);
+                    let cq = q * 16.0;
+                    let cell = cq - fract(cq); // (`floor` is the mat's local above)
+                    let ch = pr_hash3(vec3<f32>(cell, 21.0));
+                    let fq = fract(cq) - vec2<f32>(0.5);
+                    let turn = ch * 6.283;
+                    let rq = vec2<f32>(fq.x * cos(turn) - fq.y * sin(turn), fq.x * sin(turn) + fq.y * cos(turn));
+                    let chip = step(0.55, ch) * (1.0 - step(0.3, abs(rq.x) + 1.6 * abs(rq.y)));
+                    let tone = mix(0.7, 1.25, pr_hash3(vec3<f32>(cell, 22.0)));
+                    soil = soil * mix(1.0, tone, chip * mid);
+                }
                 let sprout = smoothstep(0.72, 0.9, tuft) * in.uv.y * 3.0;
                 s.albedo = mix(soil, live, clamp(sprout, 0.0, 1.0));
             }
@@ -467,6 +486,33 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         // (a narrow spread, 0.82-1.18 fine and 0.85-1.15 coarse: a wider one reads as
         // pockmarks on a smooth slab at 1.7 m.)
         s.albedo = s.albedo * mix(1.0, 0.82 + 0.36 * g, k) * (0.85 + 0.3 * coarse);
+        if ((inst.lamp >> 24u) == PR_TIP_RIBBON) {
+            // the flora pass's ribbon chert (eo_landmarks::flora TIP_RIBBON): hard red
+            // chert beds 2-10 cm thick parted by thin dark shale, folded (field guide
+            // 4.1: "highly folded bedded chert", chevron folds; beds 2.5-5 cm on
+            // average, secondary source). The beds dip by the block's yaw; folds are
+            // a sine of a few metres along the strike; each bed its own value; the
+            // partings fade to the beds' mean where a pixel spans a bed.
+            let fw = length(dpx) + length(dpy);
+            let dip = vec3<f32>(sin(inst.yaw) * 0.7, 1.0, cos(inst.yaw) * 0.7);
+            let strike = normalize(vec3<f32>(cos(inst.yaw), 0.0, -sin(inst.yaw)));
+            let along = dot(in.world, strike);
+            let fold = 0.35 * sin(along * 1.7 + inst.yaw * 3.0) + 0.12 * sin(along * 4.3);
+            let beds = (dot(in.world, normalize(dip)) + fold) / 0.06;
+            let bed = floor(beds);
+            let f = fract(beds);
+            let kb = 1.0 - smoothstep(0.02, 0.09, fw);
+            let value = 0.82 + 0.34 * pr_hash3(vec3<f32>(bed, 5.0, 9.0));
+            let parting = 1.0 - 0.55 * (1.0 - smoothstep(0.0, 0.12, f)) ;
+            s.albedo = s.albedo * mix(0.92, value * parting, kb);
+            // the beds stand proud of the partings: a groove in the normal.
+            let gdir = normalize(dip);
+            let groove = (1.0 - smoothstep(0.0, 0.12, f)) * kb;
+            let nb = normalize(s.n + gdir * groove * 0.35);
+            if (all(nb == nb)) {
+                s.n = nb;
+            }
+        }
         s.albedo = mix(s.albedo, vec3<f32>(dot(s.albedo, vec3<f32>(0.33))) * vec3<f32>(1.05, 1.08, 0.9), stain);
         let e = 0.04;
         let gx = pr_noise3((in.world + vec3<f32>(e, 0.0, 0.0)) * 9.0) - pr_noise3(in.world * 9.0);

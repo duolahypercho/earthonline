@@ -778,9 +778,14 @@ impl Materials<'_> {
         // face (past `BARE_FACE_SLOPE`) or red-brown soil in the NAIP (`soil_share`)
         // as eo_landmarks::vegetation::bare_soil leaves it without meadow patches.
         // (or, the bare class only, warm bare ground: `NAIP_WARM_RG`, soil showing through).
+        // The flora pass's chert ground (`--no-chert-ground`) shrinks the rule with the
+        // vegetation's (eo_landmarks::vegetation::bare_soil_with): steeper faces, more
+        // soil, and only the warmest ground (the summer image's cured grass is warm too).
+        let chert = eo_landmarks::flora::flora().chert;
+        let (face, soil_min, warm_min) = if chert { (CHERT_FACE_SLOPE, 0.45, 0.85) } else { (BARE_FACE_SLOPE, 0.3, 0.5) };
         let eroded = eo_landmarks::vegetation::grass3().bare
             && pr == Prior::Bare
-            && (slope > BARE_FACE_SLOPE || soil_share(naip, &self.frame, x, z, fp, eo_landmarks::vegetation::NAIP_SOIL_RG) > 0.3 || soil_share(naip, &self.frame, x, z, fp, eo_landmarks::vegetation::NAIP_WARM_RG) > 0.5);
+            && (slope > face || soil_share(naip, &self.frame, x, z, fp, eo_landmarks::vegetation::NAIP_SOIL_RG) > soil_min || soil_share(naip, &self.frame, x, z, fp, eo_landmarks::vegetation::NAIP_WARM_RG) > warm_min);
         if pr == Prior::Bare && tone != Some("bareRock") && eo_landmarks::vegetation::grass2().cover && !eroded {
             pr = Prior::Grass;
         }
@@ -791,7 +796,11 @@ impl Materials<'_> {
         // FAR_SCRUB) between the planted shrubs
         let scrub = crate::farshore::FAR_SCRUB.map(|v| v as f64);
         let substrate = if lat > MARIN_LAT {
-            let soil = mix3(lin(SOIL_SURFACE_SRGB), lin(SOIL_ERODED_SRGB), smooth(ERODED_SLOPE[0], ERODED_SLOPE[1], slope));
+            // (the flora pass: the red chert soil, the knoll's measured top and cut face.)
+            // Above the waterline cliffs only: their base is basalt and greenstone, dark
+            // (guide 4.1; the shaded Lime Point cliffs measure (71,67,64)).
+            let (top, cut) = if chert && y as f64 > eo_landmarks::flora::CHERT_MIN_Y { (eo_landmarks::flora::CHERT_TOP_SRGB, eo_landmarks::flora::CHERT_FACE_SRGB) } else { (SOIL_SURFACE_SRGB, SOIL_ERODED_SRGB) };
+            let soil = mix3(lin(top), lin(cut), smooth(ERODED_SLOPE[0], ERODED_SLOPE[1], slope));
             mix3(soil, scrub, canopy)
         } else {
             let own = [0, 8, 16].map(|s| srgb_lin(((rgba >> s) & 255) as u8));
@@ -829,6 +838,9 @@ pub fn naip_shares(naip: &Naip, frame: &GeoFrame, x: f64, z: f64, fp: f64) -> Op
 /// the third grass pass (`--no-bare-ground`): 0.84, 40 degrees, the middle of
 /// eo_landmarks::vegetation::bare_soil's 36-46 degree ramp.
 pub const BARE_FACE_SLOPE: f64 = 0.84;
+/// The same under the flora pass's chert ground: 1.0, 45 degrees, the middle of
+/// eo_landmarks::vegetation::bare_soil_with's shrunk 40-50 degree ramp.
+pub const CHERT_FACE_SLOPE: f64 = 1.0;
 
 /// The share of red-brown soil in the NAIP over a square of side `fp` at (x, z)
 /// (5 x 5 taps): not green, red over green by `rg` and not pale

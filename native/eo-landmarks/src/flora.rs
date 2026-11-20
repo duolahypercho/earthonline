@@ -14,7 +14,7 @@ use crate::vegetation::{field, hash, smoothstep, warped, Site, MEADOW_COYOTE, ME
 
 /// The flora pass's switch names (the roll-up first); eo-app accepts them,
 /// [`Flora::from_args`] reads them.
-pub const FLORA_SWITCHES: &[&str] = &["--no-flora", "--no-scrub-species", "--no-grass-ramp", "--no-bluff-scrub"];
+pub const FLORA_SWITCHES: &[&str] = &["--no-flora", "--no-scrub-species", "--no-grass-ramp", "--no-bluff-scrub", "--no-chert-ground"];
 
 /// The flora pass's features, each with its `--no-` switch ([`FLORA_SWITCHES`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -33,18 +33,23 @@ pub struct Flora {
     /// scrub (coast buckwheat, seaside daisy, Douglas iris, dudleya) among red fescue
     /// instead of the headlands' meadow, the coyote brush sparse.
     pub bluff: bool,
+    /// `--no-chert-ground`: the Marin ground's bare soil is red chert soil and rubble at
+    /// the guide's measured colours ([`CHERT_TOP_SRGB`], [`CHERT_FACE_SRGB`]), steep
+    /// Marin faces carry ribbon-chert outcrops (folded thin beds), and the bare rule
+    /// shrinks to the knoll tops, scars and faces (the overlook's shoulders are scrub).
+    pub chert: bool,
 }
 
 impl Flora {
-    pub const ALL: Flora = Flora { species: true, ramp: true, bluff: true };
-    pub const NONE: Flora = Flora { species: false, ramp: false, bluff: false };
+    pub const ALL: Flora = Flora { species: true, ramp: true, bluff: true, chert: true };
+    pub const NONE: Flora = Flora { species: false, ramp: false, bluff: false, chert: false };
 
     pub fn from_args(args: &[String]) -> Self {
         let has = |s: &str| args.iter().any(|a| a == s);
         if has("--no-flora") {
             return Self::NONE;
         }
-        Flora { species: !has("--no-scrub-species"), ramp: !has("--no-grass-ramp"), bluff: !has("--no-bluff-scrub") }
+        Flora { species: !has("--no-scrub-species"), ramp: !has("--no-grass-ramp"), bluff: !has("--no-bluff-scrub"), chert: !has("--no-chert-ground") }
     }
 }
 
@@ -58,7 +63,7 @@ pub fn flora() -> Flora {
         let g3 = crate::vegetation::grass3();
         // the species replace the third pass's mounds; the grassland's ramp and the bluff
         // scrub act in the second pass's meadow (the third pass keeps it when on).
-        Flora { species: f.species && g3.scrub, ramp: f.ramp && g3 != crate::vegetation::Grass3::NONE, bluff: f.bluff && g3 != crate::vegetation::Grass3::NONE }
+        Flora { species: f.species && g3.scrub, ramp: f.ramp && g3 != crate::vegetation::Grass3::NONE, bluff: f.bluff && g3 != crate::vegetation::Grass3::NONE, chert: f.chert && g3.bare }
     })
 }
 
@@ -263,6 +268,40 @@ pub fn bluff_kind(x: f64, z: f64, ix: i64, iz: i64) -> u8 {
     crate::vegetation::MEADOW_FESCUE
 }
 
+// ------------------------------------------------------------------ red chert ground
+
+/// Weathered chert soil, the sunlit flat top of the Battery Spencer knoll:
+/// median (190,129,75), p10 (148,118,57), p90 (204,138,85) [P:spencer] (sRGB;
+/// the rendered target: trampled thin soil and rubble of red radiolarian chert
+/// and its shale partings, iron oxide; field guide 4.1, inference UNVERIFIED).
+pub const CHERT_TOP_SRGB: [u8; 3] = [190, 129, 75];
+/// The knoll's steep cut face: (154,120,74) [P:spencer].
+pub const CHERT_FACE_SRGB: [u8; 3] = [154, 120, 74];
+/// Fresh red chert in an outcrop: (140-175, 70-95, 55-75) (estimate), its low
+/// end taken toward the neutral as the hill rock's chert (hill_rock.rs
+/// `CHERT_SRGB`: the full chroma drew salmon under the frame's light).
+pub const CHERT_RIBBON_SRGB: [u8; 3] = [128, 80, 64];
+/// Under this height (game m) the Marin ground is the waterline cliffs' basalt
+/// and greenstone, not chert (the sequence's base, guide 4.1; cliffs 10-40 m
+/// high, game heights 1.25 x real).
+pub const CHERT_MIN_Y: f64 = 45.0;
+/// The share of a cell the overlook's disturbed shoulders carry in scrub and
+/// forbs (`Flora::chert`): the ground the old bare rule stripped but the
+/// shrunk one keeps (the Battery Spencer foreground: "dense mid-green leafy
+/// herbs and shrubs", guide section 0; share INFERRED).
+pub const SHOULDER_SCRUB: f64 = 0.65;
+/// The shoulder's shrubs' height factor: wind and salt keep the growth low on
+/// the headland's exposed shoulders (guide 1.1), coyote brush prostrate at
+/// 0.3-0.6 m on windy bluffs (REF); the photograph's foreground band stands
+/// below the eye (INFERRED: 0.4 of the species' height).
+pub const SHOULDER_LOW: f32 = 0.4;
+/// The tip word that asks the props shader for ribbon-chert bedding on a rock
+/// block (props_draw.wgsl; the rocks carry no grass tip otherwise).
+pub const TIP_RIBBON: u8 = 254;
+/// A Marin face this steep or more carries ribbon-chert outcrops (degrees;
+/// the guide's chert ribs and fins along crests and cuts, estimate).
+pub const RIBBON_SLOPE_DEG: f64 = 38.0;
+
 // ------------------------------------------------------------------ where the scrub grows
 
 /// How the ground's shape weights the scrub (a factor on the third pass's
@@ -346,6 +385,7 @@ mod tests {
         assert_eq!(a(&["--no-flora"]), Flora::NONE);
         assert_eq!(a(&["--no-scrub-species"]), Flora { species: false, ..Flora::ALL });
         assert_eq!(a(&["--no-grass-ramp", "--no-bluff-scrub"]), Flora { ramp: false, bluff: false, ..Flora::ALL });
+        assert_eq!(a(&["--no-chert-ground"]), Flora { chert: false, ..Flora::ALL });
     }
 
     #[test]
@@ -386,6 +426,14 @@ mod tests {
         assert!(seed_stalks(103.0) > 0.15 && seed_stalks(10.0) == 0.0);
         // the curve is continuous across the year's end.
         assert!((grass_cure(364.9) - grass_cure(0.0)).abs() < 0.02);
+    }
+
+    #[test]
+    fn the_chert_colours_are_the_measured_ones() {
+        assert_eq!(CHERT_TOP_SRGB, [190, 129, 75]);
+        assert_eq!(CHERT_FACE_SRGB, [154, 120, 74]);
+        // red over green over blue, the face darker than the top.
+        assert!(CHERT_FACE_SRGB.iter().zip(CHERT_TOP_SRGB.iter()).all(|(f, t)| f <= t));
     }
 
     #[test]

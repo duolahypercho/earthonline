@@ -897,7 +897,7 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
         if ex.g2.cover && meadow_ground(cover, naip) {
             // the third pass: bare eroded ground stays bare (a sparse tuft in some
             // cells), and the scrub stands as mounds in place of the meadow patch.
-            if ex.g3x.bare && hash(ix, iz, 110) < bare_soil(x, z, &s, naip) {
+            if ex.g3x.bare && hash(ix, iz, 110) < bare_soil_with(x, z, &s, naip, ex.fl.chert) {
                 // scrub stands over the soil on a ridge's flanks (the seaward slopes'
                 // mounds with the eroded soil between: the photographs' foreground),
                 // not on its flatter top or on a steep face.
@@ -909,6 +909,18 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
                     let cured = meadow_cured(x, z, &s, season, ex.g3x.breakup);
                     let sc = 0.8 + 0.4 * hash(ix, iz, 112) as f32;
                     out.push(Plant { kind: Kind::Meadow(MEADOW_BARE), pos: [x, s.y - GRASS_SINK_M, z], yaw: hash(ix, iz, 7) * std::f64::consts::TAU, scale: [sc; 3], rank: hash(ix, iz, 8) as f32, tint: meadow_patch_tint(MEADOW_BARE, cured, 0.9 + 0.2 * hash(ix, iz, 20) as f32), grad: s.grad(), tip: TIP_NONE });
+                }
+                return;
+            }
+            // the flora pass's chert ground: the warm shoulders the old bare rule stripped
+            // (the overlook's disturbed ground) are dense scrub, not bare and not meadow.
+            let shoulder = ex.fl.chert && ex.g3x.bare && hash(ix, iz, 110) < bare_soil(x, z, &s, naip);
+            if ex.g3x.scrub && shoulder && slope < 50.0 && hash(ix, iz, 152) < crate::flora::SHOULDER_SCRUB {
+                // wind-pruned low on the exposed shoulder (prostrate coyote brush 0.3-0.6 m, REF).
+                let n0 = out.len();
+                plant_mound(x, z, ix, iz, &s, bloom, ex.g3x, ex.fl, day_of_year, out);
+                for p in &mut out[n0..] {
+                    p.scale = [p.scale[0] * 0.8, p.scale[1] * crate::flora::SHOULDER_LOW, p.scale[2] * 0.8];
                 }
                 return;
             }
@@ -1229,7 +1241,7 @@ pub const MOUNDS_PER_CELL: f64 = 0.5;
 
 /// The game z north of which the ground is the Marin Headlands' (37.8135 N, the
 /// strait's mid-line under the bridge; eo-render terrain_detail `MARIN_LAT`).
-fn marin_z() -> f64 {
+pub(crate) fn marin_z() -> f64 {
     static Z: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
     *Z.get_or_init(|| game_xz(37.8135, -122.4783).1)
 }
@@ -1250,13 +1262,25 @@ pub fn warped(x: f64, z: f64, cell: f64, salt: u32) -> f64 {
 /// whose image is warm bare ground ([`Naip::warm`]: the eroded knoll tops),
 /// less where the image shows any green.
 pub fn bare_soil(x: f64, z: f64, s: &Site, naip: Option<Naip>) -> f64 {
+    bare_soil_with(x, z, s, naip, false)
+}
+
+/// [`bare_soil`], or with the flora pass's chert ground (`shrunk`,
+/// `crate::flora::Flora::chert`) the bare rule shrunk: steeper faces, more
+/// soil in the image, and only the most convex knoll tops (3-5 m over their
+/// ring, not the 1.5-3.5 m of the overlook's rounded shoulders: the summer
+/// image's cured grass is as warm as soil, so the warm share on a shoulder
+/// stripped the scrub there; INFERRED from the Battery Spencer photograph,
+/// where the ground before the eye is scrub and the knoll beyond is bare).
+pub fn bare_soil_with(x: f64, z: f64, s: &Site, naip: Option<Naip>, shrunk: bool) -> f64 {
     let Some(n) = naip else { return 0.0 };
     let slope = s.slope_deg();
-    let face = smoothstep(36.0, 46.0, slope) * smoothstep(0.45, 0.85, n.bare as f64);
-    let soil = smoothstep(0.12, 0.45, n.soil as f64);
+    let (fa, sa, ra, wa) = if shrunk { ([40.0, 50.0], [0.2, 0.55], [3.0, 5.0], [0.45, 0.8]) } else { ([36.0, 46.0], [0.12, 0.45], [1.5, 3.5], [0.4, 0.8]) };
+    let face = smoothstep(fa[0], fa[1], slope) * smoothstep(0.45, 0.85, n.bare as f64);
+    let soil = smoothstep(sa[0], sa[1], n.soil as f64);
     // a knoll top or ridge (the ground 2-4 m over the mean of a ring 12 m out) whose
     // image is warm bare ground: wind and foot traffic strip the thin soil there.
-    let ridge = smoothstep(1.5, 3.5, -s.hollow_m) * smoothstep(0.4, 0.8, n.warm as f64);
+    let ridge = smoothstep(ra[0], ra[1], -s.hollow_m) * smoothstep(wa[0], wa[1], n.warm as f64);
     let green = smoothstep(0.1, 0.4, (n.canopy + n.lush) as f64);
     // a ragged edge: the soil breaks into the sward along a warped field.
     let edge = 0.75 + 0.5 * warped(x, z, 5.0, 114);
