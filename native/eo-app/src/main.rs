@@ -52,6 +52,7 @@ pub struct Args {
     pub dive_site: Option<eo_render::seabed::Habitat>,
     pub underwater_habitats: bool,
     pub cove_detail: bool,
+    pub black_point_intertidal: bool,
     pub surface_start: bool,
     pub frames: usize,
     pub warmup: usize,
@@ -213,6 +214,7 @@ fn parse_args() -> Result<Args> {
         dive_site: None,
         underwater_habitats: false,
         cove_detail: false,
+        black_point_intertidal: false,
         surface_start: false,
         frames: 720,
         warmup: 60,
@@ -389,7 +391,8 @@ fn parse_args() -> Result<Args> {
                         eo_render::seabed::Habitat::Eelgrass
                     },
                     "pacific" => eo_render::seabed::Habitat::Sand,
-                    other => anyhow::bail!("unknown dive site {other}; choose bay, bay-surface or pacific"),
+                    "black-point" => eo_render::seabed::Habitat::Rocky,
+                    other => anyhow::bail!("unknown dive site {other}; choose bay, bay-surface, black-point or pacific"),
                 });
             }
             "--water-optics" => a.look.water_optics = true,
@@ -398,6 +401,8 @@ fn parse_args() -> Result<Args> {
             "--no-cove-canopy" => a.look.cove_canopy = false,
             "--cove-sediment" => { a.cove_detail = true; a.look.cove_sediment = true; }
             "--no-cove-sediment" => a.look.cove_sediment = false,
+            "--black-point-intertidal" => { a.cove_detail = true; a.black_point_intertidal = true; }
+            "--no-black-point-intertidal" => a.black_point_intertidal = false,
             "--no-cove-detail" => a.cove_detail = false,
             "--underwater-habitats" => a.underwater_habitats = true,
             "--no-underwater-habitats" => a.underwater_habitats = false,
@@ -473,7 +478,7 @@ fn parse_args() -> Result<Args> {
             }
             "-h" | "--help" => {
                 println!(
-                    "eo-app [--dive-site bay|bay-surface|pacific] [--cove-detail|--no-cove-detail] [--cove-canopy|--no-cove-canopy] [--cove-sediment|--no-cove-sediment] [--water-optics] [--dive-exposure|--no-dive-exposure] [--underwater-habitats|--no-underwater-habitats] [--bench] [--frames N=720] [--warmup N=60] [--width 1920] [--height 1080] [--msaa 1|4]\n       [--no-indirect-validation] [--no-indirect-count] [--no-vsync] [--out DIR] [--label NAME] [--capture] [--far M=4200]\n       [--multiply N=1] [--check-budget] [--budget-ms 10 (self-test only)]\n       [--no-models] [--no-terrain-lod] [--no-kit] [--slice1] [--slice2] [--cache DIR] [--no-cache] [--stream-threads N=6] [--stream-radius M=inf]\n       [--kit-threads N=6] [--kit-split-materials] [--upload-budget-mb 4] [--kit-arena-vertices N] [--kit-arena-indices N] [--kit-arena-objects N]\n       [--kit-near-load M=110] [--kit-mid-load M=520] [--drive-frames N=3600]\n       [--time-of-day H=12] [--shadow-map N=3072] [--no-shadows] [--no-agents] [--agent-density N=1] [--no-rocketbox]\n       [--no-occlusion] [--occlusion-check] [--no-thread-priority] [--pace realtime|60hz|all-60hz|none] [--worst-frames N=12] [--check-max]\n       [--no-view-detail] [--view-margin-deg 35] [--view-predict-s 0.3] [--view-hold-s 2.5] [--stream-all-paths] [--full-arenas]\n       [--segments street_walk,elevated_sweep,city_overview,authored_street,kit_street,drive,turn_around,turn_around_authored]"
+                    "eo-app [--dive-site bay|bay-surface|black-point|pacific] [--cove-detail|--no-cove-detail] [--cove-canopy|--no-cove-canopy] [--cove-sediment|--no-cove-sediment] [--black-point-intertidal|--no-black-point-intertidal] [--water-optics] [--dive-exposure|--no-dive-exposure] [--underwater-habitats|--no-underwater-habitats] [--bench] [--frames N=720] [--warmup N=60] [--width 1920] [--height 1080] [--msaa 1|4]\n       [--no-indirect-validation] [--no-indirect-count] [--no-vsync] [--out DIR] [--label NAME] [--capture] [--far M=4200]\n       [--multiply N=1] [--check-budget] [--budget-ms 10 (self-test only)]\n       [--no-models] [--no-terrain-lod] [--no-kit] [--slice1] [--slice2] [--cache DIR] [--no-cache] [--stream-threads N=6] [--stream-radius M=inf]\n       [--kit-threads N=6] [--kit-split-materials] [--upload-budget-mb 4] [--kit-arena-vertices N] [--kit-arena-indices N] [--kit-arena-objects N]\n       [--kit-near-load M=110] [--kit-mid-load M=520] [--drive-frames N=3600]\n       [--time-of-day H=12] [--shadow-map N=3072] [--no-shadows] [--no-agents] [--agent-density N=1] [--no-rocketbox]\n       [--no-occlusion] [--occlusion-check] [--no-thread-priority] [--pace realtime|60hz|all-60hz|none] [--worst-frames N=12] [--check-max]\n       [--no-view-detail] [--view-margin-deg 35] [--view-predict-s 0.3] [--view-hold-s 2.5] [--stream-all-paths] [--full-arenas]\n       [--segments street_walk,elevated_sweep,city_overview,authored_street,kit_street,drive,turn_around,turn_around_authored]"
                 );
                 std::process::exit(0);
             }
@@ -485,10 +490,14 @@ fn parse_args() -> Result<Args> {
         a.look.dive_exposure = !std::env::args().any(|flag| flag == "--no-dive-exposure");
         a.underwater_habitats = !std::env::args().any(|flag| flag == "--no-underwater-habitats");
     }
-    if a.dive_site == Some(eo_render::seabed::Habitat::Eelgrass) {
-        a.cove_detail = !std::env::args().any(|s| s == "--no-cove-detail");
+    let raw: Vec<String> = std::env::args().skip(1).collect();
+    if matches!(a.dive_site, Some(eo_render::seabed::Habitat::Eelgrass | eo_render::seabed::Habitat::Rocky)) {
+        a.cove_detail = !raw.iter().any(|s| s == "--no-cove-detail");
+        a.look.cove_canopy = a.cove_detail && !raw.iter().any(|s| s == "--no-cove-canopy");
+        a.look.cove_sediment = a.cove_detail && !raw.iter().any(|s| s == "--no-cove-sediment");
+        a.black_point_intertidal = a.cove_detail && !raw.iter().any(|s| s == "--no-black-point-intertidal");
     }
-    apply_cove_look(&mut a, &std::env::args().skip(1).collect::<Vec<_>>());
+    apply_cove_look(&mut a, &raw);
     if a.frames + a.warmup > 1024 {
         // 4 timestamp queries per frame; one query set holds at most 4096.
         anyhow::bail!("--frames + --warmup must be <= 1024 per segment");
@@ -682,12 +691,19 @@ pub fn load_world(args: &Args) -> Result<World> {
         let pal = Some(eo_render::street::StreetPalette::new(authored.materials.street()));
         street_parts = Some(streets::prepare(sw.clone(), group_base, &mut authored, &city, pal));
     }
+    let mut rock_material = eo_render::scene::MATERIAL_VERTEX_COLOUR;
     if let Some(kit) = kit_lib {
         // The kit bake runs beside the first frames; models and kit packs wait for it.
         if finishes.as_ref().is_some_and(|f| !f.scans.is_empty()) {
             house::Scan::bind(&mut authored.materials);
         }
         let layers = authored.materials.layers.clone();
+        let rock_maps = args.black_point_intertidal
+            .then(|| eo_render::seabed::rock_maps::load(&paths.repo_root)).transpose()?;
+        if let Some(maps) = &rock_maps {
+            let finish_layers = finishes.as_ref().map_or(0, |f| 2 + f.scans.len() + usize::from(f.street_reflections.is_some()));
+            rock_material = eo_render::seabed::rock_maps::register(&mut authored.materials, layers.len() + finish_layers, maps);
+        }
         let cache = cache_dir(args);
         let (tx, rx) = std::sync::mpsc::channel();
         let repo_root = paths.repo_root.clone();
@@ -714,6 +730,7 @@ pub fn load_world(args: &Args) -> Result<World> {
                         maps.push(finishes.floorboards);
                         maps.push(finishes.atlas);
                     }
+                    maps.extend(rock_maps);
                     (KitUpload::build(&maps), t.elapsed().as_secs_f64() * 1e3)
                 })
                 .map_err(|e| format!("{e:#}"));
@@ -958,7 +975,9 @@ pub fn load_world(args: &Args) -> Result<World> {
     if args.look.water && (args.underwater_habitats || args.cove_detail || args.dive_site.is_some() || args.capture || args.bench)
         && let (Some(data), Some(height)) = (&water, &carpet_fn)
     {
-        dive_sites = dive_sites::prepare(&mut scene, &data.field, elev, height.as_ref(), args.underwater_habitats, args.cove_detail, profile.as_deref());
+        let rocky_site = (args.black_point_intertidal || args.dive_site == Some(eo_render::seabed::Habitat::Rocky)
+            || args.segments.as_ref().is_some_and(|p| p.iter().any(|n| n == "black_point_rocks"))).then_some(args.black_point_intertidal);
+        dive_sites = dive_sites::prepare(&mut scene, &data.field, elev, height.as_ref(), args.underwater_habitats, args.cove_detail, rocky_site.map(|draw| (draw, rock_material)), profile.as_deref());
     }
     drop(carpet_fn); // water
     // the bridges (eo-landmarks, the JS generators ported) on the

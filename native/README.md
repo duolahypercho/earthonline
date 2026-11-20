@@ -214,6 +214,7 @@ selection:
 | Aquatic Park Cove | `--cove-detail` enables the beach profile, cobbles, pier parapet, distant wooded slope, fair-weather clouds and cove optics. `--no-cove-detail` restores the previous scene. The Bay dive-site starts enable the preview. |
 | Black Point canopy | `--cove-canopy` enables the cove preview and resolves bark, branches and leaf cover from eight views of each park tree species. `--no-cove-canopy` restores the previous distant crowns. |
 | Submerged cove sediment | `--cove-sediment` enables the cove preview with rough submerged sand and silt. `--no-cove-sediment` restores the previous seabed material. |
+| Black Point intertidal | `--dive-site black-point` starts beside barnacle-covered rock and small algae at the west end of Aquatic Park beach. `--black-point-intertidal` adds this habitat to the map. `--no-black-point-intertidal` hides its geometry. The location follows the [National Park Service account](https://www.nps.gov/safr/blogs/a-hidden-community-in-aquatic-park-cove.htm). Individual rocks and organisms are modeled. |
 | Dive exposure | `--dive-exposure` compensates for the loss of downwelling light at the eye. `--no-dive-exposure` restores the original exposure |
 | People | `--no-rocketbox`, `--no-rocketbox-motions` (either one: no people) |
 | Props | `--no-props2`, `--no-furniture`, `--no-eztree`, `--no-wires`, `--no-overhead`, `--no-lamp-sprites` |
@@ -410,8 +411,9 @@ to four stops as the light reaching the camera decreases and partially
 corrects the local colour cast. The `bay_grass` and `pacific_sand` bench
 paths swim across the same beds.
 
-For the view from the beach, use `--dive-site bay-surface`. Both Bay starts use
-the same terrain and water. Within the south beach, join mean water level to
+For the view from the beach, use `--dive-site bay-surface`. Use
+`--dive-site black-point` for the rocky habitat near the west end of the beach.
+All three Bay starts load the same trees, sediment, intertidal rocks and water. Within the south beach, join mean water level to
 the first valid depth in the shipped NOAA topobathymetric grid, then preserve
 the measured offshore profile. The gaps between soundings are interpolated.
 The nearshore cobbles and suspended sediment are illustrative, with estimated

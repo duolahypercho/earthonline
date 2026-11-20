@@ -1,4 +1,4 @@
-//! Locate two illustrative dive sites on the rendered near terrain. The
+//! Locate the illustrative dive sites on the rendered near terrain. The
 //! camera, shell beds and grass roots all sample its actual grid triangles.
 
 use eo_render::{camera::Camera, seabed::Habitat};
@@ -11,6 +11,7 @@ pub struct Site {
     pub beach: Option<Vec2>,
     pub cove_detail: bool,
     cove_depths: [f32; 15],
+    rocky_eye: Option<Vec3>,
 }
 
 impl Site {
@@ -52,12 +53,21 @@ impl Site {
     }
 
     pub fn camera(self, aspect: f32, far: f32) -> Camera {
+        if let Some(eye) = self.rocky_eye {
+            let dir = (self.floor - eye).normalize();
+            return Camera {
+                near: 0.045,
+                far,
+                ..Camera::new(eye, dir.x.atan2(-dir.z), dir.y.asin(), aspect)
+            };
+        }
         if self.cove_detail && self.beach.is_some() {
             return self.cove_camera(aspect, far, 0.0);
         }
         let (yaw, pitch, height) = match self.habitat {
             Habitat::Eelgrass => (-0.38, -0.40, 0.37),
             Habitat::Sand => (-1.12, -0.51, 0.49),
+            Habitat::Rocky => unreachable!("a rocky site has a surveyed viewing position"),
         };
         Camera {
             near: 0.10,
@@ -87,6 +97,7 @@ pub fn prepare(
     vertex_height: &dyn Fn(f32, f32) -> f32,
     build_meshes: bool,
     cove_detail: bool,
+    rocky_site: Option<(bool, u32)>,
     profile: Option<&crate::cove_bed::CoveBed>,
 ) -> Vec<Site> {
     use std::collections::HashMap;
@@ -138,7 +149,32 @@ pub fn prepare(
                 beach,
                 cove_detail,
                 cove_depths,
+                rocky_eye: None,
                 floor: Vec3::new(p.x, bed(p), p.y),
+            });
+        }
+    }
+    if let Some((draw, material)) = rocky_site {
+        // West tip of mapped beach OSM way 224941181, where the park records
+        // rocky intertidal habitat along the boundary wall toward Municipal Pier.
+        let start = Vec2::from(eo_data::groundscale::plan32([-458.0, -3156.0]));
+        let seaward = Vec2::new(0.14, -0.99).normalize();
+        let centre = (0..=64).map(|i| start + seaward * i as f32).find(|p| {
+            let shore = field.signed_exact(p.x as f64, p.y as f64);
+            let depth = eo_water::SEA_LEVEL_Y as f32 - bed(*p);
+            shore > 0.8 && (0.92..1.85).contains(&depth)
+        });
+        if let Some(centre) = centre
+            && let Some((eye, at)) =
+                eo_render::seabed::intertidal_site(scene, centre, &mut bed, draw, material)
+        {
+            sites.push(Site {
+                habitat: Habitat::Rocky,
+                floor: at,
+                beach: None,
+                cove_detail,
+                cove_depths,
+                rocky_eye: Some(eye),
             });
         }
     }
@@ -178,6 +214,7 @@ pub fn prepare(
                 },
                 cove_detail,
                 cove_depths,
+                rocky_eye: None,
                 floor: Vec3::new(p.x, floor, p.y),
             });
             break;

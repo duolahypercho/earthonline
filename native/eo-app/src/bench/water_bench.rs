@@ -254,6 +254,7 @@ pub fn habitat_segments(world: &World, args: &crate::Args, frames: usize, aspect
         let name = match site.habitat {
             eo_render::seabed::Habitat::Eelgrass => "bay_grass",
             eo_render::seabed::Habitat::Sand => "pacific_sand",
+            eo_render::seabed::Habitat::Rocky => "black_point_rocks",
         };
         if !args.underwater_habitats && !args.segments.as_ref().is_some_and(|paths| paths.iter().any(|p| p == name)) {
             return None;
@@ -324,6 +325,7 @@ pub fn capture_cameras(world: &World, aspect: f32, far: f32) -> Vec<(&'static st
         }
         let (name, description) = match site.habitat {
             eo_render::seabed::Habitat::Eelgrass => ("bay-grass", "near the bed in Aquatic Park Cove"),
+            eo_render::seabed::Habitat::Rocky => ("black-point-rocks", "the inhabited rock faces at the western shore of Aquatic Park Cove"),
             eo_render::seabed::Habitat::Sand => ("pacific-ripples", "near the bed off Ocean Beach"),
         };
         out.push((name, site.camera(aspect, far), description.into()));

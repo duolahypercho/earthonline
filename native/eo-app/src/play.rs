@@ -73,6 +73,7 @@ fn base_args() -> Args {
         dive_site: None,
         underwater_habitats: false,
         cove_detail: false,
+        black_point_intertidal: false,
         surface_start: false,
         frames: 720,
         warmup: 60,
@@ -150,6 +151,8 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-cove-canopy" => a.look.cove_canopy = false,
             "--cove-sediment" => { a.cove_detail = true; a.look.cove_sediment = true; }
             "--no-cove-sediment" => a.look.cove_sediment = false,
+            "--black-point-intertidal" => { a.cove_detail = true; a.black_point_intertidal = true; }
+            "--no-black-point-intertidal" => a.black_point_intertidal = false,
             "--no-cove-detail" => a.cove_detail = false,
             "--underwater-habitats" => a.underwater_habitats = true,
             "--no-underwater-habitats" => a.underwater_habitats = false,

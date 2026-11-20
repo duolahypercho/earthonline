@@ -69,7 +69,7 @@ const POLYHAVEN = [
   ['forest_floor', 'ground under trees'],
   ['coast_sand_04', 'dry beach sand'],
   ['damp_beach_sand', 'wet beach sand'],
-  ['seaside_rock', 'riprap and shore rock (fetched; not drawn: no surface of the port is riprap)'],
+  ['seaside_rock', 'shore rock; a reduced scan ships with the Black Point intertidal habitat'],
 ];
 // [id, resolution, use]
 const AMBIENTCG = [
@@ -160,7 +160,8 @@ async function main() {
   let total = 0;
   // An asset already in the manifest whose every file is present with the
   // recorded size and SHA-256 is kept as recorded: no request is made for it.
-  const previous = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')).assets || [] : [];
+  const previousManifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : {};
+  const previous = previousManifest.assets || [];
   const kept = (source, id, use) => {
     const a = previous.find((p) => p.source === source && p.id === id);
     if (!a || !a.files?.length) return null;
@@ -262,7 +263,9 @@ async function main() {
       else index.push({ path: rel(p), bytes: statSync(p).size, sha256: sha256(p) });
     }
   };
+  // Texture-only stores may omit the optional selection thumbnails and API listings.
   if (existsSync(indexDir)) walk(indexDir);
+  else index.push(...(previousManifest.index || []));
   const indexBytes = index.reduce((s, f) => s + f.bytes, 0);
   const manifest = {
     schema: 'eo-cc0-manifest-v1',

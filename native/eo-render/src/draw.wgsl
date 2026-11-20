@@ -744,6 +744,7 @@ fn shade(in: VOut) -> vec4<f32> {
     // Solid sand and shells keep their outward normal across a grazing crest.
     // A ribbon of eelgrass, like the other thin geometry, shades both sides.
     let bed_surface = (objects[in.object].kind & 255u) == 13u && in.aux.x < 0.01;
+    let mineral = bed_surface && in.aux.y < -0.25;
     if (!bed_surface && dot(n, v) < 0.0) {
         n = -n;
     }
@@ -771,7 +772,7 @@ fn shade(in: VOut) -> vec4<f32> {
     rm_emit = vec3<f32>(0.0);
     if ((m.flags & F_VERTEX_COLOUR) != 0u) {
         s.albedo = vcol;
-        if ((objects[in.object].kind & 255u) == 13u && in.aux.x < 0.01) {
+        if (bed_surface && in.aux.y >= -0.25) {
             // Mineral grains and small dark inclusions on the bed. Filter both
             // scales by their pixel footprint so the bottom stays still in motion.
             let footprint = max(length(dpx.xz), length(dpy.xz));
@@ -853,7 +854,7 @@ fn shade(in: VOut) -> vec4<f32> {
         let z = sqrt(max(0.0, 1.0 - dot(xy, xy)));
         let str = m.params.z;
         s.n = normalize(fr.t * (xy.x * str) + fr.b * (xy.y * str) + fr.n * z);
-    } else if ((m.flags & F_TEXTURED) != 0u) {
+    } else if ((m.flags & F_TEXTURED) != 0u && ((objects[in.object].kind & 255u) != 13u || mineral)) {
         // Triplanar in world space, `params.w` repeats per metre.
         let k = m.params.w;
         let p = in.world * k;
@@ -898,7 +899,7 @@ fn shade(in: VOut) -> vec4<f32> {
                 tz = textureSampleGrad(kit_normal, kit_sampler, uvz, layer, gx.xy, gy.xy).xyz * 2.0 - 1.0;
             }
             // The vertex colour is the paint multiply (white on models).
-            s.albedo = alb * m.base.rgb * vcol; // vcol
+            s.albedo = alb * m.base.rgb * select(vcol, vec3<f32>(0.74) + 0.85 * vcol, mineral);
             s.metal = orm.b;
             s.ao = orm.r * 0.85 + 0.15;
             // Whiteout blend of the three tangent-space normals.
