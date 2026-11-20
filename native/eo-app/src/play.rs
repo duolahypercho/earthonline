@@ -912,6 +912,10 @@ mod house_tests {
         let mut start = house.entry_position();
         if finishes {
             assert!(start.distance(house.point(5.95, 0., -3.3)) > 0.01, "private path must reach the mapped paving");
+            let ground = &world.street.as_ref().unwrap().world;
+            for corner in house.lowest_tread_corners() {
+                assert!(corner.y > ground.surface_at(corner.x, corner.z, None) + 0.03, "the hillside cuts the lowest tread");
+            }
         }
         cw.load_blocking(start, pworld::LOAD_RADIUS_M);
         start.y = cw.surface_y(start.x, start.z);

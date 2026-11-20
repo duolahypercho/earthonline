@@ -53,6 +53,7 @@ const F_THIN_GLASS: u32 = 16u;
 // the street surface material (street classes in the vertex alpha).
 const F_STREET: u32 = 32u;
 const FLOOR_SCAN_BIT: u32 = 512u;
+const GRAVEL_BIT: u32 = 1024u;
 const PI: f32 = 3.14159265;
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -891,6 +892,22 @@ fn shade(in: VOut) -> vec4<f32> {
         // A blended pane's room reads at full strength after the blend (1 / opacity, floored at 0.25).
         let transmission = select(1.0, 1.0 / max(0.25, m.base.a), (m.flags & F_BLEND) != 0u);
         rm_emit = r.night * transmission;
+    }
+    if ((objects[in.object].kind & GRAVEL_BIT) != 0u) {
+        // Granitic fines and larger chips share one world-space surface across
+        // the authored bed and the site mesh. Fade subpixel grain at distance.
+        let uv = in.world.xz;
+        let footprint = max(length(dpx),length(dpy));
+        let chips = st_noise(uv*28.0);
+        let grain = st_noise(uv*129.0);
+        let chip_detail = 1.0-smoothstep(0.012,0.066,footprint);
+        let grain_detail = 1.0-smoothstep(0.002,0.014,footprint);
+        s.albedo *= 0.93 + 0.23*(st_noise(uv*1.8)-0.5)
+                   + 0.47*(chips-0.5)*chip_detail + 0.53*(grain-0.5)*grain_detail;
+        let gradient = vec2<f32>(st_noise(uv*28.0+vec2<f32>(0.26,0.0))-chips,
+                                 st_noise(uv*28.0+vec2<f32>(0.0,0.26))-chips);
+        s.n = normalize(n-vec3<f32>(gradient.x,0.0,gradient.y)*chip_detail*0.58);
+        s.rough = 0.95;
     }
     let floor_scan = (objects[in.object].kind & FLOOR_SCAN_BIT) != 0u;
     if (floor_scan && abs(n.y) > 0.7) {

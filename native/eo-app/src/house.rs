@@ -133,6 +133,8 @@ pub struct House {
     collision: Vec<[Point; 3]>,
     steps: Vec<[Point; 2]>,
     pavers: Vec<([Point; 4], u32)>,
+    aggregate: Vec<([Point; 4], u32)>,
+    aggregate_material: u32,
     entry: Option<DVec3>,
 }
 
@@ -173,11 +175,16 @@ impl House {
         } else {
             (eo_assets::glb::cook_glb(&raw)?, Vec::new())
         };
-        let resolved = model
+        let resolved: Vec<u32> = model
             .materials
             .iter()
             .map(|m| materials.resolve(kit, m))
             .collect();
+        let aggregate_material = model
+            .materials
+            .iter()
+            .position(|m| m.name == "decomposed-granite@b4a087")
+            .map_or(0, |i| resolved[i]);
         let floor = ring
             .iter()
             .map(|p| ground(p.x, p.y))
@@ -196,6 +203,8 @@ impl House {
             collision: vec![],
             steps: vec![],
             pavers: vec![],
+            aggregate: vec![],
+            aggregate_material,
             entry: None,
         };
         for [a, b] in manifest.boxes {
@@ -210,6 +219,17 @@ impl House {
             let y = -(i as f64) * 0.145;
             let a = [5.15, y - 0.50, z];
             let b = [6.75, y, z + 0.33];
+            // The street falls across the lot. A horizontal tread that clears
+            // the centre can still penetrate the uphill corner.
+            if finishes.is_some()
+                && i > 0
+                && [a[0], b[0]].iter().any(|&x| {
+                    let p = h.point(x, y, z);
+                    p.y < ground(p.x, p.z) + 0.036
+                })
+            {
+                break;
+            }
             h.solid_box(a, b);
             h.steps.push([a, b]);
             let p = h.point(5.95, y, z);
@@ -265,7 +285,7 @@ impl House {
             return;
         };
         let start = a[2];
-        let edge = |x| -> Option<f64> {
+        let edge = |x, start| -> Option<f64> {
             let paved = |z| {
                 let p = self.point(x, 0., z);
                 street.paved_layer_at(p.x, p.z)
@@ -299,21 +319,31 @@ impl House {
             }
             None
         };
-        let Some(left) = edge(a[0]) else { return };
-        let Some(right) = edge(b[0]) else { return };
+        let Some(left) = edge(a[0], start) else {
+            return;
+        };
+        let Some(right) = edge(b[0], start) else {
+            return;
+        };
         let end = (left + right) * 0.5;
         if start - end < 0.03 {
             return;
         }
         let span = b[0] - a[0];
+        let terrain = |x, z| {
+            let p = self.point(x, 0., z);
+            (ground(p.x, p.z) - self.floor) / self.height_scale
+        };
+        // Start the landing just under the last level tread. Ease the raised
+        // downhill corner back to grade before the public paving.
+        let landing = (b[1] - 0.13)
+            .max(terrain(a[0], start) + 0.012)
+            .max(terrain(b[0], start) + 0.012);
         let pos = |x: f64, t: f64| {
             let z = start + ((left + (right - left) * ((x - a[0]) / span)) - start) * t;
-            let p = self.point(x, 0., z);
-            [
-                x,
-                (ground(p.x, p.z) + 0.014 - self.floor) / self.height_scale,
-                z,
-            ]
+            let surface = terrain(x, z) + 0.012;
+            let lift = (landing - terrain(x, start) - 0.012).max(0.) * (1. - t) * (1. - t);
+            [x, surface + lift, z]
         };
         let courses = ((start - end) / 0.37).ceil() as usize;
         let mut tiles = Vec::new();
@@ -340,6 +370,39 @@ impl House {
                 tiles.push((quad, color));
             }
         }
+        // The retaining wall enters a graded gravel bed on the private side
+        // of the sidewalk. Clip every strip independently to the surveyed edge.
+        let mut aggregate = Vec::new();
+        for (lo, hi) in [(0.10, a[0]), (b[0], 6.91)] {
+            let columns = ((hi - lo) / 0.26).ceil() as usize;
+            let mut last = None;
+            for i in 0..=columns {
+                let x = lo + (hi - lo) * i as f64 / columns as f64;
+                let rear = -0.04;
+                let Some(outer) = edge(x, rear) else {
+                    last = None;
+                    continue;
+                };
+                if let Some((prev_x, prev_outer)) = last {
+                    let grade = |xx, zz| [xx, terrain(xx, zz) + 0.006, zz];
+                    for row in 0..12 {
+                        let t = row as f64 / 12.;
+                        let u = (row + 1) as f64 / 12.;
+                        aggregate.push((
+                            [
+                                grade(prev_x, rear + (prev_outer - rear) * t),
+                                grade(x, rear + (outer - rear) * t),
+                                grade(x, rear + (outer - rear) * u),
+                                grade(prev_x, rear + (prev_outer - rear) * u),
+                            ],
+                            0xffffffff,
+                        ));
+                    }
+                }
+                last = Some((x, outer));
+            }
+        }
+        self.aggregate = aggregate;
         for q in walk {
             self.solid_quad(q);
         }
@@ -349,6 +412,12 @@ impl House {
 
     pub fn entry_position(&self) -> DVec3 {
         self.entry.unwrap_or_else(|| self.point(5.95, 0., -3.3))
+    }
+
+    #[cfg(test)]
+    pub fn lowest_tread_corners(&self) -> [DVec3; 2] {
+        let [a, b] = self.steps.last().expect("the house has a private stair");
+        [a[0], b[0]].map(|x| self.point(x, b[1], a[2]))
     }
 
     pub fn point(&self, x: f64, y: f64, z: f64) -> DVec3 {
@@ -521,6 +590,9 @@ impl House {
                 o.kind |= eo_render::scene::FLOOR_SCAN_BIT;
             }
             o.material = self.materials[part.material as usize];
+            if self.aggregate_material != 0 && o.material == self.aggregate_material {
+                o.kind |= eo_render::scene::GRAVEL_BIT;
+            }
             if materials.gpu[o.material as usize].is_blend() {
                 o.kind |= BLEND_BIT;
             }
@@ -558,11 +630,17 @@ impl House {
                 0,
             ));
         }
-        if !self.pavers.is_empty() {
+        for (quads, kind, material) in [
+            (&self.pavers, ObjectKind::Landmark, 0),
+            (&self.aggregate, ObjectKind::Model, self.aggregate_material),
+        ] {
+            if quads.is_empty() {
+                continue;
+            }
             let start = scene.indices.len() as u32;
             let mut lo = Vec3::splat(f32::INFINITY);
             let mut hi = -lo;
-            for &(quad, color) in &self.pavers {
+            for &(quad, color) in quads {
                 let p = quad.map(|[x, y, z]| self.point(x, y, z).as_vec3());
                 let normal = eo_assets::glb::pack_normal((p[1] - p[0]).cross(p[2] - p[0]));
                 let v = scene.vertices.len() as u32;
@@ -577,14 +655,19 @@ impl House {
                 }
                 scene.indices.extend([v, v + 1, v + 2, v, v + 2, v + 3]);
             }
-            scene.objects.push(GpuObject::new(
-                ObjectKind::Landmark,
+            let mut object = GpuObject::new(
+                kind,
                 lo.to_array(),
                 hi.to_array(),
                 start,
                 scene.indices.len() as u32 - start,
                 0,
-            ));
+            );
+            object.material = material;
+            if material != 0 && material == self.aggregate_material {
+                object.kind |= eo_render::scene::GRAVEL_BIT;
+            }
+            scene.objects.push(object);
         }
         scene.stats.objects += scene.objects.len() - objects;
         scene.stats.vertices += scene.vertices.len() - base;
