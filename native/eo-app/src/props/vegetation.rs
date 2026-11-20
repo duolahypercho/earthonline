@@ -585,7 +585,7 @@ pub fn instances(plants: &[Plant], out: &mut Vec<GpuPropInstance>, counts: &mut 
             Kind::Tuft => "grass tuft",
             Kind::Flower(_) => "wildflowers",
             Kind::Rock(_) => "hill rock",
-            Kind::Meadow(i) => ["meadow sward", "meadow wild oats", "meadow fescue", "meadow clover and forbs", "meadow ice plant", "meadow thatch", "scrub coyote brush", "scrub sagebrush", "scrub bush lupine", "bare soil", "scrub poison oak", "scrub monkeyflower", "scrub coffeeberry", "scrub toyon", "seed stalks", "bluff buckwheat", "bluff herbs"][(i as usize).min(16)],
+            Kind::Meadow(i) => ["meadow sward", "meadow wild oats", "meadow fescue", "meadow clover and forbs", "meadow ice plant", "meadow thatch", "scrub coyote brush", "scrub sagebrush", "scrub bush lupine", "bare soil", "scrub poison oak", "scrub monkeyflower", "scrub coffeeberry", "scrub toyon", "seed stalks", "bluff buckwheat", "bluff herbs", "mustard", "bloom"][(i as usize).min(18)],
         };
         *counts.entry(name).or_insert(0) += 1;
         out.push(GpuPropInstance {

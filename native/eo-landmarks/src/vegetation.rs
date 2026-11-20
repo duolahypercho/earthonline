@@ -890,7 +890,11 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
                 let cured = meadow_cured(x, z, &s, season, ex.g3x.breakup);
                 let kind = crate::flora::bluff_kind(x, z, ix, iz);
                 let sc = 0.7 + 0.3 * hash(ix, iz, 4) as f32;
-                out.push(Plant { kind: Kind::Meadow(kind), pos: [x, s.y - GRASS_SINK_M, z], yaw: hash(ix, iz, 7) * std::f64::consts::TAU, scale: [sc; 3], rank: hash(ix, iz, 8) as f32, tint: meadow_patch_tint(kind, cured, 0.93 + 0.14 * hash(ix, iz, 20) as f32), grad: s.grad(), tip: TIP_NONE });
+                let plant = Plant { kind: Kind::Meadow(kind), pos: [x, s.y - GRASS_SINK_M, z], yaw: hash(ix, iz, 7) * std::f64::consts::TAU, scale: [sc; 3], rank: hash(ix, iz, 8) as f32, tint: meadow_patch_tint(kind, cured, 0.93 + 0.14 * hash(ix, iz, 20) as f32), grad: s.grad(), tip: TIP_NONE };
+                out.push(plant);
+                if ex.fl.flowers {
+                    push_bloom(&plant, kind, 0.35, day_of_year, false, out);
+                }
             }
             return;
         }
@@ -905,6 +909,14 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
                 if ex.g3x.scrub && hash(ix, iz, 113) < scrub_share(x, z, &s, cover, naip, ex.g3x) * scrub_terrain(&s, ex.fl) * MOUNDS_PER_CELL * flank {
                     plant_mound(x, z, ix, iz, &s, bloom, ex.g3x, ex.fl, day_of_year, out);
                 }
+                if ex.fl.flowers && slope < 50.0 {
+                    // the flora pass: the cut face's sparse mustard in its stands (in bloom).
+                    let (a, b) = crate::flora::MUSTARD_BLOOM;
+                    let on = smoothstep(a - 10.0, a + 5.0, day_of_year) * (1.0 - smoothstep(b - 5.0, b + 10.0, day_of_year));
+                    if on > 0.5 && warped(x, z, 7.0, 161) > crate::flora::MUSTARD_STAND && hash(ix, iz, 170) < crate::flora::MUSTARD_FACE_SHARE {
+                        push_mustard(x, z, ix, iz, &s, out);
+                    }
+                }
                 {
                     let cured = meadow_cured(x, z, &s, season, ex.g3x.breakup);
                     let sc = 0.8 + 0.4 * hash(ix, iz, 112) as f32;
@@ -915,6 +927,16 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
             // the flora pass's chert ground: the warm shoulders the old bare rule stripped
             // (the overlook's disturbed ground) are dense scrub, not bare and not meadow.
             let shoulder = ex.fl.chert && ex.g3x.bare && hash(ix, iz, 110) < bare_soil(x, z, &s, naip);
+            if ex.fl.flowers && shoulder && slope < 45.0 {
+                // the flora pass's flowers: the overlook's annual mustard in its spring
+                // bloom, clustered and sparse among the shoulder's scrub.
+                let (a, b) = crate::flora::MUSTARD_BLOOM;
+                let on = smoothstep(a - 10.0, a + 5.0, day_of_year) * (1.0 - smoothstep(b - 5.0, b + 10.0, day_of_year));
+                if on > 0.5 && warped(x, z, 7.0, 161) > crate::flora::MUSTARD_STAND && hash(ix, iz, 162) < crate::flora::MUSTARD_SHARE {
+                    push_mustard(x, z, ix, iz, &s, out);
+                    return;
+                }
+            }
             if ex.g3x.scrub && shoulder && slope < 50.0 && hash(ix, iz, 152) < crate::flora::SHOULDER_SCRUB {
                 // wind-pruned low on the exposed shoulder (prostrate coyote brush 0.3-0.6 m, REF).
                 let n0 = out.len();
@@ -940,7 +962,11 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
                 let cured = meadow_cured(x, z, &s, season, ex.g3x.breakup);
                 let kind = crate::flora::bluff_kind(x, z, ix, iz);
                 let sc = 0.85 + 0.3 * hash(ix, iz, 4) as f32;
-                out.push(Plant { kind: Kind::Meadow(kind), pos: [x, s.y - GRASS_SINK_M, z], yaw: hash(ix, iz, 7) * std::f64::consts::TAU, scale: [sc; 3], rank: hash(ix, iz, 8) as f32, tint: meadow_patch_tint(kind, cured, 0.93 + 0.14 * hash(ix, iz, 20) as f32), grad: s.grad(), tip: TIP_NONE });
+                let plant = Plant { kind: Kind::Meadow(kind), pos: [x, s.y - GRASS_SINK_M, z], yaw: hash(ix, iz, 7) * std::f64::consts::TAU, scale: [sc; 3], rank: hash(ix, iz, 8) as f32, tint: meadow_patch_tint(kind, cured, 0.93 + 0.14 * hash(ix, iz, 20) as f32), grad: s.grad(), tip: TIP_NONE };
+                out.push(plant);
+                if ex.fl.flowers {
+                    push_bloom(&plant, kind, 0.35, day_of_year, false, out);
+                }
                 return;
             }
             let n0 = out.len();
@@ -1037,7 +1063,7 @@ pub const MEADOW_LUPINE: u8 = 8;
 /// Tamalpais series' eroded horizon) with a few sparse tufts of short grass.
 pub const MEADOW_BARE: u8 = 9;
 /// The flora pass's scrub species follow (`crate::flora::MEADOW_POISON_OAK` .. `MEADOW_TOYON`).
-pub const MEADOW_TYPES: u8 = 17;
+pub const MEADOW_TYPES: u8 = 19;
 
 /// Each type's living tissue in its green state (linear albedo, the mean of its
 /// blades' vertex colours, eo-render) and cured (or, for ice plant, drought-
@@ -1074,6 +1100,9 @@ pub const MEADOW_LIVE: [[f32; 3]; MEADOW_TYPES as usize] = [
     [0.072, 0.104, 0.036],
     [0.230, 0.262, 0.205],
     [0.110, 0.200, 0.110],
+    // the mustard's leaves (the measured near-field green (90,103,43) [P:spencer]), the bloom's white.
+    [0.102, 0.136, 0.024],
+    [0.8, 0.8, 0.8],
 ];
 pub const MEADOW_CURED: [[f32; 3]; MEADOW_TYPES as usize] = [
     [0.215, 0.178, 0.100],
@@ -1093,9 +1122,11 @@ pub const MEADOW_CURED: [[f32; 3]; MEADOW_TYPES as usize] = [
     [0.280, 0.228, 0.112],
     [0.250, 0.230, 0.180],
     [0.150, 0.170, 0.100],
+    [0.102, 0.136, 0.024],
+    [0.8, 0.8, 0.8],
 ];
 /// The scrub is evergreen (its summer dullness is the dust and the older leaves: not drawn).
-pub const MEADOW_CURE: [f32; MEADOW_TYPES as usize] = [1.0, 1.0, 0.55, 0.35, 0.4, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.2, 0.3];
+pub const MEADOW_CURE: [f32; MEADOW_TYPES as usize] = [1.0, 1.0, 0.55, 0.35, 0.4, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.2, 0.3, 0.0, 0.0];
 /// Dead thatch, weathered pale straw (linear albedo; dry grass litter 0.15-0.25
 /// in the visible, USGS v7 "dry grass" and litter spectra; INFERRED): the mat's
 /// and the lying blades' colour (eo-render bakes it in the dead material).
@@ -1227,6 +1258,33 @@ pub fn plant_meadow(x: f64, z: f64, ix: i64, iz: i64, s: &Site, cover: Cover, na
     }
 }
 
+/// One annual mustard clump (the flora pass's flowers, `crate::flora::MEADOW_MUSTARD`), 0.55-1.05 m.
+fn push_mustard(x: f64, z: f64, ix: i64, iz: i64, s: &Site, out: &mut Vec<Plant>) {
+    let h = (0.55 + 0.5 * hash(ix, iz, 163)) as f32;
+    let (jx, jz) = (hash(ix, iz, 164) - 0.5, hash(ix, iz, 165) - 0.5);
+    out.push(Plant { kind: Kind::Meadow(crate::flora::MEADOW_MUSTARD), pos: [x + jx * 0.6, s.y - GRASS_SINK_M, z + jz * 0.6], yaw: hash(ix, iz, 166) * std::f64::consts::TAU, scale: [h * (0.9 + 0.3 * hash(ix, iz, 167) as f32), h, h], rank: hash(ix, iz, 168) as f32, tint: [(0.9 + 0.2 * hash(ix, iz, 169)) as f32; 3], grad: s.grad(), tip: TIP_NONE });
+}
+
+/// The flora pass's bloom over a host (`crate::flora::bloom_of`): the bloom model
+/// at the host's place and size (`host_h`: the host model's height at scale 1),
+/// tinted the flower colour, its share of heads by the season's strength (the
+/// rank: the GPU thins it like the host).
+fn push_bloom(host: &Plant, kind: u8, host_h: f32, day_of_year: f64, female: bool, out: &mut Vec<Plant>) {
+    let Some((c, amount)) = crate::flora::bloom_of(kind, day_of_year, female) else { return };
+    if (host.rank as f64) > amount {
+        return;
+    }
+    let lin = c.map(|v| {
+        let s = v as f32 / 255.0;
+        (if s <= 0.04045 { s / 12.92 } else { ((s + 0.055) / 1.055).powf(2.4) }) / crate::flora::BLOOM_WHITE
+    });
+    let mut p = *host;
+    p.kind = Kind::Meadow(crate::flora::MEADOW_BLOOM);
+    p.scale = [host.scale[0] * host_h.max(0.3), host.scale[1] * host_h, host.scale[2] * host_h.max(0.3)];
+    p.tint = lin;
+    out.push(p);
+}
+
 /// The flora pass's ground-shape weight on the scrub share
 /// ([`crate::flora::terrain_weight`]; 1 without `Flora::species`).
 fn scrub_terrain(s: &Site, fl: crate::flora::Flora) -> f64 {
@@ -1327,7 +1385,11 @@ pub fn plant_mound(x: f64, z: f64, ix: i64, iz: i64, s: &Site, bloom: f64, g: Gr
         let (jx, jz) = (hash(ix, iz, 121) - 0.5, hash(ix, iz, 122) - 0.5);
         let v = (0.88 + 0.22 * hash(ix, iz, 123) + 0.16 * (field(x, z, 25.0, 124) - 0.5)) as f32;
         let season = if kind == crate::flora::MEADOW_POISON_OAK { crate::flora::poison_oak_season(day_of_year) } else { [1.0; 3] };
-        out.push(Plant { kind: Kind::Meadow(kind), pos: [x + jx * 0.7, s.y - 0.12, z + jz * 0.7], yaw: hash(ix, iz, 125) * std::f64::consts::TAU, scale: [sx, sy, sx * (0.85 + 0.3 * hash(ix, iz, 126) as f32)], rank: hash(ix, iz, 127) as f32, tint: season.map(|c| c * v), grad: s.grad(), tip: TIP_NONE });
+        let plant = Plant { kind: Kind::Meadow(kind), pos: [x + jx * 0.7, s.y - 0.12, z + jz * 0.7], yaw: hash(ix, iz, 125) * std::f64::consts::TAU, scale: [sx, sy, sx * (0.85 + 0.3 * hash(ix, iz, 126) as f32)], rank: hash(ix, iz, 127) as f32, tint: season.map(|c| c * v), grad: s.grad(), tip: TIP_NONE };
+        out.push(plant);
+        if fl.flowers {
+            push_bloom(&plant, kind, form.h, day_of_year, hash(ix, iz, 128) < 0.5, out);
+        }
         return;
     }
     let sage = !lupine && warped(x, z, 16.0, 117) < 0.2;

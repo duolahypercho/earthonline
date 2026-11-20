@@ -86,6 +86,9 @@ pub const THIN: [(f32, f32, f32); COUNT as usize] = [
     (40.0, 90.0, 1.1),
     (70.0, 110.0, 1.3),
     (70.0, 110.0, 1.3),
+    // the flora pass's mustard and blooms.
+    (60.0, 110.0, 1.15),
+    (70.0, 110.0, 1.1),
 ];
 /// The share kept at the draw distance (thinned models).
 pub const THIN_FLOOR: f32 = 0.12;
@@ -496,6 +499,8 @@ pub(crate) fn cook(out: &mut Out, ez: Option<&eo_props::eztree::EzLibrary>, m_ba
     // the flora pass's leaf sprigs: the atlas's sprig cells drawn grey (their luminance
     // over `SPRIG_LUMINANCE`, props_draw.wgsl) so the vertex colour is the species' leaf.
     let species = eo_landmarks::flora::flora().species;
+    // the flora pass's blooms: white heads under the instance's flower colour (no blade optics).
+    let m_bloom = push_mat(out.materials, [255, 255, 255], 0.6, 0.0, P_MEADOW | P_MEADOW_LIVE, 0);
     let m_sprig = if species {
         let m = push_mat(out.materials, [255, 255, 255], 0.6, 0.0, P_TEX | P_CUT | P_BIG | P_LEAF, 0);
         out.materials[m as usize].params[3] = 1.0 / SPRIG_LUMINANCE;
@@ -508,7 +513,11 @@ pub(crate) fn cook(out: &mut Out, ez: Option<&eo_props::eztree::EzLibrary>, m_ba
             // the flora pass's grassland stalks and bluff scrub (drawn only where it plants them).
             let mut ids = [NONE; 3];
             for (l, id) in ids.iter_mut().enumerate() {
-                if k as u8 == eo_landmarks::flora::MEADOW_SEED_STALKS {
+                if k as u8 == eo_landmarks::flora::MEADOW_MUSTARD {
+                    mustard(&mut out.b, &mats, mound_mats.flower, l as u32, 700 + k * 13);
+                } else if k as u8 == eo_landmarks::flora::MEADOW_BLOOM {
+                    bloom(&mut out.b, m_bloom, l as u32, 700 + k * 13);
+                } else if k as u8 == eo_landmarks::flora::MEADOW_SEED_STALKS {
                     seed_stalks(&mut out.b, &mats, l as u32, 700 + k * 13);
                 } else {
                     bluff_patch(&mut out.b, &mats, k as u8, l as u32, 700 + k * 13);
@@ -517,7 +526,9 @@ pub(crate) fn cook(out: &mut Out, ez: Option<&eo_props::eztree::EzLibrary>, m_ba
             }
             let model = V_MEADOW + k;
             let (z, w) = thin(model);
-            out.set(model, ids, [8.0, 24.0, z, w], 0, 0.1);
+            // (the flowers hold their sprays farther: orange and yellow flecks to 40 m.)
+            let edges = if k as u8 >= eo_landmarks::flora::MEADOW_MUSTARD { [12.0, 40.0] } else { [8.0, 24.0] };
+            out.set(model, ids, [edges[0], edges[1], z, w], 0, 0.1);
             continue;
         }
         if k as u8 >= eo_landmarks::vegetation::MEADOW_COYOTE {
@@ -980,6 +991,79 @@ fn bluff_patch(b: &mut Builder, mats: &MeadowMats, kind: u8, lod: u32, seed: u32
             let a = k as f32 * 2.4;
             let c = vary(dud, k, seed);
             fleshy(b, mats.flesh, [ux, g - 0.01, uz], a, 0.04 + 0.03 * hash3(k as i32, 89, 3, seed), 0.08, 0.012 * wide.sqrt(), [c[0] * 0.85, c[1] * 0.85, c[2] * 0.85], c);
+        }
+    }
+}
+
+// ------------------------------------------------------------------ the flora pass's flowers
+
+/// The overlook's annual mustard (`eo_landmarks::flora::MEADOW_MUSTARD`), about
+/// 1 m at scale 1: a basal clump of broad leaves and leafy stems branching
+/// into racemes of small pale-yellow flowers in sprays at the top
+/// (`MUSTARD_FLOWER_SRGB`; the flowers their own colour, `m_flower`).
+fn mustard(b: &mut Builder, mats: &MeadowMats, m_flower: u32, lod: u32, seed: u32) {
+    use eo_landmarks::vegetation as v;
+    let live = v::MEADOW_LIVE[eo_landmarks::flora::MEADOW_MUSTARD as usize];
+    let g = MEADOW_GROUND;
+    let wide = [1.0f32, 1.5, 2.2][lod as usize];
+    // the basal leaves: broad, lobed (two leaflets each, offset), arching out.
+    for k in 0..[34u32, 14, 6][lod as usize] {
+        let a = hash3(k as i32, 91, 3, seed) * std::f32::consts::TAU;
+        let (x, z) = disc(k, 0.12, seed + 21);
+        let c = vary(live, k, seed + 21);
+        let len = (0.14 + 0.1 * hash3(k as i32, 92, 3, seed)) * wide.sqrt();
+        leaflet(b, mats.live, [x, g + 0.02, z], a, len, len * 0.5, 0.35 + 0.5 * hash3(k as i32, 93, 3, seed), c);
+        leaflet(b, mats.live, [x + a.cos() * len * 0.5, g + 0.04 + len * 0.25, z + a.sin() * len * 0.5], a + 0.3, len * 0.6, len * 0.35, 0.5, vary(c, 1, seed));
+    }
+    // the stems, each with a few stem leaves and a spray of flowers at its top.
+    let stems = [7u32, 5, 3][lod as usize];
+    let col = eo_landmarks::flora::MUSTARD_FLOWER_SRGB;
+    for k in 0..stems {
+        let (x, z) = disc(k, 0.18, seed + 23);
+        let yaw = hash3(k as i32, 94, 3, seed) * std::f32::consts::TAU;
+        let h = 0.55 + 0.45 * hash3(k as i32, 95, 3, seed);
+        let reach = 0.1 + 0.25 * hash3(k as i32, 96, 3, seed);
+        let c = vary(live, k + 50, seed);
+        blade(b, mats.live, [x, g - 0.01, z], yaw, h, 0.006 * wide, reach, 0.2, 3, c, c, 0.8);
+        let (sy, cy) = yaw.sin_cos();
+        let top = [x + cy * reach, g + h * 0.92, z + sy * reach];
+        if lod < 2 {
+            for j in 0..2 {
+                let t = 0.35 + 0.25 * j as f32;
+                let p = [x + cy * reach * t, g + h * t, z + sy * reach * t];
+                leaflet(b, mats.live, p, yaw + 1.6 + 3.1 * j as f32, 0.09 * wide.sqrt(), 0.035 * wide.sqrt(), 0.3, vary(c, j + 7, seed));
+            }
+        }
+        // the spray: racemes of heads round the stem's top, the open flowers above the buds.
+        let n = [40u32, 16, 7][lod as usize];
+        let base = b.v.len();
+        heads(b, m_flower, n, 0.12, 0.0, 0.2, [0.016f32, 0.026, 0.042][lod as usize], col, seed + k * 7);
+        for vtx in &mut b.v[base..] {
+            vtx.pos[0] += top[0];
+            vtx.pos[1] += top[1];
+            vtx.pos[2] += top[2];
+        }
+    }
+}
+
+/// A bloom (`eo_landmarks::flora::MEADOW_BLOOM`): sprays of small flower heads
+/// standing out of a host's crown (unit height 1, radius 0.6 at scale 1: the
+/// planting scales it to its host), white (`BLOOM_WHITE`) under the instance
+/// tint, which carries the species' flower colour.
+fn bloom(b: &mut Builder, m: u32, lod: u32, seed: u32) {
+    let w = (eo_landmarks::flora::BLOOM_WHITE.powf(1.0 / 2.2) * 255.0) as u8;
+    let sprays = [9u32, 7, 5][lod as usize];
+    for k in 0..sprays {
+        let a = hash3(k as i32, 97, 3, seed) * std::f32::consts::TAU;
+        let u = 0.25 + 0.75 * hash3(k as i32, 98, 3, seed).sqrt();
+        let top = [0.6 * u * a.cos(), 0.95 - 0.35 * u * u, 0.6 * u * a.sin()];
+        let n = [14u32, 6, 3][lod as usize];
+        let base = b.v.len();
+        heads(b, m, n, 0.07, -0.02, 0.06, [0.014f32, 0.024, 0.04][lod as usize], [w, w, w], seed + k * 5);
+        for vtx in &mut b.v[base..] {
+            vtx.pos[0] += top[0];
+            vtx.pos[1] += top[1];
+            vtx.pos[2] += top[2];
         }
     }
 }

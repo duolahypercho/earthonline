@@ -14,7 +14,7 @@ use crate::vegetation::{field, hash, smoothstep, warped, Site, MEADOW_COYOTE, ME
 
 /// The flora pass's switch names (the roll-up first); eo-app accepts them,
 /// [`Flora::from_args`] reads them.
-pub const FLORA_SWITCHES: &[&str] = &["--no-flora", "--no-scrub-species", "--no-grass-ramp", "--no-bluff-scrub", "--no-chert-ground", "--no-serpentinite"];
+pub const FLORA_SWITCHES: &[&str] = &["--no-flora", "--no-scrub-species", "--no-grass-ramp", "--no-bluff-scrub", "--no-chert-ground", "--no-serpentinite", "--no-flora-flowers"];
 
 /// The flora pass's features, each with its `--no-` switch ([`FLORA_SWITCHES`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -43,18 +43,24 @@ pub struct Flora {
     /// pillows), and rounded dark serpentinite and greenstone boulders 0.5-3 m (a few
     /// to 5 m) in the surf and on the sand at Baker and Marshall's, as the S1 scans.
     pub serpentinite: bool,
+    /// `--no-flora-flowers`: the season's flowers by species ([`bloom_of`]): the
+    /// overlook's annual mustard in pale-yellow sprays in spring (clustered, sparse),
+    /// monkeyflower orange, coyote brush's white seed fluff in autumn, toyon's
+    /// berries, the bluff's buckwheat heads (pink-white, then rust), seaside daisy
+    /// and iris.
+    pub flowers: bool,
 }
 
 impl Flora {
-    pub const ALL: Flora = Flora { species: true, ramp: true, bluff: true, chert: true, serpentinite: true };
-    pub const NONE: Flora = Flora { species: false, ramp: false, bluff: false, chert: false, serpentinite: false };
+    pub const ALL: Flora = Flora { species: true, ramp: true, bluff: true, chert: true, serpentinite: true, flowers: true };
+    pub const NONE: Flora = Flora { species: false, ramp: false, bluff: false, chert: false, serpentinite: false, flowers: false };
 
     pub fn from_args(args: &[String]) -> Self {
         let has = |s: &str| args.iter().any(|a| a == s);
         if has("--no-flora") {
             return Self::NONE;
         }
-        Flora { species: !has("--no-scrub-species"), ramp: !has("--no-grass-ramp"), bluff: !has("--no-bluff-scrub"), chert: !has("--no-chert-ground"), serpentinite: !has("--no-serpentinite") }
+        Flora { species: !has("--no-scrub-species"), ramp: !has("--no-grass-ramp"), bluff: !has("--no-bluff-scrub"), chert: !has("--no-chert-ground"), serpentinite: !has("--no-serpentinite"), flowers: !has("--no-flora-flowers") }
     }
 }
 
@@ -73,7 +79,7 @@ pub fn flora() -> Flora {
         let g3 = crate::vegetation::grass3();
         // the species replace the third pass's mounds; the grassland's ramp and the bluff
         // scrub act in the second pass's meadow (the third pass keeps it when on).
-        Flora { species: f.species && g3.scrub, ramp: f.ramp && g3 != crate::vegetation::Grass3::NONE, bluff: f.bluff && g3 != crate::vegetation::Grass3::NONE, chert: f.chert && g3.bare, serpentinite: f.serpentinite && g3 != crate::vegetation::Grass3::NONE }
+        Flora { species: f.species && g3.scrub, ramp: f.ramp && g3 != crate::vegetation::Grass3::NONE, bluff: f.bluff && g3 != crate::vegetation::Grass3::NONE, chert: f.chert && g3.bare, serpentinite: f.serpentinite && g3 != crate::vegetation::Grass3::NONE, flowers: f.flowers && g3 != crate::vegetation::Grass3::NONE }
     })
 }
 
@@ -340,6 +346,79 @@ pub const BOULDER_BOX: [f64; 4] = [-122.4860, 37.7930, -122.4740, 37.8085];
 /// signed distance, positive over the sea): the surf zone to the bluff foot.
 pub const BOULDER_BAND_M: (f64, f64) = (-30.0, 18.0);
 
+// ------------------------------------------------------------------ flowers
+
+/// The annual mustard or radish of the overlook's disturbed ground (photo ID
+/// UNVERIFIED, guide species 22): leafy mid-green clumps 0.5-1.5 m (REF) with
+/// pale-yellow flower sprays (meadow model index).
+pub const MEADOW_MUSTARD: u8 = 17;
+/// A bloom over a host plant: sprays of small flower heads in the host's
+/// crown, coloured per species and season by the instance tint (meadow model index).
+pub const MEADOW_BLOOM: u8 = 18;
+
+/// The mustard's flowers: the measured flower pixels (184,168,98), p10
+/// (173,153,75), p90 (203,192,108) [P:spencer] are the rendered target; the
+/// albedo is a little over them and more saturated (the frame's light and
+/// the heads' shading render an albedo darker and greyer).
+pub const MUSTARD_FLOWER_SRGB: [u8; 3] = [214, 192, 72];
+/// The mustard's bloom (days of the year): late winter to May (the guide's
+/// April peak "mustard"; Feb-Jun window of the spring display, [S39b]).
+pub const MUSTARD_BLOOM: (f64, f64) = (45.0, 155.0);
+/// The share of the overlook's shoulder cells (and bare soil edges) a mustard
+/// clump takes inside its stands, and the stands' threshold on a 7 m warped
+/// field: clustered and sparse (INFERRED from [P:spencer]).
+pub const MUSTARD_SHARE: f64 = 0.6;
+pub const MUSTARD_STAND: f64 = 0.45;
+/// The share a bare soil cell (the knoll's sparsely planted cut face) carries a
+/// mustard clump inside its stands ([P:spencer]: yellow sprays on the face).
+pub const MUSTARD_FACE_SHARE: f64 = 0.3;
+
+/// The bloom vertex colour (linear) the bloom model is built in; a tint of
+/// `colour / BLOOM_WHITE` gives the flower colour.
+pub const BLOOM_WHITE: f32 = 0.8;
+
+fn in_window(d: f64, a: f64, b: f64) -> f64 {
+    // a soft window [a, b] (days, wrapping the year), 10-day shoulders.
+    let d = d.rem_euclid(365.0);
+    // a window across the year's end runs to b + 365.
+    let b = if a <= b { b } else { b + 365.0 };
+    let w = |d: f64| smoothstep(a - 10.0, a + 5.0, d) * (1.0 - smoothstep(b - 5.0, b + 10.0, d));
+    w(d).max(w(d + 365.0))
+}
+
+/// A host's bloom on a day: the flower colour (sRGB) and how much of it
+/// (0..1; 0 none), per the guide's species table and season table (REF
+/// months). `female` picks the coyote brush's seed-fluff plants (dioecious).
+pub fn bloom_of(kind: u8, day: f64, female: bool) -> Option<([u8; 3], f64)> {
+    let (c, a) = match kind {
+        // orange to buff-yellow, bright orange on the cliffs [S24][S25], Apr-Jul (REF).
+        MEADOW_MONKEYFLOWER => ([222, 122, 40], in_window(day, 95.0, 205.0)),
+        // female plants turn fuzzy white in autumn, Aug-Dec (REF): a seed-fluff sheen.
+        MEADOW_COYOTE if female => ([232, 230, 218], 0.6 * in_window(day, 250.0, 350.0)),
+        // toyon: white flowers Jun-Jul, red berry clusters Nov-Jan (REF).
+        MEADOW_TOYON => {
+            let fl = in_window(day, 155.0, 210.0);
+            let berry = in_window(day, 305.0, 30.0);
+            if berry > fl { ([178, 32, 26], berry) } else { ([236, 234, 222], fl) }
+        }
+        // coast buckwheat: pink to white Jun-Oct, fading to copper (REF) [S30].
+        MEADOW_BUCKWHEAT => {
+            let fl = in_window(day, 152.0, 300.0);
+            let rust = smoothstep(235.0, 270.0, day.rem_euclid(365.0));
+            let c = [0, 1, 2].map(|i| ([232.0, 208.0, 204.0][i] * (1.0 - rust) + [168.0, 98.0, 62.0][i] * rust) as u8);
+            (c, fl)
+        }
+        // seaside daisy lavender-pink Apr-Aug; Douglas iris blue-purple Mar-May (REF).
+        MEADOW_BLUFF_HERBS => {
+            let iris = in_window(day, 60.0, 151.0);
+            let daisy = in_window(day, 91.0, 243.0);
+            if iris > 0.5 && daisy < 0.9 { ([150, 128, 200], iris) } else { ([196, 166, 214], daisy) }
+        }
+        _ => return None,
+    };
+    (a > 0.02).then_some((c, a))
+}
+
 // ------------------------------------------------------------------ where the scrub grows
 
 /// How the ground's shape weights the scrub (a factor on the third pass's
@@ -425,6 +504,7 @@ mod tests {
         assert_eq!(a(&["--no-grass-ramp", "--no-bluff-scrub"]), Flora { ramp: false, bluff: false, ..Flora::ALL });
         assert_eq!(a(&["--no-chert-ground"]), Flora { chert: false, ..Flora::ALL });
         assert_eq!(a(&["--no-serpentinite"]), Flora { serpentinite: false, ..Flora::ALL });
+        assert_eq!(a(&["--no-flora-flowers"]), Flora { flowers: false, ..Flora::ALL });
     }
 
     #[test]
@@ -473,6 +553,17 @@ mod tests {
         assert_eq!(CHERT_FACE_SRGB, [154, 120, 74]);
         // red over green over blue, the face darker than the top.
         assert!(CHERT_FACE_SRGB.iter().zip(CHERT_TOP_SRGB.iter()).all(|(f, t)| f <= t));
+    }
+
+    #[test]
+    fn flowers_keep_their_seasons() {
+        assert!(bloom_of(MEADOW_MONKEYFLOWER, 120.0, false).is_some());
+        assert!(bloom_of(MEADOW_MONKEYFLOWER, 20.0, false).is_none());
+        assert!(bloom_of(MEADOW_COYOTE, 300.0, true).is_some() && bloom_of(MEADOW_COYOTE, 300.0, false).is_none());
+        assert_eq!(bloom_of(MEADOW_TOYON, 360.0, false).map(|b| b.0), Some([178, 32, 26]));
+        let bw = |d: f64| bloom_of(MEADOW_BUCKWHEAT, d, false).map(|b| b.0[1]).unwrap_or(0);
+        assert!(bw(280.0) < bw(180.0), "buckwheat heads rust in autumn");
+        assert!(in_window(103.0, MUSTARD_BLOOM.0, MUSTARD_BLOOM.1) > 0.99);
     }
 
     #[test]
