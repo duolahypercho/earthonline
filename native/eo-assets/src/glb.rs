@@ -166,6 +166,17 @@ struct PrimOut {
 
 /// Parse a (verified) GLB and flatten it.
 pub fn cook_glb(bytes: &[u8]) -> Result<CookedModel> {
+    cook_mesh(bytes, None)
+}
+
+/// Return the first texture coordinates in the same vertex order as the cooked mesh.
+pub fn cook_glb_with_uv0(bytes: &[u8]) -> Result<(CookedModel, Vec<[f32; 2]>)> {
+    let mut uv = Vec::new();
+    let model = cook_mesh(bytes, Some(&mut uv))?;
+    Ok((model, uv))
+}
+
+fn cook_mesh(bytes: &[u8], mut uv: Option<&mut Vec<[f32; 2]>>) -> Result<CookedModel> {
     let gltf = gltf::Gltf::from_slice(bytes).map_err(|e| anyhow!("glTF parse: {e}"))?;
     let blob = gltf.blob.as_deref();
     let doc = &gltf.document;
@@ -210,6 +221,11 @@ pub fn cook_glb(bytes: &[u8]) -> Result<CookedModel> {
             let positions: Vec<[f32; 3]> =
                 reader.read_positions().ok_or_else(|| anyhow!("primitive without POSITION"))?.collect();
             let normals: Option<Vec<[f32; 3]>> = reader.read_normals().map(|n| n.collect());
+            if let Some(uv) = uv.as_deref_mut() {
+                let coords = reader.read_tex_coords(0).ok_or_else(|| anyhow!("primitive without TEXCOORD_0"))?.into_f32();
+                anyhow::ensure!(coords.len() == positions.len(), "texture coordinate count differs from POSITION");
+                uv.extend(coords);
+            }
             let base = model.positions.len() as u32;
             for (i, p3) in positions.iter().enumerate() {
                 let wp = world.transform_point3(Vec3::from(*p3));
