@@ -1414,7 +1414,7 @@ for (room_name, mat_name), (points, faces, smooth) in batches.items():
     if room_name in pivots:
         component_meshes.setdefault(room_name, []).append(obj)
 
-beaver_lighting.bake(list(bpy.context.scene.objects), RISE, detailed=FINISHES)
+beaver_lighting.bake(list(bpy.context.scene.objects), RISE, detailed=FINISHES, cloth_transfer=PATINA)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--parts", type=Path, help="Directory outside the checkout for reusable component GLBs")

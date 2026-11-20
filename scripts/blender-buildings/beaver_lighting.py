@@ -3,6 +3,7 @@
 import math
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
+from mathutils.kdtree import KDTree
 
 
 def subdivide_quad(points, face, spacing):
@@ -21,7 +22,38 @@ def subdivide_quad(points, face, spacing):
     return verts, quads
 
 
-def bake(objects, rise, detailed=False):
+def filter_cloth_irradiance(mesh, uv):
+    """Filter Monte Carlo noise along the draped surface, in linear light."""
+    # The export mesh has a regular, dense grid and shared smooth vertices.
+    # Smoothing only on the tangent sheet keeps the folded hem separate.
+    tree = KDTree(len(mesh.vertices))
+    for vertex in mesh.vertices:
+        tree.insert(vertex.co, vertex.index)
+    tree.balance()
+    energy = [None] * len(mesh.vertices)
+    for loop in mesh.loops:
+        daylight, fixture_v = uv.data[loop.index].uv
+        energy[loop.vertex_index] = (daylight ** 2, (1.0 - fixture_v) ** 2)
+
+    result = []
+    for vertex in mesh.vertices:
+        day = lamp = total = 0.0
+        for point, index, distance in tree.find_range(vertex.co, 0.23):
+            agreement = max(0.0, vertex.normal.dot(mesh.vertices[index].normal))
+            separation = abs((point - vertex.co).dot(vertex.normal))
+            weight = agreement ** 4 * math.exp(-0.5 * ((distance / 0.085) ** 2 + (separation / 0.025) ** 2))
+            day += weight * energy[index][0]
+            lamp += weight * energy[index][1]
+            total += weight
+        if total > 0:
+            result.append((math.sqrt(day / total), 1.0 - math.sqrt(lamp / total)))
+        else:
+            result.append((math.sqrt(energy[vertex.index][0]), 1.0 - math.sqrt(energy[vertex.index][1])))
+    for loop in mesh.loops:
+        uv.data[loop.index].uv = result[loop.vertex_index]
+
+
+def bake(objects, rise, detailed=False, cloth_transfer=False):
     vertices, faces = [], []
     for obj in objects:
         mesh = obj.data
@@ -70,8 +102,12 @@ def bake(objects, rise, detailed=False):
             lum += visible_energy(p,n,work_lights,False) * 0.17 / len(work_lights)
         return day, lum
 
-    def bounce(p, n, level):
-        key = (level, *(round(v / 0.24) for v in p), *(round(v * 4) for v in n))
+    def bounce(p, n, level, fine):
+        # Subdivide the irradiance cache where the blanket can turn within a
+        # single coarse cell. This is an offline cost only.
+        spacing = 0.07 if fine else 0.24
+        precision = 12 if fine else 4
+        key = (level, fine, *(round(v / spacing) for v in p), *(round(v * precision) for v in n))
         if key in bounce_cache:
             return bounce_cache[key]
         tangent = n.cross(Vector((0, 0, 1)) if abs(n.z) < 0.85 else Vector((1, 0, 0))).normalized()
@@ -95,6 +131,7 @@ def bake(objects, rise, detailed=False):
     for obj in objects:
         mesh = obj.data
         uv = mesh.uv_layers.new(name="Diffuse light transfer")
+        fine = cloth_transfer and mesh.materials[0].name.partition("@")[0] in ("cotton-coverlet", "cotton-turnback")
         # Compute per corner to preserve the two different normals at a hard edge.
         for face in mesh.polygons:
             for idx in face.loop_indices:
@@ -118,10 +155,12 @@ def bake(objects, rise, detailed=False):
                 key = (*(round(v * 300) for v in p), *(round(v * 80) for v in n))
                 if key not in direct_cache:
                     day, lum = direct(point, n, level)
-                    bd, bl = bounce(point, n, level)
+                    bd, bl = bounce(point, n, level, fine)
                     direct_cache[key] = (math.sqrt(min(1.0, day + bd)), 1.0 - math.sqrt(min(1.0, lum + bl)))
                 # Blender's glTF exporter flips V.
                 uv.data[idx].uv = direct_cache[key]
+        if fine:
+            filter_cloth_irradiance(mesh, uv)
 
 
 def dress_floor_for_blender(scene, path, boards):
