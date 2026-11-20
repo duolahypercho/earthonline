@@ -96,6 +96,13 @@ const SKY_CUMULUS: u32 = 16384u;
 // default; off, the ground's whole aerial perspective is in front of it, as before; sky.rs
 // `SkyOptions::cloud_depth_haze`)
 const SKY_CLOUD_DEPTH_HAZE: u32 = 2048u;
+// the cinematic look (`--look cinematic`, sky.rs `SkyOptions::cinematic`; the cinematic look
+// plan's stage L4): the golden haze and the shade in it (sky_volume.wgsl `vol_aerial`, the
+// shafts); its code is compiled out with SF_CINEMATIC.
+const SKY_CINEMATIC: u32 = 131072u;
+// the damp street (`--weather damp`, stage L3; sky.rs `SKY_DAMP_BIT`): the film's drying
+// patches (sky_light.wgsl `sky_damp_left`); never set by another weather.
+const SKY_DAMP: u32 = 262144u;
 
 /// World metres one cloud-sheet tile spans (eo-sky clouds.rs).
 const SKY_LOW_TILE: f32 = 3200.0;

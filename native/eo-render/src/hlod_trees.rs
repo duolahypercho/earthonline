@@ -197,6 +197,8 @@ pub struct FarTrees {
     cull_params: wgpu::Buffer,
     cmd_buf: wgpu::Buffer,
     count_buf: wgpu::Buffer,
+    /// The list in the count emulation (no MULTI_DRAW_INDIRECT_COUNT), registered at attach.
+    counted: std::sync::OnceLock<crate::counted::CountedLists>,
     cull_plain: wgpu::ComputePipeline,
     cull_hzb: wgpu::ComputePipeline,
     cull_bg: wgpu::BindGroup,
@@ -231,8 +233,8 @@ impl FarTrees {
         let block_bytes = MAX_BLOCKS as u64 * std::mem::size_of::<TreeBlock>() as u64;
         let block_buf = buffer("hlod-far-tree-blocks", block_bytes, U::STORAGE | U::COPY_DST);
         let cull_params = buffer("hlod-far-tree-cull-params", std::mem::size_of::<CullParams>() as u64, U::UNIFORM | U::COPY_DST);
-        let cmd_buf = buffer("hlod-far-tree-draws", MAX_BLOCKS as u64 * 16, U::STORAGE | U::INDIRECT);
-        let count_buf = buffer("hlod-far-tree-counts", 16, U::STORAGE | U::INDIRECT | U::COPY_DST);
+        let cmd_buf = buffer("hlod-far-tree-draws", MAX_BLOCKS as u64 * 16, U::STORAGE | U::INDIRECT | U::COPY_DST); // COPY_DST: the count emulation zeroes it
+        let count_buf = buffer("hlod-far-tree-counts", 16, U::STORAGE | U::INDIRECT | U::COPY_DST | U::COPY_SRC);
         let vf = wgpu::ShaderStages::VERTEX_FRAGMENT;
         let bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("hlod-far-trees-bgl"),
@@ -278,7 +280,7 @@ impl FarTrees {
         };
         let cull_plain = compute(&pm, &lay_p, "hlod_tree_cull");
         let cull_hzb = compute(&hm, &lay_h, "hlod_tree_cull (hzb)");
-        let module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("hlod_trees.wgsl"), source: wgpu::ShaderSource::Wgsl(format!("{}\n{WGSL}", crate::look::city_shader_source()).into()) });
+        let module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("hlod_trees.wgsl"), source: wgpu::ShaderSource::Wgsl(format!("{}\n{WGSL}", crate::look::city_shader_source_far()).into()) }); // the far layer's city shader (lighting)
         let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("hlod-far-trees-layout"), bind_group_layouts: &[Some(i.draw_bgl), Some(i.main_bgl), Some(&bgl)], immediate_size: 0 });
         let color = wgpu::ColorTargetState { format: crate::look::HDR_FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL };
         let ids = wgpu::ColorTargetState { format: crate::IDS_FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL };
@@ -316,6 +318,7 @@ impl FarTrees {
             cull_params,
             cmd_buf,
             count_buf,
+            counted: std::sync::OnceLock::new(),
             cull_plain,
             cull_hzb,
             cull_bg,
@@ -386,6 +389,12 @@ impl FarTrees {
         enc.clear_buffer(&self.count_buf, 0, None);
     }
 
+    /// Put the block list (count word 0, non-indexed) in the count emulation.
+    pub fn register_counts(&self, counts: &std::sync::Arc<crate::counted::Counts>) {
+        let list = crate::counted::List { word: 0, draws: self.cmd_buf.clone(), offset: 0, stride: 16, max: MAX_BLOCKS, floor: None };
+        let _ = self.counted.set(counts.register("far-trees", &self.count_buf, vec![list]));
+    }
+
     /// Frustum, near-distance and (after the pyramid) occlusion test of every block.
     pub fn encode_cull(&self, pass: &mut wgpu::ComputePass<'_>, hzb: Option<&wgpu::BindGroup>) {
         let n = self.block_count();
@@ -414,7 +423,7 @@ impl FarTrees {
         }
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(2, &self.bg, &[]);
-        pass.multi_draw_indirect_count(&self.cmd_buf, 0, &self.count_buf, 0, n);
+        crate::counted::draw(pass, self.counted.get(), 0, &self.cmd_buf, 0, &self.count_buf, 0, n);
     }
 }
 

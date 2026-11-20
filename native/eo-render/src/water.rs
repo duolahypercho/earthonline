@@ -52,6 +52,32 @@ pub const SEEN_HOLD_FRAMES: u64 = 30;
 pub const GATE_NEAR_M: f32 = 1500.0;
 /// The cull's counters: drawn, in the frustum, land, occluded, nearest drawn (m), pad.
 const COUNT_BYTES: u64 = 32;
+/// Under the cinematic look (stage L5) the sea's reach (water_common.wgsl
+/// `wg_reach`) runs this much further south too, as it does west, north and
+/// east: the South Bay and the Pacific off the peninsula are the sea's, the
+/// peninsula's land hides it by depth (`set_south_reach`).
+pub const CINEMATIC_SOUTH_REACH_M: f32 = 60_000.0;
+/// Under the cinematic look (stage L5) the sea pass stands down for distance
+/// past this view depth (all its water at least this far: a camera 3.5 km or
+/// more up), and the far layer draws the water in its place, inside the city
+/// grid too (farshore.wgsl `fs_vs`, the sheet). The fog in use (2e7 m with
+/// the volume's aerial perspective) alone would never skip it: from the
+/// overview's 8 km the sea pass then cost 1.1 ms of GPU at high (15.6 ->
+/// 16.7 ms, over the tier's 16.6), for waves no pixel resolves up there.
+pub const CINEMATIC_SEA_LOD_M: f32 = 3_000.0;
+
+/// All water is past the fog's far end (`fog_far`, view depth): a point in the
+/// frustum lies within the half-diagonal angle of the view axis, so its view
+/// depth (what the range fog reads) is at least its distance times that
+/// angle's cosine, and no water is nearer than the camera's height over the
+/// displaced surface. When even that bound is past the fog's far end every
+/// water pixel would be the fog colour, which the fogged seabed behind it
+/// already is: the sea pass draws nothing (`update`).
+pub fn sea_fogged(cam: &Camera, fog_far: f32) -> bool {
+    let sea = eo_water::SEA_LEVEL_Y as f32;
+    let half_diag = ((cam.fov_y_deg.to_radians() * 0.5).tan() * (1.0 + cam.aspect * cam.aspect).sqrt()).atan();
+    (cam.eye.y - sea - BOX_M).max(0.0) * half_diag.cos() >= fog_far
+}
 
 const PATCH_COUNT: u32 = eo_water::grid::PATCHES * eo_water::grid::PATCHES;
 const N: u32 = eo_water::spectrum::N as u32;
@@ -188,6 +214,8 @@ struct State {
     near_waterline: bool,
     /// All water is past the fog's far end this frame: nothing drawn.
     fogged: bool,
+    /// The reach's extra run south (m; 0, or `CINEMATIC_SOUTH_REACH_M` under the cinematic look).
+    south_m: f32,
     active: bool,
     always: bool,
     stats: WaterStats,
@@ -529,7 +557,7 @@ impl WaterGpu {
                 entry(12, fs, tex(filt, wgpu::TextureViewDimension::D2)),
             ],
         });
-        let draw_src = format!("{common}\n{}\n{}\n{}\n{}", crate::look::look_common_source(), include_str!("sky_light_core.wgsl"), include_str!("water.wgsl"), include_str!("water_surf.wgsl")) + include_str!("water_spray.wgsl"); // + the spray, the cloud shadow and the fog depth
+        let draw_src = format!("{common}\n{}\n{}\n{}\n{}\n{}", crate::look::look_common_source(), include_str!("sky_light_core.wgsl"), crate::look::LOOK_EXT_WGSL, include_str!("water.wgsl"), include_str!("water_surf.wgsl")) + include_str!("water_spray.wgsl") + "\n" + crate::far_shadow::WGSL + "\n" + &crate::probe_grid::wgsl(true); // + the spray, the cloud shadow and the fog depth; + group 1 bindings 12-18; + the far sun shadow map's lookup and the probe grid's (lighting)
         let draw_src = if look.options.water_optics {
             draw_src + include_str!("look_finish.wgsl") + include_str!("underwater.wgsl")
         } else {
@@ -684,6 +712,7 @@ impl WaterGpu {
                 fft_ever: false,
                 near_waterline: false,
                 fogged: false,
+                south_m: 0.0,
                 active: false,
                 always: false,
                 stats: Default::default(),
@@ -713,6 +742,12 @@ impl WaterGpu {
     }
     pub fn on(&self) -> bool {
         self.on.load(Ordering::Relaxed)
+    }
+
+    /// The sea's reach past the terrain grid to the south (m; stage L5: 0 by
+    /// default, `CINEMATIC_SOUTH_REACH_M` under the cinematic look).
+    pub fn set_south_reach(&self, m: f32) {
+        self.state.lock().unwrap().south_m = m;
     }
 
     /// The water clock (seconds), the time the spectrum and the collar run on.
@@ -951,14 +986,8 @@ impl WaterGpu {
                 Some(s) => frame.saturating_sub(s) <= SEEN_HOLD_FRAMES,
                 None => st.stats.readbacks == 0,
             };
-        // A point in the frustum lies within the half-diagonal angle of the view
-        // axis, so its view depth (what the range fog reads) is at least its
-        // distance times that angle's cosine, and no water is nearer than the
-        // camera's height over the displaced surface. When even that bound is
-        // past the fog's far end every water pixel would be the fog colour,
-        // which the fogged seabed behind it already is: draw nothing.
-        let half_diag = ((cam.fov_y_deg.to_radians() * 0.5).tan() * (1.0 + cam.aspect * cam.aspect).sqrt()).atan();
-        st.fogged = (cam.eye.y - sea - BOX_M).max(0.0) * half_diag.cos() >= fog_far;
+        // all water past the fog's far end: draw nothing (`sea_fogged`).
+        st.fogged = sea_fogged(cam, fog_far);
         if st.fft != (recent && !st.fogged) {
             crate::hitch::mark(crate::hitch::Mark::WaterFftFlip, 1);
         }
@@ -989,7 +1018,7 @@ impl WaterGpu {
             field: self.field_frame,
             extent: self.extent,
             // x: EO_WATER_DEBUG (1: foam / column / shore distance; 2: beach / surf / collar), 0 off
-            screen: [debug_mode(), crate::surf::hands_over(), self.submerged.is_some() as u32 as f32, 0.0], // y 1 while the surf strip draws (water_surf.wgsl `surf_cover`)
+            screen: [debug_mode(), crate::surf::hands_over(), self.submerged.is_some() as u32 as f32, st.south_m], // y 1 while the surf strip draws (water_surf.wgsl `surf_cover`); w the reach's extra run south (stage L5)
             flags: [st.copy as u32 as f32, probe.is_some() as u32 as f32, MASK_M, st.fft_ever as u32 as f32],
             sizes: [s[0] as f32, s[1] as f32, s[2] as f32, s[3] as f32],
             probe: { let p = probe.unwrap_or_default(); [p.x, p.y, p.z, BEACH_MASK_M] },

@@ -22,8 +22,9 @@
 //! every one of those pixels. The early depth is a subset of the final
 //! depth, so the late test can only keep too much, never too little.
 //!
-//! Requires `MULTI_DRAW_INDIRECT_COUNT` (the compacted lists); without it
-//! the renderer draws as before (one pass, no occlusion).
+//! Requires the compacted lists (`MULTI_DRAW_INDIRECT_COUNT`, or its
+//! emulation, `counted`); without them the renderer draws as before (one
+//! pass, no occlusion).
 
 use std::sync::Mutex;
 

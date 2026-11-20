@@ -66,6 +66,10 @@ const PI: f32 = 3.14159265;
 @group(0) @binding(8) var street_nra: texture_2d_array<f32>;
 // The JS street scans' sampler: repeat, trilinear, anisotropy 8.
 @group(0) @binding(9) var street_sampler: sampler;
+// (stage S1, `--facade-clutter`) the shop signs' lettering: one layer a word
+// cell, r the letters' fill, g a neon tube (sign_letters.rs; a 1 x 1 stand-in
+// without the clutter or a font).
+@group(0) @binding(28) var sgn_atlas: texture_2d_array<f32>;
 
 /// Offset of stress copy k: a 4-wide grid of small shifts (see scene::copy_offset).
 fn copy_offset(k: u32) -> vec3<f32> {
@@ -113,9 +117,16 @@ fn vs(
     out.rel = pos - frame.cam_pos.xyz; // cc0
     out.ft = vec2<f32>(0.0);
     let kind = o.kind & 255u;
-    if (kind == 6u || kind == 7u || kind == 9u || kind == 10u) { // 9, 10
+    if (kind == 6u || kind == 7u || kind == 9u || kind == 10u || kind == 11u) { // 9, 10; 11 a structure's deck and paint
         // Street tints are the JS palette's sRGB hex: decode exactly.
         out.color = srgb_decode(color.rgb);
+    }
+    if (kind == 12u) {
+        // a structure's concrete: its formwork coordinates (metres) in ft,
+        // its wear in aux.x (structures.rs `encode_concrete`); the tint is the material's.
+        out.ft = sx_decode(color, normal.w);
+        out.color = vec3<f32>(1.0);
+        out.aux = vec2<f32>(color.a * 255.0, -1.0);
     }
     if (kind == 5u) {
         // Kit building: the vertex alpha byte is the kit palette index (the
@@ -125,6 +136,9 @@ fn vs(
         // them, rooms.rs); the paint is decoded per fragment in `shade` (it is
         // one colour per material run, so decoding after interpolation is the same).
         out.color = color.rgb;
+        // (stage S1) a lettered sign's (u, v) in its text box ride in r and g:
+        // through ft their screen derivatives come with the others in `shade`.
+        out.ft = color.rg;
         // an envelope wall's normal carries the storey count in y
         // and the bay count in w (kit.rs `facade_test_mark`); its own y is 0.
         if ((u32(frame.copy_step.y) & 256u) != 0u && o.lod_role == 4u && abs(normal.y) < 0.95) {
@@ -302,7 +316,11 @@ fn street_surface(in: VOut, n_geom: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) -
     if (!concrete && near_scan && cc0_on(CC0_RUN_STREET)) {
         cc0_street_asphalt(&f, p, gx, gy, in.world, select(-1.0, in.aux.y * 6.35, cls == SC_ASPHALT), mean, mean_rough, mean_ao);
     }
-    if (near_scan) {
+    // a structure's deck (kind 11) takes none of the street tile's decals below it.
+    if (near_scan && (objects[in.object].kind & 255u) != 11u) {
+        if (sl_level() != 0u) {
+            sl_kd = in.aux.y * 6.35; // street life (`--street-life`): the kerb distance its decals read
+        }
         cc0_street_decals(&f, in.world, cls, dpx, dpy, mean, mean_rough, mean_ao);
     } else {
         cc0_reset_post();
@@ -385,6 +403,10 @@ fn street_surface(in: VOut, n_geom: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) -
         } else if (cls == SC_KERB_FACE) {
             cc0_kerb_grime(&s, p, gx, gy, in.aux.y * 6.35);
         }
+    }
+    if (wx_level() != 0u && (objects[in.object].kind & 255u) != 11u) {
+        // weathering (`--grime`, weathering.wgsl): aged walks, chipped kerbs, a patched and sealed carriageway.
+        wx_street(&s, in.world, in.rel, cls, in.aux.y * 6.35, dpx, dpy);
     }
     sky_wet_street(&s, in.world, n_geom, in.aux.y * 6.35, !concrete); // wet ground, puddles, rain rings
     return s;
@@ -663,9 +685,241 @@ fn ft_facade(s: ptr<function, Surface>, m: ptr<function, Material>, world: vec3<
     (*s).n = nrm;
 }
 
+// facade clutter: a sign's face lit from inside (64..95) or a neon tube (96..127);
+// the low five bits are its switch roll against the shops' lit share
+// (`look.rooms_env.z`, the share the shop windows light by), by dusk
+// (`rooms_env.x`). Its colour is its own paint. Storefront signs measure
+// 40-450 cd/m2 against lit windows' ~6-50 (Lighting Research Center 2006; the
+// reference sheet 3.7). Stage S1 lowered the face's gain from W3's 1.1 (about
+// 4x a lit pane, rooms.wgsl caps one near 0.24, which the tone curve clipped to
+// a flat white panel) to about 1.5x a pane, the colour kept under the clip;
+// the letters of a back-lit sign glow brighter than its face (channel letters
+// over a dim face, LRC's "letters 40-230" against an unlit wall), and a neon
+// tube about 9x a pane over a faint glow on its board.
+const FC_BOX_GAIN: f32 = 0.5;
+const FC_LETTER_GAIN: f32 = 1.05;
+const FC_BACK_GAIN: f32 = 0.035;
+const FC_NEON_GAIN: f32 = 2.2;
+const FC_HALO_GAIN: f32 = 0.3;
+// INFERRED: the dimmest open shop window's luminance (cd/m2; N1's bars, 16 / 1.5),
+// the level at which a shop light reads as the shop open (sky.rs `shop_k`).
+const FC_SHOP_OPEN_L: f32 = 10.0;
+// (`--look cinematic`, stage L2) the signs raised into the reference's range:
+// a lit face ~40, letters ~80, a neon tube ~165 cd/m2 against lit windows'
+// ~6 and the lamp pools' ~1 (sheet 3.3, 3.7: storefront signs 40-450), the
+// default's gains (a face ~12, a tube ~55 cd/m2 at a pane's ~6) x 3.
+const FC_CINE_SIGN_GAIN: f32 = 3.0;
+
+// How lit a sign is, 0..1 by dusk. With the shop windows' lights (`--shop-light`,
+// sky flag SKY_SHOPS) within their reach: where the light of the shop at `p`
+// (its front facing `n`) is on (rooms.wgsl `rm_shop_light`), dimmed to the
+// security level a closed shop keeps; dark over a dark shop. Past their reach
+// (a per-sign hashed hand-over across the rooms' fade, as the panes do) and
+// without them: `roll` against the shops' lit share (W3's rule).
+fn fc_lit(p: vec3<f32>, n: vec3<f32>, roll: f32) -> f32 {
+    let dusk = look.rooms_env.x;
+    var lit = step(roll, look.rooms_env.z);
+    if (SF_SHOP_LIGHT && (skyu.flags.x & SKY_SHOPS) != 0u && dusk > 0.0) {
+        let reach = select(SHOP_REACH_NEAR, SHOP_REACH_FAR, (skyu.flags.x & SKY_SHOPS_FAR) != 0u);
+        let fade = rm_ss(SHOP_ROOM_FADE * reach, reach, length(p - skyu.eye.xyz));
+        if (fract(roll * 7.31 + 0.37) >= fade) {
+            let sl = rm_shop_light(p, n);
+            let open = dot(sl.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)) / max(FC_SHOP_OPEN_L * skyu.bloom_w2.z * dusk, 1e-6);
+            lit = sl.w * clamp(open, 0.0, 1.0);
+        }
+    }
+    return lit * dusk;
+}
+
+// A sign's light this fragment: its emission when lit, and what `fc_lit` asks.
+struct FcGlow {
+    emit: vec3<f32>,
+    q: vec3<f32>,
+    n: vec3<f32>,
+    roll: f32,
+};
+
+// W3's glow code (a sign drawn without words): its own paint lit, its shop
+// looked up a little under the fragment on the face's own front.
+fn fc_glow(albedo: vec3<f32>, code: f32, world: vec3<f32>, n_raw: vec3<f32>) -> FcGlow {
+    let k = round(code * 127.0);
+    let neon = k >= 95.5;
+    var g: FcGlow;
+    g.roll = (k - select(64.0, 96.0, neon)) / 31.0;
+    g.emit = albedo * select(FC_BOX_GAIN, FC_NEON_GAIN, neon);
+    g.q = world - vec3<f32>(0.0, 1.2, 0.0);
+    g.n = vec3<f32>(n_raw.x, 0.0, n_raw.z);
+    return g;
+}
+
+// ---- shop sign lettering (stage S1, `--facade-clutter`; eo-kit clutter.rs) ----
+// A lettered quad's vertex: rgb = (u, v of its text box, the atlas cell), the
+// normal's y and w = the rest (`LetterCode::bytes`); w is negative, which no
+// other non-glass kit vertex is. Its normal's own y is 0 (a vertical face).
+// The fields' paint (eo-kit `sign_field_tint`: SIGN_FIELDS at three fades, then
+// the neon board) as bytes, and the inks (`SIGN_INKS`, sRGB bytes): an eo-render
+// test keeps both equal to eo-kit's.
+const SGN_FIELD_COUNT: u32 = 37u;
+const SGN_FIELDS = array<vec3<f32>, 37>(
+    vec3<f32>(195.0, 36.0, 44.0), vec3<f32>(246.0, 240.0, 227.0), vec3<f32>(27.0, 45.0, 88.0), vec3<f32>(33.0, 34.0, 35.0),
+    vec3<f32>(237.0, 189.0, 46.0), vec3<f32>(33.0, 108.0, 70.0), vec3<f32>(217.0, 88.0, 35.0), vec3<f32>(133.0, 45.0, 128.0),
+    vec3<f32>(40.0, 124.0, 185.0), vec3<f32>(233.0, 225.0, 197.0), vec3<f32>(166.0, 22.0, 81.0), vec3<f32>(67.0, 67.0, 74.0),
+    vec3<f32>(204.0, 79.0, 83.0), vec3<f32>(244.0, 238.0, 226.0), vec3<f32>(73.0, 86.0, 118.0), vec3<f32>(78.0, 78.0, 77.0),
+    vec3<f32>(237.0, 198.0, 85.0), vec3<f32>(78.0, 135.0, 103.0), vec3<f32>(222.0, 119.0, 77.0), vec3<f32>(156.0, 86.0, 148.0),
+    vec3<f32>(83.0, 147.0, 194.0), vec3<f32>(234.0, 226.0, 203.0), vec3<f32>(182.0, 69.0, 112.0), vec3<f32>(104.0, 103.0, 107.0),
+    vec3<f32>(213.0, 118.0, 119.0), vec3<f32>(243.0, 237.0, 225.0), vec3<f32>(115.0, 124.0, 145.0), vec3<f32>(119.0, 117.0, 114.0),
+    vec3<f32>(237.0, 207.0, 121.0), vec3<f32>(119.0, 160.0, 133.0), vec3<f32>(226.0, 148.0, 114.0), vec3<f32>(176.0, 124.0, 167.0),
+    vec3<f32>(123.0, 169.0, 201.0), vec3<f32>(235.0, 228.0, 207.0), vec3<f32>(196.0, 110.0, 140.0), vec3<f32>(139.0, 136.0, 137.0),
+    vec3<f32>(31.0, 34.0, 39.0),
+);
+const SGN_INKS = array<vec3<f32>, 6>(
+    vec3<f32>(240.0, 232.0, 214.0), vec3<f32>(24.0, 24.0, 26.0), vec3<f32>(222.0, 172.0, 52.0),
+    vec3<f32>(196.0, 34.0, 38.0), vec3<f32>(236.0, 92.0, 160.0), vec3<f32>(44.0, 92.0, 196.0),
+);
+// eo-kit `SIGN_BLEACH` (sRGB bytes) and `SIGN_FADES`: an ink fades with its field.
+const SGN_BLEACH: vec3<f32> = vec3<f32>(214.0, 206.0, 192.0);
+// (u, v) of the text box the r and g bytes span (`LETTER_UV_MIN`, `LETTER_UV_SPAN`).
+const SGN_UV_MIN: f32 = -7.5;
+const SGN_UV_SPAN: f32 = 16.0;
+const SGN_LIT_LETTERS: u32 = 1u;
+const SGN_LIT_FACE: u32 = 2u;
+const SGN_NEON: u32 = 3u;
+
+struct SgnCode {
+    cell: u32,
+    mode: u32,
+    query: u32,
+    ink: u32,
+    field: u32,
+    emblem: u32,
+};
+
+fn sgn_decode(ny: f32, nw: f32, cell: f32) -> SgnCode {
+    var c = u32((i32(round(ny * 127.0)) + 127) * 127 + (-i32(round(nw * 127.0)) - 1));
+    var o: SgnCode;
+    o.field = c % SGN_FIELD_COUNT;
+    c = c / SGN_FIELD_COUNT;
+    o.ink = c % 6u;
+    c = c / 6u;
+    o.query = c % 3u;
+    c = c / 3u;
+    o.mode = c % 4u;
+    o.emblem = c / 4u;
+    o.cell = u32(round(cell * 255.0));
+    return o;
+}
+
+// Coverage of a signed distance `d` (text heights) over a pixel of `fw`.
+fn sgn_cov(d: f32, fw: f32) -> f32 {
+    return clamp(0.5 - d / fw, 0.0, 1.0);
+}
+
+fn sgn_box(p: vec2<f32>, half: vec2<f32>, r: f32) -> f32 {
+    let q = abs(p) - half + vec2<f32>(r);
+    return length(max(q, vec2<f32>(0.0))) + min(max(q.x, q.y), 0.0) - r;
+}
+
+// A lettered sign's face: the word (atlas fill, or its neon tubes and their
+// glow), the emblem beside it or the border round it (as eo-kit's planner
+// leaves room for them: centred 0.6 text heights past the box's end, 0.42
+// across; a border 0.25 and 0.18 out), painted in its ink over the field,
+// faded with it. `t` the text box (u, v), `du`, `dv` their screen
+// derivatives. Returns its light when lit (the shop looked up under the box's
+// centre, on the front `query` names) for `fc_lit`.
+fn sgn_sign(s: ptr<function, Surface>, g: SgnCode, t: vec2<f32>, du: vec2<f32>, dv: vec2<f32>, world: vec3<f32>, n_raw: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>, group: u32) -> FcGlow {
+    // the sign's plane per unit u and v from the screen derivatives (u, v run
+    // affinely over the quad), so the box's centre and size are known here.
+    let det = du.x * dv.y - du.y * dv.x;
+    var pu = vec3<f32>(0.0);
+    var pv = vec3<f32>(0.0);
+    if (abs(det) > 1e-12) {
+        pu = (dpx * dv.y - dpy * dv.x) / det;
+        pv = (dpy * du.x - dpx * du.y) / det;
+    }
+    let aspect = clamp(length(pu) / max(length(pv), 1e-4), 0.25, 40.0);
+    // the letters: fill and tube; with no font installed (a 1 x 1 stand-in) a band, W3's design.
+    var cov = vec2<f32>(0.0);
+    var halo = 0.0;
+    let inside = all(t > vec2<f32>(0.0)) && all(t < vec2<f32>(1.0));
+    let x = (t.x - 0.5) * aspect;
+    let y = t.y - 0.5;
+    let fw = max(length(dv), 1e-4);
+    if (inside && textureDimensions(sgn_atlas).x > 1u) {
+        let at = vec2<f32>(t.x, 1.0 - t.y);
+        let gx = vec2<f32>(du.x, -dv.x);
+        let gy = vec2<f32>(du.y, -dv.y);
+        cov = textureSampleGrad(sgn_atlas, kit_sampler, at, i32(g.cell), gx, gy).rg;
+        if (g.mode == SGN_NEON) {
+            // the tubes' glow on their board: the tube mask a few levels down.
+            halo = textureSampleGrad(sgn_atlas, kit_sampler, at, i32(g.cell), gx * 10.0, gy * 10.0).g;
+        }
+    } else if (inside) {
+        cov = vec2<f32>(sgn_cov(sgn_box(vec2<f32>(x, y), vec2<f32>(0.46 * aspect, 0.09), 0.0), fw));
+    }
+    // the emblem (1..6: disc, ring, diamond; odd on the left) or the border (7).
+    var d = 1e3;
+    if (g.emblem == 7u) {
+        d = abs(sgn_box(vec2<f32>(x, y), vec2<f32>(0.5 * aspect + 0.25, 0.68), 0.12)) - 0.035;
+    } else if (g.emblem > 0u) {
+        let e = vec2<f32>(x - select(1.0, -1.0, (g.emblem & 1u) == 1u) * (0.5 * aspect + 0.6), y);
+        let kind = (g.emblem - 1u) / 2u;
+        if (kind == 0u) {
+            d = length(e) - 0.42;
+        } else if (kind == 1u) {
+            d = abs(length(e) - 0.33) - 0.09;
+        } else {
+            d = (abs(e.x) + abs(e.y)) * 0.7071 - 0.3;
+        }
+    }
+    let shape_tube = select(abs(d + 0.035) - 0.035, d, g.emblem == 7u);
+    let letters = max(cov.x, sgn_cov(d, fw));
+    let tube = max(cov.y, sgn_cov(shape_tube, fw));
+    halo = max(halo, 0.4 * clamp(1.0 - max(shape_tube, 0.0) / 0.3, 0.0, 1.0));
+    // the ink, faded with its field.
+    let fade = select(f32(g.field / 12u) * 0.16, 0.0, g.field >= 36u);
+    let ink_s = mix(SGN_INKS[min(g.ink, 5u)], SGN_BLEACH, fade) / 255.0;
+    let ink = pow(ink_s, vec3<f32>(2.2));
+    var o: FcGlow;
+    if (g.mode == SGN_NEON) {
+        // glass tubes, pale by day; by night their colour at full strength
+        // (the tone curve whitens the core) and a glow on the dark board.
+        let neon = pow(ink / max(max(ink.x, ink.y), max(ink.z, 1e-4)), vec3<f32>(1.3));
+        (*s).albedo = mix((*s).albedo, mix(vec3<f32>(0.5), neon * 0.6, 0.4), tube);
+        (*s).rough = mix((*s).rough, 0.15, tube);
+        o.emit = neon * (tube * FC_NEON_GAIN + halo * FC_HALO_GAIN);
+    } else {
+        let field = (*s).albedo;
+        (*s).albedo = mix(field, ink * 0.9, letters);
+        if (g.mode == SGN_LIT_LETTERS) {
+            o.emit = ink * letters * FC_LETTER_GAIN + field * FC_BACK_GAIN;
+        } else {
+            // lit through: brightest between the lamps, falling off toward the edges.
+            o.emit = (*s).albedo * FC_BOX_GAIN * (1.0 - 0.25 * smoothstep(0.3, 0.85, abs(y)));
+        }
+    }
+    if (g.mode == 0u) {
+        o.emit = vec3<f32>(0.0);
+    }
+    // its shop: under the box's centre, on the front the query names (a blade's
+    // root, toward the wall and down to the window).
+    let nf = normalize(vec3<f32>(n_raw.x, 0.0, n_raw.z) + vec3<f32>(1e-6, 0.0, 0.0));
+    let right = vec3<f32>(nf.z, 0.0, -nf.x);
+    let centre = world + (0.5 - t.x) * pu + (0.5 - t.y) * pv;
+    o.n = select(select(-right, right, g.query == 1u), nf, g.query == 0u);
+    o.q = centre - select(o.n * 0.45 + vec3<f32>(0.0, 2.2, 0.0), vec3<f32>(0.0, 1.2, 0.0), g.query == 0u);
+    // its switch roll: the building's group and the sign's design, hashed (stable across loads and slots).
+    var h = group * 747796405u + g.cell * 2891336453u + (g.field * 7u + g.ink) * 277803737u + (g.mode * 8u + g.emblem) * 2654435761u;
+    h = (h ^ (h >> 16u)) * 2246822519u;
+    h = (h ^ (h >> 13u)) * 3266489917u;
+    h = h ^ (h >> 16u);
+    o.roll = f32(h >> 8u) / 16777216.0;
+    return o;
+}
+
 fn shade(in: VOut) -> vec4<f32> {
     var m = materials[in.material];
     let ft_du = vec2<f32>(dpdx(in.ft.x), dpdy(in.ft.x));
+    let ft_dv = vec2<f32>(dpdx(in.ft.y), dpdy(in.ft.y)); // a structure's formwork v (structures.wgsl)
     // Derivatives first, in uniform control flow.
     let dpx = dpdx(in.world);
     let dpy = dpdy(in.world);
@@ -684,10 +938,33 @@ fn shade(in: VOut) -> vec4<f32> {
     if (dot(n, v) < 0.0) {
         n = -n;
     }
+    // (stage S1, `--facade-clutter`) a lettered sign face: its normal's y byte
+    // carries its code (a vertical face's own y is 0); none without the clutter.
+    let sgn_on = SF_FACADE_CLUTTER && (objects[in.object].kind & 255u) == 5u && (m.flags & F_GLASS) == 0u && in.aux.y < -0.004 && (fa_run() & 256u) == 0u;
+    if (sgn_on) {
+        n = normalize(vec3<f32>(in.normal.x, 0.0, in.normal.z) + vec3<f32>(1e-6, 0.0, 0.0));
+        if (dot(n, v) < 0.0) {
+            n = -n;
+        }
+    }
 
     if ((m.flags & F_STREET) != 0u) {
         let ss = street_surface(in, n, dpx, dpy);
+        if (sx_in_bore(in.object)) {
+            return sx_bore_light(ss, m, v, in.world, in.object); // a tunnel bore's roadway (structures.wgsl)
+        }
         return look_light(ss, m, v, in.world, n, in.object);
+    }
+    if (SF_STRUCTURES && (objects[in.object].kind & 255u) == 12u) {
+        // a grade-separated road's concrete (structures.wgsl; none without `--structures`: SF_STRUCTURES).
+        var sx = sx_concrete(in, m, n, dpx, dpy, ft_du, ft_dv);
+        if (sl_level() != 0u) {
+            sl_structure(&sx, in.world, n, dpx, dpy); // street life (`--street-life`): graffiti round the columns' bases
+        }
+        if (sx_in_bore(in.object)) {
+            return sx_bore_light(sx, m, v, in.world, in.object); // a tunnel bore's lining and walkways
+        }
+        return look_light(sx, m, v, in.world, n, in.object);
     }
     var s: Surface;
     s.albedo = m.base.rgb;
@@ -703,18 +980,29 @@ fn shade(in: VOut) -> vec4<f32> {
     if (kit_object) {
         vcol = pow(in.color, vec3<f32>(2.2));
     }
+    // (stage S1) a lettered face's paint is its field's (its colour bytes are its text box and cell).
+    var sgn = SgnCode();
+    if (sgn_on) {
+        sgn = sgn_decode(in.normal.y, in.aux.y, in.color.b);
+        vcol = pow(SGN_FIELDS[min(sgn.field, SGN_FIELD_COUNT - 1u)] / 255.0, vec3<f32>(2.2));
+    }
     rm_emit = vec3<f32>(0.0);
     if ((m.flags & F_VERTEX_COLOUR) != 0u) {
         s.albedo = vcol;
-        if ((objects[in.object].kind & 255u) == 7u) {
+        let paint_kind = objects[in.object].kind & 255u;
+        if (paint_kind == 7u || paint_kind == 11u) {
             // street paint ('painted-metal', roughness 0.58) and the
-            // verge bank (the concrete material's 'sidewalk' class).
+            // verge bank (the concrete material's 'sidewalk' class); a
+            // structure's paint, and its joints and downspouts in the bank's class.
             let cls = u32(round(in.aux.x));
             if (cls == SC_PAINT) {
                 s.rough = ST_PAINT_ROUGHNESS;
                 s.env = ENV_PAINTED_METAL;
                 // worn paint inside the geometric marking (an ambientCG road-line scan as the wear mask only).
                 cc0_paint_wear(&s, in.world, in.rel, in.aux.y * 6.35, cc0_drx, cc0_dry);
+                if (wx_level() != 0u && paint_kind == 7u) {
+                    wx_paint(&s, in.world, dpx, dpy); // weathering (`--grime`): faded, chipped markings
+                }
             } else {
                 s.rough = ST_CONCRETE_ROUGHNESS;
                 s.env = ENV_SIDEWALK;
@@ -838,15 +1126,40 @@ fn shade(in: VOut) -> vec4<f32> {
     let room = (m.flags >> 8u) & 7u;
     if ((m.flags & F_GLASS) != 0u && room != 0u && kit_object && frame.copy_step.z < 0.5 && (fa_run() & 32u) != 0u) {
         let ng_out = select(face, normalize(in.normal), dot(in.normal, in.normal) > 0.25);
-        let r = rm_kit_pane(vec4<f32>(in.color, in.aux.y), in.world, ng_out, frame.cam_pos.xyz, room, look.rooms_env, look.rooms_work);
+        if (sl_level() != 0u) {
+            wx_window_life_pre(vec4<f32>(in.color, in.aux.y), in.world, ng_out, in.object, room); // stage W5 (`--street-life`, weathering.wgsl): the wall beside, sill plants, a vacant shop
+        }
+        let r = rm_kit_pane(vec4<f32>(in.color, in.aux.y), in.world, ng_out, frame.cam_pos.xyz, room, look.rooms_env, look.rooms_work, objects[in.object].lod_group); // + the building's group: its shop fronts (stage N2, `--shop-light`)
         s.albedo = mix(s.albedo, r.day.xyz, r.day.w);
         s.metal = mix(s.metal, s.metal * 0.3, r.day.w);
         // A blended pane's room reads at full strength after the blend (1 / opacity, floored at 0.25).
         let transmission = select(1.0, 1.0 / max(0.25, m.base.a), (m.flags & F_BLEND) != 0u);
         rm_emit = r.night * transmission;
+        if (wx_level() != 0u || sl_level() != 0u) {
+            wx_window(&s, &m, vec4<f32>(in.color, in.aux.y), in.world, ng_out, in.object, room, dpx, dpy); // stage W5: dirty glass (`--grime`); stickers, scratched tags (`--street-life`)
+        }
+    }
+    // facade clutter (`--facade-clutter`): a lit sign face carries a glow code in the normal's w
+    // byte (eo-kit clutter.rs, kit.rs), a lettered one (stage S1) its code; none on any other kit
+    // surface, so nothing runs without it. One shop lookup a fragment (`fc_lit`).
+    var fc = FcGlow();
+    var fc_on = false;
+    if (SF_FACADE_CLUTTER && kit_object && (m.flags & F_GLASS) == 0u && in.aux.y > 0.49 && (fa_run() & 256u) == 0u) {
+        fc = fc_glow(s.albedo, in.aux.y, in.world, in.normal);
+        fc_on = true;
+    }
+    if (sgn_on) {
+        fc = sgn_sign(&s, sgn, in.ft * SGN_UV_SPAN + SGN_UV_MIN, ft_du * SGN_UV_SPAN, ft_dv * SGN_UV_SPAN, in.world, in.normal, dpx, dpy, objects[in.object].lod_group);
+        fc_on = sgn.mode != 0u;
+    }
+    if (fc_on) {
+        rm_emit = rm_emit + fc.emit * fc_lit(fc.q, fc.n, fc.roll) * select(1.0, FC_CINE_SIGN_GAIN, SF_CINEMATIC && sky_on(skyu.flags.x, SKY_CINEMATIC));
     }
     // weathering (Blender buildings) and archetype ageing (kit buildings).
     fa_apply(&s, m, in.world, n, in.object, dpx, dpy);
+    if (sl_level() != 0u && kit_object && (m.flags & F_GLASS) == 0u) {
+        sl_kit_wall(&s, in.world, n, in.object, dpx, dpy); // street life (`--street-life`): graffiti, buffs, posters at the building line
+    }
     // the shader-only facade on a near envelope wall.
     if ((fa_run() & 256u) != 0u && kit_object && objects[in.object].lod_role == 4u && dot(in.normal, in.normal) > 0.25 && abs(in.normal.y) < 0.3 && frame.copy_step.z < 0.5) {
         ft_facade(&s, &m, in.world, normalize(in.normal), in.ft, ft_du, in.object, cc0_drx, cc0_dry);
@@ -856,6 +1169,9 @@ fn shade(in: VOut) -> vec4<f32> {
     }
 
     // Lighting, shadows and fog: the JS game's light rig (look_light.wgsl).
+    if (sx_in_bore(in.object)) {
+        return sx_bore_light(s, m, v, in.world, in.object); // a tunnel bore's paint and luminaire (structures.wgsl)
+    }
     return look_light(s, m, v, in.world, n, in.object);
 }
 

@@ -272,6 +272,8 @@ pub struct HlodGpu {
     params_buf: wgpu::Buffer,
     cmd_buf: wgpu::Buffer,
     count_buf: wgpu::Buffer,
+    /// The list in the count emulation (no MULTI_DRAW_INDIRECT_COUNT), registered at attach.
+    counted: std::sync::OnceLock<crate::counted::CountedLists>,
     cull_plain: wgpu::ComputePipeline,
     cull_hzb: wgpu::ComputePipeline,
     cull_bg: wgpu::BindGroup,
@@ -319,7 +321,7 @@ impl HlodGpu {
         let index_buf = buf("hlod-indices", o.indices as u64 * 4, U::INDEX | U::COPY_DST);
         let cell_buf = buf("hlod-cells", MAX_CELLS as u64 * std::mem::size_of::<GpuCell>() as u64, U::STORAGE | U::COPY_DST);
         let params_buf = buf("hlod-cull-params", std::mem::size_of::<CullParams>() as u64, U::UNIFORM | U::COPY_DST);
-        let cmd_buf = buf("hlod-draws", MAX_CELLS as u64 * 20, U::STORAGE | U::INDIRECT);
+        let cmd_buf = buf("hlod-draws", MAX_CELLS as u64 * 20, U::STORAGE | U::INDIRECT | U::COPY_DST); // COPY_DST: the count emulation zeroes it
         let count_buf = buf("hlod-counts", 16, U::STORAGE | U::INDIRECT | U::COPY_SRC | U::COPY_DST);
         let layers = o.pages.max(1);
         let bc = d.features().contains(wgpu::Features::TEXTURE_COMPRESSION_BC);
@@ -403,7 +405,7 @@ impl HlodGpu {
                 wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::Sampler(&sampler) },
             ],
         });
-        let dm = module("hlod_draw.wgsl", format!("{}\n{}{DRAW_WGSL}", crate::look::city_shader_source(), far_constants_wgsl(&i.opts))); // + the switches
+        let dm = module("hlod_draw.wgsl", format!("{}\n{}{DRAW_WGSL}", crate::look::city_shader_source_far(), far_constants_wgsl(&i.opts))); // + the switches // the far layer's city shader (lighting: the ambient plane only)
         let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("hlod-draw-layout"), bind_group_layouts: &[Some(i.draw_bgl), Some(i.main_bgl), Some(&draw_bgl)], immediate_size: 0 });
         let attrs = [
             wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x3, offset: 0, shader_location: 0 },
@@ -452,6 +454,7 @@ impl HlodGpu {
             params_buf,
             cmd_buf,
             count_buf,
+            counted: std::sync::OnceLock::new(),
             cull_plain,
             cull_hzb,
             cull_bg,
@@ -479,6 +482,12 @@ impl HlodGpu {
 
     pub fn clear(&self, enc: &mut wgpu::CommandEncoder) {
         enc.clear_buffer(&self.count_buf, 0, None);
+    }
+
+    /// Put the cell list (count word 0) in the count emulation.
+    pub fn register_counts(&self, counts: &std::sync::Arc<crate::counted::Counts>) {
+        let list = crate::counted::List { word: 0, draws: self.cmd_buf.clone(), offset: 0, stride: crate::DRAW_ARGS_BYTES, max: MAX_CELLS, floor: None };
+        let _ = self.counted.set(counts.register("far-cells", &self.count_buf, vec![list]));
     }
 
     /// Whether the cull drops the district chunks the resident cells draw
@@ -509,7 +518,7 @@ impl HlodGpu {
         pass.set_bind_group(2, &self.draw_bg, &[]);
         pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
         pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint32);
-        pass.multi_draw_indexed_indirect_count(&self.cmd_buf, 0, &self.count_buf, 0, MAX_CELLS);
+        crate::counted::draw_indexed(pass, self.counted.get(), 0, &self.cmd_buf, 0, &self.count_buf, 0, MAX_CELLS);
     }
 
     /// The last frame's counters (blocking; tests and bench reports): entries
@@ -1126,8 +1135,9 @@ impl HlodRuntime {
 
     /// Why `settled` is false (for a settle that timed out).
     pub fn unsettled(&self) -> String {
+        let count = |s: DState| self.dstate.iter().filter(|&&d| d == s).count();
         format!(
-            "far layer: inputs {}, cells pending {}, districts pending {}, in flight {}, uploads {}, cells wanted {} resident {}, districts resident {} of {}",
+            "far layer: inputs {}, cells pending {}, districts pending {}, in flight {}, uploads {}, cells wanted {} resident {}, districts resident {} of {} (requested {}; idle {}, queued {}, uploading {}, failed {})",
             self.ctx().is_some(),
             self.pending.lock().unwrap().len(),
             self.pending_districts.lock().unwrap().len(),
@@ -1136,7 +1146,12 @@ impl HlodRuntime {
             self.slots.len(),
             self.stats.resident_cells,
             self.stats.resident_districts,
-            self.districts.len()
+            self.districts.len(),
+            self.districts_requested,
+            count(DState::Idle),
+            count(DState::Requested),
+            count(DState::Uploading),
+            count(DState::Failed),
         )
     }
 

@@ -120,6 +120,8 @@ struct State {
     lobe_pending: bool,
     /// Hold the front cube: no capture starts or advances (tests comparing frames).
     frozen: bool,
+    /// Frames in a row whose face was moved off (`defer_this_frame_within`).
+    defer_run: u32,
     stats: ProbeStats,
 }
 
@@ -135,6 +137,8 @@ pub struct ProbeGpu {
     cull_buf: wgpu::Buffer,
     draws: wgpu::Buffer,
     counters: wgpu::Buffer,
+    /// The list in the count emulation (no MULTI_DRAW_INDIRECT_COUNT), registered at attach.
+    counted: std::sync::OnceLock<crate::counted::CountedLists>,
     cull_pipeline: wgpu::ComputePipeline,
     cull_bg: wgpu::BindGroup,
     fill_pipeline: wgpu::ComputePipeline,
@@ -198,7 +202,7 @@ impl ProbeGpu {
         let buf = |label: &str, size: u64, usage: wgpu::BufferUsages| d.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: size.max(16), usage, mapped_at_creation: false });
         let frame_buf = buf("probe-frame", 160, wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST);
         let cull_buf = buf("probe-cull", std::mem::size_of::<ProbeCull>() as u64, wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST);
-        let draws = buf("probe-draws", init.object_count.max(1) as u64 * 20, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT);
+        let draws = buf("probe-draws", init.object_count.max(1) as u64 * 20, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_DST); // COPY_DST: the count emulation zeroes it
         let counters = buf("probe-counters", 16, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC);
         let lobe_buf = buf("probe-lobe", 160, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC);
         let lobe_read = buf("probe-lobe-read", 16, wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST);
@@ -341,6 +345,7 @@ impl ProbeGpu {
             cull_buf,
             draws,
             counters,
+            counted: std::sync::OnceLock::new(),
             cull_pipeline,
             cull_bg,
             fill_pipeline,
@@ -354,7 +359,7 @@ impl ProbeGpu {
             lobe_mapped: Arc::new(AtomicU8::new(0)),
             pipeline,
             sampler,
-            state: Mutex::new(State { front_pos: None, front: 0, capturing: None, hour: f64::NAN, sky_up: f64::NAN, frame: 0, this_frame: None, lobe_pending: false, frozen: false, stats: ProbeStats::default() }),
+            state: Mutex::new(State { front_pos: None, front: 0, capturing: None, hour: f64::NAN, sky_up: f64::NAN, frame: 0, this_frame: None, lobe_pending: false, frozen: false, defer_run: 0, stats: ProbeStats::default() }),
             object_count: init.object_count,
             bytes,
         }
@@ -396,6 +401,10 @@ impl ProbeGpu {
     pub fn update(&self, queue: &wgpu::Queue, eye: Vec3, hour: f64, sky_up: f64, on: bool, frame_template: &[f32; 40]) {
         let mut s = self.state.lock().unwrap();
         s.frame += 1;
+        // the last frame drew its face (none was moved off after `update` chose it), or no capture runs.
+        if s.this_frame.is_some() || s.capturing.is_none() {
+            s.defer_run = 0;
+        }
         s.this_frame = None;
         // A finished lobe read: map it (non-blocking) and pick it up when ready.
         if s.lobe_pending && self.lobe_mapped.load(Ordering::Acquire) == 0 {
@@ -477,9 +486,46 @@ impl ProbeGpu {
         if had {
             s.this_frame = None;
             s.stats.deferred += 1;
+            s.defer_run += 1;
             crate::hitch::mark(crate::hitch::Mark::ProbeDeferred, 1);
         }
         had
+    }
+
+    /// `defer_this_frame`, unless the last `max` frames' faces were all moved
+    /// off: then this one is drawn (`--smooth-time`, `smooth_time::PROBE_DEFER_MAX`:
+    /// with the hour moving a capture still finishes in a bounded number of frames).
+    pub fn defer_this_frame_within(&self, max: u32) -> bool {
+        if self.state.lock().unwrap().defer_run >= max {
+            return false;
+        }
+        self.defer_this_frame()
+    }
+
+    /// Put the face's list (count word 0) in the count emulation.
+    pub fn register_counts(&self, counts: &std::sync::Arc<crate::counted::Counts>) {
+        let list = crate::counted::List { word: 0, draws: self.draws.clone(), offset: 0, stride: crate::DRAW_ARGS_BYTES, max: self.object_count.max(1), floor: None };
+        let _ = self.counted.set(counts.register("probe", &self.counters, vec![list]));
+    }
+
+    /// In the count emulation: a face drawn to a bound its count went past
+    /// missed objects, so the captures are made again (the read-back count is
+    /// in the list's history now, so the next bound covers it).
+    pub fn recapture_if_overflowed(&self) {
+        if self.counted.get().is_some_and(|c| c.take_overflow()) {
+            self.reset();
+        }
+    }
+
+    pub(crate) fn encode_face_cull(&self, enc: &mut wgpu::CommandEncoder, ts: Option<(&wgpu::QuerySet, u32)>) {
+        enc.clear_buffer(&self.counters, 0, None);
+        {
+            let tw = ts.map(|(q, b)| wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b), end_of_pass_write_index: None });
+            let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("probe-cull"), timestamp_writes: tw });
+            pass.set_pipeline(&self.cull_pipeline);
+            pass.set_bind_group(0, &self.cull_bg, &[]);
+            pass.dispatch_workgroups(self.object_count.div_ceil(64), 1, 1);
+        }
     }
 
     /// Encode this frame's face (cull + draw), and on the sixth the fill, the
@@ -505,14 +551,7 @@ impl ProbeGpu {
             }
             return false;
         };
-        enc.clear_buffer(&self.counters, 0, None);
-        {
-            let tw = ts.map(|(q, b)| wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b), end_of_pass_write_index: None });
-            let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("probe-cull"), timestamp_writes: tw });
-            pass.set_pipeline(&self.cull_pipeline);
-            pass.set_bind_group(0, &self.cull_bg, &[]);
-            pass.dispatch_workgroups(self.object_count.div_ceil(64), 1, 1);
-        }
+        self.encode_face_cull(enc, ts);
         let last = face == 5;
         {
             let tw = ts.filter(|_| !last).map(|(q, b)| wgpu::RenderPassTimestampWrites { query_set: q, beginning_of_pass_write_index: None, end_of_pass_write_index: Some(b + 1) });
@@ -538,7 +577,7 @@ impl ProbeGpu {
             look.bind_main(&mut pass);
             pass.set_vertex_buffer(0, vertex.slice(..));
             pass.set_index_buffer(index.slice(..), wgpu::IndexFormat::Uint32);
-            pass.multi_draw_indexed_indirect_count(&self.draws, 0, &self.counters, 0, self.object_count);
+            crate::counted::draw_indexed(&mut pass, self.counted.get(), 0, &self.draws, 0, &self.counters, 0, self.object_count);
         }
         let mut s = self.state.lock().unwrap();
         s.stats.faces += 1;
@@ -579,5 +618,93 @@ impl ProbeGpu {
         s.stats.last_capture_frames = (s.frame - started + 1) as u32;
         let _ = &self.cubes;
         true
+    }
+}
+
+/// The probe grid (probe_grid.rs, `LightingOptions::probe_grid`) draws its
+/// faces with this probe's face pass: the same cull, list, pipeline and
+/// frame uniform (one face a frame in all; the single probe captures nothing
+/// while the grid is on), and finishes them with the same fill, levels and lobe.
+impl ProbeGpu {
+    /// Write the cull and frame uniforms of face `face` at `pos` (as `update`
+    /// does for the single probe's own face).
+    pub(crate) fn write_face(&self, queue: &wgpu::Queue, pos: Vec3, face: u32, frame_template: &[f32; 40]) {
+        let vp = face_view_proj(pos, face, self.c.near, self.c.far);
+        let planes = frustum_planes(vp).map(|p| p.to_array());
+        let cull = ProbeCull { planes, cam: [pos.x, pos.y, pos.z, self.c.far], object_count: self.object_count, kit_box_m: PROBE_KIT_BOX_M, pad: [0; 2] };
+        queue.write_buffer(&self.cull_buf, 0, bytemuck::bytes_of(&cull));
+        let mut fu = *frame_template;
+        fu[..16].copy_from_slice(&vp.to_cols_array());
+        fu[16..20].copy_from_slice(&[pos.x, pos.y, pos.z, 1.0]);
+        fu[32..36].copy_from_slice(&[0.0; 4]); // no probe inside the probe pass
+        fu[38] = 1.0; // copy_step.z: the probe pass
+        queue.write_buffer(&self.frame_buf, 0, bytemuck::cast_slice(&fu));
+    }
+
+    /// The face written by `write_face`: its cull (timestamp `begin` at the
+    /// start) and its draw into `target` (a face-size layer of `PROBE_FORMAT`)
+    /// over `depth` (timestamp `end` at the end).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn encode_face_into(
+        &self,
+        enc: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        depth: &wgpu::TextureView,
+        vertex: &wgpu::Buffer,
+        index: &wgpu::Buffer,
+        draw_bg: &wgpu::BindGroup,
+        look: &crate::look::LookGpu,
+        begin: Option<(&wgpu::QuerySet, u32)>,
+        end: Option<(&wgpu::QuerySet, u32)>,
+    ) {
+        self.encode_face_cull(enc, begin);
+        let tw = end.map(|(q, b)| wgpu::RenderPassTimestampWrites { query_set: q, beginning_of_pass_write_index: None, end_of_pass_write_index: Some(b) });
+        let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("probe-grid-face"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: target,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT), store: wgpu::StoreOp::Store },
+            })],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: depth,
+                depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Clear(0.0), store: wgpu::StoreOp::Discard }),
+                stencil_ops: None,
+            }),
+            timestamp_writes: tw,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(0, draw_bg, &[]);
+        look.bind_main(&mut pass);
+        pass.set_vertex_buffer(0, vertex.slice(..));
+        pass.set_index_buffer(index.slice(..), wgpu::IndexFormat::Uint32);
+        crate::counted::draw_indexed(&mut pass, self.counted.get(), 0, &self.draws, 0, &self.counters, 0, self.object_count);
+    }
+
+    /// The finishing pipelines: the fill, the levels, the lobe (probe_fill.wgsl;
+    /// their group 0 is one layout).
+    pub(crate) fn finish_pipelines(&self) -> [&wgpu::ComputePipeline; 3] {
+        [&self.fill_pipeline, &self.mip_pipeline, &self.lobe_pipeline]
+    }
+
+    /// In the count emulation: the face list's last draw fell short of its
+    /// count (the grid captures again; the single probe's own check is
+    /// `recapture_if_overflowed`).
+    pub(crate) fn take_face_overflow(&self) -> bool {
+        self.counted.get().is_some_and(|c| c.take_overflow())
+    }
+
+    /// A capture under way starts again at `eye` from its first face (the
+    /// camera jumped: its faces so far were lit under another camera's
+    /// cascades and far shadow map, a seam where they meet the later ones).
+    pub(crate) fn restart_capture_at(&self, eye: Vec3) {
+        let mut s = self.state.lock().unwrap();
+        let frame = s.frame;
+        if let Some(c) = &mut s.capturing {
+            *c = (eye, 0, frame);
+        }
     }
 }

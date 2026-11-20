@@ -60,6 +60,13 @@ pub const QUERIES_PER_FRAME: u32 = 6;
 pub const WIRE_CAPACITY: u32 = 196_608;
 /// lamp light slots.
 pub const LIGHT_CAPACITY: u32 = 16_384;
+/// (`--look cinematic`, stage L2) A lit signal lens at full night over its
+/// tone-solved radiance (the default's ~0.6 of the display's white, under the
+/// look's bloom threshold): 3.5 x puts the lens's core over the threshold
+/// (eo-look `CINE_BLOOM_THRESHOLD_X` 0.9), so a signal bleeds into the bloom
+/// as the reference's red and green heads do (sheet 7.1, 7.2); the hue-keeping
+/// shoulder holds its colour. Ramped in with the lamps (`night::lamps_on`).
+pub const CINE_SIGNAL_LENS_GAIN: f32 = 3.5;
 /// props2 feature bits (PrParams.mode.z).
 pub const F_FADE: u32 = 1;
 pub const F_WIND: u32 = 2;
@@ -222,6 +229,8 @@ pub struct PropsGpu {
     wire_look: WireLook,
     // lamp lights for the night lighting (kept, not read yet).
     lights: wgpu::Buffer,
+    /// (lighting) the buffers and group 2 the lamp and headlight shadow maps' prop casters read.
+    pub(crate) casters: crate::light_shadow::Casters,
     light_count: wgpu::Buffer,
     timing: Mutex<Option<(wgpu::QuerySet, u32)>>,
     alpha_test: f32,
@@ -311,8 +320,9 @@ impl PropsGpu {
             d.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some(label), contents: &contents, usage })
         };
         let empty = |label: &str, size: u64, usage: wgpu::BufferUsages| d.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: size.max(16).next_multiple_of(16), usage, mapped_at_creation: false });
-        let vbuf = init("prop-vertices", bytemuck::cast_slice(&lib.vertices), U::VERTEX);
-        let ibuf = init("prop-indices", bytemuck::cast_slice(&lib.indices), U::INDEX);
+        // (also read as storage by the lamp and headlight shadow maps' casters, light_shadow.rs)
+        let vbuf = init("prop-vertices", bytemuck::cast_slice(&lib.vertices), U::VERTEX | U::STORAGE);
+        let ibuf = init("prop-indices", bytemuck::cast_slice(&lib.indices), U::INDEX | U::STORAGE);
         let meshes = init("prop-meshes", bytemuck::cast_slice(&lib.meshes), U::STORAGE);
         let models = init("prop-models", bytemuck::cast_slice(&lib.models), U::STORAGE);
         let materials = init("prop-materials", bytemuck::cast_slice(&lib.materials), U::STORAGE);
@@ -517,7 +527,7 @@ impl PropsGpu {
                 wgpu::BindGroupEntry { binding: 16, resource: probe_sh.as_entire_binding() },
             ],
         });
-        let draw_src = format!("{}\n{}\n{}", crate::look::city_shader_source(), include_str!("props_types.wgsl"), include_str!("props_draw.wgsl"));
+        let draw_src = format!("{}\n{}\n{}", crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Plane, crate::look::ShadowLevels::Near, false), include_str!("props_types.wgsl"), include_str!("props_draw.wgsl")); // the ambient volume's plane only, no single-probe lookups (their frame names none; lighting: ambient::ShaderLevels, room for the probe grid)
         let draw_mod = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("props_draw.wgsl"), source: wgpu::ShaderSource::Wgsl(draw_src.into()) });
         let draw_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("prop-draw-layout"),
@@ -627,7 +637,7 @@ impl PropsGpu {
         let head = wsrc.split("#ifdef_cull").next().unwrap_or("");
         let wire_cull_plain = format!("{}\n{head}\n{}\nfn pr_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return false; }}\n", include_str!("props_types.wgsl"), section("cull"));
         let wire_cull_hzb = format!("{}\n{head}\n{}\n{hzb_tail}", include_str!("props_types.wgsl"), section("cull"));
-        let wire_draw_src = format!("{}\n{}\n{head}\n{}", crate::look::look_common_source(), include_str!("props_types.wgsl"), section("draw"));
+        let wire_draw_src = format!("{}\n{}\n{head}\n{}\n{}", crate::look::look_common_source(), include_str!("props_types.wgsl"), section("draw"), crate::look::LOOK_EXT_WGSL); // + group 1 bindings 12-18
         let wire_cull_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("prop-wire-cull-bgl"),
             entries: &[entry(0, cs, ubuf), entry(1, cs, sbuf(true)), entry(2, cs, sbuf(false)), entry(3, cs, sbuf(false))],
@@ -682,6 +692,8 @@ impl PropsGpu {
             + b1
             + b2
             + b3;
+        // (lighting) what the lamp and headlight shadow maps draw the props with.
+        let casters = crate::light_shadow::Casters { vertices: vbuf.clone(), indices: ibuf.clone(), instances: instances.clone(), models: models.clone(), meshes: meshes.clone(), data_bgl: data_bgl.clone(), data_bg: data_bg.clone() };
         Ok(Self {
             enabled: AtomicBool::new(true),
             active: AtomicBool::new(false),
@@ -728,6 +740,7 @@ impl PropsGpu {
             wire_pipe,
             wire_look: WireLook::default(),
             lights,
+            casters,
             light_count,
             timing: Mutex::new(None),
             alpha_test: lib.alpha_test,
@@ -825,8 +838,11 @@ impl PropsGpu {
     pub fn update(&self, queue: &wgpu::Queue, cam: &Camera, look: &LookGpu, occlusion: bool) {
         let vp = cam.view_proj();
         let planes = frustum_planes(vp).map(|p| p.to_array());
-        let exposure = look.frame().exposure.max(1e-6) as f32;
-        let aces = *self.lens_scale.lock().unwrap();
+        let lf = look.frame();
+        let exposure = lf.exposure.max(1e-6) as f32;
+        // (`--look cinematic`, stage L2) at night a lit signal's lens bright enough to bloom (`CINE_SIGNAL_LENS_GAIN`).
+        let lens_gain = if look.options.look.is_cinematic() { 1.0 + (CINE_SIGNAL_LENS_GAIN - 1.0) * eo_sky::night::lamps_on(lf.model.sun.altitude_deg) as f32 } else { 1.0 };
+        let aces = *self.lens_scale.lock().unwrap() * lens_gain;
         let counts = [self.high_water(), self.mesh_count, INSTANCE_CAPACITY, self.model_count];
         let feat = self.features.load(Ordering::Relaxed);
         let t = f32::from_bits(self.time_bits.load(Ordering::Relaxed));

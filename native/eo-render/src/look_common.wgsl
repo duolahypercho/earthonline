@@ -75,7 +75,37 @@ struct Look {
     // the weather's dome (eo-look `upperFromRow`): overcast, isotropy, desaturation, directional horizon band (1/0); tint.
     wx: vec4<f32>,
     wx_tint: vec4<f32>,
+    // the lighting additions (look.rs `LightingOptions`), all zero while every one is off.
+    // Rows (look.rs `LX_*`):
+    //   0      flags: x the feature bits (read `bitcast<u32>(look.lx[0].x) & LX_BIT_*`,
+    //          or `lk_lx_on`), y z w the ground bounce's sun exitance (ambient.wgsl; 0: off)
+    //   1-8    far shadow (far_shadow.wgsl): per ring (rows 1-4, 5-8) three
+    //          affine rows of world -> its map's clip space and a params row
+    //   9      far shadow params
+    //   10-11  ambient volume: origin, scale, plane mapping
+    //   12     probe grid params
+    //   13     light shadow params
+    //   14     smooth time params
+    //   15     spare
+    lx: array<vec4<f32>, 16>,
 };
+
+// The feature bits of `look.lx[0].x` (look.rs `LX_BIT_*`).
+const LX_BIT_CASCADE_BLEND: u32 = 1u;
+const LX_BIT_FAR_SHADOWS: u32 = 2u;
+const LX_BIT_AMBIENT_VOLUME: u32 = 4u;
+const LX_BIT_PROBE_GRID: u32 = 8u;
+const LX_BIT_LIGHT_SHADOWS: u32 = 16u;
+const LX_BIT_HEADLIGHT_SHADOWS: u32 = 32u;
+const LX_BIT_LIT_FOG: u32 = 64u;
+const LX_BIT_SMOOTH_TIME: u32 = 128u;
+
+// Whether a lighting addition is on this frame (`bit`: one of LX_BIT_*).
+// SF_LX_BITS (look.rs `ShaderFeatures`) are the additions compiled in: one
+// off at start folds to false here and its code leaves the pipeline.
+fn lk_lx_on(bit: u32) -> bool {
+    return (SF_LX_BITS & bit) != 0u && (bitcast<u32>(look.lx[0].x) & bit) != 0u;
+}
 
 // wet-surface-reflection.js `skyDomeRadiance`: the sky model's horizon
 // and zenith radiance mixed on the direction's elevation, clamped at the

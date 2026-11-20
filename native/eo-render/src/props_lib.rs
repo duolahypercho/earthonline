@@ -444,6 +444,11 @@ impl PropLibrary {
         if x.overhead.is_some() {
             h.update(eo_props::overhead::OVERHEAD_JS_GZ);
         }
+        // The stand-ins (`LibExtras::stand_ins`) only when on: off, the key is over the same
+        // inputs as before the switch (its source bytes above changed with it anyway).
+        if x.stand_ins {
+            h.update(b"stand-ins");
+        }
         h.finalize().iter().take(12).map(|b| format!("{b:02x}")).collect()
     }
 

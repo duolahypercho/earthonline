@@ -24,6 +24,9 @@
 // the atmosphere's transmittance and sky-view tables (sky_atmo.wgsl).
 @group(0) @binding(13) var vol_at_trans: texture_2d<f32>;
 @group(0) @binding(14) var vol_at_view: texture_2d<f32>;
+// (`--look cinematic`, stage L4) the far sun shadow map (far_shadow.wgsl, `--far-shadows`) or
+// a stand-in: the shade in the golden haze past the cascades.
+@group(0) @binding(20) var vol_far_map: texture_depth_2d_array;
 
 /// the atmosphere's sky radiance along a direction (look units).
 /// Its zenith is held to the look's own zenith luminance (the JS sky model's,
@@ -72,7 +75,9 @@ fn vol_atmo_sky(d: vec3<f32>) -> vec3<f32> {
         let lref = dot(textureSampleLevel(vol_at_view, vol_lin, at_view_uv(dref, skyu.atmo.xyz), 0.0).rgb * g_look, vec3<f32>(0.2126, 0.7152, 0.0722));
         let l = dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
         if (l > lref) {
-            let k = mix(1.0, min(g_model / max(g_look, 1e-9), 1.0), near_sun);
+            // (stage L4, the cinematic look) VOL_CINE_AUREOLE_KEEP of the cut: the low sun's glow
+            let ns = select(near_sun, near_sun * VOL_CINE_AUREOLE_KEEP, vol_cine_on());
+            let k = mix(1.0, min(g_model / max(g_look, 1e-9), 1.0), ns);
             c = c * ((lref + (l - lref) * k) / l);
         }
     }
@@ -128,6 +133,90 @@ fn vol_atmo_sky(d: vec3<f32>) -> vec3<f32> {
     return c;
 }
 
+// (`--look cinematic`, the cinematic look plan's stage L4; SKY_CINEMATIC, compiled out with
+// SF_CINEMATIC) the golden haze: the aerosol of the aerial perspective
+//  * thins with height from its own floor (a scale height of VOL_CINE_HAZE_H_M over a
+//    VOL_CINE_HAZE_DEAD_M dead band: the mean density between the eye's height and the
+//    point's, so a view from 1-3 km up looks down through a haze layer over the city that
+//    thins upward, where the default's 400 m law takes only the height difference);
+//  * is VOL_CINE_GOLDEN_GAIN denser with the sun low (the marine air of a clear evening:
+//    IMPROVE Point Reyes 15:00 runs to 156-196 Mm^-1 on its haziest days against a
+//    median of 49, reference sheet 4.3);
+//  * scatters VOL_CINE_DIRECT_SHARE of its in-scatter from the key through a
+//    Henyey-Greenstein phase of VOL_CINE_G (haze ~0.75: Narasimhan & Nayar, CVPR 2003,
+//    reference sheet 4.2) and the rest from the sky (its horizon colour x
+//    VOL_CINE_SKY_SHARE): distance glows warm toward the sun and turns cooler and darker
+//    away from it. The direct part is held under VOL_CINE_SUNWARD_CAP x the sky drawn above
+//    it in that azimuth, so the haze toward the sun never stands brighter than its sky.
+const VOL_CINE_HAZE_H_M: f32 = 600.0;
+const VOL_CINE_HAZE_DEAD_M: f32 = 20.0;
+const VOL_CINE_GOLDEN_GAIN: f32 = 0.4;
+const VOL_CINE_DIRECT_SHARE: f32 = 0.6;
+const VOL_CINE_G: f32 = 0.75;
+const VOL_CINE_SKY_SHARE: f32 = 0.55;
+const VOL_CINE_SUNWARD_CAP: f32 = 2.5;
+// (stage L4) the share of the low sun's aureole cut (`vol_atmo_sky`) the cinematic look keeps:
+// half, the glow round the sun brighter and wider (the default holds it to the tables' zenith).
+const VOL_CINE_AUREOLE_KEEP: f32 = 0.5;
+// how far the shade in the haze is marched (m): the cascades' 160 m, then the far map to here
+// (the street-level ring's fade-out begins ~525 m out, B2).
+const VOL_CINE_SHADE_FAR_M: f32 = 900.0;
+
+fn vol_cine_on() -> bool {
+    return SF_CINEMATIC && sky_on(skyu.flags.x, SKY_CINEMATIC);
+}
+
+/// 0..1: a low sun (under 25 deg, full under 8 deg, gone 4 deg below the horizon).
+fn vol_cine_low_sun() -> f32 {
+    let alt = asin(clamp(skyu.atmo.y, -1.0, 1.0)) * 57.29578;
+    return smoothstep(25.0, 8.0, alt) * smoothstep(-4.0, 0.0, alt);
+}
+
+/// 0..1: the key is the sun's (the direct share fades out with it).
+fn vol_cine_day() -> f32 {
+    return smoothstep(-4.0, 1.0, asin(clamp(skyu.atmo.y, -1.0, 1.0)) * 57.29578);
+}
+
+/// The key's single scatter off the haze along `dir` (radiance per unit optical depth),
+/// held under VOL_CINE_SUNWARD_CAP x `sky`'s luminance (the sky over the horizon in that
+/// azimuth, `vol_cine_sky`).
+fn vol_cine_direct(dir: vec3<f32>, sky: vec3<f32>) -> vec3<f32> {
+    let direct = skyu.sun_rad.xyz * sky_hg(dot(dir, skyu.atmo.xyz), VOL_CINE_G);
+    let ld = dot(direct, vec3<f32>(0.2126, 0.7152, 0.0722));
+    let cap = VOL_CINE_SUNWARD_CAP * dot(sky, vec3<f32>(0.2126, 0.7152, 0.0722));
+    return select(direct, direct * (cap / max(ld, 1e-12)), ld > cap);
+}
+
+/// The sky over the horizon in `dir`'s azimuth (`vol_aerial`'s in-scatter colour).
+fn vol_cine_sky(dir: vec3<f32>) -> vec3<f32> {
+    let dh_dir = normalize(vec3<f32>(dir.x, max(abs(dir.y), 0.03), dir.z));
+    var col = lk_sky_dome(dh_dir);
+    if (skyu.atmo2.x > 0.5) {
+        col = mix(col, vol_atmo_sky(dh_dir), skyu.atmo2.y);
+    }
+    return col;
+}
+
+/// The aerosol's extinction at its floor (1/m).
+fn vol_cine_aerosol() -> f32 {
+    return skyu.atmo3.y * (1.0 + VOL_CINE_GOLDEN_GAIN * vol_cine_low_sun());
+}
+
+/// The aerosol's density at a height over its floor's (0..1).
+fn vol_cine_density_at(y: f32) -> f32 {
+    return exp(-max(y - VOL_CINE_HAZE_DEAD_M, 0.0) / VOL_CINE_HAZE_H_M);
+}
+
+/// The aerosol's mean density between two heights over its floor's.
+fn vol_cine_density(y0: f32, y1: f32) -> f32 {
+    let a = max(min(y0, y1) - VOL_CINE_HAZE_DEAD_M, 0.0) / VOL_CINE_HAZE_H_M;
+    let b = max(max(y0, y1) - VOL_CINE_HAZE_DEAD_M, 0.0) / VOL_CINE_HAZE_H_M;
+    if (b - a < 1e-3) {
+        return exp(-0.5 * (a + b));
+    }
+    return (exp(-a) - exp(-b)) / (b - a);
+}
+
 /// aerial perspective (transmittance, in-scattered radiance) over a
 /// view distance: Rayleigh at the ground (5.8, 13.6, 33.1 e-3 / km) and clear
 /// coastal aerosol (`atmo3.y`) plus the weather's own (`atmo3.x`, from its
@@ -138,7 +227,14 @@ fn vol_atmo_sky(d: vec3<f32>) -> vec3<f32> {
 /// from it. Replaces the range fog (45 % at 4.2 km on a clear noon).
 fn vol_aerial(dir: vec3<f32>, dist: f32, eye_y: f32) -> vec4<f32> {
     let dh = dir.y * dist;
-    let dens = sky_path_density(dh);
+    var dens = sky_path_density(dh);
+    // (stage L4) the golden haze: its own height law and the low sun's marine air.
+    var aer = skyu.atmo3.y;
+    let cine = vol_cine_on();
+    if (cine) {
+        dens = vol_cine_density(eye_y, eye_y + dh);
+        aer = vol_cine_aerosol();
+    }
     let ray = AT_RAY * 0.001 * exp(-max(eye_y + 0.5 * dh, 0.0) / 8000.0);
     // the weather's own extinction lives under its deck or marine layer: none for an
     // eye 200 m over the low deck's top (the fog sea seen from above went hazy blue)
@@ -147,7 +243,7 @@ fn vol_aerial(dir: vec3<f32>, dist: f32, eye_y: f32) -> vec4<f32> {
     // 200 m over the fog top the houses under it ghosted through the fog sea seen from above.
     let wk = 1.0;
     let above_top = smoothstep(skyu.cloud0.y, skyu.cloud0.y + 100.0, eye_y);
-    let tau = (ray + vec3<f32>(skyu.atmo3.y * dens)) * dist;
+    let tau = (ray + vec3<f32>(aer * dens)) * dist;
     // fog, drizzle, rain, storm: the weather's own veil keeps the look's range-fog
     // law over its visibility (near .. far), on top of the clear air
     // Koschmieder over the path inside the layer (95 % at the weather's
@@ -166,6 +262,18 @@ fn vol_aerial(dir: vec3<f32>, dist: f32, eye_y: f32) -> vec4<f32> {
     var col = lk_sky_dome(dh_dir);
     if (skyu.atmo2.x > 0.5) {
         col = mix(col, vol_atmo_sky(dh_dir), skyu.atmo2.y);
+    }
+    if (cine) {
+        // (stage L4) the aerosol's share of the in-scatter, lit by the key through its phase.
+        let ta = aer * dens * dist;
+        let tr = dot(ray, vec3<f32>(0.2126, 0.7152, 0.0722)) * dist;
+        let share = ta / max(ta + tr, 1e-12);
+        let direct = vol_cine_direct(dir, col);
+        // x the path's transmittance: a far point hazed out meets the sky drawn behind it (the
+        // sky pixels take no phase term; at full weight the far land stood darker than the sky
+        // above it away from the sun, a line along the horizon from the air).
+        let tv = dot(t, vec3<f32>(0.2126, 0.7152, 0.0722));
+        col = mix(col, direct + col * VOL_CINE_SKY_SHARE, VOL_CINE_DIRECT_SHARE * share * vol_cine_day() * tv);
     }
     let tl = dot(t, vec3<f32>(0.2126, 0.7152, 0.0722));
     // the weather's veil takes the light under its deck (the light the
@@ -277,6 +385,40 @@ fn vol_sun_visibility(p: vec3<f32>) -> f32 {
     let uv = vec2<f32>(clip.x * 0.5 + 0.5, 0.5 - clip.y * 0.5);
     let v = textureSampleCompareLevel(vol_shadow, vol_cmp, uv, c, clip.z + look.cascade_bias[c].y);
     return mix(1.0, v, look.key_dir.w);
+}
+
+/// (stage L4) sun visibility past the cascades from the far rings (far_shadow.wgsl
+/// `lk_far_shadow`'s rings and fades, one compare, no normal offset: a point in the air),
+/// 1 without them.
+fn vol_far_visibility(p: vec3<f32>) -> f32 {
+    if (!(lk_lx_on(LX_BIT_FAR_SHADOWS) && look.lx[9].x > 0.0)) {
+        return 1.0;
+    }
+    var vis = 0.0;
+    var rest = 1.0;
+    let rings = u32(look.lx[9].x + 0.5);
+    for (var k = 0u; k < rings; k = k + 1u) {
+        let r = 1u + 4u * k;
+        let prm = look.lx[r + 3u];
+        if (prm.w <= 0.0) {
+            continue;
+        }
+        let q = vec4<f32>(p, 1.0);
+        let c = vec3<f32>(dot(look.lx[r], q), dot(look.lx[r + 1u], q), dot(look.lx[r + 2u], q));
+        let uv = vec2<f32>(c.x * 0.5 + 0.5, 0.5 - c.y * 0.5);
+        let e = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
+        let radial = 1.0 - smoothstep(prm.w * look.lx[9].z, prm.w, length(p.xz - look.cam_pos.xz));
+        let w = smoothstep(0.0, look.lx[9].y, e) * radial * select(0.0, 1.0, c.z >= 0.0 && c.z <= 1.0);
+        if (w > 0.0) {
+            let v = textureSampleCompareLevel(vol_far_map, vol_cmp, uv, i32(prm.x + 0.5), c.z);
+            vis = vis + rest * w * v;
+            rest = rest * (1.0 - w);
+            if (rest <= 0.0) {
+                break;
+            }
+        }
+    }
+    return mix(1.0, vis + rest, look.key_dir.w);
 }
 
 fn vol_cloud_t(p: vec3<f32>) -> f32 {
@@ -396,7 +538,10 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // from a blue-noise tile (clouds.rs) rather than white noise: no clumps of
     // equal offsets across neighbouring pixels (the fringe's salt and pepper), no pattern.
     let jit = cl_jitter(px, skyu.flags.y);
-    let cos_sun = dot(dir, look.key_dir.xyz);
+    // `--smooth-time`: the volume's own light direction (`beam.yzw`, eo-render sky.rs:
+    // the sun's while its light is the volume's, the moon's after), not the surfaces' key.
+    let vol_l = select(look.key_dir.xyz, skyu.beam.yzw, lk_lx_on(LX_BIT_SMOOTH_TIME));
+    let cos_sun = dot(dir, vol_l);
     let key = skyu.sun_rad.xyz;
     // with the atmosphere tables the clouds take the sun through the
     // atmosphere at the deck's height (reddened, and kept after the ground's
@@ -408,7 +553,50 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     // (A) Sun shafts in the haze, inside the cascades' reach: in-scatter only
     // (the range fog already attenuates the scene toward the fog colour).
-    if (sky_on(bits, SKY_SHAFTS) && look.key_dir.w > 0.0 && skyu.cloud4.z > 0.0) {
+    // (stage L4, the cinematic look) the golden haze (`vol_aerial`) takes the key's in-scatter
+    // over the whole path as if every point were lit; inside the cascades' reach the points in
+    // the sun's shadow give their share back here (`cine_shade`, taken off the aerial's
+    // in-scatter below), the haze's own density and phase: light shafts between the shadows
+    // of the buildings with no second haze counted on top of the aerial's. The sky's pixels
+    // (no aerial) keep the shafts below as they were: the lit air in front of the sky, the
+    // glow round a low sun seen past the buildings.
+    var cine_shade = vec3<f32>(0.0);
+    let cine = vol_cine_on() && dist < 1e8;
+    if (cine) {
+        if (sky_on(bits, SKY_SHAFTS) && look.key_dir.w > 0.0 && atmo_on) {
+            // inside the cascades' reach 8 steps on the cascades; past it, with the far rings
+            // drawn, 8 more out to VOL_CINE_SHADE_FAR_M on the far map (steps growing as the
+            // square), where the haze between the towers takes the shafts.
+            let split = look.cascade_split.z;
+            let reach = min(dist, split);
+            let n = 8;
+            let dt = reach / f32(n);
+            let sig0 = vol_cine_aerosol();
+            var acc = 0.0;
+            for (var i = 0; i < n; i = i + 1) {
+                let t = (f32(i) + jit) * dt;
+                let p = eye + dir * t;
+                acc = acc + sig0 * vol_cine_density_at(p.y) * (1.0 - vol_sun_visibility(p) * vol_cloud_t(p)) * dt;
+            }
+            let far_end = min(dist, VOL_CINE_SHADE_FAR_M);
+            if (far_end > split && lk_lx_on(LX_BIT_FAR_SHADOWS) && look.lx[9].x > 0.0) {
+                let span = far_end - split;
+                for (var i = 0; i < n; i = i + 1) {
+                    let f0 = f32(i) / f32(n);
+                    let f1 = (f32(i) + 1.0) / f32(n);
+                    let fm = (f32(i) + jit) / f32(n);
+                    let t = split + span * fm * fm;
+                    let p = eye + dir * t;
+                    acc = acc + sig0 * vol_cine_density_at(p.y) * (1.0 - vol_far_visibility(p) * vol_cloud_t(p)) * span * (f1 * f1 - f0 * f0);
+                }
+            }
+            // (the aerial's own direct term, its sunward cap included: uncapped, toward the sun the
+            // shade took more than the aerial had put in and blacked out the haze in shadow)
+            if (acc > 0.0) {
+                cine_shade = vol_cine_direct(dir, vol_cine_sky(dir)) * (VOL_CINE_DIRECT_SHARE * vol_cine_day() * acc);
+            }
+        }
+    } else if (sky_on(bits, SKY_SHAFTS) && look.key_dir.w > 0.0 && skyu.cloud4.z > 0.0) {
         let reach = min(dist, look.cascade_split.z);
         let n = 8;
         let dt = reach / f32(n);
@@ -480,7 +668,7 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                     // the ground's (the base), not the horizon-bright fog
                     // colour.
                     let below = max(top - p.y, 0.0);
-                    let tau = sig * below / max(look.key_dir.y, 0.035);
+                    let tau = sig * below / max(vol_l.y, 0.035);
                     // Under a continuous deck (rain, storm) the bank takes the
                     // sky's diffuse light, not the sun through the sheet's gaps.
                     let shade = mix(1.0, skyu.cloud1.w, clamp((skyu.cloud0.z - 0.75) / 0.2, 0.0, 1.0));
@@ -845,7 +1033,10 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // the aerial perspective on the city, the far land and the sea, in
     // front of everything in the volume (the range fog is pushed out of reach).
     if (atmo_on && dist < 1e8) {
-        let ap = vol_aerial(dir, dist, eye.y);
+        var ap = vol_aerial(dir, dist, eye.y);
+        if (cine) {
+            ap = vec4<f32>(max(ap.rgb - cine_shade, vec3<f32>(0.0)), ap.a); // (stage L4) the shade in the haze
+        }
         if (cl_a > 0.0) {
             // (cl_defer) the cloud at its mean depth: the haze in front of it (the
             // aerial to that depth) over it, the haze behind it (the rest of the path's

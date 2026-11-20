@@ -353,6 +353,26 @@ pub const RUN_FACADE_TEST: u32 = 256;
 pub const RUN_AGENT_HZB: u32 = 64;
 /// no probe face on a frame with a middle/far cascade refresh or a large upload.
 pub const RUN_PROBE_DEFER: u32 = 128;
+/// the weathering level (`--grime 1|2`, weathering.wgsl `wx_level`) in two
+/// bits of the switches from this shift: no bits (level 0) is the frame as before.
+pub const RUN_GRIME_SHIFT: u32 = 9;
+pub const RUN_GRIME_MASK: u32 = 3 << RUN_GRIME_SHIFT;
+
+/// The switch bits of a weathering level (0 off, 1 high, 2 hyper; more is 2).
+pub fn grime_bits(level: u8) -> u32 {
+    (level.min(2) as u32) << RUN_GRIME_SHIFT
+}
+
+/// the street-life level (`--street-life 1|2`, street_life.wgsl `sl_level`):
+/// litter, graffiti, posters. Two bits from this shift; none (level 0) is the
+/// frame as before.
+pub const RUN_STREET_LIFE_SHIFT: u32 = 11;
+pub const RUN_STREET_LIFE_MASK: u32 = 3 << RUN_STREET_LIFE_SHIFT;
+
+/// The switch bits of a street-life level (0 off, 1 high, 2 hyper; more is 2).
+pub fn street_life_bits(level: u8) -> u32 {
+    (level.min(2) as u32) << RUN_STREET_LIFE_SHIFT
+}
 
 /// The facade pass's GPU resources (bound in group 0 of the city pipelines).
 pub struct FacadeGpu {

@@ -729,6 +729,7 @@ fn cc0_street_decals(f: ptr<function, StTap>, world: vec3<f32>, cls: u32, dpx: v
     let asphalt = cls == SC_ASPHALT || cls == SC_PAD;
     let gutter = cls == SC_GUTTER;
     let walk = cls == SC_FOOTWAY;
+    var wx_edge = 0.0; // weathering: the building-line dirt (DK_WALK_EDGE)
     for (var k = 0u; k < 8u; k = k + 1u) {
         let idx = (cell[k / 2u] >> ((k % 2u) * 16u)) & 0xffffu;
         if (idx == 0xffffu) {
@@ -772,6 +773,11 @@ fn cc0_street_decals(f: ptr<function, StTap>, world: vec3<f32>, cls: u32, dpx: v
                     let m = smoothstep(0.42, 0.78, a) * (1.0 - smoothstep(0.3, 1.0, abs(across) / d1.y)) * smoothstep(0.35, 0.65, st_noise(vec2<f32>(along / 9.0 + seed * 31.0, 0.5)));
                     cc0_p_dark = cc0_p_dark * (1.0 - 0.32 * m);
                     cc0_p_rough = vec2<f32>(0.32, max(cc0_p_rough.y, m * 0.55));
+                    if (wx_level() != 0u) {
+                        // weathering (`--grime`): a broad, steadier oil band down the lane centre that reads at 30-100 m.
+                        let band = (1.0 - smoothstep(0.1, 1.0, abs(across) / d1.y)) * (0.6 + 0.4 * st_noise(vec2<f32>(along / 6.0 + seed * 31.0, 0.5)));
+                        cc0_p_dark = cc0_p_dark * (1.0 - WX_OIL_EXTRA * max(band, m));
+                    }
                 }
             } else if (kind == CC0_DK_OIL_SPOT || kind == CC0_DK_STAIN) {
                 if (asphalt || gutter || (walk && kind == CC0_DK_STAIN)) {
@@ -785,6 +791,9 @@ fn cc0_street_decals(f: ptr<function, StTap>, world: vec3<f32>, cls: u32, dpx: v
                     let m = clamp(pool * 0.55 + smoothstep(0.35, 0.7, a) * (1.0 - smoothstep(0.6, 1.0, r)), 0.0, 1.0) * (0.6 + 0.4 * seed);
                     cc0_p_dark = cc0_p_dark * (1.0 - select(0.45, 0.24, kind == CC0_DK_STAIN) * m);
                     cc0_p_rough = vec2<f32>(select(0.28, 0.6, kind == CC0_DK_STAIN), max(cc0_p_rough.y, m * 0.6));
+                    if (wx_level() != 0u) {
+                        cc0_p_dark = cc0_p_dark * (1.0 - 0.25 * m); // weathering (`--grime`): darker spills and drips
+                    }
                 }
             } else if (kind == CC0_DK_TYRE) {
                 if (asphalt || gutter) {
@@ -864,7 +873,28 @@ fn cc0_street_decals(f: ptr<function, StTap>, world: vec3<f32>, cls: u32, dpx: v
                     cc0_p_alb = vec4<f32>(mix(cc0_p_alb.rgb, c, a), max(cc0_p_alb.w, a));
                     cc0_p_rough = vec2<f32>(0.55, max(cc0_p_rough.y, a));
                 }
+            } else if (kind == CC0_DK_KERB_PAINT) {
+                // weathering (`--grime`; placed only with it): the kerb's paint, faded and chipped.
+                if ((cls == SC_KERB_FACE || cls == SC_KERB_TOP) && wx_level() != 0u) {
+                    let pc = wx_kerb_paint(world, along, d1.x, seed, length(gxa) + length(gya));
+                    cc0_p_alb = vec4<f32>(mix(cc0_p_alb.rgb, pc.rgb, pc.w), max(cc0_p_alb.w, pc.w));
+                    cc0_p_rough = vec2<f32>(0.7, max(cc0_p_rough.y, pc.w));
+                }
+            } else if (kind == CC0_DK_WALK_EDGE) {
+                // weathering (`--grime`; placed only with it): dirt along the building line, ragged.
+                if (walk && wx_level() != 0u) {
+                    // (the strips abut span to span: the rag is keyed on the world, the strongest strip wins)
+                    let rag = st_noise(world.xz / 0.8 + 3.7) * 0.6 + st_noise(world.xz / 0.27 + 9.1) * 0.4;
+                    wx_edge = max(wx_edge, 1.0 - smoothstep(0.1, 1.0, abs(across) / d1.y + (rag - 0.5) * 0.6));
+                }
             }
+    }
+    if (sl_level() != 0u) {
+        // street life (`--street-life`, street_life.wgsl; its decals in cells of their own): litter, leaves, grit, marks.
+        sl_street_decals(world, cls, slot, ci, dpx, dpy);
+    }
+    if (wx_edge > 0.0) {
+        cc0_p_dark = cc0_p_dark * (1.0 - 0.32 * wx_edge);
     }
 }
 

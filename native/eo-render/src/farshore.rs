@@ -14,6 +14,8 @@ use bytemuck::{Pod, Zeroable};
 use glam::{Vec3, Vec4};
 use std::sync::Mutex;
 
+pub mod outer; // the outer ring (stage L5, the cinematic look)
+
 /// Quads a side of one node's patch (farshore.wgsl divides by the same 32).
 pub const PATCH: u32 = 32;
 /// Mip levels of both textures; the quadtree's levels are 0..=TOP (TOP + 1 is the last morph target).
@@ -35,6 +37,41 @@ struct FarUniform {
     misc: [f32; 4],
     /// the sea's grid this frame: centre x, z, half size, drawn (1/0).
     sea: [f32; 4],
+    /// the cinematic look (stage L5; all 0 otherwise): x water everywhere outside the
+    /// drawn sea (1/0), y the skirt to the horizon (1/0), z the outer ring under this
+    /// layer's rim (1/0), w the skirt's length (game m).
+    ring: [f32; 4],
+    /// the outer ring's texture: origin x, z (surveyed m), 1 / (texel x width), 1 / (texel x height).
+    otex: [f32; 4],
+    /// this layer's extent on the plan (game m): min x, min z, max x, max z.
+    ext: [f32; 4],
+    /// x the inner cook's rim taper (surveyed m), y its sea floor (game y), z log2(outer texel / this texel),
+    /// w the sea sheet inside the city grid (1/0: the sea pass stood down for distance).
+    rim: [f32; 4],
+}
+
+/// The skirt's reach past the outermost layer's edge (game m, stage L5). 400 km:
+/// far enough that the volume's aerial perspective has fully hazed it (past its
+/// end the sky's pixels under the horizon are hazed as sea at that distance,
+/// sky_resolve.wgsl, the same colour), near enough that its end is no edge: a
+/// 3,000 km skirt left a one-pixel dark line where it met the sky.
+pub const SKIRT_M: f32 = 4.0e5;
+
+/// Stage L5's world edge under the cinematic look (the sea's fog test from the
+/// fog in use, the far layer's water everywhere the sea is not, the sea's reach
+/// south, the outer ring, the skirt): on unless `EO_FARSHORE_EDGE=0`, which
+/// keeps the look's frame without it (its A/B on one binary). Read once.
+pub fn world_edge_on() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("EO_FARSHORE_EDGE").map_or(true, |v| v.trim() != "0"))
+}
+
+/// Who draws the water at a plan point (stage L5's rule, farshore.wgsl `fs_vs`):
+/// the sea pass inside its reach and its grid square when it is drawn this
+/// frame; the far layer everywhere else. `reach` and `sea` as `FarUniform`'s.
+pub fn sea_draws_at(p: [f32; 2], reach: [f32; 4], sea: [f32; 4]) -> bool {
+    let in_reach = p[0] >= reach[0] && p[1] >= reach[1] && p[0] <= reach[2] && p[1] <= reach[3];
+    sea[3] > 0.5 && in_reach && (p[0] - sea[0]).abs() <= sea[2] && (p[1] - sea[1]).abs() <= sea[2]
 }
 
 /// Switches: `--no-farshore` / `EO_FARSHORE=0` (eo-app); `EO_FARSHORE_RANGE`
@@ -90,6 +127,165 @@ pub struct FarInit<'a> {
     pub reach: [f32; 4],
     pub plan_scale: f64,
     pub height_scale: f64,
+    /// The outer ring (`outer::load_or_bake`, the cinematic look only), None without it.
+    pub outer: Option<&'a eo_farshore::FarTerrain>,
+}
+
+/// The outer ring's own textures, uniform, nodes and quadtree (drawn with the
+/// far layer's pipeline and patch, after it, under the cinematic look only).
+struct OuterLayer {
+    bg: wgpu::BindGroup,
+    uniform: wgpu::Buffer,
+    inst: wgpu::Buffer,
+    count: Mutex<u32>,
+    tree: FarTree,
+    texel_game: f64,
+    tex: [f32; 4],
+}
+
+/// A cooked heightfield's three textures (heights R16Float, classes RGBA8,
+/// shape RG8, `MIPS` box-filtered mips each) and the bytes they take.
+fn upload_terrain(device: &wgpu::Device, queue: &wgpu::Queue, t: &eo_farshore::FarTerrain) -> (wgpu::TextureView, wgpu::TextureView, wgpu::TextureView, u64) {
+    let hd = &t.header;
+    let (w, h) = (hd.width, hd.height);
+    // Height mips (box average), uploaded as R16Float.
+    let mut levels: Vec<(usize, usize, Vec<f32>)> = vec![(w, h, t.heights.clone())];
+    for _ in 1..MIPS {
+        let (pw, ph, prev) = levels.last().unwrap();
+        let (nw, nh) = ((pw / 2).max(1), (ph / 2).max(1));
+        let mut next = vec![0f32; nw * nh];
+        for j in 0..nh {
+            for i in 0..nw {
+                let at = |a: usize, b: usize| prev[(b.min(ph - 1)) * pw + a.min(pw - 1)];
+                next[j * nw + i] = 0.25 * (at(2 * i, 2 * j) + at(2 * i + 1, 2 * j) + at(2 * i, 2 * j + 1) + at(2 * i + 1, 2 * j + 1));
+            }
+        }
+        levels.push((nw, nh, next));
+    }
+    let height_tex = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("farshore-heights"),
+        size: wgpu::Extent3d { width: w as u32, height: h as u32, depth_or_array_layers: 1 },
+        mip_level_count: MIPS,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::R16Float,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    let mut bytes = 0u64;
+    for (m, (lw, lh, data)) in levels.iter().enumerate() {
+        let px: Vec<u16> = data.iter().map(|&v| half(v)).collect();
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo { texture: &height_tex, mip_level: m as u32, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+            bytemuck::cast_slice(&px),
+            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(*lw as u32 * 2), rows_per_image: Some(*lh as u32) },
+            wgpu::Extent3d { width: *lw as u32, height: *lh as u32, depth_or_array_layers: 1 },
+        );
+        bytes += (lw * lh * 2) as u64;
+    }
+    // Class mips (box average), RGBA8.
+    let (cw, ch) = (t.class_width, t.class_height);
+    let class_tex = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("farshore-classes"),
+        size: wgpu::Extent3d { width: cw as u32, height: ch as u32, depth_or_array_layers: 1 },
+        mip_level_count: MIPS,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    let mut cl: (usize, usize, Vec<[u8; 4]>) = (cw, ch, t.classes.clone());
+    for m in 0..MIPS {
+        let (lw, lh, data) = &cl;
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo { texture: &class_tex, mip_level: m, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+            bytemuck::cast_slice(data),
+            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(*lw as u32 * 4), rows_per_image: Some(*lh as u32) },
+            wgpu::Extent3d { width: *lw as u32, height: *lh as u32, depth_or_array_layers: 1 },
+        );
+        bytes += (lw * lh * 4) as u64;
+        let (nw, nh) = ((lw / 2).max(1), (lh / 2).max(1));
+        let mut next = vec![[0u8; 4]; nw * nh];
+        for j in 0..nh {
+            for i in 0..nw {
+                let at = |a: usize, b: usize| data[(b.min(lh - 1)) * lw + a.min(lw - 1)];
+                for k in 0..4 {
+                    let s = at(2 * i, 2 * j)[k] as u32 + at(2 * i + 1, 2 * j)[k] as u32 + at(2 * i, 2 * j + 1)[k] as u32 + at(2 * i + 1, 2 * j + 1)[k] as u32;
+                    next[j * nw + i][k] = ((s + 2) / 4) as u8;
+                }
+            }
+        }
+        cl = (nw, nh, next);
+    }
+    // the shape plane (sky visibility, valley), RG8 with box mips.
+    let shape_tex = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("farshore-shape"),
+        size: wgpu::Extent3d { width: cw as u32, height: ch as u32, depth_or_array_layers: 1 },
+        mip_level_count: MIPS,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rg8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+    let mut sl: (usize, usize, Vec<[u8; 2]>) = (cw, ch, t.shape.clone());
+    for m in 0..MIPS {
+        let (lw, lh, data) = &sl;
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo { texture: &shape_tex, mip_level: m, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+            bytemuck::cast_slice(data),
+            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(*lw as u32 * 2), rows_per_image: Some(*lh as u32) },
+            wgpu::Extent3d { width: *lw as u32, height: *lh as u32, depth_or_array_layers: 1 },
+        );
+        bytes += (lw * lh * 2) as u64;
+        let (nw, nh) = ((lw / 2).max(1), (lh / 2).max(1));
+        let mut next = vec![[0u8; 2]; nw * nh];
+        for j in 0..nh {
+            for i in 0..nw {
+                let at = |a: usize, b: usize| data[(b.min(lh - 1)) * lw + a.min(lw - 1)];
+                for k in 0..2 {
+                    let s = at(2 * i, 2 * j)[k] as u32 + at(2 * i + 1, 2 * j)[k] as u32 + at(2 * i, 2 * j + 1)[k] as u32 + at(2 * i + 1, 2 * j + 1)[k] as u32;
+                    next[j * nw + i][k] = ((s + 2) / 4) as u8;
+                }
+            }
+        }
+        sl = (nw, nh, next);
+    }
+    (height_tex.create_view(&Default::default()), class_tex.create_view(&Default::default()), shape_tex.create_view(&Default::default()), bytes)
+}
+
+/// The far layer's shader as composed for its pipeline.
+fn shader_source() -> String {
+    format!(
+        "const FS_DEPTH_K: f32 = {:e};\n{}\n{}\n{}\n{}",
+        eo_farshore::DEPTH_K,
+        crate::look::look_common_source(),
+        include_str!("sky_light_core.wgsl"),
+        crate::look::LOOK_EXT_WGSL, // group 1 bindings 12-18
+        include_str!("farshore.wgsl")
+    )
+}
+
+/// Whether the far layer draws the water at a plan point (a mirror of
+/// farshore.wgsl `fs_vs`'s `own_water`; the sea's reach and grid as
+/// `FarUniform`'s, `grid` the city grid). By default it draws south of the grid
+/// within the reach's width and inside the reach where the sea's grid is not;
+/// past that nothing (the void the cinematic look closes). Under the cinematic
+/// look (stage L5) everywhere `sea_draws_at` is false.
+pub fn far_draws_water_at(p: [f32; 2], reach: [f32; 4], grid: [f32; 4], sea: [f32; 4], cinematic: bool) -> bool {
+    let in_sea = sea_draws_at(p, reach, sea);
+    if cinematic {
+        return !in_sea;
+    }
+    let in_reach = p[0] >= reach[0] && p[1] >= reach[1] && p[0] <= reach[2] && p[1] <= reach[3];
+    !in_sea && ((p[0] >= reach[0] && p[0] <= reach[2] && p[1] < grid[3] + 60000.0) || in_reach)
+}
+
+/// A heightfield's texture mapping (`FarUniform::tex`).
+fn tex_of(t: &eo_farshore::FarTerrain) -> [f32; 4] {
+    let hd = &t.header;
+    [hd.origin_x as f32, hd.origin_z as f32, (1.0 / (hd.texel_m * hd.width as f64)) as f32, (1.0 / (hd.texel_m * hd.height as f64)) as f32]
 }
 
 pub struct FarShoreGpu {
@@ -113,6 +309,8 @@ pub struct FarShoreGpu {
     pub bytes: u64,
     /// Nodes drawn last frame (for the bench's line).
     pub last_nodes: std::sync::atomic::AtomicU32,
+    /// The outer ring (stage L5), drawn only under the cinematic look.
+    outer: Option<OuterLayer>,
 }
 
 /// f32 -> IEEE half (round to nearest), for the R16Float heights.
@@ -124,111 +322,9 @@ impl FarShoreGpu {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, look: &crate::look::LookGpu, init: &FarInit) -> Self {
         let t = init.terrain;
         let hd = &t.header;
-        let (w, h) = (hd.width, hd.height);
-        // Height mips (box average), uploaded as R16Float.
-        let mut levels: Vec<(usize, usize, Vec<f32>)> = vec![(w, h, t.heights.clone())];
-        for _ in 1..MIPS {
-            let (pw, ph, prev) = levels.last().unwrap();
-            let (nw, nh) = ((pw / 2).max(1), (ph / 2).max(1));
-            let mut next = vec![0f32; nw * nh];
-            for j in 0..nh {
-                for i in 0..nw {
-                    let at = |a: usize, b: usize| prev[(b.min(ph - 1)) * pw + a.min(pw - 1)];
-                    next[j * nw + i] = 0.25 * (at(2 * i, 2 * j) + at(2 * i + 1, 2 * j) + at(2 * i, 2 * j + 1) + at(2 * i + 1, 2 * j + 1));
-                }
-            }
-            levels.push((nw, nh, next));
-        }
-        let height_tex = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("farshore-heights"),
-            size: wgpu::Extent3d { width: w as u32, height: h as u32, depth_or_array_layers: 1 },
-            mip_level_count: MIPS,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R16Float,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        let mut bytes = 0u64;
-        for (m, (lw, lh, data)) in levels.iter().enumerate() {
-            let px: Vec<u16> = data.iter().map(|&v| half(v)).collect();
-            queue.write_texture(
-                wgpu::TexelCopyTextureInfo { texture: &height_tex, mip_level: m as u32, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
-                bytemuck::cast_slice(&px),
-                wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(*lw as u32 * 2), rows_per_image: Some(*lh as u32) },
-                wgpu::Extent3d { width: *lw as u32, height: *lh as u32, depth_or_array_layers: 1 },
-            );
-            bytes += (lw * lh * 2) as u64;
-        }
-        // Class mips (box average), RGBA8.
-        let (cw, ch) = (t.class_width, t.class_height);
-        let class_tex = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("farshore-classes"),
-            size: wgpu::Extent3d { width: cw as u32, height: ch as u32, depth_or_array_layers: 1 },
-            mip_level_count: MIPS,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        let mut cl: (usize, usize, Vec<[u8; 4]>) = (cw, ch, t.classes.clone());
-        for m in 0..MIPS {
-            let (lw, lh, data) = &cl;
-            queue.write_texture(
-                wgpu::TexelCopyTextureInfo { texture: &class_tex, mip_level: m, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
-                bytemuck::cast_slice(data),
-                wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(*lw as u32 * 4), rows_per_image: Some(*lh as u32) },
-                wgpu::Extent3d { width: *lw as u32, height: *lh as u32, depth_or_array_layers: 1 },
-            );
-            bytes += (lw * lh * 4) as u64;
-            let (nw, nh) = ((lw / 2).max(1), (lh / 2).max(1));
-            let mut next = vec![[0u8; 4]; nw * nh];
-            for j in 0..nh {
-                for i in 0..nw {
-                    let at = |a: usize, b: usize| data[(b.min(lh - 1)) * lw + a.min(lw - 1)];
-                    for k in 0..4 {
-                        let s = at(2 * i, 2 * j)[k] as u32 + at(2 * i + 1, 2 * j)[k] as u32 + at(2 * i, 2 * j + 1)[k] as u32 + at(2 * i + 1, 2 * j + 1)[k] as u32;
-                        next[j * nw + i][k] = ((s + 2) / 4) as u8;
-                    }
-                }
-            }
-            cl = (nw, nh, next);
-        }
-        // the shape plane (sky visibility, valley), RG8 with box mips.
-        let shape_tex = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("farshore-shape"),
-            size: wgpu::Extent3d { width: cw as u32, height: ch as u32, depth_or_array_layers: 1 },
-            mip_level_count: MIPS,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rg8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        let mut sl: (usize, usize, Vec<[u8; 2]>) = (cw, ch, t.shape.clone());
-        for m in 0..MIPS {
-            let (lw, lh, data) = &sl;
-            queue.write_texture(
-                wgpu::TexelCopyTextureInfo { texture: &shape_tex, mip_level: m, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
-                bytemuck::cast_slice(data),
-                wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(*lw as u32 * 2), rows_per_image: Some(*lh as u32) },
-                wgpu::Extent3d { width: *lw as u32, height: *lh as u32, depth_or_array_layers: 1 },
-            );
-            bytes += (lw * lh * 2) as u64;
-            let (nw, nh) = ((lw / 2).max(1), (lh / 2).max(1));
-            let mut next = vec![[0u8; 2]; nw * nh];
-            for j in 0..nh {
-                for i in 0..nw {
-                    let at = |a: usize, b: usize| data[(b.min(lh - 1)) * lw + a.min(lw - 1)];
-                    for k in 0..2 {
-                        let s = at(2 * i, 2 * j)[k] as u32 + at(2 * i + 1, 2 * j)[k] as u32 + at(2 * i, 2 * j + 1)[k] as u32 + at(2 * i + 1, 2 * j + 1)[k] as u32;
-                        next[j * nw + i][k] = ((s + 2) / 4) as u8;
-                    }
-                }
-            }
-            sl = (nw, nh, next);
-        }
+        let (hv, cv, sv, mut bytes) = upload_terrain(device, queue, t);
+        // the outer ring's textures (stage L5), when it was cooked
+        let outer_views = init.outer.map(|o| upload_terrain(device, queue, o));
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("farshore-sampler"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -257,30 +353,26 @@ impl FarShoreGpu {
                 tex_entry(1),
                 tex_entry(2),
                 tex_entry(4), // the shape plane
+                tex_entry(5), // the outer ring's heights under the rim (stage L5; this layer's own heights when there is no ring)
                 wgpu::BindGroupLayoutEntry { binding: 3, visibility: wgpu::ShaderStages::VERTEX_FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None },
             ],
         });
-        let hv = height_tex.create_view(&Default::default());
-        let cv = class_tex.create_view(&Default::default());
-        let sv = shape_tex.create_view(&Default::default());
-        let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("farshore-bg"),
-            layout: &bgl,
-            entries: &[
-                wgpu::BindGroupEntry { binding: 0, resource: uniform.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&hv) },
-                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&cv) },
-                wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::Sampler(&sampler) },
-                wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(&sv) },
-            ],
-        });
-        let src = format!(
-            "const FS_DEPTH_K: f32 = {:e};\n{}\n{}\n{}",
-            eo_farshore::DEPTH_K,
-            crate::look::look_common_source(),
-            include_str!("sky_light_core.wgsl"),
-            include_str!("farshore.wgsl")
-        );
+        let make_bg = |label: &str, u: &wgpu::Buffer, h: &wgpu::TextureView, c: &wgpu::TextureView, sh: &wgpu::TextureView, o: &wgpu::TextureView| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some(label),
+                layout: &bgl,
+                entries: &[
+                    wgpu::BindGroupEntry { binding: 0, resource: u.as_entire_binding() },
+                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(h) },
+                    wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(c) },
+                    wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::Sampler(&sampler) },
+                    wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(sh) },
+                    wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(o) },
+                ],
+            })
+        };
+        let bg = make_bg("farshore-bg", &uniform, &hv, &cv, &sv, outer_views.as_ref().map_or(&hv, |o| &o.0));
+        let src = shader_source();
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("farshore.wgsl"), source: wgpu::ShaderSource::Wgsl(src.into()) });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("farshore-layout"), bind_group_layouts: &[Some(&bgl), Some(look.main_bind_group_layout())], immediate_size: 0 });
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -348,7 +440,28 @@ impl FarShoreGpu {
         let options = FarOptions::default();
         let tree = FarTree::new(t, init.grid, s, hs, options.range0 as f64);
         let texel_game = hd.texel_m * s;
-        let tex = [hd.origin_x as f32, hd.origin_z as f32, (1.0 / (hd.texel_m * w as f64)) as f32, (1.0 / (hd.texel_m * h as f64)) as f32];
+        let tex = tex_of(t);
+        let outer = init.outer.zip(outer_views).map(|(o, (ohv, ocv, osv, ob))| {
+            bytes += ob;
+            let ou = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("farshore-outer-uniform"),
+                size: std::mem::size_of::<FarUniform>() as u64,
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            let oi = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("farshore-outer-nodes"),
+                size: (MAX_NODES * 16) as u64,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            bytes += (MAX_NODES * 16) as u64 + std::mem::size_of::<FarUniform>() as u64;
+            // its level 0 is the inner cook's level log2(texel ratio): the same ranges for the same node size
+            let ratio = o.header.texel_m / hd.texel_m;
+            let mut otree = FarTree::new(o, init.grid, s, hs, options.range0 as f64 * ratio);
+            otree.hole = Some(tree.extent());
+            OuterLayer { bg: make_bg("farshore-outer-bg", &ou, &ohv, &ocv, &osv, &ohv), uniform: ou, inst: oi, count: Mutex::new(0), tree: otree, texel_game: o.header.texel_m * s, tex: tex_of(o) }
+        });
         Self {
             pipeline,
             bg,
@@ -368,20 +481,40 @@ impl FarShoreGpu {
             options,
             bytes,
             last_nodes: std::sync::atomic::AtomicU32::new(0),
+            outer,
         }
     }
 
-    /// The camera (jittered, as the city is drawn) and the node list for this frame.
-    pub fn update(&self, queue: &wgpu::Queue, cam: &Camera, sea_on: bool) {
-        let nodes = self.tree.select(cam);
+    /// Whether the outer ring was attached (stage L5).
+    pub fn has_outer(&self) -> bool {
+        self.outer.is_some()
+    }
+
+    /// The camera (jittered, as the city is drawn) and the node list for this
+    /// frame. `sea_on`: the sea pass draws this frame. `cinematic` (stage L5):
+    /// the far layer draws the water everywhere the sea does not (the sea's
+    /// reach widened south by `water::CINEMATIC_SOUTH_REACH_M`), the outer
+    /// ring under its rim and past it, and the outermost layer's edge skirted
+    /// to the horizon. `sheet` (the cinematic look, the sea pass stood down for
+    /// distance): the water inside the city grid too, a sheet at sea level over
+    /// the city's seabed. Off: exactly the frame before stage L5.
+    pub fn update(&self, queue: &wgpu::Queue, cam: &Camera, sea_on: bool, cinematic: bool, sheet: bool) {
+        let outer = self.outer.as_ref().filter(|_| cinematic);
+        let skirt = if cinematic && outer.is_none() { SKIRT_M as f64 } else { 0.0 };
+        let sheet = cinematic && sheet;
+        let nodes = self.tree.select_full(cam, skirt, sheet);
         let n = nodes.len().min(MAX_NODES);
         if n > 0 {
             queue.write_buffer(&self.inst, 0, bytemuck::cast_slice(&nodes[..n]));
         }
         *self.count.lock().unwrap() = n as u32;
-        self.last_nodes.store(n as u32, std::sync::atomic::Ordering::Relaxed);
         let o = &self.options;
         let px = (cam.fov_y_deg.to_radians() / 1080.0).max(1e-5);
+        let mut reach = self.reach;
+        if cinematic {
+            reach[3] += crate::water::CINEMATIC_SOUTH_REACH_M;
+        }
+        let ext = self.tree.extent().map(|v| v as f32);
         let u = FarUniform {
             view_proj: cam.view_proj().to_cols_array_2d(),
             cam: [cam.eye.x, cam.eye.y, cam.eye.z, cam.far],
@@ -389,7 +522,7 @@ impl FarShoreGpu {
             tex: self.tex,
             lod: [self.texel_game as f32, TOP as f32, o.morph_start, o.range0],
             grid: self.grid,
-            reach: self.reach,
+            reach,
             misc: [o.dryness, px, o.self_shadow as u32 as f32, o.debug as u32 as f32],
             sea: {
                 // the water's own grid rule (water.rs update), without its hysteresis
@@ -397,8 +530,35 @@ impl FarShoreGpu {
                 let c = eo_water::grid::offset_for(cam.eye.x as f64, cam.eye.z as f64, eo_water::grid::snap_for(r));
                 [c[0] as f32, c[1] as f32, r as f32, sea_on as u32 as f32]
             },
+            ring: if cinematic { [1.0, (skirt > 0.0) as u32 as f32, outer.is_some() as u32 as f32, SKIRT_M] } else { [0.0; 4] },
+            otex: outer.map_or([0.0; 4], |l| l.tex),
+            ext: if cinematic { ext } else { [0.0; 4] },
+            rim: if cinematic { [eo_farshore::OUTER_TAPER_M as f32, eo_data::SEA_FLOOR_Y as f32, outer.map_or(0.0, |l| (l.texel_game / self.texel_game).log2() as f32), sheet as u32 as f32] } else { [0.0; 4] },
         };
         queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&u));
+        let mut total = n;
+        if let Some(l) = outer {
+            let nodes = l.tree.select_with(cam, SKIRT_M as f64);
+            let m = nodes.len().min(MAX_NODES);
+            if m > 0 {
+                queue.write_buffer(&l.inst, 0, bytemuck::cast_slice(&nodes[..m]));
+            }
+            *l.count.lock().unwrap() = m as u32;
+            total += m;
+            let ou = FarUniform {
+                tex: l.tex,
+                lod: [l.texel_game as f32, TOP as f32, o.morph_start, l.tree.range0 as f32],
+                ring: [1.0, 1.0, 0.0, SKIRT_M],
+                otex: [0.0; 4],
+                ext: l.tree.extent().map(|v| v as f32),
+                rim: [0.0; 4],
+                ..u
+            };
+            queue.write_buffer(&l.uniform, 0, bytemuck::bytes_of(&ou));
+        } else if let Some(l) = &self.outer {
+            *l.count.lock().unwrap() = 0;
+        }
+        self.last_nodes.store(total as u32, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Inside the city pass (single sample, no debug ids): group 0 is this
@@ -406,7 +566,8 @@ impl FarShoreGpu {
     /// its own vertex and index buffers and group 0 afterwards.
     pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>, look: &crate::look::LookGpu) {
         let n = *self.count.lock().unwrap();
-        if n == 0 {
+        let m = self.outer.as_ref().map_or(0, |l| *l.count.lock().unwrap());
+        if n == 0 && m == 0 {
             return;
         }
         pass.set_pipeline(&self.pipeline);
@@ -415,7 +576,14 @@ impl FarShoreGpu {
         pass.set_vertex_buffer(0, self.patch_vb.slice(..));
         pass.set_vertex_buffer(1, self.inst.slice(..));
         pass.set_index_buffer(self.patch_ib.slice(..), wgpu::IndexFormat::Uint16);
-        pass.draw_indexed(0..self.index_count, 0, 0..n);
+        if n > 0 {
+            pass.draw_indexed(0..self.index_count, 0, 0..n);
+        }
+        if let Some(l) = self.outer.as_ref().filter(|_| m > 0) {
+            pass.set_bind_group(0, &l.bg, &[]);
+            pass.set_vertex_buffer(1, l.inst.slice(..));
+            pass.draw_indexed(0..self.index_count, 0, 0..m);
+        }
     }
 }
 
@@ -431,6 +599,11 @@ pub struct FarTree {
     texel_game: f64,
     grid: [f32; 4],
     range0: f64,
+    /// The cooked extent on the plan (game m): min x, min z, max x, max z.
+    ext: [f64; 4],
+    /// A rectangle (game m) left to another layer: nodes wholly inside it are
+    /// skipped, nodes across its edge split (the outer ring round the inner cook).
+    pub hole: Option<[f64; 4]>,
 }
 
 impl FarTree {
@@ -484,7 +657,14 @@ impl FarTree {
             dims.push((nw, nh));
         }
         let texel_game = hd.texel_m * plan_scale;
-        Self { minmax, dims, origin: [hd.origin_x * plan_scale, hd.origin_z * plan_scale], node0: texel_game * PATCH as f64, texel_game, grid, range0 }
+        let origin = [hd.origin_x * plan_scale, hd.origin_z * plan_scale];
+        let ext = [origin[0], origin[1], origin[0] + w as f64 * texel_game, origin[1] + h as f64 * texel_game];
+        Self { minmax, dims, origin, node0: texel_game * PATCH as f64, texel_game, grid, range0, ext, hole: None }
+    }
+
+    /// The cooked extent on the plan (game m): min x, min z, max x, max z.
+    pub fn extent(&self) -> [f64; 4] {
+        self.ext
     }
 
     fn range(&self, level: u32) -> f64 {
@@ -496,6 +676,18 @@ impl FarTree {
     /// nodes wholly inside the city grid and wholly within the far plane are
     /// left to the city's ground.
     pub fn select(&self, cam: &Camera) -> Vec<[f32; 4]> {
+        self.select_with(cam, 0.0)
+    }
+
+    /// `select`, with the nodes along the cooked extent's edge tested in the
+    /// frustum as reaching `skirt` game m further out (the skirt, stage L5).
+    pub fn select_with(&self, cam: &Camera, skirt: f64) -> Vec<[f32; 4]> {
+        self.select_full(cam, skirt, false)
+    }
+
+    /// `select_with`; `keep_deep`: the nodes inside the city grid within the
+    /// far plane are kept too (the sea sheet, stage L5).
+    pub fn select_full(&self, cam: &Camera, skirt: f64, keep_deep: bool) -> Vec<[f32; 4]> {
         let planes = frustum_planes(cam.view_proj());
         // The side and near planes only (reverse Z: index 4 is the far plane; the far layer has none).
         let planes: [Vec4; 5] = [planes[0], planes[1], planes[2], planes[3], planes[5]];
@@ -504,14 +696,14 @@ impl FarTree {
         let (tw, th) = self.dims[TOP as usize];
         for j in 0..th {
             for i in 0..tw {
-                self.visit(TOP, i, j, &planes, eye, cam.far as f64, &mut nodes);
+                self.visit(TOP, i, j, &planes, eye, if keep_deep { 0.0 } else { cam.far as f64 }, skirt, &mut nodes);
             }
         }
         nodes
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn visit(&self, level: u32, i: usize, j: usize, planes: &[Vec4; 5], eye: glam::DVec3, far: f64, out: &mut Vec<[f32; 4]>) {
+    fn visit(&self, level: u32, i: usize, j: usize, planes: &[Vec4; 5], eye: glam::DVec3, far: f64, skirt: f64, out: &mut Vec<[f32; 4]>) {
         let (w, h) = self.dims[level as usize];
         if i >= w || j >= h || out.len() >= MAX_NODES {
             return;
@@ -524,7 +716,32 @@ impl FarTree {
         let x0 = self.origin[0] + i as f64 * size;
         let z0 = self.origin[1] + j as f64 * size;
         let (x1, z1) = (x0 + size, z0 + size);
-        let (mn, mx) = (Vec3::new(x0 as f32, y0, z0 as f32), Vec3::new(x1 as f32, y1, z1 as f32));
+        // the hole another layer draws: skipped when wholly inside, split across its edge
+        let mut split = false;
+        if let Some(hl) = self.hole {
+            if x0 >= hl[0] && z0 >= hl[1] && x1 <= hl[2] && z1 <= hl[3] {
+                return;
+            }
+            split = x0 < hl[2] && x1 > hl[0] && z0 < hl[3] && z1 > hl[1];
+        }
+        let (mut mn, mut mx) = (Vec3::new(x0 as f32, y0, z0 as f32), Vec3::new(x1 as f32, y1, z1 as f32));
+        if skirt > 0.0 {
+            // a node on the extent's edge carries the skirt beyond it (farshore.wgsl `fs_skirt`)
+            let e = self.ext;
+            let tol = 0.5 * self.texel_game;
+            if x0 <= e[0] + tol {
+                mn.x -= skirt as f32;
+            }
+            if x1 >= e[2] - tol {
+                mx.x += skirt as f32;
+            }
+            if z0 <= e[1] + tol {
+                mn.z -= skirt as f32;
+            }
+            if z1 >= e[3] - tol {
+                mx.z += skirt as f32;
+            }
+        }
         if !planes.iter().all(|pl| {
             let n = pl.truncate();
             let p = Vec3::new(if n.x >= 0.0 { mx.x } else { mn.x }, if n.y >= 0.0 { mx.y } else { mn.y }, if n.z >= 0.0 { mx.z } else { mn.z });
@@ -545,12 +762,12 @@ impl FarTree {
         if deep && dmax < far * 0.995 {
             return; // the city's own ground covers it
         }
-        if level == 0 || dmin > self.range(level - 1) {
+        if level == 0 || (dmin > self.range(level - 1) && !split) {
             out.push([x0 as f32, z0 as f32, size as f32, level as f32]);
             return;
         }
         for (a, b) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
-            self.visit(level - 1, 2 * i + a, 2 * j + b, planes, eye, far, out);
+            self.visit(level - 1, 2 * i + a, 2 * j + b, planes, eye, far, skirt, out);
         }
     }
 }
@@ -594,6 +811,110 @@ mod tests {
             assert!(n > 0 && n < MAX_NODES / 2, "{name}: {n} nodes");
             assert!(us < 1000.0, "{name}: {us:.0} us");
         }
+    }
+
+    /// The far layer's shader composes and validates with the look compiled in
+    /// and out, and its uniform is the Rust struct's size.
+    #[test]
+    fn the_shader_validates_with_and_without_the_look() {
+        use wgpu::naga;
+        for cinematic in [false, true] {
+            let f = crate::look::ShaderFeatures { cinematic, ..crate::look::ShaderFeatures::NONE };
+            crate::look::with_shader_features(f, || {
+                let src = shader_source();
+                let module = naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("farshore.wgsl: {}", e.emit_to_string(&src)));
+                naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all()).validate(&module).expect("farshore.wgsl validates");
+                let ty = module.types.iter().find(|(_, t)| t.name.as_deref() == Some("FarU")).expect("FarU").1;
+                let naga::TypeInner::Struct { span, .. } = &ty.inner else { panic!("FarU is a struct") };
+                assert_eq!(*span as usize, std::mem::size_of::<FarUniform>());
+            });
+        }
+        // the shader's water rule is the one `far_draws_water_at` mirrors
+        let src = include_str!("farshore.wgsl");
+        assert!(src.contains("own_water = !in_sea;") && src.contains("SF_CINEMATIC && fu.ring.x > 0.5"));
+    }
+
+    /// Stage L5: under the cinematic look the sea and the far layer agree on who
+    /// draws the water at every point (exactly one of them), whether the sea pass
+    /// draws this frame or not; by default the void past the reach stays.
+    #[test]
+    fn the_sea_and_the_far_layer_agree_on_the_water() {
+        let grid = [-8000.0f32, -9000.0, 9000.0, 8000.0];
+        let reach = [grid[0] - 60000.0, grid[1] - 60000.0, grid[2] + 60000.0, grid[3]];
+        let south = [reach[0], reach[1], reach[2], reach[3] + crate::water::CINEMATIC_SOUTH_REACH_M];
+        let mut void_default = 0;
+        for sea in [[0.0f32, 0.0, 4400.0, 1.0], [3000.0, -2000.0, 35200.0, 1.0], [0.0, 0.0, 70400.0, 0.0], [-50000.0, 20000.0, 140800.0, 1.0]] {
+            for j in -60..=60 {
+                for i in -60..=60 {
+                    let p = [i as f32 * 2500.0 + 7.0, j as f32 * 2500.0 - 3.0];
+                    let s = sea_draws_at(p, south, sea);
+                    let f = far_draws_water_at(p, south, grid, sea, true);
+                    assert!(s != f, "{p:?} sea {sea:?}: sea {s}, far {f}");
+                    let (sd, fd) = (sea_draws_at(p, reach, sea), far_draws_water_at(p, reach, grid, sea, false));
+                    assert!(!(sd && fd), "{p:?}: both draw by default");
+                    void_default += (!sd && !fd) as u32;
+                }
+            }
+        }
+        assert!(void_default > 0, "the default keeps its void (the owner decides)");
+    }
+
+    /// Stage L5's sea test: decided by the fog given, so the volume's pushed-out
+    /// fog (2e7 m) never skips the sea from the air, the old 3 km range fog does.
+    #[test]
+    fn the_sea_is_fogged_only_past_the_fog_in_use() {
+        let cam = Camera { far: 40000.0, ..Camera::new(Vec3::new(0.0, 8000.0, 0.0), 0.0, -1.2, 16.0 / 9.0) };
+        assert!(crate::water::sea_fogged(&cam, 3000.0));
+        assert!(!crate::water::sea_fogged(&cam, 2.0e7));
+        let low = Camera { far: 4000.0, ..Camera::new(Vec3::new(0.0, 30.0, 0.0), 0.0, -0.1, 16.0 / 9.0) };
+        assert!(!crate::water::sea_fogged(&low, 3000.0));
+    }
+
+    /// The outer ring's quadtree leaves the inner cook's extent alone (its
+    /// nodes meet it edge to edge), covers the rest of the ring, and chooses
+    /// the same nodes each time.
+    #[test]
+    fn the_outer_ring_tiles_round_the_inner_cook() {
+        use crate::farshore::outer::*;
+        let (w, h) = (OUTER_WIDTH, OUTER_HEIGHT);
+        let header = eo_farshore::CookHeader {
+            version: eo_farshore::COOK_VERSION.into(),
+            frame: String::new(),
+            origin_x: OUTER_ORIGIN_X,
+            origin_z: OUTER_ORIGIN_Z,
+            texel_m: OUTER_TEXEL_M,
+            width: w,
+            height: h,
+            sea_level_y: eo_data::SEA_LEVEL_Y,
+            heights: String::new(),
+            classes: String::new(),
+            shape: String::new(),
+            source: String::new(),
+            tiles: vec![],
+            city_grid: String::new(),
+        };
+        let heights: Vec<f32> = (0..w * h).map(|k| ((k % w) as f32 * 0.37).sin() * 200.0 + 100.0).collect();
+        let t = eo_farshore::FarTerrain { header, heights, classes: vec![], shape: vec![], class_width: w / 2, class_height: h / 2, from: "test" };
+        let inner = [eo_farshore::ORIGIN_X, eo_farshore::ORIGIN_Z, eo_farshore::ORIGIN_X + eo_farshore::WIDTH as f64 * eo_farshore::TEXEL_M, eo_farshore::ORIGIN_Z + eo_farshore::HEIGHT as f64 * eo_farshore::TEXEL_M];
+        let grid = [-8000.0f32, -9000.0, 9000.0, 8000.0];
+        let mut tree = FarTree::new(&t, grid, 1.0, 1.0, 7000.0 * 4.0);
+        tree.hole = Some(inner);
+        // from 600 km up looking straight down: the whole ring in view
+        let cam = Camera { far: 2.0e6, ..Camera::new(Vec3::new(-6000.0, 600_000.0, -24000.0), 0.0, -1.5707, 1.0) };
+        let nodes = tree.select_with(&cam, SKIRT_M as f64);
+        assert_eq!(nodes, tree.select_with(&cam, SKIRT_M as f64));
+        let mut area = 0.0f64;
+        for n in &nodes {
+            let (x0, z0, x1, z1) = (n[0] as f64, n[1] as f64, (n[0] + n[2]) as f64, (n[1] + n[2]) as f64);
+            let overlap = (x1.min(inner[2]) - x0.max(inner[0])).max(0.0) * (z1.min(inner[3]) - z0.max(inner[1])).max(0.0);
+            assert_eq!(overlap, 0.0, "node {n:?} overlaps the inner cook");
+            let e = extent();
+            area += (x1.min(e[2]) - x0.max(e[0])).max(0.0) * (z1.min(e[3]) - z0.max(e[1])).max(0.0);
+        }
+        let e = extent();
+        let want = (e[2] - e[0]) * (e[3] - e[1]) - (inner[2] - inner[0]) * (inner[3] - inner[1]);
+        assert!((area - want).abs() < 1.0, "covered {area} of {want}");
+        assert!(nodes.len() < MAX_NODES / 2, "{} nodes", nodes.len());
     }
 
     #[test]

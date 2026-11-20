@@ -618,6 +618,11 @@ impl StreetRuntime {
                     let s = slot as u32;
                     bulk.push(Write { target: Target::Cc0Decals, offset: crate::cc0::decals_offset(s), data: Data::Bytes(bytemuck::cast_slice(&d.records).to_vec()) });
                     bulk.push(Write { target: Target::Cc0Grid, offset: crate::cc0::cells_offset(s), data: Data::Bytes(bytemuck::cast_slice(&d.cells).to_vec()) });
+                    if crate::cc0::LIFE_CELLS.load(Ordering::Relaxed) {
+                        // street life (`--street-life`): its own cells (empty ones over a tile without it)
+                        let life = if d.life_cells.is_empty() { vec![[0xffff_ffffu32; 4]; crate::cc0_decals::CELLS * crate::cc0_decals::CELLS] } else { d.life_cells.clone() };
+                        bulk.push(Write { target: Target::Cc0Grid, offset: crate::cc0::life_cells_offset(s), data: Data::Bytes(bytemuck::cast_slice(&life).to_vec()) });
+                    }
                     finish.push(Write { target: Target::Cc0Grid, offset: crate::cc0::header_offset(s), data: Data::Words(crate::cc0::header(key, d.count as u32).to_vec()) });
                 }
             }

@@ -55,6 +55,31 @@ pub const DK_STAIN: u32 = 8;
 pub const DK_WALK_CRACK: u32 = 9;
 pub const DK_TYRE: u32 = 10;
 pub const DK_GRATE: u32 = 11;
+/// Weathering only (`--grime`, `set_weathering`): the corner daylighting's red
+/// kerb paint (CVC 22500(n), `no-parking-crosswalk-daylighting` on the vehicle
+/// approach side), faded and chipped (weathering.wgsl `wx_kerb_paint`).
+pub const DK_KERB_PAINT: u32 = 12;
+/// Weathering only: dirt along the building line at the walk's back edge.
+pub const DK_WALK_EDGE: u32 = 13;
+
+/// Whether street tiles place the weathering decals (`DK_KERB_PAINT`,
+/// `DK_WALK_EDGE`): off by default, so every tile's records are as before.
+static WEATHERING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Turn the weathering decals on or off (eo-app, with `--grime`, before the street streams).
+pub fn set_weathering(on: bool) {
+    WEATHERING.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn weathering() -> bool {
+    WEATHERING.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// The kerb paint decal's half-width across the kerb line (m): it covers the
+/// kerb face and top (the shader paints only those classes). INFERRED.
+pub const KERB_PAINT_HALF_M: f64 = 0.3;
+/// The building-line dirt strip's half-width (m), centred on the walk's back edge. INFERRED.
+pub const WALK_EDGE_HALF_M: f64 = 0.55;
 
 /// The street tile's grid: 32 x 32 cells of 4 m, at most 8 decals a cell.
 pub const CELLS: usize = 32;
@@ -85,9 +110,16 @@ pub struct Decal {
 
 impl Decal {
     fn priority(&self) -> u32 {
+        // street life (`--street-life`; its kinds carry parameters above the low byte):
+        // after every other decal, so a full cell drops its pieces first.
+        match self.kind & 255 {
+            crate::street_life::DK_COLUMN => return 8,
+            crate::street_life::DK_LIFE => return 9,
+            _ => {}
+        }
         match self.kind {
             DK_MANHOLE | DK_VAULT | DK_GRATE => 0,
-            DK_PATCH => 1,
+            DK_PATCH | DK_KERB_PAINT => 1,
             DK_CRACK | DK_WALK_CRACK => 2,
             DK_WHEEL => 3,
             DK_TYRE => 4,
@@ -110,6 +142,9 @@ impl Decal {
 pub struct TileDecals {
     pub records: Vec<[f32; 4]>,
     pub cells: Vec<[u32; 4]>,
+    /// The street-life decals' own cells (street_life.rs; `cc0::LIFE_GRID_VEC4`), the
+    /// same layout; empty when the tile has none (as without `--street-life`).
+    pub life_cells: Vec<[u32; 4]>,
     pub count: usize,
     pub dropped: usize,
 }
@@ -135,6 +170,8 @@ pub struct Standards {
     pub curb_height_m: f64,
     /// `line-width-local` (4-6 in), its middle: the width the worn-paint scan's own stripe is drawn at (cc0.wgsl).
     pub line_width_m: f64,
+    /// `no-parking-crosswalk-daylighting` approach side (20 ft): the red kerb at a corner (weathering).
+    pub daylighting_m: f64,
 }
 
 pub fn standards() -> Standards {
@@ -150,6 +187,7 @@ pub fn standards() -> Standards {
                 (Ok(a), Ok(b)) => (a + b) / 2.0,
                 _ => 0.0,
             },
+            daylighting_m: t.metric_key("no-parking-crosswalk-daylighting", "approachSide").unwrap_or(0.0),
         }
     })
 }
@@ -235,6 +273,44 @@ impl Hotspots {
         let h = Self::nearest(&self.shops, self.cell, p, SHOP_REACH_M);
         (1.0 - s / STOP_REACH_M).max(1.0 - h / SHOP_REACH_M).max(0.0)
     }
+
+    /// The surveyed storm-drain inlets within `reach` of the segment a-b: (place
+    /// along it, 0 at a .. 1 at b; lateral distance), nearest first. Stage W2c:
+    /// the street-life piles' anchors (street_life.rs `place`).
+    pub fn drains_along(&self, a: [f64; 2], b: [f64; 2], reach: f64) -> Vec<(f64, f64)> {
+        points_along(&self.drains, eo_street::STREET_TILE_M, a, b, reach)
+    }
+
+    /// The surveyed transit stops within `reach` of the segment a-b, as `drains_along`.
+    pub fn stops_along(&self, a: [f64; 2], b: [f64; 2], reach: f64) -> Vec<(f64, f64)> {
+        points_along(&self.stops, self.cell, a, b, reach)
+    }
+}
+
+/// The points of a grid (`cell` m) within `reach` of the segment a-b, between its
+/// ends: (place along it 0..1, lateral distance), nearest first.
+fn points_along(grid: &std::collections::HashMap<(i32, i32), Vec<[f64; 2]>>, cell: f64, a: [f64; 2], b: [f64; 2], reach: f64) -> Vec<(f64, f64)> {
+    let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+    let l2 = (dx * dx + dz * dz).max(1e-9);
+    let (x0, x1) = (a[0].min(b[0]) - reach, a[0].max(b[0]) + reach);
+    let (z0, z1) = (a[1].min(b[1]) - reach, a[1].max(b[1]) + reach);
+    let mut out = vec![];
+    for cz in (z0 / cell).floor() as i32..=(z1 / cell).floor() as i32 {
+        for cx in (x0 / cell).floor() as i32..=(x1 / cell).floor() as i32 {
+            for p in grid.get(&(cx, cz)).into_iter().flatten() {
+                let t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / l2;
+                if !(0.0..=1.0).contains(&t) {
+                    continue;
+                }
+                let d = ((p[0] - a[0] - dx * t).powi(2) + (p[1] - a[1] - dz * t).powi(2)).sqrt();
+                if d <= reach {
+                    out.push((t, d));
+                }
+            }
+        }
+    }
+    out.sort_by(|x, y| x.1.total_cmp(&y.1).then(x.0.total_cmp(&y.0)));
+    out
 }
 
 /// Travel lanes of a run: (centre u, width) between its lane paint inside the moving carriageway.
@@ -300,8 +376,23 @@ fn at_s(g: &eo_street::mesh::EntryGeom, s: f64, u: f64) -> Option<[f64; 2]> {
     Some([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t])
 }
 
-/// Every decal of the runs with spans in `key` and its neighbours.
+/// Every decal of the runs with spans in `key` and its neighbours (with the
+/// weathering decals when `set_weathering` turned them on, and the street
+/// life's when `street_life::set_level` did).
 pub fn place(world: &StreetWorld, key: (i32, i32)) -> Vec<Decal> {
+    let mut out = place_with(world, key, weathering());
+    let level = crate::street_life::level();
+    if level > 0 {
+        // street life (`--street-life`): appended after every other decal (none at level 0).
+        crate::street_life::place(world, key, &crate::street_life::Context::global(level), &mut out);
+    }
+    out
+}
+
+/// `place`, with the weathering decals (`DK_KERB_PAINT`, `DK_WALK_EDGE`) or
+/// without them (then exactly the decals as before; with them the others are
+/// the same decals in the same order, the new ones among them).
+pub fn place_with(world: &StreetWorld, key: (i32, i32), weather: bool) -> Vec<Decal> {
     let mut spans: Vec<(u32, u32)> = vec![];
     for dz in -1..=1 {
         for dx in -1..=1 {
@@ -360,6 +451,40 @@ pub fn place(world: &StreetWorld, key: (i32, i32)) -> Vec<Decal> {
                 }
             }
             s0 = s1;
+        }
+        // Weathering: the corner daylighting's red kerb paint (CVC 22500(n)) on the
+        // vehicle approach side of each end with an intersection approach (right-hand
+        // traffic: the -n kerb toward the run's end, the +n kerb toward its start; a
+        // one-way run's both kerbs at its end), placed with the stretch that holds the end's span.
+        if weather && std_.daylighting_m > 0.0 {
+            if let (Some(f0), Some(f1)) = (g.stations.first(), g.stations.last()) {
+                let last_span = g.stations.len().saturating_sub(2) as u32;
+                for (at_end, toward) in [(true, e.approach_end.is_some()), (false, e.approach_start.is_some())] {
+                    let span = if at_end { last_span } else { 0 };
+                    if !toward || span < spans[k].1 || span > spans[j].1 {
+                        continue;
+                    }
+                    let len = std_.daylighting_m.min((f1.s - f0.s) * 0.5);
+                    if len < 1.0 {
+                        continue;
+                    }
+                    let (end, dir) = if at_end { (f1.s, -1.0) } else { (f0.s, 1.0) };
+                    for (wi, side) in [(0usize, 1.0f64), (1, -1.0)] {
+                        let approach = if e.oneway { at_end } else if at_end { side < 0.0 } else { side > 0.0 };
+                        if !approach || !(e.walks[wi] >= o.min_sidewalk_width) {
+                            continue;
+                        }
+                        let u = side * (half + 0.05);
+                        if let (Some(p), Some(q)) = (at_s(g, end, u), at_s(g, end + dir * len, u)) {
+                            // On a bend the kerb line is longer than the centreline: never more than the standard's length.
+                            let chord = ((q[0] - p[0]).powi(2) + (q[1] - p[1]).powi(2)).sqrt();
+                            let k = if chord > len { len / chord } else { 1.0 };
+                            let q = [p[0] + (q[0] - p[0]) * k, p[1] + (q[1] - p[1]) * k];
+                            push_strip(&mut out, p, q, KERB_PAINT_HALF_M as f32, DK_KERB_PAINT, hash(run ^ 0x6d2b, (at_end as u32) << 1 | wi as u32));
+                        }
+                    }
+                }
+            }
         }
         // Tyre tracks braking toward an intersection approach: in the wheel
         // paths of the lanes that travel toward it (right-hand traffic: the -n
@@ -472,6 +597,11 @@ pub fn place(world: &StreetWorld, key: (i32, i32)) -> Vec<Decal> {
                 if !(walk >= o.min_sidewalk_width) {
                     continue;
                 }
+                if weather {
+                    // Weathering: dirt along the building line, one strip per span on the walk's back
+                    // edge (keyed on the span alone, so every tile that sees it places the same strip).
+                    put(at(0.5, side * (half + walk)), len, WALK_EDGE_HALF_M * 2.0, 0.0, DK_WALK_EDGE, hash(run ^ 0x3e11, s << 1 | wi as u32));
+                }
                 let mid = side * (half + walk * 0.5);
                 // How much the walk here draws people: a stop or a shop door, else the class alone (a little).
                 let draw = hot.draw(at(0.5, mid)) as f32;
@@ -549,10 +679,16 @@ pub fn pack(key: (i32, i32), tile_m: f32, mut decals: Vec<Decal>) -> TileDecals 
     decals.truncate(MAX_DECALS);
     let mut cells = vec![[0xffff_ffffu32; 4]; CELLS * CELLS];
     let mut fill = vec![0usize; CELLS * CELLS];
+    // street life (`--street-life`): its decals sort last and take cells of their own.
+    let any_life = decals.iter().any(|d| d.priority() >= 8);
+    let mut life_cells = if any_life { vec![[0xffff_ffffu32; 4]; CELLS * CELLS] } else { vec![] };
+    let mut life_fill = vec![0usize; if any_life { CELLS * CELLS } else { 0 }];
     let mut records = Vec::with_capacity(decals.len() * 2);
     for (i, d) in decals.iter().enumerate() {
         records.push([d.c[0], d.c[1], d.a[0], d.a[1]]);
         records.push([d.half[0], d.half[1], d.kind as f32, d.seed]);
+        let life = d.priority() >= 8;
+        let (cells, fill) = if life { (&mut life_cells, &mut life_fill) } else { (&mut cells, &mut fill) };
         let (mn, mx) = d.bounds();
         let cx0 = (((mn[0] - x0) / cell).floor().max(0.0) as usize).min(CELLS - 1);
         let cx1 = (((mx[0] - x0) / cell).floor().max(0.0) as usize).min(CELLS - 1);
@@ -582,7 +718,7 @@ pub fn pack(key: (i32, i32), tile_m: f32, mut decals: Vec<Decal>) -> TileDecals 
             }
         }
     }
-    TileDecals { count: decals.len(), records, cells, dropped }
+    TileDecals { count: decals.len(), records, cells, life_cells, dropped }
 }
 
 #[cfg(test)]
@@ -625,5 +761,27 @@ mod tests {
         let p = eo_props::parking_rules::ParkingJs::load().unwrap().bus_stops[0];
         assert!((h.draw(p) - 1.0).abs() < 1e-9);
         assert_eq!(h.draw([1.0e7, 1.0e7]), 0.0);
+    }
+}
+
+#[cfg(test)]
+mod life_pack_tests {
+    use super::*;
+
+    /// The street life's decals go to their own cells, never to the wear decals'.
+    #[test]
+    fn life_decals_take_their_own_cells() {
+        let col = crate::street_life::kind_with(crate::street_life::DK_COLUMN, crate::street_life::Params { tags: 6, deck: true, wall: true, ..Default::default() }.pack());
+        let d = vec![
+            Decal { c: [10.0, 10.0], a: [1.0, 0.0], half: [20.0, 0.3], kind: DK_WHEEL, seed: 0.1 },
+            Decal { c: [6.0, 6.0], a: [1.0, 0.0], half: [1.2, 1.2], kind: col, seed: 5.0 },
+        ];
+        let t = pack((0, 0), 128.0, d);
+        assert_eq!(t.count, 2);
+        // the column is record 1; listed in its life cell (1, 1), not in the wear cell there
+        let c = 1 * CELLS + 1;
+        assert_eq!(t.life_cells[c][0] & 0xffff, 1, "{:x?}", t.life_cells[c]);
+        assert_eq!(t.cells[c][0], 0xffff_ffff);
+        assert_eq!(t.records[3][2] as u32, col);
     }
 }

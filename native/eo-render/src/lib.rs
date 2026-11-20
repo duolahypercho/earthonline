@@ -14,12 +14,16 @@
 
 pub mod agents; // agents
 pub mod alloc;
+pub mod ambient; // the ambient volume (lighting)
+pub mod ambient_bake; // the ambient volume's sky-visibility bake (lighting)
 pub mod authored;
 pub mod camera;
 pub mod clouds; // the cloud noise, blue noise and cloud-shadow map
+pub mod counted; // the count-driven draws where MULTI_DRAW_INDIRECT_COUNT is missing (Metal)
 pub mod cc0; // the CC0 scanned sets
 pub mod cc0_decals; // street wear decals
 pub mod facade; // facade
+pub mod far_shadow; // the far sun shadow hook (lighting)
 pub mod ground2; // the open ground from the measured ground-green table
 pub mod hitch; // hitch
 pub mod hlod; // hlod
@@ -29,20 +33,32 @@ pub mod hlod_lights; // hlod
 pub mod hlod_trees; // hlod
 pub mod kit;
 pub mod landmarks; // landmarks
+pub mod light_shadow; // the lamp and headlight shadow hook (lighting)
+pub mod lighting; // the lighting additions' timestamp set and slots
+pub mod lit_fog; // the lit fog hook (lighting)
 pub mod look;
 pub mod occlusion; // occlusion
 pub mod pace;
+pub mod photo; // the photographic finish's post pass (`--photo-finish`, stage W4)
+pub mod cine_post; // the cinematic look's post pass (`--look cinematic`, stage L1)
 pub mod props; // props
 pub mod props_lib; // props
 pub mod props_lib2;
 pub mod probe; // facade
+pub mod probe_grid; // the reflection probes on the streets round the camera (lighting)
 pub mod rooms;
+pub mod shop_lights; // lit shop windows at night (`--shop-light`, stage N1)
+pub mod sign_letters; // the shop signs' words (`--facade-clutter`, stage S1)
 pub mod sky; // sky
+pub mod smooth_time; // the drawn hour following the clock (`--smooth-time`)
 pub mod street;
+pub mod structures; // grade-separated roads (`--structures`)
 pub mod scene;
 pub mod surfaces;
 pub mod upload;
 pub mod view_detail;
+pub mod weathering; // surface weathering that reads (`--grime`, stage W1)
+pub mod street_life; // litter, graffiti, posters (`--street-life`, stage W2b)
 pub mod water; // water
 pub mod surf; // the surf strip along the beaches
 pub mod farshore; // the far terrain
@@ -81,6 +97,11 @@ pub const Q_WATER: u32 = 20;
 /// objects in the frustum, triangles in the frustum, objects drawn early,
 /// objects found occluded, pad.
 pub const COUNTER_WORDS: usize = 16; // was 10
+/// The count emulation's cut: a camera that moved this far, or turned past
+/// this cosine (90 degrees), needs fresh conservative draw counts until the
+/// asynchronous read-backs describe the new view.
+pub const COUNT_CUT_M: f32 = 30.0;
+pub const COUNT_CUT_COS: f32 = 0.0;
 /// Terrain tiles further than this (camera to tile box) draw their coarse level.
 pub const TERRAIN_LOD_DISTANCE_M: f32 = 1200.0;
 
@@ -90,12 +111,15 @@ pub struct GpuOptions {
     pub indirect_validation: bool,
     /// Ignore MULTI_DRAW_INDIRECT_COUNT even if the adapter has it.
     pub force_no_indirect_count: bool,
+    /// Without MULTI_DRAW_INDIRECT_COUNT, keep the uncompacted per-slot
+    /// fallback instead of the count emulation (`counted`).
+    pub force_no_count_emulation: bool,
     pub backends: wgpu::Backends,
 }
 
 impl Default for GpuOptions {
     fn default() -> Self {
-        Self { indirect_validation: true, force_no_indirect_count: false, backends: wgpu::Backends::PRIMARY }
+        Self { indirect_validation: true, force_no_indirect_count: false, force_no_count_emulation: false, backends: wgpu::Backends::PRIMARY }
     }
 }
 
@@ -108,6 +132,9 @@ pub struct GpuContext {
     pub adapter_features: wgpu::Features,
     pub enabled_features: wgpu::Features,
     pub indirect_count: bool,
+    /// Without `indirect_count`: the lists are still compacted on the GPU and
+    /// drawn to a bound read back from their counts (`counted`).
+    pub count_emulation: bool,
     pub timestamps: bool,
     pub first_instance: bool,
     pub options: GpuOptions,
@@ -116,6 +143,12 @@ pub struct GpuContext {
 }
 
 impl GpuContext {
+    /// Whether the draw lists are compacted on the GPU: with
+    /// MULTI_DRAW_INDIRECT_COUNT, or through the count emulation without it.
+    pub fn compaction(&self) -> bool {
+        self.indirect_count || self.count_emulation
+    }
+
     pub fn create_instance(opts: &GpuOptions) -> wgpu::Instance {
         let mut flags = wgpu::InstanceFlags::from_build_config();
         flags.set(wgpu::InstanceFlags::VALIDATION_INDIRECT_CALL, opts.indirect_validation);
@@ -168,6 +201,11 @@ impl GpuContext {
         if bc {
             wanted |= wgpu::Features::TEXTURE_COMPRESSION_BC;
         }
+        // (lighting) the lamp and headlight shadow maps' casters clip each triangle to its
+        // atlas tile with it (light_shadow.rs; without it they discard the fragments outside).
+        if adapter_features.contains(wgpu::Features::CLIP_DISTANCES) {
+            wanted |= wgpu::Features::CLIP_DISTANCES;
+        }
         let limits = adapter.limits();
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("eo-device"),
@@ -176,6 +214,12 @@ impl GpuContext {
             ..Default::default()
         }))
         .context("request_device")?;
+        // wgpu reports a lost device only through this callback (its errors
+        // after the loss are dropped, and submissions quietly do nothing), so
+        // say it, with the driver's reason, instead of failing later on a wait.
+        device.set_device_lost_callback(|reason, message| {
+            eprintln!("gpu: device lost ({reason:?}): {message}");
+        });
         Ok(Self {
             instance,
             adapter,
@@ -185,6 +229,7 @@ impl GpuContext {
             adapter_features,
             enabled_features: wanted,
             indirect_count,
+            count_emulation: !indirect_count && !options.force_no_count_emulation,
             timestamps,
             first_instance,
             options,
@@ -321,6 +366,13 @@ pub struct Renderer {
     pub base_object_count: u32,
     pub group_count: u32,
     pub compact: bool,
+    /// The count emulation's registry (Some without MULTI_DRAW_INDIRECT_COUNT
+    /// when the lists are compacted): every emulated list's bound this frame.
+    pub counts: Option<std::sync::Arc<counted::Counts>>,
+    /// The opaque, transparent and late opaque lists in the emulation.
+    main_lists: Option<counted::CountedLists>,
+    /// The last update's camera (eye, forward): a jump is a cut for the emulation.
+    last_view: std::sync::Mutex<Option<(glam::Vec3, glam::Vec3)>>,
     pub color_format: wgpu::TextureFormat,
     pub sample_count: u32,
     pub debug_ids: bool,
@@ -364,6 +416,8 @@ pub struct Renderer {
     pub look: look::LookGpu,
     /// appearance, weathering and the detail sheet (group 0 bindings 10-13).
     pub facade: facade::FacadeGpu,
+    /// the shop signs' lettering (group 0 binding 28, stage S1).
+    pub signs: sign_letters::SignLettersGpu,
     /// runtime switches (facade::RUN_*), read by draw.wgsl from the frame uniform.
     pub facade_flags: std::sync::atomic::AtomicU32,
     pub bytes: GpuBytes,
@@ -411,6 +465,17 @@ pub struct Renderer {
     /// the far street lamps by night (stage 3) and the distant trees (stage 4).
     pub hlod_lights: std::sync::OnceLock<hlod_lights::FarLights>,
     pub hlod_trees: std::sync::OnceLock<hlod_trees::FarTrees>,
+    /// the lighting additions' hooks (`look.options.lighting` says which are
+    /// on) and their own timestamp set (`set_lighting_timestamps`).
+    pub far_shadow: far_shadow::FarShadowGpu,
+    pub ambient: ambient::AmbientGpu,
+    /// the probe grid (`--probe-grid`), attached once (`attach_probe_grid`).
+    pub probe_grid: probe_grid::ProbeGridGpu,
+    pub light_shadow: light_shadow::LightShadowGpu,
+    pub lit_fog: lit_fog::LitFogGpu,
+    lighting_ts: lighting::LightingTimer,
+    /// grade-separated roads, attached once built (`attach_structures`).
+    pub structures: std::sync::OnceLock<structures::StructuresGpu>,
 }
 
 /// a frame that uploads this much (a quarter of the default 4 MiB budget)
@@ -432,6 +497,7 @@ fn hitch_target(t: upload::Target) -> usize {
         Target::PropLights => 8,
         Target::Cc0Texture { .. } => 5, // counted with the textures
         Target::Cc0Grid | Target::Cc0Decals => 10, // the street decal grid and records
+        Target::AmbientVolume { .. } | Target::AmbientPlane { .. } => 5, // the ambient volume and plane, with the textures (lighting)
     }
 }
 
@@ -475,6 +541,7 @@ fn make_draw_bg(
     probe_sampler: &wgpu::Sampler,
     probe_sh: &wgpu::Buffer,
     cc0: &cc0::Cc0Gpu, // cc0
+    signs: &wgpu::TextureView, // the shop signs' lettering (stage S1)
 ) -> wgpu::BindGroup {
     let (av, nv, mv) = (array_view(kit[0]), array_view(kit[1]), array_view(kit[2]));
     let cb = cc0.bind(); // cc0
@@ -514,6 +581,8 @@ fn make_draw_bg(
             wgpu::BindGroupEntry { binding: 25, resource: wgpu::BindingResource::TextureView(&cb.decal[2]) },
             wgpu::BindGroupEntry { binding: 26, resource: cb.grid.as_entire_binding() },
             wgpu::BindGroupEntry { binding: 27, resource: cb.decals.as_entire_binding() },
+            // the shop signs' lettering (stage S1; a stand-in without the facade clutter).
+            wgpu::BindGroupEntry { binding: 28, resource: wgpu::BindingResource::TextureView(signs) },
         ],
     })
 }
@@ -631,9 +700,10 @@ impl Renderer {
         let buffer = |label: &str, size: u64, usage: wgpu::BufferUsages| {
             d.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: size.max(4).next_multiple_of(4), usage, mapped_at_creation: false })
         };
-        let vertex_buf = buffer("vertices", vb_bytes, wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST);
+        // (STORAGE: the lamp and headlight shadow maps' casters read the city's geometry too, light_shadow.rs)
+        let vertex_buf = buffer("vertices", vb_bytes, wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE);
         ctx.queue.write_buffer(&vertex_buf, 0, bytemuck::cast_slice(init.vertices));
-        let index_buf = buffer("indices", ib_bytes, wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST);
+        let index_buf = buffer("indices", ib_bytes, wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE);
         ctx.queue.write_buffer(&index_buf, 0, bytemuck::cast_slice(init.indices));
         let object_buf = buffer("objects", ob_bytes, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC);
         ctx.queue.write_buffer(&object_buf, 0, bytemuck::cast_slice(&objects));
@@ -658,14 +728,24 @@ impl Renderer {
         let hlod_flags_buf = buffer("hlod-flags", hlod::MAX_CELLS as u64 * 4, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST);
         // Opaque list at [0, n), transparent list at [n, 2n); the
         // late opaque list at [2n, 3n) (compacted lists only).
-        let lists = if ctx.indirect_count { 3 } else { 2 };
+        let lists = if ctx.compaction() { 3 } else { 2 };
         let draw_bytes = (object_count.max(1) as u64) * lists * DRAW_ARGS_BYTES;
-        let draw_buf = buffer("indirect-draws", draw_bytes, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_SRC);
+        let draw_buf = buffer("indirect-draws", draw_bytes, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST); // COPY_DST: the count emulation zeroes it
         let counter_buf = buffer(
             "draw-counters",
             (COUNTER_WORDS * 4) as u64,
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
         );
+        // the count emulation (no MULTI_DRAW_INDIRECT_COUNT): its registry and
+        // the city's opaque, transparent and late opaque lists (counter words 0, 1, 10).
+        let counts = ctx.count_emulation.then(|| counted::Counts::new(d));
+        let main_lists = counts.as_ref().map(|c| {
+            let n = object_count.max(1);
+            let list = |word: u32, k: u64, floor| counted::List { word, draws: draw_buf.clone(), offset: k * n as u64 * DRAW_ARGS_BYTES, stride: DRAW_ARGS_BYTES, max: n, floor };
+            // the late opaque list never under the opaque one's bound: after a fast turn, or
+            // with the visibility flags cleared, every visible object can be late.
+            c.register("city", &counter_buf, vec![list(0, 0, None), list(1, 1, None), list(10, 2, Some(0))])
+        });
         let cull_params_buf = buffer("cull-params", std::mem::size_of::<CullParams>() as u64, wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST);
         let frame_buf = buffer("frame", std::mem::size_of::<FrameUniform>() as u64, wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST);
 
@@ -822,6 +902,8 @@ impl Renderer {
                 tex_entry(25),
                 buf_entry(26, fs, storage(true)),
                 buf_entry(27, fs, storage(true)),
+                // the shop signs' lettering (stage S1, sign_letters.rs; draw.wgsl `sgn_atlas`).
+                tex_entry(28),
             ],
         });
         // the JS street scans' sampler (`configureSurfaceTexture`: repeat, trilinear, anisotropy 8).
@@ -848,7 +930,8 @@ impl Renderer {
                 object_buf: &object_buf,
                 group_buf: &group_buf,
                 object_count,
-                compact: ctx.indirect_count,
+                compact: ctx.compaction(),
+                counts: counts.clone(),
                 output_format: init.color_format,
                 sample_count: init.sample_count,
                 debug_ids: init.debug_ids,
@@ -934,10 +1017,15 @@ impl Renderer {
                 depth_format: DEPTH_FORMAT,
             },
         );
+        if let Some(c) = &counts {
+            probe_gpu.register_counts(c);
+        }
         // one bind group per probe front cube, both made now.
         let cc0_gpu = cc0::Cc0Gpu::new(d); // placeholders until attached
-        let draw_bg = [0, 1].map(|f| make_draw_bg(d, &draw_bgl, &frame_buf, &object_buf, &material_buf, [&albedo_tex, &normal_tex, &orm_tex], &sampler, [&street_albedo, &street_nra], &street_sampler, &facade_gpu, &probe_gpu.cube_views[f], &probe_gpu.sampler, &probe_gpu.lobe_buf, &cc0_gpu));
-        let probe_bg = [0, 1].map(|f| make_draw_bg(d, &draw_bgl, &probe_gpu.frame_buf, &object_buf, &material_buf, [&albedo_tex, &normal_tex, &orm_tex], &sampler, [&street_albedo, &street_nra], &street_sampler, &facade_gpu, &probe_gpu.cube_views[f], &probe_gpu.sampler, &probe_gpu.lobe_buf, &cc0_gpu));
+        // the shop signs' words (stage S1): drawn with `--facade-clutter` (waits for the worker), else a stand-in.
+        let sign_gpu = sign_letters::SignLettersGpu::new(d, &ctx.queue);
+        let draw_bg = [0, 1].map(|f| make_draw_bg(d, &draw_bgl, &frame_buf, &object_buf, &material_buf, [&albedo_tex, &normal_tex, &orm_tex], &sampler, [&street_albedo, &street_nra], &street_sampler, &facade_gpu, &probe_gpu.cube_views[f], &probe_gpu.sampler, &probe_gpu.lobe_buf, &cc0_gpu, &sign_gpu.view));
+        let probe_bg = [0, 1].map(|f| make_draw_bg(d, &draw_bgl, &probe_gpu.frame_buf, &object_buf, &material_buf, [&albedo_tex, &normal_tex, &orm_tex], &sampler, [&street_albedo, &street_nra], &street_sampler, &facade_gpu, &probe_gpu.cube_views[f], &probe_gpu.sampler, &probe_gpu.lobe_buf, &cc0_gpu, &sign_gpu.view));
 
         let bytes = GpuBytes {
             vertex: vb_bytes,
@@ -946,13 +1034,16 @@ impl Renderer {
             draws: draw_bytes + (COUNTER_WORDS * 4) as u64 + occlusion_gpu.vis_buf.size(), // + per-object flags
             materials: std::mem::size_of_val(init.materials) as u64,
             groups: std::mem::size_of_val(groups.as_slice()) as u64 + hlod_map_buf.size() + hlod_state_buf.size() + hlod_flags_buf.size(), // + the far layer's per-group words
-            textures: ab + nb + mb + look_gpu.bytes + facade_gpu.bytes + probe_gpu.bytes, // shadow map, shadow lists, uniforms; ages, weather
+            textures: ab + nb + mb + look_gpu.bytes + facade_gpu.bytes + probe_gpu.bytes + sign_gpu.bytes, // shadow map, shadow lists, uniforms; ages, weather; the signs' words (0 without them)
         };
         Ok(Self {
             object_count,
             base_object_count: init.objects.len() as u32,
             group_count: init.groups.len() as u32,
-            compact: ctx.indirect_count,
+            compact: ctx.compaction(),
+            counts,
+            main_lists,
+            last_view: std::sync::Mutex::new(None),
             color_format: init.color_format,
             sample_count: init.sample_count,
             debug_ids: init.debug_ids,
@@ -972,7 +1063,7 @@ impl Renderer {
             cull_bg,
             late_pipeline,
             occlusion: occlusion_gpu,
-            occlusion_enabled: std::sync::atomic::AtomicBool::new(ctx.indirect_count),
+            occlusion_enabled: std::sync::atomic::AtomicBool::new(ctx.compaction()),
             occlusion_frame: std::sync::atomic::AtomicBool::new(false),
             opaque_pipeline,
             blend_pipeline,
@@ -985,6 +1076,7 @@ impl Renderer {
             street_textures: std::sync::Mutex::new([street_albedo, street_nra]),
             look: look_gpu,
             facade: facade_gpu,
+            signs: sign_gpu,
             facade_flags: std::sync::atomic::AtomicU32::new(facade::RUN_AGE | facade::RUN_DETAIL | facade::RUN_ATLAS2 | facade::RUN_PROBE | facade::RUN_ROOMS | facade::RUN_AGENT_HZB | facade::RUN_PROBE_DEFER), // + rooms, agent pyramid test, probe deferral
             bytes,
             multiplier: n,
@@ -1012,7 +1104,57 @@ impl Renderer {
             hlod: std::sync::OnceLock::new(),       // hlod
             hlod_lights: std::sync::OnceLock::new(), // hlod
             hlod_trees: std::sync::OnceLock::new(),  // hlod
+            far_shadow: far_shadow::FarShadowGpu::new(d, far_shadow::scene_heights(&objects)), // lighting
+            ambient: ambient::AmbientGpu::new(d),
+            probe_grid: probe_grid::ProbeGridGpu::new(d), // lighting
+            light_shadow: light_shadow::LightShadowGpu::new(d),
+            lit_fog: lit_fog::LitFogGpu::new(d),
+            lighting_ts: Default::default(),
+            structures: std::sync::OnceLock::new(),
         })
+    }
+
+    /// The lighting additions' timestamps for the coming encodes (bench): a
+    /// set and the first of this frame's `lighting::QUERIES_PER_FRAME` slots;
+    /// None to stop. With a set, every lighting hook writes its slots each frame.
+    pub fn set_lighting_timestamps(&self, ts: Option<(wgpu::QuerySet, u32)>) {
+        self.lighting_ts.set(ts);
+    }
+
+    /// The far sun shadow maps (`--far-shadows`; far_shadow.rs): `rings`
+    /// (1 or 2) maps of `eo_look::shadow::FAR_MAP_SIZE`, two layers each, bound
+    /// at group 1 binding 12. Drawn and sampled while
+    /// `look.options.lighting.far_shadows` is on (at most the rings attached).
+    /// Once; returns the bytes allocated.
+    pub fn attach_far_shadows(&self, ctx: &GpuContext, rings: u8) -> u64 {
+        let _ = ctx;
+        self.far_shadow.attach(self, rings)
+    }
+
+    /// The probe grid (`--probe-grid`; probe_grid.rs): `level` (1: 4 probes
+    /// of 128 px, 2: 9 of 256 px) cubes at the street `anchors`, bound at
+    /// group 1 bindings 15 and 16. While `look.options.lighting.probe_grid`
+    /// is on it captures (one face a frame, in place of the single probe,
+    /// which stands down) and every lit pass reads it. Once; returns the
+    /// bytes allocated (0 with no anchor: the single probe stays).
+    pub fn attach_probe_grid(&self, ctx: &GpuContext, level: u8, anchors: probe_grid::Anchors) -> u64 {
+        let _ = ctx;
+        if anchors.is_empty() {
+            return 0;
+        }
+        self.probe_grid.attach(self, level, anchors)
+    }
+
+    /// Attach the grade-separated roads once built: their far and coarse
+    /// levels are written into the start of the arena reserved for them (their
+    /// objects, groups and materials are in the tables the renderer was made
+    /// with, `structures::StructurePrepared`); the near level streams through
+    /// the app's upload queue (`structures::StructuresRuntime`). Returns the
+    /// GPU bytes it allocated beyond the arenas (none). eo-app calls it only
+    /// with `--structures` and a non-empty world.
+    pub fn attach_structures(&self, ctx: &GpuContext, prepared: &structures::StructurePrepared, placement: structures::Placement, arena: structures::StructuresArena) -> u64 {
+        let s = self.structures.get_or_init(|| structures::StructuresGpu::attach(ctx, self, prepared, placement, arena));
+        s.bytes()
     }
 
     /// turn the view-gated best-quality layer on or off (and its numbers).
@@ -1075,14 +1217,18 @@ impl Renderer {
             sample_count: self.sample_count,
             debug_ids: self.debug_ids,
         });
+        if let Some(c) = &self.counts {
+            t.register_counts(c);
+        }
         let b = t.bytes;
         let _ = self.hlod_trees.set(t);
         b
     }
 
     /// build the far layer's GPU side (once; later calls are ignored).
-    /// Needs the compacted lists (multi-draw-indirect-count); without them the
-    /// far layer stays off and the boxes draw as before. Returns the bytes allocated.
+    /// Needs the compacted lists (multi-draw-indirect-count, or its emulation);
+    /// without them the far layer stays off and the boxes draw as before.
+    /// Returns the bytes allocated.
     pub fn attach_hlod(&self, ctx: &GpuContext, opts: &hlod::HlodOptions) -> u64 {
         if self.hlod.get().is_some() || !self.compact || !opts.on {
             return 0;
@@ -1098,6 +1244,9 @@ impl Renderer {
             debug_ids: self.debug_ids,
             opts: *opts,
         });
+        if let Some(c) = &self.counts {
+            h.register_counts(c);
+        }
         let b = h.total_bytes();
         let _ = self.hlod.set(h);
         b
@@ -1159,6 +1308,7 @@ impl Renderer {
             // the street decal grid and records (once the CC0 buffers are attached).
             Target::Cc0Grid => self.cc0.grid_buffer(),
             Target::Cc0Decals => self.cc0.decals_buffer(),
+            Target::AmbientVolume { .. } | Target::AmbientPlane { .. } => None, // through the ambient's own staging (lighting)
         }
     }
 
@@ -1232,6 +1382,8 @@ impl Renderer {
             }
             // the CC0 arrays, the street decal grid and records.
             Target::Cc0Texture { .. } | Target::Cc0Grid | Target::Cc0Decals => self.cc0.write(queue, target, offset, data),
+            // the ambient volume's tiles and its plane (lighting).
+            Target::AmbientVolume { .. } | Target::AmbientPlane { .. } => self.ambient.write(queue, target, offset, data),
             Target::Texture { map, layer, mip } => {
                 let tex = &self.kit_textures[map as usize];
                 let r = (tex.width() >> mip).max(1);
@@ -1426,8 +1578,8 @@ impl Renderer {
         hitch::mark(hitch::Mark::BindGroupCreated, 4);
         let st = self.street_textures.lock().unwrap();
         let kit = [&self.kit_textures[0], &self.kit_textures[1], &self.kit_textures[2]];
-        let bg = [0, 1].map(|f| make_draw_bg(device, &self.draw_bgl, &self.frame_buf, &self.object_buf, &self._material_buf, kit, &self.kit_sampler, [&st[0], &st[1]], &self.street_sampler, &self.facade, &self.probe.cube_views[f], &self.probe.sampler, &self.probe.lobe_buf, &self.cc0));
-        let pbg = [0, 1].map(|f| make_draw_bg(device, &self.draw_bgl, &self.probe.frame_buf, &self.object_buf, &self._material_buf, kit, &self.kit_sampler, [&st[0], &st[1]], &self.street_sampler, &self.facade, &self.probe.cube_views[f], &self.probe.sampler, &self.probe.lobe_buf, &self.cc0));
+        let bg = [0, 1].map(|f| make_draw_bg(device, &self.draw_bgl, &self.frame_buf, &self.object_buf, &self._material_buf, kit, &self.kit_sampler, [&st[0], &st[1]], &self.street_sampler, &self.facade, &self.probe.cube_views[f], &self.probe.sampler, &self.probe.lobe_buf, &self.cc0, &self.signs.view));
+        let pbg = [0, 1].map(|f| make_draw_bg(device, &self.draw_bgl, &self.probe.frame_buf, &self.object_buf, &self._material_buf, kit, &self.kit_sampler, [&st[0], &st[1]], &self.street_sampler, &self.facade, &self.probe.cube_views[f], &self.probe.sampler, &self.probe.lobe_buf, &self.cc0, &self.signs.view));
         *self.draw_bg.lock().unwrap() = bg;
         *self.probe_draw_bg.lock().unwrap() = pbg;
     }
@@ -1479,13 +1631,39 @@ impl Renderer {
     }
 
     fn update_with(&self, queue: &wgpu::Queue, cam: &Camera, occlusion: bool) {
+        if let Some(c) = &self.counts {
+            // a cut (the camera moved CUT_M or turned past CUT_COS since the last
+            // update): recover bounds for the new view while read-backs catch up.
+            let fwd = cam.forward();
+            let mut last = self.last_view.lock().unwrap();
+            if last.is_some_and(|(e, f)| e.distance(cam.eye) > COUNT_CUT_M || f.dot(fwd) < COUNT_CUT_COS) {
+                c.force_full();
+            }
+            *last = Some((cam.eye, fwd));
+            drop(last);
+            c.begin_frame(); // the emulated lists' bounds for this frame, from the counts read back
+            if self.probe_grid.active(&self.look) {
+                if self.probe.take_face_overflow() {
+                    self.probe_grid.redo(); // the grid's face missed objects: capture again (lighting)
+                }
+            } else {
+                self.probe.recapture_if_overflowed();
+            }
+        }
         self.observe_view(cam, None); // the streamers' view (unjittered)
         // the coming frame's sub-pixel jitter (TAA); every view of the frame goes through it.
         self.look.sky.begin_frame(self.look.out_size());
         let jittered = Camera { jitter: self.look.sky.jitter(), ..*cam };
         let cam = &jittered;
+        // stage L5 (the cinematic look): the sea's "all fogged" test reads the fog in use
+        // (the volume's aerial perspective pushes the range fog to 2e7 m), and the far
+        // terrain hears when the sea pass is skipped so it draws the water there itself.
+        let cine_world = self.look.options.look.is_cinematic() && farshore::world_edge_on();
+        // (and stands down for distance past `CINEMATIC_SEA_LOD_M`, the far terrain drawing the water then)
+        let cine_fog_far = if cine_world { self.look.fog_far_in_use().min(water::CINEMATIC_SEA_LOD_M) } else { 0.0 };
         if let Some(f) = self.farshore.get().filter(|_| self.farshore_active()) {
-            f.update(queue, cam, self.water_active()); // the far terrain's nodes and camera (jittered, as the city), and where the sea is drawn
+            let skipped = cine_world && self.water_active() && water::sea_fogged(cam, cine_fog_far);
+            f.update(queue, cam, self.water_active() && !skipped, cine_world, skipped); // the far terrain's nodes and camera (jittered, as the city), and where the sea is drawn
         }
         self.occlusion_frame.store(occlusion, std::sync::atomic::Ordering::Relaxed); // occlusion
         let vp = cam.view_proj();
@@ -1506,7 +1684,6 @@ impl Renderer {
             view_proj: vp.to_cols_array_2d(),                           // occlusion
             occ: [occlusion as u32, 2 * self.object_count, self.water_active() as u32, 0], // occlusion; z = the flat sea quad stands down
         };
-        queue.write_buffer(&self.cull_params_buf, 0, bytemuck::bytes_of(&params));
         if let Some(h) = self.hlod.get() {
             h.update(queue, vp, planes, cam.eye); // the far layer's cull, the same camera
         }
@@ -1530,26 +1707,51 @@ impl Renderer {
                 (Some(p), true) => [p.x, p.y, p.z, 1.0],
                 _ => [0.0; 4],
             },
-            copy_step: [if self.multiplier > 1 { scene::COPY_STEP_M } else { 0.0 }, self.facade_flags.load(std::sync::atomic::Ordering::Relaxed) as f32, 0.0, self.cc0.run_bits() as f32], // y = switches; w = its switches
+            copy_step: [if self.multiplier > 1 { scene::COPY_STEP_M } else { 0.0 }, (self.facade_flags.load(std::sync::atomic::Ordering::Relaxed) | facade::grime_bits(self.look.options.grime) | facade::street_life_bits(self.look.options.street_life)) as f32, 0.0, self.cc0.run_bits() as f32], // y = switches (+ the weathering and street-life levels, none by default); w = its switches
         };
         queue.write_buffer(&self.frame_buf, 0, bytemuck::bytes_of(&frame));
         // the probe's face for this frame (compacted lists only).
         {
             let sky_up = self.look.frame().sky_irradiance_up;
             let _span = hitch::span(hitch::Phase::ProbeUpdate);
-            self.probe.update(queue, cam.eye, self.look.time_of_day(), sky_up, probe_on, bytemuck::cast_ref(&frame));
+            // (lighting) the probe grid captures in the single probe's place while it is on;
+            // with far shadows or the grid, a camera jump starts a capture under way again
+            // (its six faces lit under one camera's cascades and far map: no seam where they meet).
+            let grid = self.probe_grid.active(&self.look);
+            let cut = self.probe_grid.observe_eye(cam.eye);
+            let l = self.look.options.lighting;
+            if cut && (l.far_shadows > 0 || l.probe_grid > 0) {
+                self.probe.restart_capture_at(cam.eye);
+            }
+            self.probe.update(queue, cam.eye, self.look.time_of_day(), sky_up, probe_on && !grid, bytemuck::cast_ref(&frame));
+            self.probe_grid.update(self, queue, cam, bytemuck::cast_ref(&frame), probe_on, cut);
         }
         // the rig is solved for the probe's measured transfer (keyFillBalance
         // with `bakedProbeDiffuseYield(model, transfer)`), else the JS fallback yield.
         let yield_on = self.facade_flags.load(std::sync::atomic::Ordering::Relaxed) & facade::RUN_PROBE_YIELD != 0;
         self.look.set_transfer(if frame.probe_info[3] > 0.5 && yield_on { self.probe.stats().transfer } else { None });
+        // the lighting additions' CPU side, before the look's uniform takes their `lx` rows.
+        self.ambient.update(self, queue, cam);
+        self.light_shadow.update(self, queue); // the lamp and headlight shadow maps' atlas and parameters (lighting)
+        self.far_shadow.update(self, queue, cam, frame.copy_step[0]); // the far sun shadow map's tile and rows (lighting)
+        if let Some(s) = self.structures.get().filter(|s| s.has_bores()) {
+            self.look.sky.set_bore(s.eye_bore_depth(cam.eye), true); // a tunnel's bore (`--tunnels`): its exposure and lamps
+        }
         self.look.update(queue, cam, frame.copy_step[0]); // look
         // no probe face on a frame that refreshes the middle or far
         // cascade or streams a large upload; the face waits for the next frame.
         let uploaded = self.frame_upload_bytes.swap(0, std::sync::atomic::Ordering::Relaxed);
         let fx = self.facade_flags.load(std::sync::atomic::Ordering::Relaxed);
-        if fx & facade::RUN_PROBE_DEFER != 0 && (self.look.encoded_shadow_mask() & 0b110 != 0 || uploaded >= PROBE_DEFER_UPLOAD_BYTES) {
-            self.probe.defer_this_frame();
+        // (and none on a frame that draws a tile of the far sun shadow map, lighting)
+        if fx & facade::RUN_PROBE_DEFER != 0 && (self.look.encoded_shadow_mask() & 0b110 != 0 || uploaded >= PROBE_DEFER_UPLOAD_BYTES || self.far_shadow.draws_this_frame()) {
+            if self.look.options.lighting.smooth_time {
+                // the hour moving: never more than PROBE_DEFER_MAX frames in a row.
+                self.probe.defer_this_frame_within(smooth_time::PROBE_DEFER_MAX);
+            } else {
+                self.probe.defer_this_frame();
+            }
+            // the probe grid's face by the same rules (lighting; nothing to move while it is off).
+            self.probe_grid.defer(self.look.options.lighting.smooth_time.then_some(smooth_time::PROBE_DEFER_MAX));
         }
         if let Some(a) = self.agents.get() {
             a.set_camera_late(occlusion && self.compact && fx & facade::RUN_AGENT_HZB != 0); // the camera view against this frame's pyramid
@@ -1564,15 +1766,34 @@ impl Renderer {
             let wx = self.look.sky.weather(); // the sea state follows the hour and the weather
             w.set_sea(Some(water::SeaInput::Weather { hour: self.look.time_of_day(), wind: wx.wind, severity: wx.severity }));
             let clock = if self.look.options.water_optics { self.look.sky.world_time() } else { 0.0 };
-            w.update_at_time(queue, cam, probe, self.water_active(), self.look.frame().aerial.far as f32, clock);
+            w.set_south_reach(if cine_world { water::CINEMATIC_SOUTH_REACH_M } else { 0.0 }); // stage L5
+            let fog_far = if cine_world { cine_fog_far } else { self.look.frame().aerial.far as f32 };
+            w.update_at_time(queue, cam, probe, self.water_active(), fog_far, clock);
         }
         if let Some(s) = self.surf.get() {
             let swell_hs = self.water.get().and_then(|w| w.plan()).map(|p| p.state.swell.hs as f32).unwrap_or(1.8); // the swell's Hs scales the incoming surf
             s.update(queue, cam, self.water_active(), 0.0, swell_hs); // the strips in view, their columns
         }
+        if let Some(s) = self.structures.get() {
+            s.update(queue, cam); // grade-separated roads (their near level streams with the app's uploads)
+        }
+        if let Some(counts) = &self.counts {
+            counts.prepare_recovery(queue, |enc| {
+                // Without the depth test the city's opaque count bounds both
+                // partitions, even if all visibility changes in this frame.
+                let mut conservative = params;
+                conservative.occ[0] = 0;
+                queue.write_buffer(&self.cull_params_buf, 0, bytemuck::bytes_of(&conservative));
+                self.encode_cull(enc, false, None);
+                self.look.encode_shadow_cull(enc, self.look.encoded_shadow_mask() != 0, None);
+                self.far_shadow.encode_recovery_cull(self, enc); // the far sun shadow map's lists (lighting)
+                self.probe.encode_face_cull(enc, None);
+            });
+        }
+        queue.write_buffer(&self.cull_params_buf, 0, bytemuck::bytes_of(&params));
     }
 
-    fn encode_cull(&self, enc: &mut wgpu::CommandEncoder, ts: Option<(&wgpu::QuerySet, u32)>) {
+    fn encode_cull(&self, enc: &mut wgpu::CommandEncoder, occlusion: bool, ts: Option<(&wgpu::QuerySet, u32)>) {
         enc.clear_buffer(&self.counter_buf, 0, None);
         let hlod = self.hlod.get(); // hlod
         if let Some(h) = hlod {
@@ -1597,12 +1818,12 @@ impl Renderer {
         // without occlusion the far layer is culled here (after the LOD
         // pass wrote the state); with it, after the pyramid (encode_with_ids).
         if let Some(h) = hlod {
-            if !(self.compact && self.occlusion_frame.load(std::sync::atomic::Ordering::Relaxed)) {
+            if !occlusion {
                 h.encode_cull(&mut pass, None);
             }
         }
         if let Some(t) = self.hlod_trees.get() {
-            if !(self.compact && self.occlusion_frame.load(std::sync::atomic::Ordering::Relaxed)) {
+            if !occlusion {
                 t.encode_cull(&mut pass, None); // stage 4, the tree blocks
             }
         }
@@ -1632,10 +1853,19 @@ impl Renderer {
         ids: Option<&wgpu::TextureView>,
         ts: Option<(&wgpu::QuerySet, u32)>,
     ) {
-        self.encode_cull(enc, ts);
+        if let Some(c) = &self.counts {
+            c.encode_zero(enc);
+        }
+        self.encode_cull(enc, self.compact && self.occlusion_frame.load(std::sync::atomic::Ordering::Relaxed), ts);
+        // the lighting additions' own timestamps (their hooks write their slots
+        // every frame while a set is given; without one, an idle hook records nothing).
+        let lighting_ts = self.lighting_ts.get();
+        let lts = lighting_ts.as_ref().map(|(q, b)| (q, *b));
         // sun shadow cull + depth passes; the city renders into the HDR
         // target (resolving MSAA into it) and post writes the output.
         self.look.encode_shadows(enc, &self.vertex_buf, &self.index_buf, ts);
+        self.far_shadow.encode(enc, self, lts); // the far sun shadow map (lighting)
+        self.ambient.encode(enc, &self.look, lts); // the ambient volume's uploads (lighting)
         if let Some(a) = self.agents.get() {
             a.encode(enc, &self.look); // cull + LOD compute, casters into the refreshed cascades
         }
@@ -1649,8 +1879,11 @@ impl Renderer {
             // takes that cube's bind group (made in advance), nothing is rebuilt.
             let _flipped = self.probe.encode(enc, &self.vertex_buf, &self.index_buf, &pbg, &self.look, ts.map(|(q, b)| (q, b + Q_PROBE)));
         }
+        self.probe_grid.encode(enc, self, lts); // the probe grid's face (lighting)
         // the frame's lights (lamps, headlamps) gathered and clustered before the city reads them.
         self.look.encode_sky_lights(enc, self.agents.get(), self.props.get(), ts);
+        // lamp and headlight shadow maps from this frame's lights, before the city samples them (lighting).
+        self.light_shadow.encode(enc, self, lts);
         let output = resolve.unwrap_or(color);
         let hdr = self.look.hdr_target(output.texture().width(), output.texture().height());
         let (color, resolve) = if resolve.is_some() { (color, Some(&hdr)) } else { (&hdr, None) };
@@ -1769,7 +2002,9 @@ impl Renderer {
                 }
                 pass.set_pipeline(pipeline);
                 if self.compact {
-                    pass.multi_draw_indexed_indirect_count(&self.draw_buf, offset, &self.counter_buf, counter, self.object_count);
+                    // the emulation's list for the count word: opaque 0, transparent 1, late opaque 10.
+                    let list = match counter / 4 { 0 => 0, 1 => 1, _ => 2 };
+                    counted::draw_indexed(&mut pass, self.main_lists.as_ref(), list, &self.draw_buf, offset, &self.counter_buf, counter, self.object_count);
                 } else {
                     let k = (offset != 0) as usize;
                     if slots[k] > 0 {
@@ -1846,7 +2081,7 @@ impl Renderer {
                 pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
                 pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint32);
                 pass.set_pipeline(&self.blend_pipeline);
-                pass.multi_draw_indexed_indirect_count(&self.draw_buf, self.object_count as u64 * DRAW_ARGS_BYTES, &self.counter_buf, 4, self.object_count);
+                counted::draw_indexed(pass, self.main_lists.as_ref(), 1, &self.draw_buf, self.object_count as u64 * DRAW_ARGS_BYTES, &self.counter_buf, 4, self.object_count);
                 if let Some(a) = self.agents.get() {
                     a.draw_glass(pass, &self.look);
                 }
@@ -1879,8 +2114,12 @@ impl Renderer {
             p.draw_wires(enc, color, resolve, depth, &self.look); // the overhead wires, a timed pass of their own
         }
         self.look.encode_ao(enc, depth, &hdr, ts); // surfaces
-        self.look.encode_sky_after(enc, depth, &hdr, self.agents.get(), ts); // rain, luminaires, velocity, volume, resolve, bloom
+        // rain, luminaires, velocity, volume, (lighting) the lit fog, resolve, bloom
+        self.look.encode_sky_after_with(enc, depth, &hdr, self.agents.get(), ts, &mut |enc, chain| self.lit_fog.encode(enc, &self.look, depth, chain, lts));
         self.look.encode_post_with_water(enc, output, ts, water.filter(|_| self.look.options.water_optics).map(|w| (w, self.probe.front().0)));
+        if let Some(c) = &self.counts {
+            c.encode_copies(enc); // this frame's counts, read back for the next bounds
+        }
     }
 
     /// The counter buffer: see `COUNTER_WORDS`.
@@ -1893,7 +2132,10 @@ impl Renderer {
     pub fn cull_readback(&self, ctx: &GpuContext, cam: &Camera) -> Result<CullReadback> {
         self.update_with(&ctx.queue, cam, false); // the frustum + LOD reference
         let mut enc = ctx.device.create_command_encoder(&Default::default());
-        self.encode_cull(&mut enc, None);
+        if let Some(c) = &self.counts {
+            c.encode_zero(&mut enc);
+        }
+        self.encode_cull(&mut enc, false, None);
         let draw_bytes = self.object_count as u64 * 2 * DRAW_ARGS_BYTES;
         let cb = (COUNTER_WORDS * 4) as u64;
         let staging = ctx.device.create_buffer(&wgpu::BufferDescriptor {

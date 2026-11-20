@@ -115,14 +115,17 @@ pub fn shader_source() -> String {
 {}
 {}
 {}
+{}
 {}",
         common_source(),
         crate::look::look_common_source(),
         include_str!("sky_light_core.wgsl"),
+        crate::look::LOOK_EXT_WGSL, // group 1 bindings 12-18
         include_str!("water.wgsl"),
         include_str!("water_surf.wgsl"),
         include_str!("surf.wgsl")
-    )
+    ) + "\n" + crate::far_shadow::WGSL // the far sun shadow map's lookup (water.wgsl `w_shadow`, lighting)
+        + "\n" + &crate::probe_grid::wgsl(true) // the probe grid's lookups (water.wgsl `w_shade`, lighting)
 }
 
 fn common_source() -> String {

@@ -115,6 +115,15 @@ pub enum ObjectKind {
     Landmark = 9,
     /// a landmark's far item or skirt, and the open-space ground (receives only).
     LandmarkNoShadow = 10,
+    /// a grade-separated road's deck surface (the street material) and its
+    /// paint, joints and pipes (vertex colour), `--structures` (structures.rs):
+    /// exact sRGB vertex colour as the street's; receives only.
+    StructureDeck = 11,
+    /// a grade-separated road's concrete (barriers, fascia, girder, soffit,
+    /// caps, columns, walls): the tint in the material, the vertex colour and
+    /// the normal's w carry the formwork coordinates and the wear
+    /// (structures.rs `encode_concrete`); casts sun shadows at the level shown.
+    Structure = 12,
 }
 
 /// A foundation skirt: the footprint ring walled from `bottom` up to `base`.
@@ -158,6 +167,9 @@ pub struct SceneStats {
     pub terrain_tiles: usize,
     pub terrain_triangles: u64,
     pub terrain_coarse_triangles: u64,
+    /// Terrain tiles with a tunnel portal's canopy left out (their own index
+    /// lists; `build_scene_with_cuts`, `--tunnels`); 0 otherwise.
+    pub terrain_cut_tiles: usize,
     pub road_objects: usize,
     pub road_ways_drawn: usize,
     pub road_ways_skipped_bridge_or_tunnel: usize,
@@ -311,6 +323,226 @@ pub struct SceneInputs<'a> {
 }
 
 pub fn build_scene(inp: &SceneInputs) -> anyhow::Result<Scene> {
+    build_scene_with_cuts(inp, None)
+}
+
+/// An open cut (`canopy == false`) lowers the terrain vertices inside its
+/// ring and within this many terrain cells of it to its floor, so no
+/// terrain triangle reaching into the ring slopes across the cut's roadway
+/// (a grid vertex's triangles reach its neighbours one cell away). One cell
+/// is under the portal canopy's reach back over the bore
+/// (eo-structures `tunnel::PORTAL_OPEN_M`, 12 m), so no vertex over a
+/// covered bore past its canopy is lowered.
+pub const CUT_REACH_CELLS: f64 = 1.0;
+
+fn seg_dist(a: [f64; 2], b: [f64; 2], x: f64, z: f64) -> f64 {
+    let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+    let l2 = dx * dx + dz * dz;
+    let t = if l2 > 1e-12 { (((x - a[0]) * dx + (z - a[1]) * dz) / l2).clamp(0.0, 1.0) } else { 0.0 };
+    (x - a[0] - t * dx).hypot(z - a[1] - t * dz)
+}
+
+/// (x, z) is inside `c`'s ring or within `reach` of it.
+fn near_cut(c: &eo_structures::TerrainCut, x: f64, z: f64, reach: f64) -> bool {
+    if x < c.min[0] - reach || x > c.max[0] + reach || z < c.min[1] - reach || z > c.max[1] + reach {
+        return false;
+    }
+    if c.contains(x, z) {
+        return true;
+    }
+    let n = c.ring.len();
+    (0..n).any(|i| seg_dist(c.ring[i], c.ring[(i + 1) % n], x, z) <= reach)
+}
+
+/// Whether (x, z) lies behind a portal's face (over or beside the bore,
+/// within `reach` of the face's ends): the face is a canopy ring's first and
+/// last points (eo-structures `tunnel::cuts`: the ring runs from the face back
+/// over the bore on one side and returns on the other).
+fn behind_portal(c: &eo_structures::TerrainCut, x: f64, z: f64, reach: f64) -> bool {
+    let n = c.ring.len();
+    if !c.canopy || n < 4 {
+        return false;
+    }
+    let (a, b) = (c.ring[0], c.ring[n - 1]);
+    let (mx, mz) = ((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0);
+    let (ax, az) = (b[0] - a[0], b[1] - a[1]);
+    let half = ax.hypot(az) / 2.0;
+    if half < 1e-6 {
+        return false;
+    }
+    let (ux, uz) = (ax / (2.0 * half), az / (2.0 * half));
+    // into the bore: the face's normal toward the ring's far end.
+    let far = c.ring[n / 2];
+    let (mut ix, mut iz) = (-uz, ux);
+    if (far[0] - mx) * ix + (far[1] - mz) * iz < 0.0 {
+        (ix, iz) = (-ix, -iz);
+    }
+    let (dx, dz) = (x - mx, z - mz);
+    dx * ix + dz * iz > 0.0 && (dx * ux + dz * uz).abs() <= half + reach
+}
+
+/// The floor a terrain vertex at (x, z) is lowered to: the lowest of the open
+/// cuts (`canopy == false`) holding it, or within `reach` of their ring and
+/// not behind a portal's face outside its canopy (a canopy in `cuts`: the
+/// hillside beside the bore keeps its height there; the headwall stands on
+/// the face).
+pub fn terrain_cut_floor(cuts: &[&eo_structures::TerrainCut], x: f64, z: f64, reach: f64) -> Option<f64> {
+    // (inside a canopy itself the ground is lowered: that part is left out, `minus_canopies`,
+    // and what stays round it slopes down to the headwall, never across the mouth.)
+    let behind = || cuts.iter().any(|c| behind_portal(c, x, z, reach)) && !cuts.iter().any(|c| c.canopy && c.contains(x, z));
+    cuts.iter().filter(|c| !c.canopy && (c.contains(x, z) || (near_cut(c, x, z, reach) && !behind()))).map(|c| c.floor).min_by(f64::total_cmp)
+}
+
+/// A convex polygon (x, y, z points; plan in x, z) cut by the line through
+/// `a`, `b`: the part on the side `sign` of it (+1 left of a to b, -1 right),
+/// heights interpolated along the cut edges (the pieces stay in the plane).
+fn clip_side(poly: &[[f64; 3]], a: [f64; 2], b: [f64; 2], sign: f64) -> Vec<[f64; 3]> {
+    let side = |p: &[f64; 3]| sign * ((b[0] - a[0]) * (p[2] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]));
+    let mut out = vec![];
+    for i in 0..poly.len() {
+        let (p, q) = (poly[i], poly[(i + 1) % poly.len()]);
+        let (sp, sq) = (side(&p), side(&q));
+        if sp >= 0.0 {
+            out.push(p);
+        }
+        if (sp >= 0.0) != (sq >= 0.0) {
+            let t = sp / (sp - sq);
+            out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t]);
+        }
+    }
+    out
+}
+
+/// A triangle less a convex polygon `ring` (plan): the convex pieces outside
+/// it (one per ring edge the triangle reaches past), heights in the
+/// triangle's plane. The triangle alone when it does not meet the ring.
+fn minus_convex(tri: [[f64; 3]; 3], ring: &[[f64; 2]]) -> Vec<Vec<[f64; 3]>> {
+    let n = ring.len();
+    let area: f64 = (0..n).map(|i| ring[i][0] * ring[(i + 1) % n][1] - ring[(i + 1) % n][0] * ring[i][1]).sum();
+    let inside = if area >= 0.0 { 1.0 } else { -1.0 }; // the ring's inside is left of its edges when it winds counter-clockwise
+    let mut rest: Vec<[f64; 3]> = tri.to_vec();
+    let mut pieces = vec![];
+    for i in 0..n {
+        let (a, b) = (ring[i], ring[(i + 1) % n]);
+        if (a[0] - b[0]).hypot(a[1] - b[1]) < 1e-9 {
+            continue;
+        }
+        let out = clip_side(&rest, a, b, -inside);
+        if out.len() >= 3 {
+            pieces.push(out);
+        }
+        rest = clip_side(&rest, a, b, inside);
+        if rest.len() < 3 {
+            return if pieces.len() == 1 && pieces[0].len() == 3 { vec![tri.to_vec()] } else { pieces };
+        }
+    }
+    pieces
+}
+
+/// One terrain tile's triangles (the shared topology at `stride` over
+/// `verts`) less the portals' canopies (`rings`, convex: eo-structures
+/// `TerrainCut::canopy`), exactly: a triangle a canopy reaches into is cut
+/// along its edges and the pieces outside it kept (new vertices appended to
+/// `verts`, interpolated in the triangle's plane, the nearest corner's colour
+/// and normal), so the hole is the canopy's footprint, which the portal
+/// headwall's top and ends cover.
+fn minus_canopies(verts: &mut Vec<Vertex>, side: usize, stride: usize, rings: &[&[[f64; 2]]]) -> Vec<u32> {
+    let mut tris: Vec<[u32; 3]> = vec![];
+    for z in (0..side - 1).step_by(stride) {
+        for x in (0..side - 1).step_by(stride) {
+            let i0 = (z * side + x) as u32;
+            let i1 = i0 + stride as u32;
+            let i2 = i0 + (stride * side) as u32;
+            let i3 = i2 + stride as u32;
+            tris.push([i0, i2, i1]);
+            tris.push([i1, i2, i3]);
+        }
+    }
+    for ring in rings {
+        let (mut mn, mut mx) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+        for q in ring.iter() {
+            mn = [mn[0].min(q[0]), mn[1].min(q[1])];
+            mx = [mx[0].max(q[0]), mx[1].max(q[1])];
+        }
+        let mut next = Vec::with_capacity(tris.len());
+        for t in tris {
+            let p = t.map(|i| verts[i as usize].pos.map(|v| v as f64));
+            let (tx0, tx1) = (p[0][0].min(p[1][0]).min(p[2][0]), p[0][0].max(p[1][0]).max(p[2][0]));
+            let (tz0, tz1) = (p[0][2].min(p[1][2]).min(p[2][2]), p[0][2].max(p[1][2]).max(p[2][2]));
+            if tx1 < mn[0] || tx0 > mx[0] || tz1 < mn[1] || tz0 > mx[1] {
+                next.push(t);
+                continue;
+            }
+            let pieces = minus_convex(p, ring);
+            if pieces.len() == 1 && pieces[0].len() == 3 && pieces[0].iter().zip(&p).all(|(a, b)| a == b) {
+                next.push(t);
+                continue;
+            }
+            for poly in pieces {
+                // (a sliver along an edge of no area is dropped.)
+                let area: f64 = (0..poly.len()).map(|i| poly[i][0] * poly[(i + 1) % poly.len()][2] - poly[(i + 1) % poly.len()][0] * poly[i][2]).sum::<f64>().abs() / 2.0;
+                if area < 1e-4 {
+                    continue;
+                }
+                let ids: Vec<u32> = poly
+                    .iter()
+                    .map(|q| {
+                        if let Some(k) = (0..3).find(|&k| p[k] == *q) {
+                            return t[k];
+                        }
+                        // the nearest corner's colour and normal.
+                        let near = (0..3).min_by(|&a, &b| ((p[a][0] - q[0]).hypot(p[a][2] - q[2])).total_cmp(&(p[b][0] - q[0]).hypot(p[b][2] - q[2]))).unwrap();
+                        let src = verts[t[near] as usize];
+                        verts.push(Vertex { pos: [q[0] as f32, q[1] as f32, q[2] as f32], ..src });
+                        (verts.len() - 1) as u32
+                    })
+                    .collect();
+                for k in 1..ids.len() - 1 {
+                    next.push([ids[0], ids[k], ids[k + 1]]);
+                }
+            }
+        }
+        tris = next;
+    }
+    tris.into_iter().flatten().collect()
+}
+
+/// The triangles of one terrain tile's grid (`side` x `side` vertices,
+/// the shared topology at `stride`) left once every triangle with a vertex in
+/// `hole` is left out.
+#[cfg(test)]
+fn grid_without(side: usize, stride: usize, hole: &[bool]) -> Vec<u32> {
+    let mut out = vec![];
+    for z in (0..side - 1).step_by(stride) {
+        for x in (0..side - 1).step_by(stride) {
+            let i0 = (z * side + x) as u32;
+            let i1 = i0 + stride as u32;
+            let i2 = i0 + (stride * side) as u32;
+            let i3 = i2 + stride as u32;
+            for t in [[i0, i2, i1], [i1, i2, i3]] {
+                if !t.iter().any(|&i| hole[i as usize]) {
+                    out.extend_from_slice(&t);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// `build_scene`, and with `cuts` (eo-structures' world, `--structures
+/// --tunnels`) the terrain cut where the tunnels' open stretches go through
+/// the ground (`StructureWorld::terrain_cuts_in` per terrain tile): every
+/// terrain vertex inside an open cut's ring (`canopy == false`), or within
+/// `CUT_REACH_CELLS` of it (not behind a portal's face beside its canopy),
+/// is lowered to the cut's floor (its smooth normal from the lowered
+/// heights); the ground under a portal's canopy ring (`canopy == true`) is
+/// cut out exactly, at both levels (`minus_canopies`), so only the tiles with
+/// a canopy get their own vertices and index lists (the portal headwall's
+/// top and ends cover the hole from above). Tiles without a cut,
+/// and every tile with `cuts` None or a world without cuts (no `--tunnels`),
+/// are built exactly as `build_scene` builds them.
+pub fn build_scene_with_cuts(inp: &SceneInputs, cuts: Option<&eo_structures::StructureWorld>) -> anyhow::Result<Scene> {
+    let cuts = cuts.filter(|w| !w.terrain_cuts().is_empty());
     let t0 = Instant::now();
     let g = inp.elevation;
     let cell = g.meta.cell_size as f32;
@@ -435,17 +667,32 @@ pub fn build_scene(inp: &SceneInputs) -> anyhow::Result<Scene> {
     let coarse_count = b.indices.len() as u32 - coarse_first;
     // Vertex rows of every terrain tile, computed in parallel (the street
     // world's carpet answers per vertex and is not free).
-    let tile_verts = |tx: usize, tz: usize| -> (Vec<Vertex>, bool) {
+    let reach = CUT_REACH_CELLS * cell as f64;
+    let tile_verts = |tx: usize, tz: usize| -> (Vec<Vertex>, bool, Vec<&eo_structures::TerrainCut>) {
         let mut verts = Vec::with_capacity(side * side);
         let mut any_land = false;
+        // the tunnels' cuts near the tile (its vertices and the ring of cells round it).
+        let near: Vec<&eo_structures::TerrainCut> = match cuts {
+            Some(w) => {
+                let lo = |c: usize, o: f32| (o + (c as f32 - 1.5) * cell) as f64 - reach;
+                let hi = |c: usize, o: f32| (o + (c as f32 + TILE_CELLS as f32 + 1.5) * cell) as f64 + reach;
+                w.terrain_cuts_in([lo(tx * TILE_CELLS, ox), lo(tz * TILE_CELLS, oz)], [hi(tx * TILE_CELLS, ox), hi(tz * TILE_CELLS, oz)])
+            }
+            None => vec![],
+        };
         let height = |cx: i64, cz: i64| -> f32 {
             // Vertices sit on cell centres; past the grid's last
             // column/row the sampler clamps.
             let wx = ox + (cx as f32 + 0.5) * cell;
             let wz = oz + (cz as f32 + 0.5) * cell;
-            match inp.carpet {
+            let y = match inp.carpet {
                 Some(f) => f(wx, wz),
                 None => g.ground(wx as f64, wz as f64) as f32,
+            };
+            // an open cut lowers the ground in and beside it to its floor.
+            match terrain_cut_floor(&near, wx as f64, wz as f64, reach) {
+                Some(f) => y.min(f as f32),
+                None => y,
             }
         };
         // one ring of cells round the tile, for the central differences.
@@ -476,18 +723,45 @@ pub fn build_scene(inp: &SceneInputs) -> anyhow::Result<Scene> {
                 verts.push(vert);
             }
         }
-        (verts, any_land)
+        // the portals' canopies over the tile's grid (left out of it); empty: none.
+        let (x0, x1) = (verts[0].pos[0] as f64, verts[side * side - 1].pos[0] as f64);
+        let (z0, z1) = (verts[0].pos[2] as f64, verts[side * side - 1].pos[2] as f64);
+        let canopies: Vec<&eo_structures::TerrainCut> = near.iter().copied().filter(|c| c.canopy && c.max[0] >= x0 && c.min[0] <= x1 && c.max[1] >= z0 && c.min[1] <= z1).collect();
+        (verts, any_land, canopies)
     };
     let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).min(16);
     let all: Vec<(usize, usize)> = (0..tiles_z).flat_map(|tz| (0..tiles_x).map(move |tx| (tx, tz))).collect();
     let chunk = all.len().div_ceil(threads).max(1);
-    let built: Vec<(Vec<Vertex>, bool)> = std::thread::scope(|s| {
+    let built: Vec<(Vec<Vertex>, bool, Vec<&eo_structures::TerrainCut>)> = std::thread::scope(|s| {
         let hs: Vec<_> = all.chunks(chunk).map(|c| s.spawn(move || c.iter().map(|&(tx, tz)| tile_verts(tx, tz)).collect::<Vec<_>>())).collect();
         hs.into_iter().flat_map(|h| h.join().unwrap()).collect()
     });
-    for (&(tx, tz), (tv, any_land)) in all.iter().zip(built) {
+    for (&(tx, tz), (tv, any_land, canopies)) in all.iter().zip(built) {
+        let mut verts = tv;
+        if !canopies.is_empty() {
+            // a portal's canopy over this tile: its own index lists and vertices, the ground under it left out.
+            let rings: Vec<&[[f64; 2]]> = canopies.iter().map(|c| c.ring.as_slice()).collect();
+            let fine = minus_canopies(&mut verts, side, 1, &rings);
+            let coarse = minus_canopies(&mut verts, side, TERRAIN_COARSE_STRIDE, &rings);
+            if let Some(o) = b.push(ObjectKind::Terrain, &verts, &fine) {
+                if inp.terrain_lod {
+                    let first = b.indices.len() as u32;
+                    b.indices.extend_from_slice(&coarse);
+                    b.objects[o].lod_role = LOD_TERRAIN;
+                    b.objects[o].far_first_index = first;
+                    b.objects[o].far_index_count = coarse.len() as u32;
+                }
+                stats.terrain_tiles += 1;
+                stats.terrain_triangles += (fine.len() / 3) as u64;
+                stats.terrain_coarse_triangles += (coarse.len() / 3) as u64;
+                stats.terrain_cut_tiles += 1;
+            }
+            if any_land {
+                tile_used[tz * tiles_x + tx] = true;
+            }
+            continue;
+        }
         {
-            let verts = tv;
             let o = b.push_shared(ObjectKind::Terrain, &verts, shared_first, shared_count);
             if inp.terrain_lod {
                 b.objects[o].lod_role = LOD_TERRAIN;
@@ -662,4 +936,102 @@ pub fn multiply_objects(objects: &[GpuObject], n: u32) -> Vec<GpuObject> {
 /// Copy little-endian bytes read back from the GPU into u32 words.
 pub fn cast_u32(b: &[u8]) -> Vec<u32> {
     bytemuck::pod_collect_to_vec(b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use eo_structures::TerrainCut;
+
+    fn cut(ring: Vec<[f64; 2]>, floor: f64, canopy: bool) -> TerrainCut {
+        let (mut mn, mut mx) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+        for q in &ring {
+            mn = [mn[0].min(q[0]), mn[1].min(q[1])];
+            mx = [mx[0].max(q[0]), mx[1].max(q[1])];
+        }
+        TerrainCut { chain: 0, s0: 0.0, s1: 0.0, ring, floor, min: mn, max: mx, canopy }
+    }
+
+    /// Stage A8: an open cut (x 0..40, z -6..6, its portal face at x 40)
+    /// lowers the vertices inside it and within reach of it in front of the
+    /// face and under the portal's canopy (x 40 to 52, cut out of the grid),
+    /// never those behind the face beside the canopy; a tile's grid without the
+    /// triangles touching a hole keeps every other triangle of the shared
+    /// topology, at both levels.
+    #[test]
+    fn an_open_cut_lowers_the_ground_in_front_of_its_portal_only() {
+        let open = cut(vec![[0.0, 6.0], [40.0, 6.0], [40.0, -6.0], [0.0, -6.0]], 10.0, false);
+        let canopy = cut(vec![[40.0, 8.0], [46.0, 8.0], [52.0, 8.0], [52.0, -8.0], [46.0, -8.0], [40.0, -8.0]], 10.0, true);
+        let cuts = [&open, &canopy];
+        let reach = 10.0;
+        assert_eq!(terrain_cut_floor(&cuts, 20.0, 0.0, reach), Some(10.0), "inside");
+        assert_eq!(terrain_cut_floor(&cuts, 20.0, 14.0, reach), Some(10.0), "beside, within reach");
+        assert_eq!(terrain_cut_floor(&cuts, 20.0, 17.0, reach), None, "beyond reach");
+        assert_eq!(terrain_cut_floor(&cuts, -8.0, 0.0, reach), Some(10.0), "past the street end, within reach");
+        assert_eq!(terrain_cut_floor(&cuts, 45.0, 0.0, reach), Some(10.0), "under the canopy (cut out of the grid), within reach");
+        assert_eq!(terrain_cut_floor(&cuts, 44.0, 12.0, reach), None, "behind the face, beside the canopy");
+        assert_eq!(terrain_cut_floor(&cuts, 55.0, 0.0, reach), None, "behind the canopy, beyond reach");
+        assert_eq!(terrain_cut_floor(&[&open], 45.0, 0.0, reach), Some(10.0), "(no portal: within reach)");
+        // the grid without a hole's triangles.
+        let side = TILE_CELLS + 1;
+        let none = vec![false; side * side];
+        assert_eq!(grid_without(side, 1, &none).len(), TILE_CELLS * TILE_CELLS * 6);
+        assert_eq!(grid_without(side, TERRAIN_COARSE_STRIDE, &none).len(), (TILE_CELLS / TERRAIN_COARSE_STRIDE).pow(2) * 6);
+        let mut hole = none.clone();
+        hole[5 * side + 7] = true; // an inner vertex: its six triangles go
+        let g = grid_without(side, 1, &hole);
+        assert_eq!(g.len(), (TILE_CELLS * TILE_CELLS - 3) * 6);
+        assert!(!g.contains(&((5 * side + 7) as u32)));
+        assert_eq!(grid_without(side, TERRAIN_COARSE_STRIDE, &hole).len(), (TILE_CELLS / TERRAIN_COARSE_STRIDE).pow(2) * 6, "not on the coarse grid");
+    }
+
+    /// Stage A8: a portal's canopy is cut out of a tile's grid exactly: what
+    /// is left covers the tile less the canopy's footprint (no more, no
+    /// less), every piece stays in its triangle's plane, at both levels, and
+    /// a canopy off the tile leaves the grid as it was.
+    #[test]
+    fn a_canopy_is_cut_out_of_the_terrain_exactly() {
+        let side = TILE_CELLS + 1;
+        let cell = 10.0f32;
+        // a tilted plane y = 0.1 x + 0.05 z.
+        let base: Vec<Vertex> = (0..side * side).map(|i| {
+            let (x, z) = ((i % side) as f32 * cell, (i / side) as f32 * cell);
+            Vertex { pos: [x, 0.1 * x + 0.05 * z, z], normal: 0, color: 0xff808080 }
+        }).collect();
+        let area = |verts: &[Vertex], idx: &[u32]| -> f64 {
+            idx.chunks(3).map(|t| {
+                let p: Vec<[f64; 3]> = t.iter().map(|&i| verts[i as usize].pos.map(|v| v as f64)).collect();
+                ((p[1][0] - p[0][0]) * (p[2][2] - p[0][2]) - (p[2][0] - p[0][0]) * (p[1][2] - p[0][2])).abs() / 2.0
+            }).sum()
+        };
+        let full = (TILE_CELLS as f64 * cell as f64).powi(2);
+        // a canopy 12 m x 15.2 m, turned 20 degrees, its corners off the grid's vertices.
+        let (c, s) = (20f64.to_radians().cos(), 20f64.to_radians().sin());
+        let ring: Vec<[f64; 2]> = [[0.0, -7.6], [6.0, -7.6], [12.0, -7.6], [12.0, 7.6], [6.0, 7.6], [0.0, 7.6]].iter().map(|q| [133.3 + q[0] * c - q[1] * s, 147.9 + q[0] * s + q[1] * c]).collect();
+        for stride in [1, TERRAIN_COARSE_STRIDE] {
+            let mut verts = base.clone();
+            let idx = minus_canopies(&mut verts, side, stride, &[ring.as_slice()]);
+            let left = area(&verts, &idx);
+            assert!((left - (full - 12.0 * 15.2)).abs() < 1e-3, "stride {stride}: {left} of {full}");
+            for v in &verts[side * side..] {
+                assert!((v.pos[1] - (0.1 * v.pos[0] + 0.05 * v.pos[2])).abs() < 1e-3, "a cut vertex off its plane: {:?}", v.pos);
+                // on one of the canopy's edge lines (the pieces are cut along them).
+                let (x, z) = (v.pos[0] as f64, v.pos[2] as f64);
+                let on_line = |a: [f64; 2], b: [f64; 2]| ((b[0] - a[0]) * (z - a[1]) - (b[1] - a[1]) * (x - a[0])).abs() / (b[0] - a[0]).hypot(b[1] - a[1]) < 1e-3;
+                assert!((0..ring.len()).any(|i| on_line(ring[i], ring[(i + 1) % ring.len()])), "a new vertex off the canopy's edges: {:?}", v.pos);
+            }
+            // nothing left inside it (but slivers along its edges, of no area).
+            for t in idx.chunks(3) {
+                let m = t.iter().fold([0.0f64; 2], |a, &i| [a[0] + verts[i as usize].pos[0] as f64 / 3.0, a[1] + verts[i as usize].pos[2] as f64 / 3.0]);
+                let edge = (0..ring.len()).map(|i| seg_dist(ring[i], ring[(i + 1) % ring.len()], m[0], m[1])).fold(f64::INFINITY, f64::min);
+                assert!(edge < 1e-3 || !eo_street::point_in_ring(m[0], m[1], &ring), "a piece left under the canopy at {m:?}");
+            }
+        }
+        // a canopy off the tile: the grid as it was.
+        let mut verts = base.clone();
+        let far: Vec<[f64; 2]> = ring.iter().map(|q| [q[0] + 1000.0, q[1]]).collect();
+        let idx = minus_canopies(&mut verts, side, 1, &[far.as_slice()]);
+        assert_eq!(verts.len(), side * side);
+        assert_eq!(idx, grid_without(side, 1, &vec![false; side * side]));
+    }
 }

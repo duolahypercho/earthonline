@@ -54,12 +54,22 @@ struct LtParams {
     // x units per candela (lamps on), y headlamp units per candela (lamps on), z lamp reach m, w headlamp reach m
     scale: vec4<f32>,
     // props lamps: x units per JS candela (lamps on), y any props tile resident (1/0),
-    // z the RP-8 pool peak in units (lamps on)
+    // z the RP-8 pool peak in units (lamps on), w a tunnel bore's lamps' pool
+    // peak in units (`--tunnels`: lit round the clock; 0 without bores)
     props: vec4<f32>,
     // the waterside cells: x, z of the grid's corner, cell m, unused
     water: vec4<f32>,
     // the waterside cells: columns, rows
     water_n: vec4<u32>,
+    // (lighting, `--light-shadows`) SF's 3000 K LED lamps: rgb their colour at unit
+    // luminance, w 1 on (0: the colours as given); `led_key` the JS street lamp role's
+    // chromaticity key (largest channel 1), w the tolerance (sky.rs `led_params`).
+    led: vec4<f32>,
+    led_key: vec4<f32>,
+    // (`--shop-light`, stage N1; shop_lights.rs) the shop windows' lights: x how
+    // many, y units per candela (the lamps' scale times the rooms' dusk; 0 by
+    // day or without them), z the drawn hour, w the eye distance they are gathered within.
+    shops: vec4<f32>,
 };
 
 /// eo_render::props::GpuLampLight (64 bytes): a district street light's
@@ -99,6 +109,24 @@ struct PropLamp {
 // axis, LT_TILE_WORDS words), then the waterside cells.
 @group(0) @binding(11) var<storage, read> lt_mask: array<u32>;
 
+/// eo_render::shop_lights::GpuShopLight (64 bytes): a shop window's light
+/// just inside its glass, its trade's colour at unit luminance, its candela
+/// while open, its axis out of the window, the glazed area it stands for,
+/// its hours (open, hours lit from then, its level while closed).
+struct ShopLamp {
+    pos: vec3<f32>,
+    range: f32,
+    colour: vec3<f32>,
+    candela: f32,
+    dir: vec3<f32>,
+    area: f32,
+    open: f32,
+    span: f32,
+    security: f32,
+    kind: u32,
+};
+@group(0) @binding(12) var<storage, read> lt_shops: array<ShopLamp>;
+
 const LT_TILE_WORDS: u32 = 2048u;
 
 const LT_SPRITE_REACH: f32 = 4000.0;
@@ -136,6 +164,20 @@ fn lt_push(l: SkyLight) {
     }
 }
 
+/// (lighting, `--light-shadows`) A street lamp of the JS role (its colour's
+/// chromaticity is the role's 0xffc46a) in SF's 3000 K LED colour at the same
+/// luminance; any other light, and everything with the option off, as given.
+fn lt_led(c: vec3<f32>) -> vec3<f32> {
+    if (lt.led.w <= 0.0) {
+        return c;
+    }
+    let k = c / max(max(c.r, max(c.g, c.b)), 1e-6);
+    if (any(abs(k - lt.led_key.xyz) > vec3<f32>(lt.led_key.w))) {
+        return c;
+    }
+    return lt.led.xyz * dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
+}
+
 fn lt_bit(word: u32, bit: u32) -> bool {
     return ((lt_mask[word + bit / 32u] >> (bit % 32u)) & 1u) != 0u;
 }
@@ -159,6 +201,49 @@ fn lt_waterside(p: vec3<f32>) -> bool {
         return false;
     }
     return lt_bit(LT_TILE_WORDS, u32(c.y) * lt.water_n.x + u32(c.x));
+}
+
+// ---- (`--look cinematic`, stage L2; eo-sky `cine_lamps`, sky.rs `cine_lamps_wgsl`) ----
+// The look's street lamps: each takes its street's colour from the palette
+// grid (`lt.water.w` its cell, 0 off; `lt.water_n.zw` its columns and rows;
+// its corner the waterside grid's) at the light's own luminance, its pool's
+// axis along the street (a lean of `dir`, sky_light.wgsl `sky_cine_cobra`),
+// and the cobra head's longer reach. Compiled out without the look (LT_CINE).
+
+fn lt_cine_on() -> bool {
+    return LT_CINE && lt.water.w > 0.0;
+}
+
+/// The street at `p`: x its tint (0-3), y 1 where a street is, zw its axis.
+fn lt_cine_street(p: vec3<f32>) -> vec4<f32> {
+    let c = vec2<i32>(floor((p.xz - lt.water.xy) / lt.water.w));
+    if (any(c < vec2<i32>(0)) || c.x >= i32(lt.water_n.z) || c.y >= i32(lt.water_n.w)) {
+        return vec4<f32>(0.0);
+    }
+    let i = u32(c.y) * lt.water_n.z + u32(c.x);
+    let b = (lt_mask[LT_PALETTE_WORD + i / 4u] >> ((i % 4u) * 8u)) & 255u;
+    if ((b & 128u) == 0u) {
+        return vec4<f32>(0.0);
+    }
+    let a = f32((b >> 2u) & 15u) / 16.0 * 3.14159265;
+    return vec4<f32>(f32(b & 3u), 1.0, cos(a), sin(a));
+}
+
+/// A colour of the JS street lamp role (0xffc46a), whatever its luminance.
+fn lt_cine_key(c: vec3<f32>) -> bool {
+    let k = c / max(max(c.r, max(c.g, c.b)), 1e-6);
+    return all(abs(k - LT_CINE_KEY) <= vec3<f32>(LT_CINE_KEY_TOL));
+}
+
+/// A street luminaire under the look, its head `h` m over the street:
+/// `tint` 4 its street's (else that tint), `round` no axis (a globe).
+fn lt_cine_lamp(l: ptr<function, SkyLight>, head: vec3<f32>, h: f32, tint: u32, round: bool) {
+    let st = lt_cine_street(head);
+    let t = select(tint, u32(st.x), tint > 3u);
+    (*l).color = LT_CINE_TINTS[t] * dot((*l).color, vec3<f32>(0.2126, 0.7152, 0.0722));
+    let ax = select(vec2<f32>(0.0), st.zw * LT_CINE_AXIS_TILT, st.y > 0.5 && !round);
+    (*l).dir = normalize(vec3<f32>(ax.x, -1.0, ax.y));
+    (*l).range = h * LT_CINE_RANGE_MH;
 }
 
 /// A street lamp into the frame's lights (near) and the luminaires (to the
@@ -204,6 +289,12 @@ fn lights_lamps(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     l.intensity = l.intensity * lt.scale.x;
+    if (lt_cine_on() && l.kind == 0u && lt_cine_key(l.color)) {
+        // (`--look cinematic`) its street's colour, axis and reach (`size`: the head's height).
+        lt_cine_lamp(&l, l.pos, l.size, 4u, false);
+    } else {
+        l.color = lt_led(l.color);
+    }
     lt_emit(l, l.pos);
 }
 
@@ -220,18 +311,20 @@ const LT_JS_SOURCE_LIFT_MH: f32 = 0.57;
 @compute @workgroup_size(64)
 fn lights_props(@builtin(global_invocation_id) gid: vec3<u32>) {
     let i = gid.x;
-    if (i >= min(lt_props_n[0], arrayLength(&lt_props)) || lt.props.x <= 0.0) {
+    if (i >= min(lt_props_n[0], arrayLength(&lt_props)) || (lt.props.x <= 0.0 && lt.props.w <= 0.0)) {
         return;
     }
     let p = lt_props[i];
-    if (p.intensity <= 0.0) {
+    // a tunnel bore's lamp (pad0 1, `--tunnels`) is lit round the clock at the bore's own pool.
+    let tunnel = p.pad0 == 1u;
+    if (p.intensity <= 0.0 || select(lt.props.x, lt.props.w, tunnel) <= 0.0) {
         return;
     }
     var l: SkyLight;
     l.pos = p.pos + vec3<f32>(0.0, p.source_lift, 0.0);
     let hs = p.source_lift / LT_JS_SOURCE_LIFT_MH + p.source_lift;
-    l.intensity = select(p.intensity * lt.props.x, lt.props.z * hs * hs, p.source_lift > 0.0);
-    l.color = p.colour;
+    l.intensity = select(p.intensity * lt.props.x, select(lt.props.z, lt.props.w, tunnel) * hs * hs, p.source_lift > 0.0);
+    l.color = select(lt_led(p.colour), p.colour, tunnel);
     l.range = p.range;
     l.dir = vec3<f32>(0.0, -1.0, 0.0);
     l.cos_outer = cos(p.angle);
@@ -239,6 +332,21 @@ fn lights_props(@builtin(global_invocation_id) gid: vec3<u32>) {
     l.kind = 3u;
     l.size = p.source_lift;
     l.pad = 0.0;
+    if (lt_cine_on() && !tunnel && p.kind != LT_LANDMARK && p.source_lift > 0.0 && lt_cine_key(p.colour)) {
+        // (`--look cinematic`) a cobra head (kind 0) at its own head, its
+        // nadir the RP-8 peak as before; the historic and banner heads warm
+        // white, a historic globe's pool round.
+        let h = p.source_lift / LT_JS_SOURCE_LIFT_MH;
+        l.pos = p.pos;
+        l.intensity = lt.props.z * h * h;
+        l.color = p.colour;
+        l.kind = 0u;
+        l.size = h;
+        l.cos_outer = LT_CINE_COS_CUT;
+        l.cos_inner = LT_CINE_COS_PEAK;
+        let warm = p.kind == LT_MODEL_HISTORIC || p.kind == LT_MODEL_BANNER;
+        lt_cine_lamp(&l, p.pos, h, select(4u, 3u, warm), p.kind == LT_MODEL_HISTORIC);
+    }
     lt_emit(l, p.pos);
 }
 
@@ -293,6 +401,40 @@ fn lights_agents(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
 }
 
+/// (`--shop-light`, stage N1) The shop windows' lights near the eye: lit
+/// by their hours at the drawn hour (`Hours::level_at`), appended after every
+/// other light (the frame list's cap drops them first), each a spot of its
+/// window's lobe (sky_light.wgsl kinds 3 and up: full out along its axis, none
+/// behind its glass), `size` its glazed area (rooms.wgsl reads the window's
+/// luminance from it). No lens or pool is drawn for it (no sprite).
+@compute @workgroup_size(64)
+fn lights_shops(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let i = gid.x;
+    if (i >= min(u32(lt.shops.x), arrayLength(&lt_shops)) || lt.shops.y <= 0.0) {
+        return;
+    }
+    let p = lt_shops[i];
+    let since = (lt.shops.z - p.open) - floor((lt.shops.z - p.open) / 24.0) * 24.0;
+    let level = select(p.security, 1.0, p.span >= 24.0 || since < p.span);
+    if (level <= 0.0 || distance(p.pos, skyu.eye.xyz) > lt.shops.w) {
+        return;
+    }
+    var l: SkyLight;
+    l.pos = p.pos;
+    l.intensity = p.candela * level * lt.shops.y;
+    l.color = p.colour;
+    l.range = p.range;
+    l.dir = p.dir;
+    l.cos_outer = 0.0;
+    l.cos_inner = 1.0;
+    l.kind = SHOP_KIND;
+    l.size = p.area;
+    l.pad = 0.0;
+    if (lt_visible(l.pos, l.range)) {
+        lt_push(l);
+    }
+}
+
 var<workgroup> lt_wcount: atomic<u32>;
 
 @compute @workgroup_size(64)
@@ -320,19 +462,27 @@ fn lights_cluster(@builtin(workgroup_id) wid: vec3<u32>, @builtin(local_invocati
     let hi = vec3<f32>(max(x1 * z0, x1 * z1) * sx, max(y1 * z0, y1 * z1) * sy, z1);
     let n = min(atomicLoad(&lt_count[0]), lt.counts.z);
     let total = g.x * g.y * g.z;
-    for (var i = lid; i < n; i = i + 64u) {
-        let l = lt_frame[i];
-        let v = lt_view(l.pos);
-        let q = clamp(v, lo, hi);
-        let dd = v - q;
-        if (dot(dd, dd) <= l.range * l.range) {
-            let k = atomicAdd(&lt_wcount, 1u);
-            if (k < LT_CAP) {
-                lt_clusters[total + c * LT_CAP + k] = i;
+    // (`--shop-light`) the street lamps and vehicle lamps first, then the shop
+    // windows' lights in what room is left (none without them: one pass).
+    let phases = select(1u, 2u, lt.shops.x > 0.0);
+    for (var phase = 0u; phase < phases; phase = phase + 1u) {
+        for (var i = lid; i < n; i = i + 64u) {
+            let l = lt_frame[i];
+            if (phases == 2u && (l.kind == SHOP_KIND) != (phase == 1u)) {
+                continue;
+            }
+            let v = lt_view(l.pos);
+            let q = clamp(v, lo, hi);
+            let dd = v - q;
+            if (dot(dd, dd) <= l.range * l.range) {
+                let k = atomicAdd(&lt_wcount, 1u);
+                if (k < LT_CAP) {
+                    lt_clusters[total + c * LT_CAP + k] = i;
+                }
             }
         }
+        workgroupBarrier();
     }
-    workgroupBarrier();
     if (lid == 0u) {
         lt_clusters[c] = min(atomicLoad(&lt_wcount), LT_CAP);
         if (c == 0u) {

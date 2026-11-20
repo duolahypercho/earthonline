@@ -6,8 +6,10 @@ use eo_render::scene::{GpuObject, LOD_TERRAIN, ObjectKind, Vertex};
 use eo_render::{GpuContext, GpuOptions, Renderer, TERRAIN_LOD_DISTANCE_M, wgpu};
 use glam::Vec3;
 
-fn ctx(force_no_indirect_count: bool) -> GpuContext {
-    let opts = GpuOptions { force_no_indirect_count, ..Default::default() };
+/// `force_no_indirect_count` without the adapter's count draws; `force_no_count_emulation`
+/// then the per-slot fallback instead of the count emulation.
+fn ctx(force_no_indirect_count: bool, force_no_count_emulation: bool) -> GpuContext {
+    let opts = GpuOptions { force_no_indirect_count, force_no_count_emulation, ..Default::default() };
     GpuContext::new(GpuContext::create_instance(&opts), None, opts).expect("a GPU adapter is required for the culling test")
 }
 
@@ -28,8 +30,8 @@ fn cube(c: Vec3, tag: u32, verts: &mut Vec<Vertex>, objects: &mut Vec<GpuObject>
     ));
 }
 
-fn run(force_no_indirect_count: bool) {
-    let ctx = ctx(force_no_indirect_count);
+fn run(force_no_indirect_count: bool, force_no_count_emulation: bool) {
+    let ctx = ctx(force_no_indirect_count, force_no_count_emulation);
     // Camera at the origin looking north (-z).
     let cam = Camera::new(Vec3::new(0.0, 2.0, 0.0), 0.0, 0.0, 16.0 / 9.0);
     let mut verts = vec![];
@@ -90,12 +92,18 @@ fn run(force_no_indirect_count: bool) {
 
 #[test]
 fn planted_offscreen_objects_are_culled_compacted_path() {
-    run(false);
+    run(false, false);
+}
+
+/// The compacted lists without the adapter's count draws (the Metal path).
+#[test]
+fn planted_offscreen_objects_are_culled_emulated_path() {
+    run(true, false);
 }
 
 #[test]
 fn planted_offscreen_objects_are_culled_fallback_path() {
-    run(true);
+    run(true, true);
 }
 
 /// Whole real city at the bench spawn and from the air: the GPU's visible
@@ -126,7 +134,7 @@ fn real_city_gpu_cull_matches_cpu_reference() {
         smooth_terrain: false,
     })
     .unwrap();
-    let ctx = ctx(false);
+    let ctx = ctx(false, false);
     let r = Renderer::new(&ctx, &scene, wgpu::TextureFormat::Rgba8UnormSrgb, 1).unwrap();
     // the spawn and the overview point on the shipped (scaled) plan.
     let sp = eo_data::groundscale::plan([1539.0, -366.0]);
@@ -158,5 +166,29 @@ fn real_city_gpu_cull_matches_cpu_reference() {
         let tri_diff = (out.triangles() as i64 - cpu_tris as i64).abs();
         assert!(tri_diff <= 4 * 2048, "tris gpu {} vs cpu {}", out.triangles(), cpu_tris);
         eprintln!("eye {eye:?}: {} of {} objects visible, {} triangles", out.draw_count(), scene.objects.len(), out.triangles());
+    }
+}
+
+#[test]
+fn cold_start_and_camera_cut_bound_both_opaque_lists() {
+    let ctx = ctx(true, false);
+    let mut vertices = Vec::new();
+    let mut objects = Vec::new();
+    for (z, count) in [(-50.0, 64), (50.0, 700), (-10_000.0, 2048)] {
+        for _ in 0..count {
+            cube(Vec3::new(0.0, 2.0, z), 0, &mut vertices, &mut objects);
+        }
+    }
+    let r = Renderer::from_parts(&ctx, &vertices, &[0, 1, 2], &objects, wgpu::TextureFormat::Rgba8UnormSrgb, 1).unwrap();
+    for (yaw, visible) in [(0.0, 64), (std::f32::consts::PI, 700)] {
+        let cam = Camera::new(Vec3::new(0.0, 2.0, 0.0), yaw, 0.0, 1.0);
+        r.update(&ctx.queue, &cam);
+        let city = r.counts.as_ref().unwrap().stats().into_iter().find(|s| s.label == "city").unwrap();
+        // Occlusion may put every visible object in either the early or late
+        // opaque pass. Neither needs slots for the thousands beyond the view.
+        for bound in [city.bounds[0], city.bounds[2]] {
+            assert!(bound >= visible && bound < objects.len() as u32, "visible {visible}, bounds {:?}", city.bounds);
+        }
+        assert_eq!(r.cull_readback(&ctx, &cam).unwrap().counters[0], visible);
     }
 }

@@ -6,7 +6,10 @@
 // every group's level): a building casts at exactly the level it is drawn.
 // Casters: buildings, Blender model parts and kit buildings (and any kind
 // added later); not the ground (terrain, roads, sea, the street surface and
-// its paint: kinds 1, 2, 3, 6, 7 receive only), and nothing transparent.
+// its paint: kinds 1, 2, 3, 6, 7 receive only; a grade-separated road's deck
+// surface and paint, kind 11, likewise), and nothing transparent. A
+// grade-separated road's concrete (kind 12) casts at the level its tile's
+// group shows.
 
 struct Object {
     min: vec3<f32>,
@@ -46,6 +49,7 @@ const LOD_FAR: u32 = 2u;
 const LOD_TERRAIN: u32 = 3u;
 const LOD_KIT_NEAR: u32 = 4u;
 const LOD_KIT_BOX: u32 = 6u;
+const LOD_STREET_NEAR: u32 = 7u;
 const BLEND_BIT: u32 = 256u;
 
 @group(0) @binding(0) var<uniform> sp: ShadowCull;
@@ -73,7 +77,7 @@ fn shadow_cull(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let o = objects[i];
     let kind = o.kind & 255u;
-    let base_caster = (o.kind & BLEND_BIT) == 0u && kind != 1u && kind != 2u && kind != 3u && kind != 6u && kind != 7u && o.index_count > 0u;
+    let base_caster = (o.kind & BLEND_BIT) == 0u && kind != 1u && kind != 2u && kind != 3u && kind != 6u && kind != 7u && kind != 11u && o.index_count > 0u;
     var caster = base_caster;
     // Kit buildings in the outer cascades (5-10 cm texels) cast with their
     // reduced rung when it is resident, else their footprint box: the shadow
@@ -98,6 +102,14 @@ fn shadow_cull(@builtin(global_invocation_id) gid: vec3<u32>) {
         caster = false;
         mid_caster = false;
         far_caster = false;
+    } else if (o.lod_role >= LOD_STREET_NEAR && o.lod_role <= LOD_STREET_NEAR + 2u) {
+        // street tile roles (near, far, coarse): only the level the group
+        // shows casts (cull.wgsl ran first and set it). Inert for the street
+        // itself, which never casts (kinds 6 and 7 above); the structures'
+        // concrete (kind 12) casts.
+        caster = base_caster && groups[o.lod_group].level == o.lod_role - LOD_STREET_NEAR;
+        mid_caster = caster;
+        far_caster = caster;
     } else if (o.lod_role == 10u || o.lod_role == 11u) {
         // the near draws cast while the landmark is near (the JS's one
         // shadow draw); the far item, the skirt and open ground (kind 10) never.
