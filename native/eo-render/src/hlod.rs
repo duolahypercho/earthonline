@@ -638,6 +638,47 @@ pub struct HlodStats {
     pub updates: u64,
 }
 
+/// The optional shore material is registered after all building materials.
+/// Exclude its row from the cache identity, keeping the live palette indexed
+/// exactly as the GPU sees it. Landmark colours after that row keep their order.
+fn building_cache_key(
+    kit_key: &str,
+    colours: &hlod_bake::MaterialColours,
+    authored: &AuthoredSet,
+    bake: &hlod_bake::BakeOptions,
+) -> String {
+    let building_colours = authored.materials.by_name(crate::seabed::rock_maps::NAME).map(|rock| {
+        let mut palette = colours.clone();
+        palette.rgb.remove(rock as usize);
+        palette.glass.remove(rock as usize);
+        palette
+    });
+    hlod_bake::inputs_key(kit_key, building_colours.as_ref().unwrap_or(colours), authored, bake)
+}
+
+#[cfg(test)]
+mod building_cache_tests {
+    use super::*;
+    use crate::authored::GpuMaterial;
+
+    #[test]
+    fn shoreline_scan_reuses_the_city_cache_and_retains_building_colour_changes() {
+        let key = |rock: bool, red: f32| {
+            let mut authored = AuthoredSet::empty();
+            let building = GpuMaterial { base: [red, 0.4, 0.3, 1.0], ..GpuMaterial::vertex_colour() };
+            authored.materials.named("building", building);
+            if rock {
+                authored.materials.named(crate::seabed::rock_maps::NAME, GpuMaterial::vertex_colour());
+            }
+            authored.materials.named("landmark", GpuMaterial::vertex_colour());
+            let palette = hlod_bake::MaterialColours::new(&authored.materials.gpu, &[]);
+            building_cache_key("city", &palette, &authored, &hlod_bake::BakeOptions::default())
+        };
+        assert_eq!(key(false, 0.2), key(true, 0.2));
+        assert_ne!(key(true, 0.2), key(true, 0.3));
+    }
+}
+
 /// What the bakes read, apart from the planner's city and the material colours (which arrive later).
 pub struct HlodInputs {
     pub set: Arc<HlodSet>,
@@ -698,7 +739,7 @@ impl HlodRuntime {
                 // the far layer bakes the scaled city; the scale and the ground
                 // plan's version are in its key (the kit key carries them too; scale 1: unchanged).
                 // + the far roof features (all off: the key as before)
-                let key = hlod_bake::inputs_key(&format!("{kit_key}{}{}", eo_data::groundscale::cache_tag(), eo_data::roof_colours::far_cache_tag()), &colours, &inp.authored, &bake);
+                let key = building_cache_key(&format!("{kit_key}{}{}", eo_data::groundscale::cache_tag(), eo_data::roof_colours::far_cache_tag()), &colours, &inp.authored, &bake);
                 *slot.lock().unwrap() = Some(Arc::new(BakeContext {
                     set: inp.set,
                     kit: inp.kit,
