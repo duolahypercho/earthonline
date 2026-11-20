@@ -174,6 +174,7 @@ switch it does not take.
 | `--weather-seed N`, `--world-time S` | Seed and clock of the weather schedule |
 | `--moon-day D` | Day of the lunar cycle |
 | `--sky-quality low\|medium\|high` | Cloud and atmosphere quality |
+| `--cloud-depth-haze` | A low-deck cloud seen over the ground (below the horizon from inside or above the deck) takes the aerial perspective of its own depth and hides the haze behind it, instead of the haze of the whole path to the ground in front of it (a blue veil cut at the horizon). Not under a weather veil (fog, drizzle, rain, storm), where those frames stay as they were. Off by default until reviewed under the visual gate; `--no-cloud-depth-haze` restores the frame |
 | `--agent-density N` | Multiply the traffic and pedestrian population (1 to 64) |
 | `--width W --height H` | Frame size (default 1920 x 1080) |
 | `--msaa 1\|4` | Multisampling |

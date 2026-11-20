@@ -322,6 +322,7 @@ fn parse_args() -> Result<Args> {
             "--no-sky" => a.look.sky = eo_render::sky::SkyOptions { weather: a.look.sky.weather, ..eo_render::sky::SkyOptions::off() },
             "--no-clouds" => a.look.sky.clouds = false,
             "--no-cloud-shadows" => a.look.sky.cloud_shadows = false,
+            "--cloud-depth-haze" => a.look.sky.cloud_depth_haze = true,
             "--no-cloud-depth-haze" => a.look.sky.cloud_depth_haze = false,
             "--no-fog" => a.look.sky.fog = false,
             "--no-shafts" => a.look.sky.shafts = false,

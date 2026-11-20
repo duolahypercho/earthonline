@@ -91,8 +91,9 @@ pub struct SkyOptions {
     /// alone; the overcast, fog and rain decks are drawn either way); `EO_CUMULUS=1` draws it.
     pub cumulus: bool,
     /// A low-deck cloud seen over the ground takes the aerial perspective of its own depth
-    /// and hides the haze behind it (`--no-cloud-depth-haze`: the ground's whole aerial
-    /// perspective in front of it, a blue veil under the horizon, as before).
+    /// and hides the haze behind it. Off by default until reviewed under the visual gate
+    /// (`--cloud-depth-haze` turns it on); off, the ground's whole aerial perspective is in
+    /// front of the cloud, a blue veil under the horizon, as before.
     pub cloud_depth_haze: bool,
     pub weather: WeatherMode,
     pub seed: u32,
@@ -123,7 +124,7 @@ impl Default for SkyOptions {
             atmosphere: true,
             contact: true,
             cumulus: std::env::var("EO_CUMULUS").is_ok_and(|v| v == "1"),
-            cloud_depth_haze: true,
+            cloud_depth_haze: false,
             weather: WeatherMode::Preset(eo_sky::Kind::Clear),
             seed: eo_sky::world_seed(),
             world_time_s: 0.0,

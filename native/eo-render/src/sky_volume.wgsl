@@ -575,7 +575,8 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // toward the set sun are added per sample, by position).
     let cl_l = cl_light_dir();
     let cl_cs = dot(dir, cl_l);
-    // `--no-cloud-depth-haze` off (the default): over the ground (a pixel the aerial
+    // `--cloud-depth-haze` (off by default until reviewed under the visual gate): over the
+    // ground (a pixel the aerial
     // perspective below hazes) the low deck's cloud is held here and put in by the aerial
     // step, hazed by its own depth and hiding the haze behind it. Composited before the
     // aerial, a cloud 50 m off took the haze of the ground 20 km behind it and turned to a
