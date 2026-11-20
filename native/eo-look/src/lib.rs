@@ -9,6 +9,10 @@
 //! set of cascades per camera.
 
 pub mod aerial;
+pub mod blend;
+pub mod bounce;
+pub mod cinematic;
+pub mod golden;
 pub mod ground_field;
 pub mod look;
 pub mod math;
@@ -59,7 +63,7 @@ pub struct LookFrame {
 pub const DEFAULT_MAP_SPAN_M: f64 = 13784.0;
 
 /// SH basis (real, l <= 2) in the usual order.
-fn sh_basis(d: [f64; 3]) -> [f64; 9] {
+pub(crate) fn sh_basis(d: [f64; 3]) -> [f64; 9] {
     let [x, y, z] = d;
     [
         0.282095,
@@ -134,10 +138,16 @@ impl LookFrame {
     /// weather bucket: overcast, isotropy, desaturation, brightness, tint,
     /// urban glow, turbidity); the clear profile gives `with_transfer`'s frame.
     pub fn with_sky_profile(hour: f64, transfer: Option<f64>, profile: sky::Profile) -> Self {
+        Self::with_sky_profile_interp(hour, transfer, profile, rig::Interp::Linear)
+    }
+
+    /// `with_sky_profile` with the rig rows (and the key's intensity between
+    /// them) interpolated by `interp`; `Linear` is `with_sky_profile`.
+    pub fn with_sky_profile_interp(hour: f64, transfer: Option<f64>, profile: sky::Profile, interp: rig::Interp) -> Self {
         let model = sky::SkyModel::with_profile(hour, profile, true); // was SkyModel::new(hour)
         let rig = match transfer {
-            Some(t) => rig::rig_at_transfer(hour, t),
-            None => rig::rig_at(hour),
+            Some(t) => rig::rig_at_transfer_interp(hour, t, interp),
+            None => rig::rig_at_interp(hour, interp),
         };
         let key_dir = rig::key_direction(hour);
         let alt = model.sun.altitude_deg;
@@ -155,11 +165,31 @@ impl LookFrame {
             if e > 1e-9 { r.sun_intensity / e } else { 0.0 }
         };
         let (ba, bb) = (base(&t[i]), base(&t[i + 1]));
-        let unenveloped = if ba > 0.0 && bb > 0.0 { mix(ba, bb, w) } else { ba.max(bb) };
+        let unenveloped = match interp {
+            rig::Interp::Linear => {
+                if ba > 0.0 && bb > 0.0 { mix(ba, bb, w) } else { ba.max(bb) }
+            }
+            // the cubic through the rows' unenveloped keys; a row with the sun down
+            // (no key to unenvelope) is left out as the linear rule leaves it out.
+            rig::Interp::MonotoneCubic => {
+                if ba > 0.0 && bb > 0.0 {
+                    let (rows, wc) = rig::cubic_rows(t.len(), |k| t[k].hour, hour);
+                    let y = rows.map(|k| base(&t[k]));
+                    let y0 = if y[0] > 0.0 { y[0] } else { y[1] };
+                    let y3 = if y[3] > 0.0 { y[3] } else { y[2] };
+                    rig::monotone_cubic([y0, y[1], y[2], y3], wc)
+                } else {
+                    ba.max(bb)
+                }
+            }
+        };
         let reference = rig::direct_beam_transmittance(sun::sun_direction(rig::EXPOSURE_REFERENCE_HOUR).altitude_deg);
         let key_i = unenveloped * rig::key_envelope(alt) * rig::direct_beam_transmittance(alt);
         let key = scale3(rig.sun_color, key_i);
-        let rim_dir = rig::rim_direction(key_dir);
+        let rim_dir = match interp {
+            rig::Interp::Linear => rig::rim_direction(key_dir),
+            rig::Interp::MonotoneCubic => rig::rim_direction_smooth(hour), // no half turn as the key passes overhead
+        };
         let exposure = rig::recommended_exposure(&model, rig.light_rig_sun_scale);
         let aerial = aerial::aerial_perspective(&model, DEFAULT_MAP_SPAN_M);
         // the analytic sky's irradiance delivered at the bound
@@ -205,9 +235,15 @@ impl LookFrame {
     /// fill (hemisphere, ambient, rim, environment intensity, the ground lobe)
     /// and the diffuse environment's scale move. Equal to `with_transfer`.
     pub fn retarget(&self, transfer: Option<f64>) -> Self {
+        self.retarget_interp(transfer, rig::Interp::Linear)
+    }
+
+    /// `retarget` with the rig rows interpolated by `interp` (`Linear` is
+    /// `retarget`); equal to `with_sky_profile_interp` with the same `interp`.
+    pub fn retarget_interp(&self, transfer: Option<f64>, interp: rig::Interp) -> Self {
         let rig = match transfer {
-            Some(t) => rig::rig_at_transfer(self.hour, t),
-            None => rig::rig_at(self.hour),
+            Some(t) => rig::rig_at_transfer_interp(self.hour, t, interp),
+            None => rig::rig_at_interp(self.hour, interp),
         };
         let k = if self.rig.env_diffuse_scale > 1e-12 { rig.env_diffuse_scale / self.rig.env_diffuse_scale } else { 0.0 };
         let mut f = *self;
