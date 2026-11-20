@@ -54,6 +54,10 @@ pub struct ServerConfig {
     pub radii: Radii,
     pub conditions: Conditions,
     pub streets: bool,
+    /// The grade-separated roads the world is loaded with (`--structures`,
+    /// `--tunnels`; `load`). The handshake compares a client's against the
+    /// loaded world's own (`GameWorld::structures`).
+    pub structures: Option<eo_structures::StructureOptions>,
     pub max_players: usize,
     pub seed: u32,
     /// A dropped player keeps its body this long for a reconnect.
@@ -79,6 +83,7 @@ impl Default for ServerConfig {
             radii: Radii::default(),
             conditions: Conditions::NONE,
             streets: true,
+            structures: None,
             max_players: 512,
             seed: 1,
             resume_grace_s: 30.0,
@@ -535,6 +540,10 @@ impl Server {
                     // a client on another ground plan would desync.
                     proto::write_deny(h.client_salt, DenyReason::World, &mut out);
                     self.stats.denied += 1;
+                } else if h.structures != proto::structures_code(self.game.structures) {
+                    // a client with other grade-separated roads collides and drives on another world.
+                    proto::write_deny_structures(h.client_salt, proto::structures_code(self.game.structures), &mut out);
+                    self.stats.denied += 1;
                 } else {
                     let server_salt = keyed(self.secret, &[addr_bits(&addr), h.client_salt, 1]) | 1;
                     let cookie = keyed(self.secret, &[addr_bits(&addr), h.client_salt, server_salt, 2]);
@@ -547,7 +556,7 @@ impl Server {
                     return;
                 }
                 let Ok(h) = Hello::read(Kind::Response, &mut r) else { return };
-                if h.ground != proto::ground_scale_ppm() {
+                if h.ground != proto::ground_scale_ppm() || h.structures != proto::structures_code(self.game.structures) {
                     return; // refused at its request
                 }
                 if h.cookie != keyed(self.secret, &[addr_bits(&addr), h.client_salt, h.server_salt, 2]) || h.server_salt != keyed(self.secret, &[addr_bits(&addr), h.client_salt, 1]) | 1 {
@@ -876,14 +885,25 @@ impl Drop for Server {
 
 /// Load what a server needs (the city physics world and the simulation source).
 pub fn load(streets: bool) -> anyhow::Result<(Arc<GameWorld>, Arc<eo_sim::native::NativeSource>)> {
+    load_with(streets, None)
+}
+
+/// As `load`, with the grade-separated roads (`ServerConfig::structures`) in
+/// the world; the simulation's lanes then take their levels from them
+/// (`GameWorld::way_levels`, as eo-app's own sim and `--connect local`
+/// server do), so the cars on a deck are on its level. Without them the
+/// table is empty and the source is as `load`'s.
+pub fn load_with(streets: bool, structures: Option<eo_structures::StructureOptions>) -> anyhow::Result<(Arc<GameWorld>, Arc<eo_sim::native::NativeSource>)> {
     let paths = eo_data::DataPaths::discover()?;
     let (g, s) = std::thread::scope(|sc| {
         let p2 = paths.clone();
         let src = sc.spawn(move || eo_sim::native::load(&p2));
-        let g = GameWorld::load(&paths, streets);
+        let g = GameWorld::load_with(&paths, streets, structures);
         (g, src.join().expect("simulation source thread"))
     });
-    Ok((Arc::new(g?), Arc::new(s?)))
+    let g = g?;
+    let s = s?.with_levels(g.way_levels());
+    Ok((Arc::new(g), Arc::new(s)))
 }
 
 /// Make the reader for a packet (tests).

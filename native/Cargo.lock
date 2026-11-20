@@ -809,6 +809,7 @@ dependencies = [
  "eo-net",
  "eo-player",
  "eo-sim",
+ "eo-structures",
  "glam 0.34.3",
  "serde_json",
 ]

@@ -87,6 +87,9 @@ pub struct BotConfig {
     pub conditions: Conditions,
     /// Input packets a second per bot (each carries every unacknowledged input).
     pub send_hz: f64,
+    /// The server's grade-separated roads (`--structures`, `--tunnels`): the
+    /// handshake refuses bots that claim other ones.
+    pub structures: Option<eo_structures::StructureOptions>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -354,7 +357,7 @@ fn drive_bots(mut bots: Vec<Bot>, base: usize, link: Link, cfg: BotConfig, graph
         for b in bots.iter_mut().filter(|b| b.phase == Phase::Hello) {
             if b.last_hello.is_none_or(|t| now - t > Duration::from_millis(250)) {
                 b.last_hello = Some(now);
-                let h = Hello { client_salt: b.salt, version: proto::PROTOCOL_VERSION, ground: proto::ground_scale_ppm(), token: format!("dev:bot{}", base + by_salt.get(&b.salt).copied().unwrap_or(0)).into_bytes(), spawn: Some(b.spawn), resume: None, server_salt: 0, cookie: 0 };
+                let h = Hello { client_salt: b.salt, version: proto::PROTOCOL_VERSION, ground: proto::ground_scale_ppm(), structures: proto::structures_code(cfg.structures), token: format!("dev:bot{}", base + by_salt.get(&b.salt).copied().unwrap_or(0)).into_bytes(), spawn: Some(b.spawn), resume: None, server_salt: 0, cookie: 0 };
                 let mut out = Vec::with_capacity(proto::REQUEST_PAD);
                 match &b.challenge {
                     Some(c) => Hello { server_salt: c.server_salt, cookie: c.cookie, ..h }.write(Kind::Response, &mut out),
