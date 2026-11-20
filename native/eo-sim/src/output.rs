@@ -13,7 +13,9 @@
 //!  20  anim     f32       vehicles: metres travelled (wheel spin = anim / wheel radius);
 //!                         walkers: gait phase, radians (sin(anim) is the JS `walk.gait`)
 //!  24  kind     u16       see `KIND_*`
-//!  26  flags    u16       see `FLAG_*`
+//!  26  flags    u16       see `FLAG_*`; bits 8..11 the structure level of a
+//!                         car's lane (`level_of_flags`), 0 at grade, so 0
+//!                         everywhere without the grade-separated roads
 //!  28  id       u32       stable id within the region (car entity id / walker key)
 
 use bytemuck::{Pod, Zeroable};
@@ -49,6 +51,25 @@ pub const FLAG_KERB_WAIT: u16 = 32;
 /// Stepped at the reduced far cadence this frame (level of detail).
 pub const FLAG_FAR: u16 = 64;
 pub const FLAG_CORNERING: u16 = 128;
+/// A car's structure level (`network::Lane::level`, -8..=7) in bits 8..11
+/// of `flags`, two's complement: 0 at grade (and so for every car without
+/// a level table), 1 the first deck level, negative in a tunnel. The feed
+/// reads it to set a car on its deck; it is not a lamp or state flag.
+pub const FLAG_LEVEL_SHIFT: u16 = 8;
+pub const FLAG_LEVEL_MASK: u16 = 0x0F00;
+
+/// `level`'s bits for `flags` (clamped to -8..=7).
+#[inline]
+pub fn level_flags(level: i8) -> u16 {
+    (((level.clamp(-8, 7) as u8) & 0x0F) as u16) << FLAG_LEVEL_SHIFT
+}
+
+/// The structure level a car's `flags` carry.
+#[inline]
+pub fn level_of_flags(flags: u16) -> i8 {
+    let v = ((flags & FLAG_LEVEL_MASK) >> FLAG_LEVEL_SHIFT) as u8;
+    ((v << 4) as i8) >> 4
+}
 
 /// One region's agents after a step.
 #[derive(Clone, Debug, Default)]
@@ -63,5 +84,22 @@ pub struct AgentBuffer {
 impl AgentBuffer {
     pub fn bytes(&self) -> (&[u8], &[u8]) {
         (bytemuck::cast_slice(&self.vehicles), bytemuck::cast_slice(&self.walkers))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn levels_ride_in_the_flags_and_are_zero_at_grade() {
+        assert_eq!(level_flags(0), 0);
+        for l in -8..=7i8 {
+            let f = level_flags(l) | FLAG_BRAKING | FLAG_CORNERING;
+            assert_eq!(level_of_flags(f), l);
+            assert_eq!(f & !FLAG_LEVEL_MASK, FLAG_BRAKING | FLAG_CORNERING);
+        }
+        assert_eq!(level_of_flags(level_flags(9)), 7);
+        assert_eq!(level_of_flags(level_flags(-20)), -8);
     }
 }

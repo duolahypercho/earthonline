@@ -89,6 +89,11 @@ pub struct LaneBuild {
     pub legal: Option<Vec<bool>>,
     /// The tile that delivered this lane (None: the tile of its midpoint).
     pub tile: Option<TileKey>,
+    /// Structure level of the lane: 0 at grade, 1 the first level above,
+    /// negative in a tunnel (`NativeSource::with_levels`). Carried to
+    /// `Lane::level`: bodies on different levels never block or see each
+    /// other (`Fleet::sense`, `insert_blocked`, the walkers' traffic gap).
+    pub level: i8,
 }
 
 #[derive(Clone, Debug)]
@@ -125,6 +130,8 @@ pub struct FootNodeBuild {
 pub struct SegmentBuild {
     pub half: f64,
     pub points: Vec<P2>,
+    /// Structure level of the carriageway (`LaneBuild::level`): 0 at grade.
+    pub level: i8,
 }
 
 /// One delivery of network content: the lanes, footways, junctions and carriageways of some tiles.
@@ -181,6 +188,8 @@ pub struct Lane {
     /// how far back from the lane's end a body must stand to stay clear of
     /// every movement's swept path through the node.
     pub hold: [f64; 4],
+    /// Structure level (`LaneBuild::level`): 0 at grade.
+    pub level: i8,
 }
 
 #[derive(Clone, Debug)]
@@ -411,6 +420,7 @@ impl Network {
                 explicit: None,
                 terminus: true,
                 hold: [0.0; 4],
+                level: lb.level,
             };
             let id = if let Some(free) = self.free_lanes.pop() {
                 self.lanes[free as usize] = lane;
@@ -926,11 +936,17 @@ impl Network {
         (lo.x..=hi.x).flat_map(move |tx| (lo.z..=hi.z).filter_map(move |tz| self.tiles.get(&TileKey { x: tx, z: tz })))
     }
 
-    /// Is the point inside a street carriageway by more than `inset` metres?
+    /// Is the point (at grade) inside a street carriageway by more than `inset` metres?
     pub fn on_carriageway(&self, x: f64, z: f64, inset: f64) -> bool {
+        self.on_carriageway_at(x, z, inset, 0)
+    }
+
+    /// `on_carriageway` for a point on structure level `level`: only the
+    /// carriageways of that level count.
+    pub fn on_carriageway_at(&self, x: f64, z: f64, inset: f64, level: i8) -> bool {
         for t in self.tiles_near(x, z, 40.0) {
             for seg in &t.segments {
-                if geom::dist_to_polyline(&seg.points, x, z) < seg.half - inset {
+                if seg.level == level && geom::dist_to_polyline(&seg.points, x, z) < seg.half - inset {
                     return true;
                 }
             }
