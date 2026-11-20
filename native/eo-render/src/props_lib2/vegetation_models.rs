@@ -82,6 +82,10 @@ pub const THIN: [(f32, f32, f32); COUNT as usize] = [
     (70.0, 110.0, 1.15),
     (70.0, 110.0, 1.15),
     (70.0, 110.0, 1.15),
+    // the flora pass's seed stalks and serpentine bluff patches.
+    (40.0, 90.0, 1.1),
+    (70.0, 110.0, 1.3),
+    (70.0, 110.0, 1.3),
 ];
 /// The share kept at the draw distance (thinned models).
 pub const THIN_FLOOR: f32 = 0.12;
@@ -494,6 +498,22 @@ pub(crate) fn cook(out: &mut Out, ez: Option<&eo_props::eztree::EzLibrary>, m_ba
         NONE
     };
     for k in 0..V_MEADOWS {
+        if k as u8 >= eo_landmarks::flora::MEADOW_SEED_STALKS {
+            // the flora pass's grassland stalks and bluff scrub (drawn only where it plants them).
+            let mut ids = [NONE; 3];
+            for (l, id) in ids.iter_mut().enumerate() {
+                if k as u8 == eo_landmarks::flora::MEADOW_SEED_STALKS {
+                    seed_stalks(&mut out.b, &mats, l as u32, 700 + k * 13);
+                } else {
+                    bluff_patch(&mut out.b, &mats, k as u8, l as u32, 700 + k * 13);
+                }
+                *id = out.finish();
+            }
+            let model = V_MEADOW + k;
+            let (z, w) = thin(model);
+            out.set(model, ids, [8.0, 24.0, z, w], 0, 0.1);
+            continue;
+        }
         if k as u8 >= eo_landmarks::vegetation::MEADOW_COYOTE {
             let mut ids = [NONE; 3];
             for (l, id) in ids.iter_mut().enumerate() {
@@ -856,6 +876,104 @@ fn lupine_spikes(b: &mut Builder, mats: &MoundMats, balls: &[([f32; 3], f32)], l
                 let p = [base[0], base[1] + h * 0.5, base[2]];
                 mound_leaf(b, mats.flower, p, n, std::f32::consts::FRAC_PI_2, h * 1.1, 0.05, col);
             }
+        }
+    }
+}
+
+// ------------------------------------------------------------------ the flora pass's grassland and bluff
+
+/// The annual grasses' seed stalks (`eo_landmarks::flora::MEADOW_SEED_STALKS`):
+/// 5-9 culms 0.55-1.1 m (wild oats 0.5-1.2 m, ripgut brome 0.3-0.8 m, REF)
+/// with nodding panicles of spikelets in their top quarter (oats' drooping
+/// spikelets, the brome's long awns: one form), over no mat. Vertex colours
+/// are the wild oats' green state; the instance tint carries the cure.
+fn seed_stalks(b: &mut Builder, mats: &MeadowMats, lod: u32, seed: u32) {
+    use eo_landmarks::vegetation as v;
+    let live = v::MEADOW_LIVE[eo_landmarks::flora::MEADOW_SEED_STALKS as usize];
+    let g = MEADOW_GROUND;
+    let culms = [9u32, 6, 4][lod as usize];
+    let wide = [1.0f32, 1.7, 3.0][lod as usize];
+    for k in 0..culms {
+        let (x, z) = disc(k, 0.35, seed + 3);
+        let h = 0.55 + 0.55 * hash3(k as i32, 71, 3, seed);
+        let yaw = hash3(k as i32, 72, 3, seed) * std::f32::consts::TAU;
+        let reach = 0.06 + 0.14 * hash3(k as i32, 73, 3, seed);
+        let c = vary(live, k, seed + 3);
+        let cs = [5u32, 3, 2][lod as usize];
+        blade(b, mats.live, [x, g - 0.01, z], yaw, h, 0.004 * wide, reach, 0.3, cs, [c[0] * 0.9, c[1] * 0.9, c[2] * 0.9], [c[0] * 1.2, c[1] * 1.12, c[2]], 1.0);
+        let (sy, cy) = yaw.sin_cos();
+        let spk = [9u32, 5, 2][lod as usize];
+        for j in 0..spk {
+            let t = 0.72 + 0.28 * j as f32 / spk.max(1) as f32;
+            let out_d = reach * t * t.sqrt();
+            let p = [x + cy * out_d, g - 0.01 + h * (t - 0.15 * t * t), z + sy * out_d];
+            let a = hash3((k * 16 + j) as i32, 74, 3, seed) * std::f32::consts::TAU;
+            let len = 0.03 * [1.0f32, 1.5, 2.2][lod as usize];
+            // the spikelets a little paler and warmer than the culm (glumes and awns).
+            let hc = vary([c[0] * 1.35, c[1] * 1.2, c[2] * 1.1], k * 16 + j, seed);
+            blade(b, mats.live, p, a, len, 0.007 * [1.0f32, 1.5, 2.2][lod as usize], len * 0.7, 3.0, 2, hc, [hc[0] * 1.1, hc[1] * 1.05, hc[2]], 1.0);
+        }
+    }
+}
+
+/// A patch of the serpentine bluff's low scrub (`MEADOW_BUCKWHEAT`,
+/// `MEADOW_BLUFF_HERBS`) over thin turf (the mat at a low green share: the
+/// bare grey-green and brown ground shows through, field guide 1.3). Coast
+/// buckwheat: two or three woolly cushions of oval leaves 2-4 cm (REF) to
+/// about 0.3 m. The herbs: a seaside daisy mat (spoon-shaped leaves 3-10 cm,
+/// REF), a Douglas iris fan (strap leaves 1-2 cm wide, REF, dark green
+/// (40-70, 70-95, 40-60) estimate) and a dudleya rosette (chalky grey-green
+/// (150-180, 165-185, 150-170) estimate) on the far side.
+fn bluff_patch(b: &mut Builder, mats: &MeadowMats, kind: u8, lod: u32, seed: u32) {
+    use eo_landmarks::vegetation as v;
+    let live = v::MEADOW_LIVE[kind as usize];
+    let g = MEADOW_GROUND;
+    mat(b, mats.mat, 0.9, 0.3, v::MEADOW_LIVE[v::MEADOW_FESCUE as usize], seed);
+    let f = [1.0f32, 0.4, 0.15][lod as usize];
+    let n = |c: u32| ((c as f32 * f).round() as u32).max(1);
+    let wide = [1.0f32, 1.6, 2.6][lod as usize];
+    // a little red fescue through it: fine blue-green blades.
+    sward(b, mats, n(90), 0.8, 0.08, 0.2, 0.004 * wide, if lod == 0 { 2 } else { 1 }, v::MEADOW_LIVE[v::MEADOW_FESCUE as usize], seed + 9);
+    if kind == eo_landmarks::flora::MEADOW_BUCKWHEAT {
+        for c in 0..3u32 {
+            let (cx, cz) = disc(c, 0.45, seed + 11);
+            let r = 0.18 + 0.1 * hash3(c as i32, 81, 3, seed);
+            let leaves = n(70);
+            for k in 0..leaves {
+                // leaves round the cushion's dome, tilted to its surface.
+                let a = hash3((c * 128 + k) as i32, 82, 3, seed) * std::f32::consts::TAU;
+                let u = hash3((c * 128 + k) as i32, 83, 3, seed).sqrt();
+                let base = [cx + r * 0.8 * u * a.cos(), g + r * 0.9 * (1.0 - u * u).sqrt() * 0.8, cz + r * 0.8 * u * a.sin()];
+                let col = vary(live, c * 128 + k, seed);
+                leaflet(b, mats.live, base, a, 0.035 * wide.sqrt(), 0.02 * wide.sqrt(), 0.25 + 0.9 * u, col);
+            }
+        }
+    } else {
+        // seaside daisy: a low mat of spoon leaves.
+        let daisy = [0.105f32, 0.195, 0.105];
+        let (dx, dz) = disc(0, 0.3, seed + 13);
+        for k in 0..n(40) {
+            let a = hash3(k as i32, 84, 3, seed) * std::f32::consts::TAU;
+            let (x, z) = disc(k, 0.18, seed + 14);
+            leaflet(b, mats.live, [dx + x, g, dz + z], a, 0.07 * wide.sqrt(), 0.025 * wide.sqrt(), 0.5 + 0.5 * hash3(k as i32, 85, 3, seed), vary(daisy, k, seed));
+        }
+        // Douglas iris: a fan of arching straps.
+        let iris = [0.040f32, 0.085, 0.036];
+        let (ix, iz) = disc(1, 0.4, seed + 15);
+        let fan = hash3(1, 86, 3, seed) * std::f32::consts::TAU;
+        for k in 0..n(14) {
+            let a = fan + (hash3(k as i32, 87, 3, seed) - 0.5) * 1.2;
+            let h = 0.25 + 0.25 * hash3(k as i32, 88, 3, seed);
+            let c = vary(iris, k, seed);
+            blade(b, mats.live, [ix, g - 0.01, iz], a, h, 0.014 * wide, h * 0.45, 0.9, if lod == 0 { 3 } else { 2 }, [c[0] * 0.8, c[1] * 0.8, c[2] * 0.8], c, 0.6);
+        }
+        // dudleya: a chalky rosette of thick leaves.
+        let dud = [0.30f32, 0.36, 0.30];
+        let (ux, uz) = disc(2, 0.5, seed + 16);
+        for k in 0..n(14) {
+            let a = k as f32 * 2.4;
+            let c = vary(dud, k, seed);
+            fleshy(b, mats.flesh, [ux, g - 0.01, uz], a, 0.04 + 0.03 * hash3(k as i32, 89, 3, seed), 0.08, 0.012 * wide.sqrt(), [c[0] * 0.85, c[1] * 0.85, c[2] * 0.85], c);
         }
     }
 }

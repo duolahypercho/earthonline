@@ -14,7 +14,7 @@ use crate::vegetation::{field, hash, smoothstep, warped, Site, MEADOW_COYOTE, ME
 
 /// The flora pass's switch names (the roll-up first); eo-app accepts them,
 /// [`Flora::from_args`] reads them.
-pub const FLORA_SWITCHES: &[&str] = &["--no-flora", "--no-scrub-species"];
+pub const FLORA_SWITCHES: &[&str] = &["--no-flora", "--no-scrub-species", "--no-grass-ramp", "--no-bluff-scrub"];
 
 /// The flora pass's features, each with its `--no-` switch ([`FLORA_SWITCHES`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -24,18 +24,27 @@ pub struct Flora {
     /// lupine), each its own form, leaf sprigs and colour, in the gullies, lee
     /// sides and lower slopes; grassland keeps the ridges and convex shoulders.
     pub species: bool,
+    /// `--no-grass-ramp`: the annual grassland follows the guide's month table
+    /// ([`grass_cure`]: green in winter and spring, the first annuals yellowing
+    /// in April, straw by June, bleached grey-tan in September and October) and
+    /// carries seed stalks from March ([`MEADOW_SEED_STALKS`]).
+    pub ramp: bool,
+    /// `--no-bluff-scrub`: the San Francisco serpentine bluffs carry low coast bluff
+    /// scrub (coast buckwheat, seaside daisy, Douglas iris, dudleya) among red fescue
+    /// instead of the headlands' meadow, the coyote brush sparse.
+    pub bluff: bool,
 }
 
 impl Flora {
-    pub const ALL: Flora = Flora { species: true };
-    pub const NONE: Flora = Flora { species: false };
+    pub const ALL: Flora = Flora { species: true, ramp: true, bluff: true };
+    pub const NONE: Flora = Flora { species: false, ramp: false, bluff: false };
 
     pub fn from_args(args: &[String]) -> Self {
         let has = |s: &str| args.iter().any(|a| a == s);
         if has("--no-flora") {
             return Self::NONE;
         }
-        Flora { species: !has("--no-scrub-species") }
+        Flora { species: !has("--no-scrub-species"), ramp: !has("--no-grass-ramp"), bluff: !has("--no-bluff-scrub") }
     }
 }
 
@@ -46,7 +55,10 @@ pub fn flora() -> Flora {
     static S: std::sync::OnceLock<Flora> = std::sync::OnceLock::new();
     *S.get_or_init(|| {
         let f = Flora::from_args(&std::env::args().collect::<Vec<_>>());
-        if crate::vegetation::grass3().scrub { f } else { Flora::NONE }
+        let g3 = crate::vegetation::grass3();
+        // the species replace the third pass's mounds; the grassland's ramp and the bluff
+        // scrub act in the second pass's meadow (the third pass keeps it when on).
+        Flora { species: f.species && g3.scrub, ramp: f.ramp && g3 != crate::vegetation::Grass3::NONE, bluff: f.bluff && g3 != crate::vegetation::Grass3::NONE }
     })
 }
 
@@ -171,6 +183,86 @@ pub fn poison_oak_season(day_of_year: f64) -> [f32; 3] {
     [0, 1, 2].map(|i| r[i] + (g[i] - r[i]) * bare as f32)
 }
 
+// ------------------------------------------------------------------ the annual grassland
+
+/// Seed stalks of the annual grasses (wild oats, ripgut brome): tall culms with
+/// nodding panicles standing over the meadow, no mat (meadow model index).
+pub const MEADOW_SEED_STALKS: u8 = 14;
+/// Coast buckwheat, *Eriogonum latifolium*: woolly pale cushions about 0.6 m [S30].
+pub const MEADOW_BUCKWHEAT: u8 = 15;
+/// The bluff's low herbs: seaside daisy mats, Douglas iris fans and live-forever
+/// (dudleya) rosettes [S6], over thin turf.
+pub const MEADOW_BLUFF_HERBS: u8 = 16;
+
+/// How cured the annual grassland is on a day of the year (0 green .. 1
+/// cured), the field guide's month table (section 3) read at mid-month:
+/// Dec-Mar green (the first flush in November gold with a green cast);
+/// April green with seed heads up and the first annuals yellowing on thin
+/// south-facing soil (estimate); May curing on south faces and thin soils
+/// (estimate); June most cured, patchy; July-August uniform gold-tan;
+/// September-October bleached, grey-tan. Mid-month values INFERRED from the
+/// table's words.
+pub fn grass_cure(day_of_year: f64) -> f64 {
+    const T: [(f64, f64); 13] = [(15.0, 0.03), (46.0, 0.0), (74.0, 0.0), (105.0, 0.12), (135.0, 0.42), (166.0, 0.72), (196.0, 0.9), (227.0, 0.96), (258.0, 1.0), (288.0, 1.0), (319.0, 0.55), (349.0, 0.1), (380.0, 0.03)];
+    let d = day_of_year.rem_euclid(365.0);
+    let d = if d < T[0].0 { d + 365.0 } else { d };
+    for w in T.windows(2) {
+        if d >= w[0].0 && d <= w[1].0 {
+            let t = (d - w[0].0) / (w[1].0 - w[0].0);
+            return w[0].1 + (w[1].1 - w[0].1) * t;
+        }
+    }
+    T[0].1
+}
+
+/// How bleached the cured grass is (0 .. 1): September and October's grey-tan,
+/// flattened (guide section 3), before the November flush.
+pub fn grass_bleach(day_of_year: f64) -> f64 {
+    let d = day_of_year.rem_euclid(365.0);
+    smoothstep(235.0, 275.0, d) * (1.0 - smoothstep(305.0, 330.0, d))
+}
+
+/// A cured patch's colour bleached toward grey-tan: the tint (a factor on the
+/// type's green-state colour `live`) with its colour desaturated by `bleach`.
+pub fn bleached_tint(tint: [f32; 3], live: [f32; 3], bleach: f64) -> [f32; 3] {
+    let c = [0, 1, 2].map(|i| tint[i] * live[i]);
+    let y = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    let grey = [y * 1.04, y, y * 0.9];
+    let b = (0.4 * bleach) as f32;
+    [0, 1, 2].map(|i| ((c[i] + (grey[i] - c[i]) * b) / live[i].max(1e-4)).min(3.9))
+}
+
+/// The share of grassland cells carrying seed stalks on a day: heading from
+/// March, standing through the summer (dead stalks), flattened by the
+/// November rains (guide: Mar "grass heading", Apr "seed heads up", Oct
+/// "flattened"; INFERRED share).
+pub fn seed_stalks(day_of_year: f64) -> f64 {
+    let d = day_of_year.rem_euclid(365.0);
+    0.22 * smoothstep(60.0, 95.0, d) * (1.0 - smoothstep(280.0, 310.0, d))
+}
+
+/// The serpentine bluff's patch at a cell (`Flora::bluff`): red fescue, coast
+/// buckwheat cushions, the low herbs, and thin sward, each in its own patches
+/// (field guide 1.4, coast bluff scrub; shares INFERRED; sparse cover, 20-50 %
+/// over rock on the faces, estimate).
+pub fn bluff_kind(x: f64, z: f64, ix: i64, iz: i64) -> u8 {
+    let w = [
+        (crate::vegetation::MEADOW_FESCUE, 1.0),
+        (MEADOW_BUCKWHEAT, 0.7 * smoothstep(0.35, 0.7, warped(x, z, 7.0, 141))),
+        (MEADOW_BLUFF_HERBS, 0.8 * smoothstep(0.35, 0.7, warped(x, z, 6.0, 142))),
+        (crate::vegetation::MEADOW_SWARD, 0.35),
+    ];
+    let sum: f64 = w.iter().map(|v| v.1).sum();
+    let mut r = hash(ix, iz, 143) * sum;
+    for (k, v) in w {
+        if r < v {
+            return k;
+        }
+        r -= v;
+    }
+    crate::vegetation::MEADOW_FESCUE
+}
+
 // ------------------------------------------------------------------ where the scrub grows
 
 /// How the ground's shape weights the scrub (a factor on the third pass's
@@ -253,6 +345,7 @@ mod tests {
         assert_eq!(a(&[]), Flora::ALL);
         assert_eq!(a(&["--no-flora"]), Flora::NONE);
         assert_eq!(a(&["--no-scrub-species"]), Flora { species: false, ..Flora::ALL });
+        assert_eq!(a(&["--no-grass-ramp", "--no-bluff-scrub"]), Flora { ramp: false, bluff: false, ..Flora::ALL });
     }
 
     #[test]
@@ -279,6 +372,20 @@ mod tests {
             assert!(n.get(&sp.kind).copied().unwrap_or(0) > 0, "{} missing", sp.name);
             assert!(sp.kind == MEADOW_COYOTE || n[&sp.kind] < coyote, "{} outnumbers coyote brush", sp.name);
         }
+    }
+
+    #[test]
+    fn the_grassland_follows_the_guides_months() {
+        // green Dec-Mar, starting in April, straw by July, bleached in October.
+        for d in [1.0, 40.0, 70.0, 350.0] {
+            assert!(grass_cure(d) < 0.12, "day {d}: {}", grass_cure(d));
+        }
+        assert!(grass_cure(103.0) > 0.05 && grass_cure(103.0) < 0.2);
+        assert!(grass_cure(200.0) > 0.85 && grass_cure(280.0) > 0.95);
+        assert!(grass_bleach(285.0) > 0.9 && grass_bleach(103.0) == 0.0);
+        assert!(seed_stalks(103.0) > 0.15 && seed_stalks(10.0) == 0.0);
+        // the curve is continuous across the year's end.
+        assert!((grass_cure(364.9) - grass_cure(0.0)).abs() < 0.02);
     }
 
     #[test]

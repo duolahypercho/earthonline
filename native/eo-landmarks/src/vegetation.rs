@@ -848,7 +848,8 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
     }
     let g3 = ex.g3;
     let bloom = bloom(day_of_year, g3);
-    let season = eo_look::season::dryness(day_of_year) as f64;
+    // the flora pass (`--no-grass-ramp`): the guide's month table for the meadow's cure.
+    let season = if ex.fl.ramp { crate::flora::grass_cure(day_of_year) } else { eo_look::season::dryness(day_of_year) as f64 };
     lattice(x0, z0, x1, z1, GRASS_PITCH_M, 4, &mut |x, z, ix, iz| {
         let Some(s) = site(x, z) else { return };
         let Some(cover) = s.cover else { return };
@@ -881,6 +882,18 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
         let steep = 1.0 - 0.6 * smoothstep(40.0, 60.0, slope);
         let r = hash(ix, iz, 3);
         let flowers = f * bloom * smoothstep(0.35, 0.8, field(x, z, 14.0, 43));
+        if ex.fl.bluff && ex.g2.cover && s.lithology == Lithology::Serpentinite && z > marin_z() && matches!(cover, Cover::Cliff | Cover::Bare | Cover::Rock) {
+            // the flora pass: the serpentine bluff faces' sparse low scrub over the rock
+            // (20-50 % plant cover, field guide 1.4, estimate), none on the steepest faces.
+            let share = 0.45 * (1.0 - outcrop_patch(x, z, cover)) * (1.0 - smoothstep(48.0, 62.0, slope)) + 0.1;
+            if hash(ix, iz, 151) < share {
+                let cured = meadow_cured(x, z, &s, season, ex.g3x.breakup);
+                let kind = crate::flora::bluff_kind(x, z, ix, iz);
+                let sc = 0.7 + 0.3 * hash(ix, iz, 4) as f32;
+                out.push(Plant { kind: Kind::Meadow(kind), pos: [x, s.y - GRASS_SINK_M, z], yaw: hash(ix, iz, 7) * std::f64::consts::TAU, scale: [sc; 3], rank: hash(ix, iz, 8) as f32, tint: meadow_patch_tint(kind, cured, 0.93 + 0.14 * hash(ix, iz, 20) as f32), grad: s.grad(), tip: TIP_NONE });
+            }
+            return;
+        }
         if ex.g2.cover && meadow_ground(cover, naip) {
             // the third pass: bare eroded ground stays bare (a sparse tuft in some
             // cells), and the scrub stands as mounds in place of the meadow patch.
@@ -910,7 +923,33 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
                 let sc = 0.75 + 0.55 * hash(ix, iz, 4) as f32;
                 out.push(Plant { kind: Kind::Flower(if field(x, z, 25.0, 47) < 0.6 { 0 } else { 1 }), pos: [x, s.y - GRASS_SINK_M, z], yaw: hash(ix, iz, 7) * std::f64::consts::TAU, scale: [sc; 3], rank: hash(ix, iz, 8) as f32, tint, grad: s.grad(), tip: TIP_NONE });
             }
+            if ex.fl.bluff && s.lithology == Lithology::Serpentinite && z > marin_z() {
+                // the flora pass: the serpentine bluff's low scrub in place of the meadow.
+                let cured = meadow_cured(x, z, &s, season, ex.g3x.breakup);
+                let kind = crate::flora::bluff_kind(x, z, ix, iz);
+                let sc = 0.85 + 0.3 * hash(ix, iz, 4) as f32;
+                out.push(Plant { kind: Kind::Meadow(kind), pos: [x, s.y - GRASS_SINK_M, z], yaw: hash(ix, iz, 7) * std::f64::consts::TAU, scale: [sc; 3], rank: hash(ix, iz, 8) as f32, tint: meadow_patch_tint(kind, cured, 0.93 + 0.14 * hash(ix, iz, 20) as f32), grad: s.grad(), tip: TIP_NONE });
+                return;
+            }
+            let n0 = out.len();
             plant_meadow(x, z, ix, iz, &s, cover, naip, season, ex.g2, ex.g3x.breakup, out);
+            if ex.fl.ramp {
+                // September and October's bleached grey-tan on the patch.
+                if let Some(Plant { kind: Kind::Meadow(k), tint, .. }) = out.get_mut(n0) {
+                    *tint = crate::flora::bleached_tint(*tint, MEADOW_LIVE[*k as usize], crate::flora::grass_bleach(day_of_year));
+                }
+                // the annual grasses' seed stalks over the open grassland (not the scrub's
+                // cells: those returned above), in stands, cured with the season.
+                let share = crate::flora::seed_stalks(day_of_year) * smoothstep(0.3, 0.65, warped(x, z, 6.0, 144)) * (1.0 - smoothstep(30.0, 45.0, slope));
+                if hash(ix, iz, 145) < share {
+                    let cured = meadow_cured(x, z, &s, season, ex.g3x.breakup);
+                    let k = crate::flora::MEADOW_SEED_STALKS;
+                    let sc = 0.8 + 0.45 * hash(ix, iz, 146) as f32;
+                    let (jx, jz) = (hash(ix, iz, 147) - 0.5, hash(ix, iz, 148) - 0.5);
+                    let tint = crate::flora::bleached_tint(meadow_patch_tint(k, cured + 0.1, 1.0), MEADOW_LIVE[k as usize], crate::flora::grass_bleach(day_of_year));
+                    out.push(Plant { kind: Kind::Meadow(k), pos: [x + jx * 0.6, s.y - GRASS_SINK_M, z + jz * 0.6], yaw: hash(ix, iz, 149) * std::f64::consts::TAU, scale: [sc; 3], rank: hash(ix, iz, 150) as f32, tint, grad: s.grad(), tip: TIP_NONE });
+                }
+            }
             return;
         }
         let kind = if r < flowers {
@@ -986,7 +1025,7 @@ pub const MEADOW_LUPINE: u8 = 8;
 /// Tamalpais series' eroded horizon) with a few sparse tufts of short grass.
 pub const MEADOW_BARE: u8 = 9;
 /// The flora pass's scrub species follow (`crate::flora::MEADOW_POISON_OAK` .. `MEADOW_TOYON`).
-pub const MEADOW_TYPES: u8 = 14;
+pub const MEADOW_TYPES: u8 = 17;
 
 /// Each type's living tissue in its green state (linear albedo, the mean of its
 /// blades' vertex colours, eo-render) and cured (or, for ice plant, drought-
@@ -1017,6 +1056,12 @@ pub const MEADOW_LIVE: [[f32; 3]; MEADOW_TYPES as usize] = [
     [0.053, 0.091, 0.021],
     [0.040, 0.065, 0.021],
     [0.032, 0.061, 0.021],
+    // seed stalks (the wild oats'), coast buckwheat's pale woolly leaves (140-170,
+    // 150-175, 135-160) estimate, low end), the bluff herbs (the seaside daisy's
+    // (90-120, 120-140, 90-110) estimate).
+    [0.072, 0.104, 0.036],
+    [0.230, 0.262, 0.205],
+    [0.110, 0.200, 0.110],
 ];
 pub const MEADOW_CURED: [[f32; 3]; MEADOW_TYPES as usize] = [
     [0.215, 0.178, 0.100],
@@ -1033,9 +1078,12 @@ pub const MEADOW_CURED: [[f32; 3]; MEADOW_TYPES as usize] = [
     [0.053, 0.091, 0.021],
     [0.040, 0.065, 0.021],
     [0.032, 0.061, 0.021],
+    [0.280, 0.228, 0.112],
+    [0.250, 0.230, 0.180],
+    [0.150, 0.170, 0.100],
 ];
 /// The scrub is evergreen (its summer dullness is the dust and the older leaves: not drawn).
-pub const MEADOW_CURE: [f32; MEADOW_TYPES as usize] = [1.0, 1.0, 0.55, 0.35, 0.4, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0];
+pub const MEADOW_CURE: [f32; MEADOW_TYPES as usize] = [1.0, 1.0, 0.55, 0.35, 0.4, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.2, 0.3];
 /// Dead thatch, weathered pale straw (linear albedo; dry grass litter 0.15-0.25
 /// in the visible, USGS v7 "dry grass" and litter spectra; INFERRED): the mat's
 /// and the lying blades' colour (eo-render bakes it in the dead material).
@@ -1170,7 +1218,9 @@ pub fn plant_meadow(x: f64, z: f64, ix: i64, iz: i64, s: &Site, cover: Cover, na
 /// The flora pass's ground-shape weight on the scrub share
 /// ([`crate::flora::terrain_weight`]; 1 without `Flora::species`).
 fn scrub_terrain(s: &Site, fl: crate::flora::Flora) -> f64 {
-    if fl.species { crate::flora::terrain_weight(s) } else { 1.0 }
+    let w = if fl.species { crate::flora::terrain_weight(s) } else { 1.0 };
+    // the serpentine bluff's coyote brush is sparse (`Flora::bluff`; guide 6: "sparse coyote brush").
+    if fl.bluff && s.lithology == Lithology::Serpentinite { w * 0.35 } else { w }
 }
 
 /// Mounds a 1 m cell carries where the scrub is closed: a mound is 1.3-2.2 m
