@@ -468,7 +468,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--low-camera" | "--default-camera" => {}
             // read by `roofs_flags` (main) into the environment switches.
             "--no-roof-colours" | "--no-roof-contrast" | "--no-roof-parapet" | "--no-roof-patches" | "--no-roof-plant" => {}
-            "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" => {} // `roofs_flags`
+            "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" | "--no-ground-beach-fit" => {} // `roofs_flags`
             "--segments" => a.segments = Some(val()?.split(',').map(|s| s.trim().to_string()).collect()),
             // occlusion / hitch
             "--no-occlusion" => a.perf.occlusion = false,
@@ -939,6 +939,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         }
         elev.sample(x, z).filter(|h| *h > eo_water::SEA_LEVEL_Y + FAR_LAND_ABOVE_SEA_M)
     };
+    let beach_fit = eo_render::ground2::on("beach_fit");
     let ground_tone_fn = |x: f32, z: f32| -> Option<u32> {
         let cover = cover.as_ref()?;
         let (x, z) = (x as f64, z as f64);
@@ -950,9 +951,18 @@ pub fn load_world(args: &Args) -> Result<World> {
         }
         if let Some(w) = water_field.as_deref() {
             let s = w.field.signed_at(x, z);
-            if cover.beach_sand(x, z, s.abs()) {
+            // the beach's sand round a mapped beach: kept off the lawns and paving
+            // mapped beside it and off a seawall's quay (`--no-ground-beach-fit`: the JS reach rule).
+            let sand = if beach_fit { cover.beach_sand_fit(x, z, &|x, z| w.field.signed_at(x, z).abs()) } else { cover.beach_sand(x, z, s.abs()) };
+            if sand {
                 let a = ((64.0 - s) * 1.5).round().clamp(0.0, 253.0) as u8;
                 return Some(pack(cover.sand_at(x, z), a));
+            }
+            // ground the JS rule covered with sand and the fitted one leaves
+            // (a quay, a pier's root) with no green mapped: the city's paved
+            // ground, not the land-cover class the sand hid (bare earth, sea).
+            if beach_fit && cover.tone_name_at(x, z).is_none() && cover.beach_sand(x, z, s.abs()) {
+                return Some(eo_render::scene::built_ground_color());
             }
         }
         // the open ground's measured green (yards, lots, hills), inland of the shore.
@@ -1186,6 +1196,7 @@ fn roofs_flags() {
         ("--no-ground-green", "EO_GROUND_GREEN"),
         ("--no-ground-hills", "EO_GROUND_HILLS"),
         ("--no-ground-contact", "EO_GROUND_CONTACT"),
+        ("--no-ground-beach-fit", "EO_GROUND_BEACH_FIT"),
     ] {
         if a.iter().any(|x| x == flag) {
             // SAFETY: first thing in main, before any other thread exists.

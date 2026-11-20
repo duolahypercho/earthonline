@@ -223,6 +223,13 @@ fn hash(s: &str) -> u32 {
     h
 }
 
+/// The built-up ground's colour (WorldCover 50): the city's open paved ground
+/// where nothing else is drawn (eo-app's fitted beach sand gives it to a
+/// quay the sand used to cover).
+pub fn built_ground_color() -> u32 {
+    land_color(50, false)
+}
+
 /// Flat debug palette for terrain, keyed by WorldCover class. These are
 /// placeholder tones for a performance slice, not a look.
 fn land_color(class: u8, underwater: bool) -> u32 {
