@@ -341,8 +341,9 @@ fn sea_override() -> Option<eo_water::waves::SeaState> {
 
 /// The water shaders' shared WGSL (constants generated from eo-water, the
 /// grid and the uniform).
-fn common_source() -> String {
-    format!("{}\n{}\n{}", eo_water::optics::wgsl_constants(), eo_water::surface::wgsl_constants(), include_str!("water_common.wgsl"))
+pub(crate) fn common_source(cove_detail: bool) -> String {
+    format!("{}\n{}\n{}\nconst W_COVE_DETAIL: bool = {cove_detail};\nconst W_COVE_SCALE: f32 = {:.8};\n",
+        eo_water::optics::wgsl_constants(), eo_water::surface::wgsl_constants(), include_str!("water_common.wgsl"), eo_data::groundscale::scale())
 }
 
 impl WaterGpu {
@@ -520,7 +521,7 @@ impl WaterGpu {
                 wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&land_view) },
             ],
         });
-        let common = common_source();
+        let common = common_source(look.options.cove_detail);
         let plain_src = format!("{common}\n{}\nfn patch_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return false; }}\n", include_str!("water_cull.wgsl"));
         let hzb_src = format!(
             "{common}\n{}\nstruct HzbInfo {{ screen: vec4<f32> }};\n@group(1) @binding(0) var hzb: texture_2d<f32>;\n@group(1) @binding(1) var<uniform> hzb_info: HzbInfo;\n{}\nfn patch_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return hzb_occluded(mn, mx, wu.view_proj, hzb_info.screen.xy); }}\n",
@@ -558,7 +559,6 @@ impl WaterGpu {
                 entry(12, fs, tex(filt, wgpu::TextureViewDimension::D2)),
             ],
         });
-        let common = format!("{common}\nconst W_COVE_DETAIL: bool = {};\nconst W_COVE_SCALE: f32 = {:.8};", look.options.cove_detail, eo_data::groundscale::scale());
         let draw_src = format!("{common}\n{}\n{}\n{}\n{}\n{}", crate::look::look_common_source(), include_str!("sky_light_core.wgsl"), crate::look::LOOK_EXT_WGSL, include_str!("water.wgsl"), include_str!("water_surf.wgsl")) + include_str!("water_spray.wgsl") + "\n" + crate::far_shadow::WGSL + "\n" + &crate::probe_grid::wgsl(true); // + the spray, the cloud shadow and the fog depth; + group 1 bindings 12-18; + the far sun shadow map's lookup and the probe grid's (lighting)
         let draw_src = if look.options.water_optics {
             draw_src + &format!("\nconst UW_DEPTH_EXPOSURE: bool = {};\n", look.options.dive_exposure) + include_str!("look_finish.wgsl") + include_str!("underwater.wgsl")
