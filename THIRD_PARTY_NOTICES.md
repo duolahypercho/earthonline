@@ -234,3 +234,5 @@ grouped by that field exactly as each crate declares it. Regenerate it after a d
 | `BSD-2-Clause OR MIT OR Apache-2.0` | 1 | mach2 0.6.0 |
 | `ISC` | 1 | libloading 0.8.9 |
 <!-- END GENERATED: cargo-licences -->
+
+The Black Point shoreline uses *Seaside Rock* by Dimitrios Savva for Poly Haven under CC0 1.0. The game ships reduced colour, normal and roughness maps from this scan. [Source](https://polyhaven.com/a/seaside_rock) · [Licence](https://polyhaven.com/license) · [Provenance](public/assets/shore/seaside-rock.provenance.json)

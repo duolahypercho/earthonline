@@ -79,7 +79,7 @@ fn uw_air_light(p: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
 
 // Suspended grains advect with the water. Traverse only the nearby cells
 // that the ray actually enters. Turbidity hides distant grains naturally.
-fn uw_grains(origin: vec3<f32>, ray: vec3<f32>, path: f32, ext: f32) -> f32 {
+fn uw_grains(origin: vec3<f32>, ray: vec3<f32>, path: f32, ext: f32, cove_silt: f32, pixel_cone: f32) -> f32 {
     let cell_m = 0.16;
     let q = (origin - vec3<f32>(0.018, -0.006, 0.009) * wu.cam.w) / cell_m;
     var cell = floor(q);
@@ -93,9 +93,16 @@ fn uw_grains(origin: vec3<f32>, ray: vec3<f32>, path: f32, ext: f32) -> f32 {
         let v = (cell + 0.07 + 0.86 * offsets - q) * cell_m;
         let t = dot(v, ray);
         if (t > 0.08 && t < path) {
-            let r = (0.00045 + 0.00065 * seed) + 0.0006 * t;
+            // Most cove sediment is unresolved and already contributes to volume
+            // scattering. Filter the few visible aggregates over a pixel's cone
+            // and conserve their projected area as they become subpixel.
+            let aggregate = 0.00020 + 0.00062 * seed * seed;
+            let filtered = max(aggregate, t * pixel_cone);
+            let cover = aggregate / filtered;
+            let gain = mix(1.0, (0.28 + 0.16 * seed) * cover * cover, cove_silt);
+            let r = mix(0.00045 + 0.00065 * seed + 0.0006 * t, filtered, cove_silt);
             let dist = length(v - ray * t);
-            light += (1.0 - smoothstep(r * 0.2, r, dist)) * exp(-ext * t) * smoothstep(0.08, 0.18, t)
+            light += gain * (1.0 - smoothstep(r * 0.2, r, dist)) * exp(-ext * t) * smoothstep(0.08, 0.18, t)
                 * (1.0 - smoothstep(0.65, 0.9, t));
         }
         let t_next = min(next.x, min(next.y, next.z));
@@ -115,6 +122,7 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
     let near_h = wu.inv_view_proj * vec4<f32>(ndc, 1.0, 1.0);
     let to_near = near_h.xyz / near_h.w - wu.cam.xyz;
     let ray = normalize(to_near);
+    let pixel_cone = 0.5 * max(length(dpdx(ray)), length(dpdy(ray)));
     let d0 = i.level - wu.cam.y;
     let rise = ray.y - dot(i.tilt, ray.xz);
     let d_near = d0 - rise * length(to_near);
@@ -214,7 +222,7 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
             exp(-ext * down1 / max(sun_up.y, 0.1)) * focus, direct_share);
         boundary = textureLoad(w_scene, vec2<i32>(i.clip.xy), 0).rgb * incident;
     }
-    let grains = uw_grains(origin, ray, path, lk_luma(ext));
+    let grains = uw_grains(origin, ray, path, lk_luma(ext), select(0.0, cove, look.cove.x > 0.0), pixel_cone);
     let radiance = boundary * exp(-ext * path) + vol
         + grains * scatter * (ambient + direct * 0.25) * exp(-ext * diffuse_depth * down0 / 0.75);
     return finish_color(max(radiance, vec3<f32>(0.0)) * i.exposure, i.clip, dims);

@@ -1,4 +1,4 @@
-//! Two small, original underwater habitats. Both are opaque world geometry,
+//! Original underwater habitats drawn as opaque world geometry,
 //! so refraction, depth testing, shadows received and water extinction all
 //! see the same bed. The scene builds them once, in metres on the drawn floor.
 
@@ -6,10 +6,14 @@ use crate::landmarks::{Chunk, push_chunks};
 use crate::scene::{LOD_ALWAYS, MATERIAL_VERTEX_COLOUR, NO_GROUP, ObjectKind, Scene, Vertex};
 use glam::{Vec2, Vec3};
 
+mod intertidal;
+pub mod rock_maps;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Habitat {
     Eelgrass,
     Sand,
+    Rocky,
 }
 
 const RADIUS: f32 = 5.5;
@@ -127,7 +131,11 @@ pub fn append(
     centre: Vec2,
     bed: &mut impl FnMut(Vec2) -> f32,
 ) {
-    append_bed(scene, habitat, centre, bed, false);
+    if habitat == Habitat::Rocky {
+        intertidal_site(scene, centre, bed, true, MATERIAL_VERTEX_COLOUR);
+    } else {
+        append_bed(scene, habitat, centre, bed, false);
+    }
 }
 
 /// Sheltered Bay silt carries scattered shoots and subdued ripple relief.
@@ -235,6 +243,70 @@ fn append_bed(
         NO_GROUP,
         MATERIAL_VERTEX_COLOUR,
     );
+}
+
+/// Build the west beach habitat on its actual bed. Pick a viewing position
+/// with room above the rocks and below the surface, also with drawing disabled.
+pub fn intertidal_site(
+    scene: &mut Scene,
+    centre: Vec2,
+    bed: &mut impl FnMut(Vec2) -> f32,
+    draw: bool,
+    material: u32,
+) -> Option<(Vec3, Vec3)> {
+    let mut mesh = Chunk {
+        verts: vec![],
+        idx: vec![],
+        min: [f32::INFINITY; 3],
+        max: [f32::NEG_INFINITY; 3],
+    };
+    intertidal::append(&mut mesh, centre, bed);
+    let surface = eo_water::SEA_LEVEL_Y as f32;
+    let top_at = |p: Vec2, floor: f32| -> f32 {
+        let mut top = floor;
+        for t in mesh.idx.chunks_exact(3) {
+            let [a, b, c] = [t[0], t[1], t[2]].map(|i| Vec3::from(mesh.verts[i as usize].pos));
+            let xz = |q: Vec3| Vec2::new(q.x, q.z);
+            let (ab, ac, q) = (xz(b - a), xz(c - a), p - xz(a));
+            let area = ab.perp_dot(ac);
+            if area.abs() < 1e-7 {
+                continue;
+            }
+            let v = q.perp_dot(ac) / area;
+            let w = ab.perp_dot(q) / area;
+            if v.min(w) >= 0.0 && v + w <= 1.0 {
+                top = top.max(a.y + v * (b.y - a.y) + w * (c.y - a.y));
+            }
+        }
+        top
+    };
+    let at = point(centre, top_at(centre, bed(centre)) - 0.05);
+    let eye = [
+        (0.65, -1.15),
+        (0.9, -1.5),
+        (0.5, -1.8),
+        (-0.5, -1.5),
+        (1.2, -2.0),
+    ]
+    .into_iter()
+    .find_map(|(x, z)| {
+        let p = centre + Vec2::new(x, z);
+        let y = (bed(p) + 0.65)
+            .max(top_at(p, bed(p)) + 0.22)
+            .max(at.y + 0.11);
+        (y < surface - 0.18).then(|| point(p, y))
+    });
+    if draw && !mesh.idx.is_empty() {
+        push_chunks(
+            scene,
+            vec![mesh],
+            ObjectKind::Seabed,
+            LOD_ALWAYS,
+            NO_GROUP,
+            material,
+        );
+    }
+    eye.map(|p| (p, at))
 }
 
 /// An intertidal band of wave-rounded cobbles partly embedded in the drawn beach.
