@@ -32,7 +32,7 @@ pub(crate) struct Ctx<'a> {
     pub mem: &'a mut HudMemory,
     pub hits: &'a mut Vec<Hit>,
     pub focus: Option<usize>,
-    pub hover_t: &'a [f32; 16],
+    pub hover_t: &'a [f32; crate::HOVER_SLOTS],
     pub scroll: f32,
     pub ready: bool,
     pub reduced_motion: bool,
@@ -301,7 +301,9 @@ fn title_screen(p: &mut Painter, c: &mut Ctx) {
         match c.title_view {
             TitleView::Main => menu_list(p, c, x0, rail_top, !starting),
             TitleView::Settings => {
-                let panel_h = rail_h;
+                // (native) the panel ends at the content's bottom edge, above the credit line,
+                // and scrolls inside: 62dvh from `min_top` would run off a 16:9 screen.
+                let panel_h = rail_h.min(content_bottom - rail_top);
                 title_settings_panel(p, c, x0, rail_top, rail_w, panel_h)
             }
             TitleView::Exit => {
@@ -455,7 +457,7 @@ fn back_button(p: &mut Painter, c: &mut Ctx, x: f32, y: f32, stack: Stack) -> f3
 }
 
 /// `.eo-menu__view[data-menu-view="settings"]`: heading, then the shared
-/// graphics block and the title's own rows, scrolled inside 62dvh.
+/// graphics and world blocks and the title's own rows, scrolled inside 62dvh.
 fn title_settings_panel(p: &mut Painter, c: &mut Ctx, x: f32, top: f32, w: f32, h: f32) {
     let pad = c.len(title::SETTINGS_PANEL_PAD);
     p.rect(Rect::new(x, top, w, h), title::SURFACE_STRONG);
@@ -472,6 +474,7 @@ fn title_settings_panel(p: &mut Painter, c: &mut Ctx, x: f32, top: f32, w: f32, 
     p.rect(Rect::new(ix, y, 3.5 * 16.0, 2.0), title::ACCENT);
     y += 2.0 + 1.6 * 16.0;
     y += graphics_block(p, c, ix, y, iw, Stack::TitleSans);
+    y += world_block(p, c, ix, y, iw, Stack::TitleSans);
     // Background motion.
     let on = c.settings.background_motion;
     y += title_setting_row(p, c, ix, y, iw, "Background motion", if on { "On" } else { "Off" }, Action::Motion);
@@ -540,7 +543,7 @@ fn title_slider(p: &mut Painter, c: &mut Ctx, x: f32, y: f32, w: f32, label: &st
 /// `installPerformanceSettings` markup with `performance-settings.css`:
 /// the Graphics block both menus share. Returns its height.
 fn graphics_block(p: &mut Painter, c: &mut Ctx, x: f32, top: f32, w: f32, stack: Stack) -> f32 {
-    let accent = theme::hex(0xe2ad61);
+    let accent = perf::ACCENT;
     let body = st(stack, 400, perf::BUTTON_SIZE);
     let small = st(stack, 400, perf::SMALL_SIZE);
     let lh_normal = 1.33;
@@ -591,12 +594,17 @@ fn graphics_block(p: &mut Painter, c: &mut Ctx, x: f32, top: f32, w: f32, stack:
     for (key, label, _) in settings::GRAPHICS_OPTIONS {
         y += 16.0;
         let v = c.settings.performance.get(key);
-        let pressed = v == "on" || v == "high" || v == "smaa" || v == "native";
+        let pressed = v == "on" || v == "high" || v == "smaa" || v == "native" || v == "hyper";
         y += toggle_row(p, c, x, y, w, label, settings::option_label(v), pressed, Action::Option(key), body, accent);
         y += 8.0 - 8.0;
+        // (native) what the row changes at once and what waits for a restart.
+        if let Some(note) = settings::option_note(key) {
+            y += 8.0;
+            y += paragraph(p, x, y, w, note, small, 1.5, perf::COPY);
+        }
     }
     y += 8.0;
-    y += paragraph(p, x, y, w, "High, Medium and Low change these together. Turn any one down on its own for a custom mix.", small, 1.5, perf::COPY);
+    y += paragraph(p, x, y, w, "Hyper real, High, Medium and Low change these together. Turn any one down on its own for a custom mix.", small, 1.5, perf::COPY);
     y += paragraph(
         p,
         x,
@@ -612,6 +620,31 @@ fn graphics_block(p: &mut Painter, c: &mut Ctx, x: f32, top: f32, w: f32, stack:
     y += toggle_row(p, c, x, y, w, "Show FPS", if fps { "On" } else { "Off" }, fps, Action::Fps, body, accent);
     y += 8.0;
     y += paragraph(p, x, y, w, "Saved on this device and applied in the city.", small, 1.5, perf::COPY);
+    y += 22.0;
+    p.rect(Rect::new(x, y, w, 1.0), perf::RULE);
+    y += 1.0 + 28.0;
+    y - top
+}
+
+/// (native) The World block both menus share, after Graphics: what the city
+/// is built with, not how it is drawn (no preset touches it). Returns its height.
+fn world_block(p: &mut Painter, c: &mut Ctx, x: f32, top: f32, w: f32, stack: Stack) -> f32 {
+    let body = st(stack, 400, perf::BUTTON_SIZE);
+    let small = st(stack, 400, perf::SMALL_SIZE);
+    let h3 = st(stack, 400, perf::H3_SIZE);
+    let lh_normal = 1.33;
+    let mut y = top;
+    let b = p.text.baseline(h3, y, lh_normal);
+    p.text(x, b, "World", h3, perf::INK);
+    y += h3.size * lh_normal + 14.0;
+    for (key, label, _) in settings::WORLD_OPTIONS {
+        let v = c.settings.world.get(key);
+        y += toggle_row(p, c, x, y, w, label, settings::option_label(v), v != "off", Action::World(key), body, perf::ACCENT);
+        if let Some(note) = settings::option_note(key) {
+            y += 8.0;
+            y += paragraph(p, x, y, w, note, small, 1.5, perf::COPY);
+        }
+    }
     y += 22.0;
     p.rect(Rect::new(x, y, w, 1.0), perf::RULE);
     y += 1.0 + 28.0;
@@ -945,7 +978,7 @@ fn pause_slider(p: &mut Painter, c: &mut Ctx, x: f32, y: f32, w: f32, label: &st
 }
 
 /// The pause Settings sheet: audio (master and sound effects drive eo-audio; radio and dialogue have nothing to play yet), the shared graphics
-/// block, controls.
+/// and world blocks, controls.
 fn pause_settings(p: &mut Painter, c: &mut Ctx, r: Rect) {
     let screen = [c.vp.w, c.vp.h];
     p.set_scissor(Some(r), screen);
@@ -976,6 +1009,7 @@ fn pause_settings(p: &mut Painter, c: &mut Ctx, r: Rect) {
     }
     y += 28.0;
     y += graphics_block(p, c, x, y, w, Stack::Pause);
+    y += world_block(p, c, x, y, w, Stack::Pause);
     heading(p, &mut y, "Controls");
     for (key, label) in settings::INPUT_SLIDERS {
         let v = c.settings.input.value(key);
