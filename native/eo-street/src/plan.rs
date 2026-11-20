@@ -241,6 +241,21 @@ pub struct Entry {
     pub yield_spans: Vec<[f64; 2]>,
     /// Footway spans lying on somebody else's road, [left, right].
     pub walk_yield_spans: [Vec<[f64; 2]>; 2],
+    /// Only with `StreetOptions::structures` (`crate::joins`): this run is a
+    /// grade-separated road's leg into a junction, the index of its
+    /// `StructureEnd`. It is not drawn (the structure's deck is there); the
+    /// junction gets a mouth for it. None for every street run.
+    pub structure_leg: Option<usize>,
+    /// Only with `StreetOptions::structures`: its [start, end] meets a
+    /// structure end with no junction there (a stub), the index of that
+    /// `StructureEnd`: the end is capped, and raised where the structure asks.
+    pub structure_ends: [Option<usize>; 2],
+    /// Only with `StreetOptions::structures`: a stub's approach embankment may
+    /// climb on over this run (joined to the stub end to end through runs
+    /// with no junction between): (the `StructureEnd` index, this run's end
+    /// toward it: true for its start, the street's distance from that end to
+    /// the structure's end).
+    pub structure_ramps: Vec<(usize, bool, f64)>,
 }
 
 impl Entry {
@@ -414,9 +429,122 @@ fn prepare(city: &StreetCity, o: &StreetOptions) -> Vec<Entry> {
             kerb_ramps: [vec![], vec![]],
             yield_spans: vec![],
             walk_yield_spans: [vec![], vec![]],
+            structure_leg: None,
+            structure_ends: [None, None],
+            structure_ramps: vec![],
         });
     }
     out
+}
+
+/// How far along the street from a structure's end the runs an approach
+/// embankment may climb over are looked for (more than any rise the table's
+/// grades let a ramp need). A search reach, not a street dimension.
+const RAMP_WALK_M: f64 = 600.0;
+
+/// Only with `StreetOptions::structures` (`crate::joins`): each structure end
+/// that lands where two or more paved runs end becomes a leg (a run that is
+/// not drawn, appended after the paved runs) for node collection to build
+/// the junction's mouth from; one landing on a single run's end marks that
+/// stub (`Entry::structure_ends`). One landing on nothing (a run's middle)
+/// is left alone.
+fn add_structure_legs(entries: &mut Vec<Entry>, city: &StreetCity, o: &StreetOptions) {
+    let Some(joins) = o.structures.as_ref() else { return };
+    let ix = build_endpoint_index(entries, o);
+    for (k, end) in joins.ends.iter().enumerate() {
+        let near = query_endpoints(&ix, end.at[0], end.at[1], o.node_snap);
+        if near.len() == 1 {
+            let it = ix.list[near[0]];
+            entries[it.entry].structure_ends[if it.at_start { 0 } else { 1 }] = Some(k);
+            // the runs the stub continues into end to end (one other run end
+            // at each joint, no structure end there), for its ramp.
+            let (mut cur, mut toward) = (it.entry, it.at_start);
+            let mut offset = 0.0;
+            loop {
+                let e = &entries[cur];
+                offset += e.length;
+                if offset > RAMP_WALK_M {
+                    break;
+                }
+                let far = if toward { *e.points.last().unwrap() } else { e.points[0] };
+                let next: Vec<usize> = query_endpoints(&ix, far[0], far[1], o.node_snap).into_iter().filter(|&q| !(ix.list[q].entry == cur && ix.list[q].at_start != toward)).collect();
+                if next.len() != 1 || joins.ends.iter().any(|j| hypot(j.at[0] - far[0], j.at[1] - far[1]) <= o.node_snap) {
+                    break;
+                }
+                let nx = ix.list[next[0]];
+                if nx.entry == it.entry || entries[nx.entry].structure_ramps.iter().any(|r| r.0 == k) {
+                    break;
+                }
+                entries[nx.entry].structure_ramps.push((k, nx.at_start, offset));
+                (cur, toward) = (nx.entry, nx.at_start);
+            }
+            continue;
+        }
+        if near.len() < 2 {
+            continue;
+        }
+        let Some(seg) = city.segments.get(end.segment) else { continue };
+        let mut points = dedupe_points(&end.line);
+        if points.len() < 2 || !(end.half > 0.1) {
+            continue;
+        }
+        // a one-way leg runs along its traffic (`Entry::oneway`): reversed
+        // when the traffic arrives at the junction (the leg's end is there).
+        let along = {
+            let (f, l) = (seg.points[0], *seg.points.last().unwrap());
+            hypot(f[0] - end.at[0], f[1] - end.at[1]) <= hypot(l[0] - end.at[0], l[1] - end.at[1])
+        };
+        let flows_along = seg.oneway != "decreasing";
+        if seg.is_oneway() && along != flows_along {
+            points.reverse();
+        }
+        let cum = arc_table(&points);
+        let length = *cum.last().unwrap();
+        if !(length > 0.2) {
+            continue;
+        }
+        let highway = if seg.highway.is_empty() { "residential".to_string() } else { seg.highway.clone() };
+        let lanes = match seg.lanes.filter(|l| *l != 0.0 && l.is_finite()) {
+            Some(l) => (l.round() as i32).max(1),
+            None => ((end.half * 2.0 / 3.2).round() as i32).max(1),
+        };
+        entries.push(Entry {
+            id: format!("{}:structure", seg.id),
+            pieces: vec![end.segment],
+            road: end.segment,
+            points,
+            cum,
+            length,
+            half: end.half,
+            walks: [0.0, 0.0],
+            trim_start: 0.0,
+            trim_end: 0.0,
+            marking_trim_start: 0.0,
+            marking_trim_end: 0.0,
+            class_rank: street_class_rank(&highway),
+            highway,
+            lanes,
+            oneway: seg.is_oneway(),
+            approach_start: None,
+            approach_end: None,
+            mouth_start_m: None,
+            mouth_end_m: None,
+            kerb_ramps: [vec![], vec![]],
+            yield_spans: vec![],
+            walk_yield_spans: [vec![], vec![]],
+            structure_leg: Some(k),
+            structure_ends: [None, None],
+            structure_ramps: vec![],
+        });
+    }
+}
+
+/// A structure leg's end at its junction (the end at its `StructureEnd::at`):
+/// true for its start.
+pub fn leg_at_start(e: &Entry, o: &StreetOptions) -> bool {
+    let Some(at) = e.structure_leg.and_then(|k| o.structures.as_ref()?.ends.get(k)).map(|end| end.at) else { return true };
+    let (f, l) = (e.points[0], *e.points.last().unwrap());
+    hypot(f[0] - at[0], f[1] - at[1]) <= hypot(l[0] - at[0], l[1] - at[1])
 }
 
 const RUN_MERGE_SHORT_M: f64 = 15.0;
@@ -595,7 +723,13 @@ fn build_endpoint_index(entries: &[Entry], o: &StreetOptions) -> EndpointIndex {
     let mut list = vec![];
     for (ei, e) in entries.iter().enumerate() {
         let (f, l) = (e.points[0], *e.points.last().unwrap());
+        // a structure leg joins a junction at one end only (its far end is
+        // on the structure).
+        let leg = e.structure_leg.map(|_| leg_at_start(e, o));
         for it in [EndItem { entry: ei, at_start: true, x: f[0], z: f[1] }, EndItem { entry: ei, at_start: false, x: l[0], z: l[1] }] {
+            if leg.is_some_and(|start| start != it.at_start) {
+                continue;
+            }
             let k = ((it.x / cell).floor() as i64, (it.z / cell).floor() as i64);
             map.entry(k).or_default().push(list.len());
             list.push(it);
@@ -1057,6 +1191,12 @@ fn plan_node_paint(ni: usize, node: &mut Node, entries: &mut [Entry], o: &Street
                 && node.approaches.iter().zip(&legs).any(|(a, l)| (a.crossing_painted || l.listed_through) && a.class_rank >= 3);
         }
     }
+    // a structure leg carries no crosswalk (its mouth is the structure's deck).
+    for app in &mut node.approaches {
+        if entries[app.entry].structure_leg.is_some() {
+            app.crossing_painted = false;
+        }
+    }
     node.band_depth = crossing_band_depth(max_rank, o);
     for app in &mut node.approaches {
         let reach = if node.earns_paint {
@@ -1205,7 +1345,8 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
             }
         }
     }
-    let mut order: Vec<usize> = (0..entries.len()).collect();
+    // (structure legs are not drawn: they neither yield nor cover.)
+    let mut order: Vec<usize> = (0..entries.len()).filter(|&e| entries[e].structure_leg.is_none()).collect();
     order.sort_by(|&a, &b| {
         let (ea, eb) = (&entries[a], &entries[b]);
         eb.class_rank
@@ -1217,7 +1358,7 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
     // corridors after probing it, in this order, so a run is probed against the
     // runs before it: the same answer as one full index read through `rank < mine`,
     // which lets every run be probed at once.
-    let mut rank = vec![0usize; entries.len()];
+    let mut rank = vec![usize::MAX; entries.len()];
     for (i, &e) in order.iter().enumerate() {
         rank[e] = i;
     }
@@ -1274,6 +1415,9 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
         let entries_r: &[Entry] = entries;
         let run = |ei: usize| -> Vec<[f64; 2]> {
             let e = &entries_r[ei];
+            if e.structure_leg.is_some() {
+                return vec![];
+            }
             let (half, length) = (e.half, e.length);
             let reach = e.half + e.walks[0].max(e.walks[1]);
             let clear = reach * clamp(o.yield_clear_fraction, 0.0, 2.0);
@@ -1407,6 +1551,9 @@ fn plan_carriageway_yield(entries: &mut [Entry], nodes: &[Node], o: &StreetOptio
     };
     let run2 = |ei: usize| -> [Vec<[f64; 2]>; 2] {
         let e = &entries_r[ei];
+        if e.structure_leg.is_some() {
+            return [vec![], vec![]];
+        }
         let probe_step = (0.75f64).max((2.0f64).min(e.half + 0.5));
         let mut result: [Vec<[f64; 2]>; 2] = [vec![], vec![]];
         for (k, side) in [(0usize, 1.0f64), (1, -1.0)] {
@@ -1844,6 +1991,8 @@ pub fn build_plan(city: &StreetCity, o: &StreetOptions) -> Plan {
     let lap = |what: &str| if trace { eprintln!("  plan {what}: {:.0} ms", t0.elapsed().as_secs_f64() * 1e3) };
     let prepared = prepare(city, o);
     let mut entries = merge_short_runs(prepared, city);
+    // (only with `StreetOptions::structures`.)
+    add_structure_legs(&mut entries, city, o);
     let mut nodes = collect_nodes(city, &mut entries, o);
     // planJunction in stable-key order (the order does not change the trims:
     // each end takes the max of what its node asks).

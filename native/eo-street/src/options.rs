@@ -118,6 +118,10 @@ pub struct StreetOptions {
     pub front_clamp_m: f64,
     pub archetype_foundation_skirt_m: f64,
     pub foundation_embed_m: f64,
+    /// Joins with the grade-separated roads (`crate::joins`), handed in by a
+    /// host that builds them (eo-app with `--structures`). None, the default
+    /// and what `parse` reads: the street is drawn exactly as without them.
+    pub structures: Option<std::sync::Arc<crate::joins::StructureJoins>>,
 }
 
 fn num(v: &Value, key: &str) -> Result<f64> {
@@ -252,7 +256,24 @@ impl StreetOptions {
             front_clamp_m: num(d, "frontClampM")?,
             archetype_foundation_skirt_m: num(d, "archetypeFoundationSkirtM")?,
             foundation_embed_m: num(d, "foundationEmbedM")?,
+            structures: None,
         })
+    }
+
+    /// The same options with the grade-separated roads' joins (`None` and an
+    /// empty set both leave the street as it is without them).
+    pub fn with_structures(mut self, joins: Option<std::sync::Arc<crate::joins::StructureJoins>>) -> Self {
+        self.structures = joins.filter(|j| !j.is_empty());
+        self
+    }
+
+    /// A tag for cache keys that depend on the drawn street surface: empty
+    /// without joins (so such keys are unchanged), else the joins' digest.
+    pub fn structures_tag(&self) -> String {
+        match &self.structures {
+            Some(j) => format!("street-structure-joins-v1:{:016x}", j.digest()),
+            None => String::new(),
+        }
     }
 
     /// `curbTopY` (street-surface-v2.js): kerb top above the gutter invert.
