@@ -26,6 +26,7 @@ pub mod hlod; // hlod
 pub mod hlod_bake; // hlod
 pub mod hlod_district; // hlod
 pub mod hlod_lights; // hlod
+mod cove_canopy;
 pub mod hlod_trees; // hlod
 pub mod kit;
 pub mod landmarks; // landmarks
@@ -1070,6 +1071,7 @@ impl Renderer {
         }
         let t = hlod_trees::FarTrees::new(&hlod_trees::FarTreesInit {
             cove_only: !self.compact,
+            canopy: self.look.options.cove_detail && self.look.options.cove_canopy,
             device: &ctx.device,
             draw_bgl: &self.draw_bgl,
             main_bgl: self.look.main_bind_group_layout(),

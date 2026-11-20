@@ -212,6 +212,8 @@ selection:
 | Water optics | `--water-optics` enables the preview, `--no-water-optics` restores the original water shading |
 | Underwater habitats | `--underwater-habitats` adds the Bay and Pacific beds. `--no-underwater-habitats` removes them |
 | Aquatic Park Cove | `--cove-detail` enables the beach profile, cobbles, pier parapet, distant wooded slope, fair-weather clouds and cove optics. `--no-cove-detail` restores the previous scene. The Bay dive-site starts enable the preview. |
+| Black Point canopy | `--cove-canopy` enables the cove preview and resolves bark, branches and leaf cover from eight views of each park tree species. `--no-cove-canopy` restores the previous distant crowns. |
+| Submerged cove sediment | `--cove-sediment` enables the cove preview with rough submerged sand and silt. `--no-cove-sediment` restores the previous seabed material. |
 | Dive exposure | `--dive-exposure` compensates for the loss of downwelling light at the eye. `--no-dive-exposure` restores the original exposure |
 | People | `--no-rocketbox`, `--no-rocketbox-motions` (either one: no people) |
 | Props | `--no-props2`, `--no-furniture`, `--no-eztree`, `--no-wires`, `--no-overhead`, `--no-lamp-sprites` |

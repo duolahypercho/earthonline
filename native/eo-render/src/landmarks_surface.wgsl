@@ -376,6 +376,30 @@ fn lm_beach_swash_wet(s: ptr<function, Surface>, wp: vec3<f32>) {
     (*s).env = ENV_WET_FILM;
 }
 
+// Submerged grains have a mineral-water boundary. The air-facing specular
+// film on the wet beach belongs on the free water surface once the tide covers it.
+fn lm_cove_sediment(s: ptr<function, Surface>, wp: vec3<f32>, normal: vec3<f32>, dx: vec3<f32>, dy: vec3<f32>) {
+    let depth = LM_SEA_LEVEL_Y - wp.y;
+    let cover = lk_cove_weight(wp.xz * look.cove.x) * smoothstep(-0.035, 0.08, depth);
+    if (cover <= 0.0) { return; }
+    let p = wp.xz;
+    let footprint = max(length(dx.xz), length(dy.xz));
+    let deposit = st_noise(p * 0.72);
+    let strand = st_noise(p * 1.8 + vec2<f32>(deposit, 0.0));
+    let ripple = dot(p, vec2<f32>(2.3, 16.0)) + 3.0 * deposit + strand * 1.6;
+    let crest = sin(ripple) * (1.0 - smoothstep(0.035, 0.16, footprint));
+    let fine = (st_noise(p * 68.0) - 0.5) * (1.0 - smoothstep(0.004, 0.018, footprint));
+    // Fines settle in the low, sheltered hollows between sand ridges.
+    let silt = smoothstep(0.05, 1.45, depth + 0.54 * (deposit - 0.5) - 0.18 * crest);
+    let pocket = smoothstep(0.46, 0.79, deposit * 0.58 + strand * 0.42);
+    let sand = mix(vec3<f32>(0.175, 0.142, 0.099), vec3<f32>(0.087, 0.080, 0.060), silt);
+    (*s).albedo = mix((*s).albedo, sand * (1.04 - 0.31 * pocket + fine * 0.20 + crest * 0.055), cover);
+    (*s).rough = mix((*s).rough, 0.82 + 0.12 * silt, cover);
+    let slope = cos(ripple) * 0.065 * (1.0 - silt) * (1.0 - smoothstep(0.035, 0.16, footprint));
+    (*s).n = normalize(mix((*s).n, normal + vec3<f32>(-0.14 * slope, 0.0, -slope), cover));
+    if (cover > 0.5) { (*s).env = ENV_SUBMERGED; }
+}
+
 // landmark-set.js `landmarkFog`: a landmark takes the scene's range fog with
 // its sight distance capped at fogCapM, so it never clears with distance and
 // stands on the skyline past the fog's end.

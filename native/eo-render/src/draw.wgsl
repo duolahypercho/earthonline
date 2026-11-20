@@ -996,6 +996,9 @@ fn shade(in: VOut) -> vec4<f32> {
         rm_emit = rm_emit + sky_far_windows(in.world, n, in.object, dpx, dpy); // lit windows on the far boxes
     }
 
+    if ((cc0_terrain || (bed_surface && in.aux.y > 0.5)) && look.cove.x > 0.0 && in.world.y < LM_SEA_LEVEL_Y + 0.035) {
+        lm_cove_sediment(&s, in.world, n, dpx, dpy);
+    }
     let street_pane = (objects[in.object].kind & FRONT_SASH_BIT) != 0u && in.color.b > 3.5/255.0;
     if (street_pane && frame.copy_step.z < 0.5) {
         let angle = in.aux.x * (2.0 * PI / 255.0);

@@ -22,6 +22,8 @@ const ENV_PAINTED_METAL: i32 = 3;
 // A film of water over sand (the swash's wet band, landmarks_surface.wgsl): it reflects the environment strongly.
 const ENV_WET_FILM: i32 = 4;
 const ENV_KITCHEN: i32 = 5;
+// The water pass accounts for air-interface reflection on submerged terrain.
+const ENV_SUBMERGED: i32 = 6;
 // GLAZING_PROBE_ROUGHNESS_FLOOR (src/render/materials/glazing-environment.js:
 // a 4-texel footprint on the 128 px probe).
 const GLAZING_ROUGHNESS_FLOOR: f32 = 0.152;
@@ -133,6 +135,8 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
         cls = look.env_class.w;
     } else if (s.env == ENV_PAINTED_METAL) {
         cls = ST_ENV_PAINTED_METAL;
+    } else if (s.env == ENV_SUBMERGED) {
+        cls = 0.0;
     } else if (s.env == ENV_WET_FILM) {
         cls = 0.65 / max(look.ambient.w, 1e-3); // env_i 0.65 (at 1 the film reads as standing water)
     } else if (kind == 2u || kind == 6u || kind == 7u) {

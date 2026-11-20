@@ -191,6 +191,13 @@ fn append_bed(
             }
         }
     }
+    if cove {
+        // Packed normal.w identifies only the sand; shells, stones and blades
+        // retain their own materials where they emerge through the sediment.
+        for v in &mut mesh.verts {
+            v.normal |= 127 << 24;
+        }
+    }
     let placements = if habitat == Habitat::Eelgrass {
         1320
     } else {
