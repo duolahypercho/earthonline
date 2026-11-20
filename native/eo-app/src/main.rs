@@ -439,6 +439,7 @@ fn parse_args() -> Result<Args> {
 }
 
 pub struct World {
+    pub house_vertex_base: usize,
     pub house: Option<Arc<house::House>>,
     pub paths: DataPaths,
     pub city: Arc<City>,
@@ -856,6 +857,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         ground_tone: if cover.is_some() { Some(&ground_tone_fn) } else { None },
         smooth_terrain: args.landmarks && args.landmarks2,
     })?;
+    let house_vertex_base = scene.vertices.len();
     if let Some(house) = &house { house.append(&mut scene, &authored.materials); }
     drop(carpet_fn); // water
     // the bridges (eo-landmarks, the JS generators ported) on the
@@ -963,7 +965,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         }
         Err(_) => anyhow::bail!("facade detail thread panicked"),
     };
-    Ok(World { house, paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, landmarks, hlod, hlod_trees }) // hlod
+    Ok(World { house_vertex_base, house, paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, landmarks, hlod, hlod_trees }) // hlod
 }
 
 /// the street size. `--ground-scale S` (an explicit ground-plan

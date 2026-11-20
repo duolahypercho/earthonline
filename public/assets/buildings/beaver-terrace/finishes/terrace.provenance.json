@@ -3,8 +3,32 @@
  "license": "MIT",
  "attribution": "Earth Online contributors. Siting from the recorded OpenStreetMap footprint in sf-city.json.gz.",
  "url": "/assets/buildings/beaver-terrace/finishes/terrace.glb",
- "sha256": "0dade45d9efabc8580222d728557734eb3b886cafb01528c8313469a9b1f3b53",
- "bytes": 14443520,
+ "sha256": "fbcbf870900b6455af590191711691eabdf7268b16f9fe69ff6735f691666bf4",
+ "bytes": 14754588,
+ "door": {
+  "hinge": [
+   6.655,
+   0,
+   0.15
+  ],
+  "bounds": [
+   [
+    5.225,
+    0.012,
+    0.107
+   ],
+   [
+    6.655,
+    2.372,
+    0.193
+   ]
+  ],
+  "materials": [
+   "front-door-paint@586648",
+   "front-door-moulding@647053",
+   "front-door-brass@9c8152"
+  ]
+ },
  "boxes": [
   [
    [
@@ -1544,14 +1568,38 @@
   ],
   [
    [
-    6.58,
+    5.198,
     0,
-    0.15
+    0.06
    ],
    [
-    6.69,
-    2.35,
-    1.56
+    5.234,
+    2.402,
+    0.217
+   ]
+  ],
+  [
+   [
+    6.646,
+    0,
+    0.06
+   ],
+   [
+    6.705,
+    2.402,
+    0.217
+   ]
+  ],
+  [
+   [
+    5.202,
+    2.365,
+    0.06
+   ],
+   [
+    6.7,
+    2.409,
+    0.217
    ]
   ],
   [

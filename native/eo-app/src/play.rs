@@ -171,7 +171,10 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
 /// (lifted by the construction lift the renderer uses), standing on the drawn
 /// street surface (eo-street: carpet, carriageway, kerbs, sidewalks) when the
 /// streets are loaded, else on the elevation grid.
-fn collision_world(world: &World, threads: usize) -> Result<CollisionWorld> {
+fn collision_world(
+    world: &World,
+    threads: usize,
+) -> Result<(CollisionWorld, Option<crate::house::Door>)> {
     let lift = eo_assets::placement::PlacementConstants::load()?.construction_lift_m;
     let mut buildings = BuildingSet::from_city(&world.city, lift);
     let ground: Arc<dyn GroundProvider> = match &world.street {
@@ -182,9 +185,12 @@ fn collision_world(world: &World, threads: usize) -> Result<CollisionWorld> {
         let index = world.city.buildings.iter().position(|b| crate::house::owns(&b.id)).unwrap();
         for ids in buildings.by_tile.values_mut() { ids.retain(|&id| id as usize != index); }
         let ground = Arc::new(crate::house::HouseGround { base: ground, house: house.clone() });
-        return Ok(CollisionWorld::new(ground, Arc::new(buildings), threads));
+        let mut collision = CollisionWorld::new(ground, Arc::new(buildings), threads);
+        let door =
+            crate::house::Door::new(house, &world.scene, world.house_vertex_base, &mut collision)?;
+        return Ok((collision, Some(door)));
     }
-    Ok(CollisionWorld::new(ground, Arc::new(buildings), threads))
+    Ok((CollisionWorld::new(ground, Arc::new(buildings), threads), None))
 }
 
 /// The player's view as the renderer's camera.
@@ -347,7 +353,7 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
         let lead = if driving { 500.0 } else { 450.0 };
         let frames = opts.frames.unwrap_or(if driving { 3600 } else { 7200 });
         let path = from_arc(&path, (steep_s - lead).max(0.0));
-        let mut cw = collision_world(&world, opts.collision_threads)?;
+        let (mut cw, _door) = collision_world(&world, opts.collision_threads)?;
         let mut start = DVec3::new(path[0][0], world.elevation.ground(path[0][0], path[0][1]), path[0][1]);
         let t_spawn = Instant::now();
         cw.load_blocking(start, pworld::LOAD_RADIUS_M);
@@ -617,9 +623,11 @@ mod window {
         args: Args,
         gfx: Option<Gfx>,
         cw: CollisionWorld,
+        door: Option<crate::house::Door>,
         player: Player,
         map: ActionMap,
         raw: RawInput,
+        interact_requested: bool,
         looking: bool,
         last: Instant,
         fps_frames: u32,
@@ -631,14 +639,14 @@ mod window {
 
     pub fn run(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
         let world = load_world(args)?;
-        let mut cw = collision_world(&world, opts.collision_threads)?;
+        let (mut cw, door) = collision_world(&world, opts.collision_threads)?;
         let s = crate::bench::spawn(); // the spawn on the scaled plan
         let mut feet = DVec3::new(s[0] as f64, world.elevation.ground(s[0] as f64, s[1] as f64), s[1] as f64);
         if let Some(h) = &world.house { feet = h.entry_position(); }
         cw.load_blocking(feet, pworld::LOAD_RADIUS_M);
         feet.y = cw.surface_y(feet.x, feet.z);
-        let mut player = Player::new(feet, 0.0);
-        let yaw = player.yaw;
+        let yaw = world.house.as_ref().map_or(0., |h| h.entry_yaw());
+        let mut player = Player::new(feet, yaw);
         player.spawn_vehicle(&mut cw, feet.x - yaw.cos() * 4.0, feet.z + yaw.sin() * 4.0, yaw);
         let event_loop = EventLoop::new()?;
         let mut app = App {
@@ -646,9 +654,11 @@ mod window {
             args: args.clone(),
             gfx: None,
             cw,
+            door,
             player,
             map: ActionMap::default(),
             raw: RawInput::default(),
+            interact_requested: false,
             looking: false,
             last: Instant::now(),
             fps_frames: 0,
@@ -708,6 +718,19 @@ mod window {
             // Player: input, fixed steps, collision streaming, camera.
             let t0 = Instant::now();
             let frame = self.map.resolve(&mut self.raw, dt, false);
+            let interact = std::mem::take(&mut self.interact_requested)
+                || frame.tapped(eo_player::input::Action::Interact);
+            if let Some(door) = &mut self.door {
+                let feet = self.player.position(&self.cw);
+                if self.player.mode == Mode::OnFoot && interact {
+                    door.toggle(feet);
+                }
+                if door.advance(dt, feet, &mut self.world.scene, &mut self.cw)
+                    && let Some(g) = &self.gfx
+                {
+                    door.upload(&self.world.scene, &g.renderer, &g.ctx.queue);
+                }
+            }
             self.player.look(frame.look_yaw, frame.look_pitch);
             let input = StepInput::from_frame(&frame);
             self.player.advance(&mut self.cw, &input, dt);
@@ -754,9 +777,14 @@ mod window {
                     Mode::OnFoot => ("on foot", self.player.ground_speed),
                     Mode::Driving(i) => ("driving", self.player.vehicles[i].forward_speed(&self.cw).abs()),
                 };
+                let door_hint = self
+                    .door
+                    .as_ref()
+                    .filter(|d| self.player.mode == Mode::OnFoot && d.in_reach(pos))
+                    .map_or("", |d| d.action_hint());
                 let bed_hint = if self.player.mode == Mode::OnFoot && self.world.house.as_ref().is_some_and(|h| h.by_bed(pos)) { " - R: sleep until 07:00" } else { "" };
                 g.window.set_title(&format!(
-                    "Earth Online native - play - {:.0} fps - {mode} {:.1} m/s - player {:.2} ms avg / {:.2} max - F: car, V: new car, Esc: mouse{bed_hint}",
+                    "Earth Online native - play - {:.0} fps - {mode} {:.1} m/s - player {:.2} ms avg / {:.2} max - F: car, V: new car, Esc: mouse{door_hint}{bed_hint}",
                     self.fps_frames as f64 / el,
                     speed,
                     self.player_ms_sum / self.fps_frames.max(1) as f64,
@@ -813,6 +841,7 @@ mod window {
                 }
                 WindowEvent::Focused(false) => {
                     self.raw.held = HashSet::new();
+                    self.interact_requested = false;
                     self.set_looking(false);
                 }
                 WindowEvent::MouseInput { state, button, .. } => {
@@ -836,6 +865,10 @@ mod window {
                         let name = format!("{code:?}");
                         match event.state {
                             ElementState::Pressed => {
+                                // A quick tap may start and finish between redraws.
+                                if code == KeyCode::KeyE && !event.repeat {
+                                    self.interact_requested = true;
+                                }
                                 if code == KeyCode::Escape {
                                     if self.looking {
                                         self.set_looking(false);
@@ -906,44 +939,132 @@ mod house_tests {
         args.kit = false;
         args.landmarks = false;
         args.models = false;
-        let world = load_world(&args).unwrap();
+        let mut world = load_world(&args).unwrap();
         let house = world.house.as_ref().unwrap();
-        let mut cw = collision_world(&world, 2).unwrap();
+        let (mut cw, door) = collision_world(&world, 2).unwrap();
+        let mut door = door.unwrap();
+        assert!(door.is_shut());
         let mut start = house.entry_position();
         if finishes {
-            assert!(start.distance(house.point(5.95, 0., -3.3)) > 0.01, "private path must reach the mapped paving");
+            assert!(
+                start.distance(house.point(5.95, 0., -3.3)) > 0.01,
+                "private path must reach the mapped paving"
+            );
             let ground = &world.street.as_ref().unwrap().world;
             for corner in house.lowest_tread_corners() {
-                assert!(corner.y > ground.surface_at(corner.x, corner.z, None) + 0.03, "the hillside cuts the lowest tread");
+                assert!(
+                    corner.y > ground.surface_at(corner.x, corner.z, None) + 0.03,
+                    "the hillside cuts the lowest tread"
+                );
             }
         }
         cw.load_blocking(start, pworld::LOAD_RADIUS_M);
         start.y = cw.surface_y(start.x, start.z);
-        let mut body = eo_player::character::Character::new(start);
+        // Use the play window's controller and keyboard mapping for the
+        // approach, including its acceleration, slope and step handling.
+        let inside = house.point(5.95, 0., 1.05);
+        let mut player = Player::new(start, house.entry_yaw());
+        let mut raw = RawInput::default();
+        raw.held.insert("KeyW".to_owned());
+        let mut actions = ActionMap::default();
+        for _ in 0..360 {
+            let frame = actions.resolve(&mut raw, 1. / 60., false);
+            player.advance(&mut cw, &StepInput::from_frame(&frame), 1. / 60.);
+        }
+        let mut body = player.character;
+        assert!(
+            body.feet().distance(inside) > 1.0,
+            "walked through the shut front door"
+        );
+        raw.held.clear();
+        raw.held.insert("KeyE".to_owned());
+        assert!(
+            actions
+                .resolve(&mut raw, 1. / 60., false)
+                .tapped(eo_player::input::Action::Interact)
+        );
+        assert!(
+            door.toggle(body.feet()),
+            "cannot operate the front door from the stoop: {:?}",
+            body.feet()
+        );
+        for _ in 0..35 {
+            door.advance(1. / 60., body.feet(), &mut world.scene, &mut cw);
+            cw.physics.step();
+        }
+        let outside = house.point(5.89, 1.03, -0.35);
+        let ray = house.point(5.89, 1.03, 0.65) - outside;
+        assert!(
+            cw.raycast(
+                outside,
+                ray.normalize(),
+                ray.length(),
+                pworld::layer::WORLD,
+                None
+            )
+            .is_none(),
+            "open leaf still blocks the opening"
+        );
         let mut walk = |x, z| {
             let target = house.point(x, 0.0, z);
             for _ in 0..1200 {
                 let p = body.feet();
-                let delta = glam::DVec2::new(target.x-p.x, target.z-p.z);
-                if delta.length() < 0.035 { return p; }
+                let delta = glam::DVec2::new(target.x - p.x, target.z - p.z);
+                if delta.length() < 0.035 {
+                    return p;
+                }
                 let d = delta.clamp_length_max(0.033);
                 body.step(&cw, d.x, d.y, true);
             }
-            panic!("blocked at {:?} walking to ({x}, {z})",body.feet());
+            panic!("blocked at {:?} walking to ({x}, {z})", body.feet());
         };
         walk(5.95, 9.8);
         walk(3.35, 9.8);
-        assert!(house.by_bed(walk(3.35,10.8)));
-        walk(4.15,10.8);
-        walk(4.15,2.1);
-        walk(5.95,2.1);
-        let loft = walk(5.95,9.8);
+        assert!(house.by_bed(walk(3.35, 10.8)));
+        walk(4.15, 10.8);
+        walk(4.15, 2.1);
+        walk(5.95, 2.1);
+        let loft = walk(5.95, 9.8);
         assert!(loft.y > house.wake_position().y + 2.5);
-        walk(5.95,2.1);
-        walk(4.15,2.1);
-        walk(4.15,9.8);
-        walk(5.95,9.8);
-        let street = walk(5.95,-3.3);
-        assert!((street.y-start.y).abs()<0.3);
+        walk(5.95, 2.1);
+        walk(4.15, 2.1);
+        walk(4.15, 9.8);
+        walk(5.95, 9.8);
+        let street = walk(5.95, -3.3);
+        assert!((street.y - start.y).abs() < 0.3);
+        // The open knob is on the inside. A resident can close the door,
+        // it then blocks the opening, and either side can operate it again.
+        let resident = house.point(5.24, 0., 1.42);
+        assert!(door.toggle(resident));
+        let in_swing = house.point(5.91, 0., 0.93);
+        for _ in 0..12 {
+            door.advance(0.1, in_swing, &mut world.scene, &mut cw);
+            cw.physics.step();
+        }
+        assert!(
+            !door.is_shut(),
+            "the door closed through a person standing in its swing"
+        );
+        for _ in 0..35 {
+            door.advance(1. / 60., resident, &mut world.scene, &mut cw);
+            cw.physics.step();
+        }
+        assert!(door.is_shut());
+        assert!(
+            cw.raycast(
+                outside,
+                ray.normalize(),
+                ray.length(),
+                pworld::layer::WORLD,
+                None
+            )
+            .is_some(),
+            "closed leaf no longer blocks the opening"
+        );
+        assert!(door.toggle(resident));
+        assert!(
+            !door.toggle(house.point(2., 6.7, 8.)),
+            "door can be operated from another floor"
+        );
     }
 }

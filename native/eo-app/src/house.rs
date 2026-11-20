@@ -1,5 +1,7 @@
 //! Site and collision integration for the Blender-built terrace at 21 Beaver Street.
+mod door;
 use anyhow::{Result, ensure};
+pub use door::Door;
 use eo_assets::{AssetRef, CookedModel, KitLibrary};
 use eo_player::world::{GroundProvider, SurfaceMesh, TileKey};
 use eo_render::authored::MaterialTable;
@@ -26,9 +28,17 @@ type Point = [f64; 3];
 struct Manifest {
     #[serde(flatten)]
     asset: AssetRef,
+    door: DoorSpec,
     boxes: Vec<[Point; 2]>,
     ramps: Vec<[Point; 4]>,
 }
+#[derive(Deserialize)]
+struct DoorSpec {
+    hinge: Point,
+    bounds: [Point; 2],
+    materials: Vec<String>,
+}
+
 #[derive(Clone, Deserialize)]
 struct ProbeVolume {
     min: [f32; 3],
@@ -127,6 +137,7 @@ pub struct House {
     floor: f64,
     height_scale: f64,
     model: CookedModel,
+    door: DoorSpec,
     materials: Vec<u32>,
     light_transfer: Vec<[f32; 2]>,
     probes: Option<[ProbeVolume; 2]>,
@@ -197,6 +208,7 @@ impl House {
             floor,
             height_scale: b.height as f64 / 10.,
             model,
+            door: manifest.door,
             materials: resolved,
             light_transfer,
             probes: finishes.map(|r| r.manifest.probes.clone()),
@@ -419,6 +431,10 @@ impl House {
         self.entry = Some(self.point((a[0] + b[0]) * 0.5, 0., end));
     }
 
+    pub fn entry_yaw(&self) -> f64 {
+        self.back.x.atan2(self.back.y)
+    }
+
     pub fn entry_position(&self) -> DVec3 {
         self.entry.unwrap_or_else(|| self.point(5.95, 0., -3.3))
     }
@@ -583,7 +599,25 @@ impl House {
         }
         scene.indices.extend_from_slice(&self.model.indices);
         for part in &self.model.parts {
-            let (lo, hi) = self.bounds(part.min, part.max);
+            let (lo, hi) = if self
+                .door
+                .materials
+                .contains(&self.model.materials[part.material as usize].name)
+            {
+                // The cull and shadow tables cover the full swing, including
+                // the handle. At rest or in motion it is one piece of joinery.
+                let [x, y, z] = self.door.hinge;
+                let hinge = self.point(x, y, z).as_vec3();
+                let reach = ((self.door.bounds[1][0] - self.door.bounds[0][0] + 0.18)
+                    * self.across.length()) as f32;
+                let height = (self.door.bounds[1][1] * self.height_scale) as f32;
+                (
+                    (hinge - Vec3::new(reach, 0.01, reach)).to_array(),
+                    (hinge + Vec3::new(reach, height + 0.01, reach)).to_array(),
+                )
+            } else {
+                self.bounds(part.min, part.max)
+            };
             let mut o = GpuObject::new(
                 ObjectKind::Model,
                 lo,

@@ -483,19 +483,40 @@ else:
         box(ivory, (0, 10.15, z), (7, 10.37, z + 0.15))
 room = part("foundation", 0, -2.4, 0)
 box(stone, (0, -2.4, 0), (7, -0.16, 13), True)
-room = part("front-door", 6.635, 0, 0.15)
-box(sage, (6.58, 0, 0.15), (6.69, 2.35, 1.56), True, 0.012)
-for h in [0.2, 1.12]:
-    box(ivory, (6.55, h, 0.31), (6.58, h + 0.83, 1.39), False, 0.02)
-    box(sage, (6.52, h + 0.045, 0.36), (6.55, h + 0.78, 1.34), False, 0.014)
-turned(brass, 6.47, 1.02, 1.36, [(0.05, 0), (0.05, 0.065)])
+# The exported rest pose is shut. The game swings the same leaf and both
+# handles about this hinge; the frame and threshold stay in the house shell.
+door_hinge = [6.655, 0, 0.15]
+door_bounds = [[5.225, 0.012, 0.107], [6.655, 2.372, 0.193]]
+room = part("front-door", *door_hinge)
+door_paint = finish("front-door-paint", "586648", 0.56, texture=37)
+door_trim = finish("front-door-moulding", "647053", 0.53, texture=37)
+door_brass = finish("front-door-brass", "9c8152", 0.34, 0.72)
+door_materials = [door_paint,door_trim,door_brass]
+box(door_paint,*door_bounds,bevel=0.008)
+for sign,face in [(-1,0.107),(1,0.193)]:
+    for low,high in [(0.20,1.00),(1.19,2.15)]:
+        for left,right in [(5.34,5.85),(6.02,6.54)]:
+            for width,depth,material in [(0.0,0.014,door_trim),(0.033,0.018,door_paint)]:
+                z0,z1=sorted((face,face+sign*depth))
+                box(material,(left+width,low+width,z0),(right-width,high-width,z1),False,0.006)
+    # Round brass knob, tapered shank and escutcheon run along the panel normal.
+    profile=[(0.003,0.053),(0.013,0.055),(0.019,0.035),(0.036,0.018),(0.054,0.022),
+             (0.072,0.042),(0.090,0.042),(0.105,0.027),(0.111,0.002)]
+    points=[(5.335+r*math.cos(i*math.tau/28),1.026+r*math.sin(i*math.tau/28),face+sign*d)
+            for d,r in profile for i in range(28)]
+    faces=[(j*28+i,j*28+(i+1)%28,(j+1)*28+(i+1)%28,(j+1)*28+i) for j in range(len(profile)-1) for i in range(28)]
+    emit(door_brass,points,faces if sign>0 else [f[::-1] for f in faces],True)
 room = part("entrance-casing", 5.95, 0, 0)
+for lo,hi in [(5.198,5.234),(6.646,6.705)]:
+    box(walnut,(lo,0,0.060),(hi,2.402,0.217),True,0.006)
+box(walnut,(5.202,2.365,0.060),(6.70,2.409,0.217),True,0.006)
+box(stone,(5.205,0.0,-0.052),(6.695,0.015,0.223),False,0.004)
 if not FINISHES:
     for x in [5.12, 6.68]:
         box(ivory, (x, 0, -0.07), (x + 0.09, 2.51, 0.19), False, 0.009)
     box(ivory, (5.02, 2.43, -0.14), (6.86, 2.56, 0.17), False, 0.015)
 if FINISHES:
-    # A recessed portal covers the existing open door. The front, back and
+    # A recessed portal shelters the hinged door. The front, back and
     # intrados are separate faces, so the deep reveal casts a real shadow.
     room = part("arched-entry-and-lantern", 5.95, 0, -0.36)
     bronze = finish("bronze-hardware", "695b44", 0.46, 0.68)
@@ -1461,6 +1482,7 @@ manifest = {
     "url": "/" + glb.relative_to(ROOT / "public").as_posix(),
     "sha256": hashlib.sha256(raw).hexdigest(),
     "bytes": len(raw),
+    "door": {"hinge": door_hinge, "bounds": door_bounds, "materials": door_materials},
     "boxes": boxes,
     "ramps": ramps,
 }
