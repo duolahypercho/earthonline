@@ -351,7 +351,16 @@ impl House {
         for j in 0..courses {
             let t0 = j as f64 / courses as f64;
             let t1 = (j + 1) as f64 / courses as f64;
-            walk.push([pos(a[0], t0), pos(b[0], t0), pos(b[0], t1), pos(a[0], t1)]);
+            let course = [pos(a[0], t0), pos(b[0], t0), pos(b[0], t1), pos(a[0], t1)];
+            walk.push(course);
+            // Bed the pavers in mortar and close the exposed downhill edge
+            // of the fill. The terrain can be well below the raised landing.
+            let mortar = course.map(|[x, y, z]| [x, y - 0.008, z]);
+            tiles.push((mortar, 0xff829198));
+            for (from, to) in [(mortar[0], mortar[3]), (mortar[2], mortar[1])] {
+                let toe = |[x, _, z]: Point| [x, terrain(x, z) - 0.028, z];
+                tiles.push(([from, to, toe(to), toe(from)], 0xff80909c));
+            }
             for k in 0..5 {
                 let x = a[0] + (k as f64 - 0.5 * (j % 2) as f64) * span / 4.;
                 let u = (x + span / 4.).min(b[0]) - 0.004;
