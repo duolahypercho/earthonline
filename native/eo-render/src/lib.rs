@@ -1207,10 +1207,11 @@ impl Renderer {
     /// stage 4, the distant trees' pipeline and buffer (once; the list
     /// comes later: `hlod_trees.get()?.supply`). Returns the bytes allocated.
     pub fn attach_far_trees(&self, ctx: &GpuContext) -> u64 {
-        if self.hlod_trees.get().is_some() || !self.compact || !hlod::HlodOptions::from_env().on || !hlod::HlodOptions::from_env().trees {
+        if self.hlod_trees.get().is_some() || (!self.compact && !self.look.options.cove_detail) || !hlod::HlodOptions::from_env().on || !hlod::HlodOptions::from_env().trees {
             return 0;
         }
         let t = hlod_trees::FarTrees::new(&hlod_trees::FarTreesInit {
+            cove_only: !self.compact,
             device: &ctx.device,
             draw_bgl: &self.draw_bgl,
             main_bgl: self.look.main_bind_group_layout(),
@@ -1972,11 +1973,11 @@ impl Renderer {
                     if let Some(h) = self.hlod.get() {
                         // the far layer after the opaque city (the late pass with occlusion), before the sky.
                         h.draw(&mut pass);
-                        if let Some(t) = self.hlod_trees.get() {
-                            t.draw(&mut pass); // stage 4, the distant trees
-                        }
                         pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
                         pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint32);
+                    }
+                    if let Some(t) = self.hlod_trees.get() {
+                        t.draw(&mut pass);
                     }
                     if let Some(p) = self.props.get() {
                         // the street props after the opaque city (late pass with occlusion).

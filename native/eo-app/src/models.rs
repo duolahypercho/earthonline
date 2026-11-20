@@ -438,7 +438,7 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     }
     // stage 4, the distant trees' pipeline and buffer; the list (gathered on
     // the load's own thread) is written in by `ModelRuntime::pump` when it is ready.
-    if world.hlod.is_some() && world.hlod_trees.is_some() {
+    if (world.hlod.is_some() || args.cove_detail) && world.hlod_trees.is_some() {
         r.bytes.draws += r.attach_far_trees(ctx);
     }
     Ok((r, Bases { models, kit, street, model_arena, kit_near, far_layer, structures, structures_placement })) // + model_arena, kit_near, far_layer, structures
@@ -688,7 +688,7 @@ impl ModelRuntime {
             streamer,
             street,
             structures,
-            hlod_trees: if world.hlod_trees.is_some() && hlod.is_some() { 1 } else { 0 }, // hlod
+            hlod_trees: if world.hlod_trees.is_some() && (hlod.is_some() || args.cove_detail) { 1 } else { 0 }, // hlod
             hlod, // hlod
             kit_rx: world.kit_rx.take(),
             shop_rx,

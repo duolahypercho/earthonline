@@ -76,6 +76,12 @@ fn park_tree(t: eo_landmarks::ground_cover::ParkTree) -> FarTree {
     FarTree { pos: [t.x as f32, t.y as f32, t.z as f32], height: h * k, crown: cr * k, tint, seed, pad: 0 }
 }
 
+const COVE_TREE_CAPACITY: u32 = 4096;
+
+fn black_point_bounds() -> ([f64; 2], [f64; 2]) {
+    (eo_data::groundscale::plan([-905.0, -3349.0]), eo_data::groundscale::plan([-607.0, -3100.0]))
+}
+
 /// Fill the mapped Black Point woods at the same sampling density as the near
 /// trees. A single 512 m gathering area otherwise shares its 150-tree limit
 /// between the entire hillside and the neighbouring park. Keep existing stems.
@@ -85,8 +91,7 @@ pub fn fill_black_point(
     ground: &dyn Fn(f64, f64) -> f64,
     blocked: &dyn Fn(f64, f64) -> bool,
 ) {
-    let [x0, z0] = eo_data::groundscale::plan([-905.0, -3349.0]);
-    let [x1, z1] = eo_data::groundscale::plan([-607.0, -3100.0]);
+    let ([x0, z0], [x1, z1]) = black_point_bounds();
     let key = |x: f32, z: f32| (x.to_bits(), z.to_bits());
     let mut existing = std::collections::HashSet::new();
     for t in trees.iter().filter(|t| (x0..x1).contains(&(t.pos[0] as f64)) && (z0..z1).contains(&(t.pos[2] as f64))) {
@@ -224,6 +229,7 @@ pub const CAPACITY: u32 = 262_144;
 pub const WRITE_BYTES_PER_FRAME: usize = 512 << 10;
 
 pub struct FarTrees {
+    cove_only: bool,
     pipeline: wgpu::RenderPipeline,
     bg: wgpu::BindGroup,
     params: wgpu::Buffer,
@@ -246,6 +252,7 @@ pub struct FarTrees {
 }
 
 pub struct FarTreesInit<'a> {
+    pub cove_only: bool,
     pub device: &'a wgpu::Device,
     pub draw_bgl: &'a wgpu::BindGroupLayout,
     pub main_bgl: &'a wgpu::BindGroupLayout,
@@ -262,7 +269,8 @@ impl FarTrees {
         let d = i.device;
         use wgpu::BufferUsages as U;
         let buffer = |label: &str, size: u64, usage| d.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size, usage, mapped_at_creation: false });
-        let size = CAPACITY as u64 * std::mem::size_of::<FarTree>() as u64;
+        let capacity = if i.cove_only { COVE_TREE_CAPACITY } else { CAPACITY };
+        let size = capacity as u64 * std::mem::size_of::<FarTree>() as u64;
         let buf = buffer("hlod-far-trees", size, U::STORAGE | U::COPY_DST);
         let params = buffer("hlod-far-tree-params", 16, U::UNIFORM | U::COPY_DST);
         let block_bytes = MAX_BLOCKS as u64 * std::mem::size_of::<TreeBlock>() as u64;
@@ -357,6 +365,7 @@ impl FarTrees {
             cull_plain,
             cull_hzb,
             cull_bg,
+            cove_only: i.cove_only,
             count: std::sync::atomic::AtomicU32::new(0),
             blocks: std::sync::atomic::AtomicU32::new(0),
             pending: std::sync::Mutex::new(None),
@@ -365,8 +374,14 @@ impl FarTrees {
     }
 
     /// The tree list (gathered and ordered off the render thread, `into_blocks`); written by `pump`.
-    pub fn supply(&self, list: FarTreeList) {
-        let n = list.trees.len().min(CAPACITY as usize);
+    pub fn supply(&self, mut list: FarTreeList) {
+        let capacity = if self.cove_only {
+            let ([x0, z0], [x1, z1]) = black_point_bounds();
+            list.trees.retain(|t| (x0..x1).contains(&(t.pos[0] as f64)) && (z0..z1).contains(&(t.pos[2] as f64)));
+            list.blocks.clear();
+            COVE_TREE_CAPACITY
+        } else { CAPACITY };
+        let n = list.trees.len().min(capacity as usize);
         let nb = list.blocks.iter().take_while(|b| (b.first + b.count) as usize <= n).count().min(MAX_BLOCKS as usize);
         let mut data = bytemuck::cast_slice(&list.trees[..n]).to_vec();
         data.extend_from_slice(bytemuck::cast_slice(&list.blocks[..nb]));
@@ -452,6 +467,17 @@ impl FarTrees {
 
     /// In the city pass with the opaque city (groups 0 and 1 bound): the blocks the cull kept.
     pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
+        if self.cove_only {
+            let count = self.count();
+            if count > 0 {
+                // The grove fits in a single ordinary instanced draw on adapters
+                // without counted draws. The vertex shader handles the near fade.
+                pass.set_pipeline(&self.pipeline);
+                pass.set_bind_group(2, &self.bg, &[]);
+                pass.draw(0..6, 0..count);
+            }
+            return;
+        }
         let n = self.block_count();
         if n == 0 {
             return;
