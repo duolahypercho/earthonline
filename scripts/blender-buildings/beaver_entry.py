@@ -197,7 +197,7 @@ def bougainvillea(emit, bark, foliage, bracts, flower):
                         blade(center, Vector((0.002, 0.011, -0.014)), 0.004, flower)
 
 
-def dress_scans(materials, directory, scene):
+def dress_scans(materials, directory, scene, furnished=False):
     """Pack the same photographic colour, roughness and relief into the editable scene."""
     import bpy
     import json
@@ -205,7 +205,10 @@ def dress_scans(materials, directory, scene):
 
     scene.view_layers[0].update()
     uv_name = "Photographic finish"
-    for name in ("limewash", "aggregate", "fired-earth", "painted-wood", "linen"):
+    names = ["limewash", "aggregate", "fired-earth", "painted-wood", "linen"]
+    if furnished:
+        names += ["furniture/wool-carpet", "furniture/joinery"]
+    for name in names:
         spec = json.loads((directory / (name + ".provenance.json")).read_text())
         atlas = bpy.data.images.load(str(directory / (name + ".png")), check_existing=False)
         atlas.colorspace_settings.name = "Non-Color"
@@ -235,13 +238,18 @@ def dress_scans(materials, directory, scene):
             uv = mesh.uv_layers.get(uv_name) or mesh.uv_layers.new(name=uv_name)
             points = [obj.matrix_world @ vertex.co for vertex in mesh.vertices]
             metres = spec["metres_per_tile"]
+            if family == "woven-carpet":
+                x0, x1 = min(p.x for p in points), max(p.x for p in points)
+                y0, y1 = min(p.y for p in points), max(p.y for p in points)
             for poly in mesh.polygons:
                 normal = poly.normal
                 axis = max(range(3), key=lambda j: abs(normal[j]))
                 pair = ((1, 2), (0, 2), (0, 1))[axis]
                 for loop in poly.loop_indices:
                     p = points[mesh.loops[loop].vertex_index]
-                    if name == "painted-wood":
+                    if family == "woven-carpet":
+                        coords = ((y1-p.y)/(y1-y0), 1-(p.x-x0)/(x1-x0))
+                    elif name == "painted-wood":
                         coords = (p.z / 2.372, (p.x - 5.225) * 3.1 / 1.430)
                     else:
                         coords = (p[pair[0]] / metres, p[pair[1]] / metres)

@@ -57,6 +57,7 @@ const GRAVEL_BIT: u32 = 1024u;
 const DOOR_SCAN_BIT: u32 = 2048u;
 const FRONT_SASH_BIT: u32 = 4096u;
 const LIMEWASH_BIT: u32 = 8192u;
+const RUG_SCAN_BIT: u32 = 16384u;
 const PI: f32 = 3.14159265;
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -125,7 +126,9 @@ fn vs(
     if (kind == 4u && normal.w > 0.49) {
         // The house builder stores window and fixture transfer in R and G.
         out.color = color.rgb;
-        if ((o.kind & DOOR_SCAN_BIT) != 0u) {
+        if ((o.kind & RUG_SCAN_BIT) != 0u) {
+            out.ft = clamp(vec2<f32>(color.b, color.a), vec2<f32>(0.001), vec2<f32>(0.999));
+        } else if ((o.kind & DOOR_SCAN_BIT) != 0u) {
             out.ft = vec2<f32>(color.a, color.b * 3.1);
         } else if ((o.kind & FLOOR_SCAN_BIT) != 0u) {
             let strip = floor(color.b * 8.0);
@@ -751,7 +754,7 @@ fn shade(in: VOut) -> vec4<f32> {
     // a kit vertex carries raw bytes (see vs): the paint decodes here.
     let kit_object = (objects[in.object].kind & 255u) == 5u;
     let house_finish = (objects[in.object].kind & 255u) == 4u && in.aux.y > 0.49;
-    let interior_transfer = house_finish && in.aux.y > 0.99;
+    let interior_transfer = house_finish && in.aux.y > 64.5 / 127.0;
     var vcol = select(in.color, vec3<f32>(1.0), house_finish);
     if (kit_object) {
         vcol = pow(in.color, vec3<f32>(2.2));
@@ -918,18 +921,18 @@ fn shade(in: VOut) -> vec4<f32> {
         let exposure = clamp((in.color.b * 255.0 - 3.0) / 55.0, 0.0, 1.0);
         s.albedo *= mix(vec3<f32>(1.0), vec3<f32>(0.79, 0.75, 0.70), exposure);
     }
-    let door_scan = (objects[in.object].kind & DOOR_SCAN_BIT) != 0u;
-    let floor_scan = (objects[in.object].kind & (DOOR_SCAN_BIT | FLOOR_SCAN_BIT)) != 0u;
-    if (floor_scan && (door_scan || abs(n.y) > 0.7)) {
-        let layer = select(i32(textureNumLayers(kit_albedo)) - 2, m.layer, door_scan);
-        s.albedo = textureSampleGrad(kit_albedo, kit_sampler, in.ft, layer, scan_dx, scan_dy).rgb * select(vec3<f32>(1.0), m.base.rgb, door_scan);
+    let local_scan = (objects[in.object].kind & (DOOR_SCAN_BIT | RUG_SCAN_BIT)) != 0u;
+    let floor_scan = local_scan || (objects[in.object].kind & FLOOR_SCAN_BIT) != 0u;
+    if (floor_scan && (local_scan || abs(n.y) > 0.7)) {
+        let layer = select(i32(textureNumLayers(kit_albedo)) - 2, m.layer, local_scan);
+        s.albedo = textureSampleGrad(kit_albedo, kit_sampler, in.ft, layer, scan_dx, scan_dy).rgb * select(vec3<f32>(1.0), m.base.rgb, local_scan);
         s.rough = textureSampleGrad(kit_orm, kit_sampler, in.ft, layer, scan_dx, scan_dy).g;
         let bump = textureSampleGrad(kit_normal, kit_sampler, in.ft, layer, scan_dx, scan_dy).xyz * 2.0 - 1.0;
         let det = scan_dx.x * scan_dy.y - scan_dy.x * scan_dx.y;
         if (abs(det) > 1e-10) {
             let along = normalize((dpx * scan_dy.y - dpy * scan_dx.y) * sign(det));
             let across = normalize((dpy * scan_dx.x - dpx * scan_dy.x) * sign(det));
-            s.n = normalize(n * bump.z + select(1.0, m.params.z, door_scan) * (along * bump.x - across * bump.y));
+            s.n = normalize(n * bump.z + select(1.0, m.params.z, local_scan) * (along * bump.x - across * bump.y));
         }
     } else if (house_finish && !floor_scan && in.color.b > 0.5) {
         // Longitudinal oak fibres curve around growth rings. Filter the finer
@@ -949,6 +952,8 @@ fn shade(in: VOut) -> vec4<f32> {
     if (interior_transfer && (m.flags & F_GLASS) == 0u) {
         // Transfer is sampled at build time against the actual windows, furniture
         // and luminaire. Window light follows the current sky; the pendant stays warm.
+        // Near-field visibility is baked against each seat, post and rug in the room.
+        s.ao *= clamp((in.aux.y * 127.0 - 65.0) / 62.0, 0.0, 1.0);
         let transfer = in.color.rg * in.color.rg;
         let window = 0.76 * transfer.x * (look.hemi_sky.rgb + look.key.rgb * max(look.key_dir.y, 0.0));
         let pendant = transfer.y * vec3<f32>(1.55, 1.05, 0.56);

@@ -1,0 +1,23 @@
+{
+  "source": "https://www.metmuseum.org/art/collection/search/452588",
+  "license": "CC0-1.0",
+  "license_url": "https://www.metmuseum.org/about-the-met/policies-and-documents/open-access",
+  "attribution": "The Metropolitan Museum of Art. Carpet, attributed to Turkey, first half of the 19th century. Bequest of Joseph V. McMullan, 1973, 1974.149.36.",
+  "inputs": [
+    {
+      "role": "recto photograph",
+      "url": "https://images.metmuseum.org/CRDImages/is/original/DP220897.jpg",
+      "sha256": "2dd2e6ed8622458e0c6cae79055eb8d5c2ace7c6f20af708cc9852e6430f7859"
+    }
+  ],
+  "families": [
+    "woven-carpet"
+  ],
+  "metres_per_tile": 1.0,
+  "normal_strength": 0.0,
+  "paint_mix": 0.0,
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/wool-carpet.png",
+  "sha256": "b4d535371bd045c523458e4b911538cbc2aab5144e97495c2bf6c431604f7267",
+  "bytes": 693957,
+  "build": "scripts/blender-buildings/prepare_beaver_furniture.py"
+}

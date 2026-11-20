@@ -78,6 +78,8 @@ pub const DOOR_SCAN_BIT: u32 = 1 << 11;
 pub const FRONT_SASH_BIT: u32 = 1 << 12;
 /// Mineral plaster with locally baked exposure to splash and runoff.
 pub const LIMEWASH_BIT: u32 = 1 << 13;
+/// An entire carpet sampled once in its authored orientation.
+pub const RUG_SCAN_BIT: u32 = 1 << 14;
 
 /// Material 0: the vertex colour (footprints, terrain, roads, sea).
 pub const MATERIAL_VERTEX_COLOUR: u32 = 0;

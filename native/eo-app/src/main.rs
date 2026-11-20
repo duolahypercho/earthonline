@@ -44,6 +44,7 @@ pub struct Args {
     pub interior_lighting: bool,
     pub house_finishes: bool,
     pub house_patina: bool,
+    pub house_furniture: bool,
     pub bench: bool,
     pub start_underwater: bool,
     pub frames: usize,
@@ -190,6 +191,7 @@ fn parse_args() -> Result<Args> {
         interior_lighting: true,
         house_finishes: false,
         house_patina: false,
+        house_furniture: false,
         beaver_house: false,
         bench: false,
         start_underwater: false,
@@ -260,7 +262,9 @@ fn parse_args() -> Result<Args> {
             "--no-interior-lighting" => a.interior_lighting = false,
             "--house-finishes" => a.house_finishes = true,
             "--house-patina" => { a.house_finishes = true; a.house_patina = true; }
-            "--no-house-patina" => a.house_patina = false,
+            "--no-house-patina" => { a.house_patina = false; a.house_furniture = false; }
+            "--house-furniture" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; }
+            "--no-house-furniture" => a.house_furniture = false,
             "--no-house-finishes" => a.house_finishes = false,
             "--no-beaver-house" => a.beaver_house = false,
             "--no-models" => a.models = false,
@@ -582,7 +586,7 @@ pub fn load_world(args: &Args) -> Result<World> {
     // the building records the landmark buildings draw instead.
     let mut landmark_claims: HashSet<String> = if args.landmarks && args.landmarks2 { eo_landmarks::set::claimed_records() } else { HashSet::new() };
     let finishes = (args.beaver_house && args.house_finishes)
-        .then(|| house::Finishes::load(&paths.repo_root, args.house_patina))
+        .then(|| house::Finishes::load(&paths.repo_root, args.house_patina, args.house_furniture))
         .transpose()?;
     let house = if args.beaver_house {
         let record = city.buildings.iter().find(|b| house::owns(&b.id)).ok_or_else(|| anyhow::anyhow!("missing Beaver Street house footprint"))?;

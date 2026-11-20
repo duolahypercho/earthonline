@@ -245,3 +245,5 @@ grouped by that field exactly as each crate declares it. Regenerate it after a d
 | `BSD-2-Clause OR MIT OR Apache-2.0` | 1 | mach2 0.6.0 |
 | `ISC` | 1 | libloading 0.8.9 |
 <!-- END GENERATED: cargo-licences -->
+
+The optional 21 Beaver sitting-room carpet uses the public-domain recto photograph of *Carpet*, attributed to Turkey, first half of the nineteenth century, Bequest of Joseph V. McMullan, 1973, accession 1974.149.36. The material builder rectifies and resamples the photograph. [The Metropolitan Museum of Art object record](https://www.metmuseum.org/art/collection/search/452588) · [The Met Open Access policy](https://www.metmuseum.org/about-the-met/policies-and-documents/open-access).

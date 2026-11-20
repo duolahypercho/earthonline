@@ -14,6 +14,8 @@ pub const NAMES: [&str; 5] = [
     "linen",
 ];
 
+pub const FURNITURE_NAMES: [&str; 2] = ["wool-carpet", "joinery"];
+
 #[derive(Deserialize)]
 struct Spec {
     #[serde(flatten)]
@@ -58,7 +60,7 @@ impl Scan {
         }
         let surface = GpuMaterial {
             base,
-            flags: if super::door_paint(&mat.name) {
+            flags: if super::door_paint(&mat.name) || family == "woven-carpet" {
                 0
             } else {
                 F_TEXTURED

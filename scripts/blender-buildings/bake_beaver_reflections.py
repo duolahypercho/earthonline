@@ -17,7 +17,10 @@ from mathutils import Vector
 from mathutils.bvhtree import BVHTree
 
 OUT = Path(__file__).resolve().parents[2] / "public/assets/buildings/beaver-terrace/finishes"
-if "--" in sys.argv and "--house-patina" in sys.argv[sys.argv.index("--") + 1:]:
+options = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+if "--house-furniture" in options:
+    OUT = OUT / "patina/furniture"
+elif "--house-patina" in options:
     OUT = OUT / "patina"
 SOURCE = OUT / "terrace.glb"
 SIZE = 256
@@ -27,6 +30,13 @@ PROBES = [
     {"at": [1.414, 0.89, 11.68], "min": [1.16, 0, 11.57], "max": [2.24, 2.17, 12.85]},
     {"at": [1.19, 1.11, 9.80], "min": [0.06, 0, 9.04], "max": [1.24, 1.37, 10.48]},
 ]
+
+if "--house-furniture" in options:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from beaver_dimensions import furniture_point
+    for probe, name in zip(PROBES, ("enamel-refrigerator", "oven-range")):
+        for key in probe:
+            probe[key] = furniture_point(name, probe[key])
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.gltf(filepath=str(SOURCE))

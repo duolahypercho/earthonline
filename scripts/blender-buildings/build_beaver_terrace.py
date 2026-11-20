@@ -19,10 +19,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import beaver_lighting
 import beaver_courtyard as courtyard
 import beaver_entry
+import beaver_furniture as furniture
+import beaver_dimensions as dimensions
 
 ROOT = Path(__file__).resolve().parents[2]
 FINISHES = "--" in sys.argv and "--house-finishes" in sys.argv[sys.argv.index("--") + 1:]
 PATINA = "--" in sys.argv and "--house-patina" in sys.argv[sys.argv.index("--") + 1:]
+FURNITURE = "--" in sys.argv and "--house-furniture" in sys.argv[sys.argv.index("--") + 1:]
+PATINA = PATINA or FURNITURE
 FINISHES = FINISHES or PATINA
 OUT = ROOT / "public/assets/buildings/beaver-terrace"
 if FINISHES:
@@ -30,9 +34,25 @@ if FINISHES:
 FINISH_DIR = OUT
 if PATINA:
     OUT = OUT / "patina"
+SURFACE_DIR = OUT
+if FURNITURE:
+    OUT = OUT / "furniture"
 RISE = 10 / 3
 rng = random.Random(21)
-boxes, ramps = [], []
+# Box ownership is captured where geometry is emitted, before material batching.
+box_groups = []
+
+
+class SolidBoxes(list):
+    def append(self, pair):
+        if FURNITURE:
+            box_groups.append(dimensions.GROUP.get(room))
+            a, b = [dimensions.furniture_point(room, p) for p in pair]
+            pair = [tuple(min(v) for v in zip(a, b)), tuple(max(v) for v in zip(a, b))]
+        super().append(pair)
+
+
+boxes, ramps = SolidBoxes(), []
 bpy.ops.object.select_all(action="SELECT")
 bpy.ops.object.delete(use_global=False)
 room = "Ground"
@@ -43,6 +63,8 @@ pivots = {}
 
 
 def part(name, x, y, z):
+    if FURNITURE:
+        x, y, z = dimensions.furniture_point(name, (x, y, z))
     pivots[name] = Vector((x, -z, y))
     return name
 
@@ -125,6 +147,8 @@ if FINISHES:
 
 def emit(mat, points, faces, smooth=False):
     """Batch by room and finish so the editable scene and GLB have few draws."""
+    if FURNITURE and room in dimensions.GROUP:
+        points = [dimensions.furniture_point(room, p) for p in points]
     vertices, polygons, flags = batches.setdefault((room, mat), ([], [], []))
     offset = len(vertices)
     vertices.extend((x, -z, y) for x, y, z in points)
@@ -287,6 +311,9 @@ def table(x, y, z, w, d, h):
 
 
 def chair(x, y, z):
+    if FURNITURE:
+        furniture.chair(emit, box, finish, boxes, x, y, z)
+        return
     table(x, y, z, 0.55, 0.53, 0.46)
     for a in [x + 0.05, x + 0.5]:
         box(walnut, (a, y + 0.43, z + 0.47), (a + 0.035, y + 0.91, z + 0.52))
@@ -596,47 +623,70 @@ if FINISHES:
 
 room = "Ground"
 room = part("upholstered-sofa", 1.04, 0, 2.70)
-for x in [0.70, 1.34]:
-    for z in [1.62, 3.77]:
-        turned(walnut, x, 0, z, [(0.042, 0), (0.053, 0.095), (0.052, 0.11)], 12, closed=True)
-box(rust, (0.60, 0.10, 1.51), (1.46, 0.42, 3.89), True, 0.07)
-if FINISHES:
-    for j,z in enumerate((1.93,2.69,3.46)):
-        cushion(rust,(0.66+0.012*math.sin(j*2),0.71+0.016*math.cos(j),z),(0.21,0.365,0.405))
+if FURNITURE:
+    furniture.sofa(emit, box, turned, finish, boxes)
+    room = part("woven-lap-throw", 1.08, .72, 3.86)
+    furniture.throw(emit, finish)
 else:
-    cushion(rust, (0.63, 0.66, 2.70), (0.20, 0.42, 1.18))
-for z in [1.91, 2.71, 3.49]:
-    cushion(rust, (1.05, 0.49, z), (0.44, 0.145, 0.40))
-for z in [1.52, 3.89]:
-    cushion(rust, (1.04, 0.57, z), (0.51, 0.27, 0.14))
-for z, m in [(1.99, linen), (3.32, blue)]:
-    cushion(m, (0.81, 0.79, z), (0.16, 0.26, 0.28))
+    for x in [0.70, 1.34]:
+        for z in [1.62, 3.77]:
+            turned(walnut, x, 0, z, [(0.042, 0), (0.053, 0.095), (0.052, 0.11)], 12, closed=True)
+    box(rust, (0.60, 0.10, 1.51), (1.46, 0.42, 3.89), True, 0.07)
+    if FINISHES:
+        for j,z in enumerate((1.93,2.69,3.46)):
+            cushion(rust,(0.66+0.012*math.sin(j*2),0.71+0.016*math.cos(j),z),(0.21,0.365,0.405))
+    else:
+        cushion(rust, (0.63, 0.66, 2.70), (0.20, 0.42, 1.18))
+    for z in [1.91, 2.71, 3.49]:
+        cushion(rust, (1.05, 0.49, z), (0.44, 0.145, 0.40))
+    for z in [1.52, 3.89]:
+        cushion(rust, (1.04, 0.57, z), (0.51, 0.27, 0.14))
+    for z, m in [(1.99, linen), (3.32, blue)]:
+        cushion(m, (0.81, 0.79, z), (0.16, 0.26, 0.28))
 room = part("sitting-room-rug", 2.465, 0.012, 2.725)
-box(rust, (0.37, 0.012, 1.18), (4.56, 0.027, 4.27))
-for inset in [0.07, 0.14, 0.22]:
-    for x in [0.37 + inset, 4.53 - inset]:
-        box(linen, (x, 0.028, 1.18 + inset), (x + 0.023, 0.030, 4.27 - inset))
-    for z in [1.18 + inset, 4.24 - inset]:
-        box(linen, (0.37 + inset, 0.028, z), (4.56 - inset, 0.030, z + 0.023))
-for i in range(12):
-    for j in range(7):
-        x = 0.72 + i * 0.31
-        z = 1.55 + j * 0.37
-        emit(
-            blue if (i + j) % 2 else linen,
-            [(x, 0.032, z - 0.078), (x - 0.05, 0.032, z), (x, 0.032, z + 0.078), (x + 0.05, 0.032, z)],
-            [(0, 1, 2, 3), (3, 2, 1, 0)],
-        )
+if FURNITURE:
+    furniture.rug(emit, box, finish)
+else:
+    box(rust, (0.37, 0.012, 1.18), (4.56, 0.027, 4.27))
+    for inset in [0.07, 0.14, 0.22]:
+        for x in [0.37 + inset, 4.53 - inset]:
+            box(linen, (x, 0.028, 1.18 + inset), (x + 0.023, 0.030, 4.27 - inset))
+        for z in [1.18 + inset, 4.24 - inset]:
+            box(linen, (0.37 + inset, 0.028, z), (4.56 - inset, 0.030, z + 0.023))
+    for i in range(12):
+        for j in range(7):
+            x = 0.72 + i * 0.31
+            z = 1.55 + j * 0.37
+            emit(
+                blue if (i + j) % 2 else linen,
+                [(x, 0.032, z - 0.078), (x - 0.05, 0.032, z), (x, 0.032, z + 0.078), (x + 0.05, 0.032, z)],
+                [(0, 1, 2, 3), (3, 2, 1, 0)],
+            )
 room = part("coffee-table", 2.505, 0, 2.70)
-table(2.05, 0, 2.0, 0.91, 1.4, 0.44)
+if FURNITURE:
+    furniture.coffee_table(emit, box, finish, boxes)
+else:
+    table(2.05, 0, 2.0, 0.91, 1.4, 0.44)
 room = part("clothbound-book", 2.43, 0.44, 2.54)
-box(blue, (2.21, 0.44, 2.25), (2.65, 0.49, 2.83), False, 0.01)
+if FURNITURE:
+    furniture.book(box, finish)
+    room = part("sitting-room-coffee-cup", 2.69, .44, 2.86)
+    furniture.coffee_cup(emit, turned, finish)
+else:
+    box(blue, (2.21, 0.44, 2.25), (2.65, 0.49, 2.83), False, 0.01)
 room = part("oak-dining-table", 2.375, 0, 7.575)
 table(1.7, 0, 6.7, 1.35, 1.75, 0.79)
 room = part("dining-chair", 2.375, 0, 6.345)
 chair(2.1, 0, 6.08)
 room = part("dining-chair-rear", 2.375, 0, 8.905)
 chair(2.1, 0, 8.64)
+if FURNITURE:
+    for name, (x, z, _) in dimensions.DINING_CHAIRS.items():
+        if name not in ("dining-chair", "dining-chair-rear"):
+            room = part(name, x, 0, z)
+            chair(x - .274, 0, z - .262)
+    room = part("oak-sideboard", .385, 0, 7.565)
+    furniture.sideboard(emit, box, turned, finish)
 room = part("base-cabinets", 0.6, 0, 11.53)
 box(sage, (0.16, 0, 10.36), (1.02, 0.91, 12.68), True)
 # Continuous counter with an inset sink cut through its rear section.
@@ -699,7 +749,7 @@ turned(brass, 0.465, 1.158, 11.741, [(0.024, 0), (0.024, 0.022), (0.018, 0.031)]
 turned(iron, 0.465, 1.157, 11.741, [(0.001, 0), (0.019, 0)], 24)
 box(brass, (0.49, 1.10, 11.95), (0.55, 1.122, 11.977), False, 0.009)
 box(brass, (0.535, 1.104, 11.952), (0.555, 1.191, 11.974), False, 0.009)
-room = "Ground"
+room = part("kitchen-shelves", .15, 1.49, 11.20) if FURNITURE else "Ground"
 for y in [1.49, 1.92]:
     box(oak, (0.15, y, 10.42), (0.50, y + 0.064, 11.90))
     for i in range(5 if y < 1.8 else 2):
@@ -710,11 +760,14 @@ for y in [1.49, 1.92]:
             (10.57 if y < 1.8 else 11.57) + i * 0.27,
             [(0.063, 0), (0.084, 0.14), (0.085, 0.17), (0.072, 0.17), (0.065, 0.05)],
         )
+room = part("living-wall-shelves", .15, .92, 5.17) if FURNITURE else "Ground"
 for k in range(4):
     y = 0.92 + 0.36 * k
     box(oak, (0.15, y, 4.28), (0.52, y + 0.06, 6.06))
     books(0.18, y + 0.065, 4.34 + k * 0.32, 3)
+room = part("living-plant", 4.03, .01, .58) if FURNITURE else "Ground"
 plant(4.03, 0.01, 0.58)
+room = part("kitchen-plant", .56, 1, 12.32) if FURNITURE else "Ground"
 plant(0.56, 1.0, 12.32, 0.60)
 room = part("dining-pendant", 2.37, RISE - 0.16, 7.51)
 turned(brass, 2.37, 1.99, 7.51, [(0.38, 0), (0.35, 0.075), (0.22, 0.19), (0.075, 0.29), (0.065, 0.33)], 32)
@@ -1077,7 +1130,7 @@ for xx, zz in [(2.18, 7.03), (2.89, 8.13)]:
         ],
         True,
     )
-room = "Ground"
+room = part("kitchen-tiles", .15, 1, 12.72) if FURNITURE else "Ground"
 # Hand-laid ceramic splashback with offset joints, extractor and a lidded cooking pot.
 tile_shades = [finish("stoneware-glaze", c, 0.24) for c in ("dce2d6", "e9e8da", "d8dfd1")]
 for row in range(5):
@@ -1414,7 +1467,7 @@ for (room_name, mat_name), (points, faces, smooth) in batches.items():
     if room_name in pivots:
         component_meshes.setdefault(room_name, []).append(obj)
 
-beaver_lighting.bake(list(bpy.context.scene.objects), RISE, detailed=FINISHES, cloth_transfer=PATINA)
+beaver_lighting.bake(list(bpy.context.scene.objects), RISE, detailed=FINISHES, cloth_transfer=PATINA, furniture_contact=FURNITURE)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--parts", type=Path, help="Directory outside the checkout for reusable component GLBs")
@@ -1422,6 +1475,7 @@ parser.add_argument("--blend", type=Path)
 parser.add_argument("--house-finishes", action="store_true", help="Build the courtyard exterior and furnished interior variant")
 parser.add_argument("--house-patina", action="store_true", help="Build the scanned finishes, exterior joinery and mature garden")
 parser.add_argument("--render", type=Path, help="Optional kitchen photograph rendered from the editable scene")
+parser.add_argument("--house-furniture", action="store_true", help="Build the sewn upholstery, wood furniture and wool rug")
 args = parser.parse_args(sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else [])
 if args.blend:
     if args.blend.resolve().is_relative_to(ROOT):
@@ -1526,6 +1580,12 @@ manifest = {
     "boxes": boxes,
     "ramps": ramps,
 }
+if FURNITURE:
+    manifest["metric_assemblies"] = [
+        {"anchor": anchor, "components": names,
+         "boxes": [j for j, group in enumerate(box_groups) if group == i]}
+        for i, (anchor, names) in enumerate(dimensions.ASSEMBLIES)
+    ]
 (OUT / "terrace.provenance.json").write_text(json.dumps(manifest, indent=1) + "\n")
 
 
@@ -1571,7 +1631,7 @@ if FINISHES and (args.blend or args.render):
     bpy.context.view_layer.update()
     beaver_lighting.dress_floor_for_blender(scene, FINISH_DIR / "floorboards.png", boards)
 if PATINA and (args.blend or args.render):
-    beaver_entry.dress_scans(materials, OUT, scene)
+    beaver_entry.dress_scans(materials, SURFACE_DIR, scene, FURNITURE)
 if args.blend:
     bpy.context.preferences.filepaths.save_version = 0
     bpy.ops.wm.save_as_mainfile(filepath=str(args.blend.resolve()))

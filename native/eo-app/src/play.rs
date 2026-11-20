@@ -42,6 +42,7 @@ const PLAYER_MEDIAN_BUDGET_MS: f64 = 0.5;
 const PLAYER_HITCH_BUDGET_MS: f64 = 2.0;
 
 struct PlayOpts {
+    interior_eye: bool,
     bench: bool,
     /// Frames per path (default: walk 7200, drive 3600).
     frames: Option<usize>,
@@ -65,6 +66,7 @@ fn base_args() -> Args {
         interior_lighting: true,
         house_finishes: false,
         house_patina: false,
+        house_furniture: false,
         beaver_house: false,
         bench: false,
         start_underwater: false,
@@ -116,17 +118,21 @@ fn base_args() -> Args {
 
 fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
     let mut a = base_args();
-    let mut o = PlayOpts { bench: false, frames: None, segments: None, render: true, collision_threads: 2 };
+    let mut o = PlayOpts { interior_eye: true, bench: false, frames: None, segments: None, render: true, collision_threads: 2 };
     let mut it = raw.iter();
     while let Some(s) = it.next() {
         let mut val = || it.next().cloned().ok_or_else(|| anyhow!("{s} needs a value"));
         match s.as_str() {
             "--play" => {}
+            "--house-eye-camera" => o.interior_eye = true,
+            "--no-house-eye-camera" => o.interior_eye = false,
             "--beaver-house" => a.beaver_house = true,
             "--no-interior-lighting" => a.interior_lighting = false,
             "--house-finishes" => a.house_finishes = true,
             "--house-patina" => { a.house_finishes = true; a.house_patina = true; }
-            "--no-house-patina" => a.house_patina = false,
+            "--no-house-patina" => { a.house_patina = false; a.house_furniture = false; }
+            "--house-furniture" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; }
+            "--no-house-furniture" => a.house_furniture = false,
             "--no-house-finishes" => a.house_finishes = false,
             "--no-beaver-house" => a.beaver_house = false,
             "--bench" => o.bench = true,
@@ -194,6 +200,23 @@ fn collision_world(
         return Ok((collision, Some(door)));
     }
     Ok((CollisionWorld::new(ground, Arc::new(buildings), threads), None))
+}
+
+/// Inside the furnished house the lens follows the character's head and posture.
+fn player_view(player: &mut Player, cw: &CollisionWorld, world: &World, eye_camera: bool, dt: f64, aspect: f64) -> CameraView {
+    let view = player.camera(cw, dt, aspect);
+    let feet = player.character.feet();
+    if eye_camera && player.mode == Mode::OnFoot && world.house.as_ref().is_some_and(|h| h.contains_feet(feet)) {
+        let crouch_drop = 2. * (eo_player::tuning::capsule::CENTER_FROM_FEET_M - player.character.half_extent_y());
+        CameraView {
+            eye: feet + DVec3::Y * (f64::from(crate::bench::EYE_HEIGHT_M) - crouch_drop),
+            forward: DVec3::new(player.yaw.sin() * player.pitch.cos(), -player.pitch.sin(), player.yaw.cos() * player.pitch.cos()),
+            body_visible: false,
+            ..view
+        }
+    } else {
+        view
+    }
 }
 
 /// The player's view as the renderer's camera.
@@ -380,7 +403,7 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
         let mut drive_pilot = DrivePilot::new(path.clone(), 50.0 / 3.6);
         let dt = eo_player::tuning::FIXED_STEP_S;
         // Settle the renderer at the start.
-        let first = to_camera(&player.camera(&cw, dt, aspect as f64), aspect, args.far);
+        let first = to_camera(&player_view(&mut player, &cw, &world, args.house_finishes && args.house_furniture && opts.interior_eye, dt, aspect as f64), aspect, args.far);
         let mut settle_ms = 0.0;
         if let Some((ctx, renderer, _c, _view, _targets, models)) = &mut gpu_state {
             let g = Gpu { ctx, renderer };
@@ -437,7 +460,7 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
             let tp = Instant::now();
             cw.pump(pos);
             let tc = Instant::now();
-            let view = player.camera(&cw, dt, aspect as f64);
+            let view = player_view(&mut player, &cw, &world, args.house_finishes && args.house_furniture && opts.interior_eye, dt, aspect as f64);
             let t1 = Instant::now();
             let ran = eo_render::hitch::on_cpu_ms(c0, eo_render::hitch::thread_cycles()); // hitch
             player_off_cpu.push(((t1 - t0).as_secs_f64() * 1e3 - ran).max(0.0));
@@ -622,6 +645,7 @@ mod window {
     }
 
     struct App {
+        interior_eye: bool,
         world: World,
         args: Args,
         gfx: Option<Gfx>,
@@ -653,6 +677,7 @@ mod window {
         player.spawn_vehicle(&mut cw, feet.x - yaw.cos() * 4.0, feet.z + yaw.sin() * 4.0, yaw);
         let event_loop = EventLoop::new()?;
         let mut app = App {
+            interior_eye: args.house_finishes && args.house_furniture && opts.interior_eye,
             world,
             args: args.clone(),
             gfx: None,
@@ -739,7 +764,7 @@ mod window {
             self.player.advance(&mut self.cw, &input, dt);
             let pos = self.player.position(&self.cw);
             self.cw.pump(pos);
-            let view = self.player.camera(&self.cw, dt, aspect);
+            let view = player_view(&mut self.player, &self.cw, &self.world, self.interior_eye, dt, aspect);
             let ms = t0.elapsed().as_secs_f64() * 1e3;
             self.player_ms_max = self.player_ms_max.max(ms);
             self.player_ms_sum += ms;
@@ -927,23 +952,29 @@ mod house_tests {
 
     #[test]
     fn beaver_street_to_bed_and_top_floor() {
-        check_beaver_walk(false, false);
+        check_beaver_walk(false, false, false);
     }
 
     #[test]
     fn furnished_variant_reaches_bed_and_top_floor() {
-        check_beaver_walk(true, false);
+        check_beaver_walk(true, false, false);
     }
 
     #[test]
     fn weathered_variant_keeps_the_entry_and_stairs_clear() {
-        check_beaver_walk(true, true);
+        check_beaver_walk(true, true, false);
     }
 
-    fn check_beaver_walk(finishes: bool, patina: bool) {
+    #[test]
+    fn sewn_furniture_keeps_the_door_and_upstairs_route_clear() {
+        check_beaver_walk(true, true, true);
+    }
+
+    fn check_beaver_walk(finishes: bool, patina: bool, furniture: bool) {
         let mut args = base_args();
         args.house_finishes = finishes;
         args.house_patina = patina;
+        args.house_furniture = furniture;
         args.beaver_house = true;
         args.kit = false;
         args.landmarks = false;
@@ -959,6 +990,17 @@ mod house_tests {
         let (mut cw, door) = collision_world(&world, 2).unwrap();
         let mut door = door.unwrap();
         assert!(door.is_shut());
+        if furniture {
+            let floor = house.point(2., 0., 5.);
+            let mut resident = Player::new(floor, 0.);
+            assert!((2. * resident.character.half_extent_y() - 1.80).abs() < 1e-6);
+            for (crouch, height) in [(false, 1.70), (true, 1.10)] {
+                resident.character.set_crouched(&cw, crouch);
+                let view = player_view(&mut resident, &cw, &world, true, 1. / 60., 16. / 9.);
+                assert!((view.eye.y - floor.y - height).abs() < 1e-5 && !view.body_visible);
+            }
+            assert!(!house.contains_feet(house.entry_position()));
+        }
         let mut start = house.entry_position();
         if finishes {
             assert!(
@@ -975,6 +1017,24 @@ mod house_tests {
         }
         cw.load_blocking(start, pworld::LOAD_RADIUS_M);
         start.y = cw.surface_y(start.x, start.z);
+        if furniture {
+            let origin = house.point(0., 0., 0.);
+            let x_axis = (house.point(1., 0., 0.) - origin).normalize();
+            let z_axis = x_axis.cross(DVec3::Y) * x_axis.cross(DVec3::Y).dot(house.point(0., 0., 1.) - origin).signum();
+            let dining = house.point(2.375, 0., 7.575);
+            let kitchen = house.point(0.15, 0., 12.72);
+            for (label, surface, height) in [
+                ("dining table", dining, 0.75),
+                ("chair seat", dining - z_axis * 1.233, 0.45),
+                ("kitchen counter", kitchen + x_axis * 0.4 - z_axis * 0.24, 0.92),
+                ("fridge", kitchen + x_axis * 1.50 - z_axis * 0.36, 1.8952),
+            ] {
+                let above = surface + DVec3::Y * (height + 0.10);
+                let hit = cw.raycast(above, DVec3::NEG_Y, 0.2, pworld::layer::WORLD, None)
+                    .unwrap_or_else(|| panic!("{label} has no collision at its authored height"));
+                assert!((hit.distance - 0.10).abs() < 0.003, "{label} collider is at the wrong height");
+            }
+        }
         // Use the play window's controller and keyboard mapping for the
         // approach, including its acceleration, slope and step handling.
         let inside = house.point(5.95, 0., 1.05);
@@ -1033,6 +1093,14 @@ mod house_tests {
             }
             panic!("blocked at {:?} walking to ({x}, {z})", body.feet());
         };
+        if furniture {
+            // Walk both aisles between the sideboard, the six chairs, and the stairs.
+            for (x, z) in [(5.95, 1.3), (4.10, 1.3), (4.10, 5.60), (1.00, 5.60),
+                           (1.00, 9.35), (4.10, 9.35), (4.10, 2.10), (5.95, 2.10)] {
+                let feet = walk(x, z);
+                assert!((feet.y - house.point(x, 0., z).y).abs() < 0.06, "stepped onto furniture in dining aisle");
+            }
+        }
         walk(5.95, 9.8);
         walk(3.35, 9.8);
         assert!(house.by_bed(walk(3.35, 10.8)));

@@ -1,7 +1,9 @@
 //! Site and collision integration for the Blender-built terrace at 21 Beaver Street.
+mod dimensions;
 mod door;
 mod surfaces;
 pub use surfaces::Scan;
+pub const FURNITURE_LAYERS: u32 = surfaces::FURNITURE_NAMES.len() as u32;
 pub const SURFACE_LAYERS: u32 = surfaces::NAMES.len() as u32 + 1; // includes the front-sash panorama
 use anyhow::{Result, ensure};
 pub use door::Door;
@@ -34,6 +36,8 @@ struct Manifest {
     door: DoorSpec,
     boxes: Vec<[Point; 2]>,
     ramps: Vec<[Point; 4]>,
+    #[serde(default)]
+    metric_assemblies: Vec<dimensions::MetricAssembly>,
 }
 #[derive(Deserialize)]
 struct DoorSpec {
@@ -57,6 +61,7 @@ struct ProbeManifest {
 }
 
 pub struct Finishes {
+    furniture: bool,
     pub scans: Vec<Scan>,
     pub street_reflections: Option<eo_assets::kit::BakedMaps>,
     directory: std::path::PathBuf,
@@ -66,13 +71,13 @@ pub struct Finishes {
 }
 
 impl Finishes {
-    pub fn load(root: &Path, patina: bool) -> Result<Self> {
+    pub fn load(root: &Path, patina: bool, furniture: bool) -> Result<Self> {
         let directory = if patina {
             root.join(FINISH_DIR).join("patina")
         } else {
             root.join(FINISH_DIR)
         };
-        let scans = if patina {
+        let mut scans = if patina {
             surfaces::NAMES
                 .iter()
                 .map(|name| Scan::load(root, &directory, name))
@@ -88,6 +93,15 @@ impl Finishes {
         } else {
             None
         };
+        let directory = if furniture {
+            let variant = directory.join("furniture");
+            for name in surfaces::FURNITURE_NAMES {
+                scans.push(Scan::load(root, &variant, name)?);
+            }
+            variant
+        } else {
+            directory
+        };
         let manifest: ProbeManifest = serde_json::from_slice(&std::fs::read(
             directory.join("kitchen-reflections.provenance.json"),
         )?)?;
@@ -97,6 +111,7 @@ impl Finishes {
         let atlas = Self::read_maps(root, &manifest.asset, 2)?;
         let floorboards = Self::read_maps(root, &floor, 3)?;
         Ok(Self {
+            furniture,
             directory,
             scans,
             street_reflections,
@@ -164,11 +179,13 @@ pub struct House {
     across: DVec2,
     back: DVec2,
     floor: f64,
+    bedside: Point,
     height_scale: f64,
     model: CookedModel,
     door: DoorSpec,
     materials: Vec<u32>,
     light_transfer: Vec<[f32; 2]>,
+    visibility: Vec<f32>,
     probes: Option<[ProbeVolume; 2]>,
     collision: Vec<[Point; 3]>,
     steps: Vec<[Point; 2]>,
@@ -212,10 +229,20 @@ impl House {
             );
         }
         let raw = eo_assets::glb::read_verified(&manifest.asset.path(root), &manifest.asset)?;
-        let (model, light_transfer) = if interior_lighting {
-            eo_assets::glb::cook_glb_with_uv0(&raw)?
+        let across = (ring[2] - ring[1]) / 7.;
+        let back = (ring[0] - ring[1]) / 13.;
+        let height_scale = b.height as f64 / 10.;
+        let layout = dimensions::Layout::new(&manifest.metric_assemblies, manifest.boxes.len(), across, back, height_scale)?;
+        let furnished = finishes.is_some_and(|f| f.furniture);
+        let (model, light_transfer, visibility) = if furnished {
+            ensure!(!layout.nodes.is_empty(), "furnished house is missing its metric placement");
+            let (model, uv, contact) = eo_assets::glb::cook_glb_with_visibility(&raw, &layout.nodes)?;
+            if interior_lighting { (model, uv, contact) } else { (model, vec![], vec![]) }
+        } else if interior_lighting {
+            let (model, uv) = eo_assets::glb::cook_glb_with_uv0(&raw)?;
+            (model, uv, Vec::new())
         } else {
-            (eo_assets::glb::cook_glb(&raw)?, Vec::new())
+            (eo_assets::glb::cook_glb(&raw)?, Vec::new(), Vec::new())
         };
         let resolved: Vec<u32> = model
             .materials
@@ -244,15 +271,23 @@ impl House {
             + 0.22;
         let mut h = Self {
             origin: ring[1],
-            across: (ring[2] - ring[1]) / 7.,
-            back: (ring[0] - ring[1]) / 13.,
+            across,
+            back,
             floor,
-            height_scale: b.height as f64 / 10.,
+            height_scale,
+            bedside: {
+                let p = Vec3::new(3.35, 10. / 3. + 0.03, 10.8);
+                layout.nodes.get("double-bed").map_or(p, |m| m.transform_point3(p)).as_dvec3().to_array()
+            },
             model,
             door: manifest.door,
             materials: resolved,
             light_transfer,
-            probes: finishes.map(|r| r.manifest.probes.clone()),
+            visibility,
+            probes: finishes.map(|r| [
+                layout.probe("enamel-refrigerator", &r.manifest.probes[0]),
+                layout.probe("oven-range", &r.manifest.probes[1]),
+            ]),
             collision: vec![],
             steps: vec![],
             pavers: vec![],
@@ -263,8 +298,15 @@ impl House {
             patina,
             entry: None,
         };
-        for [a, b] in manifest.boxes {
-            h.solid_box(a, b);
+        for ([a, b], matrix) in manifest.boxes.into_iter().zip(layout.boxes) {
+            if let Some(m) = matrix {
+                let pts = corners(a, b).map(|p| m.transform_point3(DVec3::from(p)).to_array());
+                for face in FACES {
+                    h.solid_quad(face.map(|i| pts[i]));
+                }
+            } else {
+                h.solid_box(a, b);
+            }
         }
         for ramp in manifest.ramps {
             h.solid_quad(ramp);
@@ -526,6 +568,15 @@ impl House {
         let p = self.origin + self.across * x + self.back * z;
         DVec3::new(p.x, self.floor + y * self.height_scale, p.y)
     }
+    pub fn contains_feet(&self, feet: DVec3) -> bool {
+        let p = DVec2::new(feet.x, feet.z) - self.origin;
+        let det = self.across.perp_dot(self.back);
+        let x = p.perp_dot(self.back) / det;
+        let z = self.across.perp_dot(p) / det;
+        (0.14..6.86).contains(&x) && (0.12..12.86).contains(&z)
+            && (-0.08..9.85).contains(&((feet.y - self.floor) / self.height_scale))
+    }
+
     fn solid_quad(&mut self, q: [Point; 4]) {
         let pts = q.map(|[x, y, z]| self.point(x, y, z).to_array());
         for tri in [[0, 1, 2], [0, 2, 3]] {
@@ -539,7 +590,8 @@ impl House {
         }
     }
     pub fn wake_position(&self) -> DVec3 {
-        self.point(3.35, 10. / 3. + 0.03, 10.8)
+        let [x, y, z] = self.bedside;
+        self.point(x, y, z)
     }
     pub fn by_bed(&self, p: DVec3) -> bool {
         p.distance(self.wake_position()) < 1.45
@@ -643,6 +695,14 @@ impl House {
                     }
                     finish[i as usize] = 3 + (wear.clamp(0., 1.) * 55.).round() as u8;
                 }
+            } else if self.patina && name.starts_with("woven-carpet@") {
+                let first = part.first_index as usize;
+                for &i in &self.model.indices[first..first + part.index_count as usize] {
+                    let [x, _, z] = self.model.positions[i as usize];
+                    let u = (z - part.min[2]) / (part.max[2] - part.min[2]);
+                    let v = (x - part.min[0]) / (part.max[0] - part.min[0]);
+                    floor_uv[i as usize] = Some([u.clamp(0., 1.), v.clamp(0., 1.)]);
+                }
             } else if self.patina && door_paint(name) {
                 let start = part.first_index as usize;
                 for &i in &self.model.indices[start..start + part.index_count as usize] {
@@ -704,6 +764,10 @@ impl House {
                     | (((u * 255.).round() as u32) << 16)
                     | (((v * 255.).round() as u32) << 24);
             }
+            if let Some(visibility) = self.visibility.get(i) {
+                // 64 identifies unlit authored normals. Codes 65..127 carry diffuse visibility.
+                normal = (normal & 0x00ff_ffff) | ((65 + (62. * visibility).round() as u32) << 24);
+            }
             scene.vertices.push(Vertex {
                 pos: self
                     .point(x.into(), y.into(), z.into())
@@ -747,6 +811,9 @@ impl House {
                     .contains(&self.model.materials[part.material as usize].name.as_str())
             {
                 o.kind |= eo_render::scene::FLOOR_SCAN_BIT;
+            }
+            if self.patina && self.model.materials[part.material as usize].name.starts_with("woven-carpet@") {
+                o.kind |= eo_render::scene::RUG_SCAN_BIT;
             }
             if self.patina && door_paint(&self.model.materials[part.material as usize].name) {
                 o.kind |= eo_render::scene::DOOR_SCAN_BIT;

@@ -22,7 +22,7 @@ def subdivide_quad(points, face, spacing):
     return verts, quads
 
 
-def filter_cloth_irradiance(mesh, uv):
+def filter_cloth_irradiance(mesh, uv, compact=False):
     """Filter Monte Carlo noise along the draped surface, in linear light."""
     # The export mesh has a regular, dense grid and shared smooth vertices.
     # Smoothing only on the tangent sheet keeps the folded hem separate.
@@ -38,7 +38,8 @@ def filter_cloth_irradiance(mesh, uv):
     result = []
     for vertex in mesh.vertices:
         day = lamp = total = 0.0
-        for point, index, distance in tree.find_range(vertex.co, 0.23):
+        nearby = tree.find_n(vertex.co, min(72, len(mesh.vertices))) if compact else tree.find_range(vertex.co, 0.23)
+        for point, index, distance in nearby:
             agreement = max(0.0, vertex.normal.dot(mesh.vertices[index].normal))
             separation = abs((point - vertex.co).dot(vertex.normal))
             weight = agreement ** 4 * math.exp(-0.5 * ((distance / 0.085) ** 2 + (separation / 0.025) ** 2))
@@ -53,7 +54,36 @@ def filter_cloth_irradiance(mesh, uv):
         uv.data[loop.index].uv = result[loop.vertex_index]
 
 
-def bake(objects, rise, detailed=False, cloth_transfer=False):
+def contact_transfer(mesh, tree):
+    """Cosine-weighted visibility out to 45 cm, baked on the assembled furniture."""
+    layer = mesh.uv_layers.new(name="Near-field visibility")
+    samples = []
+    for i in range(48):
+        r = math.sqrt((i + 0.5) / 48)
+        a = i * 2.39996323
+        samples.append((r * math.cos(a), r * math.sin(a), math.sqrt(1 - r * r)))
+    cache = {}
+    for face in mesh.polygons:
+        for index in face.loop_indices:
+            loop = mesh.loops[index]
+            n = mesh.corner_normals[index].vector
+            key = (loop.vertex_index, *(round(v * 80) for v in n))
+            if key not in cache:
+                p = mesh.vertices[loop.vertex_index].co + n * 0.0025
+                tangent = n.cross(
+                    Vector((1, 0, 0)) if abs(n.z) > 0.85 else Vector((0, 0, 1))
+                ).normalized()
+                bitangent = n.cross(tangent)
+                blocked = 0.0
+                for u, v, w in samples:
+                    hit, _, _, distance = tree.ray_cast(p, tangent * u + bitangent * v + n * w, 0.45)
+                    if hit is not None:
+                        blocked += (1 - distance / 0.45) ** 2
+                cache[key] = 1 - blocked / len(samples)
+            layer.data[index].uv = (cache[key], 0.5)
+
+
+def bake(objects, rise, detailed=False, cloth_transfer=False, furniture_contact=False):
     vertices, faces = [], []
     for obj in objects:
         mesh = obj.data
@@ -131,7 +161,9 @@ def bake(objects, rise, detailed=False, cloth_transfer=False):
     for obj in objects:
         mesh = obj.data
         uv = mesh.uv_layers.new(name="Diffuse light transfer")
-        fine = cloth_transfer and mesh.materials[0].name.partition("@")[0] in ("cotton-coverlet", "cotton-turnback")
+        component = obj.name.partition(" - ")[0]
+        sofa_cloth = furniture_contact and component in ("upholstered-sofa", "woven-lap-throw") and mesh.materials[0].name.partition("@")[0] in ("canvas-plain", "flax-linen")
+        fine = sofa_cloth or cloth_transfer and mesh.materials[0].name.partition("@")[0] in ("cotton-coverlet", "cotton-turnback")
         # Compute per corner to preserve the two different normals at a hard edge.
         for face in mesh.polygons:
             for idx in face.loop_indices:
@@ -160,7 +192,12 @@ def bake(objects, rise, detailed=False, cloth_transfer=False):
                 # Blender's glTF exporter flips V.
                 uv.data[idx].uv = direct_cache[key]
         if fine:
-            filter_cloth_irradiance(mesh, uv)
+            filter_cloth_irradiance(mesh, uv, compact=sofa_cloth)
+        if furniture_contact and (component.startswith("dining-chair") or component in (
+            "upholstered-sofa", "woven-lap-throw", "sitting-room-coffee-cup", "sitting-room-rug",
+            "coffee-table", "clothbound-book", "oak-sideboard", "desk-chair", "workroom-chair",
+        )):
+            contact_transfer(mesh, tree)
 
 
 def dress_floor_for_blender(scene, path, boards):
