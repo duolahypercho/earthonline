@@ -809,7 +809,7 @@ fn species_shrub(b: &mut Builder, mats: &MoundMats, m_sprig: u32, kind: u8, lod:
             let ao = (0.35 + 0.65 * ((facing + 0.4) / 1.4).clamp(0.0, 1.0)) * (0.35 + 0.65 * (pos[1] / (0.75 * f.h)).clamp(0.0, 1.0));
             // the canopy's inside, seen between the sprigs: darker near, the far level's
             // masses closer to the canopy's mean (fewer sprigs over them).
-            let vary = (0.85 + 0.3 * hash3(k as i32, 5, 9, seed)) * [0.38f32, 0.5, 0.75][lod as usize];
+            let vary = (0.85 + 0.3 * hash3(k as i32, 5, 9, seed)) * [0.28f32, 0.42, 0.75][lod as usize];
             let c = live.map(|v| v * ao * vary);
             b.vert(pos, n, [0.5, 0.5], lin3_to_srgb(c), mats.leaf);
         }

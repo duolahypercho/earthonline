@@ -926,7 +926,7 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
             }
             // the flora pass's chert ground: the warm shoulders the old bare rule stripped
             // (the overlook's disturbed ground) are dense scrub, not bare and not meadow.
-            let shoulder = ex.fl.chert && ex.g3x.bare && hash(ix, iz, 110) < bare_soil(x, z, &s, naip);
+            let shoulder = ex.fl.chert && ex.g3x.bare && bare_soil(x, z, &s, naip) > crate::flora::SHOULDER_MIN;
             if ex.fl.flowers && shoulder && slope < 45.0 {
                 // the flora pass's flowers: the overlook's annual mustard in its spring
                 // bloom, clustered and sparse among the shoulder's scrub.

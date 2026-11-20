@@ -305,7 +305,10 @@ pub const CHERT_MIN_Y: f64 = 45.0;
 /// forbs (`Flora::chert`): the ground the old bare rule stripped but the
 /// shrunk one keeps (the Battery Spencer foreground: "dense mid-green leafy
 /// herbs and shrubs", guide section 0; share INFERRED).
-pub const SHOULDER_SCRUB: f64 = 0.65;
+pub const SHOULDER_SCRUB: f64 = 0.9;
+/// A cell is the overlook's shoulder where the old bare rule's share passes this
+/// (the whole shoulder, not the old rule's random share of it: INFERRED).
+pub const SHOULDER_MIN: f64 = 0.12;
 /// The shoulder's shrubs' height factor: wind and salt keep the growth low on
 /// the headland's exposed shoulders (guide 1.1), coyote brush prostrate at
 /// 0.3-0.6 m on windy bluffs (REF); the photograph's foreground band stands
