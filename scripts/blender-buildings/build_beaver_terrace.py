@@ -114,7 +114,7 @@ if FINISHES:
     practical = finish("opal-work-light", "f2e6cc", 0.36)
     bulb_bs = materials[practical].node_tree.nodes.get("Principled BSDF")
     bulb_bs.inputs["Emission Color"].default_value = (1.0, 0.81, 0.58, 1)
-    bulb_bs.inputs["Emission Strength"].default_value = 4.0
+    bulb_bs.inputs["Emission Strength"].default_value = 1.6
 
 
 def emit(mat, points, faces, smooth=False):
@@ -400,6 +400,14 @@ for level in range(3):
                 low = y + h + j * 0.15
                 outside = z - 0.028 if z == 0 else z + 0.151
                 box(sage, (x, low, outside), (u, min(y + v, low + 0.146), outside + 0.022))
+        if FINISHES and level == 2 and z == 0:
+            # Set the sash back from the arcades. The deep sill, soffit and
+            # side returns remain visible when looking uphill from the street.
+            for x in (0.66,4.59):
+                box(reveal,(x,y+0.85,-0.38),(x+0.055,y+2.53,0.52))
+            box(reveal,(0.66,y+0.82,-0.38),(4.645,y+0.88,0.53))
+            box(reveal,(0.66,y+2.51,-0.38),(4.645,y+2.58,0.53))
+            z = 0.48
         for x in [0.69, 2, 3.32, 4.56]:
             box(window_wood if FINISHES else ivory, (x, y + 0.83, z - 0.065), (x + 0.065, y + 2.57, z + 0.18), True, 0.009)
         for h in [0.85, 1.83, 2.53]:
@@ -534,13 +542,25 @@ if FINISHES:
     for k in range(9):
         plant(0.89+k*0.419,0.785,-0.235,0.24+0.035*math.sin(k*1.7))
 
+if FINISHES:
+    room = part("front-dry-garden", 2.50, -0.25, -1.05)
+    gravel = finish("decomposed-granite","b4a087",0.97,texture=95)
+    rock = [finish("garden-stone",tone,0.86,texture=75) for tone in ("a79881","c6b49b","928578","b9a68d")]
+    leaves = [finish("agave-leaf",tone,0.74) for tone in ("6b8b78","789a8a","91ab98","668576","809889")]
+    grass = [finish("bunchgrass",tone,0.91) for tone in ("b0a379","918c65","b5ab7c","898966")]
+    courtyard.dry_garden(emit,rock,reveal,gravel,rock,leaves,grass,ramps)
+
 room = "Ground"
 room = part("upholstered-sofa", 1.04, 0, 2.70)
 for x in [0.70, 1.34]:
     for z in [1.62, 3.77]:
         turned(walnut, x, 0, z, [(0.042, 0), (0.053, 0.095), (0.052, 0.11)], 12, closed=True)
 box(rust, (0.60, 0.10, 1.51), (1.46, 0.42, 3.89), True, 0.07)
-cushion(rust, (0.63, 0.66, 2.70), (0.20, 0.42, 1.18))
+if FINISHES:
+    for j,z in enumerate((1.93,2.69,3.46)):
+        cushion(rust,(0.66+0.012*math.sin(j*2),0.71+0.016*math.cos(j),z),(0.21,0.365,0.405))
+else:
+    cushion(rust, (0.63, 0.66, 2.70), (0.20, 0.42, 1.18))
 for z in [1.91, 2.71, 3.49]:
     cushion(rust, (1.05, 0.49, z), (0.44, 0.145, 0.40))
 for z in [1.52, 3.89]:

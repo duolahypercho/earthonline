@@ -222,7 +222,40 @@ impl House {
         {
             h.approach(street, ground);
         }
+        if finishes.is_some() {
+            h.tile_treads();
+        }
         Ok(h)
+    }
+
+    /// Individually jointed clay tiles wrap around the noses of the
+    /// ground-fitted private steps. The structural tread owns collision.
+    fn tile_treads(&mut self) {
+        let fired_clay = [0xff6382a8, 0xff6686b0, 0xff6b8bb2, 0xff6583a7, 0xff6e8bb4];
+        for (step, &[a, b]) in self.steps.iter().enumerate() {
+            let top = b[1] + 0.007;
+            let front = a[2];
+            let width = (b[0] - a[0]) / 5.;
+            for tile in 0..5 {
+                let x = a[0] + width * tile as f64 + 0.003;
+                let u = x + width - 0.006;
+                let clay = fired_clay[(step * 3 + tile * 2) % fired_clay.len()];
+                // The mortar joint continues over the curved edge and down its lip.
+                let profile = [
+                    (b[2] - 0.005, top),
+                    (front + 0.009, top),
+                    (front - 0.005, top - 0.004),
+                    (front - 0.011, top - 0.013),
+                    (front - 0.011, top - 0.034),
+                ];
+                for ends in profile.windows(2) {
+                    let (z, y) = ends[0];
+                    let (w, h) = ends[1];
+                    self.pavers
+                        .push(([[x, y, z], [u, y, z], [u, h, w], [x, h, w]], clay));
+                }
+            }
+        }
     }
 
     /// Fit the private entry path between the last tread and the first mapped
@@ -507,7 +540,11 @@ impl House {
                 scene.vertices.extend(p.map(|p| Vertex {
                     pos: p.to_array(),
                     normal,
-                    color: 0xff9aa4aa,
+                    color: if self.probes.is_some() {
+                        0xffa8b6be
+                    } else {
+                        0xff9aa4aa
+                    },
                 }));
                 scene.indices.extend([v, v + 1, v + 2, v, v + 2, v + 3]);
             }

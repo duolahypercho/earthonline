@@ -114,6 +114,7 @@ def stair_bay(emit, box, stucco, recess, wood, glass, tiles, rise):
             box(wood,(x,sill,-0.47),(x+0.038,head,-0.44))
         for h in (sill, spring):
             box(wood,(left,h,-0.47),(right,h+0.035,-0.44))
+    strip(wood, [curve(a,10.14) for a in angles], [curve(a,10.235,1.086) for a in angles], True)
     # The channels taper toward the centre and overlap downhill in two courses.
     for j in range(22):
         start = -math.pi/2 + j*math.pi/22
@@ -127,3 +128,80 @@ def stair_bay(emit, box, stucco, recess, wood, glass, tiles, rise):
                     ring.append(curve(a,height,radius))
                 rings.append(ring)
             strip(tiles[(j*5+int(outer*10))%len(tiles)], *rings, True)
+
+
+def dry_garden(emit, surface, stone, earth, rock, foliage, grasses, ramps):
+    """Terraced decomposed-granite bed with mineral mulch, agaves and bunchgrasses."""
+    rng = random.Random(412)
+    left, right = 0.14, 4.91
+    def front(x):
+        return -1.68 - 0.79 * max(0,math.sin(math.pi*(x-left)/(right-left)))**0.82
+    def grade(x,z):
+        return 0.07 - 0.093*x + 0.078*z
+    def position(x,z,lift=0.0):
+        return (x,grade(x,z)+lift,z)
+    def ribbon(mat, line1, line2, smooth=False):
+        points = [p for pair in zip(line1,line2) for p in pair]
+        emit(mat,points,[(i,i+1,i+3,i+2) for i in range(0,len(points)-2,2)],smooth)
+    # Keep the slender capstones individually jointed along the curved wall.
+    stations = [left+(right-left)*i/31 for i in range(32)]
+    near = [position(x,front(x)) for x in stations]
+    far = [position(x,0.04) for x in stations]
+    ribbon(earth,near,far)
+    for a,b,c,d in zip(near,near[1:],far,far[1:]):
+        ramps.append([a,b,d,c])
+    ring = [(x,front(x)) for x in stations] + [(right,0.04),(left,0.04)]
+    def inner(x,z):
+        # Round the street side, with short returns beside the window and stoop.
+        return (x + (2.5-x)*0.047, z+(0.02-z)*0.046)
+    for i,((x,z),(u,w)) in enumerate(zip(ring,ring[1:]+ring[:1])):
+        wall = [(x,-1.72,z),position(x,z,.056),position(u,w,.056),(u,-1.72,w)]
+        emit(stone,wall,[(0,1,2,3)])
+        ramps.append(wall)
+        x0,z0=x+(u-x)*0.008,z+(w-z)*0.008
+        x1,z1=x+(u-x)*0.992,z+(w-z)*0.992
+        uv=[(x0,z0),(x1,z1),inner(x1,z1),inner(x0,z0)]
+        emit(surface[i%len(surface)],[position(px,pz,0.071) for px,pz in uv],[(3,2,1,0)])
+    def agave(x,z,size,angle):
+        # Spiralling ranks grow from broad, recurved outer leaves to erect inner spears.
+        for j in range(34):
+            t=j/33
+            a=angle+j*2.39996 + rng.uniform(-.10,.10)
+            radius=size*(.97-.75*t)*rng.uniform(.83,1.10)
+            height=size*(.32+.99*t)*rng.uniform(.88,1.12)
+            pts=[]
+            for k in range(11):
+                s=k/10
+                wide=(0.028*(1-s)+0.11*math.sin(math.pi*s)**.79)*size*(1-.43*t)
+                radial=.017+radius*s**1.42
+                h=grade(x,z)+height*(1.23*s-.23*s*s)+.12*(1-t)*size*math.sin(s*math.pi)
+                for q in (-1,-.42,0,.42,1):
+                    rib=(1-abs(q))*.032*size*math.sin(s*math.pi)
+                    pts.append((x+math.cos(a)*radial-math.sin(a)*q*wide,h+rib,z+math.sin(a)*radial+math.cos(a)*q*wide))
+            faces=[(k*5+i,k*5+i+1,k*5+i+6,k*5+i+5) for k in range(10) for i in range(4)]
+            emit(foliage[(j//4+j)%len(foliage)],pts,faces,True)
+    def grass(x,z,size):
+        for j in range(63):
+            a=rng.random()*math.tau
+            spread=size*rng.uniform(.19,.68);height=size*rng.uniform(.32,1.1)
+            width=rng.uniform(.004,.011);root=.05*rng.random();pts=[]
+            for k in range(6):
+                s=k/5;reach=root+s*s*spread
+                h=grade(x,z)+height*(1.8*s-1.02*s*s)
+                w=width*(1-s*.98)
+                for side in (-1,1):
+                    pts.append((x+reach*math.cos(a)-side*w*math.sin(a),h,z+reach*math.sin(a)+side*w*math.cos(a)))
+            emit(grasses[j%len(grasses)],pts,[(2*k,2*k+1,2*k+3,2*k+2) for k in range(5)],True)
+    for x,z,size in [(0.83,-.88,.60),(1.43,-1.47,.34),(3.08,-1.39,.73),(3.73,-1.82,.26),(4.48,-.62,.39)]:
+        agave(x,z,size,rng.random()*math.tau)
+    for x,z,size in [(.45,-.48,.34),(1.72,-.65,.66),(2.12,-1.55,.32),(2.49,-.86,.50),(3.71,-.69,.63),(4.49,-1.52,.48)]:
+        grass(x,z,size)
+    for i in range(620):
+        x=rng.uniform(left+.08,right-.08);z=rng.uniform(front(x)+.13,-.04)
+        size=rng.uniform(.008,.027) if i>10 else rng.uniform(.08,.17)
+        a=rng.random()*math.tau;stretch=rng.uniform(.7,1.5);h=grade(x,z)+.003
+        points=[(x,h+size*rng.uniform(.38,.8),z)]
+        for k in range(7):
+            t=a+k*math.tau/7;rad=size*rng.uniform(.79,1.12)
+            points.append((x+rad*math.cos(t)*stretch,h+size*rng.uniform(-.08,.22),z+rad*math.sin(t)))
+        emit(rock[i%len(rock)],points,[(0,1+(k+1)%7,1+k) for k in range(7)],True)

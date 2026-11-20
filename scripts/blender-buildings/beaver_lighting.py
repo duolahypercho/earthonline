@@ -43,6 +43,7 @@ def bake(objects, rise, detailed=False):
     ]
     lamp = [Vector((2.37 + dx, -7.51 + dz, 1.975)) for dx, dz in [(-0.12, -0.09), (0.13, -0.09), (0, 0.13)]]
     work_lights = [Vector((0.64,-z,1.80)) for z in (9.55,10.10)]
+    porch_light = Vector((5.97,0.26,2.27))
     bounce_cache = {}
     direct_cache = {}
 
@@ -102,6 +103,15 @@ def bake(objects, rise, detailed=False):
                 n = mesh.corner_normals[idx].vector
                 point = p + n * 0.004
                 if not (0.06 < point.x < 6.94 and -12.96 < point.y < -0.04 and 0 <= point.z < 3 * rise):
+                    if detailed and 4.90 < point.x < 7.0 and 0.025 < point.y < 0.89 and 0 < point.z < 2.94:
+                        delta = porch_light - point
+                        d2 = delta.length_squared
+                        # Diffuse light from the opal globe on the inward-facing
+                        # plaster. Stop the visibility ray at the globe's surface.
+                        if d2 > 0.012 and tree.ray_cast(point,delta.normalized(),max(0,math.sqrt(d2)-0.094))[0] is None:
+                            lamp_transfer = min(0.60,0.115*max(0,n.dot(delta.normalized()))/(d2+0.09))
+                            uv.data[idx].uv = (0,1-math.sqrt(lamp_transfer))
+                            continue
                     uv.data[idx].uv = (0.0, 1.0)
                     continue
                 level = min(2, int(point.z / rise))
