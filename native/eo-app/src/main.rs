@@ -457,6 +457,7 @@ fn parse_args_from(args: impl IntoIterator<Item = String>) -> Result<Args> {
             s if eo_look::features::GG3_SWITCHES.contains(&s) => {} // read by its crate (the colour and camera)
             s if eo_landmarks::vegetation::GG3_SWITCHES.contains(&s) => {} // read by its crate (the coastal vegetation)
             s if eo_landmarks::vegetation::GRASS2_SWITCHES.contains(&s) => {} // read by its crate (the second grass pass)
+            s if eo_landmarks::vegetation::GRASS3_SWITCHES.contains(&s) => {} // read by its crate (the third grass pass)
             s if eo_landmarks::features::GG3_SWITCHES.contains(&s) => {} // read by its crate (the terrain surface)
             s if eo_landmarks::hill_rock::SWITCHES.contains(&s) => {} // read by its crate (the scanned rock; --no-hill-rock)
             s if eo_water::switches::GG3_SWITCHES.contains(&s) => {} // read by its crate (the surf and bathymetry)

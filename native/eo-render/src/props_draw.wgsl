@@ -28,6 +28,7 @@ const PR_MEADOW_LIVE: u32 = 524288u;
 const PR_MEADOW_MAT: u32 = 1048576u;
 const PR_BLADE_PBR: u32 = 2097152u;
 const PR_MEADOW_THICK: u32 = 4194304u;
+const PR_MEADOW_SOIL: u32 = 8388608u;
 
 @group(2) @binding(0) var<uniform> pr: PrParams;
 @group(2) @binding(1) var<storage, read> pr_instances: array<PrInstance>;
@@ -303,6 +304,17 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
             live = live * srgb_decode(unpack4x8unorm(inst.lamp).rgb) * 4.0;
         }
         if ((m.flags & PR_MEADOW_MAT) != 0u) {
+            if (PR_MEADOW_BREAKUP) {
+                // a lobed rim (`--no-meadow-breakup`): a world-space field cuts the mats
+                // back from their discs, the same on every mat overlapping a point, so
+                // the cover opens in irregular gaps where the terrain's tone shows
+                // instead of meeting its neighbours along disc edges.
+                let rl = length(in.local.xz) / 0.95;
+                let lobe = pr_noise3(vec3<f32>(in.world.xz * 1.6, 2.0)) * 0.65 + pr_noise3(vec3<f32>(in.world.xz * 5.0, 4.0)) * 0.35;
+                if (rl > 0.4 + 0.8 * lobe) {
+                    discard;
+                }
+            }
             // the mat under the blades: matted straw lying in two directions per
             // patch (its yaw), the sward's green through it in tufts (share: uv.y),
             // and dark pores between the straws. Each scale fades to its mean
@@ -334,6 +346,17 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
             // levels keep fewer blades), so it comes up to the canopy's mean.
             let floor = mix(0.6, 1.0, smoothstep(5.0, 26.0, dist));
             s.albedo = mix(thatch_col, live * blades, green) * (0.78 + 0.44 * clump) * floor;
+            if ((m.flags & PR_MEADOW_SOIL) != 0u) {
+                // bare eroded soil: its colour in clods and grit (two scales, each faded
+                // to its mean where a pixel spans it), paler weathered crust in patches,
+                // a little green at its own share; no straw, and not the canopy's floor.
+                let clod = mix(0.5, pr_noise3(vec3<f32>(q * 3.0, 9.0)), coarse);
+                let grit = mix(0.5, pr_noise3(vec3<f32>(q * 40.0, 13.0)), fine);
+                let crust = smoothstep(0.55, 0.8, pr_noise3(vec3<f32>(q * 0.7, 15.0)));
+                let soil = m.base.rgb * (0.78 + 0.34 * clod + 0.22 * (grit - 0.5)) * mix(vec3<f32>(1.0), vec3<f32>(1.18, 1.12, 1.05), crust);
+                let sprout = smoothstep(0.72, 0.9, tuft) * in.uv.y * 3.0;
+                s.albedo = mix(soil, live, clamp(sprout, 0.0, 1.0));
+            }
             s.ao = mix(1.0, 0.55 + 0.45 * smoothstep(0.25, 0.7, straw), fine) * mix(0.85, 1.0, green);
             s.rough = 0.9;
             // the mat lies on the ground: lit from above even where the eye grazes
@@ -343,6 +366,30 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         } else {
             if ((m.flags & PR_MEADOW_LIVE) != 0u) {
                 s.albedo = live;
+                if (inst.model >= PR_VEG_BASE + PR_VEG_MOUND && inst.model < PR_VEG_BASE + PR_VEG_MOUND_END) {
+                    // a scrub mound's leaf clusters as grain where its mesh draws none (the
+                    // clump cores between the leaves, the far level's clumps): two scales of
+                    // lit clusters and dark gaps on the albedo and as a bump on the normal,
+                    // each faded to its mean where a pixel spans it.
+                    let fw = length(dpx) + length(dpy);
+                    let p = in.world * 9.0;
+                    let k1 = 1.0 - smoothstep(0.03, 0.12, fw);
+                    let k2 = 1.0 - smoothstep(0.1, 0.4, fw);
+                    let g1 = pr_noise3(p * 2.2);
+                    let g2 = pr_noise3(p * 0.45 + vec3<f32>(5.0));
+                    let gaps = mix(0.5, g1, k1) * 0.5 + mix(0.5, g2, k2) * 0.5;
+                    s.albedo = s.albedo * (0.45 + 1.1 * smoothstep(0.2, 0.8, gaps));
+                    s.ao = mix(0.6, 1.0, smoothstep(0.25, 0.6, gaps));
+                    let e = 0.03;
+                    let gx = pr_noise3((in.world + vec3<f32>(e, 0.0, 0.0)) * 4.0) - pr_noise3(in.world * 4.0);
+                    let gy = pr_noise3((in.world + vec3<f32>(0.0, e, 0.0)) * 4.0) - pr_noise3(in.world * 4.0);
+                    let gz = pr_noise3((in.world + vec3<f32>(0.0, 0.0, e)) * 4.0) - pr_noise3(in.world * 4.0);
+                    let grad = vec3<f32>(gx, gy, gz) / e;
+                    let bump = normalize(s.n - (grad - s.n * dot(grad, s.n)) * 0.12 * k2);
+                    if (all(bump == bump)) {
+                        s.n = bump;
+                    }
+                }
             } else {
                 // dead straw: its own colour, each patch a little lighter or darker.
                 s.albedo = in.color * (0.9 + 0.2 * f32(inst.variant & 255u) / 255.0);

@@ -324,6 +324,7 @@ selection:
 | Scanned rock | `--no-gg3-rock` (all of these), `--no-scan-rocks`, `--no-cliff-dressing`, `--no-surf-rocks`, `--no-scan-riprap`, `--no-rock-geology` |
 | Coastal vegetation, round 3 | `--no-gg3-vegetation` (all of these), `--no-naip-planting`, `--no-cliff-rock-cover`, `--no-far-species`, `--no-far-tree-light`, `--no-bloom-date`, `--no-grass-color-variety`; reserved: `--no-veg-scans` |
 | Grass, second pass | `--no-grass2` (all of these: run 1's meadow), `--no-meadow-cover`, `--no-meadow-types`, `--no-blade-shading` |
+| Grass, third pass | `--no-grass3` (all of these: run 2's meadow), `--no-scrub-mounds`, `--no-scrub-bloom`, `--no-bare-ground`, `--no-meadow-breakup` |
 | Surf and bathymetry | `--no-gg3-water` (all of these), `--no-bathymetry`, `--no-surf-break`, `--no-swash-foam`, `--no-obstacle-foam`, `--no-water-body2`; reserved: `--no-ppr-dash` |
 | Golden Gate, fifth pass | `--no-gg3-bridge` or `--no-bridges5` (all of these), `--no-paint-brdf2`, `--no-paint-weathering`, `--no-concrete2`, `--no-leg-cells`, `--no-cable-detail` |
 | Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count` |
@@ -516,6 +517,19 @@ forbs, ice plant or thatch patches by slope, aspect, bluff edge and scrub, and
 no low scrub mounds in the scrub's gaps); `--no-blade-shading` leaves out the
 blades' leaf optics (transmission, keel and rolled-margin normals, clump
 occlusion, waxy sheen).
+
+The third grass pass (`--no-grass3`, eo-landmarks `vegetation::Grass3`; it acts
+inside the second pass's meadow cover): `--no-scrub-mounds` leaves out the
+lumpy coastal scrub mounds (coyote brush, sagebrush, bush lupine; leaf clumps
+0.5-1.5 m tall) planted where the land cover and NAIP show scrub (including
+the summer image's bright green) and on the Marin headland's seaward slopes;
+`--no-scrub-bloom` leaves the lupine stands out of flower (coyote brush
+there); `--no-bare-ground` gives the eroded ground (steep faces the NAIP shows
+bare, red-brown soil, warm bare knoll tops) back to the meadow and the
+terrain's bare class back to sward, instead of a red-brown soil mat with
+sparse tufts; `--no-meadow-breakup` keeps the meadow's round type and cure
+patches, the patch levels' fixed distances (a band across the view) and the
+mats' full discs.
 
 The surf and bathymetry (`--no-gg3-water`, eo-water `switches`; the CUDEM
 tiles under `EO_SURVEY_ROOT`): `--no-bathymetry` keeps the geometric exposure

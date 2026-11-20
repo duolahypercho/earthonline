@@ -91,6 +91,19 @@ fn pr_is_veg(model: u32) -> bool {
 // band, and the survivors grow by 1/sqrt(share), at most the model's own
 // limit (`pr_veg_thin(..).z`), to keep the cover. 1 for everything else. A function of the instance and the eye only, so the cull,
 // colour and shadow passes agree.
+// the distance a meadow patch picks its level by (`--no-meadow-breakup` off:
+// PR_MEADOW_BREAKUP, from `thin_wgsl`): its own distance times 0.65-1.35 by a
+// hash of its place, so the levels' edges scatter over a band instead of
+// drawing a line of changed texture across the view. The draw distance and the
+// thinning keep the true distance. A function of the instance and the eye only.
+fn pr_lod_dist(i: PrInstance, d: f32) -> f32 {
+    if (!PR_MEADOW_BREAKUP || i.model < PR_VEG_BASE + PR_VEG_MEADOW || i.model >= PR_VEG_BASE + PR_VEG_COUNT) {
+        return d;
+    }
+    let h = fract(sin(dot(floor(i.pos.xz * 4.0), vec2<f32>(12.9898, 78.233))) * 43758.5453);
+    return d * (0.65 + 0.7 * h);
+}
+
 fn pr_veg_scale(i: PrInstance) -> f32 {
     if (!pr_is_veg(i.model)) {
         return 1.0;

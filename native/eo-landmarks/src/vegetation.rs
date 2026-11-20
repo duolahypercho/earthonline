@@ -282,6 +282,57 @@ pub fn grass2() -> Grass2 {
     *S.get_or_init(|| Grass2::from_args(&std::env::args().collect::<Vec<_>>()))
 }
 
+/// The third grass pass's switch names (the roll-up first); eo-app accepts
+/// them, [`Grass3::from_args`] reads them. `--no-grass3` restores the second
+/// pass's output. Every feature acts inside the second pass's meadow cover
+/// (`--no-meadow-cover` or `--no-grass2` leave nothing for it to change).
+pub const GRASS3_SWITCHES: &[&str] = &["--no-grass3", "--no-scrub-mounds", "--no-scrub-bloom", "--no-bare-ground", "--no-meadow-breakup"];
+
+/// The third grass pass's features, each with its `--no-` switch ([`GRASS3_SWITCHES`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Grass3 {
+    /// `--no-scrub-mounds`: lumpy coastal scrub mounds (coyote brush, California
+    /// sagebrush, bush lupine; 0.5-1.5 m tall, leaf clumps) where the land cover
+    /// and the NAIP image show scrub and on the Marin headland's seaward slopes
+    /// ([`scrub_share`], [`MEADOW_COYOTE`] ..).
+    pub scrub: bool,
+    /// `--no-scrub-bloom`: in the bloom window the bush lupine mounds carry
+    /// their yellow flower spikes, the lupines grouped in stands (off: coyote brush there).
+    pub bloom: bool,
+    /// `--no-bare-ground`: eroded ground (steep faces and red-brown soil in the
+    /// NAIP image, [`bare_soil`]) stays bare red-brown soil with sparse grass
+    /// instead of carrying the meadow; the terrain draws its soil there.
+    pub bare: bool,
+    /// `--no-meadow-breakup`: the meadow's type and cure fields domain-warped into
+    /// irregular shapes and mixed at their edges, the patch levels' distances
+    /// jittered per patch (no level band across the view) and the mats' rims
+    /// lobed so the terrain's tone shows between them.
+    pub breakup: bool,
+}
+
+impl Grass3 {
+    pub const ALL: Grass3 = Grass3 { scrub: true, bloom: true, bare: true, breakup: true };
+    pub const NONE: Grass3 = Grass3 { scrub: false, bloom: false, bare: false, breakup: false };
+
+    pub fn from_args(args: &[String]) -> Self {
+        let has = |s: &str| args.iter().any(|a| a == s);
+        if has("--no-grass3") {
+            return Self::NONE;
+        }
+        Grass3 { scrub: !has("--no-scrub-mounds"), bloom: !has("--no-scrub-bloom"), bare: !has("--no-bare-ground"), breakup: !has("--no-meadow-breakup") }
+    }
+}
+
+/// The third grass pass's switches of this process (read once from the command
+/// line), with the second pass's meadow cover they act in.
+pub fn grass3() -> Grass3 {
+    static S: std::sync::OnceLock<Grass3> = std::sync::OnceLock::new();
+    *S.get_or_init(|| {
+        let g = Grass3::from_args(&std::env::args().collect::<Vec<_>>());
+        if grass2().cover { g } else { Grass3::NONE }
+    })
+}
+
 /// The round-3 switches of this process (read once from the command line).
 pub fn gg3() -> Gg3 {
     static S: std::sync::OnceLock<Gg3> = std::sync::OnceLock::new();
@@ -325,7 +376,31 @@ pub struct Naip {
     pub canopy: f32,
     pub low: f32,
     pub bare: f32,
+    /// The part of `low` that passed the green test (bright, green over red):
+    /// in the summer image the annual grass has cured, so a bright green pixel
+    /// on the headlands is sunlit evergreen scrub (coyote brush, lupine) that the
+    /// canopy rule misses (its misses are "sunlit scrub brighter than 0.38").
+    pub lush: f32,
+    /// Red-brown soil: the pixels that are not green, red over green by
+    /// [`NAIP_SOIL_RG`] and not pale ([`NAIP_BARE_V`]): eroded Tamalpais soil
+    /// (5YR hue), where cured grass is a yellower tan (red near green).
+    pub soil: f32,
+    /// Warm bare ground: not green and red over green by [`NAIP_WARM_RG`]
+    /// (thin, eroded soil showing through; on a knoll top, [`bare_soil`]).
+    pub warm: f32,
 }
+
+/// Red over green past which a non-green pixel is warm (soil showing): over
+/// the cured grass's median (1.00) by its spread; the headland knoll tops the
+/// photographs show bare read 1.08-1.14 in the image (probed). INFERRED.
+pub const NAIP_WARM_RG: f32 = 1.06;
+
+/// Red over green past which a non-green pixel is red-brown soil, not cured
+/// grass ([`Naip::soil`]). The Tamalpais series' eroded B2t horizon, dry 5YR 4/4
+/// (sRGB 126, 90, 68, terrain_detail.rs `SOIL_ERODED_SRGB`), is 1.40; the
+/// cured grass's red over green median on the headlands is 1.00, its p90
+/// 1.09 ([`MEADOW_LEAN`]'s measurement). INFERRED between them.
+pub const NAIP_SOIL_RG: f32 = 1.16;
 
 /// One NAIP pixel's class.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -418,6 +493,7 @@ pub fn naip_shares(px: &[Option<[u8; 3]>], w: usize, h: usize, slope_deg: f64) -
     }
     let v: Vec<Option<f32>> = px.iter().map(|p| p.map(|p| (p[0] as f32 + p[1] as f32 + p[2] as f32) / 765.0)).collect();
     let mut n = [0u32; 4];
+    let (mut lush, mut soil, mut warm) = (0u32, 0u32, 0u32);
     for j in 2..h - 2 {
         for i in 2..w - 2 {
             let Some(p) = px[j * w + i] else { continue };
@@ -430,11 +506,26 @@ pub fn naip_shares(px: &[Option<[u8; 3]>], w: usize, h: usize, slope_deg: f64) -
                     }
                 }
             }
-            n[naip_class(p, sum / k as f32, slope_deg) as usize] += 1;
+            let v5 = sum / k as f32;
+            let class = naip_class(p, v5, slope_deg);
+            n[class as usize] += 1;
+            let [r, g, b] = p.map(|c| c as f32);
+            let green = 2.0 * g - r - b > 0.0 && g > r;
+            if class == NaipClass::Low && green {
+                lush += 1;
+            }
+            if matches!(class, NaipClass::Low | NaipClass::Bare) && !green && r > b && v5 <= NAIP_BARE_V {
+                if r >= NAIP_SOIL_RG * g {
+                    soil += 1;
+                }
+                if r >= NAIP_WARM_RG * g {
+                    warm += 1;
+                }
+            }
         }
     }
     let known = (n[0] + n[1] + n[2]) as f32;
-    (known > 0.0).then(|| Naip { canopy: n[0] as f32 / known, low: n[1] as f32 / known, bare: n[2] as f32 / known })
+    (known > 0.0).then(|| Naip { canopy: n[0] as f32 / known, low: n[1] as f32 / known, bare: n[2] as f32 / known, lush: lush as f32 / known, soil: soil as f32 / known, warm: warm as f32 / known })
 }
 
 /// What a planting pass reads besides the ground: the round-3 switches and
@@ -443,6 +534,8 @@ pub struct Extra<'a> {
     pub g3: Gg3,
     /// The second grass pass ([`Grass2`]).
     pub g2: Grass2,
+    /// The third grass pass ([`Grass3`]).
+    pub g3x: Grass3,
     /// The shares round a point in a box of about the given side (m).
     pub naip: Box<dyn Fn(f64, f64, f64) -> Option<Naip> + 'a>,
 }
@@ -450,7 +543,7 @@ pub struct Extra<'a> {
 impl Extra<'_> {
     /// Round 2's planting (no NAIP, every round-3 switch off).
     pub fn none() -> Extra<'static> {
-        Extra { g3: Gg3::NONE, g2: Grass2::NONE, naip: Box::new(|_, _, _| None) }
+        Extra { g3: Gg3::NONE, g2: Grass2::NONE, g3x: Grass3::NONE, naip: Box::new(|_, _, _| None) }
     }
     fn at(&self, x: f64, z: f64, side: f64) -> Option<Naip> {
         if self.g3.naip_planting { (self.naip)(x, z, side) } else { None }
@@ -787,6 +880,27 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
         let r = hash(ix, iz, 3);
         let flowers = f * bloom * smoothstep(0.35, 0.8, field(x, z, 14.0, 43));
         if ex.g2.cover && meadow_ground(cover, naip) {
+            // the third pass: bare eroded ground stays bare (a sparse tuft in some
+            // cells), and the scrub stands as mounds in place of the meadow patch.
+            if ex.g3x.bare && hash(ix, iz, 110) < bare_soil(x, z, &s, naip) {
+                // scrub stands over the soil on a ridge's flanks (the seaward slopes'
+                // mounds with the eroded soil between: the photographs' foreground),
+                // not on its flatter top or on a steep face.
+                let flank = smoothstep(16.0, 26.0, slope) * (1.0 - smoothstep(36.0, 44.0, slope));
+                if ex.g3x.scrub && hash(ix, iz, 113) < scrub_share(x, z, &s, cover, naip, ex.g3x) * MOUNDS_PER_CELL * flank {
+                    plant_mound(x, z, ix, iz, &s, bloom, ex.g3x, out);
+                }
+                {
+                    let cured = meadow_cured(x, z, &s, season, ex.g3x.breakup);
+                    let sc = 0.8 + 0.4 * hash(ix, iz, 112) as f32;
+                    out.push(Plant { kind: Kind::Meadow(MEADOW_BARE), pos: [x, s.y - GRASS_SINK_M, z], yaw: hash(ix, iz, 7) * std::f64::consts::TAU, scale: [sc; 3], rank: hash(ix, iz, 8) as f32, tint: meadow_patch_tint(MEADOW_BARE, cured, 0.9 + 0.2 * hash(ix, iz, 20) as f32), grad: s.grad(), tip: TIP_NONE });
+                }
+                return;
+            }
+            if ex.g3x.scrub && hash(ix, iz, 113) < scrub_share(x, z, &s, cover, naip, ex.g3x) * MOUNDS_PER_CELL {
+                plant_mound(x, z, ix, iz, &s, bloom, ex.g3x, out);
+                return;
+            }
             // the second pass: a continuous meadow (a patch in every cell), the
             // spring flowers over it where the first pass drew them.
             if r < flowers {
@@ -794,7 +908,7 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
                 let sc = 0.75 + 0.55 * hash(ix, iz, 4) as f32;
                 out.push(Plant { kind: Kind::Flower(if field(x, z, 25.0, 47) < 0.6 { 0 } else { 1 }), pos: [x, s.y - GRASS_SINK_M, z], yaw: hash(ix, iz, 7) * std::f64::consts::TAU, scale: [sc; 3], rank: hash(ix, iz, 8) as f32, tint, grad: s.grad(), tip: TIP_NONE });
             }
-            plant_meadow(x, z, ix, iz, &s, cover, naip, season, ex.g2, out);
+            plant_meadow(x, z, ix, iz, &s, cover, naip, season, ex.g2, ex.g3x.breakup, out);
             return;
         }
         let kind = if r < flowers {
@@ -853,7 +967,23 @@ pub const MEADOW_CLOVER: u8 = 3;
 pub const MEADOW_ICE_PLANT: u8 = 4;
 /// Dead thatch: matted pale straw with a little green sward through it.
 pub const MEADOW_THATCH: u8 = 5;
-pub const MEADOW_TYPES: u8 = 6;
+/// The third pass's coastal scrub mounds (`Grass3::scrub`): rounded, lumpy
+/// shrubs of small leaves in clumps, 1 m tall and 1.6 m across at scale 1
+/// (planted 0.5-1.5 m tall). Northern coastal scrub on the headlands is coyote
+/// brush (Baccharis pilularis) with California sagebrush (Artemisia
+/// californica) and bush lupine (Lupinus arboreus) (NPS Golden Gate "Coastal
+/// Scrub"; Ford and Hayes 2007). Coyote brush: bright green, small toothed leaves.
+pub const MEADOW_COYOTE: u8 = 6;
+/// California sagebrush: grey-green, fine and feathery.
+pub const MEADOW_SAGEBRUSH: u8 = 7;
+/// Bush lupine in flower: grey-green palmate leaves under clustered spikes
+/// of yellow flowers (the yellow form of Lupinus arboreus, the common one on
+/// the Marin headlands' bluffs: Calscape, Jepson eFlora; spring bloom).
+pub const MEADOW_LUPINE: u8 = 8;
+/// Bare eroded soil (`Grass3::bare`): a ragged mat of red-brown soil (the
+/// Tamalpais series' eroded horizon) with a few sparse tufts of short grass.
+pub const MEADOW_BARE: u8 = 9;
+pub const MEADOW_TYPES: u8 = 10;
 
 /// Each type's living tissue in its green state (linear albedo, the mean of its
 /// blades' vertex colours, eo-render) and cured (or, for ice plant, drought-
@@ -871,6 +1001,14 @@ pub const MEADOW_LIVE: [[f32; 3]; MEADOW_TYPES as usize] = [
     [0.032, 0.070, 0.020],
     [0.062, 0.112, 0.030],
     [0.060, 0.095, 0.032],
+    // the scrub's leaves: coyote brush a glossy bright green, sagebrush grey-green,
+    // lupine leaves grey-green (green leaf 0.04-0.12 in the green, USGS v7; the
+    // photographs' sunlit coyote brush is the brightest green on the headland:
+    // INFERRED inside the range), the bare patch's sparse grass the sward's.
+    [0.066, 0.150, 0.026],
+    [0.088, 0.112, 0.066],
+    [0.070, 0.124, 0.046],
+    [0.060, 0.095, 0.032],
 ];
 pub const MEADOW_CURED: [[f32; 3]; MEADOW_TYPES as usize] = [
     [0.215, 0.178, 0.100],
@@ -879,8 +1017,13 @@ pub const MEADOW_CURED: [[f32; 3]; MEADOW_TYPES as usize] = [
     [0.075, 0.072, 0.036],
     [0.150, 0.075, 0.040],
     [0.215, 0.178, 0.100],
+    [0.066, 0.150, 0.026],
+    [0.088, 0.112, 0.066],
+    [0.070, 0.124, 0.046],
+    [0.215, 0.178, 0.100],
 ];
-pub const MEADOW_CURE: [f32; MEADOW_TYPES as usize] = [1.0, 1.0, 0.55, 0.35, 0.4, 1.0];
+/// The scrub is evergreen (its summer dullness is the dust and the older leaves: not drawn).
+pub const MEADOW_CURE: [f32; MEADOW_TYPES as usize] = [1.0, 1.0, 0.55, 0.35, 0.4, 1.0, 0.0, 0.0, 0.0, 1.0];
 /// Dead thatch, weathered pale straw (linear albedo; dry grass litter 0.15-0.25
 /// in the visible, USGS v7 "dry grass" and litter spectra; INFERRED): the mat's
 /// and the lying blades' colour (eo-render bakes it in the dead material).
@@ -907,9 +1050,12 @@ pub fn meadow_ground(cover: Cover, naip: Option<Naip>) -> bool {
 /// season's dryness leaned by the same patch field, aspect, slope and hollows
 /// as [`meadow_tint`], without its per-bunch term (a patch's mat is smooth
 /// with its neighbours).
-pub fn meadow_cured(x: f64, z: f64, s: &Site, season: f64) -> f64 {
+///
+/// `breakup` (`Grass3::breakup`): the patch field domain-warped ([`warped`]).
+pub fn meadow_cured(x: f64, z: f64, s: &Site, season: f64, breakup: bool) -> f64 {
     let d0 = season.clamp(0.0, 1.0);
-    let p = 0.65 * (field(x, z, 32.0, 61) - 0.5) + 0.35 * (field(x, z, 11.0, 62) - 0.5);
+    let f = |c: f64, k: u32| if breakup { warped(x, z, c, k) } else { field(x, z, c, k) };
+    let p = 0.65 * (f(32.0, 61) - 0.5) + 0.35 * (f(11.0, 62) - 0.5);
     let patch = 2.0 * smoothstep(-0.22, 0.22, p) - 1.0;
     let lean = MEADOW_LEAN * patch - 0.1 * s.north() + 0.06 * smoothstep(10.0, 35.0, s.slope_deg()) - 0.12 * (s.hollow_m * 0.5).clamp(-1.0, 1.0);
     let cured = smoothstep(0.42, 0.7, d0 + lean);
@@ -926,7 +1072,14 @@ pub fn meadow_cured(x: f64, z: f64, s: &Site, season: f64) -> f64 {
 /// * clover and forbs: moist hollows and north faces on gentle ground;
 /// * ice plant: within about 45 m of the shore on the bluff top and its face;
 /// * thatch: dry, trampled and eroded ground (the NAIP's bare share).
-pub fn meadow_kind(x: f64, z: f64, ix: i64, iz: i64, s: &Site, cover: Cover, naip: Option<Naip>, cured: f64) -> u8 {
+///
+/// `breakup` (`Grass3::breakup`): the type fields domain-warped ([`warped`])
+/// into lobed patches and the weights squared, not cubed, so neighbouring
+/// types mix over a wider edge instead of meeting in blobs (the camouflage
+/// pattern the 40-100 m slopes drew).
+#[allow(clippy::too_many_arguments)]
+pub fn meadow_kind(x: f64, z: f64, ix: i64, iz: i64, s: &Site, cover: Cover, naip: Option<Naip>, cured: f64, breakup: bool) -> u8 {
+    let field = |x: f64, z: f64, c: f64, k: u32| if breakup { warped(x, z, c, k) } else { field(x, z, c, k) };
     let slope = s.slope_deg();
     let north = s.north();
     let wet = (s.hollow_m * 0.5).clamp(-1.0, 1.0);
@@ -943,7 +1096,7 @@ pub fn meadow_kind(x: f64, z: f64, ix: i64, iz: i64, s: &Site, cover: Cover, nai
         2.2 * edge * (0.35 + 0.65 * smoothstep(12.0, 32.0, slope)) * smoothstep(0.3, 0.55, field(x, z, 9.0, 94)),
         (0.2 + 0.5 * cured + 0.4 * bare) * smoothstep(0.4, 0.75, field(x, z, 11.0, 95)),
     ]
-    .map(|v: f64| v.max(0.0).powi(3));
+    .map(|v: f64| if breakup { v.max(0.0).powi(2) } else { v.max(0.0).powi(3) });
     let sum: f64 = w.iter().sum();
     if sum <= 0.0 {
         return MEADOW_SWARD;
@@ -974,9 +1127,9 @@ pub fn meadow_patch_tint(kind: u8, cured: f64, w: f32) -> [f32; 3] {
 /// at its edges (`Grass2::types`), now and then a low coyote brush or sage
 /// mound between the coarse layer's shrubs.
 #[allow(clippy::too_many_arguments)]
-pub fn plant_meadow(x: f64, z: f64, ix: i64, iz: i64, s: &Site, cover: Cover, naip: Option<Naip>, season: f64, g2: Grass2, out: &mut Vec<Plant>) {
-    let cured = meadow_cured(x, z, s, season);
-    let kind = if g2.types { meadow_kind(x, z, ix, iz, s, cover, naip, cured) } else { MEADOW_SWARD };
+pub fn plant_meadow(x: f64, z: f64, ix: i64, iz: i64, s: &Site, cover: Cover, naip: Option<Naip>, season: f64, g2: Grass2, breakup: bool, out: &mut Vec<Plant>) {
+    let cured = meadow_cured(x, z, s, season, breakup);
+    let kind = if g2.types { meadow_kind(x, z, ix, iz, s, cover, naip, cured, breakup) } else { MEADOW_SWARD };
     let sc = 0.88 + 0.24 * hash(ix, iz, 4) as f32;
     // the sward's height in clumps (a 3 m field and each patch), so the canopy is lumpy, not mown.
     let tall = (0.6 + 0.7 * field(x, z, 3.0, 106) + 0.3 * hash(ix, iz, 9)) as f32;
@@ -1000,6 +1153,94 @@ pub fn plant_meadow(x: f64, z: f64, ix: i64, iz: i64, s: &Site, cover: Cover, na
         let (jx, jz) = (hash(ix, iz, 102) - 0.5, hash(ix, iz, 103) - 0.5);
         out.push(Plant { kind: Kind::Shrub(k as u8), pos: [x + jx * 0.6, s.y - 0.08, z + jz * 0.6], yaw: hash(ix, iz, 104) * std::f64::consts::TAU, scale: [wd, h, wd], rank: hash(ix, iz, 105) as f32, tint, grad: s.grad(), tip: TIP_NONE });
     }
+}
+
+/// Mounds a 1 m cell carries where the scrub is closed: a mound is 1.3-2.2 m
+/// across (2-3 m2), so half the cells give a closed canopy with dark gaps.
+pub const MOUNDS_PER_CELL: f64 = 0.5;
+
+/// The game z north of which the ground is the Marin Headlands' (37.8135 N, the
+/// strait's mid-line under the bridge; eo-render terrain_detail `MARIN_LAT`).
+fn marin_z() -> f64 {
+    static Z: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
+    *Z.get_or_init(|| game_xz(37.8135, -122.4783).1)
+}
+
+/// A field warped by two others (`Grass3::breakup`): its patches have
+/// irregular, lobed outlines instead of the value noise's rounded cells.
+pub fn warped(x: f64, z: f64, cell: f64, salt: u32) -> f64 {
+    let wx = (field(x, z, cell * 0.7, salt + 500) - 0.5) * cell * 1.1;
+    let wz = (field(x, z, cell * 0.7, salt + 501) - 0.5) * cell * 1.1;
+    0.75 * field(x + wx, z + wz, cell, salt) + 0.25 * field(x - wz, z + wx, cell * 0.37, salt + 502)
+}
+
+/// How much of a cell is bare eroded soil (0-1; the chance its cell stays
+/// bare): within the NAIP image (none outside it), a steep face the image
+/// shows bare (past 36 degrees non-green ground is eroded, not grass: the
+/// classifier's `NAIP_BARE_SLOPE_DEG`; the photographs' knoll faces) or
+/// red-brown soil in the image ([`Naip::soil`]), or a knoll top or ridge
+/// whose image is warm bare ground ([`Naip::warm`]: the eroded knoll tops),
+/// less where the image shows any green.
+pub fn bare_soil(x: f64, z: f64, s: &Site, naip: Option<Naip>) -> f64 {
+    let Some(n) = naip else { return 0.0 };
+    let slope = s.slope_deg();
+    let face = smoothstep(36.0, 46.0, slope) * smoothstep(0.45, 0.85, n.bare as f64);
+    let soil = smoothstep(0.12, 0.45, n.soil as f64);
+    // a knoll top or ridge (the ground 2-4 m over the mean of a ring 12 m out) whose
+    // image is warm bare ground: wind and foot traffic strip the thin soil there.
+    let ridge = smoothstep(1.5, 3.5, -s.hollow_m) * smoothstep(0.4, 0.8, n.warm as f64);
+    let green = smoothstep(0.1, 0.4, (n.canopy + n.lush) as f64);
+    // a ragged edge: the soil breaks into the sward along a warped field.
+    let edge = 0.75 + 0.5 * warped(x, z, 5.0, 114);
+    (face.max(soil).max(ridge) * (1.0 - green) * edge).clamp(0.0, 0.97)
+}
+
+/// How much of a cell the coastal scrub holds (0-1): the NAIP image's canopy
+/// and bright green (summer) share, the mapped scrub where the image is not
+/// read, and on the Marin headland's seaward (south-facing) slopes, where the
+/// scrub runs down to the bluffs (the photographs from Battery Spencer), a
+/// share of its own; broken by a warped patch field into stands with grass
+/// between (NPS: "closed patches with open grass between"). Steep faces past
+/// 50 degrees carry none.
+pub fn scrub_share(x: f64, z: f64, s: &Site, cover: Cover, naip: Option<Naip>, g: Grass3) -> f64 {
+    let slope = s.slope_deg();
+    let mapped = match cover {
+        Cover::TallScrub => 0.75,
+        Cover::Scrub => 0.6,
+        _ => 0.0,
+    };
+    // where the image's canopy is closed the coarse layer's shrubs already close it
+    // (`plant_coarse_with`): the mounds fill its edges, gaps and the bright scrub it misses.
+    let image = naip.map(|n| smoothstep(0.1, 0.5, (n.canopy + n.lush) as f64) * (1.0 - 0.85 * smoothstep(0.55, 0.9, n.canopy as f64))).unwrap_or(mapped);
+    let marin = smoothstep(0.0, 60.0, marin_z() - z);
+    let south = smoothstep(0.05, 0.3, -s.north());
+    let seaward = 0.8 * marin * south * smoothstep(5.0, 14.0, slope);
+    let p = if g.breakup { warped(x, z, 9.0, 115) } else { field(x, z, 9.0, 115) };
+    let stands = smoothstep(0.3, 0.55, p);
+    (image.max(seaward).max(mapped * 0.8) * (0.3 + 0.7 * stands) * (1.0 - smoothstep(44.0, 52.0, slope))).clamp(0.0, 1.0)
+}
+
+/// One coastal scrub mound at a fine cell (`Grass3::scrub`): coyote brush,
+/// sagebrush in its own patches, bush lupine in stands (in flower in the bloom
+/// window, `Grass3::bloom`; coyote brush out of it), 0.5-1.5 m tall.
+#[allow(clippy::too_many_arguments)]
+pub fn plant_mound(x: f64, z: f64, ix: i64, iz: i64, s: &Site, bloom: f64, g: Grass3, out: &mut Vec<Plant>) {
+    let lupine = g.bloom && bloom > 0.3 && warped(x, z, 11.0, 116) > 0.62;
+    let sage = !lupine && warped(x, z, 16.0, 117) < 0.2;
+    let kind = if lupine {
+        MEADOW_LUPINE
+    } else if sage {
+        MEADOW_SAGEBRUSH
+    } else {
+        MEADOW_COYOTE
+    };
+    // taller where the scrub is older (a 20 m field), each mound its own size.
+    let h = (0.5 + 0.55 * field(x, z, 20.0, 118) + 0.45 * hash(ix, iz, 119)) as f32;
+    let w = (0.8 + 0.5 * hash(ix, iz, 120)) as f32 * (0.85 + 0.25 * h);
+    let (jx, jz) = (hash(ix, iz, 121) - 0.5, hash(ix, iz, 122) - 0.5);
+    // each mound its own value, and a 25 m field of lighter and darker stands.
+    let v = (0.82 + 0.26 * hash(ix, iz, 123) + 0.2 * (field(x, z, 25.0, 124) - 0.5)) as f32;
+    out.push(Plant { kind: Kind::Meadow(kind), pos: [x + jx * 0.7, s.y - 0.12, z + jz * 0.7], yaw: hash(ix, iz, 125) * std::f64::consts::TAU, scale: [w, h, w * (0.85 + 0.3 * hash(ix, iz, 126) as f32)], rank: hash(ix, iz, 127) as f32, tint: [v; 3], grad: s.grad(), tip: TIP_NONE });
 }
 
 /// The lamp word's alpha for a plant with no tip colour (what every instance carried before).
@@ -1365,7 +1606,7 @@ mod tests {
         // a cliff over a beach and mapped bare rock: rock only (hill_rock), no plant.
         for cover in [Cover::Cliff, Cover::Rock] {
             let mut out = vec![];
-            let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, naip: Box::new(none) };
+            let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, g3x: Grass3::NONE, naip: Box::new(none) };
             plant_coarse_with(0.0, 0.0, 128.0, 128.0, &flat(cover), all, &ex, &mut out);
             plant_fine_with(0.0, 0.0, 32.0, 32.0, &flat(cover), 100.0, all, &ex, &mut out);
             assert!(out.iter().all(|p| matches!(p.kind, Kind::Rock(_))), "{cover:?}");
@@ -1376,16 +1617,16 @@ mod tests {
         }
         // the image's canopy: closed scrub; its open grass: none.
         let count = |n: Naip| {
-            let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, naip: Box::new(move |_, _, _| Some(n)) };
+            let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, g3x: Grass3::NONE, naip: Box::new(move |_, _, _| Some(n)) };
             let mut out = vec![];
             plant_coarse_with(0.0, 0.0, 128.0, 128.0, &flat(Cover::TallScrub), all, &ex, &mut out);
             out.iter().filter(|p| matches!(p.kind, Kind::Shrub(_))).count()
         };
         let cells = (128.0 * 128.0 / (SHRUB_PITCH_M * SHRUB_PITCH_M)) as usize;
-        assert!(count(Naip { canopy: 1.0, low: 0.0, bare: 0.0 }) > cells * 9 / 10);
-        assert!(count(Naip { canopy: 0.0, low: 1.0, bare: 0.0 }) < cells / 20);
+        assert!(count(Naip { canopy: 1.0, low: 0.0, bare: 0.0, ..Default::default() }) > cells * 9 / 10);
+        assert!(count(Naip { canopy: 0.0, low: 1.0, bare: 0.0, ..Default::default() }) < cells / 20);
         // and the sward on the open grass.
-        let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, naip: Box::new(|_, _, _| Some(Naip { canopy: 0.0, low: 1.0, bare: 0.0 })) };
+        let ex = Extra { g3: Gg3::ALL, g2: Grass2::NONE, g3x: Grass3::NONE, naip: Box::new(|_, _, _| Some(Naip { canopy: 0.0, low: 1.0, bare: 0.0, ..Default::default() })) };
         let mut out = vec![];
         plant_fine_with(0.0, 0.0, 32.0, 32.0, &flat(Cover::WildGrass), 265.0, all, &ex, &mut out);
         assert!(out.iter().filter(|p| p.kind == Kind::Grass).count() > 32 * 32 * 8 / 10);
@@ -1418,4 +1659,34 @@ mod tests {
         let mean: f32 = out.iter().map(|p| p.tint[1]).sum::<f32>() / out.len() as f32;
         assert!((mean / (0.12 * GRASS_GAIN) - 1.0).abs() < 0.05, "{mean}");
     }
+
+    #[test]
+    fn grass3_rolls_up_and_reads_each_switch() {
+        let a = |v: &[&str]| Grass3::from_args(&v.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        assert_eq!(a(&[]), Grass3::ALL);
+        assert_eq!(a(&["--no-grass3"]), Grass3::NONE);
+        assert_eq!(a(&["--no-bare-ground"]), Grass3 { bare: false, ..Grass3::ALL });
+        assert_eq!(a(&["--no-scrub-mounds", "--no-meadow-breakup"]), Grass3 { scrub: false, breakup: false, ..Grass3::ALL });
+    }
+
+    #[test]
+    fn eroded_ground_is_bare_and_scrub_keeps_off_cliffs() {
+        let site = |ny: f64, hollow: f64| Site { y: 0.0, normal: [0.0, ny, (1.0 - ny * ny).sqrt()], ground: [0.1; 3], cover: Some(Cover::Bare), lithology: Lithology::Chert, shore_m: 400.0, hollow_m: hollow };
+        let n = |bare: f32, warm: f32, lush: f32| Some(Naip { canopy: 0.0, low: 1.0 - bare, bare, lush, soil: 0.0, warm });
+        let steep = site(50f64.to_radians().cos(), 0.0);
+        let gentle = site(10f64.to_radians().cos(), 0.0);
+        let knoll = site(10f64.to_radians().cos(), -4.0);
+        // a steep face the image shows bare, and a warm bare knoll top, are mostly bare soil;
+        let mean = |s: &Site, nn: Option<Naip>| (0..400).map(|k| bare_soil(k as f64 * 3.1, k as f64 * 1.7, s, nn)).sum::<f64>() / 400.0;
+        assert!(mean(&steep, n(1.0, 0.0, 0.0)) > 0.6);
+        assert!(mean(&knoll, n(0.0, 1.0, 0.0)) > 0.6);
+        // gentle cured grass, green scrub and ground outside the image are not.
+        assert_eq!(mean(&gentle, n(0.0, 1.0, 0.0)), 0.0);
+        assert!(mean(&knoll, n(0.0, 1.0, 0.6)) < 0.05);
+        assert_eq!(mean(&steep, None), 0.0);
+        // no mound on a face past 52 degrees, however scrubby.
+        let cliff = site(55f64.to_radians().cos(), 0.0);
+        assert_eq!(scrub_share(0.0, 0.0, &cliff, Cover::TallScrub, n(0.0, 0.0, 1.0), Grass3::ALL), 0.0);
+    }
+
 }

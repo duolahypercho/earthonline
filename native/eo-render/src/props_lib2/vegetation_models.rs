@@ -71,6 +71,12 @@ pub const THIN: [(f32, f32, f32); COUNT as usize] = [
     (70.0, 110.0, 1.3),
     (70.0, 110.0, 1.3),
     (70.0, 110.0, 1.3),
+    // the third pass's scrub mounds (their own volume: the survivors grow little)
+    // and the bare ground's sparse tufts.
+    (70.0, 110.0, 1.15),
+    (70.0, 110.0, 1.15),
+    (70.0, 110.0, 1.15),
+    (70.0, 110.0, 1.3),
 ];
 /// The share kept at the draw distance (thinned models).
 pub const THIN_FLOOR: f32 = 0.12;
@@ -80,6 +86,12 @@ pub const THIN_FLOOR: f32 = 0.12;
 pub fn thin_wgsl() -> String {
     let mut s = format!("const PR_VEG_BASE: u32 = {VEG_BASE}u;\nconst PR_VEG_COUNT: u32 = {COUNT}u;\nconst PR_VEG_TREES: u32 = {}u;\nconst PR_VEG_GRASS: u32 = {}u;\nconst PR_VEG_ROCK: u32 = {}u;\nconst PR_VEG_MEADOW: u32 = {}u;\n", V_SHRUB - V_TREE, V_GRASS - V_TREE, V_ROCK - V_TREE, V_MEADOW - V_TREE);
     s += &format!("const PR_VEG_FLOOR: f32 = {THIN_FLOOR:?};\nconst PR_VEG_GRASS_CELL_MEAN: f32 = {GRASS_CELL_MEAN:?};\n");
+    // the third grass pass's break-up (`--no-meadow-breakup`): props_types.wgsl
+    // `pr_lod_dist`, props_draw.wgsl's lobed mat rims.
+    s += &format!("const PR_MEADOW_BREAKUP: bool = {};\n", eo_landmarks::vegetation::grass3().breakup);
+    // the scrub mounds' model range (props_draw.wgsl's leaf-cluster grain on them).
+    let mound = V_MEADOW - V_TREE + eo_landmarks::vegetation::MEADOW_COYOTE as u32;
+    s += &format!("const PR_VEG_MOUND: u32 = {mound}u;\nconst PR_VEG_MOUND_END: u32 = {}u;\n", mound + 3);
     s += "fn pr_veg_thin(model: u32) -> vec3<f32> {\n    switch (model - PR_VEG_BASE) {\n";
     for (k, (a, b, g)) in THIN.iter().enumerate() {
         if *a > 0.0 {
@@ -456,7 +468,35 @@ pub(crate) fn cook(out: &mut Out, ez: Option<&eo_props::eztree::EzLibrary>, m_ba
         mat: push_mat(out.materials, thatch, 0.9, 0.0, P_MEADOW | P_MEADOW_LIVE | P_MEADOW_MAT, 0),
         flesh: push_mat(out.materials, [255, 255, 255], 0.35, 0.0, P_MEADOW | P_MEADOW_LIVE | P_MEADOW_THICK | pbr, 0),
     };
+    let mound_mats = MoundMats {
+        leaf: push_mat(out.materials, [255, 255, 255], 0.85, 0.0, P_MEADOW | P_MEADOW_LIVE, 0),
+        flower: push_mat(out.materials, [255, 255, 255], 0.5, 0.0, P_MEADOW, 0),
+    };
+    // the bare ground's soil mat: the Tamalpais series' eroded horizon, dry 5YR 4/4
+    // (terrain_detail.rs SOIL_ERODED_SRGB), drawn by the mat shader (its grain, a
+    // little of the sward's green through it).
+    let soil_mat = push_mat(out.materials, crate::scene::terrain_detail::SOIL_ERODED_SRGB, 0.95, 0.0, P_MEADOW | P_MEADOW_LIVE | P_MEADOW_MAT | P_MEADOW_SOIL, 0);
     for k in 0..V_MEADOWS {
+        if k as u8 >= eo_landmarks::vegetation::MEADOW_COYOTE {
+            let mut ids = [NONE; 3];
+            for (l, id) in ids.iter_mut().enumerate() {
+                if k as u8 == eo_landmarks::vegetation::MEADOW_BARE {
+                    bare_tufts(&mut out.b, &mats, soil_mat, l as u32, 700 + k * 13);
+                } else {
+                    mound(&mut out.b, &mound_mats, k as u8, l as u32, 700 + k * 13);
+                }
+                *id = out.finish();
+            }
+            let model = V_MEADOW + k;
+            let (z, w) = thin(model);
+            if k as u8 == eo_landmarks::vegetation::MEADOW_BARE {
+                out.set(model, ids, [8.0, 24.0, z, w], 0, 0.1);
+            } else {
+                // the mounds cast into the near cascade (the dark gaps between them).
+                out.set(model, ids, [10.0, 32.0, z, w], 1, 0.1);
+            }
+            continue;
+        }
         let mut ids = [NONE; 3];
         for (l, id) in ids.iter_mut().enumerate() {
             meadow(&mut out.b, &mats, k as u8, l as u32, 700 + k * 13);
@@ -467,6 +507,193 @@ pub(crate) fn cook(out: &mut Out, ez: Option<&eo_props::eztree::EzLibrary>, m_ba
         out.set(model, ids, [8.0, 24.0, z, w], 0, 0.1);
     }
     out.sources.push("vegetation: grass, tufts, wildflowers, rock blocks, meadow patches (props_lib2/vegetation_models.rs)".into());
+}
+
+// ------------------------------------------------------------------ scrub mounds (the third grass pass)
+
+struct MoundMats {
+    /// Leaves and leaf clumps: their colour times the instance's value.
+    leaf: u32,
+    /// Flowers: their own colour.
+    flower: u32,
+}
+
+fn norm3(p: [f32; 3]) -> [f32; 3] {
+    let l = (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt().max(1e-6);
+    p.map(|v| v / l)
+}
+
+fn cross3(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+}
+
+/// The mound's height and radius at scale 1 (m).
+const MOUND_H: f32 = 1.0;
+const MOUND_R: f32 = 0.8;
+
+/// One leaf: a diamond `len` x `wid` at `p` facing `n` (turned about it by
+/// `spin`), its colour `c` (linear).
+#[allow(clippy::too_many_arguments)]
+fn mound_leaf(b: &mut Builder, m: u32, p: [f32; 3], n: [f32; 3], spin: f32, len: f32, wid: f32, c: [f32; 3]) {
+    let any = if n[1].abs() < 0.9 { [0.0, 1.0, 0.0] } else { [1.0, 0.0, 0.0] };
+    let t0 = norm3(cross3(n, any));
+    let t1 = cross3(n, t0);
+    let (ss, cs) = spin.sin_cos();
+    let a = [0, 1, 2].map(|k| t0[k] * cs + t1[k] * ss);
+    let w = [0, 1, 2].map(|k| -t0[k] * ss + t1[k] * cs);
+    let col = lin3_to_srgb(c);
+    // the leaf's own normal leans toward the clump's outward normal (a canopy of leaves shades as a surface).
+    let first = b.v.len() as u32;
+    for (f, g) in [(-0.5f32, 0.0f32), (0.0, -0.5), (0.5, 0.0), (0.0, 0.5)] {
+        b.vert([p[0] + a[0] * f * len + w[0] * g * wid, p[1] + a[1] * f * len + w[1] * g * wid, p[2] + a[2] * f * len + w[2] * g * wid], n, [0.5 + g, 0.5 + f], col, m);
+    }
+    b.tri(false, first, first + 1, first + 2);
+    b.tri(false, first, first + 2, first + 3);
+}
+
+/// A coastal scrub mound (`eo_landmarks::vegetation::MEADOW_COYOTE` ..
+/// `MEADOW_LUPINE`) at level `lod`: a rounded mound 1 m tall and 1.6 m across
+/// built from lumpy leaf clumps (displaced spheres), each clump's colour darker
+/// toward the mound's inside and base (self-shading: the dark gaps between
+/// clumps), small leaves standing out of the clumps' surfaces near and mid (they
+/// break the silhouette), and for the lupine its yellow flower spikes clustered
+/// on two or three branches. Vertex colours carry the type's leaf albedo
+/// (`MEADOW_LIVE`) times the shading; the instance tint is its value.
+fn mound(b: &mut Builder, mats: &MoundMats, kind: u8, lod: u32, seed: u32) {
+    use eo_landmarks::vegetation as v;
+    let live = v::MEADOW_LIVE[kind as usize];
+    let sage = kind == v::MEADOW_SAGEBRUSH;
+    let clumps = [12u32, 9, 6][lod as usize];
+    let sub = [2u32, 1, 0][lod as usize];
+    let (unit, faces) = icosphere(sub);
+    let centre = [0.0f32, 0.3 * MOUND_H, 0.0];
+    let mut balls: Vec<([f32; 3], f32)> = Vec::new();
+    for k in 0..clumps {
+        // the first clump the crown; the rest round it, lower toward the rim.
+        let (c, r) = if k == 0 {
+            ([0.0, 0.62 * MOUND_H, 0.0], 0.42)
+        } else {
+            let a = (k as f32 / (clumps - 1) as f32 + 0.3 * hash3(k as i32, 1, 7, seed)) * std::f32::consts::TAU;
+            let u = 0.45 + 0.5 * hash3(k as i32, 2, 7, seed);
+            let y = MOUND_H * (0.62 - 0.38 * u * u) * (0.85 + 0.3 * hash3(k as i32, 3, 7, seed));
+            ([MOUND_R * u * a.cos(), y, MOUND_R * u * a.sin()], 0.26 + 0.14 * hash3(k as i32, 4, 7, seed))
+        };
+        // the far level's fewer clumps a little larger to keep the volume.
+        // near and mid the leaves make the surface: the clump's core sits inside them.
+        let r = r * [0.82f32, 0.92, 1.22][lod as usize];
+        balls.push((c, r));
+        let first = b.v.len() as u32;
+        for p in &unit {
+            // lumpy: two octaves of noise on the radius (leaf masses, not a smooth ball).
+            let q = [p[0] * 2.2 + c[0] * 3.0, p[1] * 2.2 + c[1] * 3.0, p[2] * 2.2 + c[2] * 3.0];
+            let rr = r * (1.0 + 0.24 * fbm(q, seed + k, 2));
+            let mut pos = [c[0] + p[0] * rr, c[1] + p[1] * rr * 0.85, c[2] + p[2] * rr];
+            pos[1] = pos[1].max(-0.02);
+            let out_dir = norm3([pos[0] - centre[0], pos[1] - centre[1], pos[2] - centre[2]]);
+            // the shading normal: the clump's own and the mound's, so each clump catches the
+            // sun on its lit side and the mound still reads as one volume.
+            let n = norm3([0, 1, 2].map(|i| 0.6 * p[i] + 0.4 * out_dir[i]));
+            // self-shading: the clump's side facing into the mound and the mound's base dark.
+            let facing = (p[0] * out_dir[0] + p[1] * out_dir[1] + p[2] * out_dir[2]).clamp(-1.0, 1.0);
+            let ao = (0.3 + 0.7 * ((facing + 0.4) / 1.4).clamp(0.0, 1.0)) * (0.5 + 0.5 * (pos[1] / (0.75 * MOUND_H)).clamp(0.0, 1.0));
+            // near and mid the core is the canopy's inside, seen only between the leaves: dark.
+            let vary = (0.85 + 0.3 * hash3(k as i32, 5, 7, seed)) * [0.45f32, 0.6, 1.0][lod as usize];
+            let c = [live[0] * ao * vary * 1.04, live[1] * ao * vary, live[2] * ao * vary * (1.15 - 0.15 * ao)];
+            b.vert(pos, n, [0.5, 0.5], lin3_to_srgb(c), mats.leaf);
+        }
+        for f in &faces {
+            b.tri(false, first + f[0], first + f[1], first + f[2]);
+        }
+    }
+    // leaves standing out of the clumps' outer surfaces (none on the far level).
+    let leaves = [3200u32, 900, 0][lod as usize];
+    let size = [1.0f32, 1.45, 1.0][lod as usize];
+    // a leaf cluster's size (coyote brush's 1-4 cm leaves crowd on short shoots: a
+    // cluster reads as one 5-8 cm blade of colour from the eye).
+    let (len, wid) = if sage { (0.06, 0.018) } else if kind == v::MEADOW_LUPINE { (0.065, 0.034) } else { (0.06, 0.03) };
+    for k in 0..leaves {
+        let (c, r) = balls[(hash3(k as i32, 11, 7, seed) * balls.len() as f32) as usize % balls.len()];
+        let d = norm3([hash3(k as i32, 12, 7, seed) * 2.0 - 1.0, hash3(k as i32, 13, 7, seed) * 2.0 - 0.6, hash3(k as i32, 14, 7, seed) * 2.0 - 1.0]);
+        let o = [1.08f32, 1.0, 1.0][lod as usize] * (0.95 + 0.3 * hash3(k as i32, 15, 7, seed));
+        let p = [c[0] + d[0] * r * o, (c[1] + d[1] * r * 0.85 * o).max(0.02), c[2] + d[2] * r * o];
+        let out_dir = norm3([p[0] - centre[0], p[1] - centre[1], p[2] - centre[2]]);
+        if d[0] * out_dir[0] + d[1] * out_dir[1] + d[2] * out_dir[2] < -0.1 {
+            continue;
+        }
+        // a leaf's own tilt about the surface (+-40 degrees), its colour a little lighter
+        // on the outside of the canopy (younger leaves) and varied.
+        let tilt = [hash3(k as i32, 16, 7, seed) - 0.5, hash3(k as i32, 17, 7, seed) - 0.5, hash3(k as i32, 18, 7, seed) - 0.5];
+        let n = norm3([d[0] + tilt[0] * 2.2, d[1] + tilt[1] * 2.2 + 0.2, d[2] + tilt[2] * 2.2]);
+        // lighter toward the top and outside, every cluster its own value (some in the
+        // canopy's shade, some young and yellower), so the surface reads as leaves.
+        let r19 = hash3(k as i32, 19, 7, seed);
+        let lift = (0.55 + 0.45 * (p[1] / MOUND_H).clamp(0.0, 1.0)) * (0.55 + 0.75 * r19);
+        let young = (r19 - 0.7).max(0.0) * 1.5;
+        let c = [live[0] * lift * (1.05 + young), live[1] * lift * 1.08, live[2] * lift * (1.0 - 0.5 * young)];
+        let s = size * (0.75 + 0.5 * hash3(k as i32, 20, 7, seed));
+        mound_leaf(b, mats.leaf, p, n, hash3(k as i32, 21, 7, seed) * std::f32::consts::TAU, len * s, wid * s, c);
+    }
+    if kind == v::MEADOW_LUPINE {
+        // the flower spikes: racemes 12-22 cm tall standing out of the top of two or
+        // three clumps, crowded (Lupinus arboreus' yellow form: clear sulphur yellow,
+        // linear about 0.62/0.50/0.04, INFERRED from the colour words).
+        let yellow = [0.62f32, 0.50, 0.045];
+        let per = [6u32, 5, 4][lod as usize];
+        for g in 0..3u32 {
+            let (c, r) = balls[(1 + g * 3) as usize % balls.len()];
+            for j in 0..per {
+                let a = hash3((g * 16 + j) as i32, 31, 7, seed) * std::f32::consts::TAU;
+                let u = 0.7 * hash3((g * 16 + j) as i32, 32, 7, seed).sqrt();
+                let base = [c[0] + r * u * a.cos(), c[1] + r * (1.0 - 0.5 * u * u) * 0.85 - 0.02, c[2] + r * u * a.sin()];
+                let h = 0.12 + 0.1 * hash3((g * 16 + j) as i32, 33, 7, seed);
+                let col = [0, 1, 2].map(|i| yellow[i] * (0.85 + 0.3 * hash3((g * 16 + j) as i32, 34 + i as i32, 7, seed)));
+                if lod == 0 {
+                    // whorls of florets up the spike.
+                    for f in 0..9u32 {
+                        let t = f as f32 / 8.0;
+                        let fa = f as f32 * 2.4 + a;
+                        let rr = 0.022 * (1.0 - 0.6 * t);
+                        let p = [base[0] + rr * fa.cos(), base[1] + h * t, base[2] + rr * fa.sin()];
+                        let n = norm3([fa.cos(), 0.6, fa.sin()]);
+                        mound_leaf(b, mats.flower, p, n, fa, 0.022, 0.016, col);
+                    }
+                } else {
+                    // two crossed cards, the spike's outline.
+                    for q in 0..2u32 {
+                        let ya = a + q as f32 * std::f32::consts::FRAC_PI_2;
+                        let n = [ya.cos(), 0.0, ya.sin()];
+                        let p = [base[0], base[1] + h * 0.5, base[2]];
+                        mound_leaf(b, mats.flower, p, n, std::f32::consts::FRAC_PI_2, h * 1.1, 0.05 * [1.0f32, 1.0, 1.4][lod as usize], col);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Bare eroded soil (`MEADOW_BARE`): a ragged soil mat (`soil`, the mat shader's
+/// grain over the soil colour) with two small tufts of short blades and a few straws.
+fn bare_tufts(b: &mut Builder, mats: &MeadowMats, soil: u32, lod: u32, seed: u32) {
+    use eo_landmarks::vegetation as v;
+    let live = v::MEADOW_LIVE[v::MEADOW_BARE as usize];
+    mat(b, soil, 0.95, 0.08, live, seed);
+    let wide = [1.0f32, 1.7, 3.0][lod as usize];
+    // a tuft in about every other patch's metre (each patch two, the far level one).
+    let tufts = [2u32, 2, 1][lod as usize];
+    for t in 0..tufts {
+        let (cx, cz) = disc(t, 0.7, seed + 3);
+        let n = [26u32, 9, 4][lod as usize];
+        for k in 0..n {
+            let (x, z) = disc(k, 0.07, seed + 5 + t);
+            let c = vary(live, k + t * 64, seed);
+            let h = 0.06 + 0.14 * hash3((k + t * 64) as i32, 41, 9, seed);
+            let yaw = hash3((k + t * 64) as i32, 42, 9, seed) * std::f32::consts::TAU;
+            blade(b, mats.live, [cx + x, MEADOW_GROUND - 0.01, cz + z], yaw, h, 0.006 * wide, h * 0.35, 0.4, 1, [c[0] * 0.9, c[1] * 0.9, c[2] * 0.9], c, 0.6);
+        }
+    }
+    if lod < 2 {
+        thatch(b, mats, [8u32, 3, 0][lod as usize], 0.6, 0.15, 0.006 * wide, seed);
+    }
 }
 
 // ------------------------------------------------------------------ meadow patches
@@ -481,6 +708,9 @@ pub const P_MEADOW_MAT: u32 = 1 << 20;
 pub const P_BLADE_PBR: u32 = 1 << 21;
 /// A fleshy leaf (ice plant): no keel or rolled margins, little transmission.
 pub const P_MEADOW_THICK: u32 = 1 << 22;
+/// A soil mat (the third pass's bare ground): soil grain and pebbles, not straw, and
+/// its own small green share at every distance.
+pub const P_MEADOW_SOIL: u32 = 1 << 23;
 
 struct MeadowMats {
     live: u32,
@@ -838,7 +1068,8 @@ mod tests {
     #[test]
     fn meadow_patches_are_dense_near_and_light_far() {
         let mats = MeadowMats { live: 0, dead: 1, mat: 2, flesh: 3 };
-        for k in 0..V_MEADOWS as u8 {
+        // (the third pass's mounds and bare soil have their own test)
+        for k in 0..eo_landmarks::vegetation::MEADOW_COYOTE {
             let mut tris = [0usize; 3];
             for (l, t) in tris.iter_mut().enumerate() {
                 let mut b = Builder::default();
@@ -873,4 +1104,22 @@ mod tests {
         }
         assert!(edges.values().all(|&n| n == 2));
     }
+
+    #[test]
+    fn scrub_mounds_are_dense_near_and_light_far() {
+        let mats = MoundMats { leaf: 0, flower: 1 };
+        for k in [eo_landmarks::vegetation::MEADOW_COYOTE, eo_landmarks::vegetation::MEADOW_SAGEBRUSH, eo_landmarks::vegetation::MEADOW_LUPINE] {
+            let tris: Vec<usize> = (0..3)
+                .map(|l| {
+                    let mut b = Builder::default();
+                    mound(&mut b, &mats, k, l, 9);
+                    assert!(b.v.iter().all(|v| v.pos[1] >= -0.03 && v.pos[1] < 1.4 * MOUND_H));
+                    b.opaque.len() / 3
+                })
+                .collect();
+            assert!(tris[0] < 12_000 && tris[1] < 3_000 && tris[2] < 400, "{k}: {tris:?}");
+            assert!(tris[0] > tris[1] && tris[1] > tris[2]);
+        }
+    }
+
 }
