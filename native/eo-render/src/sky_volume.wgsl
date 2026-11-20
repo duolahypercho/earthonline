@@ -575,6 +575,19 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // toward the set sun are added per sample, by position).
     let cl_l = cl_light_dir();
     let cl_cs = dot(dir, cl_l);
+    // `--no-cloud-depth-haze` off (the default): over the ground (a pixel the aerial
+    // perspective below hazes) the low deck's cloud is held here and put in by the aerial
+    // step, hazed by its own depth and hiding the haze behind it. Composited before the
+    // aerial, a cloud 50 m off took the haze of the ground 20 km behind it and turned to a
+    // blue veil, cut along the horizon where the sky's pixels (no aerial) drew it solid.
+    // Not under a weather veil (`atmo3.x`: fog, drizzle, rain, storm): there the aerial's
+    // Koschmieder over the path under the deck's top is the deck in front of the ground,
+    // and with the march put in front of it the far hills seen from inside the fog went
+    // black and grainy; those frames stay as they were.
+    let cl_defer = sky_on(bits, SKY_CLOUD_DEPTH_HAZE) && atmo_on && dist < 1e8 && skyu.atmo3.x < 0.5;
+    var cl_rad = vec3<f32>(0.0);
+    var cl_a = 0.0;
+    var cl_tm = 0.0;
     // under a heavy deck (rain, storm) no sun reaches the base or the high sheet
     let heavy = smoothstep(0.03, 0.18, skyu.cloud1.w);
     if (sky_on(bits, SKY_CLOUDS) && skyu.cloud0.z > 0.0) {
@@ -780,14 +793,22 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
             if (atmo_on) {
                 behind = mix(behind, vol_atmo_sky(dir), skyu.atmo2.y);
             }
-            Lc = Lc * far + behind * alpha * (1.0 - far);
-            if (above) {
-                // Seen from above, the deck is in front of the marine layer.
-                L = Lc + (1.0 - alpha) * L;
+            if (cl_defer) {
+                // held for the aerial step, which hazes it by its depth (`far` is the
+                // sky pixels' stand-in for that aerial)
+                cl_rad = Lc;
+                cl_a = alpha;
+                cl_tm = t_m;
             } else {
-                L = L + T * Lc;
+                Lc = Lc * far + behind * alpha * (1.0 - far);
+                if (above) {
+                    // Seen from above, the deck is in front of the marine layer.
+                    L = Lc + (1.0 - alpha) * L;
+                } else {
+                    L = L + T * Lc;
+                }
+                T = T * (1.0 - alpha);
             }
-            T = T * (1.0 - alpha);
         }
         // (D) The high deck: one sheet at its altitude, sky only; lit by the same
         // sun as the low deck (the atmosphere's transmittance at its own height, the same
@@ -824,8 +845,25 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // front of everything in the volume (the range fog is pushed out of reach).
     if (atmo_on && dist < 1e8) {
         let ap = vol_aerial(dir, dist, eye.y);
-        L = ap.rgb + ap.a * L;
-        T = T * ap.a;
+        if (cl_a > 0.0) {
+            // (cl_defer) the cloud at its mean depth: the haze in front of it (the
+            // aerial to that depth) over it, the haze behind it (the rest of the path's
+            // in-scatter) hidden by its opacity. The cloud is in front of what the volume
+            // drew before it (the marine layer) when the eye is over the deck (as in the
+            // sky's pixels) or over the marine layer's top with the cloud nearer than the
+            // ray's way into it: from 1 km up a cumulus 300 m off stood behind the
+            // marine bank 20 km out, a bright strip across the cloud at the horizon.
+            // With no cloud (cl_a 0) the frame is the one below.
+            let apn = vol_aerial(dir, min(cl_tm, dist), eye.y);
+            let haze = apn.rgb + (1.0 - cl_a) * max(ap.rgb - apn.rgb, vec3<f32>(0.0));
+            let marine_t0 = select(0.0, (top_max - eye.y) / min(dir.y, -1e-4), eye.y > top_max && dir.y < -1e-4);
+            let front = above || cl_tm < marine_t0;
+            L = haze + ap.a * L * select(1.0, 1.0 - cl_a, front) + apn.a * select(T, 1.0, front) * cl_rad;
+            T = T * ap.a * (1.0 - cl_a);
+        } else {
+            L = ap.rgb + ap.a * L;
+            T = T * ap.a;
+        }
     }
     // the sky itself from the atmosphere tables, behind everything in
     // the volume (sky pixels, not the sea's), sharing the sky with the JS dome
