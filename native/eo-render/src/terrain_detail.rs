@@ -774,7 +774,14 @@ impl Materials<'_> {
         // eo_landmarks::vegetation::meadow_ground): bare earth and the bare class in
         // the NAIP image carry the meadow patches, so the ground under them is the
         // sward's too, not soil (mapped bare rock stays rock).
-        if pr == Prior::Bare && tone != Some("bareRock") && eo_landmarks::vegetation::grass2().cover {
+        // The third pass (`--no-bare-ground`) keeps the eroded bare class bare: a steep
+        // face (past `BARE_FACE_SLOPE`) or red-brown soil in the NAIP (`soil_share`)
+        // as eo_landmarks::vegetation::bare_soil leaves it without meadow patches.
+        // (or, the bare class only, warm bare ground: `NAIP_WARM_RG`, soil showing through).
+        let eroded = eo_landmarks::vegetation::grass3().bare
+            && pr == Prior::Bare
+            && (slope > BARE_FACE_SLOPE || soil_share(naip, &self.frame, x, z, fp, eo_landmarks::vegetation::NAIP_SOIL_RG) > 0.3 || soil_share(naip, &self.frame, x, z, fp, eo_landmarks::vegetation::NAIP_WARM_RG) > 0.5);
+        if pr == Prior::Bare && tone != Some("bareRock") && eo_landmarks::vegetation::grass2().cover && !eroded {
             pr = Prior::Grass;
         }
         let (grass, canopy) = cover_shares(pr, veg, dark_veg, pale, slope);
@@ -816,6 +823,32 @@ pub fn naip_shares(naip: &Naip, frame: &GeoFrame, x: f64, z: f64, fp: f64) -> Op
         }
     }
     (n > 0.0).then(|| (veg / n, dark_veg / n, pale / n))
+}
+
+/// The slope (rise over run) past which the bare class stays eroded soil under
+/// the third grass pass (`--no-bare-ground`): 0.84, 40 degrees, the middle of
+/// eo_landmarks::vegetation::bare_soil's 36-46 degree ramp.
+pub const BARE_FACE_SLOPE: f64 = 0.84;
+
+/// The share of red-brown soil in the NAIP over a square of side `fp` at (x, z)
+/// (5 x 5 taps): not green, red over green by `rg` and not pale
+/// (eo_landmarks::vegetation::Naip::soil's and `warm`'s rule).
+pub fn soil_share(naip: &Naip, frame: &GeoFrame, x: f64, z: f64, fp: f64, rg: f32) -> f64 {
+    let (mut acc, mut n) = (0.0, 0.0);
+    for j in 0..5 {
+        for i in 0..5 {
+            let (lat, lon) = frame.lat_lon(x + (i as f64 - 2.0) * fp / 5.0, z + (j as f64 - 2.0) * fp / 5.0);
+            let Some(c) = naip.sample_rgb(lon, lat) else { continue };
+            let (r, g, b) = (c[0] as f64, c[1] as f64, c[2] as f64);
+            let green = 2.0 * g - r - b > 0.0 && g > r;
+            let rg = rg as f64;
+            if !green && r >= rg * g && r > b && (r + g + b) / 765.0 <= eo_landmarks::vegetation::NAIP_BARE_V as f64 {
+                acc += 1.0;
+            }
+            n += 1.0;
+        }
+    }
+    if n > 0.0 { acc / n } else { 0.0 }
 }
 
 /// An sRGB byte as linear.
