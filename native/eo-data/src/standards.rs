@@ -21,6 +21,7 @@ struct Source {
     entries: Vec<Entry>,
 }
 
+#[derive(Clone)]
 pub struct CaStandards {
     metric: HashMap<String, serde_json::Value>,
     /// Every id the table lists, verified or not: what a deviation may name.

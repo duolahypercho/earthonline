@@ -274,9 +274,23 @@ pub struct Road {
     pub maxspeed: String,
     pub bridge: bool,
     pub tunnel: bool,
+    /// The OSM `layer` tag (`layer_of`): 0 at grade or untagged, positive
+    /// above, negative below.
+    pub layer: i32,
     pub points: Vec<[f32; 2]>,
     /// The same points at the file's f64 precision (slice 3: the kit's street index).
     pub points64: Vec<[f64; 2]>,
+}
+
+/// A way's OSM `layer` tag as the city file writes it: a number, a numeric
+/// string (`"-1"`), or absent. Absent, empty or not a whole number is 0
+/// (at grade).
+pub fn layer_of(v: &serde_json::Value) -> i32 {
+    match v {
+        serde_json::Value::Number(n) => n.as_i64().or_else(|| n.as_f64().filter(|f| f.fract() == 0.0).map(|f| f as i64)).map_or(0, |l| l.clamp(i32::MIN as i64, i32::MAX as i64) as i32),
+        serde_json::Value::String(s) => s.trim().parse::<i32>().unwrap_or(0),
+        _ => 0,
+    }
 }
 
 /// Counts that explain how the building set was merged.
@@ -540,6 +554,7 @@ impl City {
                 maxspeed: r.maxspeed,
                 bridge: r.bridge,
                 tunnel: r.tunnel,
+                layer: layer_of(&r.layer),
                 points: r.points.chunks_exact(2).map(|c| [(c[0] * gs) as f32, (c[1] * gs) as f32]).collect(), // * gs
                 points64: r.points.chunks_exact(2).map(|c| [c[0] * gs, c[1] * gs]).collect(),                 // * gs
             })
@@ -880,5 +895,22 @@ impl LandCover {
             }
         }
         best
+    }
+}
+
+#[cfg(test)]
+mod layer_tests {
+    use super::layer_of;
+    use serde_json::json;
+
+    #[test]
+    fn layer_reads_numbers_numeric_strings_and_absence() {
+        for (v, want) in [(json!(1), 1), (json!(-2), -2), (json!(3.0), 3), (json!("1"), 1), (json!("-1"), -1), (json!(" 2 "), 2), (json!("0"), 0)] {
+            assert_eq!(layer_of(&v), want, "{v}");
+        }
+        // absent (serde's default Null), empty, not a whole number, not a number: at grade.
+        for v in [json!(null), json!(""), json!("1;2"), json!("bridge"), json!(1.5), json!(true), json!([1])] {
+            assert_eq!(layer_of(&v), 0, "{v}");
+        }
     }
 }
