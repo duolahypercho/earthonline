@@ -17,6 +17,8 @@ use glam::Vec3;
 use std::time::Instant;
 
 pub struct Bases {
+    /// A GPU arena exists for the far layer on this adapter.
+    hlod_attached: bool,
     pub models: ArenaBase,
     pub kit: KitArena,
     pub street: eo_render::street::StreetArena,
@@ -324,7 +326,8 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     if world.hlod.is_some() && world.hlod_trees.is_some() {
         r.bytes.draws += r.attach_far_trees(ctx);
     }
-    Ok((r, Bases { models, kit, street, model_arena, kit_near })) // + model_arena, kit_near
+    let hlod_attached = r.hlod.get().is_some();
+    Ok((r, Bases { models, kit, street, model_arena, kit_near, hlod_attached }))
 }
 
 #[derive(Clone, Debug, Default)]
@@ -456,7 +459,7 @@ impl ModelRuntime {
             )
         });
         // the planner's city goes to the kit's streamer and the far layer's.
-        let (kit_city_rx, hlod_city_rx) = match (world.kit_city_rx.take(), world.hlod.is_some()) {
+        let (kit_city_rx, hlod_city_rx) = match (world.kit_city_rx.take(), bases.hlod_attached) {
             (Some(rx), true) => {
                 let (a, ar) = std::sync::mpsc::channel();
                 let (b, br) = std::sync::mpsc::channel();
