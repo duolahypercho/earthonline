@@ -373,7 +373,8 @@ impl LandmarkSet {
             use crate::waterfront as wf;
             let rings = wf::load_pier_rings(repo_root)?;
             let piers = wf::plan_piers(&rings, &oracle, height_at, js.sea_level_y, sh.road_lift);
-            let (edges, c) = wf::classify_edges(&oracle, height_at, js.sea_level_y, &rule, &piers);
+            let (mut edges, mut c) = wf::classify_edges(&oracle, height_at, js.sea_level_y, &rule, &piers);
+            if opts.cove_detail { wf::align_municipal_edges(&mut edges, &mut c, &piers); }
             let wall_edges: Vec<[f64; 4]> = edges.iter().filter(|e| e.pier.is_none()).map(|e| [e.a[0], e.a[1], e.b[0], e.b[1]]).collect();
             // The crest on the quay's own top (renderer.js's crest over the highest ground within 8 m).
             let crest_at = |x: f64, z: f64| wf::crest_ground(height_at, x, z) + sh.road_lift + sh.crest_above_road_m;

@@ -151,7 +151,7 @@ pub struct Pier {
 /// Pier. Follow the city polygon around the breakwater, leaving its entry clear.
 /// The rail sections and post spacing are visual approximations.
 pub fn municipal_parapet(piers: &[Pier]) -> Option<crate::geometry::Frozen> {
-    let pier = municipal_pier(piers)?;
+    let (_, pier) = municipal_pier(piers)?;
     let mut m = MeshArrays::new("municipal-pier-parapet");
     let top = pier.deck_y + 1.10;
     let winding = signed_area(&pier.ring).signum();
@@ -190,9 +190,29 @@ pub fn municipal_parapet(piers: &[Pier]) -> Option<crate::geometry::Frozen> {
     Some(m.freeze())
 }
 
-fn municipal_pier(piers: &[Pier]) -> Option<&Pier> {
+fn municipal_pier(piers: &[Pier]) -> Option<(usize, &Pier)> {
     let tip = eo_data::groundscale::plan([-431.5, -3610.0]);
-    piers.iter().find(|p| p.contains(tip[0] - 6.0, tip[1]) || (p.ring.len() > 20 && p.near(tip[0], tip[1], 5.0)))
+    piers.iter().enumerate().find(|(_, p)| p.contains(tip[0] - 6.0, tip[1]) || (p.ring.len() > 20 && p.near(tip[0], tip[1], 5.0)))
+}
+
+/// The city's shoreline simplifies the pier curve into longer chords. Their
+/// midpoints can lie more than the ordinary 6 game metres from the surveyed
+/// pier. Use one survey cell of tolerance here so the pier is not walled as land.
+pub fn align_municipal_edges(edges: &mut [ShoreEdge], census: &mut EdgeCensus, piers: &[Pier]) {
+    let Some((index, pier)) = municipal_pier(piers) else { return; };
+    let reach = 8.0 * eo_data::groundscale::scale();
+    for e in edges.iter_mut().filter(|e| e.pier.is_none()) {
+        let x = (e.a[0] + e.b[0]) * 0.5;
+        let z = (e.a[1] + e.b[1]) * 0.5;
+        if z < pier.max[1] - reach && pier.near(x, z, reach) {
+            let length = (e.a[0] - e.b[0]).hypot(e.a[1] - e.b[1]);
+            e.pier = Some(index);
+            census.wall -= 1;
+            census.wall_m -= length;
+            census.pier += 1;
+            census.pier_m += length;
+        }
+    }
 }
 
 impl Pier {
@@ -507,7 +527,7 @@ impl ShorePress {
     /// A LiDAR return from the pier's deck is not a seabed sounding. Keep the
     /// existing bed wherever it is deeper, and keep the Black Point land abutment.
     pub fn with_municipal_pier(mut self, piers: &[Pier]) -> Self {
-        self.municipal = municipal_pier(piers).cloned();
+        self.municipal = municipal_pier(piers).map(|(_, p)| p.clone());
         self
     }
 

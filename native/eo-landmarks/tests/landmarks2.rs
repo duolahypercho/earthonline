@@ -78,7 +78,11 @@ fn the_waterfront_is_built() {
     assert!(m.decks == piers.len() && m.piles > 5_000);
     // Trace the parapet all the way from the Black Point approach to the
     // curved head. This also catches accidentally picking a neighbouring pier.
-    let pier_bed = wf::ShorePress::new(js.sea_level_y, &edges, &piers).with_municipal_pier(&piers);
+    let mut curve = edges.clone();
+    let mut tally = c.clone();
+    wf::align_municipal_edges(&mut curve, &mut tally, &piers);
+    assert_eq!(tally.pier + tally.wall, c.pier + c.wall);
+    let pier_bed = wf::ShorePress::new(js.sea_level_y, &curve, &piers).with_municipal_pier(&piers);
     assert!(pier_bed.press(-598.0, -3546.0, 3.0) < js.sea_level_y);
     assert_eq!(pier_bed.press(-598.0, -3546.0, -6.0), -6.0);
     let rail = wf::municipal_parapet(&piers).expect("Municipal Pier in the city polygons");
