@@ -735,6 +735,7 @@ dependencies = [
  "eo-assets",
  "eo-data",
  "eo-player",
+ "eo-structures",
  "glam 0.34.3",
 ]
 

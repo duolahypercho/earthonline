@@ -7,6 +7,7 @@ use crate::wire::{Check, NetInput, check_pos};
 use anyhow::Result;
 use eo_player::world::{self as pworld, BuildingSet, CollisionWorld, ElevationGround, GroundProvider};
 use eo_player::{Mode, Player};
+use eo_structures::{StructureOptions, StructureWorld};
 use glam::DVec3;
 use std::sync::Arc;
 
@@ -17,23 +18,64 @@ pub struct GameWorld {
     pub ground: Arc<dyn GroundProvider>,
     pub buildings: Arc<BuildingSet>,
     pub streets: bool,
+    /// The grade-separated roads the ground was built with (`--structures`,
+    /// `--tunnels`; only on the street surface): the handshake refuses a
+    /// client whose own differ (`proto::structures_code`).
+    pub structures: Option<StructureOptions>,
+    /// The grade-separated roads themselves, as built for the ground (with
+    /// `structures`; None without them, and from `from_parts` unless a host
+    /// hands them over with `with_decks`): the server's simulation takes
+    /// its lanes' levels from them (`StructureWorld::way_levels`).
+    pub decks: Option<Arc<StructureWorld>>,
 }
 
 impl GameWorld {
     /// `streets`: stand on the drawn street surface (eo-street), as `--play`
     /// does by default; else on the elevation grid.
     pub fn load(paths: &eo_data::DataPaths, streets: bool) -> Result<Self> {
+        Self::load_with(paths, streets, None)
+    }
+
+    /// As `load`, and with `structures` (on the street surface only) the
+    /// grade-separated roads built over it, as eo-app's `--structures` builds
+    /// them: the street built again with the structures' joins (stage A6,
+    /// `StreetGround::build_joined`), so a dedicated server and the app stand
+    /// on the same street and collide alike. Without `structures` the street
+    /// is the one `load` builds.
+    pub fn load_with(paths: &eo_data::DataPaths, streets: bool, structures: Option<StructureOptions>) -> Result<Self> {
         let city = Arc::new(eo_data::City::load(paths)?);
         let elevation = Arc::new(eo_data::ElevationGrid::load(paths)?);
         let lift = eo_assets::placement::PlacementConstants::load()?.construction_lift_m;
         let buildings = Arc::new(BuildingSet::from_city(&city, lift));
-        let ground: Arc<dyn GroundProvider> = if streets { Arc::new(eo_player::street_ground::StreetGround::build(&city, elevation.clone())?) } else { Arc::new(ElevationGround(elevation.clone())) };
-        Ok(Self { city, elevation, ground, buildings, streets })
+        let structures = structures.filter(|_| streets);
+        let (ground, decks): (Arc<dyn GroundProvider>, Option<Arc<StructureWorld>>) = if streets {
+            let sg = eo_player::street_ground::StreetGround::build_joined(&city, elevation.clone(), structures)?;
+            let decks = sg.structures.clone();
+            (Arc::new(sg), decks)
+        } else {
+            (Arc::new(ElevationGround(elevation.clone())), None)
+        };
+        Ok(Self { city, elevation, ground, buildings, streets, structures, decks })
     }
 
-    /// From parts a host already has (eo-app's loaded world).
-    pub fn from_parts(city: Arc<eo_data::City>, elevation: Arc<eo_data::ElevationGrid>, ground: Arc<dyn GroundProvider>, buildings: Arc<BuildingSet>, streets: bool) -> Self {
-        Self { city, elevation, ground, buildings, streets }
+    /// From parts a host already has (eo-app's loaded world); `structures`
+    /// as the ground was built (None without grade-separated roads). The
+    /// built roads are not among the parts: `with_decks` adds them.
+    pub fn from_parts(city: Arc<eo_data::City>, elevation: Arc<eo_data::ElevationGrid>, ground: Arc<dyn GroundProvider>, buildings: Arc<BuildingSet>, streets: bool, structures: Option<StructureOptions>) -> Self {
+        Self { city, elevation, ground, buildings, streets, structures, decks: None }
+    }
+
+    /// The same world holding the grade-separated roads its ground was built
+    /// with (a host that built them itself, as eo-app's `--structures` does).
+    pub fn with_decks(mut self, decks: Option<Arc<StructureWorld>>) -> Self {
+        self.decks = decks;
+        self
+    }
+
+    /// The level table of the simulation's lanes (`StructureWorld::way_levels`;
+    /// empty without grade-separated roads, which leaves every lane at grade).
+    pub fn way_levels(&self) -> std::collections::HashMap<String, i8> {
+        self.decks.as_ref().map(|d| d.way_levels().clone()).unwrap_or_default()
     }
 
     /// A collision world with its own tile cookers (a client).
