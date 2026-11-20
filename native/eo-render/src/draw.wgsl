@@ -117,6 +117,15 @@ fn vs(
         // Street tints are the JS palette's sRGB hex: decode exactly.
         out.color = srgb_decode(color.rgb);
     }
+    if (kind == 4u && normal.w > 0.49) {
+        // The house builder stores window and fixture transfer in R and G.
+        out.color = color.rgb;
+        if (color.b > 0.5) {
+            let angle = color.a * 6.2831853;
+            let axis = vec2<f32>(cos(angle), sin(angle));
+            out.ft = vec2<f32>(dot(pos.xz, axis), dot(pos.xz, vec2<f32>(-axis.y, axis.x)));
+        }
+    }
     if (kind == 5u) {
         // Kit building: the vertex alpha byte is the kit palette index (the
         // object's material is the palette's first entry); rgb is the paint.
@@ -699,7 +708,9 @@ fn shade(in: VOut) -> vec4<f32> {
     s.env = -1;
     // a kit vertex carries raw bytes (see vs): the paint decodes here.
     let kit_object = (objects[in.object].kind & 255u) == 5u;
-    var vcol = in.color;
+    let house_finish = (objects[in.object].kind & 255u) == 4u && in.aux.y > 0.49;
+    let interior_transfer = house_finish && in.aux.y > 0.99;
+    var vcol = select(in.color, vec3<f32>(1.0), house_finish);
     if (kit_object) {
         vcol = pow(in.color, vec3<f32>(2.2));
     }
@@ -844,6 +855,29 @@ fn shade(in: VOut) -> vec4<f32> {
         // A blended pane's room reads at full strength after the blend (1 / opacity, floored at 0.25).
         let transmission = select(1.0, 1.0 / max(0.25, m.base.a), (m.flags & F_BLEND) != 0u);
         rm_emit = r.night * transmission;
+    }
+    if (house_finish && in.color.b > 0.5) {
+        // Longitudinal oak fibres curve around growth rings. Filter the finer
+        // pores out as their spacing approaches a screen pixel.
+        let uv = select(vec2<f32>(in.ft.x + in.ft.y, in.world.y), in.ft, abs(n.y) > 0.62);
+        let flow = st_noise(uv * vec2<f32>(6.0, 1.7));
+        let fibres = st_noise(vec2<f32>(uv.x * 310.0 + flow * 9.0, uv.y * 2.8));
+        let rings = sin(uv.x * 198.0 + 10.0 * flow + 2.0 * sin(uv.y * 1.5));
+        let detail = 1.0 - smoothstep(0.002, 0.019, max(length(dpx), length(dpy)));
+        s.albedo *= 0.95 + 0.29 * (flow - 0.5) + detail * (0.052 * rings + 0.18 * (fibres - 0.5));
+        s.rough = clamp(s.rough + 0.12 * (fibres - 0.5) * detail, 0.18, 0.9);
+    }
+    if (house_finish && in.color.b > 0.30 && in.color.b < 0.49) {
+        let plane = select(select(in.world.zy, in.world.xy, abs(n.z) > abs(n.x)), in.world.xz, abs(n.y) > 0.7);
+        s.albedo *= 0.97 + 0.057 * st_noise(plane * 2.8) + 0.025 * st_noise(plane * 62.0);
+    }
+    if (interior_transfer && (m.flags & F_GLASS) == 0u) {
+        // Transfer is sampled at build time against the actual windows, furniture
+        // and luminaire. Window light follows the current sky; the pendant stays warm.
+        let transfer = in.color.rg * in.color.rg;
+        let window = 0.76 * transfer.x * (look.hemi_sky.rgb + look.key.rgb * max(look.key_dir.y, 0.0));
+        let pendant = transfer.y * vec3<f32>(1.55, 1.05, 0.56);
+        rm_emit += s.albedo * (1.0 - s.metal) * (window + pendant);
     }
     // weathering (Blender buildings) and archetype ageing (kit buildings).
     fa_apply(&s, m, in.world, n, in.object, dpx, dpy);

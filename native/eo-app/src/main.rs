@@ -41,6 +41,7 @@ use std::time::Instant;
 #[derive(Clone)]
 pub struct Args {
     pub beaver_house: bool,
+    pub interior_lighting: bool,
     pub bench: bool,
     pub start_underwater: bool,
     pub frames: usize,
@@ -184,6 +185,7 @@ impl Default for PerfArgs {
 
 fn parse_args() -> Result<Args> {
     let mut a = Args {
+        interior_lighting: true,
         beaver_house: false,
         bench: false,
         start_underwater: false,
@@ -251,6 +253,7 @@ fn parse_args() -> Result<Args> {
             "--check-budget" => a.check_budget = true,
             "--budget-ms" => a.budget_ms = Some(val()?.parse()?),
             "--beaver-house" => a.beaver_house = true,
+            "--no-interior-lighting" => a.interior_lighting = false,
             "--no-beaver-house" => a.beaver_house = false,
             "--no-models" => a.models = false,
             "--no-terrain-lod" => a.terrain_lod = false,
@@ -573,7 +576,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         let record = city.buildings.iter().find(|b| house::owns(&b.id)).ok_or_else(|| anyhow::anyhow!("missing Beaver Street house footprint"))?;
         landmark_claims.insert(house::ID.to_string());
         let ground = |x, z| street_world.as_ref().map_or_else(|| elevation.ground(x, z), |w| w.surface_at(x, z, None));
-        Some(Arc::new(house::House::build(record, &ground, &paths.repo_root, kit_lib.as_ref().unwrap(), &mut authored.materials)?))
+        Some(Arc::new(house::House::build(args.interior_lighting, record, &ground, &paths.repo_root, kit_lib.as_ref().unwrap(), &mut authored.materials)?))
     } else { None };
     // Kit buildings: every building the authored registry does not draw.
     let t = Instant::now();

@@ -44,12 +44,14 @@ pub struct House {
     height_scale: f64,
     model: CookedModel,
     materials: Vec<u32>,
+    light_transfer: Vec<[f32; 2]>,
     collision: Vec<[Point; 3]>,
     steps: Vec<[Point; 2]>,
 }
 
 impl House {
     pub fn build(
+        interior_lighting: bool,
         b: &eo_data::Building,
         ground: &dyn Fn(f64, f64) -> f64,
         root: &Path,
@@ -62,7 +64,11 @@ impl House {
             root.join("public/assets/buildings/beaver-terrace/terrace.provenance.json"),
         )?)?;
         let raw = eo_assets::glb::read_verified(&manifest.asset.path(root), &manifest.asset)?;
-        let model = eo_assets::glb::cook_glb(&raw)?;
+        let (model, light_transfer) = if interior_lighting {
+            eo_assets::glb::cook_glb_with_uv0(&raw)?
+        } else {
+            (eo_assets::glb::cook_glb(&raw)?, Vec::new())
+        };
         let resolved = model.materials.iter().map(|m| materials.resolve(kit, m)).collect();
         let floor = ring.iter().map(|p| ground(p.x, p.y)).fold(f64::NEG_INFINITY, f64::max) + 0.22;
         let mut h = Self {
@@ -73,6 +79,7 @@ impl House {
             height_scale: b.height as f64 / 10.,
             model,
             materials: resolved,
+            light_transfer,
             collision: vec![],
             steps: vec![],
         };
@@ -140,11 +147,39 @@ impl House {
         )
         .inverse()
         .transpose();
-        for (&[x, y, z], &n) in self.model.positions.iter().zip(&self.model.normals) {
+        // The grain runs down the long axis of the boards. Give the shader the
+        // surveyed angle so grain stays parallel to each seam on rotated lots.
+        let angle = self.across.y.atan2(self.across.x).rem_euclid(std::f64::consts::TAU);
+        let angle_byte = (angle / std::f64::consts::TAU * 255.0).round() as u32;
+        let mut finish = vec![0_u8; self.model.positions.len()];
+        for part in &self.model.parts {
+            let name = &self.model.materials[part.material as usize].name;
+            let code = if name.starts_with("oiled-oak@") { 255 } else if name.starts_with("lime-plaster@") { 100 } else { 0 };
+            if code != 0 {
+                let start = part.first_index as usize;
+                for &i in &self.model.indices[start..start + part.index_count as usize] {
+                    finish[i as usize] = code;
+                }
+            }
+        }
+        for (i, (&[x, y, z], &n)) in self.model.positions.iter().zip(&self.model.normals).enumerate() {
+            let mut normal = eo_assets::glb::pack_normal(normals * eo_assets::glb::unpack_normal(n));
+            let color = if let Some(&[day, lamp]) = self.light_transfer.get(i) {
+                // Signed normal W is unused on authored models. Mark the two light channels
+                // so their values survive interpolation independently of the paint colour.
+                normal |= 0x7f00_0000;
+                let pack = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u32;
+                (angle_byte << 24) | (u32::from(finish[i]) << 16) | pack(day) | (pack(lamp) << 8)
+            } else if finish[i] != 0 {
+                normal |= 0x4000_0000;
+                (angle_byte << 24) | (u32::from(finish[i]) << 16)
+            } else {
+                0xffff_ffff
+            };
             scene.vertices.push(Vertex {
                 pos: self.point(x.into(), y.into(), z.into()).as_vec3().to_array(),
-                color: 0xffffffff,
-                normal: eo_assets::glb::pack_normal(normals * eo_assets::glb::unpack_normal(n)),
+                color,
+                normal,
             });
         }
         scene.indices.extend_from_slice(&self.model.indices);

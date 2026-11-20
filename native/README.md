@@ -156,7 +156,8 @@ switch it does not take.
 | --- | --- |
 | (none) | Windowed fly-through |
 | `--start-underwater` | Start the fly camera just beneath the Bay, looking up toward the skyline |
-| `--beaver-house` / `--no-beaver-house` | Opt in to the furnished three-storey terrace at 21 Beaver Street (off by default). With `--play --beaver-house`, start outside the open front door. Walk up the stairs to the bedroom and press R beside the bed to wake at 07:00. The top floor is a workroom. |
+| `--beaver-house` / `--no-beaver-house` | Opt in to the furnished three-storey terrace at 21 Beaver Street (off by default). With `--play --beaver-house`, start outside the open front door. Walk up the stairs to the bedroom and press R beside the bed to wake at 07:00. The top floor is a workroom. The [Blender builder](../scripts/blender-buildings/build_beaver_terrace.py) accepts `-- --blend PATH --parts DIR` to save the editable scene and individual house and furniture GLBs outside the checkout. |
+| `--no-interior-lighting` | Disable the baked window and pendant light contribution in the Beaver Street house. |
 | `--play` | The player instead of the free camera |
 | `--ui` | The interface shell: title, loading, HUD, pause menu |
 | `--connect ADDR\|local` | Online client (with `--name`, `--spawn x,z,heading`) |

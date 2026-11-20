@@ -94,6 +94,7 @@ impl Flags {
 /// The app's defaults (`parse_args` in main.rs with no flags).
 fn default_args() -> Args {
     Args {
+        interior_lighting: true,
         beaver_house: false,
         bench: false,
         start_underwater: false,

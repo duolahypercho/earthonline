@@ -62,6 +62,7 @@ pub fn intercept(process_start: Instant) -> Option<Result<()>> {
 /// main.rs's defaults (`parse_args`), field by field: `Args` has no Default.
 fn base_args() -> Args {
     Args {
+        interior_lighting: true,
         beaver_house: false,
         bench: false,
         start_underwater: false,
@@ -120,6 +121,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
         match s.as_str() {
             "--play" => {}
             "--beaver-house" => a.beaver_house = true,
+            "--no-interior-lighting" => a.interior_lighting = false,
             "--no-beaver-house" => a.beaver_house = false,
             "--bench" => o.bench = true,
             "--frames" => o.frames = Some(val()?.parse()?),
