@@ -31,6 +31,31 @@ const DARK: f64 = 0.62;
 /// INFERRED: rope spacing within a suspender pair.
 const PAIR_GAP_M: f64 = 0.45;
 
+// The detail pass (`set::Options::bridge_detail`, off by default). Its sizes
+// are read off reference photographs of the bridge, not off drawings: they
+// are INFERRED, and none of them moves a surveyed position.
+/// The paint under the detail pass. The exported `orangeSrgb` is the arithmetic
+/// conversion of the published print formula; under the game's sun it clips
+/// the red channel on lit steel (37 to 64 % of the paint's pixels in the
+/// captures, 3 to 8 % in the photographs). This darker tone keeps the hue.
+const DETAIL_ORANGE_SRGB: u32 = 0xBC_41_1C;
+/// The recessed face of a fluted tower leg, against its ribs.
+const DETAIL_LEG_RECESS: f64 = 0.86;
+/// A tower leg's vertical ribs: how far they stand off the face, their width, their spacing.
+const DETAIL_RIB_PROUD_M: f64 = 0.45;
+const DETAIL_RIB_WIDTH_M: f64 = 1.1;
+const DETAIL_RIB_SPACING_M: f64 = 3.2;
+/// The stepped brackets under a portal strut: each step's reach along the strut and its drop.
+const DETAIL_BRACKET_STEPS: [[f64; 2]; 2] = [[3.2, 2.2], [1.6, 4.4]];
+/// The bands and mullions that frame a portal strut's face.
+const DETAIL_STRUT_BAND_M: f64 = 1.0;
+const DETAIL_STRUT_PROUD_M: f64 = 0.3;
+const DETAIL_STRUT_PANELS: usize = 5;
+/// The lamp standards along the deck: spacing, height, and the arm over the roadway.
+const DETAIL_LAMP_SPACING_M: f64 = 45.0;
+const DETAIL_LAMP_HEIGHT_M: f64 = 9.0;
+const DETAIL_LAMP_ARM_M: f64 = 2.2;
+
 /// The site's derived frame (golden-gate-bridge-site.js).
 pub struct Site {
     pub south_tower: [f64; 2],
@@ -207,6 +232,8 @@ struct Ctx<'a> {
     yaw: f64,
     water: f64,
     tower_zone_half: f64,
+    /// The detail pass (`set::Options::bridge_detail`).
+    detail: bool,
 }
 
 impl Ctx<'_> {
@@ -255,16 +282,30 @@ impl Ctx<'_> {
             for [lx, lz] in [legs.east, legs.west] {
                 for &[h0, h1, across, along] in stages {
                     let y1 = if h1 == top_h1 { num(d, "towerAboveWaterM") } else { h1 };
-                    orange.box_(lx, lz, w + h0, w + y1, along / 2.0, across / 2.0, yaw, k.orange, crate::geometry::Faces { top: true, bottom: h0 == foot_h0 });
+                    let face = if self.detail { shade(k.orange, DETAIL_LEG_RECESS) } else { k.orange };
+                    orange.box_(lx, lz, w + h0, w + y1, along / 2.0, across / 2.0, yaw, face, crate::geometry::Faces { top: true, bottom: h0 == foot_h0 });
                     far.box_(lx, lz, w + h0, w + y1, along / 2.0, across / 2.0, yaw, k.orange, ALL);
+                    if self.detail {
+                        self.leg_ribs(orange, [lx, lz], w + h0, w + y1, along, across);
+                    }
+                }
+                if self.detail {
+                    self.leg_cap(orange, [lx, lz], stages);
                 }
             }
             let ([ex, ez], [wx, wz]) = (legs.east, legs.west);
+            let deck_h = num(d, "roadwayAtTowerM");
             for &[h0, h1, along] in &g.struts {
                 let (mx, mz) = ((ex + wx) / 2.0, (ez + wz) / 2.0);
                 let span = (ex - wx).hypot(ez - wz);
-                orange.box_(mx, mz, w + h0, w + h1, along / 2.0, span / 2.0, yaw, k.orange_dark, ALL);
-                far.box_(mx, mz, w + h0, w + h1, along / 2.0, span / 2.0, yaw, k.orange_dark, ALL);
+                // The portal struts over the roadway carry the legs' paint and their framing.
+                let portal = self.detail && h0 > deck_h;
+                let colour = if portal { k.orange } else { k.orange_dark };
+                orange.box_(mx, mz, w + h0, w + h1, along / 2.0, span / 2.0, yaw, colour, ALL);
+                far.box_(mx, mz, w + h0, w + h1, along / 2.0, span / 2.0, yaw, colour, ALL);
+                if portal {
+                    self.portal_strut(orange, [mx, mz], span, h0, h1, along);
+                }
             }
             // INFERRED: X bracing between the two lowest struts (the JS's 26 and 50 m: their facing chords).
             let c = self.site.chainage(ex, ez);
@@ -272,6 +313,122 @@ impl Ctx<'_> {
             let (lo, hi) = (g.struts[0][1], g.struts[1][0]);
             orange.beam(self.P(c, -s, w + lo), self.P(c, s, w + hi), 1.4, 1.4, k.orange_dark);
             orange.beam(self.P(c, s, w + lo), self.P(c, -s, w + hi), 1.4, 1.4, k.orange_dark);
+            if self.detail {
+                // The second braced panel, from the upper low strut to the underside of the truss.
+                let (lo, hi) = (g.struts[1][1], deck_h - num(d, "trussDepthM"));
+                orange.beam(self.P(c, -s, w + lo), self.P(c, s, w + hi), 1.4, 1.4, k.orange_dark);
+                orange.beam(self.P(c, s, w + lo), self.P(c, -s, w + hi), 1.4, 1.4, k.orange_dark);
+            }
+        }
+    }
+
+    /// A box `da` along and `ds` across the bridge from the plan point `at`.
+    #[allow(clippy::too_many_arguments)]
+    fn local_box(&self, m: &mut MeshArrays, at: [f64; 2], da: f64, ds: f64, y0: f64, y1: f64, half_along: f64, half_across: f64, colour: Rgb, faces: crate::geometry::Faces) {
+        let (ax, ac) = (self.site.axis, self.site.across);
+        m.box_(at[0] + ax[0] * da + ac[0] * ds, at[1] + ax[1] * da + ac[1] * ds, y0, y1, half_along, half_across, self.yaw, colour, faces);
+    }
+
+    /// Rib centres across a face `width` wide: one at each edge, the rest evenly between.
+    fn rib_centres(width: f64) -> Vec<f64> {
+        let reach = width / 2.0 - DETAIL_RIB_WIDTH_M / 2.0;
+        let n = ((width / DETAIL_RIB_SPACING_M).round() as usize + 1).max(2);
+        (0..n).map(|i| -reach + 2.0 * reach * i as f64 / (n - 1) as f64).collect()
+    }
+
+    /// The detail pass: vertical ribs on the four faces of one stage of a tower leg.
+    fn leg_ribs(&self, orange: &mut MeshArrays, leg: [f64; 2], y0: f64, y1: f64, along: f64, across: f64) {
+        let (proud, rib) = (DETAIL_RIB_PROUD_M, DETAIL_RIB_WIDTH_M);
+        let faces = crate::geometry::Faces { top: true, bottom: false };
+        for sgn in [-1.0, 1.0] {
+            for ds in Self::rib_centres(across) {
+                self.local_box(orange, leg, sgn * (along / 2.0 + proud / 2.0), ds, y0, y1, proud / 2.0, rib / 2.0, self.k.orange, faces);
+            }
+            for da in Self::rib_centres(along) {
+                self.local_box(orange, leg, da, sgn * (across / 2.0 + proud / 2.0), y0, y1, rib / 2.0, proud / 2.0, self.k.orange, faces);
+            }
+        }
+    }
+
+    /// The detail pass: the cornice and the housing on top of a tower leg.
+    fn leg_cap(&self, orange: &mut MeshArrays, leg: [f64; 2], stages: &[[f64; 4]]) {
+        let top = self.water + num(self.d, "towerAboveWaterM");
+        let [_, _, across, along] = stages[stages.len() - 1];
+        let lip = DETAIL_RIB_PROUD_M + 0.25;
+        self.local_box(orange, leg, 0.0, 0.0, top, top + 1.2, along / 2.0 + lip, across / 2.0 + lip, self.k.orange, ALL);
+        self.local_box(orange, leg, 0.0, 0.0, top + 1.2, top + 3.2, along * 0.32, across * 0.32, self.k.orange, NO_BOTTOM);
+    }
+
+    /// The detail pass: a portal strut's framed face (bands, mullions) and the
+    /// stepped brackets under its ends. `mid` is the strut's plan centre.
+    fn portal_strut(&self, orange: &mut MeshArrays, mid: [f64; 2], span: f64, h0: f64, h1: f64, along: f64) {
+        let (w, k) = (self.water, &self.k);
+        let stage = self.g.leg_stages.iter().find(|s| h0 >= s[0] && h0 < s[1]).unwrap_or(&self.g.leg_stages[self.g.leg_stages.len() - 1]);
+        // Between the legs' inner faces.
+        let clear = span - stage[2];
+        if !(clear > 2.0) {
+            return;
+        }
+        let (band, proud) = (DETAIL_STRUT_BAND_M.min((h1 - h0) / 3.0), DETAIL_STRUT_PROUD_M);
+        for sgn in [-1.0, 1.0] {
+            let da = sgn * (along / 2.0 + proud / 2.0);
+            self.local_box(orange, mid, da, 0.0, w + h1 - band, w + h1, proud / 2.0, clear / 2.0, k.orange, ALL);
+            self.local_box(orange, mid, da, 0.0, w + h0, w + h0 + band, proud / 2.0, clear / 2.0, k.orange, ALL);
+            for i in 1..DETAIL_STRUT_PANELS {
+                let ds = clear * (i as f64 / DETAIL_STRUT_PANELS as f64 - 0.5);
+                self.local_box(orange, mid, da, ds, w + h0 + band, w + h1 - band, proud / 2.0, 0.3, k.orange, NO_BOTTOM);
+            }
+        }
+        for sgn in [-1.0, 1.0] {
+            let mut top = h0;
+            for [reach, drop] in DETAIL_BRACKET_STEPS {
+                let reach = reach.min(clear / 4.0);
+                self.local_box(orange, mid, 0.0, sgn * (clear / 2.0 - reach / 2.0), w + h0 - drop, w + top, along / 2.0, reach / 2.0, k.orange, NO_TOP);
+                top = h0 - drop;
+            }
+        }
+    }
+
+    /// The detail pass: lamp standards along both edges of the deck.
+    fn lamps(&self, orange: &mut MeshArrays) {
+        let (d, p, k) = (self.d, self.plan, &self.k);
+        let edge = num(d, "widthM") / 2.0 - 0.4;
+        let base = num(d, "curbM");
+        for c in stations(p.c_start, p.c_end, DETAIL_LAMP_SPACING_M) {
+            if self.in_tower_zone(c - 2.0, c + 2.0) {
+                continue;
+            }
+            for sgn in [-1.0, 1.0] {
+                let y = p.deck_top(c) + base;
+                let head = y + DETAIL_LAMP_HEIGHT_M;
+                orange.beam(self.P(c, sgn * edge, y), self.P(c, sgn * edge, head), 0.28, 0.28, k.orange);
+                orange.beam(self.P(c, sgn * edge, head - 0.15), self.P(c, sgn * (edge - DETAIL_LAMP_ARM_M), head - 0.15), 0.18, 0.18, k.orange);
+            }
+        }
+    }
+
+    /// The detail pass: the arch pylons' stepped crowns and the ribs on their faces.
+    fn pylon_detail(&self, concrete: &mut MeshArrays) {
+        let k = &self.k;
+        for (part, [x, z, y0, y1, hx, hz, _], cap_only) in self.pylon_parts() {
+            if cap_only || !part.starts_with("arch") {
+                continue;
+            }
+            let at = [x, z];
+            self.local_box(concrete, at, 0.0, 0.0, y1, y1 + 3.0, (hx - 1.2).max(0.5), (hz - 0.6).max(0.5), k.concrete, NO_BOTTOM);
+            self.local_box(concrete, at, 0.0, 0.0, y1 + 3.0, y1 + 5.0, (hx - 2.4).max(0.4), (hz - 1.2).max(0.4), k.concrete, NO_BOTTOM);
+            let outward = if part.ends_with("west") { -1.0 } else { 1.0 };
+            let (proud, rib) = (0.5, 1.4);
+            let faces = crate::geometry::Faces { top: true, bottom: false };
+            for i in 0..3 {
+                let da = (hx - rib / 2.0) * (i as f64 - 1.0);
+                self.local_box(concrete, at, da, outward * (hz + proud / 2.0), y0, y1, rib / 2.0, proud / 2.0, k.concrete, faces);
+            }
+            for sgn in [-1.0, 1.0] {
+                for side in [-1.0, 1.0] {
+                    self.local_box(concrete, at, sgn * (hx + proud / 2.0), side * (hz - rib / 2.0), y0, y1, proud / 2.0, rib / 2.0, k.concrete, faces);
+                }
+            }
         }
     }
 
@@ -517,7 +674,8 @@ impl Ctx<'_> {
             let c = self.site.chainage(support.centre[0], support.centre[1]);
             let half_outer = support.extent[0] / 2.0;
             let inner = self.site.half_plane + 0.5;
-            let width = (half_outer - inner).min(ARCH_PYLON_COLUMN_M);
+            // The detail pass fills the support's plan: a shaft each side of the roadway.
+            let width = if self.detail { (half_outer - inner).max(ARCH_PYLON_COLUMN_M) } else { (half_outer - inner).min(ARCH_PYLON_COLUMN_M) };
             let top = p.deck_top(c) + num(d, "pylonAboveDeckM");
             for sgn in [-1.0, 1.0] {
                 let [x, z] = self.site.deck_point(c, sgn * (inner + width / 2.0));
@@ -628,7 +786,7 @@ fn polyline_distance(x: f64, z: f64, pts: &[f64]) -> f64 {
 }
 
 /// `buildGoldenGateBridge`.
-pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built {
+pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards, detail: bool) -> Built {
     let g = &js.golden_gate;
     let d = &g.dimensions;
     let site = Site::new(g);
@@ -637,7 +795,7 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
     let offset = |c: f64| site.centre_offset(c);
     let mut frame = Frame::new(site.axis_point(0.0, 0.0), site.axis);
     frame.offset = Some(&offset);
-    let orange = srgb_hex(hex(d, "orangeSrgb"));
+    let orange = srgb_hex(if detail { DETAIL_ORANGE_SRGB } else { hex(d, "orangeSrgb") });
     let k = Colours {
         orange,
         orange_dark: shade(orange, DARK),
@@ -649,7 +807,7 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
         yellow: srgb_hex(hex(d, "yellowSrgb")),
     };
     let tower_zone_half = g.leg_stages.iter().map(|s| s[3]).fold(f64::MIN, f64::max) / 2.0 + 1.0;
-    let ctx = Ctx { g, d, site: &site, plan: &plan, frame: &frame, ground: &ground_at, k, yaw: site.axis[1].atan2(site.axis[0]), water: js.sea_level_y, tower_zone_half };
+    let ctx = Ctx { g, d, site: &site, plan: &plan, frame: &frame, ground: &ground_at, k, yaw: site.axis[1].atan2(site.axis[0]), water: js.sea_level_y, tower_zone_half, detail };
     let mut orange_m = MeshArrays::new("golden-gate-bridge:orange");
     let mut deck_m = MeshArrays::new("golden-gate-bridge:deck");
     let mut concrete_m = MeshArrays::new("golden-gate-bridge:concrete");
@@ -669,6 +827,10 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
     for (_, [x, z, y0, y1, hx, hz, yaw], _) in ctx.pylon_parts() {
         concrete_m.box_(x, z, y0, y1, hx, hz, yaw, ctx.k.concrete, NO_BOTTOM);
         far.box_(x, z, y0, y1, hx, hz, yaw, ctx.k.concrete, ALL);
+    }
+    if detail {
+        ctx.pylon_detail(&mut concrete_m);
+        ctx.lamps(&mut orange_m);
     }
     // Past the sun's shadow reach the structure's own occlusion is baked in.
     let inward = frame.inward();

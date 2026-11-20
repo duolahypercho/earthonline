@@ -94,18 +94,22 @@ pub struct Options {
     pub buildings: bool,
     /// The bridges' night lights.
     pub lights: bool,
+    /// The Golden Gate's detail pass (golden_gate.rs): the photographed paint
+    /// tone, fluted tower legs, framed portal struts, full arch pylons, lamp
+    /// standards. A preview, off by default; `eo-app --bridge-detail` turns it on.
+    pub bridge_detail: bool,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Self { waterfront: true, buildings: true, lights: true }
+        Self { waterfront: true, buildings: true, lights: true, bridge_detail: false }
     }
 }
 
 impl Options {
     /// As the first landmarks slice built the set.
     pub fn off() -> Self {
-        Self { waterfront: false, buildings: false, lights: false }
+        Self { waterfront: false, buildings: false, lights: false, bridge_detail: false }
     }
 }
 
@@ -243,10 +247,10 @@ impl Landmark {
 }
 
 /// Build one landmark (`buildLandmark`): the generator, then its draws.
-pub fn build_landmark(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: &DeckStandards) -> Result<Landmark> {
+pub fn build_landmark(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: &DeckStandards, opts: Options) -> Result<Landmark> {
     let t0 = Instant::now();
     let built: Built = match id {
-        "golden-gate-bridge" => golden_gate::build(js, ground, ca),
+        "golden-gate-bridge" => golden_gate::build(js, ground, ca, opts.bridge_detail),
         "bay-bridge-west" => bay_bridge::build(js, ground, ca),
         // the landmark buildings (towers.rs).
         other => match crate::towers::build(other, &js.buildings[other], ground) {
@@ -328,7 +332,7 @@ impl LandmarkSet {
                         let d = ground_scale_shift(js, id);
                         let shifted = |x: f64, z: f64| height_at(x + d[0], z + d[1]);
                         let ground = if d == [0.0, 0.0] { ground_of(js, id, height_at) } else { ground_of(js, id, &shifted) };
-                        let mut l = build_landmark(js, id, &ground, std)?;
+                        let mut l = build_landmark(js, id, &ground, std, opts)?;
                         l.translate(d);
                         Ok::<Landmark, anyhow::Error>(l)
                     })
