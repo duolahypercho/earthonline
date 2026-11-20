@@ -160,7 +160,7 @@ fn lin(c: u8) -> f32 {
     if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
 }
 
-fn to_srgb8(l: f32) -> u8 {
+pub(crate) fn to_srgb8(l: f32) -> u8 {
     let l = l.clamp(0.0, 1.0);
     let s = if l <= 0.0031308 { l * 12.92 } else { 1.055 * l.powf(1.0 / 2.4) - 0.055 };
     (s * 255.0).round() as u8

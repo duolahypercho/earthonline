@@ -1190,6 +1190,9 @@ fn shade(in: VOut) -> vec4<f32> {
         rm_emit = rm_emit + sky_far_windows(in.world, n, in.object, dpx, dpy); // lit windows on the far boxes
     }
 
+    if ((cc0_terrain || (bed_surface && in.aux.y > 0.5)) && look.cove.x > 0.0 && in.world.y < LM_SEA_LEVEL_Y + 0.035) {
+        lm_cove_sediment(&s, in.world, n, dpx, dpy);
+    }
     // Lighting, shadows and fog: the JS game's light rig (look_light.wgsl).
     if (sx_in_bore(in.object)) {
         return sx_bore_light(s, m, v, in.world, in.object); // a tunnel bore's paint and luminaire (structures.wgsl)

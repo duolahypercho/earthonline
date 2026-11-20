@@ -566,10 +566,7 @@ fn wo_volume(path: f32, tv: vec3<f32>, l: vec3<f32>, sun: vec3<f32>, sky_irr: ve
 // open-bay values beyond the sampled cove. Coordinates use the city's map scale.
 fn wo_cove(xz: vec2<f32>) -> f32 {
     if (!W_COVE_DETAIL) { return 0.0; }
-    let p = xz / W_COVE_SCALE;
-    let lo = smoothstep(vec2<f32>(-725.0, -3750.0), vec2<f32>(-635.0, -3620.0), p);
-    let hi = 1.0 - smoothstep(vec2<f32>(-150.0, -3150.0), vec2<f32>(-65.0, -3030.0), p);
-    return lo.x * lo.y * hi.x * hi.y;
+    return lk_cove_weight(xz / W_COVE_SCALE);
 }
 const WO_COVE_A = vec3<f32>(1.12, 0.93, 1.14);
 const WO_COVE_S = vec3<f32>(0.16, 0.20, 0.15);

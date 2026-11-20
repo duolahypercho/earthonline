@@ -102,6 +102,7 @@ struct LookUniform {
     // the weather's dome (`upperFromRow`): overcast, isotropy, desaturation; tint.
     wx: [f32; 4],
     wx_tint: [f32; 4],
+    cove: [f32; 4],
     // the lighting additions (`LightingOptions`), all zero while every one is off.
     // Rows (`LX_*`; mirrored in look_common.wgsl):
     //   0      flags: x the feature bits (`LightingOptions::flags_word`, read with
@@ -164,6 +165,8 @@ pub struct LookOptions {
     pub dive_exposure: bool,
     /// Local water attenuation in the Aquatic Park Cove preview.
     pub cove_detail: bool,
+    pub cove_canopy: bool,
+    pub cove_sediment: bool,
     /// the CC0 scanned sets' switches (`cc0::RUN_*`; `--no-cc0` and the per-feature `--no-cc0-*`).
     pub cc0: u32,
     /// The opt-in lighting additions (`--quality`, `--cascade-blend`, ...), all off by default.
@@ -196,7 +199,7 @@ pub struct LookOptions {
 
 impl Default for LookOptions {
     fn default() -> Self {
-        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, dive_exposure: false, cove_detail: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default } // + rooms, agent pyramid test, probe deferral // water // sky
+        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default } // + rooms, agent pyramid test, probe deferral // water // sky
     }
 }
 
@@ -1966,6 +1969,7 @@ impl LookGpu {
             rooms_env: crate::rooms::drive_look(m.sun.altitude_deg, self.time_of_day(), smooth, self.options.look.is_cinematic()).0,
             rooms_work: crate::rooms::drive_look(m.sun.altitude_deg, self.time_of_day(), smooth, self.options.look.is_cinematic()).1,
             wx: [(m.profile.overcast * wx_keep) as f32, (m.profile.isotropy * wx_keep) as f32, (m.profile.desaturation * wx_keep) as f32, if m.ext.on { 1.0 } else { 0.0 }], // eo-look `SkyExt`
+            cove: [if self.options.cove_sediment && self.options.cove_detail { 1.0 / eo_data::groundscale::scale() as f32 } else { 0.0 }, 0.0, 0.0, 0.0],
             wx_tint: v4(m.profile.tint.map(|v| 1.0 + (v - 1.0) * wx_keep), m.ext.afterglow), // w the afterglow arch
             lx: self.lighting_params(), // zeros while every lighting addition is off
         };

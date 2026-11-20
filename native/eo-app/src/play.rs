@@ -138,6 +138,10 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--collision-threads" => o.collision_threads = val()?.parse::<usize>()?.max(1),
             "--water-optics" => a.look.water_optics = true,
             "--cove-detail" => a.cove_detail = true,
+            "--cove-canopy" => { a.cove_detail = true; a.look.cove_canopy = true; }
+            "--no-cove-canopy" => a.look.cove_canopy = false,
+            "--cove-sediment" => { a.cove_detail = true; a.look.cove_sediment = true; }
+            "--no-cove-sediment" => a.look.cove_sediment = false,
             "--no-cove-detail" => a.cove_detail = false,
             "--underwater-habitats" => a.underwater_habitats = true,
             "--no-underwater-habitats" => a.underwater_habitats = false,

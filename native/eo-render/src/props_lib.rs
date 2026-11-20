@@ -212,7 +212,7 @@ pub(crate) fn srgb_hex(h: &str) -> [u8; 3] {
     [(v >> 16) as u8, (v >> 8) as u8, v as u8]
 }
 
-fn srgb_to_linear(c: f32) -> f32 {
+pub(crate) fn srgb_to_linear(c: f32) -> f32 {
     if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
 }
 
@@ -392,7 +392,7 @@ pub(crate) fn flat_layer(rgba: [u8; 4], res: u32) -> Vec<u8> {
     rgba.iter().copied().cycle().take((res * res * 4) as usize).collect()
 }
 
-fn decode_png(bytes: &[u8]) -> Result<(usize, usize, Vec<u8>)> {
+pub(crate) fn decode_png(bytes: &[u8]) -> Result<(usize, usize, Vec<u8>)> {
     let mut dec = png::Decoder::new(std::io::Cursor::new(bytes));
     dec.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
     let mut r = dec.read_info()?;

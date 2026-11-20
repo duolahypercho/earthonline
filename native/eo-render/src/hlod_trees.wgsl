@@ -16,7 +16,7 @@ struct FarTree {
     crown: f32,
     tint: u32,
     seed: u32,
-    pad: u32,
+    species: u32,
 };
 
 struct FtParams {
@@ -26,6 +26,7 @@ struct FtParams {
 
 @group(2) @binding(0) var<storage, read> ft_trees: array<FarTree>;
 @group(2) @binding(1) var<uniform> ft: FtParams;
+@group(2) @binding(2) var ft_canopy: texture_2d_array<f32>;
 
 struct FtOut {
     @builtin(position) clip: vec4<f32>,
@@ -35,6 +36,7 @@ struct FtOut {
     @location(3) @interpolate(flat) fade: f32,
     @location(4) @interpolate(flat) seed: f32,
     @location(5) @interpolate(flat) right: vec3<f32>,
+    @location(6) @interpolate(flat) view: vec3<f32>,
 };
 
 @vertex
@@ -62,12 +64,25 @@ fn far_tree_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32)
     out.fade = smoothstep(ft.range.x, ft.range.y, d);
     out.seed = f32(t.seed & 1023u);
     out.right = right;
+    out.view = vec3<f32>(-1.0);
+    if (t.species > 16u) {
+        // A stable rotation per stem. The projected view blends continuously
+        // through north when a swimmer moves sideways along the shore.
+        let turns = atan2(to_cam.y, to_cam.x) / 6.2831853 + f32(t.seed & 65535u) / 65536.0;
+        let azimuth = fract(turns) * f32(FT_VIEWS);
+        let base = (t.species - 17u) * FT_VIEWS;
+        let view = u32(azimuth);
+        out.view = vec3<f32>(f32(base + view), f32(base + ((view + 1u) % FT_VIEWS)), fract(azimuth));
+    }
     return out;
 }
 
 fn ft_shade(in: FtOut) -> vec4<f32> {
     let dpx = dpdx(in.world);
     let dpy = dpdy(in.world);
+    let atlas_uv = vec2<f32>(in.uv.x * 0.5 + 0.5, 1.0 - in.uv.y);
+    let gx = dpdx(atlas_uv);
+    let gy = dpdy(atlas_uv);
     // The crown: an ellipse over the upper 70 % of the card, a lobed edge.
     let cy = (in.uv.y - 0.62) / 0.38;
     let r = length(vec2<f32>(in.uv.x, cy));
@@ -76,16 +91,32 @@ fn ft_shade(in: FtOut) -> vec4<f32> {
     let crown = r < 0.92 + lobes;
     // The trunk: the lower part, a narrow column.
     let trunk = in.uv.y < 0.3 && abs(in.uv.x) < 0.07;
-    if (!(crown || trunk)) {
-        discard;
+    var leaf = vec4<f32>(0.0);
+    let baked = in.view.x >= 0.0;
+    let a = max(i32(in.view.x), 0);
+    let b = max(i32(in.view.y), 0);
+    let blend = smoothstep(0.0, 1.0, in.view.z);
+    var covered = crown || trunk;
+    if (baked) {
+        leaf = mix(textureSampleGrad(ft_canopy, kit_sampler, atlas_uv, a, gx, gy),
+                   textureSampleGrad(ft_canopy, kit_sampler, atlas_uv, b, gx, gy), blend);
+        covered = leaf.a >= 0.34;
     }
+    if (!covered) { discard; }
     if (in.fade < 0.999 && hlod_dither(floor(in.clip.xy)) >= in.fade) {
         discard;
     }
     let v = normalize(frame.cam_pos.xyz - in.world);
     var n = vec3<f32>(0.0, 1.0, 0.0);
     var albedo = in.tint;
-    if (crown) {
+    if (baked) {
+        let surface = mix(textureSampleGrad(ft_canopy, kit_sampler, atlas_uv, a + FT_NORMALS, gx, gy),
+                          textureSampleGrad(ft_canopy, kit_sampler, atlas_uv, b + FT_NORMALS, gx, gy), blend);
+        let local = surface.xyz / max(surface.a, 0.01) * 2.0 - 1.0;
+        let toward = vec3<f32>(in.right.z, 0.0, -in.right.x);
+        n = normalize(in.right * local.x + vec3<f32>(0.0, local.y, 0.0) + toward * local.z + vec3<f32>(0.0, 1e-4, 0.0));
+        albedo = srgb_decode(leaf.rgb / max(leaf.a, 0.01));
+    } else if (crown) {
         let z = sqrt(max(0.0, 1.0 - min(r * r, 1.0)));
         let toward = normalize(vec3<f32>(v.x, 0.0, v.z) + vec3<f32>(1e-5, 0.0, 0.0));
         n = normalize(in.right * in.uv.x + vec3<f32>(0.0, cy, 0.0) + toward * z);

@@ -145,6 +145,10 @@ impl Flags {
                 "--no-settings-apply" => {} // read by `settings_apply`
                 "--water-optics" => args.look.water_optics = true,
                 "--cove-detail" => args.cove_detail = true,
+                "--cove-canopy" => { args.cove_detail = true; args.look.cove_canopy = true; }
+                "--no-cove-canopy" => args.look.cove_canopy = false,
+                "--cove-sediment" => { args.cove_detail = true; args.look.cove_sediment = true; }
+                "--no-cove-sediment" => args.look.cove_sediment = false,
                 "--no-cove-detail" => args.cove_detail = false,
                 "--underwater-habitats" => args.underwater_habitats = true,
                 "--no-underwater-habitats" => args.underwater_habitats = false,

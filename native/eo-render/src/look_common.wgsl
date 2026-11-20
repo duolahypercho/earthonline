@@ -75,6 +75,8 @@ struct Look {
     // the weather's dome (eo-look `upperFromRow`): overcast, isotropy, desaturation, directional horizon band (1/0); tint.
     wx: vec4<f32>,
     wx_tint: vec4<f32>,
+    // x is the inverse ground-plan scale for submerged cove sediment; zero when disabled.
+    cove: vec4<f32>,
     // the lighting additions (look.rs `LightingOptions`), all zero while every one is off.
     // Rows (look.rs `LX_*`):
     //   0      flags: x the feature bits (read `bitcast<u32>(look.lx[0].x) & LX_BIT_*`,
@@ -119,6 +121,13 @@ fn lk_js_dome(d: vec3<f32>) -> vec3<f32> {
 
 const LK_PI: f32 = 3.14159265;
 const LK_DEG: f32 = 0.0174532925;
+
+// Mapped Aquatic Park district, feathered toward the open Bay. Input in map metres.
+fn lk_cove_weight(p: vec2<f32>) -> f32 {
+    let lo = smoothstep(vec2<f32>(-725.0, -3750.0), vec2<f32>(-635.0, -3620.0), p);
+    let hi = 1.0 - smoothstep(vec2<f32>(-150.0, -3150.0), vec2<f32>(-65.0, -3030.0), p);
+    return lo.x * lo.y * hi.x * hi.y;
+}
 
 fn lk_luma(c: vec3<f32>) -> f32 {
     return dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
