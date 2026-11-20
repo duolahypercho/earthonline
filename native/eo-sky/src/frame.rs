@@ -38,6 +38,11 @@ pub struct SkyTerms {
     /// isotropy, desaturation and tint off) as bright at the zenith as the clear
     /// sky of the hour: the sky seen from above the marine layer (1 otherwise).
     pub above_fog_gain: f64,
+    /// the physical daylight's share of the frame (eo-look `phys`; 0 without
+    /// it, `apply_daylight`), and the day's EV100 when the incident meter sets
+    /// the exposure (`apply_ev100`; None with the JS curve).
+    pub daylight_weight: f64,
+    pub ev100: Option<f64>,
 }
 
 /// `NIGHT_KEY_CEILING`: the moon key never exceeds 0.02 (sky-atmosphere.js).
@@ -275,7 +280,60 @@ pub fn apply(f: &mut LookFrame, c: &Conditions) -> SkyTerms {
         lamp_units_per_lux: night::lamp_units_per_lux() * lamp_scale,
         fill_scale,
         above_fog_gain,
+        daylight_weight: 0.0,
+        ev100: None,
     }
+}
+
+/// The haze density the physical daylight is integrated at for a weather:
+/// the clear coastal medium x (1 + 2 haze), as the GPU's tables take it.
+pub fn daylight_density(w: &WeatherState) -> f64 {
+    1.0 + 2.0 * w.profile.haze
+}
+
+/// The physical daylight's weight for a frame's sun and weather (eo-look `phys::weather_weight`).
+pub fn daylight_weight(f: &LookFrame, w: &WeatherState) -> f64 {
+    eo_look::phys::weather_weight(f.model.sun.altitude_deg, w.profile.overcast)
+}
+
+/// Light a frame `look_frame_from` built with the physical daylight
+/// (`--no-phys-sky` leaves the rig's light): eo-look `phys::apply` by the
+/// daylight's weight, the weather's dome brightness and tint on its diffuse
+/// share as `apply` puts them on the rig's fill. The exposure target is
+/// left to `apply_ev100` (or stays the JS curve's).
+pub fn apply_daylight(f: &mut LookFrame, t: &mut SkyTerms, d: &eo_look::phys::Daylight) {
+    let p = t.weather.profile;
+    let mut d2 = d.clone();
+    let grade = |c: [f64; 3]| [0, 1, 2].map(|i| c[i] * p.tint[i] * p.brightness);
+    d2.env_sh = d.env_sh.map(grade);
+    eo_look::phys::apply(f, &d2);
+    t.daylight_weight = d.weight;
+}
+
+/// The night without the rig's rim light (`--no-night-shaping` keeps it): the
+/// browser game's rig carries a rim of 0.3-0.45 units at full night (four to five
+/// times the night sky's own fill on a wall), aimed 28 deg up opposite the key's
+/// heading, a stand-in for moonlight that lit every wall facing it as a uniform
+/// grey-blue glow (card 6's white wall read as lit by day). At night an unlit
+/// surface is lit by the sky's glow (the hemisphere and the environment) and the
+/// practicals (street and vehicle lamps, windows, shop spill) alone; the moon,
+/// when it is up, keys the scene through `apply`. The rim fades with `nightness`.
+pub fn apply_night_shaping(f: &mut LookFrame, t: &SkyTerms) {
+    let k = 1.0 - t.nightness.clamp(0.0, 1.0);
+    f.rim = f.rim.map(|v| v * k);
+}
+
+/// Set the frame's exposure from an incident-light meter (EV100) while the
+/// sun is up (`--no-ev100` keeps the JS curve): `night::target_exposure_ev100`
+/// on the frame's own horizontal illuminance.
+pub fn apply_ev100(f: &mut LookFrame, t: &mut SkyTerms) {
+    let w = &t.weather;
+    let e_h = night::horizontal_illuminance(f, w, t.daylight_weight);
+    let weight = eo_look::phys::weight(f.model.sun.altitude_deg);
+    let e = night::target_exposure_ev100(f, w, e_h, weight);
+    t.exposure_target = e;
+    f.exposure = e;
+    t.ev100 = Some(night::ev100_day_exposure(e_h).0);
 }
 
 #[cfg(test)]

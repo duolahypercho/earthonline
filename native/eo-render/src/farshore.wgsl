@@ -30,6 +30,9 @@ struct FarU {
     misc: vec4<f32>,
     // the sea's grid this frame (eo-water grid): centre x, z, half size, drawn (1/0)
     sea: vec4<f32>,
+    // x 1: the grass's dryness is the look's per-frame season (look.tone2.w, the date in
+    // force), 0: misc.x (read at load); y, z, w unused
+    season: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> fu: FarU;
@@ -240,7 +243,7 @@ fn fs_fs(i: FsOut) -> @location(0) vec4<f32> {
         let n1 = fs_noise(p / 700.0);
         let n2 = fs_noise(p / 190.0 + vec2<f32>(17.0, 3.0));
         let n3 = fs_noise(p / 60.0 + vec2<f32>(5.0, 41.0));
-        let dry = fu.misc.x;
+        let dry = mix(fu.misc.x, look.tone2.w, fu.season.x);
         let flat_n = max(length(n.xz), 1e-4);
         let north = clamp(-n.z / flat_n, -1.0, 1.0) * smoothstep(0.05, 0.3, slope);
         // ravines and north faces carry oak, bay and redwood; ridgelines stay open

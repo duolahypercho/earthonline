@@ -423,6 +423,16 @@ impl PropLibrary {
         h.update(eo_props::data::PROPS_JS_GZ);
         h.update(include_bytes!("props_lib.rs"));
         h.update(include_bytes!("props_lib2.rs"));
+        // the procedural furniture kinds (and whether they draw: `--no-furniture-models`).
+        h.update(include_bytes!("props_lib2/furniture_models.rs"));
+        h.update(include_bytes!("props_lib2/vegetation_models.rs"));
+        h.update([crate::props_lib2::furniture_models::enabled() as u8]);
+        // the meadow's materials follow `--no-blade-shading` (vegetation_models.rs).
+        h.update([eo_landmarks::vegetation::grass2().blade_shading as u8]);
+        // the scrub's models follow the flora pass (`--no-scrub-species`, vegetation_models.rs).
+        h.update([eo_landmarks::flora::flora().species as u8]);
+        // (and their species' forms and colours, eo_landmarks::flora::SPECIES).
+        h.update(include_bytes!("../../eo-landmarks/src/flora.rs"));
         for p in js.street_props.values() {
             h.update(p.sha256.as_bytes());
         }
@@ -434,6 +444,19 @@ impl PropLibrary {
                 h.update(bytemuck::cast_slice(&m.mesh.positions));
                 h.update(bytemuck::cast_slice(&m.mesh.colors));
                 h.update(bytemuck::cast_slice(&m.mesh.indices));
+            }
+        }
+        if let Some(ez) = x.ez {
+            // the coastal species' builds (vegetation_models.rs).
+            for id in eo_props::eztree::COASTAL_TREES.iter().chain(eo_props::eztree::COASTAL_SHRUBS.iter()) {
+                for tier in ["near", "coarse", "distant"] {
+                    if let Some(m) = ez.get(id, tier, 0) {
+                        h.update(id.as_bytes());
+                        h.update(bytemuck::cast_slice(&m.positions));
+                        h.update(bytemuck::cast_slice(&m.colors));
+                        h.update(bytemuck::cast_slice(&m.indices));
+                    }
+                }
             }
         }
         if let Some(s) = x.signs {

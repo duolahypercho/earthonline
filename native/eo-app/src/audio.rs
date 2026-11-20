@@ -521,12 +521,15 @@ impl AudioRuntime {
     }
 }
 
+/// The p-th percentile of the finite values of `v` (NaN when there are none).
+/// A non-finite sample (a NaN mix time, for one) is dropped rather than
+/// compared, so a bench run with audio on cannot panic in the sort.
 fn pct(v: &[f64], p: f64) -> f64 {
-    if v.is_empty() {
+    let mut s: Vec<f64> = v.iter().copied().filter(|x| x.is_finite()).collect();
+    if s.is_empty() {
         return f64::NAN;
     }
-    let mut s = v.to_vec();
-    s.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    s.sort_by(f64::total_cmp);
     s[((p / 100.0) * (s.len() - 1) as f64).round() as usize]
 }
 

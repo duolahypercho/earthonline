@@ -26,6 +26,12 @@ use eo_look::shadow::{self, CASCADES, CascadeCamera};
 use eo_look::{LookFrame, tone};
 use std::sync::Mutex;
 
+/// the camera look's switches and table (eo-look `tone::camera`).
+pub mod camera_look;
+pub use camera_look::CameraSwitches;
+/// the scene meter (`--no-scene-meter`).
+pub mod scene_meter;
+
 pub const HDR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 /// 16-bit is enough along the light (900 m range: 1.4 cm steps against
 /// 5-10 cm texels and their bias) and halves the depth bandwidth.
@@ -100,6 +106,13 @@ struct LookUniform {
     // the weather's dome (`upperFromRow`): overcast, isotropy, desaturation; tint.
     wx: [f32; 4],
     wx_tint: [f32; 4],
+    // the filmic display transform (eo-look `tone::filmic_curve`): contrast a, shoulder d, b, c
+    tone: [f32; 4],
+    // x filmic on (1/0), y chroma gain, z the camera look on (1/0), w the season's dryness
+    // (eo_look::season::current, 0 green .. 1 golden; read by nothing yet)
+    tone2: [f32; 4],
+    // the filmic transform's white balance (eo-look `tone::filmic_white_balance`), rows
+    wb: [[f32; 4]; 3],
 }
 
 #[repr(C)]
@@ -137,6 +150,8 @@ pub struct LookOptions {
     pub sky: crate::sky::SkyOptions,
     /// the water pass (`--no-water`: the flat sea quad, as before).
     pub water: bool,
+    /// the water pass's features (water.rs `FEAT_*`; `--no-water-instanced`, `--no-water-brdf`, `--no-water-body`, `--no-water-foam-cover`).
+    pub water_features: u32,
     /// Opt-in wave-driven underwater lighting and camera.
     pub water_optics: bool,
     /// the CC0 scanned sets' switches (`cc0::RUN_*`; `--no-cc0` and the per-feature `--no-cc0-*`).
@@ -145,7 +160,7 @@ pub struct LookOptions {
 
 impl Default for LookOptions {
     fn default() -> Self {
-        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT } // + rooms, agent pyramid test, probe deferral // water // sky
+        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_features: crate::water::FEAT_ALL, water_optics: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT } // + rooms, agent pyramid test, probe deferral // water // sky
     }
 }
 
@@ -157,6 +172,10 @@ struct AoTarget {
     /// The compute bind group for one (depth texture, HDR texture) pair.
     bind: Option<(wgpu::Texture, wgpu::Texture, wgpu::BindGroup)>,
 }
+
+/// What a frame's physical daylight was made for: the hour, the haze density and the weight (f64
+/// bits), the day of the year (f64 bits) and the ground's albedo in 1/256 steps.
+type DaylightKey = (u64, u64, u64, u64, [i64; 3]);
 
 struct State {
     hour: f64,
@@ -181,9 +200,14 @@ struct State {
     ao_made: Option<(glam::Mat4, glam::Vec3, glam::Vec3)>,
     /// the weather and night terms of `frame`, and the weather they were built for.
     terms: Option<eo_sky::SkyTerms>,
-    weather_key: (i64, i64, i64),
-    /// the weather frame before its fill (hour, sky profile, frame): `eo_sky::frame::base_frame`.
-    sky_base: Option<(f64, String, LookFrame)>,
+    /// the weather's key and the clear sky's (eo-sky `clouds::sky_key`: the live calendar's date, the
+    /// day-change mix and the cirrus amount, which move without the weather's own key)
+    weather_key: ((i64, i64, i64), [i64; 5]),
+    /// the weather frame before its fill (hour, day of the year, sky profile, frame): `eo_sky::frame::base_frame`.
+    sky_base: Option<(f64, f64, String, LookFrame)>,
+    /// the physical daylight of the frame in force (`--no-phys-sky`: None), and what it was made for
+    /// (hour, density, weight, the day of the year, the ground's albedo in 1/256 steps).
+    daylight: Option<(DaylightKey, std::sync::Arc<eo_look::phys::Daylight>)>,
 }
 
 struct PostTarget {
@@ -203,6 +227,11 @@ pub struct LookGpu {
     view_buf: wgpu::Buffer,
     shadow_draws: wgpu::Buffer,
     shadow_counters: wgpu::Buffer,
+    /// the cascade planes and refresh mask the last `update` wrote for the shadow cull.
+    shadow_planes: Mutex<([[f32; 4]; 18], u32)>,
+    /// (fixed-slot lists) each cascade's slot ranges for this frame (`draw_ranges`, set by
+    /// the renderer after `update`; None: the whole list).
+    shadow_ranges: Mutex<Option<[crate::draw_ranges::Ranges; 3]>>,
     shadow_layers: Vec<wgpu::TextureView>,
     main_bgl: wgpu::BindGroupLayout,
     /// one per history parity (the previous resolved frame differs).
@@ -223,6 +252,12 @@ pub struct LookGpu {
     post_pipeline: wgpu::RenderPipeline,
     post_bgl: wgpu::BindGroupLayout,
     post: Mutex<Option<PostTarget>>,
+    /// the camera look's table and switches (`--no-camera-look`, `--no-gg2-camera`).
+    cam_lut: camera_look::CameraLut,
+    pub cam_switches: CameraSwitches,
+    meter: scene_meter::SceneMeter,
+    /// the prior exposure (the incident meter's target) this frame's meter pass bins about.
+    meter_prior: Mutex<f64>,
     state: Mutex<State>,
     pub(crate) cmp_sampler: wgpu::Sampler, // pub(crate)
     pub(crate) device: wgpu::Device, // pub(crate) (the probe rebinds group 0)
@@ -251,6 +286,24 @@ pub fn city_shader_source() -> String {
         + "\n" + include_str!("sky_light_core.wgsl") + "\n" + include_str!("sky_light.wgsl") // sky
         + &crate::landmarks::city_wgsl() // landmarks
         + "\n" + include_str!("cc0.wgsl") + &crate::cc0::wgsl_constants(crate::cc0::scoring_pitch_m()) // cc0
+}
+
+/// look_camera.wgsl with its table's shaper constants (eo-look `tone::camera`),
+/// its table and sampler at group 0, bindings 5 and 6 (the post pass's).
+pub fn camera_wgsl() -> String {
+    camera_wgsl_at(0, 5, 6)
+}
+
+/// look_camera.wgsl with its table and sampler at the given group and bindings
+/// (another pass that finishes a frame, e.g. the submerged camera, binds
+/// `LookGpu::camera_lut` there and calls `finish_camera`).
+pub fn camera_wgsl_at(group: u32, lut: u32, sampler: u32) -> String {
+    let [mid, lo, inv, n] = camera_look::shaper_uniform();
+    include_str!("look_camera.wgsl")
+        .replace("CAM_GROUP", &group.to_string())
+        .replace("CAM_BIND_LUT", &lut.to_string())
+        .replace("CAM_BIND_SAMP", &sampler.to_string())
+        + &format!("const CAM_LOG2_MID: f32 = {mid:.8};\nconst CAM_LO_EV: f32 = {lo:.8};\nconst CAM_INV_SPAN: f32 = {inv:.8};\nconst CAM_N: f32 = {n:.1};\n")
 }
 
 /// look_common.wgsl with (surfaces) the street field's constants (GF_*), from
@@ -492,6 +545,8 @@ impl LookGpu {
                 entry(9, fs, sbuf(true)),
                 entry(10, fs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
                 entry(11, fs, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
+                // the atmosphere's sky-view table (the physical daylight's sky in reflections)
+                entry(12, fs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
             ],
         });
         let ao_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -647,7 +702,7 @@ impl LookGpu {
         });
 
         // Post.
-        let post_src = format!("{}\n{}\n{}", look_common_source(), include_str!("look_finish.wgsl"), include_str!("look_post.wgsl"));
+        let post_src = format!("{}\n{}\n{}\n{}", look_common_source(), include_str!("look_finish.wgsl"), camera_wgsl(), include_str!("look_post.wgsl"));
         let post_module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("look_post.wgsl"), source: wgpu::ShaderSource::Wgsl(post_src.into()) });
         let post_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("post-bgl"),
@@ -658,6 +713,9 @@ impl LookGpu {
                 entry(2, fs, ubuf),
                 entry(3, fs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
                 entry(4, fs, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
+                // the camera look's table and its sampler (look_camera.wgsl).
+                entry(5, fs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D3, multisampled: false }),
+                entry(6, fs, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
             ],
         });
         let post_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("post-layout"), bind_group_layouts: &[Some(&post_bgl)], immediate_size: 0 });
@@ -677,7 +735,10 @@ impl LookGpu {
             multiview_mask: None,
             cache: None,
         });
-        let bytes = shadow_bytes + draws_bytes + (SHADOW_COUNTER_WORDS * 4) as u64 + look_buf.size() + cull_buf.size() + view_buf.size() + sky.bytes; // sky
+        let cam_lut = camera_look::CameraLut::new(device);
+        let cam_switches = CameraSwitches::from_env();
+        let meter = scene_meter::SceneMeter::new(device);
+        let bytes = meter.bytes + shadow_bytes + draws_bytes + (SHADOW_COUNTER_WORDS * 4) as u64 + look_buf.size() + cull_buf.size() + view_buf.size() + sky.bytes + cam_lut.bytes; // sky
         Self {
             sky, // sky
             sky_depth_ok: std::sync::atomic::AtomicBool::new(false), // sky
@@ -691,6 +752,8 @@ impl LookGpu {
             view_buf,
             shadow_draws,
             shadow_counters,
+            shadow_planes: Mutex::new(([[0.0; 4]; 18], 0)),
+            shadow_ranges: Mutex::new(None),
             shadow_layers,
             main_bgl,
             main_bg: Mutex::new(main_bg),
@@ -709,6 +772,10 @@ impl LookGpu {
             post_pipeline,
             post_bgl,
             post: Mutex::new(None),
+            cam_lut,
+            cam_switches,
+            meter,
+            meter_prior: Mutex::new(1.0),
             state: Mutex::new(State {
                 hour: DEFAULT_HOUR,
                 transfer: None,
@@ -723,8 +790,9 @@ impl LookGpu {
                 cur_cam: None,
                 ao_made: None,
                 terms: None,                // sky
-                weather_key: (i64::MIN, 0, 0), // sky
+                weather_key: ((i64::MIN, 0, 0), [0; 5]), // sky
                 sky_base: None,
+                daylight: None,
             }),
             cmp_sampler,
             device: device.clone(),
@@ -762,6 +830,7 @@ impl LookGpu {
                 wgpu::BindGroupEntry { binding: 9, resource: sky.clusters.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 10, resource: wgpu::BindingResource::TextureView(prev) },
                 wgpu::BindGroupEntry { binding: 11, resource: wgpu::BindingResource::Sampler(&sky.rep) },
+                wgpu::BindGroupEntry { binding: 12, resource: wgpu::BindingResource::TextureView(sky.atmo_tables().0) },
             ],
         })
     }
@@ -872,11 +941,14 @@ impl LookGpu {
 
     /// change the sky stages or the weather at run time (A/B, captures).
     pub fn set_sky_options(&self, o: crate::sky::SkyOptions) {
+        // the night exposure solve meets the display transform the frame is drawn with
+        eo_look::tone::set_filmic(o.filmic);
+        eo_look::tone::camera::set_camera_look(self.cam_switches.look && o.filmic);
         if self.sky.options() != o {
             self.sky.set_options(o);
             let mut s = self.state.lock().unwrap();
             s.frame = None;
-            s.weather_key = (i64::MIN, 0, 0);
+            s.weather_key = ((i64::MIN, 0, 0), [0; 5]);
             s.force_all = true;
         }
     }
@@ -946,6 +1018,13 @@ impl LookGpu {
         self.state.lock().unwrap().hour
     }
 
+    /// Drop the cached look frame, so the next `frame()` rebuilds it (for a
+    /// change the frame's weather key does not see, such as a shot's date or
+    /// sky). Called by nothing yet.
+    pub fn invalidate(&self) {
+        self.state.lock().unwrap().frame = None;
+    }
+
     /// The look frame in force (built on demand). sky: with any sky stage on,
     /// the frame of the weather in force (its sky model, the weather's fill,
     /// the moon key, the night exposure; eo-sky `frame::look_frame`), rebuilt
@@ -959,7 +1038,7 @@ impl LookGpu {
         let mut s = self.state.lock().unwrap();
         let (h, t) = (s.hour, s.transfer);
         if let Some(w) = w {
-            let key = crate::sky::weather_key(&w);
+            let key = (crate::sky::weather_key(&w), eo_sky::clouds::sky_key(&w));
             if s.weather_key != key {
                 s.weather_key = key;
                 s.frame = None;
@@ -971,10 +1050,38 @@ impl LookGpu {
                 // the sky is integrated once per hour and weather; a new
                 // probe transfer (each capture) re-solves only the fill from it.
                 let profile = format!("{:?}", eo_sky::weather::sky_profile(&w.profile));
-                if s.sky_base.as_ref().is_none_or(|(bh, bp, _)| *bh != h || *bp != profile) {
-                    s.sky_base = Some((h, profile, eo_sky::frame::base_frame(&c, t)));
+                let day = eo_look::sun::day_of_year();
+                if s.sky_base.as_ref().is_none_or(|(bh, bd, bp, _)| *bh != h || *bd != day || *bp != profile) {
+                    s.sky_base = Some((h, day, profile, eo_sky::frame::base_frame(&c, t)));
                 }
-                let (f, terms) = eo_sky::frame::look_frame_from(&s.sky_base.as_ref().unwrap().2, &c, t);
+                let (mut f, mut terms) = eo_sky::frame::look_frame_from(&s.sky_base.as_ref().unwrap().3, &c, t);
+                // the physical daylight (eo-look `phys`) in place of the rig while the sun is
+                // up, and the incident meter's exposure (EV100).
+                if opts.phys_sky {
+                    let density = eo_sky::frame::daylight_density(&w);
+                    let weight = eo_sky::frame::daylight_weight(&f, &w);
+                    // the ground the sky light sees from the eye (eo-look `phys::ground_albedo_at`).
+                    let eye = s.cur_cam.map_or([0.0; 3], |c| [c.1.x as f64, c.1.y as f64, c.1.z as f64]);
+                    let ground = eo_look::phys::ground_albedo_at(eye);
+                    let key = (h.to_bits(), density.to_bits(), weight.to_bits(), day.to_bits(), ground.map(|a| (a * 256.0).round() as i64));
+                    if s.daylight.as_ref().is_none_or(|(k, _)| *k != key) {
+                        s.daylight = Some((key, std::sync::Arc::new(eo_look::phys::Daylight::new_with_ground(f.model.sun.dir(), density, weight, ground))));
+                    }
+                    let d = s.daylight.as_ref().unwrap().1.clone();
+                    eo_sky::frame::apply_daylight(&mut f, &mut terms, &d);
+                } else {
+                    s.daylight = None;
+                }
+                if opts.ev100 {
+                    eo_sky::frame::apply_ev100(&mut f, &mut terms);
+                }
+                if opts.night_shaping {
+                    eo_sky::frame::apply_night_shaping(&mut f, &terms);
+                }
+                // the street lamps on their photocells (`--no-lamp-photocell`: the sun-altitude ramp)
+                if self.cam_switches.photocell {
+                    terms.lamps_on = eo_sky::night::lamps_on_photocell(&f, &terms.weather);
+                }
                 s.frame = Some(f);
                 s.terms = Some(terms);
             }
@@ -1003,8 +1110,33 @@ impl LookGpu {
         &self.shadow_counters
     }
 
+    /// the camera look's table and sampler (look_camera.wgsl), uploaded on the first update.
+    pub fn camera_lut(&self) -> (&wgpu::TextureView, &wgpu::Sampler) {
+        (&self.cam_lut.view, &self.cam_lut.sampler)
+    }
+
+    /// whether the scene meter sets the exposure: its switch, with the sky's meter on.
+    pub fn scene_meter_active(&self) -> bool {
+        self.cam_switches.meter && self.sky.options().meter
+    }
+
+    /// the display transform's shoulder as a scene value (eo-sky `night::display_shoulder`), per transform.
+    fn display_shoulder(&self) -> f64 {
+        static CAMERA: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
+        static OTHER: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
+        if eo_look::tone::camera::camera_look_on() { *CAMERA.get_or_init(eo_sky::night::display_shoulder) } else { *OTHER.get_or_init(eo_sky::night::display_shoulder) }
+    }
+
+    /// whether the post pass draws through the camera look: its switch, over the filmic stage.
+    pub fn camera_look_active(&self) -> bool {
+        self.cam_switches.look && self.sky.options().filmic
+    }
+
     /// Write this frame's uniforms (the look, the cascade boxes and matrices).
     pub fn update(&self, queue: &wgpu::Queue, cam: &Camera, copy_step: f32) {
+        if self.camera_look_active() {
+            self.cam_lut.upload(queue);
+        }
         let f = self.frame();
         let fwd = cam.forward();
         let right = cam.right();
@@ -1046,13 +1178,28 @@ impl LookGpu {
         let ao_made = if self.options.ao { st.ao_made } else { None };
         st.cur_cam = Some((cam.view_proj(), cam.eye, fwd, cam.fov_y_deg.to_radians()));
         let terms = st.terms; // sky
+        let daylight = st.daylight.as_ref().map(|d| d.1.clone());
         drop(st);
         // the sky passes' uniform (unjittered camera) and the exposure, adapted.
         let out_size = self.post.lock().unwrap().as_ref().map(|t| t.size).unwrap_or((1920, 1080));
         let exposure = match terms {
             Some(t) => {
                 let _span = crate::hitch::span(crate::hitch::Phase::SkyUpdate);
-                self.sky.update(queue, &Camera { jitter: [0.0; 2], ..*cam }, &f, &t, out_size, self.sky_depth_ok.load(std::sync::atomic::Ordering::Relaxed))
+                // the scene meter's latest reading (`--no-scene-meter`: the dome estimate)
+                let scene = if self.scene_meter_active() {
+                    self.meter.poll(&self.device, self.sky.meter_snap_pending());
+                    *self.meter_prior.lock().unwrap() = t.exposure_target;
+                    self.meter.set_prior(queue, t.exposure_target);
+                    Some((self.meter.latest(), self.display_shoulder()))
+                } else {
+                    None
+                };
+                let e = self.sky.update(queue, &Camera { jitter: [0.0; 2], ..*cam }, &f, &t, out_size, self.sky_depth_ok.load(std::sync::atomic::Ordering::Relaxed), daylight.as_deref(), scene);
+                if self.scene_meter_active() {
+                    // the first frame of a new view must be metered (a free readback slot)
+                    self.meter.ensure_free(&self.device, self.sky.meter_snap_pending().is_some());
+                }
+                e
             }
             None => f.exposure,
         };
@@ -1094,7 +1241,8 @@ impl LookGpu {
             key: v4(f.key, exposure), // adapted (f.exposure with every sky stage off)
             rim_dir: v4(f.rim_dir, 0.0),
             rim: v4(f.rim, 0.0),
-            hemi_sky: v4(f.hemi_sky, 0.0),
+            // w: the physical daylight's weight (look_light.wgsl: the environment at its own intensity)
+            hemi_sky: v4(f.hemi_sky, terms.map(|t| t.daylight_weight).unwrap_or(0.0)),
             hemi_ground: v4(f.hemi_ground, 0.0),
             ambient: v4(f.ambient, f.rig.environment_intensity),
             env_class: [f.rig.env_painted as f32, f.rig.env_glass as f32, f.rig.env_asphalt as f32, f.rig.env_ground as f32],
@@ -1143,8 +1291,9 @@ impl LookGpu {
             ao_params: [
                 if ao_made.is_some() { 1.0 } else { 0.0 },
                 1.0 / focal_px,
-                std::env::var("EO_AO_DEBUG").ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0),
-                0.0,
+                std::env::var("EO_LOOK_DEBUG").or_else(|_| std::env::var("EO_AO_DEBUG")).ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0),
+                // the canyon-scale sky visibility (surfaces_ao.wgsl `AO_FAR_*`)
+                if self.sky.options().sky_vis { 1.0 } else { 0.0 },
             ],
             field: {
                 // makeGroundField's practicals ramps on the sun's altitude (dry, model exposure 1).
@@ -1154,13 +1303,25 @@ impl LookGpu {
                     let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
                     t * t * (3.0 - 2.0 * t)
                 };
-                [(gf.lamp_pool * (1.0 - ss(-3.0, 8.0, alt))) as f32, (gf.shop_spill * (1.0 - ss(2.0, 16.0, alt))) as f32, 0.0, 0.0]
+                // the lamp pools follow the photocells with the switch on (their share is the frame's)
+                let lamps = match terms {
+                    Some(t) if self.cam_switches.photocell => t.lamps_on,
+                    _ => 1.0 - ss(-3.0, 8.0, alt),
+                };
+                [(gf.lamp_pool * lamps) as f32, (gf.shop_spill * (1.0 - ss(2.0, 16.0, alt))) as f32, 0.0, 0.0]
             },
             dome_zenith: v4(m.zenith_radiance, 0.0),
             rooms_env: crate::rooms::drive(m.sun.altitude_deg, self.time_of_day()).0,
             rooms_work: crate::rooms::drive(m.sun.altitude_deg, self.time_of_day()).1,
             wx: [(m.profile.overcast * wx_keep) as f32, (m.profile.isotropy * wx_keep) as f32, (m.profile.desaturation * wx_keep) as f32, if m.ext.on { 1.0 } else { 0.0 }], // eo-look `SkyExt`
             wx_tint: v4(m.profile.tint.map(|v| 1.0 + (v - 1.0) * wx_keep), m.ext.afterglow), // w the afterglow arch
+            tone: {
+                let (b, c) = tone::filmic_coefficients(tone::FILMIC_CONTRAST, tone::FILMIC_SHOULDER, tone::FILMIC_WHITE, tone::FILMIC_MID_IN, tone::FILMIC_MID_OUT);
+                [tone::FILMIC_CONTRAST as f32, tone::FILMIC_SHOULDER as f32, b as f32, c as f32]
+            },
+            wb: tone::filmic_white_balance().map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, 0.0]),
+            // z: the camera look (it takes the filmic stage's place; `--no-filmic` keeps the old chain)
+            tone2: [if self.sky.options().filmic { 1.0 } else { 0.0 }, tone::FILMIC_CHROMA as f32, if self.camera_look_active() { 1.0 } else { 0.0 }, eo_look::season::current()],
         };
         queue.write_buffer(&self.look_buf, 0, bytemuck::bytes_of(&u));
         let mut planes = [[0f32; 4]; 18];
@@ -1169,6 +1330,8 @@ impl LookGpu {
         }
         let p = ShadowCullParams { planes, object_count: self.object_count, compact: self.compact as u32, mask, pad: 0 };
         queue.write_buffer(&self.cull_buf, 0, bytemuck::bytes_of(&p));
+        *self.shadow_planes.lock().unwrap() = (planes, mask);
+        *self.shadow_ranges.lock().unwrap() = None; // the renderer sets this update's (draw_ranges)
         for (c, cas) in cascades.iter().enumerate() {
             let mut bytes = [0f32; 20];
             for col in 0..4 {
@@ -1185,6 +1348,13 @@ impl LookGpu {
 
     /// Shadow cull + one depth pass per cascade (after the camera's cull pass).
     pub fn encode_shadows(&self, enc: &mut wgpu::CommandEncoder, vertex: &wgpu::Buffer, index: &wgpu::Buffer, ts: Option<(&wgpu::QuerySet, u32)>) {
+        self.encode_shadows_with(enc, vertex, index, ts, &|_, _| {});
+    }
+
+    /// `encode_shadows`, with `casters(pass, cascade)` called at the end of each
+    /// refreshed cascade's shadow-depth pass, after the city's casters (the
+    /// ground cover's hook: it may set its own pipeline and bind groups).
+    pub fn encode_shadows_with(&self, enc: &mut wgpu::CommandEncoder, vertex: &wgpu::Buffer, index: &wgpu::Buffer, ts: Option<(&wgpu::QuerySet, u32)>, casters: &dyn Fn(&mut wgpu::RenderPass<'_>, usize)) {
         let active = self.shadows_active();
         // Commit what the last update fitted: these boxes are what the maps
         // will hold after this encode.
@@ -1258,14 +1428,38 @@ impl LookGpu {
             let offset = c as u64 * n as u64 * crate::DRAW_ARGS_BYTES;
             if self.compact {
                 pass.multi_draw_indexed_indirect_count(&self.shadow_draws, offset, &self.shadow_counters, c as u64 * 4, n);
+            } else if let Some(r) = self.shadow_ranges.lock().unwrap().as_ref() {
+                // the blocks of slots the cascade's cull can fill, in slot order
+                crate::draw_ranges::draw(&mut pass, &self.shadow_draws, offset, &r[c]);
             } else {
                 pass.multi_draw_indexed_indirect(&self.shadow_draws, offset, n);
             }
+            casters(&mut pass, c);
         }
+    }
+
+    /// the planes (6 per cascade) and the refresh mask the last `update` gave the shadow cull.
+    pub fn shadow_cull_planes(&self) -> ([[f32; 4]; 18], u32) {
+        *self.shadow_planes.lock().unwrap()
+    }
+
+    /// this frame's slot ranges per cascade for the fixed-slot lists (after `update`).
+    pub fn set_shadow_ranges(&self, ranges: Option<[crate::draw_ranges::Ranges; 3]>) {
+        *self.shadow_ranges.lock().unwrap() = ranges;
     }
 
     pub fn bind_main(&self, pass: &mut wgpu::RenderPass<'_>) {
         let bg = self.main_bg.lock().unwrap()[self.sky.parity()].clone(); // the previous frame for this parity
+        pass.set_bind_group(1, &bg, &[]);
+    }
+
+    /// `bind_main` for a pass drawing into `resolved_view` after the resolve
+    /// (which flipped the parity): the bind group this frame's city pass took,
+    /// which reads the history before the one being drawn into.
+    pub fn bind_main_resolved(&self, pass: &mut wgpu::RenderPass<'_>) {
+        let resolved = self.post_source.load(std::sync::atomic::Ordering::Relaxed) != 0;
+        let p = if resolved { 1 - self.sky.parity() } else { self.sky.parity() };
+        let bg = self.main_bg.lock().unwrap()[p].clone();
         pass.set_bind_group(1, &bg, &[]);
     }
 
@@ -1305,18 +1499,29 @@ impl LookGpu {
                         wgpu::BindGroupEntry { binding: 2, resource: self.sky.uniform.as_entire_binding() }, // sky
                         wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&bloom) },
                         wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::Sampler(self.sky.linear_sampler()) },
+                        wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(&self.cam_lut.view) },
+                        wgpu::BindGroupEntry { binding: 6, resource: wgpu::BindingResource::Sampler(&self.cam_lut.sampler) },
                     ],
                 })
             };
             let h0 = self.sky.history_view(0).unwrap_or_else(|| self.sky.dummy_hist.clone());
             let h1 = self.sky.history_view(1).unwrap_or_else(|| self.sky.dummy_hist.clone());
             let bind = [make(&view), make(&h0), make(&h1)];
+            self.meter.bind_sources(device, (w, h), [&view, &h0, &h1]);
             *p = Some(PostTarget { size: (w, h), view, bind });
             drop(p);
             self.rebuild_main_bg(); // the city pass reads the new histories
             return self.post.lock().unwrap().as_ref().unwrap().view.clone();
         }
         p.as_ref().unwrap().view.clone()
+    }
+
+    /// The frame the post reads this frame when the sky resolve ran (its
+    /// resolved history), else None (the HDR target): the bridges' wire
+    /// members are drawn over it (landmarks.rs `draw_overlay`).
+    pub fn resolved_view(&self) -> Option<wgpu::TextureView> {
+        let src = self.post_source.load(std::sync::atomic::Ordering::Relaxed) as usize;
+        if src == 0 { None } else { self.sky.history_view(src - 1) }
     }
 
     /// Bytes of the HDR target, once it exists.
@@ -1335,6 +1540,18 @@ impl LookGpu {
     ) {
         let p = self.post.lock().unwrap();
         let t = p.as_ref().expect("hdr_target before encode_post");
+        if self.scene_meter_active() {
+            // the scene meter reads the frame post reads, before post
+            let src = self.post_source.load(std::sync::atomic::Ordering::Relaxed) as usize;
+            let prior = *self.meter_prior.lock().unwrap();
+            self.meter.encode(enc, src, t.size, prior, self.sky.frame_index(), ts.map(|(q, b)| (q, b + crate::Q_SCENE_METER)));
+        } else if let Some((q, b)) = ts {
+            // the slot is written every frame (an empty pass)
+            enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("scene-meter (off)"),
+                timestamp_writes: Some(wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b + crate::Q_SCENE_METER), end_of_pass_write_index: Some(b + crate::Q_SCENE_METER + 1) }),
+            });
+        }
         let tw = ts.map(|(q, b)| wgpu::RenderPassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b + Q_POST), end_of_pass_write_index: Some(b + Q_POST + 1) });
         let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("post"),

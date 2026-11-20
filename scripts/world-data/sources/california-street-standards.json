@@ -2682,6 +2682,20 @@
       "confidence": "primary-source-checked"
     },
     {
+      "id": "following-time-gap",
+      "topic": "traffic rules",
+      "value": 3,
+      "unit": "s",
+      "metricValue": 3,
+      "condition": "Following distance behind the vehicle ahead, counted as time; the driver handbook's rule (CVC 21703 itself sets no number: 'reasonable and prudent'). The corridor traffic's car-following time gap",
+      "source": "California Driver's Handbook, California DMV (dmv.ca.gov, read 2026-11-18)",
+      "section": "Section 8: Safe Driving, Tailgating (Following Too Closely)",
+      "url": "https://www.dmv.ca.gov/portal/?p=35434",
+      "quote": "Use the three-second rule to ensure a safe following distance and avoid a collision.",
+      "applicability": "guidance",
+      "confidence": "primary-source-checked"
+    },
+    {
       "id": "yellow-change-min-by-posted-speed",
       "topic": "signals",
       "value": {

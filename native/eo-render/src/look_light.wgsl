@@ -28,6 +28,32 @@ const GLAZING_ROUGHNESS_FLOOR: f32 = 0.152;
 @group(1) @binding(0) var<uniform> look: Look;
 @group(1) @binding(1) var lk_shadow_map: texture_depth_2d_array;
 @group(1) @binding(2) var lk_shadow_cmp: sampler_comparison;
+// the atmosphere's sky-view table (sky_atmo.wgsl), read for the physical daylight's sky
+@group(1) @binding(12) var lk_atmo_view: texture_2d<f32>;
+
+// the physical daylight's weight in this frame (eo-look `phys`; 0 with the rig's light)
+fn lk_phys() -> f32 {
+    return clamp(look.hemi_sky.w, 0.0, 1.0);
+}
+
+// the sky the physical daylight draws, along a reflection: the sky-view table at the
+// sun's own scale (`skyu.atmo4`) above the horizon, and under it the SH9 of the ground's
+// and the sky's light (the ground's radiance), blended over the horizon's few degrees.
+fn lk_phys_sky(r: vec3<f32>) -> vec3<f32> {
+    let up = normalize(vec3<f32>(r.x, max(r.y, 0.0), r.z) + vec3<f32>(0.0, 1e-4, 0.0));
+    let sky = at_spectral(textureSampleLevel(lk_atmo_view, lk_ao_samp, at_view_uv(up, skyu.atmo.xyz), 0.0).rgb * skyu.atmo4.rgb, 1.0);
+    let below = lk_sh(r) / LK_PI;
+    return mix(below, sky, smoothstep(-0.03, 0.02, r.y));
+}
+
+// a specular environment read toward the physical sky by the daylight's weight
+fn lk_sky_spec(r: vec3<f32>, rig: vec3<f32>) -> vec3<f32> {
+    let w = lk_phys();
+    if (w <= 0.0) {
+        return rig;
+    }
+    return mix(rig, lk_phys_sky(r), w);
+}
 
 fn lk_sh(n: vec3<f32>) -> vec3<f32> {
     let x = n.x;
@@ -137,21 +163,23 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     } else if (kind == 1u) {
         cls = look.env_class.w;
     }
-    let env_i = look.ambient.w * cls;
+    // the rig's envMapIntensity classes stand in for the light a probe delivered; the
+    // physical daylight's environment is the light itself, at its own intensity
+    let env_i = mix(look.ambient.w * cls, 1.0, lk_phys());
 
     // Key light with its shadow.
     let l = look.key_dir.xyz;
     let nl = max(dot(n, l), 0.0);
     var key = vec3<f32>(0.0);
     if (nl > 0.0 && dot(ng, l) > -0.05) {
-        key = look.key.xyz * nl * lk_shadow(world, ng) * sky_cloud_transmittance(world) * sky_contact_shadow(world, ng); // cloud and contact shadows
+        key = look.key.xyz * nl * lk_shadow(world, ng) * sky_cloud_transmittance(world) * sky_contact_shadow(world, ng) * lm_key_vis; // cloud and contact shadows (and a bridge deck's: landmarks_surface.wgsl)
     }
     var direct_d = key * diffuse / LK_PI;
     var direct_s = key * lk_ggx(n, v, l, f0, rough);
     // Rim (no shadow).
     let rl = look.rim_dir.xyz;
     let rnl = max(dot(n, rl), 0.0);
-    let rim = look.rim.xyz * rnl;
+    let rim = look.rim.xyz * rnl * lm_rim_vis; // (a bridge's night: landmarks_surface.wgsl)
     direct_d = direct_d + rim * diffuse / LK_PI;
     direct_s = direct_s + rim * lk_ggx(n, v, rl, f0, rough) * select(1.0, 0.0, s.env == ENV_WET_FILM); // the rig's rim light draws no false sun in a water film
 
@@ -187,7 +215,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
             rad = fa_probe_sample(r, fa_probe_lod(rough));
         }
     } else if (sharp > 0.0) {
-        rad = mix(rad, lk_sky_sample(r), sharp);
+        rad = mix(rad, lk_sky_spec(r, lk_sky_sample(r)), sharp);
     }
     let spec_occ = clamp(pow(nv + ao, exp2(-16.0 * rough - 1.0)) - 1.0 + ao, 0.0, 1.0);
     // glossy (wet) ground reflects the previous frame where its ray finds it.
@@ -196,7 +224,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     // The bounce is outgoing Lambert radiance (bounce x diffuse albedo), added
     // outside the occlusion multiply as the JS adds it on the emissive slot.
     let bounce = ao4.rgb * diffuse;
-    if (look.ao_params.z > 0.5) {
+    if (look.ao_params.z > 0.5 && look.ao_params.z < 9.5) {
         // EO_AO_DEBUG=1: visibility; =2: the bounce irradiance fraction.
         if (look.ao_params.z > 1.5) {
             return vec4<f32>(ao4.rgb, 1.0);
@@ -219,7 +247,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
         let ccr = max(GLAZING_ROUGHNESS_FLOOR, 0.08);
         let rc = reflect(-v, ncc);
         let sharp_c = 1.0 - lk_smooth(0.15, 0.5, ccr);
-        var rad_c = mix(lk_sh(rc) / LK_PI, lk_sky_sample(rc), sharp_c);
+        var rad_c = mix(lk_sh(rc) / LK_PI, lk_sky_spec(rc, lk_sky_sample(rc)), sharp_c);
         if (fa_probe_on()) {
             rad_c = fa_glazing(rc, world, ccr); // facade
         }
@@ -256,5 +284,35 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     }
     let fog = lk_smooth(look.fog.x, look.fog.y, lm_fog_depth(m, vd)); // the set's capped sight distance
     lit = mix(lit, look.fog_color.xyz, fog);
+    // the radiance probe (`lk_probe`): one term of the light in place of the whole
+    if (look.ao_params.z > 9.5) {
+        lit = lk_probe(i32(round(look.ao_params.z)), lit, direct_d, direct_s, indirect_d, indirect_s, bounce + m.emissive.rgb + rm_emit);
+    }
     return vec4<f32>(lit, alpha);
+}
+
+// The radiance probe (EO_AO_DEBUG = 10 + term; eo-look `probe`): a surface draws
+// one term of its scene-linear radiance in place of the whole, before the
+// aerial perspective and the camera, and the camera writes the radiance
+// log-encoded (look_camera.wgsl `cam_probe_encode`) so a capture reads back
+// in the look's units. Terms: 10 all (as drawn), 11 the sun's diffuse, 12 the
+// sun's specular, 13 the sky's and the ground's diffuse (the environment's
+// irradiance), 14 the sky's specular, 15 the bounce (the scene's and the
+// sea's reflected light, emission), 16 none (what is left is the aerial
+// in-scatter over the surface), 17 a unit white (the aerial transmittance
+// plus the in-scatter). Not split: the street lamps and headlamps
+// (`sky_local_lights`), the glass clearcoat and the set's capped-sight fog are
+// in term 10 only, so the single terms do not add up to it at night, on glass,
+// or under thick set fog.
+fn lk_probe(term: i32, all: vec3<f32>, sun_d: vec3<f32>, sun_s: vec3<f32>, sky_d: vec3<f32>, sky_s: vec3<f32>, bounce: vec3<f32>) -> vec3<f32> {
+    switch (term) {
+        case 11: { return sun_d; }
+        case 12: { return sun_s; }
+        case 13: { return sky_d; }
+        case 14: { return sky_s; }
+        case 15: { return bounce; }
+        case 16: { return vec3<f32>(0.0); }
+        case 17: { return vec3<f32>(1.0); }
+        default: { return all; }
+    }
 }

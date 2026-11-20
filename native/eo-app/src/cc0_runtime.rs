@@ -85,7 +85,7 @@ pub struct Cc0Runtime {
 
 impl Cc0Runtime {
     pub fn start(cache: Option<std::path::PathBuf>, started: Instant) -> Self {
-        let sets = Arc::new(ac::all_sets());
+        let sets = Arc::new(rc::all_sets()); // the shared sets, then the terrain's
         let total = sets.len();
         let (tx, rx) = std::sync::mpsc::sync_channel::<Arrival>(2);
         let next = Arc::new(AtomicUsize::new(0));
@@ -118,7 +118,7 @@ impl Cc0Runtime {
             received: 0,
             uploaded: 0,
             in_queue: 0,
-            mats: vec![Default::default(); ac::MATERIAL_SETS.len()],
+            mats: vec![Default::default(); rc::material_layers()],
             decals: vec![Default::default(); ac::DECAL_SETS.len()],
             finished: false,
             failed: false,

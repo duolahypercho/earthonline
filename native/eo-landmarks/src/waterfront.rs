@@ -129,6 +129,113 @@ pub fn ferry_sheds(outline: &[[f64; 2]], spec: &serde_json::Value, deck_y: f64) 
     Some((walls.freeze(), roofs.freeze()))
 }
 
+/// The Ferry Plaza's gate sheds drawn as built pieces (`features::pier_sheds`;
+/// off: the JS's boxes, `ferry_sheds`): at the JS's anchors and plan sizes, a
+/// single-storey steel-framed terminal shed, INFERRED (no survey of the
+/// gates): columns at the corners and every `GATE_BAY_M`, a glazed lower
+/// storey with mullions behind a sill, a painted panel band to the eave, and a
+/// low gabled roof overhanging every side as a canopy, with a fascia.
+pub const GATE_BAY_M: f64 = 4.0;
+pub const GATE_EAVE_M: f64 = 5.2;
+pub const GATE_GLAZING_TOP_M: f64 = 3.3;
+pub const GATE_RIDGE_RISE_M: f64 = 1.6;
+pub const GATE_OVERHANG_M: f64 = 1.8;
+pub const GATE_COLUMN_M: f64 = 0.32;
+/// The glazing's tone (a dim waiting hall behind clear glass, linear) and its roughness.
+pub const GATE_GLASS_LINEAR: Rgb = [0.035, 0.04, 0.045];
+
+/// The gate sheds' meshes: frames and panels (in `SHED_WALL_KIT`), roofs (`SHED_ROOF_KIT`), glazing (vertex colour).
+pub struct GateSheds {
+    pub frames: Frozen,
+    pub roofs: Frozen,
+    pub glass: Frozen,
+}
+
+pub fn ferry_gate_sheds(outline: &[[f64; 2]], spec: &serde_json::Value, deck_y: f64) -> Option<GateSheds> {
+    let n = |k: &str| crate::data::num(spec, k);
+    let (w, d) = (n("widthM"), n("depthM"));
+    let picked = crate::shore::ferry_shed_anchors(outline, spec);
+    if picked.is_empty() {
+        return None;
+    }
+    let mut frames = MeshArrays::new("ferry-gate-sheds:frames");
+    let mut roofs = MeshArrays::new("ferry-gate-sheds:roofs");
+    let mut glass = MeshArrays::new("ferry-gate-sheds:glass");
+    let white = [1.0; 3];
+    for (p, yaw) in &picked {
+        // the box's frame: local x (its width) turned by -yaw as `ferry_sheds` turns it.
+        let (c, s) = ((-yaw).cos(), (-yaw).sin());
+        let at = |lx: f64, lz: f64, y: f64| [p[0] + lx * c - lz * s, deck_y + y, p[1] + lx * s + lz * c];
+        let (hx, hz) = (w / 2.0, d / 2.0);
+        let face = |m: &mut MeshArrays, q: [[f64; 3]; 4], want: [f64; 3], col: Rgb| {
+            let e1 = [q[1][0] - q[0][0], q[1][1] - q[0][1], q[1][2] - q[0][2]];
+            let e2 = [q[3][0] - q[0][0], q[3][1] - q[0][1], q[3][2] - q[0][2]];
+            let nn = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+            if nn[0] * want[0] + nn[1] * want[1] + nn[2] * want[2] >= 0.0 { m.quad(q[0], q[1], q[2], q[3], col) } else { m.quad(q[3], q[2], q[1], q[0], col) }
+        };
+        let dir = |lx: f64, lz: f64| [lx * c - lz * s, 0.0, lx * s + lz * c];
+        // an axis box in the shed's frame
+        let lbox = |m: &mut MeshArrays, x: [f64; 2], z: [f64; 2], y: [f64; 2], col: Rgb| {
+            let v = |i: usize, j: usize, k: usize| at(x[i], z[k], y[j]);
+            face(m, [v(0, 0, 1), v(1, 0, 1), v(1, 1, 1), v(0, 1, 1)], dir(0.0, 1.0), col);
+            face(m, [v(0, 0, 0), v(1, 0, 0), v(1, 1, 0), v(0, 1, 0)], dir(0.0, -1.0), col);
+            face(m, [v(1, 0, 0), v(1, 0, 1), v(1, 1, 1), v(1, 1, 0)], dir(1.0, 0.0), col);
+            face(m, [v(0, 0, 0), v(0, 0, 1), v(0, 1, 1), v(0, 1, 0)], dir(-1.0, 0.0), col);
+            face(m, [v(0, 1, 0), v(1, 1, 0), v(1, 1, 1), v(0, 1, 1)], [0.0, 1.0, 0.0], col);
+            face(m, [v(0, 0, 0), v(1, 0, 0), v(1, 0, 1), v(0, 0, 1)], [0.0, -1.0, 0.0], scale_rgb(col, 0.6));
+        };
+        let cw = GATE_COLUMN_M / 2.0;
+        // the four walls: (start, end) in the frame, outward normal
+        let walls = [([-hx, hz], [hx, hz], (0.0, 1.0)), ([hx, -hz], [-hx, -hz], (0.0, -1.0)), ([hx, hz], [hx, -hz], (1.0, 0.0)), ([-hx, -hz], [-hx, hz], (-1.0, 0.0))];
+        for (a, b, (nx, nz)) in walls {
+            let len = (b[0] - a[0]).hypot(b[1] - a[1]);
+            let bays = (len / GATE_BAY_M).round().max(1.0) as usize;
+            let t = [(b[0] - a[0]) / len, (b[1] - a[1]) / len];
+            let pt = |s: f64, o: f64| [a[0] + t[0] * s + nx * o, a[1] + t[1] * s + nz * o];
+            // glazing set 0.15 m in behind the frame line, the panel band flush
+            let g0 = pt(0.0, -0.15);
+            let g1 = pt(len, -0.15);
+            face(&mut glass, [at(g0[0], g0[1], 0.0), at(g1[0], g1[1], 0.0), at(g1[0], g1[1], GATE_GLAZING_TOP_M), at(g0[0], g0[1], GATE_GLAZING_TOP_M)], dir(nx, nz), GATE_GLASS_LINEAR);
+            let (q0, q1) = (pt(0.0, 0.0), pt(len, 0.0));
+            face(&mut frames, [at(q0[0], q0[1], GATE_GLAZING_TOP_M), at(q1[0], q1[1], GATE_GLAZING_TOP_M), at(q1[0], q1[1], GATE_EAVE_M), at(q0[0], q0[1], GATE_EAVE_M)], dir(nx, nz), white);
+            // the sill kerb and the transom under the band
+            let (k0, k1) = (pt(0.0, -0.2), pt(len, 0.05));
+            lbox(&mut frames, [k0[0].min(k1[0]), k0[0].max(k1[0])], [k0[1].min(k1[1]), k0[1].max(k1[1])], [0.0, 0.25], white);
+            for k in 0..=bays {
+                let sc = len * k as f64 / bays as f64;
+                let cpt = pt(sc, 0.0);
+                lbox(&mut frames, [cpt[0] - cw, cpt[0] + cw], [cpt[1] - cw, cpt[1] + cw], [0.0, GATE_EAVE_M], white);
+                // two mullions a bay
+                if k < bays {
+                    for f in [1.0 / 3.0, 2.0 / 3.0] {
+                        let mp = pt(sc + len / bays as f64 * f, -0.12);
+                        lbox(&mut frames, [mp[0] - 0.05, mp[0] + 0.05], [mp[1] - 0.05, mp[1] + 0.05], [0.25, GATE_GLAZING_TOP_M], white);
+                    }
+                }
+            }
+        }
+        // the roof: a low gable along the shed's width, overhanging every side; its fascia and soffit
+        let (ox, oz) = (hx + GATE_OVERHANG_M, hz + GATE_OVERHANG_M);
+        let (e, r) = (GATE_EAVE_M + 0.15, GATE_EAVE_M + 0.15 + GATE_RIDGE_RISE_M);
+        for side in [1.0, -1.0] {
+            let q = [at(-ox, side * oz, e), at(ox, side * oz, e), at(ox, 0.0, r), at(-ox, 0.0, r)];
+            face(&mut roofs, q, [dir(0.0, side)[0] * 0.3, 1.0, dir(0.0, side)[2] * 0.3], white);
+            face(&mut frames, [at(-ox, side * oz, e - 0.35), at(ox, side * oz, e - 0.35), at(ox, side * oz, e), at(-ox, side * oz, e)], dir(0.0, side), white);
+            face(&mut frames, [at(-ox, side * oz, e - 0.35), at(ox, side * oz, e - 0.35), at(ox, 0.0, r - 0.35), at(-ox, 0.0, r - 0.35)], [0.0, -1.0, 0.0], scale_rgb(white, 0.55));
+        }
+        for side in [1.0, -1.0] {
+            // the gable ends, panelled
+            face(&mut frames, [at(side * hx, -hz, GATE_EAVE_M), at(side * hx, hz, GATE_EAVE_M), at(side * hx, 0.0, r - 0.1)].iter().chain([at(side * hx, 0.0, r - 0.1)].iter()).copied().collect::<Vec<_>>().try_into().unwrap(), dir(side, 0.0), white);
+            face(&mut frames, [at(side * ox, -oz, e - 0.35), at(side * ox, oz, e - 0.35), at(side * ox, oz, e), at(side * ox, -oz, e)], dir(side, 0.0), white);
+        }
+    }
+    Some(GateSheds { frames: frames.freeze(), roofs: roofs.freeze(), glass: glass.freeze() })
+}
+
+fn scale_rgb(c: Rgb, k: f64) -> Rgb {
+    [c[0] * k, c[1] * k, c[2] * k]
+}
+
 impl std::fmt::Debug for ShorePress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "ShorePress({} edges, {} piers)", self.edges.len(), self.piers.len())
@@ -236,6 +343,170 @@ pub fn load_pier_rings(repo_root: &std::path::Path) -> Result<Vec<Vec<[f64; 2]>>
         }
     }
     Ok(out)
+}
+
+/// The citywide map's `pierLines` (OSM `man_made=pier` mapped as lines:
+/// outlines drawn as open ways, a walkway as its two edges) on the Presidio
+/// shore (`PIER_LINES_BOX_SURVEYED`), closed into rings: a way whose ends
+/// meet within `PIER_LINE_CLOSE_M` is a ring; ways sharing an end are joined
+/// first. Torpedo Wharf (an L of asphalt on piles, OSM relation 8346136's
+/// outline) and the Coast Guard pier's walkway (its two edges) come out of
+/// it; the `piers` layer has neither. Rings inside an existing pier ring are
+/// dropped. World metres at the scaled ground plan.
+pub fn load_pier_line_rings(repo_root: &std::path::Path, existing: &[Vec<[f64; 2]>]) -> Result<Vec<Vec<[f64; 2]>>> {
+    use std::io::Read;
+    #[derive(serde::Deserialize)]
+    struct Meta {
+        quantum: f64,
+    }
+    #[derive(serde::Deserialize)]
+    struct Layer {
+        len: Vec<usize>,
+        xy: Vec<i64>,
+    }
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Map {
+        meta: Meta,
+        pier_lines: Layer,
+    }
+    let bytes = std::fs::read(repo_root.join("public/data/sf/sf-map-citywide.json.gz"))?;
+    let mut s = String::new();
+    flate2::read::GzDecoder::new(&bytes[..]).read_to_string(&mut s)?;
+    let m: Map = serde_json::from_str(&s)?;
+    let q = m.meta.quantum;
+    let b = PIER_LINES_BOX_SURVEYED;
+    let mut ways: Vec<Vec<[f64; 2]>> = Vec::new();
+    let mut k = 0usize;
+    for &n in &m.pier_lines.len {
+        if n == 0 || k + 2 * n > m.pier_lines.xy.len() {
+            break;
+        }
+        let (mut x, mut z) = (m.pier_lines.xy[k], m.pier_lines.xy[k + 1]);
+        let mut w = vec![[x as f64 * q, z as f64 * q]];
+        for v in 1..n {
+            x += m.pier_lines.xy[k + 2 * v];
+            z += m.pier_lines.xy[k + 2 * v + 1];
+            w.push([x as f64 * q, z as f64 * q]);
+        }
+        k += 2 * n;
+        if w.iter().all(|p| p[0] >= b[0] && p[0] <= b[2] && p[1] >= b[1] && p[1] <= b[3]) && w.len() >= 2 {
+            ways.push(w);
+        }
+    }
+    let rings = close_pier_lines(ways);
+    let gs = eo_data::groundscale::scale();
+    Ok(rings
+        .into_iter()
+        .map(|r| r.into_iter().map(|p| [p[0] * gs, p[1] * gs]).collect::<Vec<_>>())
+        .filter(|r| {
+            let c = ring_centroid(r);
+            !existing.iter().any(|e| e.len() >= 3 && point_in_ring(e, c[0], c[1]))
+        })
+        .collect())
+}
+
+/// Ways joined at shared ends (within `PIER_LINE_JOIN_M`) into chains, the
+/// chains whose ends meet within `PIER_LINE_CLOSE_M` as rings of at least
+/// `PIER_MIN_AREA_M2`.
+pub fn close_pier_lines(mut ways: Vec<Vec<[f64; 2]>>) -> Vec<Vec<[f64; 2]>> {
+    let d = |a: [f64; 2], b: [f64; 2]| (a[0] - b[0]).hypot(a[1] - b[1]);
+    let mut out = Vec::new();
+    while let Some(mut chain) = ways.pop() {
+        loop {
+            let (head, tail) = (chain[0], *chain.last().unwrap());
+            if d(head, tail) < PIER_LINE_CLOSE_M && chain.len() >= 3 {
+                break;
+            }
+            let Some((i, rev, front)) = ways.iter().enumerate().find_map(|(i, w)| {
+                let (a, b) = (w[0], *w.last().unwrap());
+                if d(tail, a) < PIER_LINE_JOIN_M {
+                    Some((i, false, false))
+                } else if d(tail, b) < PIER_LINE_JOIN_M {
+                    Some((i, true, false))
+                } else if d(head, b) < PIER_LINE_JOIN_M {
+                    Some((i, false, true))
+                } else if d(head, a) < PIER_LINE_JOIN_M {
+                    Some((i, true, true))
+                } else {
+                    None
+                }
+            }) else {
+                break;
+            };
+            let mut w = ways.swap_remove(i);
+            if rev {
+                w.reverse();
+            }
+            if front {
+                w.pop();
+                w.extend(chain);
+                chain = w;
+            } else {
+                chain.extend(w.into_iter().skip(1));
+            }
+        }
+        if chain.len() >= 3 && d(chain[0], *chain.last().unwrap()) < PIER_LINE_CLOSE_M {
+            if d(chain[0], *chain.last().unwrap()) < 1e-6 {
+                chain.pop();
+            }
+            if signed_area(&chain).abs() >= PIER_MIN_AREA_M2 {
+                out.push(chain);
+            }
+        }
+    }
+    out
+}
+
+/// The Presidio shore the pier lines are built on (surveyed metres in the
+/// city frame: west, north, east, south): Crissy Field's west end, from the
+/// Warming Hut's wharf to the Coast Guard station.
+pub const PIER_LINES_BOX_SURVEYED: [f64; 4] = [-4600.0, -3600.0, -4000.0, -3000.0];
+/// Pier-line ends this close are one point; a chain whose ends are this close is closed. Metres.
+pub const PIER_LINE_JOIN_M: f64 = 1.0;
+pub const PIER_LINE_CLOSE_M: f64 = 8.0;
+/// The quay railing's paint, sRGB: the grey steel of the guard rail on the
+/// quay wall (set.rs, the Ferry Building corridor's railing, the value it
+/// has had since its port) and of the pier-line decks' guard.
+pub const RAIL_PAINT_SRGB: u32 = 0x6e7478;
+
+/// The guard on a pier-line deck's water edges: 42 in (1.067 m) over the deck,
+/// California Building Code section 1015.3 (guards); people are drawn at real
+/// size (`groundscale::people`, 1.0), so this is not scaled. Posts at 8 ft
+/// (2.44 m, INFERRED), a 4 in (0.1 m) post and rail section (INFERRED).
+pub const PIER_GUARD_M: f64 = 1.067;
+pub const PIER_GUARD_POST_PITCH_M: f64 = 2.44;
+pub const PIER_GUARD_SECTION_M: f64 = 0.1;
+
+/// The guard along a pier deck's outline edges over the water (`water_at`):
+/// posts, a top rail and a mid rail, in `colour`.
+pub fn pier_guard(m: &mut MeshArrays, p: &Pier, water_at: &dyn Fn(f64, f64) -> bool, colour: Rgb) {
+    let inward = if signed_area(&p.ring) > 0.0 { 1.0 } else { -1.0 };
+    for i in 0..p.ring.len() {
+        let (a, b) = (p.ring[i], p.ring[(i + 1) % p.ring.len()]);
+        let l = (b[0] - a[0]).hypot(b[1] - a[1]);
+        if l < 1.0 {
+            continue;
+        }
+        let n = [-(b[1] - a[1]) / l * inward, (b[0] - a[0]) / l * inward];
+        let (mx, mz) = ((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0);
+        let n = if point_in_ring(&p.ring, mx + n[0], mz + n[1]) { n } else { [-n[0], -n[1]] };
+        if !water_at(mx - n[0] * 2.0, mz - n[1] * 2.0) {
+            continue;
+        }
+        let inset = PIER_GUARD_SECTION_M;
+        let (a, b) = ([a[0] + n[0] * inset, a[1] + n[1] * inset], [b[0] + n[0] * inset, b[1] + n[1] * inset]);
+        let y = p.deck_y;
+        let posts = (l / PIER_GUARD_POST_PITCH_M).ceil().max(1.0) as usize;
+        for k in 0..=posts {
+            let t = k as f64 / posts as f64;
+            let q = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+            m.beam([q[0], y, q[1]], [q[0], y + PIER_GUARD_M, q[1]], PIER_GUARD_SECTION_M, PIER_GUARD_SECTION_M, colour);
+        }
+        for h in [PIER_GUARD_M, PIER_GUARD_M * 0.5] {
+            m.beam([a[0], y + h, a[1]], [b[0], y + h, b[1]], PIER_GUARD_SECTION_M, PIER_GUARD_SECTION_M * 0.6, colour);
+        }
+    }
 }
 
 /// The piers the city draws: every ring of `PIER_MIN_AREA_M2` or more within
@@ -521,6 +792,23 @@ pub fn build_meshes(
     apron: Rgb,
     deck: Rgb,
 ) -> WaterfrontMeshes {
+    build_meshes_with(edges, piers, oracle, crest_at, sea, coping_land, concrete, dark, apron, &|_| deck)
+}
+
+/// `build_meshes` with each pier's deck tone given by its index (`deck_of`).
+#[allow(clippy::too_many_arguments)]
+pub fn build_meshes_with(
+    edges: &[ShoreEdge],
+    piers: &[Pier],
+    oracle: &eo_water::shoreline::Oracle,
+    crest_at: &dyn Fn(f64, f64) -> f64,
+    sea: f64,
+    coping_land: f64,
+    concrete: Rgb,
+    dark: Rgb,
+    apron: Rgb,
+    deck_of: &dyn Fn(usize) -> Rgb,
+) -> WaterfrontMeshes {
     let mut paving = MeshArrays::new("waterfront:paving");
     let mut conc = MeshArrays::new("waterfront:concrete");
     let mut under = MeshArrays::new("waterfront:under-deck");
@@ -533,7 +821,7 @@ pub fn build_meshes(
         let at = |p: [f64; 2], o: f64, y: f64| [p[0] + n[0] * o, y, p[1] + n[1] * o];
         let (ya, yb, inner, tone) = match e.pier {
             None => (crest_at(a[0], a[1]), crest_at(b[0], b[1]), coping_land, apron),
-            Some(i) => (piers[i].deck_y, piers[i].deck_y, 0.0, deck),
+            Some(i) => (piers[i].deck_y, piers[i].deck_y, 0.0, deck_of(i)),
         };
         // The strip: from the coping (or the waterline) to CAP_W_M inland, facing up.
         let w = CAP_W_M + coping_land;
@@ -573,7 +861,8 @@ pub fn build_meshes(
     }
     // Pier slabs over their outlines, and fascias on outline edges over open water.
     let mut decks = 0usize;
-    for p in piers {
+    for (pi, p) in piers.iter().enumerate() {
+        let deck = deck_of(pi);
         let mut ear = earcut::Earcut::<f64>::new();
         let mut tri: Vec<u32> = Vec::new();
         ear.earcut(p.ring.iter().copied(), &[] as &[u32], &mut tri);
@@ -641,5 +930,193 @@ fn pier_fascia(conc: &mut MeshArrays, under: &mut MeshArrays, a: [f64; 2], b: [f
         let yaw = u[1].atan2(u[0]);
         conc.box_(c[0], c[1], foot, soffit, h, h, yaw, concrete, crate::geometry::Faces { top: false, bottom: false });
         *piles += 1;
+    }
+}
+
+/// The guard rail along the Embarcadero's quay wall: the promenade's edge
+/// over the bay within `RAILING_CORRIDOR_M` of the Ferry Building, on the
+/// wall's coping. A picket guard of painted steel (`--no-quay-railing`: none).
+///
+/// * Height: 42 in (1067 mm) to the top of the rail, the guard height of the
+///   California Building Code 2022 section 1015.3.
+/// * Openings: no 4 in (102 mm) sphere passes (CBC 1015.4): pickets of
+///   `RAILING_PICKET_M` square at `RAILING_PICKET_PITCH_M` leave 99 mm.
+/// * INFERRED (no survey of the rail): the post pitch, the sections, the
+///   bottom rail's height, its place on the coping.
+pub const RAILING_HEIGHT_M: f64 = 1.067;
+pub const RAILING_PICKET_M: f64 = 0.016;
+pub const RAILING_PICKET_PITCH_M: f64 = 0.115;
+pub const RAILING_POST_PITCH_M: f64 = 1.83;
+pub const RAILING_POST_M: f64 = 0.06;
+pub const RAILING_TOP_RAIL_M: [f64; 2] = [0.064, 0.05];
+pub const RAILING_BOTTOM_RAIL_Y_M: f64 = 0.1;
+/// The rail's line, landward of the wall's sea face (half the coping), m.
+pub const RAILING_SET_BACK_M: f64 = 0.21;
+/// The corridor (surveyed metres from the Ferry Building's tower, before the plan scale).
+pub const RAILING_CORRIDOR_M: f64 = 900.0;
+/// The kit finish the rail is drawn in (kit-material-specs.json: a mid-grey painted steel).
+pub const RAILING_KIT: &str = "painted-steel-mid";
+
+/// The corridor quay's lift over the quay's own top (`crest_ground`) with the
+/// guard's second pass: just over the drawn terrain carpet (eo-street's
+/// `openGroundLiftM`, 0.11 m, plus a 2 cm margin) so the apron is the walk
+/// and no carpet shows through it. The JS crest (its road lift, 0.45 m, and
+/// 0.04 m over it) stood the apron 0.5 m over the promenade's carpet beside
+/// it: a raised shelf with a trench behind its kerb skirt, and the guard read
+/// half a metre too tall from the walk. Blended back to the JS crest over
+/// `QUAY_LIFT_BLEND_M` at the corridor's edge.
+pub const QUAY_APRON_LIFT_M: f64 = 0.13;
+pub const QUAY_LIFT_BLEND_M: f64 = 60.0;
+
+/// The quay's lift at `d` from the corridor's centre (corridor radius `reach`; `js_lift` outside it).
+pub fn quay_lift(d: f64, reach: f64, js_lift: f64) -> f64 {
+    let t = ((d - (reach - QUAY_LIFT_BLEND_M)) / QUAY_LIFT_BLEND_M).clamp(0.0, 1.0);
+    let t = t * t * (3.0 - 2.0 * t);
+    QUAY_APRON_LIFT_M + (js_lift - QUAY_APRON_LIFT_M) * t
+}
+
+/// The guard's second pass (`features::guard_detail`), INFERRED (no survey of
+/// the rail): a kick plate along its foot on the coping (its bottom rail
+/// seated on it), a base plate under each post, the posts' feet darkened
+/// where the coping's grime and the sky's occlusion meet them, and the
+/// pickets as wire members (eo-render's wire pass keeps a picket where the
+/// view ray passes within its radius or half a few pixels of its axis, faded
+/// by the share it truly covers: far pickets fade to their coverage instead
+/// of aliasing into moire), each drawn inside `PICKET_ENVELOPE_M` of its axis.
+pub const KICK_PLATE_M: [f64; 2] = [0.1, 0.01];
+pub const BASE_PLATE_M: [f64; 2] = [0.15, 0.015];
+pub const POST_FOOT_TONE: f64 = 0.62;
+pub const POST_FOOT_M: f64 = 0.3;
+pub const PICKET_ENVELOPE_M: f64 = 0.05;
+
+/// The guard: its rails, posts and (first pass) pickets, and with the second
+/// pass its pickets as a wire record (else empty), and the pieces built.
+pub struct Railing {
+    pub solid: Frozen,
+    pub pickets: Frozen,
+    pub pieces: usize,
+}
+
+/// The guard on every walled (non-pier) shore edge piece whose middle is
+/// within `reach` of `centre` (drawn plan), standing on `crest_at`.
+pub fn quay_railing(edges: &[ShoreEdge], crest_at: &dyn Fn(f64, f64) -> f64, centre: [f64; 2], reach: f64, colour: Rgb) -> (Frozen, usize) {
+    let r = quay_railing_with(edges, crest_at, centre, reach, colour, false);
+    (r.solid, r.pieces)
+}
+
+/// `quay_railing`, with the second pass when `detail`.
+pub fn quay_railing_with(edges: &[ShoreEdge], crest_at: &dyn Fn(f64, f64) -> f64, centre: [f64; 2], reach: f64, colour: Rgb, detail: bool) -> Railing {
+    let mut m = MeshArrays::new("waterfront:railing");
+    let mut wires = MeshArrays::wire("waterfront:railing:pickets", PICKET_ENVELOPE_M);
+    let mut pieces = 0usize;
+    let face = |m: &mut MeshArrays, q: [[f64; 3]; 4], want: [f64; 3]| {
+        let e1 = [q[1][0] - q[0][0], q[1][1] - q[0][1], q[1][2] - q[0][2]];
+        let e2 = [q[3][0] - q[0][0], q[3][1] - q[0][1], q[3][2] - q[0][2]];
+        let n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+        if n[0] * want[0] + n[1] * want[1] + n[2] * want[2] >= 0.0 { m.quad(q[0], q[1], q[2], q[3], colour) } else { m.quad(q[3], q[2], q[1], q[0], colour) }
+    };
+    // A bar from a to b (plan points, heights ya..yb at its foot) of section w x h, its sides facing out.
+    let bar = |m: &mut MeshArrays, a: [f64; 2], b: [f64; 2], ya: f64, yb: f64, w: f64, h: f64, ends: bool| {
+        let l = (b[0] - a[0]).hypot(b[1] - a[1]);
+        if l < 1e-6 {
+            return;
+        }
+        let (t, n) = ([(b[0] - a[0]) / l, (b[1] - a[1]) / l], [-(b[1] - a[1]) / l, (b[0] - a[0]) / l]);
+        let p = |s: [f64; 2], y: f64, o: f64, k: f64| [s[0] + n[0] * o, y + k, s[1] + n[1] * o];
+        let (o0, o1) = (-w / 2.0, w / 2.0);
+        face(m, [p(a, ya, o1, 0.0), p(b, yb, o1, 0.0), p(b, yb, o1, h), p(a, ya, o1, h)], [n[0], 0.0, n[1]]);
+        face(m, [p(a, ya, o0, 0.0), p(b, yb, o0, 0.0), p(b, yb, o0, h), p(a, ya, o0, h)], [-n[0], 0.0, -n[1]]);
+        face(m, [p(a, ya, o0, h), p(b, yb, o0, h), p(b, yb, o1, h), p(a, ya, o1, h)], [0.0, 1.0, 0.0]);
+        face(m, [p(a, ya, o0, 0.0), p(b, yb, o0, 0.0), p(b, yb, o1, 0.0), p(a, ya, o1, 0.0)], [0.0, -1.0, 0.0]);
+        if ends {
+            face(m, [p(a, ya, o0, 0.0), p(a, ya, o1, 0.0), p(a, ya, o1, h), p(a, ya, o0, h)], [-t[0], 0.0, -t[1]]);
+            face(m, [p(b, yb, o0, 0.0), p(b, yb, o1, 0.0), p(b, yb, o1, h), p(b, yb, o0, h)], [t[0], 0.0, t[1]]);
+        }
+    };
+    // A vertical member of square section s at plan point c from y0 to y1, its four sides.
+    let post = |m: &mut MeshArrays, c: [f64; 2], u: [f64; 2], y0: f64, y1: f64, s: f64| {
+        let v = [-u[1], u[0]];
+        let h = s / 2.0;
+        let corner = |a: f64, b: f64, y: f64| [c[0] + u[0] * a + v[0] * b, y, c[1] + u[1] * a + v[1] * b];
+        for (da, db, want) in [(1.0, 0.0, [u[0], 0.0, u[1]]), (-1.0, 0.0, [-u[0], 0.0, -u[1]]), (0.0, 1.0, [v[0], 0.0, v[1]]), (0.0, -1.0, [-v[0], 0.0, -v[1]])] {
+            let (a0, b0, a1, b1) = if da != 0.0 { (da * h, -h, da * h, h) } else { (-h, db * h, h, db * h) };
+            face(m, [corner(a0, b0, y0), corner(a1, b1, y0), corner(a1, b1, y1), corner(a0, b0, y1)], want);
+        }
+    };
+    for e in edges.iter().filter(|e| e.pier.is_none()) {
+        let mid = [(e.a[0] + e.b[0]) / 2.0, (e.a[1] + e.b[1]) / 2.0];
+        if (mid[0] - centre[0]).hypot(mid[1] - centre[1]) > reach {
+            continue;
+        }
+        let on = |p: [f64; 2]| [p[0] + e.land[0] * RAILING_SET_BACK_M, p[1] + e.land[1] * RAILING_SET_BACK_M];
+        let (a, b) = (on(e.a), on(e.b));
+        let l = (b[0] - a[0]).hypot(b[1] - a[1]);
+        if l < 0.2 {
+            continue;
+        }
+        pieces += 1;
+        let u = [(b[0] - a[0]) / l, (b[1] - a[1]) / l];
+        let (ya, yb) = (crest_at(e.a[0], e.a[1]), crest_at(e.b[0], e.b[1]));
+        let at = |t: f64| ([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], ya + (yb - ya) * t);
+        let (tw, th) = (RAILING_TOP_RAIL_M[0], RAILING_TOP_RAIL_M[1]);
+        let from = m.positions.len() / 3;
+        bar(&mut m, a, b, ya + RAILING_HEIGHT_M - th, yb + RAILING_HEIGHT_M - th, tw, th, false);
+        bar(&mut m, a, b, ya + RAILING_BOTTOM_RAIL_Y_M, yb + RAILING_BOTTOM_RAIL_Y_M, 0.04, 0.04, false);
+        if detail {
+            // the kick plate seated on the coping, the bottom rail on it
+            bar(&mut m, a, b, ya, yb, KICK_PLATE_M[1], RAILING_BOTTOM_RAIL_Y_M, true);
+        }
+        let posts = (l / RAILING_POST_PITCH_M).ceil().max(1.0) as usize;
+        for k in 0..posts {
+            let (c, y) = at(k as f64 / posts as f64);
+            post(&mut m, c, u, y - 0.05, y + RAILING_HEIGHT_M - th, RAILING_POST_M);
+            if detail {
+                let c1 = [c[0] + u[0] * BASE_PLATE_M[0] / 2.0, c[1] + u[1] * BASE_PLATE_M[0] / 2.0];
+                let c0 = [c[0] - u[0] * BASE_PLATE_M[0] / 2.0, c[1] - u[1] * BASE_PLATE_M[0] / 2.0];
+                bar(&mut m, c0, c1, y, y, BASE_PLATE_M[0], BASE_PLATE_M[1], true);
+            }
+        }
+        if detail {
+            // the feet darker: the coping's grime and the sky the plates and posts lose there
+            let base = ya.min(yb);
+            for v in from..m.positions.len() / 3 {
+                let t = ((m.positions[3 * v + 1] - base) / POST_FOOT_M).clamp(0.0, 1.0);
+                let k = POST_FOOT_TONE + (1.0 - POST_FOOT_TONE) * t * t * (3.0 - 2.0 * t);
+                for ch in 0..3 {
+                    m.colors[3 * v + ch] *= k;
+                }
+            }
+        }
+        let pickets = (l / RAILING_PICKET_PITCH_M).floor() as usize;
+        for k in 0..pickets {
+            let (c, y) = at((k as f64 + 0.5) / pickets as f64);
+            if detail {
+                wires.wire_segment([c[0], y + RAILING_BOTTOM_RAIL_Y_M + 0.04, c[1]], [c[0], y + RAILING_HEIGHT_M - th, c[1]], RAILING_PICKET_M, colour);
+            } else {
+                post(&mut m, c, u, y + RAILING_BOTTOM_RAIL_Y_M + 0.04, y + RAILING_HEIGHT_M - th, RAILING_PICKET_M);
+            }
+        }
+    }
+    Railing { solid: m.freeze(), pickets: wires.freeze(), pieces }
+}
+
+#[cfg(test)]
+mod pier_line_tests {
+    use super::*;
+
+    #[test]
+    fn pier_lines_close_into_rings() {
+        // an outline drawn as one open way, and a walkway as its two edges sharing their ends
+        let outline = vec![[0.0, 0.0], [0.0, -100.0], [60.0, -100.0], [60.0, -90.0], [6.0, -90.0], [6.0, -2.0]];
+        let left = vec![[100.0, 0.0], [100.0, -60.0], [103.0, -60.0]];
+        let right = vec![[103.0, -60.0], [103.0, 0.0], [100.5, 0.0]];
+        let rings = close_pier_lines(vec![outline, left, right]);
+        assert_eq!(rings.len(), 2, "{rings:?}");
+        let mut areas: Vec<f64> = rings.iter().map(|r| signed_area(r).abs()).collect();
+        areas.sort_by(|a, b| a.total_cmp(b));
+        assert!((areas[0] - 180.0).abs() < 20.0, "{areas:?}");
+        // a short open stub is no pier
+        assert!(close_pier_lines(vec![vec![[0.0, 0.0], [3.0, 0.0]]]).is_empty());
+        assert!((PIER_GUARD_M - 42.0 * 0.0254).abs() < 1e-3);
     }
 }

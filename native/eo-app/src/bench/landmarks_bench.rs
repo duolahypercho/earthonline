@@ -164,7 +164,87 @@ pub fn segments(world: &World, frames: usize, aspect: f32, far: f32) -> Vec<Segm
         }
         None => eprintln!("landmarks: Union Square not found; the park path left out"),
     }
+    for w in &GROUND_WALKS {
+        if named_on_command_line(w.name) {
+            out.push(ground_walk(world, w, frames, aspect, far));
+        }
+    }
     out
+}
+
+/// A short walk over open ground at a Golden Gate photo spot (the vegetation,
+/// ground, rock and water costs where they are drawn): `WALK_GROUND_M` from
+/// `from` (game x, z; the eye on the drawn ground) along `dir`, looking along
+/// it with a +-20 degree sweep. Not in the default set: a walk runs only when
+/// `--segments` names it.
+struct GroundWalk {
+    name: &'static str,
+    what: &'static str,
+    from: [f32; 2],
+    dir: [f32; 2],
+}
+
+/// Metres walked on a ground walk.
+const WALK_GROUND_M: f32 = 60.0;
+
+/// A heading (degrees, 0 north (-z), 90 east (+x)) as a ground direction (x, z).
+const fn heading(sin: f32, cos: f32) -> [f32; 2] {
+    [sin, -cos]
+}
+
+/// The four walks at the photo views' eyes (`views-r3.json`): the headland
+/// along its camera's forward (0.601, 0, 0.795), the others along their
+/// cameras' headings (sin and cos of 343, 9 and 314 degrees).
+const GROUND_WALKS: [GroundWalk; 4] = [
+    GroundWalk { name: "headland", what: "Battery Spencer's slab on the Marin headland, toward the bridge", from: [-6836.85, -6849.47], dir: [0.601, 0.795] },
+    GroundWalk { name: "bluff", what: "the bluff east of the south anchorage, heading 343", from: [-6093.05, -4174.17], dir: heading(-0.292_371_7, 0.956_304_8) },
+    GroundWalk { name: "baker", what: "the north end of Baker Beach, heading 9", from: [-6752.5, -3033.87], dir: heading(0.156_434_5, 0.987_688_3) },
+    GroundWalk { name: "crissy_beach", what: "the Crissy Field beach, heading 314", from: [-5040.51, -3745.69], dir: heading(-0.719_339_8, 0.694_658_4) },
+];
+
+/// Whether `--segments` lists `name` (the ground walks are opt-in).
+fn named_on_command_line(name: &str) -> bool {
+    let a: Vec<String> = std::env::args().collect();
+    a.windows(2).any(|w| w[0] == "--segments" && w[1].split(',').any(|s| s.trim() == name))
+}
+
+fn ground_walk(world: &World, w: &GroundWalk, frames: usize, aspect: f32, far: f32) -> Segment {
+    let dir = Vec3::new(w.dir[0], 0.0, w.dir[1]).normalize();
+    let from = Vec3::new(w.from[0], 0.0, w.from[1]);
+    let eyes: Vec<Vec3> = (0..=1024)
+        .map(|i| {
+            let p = from + dir * WALK_GROUND_M * i as f32 / 1024.0;
+            Vec3::new(p.x, ground(world, p.x, p.z).max(sea()) + EYE_HEIGHT_M, p.z)
+        })
+        .collect();
+    let (a, b) = (eyes[0], eyes[1024]);
+    let target = from + dir * 2000.0;
+    walk_segment(
+        w.name,
+        format!("eye {EYE_HEIGHT_M} m above the drawn ground at {}, {WALK_GROUND_M} m from ({:.1}, {:.1}, {:.1}) to ({:.1}, {:.1}, {:.1}), looking along the walk with a +-20 degree sweep", w.what, a.x, a.y, a.z, b.x, b.y, b.z),
+        eyes,
+        target,
+        20.0,
+        frames,
+        aspect,
+        far,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ground_walk_headings_are_unit_and_point_where_named() {
+        let yaw = |d: [f32; 2]| d[0].atan2(-d[1]).to_degrees().rem_euclid(360.0);
+        for (w, deg) in GROUND_WALKS.iter().zip([142.9f32, 343.0, 9.0, 314.0]) {
+            // the headland's is its camera forward's level part (0.997 long; the walk normalizes it).
+            let n = (w.dir[0] * w.dir[0] + w.dir[1] * w.dir[1]).sqrt();
+            assert!((n - 1.0).abs() < 5e-3, "{}: |dir| {n}", w.name);
+            assert!((yaw(w.dir) - deg).abs() < 0.1, "{}: heading {} not {deg}", w.name, yaw(w.dir));
+        }
+    }
 }
 
 /// A green's area centroid and its south-west-most corner (sf-lots-parks), by the JS carpet's id.

@@ -663,6 +663,34 @@ fn ft_facade(s: ptr<function, Surface>, m: ptr<function, Material>, world: vec3<
     (*s).n = nrm;
 }
 
+// The shading normal of a two-sided surface (`GG3_FACET_FIX`; terrain-surface
+// item 1). Round 2 flipped the interpolated normal whenever it faced away from
+// the eye; on a smooth-shaded steep facet seen at a grazing angle the
+// interpolated normal can face away while the triangle itself faces the eye,
+// and the flip lit that part of the triangle as its back: the dark wedges on
+// the Baker cliff. Here the flip follows the triangle (the test
+// @builtin(front_facing) makes, taken from the triangle's own plane, `face`
+// from the eye-relative position's screen derivatives: it holds for either
+// winding, and footprint rings come in both), and a normal that still faces
+// away is bent toward the eye's horizon, to just above it (GG3_GRAZE: the
+// least n.v kept, 0.05, INFERRED: about 3 degrees, enough that the light's
+// N.V terms stay finite).
+const GG3_GRAZE: f32 = 0.05;
+
+fn gg3_facing_normal(n_in: vec3<f32>, v: vec3<f32>, face: vec3<f32>, rel: vec3<f32>) -> vec3<f32> {
+    var n = n_in;
+    // the triangle's normal on the eye's side (rel = point - eye)
+    let f = select(face, -face, dot(face, rel) > 0.0);
+    if (dot(n, f) < 0.0) {
+        n = -n; // the triangle is seen from behind its vertex normals
+    }
+    let nv = dot(n, v);
+    if (nv < GG3_GRAZE) {
+        n = normalize(n + v * (GG3_GRAZE - nv));
+    }
+    return n;
+}
+
 fn shade(in: VOut) -> vec4<f32> {
     var m = materials[in.material];
     let ft_du = vec2<f32>(dpdx(in.ft.x), dpdy(in.ft.x));
@@ -676,12 +704,15 @@ fn shade(in: VOut) -> vec4<f32> {
     cc0_wall_hit = false; // cc0
     cc0_reset_post(); // cc0
     let v = normalize(frame.cam_pos.xyz - in.world);
+    gg3_sand_slope = select(0.0, in.aux.y * GG3_SAND_SLOPE_FULL, in.aux.y > 0.004);
     var n = face;
     if (dot(in.normal, in.normal) > 0.25) {
         n = normalize(in.normal);
     }
-    // Two-sided: shade the side the camera sees.
-    if (dot(n, v) < 0.0) {
+    if (GG3_FACET_FIX) {
+        n = gg3_facing_normal(n, v, cross(cc0_drx, cc0_dry), in.rel);
+    } else if (dot(n, v) < 0.0) {
+        // Two-sided: shade the side the camera sees.
         n = -n;
     }
 
@@ -724,7 +755,11 @@ fn shade(in: VOut) -> vec4<f32> {
     // the terrain's ground scans around its tone (not the beach sand: below), before the wet margin.
     let cc0_terrain = (m.flags & F_VERTEX_COLOUR) != 0u && (objects[in.object].kind & 255u) == 1u;
     let cc0_sand = cc0_terrain && (m.flags & LM_F_WET_GROUND) != 0u && in.aux.x < 253.5;
-    if (cc0_terrain && !cc0_sand) {
+    // the terrain surface pass's ground (its vertices' alpha GG3_MATERIAL_ALPHA): cc0.wgsl gg3_terrain
+    let gg3_ground = GG3_MATERIALS && cc0_terrain && abs(in.aux.x - GG3_MATERIAL_ALPHA) < 0.5;
+    if (gg3_ground) {
+        gg3_terrain(&s, in.world, n, dpx, dpy, in.aux.y);
+    } else if (cc0_terrain && !cc0_sand) {
         cc0_ground(&s, in.world, n, dpx, dpy);
     }
     if (((m.flags >> LM_SURFACE_SHIFT) & 7u) != 0u) {

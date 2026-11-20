@@ -3,7 +3,7 @@
 // Bruneton and Neyret 2008): a spherical planet (R 6360 km, top 6460 km) with
 // Rayleigh scattering (5.802, 13.558, 33.1) e-3 / km, scale height 8 km; Mie
 // (aerosol) scattering 3.996e-3 and absorption 4.4e-3 / km, scale height 1.2
-// km, g 0.8, here x `skyu.atmo2.z` for the coastal marine haze; ozone
+// km, g 0.8 (the medium the tables use is the uniform's, `at_medium_of`); ozone
 // absorption (0.650, 1.881, 0.085) e-3 / km in a 30 km tent about 25 km. Three
 // tables, all compute: the transmittance to the top of the atmosphere (256 x 64,
 // the Bruneton (r, mu) mapping), the multiple-scattering transfer (32 x 32, the
@@ -34,6 +34,40 @@ const AT_MIE_A: f32 = 4.40e-3;
 const AT_OZONE: vec3<f32> = vec3<f32>(1.881e-3, 1.881e-3, 0.085e-3);
 const AT_MIE_ANG: vec3<f32> = vec3<f32>(0.76, 1.0, 1.34);
 const AT_PI: f32 = 3.14159265;
+
+struct AtMedium {
+    scat: vec3<f32>,
+    ext: vec3<f32>,
+    ray: vec3<f32>,
+    mie: vec3<f32>,
+};
+
+/// the medium at a height (km) for an aerosol `m` (x scattering, y absorption per km
+/// at the ground, 550 nm; z scale height km) and spectral factor `sp.rgb`, Rayleigh
+/// scattering `ray.rgb` at sea level (scale height `ray.w` km) and ozone's peak
+/// absorption `oz.rgb` (sky.rs `atmo_m`, `atmo_s`, `atmo_r`, `atmo_o`: eo-look
+/// `atmosphere`; the constants above with `--no-phys-sky`).
+fn at_medium_of(h: f32, m: vec4<f32>, sp: vec4<f32>, ray: vec4<f32>, oz: vec4<f32>) -> AtMedium {
+    let hh = max(h, 0.0);
+    let dr = exp(-hh / max(ray.w, 0.5));
+    let dm = exp(-hh / max(m.z, 0.05));
+    let doz = max(0.0, 1.0 - abs(hh - 25.0) / 15.0);
+    var o: AtMedium;
+    o.ray = ray.rgb * dr;
+    o.mie = m.x * dm * sp.rgb;
+    o.scat = o.ray + o.mie;
+    o.ext = o.ray + (m.x + m.y) * dm * sp.rgb + oz.rgb * doz;
+    return o;
+}
+
+/// the three-channel model's chroma correction (eo-look `atmosphere::RGB_CHROMA`): the
+/// colour `k` of the way from its luminance, by weight `w` (the physical daylight's).
+const AT_RGB_CHROMA: f32 = 0.8;
+
+fn at_spectral(c: vec3<f32>, w: f32) -> vec3<f32> {
+    let l = dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
+    return mix(c, vec3<f32>(l) + (c - vec3<f32>(l)) * AT_RGB_CHROMA, w);
+}
 
 /// Distance along a ray from radius r (cosine mu to the zenith) to a sphere of radius rs; negative if missed.
 fn at_sphere(r: f32, mu: f32, rs: f32) -> f32 {

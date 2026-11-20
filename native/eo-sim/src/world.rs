@@ -31,7 +31,8 @@ use std::time::Instant;
 
 use crate::consts::FIXED_STEP_S;
 use crate::network::Network;
-use crate::output::AgentBuffer;
+use crate::corridor::Corridors;
+use crate::output::{AgentBuffer, CorridorInstance};
 use crate::region::{Focus, Region};
 
 #[derive(Clone, Copy)]
@@ -183,14 +184,31 @@ pub struct World {
     accumulator: f64,
     pool: Option<WorkerPool>,
     pub last: StepTiming,
+    /// The corridor layer (the long roads' through traffic), stepped on this
+    /// clock by `advance` after the regions, with the first region's focus
+    /// for its hand-over. It keeps every posted second (the regions drop what
+    /// `MAX_STEPS_PER_ADVANCE` cannot catch up), so its state is a function of
+    /// the time posted and not of how the posts were batched: a still replays.
+    pub corridors: Option<Corridors>,
+    /// The corridor layer's fixed steps due, in thousandths of a step (whole numbers, so a sum of posts never rounds differently).
+    corridor_due: i64,
+    /// Fixed steps the corridor layer has run.
+    pub corridor_steps: u64,
 }
+
+/// The most fixed steps the corridor layer catches up in one `advance` (10 s;
+/// a longer stall drops the rest). INFERRED: well past a shot's warm-up
+/// (120 frames) and a loading hitch, and about 60 ms of the simulation
+/// thread at the layer's cost of about 0.1 ms a step.
+pub const CORRIDOR_CATCH_UP_STEPS: i64 = 600;
+const CORRIDOR_STEP_PARTS: i64 = 1000;
 
 /// The most fixed steps one `advance` runs (the JS clock's catch-up cap).
 pub const MAX_STEPS_PER_ADVANCE: u32 = 8;
 
 impl World {
     pub fn new(net: Network) -> Self {
-        World { net, regions: vec![], time: 0.0, steps: 0, accumulator: 0.0, pool: None, last: StepTiming::default() }
+        World { net, regions: vec![], time: 0.0, steps: 0, accumulator: 0.0, pool: None, last: StepTiming::default(), corridors: None, corridor_due: 0, corridor_steps: 0 }
     }
 
     /// Use `helpers` worker threads besides the stepping thread (0: step inline).
@@ -202,7 +220,7 @@ impl World {
         1 + self.pool.as_ref().map_or(0, |p| p.threads())
     }
 
-    /// One fixed step of every region.
+    /// One fixed step of every region (the corridor layer steps in `advance`, on its own count).
     pub fn step(&mut self) {
         let dt = FIXED_STEP_S;
         self.time += dt;
@@ -220,7 +238,32 @@ impl World {
         self.last = StepTiming { wall_ns: t0.elapsed().as_nanos() as u64, cpu_ns: cpu };
     }
 
-    /// Run the fixed steps a frame of `frame_dt` seconds makes due. Returns how many ran.
+    /// The corridor layer's due fixed steps (`frame_dt` more posted). Returns how many ran.
+    fn advance_corridors(&mut self, frame_dt: f64) -> u32 {
+        let Some(c) = &mut self.corridors else { return 0 };
+        self.corridor_due += (frame_dt.max(0.0) / FIXED_STEP_S * CORRIDOR_STEP_PARTS as f64).round() as i64;
+        let focus = self.regions.first().map(|r| [r.focus.x, r.focus.z]);
+        let t1 = Instant::now();
+        let mut n = 0;
+        while self.corridor_due >= CORRIDOR_STEP_PARTS && n < CORRIDOR_CATCH_UP_STEPS {
+            self.corridor_due -= CORRIDOR_STEP_PARTS;
+            c.step(FIXED_STEP_S, focus);
+            n += 1;
+        }
+        if n == CORRIDOR_CATCH_UP_STEPS {
+            self.corridor_due = self.corridor_due.min(CORRIDOR_STEP_PARTS - 1);
+        }
+        self.corridor_steps += n as u64;
+        if n > 0 {
+            let ns = t1.elapsed().as_nanos() as u64;
+            self.last.cpu_ns += ns;
+            self.last.wall_ns += ns;
+        }
+        n as u32
+    }
+
+    /// Run the fixed steps a frame of `frame_dt` seconds makes due. Returns how
+    /// many ran (the regions' and the corridor layer's).
     pub fn advance(&mut self, frame_dt: f64) -> u32 {
         self.accumulator += frame_dt.max(0.0);
         let mut n = 0;
@@ -232,7 +275,7 @@ impl World {
         if n == MAX_STEPS_PER_ADVANCE {
             self.accumulator = self.accumulator.min(FIXED_STEP_S);
         }
-        n
+        n + self.advance_corridors(frame_dt)
     }
 
     pub fn set_focus(&mut self, region: usize, focus: Focus) {
@@ -250,6 +293,11 @@ pub struct Frame {
     pub time: f64,
     pub steps: u64,
     pub regions: Vec<AgentBuffer>,
+    /// The corridor layer's vehicles and walkers (empty without one).
+    pub corridor: Vec<CorridorInstance>,
+    /// The corridor layer's fixed steps and its own clock, s.
+    pub corridor_steps: u64,
+    pub corridor_time: f64,
     /// The last fixed step's timing on the simulation thread.
     pub timing: StepTiming,
 }
@@ -268,6 +316,13 @@ impl Frame {
             dst.vehicles.extend_from_slice(&r.out.vehicles);
             dst.walkers.clear();
             dst.walkers.extend_from_slice(&r.out.walkers);
+        }
+        self.corridor.clear();
+        self.corridor_steps = world.corridor_steps;
+        self.corridor_time = 0.0;
+        if let Some(c) = &world.corridors {
+            self.corridor.extend_from_slice(&c.out);
+            self.corridor_time = c.time();
         }
     }
 }

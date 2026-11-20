@@ -17,6 +17,7 @@ mod people_capture; // people
 mod bench;
 mod cc0_runtime; // the CC0 scanned sets at run time
 mod farshore; // the far terrain's load and attach
+mod ground_tone; // the terrain's vertex tone and the far land (the scene build's closures)
 mod models;
 mod net; // net
 mod streets;
@@ -36,7 +37,7 @@ use std::sync::Arc;
 use std::sync::mpsc::Receiver;
 use std::time::Instant;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Args {
     pub bench: bool,
     pub start_underwater: bool,
@@ -180,6 +181,11 @@ impl Default for PerfArgs {
 }
 
 fn parse_args() -> Result<Args> {
+    parse_args_from(std::env::args().skip(1))
+}
+
+/// `parse_args` over the given arguments (the program name left out).
+fn parse_args_from(args: impl IntoIterator<Item = String>) -> Result<Args> {
     let mut a = Args {
         bench: false,
         start_underwater: false,
@@ -226,15 +232,35 @@ fn parse_args() -> Result<Args> {
         landmarks: true,          // landmarks
         landmarks2: true,
     };
-    let mut it = std::env::args().skip(1);
+    // `--scene-cards` renders at 2560 x 1440 unless a size is given.
+    let (mut sized, mut scene_cards) = (false, false);
+    let mut it = args.into_iter();
     while let Some(s) = it.next() {
         let mut val = || it.next().ok_or_else(|| anyhow::anyhow!("{s} needs a value"));
         match s.as_str() {
             "--bench" => a.bench = true,
             "--frames" => a.frames = val()?.parse()?,
             "--warmup" => a.warmup = val()?.parse()?,
-            "--width" => a.width = val()?.parse()?,
-            "--height" => a.height = val()?.parse()?,
+            "--width" => {
+                a.width = val()?.parse()?;
+                sized = true;
+            }
+            "--height" => {
+                a.height = val()?.parse()?;
+                sized = true;
+            }
+            // offscreen shots and the visual-gate scene cards (bench/shots.rs reads the values).
+            "--shots" | "--clip" => {
+                val()?;
+                a.bench = true;
+            }
+            "--scene-cards" => {
+                a.bench = true;
+                scene_cards = true;
+            }
+            "--shots-only" | "--card8-fps" | "--card8-seconds" | "--card8-speed" | "--settle-timeout" => {
+                val()?;
+            }
             "--msaa" => a.msaa = val()?.parse()?,
             "--no-indirect-validation" => a.indirect_validation = false,
             "--no-indirect-count" => a.no_indirect_count = true,
@@ -336,6 +362,13 @@ fn parse_args() -> Result<Args> {
             "--no-meter" => a.look.sky.meter = false, // the camera meter off (the hour's exposure curve alone)
             "--no-atmosphere" => a.look.sky.atmosphere = false, // the JS analytic dome instead of the atmosphere tables
             "--no-contact-shadows" => a.look.sky.contact = false,
+            // lighting: the physical daylight, the aerial-perspective volume, the filmic display, the EV100 meter
+            "--no-phys-sky" => a.look.sky.phys_sky = false,
+            "--no-ap-lut" => a.look.sky.ap_lut = false,
+            "--no-filmic" => a.look.sky.filmic = false,
+            "--no-ev100" => a.look.sky.ev100 = false,
+            "--no-sky-vis" => a.look.sky.sky_vis = false,
+            "--no-night-shaping" => a.look.sky.night_shaping = false,
             "--sky-shots" => {} // bench/sky_shots.rs reads it
             "--so-shots" => {} // so: bench/so_shots.rs reads it (the sky and ocean review cards)
             "--no-farshore" => {} // farshore.rs reads it (no far terrain)
@@ -343,6 +376,17 @@ fn parse_args() -> Result<Args> {
             "--water-optics" => a.look.water_optics = true,
             "--no-water-optics" => a.look.water_optics = false,
             "--no-water" => a.look.water = false, // the flat sea quad, as before
+            "--no-water-instanced" => a.look.water_features &= !eo_render::water::FEAT_INSTANCED, // the water pass needs multi-draw-indirect-count again (without it, the flat sea)
+            "--no-water-brdf" => a.look.water_features &= !eo_render::water::FEAT_BRDF, // the earlier Fresnel, roughness and sun lobe
+            "--no-water-body" => a.look.water_features &= !eo_render::water::FEAT_BODY, // the earlier body colour
+            "--no-water-foam-cover" => a.look.water_features &= !eo_render::water::FEAT_FOAM, // the earlier whitecap cover and foam sampling
+            "--no-water-glint" => a.look.water_features &= !eo_render::water::FEAT_GLINT, // the earlier hashed sparkle and glare flashes
+            "--no-water-turbid" => a.look.water_features &= !eo_render::water::FEAT_TURBID, // the earlier three-wavelength body optics
+            "--no-water-shore" => a.look.water_features &= !eo_render::water::FEAT_SHORE, // the earlier waterline and wall collar
+            "--no-water-foam-lit" => a.look.water_features &= !eo_render::water::FEAT_FOAM_LIT, // the earlier whitecap shapes and foam light
+            "--no-water-ppr" => a.look.water_features &= !eo_render::water::FEAT_PPR, // the reflection march alone
+            "--no-water-wind-texture" => a.look.water_features &= !eo_render::water::FEAT_WIND, // the earlier gusts, no tidal current, no rotated chop
+            "--no-water-grazing" => a.look.water_features &= !eo_render::water::FEAT_GRAZE, // one mean Fresnel times the sky in one raised direction
             // agents
             "--no-agents" => a.agents = false,
             "--no-props" => a.props = false, // props
@@ -359,6 +403,19 @@ fn parse_args() -> Result<Args> {
             "--no-cc0-stains" => a.look.cc0 &= !eo_render::cc0::RUN_STAINS,
             "--cc0-shots" => {}
             "--no-landmarks2" => a.landmarks2 = false,
+            s if eo_landmarks::suspension::SWITCHES.contains(&s) => {} // read by eo_landmarks::suspension::features (the bridges)
+            "--no-ferry-building" => eo_landmarks::features::set_ferry_building(false), // its record's box, as before
+            "--no-tram-tracks" => eo_landmarks::features::set_tram_tracks(false), // no streetcar rails, as before
+            "--no-quay-railing" => eo_landmarks::features::set_quay_railing(false), // no guard on the quay wall, as before
+            "--no-ferry-building-detail" => eo_landmarks::features::set_ferry_building_detail(false), // the Ferry Building's first pass, as before
+            "--no-rail-finish" => eo_landmarks::features::set_rail_finish(false), // one bare-steel rail head, as before
+            "--no-corridor-palms" => eo_landmarks::features::set_corridor_palms(false), // no Embarcadero palms, as before
+            "--no-guard-detail" => eo_landmarks::features::set_guard_detail(false), // the quay guard's first pass, as before
+            "--no-pier-sheds" => eo_landmarks::features::set_pier_sheds(false), // the Ferry Plaza's JS shed boxes, as before
+            "--no-palm-detail" => eo_landmarks::features::set_palm_detail(false), // the corridor palms' first pass, as before
+            "--no-facade-relief" => eo_landmarks::features::set_ferry_building_relief(false), // the Ferry Building's second pass, as before
+            "--no-rail-polish" => eo_landmarks::features::set_rail_polish(false), // the rails' worn band at 0.4 / 0.65, no sealant joints, as before
+            "--no-furniture-models" => eo_render::props_lib2::furniture_models::set_enabled(false), // missing-GLB furniture as boxes, as before
             "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
             s if a.props2.parse_flag(s) => {} // --no-props2, --no-furniture, --no-eztree, --no-overhead, --no-wires, --no-props2-shading, --capture-props2
             "--agents-bench" | "--agents-capture" | "--people-capture" | "--people-lineup" => {} // + --people-capture, --people-lineup
@@ -385,6 +442,29 @@ fn parse_args() -> Result<Args> {
             // read by `roofs_flags` (main) into the environment switches.
             "--no-roof-colours" | "--no-roof-contrast" | "--no-roof-parapet" | "--no-roof-patches" | "--no-roof-plant" => {}
             "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" => {} // `roofs_flags`
+            // the Golden Gate photo-realism pass's switches, each read by its crate from the command line
+            // (the bridges' own are in eo_landmarks::suspension::SWITCHES, above).
+            "--no-gg2-camera" | "--no-camera-look" | "--no-scene-meter" | "--no-lamp-photocell" => {} // read by its crate (the camera)
+            "--no-gg2-daylight" | "--no-ground-albedo" | "--no-photo-date" | "--no-cirrus" | "--no-clear-sky-state" | "--no-terminator-bias" | "--no-spectral-sky" => {} // read by its crate (the daylight)
+            "--no-gg2-water" | "--no-water-exposure" | "--no-water-current" | "--no-water-lean" | "--no-water-ppr-blur" | "--no-beach-profiles" | "--no-water-streak-caps" | "--no-water-far-calm" | "--no-baker-surf" | "--no-swash-line" => {} // read by its crate (the water)
+            "--no-gg2-ground" | "--no-beach-sand-limit" | "--no-sand-albedo" | "--no-rocks" | "--no-riprap" | "--no-pier-lines" | "--no-ground-steps" | "--no-season-seam" => {} // read by its crate (the shore ground)
+            "--no-gg2-far" | "--no-far-fallback" | "--no-landmark-far-models" | "--no-far-tree-density" | "--no-presidio-rule" | "--no-far-paint" => {} // read by its crate (the far layer)
+            "--no-corridor-traffic" | "--no-deck-walkers" => {} // read by its crate (the corridor traffic)
+            "--no-gg2-vegetation" | "--no-coastal-trees" | "--no-ground-cover" => {} // read by its crate (the vegetation)
+            // the round-3 tracks' switches: one list per track, each in a file the track owns (read by its crate)
+            s if eo_render::pace::GG3_SWITCHES.contains(&s) => {} // read by its crate (the frame budget; --no-gg3 every track's roll-up)
+            s if eo_look::season::SWITCHES.contains(&s) => {} // read by its crate (the photo dates, season and sky)
+            s if eo_look::features::GG3_SWITCHES.contains(&s) => {} // read by its crate (the colour and camera)
+            s if eo_landmarks::vegetation::GG3_SWITCHES.contains(&s) => {} // read by its crate (the coastal vegetation)
+            s if eo_landmarks::vegetation::GRASS2_SWITCHES.contains(&s) => {} // read by its crate (the second grass pass)
+            s if eo_landmarks::vegetation::GRASS3_SWITCHES.contains(&s) => {} // read by its crate (the third grass pass)
+            s if eo_landmarks::flora::FLORA_SWITCHES.contains(&s) => {} // read by its crate (the flora pass)
+            s if eo_landmarks::flora2::FLORA2_SWITCHES.contains(&s) => {} // read by its crate (the second flora pass)
+            s if eo_landmarks::features::GG3_SWITCHES.contains(&s) => {} // read by its crate (the terrain surface)
+            s if eo_landmarks::hill_rock::SWITCHES.contains(&s) => {} // read by its crate (the scanned rock; --no-hill-rock)
+            s if eo_water::switches::GG3_SWITCHES.contains(&s) => {} // read by its crate (the surf and bathymetry)
+            s if eo_landmarks::suspension::GG3_SWITCHES.contains(&s) => {} // read by its crate (the bridge finish)
+            s if eo_landmarks::suspension::AGING_SWITCHES.contains(&s) => {} // read by its crate (the Golden Gate's aging)
             "--segments" => a.segments = Some(val()?.split(',').map(|s| s.trim().to_string()).collect()),
             // occlusion / hitch
             "--no-occlusion" => a.perf.occlusion = false,
@@ -411,12 +491,30 @@ fn parse_args() -> Result<Args> {
             }
             "-h" | "--help" => {
                 println!(
-                    "eo-app [--bench] [--frames N=720] [--warmup N=60] [--width 1920] [--height 1080] [--msaa 1|4]\n       [--no-indirect-validation] [--no-indirect-count] [--no-vsync] [--out DIR] [--label NAME] [--capture] [--far M=4200]\n       [--multiply N=1] [--check-budget] [--budget-ms 10 (self-test only)]\n       [--no-models] [--no-terrain-lod] [--no-kit] [--slice1] [--slice2] [--cache DIR] [--no-cache] [--stream-threads N=6] [--stream-radius M=inf]\n       [--kit-threads N=6] [--kit-split-materials] [--upload-budget-mb 4] [--kit-arena-vertices N] [--kit-arena-indices N] [--kit-arena-objects N]\n       [--kit-near-load M=110] [--kit-mid-load M=520] [--drive-frames N=3600]\n       [--time-of-day H=12] [--shadow-map N=3072] [--no-shadows] [--no-agents] [--agent-density N=1] [--no-rocketbox]\n       [--no-occlusion] [--occlusion-check] [--no-thread-priority] [--pace realtime|60hz|all-60hz|none] [--worst-frames N=12] [--check-max]\n       [--no-view-detail] [--view-margin-deg 35] [--view-predict-s 0.3] [--view-hold-s 2.5] [--stream-all-paths] [--full-arenas]\n       [--segments street_walk,elevated_sweep,city_overview,authored_street,kit_street,drive,turn_around,turn_around_authored]"
+                    "eo-app [--bench] [--frames N=720] [--warmup N=60] [--width 1920] [--height 1080] [--msaa 1|4]\n       [--no-indirect-validation] [--no-indirect-count] [--no-vsync] [--out DIR] [--label NAME] [--capture] [--far M=4200]\n       [--multiply N=1] [--check-budget] [--budget-ms 10 (self-test only)]\n       [--no-models] [--no-terrain-lod] [--no-kit] [--slice1] [--slice2] [--cache DIR] [--no-cache] [--stream-threads N=6] [--stream-radius M=inf]\n       [--kit-threads N=6] [--kit-split-materials] [--upload-budget-mb 4] [--kit-arena-vertices N] [--kit-arena-indices N] [--kit-arena-objects N]\n       [--kit-near-load M=110] [--kit-mid-load M=520] [--drive-frames N=3600]\n       [--time-of-day H=12] [--shadow-map N=3072] [--no-shadows] [--no-agents] [--agent-density N=1] [--no-rocketbox]\n       [--no-occlusion] [--occlusion-check] [--no-thread-priority] [--pace realtime|60hz|all-60hz|none] [--worst-frames N=12] [--check-max]\n       [--no-view-detail] [--view-margin-deg 35] [--view-predict-s 0.3] [--view-hold-s 2.5] [--stream-all-paths] [--full-arenas]\n       [--segments street_walk,elevated_sweep,city_overview,authored_street,kit_street,drive,turn_around,turn_around_authored]\n       \
+[--no-gg2-camera] [--no-camera-look] [--no-scene-meter] [--no-lamp-photocell] (the camera look, the scene meter, lamp photocells)\n       \
+[--no-gg2-daylight] [--no-bridges4] [--no-gg2-water] [--no-gg2-ground] [--no-gg2-far] [--no-corridor-traffic] [--no-gg2-vegetation]\n       \
+(the Golden Gate pass's roll-up switches; each part's own switch is in README.md, Kill switches)\n\n\
+eo-app --shots FILE.json --out DIR [--width W --height H] [--time-of-day H] [--weather KIND] [--shots-only a,b] [--settle-timeout S=600] [any world or kill switch]\n\
+       offscreen: one settled, converged PNG per shot of FILE.json, and DIR/<name>.json (resolved pose, build, command line, switches).\n\
+       A shot is {{\"name\", \"geo\": {{\"lat\", \"lon\", \"alt\" (m above mean sea level), \"range\" (m), \"heading\" (deg, 0 north, 90 east),\n\
+       \"tilt\" (deg from straight down), \"fov\" (vertical deg)}}}} (the target is looked at from range metres), or {{\"eye\": [x, y, z],\n\
+       \"yaw\" (deg, 0 north (-z), 90 east (+x)), \"pitch\" (deg, up +)}} or {{\"eye\", \"look_at\": [x, y, z]}} in game metres; optional \"fov\",\n\
+       \"far\", \"time_of_day\", \"weather\", \"what\".\n\
+eo-app --scene-cards --out DIR [--width 2560 --height 1440] [--shots-only a,b] [--card8-fps 10] [--card8-seconds 30] [--card8-speed 5.6] [any world or kill switch]\n\
+       offscreen: the eight scene cards of Docs/VISUAL_QUALITY_GATE.md at the Ferry Building and the Embarcadero, a manifest per card;\n\
+       card 8 is a numbered frame sequence across a 128 m tile boundary.\n\
+eo-app --clip FILE.json --out DIR [--width W --height H] [--shots-only a,b] [any world or kill switch]\n\
+       offscreen: moving clips at 60 Hz of wall time along camera paths, every 60 / fps-th frame written as DIR/<name>/NNNN.png;\n\
+       FILE.json holds {{\"name\", \"seconds\", \"fps\", \"time_of_day\", \"fov\", \"keys\": [{{\"t\", \"eye\": [x, y, z], \"look_at\": [x, y, z]}}]}} (bench/clip.rs)."
                 );
                 std::process::exit(0);
             }
             other => anyhow::bail!("unknown argument {other} (try --help)"),
         }
+    }
+    if scene_cards && !sized {
+        (a.width, a.height) = (2560, 1440);
     }
     if a.frames + a.warmup > 1024 {
         // 4 timestamp queries per frame; one query set holds at most 4096.
@@ -523,7 +621,12 @@ pub fn load_world(args: &Args) -> Result<World> {
         std::thread::spawn(move || eo_landmarks::ground_cover::GroundCover::load(&root))
     });
     let t = Instant::now();
-    let land = LandCover::load(&paths).ok();
+    let land = LandCover::load(&paths).ok().map(Arc::new);
+    // the land-cover classes the daylight's ground albedo reads (eo-look `phys`).
+    if let Some(l) = &land {
+        let l = l.clone();
+        eo_look::phys::set_ground_classes(Box::new(move |x: f64, z: f64| l.class_at(x, z)));
+    }
     let land_cover_ms = t.elapsed().as_secs_f64() * 1e3;
     let street_job = street_plan.map(|p| streets::spawn(p, &city, &elevation));
     let standards = CaStandards::load(&paths)?;
@@ -555,6 +658,46 @@ pub fn load_world(args: &Args) -> Result<World> {
                 let r = s.add_plazas_with(&root, &|x, z| sw.buildings.contains(x, z), &fps, &|x, z| sw.ground(x, z) + o.footway_lift, &|x, z| sw.paved_at(x, z), o.verge_max_drop, bay_tones)?; // bay tones
                 let carpet = |x: f64, z: f64| sw.carpet_y(x, z);
                 let pr = s.add_promenades(&carpet, &carpet);
+                // the Ferry Building on the footway datum (eo-landmarks ferry_building.rs) and the
+                // corridor's streetcar rails in the drawn paving, a paint step over the junction paint.
+                if bay_tones {
+                    let trace = std::env::var("EO_TRACE_LOAD").is_ok();
+                    if let Some(fb) = s.add_ferry_building(&|x, z| sw.ground(x, z) + o.footway_lift, &|x, z| sw.paved_at(x, z), &|x, z| sw.carpet_y(x, z)) {
+                        if trace {
+                            eprintln!("landmarks: Ferry Building floor {:.2} m, {:.1} x {:.1} m, bays {:?}, {} triangles, {:.0} ms", fb.base_y, fb.length_m, fb.depth_m, fb.bays, fb.triangles, fb.ms);
+                        }
+                    }
+                    let lift = o.junction_paint_lift + (o.junction_paint_lift - o.marking_lift).abs();
+                    match s.add_tram_tracks(&root, &|x, z| sw.surface_at(x, z, None), lift) {
+                        Ok(Some((n, m, tris))) if trace => eprintln!("landmarks: streetcar rails {n} tracks, {m:.0} m, {tris} triangles"),
+                        Err(e) => eprintln!("warning: streetcar rails not built ({e:#})"),
+                        _ => {}
+                    }
+                    // the corridor's surveyed palms (eo-landmarks palms.rs) from the street tree list.
+                    if eo_landmarks::features::corridor_palms() {
+                        match eo_props::JsProps::load() {
+                            Ok(js) => {
+                                let t = &js.trees;
+                                let st = t.stride.max(3);
+                                let palm = t.forms.iter().position(|f| f == "palm");
+                                let list: Vec<(f64, f64, Option<f64>, Option<f64>, u32)> = (0..t.data.len() / st)
+                                    .filter(|&i| palm.is_some_and(|p| t.data[i * st + 2] as usize == p))
+                                    .map(|i| {
+                                        let d = &t.data[i * st..i * st + st];
+                                        let dm = |k: usize| (st > k && d[k] > 0).then(|| d[k] as f64 / 10.0);
+                                        (d[0] as f64 / 10.0, d[1] as f64 / 10.0, dm(3), dm(4), i as u32)
+                                    })
+                                    .collect();
+                                if let Some((n, tris)) = s.add_corridor_palms(&list, &|x, z| sw.surface_at(x, z, None), &|x, z| sw.buildings.contains(x, z)) {
+                                    if trace {
+                                        eprintln!("landmarks: corridor palms {n}, {tris} triangles");
+                                    }
+                                }
+                            }
+                            Err(e) => eprintln!("warning: corridor palms not built ({e:#})"),
+                        }
+                    }
+                }
                 Ok((s, r, pr))
             }))
         }
@@ -680,7 +823,15 @@ pub fn load_world(args: &Args) -> Result<World> {
         Some(Err(_)) => anyhow::bail!("water thread panicked"),
         None => None,
     };
+    // the far tier's bluff cypress reads the citywide shore field's distance, as the near tier
+    // does (eo-landmarks `vegetation::install_shore_distance`; the first install wins, before the
+    // distant-tree thread below starts), not the drawn sea's estimate (hlod_trees `shore_estimate`)
+    if let Some(w) = water.clone() {
+        eo_landmarks::vegetation::install_shore_distance(Box::new(move |x, z| w.field.signed_at(x, z).abs()));
+    }
     let press = water.clone().filter(|_| args.look.water);
+    // (water r2) piers on piles over the water, unless --no-water-shore
+    eo_water::field::PIERS_OVER_WATER.store(args.look.water_features & eo_render::water::FEAT_SHORE != 0, std::sync::atomic::Ordering::Relaxed);
     // the beach foreshore goes into the street world's carpet, which the
     // drawn ground, the collision ground (eo-player StreetGround) and the
     // agents all read, so they agree on the lowered beach.
@@ -751,51 +902,12 @@ pub fn load_world(args: &Args) -> Result<World> {
         }
         _ => None,
     };
-    let pack = |c: [f64; 3], a: u8| -> u32 {
-        let b = |v: f64| (v.max(0.0).powf(1.0 / 2.2).min(1.0) * 255.0).round() as u32;
-        b(c[0]) | (b(c[1]) << 8) | (b(c[2]) << 16) | ((a as u32) << 24)
-    };
     let water_field = water.clone();
-    const FAR_LAND_ABOVE_SEA_M: f64 = 2.0;
-    const FAR_LAND_SHORE_M: f64 = 60.0;
-    let far_land_fn = |x: f64, z: f64| -> Option<f64> {
-        cover.as_ref()?;
-        let w = water_field.as_deref()?;
-        if w.field.signed_at(x, z) <= FAR_LAND_SHORE_M {
-            return None;
-        }
-        elev.sample(x, z).filter(|h| *h > eo_water::SEA_LEVEL_Y + FAR_LAND_ABOVE_SEA_M)
-    };
-    let ground_tone_fn = |x: f32, z: f32| -> Option<u32> {
-        let cover = cover.as_ref()?;
-        let (x, z) = (x as f64, z as f64);
-        // the far land's ground by its land-cover class (tile-ground-cover.js
-        // `DERIVED_TONES`: unmapped open ground, wild grass or coastal scrub; under trees understorey).
-        if far_land_fn(x, z).is_some() {
-            let class = land.as_ref().map(|l| l.class_at(x, z)).unwrap_or(0);
-            return Some(pack(eo_landmarks::ground_cover::far_land_tone(class, x, z), 255));
-        }
-        if let Some(w) = water_field.as_deref() {
-            let s = w.field.signed_at(x, z);
-            if cover.beach_sand(x, z, s.abs()) {
-                let a = ((64.0 - s) * 1.5).round().clamp(0.0, 253.0) as u8;
-                return Some(pack(cover.sand_at(x, z), a));
-            }
-        }
-        // the open ground's measured green (yards, lots, hills), inland of the shore.
-        let park = cover.tone_name_at(x, z).and_then(|n| cover.tone_at(x, z).map(|c| (n, c)));
-        let class = land.as_ref().map(|l| l.class_at(x, z)).unwrap_or(0);
-        let shore = water_field.as_deref().map(|w| w.field.signed_at(x, z).abs());
-        let h = |dx: f64, dz: f64| elev.sample(x + dx, z + dz);
-        let slope = match (h(-6.0, 0.0), h(6.0, 0.0), h(0.0, -6.0), h(0.0, 6.0)) {
-            (Some(a), Some(b), Some(c), Some(d)) => ((b - a).hypot(d - c)) / 12.0,
-            _ => 0.0,
-        };
-        if let Some(c) = eo_render::ground2::open_ground(x, z, class, park, shore, h(0.0, 0.0).map(|h| h - eo_water::SEA_LEVEL_Y), slope) {
-            return Some(pack(c, 255));
-        }
-        cover.tone_at(x, z).map(|c| pack(c, 255))
-    };
+    // the far land's height and a terrain vertex's colour from the open-space
+    // ground (ground_tone.rs): beach sand (its shore distance, metres inland,
+    // in the alpha byte) or a green's tone.
+    let far_land_fn = ground_tone::far_land(cover.as_deref(), water_field.as_deref(), elev);
+    let ground_tone_fn = ground_tone::ground_tone(cover.as_deref(), water_field.as_deref(), elev, land.as_deref());
     // land beyond the city's shoreline rings. The rings call the
     // Marin headlands across the Golden Gate sea (they are not San
     // Francisco's), so the water press drew the elevation grid's own ground
@@ -816,7 +928,7 @@ pub fn load_world(args: &Args) -> Result<World> {
     let mut scene = build_scene(&SceneInputs { // mut (the landmarks are appended)
         city: &city,
         elevation: &elevation,
-        land: land.as_ref(),
+        land: land.as_deref(),
         standards: &standards,
         authored: &authored.group_of_record,
         terrain_lod: args.terrain_lod,
@@ -830,6 +942,9 @@ pub fn load_world(args: &Args) -> Result<World> {
         smooth_terrain: args.landmarks && args.landmarks2,
     })?;
     drop(carpet_fn); // water
+    // (the ground-tone closures borrow the elevation, which the world takes below)
+    drop(ground_tone_fn);
+    drop(far_land_fn);
     // the bridges (eo-landmarks, the JS generators ported) on the
     // drawn ground, appended to the static table; their LOD groups follow the street's.
     let landmarks = if let Some(mut set) = landmark_set {
@@ -856,6 +971,9 @@ pub fn load_world(args: &Args) -> Result<World> {
             pr
         } else {
             let ground = |x: f64, z: f64| elevation.ground(x, z);
+            if args.landmarks2 {
+                set.add_ferry_building(&ground, &|_, _| None, &|_, _| f64::NEG_INFINITY);
+            }
             set.add_promenades(&ground, &ground)
         };
         if std::env::var("EO_TRACE_LOAD").is_ok() {
@@ -1035,4 +1153,38 @@ fn main() -> Result<()> {
         return agents_bench::run(&args, process_start);
     }
     if args.bench { bench::run(&args, process_start) } else { window::run(&args, process_start) }
+}
+
+#[cfg(test)]
+mod tests {
+    /// Every round-3 track's lists, as main.rs accepts them.
+    const GG3_LISTS: [&[&str]; 9] = [
+        eo_render::pace::GG3_SWITCHES,
+        eo_look::season::SWITCHES,
+        eo_look::features::GG3_SWITCHES,
+        eo_landmarks::vegetation::GG3_SWITCHES,
+        eo_landmarks::features::GG3_SWITCHES,
+        eo_landmarks::hill_rock::SWITCHES,
+        eo_water::switches::GG3_SWITCHES,
+        eo_landmarks::suspension::GG3_SWITCHES,
+        eo_landmarks::suspension::AGING_SWITCHES,
+    ];
+
+    #[test]
+    fn every_listed_switch_parses() {
+        let mut seen = std::collections::HashSet::new();
+        for list in GG3_LISTS.iter().chain([&eo_landmarks::suspension::SWITCHES]) {
+            for name in list.iter() {
+                assert!(name.starts_with("--no-"), "{name}");
+                assert!(seen.insert(*name), "{name} is in two lists");
+                if let Err(e) = super::parse_args_from([name.to_string()]) {
+                    panic!("{name} does not parse: {e}");
+                }
+            }
+        }
+        for name in ["--no-gg3", "--no-gg3-perf", "--no-gg3-sky", "--no-gg3-colour", "--no-gg3-vegetation", "--no-gg3-ground", "--no-gg3-rock", "--no-gg3-water", "--no-gg3-bridge", "--no-bridges5", "--no-hill-rock"] {
+            assert!(seen.contains(name), "{name} is reserved");
+        }
+        assert!(super::parse_args_from(["--no-such-switch".to_string()]).is_err());
+    }
 }

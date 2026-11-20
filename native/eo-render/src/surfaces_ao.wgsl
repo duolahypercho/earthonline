@@ -26,6 +26,19 @@ const AO_MAX_REACH_PX: f32 = 96.0; // 48 half-resolution texels, in full-resolut
 const AO_INTENSITY: f32 = 0.9;
 // Per-sample radiance ceiling (the JS's exposure-relative clamp): x exposure-1.
 const AO_RADIANCE_CAP: f32 = 4.0;
+// the canyon-scale sky visibility (`look.ao_params.w`, `--no-sky-vis` keeps the 4 m
+// contact term above): the same horizon search out to 30 m and up to 400 full-resolution
+// pixels, 9 steps a side, an occluder counting in full to 0.7 of the reach and fading
+// out by the reach (1 - (d / R)^4; the contact term's 1 - (d / R)^2 counted a wall 15 m
+// away at half) (the t^2 spacing keeps the first ones within a few pixels, so the
+// contact term stays), so a street between 20-40 m walls sees the third or half of the sky
+// it does (sky view factors of 0.3-0.6 measured at street level in dense downtowns:
+// Oke 1981, "Canyon geometry and the nocturnal urban heat island", J. Climatol. 1; Grimmond
+// et al. 2001) and takes the light of the walls that hide the rest (the one-bounce term:
+// the hidden arcs charged with the lit radiance of what hides them).
+const AO_FAR_RADIUS_M: f32 = 30.0;
+const AO_FAR_REACH_PX: f32 = 400.0;
+const AO_FAR_STEPS: i32 = 9;
 
 fn ao_pos(px: vec2<i32>, dims: vec2<i32>) -> vec4<f32> {
     let p = clamp(px, vec2<i32>(0), dims - 1);
@@ -75,9 +88,12 @@ fn ao_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let right = normalize(cross(fwd, vec3<f32>(0.0, 1.0, 0.0)));
     let up = cross(right, fwd);
-    // Reach in pixels: 4 m at this depth, at most 48 half-res texels.
+    // Reach in pixels: 4 m at this depth, at most 48 half-res texels (or the sky visibility's).
+    let far = look.ao_params.w > 0.5;
+    let radius = select(AO_RADIUS_M, AO_FAR_RADIUS_M, far);
+    let steps = select(AO_STEPS, AO_FAR_STEPS, far);
     let focal = 1.0 / look.ao_params.y; // tan(fov/2) inverse x half height in pixels (CPU)
-    let reach = min(AO_RADIUS_M * focal / max(vd, 0.1), AO_MAX_REACH_PX);
+    let reach = min(radius * focal / max(vd, 0.1), select(AO_MAX_REACH_PX, AO_FAR_REACH_PX, far));
     if (reach < 2.0) {
         textureStore(ao_out, hp, vec4<f32>(0.0, 0.0, 0.0, 1.0));
         return;
@@ -109,8 +125,8 @@ fn ao_main(@builtin(global_invocation_id) gid: vec3<u32>) {
             let sg = select(-1.0, 1.0, side == 1);
             // Horizon angle on this side, measured from V; starts fully open.
             var h = n + sg * 0.5 * LK_PI;
-            for (var j = 0; j < AO_STEPS; j = j + 1) {
-                let t = (f32(j) + jitter) / f32(AO_STEPS);
+            for (var j = 0; j < steps; j = j + 1) {
+                let t = (f32(j) + jitter) / f32(steps);
                 let off = dir * sg * (t * t * reach + 1.0);
                 let sp = px + vec2<i32>(round(off));
                 let S = ao_pos(sp, dims);
@@ -127,7 +143,8 @@ fn ao_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 if (dot(delta, N) < 0.03) {
                     continue;
                 }
-                let fall = clamp(1.0 - (dist * dist) / (AO_RADIUS_M * AO_RADIUS_M), 0.0, 1.0);
+                let q = (dist * dist) / (radius * radius);
+                let fall = clamp(1.0 - select(q, q * q, far), 0.0, 1.0);
                 if (fall <= 0.0) {
                     continue;
                 }

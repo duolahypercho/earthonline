@@ -24,11 +24,13 @@
 //! the same index, positions / normals / UVs / colours as the JS's
 //! `Float32Array`s hold them (UVs y-up, as three.js), `part` 0 wood / 1 leaf.
 
+mod coastal;
 mod cook;
 mod generator;
 mod geometry;
 mod street;
 
+pub use coastal::{COASTAL_SHRUBS, COASTAL_TREES};
 pub use cook::{EzLibrary, StreetForm, cook_all, cook_all_with};
 pub use geometry::build_ez_tree;
 pub use street::{
@@ -276,6 +278,10 @@ impl EzData {
                     overrides: v["overrides"].clone(),
                 },
             );
+        }
+        // the Golden Gate's coastal trees and scrub (coastal.rs), beside the export's own.
+        for sp in coastal::species_list() {
+            species.insert(sp.id.clone(), sp);
         }
         let strings = |v: &Value| -> Vec<String> { v.as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default() };
         Ok(Self {

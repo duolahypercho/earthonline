@@ -127,6 +127,9 @@ const _: () = assert!(std::mem::size_of::<GpuAgent>() == 64);
 pub const AGENT_PLAYER: u32 = 1 << 16;
 /// Turn signal lamps lit this frame (the blink is decided on the CPU clock).
 pub const AGENT_BLINK_ON: u32 = 1 << 17;
+/// A corridor vehicle or walker (eo-sim `corridor`): the box rung is drawn
+/// past the near tiers out to the corridor's far distance.
+pub const AGENT_CORRIDOR: u32 = 1 << 18;
 
 /// Clip slots of the bake (the walk is slot 0; the others are standing clips).
 pub const CLIP_WALK: u32 = 0;

@@ -35,12 +35,17 @@ struct FarUniform {
     misc: [f32; 4],
     /// the sea's grid this frame: centre x, z, half size, drawn (1/0).
     sea: [f32; 4],
+    /// x: 1 when the grass reads the look uniform's per-frame season (`tone2.w`,
+    /// eo-look `season::current`, the season on the date in force), 0 when it
+    /// keeps `misc.x` (`--no-photo-season`, or `EO_FARSHORE_DRY` given); y, z, w unused.
+    season: [f32; 4],
 }
 
 /// Switches: `--no-farshore` / `EO_FARSHORE=0` (eo-app); `EO_FARSHORE_RANGE`
 /// (level-0 range, game m), `EO_FARSHORE_TAIL` (haze tail x the fog's far
 /// end), `EO_FARSHORE_SHADOW=0`, `EO_FARSHORE_DEBUG=1` (the class guesses),
-/// `EO_FARSHORE_DRY` (0 green .. 1 golden; default from the sun model's date).
+/// `EO_FARSHORE_DRY` (0 green .. 1 golden; default from the sun model's date,
+/// each frame: the look uniform's season, `--no-photo-season` reads it at load).
 #[derive(Clone, Copy, Debug)]
 pub struct FarOptions {
     pub range0: f32,
@@ -49,24 +54,41 @@ pub struct FarOptions {
     pub self_shadow: bool,
     pub debug: bool,
     pub dryness: f32,
+    /// The grass follows the date in force each frame (the look uniform's
+    /// season) instead of `dryness` read at load: on unless `--no-photo-season`
+    /// or `EO_FARSHORE_DRY` pins it.
+    pub season_per_frame: bool,
 }
 
 fn env_f32(name: &str) -> Option<f32> {
     std::env::var(name).ok().and_then(|v| v.trim().parse::<f32>().ok()).filter(|v| v.is_finite())
 }
 
-/// How golden the annual grass is on a day of the year: green from the first
-/// winter rains to spring (Dec-Mar), browning through April-May, golden from
-/// June until the rains (Bay Area annual grassland, a Mediterranean climate).
+/// How golden the annual grass is on a day of the year (`eo_look::season::dryness`,
+/// the one season curve).
 pub fn dryness_for_day(doy: f64) -> f32 {
-    let d = doy.rem_euclid(365.0);
-    let s = |a: f64, b: f64, x: f64| {
-        let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
-        t * t * (3.0 - 2.0 * t)
-    };
-    // up from day 95 (Apr 5) to 165 (Jun 14); down from 305 (Nov 1) to 345 (Dec 11)
-    (s(95.0, 165.0, d) * (1.0 - s(305.0, 345.0, d))) as f32
+    eo_look::season::dryness(doy)
 }
+
+/// The season's dryness both land layers read (`EO_FARSHORE_DRY`, else
+/// `eo_look::season::current`, the season on the sun model's date): the far
+/// layer's grass and the city terrain's far land (eo-app ground_tone), so they
+/// meet at the city grid's edge in one season.
+pub fn season_dryness() -> f32 {
+    env_f32("EO_FARSHORE_DRY").map(|v| v.clamp(0.0, 1.0)).unwrap_or_else(eo_look::season::current)
+}
+
+/// The far layer's land albedos (farshore.wgsl, linear), shared with the city
+/// terrain's far land (eo-app ground_tone `far_land_season_tone`): the annual
+/// grass green and golden, coastal scrub, woodland (open and north face),
+/// marsh, bare rock and the built flats.
+pub const FAR_GRASS_GREEN: [f32; 3] = [0.065, 0.100, 0.034];
+pub const FAR_GRASS_GOLDEN: [f32; 3] = [0.215, 0.165, 0.092];
+pub const FAR_SCRUB: [f32; 3] = [0.075, 0.074, 0.046];
+pub const FAR_TREE: [f32; 3] = [0.036, 0.046, 0.026];
+pub const FAR_MARSH: [f32; 3] = [0.065, 0.075, 0.048];
+pub const FAR_ROCK: [f32; 3] = [0.17, 0.155, 0.13];
+pub const FAR_TOWN: [f32; 3] = [0.092, 0.094, 0.088];
 
 impl Default for FarOptions {
     fn default() -> Self {
@@ -76,7 +98,8 @@ impl Default for FarOptions {
             tail: env_f32("EO_FARSHORE_TAIL").unwrap_or(6.0).clamp(0.05, 50.0),
             self_shadow: std::env::var("EO_FARSHORE_SHADOW").map_or(true, |v| v.trim() != "0"),
             debug: std::env::var("EO_FARSHORE_DEBUG").is_ok_and(|v| v.trim() == "1"),
-            dryness: env_f32("EO_FARSHORE_DRY").map(|v| v.clamp(0.0, 1.0)).unwrap_or_else(|| dryness_for_day(eo_look::sun::DAY_OF_YEAR)),
+            dryness: season_dryness(),
+            season_per_frame: eo_look::season::features().photo_season && env_f32("EO_FARSHORE_DRY").is_none(),
         }
     }
 }
@@ -397,6 +420,7 @@ impl FarShoreGpu {
                 let c = eo_water::grid::offset_for(cam.eye.x as f64, cam.eye.z as f64, eo_water::grid::snap_for(r));
                 [c[0] as f32, c[1] as f32, r as f32, sea_on as u32 as f32]
             },
+            season: [o.season_per_frame as u32 as f32, 0.0, 0.0, 0.0],
         };
         queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&u));
     }
@@ -601,5 +625,25 @@ mod tests {
         assert!(dryness_for_day(265.0) > 0.99); // the sun model's date (September 22)
         assert!(dryness_for_day(45.0) < 0.01); // mid-February
         assert!(dryness_for_day(130.0) > 0.2 && dryness_for_day(130.0) < 0.8); // May: browning
+    }
+}
+
+#[cfg(test)]
+mod palette_tests {
+    #[test]
+    fn the_shared_palette_is_the_far_layers() {
+        // every vec3<f32>(a, b, c) literal of the shader, parsed
+        let w = include_str!("farshore.wgsl");
+        let lits: Vec<[f32; 3]> = w
+            .split("vec3<f32>(")
+            .skip(1)
+            .filter_map(|t| {
+                let v: Vec<f32> = t.split(')').next()?.split(',').map(|x| x.trim().parse::<f32>()).collect::<Result<_, _>>().ok()?;
+                (v.len() == 3).then(|| [v[0], v[1], v[2]])
+            })
+            .collect();
+        for c in [super::FAR_GRASS_GREEN, super::FAR_GRASS_GOLDEN, super::FAR_SCRUB, super::FAR_TREE, super::FAR_MARSH, super::FAR_ROCK, super::FAR_TOWN] {
+            assert!(lits.contains(&c), "{c:?} not in farshore.wgsl");
+        }
     }
 }

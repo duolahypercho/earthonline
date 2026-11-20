@@ -20,7 +20,9 @@ pub mod clouds; // the cloud noise, blue noise and cloud-shadow map
 pub mod cc0; // the CC0 scanned sets
 pub mod cc0_decals; // street wear decals
 pub mod facade; // facade
+pub mod far_city; // the far layer's fallback draw path and the built city's switches
 pub mod ground2; // the open ground from the measured ground-green table
+pub mod groundcover; // the ground vegetation and hill rock (hooks beside the props')
 pub mod hitch; // hitch
 pub mod hlod; // hlod
 pub mod hlod_bake; // hlod
@@ -43,6 +45,7 @@ pub mod scene;
 pub mod surfaces;
 pub mod upload;
 pub mod view_detail;
+pub mod draw_ranges; // the fixed-slot lists drawn in conservative ranges
 pub mod water; // water
 pub mod surf; // the surf strip along the beaches
 pub mod farshore; // the far terrain
@@ -65,7 +68,7 @@ pub const DRAW_ARGS_BYTES: u64 = 20;
 /// shadow depth begin/end, post begin/end, (surfaces) AO begin/end, then
 /// (occlusion) pyramid + late cull begin/end and late city pass begin/end.
 /// Post is the last pass executed whatever its slot.
-pub const QUERIES_PER_FRAME: u32 = 34; // +2 (sky::Q_CLOUD_SHADOW, slots 32-33) // +10 (sky::Q_SKY_*, slots 22-31) // water: +4 (Q_WATER_FFT, Q_WATER) // facade: +2 for the scene probe (Q_PROBE) // surfaces: +2 for the AO pass (look::Q_AO); +4
+pub const QUERIES_PER_FRAME: u32 = 38; // +4 (Q_WATER_PPR, Q_SCENE_METER, slots 34-37) // +2 (sky::Q_CLOUD_SHADOW, slots 32-33) // +10 (sky::Q_SKY_*, slots 22-31) // water: +4 (Q_WATER_FFT, Q_WATER) // facade: +2 for the scene probe (Q_PROBE) // surfaces: +2 for the AO pass (look::Q_AO); +4
 /// timestamp slots of the pyramid + late cull pass and the late city pass.
 pub const Q_OCCLUSION: u32 = 12;
 pub const Q_LATE_DRAW: u32 = 14;
@@ -75,6 +78,10 @@ pub const Q_PROBE: u32 = 16;
 /// with the glass drawn after the water in it (the frame copy is the gap between the two).
 pub const Q_WATER_FFT: u32 = 18;
 pub const Q_WATER: u32 = 20;
+/// the water's projected-reflection pass (inside the gap between the FFT and the water pass).
+pub const Q_WATER_PPR: u32 = 34;
+/// the scene meter's histogram pass (before post).
+pub const Q_SCENE_METER: u32 = 36;
 /// Counter words (see cull.wgsl): opaque draws, blend draws, triangles, model
 /// parts drawn, model triangles, footprint stand-ins drawn, kit objects, kit
 /// triangles, street objects, street triangles, (occlusion) late opaque draws,
@@ -321,6 +328,10 @@ pub struct Renderer {
     pub base_object_count: u32,
     pub group_count: u32,
     pub compact: bool,
+    /// The far layer draws without the compacted lists (an adapter without
+    /// multi-draw-indirect-count, unless `--no-far-fallback`): fixed-size
+    /// lists, see `hlod::HlodGpu::draw` and `hlod_trees::FarTrees::draw`.
+    pub far_fallback: bool,
     pub color_format: wgpu::TextureFormat,
     pub sample_count: u32,
     pub debug_ids: bool,
@@ -383,6 +394,8 @@ pub struct Renderer {
     pub agents: std::sync::OnceLock<agents::AgentsGpu>,
     /// static street props (signals, signs, trees, pads), attached once their library is cooked.
     pub props: std::sync::OnceLock<props::PropsGpu>,
+    /// the ground vegetation and hill rock near the camera (`groundcover`; nothing attached draws nothing).
+    pub groundcover: groundcover::GroundCover,
     /// bytes written through `write` since the last `update` (the
     /// frame's streaming uploads); a frame over `PROBE_DEFER_UPLOAD_BYTES`
     /// draws no probe face.
@@ -411,6 +424,12 @@ pub struct Renderer {
     /// the far street lamps by night (stage 3) and the distant trees (stage 4).
     pub hlod_lights: std::sync::OnceLock<hlod_lights::FarLights>,
     pub hlod_trees: std::sync::OnceLock<hlod_trees::FarTrees>,
+    /// (no multi-draw-indirect-count) the CPU copy of the object table and the
+    /// conservative ranges the fixed-slot lists are drawn in (`draw_ranges`;
+    /// None: the whole lists, as before: `--no-draw-ranges`, the compacted lists, a stress copy).
+    ranges: Option<std::sync::Mutex<draw_ranges::DrawRanges>>,
+    /// this frame's ranges of the camera's opaque list and transparent list (slots), set by `update`.
+    frame_ranges: std::sync::Mutex<Option<(draw_ranges::Ranges, draw_ranges::Ranges)>>,
 }
 
 /// a frame that uploads this much (a quarter of the default 4 MiB budget)
@@ -953,6 +972,7 @@ impl Renderer {
             base_object_count: init.objects.len() as u32,
             group_count: init.groups.len() as u32,
             compact: ctx.indirect_count,
+            far_fallback: !ctx.indirect_count && far_city::FarCity::from_env().fallback,
             color_format: init.color_format,
             sample_count: init.sample_count,
             debug_ids: init.debug_ids,
@@ -999,6 +1019,7 @@ impl Renderer {
             street_radii: street::DEFAULT_STREET_RADII,
             agents: std::sync::OnceLock::new(), // agents
             props: std::sync::OnceLock::new(),  // props
+            groundcover: Default::default(),
             frame_upload_bytes: std::sync::atomic::AtomicU64::new(0),
             water: std::sync::OnceLock::new(),  // water
             surf: std::sync::OnceLock::new(), // surf
@@ -1012,7 +1033,24 @@ impl Renderer {
             hlod: std::sync::OnceLock::new(),       // hlod
             hlod_lights: std::sync::OnceLock::new(), // hlod
             hlod_trees: std::sync::OnceLock::new(),  // hlod
+            ranges: (!ctx.indirect_count && n == 1 && pace::draw_ranges_on()).then(|| std::sync::Mutex::new(draw_ranges::DrawRanges::new(&objects, hlod::HlodOptions::from_env().on))),
+            frame_ranges: std::sync::Mutex::new(None),
         })
+    }
+
+    /// slots the fixed-slot lists issued last frame and slots they hold (None: whole lists).
+    pub fn draw_range_stats(&self) -> Option<(u64, u64)> {
+        self.ranges.as_ref().map(|r| {
+            let r = r.lock().unwrap();
+            (r.issued, r.slots)
+        })
+    }
+
+    /// the CPU copy of the object table follows a write of the GPU table (bytes at `offset`).
+    pub fn note_object_write(&self, offset: u64, data: &[u8]) {
+        if let Some(r) = &self.ranges {
+            r.lock().unwrap().write(offset, data);
+        }
     }
 
     /// turn the view-gated best-quality layer on or off (and its numbers).
@@ -1064,7 +1102,7 @@ impl Renderer {
     /// stage 4, the distant trees' pipeline and buffer (once; the list
     /// comes later: `hlod_trees.get()?.supply`). Returns the bytes allocated.
     pub fn attach_far_trees(&self, ctx: &GpuContext) -> u64 {
-        if self.hlod_trees.get().is_some() || !self.compact || !hlod::HlodOptions::from_env().on || !hlod::HlodOptions::from_env().trees {
+        if self.hlod_trees.get().is_some() || !(self.compact || self.far_fallback) || !hlod::HlodOptions::from_env().on || !hlod::HlodOptions::from_env().trees {
             return 0;
         }
         let t = hlod_trees::FarTrees::new(&hlod_trees::FarTreesInit {
@@ -1074,6 +1112,7 @@ impl Renderer {
             late_bgl: &self.occlusion.late_bgl,
             sample_count: self.sample_count,
             debug_ids: self.debug_ids,
+            fallback: !self.compact,
         });
         let b = t.bytes;
         let _ = self.hlod_trees.set(t);
@@ -1081,10 +1120,11 @@ impl Renderer {
     }
 
     /// build the far layer's GPU side (once; later calls are ignored).
-    /// Needs the compacted lists (multi-draw-indirect-count); without them the
-    /// far layer stays off and the boxes draw as before. Returns the bytes allocated.
+    /// Draws from the compacted lists (multi-draw-indirect-count), else from
+    /// fixed-size lists (`far_fallback`); with neither the far layer stays off
+    /// and the boxes draw as before. Returns the bytes allocated.
     pub fn attach_hlod(&self, ctx: &GpuContext, opts: &hlod::HlodOptions) -> u64 {
-        if self.hlod.get().is_some() || !self.compact || !opts.on {
+        if self.hlod.get().is_some() || !(self.compact || self.far_fallback) || !opts.on {
             return 0;
         }
         let h = hlod::HlodGpu::new(&hlod::HlodInit {
@@ -1097,6 +1137,7 @@ impl Renderer {
             sample_count: self.sample_count,
             debug_ids: self.debug_ids,
             opts: *opts,
+            fallback: !self.compact,
         });
         let b = h.total_bytes();
         let _ = self.hlod.set(h);
@@ -1108,6 +1149,9 @@ impl Renderer {
         let n = (self.hlod_map_buf.size() / 4) as usize;
         let words: Vec<u32> = (0..n).map(|g| group_cell.get(g).copied().unwrap_or(u32::MAX)).collect();
         queue.write_buffer(&self.hlod_map_buf, 0, bytemuck::cast_slice(&words));
+        if let Some(r) = &self.ranges {
+            r.lock().unwrap().set_hlod_map(&words);
+        }
     }
 
     /// the wire members' pipeline over the city's own groups (once;
@@ -1124,6 +1168,7 @@ impl Renderer {
             sample_count: self.sample_count,
             vertices,
             indices,
+            sky_view: self.look.sky.atmo_tables().0,
         });
         let bytes = w.as_ref().map(|w| w.bytes).unwrap_or(0);
         if let Some(w) = w {
@@ -1195,6 +1240,7 @@ impl Renderer {
             Target::Object => {
                 if self.multiplier <= 1 {
                     queue.write_buffer(&self.object_buf, offset, data);
+                    self.note_object_write(offset, data);
                 } else {
                     let objs: Vec<GpuObject> = bytemuck::pod_collect_to_vec(data);
                     for k in 0..self.multiplier {
@@ -1285,6 +1331,9 @@ impl Renderer {
             };
             let at = (k * self.base_object_count + object_at) as u64 * std::mem::size_of::<GpuObject>() as u64;
             queue.write_buffer(&self.object_buf, at, bytemuck::cast_slice(data));
+            if k == 0 {
+                self.note_object_write(at, bytemuck::cast_slice(data));
+            }
         }
         self.set_group_ready(queue, group, true);
     }
@@ -1388,10 +1437,12 @@ impl Renderer {
     }
 
     /// the sea is drawn by the water pass this frame (attached, on, and
-    /// on the path it needs: compacted lists, single-sample, no debug ids);
-    /// otherwise the flat sea quad draws as before.
+    /// on the path it needs: single-sample, no debug ids; its patches are one
+    /// instanced indirect draw, so it needs no multi-draw-indirect-count unless
+    /// `--no-water-instanced` asks for the earlier rule); otherwise the flat
+    /// sea quad draws as before.
     pub fn water_active(&self) -> bool {
-        self.compact && self.sample_count == 1 && !self.debug_ids && self.water.get().is_some_and(|w| w.on())
+        self.sample_count == 1 && !self.debug_ids && self.water.get().is_some_and(|w| w.on() && (self.compact || w.instanced()))
     }
 
     /// allocate the street's scanned-set arrays at their size, write
@@ -1459,6 +1510,7 @@ impl Renderer {
     pub fn debug_set_object_material(&self, queue: &wgpu::Queue, object: u32, material: u32) {
         let at = object as u64 * std::mem::size_of::<GpuObject>() as u64 + 44;
         queue.write_buffer(&self.object_buf, at, bytemuck::bytes_of(&material));
+        self.note_object_write(at, bytemuck::bytes_of(&material));
     }
 
     /// Upload this frame's camera (two small uniform writes; the only
@@ -1507,6 +1559,14 @@ impl Renderer {
             occ: [occlusion as u32, 2 * self.object_count, self.water_active() as u32, 0], // occlusion; z = the flat sea quad stands down
         };
         queue.write_buffer(&self.cull_params_buf, 0, bytemuck::bytes_of(&params));
+        // (no multi-draw-indirect-count) the blocks of slots this frame's cull can fill.
+        *self.frame_ranges.lock().unwrap() = self.ranges.as_ref().map(|r| {
+            let mut r = r.lock().unwrap();
+            r.begin_frame();
+            let opaque = r.camera_opaque(&planes, !self.water_active());
+            let blend = draw_ranges::shift(&r.camera_blend(&planes), self.blend_first);
+            (opaque, blend)
+        });
         if let Some(h) = self.hlod.get() {
             h.update(queue, vp, planes, cam.eye); // the far layer's cull, the same camera
         }
@@ -1544,6 +1604,13 @@ impl Renderer {
         let yield_on = self.facade_flags.load(std::sync::atomic::Ordering::Relaxed) & facade::RUN_PROBE_YIELD != 0;
         self.look.set_transfer(if frame.probe_info[3] > 0.5 && yield_on { self.probe.stats().transfer } else { None });
         self.look.update(queue, cam, frame.copy_step[0]); // look
+        if let Some(r) = &self.ranges {
+            // each cascade's list in the blocks its cull can fill (look.rs `encode_shadows_with`).
+            let (planes, mask) = self.look.shadow_cull_planes();
+            let mut r = r.lock().unwrap();
+            // (a cascade not refreshed this frame draws no pass)
+            self.look.set_shadow_ranges(Some([0, 1, 2].map(|c| if mask & (1 << c) != 0 { r.shadow(&planes[c * 6..c * 6 + 6]) } else { vec![] })));
+        }
         // no probe face on a frame that refreshes the middle or far
         // cascade or streams a large upload; the face waits for the next frame.
         let uploaded = self.frame_upload_bytes.swap(0, std::sync::atomic::Ordering::Relaxed);
@@ -1558,6 +1625,7 @@ impl Renderer {
         if let Some(p) = self.props.get() {
             p.update(queue, cam, &self.look, occlusion && self.compact); // props
         }
+        self.groundcover.update(queue, cam, &self.look, occlusion && self.compact);
         if let Some(w) = self.water.get() {
             // the grid, the clock, the gate, the uniforms (the probe as the mirror's fallback).
             let probe = (frame.probe_info[3] > 0.5).then(|| glam::Vec3::new(frame.probe_info[0], frame.probe_info[1], frame.probe_info[2]));
@@ -1635,13 +1703,15 @@ impl Renderer {
         self.encode_cull(enc, ts);
         // sun shadow cull + depth passes; the city renders into the HDR
         // target (resolving MSAA into it) and post writes the output.
-        self.look.encode_shadows(enc, &self.vertex_buf, &self.index_buf, ts);
+        // the ground cover's casters go into each refreshed cascade's pass (nothing attached: none).
+        self.look.encode_shadows_with(enc, &self.vertex_buf, &self.index_buf, ts, &|pass, c| self.groundcover.draw_shadow(pass, c, &self.look));
         if let Some(a) = self.agents.get() {
             a.encode(enc, &self.look); // cull + LOD compute, casters into the refreshed cascades
         }
         if let Some(p) = self.props.get() {
             p.encode_pre(enc, &self.look); // cascade cull + casters (and the camera cull with occlusion off)
         }
+        self.groundcover.encode_pre(enc, &self.look);
         // the scene probe's face for this frame (after the shadows it is lit with).
         {
             let pbg = self.probe_draw_bg.lock().unwrap()[self.probe.front().0].clone();
@@ -1659,7 +1729,11 @@ impl Renderer {
         let keep_depth = (self.look.options.ao || self.look.sky_wants_depth()) && depth.texture().usage().contains(wgpu::TextureUsages::TEXTURE_BINDING) && depth.texture().sample_count() == 1; // + the sky passes
         // the wire pass after the late city pass depth-tests against it.
         let keep_depth = keep_depth || self.props.get().is_some_and(|p| p.wires_pending());
+        // the bridges' wire members over the resolved frame (single-sample depth only), not in the glass pass.
+        let wire_overlay = !self.debug_ids && depth.texture().sample_count() == 1 && self.landmarks.get().is_some_and(|l| l.overlay());
+        let keep_depth = keep_depth || wire_overlay;
         let draw_bg = self.draw_bg.lock().unwrap()[self.probe.front().0].clone(); // the front cube's
+        let frame_ranges = self.frame_ranges.lock().unwrap().clone(); // (fixed-slot lists) this frame's ranges
         // with occlusion on the city is two passes, the early
         // (objects visible last frame, depth kept for the pyramid) and the
         // late (newly visible objects, agents, the sky, the glass); off, one pass.
@@ -1743,6 +1817,11 @@ impl Renderer {
                         pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
                         pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint32);
                     }
+                    if self.groundcover.draw(&mut pass, &self.look) {
+                        // the ground cover after the props; the city buffers again if it bound its own.
+                        pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
+                        pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint32);
+                    }
                     if let Some(a) = self.agents.get() {
                         // moving things after the opaque city, then the city buffers again.
                         a.draw_opaque(&mut pass, &self.look);
@@ -1772,8 +1851,14 @@ impl Renderer {
                     pass.multi_draw_indexed_indirect_count(&self.draw_buf, offset, &self.counter_buf, counter, self.object_count);
                 } else {
                     let k = (offset != 0) as usize;
-                    if slots[k] > 0 {
-                        pass.multi_draw_indexed_indirect(&self.draw_buf, offset, slots[k]);
+                    match &frame_ranges {
+                        // the blocks of slots the cull can fill, in slot order (draw_ranges)
+                        Some(fr) => draw_ranges::draw(&mut pass, &self.draw_buf, offset, if k == 0 { &fr.0 } else { &fr.1 }),
+                        None => {
+                            if slots[k] > 0 {
+                                pass.multi_draw_indexed_indirect(&self.draw_buf, offset, slots[k]);
+                            }
+                        }
                     }
                 }
             }
@@ -1781,7 +1866,7 @@ impl Renderer {
                 if let Some(a) = self.agents.get() {
                     a.draw_glass(&mut pass, &self.look); // glass and lenses after the city glass
                 }
-                if let Some(l) = self.landmarks.get() {
+                if let Some(l) = self.landmarks.get().filter(|_| !wire_overlay) {
                     // the wire members where the glass is drawn.
                     pass.set_bind_group(0, &draw_bg, &[]);
                     self.look.bind_main(&mut pass);
@@ -1806,6 +1891,7 @@ impl Renderer {
                     if let Some(p) = self.props.get() {
                         p.cull_camera(pass, hzb_bg); // the camera view against this frame's pyramid
                     }
+                    self.groundcover.cull_camera(pass, hzb_bg);
                     if let Some(a) = self.agents.get() {
                         a.cull_camera(pass, hzb_bg); // moving agents against this frame's pyramid
                     }
@@ -1840,17 +1926,24 @@ impl Renderer {
             w.encode_compute(enc, occlusion, ts.map(|(q, b)| (q, b + Q_WATER_FFT)));
             let (front, _) = self.probe.front();
             // The glass in the same pass, after the water (it tests the read-only depth, never writes it).
-            w.encode_draw(enc, &self.look, &hdr, depth, [&self.probe.cube_views[0], &self.probe.cube_views[1]], front, /* hitch2: both cubes */ ts.map(|(q, b)| (q, b + Q_WATER)), |pass| {
+            w.encode_draw(enc, &self.look, &hdr, depth, [&self.probe.cube_views[0], &self.probe.cube_views[1]], front, /* hitch2: both cubes */ ts.map(|(q, b)| (q, b + Q_WATER)), ts.map(|(q, b)| (q, b + Q_WATER_PPR)), |pass| {
                 pass.set_bind_group(0, &draw_bg, &[]);
                 self.look.bind_main(pass);
                 pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
                 pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint32);
                 pass.set_pipeline(&self.blend_pipeline);
-                pass.multi_draw_indexed_indirect_count(&self.draw_buf, self.object_count as u64 * DRAW_ARGS_BYTES, &self.counter_buf, 4, self.object_count);
+                if self.compact {
+                    pass.multi_draw_indexed_indirect_count(&self.draw_buf, self.object_count as u64 * DRAW_ARGS_BYTES, &self.counter_buf, 4, self.object_count);
+                } else if let Some(fr) = &frame_ranges {
+                    draw_ranges::draw(pass, &self.draw_buf, self.object_count as u64 * DRAW_ARGS_BYTES, &fr.1); // the glass list's fillable blocks
+                } else if self.object_count > self.blend_first {
+                    // without the count, the glass list's slots from `blend_first` on (as the city pass draws it)
+                    pass.multi_draw_indexed_indirect(&self.draw_buf, self.object_count as u64 * DRAW_ARGS_BYTES, self.object_count - self.blend_first);
+                }
                 if let Some(a) = self.agents.get() {
                     a.draw_glass(pass, &self.look);
                 }
-                if let Some(l) = self.landmarks.get() {
+                if let Some(l) = self.landmarks.get().filter(|_| !wire_overlay) {
                     // the wire members over the water, with the glass.
                     pass.set_bind_group(0, &draw_bg, &[]);
                     self.look.bind_main(pass);
@@ -1868,7 +1961,7 @@ impl Renderer {
             }
         } else if let Some((q, b)) = ts {
             // Every slot a frame resolves is written (empty passes).
-            for slot in [Q_WATER_FFT, Q_WATER] {
+            for slot in [Q_WATER_FFT, Q_WATER, Q_WATER_PPR] {
                 enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
                     label: Some("water off"),
                     timestamp_writes: Some(wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b + slot), end_of_pass_write_index: Some(b + slot + 1) }),
@@ -1880,6 +1973,21 @@ impl Renderer {
         }
         self.look.encode_ao(enc, depth, &hdr, ts); // surfaces
         self.look.encode_sky_after(enc, depth, &hdr, self.agents.get(), ts); // rain, luminaires, velocity, volume, resolve, bloom
+        if let Some(l) = self.landmarks.get().filter(|_| wire_overlay) {
+            // the bridges' cables and suspenders over the frame the post reads (after the atmosphere, which wiped them over the sky).
+            let target = self.look.resolved_view().unwrap_or_else(|| hdr.clone());
+            let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("landmark-wires-overlay"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &target, depth_slice: None, resolve_target: None, ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store } })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: depth, depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store }), stencil_ops: None }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_bind_group(0, &draw_bg, &[]);
+            self.look.bind_main_resolved(&mut pass);
+            l.draw_overlay(&mut pass);
+        }
         self.look.encode_post_with_water(enc, output, ts, water.filter(|_| self.look.options.water_optics).map(|w| (w, self.probe.front().0)));
     }
 
@@ -1980,6 +2088,9 @@ impl Renderer {
     /// set the per-cell residency words directly (tests; the far layer's streamer writes them otherwise).
     pub fn write_hlod_flags(&self, queue: &wgpu::Queue, flags: &[u32]) {
         queue.write_buffer(&self.hlod_flags_buf, 0, bytemuck::cast_slice(flags));
+        if let Some(r) = &self.ranges {
+            r.lock().unwrap().set_hlod_flags(flags); // the kit boxes' rule (draw_ranges)
+        }
     }
 
     /// Read the object table back (tests).
