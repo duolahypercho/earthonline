@@ -837,6 +837,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "eo-structures"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "eo-data",
+ "eo-landmarks",
+ "eo-street",
+]
+
+[[package]]
 name = "eo-ui"
 version = "0.1.0"
 dependencies = [
