@@ -530,6 +530,7 @@ impl WaterGpu {
                 entry(12, fs, tex(filt, wgpu::TextureViewDimension::D2)),
             ],
         });
+        let common = format!("{common}\nconst W_COVE_DETAIL: bool = {};\nconst W_COVE_SCALE: f32 = {:.8};", look.options.cove_detail, eo_data::groundscale::scale());
         let draw_src = format!("{common}\n{}\n{}\n{}\n{}", crate::look::look_common_source(), include_str!("sky_light_core.wgsl"), include_str!("water.wgsl"), include_str!("water_surf.wgsl")) + include_str!("water_spray.wgsl"); // + the spray, the cloud shadow and the fog depth
         let draw_src = if look.options.water_optics {
             draw_src + &format!("\nconst UW_DEPTH_EXPOSURE: bool = {};\n", look.options.dive_exposure) + include_str!("look_finish.wgsl") + include_str!("underwater.wgsl")
@@ -868,6 +869,24 @@ impl WaterGpu {
         let wet = self.submerged.as_ref().is_some_and(|(_, field)|
             field.signed_at(cam.eye.x as f64, cam.eye.z as f64) > MASK_M as f64);
         self.fallback_dive.store(wet, Ordering::Relaxed);
+    }
+
+    /// The sky and skyline that a sheltered water surface reflects are in air.
+    /// Share the cove's above-water cube while swimming. Nearby receivers and
+    /// their reflections still come from this frame's exact screen positions.
+    pub(crate) fn cove_reflection_eye(&self, eye: glam::Vec3) -> glam::Vec3 {
+        let sea = eo_water::SEA_LEVEL_Y as f32;
+        let scale = eo_data::groundscale::scale() as f32;
+        let x = eye.x / scale;
+        let z = eye.z / scale;
+        let edge = ((x + 625.0) / 48.0).min((-150.0 - x) / 48.0)
+            .min((z + 3620.0) / 64.0).min((-3110.0 - z) / 40.0);
+        let w = edge.min((sea + 8.0 - eye.y) / 5.0).clamp(0.0, 1.0);
+        if w == 0.0 || !self.submerged.as_ref().is_some_and(|(_, f)| f.signed_at(eye.x as f64, eye.z as f64) > 0.0) {
+            return eye;
+        }
+        let anchor = glam::Vec3::new(-365.0 * scale, sea + 1.7, -3250.0 * scale);
+        eye.lerp(anchor, w * w * (3.0 - 2.0 * w))
     }
 
     pub(crate) fn fallback_dive(&self) -> bool {

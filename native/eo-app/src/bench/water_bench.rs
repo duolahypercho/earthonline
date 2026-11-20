@@ -250,7 +250,7 @@ pub fn dive_segment(world: &World, frames: usize, aspect: f32, far: f32) -> Opti
 /// Short, level swim through the actual starting views. Explicit segment
 /// selection also exposes the paths with the habitats off for matched timing.
 pub fn habitat_segments(world: &World, args: &crate::Args, frames: usize, aspect: f32, far: f32) -> Vec<Segment> {
-    world.dive_sites.iter().filter_map(|site| {
+    let mut segments: Vec<Segment> = world.dive_sites.iter().filter_map(|site| {
         let name = match site.habitat {
             eo_render::seabed::Habitat::Eelgrass => "bay_grass",
             eo_render::seabed::Habitat::Sand => "pacific_sand",
@@ -266,7 +266,22 @@ pub fn habitat_segments(world: &World, args: &crate::Args, frames: usize, aspect
                 Camera { eye: cam.eye + cam.right() * (t - 0.5) * 1.2, yaw: cam.yaw + (t - 0.5)*0.32, ..cam }
             }),
         })
-    }).collect()
+    }).collect();
+    if (args.cove_detail || args.segments.as_ref().is_some_and(|p| p.iter().any(|n| n == "cove_descent")))
+        && let Some(&site) = world.dive_sites.iter().find(|s| s.beach.is_some()) {
+        segments.push(Segment {
+            name: "cove_descent", description: "Descend offshore from the Aquatic Park beach toward the surveyed basin.".into(),
+            frames, paced: false, streams: true,
+            camera: Box::new(move |i, n| {
+                let t = i as f32 / n.saturating_sub(1).max(1) as f32;
+                let mut camera = site.cove_camera(aspect, far, 112.0 * t);
+                // Enter through the moving surface before following the descending bed.
+                camera.eye.y += (1.0 - t * 8.0).max(0.0) * 1.1;
+                camera
+            }),
+        });
+    }
+    segments
 }
 
 /// The `capture-water-*` views: (name, camera, what it shows).
@@ -302,6 +317,11 @@ pub fn capture_cameras(world: &World, aspect: f32, far: f32) -> Vec<(&'static st
         out.push(("bay-waterline", crossing, "at mean sea level facing the city".into()));
     }
     for site in &world.dive_sites {
+        if site.beach.is_some() {
+            out.push(("cove-surface", site.surface_camera(aspect, far), "Aquatic Park beach toward Municipal Pier and Black Point".into()));
+            out.push(("cove-shallows", site.cove_camera(aspect, far, 0.0), "looking down the cove bank just below the surface".into()));
+            out.push(("cove-basin", site.cove_camera(aspect, far, 112.0), "112 m farther offshore on the same transect".into()));
+        }
         let (name, description) = match site.habitat {
             eo_render::seabed::Habitat::Eelgrass => ("bay-grass", "near the bed in Aquatic Park Cove"),
             eo_render::seabed::Habitat::Sand => ("pacific-ripples", "near the bed off Ocean Beach"),

@@ -57,7 +57,7 @@ fn cl_stratus() -> f32 {
 /// closes into a continuous deck (coverage over 0.75: the overcast, fog, drizzle, rain
 /// and storm decks), its cumulus part faded out.
 fn cl_cumulus_on() -> f32 {
-    return select(0.0, 1.0, sky_on(skyu.flags.x, SKY_CUMULUS));
+    return select(0.0, skyu.prev_eye.w, sky_on(skyu.flags.x, SKY_CUMULUS));
 }
 
 /// Whether the low deck draws at all (the march, its cloud shadows).

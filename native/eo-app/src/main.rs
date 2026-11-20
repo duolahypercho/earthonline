@@ -18,6 +18,7 @@ mod agents_bench;
 mod people_capture; // people
 mod bench;
 mod dive_sites;
+mod cove_bed;
 mod cc0_runtime; // the CC0 scanned sets at run time
 mod farshore; // the far terrain's load and attach
 mod models;
@@ -50,6 +51,8 @@ pub struct Args {
     pub start_underwater: bool,
     pub dive_site: Option<eo_render::seabed::Habitat>,
     pub underwater_habitats: bool,
+    pub cove_detail: bool,
+    pub surface_start: bool,
     pub frames: usize,
     pub warmup: usize,
     pub width: u32,
@@ -189,6 +192,15 @@ impl Default for PerfArgs {
     }
 }
 
+fn apply_cove_look(args: &mut Args, raw: &[String]) {
+    if args.cove_detail {
+        args.look.cove_detail = true;
+        args.look.water_optics = !raw.iter().any(|s| s == "--no-water-optics");
+        args.look.dive_exposure = !raw.iter().any(|s| s == "--no-dive-exposure");
+        args.look.sky.cove_cumulus = args.look.sky.clouds;
+    }
+}
+
 fn parse_args() -> Result<Args> {
     let mut a = Args {
         interior_lighting: true,
@@ -200,6 +212,8 @@ fn parse_args() -> Result<Args> {
         start_underwater: false,
         dive_site: None,
         underwater_habitats: false,
+        cove_detail: false,
+        surface_start: false,
         frames: 720,
         warmup: 60,
         width: 1920,
@@ -367,13 +381,20 @@ fn parse_args() -> Result<Args> {
             "--no-farshore" => {} // farshore.rs reads it (no far terrain)
             "--start-underwater" => a.start_underwater = true,
             "--dive-site" => {
-                a.dive_site = Some(match val()?.as_str() {
-                    "bay" => eo_render::seabed::Habitat::Eelgrass,
+                let s_site = val()?;
+                a.surface_start = false;
+                a.dive_site = Some(match s_site.as_str() {
+                    "bay" | "bay-surface" => {
+                        a.surface_start = s_site == "bay-surface";
+                        eo_render::seabed::Habitat::Eelgrass
+                    },
                     "pacific" => eo_render::seabed::Habitat::Sand,
-                    other => anyhow::bail!("unknown dive site {other}; choose bay or pacific"),
+                    other => anyhow::bail!("unknown dive site {other}; choose bay, bay-surface or pacific"),
                 });
             }
             "--water-optics" => a.look.water_optics = true,
+            "--cove-detail" => a.cove_detail = true,
+            "--no-cove-detail" => a.cove_detail = false,
             "--underwater-habitats" => a.underwater_habitats = true,
             "--no-underwater-habitats" => a.underwater_habitats = false,
             "--no-water-optics" => a.look.water_optics = false,
@@ -448,7 +469,7 @@ fn parse_args() -> Result<Args> {
             }
             "-h" | "--help" => {
                 println!(
-                    "eo-app [--dive-site bay|pacific] [--water-optics] [--dive-exposure|--no-dive-exposure] [--underwater-habitats|--no-underwater-habitats] [--bench] [--frames N=720] [--warmup N=60] [--width 1920] [--height 1080] [--msaa 1|4]\n       [--no-indirect-validation] [--no-indirect-count] [--no-vsync] [--out DIR] [--label NAME] [--capture] [--far M=4200]\n       [--multiply N=1] [--check-budget] [--budget-ms 10 (self-test only)]\n       [--no-models] [--no-terrain-lod] [--no-kit] [--slice1] [--slice2] [--cache DIR] [--no-cache] [--stream-threads N=6] [--stream-radius M=inf]\n       [--kit-threads N=6] [--kit-split-materials] [--upload-budget-mb 4] [--kit-arena-vertices N] [--kit-arena-indices N] [--kit-arena-objects N]\n       [--kit-near-load M=110] [--kit-mid-load M=520] [--drive-frames N=3600]\n       [--time-of-day H=12] [--shadow-map N=3072] [--no-shadows] [--no-agents] [--agent-density N=1] [--no-rocketbox]\n       [--no-occlusion] [--occlusion-check] [--no-thread-priority] [--pace realtime|60hz|all-60hz|none] [--worst-frames N=12] [--check-max]\n       [--no-view-detail] [--view-margin-deg 35] [--view-predict-s 0.3] [--view-hold-s 2.5] [--stream-all-paths] [--full-arenas]\n       [--segments street_walk,elevated_sweep,city_overview,authored_street,kit_street,drive,turn_around,turn_around_authored]"
+                    "eo-app [--dive-site bay|bay-surface|pacific] [--cove-detail|--no-cove-detail] [--water-optics] [--dive-exposure|--no-dive-exposure] [--underwater-habitats|--no-underwater-habitats] [--bench] [--frames N=720] [--warmup N=60] [--width 1920] [--height 1080] [--msaa 1|4]\n       [--no-indirect-validation] [--no-indirect-count] [--no-vsync] [--out DIR] [--label NAME] [--capture] [--far M=4200]\n       [--multiply N=1] [--check-budget] [--budget-ms 10 (self-test only)]\n       [--no-models] [--no-terrain-lod] [--no-kit] [--slice1] [--slice2] [--cache DIR] [--no-cache] [--stream-threads N=6] [--stream-radius M=inf]\n       [--kit-threads N=6] [--kit-split-materials] [--upload-budget-mb 4] [--kit-arena-vertices N] [--kit-arena-indices N] [--kit-arena-objects N]\n       [--kit-near-load M=110] [--kit-mid-load M=520] [--drive-frames N=3600]\n       [--time-of-day H=12] [--shadow-map N=3072] [--no-shadows] [--no-agents] [--agent-density N=1] [--no-rocketbox]\n       [--no-occlusion] [--occlusion-check] [--no-thread-priority] [--pace realtime|60hz|all-60hz|none] [--worst-frames N=12] [--check-max]\n       [--no-view-detail] [--view-margin-deg 35] [--view-predict-s 0.3] [--view-hold-s 2.5] [--stream-all-paths] [--full-arenas]\n       [--segments street_walk,elevated_sweep,city_overview,authored_street,kit_street,drive,turn_around,turn_around_authored]"
                 );
                 std::process::exit(0);
             }
@@ -460,6 +481,10 @@ fn parse_args() -> Result<Args> {
         a.look.dive_exposure = !std::env::args().any(|flag| flag == "--no-dive-exposure");
         a.underwater_habitats = !std::env::args().any(|flag| flag == "--no-underwater-habitats");
     }
+    if a.dive_site == Some(eo_render::seabed::Habitat::Eelgrass) {
+        a.cove_detail = !std::env::args().any(|s| s == "--no-cove-detail");
+    }
+    apply_cove_look(&mut a, &std::env::args().skip(1).collect::<Vec<_>>());
     if a.frames + a.warmup > 1024 {
         // 4 timestamp queries per frame; one query set holds at most 4096.
         anyhow::bail!("--frames + --warmup must be <= 1024 per segment");
@@ -557,6 +582,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         let (g, p) = (elevation.clone(), paths.clone());
         // `--no-landmarks2` builds the set as the first landmarks slice did.
         let opts = if args.landmarks2 { eo_landmarks::set::Options::default() } else { eo_landmarks::set::Options::off() };
+        let opts = eo_landmarks::set::Options { cove_detail: args.cove_detail, ..opts };
         std::thread::spawn(move || -> Result<eo_landmarks::LandmarkSet> {
             let ca = CaStandards::load(&p)?;
             eo_landmarks::LandmarkSet::build_with(&p.repo_root, &|x: f64, z: f64| g.sample(x, z), &ca, opts)
@@ -744,18 +770,36 @@ pub fn load_world(args: &Args) -> Result<World> {
         None => None,
     };
     let press = water.clone().filter(|_| args.look.water);
+    let profile = press.as_ref().filter(|_| args.cove_detail || args.capture || args.bench)
+        .map(|p| Arc::new(cove_bed::CoveBed::new(&elevation, &p.field)));
+    let cove = profile.clone().filter(|_| args.cove_detail);
     // the beach foreshore goes into the street world's carpet, which the
     // drawn ground, the collision ground (eo-player StreetGround) and the
     // agents all read, so they agree on the lowered beach.
     if let (Some(sw), Some(p)) = (&street_world, &press) {
         let p = p.clone();
-        sw.set_shore_press(Arc::new(move |x: f64, z: f64, y: f64| p.field.press_beach(x, z, y)));
+        let cove = cove.clone();
+        sw.set_shore_press(Arc::new(move |x, z, y| {
+            if let Some((h, w)) = cove.as_ref().and_then(|c| c.sample(x, z)) {
+                let old = p.field.press_ground(x, z, y);
+                return old + w * (h - old);
+            }
+            p.field.press_beach(x, z, y)
+        }));
     }
     let elev = &elevation;
     let carpet_fn: Option<Box<dyn Fn(f32, f32) -> f32 + Sync + '_>> = match (street_world.clone(), press) {
-        (Some(w), Some(p)) => Some(Box::new(move |x: f32, z: f32| p.field.press_ground_rings(x as f64, z as f64, w.carpet_vertex(x, z) as f64) as f32)), // the beach is in the carpet already
+        (Some(w), Some(p)) => Some(Box::new(move |x: f32, z: f32| {
+            let y = w.carpet_vertex(x, z);
+            if cove.as_ref().is_some_and(|c| c.sample(x as f64, z as f64).is_some()) { y }
+            else { p.field.press_ground_rings(x as f64, z as f64, y as f64) as f32 }
+        })), // the beach is in the carpet already
         (Some(w), None) => Some(Box::new(move |x: f32, z: f32| w.carpet_vertex(x, z))),
-        (None, Some(p)) => Some(Box::new(move |x: f32, z: f32| p.field.press_ground(x as f64, z as f64, elev.ground(x as f64, z as f64)) as f32)),
+        (None, Some(p)) => Some(Box::new(move |x: f32, z: f32| {
+            let (x, z) = (x as f64, z as f64);
+            let old = p.field.press_ground(x, z, elev.ground(x, z));
+            cove.as_ref().and_then(|c| c.sample(x, z)).map_or(old, |(h, w)| old + w * (h - old)) as f32
+        })),
         (None, None) => None,
     };
     // the landmark set joined before the scene build (it was done
@@ -793,6 +837,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         (Some(sw), cover, true) => {
             let (sw, cover, g) = (sw.clone(), cover.clone(), (elevation.meta.origin_x, elevation.meta.origin_z, elevation.max_x(), elevation.max_z()));
             let (tx, rx) = std::sync::mpsc::channel();
+            let cove_detail = args.cove_detail;
             std::thread::spawn(move || {
                 let t = Instant::now();
                 let Ok(js) = eo_props::JsProps::load() else { return };
@@ -802,7 +847,11 @@ pub fn load_world(args: &Args) -> Result<World> {
                 if let Some(cover) = &cover {
                     let sea = eo_water::SEA_LEVEL_Y;
                     let blocked = |x: f64, z: f64| sw.buildings.contains(x, z) || sw.paved_at(x, z).is_some() || sw.ground(x, z) < sea + 0.3;
-                    trees.extend(eo_render::hlod_trees::park_trees(cover, g.0, g.1, g.2, g.3, &|x, z| sw.ground(x, z), &blocked));
+                    let ground = |x, z| sw.ground(x, z);
+                    trees.extend(eo_render::hlod_trees::park_trees(cover, g.0, g.1, g.2, g.3, &ground, &blocked));
+                    if cove_detail {
+                        eo_render::hlod_trees::fill_black_point(&mut trees, cover, &ground, &blocked);
+                    }
                 }
                 if std::env::var("EO_TRACE_LOAD").is_ok() {
                     eprintln!("hlod: {} distant trees ({} street, {} park) in {:.0} ms (load thread)", trees.len(), street_n, trees.len() - street_n, t.elapsed().as_secs_f64() * 1e3);
@@ -821,7 +870,9 @@ pub fn load_world(args: &Args) -> Result<World> {
     let water_field = water.clone();
     const FAR_LAND_ABOVE_SEA_M: f64 = 2.0;
     const FAR_LAND_SHORE_M: f64 = 60.0;
+    let municipal = shore_press.clone().filter(|_| args.cove_detail);
     let far_land_fn = |x: f64, z: f64| -> Option<f64> {
+        if municipal.as_ref().is_some_and(|p| p.under_municipal_pier(x, z)) { return None; }
         cover.as_ref()?;
         let w = water_field.as_deref()?;
         if w.field.signed_at(x, z) <= FAR_LAND_SHORE_M {
@@ -895,10 +946,10 @@ pub fn load_world(args: &Args) -> Result<World> {
     let house_vertex_base = scene.vertices.len();
     if let Some(house) = &house { house.append(&mut scene, &authored.materials); }
     let mut dive_sites = vec![];
-    if args.look.water && (args.underwater_habitats || args.dive_site.is_some() || args.capture || args.bench)
+    if args.look.water && (args.underwater_habitats || args.cove_detail || args.dive_site.is_some() || args.capture || args.bench)
         && let (Some(data), Some(height)) = (&water, &carpet_fn)
     {
-        dive_sites = dive_sites::prepare(&mut scene, &data.field, elev, height.as_ref(), args.underwater_habitats);
+        dive_sites = dive_sites::prepare(&mut scene, &data.field, elev, height.as_ref(), args.underwater_habitats, args.cove_detail, profile.as_deref());
     }
     drop(carpet_fn); // water
     // the bridges (eo-landmarks, the JS generators ported) on the

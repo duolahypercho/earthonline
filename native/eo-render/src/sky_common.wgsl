@@ -9,7 +9,7 @@ struct Sky {
     prev_vp: mat4x4<f32>,
     // xyz eye, w world seconds (wrapped to a day)
     eye: vec4<f32>,
-    prev_eye: vec4<f32>,
+    prev_eye: vec4<f32>, // xyz previous eye, w fair-weather cumulus density
     // xy this frame's jitter (NDC), zw the last frame's
     jitter: vec4<f32>,
     // x TAA on, y history valid (the frames of history since the last cut, 0 = none), z blend (new frame weight), w frame dt (s)

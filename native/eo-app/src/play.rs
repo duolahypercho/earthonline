@@ -72,6 +72,8 @@ fn base_args() -> Args {
         start_underwater: false,
         dive_site: None,
         underwater_habitats: false,
+        cove_detail: false,
+        surface_start: false,
         frames: 720,
         warmup: 60,
         width: 1920,
@@ -143,6 +145,8 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-render" => o.render = false,
             "--collision-threads" => o.collision_threads = val()?.parse::<usize>()?.max(1),
             "--water-optics" => a.look.water_optics = true,
+            "--cove-detail" => a.cove_detail = true,
+            "--no-cove-detail" => a.cove_detail = false,
             "--underwater-habitats" => a.underwater_habitats = true,
             "--no-underwater-habitats" => a.underwater_habitats = false,
             "--no-water-optics" => a.look.water_optics = false,
@@ -179,6 +183,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
         }
     }
     a.bench = o.bench;
+    crate::apply_cove_look(&mut a, raw);
     Ok((a, o))
 }
 

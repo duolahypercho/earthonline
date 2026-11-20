@@ -1541,8 +1541,11 @@ impl Renderer {
         // the probe's face for this frame (compacted lists only).
         {
             let sky_up = self.look.frame().sky_irradiance_up;
+            let probe_eye = if self.look.options.cove_detail && self.water_active() {
+                self.water.get().map_or(cam.eye, |w| w.cove_reflection_eye(cam.eye))
+            } else { cam.eye };
             let _span = hitch::span(hitch::Phase::ProbeUpdate);
-            self.probe.update(queue, cam.eye, self.look.time_of_day(), sky_up, probe_on, bytemuck::cast_ref(&frame));
+            self.probe.update(queue, probe_eye, self.look.time_of_day(), sky_up, probe_on, bytemuck::cast_ref(&frame));
         }
         // the rig is solved for the probe's measured transfer (keyFillBalance
         // with `bakedProbeDiffuseYield(model, transfer)`), else the JS fallback yield.

@@ -90,6 +90,8 @@ pub struct SkyOptions {
     /// The fair-weather cumulus field, off by default (a clear sky keeps the high sheet
     /// alone; the overcast, fog and rain decks are drawn either way); `EO_CUMULUS=1` draws it.
     pub cumulus: bool,
+    /// Enable fair-weather clouds when the camera is near Aquatic Park.
+    pub cove_cumulus: bool,
     pub weather: WeatherMode,
     pub seed: u32,
     /// The world clock at the first frame (seconds since the world's epoch).
@@ -118,6 +120,7 @@ impl Default for SkyOptions {
             meter: true,
             atmosphere: true,
             contact: true,
+            cove_cumulus: false,
             cumulus: std::env::var("EO_CUMULUS").is_ok_and(|v| v == "1"),
             weather: WeatherMode::Preset(eo_sky::Kind::Clear),
             seed: eo_sky::world_seed(),
@@ -149,6 +152,7 @@ impl SkyOptions {
             meter: false,
             atmosphere: false,
             contact: false,
+            cove_cumulus: false,
             cumulus: false,
             ..Self::default()
         }
@@ -160,6 +164,15 @@ impl SkyOptions {
     pub fn needs_volume(&self) -> bool {
         self.clouds || self.fog || self.shafts
     }
+    fn cumulus_weight(&self, eye: glam::Vec3) -> f32 {
+        if self.cumulus { return 1.0; }
+        if !self.cove_cumulus { return 0.0; }
+        let scale = eo_data::groundscale::scale() as f32;
+        let distance = (eye.x / scale + 400.0).hypot(eye.z / scale + 3340.0);
+        let t = ((1250.0 - distance) / 550.0).clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t)
+    }
+
     fn bits(&self) -> u32 {
         let mut b = 0;
         for (on, bit) in [
@@ -176,7 +189,7 @@ impl SkyOptions {
             (self.bloom, 1024),
             (self.sprites, 4096),
             (self.contact, 8192),
-            (self.cumulus, 16384), // SKY_CUMULUS
+            (self.cumulus || self.cove_cumulus, 16384), // SKY_CUMULUS
         ] {
             if on {
                 b |= bit;
@@ -1230,7 +1243,7 @@ impl SkyGpu {
             vp: vp.to_cols_array_2d(),
             prev_vp: prev_vp.to_cols_array_2d(),
             eye: [cam.eye.x, cam.eye.y, cam.eye.z, (world_s % 86400.0) as f32],
-            prev_eye: prev_eye.extend(1.0).to_array(),
+            prev_eye: prev_eye.extend(o.cumulus_weight(cam.eye)).to_array(),
             jitter: [s.jitter[0], s.jitter[1], s.prev_jitter[0], s.prev_jitter[1]],
             taa: [if o.taa && depth_ok { 1.0 } else { 0.0 }, if s.history_valid && !cut { s.hist_n.max(1) as f32 } else { 0.0 }, 0.1, dt.max(1e-4) as f32],
             res: [out_size.0 as f32, out_size.1 as f32, 1.0 / out_size.0.max(1) as f32, 1.0 / out_size.1.max(1) as f32],

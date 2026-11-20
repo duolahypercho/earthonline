@@ -141,13 +141,15 @@ pub struct LookOptions {
     pub water_optics: bool,
     /// Compensate the camera for daylight lost along the path down to the eye.
     pub dive_exposure: bool,
+    /// Local water attenuation in the Aquatic Park Cove preview.
+    pub cove_detail: bool,
     /// the CC0 scanned sets' switches (`cc0::RUN_*`; `--no-cc0` and the per-feature `--no-cc0-*`).
     pub cc0: u32,
 }
 
 impl Default for LookOptions {
     fn default() -> Self {
-        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, dive_exposure: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT } // + rooms, agent pyramid test, probe deferral // water // sky
+        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, dive_exposure: false, cove_detail: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT } // + rooms, agent pyramid test, probe deferral // water // sky
     }
 }
 

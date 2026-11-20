@@ -562,6 +562,18 @@ fn wo_volume(path: f32, tv: vec3<f32>, l: vec3<f32>, sun: vec3<f32>, sky_irr: ve
 }
 
 // `underwaterLightModulation` (sun share 0.6, no caustics), clear constants.
+// Optical estimates for a sheltered, silty shoreline. Smoothly return to
+// open-bay values beyond the sampled cove. Coordinates use the city's map scale.
+fn wo_cove(xz: vec2<f32>) -> f32 {
+    if (!W_COVE_DETAIL) { return 0.0; }
+    let p = xz / W_COVE_SCALE;
+    let lo = smoothstep(vec2<f32>(-725.0, -3750.0), vec2<f32>(-635.0, -3620.0), p);
+    let hi = 1.0 - smoothstep(vec2<f32>(-150.0, -3150.0), vec2<f32>(-65.0, -3030.0), p);
+    return lo.x * lo.y * hi.x * hi.y;
+}
+const WO_COVE_A = vec3<f32>(1.12, 0.93, 1.14);
+const WO_COVE_S = vec3<f32>(0.16, 0.20, 0.15);
+
 fn wo_underwater(depth: f32, l: vec3<f32>) -> vec3<f32> {
     let sig_t = vec3<f32>(0.432, 0.093, 0.059);
     let ls = refract(-l, vec3<f32>(0.0, 1.0, 0.0), 1.0 / WO_IOR);
@@ -1236,9 +1248,10 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
 
     // --- the water column: refracted view ray, path to the bottom in the frame.
     let ocean = wg_ocean(world.x);
-    var sig_a = mix(WO_BAY_A, WO_COAST_A, ocean);
-    var sig_s = mix(WO_BAY_S, WO_COAST_S, ocean);
-    var bb = mix(WO_BAY_BB, WO_COAST_BB, ocean);
+    let cove = wo_cove(world.xz);
+    var sig_a = mix(mix(WO_BAY_A, WO_COAST_A, ocean), WO_COVE_A, cove);
+    var sig_s = mix(mix(WO_BAY_S, WO_COAST_S, ocean), WO_COVE_S, cove);
+    var bb = mix(mix(WO_BAY_BB, WO_COAST_BB, ocean), 0.045, cove);
     // a beach's surf zone carries churned sand: opaque grey-green to
     // tan, never clear blue (strongest inside the break, gone past 450 m).
     // (sea r3: not in a wave's rising face, which is clearer green-grey water drawn up from outside the break)
@@ -1283,7 +1296,7 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // the bay is turbid (visibility under a metre): the bottom through
     // it fades within about a metre of water, so Crissy's sand is not seen
     // through the strait.
-    vol.tview = vol.tview * exp(-vec3<f32>(2.5) * path * (1.0 - wg_ocean(world.x))); // (2.5 / m: a wall under 0.5 m of bay water is barely seen)
+    vol.tview = vol.tview * exp(-vec3<f32>(2.5 * (1.0 - cove)) * path * (1.0 - wg_ocean(world.x))); // (2.5 / m: a wall under 0.5 m of bay water is barely seen)
     // under an overcast the light the body sends up is a dull grey
     // (the weather's overcast weight desaturates it and takes a third off).
     let ovc = clamp(look.wx.x, 0.0, 1.0);

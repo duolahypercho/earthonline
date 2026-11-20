@@ -127,6 +127,21 @@ pub fn append(
     centre: Vec2,
     bed: &mut impl FnMut(Vec2) -> f32,
 ) {
+    append_bed(scene, habitat, centre, bed, false);
+}
+
+/// Sheltered Bay silt carries scattered shoots and subdued ripple relief.
+pub fn append_cove(scene: &mut Scene, centre: Vec2, bed: &mut impl FnMut(Vec2) -> f32) {
+    append_bed(scene, Habitat::Eelgrass, centre, bed, true);
+}
+
+fn append_bed(
+    scene: &mut Scene,
+    habitat: Habitat,
+    centre: Vec2,
+    bed: &mut impl FnMut(Vec2) -> f32,
+    cove: bool,
+) {
     let mut mesh = Chunk {
         verts: vec![],
         idx: vec![],
@@ -147,14 +162,19 @@ pub fn append(
             let grad = Vec2::new(
                 bed(world + Vec2::X * step) - base,
                 bed(world + Vec2::Y * step) - base,
-            ) / step + Vec2::new(
-                relief(p + Vec2::X * 0.005, habitat).0 - dy,
-                relief(p + Vec2::Y * 0.005, habitat).0 - dy,
-            ) / 0.005;
+            ) / step
+                + Vec2::new(
+                    relief(p + Vec2::X * 0.005, habitat).0 - dy,
+                    relief(p + Vec2::Y * 0.005, habitat).0 - dy,
+                ) / 0.005;
             let sand = if habitat == Habitat::Sand {
                 Vec3::new(172.0, 154.0, 123.0)
             } else {
-                Vec3::new(118.0, 107.0, 78.0)
+                if cove {
+                    Vec3::new(100.0, 94.0, 78.0)
+                } else {
+                    Vec3::new(118.0, 107.0, 78.0)
+                }
             };
             let mottling = (p.x * 1.7 + (p.y * 1.3).sin()).sin() * (p.y * 2.4).cos();
             add_vertex(
@@ -176,6 +196,7 @@ pub fn append(
     } else {
         780
     };
+    let placements = if cove { 260 } else { placements };
     for i in 0..placements {
         // A denser stand inside the meadow gives way to isolated shoots.
         let extent = if i >= 780 { 2.1 } else { RADIUS };
@@ -190,7 +211,9 @@ pub fn append(
             shell(&mut mesh, root, &mut rng);
         }
         let meadow = (p.x * 1.6 + 0.8 * (p.y * 1.3).sin()).sin() + (p.y * 1.8 + p.x * 0.42).cos();
-        if habitat == Habitat::Eelgrass && meadow > -0.65 && y < eo_water::SEA_LEVEL_Y as f32 - 0.65
+        if habitat == Habitat::Eelgrass
+            && meadow > (if cove { 0.55 } else { -0.65 })
+            && y < eo_water::SEA_LEVEL_Y as f32 - 0.65
         {
             for _ in 0..4 {
                 blade(&mut mesh, root - Vec3::Y * 0.012, &mut rng);
@@ -207,6 +230,81 @@ pub fn append(
     );
 }
 
+/// An intertidal band of wave-rounded cobbles partly embedded in the drawn beach.
+/// The same geometry is sampled by the refracting surface and the submerged view.
+pub fn cove_shore(scene: &mut Scene, shore: Vec2, bed: &mut impl FnMut(Vec2) -> f32) {
+    let mut mesh = Chunk {
+        verts: vec![],
+        idx: vec![],
+        min: [f32::INFINITY; 3],
+        max: [f32::NEG_INFINITY; 3],
+    };
+    let mut rng = Sequence(0x98734);
+    for i in 0..1450 {
+        let reach = if i < 1100 { 34.0 } else { 146.0 };
+        let p = shore + Vec2::new((rng.unit() - 0.5) * 31.0, 3.5 - rng.unit() * reach);
+        let radius = 0.024 + 0.34 * rng.unit().powi(5);
+        let axis = Vec2::from_angle(rng.unit() * std::f32::consts::TAU);
+        let narrow = 0.56 + 0.38 * rng.unit();
+        let high = radius * (0.38 + 0.55 * rng.unit());
+        let root = bed(p) - high * 0.21;
+        let tone = match (rng.unit() * 4.0) as u8 {
+            0 => Vec3::new(103.0, 97.0, 83.0),
+            1 => Vec3::new(110.0, 84.0, 66.0),
+            2 => Vec3::new(74.0, 82.0, 74.0),
+            _ => Vec3::new(87.0, 86.0, 83.0),
+        } * (0.82 + 0.35 * rng.unit());
+        let first = mesh.verts.len() as u32;
+        let phases: [f32; 8] = std::array::from_fn(|_| 0.85 + rng.unit() * 0.28);
+        let lean = (rng.unit() - 0.5) * 0.2;
+        for (ring, (spread, y)) in [(0.93, 0.0), (1.0, 0.34), (0.76, 0.76), (0.24, 0.97)]
+            .into_iter()
+            .enumerate()
+        {
+            for (k, shape) in phases.iter().enumerate() {
+                let v = Vec2::from_angle(k as f32 * std::f32::consts::TAU / 8.0);
+                let offset = axis.rotate(Vec2::new(v.x * spread + lean * y, v.y * narrow * spread))
+                    * radius
+                    * *shape;
+                let normal =
+                    point(axis.rotate(Vec2::new(v.x, v.y / narrow)) * (1.0 - y), y).normalize();
+                add_vertex(
+                    &mut mesh,
+                    point(p + offset, root + high * y * (0.94 + 0.06 * *shape)),
+                    normal,
+                    tone * (0.89 + 0.11 * y),
+                    0.0,
+                );
+                if ring > 0 {
+                    let a = first + ((ring - 1) * 8 + k) as u32;
+                    let b = first + ((ring - 1) * 8 + (k + 1) % 8) as u32;
+                    mesh.idx.extend([a, a + 8, b, b, a + 8, b + 8]);
+                }
+            }
+        }
+        for k in 1..7 {
+            mesh.idx
+                .extend([first + 24, first + 25 + k, first + 24 + k]);
+        }
+    }
+    // Small drifts of shell fragments in the silt, growing sparser offshore.
+    for _ in 0..900 {
+        let drift = shore + Vec2::new((rng.unit() - 0.5) * 32.0, -rng.unit() * 146.0);
+        for _ in 0..(1 + (rng.unit() * 6.0) as u8) {
+            let p = drift + Vec2::new(rng.unit() - 0.5, rng.unit() - 0.5) * 0.85;
+            let floor = bed(p);
+            shell(&mut mesh, point(p, floor + 0.007), &mut rng);
+        }
+    }
+    push_chunks(
+        scene,
+        vec![mesh],
+        ObjectKind::Seabed,
+        LOD_ALWAYS,
+        NO_GROUP,
+        MATERIAL_VERTEX_COLOUR,
+    );
+}
 #[cfg(test)]
 mod tests {
     use super::*;
