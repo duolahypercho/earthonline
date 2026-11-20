@@ -43,6 +43,7 @@ pub struct Args {
     pub beaver_house: bool,
     pub interior_lighting: bool,
     pub house_finishes: bool,
+    pub house_patina: bool,
     pub bench: bool,
     pub start_underwater: bool,
     pub frames: usize,
@@ -188,6 +189,7 @@ fn parse_args() -> Result<Args> {
     let mut a = Args {
         interior_lighting: true,
         house_finishes: false,
+        house_patina: false,
         beaver_house: false,
         bench: false,
         start_underwater: false,
@@ -257,6 +259,8 @@ fn parse_args() -> Result<Args> {
             "--beaver-house" => a.beaver_house = true,
             "--no-interior-lighting" => a.interior_lighting = false,
             "--house-finishes" => a.house_finishes = true,
+            "--house-patina" => { a.house_finishes = true; a.house_patina = true; }
+            "--no-house-patina" => a.house_patina = false,
             "--no-house-finishes" => a.house_finishes = false,
             "--no-beaver-house" => a.beaver_house = false,
             "--no-models" => a.models = false,
@@ -578,7 +582,7 @@ pub fn load_world(args: &Args) -> Result<World> {
     // the building records the landmark buildings draw instead.
     let mut landmark_claims: HashSet<String> = if args.landmarks && args.landmarks2 { eo_landmarks::set::claimed_records() } else { HashSet::new() };
     let finishes = (args.beaver_house && args.house_finishes)
-        .then(|| house::Finishes::load(&paths.repo_root))
+        .then(|| house::Finishes::load(&paths.repo_root, args.house_patina))
         .transpose()?;
     let house = if args.beaver_house {
         let record = city.buildings.iter().find(|b| house::owns(&b.id)).ok_or_else(|| anyhow::anyhow!("missing Beaver Street house footprint"))?;
@@ -624,6 +628,9 @@ pub fn load_world(args: &Args) -> Result<World> {
     }
     if let Some(kit) = kit_lib {
         // The kit bake runs beside the first frames; models and kit packs wait for it.
+        if finishes.as_ref().is_some_and(|f| !f.scans.is_empty()) {
+            house::Scan::bind(&mut authored.materials);
+        }
         let layers = authored.materials.layers.clone();
         let cache = cache_dir(args);
         let (tx, rx) = std::sync::mpsc::channel();
@@ -646,6 +653,8 @@ pub fn load_world(args: &Args) -> Result<World> {
                         }
                     }
                     if let Some(finishes) = finishes {
+                        maps.extend(finishes.scans.into_iter().map(|scan| scan.maps));
+                        maps.extend(finishes.street_reflections);
                         maps.push(finishes.floorboards);
                         maps.push(finishes.atlas);
                     }

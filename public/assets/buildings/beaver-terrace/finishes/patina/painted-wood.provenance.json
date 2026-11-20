@@ -1,0 +1,41 @@
+{
+  "source": [
+    "https://polyhaven.com/a/wood_floor_worn"
+  ],
+  "license": "CC0-1.0",
+  "license_url": "https://polyhaven.com/license",
+  "attribution": [
+    "Dimitrios Savva"
+  ],
+  "inputs": [
+    {
+      "asset": "wood_floor_worn",
+      "role": "albedo",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_floor_worn/wood_floor_worn_diff_1k.jpg",
+      "sha256": "db386853009b92b9edd7255b35c9f7b0d4b7de16837a7a9da8422148754bc758"
+    },
+    {
+      "asset": "wood_floor_worn",
+      "role": "normal",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_floor_worn/wood_floor_worn_nor_gl_1k.jpg",
+      "sha256": "f428496e5d6c726d17d9ecea29c0acd8660348630acf791cea7bdd7f3c6e262b"
+    },
+    {
+      "asset": "wood_floor_worn",
+      "role": "rough",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_floor_worn/wood_floor_worn_rough_1k.jpg",
+      "sha256": "9d7492db1197f1386466dfd7dd43f692446166c1433ddeebf66c10e8b226a6d0"
+    }
+  ],
+  "build": "scripts/blender-buildings/prepare_beaver_surfaces.py",
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/painted-wood.png",
+  "sha256": "77d66ca33cfb61dd75d98a8b4a4ffb3cc0336b1887000a4c2f1c6905319cda2d",
+  "bytes": 212042,
+  "families": [
+    "front-door-paint",
+    "front-door-moulding"
+  ],
+  "metres_per_tile": 1.0,
+  "normal_strength": 0.3,
+  "paint_mix": 0.92
+}

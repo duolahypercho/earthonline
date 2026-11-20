@@ -72,6 +72,12 @@ pub const BLEND_BIT: u32 = 1 << 8;
 pub const FLOOR_SCAN_BIT: u32 = 1 << 9;
 /// Loose mineral aggregate on a private lot.
 pub const GRAVEL_BIT: u32 = 1 << 10;
+/// Leaf-local coordinates for a swinging painted timber door.
+pub const DOOR_SCAN_BIT: u32 = 1 << 11;
+/// Camera-facing reflection in the actual front sash of the Beaver Street house.
+pub const FRONT_SASH_BIT: u32 = 1 << 12;
+/// Mineral plaster with locally baked exposure to splash and runoff.
+pub const LIMEWASH_BIT: u32 = 1 << 13;
 
 /// Material 0: the vertex colour (footprints, terrain, roads, sea).
 pub const MATERIAL_VERTEX_COLOUR: u32 = 0;

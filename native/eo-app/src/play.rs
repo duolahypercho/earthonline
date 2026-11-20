@@ -64,6 +64,7 @@ fn base_args() -> Args {
     Args {
         interior_lighting: true,
         house_finishes: false,
+        house_patina: false,
         beaver_house: false,
         bench: false,
         start_underwater: false,
@@ -124,6 +125,8 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--beaver-house" => a.beaver_house = true,
             "--no-interior-lighting" => a.interior_lighting = false,
             "--house-finishes" => a.house_finishes = true,
+            "--house-patina" => { a.house_finishes = true; a.house_patina = true; }
+            "--no-house-patina" => a.house_patina = false,
             "--no-house-finishes" => a.house_finishes = false,
             "--no-beaver-house" => a.beaver_house = false,
             "--bench" => o.bench = true,
@@ -924,23 +927,35 @@ mod house_tests {
 
     #[test]
     fn beaver_street_to_bed_and_top_floor() {
-        check_beaver_walk(false);
+        check_beaver_walk(false, false);
     }
 
     #[test]
     fn furnished_variant_reaches_bed_and_top_floor() {
-        check_beaver_walk(true);
+        check_beaver_walk(true, false);
     }
 
-    fn check_beaver_walk(finishes: bool) {
+    #[test]
+    fn weathered_variant_keeps_the_entry_and_stairs_clear() {
+        check_beaver_walk(true, true);
+    }
+
+    fn check_beaver_walk(finishes: bool, patina: bool) {
         let mut args = base_args();
         args.house_finishes = finishes;
+        args.house_patina = patina;
         args.beaver_house = true;
         args.kit = false;
         args.landmarks = false;
         args.models = false;
         let mut world = load_world(&args).unwrap();
         let house = world.house.as_ref().unwrap();
+        if patina {
+            use eo_render::scene::{BLEND_BIT, FRONT_SASH_BIT};
+            let panes: Vec<_> = world.scene.objects.iter().filter(|o| o.kind & FRONT_SASH_BIT != 0).collect();
+            assert!(!panes.is_empty(), "the front windows lost their reflection");
+            assert!(panes.iter().all(|o| o.kind & BLEND_BIT != 0), "glass must still transmit the furnished rooms");
+        }
         let (mut cw, door) = collision_world(&world, 2).unwrap();
         let mut door = door.unwrap();
         assert!(door.is_shut());

@@ -18,12 +18,18 @@ from mathutils import Matrix, Vector
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import beaver_lighting
 import beaver_courtyard as courtyard
+import beaver_entry
 
 ROOT = Path(__file__).resolve().parents[2]
 FINISHES = "--" in sys.argv and "--house-finishes" in sys.argv[sys.argv.index("--") + 1:]
+PATINA = "--" in sys.argv and "--house-patina" in sys.argv[sys.argv.index("--") + 1:]
+FINISHES = FINISHES or PATINA
 OUT = ROOT / "public/assets/buildings/beaver-terrace"
 if FINISHES:
     OUT = OUT / "finishes"
+FINISH_DIR = OUT
+if PATINA:
+    OUT = OUT / "patina"
 RISE = 10 / 3
 rng = random.Random(21)
 boxes, ramps = [], []
@@ -488,8 +494,8 @@ box(stone, (0, -2.4, 0), (7, -0.16, 13), True)
 door_hinge = [6.655, 0, 0.15]
 door_bounds = [[5.225, 0.012, 0.107], [6.655, 2.372, 0.193]]
 room = part("front-door", *door_hinge)
-door_paint = finish("front-door-paint", "586648", 0.56, texture=37)
-door_trim = finish("front-door-moulding", "647053", 0.53, texture=37)
+door_paint = finish("front-door-paint", "819078" if PATINA else "586648", 0.56, texture=37)
+door_trim = finish("front-door-moulding", "8f9b83" if PATINA else "647053", 0.53, texture=37)
 door_brass = finish("front-door-brass", "9c8152", 0.34, 0.72)
 door_materials = [door_paint,door_trim,door_brass]
 box(door_paint,*door_bounds,bevel=0.008)
@@ -562,6 +568,23 @@ if FINISHES:
         box(bronze,(x-0.026,0.47,-0.37),(x+0.026,0.61,-0.046),False,0.005)
     for k in range(9):
         plant(0.89+k*0.419,0.785,-0.235,0.24+0.035*math.sin(k*1.7))
+
+if PATINA:
+    room = part("high-and-low-casements", 2.60, 0.81, -0.09)
+    beaver_entry.window_joinery(box, emit, window_wood, finish("sash-putty","bcb19b"), reveal)
+    room = part("rainwater-goods-and-address-tile", 6.90, 0, -0.15)
+    beaver_entry.rainwater(emit,bent_tube,box,finish("aged-copper","796451",0.66,0.43),
+                          finish("blackened-bronze","4e493b",0.59,0.49),finish("address-ceramic","e0cbaa",0.3))
+    room = part("front-stair-handrail", 6.61, 0, -0.16)
+    beaver_entry.stair_rail(bent_tube,box,turned,wrought,bronze)
+    # Narrow posts own the barrier. The stair's centreline stays clear.
+    for step in (0,2,4):
+        z=-(step+.47)*.33
+        boxes.append([[6.59,-step*.145,z-.02],[6.63,.89-step*.145,z+.02]])
+    room = part("trained-bougainvillea",0.38,0,-0.27)
+    beaver_entry.bougainvillea(emit,finish("vine-bark","705745",0.95),
+        [finish("vine-leaf",c,0.67) for c in ("50633a","626e37","7d8350","415c3e","687d51")],
+        [finish("bougainvillea-bract",c,0.77) for c in ("b94868","a45566","bc6276","a83e62","c16c78")],pottery)
 
 if FINISHES:
     room = part("front-dry-garden", 2.50, -0.25, -1.05)
@@ -763,7 +786,7 @@ boxes.append([[0.86, y + 0.40, 10.16], [2.79, y + 0.67, 12.46]])
 if FINISHES:
     # A padded box-stitched coverlet. The radiused returns wrap the mattress,
     # with gathered excess at the foot. The shell has a sewn binding at its edges.
-    quilt = finish("cotton-coverlet", "758f99", 0.94, texture=180)
+    quilt = finish("cotton-coverlet", "87999b" if PATINA else "758f99", 0.94, texture=180)
     binding = finish("cotton-binding", "657e88", 0.96)
     def coverlet(u, t):
         side = 2 * u - 1
@@ -786,6 +809,22 @@ if FINISHES:
         x += math.copysign(drop * (0.009 + 0.014 * math.sin(15*z + 2*drop)), side)
         z -= foot * (0.012 + 0.017 * math.cos(17*x + foot))
         return (x, y + h, z)
+    if PATINA:
+        settled = beaver_entry.settled_coverlet()
+        def coverlet(u,t):
+            x,h,z=settled(u,t)
+            # Very shallow quilting remains in the stuffing once the fabric settles.
+            h+=.009*(math.sin(math.pi*9*u)*math.sin(math.pi*8*t))**2
+            return x,y+h,z
+        # The turned edge shows the softer reverse, with a round fold and two
+        # uneven corners. Its underside and the hem track the settled sheet.
+        reverse=finish("cotton-turnback","c1c2b1",.96)
+        def turnback(u,v):
+            start=.858+.055*u+.024*math.sin(u*5)
+            x,h,z=coverlet(u,start+v*(1-start))
+            crown=.022+.046*math.sin(math.pi*v)**.8+.009*math.sin(10*u+v)*v
+            return x,h+crown,z
+        fabric_grid(reverse,60,13,turnback)
     fabric_grid(quilt, 100, 86, coverlet)
     # Corded linen binding with a rounded cross section, following the hanging hem.
     for edge in [lambda t: coverlet(0,t), lambda t: coverlet(1,t),
@@ -1069,7 +1108,7 @@ if FINISHES:
             sx=math.copysign(abs(math.cos(a))**0.55,math.cos(a))
             sz=math.copysign(abs(math.sin(a))**0.55,math.sin(a))
             pts.append(((x+0.15)/2+(x-0.15)/2*sx,h,9.825+w*sz))
-    emit(stucco,pts,[(i*n+k,i*n+(k+1)%n,(i+1)*n+(k+1)%n,(i+1)*n+k) for i in range(len(profile)-1) for k in range(n)],True)
+    emit(plaster if PATINA else stucco,pts,[(i*n+k,i*n+(k+1)%n,(i+1)*n+(k+1)%n,(i+1)*n+k) for i in range(len(profile)-1) for k in range(n)],True)
     emit(window_wood,pts[:n],[tuple(range(n))])
     for z in (9.55,10.10):
         turned(practical,0.64,1.805,z,[(0.058,0),(0.064,0.008)],24,closed=True)
@@ -1381,6 +1420,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--parts", type=Path, help="Directory outside the checkout for reusable component GLBs")
 parser.add_argument("--blend", type=Path)
 parser.add_argument("--house-finishes", action="store_true", help="Build the courtyard exterior and furnished interior variant")
+parser.add_argument("--house-patina", action="store_true", help="Build the scanned finishes, exterior joinery and mature garden")
 parser.add_argument("--render", type=Path, help="Optional kitchen photograph rendered from the editable scene")
 args = parser.parse_args(sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else [])
 if args.blend:
@@ -1529,7 +1569,9 @@ scene.render.resolution_y = 900
 scene.render.resolution_percentage = 100
 if FINISHES and (args.blend or args.render):
     bpy.context.view_layer.update()
-    beaver_lighting.dress_floor_for_blender(scene, OUT / "floorboards.png", boards)
+    beaver_lighting.dress_floor_for_blender(scene, FINISH_DIR / "floorboards.png", boards)
+if PATINA and (args.blend or args.render):
+    beaver_entry.dress_scans(materials, OUT, scene)
 if args.blend:
     bpy.context.preferences.filepaths.save_version = 0
     bpy.ops.wm.save_as_mainfile(filepath=str(args.blend.resolve()))

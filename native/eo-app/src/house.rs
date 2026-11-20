@@ -1,5 +1,8 @@
 //! Site and collision integration for the Blender-built terrace at 21 Beaver Street.
 mod door;
+mod surfaces;
+pub use surfaces::Scan;
+pub const SURFACE_LAYERS: u32 = surfaces::NAMES.len() as u32 + 1; // includes the front-sash panorama
 use anyhow::{Result, ensure};
 pub use door::Door;
 use eo_assets::{AssetRef, CookedModel, KitLibrary};
@@ -54,16 +57,39 @@ struct ProbeManifest {
 }
 
 pub struct Finishes {
+    pub scans: Vec<Scan>,
+    pub street_reflections: Option<eo_assets::kit::BakedMaps>,
+    directory: std::path::PathBuf,
     manifest: ProbeManifest,
     pub atlas: eo_assets::kit::BakedMaps,
     pub floorboards: eo_assets::kit::BakedMaps,
 }
 
 impl Finishes {
-    pub fn load(root: &Path) -> Result<Self> {
-        let manifest: ProbeManifest = serde_json::from_slice(&std::fs::read(
+    pub fn load(root: &Path, patina: bool) -> Result<Self> {
+        let directory = if patina {
+            root.join(FINISH_DIR).join("patina")
+        } else {
             root.join(FINISH_DIR)
-                .join("kitchen-reflections.provenance.json"),
+        };
+        let scans = if patina {
+            surfaces::NAMES
+                .iter()
+                .map(|name| Scan::load(root, &directory, name))
+                .collect::<Result<Vec<_>>>()?
+        } else {
+            vec![]
+        };
+        let street_reflections = if patina {
+            let panorama: AssetRef = serde_json::from_slice(&std::fs::read(
+                directory.join("street-reflections.provenance.json"),
+            )?)?;
+            Some(Self::read_maps(root, &panorama, 2)?)
+        } else {
+            None
+        };
+        let manifest: ProbeManifest = serde_json::from_slice(&std::fs::read(
+            directory.join("kitchen-reflections.provenance.json"),
         )?)?;
         let floor: AssetRef = serde_json::from_slice(&std::fs::read(
             root.join(FINISH_DIR).join("floorboards.provenance.json"),
@@ -71,6 +97,9 @@ impl Finishes {
         let atlas = Self::read_maps(root, &manifest.asset, 2)?;
         let floorboards = Self::read_maps(root, &floor, 3)?;
         Ok(Self {
+            directory,
+            scans,
+            street_reflections,
             manifest,
             atlas,
             floorboards,
@@ -144,8 +173,11 @@ pub struct House {
     collision: Vec<[Point; 3]>,
     steps: Vec<[Point; 2]>,
     pavers: Vec<([Point; 4], u32)>,
+    mortar: Vec<([Point; 4], u32)>,
     aggregate: Vec<([Point; 4], u32)>,
     aggregate_material: u32,
+    paver_material: u32,
+    patina: bool,
     entry: Option<DVec3>,
 }
 
@@ -166,14 +198,13 @@ impl House {
             .iter()
             .map(|p| DVec2::new(p[0] as f64, p[1] as f64))
             .collect();
-        let dir = if finishes.is_some() {
-            FINISH_DIR
-        } else {
-            "public/assets/buildings/beaver-terrace"
-        };
-        let manifest: Manifest = serde_json::from_slice(&std::fs::read(
-            root.join(dir).join("terrace.provenance.json"),
-        )?)?;
+        let dir = finishes.map_or_else(
+            || root.join("public/assets/buildings/beaver-terrace"),
+            |f| f.directory.clone(),
+        );
+        let patina = finishes.is_some_and(|f| !f.scans.is_empty());
+        let manifest: Manifest =
+            serde_json::from_slice(&std::fs::read(dir.join("terrace.provenance.json"))?)?;
         if let Some(r) = finishes {
             ensure!(
                 r.manifest.house_sha256 == manifest.asset.sha256,
@@ -189,12 +220,22 @@ impl House {
         let resolved: Vec<u32> = model
             .materials
             .iter()
-            .map(|m| materials.resolve(kit, m))
+            .map(|m| {
+                finishes
+                    .and_then(|f| Scan::material(&f.scans, m, materials))
+                    .unwrap_or_else(|| materials.resolve(kit, m))
+            })
             .collect();
         let aggregate_material = model
             .materials
             .iter()
             .position(|m| m.name == "decomposed-granite@b4a087")
+            .map_or(0, |i| resolved[i]);
+        let paver_material = model
+            .materials
+            .iter()
+            .position(|m| m.name.starts_with("fired-clay@"))
+            .filter(|_| patina)
             .map_or(0, |i| resolved[i]);
         let floor = ring
             .iter()
@@ -215,8 +256,11 @@ impl House {
             collision: vec![],
             steps: vec![],
             pavers: vec![],
+            mortar: vec![],
             aggregate: vec![],
             aggregate_material,
+            paver_material,
+            patina,
             entry: None,
         };
         for [a, b] in manifest.boxes {
@@ -273,13 +317,39 @@ impl House {
                 let u = x + width - 0.006;
                 let clay = fired_clay[(step * 3 + tile * 2) % fired_clay.len()];
                 // The mortar joint continues over the curved edge and down its lip.
-                let profile = [
+                let old_profile = [
                     (b[2] - 0.005, top),
                     (front + 0.009, top),
                     (front - 0.005, top - 0.004),
                     (front - 0.011, top - 0.013),
                     (front - 0.011, top - 0.034),
                 ];
+                let bullnose = [
+                    (b[2] - 0.005, top),
+                    (front - 0.010, top),
+                    (front - 0.020, top - 0.003),
+                    (front - 0.028, top - 0.010),
+                    (front - 0.030, top - 0.019),
+                    (front - 0.027, top - 0.027),
+                    (front - 0.018, top - 0.035),
+                    (front - 0.003, top - 0.037),
+                ];
+                let profile = if self.patina {
+                    // The rounded nosing projects beyond the upright riser.
+                    // Its return catches grazing light and shades the joint.
+                    self.pavers.push((
+                        [
+                            [x, top - 0.038, front - 0.004],
+                            [u, top - 0.038, front - 0.004],
+                            [u, top - 0.144, front - 0.004],
+                            [x, top - 0.144, front - 0.004],
+                        ],
+                        clay,
+                    ));
+                    &bullnose[..]
+                } else {
+                    &old_profile[..]
+                };
                 for ends in profile.windows(2) {
                     let (z, y) = ends[0];
                     let (w, h) = ends[1];
@@ -359,6 +429,7 @@ impl House {
         };
         let courses = ((start - end) / 0.37).ceil() as usize;
         let mut tiles = Vec::new();
+        let mut bedding = Vec::new();
         let mut walk = Vec::new();
         for j in 0..courses {
             let t0 = j as f64 / courses as f64;
@@ -368,10 +439,15 @@ impl House {
             // Bed the pavers in mortar and close the exposed downhill edge
             // of the fill. The terrain can be well below the raised landing.
             let mortar = course.map(|[x, y, z]| [x, y - 0.008, z]);
-            tiles.push((mortar, 0xff829198));
+            let mortar_faces = if self.patina {
+                &mut bedding
+            } else {
+                &mut tiles
+            };
+            mortar_faces.push((mortar, 0xff829198));
             for (from, to) in [(mortar[0], mortar[3]), (mortar[2], mortar[1])] {
                 let toe = |[x, _, z]: Point| [x, terrain(x, z) - 0.028, z];
-                tiles.push(([from, to, toe(to), toe(from)], 0xff80909c));
+                mortar_faces.push(([from, to, toe(to), toe(from)], 0xff80909c));
             }
             for k in 0..5 {
                 let x = a[0] + (k as f64 - 0.5 * (j % 2) as f64) * span / 4.;
@@ -428,6 +504,7 @@ impl House {
             self.solid_quad(q);
         }
         self.pavers = tiles;
+        self.mortar = bedding;
         self.entry = Some(self.point((a[0] + b[0]) * 0.5, 0., end));
     }
 
@@ -538,6 +615,45 @@ impl House {
                     let across = (row as f32 + 0.07 + 0.86 * board.fract()) / 8.0;
                     floor_uv[i as usize] = Some([across, (z / 13.0).clamp(0.0, 1.0)]);
                 }
+            } else if self.patina && name.starts_with("glass-door@") {
+                // Blender batches the front and rear panes of a storey into
+                // one primitive. Only a street-facing pane sees this probe.
+                let start = part.first_index as usize;
+                for &i in &self.model.indices[start..start + part.index_count as usize] {
+                    if self.model.positions[i as usize][2] < 0.75 {
+                        finish[i as usize] = 4;
+                    }
+                }
+            } else if self.patina && plaster_finish(name) {
+                let start = part.first_index as usize;
+                for &i in &self.model.indices[start..start + part.index_count as usize] {
+                    let [x, y, z] = self.model.positions[i as usize];
+                    // Splashback at the soil and rain paths below projecting sill ends.
+                    let mut wear = ((0.62 - y) / 0.84).clamp(0., 1.) * 0.53;
+                    if z < 0.09 {
+                        for h in [0.82, 4.15, 7.49] {
+                            let drop = h - y;
+                            if (0. ..1.12).contains(&drop) {
+                                let edge = (x - 0.65).abs().min((x - 4.65).abs());
+                                wear += 0.58
+                                    * (1. - drop / 1.12)
+                                    * (1. - edge / (0.14 + drop * 0.19)).max(0.);
+                            }
+                        }
+                    }
+                    finish[i as usize] = 3 + (wear.clamp(0., 1.) * 55.).round() as u8;
+                }
+            } else if self.patina && door_paint(name) {
+                let start = part.first_index as usize;
+                for &i in &self.model.indices[start..start + part.index_count as usize] {
+                    let [x, y, _] = self.model.positions[i as usize];
+                    let [a, b] = self.door.bounds;
+                    // Fractions belong to the leaf, so the wood grain follows its hinge.
+                    floor_uv[i as usize] = Some([
+                        ((x - a[0] as f32) / (b[0] - a[0]) as f32).clamp(0., 1.),
+                        (y / b[1] as f32).clamp(0., 1.),
+                    ]);
+                }
             } else if appliance && let Some(probes) = &self.probes {
                 let first = part.first_index as usize;
                 for &index in &self.model.indices[first..first + part.index_count as usize] {
@@ -632,8 +748,19 @@ impl House {
             {
                 o.kind |= eo_render::scene::FLOOR_SCAN_BIT;
             }
+            if self.patina && door_paint(&self.model.materials[part.material as usize].name) {
+                o.kind |= eo_render::scene::DOOR_SCAN_BIT;
+            }
+            let family = &self.model.materials[part.material as usize].name;
             o.material = self.materials[part.material as usize];
-            if self.aggregate_material != 0 && o.material == self.aggregate_material {
+            if self.patina && plaster_finish(family) {
+                o.kind |= eo_render::scene::LIMEWASH_BIT;
+            }
+            if self.patina && family.starts_with("glass-door@") && part.min[2] < 0.75 {
+                o.kind |= eo_render::scene::FRONT_SASH_BIT;
+            }
+            if !self.patina && self.aggregate_material != 0 && o.material == self.aggregate_material
+            {
                 o.kind |= eo_render::scene::GRAVEL_BIT;
             }
             if materials.gpu[o.material as usize].is_blend() {
@@ -655,7 +782,9 @@ impl House {
                 scene.vertices.extend(p.map(|p| Vertex {
                     pos: p.to_array(),
                     normal,
-                    color: if self.probes.is_some() {
+                    color: if self.patina {
+                        0xff78858f
+                    } else if self.probes.is_some() {
                         0xffa8b6be
                     } else {
                         0xff9aa4aa
@@ -674,7 +803,16 @@ impl House {
             ));
         }
         for (quads, kind, material) in [
-            (&self.pavers, ObjectKind::Landmark, 0),
+            (&self.mortar, ObjectKind::Landmark, 0),
+            (
+                &self.pavers,
+                if self.patina {
+                    ObjectKind::Model
+                } else {
+                    ObjectKind::Landmark
+                },
+                self.paver_material,
+            ),
             (&self.aggregate, ObjectKind::Model, self.aggregate_material),
         ] {
             if quads.is_empty() {
@@ -684,6 +822,13 @@ impl House {
             let mut lo = Vec3::splat(f32::INFINITY);
             let mut hi = -lo;
             for &(quad, color) in quads {
+                let color = if self.patina && material == self.paver_material {
+                    // Each fired tile modulates the scan by its own kiln tone.
+                    let tone = 220 + (color & 31);
+                    0xff000000 | tone * 0x010101
+                } else {
+                    color
+                };
                 let p = quad.map(|[x, y, z]| self.point(x, y, z).as_vec3());
                 let normal = eo_assets::glb::pack_normal((p[1] - p[0]).cross(p[2] - p[0]));
                 let v = scene.vertices.len() as u32;
@@ -707,7 +852,7 @@ impl House {
                 0,
             );
             object.material = material;
-            if material != 0 && material == self.aggregate_material {
+            if !self.patina && material != 0 && material == self.aggregate_material {
                 object.kind |= eo_render::scene::GRAVEL_BIT;
             }
             scene.objects.push(object);
@@ -717,6 +862,14 @@ impl House {
         scene.stats.indices += scene.indices.len() - first;
         scene.stats.triangles += ((scene.indices.len() - first) / 3) as u64;
     }
+}
+
+fn plaster_finish(name: &str) -> bool {
+    name.starts_with("painted-stucco@") || name.starts_with("float-finish-stucco@")
+}
+
+fn door_paint(name: &str) -> bool {
+    name.starts_with("front-door-paint@") || name.starts_with("front-door-moulding@")
 }
 
 pub struct HouseGround {

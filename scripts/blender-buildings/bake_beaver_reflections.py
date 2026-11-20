@@ -6,6 +6,7 @@ two appliance positions. Day alpha is visibility to the outdoor environment.
 import hashlib
 import json
 import math
+import sys
 import struct
 import zlib
 from pathlib import Path
@@ -16,6 +17,8 @@ from mathutils import Vector
 from mathutils.bvhtree import BVHTree
 
 OUT = Path(__file__).resolve().parents[2] / "public/assets/buildings/beaver-terrace/finishes"
+if "--" in sys.argv and "--house-patina" in sys.argv[sys.argv.index("--") + 1:]:
+    OUT = OUT / "patina"
 SOURCE = OUT / "terrace.glb"
 SIZE = 256
 # Across, height, depth, in metres. Each volume surrounds one appliance and
@@ -129,6 +132,6 @@ path.write_bytes(content)
     "source": "scripts/blender-buildings/bake_beaver_reflections.py, ray cast against terrace.glb",
     "house_sha256": hashlib.sha256(SOURCE.read_bytes()).hexdigest(),
     "license": "MIT", "attribution": "Earth Online contributors",
-    "url": "/assets/buildings/beaver-terrace/finishes/" + path.name,
+    "url": "/" + path.relative_to(Path(__file__).resolve().parents[2] / "public").as_posix(),
     "sha256": hashlib.sha256(content).hexdigest(), "bytes": len(content), "probes": PROBES
 }, indent=2) + "\n")

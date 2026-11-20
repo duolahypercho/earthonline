@@ -54,6 +54,9 @@ const F_THIN_GLASS: u32 = 16u;
 const F_STREET: u32 = 32u;
 const FLOOR_SCAN_BIT: u32 = 512u;
 const GRAVEL_BIT: u32 = 1024u;
+const DOOR_SCAN_BIT: u32 = 2048u;
+const FRONT_SASH_BIT: u32 = 4096u;
+const LIMEWASH_BIT: u32 = 8192u;
 const PI: f32 = 3.14159265;
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -122,7 +125,9 @@ fn vs(
     if (kind == 4u && normal.w > 0.49) {
         // The house builder stores window and fixture transfer in R and G.
         out.color = color.rgb;
-        if ((o.kind & FLOOR_SCAN_BIT) != 0u) {
+        if ((o.kind & DOOR_SCAN_BIT) != 0u) {
+            out.ft = vec2<f32>(color.a, color.b * 3.1);
+        } else if ((o.kind & FLOOR_SCAN_BIT) != 0u) {
             let strip = floor(color.b * 8.0);
             let grain = select(1.0, -1.0, (u32(strip) & 1u) != 0u);
             out.ft = vec2<f32>(grain * color.a * 6.5 + fract(strip * 0.618034), color.b);
@@ -909,17 +914,22 @@ fn shade(in: VOut) -> vec4<f32> {
         s.n = normalize(n-vec3<f32>(gradient.x,0.0,gradient.y)*chip_detail*0.58);
         s.rough = 0.95;
     }
-    let floor_scan = (objects[in.object].kind & FLOOR_SCAN_BIT) != 0u;
-    if (floor_scan && abs(n.y) > 0.7) {
-        let layer = i32(textureNumLayers(kit_albedo)) - 2;
-        s.albedo = textureSampleGrad(kit_albedo, kit_sampler, in.ft, layer, scan_dx, scan_dy).rgb;
+    if ((objects[in.object].kind & LIMEWASH_BIT) != 0u) {
+        let exposure = clamp((in.color.b * 255.0 - 3.0) / 55.0, 0.0, 1.0);
+        s.albedo *= mix(vec3<f32>(1.0), vec3<f32>(0.79, 0.75, 0.70), exposure);
+    }
+    let door_scan = (objects[in.object].kind & DOOR_SCAN_BIT) != 0u;
+    let floor_scan = (objects[in.object].kind & (DOOR_SCAN_BIT | FLOOR_SCAN_BIT)) != 0u;
+    if (floor_scan && (door_scan || abs(n.y) > 0.7)) {
+        let layer = select(i32(textureNumLayers(kit_albedo)) - 2, m.layer, door_scan);
+        s.albedo = textureSampleGrad(kit_albedo, kit_sampler, in.ft, layer, scan_dx, scan_dy).rgb * select(vec3<f32>(1.0), m.base.rgb, door_scan);
         s.rough = textureSampleGrad(kit_orm, kit_sampler, in.ft, layer, scan_dx, scan_dy).g;
         let bump = textureSampleGrad(kit_normal, kit_sampler, in.ft, layer, scan_dx, scan_dy).xyz * 2.0 - 1.0;
         let det = scan_dx.x * scan_dy.y - scan_dy.x * scan_dx.y;
         if (abs(det) > 1e-10) {
             let along = normalize((dpx * scan_dy.y - dpy * scan_dx.y) * sign(det));
             let across = normalize((dpy * scan_dx.x - dpx * scan_dy.x) * sign(det));
-            s.n = normalize(n * bump.z + along * bump.x - across * bump.y);
+            s.n = normalize(n * bump.z + select(1.0, m.params.z, door_scan) * (along * bump.x - across * bump.y));
         }
     } else if (house_finish && !floor_scan && in.color.b > 0.5) {
         // Longitudinal oak fibres curve around growth rings. Filter the finer
@@ -959,6 +969,31 @@ fn shade(in: VOut) -> vec4<f32> {
         rm_emit = rm_emit + sky_far_windows(in.world, n, in.object, dpx, dpy); // lit windows on the far boxes
     }
 
+    let street_pane = (objects[in.object].kind & FRONT_SASH_BIT) != 0u && in.color.b > 3.5/255.0;
+    if (street_pane && frame.copy_step.z < 0.5) {
+        let angle = in.aux.x * (2.0 * PI / 255.0);
+        let outside = vec2<f32>(sin(angle),-cos(angle));
+        if (dot(v.xz,outside) <= 0.0) {
+            return look_light(s,m,v,in.world,n,in.object);
+        }
+        let pane_layer = i32(textureNumLayers(kit_albedo))-3;
+        // The two real glass faces blend separately. Divide by opacity because
+        // the blended pass multiplies the returned radiance by alpha once.
+        // A low-opacity pane otherwise suppresses its own reflection twice.
+        let ray = reflect(-v,n);
+        let uv = vec2<f32>(atan2(ray.x,-ray.z) / (2.0*PI) + 0.5,
+                           clamp(0.5 - asin(clamp(ray.y,-1.0,1.0)) / PI,0.002,0.998));
+        let day = textureSampleLevel(kit_albedo,kit_sampler,uv,pane_layer,0.7).rgb;
+        let night = srgb_decode(textureSampleLevel(kit_normal,kit_sampler,uv,pane_layer,0.7).rgb);
+        let captured = mix(day,night,skyu.night.z);
+        // Low-iron clear glazing transmits the room while keeping a slight
+        // neutral veil from the outer surface over bright sky reflections.
+        let plate = mix(vec3<f32>(dot(captured, vec3<f32>(0.2126,0.7152,0.0722))), captured, 0.83);
+        let reflected = plate / max(vec3<f32>(0.15),vec3<f32>(1.0)-0.79*plate);
+        let fresnel = 0.042 + 0.958*pow(1.0-clamp(dot(n,v),0.0,1.0),5.0);
+        let alpha = fresnel + (1.0-fresnel)*0.047;
+        return vec4<f32>(reflected*fresnel/alpha,alpha);
+    }
     // Lighting, shadows and fog: the JS game's light rig (look_light.wgsl).
     return look_light(s, m, v, in.world, n, in.object);
 }

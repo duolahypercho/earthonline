@@ -210,6 +210,8 @@ trademark or brand logo is drawn on any sign face.
 
 The optional 21 Beaver Street floor finish uses Dimitrios Savva’s *Wood Floor Worn* for Poly Haven, released under CC0 1.0. Eight board strips were cropped from the diffuse, OpenGL normal and roughness maps. The [material provenance](public/assets/buildings/beaver-terrace/finishes/floorboards.provenance.json) records the original files and their checksums. [Asset](https://polyhaven.com/a/wood_floor_worn) · [Licence](https://polyhaven.com/license)
 
+The weathered 21 Beaver Street variant uses six CC0 photographic materials from Poly Haven. Amal Kumar photographed *Clay Roof Tiles 02*, Rob Tuytel created *Plaster Grey 04*, Dimitrios Savva created *White Stucco 02* and *Wood Floor Worn*, Charlotte Baglioni created *Gravel Floor 03*, and colormass and Rico Cilliers produced *Rough Linen*. The [surface manifests](public/assets/buildings/beaver-terrace/finishes/patina) list each input and its SHA-256. [CC0 licence](https://polyhaven.com/license)
+
 ## Rust crate licences
 
 <!-- BEGIN GENERATED: cargo-licences -->
