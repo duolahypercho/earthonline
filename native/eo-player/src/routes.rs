@@ -414,6 +414,285 @@ pub fn drive_route(city: &eo_data::City, elevation: &eo_data::ElevationGrid) -> 
     walk_route(city, elevation)
 }
 
+/// A freeway drive's street run on to its first ramp and off its last.
+pub const FREEWAY_LEAD_M: f64 = 120.0;
+
+/// The most a freeway drive turns where one chain meets the next (radians;
+/// `chain_route`'s continuation limit).
+const FREEWAY_TURN_RAD: f64 = 0.6;
+
+/// The chains a freeway drive passes through at most.
+const FREEWAY_LEGS: usize = 8;
+
+/// The OSM name the city's data gives the I-80 approach to the Bay Bridge
+/// (the chains A1 records there carry it); a drive along it is preferred.
+const I80_APPROACH_NAME: &str = "Route 80";
+
+/// A freeway drive's street lead-in and lead-out must be drivable on the
+/// drawn surface (`lead_drivable`): every metre a walkable surface within
+/// `LEAD_STEP_M` of the last (a kerb a car mounts), and no paving over it
+/// lower than `LEAD_CLEAR_M` (a car's body under it: a footway laid over the
+/// carriageway at another datum is a street surface defect, not a road).
+/// INFERRED (a car's step and height).
+const LEAD_STEP_M: f64 = 0.35;
+const LEAD_CLEAR_M: f64 = 2.5;
+
+/// Whether a car can follow `path` (plan, from its start) on `streets`'
+/// drawn surface (see `LEAD_STEP_M`); off the paving it follows the carpet.
+fn lead_drivable(streets: &eo_street::StreetWorld, path: &[[f64; 2]]) -> bool {
+    let mut h: Option<f64> = None;
+    for w in path.windows(2) {
+        let l = (w[1][0] - w[0][0]).hypot(w[1][1] - w[0][1]);
+        let n = l.ceil().max(1.0) as usize;
+        for k in 0..n {
+            let t = k as f64 / n as f64;
+            let (x, z) = (w[0][0] + (w[1][0] - w[0][0]) * t, w[0][1] + (w[1][1] - w[0][1]) * t);
+            let hs = streets.paved_heights(x, z);
+            let here = match h {
+                // the first sample: the lowest paving (the carriageway), else the carpet.
+                None => hs.iter().copied().fold(None, |a: Option<f64>, v| Some(a.map_or(v, |a| a.min(v)))).unwrap_or_else(|| streets.carpet_y(x, z)),
+                Some(prev) => match hs.iter().copied().filter(|v| (v - prev).abs() <= LEAD_STEP_M).min_by(|a, b| (a - prev).abs().total_cmp(&(b - prev).abs())) {
+                    Some(v) => v,
+                    None if hs.is_empty() => streets.carpet_y(x, z),
+                    None => return false, // a step no car climbs
+                },
+            };
+            if hs.iter().any(|&v| v > here + LEAD_STEP_M && v < here + LEAD_CLEAR_M) {
+                return false; // paving over the road, under a car's roof
+            }
+            h = Some(here);
+        }
+    }
+    true
+}
+
+/// A drive over the grade-separated roads (eo-structures, `--structures`;
+/// for the bench and the tests): along a surface street onto an on-ramp,
+/// along the freeway's deck, down an off-ramp and along the street again.
+/// The existing builders above never use a bridge, a tunnel or a freeway.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FreewayRoute {
+    /// The whole drive, plan metres: the street lead-in, each chain's
+    /// centreline in travel order, the street lead-out.
+    pub path: Vec<[f64; 2]>,
+    /// The chains driven, in order: (chain id, along its increasing station).
+    pub chains: Vec<(u32, bool)>,
+    /// Arc length along `path` of the first chain's paved end (where the
+    /// deck begins) and of the last chain's (where it ends).
+    pub deck_from: f64,
+    pub deck_to: f64,
+}
+
+/// Whether a car may drive a chain along its increasing station
+/// (`forward`) or against it: every piece's one-way rule allows it.
+fn chain_drivable(streets: &eo_street::StreetWorld, c: &eo_structures::Chain, forward: bool) -> bool {
+    c.pieces.iter().all(|p| {
+        let along = forward != p.reversed; // along the segment's own point order
+        match streets.city.segments.get(p.segment).map(|s| s.oneway.as_str()) {
+            Some("true" | "yes" | "1" | "increasing") => along,
+            Some("decreasing" | "-1") => !along,
+            _ => true,
+        }
+    })
+}
+
+/// A way the street plan paves (drawn at grade): a vehicle way that is no
+/// bridge or tunnel and on no other layer.
+fn paved_way(r: &eo_data::Road) -> bool {
+    eo_data::standards::is_vehicle_way(&r.highway) && !r.bridge && !r.tunnel && r.layer == 0
+}
+
+/// Along the paved ways from their vertex nearest `from` (within a metre),
+/// leaving it along the way nearest `heading` and on through each node by
+/// the straightest continuation (the same name preferred, as
+/// `chain_route`), for `length` metres. Empty when no paved way has a
+/// vertex there.
+fn paved_run(city: &eo_data::City, from: [f64; 2], heading: [f64; 2], length: f64) -> Vec<[f64; 2]> {
+    let mut nodes: std::collections::HashMap<(i64, i64), Vec<(usize, usize)>> = std::collections::HashMap::new();
+    let mut start: Option<(f64, (i64, i64))> = None;
+    for (i, r) in city.roads.iter().enumerate() {
+        if !paved_way(r) {
+            continue;
+        }
+        for (j, p) in r.points64.iter().enumerate() {
+            nodes.entry(node_key(*p)).or_default().push((i, j));
+            let d = (p[0] - from[0]).hypot(p[1] - from[1]);
+            if d <= 1.0 && start.is_none_or(|s| d < s.0) {
+                start = Some((d, node_key(*p)));
+            }
+        }
+    }
+    let Some((_, key)) = start else { return vec![] };
+    let mut used: std::collections::HashSet<(usize, usize)> = std::collections::HashSet::new();
+    // (way, vertex, direction) leaving the start most along `heading`.
+    let mut best: Option<(f64, usize, usize, i64)> = None;
+    for &(w, j) in &nodes[&key] {
+        let pts = &city.roads[w].points64;
+        for d in [-1i64, 1] {
+            let n = j as i64 + d;
+            if n < 0 || n as usize >= pts.len() {
+                continue;
+            }
+            let (a, b) = (pts[j], pts[n as usize]);
+            let l = (b[0] - a[0]).hypot(b[1] - a[1]).max(1e-9);
+            let along = ((b[0] - a[0]) * heading[0] + (b[1] - a[1]) * heading[1]) / l;
+            if best.is_none_or(|x| along > x.0) {
+                best = Some((along, w, j, d));
+            }
+        }
+    }
+    let Some((_, mut w, j0, mut d)) = best else { return vec![] };
+    let mut j = j0 as i64;
+    let mut out = vec![city.roads[w].points64[j0]];
+    let mut run = 0.0;
+    while run < length {
+        let pts = &city.roads[w].points64;
+        let nj = j + d;
+        if nj < 0 || nj as usize >= pts.len() || !used.insert((w, j.min(nj) as usize)) {
+            break;
+        }
+        let (a, b) = (pts[j as usize], pts[nj as usize]);
+        run += (b[0] - a[0]).hypot(b[1] - a[1]);
+        out.push(b);
+        j = nj;
+        let h = (b[0] - a[0]).atan2(b[1] - a[1]);
+        let name = &city.roads[w].name;
+        let mut next: Option<(f64, usize, i64, i64)> = None;
+        for &(ow, oj) in nodes.get(&node_key(b)).map(|v| v.as_slice()).unwrap_or(&[]) {
+            for od in [-1i64, 1] {
+                let nn = oj as i64 + od;
+                let opts = &city.roads[ow].points64;
+                if nn < 0 || nn as usize >= opts.len() || used.contains(&(ow, (oj as i64).min(nn) as usize)) {
+                    continue;
+                }
+                let c = opts[nn as usize];
+                let h2 = (c[0] - b[0]).atan2(c[1] - b[1]);
+                let turn = (h2 - h).sin().atan2((h2 - h).cos()).abs();
+                if turn > FREEWAY_TURN_RAD {
+                    continue;
+                }
+                let score = turn + if &city.roads[ow].name == name { 0.0 } else { 0.3 };
+                if next.is_none_or(|x| score < x.0) {
+                    next = Some((score, ow, oj as i64, od));
+                }
+            }
+        }
+        if let Some((_, ow, oj, od)) = next {
+            w = ow;
+            j = oj;
+            d = od;
+        }
+    }
+    out
+}
+
+/// The freeway drive: from every built deck chain that is no mainline
+/// (`motorway`, `trunk`) with a paved end a car may leave the street by (an
+/// on-ramp), through chains sharing a node with the one before (turning at
+/// most `FREEWAY_TURN_RAD`, along each chain's one-way direction), to a
+/// ramp with a paved end it may leave the deck by (an off-ramp), passing
+/// along at least one freeway mainline (`motorway`) chain; with
+/// `FREEWAY_LEAD_M` of the paved street before and after, both drivable on
+/// the drawn surface (`lead_drivable`).
+/// Preferred: a drive along the I-80 approach (`I80_APPROACH_NAME`), then
+/// the longest stretch of mainline, then the lowest chain ids.
+/// Deterministic for the data; None when no such drive is built (without
+/// `--structures`, or with every candidate held).
+pub fn freeway_route(city: &eo_data::City, streets: &eo_street::StreetWorld, structures: &eo_structures::StructureWorld) -> Option<FreewayRoute> {
+    use eo_structures::{Chain, ChainKind, EndKind, RoadClass};
+    let chains = structures.chains();
+    let deck = |c: &Chain| c.is_built() && c.kind == ChainKind::Deck && c.landmark.is_none() && c.points.len() >= 2;
+    // a leg: a chain driven one way; its end where the drive leaves it
+    // (`last`) or enters it.
+    fn end_of(c: &eo_structures::Chain, forward: bool, last: bool) -> &eo_structures::ChainEnd {
+        if forward == last { &c.ends[1] } else { &c.ends[0] }
+    }
+    let heading = |c: &Chain, forward: bool, last: bool| -> [f64; 2] {
+        let f = c.frame(if forward == last { c.length() } else { 0.0 });
+        if forward { [f.tx, f.tz] } else { [-f.tx, -f.tz] }
+    };
+    let legs: Vec<(u32, bool)> = chains.iter().filter(|c| deck(c)).flat_map(|c| [true, false].into_iter().filter(|&f| chain_drivable(streets, c, f)).map(move |f| (c.id, f))).collect();
+    let mut found: Vec<Vec<(u32, bool)>> = vec![];
+    let mut stack: Vec<Vec<(u32, bool)>> = legs.iter().filter(|&&(id, f)| end_of(&chains[id as usize], f, false).kind == EndKind::Paved).map(|&l| vec![l]).collect();
+    while let Some(route) = stack.pop() {
+        let &(id, f) = route.last().unwrap();
+        let c = &chains[id as usize];
+        let out = end_of(c, f, true);
+        if out.kind == EndKind::Paved {
+            // on and off by ramps, along the mainline between.
+            let ramp = |i: u32| !matches!(chains[i as usize].class, RoadClass::Motorway | RoadClass::Trunk);
+            if ramp(route[0].0) && ramp(id) && route.iter().any(|&(i, _)| chains[i as usize].class == RoadClass::Motorway) {
+                found.push(route);
+            }
+            continue;
+        }
+        if out.kind != EndKind::Shared || route.len() >= FREEWAY_LEGS {
+            continue;
+        }
+        let h = heading(c, f, true);
+        for &(nid, nf) in &legs {
+            let n = &chains[nid as usize];
+            let into = end_of(n, nf, false);
+            if into.kind != EndKind::Shared || into.node != out.node || route.iter().any(|&(i, _)| i == nid) {
+                continue;
+            }
+            let h2 = heading(n, nf, false);
+            let turn = (h[0] * h2[1] - h[1] * h2[0]).atan2(h[0] * h2[0] + h[1] * h2[1]).abs();
+            if turn <= FREEWAY_TURN_RAD {
+                let mut r = route.clone();
+                r.push((nid, nf));
+                stack.push(r);
+            }
+        }
+    }
+    let rank = |r: &Vec<(u32, bool)>| {
+        let i80 = r.iter().any(|&(i, _)| chains[i as usize].pieces.iter().any(|p| p.name == I80_APPROACH_NAME));
+        let mainline: f64 = r.iter().map(|&(i, _)| &chains[i as usize]).filter(|c| c.class == RoadClass::Motorway).map(|c| c.length()).sum();
+        (!i80, -mainline, r.iter().map(|x| x.0).collect::<Vec<u32>>())
+    };
+    found.sort_by(|a, b| {
+        let (ka, kb) = (rank(a), rank(b));
+        ka.0.cmp(&kb.0).then(ka.1.total_cmp(&kb.1)).then(ka.2.cmp(&kb.2))
+    });
+    for legs in found {
+        let (first, last) = (&chains[legs[0].0 as usize], &chains[legs.last().unwrap().0 as usize]);
+        let (fa, la) = (end_of(first, legs[0].1, false).at, end_of(last, legs.last().unwrap().1, true).at);
+        let hf = heading(first, legs[0].1, false);
+        let mut lead_in = paved_run(city, fa, [-hf[0], -hf[1]], FREEWAY_LEAD_M);
+        let lead_out = paved_run(city, la, heading(last, legs.last().unwrap().1, true), FREEWAY_LEAD_M);
+        if polyline_length(&lead_in) < FREEWAY_LEAD_M / 2.0 || polyline_length(&lead_out) < FREEWAY_LEAD_M / 2.0 {
+            continue;
+        }
+        // (from the deck's ends outward: a car must get on and off by the street.)
+        if !lead_drivable(streets, &lead_in) || !lead_drivable(streets, &lead_out) {
+            continue;
+        }
+        lead_in.reverse();
+        let mut path = lead_in;
+        let deck_from = polyline_length(&path);
+        for &(id, f) in &legs {
+            let c = &chains[id as usize];
+            let mut pts = c.points.clone();
+            if !f {
+                pts.reverse();
+            }
+            for p in pts {
+                if path.last().is_none_or(|q: &[f64; 2]| (q[0] - p[0]).hypot(q[1] - p[1]) > 1e-3) {
+                    path.push(p);
+                }
+            }
+        }
+        let deck_to = polyline_length(&path);
+        for p in lead_out {
+            if path.last().is_none_or(|q: &[f64; 2]| (q[0] - p[0]).hypot(q[1] - p[1]) > 1e-3) {
+                path.push(p);
+            }
+        }
+        return Some(FreewayRoute { path, chains: legs, deck_from, deck_to });
+    }
+    None
+}
+
 /// Drives a path: pure pursuit on steering (analog), throttle/brake to a target speed.
 pub struct DrivePilot {
     pub path: Vec<[f64; 2]>,
@@ -469,7 +748,12 @@ impl DrivePilot {
     }
 }
 
-/// Feet height above the bare ground (negative: below it).
+/// Feet height above the bare ground (negative: below it); where the ground
+/// has several levels (decks), above the surface nearest below the feet
+/// (`CollisionWorld::surface_below` from `LEVEL_REACH_M` over them).
 pub fn clearance(world: &CollisionWorld, p: DVec3) -> f64 {
+    if world.multi_level() {
+        return p.y - world.surface_below(p.x, p.z, p.y + crate::world::LEVEL_REACH_M);
+    }
     p.y - world.ground.ground_y(p.x, p.z)
 }
