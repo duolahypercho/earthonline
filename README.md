@@ -73,7 +73,7 @@ See [Docs/ASSET-STORE.md](Docs/ASSET-STORE.md).
 | `public/data/sf/` | The San Francisco data the game loads, each file with a `NOTICE` |
 | `public/assets/` | Shipped models and textures, each with a provenance file |
 | `artifacts/` | Provenance and the lock file of the off-repository asset store |
-| `scripts/` | Asset-store, Blender building and character tooling, and the street-standards table |
+| `scripts/` | Asset-store, Blender building and vehicle tooling, and the street-standards table |
 | `Docs/` | Data pipeline, street standards, asset store and quality-gate documents |
 
 ## Data sources and attribution

@@ -19,7 +19,7 @@ export const LOCK_PATH = 'artifacts/ASSETS.lock.json';
 
 // Trees whose heavy files are stored off-repo. Their JSON/markdown provenance
 // stays committed alongside artifacts/ASSETS.lock.json.
-export const ROOTS = ['artifacts/tripo', 'artifacts/vehicles', 'artifacts/characters'];
+export const ROOTS = ['artifacts/tripo', 'artifacts/vehicles'];
 
 // Archived to the store and recorded in the lock.
 export const ARCHIVED_EXT = new Set(['.glb', '.blend', '.fbx', '.png', '.jpg', '.jpeg']);

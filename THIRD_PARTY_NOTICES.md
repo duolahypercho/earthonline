@@ -124,13 +124,6 @@ source, licence and SHA-256; the program refuses a file that does not match.
   textures and meshes from ez-tree by Daniel Greenheck (MIT), and the
   ambientCG bark (CC0). Terms:
   [public/assets/vegetation/ez-vegetation-v1.LICENSE.txt](public/assets/vegetation/ez-vegetation-v1.LICENSE.txt).
-- **Characters** (`public/assets/characters/civilian-v1/`, no longer read
-  by the game): bodies, faces,
-  clothes, hair, eyes and skins are MakeHuman / MPFB system assets released
-  under CC0 1.0. Some garment, hair-cap and brow textures are
-  machine-generated edits of those CC0 textures; prompts and digests are in
-  the source manifests under `artifacts/characters/civilian-v1/`. See
-  `public/assets/characters/civilian-v1/provenance.json`.
 - **Hand-built buildings** (`public/assets/buildings/`): original geometry
   built in Blender by `scripts/blender-buildings/` from open data (DataSF
   footprints, LiDAR heights, the assessor roll). Per-building provenance

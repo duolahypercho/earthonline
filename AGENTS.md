@@ -20,7 +20,6 @@ workspace in `native/`.
 | `artifacts/` | Provenance and `ASSETS.lock.json` of the off-repository asset store | No binaries ([Docs/ASSET-STORE.md](Docs/ASSET-STORE.md)) |
 | `scripts/assets/`, `scripts/verify/` | Asset-store and vehicle tooling, the asset-lock check | Run through `npm run` |
 | `scripts/blender-buildings/` | The hand-built building pipeline | Blender, headless |
-| `scripts/character-assets/` | Character skeleton and asset contract | |
 | `scripts/world-data/sources/` | The cited California street-standards table | [Docs/CALIFORNIA-STREET-STANDARDS.md](Docs/CALIFORNIA-STREET-STANDARDS.md) |
 | `Docs/` | Data pipeline, street standards, asset store, visual gate | |
 
@@ -130,8 +129,8 @@ It is not evidence about how a frame looks.
 
 ### The asset store
 
-- Pipeline source binaries (Blender scenes, vehicle and character sources,
-  texture plates) live in an off-repository object store. Only
+- Pipeline source binaries (Blender scenes, vehicle sources, texture
+  plates) live in an off-repository object store. Only
   `artifacts/ASSETS.lock.json` and the JSON and Markdown provenance beside
   the assets are tracked. `npm run assets:pull <substring>` restores what a
   task needs; a clone with nothing pulled is a valid state. See

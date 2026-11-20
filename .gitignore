@@ -123,12 +123,6 @@ artifacts/vehicles/**/*.blend
 artifacts/vehicles/**/*.png
 artifacts/vehicles/**/*.jpg
 artifacts/vehicles/**/*.jpeg
-artifacts/characters/**/*.glb
-artifacts/characters/**/*.blend
-artifacts/characters/**/*.fbx
-artifacts/characters/**/*.png
-artifacts/characters/**/*.jpg
-artifacts/characters/**/*.jpeg
 
 # Regenerable local junk: Blender autosave backups and bytecode caches.
 *.blend1
