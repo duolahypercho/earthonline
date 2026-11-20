@@ -17,6 +17,7 @@
 pub mod bay_bridge;
 pub mod data;
 pub mod features;
+pub mod flora2; // the second flora pass: the Battery Spencer knoll's bare chert, the Baker bluff's serpentinite rock and boulders
 pub mod flora; // the flora pass: the scrub by species, the grassland's season, chert and serpentinite ground, flowers
 pub mod ferry_building;
 pub mod geometry;

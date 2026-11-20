@@ -326,6 +326,7 @@ selection:
 | Grass, second pass | `--no-grass2` (all of these: run 1's meadow), `--no-meadow-cover`, `--no-meadow-types`, `--no-blade-shading` |
 | Grass, third pass | `--no-grass3` (all of these: run 2's meadow), `--no-scrub-mounds`, `--no-scrub-bloom`, `--no-bare-ground`, `--no-meadow-breakup` |
 | Flora (scrub species, grassland season, chert, serpentinite, flowers) | `--no-flora` (all of these: the third grass pass's output), `--no-scrub-species`, `--no-grass-ramp`, `--no-bluff-scrub`, `--no-chert-ground`, `--no-serpentinite`, `--no-flora-flowers` |
+| Flora 2 (Battery Spencer knoll, Baker bluff rock and boulders) | `--no-flora2` (all of these: the flora pass's output), `--no-knoll-ground`, `--no-knoll-relief`, `--no-bluff-rock`, `--no-boulder-surf` |
 | Surf and bathymetry | `--no-gg3-water` (all of these), `--no-bathymetry`, `--no-surf-break`, `--no-swash-foam`, `--no-obstacle-foam`, `--no-water-body2`; reserved: `--no-ppr-dash` |
 | Golden Gate, fifth pass | `--no-gg3-bridge` or `--no-bridges5` (all of these), `--no-paint-brdf2`, `--no-paint-weathering`, `--no-concrete2`, `--no-leg-cells`, `--no-cable-detail` |
 | Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count` |

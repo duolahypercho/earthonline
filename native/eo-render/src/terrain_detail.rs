@@ -459,6 +459,8 @@ pub fn build(inp: &Inputs, materials: Option<&Materials<'_>>) -> Option<Detail> 
         let hw = SIDE + 2;
         let mut hs = vec![0.0f32; hw * hw];
         let mut ad = vec![0.0f32; hw * hw];
+        // the second flora pass's knoll (`--no-knoll-ground`): (top, face) at each vertex
+        let mut kn = vec![(0.0f64, 0.0f64); hw * hw];
         let (mut relieved, mut max_relief) = (0usize, 0.0f32);
         for jj in 0..hw {
             for ii in 0..hw {
@@ -472,6 +474,16 @@ pub fn build(inp: &Inputs, materials: Option<&Materials<'_>>) -> Option<Detail> 
                     let lpv = cell_tri(a as f32, b as f32, c as f32, d as f32, u, v) as f64;
                     let w = smooth(0.0, MASK_FADE_M, dist_at(x, z) - step * 0.5) * smooth(0.0, EDGE_FADE_M, edge_d(x, z));
                     add = (((dm - lpv) * inp.height_scale) as f32).clamp(-MAX_RELIEF_M, MAX_RELIEF_M) * w as f32;
+                }
+                if materials.is_some() && eo_landmarks::flora2::flora2().knoll && base as f64 > eo_landmarks::flora2::KNOLL_MIN_Y {
+                    if let Some((t, f, down)) = knoll_at(inp, dem, x, z) {
+                        kn[jj * hw + ii] = (t, f);
+                        if eo_landmarks::flora2::flora2().relief && f > 0.0 {
+                            // the cut face's gullies, under the same masks as the relief
+                            let w = smooth(0.0, MASK_FADE_M, dist_at(x, z) - step * 0.5) * smooth(0.0, EDGE_FADE_M, edge_d(x, z));
+                            add += (eo_landmarks::flora2::gully_m(x, z, down, f) * w) as f32;
+                        }
+                    }
                 }
                 hs[jj * hw + ii] = base + add;
                 ad[jj * hw + ii] = add;
@@ -512,6 +524,7 @@ pub fn build(inp: &Inputs, materials: Option<&Materials<'_>>) -> Option<Detail> 
                 let mut normal = eo_assets::glb::pack_normal(nrm);
                 if let Some(m) = materials {
                     let (c, w) = m.material(x, z, color, nrm.y as f64, hs[k], step);
+                    let (c, w) = knoll_material(c, w, kn[k]);
                     color = c;
                     normal |= (w as u8 as u32) << 24;
                 }
@@ -591,7 +604,7 @@ pub fn build(inp: &Inputs, materials: Option<&Materials<'_>>) -> Option<Detail> 
                 let (qx, qz) = (fx.floor() as i64, fz.floor() as i64);
                 let base = drawn_base_q(inp, qx, qz, (fx - qx as f64) as f32, (fz - qz as f64) as f32);
                 let (lat, lon) = inp.frame.lat_lon(x, z);
-                eprintln!("probe {:6.1} m: base {:8.2} drawn {:?} dem {:?} raw {:.2}", k as f64 * 3.0, base, d.height(x, z), dem.height(lon, lat), (inp.raw_ground)(x, z));
+                eprintln!("probe {:6.1} m: base {:8.2} drawn {:?} dem {:?} raw {:.2} knoll {:?} gully {:?} relief {:?}", k as f64 * 3.0, base, d.height(x, z), dem.height(lon, lat), (inp.raw_ground)(x, z), knoll_at(inp, dem, x, z), knoll_at(inp, dem, x, z).map(|(_, f, dn)| eo_landmarks::flora2::gully_m(x, z, dn, f)), d.relief_height(x, z));
             }
         }
     }
@@ -765,10 +778,26 @@ impl Materials<'_> {
             return (rgba, 0);
         }
         let Some((veg, dark_veg, pale)) = naip_shares(naip, &self.frame, x, z, fp) else { return (rgba, 0) };
+        let slope = (1.0 - ny * ny).max(0.0).sqrt() / ny.max(1e-3);
+        let enc = |v: f64| (v.max(0.0).powf(1.0 / 2.2).min(1.0) * 255.0).round() as u32;
+        // the second flora pass (`--no-bluff-rock`): the Baker bluff's steep faces are
+        // serpentinite rock (eo_landmarks::flora2 `bluff_albedo`), pale ground in the image
+        // too (the bluff's slides and its Colma skin: the rock stands under them), the
+        // shader's bluff code in the grass byte (-64 to -127: a sheared, scaly rock with
+        // grass on its ledges).
+        let (lat, lon) = self.frame.lat_lon(x, z);
+        let face = if lat <= MARIN_LAT && eo_landmarks::flora2::flora2().bluff_rock { eo_landmarks::flora2::bluff_face(lon, lat, slope.atan().to_degrees()) } else { 0.0 };
+        if face > 0.02 {
+            let own = [0, 8, 16].map(|s| srgb_lin(((rgba >> s) & 255) as u8));
+            let substrate = mix3(own, crate::farshore::FAR_SCRUB.map(|v| v as f64), dark_veg);
+            let rock = eo_landmarks::flora2::bluff_albedo(x, z, y as f64 - eo_data::SEA_LEVEL_Y);
+            let m = mix3(substrate, rock, face * (1.0 - 0.5 * dark_veg));
+            let c = enc(m[0]) | (enc(m[1]) << 8) | (enc(m[2]) << 16) | (MATERIAL_ALPHA << 24);
+            return (c, -(64 + (63.0 * face).round() as i8));
+        }
         if pale > 0.5 {
             return (rgba, 0); // gravel, a path, a slab: the ground's own tone
         }
-        let slope = (1.0 - ny * ny).max(0.0).sqrt() / ny.max(1e-3);
         let mut pr = prior(tone, class);
         // the second grass pass's continuous meadow (`--no-meadow-cover`;
         // eo_landmarks::vegetation::meadow_ground): bare earth and the bare class in
@@ -790,7 +819,6 @@ impl Materials<'_> {
             pr = Prior::Grass;
         }
         let (grass, canopy) = cover_shares(pr, veg, dark_veg, pale, slope);
-        let (lat, _) = self.frame.lat_lon(x, z);
         let lin = |c: [u8; 3]| c.map(|v| srgb_lin(v));
         // the canopy: drawn as the coastal scrub's own albedo (the far layer's, farshore.rs
         // FAR_SCRUB) between the planted shrubs
@@ -806,10 +834,88 @@ impl Materials<'_> {
             let own = [0, 8, 16].map(|s| srgb_lin(((rgba >> s) & 255) as u8));
             mix3(own, scrub, canopy)
         };
-        let enc = |v: f64| (v.max(0.0).powf(1.0 / 2.2).min(1.0) * 255.0).round() as u32;
         let c = enc(substrate[0]) | (enc(substrate[1]) << 8) | (enc(substrate[2]) << 16) | (MATERIAL_ALPHA << 24);
         (c, (grass.clamp(0.0, 1.0) * 127.0).round() as i8)
     }
+}
+
+/// The second flora pass's knoll at game (x, z) (eo_landmarks::flora2::knoll):
+/// (top, face, the face's downslope direction) from the 1 m DEM's convexity
+/// (its height over the means of rings 12 and 25 m out, as the plants') and
+/// slope, and the NAIP's green share over 2.5 m; None off Marin, the DEM or
+/// the image, or where the ground is not convex.
+pub fn knoll_at(inp: &Inputs, dem: &Dem1m, x: f64, z: f64) -> Option<(f64, f64, [f64; 2])> {
+    let h = |x: f64, z: f64| -> Option<f64> {
+        let (lat, lon) = inp.frame.lat_lon(x, z);
+        dem.height(lon, lat).map(|v| v as f64 * inp.height_scale)
+    };
+    let (lat, _) = inp.frame.lat_lon(x, z);
+    if lat <= MARIN_LAT {
+        return None;
+    }
+    let c = h(x, z)?;
+    let r = eo_landmarks::flora2::KNOLL_RING_M.0;
+    let mut ring = 0.0;
+    for k in 0..8 {
+        let (sn, cs) = (k as f64 * std::f64::consts::FRAC_PI_4).sin_cos();
+        ring += h(x + cs * r, z + sn * r)?;
+    }
+    let hollow = ring / 8.0 - c;
+    if -hollow < eo_landmarks::flora2::KNOLL_CONVEX_M.0 {
+        return None;
+    }
+    let r2 = eo_landmarks::flora2::KNOLL_RING_M.1;
+    let mut ring2 = 0.0;
+    for k in 0..8 {
+        let (sn, cs) = (k as f64 * std::f64::consts::FRAC_PI_4).sin_cos();
+        ring2 += h(x + cs * r2, z + sn * r2)?;
+    }
+    let hollow25 = ring2 / 8.0 - c;
+    let e = 1.5;
+    let gx = (h(x + e, z)? - h(x - e, z)?) / (2.0 * e);
+    let gz = (h(x, z + e)? - h(x, z - e)?) / (2.0 * e);
+    let g = gx.hypot(gz);
+    let slope = g.atan().to_degrees();
+    let naip = naip()?;
+    let (mut green, mut n) = (0.0, 0.0);
+    for j in 0..5 {
+        for i in 0..5 {
+            let (la, lo) = inp.frame.lat_lon(x + (i as f64 - 2.0) * 0.5, z + (j as f64 - 2.0) * 0.5);
+            let Some(p) = naip.sample_rgb(lo, la) else { continue };
+            let [r, g, b] = p.map(|c| c as f64);
+            n += 1.0;
+            if 2.0 * g - r - b > eo_landmarks::vegetation::NAIP_GREEN_STRICT as f64 * (r + g + b) && g > r {
+                green += 1.0;
+            }
+        }
+    }
+    if n == 0.0 {
+        return None;
+    }
+    let (a, b) = eo_landmarks::flora2::KNOLL_CONVEX25_DEM_M;
+    let c25 = smooth(a, b, -hollow25);
+    let (t, f) = eo_landmarks::flora2::knoll(slope, hollow, c25, green / n);
+    let down = if g > 1e-6 { [-gx / g, -gz / g] } else { [1.0, 0.0] };
+    Some((t, f, down))
+}
+
+/// A material vertex on the knoll (`kn`: its (top, face)): the top's rust soil
+/// and the face's eroded chert (eo_landmarks::flora2 `KNOLL_TOP_SRGB`,
+/// `KNOLL_FACE_SRGB`), and the shader's knoll code in the grass byte: -1 to -63
+/// (cc0.wgsl `gg3_terrain`: sparse cured grass, rubble, rills).
+pub fn knoll_material(c: u32, w: i8, kn: (f64, f64)) -> (u32, i8) {
+    let k = (kn.0 + kn.1).min(1.0);
+    if k <= 0.02 || (c >> 24) != MATERIAL_ALPHA {
+        return (c, w);
+    }
+    let lin = |v: [u8; 3]| v.map(srgb_lin);
+    let soil = mix3(lin(eo_landmarks::flora2::KNOLL_TOP_SRGB), lin(eo_landmarks::flora2::KNOLL_FACE_SRGB), kn.1 / (kn.0 + kn.1));
+    let own = [0, 8, 16].map(|s| srgb_lin(((c >> s) & 255) as u8));
+    let m = mix3(own, soil, k);
+    let enc = |v: f64| (v.max(0.0).powf(1.0 / 2.2).min(1.0) * 255.0).round() as u32;
+    let c = enc(m[0]) | (enc(m[1]) << 8) | (enc(m[2]) << 16) | (MATERIAL_ALPHA << 24);
+    // the knoll's code (the shader draws the rills where the face is steep)
+    (c, -(1 + (62.0 * k).round() as i8))
 }
 
 /// The NAIP over a square of side `fp` at (x, z), 5 x 5 taps: (vegetation

@@ -388,6 +388,10 @@ pub struct Naip {
     /// Warm bare ground: not green and red over green by [`NAIP_WARM_RG`]
     /// (thin, eroded soil showing through; on a knoll top, [`bare_soil`]).
     pub warm: f32,
+    /// The pixels clearly green (excess green over [`NAIP_GREEN_STRICT`] of the
+    /// chromatic sum and green over red), at any brightness: living leaves (the
+    /// second flora pass's knoll: `crate::flora2::knoll`).
+    pub green: f32,
 }
 
 /// Red over green past which a non-green pixel is warm (soil showing): over
@@ -401,6 +405,12 @@ pub const NAIP_WARM_RG: f32 = 1.06;
 /// cured grass's red over green median on the headlands is 1.00, its p90
 /// 1.09 ([`MEADOW_LEAN`]'s measurement). INFERRED between them.
 pub const NAIP_SOIL_RG: f32 = 1.16;
+
+/// Excess green over the chromatic sum past which a pixel is clearly green
+/// ([`Naip::green`]): the summer image's grey sage scrub and the dark chert faces
+/// both read about 0.03-0.04 (probed at the Battery Spencer knoll), living green
+/// leaves past 0.08 (INFERRED between).
+pub const NAIP_GREEN_STRICT: f32 = 0.06;
 
 /// One NAIP pixel's class.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -493,7 +503,7 @@ pub fn naip_shares(px: &[Option<[u8; 3]>], w: usize, h: usize, slope_deg: f64) -
     }
     let v: Vec<Option<f32>> = px.iter().map(|p| p.map(|p| (p[0] as f32 + p[1] as f32 + p[2] as f32) / 765.0)).collect();
     let mut n = [0u32; 4];
-    let (mut lush, mut soil, mut warm) = (0u32, 0u32, 0u32);
+    let (mut lush, mut soil, mut warm, mut greens) = (0u32, 0u32, 0u32, 0u32);
     for j in 2..h - 2 {
         for i in 2..w - 2 {
             let Some(p) = px[j * w + i] else { continue };
@@ -511,6 +521,9 @@ pub fn naip_shares(px: &[Option<[u8; 3]>], w: usize, h: usize, slope_deg: f64) -
             n[class as usize] += 1;
             let [r, g, b] = p.map(|c| c as f32);
             let green = 2.0 * g - r - b > 0.0 && g > r;
+            if 2.0 * g - r - b > NAIP_GREEN_STRICT * (r + g + b) && g > r && class != NaipClass::Unknown {
+                greens += 1;
+            }
             if class == NaipClass::Low && green {
                 lush += 1;
             }
@@ -525,7 +538,7 @@ pub fn naip_shares(px: &[Option<[u8; 3]>], w: usize, h: usize, slope_deg: f64) -
         }
     }
     let known = (n[0] + n[1] + n[2]) as f32;
-    (known > 0.0).then(|| Naip { canopy: n[0] as f32 / known, low: n[1] as f32 / known, bare: n[2] as f32 / known, lush: lush as f32 / known, soil: soil as f32 / known, warm: warm as f32 / known })
+    (known > 0.0).then(|| Naip { canopy: n[0] as f32 / known, low: n[1] as f32 / known, bare: n[2] as f32 / known, lush: lush as f32 / known, soil: soil as f32 / known, warm: warm as f32 / known, green: greens as f32 / known })
 }
 
 /// What a planting pass reads besides the ground: the round-3 switches and
@@ -772,6 +785,11 @@ pub fn plant_coarse_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, 
             // none on the open grass and bare ground between. Under the mapped woods the
             // canopy is the trees': the understorey keeps its round-2 share there.
             let naip = ex.at(x, z, NAIP_PLANT_BOX_M).filter(|_| !matches!(cover, Cover::Wood | Cover::WoodGreen));
+            // the second flora pass (`--no-knoll-ground`): no scrub on the bare knoll.
+            let (kt, kf) = crate::flora2::knoll_site(site, &s, x, z, naip);
+            if hash(ix, iz, 201) < kt.max(kf) {
+                return;
+            }
             let chance = if let Some(n) = naip {
                 0.02 + 0.98 * smoothstep(0.12, 0.55, n.canopy as f64)
             } else {
@@ -895,6 +913,27 @@ pub fn plant_fine_with(x0: f64, z0: f64, x1: f64, z1: f64, site: &dyn Fn(f64, f6
                 if ex.fl.flowers {
                     push_bloom(&plant, kind, 0.35, day_of_year, false, out);
                 }
+            }
+            return;
+        }
+        // the second flora pass (`--no-knoll-ground`): the bare knoll's top and cut face
+        // carry sparse cured grass and, on the face, chert rubble; nothing else.
+        let (kt, kf) = crate::flora2::knoll_site(site, &s, x, z, naip);
+        if hash(ix, iz, 202) < kt.max(kf) {
+            let k = kt + kf;
+            let grass = (crate::flora2::KNOLL_GRASS.0 * kt + crate::flora2::KNOLL_GRASS.1 * kf) / k.max(1e-9);
+            let r = hash(ix, iz, 203);
+            if r < grass {
+                // cured annual grass in sparse seed-stalk tufts, bleached with the season
+                let k = crate::flora::MEADOW_SEED_STALKS;
+                let sc = 0.55 + 0.35 * hash(ix, iz, 112) as f32;
+                let tint = crate::flora::bleached_tint(meadow_patch_tint(k, 1.0, 0.9 + 0.2 * hash(ix, iz, 20) as f32), MEADOW_LIVE[k as usize], crate::flora::grass_bleach(day_of_year));
+                out.push(Plant { kind: Kind::Meadow(k), pos: [x, s.y - GRASS_SINK_M, z], yaw: hash(ix, iz, 7) * std::f64::consts::TAU, scale: [sc; 3], rank: hash(ix, iz, 8) as f32, tint, grad: s.grad(), tip: TIP_NONE });
+            } else if r < grass + crate::flora2::KNOLL_RUBBLE * kf / k.max(1e-9) {
+                let (a, b) = crate::flora2::KNOLL_RUBBLE_M;
+                let size = ((a + (b - a) * hash(ix, iz, 204).powf(1.5)) * 1.25) as f32;
+                let tint = crate::flora::CHERT_RIBBON_SRGB.map(|c| srgb_to_linear(c) / crate::hill_rock::ROCK_SHADE * (0.8 + 0.4 * hash(ix, iz, 205) as f32));
+                out.push(Plant { kind: Kind::Rock((hash(ix, iz, 206) * 2.0) as u8 % 2), pos: [x + hash(ix, iz, 207) - 0.5, s.y - 0.25 * size as f64, z + hash(ix, iz, 208) - 0.5], yaw: hash(ix, iz, 209) * std::f64::consts::TAU, scale: [size, size * 0.55, size * 0.8], rank: hash(ix, iz, 8) as f32, tint, grad: s.grad(), tip: crate::flora::TIP_RIBBON });
             }
             return;
         }
@@ -1838,7 +1877,7 @@ mod tests {
     #[test]
     fn eroded_ground_is_bare_and_scrub_keeps_off_cliffs() {
         let site = |ny: f64, hollow: f64| Site { y: 0.0, normal: [0.0, ny, (1.0 - ny * ny).sqrt()], ground: [0.1; 3], cover: Some(Cover::Bare), lithology: Lithology::Chert, shore_m: 400.0, hollow_m: hollow };
-        let n = |bare: f32, warm: f32, lush: f32| Some(Naip { canopy: 0.0, low: 1.0 - bare, bare, lush, soil: 0.0, warm });
+        let n = |bare: f32, warm: f32, lush: f32| Some(Naip { canopy: 0.0, low: 1.0 - bare, bare, lush, soil: 0.0, warm, green: lush });
         let steep = site(50f64.to_radians().cos(), 0.0);
         let gentle = site(10f64.to_radians().cos(), 0.0);
         let knoll = site(10f64.to_radians().cos(), -4.0);

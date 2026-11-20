@@ -356,6 +356,10 @@ impl VegGround {
                 self.naip_at(x, z, eo_landmarks::vegetation::NAIP_PLANT_BOX_M),
                 self.site(x, z)
             );
+            if let Some(s) = self.site(x, z) {
+                let ring = |r: f64| (0..8).filter_map(|k| { let (sn, cs) = (k as f64 * std::f64::consts::FRAC_PI_4).sin_cos(); self.site(x + cs * r, z + sn * r).map(|q| q.y) }).sum::<f64>() / 8.0 - s.y;
+                eprintln!("  knoll (top, face) {:?}, over the 25 m ring {:.2} m", eo_landmarks::flora2::knoll_site(&|x, z| self.site(x, z), &s, x, z, self.naip_at(x, z, eo_landmarks::vegetation::NAIP_PLANT_BOX_M)), -ring(25.0));
+            }
         }
     }
 

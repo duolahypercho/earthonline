@@ -507,7 +507,14 @@ pub fn target_albedo(geology: bool, source: Source, lon: f64, lat: f64, navd88: 
     if source == Source::Armour {
         return crate::rocks::ARMOUR_ALBEDO; // quarried granite, not the bluff's rock
     }
-    let unit = unit_srgb(unit_at(lon, lat, navd88)).map(lin);
+    let u = unit_at(lon, lat, navd88);
+    // the second flora pass (`--no-bluff-rock`): the Baker bluff's slope and face pieces
+    // in the face's dark, rust-stained serpentinite (eo_landmarks::flora2 `bluff_albedo`).
+    if u == Unit::Serpentinite && !matches!(source, Source::Surf | Source::Boulder) && crate::flora2::flora2().bluff_rock && crate::flora2::bluff_face(lon, lat, 90.0) > 0.0 {
+        let (x, z) = crate::vegetation::game_xz(lat, lon);
+        return crate::flora2::bluff_albedo(x, z, (navd88 - 0.969) * eo_data::groundscale::height_scale());
+    }
+    let unit = unit_srgb(u).map(lin);
     if matches!(source, Source::Surf | Source::Boulder) {
         // the shore's loose stones are sea-worn rock, darker than the unit's dry
         // outcrop colour (the colour words describe the outcrop): the measured
@@ -587,7 +594,9 @@ pub fn serpentinite_boulders(lib: &Library, w: &World) -> Vec<Piece> {
     let (x0, z1) = game_xz(BOULDER_BOX[0], BOULDER_BOX[1], w.plan);
     let (x1, z0) = game_xz(BOULDER_BOX[2], BOULDER_BOX[3], w.plan);
     let pitch = 4.0 * w.plan;
-    let tone = SERPENTINITE_BOULDER_SRGB.map(lin);
+    // the second flora pass (`--no-boulder-surf`): darker, wet in the swash, in tighter clusters.
+    let f2 = crate::flora2::flora2().boulders;
+    let tone = if f2 { crate::flora2::BOULDER_DRY_SRGB } else { SERPENTINITE_BOULDER_SRGB }.map(lin);
     let mut out = vec![];
     let (i0, i1) = ((x0 / pitch).floor() as i64, (x1 / pitch).ceil() as i64);
     let (j0, j1) = ((z0 / pitch).floor() as i64, (z1 / pitch).ceil() as i64);
@@ -601,14 +610,9 @@ pub fn serpentinite_boulders(lib: &Library, w: &World) -> Vec<Piece> {
                 continue;
             }
             // clusters: a smooth field of cells about 14 m, thicker near the waterline.
-            let cell = 14.0 * w.plan;
-            let (cx, cz) = ((x / cell).floor() as i64, (z / cell).floor() as i64);
-            let (fx, fz) = (x / cell - cx as f64, z / cell - cz as f64);
-            let c = |a: i64, b: i64| hash(a, b, 977);
-            let sm = |t: f64| t * t * (3.0 - 2.0 * t);
-            let f = (c(cx, cz) * (1.0 - sm(fx)) + c(cx + 1, cz) * sm(fx)) * (1.0 - sm(fz)) + (c(cx, cz + 1) * (1.0 - sm(fx)) + c(cx + 1, cz + 1) * sm(fx)) * sm(fz);
+            let f = boulder_cluster(x, z, w.plan);
             let near_water = 1.0 - (sd.abs() / 25.0).min(1.0);
-            let chance = 0.08 + 0.75 * ((f - 0.45) / 0.3).clamp(0.0, 1.0) * (0.4 + 0.6 * near_water);
+            let chance = if f2 { crate::flora2::boulder_chance(f, sd) } else { 0.08 + 0.75 * ((f - 0.45) / 0.3).clamp(0.0, 1.0) * (0.4 + 0.6 * near_water) };
             if u(2) >= chance {
                 continue;
             }
@@ -622,11 +626,51 @@ pub fn serpentinite_boulders(lib: &Library, w: &World) -> Vec<Piece> {
             // rounded to sub-rounded: a little flattened, each its own proportions.
             let s = [s0 * (0.9 + 0.2 * u(6)), s0 * (0.7 + 0.35 * u(7)), s0 * (0.9 + 0.2 * u(8))];
             if let Some((pos, rot, g)) = seat(lib, kind, w, x, z, s, None, u(9) * std::f64::consts::TAU, 0.6, 0.0) {
-                out.push(Piece { kind, pos, rot, scale: s, tint: tint_to(k, tone, 0.85 + 0.3 * u(10)), wet: wetness(w, g), source: Source::Boulder });
+                // (wet past 1: wet through with a sheen, rock_draw.wgsl; the pass's swash band)
+                let wet = if f2 { wetness(w, g).max(crate::flora2::boulder_wet(sd)) + crate::flora2::boulder_wet(sd) } else { wetness(w, g) };
+                out.push(Piece { kind, pos, rot, scale: s, tint: tint_to(k, tone, 0.85 + 0.3 * u(10)), wet, source: Source::Boulder });
             }
         }
     }
     out
+}
+
+/// The boulders' cluster field at game (x, z): a smooth field of cells about
+/// 14 m (real), 0-1.
+pub fn boulder_cluster(x: f64, z: f64, plan: f64) -> f64 {
+    let cell = 14.0 * plan;
+    let (cx, cz) = ((x / cell).floor() as i64, (z / cell).floor() as i64);
+    let (fx, fz) = (x / cell - cx as f64, z / cell - cz as f64);
+    let c = |a: i64, b: i64| hash(a, b, 977);
+    let sm = |t: f64| t * t * (3.0 - 2.0 * t);
+    (c(cx, cz) * (1.0 - sm(fx)) + c(cx + 1, cz) * sm(fx)) * (1.0 - sm(fz)) + (c(cx, cz + 1) * (1.0 - sm(fx)) + c(cx + 1, cz + 1) * sm(fx)) * sm(fz)
+}
+
+/// The second flora pass (`--no-boulder-surf`) on the earlier rounds' loose shore
+/// stones (round 2's boulders, the surf field) in the Baker and Marshall's box:
+/// those off the boulder clusters go (the beach clear between them), the rest
+/// take the boulders' dark albedo, wet through with a sheen in the swash.
+pub fn cluster_shore_stones(lib: &Library, w: &World, pieces: &mut Vec<Piece>) {
+    let b = crate::flora::BOULDER_BOX;
+    let tone = crate::flora2::BOULDER_DRY_SRGB.map(lin);
+    pieces.retain_mut(|p| {
+        if !matches!(p.source, Source::Surf | Source::Boulder) {
+            return true;
+        }
+        let (lon, lat) = crate::flora2::geo_of(p.pos[0], p.pos[2]);
+        if lon < b[0] || lon > b[2] || lat < b[1] || lat > b[3] {
+            return true;
+        }
+        let sd = (w.signed)(p.pos[0], p.pos[2]);
+        let f = boulder_cluster(p.pos[0], p.pos[2], w.plan);
+        let u = hash((p.pos[0] * 7.0) as i64, (p.pos[2] * 7.0) as i64, 991);
+        if u >= crate::flora2::boulder_chance(f, sd) / crate::flora2::boulder_chance(1.0, sd) {
+            return false;
+        }
+        p.tint = tint_to(&lib.kinds[p.kind as usize], tone, 0.85 + 0.3 * hash((p.pos[0] * 7.0) as i64, (p.pos[2] * 7.0) as i64, 992));
+        p.wet = p.wet.max(crate::flora2::boulder_wet(sd)) + crate::flora2::boulder_wet(sd);
+        true
+    });
 }
 
 /// rocks.rs's steep-face zone, rise over run (its `OUTCROP_SLOPE` less a margin for the drawn ground's smoothing).

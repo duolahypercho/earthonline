@@ -288,7 +288,10 @@ fn icosphere(subdiv: u32) -> (Vec<[f32; 3]>, Vec<[u32; 3]>) {
 /// One rock: unit-ish size (about 1 m across before the instance scale),
 /// flattened, its lowest fifth below y = 0. `bedded`: planar steps along a
 /// tilted bedding plane (the ribbon chert's beds).
-fn rock(b: &mut Builder, m: u32, subdiv: u32, seed: u32, bedded: bool) {
+/// `blocky` (the second flora pass's sheared serpentinite, eo_landmarks::flora2
+/// `bluff_rock`): fewer, deeper joint planes, so the block is an angular,
+/// broken slab rather than a rounded knob.
+fn rock(b: &mut Builder, m: u32, subdiv: u32, seed: u32, bedded: bool, blocky: bool) {
     let (unit, faces) = icosphere(subdiv);
     let stretch = [0.95 + 0.4 * hash3(1, 0, 0, seed), 0.55 + 0.2 * hash3(2, 0, 0, seed), 0.8 + 0.3 * hash3(3, 0, 0, seed)];
     let bed = {
@@ -303,12 +306,15 @@ fn rock(b: &mut Builder, m: u32, subdiv: u32, seed: u32, bedded: bool) {
     // the faces are flat and the edges sharp; a little noise breaks the planes. The
     // bedded (chert) shapes add slabs parallel to the bedding.
     const CUTS: u32 = 20;
-    let mut planes: Vec<([f32; 3], f32)> = (0..CUTS)
+    // (blocky: 11 joints cut deep, 0.42-0.62 of the sphere: flat faces meet at sharp
+    // edges all round; INFERRED from the guide's "blocky, sheared" bluff.)
+    let (cuts, d0, dd) = if blocky { (11, 0.42, 0.2) } else { (CUTS, 0.62, 0.3) };
+    let mut planes: Vec<([f32; 3], f32)> = (0..cuts)
         .map(|k| {
             let u = hash3(k as i32, 1, 3, seed) * 2.0 - 1.0;
             let a = hash3(k as i32, 2, 3, seed) * std::f32::consts::TAU;
             let r = (1.0 - u * u).max(0.0).sqrt();
-            ([r * a.cos(), u, r * a.sin()], 0.62 + 0.3 * hash3(k as i32, 4, 3, seed))
+            ([r * a.cos(), u, r * a.sin()], d0 + dd * hash3(k as i32, 4, 3, seed))
         })
         .collect();
     if bedded {
@@ -470,7 +476,7 @@ pub(crate) fn cook(out: &mut Out, ez: Option<&eo_props::eztree::EzLibrary>, m_ba
     for k in 0..V_ROCKS {
         let mut ids = [NONE; 3];
         for (l, sub) in [3u32, 2, 1].iter().enumerate() {
-            rock(&mut out.b, m_rock, *sub, 501 + k * 17, k < 2);
+            rock(&mut out.b, m_rock, *sub, 501 + k * 17, k < 2, k >= 2 && eo_landmarks::flora2::flora2().bluff_rock);
             ids[l] = out.finish();
         }
         let model = V_ROCK + k;
@@ -1485,7 +1491,7 @@ mod tests {
     #[test]
     fn rock_sits_partly_buried_and_is_closed() {
         let mut b = Builder::default();
-        rock(&mut b, 0, 2, 7, true);
+        rock(&mut b, 0, 2, 7, true, false);
         let ys: Vec<f32> = b.v.iter().map(|v| v.pos[1]).collect();
         let (lo, hi) = ys.iter().fold((f32::MAX, f32::MIN), |a, y| (a.0.min(*y), a.1.max(*y)));
         assert!(lo < 0.0 && hi > 0.0);

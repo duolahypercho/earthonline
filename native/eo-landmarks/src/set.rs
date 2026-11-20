@@ -357,6 +357,10 @@ fn shore_rocks(
             }
             pieces.extend(place::slopes(lib, &world, &sv, sw.geology, sw.cliff));
         }
+        if crate::flora2::flora2().boulders {
+            // the second flora pass: the earlier rounds' Baker stones into its boulder clusters.
+            place::cluster_shore_stones(lib, &world, &mut pieces);
+        }
         if crate::flora::flora().serpentinite {
             // the flora pass: Baker's and Marshall's serpentinite boulders (rocks/place.rs).
             pieces.extend(place::serpentinite_boulders(lib, &world));

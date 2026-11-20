@@ -57,6 +57,33 @@ pub fn plant_with(claims: Option<&crate::rocks::scan::Claims>, x0: f64, z0: f64,
         // elsewhere single blocks on steep slopes (grouped by the same field) and a few
         // stones on bare earth.
         let group = field(x, z, 22.0, 31);
+        // the second flora pass (`--no-bluff-rock`): the Baker bluff's faces as broken,
+        // tabular serpentinite slabs that overlap into a fractured face.
+        if crate::flora2::flora2().bluff_rock && s.lithology == Lithology::Serpentinite && z > crate::vegetation::marin_z() {
+            let (lon, lat) = crate::flora2::geo_of(x, z);
+            let face = crate::flora2::bluff_face(lon, lat, slope);
+            if face > 0.5 {
+                if hash(ix, iz, 3) < crate::flora2::BLUFF_BLOCK_CHANCE * face {
+                    let (a, b) = crate::flora2::BLUFF_BLOCK_M;
+                    let size = ((a + (b - a) * hash(ix, iz, 4).powf(1.3)) * 1.25) as f32;
+                    let (ta, tb) = crate::flora2::BLUFF_BLOCK_TALL;
+                    let tall = ta + (tb - ta) * hash(ix, iz, 9) as f32;
+                    let (grad, sink) = rock_seat(s.grad(), size, tall);
+                    let al = crate::flora2::bluff_albedo(x, z, s.y + 0.55);
+                    out.push(Plant {
+                        kind: Kind::Rock(2 + (hash(ix, iz, 5) * 2.0) as u8 % 2),
+                        pos: [x, s.y - sink, z],
+                        yaw: hash(ix, iz, 7) * std::f64::consts::TAU,
+                        scale: [size * (1.0 + 0.4 * hash(ix, iz, 10) as f32), size * tall, size * (0.8 + 0.3 * hash(ix, iz, 12) as f32)],
+                        rank: hash(ix, iz, 8) as f32,
+                        tint: al.map(|c| c as f32 / ROCK_SHADE),
+                        grad,
+                        tip: crate::flora::TIP_SCALY,
+                    });
+                }
+                return;
+            }
+        }
         // the flora pass (`--no-chert-ground`): ribbon-chert outcrops on the steep Marin faces.
         let ribbon = crate::flora::flora().chert && s.lithology == Lithology::Chert && slope >= crate::flora::RIBBON_SLOPE_DEG && z < crate::vegetation::marin_z();
         let chance = match cover {
@@ -92,7 +119,9 @@ pub fn plant_with(claims: Option<&crate::rocks::scan::Claims>, x0: f64, z0: f64,
             Lithology::Sandstone => SANDSTONE_SRGB,
         };
         let v = 0.85 + 0.3 * hash(ix, iz, 6) as f32;
-        let tint = base.map(|c| srgb_to_linear(c) / ROCK_SHADE * v);
+        // the second flora pass (`--no-bluff-rock`): the Baker bluff's knobs in the face's rock colours.
+        let baker = serp && crate::flora2::flora2().bluff_rock && { let (lon, lat) = crate::flora2::geo_of(x, z); crate::flora2::bluff_face(lon, lat, 90.0) > 0.0 };
+        let tint = if baker { crate::flora2::bluff_albedo(x, z, s.y + 0.55).map(|c| c as f32 / ROCK_SHADE * v) } else { base.map(|c| srgb_to_linear(c) / ROCK_SHADE * v) };
         // a block stands proud of its slope (the mesh is about 0.6 as tall as wide at
         // scale 1): a loose block 0.5-0.7 as tall as wide, an outcrop's 0.65-0.95, so the
         // overlapping blocks stand as a broken face rather than a bed of flat pillows; the
@@ -127,7 +156,7 @@ pub fn plant_with(claims: Option<&crate::rocks::scan::Claims>, x0: f64, z0: f64,
                     yaw: h(46) * std::f64::consts::TAU,
                     scale: [size * (0.9 + 0.4 * h(47) as f32), size * tall, size],
                     rank: h(48) as f32,
-                    tint: crate::flora::SERPENTINITE_SRGB.map(|c| srgb_to_linear(c) / ROCK_SHADE * (0.8 + 0.35 * h(49) as f32)),
+                    tint: if baker { crate::flora2::bluff_albedo(x + ox, z + oz, s2.y + 0.55).map(|c| c as f32 / ROCK_SHADE * (0.8 + 0.35 * h(49) as f32)) } else { crate::flora::SERPENTINITE_SRGB.map(|c| srgb_to_linear(c) / ROCK_SHADE * (0.8 + 0.35 * h(49) as f32)) },
                     grad,
                     tip: crate::flora::TIP_SCALY,
                 });

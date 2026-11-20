@@ -311,6 +311,14 @@ pub fn gg3_ground_wgsl(on: &dyn Fn(&str) -> bool) -> String {
         on("terrain-materials"),
         g[0], g[1], g[2], y[0], y[1], y[2],
         crate::scene::terrain_detail::MATERIAL_ALPHA as f32
+    ) + &format!(
+        // the second flora pass (eo_landmarks::flora2): the knoll's and the bluff's codes in
+        // the grass byte (terrain_detail.rs `knoll_material`, `Materials::material`).
+        "const FL2_KNOLL: bool = {};\nconst FL2_BLUFF: bool = {};\nconst FL2_KNOLL_RELIEF: bool = {};\nconst FL2_BLUFF_GRASS: f32 = {:.3};\n",
+        eo_landmarks::flora2::flora2().knoll,
+        eo_landmarks::flora2::flora2().bluff_rock,
+        eo_landmarks::flora2::flora2().relief,
+        eo_landmarks::flora2::BLUFF_GRASS,
     )
 }
 

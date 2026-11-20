@@ -21,6 +21,9 @@
 // not a mirror; a glossier film glitters on the scans' fine normal detail).
 const GC_WET_RATIO: f32 = 0.5;
 const GC_WET_ROUGH: f32 = 0.5;
+// The swash's film on a boulder wet through (INFERRED: the photograph's sheen on the
+// boulders in the surf; glossier than the damp film above it).
+const GC_SHEEN_ROUGH: f32 = 0.28;
 // An open shell's inner side: the hollow under a scanned face, which in
 // the ground it came from is never seen; drawn at this share of its albedo
 // so a piece turned to show it does not read as a bleached lit face
@@ -88,8 +91,11 @@ fn gc_shade(in: GcOut, front: bool) -> vec4<f32> {
     }
     var s: Surface;
     let wet = clamp(r.wet, 0.0, 1.0);
+    // past 1: wet through in the swash with a glossier film (the second flora pass's
+    // boulders, eo_landmarks::flora2 `boulder_wet`; no other piece passes 1).
+    let sheen = clamp(r.wet - 1.0, 0.0, 1.0);
     s.albedo = albedo * r.tint * mix(1.0, GC_WET_RATIO, wet) * select(GC_INNER_SHADE, 1.0, front);
-    s.rough = clamp(mix(arm.g, GC_WET_ROUGH, wet), 0.05, 1.0);
+    s.rough = clamp(mix(mix(arm.g, GC_WET_ROUGH, wet), GC_SHEEN_ROUGH, sheen), 0.05, 1.0);
     s.metal = 0.0;
     s.ao = arm.r;
     s.n = nm;
