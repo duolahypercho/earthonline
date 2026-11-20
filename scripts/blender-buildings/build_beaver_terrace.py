@@ -169,6 +169,40 @@ def turned(mat, x, y, z, profile, n=16, closed=False):
         emit(mat, points[-n:], [tuple(reversed(range(n)))])
 
 
+def enamel_chip(centre, along, up, width, height, wear_random):
+    """Thin, irregular rings expose the primer and oxidised steel at a contact point."""
+    c, u, v = map(Vector, (centre, along, up))
+    outline = []
+    for j in range(13):
+        a = j * math.tau / 13
+        r = wear_random.uniform(0.70, 1.24)
+        outline.append(u * (width * r * math.cos(a)) + v * (height * r * math.sin(a)))
+    rings = [[c + p * k for p in outline] for k in (1, 0.75, 0.39)]
+    for i, mat in enumerate((worn_primer, exposed_steel)):
+        points = rings[i] + rings[i + 1]
+        emit(mat, points, [(j, (j + 1) % 13, (j + 1) % 13 + 13, j + 13) for j in range(13)])
+    emit(oxide, rings[-1], [tuple(range(13))])
+
+
+def bent_tube(mat, centres, radius, axis, sides=10):
+    """Sweep a round section through the supplied centreline in its bend plane."""
+    pts = [Vector(p) for p in centres]
+    axis = Vector(axis).normalized()
+    points = []
+    for i, centre in enumerate(pts):
+        tangent = (pts[min(i + 1, len(pts) - 1)] - pts[max(i - 1, 0)]).normalized()
+        across = tangent.cross(axis).normalized()
+        for j in range(sides):
+            a = j * math.tau / sides
+            points.append(centre + radius * (axis * math.cos(a) + across * math.sin(a)))
+    faces = [
+        (i * sides + j, i * sides + (j + 1) % sides, (i + 1) * sides + (j + 1) % sides, (i + 1) * sides + j)
+        for i in range(len(pts) - 1)
+        for j in range(sides)
+    ]
+    emit(mat, points, faces, True)
+
+
 def cushion(mat, centre, radii):
     """A softly crowned superellipsoid with subtly gathered upholstery."""
     x, y, z = centre
@@ -629,6 +663,13 @@ plant(4.14, y + 0.01, 0.72)
 room = part("workroom-chair", 3.095, y, 6.835)
 chair(2.82, y, 6.57)
 
+wear_random = random.Random(1939)
+nickel = finish("satin-nickel", "b8b3a4", 0.32, 0.78)
+seasoned_iron = finish("seasoned-iron", "474742", 0.72, 0.40)
+smoked_enamel = finish("smoked-enamel", "2d3431", 0.19, 0.20)
+worn_primer = finish("enamel-primer", "b1a08a", 0.71)
+exposed_steel = finish("exposed-steel", "69594b", 0.60, 0.37)
+oxide = finish("iron-oxide", "8c5232", 0.88, texture=110)
 room = part("enamel-refrigerator", 1.685, 0.025, 12.22)
 # Enamel refrigerator: individual doors, dark compression seals, brushed handles and grille.
 enamel = finish("ivory-enamel", "e8e5da", 0.28, 0.17)
@@ -636,18 +677,95 @@ box(enamel, (1.24, 0.025, 11.84), (2.13, 2.06, 12.72), True, 0.055)
 box(iron, (1.27, 0.15, 11.80), (2.10, 2.02, 11.86), False, 0.020)
 for low, high in [(0.18, 0.69), (0.715, 2.025)]:
     box(enamel, (1.25, low, 11.72), (2.12, high, 11.84), True, 0.038)
-    h = high - 0.18 if high < 1 else low + 0.14
-    box(brass, (1.36, h, 11.64), (1.40, h + 0.17, 11.72), False, 0.016)
-for i in range(8):
-    box(iron, (1.36 + i * 0.083, 0.067, 11.832), (1.41 + i * 0.083, 0.108, 11.844))
+# Project the two pulls far enough for fingers to clear the enamel. Their
+# fixing plates are the places where the paint is most likely to fail.
+front_u, front_v = (-1, 0, 0), (0, 1, 0)
+for lo, hi in ((0.525, 0.667), (0.899, 1.072)):
+    for h in (lo, hi):
+        box(nickel, (1.347, h - 0.022, 11.709), (1.419, h + 0.022, 11.723), False, 0.008)
+        for x in (1.358, 1.408):
+            box(exposed_steel, (x - 0.005, h - 0.004, 11.705), (x + 0.005, h + 0.004, 11.710), False, 0.003)
+            box(seasoned_iron, (x - 0.0035, h - 0.0008, 11.704), (x + 0.0035, h + 0.0008, 11.706))
+        enamel_chip((1.375, h - 0.025, 11.718), front_u, front_v, 0.020, 0.007, wear_random)
+    bent_tube(
+        nickel,
+        [
+            (1.383, lo, 11.709),
+            (1.383, lo + 0.014, 11.680),
+            (1.383, lo + 0.034, 11.654),
+            (1.383, lo + 0.050, 11.647),
+            (1.383, hi - 0.044, 11.647),
+            (1.383, hi - 0.022, 11.652),
+            (1.383, hi - 0.007, 11.675),
+            (1.383, hi, 11.709),
+        ],
+        0.013,
+        (1, 0, 0),
+        12,
+    )
+for x, y, rx, ry in [
+    (1.308, 0.226, 0.024, 0.006),
+    (2.061, 0.228, 0.010, 0.005),
+    (1.309, 0.762, 0.021, 0.006),
+    (2.061, 0.758, 0.014, 0.004),
+    (1.519, 0.645, 0.010, 0.003),
+]:
+    enamel_chip((x, y, 11.718), front_u, front_v, rx, ry, wear_random)
+    for _ in range(4):
+        enamel_chip(
+            (x + wear_random.uniform(-rx * 1.15, rx * 1.15), y + wear_random.uniform(0.005, 0.010), 11.718),
+            front_u,
+            front_v,
+            0.002,
+            0.0012,
+            wear_random,
+        )
+box(nickel, (1.311, 0.038, 11.823), (2.063, 0.143, 11.843), False, 0.009)
+for row in range(2):
+    for i in range(24):
+        x = 1.35 + i * 0.028
+        y = 0.074 + row * 0.026
+        box(seasoned_iron, (x, y, 11.819), (x + 0.017, y + 0.005, 11.825))
 room = "oven-range"
 # Oven glazing, trim, selector knobs and folded towel over the handle.
 box(iron, (1.055, 0.18, 9.31), (1.11, 0.83, 10.32), False, 0.022)
-box(blue, (1.11, 0.25, 9.42), (1.125, 0.62, 10.21), False, 0.018)
+box(smoked_enamel, (1.11, 0.25, 9.42), (1.125, 0.62, 10.21), False, 0.018)
 box(brass, (1.13, 0.68, 9.41), (1.19, 0.72, 10.22), False, 0.012)
 box(linen, (1.15, 0.43, 9.64), (1.196, 0.74, 9.96), False, 0.014)
 for i in range(4):
     cushion(iron, (1.136, 0.779, 9.46 + 0.20 * i), (0.023, 0.042, 0.042))
+for z in (9.34, 10.282):
+    for h in (0.221, 0.798):
+        box(nickel, (1.110, h - 0.006, z - 0.006), (1.115, h + 0.006, z + 0.006), False, 0.003)
+        box(seasoned_iron, (1.1145, h - 0.001, z - 0.004), (1.116, h + 0.001, z + 0.004))
+        enamel_chip((1.111, h - 0.008, z + 0.006), (0, 0, -1), (0, 1, 0), 0.009, 0.004, wear_random)
+for cz in (9.62, 10.09):
+    for cx in (0.41, 0.80):
+        for arm in range(4):
+            a = math.pi / 4 + arm * math.pi / 2
+            path = [
+                (cx + r * math.cos(a), h, cz + r * math.sin(a))
+                for r, h in ((0.181, 1.034), (0.176, 1.048), (0.165, 1.057), (0.143, 1.058), (0.11, 1.058))
+            ]
+            bent_tube(seasoned_iron, path, 0.008, (-math.sin(a), 0, math.cos(a)), 8)
+for z in (9.235, 10.289):
+    for _ in range(9):
+        enamel_chip(
+            (1.044 + wear_random.uniform(-0.004, 0.004), 1.0008, z + wear_random.uniform(-0.035, 0.035)),
+            (0, 0, 1),
+            (1, 0, 0),
+            wear_random.uniform(0.002, 0.009),
+            wear_random.uniform(0.001, 0.003),
+            wear_random,
+        )
+for i in range(4):
+    z = 9.46 + i * 0.20
+    box(pottery, (1.154, 0.789, z - 0.0015), (1.161, 0.809, z + 0.0015), False, 0.001)
+    for tick in range(9):
+        a = math.radians(-130 + 32.5 * tick)
+        h = 0.779 + 0.052 * math.cos(a)
+        u = z + 0.052 * math.sin(a)
+        box(pottery, (1.110, h - 0.0025, u - 0.001), (1.112, h + 0.0025, u + 0.001))
 room = part("stacked-plates", 0.60, 1.0, 10.71)
 # Stacked ceramic dishes, a mixing bowl with an actual hollow profile, and mugs with loop handles.
 for i in range(4):
