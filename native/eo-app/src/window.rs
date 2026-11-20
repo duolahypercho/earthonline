@@ -56,7 +56,11 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     }
     let world = load_world(args)?;
     let aspect = args.width as f32 / args.height as f32;
-    let cam = if args.start_underwater {
+    let cam = if let Some(habitat) = args.dive_site {
+        world.dive_sites.iter().find(|s| s.habitat == habitat)
+            .ok_or_else(|| anyhow::anyhow!("the requested dive site requires water and a shallow, submerged bed"))?
+            .camera(aspect, args.far)
+    } else if args.start_underwater {
         crate::bench::dive_camera(&world, aspect, args.far)
             .ok_or_else(|| anyhow::anyhow!("the underwater start requires an open-water point above the bay bed"))?
     } else {

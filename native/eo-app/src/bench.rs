@@ -394,6 +394,7 @@ fn segments(world: &World, args: &Args, aspect: f32, far: f32) -> Vec<Segment> {
     .chain(water_bench::waterfront_segment(world, frames, aspect, far)) // water
     .chain(water_bench::bay_segment(world, frames, aspect, far)) // water
     .chain(water_bench::dive_segment(world, frames, aspect, far))
+    .chain(water_bench::habitat_segments(world, args, frames, aspect, far))
     .chain(so_shots::surf_segment(world, frames, aspect, far)) // opt-in (EO_SURF_BENCH=1), Ocean Beach's surf in view
     .chain(landmarks_bench::segments(world, frames, aspect, far)) // landmarks
     .chain(view_bench::turn_segments(world, frames, args.warmup, aspect, far))
@@ -1467,6 +1468,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 "worst_frames": worst_frames,
             },
         });
+        report["water"]["underwater_habitats"] = args.underwater_habitats.into();
+        report["water"]["dive_exposure"] = args.look.dive_exposure.into();
         report["view_detail"] = vd_json; // outside the json! above: its recursion limit
         println!("  street objects/frame   median {:.0}  p95 {:.0}  (street triangles median {:.0}, p95 {:.0})", percentile(&street_objs, 50.0), percentile(&street_objs, 95.0), percentile(&street_tris, 50.0), percentile(&street_tris, 95.0));
         println!(

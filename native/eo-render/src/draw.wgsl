@@ -108,7 +108,14 @@ fn vs(
 ) -> VOut {
     let o = objects[inst];
     var out: VOut;
-    let pos = pos_in + copy_offset(o.copy);
+    var pos = pos_in + copy_offset(o.copy);
+    if ((o.kind & 255u) == 13u && color.a > 0.0) {
+        // Alpha is flex from root to tip. Both current components wrap with the sky clock.
+        let phase = dot(pos.xz, vec2<f32>(0.85, 0.54));
+        let clock = skyu.wet.w * (6.2831853 / 6.0);
+        pos.x += color.a * (0.045 * sin(clock + phase) + 0.020 * sin(clock * 2.0 - phase));
+        pos.z += color.a * 0.032 * cos(clock + phase * 0.7);
+    }
     out.clip = frame.view_proj * vec4<f32>(pos, 1.0);
     out.world = pos;
     // Vertex colours are authored as sRGB bytes; light in linear.
@@ -734,8 +741,10 @@ fn shade(in: VOut) -> vec4<f32> {
     if (dot(in.normal, in.normal) > 0.25) {
         n = normalize(in.normal);
     }
-    // Two-sided: shade the side the camera sees.
-    if (dot(n, v) < 0.0) {
+    // Solid sand and shells keep their outward normal across a grazing crest.
+    // A ribbon of eelgrass, like the other thin geometry, shades both sides.
+    let bed_surface = (objects[in.object].kind & 255u) == 13u && in.aux.x < 0.01;
+    if (!bed_surface && dot(n, v) < 0.0) {
         n = -n;
     }
 
@@ -762,6 +771,19 @@ fn shade(in: VOut) -> vec4<f32> {
     rm_emit = vec3<f32>(0.0);
     if ((m.flags & F_VERTEX_COLOUR) != 0u) {
         s.albedo = vcol;
+        if ((objects[in.object].kind & 255u) == 13u && in.aux.x < 0.01) {
+            // Mineral grains and small dark inclusions on the bed. Filter both
+            // scales by their pixel footprint so the bottom stays still in motion.
+            let footprint = max(length(dpx.xz), length(dpy.xz));
+            let local = in.world.xz - objects[in.object].min.xz;
+            let fleck = st_noise(local * 135.0);
+            let fine = st_noise(local * 640.0);
+            let fleck_weight = 1.0 - smoothstep(0.002, 0.009, footprint);
+            let fine_weight = 1.0 - smoothstep(0.0006, 0.0025, footprint);
+            s.albedo *= (1.0 + (fine - 0.5) * 0.78 * fine_weight)
+                * (1.0 + (fleck - 0.5) * 0.9 * fleck_weight);
+            s.rough = 0.91;
+        }
         if ((objects[in.object].kind & 255u) == 7u) {
             // street paint ('painted-metal', roughness 0.58) and the
             // verge bank (the concrete material's 'sidewalk' class).

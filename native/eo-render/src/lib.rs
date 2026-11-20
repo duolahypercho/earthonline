@@ -43,6 +43,7 @@ pub mod scene;
 pub mod surfaces;
 pub mod upload;
 pub mod view_detail;
+pub mod seabed;
 pub mod water; // water
 pub mod surf; // the surf strip along the beaches
 pub mod farshore; // the far terrain
@@ -1387,11 +1388,12 @@ impl Renderer {
         self.sample_count == 1 && !self.debug_ids && self.farshore.get().is_some()
     }
 
-    /// the sea is drawn by the water pass this frame (attached, on, and
-    /// on the path it needs: compacted lists, single-sample, no debug ids);
-    /// otherwise the flat sea quad draws as before.
+    /// Draw the sea into single-sample colour when attached and enabled.
+    /// With fixed draw slots the dive preview activates over the wet shore mask.
     pub fn water_active(&self) -> bool {
-        self.compact && self.sample_count == 1 && !self.debug_ids && self.water.get().is_some_and(|w| w.on())
+        self.sample_count == 1 && !self.debug_ids && self.water.get().is_some_and(|w| {
+            w.on() && (self.compact || (self.look.options.water_optics && w.fallback_dive()))
+        })
     }
 
     /// allocate the street's scanned-set arrays at their size, write
@@ -1479,6 +1481,9 @@ impl Renderer {
     }
 
     fn update_with(&self, queue: &wgpu::Queue, cam: &Camera, occlusion: bool) {
+        if !self.compact && self.look.options.water_optics && let Some(w) = self.water.get() {
+            w.locate_fallback_dive(cam);
+        }
         self.observe_view(cam, None); // the streamers' view (unjittered)
         // the coming frame's sub-pixel jitter (TAA); every view of the frame goes through it.
         self.look.sky.begin_frame(self.look.out_size());
@@ -1846,7 +1851,11 @@ impl Renderer {
                 pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
                 pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint32);
                 pass.set_pipeline(&self.blend_pipeline);
-                pass.multi_draw_indexed_indirect_count(&self.draw_buf, self.object_count as u64 * DRAW_ARGS_BYTES, &self.counter_buf, 4, self.object_count);
+                if self.compact {
+                    pass.multi_draw_indexed_indirect_count(&self.draw_buf, self.object_count as u64 * DRAW_ARGS_BYTES, &self.counter_buf, 4, self.object_count);
+                } else if self.object_count > self.blend_first {
+                    pass.multi_draw_indexed_indirect(&self.draw_buf, self.object_count as u64 * DRAW_ARGS_BYTES, self.object_count - self.blend_first);
+                }
                 if let Some(a) = self.agents.get() {
                     a.draw_glass(pass, &self.look);
                 }

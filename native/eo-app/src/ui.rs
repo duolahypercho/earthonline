@@ -72,7 +72,11 @@ impl Flags {
                 "--no-models" => args.models = false,
                 "--no-kit" => args.kit = false,
                 "--water-optics" => args.look.water_optics = true,
+                "--underwater-habitats" => args.underwater_habitats = true,
+                "--no-underwater-habitats" => args.underwater_habitats = false,
                 "--no-water-optics" => args.look.water_optics = false,
+                "--dive-exposure" => args.look.dive_exposure = true,
+                "--no-dive-exposure" => args.look.dive_exposure = false,
                 "--no-vsync" => args.vsync = false,
                 "--no-props" => args.props = false, // props in the UI's street
                 "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
@@ -101,6 +105,8 @@ fn default_args() -> Args {
         beaver_house: false,
         bench: false,
         start_underwater: false,
+        dive_site: None,
+        underwater_habitats: false,
         frames: 720,
         warmup: 60,
         width: W,

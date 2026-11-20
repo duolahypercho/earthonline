@@ -127,6 +127,8 @@ pub enum ObjectKind {
     Landmark = 9,
     /// a landmark's far item or skirt, and the open-space ground (receives only).
     LandmarkNoShadow = 10,
+    /// Close underwater sediment, shells and flexible eelgrass blades.
+    Seabed = 13,
 }
 
 /// A foundation skirt: the footprint ring walled from `bottom` up to `base`.

@@ -17,6 +17,7 @@ mod props; // props
 mod agents_bench;
 mod people_capture; // people
 mod bench;
+mod dive_sites;
 mod cc0_runtime; // the CC0 scanned sets at run time
 mod farshore; // the far terrain's load and attach
 mod models;
@@ -47,6 +48,8 @@ pub struct Args {
     pub house_furniture: bool,
     pub bench: bool,
     pub start_underwater: bool,
+    pub dive_site: Option<eo_render::seabed::Habitat>,
+    pub underwater_habitats: bool,
     pub frames: usize,
     pub warmup: usize,
     pub width: u32,
@@ -195,6 +198,8 @@ fn parse_args() -> Result<Args> {
         beaver_house: false,
         bench: false,
         start_underwater: false,
+        dive_site: None,
+        underwater_habitats: false,
         frames: 720,
         warmup: 60,
         width: 1920,
@@ -361,8 +366,19 @@ fn parse_args() -> Result<Args> {
             "--so-shots" => {} // so: bench/so_shots.rs reads it (the sky and ocean review cards)
             "--no-farshore" => {} // farshore.rs reads it (no far terrain)
             "--start-underwater" => a.start_underwater = true,
+            "--dive-site" => {
+                a.dive_site = Some(match val()?.as_str() {
+                    "bay" => eo_render::seabed::Habitat::Eelgrass,
+                    "pacific" => eo_render::seabed::Habitat::Sand,
+                    other => anyhow::bail!("unknown dive site {other}; choose bay or pacific"),
+                });
+            }
             "--water-optics" => a.look.water_optics = true,
+            "--underwater-habitats" => a.underwater_habitats = true,
+            "--no-underwater-habitats" => a.underwater_habitats = false,
             "--no-water-optics" => a.look.water_optics = false,
+            "--dive-exposure" => a.look.dive_exposure = true,
+            "--no-dive-exposure" => a.look.dive_exposure = false,
             "--no-water" => a.look.water = false, // the flat sea quad, as before
             // agents
             "--no-agents" => a.agents = false,
@@ -432,12 +448,17 @@ fn parse_args() -> Result<Args> {
             }
             "-h" | "--help" => {
                 println!(
-                    "eo-app [--bench] [--frames N=720] [--warmup N=60] [--width 1920] [--height 1080] [--msaa 1|4]\n       [--no-indirect-validation] [--no-indirect-count] [--no-vsync] [--out DIR] [--label NAME] [--capture] [--far M=4200]\n       [--multiply N=1] [--check-budget] [--budget-ms 10 (self-test only)]\n       [--no-models] [--no-terrain-lod] [--no-kit] [--slice1] [--slice2] [--cache DIR] [--no-cache] [--stream-threads N=6] [--stream-radius M=inf]\n       [--kit-threads N=6] [--kit-split-materials] [--upload-budget-mb 4] [--kit-arena-vertices N] [--kit-arena-indices N] [--kit-arena-objects N]\n       [--kit-near-load M=110] [--kit-mid-load M=520] [--drive-frames N=3600]\n       [--time-of-day H=12] [--shadow-map N=3072] [--no-shadows] [--no-agents] [--agent-density N=1] [--no-rocketbox]\n       [--no-occlusion] [--occlusion-check] [--no-thread-priority] [--pace realtime|60hz|all-60hz|none] [--worst-frames N=12] [--check-max]\n       [--no-view-detail] [--view-margin-deg 35] [--view-predict-s 0.3] [--view-hold-s 2.5] [--stream-all-paths] [--full-arenas]\n       [--segments street_walk,elevated_sweep,city_overview,authored_street,kit_street,drive,turn_around,turn_around_authored]"
+                    "eo-app [--dive-site bay|pacific] [--water-optics] [--dive-exposure|--no-dive-exposure] [--underwater-habitats|--no-underwater-habitats] [--bench] [--frames N=720] [--warmup N=60] [--width 1920] [--height 1080] [--msaa 1|4]\n       [--no-indirect-validation] [--no-indirect-count] [--no-vsync] [--out DIR] [--label NAME] [--capture] [--far M=4200]\n       [--multiply N=1] [--check-budget] [--budget-ms 10 (self-test only)]\n       [--no-models] [--no-terrain-lod] [--no-kit] [--slice1] [--slice2] [--cache DIR] [--no-cache] [--stream-threads N=6] [--stream-radius M=inf]\n       [--kit-threads N=6] [--kit-split-materials] [--upload-budget-mb 4] [--kit-arena-vertices N] [--kit-arena-indices N] [--kit-arena-objects N]\n       [--kit-near-load M=110] [--kit-mid-load M=520] [--drive-frames N=3600]\n       [--time-of-day H=12] [--shadow-map N=3072] [--no-shadows] [--no-agents] [--agent-density N=1] [--no-rocketbox]\n       [--no-occlusion] [--occlusion-check] [--no-thread-priority] [--pace realtime|60hz|all-60hz|none] [--worst-frames N=12] [--check-max]\n       [--no-view-detail] [--view-margin-deg 35] [--view-predict-s 0.3] [--view-hold-s 2.5] [--stream-all-paths] [--full-arenas]\n       [--segments street_walk,elevated_sweep,city_overview,authored_street,kit_street,drive,turn_around,turn_around_authored]"
                 );
                 std::process::exit(0);
             }
             other => anyhow::bail!("unknown argument {other} (try --help)"),
         }
+    }
+    if a.dive_site.is_some() {
+        a.look.water_optics = !std::env::args().any(|flag| flag == "--no-water-optics");
+        a.look.dive_exposure = !std::env::args().any(|flag| flag == "--no-dive-exposure");
+        a.underwater_habitats = !std::env::args().any(|flag| flag == "--no-underwater-habitats");
     }
     if a.frames + a.warmup > 1024 {
         // 4 timestamp queries per frame; one query set holds at most 4096.
@@ -469,6 +490,7 @@ pub struct World {
     pub facade_detail: Option<Arc<eo_assets::facade_detail::FacadeDetail>>,
     /// the citywide shore field and the FFT spectrum (drawn unless `--no-water`).
     pub water: Option<Arc<eo_water::WaterData>>,
+    pub dive_sites: Vec<dive_sites::Site>,
     /// what the scene build added (LOD groups after the street's, the wire members).
     pub landmarks: Option<Arc<eo_render::landmarks::LandmarkStatic>>,
     /// the far layer's cells (every building drawn as a building, in one cell each).
@@ -872,6 +894,12 @@ pub fn load_world(args: &Args) -> Result<World> {
     })?;
     let house_vertex_base = scene.vertices.len();
     if let Some(house) = &house { house.append(&mut scene, &authored.materials); }
+    let mut dive_sites = vec![];
+    if args.look.water && (args.underwater_habitats || args.dive_site.is_some() || args.capture || args.bench)
+        && let (Some(data), Some(height)) = (&water, &carpet_fn)
+    {
+        dive_sites = dive_sites::prepare(&mut scene, &data.field, elev, height.as_ref(), args.underwater_habitats);
+    }
     drop(carpet_fn); // water
     // the bridges (eo-landmarks, the JS generators ported) on the
     // drawn ground, appended to the static table; their LOD groups follow the street's.
@@ -978,7 +1006,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         }
         Err(_) => anyhow::bail!("facade detail thread panicked"),
     };
-    Ok(World { house_vertex_base, house, paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, landmarks, hlod, hlod_trees }) // hlod
+    Ok(World { house_vertex_base, house, paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, dive_sites, landmarks, hlod, hlod_trees }) // hlod
 }
 
 /// the street size. `--ground-scale S` (an explicit ground-plan

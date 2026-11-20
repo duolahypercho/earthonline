@@ -6,6 +6,7 @@ struct UwView {
     @location(0) @interpolate(flat) level: f32,
     @location(1) @interpolate(flat) tilt: vec2<f32>,
     @location(2) @interpolate(flat) atmo_gain: f32,
+    @location(3) @interpolate(flat) exposure: vec3<f32>,
 };
 
 // Invert the horizontal choppiness for the point whose displaced position
@@ -28,6 +29,20 @@ fn uw_vs(@builtin(vertex_index) vi: u32) -> UwView {
     out.level = y;
     out.tilt = slope;
     out.atmo_gain = w_atmo_gain();
+    out.exposure = vec3<f32>(1.0);
+    if (UW_DEPTH_EXPOSURE) {
+        // Open the camera for the downwelling light lost between the surface and eye.
+        // Meter green-weighted luminance. Four stops of
+        // travel preserve a dark deep field. At the interface the gain is exactly one.
+        let extinction = mix(WO_BAY_A + WO_BAY_S, WO_COAST_A + WO_COAST_S, wg_ocean(xz.x));
+        let depth = max(y - wu.cam.y, 0.0);
+        let light = exp(-extinction * depth / 0.75);
+        let meter = max(lk_luma(light), 1.0 / 16.0);
+        // Partial chromatic adaptation to the local illuminant. The view path
+        // still carries its full spectral extinction and distance-dependent cast.
+        let balance = clamp(sqrt(meter / max(light, vec3<f32>(0.015))), vec3<f32>(0.8), vec3<f32>(1.6));
+        out.exposure = min(balance / meter, vec3<f32>(16.0));
+    }
     return out;
 }
 
@@ -197,5 +212,5 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
     let grains = uw_grains(origin, ray, path, lk_luma(ext));
     let radiance = boundary * exp(-ext * path) + vol
         + grains * scatter * (ambient + direct * 0.25) * exp(-ext * down0 / 0.75);
-    return finish_color(max(radiance, vec3<f32>(0.0)), i.clip, dims);
+    return finish_color(max(radiance, vec3<f32>(0.0)) * i.exposure, i.clip, dims);
 }
