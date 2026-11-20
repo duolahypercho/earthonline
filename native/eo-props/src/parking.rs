@@ -114,7 +114,8 @@ pub fn kerb_mouths(w: &PropsWorld) -> &HashMap<(u32, i8), Vec<[f64; 2]>> {
         let cell = 32.0;
         let mut grid: HashMap<(i32, i32), Vec<u32>> = HashMap::new();
         for (hi, h) in plan.entries.iter().enumerate() {
-            if h.class_rank <= 1 || h.points.len() < 2 {
+            // (a structure's leg into a junction, eo-street joins, is not drawn.)
+            if h.class_rank <= 1 || h.points.len() < 2 || h.structure_leg.is_some() {
                 continue;
             }
             let reach = h.half + h.walks[0].max(h.walks[1]);
@@ -172,7 +173,7 @@ pub fn kerb_mouths(w: &PropsWorld) -> &HashMap<(u32, i8), Vec<[f64; 2]>> {
             windows.entry((host, side)).or_default().push([s_kerb - half, s_kerb + half]);
         };
         for (di, drive) in plan.entries.iter().enumerate() {
-            if drive.class_rank != 1 || drive.points.len() < 2 {
+            if drive.class_rank != 1 || drive.points.len() < 2 || drive.structure_leg.is_some() {
                 continue;
             }
             let pts = &drive.points;
@@ -665,6 +666,11 @@ pub fn plan_kerbs(w: &PropsWorld, ei: usize, key: &str, ctx: &mut PlanCtx) -> Ve
             }
             if let Some(why) = r.footprint_reason(&corners, ei) {
                 ctx.reject(&format!("stall-in-{why}"));
+                continue;
+            }
+            // (`--structures`: off the columns, and under nothing lower than the car.)
+            if let Some(why) = r.structure_reason(w, &corners, spec.height) {
+                ctx.reject(&format!("stall-{why}"));
                 continue;
             }
             if r.on_mapped_crossing(&corners, yaw) {

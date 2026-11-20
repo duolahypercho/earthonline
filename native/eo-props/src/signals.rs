@@ -318,6 +318,130 @@ pub fn plan_node(w: &PropsWorld, ni: usize, out: &mut Vec<Prop>) {
     }
 }
 
+/// A signal pole the clearance dropped or cut down (`plan_node_clear`):
+/// where it stood, and the height above which nothing it held still stands
+/// (minus infinity when dropped, the pedestal's top when cut down).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PoleChange {
+    pub x: f64,
+    pub z: f64,
+    pub top_before: f64,
+    pub top_after: f64,
+}
+
+/// One signalised junction's props kept clear of the grade-separated roads.
+#[derive(Clone, Debug, Default)]
+pub struct ClearedNode {
+    pub props: Vec<Prop>,
+    pub changes: Vec<PoleChange>,
+    pub stats: crate::clearance::ClearStats,
+}
+
+/// `plan_node` kept clear of the grade-separated roads `s` (`--structures`,
+/// stage A6): each pole's assembly (its arms, the heads on it, the
+/// pedestrian heads mounted on it) is kept whole when every part is clear;
+/// a mast that is not is cut down to a pedestal (`pedestalPoleHeightM`)
+/// with only its pole-mounted heads, at the pedestal's head height
+/// (`pedestalHeadCentreM`), when that is clear; else the assembly is
+/// dropped. A pedestrian head on no pole stands or goes alone. The props
+/// come in `plan_node`'s order.
+pub fn plan_node_clear(w: &PropsWorld, s: &eo_structures::StructureWorld, ni: usize) -> ClearedNode {
+    use crate::clearance::{Extent, all_clear, extents};
+    let h = H::new(w);
+    let d = w.clear_dims();
+    let mut np = plan_node_parts(w, ni);
+    let mut out = ClearedNode::default();
+    // each pedestrian head's pole: the nearest within reach of its mount.
+    let ped_pole: Vec<Option<usize>> = np
+        .ped_heads
+        .iter()
+        .map(|p| np.poles.iter().enumerate().map(|(i, q)| (i, (q.x - p.x).hypot(q.z - p.z))).filter(|x| x.1 <= 0.9).min_by(|a, b| a.1.total_cmp(&b.1)).map(|x| x.0))
+        .collect();
+    let c = w.street.plan.nodes[ni].position;
+    let pole_prop = |p: &Pole| Prop { model: Model::SignalPole, pos: [p.x, p.base_y, p.z], yaw: 0.0, scale: [1.0, p.height as f32, 1.0], variant: p.kind_mast as u16, live: Live::None };
+    let arm_prop = |a: &Arm| Prop { model: Model::MastArm, pos: [a.x, a.y, a.z], yaw: a.yaw, scale: [a.length as f32, 1.0, 1.0], variant: 0, live: Live::None };
+    let head_prop = |hd: &Head| Prop { model: Model::SignalHead, pos: [hd.x, hd.y, hd.z], yaw: hd.yaw, scale: [1.0; 3], variant: hd.mount as u16, live: Live::Vehicle { node: c, bearing: hd.bearing } };
+    let ped_prop = |hd: &PedHead| Prop { model: Model::PedHead, pos: [hd.x, hd.y, hd.z], yaw: hd.yaw, scale: [1.0; 3], variant: 0, live: Live::Pedestrian { node: c, bearing: hd.bearing, length_m: hd.length } };
+    let clear = |props: &[Prop]| {
+        let mut ex: Vec<Extent> = vec![];
+        for p in props {
+            extents(d, p, &mut ex);
+        }
+        all_clear(s, &ex, None)
+    };
+    let (mut keep_pole, mut keep_arm, mut keep_head, mut keep_ped) = (vec![true; np.poles.len()], vec![true; np.arms.len()], vec![true; np.heads.len()], vec![true; np.ped_heads.len()]);
+    for pi in 0..np.poles.len() {
+        let id = np.poles[pi].id.clone();
+        let arms: Vec<usize> = (0..np.arms.len()).filter(|&k| np.arms[k].pole == id).collect();
+        let heads: Vec<usize> = (0..np.heads.len()).filter(|&k| np.heads[k].pole == id).collect();
+        let peds: Vec<usize> = (0..np.ped_heads.len()).filter(|&k| ped_pole[k] == Some(pi)).collect();
+        let mut parts = vec![pole_prop(&np.poles[pi])];
+        parts.extend(arms.iter().map(|&k| arm_prop(&np.arms[k])));
+        parts.extend(heads.iter().map(|&k| head_prop(&np.heads[k])));
+        parts.extend(peds.iter().map(|&k| ped_prop(&np.ped_heads[k])));
+        if clear(&parts) {
+            continue;
+        }
+        let before = np.poles[pi].base_y + np.poles[pi].height;
+        let (px, pz) = (np.poles[pi].x, np.poles[pi].z);
+        // a mast cut down to a pedestal, its pole-mounted heads at the pedestal's height.
+        if np.poles[pi].kind_mast {
+            let mut pole = np.poles[pi].clone();
+            pole.height = h.pedestal_pole_height;
+            pole.kind_mast = false;
+            let on_pole: Vec<usize> = heads.iter().copied().filter(|&k| np.heads[k].mount == 0).collect();
+            let mut cut = vec![pole_prop(&pole)];
+            for &k in &on_pole {
+                let mut hd = np.heads[k].clone();
+                hd.y = pole.base_y + h.pedestal_head_centre;
+                cut.push(head_prop(&hd));
+            }
+            cut.extend(peds.iter().map(|&k| ped_prop(&np.ped_heads[k])));
+            if clear(&cut) {
+                for &k in &on_pole {
+                    np.heads[k].y = pole.base_y + h.pedestal_head_centre;
+                }
+                for &k in heads.iter().filter(|&&k| np.heads[k].mount != 0) {
+                    keep_head[k] = false;
+                }
+                for &k in &arms {
+                    keep_arm[k] = false;
+                }
+                out.changes.push(PoleChange { x: px, z: pz, top_before: before, top_after: pole.base_y + pole.height });
+                np.poles[pi] = pole;
+                out.stats.pedestals += 1;
+                continue;
+            }
+        }
+        keep_pole[pi] = false;
+        arms.iter().for_each(|&k| keep_arm[k] = false);
+        heads.iter().for_each(|&k| keep_head[k] = false);
+        peds.iter().for_each(|&k| keep_ped[k] = false);
+        out.changes.push(PoleChange { x: px, z: pz, top_before: before, top_after: f64::NEG_INFINITY });
+    }
+    // a pedestrian head on no pole of this plan.
+    for k in 0..np.ped_heads.len() {
+        if ped_pole[k].is_none() && keep_ped[k] && !clear(&[ped_prop(&np.ped_heads[k])]) {
+            keep_ped[k] = false;
+        }
+    }
+    let mut count = |name: &str, kept: &[bool]| {
+        let n = kept.iter().filter(|k| !**k).count();
+        if n > 0 {
+            *out.stats.dropped.entry(name.to_string()).or_default() += n;
+        }
+    };
+    count("SignalPole", &keep_pole);
+    count("MastArm", &keep_arm);
+    count("SignalHead", &keep_head);
+    count("PedHead", &keep_ped);
+    out.props.extend(np.poles.iter().zip(&keep_pole).filter(|x| *x.1).map(|x| pole_prop(x.0)));
+    out.props.extend(np.arms.iter().zip(&keep_arm).filter(|x| *x.1).map(|x| arm_prop(x.0)));
+    out.props.extend(np.heads.iter().zip(&keep_head).filter(|x| *x.1).map(|x| head_prop(x.0)));
+    out.props.extend(np.ped_heads.iter().zip(&keep_ped).filter(|x| *x.1).map(|x| ped_prop(x.0)));
+    out
+}
+
 pub fn plan_node_parts(w: &PropsWorld, ni: usize) -> NodePlan {
     let h = H::new(w);
     let plan = &w.street.plan;

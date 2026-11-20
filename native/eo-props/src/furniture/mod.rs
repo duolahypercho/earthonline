@@ -851,8 +851,15 @@ impl Furniture {
         let toward = [-it.rotation.sin(), -it.rotation.cos()];
         let reach = if historic { 0.0 } else { spec.reach_m };
         let head = [it.x + toward[0] * reach, it.y + spec.height_m, it.z + toward[1] * reach];
+        Some(self.luminaire(head, [it.x, it.y, it.z], spec.height_m, model))
+    }
+
+    /// A street luminaire's light (`LAMP_PRACTICALS` with `lampPoolOptics`):
+    /// its head at `head`, `h` metres over the surface it lights, on the
+    /// post whose foot is `base`. The district lights' own, and the deck
+    /// luminaires' (`clearance`, stage A6).
+    pub fn luminaire(&self, head: [f64; 3], base: [f64; 3], h: f64, model: Model) -> LampLight {
         let p = &self.js.consts.lamp_practicals;
-        let h = spec.height_m;
         let (lift, angle, penumbra, gain) = if !(h > 1.0) {
             (0.0, p.angle, p.penumbra, 1.0)
         } else {
@@ -862,9 +869,9 @@ impl Furniture {
             let inner = (p.pool_inner_m_h * h / big).atan();
             (lift, outer, 1.0 - inner / outer, (big / h).powi(2))
         };
-        Some(LampLight {
+        LampLight {
             pos: head,
-            base: [it.x, it.y, it.z],
+            base,
             colour_linear: self.lamp_colour,
             intensity: (p.intensity * gain) as f32,
             range_m: (p.distance + lift) as f32,
@@ -873,7 +880,7 @@ impl Furniture {
             penumbra: penumbra as f32,
             source_lift_m: lift as f32,
             kind: model,
-        })
+        }
     }
 }
 
