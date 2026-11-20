@@ -103,6 +103,7 @@ pub fn thin_wgsl() -> String {
     let lin = |c: [u8; 3]| c.map(|v| crate::scene::terrain_detail::srgb_lin(v) as f32);
     let (t, f) = (lin(eo_landmarks::flora::CHERT_TOP_SRGB), lin(eo_landmarks::flora::CHERT_FACE_SRGB));
     s += &format!("const PR_CHERT_GROUND: bool = {};\nconst PR_CHERT_TOP: vec3<f32> = vec3<f32>({:?}, {:?}, {:?});\nconst PR_CHERT_FACE: vec3<f32> = vec3<f32>({:?}, {:?}, {:?});\nconst PR_TIP_RIBBON: u32 = {}u;\n", eo_landmarks::flora::flora().chert, t[0], t[1], t[2], f[0], f[1], f[2], eo_landmarks::flora::TIP_RIBBON);
+    s += &format!("const PR_TIP_SCALY: u32 = {}u;\n", eo_landmarks::flora::TIP_SCALY);
     // the scrub mounds' model range (props_draw.wgsl's leaf-cluster grain on them).
     // (the flora pass's species follow the bare soil type: a second range.)
     let mound = V_MEADOW - V_TREE + eo_landmarks::vegetation::MEADOW_COYOTE as u32;

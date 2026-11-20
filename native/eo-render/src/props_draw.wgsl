@@ -513,6 +513,27 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
                 s.n = nb;
             }
         }
+        if ((inst.lamp >> 24u) == PR_TIP_SCALY) {
+            // the flora pass's serpentinite (eo_landmarks::flora TIP_SCALY): a scaly,
+            // sheared fabric, slick polished lens-shaped scales (field guide 4.2), as
+            // cells of noise stretched along a foliation turned by the block's yaw;
+            // each lens its own value and polish, darker seams between, and the
+            // weathered skin buff to rusty brown on the upward faces.
+            let fw = length(dpx) + length(dpy);
+            let ks = 1.0 - smoothstep(0.03, 0.15, fw);
+            let fol = vec3<f32>(cos(inst.yaw), 0.35, sin(inst.yaw));
+            let p = in.world * 3.0;
+            let along = dot(p, normalize(fol));
+            let q = p - normalize(fol) * along * 0.75;
+            let lens = pr_noise3(q * 1.6 + vec3<f32>(along * 0.4));
+            let seam = smoothstep(0.42, 0.5, lens) * (1.0 - smoothstep(0.5, 0.58, lens));
+            let scale = pr_noise3(q * 0.8 + vec3<f32>(13.0));
+            s.albedo = s.albedo * mix(1.0, (0.85 + 0.3 * scale) * (1.0 - 0.45 * seam), ks);
+            let rust = smoothstep(0.55, 0.8, pr_noise3(in.world * 0.9 + vec3<f32>(3.0))) * clamp(s.n.y, 0.0, 1.0) * 0.55;
+            s.albedo = mix(s.albedo, vec3<f32>(dot(s.albedo, vec3<f32>(0.33))) * vec3<f32>(1.35, 1.05, 0.7), rust);
+            // polished scales: smoother where the lens is whole, rough at the seams.
+            s.rough = mix(s.rough, mix(0.38, 0.8, seam), ks * (1.0 - rust));
+        }
         s.albedo = mix(s.albedo, vec3<f32>(dot(s.albedo, vec3<f32>(0.33))) * vec3<f32>(1.05, 1.08, 0.9), stain);
         let e = 0.04;
         let gx = pr_noise3((in.world + vec3<f32>(e, 0.0, 0.0)) * 9.0) - pr_noise3(in.world * 9.0);

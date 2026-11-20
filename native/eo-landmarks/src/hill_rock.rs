@@ -70,7 +70,14 @@ pub fn plant_with(claims: Option<&crate::rocks::scan::Claims>, x0: f64, z0: f64,
         }
         // outcrop blocks of 4.5-9.5 m on the 5 m lattice, so they overlap into rock faces;
         // elsewhere 0.8-3.4 m (sizes INFERRED).
-        let size = if outcrop { 4.5 + 5.0 * hash(ix, iz, 4).powf(1.2) } else { 0.8 + 2.6 * hash(ix, iz, 4).powf(1.6) * (0.6 + 0.8 * steep) } as f32;
+        // The flora pass (`--no-serpentinite`): the serpentinite stands as hard knobs
+        // 0.5-3 m (a few to 4.5) out of its sheared matrix (game m: x1.25).
+        let serp = crate::flora::flora().serpentinite && s.lithology == Lithology::Serpentinite;
+        let size = if serp {
+            let (a, b) = crate::flora::BOULDER_M;
+            let big = hash(ix, iz, 11) < crate::flora::BOULDER_BIG_SHARE;
+            (if big { crate::flora::BOULDER_BIG_M } else { a + (b - a) * hash(ix, iz, 4).powf(1.4) } * 1.25) as f32
+        } else if outcrop { (4.5 + 5.0 * hash(ix, iz, 4).powf(1.2)) as f32 } else { (0.8 + 2.6 * hash(ix, iz, 4).powf(1.6) * (0.6 + 0.8 * steep)) as f32 };
         let shape = (hash(ix, iz, 5) * 4.0) as u8 % 4;
         let shape = match s.lithology {
             Lithology::Chert => shape % 2,
@@ -78,6 +85,7 @@ pub fn plant_with(claims: Option<&crate::rocks::scan::Claims>, x0: f64, z0: f64,
             Lithology::Sandstone => shape,
         };
         let base = match s.lithology {
+            Lithology::Serpentinite if serp => crate::flora::SERPENTINITE_SRGB,
             Lithology::Chert if ribbon => crate::flora::CHERT_RIBBON_SRGB,
             Lithology::Chert => CHERT_SRGB,
             Lithology::Serpentinite => SERPENTINITE_SRGB,
@@ -100,8 +108,31 @@ pub fn plant_with(claims: Option<&crate::rocks::scan::Claims>, x0: f64, z0: f64,
             rank: hash(ix, iz, 8) as f32,
             tint,
             grad,
-            tip: if ribbon { crate::flora::TIP_RIBBON } else { crate::vegetation::TIP_NONE },
+            tip: if ribbon { crate::flora::TIP_RIBBON } else if serp { crate::flora::TIP_SCALY } else { crate::vegetation::TIP_NONE },
         });
+        if serp && outcrop {
+            // the sheared bluff: more knobs round the first, half buried in the matrix
+            // (blocky, broken faces; the knobs per outcrop cell INFERRED).
+            for k in 0..crate::flora::SERP_KNOBS {
+                let h = |salt: u32| hash(ix * 7 + k as i64, iz, salt);
+                let (ox, oz) = ((h(41) - 0.5) * ROCK_PITCH_M, (h(42) - 0.5) * ROCK_PITCH_M);
+                let Some(s2) = site(x + ox, z + oz) else { continue };
+                let (a, b) = crate::flora::BOULDER_M;
+                let size = ((a + (b - a) * h(43).powf(1.6)) * 1.25) as f32;
+                let tall = (0.6 + 0.4 * h(44)) as f32;
+                let (grad, sink) = rock_seat(s2.grad(), size, tall);
+                out.push(Plant {
+                    kind: Kind::Rock(2 + (h(45) * 2.0) as u8 % 2),
+                    pos: [x + ox, s2.y - sink - 0.15 * size as f64, z + oz],
+                    yaw: h(46) * std::f64::consts::TAU,
+                    scale: [size * (0.9 + 0.4 * h(47) as f32), size * tall, size],
+                    rank: h(48) as f32,
+                    tint: crate::flora::SERPENTINITE_SRGB.map(|c| srgb_to_linear(c) / ROCK_SHADE * (0.8 + 0.35 * h(49) as f32)),
+                    grad,
+                    tip: crate::flora::TIP_SCALY,
+                });
+            }
+        }
     });
 }
 

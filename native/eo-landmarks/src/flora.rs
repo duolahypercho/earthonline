@@ -14,7 +14,7 @@ use crate::vegetation::{field, hash, smoothstep, warped, Site, MEADOW_COYOTE, ME
 
 /// The flora pass's switch names (the roll-up first); eo-app accepts them,
 /// [`Flora::from_args`] reads them.
-pub const FLORA_SWITCHES: &[&str] = &["--no-flora", "--no-scrub-species", "--no-grass-ramp", "--no-bluff-scrub", "--no-chert-ground"];
+pub const FLORA_SWITCHES: &[&str] = &["--no-flora", "--no-scrub-species", "--no-grass-ramp", "--no-bluff-scrub", "--no-chert-ground", "--no-serpentinite"];
 
 /// The flora pass's features, each with its `--no-` switch ([`FLORA_SWITCHES`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -38,18 +38,23 @@ pub struct Flora {
     /// Marin faces carry ribbon-chert outcrops (folded thin beds), and the bare rule
     /// shrinks to the knoll tops, scars and faces (the overlook's shoulders are scrub).
     pub chert: bool,
+    /// `--no-serpentinite`: the Presidio's serpentinite: the bluffs' rock as blue-green,
+    /// scaly, polished knobs 0.5-3 m standing out of the sheared matrix (not 4.5-9.5 m
+    /// pillows), and rounded dark serpentinite and greenstone boulders 0.5-3 m (a few
+    /// to 5 m) in the surf and on the sand at Baker and Marshall's, as the S1 scans.
+    pub serpentinite: bool,
 }
 
 impl Flora {
-    pub const ALL: Flora = Flora { species: true, ramp: true, bluff: true, chert: true };
-    pub const NONE: Flora = Flora { species: false, ramp: false, bluff: false, chert: false };
+    pub const ALL: Flora = Flora { species: true, ramp: true, bluff: true, chert: true, serpentinite: true };
+    pub const NONE: Flora = Flora { species: false, ramp: false, bluff: false, chert: false, serpentinite: false };
 
     pub fn from_args(args: &[String]) -> Self {
         let has = |s: &str| args.iter().any(|a| a == s);
         if has("--no-flora") {
             return Self::NONE;
         }
-        Flora { species: !has("--no-scrub-species"), ramp: !has("--no-grass-ramp"), bluff: !has("--no-bluff-scrub"), chert: !has("--no-chert-ground") }
+        Flora { species: !has("--no-scrub-species"), ramp: !has("--no-grass-ramp"), bluff: !has("--no-bluff-scrub"), chert: !has("--no-chert-ground"), serpentinite: !has("--no-serpentinite") }
     }
 }
 
@@ -57,13 +62,18 @@ impl Flora {
 /// line). It acts inside the third grass pass's scrub mounds: without them
 /// (`--no-scrub-mounds`, `--no-grass3`) the species have nothing to replace.
 pub fn flora() -> Flora {
+    // the crate's unit tests read the pass explicitly (`Extra::fl`, `Flora::from_args`):
+    // the test runner's arguments must not switch it on under the round's own tests.
+    if cfg!(test) {
+        return Flora::NONE;
+    }
     static S: std::sync::OnceLock<Flora> = std::sync::OnceLock::new();
     *S.get_or_init(|| {
         let f = Flora::from_args(&std::env::args().collect::<Vec<_>>());
         let g3 = crate::vegetation::grass3();
         // the species replace the third pass's mounds; the grassland's ramp and the bluff
         // scrub act in the second pass's meadow (the third pass keeps it when on).
-        Flora { species: f.species && g3.scrub, ramp: f.ramp && g3 != crate::vegetation::Grass3::NONE, bluff: f.bluff && g3 != crate::vegetation::Grass3::NONE, chert: f.chert && g3.bare }
+        Flora { species: f.species && g3.scrub, ramp: f.ramp && g3 != crate::vegetation::Grass3::NONE, bluff: f.bluff && g3 != crate::vegetation::Grass3::NONE, chert: f.chert && g3.bare, serpentinite: f.serpentinite && g3 != crate::vegetation::Grass3::NONE }
     })
 }
 
@@ -302,6 +312,34 @@ pub const TIP_RIBBON: u8 = 254;
 /// the guide's chert ribs and fins along crests and cuts, estimate).
 pub const RIBBON_SLOPE_DEG: f64 = 38.0;
 
+// ------------------------------------------------------------------ serpentinite
+
+/// Fresh serpentinite, blue-green to grey-green, (90-130, 110-140, 100-130)
+/// (estimate; [S47] "blue-green serpentinite rock"): toward its low end, the
+/// bluff's knobs (its middle drew pale cyan under the sunset).
+pub const SERPENTINITE_SRGB: [u8; 3] = [92, 112, 102];
+/// Extra knobs round each bluff outcrop cell (the sheared matrix's hard blocks).
+pub const SERP_KNOBS: u32 = 3;
+/// The beach boulders, wet and dark: base albedo dark grey-green to black,
+/// (40-70, 45-70, 40-60) (estimate; [P:baker-sunset] (35,24,15) in the surf
+/// and (61,39,15) in the foreground under the sunset): its middle.
+pub const SERPENTINITE_BOULDER_SRGB: [u8; 3] = [55, 60, 52];
+/// The tip word that asks the props shader for serpentinite's scaly fabric.
+pub const TIP_SCALY: u8 = 253;
+/// The bluff knobs' and the beach boulders' size range (real m): rounded to
+/// sub-rounded, mostly 0.5-3 m, a few 4-5 m (guide 4.3, [P:baker-sunset]).
+pub const BOULDER_M: (f64, f64) = (0.5, 3.0);
+pub const BOULDER_BIG_M: f64 = 4.5;
+/// The share of boulders that are the big ones (INFERRED from "a few").
+pub const BOULDER_BIG_SHARE: f64 = 0.04;
+/// The Baker and Marshall's shore the boulders scatter on (lon west, lat
+/// south, lon east, lat north; degrees): the serpentinite unit's box
+/// (rocks::place `unit_at`) from Baker Beach's north half to the bridge.
+pub const BOULDER_BOX: [f64; 4] = [-122.4860, 37.7930, -122.4740, 37.8085];
+/// The band across the shore they scatter in (drawn m of the shore field's
+/// signed distance, positive over the sea): the surf zone to the bluff foot.
+pub const BOULDER_BAND_M: (f64, f64) = (-30.0, 18.0);
+
 // ------------------------------------------------------------------ where the scrub grows
 
 /// How the ground's shape weights the scrub (a factor on the third pass's
@@ -386,6 +424,7 @@ mod tests {
         assert_eq!(a(&["--no-scrub-species"]), Flora { species: false, ..Flora::ALL });
         assert_eq!(a(&["--no-grass-ramp", "--no-bluff-scrub"]), Flora { ramp: false, bluff: false, ..Flora::ALL });
         assert_eq!(a(&["--no-chert-ground"]), Flora { chert: false, ..Flora::ALL });
+        assert_eq!(a(&["--no-serpentinite"]), Flora { serpentinite: false, ..Flora::ALL });
     }
 
     #[test]

@@ -357,6 +357,10 @@ fn shore_rocks(
             }
             pieces.extend(place::slopes(lib, &world, &sv, sw.geology, sw.cliff));
         }
+        if crate::flora::flora().serpentinite {
+            // the flora pass: Baker's and Marshall's serpentinite boulders (rocks/place.rs).
+            pieces.extend(place::serpentinite_boulders(lib, &world));
+        }
         let mut counts: std::collections::BTreeMap<String, usize> = Default::default();
         for p in &pieces {
             *counts.entry(format!("{:?}", p.source)).or_default() += 1;

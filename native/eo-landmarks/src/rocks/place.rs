@@ -574,6 +574,61 @@ pub fn from_stones(lib: &Library, w: &World, stones: &[crate::rocks::Stone], sou
     out
 }
 
+/// The flora pass's serpentinite boulders (`crate::flora::Flora::serpentinite`):
+/// rounded dark boulders 0.5-3 m (a few 4.5 m) scattered singly and in
+/// clusters through the surf zone and along the bluff foot of Baker and
+/// Marshall's beaches ([`crate::flora::BOULDER_BOX`], the shore field's band
+/// [`crate::flora::BOULDER_BAND_M`]), as the scanned boulder (and a scanned
+/// cluster for a fifth), tinted the guide's dark grey-green, wet below the
+/// high water. Placed on a 4 m (real) lattice in clusters (a 14 m field;
+/// densities INFERRED from [P:baker-sunset]).
+pub fn serpentinite_boulders(lib: &Library, w: &World) -> Vec<Piece> {
+    use crate::flora::{BOULDER_BAND_M, BOULDER_BIG_M, BOULDER_BIG_SHARE, BOULDER_BOX, BOULDER_M, SERPENTINITE_BOULDER_SRGB};
+    let (x0, z1) = game_xz(BOULDER_BOX[0], BOULDER_BOX[1], w.plan);
+    let (x1, z0) = game_xz(BOULDER_BOX[2], BOULDER_BOX[3], w.plan);
+    let pitch = 4.0 * w.plan;
+    let tone = SERPENTINITE_BOULDER_SRGB.map(lin);
+    let mut out = vec![];
+    let (i0, i1) = ((x0 / pitch).floor() as i64, (x1 / pitch).ceil() as i64);
+    let (j0, j1) = ((z0 / pitch).floor() as i64, (z1 / pitch).ceil() as i64);
+    for i in i0..=i1 {
+        for j in j0..=j1 {
+            let u = |k: u32| hash(i, j, 960 + k);
+            let x = (i as f64 + u(0)) * pitch;
+            let z = (j as f64 + u(1)) * pitch;
+            let sd = (w.signed)(x, z);
+            if sd < BOULDER_BAND_M.0 || sd > BOULDER_BAND_M.1 {
+                continue;
+            }
+            // clusters: a smooth field of cells about 14 m, thicker near the waterline.
+            let cell = 14.0 * w.plan;
+            let (cx, cz) = ((x / cell).floor() as i64, (z / cell).floor() as i64);
+            let (fx, fz) = (x / cell - cx as f64, z / cell - cz as f64);
+            let c = |a: i64, b: i64| hash(a, b, 977);
+            let sm = |t: f64| t * t * (3.0 - 2.0 * t);
+            let f = (c(cx, cz) * (1.0 - sm(fx)) + c(cx + 1, cz) * sm(fx)) * (1.0 - sm(fz)) + (c(cx, cz + 1) * (1.0 - sm(fx)) + c(cx + 1, cz + 1) * sm(fx)) * sm(fz);
+            let near_water = 1.0 - (sd.abs() / 25.0).min(1.0);
+            let chance = 0.08 + 0.75 * ((f - 0.45) / 0.3).clamp(0.0, 1.0) * (0.4 + 0.6 * near_water);
+            if u(2) >= chance {
+                continue;
+            }
+            let big = u(3) < BOULDER_BIG_SHARE;
+            let d = if big { BOULDER_BIG_M } else { BOULDER_M.0 + (BOULDER_M.1 - BOULDER_M.0) * u(4).powf(1.8) } * w.plan;
+            let cluster = d > 1.8 * w.plan && u(5) < 0.2;
+            let kind = if cluster { COAST_ROCKS } else { BOULDER };
+            let k = &lib.kinds[kind as usize];
+            let ext = [0, 1, 2].map(|i| (k.max[i] - k.min[i]) as f64);
+            let s0 = d / ext[0].max(ext[2]);
+            // rounded to sub-rounded: a little flattened, each its own proportions.
+            let s = [s0 * (0.9 + 0.2 * u(6)), s0 * (0.7 + 0.35 * u(7)), s0 * (0.9 + 0.2 * u(8))];
+            if let Some((pos, rot, g)) = seat(lib, kind, w, x, z, s, None, u(9) * std::f64::consts::TAU, 0.6, 0.0) {
+                out.push(Piece { kind, pos, rot, scale: s, tint: tint_to(k, tone, 0.85 + 0.3 * u(10)), wet: wetness(w, g), source: Source::Boulder });
+            }
+        }
+    }
+    out
+}
+
 /// rocks.rs's steep-face zone, rise over run (its `OUTCROP_SLOPE` less a margin for the drawn ground's smoothing).
 pub const OUTCROP_STONE_SLOPE: f64 = 0.8;
 
