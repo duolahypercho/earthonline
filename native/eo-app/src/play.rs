@@ -63,6 +63,7 @@ pub fn intercept(process_start: Instant) -> Option<Result<()>> {
 fn base_args() -> Args {
     Args {
         interior_lighting: true,
+        house_finishes: false,
         beaver_house: false,
         bench: false,
         start_underwater: false,
@@ -122,6 +123,8 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--play" => {}
             "--beaver-house" => a.beaver_house = true,
             "--no-interior-lighting" => a.interior_lighting = false,
+            "--house-finishes" => a.house_finishes = true,
+            "--no-house-finishes" => a.house_finishes = false,
             "--no-beaver-house" => a.beaver_house = false,
             "--bench" => o.bench = true,
             "--frames" => o.frames = Some(val()?.parse()?),
@@ -631,7 +634,7 @@ mod window {
         let mut cw = collision_world(&world, opts.collision_threads)?;
         let s = crate::bench::spawn(); // the spawn on the scaled plan
         let mut feet = DVec3::new(s[0] as f64, world.elevation.ground(s[0] as f64, s[1] as f64), s[1] as f64);
-        if let Some(h) = &world.house { feet = h.point(5.95, 0.0, -3.3); }
+        if let Some(h) = &world.house { feet = h.entry_position(); }
         cw.load_blocking(feet, pworld::LOAD_RADIUS_M);
         feet.y = cw.surface_y(feet.x, feet.z);
         let mut player = Player::new(feet, 0.0);
@@ -888,7 +891,17 @@ mod house_tests {
 
     #[test]
     fn beaver_street_to_bed_and_top_floor() {
+        check_beaver_walk(false);
+    }
+
+    #[test]
+    fn furnished_variant_reaches_bed_and_top_floor() {
+        check_beaver_walk(true);
+    }
+
+    fn check_beaver_walk(finishes: bool) {
         let mut args = base_args();
+        args.house_finishes = finishes;
         args.beaver_house = true;
         args.kit = false;
         args.landmarks = false;
@@ -896,7 +909,10 @@ mod house_tests {
         let world = load_world(&args).unwrap();
         let house = world.house.as_ref().unwrap();
         let mut cw = collision_world(&world, 2).unwrap();
-        let mut start = house.point(5.95, 0.0, -3.3);
+        let mut start = house.entry_position();
+        if finishes {
+            assert!(start.distance(house.point(5.95, 0., -3.3)) > 0.01, "private path must reach the mapped paving");
+        }
         cw.load_blocking(start, pworld::LOAD_RADIUS_M);
         start.y = cw.surface_y(start.x, start.z);
         let mut body = eo_player::character::Character::new(start);

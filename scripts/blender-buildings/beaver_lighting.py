@@ -21,7 +21,7 @@ def subdivide_quad(points, face, spacing):
     return verts, quads
 
 
-def bake(objects, rise):
+def bake(objects, rise, detailed=False):
     vertices, faces = [], []
     for obj in objects:
         mesh = obj.data
@@ -42,6 +42,7 @@ def bake(objects, rise):
         for level in range(3)
     ]
     lamp = [Vector((2.37 + dx, -7.51 + dz, 1.975)) for dx, dz in [(-0.12, -0.09), (0.13, -0.09), (0, 0.13)]]
+    work_lights = [Vector((0.64,-z,1.80)) for z in (9.55,10.10)]
     bounce_cache = {}
     direct_cache = {}
 
@@ -64,6 +65,8 @@ def bake(objects, rise):
         # separately from daylight so its local pool is retained after sunset.
         day = visible_energy(p, n, windows[level], True) * (3.82 * 1.53 / 28) / math.pi
         lum = visible_energy(p, n, lamp, False) * 0.8 / len(lamp) if level == 0 else 0.0
+        if detailed and level == 0:
+            lum += visible_energy(p,n,work_lights,False) * 0.17 / len(work_lights)
         return day, lum
 
     def bounce(p, n, level):
@@ -73,8 +76,9 @@ def bake(objects, rise):
         tangent = n.cross(Vector((0, 0, 1)) if abs(n.z) < 0.85 else Vector((1, 0, 0))).normalized()
         bitangent = n.cross(tangent)
         day, lum = 0.0, 0.0
-        for i in range(16):
-            r = math.sqrt((i + 0.5) / 16)
+        samples = 40 if detailed else 16
+        for i in range(samples):
+            r = math.sqrt((i + 0.5) / samples)
             phi = i * 2.399963
             direction = tangent * (r * math.cos(phi)) + bitangent * (r * math.sin(phi)) + n * math.sqrt(1 - r * r)
             hit, hn, _, _ = tree.ray_cast(p, direction, 15)
@@ -84,7 +88,7 @@ def bake(objects, rise):
                 a, b = direct(hit + hn * 0.003, hn, level)
                 day += a
                 lum += b
-        bounce_cache[key] = (day * 0.42 / 16, lum * 0.42 / 16)
+        bounce_cache[key] = (day * 0.42 / samples, lum * 0.42 / samples)
         return bounce_cache[key]
 
     for obj in objects:
@@ -108,3 +112,60 @@ def bake(objects, rise):
                     direct_cache[key] = (math.sqrt(min(1.0, day + bd)), 1.0 - math.sqrt(min(1.0, lum + bl)))
                 # Blender's glTF exporter flips V.
                 uv.data[idx].uv = direct_cache[key]
+
+
+def dress_floor_for_blender(scene, path, boards):
+    """Use the same photographed boards in the editable scene as in the game."""
+    import bpy
+
+    if not path.is_file():
+        raise FileNotFoundError(f"Build the photographic floor maps first: {path}")
+    name = "Board surface"
+    paint = {material_name: i for i, material_name in enumerate(boards)}
+    for obj in scene.objects:
+        if obj.type != "MESH" or not obj.data.materials or obj.data.materials[0].name not in paint:
+            continue
+        row_paint = paint[obj.data.materials[0].name]
+        mesh = obj.data
+        uv = mesh.uv_layers.get(name) or mesh.uv_layers.new(name=name)
+        coords = []
+        for vertex in mesh.vertices:
+            p = obj.matrix_world @ vertex.co
+            section = 5.1 if p.z > 1 and p.x >= 5.0999 else 0
+            board = max(0, (p.x-section)/0.18 + 0.0001)
+            row = (int(board)*5 + row_paint*3 + round(p.z/(10/3))) % 8
+            v = (row + 0.07 + 0.86*(board % 1)) / 8
+            u = (-p.y) * 0.5 * (-1 if row % 2 else 1) + (row*0.618034) % 1
+            coords.append((u,1-v))
+        for loop in mesh.loops:
+            uv.data[loop.index].uv = coords[loop.vertex_index]
+    color = bpy.data.images.load(str(path), check_existing=False)
+    data = bpy.data.images.load(str(path), check_existing=False)
+    data.colorspace_settings.name = "Non-Color"
+    for image in (color,data):
+        image.pack()
+    for mat_name in boards:
+        tree = bpy.data.materials[mat_name].node_tree
+        shader = next(n for n in tree.nodes if n.type == 'BSDF_PRINCIPLED')
+        uv = tree.nodes.new("ShaderNodeUVMap")
+        uv.uv_map = name
+        for page, slot in enumerate(("Base Color", "Normal", "Roughness")):
+            coord = tree.nodes.new("ShaderNodeVectorMath")
+            coord.operation = "MULTIPLY_ADD"
+            coord.inputs[1].default_value = (1,1/3,1)
+            coord.inputs[2].default_value = (0,(2-page)/3,0)
+            tree.links.new(uv.outputs["UV"],coord.inputs[0])
+            tex = tree.nodes.new("ShaderNodeTexImage")
+            tex.image = color if page == 0 else data
+            tree.links.new(coord.outputs["Vector"],tex.inputs["Vector"])
+            result = tex.outputs["Color"]
+            if slot == "Normal":
+                normal = tree.nodes.new("ShaderNodeNormalMap")
+                normal.uv_map = name
+                tree.links.new(result,normal.inputs["Color"])
+                result = normal.outputs["Normal"]
+            elif slot == "Roughness":
+                channels = tree.nodes.new("ShaderNodeSeparateColor")
+                tree.links.new(result,channels.inputs["Color"])
+                result = channels.outputs["Green"]
+            tree.links.new(result,shader.inputs[slot])

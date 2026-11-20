@@ -1717,7 +1717,7 @@ impl Renderer {
             let n = self.object_count as u64;
             let blend_offset = n * DRAW_ARGS_BYTES;
             // In the fallback the transparent list has a slot only for the objects
-            // from `blend_first` on (the model arena: nothing before it is glass).
+            // from `blend_first` on (the first possible glass, static or streamed).
             let slots = [self.object_count, self.object_count - self.blend_first];
             // (pipeline, list offset, count word): the early pass draws the
             // opaque list; the late pass the late opaque list, then the glass.

@@ -173,13 +173,15 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
             groups: &groups,
             hlod_enter_m: set.hlod_enter_m,
             hlod_exit_m: set.hlod_exit_m,
-            kit_layers: set.materials.layers.len() as u32,
+            kit_layers: set.materials.layers.len() as u32 + 2 * u32::from(args.beaver_house && args.house_finishes),
             kit_res: eo_assets::kit::HIGH_RES as u32,
             color_format: format,
             sample_count: args.msaa,
             multiplier: args.multiply,
             debug_ids,
-            blend_first_object: models.object,
+            // Hand-placed house panes can precede the streamed model arena.
+            blend_first_object: world.scene.objects.iter().position(|o| o.kind & eo_render::scene::BLEND_BIT != 0)
+                .map_or(models.object, |index| index as u32),
         },
     )?;
     r.kit_radii = eo_render::kit::DEFAULT_KIT_RADII;

@@ -208,6 +208,8 @@ trademark or brand logo is drawn on any sign face.
 - The earlier browser build and its JavaScript dependencies have been
   removed from the repository.
 
+The optional 21 Beaver Street floor finish uses Dimitrios Savva’s *Wood Floor Worn* for Poly Haven, released under CC0 1.0. Eight board strips were cropped from the diffuse, OpenGL normal and roughness maps. The [material provenance](public/assets/buildings/beaver-terrace/finishes/floorboards.provenance.json) records the original files and their checksums. [Asset](https://polyhaven.com/a/wood_floor_worn) · [Licence](https://polyhaven.com/license)
+
 ## Rust crate licences
 
 <!-- BEGIN GENERATED: cargo-licences -->

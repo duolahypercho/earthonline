@@ -9,6 +9,13 @@ use serde::Deserialize;
 use std::path::Path;
 use std::sync::Arc;
 
+const FINISH_DIR: &str = "public/assets/buildings/beaver-terrace/finishes";
+const FLOOR_MATERIALS: [&str; 4] = [
+    "oiled-oak@ba9a79",
+    "oiled-oak@b49575",
+    "oiled-oak@ba9e82",
+    "oiled-oak@b6987a",
+];
 pub const ID: &str = "266146886";
 pub fn owns(id: &str) -> bool {
     id.trim_start_matches("sf-building-") == ID
@@ -22,7 +29,84 @@ struct Manifest {
     boxes: Vec<[Point; 2]>,
     ramps: Vec<[Point; 4]>,
 }
-const FACES: [[usize; 4]; 6] = [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [3, 7, 6, 2], [0, 4, 7, 3], [1, 2, 6, 5]];
+#[derive(Clone, Deserialize)]
+struct ProbeVolume {
+    min: [f32; 3],
+    max: [f32; 3],
+}
+
+#[derive(Deserialize)]
+struct ProbeManifest {
+    #[serde(flatten)]
+    asset: AssetRef,
+    house_sha256: String,
+    probes: [ProbeVolume; 2],
+}
+
+pub struct Finishes {
+    manifest: ProbeManifest,
+    pub atlas: eo_assets::kit::BakedMaps,
+    pub floorboards: eo_assets::kit::BakedMaps,
+}
+
+impl Finishes {
+    pub fn load(root: &Path) -> Result<Self> {
+        let manifest: ProbeManifest = serde_json::from_slice(&std::fs::read(
+            root.join(FINISH_DIR)
+                .join("kitchen-reflections.provenance.json"),
+        )?)?;
+        let floor: AssetRef = serde_json::from_slice(&std::fs::read(
+            root.join(FINISH_DIR).join("floorboards.provenance.json"),
+        )?)?;
+        let atlas = Self::read_maps(root, &manifest.asset, 2)?;
+        let floorboards = Self::read_maps(root, &floor, 3)?;
+        Ok(Self {
+            manifest,
+            atlas,
+            floorboards,
+        })
+    }
+
+    fn read_maps(root: &Path, asset: &AssetRef, pages: usize) -> Result<eo_assets::kit::BakedMaps> {
+        let bytes = eo_assets::glb::read_verified(&asset.path(root), asset)?;
+        let mut reader = png::Decoder::new(std::io::Cursor::new(bytes)).read_info()?;
+        let res = eo_assets::kit::HIGH_RES;
+        let info = reader.info();
+        ensure!(
+            info.width as usize == res
+                && info.height as usize == pages * res
+                && info.color_type == png::ColorType::Rgba
+                && info.bit_depth == png::BitDepth::Eight,
+            "unexpected image format for {}",
+            asset.url
+        );
+        let size = res * res * 4;
+        let mut albedo = vec![0; pages * size];
+        reader.next_frame(&mut albedo)?;
+        let orm = if pages == 3 {
+            albedo.split_off(size * 2)
+        } else {
+            vec![0; size]
+        };
+        let normal = albedo.split_off(size);
+        Ok(eo_assets::kit::BakedMaps {
+            res,
+            metres_per_tile: 2.,
+            normal,
+            orm,
+            albedo,
+        })
+    }
+}
+
+const FACES: [[usize; 4]; 6] = [
+    [0, 3, 2, 1],
+    [4, 5, 6, 7],
+    [0, 1, 5, 4],
+    [3, 7, 6, 2],
+    [0, 4, 7, 3],
+    [1, 2, 6, 5],
+];
 fn corners([x, y, z]: Point, [u, v, w]: Point) -> [Point; 8] {
     [
         [x, y, z],
@@ -45,32 +129,60 @@ pub struct House {
     model: CookedModel,
     materials: Vec<u32>,
     light_transfer: Vec<[f32; 2]>,
+    probes: Option<[ProbeVolume; 2]>,
     collision: Vec<[Point; 3]>,
     steps: Vec<[Point; 2]>,
+    pavers: Vec<([Point; 4], u32)>,
+    entry: Option<DVec3>,
 }
 
 impl House {
     pub fn build(
         interior_lighting: bool,
+        finishes: Option<&Finishes>,
         b: &eo_data::Building,
         ground: &dyn Fn(f64, f64) -> f64,
+        street: Option<&eo_street::StreetWorld>,
         root: &Path,
         kit: &KitLibrary,
         materials: &mut MaterialTable,
     ) -> Result<Self> {
         ensure!(b.ring.len() == 4, "unexpected 21 Beaver footprint");
-        let ring: Vec<_> = b.ring.iter().map(|p| DVec2::new(p[0] as f64, p[1] as f64)).collect();
+        let ring: Vec<_> = b
+            .ring
+            .iter()
+            .map(|p| DVec2::new(p[0] as f64, p[1] as f64))
+            .collect();
+        let dir = if finishes.is_some() {
+            FINISH_DIR
+        } else {
+            "public/assets/buildings/beaver-terrace"
+        };
         let manifest: Manifest = serde_json::from_slice(&std::fs::read(
-            root.join("public/assets/buildings/beaver-terrace/terrace.provenance.json"),
+            root.join(dir).join("terrace.provenance.json"),
         )?)?;
+        if let Some(r) = finishes {
+            ensure!(
+                r.manifest.house_sha256 == manifest.asset.sha256,
+                "kitchen reflections were baked for a different house"
+            );
+        }
         let raw = eo_assets::glb::read_verified(&manifest.asset.path(root), &manifest.asset)?;
         let (model, light_transfer) = if interior_lighting {
             eo_assets::glb::cook_glb_with_uv0(&raw)?
         } else {
             (eo_assets::glb::cook_glb(&raw)?, Vec::new())
         };
-        let resolved = model.materials.iter().map(|m| materials.resolve(kit, m)).collect();
-        let floor = ring.iter().map(|p| ground(p.x, p.y)).fold(f64::NEG_INFINITY, f64::max) + 0.22;
+        let resolved = model
+            .materials
+            .iter()
+            .map(|m| materials.resolve(kit, m))
+            .collect();
+        let floor = ring
+            .iter()
+            .map(|p| ground(p.x, p.y))
+            .fold(f64::NEG_INFINITY, f64::max)
+            + 0.22;
         let mut h = Self {
             origin: ring[1],
             across: (ring[2] - ring[1]) / 7.,
@@ -80,8 +192,11 @@ impl House {
             model,
             materials: resolved,
             light_transfer,
+            probes: finishes.map(|r| r.manifest.probes.clone()),
             collision: vec![],
             steps: vec![],
+            pavers: vec![],
+            entry: None,
         };
         for [a, b] in manifest.boxes {
             h.solid_box(a, b);
@@ -102,8 +217,107 @@ impl House {
                 break;
             }
         }
+        if finishes.is_some()
+            && let Some(street) = street
+        {
+            h.approach(street, ground);
+        }
         Ok(h)
     }
+
+    /// Fit the private entry path between the last tread and the first mapped
+    /// paving. Both edges are clipped independently on the sloping lot.
+    fn approach(&mut self, street: &eo_street::StreetWorld, ground: &dyn Fn(f64, f64) -> f64) {
+        let Some(&[a, b]) = self.steps.last() else {
+            return;
+        };
+        let start = a[2];
+        let edge = |x| -> Option<f64> {
+            let paved = |z| {
+                let p = self.point(x, 0., z);
+                street.paved_layer_at(p.x, p.z)
+            };
+            if paved(start).is_some() {
+                return None;
+            }
+            let mut inside = start;
+            for i in 1..=64 {
+                let mut outside = start - f64::from(i) * 0.25;
+                if let Some(layer) = paved(outside) {
+                    if !matches!(
+                        layer,
+                        eo_street::Layer::Sidewalk
+                            | eo_street::Layer::Verge
+                            | eo_street::Layer::Ramp
+                    ) {
+                        return None;
+                    }
+                    for _ in 0..12 {
+                        let mid = (inside + outside) * 0.5;
+                        if paved(mid).is_some() {
+                            outside = mid;
+                        } else {
+                            inside = mid;
+                        }
+                    }
+                    return Some(inside);
+                }
+                inside = outside;
+            }
+            None
+        };
+        let Some(left) = edge(a[0]) else { return };
+        let Some(right) = edge(b[0]) else { return };
+        let end = (left + right) * 0.5;
+        if start - end < 0.03 {
+            return;
+        }
+        let span = b[0] - a[0];
+        let pos = |x: f64, t: f64| {
+            let z = start + ((left + (right - left) * ((x - a[0]) / span)) - start) * t;
+            let p = self.point(x, 0., z);
+            [
+                x,
+                (ground(p.x, p.z) + 0.014 - self.floor) / self.height_scale,
+                z,
+            ]
+        };
+        let courses = ((start - end) / 0.37).ceil() as usize;
+        let mut tiles = Vec::new();
+        let mut walk = Vec::new();
+        for j in 0..courses {
+            let t0 = j as f64 / courses as f64;
+            let t1 = (j + 1) as f64 / courses as f64;
+            walk.push([pos(a[0], t0), pos(b[0], t0), pos(b[0], t1), pos(a[0], t1)]);
+            for k in 0..5 {
+                let x = a[0] + (k as f64 - 0.5 * (j % 2) as f64) * span / 4.;
+                let u = (x + span / 4.).min(b[0]) - 0.004;
+                let x = x.max(a[0]) + 0.004;
+                if u <= x {
+                    continue;
+                }
+                let inset = 0.003 / (start - end);
+                let quad = [
+                    pos(x, t0 + inset),
+                    pos(u, t0 + inset),
+                    pos(u, t1 - inset),
+                    pos(x, t1 - inset),
+                ];
+                let color = [0xff698cae, 0xff7c9eb7, 0xff7195b5, 0xff6f90b1][(j * 7 + k * 3) % 4];
+                tiles.push((quad, color));
+            }
+        }
+        for q in walk {
+            self.solid_quad(q);
+        }
+        self.pavers = tiles;
+        self.entry = Some(self.point((a[0] + b[0]) * 0.5, 0., end));
+    }
+
+    pub fn entry_position(&self) -> DVec3 {
+        self.entry.unwrap_or_else(|| self.point(5.95, 0., -3.3))
+    }
+
     pub fn point(&self, x: f64, y: f64, z: f64) -> DVec3 {
         let p = self.origin + self.across * x + self.back * z;
         DVec3::new(p.x, self.floor + y * self.height_scale, p.y)
@@ -149,22 +363,83 @@ impl House {
         .transpose();
         // The grain runs down the long axis of the boards. Give the shader the
         // surveyed angle so grain stays parallel to each seam on rotated lots.
-        let angle = self.across.y.atan2(self.across.x).rem_euclid(std::f64::consts::TAU);
+        let angle = self
+            .across
+            .y
+            .atan2(self.across.x)
+            .rem_euclid(std::f64::consts::TAU);
         let angle_byte = (angle / std::f64::consts::TAU * 255.0).round() as u32;
+        let mut floor_uv = if self.probes.is_some() {
+            vec![None; self.model.positions.len()]
+        } else {
+            Vec::new()
+        };
         let mut finish = vec![0_u8; self.model.positions.len()];
         for part in &self.model.parts {
             let name = &self.model.materials[part.material as usize].name;
-            let code = if name.starts_with("oiled-oak@") { 255 } else if name.starts_with("lime-plaster@") { 100 } else { 0 };
-            if code != 0 {
+            let code = if name.starts_with("oiled-oak@") {
+                255
+            } else if name.starts_with("lime-plaster@") {
+                100
+            } else {
+                0
+            };
+            let appliance = matches!(
+                name.split('@').next().unwrap_or(""),
+                "appliance-steel"
+                    | "brushed-brass"
+                    | "porcelain"
+                    | "satin-nickel"
+                    | "ivory-enamel"
+                    | "smoked-enamel"
+                    | "enamel-primer"
+                    | "exposed-steel"
+                    | "cast-iron"
+                    | "iron-oxide"
+                    | "seasoned-iron"
+            );
+            if self.probes.is_some()
+                && let Some(paint) = FLOOR_MATERIALS.iter().position(|m| m == name)
+            {
+                let start = part.first_index as usize;
+                for &i in &self.model.indices[start..start + part.index_count as usize] {
+                    let [x, h, z] = self.model.positions[i as usize];
+                    let section = if h > 1.0 && x >= 5.0999 { 5.1 } else { 0.0 };
+                    let board = ((x - section) / 0.18 + 0.0001).max(0.0);
+                    let level = (h / (10.0 / 3.0)).round() as usize;
+                    let row = (board as usize * 5 + paint * 3 + level) % 8;
+                    let across = (row as f32 + 0.07 + 0.86 * board.fract()) / 8.0;
+                    floor_uv[i as usize] = Some([across, (z / 13.0).clamp(0.0, 1.0)]);
+                }
+            } else if appliance && let Some(probes) = &self.probes {
+                let first = part.first_index as usize;
+                for &index in &self.model.indices[first..first + part.index_count as usize] {
+                    let point = self.model.positions[index as usize];
+                    if let Some(row) = probes
+                        .iter()
+                        .position(|p| (0..3).all(|k| (p.min[k]..=p.max[k]).contains(&point[k])))
+                    {
+                        // Blue bytes 1 and 2 select the two rows in the reflection atlas.
+                        finish[index as usize] = row as u8 + 1;
+                    }
+                }
+            } else if code != 0 {
                 let start = part.first_index as usize;
                 for &i in &self.model.indices[start..start + part.index_count as usize] {
                     finish[i as usize] = code;
                 }
             }
         }
-        for (i, (&[x, y, z], &n)) in self.model.positions.iter().zip(&self.model.normals).enumerate() {
-            let mut normal = eo_assets::glb::pack_normal(normals * eo_assets::glb::unpack_normal(n));
-            let color = if let Some(&[day, lamp]) = self.light_transfer.get(i) {
+        for (i, (&[x, y, z], &n)) in self
+            .model
+            .positions
+            .iter()
+            .zip(&self.model.normals)
+            .enumerate()
+        {
+            let mut normal =
+                eo_assets::glb::pack_normal(normals * eo_assets::glb::unpack_normal(n));
+            let mut color = if let Some(&[day, lamp]) = self.light_transfer.get(i) {
                 // Signed normal W is unused on authored models. Mark the two light channels
                 // so their values survive interpolation independently of the paint colour.
                 normal |= 0x7f00_0000;
@@ -176,8 +451,21 @@ impl House {
             } else {
                 0xffff_ffff
             };
+            if let Some(&Some([u, v])) = floor_uv.get(i) {
+                normal |= if self.light_transfer.is_empty() {
+                    0x4000_0000
+                } else {
+                    0x7f00_0000
+                };
+                color = (color & 0xffff)
+                    | (((u * 255.).round() as u32) << 16)
+                    | (((v * 255.).round() as u32) << 24);
+            }
             scene.vertices.push(Vertex {
-                pos: self.point(x.into(), y.into(), z.into()).as_vec3().to_array(),
+                pos: self
+                    .point(x.into(), y.into(), z.into())
+                    .as_vec3()
+                    .to_array(),
                 color,
                 normal,
             });
@@ -193,6 +481,12 @@ impl House {
                 part.index_count,
                 base as i32,
             );
+            if self.probes.is_some()
+                && FLOOR_MATERIALS
+                    .contains(&self.model.materials[part.material as usize].name.as_str())
+            {
+                o.kind |= eo_render::scene::FLOOR_SCAN_BIT;
+            }
             o.material = self.materials[part.material as usize];
             if materials.gpu[o.material as usize].is_blend() {
                 o.kind |= BLEND_BIT;
@@ -218,9 +512,42 @@ impl House {
                 scene.indices.extend([v, v + 1, v + 2, v, v + 2, v + 3]);
             }
             let (lo, hi) = self.bounds(a.map(|v| v as f32), b.map(|v| v as f32));
-            scene
-                .objects
-                .push(GpuObject::new(ObjectKind::Landmark, lo, hi, start as u32, 36, 0));
+            scene.objects.push(GpuObject::new(
+                ObjectKind::Landmark,
+                lo,
+                hi,
+                start as u32,
+                36,
+                0,
+            ));
+        }
+        if !self.pavers.is_empty() {
+            let start = scene.indices.len() as u32;
+            let mut lo = Vec3::splat(f32::INFINITY);
+            let mut hi = -lo;
+            for &(quad, color) in &self.pavers {
+                let p = quad.map(|[x, y, z]| self.point(x, y, z).as_vec3());
+                let normal = eo_assets::glb::pack_normal((p[1] - p[0]).cross(p[2] - p[0]));
+                let v = scene.vertices.len() as u32;
+                for point in p {
+                    lo = lo.min(point);
+                    hi = hi.max(point);
+                    scene.vertices.push(Vertex {
+                        pos: point.to_array(),
+                        normal,
+                        color,
+                    });
+                }
+                scene.indices.extend([v, v + 1, v + 2, v, v + 2, v + 3]);
+            }
+            scene.objects.push(GpuObject::new(
+                ObjectKind::Landmark,
+                lo.to_array(),
+                hi.to_array(),
+                start,
+                scene.indices.len() as u32 - start,
+                0,
+            ));
         }
         scene.stats.objects += scene.objects.len() - objects;
         scene.stats.vertices += scene.vertices.len() - base;

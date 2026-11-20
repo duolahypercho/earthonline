@@ -78,6 +78,7 @@ pub fn intercept(process_start: Instant) -> Option<Result<()>> {
 fn base_args() -> Args {
     Args {
         interior_lighting: true,
+        house_finishes: false,
         beaver_house: false,
         bench: false,
         start_underwater: false,

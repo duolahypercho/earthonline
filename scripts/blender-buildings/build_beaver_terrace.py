@@ -17,9 +17,13 @@ from mathutils import Matrix, Vector
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import beaver_lighting
+import beaver_courtyard as courtyard
 
 ROOT = Path(__file__).resolve().parents[2]
+FINISHES = "--" in sys.argv and "--house-finishes" in sys.argv[sys.argv.index("--") + 1:]
 OUT = ROOT / "public/assets/buildings/beaver-terrace"
+if FINISHES:
+    OUT = OUT / "finishes"
 RISE = 10 / 3
 rng = random.Random(21)
 boxes, ramps = [], []
@@ -100,6 +104,17 @@ glass = finish("glass-door", "ffffff", 0.08)
 materials[glass].node_tree.nodes.get("Principled BSDF").inputs["Transmission Weight"].default_value = 1.0
 paper = finish("book-paper", "d9c8a4")
 book_colors = [teal, rust, walnut, blue, sage, brass]
+if FINISHES:
+    stucco = finish("painted-stucco", "eadfc8", 0.87, texture=145)
+    reveal = finish("float-finish-stucco", "d5c6aa", 0.89, texture=125)
+    window_wood = finish("oil-rubbed-wood", "665442", 0.53)
+    wrought = finish("wrought-iron", "514b43", 0.58, 0.65)
+    roof_tiles = [finish("fired-clay", c, 0.83, texture=120) for c in
+                  ("ab7056", "b37c60", "a96e56", "bf8769", "a7745e", "b07b62")]
+    practical = finish("opal-work-light", "f2e6cc", 0.36)
+    bulb_bs = materials[practical].node_tree.nodes.get("Principled BSDF")
+    bulb_bs.inputs["Emission Color"].default_value = (1.0, 0.81, 0.58, 1)
+    bulb_bs.inputs["Emission Strength"].default_value = 4.0
 
 
 def emit(mat, points, faces, smooth=False):
@@ -203,6 +218,15 @@ def bent_tube(mat, centres, radius, axis, sides=10):
     emit(mat, points, faces, True)
 
 
+def fabric_grid(mat, columns, rows, sample, reverse=False):
+    """One continuous, smooth sheet. Shared vertices carry normals through the folds."""
+    points = [sample(i / columns, j / rows) for j in range(rows + 1) for i in range(columns + 1)]
+    stride = columns + 1
+    faces = [(k, k + stride, k + stride + 1, k + 1)
+             for j in range(rows) for i in range(columns) for k in [j * stride + i]]
+    emit(mat, points, [f[::-1] for f in faces] if reverse else faces, True)
+
+
 def cushion(mat, centre, radii):
     """A softly crowned superellipsoid with subtly gathered upholstery."""
     x, y, z = centre
@@ -277,6 +301,37 @@ def plant(x, y, z, size=1):
             (0.14 * size, 0.35 * size),
         ],
     )
+    if FINISHES:
+        # Each leaf grows from a petiole. A folded midrib opens into an
+        # arching blade and its tip hangs below the shoulder.
+        soil = materials.get("potting-earth@473d31")
+        earth = soil.name if soil else finish("potting-earth", "473d31", 0.98)
+        turned(earth, x, y + 0.325*size, z, [(0.139*size,0),(0.14*size,0.006*size)], 24, closed=True)
+        seed = random.Random(round(971*x + 183*z))
+        for i in range(15):
+            angle = 2.40*i + seed.uniform(-0.33,0.33)
+            dx,dz = math.cos(angle),math.sin(angle)
+            length = size * seed.uniform(0.24,0.39)
+            height = size * (0.81 - 0.024*i + seed.uniform(-0.06,0.06))
+            rad = size * (0.073 + 0.007*i)
+            skew = seed.uniform(-0.35,0.35)
+            root = Vector((x+size*0.018*dx,y+0.33*size,z+size*0.018*dz))
+            shoulder = Vector((x+rad*dx,y+height,z+rad*dz))
+            control = root.lerp(shoulder,0.55) + Vector((-0.018*size*dx,0,-0.018*size*dz))
+            stem = [(1-t)**2*root + 2*(1-t)*t*control + t*t*shoulder for t in (0,0.25,0.5,0.75,1)]
+            bent_tube(green,stem,0.0035*size,(dz,0,-dx),6)
+            pts = []
+            for j in range(15):
+                t = j/14
+                centre = shoulder + Vector((dx,0,dz))*length*0.78*t
+                centre.y += length*(0.54*math.sin(math.pi*t)-0.20*t)
+                width = length*0.24*math.sin(math.pi*t)**0.76
+                for u in (-1,-0.48,0,0.48,1):
+                    fold = width*(0.26*abs(u) - 0.09*math.cos(14*t + i)*u + skew*u)
+                    pts.append((centre.x+dz*width*u,centre.y+fold,centre.z-dx*width*u))
+            faces = [(j*5+k,j*5+k+1,j*5+k+6,j*5+k+5) for j in range(14) for k in range(4)]
+            emit(light_leaf if i % 4 == 0 else green,pts,faces,True)
+        return
     for i in range(19):
         a = i * 2.4
         r = size * (0.13 + i * 0.009)
@@ -332,23 +387,31 @@ for level in range(3):
             (6.7, 7, 0, RISE),
             (5.2, 6.7, 2.4 if level == 0 and z == 0 else 0, RISE),
         ]
+        if FINISHES and level > 0 and z == 0:
+            panels[-1:] = [(5.2,5.445,0,RISE),(6.465,6.7,0,RISE),
+                            (5.445,6.465,0,0.86),(5.445,6.465,2.43,RISE)]
         for x, u, h, v in panels:
             box(plaster, (x, y + h, z), (u, y + v, z + 0.15), True)
+            if FINISHES:
+                outside = z - 0.052 if z == 0 else z + 0.151
+                box(stucco, (x, y+h, outside), (u, y+v, outside+0.042))
+                continue
             for j in range(math.ceil((v - h) / 0.15)):
                 low = y + h + j * 0.15
                 outside = z - 0.028 if z == 0 else z + 0.151
                 box(sage, (x, low, outside), (u, min(y + v, low + 0.146), outside + 0.022))
         for x in [0.69, 2, 3.32, 4.56]:
-            box(ivory, (x, y + 0.83, z - 0.065), (x + 0.065, y + 2.57, z + 0.18), True, 0.009)
+            box(window_wood if FINISHES else ivory, (x, y + 0.83, z - 0.065), (x + 0.065, y + 2.57, z + 0.18), True, 0.009)
         for h in [0.85, 1.83, 2.53]:
-            box(ivory, (0.63, y + h, z - 0.079), (4.69, y + h + 0.061, z + 0.23), False, 0.009)
+            box(window_wood if FINISHES else ivory, (0.63, y + h, z - 0.079), (4.69, y + h + 0.061, z + 0.23), False, 0.009)
         # The thin glass uses the engine's transparent door glass material.
         box(glass, (0.73, y + 0.91, z + 0.06), (4.55, y + 2.52, z + 0.067), True)
-    for yoff, depth in [(RISE - 0.20, 0.08), (RISE - 0.12, 0.15), (RISE - 0.065, 0.19)]:
-        box(ivory, (-0.04, y + yoff, -depth), (7.04, y + yoff + 0.055, 0.15), False, 0.009)
-    if level == 2:
-        for x in [i * 0.40 for i in range(18)]:
-            box(ivory, (x, y + RISE - 0.31, -0.12), (x + 0.09, y + RISE - 0.17, 0.05), False, 0.012)
+    if not FINISHES:
+        for yoff, depth in [(RISE - 0.20, 0.08), (RISE - 0.12, 0.15), (RISE - 0.065, 0.19)]:
+            box(ivory, (-0.04, y + yoff, -depth), (7.04, y + yoff + 0.055, 0.15), False, 0.009)
+        if level == 2:
+            for x in [i * 0.40 for i in range(18)]:
+                box(ivory, (x, y + RISE - 0.31, -0.12), (x + 0.09, y + RISE - 0.17, 0.05), False, 0.012)
     if level < 2:
         room = part(f"stair-flight-{level + 1}", 5.10, y, 3.0)
         ramps.append([[5.1, y, 3], [5.1, y + RISE, 9], [6.85, y + RISE, 9], [6.85, y, 3]])
@@ -395,11 +458,21 @@ for level in range(3):
 
 room = part("terrace-roof", 0, 3 * RISE, 0)
 box(plaster, (0.14, 3 * RISE - 0.10, 0.15), (6.86, 3 * RISE - 0.02, 12.85))
-box(roof, (-0.05, 3 * RISE, -0.10), (7.05, 3 * RISE + 0.15, 13.04), True)
-for x in [0, 6.85]:
-    box(ivory, (x, 10.15, 0), (x + 0.15, 10.37, 13.03))
-for z in [0, 12.85]:
-    box(ivory, (0, 10.15, z), (7, 10.37, z + 0.15))
+if FINISHES:
+    # The stair wing finishes under a lower lean-to. The front living wing
+    # has its own low gable, with staggered rafter tails under the eaves.
+    courtyard.roof_pitch(emit, stucco, window_wood, roof_tiles, -0.15, 10.01, 2.50, 10.84, -0.63, 13.18)
+    courtyard.roof_pitch(emit, stucco, window_wood, roof_tiles, 5.15, 10.01, 2.50, 10.84, -0.63, 13.18)
+    courtyard.roof_pitch(emit, stucco, window_wood, roof_tiles, 7.15, 10.00, 5.00, 10.34, -0.12, 13.18)
+    for x in [0.21 + i*0.53 for i in range(10)]:
+        h = 9.99 + 0.31*(2.65-abs(x-2.50))
+        box(window_wood,(x-0.043,h-0.105,-0.57),(x+0.043,h+0.015,0.12),False,0.009)
+else:
+    box(roof, (-0.05, 3 * RISE, -0.10), (7.05, 3 * RISE + 0.15, 13.04), True)
+    for x in [0, 6.85]:
+        box(ivory, (x, 10.15, 0), (x + 0.15, 10.37, 13.03))
+    for z in [0, 12.85]:
+        box(ivory, (0, 10.15, z), (7, 10.37, z + 0.15))
 room = part("foundation", 0, -2.4, 0)
 box(stone, (0, -2.4, 0), (7, -0.16, 13), True)
 room = part("front-door", 6.635, 0, 0.15)
@@ -409,9 +482,57 @@ for h in [0.2, 1.12]:
     box(sage, (6.52, h + 0.045, 0.36), (6.55, h + 0.78, 1.34), False, 0.014)
 turned(brass, 6.47, 1.02, 1.36, [(0.05, 0), (0.05, 0.065)])
 room = part("entrance-casing", 5.95, 0, 0)
-for x in [5.12, 6.68]:
-    box(ivory, (x, 0, -0.07), (x + 0.09, 2.51, 0.19), False, 0.008)
-box(ivory, (5.02, 2.43, -0.14), (6.86, 2.56, 0.17), False, 0.015)
+if not FINISHES:
+    for x in [5.12, 6.68]:
+        box(ivory, (x, 0, -0.07), (x + 0.09, 2.51, 0.19), False, 0.009)
+    box(ivory, (5.02, 2.43, -0.14), (6.86, 2.56, 0.17), False, 0.015)
+if FINISHES:
+    # A recessed portal covers the existing open door. The front, back and
+    # intrados are separate faces, so the deep reveal casts a real shadow.
+    room = part("arched-entry-and-lantern", 5.95, 0, -0.36)
+    bronze = finish("bronze-hardware", "695b44", 0.46, 0.68)
+    opal = practical
+    for lo,hi in [(4.95,5.16),(6.75,6.96)]:
+        box(stucco,(lo,0,-0.85),(hi,2.92,0.075),True,0.024)
+    courtyard.arch(emit,stucco,5.955,0.795,1.92,0.72,2.92,-0.85,0.068)
+    emit(window_wood,[(4.89,2.93,-0.93),(7.02,2.93,-0.93),(7.02,3.13,0.03),(4.89,3.13,0.03)],[(0,1,2,3)])
+    courtyard.awning_tiles(emit,roof_tiles,4.88,7.04,-0.94,0.04,2.94,3.15)
+    room = part("rounded-stair-bay", 5.955, 2.98, 0.04)
+    courtyard.stair_bay(emit,box,stucco,reveal,window_wood,glass,roof_tiles,RISE)
+    # The upper loggia is recessed from its outer arches.
+    room = part("upper-arched-loggia",2.62,2*RISE,-0.42)
+    for i in range(3):
+        center = 1.315 + 1.31*i
+        courtyard.arch(emit,stucco,center,0.595,2*RISE+1.77,0.72,2*RISE+2.83,-0.405,0.056)
+    for x in (0.66,1.97,3.28,4.59):
+        box(reveal,(x-0.065,2*RISE+0.78,-0.403),(x+0.065,2*RISE+2.82,0.065),False,0.015)
+        box(stucco,(x-0.089,2*RISE+1.706,-0.420),(x+0.089,2*RISE+1.79,0.065),False,0.012)
+    box(stucco,(0.58,2*RISE+0.71,-0.44),(4.68,2*RISE+0.88,0.077),False,0.032)
+    # A shallow iron balcony stands off the bedroom sash at the middle floor.
+    room = part("bedroom-iron-balcony",2.62,RISE+0.79,-0.40)
+    box(reveal,(0.47,RISE+0.69,-0.63),(4.78,RISE+0.84,0.10),False,0.048)
+    for h in (0.91,1.565):
+        bent_tube(wrought,[(0.51,RISE+h,0.015),(0.51,RISE+h,-0.58),(4.74,RISE+h,-0.58),(4.74,RISE+h,0.015)],0.016,(0,1,0),12)
+    for i in range(27):
+        x=0.54+i*0.16
+        bent_tube(wrought,[(x,RISE+0.88,-0.54),(x,RISE+1.04,-0.60),(x,RISE+1.15,-0.65),(x,RISE+1.30,-0.62),(x,RISE+1.53,-0.58)],0.008,(1,0,0),8)
+    for x in (0.66,1.95,3.30,4.60):
+        bent_tube(wrought,[(x,RISE+0.44,-0.02),(x,RISE+0.61,-0.18),(x,RISE+0.70,-0.51)],0.022,(1,0,0),8)
+    room = "arched-entry-and-lantern"
+    for h,r in [(2.427,0.063),(2.39,0.029),(2.34,0.037)]:
+        turned(bronze,5.97,h,-0.26,[(r,0),(r,0.034)],16,closed=True)
+    turned(opal,5.97,2.20,-0.26,[(0.025,0),(0.077,0.035),(0.074,0.11),(0.037,0.144)],20,closed=True)
+    for k in range(4):
+        a=k*math.pi/2
+        bent_tube(bronze,[(5.97+r*math.cos(a),h,-0.26+r*math.sin(a)) for h,r in [(2.203,0.029),(2.236,0.079),(2.31,0.077),(2.344,0.040)]],0.0035,(math.sin(a),0,-math.cos(a)),6)
+    room = part("front-window-box",2.59,0.55,-0.19)
+    box(reveal,(0.63,0.58,-0.38),(4.54,0.84,-0.09),False,0.018)
+    for z in (-0.404,-0.082):
+        box(ivory,(0.60,0.81,z),(4.57,0.865,z+0.026),False,0.004)
+    for x in (0.73,2.59,4.44):
+        box(bronze,(x-0.026,0.47,-0.37),(x+0.026,0.61,-0.046),False,0.005)
+    for k in range(9):
+        plant(0.89+k*0.419,0.785,-0.235,0.24+0.035*math.sin(k*1.7))
 
 room = "Ground"
 room = part("upholstered-sofa", 1.04, 0, 2.70)
@@ -598,32 +719,73 @@ box(walnut, (0.85, y + 0.08, 10.15), (2.80, y + 0.43, 12.48), True, 0.055)
 box(oak, (0.80, y + 0.08, 12.40), (2.85, y + 1.22, 12.54), True, 0.04)
 cushion(linen, (1.825, y + 0.51, 11.30), (0.97, 0.19, 1.18))
 boxes.append([[0.86, y + 0.40, 10.16], [2.79, y + 0.67, 12.46]])
-# Quilt drapes over the bed edge; small sinusoidal folds catch raking sunlight.
-nx, nz = 35, 39
-pts = []
-for j in range(nz):
-    t = j / (nz - 1)
-    for i in range(nx):
-        s = i / (nx - 1)
-        edge = max(0, abs(s - 0.5) - 0.40) * 10
-        h = (
-            0.73
-            - 0.26 * edge**1.5
-            - 0.12 * max(0, 0.11 - t) * 9
-            + 0.022 * math.sin(39 * s + 2 * math.sin(8 * t))
-            + 0.012 * math.cos(23 * t + 4 * s)
-        )
-        pts.append((0.80 + 2.06 * s, y + h, 10.06 + 1.85 * t + 0.026 * math.sin(17 * s) * max(t, 0.2)))
-emit(
-    blue,
-    pts,
-    [
-        (j * nx + i, (j + 1) * nx + i, (j + 1) * nx + i + 1, j * nx + i + 1)
-        for j in range(nz - 1)
-        for i in range(nx - 1)
-    ],
-    True,
-)
+if FINISHES:
+    # A padded box-stitched coverlet. The radiused returns wrap the mattress,
+    # with gathered excess at the foot. The shell has a sewn binding at its edges.
+    quilt = finish("cotton-coverlet", "758f99", 0.94, texture=180)
+    binding = finish("cotton-binding", "657e88", 0.96)
+    def coverlet(u, t):
+        side = 2 * u - 1
+        drop = max(0, (abs(side) - 0.80) / 0.20)
+        foot = max(0, (0.14 - t) / 0.14)
+        a, b = min(1, drop * 2.6) * math.pi / 2, min(1, foot * 2.5) * math.pi / 2
+        x = 1.825 + math.copysign(min(abs(side) / 0.80, 1) * 0.938 + 0.080 * math.sin(a), side)
+        z = 10.206 + max(0, t - 0.14) / 0.86 * 1.756 - 0.082 * math.sin(b)
+        # Tufting follows the stitched channels. The top stays above the mattress crown.
+        bx = ((x - 0.82) / 0.245 + 0.03 * math.sin(5*z)) % 1
+        bz = ((z - 10.10) / 0.285 + 0.02 * math.cos(6*x)) % 1
+        loft = 0.019 * (math.sin(math.pi*bx) * math.sin(math.pi*bz))**0.8
+        folds = 0.012 * math.sin(10*x + 4*z + 0.8*math.sin(9*z)) + 0.005 * math.sin(16*z - 11*x)
+        h = 0.752 + loft + folds - 0.08 * (1 - math.cos(a)*math.cos(b))
+        side_drop = max(0, drop - 1/2.6)*0.39
+        foot_drop = max(0, foot - 0.40)*0.27
+        h -= max(side_drop,foot_drop) + 0.12*min(side_drop,foot_drop)
+        x -= math.copysign(0.047 * foot * drop,side)
+        z += 0.058 * foot * drop
+        x += math.copysign(drop * (0.009 + 0.014 * math.sin(15*z + 2*drop)), side)
+        z -= foot * (0.012 + 0.017 * math.cos(17*x + foot))
+        return (x, y + h, z)
+    fabric_grid(quilt, 100, 86, coverlet)
+    # Corded linen binding with a rounded cross section, following the hanging hem.
+    for edge in [lambda t: coverlet(0,t), lambda t: coverlet(1,t),
+                 lambda t: coverlet(t,0), lambda t: coverlet(t,1)]:
+        pts = [Vector(edge(i/90)) for i in range(91)]
+        rings = []
+        for i, q in enumerate(pts):
+            tangent = (pts[min(i+1,90)] - pts[max(i-1,0)]).normalized()
+            u = tangent.cross(Vector((0,1,0))).normalized()
+            v = tangent.cross(u)
+            for k in range(6):
+                rings.append(q + 0.004 * (u * math.cos(k*math.tau/6) + v * math.sin(k*math.tau/6)))
+        emit(binding, rings, [(i*6+k, i*6+(k+1)%6, (i+1)*6+(k+1)%6, (i+1)*6+k)
+                              for i in range(90) for k in range(6)], True)
+else:
+    # Quilt drapes over the bed edge; small sinusoidal folds catch raking sunlight.
+    nx, nz = 35, 39
+    pts = []
+    for j in range(nz):
+        t = j / (nz - 1)
+        for i in range(nx):
+            s = i / (nx - 1)
+            edge = max(0, abs(s - 0.5) - 0.40) * 10
+            h = (
+                0.73
+                - 0.26 * edge**1.5
+                - 0.12 * max(0, 0.11 - t) * 9
+                + 0.022 * math.sin(39 * s + 2 * math.sin(8 * t))
+                + 0.012 * math.cos(23 * t + 4 * s)
+            )
+            pts.append((0.80 + 2.06 * s, y + h, 10.06 + 1.85 * t + 0.026 * math.sin(17 * s) * max(t, 0.2)))
+    emit(
+        blue,
+        pts,
+        [
+            (j * nx + i, (j + 1) * nx + i, (j + 1) * nx + i + 1, j * nx + i + 1)
+            for j in range(nz - 1)
+            for i in range(nx - 1)
+        ],
+        True,
+    )
 for x in [1.36, 2.31]:
     cushion(linen, (x, y + 0.75, 12.10), (0.42, 0.145, 0.255))
 room = part("bedside-table", 3.43, y, 12.09)
@@ -687,22 +849,35 @@ for lo, hi in ((0.525, 0.667), (0.899, 1.072)):
             box(exposed_steel, (x - 0.005, h - 0.004, 11.705), (x + 0.005, h + 0.004, 11.710), False, 0.003)
             box(seasoned_iron, (x - 0.0035, h - 0.0008, 11.704), (x + 0.0035, h + 0.0008, 11.706))
         enamel_chip((1.375, h - 0.025, 11.718), front_u, front_v, 0.020, 0.007, wear_random)
-    bent_tube(
-        nickel,
-        [
-            (1.383, lo, 11.709),
-            (1.383, lo + 0.014, 11.680),
-            (1.383, lo + 0.034, 11.654),
-            (1.383, lo + 0.050, 11.647),
-            (1.383, hi - 0.044, 11.647),
-            (1.383, hi - 0.022, 11.652),
-            (1.383, hi - 0.007, 11.675),
-            (1.383, hi, 11.709),
-        ],
-        0.013,
-        (1, 0, 0),
-        12,
-    )
+    if FINISHES:
+        radius = 0.052
+        slot = 11.705
+        curve = [(1.383, lo, slot+0.004)]
+        for k in range(13):
+            a = k * math.pi / 24
+            curve.append((1.383, lo + radius*(1-math.cos(a)), slot - radius*math.sin(a)))
+        for k in range(13):
+            a = k * math.pi / 24
+            curve.append((1.383, hi - radius + radius*math.sin(a), slot - radius*math.cos(a)))
+        curve.append((1.383, hi, slot+0.004))
+        bent_tube(nickel, curve, 0.013, (1,0,0), 32)
+    else:
+        bent_tube(
+            nickel,
+            [
+                (1.383, lo, 11.709),
+                (1.383, lo + 0.014, 11.680),
+                (1.383, lo + 0.034, 11.654),
+                (1.383, lo + 0.050, 11.647),
+                (1.383, hi - 0.044, 11.647),
+                (1.383, hi - 0.022, 11.652),
+                (1.383, hi - 0.007, 11.675),
+                (1.383, hi, 11.709),
+            ],
+            0.013,
+            (1, 0, 0),
+            12,
+        )
 for x, y, rx, ry in [
     (1.308, 0.226, 0.024, 0.006),
     (2.061, 0.228, 0.010, 0.005),
@@ -731,7 +906,8 @@ room = "oven-range"
 box(iron, (1.055, 0.18, 9.31), (1.11, 0.83, 10.32), False, 0.022)
 box(smoked_enamel, (1.11, 0.25, 9.42), (1.125, 0.62, 10.21), False, 0.018)
 box(brass, (1.13, 0.68, 9.41), (1.19, 0.72, 10.22), False, 0.012)
-box(linen, (1.15, 0.43, 9.64), (1.196, 0.74, 9.96), False, 0.014)
+if not FINISHES:
+    box(linen, (1.15, 0.43, 9.64), (1.196, 0.74, 9.96), False, 0.014)
 for i in range(4):
     cushion(iron, (1.136, 0.779, 9.46 + 0.20 * i), (0.023, 0.042, 0.042))
 for z in (9.34, 10.282):
@@ -839,10 +1015,28 @@ for row in range(5):
         )
         z = w
 room = part("range-hood", 0.49, 1.82, 9.825)
-box(iron, (0.16, 1.82, 9.31), (0.82, 1.94, 10.34), False, 0.026)
-box(enamel, (0.17, 1.94, 9.47), (0.53, RISE - 0.16, 10.19), False, 0.014)
-for side in [9.42, 10.02]:
-    box(pottery, (0.72, 1.816, side), (0.77, 1.824, side + 0.17))
+if FINISHES:
+    # The plaster hood flares out above the hob in a continuous coved profile.
+    profile = [(1.815,0.81,0.57),(1.85,0.845,0.59),(1.90,0.844,0.588),(1.937,0.81,0.56),
+               (2.01,0.72,0.50),(2.16,0.60,0.43),(2.32,0.51,0.38),(2.48,0.452,0.34),
+               (2.60,0.425,0.32),(RISE-0.15,0.421,0.32)]
+    pts=[]
+    n=32
+    for h,x,w in profile:
+        for k in range(n):
+            a=math.tau*k/n
+            sx=math.copysign(abs(math.cos(a))**0.55,math.cos(a))
+            sz=math.copysign(abs(math.sin(a))**0.55,math.sin(a))
+            pts.append(((x+0.15)/2+(x-0.15)/2*sx,h,9.825+w*sz))
+    emit(stucco,pts,[(i*n+k,i*n+(k+1)%n,(i+1)*n+(k+1)%n,(i+1)*n+k) for i in range(len(profile)-1) for k in range(n)],True)
+    emit(window_wood,pts[:n],[tuple(range(n))])
+    for z in (9.55,10.10):
+        turned(practical,0.64,1.805,z,[(0.058,0),(0.064,0.008)],24,closed=True)
+else:
+    box(iron, (0.16, 1.82, 9.31), (0.82, 1.94, 10.34), False, 0.026)
+    box(enamel, (0.17, 1.94, 9.47), (0.53, RISE - 0.16, 10.19), False, 0.014)
+    for side in [9.42, 10.02]:
+        box(pottery, (0.72, 1.816, side), (0.77, 1.824, side + 0.17))
 room = part("enamel-stockpot", 0.79, 1.065, 9.65)
 turned(
     teal, 0.79, 1.065, 9.65, [(0.115, 0), (0.15, 0.02), (0.151, 0.155), (0.155, 0.165), (0.145, 0.171)], 32, closed=True
@@ -854,37 +1048,84 @@ for z in [9.45, 9.77]:
 room = part("chopping-board", 0.225, 1.0, 10.795)
 box(oak, (0.20, 1.00, 10.58), (0.25, 1.38, 11.01), False, 0.023)
 room = "oven-range"
-# A striped cotton towel, looped over the oven rail with tiny ripples.
-pts = []
-for j in range(11):
-    t = j / 10
-    for i in range(15):
-        q = i / 14
-        pts.append(
-            (
-                1.198 + 0.014 * math.cos(6 * math.pi * q) + 0.018 * t,
-                0.725 - 0.27 * t + 0.008 * math.sin(8 * q) * t,
-                9.64 + q * 0.32,
+if FINISHES:
+    # One continuous length of cotton passes over the rail with two free ends.
+    towel = finish("tea-towel-cotton", "dad1b7", 0.94, texture=220)
+    selvedge = finish("tea-towel-stripe", "516d75", 0.94, texture=220)
+    def towel_point(u, t):
+        # Back length, rounded crown, longer face. The top conforms to the rail.
+        if t < 0.38:
+            d = 1 - t/0.38
+            x, h = 1.124 - 0.006*d, 0.70 - 0.211*d
+        elif t < 0.54:
+            a = (t - 0.38)/0.16 * math.pi
+            d = 0
+            x, h = 1.16 - 0.036*math.cos(a), 0.70 + 0.026*math.sin(a)
+        else:
+            d = (t - 0.54)/0.46
+            x, h = 1.196 + 0.015*d, 0.70 - 0.30*d
+        p = math.tau*(2.8*u + 0.14*math.sin(4*u+2*d) + 0.11*d)
+        x += (0.002 + 0.013*d)*math.sin(p) + 0.005*d*math.sin(1.7*p + d)
+        h += d * (0.018*(u-0.5) + 0.008*math.sin(5*u + 0.4))
+        z = 9.64 + 0.33*u + 0.009*d*math.sin(2.7*u + 0.4) + 0.017*d*(u-0.4)
+        return (x,h,z)
+    for a,b,mat in [(0,0.38,towel),(0.38,0.54,towel),(0.54,0.87,towel),
+                    (0.87,0.889,selvedge),(0.889,0.910,towel),(0.910,0.937,selvedge),
+                    (0.937,0.98,towel),(0.98,1,towel)]:
+        fabric_grid(mat, 46, max(3,math.ceil((b-a)*94)), lambda u,t: towel_point(u,a+(b-a)*t), reverse=True)
+    # The turn-under gives the free hem a sewn edge just over a millimetre thick.
+    fabric_grid(towel, 46, 3, lambda u,t: tuple(a+b for a,b in zip(towel_point(u,1),(-0.0016*t,0.004*t,0))))
+    # Linen curtains hang from individual loops, with gathers spreading below
+    # the header and a turned lower hem that sags between the support points.
+    room = part("bedroom-curtains", 2.65, RISE+2.66, 12.61)
+    bent_tube(brass, [(0.49,RISE+2.71,12.63),(4.83,RISE+2.71,12.63)], 0.013,(0,1,0),16)
+    curtain = finish("curtain-linen", "ded7c4", 0.97, texture=190)
+    for panel,x0 in enumerate([0.54,4.02]):
+        def hanging(u,t):
+            fore = 1-t
+            p = math.tau*(4.35*u + 0.055*math.sin(8*u+panel) + 0.085*fore*math.sin(5*u+2*t+panel))
+            x = x0 + 0.55*u + fore**1.4*(0.10*(2*u-1) + 0.035*math.sin(3.8*u + panel))
+            z = 12.60 + (0.034 + 0.032*fore) * math.cos(p) + 0.012*math.sin(3.2*u+1.9*t+panel)
+            h = RISE+0.68 + t*1.98 + fore*(0.015*math.sin(7*u+panel)+0.012*math.cos(p))
+            return x,h,z
+        fabric_grid(curtain, 56, 30, hanging)
+        fabric_grid(curtain, 56, 3, lambda u,t: tuple(a+b for a,b in zip(hanging(u,0),(0,0.012*t,0.002*t))))
+        for i in range(6):
+            x,h,z = hanging(i/5,1)
+            bent_tube(brass, [(x,RISE+2.711+0.030*math.cos(k*math.tau/16),12.63+0.030*math.sin(k*math.tau/16)) for k in range(17)], 0.003,(1,0,0),8)
+
+else:
+    # A striped cotton towel, looped over the oven rail with tiny ripples.
+    pts = []
+    for j in range(11):
+        t = j / 10
+        for i in range(15):
+            q = i / 14
+            pts.append(
+                (
+                    1.198 + 0.014 * math.cos(6 * math.pi * q) + 0.018 * t,
+                    0.725 - 0.27 * t + 0.008 * math.sin(8 * q) * t,
+                    9.64 + q * 0.32,
+                )
             )
-        )
-for j in range(10):
-    for i in range(14):
-        k = j * 15 + i
+    for j in range(10):
+        for i in range(14):
+            k = j * 15 + i
+            emit(
+                blue if j in (7, 9) else linen, [pts[k], pts[k + 15], pts[k + 16], pts[k + 1]], [(0, 1, 2, 3), (3, 2, 1, 0)]
+            )
+    # Hanging pleated linen on both edges of the bedroom window.
+    room = "Bedroom floor"
+    for x in [0.58, 4.15]:
+        pts = [
+            (x + i * 0.018, RISE + 0.78 + j * 1.88, 12.65 + 0.045 * math.cos(i * 0.85)) for j in range(2) for i in range(30)
+        ]
         emit(
-            blue if j in (7, 9) else linen, [pts[k], pts[k + 15], pts[k + 16], pts[k + 1]], [(0, 1, 2, 3), (3, 2, 1, 0)]
+            linen,
+            pts,
+            [(i, 30 + i, 31 + i, i + 1) for i in range(29)] + [(i + 1, 31 + i, 30 + i, i) for i in range(29)],
+            True,
         )
-# Hanging pleated linen on both edges of the bedroom window.
-room = "Bedroom floor"
-for x in [0.58, 4.15]:
-    pts = [
-        (x + i * 0.018, RISE + 0.78 + j * 1.88, 12.65 + 0.045 * math.cos(i * 0.85)) for j in range(2) for i in range(30)
-    ]
-    emit(
-        linen,
-        pts,
-        [(i, 30 + i, 31 + i, i + 1) for i in range(29)] + [(i + 1, 31 + i, 30 + i, i) for i in range(29)],
-        True,
-    )
 
 # A waxed pine bench in the rear window reveal. The patterned seat leaves the sash accessible.
 room = part("window-seat", 3.50, 0.07, 12.40)
@@ -1093,11 +1334,12 @@ for (room_name, mat_name), (points, faces, smooth) in batches.items():
     if room_name in pivots:
         component_meshes.setdefault(room_name, []).append(obj)
 
-beaver_lighting.bake(list(bpy.context.scene.objects), RISE)
+beaver_lighting.bake(list(bpy.context.scene.objects), RISE, detailed=FINISHES)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--parts", type=Path, help="Directory outside the checkout for reusable component GLBs")
 parser.add_argument("--blend", type=Path)
+parser.add_argument("--house-finishes", action="store_true", help="Build the courtyard exterior and furnished interior variant")
 parser.add_argument("--render", type=Path, help="Optional kitchen photograph rendered from the editable scene")
 args = parser.parse_args(sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else [])
 if args.blend:
@@ -1196,7 +1438,7 @@ manifest = {
     "source": manifest_source,
     "license": "MIT",
     "attribution": "Earth Online contributors. Siting from the recorded OpenStreetMap footprint in sf-city.json.gz.",
-    "url": "/assets/buildings/beaver-terrace/terrace.glb",
+    "url": "/" + glb.relative_to(ROOT / "public").as_posix(),
     "sha256": hashlib.sha256(raw).hexdigest(),
     "bytes": len(raw),
     "boxes": boxes,
@@ -1243,6 +1485,9 @@ scene.cycles.use_denoising = True
 scene.render.resolution_x = 1400
 scene.render.resolution_y = 900
 scene.render.resolution_percentage = 100
+if FINISHES and (args.blend or args.render):
+    bpy.context.view_layer.update()
+    beaver_lighting.dress_floor_for_blender(scene, OUT / "floorboards.png", boards)
 if args.blend:
     bpy.context.preferences.filepaths.save_version = 0
     bpy.ops.wm.save_as_mainfile(filepath=str(args.blend.resolve()))

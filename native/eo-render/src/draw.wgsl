@@ -52,6 +52,7 @@ const F_GLASS: u32 = 8u;
 const F_THIN_GLASS: u32 = 16u;
 // the street surface material (street classes in the vertex alpha).
 const F_STREET: u32 = 32u;
+const FLOOR_SCAN_BIT: u32 = 512u;
 const PI: f32 = 3.14159265;
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -120,7 +121,11 @@ fn vs(
     if (kind == 4u && normal.w > 0.49) {
         // The house builder stores window and fixture transfer in R and G.
         out.color = color.rgb;
-        if (color.b > 0.5) {
+        if ((o.kind & FLOOR_SCAN_BIT) != 0u) {
+            let strip = floor(color.b * 8.0);
+            let grain = select(1.0, -1.0, (u32(strip) & 1u) != 0u);
+            out.ft = vec2<f32>(grain * color.a * 6.5 + fract(strip * 0.618034), color.b);
+        } else if (color.b > 0.5) {
             let angle = color.a * 6.2831853;
             let axis = vec2<f32>(cos(angle), sin(angle));
             out.ft = vec2<f32>(dot(pos.xz, axis), dot(pos.xz, vec2<f32>(-axis.y, axis.x)));
@@ -672,12 +677,43 @@ fn ft_facade(s: ptr<function, Surface>, m: ptr<function, Material>, world: vec3<
     (*s).n = nrm;
 }
 
+// Four octahedral tiles in the final albedo layer. Each row samples the
+// furnished room from one appliance. Left is window transfer and open-sky
+// coverage, right is light from the actual dining pendant.
+fn kitchen_reflection(r: vec3<f32>, angle: f32, row: f32, rough: f32) -> vec3<f32> {
+    let across = vec2<f32>(cos(angle), sin(angle));
+    let local = vec3<f32>(dot(r.xz, across), r.y, dot(r.xz, vec2<f32>(-across.y, across.x)));
+    var uv = local.xz / dot(abs(local), vec3<f32>(1.0));
+    if (local.y < 0.0) {
+        uv = (1.0 - abs(uv.yx)) * select(vec2<f32>(-1.0), vec2<f32>(1.0), uv >= vec2<f32>(0.0));
+    }
+    let lod = clamp(log2(1.0 + 64.0 * rough * rough), 0.0, 6.0);
+    // Keep the bilinear/trilinear footprint inside its own tile at both mip levels.
+    let border = 0.5 * exp2(ceil(lod)) / (0.5 * f32(textureDimensions(kit_albedo, 0).x));
+    uv = clamp(uv * 0.5 + 0.5, vec2<f32>(border), vec2<f32>(1.0 - border));
+    let st = 0.5 * (uv + vec2<f32>(0.0, row));
+    let layer = i32(textureNumLayers(kit_albedo)) - 1;
+    let day = textureSampleLevel(kit_albedo, kit_sampler, st, layer, lod);
+    let lamp = textureSampleLevel(kit_albedo, kit_sampler, st + vec2<f32>(0.5, 0.0), layer, lod);
+    let sky = look.hemi_sky.rgb + look.key.rgb * max(look.key_dir.y, 0.0);
+    let albedo = textureSampleLevel(kit_normal, kit_sampler, st, layer, lod).rgb;
+    let encoded = textureSampleLevel(kit_normal, kit_sampler, st + vec2<f32>(0.5, 0.0), layer, lod).rgb * 2.0 - 1.0;
+    let back = vec2<f32>(-across.y, across.x);
+    let plane = across * encoded.x + back * encoded.z;
+    let hit_n = vec3<f32>(plane.x, encoded.y, plane.y) / max(length(encoded), 0.001);
+    let hemi = mix(look.hemi_ground.rgb, look.hemi_sky.rgb, 0.5 + 0.5 * hit_n.y);
+    let ambient = hemi + look.ambient.rgb + lk_sh(hit_n) * look.ambient.w * look.env_class.x;
+    return albedo * ambient / PI + day.rgb * sky + lamp.rgb * 4.0 + day.a * lk_sky_sample(r);
+}
+
 fn shade(in: VOut) -> vec4<f32> {
     var m = materials[in.material];
     let ft_du = vec2<f32>(dpdx(in.ft.x), dpdy(in.ft.x));
     // Derivatives first, in uniform control flow.
     let dpx = dpdx(in.world);
     let dpy = dpdy(in.world);
+    let scan_dx = dpdx(in.ft);
+    let scan_dy = dpdy(in.ft);
     let face = normalize(cross(dpx, dpy));
     cc0_daux = vec2<f32>(dpdx(in.aux.y), dpdy(in.aux.y)); // the footway's across coordinate (scoring joints)
     cc0_drx = dpdx(in.rel); // cc0
@@ -856,7 +892,19 @@ fn shade(in: VOut) -> vec4<f32> {
         let transmission = select(1.0, 1.0 / max(0.25, m.base.a), (m.flags & F_BLEND) != 0u);
         rm_emit = r.night * transmission;
     }
-    if (house_finish && in.color.b > 0.5) {
+    let floor_scan = (objects[in.object].kind & FLOOR_SCAN_BIT) != 0u;
+    if (floor_scan && abs(n.y) > 0.7) {
+        let layer = i32(textureNumLayers(kit_albedo)) - 2;
+        s.albedo = textureSampleGrad(kit_albedo, kit_sampler, in.ft, layer, scan_dx, scan_dy).rgb;
+        s.rough = textureSampleGrad(kit_orm, kit_sampler, in.ft, layer, scan_dx, scan_dy).g;
+        let bump = textureSampleGrad(kit_normal, kit_sampler, in.ft, layer, scan_dx, scan_dy).xyz * 2.0 - 1.0;
+        let det = scan_dx.x * scan_dy.y - scan_dy.x * scan_dx.y;
+        if (abs(det) > 1e-10) {
+            let along = normalize((dpx * scan_dy.y - dpy * scan_dx.y) * sign(det));
+            let across = normalize((dpy * scan_dx.x - dpx * scan_dy.x) * sign(det));
+            s.n = normalize(n * bump.z + along * bump.x - across * bump.y);
+        }
+    } else if (house_finish && !floor_scan && in.color.b > 0.5) {
         // Longitudinal oak fibres curve around growth rings. Filter the finer
         // pores out as their spacing approaches a screen pixel.
         let uv = select(vec2<f32>(in.ft.x + in.ft.y, in.world.y), in.ft, abs(n.y) > 0.62);
@@ -867,7 +915,7 @@ fn shade(in: VOut) -> vec4<f32> {
         s.albedo *= 0.95 + 0.29 * (flow - 0.5) + detail * (0.052 * rings + 0.18 * (fibres - 0.5));
         s.rough = clamp(s.rough + 0.12 * (fibres - 0.5) * detail, 0.18, 0.9);
     }
-    if (house_finish && in.color.b > 0.30 && in.color.b < 0.49) {
+    if (house_finish && !floor_scan && in.color.b > 0.30 && in.color.b < 0.49) {
         let plane = select(select(in.world.zy, in.world.xy, abs(n.z) > abs(n.x)), in.world.xz, abs(n.y) > 0.7);
         s.albedo *= 0.97 + 0.057 * st_noise(plane * 2.8) + 0.025 * st_noise(plane * 62.0);
     }
@@ -881,6 +929,11 @@ fn shade(in: VOut) -> vec4<f32> {
     }
     // weathering (Blender buildings) and archetype ageing (kit buildings).
     fa_apply(&s, m, in.world, n, in.object, dpx, dpy);
+    if (house_finish && !floor_scan && in.color.b > 0.5 / 255.0 && in.color.b < 2.5 / 255.0) {
+        s.env = ENV_KITCHEN;
+        let row = round(in.color.b * 255.0) - 1.0;
+        room_radiance = kitchen_reflection(reflect(-v, s.n), in.aux.x * (6.2831853 / 255.0), row, s.rough);
+    }
     // the shader-only facade on a near envelope wall.
     if ((fa_run() & 256u) != 0u && kit_object && objects[in.object].lod_role == 4u && dot(in.normal, in.normal) > 0.25 && abs(in.normal.y) < 0.3 && frame.copy_step.z < 0.5) {
         ft_facade(&s, &m, in.world, normalize(in.normal), in.ft, ft_du, in.object, cc0_drx, cc0_dry);

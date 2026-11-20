@@ -21,6 +21,7 @@ const ENV_SIDEWALK: i32 = 2;
 const ENV_PAINTED_METAL: i32 = 3;
 // A film of water over sand (the swash's wet band, landmarks_surface.wgsl): it reflects the environment strongly.
 const ENV_WET_FILM: i32 = 4;
+const ENV_KITCHEN: i32 = 5;
 // GLAZING_PROBE_ROUGHNESS_FLOOR (src/render/materials/glazing-environment.js:
 // a 4-texel footprint on the 128 px probe).
 const GLAZING_ROUGHNESS_FLOOR: f32 = 0.152;
@@ -107,6 +108,8 @@ fn lk_dfg(nv: f32, rough: f32) -> vec2<f32> {
 // the room behind kit glazing at night (rooms.wgsl), set by the city
 // shader before `look_light`: the pane's emission (kit/materials.js emissiveNode).
 var<private> rm_emit: vec3<f32>;
+// Set by the house vertices that select a local reflection, consumed only for ENV_KITCHEN.
+var<private> room_radiance: vec3<f32>;
 
 fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: vec3<f32>, object: u32) -> vec4<f32> {
     var s = s_in; // sky
@@ -153,7 +156,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     let rnl = max(dot(n, rl), 0.0);
     let rim = look.rim.xyz * rnl;
     direct_d = direct_d + rim * diffuse / LK_PI;
-    direct_s = direct_s + rim * lk_ggx(n, v, rl, f0, rough) * select(1.0, 0.0, s.env == ENV_WET_FILM); // the rig's rim light draws no false sun in a water film
+    direct_s = direct_s + rim * lk_ggx(n, v, rl, f0, rough) * select(1.0, 0.0, s.env == ENV_WET_FILM || s.env == ENV_KITCHEN); // the rig's rim light draws no false sun in a water film
 
     // Indirect diffuse.
     let hemi = mix(look.hemi_ground.xyz, look.hemi_sky.xyz, n.y * 0.5 + 0.5);
@@ -178,7 +181,9 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     let r = reflect(-v, n);
     var rad = lk_sh(r) / LK_PI;
     let sharp = 1.0 - lk_smooth(0.15, 0.5, rough);
-    if (fa_probe_on()) {
+    if (s.env == ENV_KITCHEN) {
+        rad = room_radiance;
+    } else if (fa_probe_on()) {
         // the scene probe is the specular environment (glass reads it
         // through the glazing floor and canyon parallax).
         if (glass) {
@@ -191,8 +196,11 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     }
     let spec_occ = clamp(pow(nv + ao, exp2(-16.0 * rough - 1.0)) - 1.0 + ao, 0.0, 1.0);
     // glossy (wet) ground reflects the previous frame where its ray finds it.
-    let ssr = sky_ssr(world, n, v, rough);
-    let indirect_s = mix(rad * env_i, ssr.rgb, ssr.a) * fss * spec_occ;
+    if (s.env != ENV_KITCHEN) {
+        let ssr = sky_ssr(world, n, v, rough);
+        rad = mix(rad * env_i, ssr.rgb, ssr.a);
+    }
+    let indirect_s = rad * fss * spec_occ;
     // The bounce is outgoing Lambert radiance (bounce x diffuse albedo), added
     // outside the occlusion multiply as the JS adds it on the emissive slot.
     let bounce = ao4.rgb * diffuse;

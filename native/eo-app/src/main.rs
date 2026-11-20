@@ -42,6 +42,7 @@ use std::time::Instant;
 pub struct Args {
     pub beaver_house: bool,
     pub interior_lighting: bool,
+    pub house_finishes: bool,
     pub bench: bool,
     pub start_underwater: bool,
     pub frames: usize,
@@ -186,6 +187,7 @@ impl Default for PerfArgs {
 fn parse_args() -> Result<Args> {
     let mut a = Args {
         interior_lighting: true,
+        house_finishes: false,
         beaver_house: false,
         bench: false,
         start_underwater: false,
@@ -254,6 +256,8 @@ fn parse_args() -> Result<Args> {
             "--budget-ms" => a.budget_ms = Some(val()?.parse()?),
             "--beaver-house" => a.beaver_house = true,
             "--no-interior-lighting" => a.interior_lighting = false,
+            "--house-finishes" => a.house_finishes = true,
+            "--no-house-finishes" => a.house_finishes = false,
             "--no-beaver-house" => a.beaver_house = false,
             "--no-models" => a.models = false,
             "--no-terrain-lod" => a.terrain_lod = false,
@@ -572,11 +576,14 @@ pub fn load_world(args: &Args) -> Result<World> {
     };
     // the building records the landmark buildings draw instead.
     let mut landmark_claims: HashSet<String> = if args.landmarks && args.landmarks2 { eo_landmarks::set::claimed_records() } else { HashSet::new() };
+    let finishes = (args.beaver_house && args.house_finishes)
+        .then(|| house::Finishes::load(&paths.repo_root))
+        .transpose()?;
     let house = if args.beaver_house {
         let record = city.buildings.iter().find(|b| house::owns(&b.id)).ok_or_else(|| anyhow::anyhow!("missing Beaver Street house footprint"))?;
         landmark_claims.insert(house::ID.to_string());
         let ground = |x, z| street_world.as_ref().map_or_else(|| elevation.ground(x, z), |w| w.surface_at(x, z, None));
-        Some(Arc::new(house::House::build(args.interior_lighting, record, &ground, &paths.repo_root, kit_lib.as_ref().unwrap(), &mut authored.materials)?))
+        Some(Arc::new(house::House::build(args.interior_lighting, finishes.as_ref(), record, &ground, street_world.as_deref(), &paths.repo_root, kit_lib.as_ref().unwrap(), &mut authored.materials)?))
     } else { None };
     // Kit buildings: every building the authored registry does not draw.
     let t = Instant::now();
@@ -636,6 +643,10 @@ pub fn load_world(args: &Args) -> Result<World> {
                             }
                             Err(e) => eprintln!("warning: facade atlas cell {cell} not loaded ({e:#}); {name} keeps its bake"),
                         }
+                    }
+                    if let Some(finishes) = finishes {
+                        maps.push(finishes.floorboards);
+                        maps.push(finishes.atlas);
                     }
                     (KitUpload::build(&maps), t.elapsed().as_secs_f64() * 1e3)
                 })

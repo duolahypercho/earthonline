@@ -68,6 +68,8 @@ pub const LOD_LANDMARK_NEAR: u32 = 10;
 /// a landmark's far item, drawn while its group is not near.
 pub const LOD_LANDMARK_FAR: u32 = 11;
 pub const BLEND_BIT: u32 = 1 << 8;
+/// Model with per-board coordinates for the photographic floor scan.
+pub const FLOOR_SCAN_BIT: u32 = 1 << 9;
 
 /// Material 0: the vertex colour (footprints, terrain, roads, sea).
 pub const MATERIAL_VERTEX_COLOUR: u32 = 0;
