@@ -83,7 +83,8 @@ def contact_transfer(mesh, tree):
             layer.data[index].uv = (cache[key], 0.5)
 
 
-def bake(objects, rise, detailed=False, cloth_transfer=False, furniture_contact=False):
+def bake(objects, rise, detailed=False, cloth_transfer=False, furniture_contact=False,
+         porch_source=(5.97, 2.27, -0.26), entry_setback=0):
     vertices, faces = [], []
     for obj in objects:
         mesh = obj.data
@@ -105,7 +106,8 @@ def bake(objects, rise, detailed=False, cloth_transfer=False, furniture_contact=
     ]
     lamp = [Vector((2.37 + dx, -7.51 + dz, 1.975)) for dx, dz in [(-0.12, -0.09), (0.13, -0.09), (0, 0.13)]]
     work_lights = [Vector((0.64,-z,1.80)) for z in (9.55,10.10)]
-    porch_light = Vector((5.97,0.26,2.27))
+    x, height, depth = porch_source
+    porch_light = Vector((x, -depth, height))
     bounce_cache = {}
     direct_cache = {}
 
@@ -171,6 +173,20 @@ def bake(objects, rise, detailed=False, cloth_transfer=False, furniture_contact=
                 p = mesh.vertices[loop.vertex_index].co
                 n = mesh.corner_normals[idx].vector
                 point = p + n * 0.004
+                # The entry niche is outside even though it lies inside the footprint.
+                in_porch = (entry_setback > 0 and 5.13 < point.x < 6.78 and 0 <= point.z < 2.72
+                            and -(entry_setback + .16) < point.y < .89
+                            and (point.y > -(entry_setback + .04) or n.y > .35))
+                if in_porch:
+                    # Exterior daylight already comes from the runtime sky. Bake only
+                    # the sconce here so the arch and adjoining facade share that sky.
+                    delta = porch_light - point
+                    dist = delta.length
+                    lum = 0.
+                    if dist > .09 and tree.ray_cast(point, delta.normalized(), dist-.09)[0] is None:
+                        lum = min(.42, .070 * max(0., n.dot(delta.normalized())) / (dist*dist+.09))
+                    uv.data[idx].uv = (0., 1-math.sqrt(lum))
+                    continue
                 if not (0.06 < point.x < 6.94 and -12.96 < point.y < -0.04 and 0 <= point.z < 3 * rise):
                     if detailed and 4.90 < point.x < 7.0 and 0.025 < point.y < 0.89 and 0 < point.z < 2.94:
                         delta = porch_light - point

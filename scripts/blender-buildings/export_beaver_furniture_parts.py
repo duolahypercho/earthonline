@@ -1,4 +1,4 @@
-"""Export portable furniture GLBs from the dressed 21 Beaver Blender file."""
+"""Export portable interior pieces and the hinged entry from the dressed Blender file."""
 
 import argparse
 import hashlib
@@ -8,6 +8,9 @@ from pathlib import Path
 
 import bpy
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from beaver_entry import ACROSS_M, DEPTH_M
 
 root = Path(__file__).resolve().parents[2]
 surfaces = root / "public/assets/buildings/beaver-terrace/finishes/patina"
@@ -19,6 +22,7 @@ if destination.is_relative_to(root):
     raise ValueError("Keep portable source models outside this checkout.")
 destination.mkdir(parents=True, exist_ok=True)
 parts = (
+    "front-door",
     "upholstered-sofa",
     "woven-lap-throw",
     "sitting-room-rug",
@@ -37,7 +41,7 @@ parts = (
 )
 lookup = {}
 provenance = []
-for name in ("linen", "furniture/wool-carpet", "furniture/joinery"):
+for name in ("painted-wood", "linen", "furniture/wool-carpet", "furniture/joinery"):
     manifest = json.loads((surfaces / (name + ".provenance.json")).read_text())
     provenance.append({k: manifest[k] for k in ("source", "license", "attribution", "sha256")})
     for family in manifest["families"]:
@@ -93,12 +97,16 @@ entries = []
 for name in parts:
     handle = bpy.data.objects[name]
     original = handle.location.copy()
+    original_scale = handle.scale.copy()
     path = destination / (name + ".glb")
     bpy.ops.object.select_all(action="DESELECT")
     for obj in bpy.data.collections[name].all_objects:
         obj.select_set(True)
     try:
         handle.location = (0, 0, 0)
+        if name == "front-door":
+            # The root stays on its hinge, with the installed size in metres.
+            handle.scale = (ACROSS_M, DEPTH_M, 1.0)
         bpy.ops.export_scene.gltf(
             filepath=str(path),
             export_format="GLB",
@@ -110,6 +118,7 @@ for name in parts:
         )
     finally:
         handle.location = original
+        handle.scale = original_scale
     raw = path.read_bytes()
     entries.append(
         dict(

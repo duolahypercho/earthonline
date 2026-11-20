@@ -420,6 +420,17 @@ for level in range(3):
             (6.7, 7, 0, RISE),
             (5.2, 6.7, 2.4 if level == 0 and z == 0 else 0, RISE),
         ]
+        if FURNITURE and level == 0 and z == 0:
+            left, right, head = beaver_entry.frame_opening()
+            panels[-3:] = [(4.6, 5.16, 0, RISE), (6.75, 7, 0, RISE), (5.16, 6.75, 2.70, RISE)]
+            recess = beaver_entry.SETBACK
+            for x, u, h, v in [(5.16, left, 0, 2.70), (right, 6.75, 0, 2.70),
+                               (left, right, head, 2.70)]:
+                box(plaster, (x, h, recess), (u, v, recess + 0.15), True)
+                box(stucco, (x, h, recess - 0.052), (u, v, recess - 0.010))
+            for x in (5.12, 6.75):
+                box(plaster, (x, 0, 0.15), (x + 0.04, 2.70, recess + 0.15), True)
+            box(plaster, (5.12, 2.70, 0.15), (6.79, 2.79, recess + 0.15), True)
         if FINISHES and level > 0 and z == 0:
             panels[-1:] = [(5.2,5.445,0,RISE),(6.465,6.7,0,RISE),
                             (5.445,6.465,0,0.86),(5.445,6.465,2.43,RISE)]
@@ -518,32 +529,44 @@ room = part("foundation", 0, -2.4, 0)
 box(stone, (0, -2.4, 0), (7, -0.16, 13), True)
 # The exported rest pose is shut. The game swings the same leaf and both
 # handles about this hinge; the frame and threshold stay in the house shell.
-door_hinge = [6.655, 0, 0.15]
-door_bounds = [[5.225, 0.012, 0.107], [6.655, 2.372, 0.193]]
-room = part("front-door", *door_hinge)
-door_paint = finish("front-door-paint", "819078" if PATINA else "586648", 0.56, texture=37)
-door_trim = finish("front-door-moulding", "8f9b83" if PATINA else "647053", 0.53, texture=37)
-door_brass = finish("front-door-brass", "9c8152", 0.34, 0.72)
-door_materials = [door_paint,door_trim,door_brass]
-box(door_paint,*door_bounds,bevel=0.008)
-for sign,face in [(-1,0.107),(1,0.193)]:
-    for low,high in [(0.20,1.00),(1.19,2.15)]:
-        for left,right in [(5.34,5.85),(6.02,6.54)]:
-            for width,depth,material in [(0.0,0.014,door_trim),(0.033,0.018,door_paint)]:
-                z0,z1=sorted((face,face+sign*depth))
-                box(material,(left+width,low+width,z0),(right-width,high-width,z1),False,0.006)
-    # Round brass knob, tapered shank and escutcheon run along the panel normal.
-    profile=[(0.003,0.053),(0.013,0.055),(0.019,0.035),(0.036,0.018),(0.054,0.022),
-             (0.072,0.042),(0.090,0.042),(0.105,0.027),(0.111,0.002)]
-    points=[(5.335+r*math.cos(i*math.tau/28),1.026+r*math.sin(i*math.tau/28),face+sign*d)
-            for d,r in profile for i in range(28)]
-    faces=[(j*28+i,j*28+(i+1)%28,(j+1)*28+(i+1)%28,(j+1)*28+i) for j in range(len(profile)-1) for i in range(28)]
-    emit(door_brass,points,faces if sign>0 else [f[::-1] for f in faces],True)
-room = part("entrance-casing", 5.95, 0, 0)
-for lo,hi in [(5.198,5.234),(6.646,6.705)]:
-    box(walnut,(lo,0,0.060),(hi,2.402,0.217),True,0.006)
-box(walnut,(5.202,2.365,0.060),(6.70,2.409,0.217),True,0.006)
-box(stone,(5.205,0.0,-0.052),(6.695,0.015,0.223),False,0.004)
+if FURNITURE:
+    door_bounds = beaver_entry.LEAF_BOUNDS
+    door_hinge = beaver_entry.HINGE
+    room = part("front-door", *door_hinge)
+    paint = finish("front-door-paint", "b3ab93", 0.62, texture=37)
+    moulding = finish("front-door-moulding", "b7b09a", 0.60, texture=37)
+    hardware = finish("front-door-brass", "c1a171", 0.39, 0.52)
+    door_materials = [paint, moulding, hardware]
+    beaver_entry.panel_door(box, emit, turned, bent_tube, paint, moulding, hardware)
+    room = part("entrance-casing", 5.95, 0, 0)
+    beaver_entry.door_frame(box, window_wood, ivory, stone, roof_tiles)
+else:
+    door_hinge = [6.655, 0, 0.15]
+    door_bounds = [[5.225, 0.012, 0.107], [6.655, 2.372, 0.193]]
+    room = part("front-door", *door_hinge)
+    door_paint = finish("front-door-paint", "819078" if PATINA else "586648", 0.56, texture=37)
+    door_trim = finish("front-door-moulding", "8f9b83" if PATINA else "647053", 0.53, texture=37)
+    door_brass = finish("front-door-brass", "9c8152", 0.34, 0.72)
+    door_materials = [door_paint,door_trim,door_brass]
+    box(door_paint,*door_bounds,bevel=0.008)
+    for sign,face in [(-1,0.107),(1,0.193)]:
+        for low,high in [(0.20,1.00),(1.19,2.15)]:
+            for left,right in [(5.34,5.85),(6.02,6.54)]:
+                for width,depth,material in [(0.0,0.014,door_trim),(0.033,0.018,door_paint)]:
+                    z0,z1=sorted((face,face+sign*depth))
+                    box(material,(left+width,low+width,z0),(right-width,high-width,z1),False,0.006)
+        # Round brass knob, tapered shank and escutcheon run along the panel normal.
+        profile=[(0.003,0.053),(0.013,0.055),(0.019,0.035),(0.036,0.018),(0.054,0.022),
+                 (0.072,0.042),(0.090,0.042),(0.105,0.027),(0.111,0.002)]
+        points=[(5.335+r*math.cos(i*math.tau/28),1.026+r*math.sin(i*math.tau/28),face+sign*d)
+                for d,r in profile for i in range(28)]
+        faces=[(j*28+i,j*28+(i+1)%28,(j+1)*28+(i+1)%28,(j+1)*28+i) for j in range(len(profile)-1) for i in range(28)]
+        emit(door_brass,points,faces if sign>0 else [f[::-1] for f in faces],True)
+    room = part("entrance-casing", 5.95, 0, 0)
+    for lo,hi in [(5.198,5.234),(6.646,6.705)]:
+        box(walnut,(lo,0,0.060),(hi,2.402,0.217),True,0.006)
+    box(walnut,(5.202,2.365,0.060),(6.70,2.409,0.217),True,0.006)
+    box(stone,(5.205,0.0,-0.052),(6.695,0.015,0.223),False,0.004)
 if not FINISHES:
     for x in [5.12, 6.68]:
         box(ivory, (x, 0, -0.07), (x + 0.09, 2.51, 0.19), False, 0.009)
@@ -554,9 +577,10 @@ if FINISHES:
     room = part("arched-entry-and-lantern", 5.95, 0, -0.36)
     bronze = finish("bronze-hardware", "695b44", 0.46, 0.68)
     opal = practical
+    portal_back = beaver_entry.SETBACK if FURNITURE else 0
     for lo,hi in [(4.95,5.16),(6.75,6.96)]:
-        box(stucco,(lo,0,-0.85),(hi,2.92,0.075),True,0.024)
-    courtyard.arch(emit,stucco,5.955,0.795,1.92,0.72,2.92,-0.85,0.068)
+        box(stucco,(lo,0,-0.85),(hi,2.92,portal_back+0.075),True,0.024)
+    courtyard.arch(emit,stucco,5.955,0.795,1.92,0.72,2.92,-0.85,portal_back+0.068)
     emit(window_wood,[(4.89,2.93,-0.93),(7.02,2.93,-0.93),(7.02,3.13,0.03),(4.89,3.13,0.03)],[(0,1,2,3)])
     courtyard.awning_tiles(emit,roof_tiles,4.88,7.04,-0.94,0.04,2.94,3.15)
     room = part("rounded-stair-bay", 5.955, 2.98, 0.04)
@@ -581,12 +605,19 @@ if FINISHES:
     for x in (0.66,1.95,3.30,4.60):
         bent_tube(wrought,[(x,RISE+0.44,-0.02),(x,RISE+0.61,-0.18),(x,RISE+0.70,-0.51)],0.022,(1,0,0),8)
     room = "arched-entry-and-lantern"
-    for h,r in [(2.427,0.063),(2.39,0.029),(2.34,0.037)]:
-        turned(bronze,5.97,h,-0.26,[(r,0),(r,0.034)],16,closed=True)
-    turned(opal,5.97,2.20,-0.26,[(0.025,0),(0.077,0.035),(0.074,0.11),(0.037,0.144)],20,closed=True)
-    for k in range(4):
-        a=k*math.pi/2
-        bent_tube(bronze,[(5.97+r*math.cos(a),h,-0.26+r*math.sin(a)) for h,r in [(2.203,0.029),(2.236,0.079),(2.31,0.077),(2.344,0.040)]],0.0035,(math.sin(a),0,-math.cos(a)),6)
+    if FURNITURE:
+        shade = finish("porch-opal", "e5d7ba", 0.40)
+        glass_bs = materials[shade].node_tree.nodes.get("Principled BSDF")
+        glass_bs.inputs["Emission Color"].default_value = (1.0, 0.79, 0.55, 1)
+        glass_bs.inputs["Emission Strength"].default_value = 0.23
+        beaver_entry.porch_sconce(box, turned, bronze, shade)
+    else:
+        for h,r in [(2.427,0.063),(2.39,0.029),(2.34,0.037)]:
+            turned(bronze,5.97,h,-0.26,[(r,0),(r,0.034)],16,closed=True)
+        turned(opal,5.97,2.20,-0.26,[(0.025,0),(0.077,0.035),(0.074,0.11),(0.037,0.144)],20,closed=True)
+        for k in range(4):
+            a=k*math.pi/2
+            bent_tube(bronze,[(5.97+r*math.cos(a),h,-0.26+r*math.sin(a)) for h,r in [(2.203,0.029),(2.236,0.079),(2.31,0.077),(2.344,0.040)]],0.0035,(math.sin(a),0,-math.cos(a)),6)
     room = part("front-window-box",2.59,0.55,-0.19)
     box(reveal,(0.63,0.58,-0.38),(4.54,0.84,-0.09),False,0.018)
     for z in (-0.404,-0.082):
@@ -1467,7 +1498,9 @@ for (room_name, mat_name), (points, faces, smooth) in batches.items():
     if room_name in pivots:
         component_meshes.setdefault(room_name, []).append(obj)
 
-beaver_lighting.bake(list(bpy.context.scene.objects), RISE, detailed=FINISHES, cloth_transfer=PATINA, furniture_contact=FURNITURE)
+beaver_lighting.bake(list(bpy.context.scene.objects), RISE, detailed=FINISHES, cloth_transfer=PATINA, furniture_contact=FURNITURE,
+                     porch_source=beaver_entry.SCONCE_LIGHT if FURNITURE else (5.97, 2.27, -0.26),
+                     entry_setback=beaver_entry.SETBACK if FURNITURE else 0)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--parts", type=Path, help="Directory outside the checkout for reusable component GLBs")
@@ -1631,7 +1664,7 @@ if FINISHES and (args.blend or args.render):
     bpy.context.view_layer.update()
     beaver_lighting.dress_floor_for_blender(scene, FINISH_DIR / "floorboards.png", boards)
 if PATINA and (args.blend or args.render):
-    beaver_entry.dress_scans(materials, SURFACE_DIR, scene, FURNITURE)
+    beaver_entry.dress_scans(materials, SURFACE_DIR, scene, FURNITURE, door_bounds)
 if args.blend:
     bpy.context.preferences.filepaths.save_version = 0
     bpy.ops.wm.save_as_mainfile(filepath=str(args.blend.resolve()))

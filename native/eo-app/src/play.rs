@@ -1080,6 +1080,31 @@ mod house_tests {
             .is_none(),
             "open leaf still blocks the opening"
         );
+        if furniture {
+            // Measure the installed opening at the player's shoulders and above the lintel.
+            let across = (house.point(1., 0., 0.) - house.point(0., 0., 0.)).normalize();
+            let clear = |offset, height| {
+                let start = house.point(5.95, height, -0.35) + across * offset;
+                cw.raycast(start, ray.normalize(), ray.length(), pworld::layer::WORLD, None)
+                    .is_none()
+            };
+            assert!(clear(-0.42, 1.4) && clear(0.42, 1.4), "shoulders catch the open door");
+            assert!(!clear(-0.53, 1.4) && !clear(0.53, 1.4), "missing fixed side returns");
+            assert!(clear(0., 2.03) && !clear(0., 2.11), "door head clearance changed");
+            // A whole standing character fits on level ground outside the shut leaf.
+            let approach = (house.point(0., 0., 1.) - house.point(0., 0., 0.)).normalize();
+            let shoulder = house.point(5.95, 1.4, -0.32);
+            let ground = house.point(5.95, 0., -0.32);
+            for travel in [0., 0.35, 0.70, 0.96] {
+                let above = ground + approach * travel + DVec3::Y * 0.10;
+                let hit = cw.raycast(above, DVec3::NEG_Y, 0.13, pworld::layer::WORLD, None)
+                    .expect("missing entrance landing surface");
+                assert!((hit.distance - 0.10).abs() < 0.015, "step in front of the latch");
+            }
+            let jamb = cw.raycast(shoulder - across * 0.54, approach, 1.2, pworld::layer::WORLD, None)
+                .expect("missing fixed wall beside the leaf");
+            assert!(jamb.distance >= 0.84, "player cannot stand inside the sheltered landing");
+        }
         let mut walk = |x, z| {
             let target = house.point(x, 0.0, z);
             for _ in 0..1200 {

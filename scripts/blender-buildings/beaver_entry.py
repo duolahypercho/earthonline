@@ -197,7 +197,12 @@ def bougainvillea(emit, bark, foliage, bracts, flower):
                         blade(center, Vector((0.002, 0.011, -0.014)), 0.004, flower)
 
 
-def dress_scans(materials, directory, scene, furnished=False):
+def painted_wood_uv(point, leaf_bounds):
+    (left, _, _), (right, top, _) = leaf_bounds
+    return point.z / top, (point.x - left) * 3.1 / (right - left)
+
+
+def dress_scans(materials, directory, scene, furnished, leaf_bounds):
     """Pack the same photographic colour, roughness and relief into the editable scene."""
     import bpy
     import json
@@ -250,7 +255,7 @@ def dress_scans(materials, directory, scene, furnished=False):
                     if family == "woven-carpet":
                         coords = ((y1-p.y)/(y1-y0), 1-(p.x-x0)/(x1-x0))
                     elif name == "painted-wood":
-                        coords = (p.z / 2.372, (p.x - 5.225) * 3.1 / 1.430)
+                        coords = painted_wood_uv(p, leaf_bounds)
                     else:
                         coords = (p[pair[0]] / metres, p[pair[1]] / metres)
                     uv.data[loop].uv = coords
@@ -392,3 +397,125 @@ def settled_coverlet():
         )
 
     return sample
+
+
+# This shell fits the surveyed 21 Beaver parcel at 1.308 m per across unit
+# and 1.295 m per depth unit. Size hardware and joinery in installed metres.
+ACROSS_M = 1.308
+DEPTH_M = 1.295
+ENTRY_CENTER = 5.95
+SETBACK = 0.34  # Place the door behind the arch, beyond a full standing landing.
+LEAF_HALF = 0.96 / (2 * ACROSS_M)
+FRONT = SETBACK + 0.15 - 0.045 / (2 * DEPTH_M)
+BACK = SETBACK + 0.15 + 0.045 / (2 * DEPTH_M)
+LEAF_BOUNDS = [[ENTRY_CENTER - LEAF_HALF, 0.012, FRONT],
+               [ENTRY_CENTER + LEAF_HALF, 2.062, BACK]]
+HINGE = [LEAF_BOUNDS[1][0], 0, BACK]
+SCONCE_LIGHT = (5.37, 1.78, SETBACK - 0.17)
+
+
+def frame_opening():
+    (left, _, _), (right, head, _) = LEAF_BOUNDS
+    jamb = (0.004 + 0.027) / ACROSS_M
+    return left - jamb, right + jamb, head + 0.004 + 0.027
+
+
+def door_frame(box, wood, trim, stone, clay):
+    left, right, top = frame_opening()
+    jamb = 0.027 / ACROSS_M
+    for x in (left, right - jamb):
+        box(wood, (x, 0, SETBACK - 0.054), (x + jamb, top, SETBACK + 0.185), True, 0.002)
+    box(wood, (left + jamb, top - 0.027, SETBACK - 0.054), (right - jamb, top, SETBACK + 0.185), True, 0.002)
+    # Stops on the outside face of the inward-swinging leaf.
+    for x in (left + jamb, right - jamb - 0.013):
+        box(wood, (x, 0.012, FRONT - 0.015), (x + 0.013, top - 0.027, FRONT - 0.002), bevel=0.002)
+    box(wood, (left + jamb, top - 0.043, FRONT - 0.015),
+        (right - jamb, top - 0.027, FRONT - 0.002), bevel=0.002)
+    box(stone, (left, 0, SETBACK), (right, 0.010, SETBACK + 0.189), bevel=0.003)
+    # Continue the existing five tile columns from the top tread to the sill.
+    for i in range(5):
+        x = 5.15 + 0.32*i
+        box(clay[i % len(clay)], (x+.003, -.012, 0), (x+.317, .007, SETBACK-.003), bevel=.002)
+    # Stepped casing covers the plaster joint. Skirting returns into the jamb
+    # on each side, including the short return to the flush hallway wall.
+    wall = SETBACK + .15
+    for lo, hi in [(left-.041, left+.015), (right-.015, right+.041)]:
+        box(trim, (lo, .006, wall+.001), (hi, top+.045, wall+.039), bevel=.003)
+    box(trim, (left+.015, top-.008, wall+.001), (right-.015, top+.045, wall+.039), bevel=.003)
+    for lo, hi in [(5.12, left-.041), (right+.041, 6.79)]:
+        box(trim, (lo, .006, wall), (hi, .112, wall+.015), bevel=.002)
+    for x in (5.108, 6.79):
+        box(trim, (x, .006, .15), (x+.012, .112, wall+.015), bevel=.002)
+
+
+def panel_door(box, emit, turned, tube, paint, moulding, brass):
+    (left, bottom, front), (right, top, back) = LEAF_BOUNDS
+    stile = 0.118 / ACROSS_M
+    inner_l, inner_r = left + stile, right - stile
+    for x in (left, inner_r):
+        box(paint, (x, bottom, front), (x + stile, top, back), bevel=0.0016)
+    rails = [(bottom, 0.212), (0.85, 1.015), (top - 0.121, top)]
+    for low, high in rails:
+        box(paint, (inner_l, low, front), (inner_r, high, back), bevel=0.0016)
+    # Two inset timber fields. The ovolo and the bevel are real profiles on
+    # each face, with mitred corners and a shadow line around the panel.
+    for low, high in [(rails[0][1], rails[1][0]), (rails[1][1], rails[2][0])]:
+        inset = 0.025
+        box(paint, (inner_l + inset / ACROSS_M, low + inset, front + 0.010),
+            (inner_r - inset / ACROSS_M, high - inset, back - 0.010))
+        for side, face in [(-1, front), (1, back)]:
+            rings = []
+            for width, relief in [(0, -0.001), (0.004, 0.003), (0.009, 0.0045),
+                                  (0.015, 0.001), (0.020, -0.006), (inset, -0.013)]:
+                dx = width / ACROSS_M
+                z = face + side * relief / DEPTH_M
+                rings.extend([(inner_l + dx, low + width, z), (inner_r - dx, low + width, z),
+                              (inner_r - dx, high - width, z), (inner_l + dx, high - width, z)])
+            faces = [(i+j, i+(j+1)%4, i+4+(j+1)%4, i+4+j)
+                     for i in range(0, len(rings)-4, 4) for j in range(4)]
+            emit(moulding, rings, [f[::-1] for f in faces] if side < 0 else faces)
+
+    # Spin the lock hardware around the normal to each face. Spindle centre
+    # lies 67 mm from the latch edge. The lever rose is 64 mm in diameter.
+    latch = left + 0.067 / ACROSS_M
+
+    def fitting(height, face, side, profile):
+        count = 28
+        points = [(latch + radius * math.cos(i * math.tau/count) / ACROSS_M,
+                   height + radius * math.sin(i * math.tau/count), face + side * depth / DEPTH_M)
+                  for depth, radius in profile for i in range(count)]
+        faces = [(j+i, j+(i+1)%count, j+count+(i+1)%count, j+count+i)
+                 for j in range(0, len(points)-count, count) for i in range(count)]
+        faces.append(tuple(range(len(points)-count, len(points))))
+        emit(brass, points, [f[::-1] for f in faces] if side < 0 else faces, True)
+
+    rose = [(0, .029), (.002, .032), (.006, .031), (.009, .027), (.011, .017), (.032, .012)]
+    for side, face in [(-1, front), (1, back)]:
+        fitting(0.97, face, side, rose)
+        # Cast lever with a rounded return toward the leaf. It leaves finger
+        # clearance behind the grip, and can be read separately from the lock.
+        curve = [(0, .029), (0, .042), (.009, .052), (.025, .056),
+                 (.095, .060), (.109, .058), (.115, .049), (.115, .041)]
+        tube(brass, [(latch + x/ACROSS_M, .97, face + side*z/DEPTH_M) for x, z in curve],
+             .008, (0, 1, 0), 18)
+        fitting(1.125, face, side, [(0, .024), (.003, .025), (.008, .021), (.009, .014)])
+        if side < 0:
+            # A recessed keyway reads dark between the two cylinder lips.
+            box(paint, (latch-.0016, 1.119, face-.0074), (latch+.0016, 1.130, face-.0070))
+        else:
+            box(brass, (latch-.011, 1.121, face+.0068), (latch+.011, 1.129, face+.018), bevel=.002)
+    for y in (0.26, 1.01, 1.79):
+        turned(brass, right, y, back + .002, [(.005, 0), (.005, .078)], 12, closed=True)
+
+
+def porch_sconce(box, turned, bronze, glass):
+    x, height, z = SCONCE_LIGHT
+    # Rear plate overlaps the stucco skin. A short bracket carries the hood
+    # from the plate, leaving the door swing and the arch clear.
+    box(bronze, (x-.033, height-.015, SETBACK-.078), (x+.033, height+.115, SETBACK-.047), bevel=.005)
+    box(bronze, (x-.010, height+.068, z), (x+.010, height+.086, SETBACK-.070), bevel=.003)
+    turned(bronze, x, height+.060, z,
+           [(.057, 0), (.058, .009), (.043, .020), (.019, .031), (.014, .031)], 36, closed=True)
+    turned(glass, x, height-.077, z,
+           [(.022, 0), (.037, .008), (.045, .020), (.045, .116), (.041, .139)], 36, closed=True)
+    turned(bronze, x, height-.083, z, [(.025, 0), (.031, .005), (.031, .011)], 32, closed=True)

@@ -328,7 +328,13 @@ impl House {
             {
                 break;
             }
-            h.solid_box(a, b);
+            // The first tread and the recessed, tiled landing share one walking
+            // surface up to the sill. The oak floor substrate sits 25 mm lower.
+            let mut landing = b;
+            if furnished && i == 0 {
+                landing[2] = h.door.bounds[1][2];
+            }
+            h.solid_box(a, landing);
             h.steps.push([a, b]);
             let p = h.point(5.95, y, z);
             if p.y <= ground(p.x, p.z) + 0.12 {
