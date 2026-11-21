@@ -14,7 +14,7 @@
 use std::sync::Mutex;
 
 /// Timestamps the lighting hooks write per frame: begin/end pairs.
-pub const QUERIES_PER_FRAME: u32 = 12;
+pub const QUERIES_PER_FRAME: u32 = 14;
 /// The far sun shadow map (`far_shadow`).
 pub const Q_FAR_SHADOW: u32 = 0;
 /// The ambient volume's uploads (`ambient`).
@@ -27,14 +27,18 @@ pub const Q_LIGHT_SHADOWS: u32 = 6;
 pub const Q_HEADLIGHT_SHADOWS: u32 = 8;
 /// The fog lit by the local lights (`lit_fog`).
 pub const Q_LIT_FOG: u32 = 10;
+/// The ray-traced diffuse light's trace, temporal and a-trous passes (`rt_gi`;
+/// its acceleration-structure builds are not inside the span).
+pub const Q_RT_GI: u32 = 12;
 /// Every pass and its slot, in slot order (the bench's `lighting_passes_ms` names).
-pub const PASSES: [(&str, u32); 6] = [
+pub const PASSES: [(&str, u32); 7] = [
     ("far_shadow", Q_FAR_SHADOW),
     ("ambient_upload", Q_AMBIENT_UPLOAD),
     ("probe_grid", Q_PROBE_GRID),
     ("light_shadows", Q_LIGHT_SHADOWS),
     ("headlight_shadows", Q_HEADLIGHT_SHADOWS),
     ("lit_fog", Q_LIT_FOG),
+    ("rt_gi", Q_RT_GI),
 ];
 
 /// This frame's lighting timestamps: the set and its first slot for this frame.
@@ -263,7 +267,7 @@ mod tests {
         assert_eq!(look::ShaderFeatures::of(&o, false, false, false), look::ShaderFeatures::NONE, "the default options compile nothing in");
         assert!(!look::ShaderFeatures::of(&o, false, true, false).tunnels, "no tunnels without the structures");
         let on = look::LookOptions {
-            lighting: LightingOptions { cascade_blend: true, far_shadows: 2, ambient_volume: 2, probe_grid: 2, light_shadows: 3, light_shadow_moving: true, headlight_shadows: 8, lit_fog: 2, smooth_time: true, ground_bounce: true },
+            lighting: LightingOptions { cascade_blend: true, far_shadows: 2, ambient_volume: 2, probe_grid: 2, light_shadows: 3, light_shadow_moving: true, headlight_shadows: 8, lit_fog: 2, smooth_time: true, ground_bounce: true, rt_gi: false },
             grime: 2,
             street_life: 1,
             sky: crate::sky::SkyOptions { shop_light: 2, ..o.sky },

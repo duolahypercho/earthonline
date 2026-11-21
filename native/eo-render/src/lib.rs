@@ -48,6 +48,7 @@ pub mod props_lib2;
 pub mod probe; // facade
 pub mod probe_grid; // the reflection probes on the streets round the camera (lighting)
 pub mod rooms;
+pub mod rt_gi; // ray-traced one-bounce diffuse light (`--rt-gi`, stage R1)
 pub mod shop_lights; // lit shop windows at night (`--shop-light`, stage N1)
 pub mod sign_letters; // the shop signs' words (`--facade-clutter`, stage S1)
 pub mod sky; // sky
@@ -142,6 +143,10 @@ pub struct GpuContext {
     pub options: GpuOptions,
     /// BC block compression (the CC0 sets are BC7 / BC5).
     pub bc: bool,
+    /// (`--rt-gi`, rt_gi.rs) inline ray queries: asked for only when
+    /// `rt_gi::wanted()`, on Metal (the one backend tested) where the adapter
+    /// has `EXPERIMENTAL_RAY_QUERY`.
+    pub ray_query: bool,
 }
 
 impl GpuContext {
@@ -208,11 +213,20 @@ impl GpuContext {
         if adapter_features.contains(wgpu::Features::CLIP_DISTANCES) {
             wanted |= wgpu::Features::CLIP_DISTANCES;
         }
+        // (`--rt-gi`) inline ray queries, asked for only with the option, on
+        // Metal only (no other backend has been tested); without them the
+        // option is off and the frame is as before.
+        let ray_query = rt_gi::wanted() && info.backend == wgpu::Backend::Metal && adapter_features.contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY);
+        if ray_query {
+            wanted |= wgpu::Features::EXPERIMENTAL_RAY_QUERY;
+        }
         let limits = adapter.limits();
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("eo-device"),
             required_features: wanted,
             required_limits: limits,
+            // SAFETY: the experimental ray-query API is opted into only with `--rt-gi` on Metal (rt_gi.rs).
+            experimental_features: if ray_query { unsafe { wgpu::ExperimentalFeatures::enabled() } } else { wgpu::ExperimentalFeatures::disabled() },
             ..Default::default()
         }))
         .context("request_device")?;
@@ -236,6 +250,7 @@ impl GpuContext {
             first_instance,
             options,
             bc, // cc0
+            ray_query,
         })
     }
 }
@@ -476,6 +491,8 @@ pub struct Renderer {
     pub light_shadow: light_shadow::LightShadowGpu,
     pub lit_fog: lit_fog::LitFogGpu,
     lighting_ts: lighting::LightingTimer,
+    /// (`--rt-gi`) the ray-traced diffuse light's pass (rt_gi.rs), with the option and a device with ray queries.
+    rt_gi: Option<rt_gi::RtGi>,
     /// grade-separated roads, attached once built (`attach_structures`).
     pub structures: std::sync::OnceLock<structures::StructuresGpu>,
 }
@@ -703,9 +720,12 @@ impl Renderer {
             d.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: size.max(4).next_multiple_of(4), usage, mapped_at_creation: false })
         };
         // (STORAGE: the lamp and headlight shadow maps' casters read the city's geometry too, light_shadow.rs)
-        let vertex_buf = buffer("vertices", vb_bytes, wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE);
+        // (`--rt-gi`) the arena is the acceleration structures' input too, with the pass only.
+        let rt_gi_live = look::shader_features().rt_gi && ctx.ray_query && n == 1;
+        let blas_input = if rt_gi_live { wgpu::BufferUsages::BLAS_INPUT } else { wgpu::BufferUsages::empty() };
+        let vertex_buf = buffer("vertices", vb_bytes, wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE | blas_input);
         ctx.queue.write_buffer(&vertex_buf, 0, bytemuck::cast_slice(init.vertices));
-        let index_buf = buffer("indices", ib_bytes, wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE);
+        let index_buf = buffer("indices", ib_bytes, wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE | blas_input);
         ctx.queue.write_buffer(&index_buf, 0, bytemuck::cast_slice(init.indices));
         let object_buf = buffer("objects", ob_bytes, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC);
         ctx.queue.write_buffer(&object_buf, 0, bytemuck::cast_slice(&objects));
@@ -1038,6 +1058,16 @@ impl Renderer {
             groups: std::mem::size_of_val(groups.as_slice()) as u64 + hlod_map_buf.size() + hlod_state_buf.size() + hlod_flags_buf.size(), // + the far layer's per-group words
             textures: ab + nb + mb + look_gpu.bytes + facade_gpu.bytes + probe_gpu.bytes + sign_gpu.bytes, // shadow map, shadow lists, uniforms; ages, weather; the signs' words (0 without them)
         };
+        // (`--rt-gi`) the pass and the static cells it traces.
+        let rt_gi = rt_gi_live.then(|| {
+            let r = rt_gi::RtGi::new(d, &ctx.queue, rt_gi::RtGiInit { vertex_buf: &vertex_buf, index_buf: &index_buf, material_buf: &material_buf, look_buf: look_gpu.look_buffer(), kit_layers: init.kit_layers });
+            let cells = rt_gi::static_cells(init.objects, init.indices, vertex_capacity);
+            eprintln!("rt-gi: on ({} static cells, {} triangles; {:?})", cells.len(), cells.iter().flat_map(|c| &c.1).map(|g| g.index_count as u64 / 3).sum::<u64>(), r.config);
+            for (k, g, mn, mx) in cells {
+                r.add(k, g, mn, mx);
+            }
+            r
+        });
         Ok(Self {
             object_count,
             base_object_count: init.objects.len() as u32,
@@ -1113,7 +1143,40 @@ impl Renderer {
             lit_fog: lit_fog::LitFogGpu::new(d),
             lighting_ts: Default::default(),
             structures: std::sync::OnceLock::new(),
+            rt_gi,
         })
+    }
+
+    /// (`--rt-gi`) Whether the ray-traced diffuse light's pass runs (the option
+    /// compiled in and a device with ray queries).
+    pub fn rt_gi_live(&self) -> bool {
+        self.rt_gi.is_some()
+    }
+
+    /// (`--rt-gi`, bench settling) Build the traced scene round the camera of
+    /// the last `update` without drawing; true when it is whole (always true
+    /// without the pass, which then does nothing).
+    pub fn rt_gi_prepare(&self) -> bool {
+        self.rt_gi.as_ref().is_none_or(|r| r.prepare(&self.look))
+    }
+
+    /// (`--rt-gi`) The pass, when it runs.
+    pub fn rt_gi(&self) -> Option<&rt_gi::RtGi> {
+        self.rt_gi.as_ref()
+    }
+
+    /// (`--rt-gi`) A BLAS source became resident (kit packs): traced from the next frame.
+    pub fn rt_gi_add(&self, key: rt_gi::RtKey, geoms: Vec<rt_gi::RtGeom>, min: glam::Vec3, max: glam::Vec3) {
+        if let Some(r) = &self.rt_gi {
+            r.add(key, geoms, min, max);
+        }
+    }
+
+    /// (`--rt-gi`) A BLAS source left (an evicted kit pack): out of the TLAS at the next encode.
+    pub fn rt_gi_remove(&self, key: rt_gi::RtKey) {
+        if let Some(r) = &self.rt_gi {
+            r.remove(key);
+        }
     }
 
     /// The lighting additions' timestamps for the coming encodes (bench): a
@@ -1441,6 +1504,11 @@ impl Renderer {
             };
             let at = (k * self.base_object_count + object_at) as u64 * std::mem::size_of::<GpuObject>() as u64;
             queue.write_buffer(&self.object_buf, at, bytemuck::cast_slice(data));
+        }
+        if let Some(r) = &self.rt_gi {
+            // (`--rt-gi`) the model is traced from the next frame.
+            let (g, mn, mx) = rt_gi::model_geoms(objects, index_at, indices);
+            r.add(rt_gi::RtKey::Model(object_at), g, mn, mx);
         }
         self.set_group_ready(queue, group, true);
     }
@@ -1903,6 +1971,8 @@ impl Renderer {
         let keep_depth = (self.look.options.ao || self.look.sky_wants_depth()) && depth.texture().usage().contains(wgpu::TextureUsages::TEXTURE_BINDING) && depth.texture().sample_count() == 1; // + the sky passes
         // the wire pass after the late city pass depth-tests against it.
         let keep_depth = keep_depth || self.props.get().is_some_and(|p| p.wires_pending());
+        // (`--rt-gi`) the traced light's pass reads it after the city pass.
+        let keep_depth = keep_depth || (self.rt_gi.is_some() && depth.texture().usage().contains(wgpu::TextureUsages::TEXTURE_BINDING) && depth.texture().sample_count() == 1);
         let draw_bg = self.draw_bg.lock().unwrap()[self.probe.front().0].clone(); // the front cube's
         // with occlusion on the city is two passes, the early
         // (objects visible last frame, depth kept for the pyramid) and the
@@ -2129,6 +2199,11 @@ impl Renderer {
             p.draw_wires(enc, color, resolve, depth, &self.look); // the overhead wires, a timed pass of their own
         }
         self.look.encode_ao(enc, depth, &hdr, ts); // surfaces
+        // (`--rt-gi`) the traced diffuse light on this frame's depth, read by the next frame's city pass.
+        match &self.rt_gi {
+            Some(r) => r.encode(enc, &self.look, depth, lts),
+            None => lighting::empty_span(enc, lts, lighting::Q_RT_GI, "rt-gi (off)"),
+        }
         // rain, luminaires, velocity, volume, (lighting) the lit fog, resolve, bloom
         self.look.encode_sky_after_with(enc, depth, &hdr, self.agents.get(), ts, &mut |enc, chain| self.lit_fog.encode(enc, &self.look, depth, chain, lts));
         self.look.encode_post_with_water(enc, output, ts, water.filter(|_| self.look.options.water_optics).map(|w| (w, self.probe.front().0)));

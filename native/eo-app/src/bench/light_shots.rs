@@ -472,6 +472,7 @@ pub fn run(
     if args.look.lighting.lit_fog > 0 {
         m["lit_fog"] = lit_fog_json(renderer); // (lighting) only with --lit-fog
     }
+    m["rt_gi"] = crate::quality::rt_gi_json(args, renderer); // (`--rt-gi`) whether the pass ran, its settings and what it traced
     if args.look.sky.shop_light > 0 {
         m["shop_light"] = crate::quality::shop_light_json(args, eo_render::shop_lights::census().as_ref()); // (`--shop-light`)
     }

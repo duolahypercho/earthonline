@@ -51,7 +51,7 @@ fn camera() -> Camera {
 
 /// Every lighting addition on, at the highest level each takes.
 fn all_on() -> LightingOptions {
-    LightingOptions { cascade_blend: true, far_shadows: 2, ambient_volume: 2, probe_grid: 2, light_shadows: 3, light_shadow_moving: true, headlight_shadows: 8, lit_fog: 2, smooth_time: true, ground_bounce: true }
+    LightingOptions { cascade_blend: true, far_shadows: 2, ambient_volume: 2, probe_grid: 2, light_shadows: 3, light_shadow_moving: true, headlight_shadows: 8, lit_fog: 2, smooth_time: true, ground_bounce: true, rt_gi: false }
 }
 
 /// Render `frames` frames (the lighting set, if given, gets slot `QUERIES_PER_FRAME * k` on frame k);

@@ -243,6 +243,10 @@ pub struct LightingOptions {
     /// (`--ground-bounce`; only with `ambient_volume`, whose levels hold it:
     /// eo-app turns it on with the volume unless `--no-ground-bounce`).
     pub ground_bounce: bool,
+    /// Ray-traced one-bounce diffuse light (`--rt-gi`, rt_gi.rs): no bit of
+    /// its own (its shader code is spliced in by `ShaderFeatures::rt_gi`, its
+    /// pass needs a device with ray queries); no tier turns it on.
+    pub rt_gi: bool,
 }
 
 /// Bits of `LightingOptions::mask` (`Look.lx[LX_FLAGS].x`, look_common.wgsl `LX_BIT_*`).
@@ -273,7 +277,7 @@ pub const LX_SPARE: usize = 15;
 
 impl LightingOptions {
     /// Every feature off.
-    pub const OFF: Self = Self { cascade_blend: false, far_shadows: 0, ambient_volume: 0, probe_grid: 0, light_shadows: 0, light_shadow_moving: false, headlight_shadows: 0, lit_fog: 0, smooth_time: false, ground_bounce: false };
+    pub const OFF: Self = Self { cascade_blend: false, far_shadows: 0, ambient_volume: 0, probe_grid: 0, light_shadows: 0, light_shadow_moving: false, headlight_shadows: 0, lit_fog: 0, smooth_time: false, ground_bounce: false, rt_gi: false };
 
     /// Whether any feature is on.
     pub fn any(&self) -> bool {
@@ -470,6 +474,58 @@ impl LightingBindings {
     }
 }
 
+/// (`--rt-gi`, rt_gi.rs) What group 1 bindings 20-22 hold with the option
+/// compiled in: the traced result, its view depth and the camera it was made
+/// with (`rt_gi::RtGi`), or 1 x 1 stand-ins and a zero uniform (no result:
+/// the rig's light) until the pass binds its own.
+#[derive(Clone, Debug)]
+pub struct RtGiBindings {
+    pub gi: wgpu::TextureView,
+    pub z: wgpu::TextureView,
+    pub view: wgpu::Buffer,
+}
+
+impl RtGiBindings {
+    fn stand_ins(device: &wgpu::Device) -> Self {
+        let tex = |label: &str, format| {
+            device
+                .create_texture(&wgpu::TextureDescriptor {
+                    label: Some(label),
+                    size: wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
+                })
+                .create_view(&Default::default())
+        };
+        let view = device.create_buffer(&wgpu::BufferDescriptor { label: Some("rt-gi-view-stand-in"), size: std::mem::size_of::<crate::rt_gi::RtGiView>() as u64, usage: wgpu::BufferUsages::UNIFORM, mapped_at_creation: false });
+        Self { gi: tex("rt-gi-stand-in", crate::rt_gi::GI_FORMAT), z: tex("rt-gi-z-stand-in", crate::rt_gi::GI_Z_FORMAT), view }
+    }
+
+    /// The layout entries (fragment only): the result (filterable float), its depth (read with loads), the view uniform.
+    pub(crate) fn layout_entries() -> [wgpu::BindGroupLayoutEntry; 3] {
+        let fs = wgpu::ShaderStages::FRAGMENT;
+        let e = |binding, ty| wgpu::BindGroupLayoutEntry { binding, visibility: fs, ty, count: None };
+        let tex = |filterable| wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false };
+        [
+            e(crate::rt_gi::B_RT_GI, tex(true)),
+            e(crate::rt_gi::B_RT_GI_Z, tex(false)),
+            e(crate::rt_gi::B_RT_GI_VIEW, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }),
+        ]
+    }
+
+    fn entries(&self) -> [wgpu::BindGroupEntry<'_>; 3] {
+        [
+            wgpu::BindGroupEntry { binding: crate::rt_gi::B_RT_GI, resource: wgpu::BindingResource::TextureView(&self.gi) },
+            wgpu::BindGroupEntry { binding: crate::rt_gi::B_RT_GI_Z, resource: wgpu::BindingResource::TextureView(&self.z) },
+            wgpu::BindGroupEntry { binding: crate::rt_gi::B_RT_GI_VIEW, resource: self.view.as_entire_binding() },
+        ]
+    }
+}
+
 pub struct LookGpu {
     pub options: LookOptions,
     pub(crate) output_format: wgpu::TextureFormat,
@@ -521,6 +577,8 @@ pub struct LookGpu {
     lighting_bound: Mutex<LightingBindings>,
     /// `Look.lx` rows as the lighting features set them (row 0 x is the feature mask, written by `update`).
     lx: Mutex<[[f32; 4]; LX_LEN]>,
+    /// (`--rt-gi`) group 1 bindings 20-22, only with `ShaderFeatures::rt_gi` (None: the layout as before).
+    rt_gi_bound: Mutex<Option<RtGiBindings>>,
     /// Bytes this module allocated on the GPU (shadow map, lists, uniforms; the
     /// HDR target is counted when it exists).
     pub bytes: u64,
@@ -628,13 +686,18 @@ pub struct ShaderFeatures {
     /// The cinematic look (`--look cinematic`; `SF_CINEMATIC`): every shader line of the
     /// cinematic look plan sits behind it, as well as behind its runtime test.
     pub cinematic: bool,
+    /// The ray-traced diffuse light's read (`--rt-gi`, rt_gi.rs): spliced into
+    /// look_light.wgsl with rt_gi_use.wgsl, and group 1 bindings 20-22 added to
+    /// `look-bgl`. Not in `ALL` (the shaders as before): the source text, the
+    /// layout and the generated constants are unchanged without it.
+    pub rt_gi: bool,
 }
 
 impl ShaderFeatures {
     /// Every feature compiled in (the shaders as before stage P1).
-    pub const ALL: Self = Self { lx_bits: u32::MAX, grime: true, street_life: true, structures: true, tunnels: true, shop_light: true, facade_clutter: true, cinematic: true };
+    pub const ALL: Self = Self { lx_bits: u32::MAX, grime: true, street_life: true, structures: true, tunnels: true, shop_light: true, facade_clutter: true, cinematic: true, rt_gi: false };
     /// No feature compiled in (the default frame's pipelines).
-    pub const NONE: Self = Self { lx_bits: 0, grime: false, street_life: false, structures: false, tunnels: false, shop_light: false, facade_clutter: false, cinematic: false };
+    pub const NONE: Self = Self { lx_bits: 0, grime: false, street_life: false, structures: false, tunnels: false, shop_light: false, facade_clutter: false, cinematic: false, rt_gi: false };
 
     /// The features the look's options ask for, with the world's (`structures`,
     /// `tunnels`, `facade_clutter`: eo-app's `--structures`, `--tunnels`,
@@ -649,6 +712,7 @@ impl ShaderFeatures {
             shop_light: o.sky.shop_light > 0,
             facade_clutter,
             cinematic: o.look.is_cinematic(),
+            rt_gi: o.lighting.rt_gi,
         }
     }
 
@@ -686,6 +750,7 @@ impl ShaderFeatures {
             g.lit_fog = 0;
         }
         g.smooth_time &= lx(LX_BIT_SMOOTH_TIME);
+        g.rt_gi &= self.rt_gi;
         if !self.grime {
             l.grime = 0;
         }
@@ -761,7 +826,7 @@ pub fn city_shader_source_variant_probes(ambient: crate::ambient::ShaderLevels, 
         include_str!("draw.wgsl"),
         street_constants_wgsl(),
         look_common_source(),
-        include_str!("look_light.wgsl"),
+        crate::rt_gi::splice_look_light(include_str!("look_light.wgsl"), shader_features().rt_gi), // (`--rt-gi`) the hook, with the option only
         include_str!("surfaces_ao_use.wgsl"),
         include_str!("facade_age.wgsl"),             // facade
         crate::facade::facade_constants_wgsl()        // facade
@@ -778,6 +843,7 @@ pub fn city_shader_source_variant_probes(ambient: crate::ambient::ShaderLevels, 
         + "\n" + include_str!("street_life.wgsl") + &crate::street_life::wgsl() // street life (`--street-life`; every term behind it)
         + &crate::structures::wgsl() // the grade-separated roads' concrete (draw.wgsl kind 12)
         + &format!("\n// generated by look.rs city_shader_source_variant_probes\nconst FA_PROBE_SHADER: bool = {single_probe};\n") // the single probe's lookups (lighting)
+        + if shader_features().rt_gi { crate::rt_gi::USE_WGSL } else { "" } // (`--rt-gi`) group 1 bindings 20-22 and the read, with the option only
 }
 
 /// Group 1 bindings 12-18 (the lighting additions' resources). Every shader
@@ -1016,6 +1082,7 @@ impl LookGpu {
 
         // Group 1 of the city pipelines.
         let [l12, l13, l14, l15, l16, l17, l18, l19] = LightingBindings::layout_entries();
+        let rt_gi_on = shader_features().rt_gi;
         let main_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("look-bgl"),
             entries: &[
@@ -1045,9 +1112,13 @@ impl LookGpu {
                 l17,
                 l18,
                 l19, // (stage N2) the shop fronts
-            ],
+            ]
+            .into_iter()
+            .chain(rt_gi_on.then(RtGiBindings::layout_entries).into_iter().flatten()) // (`--rt-gi`) 20-22, with the option only
+            .collect::<Vec<_>>(),
         });
         let (lighting_stand_ins, stand_in_bytes) = LightingBindings::stand_ins(device);
+        let rt_gi_stand_ins = rt_gi_on.then(|| RtGiBindings::stand_ins(device));
         let ao_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("ao-linear"),
             mag_filter: wgpu::FilterMode::Linear,
@@ -1060,7 +1131,7 @@ impl LookGpu {
             device,
             crate::sky::SkyInit { look_buf: &look_buf, hdr_format: HDR_FORMAT, depth_format: crate::DEPTH_FORMAT, shadow_array: &shadow_array, cmp_sampler: &cmp_sampler },
         );
-        let main_bg = [0, 1].map(|_| Self::make_main_bg(device, &main_bgl, &look_buf, &shadow_array, &cmp_sampler, &ao_dummy.0, &ao_dummy.1, &ao_sampler, &sky, &sky.dummy_hist, &lighting_stand_ins));
+        let main_bg = [0, 1].map(|_| Self::make_main_bg(device, &main_bgl, &look_buf, &shadow_array, &cmp_sampler, &ao_dummy.0, &ao_dummy.1, &ao_sampler, &sky, &sky.dummy_hist, &lighting_stand_ins, rt_gi_stand_ins.as_ref()));
         // the occlusion + bounce compute.
         let ao_src = format!("{}\n{}", look_common_source(), include_str!("surfaces_ao.wgsl"));
         let ao_module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("surfaces_ao.wgsl"), source: wgpu::ShaderSource::Wgsl(ao_src.into()) });
@@ -1243,6 +1314,7 @@ impl LookGpu {
             lighting_bound: Mutex::new(lighting_stand_ins.clone()),
             lighting_stand_ins,
             lx: Mutex::new([[0.0; 4]; LX_LEN]),
+            rt_gi_bound: Mutex::new(rt_gi_stand_ins),
             options,
             output_format: init.output_format,
             object_count: init.object_count,
@@ -1313,8 +1385,10 @@ impl LookGpu {
         sky: &crate::sky::SkyGpu,     // sky
         prev: &wgpu::TextureView,     // the previous resolved frame
         lighting: &LightingBindings,  // bindings 12-18
+        rt_gi: Option<&RtGiBindings>, // (`--rt-gi`) bindings 20-22, with the option only
     ) -> wgpu::BindGroup {
         let [l12, l13, l14, l15, l16, l17, l18, l19] = lighting.entries();
+        let rt = rt_gi.map(|r| r.entries());
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("look-bg"),
             layout: bgl,
@@ -1341,7 +1415,10 @@ impl LookGpu {
                 l17,
                 l18,
                 l19, // (stage N2) the shop fronts
-            ],
+            ]
+            .into_iter()
+            .chain(rt.into_iter().flatten())
+            .collect::<Vec<_>>(),
         })
     }
 
@@ -1352,12 +1429,33 @@ impl LookGpu {
             None => (&self.ao_dummy.0, &self.ao_dummy.1),
         };
         let lighting = self.lighting_bound.lock().unwrap().clone();
+        let rt_gi = self.rt_gi_bound.lock().unwrap().clone();
         // main_bg[p] is bound while the resolve writes history p: it reads history 1 - p.
         let bg = |p: usize| {
             let prev = self.sky.history_view(1 - p).unwrap_or_else(|| self.sky.dummy_hist.clone());
-            Self::make_main_bg(&self.device, &self.main_bgl, &self.look_buf, &self.shadow_array, &self.cmp_sampler, a, z, &self.ao_sampler, &self.sky, &prev, &lighting)
+            Self::make_main_bg(&self.device, &self.main_bgl, &self.look_buf, &self.shadow_array, &self.cmp_sampler, a, z, &self.ao_sampler, &self.sky, &prev, &lighting, rt_gi.as_ref())
         };
         *self.main_bg.lock().unwrap() = [bg(0), bg(1)];
+    }
+
+    /// (`--rt-gi`) Bind the traced result, its depth and its view uniform at
+    /// group 1 bindings 20-22 and rebuild both main bind groups (once, when the
+    /// pass makes its targets). Nothing without the option compiled in.
+    pub fn set_rt_gi(&self, gi: &wgpu::TextureView, z: &wgpu::TextureView, view: &wgpu::Buffer) {
+        {
+            let mut b = self.rt_gi_bound.lock().unwrap();
+            if b.is_none() {
+                return;
+            }
+            *b = Some(RtGiBindings { gi: gi.clone(), z: z.clone(), view: view.clone() });
+        }
+        crate::hitch::mark(crate::hitch::Mark::BindGroupCreated, 2);
+        self.rebuild_main_bg();
+    }
+
+    /// The camera of the last `update` (world view-projection, eye, forward, vertical fov in radians).
+    pub fn current_camera(&self) -> Option<(glam::Mat4, glam::Vec3, glam::Vec3, f32)> {
+        self.state.lock().unwrap().cur_cam
     }
 
     /// The stand-ins group 1 bindings 12-18 hold while no feature binds its own.

@@ -209,6 +209,11 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
             _ => {}
         }
     }
+    // (`--rt-gi`) only on a device with ray queries; otherwise off, the frame as before, and one line saying so.
+    features.rt_gi = args.look.lighting.rt_gi && ctx.ray_query;
+    if args.look.lighting.rt_gi && !ctx.ray_query {
+        eprintln!("rt-gi: off: {} ({:?}) offers no inline ray queries here (Metal with EXPERIMENTAL_RAY_QUERY only); the rig's ambient light as before", ctx.info.name, ctx.info.backend);
+    }
     eo_render::look::set_shader_features(features);
     let mut r = Renderer::from_init(
         ctx,
@@ -749,6 +754,10 @@ impl ModelRuntime {
                         self.kit_means = Some(crate::cc0_runtime::kit_means(&maps)); // cc0
                         if let Some(h) = &mut self.hlod {
                             h.set_layer_means(eo_render::hlod_bake::layer_means(&maps)); // the far layer's material colours
+                        }
+                        if let Some(r) = renderer.rt_gi() {
+                            // (`--rt-gi`) the traced hits' kit albedo: each layer's mean.
+                            r.set_layer_means(0, &eo_render::hlod_bake::layer_means(&maps).iter().map(|m| [m[0], m[1], m[2], 1.0]).collect::<Vec<_>>());
                         }
                         let mut bulk = vec![];
                         for (layer, chain) in maps.layers.into_iter().enumerate() {
