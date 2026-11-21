@@ -5,6 +5,19 @@ const FINISH_RAIL: u32 = 1u;
 const FINISH_BOWL: u32 = 2u;
 const FINISH_BOARDS: u32 = 3u;
 const FINISH_LINEN: u32 = 5u;
+const KITCHEN_SHADE: u32 = 6u;
+const KITCHEN_REFLECTOR: u32 = 7u;
+const KITCHEN_TILE: u32 = 8u;
+const KITCHEN_WORKTOP: u32 = 10u;
+const KITCHEN_FITTING: u32 = 11u;
+const KITCHEN_SHARED: u32 = 12u;
+const KITCHEN_BOARD: u32 = 13u;
+const KITCHEN_GROUT: u32 = 14u;
+
+fn kitchen_uv(point: vec3<f32>) -> vec2<f32> {
+    let p=vec4<f32>(point,1.);
+    return vec2<f32>(dot(look.kitchen_frame[0],p),dot(look.kitchen_frame[1],p));
+}
 
 fn fitted_probe_uv(r: vec3<f32>) -> vec2<f32> {
     let depth = normalize((vec4<f32>(0.,0.,1.,0.)*look.enclosure_frame).xyz);
@@ -36,6 +49,18 @@ fn fitted_region(point: vec3<f32>, group: u32) -> FinishRegion {
         return FinishRegion(vec4<u32>(start,start+1u,start,start+1u),vec2<f32>(f,0.));
     }
     if (group == FINISH_BOWL) { return FinishRegion(vec4<u32>(3u),vec2<f32>(0.)); }
+    if (group >= KITCHEN_SHADE) {
+        if (group == KITCHEN_SHADE || group == KITCHEN_FITTING || group == KITCHEN_REFLECTOR) {
+            let column=select(0u,1u,group==KITCHEN_REFLECTOR);
+            return FinishRegion(vec4<u32>(column),vec2<f32>(0.));
+        }
+        // Three longitudinal stations at the wall, and three at the front edge.
+        let st=kitchen_uv(point);
+        let along=clamp((st.x-.125)/.375,0.,2.);
+        let i=min(u32(along),1u);
+        return FinishRegion(vec4<u32>(2u+i,3u+i,5u+i,6u+i),
+                            vec2<f32>(along-f32(i),clamp(1.-st.y,0.,1.)));
+    }
     let rect=look.fitted_finish[0];
     let relative=(point.xz-rect.xy)/(rect.zw-rect.xy);
     return FinishRegion(vec4<u32>(4u,5u,6u,7u),clamp((relative-.2)/.6,vec2<f32>(0.),vec2<f32>(1.)));
@@ -82,7 +107,22 @@ fn fitted_source(source: u32, region: FinishRegion, uv: vec2<f32>, coat_uv: vec2
     }
     sample.base=fitted_lobe(uv,region,source,layer,rough);
     if (m.emissive.w>0.) { sample.coat=fitted_lobe(coat_uv,region,source,layer,m.rough_flatten); }
-    if (chart.x>=0.) { sample.diffuse=fitted_chart(chart,source,layer,false); }
+    if (chart.x>=0.) {
+        let group=u32(m.thin_absorption);
+        if (group==KITCHEN_BOARD || group==KITCHEN_GROUT) {
+            let at=(chart+vec2<f32>(64.*f32(source),448.))/512.;
+            if (group==KITCHEN_BOARD) {
+                sample.diffuse=fitted_decode(textureSampleLevel(kit_normal,kit_sampler,at,layer,0.).rgb);
+            } else {
+                sample.diffuse=fitted_decode(textureSampleLevel(kit_orm,kit_sampler,at,layer,0.).rgb);
+            }
+        } else if (group>=KITCHEN_SHADE) {
+            let at=chart+vec2<f32>(0.,64.*f32(source));
+            sample.diffuse=fitted_decode(textureSampleLevel(kit_albedo,kit_sampler,at/512.,layer,0.).rgb);
+        } else {
+            sample.diffuse=fitted_chart(chart,source,layer,false);
+        }
+    }
     return sample;
 }
 fn add_finish(a: FinishSample,b: FinishSample,weight: vec3<f32>) -> FinishSample {
@@ -101,6 +141,26 @@ fn fitted_light(point: vec3<f32>, texcoord: vec2<f32>, world: vec3<f32>, v: vec3
     if (group == FINISH_BOARDS && ng.y>.001) {
         let rect=look.fitted_finish[0];
         chart=vec2<f32>(129.5,1.5)+125.*clamp((point.xz-rect.xy)/(rect.zw-rect.xy),vec2<f32>(0.),vec2<f32>(1.));
+    }
+    if (group>=KITCHEN_SHADE) {
+        let st=kitchen_uv(point);
+        let heights=look.kitchen_frame[2];
+        if (group==KITCHEN_REFLECTOR || (group==KITCHEN_SHADE && point.y<=heights.w)) {
+            chart=vec2<f32>(1.5)+vec2<f32>(125.,61.)*clamp(texcoord,vec2<f32>(0.),vec2<f32>(1.));
+        } else if (group==KITCHEN_BOARD) {
+            chart=vec2<f32>(1.5)+61.*clamp(texcoord,vec2<f32>(0.),vec2<f32>(1.));
+        } else if (group==KITCHEN_GROUT) {
+            let h=clamp((point.y-heights.x)/(heights.y-heights.x),0.,1.);
+            let course=fract(7.*h);
+            let row=select(0.,32.,min(course,1.-course)<.045);
+            chart=vec2<f32>(1.5+61.*clamp(st.x,0.,1.),row+1.5+29.*(1.-h));
+        } else if (group==KITCHEN_TILE) {
+            let h=clamp((point.y-heights.x)/(heights.y-heights.x),0.,1.);
+            chart=vec2<f32>(129.5,1.5)+vec2<f32>(253.*clamp(st.x,0.,1.),61.*(1.-h));
+        } else if (group==KITCHEN_WORKTOP && ng.y>.90 && abs(point.y-heights.z)<.013
+                   && all(st>=vec2<f32>(0.)) && all(st<=vec2<f32>(1.))) {
+            chart=vec2<f32>(385.5,1.5)+vec2<f32>(125.*st.x,61.*(1.-st.y));
+        }
     }
     let sun=look.key_dir.xyz;
     let cloud=sky_cloud_transmittance(world);
@@ -123,7 +183,9 @@ fn fitted_light(point: vec3<f32>, texcoord: vec2<f32>, world: vec3<f32>, v: vec3
     }
     room_radiance=light.base;
     fitted_coat_light=light.coat;
-    if (chart.x>=0.) {
+    if (group>=KITCHEN_SHADE && chart.x>=0.) {
+        room_diffuse=light.diffuse;
+    } else if (chart.x>=0.) {
         room_diffuse=light.diffuse;
         let to_lamp=normalize(look.dining_lamp.xyz-world);
         let direct=fitted_chart(chart,7u,i32(m.params.w),group == FINISH_LINEN);

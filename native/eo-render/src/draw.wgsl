@@ -1561,8 +1561,10 @@ fn shade(in: VOut) -> vec4<f32> {
             let local = (look.enclosure_frame*vec4<f32>(in.world+.022*n,1.)).xyz;
             room_enclosure = 1.;
             measured_room = true;
-            if (m.thin_absorption > 0.) {
-                let point = (look.enclosure_frame*vec4<f32>(in.world,1.)).xyz;
+            let point = (look.enclosure_frame*vec4<f32>(in.world,1.)).xyz;
+            let local_finish = u32(m.thin_absorption) != KITCHEN_SHARED ||
+                               (all(point>=look.kitchen_frame[3].xyz) && all(point<=look.kitchen_frame[4].xyz));
+            if (m.thin_absorption > 0. && local_finish) {
                 s.env=ENV_LOCAL_PROBE;
                 fitted_light(point,in.ft,in.world,v,n,s,m);
             } else {

@@ -341,6 +341,7 @@ struct State {
     /// the forward the meter last metered (a turn of more than ~30 deg snaps the adaptation, as a cut does).
     meter_fwd: Option<glam::Vec3>,
     interior_meter: Option<crate::interior_meter::InteriorMeter>,
+    frame_bloom: bool,
     /// the aerosol density the transmittance and multiple-scattering
     /// tables were built for (they depend on the medium only; rebuilt on a change).
     atmo_built: Option<f32>,
@@ -858,6 +859,7 @@ impl SkyGpu {
                 adapt: Default::default(),
                 meter_fwd: None,
                 interior_meter: None,
+                frame_bloom: false,
                 atmo_built: None,
                 atmo_haze: 0.0,
                 hist_look: None,
@@ -1049,7 +1051,7 @@ impl SkyGpu {
     /// The weather, the decks and the night for this frame, and the uniform.
     /// `f` is the look frame (already built for this weather), `cam` the
     /// unjittered camera.
-    pub(crate) fn update(&self, queue: &wgpu::Queue, cam: &Camera, f: &eo_look::LookFrame, terms: &eo_sky::SkyTerms, out_size: (u32, u32), depth_ok: bool) -> f64 {
+    pub(crate) fn update(&self, queue: &wgpu::Queue, cam: &Camera, f: &eo_look::LookFrame, terms: &eo_sky::SkyTerms, out_size: (u32, u32), depth_ok: bool, source_lens: bool) -> f64 {
         if !self.sheet_ready.swap(true, Ordering::Relaxed) {
             let sheet = eo_sky::clouds::bake_sheet(0x5eed_c10d);
             for (mip, level) in eo_sky::clouds::sheet_mips(&sheet).iter().enumerate() {
@@ -1228,6 +1230,13 @@ impl SkyGpu {
         let live_near = 0.1 + 0.9 * (rate / 25.0).sqrt();
         let live_far = ((rate - 1.5) / 18.0).clamp(0.0, 1.0);
         let threshold = 2.101 / exposure.max(1e-3);
+        // The fitted source camera has no glare compositor. Its response is
+        // calibrated independently of the city's exterior lens.
+        let lens_weight = if source_lens {
+            s.interior_meter.as_ref().map_or(0., |m| m.ground_floor_lens(cam.eye))
+        } else { 0. };
+        let glare = if o.bloom { 1. - lens_weight } else { 0. };
+        s.frame_bloom = glare > 0.;
         let (strength, radius) = (0.26, 0.22);
         let mw = [1.0, 0.8, 0.6, 0.4, 0.2].map(|fv: f64| ((fv + (1.2 - fv - fv) * radius) * strength) as f32);
         let lamp_k = terms.lamp_units_per_lux;
@@ -1268,7 +1277,7 @@ impl SkyGpu {
             night: [lamps_on as f32, terms.dusk as f32, terms.nightness as f32, veh as f32],
             moon: v4(moon.dir, if o.moon_stars { terms.moon_disc } else { 0.0 }),
             stars: [if o.moon_stars { terms.star_level as f32 } else { 0.0 }, (f.hour * 15.041 * std::f64::consts::PI / 180.0) as f32, moon.illuminated as f32, if moon.waxing { 1.0 } else { 0.0 }],
-            bloom: [threshold as f32, 0.55, 1.0, if o.bloom { 1.0 } else { 0.0 }],
+            bloom: [threshold as f32, 0.55, 1.0, glare],
             bloom_w: [mw[0], mw[1], mw[2], mw[3]],
             bloom_w2: [mw[4], 4.0, lamp_k as f32, w.profile.lamp_haze as f32],
             flags: [o.bits(), s.frame, (o.ssr && s.history_valid && !cut) as u32, volume_ok as u32],
@@ -1535,9 +1544,9 @@ impl SkyGpu {
                 });
             }
         };
-        let (o, parity, history_valid) = {
+        let (o, parity, history_valid, frame_bloom) = {
             let s = self.state.lock().unwrap();
-            (s.opts, s.parity, s.history_valid)
+            (s.opts, s.parity, s.history_valid, s.frame_bloom)
         };
         let depth_ok = depth_now;
         if !o.any_post() || !depth_ok {
@@ -1724,7 +1733,7 @@ impl SkyGpu {
                 label: Some("sky-bloom"),
                 timestamp_writes: tw(Q_SKY_BLOOM).map(|(q, b)| wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b), end_of_pass_write_index: Some(b + 1) }),
             });
-            if o.bloom {
+            if frame_bloom {
                 let bgs = &t.bloom_bgs[parity];
                 let sizes: Vec<(u32, u32)> = (0..BLOOM_LEVELS).map(|i| ((t.size.0 >> (i + 1)).max(1), (t.size.1 >> (i + 1)).max(1))).collect();
                 pass.set_pipeline(&self.bloom_pipes[0]);

@@ -78,6 +78,19 @@ impl InteriorMeter {
         self.to_local
     }
 
+    /// Weight of the fitted ground-floor camera inside its registered envelope.
+    /// Blend through the entry and stair landing over one quarter metre.
+    pub(crate) fn ground_floor_lens(&self, eye: Vec3) -> f32 {
+        let p = self.to_local.transform_point3(eye);
+        let ceiling = self.max.y.min(self.storey);
+        let high = Vec3::new(self.max.x, ceiling, self.max.z);
+        let distance = (p - self.min).min(high - p);
+        let rows = self.to_local.transpose();
+        let m = Vec3::new(rows.x_axis.truncate().length(), rows.y_axis.truncate().length(), rows.z_axis.truncate().length());
+        let t = (4. * (distance / m).min_element()).clamp(0., 1.);
+        t * t * (3. - 2. * t)
+    }
+
     /// Locate the first face of the room envelope on a metering ray. Faces are
     /// returned in world space, including the surveyed parcel's orientation.
     fn facade_normal(&self, eye: Vec3, direction: Vec3) -> Option<Vec3> {
@@ -245,6 +258,17 @@ impl InteriorMeter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ground_floor_lens_blends_at_the_door_and_releases_the_stairs() {
+        let world = Mat4::from_rotation_y(0.4) * Mat4::from_scale(Vec3::new(1.3, 1., 1.4));
+        let meter = InteriorMeter::new(world, Vec3::ZERO, Vec3::new(7., 9., 13.), 3., std::iter::empty());
+        let lens = |p| meter.ground_floor_lens(world.transform_point3(p));
+        assert_eq!(lens(Vec3::new(2.,1.6,-1.)),0.);
+        assert!((lens(Vec3::new(2.,1.6,0.125 / 1.4))-0.5).abs() < 0.0001);
+        assert_eq!(lens(Vec3::new(2.,1.6,4.)),1.);
+        assert_eq!(lens(Vec3::new(2.,4.6,4.)),0.);
+    }
 
     #[test]
     fn metering_accounts_for_glazing_on_the_observers_floor() {

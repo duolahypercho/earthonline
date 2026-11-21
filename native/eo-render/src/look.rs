@@ -105,6 +105,7 @@ struct LookUniform {
     table_light: [[f32; 4]; 3],
     oak_finish: [[f32; 4]; 3],
     fitted_finish: [[f32; 4]; 2],
+    kitchen_frame: [[f32; 4]; 5],
 }
 
 #[repr(C)]
@@ -209,6 +210,7 @@ pub struct LookGpu {
     pub table_light: [[f32; 4]; 3],
     pub oak_finish: [[f32; 4]; 3],
     pub fitted_finish: [[f32; 4]; 2],
+    pub kitchen_frame: [[f32; 4]; 5],
     pub options: LookOptions,
     pub(crate) output_format: wgpu::TextureFormat,
     object_count: u32,
@@ -706,6 +708,7 @@ impl LookGpu {
             table_light: [[0.;4];3],
             oak_finish: [[0.;4];3],
             fitted_finish: [[0.;4];2],
+            kitchen_frame: [[0.;4];5],
             output_format: init.output_format,
             object_count: init.object_count,
             compact: init.compact,
@@ -1077,7 +1080,7 @@ impl LookGpu {
                 let _span = crate::hitch::span(crate::hitch::Phase::SkyUpdate);
                 let sample = self.sky.jitter();
                 let unjittered = Camera { jitter: [cam.jitter[0] - sample[0], cam.jitter[1] - sample[1]], ..*cam };
-                self.sky.update(queue, &unjittered, &f, &t, out_size, self.sky_depth_ok.load(std::sync::atomic::Ordering::Relaxed))
+                self.sky.update(queue, &unjittered, &f, &t, out_size, self.sky_depth_ok.load(std::sync::atomic::Ordering::Relaxed), self.options.blender_camera && self.kitchen_frame[2][1] > 0.)
             }
             None => f.exposure,
         };
@@ -1191,6 +1194,7 @@ impl LookGpu {
             table_light: self.table_light,
             oak_finish: self.oak_finish,
             fitted_finish: self.fitted_finish,
+            kitchen_frame: self.kitchen_frame,
         };
         queue.write_buffer(&self.look_buf, 0, bytemuck::bytes_of(&u));
         let mut planes = [[0f32; 4]; 18];
