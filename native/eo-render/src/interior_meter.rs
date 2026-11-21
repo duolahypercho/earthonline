@@ -10,6 +10,14 @@ pub struct InteriorMeter {
     max: Vec3,
     storey: f32,
     patches: Vec<Patch>,
+    room_response: Option<RoomResponse>,
+}
+
+struct RoomResponse {
+    level: i32,
+    sky_return: f32,
+    max_gain: f32,
+    exposed_beam: f32,
 }
 
 struct Patch {
@@ -57,6 +65,7 @@ impl InteriorMeter {
             })
             .collect();
         Self {
+            room_response: None,
             to_local,
             min,
             max,
@@ -116,7 +125,14 @@ impl InteriorMeter {
         let delta = eye - eye.clamp(self.min, self.max);
         let range = self.to_local.inverse().transform_vector3(delta).length();
         if range <= 0.001 {
-            return self.daylight_gain(cam);
+            // Both renderers measure the same horizontal white card. Convert the
+            // source camera latitude into the live outdoor meter's exposure units.
+            let beam = key_on_ground(f) * mean_beam(weather);
+            let daylight = (beam as f32).clamp(0.,1.);
+            let exposure_ratio = self.room_response.as_ref().map_or(1., |r| {
+                (r.exposed_beam as f64 / (beam * f.exposure * sky_meter).max(1e-5)).min(1.) as f32
+            });
+            return self.enclosed_gain(cam, daylight, exposure_ratio);
         }
         // Outside the parcel approach, nearer buildings may obscure this envelope.
         if range >= 35. || f.key_dir[1] <= 0. {
@@ -155,7 +171,16 @@ impl InteriorMeter {
         2.0_f64.powf(weight * stops)
     }
 
+    /// The calibrated source-camera latitude limits exposure when little glass is in frame.
+    pub fn set_room_response(&mut self, level: i32, sky_return: f32, exposure_range: f32, exposed_beam: f32) {
+        self.room_response = Some(RoomResponse { level, sky_return, max_gain: exposure_range.exp2(), exposed_beam });
+    }
+
     pub fn daylight_gain(&self, cam: &Camera) -> f64 {
+        self.enclosed_gain(cam, 1., 1.)
+    }
+
+    fn enclosed_gain(&self, cam: &Camera, daylight: f32, exposure_ratio: f32) -> f64 {
         let eye = self.to_local.transform_point3(cam.eye);
         let inside = (eye - self.min).min(self.max - eye).min_element();
         if inside <= 0. {
@@ -186,7 +211,14 @@ impl InteriorMeter {
         let window = (visible_angle / frame_angle).clamp(0., 1.);
         // Log-average metering of an enclosed diffuse field and bright glazing.
         // Keep the highlights' latitude within a stop and a half.
-        let gain = 2.0_f32.powf(1.5 * (1. - window.sqrt()));
+        let mut gain = 2.0_f32.powf(1.5 * (1. - window.sqrt()));
+        if let Some(r) = &self.room_response {
+            // Weighted reflected light from the visible glazing and the room.
+            let measured = ((window + (1.-window)*r.sky_return).recip().min(r.max_gain) * exposure_ratio).max(1.);
+            let y = eye.y - r.level as f32 * self.storey;
+            let blend = (y.min(self.storey-y) / 0.35).clamp(0.,1.) * daylight;
+            gain += blend * (measured-gain);
+        }
         let transition = (inside / 0.45).clamp(0., 1.);
         (1. + (gain - 1.) * transition) as f64
     }
@@ -209,7 +241,7 @@ mod tests {
             [[a, b, c], [a, c, d]]
         });
         let to_world = Mat4::from_rotation_y(0.31);
-        let meter = InteriorMeter::new(
+        let mut meter = InteriorMeter::new(
             to_world,
             Vec3::new(-2., 0., 0.),
             Vec3::new(2., 6., 4.),
@@ -242,5 +274,10 @@ mod tests {
             meter.daylight_gain(&camera(Vec3::new(0., 1.5, -1.), 0.)),
             1.
         );
+        meter.set_room_response(1, 0.01, 2.6, 2.4);
+        let upstairs = camera(eye + Vec3::Y * 3., std::f32::consts::PI-0.31);
+        assert!((meter.daylight_gain(&upstairs) - 2.6_f64.exp2()).abs() < 1e-5);
+        assert!((meter.enclosed_gain(&upstairs, 0., 1.) - dark_wall).abs() < 1e-5);
+        assert!((meter.daylight_gain(&camera(eye, -0.31)) - bright_window).abs() < 1e-5);
     }
 }

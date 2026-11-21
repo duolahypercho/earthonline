@@ -57,6 +57,8 @@ const THIN_FIBRE_BIT: u32 = 262144u;
 const QUILT_FIBRE_BIT: u32 = 524288u;
 const TABLE_BOARD_BIT: u32 = 1048576u;
 const ENTRY_BRASS_BIT: u32 = 2097152u;
+const CUT_COTTON_BIT: u32 = 4194304u;
+const BEDROOM_LIGHT_BIT: u32 = 8388608u;
 const ENCLOSURE_TRANSFER_BIT: u32 = 131072u;
 const WAXED_BOARD_BIT: u32 = 32768u;
 const COURTYARD_BOUNCE_BIT: u32 = 65536u;
@@ -134,7 +136,9 @@ fn vs(
     if (kind == 4u && out.aux.y > 0.49) {
         // The house builder stores window and fixture transfer in R and G.
         out.color = color.rgb;
-        if ((o.kind & (RUG_SCAN_BIT | TABLE_BOARD_BIT)) != 0u) {
+        if ((o.kind & CUT_COTTON_BIT) != 0u) {
+            out.ft = vec2<f32>(color.b, color.a);
+        } else if ((o.kind & (RUG_SCAN_BIT | TABLE_BOARD_BIT)) != 0u) {
             out.ft = clamp(vec2<f32>(color.b, color.a), vec2<f32>(0.001), vec2<f32>(0.999));
         } else if ((o.kind & DOOR_SCAN_BIT) != 0u) {
             out.ft = vec2<f32>(color.a, color.b * 3.1);
@@ -799,6 +803,59 @@ fn floor_daylight(world: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
         * cos_receiver * (vec3<f32>(fresnel) + grain);
 }
 
+// Each row of the atlas is a hemisphere integral under one incident source.
+// X/Y interpolate in hardware. The two Z slices remain separate to avoid
+// filtering between adjacent tiles or between two lighting conditions.
+fn bedroom_axis(grid: vec3<f32>, axis: u32, source: u32, layer: i32) -> vec3<f32> {
+    let z = floor(grid.z);
+    let row = 6u * (6u * source + axis);
+    let texel = vec2<f32>(grid.x + 10. * z, grid.y + f32(row)) + .5;
+    let a = textureSampleLevel(kit_orm, kit_sampler, texel / 512., layer, 0.).rgb;
+    let b = textureSampleLevel(kit_orm, kit_sampler,
+        (texel + vec2<f32>(10. * min(1.,18.-z),0.)) / 512., layer, 0.).rgb;
+    return mix(a * a, b * b, fract(grid.z));
+}
+
+fn bedroom_basis(grid: vec3<f32>, n: vec3<f32>, source: u32, layer: i32) -> vec3<f32> {
+    let direction = vec3<u32>(select(1u,0u,n.x>=0.), select(3u,2u,n.y>=0.), select(5u,4u,n.z>=0.));
+    let w = n*n;
+    return w.x * bedroom_axis(grid,direction.x,source,layer)
+         + w.y * bedroom_axis(grid,direction.y,source,layer)
+         + w.z * bedroom_axis(grid,direction.z,source,layer);
+}
+
+fn bedroom_diffuse(point: vec3<f32>, world_normal: vec3<f32>, world: vec3<f32>) -> vec3<f32> {
+    // Grid dimensions, sample centres and source order are recorded by the baker.
+    let limits = vec3<f32>(.22, 10./3.+.15, .23);
+    let extent = vec3<f32>(6.78, 20./3.-.17, 12.77) - limits;
+    let grid = clamp((point-limits)/extent, vec3<f32>(0.), vec3<f32>(1.)) * vec3<f32>(9.,5.,18.);
+    let x = normalize((vec4<f32>(1.,0.,0.,0.) * look.enclosure_frame).xyz);
+    let z = vec3<f32>(-x.z,0.,x.x);
+    let n = vec3<f32>(dot(world_normal,x),world_normal.y,dot(world_normal,z));
+    let layer = i32(textureNumLayers(kit_orm))-3;
+    // A unit sky gives unit outgoing radiance on an unobstructed white receiver.
+    // The city's SH already includes the streets' occlusion. Recover the open
+    // sky measured by eo-look before applying the room's own window transfer.
+    let sky_tint = max(lk_sh(vec3<f32>(0.,1.,0.)),vec3<f32>(.00001));
+    let sky = sky_tint * (look.hemi_sky.w / lk_luma(sky_tint));
+    let cloud = sky_cloud_transmittance(world);
+    let clear = cloud * smoothstep(0.,.35,look.key_dir.y) * (1.-skyu.night.z);
+    let diffuse_sky = mix(bedroom_basis(grid,n,0u,layer) * sky,
+                          bedroom_basis(grid,n,5u,layer) * look.key.rgb, clear);
+    var light = diffuse_sky + 2. * bedroom_basis(grid,n,6u,layer);
+    let sun = look.key_dir.xyz;
+    let along = dot(sun,z);
+    if (sun.y > 0. && abs(along) > .01) {
+        let elevation = asin(clamp(sun.y,0.,1.));
+        let t = clamp((elevation-radians(25.))/radians(32.),0.,1.);
+        let low = select(1u,3u,along>0.);
+        let solar = mix(bedroom_basis(grid,n,low,layer),bedroom_basis(grid,n,low+1u,layer),t);
+        let projected = abs(along)/max(.01,cos(clamp(elevation,radians(25.),radians(57.))));
+        light += solar * look.key.rgb * projected * cloud;
+    }
+    return light;
+}
+
 fn shade(in: VOut) -> vec4<f32> {
     var m = materials[in.material];
     let ft_du = vec2<f32>(dpdx(in.ft.x), dpdy(in.ft.x));
@@ -1010,7 +1067,13 @@ fn shade(in: VOut) -> vec4<f32> {
             s.albedo *= mix(vec3<f32>(1.0), vec3<f32>(0.79, 0.75, 0.70), exposure);
         }
     }
-    let local_scan = (objects[in.object].kind & (DOOR_SCAN_BIT | RUG_SCAN_BIT)) != 0u;
+    let cut_cotton = (objects[in.object].kind & CUT_COTTON_BIT) != 0u;
+    let local_scan = cut_cotton || (objects[in.object].kind & (DOOR_SCAN_BIT | RUG_SCAN_BIT)) != 0u;
+    var bedroom_point = vec3<f32>(0.);
+    if ((objects[in.object].kind & BEDROOM_LIGHT_BIT) != 0u && in.aux.z > .5) {
+        bedroom_point = (look.enclosure_frame * vec4<f32>(in.world + .025*n,1.)).xyz;
+        measured_room = bedroom_point.y > 10./3. && bedroom_point.y < 20./3.;
+    }
     let table_board = (objects[in.object].kind & TABLE_BOARD_BIT) != 0u;
     let floor_scan = table_board || local_scan || (objects[in.object].kind & FLOOR_SCAN_BIT) != 0u;
     if (floor_scan && (local_scan || table_board || abs(n.y) > 0.7)) {
@@ -1039,7 +1102,17 @@ fn shade(in: VOut) -> vec4<f32> {
             let relief = select(select(1.0, m.params.z, local_scan), 0.28, table_board);
             s.n = normalize(n * bump.z + relief * (along * bump.x - across * bump.y));
         }
+        if (cut_cotton) {
+            // Specular IOR Level .18 in the source cotton material.
+            dielectric_scale = .36;
+        }
         if (waxed) {
+            if (measured_room) {
+                // The oiled upper boards have their own stain and roughness in Blender.
+                s.albedo *= vec3<f32>(.70,.48,.32);
+                s.rough = clamp(.75 * s.rough + .27, .03, 1.);
+                dielectric_scale = .48;
+            }
             s.env = ENV_INTERIOR_FLOOR;
             room_radiance = board_reflection(in.ft,scan_dx,scan_dy,dpx,dpy,
                 reflect(-v,s.n),s.rough,in.color.r*in.color.r,in.color.g*in.color.g,0.);
@@ -1098,12 +1171,18 @@ fn shade(in: VOut) -> vec4<f32> {
         // the outdoor field by the room's sky visibility instead of adding it twice.
         room_enclosure = in.aux.z;
         room_daylight = transfer.x;
-        if (in.aux.z > .5) {
+        if (in.aux.z > .5 && !measured_room) {
             rm_emit += s.albedo * (1.-s.metal) * floor_daylight(in.world, s.n) / PI;
         }
         let window = 0.76 * transfer.x * (look.hemi_sky.rgb + look.key.rgb * max(look.key_dir.y, 0.0));
         let pendant = transfer.y * vec3<f32>(1.55, 1.05, 0.56);
-        rm_emit += s.albedo * (1.0 - s.metal) * (window + pendant);
+        if (measured_room) {
+            // Direct sunlight still comes from the current cascaded shadow map.
+            room_diffuse = bedroom_diffuse(bedroom_point, s.n, in.world);
+            rm_emit += s.albedo * (1.0 - s.metal) * pendant;
+        } else {
+            rm_emit += s.albedo * (1.0 - s.metal) * (window + pendant);
+        }
     }
     if ((objects[in.object].kind & THIN_FIBRE_BIT) != 0u) {
         // A woven shade transmits diffuse skylight as well as direct light.
@@ -1120,7 +1199,8 @@ fn shade(in: VOut) -> vec4<f32> {
         s.rough = max(s.rough, 0.87);
     }
     if ((objects[in.object].kind & QUILT_FIBRE_BIT) != 0u) {
-        s.rough = max(0.90, s.rough);
+        // The cut cotton already carries the roughness of the source material.
+        if (!cut_cotton) { s.rough = max(0.90, s.rough); }
         s.metal = 0.;
     }
     // weathering (Blender buildings) and archetype ageing (kit buildings).

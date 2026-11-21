@@ -69,6 +69,7 @@ fn base_args() -> Args {
         house_furniture: false,
         house_photo: false,
         house_photo_lod: false,
+        house_blender_bedroom: false,
         house_glazing: true,
         beaver_house: false,
         bench: false,
@@ -138,6 +139,15 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
+            "--house-blender-bedroom" => {
+                a.beaver_house = true;
+                a.house_finishes = true;
+                a.house_patina = true;
+                a.house_furniture = true;
+                a.house_photo = true;
+                a.house_blender_bedroom = true;
+            }
+            "--no-house-blender-bedroom" => a.house_blender_bedroom = false,
             "--house-photo-lod" => a.house_photo_lod = true,
             "--no-house-photo-lod" => a.house_photo_lod = false,
             "--no-house-glazing" => a.house_glazing = false,
@@ -981,6 +991,28 @@ mod house_tests {
     #[test]
     fn photo_terrace_keeps_the_door_bed_and_stairs_reachable() {
         check_beaver_walk(true, true, true, true);
+    }
+
+    #[test]
+    fn blender_bedroom_reads_its_cut_pattern_and_directional_light() {
+        use eo_render::scene::{BEDROOM_LIGHT_BIT, CUT_COTTON_BIT};
+        let (args, _) = parse(&["--house-blender-bedroom".to_owned()]).unwrap();
+        let mut args = args;
+        args.kit = false;
+        args.models = false;
+        args.landmarks = false;
+        let world = load_world(&args).unwrap();
+        let cotton = world.scene.objects.iter().find(|p| p.kind & CUT_COTTON_BIT != 0)
+            .expect("expected the cut cotton surface");
+        assert_ne!(cotton.kind & BEDROOM_LIGHT_BIT, 0);
+        let start = cotton.first_index as usize;
+        let coords: std::collections::BTreeSet<_> = world.scene.indices[start..start+cotton.index_count as usize]
+            .iter().map(|&i| world.scene.vertices[(cotton.base_vertex as i64+i64::from(i)) as usize].color >> 16)
+            .collect();
+        assert!(coords.len() >= 8_000, "the cut coordinates must distinguish points across the cloth");
+        assert!(coords.contains(&0) && coords.contains(&0xffff));
+        let (off, _) = parse(&["--house-blender-bedroom".to_owned(), "--no-house-blender-bedroom".to_owned()]).unwrap();
+        assert!(off.house_photo && !off.house_blender_bedroom);
     }
 
     fn check_beaver_walk(finishes: bool, patina: bool, furniture: bool, photo: bool) {

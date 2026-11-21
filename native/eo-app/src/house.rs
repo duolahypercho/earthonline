@@ -82,7 +82,17 @@ struct ProbeManifest {
     probes: [ProbeVolume; 2],
 }
 
+#[derive(Deserialize)]
+struct RoomLight {
+    #[serde(flatten)]
+    asset: AssetRef,
+    mean_sky_return: f32,
+    exposure_range_ev: f32,
+    exterior_exposed_beam: f32,
+}
+
 pub struct Finishes {
+    room_light: Option<RoomLight>,
     glazing: bool,
     furniture: bool,
     pub scans: Vec<Scan>,
@@ -95,13 +105,14 @@ pub struct Finishes {
 }
 
 impl Finishes {
-    pub fn load(root: &Path, patina: bool, furniture: bool, photo: bool, glazing: bool) -> Result<Self> {
+    pub fn load(root: &Path, patina: bool, furniture: bool, photo: bool, glazing: bool, blender_bedroom: bool) -> Result<Self> {
         let directory = if patina {
             root.join(FINISH_DIR).join("patina")
         } else {
             root.join(FINISH_DIR)
         };
         let photo_dir = directory.join("furniture/photo");
+        let blender_bedroom = blender_bedroom && photo && furniture && patina;
         let mut scans = if patina {
             surfaces::NAMES
                 .iter()
@@ -117,12 +128,28 @@ impl Finishes {
         } else {
             vec![]
         };
+        let room_light = if blender_bedroom {
+            let light: RoomLight = serde_json::from_slice(&std::fs::read(
+                photo_dir.join("bedroom-daylight.provenance.json"),
+            )?)?;
+            ensure!((0.0..1.0).contains(&light.mean_sky_return)
+                && (0.0..8.0).contains(&light.exposure_range_ev) && light.exterior_exposed_beam > 0., "invalid bedroom daylight calibration");
+            Some(light)
+        } else {
+            None
+        };
         let street_reflections = if patina {
             let panorama: AssetRef = serde_json::from_slice(&std::fs::read(
                 if photo && glazing { photo_dir.join("street-reflections.provenance.json") }
                 else { directory.join("street-reflections.provenance.json") },
             )?)?;
-            Some(Self::read_maps(root, &panorama, 2)?)
+            let mut maps = Self::read_maps(root, &panorama, 2)?;
+            if let Some(light) = &room_light {
+                // The two panorama images occupy the color and normal arrays.
+                // Their third array slot can hold the linear light-transfer grid.
+                maps.orm = Self::read_pixels(root, &light.asset, 1)?;
+            }
+            Some(maps)
         } else {
             None
         };
@@ -134,6 +161,9 @@ impl Finishes {
             if photo {
                 for name in surfaces::SITE_NAMES {
                     scans.push(Scan::load(root, &photo_dir, name)?);
+                }
+                if blender_bedroom {
+                    scans.insert(0, Scan::load(root, &photo_dir, "washed-cotton")?);
                 }
                 photo_dir.clone()
             } else {
@@ -161,6 +191,7 @@ impl Finishes {
         let atlas = Self::read_maps(root, &manifest.asset, 2)?;
         let floorboards = Self::read_maps(root, &floor, 3)?;
         Ok(Self {
+            room_light,
             glazing,
             furniture,
             directory,
@@ -173,7 +204,7 @@ impl Finishes {
         })
     }
 
-    fn read_maps(root: &Path, asset: &AssetRef, pages: usize) -> Result<eo_assets::kit::BakedMaps> {
+    fn read_pixels(root: &Path, asset: &AssetRef, pages: usize) -> Result<Vec<u8>> {
         let bytes = eo_assets::glb::read_verified(&asset.path(root), asset)?;
         let mut reader = png::Decoder::new(std::io::Cursor::new(bytes)).read_info()?;
         let res = eo_assets::kit::HIGH_RES;
@@ -189,6 +220,13 @@ impl Finishes {
         let size = res * res * 4;
         let mut albedo = vec![0; pages * size];
         reader.next_frame(&mut albedo)?;
+        Ok(albedo)
+    }
+
+    fn read_maps(root: &Path, asset: &AssetRef, pages: usize) -> Result<eo_assets::kit::BakedMaps> {
+        let res = eo_assets::kit::HIGH_RES;
+        let size = res * res * 4;
+        let mut albedo = Self::read_pixels(root, asset, pages)?;
         let orm = if pages == 3 {
             albedo.split_off(size * 2)
         } else {
@@ -238,6 +276,8 @@ pub struct House {
     materials: Vec<u32>,
     light_transfer: Vec<[f32; 2]>,
     visibility: Vec<f32>,
+    cut_pattern: eo_assets::glb::CutPattern,
+    room_meter: Option<[f32; 3]>,
     probes: Option<[ProbeVolume; 2]>,
     collision: Vec<[Point; 3]>,
     steps: Vec<[Point; 2]>,
@@ -336,9 +376,19 @@ impl House {
             }
         }
         let furnished = finishes.is_some_and(|f| f.furniture);
+        let room_meter = finishes.and_then(|f| f.room_light.as_ref())
+            .map(|light| [light.mean_sky_return, light.exposure_range_ev, light.exterior_exposed_beam]);
+        let mut cut_pattern = eo_assets::glb::CutPattern::new();
         let (model, light_transfer, visibility) = if furnished {
             ensure!(!layout.nodes.is_empty(), "furnished house is missing its metric placement");
-            let (model, uv, contact) = eo_assets::glb::cook_glb_with_visibility(&raw, &layout.nodes)?;
+            let (model, uv, contact) = if room_meter.is_some() {
+                let (model, light, contact, pattern) =
+                    eo_assets::glb::cook_glb_with_cut_pattern(&raw, &layout.nodes)?;
+                cut_pattern = pattern;
+                (model, light, contact)
+            } else {
+                eo_assets::glb::cook_glb_with_visibility(&raw, &layout.nodes)?
+            };
             if interior_lighting { (model, uv, contact) } else { (model, vec![], vec![]) }
         } else if interior_lighting {
             let (model, uv) = eo_assets::glb::cook_glb_with_uv0(&raw)?;
@@ -351,7 +401,7 @@ impl House {
             .iter()
             .map(|m| {
                 finishes
-                    .and_then(|f| Scan::material(&f.scans, m, materials))
+                    .and_then(|f| Scan::material(&f.scans, m, materials, !cut_pattern.is_empty()))
                     .unwrap_or_else(|| materials.resolve(kit, m))
             })
             .collect();
@@ -392,6 +442,8 @@ impl House {
             materials: resolved,
             light_transfer,
             visibility,
+            cut_pattern,
+            room_meter,
             probes: finishes.map(|r| [
                 layout.probe("enamel-refrigerator", &r.manifest.probes[0]),
                 layout.probe("oven-range", &r.manifest.probes[1]),
@@ -780,8 +832,12 @@ impl House {
             .map(|indices| [0, 1, 2].map(|i| Vec3::from_array(self.model.positions[indices[i] as usize])))
             // Each pane is a thin closed solid. Integrate light through a single face.
             .filter(|[a,b,c]| (*b-*a).cross(*c-*a).normalize_or_zero().z > 0.8);
-        Some(eo_render::interior_meter::InteriorMeter::new(basis,
-            Vec3::new(0.14, -0.08, 0.50), Vec3::new(6.86, 9.88, 12.86), 10. / 3., glass))
+        let mut meter = eo_render::interior_meter::InteriorMeter::new(basis,
+            Vec3::new(0.14, -0.08, 0.50), Vec3::new(6.86, 9.88, 12.86), 10. / 3., glass);
+        if let Some([sky_return, exposure_range, exposed_beam]) = self.room_meter {
+            meter.set_room_response(1, sky_return, exposure_range, exposed_beam);
+        }
+        Some(meter)
     }
 
     pub fn contains_feet(&self, feet: DVec3) -> bool {
@@ -1000,6 +1056,10 @@ impl House {
                     | (((u * 255.).round() as u32) << 16)
                     | (((v * 255.).round() as u32) << 24);
             }
+            if let Some(&[u, v]) = self.cut_pattern.get(&(i as u32)) {
+                normal |= 0x4000_0000;
+                color = (color & 0xffff) | (u32::from(u) << 16) | (u32::from(v) << 24);
+            }
             if let Some(visibility) = self.visibility.get(i) {
                 // 64 identifies unlit authored normals. Codes 65..127 carry diffuse visibility.
                 normal = (normal & 0x00ff_ffff) | ((65 + (62. * visibility).round() as u32) << 24);
@@ -1080,6 +1140,15 @@ impl House {
                     "cotton-coverlet" | "cotton-turnback" | "cotton-binding" =>
                         o.kind |= eo_render::scene::QUILT_FIBRE_BIT,
                     _ => {}
+                }
+            }
+            if self.room_meter.is_some() {
+                if !self.cut_pattern.is_empty() && family.starts_with("cotton-coverlet@") {
+                    o.kind |= eo_render::scene::CUT_COTTON_BIT;
+                }
+                if !self.light_transfer.is_empty() && part.max[1] >= 10./3. - 0.02
+                    && part.min[1] <= 20./3. + 0.02 {
+                    o.kind |= eo_render::scene::BEDROOM_LIGHT_BIT;
                 }
             }
             o.material = self.materials[part.material as usize];

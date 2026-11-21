@@ -96,6 +96,10 @@ pub const QUILT_FIBRE_BIT: u32 = 1 << 19;
 pub const TABLE_BOARD_BIT: u32 = 1 << 20;
 /// Door lever and lock reflecting the actual porch opening.
 pub const ENTRY_BRASS_BIT: u32 = 1 << 21;
+/// Cloth shading follows the garment's flat cutting pattern.
+pub const CUT_COTTON_BIT: u32 = 1 << 22;
+/// Use the measured Cycles irradiance for the enclosed middle floor.
+pub const BEDROOM_LIGHT_BIT: u32 = 1 << 23;
 
 /// Material 0: the vertex colour (footprints, terrain, roads, sea).
 pub const MATERIAL_VERTEX_COLOUR: u32 = 0;

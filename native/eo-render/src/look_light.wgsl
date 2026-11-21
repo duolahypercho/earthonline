@@ -113,6 +113,9 @@ var<private> rm_emit: vec3<f32>;
 var<private> room_radiance: vec3<f32>;
 var<private> room_enclosure: f32;
 var<private> room_daylight: f32;
+var<private> measured_room: bool;
+var<private> room_diffuse: vec3<f32>;
+var<private> dielectric_scale: f32;
 
 fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: vec3<f32>, object: u32) -> vec4<f32> {
     var s = s_in; // sky
@@ -122,7 +125,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     let n = s.n;
     let rough = s.rough;
     let diffuse = s.albedo * (1.0 - s.metal);
-    let f0 = mix(vec3<f32>(0.04), s.albedo, s.metal);
+    let f0 = mix(vec3<f32>(0.04 * select(1.,dielectric_scale,dielectric_scale>0.)), s.albedo, s.metal);
     let glass = (m.flags & F_GLASS) != 0u;
     // envMapIntensity class: glass, roads and the street surface (asphalt),
     // terrain (sidewalk), else painted facade.
@@ -169,7 +172,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     }
     let sky_field = hemi + look.ambient.xyz + env_e * env_i;
     let indoor_field = (0.30 + 0.70 * sqrt(room_daylight)) * vec3<f32>(1.0, 0.92, 0.80);
-    let irr = sky_field * mix(vec3<f32>(1.0), indoor_field, room_enclosure);
+    let irr = select(sky_field * mix(vec3<f32>(1.0), indoor_field, room_enclosure), room_diffuse*LK_PI, measured_room);
     let nv = max(dot(n, v), 1e-4);
     let dfg = lk_dfg(nv, rough);
     let fss = f0 * dfg.x + vec3<f32>(dfg.y);
@@ -179,7 +182,10 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
         ao4 = ao_fetch(world); // no screen-space AO inside the probe pass
     }
     let ao_vis = ao_multi_bounce(ao4.a);
-    let ao = s.ao * ao_vis;
+    // The measured room contains the furniture and walls. Its vertex contact
+    // term resolves folds below the probe spacing; the broad screen-space
+    // visibility would darken that same lighting a second time.
+    let ao = s.ao * select(ao_vis, 1., measured_room);
     let indirect_d = irr * diffuse / LK_PI * (vec3<f32>(1.0) - fss) * ao;
 
     // Indirect specular: the sky along the reflection, blurred with roughness.
@@ -200,7 +206,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
         rad = mix(rad, lk_sky_sample(r), sharp);
     }
     if (room_enclosure > 0.0 && s.env != ENV_LOCAL_PROBE && s.env != ENV_INTERIOR_FLOOR) {
-        let local = indoor_field * (hemi + look.ambient.xyz + env_e * env_i) / LK_PI;
+        let local = select(indoor_field * (hemi + look.ambient.xyz + env_e * env_i) / LK_PI, room_diffuse, measured_room);
         rad = mix(rad, local, room_enclosure * smoothstep(0.18, 0.75, rough));
     }
     let spec_occ = clamp(pow(nv + ao, exp2(-16.0 * rough - 1.0)) - 1.0 + ao, 0.0, 1.0);
@@ -212,7 +218,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     let indirect_s = rad * fss * spec_occ;
     // The bounce is outgoing Lambert radiance (bounce x diffuse albedo), added
     // outside the occlusion multiply as the JS adds it on the emissive slot.
-    let bounce = ao4.rgb * diffuse;
+    let bounce = select(ao4.rgb * diffuse, vec3<f32>(0.), measured_room);
     if (look.ao_params.z > 0.5) {
         // EO_AO_DEBUG=1: visibility; =2: the bounce irradiance fraction.
         if (look.ao_params.z > 1.5) {

@@ -1101,7 +1101,7 @@ impl LookGpu {
             key: v4(f.key, exposure), // adapted (f.exposure with every sky stage off)
             rim_dir: v4(f.rim_dir, 0.0),
             rim: v4(f.rim, 0.0),
-            hemi_sky: v4(f.hemi_sky, 0.0),
+            hemi_sky: v4(f.hemi_sky, f.sky_irradiance_up / std::f64::consts::PI),
             hemi_ground: v4(f.hemi_ground, 0.0),
             ambient: v4(f.ambient, f.rig.environment_intensity),
             env_class: [f.rig.env_painted as f32, f.rig.env_glass as f32, f.rig.env_asphalt as f32, f.rig.env_ground as f32],

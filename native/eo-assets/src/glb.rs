@@ -166,13 +166,13 @@ struct PrimOut {
 
 /// Parse a (verified) GLB and flatten it.
 pub fn cook_glb(bytes: &[u8]) -> Result<CookedModel> {
-    cook_mesh(bytes, None, None, None)
+    cook_mesh(bytes, None, None, None, None)
 }
 
 /// Return the first texture coordinates in the same vertex order as the cooked mesh.
 pub fn cook_glb_with_uv0(bytes: &[u8]) -> Result<(CookedModel, Vec<[f32; 2]>)> {
     let mut uv = Vec::new();
-    let model = cook_mesh(bytes, Some(&mut uv), None, None)?;
+    let model = cook_mesh(bytes, Some(&mut uv), None, None, None)?;
     Ok((model, uv))
 }
 
@@ -181,11 +181,24 @@ pub fn cook_glb_with_uv0(bytes: &[u8]) -> Result<(CookedModel, Vec<[f32; 2]>)> {
 pub fn cook_glb_with_visibility(bytes: &[u8], placements: &std::collections::HashMap<String, Mat4>) -> Result<(CookedModel, Vec<[f32; 2]>, Vec<f32>)> {
     let mut uv = Vec::new();
     let mut visibility = Vec::new();
-    let model = cook_mesh(bytes, Some(&mut uv), Some(&mut visibility), Some(placements))?;
+    let model = cook_mesh(bytes, Some(&mut uv), Some(&mut visibility), None, Some(placements))?;
     Ok((model, uv, visibility))
 }
 
-fn cook_mesh(bytes: &[u8], mut uv: Option<&mut Vec<[f32; 2]>>, mut visibility: Option<&mut Vec<f32>>, placements: Option<&std::collections::HashMap<String, Mat4>>) -> Result<CookedModel> {
+/// Additional UV data stays sparse. Most of a furnished building has no cut-fabric pattern.
+pub type CutPattern = std::collections::HashMap<u32, [u8; 2]>;
+
+pub fn cook_glb_with_cut_pattern(
+    bytes: &[u8], placements: &std::collections::HashMap<String, Mat4>,
+) -> Result<(CookedModel, Vec<[f32; 2]>, Vec<f32>, CutPattern)> {
+    let mut light = Vec::new();
+    let mut contact = Vec::new();
+    let mut cut = CutPattern::new();
+    let model = cook_mesh(bytes, Some(&mut light), Some(&mut contact), Some(&mut cut), Some(placements))?;
+    Ok((model, light, contact, cut))
+}
+
+fn cook_mesh(bytes: &[u8], mut uv: Option<&mut Vec<[f32; 2]>>, mut visibility: Option<&mut Vec<f32>>, mut cut: Option<&mut CutPattern>, placements: Option<&std::collections::HashMap<String, Mat4>>) -> Result<CookedModel> {
     let gltf = gltf::Gltf::from_slice(bytes).map_err(|e| anyhow!("glTF parse: {e}"))?;
     let blob = gltf.blob.as_deref();
     let doc = &gltf.document;
@@ -252,6 +265,16 @@ fn cook_mesh(bytes: &[u8], mut uv: Option<&mut Vec<[f32; 2]>>, mut visibility: O
                 }
             }
             let base = model.positions.len() as u32;
+            if let Some(pattern) = cut.as_deref_mut()
+                && let Some(coords) = reader.read_tex_coords(2)
+            {
+                let coords = coords.into_f32();
+                anyhow::ensure!(coords.len() == positions.len(), "cut pattern count differs from POSITION");
+                for (i, uv) in coords.enumerate() {
+                    anyhow::ensure!(uv.iter().all(|c| (0.0..=1.0).contains(c)), "cut pattern outside fabric");
+                    pattern.insert(base + i as u32, uv.map(|v| (v * 255.).round() as u8));
+                }
+            }
             for (i, p3) in positions.iter().enumerate() {
                 let wp = world.transform_point3(Vec3::from(*p3));
                 model.positions.push(wp.to_array());

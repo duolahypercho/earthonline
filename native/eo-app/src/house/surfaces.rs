@@ -26,6 +26,8 @@ struct Spec {
     metres_per_tile: f32,
     normal_strength: f32,
     paint_mix: f32,
+    #[serde(default)]
+    cut_pattern: bool,
 }
 
 pub struct Scan {
@@ -49,12 +51,16 @@ impl Scan {
         scans: &[Self],
         mat: &CookedMaterial,
         table: &mut MaterialTable,
+        cut_pattern: bool,
     ) -> Option<u32> {
         let family = mat.name.split('@').next()?;
         let (slot, scan) = scans
             .iter()
             .enumerate()
-            .find(|(_, scan)| scan.spec.families.iter().any(|f| f == family))?;
+            .find(|(_, scan)| {
+                (cut_pattern || !scan.spec.cut_pattern)
+                    && scan.spec.families.iter().any(|f| f == family)
+            })?;
         let paint = scan.spec.paint_mix;
         let mut base = [1.; 4];
         for (c, source) in base[..3].iter_mut().zip(&mat.base_color) {
@@ -62,7 +68,7 @@ impl Scan {
         }
         let surface = GpuMaterial {
             base,
-            flags: if super::door_paint(&mat.name) || family == "woven-carpet" {
+            flags: if super::door_paint(&mat.name) || family == "woven-carpet" || cut_pattern && family == "cotton-coverlet" {
                 0
             } else {
                 F_TEXTURED
