@@ -56,6 +56,7 @@ pub struct Args {
     pub house_oak_joinery: bool,
     pub house_floor_reflections: bool,
     pub house_fitted_dining: bool,
+    pub house_fitted_finishes: bool,
     pub house_dining_meter: bool,
     pub house_glazing: bool,
     pub bench: bool,
@@ -216,6 +217,7 @@ fn parse_args() -> Result<Args> {
         house_oak_joinery: false,
         house_floor_reflections: false,
         house_fitted_dining: false,
+        house_fitted_finishes: false,
         house_dining_meter: false,
         house_glazing: true,
         beaver_house: false,
@@ -293,7 +295,7 @@ fn parse_args() -> Result<Args> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
-            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" => {
+            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" | "--house-fitted-finishes" => {
                 a.beaver_house = true;
                 a.house_finishes = true;
                 a.house_patina = true;
@@ -303,6 +305,7 @@ fn parse_args() -> Result<Args> {
                     "--house-dining-light" => a.house_dining_light = true,
                     "--house-downstairs-light" => a.house_downstairs_light = true,
                     "--house-table-light" => a.house_table_light = true,
+                    "--house-fitted-finishes" => { a.house_fitted_dining = true; a.house_fitted_finishes = true; }
                     "--house-fitted-dining" => a.house_fitted_dining = true,
                     "--house-oak-finish" => a.house_oak_finish = true,
                     "--house-dining-meter" => a.house_dining_meter = true,
@@ -315,6 +318,7 @@ fn parse_args() -> Result<Args> {
             "--no-house-dining-light" => a.house_dining_light = false,
             "--no-house-downstairs-light" => a.house_downstairs_light = false,
             "--no-house-table-light" => a.house_table_light = false,
+            "--no-house-fitted-finishes" => a.house_fitted_finishes = false,
             "--no-house-fitted-dining" => a.house_fitted_dining = false,
             "--no-house-oak-finish" => a.house_oak_finish = false,
             "--no-house-dining-meter" => a.house_dining_meter = false,

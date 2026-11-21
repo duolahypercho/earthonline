@@ -292,7 +292,7 @@ impl Finishes {
                 &mut street.orm, &mut floorboards.orm)?;
         }
         let (fitted, fitted_maps) = if fitted_enabled {
-            let (recipe, maps) = fitted::Recipe::read(root, &dining_dir, &manifest.house_sha256)?;
+            let (recipe, maps) = fitted::Recipe::read(root, &dining_dir, &manifest.house_sha256, args.house_fitted_finishes && args.interior_lighting)?;
             (Some(recipe), maps)
         } else { (None, Vec::new()) };
         Ok(Self {
@@ -968,6 +968,10 @@ impl House {
     pub fn lowest_tread_corners(&self) -> [DVec3; 2] {
         let [a, b] = self.steps.last().expect("the house has a private stair");
         [a[0], b[0]].map(|x| self.point(x, b[1], a[2]))
+    }
+
+    pub fn fitted_finish(&self) -> [[f32; 4]; 2] {
+        self.fitted.as_ref().map(|room| room.finish_parameters).unwrap_or_default()
     }
 
     pub fn oak_finish(&self) -> [[f32; 4]; 3] {

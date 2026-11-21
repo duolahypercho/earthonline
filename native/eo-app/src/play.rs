@@ -78,6 +78,7 @@ fn base_args() -> Args {
         house_oak_joinery: false,
         house_floor_reflections: false,
         house_fitted_dining: false,
+        house_fitted_finishes: false,
         house_dining_meter: false,
         house_glazing: true,
         beaver_house: false,
@@ -148,7 +149,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
-            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" => {
+            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" | "--house-fitted-finishes" => {
                 a.beaver_house = true;
                 a.house_finishes = true;
                 a.house_patina = true;
@@ -158,6 +159,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
                     "--house-dining-light" => a.house_dining_light = true,
                     "--house-downstairs-light" => a.house_downstairs_light = true,
                     "--house-table-light" => a.house_table_light = true,
+                    "--house-fitted-finishes" => { a.house_fitted_dining = true; a.house_fitted_finishes = true; }
                     "--house-fitted-dining" => a.house_fitted_dining = true,
                     "--house-oak-finish" => a.house_oak_finish = true,
                     "--house-dining-meter" => a.house_dining_meter = true,
@@ -170,6 +172,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-dining-light" => a.house_dining_light = false,
             "--no-house-downstairs-light" => a.house_downstairs_light = false,
             "--no-house-table-light" => a.house_table_light = false,
+            "--no-house-fitted-finishes" => a.house_fitted_finishes = false,
             "--no-house-fitted-dining" => a.house_fitted_dining = false,
             "--no-house-oak-finish" => a.house_oak_finish = false,
             "--no-house-dining-meter" => a.house_dining_meter = false,
@@ -1295,6 +1298,44 @@ mod house_tests {
         check_beaver_walk(true, true, true, true, true);
         let (off, _) = parse(&["--house-fitted-dining".into(),"--no-house-fitted-dining".into()]).unwrap();
         assert!(off.house_photo && !off.house_fitted_dining);
+    }
+
+    #[test]
+    fn fitted_finishes_bind_the_registered_coats_and_restore_the_prior_room() {
+        let (mut args, _) = parse(&["--house-fitted-finishes".into()]).unwrap();
+        assert!(args.house_fitted_dining && args.house_fitted_finishes);
+        args.kit = false;
+        args.landmarks = false;
+        args.models = false;
+        let world = load_world(&args).unwrap();
+        let table = &world.authored.materials;
+        let find = |name: &str| {
+            let i = table.names.iter().position(|s| s == name).unwrap();
+            table.gpu[i]
+        };
+        let glaze = find("21-beaver-fitted/Fired sage ash glaze");
+        let rail = find("21-beaver-fitted/Waxed walnut stair handrail");
+        assert_eq!(rail.thin_absorption, 1.);
+        assert_eq!(glaze.thin_absorption, 2.);
+        assert!((rail.emissive[3] - 0.24).abs() < 1e-5 && (rail.rough_flatten - 0.19).abs() < 1e-5);
+        assert!((glaze.emissive[3] - 0.32).abs() < 1e-5);
+        assert_eq!(rail.params[3], glaze.params[3]);
+        let linen = find("21-beaver-fitted/Laundered flax with woven indigo borders");
+        assert_eq!(linen.thin_absorption, 5.);
+        assert_eq!(linen.params[3], glaze.params[3]);
+        let [bounds, heights] = world.house.as_ref().unwrap().fitted_finish();
+        assert!(
+            bounds[0] < bounds[2]
+                && bounds[1] < bounds[3]
+                && heights[0] < heights[1]
+                && heights[1] < heights[2]
+        );
+        let (off, _) = parse(&[
+            "--house-fitted-finishes".into(),
+            "--no-house-fitted-finishes".into(),
+        ])
+        .unwrap();
+        assert!(off.house_fitted_dining && !off.house_fitted_finishes);
     }
 
     fn check_beaver_walk(finishes: bool, patina: bool, furniture: bool, photo: bool, fitted: bool) {

@@ -8,6 +8,7 @@ use eo_render::{
 };
 use glam::Mat3;
 use serde::Deserialize;
+use std::collections::BTreeMap;
 use std::path::Path;
 
 #[derive(Deserialize)]
@@ -18,8 +19,39 @@ struct Surface {
     garden: bool,
     thin: bool,
 }
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[repr(u8)]
+enum Group {
+    Rail = 1,
+    Bowl = 2,
+    Boards = 3,
+    Chairs = 4,
+    Linen = 5,
+}
+
+#[derive(Deserialize)]
+struct Coating {
+    group: Group,
+    coat: f32,
+    roughness: f32,
+}
+
+#[derive(Deserialize)]
+struct FinishSurvey {
+    #[serde(flatten)]
+    asset: AssetRef,
+    fitted_geometry_sha256: String,
+    house_sha256: String,
+    table_parcel_bounds: [f32; 4],
+    probe_blender_xyz: [[f32; 3]; 8],
+    materials: BTreeMap<String, Coating>,
+}
+
 #[derive(Deserialize)]
 pub(super) struct Recipe {
+    #[serde(skip)]
+    finish: Option<FinishSurvey>,
     #[serde(flatten)]
     geometry: AssetRef,
     house_sha256: String,
@@ -33,8 +65,13 @@ pub(super) struct Recipe {
 }
 
 impl Recipe {
-    pub fn read(root: &Path, dir: &Path, shell_hash: &str) -> Result<(Self, Vec<BakedMaps>)> {
-        let spec: Self =
+    pub fn read(
+        root: &Path,
+        dir: &Path,
+        shell_hash: &str,
+        finishes: bool,
+    ) -> Result<(Self, Vec<BakedMaps>)> {
+        let mut spec: Self =
             serde_json::from_slice(&std::fs::read(dir.join("fitted-room.provenance.json"))?)?;
         ensure!(
             spec.house_sha256 == shell_hash && (1..=64).contains(&spec.layers),
@@ -45,7 +82,7 @@ impl Recipe {
         let (color, normal, orm) = (color?, normal?, orm?);
         let res = eo_assets::kit::HIGH_RES;
         let len = res * res * 4;
-        let pages = (0..spec.layers)
+        let mut pages: Vec<_> = (0..spec.layers)
             .map(|i| {
                 let range = i * len..(i + 1) * len;
                 BakedMaps {
@@ -57,6 +94,34 @@ impl Recipe {
                 }
             })
             .collect();
+        if finishes {
+            let survey: FinishSurvey = serde_json::from_slice(&std::fs::read(
+                dir.join("fitted-finish-light.provenance.json"),
+            )?)?;
+            let [left, front, right, back] = survey.table_parcel_bounds;
+            ensure!(
+                survey.fitted_geometry_sha256 == spec.geometry.sha256
+                    && survey.house_sha256 == shell_hash
+                    && left < right
+                    && front < back
+                    && survey.probe_blender_xyz[..3]
+                        .windows(2)
+                        .all(|p| p[0][2] < p[1][2])
+                    && survey.materials.iter().all(|(name, m)| spec
+                        .surfaces
+                        .iter()
+                        .any(|s| &s.name == name)
+                        && (0.0..=1.0).contains(&m.coat)
+                        && (0.0..=1.0).contains(&m.roughness)),
+                "invalid fitted finish survey"
+            );
+            // The last fitted layer always belongs to the common floorboards.
+            pages.insert(
+                spec.layers - 1,
+                Finishes::read_maps(root, &survey.asset, 3)?,
+            );
+            spec.finish = Some(survey);
+        }
         Ok((spec, pages))
     }
 
@@ -79,29 +144,64 @@ impl Recipe {
                 spec.name
             );
             let layer = spec.layer.map_or(-1, |l| (first_layer + l) as i32);
+            let coat = self
+                .finish
+                .as_ref()
+                .and_then(|survey| survey.materials.get(&spec.name));
+            // Fitted materials use authored UVs. The repeat slot addresses their
+            // light atlas, and the two kit finish slots hold group and coat roughness.
+            let survey_layer = coat.map_or(1., |_| (first_layer + self.layers - 1) as f32);
             let id = table.named(
                 &format!("21-beaver-fitted/{}", mat.name),
                 GpuMaterial {
                     base: mat.base_color,
                     flags: 0,
                     layer,
-                    params: [mat.roughness, mat.metallic, spec.normal_strength, 1.],
+                    params: [
+                        mat.roughness,
+                        mat.metallic,
+                        spec.normal_strength,
+                        survey_layer,
+                    ],
+                    thin_absorption: coat.map_or(0., |c| c.group as u8 as f32),
+                    rough_flatten: coat.map_or(0., |c| c.roughness),
                     emissive: [
                         mat.emissive[0] * mat.emissive_strength,
                         mat.emissive[1] * mat.emissive_strength,
                         mat.emissive[2] * mat.emissive_strength,
-                        0.,
+                        coat.map_or(0., |c| c.coat),
                     ],
                     ..GpuMaterial::vertex_colour()
                 },
             );
             draws.push((id, spec.garden, spec.thin));
         }
-        Ok(Room { model, uv, draws })
+        let finish_parameters = self
+            .finish
+            .as_ref()
+            .map(|s| {
+                [
+                    s.table_parcel_bounds,
+                    [
+                        s.probe_blender_xyz[0][2],
+                        s.probe_blender_xyz[1][2],
+                        s.probe_blender_xyz[2][2],
+                        0.,
+                    ],
+                ]
+            })
+            .unwrap_or_default();
+        Ok(Room {
+            model,
+            uv,
+            draws,
+            finish_parameters,
+        })
     }
 }
 
 pub(super) struct Room {
+    pub(super) finish_parameters: [[f32; 4]; 2],
     model: CookedModel,
     uv: Vec<[f32; 2]>,
     draws: Vec<(u32, bool, bool)>,
