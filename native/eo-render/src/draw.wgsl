@@ -1232,6 +1232,9 @@ fn shade(in: VOut) -> vec4<f32> {
         n = -n;
     }
 
+    if look.porch_light[0].w > 0. && frame.copy_step.z < .5 {
+        porch_field = porch_irradiance(in.world, n);
+    }
     if ((m.flags & F_STREET) != 0u) {
         let ss = street_surface(in, n, dpx, dpy);
         return look_light(ss, m, v, in.world, n, in.object);
@@ -1610,7 +1613,7 @@ fn shade(in: VOut) -> vec4<f32> {
             rm_emit += s.albedo * (1.-s.metal) * floor_daylight(in.world, s.n) / PI;
         }
         let window = 0.76 * transfer.x * (look.hemi_sky.rgb + look.key.rgb * max(look.key_dir.y, 0.0));
-        let pendant = transfer.y * vec3<f32>(1.55, 1.05, 0.56);
+        let pendant = transfer.y * (1.-porch_field.z) * vec3<f32>(1.55, 1.05, 0.56);
         if (measured_room) {
             // Direct sunlight still comes from the current cascaded shadow map.
             if (!downstairs) {
@@ -1626,7 +1629,7 @@ fn shade(in: VOut) -> vec4<f32> {
         let parcel = (look.enclosure_frame*vec4<f32>(in.world,1.)).xyz;
         let local_n = normalize((look.enclosure_frame*vec4<f32>(n,0.)).xyz);
         let chart = wall_chart(parcel,local_n);
-        if (chart.z >= 0.) {
+        if (chart.z >= 0. && look.wall_sample.x > 0.) {
             measured_wall = smoothstep(0.,.20,look.key_dir.y)*(1.-skyu.night.z);
             measured_front = measured_wall;
             front_ambient = LK_PI*measured_wall_light(chart);
@@ -1635,6 +1638,22 @@ fn shade(in: VOut) -> vec4<f32> {
             wall_pigment = textureSampleLevel(kit_albedo,kit_sampler,uv,i32(look.wall_sample.x),0.);
             // The wall field already includes diffuse sky, practicals and sun bounce.
             rm_emit *= 1.-measured_wall;
+        }
+        if porch_field.z > 0. {
+            let porch = porch_chart(parcel, local_n);
+            if porch.z >= 0. {
+                // The closed-leaf bake includes its indirect bounce and shadow.
+                // As it opens the independent area-light field handles its live shadow.
+                porch_measured = porch_field.z*(1.-smoothstep(0.,.18,abs(look.porch_light[6].w)));
+                let weight = mix(measured_front,1.,porch_measured);
+                if weight > 0. {
+                    front_ambient = mix(front_ambient*measured_front,LK_PI*porch_surface_light(porch),porch_measured)/weight;
+                    measured_front = weight;
+                    measured_wall = mix(measured_wall,1.,porch_measured);
+                    wall_pigment = mix(wall_pigment,porch_pigment(porch),porch_measured);
+                    rm_emit *= 1.-porch_measured;
+                }
+            }
         }
     }
     if ((objects[in.object].kind & THIN_FIBRE_BIT) != 0u) {

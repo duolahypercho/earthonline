@@ -1246,7 +1246,8 @@ impl SkyGpu {
         let lens_weight = if source_lens {
             s.interior_meter.as_ref().map_or(0., |m| m.ground_floor_lens(cam.eye))
         } else { 0. };
-        let glare = if o.bloom { 1. - lens_weight } else { 0. };
+        let porch_lens = s.exterior_camera.as_ref().map_or(0., |c| c.porch_lens(cam.eye));
+        let glare = if o.bloom { 1. - lens_weight.max(porch_lens) } else { 0. };
         s.frame_bloom = glare > 0.;
         let (strength, radius) = (0.26, 0.22);
         let mw = [1.0, 0.8, 0.6, 0.4, 0.2].map(|fv: f64| ((fv + (1.2 - fv - fv) * radius) * strength) as f32);
@@ -1284,7 +1285,7 @@ impl SkyGpu {
             cluster: [CLUSTER_NEAR_M, CLUSTER_FAR_M, (0.5 * cam.fov_y_deg.to_radians()).tan(), cam.aspect],
             cam_fwd: fwd.extend(0.0).to_array(),
             cam_right: right.extend(0.0).to_array(),
-            cam_up: up.extend(0.0).to_array(),
+            cam_up: up.extend(porch_lens).to_array(),
             night: [lamps_on as f32, terms.dusk as f32, terms.nightness as f32, veh as f32],
             moon: v4(moon.dir, if o.moon_stars { terms.moon_disc } else { 0.0 }),
             stars: [if o.moon_stars { terms.star_level as f32 } else { 0.0 }, (f.hour * 15.041 * std::f64::consts::PI / 180.0) as f32, moon.illuminated as f32, if moon.waxing { 1.0 } else { 0.0 }],

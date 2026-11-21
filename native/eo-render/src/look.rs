@@ -110,6 +110,7 @@ struct LookUniform {
     wall_sample: [f32; 4],
     wall_overcast: [f32; 4],
     window_sample: [f32; 4],
+    porch_light: [[f32; 4]; 7],
 }
 
 #[repr(C)]
@@ -217,6 +218,7 @@ pub struct LookGpu {
     pub kitchen_frame: [[f32; 4]; 5],
     pub front_daylight: Option<crate::front_daylight::FrontDaylight>,
     pub wall_daylight_layer: Option<u32>,
+    pub porch_light: [[f32; 4]; 7],
     window_optics: wgpu::Buffer,
     trace_window_glass: bool,
     front_door_open: bool,
@@ -279,7 +281,7 @@ pub fn city_shader_source() -> String {
         + "\n" + include_str!("sky_light_core.wgsl") + "\n" + include_str!("sky_light.wgsl") // sky
         + &crate::landmarks::city_wgsl() // landmarks
         + "\n" + include_str!("cc0.wgsl") + &crate::cc0::wgsl_constants(crate::cc0::scoring_pitch_m()) // cc0
-        + "\n" + include_str!("fitted_finish.wgsl") + "\n" + include_str!("window_optics.wgsl")
+        + "\n" + include_str!("fitted_finish.wgsl") + "\n" + include_str!("window_optics.wgsl") + "\n" + include_str!("porch_light.wgsl")
 }
 
 /// look_common.wgsl with (surfaces) the street field's constants (GF_*), from
@@ -722,6 +724,7 @@ impl LookGpu {
             kitchen_frame: [[0.;4];5],
             front_daylight: None,
             wall_daylight_layer: None,
+            porch_light: [[0.; 4]; 7],
             window_optics,
             trace_window_glass: false,
             front_door_open: false,
@@ -811,8 +814,9 @@ impl LookGpu {
     }
 
     /// The optical survey measured the entry leaf at its closed position.
-    pub fn set_front_door_open(&mut self, open: bool) {
-        self.front_door_open = open;
+    pub fn set_front_door_angle(&mut self, radians: f32) {
+        self.front_door_open = radians != 0.;
+        self.porch_light[6][3] = radians;
     }
 
     /// Install the source geometry once, before the first camera update.
@@ -1235,11 +1239,12 @@ impl LookGpu {
             kitchen_frame: self.kitchen_frame,
             wall_sample: [self.wall_daylight_layer.unwrap_or(0) as f32,
                 ((f.hour as f32-8.)*0.5).clamp(0.,5.), (m.profile.overcast*wx_keep) as f32, f32::from(self.front_door_open)],
+            porch_light: self.porch_light,
             window_sample: {
                 let [a, b, t] = crate::window_optics::light_sample(f.hour as f32);
                 [f32::from(self.trace_window_glass), a, b, t]
             },
-            wall_overcast: if self.wall_daylight_layer.is_some() || self.window_optics.size() > 16 {
+            wall_overcast: if self.wall_daylight_layer.is_some() || self.window_optics.size() > 16 || self.porch_light[0][3] > 0. {
                 let [r,g,b] = crate::front_daylight::overcast_radiance(&f);
                 [r,g,b,0.]
             } else { [0.;4] },

@@ -90,7 +90,10 @@ fn finish_color(radiance: vec3<f32>, pos: vec4<f32>, dims: vec2<f32>) -> vec4<f3
     // grey-blue-black while a lamp's pool and a lit window keep theirs.
     // only once the sky is dark (nightness 0.85 .. 1: sun under ~-5 deg): through
     // the blue hour it greyed the twilight sky into a uniform lavender wash.
-    let nz = smoothstep(0.85, 1.0, skyu.night.z);
+    // The registered photographic exposure records light on a sensor. As the
+    // observer leaves the source camera area, restore the city's night vision.
+    let photo_weight = select(0., skyu.cam_up.w, look.blender_camera > 0.5);
+    let nz = smoothstep(0.85, 1.0, skyu.night.z) * (1. - photo_weight);
     if (nz > 0.0) {
         let y = lk_luma(c);
         let dim = 1.0 - smoothstep(0.03, 0.3, y * exposure);

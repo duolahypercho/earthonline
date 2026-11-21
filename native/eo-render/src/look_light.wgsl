@@ -127,6 +127,8 @@ var<private> front_ambient: vec3<f32>;
 var<private> measured_front: f32;
 var<private> measured_wall: f32;
 var<private> joinery_diffuse: vec4<f32>;
+var<private> porch_field: vec3<f32>;
+var<private> porch_measured: f32;
 
 fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: vec3<f32>, object: u32) -> vec4<f32> {
     var s = s_in; // sky
@@ -247,6 +249,9 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     var lit = direct_d + direct_s + indirect_d + indirect_s + bounce + m.emissive.rgb + rm_emit; // + the room
     if joinery_diffuse.a > 0. {
         lit = joinery_diffuse.rgb + direct_s + indirect_s + m.emissive.rgb + rm_emit;
+    }
+    if porch_field.z > 0. {
+        lit = porch_lit(lit,world,n,v,diffuse,f0,rough);
     }
     lit = lit + sky_local_lights(world, n, v, diffuse, f0, rough); // street lamps, headlamps
     if ((objects[object].kind & FITTED_ROOM_BIT) != 0u && m.thin_absorption>0. && measured_room) {

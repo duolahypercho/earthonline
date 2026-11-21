@@ -11,6 +11,7 @@ pub struct ExteriorCamera {
     min: Vec3,
     max: Vec3,
     exposure: f64,
+    porch: Option<(Vec3, f32)>,
 }
 
 impl ExteriorCamera {
@@ -21,7 +22,22 @@ impl ExteriorCamera {
             min,
             max,
             exposure: exposure.into(),
+            porch: None,
         }
+    }
+
+    pub fn set_porch(&mut self, centre: Vec3, reference_distance_m: f32) {
+        self.porch = Some((centre, reference_distance_m));
+    }
+
+    // Hold the source lens up to the registered camera. Release it as the
+    // player walks away or steps through the front door.
+    pub(crate) fn porch_lens(&self, eye: Vec3) -> f32 {
+        let Some((centre, radius)) = self.porch else { return 0.; };
+        let t = (2. - eye.distance(centre)/radius).clamp(0., 1.);
+        let local = self.to_local.transform_point3(eye);
+        let outside = self.to_world.transform_vector3(local-local.clamp(self.min,self.max)).length();
+        (t*t*(3.-2.*t)) * (outside/0.45).clamp(0.,1.)
     }
 
     pub(crate) fn target(&self, eye: Vec3, ordinary: f64, clear_day: f64) -> f64 {
@@ -30,7 +46,7 @@ impl ExteriorCamera {
         let range = self.to_world.transform_vector3(delta).length();
         // Share the facade meter's 20–35 m approach and 45 cm doorway transition.
         let fade = f64::from(((35. - range) / 15.).clamp(0., 1.) * (range / 0.45).clamp(0., 1.)) * clear_day;
-        ordinary * (self.exposure / ordinary).powf(fade)
+        ordinary * (self.exposure / ordinary).powf(fade.max(f64::from(self.porch_lens(eye))))
     }
 }
 
@@ -299,6 +315,18 @@ mod tests {
         assert_eq!(target(2.,1.),1.2);
         assert_eq!(target(-40.,1.),1.2);
         assert_eq!(target(-10.,0.),1.2);
+    }
+
+    #[test]
+    fn porch_lens_holds_the_night_exposure_only_at_the_registered_entrance() {
+        let mut meter = ExteriorCamera::new(Mat4::IDENTITY, Vec3::ZERO, Vec3::splat(7.), 0.5);
+        let centre = Vec3::new(3., 1.7, -0.5);
+        assert_eq!(meter.target(centre, 2., 0.), 2.);
+        meter.set_porch(centre, 2.);
+        assert_eq!(meter.target(centre, 2., 0.), 0.5);
+        assert_eq!(meter.target(centre - 3. * Vec3::Z, 2., 0.), 1.);
+        assert_eq!(meter.target(centre - 4. * Vec3::Z, 2., 0.), 2.);
+        assert_eq!(meter.target(centre + Vec3::Z, 2., 0.), 2.);
     }
 
     #[test]
