@@ -1467,11 +1467,13 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // (sea r8: past the shore field's region its clamped edge texels hold the coast's
     // cut as long stripes; the skirt there is open sea)
     let in_field = all(world.xz > wu.field.xy) && all(world.xz < wu.field.xy + wu.field.zw);
-    if ((signed < mask && in_field) || world.x < reach.x || world.x > reach.z || world.z < reach.y || world.z > reach.w) {
+    let cut_land = (signed < mask && in_field) || world.x < reach.x || world.x > reach.z || world.z < reach.y || world.z > reach.w;
+    if (cut_land) {
         discard;
     }
     let sf_hand = 1.0 - surf_cover(base, fs); // the surf strip draws here (water_surf.wgsl), the sea stands down
-    if (sf_inj.on < 0.5 && sf_hand <= 0.001) {
+    let cut_surf = sf_inj.on < 0.5 && sf_hand <= 0.001;
+    if (cut_surf) {
         discard;
     }
     let to_cam = wu.cam.xyz - world;
@@ -1491,7 +1493,8 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // over a sunken pier footprint (eo-water field.rs `PIERS_OVER_WATER`, the
     // ground pressed to the seabed under it), never over the land the press
     // holds 10 cm above the sea along a seawall, where a wave crest would poke through
-    if (wv_feat(64u) && beach <= 0.5 && signed < wu.flags.z && column < 0.8) {
+    let cut_wall = wv_feat(64u) && beach <= 0.5 && signed < wu.flags.z && column < 0.8;
+    if (cut_wall) {
         discard;
     }
     // The collar's shore distance. The JS reads the shoreline rings' distance
@@ -2569,6 +2572,16 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // --- the fog (three's range fog on view depth).
     let fog = lk_smooth(look.fog.x, look.fog.y, sky_fog_depth(view_dist, world.y - look.cam_pos.y)); // the city's aerial path density
 
+    // The cuts above once more, after the shading: a no-op for the frame (those
+    // fragments are discarded already), but it keeps the pipeline's last
+    // discard here. Apple's GPU compiler aborts on fs_copy and fs_blend
+    // (XPC_ERROR_CONNECTION_INTERRUPTED, an LLVM error in its code emission;
+    // measured on an M-series GPU) when their last discard comes before nearly
+    // all of this function, as it did once the swash edge's cut became a
+    // see-through return; with the last discard here they compile.
+    if (cut_land || cut_surf || cut_wall) {
+        discard;
+    }
     var s: Shade;
     if (wu.screen.x > 0.5 && wu.screen.x < 2.5) {
         // EO_WATER_DEBUG=1: r foam, g column (0..2 m), b signed shore distance (0..20 m); =2: r beach, g surf foam, b collar.

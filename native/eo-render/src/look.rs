@@ -2194,12 +2194,14 @@ impl LookGpu {
         let exposure = match terms {
             Some(t) => {
                 let _span = crate::hitch::span(crate::hitch::Phase::SkyUpdate);
-                // the scene meter's latest reading (`--no-scene-meter`: the dome estimate)
+                // the scene meter's reading of a fixed frame back, whatever the GPU's lag
+                // (`--no-scene-meter`: the dome estimate)
                 let scene = if self.scene_meter_active() {
-                    self.meter.poll(&self.device, self.sky.meter_snap_pending());
+                    let need = self.sky.meter_reading_frame();
+                    self.meter.poll(&self.device, need);
                     *self.meter_prior.lock().unwrap() = t.exposure_target;
                     self.meter.set_prior(queue, t.exposure_target);
-                    Some((self.meter.latest(), self.display_shoulder()))
+                    Some((self.meter.reading(need), self.display_shoulder()))
                 } else {
                     None
                 };
