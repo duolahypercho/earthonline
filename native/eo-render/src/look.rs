@@ -101,6 +101,7 @@ struct LookUniform {
     wx: [f32; 4],
     wx_tint: [f32; 4],
     enclosure_frame: [[f32; 4]; 4],
+    dining_lamp: [f32; 4],
 }
 
 #[repr(C)]
@@ -200,6 +201,8 @@ struct PostTarget {
 pub struct LookGpu {
     /// World-to-building transform used by the local daylight transfer.
     pub enclosure_frame: glam::Mat4,
+    /// World position and emitting radius of the furnished house pendant.
+    pub dining_lamp: [f32; 4],
     pub options: LookOptions,
     pub(crate) output_format: wgpu::TextureFormat,
     object_count: u32,
@@ -692,6 +695,7 @@ impl LookGpu {
             post_source: std::sync::atomic::AtomicU32::new(0),       // sky
             options,
             enclosure_frame: glam::Mat4::ZERO,
+            dining_lamp: [0.;4],
             output_format: init.output_format,
             object_count: init.object_count,
             compact: init.compact,
@@ -1173,6 +1177,7 @@ impl LookGpu {
             wx: [(m.profile.overcast * wx_keep) as f32, (m.profile.isotropy * wx_keep) as f32, (m.profile.desaturation * wx_keep) as f32, if m.ext.on { 1.0 } else { 0.0 }], // eo-look `SkyExt`
             wx_tint: v4(m.profile.tint.map(|v| 1.0 + (v - 1.0) * wx_keep), m.ext.afterglow), // w the afterglow arch
             enclosure_frame: self.enclosure_frame.to_cols_array_2d(),
+            dining_lamp: self.dining_lamp,
         };
         queue.write_buffer(&self.look_buf, 0, bytemuck::bytes_of(&u));
         let mut planes = [[0f32; 4]; 18];

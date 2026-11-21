@@ -390,11 +390,16 @@ fn segments(world: &World, args: &Args, aspect: f32, far: f32) -> Vec<Segment> {
         },
     ]
     .into_iter()
-    .chain(["house_bedroom", "house_roof"].into_iter().filter_map(|name| {
+    .chain(["house_bedroom", "house_roof", "house_dining"].into_iter().filter_map(|name| {
             let selected = args.segments.as_ref()?.iter().any(|s| s == name);
             if !selected { return None; }
             let house = world.house.as_ref()?;
-            let (left, right, target, description) = if name == "house_roof" {
+            let (left, right, target, description) = if name == "house_dining" {
+                (house.point(4.5,0.,2.0).as_vec3() + EYE_HEIGHT_M * Vec3::Y,
+                 house.point(3.9,0.,5.2).as_vec3() + EYE_HEIGHT_M * Vec3::Y,
+                 house.point(2.4,0.52,7.6).as_vec3(),
+                 "Approaching the dining table with the pendant-lit floor in view")
+            } else if name == "house_roof" {
                 (house.point(9.6, 12.8, -5.6).as_vec3(), house.point(7.7, 12.0, -3.7).as_vec3(),
                  house.point(5.0, 10.65, 0.7).as_vec3(), "Moving over the rounded bay and along the Mission tile courses")
             } else {
@@ -645,7 +650,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             }
             let p = dir.join(format!("capture-{label}-{name}.png"));
             capture(&ctx, &renderer, &color, attach, resolve, &targets.depth, &cam, &p)?;
-            println!("wrote {}", p.display());
+            let lighting = renderer.look.frame();
+            println!("wrote {} (exposure {:.6}, key {:?})", p.display(), lighting.exposure, lighting.key);
         }
         return Ok(());
     }

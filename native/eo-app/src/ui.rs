@@ -102,6 +102,7 @@ fn default_args() -> Args {
         house_photo_lod: false,
         house_blender_bedroom: false,
         house_mission_roof: false,
+        house_dining_light: false,
         house_glazing: true,
         beaver_house: false,
         bench: false,

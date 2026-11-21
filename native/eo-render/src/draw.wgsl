@@ -59,6 +59,7 @@ const TABLE_BOARD_BIT: u32 = 1048576u;
 const ENTRY_BRASS_BIT: u32 = 2097152u;
 const CUT_COTTON_BIT: u32 = 4194304u;
 const BEDROOM_LIGHT_BIT: u32 = 8388608u;
+const DINING_FLOOR_LIGHT_BIT: u32 = 16777216u;
 const ENCLOSURE_TRANSFER_BIT: u32 = 131072u;
 const WAXED_BOARD_BIT: u32 = 32768u;
 const COURTYARD_BOUNCE_BIT: u32 = 65536u;
@@ -729,16 +730,19 @@ fn kitchen_reflection(r: vec3<f32>, angle: f32, row: f32, rough: f32) -> vec3<f3
     return albedo * ambient / PI + day.rgb * sky + lamp.rgb * 4.0 + day.a * lk_sky_sample(r);
 }
 
+fn board_ambient(transfer: vec2<f32>) -> vec3<f32> {
+    return vec3<f32>(.56,.41,.29) *
+        (look.ambient.rgb + transfer.x*look.hemi_sky.rgb + transfer.y*vec3<f32>(1.2,.78,.46));
+}
+
 // Project the reflected ray onto the finite set of three sash bays. The
 // interpolated board coordinates are in the Blender plan's across/depth axes.
 // Their screen derivatives convert the world ray to that same surveyed frame.
 fn board_reflection(plan: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>,
                     wx: vec3<f32>, wy: vec3<f32>, ray: vec3<f32>,
-                    rough: f32, day: f32, lamp: f32, height: f32) -> vec3<f32> {
+                    rough: f32, ambient: vec3<f32>, height: f32) -> vec3<f32> {
     let up = vec3<f32>(0., 1., 0.);
     let det = dot(cross(wx,wy),up);
-    let ambient = vec3<f32>(0.56,0.41,0.29) *
-        (look.ambient.rgb + day*look.hemi_sky.rgb + lamp*vec3<f32>(1.2,0.78,0.46));
     if (abs(det) < 1e-12 || ray.y <= 0.) { return ambient; }
     let rd = (dx * dot(ray,cross(wy,up)) + dy * dot(ray,cross(up,wx))) / det;
     if (abs(rd.y) < 0.0001) { return ambient; }
@@ -854,6 +858,55 @@ fn bedroom_diffuse(point: vec3<f32>, world_normal: vec3<f32>, world: vec3<f32>) 
         light += solar * look.key.rgb * projected * cloud;
     }
     return light;
+}
+
+// The full-resolution RGB pages keep the lamp and daylight independent. The
+// clear-sky page's alpha also holds the overcast sky and indirect solar return.
+struct DiningLight { diffuse: vec3<f32>, direct: vec3<f32> };
+fn dining_floor_light(point: vec2<f32>, world: vec3<f32>) -> DiningLight {
+    let uv = clamp(point / vec2<f32>(7.,13.), vec2<f32>(.5/512.), vec2<f32>(1.-.5/512.));
+    let layers = i32(textureNumLayers(kit_orm));
+    let fixture = textureSampleLevel(kit_orm, kit_sampler, uv, layers-4, 0.);
+    let day = textureSampleLevel(kit_orm, kit_sampler, uv, layers-1, 0.).rgb;
+    let sky_tint = max(lk_sh(vec3<f32>(0.,1.,0.)),vec3<f32>(.00001));
+    let sky = sky_tint * (look.hemi_sky.w / lk_luma(sky_tint));
+    let sun = look.key_dir.xyz;
+    let cloud = sky_cloud_transmittance(world);
+    let clear = cloud * smoothstep(0.,.35,sun.y) * (1.-skyu.night.z);
+    let sky_v = clamp(uv.y,.5/256.,1.-.5/256.);
+    let overcast = textureSampleLevel(kit_orm,kit_sampler,vec2<f32>(uv.x,.5+.5*sky_v),layers-1,0.).a;
+    let lamp = 2.*fixture.rgb*fixture.rgb;
+    var return_light = lamp + mix(overcast*overcast*sky, day*day*look.key.rgb, clear);
+    if (sun.y > 0.) {
+        let across = normalize((vec4<f32>(1.,0.,0.,0.) * look.enclosure_frame).xyz);
+        let along = dot(sun, vec3<f32>(-across.z,0.,across.x));
+        let elevation = asin(clamp(sun.y,0.,1.));
+        let angle = clamp(elevation,radians(25.),radians(57.));
+        let t = (angle-radians(25.))/radians(32.);
+        let half_texel = vec2<f32>(.5/256.,.5/128.);
+        let base = vec2<f32>(.5,.25) * (clamp(uv,half_texel,1.-half_texel) + vec2<f32>(0.,select(0.,1.,along>0.)));
+        let low = textureSampleLevel(kit_orm, kit_sampler, base, layers-1, 0.).a;
+        let high = textureSampleLevel(kit_orm, kit_sampler, base+vec2<f32>(.5,0.), layers-1, 0.).a;
+        return_light += mix(low*low,high*high,t)*look.key.rgb*cloud*abs(along)/cos(angle);
+    }
+    return DiningLight(return_light, 2.*fixture.a*fixture.a*lamp/max(lamp.r,.00001));
+}
+
+// Integrate the finite opal globe around its closest direction to the mirror
+// ray. Use the direct-only bake so chair and table shadows also mask the glint.
+fn pendant_gloss(direct: vec3<f32>, world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, rough: f32) -> vec3<f32> {
+    let to_lamp = look.dining_lamp.xyz-world;
+    let dist = max(length(to_lamp),.01);
+    let centre = to_lamp/dist;
+    let mirror_ray = reflect(-v,n);
+    let offset = mirror_ray*max(dot(to_lamp,mirror_ray),0.)-to_lamp;
+    let radius = look.dining_lamp.w;
+    let l = normalize(to_lamp + offset*min(1.,radius/max(length(offset),.00001)));
+    let alpha = rough*rough;
+    let spread = min(1.,alpha+radius/(2.*dist));
+    let energy = alpha/max(spread,.0001);
+    return PI*direct*(max(dot(n,centre),0.)/max(.01,centre.y))*energy*energy
+        *lk_ggx(n,v,l,vec3<f32>(.04),rough);
 }
 
 fn shade(in: VOut) -> vec4<f32> {
@@ -1074,6 +1127,13 @@ fn shade(in: VOut) -> vec4<f32> {
         bedroom_point = (look.enclosure_frame * vec4<f32>(in.world + .025*n,1.)).xyz;
         measured_room = bedroom_point.y > 10./3. && bedroom_point.y < 20./3.;
     }
+    var measured_floor = false;
+    var floor_light: DiningLight;
+    if ((objects[in.object].kind & DINING_FLOOR_LIGHT_BIT) != 0u && n.y > .7) {
+        let parcel = (look.enclosure_frame * vec4<f32>(in.world,1.)).xyz;
+        measured_floor = abs(parcel.y) < .04;
+        if (measured_floor) { floor_light = dining_floor_light(parcel.xz,in.world); }
+    }
     let table_board = (objects[in.object].kind & TABLE_BOARD_BIT) != 0u;
     let floor_scan = table_board || local_scan || (objects[in.object].kind & FLOOR_SCAN_BIT) != 0u;
     if (floor_scan && (local_scan || table_board || abs(n.y) > 0.7)) {
@@ -1115,7 +1175,7 @@ fn shade(in: VOut) -> vec4<f32> {
             }
             s.env = ENV_INTERIOR_FLOOR;
             room_radiance = board_reflection(in.ft,scan_dx,scan_dy,dpx,dpy,
-                reflect(-v,s.n),s.rough,in.color.r*in.color.r,in.color.g*in.color.g,0.);
+                reflect(-v,s.n),s.rough,select(board_ambient(in.color.rg*in.color.rg),floor_light.diffuse,measured_floor),0.);
         } else if (table_board) {
             let frame_pos = (look.enclosure_frame * vec4<f32>(in.world,1.)).xyz;
             let wood_axis = normalize((vec4<f32>(1.,0.,0.,0.) * look.enclosure_frame).xyz);
@@ -1137,7 +1197,7 @@ fn shade(in: VOut) -> vec4<f32> {
                     let local_dy = (look.enclosure_frame * vec4<f32>(dpy,0.)).xz;
                     s.env = ENV_INTERIOR_FLOOR;
                     room_radiance = board_reflection(frame_pos.xz,local_dx,local_dy,dpx,dpy,
-                        reflect(-v,s.n),s.rough,in.color.r*in.color.r,in.color.g*in.color.g,frame_pos.y);
+                        reflect(-v,s.n),s.rough,board_ambient(in.color.rg*in.color.rg),frame_pos.y);
                 }
             }
         }
@@ -1161,7 +1221,13 @@ fn shade(in: VOut) -> vec4<f32> {
         let fill = (.033 + .039 * upward) * s.ao;
         rm_emit += s.albedo * fill * (look.hemi_sky.rgb + look.key.rgb*max(look.key_dir.y,0.));
     }
-    if (interior_transfer && (m.flags & F_GLASS) == 0u) {
+    if (measured_floor) {
+        // Furniture occlusion is already resolved on the neutral floor receiver.
+        room_enclosure = 1.;
+        measured_room = true;
+        room_diffuse = floor_light.diffuse;
+        rm_emit += pendant_gloss(floor_light.direct,in.world,s.n,v,s.rough);
+    } else if (interior_transfer && (m.flags & F_GLASS) == 0u) {
         // Transfer is sampled at build time against the actual windows, furniture
         // and luminaire. Window light follows the current sky; the pendant stays warm.
         // Near-field visibility is baked against each seat, post and rug in the room.

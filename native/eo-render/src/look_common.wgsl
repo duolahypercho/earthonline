@@ -77,6 +77,7 @@ struct Look {
     wx: vec4<f32>,
     wx_tint: vec4<f32>,
     enclosure_frame: mat4x4<f32>,
+    dining_lamp: vec4<f32>,
 };
 
 // wet-surface-reflection.js `skyDomeRadiance`: the sky model's horizon

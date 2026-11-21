@@ -93,6 +93,7 @@ struct RoomLight {
 }
 
 pub struct Finishes {
+    dining_lamp: Option<[f32; 4]>,
     mission_roof: bool,
     room_light: Option<RoomLight>,
     glazing: bool,
@@ -107,15 +108,18 @@ pub struct Finishes {
 }
 
 impl Finishes {
-    pub fn load(root: &Path, patina: bool, furniture: bool, photo: bool, glazing: bool, blender_bedroom: bool, mission_roof: bool) -> Result<Self> {
+    pub fn load(root: &Path, args: &crate::Args) -> Result<Self> {
+        let (patina, furniture, photo) = (args.house_patina, args.house_furniture, args.house_photo);
+        let glazing = args.house_glazing;
         let directory = if patina {
             root.join(FINISH_DIR).join("patina")
         } else {
             root.join(FINISH_DIR)
         };
         let photo_dir = directory.join("furniture/photo");
-        let blender_bedroom = blender_bedroom && photo && furniture && patina;
-        let mission_roof = mission_roof && photo && furniture && patina;
+        let blender_bedroom = args.house_blender_bedroom && photo && furniture && patina;
+        let dining_light = args.house_dining_light && args.interior_lighting && photo && furniture && patina;
+        let mission_roof = args.house_mission_roof && photo && furniture && patina;
         let mut scans = if patina {
             surfaces::NAMES
                 .iter()
@@ -181,7 +185,7 @@ impl Finishes {
         let manifest: ProbeManifest = serde_json::from_slice(&std::fs::read(
             directory.join("kitchen-reflections.provenance.json"),
         )?)?;
-        let yard_reflections = if furniture && photo {
+        let mut yard_reflections = if furniture && photo {
             let panorama: AssetRef = serde_json::from_slice(&std::fs::read(
                 if glazing { directory.join("yard-reflections.provenance.json") }
                 else { root.join(FINISH_DIR).join("patina/street-reflections.provenance.json") },
@@ -194,9 +198,35 @@ impl Finishes {
             if furniture && photo { photo_dir.join("floorboards.provenance.json") }
             else { root.join(FINISH_DIR).join("floorboards.provenance.json") },
         )?)?;
-        let atlas = Self::read_maps(root, &manifest.asset, 2)?;
+        let mut atlas = Self::read_maps(root, &manifest.asset, 2)?;
+        let dining_lamp = if dining_light {
+            #[derive(Deserialize)]
+            struct FloorLight {
+                #[serde(flatten)]
+                asset: AssetRef,
+                house_sha256: String,
+                lamp_parcel_xyz: [f32; 3],
+                lamp_radius_m: f32,
+            }
+            let light: FloorLight = serde_json::from_slice(&std::fs::read(
+                directory.join("dining-floor-light.provenance.json"),
+            )?)?;
+            ensure!(light.house_sha256 == manifest.house_sha256, "dining light was baked for a different house");
+            let mut pages = Self::read_pixels(root, &light.asset, 2)?;
+            // The panoramas use color and normal only. Bind the two linear
+            // light pages in their otherwise empty ORM slots.
+            atlas.orm = pages.split_off(pages.len() / 2);
+            yard_reflections.as_mut().ok_or_else(|| anyhow::anyhow!("missing courtyard layer for dining light"))?.orm = pages;
+            let [x,y,z] = light.lamp_parcel_xyz;
+            ensure!((0.0..7.0).contains(&x) && (0.0..3.3).contains(&y) && (0.0..13.0).contains(&z)
+                && (0.0..1.0).contains(&light.lamp_radius_m), "invalid dining pendant position or radius");
+            Some([x,y,z,light.lamp_radius_m])
+        } else {
+            None
+        };
         let floorboards = Self::read_maps(root, &floor, 3)?;
         Ok(Self {
+            dining_lamp,
             mission_roof,
             room_light,
             glazing,
@@ -286,6 +316,7 @@ pub struct House {
     cut_pattern: eo_assets::glb::CutPattern,
     roof_uv: Option<roof::RoofUv>,
     room_meter: Option<[f32; 3]>,
+    dining_lamp: Option<[f32; 4]>,
     probes: Option<[ProbeVolume; 2]>,
     collision: Vec<[Point; 3]>,
     steps: Vec<[Point; 2]>,
@@ -452,6 +483,7 @@ impl House {
             cut_pattern,
             roof_uv,
             room_meter,
+            dining_lamp: finishes.and_then(|f| f.dining_lamp),
             probes: finishes.map(|r| [
                 layout.probe("enamel-refrigerator", &r.manifest.probes[0]),
                 layout.probe("oven-range", &r.manifest.probes[1]),
@@ -819,6 +851,11 @@ impl House {
         [a[0], b[0]].map(|x| self.point(x, b[1], a[2]))
     }
 
+    pub fn dining_lamp(&self) -> Option<[f32; 4]> {
+        let [x,y,z,radius] = self.dining_lamp?;
+        Some(self.point(x.into(),y.into(),z.into()).as_vec3().extend(radius).to_array())
+    }
+
     pub fn point(&self, x: f64, y: f64, z: f64) -> DVec3 {
         let p = self.origin + self.across * x + self.back * z;
         DVec3::new(p.x, self.floor + y * self.height_scale, p.y)
@@ -1130,6 +1167,9 @@ impl House {
                     .contains(&self.model.materials[part.material as usize].name.as_str())
             {
                 o.kind |= eo_render::scene::FLOOR_SCAN_BIT;
+                if self.dining_lamp.is_some() && part.min[1] < 0.04 {
+                    o.kind |= eo_render::scene::DINING_FLOOR_LIGHT_BIT;
+                }
                 if self.photo { o.kind |= eo_render::scene::WAXED_BOARD_BIT; }
             }
             let family = &self.model.materials[part.material as usize].name;

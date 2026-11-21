@@ -71,6 +71,7 @@ fn base_args() -> Args {
         house_photo_lod: false,
         house_blender_bedroom: false,
         house_mission_roof: false,
+        house_dining_light: false,
         house_glazing: true,
         beaver_house: false,
         bench: false,
@@ -140,18 +141,19 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
-            "--house-blender-bedroom" | "--house-mission-roof" => {
+            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" => {
                 a.beaver_house = true;
                 a.house_finishes = true;
                 a.house_patina = true;
                 a.house_furniture = true;
                 a.house_photo = true;
-                if s == "--house-mission-roof" {
-                    a.house_mission_roof = true;
-                } else {
-                    a.house_blender_bedroom = true;
+                match s.as_str() {
+                    "--house-dining-light" => a.house_dining_light = true,
+                    "--house-mission-roof" => a.house_mission_roof = true,
+                    _ => a.house_blender_bedroom = true,
                 }
             }
+            "--no-house-dining-light" => a.house_dining_light = false,
             "--no-house-mission-roof" => a.house_mission_roof = false,
             "--no-house-blender-bedroom" => a.house_blender_bedroom = false,
             "--house-photo-lod" => a.house_photo_lod = true,
@@ -1026,6 +1028,37 @@ mod house_tests {
         assert!(coords.contains(&0) && coords.contains(&0xffff));
         let (off, _) = parse(&["--house-blender-bedroom".to_owned(), "--no-house-blender-bedroom".to_owned()]).unwrap();
         assert!(off.house_photo && !off.house_blender_bedroom);
+    }
+
+    #[test]
+    fn dining_light_registers_the_two_pages_on_the_installed_floor() {
+        use eo_render::scene::{DINING_FLOOR_LIGHT_BIT, FLOOR_SCAN_BIT};
+        let (mut args, _) = parse(&["--house-dining-light".into()]).unwrap();
+        args.kit = false;
+        args.models = false;
+        args.landmarks = false;
+        let world = load_world(&args).unwrap();
+        let floor = world.house.as_ref().unwrap().point(0.,0.,0.).y as f32;
+        let boards: Vec<_> = world.scene.objects.iter().filter(|o| o.kind & DINING_FLOOR_LIGHT_BIT != 0).collect();
+        assert!(!boards.is_empty());
+        assert!(boards.iter().all(|o| o.kind & FLOOR_SCAN_BIT != 0 && o.min[1] <= floor + 0.04));
+        let maps = crate::house::Finishes::load(&world.paths.repo_root, &args).unwrap();
+        let lamp = &maps.yard_reflections.as_ref().unwrap().orm;
+        let sky = &maps.atlas.orm;
+        let res = eo_assets::kit::HIGH_RES;
+        assert_eq!((lamp.len(),sky.len()),(4*res*res,4*res*res));
+        // The neutral floor receives direct lamp light beside the table. The
+        // tabletop blocks it at the centre. The kernel's origin is the street.
+        let texel = |page: &[u8], x: f32, z: f32, channel: usize| {
+            page[4*((z*res as f32/13.) as usize*res+(x*res as f32/7.) as usize)+channel]
+        };
+        assert!(texel(lamp,2.55,5.9,0) > texel(lamp,2.55,7.1,0));
+        assert!(sky.chunks_exact(4).any(|t| t[0] > 5 && t[3] > 5));
+        let (off, _) = parse(&["--house-dining-light".into(),"--no-house-dining-light".into()]).unwrap();
+        assert!(off.house_photo && !off.house_dining_light);
+        let original = crate::house::Finishes::load(&world.paths.repo_root, &off).unwrap();
+        assert!(original.atlas.orm.iter().all(|&b| b==0));
+        assert!(original.yard_reflections.unwrap().orm.iter().all(|&b| b==0));
     }
 
     #[test]
