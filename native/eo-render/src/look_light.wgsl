@@ -377,5 +377,6 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     }
     let fog = lk_smooth(look.fog.x, look.fog.y, lm_fog_depth(m, vd)); // the set's capped sight distance
     lit = mix(lit, look.fog_color.xyz, fog);
+    // RT_GI_HOOK
     return vec4<f32>(lit, alpha);
 }

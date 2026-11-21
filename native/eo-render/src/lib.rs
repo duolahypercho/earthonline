@@ -48,6 +48,10 @@ pub mod props_lib2;
 pub mod probe; // facade
 pub mod probe_grid; // the reflection probes on the streets round the camera (lighting)
 pub mod rooms;
+pub mod rt_composite; // the ray-traced passes' G-buffer and deferred composite (`--rt-gi`, `--rt-reflect`)
+pub mod rt_gi; // ray-traced one-bounce diffuse light (`--rt-gi`)
+pub mod rt_reflect; // ray-traced reflections (`--rt-reflect`)
+pub mod rt_scene; // the traced scene every ray-traced pass shares (`--rt-gi`, `--rt-reflect`)
 pub mod shop_lights; // lit shop windows at night (`--shop-light`, stage N1)
 pub mod sign_letters; // the shop signs' words (`--facade-clutter`, stage S1)
 pub mod sky; // sky
@@ -142,6 +146,10 @@ pub struct GpuContext {
     pub options: GpuOptions,
     /// BC block compression (the CC0 sets are BC7 / BC5).
     pub bc: bool,
+    /// (`--rt-gi`, rt_gi.rs) inline ray queries: asked for only when
+    /// `rt_gi::wanted()`, on Metal (the one backend tested) where the adapter
+    /// has `EXPERIMENTAL_RAY_QUERY`.
+    pub ray_query: bool,
 }
 
 impl GpuContext {
@@ -208,11 +216,20 @@ impl GpuContext {
         if adapter_features.contains(wgpu::Features::CLIP_DISTANCES) {
             wanted |= wgpu::Features::CLIP_DISTANCES;
         }
+        // (`--rt-gi`) inline ray queries, asked for only with the option, on
+        // Metal only (no other backend has been tested); without them the
+        // option is off and the frame is as before.
+        let ray_query = rt_scene::wanted() && info.backend == wgpu::Backend::Metal && adapter_features.contains(wgpu::Features::EXPERIMENTAL_RAY_QUERY);
+        if ray_query {
+            wanted |= wgpu::Features::EXPERIMENTAL_RAY_QUERY;
+        }
         let limits = adapter.limits();
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("eo-device"),
             required_features: wanted,
             required_limits: limits,
+            // SAFETY: the experimental ray-query API is opted into only with `--rt-gi` on Metal (rt_scene.rs).
+            experimental_features: if ray_query { unsafe { wgpu::ExperimentalFeatures::enabled() } } else { wgpu::ExperimentalFeatures::disabled() },
             ..Default::default()
         }))
         .context("request_device")?;
@@ -236,6 +253,7 @@ impl GpuContext {
             first_instance,
             options,
             bc, // cc0
+            ray_query,
         })
     }
 }
@@ -401,6 +419,8 @@ pub struct Renderer {
     occlusion_frame: std::sync::atomic::AtomicBool,
     opaque_pipeline: wgpu::RenderPipeline,
     blend_pipeline: wgpu::RenderPipeline,
+    /// (`--rt-gi`, `--rt-reflect`) `opaque_pipeline` writing the traced passes' G-buffer too (with a pass only).
+    opaque_rt_pipeline: Option<wgpu::RenderPipeline>,
     /// one per probe front cube (made with the renderer and when the street
     /// sets or the detail sheet arrive; a capture flips the index, nothing is made mid-play).
     draw_bg: std::sync::Mutex<[wgpu::BindGroup; 2]>,
@@ -476,6 +496,14 @@ pub struct Renderer {
     pub light_shadow: light_shadow::LightShadowGpu,
     pub lit_fog: lit_fog::LitFogGpu,
     lighting_ts: lighting::LightingTimer,
+    /// (`--rt-gi`, `--rt-reflect`) the traced scene (rt_scene.rs), the
+    /// G-buffer and composite (rt_composite.rs), the ray-traced diffuse light
+    /// (rt_gi.rs) and reflections (rt_reflect.rs), with their options and a
+    /// device with ray queries.
+    rt_scene: Option<rt_scene::RtScene>,
+    rt_composite: Option<rt_composite::RtComposite>,
+    rt_gi: Option<rt_gi::RtGi>,
+    rt_reflect: Option<rt_reflect::RtReflect>,
     /// grade-separated roads, attached once built (`attach_structures`).
     pub structures: std::sync::OnceLock<structures::StructuresGpu>,
 }
@@ -703,9 +731,15 @@ impl Renderer {
             d.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: size.max(4).next_multiple_of(4), usage, mapped_at_creation: false })
         };
         // (STORAGE: the lamp and headlight shadow maps' casters read the city's geometry too, light_shadow.rs)
-        let vertex_buf = buffer("vertices", vb_bytes, wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE);
+        // (`--rt-gi`) the arena is the acceleration structures' input too, with the pass only.
+        // (`--rt-gi`, `--rt-reflect`) the traced passes: a device with ray queries and a
+        // single-sample target without the debug ids (the city's opaque pass writes their G-buffer).
+        let rt_features = look::shader_features();
+        let rt_live = (rt_features.rt_gi || rt_features.rt_reflect) && ctx.ray_query && n == 1 && !init.debug_ids;
+        let blas_input = if rt_live { wgpu::BufferUsages::BLAS_INPUT } else { wgpu::BufferUsages::empty() };
+        let vertex_buf = buffer("vertices", vb_bytes, wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE | blas_input);
         ctx.queue.write_buffer(&vertex_buf, 0, bytemuck::cast_slice(init.vertices));
-        let index_buf = buffer("indices", ib_bytes, wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE);
+        let index_buf = buffer("indices", ib_bytes, wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE | blas_input);
         ctx.queue.write_buffer(&index_buf, 0, bytemuck::cast_slice(init.indices));
         let object_buf = buffer("objects", ob_bytes, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC);
         ctx.queue.write_buffer(&object_buf, 0, bytemuck::cast_slice(&objects));
@@ -950,7 +984,7 @@ impl Renderer {
             wgpu::VertexAttribute { format: wgpu::VertexFormat::Snorm8x4, offset: 12, shader_location: 1 },
             wgpu::VertexAttribute { format: wgpu::VertexFormat::Unorm8x4, offset: 16, shader_location: 2 },
         ];
-        let make = |label: &str, blend: bool| {
+        let make = |label: &str, blend: bool, rt: bool| {
             let color = wgpu::ColorTargetState {
                 format: look::HDR_FORMAT, // the city renders HDR; post writes init.color_format
                 blend: blend.then_some(wgpu::BlendState::ALPHA_BLENDING),
@@ -962,6 +996,10 @@ impl Renderer {
                 write_mask: if blend { wgpu::ColorWrites::empty() } else { wgpu::ColorWrites::ALL },
             };
             let targets_ids = [Some(color.clone()), Some(ids)];
+            // (`--rt-gi`, `--rt-reflect`) the traced passes' G-buffer beside the colour (rt_composite.rs `use_wgsl`).
+            let targets_rt: Vec<_> = std::iter::once(Some(color.clone()))
+                .chain(rt_composite::gbuffer_layout(rt_features.rt_gi, rt_features.rt_reflect).into_iter().map(|(_, format)| Some(wgpu::ColorTargetState { format, blend: None, write_mask: wgpu::ColorWrites::ALL })))
+                .collect();
             let targets = [Some(color)];
             d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
@@ -993,16 +1031,18 @@ impl Renderer {
                 multisample: wgpu::MultisampleState { count: init.sample_count, ..Default::default() },
                 fragment: Some(wgpu::FragmentState {
                     module: &draw_module,
-                    entry_point: Some(if init.debug_ids { "fs_ids" } else { "fs" }),
+                    entry_point: Some(if rt { "fs_rtg" } else if init.debug_ids { "fs_ids" } else { "fs" }),
                     compilation_options: Default::default(),
-                    targets: if init.debug_ids { &targets_ids } else { &targets },
+                    targets: if rt { &targets_rt } else if init.debug_ids { &targets_ids } else { &targets },
                 }),
                 multiview_mask: None,
                 cache: None,
             })
         };
-        let opaque_pipeline = make("draw-opaque", false);
-        let blend_pipeline = make("draw-blend", true);
+        let opaque_pipeline = make("draw-opaque", false, false);
+        let blend_pipeline = make("draw-blend", true, false);
+        // (`--rt-gi`, `--rt-reflect`) the opaque city with the traced passes' G-buffer, with a pass only.
+        let opaque_rt_pipeline = rt_live.then(|| make("draw-opaque-rt", false, true));
         // the scene probe (its face pass draws with the city pipeline layout).
         let probe_gpu = probe::ProbeGpu::new(
             d,
@@ -1038,6 +1078,27 @@ impl Renderer {
             groups: std::mem::size_of_val(groups.as_slice()) as u64 + hlod_map_buf.size() + hlod_state_buf.size() + hlod_flags_buf.size(), // + the far layer's per-group words
             textures: ab + nb + mb + look_gpu.bytes + facade_gpu.bytes + probe_gpu.bytes + sign_gpu.bytes, // shadow map, shadow lists, uniforms; ages, weather; the signs' words (0 without them)
         };
+        // (`--rt-gi`) the traced scene with its static cells, and the pass.
+        let rt_scene = rt_live.then(|| {
+            let s = rt_scene::RtScene::new(d, &ctx.queue, rt_scene::RtSceneInit { vertex_buf: &vertex_buf, index_buf: &index_buf, material_buf: &material_buf, look_buf: look_gpu.look_buffer(), kit_layers: init.kit_layers });
+            let cells = rt_scene::static_cells(init.objects, init.indices, vertex_capacity);
+            eprintln!("rt: scene on ({} static cells, {} triangles; {:?})", cells.len(), cells.iter().flat_map(|c| &c.1).map(|g| g.index_count as u64 / 3).sum::<u64>(), s.config);
+            for (k, g, mn, mx) in cells {
+                s.add(k, g, mn, mx);
+            }
+            s
+        });
+        let rt_composite = rt_scene.as_ref().map(|_| rt_composite::RtComposite::new(d, &ctx.queue, look_gpu.look_buffer(), rt_features.rt_gi, rt_features.rt_reflect));
+        let rt_gi = rt_scene.as_ref().filter(|_| rt_features.rt_gi).map(|s| {
+            let r = rt_gi::RtGi::new(d, &ctx.queue, s);
+            eprintln!("rt-gi: on ({:?})", r.config);
+            r
+        });
+        let rt_reflect = rt_scene.as_ref().filter(|_| rt_features.rt_reflect).map(|s| {
+            let r = rt_reflect::RtReflect::new(d, &ctx.queue, s);
+            eprintln!("rt-reflect: on ({:?})", r.config);
+            r
+        });
         Ok(Self {
             object_count,
             base_object_count: init.objects.len() as u32,
@@ -1068,6 +1129,7 @@ impl Renderer {
             occlusion_enabled: std::sync::atomic::AtomicBool::new(ctx.compaction()),
             occlusion_frame: std::sync::atomic::AtomicBool::new(false),
             opaque_pipeline,
+            opaque_rt_pipeline,
             blend_pipeline,
             draw_bg: std::sync::Mutex::new(draw_bg),
             probe_draw_bg: std::sync::Mutex::new(probe_bg),
@@ -1113,7 +1175,58 @@ impl Renderer {
             lit_fog: lit_fog::LitFogGpu::new(d),
             lighting_ts: Default::default(),
             structures: std::sync::OnceLock::new(),
+            rt_scene,
+            rt_composite,
+            rt_gi,
+            rt_reflect,
         })
+    }
+
+    /// (`--rt-gi`) Whether a traced scene exists (a ray-traced pass runs: the
+    /// option compiled in and a device with ray queries).
+    pub fn rt_scene_live(&self) -> bool {
+        self.rt_scene.is_some()
+    }
+
+    /// (`--rt-gi`, bench settling) Build the traced scene round the camera of
+    /// the last `update` without drawing; true when it is whole (always true
+    /// without one).
+    pub fn rt_prepare(&self) -> bool {
+        self.rt_scene.as_ref().is_none_or(|s| s.prepare(&self.look))
+    }
+
+    /// (`--rt-gi`) The traced scene, when there is one.
+    pub fn rt_scene(&self) -> Option<&rt_scene::RtScene> {
+        self.rt_scene.as_ref()
+    }
+
+    /// (`--rt-gi`) The diffuse light's pass, when it runs.
+    pub fn rt_gi(&self) -> Option<&rt_gi::RtGi> {
+        self.rt_gi.as_ref()
+    }
+
+    /// (`--rt-reflect`) The reflections' pass, when it runs.
+    pub fn rt_reflect(&self) -> Option<&rt_reflect::RtReflect> {
+        self.rt_reflect.as_ref()
+    }
+
+    /// (`--rt-gi`, `--rt-reflect`) The G-buffer and composite, when a traced pass runs.
+    pub fn rt_composite(&self) -> Option<&rt_composite::RtComposite> {
+        self.rt_composite.as_ref()
+    }
+
+    /// (`--rt-gi`) A BLAS source became resident (kit packs): traced from the next frame.
+    pub fn rt_add(&self, key: rt_scene::RtKey, geoms: Vec<rt_scene::RtGeom>, min: glam::Vec3, max: glam::Vec3) {
+        if let Some(s) = &self.rt_scene {
+            s.add(key, geoms, min, max);
+        }
+    }
+
+    /// (`--rt-gi`) A BLAS source left (an evicted kit pack): out of the TLAS at the next encode.
+    pub fn rt_remove(&self, key: rt_scene::RtKey) {
+        if let Some(s) = &self.rt_scene {
+            s.remove(key);
+        }
     }
 
     /// The lighting additions' timestamps for the coming encodes (bench): a
@@ -1441,6 +1554,11 @@ impl Renderer {
             };
             let at = (k * self.base_object_count + object_at) as u64 * std::mem::size_of::<GpuObject>() as u64;
             queue.write_buffer(&self.object_buf, at, bytemuck::cast_slice(data));
+        }
+        if let Some(s) = &self.rt_scene {
+            // (`--rt-gi`) the model is traced from the next frame.
+            let (g, mn, mx) = rt_scene::model_geoms(objects, index_at, indices);
+            s.add(rt_scene::RtKey::Model(object_at), g, mn, mx);
         }
         self.set_group_ready(queue, group, true);
     }
@@ -1903,6 +2021,19 @@ impl Renderer {
         let keep_depth = (self.look.options.ao || self.look.sky_wants_depth()) && depth.texture().usage().contains(wgpu::TextureUsages::TEXTURE_BINDING) && depth.texture().sample_count() == 1; // + the sky passes
         // the wire pass after the late city pass depth-tests against it.
         let keep_depth = keep_depth || self.props.get().is_some_and(|p| p.wires_pending());
+        // (`--rt-gi`) the traced diffuse light: the city's opaque pass writes its
+        // G-buffer, the trace and the composite follow it, then the rest of the
+        // city pass (`CityPart`); with a single-sample depth it can read.
+        let rt = match (&self.rt_scene, &self.rt_composite) {
+            (Some(s), Some(c)) if resolve.is_none() && depth.texture().usage().contains(wgpu::TextureUsages::TEXTURE_BINDING) && depth.texture().sample_count() == 1 => {
+                Some((s, c, c.gbuffer_views((output.texture().width(), output.texture().height()))))
+            }
+            _ => None,
+        };
+        let opaque_city = match (&rt, &self.opaque_rt_pipeline) {
+            (Some(_), Some(p)) => p,
+            _ => &self.opaque_pipeline,
+        };
         let draw_bg = self.draw_bg.lock().unwrap()[self.probe.front().0].clone(); // the front cube's
         // with occlusion on the city is two passes, the early
         // (objects visible last frame, depth kept for the pyramid) and the
@@ -1911,12 +2042,17 @@ impl Renderer {
         // with the water pass on, the glass is drawn after the water (its own pass below).
         let water = self.water.get().filter(|_| self.water_active());
         let water_on = water.is_some();
-        let city_pass = |enc: &mut wgpu::CommandEncoder, late: bool, last: bool, ts_base: u32| {
-            let tw = ts.map(|(q, base)| wgpu::RenderPassTimestampWrites {
-                query_set: q,
-                beginning_of_pass_write_index: Some(base + ts_base),
-                end_of_pass_write_index: Some(base + ts_base + 1),
-            });
+        // What a city pass draws: everything (without the traced light), the
+        // opaque city alone (with its G-buffer), or the rest after the composite.
+        #[derive(Clone, Copy, PartialEq)]
+        enum CityPart {
+            All,
+            Opaque,
+            Rest,
+        }
+        // (`tsw`: the timestamp set and the slot of the pass's begin; its end is the next.)
+        let city_pass = |enc: &mut wgpu::CommandEncoder, late: bool, last: bool, part: CityPart, tsw: Option<(&wgpu::QuerySet, u32)>| {
+            let tw = tsw.map(|(q, slot)| wgpu::RenderPassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(slot), end_of_pass_write_index: Some(slot + 1) });
             let mut attachments = vec![Some(wgpu::RenderPassColorAttachment {
                 view: color,
                 depth_slice: None,
@@ -1938,8 +2074,23 @@ impl Renderer {
                     },
                 }));
             }
+            if let (CityPart::Opaque, Some((_, _, gb))) = (part, &rt) {
+                // (`--rt-gi`) the G-buffer, cleared by the first opaque pass.
+                for v in gb {
+                    attachments.push(Some(wgpu::RenderPassColorAttachment {
+                        view: v,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations { load: if late { wgpu::LoadOp::Load } else { wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT) }, store: wgpu::StoreOp::Store },
+                    }));
+                }
+            }
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some(if late { "city-late" } else { "city" }),
+                label: Some(match (part, late) {
+                    (CityPart::Rest, _) => "city-rest",
+                    (_, true) => "city-late",
+                    _ => "city",
+                }),
                 color_attachments: &attachments,
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: depth,
@@ -1965,10 +2116,15 @@ impl Renderer {
             let slots = [self.object_count, self.object_count - self.blend_first];
             // (pipeline, list offset, count word): the early pass draws the
             // opaque list; the late pass the late opaque list, then the glass.
-            let lists: &[(&wgpu::RenderPipeline, u64, u64)] = match (occlusion, late) {
-                (false, _) => &[(&self.opaque_pipeline, 0, 0), (&self.blend_pipeline, blend_offset, 4)],
-                (true, false) => &[(&self.opaque_pipeline, 0, 0)],
-                (true, true) => &[(&self.opaque_pipeline, 2 * n * DRAW_ARGS_BYTES, 40), (&self.blend_pipeline, blend_offset, 4)],
+            // (`--rt-gi`) the opaque part draws the opaque lists with the G-buffer's
+            // pipeline; the rest part what the late (or the one) pass draws after them.
+            let lists: &[(&wgpu::RenderPipeline, u64, u64)] = match (part, occlusion, late) {
+                (CityPart::All, false, _) => &[(&self.opaque_pipeline, 0, 0), (&self.blend_pipeline, blend_offset, 4)],
+                (CityPart::All, true, false) => &[(&self.opaque_pipeline, 0, 0)],
+                (CityPart::All, true, true) => &[(&self.opaque_pipeline, 2 * n * DRAW_ARGS_BYTES, 40), (&self.blend_pipeline, blend_offset, 4)],
+                (CityPart::Opaque, true, true) => &[(opaque_city, 2 * n * DRAW_ARGS_BYTES, 40)],
+                (CityPart::Opaque, _, _) => &[(opaque_city, 0, 0)],
+                (CityPart::Rest, _, _) => &[(&self.blend_pipeline, blend_offset, 4)],
             };
             for &(pipeline, offset, counter) in lists {
                 if std::ptr::eq(pipeline, &self.blend_pipeline) {
@@ -2035,8 +2191,9 @@ impl Renderer {
                 }
             }
         };
+        let first = if rt.is_some() { CityPart::Opaque } else { CityPart::All };
         if occlusion {
-            city_pass(enc, false, false, 2);
+            city_pass(enc, false, false, first, ts.map(|(q, b)| (q, b + 2)));
             {
                 let tw = ts.map(|(q, b)| wgpu::ComputePassTimestampWrites {
                     query_set: q,
@@ -2066,9 +2223,9 @@ impl Renderer {
                     }
                 });
             }
-            city_pass(enc, true, true, Q_LATE_DRAW);
+            city_pass(enc, true, rt.is_none(), first, ts.map(|(q, b)| (q, b + Q_LATE_DRAW)));
         } else {
-            city_pass(enc, false, true, 2);
+            city_pass(enc, false, rt.is_none(), first, ts.map(|(q, b)| (q, b + 2)));
             // The occlusion slots are still written (empty passes), so every
             // query a frame resolves is defined.
             if let Some((q, b)) = ts {
@@ -2079,6 +2236,38 @@ impl Renderer {
                     });
                 }
             }
+        }
+        if let Some((scene, comp, _)) = &rt {
+            // (`--rt-gi`, `--rt-reflect`) the scene round this frame's camera, the
+            // traces and their composite on the opaque city, then the rest of the
+            // city pass over it.
+            if let Some((_, eye, _, _)) = self.look.current_camera() {
+                scene.update(enc, eye);
+            }
+            let gb = |slot| comp.view(slot);
+            let gi = match (&self.rt_gi, gb(rt_composite::GSlot::N)) {
+                (Some(g), Some(n)) => g.encode(enc, scene, &self.look, depth, &n, lts),
+                _ => {
+                    lighting::empty_span(enc, lts, lighting::Q_RT_GI, "rt-gi (off)");
+                    None
+                }
+            };
+            let refl = match (&self.rt_reflect, gb(rt_composite::GSlot::N), gb(rt_composite::GSlot::C), gb(rt_composite::GSlot::D)) {
+                (Some(r), Some(n), Some(c), Some(d)) => r.encode(enc, scene, &self.look, depth, &n, &c, &d, lts),
+                _ => {
+                    lighting::empty_span(enc, lts, lighting::Q_RT_REFLECT, "rt-reflect (off)");
+                    None
+                }
+            };
+            let gi_in = self.rt_gi.as_ref().zip(gi.as_ref()).map(|(g, (r, z))| g.composite_input(r, z));
+            let refl_in = self.rt_reflect.as_ref().zip(refl.as_ref()).map(|(p, (r, z))| p.composite_input(r, z));
+            comp.encode(enc, depth, &hdr, gi_in, refl_in, lts);
+            city_pass(enc, true, true, CityPart::Rest, lts.map(|(q, b)| (q, b + lighting::Q_CITY_REST)));
+        } else {
+            lighting::empty_span(enc, lts, lighting::Q_RT_GI, "rt-gi (off)");
+            lighting::empty_span(enc, lts, lighting::Q_RT_REFLECT, "rt-reflect (off)");
+            lighting::empty_span(enc, lts, lighting::Q_RT_COMPOSITE, "rt-composite (off)");
+            lighting::empty_span(enc, lts, lighting::Q_CITY_REST, "city rest (in the city pass)");
         }
         // the FFT (+ the plain patch cull), the frame copy and the water
         // pass, the city's and the agents' glass drawn over it in the same pass.

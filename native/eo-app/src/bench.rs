@@ -490,9 +490,11 @@ fn settle_p(ctx: &GpuContext, renderer: &Renderer, world: &World, models: &mut M
         // Keep the GPU fed so the LOD state follows (and queued writes land).
         renderer.update(&ctx.queue, cam);
         eo_render::pace::submit_tick(&ctx.device, &ctx.queue); // always counted (an empty submit counts only with queued writes)
+        // (`--rt-gi`) the traced scene round the camera built before a frame is drawn (nothing without the pass).
+        let rt_ready = renderer.rt_prepare();
         // Reclaim finished submissions' staging memory, as a presenting loop would.
         let _ = ctx.device.poll(wgpu::PollType::Poll);
-        if models.settled() && props.as_deref().is_none_or(|p| p.settled()) && renderer.ambient.settled() { // props // the ambient volume (lighting)
+        if models.settled() && props.as_deref().is_none_or(|p| p.settled()) && renderer.ambient.settled() && rt_ready { // props // the ambient volume (lighting)
             break;
         }
         if t.elapsed().as_secs_f64() > timeout_s {
@@ -1052,7 +1054,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             }
         }
         // the lighting additions' passes, per measured frame (empty spans for those off).
-        let mut li_passes: [Vec<f64>; 6] = Default::default();
+        let mut li_passes: Vec<Vec<f64>> = vec![vec![]; eo_render::lighting::PASSES.len()];
         if let Some(target) = &li_resolve {
             let ts = read_resolved(&ctx, target, total.div_ceil(TS_FRAMES), lq, li_stride)?;
             let ms = |a: u64, b: u64| if b >= a { (b - a) as f64 * period_ns / 1e6 } else { 0.0 };
@@ -1607,6 +1609,16 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         report["water"]["dive_exposure"] = args.look.dive_exposure.into();
         report["view_detail"] = vd_json; // outside the json! above: its recursion limit
         report["lighting_passes_ms"] = serde_json::Value::Object(lighting_passes); // on: whether this path timed them
+        if let Some(r) = renderer.rt_gi() {
+            // (`--rt-gi`) what was traced on this path so far (cumulative over the run's paths).
+            report["rt_gi"] = r.stats().json();
+        }
+        if let Some(r) = renderer.rt_reflect() {
+            report["rt_reflect"] = r.stats().json();
+        }
+        if let Some(s) = renderer.rt_scene() {
+            report["rt_scene"] = s.stats().json();
+        }
         if renderer.structures.get().is_some() {
             // the grade-separated roads (`--structures`; absent without them).
             report["structures"] = json!({
@@ -1827,6 +1839,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     out["settings"]["quality"] = json!(args.quality.name());
     out["settings"]["budget_ms"] = json!(budget_ms);
     out["lighting"] = crate::quality::lighting_json(args);
+    out["rt"] = crate::quality::rt_json(args, &renderer); // (`--rt-gi`, `--rt-reflect`) whether the passes ran, their settings and what they traced
     out["grime"] = crate::quality::grime_json(args); // surface weathering (`--grime`)
     out["street_life"] = crate::quality::street_life_json(args); // litter, graffiti, posters (`--street-life`)
     out["stand_ins"] = crate::quality::stand_ins_json(args); // procedural models for absent prop GLBs (`--stand-ins`)

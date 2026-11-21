@@ -912,6 +912,9 @@ pub struct KitRuntime {
     /// deferred (near, mid).
     near_pool: Option<NearPool>,
     freed: [bool; 2],
+    /// (`--rt-gi`) each uploading pack's buildings as acceleration-structure
+    /// geometries, handed to the renderer when the pack is resident.
+    rt_pending: HashMap<(u32, u8), (Vec<crate::rt_scene::RtGeom>, Vec3, Vec3)>,
 }
 
 impl KitRuntime {
@@ -1043,6 +1046,7 @@ impl KitRuntime {
             near_out_of_view: 0,
             near_pool: None,
             freed: [false; 2],
+            rt_pending: HashMap::new(),
         }
     }
 
@@ -1151,6 +1155,7 @@ impl KitRuntime {
                     }
                     Some(Slot::Uploading(a)) => {
                         self.free(a);
+                        self.rt_pending.remove(&k);
                         self.stats.packs_dropped_unneeded += 1;
                     }
                     _ => {}
@@ -1189,7 +1194,7 @@ impl KitRuntime {
                 crate::upload::bury(Box::new(a)); // a whole pack (MBs) is not freed on the render thread
                 continue;
             }
-            match self.make_job(&mut a) {
+            match self.make_job(&mut a, renderer.rt_scene_live()) {
                 Some((job, alloc)) => {
                     self.slots.insert(key, Slot::Uploading(alloc));
                     uploads.push(job);
@@ -1245,7 +1250,7 @@ impl KitRuntime {
         Some((v + base[0], i + base[1], o + base[2], pooled))
     }
 
-    fn make_job(&mut self, a: &mut PackArrival) -> Option<(Job, Alloc)> {
+    fn make_job(&mut self, a: &mut PackArrival, rt_gi: bool) -> Option<(Job, Alloc)> {
         let objects_needed: u32 =
             if self.split_materials { a.pack.buildings.iter().map(|b| b.splits.len() as u32).sum() } else { a.pack.buildings.len() as u32 };
         let (v, i, o, pooled) = self.alloc_ranges(a.pack.rung == RUNG_NEAR, a.nv, a.ni, objects_needed)?;
@@ -1271,6 +1276,27 @@ impl KitRuntime {
             } else {
                 objects.push(mk(b.index_start, b.index_count));
             }
+        }
+        if rt_gi {
+            // (`--rt-gi`) one geometry a building, its range in the arena.
+            let (mut mn, mut mx) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+            let geoms = pack
+                .buildings
+                .iter()
+                .map(|b| {
+                    mn = mn.min(Vec3::from(b.min));
+                    mx = mx.max(Vec3::from(b.max));
+                    crate::rt_scene::RtGeom {
+                        base_vertex: ar.vertex_base + v + b.vertex_start,
+                        vertex_count: b.vertex_count,
+                        first_index: ar.index_base + i + b.index_start,
+                        index_count: b.index_count / 3 * 3,
+                        material: self.set.palette_base,
+                        kind: ObjectKind::Kit as u32,
+                    }
+                })
+                .collect();
+            self.rt_pending.insert((pack.tile, pack.rung), (geoms, mn, mx));
         }
         let vsize = std::mem::size_of::<Vertex>() as u64;
         let osize = std::mem::size_of::<GpuObject>() as u64;
@@ -1322,6 +1348,7 @@ impl KitRuntime {
 
     fn evict(&mut self, renderer: &crate::Renderer, queue: &wgpu::Queue, key: (u32, u8), a: Alloc) {
         crate::hitch::count(crate::hitch::Event::Eviction, 1); // hitch
+        renderer.rt_remove(crate::rt_scene::RtKey::Kit(key.0, key.1)); // (`--rt-gi`) out of the traced set this frame
         // Not ready first, then the objects emptied; the ranges are reused only
         // by later writes, which the queue orders after the frames in flight.
         self.set_ready(key.0, key.1, false);
@@ -1375,6 +1402,9 @@ impl KitRuntime {
             let key = (((tag >> 8) & 0xffff_ffff) as u32, (tag & 0xff) as u8);
             let Some(Slot::Uploading(a)) = self.slots.remove(&key) else { continue };
             self.slots.insert(key, Slot::Resident(a));
+            if let Some((g, mn, mx)) = self.rt_pending.remove(&key) {
+                renderer.rt_add(crate::rt_scene::RtKey::Kit(key.0, key.1), g, mn, mx); // (`--rt-gi`) traced from the next encode
+            }
             crate::hitch::mark(crate::hitch::Mark::KitPackResident, 1);
             self.set_ready(key.0, key.1, true);
             self.write_groups(renderer, queue, key.0);
