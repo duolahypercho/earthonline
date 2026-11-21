@@ -275,7 +275,7 @@ pub fn draw_source(kind: &str, clip: bool) -> String {
     );
     let common = format!("{}\n{out}\n{}", constants_wgsl(), include_str!("light_shadow_draw.wgsl"));
     let body = match kind {
-        "props" => format!("{}\n{}\n{}", include_str!("props_types.wgsl"), common, include_str!("light_shadow_props.wgsl")),
+        "props" => format!("{}\n{}\n{}", crate::props::pr_types_src(), common, include_str!("light_shadow_props.wgsl")),
         "agents" => format!("{}\n{}\n{}\n{}", include_str!("agents_types.wgsl"), include_str!("agents_common.wgsl"), common, include_str!("light_shadow_agents.wgsl")),
         _ => common,
     };

@@ -19,10 +19,12 @@
 //!   `vehicles`  the driving model
 //!   `pedestrians` the walker model
 //!   `region`    one focus: population, level of detail, output
+//!   `corridor`  the long roads' through traffic and the bridge's walkers, out to the horizon
 //!   `world`     the clock, the worker pool, the off-thread runner
 //!   `output`    the 32-byte instance record
 
 pub mod consts;
+pub mod corridor;
 pub mod geom;
 pub mod grid;
 pub mod import_js;

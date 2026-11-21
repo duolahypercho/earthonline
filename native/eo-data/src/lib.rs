@@ -10,6 +10,8 @@ use std::collections::HashSet;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+pub mod detail_ground; // a finer drawn ground than the 8 m grid, when a provider is set (none yet)
+pub mod geo; // latitude, longitude and height above mean sea level to game coordinates
 pub mod groundscale; // the street size (the approved ground-plan deviation, 1.25)
 pub mod roof_colours; // measured roof colours (aerial imagery)
 pub mod sim_source;

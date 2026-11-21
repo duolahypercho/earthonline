@@ -42,6 +42,9 @@ fn scene(ctx: &GpuContext, smooth: bool) -> Renderer {
     let mut r = Renderer::from_parts(ctx, &v, &i, &o, wgpu::TextureFormat::Rgba8UnormSrgb, 1).unwrap();
     let opts = LookOptions { ao: false, sky: eo_render::sky::SkyOptions::default(), lighting: LightingOptions { smooth_time: smooth, ..LightingOptions::OFF }, ..r.look.options };
     r.look.set_options(&ctx.device, opts);
+    // the dome-estimate meter this test was written for, not the scene meter
+    // (on by default since the Golden Gate merge), which barely moves here.
+    r.look.cam_switches.meter = false;
     r
 }
 

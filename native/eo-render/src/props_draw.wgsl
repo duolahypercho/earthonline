@@ -21,6 +21,14 @@ const PR_PLATE: u32 = 8192u;
 const PR_GLB_MAPS: u32 = 16384u;
 const PR_BIG: u32 = 32768u;
 const PR_LEAF: u32 = 65536u;
+const PR_ROCK: u32 = 131072u;
+// the meadow patches (props_lib2/vegetation_models.rs P_MEADOW*, P_BLADE_PBR).
+const PR_MEADOW: u32 = 262144u;
+const PR_MEADOW_LIVE: u32 = 524288u;
+const PR_MEADOW_MAT: u32 = 1048576u;
+const PR_BLADE_PBR: u32 = 2097152u;
+const PR_MEADOW_THICK: u32 = 4194304u;
+const PR_MEADOW_SOIL: u32 = 8388608u;
 
 @group(2) @binding(0) var<uniform> pr: PrParams;
 @group(2) @binding(1) var<storage, read> pr_instances: array<PrInstance>;
@@ -65,7 +73,11 @@ fn prop_vs(
     var out: PrOut;
     out.clip = frame.view_proj * vec4<f32>(world, 1.0);
     out.world = world;
-    out.normal = pr_rot(inst.yaw, normal.xyz / max(inst.scale, vec3<f32>(1e-3)));
+    var nw = pr_rot(inst.yaw, normal.xyz / max(inst.scale, vec3<f32>(1e-3)));
+    // the slope shear's inverse transpose (pr_veg_grad).
+    let g = pr_veg_grad(inst);
+    nw = vec3<f32>(nw.x - g.x * nw.y, nw.y, nw.z - g.y * nw.y);
+    out.normal = nw;
     out.uv = uv;
     out.color = srgb_decode(color.rgb);
     out.material = material;
@@ -74,6 +86,24 @@ fn prop_vs(
     let view = ii / max(pr.counts.z, 1u);
     out.fade = vec2<f32>(f32((word >> 17u) & 255u) / 255.0, select(0.0, 1.0, view == 5u));
     return out;
+}
+
+// value noise in [0, 1] (rock grain).
+fn pr_hash3(p: vec3<f32>) -> f32 {
+    var q = fract(p * 0.1031);
+    q = q + dot(q, q.yzx + 33.33);
+    return fract((q.x + q.y) * q.z);
+}
+
+fn pr_noise3(p: vec3<f32>) -> f32 {
+    let i = floor(p);
+    let f = fract(p);
+    let u = f * f * (3.0 - 2.0 * f);
+    let a = mix(pr_hash3(i), pr_hash3(i + vec3<f32>(1.0, 0.0, 0.0)), u.x);
+    let b = mix(pr_hash3(i + vec3<f32>(0.0, 1.0, 0.0)), pr_hash3(i + vec3<f32>(1.0, 1.0, 0.0)), u.x);
+    let c = mix(pr_hash3(i + vec3<f32>(0.0, 0.0, 1.0)), pr_hash3(i + vec3<f32>(1.0, 0.0, 1.0)), u.x);
+    let d = mix(pr_hash3(i + vec3<f32>(0.0, 1.0, 1.0)), pr_hash3(i + vec3<f32>(1.0, 1.0, 1.0)), u.x);
+    return mix(mix(a, b, u.y), mix(c, d, u.y), u.z);
 }
 
 // interleaved gradient noise, the dither of the cross-fade.
@@ -124,6 +154,12 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         } else {
             albedo_tex = textureSampleGrad(kit_albedo, kit_sampler, in.uv, m.layer, duvx, duvy);
         }
+    }
+    if ((m.flags & PR_LEAF) != 0u && m.params.w > 0.0) {
+        // the flora pass's leaf sprigs (vegetation_models.rs `SPRIG_LUMINANCE`): the atlas
+        // sprig drawn grey, its luminance over the cells' mean, so the vertex colour is
+        // the species' leaf albedo.
+        albedo_tex = vec4<f32>(vec3<f32>(dot(albedo_tex.rgb, vec3<f32>(0.2126, 0.7152, 0.0722)) * m.params.w), albedo_tex.a);
     }
     let v = normalize(frame.cam_pos.xyz - in.world);
     var n = normalize(in.normal);
@@ -220,8 +256,297 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         m.emissive = vec4<f32>(select(hue * 0.04, hue, lit) * pr.lens.x, 0.0);
         s.albedo = vec3<f32>(0.02);
     }
+    if (inst.model >= PR_VEG_BASE + PR_VEG_GRASS && inst.model < PR_VEG_BASE + PR_VEG_ROCK && (m.flags & PR_TEX) != 0u) {
+        // the ground cover's blades: the atlas cell's own shading near (blade by blade),
+        // its mean from 6 m to 25 m. What survives the alpha test far off is the
+        // cell's dark base clump (its rows run 0.3 of the tips' value at the root),
+        // which drew a dark stroke on the ground tone; the mean keeps a far bunch
+        // the ground's tone, its own value and cast (the instance tint) its only mark.
+        let t = smoothstep(6.0, 25.0, distance(in.world, frame.cam_pos.xyz));
+        s.albedo = in.color * m.base.rgb * mix(albedo_tex.rgb, vec3<f32>(PR_VEG_GRASS_CELL_MEAN), t);
+    }
+    if (pr_is_veg(inst.model) && inst.lamp != 0u && (m.flags & (PR_LEAF | PR_ROCK)) != 0u) {
+        // the vegetation's own colour on its leaves, blades and rock (the bark keeps its own): sRGB x 4 in the lamp word.
+        s.albedo = s.albedo * srgb_decode(unpack4x8unorm(inst.lamp).rgb) * 4.0;
+    }
+    let tip_word = inst.lamp >> 24u;
+    if (inst.model >= PR_VEG_BASE + PR_VEG_GRASS && inst.model < PR_VEG_BASE + PR_VEG_ROCK && (m.flags & PR_TEX) != 0u && inst.lamp != 0u && tip_word != 255u) {
+        // the meadow's blades (eo_landmarks::vegetation::meadow_tip; 255, every instance
+        // before it and with --no-grass-color-variety, skips this): near the eye each blade
+        // column of each card its own value (+-14 %) and cast, and the top of the cell (the
+        // tallest blades' seed heads and awns) toward the bunch's tip colour: straw
+        // lighter than the stem, or one of the flower tints (yellow, purple, white; linear,
+        // INFERRED from the species' flower colour words) faded out by 30 m so a far
+        // meadow is not speckled.
+        let dist = distance(in.world, frame.cam_pos.xyz);
+        let near = 1.0 - smoothstep(6.0, 25.0, dist);
+        let h = pr_hash3(vec3<f32>(floor(in.uv.x * 48.0), floor(in.local.x * 5.0) + 37.0, floor(in.local.z * 5.0) + 11.0));
+        s.albedo = s.albedo * mix(vec3<f32>(1.0), vec3<f32>(0.86 + 0.28 * h) * vec3<f32>(1.0 + 0.1 * (h - 0.5), 1.0, 1.0 - 0.16 * (h - 0.5)), near);
+        let up = clamp((0.248 - in.uv.y) / 0.246, 0.0, 1.0);
+        let kind = tip_word >> 6u;
+        let amount = f32(tip_word & 63u) / 62.0;
+        var tip_col = s.albedo * vec3<f32>(1.4, 1.3, 1.1);
+        var fade = 1.0;
+        if (kind == 1u) {
+            tip_col = vec3<f32>(0.62, 0.42, 0.03);
+            fade = 1.0 - smoothstep(12.0, 30.0, dist);
+        } else if (kind == 2u) {
+            tip_col = vec3<f32>(0.20, 0.10, 0.42);
+            fade = 1.0 - smoothstep(12.0, 30.0, dist);
+        } else if (kind == 3u) {
+            tip_col = vec3<f32>(0.62, 0.62, 0.56);
+            fade = 1.0 - smoothstep(12.0, 30.0, dist);
+        }
+        s.albedo = mix(s.albedo, tip_col, smoothstep(0.62, 0.92, up) * amount * 0.7 * fade);
+    }
+    // a meadow blade's diffuse transmittance (linear; zero for everything else).
+    var blade_t = vec3<f32>(0.0);
+    var n_light = n;
+    if ((m.flags & PR_MEADOW) != 0u) {
+        let dist = distance(in.world, frame.cam_pos.xyz);
+        var live = in.color;
+        if ((m.flags & PR_MEADOW_LIVE) != 0u && inst.lamp != 0u) {
+            // the patch's cure (eo_landmarks::vegetation::meadow_patch_tint), sRGB x 4.
+            live = live * srgb_decode(unpack4x8unorm(inst.lamp).rgb) * 4.0;
+        }
+        if ((m.flags & PR_MEADOW_MAT) != 0u) {
+            if (PR_MEADOW_BREAKUP) {
+                // a lobed rim (`--no-meadow-breakup`): a world-space field cuts the mats
+                // back from their discs, the same on every mat overlapping a point, so
+                // the cover opens in irregular gaps where the terrain's tone shows
+                // instead of meeting its neighbours along disc edges.
+                let rl = length(in.local.xz) / 0.95;
+                let lobe = pr_noise3(vec3<f32>(in.world.xz * 1.6, 2.0)) * 0.65 + pr_noise3(vec3<f32>(in.world.xz * 5.0, 4.0)) * 0.35;
+                if (rl > 0.4 + 0.8 * lobe) {
+                    discard;
+                }
+            }
+            // the mat under the blades: matted straw lying in two directions per
+            // patch (its yaw), the sward's green through it in tufts (share: uv.y),
+            // and dark pores between the straws. Each scale fades to its mean
+            // where a pixel spans it, so the far mat is its mean colour, not noise.
+            let fw = length(dpx) + length(dpy);
+            let q = in.world.xz;
+            let d1 = vec2<f32>(cos(inst.yaw), sin(inst.yaw));
+            let d2 = vec2<f32>(cos(inst.yaw + 1.1), sin(inst.yaw + 1.1));
+            let r1 = vec2<f32>(dot(q, d1), dot(q, vec2<f32>(-d1.y, d1.x)));
+            let r2 = vec2<f32>(dot(q, d2), dot(q, vec2<f32>(-d2.y, d2.x)));
+            let fine = 1.0 - smoothstep(0.003, 0.012, fw);
+            let mid = 1.0 - smoothstep(0.012, 0.05, fw);
+            let st = max(pr_noise3(vec3<f32>(r1.x * 5.0, r1.y * 70.0, 0.0)), pr_noise3(vec3<f32>(r2.x * 7.0, r2.y * 95.0, 3.0)));
+            let straw = mix(0.62, st, fine);
+            let coarse = 1.0 - smoothstep(0.03, 0.12, fw);
+            let tuft = mix(0.5, pr_noise3(vec3<f32>(q * 24.0, 7.0)), mid) * 0.6 + mix(0.5, pr_noise3(vec3<f32>(q * 9.0, 11.0)), coarse) * 0.4;
+            // far off every patch's mat goes to one share, so the types' mats do not
+            // tile the hill in blobs (the patch tint, smooth over the hill, stays).
+            let share = mix(in.uv.y, 0.5, smoothstep(15.0, 45.0, dist));
+            // a soft mix: the green shoots come up through the straw, not in islands.
+            let green = smoothstep(0.5 - share * 0.9 - 0.18, 0.5 - share * 0.9 + 0.62, tuft) * min(share * 1.6, 1.0);
+            let blades = mix(1.0, 0.7 + 0.6 * pr_noise3(vec3<f32>(q.x * 80.0, q.y * 80.0, 1.0)), fine);
+            let thatch_col = m.base.rgb * (0.55 + 0.7 * straw);
+            // the clumps' own shade at a few per metre (what reads as texture from 20 to 100 m).
+            let clump = mix(0.5, pr_noise3(vec3<f32>(q * 6.0, 5.0)), 1.0 - smoothstep(0.06, 0.25, fw));
+            // near, where the blades stand over it, the mat is the canopy's floor: lit
+            // through the blades, so darker (about 0.6; INFERRED from the photographs'
+            // dark gaps between blades). Farther the mat alone draws the canopy (the
+            // levels keep fewer blades), so it comes up to the canopy's mean.
+            let floor = mix(0.6, 1.0, smoothstep(5.0, 26.0, dist));
+            s.albedo = mix(thatch_col, live * blades, green) * (0.78 + 0.44 * clump) * floor;
+            if ((m.flags & PR_MEADOW_SOIL) != 0u) {
+                // bare eroded soil: its colour in clods and grit (two scales, each faded
+                // to its mean where a pixel spans it), paler weathered crust in patches,
+                // a little green at its own share; no straw, and not the canopy's floor.
+                let clod = mix(0.5, pr_noise3(vec3<f32>(q * 3.0, 9.0)), coarse);
+                let grit = mix(0.5, pr_noise3(vec3<f32>(q * 40.0, 13.0)), fine);
+                let crust = smoothstep(0.55, 0.8, pr_noise3(vec3<f32>(q * 0.7, 15.0)));
+                var soil = m.base.rgb * (0.78 + 0.34 * clod + 0.22 * (grit - 0.5)) * mix(vec3<f32>(1.0), vec3<f32>(1.18, 1.12, 1.05), crust);
+                if (PR_CHERT_GROUND) {
+                    // the flora pass's red chert soil (eo_landmarks::flora CHERT_TOP_SRGB,
+                    // CHERT_FACE_SRGB: the knoll's measured top and cut face) by the ground's
+                    // slope, with angular tabular chips of chert rubble (5-30 cm talus, the
+                    // guide's estimate; here the finer gravel, 4-8 cm), lighter or darker
+                    // than the soil, each faded to its mean where a pixel spans it.
+                    let up = clamp(normalize(in.normal).y, 0.0, 1.0);
+                    let base = mix(PR_CHERT_FACE, PR_CHERT_TOP, smoothstep(0.62, 0.85, up));
+                    soil = base * (0.86 + 0.24 * clod + 0.16 * (grit - 0.5)) * mix(vec3<f32>(1.0), vec3<f32>(1.06, 1.04, 1.02), crust);
+                    let cq = q * 16.0;
+                    let cell = cq - fract(cq); // (`floor` is the mat's local above)
+                    let ch = pr_hash3(vec3<f32>(cell, 21.0));
+                    let fq = fract(cq) - vec2<f32>(0.5);
+                    let turn = ch * 6.283;
+                    let rq = vec2<f32>(fq.x * cos(turn) - fq.y * sin(turn), fq.x * sin(turn) + fq.y * cos(turn));
+                    let chip = step(0.55, ch) * (1.0 - step(0.3, abs(rq.x) + 1.6 * abs(rq.y)));
+                    let tone = mix(0.7, 1.25, pr_hash3(vec3<f32>(cell, 22.0)));
+                    soil = soil * mix(1.0, tone, chip * mid);
+                }
+                let sprout = smoothstep(0.72, 0.9, tuft) * in.uv.y * 3.0;
+                s.albedo = mix(soil, live, clamp(sprout, 0.0, 1.0));
+            }
+            s.ao = mix(1.0, 0.55 + 0.45 * smoothstep(0.25, 0.7, straw), fine) * mix(0.85, 1.0, green);
+            s.rough = 0.9;
+            // the mat lies on the ground: lit from above even where the eye grazes
+            // it from below its plane (a patch's sheared plane past a brow).
+            s.n = normalize(in.normal);
+            n_light = s.n;
+        } else {
+            if ((m.flags & PR_MEADOW_LIVE) != 0u) {
+                s.albedo = live;
+                if ((inst.model >= PR_VEG_BASE + PR_VEG_MOUND && inst.model < PR_VEG_BASE + PR_VEG_MOUND_END) || (inst.model >= PR_VEG_BASE + PR_VEG_SPECIES && inst.model < PR_VEG_BASE + PR_VEG_SPECIES_END)) {
+                    // a scrub mound's leaf clusters as grain where its mesh draws none (the
+                    // clump cores between the leaves, the far level's clumps): two scales of
+                    // lit clusters and dark gaps on the albedo and as a bump on the normal,
+                    // each faded to its mean where a pixel spans it.
+                    let fw = length(dpx) + length(dpy);
+                    let p = in.world * 9.0;
+                    let k1 = 1.0 - smoothstep(0.03, 0.12, fw);
+                    let k2 = 1.0 - smoothstep(0.1, 0.4, fw);
+                    let g1 = pr_noise3(p * 2.2);
+                    let g2 = pr_noise3(p * 0.45 + vec3<f32>(5.0));
+                    let gaps = mix(0.5, g1, k1) * 0.5 + mix(0.5, g2, k2) * 0.5;
+                    s.albedo = s.albedo * (0.45 + 1.1 * smoothstep(0.2, 0.8, gaps));
+                    s.ao = mix(0.6, 1.0, smoothstep(0.25, 0.6, gaps));
+                    let e = 0.03;
+                    let gx = pr_noise3((in.world + vec3<f32>(e, 0.0, 0.0)) * 4.0) - pr_noise3(in.world * 4.0);
+                    let gy = pr_noise3((in.world + vec3<f32>(0.0, e, 0.0)) * 4.0) - pr_noise3(in.world * 4.0);
+                    let gz = pr_noise3((in.world + vec3<f32>(0.0, 0.0, e)) * 4.0) - pr_noise3(in.world * 4.0);
+                    let grad = vec3<f32>(gx, gy, gz) / e;
+                    let bump = normalize(s.n - (grad - s.n * dot(grad, s.n)) * 0.12 * k2);
+                    if (all(bump == bump)) {
+                        s.n = bump;
+                    }
+                }
+            } else {
+                // dead straw: its own colour, each patch a little lighter or darker.
+                s.albedo = in.color * (0.9 + 0.2 * f32(inst.variant & 255u) / 255.0);
+            }
+            if ((m.flags & PR_BLADE_PBR) != 0u) {
+                let along = clamp(in.uv.y, 0.0, 1.0);
+                let across = in.uv.x * 2.0 - 1.0;
+                let thick = (m.flags & PR_MEADOW_THICK) != 0u;
+                // clump occlusion: inside a clump the base sees little sun and a
+                // narrow cone of sky, so it is darker and cooler (sky-lit); the tips
+                // stand in the open. (A blade's position along itself stands in for
+                // its depth in the canopy.)
+                let open = clamp(0.3 + 0.7 * along, 0.0, 1.0);
+                s.albedo = s.albedo * mix(vec3<f32>(0.68, 0.75, 0.85), vec3<f32>(1.0), open);
+                s.ao = mix(0.45, 1.0, open);
+                // the blade's keel (a V fold at the midrib) and rolled margins as a
+                // normal map: the across direction from the screen derivatives of u.
+                let near = 1.0 - smoothstep(6.0, 18.0, dist);
+                let r1 = cross(dpy, n);
+                let r2 = cross(n, dpx);
+                let tq = r1 * duvx.x + r2 * duvy.x;
+                if (!thick && near > 0.0 && dot(tq, tq) > 1e-24) {
+                    let t = normalize(tq);
+                    let fold = sign(across) * 0.45 + across * abs(across) * 0.55;
+                    let nb = normalize(s.n - t * fold * near);
+                    if (all(nb == nb)) {
+                        s.n = nb;
+                    }
+                    // a paler midrib and faint parallel veins.
+                    s.albedo = s.albedo * (1.0 + near * (0.2 * exp(-across * across * 60.0) + 0.05 * cos(across * 28.0)));
+                }
+                // dry, paler tips in the sun.
+                s.albedo = s.albedo * (1.0 + 0.12 * smoothstep(0.75, 1.0, along));
+                // Leaf optics. A green leaf's visible transmittance is close to its
+                // reflectance in the green (about 0.1 at 550 nm) and far below it in
+                // the blue and red, where chlorophyll absorbs (PROSPECT: Jacquemoud
+                // and Baret 1990, Remote Sens. Environ. 34, 75-91; PROSPECT-D: Feret
+                // et al. 2017, Remote Sens. Environ. 193, 204-215; measured leaves:
+                // Woolley 1971, Plant Physiol. 47, 656-662), so light through a thin
+                // blade is a saturated yellow-green. Dry straw transmits less and
+                // warmer (brown pigments); a succulent leaf, thick and water-filled,
+                // little. The cuticle's wax gives a weak, broad specular lobe (leaf
+                // BRDF: Bousquet et al. 2005, Remote Sens. Environ. 98, 201-211):
+                // dielectric F0 0.04, rough 0.5 to 0.6, not a plastic sheen.
+                if (thick) {
+                    blade_t = s.albedo * vec3<f32>(0.5, 0.6, 0.2) * 0.3;
+                    s.rough = 0.38;
+                } else if ((m.flags & PR_MEADOW_LIVE) != 0u) {
+                    blade_t = s.albedo * vec3<f32>(0.95, 0.9, 0.3) * 0.9;
+                    s.rough = 0.55;
+                } else {
+                    blade_t = s.albedo * vec3<f32>(0.75, 0.6, 0.35) * 0.6;
+                    s.rough = 0.72;
+                }
+            }
+        }
+    }
+    if ((m.flags & PR_ROCK) != 0u) {
+        // rock grain: two octaves of value noise in world metres (mottle and
+        // pitting), on the albedo and as a bump on the normal, faded out where
+        // a pixel spans more than its cell.
+        let fw = length(dpx) + length(dpy);
+        let k = 1.0 - smoothstep(0.05, 0.4, fw);
+        let g = pr_noise3(in.world * 2.3) * 0.65 + pr_noise3(in.world * 9.0) * 0.35;
+        let coarse = pr_noise3(in.world * 0.6) * 0.6 + pr_noise3(in.world * 0.17) * 0.4;
+        // lichen and soil stain on the upward faces (grey-olive), darker in the coarse lows.
+        let up = clamp(s.n.y, 0.0, 1.0);
+        let stain = smoothstep(0.55, 0.8, pr_noise3(in.world * 1.1 + vec3<f32>(7.0))) * up * 0.6;
+        // (a narrow spread, 0.82-1.18 fine and 0.85-1.15 coarse: a wider one reads as
+        // pockmarks on a smooth slab at 1.7 m.)
+        s.albedo = s.albedo * mix(1.0, 0.82 + 0.36 * g, k) * (0.85 + 0.3 * coarse);
+        if ((inst.lamp >> 24u) == PR_TIP_RIBBON) {
+            // the flora pass's ribbon chert (eo_landmarks::flora TIP_RIBBON): hard red
+            // chert beds 2-10 cm thick parted by thin dark shale, folded (field guide
+            // 4.1: "highly folded bedded chert", chevron folds; beds 2.5-5 cm on
+            // average, secondary source). The beds dip by the block's yaw; folds are
+            // a sine of a few metres along the strike; each bed its own value; the
+            // partings fade to the beds' mean where a pixel spans a bed.
+            let fw = length(dpx) + length(dpy);
+            let dip = vec3<f32>(sin(inst.yaw) * 0.7, 1.0, cos(inst.yaw) * 0.7);
+            let strike = normalize(vec3<f32>(cos(inst.yaw), 0.0, -sin(inst.yaw)));
+            let along = dot(in.world, strike);
+            let fold = 0.35 * sin(along * 1.7 + inst.yaw * 3.0) + 0.12 * sin(along * 4.3);
+            let beds = (dot(in.world, normalize(dip)) + fold) / 0.06;
+            let bed = floor(beds);
+            let f = fract(beds);
+            let kb = 1.0 - smoothstep(0.02, 0.09, fw);
+            let value = 0.82 + 0.34 * pr_hash3(vec3<f32>(bed, 5.0, 9.0));
+            let parting = 1.0 - 0.55 * (1.0 - smoothstep(0.0, 0.12, f)) ;
+            s.albedo = s.albedo * mix(0.92, value * parting, kb);
+            // the beds stand proud of the partings: a groove in the normal.
+            let gdir = normalize(dip);
+            let groove = (1.0 - smoothstep(0.0, 0.12, f)) * kb;
+            let nb = normalize(s.n + gdir * groove * 0.35);
+            if (all(nb == nb)) {
+                s.n = nb;
+            }
+        }
+        if ((inst.lamp >> 24u) == PR_TIP_SCALY) {
+            // the flora pass's serpentinite (eo_landmarks::flora TIP_SCALY): a scaly,
+            // sheared fabric, slick polished lens-shaped scales (field guide 4.2), as
+            // cells of noise stretched along a foliation turned by the block's yaw;
+            // each lens its own value and polish, darker seams between, and the
+            // weathered skin buff to rusty brown on the upward faces.
+            let fw = length(dpx) + length(dpy);
+            let ks = 1.0 - smoothstep(0.03, 0.15, fw);
+            let fol = vec3<f32>(cos(inst.yaw), 0.35, sin(inst.yaw));
+            let p = in.world * 3.0;
+            let along = dot(p, normalize(fol));
+            let q = p - normalize(fol) * along * 0.75;
+            let lens = pr_noise3(q * 1.6 + vec3<f32>(along * 0.4));
+            let seam = smoothstep(0.42, 0.5, lens) * (1.0 - smoothstep(0.5, 0.58, lens));
+            let scale = pr_noise3(q * 0.8 + vec3<f32>(13.0));
+            s.albedo = s.albedo * mix(1.0, (0.85 + 0.3 * scale) * (1.0 - 0.45 * seam), ks);
+            let rust = smoothstep(0.55, 0.8, pr_noise3(in.world * 0.9 + vec3<f32>(3.0))) * clamp(s.n.y, 0.0, 1.0) * 0.55;
+            s.albedo = mix(s.albedo, vec3<f32>(dot(s.albedo, vec3<f32>(0.33))) * vec3<f32>(1.35, 1.05, 0.7), rust);
+            // polished scales: smoother where the lens is whole, rough at the seams.
+            s.rough = mix(s.rough, mix(0.38, 0.8, seam), ks * (1.0 - rust));
+        }
+        s.albedo = mix(s.albedo, vec3<f32>(dot(s.albedo, vec3<f32>(0.33))) * vec3<f32>(1.05, 1.08, 0.9), stain);
+        let e = 0.04;
+        let gx = pr_noise3((in.world + vec3<f32>(e, 0.0, 0.0)) * 9.0) - pr_noise3(in.world * 9.0);
+        let gy = pr_noise3((in.world + vec3<f32>(0.0, e, 0.0)) * 9.0) - pr_noise3(in.world * 9.0);
+        let gz = pr_noise3((in.world + vec3<f32>(0.0, 0.0, e)) * 9.0) - pr_noise3(in.world * 9.0);
+        let grad = vec3<f32>(gx, gy, gz) / e;
+        let bump = normalize(s.n - (grad - s.n * dot(grad, s.n)) * 0.012 * k);
+        if (all(bump == bump)) {
+            s.n = bump;
+        }
+    }
     s.rough = clamp(s.rough, 0.03, 1.0);
-    var c = look_light(s, m, v, in.world, n, 0u);
+    var c = look_light(s, m, v, in.world, n_light, 0u);
     if ((m.flags & PR_LEAF) != 0u && (pr.mode.z & PR_F_LEAF) != 0u) {
         // back-lit leaves. A thin leaf passes part of the sun it does not
         // reflect: a diffuse transmission through the card (the sun behind the
@@ -234,6 +559,19 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
         let vd = dot(in.world - look.cam_pos.xyz, look.cam_fwd.xyz);
         let fog = lk_smooth(look.fog.x, look.fog.y, vd);
         let trans = look.key.xyz * s.albedo * (through * 0.35 + lobe * 0.6) * sh / LK_PI;
+        c = vec4<f32>(c.rgb + trans * (1.0 - fog), c.a);
+    }
+    if (blade_t.g > 0.0) {
+        // light through the blade: diffuse transmission when the sun is behind
+        // it (as seen from here) and a forward lobe toward the sun, shadowed and
+        // fogged as the key light. The geometric normal faces the eye.
+        let l = look.key_dir.xyz;
+        let through = max(dot(-n, l), 0.0);
+        let lobe = pow(max(dot(-v, l), 0.0), 4.0);
+        let sh = lk_shadow(in.world, n);
+        let vd = dot(in.world - look.cam_pos.xyz, look.cam_fwd.xyz);
+        let fog = lk_smooth(look.fog.x, look.fog.y, vd);
+        let trans = look.key.xyz * blade_t * (through + lobe * 0.8) * sh / LK_PI;
         c = vec4<f32>(c.rgb + trans * (1.0 - fog), c.a);
     }
     return c;
@@ -257,7 +595,23 @@ fn pr_cut(in: PrOut) {
             a = textureSampleLevel(pr_big, kit_sampler, pr_face_uv(tile, in.local), 1, 0.0).a;
         }
     } else if ((m.flags & PR_BIG) != 0u) {
-        a = textureSampleGrad(pr_big, kit_sampler, in.uv, m.layer, duvx, duvy).a;
+        let vm = pr_instances[in.inst].model;
+        if (pr_is_veg(vm)) {
+            // the vegetation's cards (leaf sprigs, grass blades): alpha from a
+            // sharper level (a quarter of the footprint, two mips finer) so thin
+            // blades keep their coverage instead of thinning to their base; the
+            // temporal resolve smooths the finer edge. The ground cover (grass,
+            // tufts, flowers) goes back to the footprint's own level from 10 m
+            // to 40 m, so its far blades soften and fade into the ground tone
+            // instead of standing as sharp strokes.
+            var k = 0.25;
+            if (vm >= PR_VEG_BASE + PR_VEG_GRASS && vm < PR_VEG_BASE + PR_VEG_ROCK) {
+                k = mix(0.25, 1.0, smoothstep(10.0, 40.0, distance(in.world, pr.cam.xyz)));
+            }
+            a = textureSampleGrad(pr_big, kit_sampler, in.uv, m.layer, duvx * k, duvy * k).a;
+        } else {
+            a = textureSampleGrad(pr_big, kit_sampler, in.uv, m.layer, duvx, duvy).a;
+        }
     } else {
         a = textureSampleGrad(kit_albedo, kit_sampler, in.uv, m.layer, duvx, duvy).a;
     }

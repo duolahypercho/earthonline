@@ -501,6 +501,19 @@ pub struct WeatherState {
     /// 0..1 lightning flash and its distance (m), storm only.
     pub flash: f64,
     pub flash_distance_m: f64,
+    /// The game day of the world clock, `floor(world_s / 86400)` (0 for a
+    /// preset without a clock): a clear day's sky is drawn per game day
+    /// (clouds.rs `drawn_state`).
+    pub day: u32,
+    /// The world clock the state was taken at (s; 0 for a preset without a
+    /// clock): a clear day's sky changes to the next game day's over the end
+    /// of the world clock's day (clouds.rs `sky_mix`).
+    pub clock_s: f64,
+}
+
+/// The game day of a world clock (s).
+pub fn game_day(world_s: f64) -> u32 {
+    (world_s.max(0.0) / 86400.0).floor().min(u32::MAX as f64) as u32
 }
 
 /// The visual profile along the severity axis: the rung buckets clear, fog,
@@ -586,6 +599,8 @@ pub fn state_at(seed: u32, world_s: f64) -> WeatherState {
         gust: s.gust_factor,
         flash,
         flash_distance_m: flash_d,
+        day: game_day(world_s),
+        clock_s: world_s,
     }
 }
 
@@ -616,7 +631,16 @@ pub fn preset(kind: Kind) -> WeatherState {
         gust: 1.0,
         flash: 0.0,
         flash_distance_m: 0.0,
+        day: 0,
+        clock_s: 0.0,
     }
+}
+
+/// A preset on the game day of a world clock (`preset` is day 0). The
+/// renderer's preset weather should come from this so a clear day's sky is
+/// drawn afresh each game day (eo-render sky.rs `weather_of`: a hand-off).
+pub fn preset_at(kind: Kind, world_s: f64) -> WeatherState {
+    WeatherState { day: game_day(world_s), clock_s: world_s, ..preset(kind) }
 }
 
 #[cfg(test)]

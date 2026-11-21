@@ -402,8 +402,12 @@ impl UploadQueue {
                 let take = rows.bytes();
                 let arc = job.cur.get_or_insert_with(|| Arc::new(std::mem::replace(&mut job.bulk[job.next].data, Data::Bytes(Vec::new())))).clone();
                 let tw = std::time::Instant::now();
+                let src = matches!(target, Target::Object).then(|| arc.clone()); // the renderer's CPU copy of the table follows
                 if !stager.stage(job.id, arc, rows, dst) {
                     break 'jobs; // every chunk is in flight: the rest waits for a later pump
+                }
+                if let Some(src) = src {
+                    renderer.note_object_write(offset + job.at as u64, &src.bytes()[job.at..job.at + take as usize]);
                 }
                 crate::hitch::note_write_to(crate::hitch_target(target), take, tw.elapsed().as_secs_f64() * 1e3);
                 staged_bytes += take;

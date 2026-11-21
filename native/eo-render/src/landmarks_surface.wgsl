@@ -93,6 +93,20 @@ fn lm_surface(s: ptr<function, Surface>, m: Material, world: vec3<f32>, n: vec3<
         lm_seawall(s, world, n);
         return;
     }
+    if (kind == 7u) {
+        // the Golden Gate's far item: only the towers' floodlighting (and, with
+        // `finish`, the sea's light on its faces turned down).
+        if (LM_AGE_MATTE_ON || LM_AGE_FADE_ON) {
+            lm_gg_age_far(s, n);
+        }
+        rm_emit = rm_emit + lm_floodlit(world, n, (*s).albedo);
+        if (LM_FINISH_ON) {
+            (*s).ao = (*s).ao * lm_bridge_sky_vis(world, n);
+            rm_emit = rm_emit + lm_bridge_bounce(world, n, (*s).albedo, (*s).ao);
+            lm_rim_vis = lm_bridge_rim();
+        }
+        return;
+    }
     if (kind >= 4u) {
         lm_building_surface(s, m, kind, world, n, dpx, dpy);
         return;
@@ -105,16 +119,53 @@ fn lm_surface(s: ptr<function, Surface>, m: Material, world: vec3<f32>, n: vec3<
     let footprint = ((abs(du.x) + abs(dv.x)) + (abs(du.y) + abs(dv.y))) * 0.5;
     let up = n.y;
     let vertical = clamp(1.0 - abs(up), 0.0, 1.0);
+    // a bridge's own coat (eo-landmarks suspension.rs `finish_material`).
+    let bridge = m.rough_flatten > 0.5;
     if (kind == 1u) {
-        let tone = lm_noise(local / LM_PS_PATCH_M) * LM_PS_PATCH_TONE
-            + lm_noise(local / LM_PS_FINE_PATCH_M + vec3<f32>(13.1, 7.7, 3.3)) * LM_PS_FINE_PATCH_TONE;
+        // the bridges' paint is renewed panel by panel and touched up: its
+        // tone wanders little over a member (a fifth of the landmark steel's
+        // 9 m patches, half its 2.6 m ones), where the landmark mottle drew blotches.
+        let kp = select(1.0, 0.2, bridge);
+        let kf = select(1.0, 0.5, bridge);
+        let tone = lm_noise(local / LM_PS_PATCH_M) * LM_PS_PATCH_TONE * kp
+            + lm_noise(local / LM_PS_FINE_PATCH_M + vec3<f32>(13.1, 7.7, 3.3)) * LM_PS_FINE_PATCH_TONE * kf;
         // Salt grime: darkest at the water, gone by grimeHeightM over it.
         let grime = mix(LM_PS_GRIME_TONE, 1.0, lm_ss(0.0, LM_PS_GRIME_HEIGHT_M, world.y));
         let streak = lm_noise(vec3<f32>(uv.x * 1.7, uv.y * 0.07, 0.0)) * LM_PS_STREAK_TONE * vertical;
         let chalk = lm_ss(0.4, 0.95, up) * LM_PS_CHALK_TONE;
         (*s).albedo = (*s).albedo * (vec3<f32>((1.0 + tone - abs(streak)) * grime) + chalk);
-        (*s).rough = clamp((*s).rough + lm_noise(local / (LM_PS_PATCH_M * 0.7) + vec3<f32>(5.1, 2.3, 9.4)) * LM_PS_ROUGH_SPREAD
+        if (bridge) {
+            (*s).albedo = (*s).albedo * lm_bridge_plating(uv, du, dv, vertical);
+            (*s).ao = (*s).ao * lm_gg_deck_contact(world) * lm_bridge_sky_vis(world, n);
+            lm_key_vis = lm_deck_key(world);
+            lm_rim_vis = lm_bridge_rim();
+            if (LM_WEATHER_ON && lm_is_gg(world)) {
+                lm_weather(s, world, local, n, uv, du, dv, footprint, vertical);
+            }
+            if (LM_LEGCELLS_ON && lm_is_gg(world)) {
+                let sh = lm_gg_self_shade(world, n, footprint);
+                lm_key_vis = lm_key_vis * sh.x;
+                (*s).ao = (*s).ao * sh.y;
+            }
+            if ((LM_AGE_FADE_ON || LM_AGE_GRIME_ON || LM_AGE_UNDER_ON) && lm_is_gg(world)) {
+                let ud = lm_gg_under(world, n);
+                if (LM_AGE_UNDER_ON) {
+                    lm_key_vis = lm_key_vis * ud.y;
+                    (*s).ao = (*s).ao * ud.z;
+                }
+                lm_gg_age_paint(s, world, n, uv, footprint, vertical, ud.x);
+            }
+        }
+        // (the bridges' coat a quarter of the landmark steel's roughness spread:
+        // one film, renewed as one; its patches under 0.5 took the sky's sharp
+        // reflection and drew the clouds on the struts.)
+        let spread = LM_PS_ROUGH_SPREAD * select(1.0, 0.25, bridge);
+        (*s).rough = clamp((*s).rough + lm_noise(local / (LM_PS_PATCH_M * 0.7) + vec3<f32>(5.1, 2.3, 9.4)) * spread
             + chalk / max(1e-3, LM_PS_CHALK_TONE) * LM_PS_CHALK_ROUGH, 0.2, 0.95);
+        if (bridge && LM_AGE_MATTE_ON && lm_is_gg(world)) {
+            // (`matte`) the chalked coat's flat finish.
+            (*s).rough = max((*s).rough, LM_AGE_ROUGH);
+        }
         let fs = lm_fade(footprint, LM_PS_PLATE_U);
         let fr2 = lm_fade(footprint, LM_PS_RIVET_PITCH);
         if (fs + fr2 > 0.0) {
@@ -123,18 +174,458 @@ fn lm_surface(s: ptr<function, Surface>, m: Material, world: vec3<f32>, n: vec3<
             let hy = lm_steel_height(uv + dv);
             (*s).n = lm_bump(n, dpx, dpy, h0.x * fs + h0.y * fr2, hx.x * fs + hx.y * fr2, hy.x * fs + hy.y * fr2);
         }
+        rm_emit = rm_emit + lm_floodlit(world, (*s).n, (*s).albedo);
+        if (bridge) {
+            rm_emit = rm_emit + lm_bridge_bounce(world, (*s).n, (*s).albedo, (*s).ao);
+            if (LM_PROBE != 0u && lm_is_gg(world)) {
+                lm_probe(s, world, n);
+            }
+        }
     } else if (kind == 2u) {
         let tone = lm_noise(local / LM_CO_PATCH_M) * LM_CO_PATCH_TONE;
         let wet = mix(LM_CO_WET_TONE, 1.0, lm_ss(0.0, LM_CO_WET_BAND_M, world.y));
         let streak = lm_noise(vec3<f32>(uv.x * 2.3, uv.y * 0.11, 4.2)) * LM_CO_STREAK_TONE * vertical;
         (*s).albedo = (*s).albedo * vec3<f32>((1.0 + tone - abs(streak)) * wet);
+        if (bridge && LM_CONCRETE2_ON && lm_is_gg(world)) {
+            lm_concrete_age(s, world, n, uv, du, dv, footprint, vertical);
+            if (LM_AGE_CONCRETE_ON) {
+                lm_gg_age_concrete(s, world, n, uv, footprint, vertical);
+            }
+        }
+        if (bridge) {
+            (*s).ao = (*s).ao * lm_bridge_sky_vis(world, n);
+            lm_key_vis = lm_deck_key(world);
+            lm_rim_vis = lm_bridge_rim();
+            lm_bridge_tide(s, world, vertical);
+            rm_emit = rm_emit + lm_bridge_bounce(world, n, (*s).albedo, (*s).ao);
+        }
         (*s).rough = clamp(((*s).rough + lm_noise(local / 3.1 + vec3<f32>(1.7, 8.2, 4.4)) * LM_CO_ROUGH_SPREAD)
             * mix(0.75, 1.0, lm_ss(0.0, LM_CO_WET_BAND_M, world.y)), 0.4, 1.0);
         let fj = lm_fade(footprint, LM_CO_LIFT_M);
-        if (fj > 0.0) {
-            (*s).n = lm_bump(n, dpx, dpy, lm_concrete_height(uv) * fj, lm_concrete_height(uv + du) * fj, lm_concrete_height(uv + dv) * fj);
+        // (`pylons`) the Golden Gate's rough-board-formed concrete on its walls.
+        let board = bridge && LM_BOARDFORM_ON && vertical > 0.7 && lm_is_gg(world);
+        let fb = select(0.0, lm_fade(footprint, LM_GG_BOARD_M[0]), board);
+        if (fb > 0.0) {
+            (*s).albedo = (*s).albedo * (1.0 + lm_board(world, n).x * fb);
+        }
+        if (fj > 0.0 || fb > 0.0) {
+            let h0 = lm_concrete_height(uv) * fj + lm_board(world, n).y * fb;
+            let hx = lm_concrete_height(uv + du) * fj + lm_board(world + dpx, n).y * fb;
+            let hy = lm_concrete_height(uv + dv) * fj + lm_board(world + dpy, n).y * fb;
+            (*s).n = lm_bump(n, dpx, dpy, h0, hx, hy);
         }
     }
+}
+
+// The Golden Gate's concrete cast in "form lumber with the rough side
+// against the concrete" (Strauss 1937; `pylons`): horizontal boards
+// LM_GG_BOARD_M[0] wide and [1] long, their ends staggered row by row, each
+// its own tone (the lumber's grain and its water take-up), the joints
+// between rows a shallow ridge. Returns (tone, height) at a point of a wall.
+fn lm_board(p: vec3<f32>, n: vec3<f32>) -> vec2<f32> {
+    let side = normalize(vec2<f32>(-n.z, n.x) + vec2<f32>(1e-5, 0.0));
+    let h = dot(p.xz, side);
+    let row = floor(p.y / LM_GG_BOARD_M[0]);
+    let seg = floor(h / LM_GG_BOARD_M[1] + fract(row * 0.618));
+    let tone = (lm_cell_hash(vec3<f32>(row, seg, 11.0)) - 0.5) * 2.0 * LM_GG_BOARD_TONE;
+    let joint = 1.0 - lm_ss(0.0, 0.008, lm_line(p.y, LM_GG_BOARD_M[0]));
+    return vec2<f32>(tone, joint * LM_GG_BOARD_RIDGE_M);
+}
+
+// the Golden Gate towers' floodlighting at night (eo-landmarks lights.rs
+// `gg_floodlit`): on the towers above the deck (the legs and the portal
+// struts between them, inside the tower's plan box), the floods' mean
+// illuminance LM_FLOOD_LUX from 1.4 x at the deck to 0.6 x at the top, on the
+// vertical faces and the undersides (the floods stand below), none on the
+// tops; diffuse, in the lamps' scale, with the lamps' switch-on.
+fn lm_floodlit(p: vec3<f32>, n: vec3<f32>, albedo: vec3<f32>) -> vec3<f32> {
+    if (LM_FLOODS2_ON) {
+        return lm_floodlit2(p, n, albedo);
+    }
+    let lamps = skyu.night.x;
+    if (!LM_FLOOD_ON || lamps <= 0.0 || p.y < LM_GG_DECK_Y || p.y > LM_GG_TOP_Y + 1.0) {
+        return vec3<f32>(0.0);
+    }
+    let rel = p.xz - LM_GG_ORIGIN;
+    let c = dot(rel, LM_GG_AXIS);
+    let sl = dot(rel, vec2<f32>(-LM_GG_AXIS.y, LM_GG_AXIS.x));
+    let ct = select(0.0, LM_GG_SPAN, c > LM_GG_SPAN * 0.5);
+    if (abs(c - ct) > LM_GG_HALF_ALONG + 1.0 || abs(sl) > LM_GG_HP + LM_GG_HALF_ACROSS + 1.0) {
+        return vec3<f32>(0.0);
+    }
+    let h = clamp((p.y - LM_GG_DECK_Y) / max(LM_GG_TOP_Y - LM_GG_DECK_Y, 1.0), 0.0, 1.0);
+    let facing = max(1.0 - abs(n.y), -n.y);
+    let e = LM_FLOOD_LUX * (1.4 - 0.8 * h) * facing;
+    return albedo * (e / 3.14159265) * skyu.bloom_w2.z * lamps * LM_FLOOD_RGB;
+}
+
+// The box-filtered share of [x - f/2, x + f/2] that lines `w` wide at a
+// `pitch` (centred on its multiples) cover: exact at any footprint, so a seam
+// pattern goes to its mean (w / pitch) instead of aliasing as it recedes.
+fn lm_lines_int(x: f32, pitch: f32, w: f32) -> f32 {
+    let y = x + 0.5 * w;
+    let k = floor(y / pitch);
+    return k * w + clamp(y - k * pitch, 0.0, w);
+}
+
+fn lm_lines(x: f32, f: f32, pitch: f32, w: f32) -> f32 {
+    let ff = max(f, 1e-4);
+    return clamp((lm_lines_int(x + 0.5 * ff, pitch, w) - lm_lines_int(x - 0.5 * ff, pitch, w)) / ff, 0.0, 1.0);
+}
+
+// the bridges' plating (`finish`): each plate seam a dark line (the paint
+// shadowed and dirt-filled in the joint, 4 cm), the rows of rivet heads 6 cm
+// either side of the horizontal seams a lighter and a darker line (the heads'
+// lit tops and their shadows, 3 cm each), on the landmark steel's plate grid
+// (LM_PS_PLATE_U x LM_PS_PLATE_V; landmark-surface.js); filtered by the
+// pixel's footprint. INFERRED: the line widths and tones.
+fn lm_bridge_plating(uv: vec2<f32>, du: vec2<f32>, dv: vec2<f32>, vertical: f32) -> f32 {
+    let fx = abs(du.x) + abs(dv.x);
+    let fy = abs(du.y) + abs(dv.y);
+    let seam = max(lm_lines(uv.x, fx, LM_PS_PLATE_U, 0.04), lm_lines(uv.y, fy, LM_PS_PLATE_V, 0.04));
+    let lit_row = lm_lines(uv.y - 0.06, fy, LM_PS_PLATE_V, 0.03) + lm_lines(uv.y + 0.06, fy, LM_PS_PLATE_V, 0.03);
+    let shade_row = lm_lines(uv.y - 0.085, fy, LM_PS_PLATE_V, 0.025) + lm_lines(uv.y + 0.035, fy, LM_PS_PLATE_V, 0.025);
+    return 1.0 - 0.38 * seam + (0.10 * lit_row - 0.16 * shade_row) * vertical;
+}
+
+// The key light's visibility a bridge's surface sets for look_light (1 for
+// every other surface: the initialiser runs per invocation).
+var<private> lm_key_vis: f32 = 1.0;
+// The rig's rim light's share a bridge's surface takes (`finish`; 1 for every
+// other surface): none at night. The rig's night rim (0.3-0.4 from the
+// west-north-west, four times its daytime value) stands for no source on the
+// bay: it lit the west span's anchorage and towers a daytime grey over the
+// dark water. The bridges at night take their lamps, floods and the sky.
+var<private> lm_rim_vis: f32 = 1.0;
+
+fn lm_bridge_rim() -> f32 {
+    return 1.0 - clamp(skyu.night.x, 0.0, 1.0);
+}
+
+fn lm_gg_deck_top(c: f32) -> f32 {
+    let cs = LM_GG_DECK[0];
+    let ys = LM_GG_DECK[1];
+    let l = LM_GG_DECK[2];
+    let yt = LM_GG_DECK[3];
+    let ym = LM_GG_DECK[4];
+    let cn = LM_GG_DECK[5];
+    let yn = LM_GG_DECK[6];
+    if (c <= 0.0) {
+        return ys + (yt - ys) * clamp((c - cs) / max(-cs, 1e-3), 0.0, 1.0);
+    }
+    if (c <= l) {
+        let t = (c - 0.5 * l) / (0.5 * l);
+        return yt + (ym - yt) * (1.0 - t * t);
+    }
+    return yt + (yn - yt) * clamp((c - l) / max(cn - l, 1e-3), 0.0, 1.0);
+}
+
+fn lm_smin(a: f32, b: f32, k: f32) -> f32 {
+    return (a + b - sqrt((a - b) * (a - b) + k * k)) * 0.5;
+}
+
+fn lm_bay_deck_top(c: f32) -> f32 {
+    let g = LM_BAY_DECK[5];
+    return lm_smin(lm_smin(LM_BAY_DECK[4], LM_BAY_DECK[2] + g * (c - LM_BAY_DECK[0]), LM_BAY_ROUND_M), LM_BAY_DECK[3] + g * (LM_BAY_DECK[1] - c), LM_BAY_ROUND_M);
+}
+
+// The deck's shadow on what stands under it (`finish`): the sun's visibility
+// at a point of a bridge, 0 where the ray toward the sun meets the deck
+// plate above it (the Golden Gate's roadway; on the west span the lower
+// deck for what is under it, else the upper) inside the deck's width and
+// length, with a 0.8 m soft edge (the sun's half degree and the railings).
+// The decks' lines are the builds' own (eo-landmarks suspension.rs
+// `deck_line`), on each bridge's straight frame (the Golden Gate's
+// approaches' curve is left out). The shadow maps reach 160 m from the eye:
+// past them this is the only shadow the members under a deck receive.
+fn lm_deck_key(p: vec3<f32>) -> f32 {
+    let l = look.key_dir.xyz;
+    if (!LM_DECKSHADE_ON || l.y < 0.02) {
+        return 1.0;
+    }
+    let gg = distance(p.xz, LM_GG_ORIGIN) < distance(p.xz, LM_BAY_ORIGIN);
+    let o = select(LM_BAY_ORIGIN, LM_GG_ORIGIN, gg);
+    let ax = select(LM_BAY_AXIS, LM_GG_AXIS, gg);
+    let across = vec2<f32>(-ax.y, ax.x);
+    let rel = p.xz - o;
+    let c = dot(rel, ax);
+    let hw = select(LM_BAY_DECK[7], LM_GG_DECK[7], gg);
+    if (abs(dot(rel, across)) > hw + 1.0) {
+        return 1.0;
+    }
+    var c0 = LM_BAY_DECK[0];
+    var c1 = LM_BAY_DECK[1];
+    var top = lm_bay_deck_top(c);
+    if (gg) {
+        c0 = LM_GG_DECK[0];
+        c1 = LM_GG_DECK[5];
+        top = lm_gg_deck_top(c);
+    } else if (p.y < top - LM_BAY_DECK[6] - 0.25) {
+        top = top - LM_BAY_DECK[6];
+    }
+    let dh = top - 0.3 - p.y;
+    if (c < c0 || c > c1 || dh < 0.05) {
+        return 1.0;
+    }
+    let hit = rel + l.xz * (dh / l.y);
+    let ch = dot(hit, ax);
+    let inside = (1.0 - lm_ss(hw - 0.4, hw + 0.4, abs(dot(hit, across)))) * step(c0, ch) * step(ch, c1);
+    return 1.0 - inside;
+}
+
+// The Golden Gate legs' occlusion where they pass through the deck
+// (`finish`): the sky a leg's face sees within a couple of metres over the
+// roadway is cut by the deck's railings, the sidewalk round the leg and the
+// leg's own collar; the frame's screen-space occlusion misses it at a
+// distance. A band from half the sky at the deck to all of it 2.5 m up.
+// INFERRED: the band's height and depth.
+fn lm_gg_deck_contact(p: vec3<f32>) -> f32 {
+    let dy = p.y - LM_GG_DECK_Y;
+    if (dy < -0.5 || dy > 2.5) {
+        return 1.0;
+    }
+    let across = vec2<f32>(-LM_GG_AXIS.y, LM_GG_AXIS.x);
+    let rel = p.xz - LM_GG_ORIGIN;
+    let c0 = dot(rel, LM_GG_AXIS);
+    let c = c0 - select(0.0, LM_GG_SPAN, c0 > LM_GG_SPAN * 0.5);
+    let sl = abs(dot(rel, across));
+    if (abs(c) > LM_GG_HALF_ALONG + 1.0 || abs(sl - LM_GG_HP) > LM_GG_HALF_ACROSS + 1.0) {
+        return 1.0;
+    }
+    return mix(0.5, 1.0, lm_ss(0.0, 2.5, dy));
+}
+
+// The light the sea reflects onto a bridge's faces turned down (`finish`;
+// eo-landmarks suspension.rs `SEA_ALBEDO`), irradiance in the rig's units:
+// the sea as an isotropic reflector (the isotropic ground term of Liu and
+// Jordan, Solar Energy 4, 1960), its albedo times the global horizontal
+// irradiance (the key on the level times its cloud transmittance, and the
+// sky's irradiance on the level: the rig's hemisphere, ambient and
+// environment terms at n = up), over the share (1 - n.y) / 2 of the face's
+// hemisphere the sea fills. The rig's hemisphere delivers its own ground
+// colour over that share, so what is returned is the sea's light less it:
+// by day the sea's reflection over the rig's ground, at night (no sun for the
+// sea to reflect, the rig's ground lobe near its daytime value) the rig's
+// unsourced ground light taken off again, so a bridge's concrete and steel
+// stand dark over the dark bay. The deck's shadow on the water is left out
+// (a few per cent of what a strut's underside sees).
+fn lm_bridge_bounce_e(world: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
+    let up = vec3<f32>(0.0, 1.0, 0.0);
+    let key = look.key.xyz * max(look.key_dir.y, 0.0) * sky_cloud_transmittance(world);
+    var env_i = look.ambient.w * look.env_class.x;
+    var ground = look.hemi_ground.xyz;
+    if (LM_DIELECTRIC_ON && lm_gg_over_water(world)) {
+        // (`dielectric`, the Golden Gate) the physical daylight fades the rig's
+        // ground out (eo-look phys.rs `apply`) and delivers the ground's light
+        // in the environment's lower hemisphere instead (its sky light over the
+        // land's albedo): the irradiance a face turned straight down takes from
+        // it is lk_sh(-up), the share a face sees (1 - n.y) / 2 of it. That is
+        // the light the sea's replaces, so it is what comes off, else the
+        // ground was counted twice. The sky's irradiance on the level is the
+        // environment's at its own intensity under the daylight (look_light's
+        // `env_i`), as the paint's diffuse takes it.
+        let w = lk_phys();
+        env_i = mix(env_i, 1.0, w);
+        ground = ground + lk_sh(-up) * w;
+    }
+    let sky = look.hemi_sky.xyz + look.ambient.xyz + lk_sh(up) * env_i;
+    let share = clamp((1.0 - n.y) * 0.5, 0.0, 1.0);
+    return (LM_SEA_ALBEDO * (key + sky) - ground) * share;
+}
+
+// A point belongs to the Golden Gate (not the west span): the nearer of the two frames' origins.
+fn lm_is_gg(p: vec3<f32>) -> bool {
+    return distance(p.xz, LM_GG_ORIGIN) < distance(p.xz, LM_BAY_ORIGIN);
+}
+
+// A Golden Gate point over the strait (between the shore-end pylon and the
+// Marin anchorage): the sea under it is what its faces turned down see.
+fn lm_gg_over_water(p: vec3<f32>) -> bool {
+    let c = dot(p.xz - LM_GG_ORIGIN, LM_GG_AXIS);
+    return lm_is_gg(p) && c > LM_GG_WATER_C.x && c < LM_GG_WATER_C.y;
+}
+
+// The view factor from a point to a rectangle in a plane parallel to the
+// point's face, `c` away, with one corner on the face's normal and sides a
+// and b (Howell, "A Catalog of Radiation Heat Transfer Configuration
+// Factors", B-3: differential planar element to a parallel rectangle).
+fn lm_vf_rect(a: f32, b: f32, c: f32) -> f32 {
+    let x = max(a, 0.0) / max(c, 1e-3);
+    let y = max(b, 0.0) / max(c, 1e-3);
+    let sx = sqrt(1.0 + x * x);
+    let sy = sqrt(1.0 + y * y);
+    return (x / sx * atan(y / sx) + y / sy * atan(x / sy)) / (2.0 * 3.14159265);
+}
+
+// The share of the sky a Golden Gate face still sees (`shade2`): what the
+// screen-space occlusion misses at the bridge's distances (it is near 1 past
+// a few hundred metres), from the structure's own two large occluders, taken
+// off the indirect light only (the albedo bake it replaces dimmed the sun on
+// the face as well, and a face turned down twice: its environment irradiance
+// holds no sky).
+//  * The deck plate over a member under it (the truss, the floor beams, the
+//    legs under the roadway): an infinitely long strip of the deck's half
+//    width at the height over the point (Howell B-14 and B-15 for a
+//    differential strip under, beside and facing a parallel strip); a face
+//    turned up loses 0.5 (sin a + sin b) of its sky (a and b the edges'
+//    angles off the vertical), a face turned across 0.5 (1 - sin e) (e the
+//    near edge's elevation), a face turned along the span half the up face's.
+//  * The opposite leg over a leg's inner face between the legs: a rectangle
+//    the opposite leg's width along the span and the tower's height, facing
+//    the face across the gap (lm_vf_rect over its four quadrants).
+// The occluders' own reflected light (paint of a 0.14 albedo) is left out.
+fn lm_bridge_sky_vis(p: vec3<f32>, n: vec3<f32>) -> f32 {
+    if (!LM_SHADE2_ON || !lm_is_gg(p)) {
+        return 1.0;
+    }
+    let ax = LM_GG_AXIS;
+    let across = vec2<f32>(-ax.y, ax.x);
+    let rel = p.xz - LM_GG_ORIGIN;
+    let c = dot(rel, ax);
+    let u = dot(rel, across);
+    let na = dot(n.xz, across);
+    let nc = dot(n.xz, ax);
+    let horiz = max(abs(na) + abs(nc), 1e-4);
+    var f = 0.0;
+    // the deck.
+    let hw = LM_GG_DECK[7];
+    let dh = lm_gg_deck_top(c) - 0.3 - p.y;
+    if (c > LM_GG_DECK[0] && c < LM_GG_DECK[5] && dh > 0.05 && abs(u) < hw + 40.0) {
+        let ea = hw - u;
+        let eb = hw + u;
+        let f_up = 0.5 * (ea / sqrt(ea * ea + dh * dh) + eb / sqrt(eb * eb + dh * dh));
+        let e = max(select(eb, ea, na > 0.0), 0.0);
+        let f_side = 0.5 * (1.0 - dh / sqrt(dh * dh + e * e));
+        let f_vert = (abs(na) * f_side + abs(nc) * 0.5 * f_up) / horiz;
+        f = select((1.0 + n.y) * f_vert, n.y * f_up + (1.0 - n.y) * f_vert, n.y > 0.0);
+    }
+    // the opposite leg, over a leg's inner face.
+    let ct = select(0.0, LM_GG_SPAN, c > LM_GG_SPAN * 0.5);
+    let inward = -sign(u) * na;
+    if (abs(c - ct) < LM_GG_HALF_ALONG + 1.0 && abs(u) < LM_GG_HP && inward > 0.0) {
+        var ha = LM_GG_STAGES[0].w;
+        var hc = LM_GG_STAGES[0].z;
+        for (var i = 0u; i < LM_GG_STAGE_N; i = i + 1u) {
+            if (p.y >= LM_GG_STAGES[i].x) {
+                ha = LM_GG_STAGES[i].w;
+                hc = LM_GG_STAGES[i].z;
+            }
+        }
+        let gap = abs(u) + LM_GG_HP - hc;
+        let up_b = LM_GG_STAGES[LM_GG_STAGE_N - 1u].y - p.y;
+        let down_b = p.y - LM_GG_STAGES[0].x;
+        let a0 = ha + (c - ct);
+        let a1 = ha - (c - ct);
+        let leg = lm_vf_rect(a0, up_b, gap) + lm_vf_rect(a1, up_b, gap) + lm_vf_rect(a0, down_b, gap) + lm_vf_rect(a1, down_b, gap);
+        f = max(f, leg * inward);
+    }
+    return clamp(1.0 - f, 0.0, 1.0);
+}
+
+// The sea's light as outgoing Lambert radiance (added on the emission slot,
+// outside look_light's occlusion multiply): what it takes off is weighted by
+// the occlusion the rig's ground term was (`ao`: the bake's and the contact
+// band's; the screen-space term is near 1 at a bridge's distances).
+fn lm_bridge_bounce(world: vec3<f32>, n: vec3<f32>, albedo: vec3<f32>, ao: f32) -> vec3<f32> {
+    let e = lm_bridge_bounce_e(world, n);
+    return albedo / 3.14159265 * (max(e, vec3<f32>(0.0)) + min(e, vec3<f32>(0.0)) * ao * 0.95);
+}
+
+// the intertidal band on the bridges' concrete (`finish`): the bay's tide
+// (mean diurnal range 1.78 m at the Golden Gate, NOAA station 9414290) and
+// its splash leave a ragged dark, brown-green band from the still sea to
+// about 2 m over it, glossy in the splash (lm_seawall's band, taller).
+fn lm_bridge_tide(s: ptr<function, Surface>, world: vec3<f32>, faceness: f32) {
+    let sea = LM_SEA_LEVEL_Y;
+    let ragged = lm_mx_noise(vec3<f32>(world.x * 0.35, 0.3, world.z * 0.35)) * 0.35 + lm_mx_noise(vec3<f32>(world.x * 2.1, 1.7, world.z * 2.1)) * 0.1;
+    let tide = lm_ss(sea + 2.1 + ragged, sea + 1.7 + ragged, world.y) * faceness;
+    let splash = lm_ss(sea + 0.9, sea + 0.1, world.y) * faceness;
+    (*s).albedo = mix((*s).albedo, (*s).albedo * vec3<f32>(0.46, 0.47, 0.40), tide);
+    (*s).albedo = mix((*s).albedo, (*s).albedo * vec3<f32>(0.55, 0.6, 0.5), splash * 0.7);
+    (*s).rough = mix((*s).rough, 0.3, splash);
+}
+
+// A segment from `o` along unit `d` for `tmax` metres crosses the box
+// [bmin, bmax] (slab test; the start outside it).
+fn lm_ray_box(o: vec3<f32>, d: vec3<f32>, tmax: f32, bmin: vec3<f32>, bmax: vec3<f32>) -> bool {
+    let dd = select(d, vec3<f32>(1e-6), abs(d) < vec3<f32>(1e-6));
+    let inv = 1.0 / dd;
+    let t0 = (bmin - o) * inv;
+    let t1 = (bmax - o) * inv;
+    let tn = max(max(min(t0.x, t1.x), min(t0.y, t1.y)), min(t0.z, t1.z));
+    let tf = min(min(max(t0.x, t1.x), max(t0.y, t1.y)), max(t0.z, t1.z));
+    return tf > max(tn, 0.0) && tn < tmax;
+}
+
+// the Golden Gate towers' floods as placed sources (`BridgeFeatures::floods`,
+// eo-landmarks lights.rs `gg_tower_floods`): the nearer tower's 12 floods on
+// the sidewalk round its legs, each lighting what faces it inside its beam
+// (`LM_FLOOD_COS_*`) and what the leg it stands at and the portal struts
+// above the deck leave in its view; the face illuminance laid by the
+// floods' combined aim (`LM_FLOOD_PROFILE`, about half at the top), times
+// the share of the face's two floods that reach it. So the faces the
+// sidewalk passes are lit, the inner faces (toward the roadway) and the
+// setbacks' tops stay dark, and the struts throw their shadows up the legs.
+// Under the deck the 12 lights below the roadway (the list's last 12, on the
+// pier) light the legs the same way, up to the deck's underside (the deck
+// stands between the two sets: each lights only its own side of it).
+fn lm_floodlit2(p: vec3<f32>, n: vec3<f32>, albedo: vec3<f32>) -> vec3<f32> {
+    let lamps = skyu.night.x;
+    let above = p.y > LM_GG_DECK_Y - 1.0;
+    let below = p.y < LM_GG_UNDER_Y + 0.5 && p.y > LM_GG_BASE_Y - 1.0;
+    if (!LM_FLOOD_ON || lamps <= 0.0 || !(above || below) || p.y > LM_GG_TOP_Y + 1.0) {
+        return vec3<f32>(0.0);
+    }
+    let across = vec2<f32>(-LM_GG_AXIS.y, LM_GG_AXIS.x);
+    let rel = p.xz - LM_GG_ORIGIN;
+    let c0 = dot(rel, LM_GG_AXIS);
+    let sl = dot(rel, across);
+    let ct = select(0.0, LM_GG_SPAN, c0 > LM_GG_SPAN * 0.5);
+    let c = c0 - ct;
+    if (abs(c) > LM_GG_HALF_ALONG + 8.0 || abs(sl) > LM_GG_HP + LM_GG_HALF_ACROSS + 8.0) {
+        return vec3<f32>(0.0);
+    }
+    let nl = vec3<f32>(dot(n.xz, LM_GG_AXIS), dot(n.xz, across), n.y);
+    let q = vec3<f32>(c, sl, p.y) + nl * 0.05;
+    var fpos = LM_GG_FLOOD_POS;
+    var faim = LM_GG_FLOOD_AIM;
+    var struts = LM_GG_STRUTS;
+    var e = 0.0;
+    let i0 = select(LM_GG_FLOOD_NA, 0u, above);
+    let i1 = select(LM_GG_FLOOD_N, LM_GG_FLOOD_NA, above);
+    for (var i = i0; i < i1; i = i + 1u) {
+        let fp = fpos[i];
+        let to = fp - q;
+        let d = length(to);
+        let l = to / max(d, 1e-3);
+        let facing = dot(nl, l);
+        let beam = lm_ss(LM_FLOOD_COS_OUT, LM_FLOOD_COS_IN, dot(-l, faim[i]));
+        if (facing <= 0.0 || beam <= 0.0) {
+            continue;
+        }
+        // the leg the flood stands at (unless the point is on it: its own faces turn from what they cannot see).
+        let leg_s = select(-LM_GG_HP, LM_GG_HP, fp.y > 0.0);
+        var vis = 1.0;
+        let on_leg = abs(sl - leg_s) < LM_GG_HALF_ACROSS + 0.2 && abs(c) < LM_GG_HALF_ALONG + 0.2;
+        if (!on_leg && lm_ray_box(q, l, d, vec3<f32>(-LM_GG_HALF_ALONG, leg_s - LM_GG_HALF_ACROSS, LM_GG_BASE_Y), vec3<f32>(LM_GG_HALF_ALONG, leg_s + LM_GG_HALF_ACROSS, LM_GG_TOP_Y))) {
+            vis = 0.0;
+        }
+        for (var k = 0u; k < LM_GG_STRUT_N && vis > 0.0; k = k + 1u) {
+            let st = struts[k];
+            if (lm_ray_box(q, l, d, vec3<f32>(-st.z, -st.w, st.x), vec3<f32>(st.z, st.w, st.y))) {
+                vis = 0.0;
+            }
+        }
+        e = e + beam * lm_ss(0.0, 0.3, facing) * vis;
+    }
+    var h = clamp((p.y - LM_GG_DECK_Y) / max(LM_GG_TOP_Y - LM_GG_DECK_Y, 1.0), 0.0, 1.0);
+    var lux0 = LM_FLOOD_LUX;
+    if (!above) {
+        h = clamp((p.y - LM_GG_BASE_Y) / max(LM_GG_UNDER_Y - LM_GG_BASE_Y, 1.0), 0.0, 1.0);
+        lux0 = LM_FLOOD_LUX_B;
+    }
+    let lux = lux0 * (LM_FLOOD_PROFILE.x + LM_FLOOD_PROFILE.y * h) * 0.5 * e;
+    return albedo * (lux / 3.14159265) * skyu.bloom_w2.z * lamps * LM_FLOOD_RGB;
 }
 
 // the landmark buildings' surfaces (landmark-surface.js):
@@ -256,126 +747,6 @@ fn lm_mx_noise(p: vec3<f32>) -> f32 {
     return 0.982 * res;
 }
 
-// renderer.js's seawall colour and roughness nodes: pour mottle, vertical
-// run-off streaks, the algae-green tide stain over the bottom half metre, the
-// wet-dark band at the waterline, the stack floored at 0.38 of the albedo, the
-// sky-catch on the upper face; wet concrete glossier through the stain.
-fn lm_seawall(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>) {
-    let base = (*s).albedo;
-    let sea = LM_SEA_LEVEL_Y;
-    let mottle = lm_mx_noise(vec3<f32>(world.x * 0.11, world.y * 0.45, world.z * 0.11)) * 0.09 + 1.0;
-    let streak = 1.0 - (lm_mx_noise(vec3<f32>(world.x * 1.35, world.y * 0.07, world.z * 1.35)) * 0.5 + 0.5) * 0.14 + 0.07;
-    var tone = base * mottle * streak;
-    let stain_t = lm_ss(sea + 0.5, sea + 0.08, world.y);
-    let stain_noise = lm_mx_noise(vec3<f32>(world.x * 0.9, world.y * 1.8, world.z * 0.9)) * 0.14 + 0.86;
-    tone = mix(tone, tone * vec3<f32>(0.62, 0.67, 0.55) * stain_noise, stain_t);
-    let wet = 1.0 - lm_ss(sea + 0.55, sea + 0.02, world.y) * 0.36;
-    let floored = max(tone * wet, base * 0.38);
-    let faceness = clamp(1.0 - abs(n.y), 0.0, 1.0);
-    let crest_band = lm_ss(sea + 0.55, sea + 1.0, world.y);
-    (*s).albedo = floored * (faceness * crest_band * 0.38 + 1.0);
-    (*s).rough = clamp((*s).rough - lm_ss(sea + 0.55, sea + 0.08, world.y) * 0.4, 0.05, 1.0);
-    // the intertidal band the bay's 1.7 m tide leaves on a wall: a
-    // ragged tide line about 1.2 m over the still sea, dark and brown-green
-    // below it (weed and silt), black-green and glossy in the splash a few
-    // decimetres over the water.
-    let ragged = lm_mx_noise(vec3<f32>(world.x * 0.7, 0.3, world.z * 0.7)) * 0.18 + lm_mx_noise(vec3<f32>(world.x * 3.1, 1.7, world.z * 3.1)) * 0.06;
-    let tide = lm_ss(sea + 1.25 + ragged, sea + 1.05 + ragged, world.y) * faceness;
-    let splash = lm_ss(sea + 0.45, sea + 0.05, world.y) * faceness;
-    (*s).albedo = mix((*s).albedo, (*s).albedo * vec3<f32>(0.42, 0.44, 0.36), tide);
-    (*s).albedo = mix((*s).albedo, (*s).albedo * vec3<f32>(0.45, 0.5, 0.42), splash * 0.7); // (sea r9: darkened, not black: it read as a gap at the wall foot)
-    (*s).rough = mix((*s).rough, 0.22, splash);
-}
-
-// beach-surface.js's wet margin on the dry side of the waterline (ground
-// within a few decimetres of the datum stays saturated from below: darkest at
-// the water, drying up the face; 0.6 of full wetness where no shore
-// simulation runs) and its wet look: darker, more saturated, cooled, glossier.
-fn lm_wet_ground(s: ptr<function, Surface>, world: vec3<f32>) {
-    let wet = lm_ss(LM_SEA_LEVEL_Y + 0.35, LM_SEA_LEVEL_Y + 0.02, world.y) * 0.6;
-    if (wet <= 0.0) {
-        return;
-    }
-    let dry = (*s).albedo;
-    let wet_base = dry * 0.58;
-    let luma = dot(wet_base, vec3<f32>(0.2126, 0.7152, 0.0722));
-    let wet_sand = mix(vec3<f32>(luma), wet_base, 1.15) * vec3<f32>(0.97, 0.98, 1.0);
-    (*s).albedo = mix(dry, wet_sand, wet);
-    (*s).rough = mix((*s).rough, mix(0.45, 0.28, wet), wet);
-}
-
-// beach-surface.js `createBeachSurfaceMaterial` on the terrain's
-// beach sand (`shore` metres inland of the shoreline, negative offshore, from
-// the vertex): the dry sand's drifts and two grain scales, the 0.42 m wind
-// ripples above the swash, the wrack line, the damp band the swash leaves
-// (its reach at the sets' mean, 0.7 of SWASH_REACH_M: the moving sheet and
-// its foam are not drawn), the wet margin at the waterline, and the
-// submerged sand's wave ripples and fade to the deep bed. Three's MaterialX
-// noise (`lm_mx_noise`) as the seawall's.
-const LM_SWASH_REACH_M: f32 = 24.0;
-const LM_WRACK_A: f32 = 38.0;
-const LM_WRACK_B: f32 = 58.0;
-const LM_SEABED_FADE_A: f32 = 60.0;
-const LM_SEABED_FADE_B: f32 = 180.0;
-
-fn lm_beach(s: ptr<function, Surface>, wp: vec3<f32>, shore: f32) {
-    let coarse = lm_mx_noise(vec3<f32>(wp.x * 0.12, wp.z * 0.12, 0.35)) * 0.5 + 0.5;
-    let macro_n = lm_mx_noise(vec3<f32>(wp.x * 0.031, wp.z * 0.031, 1.1)) * 0.5 + 0.5;
-    let grain = lm_mx_noise(vec3<f32>(wp.x * 1.3, wp.z * 1.3, 2.2)) * 0.5 + 0.5;
-    let grain_fine = lm_mx_noise(vec3<f32>(wp.x * 5.4, wp.z * 5.4, 4.4)) * 0.5 + 0.5;
-    let ripples = sin(wp.x * 2.4 + wp.z * 0.9 + (macro_n - 0.5) * 2.4) * 0.5 + 0.5;
-    let base = (*s).albedo;
-    var dry = mix(base * vec3<f32>(1.06, 1.05, 1.03), base * vec3<f32>(1.0, 0.96, 0.89), lm_ss(0.34, 0.76, macro_n));
-    dry = dry * ((coarse - 0.5) * 0.13 + 1.0) * ((grain - 0.45) * 0.26 + 0.99) * ((grain_fine - 0.45) * 0.16 + 1.0);
-    let ripple_k = lm_ss(LM_SWASH_REACH_M + 4.0, LM_SWASH_REACH_M + 18.0, shore);
-    dry = dry * ((ripples - 0.5) * 0.1 * ripple_k + 1.0);
-    let wrack_band = lm_ss(LM_WRACK_A, LM_WRACK_A + 7.0, shore) * lm_ss(LM_WRACK_B, LM_WRACK_B - 9.0, shore);
-    let wrack = wrack_band * lm_ss(0.56, 0.74, grain) * lm_ss(0.4, 0.6, macro_n);
-    dry = mix(dry, vec3<f32>(0.27, 0.21, 0.14), wrack * 0.62);
-    let reach = 0.7 * LM_SWASH_REACH_M;
-    let damp = lm_ss(reach + 5.0, reach - 6.0, shore) * 0.62;
-    let margin = lm_ss(LM_SEA_LEVEL_Y + 0.35, LM_SEA_LEVEL_Y + 0.02, wp.y) * 0.6;
-    let wet = clamp(max(damp, margin), 0.0, 1.0);
-    let wet_base = dry * 0.58;
-    let luma = dot(wet_base, vec3<f32>(0.2126, 0.7152, 0.0722));
-    let wet_sand = mix(vec3<f32>(luma), wet_base, 1.15) * vec3<f32>(0.97, 0.98, 1.0);
-    var colour = mix(dry, wet_sand, wet);
-    let submerged = lm_ss(LM_SEA_LEVEL_Y + 0.03, LM_SEA_LEVEL_Y - 0.3, wp.y) * lm_ss(60.0, 45.0, shore);
-    let wave = sin(shore * 6.2 + macro_n * 3.0) * 0.5 + 0.5;
-    var under = wet_sand * ((wave - 0.5) * 0.12 + 0.95);
-    let depth_below = max(LM_SEA_LEVEL_Y - wp.y, 0.0);
-    under = mix(under, vec3<f32>(0.05, 0.075, 0.08), lm_ss(LM_SEABED_FADE_A, LM_SEABED_FADE_B, max(-shore, 0.0)) * lm_ss(0.6, 1.8, depth_below));
-    colour = mix(colour, under, submerged);
-    (*s).albedo = colour;
-    (*s).rough = clamp(mix(0.94, mix(0.45, 0.28, wet), wet), 0.06, 1.0);
-    lm_beach_swash_wet(s, wp);
-}
-
-// the sand the swash wets (the water pass runs each bore up the beach
-// to about half a metre over the sea): below that reach it is dark and glossy
-// (water in its pores, about half the dry albedo), nearly a mirror within a
-// few centimetres of the sea, drying over the 0.35 m above. Keyed to the sea
-// level, not to the ground's height scale, as the swash itself is.
-fn lm_beach_swash_wet(s: ptr<function, Surface>, wp: vec3<f32>) {
-    let wet = lm_ss(LM_SEA_LEVEL_Y + 0.65, LM_SEA_LEVEL_Y + 0.3, wp.y);
-    if (wet <= 0.0) {
-        return;
-    }
-    let soak = lm_ss(LM_SEA_LEVEL_Y + 0.3, LM_SEA_LEVEL_Y + 0.03, wp.y);
-    (*s).albedo = mix((*s).albedo, (*s).albedo * vec3<f32>(0.5, 0.52, 0.56), wet * 0.9);
-    (*s).rough = mix((*s).rough, mix(0.3, 0.08, soak), wet);
-    // The band the swash keeps running over lies under a film of water a few millimetres thick,
-    // in patches (drier between): the film half fills the sand's relief (the normal halfway to flat),
-    // is nearly smooth (0.07), reflects the environment at 0.65 of its radiance (ENV_WET_FILM,
-    // look_light.wgsl), and the sand under it is a tenth darker.
-    let patchy = lm_mx_noise(vec3<f32>(wp.x * 0.06, wp.z * 0.06, 5.1));
-    let film = lm_ss(LM_SEA_LEVEL_Y + 0.42, LM_SEA_LEVEL_Y + 0.12, wp.y + 0.12 * patchy) * lm_ss(0.0, 0.35, patchy + 0.1 * soak) * (0.55 + 0.45 * lm_ss(-0.3, 0.3, lm_mx_noise(vec3<f32>(wp.x * 0.7, wp.z * 0.7, 2.6))));
-    (*s).n = normalize(mix((*s).n, vec3<f32>(0.0, 1.0, 0.0), film * 0.5));
-    (*s).rough = mix((*s).rough, 0.07, film);
-    (*s).albedo = (*s).albedo * (1.0 - 0.1 * film);
-    (*s).env = ENV_WET_FILM;
-}
-
 // Submerged grains have a mineral-water boundary. The air-facing specular
 // film on the wet beach belongs on the free water surface once the tide covers it.
 fn lm_cove_sediment(s: ptr<function, Surface>, wp: vec3<f32>, normal: vec3<f32>, dx: vec3<f32>, dy: vec3<f32>) {
@@ -408,4 +779,525 @@ fn lm_fog_depth(m: Material, vd: f32) -> f32 {
         return min(vd, LM_FOG_CAP_M);
     }
     return vd;
+}
+
+// ---- the fifth pass (round 3's bridge finish) ----
+
+// The tower frame at a Golden Gate point: (chainage from the nearer tower's
+// centre line, lateral offset, height).
+fn lm_gg_tower_local(p: vec3<f32>) -> vec3<f32> {
+    let rel = p.xz - LM_GG_ORIGIN;
+    let c0 = dot(rel, LM_GG_AXIS);
+    let ct = select(0.0, LM_GG_SPAN, c0 > LM_GG_SPAN * 0.5);
+    return vec3<f32>(c0 - ct, dot(rel, vec2<f32>(-LM_GG_AXIS.y, LM_GG_AXIS.x)), p.y);
+}
+
+// The paint's weathering (`BridgeFeatures::weathering`). Facts (goldengate.org,
+// "Painting the Bridge"): the coat is renewed continuously, "routine touch up
+// painting on an on-going basis" where inspections find corrosion; salt-laden
+// fog attacks the film; rust "attacked the rivet heads and surfaces" from the
+// bases of the towers; failures start under loosened mill scale. Acrylic
+// topcoats chalk under sunlight (the degree rated by ASTM D4214). INFERRED,
+// every form and amount: touch-up patches over a few plates in fresher,
+// glossier, more saturated paint (`LM_WX_TOUCH` of the plate groups); the rest
+// chalked by its own age, more on faces turned up; rust bloom along the rivet
+// rows beside the plate seams, densest at the towers' feet and in the splash
+// zone; dirt on the ledges (faces turned up); run-off streaks under the legs'
+// set-backs and under the deck's edge. Each is filtered by the pixel's
+// footprint to its mean, so a far member takes the mean, not noise.
+const LM_WX_TOUCH: f32 = 0.12;
+const LM_WX_CHALK: f32 = 0.22;
+const LM_WX_RUST_P: vec2<f32> = vec2<f32>(0.04, 0.35); // rivets blooming: mean, and at the towers' feet
+const LM_WX_RUST_RGB: vec3<f32> = vec3<f32>(0.115, 0.048, 0.022); // iron oxide brown (linear)
+const LM_WX_LEDGE: f32 = 0.45;
+const LM_WX_RUN_M: f32 = 7.0;
+const LM_WX_RUN_TONE: f32 = 0.22;
+
+fn lm_weather(s: ptr<function, Surface>, world: vec3<f32>, local: vec3<f32>, n: vec3<f32>, uv: vec2<f32>, du: vec2<f32>, dv: vec2<f32>, footprint: f32, vertical: f32) {
+    let c0 = (*s).albedo;
+    let up = n.y;
+    let plate = vec2<f32>(LM_PS_PLATE_U, LM_PS_PLATE_V);
+    let fp = lm_fade(footprint, LM_PS_PLATE_U * 3.0);
+    let fid = floor(dot(n, vec3<f32>(1.0, 3.0, 7.0)) * 2.0 + 0.5);
+    let cell = floor(uv / plate);
+    let age = mix(0.5, lm_cell_hash(vec3<f32>(cell.x, cell.y, fid + 17.0)), fp);
+    let grp = floor(vec2<f32>(cell.x / 3.0, cell.y / 2.0));
+    let touched = select(0.0, 1.0, lm_cell_hash(vec3<f32>(grp.x, grp.y, fid + 41.0)) < LM_WX_TOUCH);
+    let touch = mix(LM_WX_TOUCH, touched, fp);
+    // chalk: a lighter tint of the paint's own colour and a little white (the binder gone, the pigment and extender loose).
+    let chalk = LM_WX_CHALK * (0.35 + 0.65 * age) * (0.65 + 0.35 * max(up, 0.0)) * (1.0 - touch);
+    var c = mix(c0, c0 * 1.3 + vec3<f32>(0.010, 0.008, 0.007), chalk);
+    c = mix(c, c0 * vec3<f32>(0.95, 0.86, 0.82), touch);
+    // (a fresher patch keeps the coat's roughness: a glossier one reflected the bright sky at grazing
+    // views as pale blotches, and no gloss value for the touch-up coat was found)
+    (*s).rough = clamp((*s).rough + 0.15 * chalk, 0.3, 0.95);
+    // rust bloom on the rivet rows (6 cm either side of the horizontal seams), as stain bands 5 cm high.
+    let fy = abs(du.y) + abs(dv.y);
+    let fx = abs(du.x) + abs(dv.x);
+    let rows = lm_lines(uv.y - 0.06, fy, LM_PS_PLATE_V, 0.05) + lm_lines(uv.y + 0.06, fy, LM_PS_PLATE_V, 0.05);
+    let foot = 1.0 - lm_ss(LM_SEA_LEVEL_Y + 6.0, LM_SEA_LEVEL_Y + 40.0, world.y);
+    let p_rust = mix(LM_WX_RUST_P.x, LM_WX_RUST_P.y, foot) * (1.0 - touch);
+    let rivet = floor(uv.x / LM_PS_RIVET_PITCH);
+    let is_on = select(0.0, 1.0, lm_cell_hash(vec3<f32>(rivet, floor(uv.y / LM_PS_PLATE_V * 2.0 + 0.5), fid + 5.0)) < p_rust);
+    let spot = mix(p_rust, is_on, lm_fade(fx, LM_PS_RIVET_PITCH));
+    c = mix(c, LM_WX_RUST_RGB, clamp(rows * spot * 0.85 * vertical, 0.0, 1.0));
+    // dirt on the ledges.
+    let ledge = LM_WX_LEDGE * lm_ss(0.55, 0.95, up) * (0.65 + 0.35 * lm_noise(local / 1.7 + vec3<f32>(2.2, 0.0, 9.1)));
+    c = mix(c, c * 0.5 + vec3<f32>(0.012, 0.010, 0.008), ledge);
+    // run-off under the ledge above: a leg's set-back top (in a tower's plan box) or the deck's edge.
+    let drop = lm_gg_drop(world);
+    let fr = lm_fade(footprint, 1.2);
+    let stripes = mix(0.5, lm_ss(-0.1, 0.6, lm_noise(vec3<f32>(uv.x * 0.9, world.y * 0.025, 6.3))), fr);
+    let run = LM_WX_RUN_TONE * exp(-drop / LM_WX_RUN_M) * stripes * vertical;
+    c = c * (1.0 - run);
+    (*s).albedo = c;
+}
+
+// The height of a Golden Gate steel point under the ledge above it: a leg's
+// set-back top (in a tower's plan box) or the deck's edge (1e4 under neither).
+fn lm_gg_drop(world: vec3<f32>) -> f32 {
+    let t = lm_gg_tower_local(world);
+    var drop = 1e4;
+    if (abs(t.x) < LM_GG_HALF_ALONG + 1.0 && abs(abs(t.y) - LM_GG_HP) < LM_GG_HALF_ACROSS + 1.0) {
+        for (var i = 0u; i + 1u < LM_GG_STAGE_N; i = i + 1u) {
+            let top = LM_GG_STAGES[i].y;
+            if (top > world.y) {
+                drop = min(drop, top - world.y);
+            }
+        }
+    } else {
+        let deck = lm_gg_deck_top(dot(world.xz - LM_GG_ORIGIN, LM_GG_AXIS));
+        if (deck > world.y) {
+            drop = deck - world.y;
+        }
+    }
+    return drop;
+}
+
+// The concrete's age (`BridgeFeatures::concrete2`): rough-board-formed
+// (Strauss 1937) and cast in lifts, each lift's own tone (each pour's mix and
+// its curing), lime leached at the lift joints and run down the face as pale
+// streaks (efflorescence), and dark weathering streaks down the faces where
+// the run-off from the tops carries dirt and the salt fog's growth.
+// INFERRED: the lift height (`LM_CO_LIFT_M`, the export's), the tones and lengths.
+// The cited albedo (golden_gate.rs `CONCRETE2_LUMINANCE`) is already a
+// weathered concrete's, so every term here is zero-mean: each stain divides
+// by its own mean (the value noise's, measured over 600,000 samples:
+// `LM_CO_MEAN_*`), and so does the round-2 streak's darkening the caller laid
+// down (its mean |noise| x `LM_CO_STREAK_TONE`); a face's mean albedo, near
+// or far, is the cited one (the wet band at the tide stays the tide's).
+const LM_CO_MEAN_DIRT: f32 = 0.286; // E[ss(-0.2, 0.7, noise)]
+const LM_CO_MEAN_BROAD: f32 = 0.295; // E[ss(-0.3, 0.8, noise)]
+const LM_CO_MEAN_LEACH: f32 = 0.295; // E[ss(0.35, 0.9, noise / 2 + 1 / 2)]
+const LM_CO_MEAN_ABS_NOISE: f32 = 0.303; // E[|noise|]
+fn lm_concrete_age(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, uv: vec2<f32>, du: vec2<f32>, dv: vec2<f32>, footprint: f32, vertical: f32) {
+    let lift = floor(world.y / LM_CO_LIFT_M);
+    let fid = floor(dot(n, vec3<f32>(1.0, 3.0, 7.0)) * 2.0 + 0.5);
+    let fl = lm_fade(footprint, LM_CO_LIFT_M);
+    let lift_tone = mix(0.0, (lm_cell_hash(vec3<f32>(lift, fid, 23.0)) - 0.5) * 0.10, fl) * vertical;
+    let below = mix(0.25, pow(fract(world.y / LM_CO_LIFT_M), 3.0), fl); // 1 just under a joint, 0 at the next; E = 1/4
+    let fs = lm_fade(footprint, 0.6);
+    let leach_k = 0.10 * vertical;
+    let leach = (mix(LM_CO_MEAN_LEACH, lm_ss(0.35, 0.9, lm_noise(vec3<f32>(uv.x * 2.1, lift * 1.7, 12.5)) * 0.5 + 0.5), fs) * below - LM_CO_MEAN_LEACH * 0.25) * leach_k;
+    let dirt_k = 0.22 * vertical;
+    let dirt = mix(LM_CO_MEAN_DIRT, lm_ss(-0.2, 0.7, lm_noise(vec3<f32>(uv.x * 0.7, world.y * 0.018, 31.0))), lm_fade(footprint, 1.5)) * dirt_k;
+    // the same weathering at the wall's scale (bands some 5-10 m across, faded with height over 40 m), so a
+    // housing's wall seen from hundreds of metres keeps its staining where the fine streaks have gone to their mean.
+    let broad_k = 0.16 * vertical;
+    let broad = mix(LM_CO_MEAN_BROAD, lm_ss(-0.3, 0.8, lm_noise(vec3<f32>(uv.x * 0.12, world.y * 0.012, 47.0))), lm_fade(footprint, 8.0)) * broad_k;
+    let norm = (1.0 - LM_CO_MEAN_DIRT * dirt_k) * (1.0 - LM_CO_MEAN_BROAD * broad_k) * (1.0 - LM_CO_MEAN_ABS_NOISE * LM_CO_STREAK_TONE * vertical);
+    let c = (*s).albedo;
+    (*s).albedo = max(c * (1.0 + lift_tone) * (1.0 - dirt) * (1.0 - broad) / norm + vec3<f32>(0.05, 0.05, 0.048) * leach, vec3<f32>(0.0));
+}
+
+// The share of a face's sky that two parallel fins `d` deep, standing `x0`
+// and `x1` to either side of the point and as tall as the face, take
+// (Howell's differential element to a perpendicular semi-infinite plate,
+// each 0.5 (1 - x / sqrt(x^2 + d^2))).
+fn lm_fin_occ(x: f32, d: f32) -> f32 {
+    let xx = max(x, 0.0);
+    return 0.5 * (1.0 - xx / sqrt(xx * xx + d * d));
+}
+
+// The light through a recess: a point `t` across a channel [a, b] on a face
+// `depth` deep (the channel's walls standing out of the face), the key
+// direction's components (along the face's normal `ln`, across the channel
+// `lt`); a soft edge `ws` wide. 1 where the ray to the sun clears the walls.
+fn lm_channel_key(t: f32, a: f32, b: f32, depth: f32, ln: f32, lt: f32, ws: f32) -> f32 {
+    if (ln <= 1e-3) {
+        return 1.0;
+    }
+    let te = t + lt / ln * depth;
+    return lm_ss(a - ws, a + ws, te) * (1.0 - lm_ss(b - ws, b + ws, te));
+}
+
+// The legs' recessed panels (golden_gate/legs.rs `face_runs`, mirrored): the
+// run of a face `hw` either side that holds `t` as (from, to, recessed).
+fn lm_leg_run(t: f32, hw: f32) -> vec3<f32> {
+    let w = 2.0 * hw;
+    let n = max(round(w / LM_GG_CELL_M), 3.0);
+    let m = w / n;
+    let panels = max(ceil((n - 1.0) / (LM_GG_PANEL_MAX + 1.0)), 1.0);
+    let wp = (n - (panels + 1.0)) / panels;
+    let x = t + hw; // from the face's start
+    let unitw = m + wp * m;
+    let k = floor(x / unitw);
+    let r = x - k * unitw;
+    if (k >= panels || r < m) {
+        return vec3<f32>(0.0, 0.0, 0.0);
+    }
+    let a = -hw + k * unitw + m;
+    return vec3<f32>(a, a + wp * m, 1.0);
+}
+
+// A Golden Gate tower face's own sun shadow and sky occlusion past the
+// shadow maps (`BridgeFeatures::leg_cells`): on a leg's recessed panel the
+// panel's two pilasters; on a portal casing's face the legs standing proud of
+// it, the lip over it and its ribs. (key visibility, sky visibility).
+fn lm_gg_self_shade(p: vec3<f32>, n: vec3<f32>, footprint: f32) -> vec2<f32> {
+    let t = lm_gg_tower_local(p);
+    let ax = vec3<f32>(LM_GG_AXIS.x, 0.0, LM_GG_AXIS.y);
+    let ac = vec3<f32>(-LM_GG_AXIS.y, 0.0, LM_GG_AXIS.x);
+    let nc = dot(n, ax);
+    let ns = dot(n, ac);
+    let l = look.key_dir.xyz;
+    let ws = max(footprint, 0.03);
+    if (abs(t.x) > LM_GG_HALF_ALONG + 1.0 || abs(t.y) > LM_GG_HP + LM_GG_HALF_ACROSS + 1.0 || t.z < LM_GG_STAGES[0].x || t.z > LM_GG_STAGES[LM_GG_STAGE_N - 1u].y + 0.5) {
+        return vec2<f32>(1.0);
+    }
+    // the portal casings (between the legs' inner faces, a face turned along the span).
+    if (abs(nc) > 0.9) {
+        for (var i = 0u; i < LM_GG_CASING_N; i = i + 1u) {
+            let cs = LM_GG_CASINGS[i];
+            if (t.z < cs.x || t.z > cs.y || abs(t.y) > cs.w || abs(t.x) > cs.z + LM_GG_RIB.x + 0.05) {
+                continue;
+            }
+            let on_rib = abs(t.x) > cs.z + 0.5 * LM_GG_RIB.x;
+            let ln = dot(l, ax) * sign(nc);
+            let lt = dot(l, ac);
+            let setb = select(LM_GG_CASE_SET, LM_GG_CASE_SET - LM_GG_RIB.x, on_rib);
+            // the legs, either side.
+            var key = lm_channel_key(t.y, -cs.w, cs.w, setb, ln, lt, ws);
+            var occ = lm_fin_occ(cs.w - t.y, setb) + lm_fin_occ(cs.w + t.y, setb);
+            // the lip over the face (its underside at cs.y - lip height, standing out lip proud).
+            let under = cs.y - LM_GG_LIP.x;
+            let lo = select(LM_GG_LIP.y + LM_GG_RIB.x, LM_GG_LIP.y, on_rib);
+            if (t.z < under) {
+                if (ln > 1e-3) {
+                    key = key * (1.0 - lm_ss(under - ws, under + ws, t.z + l.y / ln * lo));
+                }
+                occ = occ + lm_fin_occ(under - t.z, lo);
+            }
+            if (!on_rib) {
+                // the ribs (centred on the casing; laid as golden_gate.rs `portal_ribs`).
+                let nr = max(floor((2.0 * cs.w - LM_GG_RIB.y) / LM_GG_RIB.z), 1.0);
+                let first = -nr * LM_GG_RIB.z * 0.5;
+                let k = clamp(floor((t.y - first) / LM_GG_RIB.z), 0.0, nr - 1.0);
+                let a = first + k * LM_GG_RIB.z + 0.5 * LM_GG_RIB.y;
+                let b = first + (k + 1.0) * LM_GG_RIB.z - 0.5 * LM_GG_RIB.y;
+                if (t.y > a && t.y < b) {
+                    key = key * lm_channel_key(t.y, a, b, LM_GG_RIB.x, ln, lt, ws);
+                    occ = occ + lm_fin_occ(t.y - a, LM_GG_RIB.x) + lm_fin_occ(b - t.y, LM_GG_RIB.x);
+                }
+            }
+            return vec2<f32>(key, clamp(1.0 - occ, 0.0, 1.0));
+        }
+    }
+    // a leg's face: the stage the point is in.
+    var st = LM_GG_STAGES[0];
+    for (var i = 0u; i < LM_GG_STAGE_N; i = i + 1u) {
+        if (t.z >= LM_GG_STAGES[i].x) {
+            st = LM_GG_STAGES[i];
+        }
+    }
+    let leg_s = select(-LM_GG_HP, LM_GG_HP, t.y > 0.0);
+    let ls = t.y - leg_s;
+    var tf = 0.0;
+    var hw = 0.0;
+    var depth = 0.0;
+    var ln = 0.0;
+    var lt = 0.0;
+    if (abs(nc) > 0.9) {
+        tf = ls;
+        hw = st.z;
+        depth = st.w - abs(t.x);
+        ln = dot(l, ax) * sign(nc);
+        lt = dot(l, ac);
+    } else if (abs(ns) > 0.9) {
+        tf = t.x;
+        hw = st.w;
+        depth = st.z - abs(ls);
+        ln = dot(l, ac) * sign(ns);
+        lt = dot(l, ax);
+    } else {
+        return vec2<f32>(1.0);
+    }
+    if (abs(tf) > hw + 0.05 || depth < 0.5 * LM_GG_RECESS_M || depth > LM_GG_RECESS_M + 0.05) {
+        return vec2<f32>(1.0); // a pilaster's face, a wall of a recess, or not on the leg
+    }
+    let run = lm_leg_run(tf, hw);
+    if (run.z < 0.5) {
+        return vec2<f32>(1.0);
+    }
+    let key = lm_channel_key(tf, run.x, run.y, LM_GG_RECESS_M, ln, lt, ws);
+    let occ = lm_fin_occ(tf - run.x, LM_GG_RECESS_M) + lm_fin_occ(run.y - tf, LM_GG_RECESS_M);
+    return vec2<f32>(key, clamp(1.0 - occ, 0.0, 1.0));
+}
+
+// The radiance probe (EO_BRIDGE_PROBE = a mask; a debugging view, never on
+// by default): a Golden Gate painted surface keeps only the terms its mask
+// names, recomputed as look_light computes them (1 the sun's diffuse and
+// rim, 2 the sun's specular, 4 the sky's diffuse (hemisphere, ambient,
+// environment), 8 the sky's specular, 16 the sea's bounce, 32 the scene's
+// bounce), the rest of the frame unchanged (the atmosphere still laid over
+// it). Mask 63 redraws the surface as it is. look_light's own terms are
+// zeroed (no albedo, no occlusion, no key or rim) and the kept ones ride on
+// the emission slot.
+fn lm_probe(s: ptr<function, Surface>, world: vec3<f32>, ng: vec3<f32>) {
+    let mask = LM_PROBE;
+    let sf = *s;
+    let n = sf.n;
+    let v = normalize(look.cam_pos.xyz - world);
+    let diffuse = sf.albedo;
+    let f0 = vec3<f32>(0.04);
+    let rough = sf.rough;
+    let env_i = mix(look.ambient.w * ST_ENV_PAINTED_METAL, 1.0, lk_phys());
+    let l = look.key_dir.xyz;
+    let nl = max(dot(n, l), 0.0);
+    var key = vec3<f32>(0.0);
+    if (nl > 0.0 && dot(ng, l) > -0.05) {
+        key = look.key.xyz * nl * lk_shadow(world, ng) * sky_cloud_transmittance(world) * sky_contact_shadow(world, ng) * lm_key_vis;
+    }
+    let rim = look.rim.xyz * max(dot(n, look.rim_dir.xyz), 0.0) * lm_rim_vis;
+    var out = vec3<f32>(0.0);
+    if ((mask & 1u) != 0u) {
+        out = out + (key + rim) * diffuse / LK_PI;
+    }
+    if ((mask & 2u) != 0u) {
+        out = out + key * lk_ggx(n, v, l, f0, rough) + rim * lk_ggx(n, v, look.rim_dir.xyz, f0, rough);
+    }
+    let nv = max(dot(n, v), 1e-4);
+    let dfg = lk_dfg(nv, rough);
+    let fss = f0 * dfg.x + vec3<f32>(dfg.y);
+    var ao4 = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+    if (frame.copy_step.z < 0.5) {
+        ao4 = ao_fetch(world);
+    }
+    let ao = sf.ao * ao_multi_bounce(ao4.a);
+    if ((mask & 4u) != 0u) {
+        let hemi = mix(look.hemi_ground.xyz, look.hemi_sky.xyz, n.y * 0.5 + 0.5);
+        var env_e = lk_sh(n);
+        if (fa_probe_on() && (fa_run() & 16u) != 0u) {
+            env_e = fa_probe_irradiance(n);
+        }
+        out = out + (hemi + look.ambient.xyz + env_e * env_i) * diffuse / LK_PI * (vec3<f32>(1.0) - fss) * ao;
+    }
+    if ((mask & 8u) != 0u) {
+        let r = reflect(-v, n);
+        var rad = lk_sh(r) / LK_PI;
+        let sharp = 1.0 - lk_smooth(0.15, 0.5, rough);
+        if (fa_probe_on()) {
+            rad = fa_probe_sample(r, fa_probe_lod(rough));
+        } else if (sharp > 0.0) {
+            rad = mix(rad, lk_sky_spec(r, lk_sky_sample(r)), sharp);
+        }
+        let spec_occ = clamp(pow(nv + ao, exp2(-16.0 * rough - 1.0)) - 1.0 + ao, 0.0, 1.0);
+        let ssr = sky_ssr(world, n, v, rough);
+        out = out + mix(rad * env_i, ssr.rgb, ssr.a) * fss * spec_occ;
+    }
+    if ((mask & 32u) != 0u) {
+        out = out + ao4.rgb * diffuse;
+    }
+    // the sea's bounce already sits on the emission slot (lm_surface): take it off unless kept.
+    if ((mask & 16u) == 0u) {
+        rm_emit = rm_emit - lm_bridge_bounce(world, n, diffuse, sf.ao);
+    }
+    rm_emit = rm_emit + out;
+    (*s).albedo = vec3<f32>(0.0);
+    (*s).ao = 0.0;
+    lm_key_vis = 0.0;
+    lm_rim_vis = 0.0;
+}
+
+// ---- the sixth pass: the Golden Gate's aging (eo-landmarks golden_gate/aging.rs,
+// where every value's source is given; `BridgeFeatures::matte` .. `concrete_age`,
+// `--no-gg-aging`). Every pattern is anchored in the world and filtered by the
+// pixel's footprint to its mean before it could alias (`lm_fade`), so a member
+// far off takes the mean, not noise; the sizes are a few metres, to read at
+// 300-800 m. ----
+
+// The means of the value noise's smoothsteps the patterns use (2,000,000 samples).
+const LM_AGE_MEAN_SS_0_06: f32 = 0.2351; // E[ss(0.0, 0.6, noise)]
+const LM_AGE_MEAN_SS_03_08: f32 = 0.0823; // E[ss(0.3, 0.8, noise)]
+
+// Where a Golden Gate steel point stands under the roadway (`underside`):
+// (x) how far it is inside the truss or sheltered under the deck (1 inside
+// the two truss planes, on a plane's inner face or turned down under the
+// deck; 0 in the open); (y) the sun's share the near truss plane's lattice
+// lets through to it, where the ray to the sun leaves the truss through a
+// side plane under the deck (the deck itself is `lm_deck_key`'s); (z) the
+// sky's share the two planes leave it. The towers' legs, which pass through
+// the deck, are in the open.
+// The deck's centre line's offset across the straight frame at chainage c (the approaches' curve).
+fn lm_gg_offset(c: f32) -> f32 {
+    let x = clamp((c - LM_GG_OFFSET_C.x) / max(LM_GG_OFFSET_C.y - LM_GG_OFFSET_C.x, 1e-3), 0.0, 1.0) * 95.0;
+    let i = min(u32(floor(x)), 94u);
+    var t = LM_GG_OFFSET;
+    return mix(t[i], t[i + 1u], x - f32(i));
+}
+
+fn lm_gg_under(p: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
+    let open = vec3<f32>(0.0, 1.0, 1.0);
+    let across = vec2<f32>(-LM_GG_AXIS.y, LM_GG_AXIS.x);
+    let rel = p.xz - LM_GG_ORIGIN;
+    let c = dot(rel, LM_GG_AXIS);
+    let u = dot(rel, across) - lm_gg_offset(c);
+    // (the members built off the deck's edge, the arch's ribs and the bents' columns, stand a few metres out)
+    if (c < LM_GG_DECK[0] || c > LM_GG_DECK[5] || abs(u) > max(LM_GG_DECK[7], LM_GG_HP) + 4.0) {
+        return open;
+    }
+    let deck = lm_gg_deck_top(c) - 0.3;
+    if (deck - p.y < 0.3) {
+        return open;
+    }
+    // (a leg's widest stage, its base, and the struts between the legs)
+    let t = lm_gg_tower_local(p);
+    let leg = max(LM_GG_STAGES[0].zw, vec2<f32>(LM_GG_HALF_ACROSS, LM_GG_HALF_ALONG)) + 0.5;
+    if (abs(t.x) < leg.y && abs(t.y) < LM_GG_HP + leg.x) {
+        return open;
+    }
+    let hp = LM_GG_HP;
+    let inward = -sign(u) * dot(n.xz, across);
+    let inside = 1.0 - lm_ss(hp - 0.9, hp - 0.2, abs(u));
+    let inner_face = select(0.0, 1.0, inward > 0.3 && abs(u) < hp + 1.0);
+    let down = lm_ss(-0.2, -0.7, n.y);
+    // the outer faces under the deck's edge take part of it (the roadway's run-off drains over them).
+    let shelter = max(max(max(inside, inner_face), down), LM_AGE_UNDER_OUTER);
+    // the sun through a side plane.
+    let l = look.key_dir.xyz;
+    let lu = dot(l.xz, across);
+    var key = 1.0;
+    if (abs(lu) > 1e-3 && l.y > 0.02) {
+        let tt = (sign(lu) * hp - u) / lu;
+        if (tt * abs(lu) > 0.4 && p.y + l.y * tt < deck) {
+            key = LM_AGE_LATTICE_T;
+        }
+    }
+    let sky = mix(1.0, LM_AGE_UNDER_SKY, max(inside, inner_face));
+    return vec3<f32>(shelter, key, sky);
+}
+
+// The Golden Gate coat's age (`fade`, `grime`, `underside`): the chalk by the
+// coat's age and exposure, the age's wander over sections and its repainted
+// stretches, the run-off streaks, the salt at the towers' feet and the dirt
+// under the deck. `shelter` is lm_gg_under's (x).
+fn lm_gg_age_paint(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, uv: vec2<f32>, footprint: f32, vertical: f32, shelter_in: f32) {
+    var c = (*s).albedo;
+    let fid = floor(dot(n, vec3<f32>(1.0, 3.0, 7.0)) * 2.0 + 0.5);
+    var age = 0.5;
+    var tone = 0.0;
+    if (LM_AGE_GRIME_ON) {
+        // the age's wander, a section a few metres across; a stretch repainted (fresh, darker, fuller).
+        let fa = lm_fade(footprint, LM_AGE_PATCH_M.x * 2.0);
+        let na = lm_noise(vec3<f32>(uv.x / LM_AGE_PATCH_M.x, uv.y / LM_AGE_PATCH_M.y, fid * 1.37 + 3.1));
+        age = 0.5 + 0.5 * clamp(na / 0.6, -1.0, 1.0) * fa;
+        tone = lm_noise(vec3<f32>(uv.x / (LM_AGE_PATCH_M.x * 1.6), uv.y / (LM_AGE_PATCH_M.y * 0.7), fid * 2.11 + 9.7)) / 0.6 * LM_AGE_TONE * fa;
+        let cell = floor(uv / LM_AGE_REPAINT_M);
+        let fresh = select(0.0, 1.0, lm_cell_hash(vec3<f32>(cell.x, cell.y, fid + 71.0)) < LM_AGE_REPAINT_SHARE);
+        let fr = mix(LM_AGE_REPAINT_SHARE, fresh, lm_fade(footprint, LM_AGE_REPAINT_M.x));
+        age = mix(age, 0.05, fr);
+        tone = tone + fr * LM_AGE_REPAINT_TONE;
+    }
+    if (LM_AGE_FADE_ON) {
+        // chalk: most on faces in the open and turned up, least where sheltered; by the coat's age.
+        let shelter = max(shelter_in, lm_ss(-0.2, -0.7, n.y));
+        let expo = mix(1.0, LM_AGE_CHALK_SHELTER, shelter) * (0.85 + 0.3 * max(n.y, 0.0));
+        let k = LM_AGE_CHALK * expo * (0.3 + 1.4 * age);
+        c = mix(c, LM_AGE_CHALK_RGB, clamp(k, 0.0, 1.0));
+    }
+    if (LM_AGE_GRIME_ON) {
+        c = c * (1.0 + tone);
+        // run-off streaks down the vertical faces, strongest under the ledge above, some rust-brown.
+        let drop = lm_gg_drop(world);
+        let fs = lm_fade(footprint, LM_AGE_STREAK_M.x);
+        let sn = lm_noise(vec3<f32>(uv.x / LM_AGE_STREAK_M.x, world.y / LM_AGE_STREAK_M.y, fid + 23.0));
+        let st = mix(LM_AGE_MEAN_SS_0_06, lm_ss(0.0, 0.6, sn), fs);
+        let k = LM_AGE_STREAK_TONE * st * (0.5 + 0.5 * exp(-drop / LM_AGE_STREAK_DECAY_M)) * vertical;
+        let rn = lm_noise(vec3<f32>(uv.x / (LM_AGE_STREAK_M.x * 3.0), world.y / LM_AGE_STREAK_M.y, fid + 41.0));
+        let rust = LM_AGE_STREAK_RUST * mix(0.5, lm_ss(-0.2, 0.4, rn), fs);
+        c = mix(c * (1.0 - k), LM_WX_RUST_RGB, k * rust);
+        // salt and soot at the feet.
+        c = c * mix(LM_AGE_BASE_TONE, 1.0, lm_ss(LM_SEA_LEVEL_Y, LM_SEA_LEVEL_Y + LM_AGE_BASE_M, world.y));
+    }
+    if (LM_AGE_UNDER_ON) {
+        // the dirt under the deck that no rain washes off.
+        c = c * mix(1.0, LM_AGE_UNDER_DIRT, shelter_in);
+    }
+    (*s).albedo = c;
+}
+
+// The far item (the towers past the near items' range) at the coat's mean
+// age: its paint (told from its concrete by the red) chalked, its finish flat.
+fn lm_gg_age_far(s: ptr<function, Surface>, n: vec3<f32>) {
+    let a = (*s).albedo;
+    let paint = a.x > 2.0 * a.y;
+    if (LM_AGE_MATTE_ON && paint) {
+        (*s).rough = max((*s).rough, LM_AGE_ROUGH);
+    }
+    if (LM_AGE_FADE_ON && paint) {
+        let k = LM_AGE_CHALK * (0.85 + 0.3 * max(n.y, 0.0));
+        (*s).albedo = mix(a, LM_AGE_CHALK_RGB, k);
+    }
+}
+
+// The Golden Gate concrete's age (`concrete_age`): run-off from the coping
+// above (a pylon's top in its plan along the span, else the deck's edge over
+// the point), a wall-scale tone, efflorescence and a dark foot (a pylon's own,
+// else the sea's). Normalised so a face's mean stays the cited albedo (the
+// foot, like the tide's band, is the foot's own).
+fn lm_gg_age_concrete(s: ptr<function, Surface>, world: vec3<f32>, n: vec3<f32>, uv: vec2<f32>, footprint: f32, vertical: f32) {
+    let fid = floor(dot(n, vec3<f32>(1.0, 3.0, 7.0)) * 2.0 + 0.5);
+    let c0 = dot(world.xz - LM_GG_ORIGIN, LM_GG_AXIS);
+    var drop = 1e4;
+    var foot = LM_SEA_LEVEL_Y;
+    for (var i = 0u; i < LM_GG_PYLON_N; i = i + 1u) {
+        let py = LM_GG_PYLONS[i];
+        if (abs(c0 - py.x) < py.z + 0.6) {
+            drop = py.y - world.y;
+            foot = py.w;
+        }
+    }
+    if (drop > 1e3 && c0 > LM_GG_DECK[0] && c0 < LM_GG_DECK[5]) {
+        let deck = lm_gg_deck_top(c0);
+        if (deck > world.y) {
+            drop = deck - world.y;
+        }
+    }
+    drop = max(drop, 0.0);
+    // run-off: dark grey-brown streaks, strongest under the coping.
+    let fr = lm_fade(footprint, LM_AGE_RUNOFF.x);
+    let rn = lm_noise(vec3<f32>(uv.x / LM_AGE_RUNOFF.x, world.y / 14.0, fid + 61.0));
+    let run = mix(LM_AGE_MEAN_SS_0_06, lm_ss(0.0, 0.6, rn), fr);
+    let k_run = LM_AGE_RUNOFF.y * (0.35 + 0.65 * exp(-drop / LM_AGE_RUNOFF.z)) * vertical;
+    // the wall's own tone, a few metres across, zero-mean.
+    let fw = lm_fade(footprint, LM_AGE_WALL.x);
+    let wall = lm_noise(vec3<f32>(uv.x / LM_AGE_WALL.x, world.y / 30.0, fid + 67.0)) / 0.6 * LM_AGE_WALL.y * fw * vertical;
+    // efflorescence: pale streaks.
+    let fe = lm_fade(footprint, 0.8);
+    let ef = mix(LM_AGE_MEAN_SS_03_08, lm_ss(0.3, 0.8, lm_noise(vec3<f32>(uv.x / 0.8, world.y / 6.0, fid + 71.0))), fe) * LM_AGE_EFFLOR * vertical;
+    let c = (*s).albedo;
+    let dirt = vec3<f32>(0.92, 1.0, 1.12); // the run-off's dirt is brown: the blue goes first
+    var a = c * (1.0 + wall) * max(vec3<f32>(1.0) - dirt * (k_run * run), vec3<f32>(0.0));
+    a = mix(a, LM_AGE_EFFLOR_RGB, ef);
+    // the mean the staining moves a face by, taken off again (the run-off at its mean strength, the efflorescence at its mean).
+    let km = LM_AGE_RUNOFF.y * 0.5 * vertical * LM_AGE_MEAN_SS_0_06;
+    let em = LM_AGE_MEAN_SS_03_08 * LM_AGE_EFFLOR * vertical;
+    let mean = (c * (1.0 - km) * (1.0 - em) + LM_AGE_EFFLOR_RGB * em) / max(c, vec3<f32>(1e-4));
+    a = a / mean;
+    // the foot: splash and soil at a pylon's, salt and the marine growth at the sea's.
+    a = a * mix(LM_AGE_FOOT.y, 1.0, lm_ss(foot, foot + LM_AGE_FOOT.x, world.y));
+    if (foot == LM_SEA_LEVEL_Y) {
+        a = a * mix(LM_AGE_SEA_FOOT_RGB, vec3<f32>(1.0), lm_ss(LM_SEA_LEVEL_Y, LM_SEA_LEVEL_Y + LM_AGE_SEA_FOOT_M, world.y));
+    }
+    (*s).albedo = max(a, vec3<f32>(0.0));
 }

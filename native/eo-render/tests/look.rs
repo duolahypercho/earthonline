@@ -165,6 +165,41 @@ fn gpu_post_equals_cpu_display_transform() {
     assert!(worst <= 2, "post differs from the CPU display transform by {worst} steps");
 }
 
+/// The camera look's post pass (look_camera.wgsl: the white balance, the
+/// baked 65^3 table over its log2 shaper, the dither) equals eo-look's exact
+/// CPU `display_camera` within 3 8-bit levels on every pixel of a sky frame
+/// (the table's trilinear error, the dither's step and f16).
+#[test]
+fn gpu_camera_post_equals_cpu_display_camera() {
+    let ctx = ctx();
+    let (v, i, o) = tiny_scene();
+    let mut r = Renderer::from_parts(&ctx, &v, &i, &o, wgpu::TextureFormat::Rgba8UnormSrgb, 1).unwrap();
+    let mut opts = r.look.options;
+    opts.sky.filmic = true; // the camera look takes the filmic stage's place
+    r.look.set_options(&ctx.device, opts);
+    assert!(r.look.camera_look_active(), "the camera look is the default with the filmic stage on");
+    let mut worst = 0i32;
+    let mut sum = 0.0;
+    let mut n = 0.0;
+    for (hour, yaw, pitch) in [(15.0, 2.0f32, 0.25f32), (9.5, -0.8, 0.05), (18.4, -1.5, 0.1)] {
+        r.look.set_time_of_day(hour);
+        let cam = Camera::new(Vec3::new(0.0, 2.0, 0.0), yaw, pitch, W as f32 / H as f32);
+        let (hdr, out) = render(&ctx, &r, &cam);
+        let exposure = r.look.sky.drawn_exposure().unwrap_or(r.look.frame().exposure);
+        for (h, o) in hdr.iter().zip(&out) {
+            let want = eo_look::tone::camera::display_camera([h[0] as f64, h[1] as f64, h[2] as f64], exposure);
+            for c in 0..3 {
+                let e = ((want[c] * 255.0).round() as i32 - o[c] as i32).abs();
+                worst = worst.max(e);
+                sum += e as f64;
+                n += 1.0;
+            }
+        }
+    }
+    eprintln!("camera post against display_camera: mean {:.2} worst {worst} 8-bit levels", sum / n);
+    assert!(worst <= 3, "the camera post differs from display_camera by {worst} levels");
+}
+
 #[test]
 fn a_box_casts_a_sun_shadow() {
     let ctx = ctx();

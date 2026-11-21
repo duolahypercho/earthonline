@@ -211,3 +211,40 @@ fn a_level_table_of_ways_at_grade_changes_nothing() {
     }
     assert_eq!(records(&worlds[0]), records(&worlds[2]));
 }
+
+/// The corridor layer keeps every posted second, however the posts are
+/// batched (the regions drop what `MAX_STEPS_PER_ADVANCE` cannot catch up):
+/// two worlds fed the same 2 s, one a frame at a time and one in a lump,
+/// draw the same corridor traffic.
+#[test]
+fn the_corridor_layer_replays_however_the_time_is_posted() {
+    use eo_sim::corridor::{Corridors, Params, Travel, WaySpec};
+    let way = WaySpec {
+        name: "test".into(),
+        points: vec![[0.0, 10.0, 0.0], [0.0, 10.0, -3000.0]],
+        lanes: vec![1.8, 5.4],
+        speed_mps: 20.0,
+        flow_vph: [2500.0; 24],
+        mix: [0.9, 0.02, 0.06, 0.02],
+        travel: Travel::Vehicles,
+        hidden: vec![],
+        handover: false,
+        next: None,
+    };
+    let world = || {
+        let mut w = World::new(Network::new(source().timing.clone()));
+        w.corridors = Some(Corridors::new(vec![way.clone()], Params::with_time_gap(3.0), 4));
+        w
+    };
+    let (mut a, mut b) = (world(), world());
+    for _ in 0..120 {
+        a.advance(1.0 / 60.0);
+    }
+    b.advance(1.5);
+    b.advance(0.5);
+    assert_eq!(a.corridor_steps, 120);
+    assert_eq!(b.corridor_steps, 120);
+    let (ca, cb) = (a.corridors.as_ref().unwrap(), b.corridors.as_ref().unwrap());
+    assert!(!ca.out.is_empty());
+    assert_eq!(ca.out, cb.out);
+}

@@ -103,6 +103,26 @@ pub struct SkyOptions {
     /// (`--cloud-depth-haze` turns it on); off, the ground's whole aerial perspective is in
     /// front of the cloud, a blue veil under the horizon, as before.
     pub cloud_depth_haze: bool,
+    /// The physical daylight (`--no-phys-sky`): the sun, the sky and the ground's light from
+    /// the clear coastal atmosphere (eo-look `atmosphere`, `phys`), the sky tables drawn at
+    /// the sun's own scale and the city's reflections read from them, in place of the
+    /// browser game's rig, aerosol and dome anchor.
+    pub phys_sky: bool,
+    /// The aerial-perspective volume (`--no-ap-lut`): the in-scattered light and
+    /// transmittance of the atmosphere's own medium over the view distance, from a
+    /// precomputed table, in place of the haze toward the horizon's colour.
+    pub ap_lut: bool,
+    /// The filmic display transform (`--no-filmic`): eo-look `tone::display_filmic`
+    /// in place of the ACES fit with the post chain's shoulder, grade and finish.
+    pub filmic: bool,
+    /// The incident meter's exposure in EV100 while the sun is up (`--no-ev100`: the JS curve).
+    pub ev100: bool,
+    /// The canyon-scale sky visibility and wall bounce of the occlusion pass (`--no-sky-vis`:
+    /// the 4 m contact term alone).
+    pub sky_vis: bool,
+    /// The night lit by its sky and its practicals alone (`--no-night-shaping`: the rig's rim
+    /// fill stays on at night; eo-sky `frame::apply_night_shaping`).
+    pub night_shaping: bool,
     pub weather: WeatherMode,
     pub seed: u32,
     /// The world clock at the first frame (seconds since the world's epoch).
@@ -143,6 +163,12 @@ impl Default for SkyOptions {
             cove_cumulus: false,
             cumulus: std::env::var("EO_CUMULUS").is_ok_and(|v| v == "1"),
             cloud_depth_haze: false,
+            phys_sky: true,
+            ap_lut: true,
+            filmic: true,
+            ev100: true,
+            sky_vis: true,
+            night_shaping: true,
             weather: WeatherMode::Preset(eo_sky::Kind::Clear),
             seed: eo_sky::world_seed(),
             world_time_s: 0.0,
@@ -178,6 +204,12 @@ impl SkyOptions {
             cove_cumulus: false,
             cumulus: false,
             cloud_depth_haze: false,
+            phys_sky: false,
+            ap_lut: false,
+            filmic: false,
+            ev100: false,
+            sky_vis: false,
+            night_shaping: false,
             ..Self::default()
         }
     }
@@ -278,7 +310,28 @@ pub struct SkyUniform {
     // aerial perspective: x the weather veils (1/0: its visibility under clear air's), y clear air's aerosol extinction at the ground (1/m), z, w the weather's range-fog near / far (m)
     atmo3: [f32; 4],
     sun_glint: [f32; 4],
+    // the physical daylight: rgb a white sun at the top of the atmosphere x the Sun's colour
+    // (look units; the sky tables are per unit solar illuminance), w its weight (0: the dome anchor)
+    atmo4: [f32; 4],
+    // the medium the tables integrate: x aerosol scattering, y aerosol absorption (1/km at the
+    // ground, 550 nm, x the haze density), z the aerosol's scale height (km), w the
+    // aerial-perspective volume on (1/0)
+    atmo_m: [f32; 4],
+    // rgb the aerosol's spectral factor per channel, w the aerial-perspective volume's reach (km)
+    atmo_s: [f32; 4],
+    // rgb Rayleigh scattering at sea level (1/km), w its scale height (km)
+    atmo_r: [f32; 4],
+    // rgb ozone's peak absorption (1/km), w unused
+    atmo_o: [f32; 4],
+    // the second high deck (eo_sky::clouds::Decks::cirrus): x its height (m), y its opacity, z, w unused; read by nothing yet
+    cirrus: [f32; 4],
+    // spare (the sky tracks' next field); zero
+    spare: [f32; 4],
 }
+
+/// The aerial-perspective volume: texels (azimuth about the sun, elevation, distance) and reach.
+pub const AP_SIZE: [u32; 3] = [32, 32, 32];
+pub const AP_REACH_KM: f32 = 40.0;
 
 /// One light as the GPU reads it (sky_light.wgsl `SkyLight`), 64 bytes.
 #[repr(C)]
@@ -397,10 +450,14 @@ struct State {
     adapt: eo_sky::night::Adaptation,
     /// the forward the meter last metered (a turn of more than ~30 deg snaps the adaptation, as a cut does).
     meter_fwd: Option<glam::Vec3>,
+    /// the scene meter (`--no-scene-meter`): after a cut or a turn, the frame
+    /// from which a reading counts as the new view's (its first snaps the adaptation).
+    meter_snap_after: Option<u32>,
     /// the aerosol density the transmittance and multiple-scattering
     /// tables were built for (they depend on the medium only; rebuilt on a change).
-    atmo_built: Option<f32>,
-    atmo_haze: f32,
+    atmo_built: Option<[[f32; 4]; 4]>,
+    /// the medium the tables are built for (`atmo_m`, `atmo_s`, `atmo_r`, `atmo_o`), the rebuild key.
+    atmo_medium: [[f32; 4]; 4],
     /// the (hour, weather) the histories were made under; frames left to discard after a change; frames of history since the last cut.
     hist_look: Option<(f64, (i64, i64, i64))>,
     recut: u32,
@@ -460,13 +517,12 @@ pub struct SkyGpu {
     // the atmosphere tables (transmittance, multiple scattering, sky view) and their passes
     atmo_views: [wgpu::TextureView; 3],
     atmo_pipes: [wgpu::ComputePipeline; 3],
-    /// (`--photo-finish`) the same passes over the measured air's medium
-    /// (photo.rs `atmo_luts_source`), made the first time the option is on, and
-    /// the layout they share with `atmo_pipes`.
-    atmo_photo: std::sync::OnceLock<Option<[wgpu::ComputePipeline; 3]>>,
-    atmo_layout: wgpu::PipelineLayout,
     atmo_bgs: [wgpu::BindGroup; 3],
     atmo_sizes: [(u32, u32); 3],
+    /// the aerial-perspective volume (in-scattered light, transmittance) and its pass
+    ap_views: [wgpu::TextureView; 2],
+    ap_pipe: wgpu::ComputePipeline,
+    ap_bg: wgpu::BindGroup,
     noise_ready: AtomicBool,
     /// the cloud noise, the blue-noise tile and the cloud-shadow map (clouds.rs).
     pub(crate) clouds: crate::clouds::CloudGpu,
@@ -519,7 +575,7 @@ pub struct SkyGpu {
     /// with a generation that rebuilds the resolve's bind groups when it changes.
     lit_fog_bind: Mutex<(u64, Option<(wgpu::TextureView, wgpu::Buffer)>)>,
     /// (`--look cinematic`, stage L4) the far sun shadow map (`--far-shadows`) at the volume's
-    /// binding 20, for the shade in the golden haze past the cascades (`set_far_shadow_map`),
+    /// binding 22, for the shade in the golden haze past the cascades (`set_far_shadow_map`),
     /// with a generation that rebuilds the volume's bind groups; a 1 x 1 stand-in without it
     /// (the shader reads it only with SF_CINEMATIC, SKY_CINEMATIC and the far rings drawn).
     far_shadow_bind: Mutex<(u64, Option<wgpu::TextureView>)>,
@@ -792,8 +848,11 @@ impl SkyGpu {
                 entry(17, cs, t2(true)),
                 entry(18, cs, t2(true)),
                 entry(19, cs, t2(true)),
+                // the aerial-perspective volume: in-scattered light, transmittance
+                entry(20, cs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D3, multisampled: false }),
+                entry(21, cs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D3, multisampled: false }),
                 // (`--look cinematic`, stage L4) the far sun shadow map (or its stand-in)
-                entry(20, cs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2Array, multisampled: false }),
+                entry(22, cs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2Array, multisampled: false }),
             ],
         });
         let atmo_src = include_str!("sky_atmo.wgsl");
@@ -850,6 +909,42 @@ impl SkyGpu {
             })
         };
         let atmo_bgs = [atmo_bg(0, &dummy_view, &dummy_view), atmo_bg(1, &atmo_views[0], &dummy_view), atmo_bg(2, &atmo_views[0], &atmo_views[1])];
+        // the aerial-perspective volume (sky_atmo_luts.wgsl `at_ap_main`): two 3D tables, written
+        // after the sky view from the same transmittance and multiple-scattering tables.
+        let ap_tex: Vec<wgpu::Texture> = ["sky-ap-inscatter", "sky-ap-transmittance"]
+            .iter()
+            .map(|l| {
+                d.create_texture(&wgpu::TextureDescriptor {
+                    label: Some(l),
+                    size: wgpu::Extent3d { width: AP_SIZE[0], height: AP_SIZE[1], depth_or_array_layers: AP_SIZE[2] },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D3,
+                    format: wgpu::TextureFormat::Rgba16Float,
+                    usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
+                })
+            })
+            .collect();
+        let ap_views: [wgpu::TextureView; 2] = std::array::from_fn(|i| ap_tex[i].create_view(&Default::default()));
+        let store3 = wgpu::BindingType::StorageTexture { access: wgpu::StorageTextureAccess::WriteOnly, format: wgpu::TextureFormat::Rgba16Float, view_dimension: wgpu::TextureViewDimension::D3 };
+        let ap_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("sky-ap-bgl"),
+            entries: &[entry(0, cs, ubuf), entry(2, cs, t2(true)), entry(3, cs, t2(true)), entry(4, cs, samp), entry(5, cs, store3), entry(6, cs, store3)],
+        });
+        let ap_bg = d.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("sky-ap-bg"),
+            layout: &ap_bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: uniform.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&atmo_views[0]) },
+                wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&atmo_views[1]) },
+                wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::Sampler(&lin) },
+                wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(&ap_views[0]) },
+                wgpu::BindGroupEntry { binding: 6, resource: wgpu::BindingResource::TextureView(&ap_views[1]) },
+            ],
+        });
+        let ap_pipe = compute("sky_atmo_ap", &layout("sky-ap-layout", &ap_bgl), &am, "at_ap_main");
         let volume_pipe = compute("sky_volume", &layout("sky-volume-layout", &volume_bgl), &vm, "vol_main");
         // the cloud noise, blue noise and cloud-shadow map (the shadow pass is the volume module's `cl_shadow_main`)
         let clouds = crate::clouds::CloudGpu::new(d, crate::clouds::ShadowInputs { module: &vm, look_buf: init.look_buf, sky_uniform: &uniform, sheet: &sheet_view, repeat: &rep, sky_view: &atmo_views[2], linear: &lin });
@@ -1032,10 +1127,11 @@ impl SkyGpu {
             recon_pipe,
             atmo_views,
             atmo_pipes,
-            atmo_photo: std::sync::OnceLock::new(),
-            atmo_layout: al,
             atmo_bgs,
             atmo_sizes,
+            ap_views,
+            ap_pipe,
+            ap_bg,
             resolve_bgl,
             resolve_pipe,
             bloom_bgl,
@@ -1065,8 +1161,9 @@ impl SkyGpu {
                 parity: 0,
                 adapt: Default::default(),
                 meter_fwd: None,
+                meter_snap_after: None,
                 atmo_built: None,
-                atmo_haze: 0.0,
+                atmo_medium: [[0.0; 4]; 4],
                 hist_look: None,
                 recut: 0,
                 cut_hold: false,
@@ -1098,7 +1195,7 @@ impl SkyGpu {
     /// it checks (`[0]`: the frame it was last integrated in), or None for the
     /// stand-ins. The resolve's bind groups are rebuilt at the next frame. Locks
     /// only its own slot (safe inside `encode_after`'s `mid` hook).
-    /// (`--look cinematic`, stage L4) the far sun shadow map for the volume's binding 20
+    /// (`--look cinematic`, stage L4) the far sun shadow map for the volume's binding 22
     /// (None: the stand-in); the volume's bind groups are rebuilt at the next frame.
     pub(crate) fn set_far_shadow_map(&self, v: Option<&wgpu::TextureView>) {
         let mut b = self.far_shadow_bind.lock().unwrap();
@@ -1139,6 +1236,16 @@ impl SkyGpu {
     pub fn atmo_tables(&self) -> (&wgpu::TextureView, &wgpu::TextureView) {
         (&self.atmo_views[2], &self.atmo_views[0])
     }
+    /// the frame whose scene-meter reading the exposure waits on (after a cut or a turn), if any.
+    pub fn meter_snap_pending(&self) -> Option<u32> {
+        self.state.lock().unwrap().meter_snap_after
+    }
+
+    /// the frame counter `update` advances (the scene meter tags its readings with it).
+    pub fn frame_index(&self) -> u32 {
+        self.state.lock().unwrap().frame
+    }
+
     /// the exposure the last frame was drawn with (the target, metered and adapted), None before the first.
     pub fn drawn_exposure(&self) -> Option<f64> {
         let s = self.state.lock().unwrap();
@@ -1186,29 +1293,11 @@ impl SkyGpu {
     }
 
     /// (`--photo-finish`) the level (0 off): the measured air and the lens's bloom.
-    /// The tables' passes for the measured air are made here, the first time.
+    /// The measured air reaches the tables through the medium `update` writes
+    /// (`atmo_m`: the aerosol's absorption and scale height, eo-sky `photo`), so
+    /// the tables' passes are the default ones and the medium's change rebuilds them.
     pub(crate) fn set_photo_finish(&self, level: u8) {
-        if level > 0 {
-            self.atmo_photo_pipes();
-        }
         self.state.lock().unwrap().photo = level;
-    }
-
-    /// (`--photo-finish`) the atmosphere tables' passes over the measured air (None:
-    /// photo.rs could not place its medium, the default passes stand in; logged once).
-    fn atmo_photo_pipes(&self) -> Option<&[wgpu::ComputePipeline; 3]> {
-        self.atmo_photo
-            .get_or_init(|| {
-                let Some(src) = crate::photo::atmo_luts_source() else {
-                    eprintln!("photo finish: sky_atmo_luts.wgsl's medium was not found; the atmosphere tables keep the default air");
-                    return None;
-                };
-                let d = &self.device;
-                let m = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("sky_atmo_luts.wgsl (photo)"), source: wgpu::ShaderSource::Wgsl(src.into()) });
-                let compute = |label: &str, e: &str| d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some(label), layout: Some(&self.atmo_layout), module: &m, entry_point: Some(e), compilation_options: Default::default(), cache: None });
-                Some([compute("sky_atmo_trans_photo", "at_trans_main"), compute("sky_atmo_ms_photo", "at_ms_main"), compute("sky_atmo_view_photo", "at_view_main")])
-            })
-            .as_ref()
     }
 
     pub fn world_time(&self) -> f64 {
@@ -1226,6 +1315,9 @@ impl SkyGpu {
     /// few thousand steps).
     pub fn weather(&self) -> eo_sky::WeatherState {
         let mut s = self.state.lock().unwrap();
+        // the live calendar's date follows the world clock this sky draws (eo-look
+        // `sun::set_calendar_clock`; eo-sky's weather functions stay pure)
+        eo_look::sun::set_calendar_clock(s.world_s);
         if let WeatherMode::Schedule = s.opts.weather {
             let sec = s.world_s.floor();
             if let Some((t, w)) = s.weather_cache {
@@ -1408,7 +1500,10 @@ impl SkyGpu {
     /// The weather, the decks and the night for this frame, and the uniform.
     /// `f` is the look frame (already built for this weather), `cam` the
     /// unjittered camera.
-    pub(crate) fn update(&self, queue: &wgpu::Queue, cam: &Camera, f: &eo_look::LookFrame, terms: &eo_sky::SkyTerms, out_size: (u32, u32), depth_ok: bool) -> f64 {
+    /// `scene`: the scene meter's latest reading and the display's shoulder
+    /// (`--no-scene-meter`: None, the dome estimate below meters the frame).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn update(&self, queue: &wgpu::Queue, cam: &Camera, f: &eo_look::LookFrame, terms: &eo_sky::SkyTerms, out_size: (u32, u32), depth_ok: bool, daylight: Option<&eo_look::phys::Daylight>, scene: Option<(Option<eo_sky::night::SceneMeterReading>, f64)>) -> f64 {
         if !self.sheet_ready.swap(true, Ordering::Relaxed) {
             let sheet = eo_sky::clouds::bake_sheet(0x5eed_c10d);
             for (mip, level) in eo_sky::clouds::sheet_mips(&sheet).iter().enumerate() {
@@ -1466,7 +1561,30 @@ impl SkyGpu {
         // the camera meter (eo-sky `night::meter`) over a 5 x 3 grid of
         // the view, centre-weighted; a cut or a turn of more than ~30 deg
         // snaps the adaptation (a new shot, not a pan).
-        let meter = if o.meter {
+        let turned = s.meter_fwd.is_some_and(|p| p.dot(cam.forward()) < 0.87);
+        let meter = if o.meter && let Some((reading, shoulder)) = &scene {
+            // the scene meter: a reading of this view (taken after the last cut or
+            // turn) sets the exposure; its first snaps the adaptation (a new shot).
+            // (`--smooth-time`: only a camera cut, as below; `step_smooth` converges.)
+            if camera_cut || ((cut || turned) && !smooth) {
+                s.meter_snap_after = Some(s.frame);
+            }
+            match reading {
+                Some(r) if s.meter_snap_after.is_none_or(|a| r.frame >= a) => {
+                    if s.meter_snap_after.take().is_some() {
+                        s.adapt.current = None;
+                    }
+                    let k = eo_sky::night::scene_meter(f.model.sun.altitude_deg, &r.hist, *shoulder);
+                    let range = eo_sky::night::SCENE_METER_RANGE_EV.exp2();
+                    let m = (r.prior * k / terms.exposure_target.max(1e-12)).clamp(1.0 / range, range);
+                    if std::env::var_os("EO_SCENE_METER_LOG").is_some() {
+                        eprintln!("scene meter: frame {} reading {} factor {:+.2} EV (prior {:.4})", s.frame, r.frame, m.log2(), terms.exposure_target);
+                    }
+                    m
+                }
+                _ => 1.0,
+            }
+        } else if o.meter {
             let (fw, rt) = (cam.forward(), cam.right());
             let up = rt.cross(fw);
             let ty = (0.5 * cam.fov_y_deg.to_radians()).tan();
@@ -1479,11 +1597,24 @@ impl SkyGpu {
                     dirs.push(([d.x as f64, d.y as f64, d.z as f64], 1.5 - 0.5 * (x * x + y * y) as f64));
                 }
             }
-            eo_sky::night::meter(f, &terms.weather, &dirs)
+            match daylight.filter(|d| d.weight > 0.0) {
+                // the physical daylight's sky and card where it lights the frame (by its weight)
+                Some(d) => {
+                    let wt = d.weight;
+                    let card_js = 0.18 * (eo_sky::night::key_on_ground(f) * eo_sky::night::mean_beam(&terms.weather) + eo_sky::night::ground_fill(f, eo_sky::night::SIDEWALK_ENV)) / std::f64::consts::PI;
+                    let card_ph = 0.18 * eo_sky::night::horizontal_illuminance(f, &terms.weather, wt) / std::f64::consts::PI;
+                    let card = card_js + (card_ph - card_js) * wt;
+                    let eye_m = cam.eye.y as f64;
+                    eo_sky::night::meter_with(f, &dirs, card, &|dd| {
+                        let js = eo_look::math::luminance(f.model.dome(dd));
+                        js + (eo_look::math::luminance(d.sky(dd, eye_m)) - js) * wt
+                    })
+                }
+                None => eo_sky::night::meter(f, &terms.weather, &dirs),
+            }
         } else {
             1.0
         };
-        let turned = s.meter_fwd.is_some_and(|p| p.dot(cam.forward()) < 0.87);
         s.meter_fwd = Some(cam.forward());
         // (`--smooth-time`: neither a turn nor a clock jump resets it; `step_smooth` converges.)
         if (cut || turned) && !smooth {
@@ -1627,12 +1758,39 @@ impl SkyGpu {
             eo_look::sky::afterglow_arch([s[0] / h, 0.02, s[2] / h], s, m.ext.afterglow)
         };
         // (`--photo-finish`) San Francisco's measured air (eo-sky `photo`): the tables'
-        // aerosol (and its albedo and scale height: `atmo_photo`'s passes, photo.rs
-        // `atmo_luts_source`), the aerial perspective's extinction (`atmo3.y` below);
-        // the lens's bloom (eo-look `tone`).
+        // aerosol (its density here, its absorption and scale height in the medium below),
+        // the aerial perspective's extinction (`atmo3.y` below); the lens's bloom (eo-look `tone`).
         let photo = s.photo > 0;
         let atmo_haze = if photo { eo_sky::photo::lut_density(w.profile.haze) as f32 } else { (ATMO_HAZE * (1.0 + 2.0 * w.profile.haze)) as f32 };
-        s.atmo_haze = atmo_haze;
+        // the medium the tables integrate: the clear coastal air (eo-look `atmosphere`) with the
+        // physical daylight, else the standard aerosol x ATMO_HAZE as before; both x the weather's haze.
+        // With the physical daylight the medium moves from the old one to the coastal air by
+        // the daylight's weight (the sun up: all of it; the twilight and the night keep the
+        // tables they were tuned on). The haze density folds into the aerosol's coefficients.
+        let legacy = eo_look::atmosphere::Atmosphere::legacy();
+        // (`--photo-finish`) the measured air's aerosol: its absorption per unit density and
+        // its scale height (eo-sky `photo::LUT_MIE_ABSORB_PHOTO_PER_KM`, `LUT_AEROSOL_SCALE_KM`).
+        let legacy = if photo { eo_look::atmosphere::Atmosphere { aerosol_abs: eo_sky::photo::LUT_MIE_ABSORB_PHOTO_PER_KM, aerosol_h_km: eo_sky::photo::LUT_AEROSOL_SCALE_KM, ..legacy } } else { legacy };
+        let legacy = eo_look::atmosphere::Atmosphere { aerosol_scat: legacy.aerosol_scat * atmo_haze as f64, aerosol_abs: legacy.aerosol_abs * atmo_haze as f64, ..legacy };
+        let atm = match daylight.filter(|_| o.phys_sky) {
+            Some(d) => {
+                let c = eo_look::atmosphere::Atmosphere::coastal_clear();
+                let dens = eo_sky::frame::daylight_density(w);
+                let c = eo_look::atmosphere::Atmosphere { aerosol_scat: c.aerosol_scat * dens, aerosol_abs: c.aerosol_abs * dens, ..c };
+                eo_look::atmosphere::Atmosphere::lerp(&legacy, &c, d.weight.clamp(0.0, 1.0))
+            }
+            None => legacy,
+        };
+        let atmo_m = [atm.aerosol_scat as f32, atm.aerosol_abs as f32, atm.aerosol_h_km as f32, if o.ap_lut { 1.0 } else { 0.0 }];
+        let atmo_s = [atm.aerosol_spectral[0] as f32, atm.aerosol_spectral[1] as f32, atm.aerosol_spectral[2] as f32, AP_REACH_KM];
+        let atmo_r = [atm.rayleigh[0] as f32, atm.rayleigh[1] as f32, atm.rayleigh[2] as f32, atm.rayleigh_h_km as f32];
+        let atmo_o = [atm.ozone[0] as f32, atm.ozone[1] as f32, atm.ozone[2] as f32, 0.0];
+        // the transmittance and multiple-scattering tables are rebuilt when any of the medium moves
+        s.atmo_medium = [[atmo_m[0], atmo_m[1], atmo_m[2], 0.0], atmo_s, atmo_r, atmo_o];
+        let atmo4 = match daylight.filter(|_| o.phys_sky) {
+            Some(d) => [d.sun_toa[0] as f32, d.sun_toa[1] as f32, d.sun_toa[2] as f32, d.weight as f32],
+            None => [0.0; 4],
+        };
         let fwd = cam.forward();
         let right = cam.right();
         let up = right.cross(fwd);
@@ -1727,6 +1885,16 @@ impl SkyGpu {
                 let ap = if photo { eo_sky::photo::ap_extinction_per_m(w.profile.haze) as f32 } else { (AP_HAZE_PER_KM * 0.001 * (1.0 + 2.0 * w.profile.haze)) as f32 };
                 [if o.atmosphere && far < far_clear * 0.97 { 1.0 } else { 0.0 }, ap, f.aerial.near as f32, far as f32]
             },
+            atmo4,
+            atmo_m,
+            atmo_s,
+            atmo_r,
+            atmo_o,
+            cirrus: {
+                let c = decks.cirrus();
+                [c.alt_m as f32, c.opacity as f32, 0.0, 0.0]
+            },
+            spare: [0.0; 4],
         };
         queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&u));
         // The lights' scales: candela -> irradiance units, on with the lamps.
@@ -2107,7 +2275,9 @@ impl SkyGpu {
                         wgpu::BindGroupEntry { binding: 17, resource: wgpu::BindingResource::TextureView(&self.clouds.curl_view) },
                         wgpu::BindGroupEntry { binding: 18, resource: wgpu::BindingResource::TextureView(&self.clouds.shadow_view) },
                         wgpu::BindGroupEntry { binding: 19, resource: wgpu::BindingResource::TextureView(&self.clouds.blue_view) },
-                        wgpu::BindGroupEntry { binding: 20, resource: wgpu::BindingResource::TextureView(far_view) }, // (stage L4)
+                        wgpu::BindGroupEntry { binding: 20, resource: wgpu::BindingResource::TextureView(&self.ap_views[0]) },
+                        wgpu::BindGroupEntry { binding: 21, resource: wgpu::BindingResource::TextureView(&self.ap_views[1]) },
+                        wgpu::BindGroupEntry { binding: 22, resource: wgpu::BindingResource::TextureView(far_view) }, // (stage L4)
                     ],
                 })
             };
@@ -2159,22 +2329,23 @@ impl SkyGpu {
         // the atmosphere tables, before the volume reads them.
         if o.atmosphere && o.needs_volume() {
             // The transmittance and multiple-scattering tables only when the medium changed (0.3-0.4 ms each frame otherwise).
-            let (first, photo) = {
+            let first = {
                 let mut s = self.state.lock().unwrap();
-                let rebuild = s.atmo_built != Some(s.atmo_haze);
-                s.atmo_built = Some(s.atmo_haze);
-                (if rebuild { 0 } else { 2 }, s.photo > 0)
+                let rebuild = s.atmo_built != Some(s.atmo_medium);
+                s.atmo_built = Some(s.atmo_medium);
+                if rebuild { 0 } else { 2 }
             };
-            // (`--photo-finish`) the measured air's passes (the default passes untouched).
-            let pipes = match (photo, self.atmo_photo.get()) {
-                (true, Some(Some(p))) => p,
-                _ => &self.atmo_pipes,
-            };
+            // (`--photo-finish`'s measured air reaches these passes through the medium: `update`'s `atmo_m`.)
             let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("sky-atmosphere"), timestamp_writes: None });
             for k in first..3 {
-                pass.set_pipeline(&pipes[k]);
+                pass.set_pipeline(&self.atmo_pipes[k]);
                 pass.set_bind_group(0, &self.atmo_bgs[k], &[]);
                 pass.dispatch_workgroups(self.atmo_sizes[k].0.div_ceil(8), self.atmo_sizes[k].1.div_ceil(8), 1);
+            }
+            if o.ap_lut {
+                pass.set_pipeline(&self.ap_pipe);
+                pass.set_bind_group(0, &self.ap_bg, &[]);
+                pass.dispatch_workgroups(AP_SIZE[0].div_ceil(8), AP_SIZE[1].div_ceil(8), 1);
             }
         }
         // Volume.
@@ -2249,7 +2420,9 @@ impl SkyGpu {
 /// The weather in force for options and a world clock.
 pub fn weather_of(o: &SkyOptions, world_s: f64) -> eo_sky::WeatherState {
     match o.weather {
-        WeatherMode::Preset(k) => eo_sky::weather::preset(k),
+        // the preset carries the world clock's game day, so a clear day's sky
+        // (eo-sky `clouds::sky_state`) is drawn afresh each game day in live play
+        WeatherMode::Preset(k) => eo_sky::weather::preset_at(k, world_s),
         WeatherMode::Schedule => eo_sky::weather::state_at(o.seed, world_s),
     }
 }

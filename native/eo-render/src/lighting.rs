@@ -256,7 +256,7 @@ mod tests {
                 for (label, src) in group1_shaders() {
                     parse(&format!("{name}: {label}"), &src);
                 }
-                let props = format!("{}\n{}\n{}", look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Plane, look::ShadowLevels::Near, false), include_str!("props_types.wgsl"), include_str!("props_draw.wgsl"));
+                let props = format!("{}\n{}\n{}", look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Plane, look::ShadowLevels::Near, false), crate::props::pr_types_src(), include_str!("props_draw.wgsl"));
                 parse(&format!("{name}: props"), &props);
                 let agents = format!(
                     "{}\n{}\n{}\n{}\n{}",

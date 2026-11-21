@@ -89,7 +89,7 @@ fn a_car_in_a_bore_is_marked_with_its_depth_and_nothing_else_is() {
     let origin = [p[0].div_euclid(256.0) * 256.0, p[1].div_euclid(256.0) * 256.0];
     let heading = dir[0].atan2(dir[1]) as f32;
     let car = |id: u32, level: i8, flags: u16| AgentInstance { pos: [(p[0] - origin[0]) as f32, 0.0, (p[1] - origin[1]) as f32], heading, speed: 11.0, anim: 1.0, kind: 0, flags: level_flags(level) | flags, id };
-    let frame = Frame { time: 1.0, steps: 60, regions: vec![AgentBuffer { origin, time: 1.0, step: 60, vehicles: vec![car(1, level, 1), car(2, 0, 1)], walkers: vec![] }], timing: Default::default() };
+    let frame = Frame { time: 1.0, steps: 60, regions: vec![AgentBuffer { origin, time: 1.0, step: 60, vehicles: vec![car(1, level, 1), car(2, 0, 1)], walkers: vec![] }], ..Default::default() };
     let mut feeder = Feeder::new(library(), ground.clone(), Some(tunnels.clone()), 7).unwrap();
     let mut fed = vec![];
     feeder.build(&frame, &mut fed);

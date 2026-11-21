@@ -153,6 +153,13 @@ struct PrFrame {
     copy_step: [f32; 4],
 }
 
+/// props_types.wgsl with the vegetation's range and thinning ahead of it
+/// (`props_lib2::vegetation_models::thin_wgsl`): every shader that composes
+/// props_types.wgsl takes it from here (light_shadow.rs's props variant too).
+pub(crate) fn pr_types_src() -> String {
+    format!("{}\n{}", crate::props_lib2::vegetation_models::thin_wgsl(), include_str!("props_types.wgsl"))
+}
+
 /// What building a `PropsGpu` needs from the renderer (clones: wgpu handles are shared).
 #[derive(Clone)]
 pub struct PropsInit {
@@ -432,12 +439,12 @@ impl PropsGpu {
         };
         let cull_bg_s = cull_bg(&params_s, "prop-cull-bg-pre");
         let cull_bg_c = cull_bg(&params_c, "prop-cull-bg-camera");
-        let plain_src = format!("{}\n{}\nfn pr_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return false; }}\n", include_str!("props_types.wgsl"), include_str!("props_cull.wgsl"));
+        let plain_src = format!("{}\n{}\nfn pr_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return false; }}\n", pr_types_src(), include_str!("props_cull.wgsl"));
         let hzb_tail = format!(
             "struct HzbInfo {{ screen: vec4<f32> }};\n@group(1) @binding(0) var hzb: texture_2d<f32>;\n@group(1) @binding(1) var<uniform> hzb_info: HzbInfo;\n{}\nfn pr_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return hzb_occluded(mn, mx, pr.view_proj, hzb_info.screen.xy); }}\n",
             crate::occlusion::OCCLUSION_WGSL
         );
-        let hzb_src = format!("{}\n{}\n{hzb_tail}", include_str!("props_types.wgsl"), include_str!("props_cull.wgsl"));
+        let hzb_src = format!("{}\n{}\n{hzb_tail}", pr_types_src(), include_str!("props_cull.wgsl"));
         let plain_mod = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("props_cull.wgsl"), source: wgpu::ShaderSource::Wgsl(plain_src.into()) });
         let hzb_mod = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("props_cull.wgsl (hzb)"), source: wgpu::ShaderSource::Wgsl(hzb_src.into()) });
         let lay_s = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("prop-cull-layout"), bind_group_layouts: &[Some(&cull_bgl)], immediate_size: 0 });
@@ -527,7 +534,7 @@ impl PropsGpu {
                 wgpu::BindGroupEntry { binding: 16, resource: probe_sh.as_entire_binding() },
             ],
         });
-        let draw_src = format!("{}\n{}\n{}", crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Plane, crate::look::ShadowLevels::Near, false), include_str!("props_types.wgsl"), include_str!("props_draw.wgsl")); // the ambient volume's plane only, no single-probe lookups (their frame names none; lighting: ambient::ShaderLevels, room for the probe grid)
+        let draw_src = format!("{}\n{}\n{}", crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Plane, crate::look::ShadowLevels::Near, false), pr_types_src(), include_str!("props_draw.wgsl")); // the ambient volume's plane only, no single-probe lookups (their frame names none; lighting: ambient::ShaderLevels, room for the probe grid)
         let draw_mod = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("props_draw.wgsl"), source: wgpu::ShaderSource::Wgsl(draw_src.into()) });
         let draw_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("prop-draw-layout"),
@@ -595,7 +602,7 @@ impl PropsGpu {
                 resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding { buffer: &pi.shadow_views, offset: 0, size: Some(std::num::NonZeroU64::new(80).unwrap()) }),
             }],
         });
-        let shadow_src = format!("{}\n{}", include_str!("props_types.wgsl"), include_str!("props_shadow.wgsl"));
+        let shadow_src = format!("{}\n{}", pr_types_src(), include_str!("props_shadow.wgsl"));
         let shadow_mod = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("props_shadow.wgsl"), source: wgpu::ShaderSource::Wgsl(shadow_src.into()) });
         let shadow_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("prop-shadow-layout"), bind_group_layouts: &[Some(&view_bgl), None, Some(&data_bgl)], immediate_size: 0 });
         let shadow_attrs = [attrs[0], attrs[2], attrs[4], attrs[5]];
@@ -635,9 +642,9 @@ impl PropsGpu {
             wsrc[a..b].to_string()
         };
         let head = wsrc.split("#ifdef_cull").next().unwrap_or("");
-        let wire_cull_plain = format!("{}\n{head}\n{}\nfn pr_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return false; }}\n", include_str!("props_types.wgsl"), section("cull"));
-        let wire_cull_hzb = format!("{}\n{head}\n{}\n{hzb_tail}", include_str!("props_types.wgsl"), section("cull"));
-        let wire_draw_src = format!("{}\n{}\n{head}\n{}\n{}", crate::look::look_common_source(), include_str!("props_types.wgsl"), section("draw"), crate::look::LOOK_EXT_WGSL); // + group 1 bindings 12-18
+        let wire_cull_plain = format!("{}\n{head}\n{}\nfn pr_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return false; }}\n", pr_types_src(), section("cull"));
+        let wire_cull_hzb = format!("{}\n{head}\n{}\n{hzb_tail}", pr_types_src(), section("cull"));
+        let wire_draw_src = format!("{}\n{}\n{head}\n{}\n{}", crate::look::look_common_source(), pr_types_src(), section("draw"), crate::look::LOOK_EXT_WGSL); // + group 1 bindings 12-18
         let wire_cull_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("prop-wire-cull-bgl"),
             entries: &[entry(0, cs, ubuf), entry(1, cs, sbuf(true)), entry(2, cs, sbuf(false)), entry(3, cs, sbuf(false))],

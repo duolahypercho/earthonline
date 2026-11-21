@@ -21,6 +21,7 @@ fn uw_height(xz: vec2<f32>, spacing: f32) -> f32 {
 fn uw_vs(@builtin(vertex_index) vi: u32) -> UwView {
     let xz = wu.cam.xz;
     let spacing = wg_spacing(0.0, wu.fwd.w);
+    w_expo_set(xz); // (iteration 2, exposure) the waves over the eye, as the surface's vertex
     let y = uw_height(xz, spacing);
     let slope = (vec2<f32>(uw_height(xz + vec2<f32>(spacing, 0.0), spacing),
                            uw_height(xz + vec2<f32>(0.0, spacing), spacing)) - y) / spacing;
@@ -131,6 +132,7 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
     if (d0 <= 0.0 && d_near <= 0.0) { discard; }
     let start = select(0.0, max(d0 / min(rise, -1e-5), 0.0), d0 < 0.0);
     let origin = wu.cam.xyz + ray * start;
+    w_expo_set(origin.xz); // (iteration 2, exposure) the place's swell share and waves, as the surface's
     let ocean = wg_ocean(origin.x);
     let cove = wo_cove(origin.xz);
     let scatter = mix(mix(WO_BAY_S, WO_COAST_S, ocean), WO_COVE_S, cove);
@@ -225,5 +227,11 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
     let grains = uw_grains(origin, ray, path, lk_luma(ext), select(0.0, cove, look.cove.x > 0.0), pixel_cone);
     let radiance = boundary * exp(-ext * path) + vol
         + grains * scatter * (ambient + direct * 0.25) * exp(-ext * diffuse_depth * down0 / 0.75);
-    return finish_color(max(radiance, vec3<f32>(0.0)) * i.exposure, i.clip, dims);
+    // the dive exposure (`UW_DEPTH_EXPOSURE`; 1 without it), then the display transform
+    let shown = max(radiance, vec3<f32>(0.0)) * i.exposure;
+    if (look.tone2.z > 0.5) {
+        // the camera look (look_camera.wgsl), as the post pass finishes the drawn frame
+        return finish_camera(shown, i.clip);
+    }
+    return finish_color(shown, i.clip, dims);
 }

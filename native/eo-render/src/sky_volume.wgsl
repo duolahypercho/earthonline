@@ -24,9 +24,13 @@
 // the atmosphere's transmittance and sky-view tables (sky_atmo.wgsl).
 @group(0) @binding(13) var vol_at_trans: texture_2d<f32>;
 @group(0) @binding(14) var vol_at_view: texture_2d<f32>;
+// the aerial-perspective volume (sky_atmo_luts.wgsl `at_ap_main`): in-scattered light per
+// unit solar illuminance and transmittance, by direction about the sun and distance.
+@group(0) @binding(20) var vol_ap_in: texture_3d<f32>;
+@group(0) @binding(21) var vol_ap_tr: texture_3d<f32>;
 // (`--look cinematic`, stage L4) the far sun shadow map (far_shadow.wgsl, `--far-shadows`) or
 // a stand-in: the shade in the golden haze past the cascades.
-@group(0) @binding(20) var vol_far_map: texture_depth_2d_array;
+@group(0) @binding(22) var vol_far_map: texture_depth_2d_array;
 
 /// the atmosphere's sky radiance along a direction (look units).
 /// Its zenith is held to the look's own zenith luminance (the JS sky model's,
@@ -48,8 +52,30 @@ fn vol_atmo_gain() -> f32 {
     return clamp(tgt / max(lz, 1e-9), 0.2 * skyu.atmo.w, 400.0 * skyu.atmo.w);
 }
 
+/// the physical daylight's weight (`atmo4.w`; compiled out with `--no-phys-sky` at
+/// start: look.rs `ShaderFeatures::phys_sky`)
+fn vol_phys() -> f32 {
+    return select(0.0, skyu.atmo4.w, SF_PHYS_SKY);
+}
+
+/// the scale the tables are drawn at (look units per unit solar illuminance): the
+/// look's dome anchor (`vol_atmo_gain`), or with the physical daylight the sun's
+/// own irradiance above the atmosphere in its colour (`atmo4`), by its weight.
+fn vol_atmo_scale() -> vec3<f32> {
+    let ph = vol_phys();
+    if (ph <= 0.0) {
+        return vec3<f32>(vol_atmo_gain());
+    }
+    if (ph >= 1.0) {
+        return skyu.atmo4.rgb;
+    }
+    return mix(vec3<f32>(vol_atmo_gain()), skyu.atmo4.rgb, ph);
+}
+
 fn vol_atmo_sky(d: vec3<f32>) -> vec3<f32> {
     let uv = at_view_uv(d, skyu.atmo.xyz);
+    let gs = vol_atmo_scale();
+    let ph = clamp(vol_phys(), 0.0, 1.0);
     // the gain that holds the tables' zenith to the look's (`vol_atmo_gain`) scaled the
     // whole low-sun sky, its aureole too: with the look's zenith brighter than the tables' at a
     // low sun, the aureole clipped over 10-20 deg and veiled what stood before the sun. From
@@ -61,11 +87,12 @@ fn vol_atmo_sky(d: vec3<f32>) -> vec3<f32> {
     let g_model = clamp(dot(look.dome_zenith.xyz, vec3<f32>(0.2126, 0.7152, 0.0722)) / max(dot(z, vec3<f32>(0.2126, 0.7152, 0.0722)), 1e-9), 0.2 * skyu.atmo.w, 400.0 * skyu.atmo.w);
     let ang = acos(clamp(dot(d, skyu.atmo.xyz), -1.0, 1.0)) * 57.29578;
     let near_sun = smoothstep(0.5, 1.5, ang) * (1.0 - smoothstep(18.0, 30.0, ang)) * (1.0 - smoothstep(10.0, 15.0, asin(clamp(skyu.atmo.y, -1.0, 1.0)) * 57.29578));
-    var c = textureSampleLevel(vol_at_view, vol_lin, uv, 0.0).rgb * g_look;
+    var c = at_spectral(textureSampleLevel(vol_at_view, vol_lin, uv, 0.0).rgb * gs, ph);
     // Only the excess over the sky 40 deg round in azimuth at the same elevation is scaled (a
     // straight gain switch drew a dark ring round the sun): the glare never falls below the
     // sky beside it.
-    if (near_sun > 0.0) {
+    // (the physical daylight's sky is at the sun's own scale: no anchor to undo)
+    if (near_sun > 0.0 && ph < 1.0) {
         let sh = normalize(skyu.atmo.xz + vec2<f32>(1e-5, 0.0));
         let ca = 0.766;
         let sa = 0.643;
@@ -77,7 +104,7 @@ fn vol_atmo_sky(d: vec3<f32>) -> vec3<f32> {
         if (l > lref) {
             // (stage L4, the cinematic look) VOL_CINE_AUREOLE_KEEP of the cut: the low sun's glow
             let ns = select(near_sun, near_sun * VOL_CINE_AUREOLE_KEEP, vol_cine_on());
-            let k = mix(1.0, min(g_model / max(g_look, 1e-9), 1.0), ns);
+            let k = mix(1.0, min(g_model / max(g_look, 1e-9), 1.0), ns * (1.0 - ph));
             c = c * ((lref + (l - lref) * k) / l);
         }
     }
@@ -93,7 +120,7 @@ fn vol_atmo_sky(d: vec3<f32>) -> vec3<f32> {
     if (d.y > -0.02 && d.y < 0.0698) {
         let hd4 = sqrt(max(1.0 - d.y * d.y, 1e-6));
         let d4 = vec3<f32>(d.x / hd4 * 0.99756, 0.0698, d.z / hd4 * 0.99756);
-        let l4 = dot(textureSampleLevel(vol_at_view, vol_lin, at_view_uv(d4, skyu.atmo.xyz), 0.0).rgb * g_look, vec3<f32>(0.2126, 0.7152, 0.0722));
+        let l4 = dot(textureSampleLevel(vol_at_view, vol_lin, at_view_uv(d4, skyu.atmo.xyz), 0.0).rgb * gs, vec3<f32>(0.2126, 0.7152, 0.0722));
         let lh = dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
         let cap = 1.25 * l4;
         if (lh > cap) {
@@ -225,6 +252,30 @@ fn vol_cine_density(y0: f32, y1: f32) -> f32 {
 /// tables by day, the weather's or the night's dome as they take over), so a
 /// far hill fades to the sky behind it, warm toward a low sun, blue-grey away
 /// from it. Replaces the range fog (45 % at 4.2 km on a clear noon).
+/// the aerial-perspective volume along a direction over a distance (m): (in-scattered
+/// light per unit solar illuminance, transmittance), both rgb. Slice k of n ends at
+/// reach x ((k + 1) / n)^2; under the first slice the light grows from none.
+struct VolAp {
+    ins: vec3<f32>,
+    tr: vec3<f32>,
+};
+
+fn vol_ap(dir: vec3<f32>, dist: f32) -> VolAp {
+    let uv = at_view_uv(dir, skyu.atmo.xyz);
+    let n = f32(textureDimensions(vol_ap_in).z);
+    let s = sqrt(clamp(dist * 0.001 / skyu.atmo_s.w, 0.0, 1.0)) * n;
+    let w = clamp((s - 0.5) / n, 0.5 / n, 1.0 - 0.5 / n);
+    var o: VolAp;
+    o.ins = textureSampleLevel(vol_ap_in, vol_lin, vec3<f32>(uv, w), 0.0).rgb;
+    o.tr = textureSampleLevel(vol_ap_tr, vol_lin, vec3<f32>(uv, w), 0.0).rgb;
+    if (s < 1.0) {
+        let k = s * s;
+        o.ins = o.ins * k;
+        o.tr = mix(vec3<f32>(1.0), o.tr, k);
+    }
+    return o;
+}
+
 fn vol_aerial(dir: vec3<f32>, dist: f32, eye_y: f32) -> vec4<f32> {
     let dh = dir.y * dist;
     var dens = sky_path_density(dh);
@@ -302,6 +353,17 @@ fn vol_aerial(dir: vec3<f32>, dist: f32, eye_y: f32) -> vec4<f32> {
     // too (grey, not the clear sky's blue: the part of a far object the veil left showed
     // bluer and lighter than the fog round it).
     let colc = mix(col, colw, skyu.atmo3.x * wk);
+    // (`--look cinematic` keeps its own golden haze above: stage L4's in-scatter and the
+    // volume's would both add the sun's phase)
+    if (SF_AP_LUT && skyu.atmo_m.w > 0.5 && skyu.atmo2.x > 0.5 && !cine) {
+        // the aerial-perspective volume: the medium's own in-scatter (the sun's phase, the
+        // planet's shadow, the multiple scattering) at the sky's scale, its transmittance, in
+        // place of the fade toward the horizon's colour; the weather's veil as above.
+        let ap = vol_ap(dir, dist);
+        let ta = dot(ap.tr, vec3<f32>(0.2126, 0.7152, 0.0722));
+        let ins = mix(at_spectral(ap.ins * vol_atmo_scale(), clamp(vol_phys(), 0.0, 1.0)), colw * (1.0 - ta), skyu.atmo3.x * wk);
+        return vec4<f32>(ins * (1.0 - wv) + colw * wv, ta * (1.0 - wv));
+    }
     return vec4<f32>(colc * (1.0 - tl) * (1.0 - wv) + colw * wv, tl * (1.0 - wv));
 }
 
@@ -486,6 +548,213 @@ fn vol_extra_amb(p: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
         a = a + skyu.twi.xyz * (0.25 + 0.75 * c * c) * lit;
     }
     return a;
+}
+
+/// The high deck stands at cirrus height (eo-sky clouds.rs `CIRRUS_ALT_M`, 9.5 km) on a
+/// cirrus day; the fair-weather sheet stays at 5.2 km (`FAIR_HIGH_ALT_M`). While the clear
+/// sky's state fades with the weather (clouds.rs `Decks::with_sky`), a fair sheet uniform
+/// between 5.2 and 6.2 km (`FADE_BAND_M`) is the sheet at 5.2 km at a share of its opacity.
+const VOL_CIRRUS_MIN_M: f32 = 7000.0;
+const VOL_FAIR_HIGH_M: f32 = 5200.0;
+const VOL_FAIR_FADE_M: f32 = 1000.0;
+
+fn vol_cirrus_day() -> bool {
+    return skyu.cloud1.y > VOL_CIRRUS_MIN_M && skyu.cloud1.z > 0.0;
+}
+
+/// The cirrus's high wind axis (x east, z south): toward a little south of east.
+const VOL_CIRRUS_AXIS: vec2<f32> = vec2<f32>(0.95, 0.31);
+
+/// Cirrus fibratus: the streak's shape 0..1 at a point of its plane, `t` metres along the
+/// view `dir` (the optical depth is `CIRRUS_TAU` x it). Long, soft, nearly straight bands
+/// drawn out along the high wind (the drift `cloud2.zw` moves them; the jet-level
+/// westerlies over the coast blow from a little south of west), each band a smooth ridge
+/// of the sheet's channels read almost constant along the wind (200 : 1), tapering in and
+/// out along its length, with fine parallel fibres inside it; the bands bend slowly and
+/// gather in a few patches. (INFERRED shape constants: the stretch, tiles and thresholds
+/// are chosen to the reference photographs' streaks, not measured.)
+fn vol_cirrus(pxz: vec2<f32>, t: f32, dir: vec3<f32>) -> f32 {
+    let w = pxz + skyu.cloud2.zw;
+    let ax = VOL_CIRRUS_AXIS;
+    let u = dot(w, ax);
+    let v = dot(w, vec2<f32>(-ax.y, ax.x));
+    // patches: the high channel at 60 km a tile, drawn out 4 : 1 along the wind; most of
+    // the sky stays open
+    let env = smoothstep(0.6, 0.92, textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / 4.0, v) / 60000.0, 2.0).g);
+    if (env <= 0.0) {
+        return 0.0;
+    }
+    // how end-on the view looks along the wind (1: straight along it). A band is a line of
+    // constant `vf`; seen end-on, perspective squeezes its length and keeps its width, so
+    // its slow bend (kilometres over tens of kilometres) turns into a crisp vertical S
+    // curl on screen. End-on, the band term fades to its mean (a soft veil in the patch)
+    // and the bend to nothing.
+    let dh = dir.xz / max(length(dir.xz), 1e-4);
+    let endon = abs(dot(dh, ax));
+    let side = 1.0 - smoothstep(0.8, 0.97, endon);
+    // a slow bend of the bands (the marine channel, 80 km along the wind; four mips down,
+    // so only its broad swing bends them)
+    let vf = v + (textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / 80000.0, 0.37), 4.0).b - 0.5) * 6000.0 * side;
+    // the footprint across the wind (the band field barely varies along it): the pixel's
+    // span across the view, and its span along the view stretched by the grazing angle,
+    // each projected on the across-wind axis; its mip on the band tile (12 km across the
+    // wind, 256 texels)
+    let f0 = max(vol_footprint(t), 1.0);
+    let fv = f0 * max(endon, sqrt(max(1.0 - endon * endon, 0.0)) / max(abs(dir.y), 0.05));
+    let lod = clamp(log2(fv / 47.0), 0.0, 6.0);
+    // bands: a smooth ridge across the wind, a few hundred metres to 2 km wide
+    let f1 = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / 200.0, vf) / 12000.0, lod).g;
+    let ridge = smoothstep(0.25, 1.0, 1.0 - abs(2.0 * f1 - 1.0));
+    // (0.28: the mean of ridge^2 over the equalised channel)
+    let band = mix(0.28, ridge * ridge, side);
+    // each band tapers in and out along its length (20-60 km)
+    let along = smoothstep(0.2, 0.7, textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / 60000.0, vf / 40000.0), 3.0).g);
+    // fine parallel fibres inside a band (the detail channel, 1.5 km across)
+    let f2 = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / 300.0, vf) / 1500.0 + vec2<f32>(0.5, 0.25), clamp(lod + 3.0, 0.0, 6.0)).a;
+    let fibre = mix(0.65, 1.0, mix(0.5, smoothstep(0.2, 0.9, 1.0 - abs(2.0 * f2 - 1.0)), side));
+    return clamp(env * band * along * fibre, 0.0, 1.0);
+}
+
+/// The second high deck (eo-sky clouds.rs `Decks::cirrus`, sky_common.wgsl `cirrus`): x its
+/// height (m; 0: off, round 2's one high deck above), y its amount, the share of the sky it
+/// covers (the METAR eighths / 8) x its fade. With it on, the 5.2 km sheet's opacity
+/// (`cloud1.z`) comes already faded and floored from the CPU (clouds.rs `with_sky_mix`).
+fn vol_ci2_on() -> bool {
+    return skyu.cirrus.x > 0.0;
+}
+
+/// The cirrus deck's core optical depth (clouds.rs `CIRRUS2_TAU`).
+const VOL_CI2_TAU: f32 = 0.3;
+
+/// The second deck's sheet reads, each a tile across the wind (m) and a stretch along it: the
+/// patches, the sheets, the bend and the fibres (`vol_cirrus2`). Along the wind (x) every tile is
+/// a whole part of 160 km and across it (z) of 80 km, and the high deck's drift wraps at 160 km
+/// with the second deck on (eo-sky clouds.rs `CIRRUS2_WRAP_M`, whose test reads these), so the
+/// wrap moves no texture and the drifting deck never jumps.
+const VOL_CI2_ENV_M: f32 = 80000.0;
+const VOL_CI2_ENV_X: f32 = 2.0;
+const VOL_CI2_BODY_M: f32 = 10000.0;
+const VOL_CI2_BODY_X: f32 = 8.0;
+const VOL_CI2_BEND_M: f32 = 20000.0;
+const VOL_CI2_BEND_X: f32 = 4.0;
+const VOL_CI2_FIBRE_M: f32 = 2000.0;
+const VOL_CI2_FIBRE_X: f32 = 20.0;
+
+/// The cirrus deck's cover field (`vol_cirrus2`): the high channel plus this much of the detail
+/// channel's departure from its middle, read in the same sample, a zero-mean term that breaks a
+/// patch's edge at 2.5-10 km (INFERRED: the round-2 0.3 of the edge term, now from one read).
+const VOL_CI2_EDGE: f32 = 0.3;
+/// The patch's soft edge: the cover rises from 0 to 1 over this much of the field above the cut
+/// (INFERRED: the field moves about 0.08 a kilometre or two across a patch's edge, so a patch's
+/// edge thins out over a kilometre or two, not a hard line).
+const VOL_CI2_RAMP: f32 = 0.08;
+/// How deep into a patch the sheets reach their full thickness: over this much of the field
+/// above the cut. A small patch (a FEW day's, cut near the field's top) stays a thin wisp; only a
+/// large patch thickens to dense cores (INFERRED: the dense cirrus spissatus patches come with
+/// more cover; set before the comparison).
+const VOL_CI2_DEEP: f32 = 0.3;
+
+/// The cut of the cover field for an amount (eighths 0..8 across a row) at a mip (rows: mips 1 to
+/// 4, the read's range): the field's quantile at `1 - eighths / 8` at that mip (eo-sky clouds.rs `cirrus_cut_table`,
+/// whose test checks these against the bake and integrates the cover over the tile), so the deck
+/// covers its METAR share of the plane near and far. Box-filtered mips squeeze the field toward
+/// its middle: one cut for all mips covered more of the plane far away.
+const VOL_CI2_CUT: array<f32, 36> = array<f32, 36>(
+    1.1251, 0.8864, 0.7542, 0.6241, 0.4989, 0.3650, 0.2366, 0.1203, -0.2111,
+    1.1206, 0.8799, 0.7481, 0.6183, 0.4987, 0.3685, 0.2434, 0.1302, -0.2008,
+    1.1072, 0.8591, 0.7321, 0.6037, 0.4953, 0.3803, 0.2663, 0.1544, -0.1581,
+    1.0577, 0.8249, 0.6902, 0.5829, 0.4921, 0.4027, 0.3074, 0.2032, -0.1028,
+);
+
+/// The cut (`VOL_CI2_CUT`) at an amount 0..1 (linear between eighths) and a mip (linear between rows).
+fn vol_ci2_cut(amt: f32, lod: f32) -> f32 {
+    var cut = VOL_CI2_CUT;
+    let a = clamp(amt, 0.0, 1.0) * 8.0;
+    let k = min(u32(a), 7u);
+    let fa = a - f32(k);
+    let l = clamp(lod, 1.0, 4.0) - 1.0;
+    let r = min(u32(l), 2u);
+    let fl = l - f32(r);
+    let i0 = r * 9u + k;
+    let i1 = i0 + 9u;
+    return mix(mix(cut[i0], cut[i0 + 1u], fa), mix(cut[i1], cut[i1 + 1u], fa), fl);
+}
+
+/// Cirrus as the second deck: how much of the core optical depth (`VOL_CI2_TAU`) a point of
+/// its plane carries, 0..1, `t` metres along the view `dir`. Four reads of the sheet, each
+/// a channel histogram-equalised at bake time (clouds.rs `bake_sheet`), in the frame of the
+/// high wind, toward the east (x; the deck's drift, clouds.rs `DRIFT_HIGH_MS`, 18 m/s east and
+/// 2 south: the jet-level westerlies):
+///
+/// * where the deck is: the high channel over 80 km, drawn out 2 : 1 along the wind, its edge
+///   broken by the detail channel of the same read (`VOL_CI2_EDGE`) and cut so the deck covers
+///   its METAR share of the plane at the mip it is read at (`VOL_CI2_CUT`): patches of 5-25 km
+///   with soft, ragged edges;
+/// * the sheets inside it: the low-deck channel over 10 km drawn out 8 : 1, read a mip soft,
+///   so a patch is broad thick and thin bands 1-3 km across and 10-20 km long (cirrostratus
+///   and cirrus spissatus), not lines; they reach their full thickness only deep inside a
+///   patch (`VOL_CI2_DEEP`), so a FEW day's small patches stay thin wisps;
+/// * the fibres: the detail channel over 2 km drawn out 20 : 1 along the wind (filaments of
+///   60-250 m across, 1-5 km long), which perspective draws converging on the wind's
+///   vanishing point; their across-wind coordinate is bent by the marine channel over 20 km
+///   across and 80 km along the wind (a slow swing of up to 1.2 km) and by the sheet itself
+///   (600 m from its thin to its thick parts), so the fibres curl where they leave a thick
+///   head, the fallstreak hooks of cirrus uncinus; the fibres carve up to 70 % out of the thin
+///   parts and 25 % out of the thick cores, which read as smooth sheets; seen end-on along the
+///   wind the bend and most of the fibres' contrast give way (perspective would squeeze the
+///   bend's swing into a marbled swirl);
+/// * the fibres' contrast fades as they shrink under a pixel (their mip's mean is not a
+///   fibre), toward the zenith (from 30 to 64 degrees up: there the one 2 km fibre tile is seen
+///   nearest and least foreshortened, and its regular spacing reads as a repeated grain, which
+///   real fibres, each its own width and spacing, do not have; INFERRED, a limit of the one
+///   tile, not a property of cirrus), and the whole deck toward the horizon as the round-2 deck did.
+///
+/// The tiles, stretches and the bend are INFERRED: sizes in the range the WMO
+/// International Cloud Atlas (2017) describes for cirrus fibratus, uncinus and spissatus
+/// (filaments, hooks and dense patches of the high etage), set before the comparison;
+/// the photographs are the check, not the source.
+fn vol_cirrus2(pxz: vec2<f32>, t: f32, dir: vec3<f32>) -> f32 {
+    let amt = clamp(skyu.cirrus.y, 0.0, 1.0);
+    let w = pxz + skyu.cloud2.zw;
+    let u = w.x;
+    let v = w.y;
+    // the pixel's footprint across the wind (as `vol_cirrus`)
+    let dh = dir.xz / max(length(dir.xz), 1e-4);
+    let endon = abs(dh.x);
+    let f0 = max(vol_footprint(t), 1.0);
+    let fv = f0 * max(endon, sqrt(max(1.0 - endon * endon, 0.0)) / max(abs(dir.y), 0.05));
+    let l2 = log2(fv);
+    let lt = log2(1.0 / 256.0);
+    // where the deck is: the cover field, cut at the amount for the mip it is read at
+    let le = clamp(l2 - log2(VOL_CI2_ENV_M) - lt, 1.0, 4.0);
+    let e = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / VOL_CI2_ENV_X, v) / VOL_CI2_ENV_M, le);
+    let x = e.g + VOL_CI2_EDGE * (e.a - 0.5);
+    let thr = vol_ci2_cut(amt, le);
+    let cov = smoothstep(thr, thr + VOL_CI2_RAMP, x) * smoothstep(0.0, 0.12, amt);
+    if (cov <= 0.0) {
+        return 0.0;
+    }
+    // how deep inside its patch the point is
+    let deep = smoothstep(thr, thr + VOL_CI2_DEEP, x);
+    // the sheets (a mip soft)
+    let body = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / VOL_CI2_BODY_X, v) / VOL_CI2_BODY_M + vec2<f32>(0.31, 0.62), clamp(l2 - log2(VOL_CI2_BODY_M) - lt + 1.0, 1.0, 7.0)).r;
+    let core = smoothstep(0.25, 0.85, body) * deep;
+    let thick = mix(0.25, 1.0, core);
+    // the bend
+    let bend = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / VOL_CI2_BEND_X, v) / VOL_CI2_BEND_M + vec2<f32>(0.17, 0.83), clamp(l2 - log2(VOL_CI2_BEND_M) - lt + 1.0, 2.0, 7.0)).b - 0.5;
+    // seen end-on (along the wind) perspective squeezes the along-wind swing of the bend into a
+    // few pixels: it and the fibres' contrast give way there (as `vol_cirrus`'s `side`)
+    let side = 1.0 - smoothstep(0.8, 0.97, endon);
+    let vf = v + (bend * 2400.0 + (body - 0.5) * 600.0) * side;
+    // the fibres
+    let lf = clamp(l2 - log2(VOL_CI2_FIBRE_M) - lt, 0.0, 7.0);
+    let fa = textureSampleLevel(vol_sheet, vol_rep, vec2<f32>(u / VOL_CI2_FIBRE_X, vf) / VOL_CI2_FIBRE_M + vec2<f32>(0.5, 0.25), lf).a;
+    let ridge = smoothstep(0.3, 0.95, 1.0 - abs(2.0 * fa - 1.0));
+    // the fibres show where the sheet thins (its edges and wisps) and fade into the thick cores,
+    // which read as smooth sheets; under a pixel, end-on and toward the zenith they give way
+    let fc = (1.0 - smoothstep(2.5, 5.0, lf)) * mix(0.35, 1.0, side) * (1.0 - smoothstep(0.5, 0.9, dir.y));
+    let fibre = 1.0 - fc * mix(0.7, 0.25, smoothstep(0.45, 0.85, body)) * (1.0 - ridge);
+    return clamp(cov * thick * fibre, 0.0, 1.0);
 }
 
 fn vol_remap(v: f32, lo: f32, hi: f32) -> f32 {
@@ -779,7 +1048,8 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     var cl_tm = 0.0;
     // under a heavy deck (rain, storm) no sun reaches the base or the high sheet
     let heavy = smoothstep(0.03, 0.18, skyu.cloud1.w);
-    if (sky_on(bits, SKY_CLOUDS) && skyu.cloud0.z > 0.0) {
+    // (a cirrus day has no low deck: eo-sky clouds.rs `SkyState::Cirrus`)
+    if (sky_on(bits, SKY_CLOUDS) && (skyu.cloud0.z > 0.0 || vol_cirrus_day() || (vol_ci2_on() && (skyu.cirrus.y > 0.0 || skyu.cloud1.z > 0.0)))) {
         let base = skyu.cloud0.x;
         let top = skyu.cloud0.y;
         let strat = cl_stratus();
@@ -812,7 +1082,7 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
         t1 = min(min(min(t1, t0 + 16000.0), 45000.0), dist); // (past 45 km the field is >85 % haze)
         // no cumulus field unless EO_CUMULUS=1 (sky_clouds `cl_low_deck_on`)
         let march = t0 >= 0.0 && t1 > t0 && t0 < 60000.0 && cl_low_deck_on();
-        let high = dist > 1e8 && dir.y > 0.0 && skyu.cloud1.z > 0.0;
+        let high = dist > 1e8 && dir.y > 0.0 && (skyu.cloud1.z > 0.0 || (vol_ci2_on() && skyu.cirrus.y > 0.0));
         var a_top = skyu.amb_top.xyz;
         var a_side = skyu.amb_top.xyz;
         var a_bot = skyu.amb_base.xyz;
@@ -1002,9 +1272,78 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
         // (D) The high deck: one sheet at its altitude, sky only; lit by the same
         // sun as the low deck (the atmosphere's transmittance at its own height, the same
         // phase and octaves), so the two layers agree and the high one keeps the sun longest.
-        if (high) {
-            let t = cl_hit(eye.y, dir, skyu.cloud1.y, false);
-            if (t > 0.0) {
+        if (high && vol_ci2_on()) {
+            // two decks, each at its own height: the 5.2 km sheet (its opacity as the CPU faded
+            // and floored it), then the cirrus behind it
+            if (skyu.cloud1.z > 0.0) {
+                let t = cl_hit(eye.y, dir, skyu.cloud1.y, false);
+                if (t > 0.0) {
+                    let p = eye + dir * t;
+                    // (the sheet read 2 : 1 along the high wind, east: round 2 turned it a little,
+                    // which made the drift's wrap at the tile a jump; at 160 km it is a whole number of tiles)
+                    let q = (p.xz + skyu.cloud2.zw) / SKY_HIGH_TILE;
+                    let s = textureSampleLevel(vol_sheet, vol_rep, q * vec2<f32>(0.5, 1.0), 0.0);
+                    let ci = clamp((0.3 - skyu.cloud0.z) / 0.3, 0.0, 1.0);
+                    let a = vol_remap(s.g, mix(1.0 - min(skyu.cloud0.z + 0.2, 1.0), 0.72, ci), 1.0) * skyu.cloud1.z * smoothstep(0.0, 0.1, dir.y) * (0.5 + 0.5 * s.a);
+                    let e_sun = cl_sun(skyu.cloud1.y) * heavy;
+                    let c = e_sun * cl_ms(0.6 * a, 0.6 * a, cl_cs) * CL_SUN_GAIN * 0.7 + a_top * 0.85;
+                    let fh = exp(-t * (1.0 - 0.85 * abs(dir.y)) / 60000.0);
+                    var behind_h = lk_sky_dome(dir);
+                    if (atmo_on) {
+                        behind_h = mix(behind_h, vol_atmo_sky(dir), skyu.atmo2.y);
+                    }
+                    L = L + T * a * (c * fh + behind_h * 0.4 * (1.0 - fh));
+                    T = T * (1.0 - 0.4 * a);
+                }
+            }
+            if (skyu.cirrus.y > 0.0) {
+                let t = cl_hit(eye.y, dir, skyu.cirrus.x, false);
+                if (t > 0.0) {
+                    let p = eye + dir * t;
+                    let tau = vol_cirrus2(p.xz, t, dir) * VOL_CI2_TAU * smoothstep(0.0, 0.08, dir.y);
+                    let a = 1.0 - exp(-tau);
+                    // lit as round 2's cirrus (below): the sun through the atmosphere to the
+                    // deck's height (warm at a low sun), the forward phase, half the top light
+                    let e_sun = cl_sun(skyu.cirrus.x) * heavy;
+                    let c = e_sun * cl_ms(0.6 * tau, 0.6 * tau, cl_cs) * CL_SUN_GAIN * 0.7 + a_top * 0.5;
+                    let fh = exp(-t * (1.0 - 0.85 * abs(dir.y)) / 60000.0);
+                    var behind_h = lk_sky_dome(dir);
+                    if (atmo_on) {
+                        behind_h = mix(behind_h, vol_atmo_sky(dir), skyu.atmo2.y);
+                    }
+                    L = L + T * a * (c * fh + behind_h * (1.0 - fh));
+                    T = T * (1.0 - a);
+                }
+            }
+        } else if (high) {
+            // (the fair sheet stands at 5.2 km; above it, the uniform's height is its fade)
+            let fair_fade = 1.0 - clamp((skyu.cloud1.y - VOL_FAIR_HIGH_M) / VOL_FAIR_FADE_M, 0.0, 1.0);
+            let hh = select(min(skyu.cloud1.y, VOL_FAIR_HIGH_M), skyu.cloud1.y, vol_cirrus_day());
+            let t = cl_hit(eye.y, dir, hh, false);
+            if (t > 0.0 && vol_cirrus_day()) {
+                // a cirrus day: fibrous ice streaks at cirrus height (`vol_cirrus`); the
+                // uniform's opacity is the streak core's optical depth (clouds.rs `CIRRUS_TAU`)
+                let p = eye + dir * t;
+                let tau = vol_cirrus(p.xz, t, dir) * skyu.cloud1.z * smoothstep(0.0, 0.08, dir.y);
+                let a = 1.0 - exp(-tau);
+                let e_sun = cl_sun(skyu.cloud1.y) * heavy;
+                // thin ice, single scattering: the sun through the forward-peaked phase, and the
+                // sky round it. The sky at 9.5 km: about 0.29 of the air column is above it (US
+                // Standard Atmosphere 1976: 29 kPa of 101 kPa), so the light from above is about
+                // a third of the low deck's top light and the rest comes up from the air and sea
+                // below: half `a_top` (INFERRED from that split; 0.85 left the sun's share too
+                // small at a low sun, where cirrus is the most strongly coloured cloud).
+                let c = e_sun * cl_ms(0.6 * tau, 0.6 * tau, cl_cs) * CL_SUN_GAIN * 0.7 + a_top * 0.5;
+                let fh = exp(-t * (1.0 - 0.85 * abs(dir.y)) / 60000.0);
+                var behind_h = lk_sky_dome(dir);
+                if (atmo_on) {
+                    behind_h = mix(behind_h, vol_atmo_sky(dir), skyu.atmo2.y);
+                }
+                // the same opacity hides the sky behind as the streak adds (far away, the
+                // streak fades into the sky it stands in)
+                L = L + T * a * (c * fh + behind_h * (1.0 - fh));
+                T = T * (1.0 - a);
+            } else if (t > 0.0) {
                 let p = eye + dir * t;
                 // cirrus: the sheet read stretched 2 : 1 along the high wind
                 let q = (p.xz + skyu.cloud2.zw) / SKY_HIGH_TILE;
@@ -1012,9 +1351,9 @@ fn vol_main(@builtin(global_invocation_id) gid: vec3<u32>) {
                 let s = textureSampleLevel(vol_sheet, vol_rep, qs, 0.0);
                 let ci = clamp((0.3 - skyu.cloud0.z) / 0.3, 0.0, 1.0);
                 let hop = max(skyu.cloud1.z, 0.10 * ci);
-                let a = vol_remap(s.g, mix(1.0 - min(skyu.cloud0.z + 0.2, 1.0), 0.72, ci), 1.0) * hop * smoothstep(0.0, 0.1, dir.y) * (0.5 + 0.5 * s.a);
+                let a = vol_remap(s.g, mix(1.0 - min(skyu.cloud0.z + 0.2, 1.0), 0.72, ci), 1.0) * hop * smoothstep(0.0, 0.1, dir.y) * (0.5 + 0.5 * s.a) * fair_fade;
                 // thin ice: optical depth ~a across it, toward the sun about as much
-                let e_sun = cl_sun(skyu.cloud1.y) * heavy;
+                let e_sun = cl_sun(hh) * heavy;
                 let c = e_sun * cl_ms(0.6 * a, 0.6 * a, cl_cs) * CL_SUN_GAIN * 0.7 + a_top * 0.85;
                 let fh = exp(-t * (1.0 - 0.85 * abs(dir.y)) / 60000.0);
                 var behind_h = lk_sky_dome(dir);

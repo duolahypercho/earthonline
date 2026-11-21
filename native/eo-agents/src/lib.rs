@@ -132,12 +132,19 @@ pub const AGENT_BLINK_ON: u32 = 1 << 17;
 /// are lit (eo-render agents_draw.wgsl, structures.wgsl `sx_bore_light_at`),
 /// not by the sun and sky. Never set without bores.
 pub const AGENT_IN_BORE: u32 = 1 << 18;
+/// A corridor vehicle or walker (eo-sim `corridor`): the box rung is drawn
+/// past the near tiers out to the corridor's far distance (eo-render
+/// agents_types.wgsl `AG_CORRIDOR`).
+pub const AGENT_CORRIDOR: u32 = 1 << 19;
 /// With `AGENT_IN_BORE`, the flags' bits from here up carry how far in the
 /// agent stands from the bore's nearer portal, in `1 / BORE_DEPTH_QUANT` m
-/// steps (saturating at the field's top: deep inside, or no portal).
-pub const BORE_DEPTH_SHIFT: u32 = 19;
-pub const BORE_DEPTH_QUANT: f64 = 8.0;
+/// steps (saturating at the field's top: deep inside, or no portal). The
+/// field sits above `AGENT_CORRIDOR`: twelve bits at four steps a metre reach
+/// 1023 m, past the middle of the city's longest bore.
+pub const BORE_DEPTH_SHIFT: u32 = 20;
+pub const BORE_DEPTH_QUANT: f64 = 4.0;
 pub const BORE_DEPTH_MAX_Q: u32 = (1 << (32 - BORE_DEPTH_SHIFT)) - 1;
+const _: () = assert!(AGENT_CORRIDOR & (AGENT_PLAYER | AGENT_BLINK_ON | AGENT_IN_BORE | (BORE_DEPTH_MAX_Q << BORE_DEPTH_SHIFT)) == 0);
 
 /// The flag bits of an agent in a bore `depth` m in from its nearer portal
 /// (`f64::INFINITY` with no portal).

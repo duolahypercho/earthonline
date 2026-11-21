@@ -45,6 +45,8 @@ pub struct LoadedRecord {
     pub amenity: String,
     pub year_built: f64,
     pub tenancy: Vec<TenancyUnit>,
+    /// On the Presidio without an assessor parcel's join (presidio.rs; set by `KitCity::build`).
+    pub presidio: bool,
 }
 
 /// The source record's fields (eo-data `Building` + tags), in JS terms.
@@ -146,6 +148,7 @@ pub fn loaded_record(src: &SourceRecord, tenancy: Vec<TenancyUnit>) -> LoadedRec
         amenity: src.amenity.to_string(),
         year_built: 1900.0,
         tenancy,
+        presidio: false,
     }
 }
 
@@ -172,6 +175,8 @@ pub fn classify_loaded(rec: &LoadedRecord) -> Option<Classified> {
     };
     let mut c = classify::classify(&input);
     c.record_id = rec.id.clone();
+    // the Presidio rule: on the post and on no assessor parcel (the federal land has none)
+    c.presidio = rec.presidio && c.civic.is_none();
     Some(c)
 }
 
@@ -695,6 +700,9 @@ pub fn drawn_materials(planned: &Planned, rung: u32) -> DrawnMaterials {
     if crate::wall_paint::enabled() {
         crate::wall_paint::apply(c, &materials, matches!(plan.extra.get("tints"), Some(J::Object(_))), &mut tints);
     }
+    // the Presidio and GGNRA rule (presidio.rs): off-white paint, red tile on the low roofs
+    let tiled = crate::presidio::apply(c.presidio, &plan.id, c.archetype, c.storeys, c.seed, &mut materials, &mut tints);
+    let skip = skip || tiled;
     let mut finish = None;
     if !skip {
         if let Some(id) = roof_finish_id_for(c.archetype, c.seed) {

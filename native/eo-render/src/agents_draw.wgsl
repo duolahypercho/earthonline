@@ -16,8 +16,8 @@ const AG_M_ATLAS: u32 = 32768u;
 // eo_agents AGENT_IN_BORE, BORE_DEPTH_SHIFT, BORE_DEPTH_QUANT (agents.rs tests them):
 // a car in a tunnel's bore and how far in from its portal.
 const AG_IN_BORE: u32 = 262144u;
-const AG_BORE_DEPTH_SHIFT: u32 = 19u;
-const AG_BORE_DEPTH_QUANT: f32 = 8.0;
+const AG_BORE_DEPTH_SHIFT: u32 = 20u;
+const AG_BORE_DEPTH_QUANT: f32 = 4.0;
 
 struct AgOut {
     @builtin(position) clip: vec4<f32>,

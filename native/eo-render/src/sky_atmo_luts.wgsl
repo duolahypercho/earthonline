@@ -8,28 +8,18 @@
 @group(0) @binding(2) var at_trans: texture_2d<f32>;
 @group(0) @binding(3) var at_ms: texture_2d<f32>;
 @group(0) @binding(4) var at_lin: sampler;
+// the aerial-perspective volume's two tables (its pass only; the others bind 1 x 1 x 1 placeholders)
+@group(0) @binding(5) var at_ap_in: texture_storage_3d<rgba16float, write>;
+@group(0) @binding(6) var at_ap_tr: texture_storage_3d<rgba16float, write>;
 
-struct AtMedium {
-    scat: vec3<f32>,
-    ext: vec3<f32>,
-    ray: vec3<f32>,
-    mie: vec3<f32>,
-};
-
+// the medium at a height (km): the aerosol's scattering, absorption, scale height
+// and spectral factor from the uniform (`atmo_m`, `atmo_s`: eo-look `atmosphere`, the
+// clear coastal air with the physical daylight, else the standard aerosol x the haze).
+// The coastal aerosol scatters and absorbs more of the blue than the red (the
+// Angstrom factor): grey aerosol over a reddened sun mixed with the Rayleigh blue
+// into an olive-khaki low sky at golden hour.
 fn at_medium(h: f32) -> AtMedium {
-    let hh = max(h, 0.0);
-    let dr = exp(-hh / 8.0);
-    let dm = exp(-hh / 1.2) * skyu.atmo2.z;
-    let doz = max(0.0, 1.0 - abs(hh - 25.0) / 15.0);
-    var m: AtMedium;
-    m.ray = AT_RAY * dr;
-    // the coastal aerosol scatters and absorbs more of the blue than the red
-    // (Angstrom exponent 1.3 about 550 nm: x 0.76 / 1 / 1.34): grey aerosol over a
-    // reddened sun mixed with the Rayleigh blue into an olive-khaki low sky at golden hour.
-    m.mie = AT_MIE_S * dm * AT_MIE_ANG;
-    m.scat = m.ray + m.mie;
-    m.ext = m.ray + (AT_MIE_S + AT_MIE_A) * dm * AT_MIE_ANG + AT_OZONE * doz;
-    return m;
+    return at_medium_of(h, skyu.atmo_m, skyu.atmo_s, skyu.atmo_r, skyu.atmo_o);
 }
 
 
@@ -123,6 +113,56 @@ fn at_ms_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     fms = fms / f32(nd);
     let psi = l2 / max(vec3<f32>(1.0) - fms, vec3<f32>(1e-3));
     textureStore(at_out, vec2<i32>(gid.xy), vec4<f32>(psi, 1.0));
+}
+
+/// the aerial-perspective volume (Hillaire 2020, section 5.4, here by
+/// direction about the sun as the sky-view table, not by screen position, so
+/// it holds for every pass that knows a direction and a distance): along each
+/// of the table's directions from the eye, the light scattered in (single
+/// scattering with the planet's shadow plus the multiple-scattering transfer,
+/// per unit solar illuminance) and the transmittance over the distance to the
+/// end of each slice, slice k ending at reach x ((k + 1) / n)^2. Four steps a slice.
+@compute @workgroup_size(8, 8)
+fn at_ap_main(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let n = textureDimensions(at_ap_in);
+    if (gid.x >= n.x || gid.y >= n.y) {
+        return;
+    }
+    let uv = (vec2<f32>(gid.xy) + 0.5) / vec2<f32>(n.xy);
+    let sun = skyu.atmo.xyz;
+    let dir = at_view_dir(uv, sun);
+    let r0 = AT_R + max(skyu.eye.y, 1.0) * 0.001;
+    let cth = dot(dir, sun);
+    let p_ray = at_rayleigh_phase(cth);
+    let p_mie = at_mie_phase(cth);
+    let reach = skyu.atmo_s.w;
+    var lum = vec3<f32>(0.0);
+    var trans = vec3<f32>(1.0);
+    var t_prev = 0.0;
+    let sub = 4;
+    for (var k = 0u; k < n.z; k = k + 1u) {
+        let fk = (f32(k) + 1.0) / f32(n.z);
+        let t_end = reach * fk * fk;
+        let seg = (t_end - t_prev) / f32(sub);
+        for (var j = 0; j < sub; j = j + 1) {
+            let t = t_prev + (f32(j) + 0.5) * seg;
+            let p = vec3<f32>(0.0, r0, 0.0) + dir * t;
+            let pr = length(p);
+            let m = at_medium(pr - AT_R);
+            let up = p / pr;
+            let mus = dot(up, sun);
+            let ts = at_transmittance(pr, mus);
+            let single = (m.ray * p_ray + m.mie * p_mie) * ts;
+            let multi = m.scat * at_multi(pr, mus);
+            let st = exp(-m.ext * seg);
+            let k_int = (vec3<f32>(1.0) - st) / max(m.ext, vec3<f32>(1e-7));
+            lum = lum + trans * (single + multi) * k_int;
+            trans = trans * st;
+        }
+        t_prev = t_end;
+        textureStore(at_ap_in, vec3<u32>(gid.xy, k), vec4<f32>(lum, 1.0));
+        textureStore(at_ap_tr, vec3<u32>(gid.xy, k), vec4<f32>(trans, 1.0));
+    }
 }
 
 /// The sky seen from the eye (Hillaire 2020, section 5.3): single scattering

@@ -6,6 +6,12 @@
 //!
 //! `--no-agents` turns all of it off; `--agent-density N` multiplies the
 //! default population (42 moving cars, People `medium`) N times in one region.
+//!
+//! The corridor layer (`corridor`, eo-sim `corridor`) adds the long roads'
+//! through traffic and the bridge's walkers on the same clock;
+//! `--no-corridor-traffic` leaves it out.
+
+mod corridor;
 
 use crate::{Args, World};
 use anyhow::Result;
@@ -17,6 +23,7 @@ use eo_sim::region::{Focus, People, Region, RegionConfig};
 use eo_sim::{AsyncSim, Network, World as SimWorld};
 use glam::Vec3;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::Receiver;
 use std::time::Instant;
 
@@ -55,6 +62,12 @@ pub struct AgentRuntime {
     pub lib: Option<Arc<Library>>,
     lib_rx: Option<Receiver<Result<Library, String>>>,
     sim_rx: Option<Receiver<Result<(SimWorld, Arc<eo_sim::native::NativeSource>), String>>>,
+    /// The corridor layer's hour (written from the look's time of day each pump).
+    corridor_hour: Option<Arc<AtomicU64>>,
+    /// The look's time of day at the last pump (the hour a rebuilt corridor layer starts at).
+    last_hour: f64,
+    /// The Golden Gate deck's ground grid (the drawn terrain under it), for the corridor layer.
+    gg_ground: Option<Arc<eo_landmarks::GroundGrid>>,
     pub sim: Option<AsyncSim>,
     feed: Option<FeedThread>,
     ground: Ground,
@@ -62,6 +75,7 @@ pub struct AgentRuntime {
     structures: Option<Arc<eo_structures::StructureWorld>>,
     last: Option<Arc<Vec<GpuAgent>>>,
     last_steps: u64,
+    last_corridor_steps: u64,
     scratch: Vec<GpuAgent>,
     /// Instances the caller adds this frame (the player and the player's car).
     pub extras: Vec<GpuAgent>,
@@ -120,12 +134,16 @@ impl AgentRuntime {
             lib: None,
             lib_rx: None,
             sim_rx: None,
+            corridor_hour: None,
+            last_hour: f64::NAN,
+            gg_ground: None,
             sim: None,
             feed: None,
             ground,
             structures: world.structures.clone(),
             last: None,
             last_steps: 0,
+            last_corridor_steps: 0,
             scratch: vec![],
             extras: vec![],
             parked: vec![], // props
@@ -167,21 +185,42 @@ impl AgentRuntime {
         self.feed = None;
         self.last = None;
         self.last_steps = 0;
+        self.last_corridor_steps = 0;
         self.sim_ready_ms = None;
         self.opts.density = density;
+        self.corridor_hour = None;
         let paths = world.paths.clone();
         // The structure level of each way (`--structures`; empty otherwise, which leaves the sim as it was).
         let levels = self.structures.as_ref().map(|s| s.way_levels().clone()).unwrap_or_default();
+        let (traffic, walkers) = corridor::switches();
+        if traffic && self.gg_ground.is_none() {
+            let js = eo_landmarks::LandmarksJs::get();
+            self.gg_ground = Some(Arc::new(eo_landmarks::set::ground_of(js, "golden-gate-bridge", &|x: f64, z: f64| world.elevation.sample(x, z))));
+        }
+        let gg_ground = self.gg_ground.clone().filter(|_| traffic);
+        let ground = self.ground.clone();
+        // the deck the traffic rides is the drawn bridge's (none with `--no-landmarks`).
+        let deck_drawn = world.landmarks.is_some();
+        let hour0 = if self.last_hour.is_finite() { self.last_hour } else { 12.0 };
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::Builder::new()
             .name("eo-agents-sim-build".into())
             .spawn(move || {
                 let r = (|| -> Result<(SimWorld, Arc<eo_sim::native::NativeSource>)> {
-                    let source = eo_sim::native::load(&paths)?.with_levels(levels);
+                    let mut source = eo_sim::native::load(&paths)?.with_levels(levels);
+                    // the corridor layer's ways, read before the local network leaves the roads it drives alone.
+                    let corridors = match &gg_ground {
+                        Some(gg) => Some(build_corridors(&paths, &source, gg, &ground, walkers && deck_drawn, deck_drawn, hour0)?),
+                        None => None,
+                    };
+                    if corridors.is_some() {
+                        source.without_roads(|r| corridor::EXCLUSIVE.contains(&r.name.as_str()));
+                    }
                     let tiles = eo_sim::native::tiles_around(focus[0], focus[1], SIM_RADIUS_M);
                     let mut net = Network::new(source.timing.clone());
                     net.add(source.build(&tiles));
                     let mut w = SimWorld::new(net);
+                    w.corridors = corridors;
                     let f = Focus { x: focus[0], z: focus[1], yaw: focus[2] };
                     let r = Region::new(&w.net, 0, region_config(density), f);
                     w.regions.push(r);
@@ -246,6 +285,7 @@ impl AgentRuntime {
                 self.sim_rx = None;
                 match r {
                     Ok((w, src)) => {
+                        self.corridor_hour = w.corridors.as_ref().map(|c| c.hour_handle());
                         let source = Some(src);
                         let mut last = [f64::NAN; 2];
                         self.sim = Some(AsyncSim::start_with(w, move |w| {
@@ -279,13 +319,19 @@ impl AgentRuntime {
             g.set_enabled(self.opts.on);
         }
         let mut clock_read = false; // smooth time
+        self.last_hour = renderer.look.time_of_day();
+        if let Some(h) = &self.corridor_hour {
+            h.store(self.last_hour.to_bits(), Ordering::Relaxed);
+        }
         if let Some(sim) = &mut self.sim {
             sim.post(dt, &[(0, Focus { x: focus[0], z: focus[1], yaw: focus[2] })]);
             let fr = sim.latest();
             self.sim_time = fr.time;
             clock_read = true;
-            if fr.steps != self.last_steps {
+            // a new frame: the regions or the corridor layer stepped (it keeps its own count).
+            if fr.steps != self.last_steps || fr.corridor_steps != self.last_corridor_steps {
                 self.last_steps = fr.steps;
+                self.last_corridor_steps = fr.corridor_steps;
                 if let Some(feed) = &self.feed {
                     feed.post(fr.clone());
                 }
@@ -410,6 +456,26 @@ impl AgentRuntime {
     pub fn focus_of(eye: Vec3, forward: Vec3) -> [f64; 3] {
         [eye.x as f64, eye.z as f64, (forward.x as f64).atan2(forward.z as f64)]
     }
+}
+
+/// The corridor layer on the drawn deck and streets (`corridor`), starting at `hour`.
+fn build_corridors(paths: &eo_data::DataPaths, source: &eo_sim::native::NativeSource, gg: &eo_landmarks::GroundGrid, ground: &Ground, walkers: bool, deck_drawn: bool, hour: f64) -> Result<eo_sim::corridor::Corridors> {
+    let js = eo_landmarks::LandmarksJs::get();
+    let ca = eo_data::CaStandards::load(paths)?;
+    let k_width = eo_landmarks::suspension::DeckStandards::load(&ca)?.k_width;
+    let time_gap = eo_sim::Standards::load(paths)?.metric("following-time-gap")?;
+    let site = eo_landmarks::golden_gate::Site::new(&eo_landmarks::golden_gate::data(js));
+    let deck = corridor::Deck::new(js, &site, &|x: f64, z: f64| gg.at(x, z), k_width);
+    let paved = |x: f64, z: f64| match ground {
+        Ground::Street(w) => w.paved_heights(x, z),
+        _ => vec![],
+    };
+    let carpet = |x: f64, z: f64| ground.y(x, z);
+    let surfaces = corridor::Surfaces { deck: deck_drawn.then_some(&deck), street: matches!(ground, Ground::Street(_)), paved: &paved, ground: &carpet };
+    let ways = corridor::ways(source, &surfaces, walkers);
+    let c = eo_sim::corridor::Corridors::new(ways, eo_sim::corridor::Params::with_time_gap(time_gap), SEED_INT);
+    c.hour_handle().store(hour.to_bits(), Ordering::Relaxed);
+    Ok(c)
 }
 
 /// The player's drawn state between frames: the walk phase (`advanceGaitPhase`;

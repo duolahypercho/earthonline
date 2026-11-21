@@ -1,0 +1,24 @@
+eo-look/src/tone/aces2.rs - the ACES 2.0 output transform, ported to Rust
+
+Source: the Academy Color Encoding System (ACES) 2.0 reference CTL,
+Copyright Contributors to the ACES Project, licensed under the Apache
+License, Version 2.0 (SPDX-License-Identifier: Apache-2.0). The licence text
+is in LICENSES/Apache-2.0.txt at the repository root.
+
+  https://github.com/aces-aswf/aces-core (commit 069b0bc3e1f6c62820f19fdae2fecec3f4fc0f80)
+    lib/Lib.Academy.OutputTransform.ctl  sha256 34a23e14e29dff47f5575514b7c98f502e2be7784a81709a9ca9b53777b2fdfe
+    lib/Lib.Academy.Tonescale.ctl        sha256 fcb99aad7fdf52ae048886171c18af9107ceeee2709aa33233ef09636fd1c6c4
+    lib/Lib.Academy.Utilities.ctl        sha256 142ad05f16816c76eacf70ed9d3d6eb8778029b0e497900867abbf21d712fb03
+    lib/Lib.Academy.ColorSpaces.ctl      sha256 4f07503e00127b00719416d63446d9a6b504798111d94f3860eb74754b6fb00a
+    lib/Lib.Academy.DisplayEncoding.ctl  sha256 5cd4f7d16f594a39f02e378c188096c84eb827e71b2bfa1e2dcc6041e388ec9a
+  https://github.com/aces-aswf/aces-output (main, tree 6d8f9071a67b044bac0fbcb3d51ad0543f065e66)
+    d65/srgb/Output.Academy.Rec709-D65_100nit_in_Rec709-D65_sRGB-Piecewise.ctl
+                                         sha256 3b750b94a46c936f3ff83e29acc1254700d96b0ac8dca9095060a3c5c9db6a65
+
+Changes from the source: translated from CTL to Rust; only the forward
+direction of the transform and the table builders it needs are kept; the
+peak luminance (100 nits), the limiting and encoding primaries (Rec.709 D65)
+and the sRGB piecewise encoding of the Output.Academy.Rec709-D65_100nit_in_
+Rec709-D65_sRGB-Piecewise transform are fixed. Nothing of the CTL is
+redistributed except as this translation. The CTL files were read as text
+and are not stored in this repository.

@@ -8,6 +8,10 @@ use eo_data::{City, ElevationGrid, LandCover, SEA_LEVEL_Y};
 use std::collections::HashMap;
 use std::time::Instant;
 
+/// The terrain surface pass's relief patches and materials (round 3).
+#[path = "terrain_detail.rs"]
+pub mod terrain_detail;
+
 /// One vertex (20 bytes): world position, a packed normal (snorm8 x 3; all
 /// zero = "no normal", the fragment shader then takes the flat face normal
 /// from screen derivatives) and an RGBA8 colour (sRGB bytes; white on models).
@@ -467,10 +471,16 @@ fn minus_convex(tri: [[f64; 3]; 3], ring: &[[f64; 2]]) -> Vec<Vec<[f64; 3]>> {
 /// `verts`, interpolated in the triangle's plane, the nearest corner's colour
 /// and normal), so the hole is the canopy's footprint, which the portal
 /// headwall's top and ends cover.
-fn minus_canopies(verts: &mut Vec<Vertex>, side: usize, stride: usize, rings: &[&[[f64; 2]]]) -> Vec<u32> {
+/// Only the cells `keep(x, z)` keeps are drawn (the cell's first vertex column
+/// and row; at `stride` a coarse cell goes with its first fine cell): the
+/// terrain detail's relief patches leave their cells out this way.
+fn minus_canopies(verts: &mut Vec<Vertex>, side: usize, stride: usize, rings: &[&[[f64; 2]]], keep: &dyn Fn(usize, usize) -> bool) -> Vec<u32> {
     let mut tris: Vec<[u32; 3]> = vec![];
     for z in (0..side - 1).step_by(stride) {
         for x in (0..side - 1).step_by(stride) {
+            if !keep(x, z) {
+                continue;
+            }
             let i0 = (z * side + x) as u32;
             let i1 = i0 + stride as u32;
             let i2 = i0 + (stride * side) as u32;
@@ -659,6 +669,67 @@ pub fn build_scene_with_cuts(inp: &SceneInputs, cuts: Option<&eo_structures::Str
         }
     }
 
+    // --- The terrain surface pass (terrain_detail.rs): the survey's materials
+    // at the vertices, and the 2 m relief patches round the photo eyes. ------
+    let frame = eo_data::geo::GeoFrame::of_city(&inp.city.meta);
+    let materials = eo_landmarks::features::gg3_ground("terrain-materials").then(|| terrain_detail::Materials { frame, land: inp.land, sea_y: SEA_LEVEL_Y as f32 });
+    let materials = materials.filter(|_| terrain_detail::naip().is_some());
+    let vertex_height = |cx: i64, cz: i64| -> f32 {
+        let wx = ox + (cx as f32 + 0.5) * cell;
+        let wz = oz + (cz as f32 + 0.5) * cell;
+        match inp.carpet {
+            Some(f) => f(wx, wz),
+            None => g.ground(wx as f64, wz as f64) as f32,
+        }
+    };
+    // a vertex's round-2 colour at any plan point (the tiles' rule, the cell's lidar flag)
+    let colour_at = |wx: f32, wz: f32| -> u32 {
+        let cx = ((wx - ox) / cell).floor();
+        let cz = ((wz - oz) / cell).floor();
+        let lidar = cx >= 0.0 && cz >= 0.0 && (cx as usize) < g.meta.width && (cz as usize) < g.meta.height && g.is_lidar_ground_cell(cx as usize, cz as usize);
+        let class = inp.land.map(|l| l.class_at(wx as f64, wz as f64)).unwrap_or(50);
+        inp.ground_tone.and_then(|f| f(wx, wz)).unwrap_or_else(|| land_color(class, !lidar))
+    };
+    let detail = if eo_landmarks::features::gg3_ground("terrain-detail") && inp.smooth_terrain {
+        let street_tris: Vec<[[f32; 2]; 3]> = inp
+            .street
+            .map(|st| {
+                st.objects
+                    .iter()
+                    .filter(|o| o.lod_role == LOD_STREET_FAR)
+                    .flat_map(|o| {
+                        st.indices[o.first_index as usize..(o.first_index + o.index_count) as usize].chunks_exact(3).map(move |t| {
+                            [t[0], t[1], t[2]].map(|i| {
+                                let v = st.vertices[(o.base_vertex + i as i32) as usize].pos;
+                                [v[0], v[2]]
+                            })
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let raw = |x: f64, z: f64| g.ground(x, z) as f32;
+        let di = terrain_detail::Inputs {
+            lattice: terrain_detail::Lattice { ox: ox as f64, oz: oz as f64, cell: cell as f64, width: g.meta.width as i64, height: g.meta.height as i64 },
+            vertex_height: &vertex_height,
+            raw_ground: &raw,
+            colour: &colour_at,
+            street_tris: &street_tris,
+            buildings: inp.city.buildings.iter().map(|b| b.ring.as_slice()).collect(),
+            frame,
+            height_scale: eo_data::groundscale::height_scale(),
+            sea_y: SEA_LEVEL_Y as f32,
+        };
+        terrain_detail::build(&di, materials.as_ref())
+    } else {
+        None
+    };
+    if let Some(d) = &detail {
+        eprintln!(
+            "terrain detail: {} patches of 64 m at 2 m ({} vertices; {} flat ones left to the tiles, {} rebuilt beside them), {} with relief (largest {:.2} m), {:.0} ms",
+            d.stats.patches, d.stats.vertices, d.stats.dropped, d.stats.rebuilt, d.stats.relieved, d.stats.max_relief_m, d.stats.ms
+        );
+    }
     // --- Terrain: 32 x 32-cell tiles over the whole elevation grid. ---------
     // All tiles share one (33 x 33)-vertex grid topology in the index buffer,
     // and one coarse topology over every 4th vertex of the same grid.
@@ -686,6 +757,23 @@ pub fn build_scene_with_cuts(inp: &SceneInputs, cuts: Option<&eo_structures::Str
         }
     }
     let coarse_count = b.indices.len() as u32 - coarse_first;
+    // the relief patches: the tiles' topology (33 x 33 vertices at 2 m), the coarse level every
+    // 4th (8 m). Pushed before the tiles: a reader that copies the terrain objects' vertices into
+    // the 8 m grid as tiles (eo-app props/vegetation.rs `TerrainGrid::from_scene`) then has every
+    // cell written last by the tile that holds it (the tiles keep all their vertices, the cells
+    // under a patch included), not by a patch's 2 m vertices.
+    if let Some(d) = &detail {
+        for p in &d.patches {
+            let o = b.push_shared(ObjectKind::Terrain, &p.verts, shared_first, shared_count);
+            if inp.terrain_lod {
+                b.objects[o].lod_role = LOD_TERRAIN;
+                b.objects[o].far_first_index = coarse_first;
+                b.objects[o].far_index_count = coarse_count;
+            }
+            stats.terrain_triangles += (shared_count / 3) as u64;
+            stats.terrain_coarse_triangles += (coarse_count / 3) as u64;
+        }
+    }
     // Vertex rows of every terrain tile, computed in parallel (the street
     // world's carpet answers per vertex and is not free).
     let reach = CUT_REACH_CELLS * cell as f64;
@@ -736,10 +824,21 @@ pub fn build_scene_with_cuts(inp: &SceneInputs, cuts: Option<&eo_structures::Str
                 let class = inp.land.map(|l| l.class_at(wx as f64, wz as f64)).unwrap_or(50);
                 let colour = inp.ground_tone.and_then(|f| f(wx, wz)).unwrap_or_else(|| land_color(class, !lidar));
                 let mut vert = v([wx, y, wz], colour);
+                let mut ny = 1.0f32;
                 if inp.smooth_terrain {
                     let dx = (ring[(z + 1) * n + x + 2] - ring[(z + 1) * n + x]) / (2.0 * cell);
                     let dz = (ring[(z + 2) * n + x + 1] - ring[z * n + x + 1]) / (2.0 * cell);
-                    vert.normal = eo_assets::glb::pack_normal(glam::Vec3::new(-dx, 1.0, -dz));
+                    let nn = glam::Vec3::new(-dx, 1.0, -dz).normalize();
+                    ny = nn.y;
+                    vert.normal = eo_assets::glb::pack_normal(nn);
+                }
+                if let Some(m) = &materials {
+                    let (c, w) = m.material(wx as f64, wz as f64, colour, ny as f64, y, cell as f64);
+                    vert.color = c;
+                    vert.normal |= (w as u8 as u32) << 24;
+                }
+                if let Some(w) = terrain_detail::sand_slope_byte(wx as f64, wz as f64, vert.color) {
+                    vert.normal |= (w as u8 as u32) << 24;
                 }
                 verts.push(vert);
             }
@@ -759,11 +858,16 @@ pub fn build_scene_with_cuts(inp: &SceneInputs, cuts: Option<&eo_structures::Str
     });
     for (&(tx, tz), (tv, any_land, canopies)) in all.iter().zip(built) {
         let mut verts = tv;
-        if !canopies.is_empty() {
-            // a portal's canopy over this tile: its own index lists and vertices, the ground under it left out.
+        // (the terrain detail) the relief patches over this tile: their cells are left out of it at both levels.
+        let holed = detail.as_ref().filter(|d| (0..TILE_CELLS as i64).any(|k| (0..TILE_CELLS as i64).step_by(terrain_detail::PATCH_CELLS as usize).any(|j| d.covers_quad((tx * TILE_CELLS) as i64 + j, (tz * TILE_CELLS) as i64 + k))));
+        if !canopies.is_empty() || holed.is_some() {
+            // a portal's canopy or relief patches over this tile: its own index lists (and, under a
+            // canopy, vertices), the ground under the canopy and the patches' cells left out at both levels.
+            let (cx0, cz0) = ((tx * TILE_CELLS) as i64, (tz * TILE_CELLS) as i64);
+            let keep = |x: usize, z: usize| holed.is_none_or(|d| !d.covers_quad(cx0 + x as i64, cz0 + z as i64));
             let rings: Vec<&[[f64; 2]]> = canopies.iter().map(|c| c.ring.as_slice()).collect();
-            let fine = minus_canopies(&mut verts, side, 1, &rings);
-            let coarse = minus_canopies(&mut verts, side, TERRAIN_COARSE_STRIDE, &rings);
+            let fine = minus_canopies(&mut verts, side, 1, &rings, &keep);
+            let coarse = minus_canopies(&mut verts, side, TERRAIN_COARSE_STRIDE, &rings, &keep);
             if let Some(o) = b.push(ObjectKind::Terrain, &verts, &fine) {
                 if inp.terrain_lod {
                     let first = b.indices.len() as u32;
@@ -775,7 +879,9 @@ pub fn build_scene_with_cuts(inp: &SceneInputs, cuts: Option<&eo_structures::Str
                 stats.terrain_tiles += 1;
                 stats.terrain_triangles += (fine.len() / 3) as u64;
                 stats.terrain_coarse_triangles += (coarse.len() / 3) as u64;
-                stats.terrain_cut_tiles += 1;
+                if !canopies.is_empty() {
+                    stats.terrain_cut_tiles += 1;
+                }
             }
             if any_land {
                 tile_used[tz * tiles_x + tx] = true;
@@ -796,6 +902,13 @@ pub fn build_scene_with_cuts(inp: &SceneInputs, cuts: Option<&eo_structures::Str
                 tile_used[tz * tiles_x + tx] = true;
             }
         }
+    }
+
+    if let Some(d) = detail {
+        // the props and rocks seat on the drawn relief (eo_data::detail_ground) where the relief
+        // moved the ground; elsewhere (None) on their own ground, which is the drawn 8 m surface there
+        let d = std::sync::Arc::new(d);
+        eo_data::detail_ground::set_provider(Box::new(move |x, z| d.relief_height(x, z)));
     }
 
     // --- Roads: carriageway ribbons on the terrain, grouped per tile. -------
@@ -1031,7 +1144,7 @@ mod tests {
         let ring: Vec<[f64; 2]> = [[0.0, -7.6], [6.0, -7.6], [12.0, -7.6], [12.0, 7.6], [6.0, 7.6], [0.0, 7.6]].iter().map(|q| [133.3 + q[0] * c - q[1] * s, 147.9 + q[0] * s + q[1] * c]).collect();
         for stride in [1, TERRAIN_COARSE_STRIDE] {
             let mut verts = base.clone();
-            let idx = minus_canopies(&mut verts, side, stride, &[ring.as_slice()]);
+            let idx = minus_canopies(&mut verts, side, stride, &[ring.as_slice()], &|_, _| true);
             let left = area(&verts, &idx);
             assert!((left - (full - 12.0 * 15.2)).abs() < 1e-3, "stride {stride}: {left} of {full}");
             for v in &verts[side * side..] {
@@ -1051,7 +1164,7 @@ mod tests {
         // a canopy off the tile: the grid as it was.
         let mut verts = base.clone();
         let far: Vec<[f64; 2]> = ring.iter().map(|q| [q[0] + 1000.0, q[1]]).collect();
-        let idx = minus_canopies(&mut verts, side, 1, &[far.as_slice()]);
+        let idx = minus_canopies(&mut verts, side, 1, &[far.as_slice()], &|_, _| true);
         assert_eq!(verts.len(), side * side);
         assert_eq!(idx, grid_without(side, 1, &vec![false; side * side]));
     }

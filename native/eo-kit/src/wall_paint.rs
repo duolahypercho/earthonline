@@ -60,7 +60,7 @@ pub fn enabled() -> bool {
 
 /// A tag for the kit tile cache key (empty when off: the key is today's).
 pub fn cache_tag() -> String {
-    if enabled() { format!("wall-paint-v{VERSION}") } else { String::new() }
+    if enabled() { format!("wall-paint-v{VERSION}{}", crate::presidio::cache_tag()) } else { String::new() }
 }
 
 fn lin(c: [u8; 3]) -> [f32; 3] {

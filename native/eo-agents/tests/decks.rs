@@ -127,7 +127,7 @@ fn a_car_on_a_deck_lane_stands_on_the_deck_and_a_car_under_it_on_the_street() {
         flags: level_flags(level),
         id,
     };
-    let frame = Frame { time: 1.0, steps: 60, regions: vec![AgentBuffer { origin, time: 1.0, step: 60, vehicles: vec![car(1, level), car(2, 0)], walkers: vec![] }], timing: Default::default() };
+    let frame = Frame { time: 1.0, steps: 60, regions: vec![AgentBuffer { origin, time: 1.0, step: 60, vehicles: vec![car(1, level), car(2, 0)], walkers: vec![] }], ..Default::default() };
     let mut out = vec![];
     feeder.build(&frame, &mut out);
     assert_eq!(out.len(), 2);

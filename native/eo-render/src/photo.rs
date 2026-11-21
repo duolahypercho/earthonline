@@ -91,41 +91,6 @@ pub fn shader_source() -> String {
     format!("{}\n{}\n{}\n{}", crate::look::look_common_source(), include_str!("look_finish.wgsl"), wgsl(), include_str!("look_photo.wgsl"))
 }
 
-/// The atmosphere tables' passes under the photo finish (sky.rs builds them
-/// the first time the option is on, beside the default ones): the sky's
-/// common source, sky_atmo.wgsl and sky_atmo_luts.wgsl with its medium's
-/// aerosol given eo-sky `photo`'s absorption (`LUT_MIE_ABSORB_PHOTO_PER_KM`)
-/// and scale height (`LUT_AEROSOL_SCALE_KM`). The default passes keep the
-/// file's text as it is, so with the option off the tables are the old ones
-/// bit for bit. None if the medium's text is not found exactly once (the
-/// tables then keep the default air; a unit test catches the drift).
-pub fn atmo_luts_source() -> Option<String> {
-    let swaps = [
-        ("let dm = exp(-hh / 1.2) * skyu.atmo2.z;", "let dm = exp(-hh / PH_AT_MIE_H) * skyu.atmo2.z;"),
-        ("(AT_MIE_S + AT_MIE_A) * dm", "(AT_MIE_S + PH_AT_MIE_A) * dm"),
-    ];
-    let mut luts = include_str!("sky_atmo_luts.wgsl").to_string();
-    for (a, b) in swaps {
-        if luts.matches(a).count() != 1 {
-            return None;
-        }
-        luts = luts.replacen(a, b, 1);
-    }
-    Some(format!(
-        "{}
-{}
-// (photo finish) the measured air's aerosol: absorption per unit density (1/km), scale height (km).
-const PH_AT_MIE_A: f32 = {:?};
-const PH_AT_MIE_H: f32 = {:?};
-{}",
-        include_str!("sky_common.wgsl"),
-        include_str!("sky_atmo.wgsl"),
-        eo_sky::photo::LUT_MIE_ABSORB_PHOTO_PER_KM as f32,
-        eo_sky::photo::LUT_AEROSOL_SCALE_KM as f32,
-        luts
-    ))
-}
-
 /// The pipeline, its layout and its uniform.
 pub struct PhotoGpu {
     pub(crate) pipeline: wgpu::RenderPipeline,
@@ -214,30 +179,6 @@ mod tests {
         let naga::TypeInner::Struct { span, .. } = &ty.inner else { panic!("Photo is a struct") };
         assert_eq!(*span as usize, std::mem::size_of::<PhotoUniform>());
         for entry in ["photo_vs", "photo_fs"] {
-            assert!(module.entry_points.iter().any(|e| e.name == entry), "{entry}");
-        }
-    }
-
-    /// The value of `const NAME: TYPE = VALUE;` in a WGSL source.
-    fn wgsl_const(src: &str, name: &str) -> f64 {
-        let line = src.lines().find(|l| l.trim_start().starts_with(&format!("const {name}:"))).unwrap_or_else(|| panic!("no const {name}"));
-        let v = line.split('=').nth(1).unwrap().trim().trim_end_matches(';').trim_end_matches('u');
-        v.parse().unwrap_or_else(|_| panic!("{line}"))
-    }
-
-    #[test]
-    fn the_tables_take_eo_skys_air() {
-        let src = atmo_luts_source().expect("sky_atmo_luts.wgsl's medium is found once");
-        let close = |a: f64, b: f64| (a - b).abs() <= 1e-6 * b.abs();
-        assert!(close(wgsl_const(&src, "PH_AT_MIE_A"), eo_sky::photo::LUT_MIE_ABSORB_PHOTO_PER_KM));
-        assert!(close(wgsl_const(&src, "PH_AT_MIE_H"), eo_sky::photo::LUT_AEROSOL_SCALE_KM));
-        assert!(close(wgsl_const(&src, "AT_MIE_S"), eo_sky::photo::LUT_MIE_SCATTER_PER_KM));
-        // the medium takes them, nothing else moved, and the passes validate.
-        assert!(src.contains("exp(-hh / PH_AT_MIE_H) * skyu.atmo2.z") && src.contains("(AT_MIE_S + PH_AT_MIE_A) * dm"));
-        assert!(!src.contains("(AT_MIE_S + AT_MIE_A) * dm") && !src.contains("exp(-hh / 1.2)"));
-        let module = naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("photo tables: {}", e.emit_to_string(&src)));
-        naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all()).validate(&module).expect("the photo tables validate");
-        for entry in ["at_trans_main", "at_ms_main", "at_view_main"] {
             assert!(module.entry_points.iter().any(|e| e.name == entry), "{entry}");
         }
     }

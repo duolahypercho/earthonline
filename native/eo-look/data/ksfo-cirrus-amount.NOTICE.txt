@@ -1,0 +1,20 @@
+ksfo-cirrus-amount.csv - how much of the sky San Francisco airport's cirrus days cover, by month
+
+Source: routine hourly METAR reports of San Francisco International Airport (KSFO), 2014-2023,
+  from the NOAA / National Weather Service Automated Surface Observing System (ASOS),
+  as archived by the Iowa Environmental Mesonet (Iowa State University),
+  https://mesonet.agron.iastate.edu/request/download.phtml
+Licence: the observations are works of the US federal government (NOAA/NWS) and are in the
+  public domain in the United States. The archive is credited as the Iowa Environmental Mesonet.
+Query:         the same file as ksfo-clear-day-sky.csv (see ksfo-clear-day-sky.py)
+Source sha256: 108ab81bc11ac6cf8ef58b97fee005e138fea602cef8709dd3c7ccab1bf50e54 (87,616 lines, 87,615 reports)
+Produced by:   native/eo-look/data/ksfo-clear-day-sky.py --amount, which refuses an input with another digest.
+               The input file is not tracked; the script finds it through EO_KSFO_METAR_CSV.
+
+Kept: per month, the cirrus days of ksfo-clear-day-sky.csv counted by the day's high-cloud
+amount: the METAR sky-cover code (FEW, SCT, BKN, OVC) of the most covering layer at or over
+18,000 ft, the median over the day's reports that carry one. The codes are eighths of the sky
+(FEW 1-2 oktas, SCT 3-4, BKN 5-7, OVC 8: WMO-No. 306 FM 15 METAR regulation 15.9.1.1).
+Read by: native/eo-sky/src/clouds.rs (`ksfo_cirrus_amounts`, `drawn_oktas`, `modal_oktas`).
+The cirrus heights in these reports are observer estimates (the ASOS ceilometer does not reach
+cirrus); they are not used.

@@ -75,6 +75,24 @@ struct Sky {
     // past the rig's horizon envelope (sea glint): rgb in key units (as `look.key`), w the
     // refracted elevation's sine. Zero once the disc's upper limb has set.
     sun_glint: vec4<f32>,
+    // the physical daylight (eo-look `phys`): rgb a white sun at the top of the atmosphere x the
+    // Sun's colour, in look units (the sky tables are per unit solar illuminance), w its weight
+    // (0: the tables keep the look's dome anchor, `vol_atmo_gain`)
+    atmo4: vec4<f32>,
+    // the medium the tables integrate: x aerosol scattering, y aerosol absorption (1/km at the
+    // ground, 550 nm, x the haze), z the aerosol's scale height (km), w the aerial-perspective
+    // volume on (1/0)
+    atmo_m: vec4<f32>,
+    // rgb the aerosol's spectral factor per channel, w the aerial-perspective volume's reach (km)
+    atmo_s: vec4<f32>,
+    // rgb Rayleigh scattering at sea level (1/km), w its scale height (km)
+    atmo_r: vec4<f32>,
+    // rgb ozone's peak absorption (1/km), w unused
+    atmo_o: vec4<f32>,
+    // the second high deck (eo_sky::clouds::Decks::cirrus): x height (m), y opacity; unread
+    cirrus: vec4<f32>,
+    // spare; zero
+    spare: vec4<f32>,
 };
 
 const SKY_CLOUDS: u32 = 1u;

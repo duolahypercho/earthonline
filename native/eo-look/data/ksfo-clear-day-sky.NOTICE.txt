@@ -1,0 +1,19 @@
+ksfo-clear-day-sky.csv - how San Francisco airport's clear days split into cloudless, cirrus and fair skies, by month
+
+Source: routine hourly METAR reports of San Francisco International Airport (KSFO), 2014-2023,
+  from the NOAA / National Weather Service Automated Surface Observing System (ASOS),
+  as archived by the Iowa Environmental Mesonet (Iowa State University),
+  https://mesonet.agron.iastate.edu/request/download.phtml
+Licence: the observations are works of the US federal government (NOAA/NWS) and are in the
+  public domain in the United States. The archive is credited as the Iowa Environmental Mesonet.
+Query:         see ksfo-clear-day-sky.py (station SFO, sky cover and layer heights 1-4,
+               2014-01-01 to 2024-01-01 local time, routine reports only, comma-separated)
+Retrieved:     2026-11-18
+Source sha256: 108ab81bc11ac6cf8ef58b97fee005e138fea602cef8709dd3c7ccab1bf50e54 (87,616 lines, 87,615 reports)
+Produced by:   native/eo-look/data/ksfo-clear-day-sky.py, which refuses an input with another digest.
+               The input file is not tracked; the script finds it through EO_KSFO_METAR_CSV.
+
+Kept: per month, the count of days that are not clear (low cloud), cloudless, cirrus-only and fair.
+Read by: native/eo-sky/src/clouds.rs (`ksfo_clear_day_shares`, `drawn_state`).
+The day classification's thresholds (the 18,000 ft cirrus line, two reports, half the day) are
+inferred, not taken from a published method.

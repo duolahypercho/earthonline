@@ -683,11 +683,11 @@ impl AgentsGpu {
             lamp_misc: [night, self.lamps.2, seconds.rem_euclid(3600.0) as f32, 0.0],
             // before the shadows the cascades, and the camera only
             // without an occlusion pass this frame.
-            misc: [if self.camera_late.load(Ordering::Relaxed) { 0b1110 } else { 0b1111 }, 0, 0, 0],
+            misc: [if self.camera_late.load(Ordering::Relaxed) { 0b1110 } else { 0b1111 }, 1, 0, 0],
             view_proj: vp.to_cols_array_2d(),
         };
         queue.write_buffer(&self.params, 0, bytemuck::bytes_of(&p));
-        let pc = AgParams { misc: [0b0001, 0, 0, 0], ..p }; // after the pyramid, the camera
+        let pc = AgParams { misc: [0b0001, 1, 0, 0], ..p }; // after the pyramid, the camera (y: corridor boxes to the far plane)
         queue.write_buffer(&self.params_c, 0, bytemuck::bytes_of(&pc));
         let f = AgFrame {
             view_proj: vp.to_cols_array_2d(),

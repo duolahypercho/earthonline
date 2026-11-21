@@ -1,0 +1,29 @@
+ground-albedo - the per-class ground albedos in native/eo-look/src/phys.rs
+
+No data file is shipped: the values are constants in phys.rs (`SEA_ALBEDO`, `TREE_ALBEDO`,
+`LOW_VEGETATION_ALBEDO`, `BARE_ALBEDO`), applied to the classes of the shipped land cover
+(public/data/sf/sf-land-cover.bin.gz, ESA WorldCover 2021 v200, CC BY 4.0; see its own NOTICE).
+This file records where each value comes from and how far that source was checked.
+
+Sea, 0.06 (the figures as the earlier pass took them from these papers; the citations are
+confirmed, the full texts were not re-read for this file):
+  Payne, R. E., 1972: Albedo of the sea surface. J. Atmos. Sci. 29, 959-970
+    (monthly mean ocean albedo about 0.06 at solar altitudes over about 30 degrees).
+  Jin, Z., T. P. Charlock, W. L. Smith Jr. and K. Rutledge, 2004: A parameterization of ocean
+    surface albedo. Geophys. Res. Lett. 31, L22301 (about 0.066 under a diffuse sky).
+
+Tree cover 0.05 and grass, shrub, crop and wetland 0.06 (INFERRED, source not read):
+  Meant as the MODIS MCD43 visible-band (0.3-0.7 um) white-sky means of the forest and grassland
+  IGBP classes. The per-class table these should come from (Gao, F., C. B. Schaaf et al., 2005:
+  MODIS BRDF and albedo Climate Modeling Grid products and the variability of albedo for major
+  global vegetation types. J. Geophys. Res. 110, D01104) could not be read: the publisher's page
+  refused access and no open full text was found. The values are therefore INFERRED and owed a
+  primary source. An earlier comment cited a bare-soil albedo paper for the forest value and a
+  second-hand quote for the grass value; both citations were withdrawn.
+
+Bare ground: the city's mean (`URBAN_GROUND_ALBEDO`), INFERRED.
+
+Deviation from the plan: the plan asks for a broadband albedo; the values are visible-band,
+because the renderer's light is visible light and a canopy's near-infrared reflectance does not
+light a wall. San Francisco's summer-dry grass is lighter than the green-grass value; no seasonal
+value is applied.

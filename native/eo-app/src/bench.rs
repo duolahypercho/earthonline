@@ -138,6 +138,9 @@ mod view_bench;
 mod water_bench; // water
 pub(crate) use water_bench::dive_camera;
 mod sign_shots; // signs
+mod scene_cards; // the visual gate's eight scene cards (`--scene-cards`)
+mod clip; // moving clips along camera paths (`--clip FILE.json`)
+mod shots; // offscreen geo-referenced shots (`--shots FILE.json`)
 
 struct Segment {
     name: &'static str,
@@ -449,8 +452,23 @@ fn read_resolved(ctx: &GpuContext, target: &wgpu::Buffer, chunks: usize, per_fra
 
 /// The whole-frame target at 1920x1080 on the reference desktop GPU.
 pub const FRAME_BUDGET_MS: f64 = 10.0;
+/// set by the device-lost callback (`run`).
+static DEVICE_LOST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// Segments the budget check enforces (median frame total).
 const STANDARD_SEGMENTS: &[&str] = &["street_walk", "elevated_sweep", "authored_street", "kit_street", "sidewalk_walk"];
+
+/// The budget check's verdict: "not run" when none of `STANDARD_SEGMENTS` ran,
+/// else PASS or FAIL over the ones that did.
+fn budget_verdict(ran: &[&str], failures: &[String]) -> &'static str {
+    if ran.is_empty() {
+        "not run"
+    } else if failures.is_empty() {
+        "PASS"
+    } else {
+        "FAIL"
+    }
+}
 
 fn percentile(v: &[f64], p: f64) -> f64 {
     if v.is_empty() {
@@ -513,6 +531,7 @@ fn settle_p(ctx: &GpuContext, renderer: &Renderer, world: &World, models: &mut M
 }
 
 pub fn run(args: &Args, process_start: Instant) -> Result<()> {
+    shots::preflight()?; // a shots file that does not parse stops here, before the world loads
     // the render thread above normal (workers lower themselves when started).
     let raised = args.perf.thread_priority && hitch::raise_render_thread();
     eo_render::alloc::claim_render_thread(); // this thread allocates from a heap no worker takes
@@ -584,7 +603,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         }
         std::fs::create_dir(dir)?;
     }
-    let first_cam = (segs[0].camera)(0, args.warmup + segs[0].frames);
+    // `--shots` / `--scene-cards`: stream in at the first shot, not at the first path.
+    let first_cam = shots::first_camera(&world, args, aspect)?.unwrap_or_else(|| (segs[0].camera)(0, args.warmup + segs[0].frames));
     let mut models = ModelRuntime::start(&mut world, args, bases, first_cam.eye, process_start);
     // the simulation, feed and agent library, live while the paths run.
     let mut agents = crate::agents::AgentRuntime::start(&world, args, crate::agents::AgentRuntime::focus_of(first_cam.eye, first_cam.forward()));
@@ -765,6 +785,12 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let dir = args.out_dir.clone().unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bench-out"));
         return hlod_shots::run(&ctx, &renderer, &world, &mut models, &mut props, &mut agents, &segs, args, &color, attach, resolve, &targets, &dir, args.label.as_deref().unwrap_or("shots"));
     }
+    // `--shots FILE.json` and `--scene-cards` write their settled shots instead of the timing.
+    if let Some(mode) = shots::requested() {
+        let dir = args.out_dir.clone().unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bench-out").join(mode.default_dir()));
+        let mut io = shots::Io { ctx: &ctx, renderer: &renderer, world: &world, models: &mut models, props: &mut props, agents: &mut agents, args, color: &color, attach, resolve, targets: &targets };
+        return shots::run(&mut io, mode, &dir);
+    }
     // `--occlusion-check` runs the ground-truth test instead of the timing.
     if args.perf.occlusion_check {
         if args.msaa != 1 {
@@ -783,6 +809,15 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         return Ok(());
     }
 
+    // a lost device (a GPU fault or timeout) fails every later submission silently and the
+    // next wait reports a "submission index" error: say what happened, and when, instead.
+    {
+        let t0 = Instant::now();
+        ctx.device.set_device_lost_callback(move |r, m| {
+            DEVICE_LOST.store(true, std::sync::atomic::Ordering::Relaxed);
+            eprintln!("bench: the GPU device was lost {:.1} s into the run ({r:?}: {m})", t0.elapsed().as_secs_f64());
+        });
+    }
     let period_ns = ctx.queue.get_timestamp_period() as f64;
     let mut seg_reports = vec![];
     let mut budget_failures: Vec<String> = vec![];
@@ -790,6 +825,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     // the tier's budget (medium: FRAME_BUDGET_MS), unless `--budget-ms` says otherwise.
     let budget_ms = args.budget_ms.unwrap_or(args.quality.budget_ms());
     let budget_note = format!("[quality {}, budget {budget_ms} ms{}]", args.quality.name(), if args.budget_ms.is_some() { " from --budget-ms" } else { "" });
+    // the standard segments that ran (the budget line says "not run" when none did).
+    let mut standard_ran: Vec<&str> = vec![];
     let cw = COUNTER_WORDS as u64 * 4;
     let mut kit_after_paths = vec![];
     for seg in &segs {
@@ -889,6 +926,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let mut pump_bytes = Vec::with_capacity(total);
         let mut starts = Vec::with_capacity(total + 1);
         let mut subs: Vec<wgpu::SubmissionIndex> = Vec::with_capacity(total);
+        // (fixed-slot lists) the slots issued per frame and the slots the lists hold (eo-render draw_ranges).
+        let mut range_slots: Vec<(f64, f64)> = Vec::with_capacity(total);
         // per-frame breakdown, the thread's on-CPU time, the wait for
         // the frame two back, and (EO_HITCH_ALLOC=1) the allocator's blocks.
         let mut traces: Vec<FrameRecord> = Vec::with_capacity(total);
@@ -926,7 +965,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             if i >= 2 {
                 ctx.device
                     .poll(wgpu::PollType::Wait { submission_index: Some(subs[i - 2].clone()), timeout: None })
-                    .map_err(|e| anyhow!("{e}"))?;
+                    .map_err(|e| if DEVICE_LOST.load(std::sync::atomic::Ordering::Relaxed) { anyhow!("[{}] the GPU device was lost before frame {i} (see the line above): {e}", seg.name) } else { anyhow!("{e}") })?;
             }
             let wait_ms = tw.elapsed().as_secs_f64() * 1e3;
             let overran = prepay.submissions > 0 && wait_ms < PREPAY_FREE_WAIT_MS;
@@ -988,6 +1027,9 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 resolved = i / TS_FRAMES + 1;
             }
             drop(enc_span);
+            if let Some((issued, slots)) = renderer.draw_range_stats() {
+                range_slots.push((issued as f64, slots as f64));
+            }
             let cmd = hitch::timed(hitch::Phase::Finish, || enc.finish());
             let t1 = Instant::now();
             subs.push(hitch::timed(hitch::Phase::Submit, || eo_render::pace::submit(&ctx.queue, [cmd]))); // counted
@@ -1114,6 +1156,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let water_frames = renderer.water.get().map(|w| w.stats()).zip(water_before).map(|(a, b)| (a.frames - b.frames, a.fft_frames - b.fft_frames, a.copy_frames - b.copy_frames, a.fogged_frames - b.fogged_frames));
 
         let mut gpu = json!(null);
+        let mut gpu_serial = json!(null);
         let mut gpu_total_ms = vec![];
         let (mut cull, mut draw) = (vec![], vec![]);
         let (mut sh_cull, mut sh_draw, mut post) = (vec![], vec![], vec![]);
@@ -1121,6 +1164,18 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let mut probe_pass = vec![]; // facade
         let mut sky_passes: [Vec<f64>; 6] = Default::default(); // the sky passes, then the cloud-shadow map
         let (mut water_fft, mut water_copy, mut water_pass) = (vec![], vec![], vec![]); // water
+        let (mut water_ppr, mut scene_meter) = (vec![], vec![]); // the gap's projected-reflection pass, the scene meter
+        // each pass's serial share: its end minus the previous pass's end in the frame's
+        // order (Apple GPUs start a pass's clock while earlier passes still run, so
+        // begin-to-end windows overlap; the serial shares add up to the frame).
+        const SERIAL: [(&str, u32); 19] = [
+            ("cull", 0), ("shadow_cull", eo_render::look::Q_SHADOW_CULL), ("shadow_depth", eo_render::look::Q_SHADOW_DRAW), ("probe", eo_render::Q_PROBE),
+            ("cloud_shadow", eo_render::sky::Q_CLOUD_SHADOW), ("sky_lights", eo_render::sky::Q_SKY_LIGHTS), ("city", 2), ("pyramid_late_cull", eo_render::Q_OCCLUSION),
+            ("late_city", eo_render::Q_LATE_DRAW), ("water_fft", eo_render::Q_WATER_FFT), ("water_copy_and_ppr", eo_render::Q_WATER_PPR), ("water_and_glass", eo_render::Q_WATER),
+            ("ao", eo_render::look::Q_AO), ("sky_fx_and_velocity", eo_render::sky::Q_SKY_FX), ("sky_volume", eo_render::sky::Q_SKY_VOLUME), ("sky_resolve", eo_render::sky::Q_SKY_RESOLVE),
+            ("sky_bloom", eo_render::sky::Q_SKY_BLOOM), ("scene_meter", eo_render::Q_SCENE_METER), ("post", eo_render::look::Q_POST),
+        ];
+        let mut serial: Vec<Vec<f64>> = vec![vec![]; SERIAL.len()];
         let (mut occ_ms, mut late_draw, mut early_draw) = (vec![], vec![], vec![]); // occlusion
         if let Some(target) = &ts_resolve {
             let ts = read_resolved(&ctx, target, total.div_ceil(TS_FRAMES), QUERIES_PER_FRAME, ts_stride)?;
@@ -1150,16 +1205,30 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 let (qf, qw) = (eo_render::Q_WATER_FFT as usize, eo_render::Q_WATER as usize);
                 water_fft.push(ms(ts[b + qf], ts[b + qf + 1]));
                 water_copy.push(ms(ts[b + qf + 1], ts[b + qw]));
+                let (qr, qm) = (eo_render::Q_WATER_PPR as usize, eo_render::Q_SCENE_METER as usize);
+                water_ppr.push(ms(ts[b + qr], ts[b + qr + 1]));
+                scene_meter.push(ms(ts[b + qm], ts[b + qm + 1]));
                 water_pass.push(ms(ts[b + qw], ts[b + qw + 1]));
                 // Frame order: cull, shadow cull, shadow depth, city (early), pyramid + late cull, city (late) + sky, AO, post.
                 // A post end before the cull begin (a timestamp the GPU did not write; seen on
                 // Metal) leaves the frame untimed (NaN): its total is its wall interval.
                 gpu_total_ms.push(if ts[b + 9] >= ts[b] { ms(ts[b], ts[b + 9]) } else { f64::NAN });
+                let mut prev = ts[b];
+                for (k, &(_, q)) in SERIAL.iter().enumerate() {
+                    let end = ts[b + q as usize + 1];
+                    // (a pass that ended before the one before it counts 0)
+                    let d = if end.wrapping_sub(prev) as i64 > 0 { ms(prev, end) } else { 0.0 };
+                    serial[k].push(d);
+                    prev = prev.max(end);
+                }
             }
             let probe_json = {
                 let p = renderer.probe.stats(); // facade
                 json!({ "captures": p.captures, "faces": p.faces, "transfer": p.transfer, "frames_per_capture": p.last_capture_frames, "look_transfer_in_use": renderer.look.transfer() })
             };
+            let serial_json: serde_json::Map<String, serde_json::Value> = SERIAL.iter().zip(&serial).map(|((n, _), v)| (n.to_string(), json!(percentile(v, 50.0)))).collect();
+            println!("  GPU serial shares (median ms, end minus the previous pass's end): {}", SERIAL.iter().zip(&serial).map(|((n, _), v)| format!("{n} {:.2}", percentile(v, 50.0))).collect::<Vec<_>>().join(", "));
+            gpu_serial = json!(serial_json);
             gpu = json!({
                 "frame_ms_cull_begin_to_post_end": summary(&gpu_total_ms.iter().copied().filter(|g| g.is_finite()).collect::<Vec<_>>()),
                 "frames_untimed (timestamps out of order)": gpu_total_ms.iter().filter(|g| !g.is_finite()).count(),
@@ -1185,6 +1254,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 // water
                 "water_fft_pass_ms (FFT when water was seen lately, + the patch cull without occlusion)": summary(&water_fft),
                 "water_copy_ms (the frame copy: the gap before the water pass)": summary(&water_copy),
+                "water_ppr_pass_ms (the projected reflection, inside that gap)": summary(&water_ppr),
+                "scene_meter_pass_ms (the reflected-light meter's histogram, before post)": summary(&scene_meter),
                 "water_pass_ms (the sea, then the glass drawn after it)": summary(&water_pass),
                 "shadow_casters_drawn_per_frame (3 cascades summed)": summary(&shadow_cmds),
                 "shadow_triangles_drawn_per_frame (3 cascades summed)": summary(&shadow_tris),
@@ -1358,6 +1429,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 ("gpu_post", post[k]),
                 ("gpu_water_fft", water_fft[k]), // water
                 ("gpu_water_copy", water_copy[k]),
+                ("gpu_water_ppr", water_ppr[k]),
+                ("gpu_scene_meter", scene_meter[k]),
                 ("gpu_water_and_glass", water_pass[k]),
                 // every timed pass of the frame, and what no pass accounts for
                 ("gpu_probe", probe_pass[k]),
@@ -1371,7 +1444,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 ("gpu_props_casters", pr_casters.get(k).copied().unwrap_or(0.0)),
                 ("gpu_props_wires", pr_wires.get(k).copied().unwrap_or(0.0)),
             ];
-            let timed: f64 = v.iter().map(|p| p.1).sum();
+            let timed: f64 = v.iter().map(|p| p.1).sum::<f64>() - water_ppr[k]; // (the PPR pass lies inside the water gap)
             v.push(("gpu_untimed (agents compute/casters, gaps, other processes)", (gpu_total_ms[k] - timed).max(0.0)));
             v.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
             v
@@ -1514,8 +1587,11 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             "shortest_wait_after_taken_spike_ms": if min_wait_after.is_finite() { json!(min_wait_after) } else { json!(null) },
             "prepays_charged_to_their_frame": charged,
         });
-        if STANDARD_SEGMENTS.contains(&seg.name) && tot_med >= budget_ms {
-            budget_failures.push(format!("{} median {tot_med:.3} ms", seg.name));
+        if STANDARD_SEGMENTS.contains(&seg.name) {
+            standard_ran.push(seg.name);
+            if tot_med >= budget_ms {
+                budget_failures.push(format!("{} median {tot_med:.3} ms", seg.name));
+            }
         }
         // the MAX check (every path), enforced with --check-max.
         if tot_max >= budget_ms {
@@ -1535,6 +1611,15 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             })
         });
         kit_after_paths.push(json!({ "after": seg.name, "kit": kit_now }));
+        let fixed_slot_json = if range_slots.is_empty() {
+            json!(null)
+        } else {
+            let from = args.warmup.min(range_slots.len());
+            json!({
+                "slots_issued_per_frame": summary(&range_slots[from..].iter().map(|r| r.0).collect::<Vec<_>>()),
+                "slots_in_the_lists_per_frame": summary(&range_slots[from..].iter().map(|r| r.1).collect::<Vec<_>>()),
+            })
+        };
         let mut report = json!({
             "name": seg.name,
             "budget": budget,
@@ -1554,6 +1639,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             "gpu": gpu,
             "objects_drawn_per_frame": summary(&drawn_objects),
             "transparent_objects_drawn_per_frame": summary(&drawn_blend),
+            // without multi-draw-indirect-count: slots the fixed-slot lists issued (draw_ranges) and held, per frame
             "triangles_drawn_per_frame": summary(&drawn_tris),
             "model_parts_drawn_per_frame": summary(&model_parts),
             "model_triangles_drawn_per_frame": summary(&model_tris),
@@ -1627,6 +1713,11 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             });
         }
         println!("  street objects/frame   median {:.0}  p95 {:.0}  (street triangles median {:.0}, p95 {:.0})", percentile(&street_objs, 50.0), percentile(&street_objs, 95.0), percentile(&street_tris, 50.0), percentile(&street_tris, 95.0));
+        if range_slots.len() > args.warmup {
+            let m: Vec<f64> = range_slots[args.warmup..].iter().map(|r| r.0).collect();
+            let all: Vec<f64> = range_slots[args.warmup..].iter().map(|r| r.1).collect();
+            println!("  fixed-slot draws/frame median {:.0}  p95 {:.0}  of {:.0} slots in the lists (draw_ranges)", percentile(&m, 50.0), percentile(&m, 95.0), percentile(&all, 50.0));
+        }
         println!(
             "\n[{}] {} frames after {} warm-up (settle {:.0} ms)\n  CPU pump+encode+submit ms median {:.3}  p95 {:.3}  max {:.3}\n  wall ms/frame          median {:.3}  p95 {:.3}\n  GPU ms (cull->draw)    median {}  p95 {}\n  objects drawn/frame    median {:.0}  p95 {:.0}  (transparent median {:.0})\n  triangles drawn/frame  median {:.0}  p95 {:.0}\n  model parts/frame      median {:.0}  (model triangles median {:.0}, footprint stand-ins median {:.0})\n  kit objects/frame      median {:.0}  p95 {:.0}  (kit triangles median {:.0}, p95 {:.0})",
             seg.name,
@@ -1655,6 +1746,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         );
         // the far layer after the path, and its last frame's counters (entries drawn, triangles, entries in the frustum, entries occluded).
         let mut report = report;
+        report["fixed_slot_lists"] = fixed_slot_json;
+        report["gpu_serial_ms"] = gpu_serial; // each pass's end minus the previous pass's end (frame order), median // without multi-draw-indirect-count: slots issued (draw_ranges) and held, per frame
         report["hlod_after"] = json!(models.hlod.as_ref().map(|h| h.stats_json()));
         report["hlod_last_frame"] = json!(renderer.hlod.get().map(|h| h.readback(&ctx.queue)));
         seg_reports.push(report);
@@ -1786,7 +1879,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             "process_start_to_first_path_settled": streamed_ms,
         },
         "segments": seg_reports,
-        "budget_check": { "budget_ms": budget_ms, "enforced_on": STANDARD_SEGMENTS, "rule": "median frame total (CPU pump+encode+submit + GPU) under the budget", "failures": budget_failures },
+        "budget_check": { "budget_ms": budget_ms, "enforced_on": STANDARD_SEGMENTS, "ran": standard_ran, "verdict": budget_verdict(&standard_ran, &budget_failures), "rule": "median frame total (CPU pump+encode+submit + GPU) under the budget", "failures": budget_failures },
         // every path's worst frame against the budget (enforced with --check-max).
         "max_check": { "budget_ms": budget_ms, "enforced": args.perf.check_max, "failures": max_failures },
     });
@@ -1873,8 +1966,11 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     std::fs::write(&path, serde_json::to_string_pretty(&out)?)?;
     println!("wrote {}", path.display());
     audio.final_report(); // audio
-    if budget_failures.is_empty() {
-        println!("budget check: PASS (median frame total under {budget_ms} ms on {STANDARD_SEGMENTS:?}) {budget_note}");
+    if standard_ran.is_empty() {
+        // nothing it enforces ran: no verdict (a PASS here would claim paths that were not measured)
+        println!("budget check: not run (none of {STANDARD_SEGMENTS:?} ran) {budget_note}");
+    } else if budget_failures.is_empty() {
+        println!("budget check: PASS (median frame total under {budget_ms} ms on {standard_ran:?} of {STANDARD_SEGMENTS:?}) {budget_note}");
     } else {
         println!("budget check: FAIL {budget_failures:?} {budget_note}");
     }
@@ -2162,21 +2258,30 @@ fn capture(
         if renderer.probe_grid.settled() && !(single && renderer.probe.capturing()) {
             break;
         }
-        renderer.update(&ctx.queue, cam);
-        let mut enc = ctx.device.create_command_encoder(&Default::default());
-        renderer.encode(&mut enc, attach, resolve, depth, None);
-        eo_render::pace::submit(&ctx.queue, [enc.finish()]); // counted
+        draw(ctx, renderer, attach, resolve, depth, cam);
     }
     for _ in 0..20 {
-        renderer.update(&ctx.queue, cam);
-        let mut enc = ctx.device.create_command_encoder(&Default::default());
-        renderer.encode(&mut enc, attach, resolve, depth, None);
-        eo_render::pace::submit(&ctx.queue, [enc.finish()]); // counted
+        draw(ctx, renderer, attach, resolve, depth, cam);
     }
     write_capture(ctx, color, path)
 }
 
+/// The offscreen colour target written to `path` as a PNG.
 fn write_capture(ctx: &GpuContext, color: &wgpu::Texture, path: &std::path::Path) -> Result<()> {
+    let rgba = read_color(ctx, color)?;
+    write_png(path, color.width(), color.height(), &rgba)
+}
+
+/// Draw `cam` once into the offscreen target.
+fn draw(ctx: &GpuContext, renderer: &Renderer, attach: &wgpu::TextureView, resolve: Option<&wgpu::TextureView>, depth: &wgpu::TextureView, cam: &Camera) {
+    renderer.update(&ctx.queue, cam);
+    let mut enc = ctx.device.create_command_encoder(&Default::default());
+    renderer.encode(&mut enc, attach, resolve, depth, None);
+    eo_render::pace::submit(&ctx.queue, [enc.finish()]); // counted
+}
+
+/// The offscreen colour target read back, tightly packed RGBA8 rows.
+fn read_color(ctx: &GpuContext, color: &wgpu::Texture) -> Result<Vec<u8>> {
     let (w, h) = (color.width(), color.height());
     let row = (w * 4).div_ceil(256) * 256;
     let buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {
@@ -2197,11 +2302,16 @@ fn write_capture(ctx: &GpuContext, color: &wgpu::Texture, path: &std::path::Path
     for y in 0..h as usize {
         rgba.extend_from_slice(&bytes[y * row as usize..y * row as usize + w as usize * 4]);
     }
+    Ok(rgba)
+}
+
+/// Write tightly packed RGBA8 rows as a PNG.
+fn write_png(path: &std::path::Path, w: u32, h: u32, rgba: &[u8]) -> Result<()> {
     let file = std::io::BufWriter::new(std::fs::File::create(path)?);
     let mut enc = png::Encoder::new(file, w, h);
     enc.set_color(png::ColorType::Rgba);
     enc.set_depth(png::BitDepth::Eight);
-    enc.write_header()?.write_image_data(&rgba)?;
+    enc.write_header()?.write_image_data(rgba)?;
     Ok(())
 }
 
@@ -2225,4 +2335,16 @@ const PREPAY_FREE_WAIT_MS: f64 = eo_render::pace::PREPAY_FREE_WAIT_MS; // one va
 
 fn fmt_opt(v: &[f64], p: f64) -> String {
     if v.is_empty() { "n/a".into() } else { format!("{:.3}", percentile(v, p)) }
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use super::budget_verdict;
+
+    #[test]
+    fn the_budget_line_has_no_verdict_when_no_standard_segment_ran() {
+        assert_eq!(budget_verdict(&[], &[]), "not run");
+        assert_eq!(budget_verdict(&["street_walk"], &[]), "PASS");
+        assert_eq!(budget_verdict(&["street_walk"], &["street_walk median 12.000 ms".into()]), "FAIL");
+    }
 }

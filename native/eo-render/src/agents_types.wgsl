@@ -25,7 +25,8 @@ struct AgParams {
     lamp_misc: vec4<f32>,
     // x the views this cull dispatch serves (bit 0 the camera, bits 1..3
     // the cascades): before the shadows the cascades (and the camera without
-    // an occlusion pass), after the pyramid the camera alone.
+    // an occlusion pass), after the pyramid the camera alone. y 1: corridor
+    // vehicles keep their box rung past the box tier's radius.
     misc: vec4<u32>,
     // the camera's view-projection (the pyramid test).
     view_proj: mat4x4<f32>,
@@ -75,6 +76,9 @@ const AG_FLAG_TURN_LEFT: u32 = 4u;
 const AG_FLAG_TURN_RIGHT: u32 = 8u;
 const AG_PLAYER: u32 = 65536u;
 const AG_BLINK_ON: u32 = 131072u;
+// eo-agents AGENT_CORRIDOR: a corridor vehicle, drawn as its box rung past
+// the box tier's radius out to the frustum's far plane.
+const AG_CORRIDOR: u32 = 524288u; // eo_agents::AGENT_CORRIDOR (1 << 19)
 
 fn ag_rotate(q: vec4<f32>, v: vec3<f32>) -> vec3<f32> {
     let t = 2.0 * cross(q.xyz, v);

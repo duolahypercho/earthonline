@@ -29,6 +29,7 @@ pub mod js;
 pub mod lod;
 pub mod mesh;
 pub mod pipeline;
+pub mod presidio; // the Presidio and GGNRA rule (off-white walls, red tile roofs)
 pub mod rng;
 pub mod roof_measured; // roof finishes tinted to the measured aerial colour
 pub mod roof_plant;

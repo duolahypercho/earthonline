@@ -9,16 +9,22 @@
 //! set of cascades per camera.
 
 pub mod aerial;
+pub mod atmosphere;
 pub mod blend;
 pub mod bounce;
 pub mod cinematic;
+pub mod features;
 pub mod golden;
 pub mod ground_field;
 pub mod look;
 pub mod math;
+pub mod phys;
+pub mod probe; // the radiance probe's encoding (EO_AO_DEBUG = 10 + term)
 pub mod rig;
+pub mod season; // the grass's dryness by the day of the year (one curve for every land layer)
 pub mod shadow;
 pub mod sky;
+pub mod spectral; // the direct sun's colour from its spectrum (`--no-sun-spectrum2`)
 pub mod sun;
 pub mod tone;
 

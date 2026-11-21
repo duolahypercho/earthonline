@@ -25,6 +25,7 @@ eo-structures = { path = "../eo-structures" } # structures: grade-separated road
 eo-ui = { path = "../eo-ui" }
 eo-water = { path = "../eo-water" } # water
 eo-landmarks = { path = "../eo-landmarks" } # landmarks
+eo-look = { path = "../eo-look" } # the daylight's ground classes, the day of the year
 eo-farshore = { path = "../eo-farshore" } # farshore
 glam = "0.34.3"
 hound = "3.5.1" # audio: the offline mixes (--audio-render)

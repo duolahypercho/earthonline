@@ -37,7 +37,7 @@ new blind review can change it.
 | `eo-look` | The lighting model as pure functions: sun position, analytic sky, fog, the light rig, exposure, tone curve and shadow cascade fitting. No GPU. |
 | `eo-sky` | Weather schedule, clouds, marine layer, rain and wetness, moon and stars, street-lamp photometry. No GPU. |
 | `eo-water` | The shoreline field, the FFT ocean spectrum, wind, water optics, surf and the open-sea grid. No GPU. |
-| `eo-landmarks` | Bridges, the quay wall, piers, seawalls, plazas, landmark towers and the open-space ground as plain meshes. No GPU. |
+| `eo-landmarks` | Bridges, the quay wall, piers, seawalls, plazas, landmark towers, the Ferry Building, the corridor's streetcar rails and quay railing, and the open-space ground as plain meshes. No GPU. |
 | `eo-farshore` | The land beyond the city out to the horizon, cooked from elevation tiles. No GPU. |
 | `eo-structures` | Grade-separated roads (freeways, ramps, road bridges, tunnels): their vertical profiles, deck, support and portal meshes and collision triangles, behind `--structures`; the joins a host builds the street again with (`build_joined`: junction legs, capped, raised and lowered stubs), the tunnels' bores, lights and terrain cuts (`--tunnels`). It reads the street plan and never edits the street surface itself (eo-street draws the joins). No GPU. |
 | `eo-props` | Street furniture, traffic and pedestrian signals, signs and sign atlases, street trees, parked cars, placed per tile by rule. No GPU. |
@@ -258,6 +258,98 @@ switch it does not take.
 | `--check-max` | Exit 1 if any path's median, p95 or worst frame reaches the budget |
 | `--worst-frames N` | How many of the worst frames to report |
 | `--pace realtime\|60hz\|all-60hz\|none` | How the bench paces its frames |
+| `--shots FILE.json --out DIR` | Offscreen stills instead of the timing: one PNG per shot of the file, and `DIR/<name>.json` beside it (below) |
+| `--scene-cards --out DIR` | The eight scene cards of [the visual gate](../Docs/VISUAL_QUALITY_GATE.md) at the Ferry Building and The Embarcadero, 2560 x 1440 unless `--width`/`--height` are given (below) |
+| `--clip FILE.json --out DIR` | Moving clips along camera paths: every frame drawn at 60 Hz of wall time, every `60 / fps`-th written as `DIR/<name>/NNNN.png` with `DIR/<name>.json`; each clip is `{"name", "seconds", "fps", "time_of_day", "fov", "keys": [{"t", "eye", "look_at"}]}` in game metres (`bench/clip.rs`) |
+| `--shots-only a,b` | Only the shots or cards whose name contains `a` or `b` |
+| `--settle-timeout S` | The most a shot waits for streaming to settle (600 s) |
+| `--card8-seconds S`, `--card8-fps N`, `--card8-speed M` | Card 8's length (30 s), frames written per second (10) and speed (the player's run, 5.6 m/s) |
+
+Neither needs `--bench`. Every world switch and kill switch applies, and
+`--time-of-day` and `--weather` set the hour and weather of a shot that
+does not give its own.
+
+**Shots.** The file is a JSON array; each shot has a `name` (letters,
+digits, `-`, `_`, `.`; it names the files) and one pose:
+
+```json
+[
+  { "name": "transamerica_oblique",
+    "geo": { "lat": 37.7952, "lon": -122.4028, "alt": 110, "range": 800, "heading": 30, "tilt": 75, "fov": 35 },
+    "time_of_day": 13, "weather": "clear" },
+  { "name": "embarcadero", "eye": [2830.9, 4.5, -2366.9], "yaw": 314, "pitch": -2, "fov": 52 },
+  { "name": "salesforce", "eye": [2830.9, 4.5, -2366.9], "look_at": [2475.1, 160.0, -1627.9] }
+]
+```
+
+- `geo` is the look-at pose of the common web-globe URL convention:
+  (`lat`, `lon`, `alt`) is the target, `alt` in metres above mean sea level;
+  the camera stands `range` metres from it; `heading` is the compass bearing
+  the camera faces (0 north, 90 east); `tilt` is the angle from straight down
+  (0 looks straight down, 90 at the horizon); `fov` is the vertical field of
+  view in degrees. The camera is `target - range * forward` on the WGS84
+  ellipsoid, `forward = (sin tilt sin heading, sin tilt cos heading, -cos tilt)`
+  (east, north, up). The same keys at the top level of a shot are read as a
+  `geo` pose too.
+- `eye` with `yaw` and `pitch` (degrees; yaw 0 looks north, -z, and 90 east,
+  +x; pitch up positive), or `eye` with `look_at`, are game metres (x east,
+  y up, z south).
+- Optional: `fov` (degrees, default 52, the game camera's), `far` (metres;
+  default `--far` if given, else 20000 m so a view across the city is not
+  cut short), `time_of_day`, `weather` (`clear`, `overcast`, `fog`,
+  `drizzle`, `rain`, `storm`), `what`, and keys starting with `_` (comments).
+  Any other key is an error.
+
+Latitude, longitude and height go to game coordinates through
+`eo_data::geo`: the city's projection (`sf-city.json` `meta`: centre and
+metres per degree) times the ground-plan scale (below), and the height as
+height above the surveyed ground kept over the drawn ground (the elevation
+grid is NAVD88; mean sea level is game y -0.55; the drawn ground lifts
+heights above mean sea level by the height scale, and buildings and
+landmarks stand on it at their real size). Both the target and the camera
+are converted and the game camera looks at the target, so the bearing is
+kept and the tilt and distance change with the plan scale; the manifest
+records both.
+
+Before each PNG is written the hour and weather are set with the cloud and
+water clocks held still, the traffic is rebuilt round the shot from the
+simulation's seeded warm-up and stepped 2 s, streaming settles for that view
+(the upload queue empty and every tile, model, far cell and prop the view
+wants resident, up to `--settle-timeout`), and the temporal resolve is drawn
+to convergence under the still camera (two frames one jitter cycle apart
+under 0.5 RMS in 8-bit levels, or a difference that has stopped changing
+over three comparisons: what is left changes every frame, such as the post
+pass's display dither; 48 to 320 frames). `DIR/<name>.json` records
+the input, the resolved eye and orientation in game coordinates (and the
+eye's latitude, longitude and height), the commit the binary was built from
+and the checkout's state, the full command line, the size, the hour, the
+weather, every switch, the traffic, how the settle and the convergence went,
+and notes (an eye inside a building or under the ground, a view against a
+wall, a settle that timed out).
+
+**Scene cards.** `--scene-cards` takes the gate's eight cards at the Ferry
+Building / Embarcadero corridor, each placed from the data (the street
+plan's runs and junctions by name, the shore field, the Ferry Building's
+anchor): 1 Market Street's footway at noon; 2 the painted junction on The
+Embarcadero where Market Street meets it, across the crosswalk; 3 California
+Street among the towers at 18.5 h; 4 the Embarcadero promenade over the bay;
+5 The Embarcadero by the Ferry Building in drizzle at 16 h; 6 card 1's
+street at 21 h; 7 a third-person character standing, walking toward and
+stopped at The Embarcadero's kerb (7a, 7b, 7c) with the on-foot camera rig;
+8 the promenade south-east of the Ferry Building at the player's run,
+rendered every frame at 60 Hz of wall time with streaming and traffic
+running, written as `DIR/card8-traversal/0000.png`, ... and placed so a
+128 m tile boundary is crossed halfway (the frames that cross it are in
+`card8-traversal.json`). Each card's manifest is the shots manifest plus
+the card's number, category and place, and `honoured: false` with the
+reason when the run cannot give what the card needs (no people without the
+optional people assets, so no pedestrians and no character; no traffic with
+`--no-agents`).
+
+```sh
+EO_NATIVE_CACHE=... ./target/release/eo-app --shots views.json --out shots-out --width 1600 --height 900 --time-of-day 13 --weather clear
+EO_NATIVE_CACHE=... ./target/release/eo-app --scene-cards --out cards-out
+```
 
 ### Kill switches
 
@@ -277,22 +369,263 @@ selection:
 | Black Point intertidal | `--dive-site black-point` starts beside barnacle-covered rock and small algae at the west end of Aquatic Park beach. `--black-point-intertidal` adds this habitat to the map. `--no-black-point-intertidal` hides its geometry. The location follows the [National Park Service account](https://www.nps.gov/safr/blogs/a-hidden-community-in-aquatic-park-cove.htm). Individual rocks and organisms are modeled. |
 | Black Point rockweed | `--black-point-rockweed` models forked blades with raised midribs and thickened tips on the rocky habitat. `--no-black-point-rockweed` uses the original ribbons. Blade margins transmit more backlight than the thicker rib. The geometry follows the form described by [Stanford’s Hopkins Marine Station](https://seanet.stanford.edu/brown) and the habitat reported by a [central Bay shoreline survey](https://escholarship.org/uc/item/8jt3v8mk). Individual plants are illustrative. |
 | Dive exposure | `--dive-exposure` compensates for the loss of downwelling light at the eye. `--no-dive-exposure` restores the original exposure |
-| Bridge detail | `--bridge-detail` enables the Golden Gate detail preview (a darker paint tone, ribbed tower legs, framed portal struts, full arch pylons, lamp standards), `--no-bridge-detail` keeps the bridge as exported |
+| Bridge detail | `--bridge-detail` enables the Golden Gate detail preview (a darker paint tone, ribbed tower legs, framed portal struts, full arch pylons, lamp standards), each part drawn only where the bridges' own passes (Bridges, below) leave it as exported; left out, the preview is off. `--no-bridge-detail` is not its off form: it is the bridges' own detail switch (Bridges), so with both the preview's legs and portal struts stand in for that pass |
 | People | `--no-rocketbox`, `--no-rocketbox-motions` (either one: no people) |
-| Props | `--no-props2`, `--no-furniture`, `--no-eztree`, `--no-wires`, `--no-overhead`, `--no-lamp-sprites`, `--no-stand-ins` |
+| Props | `--no-props2`, `--no-furniture`, `--no-eztree`, `--no-wires`, `--no-overhead`, `--no-lamp-sprites`, `--no-stand-ins`, `--no-furniture-models` (a furniture kind whose GLB is not in the checkout draws as a 0.3 m box at its height, not its model drawn in code) |
+| Bridges | `--no-bridges2` (all of these), `--no-bridge-scale`, `--no-bridge-paint`, `--no-bridge-detail`, `--no-bridge-wires`, `--no-bridge-night`; the second pass: `--no-bridges3` (all of its), `--no-bridge-air`, `--no-bridge-finish`, `--no-bridge-members`, `--no-bridge-floods`, `--no-bridge-curtain` |
 | Buildings | `--no-facade-detail`, `--no-facade-age`, `--no-rooms`, `--no-room-frames`, `--no-room-dim`, `--no-roof-colours`, `--no-roof-plant`, `--no-roof-parapet`, `--no-roof-patches`, `--no-wall-paint` |
 | Ground | `--no-ground-hills`, `--no-ground-green`, `--no-ground-contact`, `--no-ground-beach-fit` (the sand round a mapped beach spreads as the JS rule does: over lawns and paving mapped beside it and along a seawall's quay), `--no-terrain-lod` |
+| Water | `--no-water` (the flat sea plane), `--no-water-instanced` (the pass needs multi-draw-indirect-count, as before; without it the flat sea plane), `--no-water-brdf` (the earlier Fresnel, roughness, sun lobe and reflection march), `--no-water-body` (the earlier body colour), `--no-water-foam-cover` (the earlier whitecap cover and foam sampling), `--no-water-glint` (the earlier hashed sparkle), `--no-water-turbid` (the earlier three-wavelength body), `--no-water-shore` (the earlier waterline, wall collar and the lift under piers), `--no-water-foam-lit` (the earlier whitecap shapes and foam light), `--no-water-ppr` (the reflection march alone), `--no-water-wind-texture` (no gust patches, tidal current or rotated chop), `--no-water-grazing` (one mean Fresnel times the sky in one direction) |
+| Waterfront corridor | `--no-ferry-building` (its record's plain box instead), `--no-tram-tracks` (no streetcar rails), `--no-quay-railing` (no guard on the Embarcadero quay wall), `--no-ferry-building-detail` (the Ferry Building's first pass: no ashlar course scale, rustication, deep reveals, modillions, granite plinth, weathering or tower balustrades), `--no-rail-finish` (one bare-steel rail head and a black groove), `--no-corridor-palms` (no Embarcadero palms), `--no-guard-detail` (the quay guard's first pass, on the JS crest: no kick plate, solid pickets), `--no-pier-sheds` (the Ferry Plaza's JS shed boxes), `--no-rail-polish` (the rails' worn band whole at roughness 0.4, no burnished strip or sealant joints), `--no-facade-relief` (the Ferry Building's second pass: one glazing pane an opening, the second pass's reveal tone and dirt under the cornices, no fanlight frames or voussoir tones), `--no-palm-detail` (the corridor palms' first pass: no tree well, root initials, scar lattice, senescent leaves or spear, and unsurveyed palms at the median size) |
 | Scanned surfaces | `--no-cc0` (all), `--no-cc0-street`, `--no-cc0-walls`, `--no-cc0-ground`, `--no-cc0-decals`, `--no-cc0-grime`, `--no-cc0-stains`, `--no-cc0-pom`, `--no-cc0-tiling` |
-| Lighting and sky | `--no-shadows`, `--no-ao`, `--no-contact-shadows`, `--no-atmosphere`, `--no-fog`, `--no-clouds`, `--no-cloud-shadows`, `--no-cloud-depth-haze`, `--no-shafts`, `--no-moon-stars`, `--no-lights` |
+| Lighting and sky | `--no-shadows`, `--no-ao`, `--no-sky-vis`, `--no-contact-shadows`, `--no-atmosphere`, `--no-phys-sky`, `--no-ap-lut`, `--no-night-shaping`, `--no-fog`, `--no-clouds`, `--no-cloud-shadows`, `--no-cloud-depth-haze`, `--no-shafts`, `--no-moon-stars`, `--no-lights` |
 | Lighting additions (opt-in) | `--no-cascade-blend`, `--no-far-shadows`, `--no-ambient-volume`, `--no-probe-grid`, `--no-light-shadows`, `--no-light-shadow-moving`, `--no-headlight-shadows`, `--no-lit-fog`, `--no-smooth-time`, `--no-ground-bounce`, `--no-shadow-slope-bias`, `--no-grime`, `--no-street-life`, `--no-photo-finish`, `--no-facade-clutter`, `--no-shop-light`, `--no-look` (each wins over `--quality`), `--no-rt-gi`, `--no-rt-reflect` (no tier turns `--rt-gi` or `--rt-reflect` on) |
 | World additions (opt-in) | `--no-structures`, `--no-tunnels` (the last of a switch and its `--no-` form wins; `eo-server` takes them too) |
 | Weather | `--no-rain`, `--no-wet`, `--no-wind` |
-| Camera finish | `--no-taa`, `--no-bloom`, `--no-adaptation`, `--no-ssr` |
+| Camera finish | `--no-taa`, `--no-bloom`, `--no-adaptation`, `--no-ev100`, `--no-filmic`, `--no-ssr` |
+| Camera look and exposure | `--no-gg2-camera` (all three below), `--no-camera-look`, `--no-scene-meter`, `--no-lamp-photocell` |
+| Daylight and sky | `--no-gg2-daylight` (all of these), `--no-ground-albedo`, `--no-photo-date`, `--no-clear-sky-state`, `--no-cirrus`; reserved, nothing reads them yet: `--no-terminator-bias`, `--no-spectral-sky` |
+| Golden Gate, fourth pass | `--no-bridges4` (all of these), `--no-bridge-shade2`, `--no-bridge-dielectric`, `--no-bridge-haunch`, `--no-bridge-bracing`, `--no-bridge-pylons`, `--no-bridge-arch2`, `--no-bridge-fender2`, `--no-bridge-crest`, `--no-bridge-collar` |
+| Strait water | `--no-gg2-water` (all of these), `--no-water-exposure`, `--no-water-current`, `--no-water-lean`, `--no-water-ppr-blur`, `--no-beach-profiles`, `--no-water-streak-caps`, `--no-water-far-calm`, `--no-baker-surf`; reserved: `--no-swash-line` |
+| Shore ground | `--no-gg2-ground` (all of these), `--no-beach-sand-limit`, `--no-sand-albedo`, `--no-rocks`, `--no-riprap`, `--no-pier-lines`, `--no-season-seam`; reserved: `--no-ground-steps` |
+| Far layer | `--no-gg2-far` (all of these), `--no-far-fallback`, `--no-landmark-far-models`, `--no-far-tree-density`, `--no-presidio-rule`; reserved: `--no-far-paint` |
+| Corridor traffic | `--no-corridor-traffic` (the whole layer), `--no-deck-walkers` |
+| Coastal vegetation | `--no-gg2-vegetation` (all of these), `--no-coastal-trees`, `--no-ground-cover`, `--no-hill-rock` |
+| Round 3, all tracks | `--no-gg3` turns every round-3 track's roll-up on (restores round 2's output) |
+| Frame budget | `--no-gg3-perf` (all of these), `--no-draw-ranges` |
+| Photo dates and sky | `--no-gg3-sky` (all of these), `--no-photo-season`, `--no-cirrus2`, `--no-sky-day-fade`, `--no-live-calendar` |
+| Colour and camera | `--no-gg3-colour` (all of these), `--no-sun-spectrum2`, `--no-meter-highlights`; reserved: `--no-sky-calibration`, `--no-camera-style`, `--no-haze-visibility` |
+| Terrain surface | `--no-gg3-ground` (all of these), `--no-facet-normal-fix`, `--no-terrain-detail`, `--no-terrain-materials`, `--no-sand-detail2`; reserved: `--no-bluff-soil`, `--no-bank-grade` |
+| Scanned rock | `--no-gg3-rock` (all of these), `--no-scan-rocks`, `--no-cliff-dressing`, `--no-surf-rocks`, `--no-scan-riprap`, `--no-rock-geology` |
+| Coastal vegetation, round 3 | `--no-gg3-vegetation` (all of these), `--no-naip-planting`, `--no-cliff-rock-cover`, `--no-far-species`, `--no-far-tree-light`, `--no-bloom-date`, `--no-grass-color-variety`; reserved: `--no-veg-scans` |
+| Grass, second pass | `--no-grass2` (all of these: run 1's meadow), `--no-meadow-cover`, `--no-meadow-types`, `--no-blade-shading` |
+| Grass, third pass | `--no-grass3` (all of these: run 2's meadow), `--no-scrub-mounds`, `--no-scrub-bloom`, `--no-bare-ground`, `--no-meadow-breakup` |
+| Flora (scrub species, grassland season, chert, serpentinite, flowers) | `--no-flora` (all of these: the third grass pass's output), `--no-scrub-species`, `--no-grass-ramp`, `--no-bluff-scrub`, `--no-chert-ground`, `--no-serpentinite`, `--no-flora-flowers` |
+| Flora 2 (Battery Spencer knoll, Baker bluff rock and boulders) | `--no-flora2` (all of these: the flora pass's output), `--no-knoll-ground`, `--no-knoll-relief`, `--no-bluff-rock`, `--no-boulder-surf` |
+| Surf and bathymetry | `--no-gg3-water` (all of these), `--no-bathymetry`, `--no-surf-break`, `--no-swash-foam`, `--no-obstacle-foam`, `--no-water-body2`; reserved: `--no-ppr-dash` |
+| Golden Gate, fifth pass | `--no-gg3-bridge` or `--no-bridges5` (all of these), `--no-paint-brdf2`, `--no-paint-weathering`, `--no-concrete2`, `--no-leg-cells`, `--no-cable-detail` |
 | Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count`, `--no-count-emulation` |
 | Interface and sound | `--no-hud`, `--no-audio`, `--audio-null` (mix to a null output), `--no-settings-apply` (`--ui`: the settings file does not reach the renderer or the world) |
 
 A new visual feature should come with its own switch, defaulting to on only
 once it has been reviewed.
+
+The lighting switches: `--no-phys-sky` keeps the browser game's light rig,
+aerosol and dome anchor in place of the physical daylight (the sun, the sky
+and the ground's light from the clear coastal atmosphere in `eo-look`
+`atmosphere` and `phys`, the sky drawn at the sun's own scale, the city's
+reflections read from the sky tables); `--no-ap-lut` keeps the haze toward
+the horizon's colour in place of the aerial-perspective volume; `--no-filmic`
+keeps the ACES fit with the post chain's shoulder, grade and finish in place
+of the filmic curve, the daylight white balance and the chroma gain;
+`--no-ev100` keeps the JS exposure curve in place of the incident meter's
+EV100; `--no-sky-vis` keeps the occlusion pass's 4 m contact term in place of
+the canyon-scale sky visibility and wall bounce; `--no-night-shaping` keeps
+the rig's rim light on at night (without it an unlit wall at night is lit by
+the night sky's fill and the practicals alone). All six together give the
+previous output.
+
+The camera switches. `--no-camera-look` keeps the filmic curve, its chroma
+gain and the incident meter's +0.85 EV offset in place of the camera look.
+The camera look is the daylight white balance, the ISO 12232 SOS placement
+(the meter's grey at scene 0.18, sRGB 118 at 0.2215) and the ACES 2.0 output
+transform for a 100-nit sRGB display, baked into a 65^3 table (eo-look
+`tone::camera`); the submerged camera (`--water-optics`) finishes through
+the same table. `--no-filmic` still keeps the older ACES-fit chain and turns
+the camera look off with it. `--no-scene-meter` keeps the dome-estimate meter
+in place of the reflected-light meter on the drawn frame: a
+quarter-resolution, centre-weighted luminance histogram, K = 12.5, within 2
+stops of the incident reading, holding the top 2 % under the shoulder.
+`--no-lamp-photocell` keeps the sun-altitude lamp ramp in place of
+street-lamp photocells (ANSI C136.10 levels, 1.5 +- 0.5 fc on, at most 1.5x
+off) on the twilight illuminance. `--no-gg2-camera` turns all three off and
+gives the previous output.
+
+The daylight switches. A clear day's sky is cloudless, cirrus-only or fair
+cumulus, drawn per game day of the world clock from San Francisco airport's
+2014-2023 METAR shares for the month of the sun's date (the table is
+`eo-look/data/ksfo-clear-day-sky.csv`, generated by `ksfo-clear-day-sky.py`
+from the query it records; input through `EO_KSFO_METAR_CSV`,
+digest-checked). The state fades with the weather's clear weight
+(1 - smoothstep(0.1, 0.3, overcast)), with no jump. `--no-clear-sky-state`
+keeps the fair-weather sky on every clear day; `--no-cirrus` keeps the 5.2 km
+sheet in place of fibrous ice cloud at 9.5 km; `--no-ground-albedo` keeps the
+city's ground albedo under the sky light everywhere in place of the land
+cover's round the eye; `--no-photo-date` makes a shot ignore its
+`day_of_year`. Shots can hold the sky (`sky`), the date (`day_of_year`) and
+the game day (`game_day`). `--no-gg2-daylight` turns them all off.
+
+The Golden Gate's fourth pass (`--no-bridges4`, read by eo-landmarks
+`suspension`): `--no-bridge-shade2` keeps the JS's dark bake on the struts,
+fins, bracing and floor beams and the baked occlusion in place of one paint
+and the sky the deck and the opposite leg hide; `--no-bridge-dielectric`
+adds the sea's light on top of the environment's ground share instead of
+replacing it; `--no-bridge-haunch`, `--no-bridge-bracing`,
+`--no-bridge-pylons`, `--no-bridge-arch2`, `--no-bridge-fender2` and
+`--no-bridge-collar` leave out the portal struts' casings and haunches, the
+bracing under the roadway, the pylons S1, S2, N1 and N2 with the tie-downs
+and anchorage housings, the Fort Point arch's laced ribs, the south fender
+at its published size, and the truss closed at the tower legs;
+`--no-bridge-crest` keeps the roadway's sag in place of its surveyed crest at
+midspan (the corridor traffic follows the deck either way).
+
+The water switches (`--no-gg2-water`, read by eo-water `switches`):
+`--no-water-exposure` leaves out the exposure field and the strait's
+measured wind floor; `--no-water-current` the tidal current on the game's
+clock; `--no-water-lean` the anisotropic cascade fade and sub-pixel slope
+variance; `--no-water-ppr-blur` the slope-blurred projected reflection;
+`--no-beach-profiles` each beach's own foreshore slope and turbid bottom;
+`--no-water-streak-caps` the measured afternoon wind and streaked
+whitecaps; `--no-water-far-calm` the far calm and current lines;
+`--no-baker-surf` the open coast's surf.
+
+The shore-ground switches (`--no-gg2-ground`, read by eo-landmarks
+`features::shore_ground`): `--no-beach-sand-limit` lets the beach sand run
+past the berm and the cliff toe; `--no-sand-albedo` keeps the earlier sand
+tone in place of measured dry and wet sand, the tide-keyed damp band, wrack
+and footprints; `--no-rocks` leaves out the boulders; `--no-riprap` the
+quarried-block revetment and the Fort Point seawall's coursed granite;
+`--no-pier-lines` the decks built from the citywide map's pier lines
+(Torpedo Wharf, the Coast Guard walkway); `--no-season-seam` keeps the city
+terrain and the far layer on their own dryness curves.
+
+The far-layer switches (`--no-gg2-far`, eo-render `far_city`):
+`--no-far-fallback` keeps the far layer off where the adapter lacks
+multi-draw-indirect-count; `--no-landmark-far-models` lets Fort Point's
+authored model leave residency at its old range; `--no-far-tree-density`
+keeps the old far park tree sampling; `--no-presidio-rule` keeps the
+Presidio's buildings in the generic palette instead of off-white walls and
+red tile roofs.
+
+The corridor traffic (eo-app `agents::corridor`): through traffic on US-101,
+CA-1 and Marina Boulevard and walkers on the bridge's east walk, from a flow
+layer on the world clock (eo-sim `corridor`) at the published counts, with
+the driver handbook's three-second gap. `--no-corridor-traffic` leaves the
+whole layer out; `--no-deck-walkers` the walkers alone.
+
+The coastal vegetation (eo-landmarks `vegetation`): coastal tree stands,
+ground cover and hill rock on the props tiles. `--no-coastal-trees` keeps the
+park species in the mapped woods; `--no-ground-cover` leaves out the grass,
+tufts, flowers and scrub; `--no-hill-rock` the rock outcrops.
+`--no-gg2-vegetation` turns all three off.
+
+The round-3 switches. `--no-gg3` turns every round-3 track off at once and
+gives round 2's output; each track also has its own roll-up.
+
+The frame budget (`--no-gg3-perf`, eo-render `pace`): `--no-draw-ranges`. On
+an adapter without multi-draw-indirect-count, the camera's opaque and glass
+lists and each refreshed shadow cascade keep one slot per object, and the
+cull pass writes instance count 0 or 1 into each slot. By default only the
+blocks of 64 slots that this frame's cull can fill are issued, in slot
+order. The renderer keeps a CPU copy of the object table and the far layer's
+residency to decide this; a block written in the last 8 frames is issued
+whole. The frame is the same either way. With `--no-draw-ranges` every slot
+is issued as before: about 640 k Metal draws a frame and 26 ms of
+render-thread time on golden_gate, plus wgpu's indirect-validation pass
+before the water pass. The bench also reports `fixed_slot_lists` (slots
+issued per frame), `gpu_serial_ms` (each pass's end minus the previous
+pass's end, which adds up to the frame; begin-to-end pass windows overlap
+on Apple GPUs), the PPR and scene-meter passes, and a budget verdict of
+"not run" when no standard path ran.
+
+The photo-date sky (`--no-gg3-sky`, eo-look `season`): `--no-photo-season`
+keeps round 2's season curve, read once at load, instead of the cited
+grassland phenology the far layer reads every frame; `--no-cirrus2` keeps
+round 2's one high deck and its streaks instead of the second cirrus deck,
+which takes its METAR amount (FEW/SCT/BKN from KSFO, or a shot's
+`sky_oktas`) and covers that share of the plane at every mip;
+`--no-sky-day-fade` lets a clear day's sky flip at the game day boundary
+instead of giving way to the next day's over the world clock's 21-24 h;
+`--no-live-calendar` keeps the date on 22 September instead of advancing one
+day each game day (the renderer's sky tells the calendar the world clock).
+
+The colour and camera (`--no-gg3-colour`, eo-look `features`):
+`--no-sun-spectrum2` draws the direct sun's colour from the atmosphere's
+three channels instead of its spectrum; `--no-meter-highlights` restores the
+scene meter's 2 % highlight hold and its centre weighting (by default the
+meter averages the whole frame, ISO 2720's K = 12.5). `--no-sky-calibration`,
+`--no-camera-style` and `--no-haze-visibility` are reserved and change
+nothing. `EO_LOOK_DEBUG=10..17` (also read as `EO_AO_DEBUG`) draws one term
+of a surface's scene radiance, log2-encoded over 2^-14..2^4: 10 all, 11 sun
+diffuse, 12 sun specular, 13 sky diffuse, 14 sky specular, 15 bounce, 16
+none (aerial in-scatter only), 17 unit white; decode with eo-look
+`probe::decode_level`. (The colour track's ACES 1.3 option is not in this
+build until its licence text is approved.)
+
+The terrain surface (`--no-gg3-ground`, eo-landmarks `features::gg3_ground`;
+the survey readers need `EO_SURVEY_ROOT`, and without it the ground draws as
+round 2): `--no-facet-normal-fix` keeps round 2's two-sided flip of the
+interpolated normal instead of orienting it by the triangle and bending it
+toward the eye's horizon; `--no-terrain-detail` leaves out the 1-2 m relief
+from the 1 m DEM (published through eo-data `detail_ground`, which the
+plants and rocks sit on); `--no-terrain-materials` the ground materials on
+the NAIP land cover; `--no-sand-detail2` keys the damp band, wrack and
+footprints to round 2's constant slope instead of each beach's measured
+foreshore. `--no-bluff-soil` and `--no-bank-grade` are reserved.
+
+The scanned rock (`--no-gg3-rock`, eo-landmarks `rocks::scan`; the Poly Haven
+scans under `EO_SURVEY_ROOT`, cooked under `EO_NATIVE_CACHE`): `--no-scan-rocks`
+leaves out every scan (round 2's procedural rock); `--no-cliff-dressing` the
+cliff band's rock faces; `--no-surf-rocks` the intertidal rock field from the
+imagery and the bed; `--no-scan-riprap` the
+revetment's armour as scanned stone; `--no-rock-geology` keeps round 2's
+colours instead of tints from the mapped geologic units.
+
+The coastal vegetation, round 3 (`--no-gg3-vegetation`, eo-landmarks
+`vegetation::Gg3`): `--no-naip-planting` keeps round 2's placement instead of
+scrub, trees and grass placed from the 0.6 m NAIP image; `--no-cliff-rock-cover`
+lets plants stand on a cliff over a beach, mapped bare rock or a sand cliff;
+`--no-far-species` keeps round 2's far tree forms instead of the near tier's
+coastal species; `--no-far-tree-light` keeps round 2's far card light instead
+of a leaf volume with transmission; `--no-bloom-date` leaves out the cited
+bloom window and the flower heads' own colour; `--no-grass-color-variety`
+keeps every grass bunch in the ground's tone (no meadow mosaic of green and
+cured patches by aspect, slope and hollow, no grey-green or brown patches, no
+lighter seed heads or flower-tinted tips, no olive to grey-green scrub).
+`--no-veg-scans` is reserved.
+
+The second grass pass (`--no-grass2`, eo-landmarks `vegetation::Grass2`):
+`--no-meadow-cover` keeps the scattered bunches and tufts instead of a meadow
+patch in every 1 m cell of grass, scrub and (inside the NAIP image) the bare
+class, each a matted thatch and short-sward mat with blades over it, and keeps
+the soil the terrain materials draw on the bare class; `--no-meadow-types`
+makes every patch short sward (no wild oats, fescue tussocks, clover and
+forbs, ice plant or thatch patches by slope, aspect, bluff edge and scrub, and
+no low scrub mounds in the scrub's gaps); `--no-blade-shading` leaves out the
+blades' leaf optics (transmission, keel and rolled-margin normals, clump
+occlusion, waxy sheen).
+
+The third grass pass (`--no-grass3`, eo-landmarks `vegetation::Grass3`; it acts
+inside the second pass's meadow cover): `--no-scrub-mounds` leaves out the
+lumpy coastal scrub mounds (coyote brush, sagebrush, bush lupine; leaf clumps
+0.5-1.5 m tall) planted where the land cover and NAIP show scrub (including
+the summer image's bright green) and on the Marin headland's seaward slopes;
+`--no-scrub-bloom` leaves the lupine stands out of flower (coyote brush
+there); `--no-bare-ground` gives the eroded ground (steep faces the NAIP shows
+bare, red-brown soil, warm bare knoll tops) back to the meadow and the
+terrain's bare class back to sward, instead of a red-brown soil mat with
+sparse tufts; `--no-meadow-breakup` keeps the meadow's round type and cure
+patches, the patch levels' fixed distances (a band across the view) and the
+mats' full discs.
+
+The surf and bathymetry (`--no-gg3-water`, eo-water `switches`; the CUDEM
+tiles under `EO_SURVEY_ROOT`): `--no-bathymetry` keeps the geometric exposure
+instead of the measured sea bed and the swell refracted and shoaled over it;
+`--no-surf-break` the surf breaking where the depth says; `--no-swash-foam`
+the bay beaches' thin swash line; `--no-obstacle-foam` the white water at
+rocks, the fender and walls; `--no-water-body2` keeps round 2's constant
+grey in the reflected sky. `--no-ppr-dash` is reserved. `--no-gg2-water`
+turns these off too.
+
+The Golden Gate's fifth pass (`--no-gg3-bridge` or `--no-bridges5`, eo-landmarks
+`suspension`): `--no-paint-brdf2` keeps the fourth pass's paint instead of
+the District's named colour match as a dielectric film; `--no-paint-weathering`
+the chalking, touch-up patches, rust bloom at rivet rows and dirt on ledges;
+`--no-concrete2` the pylons', housings', piers' and fender's weathered
+concrete with its pour lifts and zero-mean staining; `--no-leg-cells` the
+tower legs' cellular section and the portal casings' own shadow;
+`--no-cable-detail` the cable bands, four-rope suspender groups, spacing
+clamps and the lamp standards at the published 150 ft pitch.
 
 ### Quality tiers
 
@@ -406,6 +739,7 @@ is turned off, the log says so in one line, and the game runs without it.
 | `EO_AUDIO_ROOT` | Sound clips | The game |
 | `EO_SIGN_ART_ROOT` | Official sign art and the sign font | The game, `tools/fetch-sign-art.mjs` |
 | `EO_DEM_ROOT` | Elevation tiles for the far shore | The game |
+| `EO_SURVEY_ROOT` | The Golden Gate survey set: NAIP 0.6 m aerial tiles, USGS 3DEP 1 m DEMs, NOAA CUDEM topobathy, Poly Haven scanned rocks and plants (`assets/survey-manifest.json`) | The game (`eo_farshore::survey`, read by nothing yet), `tools/survey-manifest.mjs` |
 | `EO_AERIAL_DIR` | Aerial imagery | Tools only (the roof survey and `tools/fetch-aerial.mjs`) |
 | `EO_POLYHAVEN_STORE` | Poly Haven downloads | The Blender building scripts |
 
@@ -558,7 +892,22 @@ the freeway columns, by land use and foot traffic
 **Water.** A camera-following grid displaced by a cascaded FFT ocean
 spectrum, masked by a citywide shore field, with its own optics per body of
 water, screen-space reflection, surf on the mapped beaches and a shore
-collar. `--no-water` draws a flat sea plane.
+collar. Its patches are one instanced indirect draw, so it draws on adapters
+without multi-draw-indirect-count too. The slope variance a pixel does not
+resolve goes to the BRDF (the Cox-Munk total for the wind kept at every
+range), with the Fresnel averaged over the visible facets and a Beckmann sun
+lobe; the body's colour is the water-leaving reflectance of the bay's and
+the coast's optical properties under the city's own irradiance
+(`eo-water` `optics`, integrated over the visible spectrum for the bay's
+sediment); whitecaps cover what the Monahan and O'Muircheartaigh fit gives,
+drawn as lit foam patches that dissolve as they age. The sun's glints are a
+per-pixel count of the facets that mirror its disc, so the glitter path
+tapers by itself; the sky reflection is integrated over the facets the eye
+sees; the frame's own geometry is projected across the sea plane
+(pixel-projected reflection) for decks, cables and the skyline. At the shore
+the beach sheet fades into the sand, a seawall sends the chop back
+(clapotis), and piers on piles stand over the sea (`eo-water` `field`
+`PIERS_OVER_WATER`). `--no-water` draws a flat sea plane.
 
 Run `./target/release/eo-app --water-optics --start-underwater` for the
 submerged fly camera. Hold Ctrl for fine movement, E to surface and Q to
@@ -611,7 +960,27 @@ lamps, vehicle lamps and lit windows. The camera finish is temporal
 anti-aliasing, bloom, exposure adaptation, tone mapping and a grade.
 
 **Landmarks.** The two bridges, the quay wall and piers, seawalls, plazas,
-landmark towers and the bridges' lights are generated by `eo-landmarks`.
+landmark towers and the bridges' lights are generated by `eo-landmarks`. The
+bridges' heights and members follow the drawn terrain's height scale, so
+each keeps its published proportions on the wider ground plan; they wear
+their cited paint (International Orange, the west span's aluminium grey);
+the Golden Gate towers carry their notched legs and ribbed portal struts and
+its deck its painted steel underside; the cables and suspenders are drawn
+after the atmosphere at every distance, anti-aliased at a screen-space floor
+width; at night the Golden Gate towers are floodlit and the west span's
+suspenders carry their LEDs (`eo_landmarks::suspension::BridgeFeatures`).
+The second pass gives the wires the aerial perspective and a hairline's
+mean half-section shading (`--no-bridge-air`); paints the coats as
+dielectric films at a low sheen, lights the members' undersides with the
+sea's reflected light, shadows what stands under a deck from the sun past
+the shadow maps' reach and eases the baked occlusion (`--no-bridge-finish`);
+adds the cable saddles' housings, cable bands and sockets, the Fort Point
+arch's open web, the pylons' pilasters, the south pier's fender, the lamp
+standards and the west span's floor system and laced tower bracing
+(`--no-bridge-members`); lights the Golden Gate towers by their placed
+floods above and below the roadway and plays the suspender LEDs in bands
+(`--no-bridge-floods`); and veils a receding suspender curtain at its mean
+cover (`--no-bridge-curtain`).
 
 **Traffic and people.** `eo-sim` runs traffic on the street graph with
 signals and junction rules, and pedestrians on the sidewalks and crossings,

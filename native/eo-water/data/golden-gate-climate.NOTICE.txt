@@ -1,0 +1,20 @@
+golden-gate-climate.json - Golden Gate wind climatology and tidal-current constants
+
+Source: NOAA National Ocean Service, Center for Operational Oceanographic Products
+and Services (CO-OPS): station 9414290 San Francisco, CA, hourly wind (2022-2024),
+and current station SFB1203 Golden Gate Bridge, harmonic constants of bin 18 (9.1 m).
+https://tidesandcurrents.noaa.gov/ , API https://api.tidesandcurrents.noaa.gov/
+Licence: public domain (a work of the United States Government, 17 U.S.C. 105).
+Retrieved: 2026-11-18
+Source sha256 wind-9414290-2022.json: b6f36b71f8f5c48ba442e1bc7e7b505a71ee52fffb743ba36d5872ebc9b417de
+Source sha256 wind-9414290-2023.json: 5b799462b5b4e66fa09f606e54d440190ba383930e7f17883f5886577b37411b
+Source sha256 wind-9414290-2024.json: 9aeb153bd24cd0a4f616a7eedc108d34e4b7097ee02a8b881987b41a6cbd5ab4
+Source sha256 harcon-SFB1203-bin18.json: 24c85d95ae29b78bbf0a92fcfef7247e055685db5c6b19c4a34d6137e97b1b67
+Produced by:   native/eo-water/data/build-golden-gate-climate.py (version 1)
+Output sha256: 957bea58ce7b7bd0b125cf6cbcb045cd713a1121d0bddec832b21b815c7ce68f
+
+Kept: the mean hourly wind speed and its vector-mean direction per month and hour
+of the day (local standard time) over the three years; the current's major-axis
+amplitude and Greenwich phase for the constituents of at least 2 cm/s, and its
+mean (residual) speed along the major axis.
+The wind is measured at the shore station, not over the open strait.
