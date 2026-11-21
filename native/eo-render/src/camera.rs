@@ -19,7 +19,7 @@ pub struct Camera {
     pub near: f32,
     pub far: f32,
     pub aspect: f32,
-    /// sub-pixel offset of the projection (NDC), the temporal resolve's jitter.
+    /// NDC offset of the optical centre. Rendering adds the temporal sample's subpixel jitter.
     pub jitter: [f32; 2],
 }
 

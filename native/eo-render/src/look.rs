@@ -1056,7 +1056,9 @@ impl LookGpu {
         let exposure = match terms {
             Some(t) => {
                 let _span = crate::hitch::span(crate::hitch::Phase::SkyUpdate);
-                self.sky.update(queue, &Camera { jitter: [0.0; 2], ..*cam }, &f, &t, out_size, self.sky_depth_ok.load(std::sync::atomic::Ordering::Relaxed))
+                let sample = self.sky.jitter();
+                let unjittered = Camera { jitter: [cam.jitter[0] - sample[0], cam.jitter[1] - sample[1]], ..*cam };
+                self.sky.update(queue, &unjittered, &f, &t, out_size, self.sky_depth_ok.load(std::sync::atomic::Ordering::Relaxed))
             }
             None => f.exposure,
         };

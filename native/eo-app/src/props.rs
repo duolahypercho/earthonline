@@ -1023,12 +1023,38 @@ pub fn read_poses(path: &std::path::Path) -> anyhow::Result<Vec<CapturePose>> {
     v.as_array().ok_or_else(|| anyhow::anyhow!("expected an array of capture poses"))?.iter().map(|p| {
         let e = &p["eye"];
         let player = p.get("player").map(|value| serde_json::from_value(value.clone())).transpose()?;
+        let projection_shift = p.get("projection_shift_ndc")
+            .map(|v| serde_json::from_value::<[f32; 2]>(v.clone())).transpose()?.unwrap_or([0.; 2]);
         Ok(CapturePose {
             name: p["name"].as_str().unwrap_or("pose").to_string(),
-            camera: eo_render::camera::Camera { eye: Vec3::new(f(&e[0]), f(&e[1]), f(&e[2])), yaw: f(&p["yaw"]), pitch: f(&p["pitch"]), fov_y_deg: f(&p["fov_y_deg"]), near: f(&p["near"]), far: f(&p["far"]), aspect: f(&p["aspect"]), jitter: [0.0; 2] },
+            camera: eo_render::camera::Camera { eye: Vec3::new(f(&e[0]), f(&e[1]), f(&e[2])), yaw: f(&p["yaw"]), pitch: f(&p["pitch"]), fov_y_deg: f(&p["fov_y_deg"]), near: f(&p["near"]), far: f(&p["far"]), aspect: f(&p["aspect"]), jitter: projection_shift },
             player,
         })
     }).collect()
+}
+
+#[cfg(test)]
+mod capture_pose_tests {
+    use super::read_poses;
+    use glam::Vec3;
+    use serde_json::json;
+
+    #[test]
+    fn captured_principal_point_survives_import() {
+        let path = std::env::temp_dir().join(format!("eo-optical-centre-{}.json", std::process::id()));
+        let plain = json!({"eye":[0,0,0], "yaw":0, "pitch":0, "fov_y_deg":52,
+                           "near":0.05, "far":120, "aspect":1.5});
+        let mut shifted = plain.clone();
+        shifted["projection_shift_ndc"] = json!([0.12, -0.08]);
+        std::fs::write(&path, serde_json::to_vec(&[plain,shifted]).unwrap()).unwrap();
+        let poses = read_poses(&path).unwrap();
+        std::fs::remove_file(path).unwrap();
+        for (p, shift) in poses.iter().zip([[0.,0.],[0.12,-0.08]]) {
+            let projected = p.camera.view_proj().project_point3(Vec3::NEG_Z);
+            assert!((projected.x - shift[0]).abs() < 1e-6);
+            assert!((projected.y - shift[1]).abs() < 1e-6);
+        }
+    }
 }
 
 /// the `--capture-props2` poses, chosen from the placement (the same with and

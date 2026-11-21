@@ -1483,7 +1483,11 @@ impl Renderer {
         self.observe_view(cam, None); // the streamers' view (unjittered)
         // the coming frame's sub-pixel jitter (TAA); every view of the frame goes through it.
         self.look.sky.begin_frame(self.look.out_size());
-        let jittered = Camera { jitter: self.look.sky.jitter(), ..*cam };
+        let temporal = self.look.sky.jitter();
+        let jittered = Camera {
+            jitter: [cam.jitter[0] + temporal[0], cam.jitter[1] + temporal[1]],
+            ..*cam
+        };
         let cam = &jittered;
         if let Some(f) = self.farshore.get().filter(|_| self.farshore_active()) {
             f.update(queue, cam, self.water_active()); // the far terrain's nodes and camera (jittered, as the city), and where the sea is drawn
