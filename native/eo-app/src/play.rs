@@ -77,6 +77,7 @@ fn base_args() -> Args {
         house_oak_finish: false,
         house_oak_joinery: false,
         house_floor_reflections: false,
+        house_fitted_dining: false,
         house_dining_meter: false,
         house_glazing: true,
         beaver_house: false,
@@ -147,7 +148,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
-            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" => {
+            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" => {
                 a.beaver_house = true;
                 a.house_finishes = true;
                 a.house_patina = true;
@@ -157,6 +158,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
                     "--house-dining-light" => a.house_dining_light = true,
                     "--house-downstairs-light" => a.house_downstairs_light = true,
                     "--house-table-light" => a.house_table_light = true,
+                    "--house-fitted-dining" => a.house_fitted_dining = true,
                     "--house-oak-finish" => a.house_oak_finish = true,
                     "--house-dining-meter" => a.house_dining_meter = true,
                     "--house-floor-reflections" => a.house_floor_reflections = true,
@@ -168,6 +170,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-dining-light" => a.house_dining_light = false,
             "--no-house-downstairs-light" => a.house_downstairs_light = false,
             "--no-house-table-light" => a.house_table_light = false,
+            "--no-house-fitted-dining" => a.house_fitted_dining = false,
             "--no-house-oak-finish" => a.house_oak_finish = false,
             "--no-house-dining-meter" => a.house_dining_meter = false,
             "--no-house-floor-reflections" => a.house_floor_reflections = false,
@@ -1003,27 +1006,27 @@ mod house_tests {
 
     #[test]
     fn beaver_street_to_bed_and_top_floor() {
-        check_beaver_walk(false, false, false, false);
+        check_beaver_walk(false, false, false, false, false);
     }
 
     #[test]
     fn furnished_variant_reaches_bed_and_top_floor() {
-        check_beaver_walk(true, false, false, false);
+        check_beaver_walk(true, false, false, false, false);
     }
 
     #[test]
     fn weathered_variant_keeps_the_entry_and_stairs_clear() {
-        check_beaver_walk(true, true, false, false);
+        check_beaver_walk(true, true, false, false, false);
     }
 
     #[test]
     fn sewn_furniture_keeps_the_door_and_upstairs_route_clear() {
-        check_beaver_walk(true, true, true, false);
+        check_beaver_walk(true, true, true, false, false);
     }
 
     #[test]
     fn photo_terrace_keeps_the_door_bed_and_stairs_reachable() {
-        check_beaver_walk(true, true, true, true);
+        check_beaver_walk(true, true, true, true, false);
     }
 
     #[test]
@@ -1287,12 +1290,20 @@ mod house_tests {
         assert!(disabled.house_photo && !disabled.house_mission_roof);
     }
 
-    fn check_beaver_walk(finishes: bool, patina: bool, furniture: bool, photo: bool) {
+    #[test]
+    fn fitted_dining_is_walkable_from_the_closed_door_to_the_bed_and_kitchen() {
+        check_beaver_walk(true, true, true, true, true);
+        let (off, _) = parse(&["--house-fitted-dining".into(),"--no-house-fitted-dining".into()]).unwrap();
+        assert!(off.house_photo && !off.house_fitted_dining);
+    }
+
+    fn check_beaver_walk(finishes: bool, patina: bool, furniture: bool, photo: bool, fitted: bool) {
         let mut args = base_args();
         args.house_finishes = finishes;
         args.house_patina = patina;
         args.house_furniture = furniture;
         args.house_photo = photo;
+        args.house_fitted_dining = fitted;
         args.house_photo_lod = photo;
         args.beaver_house = true;
         args.kit = false;
@@ -1304,7 +1315,9 @@ mod house_tests {
             use eo_render::scene::{LOD_AUTHORED_DETAIL, TABLE_BOARD_BIT, THIN_FIBRE_BIT};
             let parts = &world.scene.objects;
             let boards: std::collections::BTreeSet<_> = parts.iter()
-                .filter(|p| p.kind & TABLE_BOARD_BIT != 0).map(|p| p.material).collect();
+                .filter(|p| if fitted {
+                    p.kind & eo_render::scene::FITTED_ROOM_BIT != 0 && world.authored.materials.names[p.material as usize].starts_with("21-beaver-fitted/Dining tabletop · plank")
+                } else {p.kind & TABLE_BOARD_BIT != 0}).map(|p| p.material).collect();
             assert_eq!(boards.len(), 4, "every dining plank retains its grain mapping");
             assert!(parts.iter().any(|p| {
                 let centre = (Vec3::from(p.min) + Vec3::from(p.max)) * 0.5;
@@ -1356,10 +1369,12 @@ mod house_tests {
             let x_axis = (house.point(1., 0., 0.) - origin).normalize();
             let z_axis = x_axis.cross(DVec3::Y) * x_axis.cross(DVec3::Y).dot(house.point(0., 0., 1.) - origin).signum();
             // Collision probes are measured from the installed centre of each table.
-            let dining = house.point(2.375, 0., 7.575) + if photo {
+            let dining = if fitted { house.point(3.137,0.,6.537) } else { house.point(2.375, 0., 7.575) + if photo {
                 x_axis * 0.17 - z_axis * 0.70
-            } else { DVec3::ZERO };
-            let table_axis = if photo { -x_axis } else { z_axis };
+            } else { DVec3::ZERO } };
+            let table_axis = if fitted {
+                (house.point(3.281,0.,7.555) - dining).normalize()
+            } else if photo { -x_axis } else { z_axis };
             let near_chair = if photo { 1.053 } else { 1.233 };
             let kitchen = house.point(0.15, 0., 12.72);
             for (label, surface, height) in [
@@ -1458,7 +1473,16 @@ mod house_tests {
             }
             panic!("blocked at {:?} walking to ({x}, {z})", body.feet());
         };
-        if furniture {
+        if fitted {
+            // Walk from the entrance to the table, along the kitchen, to the window bench
+            // and back around the chairs to the stair. Each point is in the native parcel.
+            for (x,z) in [(5.95,1.30),(4.55,2.60),(4.28,4.20),(1.80,4.20),
+                (1.80,6.64),(1.35,9.38),(1.35,11.53),(3.50,11.53),(4.36,9.23),
+                (4.45,7.62),(4.55,5.20),(4.50,3.65),(5.95,2.10)] {
+                let feet = walk(x,z);
+                assert!((feet.y-house.point(x,0.,z).y).abs()<0.06,"climbed furniture on the fitted route");
+            }
+        } else if furniture {
             // Walk both aisles between the sideboard, the six chairs, and the stairs.
             for (x, z) in [(5.95, 1.3), (4.10, 1.3), (4.10, 5.60), (1.00, 5.60),
                            (1.00, 9.35), (4.10, 9.35), (4.10, 2.10), (5.95, 2.10)] {

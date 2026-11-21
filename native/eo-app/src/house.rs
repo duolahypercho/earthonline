@@ -1,5 +1,6 @@
 //! Site and collision integration for the Blender-built terrace at 21 Beaver Street.
 mod dimensions;
+mod fitted;
 mod table_light;
 mod oak;
 use table_light::TableLight;
@@ -93,6 +94,8 @@ struct RoomLight {
 }
 
 pub struct Finishes {
+    fitted: Option<fitted::Recipe>,
+    fitted_maps: Vec<eo_assets::kit::BakedMaps>,
     downstairs_light: bool,
     dining_meter: Option<[f32; 3]>,
     dining_camera_exposure: Option<f32>,
@@ -124,9 +127,11 @@ impl Finishes {
         };
         let photo_dir = directory.join("furniture/photo");
         let blender_bedroom = args.house_blender_bedroom && photo && furniture && patina;
-        let dining_light = args.house_dining_light && args.interior_lighting && photo && furniture && patina;
-        let downstairs_light = args.house_downstairs_light && args.interior_lighting && photo && furniture && patina;
-        let table_enabled = (args.house_table_light || args.house_oak_joinery) && args.interior_lighting && photo && furniture && patina;
+        let fitted_enabled = args.house_fitted_dining && photo && furniture && patina;
+        let dining_dir = if fitted_enabled { photo_dir.join("fitted-dining") } else { photo_dir.clone() };
+        let dining_light = (args.house_dining_light || fitted_enabled) && args.interior_lighting && photo && furniture && patina;
+        let downstairs_light = (args.house_downstairs_light || fitted_enabled) && args.interior_lighting && photo && furniture && patina;
+        let table_enabled = !fitted_enabled && (args.house_table_light || args.house_oak_joinery) && args.interior_lighting && photo && furniture && patina;
         let mission_roof = args.house_mission_roof && photo && furniture && patina;
         let mut scans = if patina {
             surfaces::NAMES
@@ -209,7 +214,7 @@ impl Finishes {
                 exterior_exposed_beam: f32,
             }
             let light: DownstairsLight = serde_json::from_slice(&std::fs::read(
-                directory.join("downstairs-daylight.provenance.json"),
+                dining_dir.join("downstairs-daylight.provenance.json"),
             )?)?;
             let res = eo_assets::kit::HIGH_RES;
             ensure!(light.house_sha256 == manifest.house_sha256 && light.grid == [15, 6, 33]
@@ -256,7 +261,7 @@ impl Finishes {
                 lamp_radius_m: f32,
             }
             let light: FloorLight = serde_json::from_slice(&std::fs::read(
-                directory.join("dining-floor-light.provenance.json"),
+                dining_dir.join("dining-floor-light.provenance.json"),
             )?)?;
             ensure!(light.house_sha256 == manifest.house_sha256, "dining light was baked for a different house");
             let mut pages = Self::read_pixels(root, &light.asset, 2)?;
@@ -272,10 +277,10 @@ impl Finishes {
             None
         };
         let floor_reflections = if args.house_floor_reflections && args.interior_lighting && photo && furniture && patina {
-            Some(oak::floor_reflections(root, &directory, &manifest.house_sha256)?)
+            Some(oak::floor_reflections(root, &dining_dir, &manifest.house_sha256)?)
         } else { None };
         let dining_camera_exposure = if meter_enabled && args.look.blender_camera {
-            Some(oak::dining_exposure(&directory, &manifest.house_sha256)?)
+            Some(oak::dining_exposure(&dining_dir, &manifest.house_sha256)?)
         } else { None };
         let mut floorboards = Self::read_maps(root, &floor, 3)?;
         let oak_finish = if args.house_oak_finish && args.interior_lighting && photo && furniture && patina {
@@ -286,8 +291,12 @@ impl Finishes {
             table.install_joinery(root, &directory, &manifest.house_sha256, args.house_table_light,
                 &mut street.orm, &mut floorboards.orm)?;
         }
+        let (fitted, fitted_maps) = if fitted_enabled {
+            let (recipe, maps) = fitted::Recipe::read(root, &dining_dir, &manifest.house_sha256)?;
+            (Some(recipe), maps)
+        } else { (None, Vec::new()) };
         Ok(Self {
-            downstairs_light,
+            fitted, fitted_maps, downstairs_light,
             dining_meter,
             dining_camera_exposure,
             oak_finish,
@@ -310,6 +319,7 @@ impl Finishes {
 
     pub fn into_maps(self) -> Vec<eo_assets::kit::BakedMaps> {
         let mut maps: Vec<_> = self.scans.into_iter().map(|scan| scan.maps).collect();
+        maps.extend(self.fitted_maps);
         maps.extend(self.floor_reflections);
         maps.extend(self.yard_reflections);
         maps.extend(self.street_reflections);
@@ -379,6 +389,7 @@ fn corners([x, y, z]: Point, [u, v, w]: Point) -> [Point; 8] {
 }
 
 pub struct House {
+    fitted: Option<fitted::Room>,
     origin: DVec2,
     across: DVec2,
     back: DVec2,
@@ -498,6 +509,7 @@ impl House {
                 *slot = Some(transform);
             }
         }
+        let fitted_recipe = finishes.and_then(|f| f.fitted.as_ref());
         let furnished = finishes.is_some_and(|f| f.furniture);
         let room_meter = finishes.and_then(|f| f.room_light.as_ref())
             .map(|light| [light.mean_sky_return, light.exposure_range_ev, light.exterior_exposed_beam]);
@@ -505,7 +517,10 @@ impl House {
         let mission_roof = finishes.is_some_and(|f| f.mission_roof);
         let (mut model, light_transfer, visibility) = if furnished {
             ensure!(!layout.nodes.is_empty(), "furnished house is missing its metric placement");
-            let skip = mission_roof.then_some(roof::old_clay as fn(&str) -> bool);
+            let skip: Option<fn(&str) -> bool> = match (mission_roof, fitted_recipe.is_some()) {
+                (true,true) => Some(|name|roof::old_clay(name) || fitted::replaced(name)),
+                (true,false) => Some(roof::old_clay), (false,true) => Some(fitted::replaced), _ => None,
+            };
             let (model, uv, contact, pattern) = eo_assets::glb::cook_furnished_glb(
                 &raw, &layout.nodes, room_meter.is_some(), skip,
             )?;
@@ -551,7 +566,9 @@ impl House {
         } else { 0 };
         let table_light = finishes.and_then(|f| f.table_light.clone());
         let table_vertices = table_light.as_ref().map(|s| s.vertices(&model)).transpose()?.unwrap_or_default();
+        let fitted = fitted_recipe.map(|r| r.load(root,materials,finishes.map_or(0,|f|f.scans.len()))).transpose()?;
         let mut h = Self {
+            fitted,
             origin: ring[1],
             across,
             back,
@@ -600,7 +617,13 @@ impl House {
             glazing: finishes.is_some_and(|f| f.glazing),
             entry: None,
         };
-        for ([a, b], matrix) in manifest.boxes.into_iter().zip(layout.boxes) {
+        if let Some(fit) = fitted_recipe {
+            for pts in &fit.boxes {
+                for face in FACES { h.solid_quad(face.map(|i| pts[i])); }
+            }
+        }
+        for (index, ([a, b], matrix)) in manifest.boxes.into_iter().zip(layout.boxes).enumerate() {
+            if fitted_recipe.is_some_and(|r|r.replaced_boxes.contains(&index)) { continue; }
             if let Some(m) = matrix {
                 let pts = corners(a, b).map(|p| m.transform_point3(DVec3::from(p)).to_array());
                 for face in FACES {
@@ -610,8 +633,11 @@ impl House {
                 h.solid_box(a, b);
             }
         }
-        for ramp in manifest.ramps {
-            h.solid_quad(ramp);
+        for (i,ramp) in manifest.ramps.into_iter().enumerate() {
+            if !fitted_recipe.is_some_and(|r|r.replaced_ramps.contains(&i)) { h.solid_quad(ramp); }
+        }
+        if let Some(fit) = fitted_recipe {
+            for ramp in &fit.ramps { h.solid_quad(*ramp); }
         }
         // The front stoop follows the surveyed ground at this scale.
         for i in 0..48 {
@@ -1289,6 +1315,7 @@ impl House {
                 if self.photo { o.kind |= eo_render::scene::WAXED_BOARD_BIT; }
                 if self.floor_reflections && part.min[1] < 0.04 {
                     o.kind |= eo_render::scene::FLOOR_REFLECTION_BIT;
+                    if self.fitted.is_some() { o.kind |= eo_render::scene::FITTED_FLOOR_BIT; }
                 }
             }
             let family = &self.model.materials[part.material as usize].name;
@@ -1451,6 +1478,7 @@ impl House {
             }
             scene.objects.push(object);
         }
+        if let Some(fit) = &self.fitted { fit.append(self,scene,normals); }
         self.planting.append(scene);
         if self.photo && detail_lod { lod::install(scene, objects); }
         scene.stats.objects += scene.objects.len() - objects;

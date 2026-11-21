@@ -88,7 +88,7 @@ impl Scan {
     pub fn bind(table: &mut MaterialTable) {
         let first = table.layers.len() as i32;
         for (name, material) in table.names.iter().zip(&mut table.gpu) {
-            if name.starts_with("21-beaver-scan/") {
+            if name.starts_with("21-beaver-scan/") || name.starts_with("21-beaver-fitted/") && material.layer >= 0 {
                 material.layer += first;
             }
         }
