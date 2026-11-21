@@ -743,7 +743,10 @@ fn shade(in: VOut) -> vec4<f32> {
     }
     // Solid sand and shells keep their outward normal across a grazing crest.
     // A ribbon of eelgrass, like the other thin geometry, shades both sides.
-    let bed_surface = (objects[in.object].kind & 255u) == 13u && in.aux.x < 0.01;
+    let seabed = (objects[in.object].kind & 255u) == 13u;
+    let tissue_tag = in.aux.y * 127.0;
+    let rockweed = seabed && tissue_tag >= 31.5 && tissue_tag <= 63.5;
+    let bed_surface = seabed && in.aux.x < 0.01 && !rockweed;
     let mineral = bed_surface && in.aux.y < -0.25;
     if (!bed_surface && dot(n, v) < 0.0) {
         n = -n;
@@ -1024,6 +1027,23 @@ fn shade(in: VOut) -> vec4<f32> {
         let fresnel = 0.042 + 0.958*pow(1.0-clamp(dot(n,v),0.0,1.0),5.0);
         let alpha = fresnel + (1.0-fresnel)*0.047;
         return vec4<f32>(reflected*fresnel/alpha,alpha);
+    }
+    if (rockweed) {
+        // Thin margins transmit scattered light from the other face. The rib
+        // and swollen tips absorb more. The water pass attenuates this radiance
+        // along with the rock, using the same path to the light and camera.
+        s.albedo = vcol;
+        s.env = ENV_SUBMERGED;
+        s.rough = 0.54;
+        s.metal = 0.0;
+        let mm = max((tissue_tag - 32.0) * 0.25, 0.25);
+        let back = max(dot(-n, look.key_dir.xyz), 0.0);
+        var incoming = look.ambient.xyz + mix(look.hemi_ground.xyz, look.hemi_sky.xyz, 0.5 - 0.5 * n.y);
+        if (back > 0.0) {
+            incoming += look.key.xyz * back * lk_shadow(in.world, -n) * sky_cloud_transmittance(in.world);
+        }
+        let transmission = vec3<f32>(0.14, 0.19, 0.07) * exp(-mm * vec3<f32>(0.65, 0.45, 1.15));
+        rm_emit = transmission * incoming / LK_PI;
     }
     // Lighting, shadows and fog: the JS game's light rig (look_light.wgsl).
     return look_light(s, m, v, in.world, n, in.object);
