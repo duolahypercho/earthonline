@@ -52,6 +52,7 @@ const F_GLASS: u32 = 8u;
 const F_THIN_GLASS: u32 = 16u;
 // the street surface material (street classes in the vertex alpha).
 const F_STREET: u32 = 32u;
+const F_FRONT_DAYLIGHT: u32 = 64u;
 const FLOOR_SCAN_BIT: u32 = 512u;
 const THIN_FIBRE_BIT: u32 = 262144u;
 const QUILT_FIBRE_BIT: u32 = 524288u;
@@ -1110,6 +1111,27 @@ fn pendant_gloss(direct: vec3<f32>, world: vec3<f32>, n: vec3<f32>, v: vec3<f32>
         *lk_ggx(n,v,l,vec3<f32>(.04),rough);
 }
 
+// Irradiance divided by pi. The six points lie on two rows along the sloping bed.
+fn front_sky_radiance(world: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
+    let local = (look.enclosure_frame * vec4<f32>(world, 1.)).xyz;
+    let u = clamp((local.x - .68) / 1.94, 0., 2.);
+    let col = min(u32(u), 1u);
+    let du = u - f32(col);
+    let dv = clamp((local.z + 1.78) / 1.26, 0., 1.);
+    let back = normalize((vec4<f32>(0., 0., 1., 0.) * look.enclosure_frame).xyz);
+    let x = dot(normal, vec3<f32>(back.z, 0., -back.x));
+    let y = -dot(normal, back);
+    let z = normal.y;
+    let weights = array<f32, 9>(1.,x,y,z,x*y,y*z,3.*z*z-1.,x*z,x*x-y*y);
+    var result = vec3<f32>(0.);
+    for (var j = 0u; j < 9u; j++) {
+        let front = mix(look.front_daylight[col*9u+j].xyz, look.front_daylight[(col+1u)*9u+j].xyz, du);
+        let rear = mix(look.front_daylight[(col+3u)*9u+j].xyz, look.front_daylight[(col+4u)*9u+j].xyz, du);
+        result += weights[j] * mix(front, rear, dv);
+    }
+    return max(result, vec3<f32>(0.));
+}
+
 fn shade(in: VOut) -> vec4<f32> {
     var m = materials[in.material];
     let ft_du = vec2<f32>(dpdx(in.ft.x), dpdy(in.ft.x));
@@ -1561,6 +1583,10 @@ fn shade(in: VOut) -> vec4<f32> {
                 let b = normalize((dpy*scan_dx.x-dpx*scan_dy.x)*sign(det));
                 s.n = normalize(n*bump.z+m.params.z*(t*bump.x-b*bump.y));
             }
+        }
+        if ((m.flags & F_FRONT_DAYLIGHT) != 0u) {
+            measured_front = smoothstep(0., .20, look.key_dir.y) * (1. - skyu.night.z);
+            front_ambient = LK_PI * front_sky_radiance(in.world, s.n);
         }
         if ((objects[in.object].kind & DOWNSTAIRS_LIGHT_BIT) != 0u) {
             let local = (look.enclosure_frame*vec4<f32>(in.world+.022*n,1.)).xyz;

@@ -38,6 +38,7 @@ pub const F_GLASS: u32 = 8;
 pub const F_THIN_GLASS: u32 = 16;
 /// the street surface material (draw.wgsl `street_surface`).
 pub const F_STREET: u32 = 32;
+pub const F_FRONT_DAYLIGHT: u32 = 64;
 
 /// One material (64 bytes, std430).
 #[repr(C)]

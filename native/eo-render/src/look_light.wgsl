@@ -122,6 +122,10 @@ var<private> room_diffuse: vec3<f32>;
 var<private> surface_fixture: vec3<f32>;
 var<private> dielectric_scale: f32;
 
+// Written only by the garden material in the city draw pass.
+var<private> front_ambient: vec3<f32>;
+var<private> measured_front: f32;
+
 fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: vec3<f32>, object: u32) -> vec4<f32> {
     var s = s_in; // sky
     if ((m.flags & F_GLASS) == 0u && s.env <= 0 && room_enclosure < 0.5) {
@@ -177,7 +181,8 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     }
     let sky_field = hemi + look.ambient.xyz + env_e * env_i;
     let indoor_field = (0.30 + 0.70 * sqrt(room_daylight)) * vec3<f32>(1.0, 0.92, 0.80);
-    let irr = select(sky_field * mix(vec3<f32>(1.0), indoor_field, room_enclosure), room_diffuse*LK_PI, measured_room);
+    var irr = select(sky_field * mix(vec3<f32>(1.0), indoor_field, room_enclosure), room_diffuse*LK_PI, measured_room);
+    irr = mix(irr, front_ambient, measured_front);
     let nv = max(dot(n, v), 1e-4);
     let dfg = lk_dfg(nv, rough);
     let fss = f0 * dfg.x + vec3<f32>(dfg.y);
@@ -190,7 +195,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     // The measured room contains the furniture and walls. Its vertex contact
     // term resolves folds below the probe spacing; the broad screen-space
     // visibility would darken that same lighting a second time.
-    let ao = s.ao * select(ao_vis, 1., measured_room);
+    let ao = s.ao * select(mix(ao_vis, 1., measured_front), 1., measured_room);
     var indirect_d = irr * diffuse / LK_PI * (vec3<f32>(1.0) - fss) * ao;
     if ((objects[object].kind & TABLE_LIGHT_BIT) != 0u) {
         indirect_d += surface_fixture * diffuse * (vec3<f32>(1.0) - fss);
@@ -226,7 +231,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     let indirect_s = rad * fss * spec_occ;
     // The bounce is outgoing Lambert radiance (bounce x diffuse albedo), added
     // outside the occlusion multiply as the JS adds it on the emissive slot.
-    let bounce = select(ao4.rgb * diffuse, vec3<f32>(0.), measured_room);
+    let bounce = select(ao4.rgb * diffuse * (1.-measured_front), vec3<f32>(0.), measured_room);
     if (look.ao_params.z > 0.5) {
         // EO_AO_DEBUG=1: visibility; =2: the bounce irradiance fraction.
         if (look.ao_params.z > 1.5) {

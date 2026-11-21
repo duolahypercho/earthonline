@@ -106,6 +106,7 @@ struct LookUniform {
     oak_finish: [[f32; 4]; 3],
     fitted_finish: [[f32; 4]; 2],
     kitchen_frame: [[f32; 4]; 5],
+    front_daylight: crate::front_daylight::Field,
 }
 
 #[repr(C)]
@@ -211,6 +212,7 @@ pub struct LookGpu {
     pub oak_finish: [[f32; 4]; 3],
     pub fitted_finish: [[f32; 4]; 2],
     pub kitchen_frame: [[f32; 4]; 5],
+    pub front_daylight: Option<crate::front_daylight::FrontDaylight>,
     pub options: LookOptions,
     pub(crate) output_format: wgpu::TextureFormat,
     object_count: u32,
@@ -709,6 +711,7 @@ impl LookGpu {
             oak_finish: [[0.;4];3],
             fitted_finish: [[0.;4];2],
             kitchen_frame: [[0.;4];5],
+            front_daylight: None,
             output_format: init.output_format,
             object_count: init.object_count,
             compact: init.compact,
@@ -1195,6 +1198,9 @@ impl LookGpu {
             oak_finish: self.oak_finish,
             fitted_finish: self.fitted_finish,
             kitchen_frame: self.kitchen_frame,
+            front_daylight: self.front_daylight.as_ref().map_or([[[0.; 4]; 9]; 6], |light| {
+                light.at(&f, (m.profile.overcast * wx_keep) as f32)
+            }),
         };
         queue.write_buffer(&self.look_buf, 0, bytemuck::bytes_of(&u));
         let mut planes = [[0f32; 4]; 18];
