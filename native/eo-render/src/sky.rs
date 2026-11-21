@@ -1107,8 +1107,9 @@ impl SkyGpu {
                     dirs.push(([d.x as f64, d.y as f64, d.z as f64], 1.5 - 0.5 * (x * x + y * y) as f64));
                 }
             }
-            let gain = s.interior_meter.as_ref().map_or(1.0, |m| m.daylight_gain(cam));
-            eo_sky::night::meter(f, &terms.weather, &dirs) * (1. + (gain - 1.) * (1. - terms.nightness))
+            let sky_meter = eo_sky::night::meter(f, &terms.weather, &dirs);
+            let gain = s.interior_meter.as_ref().map_or(1.0, |m| m.scene_gain(cam, f, &terms.weather, &dirs, sky_meter));
+            sky_meter * (1. + (gain - 1.) * (1. - terms.nightness))
         } else {
             1.0
         };

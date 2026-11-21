@@ -97,54 +97,54 @@
   "inputs": [
     {
       "view": "capture-sash-day-north.png",
-      "sha256": "49674b4f3b6838acf8481e215008dd6e43fc0fc7c21efea9d2f2436d9ca7cc4c"
+      "sha256": "79bb31ae2a23dbbb310130b3b12ae694d8529b083918bd2564bcd517ec579133"
     },
     {
       "view": "capture-sash-day-east.png",
-      "sha256": "61d4e904650628de553e87293f20935c5b2cb91814c45ad494d3578a6c421759"
+      "sha256": "6ad7ead1008e7252465f6c6485691f7b7e9ca11f70dd27fa6e83a6a57abd1853"
     },
     {
       "view": "capture-sash-day-south.png",
-      "sha256": "9ec681679371d77de707a181d3a96d8bef2c6adc0b042190d28dfe537f0fe146"
+      "sha256": "cfaf27ef372b3baed6630a5e213fb343263ec38d4eec99a1ecd9c2909b9e845e"
     },
     {
       "view": "capture-sash-day-west.png",
-      "sha256": "1b1616c4477721560a2b9c823287ba439598552871a7abc3f503a02cceff5d55"
+      "sha256": "c5317cb2928c04d8319e2fd541e8f0a27354f088c0c39874c56c310422641146"
     },
     {
       "view": "capture-sash-day-up.png",
-      "sha256": "c4403f79dc7b6abecd420455844d709bdc6dfcc51c4e5be9f4a5bdc307ebf1c3"
+      "sha256": "8899fa0f520d1be9cfc81e43acbde448a1741c49223a2c1b67aa8e97a9f2ea28"
     },
     {
       "view": "capture-sash-day-down.png",
-      "sha256": "5de8c1028afa334fd7e3523abacb834a398b8ccf9a61ebce52f2434d3983539c"
+      "sha256": "2d3c30559a864154fc06b40221272cc26c5b97d4266e166d39a2d40963033c6e"
     },
     {
       "view": "capture-sash-night-north.png",
-      "sha256": "8d8f6a42f7cc52171d926c6d4c85d768b511f0f5dd0a949e1a258be203b7af56"
+      "sha256": "0fad5fc1a7d6281b628c8f85d7c8afea2fe977f11c666f766fea842b79e53faa"
     },
     {
       "view": "capture-sash-night-east.png",
-      "sha256": "c91102635ad13352a14c397b71091c44adb4fc0275d72dbcd3bf4740b2b8a013"
+      "sha256": "b4c1da0fb53866dfcaf3d4b6cc791e520fde86869a078370fba6b28a7759a82d"
     },
     {
       "view": "capture-sash-night-south.png",
-      "sha256": "a43e5f7111f5fd4afad3cd0a008f034da08dc4748bbcf80c5a3ee6b5f8c04cf3"
+      "sha256": "01b3a9d5c8163d5c3e28c5d179117489c9fc68cbcd6ddd344c80dec4d78eca0a"
     },
     {
       "view": "capture-sash-night-west.png",
-      "sha256": "99f8ad51acd41f2072709144fcdd0f47468276193c5f69ea4c069809a15b4f0f"
+      "sha256": "14fb25505d81a9eccc65898e24230735de2f13b26a9cd4f4baf42de46710376d"
     },
     {
       "view": "capture-sash-night-up.png",
-      "sha256": "29ffbce4e2769756e562a40cb87fb7941d6d247cbea42b073a1de8bf4c49443a"
+      "sha256": "79f6664c4644a7959b003acf1a4c2aa7122f9f563def816b7a304d9b971662bc"
     },
     {
       "view": "capture-sash-night-down.png",
-      "sha256": "40176654932d5e301f532b7942b5c2ab1e60fe0f7185b2c5a450e40614a722b0"
+      "sha256": "5939d82da7dde9286a112e529d43d10e1d2dbec0e60cc8ab9b930e8c85a4d463"
     }
   ],
   "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/street-reflections.png",
-  "sha256": "754fb12299fcfa5122b1cb0100a54bc20953a49d3cbd0531ea25d6986b2c6b16",
-  "bytes": 724333
+  "sha256": "4a2c87d59c3aee42a6815c11a5f2eab584d0435c118d6b91fce1980747b443fe",
+  "bytes": 732844
 }

@@ -69,6 +69,92 @@ impl InteriorMeter {
         self.to_local
     }
 
+    /// Locate the first face of the room envelope on a metering ray. Faces are
+    /// returned in world space, including the surveyed parcel's orientation.
+    fn facade_normal(&self, eye: Vec3, direction: Vec3) -> Option<Vec3> {
+        let ray = self.to_local.transform_vector3(direction);
+        let mut entry = 0.0_f32;
+        let mut exit = f32::INFINITY;
+        let mut face = Vec3::ZERO;
+        for axis in 0..3 {
+            if ray[axis].abs() < 1e-6 {
+                if eye[axis] < self.min[axis] || eye[axis] > self.max[axis] {
+                    return None;
+                }
+                continue;
+            }
+            let a = (self.min[axis] - eye[axis]) / ray[axis];
+            let b = (self.max[axis] - eye[axis]) / ray[axis];
+            if a.min(b) > entry {
+                entry = a.min(b);
+                face = Vec3::ZERO;
+                face[axis] = -ray[axis].signum();
+            }
+            exit = exit.min(a.max(b));
+        }
+        (entry < exit && face != Vec3::ZERO).then(|| {
+            self.to_local
+                .transpose()
+                .transform_vector3(face)
+                .normalize()
+        })
+    }
+
+    /// Sky metering normally treats every upward ray as open sky. At a close
+    /// facade, meter the incident light on the wall that actually fills the lens.
+    pub fn scene_gain(
+        &self,
+        cam: &Camera,
+        f: &eo_look::LookFrame,
+        weather: &eo_sky::WeatherState,
+        directions: &[([f64; 3], f64)],
+        sky_meter: f64,
+    ) -> f64 {
+        use eo_look::math::luminance;
+        use eo_sky::night::{METER_GAIN, SIDEWALK_ENV, ground_fill, key_on_ground, mean_beam};
+        let eye = self.to_local.transform_point3(cam.eye);
+        let delta = eye - eye.clamp(self.min, self.max);
+        let range = self.to_local.inverse().transform_vector3(delta).length();
+        if range <= 0.001 {
+            return self.daylight_gain(cam);
+        }
+        // Outside the parcel approach, nearer buildings may obscure this envelope.
+        if range >= 35. || f.key_dir[1] <= 0. {
+            return 1.;
+        }
+        let weight = f64::from(((35. - range) / 15.).clamp(0., 1.) * (range / 0.45).min(1.));
+        let beam = mean_beam(weather);
+        let reference = (ground_fill(f, SIDEWALK_ENV) + key_on_ground(f) * beam).max(1e-6);
+        let sun = Vec3::from_array(f.key_dir.map(|c| c as f32));
+        let mut stops = 0.;
+        let mut total = 0.;
+        let mut occluded = directions.to_vec();
+        for (direction, wt) in &mut occluded {
+            total += *wt;
+            let Some(n) = self.facade_normal(eye, Vec3::from_array(direction.map(|v| v as f32)))
+            else {
+                continue;
+            };
+            let hemisphere = (n.y as f64 + 1.) * 0.5;
+            let sh = eo_look::sh_eval(&f.env_sh, n.to_array().map(f64::from));
+            let fill = [0, 1, 2].map(|i| {
+                f.hemi_ground[i] * (1. - hemisphere)
+                    + f.hemi_sky[i] * hemisphere
+                    + f.ambient[i]
+                    + sh[i] * f.rig.environment_intensity * f.rig.env_painted
+            });
+            let irradiance =
+                luminance(fill) + luminance(f.key) * beam * f64::from(n.dot(sun).max(0.));
+            // Preserve highlight latitude when a bright opening borders a shaded pier.
+            stops += *wt * (reference / irradiance.max(1e-6)).log2().clamp(-0.5, 1.35);
+            // The sky meter uses a grey card for directions occluded by solid ground.
+            direction[1] = -direction[1].abs();
+        }
+        let corrected = eo_sky::night::meter(f, weather, &occluded);
+        let stops = METER_GAIN * stops / total.max(1.) + (corrected / sky_meter.max(1e-6)).log2();
+        2.0_f64.powf(weight * stops)
+    }
+
     pub fn daylight_gain(&self, cam: &Camera) -> f64 {
         let eye = self.to_local.transform_point3(cam.eye);
         let inside = (eye - self.min).min(self.max - eye).min_element();
@@ -140,6 +226,11 @@ mod tests {
             far: 100.,
             jitter: [0.; 2],
         };
+        let ray = to_world.transform_vector3(Vec3::Z);
+        let front = meter.facade_normal(Vec3::new(0., 1.5, -2.), ray).unwrap();
+        assert!((front + ray).length() < 1e-5);
+        assert!(meter.facade_normal(Vec3::new(0., 1.5, -2.), -ray).is_none());
+        assert!(meter.facade_normal(Vec3::new(4., 1.5, -2.), ray).is_none());
         let eye = Vec3::new(0., 1.5, 1.8);
         let bright_window = meter.daylight_gain(&camera(eye, -0.31));
         let dark_wall = meter.daylight_gain(&camera(eye, std::f32::consts::PI - 0.31));

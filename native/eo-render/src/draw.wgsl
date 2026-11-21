@@ -55,6 +55,8 @@ const F_STREET: u32 = 32u;
 const FLOOR_SCAN_BIT: u32 = 512u;
 const THIN_FIBRE_BIT: u32 = 262144u;
 const QUILT_FIBRE_BIT: u32 = 524288u;
+const TABLE_BOARD_BIT: u32 = 1048576u;
+const ENTRY_BRASS_BIT: u32 = 2097152u;
 const ENCLOSURE_TRANSFER_BIT: u32 = 131072u;
 const WAXED_BOARD_BIT: u32 = 32768u;
 const COURTYARD_BOUNCE_BIT: u32 = 65536u;
@@ -132,7 +134,7 @@ fn vs(
     if (kind == 4u && out.aux.y > 0.49) {
         // The house builder stores window and fixture transfer in R and G.
         out.color = color.rgb;
-        if ((o.kind & RUG_SCAN_BIT) != 0u) {
+        if ((o.kind & (RUG_SCAN_BIT | TABLE_BOARD_BIT)) != 0u) {
             out.ft = clamp(vec2<f32>(color.b, color.a), vec2<f32>(0.001), vec2<f32>(0.999));
         } else if ((o.kind & DOOR_SCAN_BIT) != 0u) {
             out.ft = vec2<f32>(color.a, color.b * 3.1);
@@ -728,7 +730,7 @@ fn kitchen_reflection(r: vec3<f32>, angle: f32, row: f32, rough: f32) -> vec3<f3
 // Their screen derivatives convert the world ray to that same surveyed frame.
 fn board_reflection(plan: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>,
                     wx: vec3<f32>, wy: vec3<f32>, ray: vec3<f32>,
-                    rough: f32, day: f32, lamp: f32) -> vec3<f32> {
+                    rough: f32, day: f32, lamp: f32, height: f32) -> vec3<f32> {
     let up = vec3<f32>(0., 1., 0.);
     let det = dot(cross(wx,wy),up);
     let ambient = vec3<f32>(0.56,0.41,0.29) *
@@ -739,7 +741,7 @@ fn board_reflection(plan: vec2<f32>, dx: vec2<f32>, dy: vec2<f32>,
     let rear = rd.y > 0.;
     let t = (select(0.04,12.92,rear)-plan.y) / rd.y;
     if (t <= 0.) { return ambient; }
-    let hit = vec2<f32>(plan.x+t*rd.x,t*ray.y);
+    let hit = vec2<f32>(plan.x+t*rd.x,height+t*ray.y);
     let width = max(0.035, t * rough * rough * .60);
     let low = smoothstep(vec2<f32>(.72,.86)-width,vec2<f32>(.72,.86)+width,hit);
     let high = 1.-smoothstep(vec2<f32>(4.56,2.54)-width,vec2<f32>(4.56,2.54)+width,hit);
@@ -1001,11 +1003,17 @@ fn shade(in: VOut) -> vec4<f32> {
     }
     if ((objects[in.object].kind & LIMEWASH_BIT) != 0u) {
         let exposure = clamp((in.color.b * 255.0 - 3.0) / 55.0, 0.0, 1.0);
-        s.albedo *= mix(vec3<f32>(1.0), vec3<f32>(0.79, 0.75, 0.70), exposure);
+        if ((objects[in.object].kind & COURTYARD_BOUNCE_BIT) != 0u) {
+            let stain = exposure * st_noise(in.world.xy*5.5);
+            s.albedo *= mix(vec3<f32>(1.),vec3<f32>(.45,.35,.22),stain);
+        } else {
+            s.albedo *= mix(vec3<f32>(1.0), vec3<f32>(0.79, 0.75, 0.70), exposure);
+        }
     }
     let local_scan = (objects[in.object].kind & (DOOR_SCAN_BIT | RUG_SCAN_BIT)) != 0u;
-    let floor_scan = local_scan || (objects[in.object].kind & FLOOR_SCAN_BIT) != 0u;
-    if (floor_scan && (local_scan || abs(n.y) > 0.7)) {
+    let table_board = (objects[in.object].kind & TABLE_BOARD_BIT) != 0u;
+    let floor_scan = table_board || local_scan || (objects[in.object].kind & FLOOR_SCAN_BIT) != 0u;
+    if (floor_scan && (local_scan || table_board || abs(n.y) > 0.7)) {
         let layer = select(i32(textureNumLayers(kit_albedo)) - 2, m.layer, local_scan);
         var uv = in.ft;
         var uv_dx = scan_dx;
@@ -1028,12 +1036,37 @@ fn shade(in: VOut) -> vec4<f32> {
         if (abs(det) > 1e-10) {
             let along = normalize((dpx * uv_dy.y - dpy * uv_dx.y) * sign(det));
             let across = normalize((dpy * uv_dx.x - dpx * uv_dy.x) * sign(det));
-            s.n = normalize(n * bump.z + select(1.0, m.params.z, local_scan) * (along * bump.x - across * bump.y));
+            let relief = select(select(1.0, m.params.z, local_scan), 0.28, table_board);
+            s.n = normalize(n * bump.z + relief * (along * bump.x - across * bump.y));
         }
         if (waxed) {
             s.env = ENV_INTERIOR_FLOOR;
             room_radiance = board_reflection(in.ft,scan_dx,scan_dy,dpx,dpy,
-                reflect(-v,s.n),s.rough,in.color.r*in.color.r,in.color.g*in.color.g);
+                reflect(-v,s.n),s.rough,in.color.r*in.color.r,in.color.g*in.color.g,0.);
+        } else if (table_board) {
+            let frame_pos = (look.enclosure_frame * vec4<f32>(in.world,1.)).xyz;
+            let wood_axis = normalize((vec4<f32>(1.,0.,0.,0.) * look.enclosure_frame).xyz);
+            if (abs(dot(n,wood_axis)) > .86) {
+                // The saw cut runs across the growth rings, perpendicular to the long grain.
+                let cut = frame_pos.zy;
+                let rings = sin(length(cut - floor(cut/.32)*.32) * 850. + 2.35*st_noise(cut*45.));
+                let resolved_rings = 1.-smoothstep(.002,.011,max(length(dpx),length(dpy)));
+                s.albedo = m.base.rgb * (.745 + .175*rings*resolved_rings);
+                s.rough = .55;
+                s.n = n;
+            } else {
+                s.albedo *= mix(vec3<f32>(1.),vec3<f32>(.54,.37,.24),.64);
+                // Wax fills the open pores of the planed table. Keep the roughness
+                // scan, with a broader reflection than the floor varnish.
+                s.rough = clamp(.31 + .43*s.rough, .36, .67);
+                if (n.y > .64) {
+                    let local_dx = (look.enclosure_frame * vec4<f32>(dpx,0.)).xz;
+                    let local_dy = (look.enclosure_frame * vec4<f32>(dpy,0.)).xz;
+                    s.env = ENV_INTERIOR_FLOOR;
+                    room_radiance = board_reflection(frame_pos.xz,local_dx,local_dy,dpx,dpy,
+                        reflect(-v,s.n),s.rough,in.color.r*in.color.r,in.color.g*in.color.g,frame_pos.y);
+                }
+            }
         }
     } else if (house_finish && !floor_scan && in.color.b > 0.5) {
         // Longitudinal oak fibres curve around growth rings. Filter the finer
@@ -1093,9 +1126,26 @@ fn shade(in: VOut) -> vec4<f32> {
     // weathering (Blender buildings) and archetype ageing (kit buildings).
     fa_apply(&s, m, in.world, n, in.object, dpx, dpy);
     if (house_finish && !floor_scan && in.color.b > 0.5 / 255.0 && in.color.b < 2.5 / 255.0) {
-        s.env = ENV_KITCHEN;
+        s.env = ENV_LOCAL_PROBE;
         let row = round(in.color.b * 255.0) - 1.0;
         room_radiance = kitchen_reflection(reflect(-v, s.n), in.aux.x * (6.2831853 / 255.0), row, s.rough);
+    }
+    if ((objects[in.object].kind & ENTRY_BRASS_BIT) != 0u) {
+        // The lever reflects the street through a finite opening in the plaster porch.
+        let ray = reflect(-v,s.n);
+        let local_ray = (look.enclosure_frame * vec4<f32>(ray,0.)).xyz;
+        let uv = vec2<f32>(atan2(ray.x,-ray.z)/(2.*PI)+.5,
+                           clamp(.5-asin(clamp(ray.y,-1.,1.))/PI,.002,.998));
+        let layer = i32(textureNumLayers(kit_albedo)) - 3;
+        let mip = 1.0 + 5.0*s.rough;
+        let day = textureSampleLevel(kit_albedo,kit_sampler,uv,layer,mip).rgb;
+        let night = srgb_decode(textureSampleLevel(kit_normal,kit_sampler,uv,layer,mip).rgb);
+        let plate = mix(day,night,skyu.night.z);
+        let incident = plate / max(.15,1.-.83*dot(plate,vec3<f32>(.2126,.7152,.0722)));
+        let opening = smoothstep(.05,.65,-normalize(local_ray).z);
+        let wall = vec3<f32>(.48,.40,.31)*(look.ambient.rgb+.34*look.hemi_sky.rgb)/PI;
+        s.env = ENV_LOCAL_PROBE;
+        room_radiance = mix(wall,incident,opening);
     }
     // the shader-only facade on a near envelope wall.
     if ((fa_run() & 256u) != 0u && kit_object && objects[in.object].lod_role == 4u && dot(in.normal, in.normal) > 0.25 && abs(in.normal.y) < 0.3 && frame.copy_step.z < 0.5) {

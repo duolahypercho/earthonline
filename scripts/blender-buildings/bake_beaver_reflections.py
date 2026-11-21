@@ -38,7 +38,12 @@ if "--house-furniture" in options or "--house-photo" in options:
     from beaver_dimensions import furniture_point
     for probe, name in zip(PROBES, ("enamel-refrigerator", "oven-range")):
         for key in probe:
-            probe[key] = furniture_point(name, probe[key])
+            point = furniture_point(name, probe[key])
+            if "--house-photo" in options:
+                from beaver_dimensions import GROUP
+                from beaver_photo import furniture_placement
+                point = furniture_placement(name, point, GROUP[name])
+            probe[key] = point
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.gltf(filepath=str(SOURCE))

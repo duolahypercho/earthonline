@@ -989,12 +989,28 @@ mod house_tests {
         args.house_patina = patina;
         args.house_furniture = furniture;
         args.house_photo = photo;
+        args.house_photo_lod = photo;
         args.beaver_house = true;
         args.kit = false;
         args.landmarks = false;
         args.models = false;
         let mut world = load_world(&args).unwrap();
         let house = world.house.as_ref().unwrap();
+        if photo {
+            use eo_render::scene::{LOD_AUTHORED_DETAIL, TABLE_BOARD_BIT, THIN_FIBRE_BIT};
+            let parts = &world.scene.objects;
+            let boards: std::collections::BTreeSet<_> = parts.iter()
+                .filter(|p| p.kind & TABLE_BOARD_BIT != 0).map(|p| p.material).collect();
+            assert_eq!(boards.len(), 4, "every dining plank retains its grain mapping");
+            assert!(parts.iter().any(|p| {
+                let centre = (Vec3::from(p.min) + Vec3::from(p.max)) * 0.5;
+                let yard = house.point(3., 0., 26.).as_vec3();
+                p.kind & THIN_FIBRE_BIT != 0 && (centre - yard).length() < 11. && p.index_count > 30
+            }), "expected planted meshes at courtyard grade");
+            let reduced: Vec<_> = parts.iter().filter(|p| p.lod_role == LOD_AUTHORED_DETAIL).collect();
+            assert!(reduced.iter().all(|p| p.far_index_count < p.index_count));
+            assert!(reduced.iter().map(|p| p.index_count - p.far_index_count).sum::<u32>() > 100_000);
+        }
         if patina {
             use eo_render::scene::{BLEND_BIT, FRONT_SASH_BIT};
             let panes: Vec<_> = world.scene.objects.iter().filter(|o| o.kind & FRONT_SASH_BIT != 0).collect();
@@ -1036,13 +1052,16 @@ mod house_tests {
             let x_axis = (house.point(1., 0., 0.) - origin).normalize();
             let z_axis = x_axis.cross(DVec3::Y) * x_axis.cross(DVec3::Y).dot(house.point(0., 0., 1.) - origin).signum();
             // Collision probes are measured from the installed centre of each table.
-            let dining = house.point(2.375, 0., 7.575) - z_axis * if photo { 0.70 } else { 0. };
+            let dining = house.point(2.375, 0., 7.575) + if photo {
+                x_axis * 0.17 - z_axis * 0.70
+            } else { DVec3::ZERO };
+            let table_axis = if photo { -x_axis } else { z_axis };
             let near_chair = if photo { 1.053 } else { 1.233 };
             let kitchen = house.point(0.15, 0., 12.72);
             for (label, surface, height) in [
                 ("dining table", dining, 0.75),
-                ("chair seat", dining - z_axis * near_chair, 0.45),
-                ("far chair seat", dining + z_axis * 1.327, 0.45),
+                ("chair seat", dining - table_axis * near_chair, 0.45),
+                ("far chair seat", dining + table_axis * 1.327, 0.45),
                 ("kitchen counter", kitchen + x_axis * 0.4 - z_axis * 0.24, 0.92),
                 ("fridge", kitchen + x_axis * 1.50 - z_axis * 0.36, 1.8952),
             ] {

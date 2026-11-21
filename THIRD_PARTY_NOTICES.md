@@ -250,7 +250,7 @@ The optional 21 Beaver sitting-room carpet uses the public-domain recto photogra
 
 - The private frontage tree uses the City and County of San Francisco street-tree inventory (DataSF dataset `tkzw-k3nq`, PDDL 1.0). The original mesh follows the position, height and crown recorded in the existing city data. [Street Tree List](https://data.sfgov.org/d/tkzw-k3nq).
 
-The optional private courtyard and paved apron at 21 Beaver use the CC0 scans [Park Dirt](https://polyhaven.com/a/park_dirt) by Christopher Melani and [Concrete Floor Worn 001](https://polyhaven.com/a/concrete_floor_worn_001) by Dimitrios Savva, Rico Cilliers. [Poly Haven licence](https://polyhaven.com/license).
+The optional private courtyard and paved apron at 21 Beaver use the CC0 scans [Park Dirt](https://polyhaven.com/a/park_dirt) by Christopher Melani, [Leafy Grass](https://polyhaven.com/a/leafy_grass) by Charlotte Baglioni and [Concrete Floor Worn 001](https://polyhaven.com/a/concrete_floor_worn_001) by Dimitrios Savva, Rico Cilliers. [Poly Haven licence](https://polyhaven.com/license).
 
 Rob Tuytel photographed the frontage tree’s bark. Dimitrios Savva photographed the terracotta used on the porch and steps. The optional house uses these CC0 colour, normal and roughness maps. [Bark Brown 02](https://polyhaven.com/a/bark_brown_02) · [Terracotta Floor Tiles](https://polyhaven.com/a/terracotta_floor_tiles) · [Poly Haven licence](https://polyhaven.com/license).
 

@@ -1,11 +1,13 @@
 {
   "source": [
-    "https://polyhaven.com/a/park_dirt"
+    "https://polyhaven.com/a/park_dirt",
+    "https://polyhaven.com/a/leafy_grass"
   ],
   "license": "CC0-1.0",
   "license_url": "https://polyhaven.com/license",
   "attribution": [
-    "Christopher Melani"
+    "Christopher Melani",
+    "Charlotte Baglioni"
   ],
   "inputs": [
     {
@@ -15,22 +17,40 @@
       "sha256": "b1eafefbd8cd3c5e295cc4bcfae743e552b029aff0cf89dd1c5b0abe43fb4223"
     },
     {
+      "asset": "leafy_grass",
+      "role": "albedo",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/leafy_grass/leafy_grass_diff_2k.jpg",
+      "sha256": "8e1c6d21365d4b89bc5a35ab664da98a78dbc3ab9ba6100474881c8619a5b113"
+    },
+    {
       "asset": "park_dirt",
       "role": "normal",
       "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/park_dirt/park_dirt_nor_gl_2k.jpg",
       "sha256": "b6b454e10994ae9d44d1a450f1d26eab51955df3fb4fabf1f70ee2f1e02257c3"
     },
     {
+      "asset": "leafy_grass",
+      "role": "normal",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/leafy_grass/leafy_grass_nor_gl_2k.jpg",
+      "sha256": "df0cf0ce96e653f033e5b934d5b12995464bda027aa53bd12e329be889aa9f45"
+    },
+    {
       "asset": "park_dirt",
       "role": "arm",
       "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/park_dirt/park_dirt_arm_2k.jpg",
       "sha256": "3c42f6290af1de9decd9f693a10dce1b73cbff523a0040f6bb2e60f1efbce0e6"
+    },
+    {
+      "asset": "leafy_grass",
+      "role": "arm",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/leafy_grass/leafy_grass_arm_2k.jpg",
+      "sha256": "70d61c669fe9d186a84f5bb50e8a337083014d7e46534306a89d47d48fd5eb0e"
     }
   ],
   "build": "scripts/blender-buildings/prepare_beaver_surfaces.py",
   "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/yard-earth.png",
-  "sha256": "ef721bd7a968e73d8ca99a6bf226cd42569401939dc1c8ce2bfbb26c4d39a909",
-  "bytes": 1859332,
+  "sha256": "5fbdbed92582e55477e39b49fc486e80492e91de2806c4f3338c22e095eaaf55",
+  "bytes": 1911781,
   "families": [
     "garden-topsoil"
   ],

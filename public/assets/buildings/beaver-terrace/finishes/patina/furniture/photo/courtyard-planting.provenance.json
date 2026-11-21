@@ -1,0 +1,12 @@
+{
+  "source": "Original modeled grass and citrus from the editable 21 Beaver Street scene",
+  "build": "scripts/blender-buildings/export_beaver_planting.py",
+  "scene_builder": "scripts/blender-buildings/beaver_blender_scene.py",
+  "footprint": "public/data/sf/sf-city.json.gz",
+  "attribution": "Earth Online contributors",
+  "license": "MIT",
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/courtyard-planting.glb",
+  "bytes": 2200404,
+  "sha256": "a6370b84ecb407809c8bdeb2099e5fd350659e40b83afb51d79774b7c09b252e",
+  "encoding": "POSITION in metres relative to the root, TEXCOORD_0.xy is root XZ in the seven-by-thirteen house plan"
+}

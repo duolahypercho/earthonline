@@ -2,6 +2,7 @@
 mod dimensions;
 mod door;
 mod lod;
+mod planting;
 mod surfaces;
 pub use surfaces::Scan;
 pub const FURNITURE_LAYERS: u32 = surfaces::FURNITURE_NAMES.len() as u32;
@@ -42,6 +43,13 @@ struct Manifest {
     metric_assemblies: Vec<dimensions::MetricAssembly>,
     #[serde(default)]
     ground_components: Vec<GroundComponent>,
+    #[serde(default)]
+    rear_parcel: Option<RearParcel>,
+}
+
+#[derive(Deserialize)]
+struct RearParcel {
+    survey_xz: [[f64; 2]; 4],
 }
 
 #[derive(Deserialize)]
@@ -239,6 +247,10 @@ pub struct House {
     aggregate_material: u32,
     yard: Vec<([Point; 4], u32)>,
     yard_material: u32,
+    rear_stucco: Vec<([Point; 4], u32)>,
+    footing: Vec<([Point; 4], u32)>,
+    rear_stucco_material: u32,
+    planting: planting::Planting,
     concrete_material: u32,
     paver_material: u32,
     patina: bool,
@@ -362,6 +374,9 @@ impl House {
             (site_material("garden-topsoil@").ok_or_else(|| anyhow::anyhow!("yard soil missing"))?,
              site_material("cast-stone@").ok_or_else(|| anyhow::anyhow!("private apron concrete missing"))?)
         } else { (0,0) };
+        let rear_stucco_material = if photo {
+            site_material("painted-stucco@").ok_or_else(|| anyhow::anyhow!("rear stucco missing"))?
+        } else { 0 };
         let mut h = Self {
             origin: ring[1],
             across,
@@ -387,6 +402,10 @@ impl House {
             mortar: vec![],
             aggregate: vec![],
             yard: vec![],
+            rear_stucco: vec![],
+            footing: vec![],
+            rear_stucco_material,
+            planting: planting::Planting::default(),
             yard_material,
             concrete_material,
             aggregate_material,
@@ -447,20 +466,65 @@ impl House {
         if finishes.is_some() {
             h.tile_treads();
         }
-        if !manifest.ground_components.is_empty() {
-            // Private planting strip directly below the rear windows. Use the
-            // same terrain query as the pots so the mineral mulch follows the grade.
-            let point = |x: f64, z: f64| {
-                let site = ring[1] + across * x + back * z;
-                [x, (ground(site.x, site.y) - floor + 0.009) / height_scale, z]
+        if let Some(parcel) = manifest.rear_parcel {
+            h.planting = planting::Planting::load(&dir, root, &h, ground, street, kit, materials)?;
+            // Continue the exterior finish down the stem wall, leaving the same
+            // 19 cm reveal above local grade as the source Blender elevation.
+            let installed_width = across.length() * 7.;
+            let blocks = (installed_width / 0.40).ceil() as usize;
+            let grade = |x: f64| {
+                let site = ring[1] + across*x + back*13.052;
+                ground(site.x, site.y) - floor
             };
-            for i in 0..24 {
-                let x = 0.12 + f64::from(i) * 6.76 / 24.;
-                let u = 0.12 + f64::from(i+1) * 6.76 / 24.;
-                for j in 0..8 {
-                    let far_edge = |col: f64| 2.16 + 0.23*(4.1*col).sin() + 0.12*(7.3*col).cos();
-                    let strip = |col, row: i32| point(col, 13. + far_edge(col)*f64::from(row)/8.);
-                    h.yard.push(([strip(x,j),strip(x,j+1),strip(u,j+1),strip(u,j)], 0xffffffff));
+            for i in 0..blocks {
+                let left = 7. * i as f64 / blocks as f64;
+                let right = 7. * (i + 1) as f64 / blocks as f64;
+                let top_m = ((grade(left).max(grade(right)) + 0.19) / 0.20).ceil() * 0.20;
+                let top = top_m / height_scale;
+                if top >= 0.015 { continue; }
+                let z = 13.052;
+                let quad = [[left, top, z], [right, top, z], [right, 0.015, z], [left, 0.015, z]];
+                h.rear_stucco.push((quad, 0xffffffff));
+                let joint = 0.003 / across.length();
+                let face = z + 0.007 / back.length();
+                let back_edge = z - 0.007 / back.length();
+                for row in [0., 1.] {
+                    let cap = (top_m - 0.20*row - 0.004) / height_scale;
+                    let pts = corners([left + joint, cap - 0.192/height_scale, back_edge],
+                                      [right - joint, cap, face]);
+                    for side in [FACES[1], FACES[3], FACES[4], FACES[5]] {
+                        h.footing.push((side.map(|v| pts[v]), 0xffe2e6e8));
+                    }
+                }
+            }
+            let det = across.perp_dot(back);
+            let mut plan = parcel.survey_xz.map(|p| {
+                let local = DVec2::from(p) * eo_data::groundscale::scale() - ring[1];
+                DVec2::new(local.perp_dot(back)/det, across.perp_dot(local)/det)
+            });
+            plan.sort_by(|a,b| a.y.total_cmp(&b.y));
+            let (front,rear) = plan.split_at_mut(2);
+            front.sort_by(|a,b| a.x.total_cmp(&b.x));
+            rear.sort_by(|a,b| a.x.total_cmp(&b.x));
+            let mut start = [DVec2::ZERO; 2];
+            for i in 0..2 {
+                ensure!(front[i].y < 13. && rear[i].y > 13., "parcel does not contain the rear facade");
+                start[i] = front[i].lerp(rear[i], (13.-front[i].y)/(rear[i].y-front[i].y));
+            }
+            // Follow both parcel lines and triangulate the ground at its sampled grade.
+            let sample = |i: i32,j: i32| {
+                let t = f64::from(j)/42.;
+                let q = start[0].lerp(rear[0],t).lerp(start[1].lerp(rear[1],t),f64::from(i)/18.);
+                let site = ring[1] + across*q.x + back*q.y;
+                [q.x,(ground(site.x, site.y) - floor + 0.012)/height_scale,q.y]
+            };
+            for i in 0..18 {
+                for j in 0..42 {
+                    let quad = [sample(i,j),sample(i,j+1),sample(i+1,j+1),sample(i+1,j)];
+                    let middle = (h.point(quad[0][0],0.,quad[0][2]) + h.point(quad[2][0],0.,quad[2][2]))*0.5;
+                    if street.is_some_and(|s| s.buildings.contains(middle.x,middle.z)
+                        || s.paved_layer_at(middle.x,middle.z).is_some()) { continue }
+                    h.yard.push((quad,0xffffffff));
                 }
             }
         }
@@ -852,6 +916,21 @@ impl House {
                     }
                     finish[i as usize] = 3 + (wear.clamp(0., 1.) * 55.).round() as u8;
                 }
+            } else if self.photo && let Some(plank) = dining_plank(name) {
+                // The four measured boards use the same distinct scan strips as in Blender.
+                let range = Vec3::from(part.max) - Vec3::from(part.min);
+                let first = part.first_index as usize;
+                for &i in &self.model.indices[first..first + part.index_count as usize] {
+                    let index = i as usize;
+                    let t = ((Vec3::from(self.model.positions[index]) - Vec3::from(part.min)) / range)
+                        .clamp(Vec3::ZERO, Vec3::ONE);
+                    let n = eo_assets::glb::unpack_normal(self.model.normals[index]);
+                    let u = if plank % 2 == 0 { 1. - t.x } else { t.x };
+                    let section = if n.y.abs() > 0.64 { 0.07 + 0.86 * (1. - t.z) }
+                                  else { 0.10 + 0.12 * t.y };
+                    let row = [0., 3., 5., 7.][plank];
+                    floor_uv[index] = Some([0.025 + 0.95 * u, (row + section) / 8.]);
+                }
             } else if self.patina && name.starts_with("woven-carpet@") {
                 let first = part.first_index as usize;
                 for &i in &self.model.indices[first..first + part.index_count as usize] {
@@ -987,12 +1066,16 @@ impl House {
             if self.patina && door_paint(&self.model.materials[part.material as usize].name) {
                 o.kind |= eo_render::scene::DOOR_SCAN_BIT;
             }
+            if self.photo && dining_plank(&self.model.materials[part.material as usize].name).is_some() {
+                o.kind |= eo_render::scene::TABLE_BOARD_BIT;
+            }
             if self.photo && !self.light_transfer.is_empty() {
                 o.kind |= eo_render::scene::ENCLOSURE_TRANSFER_BIT;
             }
             let family = &self.model.materials[part.material as usize].name;
             if self.photo {
                 match family.split('@').next().unwrap_or("") {
+                    "front-door-brass" => o.kind |= eo_render::scene::ENTRY_BRASS_BIT,
                     "curtain-linen" | "street-tree-foliage" => o.kind |= eo_render::scene::THIN_FIBRE_BIT,
                     "cotton-coverlet" | "cotton-turnback" | "cotton-binding" =>
                         o.kind |= eo_render::scene::QUILT_FIBRE_BIT,
@@ -1063,6 +1146,8 @@ impl House {
             (&self.aggregate, ObjectKind::Model,
                 if self.photo { self.concrete_material } else { self.aggregate_material }),
             (&self.yard, ObjectKind::Model, self.yard_material),
+            (&self.rear_stucco, ObjectKind::Model, self.rear_stucco_material),
+            (&self.footing, ObjectKind::Model, self.concrete_material),
         ] {
             if quads.is_empty() {
                 continue;
@@ -1082,6 +1167,11 @@ impl House {
                 let normal = eo_assets::glb::pack_normal((p[1] - p[0]).cross(p[2] - p[0]));
                 let v = scene.vertices.len() as u32;
                 for point in p {
+                    let (normal, color) = if self.photo && material == self.rear_stucco_material {
+                        let above_plinth = (point.y - p[0].y).max(0.);
+                        let wear = (0.78 - above_plinth / 0.74).clamp(0.12, 0.94);
+                        (normal | 0x4000_0000, (3 + (55. * wear).round() as u32) << 16)
+                    } else { (normal, color) };
                     lo = lo.min(point);
                     hi = hi.max(point);
                     scene.vertices.push(Vertex {
@@ -1101,6 +1191,9 @@ impl House {
                 0,
             );
             object.material = material;
+            if self.photo && material == self.rear_stucco_material {
+                object.kind |= eo_render::scene::LIMEWASH_BIT;
+            }
             if self.photo && kind == ObjectKind::Model {
                 object.kind |= eo_render::scene::COURTYARD_BOUNCE_BIT;
             }
@@ -1109,12 +1202,18 @@ impl House {
             }
             scene.objects.push(object);
         }
+        self.planting.append(scene);
         if self.photo && detail_lod { lod::install(scene, objects); }
         scene.stats.objects += scene.objects.len() - objects;
         scene.stats.vertices += scene.vertices.len() - base;
         scene.stats.indices += scene.indices.len() - first;
         scene.stats.triangles += ((scene.indices.len() - first) / 3) as u64;
     }
+}
+
+fn dining_plank(name: &str) -> Option<usize> {
+    let family = name.split_once('@')?.0;
+    family.strip_prefix("dining-board-")?.parse::<usize>().ok().filter(|i| *i < 4)
 }
 
 fn plaster_finish(name: &str) -> bool {

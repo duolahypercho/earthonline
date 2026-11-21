@@ -92,6 +92,10 @@ pub const ENCLOSURE_TRANSFER_BIT: u32 = 1 << 17;
 pub const THIN_FIBRE_BIT: u32 = 1 << 18;
 /// Opaque bed linen has a rough fibrous surface over a softer filling.
 pub const QUILT_FIBRE_BIT: u32 = 1 << 19;
+/// An individually mapped oak plank in the dining tabletop.
+pub const TABLE_BOARD_BIT: u32 = 1 << 20;
+/// Door lever and lock reflecting the actual porch opening.
+pub const ENTRY_BRASS_BIT: u32 = 1 << 21;
 
 /// Material 0: the vertex colour (footprints, terrain, roads, sea).
 pub const MATERIAL_VERTEX_COLOUR: u32 = 0;

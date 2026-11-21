@@ -107,7 +107,7 @@ def bake(objects, rise, detailed=False, cloth_transfer=False, furniture_contact=
     # The installed pendant moves with its dining group. Convert its 70 cm
     # move from physical metres to the surveyed depth used by this bake.
     fixture_z = 7.51 - .70 / 1.295 if exterior_bounce else 7.51
-    lamp = [Vector((2.37 + dx, -fixture_z + dz, 1.975)) for dx, dz in [(-0.12, -0.09), (0.13, -0.09), (0, 0.13)]]
+    lamp = [Vector((2.37 + (.17 / 1.308 if exterior_bounce else 0.) + dx, -fixture_z + dz, 1.975)) for dx, dz in [(-0.12, -0.09), (0.13, -0.09), (0, 0.13)]]
     work_lights = [Vector((0.64,-z,1.80)) for z in (9.55,10.10)]
     x, height, depth = porch_source
     porch_light = Vector((x, -depth, height))
@@ -273,7 +273,8 @@ def bake(objects, rise, detailed=False, cloth_transfer=False, furniture_contact=
         if fine:
             filter_cloth_irradiance(mesh, uv, compact=sofa_cloth)
         outdoor_contact = exterior_bounce and component in (
-            "front-door", "arched-entry-and-lantern", "upper-arched-loggia",
+            "front-door", "front-window-box", "arched-entry-and-lantern", "upper-arched-loggia",
+            "ground-storey",
             "rear-clay-planter", "rear-herb-pot", "double-bed", "bedroom-curtains",
         )
         if outdoor_contact or furniture_contact and (component.startswith("dining-chair") or component in (

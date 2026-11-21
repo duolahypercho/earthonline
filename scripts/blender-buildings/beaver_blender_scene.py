@@ -221,7 +221,8 @@ def site_model(scene, root, city, house, mapped, ground, site):
     nodes = soil.node_tree.nodes
     link = soil.node_tree.links.new
     shader = nodes.get("Principled BSDF")
-    base = shader.inputs["Base Color"].links[0].from_socket
+    old_soil = shader.inputs["Base Color"].links[0].from_socket
+    base = photographic_surface(root, soil, "park_dirt", 1.85, 0.20) or old_soil
     tex = nodes.new("ShaderNodeTexCoord")
     broad = nodes.new("ShaderNodeTexNoise")
     broad.inputs["Scale"].default_value = 0.73
@@ -807,21 +808,33 @@ def stage(scene, root, components, dimensions, planted):
         m for m in bpy.data.materials if m.name.startswith("painted-stucco@")
     )
     coating = MeshBatch()
-    for i in range(35):
-        a, b = 7 * i / 35, 7 * (i + 1) / 35
+    footing = MeshBatch()
+    concrete = material("Footing · weathered concrete", (0.27, 0.25, 0.22), 0.86)
+    photographic_surface(root, concrete, "concrete_floor_worn_001", 2.20, 0.20)
+    # Level masonry courses step with the measured crossfall. A recessed joint
+    # separates each block, with the original continuous foundation behind it.
+    width = (site @ Vector((7, 0, 0))).x
+    blocks = math.ceil(width / 0.40)
+    for i in range(blocks):
+        a, b = 7 * i / blocks, 7 * (i + 1) / blocks
         left, right = [site @ Vector((x, -13.052, 0)) for x in (a, b)]
-        low_a, low_b = ground(left.xy) + 0.19, ground(right.xy) + 0.19
-        coating.face(
-            base_material,
-            [
-                (left.x, left.y, low_a),
-                (right.x, right.y, low_b),
-                (right.x, right.y, 0.015),
-                (left.x, left.y, 0.015),
-            ],
-        )
+        top = math.ceil((max(ground(left.xy), ground(right.xy)) + 0.19) / 0.20) * 0.20
+        coating.face(base_material, [(left.x, left.y, top), (right.x, right.y, top),
+                                     (right.x, right.y, 0.015), (left.x, left.y, 0.015)])
+        for row in (0, 1):
+            z = top - row * .20 - .004
+            x0, x1 = left.x + .003, right.x - .003
+            y = left.y - .007
+            footing.box(concrete, (x0, y, z - .192), (x1, y + .014, z))
     exterior = bpy.data.collections["Site · parcel and surrounding buildings"]
     coating.finish("Rear foundation stucco", exterior)
+    footing.finish("Exposed masonry footing", exterior)
+    blocks_ob = next(o for o in exterior.objects if o.name.startswith("Exposed masonry footing"))
+    tex = blocks_ob.data.uv_layers.new(name="Site survey UV")
+    for face in blocks_ob.data.polygons:
+        for li in face.loop_indices:
+            pt = blocks_ob.data.vertices[blocks_ob.data.loops[li].vertex_index].co
+            tex.data[li].uv = (pt.x, pt.z if abs(face.normal.y) > .5 else pt.y)
     weather = next(
         o for o in exterior.objects if o.name.startswith("Rear foundation stucco")
     )

@@ -188,11 +188,24 @@ def tint(im, base, gain):
     )
 
 
+def yard_cover(grass):
+    # A periodic mask keeps all three pages registered across tile boundaries.
+    y, x = np.mgrid[0:512, 0:512] * (2 * np.pi / 512)
+    patch = (0.53 + 0.17 * np.cos(x - y) + 0.12 * np.sin(2*x + y)
+             + 0.09 * np.sin(x + 3*y) + 0.035 * np.sin(5*x - 4*y))
+    leaves = np.asarray(grass, dtype=float) / 255
+    green = leaves[:, :, 1] - leaves[:, :, 0]
+    weight = np.clip((patch - 0.39 + 1.8 * green) / 0.29, 0, 1)
+    weight = weight * weight * (3 - 2 * weight)
+    return Image.fromarray(np.rint(255 * weight).astype("uint8"))
+
+
 def surface(name, assets, families, metres, bump, paint_mix):
     if args.house_photo and name not in ("limewash", "fired-earth", "apron-concrete", "yard-earth", "trunk-bark", "porch-terracotta"):
         return
     pages = []
     inputs = []
+    cover = None
     for role in ("albedo", "normal", "arm"):
         if name == "limewash":
             # Both source tiles are seamless. The sand finish supplies the
@@ -212,13 +225,21 @@ def surface(name, assets, families, metres, bump, paint_mix):
                                                       + np.array([42,41,37]), 0, 255)))
         elif name == "trunk-bark":
             page = size(get(assets[0], role, inputs))
-        elif name in ("apron-concrete", "yard-earth"):
+        elif name == "yard-earth":
+            soil = size(get(assets[0], role, inputs))
+            grass = size(get(assets[1], role, inputs))
+            if role == "albedo":
+                cover = yard_cover(grass)
+                soil = Image.blend(soil, tint(soil, (116, 103, 77), .91), .40)
+            page = Image.composite(grass, soil, cover)
+            if role == "normal":
+                n = np.asarray(page, dtype=float) / 127.5 - 1
+                n /= np.maximum(np.linalg.norm(n, axis=2, keepdims=True), 1e-6)
+                page = Image.fromarray(np.uint8(np.rint(127.5 * (1 + n))))
+        elif name == "apron-concrete":
             page = size(get(assets[0], role, inputs))
             if role == "albedo":
-                # Keep photographically registered seams, organic litter and
-                # granular variations from the scanned material at yard scale.
-                page = (Image.blend(page,tint(page,(172,170,164),.83),.78) if name=="apron-concrete"
-                        else Image.blend(page,tint(page,(116,103,77),.91),.40))
+                page = Image.blend(page, tint(page, (172, 170, 164), .83), .78)
         elif name == "aggregate":
             # Crop to the size of the actual pictured fines in the private bed.
             page = size(get(assets[0], role, inputs))
@@ -324,6 +345,6 @@ surface(
 
 if args.house_photo:
     surface("apron-concrete", ["concrete_floor_worn_001"], ["cast-stone"], 2.20, .53, .18)
-    surface("yard-earth", ["park_dirt"], ["garden-topsoil"], 1.85, .87, .13)
+    surface("yard-earth", ["park_dirt", "leafy_grass"], ["garden-topsoil"], 1.85, .87, .13)
     surface("trunk-bark", ["bark_brown_02"], ["street-tree-bark"], 1.00, .82, .12)
     surface("porch-terracotta", ["terracotta_floor_tiles"], ["terracotta-paver"], .36, .64, .14)
