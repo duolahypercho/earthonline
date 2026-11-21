@@ -214,3 +214,47 @@ fn fitted_light(point: vec3<f32>, texcoord: vec2<f32>, world: vec3<f32>, v: vec3
         room_diffuse=room_irradiance(point,s.n,world,true,false);
     }
 }
+
+// These charts were baked on the two physical sides of the folded linen.
+// They include light scattered through the preceding pleats and the shadows
+// of the sash, headrail and lift tapes.
+fn window_source(chart: vec2<f32>, row: u32, layer: i32, front: bool) -> vec3<f32> {
+    let st=vec2<f32>(chart.x,(clamp(chart.y,.008,.992)+f32(row))*.125);
+    if (front) { return fitted_decode(textureSampleLevel(kit_albedo,kit_sampler,st,layer,0.).rgb); }
+    return fitted_decode(textureSampleLevel(kit_normal,kit_sampler,st,layer,0.).rgb);
+}
+
+fn window_linen(uv: vec2<f32>, world: vec3<f32>, m: Material, front: bool, du: vec2<f32>, dv: vec2<f32>) -> vec3<f32> {
+    let layer=m.layer;
+    let sun=look.key_dir.xyz;
+    let cloud=sky_cloud_transmittance(world);
+    let clear=cloud*smoothstep(0.,.35,sun.y)*(1.-skyu.night.z);
+    var lit=window_source(uv,0u,layer,front);
+    if (clear<1.) {
+        let sky=max(lk_sh(vec3<f32>(0.,1.,0.)),vec3<f32>(.00001));
+        lit+=window_source(uv,1u,layer,front)*sky*(look.hemi_sky.w/lk_luma(sky))*(1.-clear);
+    }
+    if (clear>0.) { lit+=window_source(uv,2u,layer,front)*look.key.rgb*clear; }
+    if (cloud>0. && sun.y>0.) {
+        let depth=normalize((vec4<f32>(0.,0.,1.,0.)*look.enclosure_frame).xyz);
+        let across=vec3<f32>(depth.z,0.,-depth.x);
+        let local=vec3<f32>(dot(sun,across),sun.y,dot(sun,depth));
+        let noon=smoothstep(cos(radians(24.)),cos(radians(3.)),dot(local,m.emissive.xyz));
+        var beam=vec3<f32>(0.);
+        if (noon>0.) { beam=window_source(uv,7u,layer,front)*noon; }
+        if (noon<1.) {
+            let altitude=clamp(asin(clamp(sun.y,0.,1.)),radians(25.),radians(57.));
+            let blend=(altitude-radians(25.))/radians(32.);
+            let first=select(3u,5u,local.z>0.);
+            let pair=mix(window_source(uv,first,layer,front),window_source(uv,first+1u,layer,front),blend);
+            beam+=pair*(1.-noon)*abs(local.z)/cos(altitude);
+        }
+        lit+=look.key.rgb*cloud*beam;
+    }
+    let arc=textureSampleLevel(kit_orm,kit_sampler,uv,layer,0.).gb;
+    let distance=dot(arc,vec2<f32>(256.,1.)/257.);
+    let weave=vec2<f32>(uv.x*m.base.x+m.base.y,mix(m.base.z,m.base.w,distance));
+    let scale=vec2<f32>(m.base.x,(m.base.w-m.base.z)/.81);
+    let grain=textureSampleGrad(kit_orm,kit_sampler,weave,layer,du*scale,dv*scale).r*2.;
+    return lit*grain;
+}

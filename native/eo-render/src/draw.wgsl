@@ -1129,6 +1129,9 @@ fn shade(in: VOut) -> vec4<f32> {
     if (dot(in.normal, in.normal) > 0.25) {
         n = normalize(in.normal);
     }
+    if ((objects[in.object].kind & FITTED_ROOM_BIT) != 0u && m.thin_absorption == -1.) {
+        return vec4<f32>(window_linen(in.ft,in.world,m,dot(n,v)>=0.,scan_dx,scan_dy),1.);
+    }
     // Two-sided: shade the side the camera sees.
     if (dot(n, v) < 0.0) {
         n = -n;
