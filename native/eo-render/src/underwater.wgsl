@@ -35,9 +35,12 @@ fn uw_vs(@builtin(vertex_index) vi: u32) -> UwView {
         // Meter green-weighted luminance. Four stops of
         // travel preserve a dark deep field. At the interface the gain is exactly one.
         let cove = wo_cove(xz);
-        let extinction = mix(mix(WO_BAY_A + WO_BAY_S, WO_COAST_A + WO_COAST_S, wg_ocean(xz.x)), WO_COVE_A + WO_COVE_S, cove) * mix(1.0, 0.63, cove);
+        let ext = mix(mix(WO_BAY_A + WO_BAY_S, WO_COAST_A + WO_COAST_S, wg_ocean(xz.x)), WO_COVE_A + WO_COVE_S, cove);
         let depth = max(y - wu.cam.y, 0.0);
-        let light = exp(-extinction * depth / 0.75);
+        var light = exp(-(ext * mix(1.0, 0.63, cove)) * depth / 0.75);
+        if (look.cove.y > 0.0 && cove > 0.0) {
+            light = mix(light, exp(-ext * (wo_daylight_ratio(ext, look.cove.y) * depth)), cove);
+        }
         let meter = max(lk_luma(light), mix(1.0 / 16.0, 1.0 / 5.0, cove));
         // Partial chromatic adaptation to the local illuminant. The view path
         // still carries its full spectral extinction and distance-dependent cast.
@@ -136,7 +139,11 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
     let scatter = mix(mix(WO_BAY_S, WO_COAST_S, ocean), WO_COVE_S, cove);
     let ext = mix(mix(WO_BAY_A, WO_COAST_A, ocean), WO_COVE_A, cove) + scatter;
     // Diffuse skylight penetrates suspended sediment farther than image contrast.
-    let diffuse_depth = mix(1.0, 0.63, cove);
+    var diffuse_depth = mix(1.0, 0.63, cove);
+    let daylight = select(0.0, cove, look.cove.y > 0.0);
+    if (daylight > 0.0) {
+        diffuse_depth = mix(diffuse_depth, 0.75 * wo_daylight_ratio(ext, look.cove.y), daylight);
+    }
     let limit = 10.0 / min(ext.r, min(ext.g, ext.b));
     let hit = w_scene_depth(uv) / max(dot(ray, wu.fwd.xyz), 1e-4);
     var path = min(max(hit - start, 0.0), limit);
@@ -218,8 +225,11 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
         // Only the incident sunlight is focused. Keep ambient in open shade.
         let direct_share = lk_luma(direct) / max(lk_luma(direct + ambient), 1e-5);
         let focus = mix(1.0, w_caustic(end, down1, sun_up), exp(-cove * down1 * 1.5));
-        let incident = mix(exp(-ext * diffuse_depth * down1 / 0.75),
+        var incident = mix(exp(-ext * mix(1.0, 0.63, cove) * down1 / 0.75),
             exp(-ext * down1 / max(sun_up.y, 0.1)) * focus, direct_share);
+        if (daylight > 0.0) {
+            incident = mix(incident, wo_daylight_bed(down1, ext, sun_up.y, direct_share, focus, look.cove.y), daylight);
+        }
         boundary = textureLoad(w_scene, vec2<i32>(i.clip.xy), 0).rgb * incident;
     }
     let grains = uw_grains(origin, ray, path, lk_luma(ext), select(0.0, cove, look.cove.x > 0.0), pixel_cone);

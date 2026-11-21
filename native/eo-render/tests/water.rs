@@ -308,3 +308,73 @@ fn submerged_camera_obeys_depth_critical_angle_and_shore() {
     let dry = view(-180.0, 0.5, 1.4);
     assert!((center(&on, dry) - center(&off, dry)).abs() < 2.0, "submerged optics on dry land");
 }
+
+/// Read the irradiance calculated by the same WGSL function used by the
+/// surface and submerged passes. A wave can focus only the collimated share.
+#[test]
+fn cove_bed_daylight_keeps_the_measured_vertical_loss_across_the_waterline() {
+    let ctx = ctx();
+    let d = &ctx.device;
+    let code = format!(
+        "{}\nconst KD: f32 = {};\n{}",
+        include_str!("../src/cove_daylight.wgsl"),
+        eo_water::optics::COVE_DAYLIGHT_KD,
+        r#"
+        @group(0) @binding(0) var<storage,read_write> light: array<vec4<f32>, 4>;
+        @compute @workgroup_size(1)
+        fn check() {
+            let neutral = vec3<f32>(1.2);
+            light[0] = vec4<f32>(wo_daylight_bed(0., neutral, 0.75, 0.7, 1., KD), 0.);
+            light[1] = vec4<f32>(wo_daylight_bed(3.5, neutral, 0.75, 0.7, 1., KD), 0.);
+            light[2] = vec4<f32>(wo_daylight_bed(3.5, neutral, 0.75, 0.7, 2., KD), 0.);
+            light[3] = vec4<f32>(wo_daylight_bed(1., vec3<f32>(1.28,1.13,1.29), 0.8, 0.0, 1., KD), 0.);
+        }"#
+    );
+    let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("cove daylight measurement"),
+        source: wgpu::ShaderSource::Wgsl(code.into()),
+    });
+    let pipeline = d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: None,
+        layout: None,
+        module: &module,
+        entry_point: Some("check"),
+        compilation_options: Default::default(),
+        cache: None,
+    });
+    let buffer = |usage| {
+        d.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: 64,
+            usage,
+            mapped_at_creation: false,
+        })
+    };
+    let out = buffer(wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC);
+    let read = buffer(wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST);
+    let bg = d.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: None,
+        layout: &pipeline.get_bind_group_layout(0),
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: out.as_entire_binding(),
+        }],
+    });
+    let mut enc = d.create_command_encoder(&Default::default());
+    {
+        let mut pass = enc.begin_compute_pass(&Default::default());
+        pass.set_pipeline(&pipeline);
+        pass.set_bind_group(0, &bg, &[]);
+        pass.dispatch_workgroups(1, 1, 1);
+    }
+    enc.copy_buffer_to_buffer(&out, 0, &read, 0, 64);
+    ctx.queue.submit([enc.finish()]);
+    let bytes = read_mapped(&ctx, &read).unwrap();
+    let value = |i: usize| f32::from_le_bytes(bytes[4 * i..4 * i + 4].try_into().unwrap());
+    let near = (-(eo_water::optics::COVE_DAYLIGHT_KD)).exp();
+    let deep = (-3.5 * eo_water::optics::COVE_DAYLIGHT_KD).exp();
+    assert!((value(0) - 1.).abs() < 1e-5);
+    assert!((value(4) - deep).abs() < 1e-5);
+    assert!((value(8) - deep - 0.7 * (-1.2_f32 * 3.5 / 0.75).exp()).abs() < 1e-5);
+    assert!(value(12) < near && value(13) > near && value(14) < near);
+}

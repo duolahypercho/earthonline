@@ -146,13 +146,14 @@ pub struct LookOptions {
     pub cove_detail: bool,
     pub cove_canopy: bool,
     pub cove_sediment: bool,
+    pub cove_daylight: bool,
     /// the CC0 scanned sets' switches (`cc0::RUN_*`; `--no-cc0` and the per-feature `--no-cc0-*`).
     pub cc0: u32,
 }
 
 impl Default for LookOptions {
     fn default() -> Self {
-        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT } // + rooms, agent pyramid test, probe deferral // water // sky
+        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, cove_daylight: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT } // + rooms, agent pyramid test, probe deferral // water // sky
     }
 }
 
@@ -1167,7 +1168,8 @@ impl LookGpu {
             rooms_env: crate::rooms::drive(m.sun.altitude_deg, self.time_of_day()).0,
             rooms_work: crate::rooms::drive(m.sun.altitude_deg, self.time_of_day()).1,
             wx: [(m.profile.overcast * wx_keep) as f32, (m.profile.isotropy * wx_keep) as f32, (m.profile.desaturation * wx_keep) as f32, if m.ext.on { 1.0 } else { 0.0 }], // eo-look `SkyExt`
-            cove: [if self.options.cove_sediment && self.options.cove_detail { 1.0 / eo_data::groundscale::scale() as f32 } else { 0.0 }, 0.0, 0.0, 0.0],
+            cove: [if self.options.cove_sediment && self.options.cove_detail { 1.0 / eo_data::groundscale::scale() as f32 } else { 0.0 },
+                if self.options.cove_detail && self.options.cove_daylight { eo_water::optics::COVE_DAYLIGHT_KD } else { 0.0 }, 0.0, 0.0],
             wx_tint: v4(m.profile.tint.map(|v| 1.0 + (v - 1.0) * wx_keep), m.ext.afterglow), // w the afterglow arch
         };
         queue.write_buffer(&self.look_buf, 0, bytemuck::bytes_of(&u));

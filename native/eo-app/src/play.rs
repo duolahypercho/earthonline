@@ -153,6 +153,8 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-cove-canopy" => a.look.cove_canopy = false,
             "--cove-sediment" => { a.cove_detail = true; a.look.cove_sediment = true; }
             "--no-cove-sediment" => a.look.cove_sediment = false,
+            "--cove-daylight" => { a.cove_detail = true; a.look.cove_daylight = true; }
+            "--no-cove-daylight" => a.look.cove_daylight = false,
             "--cove-pile-contact" => a.cove_detail = true,
             "--no-cove-pile-contact" => {} // resolved with the bay preview settings
             "--black-point-intertidal" => { a.cove_detail = true; a.black_point_intertidal = true; }
