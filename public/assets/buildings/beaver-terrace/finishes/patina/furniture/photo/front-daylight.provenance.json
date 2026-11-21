@@ -1,0 +1,32 @@
+{
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/front-daylight.bin",
+  "sha256": "bf4a08d5c10e799f5fd4c948e6962c78c497379098851848c884daaedc5c7ad1",
+  "bytes": 4536,
+  "garden_sha256": "05e6b5cceba5a98495e1067bbae7799f1f995b1faeb7979e2fe84e18c1f4fe47",
+  "source_scene_sha256": "1e4a3b1d51ef0373d61baff687383a0fc0f7b6cbee3b5343f6ad1c635484444d",
+  "panoramas_sha256": "1670c8588eb454b5254a7c56415ed8e0dd25613adf346b6b476d7674c800dfc8",
+  "solar_table_sha256": "0aeb8c470bde20a5cb2d7e533d1872fd59d71a280f8b95e9306a8cf72984db3b",
+  "hours": [
+    8,
+    10,
+    12,
+    14,
+    16,
+    18
+  ],
+  "across": [
+    0.68,
+    2.62,
+    4.56
+  ],
+  "depth": [
+    -1.78,
+    -0.52
+  ],
+  "height_above_grade_m": 0.5,
+  "coefficient_layout": "7 skies, 6 probes, 9 polynomial terms, RGB f32 little endian",
+  "relative_quadrature_error_p95": 0.04100810341558655,
+  "attribution": "Earth Online. Scene-linear measurements of the assembled 21 Beaver house in Blender Cycles.",
+  "license": "MIT for the project-authored measurements. The fitted garden uses CC0 1.0 photographs credited in street-garden.provenance.json.",
+  "build": "scripts/blender-buildings/cook_beaver_front_daylight.py"
+}
