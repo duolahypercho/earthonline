@@ -87,6 +87,67 @@ def receiver(scene, parcel):
     return ob, target
 
 
+def light_conditions(scene, measure):
+    world = scene.world
+    unit = bpy.data.worlds.new("Porch calibration sky")
+    unit.use_nodes = True
+    bg = unit.node_tree.nodes["Background"]
+    bg.inputs["Color"].default_value = (1, 1, 1, 1)
+    bg.inputs["Strength"].default_value = 0
+    scene.world = unit
+    sun = scene.objects[SUN]
+    sun.hide_render = True
+    # Few light paths reach the back wall from this small enclosed source.
+    # Resolve the broad indirect return separately from the hard hood shadow.
+    scene.cycles.samples = 2048
+    fixture_direct = measure("Porch fixtures direct", {"DIRECT"})
+    scene.cycles.samples = 4096
+    fixture_indirect = measure("Porch fixtures indirect", {"INDIRECT"})
+    scene.cycles.samples = 384
+    fixture = fixture_direct + fixture_indirect
+    for obj in scene.objects:
+        if obj.type == "LIGHT":
+            obj.hide_render = True
+    for mat in bpy.data.materials:
+        if not mat.node_tree:
+            continue
+        for node in mat.node_tree.nodes:
+            socket = {
+                "BSDF_PRINCIPLED": "Emission Strength",
+                "EMISSION": "Strength",
+            }.get(node.type)
+            if socket:
+                inp = node.inputs[socket]
+                for wire in list(inp.links):
+                    mat.node_tree.links.remove(wire)
+                inp.default_value = 0
+    rows = []
+    sky_strength = []
+    for hour in HOURS:
+        scene.world = world
+        # The keyed world must belong to the scene when Blender evaluates the frame.
+        scene.frame_set(int(2 * hour))
+        bg_source = next(n for n in world.node_tree.nodes if n.type == "BACKGROUND")
+        sky_strength.append(float(bg_source.inputs["Strength"].default_value))
+        sun.hide_render = True
+        sky = measure(f"Porch sky {hour}", {"DIRECT", "INDIRECT"})
+        scene.world = unit
+        sun.hide_render = False
+        bounce = measure(f"Porch solar bounce {hour}", {"INDIRECT"})
+        rows.append(sky[:, :, :3] + bounce[:, :, :3])
+    sun.hide_render = True
+    bg.inputs["Strength"].default_value = 1
+    if sky_strength[-1] != 0 or min(sky_strength[:3]) <= 0:
+        raise ValueError(
+            f"Unexpected source sky at the four survey hours: {sky_strength}"
+        )
+    if np.max(rows[-1]) > 0.0001:
+        raise ValueError("The unlit scene returned daylight after sunset")
+    rows.append(measure("Unit overcast on porch", {"DIRECT", "INDIRECT"})[:, :, :3])
+    rows.append(fixture[:, :, :3])
+    return rows, sky_strength, fixture_direct, fixture_indirect
+
+
 def bake(out):
     src = Path(bpy.data.filepath)
     provenance = json.loads((src.parent / "porch-light.provenance.json").read_text())
@@ -152,63 +213,9 @@ def bake(out):
     pigment = measure("Projected porch reflectance", {"COLOR"}, True)
     for surface in originals:
         surface.select_set(False)
-    world = scene.world
-    unit = bpy.data.worlds.new("Porch calibration sky")
-    unit.use_nodes = True
-    bg = unit.node_tree.nodes["Background"]
-    bg.inputs["Color"].default_value = (1, 1, 1, 1)
-    bg.inputs["Strength"].default_value = 0
-    scene.world = unit
-    sun = scene.objects[SUN]
-    sun.hide_render = True
-    # Few light paths reach the back wall from this small enclosed source.
-    # Resolve the broad indirect return separately from the hard hood shadow.
-    scene.cycles.samples = 2048
-    fixture_direct = measure("Porch fixtures direct", {"DIRECT"})
-    scene.cycles.samples = 4096
-    fixture_indirect = measure("Porch fixtures indirect", {"INDIRECT"})
-    scene.cycles.samples = 384
-    fixture = fixture_direct + fixture_indirect
-    for obj in scene.objects:
-        if obj.type == "LIGHT":
-            obj.hide_render = True
-    for mat in bpy.data.materials:
-        if not mat.node_tree:
-            continue
-        for node in mat.node_tree.nodes:
-            socket = {
-                "BSDF_PRINCIPLED": "Emission Strength",
-                "EMISSION": "Strength",
-            }.get(node.type)
-            if socket:
-                inp = node.inputs[socket]
-                for wire in list(inp.links):
-                    mat.node_tree.links.remove(wire)
-                inp.default_value = 0
-    rows = []
-    sky_strength = []
-    for hour in HOURS:
-        scene.world = world
-        # The keyed world must belong to the scene when Blender evaluates the frame.
-        scene.frame_set(int(2 * hour))
-        bg_source = next(n for n in world.node_tree.nodes if n.type == "BACKGROUND")
-        sky_strength.append(float(bg_source.inputs["Strength"].default_value))
-        sun.hide_render = True
-        sky = measure(f"Porch sky {hour}", {"DIRECT", "INDIRECT"})
-        scene.world = unit
-        sun.hide_render = False
-        bounce = measure(f"Porch solar bounce {hour}", {"INDIRECT"})
-        rows.append(sky[:, :, :3] + bounce[:, :, :3])
-    sun.hide_render = True
-    bg.inputs["Strength"].default_value = 1
-    if sky_strength[-1] != 0 or min(sky_strength[:3]) <= 0:
-        raise ValueError(
-            f"Unexpected source sky at the four survey hours: {sky_strength}"
-        )
-    if np.max(rows[-1]) > 0.0001:
-        raise ValueError("The unlit scene returned daylight after sunset")
-    rows.append(measure("Unit overcast on porch", {"DIRECT", "INDIRECT"})[:, :, :3])
-    rows.append(fixture[:, :, :3])
+    rows, sky_strength, fixture_direct, fixture_indirect = light_conditions(
+        scene, measure
+    )
     raw = out / "porch-surfaces.npz"
     np.savez_compressed(
         raw,

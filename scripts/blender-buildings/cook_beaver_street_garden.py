@@ -11,7 +11,7 @@ from cook_beaver_fitted_room import PARENT, SIZE, digest
 from PIL import Image
 
 
-def portable_geometry(path, transform, dest):
+def portable_geometry(path, transform, dest, *, label="Installed street garden"):
     doc, blob = read_glb(path)
     mats = doc["materials"]
     material_names = [m["name"] for m in mats]
@@ -61,7 +61,7 @@ def portable_geometry(path, transform, dest):
     old_scene = doc["scenes"][doc.get("scene", 0)]
     doc["nodes"].append(
         {
-            "name": "Installed street garden",
+            "name": label,
             "children": old_scene["nodes"],
             "matrix": np.asarray(transform).T.ravel().tolist(),
         }
