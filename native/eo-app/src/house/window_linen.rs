@@ -94,6 +94,6 @@ impl Window {
             let id = table.named(&format!("21-beaver-fitted/Window/{}", mat.name), gpu);
             draws.push((id, false, cloth && !measured));
         }
-        Ok(Geometry { model, uv, draws })
+        Ok(Geometry { model, uv, draws, visibility: Vec::new() })
     }
 }

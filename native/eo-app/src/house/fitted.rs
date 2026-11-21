@@ -305,7 +305,7 @@ impl Recipe {
             .map(|(w, i, measure)| w.load(root, table, first_layer + i, *measure))
             .transpose()?;
         Ok(Room {
-            base: Geometry { model, uv, draws },
+            base: Geometry { model, uv, draws, visibility: Vec::new() },
             window,
             finish_parameters,
             kitchen_frame: self
@@ -332,6 +332,7 @@ pub(super) struct Geometry {
     pub model: CookedModel,
     pub uv: Vec<[f32; 2]>,
     pub draws: Vec<(u32, bool, bool)>,
+    pub visibility: Vec<f32>,
 }
 
 impl Room {
@@ -344,23 +345,27 @@ impl Room {
 }
 
 impl Geometry {
-    fn append(&self, house: &House, scene: &mut Scene, basis: Mat3) {
+    pub(super) fn append(&self, house: &House, scene: &mut Scene, basis: Mat3) {
         let base = scene.vertices.len() as i32;
         let first = scene.indices.len() as u32;
-        for ((pos, normal), uv) in self
+        for (i, ((pos, normal), uv)) in self
             .model
             .positions
             .iter()
             .zip(&self.model.normals)
             .zip(&self.uv)
+            .enumerate()
         {
+            let blocked = self.visibility.get(i).map_or(0, |v| {
+                ((v - 1.) * 127.).round() as i8 as u8
+            });
             let [u, v] = uv.map(|s| u32::from(eo_farshore::half::f16::from_f32(s).to_bits()));
             scene.vertices.push(Vertex {
                 pos: house
                     .point(pos[0].into(), pos[1].into(), pos[2].into())
                     .as_vec3()
                     .to_array(),
-                normal: glb::pack_normal(basis * glb::unpack_normal(*normal)),
+                normal: glb::pack_normal(basis * glb::unpack_normal(*normal)) | (u32::from(blocked) << 24),
                 color: u | v << 16,
             });
         }

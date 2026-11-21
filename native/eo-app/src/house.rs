@@ -9,6 +9,7 @@ use table_light::TableLight;
 mod door;
 mod lod;
 mod planting;
+mod street_garden;
 mod roof;
 mod surfaces;
 pub use surfaces::Scan;
@@ -98,6 +99,8 @@ struct RoomLight {
 pub struct Finishes {
     fitted: Option<fitted::Recipe>,
     fitted_maps: Vec<eo_assets::kit::BakedMaps>,
+    garden: Option<street_garden::Garden>,
+    garden_maps: Vec<eo_assets::kit::BakedMaps>,
     downstairs_light: bool,
     dining_meter: Option<[f32; 3]>,
     dining_camera_exposure: Option<f32>,
@@ -297,8 +300,12 @@ impl Finishes {
             let (recipe, maps) = fitted::Recipe::read(root, &dining_dir, &manifest.house_sha256, args.house_fitted_finishes && args.interior_lighting, args.house_kitchen_light && args.interior_lighting, args.house_window_linen, args.interior_lighting)?;
             (Some(recipe), maps)
         } else { (None, Vec::new()) };
+        let (garden, garden_maps) = if args.house_street_garden && photo && furniture && patina {
+            let (recipe, maps) = street_garden::Garden::read(root, &photo_dir, &manifest.house_sha256)?;
+            (Some(recipe), maps)
+        } else { (None, vec![]) };
         Ok(Self {
-            fitted, fitted_maps, downstairs_light,
+            garden, garden_maps, fitted, fitted_maps, downstairs_light,
             dining_meter,
             dining_camera_exposure,
             oak_finish,
@@ -321,6 +328,7 @@ impl Finishes {
 
     pub fn into_maps(self) -> Vec<eo_assets::kit::BakedMaps> {
         let mut maps: Vec<_> = self.scans.into_iter().map(|scan| scan.maps).collect();
+        maps.extend(self.garden_maps);
         maps.extend(self.fitted_maps);
         maps.extend(self.floor_reflections);
         maps.extend(self.yard_reflections);
@@ -392,6 +400,7 @@ fn corners([x, y, z]: Point, [u, v, w]: Point) -> [Point; 8] {
 
 pub struct House {
     fitted: Option<fitted::Room>,
+    garden: Option<fitted::Geometry>,
     origin: DVec2,
     across: DVec2,
     back: DVec2,
@@ -519,12 +528,12 @@ impl House {
         let mission_roof = finishes.is_some_and(|f| f.mission_roof);
         let (mut model, light_transfer, visibility) = if furnished {
             ensure!(!layout.nodes.is_empty(), "furnished house is missing its metric placement");
-            let skip: Option<fn(&str) -> bool> = match (mission_roof, fitted_recipe.is_some()) {
-                (true,true) => Some(|name|roof::old_clay(name) || fitted::replaced(name)),
-                (true,false) => Some(roof::old_clay), (false,true) => Some(fitted::replaced), _ => None,
-            };
-            let (model, uv, contact, pattern) = eo_assets::glb::cook_furnished_glb(
-                &raw, &layout.nodes, room_meter.is_some(), skip,
+            let garden = finishes.and_then(|f| f.garden.as_ref());
+            let skip = |name: &str| (mission_roof && roof::old_clay(name))
+                || (fitted_recipe.is_some() && fitted::replaced(name))
+                || garden.is_some_and(|g| g.replaces(name));
+            let (model, uv, contact, pattern) = eo_assets::glb::cook_furnished_glb_filtered(
+                &raw, &layout.nodes, room_meter.is_some(), Some(&skip),
             )?;
             cut_pattern = pattern;
             if interior_lighting { (model, uv, contact) } else { (model, vec![], vec![]) }
@@ -568,9 +577,12 @@ impl House {
         } else { 0 };
         let table_light = finishes.and_then(|f| f.table_light.clone());
         let table_vertices = table_light.as_ref().map(|s| s.vertices(&model)).transpose()?.unwrap_or_default();
-        let fitted = fitted_recipe.map(|r| r.load(root,materials,finishes.map_or(0,|f|f.scans.len()))).transpose()?;
+        let scans = finishes.map_or(0, |f| f.scans.len());
+        let garden = finishes.and_then(|f| f.garden.as_ref()).map(|g| g.load(root,materials,scans)).transpose()?;
+        let first_fitted = scans + finishes.map_or(0, |f| f.garden_maps.len());
+        let fitted = fitted_recipe.map(|r| r.load(root,materials,first_fitted)).transpose()?;
         let mut h = Self {
-            fitted,
+            garden, fitted,
             origin: ring[1],
             across,
             back,
@@ -1489,6 +1501,7 @@ impl House {
             scene.objects.push(object);
         }
         if let Some(fit) = &self.fitted { fit.append(self,scene,normals); }
+        if let Some(garden) = &self.garden { garden.append(self, scene, normals); }
         self.planting.append(scene);
         if self.photo && detail_lod { lod::install(scene, objects); }
         scene.stats.objects += scene.objects.len() - objects;

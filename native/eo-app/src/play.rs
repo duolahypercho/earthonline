@@ -81,6 +81,7 @@ fn base_args() -> Args {
         house_fitted_finishes: false,
         house_kitchen_light: false,
         house_window_linen: false,
+        house_street_garden: false,
         house_dining_meter: false,
         house_glazing: true,
         beaver_house: false,
@@ -151,7 +152,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
-            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" | "--house-fitted-finishes" | "--house-kitchen-light" | "--house-window-linen" => {
+            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" | "--house-fitted-finishes" | "--house-kitchen-light" | "--house-window-linen" | "--house-street-garden" => {
                 a.beaver_house = true;
                 a.house_finishes = true;
                 a.house_patina = true;
@@ -161,6 +162,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
                     "--house-dining-light" => a.house_dining_light = true,
                     "--house-downstairs-light" => a.house_downstairs_light = true,
                     "--house-table-light" => a.house_table_light = true,
+                    "--house-street-garden" => a.house_street_garden = true,
                     "--house-window-linen" => { a.house_fitted_dining = true; a.house_window_linen = true; }
                     "--house-kitchen-light" => { a.house_fitted_dining = true; a.house_kitchen_light = true; }
                     "--house-fitted-finishes" => { a.house_fitted_dining = true; a.house_fitted_finishes = true; }
@@ -177,6 +179,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-downstairs-light" => a.house_downstairs_light = false,
             "--no-house-table-light" => a.house_table_light = false,
             "--no-house-fitted-finishes" => a.house_fitted_finishes = false,
+            "--no-house-street-garden" => a.house_street_garden = false,
             "--no-house-window-linen" => a.house_window_linen = false,
             "--no-house-kitchen-light" => a.house_kitchen_light = false,
             "--no-house-fitted-dining" => a.house_fitted_dining = false,
@@ -1304,6 +1307,93 @@ mod house_tests {
         check_beaver_walk(true, true, true, true, true);
         let (off, _) = parse(&["--house-fitted-dining".into(),"--no-house-fitted-dining".into()]).unwrap();
         assert!(off.house_photo && !off.house_fitted_dining);
+    }
+
+    #[test]
+    fn street_garden_preserves_the_entry_and_the_fitted_room_maps() {
+        let common = [
+            "--house-window-linen",
+            "--house-fitted-finishes",
+            "--house-floor-reflections",
+            "--house-mission-roof",
+        ];
+        let mut control = None;
+        for enabled in [false, true] {
+            let mut flags = common.map(String::from).to_vec();
+            flags.push("--house-street-garden".into());
+            if !enabled {
+                flags.push("--no-house-street-garden".into());
+            }
+            let (mut args, _) = parse(&flags).unwrap();
+            assert_eq!(args.house_street_garden, enabled);
+            args.kit = false;
+            args.landmarks = false;
+            args.models = false;
+            let world = load_world(&args).unwrap();
+            let house = world.house.as_ref().unwrap();
+            let table = &world.authored.materials;
+            let name = |o: &eo_render::scene::GpuObject| table.names[o.material as usize].as_str();
+            let old = world
+                .scene
+                .objects
+                .iter()
+                .filter(|o| name(o).contains("agave-leaf@"))
+                .count();
+            assert_eq!(old > 0, !enabled);
+            let garden: Vec<_> = world
+                .scene
+                .objects
+                .iter()
+                .filter(|o| name(o).starts_with("21-beaver-fitted/Street garden/"))
+                .collect();
+            assert_eq!(garden.len(), if enabled { 3 } else { 0 });
+            let maps = crate::house::Finishes::load(&world.paths.repo_root, &args)
+                .unwrap()
+                .into_maps();
+            let bound = |o: &eo_render::scene::GpuObject| {
+                (table.gpu[o.material as usize].layer as usize) - table.layers.len()
+            };
+            let blind = world
+                .scene
+                .objects
+                .iter()
+                .find(|o| name(o).ends_with("/Sun-filtering plainweave flax"))
+                .unwrap();
+            let stable = (
+                house.entry_position(),
+                house.lowest_tread_corners(),
+                maps[bound(blind)].albedo.clone(),
+                maps[maps.len() - 6].albedo.clone(),
+            );
+            if let Some(prior) = &control {
+                assert_eq!(&stable, prior);
+            } else {
+                control = Some(stable);
+                continue;
+            }
+            for o in garden {
+                assert_ne!(o.kind & eo_render::scene::FITTED_ROOM_BIT, 0);
+                assert_eq!(o.kind & eo_render::scene::DOWNSTAIRS_LIGHT_BIT, 0);
+                let page = &maps[bound(o)];
+                assert!(
+                    page.normal
+                        .chunks_exact(4)
+                        .any(|p| p[2] > 190 && p[1] != 128)
+                );
+                let begin = o.first_index as usize;
+                let contact = world.scene.indices[begin..begin + o.index_count as usize]
+                    .iter()
+                    .map(|&index| {
+                        (world.scene.vertices[(o.base_vertex as i64 + i64::from(index)) as usize]
+                            .normal
+                            >> 24) as i8
+                    });
+                assert!(contact.clone().any(|v| v < -25));
+                assert!(contact.clone().any(|v| v > -5));
+            }
+        }
+        let (standalone, _) = parse(&["--house-street-garden".into()]).unwrap();
+        assert!(standalone.house_photo && !standalone.house_fitted_dining);
     }
 
     #[test]

@@ -59,6 +59,7 @@ pub struct Args {
     pub house_fitted_finishes: bool,
     pub house_kitchen_light: bool,
     pub house_window_linen: bool,
+    pub house_street_garden: bool,
     pub house_dining_meter: bool,
     pub house_glazing: bool,
     pub bench: bool,
@@ -222,6 +223,7 @@ fn parse_args() -> Result<Args> {
         house_fitted_finishes: false,
         house_kitchen_light: false,
         house_window_linen: false,
+        house_street_garden: false,
         house_dining_meter: false,
         house_glazing: true,
         beaver_house: false,
@@ -299,7 +301,7 @@ fn parse_args() -> Result<Args> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
-            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" | "--house-fitted-finishes" | "--house-kitchen-light" | "--house-window-linen" => {
+            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" | "--house-fitted-finishes" | "--house-kitchen-light" | "--house-window-linen" | "--house-street-garden" => {
                 a.beaver_house = true;
                 a.house_finishes = true;
                 a.house_patina = true;
@@ -309,6 +311,7 @@ fn parse_args() -> Result<Args> {
                     "--house-dining-light" => a.house_dining_light = true,
                     "--house-downstairs-light" => a.house_downstairs_light = true,
                     "--house-table-light" => a.house_table_light = true,
+                    "--house-street-garden" => a.house_street_garden = true,
                     "--house-window-linen" => { a.house_fitted_dining = true; a.house_window_linen = true; }
                     "--house-kitchen-light" => { a.house_fitted_dining = true; a.house_kitchen_light = true; }
                     "--house-fitted-finishes" => { a.house_fitted_dining = true; a.house_fitted_finishes = true; }
@@ -325,6 +328,7 @@ fn parse_args() -> Result<Args> {
             "--no-house-downstairs-light" => a.house_downstairs_light = false,
             "--no-house-table-light" => a.house_table_light = false,
             "--no-house-fitted-finishes" => a.house_fitted_finishes = false,
+            "--no-house-street-garden" => a.house_street_garden = false,
             "--no-house-window-linen" => a.house_window_linen = false,
             "--no-house-kitchen-light" => a.house_kitchen_light = false,
             "--no-house-fitted-dining" => a.house_fitted_dining = false,
