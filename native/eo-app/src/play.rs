@@ -86,6 +86,7 @@ fn base_args() -> Args {
         house_wall_daylight: false,
         house_window_optics: false,
         house_joinery_light: false,
+        house_porch_lamp: false,
         house_site_camera: false,
         house_dining_meter: false,
         house_glazing: true,
@@ -157,7 +158,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
-            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" | "--house-fitted-finishes" | "--house-kitchen-light" | "--house-window-linen" | "--house-street-garden" | "--house-front-daylight" | "--house-wall-daylight" | "--house-site-camera" | "--house-window-optics" | "--house-joinery-light" => {
+            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" | "--house-fitted-finishes" | "--house-kitchen-light" | "--house-window-linen" | "--house-street-garden" | "--house-front-daylight" | "--house-wall-daylight" | "--house-site-camera" | "--house-window-optics" | "--house-joinery-light" | "--house-porch-lamp" => {
                 a.beaver_house = true;
                 a.house_finishes = true;
                 a.house_patina = true;
@@ -169,6 +170,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
                     "--house-table-light" => a.house_table_light = true,
                     "--house-street-garden" => a.house_street_garden = true,
                     "--house-site-camera" => a.house_site_camera = true,
+                    "--house-porch-lamp" => a.house_porch_lamp = true,
                     "--house-joinery-light" => a.house_joinery_light = true,
                     "--house-window-optics" => a.house_window_optics = true,
                     "--house-wall-daylight" => a.house_wall_daylight = true,
@@ -191,6 +193,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-fitted-finishes" => a.house_fitted_finishes = false,
             "--no-house-street-garden" => a.house_street_garden = false,
             "--no-house-site-camera" => a.house_site_camera = false,
+            "--no-house-porch-lamp" => a.house_porch_lamp = false,
             "--no-house-joinery-light" => a.house_joinery_light = false,
             "--no-house-window-optics" => a.house_window_optics = false,
             "--no-house-wall-daylight" => a.house_wall_daylight = false,
@@ -837,7 +840,7 @@ mod window {
                 if door.advance(dt, feet, &mut self.world.scene, &mut self.cw)
                     && let Some(g) = &mut self.gfx
                 {
-                    g.renderer.look.set_front_door_open(!door.is_shut());
+                    g.renderer.look.set_front_door_angle(door.opening_angle());
                     door.upload(&self.world.scene, &g.renderer, &g.ctx.queue);
                 }
             }
@@ -1323,6 +1326,42 @@ mod house_tests {
         check_beaver_walk(true, true, true, true, true);
         let (off, _) = parse(&["--house-fitted-dining".into(),"--no-house-fitted-dining".into()]).unwrap();
         assert!(off.house_photo && !off.house_fitted_dining);
+    }
+
+    #[test]
+    fn porch_switch_uses_the_emitting_shade_and_its_own_atlas_layer() {
+        for (walls, enabled) in [(false, true), (true, true), (true, false)] {
+            let mut flags = ["--house-porch-lamp", "--house-street-garden", "--no-interior-lighting"]
+                .map(str::to_owned).to_vec();
+            if walls { flags.push("--house-wall-daylight".into()); }
+            if !enabled { flags.push("--no-house-porch-lamp".into()); }
+            let (mut args, _) = parse(&flags).unwrap();
+            args.kit = false;
+            args.models = false;
+            args.agents = false;
+            args.props = false;
+            let world = load_world(&args).unwrap();
+            let house = world.house.as_ref().unwrap();
+            let table = &world.authored.materials;
+            let light = house.porch_light(table.layers.len());
+            let shade = table.names.iter().position(|n| n == "21-beaver/opal-porch-lamp");
+            assert_eq!(light.is_some(), enabled);
+            assert_eq!(shade.is_some(), enabled);
+            if let (Some(field), Some(id)) = (light, shade) {
+                let [r,g,b,_] = table.gpu[id].emissive;
+                assert!(r > g && g > b && b > 1.);
+                assert!(world.scene.objects.iter().any(|o| o.material == id as u32));
+                let slot = field[1][3] as usize;
+                if let Some(wall) = house.wall_daylight_layer {
+                    assert_eq!(table.layers.len() + wall + 1, slot);
+                }
+                assert!(table.names.iter().zip(&table.gpu)
+                    .filter(|(n,_)| n.starts_with("21-beaver-fitted/Street garden/"))
+                    .all(|(_, material)| material.layer > slot as i32));
+                assert!(field[5][3] > 2. && field[6][2] > 0.75);
+                assert_eq!(field[6][3], 0.);
+            }
+        }
     }
 
     #[test]

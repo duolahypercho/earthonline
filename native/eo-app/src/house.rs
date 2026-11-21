@@ -9,6 +9,7 @@ use table_light::TableLight;
 mod door;
 mod lod;
 mod planting;
+mod porch;
 mod street_garden;
 mod roof;
 mod surfaces;
@@ -105,6 +106,7 @@ pub struct Finishes {
     wall_daylight: Option<eo_assets::kit::BakedMaps>,
     window_optics: Option<Arc<eo_render::window_optics::WindowOptics>>,
     joinery_light: bool,
+    porch_light: Option<(porch::Lamp, eo_assets::kit::BakedMaps)>,
     site_camera_exposure: Option<f32>,
     downstairs_light: bool,
     dining_meter: Option<[f32; 3]>,
@@ -314,12 +316,15 @@ impl Finishes {
         let window_optics = if (args.house_window_optics && glazing || args.house_joinery_light) && photo && patina && furniture {
             Some(Arc::new(Self::read_window_optics(root, &photo_dir, &manifest.house_sha256)?))
         } else { None };
+        let porch_light = if args.house_porch_lamp && photo && patina && furniture {
+            Some(porch::Lamp::read(root, &photo_dir, &manifest.house_sha256)?)
+        } else { None };
         let camera = args.house_site_camera && args.look.blender_camera;
         let (wall_daylight, site_camera_exposure) = if (args.house_wall_daylight || camera) && photo && furniture && patina {
             Self::read_wall_daylight(root, &photo_dir, &manifest.house_sha256, args.house_wall_daylight, camera)?
         } else { (None, None) };
         Ok(Self {
-            joinery_light: args.house_joinery_light, window_optics, site_camera_exposure, wall_daylight, front_daylight, garden, garden_maps, fitted, fitted_maps, downstairs_light,
+            porch_light, joinery_light: args.house_joinery_light, window_optics, site_camera_exposure, wall_daylight, front_daylight, garden, garden_maps, fitted, fitted_maps, downstairs_light,
             dining_meter,
             dining_camera_exposure,
             oak_finish,
@@ -343,6 +348,7 @@ impl Finishes {
     pub fn into_maps(self) -> Vec<eo_assets::kit::BakedMaps> {
         let mut maps: Vec<_> = self.scans.into_iter().map(|scan| scan.maps).collect();
         maps.extend(self.wall_daylight);
+        maps.extend(self.porch_light.map(|(_, maps)| maps));
         maps.extend(self.garden_maps);
         maps.extend(self.fitted_maps);
         maps.extend(self.floor_reflections);
@@ -480,6 +486,7 @@ pub struct House {
     garden: Option<fitted::Geometry>,
     pub front_daylight: Option<eo_render::front_daylight::FrontDaylight>,
     pub wall_daylight_layer: Option<usize>,
+    porch_light: Option<(porch::Lamp, usize)>,
     pub window_optics: Option<Arc<eo_render::window_optics::WindowOptics>>,
     site_camera_exposure: Option<f32>,
     origin: DVec2,
@@ -632,6 +639,13 @@ impl House {
                 let original = finishes
                     .and_then(|f| Scan::material(&f.scans, m, materials, !cut_pattern.is_empty()))
                     .unwrap_or_else(|| materials.resolve(kit, m));
+                if m.name.starts_with("porch-opal@") {
+                    if let Some((lamp, _)) = finishes.and_then(|f| f.porch_light.as_ref()) {
+                        let mut material = materials.gpu[original as usize];
+                        material.emissive[..3].copy_from_slice(&lamp.emission());
+                        return materials.named("21-beaver/opal-porch-lamp", material);
+                    }
+                }
                 if finishes.is_some_and(|f| f.joinery_light && f.window_optics.is_some()) {
                     let family = match m.name.split('@').next().unwrap_or("") {
                         "oil-rubbed-wood" => 1, "sash-putty" => 2, "wrought-iron" => 3,
@@ -680,7 +694,9 @@ impl House {
         let scans = finishes.map_or(0, |f| f.scans.len());
         let front_daylight = finishes.and_then(|f| f.front_daylight.clone());
         let wall_daylight_layer = finishes.filter(|f| f.wall_daylight.is_some()).map(|_| scans);
-        let garden_base = scans + usize::from(wall_daylight_layer.is_some());
+        let after_wall = scans + usize::from(wall_daylight_layer.is_some());
+        let porch_light = finishes.and_then(|f| f.porch_light.as_ref()).map(|(lamp, _)| (lamp.clone(), after_wall));
+        let garden_base = after_wall + usize::from(porch_light.is_some());
         let garden = finishes.and_then(|f| f.garden.as_ref())
             .map(|g| g.load(root, materials, garden_base, front_daylight.is_some())).transpose()?;
         let first_fitted = garden_base + finishes.map_or(0, |f| f.garden_maps.len());
@@ -688,7 +704,7 @@ impl House {
         let mut h = Self {
             window_optics: finishes.and_then(|f| f.window_optics.clone()),
             site_camera_exposure: finishes.and_then(|f| f.site_camera_exposure),
-            wall_daylight_layer, front_daylight, garden, fitted,
+            porch_light, wall_daylight_layer, front_daylight, garden, fitted,
             origin: ring[1],
             across,
             back,
@@ -1106,6 +1122,11 @@ impl House {
         self.table_light.as_ref().map(TableLight::uniforms).unwrap_or_default()
     }
 
+    pub fn porch_light(&self, city_layers: usize) -> Option<[[f32; 4]; 7]> {
+        let (lamp, slot) = self.porch_light.as_ref()?;
+        Some(lamp.uniforms(self, city_layers + slot))
+    }
+
     pub fn dining_lamp(&self) -> Option<[f32; 4]> {
         let [x,y,z,radius] = self.dining_lamp.or_else(|| self.table_light.as_ref().map(TableLight::lamp))?;
         Some(self.point(x.into(),y.into(),z.into()).as_vec3().extend(radius).to_array())
@@ -1127,7 +1148,13 @@ impl House {
     const ROOM_MAX: Vec3 = Vec3::new(6.86, 9.88, 12.86);
 
     pub fn site_camera(&self) -> Option<eo_render::interior_meter::ExteriorCamera> {
-        Some(eo_render::interior_meter::ExteriorCamera::new(self.parcel_to_world(), Self::ROOM_MIN, Self::ROOM_MAX, self.site_camera_exposure?))
+        let mut camera = eo_render::interior_meter::ExteriorCamera::new(
+            self.parcel_to_world(), Self::ROOM_MIN, Self::ROOM_MAX, self.site_camera_exposure?);
+        if let Some((lamp, _)) = &self.porch_light {
+            let (centre, radius) = lamp.camera(self);
+            camera.set_porch(centre, radius);
+        }
+        Some(camera)
     }
 
     pub fn interior_meter(&self) -> Option<eo_render::interior_meter::InteriorMeter> {
@@ -1497,7 +1524,7 @@ impl House {
                 }
             }
             o.material = self.materials[part.material as usize];
-            if self.wall_daylight_layer.is_some() && (plaster_finish(family) || family.starts_with("lime-plaster@") || family.starts_with("painted-white@")) {
+            if (self.wall_daylight_layer.is_some() || self.porch_light.is_some()) && (plaster_finish(family) || family.starts_with("lime-plaster@") || family.starts_with("painted-white@")) {
                 o.kind |= eo_render::scene::WALL_DAYLIGHT_BIT;
             }
             if self.patina && plaster_finish(family) {

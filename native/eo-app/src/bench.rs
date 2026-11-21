@@ -390,13 +390,17 @@ fn segments(world: &World, args: &Args, aspect: f32, far: f32) -> Vec<Segment> {
         },
     ]
     .into_iter()
-    .chain(["house_bedroom", "house_roof", "house_dining", "house_garden", "house_frontage", "house_windows"].into_iter().filter_map(|name| {
+    .chain(["house_bedroom", "house_roof", "house_dining", "house_garden", "house_frontage", "house_windows", "house_porch"].into_iter().filter_map(|name| {
             let selected = args.segments.as_ref()?.iter().any(|s| s == name);
             if !selected { return None; }
             let house = world.house.as_ref()?;
             let (left, right, target, description) = if name == "house_garden" {
                 (house.point(5.35, 0.98, -5.13).as_vec3(), house.point(5.72, 1.46, -3.17).as_vec3(),
                  house.point(2.89, 0.05, -1.11).as_vec3(), "Walking from the sloped approach to the stoop, facing the planted bed")
+            } else if name == "house_porch" {
+                (house.point(4.6,0.,-3.6).as_vec3() + EYE_HEIGHT_M*Vec3::Y,
+                 house.point(5.9,0.,-0.70).as_vec3() + EYE_HEIGHT_M*Vec3::Y,
+                 house.point(5.37,1.78,0.17).as_vec3(), "Approaching the fitted porch lamp and closed entrance")
             } else if name == "house_windows" {
                 (house.point(-1.98, 1.73, -7.26).as_vec3(), house.point(5.66, 1.73, -5.56).as_vec3(),
                  house.point(2.75, 5.12, 0.062).as_vec3(), "Crossing the approach while following the tree reflection in the upstairs sash")

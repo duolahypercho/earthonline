@@ -117,6 +117,7 @@ fn default_args() -> Args {
         house_wall_daylight: false,
         house_window_optics: false,
         house_joinery_light: false,
+        house_porch_lamp: false,
         house_site_camera: false,
         house_dining_meter: false,
         house_glazing: true,

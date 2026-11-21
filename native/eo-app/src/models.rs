@@ -195,6 +195,10 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
         r.look.enclosure_frame = house.parcel_to_world().inverse();
     }
     if let Some(house) = world.house.as_ref() {
+        if let Some(lamp) = house.porch_light(set.materials.layers.len()) {
+            r.look.porch_light = lamp;
+            r.look.enclosure_frame = house.parcel_to_world().inverse();
+        }
         if let Some(optics) = &house.window_optics {
             let previous_bytes = r.look.bytes;
             r.look.install_window_optics(optics, args.house_window_optics && args.house_glazing)?;
