@@ -265,9 +265,16 @@ fn props2_stand_ins_only_with_their_switch() {
     assert!(lib_on.materials.len() > lib_off.materials.len(), "the stand-ins push their materials only when on");
     let h = Model::Hydrant as usize;
     let (m_off, m_on) = (lib_off.models[h], lib_on.models[h]);
-    assert!(m_off.meshes[0] == m_off.meshes[1] && m_off.meshes[1] == m_off.meshes[2], "off: one proxy box at every level");
     assert!(m_on.meshes[0] != m_on.meshes[1] && m_on.meshes[1] != m_on.meshes[2], "on: the stand-in's three levels");
-    assert!(m_on.lod[0] < m_off.lod[0], "on: the GLB's own level edges (off: the proxy's near ring)");
+    let hydrant_note = lib_off.missing.iter().find(|m| m.contains("hydrant")).unwrap();
+    if eo_render::props_lib2::furniture_models::enabled() {
+        // off, with the furniture models (on by default): the hydrant is drawn in code, not as a box.
+        assert!(hydrant_note.contains("drawn in code instead"), "off: the furniture model stands in ({hydrant_note})");
+        assert!(m_off.meshes[0] != eo_render::props_lib::NONE, "off: the furniture model is built");
+    } else {
+        assert!(m_off.meshes[0] == m_off.meshes[1] && m_off.meshes[1] == m_off.meshes[2], "off: one proxy box at every level");
+        assert!(m_on.lod[0] < m_off.lod[0], "on: the GLB's own level edges (off: the proxy's near ring)");
+    }
 }
 
 fn kinds_fade_wires_lights(ctx: &GpuContext, r: Renderer, lib: eo_render::props_lib::PropLibrary) {
