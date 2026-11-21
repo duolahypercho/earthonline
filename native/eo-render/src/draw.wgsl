@@ -1546,6 +1546,8 @@ fn shade(in: VOut) -> vec4<f32> {
         s.metal = 0.;
     }
     if ((objects[in.object].kind & FITTED_ROOM_BIT) != 0u) {
+        // Negative normal.w stores the fraction of nearby diffuse sky blocked by the planted bed.
+        s.ao *= clamp(1. + in.aux.y, 0., 1.);
         if (m.layer >= 0) {
             let st = textureSampleGrad(kit_albedo,kit_sampler,in.ft,m.layer,scan_dx,scan_dy);
             let properties = textureSampleGrad(kit_orm,kit_sampler,in.ft,m.layer,scan_dx,scan_dy);
