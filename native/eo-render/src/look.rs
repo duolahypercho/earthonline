@@ -107,6 +107,7 @@ struct LookUniform {
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct ShadowCullParams {
     planes: [[f32; 4]; 18],
+    camera: [f32; 4],
     object_count: u32,
     compact: u32,
     mask: u32,
@@ -1174,7 +1175,7 @@ impl LookGpu {
         for (c, cas) in cascades.iter().enumerate() {
             planes[c * 6..c * 6 + 6].copy_from_slice(&cas.planes);
         }
-        let p = ShadowCullParams { planes, object_count: self.object_count, compact: self.compact as u32, mask, pad: 0 };
+        let p = ShadowCullParams { planes, camera: cam.eye.extend(1.).to_array(), object_count: self.object_count, compact: self.compact as u32, mask, pad: 0 };
         queue.write_buffer(&self.cull_buf, 0, bytemuck::bytes_of(&p));
         for (c, cas) in cascades.iter().enumerate() {
             let mut bytes = [0f32; 20];

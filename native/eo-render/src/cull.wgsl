@@ -286,6 +286,11 @@ fn lod_and_frustum(i: u32, o: Object) -> vec3<u32> {
     } else if (o.lod_role == LOD_LANDMARK_NEAR || o.lod_role == LOD_LANDMARK_FAR) {
         // the near draws or the far item, by the group's switch.
         visible = (groups[o.lod_group].detailed == 1u) == (o.lod_role == LOD_LANDMARK_NEAR);
+    } else if (o.lod_role == 12u) {
+        if (distance(params.cam.xyz, clamp(params.cam.xyz, o.min, o.max)) > 120.) {
+            first = o.far_first_index;
+            count = o.far_index_count;
+        }
     } else if (o.lod_role == LOD_TERRAIN) {
         // Camera to the tile box.
         let c = clamp(params.cam.xyz, o.min, o.max);

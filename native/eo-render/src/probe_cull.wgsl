@@ -86,6 +86,11 @@ fn probe_cull(@builtin(global_invocation_id) gid: vec3<u32>) {
     } else if (o.lod_role == 10u || o.lod_role == 11u) {
         // the camera's near/far switch (scene.rs LOD_LANDMARK_*).
         visible = (groups[o.lod_group].detailed == 1u) == (o.lod_role == 10u);
+    } else if (o.lod_role == 12u) {
+        if (distance(pc.cam.xyz, clamp(pc.cam.xyz, o.min, o.max)) > 120.) {
+            first = o.far_first_index;
+            count = o.far_index_count;
+        }
     } else if (o.lod_role == LOD_TERRAIN) {
         first = o.far_first_index;
         count = o.far_index_count;

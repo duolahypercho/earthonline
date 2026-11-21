@@ -99,6 +99,7 @@ fn default_args() -> Args {
         house_patina: false,
         house_furniture: false,
         house_photo: false,
+        house_photo_lod: false,
         house_glazing: true,
         beaver_house: false,
         bench: false,

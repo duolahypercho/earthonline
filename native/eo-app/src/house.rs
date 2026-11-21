@@ -1,6 +1,7 @@
 //! Site and collision integration for the Blender-built terrace at 21 Beaver Street.
 mod dimensions;
 mod door;
+mod lod;
 mod surfaces;
 pub use surfaces::Scan;
 pub const FURNITURE_LAYERS: u32 = surfaces::FURNITURE_NAMES.len() as u32;
@@ -757,7 +758,7 @@ impl House {
         }
         (lo.to_array(), hi.to_array())
     }
-    pub fn append(&self, scene: &mut Scene, materials: &MaterialTable) {
+    pub fn append(&self, scene: &mut Scene, materials: &MaterialTable, detail_lod: bool) {
         let base = scene.vertices.len();
         let first = scene.indices.len();
         let objects = scene.objects.len();
@@ -1108,6 +1109,7 @@ impl House {
             }
             scene.objects.push(object);
         }
+        if self.photo && detail_lod { lod::install(scene, objects); }
         scene.stats.objects += scene.objects.len() - objects;
         scene.stats.vertices += scene.vertices.len() - base;
         scene.stats.indices += scene.indices.len() - first;

@@ -67,6 +67,8 @@ pub const LOD_STREET_COARSE: u32 = 9;
 pub const LOD_LANDMARK_NEAR: u32 = 10;
 /// a landmark's far item, drawn while its group is not near.
 pub const LOD_LANDMARK_FAR: u32 = 11;
+/// The full material part within 120 m of its bounds, then the coarse mesh.
+pub const LOD_AUTHORED_DETAIL: u32 = 12;
 pub const BLEND_BIT: u32 = 1 << 8;
 /// Model with per-board coordinates for the photographic floor scan.
 pub const FLOOR_SCAN_BIT: u32 = 1 << 9;

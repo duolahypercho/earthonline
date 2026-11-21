@@ -68,6 +68,7 @@ fn base_args() -> Args {
         house_patina: false,
         house_furniture: false,
         house_photo: false,
+        house_photo_lod: false,
         house_glazing: true,
         beaver_house: false,
         bench: false,
@@ -137,6 +138,8 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
+            "--house-photo-lod" => a.house_photo_lod = true,
+            "--no-house-photo-lod" => a.house_photo_lod = false,
             "--no-house-glazing" => a.house_glazing = false,
             "--no-house-finishes" => a.house_finishes = false,
             "--no-beaver-house" => a.beaver_house = false,

@@ -46,6 +46,7 @@ pub struct Args {
     pub house_patina: bool,
     pub house_furniture: bool,
     pub house_photo: bool,
+    pub house_photo_lod: bool,
     pub house_glazing: bool,
     pub bench: bool,
     pub start_underwater: bool,
@@ -195,6 +196,7 @@ fn parse_args() -> Result<Args> {
         house_patina: false,
         house_furniture: false,
         house_photo: false,
+        house_photo_lod: false,
         house_glazing: true,
         beaver_house: false,
         bench: false,
@@ -271,6 +273,8 @@ fn parse_args() -> Result<Args> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
+            "--house-photo-lod" => a.house_photo_lod = true,
+            "--no-house-photo-lod" => a.house_photo_lod = false,
             "--no-house-glazing" => a.house_glazing = false,
             "--no-house-finishes" => a.house_finishes = false,
             "--no-beaver-house" => a.beaver_house = false,
@@ -879,7 +883,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         smooth_terrain: args.landmarks && args.landmarks2,
     })?;
     let house_vertex_base = scene.vertices.len();
-    if let Some(house) = &house { house.append(&mut scene, &authored.materials); }
+    if let Some(house) = &house { house.append(&mut scene, &authored.materials, args.house_photo_lod); }
     drop(carpet_fn); // water
     // the bridges (eo-landmarks, the JS generators ported) on the
     // drawn ground, appended to the static table; their LOD groups follow the street's.
