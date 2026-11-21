@@ -151,6 +151,10 @@ pub struct Pier {
 /// Pier. Follow the city polygon around the breakwater, leaving its entry clear.
 /// The rail sections and post spacing are visual approximations.
 pub fn municipal_parapet(piers: &[Pier]) -> Option<crate::geometry::Frozen> {
+    municipal_parapet_with_feet(piers, &mut PileFeet::default())
+}
+
+pub(crate) fn municipal_parapet_with_feet(piers: &[Pier], feet: &mut PileFeet) -> Option<crate::geometry::Frozen> {
     let (_, pier) = municipal_pier(piers)?;
     let mut m = MeshArrays::new("municipal-pier-parapet");
     let top = pier.deck_y + 1.10;
@@ -177,7 +181,9 @@ pub fn municipal_parapet(piers: &[Pier]) -> Option<crate::geometry::Frozen> {
             let t = (i as f64 + 0.5) / bays as f64;
             let x = a[0] + t * (b[0] - a[0]) + 1.65 * nx;
             let z = a[1] + t * (b[1] - a[1]) + 1.65 * nz;
+            let start = m.positions.len();
             m.box_(x, z, eo_water::SEA_LEVEL_Y - 2.0, pier.deck_y - 0.70, 0.38, 0.38, 0.0, base, crate::geometry::NO_BOTTOM);
+            feet.boxes.push(start..m.positions.len());
         }
         let spans = (len / 2.4).ceil() as usize;
         for i in 0..spans {
@@ -575,6 +581,32 @@ impl ShorePress {
     }
 }
 
+/// Positions of the pile boxes in their owning mesh. The terrain is assembled
+/// after the waterfront, when its precise ground triangles become available.
+#[derive(Clone, Default, Debug)]
+pub(crate) struct PileFeet {
+    boxes: Vec<std::ops::Range<usize>>,
+}
+
+impl PileFeet {
+    pub(crate) fn seat(&self, mesh: &mut crate::geometry::Frozen, bed: &mut impl FnMut(f32, f32) -> f32) {
+        for span in &self.boxes {
+            let vertices = &mut mesh.positions[span.clone()];
+            let original = vertices[1]; // first lower corner of the box
+            let mut foot = original;
+            for p in vertices.chunks_exact(3).filter(|p| p[1] == original) {
+                // Keep the visible ends under all four corners on a sloping bed.
+                // This small overlap hides the open end of the modeled support.
+                foot = foot.min(bed(p[0], p[2]) - 0.08);
+            }
+            for p in vertices.chunks_exact_mut(3).filter(|p| p[1] == original) {
+                p[1] = foot;
+            }
+            mesh.min_y = mesh.min_y.min(f64::from(foot));
+        }
+    }
+}
+
 /// The meshes of the built waterfront.
 #[derive(Default)]
 pub struct WaterfrontMeshes {
@@ -585,6 +617,7 @@ pub struct WaterfrontMeshes {
     /// The dark under-deck faces.
     pub under_deck: Frozen,
     pub piles: usize,
+    pub(crate) municipal_feet: PileFeet,
     pub decks: usize,
 }
 
@@ -609,6 +642,8 @@ pub fn build_meshes(
     let mut conc = MeshArrays::new("waterfront:concrete");
     let mut under = MeshArrays::new("waterfront:under-deck");
     let mut piles = 0usize;
+    let municipal = municipal_pier(piers).map(|(index, _)| index);
+    let mut municipal_feet = PileFeet::default();
     // Joints: the strip's corner at each edge end, to fill the wedge between consecutive edges.
     let mut ends: HashMap<(i64, i64), Vec<([f64; 2], f64, f64, Rgb)>> = HashMap::new();
     let key = |p: [f64; 2]| ((p[0] * 100.0).round() as i64, (p[1] * 100.0).round() as i64);
@@ -633,7 +668,7 @@ pub fn build_meshes(
         ends.entry(key(b)).or_default().push(([n[0], n[1]], yb, inner, tone));
         if let Some(i) = e.pier {
             let deck = piers[i].deck_y;
-            pier_fascia(&mut conc, &mut under, a, b, n, deck, sea, concrete, dark, &mut piles);
+            pier_fascia(&mut conc, &mut under, a, b, n, deck, sea, concrete, dark, &mut piles, (municipal == Some(i)).then_some(&mut municipal_feet));
         }
     }
     // Joint fans: the strip's wedge between two edges meeting at a point.
@@ -657,7 +692,7 @@ pub fn build_meshes(
     }
     // Pier slabs over their outlines, and fascias on outline edges over open water.
     let mut decks = 0usize;
-    for p in piers {
+    for (index, p) in piers.iter().enumerate() {
         let mut ear = earcut::Earcut::<f64>::new();
         let mut tri: Vec<u32> = Vec::new();
         ear.earcut(p.ring.iter().copied(), &[] as &[u32], &mut tri);
@@ -686,17 +721,17 @@ pub fn build_meshes(
             }
             // The outline's interior side: a point a metre in must be inside.
             let n = if point_in_ring(&p.ring, mx + n[0], mz + n[1]) { n } else { [-n[0], -n[1]] };
-            pier_fascia(&mut conc, &mut under, a, b, n, p.deck_y, sea, concrete, dark, &mut piles);
+            pier_fascia(&mut conc, &mut under, a, b, n, p.deck_y, sea, concrete, dark, &mut piles, (municipal == Some(index)).then_some(&mut municipal_feet));
         }
     }
-    WaterfrontMeshes { paving: paving.freeze(), concrete: conc.freeze(), under_deck: under.freeze(), piles, decks }
+    WaterfrontMeshes { paving: paving.freeze(), concrete: conc.freeze(), under_deck: under.freeze(), piles, decks, municipal_feet }
 }
 
 /// A pier deck's edge on the segment a-b (`n` into the deck): the fascia beam,
 /// its soffit back to the under-deck face, that dark face down into the
 /// water, and a pile row under the soffit.
 #[allow(clippy::too_many_arguments)]
-fn pier_fascia(conc: &mut MeshArrays, under: &mut MeshArrays, a: [f64; 2], b: [f64; 2], n: [f64; 2], deck: f64, sea: f64, concrete: Rgb, dark: Rgb, piles: &mut usize) {
+fn pier_fascia(conc: &mut MeshArrays, under: &mut MeshArrays, a: [f64; 2], b: [f64; 2], n: [f64; 2], deck: f64, sea: f64, concrete: Rgb, dark: Rgb, piles: &mut usize, mut feet: Option<&mut PileFeet>) {
     let l = (b[0] - a[0]).hypot(b[1] - a[1]);
     if l < 0.3 {
         return;
@@ -723,7 +758,45 @@ fn pier_fascia(conc: &mut MeshArrays, under: &mut MeshArrays, a: [f64; 2], b: [f
         let s = (k as f64 + 0.5) * l / count as f64;
         let c = [a[0] + u[0] * s + n[0] * (PIER_VOID_SETBACK_M * 0.5), a[1] + u[1] * s + n[1] * (PIER_VOID_SETBACK_M * 0.5)];
         let yaw = u[1].atan2(u[0]);
+        let start = conc.positions.len();
         conc.box_(c[0], c[1], foot, soffit, h, h, yaw, concrete, crate::geometry::Faces { top: false, bottom: false });
+        if let Some(row) = feet.as_deref_mut() {
+            row.boxes.push(start..conc.positions.len());
+        }
         *piles += 1;
+    }
+}
+
+#[cfg(test)]
+mod pile_tests {
+    use super::*;
+
+    #[test]
+    fn only_the_pile_feet_follow_the_deepest_corner_of_the_bed() {
+        let mut concrete = MeshArrays::new("concrete");
+        concrete.box_(1.0, 0.0, -1.95, 1.2, 0.23, 0.23, 0.4, [0.4; 3], crate::geometry::NO_BOTTOM);
+        let end = concrete.positions.len();
+        concrete.box_(4.0, 0.0, -1.95, 1.2, 0.23, 0.23, 0.4, [0.4; 3], crate::geometry::NO_BOTTOM);
+        let mut mesh = concrete.freeze();
+        let reference = mesh.clone();
+        let feet = PileFeet { boxes: vec![0..end] };
+        let floor = |x: f32, z: f32| -3.0 - 0.6 * x + 0.3 * z;
+        feet.seat(&mut mesh, &mut |x, z| floor(x, z));
+        let mut bases = Vec::new();
+        for (p, old) in mesh.positions[..end].chunks_exact(3).zip(reference.positions.chunks_exact(3)) {
+            assert_eq!((p[0], p[2]), (old[0], old[2]));
+            if old[1] < 0.0 {
+                assert!(p[1] < floor(p[0], p[2]));
+                bases.push(p[1]);
+            } else {
+                assert_eq!(p[1], old[1]);
+            }
+        }
+        assert_eq!(bases.len(), 8);
+        assert!(bases.iter().all(|base| *base == bases[0]));
+        assert_eq!(mesh.min_y, f64::from(bases[0]));
+        assert_eq!(&mesh.positions[end..], &reference.positions[end..]);
+        assert_eq!(mesh.indices, reference.indices);
+        assert_eq!(mesh.normals, reference.normals);
     }
 }

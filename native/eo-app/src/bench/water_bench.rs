@@ -317,6 +317,15 @@ pub fn capture_cameras(world: &World, aspect: f32, far: f32) -> Vec<(&'static st
         let crossing = Camera { eye: Vec3::new(cam.eye.x, sea(), cam.eye.z), pitch: 0.0, ..cam };
         out.push(("bay-waterline", crossing, "at mean sea level facing the city".into()));
     }
+    // Beside the cove-facing pile row at the northwest curve. The submerged
+    // camera sits above the bed and looks through the gap beside the support.
+    if world.dive_sites.iter().any(|s| s.cove_detail && s.beach.is_some()) {
+        let centre = super::on_plan(Vec3::new(-626.461, 0.0, -3535.113));
+        let eye = centre + Vec3::new(-1.5, sea() - 1.61, -0.55);
+        let dir = Vec3::new(1.5, -0.04, 0.55).normalize();
+        let cam = Camera { near: 0.045, far, fov_y_deg: 60.0, ..Camera::new(eye, yaw_of(dir), dir.y.asin(), aspect) };
+        out.push(("municipal-pile", cam, "Municipal Pier support at the submerged bed".into()));
+    }
     for site in &world.dive_sites {
         if site.beach.is_some() {
             out.push(("cove-surface", site.surface_camera(aspect, far), "Aquatic Park beach toward Municipal Pier and Black Point".into()));

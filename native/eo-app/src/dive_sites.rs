@@ -90,28 +90,38 @@ fn triangle_height(q: Vec2, mut height: impl FnMut(glam::IVec2) -> f32) -> f32 {
     }
 }
 
-pub fn prepare(
-    scene: &mut eo_render::scene::Scene,
-    field: &eo_water::field::ShoreField,
+/// Interpolate the drawn terrain triangles and reuse their vertex heights at nearby points.
+pub fn terrain_bed<'a>(
     grid: &eo_data::ElevationGrid,
-    vertex_height: &dyn Fn(f32, f32) -> f32,
-    build_meshes: bool,
-    cove_detail: bool,
-    rocky_site: Option<(bool, u32)>,
-    profile: Option<&crate::cove_bed::CoveBed>,
-) -> Vec<Site> {
+    vertex_height: &'a dyn Fn(f32, f32) -> f32,
+) -> impl FnMut(Vec2) -> f32 + 'a {
     use std::collections::HashMap;
     let cell_m = grid.meta.cell_size as f32;
     let origin = Vec2::new(grid.meta.origin_x as f32, grid.meta.origin_z as f32);
     let mut cache = HashMap::new();
-    let mut bed = |p: Vec2| {
+    move |p: Vec2| {
         triangle_height((p - origin) / cell_m - 0.5, |cell| {
             *cache.entry(cell).or_insert_with(|| {
                 let q = origin + (cell.as_vec2() + 0.5) * cell_m;
                 vertex_height(q.x, q.y)
             })
         })
-    };
+    }
+}
+
+pub fn prepare(
+    scene: &mut eo_render::scene::Scene,
+    field: &eo_water::field::ShoreField,
+    grid: &eo_data::ElevationGrid,
+    vertex_height: &dyn Fn(f32, f32) -> f32,
+    bed: &mut impl FnMut(Vec2) -> f32,
+    build_meshes: bool,
+    cove_detail: bool,
+    rocky_site: Option<(bool, u32)>,
+    profile: Option<&crate::cove_bed::CoveBed>,
+) -> Vec<Site> {
+    let cell_m = grid.meta.cell_size as f32;
+    let origin = Vec2::new(grid.meta.origin_x as f32, grid.meta.origin_z as f32);
     // Shore-normal transects into Aquatic Park Cove and off Ocean Beach.
     // The live ground scale, water mask and depth select each actual site.
     let mut sites = vec![];
@@ -139,10 +149,10 @@ pub fn prepare(
             *depth = (bottom_depth - 0.34 - 0.10 * i as f32 / 14.0).max(0.0);
         }
         if cove_detail {
-            eo_render::seabed::cove_shore(scene, shore, &mut bed);
+            eo_render::seabed::cove_shore(scene, shore, bed);
             let p = shore - Vec2::Y * 26.0;
             if build_meshes {
-                eo_render::seabed::append_cove(scene, p, &mut bed);
+                eo_render::seabed::append_cove(scene, p, bed);
             }
             sites.push(Site {
                 habitat: Habitat::Eelgrass,
@@ -166,7 +176,7 @@ pub fn prepare(
         });
         if let Some(centre) = centre
             && let Some((eye, at)) =
-                eo_render::seabed::intertidal_site(scene, centre, &mut bed, draw, material)
+                eo_render::seabed::intertidal_site(scene, centre, bed, draw, material)
         {
             sites.push(Site {
                 habitat: Habitat::Rocky,
@@ -203,7 +213,7 @@ pub fn prepare(
                 continue;
             }
             if build_meshes {
-                eo_render::seabed::append(scene, habitat, p, &mut bed);
+                eo_render::seabed::append(scene, habitat, p, bed);
             }
             sites.push(Site {
                 habitat,
