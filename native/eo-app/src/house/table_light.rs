@@ -20,6 +20,8 @@ pub(super) struct TableLight {
     minimum: [f32; 3],
     maximum: [f32; 3],
     tabletop_height_m: f32,
+    #[serde(skip)]
+    edge_thickness: f32,
     lamp_parcel_xyz: [f32; 3],
     lamp_radius_m: f32,
     lamp_linear_rgb: [f32; 3],
@@ -93,6 +95,102 @@ impl TableLight {
         Ok(table)
     }
 
+    pub(super) fn install_joinery(
+        &mut self,
+        root: &Path,
+        directory: &Path,
+        house_sha: &str,
+        place_settings: bool,
+        room: &mut [u8],
+        wood: &mut [u8],
+    ) -> Result<()> {
+        #[derive(Deserialize)]
+        struct Joinery {
+            #[serde(flatten)]
+            asset: AssetRef,
+            house_sha256: String,
+            surfaces: Vec<Surface>,
+            surface_vertices: usize,
+            minimum: [f32; 3],
+            maximum: [f32; 3],
+            board_bottom_m: f32,
+            tabletop_height_m: f32,
+            cut_map: [usize; 2],
+            lamp_first_row: usize,
+            cut_encoding: String,
+            transfer_encoding: String,
+        }
+
+        let survey: Joinery = serde_json::from_slice(&std::fs::read(
+            directory.join("oak-joinery.provenance.json"),
+        )?)?;
+        let thickness = survey.tabletop_height_m - survey.board_bottom_m;
+        let mut boards: Vec<_> = survey
+            .surfaces
+            .iter()
+            .filter_map(|s| super::dining_plank(&s.material))
+            .collect();
+        boards.sort_unstable();
+        ensure!(
+            boards == [0, 1, 2, 3]
+                && survey.surfaces.len() == 4
+                && survey.house_sha256 == house_sha
+                && survey.minimum == self.minimum
+                && survey.maximum == self.maximum
+                && survey.tabletop_height_m == self.tabletop_height_m
+                && (0.0..0.2).contains(&thickness)
+                && thickness > 0.
+                && survey.cut_map == [512, 48]
+                && survey.lamp_first_row == 96
+                && survey.cut_encoding == "sqrt(linear RGB)"
+                && survey.transfer_encoding == "sqrt(L/(1+L))",
+            "unregistered oak joinery survey"
+        );
+        if !place_settings {
+            self.surfaces.clear();
+            self.surface_vertices = 0;
+        }
+        let base = self.surface_vertices;
+        let count = survey.surface_vertices;
+        ensure!(
+            count > 0
+                && count <= 96 * 256 - base
+                && room.len() == 512 * 512 * 4
+                && wood.len() == room.len(),
+            "oak light survey exceeds texture bounds"
+        );
+        let pixels = super::Finishes::read_pixels(root, &survey.asset, 1)?;
+        // Green is still the photographed roughness, including on the floor.
+        for (dst, src) in wood[416 * 512 * 4..]
+            .chunks_exact_mut(4)
+            .zip(pixels.chunks_exact(4))
+        {
+            dst[0] = src[0];
+            dst[2] = src[1];
+            dst[3] = src[2];
+        }
+        // Append both sides after the last place setting. Row 192 and below
+        // continue to hold the independent high-resolution horizontal receiver.
+        for side in 0..2 {
+            for i in 0..count {
+                let address = base + i;
+                let dst = 4 * ((address / 256 + 96 * side) * 512 + 256 + address % 256);
+                let src = 4 * (survey.lamp_first_row * 512 + count * side + i);
+                room[dst..dst + 4].copy_from_slice(&pixels[src..src + 4]);
+            }
+        }
+        for mut surface in survey.surfaces {
+            surface.atlas_start = surface
+                .atlas_start
+                .checked_add(base as u32)
+                .ok_or_else(|| anyhow::anyhow!("invalid joinery vertex address"))?;
+            self.surfaces.push(surface);
+        }
+        self.surface_vertices += count;
+        self.edge_thickness = thickness;
+        Ok(())
+    }
+
     pub(super) fn material(&self, name: &str) -> bool {
         self.surfaces.iter().any(|s| s.material == name)
     }
@@ -147,7 +245,9 @@ impl TableLight {
             glam::Vec3::from(self.minimum)
                 .extend(self.tabletop_height_m)
                 .to_array(),
-            glam::Vec3::from(self.maximum).extend(0.).to_array(),
+            glam::Vec3::from(self.maximum)
+                .extend(self.edge_thickness)
+                .to_array(),
             glam::Vec3::from(self.lamp_linear_rgb).extend(0.).to_array(),
         ]
     }

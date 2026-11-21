@@ -1256,6 +1256,7 @@ fn shade(in: VOut) -> vec4<f32> {
     }
     let table_board = (objects[in.object].kind & TABLE_BOARD_BIT) != 0u;
     let oak_finish = (objects[in.object].kind & OAK_FINISH_BIT) != 0u;
+    let joinery = table_board && look.table_light[1].w > 0.;
     let floor_scan = table_board || local_scan || (objects[in.object].kind & FLOOR_SCAN_BIT) != 0u;
     if (floor_scan && (local_scan || table_board || abs(n.y) > 0.7)) {
         let layer = select(i32(textureNumLayers(kit_albedo)) - 2, m.layer, local_scan);
@@ -1300,7 +1301,22 @@ fn shade(in: VOut) -> vec4<f32> {
         } else if (table_board) {
             let frame_pos = (look.enclosure_frame * vec4<f32>(in.world,1.)).xyz;
             let wood_axis = normalize((vec4<f32>(1.,0.,0.,0.) * look.enclosure_frame).xyz);
-            if (abs(dot(n,wood_axis)) > .86) {
+            let cut_face = abs(dot(select(n,face,joinery),wood_axis)) > .86;
+            if (joinery && cut_face) {
+                let lo = look.table_light[0];
+                let hi = look.table_light[1];
+                let side = select(0.,48.,frame_pos.x > (lo.x+hi.x)*.5);
+                let size = vec2<f32>(504./(hi.z-lo.z),40./hi.w);
+                let cut = (frame_pos.zy-vec2<f32>(lo.z,lo.w-hi.w))*size;
+                let uv = (vec2<f32>(4.,420.+side)+cut)/512.;
+                let dx = (look.enclosure_frame*vec4<f32>(dpx,0.)).zy*size;
+                let dy = (look.enclosure_frame*vec4<f32>(dpy,0.)).zy*size;
+                let lod = clamp(log2(max(1.,max(length(dx),length(dy)))),0.,2.);
+                let encoded = textureSampleLevel(kit_orm,kit_sampler,uv,layer,lod).rba;
+                s.albedo = encoded*encoded;
+                s.rough = .55;
+                s.n = n;
+            } else if (cut_face) {
                 // The saw cut runs across the growth rings, perpendicular to the long grain.
                 let cut = frame_pos.zy;
                 let rings = sin(length(cut - floor(cut/.32)*.32) * 850. + 2.35*st_noise(cut*45.));
@@ -1321,7 +1337,7 @@ fn shade(in: VOut) -> vec4<f32> {
                         oak_reflections(frame_pos,in.world,v,s.n,n,(objects[in.object].kind & TABLE_LIGHT_BIT) != 0u);
                     } else {
                         room_radiance = board_reflection(frame_pos.xz,local_dx,local_dy,dpx,dpy,
-                            reflect(-v,s.n),s.rough,board_ambient(in.color.rg*in.color.rg),frame_pos.y);
+                            reflect(-v,s.n),s.rough,select(board_ambient(in.color.rg*in.color.rg),in.table_fixture.rgb,joinery),frame_pos.y);
                     }
                 }
             }
@@ -1366,11 +1382,12 @@ fn shade(in: VOut) -> vec4<f32> {
         let room_kind = objects[in.object].kind;
         if ((room_kind & (DOWNSTAIRS_LIGHT_BIT | TABLE_LIGHT_BIT)) != 0u && in.aux.z > .5) {
             let room_point = (look.enclosure_frame * vec4<f32>(in.world + .025*n,1.)).xyz;
+            var top = false;
             var table = false;
             var lamps: DiningLight;
             if ((room_kind & TABLE_LIGHT_BIT) != 0u) {
                 let local = (look.enclosure_frame * vec4<f32>(in.world,1.)).xyz;
-                let top = table_board && n.y>.85 && abs(local.y-look.table_light[0].w)<.004;
+                top = table_board && n.y>.85 && abs(local.y-look.table_light[0].w)<.004;
                 table = top || in.aux.z > 1.5;
                 if (table) {
                     var measured = select(in.table_reverse,in.table_fixture,dot(in.normal,v)>=0.);
@@ -1392,7 +1409,7 @@ fn shade(in: VOut) -> vec4<f32> {
                 // The surface bake already includes the contact shadow. Apply
                 // near-field occlusion only to the coarse daylight component.
                 surface_fixture = lamps.diffuse;
-                if (table && oak_coated) {
+                if (table && oak_coated && (!joinery || top)) {
                     // Both surveys contain the real contact shadows from the bowl and book.
                     surface_fixture += oak_daylight;
                 } else {

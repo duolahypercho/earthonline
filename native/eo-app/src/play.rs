@@ -75,6 +75,7 @@ fn base_args() -> Args {
         house_downstairs_light: false,
         house_table_light: false,
         house_oak_finish: false,
+        house_oak_joinery: false,
         house_glazing: true,
         beaver_house: false,
         bench: false,
@@ -144,7 +145,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
-            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" => {
+            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" => {
                 a.beaver_house = true;
                 a.house_finishes = true;
                 a.house_patina = true;
@@ -155,6 +156,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
                     "--house-downstairs-light" => a.house_downstairs_light = true,
                     "--house-table-light" => a.house_table_light = true,
                     "--house-oak-finish" => a.house_oak_finish = true,
+                    "--house-oak-joinery" => a.house_oak_joinery = true,
                     "--house-mission-roof" => a.house_mission_roof = true,
                     _ => a.house_blender_bedroom = true,
                 }
@@ -163,6 +165,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-downstairs-light" => a.house_downstairs_light = false,
             "--no-house-table-light" => a.house_table_light = false,
             "--no-house-oak-finish" => a.house_oak_finish = false,
+            "--no-house-oak-joinery" => a.house_oak_joinery = false,
             "--no-house-mission-roof" => a.house_mission_roof = false,
             "--no-house-blender-bedroom" => a.house_blender_bedroom = false,
             "--house-photo-lod" => a.house_photo_lod = true,
@@ -1108,6 +1111,39 @@ mod house_tests {
         args.house_table_light = true;
         args.interior_lighting = false;
         assert!(atlas(&args).iter().all(|&c| c == 0));
+    }
+
+    #[test]
+    fn cut_face_material_and_edge_meters_preserve_the_place_settings_and_roughness() {
+        use eo_render::scene::{TABLE_BOARD_BIT, TABLE_LIGHT_BIT};
+        let (mut args, _) = parse(&["--house-oak-finish".into(), "--house-table-light".into(),
+            "--house-oak-joinery".into()]).unwrap();
+        args.kit = false;
+        args.models = false;
+        args.landmarks = false;
+        let world = load_world(&args).unwrap();
+        let house = world.house.as_ref().unwrap();
+        let light = house.table_light();
+        assert!((0.025..0.085).contains(&light[1][3]));
+        let boards: Vec<_> = world.scene.objects.iter().filter(|o| o.kind & TABLE_BOARD_BIT != 0).collect();
+        assert_eq!(boards.len(),4);
+        assert!(boards.iter().all(|o| o.kind & TABLE_LIGHT_BIT != 0));
+        let root = &world.paths.repo_root;
+        let with = crate::house::Finishes::load(root, &args).unwrap();
+        args.house_oak_joinery = false;
+        let prior = crate::house::Finishes::load(root, &args).unwrap();
+        let row = 512*4;
+        assert_eq!(&with.floorboards.orm[..416*row], &prior.floorboards.orm[..416*row]);
+        assert!(with.floorboards.orm.chunks_exact(4).zip(prior.floorboards.orm.chunks_exact(4))
+            .all(|(a,b)| a[1] == b[1]));
+        assert_ne!(&with.floorboards.orm[416*row..], &prior.floorboards.orm[416*row..]);
+        let a = &with.street_reflections.as_ref().unwrap().orm;
+        let b = &prior.street_reflections.as_ref().unwrap().orm;
+        assert_eq!(&a[192*row..], &b[192*row..]);
+        assert_eq!(&a[..26*row], &b[..26*row]);
+        assert_eq!(&a[96*row..122*row], &b[96*row..122*row]);
+        let (off, _) = parse(&["--house-oak-joinery".into(),"--no-house-oak-joinery".into()]).unwrap();
+        assert!(!off.house_oak_joinery && !off.house_table_light);
     }
 
     #[test]

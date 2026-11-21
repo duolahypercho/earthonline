@@ -126,7 +126,7 @@ impl Finishes {
         let blender_bedroom = args.house_blender_bedroom && photo && furniture && patina;
         let dining_light = args.house_dining_light && args.interior_lighting && photo && furniture && patina;
         let downstairs_light = args.house_downstairs_light && args.interior_lighting && photo && furniture && patina;
-        let table_enabled = args.house_table_light && args.interior_lighting && photo && furniture && patina;
+        let table_enabled = (args.house_table_light || args.house_oak_joinery) && args.interior_lighting && photo && furniture && patina;
         let mission_roof = args.house_mission_roof && photo && furniture && patina;
         let mut scans = if patina {
             surfaces::NAMES
@@ -216,7 +216,7 @@ impl Finishes {
             let street = street_reflections.as_mut().ok_or_else(|| anyhow::anyhow!("missing house reflection atlas"))?;
             street.orm[split..].copy_from_slice(&pixels[split..]);
         }
-        let table_light = if table_enabled {
+        let mut table_light = if table_enabled {
             let street = street_reflections.as_mut().ok_or_else(|| anyhow::anyhow!("missing house reflection atlas"))?;
             Some(TableLight::install(root, &directory, &manifest.house_sha256, &mut street.orm)?)
         } else { None };
@@ -263,6 +263,11 @@ impl Finishes {
         let oak_finish = if args.house_oak_finish && args.interior_lighting && photo && furniture && patina {
             Some(oak::Finish::load(root, &directory, &manifest.house_sha256, &mut floorboards.orm)?)
         } else { None };
+        if args.house_oak_joinery && let Some(table) = table_light.as_mut() {
+            let street = street_reflections.as_mut().ok_or_else(|| anyhow::anyhow!("missing dining light atlas"))?;
+            table.install_joinery(root, &directory, &manifest.house_sha256, args.house_table_light,
+                &mut street.orm, &mut floorboards.orm)?;
+        }
         Ok(Self {
             downstairs_light,
             oak_finish,

@@ -53,6 +53,7 @@ pub struct Args {
     pub house_downstairs_light: bool,
     pub house_table_light: bool,
     pub house_oak_finish: bool,
+    pub house_oak_joinery: bool,
     pub house_glazing: bool,
     pub bench: bool,
     pub start_underwater: bool,
@@ -209,6 +210,7 @@ fn parse_args() -> Result<Args> {
         house_downstairs_light: false,
         house_table_light: false,
         house_oak_finish: false,
+        house_oak_joinery: false,
         house_glazing: true,
         beaver_house: false,
         bench: false,
@@ -285,7 +287,7 @@ fn parse_args() -> Result<Args> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
-            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" => {
+            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" => {
                 a.beaver_house = true;
                 a.house_finishes = true;
                 a.house_patina = true;
@@ -296,6 +298,7 @@ fn parse_args() -> Result<Args> {
                     "--house-downstairs-light" => a.house_downstairs_light = true,
                     "--house-table-light" => a.house_table_light = true,
                     "--house-oak-finish" => a.house_oak_finish = true,
+                    "--house-oak-joinery" => a.house_oak_joinery = true,
                     "--house-mission-roof" => a.house_mission_roof = true,
                     _ => a.house_blender_bedroom = true,
                 }
@@ -304,6 +307,7 @@ fn parse_args() -> Result<Args> {
             "--no-house-downstairs-light" => a.house_downstairs_light = false,
             "--no-house-table-light" => a.house_table_light = false,
             "--no-house-oak-finish" => a.house_oak_finish = false,
+            "--no-house-oak-joinery" => a.house_oak_joinery = false,
             "--no-house-mission-roof" => a.house_mission_roof = false,
             "--no-house-blender-bedroom" => a.house_blender_bedroom = false,
             "--house-photo-lod" => a.house_photo_lod = true,

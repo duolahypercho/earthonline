@@ -89,6 +89,7 @@ fn base_args() -> Args {
         house_downstairs_light: false,
         house_table_light: false,
         house_oak_finish: false,
+        house_oak_joinery: false,
         house_glazing: true,
         beaver_house: false,
         bench: false,
