@@ -914,7 +914,7 @@ pub struct KitRuntime {
     freed: [bool; 2],
     /// (`--rt-gi`) each uploading pack's buildings as acceleration-structure
     /// geometries, handed to the renderer when the pack is resident.
-    rt_pending: HashMap<(u32, u8), (Vec<crate::rt_gi::RtGeom>, Vec3, Vec3)>,
+    rt_pending: HashMap<(u32, u8), (Vec<crate::rt_scene::RtGeom>, Vec3, Vec3)>,
 }
 
 impl KitRuntime {
@@ -1194,7 +1194,7 @@ impl KitRuntime {
                 crate::upload::bury(Box::new(a)); // a whole pack (MBs) is not freed on the render thread
                 continue;
             }
-            match self.make_job(&mut a, renderer.rt_gi_live()) {
+            match self.make_job(&mut a, renderer.rt_scene_live()) {
                 Some((job, alloc)) => {
                     self.slots.insert(key, Slot::Uploading(alloc));
                     uploads.push(job);
@@ -1286,7 +1286,7 @@ impl KitRuntime {
                 .map(|b| {
                     mn = mn.min(Vec3::from(b.min));
                     mx = mx.max(Vec3::from(b.max));
-                    crate::rt_gi::RtGeom {
+                    crate::rt_scene::RtGeom {
                         base_vertex: ar.vertex_base + v + b.vertex_start,
                         vertex_count: b.vertex_count,
                         first_index: ar.index_base + i + b.index_start,
@@ -1348,7 +1348,7 @@ impl KitRuntime {
 
     fn evict(&mut self, renderer: &crate::Renderer, queue: &wgpu::Queue, key: (u32, u8), a: Alloc) {
         crate::hitch::count(crate::hitch::Event::Eviction, 1); // hitch
-        renderer.rt_gi_remove(crate::rt_gi::RtKey::Kit(key.0, key.1)); // (`--rt-gi`) out of the traced set this frame
+        renderer.rt_remove(crate::rt_scene::RtKey::Kit(key.0, key.1)); // (`--rt-gi`) out of the traced set this frame
         // Not ready first, then the objects emptied; the ranges are reused only
         // by later writes, which the queue orders after the frames in flight.
         self.set_ready(key.0, key.1, false);
@@ -1403,7 +1403,7 @@ impl KitRuntime {
             let Some(Slot::Uploading(a)) = self.slots.remove(&key) else { continue };
             self.slots.insert(key, Slot::Resident(a));
             if let Some((g, mn, mx)) = self.rt_pending.remove(&key) {
-                renderer.rt_gi_add(crate::rt_gi::RtKey::Kit(key.0, key.1), g, mn, mx); // (`--rt-gi`) traced from the next encode
+                renderer.rt_add(crate::rt_scene::RtKey::Kit(key.0, key.1), g, mn, mx); // (`--rt-gi`) traced from the next encode
             }
             crate::hitch::mark(crate::hitch::Mark::KitPackResident, 1);
             self.set_ready(key.0, key.1, true);

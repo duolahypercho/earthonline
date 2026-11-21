@@ -1,35 +1,32 @@
 // Ray-traced one-bounce diffuse light (`--rt-gi`, rt_gi.rs): three compute
-// stages at half the output's resolution, after the city pass, on its depth.
-// rt_gi.rs prepends `enable wgpu_ray_query;`, look_common_source() (the
-// `Look` struct and its helpers) and the street constants (ST_*).
+// stages at half the output's resolution on the city's opaque depth and its
+// G-buffer (written by the city pass, `fs_rtg` in rt_gi_use.wgsl), then the
+// deferred composite (rt_gi_composite.wgsl) in the same frame. rt_scene.rs
+// `module_source` prepends the ray-query extension, the look's common code,
+// the street constants and the traced scene (rt_scene.wgsl, group 0).
 //
-//  * `rt_trace`: a surface point and normal from the depth (as surfaces_ao.wgsl
-//    finds them), one cosine-distributed ray into the acceleration structure
-//    (static city geometry only: kit buildings, hand-built buildings, terrain,
-//    the street's flat strips, structures and landmarks; no agents, props or
-//    water). A ray that leaves the scene takes the rig's sky in its direction
-//    (the hemisphere light's radiance, sky above the horizon and ground lobe
-//    below); a ray that hits takes the hit's Lambert radiance: its albedo
-//    (the material table, the kit palette and paint, the kit layer's mean, the
-//    street's class) x (the key, through a shadow ray toward it, + the rim +
-//    the rig's sky at the hit's normal x RT_HIT_SKY). Writes the irradiance
-//    without the rig's ambient and environment terms (rgb) and whether the ray
-//    left the scene (a: the environment's visible share, look_light scales its
-//    environment term by it), and the point's normal and view depth.
+//  * `rt_trace`: the surface point from the depth and its normal from the
+//    G-buffer (the vertex normal the city shaded with), one cosine-distributed
+//    ray into the traced scene. A ray that leaves it takes the rig's sky in
+//    its direction (the hemisphere light's radiance); a ray that hits takes
+//    the hit's Lambert light (rt_scene.wgsl `rt_hit_light`, the rig's sky at
+//    the hit x RT_HIT_SKY). Writes the irradiance without the rig's ambient
+//    and environment terms (rgb) and whether the ray left the scene (a: the
+//    environment's visible share, the composite scales the environment term by
+//    it), and the point's normal and view depth.
 //  * `rt_temporal`: the previous frame's history at the point, reprojected
 //    with the previous camera and refused where its depth or normal is another
 //    surface's, blended with this frame's sample over up to RT_MAX_FRAMES
-//    frames (a running mean).
-//    It also keeps the running moments of a guide value (`rt_guide`: the
-//    irradiance the sample stands for, the environment's share at the
-//    painted-facade class) for the filter's luminance stop.
+//    frames (a running mean). It also keeps the running moments of a guide
+//    value (`rt_guide`: the irradiance the sample stands for, the
+//    environment's share at the painted-facade class) for the filter's
+//    luminance stop.
 //  * `rt_atrous`: an edge-aware a-trous filter (5 x 5 B3 spline at a step of
 //    1, 2, 4 texels), its weights stopped by the point's plane and normal and
 //    by the guide value against the history's standard deviation (a
 //    variance-guided stop: coplanar ground in and out of a deck's shade stays
-//    apart); the last pass writes the result and its view depth for the next
-//    frame's city pass (rt_gi_use.wgsl reads them, reprojected as `ao_fetch`
-//    reads the AO).
+//    apart); the last pass writes the result and its view depth for the
+//    composite.
 
 struct RtTrace {
     // xyz the eye, w the frame index (exact in a float to 2^24)
@@ -51,56 +48,26 @@ struct RtTrace {
     size: vec4<u32>,
 };
 
-struct RtGeo {
-    base_vertex: u32,
-    first_index: u32,
-    material: u32,
-    kind: u32,
-};
 
-struct RtMat {
-    base: vec4<f32>,
-    emissive: vec4<f32>,
-    params: vec4<f32>,
-    layer: i32,
-    flags: u32,
-    rough_flatten: f32,
-    thin_absorption: f32,
-};
+// The frame's inputs (group 1): the trace uniform, the city's opaque depth,
+// the G-buffer's normal (rgb n x 0.5 + 0.5, a 1 where the city shaded a texel).
+@group(1) @binding(0) var<uniform> rt: RtTrace;
+@group(1) @binding(1) var rt_depth: texture_depth_2d;
+@group(1) @binding(2) var rt_gb_n: texture_2d<f32>;
 
-@group(0) @binding(0) var<uniform> look: Look;
-@group(0) @binding(1) var<uniform> rt: RtTrace;
-@group(0) @binding(2) var rt_acc: acceleration_structure;
-// the shared arena: 20-byte vertices (position, packed normal, colour), 32-bit indices.
-@group(0) @binding(3) var<storage, read> rt_verts: array<u32>;
-@group(0) @binding(4) var<storage, read> rt_idx: array<u32>;
-// one entry per acceleration-structure geometry: instance custom data + geometry index.
-@group(0) @binding(5) var<storage, read> rt_geos: array<RtGeo>;
-@group(0) @binding(6) var<storage, read> rt_mats: array<RtMat>;
-// each kit map layer's mean albedo (linear rgb), 0.5 grey until the bake lands.
-@group(0) @binding(7) var<storage, read> rt_layer_mean: array<vec4<f32>>;
-@group(0) @binding(8) var rt_depth: texture_depth_2d;
-
-// The stage's own targets (group 1; rt_gi.rs makes one layout a stage with
+// The stage's own targets (group 2; rt_gi.rs makes one layout a stage with
 // only the bindings its entry point reads): trace 4 5; temporal 0 1 2 3 8, 4 5;
 // a-trous 0 1 2, 4 6 7.
-@group(1) @binding(0) var rt_in_a: texture_2d<f32>;
-@group(1) @binding(1) var rt_in_b: texture_2d<f32>;
-@group(1) @binding(2) var rt_in_c: texture_2d<f32>;
-@group(1) @binding(3) var rt_in_d: texture_2d<f32>;
-@group(1) @binding(4) var rt_out_a: texture_storage_2d<rgba16float, write>;
-@group(1) @binding(5) var rt_out_b: texture_storage_2d<rgba32float, write>;
-@group(1) @binding(6) var rt_out_c: texture_storage_2d<r32float, write>;
-@group(1) @binding(7) var<uniform> rt_step: vec4<u32>;
-@group(1) @binding(8) var rt_in_e: texture_2d<f32>;
+@group(2) @binding(0) var rt_in_a: texture_2d<f32>;
+@group(2) @binding(1) var rt_in_b: texture_2d<f32>;
+@group(2) @binding(2) var rt_in_c: texture_2d<f32>;
+@group(2) @binding(3) var rt_in_d: texture_2d<f32>;
+@group(2) @binding(4) var rt_out_a: texture_storage_2d<rgba16float, write>;
+@group(2) @binding(5) var rt_out_b: texture_storage_2d<rgba32float, write>;
+@group(2) @binding(6) var rt_out_c: texture_storage_2d<r32float, write>;
+@group(2) @binding(7) var<uniform> rt_step: vec4<u32>;
+@group(2) @binding(8) var rt_in_e: texture_2d<f32>;
 
-const RT_F_GLASS: u32 = 8u;
-const RT_F_VERTEX_COLOUR: u32 = 1u;
-// glazing reflects, it scatters little (a clean pane's diffuse share).
-const RT_GLASS_ALBEDO: f32 = 0.04;
-// the street classes (draw.wgsl SC_*): concrete from the kerb face on; the gutter pan's silt.
-const RT_SC_GUTTER: u32 = 1u;
-const RT_SC_KERB_FACE: u32 = 3u;
 // a ray in a texel of sky or past the fade: none.
 const RT_NONE: f32 = -1.0;
 // the filter's guide stop: standard deviations of the history, and a floor (a
@@ -108,10 +75,7 @@ const RT_NONE: f32 = -1.0;
 const RT_LUMA_SIGMA: f32 = 4.0;
 const RT_LUMA_FLOOR: f32 = 0.1;
 
-// ---------------------------------------------------------------------------
 // The surface point from the depth (surfaces_ao.wgsl `ao_pos`), camera-relative.
-// ---------------------------------------------------------------------------
-
 fn rt_pos(px: vec2<i32>) -> vec4<f32> {
     let dims = vec2<i32>(rt.size.zw);
     let p = clamp(px, vec2<i32>(0), dims - 1);
@@ -122,188 +86,10 @@ fn rt_pos(px: vec2<i32>) -> vec4<f32> {
     return vec4<f32>(w.xyz / w.w, d);
 }
 
-// The geometric normal from the depth neighbours, the smaller step on each
-// axis, facing the eye (`ao_main`).
-fn rt_normal(px: vec2<i32>, c: vec3<f32>) -> vec3<f32> {
-    let r = rt_pos(px + vec2<i32>(1, 0)).xyz - c;
-    let l = c - rt_pos(px - vec2<i32>(1, 0)).xyz;
-    let d = rt_pos(px + vec2<i32>(0, 1)).xyz - c;
-    let u = c - rt_pos(px - vec2<i32>(0, 1)).xyz;
-    // the shorter non-zero step on each axis (at the frame's edge the clamped
-    // neighbour is the texel itself: a zero step, which would make the normal NaN).
-    let dx = select(l, r, (dot(r, r) < dot(l, l) && dot(r, r) > 0.0) || dot(l, l) == 0.0);
-    let dy = select(u, d, (dot(d, d) < dot(u, u) && dot(d, d) > 0.0) || dot(u, u) == 0.0);
-    let x = cross(dy, dx);
-    let len2 = dot(x, x);
-    if (len2 < 1e-24) {
-        return -c * inverseSqrt(max(dot(c, c), 1e-12)); // no tangent: face the eye
-    }
-    var n = x * inverseSqrt(len2);
-    if (dot(n, -c) < 0.0) {
-        n = -n;
-    }
-    return n;
-}
-
-// ---------------------------------------------------------------------------
-// Sampling.
-// ---------------------------------------------------------------------------
-
-fn rt_pcg(v: u32) -> u32 {
-    let s = v * 747796405u + 2891336453u;
-    let w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u;
-    return (w >> 22u) ^ w;
-}
-
-// Two numbers in [0, 1): a per-texel offset stepped each frame along the R2
-// sequence, so a texel's samples spread over its hemisphere in few frames.
-fn rt_rand2(p: vec2<u32>, frame: u32) -> vec2<f32> {
-    let h = rt_pcg(p.x + rt_pcg(p.y + 0x9e3779b9u));
-    let o = vec2<f32>(f32(h & 0xffffu), f32(h >> 16u)) * (1.0 / 65536.0);
-    let f = f32(frame % 4096u);
-    return fract(o + f * vec2<f32>(0.7548776662, 0.5698402910));
-}
-
-fn rt_cosine(n: vec3<f32>, u: vec2<f32>) -> vec3<f32> {
-    let r = sqrt(u.x);
-    let phi = 6.2831853 * u.y;
-    let a = select(vec3<f32>(1.0, 0.0, 0.0), vec3<f32>(0.0, 1.0, 0.0), abs(n.x) > 0.9);
-    let t = normalize(cross(a, n));
-    let b = cross(n, t);
-    return normalize(t * (r * cos(phi)) + b * (r * sin(phi)) + n * sqrt(max(0.0, 1.0 - u.x)));
-}
-
-// ---------------------------------------------------------------------------
-// The rig's indirect terms (look_light.wgsl), for a hit.
-// ---------------------------------------------------------------------------
-
-fn rt_sh(n: vec3<f32>) -> vec3<f32> {
-    let x = n.x;
-    let y = n.y;
-    let z = n.z;
-    var e = look.sh[0].xyz * 0.282095;
-    e = e + look.sh[1].xyz * (0.488603 * y) + look.sh[2].xyz * (0.488603 * z) + look.sh[3].xyz * (0.488603 * x);
-    e = e + look.sh[4].xyz * (1.092548 * x * y) + look.sh[5].xyz * (1.092548 * y * z) + look.sh[6].xyz * (0.315392 * (3.0 * z * z - 1.0));
-    e = e + look.sh[7].xyz * (1.092548 * x * z) + look.sh[8].xyz * (0.546274 * (x * x - y * y));
-    return max(e, vec3<f32>(0.0));
-}
-
-// The rig's open-sky irradiance at a normal (hemisphere light, ambient,
-// environment at the painted-facade class), as `look_light` builds `irr`.
-fn rt_rig_irradiance(n: vec3<f32>) -> vec3<f32> {
-    let hemi = mix(look.hemi_ground.xyz, look.hemi_sky.xyz, n.y * 0.5 + 0.5);
-    return hemi + look.ambient.xyz + rt_sh(n) * (look.ambient.w * look.env_class.x);
-}
-
 // The filter's guide: the irradiance a texel's (irradiance, open share) stands
 // for at normal n, the environment's share at the painted-facade class.
 fn rt_guide(v: vec4<f32>, n: vec3<f32>) -> f32 {
     return lk_luma(v.rgb) + v.a * lk_luma(rt_sh(n) * (look.ambient.w * look.env_class.x));
-}
-
-fn rt_srgb(c: vec3<f32>) -> vec3<f32> {
-    return select(pow((c + 0.055) / 1.055, vec3<f32>(2.4)), c / 12.92, c <= vec3<f32>(0.04045));
-}
-
-// The Lambert albedo at a hit, from its geometry's material and the hit
-// triangle's first vertex colour (draw.wgsl `vs` and `shade`, reduced to
-// their means: no scans, no weathering).
-fn rt_albedo(g: RtGeo, colour: u32) -> vec3<f32> {
-    let kind = g.kind & 255u;
-    let c = unpack4x8unorm(colour);
-    var mi = g.material;
-    if (kind == 5u) {
-        mi = mi + u32(round(c.a * 255.0)); // the kit palette index
-    }
-    let m = rt_mats[mi];
-    if ((m.flags & RT_F_GLASS) != 0u) {
-        return vec3<f32>(RT_GLASS_ALBEDO);
-    }
-    var a = m.base.rgb;
-    if (kind == 5u) {
-        a = a * pow(c.rgb, vec3<f32>(2.2)); // the paint
-        if (m.layer >= 0) {
-            a = a * rt_layer_mean[m.layer].rgb;
-        }
-    } else if (kind == 6u) {
-        // the street surface: the class in the alpha byte, the tint exact sRGB.
-        let cls = u32(round(c.a * 255.0));
-        a = rt_srgb(c.rgb);
-        if (cls >= RT_SC_KERB_FACE) {
-            a = a * ST_CONCRETE_BASE;
-        } else if (cls == RT_SC_GUTTER) {
-            a = a * (1.0 - ST_GUTTER_POUR_SILT);
-        } else {
-            a = a * ST_ASPHALT_BASE;
-        }
-    } else if (kind == 7u || kind == 9u || kind == 10u || kind == 11u) {
-        a = rt_srgb(c.rgb); // paint, landmarks, a structure's deck: exact sRGB vertex colour
-    } else if (kind == 12u) {
-        a = m.base.rgb; // a structure's concrete: its tint (the colour bytes carry the formwork)
-    } else if ((m.flags & RT_F_VERTEX_COLOUR) != 0u) {
-        a = pow(c.rgb, vec3<f32>(2.2));
-    } else if (m.layer >= 0) {
-        a = a * rt_layer_mean[m.layer].rgb;
-    }
-    return clamp(a, vec3<f32>(0.0), vec3<f32>(0.95));
-}
-
-fn rt_vpos(i: u32) -> vec3<f32> {
-    let b = i * 5u;
-    return vec3<f32>(bitcast<f32>(rt_verts[b]), bitcast<f32>(rt_verts[b + 1u]), bitcast<f32>(rt_verts[b + 2u]));
-}
-
-// The key's visibility from a point: any hit toward the sun within the reach.
-fn rt_sun_visible(o: vec3<f32>, l: vec3<f32>) -> f32 {
-    var rq: ray_query;
-    rayQueryInitialize(&rq, rt_acc, RayDesc(RAY_FLAG_TERMINATE_ON_FIRST_HIT, 0xFFu, 0.02, 2.0 * rt.fwd.w, o, l));
-    while (rayQueryProceed(&rq)) {}
-    let h = rayQueryGetCommittedIntersection(&rq);
-    return select(1.0, 0.0, h.kind == RAY_QUERY_INTERSECTION_TRIANGLE);
-}
-
-struct RtRay {
-    // radiance along the ray without the rig's ambient and environment terms
-    l: vec3<f32>,
-    // 1 when the ray left the scene (its environment counts), else 0
-    open: f32,
-};
-
-fn rt_cast(o: vec3<f32>, d: vec3<f32>, tmin: f32) -> RtRay {
-    var rq: ray_query;
-    rayQueryInitialize(&rq, rt_acc, RayDesc(RAY_FLAG_NONE, 0xFFu, tmin, rt.fwd.w, o, d));
-    while (rayQueryProceed(&rq)) {}
-    let h = rayQueryGetCommittedIntersection(&rq);
-    var r: RtRay;
-    if (h.kind != RAY_QUERY_INTERSECTION_TRIANGLE) {
-        // the hemisphere light's radiance in this direction (sky above, ground lobe below).
-        r.l = select(look.hemi_ground.xyz, look.hemi_sky.xyz, d.y >= 0.0) / LK_PI;
-        r.open = 1.0;
-        return r;
-    }
-    let g = rt_geos[h.instance_custom_data + h.geometry_index];
-    let at = g.first_index + 3u * h.primitive_index;
-    let i0 = g.base_vertex + rt_idx[at];
-    let p0 = rt_vpos(i0);
-    let p1 = rt_vpos(g.base_vertex + rt_idx[at + 1u]);
-    let p2 = rt_vpos(g.base_vertex + rt_idx[at + 2u]);
-    var n = cross(p1 - p0, p2 - p0);
-    n = n * inverseSqrt(max(dot(n, n), 1e-30));
-    if (dot(n, d) > 0.0) {
-        n = -n;
-    }
-    let albedo = rt_albedo(g, rt_verts[i0 * 5u + 4u]);
-    let p = o + d * h.t + n * 0.03;
-    var e = rt_rig_irradiance(n) * rt.params.z;
-    let l = look.key_dir.xyz;
-    let nl = dot(n, l);
-    if (nl > 0.0 && look.key_dir.w > 0.0) {
-        e = e + look.key.xyz * (nl * look.key_dir.w * rt_sun_visible(p, l));
-    }
-    e = e + look.rim.xyz * max(dot(n, look.rim_dir.xyz), 0.0);
-    r.l = albedo / LK_PI * e;
-    r.open = 0.0;
-    return r;
 }
 
 // ---------------------------------------------------------------------------
@@ -317,26 +103,29 @@ fn rt_trace(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let hp = vec2<i32>(gid.xy);
-    let px = hp * 2;
+    let px = min(hp * 2, vec2<i32>(rt.size.zw) - 1);
+    let gn = textureLoad(rt_gb_n, px, 0);
     let c = rt_pos(px);
-    if (c.w <= 0.0) {
-        textureStore(rt_out_a, hp, vec4<f32>(0.0));
-        textureStore(rt_out_b, hp, vec4<f32>(0.0, 1.0, 0.0, RT_NONE));
-        return;
-    }
     let vd = dot(c.xyz, rt.fwd.xyz);
-    if (vd >= rt.fade.y) {
+    if (gn.a < 0.5 || c.w <= 0.0 || vd >= rt.fade.y) {
+        // sky, a surface the city did not shade (props, agents: drawn after), or past the fade.
         textureStore(rt_out_a, hp, vec4<f32>(0.0));
         textureStore(rt_out_b, hp, vec4<f32>(0.0, 1.0, 0.0, RT_NONE));
         return;
     }
-    let n = rt_normal(px, c.xyz);
+    let n = normalize(gn.xyz * 2.0 - 1.0);
     let world = c.xyz + rt.cam.xyz;
     let o = world + n * (rt.params.x + rt.params.y * vd);
-    let d = rt_cosine(n, rt_rand2(gid.xy, u32(rt.cam.w)));
-    let r = rt_cast(o, d, 0.0);
+    let d = rt_cosine(n, rt_rand2(gid.xy, u32(rt.cam.w), 0u));
+    let h = rt_hit(o, d, 0.0, rt.fwd.w);
+    var l = rt_hemi_radiance(d);
+    var open = 1.0;
+    if (h.hit) {
+        l = rt_hit_light(h, o, d, rt.params.z, 2.0 * rt.fwd.w);
+        open = 0.0;
+    }
     // one cosine-distributed sample: the irradiance estimate is pi x its radiance.
-    textureStore(rt_out_a, hp, vec4<f32>(r.l * LK_PI, r.open));
+    textureStore(rt_out_a, hp, vec4<f32>(l * LK_PI, open));
     textureStore(rt_out_b, hp, vec4<f32>(n, vd));
 }
 

@@ -236,7 +236,6 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     if (frame.copy_step.z < 0.5) {
         ao4 = ao_fetch(world); // no screen-space AO inside the probe pass
     }
-    // RT_GI_HOOK
     let ao_vis = ao_multi_bounce(ao4.a);
     let ao = s.ao * ao_vis;
     let indirect_d = irr * diffuse / LK_PI * (vec3<f32>(1.0) - fss) * ao;
@@ -364,5 +363,6 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     }
     let fog = lk_smooth(look.fog.x, look.fog.y, lm_fog_depth(m, vd)); // the set's capped sight distance
     lit = mix(lit, look.fog_color.xyz, fog);
+    // RT_GI_HOOK
     return vec4<f32>(lit, alpha);
 }

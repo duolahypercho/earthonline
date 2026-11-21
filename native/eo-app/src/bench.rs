@@ -491,7 +491,7 @@ fn settle_p(ctx: &GpuContext, renderer: &Renderer, world: &World, models: &mut M
         renderer.update(&ctx.queue, cam);
         eo_render::pace::submit_tick(&ctx.device, &ctx.queue); // always counted (an empty submit counts only with queued writes)
         // (`--rt-gi`) the traced scene round the camera built before a frame is drawn (nothing without the pass).
-        let rt_ready = renderer.rt_gi_prepare();
+        let rt_ready = renderer.rt_prepare();
         // Reclaim finished submissions' staging memory, as a presenting loop would.
         let _ = ctx.device.poll(wgpu::PollType::Poll);
         if models.settled() && props.as_deref().is_none_or(|p| p.settled()) && renderer.ambient.settled() && rt_ready { // props // the ambient volume (lighting)
@@ -1577,6 +1577,12 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             // (`--rt-gi`) what was traced on this path so far (cumulative over the run's paths).
             report["rt_gi"] = r.stats().json();
         }
+        if let Some(r) = renderer.rt_reflect() {
+            report["rt_reflect"] = r.stats().json();
+        }
+        if let Some(s) = renderer.rt_scene() {
+            report["rt_scene"] = s.stats().json();
+        }
         if renderer.structures.get().is_some() {
             // the grade-separated roads (`--structures`; absent without them).
             report["structures"] = json!({
@@ -1797,7 +1803,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     out["settings"]["quality"] = json!(args.quality.name());
     out["settings"]["budget_ms"] = json!(budget_ms);
     out["lighting"] = crate::quality::lighting_json(args);
-    out["rt_gi"] = crate::quality::rt_gi_json(args, &renderer); // (`--rt-gi`) whether the pass ran, its settings and what it traced
+    out["rt"] = crate::quality::rt_json(args, &renderer); // (`--rt-gi`, `--rt-reflect`) whether the passes ran, their settings and what they traced
     out["grime"] = crate::quality::grime_json(args); // surface weathering (`--grime`)
     out["street_life"] = crate::quality::street_life_json(args); // litter, graffiti, posters (`--street-life`)
     out["stand_ins"] = crate::quality::stand_ins_json(args); // procedural models for absent prop GLBs (`--stand-ins`)

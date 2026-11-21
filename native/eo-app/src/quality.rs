@@ -162,7 +162,7 @@ impl Quality {
     /// differ from the defaults (the default sky quality is 1, the map 3072).
     pub fn tier(self) -> Tier {
         let none = Tier { shadow_map: None, ssr: None, contact_shadows: None, sky_quality: None, shadow_slope_bias: None, ao: None, shafts: None, bloom: None, grime: None, street_life: None, stand_ins: None, photo_finish: None, facade_clutter: None, shop_light: None, look: None, lighting: LightingOptions::OFF };
-        let high = LightingOptions { cascade_blend: true, far_shadows: 1, ambient_volume: 1, probe_grid: 0, light_shadows: 1, light_shadow_moving: false, headlight_shadows: 2, lit_fog: 1, smooth_time: true, ground_bounce: true, rt_gi: false };
+        let high = LightingOptions { cascade_blend: true, far_shadows: 1, ambient_volume: 1, probe_grid: 0, light_shadows: 1, light_shadow_moving: false, headlight_shadows: 2, lit_fog: 1, smooth_time: true, ground_bounce: true, rt_gi: false, rt_reflect: false };
         match self {
             Quality::Low => Tier { shadow_map: Some(2048), ssr: Some(false), contact_shadows: Some(false), sky_quality: Some(0), ao: Some(false), shafts: Some(false), bloom: Some(false), ..none },
             Quality::Medium => none,
@@ -203,6 +203,8 @@ pub struct Switches {
     ground_bounce: Option<bool>,
     // the ray-traced diffuse light (`--rt-gi`, `--no-rt-gi`; no tier sets it).
     rt_gi: Option<bool>,
+    // the ray-traced reflections (`--rt-reflect`, `--no-rt-reflect`; no tier sets it).
+    rt_reflect: Option<bool>,
     // a shadow switch a tier sets (each wins over the tier).
     shadow_slope_bias: Option<bool>,
     // surface weathering (`--grime [1|2]`, `--no-grime`; wins over the tier).
@@ -313,6 +315,10 @@ impl Switches {
             }
             "--rt-gi" | "--no-rt-gi" => {
                 self.rt_gi = Some(flag == "--rt-gi");
+                0
+            }
+            "--rt-reflect" | "--no-rt-reflect" => {
+                self.rt_reflect = Some(flag == "--rt-reflect");
                 0
             }
             "--shadow-slope-bias" | "--no-shadow-slope-bias" => {
@@ -500,6 +506,7 @@ impl Switches {
         given(&mut l.lit_fog, self.lit_fog);
         given_b(&mut l.smooth_time, self.smooth_time);
         given_b(&mut l.rt_gi, self.rt_gi);
+        given_b(&mut l.rt_reflect, self.rt_reflect);
         // the ground bounce lives in the ambient volume: on with it unless `--no-ground-bounce`, never without it.
         l.ground_bounce = l.ambient_volume > 0 && self.ground_bounce.unwrap_or(true);
         a.look.lighting = l;
@@ -525,18 +532,32 @@ pub fn lighting_json(args: &Args) -> serde_json::Value {
         "smooth_time": l.smooth_time,
         "ground_bounce": l.ground_bounce_on(),
         "rt_gi": l.rt_gi,
+        "rt_reflect": l.rt_reflect,
     })
 }
 
-/// The bench JSON's `rt_gi` object (`--rt-gi`): asked for, whether the pass
-/// runs (a device with ray queries), its settings and what it traced.
-pub fn rt_gi_json(args: &Args, renderer: &eo_render::Renderer) -> serde_json::Value {
+/// The bench JSON's `rt` object (`--rt-gi`, `--rt-reflect`): for each pass
+/// whether it was asked for and runs (a device with ray queries), its
+/// settings and what it did; the traced scene and the G-buffer.
+pub fn rt_json(args: &Args, renderer: &eo_render::Renderer) -> serde_json::Value {
     serde_json::json!({
-        "asked": args.look.lighting.rt_gi,
-        "live": renderer.rt_gi_live(),
-        "config": renderer.rt_gi().map(|r| r.config.json()),
-        "stats": renderer.rt_gi().map(|r| r.stats().json()),
-        "target_bytes": renderer.rt_gi().map(|r| r.target_bytes()),
+        "gi": {
+            "asked": args.look.lighting.rt_gi,
+            "live": renderer.rt_gi().is_some(),
+            "config": renderer.rt_gi().map(|r| r.config.json()),
+            "stats": renderer.rt_gi().map(|r| r.stats().json()),
+            "target_bytes": renderer.rt_gi().map(|r| r.target_bytes()),
+        },
+        "reflect": {
+            "asked": args.look.lighting.rt_reflect,
+            "live": renderer.rt_reflect().is_some(),
+            "config": renderer.rt_reflect().map(|r| r.config.json()),
+            "stats": renderer.rt_reflect().map(|r| r.stats().json()),
+            "target_bytes": renderer.rt_reflect().map(|r| r.target_bytes()),
+        },
+        "gbuffer_bytes": renderer.rt_composite().map(|c| c.bytes()),
+        "scene_config": renderer.rt_scene().map(|s| s.config.json()),
+        "scene_stats": renderer.rt_scene().map(|s| s.stats().json()),
     })
 }
 
@@ -655,13 +676,13 @@ mod tests {
         assert_eq!((high.look.shadow_map, high.look.sky.ssr, high.look.sky.contact, high.look.sky.quality), (d.look.shadow_map, d.look.sky.ssr, d.look.sky.contact, d.look.sky.quality));
         assert_eq!(
             high.look.lighting,
-            LightingOptions { cascade_blend: true, far_shadows: 1, ambient_volume: 1, probe_grid: 0, light_shadows: 1, light_shadow_moving: false, headlight_shadows: 2, lit_fog: 1, smooth_time: true, ground_bounce: true, rt_gi: false }
+            LightingOptions { cascade_blend: true, far_shadows: 1, ambient_volume: 1, probe_grid: 0, light_shadows: 1, light_shadow_moving: false, headlight_shadows: 2, lit_fog: 1, smooth_time: true, ground_bounce: true, rt_gi: false, rt_reflect: false }
         );
         let hyper = parse(&["--quality", "hyper"]);
         assert_eq!((hyper.look.shadow_map, hyper.look.sky.quality), (4096, 2));
         assert_eq!(
             hyper.look.lighting,
-            LightingOptions { cascade_blend: true, far_shadows: 2, ambient_volume: 2, probe_grid: 2, light_shadows: 3, light_shadow_moving: true, headlight_shadows: 8, lit_fog: 2, smooth_time: true, ground_bounce: true, rt_gi: false }
+            LightingOptions { cascade_blend: true, far_shadows: 2, ambient_volume: 2, probe_grid: 2, light_shadows: 3, light_shadow_moving: true, headlight_shadows: 8, lit_fog: 2, smooth_time: true, ground_bounce: true, rt_gi: false, rt_reflect: false }
         );
         assert_eq!(hyper.quality, Quality::Hyper);
         // no tier entry equals a default (it would be a no-op that hides a mistake).

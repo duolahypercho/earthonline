@@ -1,4 +1,4 @@
-//! (`--rt-gi`, stage R1) The ray-traced diffuse light on the GPU, on a small
+//! (`--rt-gi`, `--rt-reflect`) The ray-traced passes on the GPU, on a small
 //! scene: a ground slab with a canopy over part of it and a wall, at 15 h.
 //! With the option compiled in and a device with ray queries, the pass runs
 //! with no validation error, its result is finite, the open share it traces
@@ -107,11 +107,11 @@ fn half_to_f32(h: u16) -> f32 {
 #[test]
 fn traced_light_runs_and_sees_the_canopy() {
     let opts = GpuOptions::default();
-    eo_render::rt_gi::set_wanted(false);
+    eo_render::rt_scene::set_wanted(false);
     let plain_ctx = GpuContext::new(GpuContext::create_instance(&opts), None, opts).expect("a GPU adapter is required");
     assert!(!plain_ctx.ray_query, "no ray queries unless asked for");
     let plain = eo_render::look::with_shader_features(ShaderFeatures::ALL, || render(&plain_ctx, &scene(&plain_ctx), 30));
-    eo_render::rt_gi::set_wanted(true);
+    eo_render::rt_scene::set_wanted(true);
     let ctx = GpuContext::new(GpuContext::create_instance(&opts), None, opts).expect("a GPU adapter is required");
     if !ctx.ray_query {
         println!("SKIP: {} ({:?}) offers no inline ray queries (the pass is Metal only)", ctx.info.name, ctx.info.backend);
@@ -120,13 +120,13 @@ fn traced_light_runs_and_sees_the_canopy() {
     let scope = ctx.device.push_error_scope(wgpu::ErrorFilter::Validation);
     let off = eo_render::look::with_shader_features(ShaderFeatures::ALL, || {
         let r = scene(&ctx);
-        assert!(!r.rt_gi_live(), "no pass without the option compiled in");
+        assert!(!r.rt_scene_live() && r.rt_gi().is_none(), "no pass without the option compiled in");
         render(&ctx, &r, 30)
     });
     assert!(off == plain, "without the option the frame is bit for bit the frame of a device that never asked for ray queries");
     let rt = eo_render::look::with_shader_features(ShaderFeatures { rt_gi: true, ..ShaderFeatures::ALL }, || {
         let r = scene(&ctx);
-        assert!(r.rt_gi_live(), "the pass with the option and ray queries");
+        assert!(r.rt_scene_live() && r.rt_gi().is_some(), "the pass with the option and ray queries");
         let frame = render(&ctx, &r, 30);
         (r, frame)
     });
@@ -135,7 +135,8 @@ fn traced_light_runs_and_sees_the_canopy() {
     assert!(err.is_none(), "validation: {err:?}");
     let g = r.rt_gi().unwrap();
     let s = g.stats();
-    assert!(s.instances >= 1 && s.traced_frames >= 29, "{s:?}");
+    let sc = r.rt_scene().unwrap().stats();
+    assert!(sc.instances >= 1 && s.traced_frames >= 29, "{s:?} {sc:?}");
     let (gi, z) = g.result_views().expect("the targets exist after a traced frame");
     let (gw, gh) = (gi.texture().width(), gi.texture().height());
     assert_eq!((gw, gh), (W / 2, H / 2));
@@ -185,4 +186,30 @@ fn traced_light_runs_and_sees_the_canopy() {
     let (a, b) = (luma(&off, Vec3::new(25.0, 0.0, 9.0)), luma(&lit, Vec3::new(25.0, 0.0, 9.0)));
     println!("under the canopy: {a:.4} without, {b:.4} with the traced light");
     assert!(b < a * 0.9, "the canopy's shade deepens ({b} vs {a})");
+    // (`--rt-reflect`, stage R3) the reflections, alone and with the diffuse
+    // light: no validation error, a finite frame and a finite result.
+    for gi in [false, true] {
+        let scope = ctx.device.push_error_scope(wgpu::ErrorFilter::Validation);
+        let (r, frame) = eo_render::look::with_shader_features(ShaderFeatures { rt_gi: gi, rt_reflect: true, ..ShaderFeatures::ALL }, || {
+            let r = scene(&ctx);
+            assert!(r.rt_reflect().is_some() && r.rt_gi().is_some() == gi, "the passes the options ask for");
+            let frame = render(&ctx, &r, 20);
+            (r, frame)
+        });
+        let err = pollster::block_on(scope.pop());
+        assert!(err.is_none(), "validation (with the diffuse light: {gi}): {err:?}");
+        assert!(frame.chunks(2).all(|h| half_to_f32(u16::from_le_bytes([h[0], h[1]])).is_finite()), "the frame is finite");
+        let p = r.rt_reflect().unwrap();
+        assert!(p.stats().traced_frames >= 19, "{:?}", p.stats());
+        let (out, z) = p.result_views().expect("the targets exist after a traced frame");
+        let ob = readback(&ctx, out.texture(), 8);
+        let zb = readback(&ctx, z.texture(), 4);
+        let mut traced = 0;
+        for k in 0..(out.texture().width() * out.texture().height()) as usize {
+            let px: Vec<f32> = (0..4).map(|c| f16(&ob[k * 8 + c * 2..])).collect();
+            assert!(px.iter().all(|v| v.is_finite() && *v >= 0.0), "texel {k}: {px:?}");
+            traced += (f32::from_le_bytes(zb[k * 4..k * 4 + 4].try_into().unwrap()) >= 0.0) as usize;
+        }
+        println!("reflections (with the diffuse light: {gi}): {traced} texels traced; {:?}", p.stats());
+    }
 }
