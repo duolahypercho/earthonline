@@ -117,7 +117,7 @@ pub fn prepare(
     bed: &mut impl FnMut(Vec2) -> f32,
     build_meshes: bool,
     cove_detail: bool,
-    rocky_site: Option<(bool, u32)>,
+    rocky_site: Option<eo_render::seabed::IntertidalOptions>,
     profile: Option<&crate::cove_bed::CoveBed>,
 ) -> Vec<Site> {
     let cell_m = grid.meta.cell_size as f32;
@@ -164,7 +164,7 @@ pub fn prepare(
             });
         }
     }
-    if let Some((draw, material)) = rocky_site {
+    if let Some(options) = rocky_site {
         // West tip of mapped beach OSM way 224941181, where the park records
         // rocky intertidal habitat along the boundary wall toward Municipal Pier.
         let start = Vec2::from(eo_data::groundscale::plan32([-458.0, -3156.0]));
@@ -176,7 +176,7 @@ pub fn prepare(
         });
         if let Some(centre) = centre
             && let Some((eye, at)) =
-                eo_render::seabed::intertidal_site(scene, centre, bed, draw, material)
+                eo_render::seabed::intertidal_site_with_options(scene, centre, bed, options)
         {
             sites.push(Site {
                 habitat: Habitat::Rocky,

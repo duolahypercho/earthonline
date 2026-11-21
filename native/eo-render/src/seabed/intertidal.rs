@@ -2,7 +2,7 @@
 //! intertidal survey describes attached algae and barnacles along this shore.
 //! Individual rocks and colonies are deterministic habitat illustrations.
 
-use super::{Chunk, Sequence, add_vertex, point};
+use super::{Chunk, Sequence, add_vertex, point, rockweed};
 use glam::{Vec2, Vec3};
 
 const SIDES: u32 = 18;
@@ -148,12 +148,11 @@ fn frond(
     length: f32,
     width: f32,
     tone: Vec3,
-    rng: &mut Sequence,
+    blade_angle: f32,
+    curl: f32,
 ) {
     let (u, v) = axis.any_orthonormal_pair();
-    let blade_angle = rng.unit() * std::f32::consts::TAU;
     let side = u * blade_angle.cos() + v * blade_angle.sin();
-    let curl = rng.unit() * std::f32::consts::TAU;
     let first = mesh.verts.len() as u32;
     for k in 0..=8u32 {
         let t = k as f32 / 8.0;
@@ -185,7 +184,8 @@ fn frond(
     }
 }
 
-pub(super) fn append(mesh: &mut Chunk, centre: Vec2, bed: &mut impl FnMut(Vec2) -> f32) {
+pub(super) fn append(mesh: &mut Chunk, centre: Vec2, bed: &mut impl FnMut(Vec2) -> f32, forked: bool) {
+    let draw_frond = if forked { rockweed::append } else { frond };
     let mut rng = Sequence(0x465241);
     let along = Vec2::new(0.94, 0.34);
     let mut stones: Vec<(Vec2, f32)> = Vec::new();
@@ -253,7 +253,9 @@ pub(super) fn append(mesh: &mut Chunk, centre: Vec2, bed: &mut impl FnMut(Vec2) 
                     let dir = (0.40 * n + point(a, 0.35 + 0.7 * rng.unit())).normalize();
                     let length = 0.07 + 0.26 * rng.unit();
                     let width = length * (0.045 + 0.055 * rng.unit());
-                    frond(mesh, root, dir, length, width, shade, &mut rng);
+                    let angle = rng.unit() * std::f32::consts::TAU;
+                    let curl = rng.unit() * std::f32::consts::TAU;
+                    draw_frond(mesh, root, dir, length, width, shade, angle, curl);
                 }
             }
         }
@@ -291,6 +293,14 @@ mod tests {
                 .iter()
                 .all(|&i| (i as usize) < shown.vertices.len())
         );
+        let mut forked = empty_scene();
+        let habitat = super::super::IntertidalOptions { draw: true, rockweed: true, material: 0 };
+        let c = super::super::intertidal_site_with_options(&mut forked, Vec2::ZERO, &mut bed, habitat).unwrap();
+        assert_eq!(a, c, "changing the algae moved the camera");
+        assert_eq!(shown.objects.len(), forked.objects.len());
+        let mineral = |scene: &Scene| scene.vertices.iter().filter(|v| v.normal >> 24 == 0xc0)
+            .map(|v| (v.pos, v.normal, v.color)).collect::<Vec<_>>();
+        assert_eq!(mineral(&shown), mineral(&forked), "changing the algae moved a rock");
         assert!(shown.vertices.iter().any(|v| v.normal >> 24 == 0xc0));
         assert!(shown.vertices.iter().any(|v| v.color >> 24 > 0));
     }
