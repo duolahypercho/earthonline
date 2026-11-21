@@ -53,6 +53,7 @@ const F_THIN_GLASS: u32 = 16u;
 // the street surface material (street classes in the vertex alpha).
 const F_STREET: u32 = 32u;
 const F_FRONT_DAYLIGHT: u32 = 64u;
+const F_STOOP_LIGHT: u32 = 262144u;
 const F_JOINERY_LIGHT: u32 = 128u;
 const WALL_DAYLIGHT_BIT: u32 = 0x80000000u;
 const FLOOR_SCAN_BIT: u32 = 512u;
@@ -1690,6 +1691,19 @@ fn shade(in: VOut) -> vec4<f32> {
                 let t = normalize((dpx*scan_dy.y-dpy*scan_dx.y)*sign(det));
                 let b = normalize((dpy*scan_dx.x-dpx*scan_dy.x)*sign(det));
                 s.n = normalize(n*bump.z+m.params.z*(t*bump.x-b*bump.y));
+            }
+        }
+        if ((m.flags & F_STOOP_LIGHT) != 0u && look.porch_light[0].w > 0.) {
+            let p = (look.enclosure_frame*vec4<f32>(in.world,1.)).xyz;
+            let local_n = normalize((look.enclosure_frame*vec4<f32>(n,0.)).xyz);
+            let chart = stoop_chart(p,local_n);
+            if chart.z >= 0. {
+                let atlas = m.layer+i32(m.params.w);
+                let weight = 1.-smoothstep(.05,.32,abs(look.porch_light[6].w));
+                measured_front = weight;
+                measured_wall = weight;
+                porch_measured = weight;
+                front_ambient = LK_PI*stoop_lighting(chart,atlas);
             }
         }
         if ((m.flags & F_FRONT_DAYLIGHT) != 0u) {

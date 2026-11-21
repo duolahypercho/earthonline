@@ -41,6 +41,8 @@ pub const F_STREET: u32 = 32;
 pub const F_FRONT_DAYLIGHT: u32 = 64;
 /// Source-lit house joinery. Bits 8–10 identify the corresponding baked finish.
 pub const F_JOINERY_LIGHT: u32 = 128;
+/// Registered diffuse light on the fitted entrance clay.
+pub const F_STOOP_LIGHT: u32 = 1 << 18;
 
 /// One material (64 bytes, std430).
 #[repr(C)]

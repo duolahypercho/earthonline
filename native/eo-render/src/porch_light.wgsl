@@ -111,3 +111,36 @@ fn porch_surface_light(chart: vec3<f32>) -> vec3<f32> {
     let diffuse_sky=window_weather(clear,porch_radiance(chart,4));
     return diffuse_sky+porch_radiance(chart,5);
 }
+
+// The receiver follows the same tread profile as the portable clay courses.
+// Chart zero is the top landing. Each later strip runs across one tread,
+// around the bullnose and down the separately bedded riser.
+fn stoop_chart(p: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
+    let u = clamp((p.x-5.15)/1.60,0.,1.);
+    if p.z>=0. { return vec3<f32>(u,clamp(1.-p.z/.34,0.,1.),0.); }
+    var course=round(-p.y/.145);
+    if n.z < -.55 && abs(n.y)<.65 { course=round(-p.z/.33)-1.; }
+    if course<0. || course>5. { return vec3<f32>(0.,0.,-1.); }
+    let rear=-.33*course;
+    let drop=-.145*course-p.y;
+    let along=(rear-p.z)/.33;
+    var v=.64*clamp(along,0.,1.);
+    if along>.98 && (along>1. || drop>0.) {
+        v=mix(.64,.78,clamp((.009+drop)/.034,0.,1.));
+        if drop>=.022 { v=mix(.78,1.,clamp((drop-.022)/.122,0.,1.)); }
+    }
+    return vec3<f32>(u,v,course+1.);
+}
+
+fn stoop_sample(chart: vec3<f32>, layer: i32, condition: i32) -> vec3<f32> {
+    let tile=vec2<f32>(f32(condition%4)*128.,f32(condition/4)*256.+32.*chart.z);
+    let uv=(tile+clamp(chart.xy*vec2<f32>(128.,32.),vec2<f32>(.5),vec2<f32>(127.5,31.5)))/512.;
+    let code=textureSampleLevel(kit_orm,kit_sampler,uv,layer,0.).rgb;
+    let value=code*code;
+    return value/max(vec3<f32>(.00001),1.-value);
+}
+
+fn stoop_lighting(chart: vec3<f32>, layer: i32) -> vec3<f32> {
+    let day=mix(stoop_sample(chart,layer,i32(look.window_sample.y)),stoop_sample(chart,layer,i32(look.window_sample.z)),look.window_sample.w);
+    return window_weather(day,stoop_sample(chart,layer,4))+stoop_sample(chart,layer,5);
+}
