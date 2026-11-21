@@ -449,6 +449,12 @@ impl PropLibrary {
         if x.stand_ins {
             h.update(b"stand-ins");
         }
+        // The boats only when drawn (`--no-boats`: the key over the inputs before them).
+        if let Some(bodies) = x.boats {
+            for l in bodies.iter().flat_map(|b| b.lods.iter()) {
+                h.update(l.sha256.as_bytes());
+            }
+        }
         h.finalize().iter().take(12).map(|b| format!("{b:02x}")).collect()
     }
 
@@ -460,7 +466,8 @@ impl PropLibrary {
     /// `dome`: `DETECTABLE_WARNING_PAD` (base diameter, height, pitch max, depth), from `caMetric`.
     pub fn load_full(repo: &Path, js: &JsProps, lens_dia_m: f64, x: &crate::props_lib2::LibExtras, dome: [f32; 4], cache_dir: Option<&Path>) -> Result<Self> {
         // A checkout without some prop files cooks (and caches) a library of its own.
-        let absent: String = js.street_props.values().map(|p| if repo.join(&p.path).is_file() { '1' } else { '0' }).collect();
+        let boat_files = x.boats.unwrap_or_default().iter().flat_map(|b| b.lods.iter());
+        let absent: String = js.street_props.values().chain(boat_files).map(|p| if repo.join(&p.path).is_file() { '1' } else { '0' }).collect();
         let tag = if absent.contains('0') { format!("-{absent}") } else { String::new() };
         let path = cache_dir.map(|d| d.join("props").join(format!("{}{tag}.eopl", Self::key_with(js, x, dome))));
         if let Some(p) = &path {

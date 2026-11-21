@@ -579,6 +579,9 @@ pub struct World {
     /// and coarse levels, the arena they need); None without the switch or
     /// for an empty world.
     pub structures_drawn: Option<Arc<eo_render::structures::StructurePrepared>>,
+    /// the berths along the harbours' floating docks (eo-landmarks), where the
+    /// props draw the moored boats; empty without the docks.
+    pub berths: Arc<Vec<eo_landmarks::floating_docks::Berth>>,
 }
 
 /// the JS street ground materials' scanned sets, as
@@ -1044,8 +1047,10 @@ pub fn load_world(args: &Args) -> Result<World> {
     drop(carpet_fn); // water
     // the bridges (eo-landmarks, the JS generators ported) on the
     // drawn ground, appended to the static table; their LOD groups follow the street's.
+    let mut berths = Vec::new();
     let landmarks = if let Some(mut set) = landmark_set {
         let t = Instant::now();
+        berths = std::mem::take(&mut set.berths);
         if std::env::var("EO_TRACE_LOAD").is_ok() {
             eprintln!("landmarks: waited {landmark_wait_ms:.0} ms for the bridge and wall thread (before the scene build)");
             if let Some(c) = &set.census {
@@ -1158,7 +1163,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         }
         None => (None, None),
     };
-    Ok(World { paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, dive_sites, landmarks, hlod, hlod_trees, structures, structures_drawn }) // hlod
+    Ok(World { paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, dive_sites, landmarks, hlod, hlod_trees, structures, structures_drawn, berths: Arc::new(berths) }) // hlod
 }
 
 /// the street size. `--ground-scale S` (an explicit ground-plan
