@@ -82,6 +82,7 @@ pub struct LandmarkSet {
     pub census: Option<crate::waterfront::EdgeCensus>,
     /// pier decks and piles built.
     pub piers_built: (usize, usize),
+    municipal_feet: Vec<(usize, crate::waterfront::PileFeet)>,
 }
 
 /// what the set builds beyond the first landmarks slice. All on
@@ -306,6 +307,13 @@ pub fn build_landmark(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: &Deck
 }
 
 impl LandmarkSet {
+    /// Fit the Municipal Pier supports once, before uploading the waterfront.
+    pub fn seat_municipal_piles(&mut self, mut bed: impl FnMut(f32, f32) -> f32) {
+        for (index, feet) in self.municipal_feet.drain(..) {
+            feet.seat(&mut self.structures[index].mesh, &mut bed);
+        }
+    }
+
     /// Every landmark this port has a generator for, on the ground `height_at`
     /// (the drawn terrain's sampler; None outside its grid, which the JS reads as 0).
     pub fn build(repo_root: &std::path::Path, height_at: &(dyn Fn(f64, f64) -> Option<f64> + Sync), ca: &eo_data::CaStandards) -> Result<Self> {
@@ -357,6 +365,7 @@ impl LandmarkSet {
         let thick = crate::data::num(&fp.presentation, "deckThicknessM");
         let elev = |x: f64, z: f64| height_at(x, z).unwrap_or(0.0) + sh.road_lift;
         let mut structures = Vec::new();
+        let mut municipal_feet = Vec::new();
         let (mut press, mut census, mut piers_built) = (None, None, (0usize, 0usize));
         let walls = if !opts.waterfront {
             let walls = crate::shore::city_walls(&sh.seawall, js.sea_level_y, &oracle, height_at, &top_at, js.sea_level_y - sh.bottom_below_sea_m, &rule, wall_colour);
@@ -389,11 +398,16 @@ impl LandmarkSet {
             let hex = |s: &str| crate::geometry::srgb_hex(u32::from_str_radix(s.trim_start_matches('#'), 16).unwrap_or(0x808080));
             let apron = hex(js.open_space.colors.get("path").map(|s| s.as_str()).unwrap_or("#e1e3e4"));
             let m = wf::build_meshes(&edges, &piers, &oracle, &crest_at, js.sea_level_y, 0.42, concrete, wf::UNDER_DECK_LINEAR, apron, crate::geometry::srgb_hex(fp.deck_srgb));
-            if opts.cove_detail && let Some(mesh) = wf::municipal_parapet(&piers) {
+            let mut inner_feet = wf::PileFeet::default();
+            if opts.cove_detail && let Some(mesh) = wf::municipal_parapet_with_feet(&piers, &mut inner_feet) {
+                municipal_feet.push((structures.len(), inner_feet));
                 structures.push(Structure { cast: true, footway: false, kit: None, name: "waterfront:municipal-pier-parapet".into(), material: plain_material(0.93, 0.0, "facade-masonry"), mesh });
             }
             piers_built = (m.decks, m.piles);
             structures.push(Structure { cast: false, footway: true, kit: None, name: "waterfront:paving".into(), material: plain_material(0.9, 0.0, "sidewalk"), mesh: m.paving });
+            if opts.cove_detail {
+                municipal_feet.push((structures.len(), m.municipal_feet));
+            }
             structures.push(Structure { cast: true, footway: false, kit: None, name: "waterfront:concrete".into(), material: Material { surface: Some("concrete".into()), ..plain_material(0.92, 0.0, "facade-masonry") }, mesh: m.concrete });
             structures.push(Structure { cast: false, footway: false, kit: None, name: "waterfront:under-deck".into(), material: plain_material(0.95, 0.0, "facade-masonry"), mesh: m.under_deck });
             // The Ferry Plaza pier's sheds (createFerryCard04PierSheds) on its
@@ -429,6 +443,7 @@ impl LandmarkSet {
             press,
             census,
             piers_built,
+            municipal_feet,
         })
     }
 

@@ -83,6 +83,7 @@ fn base_args() -> Args {
         underwater_habitats: false,
         cove_detail: false,
         black_point_intertidal: false,
+        cove_pile_contact: false,
         surface_start: false,
         quality: Default::default(),
         frames: 720,

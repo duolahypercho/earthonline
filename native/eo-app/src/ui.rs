@@ -149,6 +149,8 @@ impl Flags {
                 "--no-cove-canopy" => args.look.cove_canopy = false,
                 "--cove-sediment" => { args.cove_detail = true; args.look.cove_sediment = true; }
                 "--no-cove-sediment" => args.look.cove_sediment = false,
+                "--cove-pile-contact" => args.cove_detail = true,
+                "--no-cove-pile-contact" => {} // resolved with the bay preview settings
                 "--black-point-intertidal" => { args.cove_detail = true; args.black_point_intertidal = true; }
                 "--no-black-point-intertidal" => args.black_point_intertidal = false,
                 "--no-cove-detail" => args.cove_detail = false,
@@ -219,6 +221,7 @@ fn default_args() -> Args {
         underwater_habitats: false,
         cove_detail: false,
         black_point_intertidal: false,
+        cove_pile_contact: false,
         surface_start: false,
         quality: Default::default(),
         frames: 720,
