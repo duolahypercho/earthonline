@@ -331,6 +331,8 @@ fn parse_args() -> Result<Args> {
             // look
             "--time-of-day" => a.time_of_day = val()?.parse()?,
             "--shadow-map" => a.look.shadow_map = val()?.parse::<u32>()?.clamp(256, 8192),
+            "--blender-camera" => a.look.blender_camera = true,
+            "--no-blender-camera" => a.look.blender_camera = false,
             "--no-shadows" => a.look.shadows = false,
             "--no-ao" => a.look.ao = false, // no occlusion + bounce pass
             "--no-facade-age" => a.look.facade &= !eo_render::facade::RUN_AGE, // facade

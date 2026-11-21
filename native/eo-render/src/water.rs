@@ -531,7 +531,7 @@ impl WaterGpu {
         });
         let draw_src = format!("{common}\n{}\n{}\n{}\n{}", crate::look::look_common_source(), include_str!("sky_light_core.wgsl"), include_str!("water.wgsl"), include_str!("water_surf.wgsl")) + include_str!("water_spray.wgsl"); // + the spray, the cloud shadow and the fog depth
         let draw_src = if look.options.water_optics {
-            draw_src + include_str!("look_finish.wgsl") + include_str!("underwater.wgsl")
+            draw_src + crate::look::DISPLAY_SHADER + include_str!("underwater.wgsl")
         } else {
             draw_src
         };

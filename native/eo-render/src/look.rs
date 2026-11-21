@@ -129,6 +129,8 @@ fn v4(a: [f64; 3], w: f64) -> [f32; 4] {
 /// Quality settings (`--shadow-map`, `--no-shadows`).
 #[derive(Clone, Copy, Debug)]
 pub struct LookOptions {
+    /// Apply the calibrated Blender sRGB camera to the complete displayed frame.
+    pub blender_camera: bool,
     pub shadow_map: u32,
     pub shadows: bool,
     /// scene-scale occlusion + one bounce (`--no-ao` turns it off).
@@ -147,7 +149,7 @@ pub struct LookOptions {
 
 impl Default for LookOptions {
     fn default() -> Self {
-        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT } // + rooms, agent pyramid test, probe deferral // water // sky
+        Self { blender_camera: false, shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_optics: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT } // + rooms, agent pyramid test, probe deferral // water // sky
     }
 }
 
@@ -239,6 +241,8 @@ pub struct LookGpu {
     /// HDR target is counted when it exists).
     pub bytes: u64,
 }
+
+pub(crate) const DISPLAY_SHADER: &str = concat!(include_str!("photo_camera_response.wgsl"), "\n", include_str!("look_finish.wgsl"));
 
 /// WGSL of the city shader: draw.wgsl + the look's shared code and lighting.
 pub fn city_shader_source() -> String {
@@ -651,7 +655,7 @@ impl LookGpu {
         });
 
         // Post.
-        let post_src = format!("{}\n{}\n{}", look_common_source(), include_str!("look_finish.wgsl"), include_str!("look_post.wgsl"));
+        let post_src = format!("{}\n{}\n{}", look_common_source(), DISPLAY_SHADER, include_str!("look_post.wgsl"));
         let post_module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("look_post.wgsl"), source: wgpu::ShaderSource::Wgsl(post_src.into()) });
         let post_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("post-bgl"),
@@ -1143,7 +1147,7 @@ impl LookGpu {
             post1: [look.grade_brightness as f32, look.finish_balance as f32, look.finish_vibrance as f32, look.finish_vignette as f32],
             post2: [look.finish_density as f32, 1.0 / 255.0, if self.output_format.is_srgb() { 1.0 } else { 0.0 }, (frame_index % 64) as f32],
             shadow_tint: v4(look.finish_shadow_tint, 0.0),
-            highlight_tint: v4(look.finish_highlight_tint, 0.0),
+            highlight_tint: v4(look.finish_highlight_tint, f64::from(self.options.blender_camera)),
             ao_vp: ao_made.map(|m| m.0.to_cols_array_2d()).unwrap_or([[0.0; 4]; 4]),
             ao_cam: ao_made.map(|m| m.1.extend(1.0).to_array()).unwrap_or([0.0; 4]),
             ao_fwd: ao_made.map(|m| m.2.extend(0.0).to_array()).unwrap_or([0.0; 4]),

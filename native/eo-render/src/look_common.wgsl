@@ -57,7 +57,8 @@ struct Look {
     // density, dither amplitude (display), output is sRGB-encoded by the target (1/0), frame index
     post2: vec4<f32>,
     shadow_tint: vec4<f32>,
-    highlight_tint: vec4<f32>,
+    highlight_tint: vec3<f32>,
+    blender_camera: f32,
     // the camera the occlusion/bounce result was made with
     // (view-projection, eye, forward), and x = result usable (1/0),
     // y = 1 / focal length in full-resolution pixels.

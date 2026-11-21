@@ -33,29 +33,31 @@ fn hash(p: vec2<f32>, k: f32) -> f32 {
     return fract(sin(dot(p + k, vec2<f32>(12.9898, 78.233))) * 43758.5453);
 }
 
-fn finish_color(radiance: vec3<f32>, pos: vec4<f32>, dims: vec2<f32>) -> vec4<f32> {
-    var c = radiance;
-    let exposure = look.key.w;
-    // mesopic vision: at night colour fades from what is dim (CIE
-    // 191:2010; rods carry no colour), so an unlit lawn or facade goes
-    // grey-blue-black while a lamp's pool and a lit window keep theirs.
-    // only once the sky is dark (nightness 0.85 .. 1: sun under ~-5 deg): through
-    // the blue hour it greyed the twilight sky into a uniform lavender wash.
-    let nz = smoothstep(0.85, 1.0, skyu.night.z);
-    if (nz > 0.0) {
-        let y = lk_luma(c);
-        let dim = 1.0 - smoothstep(0.03, 0.3, y * exposure);
-        // 0.5 (0.75 greyed the city's orange skyglow into neutral charcoal)
-        c = mix(c, vec3<f32>(y), 0.5 * nz * dim);
-    }
+// A neutral exposure wedge supplies one continuous cubic for each stop.
+fn photo_channel(value: f32) -> f32 {
+    let stop = clamp(log2(max(value, 0.0001220703125)) + 13.0, 0.0, 18.0);
+    let interval = min(u32(stop), 17u);
+    let t = stop - f32(interval);
+    let k = PHOTO_RESPONSE[interval];
+    return ((k.x * t + k.y) * t + k.z) * t + k.w;
+}
+
+fn photo_display(radiance: vec3<f32>, exposure: f32) -> vec3<f32> {
+    let wide = (PHOTO_INPUT * radiance) * (exposure * PHOTO_METER_GAIN);
+    let encoded = vec3<f32>(photo_channel(wide.r), photo_channel(wide.g), photo_channel(wide.b));
+    let linear = clamp(PHOTO_OUTPUT * from_srgb(encoded), vec3<f32>(0.0), vec3<f32>(1.0));
+    return to_srgb(linear);
+}
+
+fn city_display(c: vec3<f32>, exposure: f32, pos: vec4<f32>, dims: vec2<f32>) -> vec3<f32> {
     // Highlight shoulder, one gain off the peak channel.
     let start = look.post0.x;
     let scale = look.post0.y;
     let peak = max(max(c.r, c.g), c.b) * exposure / 0.6;
     let held = max(peak, start);
     let rolled = start + scale * log((held - start) / scale + 1.0);
-    c = c * (rolled / held);
-    var d = to_srgb(aces(c, exposure));
+    let rolled_color = c * (rolled / held);
+    var d = to_srgb(aces(rolled_color, exposure));
     // Grade: saturate, contrast (power S-curve), brightness.
     let css = vec3<f32>(0.213, 0.715, 0.072);
     let luma = dot(d, css);
@@ -77,7 +79,30 @@ fn finish_color(radiance: vec3<f32>, pos: vec4<f32>, dims: vec2<f32>) -> vec4<f3
     let vivid = mix(vec3<f32>(tl), toned, (1.0 - clamp(chroma, 0.0, 1.0)) * look.post1.z + 1.0);
     let cu = pos.xy / dims - 0.5;
     let vig = 1.0 - smoothstep(0.12, 0.5, dot(cu, cu)) * look.post1.w;
-    d = clamp(vivid * vig, vec3<f32>(0.0), vec3<f32>(1.0));
+    return clamp(vivid * vig, vec3<f32>(0.0), vec3<f32>(1.0));
+}
+
+fn finish_color(radiance: vec3<f32>, pos: vec4<f32>, dims: vec2<f32>) -> vec4<f32> {
+    var c = radiance;
+    let exposure = look.key.w;
+    // mesopic vision: at night colour fades from what is dim (CIE
+    // 191:2010; rods carry no colour), so an unlit lawn or facade goes
+    // grey-blue-black while a lamp's pool and a lit window keep theirs.
+    // only once the sky is dark (nightness 0.85 .. 1: sun under ~-5 deg): through
+    // the blue hour it greyed the twilight sky into a uniform lavender wash.
+    let nz = smoothstep(0.85, 1.0, skyu.night.z);
+    if (nz > 0.0) {
+        let y = lk_luma(c);
+        let dim = 1.0 - smoothstep(0.03, 0.3, y * exposure);
+        // 0.5 (0.75 greyed the city's orange skyglow into neutral charcoal)
+        c = mix(c, vec3<f32>(y), 0.5 * nz * dim);
+    }
+    var d: vec3<f32>;
+    if (look.blender_camera > 0.5) {
+        d = photo_display(c, exposure);
+    } else {
+        d = city_display(c, exposure, pos, dims);
+    }
     // Display dither: triangular, +-1 step of 8-bit.
     let amp = look.post2.y;
     let n = hash(pos.xy, look.post2.w) + hash(pos.yx * 1.31, look.post2.w + 3.7) - 1.0;

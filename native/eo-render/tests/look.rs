@@ -216,3 +216,55 @@ fn a_box_casts_a_sun_shadow() {
     let unshadowed = 0.2126 * px[0] + 0.7152 * px[1] + 0.0722 * px[2];
     assert!(unshadowed > 1.5 * shadowed, "without shadows {unshadowed} vs {shadowed}");
 }
+
+#[test]
+fn measured_camera_matches_independent_blender_chart_colors() {
+    let ctx = ctx();
+    let (v, i, o) = tiny_scene();
+    let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+    let mut renderer = Renderer::from_parts(&ctx, &v, &i, &o, format, 1).unwrap();
+    let options = eo_render::look::LookOptions { blender_camera: true, ..renderer.look.options };
+    renderer.look.set_options(&ctx.device, options);
+    renderer.look.set_time_of_day(12.);
+    let hdr = renderer.look.hdr_target(1, 1);
+    let cam = Camera::new(Vec3::ZERO, 0., 0., 1.);
+    renderer.update(&ctx.queue, &cam);
+    let size = wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 };
+    let out = ctx.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("camera test chip"), size, mip_level_count: 1, sample_count: 1,
+        dimension: wgpu::TextureDimension::D2, format,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let view = out.create_view(&Default::default());
+    let read = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+        label: None, size: 256, usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false,
+    });
+    // Odd-numbered chart samples were held out when fitting the two matrices.
+    // Remove the active exposure and middle-gray match to feed the measured stimulus.
+    let gain = renderer.look.frame().exposure * 1.1865933;
+    for (chip, expected) in [
+        ([0.54825425, 0.2883069, 0.20226242], [176u8, 143, 127]),
+        ([0.03803321, 0.0723016, 0.1260658], [48, 75, 98]),
+        ([1.1763026, 1.0194125, 0.8941501], [202, 197, 193]),
+        ([0.18704098, 0.17530347, 0.17446543], [119, 116, 116]),
+        ([4.0433016, 2.7553678, 0.8932499], [235, 223, 202]),
+    ] {
+        let [r, g, b] = chip.map(|x| x / gain);
+        let mut encoder = ctx.device.create_command_encoder(&Default::default());
+        drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &hdr, depth_slice: None, resolve_target: None,
+                ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color { r, g, b, a: 1. }), store: wgpu::StoreOp::Store },
+            })], ..Default::default()
+        }));
+        renderer.look.encode_post(&mut encoder, &view, None);
+        encoder.copy_texture_to_buffer(out.as_image_copy(), wgpu::TexelCopyBufferInfo {
+            buffer: &read, layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(256), rows_per_image: Some(1) },
+        }, size);
+        ctx.queue.submit([encoder.finish()]);
+        let rgb = &read_mapped(&ctx, &read).unwrap()[..3];
+        // The independently fitted transfer and output dither both contribute.
+        assert!(rgb.iter().zip(expected).all(|(&a, b)| a.abs_diff(b) <= 4), "{chip:?} rendered {rgb:?}, expected {expected:?}");
+    }
+}

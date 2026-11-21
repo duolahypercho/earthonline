@@ -164,6 +164,8 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--segments" => o.segments = Some(val()?.split(',').map(|s| s.trim().to_string()).collect()),
             "--no-render" => o.render = false,
             "--collision-threads" => o.collision_threads = val()?.parse::<usize>()?.max(1),
+            "--blender-camera" => a.look.blender_camera = true,
+            "--no-blender-camera" => a.look.blender_camera = false,
             "--water-optics" => a.look.water_optics = true,
             "--no-water-optics" => a.look.water_optics = false,
             "--width" => a.width = val()?.parse()?,
