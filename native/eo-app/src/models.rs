@@ -184,6 +184,7 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
                 .map_or(models.object, |index| index as u32),
         },
     )?;
+    r.look.table_light = world.house.as_ref().map(|house| house.table_light()).unwrap_or_default();
     r.look.dining_lamp = world.house.as_ref().and_then(|house| house.dining_lamp()).unwrap_or_default();
     if let Some(meter) = world.house.as_ref().and_then(|h| h.interior_meter()) {
         r.look.enclosure_frame = meter.world_to_local();

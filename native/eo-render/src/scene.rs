@@ -106,6 +106,8 @@ pub const BEDROOM_LIGHT_BIT: u32 = 1 << 23;
 pub const DINING_FLOOR_LIGHT_BIT: u32 = 1 << 24;
 /// Interior faces below the bedroom landing use the furnished-room irradiance grid.
 pub const DOWNSTAIRS_LIGHT_BIT: u32 = 1 << 25;
+/// The tabletop and place settings receive the installed pendant above the wood.
+pub const TABLE_LIGHT_BIT: u32 = 1 << 26;
 
 /// Material 0: the vertex colour (footprints, terrain, roads, sea).
 pub const MATERIAL_VERTEX_COLOUR: u32 = 0;

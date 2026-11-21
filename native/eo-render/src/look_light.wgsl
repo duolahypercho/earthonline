@@ -115,6 +115,7 @@ var<private> room_enclosure: f32;
 var<private> room_daylight: f32;
 var<private> measured_room: bool;
 var<private> room_diffuse: vec3<f32>;
+var<private> surface_fixture: vec3<f32>;
 var<private> dielectric_scale: f32;
 
 fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: vec3<f32>, object: u32) -> vec4<f32> {
@@ -186,7 +187,10 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     // term resolves folds below the probe spacing; the broad screen-space
     // visibility would darken that same lighting a second time.
     let ao = s.ao * select(ao_vis, 1., measured_room);
-    let indirect_d = irr * diffuse / LK_PI * (vec3<f32>(1.0) - fss) * ao;
+    var indirect_d = irr * diffuse / LK_PI * (vec3<f32>(1.0) - fss) * ao;
+    if ((objects[object].kind & TABLE_LIGHT_BIT) != 0u) {
+        indirect_d += surface_fixture * diffuse * (vec3<f32>(1.0) - fss);
+    }
 
     // Indirect specular: the sky along the reflection, blurred with roughness.
     let r = reflect(-v, n);
@@ -206,7 +210,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
         rad = mix(rad, lk_sky_sample(r), sharp);
     }
     if (room_enclosure > 0.0 && s.env != ENV_LOCAL_PROBE && s.env != ENV_INTERIOR_FLOOR) {
-        let local = select(indoor_field * (hemi + look.ambient.xyz + env_e * env_i) / LK_PI, room_diffuse, measured_room);
+        let local = select(indoor_field * (hemi + look.ambient.xyz + env_e * env_i) / LK_PI, room_diffuse + surface_fixture, measured_room);
         rad = mix(rad, local, room_enclosure * smoothstep(0.18, 0.75, rough));
     }
     let spec_occ = clamp(pow(nv + ao, exp2(-16.0 * rough - 1.0)) - 1.0 + ao, 0.0, 1.0);

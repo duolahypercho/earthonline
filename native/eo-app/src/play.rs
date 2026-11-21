@@ -73,6 +73,7 @@ fn base_args() -> Args {
         house_mission_roof: false,
         house_dining_light: false,
         house_downstairs_light: false,
+        house_table_light: false,
         house_glazing: true,
         beaver_house: false,
         bench: false,
@@ -142,7 +143,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
-            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" => {
+            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" => {
                 a.beaver_house = true;
                 a.house_finishes = true;
                 a.house_patina = true;
@@ -151,12 +152,14 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
                 match s.as_str() {
                     "--house-dining-light" => a.house_dining_light = true,
                     "--house-downstairs-light" => a.house_downstairs_light = true,
+                    "--house-table-light" => a.house_table_light = true,
                     "--house-mission-roof" => a.house_mission_roof = true,
                     _ => a.house_blender_bedroom = true,
                 }
             }
             "--no-house-dining-light" => a.house_dining_light = false,
             "--no-house-downstairs-light" => a.house_downstairs_light = false,
+            "--no-house-table-light" => a.house_table_light = false,
             "--no-house-mission-roof" => a.house_mission_roof = false,
             "--no-house-blender-bedroom" => a.house_blender_bedroom = false,
             "--house-photo-lod" => a.house_photo_lod = true,
@@ -1062,6 +1065,46 @@ mod house_tests {
         let original = crate::house::Finishes::load(&world.paths.repo_root, &off).unwrap();
         assert!(original.atlas.orm.iter().all(|&b| b==0));
         assert!(original.yard_reflections.unwrap().orm.iter().all(|&b| b==0));
+    }
+
+    #[test]
+    fn table_survey_lights_the_board_and_place_settings_independently_of_the_floor() {
+        use eo_render::scene::{DINING_FLOOR_LIGHT_BIT, TABLE_BOARD_BIT, TABLE_LIGHT_BIT};
+        let (mut args, _) = parse(&["--house-table-light".into()]).unwrap();
+        assert!(args.house_photo && !args.house_downstairs_light && !args.house_dining_light);
+        args.kit = false;
+        args.models = false;
+        args.landmarks = false;
+        let world = load_world(&args).unwrap();
+        let marked: Vec<_> = world.scene.objects.iter().filter(|o| o.kind & TABLE_LIGHT_BIT != 0).collect();
+        assert_eq!(marked.iter().filter(|o| o.kind & TABLE_BOARD_BIT != 0).count(), 4);
+        // Cups and cabinetry share the porcelain draw. Its bounds extend
+        // well beyond the table although some of its vertices sit on the wood.
+        assert!(marked.iter().any(|o| (glam::Vec3::from(o.max) - glam::Vec3::from(o.min)).length() > 4.0));
+        assert!(world.scene.objects.iter().all(|o| o.kind & DINING_FLOOR_LIGHT_BIT == 0));
+        let house = world.house.as_ref().unwrap();
+        assert!((house.table_light()[0][3] - 0.75).abs() < 0.0001);
+        assert!(house.dining_lamp().is_some());
+
+        args.house_downstairs_light = true;
+        let atlas = |args: &Args| crate::house::Finishes::load(&world.paths.repo_root, args)
+            .unwrap().street_reflections.unwrap().orm;
+        let on = atlas(&args);
+        args.house_table_light = false;
+        let off = atlas(&args);
+        let mut changed = 0;
+        for (i, (a,b)) in on.chunks_exact(4).zip(off.chunks_exact(4)).enumerate() {
+            if a != b {
+                assert!(i % 512 >= 256 && i / 512 < 256);
+                changed += 1;
+            }
+        }
+        assert!(changed > 4096);
+        let (disabled, _) = parse(&["--house-table-light".into(), "--no-house-table-light".into()]).unwrap();
+        assert!(!disabled.house_table_light);
+        args.house_table_light = true;
+        args.interior_lighting = false;
+        assert!(atlas(&args).iter().all(|&c| c == 0));
     }
 
     #[test]

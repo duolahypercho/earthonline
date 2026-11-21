@@ -61,6 +61,7 @@ const CUT_COTTON_BIT: u32 = 4194304u;
 const BEDROOM_LIGHT_BIT: u32 = 8388608u;
 const DINING_FLOOR_LIGHT_BIT: u32 = 16777216u;
 const DOWNSTAIRS_LIGHT_BIT: u32 = 33554432u;
+const TABLE_LIGHT_BIT: u32 = 67108864u;
 const ENCLOSURE_TRANSFER_BIT: u32 = 131072u;
 const WAXED_BOARD_BIT: u32 = 32768u;
 const COURTYARD_BOUNCE_BIT: u32 = 65536u;
@@ -104,6 +105,8 @@ struct VOut {
     @location(6) rel: vec3<f32>,
     // (bays along the wall, storeys up it) on an envelope wall, else 0.
     @location(7) ft: vec2<f32>,
+    @location(8) table_fixture: vec4<f32>,
+    @location(9) table_reverse: vec4<f32>,
 };
 
 fn srgb_decode(c: vec3<f32>) -> vec3<f32> {
@@ -128,6 +131,19 @@ fn vs(
     out.material = o.material;
     let enclosed = (o.kind & ENCLOSURE_TRANSFER_BIT) != 0u && normal.w < -0.50;
     out.aux = vec3<f32>(color.a * 255.0, select(normal.w, -normal.w, enclosed), select(0.0, 1.0, enclosed));
+    out.table_fixture = vec4<f32>(0.);
+    out.table_reverse = vec4<f32>(0.);
+    if ((o.kind & TABLE_LIGHT_BIT) != 0u && normal.w < 0. && normal.w > -.5) {
+        // Each split mesh normal was metered in Blender. Interpolate physical
+        // radiance across the triangle after decoding the four stored channels.
+        let cell = vec2<i32>(256,0) + vec2<i32>(round(color.rg*255.));
+        let encoded = textureLoad(kit_orm,cell,i32(textureNumLayers(kit_orm))-3,0);
+        out.table_fixture = encoded*encoded/max(1.-encoded*encoded,vec4<f32>(.0001));
+        let reverse = textureLoad(kit_orm,cell+vec2<i32>(0,96),i32(textureNumLayers(kit_orm))-3,0);
+        out.table_reverse = reverse*reverse/max(1.-reverse*reverse,vec4<f32>(.0001));
+        out.aux.y = 64./127.-normal.w;
+        out.aux.z = 2.;
+    }
     out.rel = pos - frame.cam_pos.xyz; // cc0
     out.ft = vec2<f32>(0.0);
     let kind = o.kind & 255u;
@@ -840,7 +856,8 @@ fn room_basis(grid: vec3<f32>, n: vec3<f32>, source: u32, layer: i32, slices: ve
          + w.z * room_axis(grid,direction.z,source,layer,slices);
 }
 
-fn room_irradiance(point: vec3<f32>, world_normal: vec3<f32>, world: vec3<f32>, downstairs: bool) -> vec3<f32> {
+fn room_irradiance(point: vec3<f32>, world_normal: vec3<f32>, world: vec3<f32>, downstairs: bool,
+                   use_table: bool) -> vec3<f32> {
     // Each floor has six vertical samples per hemisphere. The denser downstairs
     // slices occupy the lower half of the same linear atlas.
     let minimum = vec3<f32>(.22, select(10./3.+.15,.09,downstairs), .23);
@@ -862,7 +879,9 @@ fn room_irradiance(point: vec3<f32>, world_normal: vec3<f32>, world: vec3<f32>, 
     let clear = cloud * smoothstep(0.,.35,look.key_dir.y) * (1.-skyu.night.z);
     let diffuse_sky = mix(room_basis(grid,n,0u,layer,slices) * sky,
                           room_basis(grid,n,5u,layer,slices) * look.key.rgb, clear);
-    var light = diffuse_sky + 2. * room_basis(grid,n,6u,layer,slices);
+    var fixture = vec3<f32>(0.);
+    if (!use_table) { fixture = 2. * room_basis(grid,n,6u,layer,slices); }
+    var light = diffuse_sky + fixture;
     let sun = look.key_dir.xyz;
     let along = dot(sun,z);
     if (sun.y > 0. && abs(along) > .01) {
@@ -879,6 +898,16 @@ fn room_irradiance(point: vec3<f32>, world_normal: vec3<f32>, world: vec3<f32>, 
 // The full-resolution RGB pages keep the lamp and daylight independent. The
 // clear-sky page's alpha also holds the overcast sky and indirect solar return.
 struct DiningLight { diffuse: vec3<f32>, direct: vec3<f32> };
+// The continuous receiver sits 4 mm above the oak, resolving shadows from
+// the bowl, cloth and mug handles independently of the room's vertical spacing.
+fn oak_incident(point: vec3<f32>) -> vec4<f32> {
+    let fraction = (point.xz-look.table_light[0].xz)/(look.table_light[1].xz-look.table_light[0].xz);
+    let uv = clamp(fraction*vec2<f32>(256.,64.),vec2<f32>(.5),vec2<f32>(255.5,63.5));
+    let layer = i32(textureNumLayers(kit_orm))-3;
+    let encoded = textureSampleLevel(kit_orm,kit_sampler,(vec2<f32>(256.,192.)+uv)/512.,layer,0.);
+    return encoded*encoded/max(1.-encoded*encoded,vec4<f32>(.0001));
+}
+
 fn dining_floor_light(point: vec2<f32>, world: vec3<f32>) -> DiningLight {
     let uv = clamp(point / vec2<f32>(7.,13.), vec2<f32>(.5/512.), vec2<f32>(1.-.5/512.));
     let layers = i32(textureNumLayers(kit_orm));
@@ -1251,15 +1280,38 @@ fn shade(in: VOut) -> vec4<f32> {
         let transfer = in.color.rg * in.color.rg;
         // Window and fixture transfer already include a diffuse bounce. Weight
         // the outdoor field by the room's sky visibility instead of adding it twice.
-        room_enclosure = in.aux.z;
+        room_enclosure = min(in.aux.z,1.);
         room_daylight = transfer.x;
         var downstairs = false;
-        if ((objects[in.object].kind & DOWNSTAIRS_LIGHT_BIT) != 0u && in.aux.z > .5) {
+        let room_kind = objects[in.object].kind;
+        if ((room_kind & (DOWNSTAIRS_LIGHT_BIT | TABLE_LIGHT_BIT)) != 0u && in.aux.z > .5) {
             let room_point = (look.enclosure_frame * vec4<f32>(in.world + .025*n,1.)).xyz;
-            downstairs = room_point.y >= 0. && room_point.y < 10./3.;
+            var table = false;
+            var lamps: DiningLight;
+            if ((room_kind & TABLE_LIGHT_BIT) != 0u) {
+                let local = (look.enclosure_frame * vec4<f32>(in.world,1.)).xyz;
+                let top = table_board && n.y>.85 && abs(local.y-look.table_light[0].w)<.004;
+                table = top || in.aux.z > 1.5;
+                if (table) {
+                    var measured = select(in.table_reverse,in.table_fixture,dot(in.normal,v)>=0.);
+                    var beam = measured.a * max(0.,normalize(look.dining_lamp.xyz-in.world).y);
+                    if (top) {
+                        measured = oak_incident(local);
+                        beam = measured.a;
+                    }
+                    lamps.diffuse = measured.rgb;
+                    lamps.direct = look.table_light[2].rgb * (beam/look.table_light[2].r);
+                    rm_emit += pendant_gloss(lamps.direct,in.world,s.n,v,s.rough);
+                }
+            }
+            downstairs = (table || (room_kind & DOWNSTAIRS_LIGHT_BIT) != 0u)
+                       && room_point.y >= 0. && room_point.y < 10./3.;
             if (downstairs) {
                 measured_room = true;
-                room_diffuse = room_irradiance(room_point, s.n, in.world, true);
+                // The surface bake already includes the contact shadow. Apply
+                // near-field occlusion only to the coarse daylight component.
+                surface_fixture = lamps.diffuse;
+                room_diffuse = room_irradiance(room_point,s.n,in.world,true,table);
             }
         }
         if (in.aux.z > .5 && !measured_room) {
@@ -1270,7 +1322,7 @@ fn shade(in: VOut) -> vec4<f32> {
         if (measured_room) {
             // Direct sunlight still comes from the current cascaded shadow map.
             if (!downstairs) {
-                room_diffuse = room_irradiance(bedroom_point, s.n, in.world, false);
+                room_diffuse = room_irradiance(bedroom_point,s.n,in.world,false,false);
                 rm_emit += s.albedo * (1.0 - s.metal) * pendant;
             }
         } else {

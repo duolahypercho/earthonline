@@ -1,5 +1,7 @@
 //! Site and collision integration for the Blender-built terrace at 21 Beaver Street.
 mod dimensions;
+mod table_light;
+use table_light::TableLight;
 mod door;
 mod lod;
 mod planting;
@@ -94,6 +96,7 @@ struct RoomLight {
 
 pub struct Finishes {
     downstairs_light: bool,
+    table_light: Option<TableLight>,
     dining_lamp: Option<[f32; 4]>,
     mission_roof: bool,
     room_light: Option<RoomLight>,
@@ -121,6 +124,7 @@ impl Finishes {
         let blender_bedroom = args.house_blender_bedroom && photo && furniture && patina;
         let dining_light = args.house_dining_light && args.interior_lighting && photo && furniture && patina;
         let downstairs_light = args.house_downstairs_light && args.interior_lighting && photo && furniture && patina;
+        let table_enabled = args.house_table_light && args.interior_lighting && photo && furniture && patina;
         let mission_roof = args.house_mission_roof && photo && furniture && patina;
         let mut scans = if patina {
             surfaces::NAMES
@@ -187,7 +191,7 @@ impl Finishes {
         let manifest: ProbeManifest = serde_json::from_slice(&std::fs::read(
             directory.join("kitchen-reflections.provenance.json"),
         )?)?;
-        if downstairs_light {
+        if downstairs_light || table_enabled {
             #[derive(Deserialize)]
             struct DownstairsLight {
                 #[serde(flatten)]
@@ -210,6 +214,10 @@ impl Finishes {
             let street = street_reflections.as_mut().ok_or_else(|| anyhow::anyhow!("missing house reflection atlas"))?;
             street.orm[split..].copy_from_slice(&pixels[split..]);
         }
+        let table_light = if table_enabled {
+            let street = street_reflections.as_mut().ok_or_else(|| anyhow::anyhow!("missing house reflection atlas"))?;
+            Some(TableLight::install(root, &directory, &manifest.house_sha256, &mut street.orm)?)
+        } else { None };
         let mut yard_reflections = if furniture && photo {
             let panorama: AssetRef = serde_json::from_slice(&std::fs::read(
                 if glazing { directory.join("yard-reflections.provenance.json") }
@@ -252,6 +260,7 @@ impl Finishes {
         let floorboards = Self::read_maps(root, &floor, 3)?;
         Ok(Self {
             downstairs_light,
+            table_light,
             dining_lamp,
             mission_roof,
             room_light,
@@ -340,9 +349,11 @@ pub struct House {
     light_transfer: Vec<[f32; 2]>,
     visibility: Vec<f32>,
     cut_pattern: eo_assets::glb::CutPattern,
+    table_vertices: eo_assets::glb::CutPattern,
     roof_uv: Option<roof::RoofUv>,
     room_meter: Option<[f32; 3]>,
     downstairs_light: bool,
+    table_light: Option<TableLight>,
     dining_lamp: Option<[f32; 4]>,
     probes: Option<[ProbeVolume; 2]>,
     collision: Vec<[Point; 3]>,
@@ -492,6 +503,8 @@ impl House {
         let rear_stucco_material = if photo {
             site_material("painted-stucco@").ok_or_else(|| anyhow::anyhow!("rear stucco missing"))?
         } else { 0 };
+        let table_light = finishes.and_then(|f| f.table_light.clone());
+        let table_vertices = table_light.as_ref().map(|s| s.vertices(&model)).transpose()?.unwrap_or_default();
         let mut h = Self {
             origin: ring[1],
             across,
@@ -510,6 +523,8 @@ impl House {
             cut_pattern,
             roof_uv,
             room_meter,
+            table_light,
+            table_vertices,
             downstairs_light: finishes.is_some_and(|f| f.downstairs_light),
             dining_lamp: finishes.and_then(|f| f.dining_lamp),
             probes: finishes.map(|r| [
@@ -879,8 +894,12 @@ impl House {
         [a[0], b[0]].map(|x| self.point(x, b[1], a[2]))
     }
 
+    pub fn table_light(&self) -> [[f32; 4]; 3] {
+        self.table_light.as_ref().map(TableLight::uniforms).unwrap_or_default()
+    }
+
     pub fn dining_lamp(&self) -> Option<[f32; 4]> {
-        let [x,y,z,radius] = self.dining_lamp?;
+        let [x,y,z,radius] = self.dining_lamp.or_else(|| self.table_light.as_ref().map(TableLight::lamp))?;
         Some(self.point(x.into(),y.into(),z.into()).as_vec3().extend(radius).to_array())
     }
 
@@ -1152,6 +1171,13 @@ impl House {
                     normal = (normal & 0x00ff_ffff) | (u32::from((-visibility) as u8) << 24);
                 }
             }
+            if let Some(&[u,v]) = self.table_vertices.get(&(i as u32)) {
+                // The low bytes address the photographed prop's surface light.
+                // Negative codes -1..-63 preserve the original near-field visibility.
+                let visibility = ((normal >> 24) as i8).unsigned_abs().clamp(65,127);
+                normal = (normal & 0x00ff_ffff) | (u32::from((-(visibility as i8 - 64)) as u8) << 24);
+                color = (color & 0xffff_0000) | u32::from(u) | (u32::from(v) << 8);
+            }
             scene.vertices.push(Vertex {
                 pos: self
                     .point(x.into(), y.into(), z.into())
@@ -1212,6 +1238,9 @@ impl House {
             }
             if self.photo && !self.light_transfer.is_empty() {
                 o.kind |= eo_render::scene::ENCLOSURE_TRANSFER_BIT;
+                if self.table_light.as_ref().is_some_and(|table| dining_plank(family).is_some() || table.material(family)) {
+                    o.kind |= eo_render::scene::TABLE_LIGHT_BIT;
+                }
                 if self.downstairs_light && part.min[1] < 10. / 3. + 0.03 && part.max[1] >= 0. {
                     o.kind |= eo_render::scene::DOWNSTAIRS_LIGHT_BIT;
                 }

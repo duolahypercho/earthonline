@@ -787,7 +787,7 @@ impl Renderer {
                 buf_entry(2, fs, storage(true)),
                 tex_entry(3),
                 tex_entry(4),
-                tex_entry(5),
+                wgpu::BindGroupLayoutEntry { visibility: vf, ..tex_entry(5) },
                 wgpu::BindGroupLayoutEntry { binding: 6, visibility: fs, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None },
                 // the street's scanned sets and their sampler.
                 tex_entry(7),
