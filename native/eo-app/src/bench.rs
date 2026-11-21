@@ -531,6 +531,16 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     if let Some(only) = &args.segments {
         segs.retain(|s| only.iter().any(|o| o == s.name));
     }
+    let dive_recording = std::env::var_os("EO_RECORD_DIVE").map(std::path::PathBuf::from);
+    if let Some(dir) = &dive_recording {
+        anyhow::ensure!(segs.len() == 1 && segs[0].name == "cove_descent", "EO_RECORD_DIVE needs --dive-site bay --segments cove_descent");
+        anyhow::ensure!(!args.perf.check_max && !args.check_budget && !args.capture && !args.perf.occlusion_check, "record the dive separately from checks and still captures");
+        // Each take owns a new directory so a failed retry cannot mix two films.
+        if let Some(parent) = dir.parent().filter(|p| !p.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::create_dir(dir)?;
+    }
     let first_cam = (segs[0].camera)(0, args.warmup + segs[0].frames);
     let mut models = ModelRuntime::start(&mut world, args, bases, first_cam.eye, process_start);
     // the simulation, feed and agent library, live while the paths run.
@@ -714,7 +724,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         // camera positions along the path; with `Pace::Realtime` the
         // drive's camera follows the wall clock and frames are rendered back
         // to back, so more frames than positions are drawn (up to `total`).
-        let path_frames = args.warmup + seg.frames;
+        // The waterfront review card is 30 seconds of consecutive 60 Hz camera positions.
+        let path_frames = if dive_recording.is_some() { 30 * 60 } else { args.warmup + seg.frames };
         let (paced, realtime) = match args.perf.pace {
             crate::Pace::Realtime => (false, seg.paced),
             crate::Pace::Hz60 => (seg.paced, false),
@@ -850,6 +861,9 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             if let Some(w) = renderer.water.get() {
                 w.set_time(cam_i as f64 * FRAME_PERIOD_S); // the sea's clock follows the path's
             }
+            if dive_recording.is_some() {
+                renderer.look.sky.set_clock(args.look.sky.world_time_s + cam_i as f64 * FRAME_PERIOD_S, 0.0);
+            }
             hitch::timed(hitch::Phase::CameraUpdate, || renderer.update(&ctx.queue, &cam));
             let enc_span = hitch::span(hitch::Phase::Encode);
             let mut enc = ctx.device.create_command_encoder(&Default::default());
@@ -875,6 +889,12 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             encode_ms.push((t1 - tp).as_secs_f64() * 1e3);
             submit_ms.push((t2 - t1).as_secs_f64() * 1e3);
             cpu_ms.push((t2 - t0).as_secs_f64() * 1e3 + charged_ms); // + a prepay the wait did not absorb
+            if let Some(dir) = &dive_recording {
+                // Capture exactly the submitted frame. The still-camera path below
+                // settles the same view repeatedly, which advances temporal effects.
+                write_capture(&ctx, &color, &dir.join(format!("frame-{cam_i:04}.png")))?;
+                continue;
+            }
             // what is on screen at a lower level than its zone wants (outside the frame's timing).
             vd.frame(&world, &models, &cam, cam_i as f64 * FRAME_PERIOD_S * 1e3, pf.bytes, cam_i >= args.warmup);
             if vd_caps.first().is_some_and(|&f| cam_i >= f) {
@@ -889,6 +909,10 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             }
         }
         ctx.device.poll(wgpu::PollType::wait_indefinitely()).map_err(|e| anyhow!("{e}"))?;
+        if let Some(dir) = &dive_recording {
+            println!("recorded {path_frames} consecutive cove frames at 60 Hz in {}", dir.display());
+            return Ok(());
+        }
         starts.push(Instant::now());
         view_bench::set_clock(path_t0 + cam_last as f64 * FRAME_PERIOD_S);
         let vd_json = vd.finish(&models, &props, args.perf.view_detail.enabled);
@@ -1939,14 +1963,6 @@ fn capture(
         // a frame from inside a building, or against a wall, shows its back faces or a blank wall, not the street.
         println!("capture: BLOCKED VIEW: {why} at eye ({:.1}, {:.1}, {:.1}) for {}", cam.eye.x, cam.eye.y, cam.eye.z, path.display());
     }
-    let (w, h) = (color.width(), color.height());
-    let row = (w * 4).div_ceil(256) * 256;
-    let buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("capture"),
-        size: row as u64 * h as u64,
-        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    });
     // Two frames: the first settles the LOD hysteresis for this camera.
     // twenty: the scene probe captures at most one cube face a frame
     // (six faces and the levels after a move of more than 16 m; a face waits
@@ -1959,6 +1975,18 @@ fn capture(
         renderer.encode(&mut enc, attach, resolve, depth, None);
         eo_render::pace::submit(&ctx.queue, [enc.finish()]); // counted
     }
+    write_capture(ctx, color, path)
+}
+
+fn write_capture(ctx: &GpuContext, color: &wgpu::Texture, path: &std::path::Path) -> Result<()> {
+    let (w, h) = (color.width(), color.height());
+    let row = (w * 4).div_ceil(256) * 256;
+    let buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("capture"),
+        size: row as u64 * h as u64,
+        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
     let mut enc = ctx.device.create_command_encoder(&Default::default());
     enc.copy_texture_to_buffer(
         color.as_image_copy(),
