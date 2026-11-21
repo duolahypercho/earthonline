@@ -112,6 +112,10 @@ pub const TABLE_LIGHT_BIT: u32 = 1 << 26;
 pub const OAK_FINISH_BIT: u32 = 1 << 27;
 /// Authored board strips and the surveyed incident light above the furnished ground floor.
 pub const FLOOR_REFLECTION_BIT: u32 = 1 << 28;
+/// The fitted Blender room carries two half-float UVs in the vertex color.
+pub const FITTED_ROOM_BIT: u32 = 1 << 29;
+/// Use the fitted photograph on the ground-floor boards of the shared shell.
+pub const FITTED_FLOOR_BIT: u32 = 1 << 30;
 
 /// Material 0: the vertex colour (footprints, terrain, roads, sea).
 pub const MATERIAL_VERTEX_COLOUR: u32 = 0;

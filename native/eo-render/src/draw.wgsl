@@ -63,6 +63,8 @@ const DINING_FLOOR_LIGHT_BIT: u32 = 16777216u;
 const DOWNSTAIRS_LIGHT_BIT: u32 = 33554432u;
 const TABLE_LIGHT_BIT: u32 = 67108864u;
 const FLOOR_REFLECTION_BIT: u32 = 268435456u;
+const FITTED_ROOM_BIT: u32 = 536870912u;
+const FITTED_FLOOR_BIT: u32 = 1073741824u;
 const OAK_FINISH_BIT: u32 = 134217728u;
 const ENCLOSURE_TRANSFER_BIT: u32 = 131072u;
 const WAXED_BOARD_BIT: u32 = 32768u;
@@ -180,6 +182,9 @@ fn vs(
             let axis = vec2<f32>(cos(angle), sin(angle));
             out.ft = vec2<f32>(dot(pos.xz, axis), dot(pos.xz, vec2<f32>(-axis.y, axis.x)));
         }
+    }
+    if ((o.kind & FITTED_ROOM_BIT) != 0u) {
+        out.ft = unpack2x16float(pack4x8unorm(color));
     }
     if (kind == 5u) {
         // Kit building: the vertex alpha byte is the kit palette index (the
@@ -1335,12 +1340,16 @@ fn shade(in: VOut) -> vec4<f32> {
     let joinery = table_board && look.table_light[1].w > 0.;
     let floor_scan = table_board || local_scan || (objects[in.object].kind & FLOOR_SCAN_BIT) != 0u;
     if (floor_scan && (local_scan || table_board || abs(n.y) > 0.7)) {
-        let layer = select(i32(textureNumLayers(kit_albedo)) - 2, m.layer, local_scan);
+        var layer = select(i32(textureNumLayers(kit_albedo)) - 2, m.layer, local_scan);
         var uv = in.ft;
         var uv_dx = scan_dx;
         var uv_dy = scan_dy;
         let waxed = (objects[in.object].kind & WAXED_BOARD_BIT) != 0u;
         let floor_survey = (objects[in.object].kind & FLOOR_REFLECTION_BIT) != 0u && abs((look.enclosure_frame*vec4<f32>(in.world,1.)).y)<.04;
+        if (floor_survey && (objects[in.object].kind & FITTED_FLOOR_BIT) != 0u) {
+            // The final fitted layer precedes floor, yard, street and kitchen probes and the common boards.
+            layer = i32(textureNumLayers(kit_albedo)) - 6;
+        }
         if (waxed && !floor_survey) {
             let board = in.ft.x / .18;
             let row = (u32(max(0.,floor(board))) * 5u + in.material) % 8u;
@@ -1532,6 +1541,28 @@ fn shade(in: VOut) -> vec4<f32> {
         // The cut cotton already carries the roughness of the source material.
         if (!cut_cotton) { s.rough = max(0.90, s.rough); }
         s.metal = 0.;
+    }
+    if ((objects[in.object].kind & FITTED_ROOM_BIT) != 0u) {
+        if (m.layer >= 0) {
+            let st = textureSampleGrad(kit_albedo,kit_sampler,in.ft,m.layer,scan_dx,scan_dy);
+            let properties = textureSampleGrad(kit_orm,kit_sampler,in.ft,m.layer,scan_dx,scan_dy);
+            s.albedo = m.base.rgb * st.rgb;
+            s.rough = clamp(m.params.x * properties.g,.03,1.);
+            s.metal = m.params.y * properties.b;
+            let bump = textureSampleGrad(kit_normal,kit_sampler,in.ft,m.layer,scan_dx,scan_dy).xyz*2.-1.;
+            let det = scan_dx.x*scan_dy.y-scan_dx.y*scan_dy.x;
+            if (abs(det)>1e-12) {
+                let t = normalize((dpx*scan_dy.y-dpy*scan_dx.y)*sign(det));
+                let b = normalize((dpy*scan_dx.x-dpx*scan_dy.x)*sign(det));
+                s.n = normalize(n*bump.z+m.params.z*(t*bump.x-b*bump.y));
+            }
+        }
+        if ((objects[in.object].kind & DOWNSTAIRS_LIGHT_BIT) != 0u) {
+            let local = (look.enclosure_frame*vec4<f32>(in.world+.022*n,1.)).xyz;
+            room_enclosure = 1.;
+            measured_room = true;
+            room_diffuse = room_irradiance(local,s.n,in.world,true,false);
+        }
     }
     // weathering (Blender buildings) and archetype ageing (kit buildings).
     fa_apply(&s, m, in.world, n, in.object, dpx, dpy);
