@@ -1,6 +1,7 @@
 //! Site and collision integration for the Blender-built terrace at 21 Beaver Street.
 mod dimensions;
 mod fitted;
+mod fitted_board;
 mod table_light;
 mod oak;
 use table_light::TableLight;
@@ -292,7 +293,7 @@ impl Finishes {
                 &mut street.orm, &mut floorboards.orm)?;
         }
         let (fitted, fitted_maps) = if fitted_enabled {
-            let (recipe, maps) = fitted::Recipe::read(root, &dining_dir, &manifest.house_sha256, args.house_fitted_finishes && args.interior_lighting)?;
+            let (recipe, maps) = fitted::Recipe::read(root, &dining_dir, &manifest.house_sha256, args.house_fitted_finishes && args.interior_lighting, args.house_kitchen_light && args.interior_lighting)?;
             (Some(recipe), maps)
         } else { (None, Vec::new()) };
         Ok(Self {
@@ -968,6 +969,10 @@ impl House {
     pub fn lowest_tread_corners(&self) -> [DVec3; 2] {
         let [a, b] = self.steps.last().expect("the house has a private stair");
         [a[0], b[0]].map(|x| self.point(x, b[1], a[2]))
+    }
+
+    pub fn kitchen_frame(&self) -> [[f32; 4]; 5] {
+        self.fitted.as_ref().map(|room| room.kitchen_frame).unwrap_or_default()
     }
 
     pub fn fitted_finish(&self) -> [[f32; 4]; 2] {

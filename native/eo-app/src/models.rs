@@ -184,6 +184,7 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
                 .map_or(models.object, |index| index as u32),
         },
     )?;
+    r.look.kitchen_frame = world.house.as_ref().map(|house| house.kitchen_frame()).unwrap_or_default();
     r.look.fitted_finish = world.house.as_ref().map(|house| house.fitted_finish()).unwrap_or_default();
     r.look.oak_finish = world.house.as_ref().map(|house| house.oak_finish()).unwrap_or_default();
     r.look.table_light = world.house.as_ref().map(|house| house.table_light()).unwrap_or_default();

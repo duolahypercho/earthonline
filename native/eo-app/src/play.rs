@@ -79,6 +79,7 @@ fn base_args() -> Args {
         house_floor_reflections: false,
         house_fitted_dining: false,
         house_fitted_finishes: false,
+        house_kitchen_light: false,
         house_dining_meter: false,
         house_glazing: true,
         beaver_house: false,
@@ -149,7 +150,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
-            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" | "--house-fitted-finishes" => {
+            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" | "--house-fitted-finishes" | "--house-kitchen-light" => {
                 a.beaver_house = true;
                 a.house_finishes = true;
                 a.house_patina = true;
@@ -159,6 +160,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
                     "--house-dining-light" => a.house_dining_light = true,
                     "--house-downstairs-light" => a.house_downstairs_light = true,
                     "--house-table-light" => a.house_table_light = true,
+                    "--house-kitchen-light" => { a.house_fitted_dining = true; a.house_kitchen_light = true; }
                     "--house-fitted-finishes" => { a.house_fitted_dining = true; a.house_fitted_finishes = true; }
                     "--house-fitted-dining" => a.house_fitted_dining = true,
                     "--house-oak-finish" => a.house_oak_finish = true,
@@ -173,6 +175,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-downstairs-light" => a.house_downstairs_light = false,
             "--no-house-table-light" => a.house_table_light = false,
             "--no-house-fitted-finishes" => a.house_fitted_finishes = false,
+            "--no-house-kitchen-light" => a.house_kitchen_light = false,
             "--no-house-fitted-dining" => a.house_fitted_dining = false,
             "--no-house-oak-finish" => a.house_oak_finish = false,
             "--no-house-dining-meter" => a.house_dining_meter = false,
@@ -1298,6 +1301,54 @@ mod house_tests {
         check_beaver_walk(true, true, true, true, true);
         let (off, _) = parse(&["--house-fitted-dining".into(),"--no-house-fitted-dining".into()]).unwrap();
         assert!(off.house_photo && !off.house_fitted_dining);
+    }
+
+    #[test]
+    fn fitted_kitchen_light_binds_the_tile_wall_and_both_sides_of_the_pendant() {
+        for (switches, kitchen, dining) in [
+            (vec!["--house-kitchen-light"], true, false),
+            (vec!["--house-kitchen-light", "--house-fitted-finishes"], true, true),
+            (vec!["--house-fitted-finishes", "--house-kitchen-light", "--no-house-kitchen-light"], false, true),
+        ] {
+            let flags: Vec<_> = switches.into_iter().map(String::from).collect();
+            let (mut args, _) = parse(&flags).unwrap();
+            assert!(args.house_fitted_dining);
+            assert_eq!((args.house_kitchen_light, args.house_fitted_finishes), (kitchen, dining));
+            args.kit = false;
+            args.landmarks = false;
+            args.models = false;
+            let world = load_world(&args).unwrap();
+            let table = &world.authored.materials;
+            let material = |name: &str| {
+                let name = format!("21-beaver-fitted/{name}");
+                table.gpu[table.names.iter().position(|s| s == &name).unwrap()]
+            };
+            let tile = material("Warm white glazed kitchen tile 1");
+            let shade = material("Black stove enamel");
+            let lining = material("Cream vitreous reflector");
+            let bowl = material("Fired sage ash glaze");
+            assert_eq!(tile.thin_absorption, if kitchen { 8. } else { 0. });
+            assert_eq!(shade.thin_absorption, if kitchen { 6. } else { 0. });
+            assert_eq!(lining.thin_absorption, if kitchen { 7. } else { 0. });
+            assert_eq!(bowl.thin_absorption, if dining { 2. } else { 0. });
+            let frame = world.house.as_ref().unwrap().kitchen_frame();
+            if kitchen {
+                assert_eq!(tile.params[3], shade.params[3]);
+                assert_eq!(tile.params[3], lining.params[3]);
+                if dining { assert_eq!(tile.params[3], bowl.params[3] + 1.); }
+                let [along, across, heights, low, high] = frame;
+                assert!(low[0] < high[0]);
+                let oak = material("Chopping board oak");
+                assert_eq!(material("oiled-oak@ae906f").layer, -1);
+                assert_eq!(oak.thin_absorption, 13.);
+                assert_eq!(oak.layer, tile.params[3] as i32 + 1);
+                assert_eq!(oak.base, [1.; 4]);
+                assert!(along[2] < 0. && across[0] < 0. && heights[2] < heights[0]
+                    && heights[0] < heights[1] && heights[1] < heights[3]);
+            } else {
+                assert_eq!(frame, [[0.; 4]; 5]);
+            }
+        }
     }
 
     #[test]

@@ -1,5 +1,5 @@
 //! The measured Blender dining furniture and its native PBR texture layers.
-use super::{Finishes, House, Point};
+use super::{Finishes, House, Point, fitted_board::Board};
 use anyhow::{Result, ensure};
 use eo_assets::{AssetRef, CookedModel, glb, kit::BakedMaps};
 use eo_render::{
@@ -28,6 +28,15 @@ enum Group {
     Boards = 3,
     Chairs = 4,
     Linen = 5,
+    Shade = 6,
+    Reflector = 7,
+    Tile = 8,
+    Kitchen = 9,
+    Worktop = 10,
+    Fitting = 11,
+    Shared = 12,
+    Board = 13,
+    Grout = 14,
 }
 
 #[derive(Deserialize)]
@@ -49,9 +58,23 @@ struct FinishSurvey {
 }
 
 #[derive(Deserialize)]
+struct KitchenSurvey {
+    #[serde(flatten)]
+    asset: AssetRef,
+    fitted_geometry_sha256: String,
+    house_sha256: String,
+    kitchen_frame: [[f32; 4]; 3],
+    shared_bounds: [[f32; 3]; 2],
+    board: Board,
+    materials: BTreeMap<String, Group>,
+}
+
+#[derive(Deserialize)]
 pub(super) struct Recipe {
     #[serde(skip)]
     finish: Option<FinishSurvey>,
+    #[serde(skip)]
+    kitchen: Option<KitchenSurvey>,
     #[serde(flatten)]
     geometry: AssetRef,
     house_sha256: String,
@@ -70,6 +93,7 @@ impl Recipe {
         dir: &Path,
         shell_hash: &str,
         finishes: bool,
+        kitchen: bool,
     ) -> Result<(Self, Vec<BakedMaps>)> {
         let mut spec: Self =
             serde_json::from_slice(&std::fs::read(dir.join("fitted-room.provenance.json"))?)?;
@@ -122,12 +146,51 @@ impl Recipe {
             );
             spec.finish = Some(survey);
         }
+        if kitchen {
+            let survey: KitchenSurvey =
+                serde_json::from_slice(&std::fs::read(dir.join("kitchen-light.provenance.json"))?)?;
+            let [along, across, heights] = survey.kitchen_frame;
+            ensure!(
+                survey.fitted_geometry_sha256 == spec.geometry.sha256
+                    && survey.house_sha256 == shell_hash
+                    && survey.board.fitted_geometry_sha256 == spec.geometry.sha256
+                    && survey.board.camera_glare == 0.
+                    && (0..3).all(|i| survey.shared_bounds[0][i] < survey.shared_bounds[1][i])
+                    && survey.kitchen_frame.iter().flatten().all(|v| v.is_finite())
+                    && along[2].abs() > 0.
+                    && across[0].abs() > 0.
+                    && heights[2] <= heights[0]
+                    && heights[0] < heights[1]
+                    && heights[1] < heights[3]
+                    && !survey.materials.is_empty()
+                    && survey.materials.iter().all(|(name, group)| *group as u8
+                        >= Group::Shade as u8
+                        && spec.surfaces.iter().any(|s| &s.name == name)
+                        && spec
+                            .finish
+                            .as_ref()
+                            .is_none_or(|f| !f.materials.contains_key(name))),
+                "invalid fitted kitchen light survey"
+            );
+            pages.insert(
+                pages.len() - 1,
+                Finishes::read_maps(root, &survey.asset, 3)?,
+            );
+            pages.insert(
+                pages.len() - 1,
+                Finishes::read_maps(root, &survey.board.asset, 3)?,
+            );
+            spec.kitchen = Some(survey);
+        }
         Ok((spec, pages))
     }
 
     pub fn load(&self, root: &Path, table: &mut MaterialTable, first_layer: usize) -> Result<Room> {
         let data = glb::read_verified(&self.geometry.path(root), &self.geometry)?;
-        let (model, uv) = glb::cook_glb_with_uv0(&data)?;
+        let (mut model, mut uv) = glb::cook_glb_with_uv0(&data)?;
+        if let Some(survey) = &self.kitchen {
+            survey.board.apply(&mut model, &mut uv)?;
+        }
         ensure!(
             self.surfaces.len() == model.materials.len()
                 && uv
@@ -150,7 +213,17 @@ impl Recipe {
                 .and_then(|survey| survey.materials.get(&spec.name));
             // Fitted materials use authored UVs. The repeat slot addresses their
             // light atlas, and the two kit finish slots hold group and coat roughness.
-            let survey_layer = coat.map_or(1., |_| (first_layer + self.layers - 1) as f32);
+            let kitchen = self
+                .kitchen
+                .as_ref()
+                .and_then(|k| k.materials.get(&spec.name));
+            let optical_layer = first_layer + self.layers - 1;
+            let survey_layer = if kitchen.is_some() {
+                (optical_layer + usize::from(self.finish.is_some())) as f32
+            } else {
+                coat.map_or(1., |_| optical_layer as f32)
+            };
+            let group = kitchen.copied().or_else(|| coat.map(|c| c.group));
             let id = table.named(
                 &format!("21-beaver-fitted/{}", mat.name),
                 GpuMaterial {
@@ -163,7 +236,7 @@ impl Recipe {
                         spec.normal_strength,
                         survey_layer,
                     ],
-                    thin_absorption: coat.map_or(0., |c| c.group as u8 as f32),
+                    thin_absorption: group.map_or(0., |g| g as u8 as f32),
                     rough_flatten: coat.map_or(0., |c| c.roughness),
                     emissive: [
                         mat.emissive[0] * mat.emissive_strength,
@@ -175,6 +248,23 @@ impl Recipe {
                 },
             );
             draws.push((id, spec.garden, spec.thin));
+        }
+        if let Some(kitchen) = &self.kitchen {
+            let board_source = self
+                .surfaces
+                .iter()
+                .position(|s| s.name == kitchen.board.material)
+                .ok_or_else(|| anyhow::anyhow!("missing original oak material"))?;
+            let (source_id, garden, thin) = draws[board_source];
+            let mut oak = table.gpu[source_id as usize];
+            oak.base = [1.; 4];
+            oak.thin_absorption = Group::Board as u8 as f32;
+            oak.layer = oak.params[3] as i32 + 1;
+            draws.push((
+                table.named("21-beaver-fitted/Chopping board oak", oak),
+                garden,
+                thin,
+            ));
         }
         let finish_parameters = self
             .finish
@@ -196,11 +286,21 @@ impl Recipe {
             uv,
             draws,
             finish_parameters,
+            kitchen_frame: self
+                .kitchen
+                .as_ref()
+                .map(|s| {
+                    let [a, b, h] = s.kitchen_frame;
+                    let [min, max] = s.shared_bounds.map(|b| [b[0], b[1], b[2], 0.]);
+                    [a, b, h, min, max]
+                })
+                .unwrap_or_default(),
         })
     }
 }
 
 pub(super) struct Room {
+    pub(super) kitchen_frame: [[f32; 4]; 5],
     pub(super) finish_parameters: [[f32; 4]; 2],
     model: CookedModel,
     uv: Vec<[f32; 2]>,
