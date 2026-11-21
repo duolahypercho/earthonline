@@ -455,7 +455,6 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
         let mut player_ms = Vec::with_capacity(frames);
         // how long the thread actually ran during the step, and the rest.
         let mut player_ran = Vec::with_capacity(frames);
-        let mut player_off_cpu = Vec::with_capacity(frames);
         // Process page faults during the step (all threads: an indication, not an attribution).
         let mut player_faults: Vec<f64> = Vec::with_capacity(frames);
         let mut pump_ms = Vec::with_capacity(frames);
@@ -489,7 +488,6 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
             let view = player_view(&mut player, &cw, &world, args.house_finishes && args.house_furniture && opts.interior_eye, dt, aspect as f64);
             let t1 = Instant::now();
             let ran = eo_render::hitch::on_cpu_ms(c0, eo_render::hitch::thread_cycles()); // hitch
-            player_off_cpu.push(((t1 - t0).as_secs_f64() * 1e3 - ran).max(0.0));
             player_faults.push(eo_render::hitch::process_page_faults().saturating_sub(pf0) as f64);
             player_ran.push(ran);
             player_ms.push((t1 - t0).as_secs_f64() * 1e3);
@@ -589,17 +587,24 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
         );
         // the longest step: did the thread run, or wait?
         let worst = player_ms.iter().enumerate().max_by(|a, b| a.1.partial_cmp(b.1).unwrap()).map(|(k, _)| k).unwrap_or(0);
+        // A platform without a thread cycle counter has wall times only.
+        // Keep the indexed readings for the longest frame and summarize observed pairs.
+        let (on_cpu, off_cpu): (Vec<_>, Vec<_>) = player_ran.iter().zip(&player_ms)
+            .filter(|(ran, _)| ran.is_finite())
+            .map(|(&ran, &wall)| (ran, (wall - ran).max(0.0)))
+            .unzip();
+        let cpu_detail = match player_ran.get(worst).filter(|ran| ran.is_finite()) {
+            Some(ran) => format!("thread ran {ran:.3} ms; off-CPU time per step median {:.3} / max {:.3} ms", percentile(&off_cpu, 50.0), percentile(&off_cpu, 100.0)),
+            None => String::from("thread CPU time unavailable"),
+        };
         println!(
-            "  hitch: longest step frame {worst}: {:.3} ms wall, thread ran {:.3} ms, process page faults during it {:.0} (median a step {:.0}) (fixed step {:.3}, collision {:.3}, camera {:.3}); off-CPU time per step median {:.3} / max {:.3} ms; thread priority {}",
+            "  hitch: longest step frame {worst}: {:.3} ms wall, process page faults during it {:.0} (median a step {:.0}) (fixed step {:.3}, collision {:.3}, camera {:.3}); {cpu_detail}; thread priority {}",
             player_ms.get(worst).copied().unwrap_or(f64::NAN),
-            player_ran.get(worst).copied().unwrap_or(f64::NAN),
             player_faults.get(worst).copied().unwrap_or(f64::NAN),
             percentile(&player_faults, 50.0),
             step_ms.get(worst).copied().unwrap_or(f64::NAN),
             pump_ms.get(worst).copied().unwrap_or(f64::NAN),
             camera_ms.get(worst).copied().unwrap_or(f64::NAN),
-            percentile(&player_off_cpu, 50.0),
-            percentile(&player_off_cpu, 100.0),
             eo_render::hitch::thread_priority(),
         );
         verdicts.push((name, pass_med && pass_max));
@@ -627,8 +632,8 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
             "frames_feet_under_ground": under_ground,
             "frames_four_wheels_down": four_wheels,
             // hitch
-            "player_step_on_cpu_ms": summary(&player_ran),
-            "player_step_off_cpu_ms": summary(&player_off_cpu),
+            "player_step_on_cpu_ms": summary(&on_cpu),
+            "player_step_off_cpu_ms": summary(&off_cpu),
             "longest_step": { "frame": worst, "wall_ms": player_ms.get(worst), "ran_ms": player_ran.get(worst), "fixed_step_ms": step_ms.get(worst), "collision_pump_ms": pump_ms.get(worst), "camera_ms": camera_ms.get(worst) },
             "thread_priority": eo_render::hitch::thread_priority(),
         }));
