@@ -65,15 +65,16 @@ def encode(linear, srgb=False):
     return np.rint(255 * q).astype(np.uint8)
 
 
-def denoise_transfer(light):
+def denoise_transfer(light, widths=(128, 128, 128)):
     """Filter indirect Monte Carlo noise across each continuous UV chart.
 
     Direct fixture visibility guides the filter at the bowl rim, cloth folds
     and contact shadows. The measured direct component remains unfiltered.
     """
     result = light.copy()
-    for x in range(0, light.shape[2], 128):
-        region = np.s_[:, :, x : x + 128, :]
+    for x, width in zip(np.cumsum((0, *widths[:-1])), widths):
+        height = light.shape[1]
+        region = np.s_[:, :, x : x + width, :]
         chart = light[region].copy()
         direct = chart[7]
         chart[0] = np.maximum(0, chart[0] - direct)
@@ -90,16 +91,16 @@ def denoise_transfer(light):
             weights = np.zeros_like(guide)
             for i, a in enumerate((1, 4, 6, 4, 1)):
                 for j, b in enumerate((1, 4, 6, 4, 1)):
-                    yy = slice(i * step, i * step + 128)
-                    xx = slice(j * step, j * step + 128)
+                    yy = slice(i * step, i * step + height)
+                    xx = slice(j * step, j * step + width)
                     weight = (
                         a * b * np.exp(-0.5 * ((guide - guide_pad[yy, xx]) / 0.20) ** 2)
                     )
                     total += padded[:, yy, xx, :] * weight[None, :, :, None]
                     weights += weight
             value = (total / weights[None, :, :, None]).astype(np.float32)
-        result[:7, :, x : x + 128, :] = value
-        result[0, :, x : x + 128, :] += direct
+        result[:7, :, x : x + width, :] = value
+        result[0, :, x : x + width, :] += direct
     return result
 
 
@@ -143,6 +144,21 @@ def material_finishes(portable):
     return materials
 
 
+def pack_reflections(pages, panos):
+    for k, rough in enumerate(ROUGHNESS):
+        index, weight = kernel(rough)
+        for row, probes in enumerate(panos):
+            for column, panorama in enumerate(probes):
+                rad = np.einsum(
+                    "ijk,ij->ik", panorama.reshape(-1, 3)[index], weight
+                ).reshape(30, 62, 3)
+                tile = np.pad(encode(rad), ((0, 0), (1, 1), (0, 0)), mode="wrap")
+                tile = np.pad(tile, ((1, 1), (0, 0), (0, 0)), mode="edge")
+                x = column * 64
+                y = (row + 7 * (k % 2)) * 32
+                pages[1 + k // 2, y : y + 32, x : x + 64, :3] = tile
+
+
 def cook(source, portable, output):
     info = json.loads(source.with_suffix(".provenance.json").read_text())
     room = json.loads((DEST / "fitted-room.provenance.json").read_text())
@@ -176,18 +192,7 @@ def cook(source, portable, output):
         # follows the continuous folded cloth through its original UVs.
         linen = field[:, 256:].reshape(64, 2, 64, 2, 3).mean(axis=(1, 3))
         pages[1, 448:, row * 64 : (row + 1) * 64, :3] = encode(linen)
-    for k, rough in enumerate(ROUGHNESS):
-        index, weight = kernel(rough)
-        for row, probes in enumerate(panos):
-            for column, panorama in enumerate(probes):
-                rad = np.einsum(
-                    "ijk,ij->ik", panorama.reshape(-1, 3)[index], weight
-                ).reshape(30, 62, 3)
-                tile = np.pad(encode(rad), ((0, 0), (1, 1), (0, 0)), mode="wrap")
-                tile = np.pad(tile, ((1, 1), (0, 0), (0, 0)), mode="edge")
-                x = column * 64
-                y = (row + 7 * (k % 2)) * 32
-                pages[1 + k // 2, y : y + 32, x : x + 64, :3] = tile
+    pack_reflections(pages, panos)
     output.mkdir(parents=True, exist_ok=True)
     path = output / "fitted-finish-light.png"
     Image.fromarray(pages.reshape(1536, 512, 4)).save(path, compress_level=9)
