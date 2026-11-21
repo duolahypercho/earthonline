@@ -22,6 +22,7 @@ from cook_beaver_mission_roof import png
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--output-dir", type=Path, help="External verification bake")
+parser.add_argument("--joinery", action="store_true", help="Measure the cut faces and rounded edges of the four boards")
 args = parser.parse_args(
     sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
 )
@@ -65,6 +66,7 @@ boards = [
     o for o in scene.objects["oak-dining-table"].children if "dining-board" in o.name
 ]
 lo, hi = bounds(boards)
+board_bottom = float(lo[1])
 top = hi[1]
 # Probe both the tabletop and the room air up to the tallest piece of fruit.
 settings = (
@@ -98,6 +100,7 @@ if hashlib.sha256(house_path.read_bytes()).hexdigest() != floor["house_sha256"]:
     raise ValueError("The installed house differs from the source light survey.")
 gltf, blob = read_glb(house_path)
 verts, faces, texels, surfaces, cosines = [], [], [], [], []
+board_names = {o.name for o in boards}
 material_indices = {}
 pendant = next(
     o
@@ -116,7 +119,8 @@ while stack:
         count = gltf["accessors"][prim["indices"]]["count"]
         first = material_indices.get(material, 0)
         material_indices[material] = first + count
-        if name.split(" - ")[0] not in settings:
+        selected = name in board_names if args.joinery else name.split(" - ")[0] in settings
+        if not selected:
             continue
         obj = scene.objects[name]
         positions = accessor(gltf, blob, prim["attributes"]["POSITION"])
@@ -168,7 +172,7 @@ while stack:
             # side. Put the two meters on opposite sides of the actual surface.
             pair = []
             for side, row_offset in ((1, 0), (-1, 96)):
-                centre = p + side * 0.0025 * ng
+                centre = p + side * (0.0004 if args.joinery else 0.0025) * ng
                 shading_normal = side * n
                 u = shading_normal.orthogonal().normalized() * 0.0002
                 v = shading_normal.cross(u)
@@ -278,8 +282,7 @@ for side, offset in enumerate((0, 96 * 256)):
     red.flat[offset : offset + len(cosines)] /= np.asarray(cosines)[:, side]
 values = np.dstack((total, red))
 encoded = np.rint(255 * np.sqrt(values / (1 + values))).astype(np.uint8)
-path = out / "tabletop-light.png"
-png(path, encoded)
+path = out / ("oak-joinery.png" if args.joinery else "tabletop-light.png")
 metadata = dict(
     source="Furnished 21 Beaver dining table, crockery, fruit and installed interior lamps.",
     license="Project-authored lighting data",
@@ -288,8 +291,8 @@ metadata = dict(
     build="scripts/blender-buildings/bake_beaver_table.py",
     source_scene={"file": source.name, "sha256": digest},
     house_sha256=floor["house_sha256"],
-    sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
-    bytes=path.stat().st_size,
+    sha256=None,
+    bytes=None,
     minimum=lo.tolist(),
     maximum=hi.tolist(),
     tabletop_height_m=top,
@@ -307,5 +310,33 @@ metadata = dict(
     transfer_encoding="sqrt(L/(1+L))",
     channels="Installed fixture RGB including bounce, direct pendant red in alpha.",
 )
+if args.joinery:
+    from beaver_oak_joinery import capture_end_grain
+
+    # Rows 0..95 carry the two saw cuts. Rows 96 onward contain one pair
+    # of four-channel lamp readings per shipping vertex, before texture upload.
+    grain = capture_end_grain(boards, inverse, lo[2], hi[2], board_bottom, top)
+    pixels = np.zeros((512, 512, 4), dtype=np.uint8)
+    pixels[:96, :, :3] = grain
+    count = len(cosines)
+    samples = pixels[96:].reshape(-1, 4)
+    for side in range(2):
+        page = encoded[side * 96 : (side + 1) * 96].reshape(-1, 4)
+        samples[side * count : (side + 1) * count] = page[:count]
+    metadata.update(
+        source="The eight cut faces and installed light on the four original Blender dining boards.",
+        build="scripts/blender-buildings/bake_beaver_table.py --joinery",
+        board_bottom_m=board_bottom,
+        cut_map=[512, 48],
+        cut_encoding="sqrt(linear RGB)",
+        lamp_first_row=96,
+        channels="Two cut-face base colours, followed by front and reverse fixture RGB and direct pendant red.",
+    )
+    for key in ("reverse_face_row", "board_map", "atlas_origin"):
+        del metadata[key]
+else:
+    pixels = encoded
+png(path, pixels)
+metadata.update(sha256=hashlib.sha256(path.read_bytes()).hexdigest(), bytes=path.stat().st_size)
 path.with_suffix(".provenance.json").write_text(json.dumps(metadata, indent=2) + "\n")
 print("Baked table", lo, hi, path, flush=True)
