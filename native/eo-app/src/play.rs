@@ -74,6 +74,8 @@ fn base_args() -> Args {
         underwater_habitats: false,
         cove_detail: false,
         black_point_intertidal: false,
+        black_point_rockweed: false,
+        cove_pile_contact: false,
         surface_start: false,
         quality: Default::default(),
         frames: 720,
@@ -160,8 +162,12 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-cove-canopy" => a.look.cove_canopy = false,
             "--cove-sediment" => { a.cove_detail = true; a.look.cove_sediment = true; }
             "--no-cove-sediment" => a.look.cove_sediment = false,
+            "--cove-pile-contact" => a.cove_detail = true,
+            "--no-cove-pile-contact" => {} // resolved with the bay preview settings
             "--black-point-intertidal" => { a.cove_detail = true; a.black_point_intertidal = true; }
             "--no-black-point-intertidal" => a.black_point_intertidal = false,
+            "--black-point-rockweed" => { a.cove_detail = true; a.black_point_intertidal = true; a.black_point_rockweed = true; }
+            "--no-black-point-rockweed" => a.black_point_rockweed = false,
             "--no-cove-detail" => a.cove_detail = false,
             "--underwater-habitats" => a.underwater_habitats = true,
             "--no-underwater-habitats" => a.underwater_habitats = false,

@@ -7,6 +7,7 @@ use crate::scene::{LOD_ALWAYS, MATERIAL_VERTEX_COLOUR, NO_GROUP, ObjectKind, Sce
 use glam::{Vec2, Vec3};
 
 mod intertidal;
+mod rockweed;
 pub mod rock_maps;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -245,6 +246,14 @@ fn append_bed(
     );
 }
 
+/// Geometry selected for the rocky habitat at the west end of the beach.
+#[derive(Clone, Copy)]
+pub struct IntertidalOptions {
+    pub draw: bool,
+    pub material: u32,
+    pub rockweed: bool,
+}
+
 /// Build the west beach habitat on its actual bed. Pick a viewing position
 /// with room above the rocks and below the surface, also with drawing disabled.
 pub fn intertidal_site(
@@ -254,13 +263,19 @@ pub fn intertidal_site(
     draw: bool,
     material: u32,
 ) -> Option<(Vec3, Vec3)> {
+    intertidal_site_with_options(scene, centre, bed, IntertidalOptions { draw, material, rockweed: false })
+}
+
+pub fn intertidal_site_with_options(
+    scene: &mut Scene, centre: Vec2, bed: &mut impl FnMut(Vec2) -> f32, options: IntertidalOptions,
+) -> Option<(Vec3, Vec3)> {
     let mut mesh = Chunk {
         verts: vec![],
         idx: vec![],
         min: [f32::INFINITY; 3],
         max: [f32::NEG_INFINITY; 3],
     };
-    intertidal::append(&mut mesh, centre, bed);
+    intertidal::append(&mut mesh, centre, bed, options.rockweed);
     let surface = eo_water::SEA_LEVEL_Y as f32;
     let top_at = |p: Vec2, floor: f32| -> f32 {
         let mut top = floor;
@@ -296,14 +311,14 @@ pub fn intertidal_site(
             .max(at.y + 0.11);
         (y < surface - 0.18).then(|| point(p, y))
     });
-    if draw && !mesh.idx.is_empty() {
+    if options.draw && !mesh.idx.is_empty() {
         push_chunks(
             scene,
             vec![mesh],
             ObjectKind::Seabed,
             LOD_ALWAYS,
             NO_GROUP,
-            material,
+            options.material,
         );
     }
     eye.map(|p| (p, at))
