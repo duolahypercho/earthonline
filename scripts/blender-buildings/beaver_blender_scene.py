@@ -771,6 +771,131 @@ def dress_plaster(components, site):
         link(mix.outputs[0], bs.inputs[0])
 
 
+def dress_bedroom(components, root):
+    # The same photographed board is used for the finish of the other rooms.
+    # Give the bedroom's older amber oil its own material and preserve each
+    # plank's measured grain direction and local variation in roughness.
+    for obj in components["bedroom-storey"][1]:
+        mat = obj.data.materials[0]
+        if mat.name.startswith("lime-plaster@"):
+            mat = mat.copy()
+            mat.name = "Bedroom · trowelled lime plaster"
+            obj.data.materials[0] = mat
+            scan = photographic_surface(root, mat, "worn_plaster_wall", 2.25, .26)
+            if scan:
+                # A second coat preserves trowelling and softens the older surface.
+                tree = mat.node_tree
+                paint = tree.nodes.new("ShaderNodeMixRGB")
+                paint.inputs[0].default_value = .24
+                paint.inputs[1].default_value = mat.diffuse_color
+                tree.links.new(scan, paint.inputs[2])
+                bs = tree.nodes.get("Principled BSDF")
+                tree.links.new(paint.outputs[0], bs.inputs["Base Color"])
+                normal = bs.inputs["Normal"].links[0].from_node
+                normal.inputs["Strength"].default_value = .30
+                uv = obj.data.uv_layers.new(name="Site survey UV")
+                for face in obj.data.polygons:
+                    axes = ((1,2), (0,2), (0,1))[max(range(3), key=lambda i: abs(face.normal[i]))]
+                    for i in face.loop_indices:
+                        p = obj.matrix_world @ obj.data.vertices[obj.data.loops[i].vertex_index].co
+                        uv.data[i].uv = (p[axes[0]], p[axes[1]])
+            continue
+        if not any(n.type == "UVMAP" and n.uv_map == "Board surface" for n in mat.node_tree.nodes):
+            continue
+        mat = mat.copy()
+        mat.name = "Bedroom oiled floor · " + mat.name
+        obj.data.materials[0] = mat
+        tree = mat.node_tree
+        bs = tree.nodes.get("Principled BSDF")
+        base = bs.inputs["Base Color"]
+        stain = tree.nodes.new("ShaderNodeMixRGB")
+        stain.blend_type = "MULTIPLY"
+        stain.inputs[0].default_value = 1
+        stain.inputs[2].default_value = (.70, .48, .32, 1)
+        tree.links.new(base.links[0].from_socket, stain.inputs[1])
+        tree.links.new(stain.outputs[0], base)
+        grain = bs.inputs["Roughness"]
+        rough = tree.nodes.new("ShaderNodeMath")
+        rough.operation = "MULTIPLY_ADD"
+        rough.inputs[1].default_value = .75
+        rough.inputs[2].default_value = .27
+        tree.links.new(grain.links[0].from_socket, rough.inputs[0])
+        tree.links.new(rough.outputs[0], grain)
+        bs.inputs["Specular IOR Level"].default_value = .24
+
+    # Wash creases in the top cloth run across the cut, on top of the scanned
+    # warp and weft. Both use the cutting pattern across the top and its returns.
+    mat = next(m for m in bpy.data.materials if m.name.startswith("cotton-coverlet@"))
+    tree = mat.node_tree
+    bs = tree.nodes.get("Principled BSDF")
+    uv = next(n for n in tree.nodes if n.type == "UVMAP" and n.uv_map == "Photographic finish")
+    bias = tree.nodes.new("ShaderNodeVectorMath")
+    bias.operation = "MULTIPLY"
+    bias.inputs[1].default_value = (5.7, 2.1, 1)
+    tree.links.new(uv.outputs["UV"], bias.inputs[0])
+    noise = tree.nodes.new("ShaderNodeTexNoise")
+    noise.inputs["Scale"].default_value = 3.5
+    noise.inputs["Detail"].default_value = 2.8
+    noise.inputs["Distortion"].default_value = .68
+    tree.links.new(bias.outputs[0], noise.inputs["Vector"])
+    ridge = tree.nodes.new("ShaderNodeValToRGB")
+    ridge.color_ramp.elements[0].position = .35
+    ridge.color_ramp.elements[1].position = .49
+    last = ridge.color_ramp.elements.new(.58)
+    last.color = (.14, .14, .14, 1)
+    tree.links.new(noise.outputs["Fac"], ridge.inputs[0])
+    bump = tree.nodes.new("ShaderNodeBump")
+    bump.inputs["Strength"].default_value = .68
+    bump.inputs["Distance"].default_value = .0042
+    tree.links.new(bs.inputs["Normal"].links[0].from_socket, bump.inputs["Normal"])
+    tree.links.new(ridge.outputs[0], bump.inputs["Height"])
+    tree.links.new(bump.outputs[0], bs.inputs["Normal"])
+    bs.inputs["Sheen Weight"].default_value = .07
+    bs.inputs["Specular IOR Level"].default_value = .18
+
+
+def backlight_linen(mat):
+    """Diffuse forward scattering by flax fibres plus the open area between yarns."""
+    tree = mat.node_tree
+    bs = tree.nodes.get("Principled BSDF")
+    tint = bs.inputs["Base Color"].links[0].from_socket
+    scattered = tree.nodes.new("ShaderNodeBsdfTranslucent")
+    scattered.label = "Light carried through flax"
+    tree.links.new(tint, scattered.inputs["Color"])
+    scatter = tree.nodes.new("ShaderNodeMixShader")
+    scatter.inputs[0].default_value = .28
+    tree.links.new(bs.outputs[0], scatter.inputs[1])
+    tree.links.new(scattered.outputs[0], scatter.inputs[2])
+
+    # Use the photographed yarn relief to open the interstices first. Rays
+    # grazing a deep fold travel through more yarn than rays hitting it face on.
+    orm = next(n for n in tree.nodes if n.type == "TEX_IMAGE" and n.image.name.endswith("ORM"))
+    channels = tree.nodes.new("ShaderNodeSeparateColor")
+    tree.links.new(orm.outputs[0], channels.inputs[0])
+    pores = tree.nodes.new("ShaderNodeMapRange")
+    pores.inputs["From Min"].default_value = .40
+    pores.inputs["From Max"].default_value = 1.0
+    pores.inputs["To Min"].default_value = .035
+    pores.inputs["To Max"].default_value = .009
+    tree.links.new(channels.outputs["Red"], pores.inputs["Value"])
+    facing = tree.nodes.new("ShaderNodeLayerWeight")
+    openness = tree.nodes.new("ShaderNodeMath")
+    openness.operation = "MULTIPLY"
+    tree.links.new(pores.outputs["Result"], openness.inputs[0])
+    # Facing is zero at normal incidence with this input's default blend.
+    inverse = tree.nodes.new("ShaderNodeMath")
+    inverse.operation = "SUBTRACT"
+    inverse.inputs[0].default_value = 1
+    tree.links.new(facing.outputs["Facing"], inverse.inputs[1])
+    tree.links.new(inverse.outputs[0], openness.inputs[1])
+    apertures = tree.nodes.new("ShaderNodeBsdfTransparent")
+    surface = tree.nodes.new("ShaderNodeMixShader")
+    tree.links.new(openness.outputs[0], surface.inputs[0])
+    tree.links.new(scatter.outputs[0], surface.inputs[1])
+    tree.links.new(apertures.outputs[0], surface.inputs[2])
+    tree.links.new(surface.outputs[0], tree.nodes.get("Material Output").inputs["Surface"])
+
+
 def stage(scene, root, components, dimensions, planted):
     with gzip.open(root / "public/data/sf/sf-city.json.gz", "rt") as f:
         city = json.load(f)
@@ -848,6 +973,8 @@ def stage(scene, root, components, dimensions, planted):
         p = weather.data.vertices[l.vertex_index].co
         uv.data[l.index].uv = (p.x / 1.8, p.z / 1.8)
     for mat in bpy.data.materials:
+        if mat.name.startswith("curtain-linen@"):
+            backlight_linen(mat)
         if mat.name.startswith(
             ("cotton-coverlet@", "cotton-turnback@", "cotton-binding@")
         ):
@@ -864,6 +991,7 @@ def stage(scene, root, components, dimensions, planted):
                 adjust.inputs[2].default_value = 0.72
                 tree.links.new(channel, adjust.inputs[0])
                 tree.links.new(adjust.outputs[0], rough)
+    dress_bedroom(components, root)
     for obj in list(scene.objects):
         if obj.type in ("LIGHT", "CAMERA"):
             bpy.data.objects.remove(obj, do_unlink=True)
@@ -894,7 +1022,9 @@ def stage(scene, root, components, dimensions, planted):
         "03 · Dining room", (5.014, 1.71, 2.50), (3.075, 0.247, 9.113), 32.63
     )
     dining.data.shift_y = 0.059
-    camera("04 · Upstairs bedroom", (4.32, 4.93, 8.35), (2.30, 4.08, 11.77), 24)
+    bedroom = camera("04 · Upstairs bedroom", (4.32, 4.93, 8.35), (2.30, 4.08, 11.77), 22.5)
+    bedroom.data.shift_x = -.028
+    bedroom.data.shift_y = .018
     camera("05 · Front entry", (5.65, 1.62, -5.70), (5.70, 1.14, 0.13), 39)
     camera("06 · Kitchen at table height", (3.44, 1.36, 5.56), (1.37, 1.12, 9.56), 35)
     world = scene.world
@@ -973,16 +1103,28 @@ def stage(scene, root, components, dimensions, planted):
     scene.frame_start = 1
     scene.frame_end = len(cameras)
     for frame, (cam, ev) in enumerate(
-        zip(cameras, (-0.30, -0.25, 2.80, 2.35, 0.30, 2.70)), 1
+        zip(cameras, (-0.30, -0.25, 2.80, 2.78, 0.30, 2.70)), 1
     ):
         incoming = (
             (-0.70, -0.65, -0.85),
             (0.065, 0.99, -0.68),
             (0.31, 0.90, -0.49),
-            (0.31, 0.90, -0.49),
+            (0.04, 0.75, -1.05),
             (-0.55, -0.77, -0.56),
             (0.31, 0.90, -0.49),
         )[frame - 1]
+        if frame == 4:
+            towards_sun = -Vector(incoming).normalized()
+            sky.sun_elevation = math.asin(towards_sun.z)
+            sky.sun_rotation = math.atan2(towards_sun.y, towards_sun.x)
+        else:
+            sky.sun_elevation = math.radians(36)
+            sky.sun_rotation = math.radians(241)
+        sky.keyframe_insert("sun_elevation", frame=frame)
+        sky.keyframe_insert("sun_rotation", frame=frame)
+        scene.view_settings.white_balance_temperature = 7700
+        scene.view_settings.use_white_balance = frame == 4
+        scene.view_settings.keyframe_insert("use_white_balance", frame=frame)
         sunlight.rotation_euler = Vector(incoming).to_track_quat("-Z", "Y").to_euler()
         sunlight.keyframe_insert("rotation_euler", frame=frame)
         scene.timeline_markers.new(cam.name, frame=frame).camera = cam

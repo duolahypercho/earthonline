@@ -74,6 +74,7 @@ bpy.ops.object.select_all(action="SELECT")
 bpy.ops.object.delete(use_global=False)
 room = "Ground"
 batches = {}
+cloth_patterns = {}
 materials = {}
 # Component insertion points in the builder's across / height / depth coordinates.
 pivots = {}
@@ -268,9 +269,18 @@ def bent_tube(mat, centres, radius, axis, sides=10):
     emit(mat, points, faces, True)
 
 
-def fabric_grid(mat, columns, rows, sample, reverse=False):
+def fabric_grid(mat, columns, rows, sample, reverse=False, cut_size=None):
     """One continuous, smooth sheet. Shared vertices carry normals through the folds."""
     points = [sample(i / columns, j / rows) for j in range(rows + 1) for i in range(columns + 1)]
+    if cut_size is not None:
+        # A woven sheet keeps its yarn direction as it bends. Store metre
+        # coordinates of the flat cutting pattern until the scene receives UVs.
+        previous = batches.get((room, mat))
+        start = len(previous[0]) if previous else 0
+        pattern = cloth_patterns.setdefault((room, mat), {})
+        for j in range(rows + 1):
+            for i in range(columns + 1):
+                pattern[start + j * (columns + 1) + i] = (cut_size[0] * i / columns, cut_size[1] * j / rows)
     stride = columns + 1
     faces = [(k, k + stride, k + stride + 1, k + 1)
              for j in range(rows) for i in range(columns) for k in [j * stride + i]]
@@ -933,6 +943,8 @@ for a, b in [
     ((2.60, y, 0.15), (2.74, ceiling, 2.72)),
 ]:
     box(plaster, a, b, True)
+if PHOTO:
+    beaver_photo.bedroom_joinery(box, emit, ivory, y)
 room = part("double-bed", 1.825, y, 11.35)
 for x in [0.98, 2.67]:
     for z in [10.28, 12.34]:
@@ -971,38 +983,41 @@ if FINISHES:
         z -= foot * (0.012 + 0.017 * math.cos(17*x + foot))
         return (x, y + h, z)
     if PATINA:
-        settled = beaver_entry.settled_coverlet()
+        settled = beaver_entry.settled_coverlet(deep_drop=PHOTO)
         def coverlet(u,t):
             x,h,z=settled(u,t)
             # Very shallow quilting remains in the stuffing once the fabric settles.
             h+=.009*(math.sin(math.pi*9*u)*math.sin(math.pi*8*t))**2
             if PHOTO:
-                # Pull the quilt smooth over its supported area. Leave the
+                # Partially relax the supported crown. Leave the
                 # cloth simulation's full length and weight on the hanging edges.
                 support=max(0.,1-(abs(2*u-1)/.88)**6)*min(1.,t/.17)
-                h += .78*support*(.723-h)
+                h += .46*support*(.723-h)
                 return beaver_photo.bunched_linen(u, t, x, y+h, z)
             return x,y+h,z
         # The turned edge shows the softer reverse, with a round fold and two
         # uneven corners. Its underside and the hem track the settled sheet.
-        reverse=finish("cotton-turnback","c1c2b1",.96)
+        reverse=finish("cotton-turnback","f1e6d6" if PHOTO else "c1c2b1",.96)
         def turnback(u,v):
             start=.858+.055*u+.024*math.sin(u*5)
             x,h,z=coverlet(u,start+v*(1-start))
             crown=.022+.046*math.sin(math.pi*v)**.8+.009*math.sin(10*u+v)*v
             return x,h+crown,z
-        fabric_grid(reverse,60,13,turnback)
-    fabric_grid(quilt, 100, 86, coverlet)
+        if PHOTO:
+            fabric_grid(reverse, 90, 26, lambda u, v: beaver_photo.loose_top_sheet(u, v, coverlet), cut_size=(2.25, .42))
+        else:
+            fabric_grid(reverse,60,13,turnback)
+    fabric_grid(quilt, 100, 86, coverlet, cut_size=(2.25, 2.10) if PHOTO else None)
     if PHOTO:
         # Paired rows of broken cotton stitches follow the quilt over the foot.
-        thread=finish("cotton-binding","7c8986",.96)
+        thread=finish("cotton-binding","b5a17a",.96)
         for seam in (.13,.34,.55,.76,.91):
             for line in (seam,seam+.0027):
                 for k in range(122):
                     t0=k/122
                     edge=[]
                     for t in (t0,t0+.0038):
-                        for side in (-.00036,.00036):
+                        for side in (-.00061,.00061):
                             x,h,z=coverlet(line+side,t)
                             edge.append((x,h+.0011,z-.0010*(1-t)**6))
                     emit(thread,edge,[(0,1,3,2)])
@@ -1052,7 +1067,10 @@ for x in [1.36, 2.31]:
     else:
         cushion(linen, (x, y + 0.75, 12.10), (0.42, 0.145, 0.255))
 room = part("bedside-table", 3.43, y, 12.09)
-table(3.10, y, 11.75, 0.66, 0.68, 0.62)
+if PHOTO:
+    beaver_photo.bedside_joinery(box, oak, walnut, boxes, y)
+else:
+    table(3.10, y, 11.75, 0.66, 0.68, 0.62)
 if PHOTO:
     box(walnut, (3.14,y+.62,11.87),(3.34,y+.649,12.13),False,.005)
     box(paper, (3.15,y+.649,11.878),(3.33,y+.671,12.122))
@@ -1064,7 +1082,10 @@ else:
     turned(brass, 3.43, y + 0.62, 12.07, [(0.13, 0), (0.12, 0.04), (0.04, 0.065), (0.032, 0.31), (0.07, 0.37)])
 turned(linen, 3.43, y + 0.95, 12.07, [(0.195, 0), (0.145, 0.26), (0.115, 0.265)], 24)
 room = part("potted-plant", 0.57, y + 0.01, 9.28)
-plant(0.57, y + 0.01, 9.28, 0.85)
+if PHOTO:
+    beaver_photo.money_tree(emit, turned, bent_tube, finish, clay, .57, y+.01, 9.28)
+else:
+    plant(0.57, y + 0.01, 9.28, 0.85)
 room = part("bathtub", 0.78, y + 0.04, 2.19)
 box(pottery, (0.29, y + 0.04, 1.16), (1.27, y + 0.20, 3.23), True, 0.06)
 for x in [0.29, 1.12]:
@@ -1348,24 +1369,42 @@ if FINISHES:
     # Linen curtains hang from individual loops, with gathers spreading below
     # the header and a turned lower hem that sags between the support points.
     room = part("bedroom-curtains", 2.65, RISE+2.66, 12.61)
-    bent_tube(brass, [(0.49,RISE+2.71,12.63),(4.83,RISE+2.71,12.63)], 0.013,(0,1,0),16)
+    hardware = wrought if PHOTO else brass
+    bent_tube(hardware, [(0.49,RISE+2.71,12.63),(4.83,RISE+2.71,12.63)], 0.013,(0,1,0),16)
+    if PHOTO:
+        for end in (.49, 4.83):
+            cushion(hardware, (end, RISE + 2.71, 12.63), (.026, .023, .023))
+        for bracket in (.57, 2.66, 4.71):
+            bent_tube(hardware, [(bracket, RISE + 2.71, 12.63),
+                                 (bracket, RISE + 2.665, 12.66),
+                                 (bracket, RISE + 2.665, 12.88)], .008, (1, 0, 0), 8)
     curtain = finish("curtain-linen", "ded7c4", 0.97, texture=190)
     for panel,x0 in enumerate([0.54,4.02]):
-        def hanging(u,t):
-            fore = 1-t
-            p = math.tau*(4.35*u + 0.055*math.sin(8*u+panel) + 0.085*fore*math.sin(5*u+2*t+panel))
-            x = x0 + 0.55*u + fore**1.4*(0.10*(2*u-1) + 0.035*math.sin(3.8*u + panel))
-            z = 12.60 + (0.034 + 0.032*fore) * math.cos(p) + 0.012*math.sin(3.2*u+1.9*t+panel)
-            h = RISE+0.68 + t*1.98 + fore*(0.015*math.sin(7*u+panel)+0.012*math.cos(p))
+        if PHOTO:
+            def hanging(u, t):
+                return beaver_photo.pinch_pleated_panel(u, t, panel, x0, RISE)
+            fabric_grid(curtain, 100, 43, hanging, cut_size=(1.27, 1.98))
+            # The turned hem doubles the cloth over the lower 35 mm.
+            def inner_hem(u, v):
+                x, h, z = hanging(u, v * .035 / 1.98)
+                return x, h, z + .0024 + .0016 * math.sin(math.pi * v)
+            fabric_grid(curtain, 100, 3, inner_hem, reverse=True, cut_size=(1.27, .035))
+        else:
+            def hanging(u,t):
+                fore = 1-t
+                p = math.tau*(4.35*u + 0.055*math.sin(8*u+panel) + 0.085*fore*math.sin(5*u+2*t+panel))
+                x = x0 + 0.55*u + fore**1.4*(0.10*(2*u-1) + 0.035*math.sin(3.8*u + panel))
+                z = 12.60 + (0.034 + 0.032*fore) * math.cos(p) + 0.012*math.sin(3.2*u+1.9*t+panel)
+                h = RISE+0.68 + t*1.98 + fore*(0.015*math.sin(7*u+panel)+0.012*math.cos(p))
+                return x,h,z
+            fabric_grid(curtain, 56, 30, hanging)
+            fabric_grid(curtain, 56, 3, lambda u,t: tuple(a+b for a,b in zip(hanging(u,0),(0,0.012*t,0.002*t))))
+        support_count = 8 if PHOTO else 6
+        for i in range(support_count):
+            x,h,z = hanging(i/(support_count-1),1)
             if PHOTO:
-                z += .026 * fore * math.sin(3.9*u + 2.1*t + panel)
-                h += .017 * fore * math.sin(6.1*u + .9*panel)
-            return x,h,z
-        fabric_grid(curtain, 56, 30, hanging)
-        fabric_grid(curtain, 56, 3, lambda u,t: tuple(a+b for a,b in zip(hanging(u,0),(0,0.012*t,0.002*t))))
-        for i in range(6):
-            x,h,z = hanging(i/5,1)
-            bent_tube(brass, [(x,RISE+2.711+0.030*math.cos(k*math.tau/16),12.63+0.030*math.sin(k*math.tau/16)) for k in range(17)], 0.003,(1,0,0),8)
+                bent_tube(hardware, [(x,h-.004,z), (x,h+.005,z-.004), (x,RISE+2.683,12.63)], .002, (1,0,0), 6)
+            bent_tube(hardware, [(x,RISE+2.711+0.030*math.cos(k*math.tau/16),12.63+0.030*math.sin(k*math.tau/16)) for k in range(17)], 0.003,(1,0,0),8)
 
 else:
     # A striped cotton towel, looped over the oven rail with tiny ripples.
@@ -1829,7 +1868,7 @@ if FINISHES and (args.blend or args.render):
     bpy.context.view_layer.update()
     beaver_lighting.dress_floor_for_blender(scene, (OUT if PHOTO else FINISH_DIR) / "floorboards.png", boards)
 if PATINA and (args.blend or args.render):
-    beaver_entry.dress_scans(materials, SURFACE_DIR, scene, FURNITURE, door_bounds, photo=PHOTO)
+    beaver_entry.dress_scans(materials, SURFACE_DIR, scene, FURNITURE, door_bounds, photo=PHOTO, cloth_patterns=cloth_patterns)
 if args.blend_only and PHOTO:
     import beaver_blender_scene
     beaver_blender_scene.stage(scene, ROOT, components, dimensions, ground_components)

@@ -140,7 +140,7 @@ def bunched_linen(u, t, x, h, z):
     for anchor,lean in ((.13,.31),(.33,-.21),(.72,.20),(.89,-.32)):
         line=u-anchor-lean*t-.021*math.sin(13*t+anchor*8)
         lift += .038*math.exp(-(line/.022)**2) * math.exp(-((t-.35)/.31)**2)
-    h += (.32+.56*edge**3+.19*(1-t)**3)*lift + .0038*math.sin(41*u+19*t)*math.sin(8*t)**2
+    h += (.72+.36*edge**3+.19*(1-t)**3)*lift + .0038*math.sin(41*u+19*t)*math.sin(8*t)**2
     h -= .105*edge**5*(.55+.36*math.sin(9*t+u)) + .060*(1-t)**6
     # Small radial tension folds continue over the hanging edge at the foot.
     edge_t = max(0., (.38-t)/.38)
@@ -148,7 +148,52 @@ def bunched_linen(u, t, x, h, z):
             .35*math.sin(113*u-19*t))
     z -= edge_t**2 * seam * .024
     h += edge_t * seam * .013 + .008*math.sin(72*u+32*t)*math.exp(-((t-.81)/.17)**2)
+    # Shorter folds feather away from the crease at the turned sheet.
+    for anchor, lean, middle, length in ((.19,.35,.63,.23),(.28,.29,.67,.15),
+                                          (.52,-.43,.68,.19),(.67,-.31,.59,.25)):
+        across = u-anchor-lean*(t-middle)-.016*math.sin(14*t+anchor*21)
+        h += .026*math.exp(-(across/.016)**2-((t-middle)/length)**2)
     return x,h,z
+
+
+def pinch_pleated_panel(u, t, panel, x0, rise):
+    """The header hangs from eight fixed hooks. The ungathered hem opens below them."""
+    hooks = (0., .13, .292, .42, .587, .739, .857, 1.) if panel == 0 else (0., .15, .27, .446, .573, .735, .87, 1.)
+    drop = 1 - t
+    # The free hem drifts sideways between hooks, where the cloth carries slack.
+    swing = drop * math.sin(math.pi*u) * (.024*math.sin(8*u+2*t+panel) + .011*math.sin(15*u-3*t))
+    unfolded = u + swing
+    span = min(len(hooks)-2, int(unfolded * (len(hooks)-1)))
+    along = unfolded * (len(hooks)-1) - span
+    header = hooks[span] + along * (hooks[span + 1] - hooks[span])
+    # The weight of the hem draws neighboring folds into different directions.
+    sag = math.sin(math.pi * along)
+    curl = math.sin((along + .065 * drop * math.sin(2.8 * span + panel)) * math.tau)
+    shoulder = math.exp(-((drop - .035) / .07) ** 2)
+    finger = math.exp(-(min(along, 1 - along) / .16) ** 2)
+    flare = (.077 + .022 * math.cos(panel * 2 + 4 * u)) * (2 * u - 1)
+    x = x0 + .55 * header + drop**.86 * (flare + .019 * math.sin(8 * u + 3 * drop + panel))
+    x += .023 * curl * (1 - .28 * drop)
+    z = 12.628 - (.052 + .048 * drop + .013 * math.sin(span * 3 + panel)) * sag**1.5
+    z += .022 * drop * curl + .023 * shoulder * finger * math.cos(33 * along)
+    z += .023 * drop**2 * math.sin(9 * u - 2.5 * drop + panel)
+    h = rise + 2.672 - 1.98 * drop - .016 * sag * (1 - drop) ** 2
+    h += drop**2 * (.025 * math.sin(8.4 * u + panel) - .011 * sag)
+    return x, h, z
+
+
+def loose_top_sheet(u, v, coverlet):
+    """A sheet folded toward the foot, finished with a rolled lip across the bed."""
+    front = .765 + .065 * u + .027 * math.sin(7 * u + .5)
+    x, h, z = coverlet(u, front + v * (1 - front))
+    side = abs(2 * u - 1) ** 5
+    x += math.copysign(.022 * side * (.4 + .6 * v), u - .5)
+    # A loose corner of the lighter sheet hangs below the quilt at the head.
+    h -= .16 * side * v**.75
+    crown = .018 + .042 * math.exp(-((v - .07) / .12) ** 2)
+    crown += .024 * math.sin(math.pi * v) * (.6 + .4 * math.sin(14 * u + 4 * v))
+    z -= .039 * math.sin(math.pi * v) * (1 - .55 * u)
+    return x, h + crown, z
 
 
 def upholstered_headboard(emit, box, finish, y):
@@ -162,20 +207,30 @@ def sleeping_pillow(emit, tube, mat, x, h, z):
     """A pillowcase made from two bowed panels sharing a sewn edge and folded corners."""
     points, faces, rim = [], [], []
     sections, rings = 56, 12
+    # The mattress supports the lower toe and the headboard supports the upper edge.
+    # Rotate both shells and their piping about exactly the same axis.
+    right = x > 1.8
+    pitch = math.radians(19 if right else 25)
+    yaw = math.radians(-3 if right else 4)
+    def posed(dx, loft, dz):
+        depth = dz * math.cos(pitch) - loft * math.sin(pitch)
+        return (x + dx * math.cos(yaw) - depth * math.sin(yaw),
+                h + .033 + dz * math.sin(pitch) + loft * math.cos(pitch),
+                z + .055 + depth * math.cos(yaw) + dx * math.sin(yaw))
     for face in (-1,1):
         base = len(points)
-        points.append((x,h+face*.106,z))
+        points.append(posed(0, face * .114, 0))
         for j in range(1,rings+1):
             t=j/rings
             for i in range(sections):
                 a=i*math.tau/sections
-                power=lambda n: math.copysign(abs(n)**.48,n)
+                power=lambda n: math.copysign(abs(n)**.50,n)
                 dx=.462*power(math.cos(a))*t
                 dz=.301*power(math.sin(a))*t
                 corners=abs(math.sin(2*a))
-                crease=.013*math.sin(19*a+5*t)*corners*t**3
-                y=h+.24*dz+face*(.004+.105*(1-t**3)**.62)+crease
-                p=(x+dx,y,z+dz)
+                crease=.021*math.sin(18*a+7*t+float(right))*corners*t**2
+                loft=face*.114*(1-t**3)**.62+crease
+                p=posed(dx,loft,dz)
                 points.append(p)
                 if j==rings and face==1:
                     rim.append(p)
@@ -189,6 +244,93 @@ def sleeping_pillow(emit, tube, mat, x, h, z):
                 faces.append(q if face>0 else q[::-1])
     emit(mat,points,faces,True)
     tube(mat,rim+[rim[0]],.004,(0,1,0),6)
+
+
+def bedroom_joinery(box, emit, paint, rise):
+    """Skirting and coved plaster between the bedroom walls and suspended ceiling."""
+    for bottom, profile in (
+        (rise, ((0, .019), (.109, .019), (.119, .014), (.127, .012), (.131, .004))),
+        (2 * rise - .16, ((-.042, .003), (-.036, .009), (-.029, .011),
+                           (-.022, .014), (-.015, .018), (-.008, .027), (0, .037))),
+    ):
+        # Miter the two lengths at their common inside corner.
+        for side in (False, True):
+            strip = []
+            for height, projection in profile:
+                corner = (.14 + projection, bottom + height, 12.85 - projection)
+                far = ((.14 + projection, bottom + height, 8.59) if side else
+                       (6.86, bottom + height, 12.85 - projection))
+                strip.extend((corner, far))
+            emit(paint, strip, [(2*i, 2*i+1, 2*i+3, 2*i+2)
+                                for i in range(len(profile)-1)])
+    # Apron underneath the rear sill, with a narrow bead at the lower edge.
+    box(paint, (.665, rise + .767, 12.820), (4.67, rise + .844, 12.85), False, .004)
+    box(paint, (.69, rise + .761, 12.813), (4.65, rise + .774, 12.85), False, .003)
+
+
+def bedside_joinery(box, wood, endgrain, boxes, y):
+    """Four square legs, inset aprons and a projecting solid timber top."""
+    box(wood, (3.10,y+.587,11.75), (3.76,y+.62,12.43), False, .007)
+    for x0 in (3.14, 3.672):
+        for z0 in (11.79, 12.342):
+            box(endgrain, (x0,y,z0), (x0+.048,y+.587,z0+.048), False, .003)
+    for x0 in (3.152, 3.686):
+        box(wood, (x0,y+.512,11.827), (x0+.022,y+.587,12.354), False, .003)
+    for z0 in (11.804, 12.356):
+        box(wood, (3.178,y+.512,z0), (3.683,y+.587,z0+.022), False, .003)
+    boxes.append([[3.14,y,11.79], [3.72,y+.62,12.39]])
+
+
+def money_tree(emit, turned, tube, finish, clay, x, y, z):
+    """Pachira with palmate leaves on woody shoots and a mineral-marked clay pot."""
+    rng = random.Random(21043)
+    bark = finish("houseplant-bark", "746048", .84, texture=125)
+    rib = finish("leaf-vein", "77814b", .65)
+    leaves = [finish("leaf", col, .44) for col in ("475c33", "61783e", "354f32", "647e48")]
+    earth = finish("potting-earth", "41382b", .98)
+    turned(clay, x,y,z,[(.167,0),(.181,.004),(.183,.015),(.175,.025),(.155,.027)],48)
+    turned(clay, x,y+.015,z,[(.131,0),(.137,.013),(.166,.169),(.185,.248),
+                             (.197,.253),(.198,.281),(.194,.290),(.181,.290),
+                             (.178,.278),(.173,.252)],56)
+    turned(earth, x,y+.270,z,[(.171,0),(.162,.004),(.119,.009),(.018,.012)],48,True)
+    for k in range(3):
+        a = k * 2.4
+        dx, dz = math.cos(a), math.sin(a)
+        height = (.88,.79,.73)[k]
+        def trunk(t):
+            return (x+dx*(.018+.085*t)+.022*math.sin(3*t+k)*t,
+                    y+.278+(height-.278)*t,
+                    z+dz*(.019+.088*t)+.018*math.sin(5*t+k)*t)
+        tube(bark, [trunk(j/12) for j in range(13)], .012-.001*k, (-dz,0,dx),8)
+        for j in range(4):
+            start = trunk(.37 + .20*j)
+            az = a + j*2.32 + rng.uniform(-.35, .35)
+            run = rng.uniform(.105, .21)
+            shoot_x, shoot_z = math.cos(az), math.sin(az)
+            hub = (start[0]+run*shoot_x, start[1]+.105, start[2]+run*shoot_z)
+            path = [(start[0]+run*t*shoot_x, start[1]+.105*t+.044*math.sin(math.pi*t),
+                     start[2]+run*t*shoot_z) for t in (0,.25,.5,.75,1)]
+            tube(bark if j<2 else rib,path,.0045,(-shoot_z,0,shoot_x),6)
+            for blade in range(5 + (j == 2)):
+                angle = az+(blade-2)*.65+rng.uniform(-.12,.12)
+                vx, vz = math.cos(angle), math.sin(angle)
+                length = rng.uniform(.123,.185) * (1+.23*(1-abs(blade-2)/3))
+                width = length*rng.uniform(.128,.169)
+                tilt = rng.uniform(-.14,.25)
+                twist = rng.uniform(-.35,.38)
+                pts, centre = [], []
+                for row in range(13):
+                    t=row/12
+                    mid = (hub[0]+vx*length*t,hub[1]+length*(tilt*t+.24*math.sin(math.pi*t)-.61*t**2.3),
+                           hub[2]+vz*length*t)
+                    centre.append(mid)
+                    w = width * math.sin(math.pi*t**.93)**.82
+                    for u in (-1,-.48,0,.48,1):
+                        pts.append((mid[0]-vz*w*u,mid[1]+w*(.23*abs(u)+twist*u*math.sin(t*2.4)),
+                                    mid[2]+vx*w*u))
+                faces = [(r*5+c,r*5+c+1,r*5+c+6,r*5+c+5) for r in range(12) for c in range(4)]
+                emit(rng.choice(leaves),pts,faces,True)
+                tube(rib, [(xx,hh+.0007,zz) for xx,hh,zz in centre[:10]], .00075, (-vz,0,vx),4)
 
 
 def trailing_plant(emit, turned, tube, clay, green, pale, bark, x, h, z):
