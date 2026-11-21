@@ -1,0 +1,170 @@
+{
+  "source": "Measured incident light at the walnut volute, stair flight, bowl and four dining-table positions, and surface irradiance baked on the registered ceramic, folded flax and boards.",
+  "license": "Project-authored lighting data",
+  "attribution": "Earth Online",
+  "source_scene": {
+    "file": "21 Beaver - Fitted dining room.blend",
+    "sha256": "15ffbcf57cc8327d3326ba5a28b6fbf2ab043ff9c709dacaa881d87cd1531c50"
+  },
+  "house_sha256": "0f567a703707bf14d2e49fd9ee1a713422faa46109fd5b42f404f5ab6bd0dc50",
+  "fitted_geometry_sha256": "caa9e62c6b298a21e00f2d33fab23e1690080074c7eb4b023236f5480b21646d",
+  "survey": {
+    "file": "fitted-finish-survey.npz",
+    "sha256": "85cf0a82bde14c15b1ad7974563957a4e3c935ab93267e63d10e602eaa20ebf0"
+  },
+  "probe_blender_xyz": [
+    [
+      6.386218070983887,
+      -5.831531524658203,
+      0.9935455322265625
+    ],
+    [
+      6.957259178161621,
+      -8.805558204650879,
+      2.6853294372558594
+    ],
+    [
+      7.013571739196777,
+      -11.352409362792969,
+      4.17507791519165
+    ],
+    [
+      4.225268363952637,
+      -8.61590576171875,
+      0.8347970247268677
+    ],
+    [
+      3.8951427936553955,
+      -7.898504257202148,
+      0.7680000066757202
+    ],
+    [
+      4.6607489585876465,
+      -7.898504257202148,
+      0.7680000066757202
+    ],
+    [
+      3.9202778339385986,
+      -9.035757064819336,
+      0.7680000066757202
+    ],
+    [
+      4.68588399887085,
+      -9.035757064819336,
+      0.7680000066757202
+    ]
+  ],
+  "table_parcel_bounds": [
+    2.649416080328419,
+    5.805780834964196,
+    3.6249775793483945,
+    7.269244253138822
+  ],
+  "roughness": [
+    0.035,
+    0.2,
+    0.38,
+    0.7
+  ],
+  "materials": {
+    "Waxed walnut stair handrail": {
+      "group": "rail",
+      "coat": 0.23999999463558197,
+      "roughness": 0.1899999976158142
+    },
+    "Laundered flax with woven indigo borders": {
+      "group": "linen",
+      "coat": 0,
+      "roughness": 0
+    },
+    "Exposed stoneware foot": {
+      "group": "bowl",
+      "coat": 0,
+      "roughness": 0
+    },
+    "Fired sage ash glaze": {
+      "group": "bowl",
+      "coat": 0.3199999928474426,
+      "roughness": 0
+    },
+    "Iron wash at the lip": {
+      "group": "bowl",
+      "coat": 0,
+      "roughness": 0
+    },
+    "furniture-oak@8c6a4c.008": {
+      "group": "chairs",
+      "coat": 0.2199999988079071,
+      "roughness": 0.33000001311302185
+    },
+    "furniture-oak@a18061.008": {
+      "group": "chairs",
+      "coat": 0.2199999988079071,
+      "roughness": 0.33000001311302185
+    },
+    "Dining tabletop \u00b7 plank 1": {
+      "group": "boards",
+      "coat": 0.15000000596046448,
+      "roughness": 0.36000001430511475
+    },
+    "Dining tabletop \u00b7 end grain 1.002": {
+      "group": "boards",
+      "coat": 0,
+      "roughness": 0
+    },
+    "Dining tabletop \u00b7 plank 2": {
+      "group": "boards",
+      "coat": 0.15000000596046448,
+      "roughness": 0.36000001430511475
+    },
+    "Dining tabletop \u00b7 end grain 2.002": {
+      "group": "boards",
+      "coat": 0,
+      "roughness": 0
+    },
+    "Dining tabletop \u00b7 plank 3": {
+      "group": "boards",
+      "coat": 0.15000000596046448,
+      "roughness": 0.36000001430511475
+    },
+    "Dining tabletop \u00b7 end grain 3.002": {
+      "group": "boards",
+      "coat": 0,
+      "roughness": 0
+    },
+    "Dining tabletop \u00b7 plank 4": {
+      "group": "boards",
+      "coat": 0.15000000596046448,
+      "roughness": 0.36000001430511475
+    },
+    "Dining tabletop \u00b7 end grain 4.002": {
+      "group": "boards",
+      "coat": 0,
+      "roughness": 0
+    }
+  },
+  "sources": [
+    "fixtures",
+    "uniform-sky",
+    "clear-sky",
+    "front-25",
+    "front-57",
+    "rear-25",
+    "rear-57"
+  ],
+  "surface_only_source": "pendant-direct",
+  "pages": [
+    "sRGB-encoded diffuse transfer, 8 sources",
+    "linear encoded GGX radiance, two narrow lobes and folded-linen transfer",
+    "linear encoded GGX radiance, two broad lobes"
+  ],
+  "transfer_encoding": "sqrt(L/(1+L))",
+  "samples": {
+    "panorama": 64,
+    "diffuse": 1536
+  },
+  "build": "scripts/blender-buildings/cook_beaver_fitted_finishes.py",
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/fitted-dining/fitted-finish-light.png",
+  "bytes": 652819,
+  "sha256": "190b8bc73787ea3a43955b356d8a8efa4754933bce3be44d4f58a7ca10021dd8"
+}

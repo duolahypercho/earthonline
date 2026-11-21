@@ -1,0 +1,9 @@
+{
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/stoop/landing.glb",
+  "bytes": 33528,
+  "sha256": "545394fb1b655875842b5c243ad5d9f0c3d129b8b5432193dd340a898470d556",
+  "source_sha256": "92fbf67a3c550653f080f0452ec10fe813f5f93f15c10e3b224ad5c39aa33d2a",
+  "blender_sha256": "8fda283fcec39b2f276a1fd64abf7a89154b7c5fbb32480dbcfd95b3bcbcd970",
+  "license": "Project-authored Earth Online geometry.",
+  "build": "scripts/blender-buildings/cook_beaver_stoop.py"
+}

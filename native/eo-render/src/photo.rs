@@ -88,7 +88,7 @@ pub fn wgsl() -> String {
 /// structs), the old display transform's helpers (`to_srgb`, `from_srgb`,
 /// `hash`), the constants, and look_photo.wgsl.
 pub fn shader_source() -> String {
-    format!("{}\n{}\n{}\n{}", crate::look::look_common_source(), include_str!("look_finish.wgsl"), wgsl(), include_str!("look_photo.wgsl"))
+    format!("{}\n{}\n{}\n{}", crate::look::look_common_source(), crate::look::DISPLAY_SHADER, wgsl(), include_str!("look_photo.wgsl"))
 }
 
 /// The pipeline, its layout and its uniform.

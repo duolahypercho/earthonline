@@ -1,0 +1,61 @@
+{
+  "source": [
+    "https://polyhaven.com/a/white_stucco_02",
+    "https://polyhaven.com/a/plaster_grey_04"
+  ],
+  "license": "CC0-1.0",
+  "license_url": "https://polyhaven.com/license",
+  "attribution": [
+    "Dimitrios Savva",
+    "Rob Tuytel"
+  ],
+  "inputs": [
+    {
+      "asset": "white_stucco_02",
+      "role": "albedo",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/white_stucco_02/white_stucco_02_diff_2k.jpg",
+      "sha256": "794a309cd768446958e7344d058a35626f507fe132fe9160bb4d50434e2e892c"
+    },
+    {
+      "asset": "plaster_grey_04",
+      "role": "albedo",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/plaster_grey_04/plaster_grey_04_diff_2k.jpg",
+      "sha256": "f8fd4a4263dc257060f34021bd537d968cc04b38b332f29ddd516f1fdd5ec201"
+    },
+    {
+      "asset": "white_stucco_02",
+      "role": "normal",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/white_stucco_02/white_stucco_02_nor_gl_2k.jpg",
+      "sha256": "9d7f80ba4d49da2b6d6a66953e597ff14489d8c50a626cb9d95006878e719c06"
+    },
+    {
+      "asset": "plaster_grey_04",
+      "role": "normal",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/plaster_grey_04/plaster_grey_04_nor_gl_2k.jpg",
+      "sha256": "25a501bd78e1b55d62bebe2f9fd5ff77ed796a66e092b2efbd5339e4bee15f0a"
+    },
+    {
+      "asset": "white_stucco_02",
+      "role": "arm",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/white_stucco_02/white_stucco_02_arm_2k.jpg",
+      "sha256": "a11ab0778948ddb8592d3326fdac1f5efae8a3430a937282793d10ab2a5eaaab"
+    },
+    {
+      "asset": "plaster_grey_04",
+      "role": "arm",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/plaster_grey_04/plaster_grey_04_arm_2k.jpg",
+      "sha256": "7bed7ffac681c134600cb87507446cd3974a05c672a1315ac597788c660432b6"
+    }
+  ],
+  "build": "scripts/blender-buildings/prepare_beaver_surfaces.py",
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/limewash.png",
+  "sha256": "c2cd354dbc7cc0b61906aa50dd566c1652c35235ddb1baa61ab106a538bb220e",
+  "bytes": 1371991,
+  "families": [
+    "painted-stucco",
+    "float-finish-stucco"
+  ],
+  "metres_per_tile": 1.8,
+  "normal_strength": 0.28,
+  "paint_mix": 0.13
+}

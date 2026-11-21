@@ -248,7 +248,7 @@ trademark or brand logo is drawn on any sign face.
 
 The optional 21 Beaver Street floor finish uses Dimitrios Savva’s *Wood Floor Worn* for Poly Haven, released under CC0 1.0. Eight board strips were cropped from the diffuse, OpenGL normal and roughness maps. The [material provenance](public/assets/buildings/beaver-terrace/finishes/floorboards.provenance.json) records the original files and their checksums. [Asset](https://polyhaven.com/a/wood_floor_worn) · [Licence](https://polyhaven.com/license)
 
-The weathered 21 Beaver Street variant uses six CC0 photographic materials from Poly Haven. Amal Kumar photographed *Clay Roof Tiles 02*, Rob Tuytel created *Plaster Grey 04*, Dimitrios Savva created *White Stucco 02* and *Wood Floor Worn*, Charlotte Baglioni created *Gravel Floor 03*, and colormass and Rico Cilliers produced *Rough Linen*. The [surface manifests](public/assets/buildings/beaver-terrace/finishes/patina) list each input and its SHA-256. [CC0 licence](https://polyhaven.com/license)
+The weathered 21 Beaver Street variant uses six CC0 photographic materials from Poly Haven. Amal Kumar photographed *Clay Roof Tiles 02*, Rob Tuytel created *Plaster Grey 04*, Dimitrios Savva created *White Stucco 02* and *Wood Floor Worn*, Charlotte Baglioni created *Gravel Floor 03*, and colormass and Rico Cilliers produced *Rough Linen*. The [surface manifests](public/assets/buildings/beaver-terrace/finishes/patina) list each input and its SHA-256. The optional fitted roof samples sixteen individual tile faces from Kumar’s scan for its [clay material](public/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/mission-clay.provenance.json). [CC0 licence](https://polyhaven.com/license)
 
 ## Rust crate licences
 
@@ -287,3 +287,11 @@ grouped by that field exactly as each crate declares it. Regenerate it after a d
 The Black Point shoreline uses *Seaside Rock* by Dimitrios Savva for Poly Haven under CC0 1.0. The game ships reduced colour, normal and roughness maps from this scan. [Source](https://polyhaven.com/a/seaside_rock) · [Licence](https://polyhaven.com/license) · [Provenance](public/assets/shore/seaside-rock.provenance.json)
 
 The optional 21 Beaver sitting-room carpet uses the public-domain recto photograph of *Carpet*, attributed to Turkey, first half of the nineteenth century, Bequest of Joseph V. McMullan, 1973, accession 1974.149.36. The material builder rectifies and resamples the photograph. [The Metropolitan Museum of Art object record](https://www.metmuseum.org/art/collection/search/452588) · [The Met Open Access policy](https://www.metmuseum.org/about-the-met/policies-and-documents/open-access).
+
+- The private frontage tree uses the City and County of San Francisco street-tree inventory (DataSF dataset `tkzw-k3nq`, PDDL 1.0). The original mesh follows the position, height and crown recorded in the existing city data. [Street Tree List](https://data.sfgov.org/d/tkzw-k3nq).
+
+The optional private courtyard and paved apron at 21 Beaver use the CC0 scans [Park Dirt](https://polyhaven.com/a/park_dirt) by Christopher Melani, [Leafy Grass](https://polyhaven.com/a/leafy_grass) by Charlotte Baglioni and [Concrete Floor Worn 001](https://polyhaven.com/a/concrete_floor_worn_001) by Dimitrios Savva, Rico Cilliers. [Poly Haven licence](https://polyhaven.com/license).
+
+Rob Tuytel photographed the frontage tree’s bark. Dimitrios Savva photographed the terracotta used on the porch and steps. The optional house uses these CC0 colour, normal and roughness maps. [Bark Brown 02](https://polyhaven.com/a/bark_brown_02) · [Terracotta Floor Tiles](https://polyhaven.com/a/terracotta_floor_tiles) · [Poly Haven licence](https://polyhaven.com/license).
+
+The optional house courtyard follows parcel 3561049 from the City and County of San Francisco parcel survey, released under PDDL 1.0. [Parcels – Active and Retired](https://data.sf.gov/d/acdm-wktn) · [Source and licence](scripts/blender-buildings/sources/beaver-parcel.NOTICE.txt).

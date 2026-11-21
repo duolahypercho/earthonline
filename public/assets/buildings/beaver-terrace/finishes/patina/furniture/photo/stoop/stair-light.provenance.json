@@ -1,0 +1,26 @@
+{
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/stoop/stair-light.png",
+  "bytes": 211385,
+  "sha256": "56afcabbd63b466a9842fc1bcc7dc18646057e33d2a47b9dd43d6458a2d98af1",
+  "source": {
+    "source_sha256": "8fda283fcec39b2f276a1fd64abf7a89154b7c5fbb32480dbcfd95b3bcbcd970",
+    "sha256": "7762884947591fede8620d6a4bac187f4a76e4c3cf3d79b4254b8d81ff36008f",
+    "courses": 7,
+    "hours": [
+      8.5,
+      12,
+      17,
+      22
+    ],
+    "sky_strength": [
+      0.3400000035762787,
+      0.3400000035762787,
+      0.3400000035762787,
+      0.0
+    ],
+    "build": "scripts/blender-buildings/bake_beaver_stoop_light.py"
+  },
+  "calibration": 2.6080094371717353,
+  "build": "scripts/blender-buildings/cook_beaver_stoop.py",
+  "license": "Project-authored Earth Online light measurements."
+}

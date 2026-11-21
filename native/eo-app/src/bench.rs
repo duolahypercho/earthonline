@@ -398,6 +398,50 @@ fn segments(world: &World, args: &Args, aspect: f32, far: f32) -> Vec<Segment> {
         },
     ]
     .into_iter()
+    .chain(["house_bedroom", "house_roof", "house_dining", "house_garden", "house_frontage", "house_windows", "house_porch"].into_iter().filter_map(|name| {
+            let selected = args.segments.as_ref()?.iter().any(|s| s == name);
+            if !selected { return None; }
+            let house = world.house.as_ref()?;
+            let (left, right, target, description) = if name == "house_garden" {
+                (house.point(5.35, 0.98, -5.13).as_vec3(), house.point(5.72, 1.46, -3.17).as_vec3(),
+                 house.point(2.89, 0.05, -1.11).as_vec3(), "Walking from the sloped approach to the stoop, facing the planted bed")
+            } else if name == "house_porch" {
+                (house.point(4.6,0.,-3.6).as_vec3() + EYE_HEIGHT_M*Vec3::Y,
+                 house.point(5.9,0.,-0.70).as_vec3() + EYE_HEIGHT_M*Vec3::Y,
+                 house.point(5.37,1.78,0.17).as_vec3(), "Approaching the fitted porch lamp and closed entrance")
+            } else if name == "house_windows" {
+                (house.point(-1.98, 1.73, -7.26).as_vec3(), house.point(5.66, 1.73, -5.56).as_vec3(),
+                 house.point(2.75, 5.12, 0.062).as_vec3(), "Crossing the approach while following the tree reflection in the upstairs sash")
+            } else if name == "house_frontage" {
+                (house.point(-1.3, 2.7, -10.3).as_vec3(), house.point(5.35, 1.70, -6.8).as_vec3(),
+                 house.point(3.0, 4.30, 0.).as_vec3(), "Walking across the street frontage, facing the upper arcade")
+            } else if name == "house_dining" {
+                (house.point(4.5,0.,2.0).as_vec3() + EYE_HEIGHT_M * Vec3::Y,
+                 house.point(3.9,0.,5.2).as_vec3() + EYE_HEIGHT_M * Vec3::Y,
+                 house.point(2.4,0.52,7.6).as_vec3(),
+                 "Approaching the dining table with the pendant-lit floor in view")
+            } else if name == "house_roof" {
+                (house.point(9.6, 12.8, -5.6).as_vec3(), house.point(7.7, 12.0, -3.7).as_vec3(),
+                 house.point(5.0, 10.65, 0.7).as_vec3(), "Moving over the rounded bay and along the Mission tile courses")
+            } else {
+                let storey = 10. / 3.;
+                (house.point(4.0, storey, 8.1).as_vec3() + EYE_HEIGHT_M * Vec3::Y,
+                 house.point(4.7, storey, 8.8).as_vec3() + EYE_HEIGHT_M * Vec3::Y,
+                 house.point(2.3,storey+0.72,11.8).as_vec3(),
+                 "Standing inside the upstairs terrace, moving past the foot of the bed toward the rear sash")
+            };
+            Some(Segment {
+                name,
+                description: description.into(),
+                camera: Box::new(move |i, n| {
+                    let t = i as f32 / n.max(1) as f32;
+                    let eye = left.lerp(right,t);
+                    let d = (target-eye).normalize();
+                    Camera { far, ..Camera::new(eye,yaw_of(d),d.y.asin(),aspect) }
+                }),
+                frames, paced: false, streams: false,
+            })
+        }))
     .chain(street_bench::sidewalk_segment(world, frames, aspect, far))
     .chain(water_bench::waterfront_segment(world, frames, aspect, far)) // water
     .chain(water_bench::bay_segment(world, frames, aspect, far)) // water
@@ -700,7 +744,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             }
             let p = dir.join(format!("capture-{label}-{name}.png"));
             capture(&ctx, &renderer, &color, attach, resolve, &targets.depth, &cam, &p)?;
-            println!("wrote {}", p.display());
+            let lighting = renderer.look.frame();
+            println!("wrote {} (exposure {:.6}, key {:?})", p.display(), lighting.exposure, lighting.key);
         }
         return Ok(());
     }

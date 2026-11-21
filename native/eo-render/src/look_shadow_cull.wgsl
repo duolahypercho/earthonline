@@ -37,6 +37,7 @@ struct Group {
 
 struct ShadowCull {
     planes: array<vec4<f32>, 18>,
+    camera: vec4<f32>,
     object_count: u32,
     compact: u32,
     // bit c: cascade c is refreshed this frame
@@ -77,7 +78,14 @@ fn shadow_cull(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let o = objects[i];
     let kind = o.kind & 255u;
-    let base_caster = (o.kind & BLEND_BIT) == 0u && kind != 1u && kind != 2u && kind != 3u && kind != 6u && kind != 7u && kind != 11u && o.index_count > 0u;
+    var first = o.first_index;
+    var count = o.index_count;
+    // (the playable house, `--house-photo-lod`) an authored detail's coarse mesh past 120 m.
+    if (o.lod_role == 12u && distance(sp.camera.xyz, clamp(sp.camera.xyz, o.min, o.max)) > 120.) {
+        first = o.far_first_index;
+        count = o.far_index_count;
+    }
+    let base_caster = (o.kind & BLEND_BIT) == 0u && kind != 1u && kind != 2u && kind != 3u && kind != 6u && kind != 7u && kind != 11u && count > 0u;
     var caster = base_caster;
     // Kit buildings in the outer cascades (5-10 cm texels) cast with their
     // reduced rung when it is resident, else their footprint box: the shadow
@@ -138,14 +146,14 @@ fn shadow_cull(@builtin(global_invocation_id) gid: vec3<u32>) {
         if (sp.compact == 1u) {
             if (inside) {
                 let slot = atomicAdd(&counters[c], 1u);
-                write_cmd(c * n + slot, o.index_count, 1u, o.first_index, o.base_vertex, i);
-                atomicAdd(&counters[3u + c], o.index_count / 3u);
+                write_cmd(c * n + slot, count, 1u, first, o.base_vertex, i);
+                atomicAdd(&counters[3u + c], count / 3u);
             }
         } else {
-            write_cmd(c * n + i, o.index_count, select(0u, 1u, inside), o.first_index, o.base_vertex, i);
+            write_cmd(c * n + i, count, select(0u, 1u, inside), first, o.base_vertex, i);
             if (inside) {
                 atomicAdd(&counters[c], 1u);
-                atomicAdd(&counters[3u + c], o.index_count / 3u);
+                atomicAdd(&counters[3u + c], count / 3u);
             }
         }
     }

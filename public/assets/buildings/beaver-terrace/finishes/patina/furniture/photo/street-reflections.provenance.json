@@ -1,0 +1,150 @@
+{
+  "source": "Native Earth Online release captures of the Beaver Street block, with the closed-door courtyard loaded",
+  "attribution": "Earth Online contributors. City data sources and licences are recorded in public/data/sf/*.NOTICE.txt.",
+  "license": "MIT (game rendering); underlying city data retains its stated licences",
+  "build": "scripts/blender-buildings/bake_beaver_glazing.py",
+  "eye_world_m": [
+    -1616.52,
+    65.75,
+    1810.34
+  ],
+  "poses": [
+    {
+      "name": "north",
+      "eye": [
+        -1616.52,
+        65.75,
+        1810.34
+      ],
+      "yaw": 0.0,
+      "pitch": 0.0,
+      "fov_y_deg": 90,
+      "near": 0.05,
+      "far": 4200.0,
+      "aspect": 1.0
+    },
+    {
+      "name": "east",
+      "eye": [
+        -1616.52,
+        65.75,
+        1810.34
+      ],
+      "yaw": 1.5707963267948966,
+      "pitch": 0.0,
+      "fov_y_deg": 90,
+      "near": 0.05,
+      "far": 4200.0,
+      "aspect": 1.0
+    },
+    {
+      "name": "south",
+      "eye": [
+        -1616.52,
+        65.75,
+        1810.34
+      ],
+      "yaw": 3.141592653589793,
+      "pitch": 0.0,
+      "fov_y_deg": 90,
+      "near": 0.05,
+      "far": 4200.0,
+      "aspect": 1.0
+    },
+    {
+      "name": "west",
+      "eye": [
+        -1616.52,
+        65.75,
+        1810.34
+      ],
+      "yaw": -1.5707963267948966,
+      "pitch": 0.0,
+      "fov_y_deg": 90,
+      "near": 0.05,
+      "far": 4200.0,
+      "aspect": 1.0
+    },
+    {
+      "name": "up",
+      "eye": [
+        -1616.52,
+        65.75,
+        1810.34
+      ],
+      "yaw": 0.0,
+      "pitch": 1.5707863267948965,
+      "fov_y_deg": 90,
+      "near": 0.05,
+      "far": 4200.0,
+      "aspect": 1.0
+    },
+    {
+      "name": "down",
+      "eye": [
+        -1616.52,
+        65.75,
+        1810.34
+      ],
+      "yaw": 0.0,
+      "pitch": -1.5707863267948965,
+      "fov_y_deg": 90,
+      "near": 0.05,
+      "far": 4200.0,
+      "aspect": 1.0
+    }
+  ],
+  "inputs": [
+    {
+      "view": "capture-sash-day-north.png",
+      "sha256": "eac0061141a5223b759fa4a0bee54d44b4c32cf39e726d08c24a4331c69b63e7"
+    },
+    {
+      "view": "capture-sash-day-east.png",
+      "sha256": "0c2a663449052a297054fa1ed229aadf465956e52a78a1d02a4f3cc6dc534086"
+    },
+    {
+      "view": "capture-sash-day-south.png",
+      "sha256": "1031feed77d7075665fe591e3dddf425aafddba737c70f2121b9eadd1dc22838"
+    },
+    {
+      "view": "capture-sash-day-west.png",
+      "sha256": "52f51a095b5574e1d07d6e8526b75ddfc58ce61d773f4178a82dc24cd39d101c"
+    },
+    {
+      "view": "capture-sash-day-up.png",
+      "sha256": "1e4544268567548d16478b06cb77a26cacc345f0970199f0d32a93813e720c9f"
+    },
+    {
+      "view": "capture-sash-day-down.png",
+      "sha256": "82a0f7ee52491303959317ed4e43fef9d24685d6ce450b1d3ba94db4b8ad56b3"
+    },
+    {
+      "view": "capture-sash-night-north.png",
+      "sha256": "49100c4bd6ca60f1db60a788a45b6be21f051b58db4fbd255d618febf49e181e"
+    },
+    {
+      "view": "capture-sash-night-east.png",
+      "sha256": "966482f6e3412141a63f63a0959d7d58907e6d22e0df8c14c221ead7aea654d6"
+    },
+    {
+      "view": "capture-sash-night-south.png",
+      "sha256": "1dfdf5ba070e1c5221e7fd3329663e4cd0d967b6d1f2fd7454b63f72cc98c35d"
+    },
+    {
+      "view": "capture-sash-night-west.png",
+      "sha256": "48abf65e0220b99c774e46f1ab1d65c67a4ef0d1191dce93d98b72dde6b2a068"
+    },
+    {
+      "view": "capture-sash-night-up.png",
+      "sha256": "3c88f5cf93e96809c695b2866443f83f81b69d4b39a1123bc77d89eef33a975b"
+    },
+    {
+      "view": "capture-sash-night-down.png",
+      "sha256": "35dc46fae2289e02f3fab88f2761fcb992b29545c3793df3abd9ecad04e9e2d6"
+    }
+  ],
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/street-reflections.png",
+  "sha256": "4ea649e6943579be275f542c048ac227a7fc73e64b037c043bd77f5274fbe9e5",
+  "bytes": 732868
+}

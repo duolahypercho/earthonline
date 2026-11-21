@@ -18,6 +18,7 @@ pub mod ambient; // the ambient volume (lighting)
 pub mod ambient_bake; // the ambient volume's sky-visibility bake (lighting)
 pub mod authored;
 pub mod camera;
+pub mod interior_meter;
 pub mod clouds; // the cloud noise, blue noise and cloud-shadow map
 pub mod counted; // the count-driven draws where MULTI_DRAW_INDIRECT_COUNT is missing (Metal)
 pub mod cc0; // the CC0 scanned sets
@@ -49,6 +50,8 @@ pub mod props_lib; // props
 pub mod props_lib2;
 pub mod probe; // facade
 pub mod probe_grid; // the reflection probes on the streets round the camera (lighting)
+pub mod front_daylight; // the playable house's measured garden daylight (`--house-front-daylight`)
+pub mod window_optics; // the playable house's traced window optics (`--house-window-optics`)
 pub mod rooms;
 pub mod rt_composite; // the ray-traced passes' G-buffer and deferred composite (`--rt-gi`, `--rt-reflect`)
 pub mod rt_gi; // ray-traced one-bounce diffuse light (`--rt-gi`)
@@ -921,7 +924,7 @@ impl Renderer {
                 buf_entry(2, fs, storage(true)),
                 tex_entry(3),
                 tex_entry(4),
-                tex_entry(5),
+                wgpu::BindGroupLayoutEntry { visibility: vf, ..tex_entry(5) },
                 wgpu::BindGroupLayoutEntry { binding: 6, visibility: fs, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None },
                 // the street's scanned sets and their sampler.
                 tex_entry(7),
@@ -1834,7 +1837,11 @@ impl Renderer {
         self.observe_view(cam, None); // the streamers' view (unjittered)
         // the coming frame's sub-pixel jitter (TAA); every view of the frame goes through it.
         self.look.sky.begin_frame(self.look.out_size());
-        let jittered = Camera { jitter: self.look.sky.jitter(), ..*cam };
+        let temporal = self.look.sky.jitter();
+        let jittered = Camera {
+            jitter: [cam.jitter[0] + temporal[0], cam.jitter[1] + temporal[1]],
+            ..*cam
+        };
         let cam = &jittered;
         // stage L5 (the cinematic look): the sea's "all fogged" test reads the fog in use
         // (the volume's aerial perspective pushes the range fog to 2e7 m), and the far

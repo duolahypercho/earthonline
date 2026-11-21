@@ -75,9 +75,10 @@ fn cine_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     c = clamp(c, vec3<f32>(0.0), vec3<f32>(65504.0));
     // the bloom, energy kept: the pixel gives up the share of its bright part
     // the pyramid spreads (the levels' weights sum to that share, sky.rs).
-    if (skyu.bloom.w > 0.5) {
+    // (`bloom.w` its share: under 1 where the playable house's source lens takes the view)
+    if (skyu.bloom.w > 0.0) {
         let b = max(textureSampleLevel(bloom_tex, ph_lin, pos.xy / dims, 0.0).rgb, vec3<f32>(0.0));
-        c = max(c - cine.bloom.x * cn_bright(c), vec3<f32>(0.0)) + b;
+        c = max(c - skyu.bloom.w * cine.bloom.x * cn_bright(c), vec3<f32>(0.0)) + skyu.bloom.w * b;
     }
     if (lens) {
         // the photo finish's residual fall-off (eo-look `tone::vignette_gain`).

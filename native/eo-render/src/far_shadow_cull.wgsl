@@ -66,6 +66,7 @@ const LOD_TERRAIN: u32 = 3u;
 const LOD_KIT_BOX: u32 = 6u;
 const LOD_STREET_COARSE: u32 = 9u;
 const LOD_LANDMARK_FAR: u32 = 11u;
+const LOD_AUTHORED_DETAIL: u32 = 12u;
 const BLEND_BIT: u32 = 256u;
 const KIND_STRUCTURE: u32 = 12u;
 const NO_CELL: u32 = 0xffffffffu;
@@ -124,6 +125,12 @@ fn far_cull_objects(@builtin(global_invocation_id) gid: vec3<u32>) {
         }
     } else if (role == LOD_FAR || role == LOD_KIT_BOX) {
         casts = casts && !far_held(o.lod_group);
+    } else if (role == LOD_AUTHORED_DETAIL) {
+        // (the playable house, `--house-photo-lod`) an authored detail casts with its
+        // coarse mesh: past the cascades it lies beyond its 120 m switch (cull.wgsl).
+        first = o.far_first_index;
+        count = o.far_index_count;
+        casts = casts && kind == 4u;
     } else if (role == LOD_STREET_COARSE) {
         casts = casts && kind == KIND_STRUCTURE;
     } else if (role == LOD_ALWAYS) {

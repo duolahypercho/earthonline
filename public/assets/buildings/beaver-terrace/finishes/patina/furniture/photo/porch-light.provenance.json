@@ -1,0 +1,70 @@
+{
+  "source_sha256": "fa3ede8c0e5980f1ac16957aac8919412f69c7866bad59a2d28cf633c03101ae",
+  "parent_scene_sha256": "ddc4fd6a8e4d08ebaae75e1f6877b4d62e647102272694b298300b52847b312f",
+  "house_sha256": "0f567a703707bf14d2e49fd9ee1a713422faa46109fd5b42f404f5ab6bd0dc50",
+  "calibration": 2.6080094371717353,
+  "new_centre": [
+    5.370001406646939,
+    1.7762056589126587,
+    0.17000004975031402
+  ],
+  "old_centre": [
+    5.9700000690888615,
+    2.2300000190734863,
+    -0.2599999840466438
+  ],
+  "grid": [
+    48,
+    64,
+    48
+  ],
+  "min": [
+    4.3,
+    -0.8,
+    -1.85
+  ],
+  "max": [
+    7.12,
+    3.18,
+    0.56
+  ],
+  "area_m2": 0.06541168972844166,
+  "power_w": 6.0,
+  "radiance": 29.197523027330053,
+  "colour": [
+    1.0,
+    0.75,
+    0.5099999904632568
+  ],
+  "samples": 48,
+  "npy_sha256": "ddfdb8282bb8c13fbadd67e2097edc772e05dbd7de6d816bfefa7e9e6b645cb3",
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/porch-light.png",
+  "sha256": "722009c62fb7636cc7c32b3acec809791ce4f29eb8e088b744bf04a4424bf499",
+  "bytes": 618959,
+  "scales": [
+    3.501774787902832,
+    28.329465866088867
+  ],
+  "reference_camera_distance_m": 5.250229243051282,
+  "encoding": "porch-radiance-and-visibility-v1",
+  "surface_sha256": "a2fdc5ab4abbf0b24839286bd23f3df34be5405bdff7b07f7b0591c9ae8a9a7f",
+  "surface_build": "scripts/blender-buildings/bake_beaver_porch_surfaces.py",
+  "fixture_direct_samples": 2048,
+  "fixture_indirect_samples": 4096,
+  "charts": [
+    "back wall",
+    "east reveal",
+    "west reveal",
+    "arch underside",
+    "arch face"
+  ],
+  "hours": [
+    8.5,
+    12,
+    17,
+    22
+  ],
+  "source": "Area and visibility of the fitted opal porch shade and its previous point light in the authored Blender scene.",
+  "license": "Project-authored for Earth Online. No third-party content in this light field.",
+  "build": "scripts/blender-buildings/cook_beaver_porch_light.py"
+}

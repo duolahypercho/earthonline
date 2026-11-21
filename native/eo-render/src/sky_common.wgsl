@@ -42,7 +42,7 @@ struct Sky {
     lights: vec4<u32>,
     // cluster near m, far m, tan(fov_y / 2), aspect
     cluster: vec4<f32>,
-    // camera basis for the clusters (forward, right, up)
+    // Camera basis for the clusters. cam_up.w blends to the registered porch lens.
     cam_fwd: vec4<f32>,
     cam_right: vec4<f32>,
     cam_up: vec4<f32>,

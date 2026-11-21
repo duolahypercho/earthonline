@@ -240,6 +240,8 @@ mod tests {
         sets.push(("shop light".into(), look::ShaderFeatures { shop_light: true, ..none }));
         sets.push(("facade clutter".into(), look::ShaderFeatures { facade_clutter: true, ..none }));
         sets.push(("cinematic".into(), look::ShaderFeatures { cinematic: true, ..none })); // (`--look cinematic`, stage L0)
+        sets.push(("house".into(), look::ShaderFeatures { house: true, ..none })); // (the playable house, `--house-*`)
+        sets.push(("blender camera".into(), look::ShaderFeatures { blender_camera: true, ..none })); // (`--blender-camera`)
         sets
     }
 
@@ -285,7 +287,9 @@ mod tests {
             ..o
         };
         let f = look::ShaderFeatures::of(&on, true, true, true);
-        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, ..look::ShaderFeatures::ALL }); // (the look profile is its own, below)
+        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, house: false, blender_camera: false, ..look::ShaderFeatures::ALL }); // (the look profile is its own, below; the house is the world's, set by eo-app; the source camera its own)
+        assert!(look::ShaderFeatures::of(&look::LookOptions { blender_camera: true, ..o }, false, false, false).blender_camera, "the source camera follows its option");
+        assert!(!look::ShaderFeatures::NONE.limit(&look::LookOptions { blender_camera: true, ..o }).blender_camera, "compiled out, the source camera stays off");
         let same = |a: &look::LookOptions, b: &look::LookOptions| format!("{a:?}") == format!("{b:?}"); // (LookOptions has no PartialEq)
         assert!(same(&f.limit(&on), &on), "what is compiled in is left as asked");
         assert!(same(&look::ShaderFeatures::ALL.limit(&on), &on));

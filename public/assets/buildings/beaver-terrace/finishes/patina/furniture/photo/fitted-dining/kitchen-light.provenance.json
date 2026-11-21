@@ -1,0 +1,228 @@
+{
+  "license": "Project-authored lighting data",
+  "attribution": "Earth Online",
+  "source_scene": {
+    "file": "21 Beaver - Fitted dining room.blend",
+    "sha256": "15ffbcf57cc8327d3326ba5a28b6fbf2ab043ff9c709dacaa881d87cd1531c50"
+  },
+  "house_sha256": "0f567a703707bf14d2e49fd9ee1a713422faa46109fd5b42f404f5ab6bd0dc50",
+  "sources": [
+    "fixtures",
+    "uniform-sky",
+    "clear-sky",
+    "front-25",
+    "front-57",
+    "rear-25",
+    "rear-57"
+  ],
+  "probe_blender_xyz": [
+    [
+      4.389225125312805,
+      -8.446434020996094,
+      2.2009028434753417
+    ],
+    [
+      4.411525130271912,
+      -8.446434020996094,
+      1.9739029569625854
+    ],
+    [
+      0.5977978348731995,
+      -15.836600303649902,
+      1.26010000705719
+    ],
+    [
+      0.5977978348731995,
+      -14.09000015258789,
+      1.26010000705719
+    ],
+    [
+      0.5977978348731995,
+      -12.343400001525879,
+      1.26010000705719
+    ],
+    [
+      1.2739999628067016,
+      -15.836600303649902,
+      1.0800000166893005
+    ],
+    [
+      1.2739999628067016,
+      -14.09000015258789,
+      1.0800000166893005
+    ],
+    [
+      1.2739999628067016,
+      -12.343400001525879,
+      1.0800000166893005
+    ]
+  ],
+  "spot_blender_xyz": [
+    [
+      0.8966435194015503,
+      -12.616446495056152,
+      1.6522787809371948
+    ],
+    [
+      0.8966435194015503,
+      -12.121444702148438,
+      1.6522787809371948
+    ]
+  ],
+  "kitchen_frame": [
+    [
+      -0.0,
+      -0.0,
+      -0.2780747071900995,
+      3.525162945284128
+    ],
+    [
+      -1.901127279694777,
+      -0.0,
+      -0.04160622001910128,
+      1.8008721338221376
+    ],
+    [
+      0.9229999780654907,
+      1.5972000360488892,
+      0.9200000166893005,
+      2.175902843475342
+    ]
+  ],
+  "samples": {
+    "panorama": 64,
+    "diffuse": 1024
+  },
+  "source": "Cycles surface transfer on the enamel shade, backsplash and slab in the furnished kitchen; full-sphere incident light above and below the pendant and at six stations along the kitchen run.",
+  "survey": {
+    "file": "kitchen-light-survey.npz",
+    "sha256": "d04596d04ed26b2c7b03426d553757cdb94fdd09f1f3b3b99ccfe3cff6a8dd27"
+  },
+  "fitted_geometry_sha256": "caa9e62c6b298a21e00f2d33fab23e1690080074c7eb4b023236f5480b21646d",
+  "materials": {
+    "furniture-oak@997950": "shared",
+    "cabinet-enamel@6c705f": "kitchen",
+    "cabinet-enamel@8c9076": "kitchen",
+    "Braided brown flex": "fitting",
+    "Black stove enamel": "shade",
+    "Warm white glazed kitchen tile 1": "tile",
+    "Warm white glazed kitchen tile 2": "tile",
+    "Warm white glazed kitchen tile 3": "tile",
+    "Warm white glazed kitchen tile 4": "tile",
+    "porcelain@e4dfce": "worktop",
+    "Warm kitchen tile grout": "grout",
+    "Warm opal globe": "fitting",
+    "Darkened brass fittings": "fitting",
+    "brushed-brass@b99a5e": "shared",
+    "Cream vitreous reflector": "reflector",
+    "painted-white@ece1c8": "shared",
+    "furniture-oak@96724b": "kitchen",
+    "painted-clapboard@68785e": "kitchen",
+    "satin-nickel@a2a39c": "kitchen",
+    "stoneware-glaze@969b89": "kitchen",
+    "cast-iron@393c39": "shared",
+    "oiled-oak@ae906f": "shared",
+    "blockprint-ink@87452f": "shared",
+    "enamel-primer@b1a08a": "kitchen",
+    "exposed-steel@69594b": "kitchen",
+    "iron-oxide@8c5232": "kitchen",
+    "ivory-enamel@e8e5da": "kitchen",
+    "rag-paper@dfd0ac": "kitchen",
+    "satin-nickel@b8b3a4": "kitchen",
+    "seasoned-iron@474742": "kitchen",
+    "woven-indigo@4a6174": "shared",
+    "oiled-oak@785338": "shared",
+    "stoneware-glaze@527775": "shared",
+    "appliance-steel@999e9a": "kitchen",
+    "smoked-enamel@2d3431": "kitchen",
+    "tea-towel-cotton@dad1b7": "kitchen",
+    "tea-towel-stripe@516d75": "kitchen",
+    "lime-plaster@e3dbc6": "kitchen",
+    "oil-rubbed-wood@665442": "kitchen",
+    "opal-work-light@f2e6cc": "kitchen"
+  },
+  "shared_bounds": [
+    [
+      0.251660145607288,
+      0.030200001180171965,
+      7.988086096550044
+    ],
+    [
+      1.6547154917317493,
+      1.860399985358119,
+      12.569124050340227
+    ]
+  ],
+  "board": {
+    "material": "oiled-oak@ae906f",
+    "source_part": "chopping-board - oiled-oak@ae906f",
+    "local_from_parcel": [
+      [
+        1.3079755306243896,
+        -0.0,
+        0.02862507849931717,
+        -0.6117873787879944
+      ],
+      [
+        -0.0,
+        0.0,
+        -1.2951608896255493,
+        11.701949119567871
+      ],
+      [
+        0.0,
+        1.0,
+        0.0,
+        -0.9200000166893005
+      ]
+    ],
+    "min": [
+      -0.017159998416900635,
+      -0.19349956512451172,
+      0.0
+    ],
+    "size": [
+      0.03431999683380127,
+      0.38700008392333984,
+      0.34960001707077026
+    ],
+    "widths": [
+      340,
+      86,
+      86
+    ],
+    "roughness": 0.6200000047683716,
+    "license": "Project-authored wood material",
+    "attribution": "Earth Online",
+    "source_scene_sha256": "15ffbcf57cc8327d3326ba5a28b6fbf2ab043ff9c709dacaa881d87cd1531c50",
+    "camera_glare": 0.0,
+    "triangles": 188,
+    "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/fitted-dining/kitchen-board.png",
+    "bytes": 351902,
+    "sha256": "102fe0b8488e97d3f37c545c1b4fd95eeb3d209f4d59cd3db57a0175ec2f40a4",
+    "source": "The actual chopping board's six oak faces, procedural pigment and tangent-space bump from the fitted source.",
+    "survey": {
+      "file": "kitchen-board-survey.npz",
+      "sha256": "0109f7ec5e04870fe284f74f0fa9040d38d24c86110aac28aec032d03d8415cb"
+    },
+    "fitted_geometry_sha256": "caa9e62c6b298a21e00f2d33fab23e1690080074c7eb4b023236f5480b21646d",
+    "build": "scripts/blender-buildings/cook_beaver_kitchen_light.py"
+  },
+  "roughness": [
+    0.035,
+    0.2,
+    0.38,
+    0.7
+  ],
+  "surface_only_source": "range-hood-direct",
+  "pages": [
+    "sRGB diffuse transfer (shade, tile, worktop)",
+    "linear GGX radiance, two narrow lobes; board irradiance",
+    "linear GGX radiance, two broad lobes; recessed mortar irradiance"
+  ],
+  "transfer_encoding": "sqrt(L/(1+L))",
+  "build": "scripts/blender-buildings/cook_beaver_kitchen_light.py",
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/fitted-dining/kitchen-light.png",
+  "bytes": 691964,
+  "sha256": "eaa263ffca480fb577672a58671a59a4b77ad1942a216ba87d6983c3c137a15a"
+}

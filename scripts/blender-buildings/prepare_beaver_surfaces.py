@@ -14,7 +14,12 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "public/assets/buildings/beaver-terrace/finishes/patina"
 parser = argparse.ArgumentParser()
 parser.add_argument("source_cache", type=Path)
-cache = parser.parse_args().source_cache.resolve()
+parser.add_argument("--house-photo", action="store_true")
+args = parser.parse_args()
+cache = args.source_cache.resolve()
+base_finish = OUT.parent
+if args.house_photo:
+    OUT = OUT / "furniture/photo"
 if cache.is_relative_to(ROOT):
     raise ValueError("Keep original photographic plates outside the checkout.")
 cache.mkdir(parents=True, exist_ok=True)
@@ -23,6 +28,52 @@ manifest = json.loads((ROOT / "native/assets/cc0-manifest.json").read_text())
 source = {a["id"]: a for a in manifest["assets"]}
 source.update(
     {
+            "bark_brown_02": {
+                "authors": [
+                    "Rob Tuytel"
+                ],
+                "page": "https://polyhaven.com/a/bark_brown_02",
+                "files": [
+                    {
+                        "role": "albedo",
+                        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/bark_brown_02/bark_brown_02_diff_2k.jpg",
+                        "sha256": "285051e34826ace29f4ab438ad35cc1201b2aae0a6157a5f3c0bf6667bbc539e"
+                    },
+                    {
+                        "role": "normal",
+                        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/bark_brown_02/bark_brown_02_nor_gl_2k.jpg",
+                        "sha256": "aaba4529c3167a7811b4dbf5b4327d054a166c2fc8ea08ebd249a2692adace41"
+                    },
+                    {
+                        "role": "arm",
+                        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/bark_brown_02/bark_brown_02_arm_2k.jpg",
+                        "sha256": "d04abcb75755426cb9ae4f3190d5149f631ac35d100b921caeb565e44cd7365a"
+                    }
+                ]
+            },
+            "terracotta_floor_tiles": {
+                "authors": [
+                    "Dimitrios Savva"
+                ],
+                "page": "https://polyhaven.com/a/terracotta_floor_tiles",
+                "files": [
+                    {
+                        "role": "albedo",
+                        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/terracotta_floor_tiles/terracotta_floor_tiles_diff_2k.jpg",
+                        "sha256": "dd1adc1d35618db8fd58f2d22b51242bc570dc83c23518a1100d3570dfe05559"
+                    },
+                    {
+                        "role": "normal",
+                        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/terracotta_floor_tiles/terracotta_floor_tiles_nor_gl_2k.jpg",
+                        "sha256": "7378375dd7d7ec01a33bce4fc679f8a10fad4085746c7ad698724e8ca1113807"
+                    },
+                    {
+                        "role": "arm",
+                        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/terracotta_floor_tiles/terracotta_floor_tiles_arm_2k.jpg",
+                        "sha256": "6a44f0a0cec7caab1f7fa0753a958dfd087d8a4dc7003b6fe394aa12b21040eb"
+                    }
+                ]
+            },
         "white_stucco_02": {
             "authors": ["Dimitrios Savva"],
             "page": "https://polyhaven.com/a/white_stucco_02",
@@ -67,7 +118,7 @@ source.update(
         },
     }
 )
-floor = json.loads((OUT.parent / "floorboards.provenance.json").read_text())
+floor = json.loads((base_finish / "floorboards.provenance.json").read_text())
 linen = {
     "diff": "04897d7611d7390ddf5b2c6f7273f448dfc48341fdbd1f4f207fa30b331d7f57",
     "nor_gl": "e2402166d1a489f7414814e69e1836ab672aa24e30bec2d41fea356f81687e53",
@@ -137,9 +188,24 @@ def tint(im, base, gain):
     )
 
 
+def yard_cover(grass):
+    # A periodic mask keeps all three pages registered across tile boundaries.
+    y, x = np.mgrid[0:512, 0:512] * (2 * np.pi / 512)
+    patch = (0.53 + 0.17 * np.cos(x - y) + 0.12 * np.sin(2*x + y)
+             + 0.09 * np.sin(x + 3*y) + 0.035 * np.sin(5*x - 4*y))
+    leaves = np.asarray(grass, dtype=float) / 255
+    green = leaves[:, :, 1] - leaves[:, :, 0]
+    weight = np.clip((patch - 0.39 + 1.8 * green) / 0.29, 0, 1)
+    weight = weight * weight * (3 - 2 * weight)
+    return Image.fromarray(np.rint(255 * weight).astype("uint8"))
+
+
 def surface(name, assets, families, metres, bump, paint_mix):
+    if args.house_photo and name not in ("limewash", "fired-earth", "apron-concrete", "yard-earth", "trunk-bark", "porch-terracotta"):
+        return
     pages = []
     inputs = []
+    cover = None
     for role in ("albedo", "normal", "arm"):
         if name == "limewash":
             # Both source tiles are seamless. The sand finish supplies the
@@ -147,9 +213,33 @@ def surface(name, assets, families, metres, bump, paint_mix):
             sand = size(get(assets[0], role, inputs))
             float_marks = size(get(assets[1], role, inputs))
             if role == "albedo":
-                sand = tint(sand, (235, 224, 204), 0.86)
-                float_marks = tint(float_marks, (229, 215, 191), 0.83)
+                sand = tint(sand, (235, 224, 204), 0.28 if args.house_photo else 0.86)
+                float_marks = tint(float_marks, (229, 215, 191), 0.38 if args.house_photo else 0.83)
             page = Image.blend(sand, float_marks, 0.39 if role == "albedo" else 0.32)
+        elif name == "porch-terracotta":
+            # The landing and steps already have physical joints. Sample a single
+            # fired tile face, keeping colour, tangent relief and roughness registered.
+            page = mirrored_patch(get(assets[0], role, inputs), (1170, 475, 1340, 650), role)
+            if role == "albedo":
+                page = Image.fromarray(np.uint8(np.clip(np.asarray(page)*1.32
+                                                      + np.array([42,41,37]), 0, 255)))
+        elif name == "trunk-bark":
+            page = size(get(assets[0], role, inputs))
+        elif name == "yard-earth":
+            soil = size(get(assets[0], role, inputs))
+            grass = size(get(assets[1], role, inputs))
+            if role == "albedo":
+                cover = yard_cover(grass)
+                soil = Image.blend(soil, tint(soil, (116, 103, 77), .91), .40)
+            page = Image.composite(grass, soil, cover)
+            if role == "normal":
+                n = np.asarray(page, dtype=float) / 127.5 - 1
+                n /= np.maximum(np.linalg.norm(n, axis=2, keepdims=True), 1e-6)
+                page = Image.fromarray(np.uint8(np.rint(127.5 * (1 + n))))
+        elif name == "apron-concrete":
+            page = size(get(assets[0], role, inputs))
+            if role == "albedo":
+                page = Image.blend(page, tint(page, (172, 170, 164), .83), .78)
         elif name == "aggregate":
             # Crop to the size of the actual pictured fines in the private bed.
             page = size(get(assets[0], role, inputs))
@@ -166,7 +256,7 @@ def surface(name, assets, families, metres, bump, paint_mix):
                 )
                 grain = (gray - local) * 0.97 + (local - np.median(local)) * 0.12
                 page = Image.fromarray(
-                    np.uint8(np.clip(np.array((195, 146, 117)) + grain[:, :, None], 0, 255))
+                    np.uint8(np.clip(np.array((232, 216, 195) if args.house_photo else (195, 146, 117)) + grain[:, :, None], 0, 255))
                 )
             if role == "arm":
                 orm = np.asarray(page, dtype=float).copy()
@@ -229,11 +319,11 @@ surface(
     ["white_stucco_02", "plaster_grey_04"],
     ["painted-stucco", "float-finish-stucco"],
     1.80,
-    0.84,
+    0.28 if args.house_photo else 0.84,
     0.13,
 )
 surface("aggregate", ["gravel_floor_03"], ["decomposed-granite", "garden-stone"], 2.50, 1.15, 0.22)
-surface("fired-earth", ["clay_roof_tiles_02"], ["fired-clay", "terracotta"], 0.61, 0.42, 0.17)
+surface("fired-earth", ["clay_roof_tiles_02"], ["fired-clay", "terracotta"], 0.61, 0.42, 0.88 if args.house_photo else 0.17)
 surface(
     "painted-wood", ["wood_floor_worn"], ["front-door-paint", "front-door-moulding"], 1.0, 0.30, 0.92
 )
@@ -252,3 +342,9 @@ surface(
     0.68,
     0.95,
 )
+
+if args.house_photo:
+    surface("apron-concrete", ["concrete_floor_worn_001"], ["cast-stone"], 2.20, .53, .18)
+    surface("yard-earth", ["park_dirt", "leafy_grass"], ["garden-topsoil"], 1.85, .87, .13)
+    surface("trunk-bark", ["bark_brown_02"], ["street-tree-bark"], 1.00, .82, .12)
+    surface("porch-terracotta", ["terracotta_floor_tiles"], ["terracotta-paver"], .36, .64, .14)

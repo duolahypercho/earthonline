@@ -71,6 +71,8 @@ pub const LOD_STREET_COARSE: u32 = 9;
 pub const LOD_LANDMARK_NEAR: u32 = 10;
 /// a landmark's far item, drawn while its group is not near.
 pub const LOD_LANDMARK_FAR: u32 = 11;
+/// The full material part within 120 m of its bounds, then the coarse mesh.
+pub const LOD_AUTHORED_DETAIL: u32 = 12;
 pub const BLEND_BIT: u32 = 1 << 8;
 /// Model with per-board coordinates for the photographic floor scan.
 pub const FLOOR_SCAN_BIT: u32 = 1 << 9;
@@ -82,8 +84,44 @@ pub const DOOR_SCAN_BIT: u32 = 1 << 11;
 pub const FRONT_SASH_BIT: u32 = 1 << 12;
 /// Mineral plaster with locally baked exposure to splash and runoff.
 pub const LIMEWASH_BIT: u32 = 1 << 13;
-/// An entire carpet sampled once in its authored orientation.
-pub const RUG_SCAN_BIT: u32 = 1 << 14;
+/// Use the authored UVs of a local photographic surface.
+pub const LOCAL_UV_SCAN_BIT: u32 = 1 << 14;
+/// The original whole-carpet consumer of the local UV scan.
+pub const RUG_SCAN_BIT: u32 = LOCAL_UV_SCAN_BIT;
+/// Board-mounted room coordinates and the interior reflection of the sash.
+pub const WAXED_BOARD_BIT: u32 = 1 << 15;
+/// Private paving and aggregate receive the same outdoor bounce as the planted bed.
+pub const COURTYARD_BOUNCE_BIT: u32 = 1 << 16;
+/// Negative normal W stores near-field visibility on the enclosed side of the wall.
+pub const ENCLOSURE_TRANSFER_BIT: u32 = 1 << 17;
+/// Thin woven panels and leaves transmit the exterior daylight behind them.
+pub const THIN_FIBRE_BIT: u32 = 1 << 18;
+/// Opaque bed linen has a rough fibrous surface over a softer filling.
+pub const QUILT_FIBRE_BIT: u32 = 1 << 19;
+/// An individually mapped oak plank in the dining tabletop.
+pub const TABLE_BOARD_BIT: u32 = 1 << 20;
+/// Door lever and lock reflecting the actual porch opening.
+pub const ENTRY_BRASS_BIT: u32 = 1 << 21;
+/// Cloth shading follows the garment's flat cutting pattern.
+pub const CUT_COTTON_BIT: u32 = 1 << 22;
+/// Use the measured Cycles irradiance for the enclosed middle floor.
+pub const BEDROOM_LIGHT_BIT: u32 = 1 << 23;
+/// Ground-storey boards receive the Blender dining pendant and window light.
+pub const DINING_FLOOR_LIGHT_BIT: u32 = 1 << 24;
+/// Interior faces below the bedroom landing use the furnished-room irradiance grid.
+pub const DOWNSTAIRS_LIGHT_BIT: u32 = 1 << 25;
+/// The tabletop and place settings receive the installed pendant above the wood.
+pub const TABLE_LIGHT_BIT: u32 = 1 << 26;
+/// Photographic wood and its two reflection lobes on the four dining boards.
+pub const OAK_FINISH_BIT: u32 = 1 << 27;
+/// Authored board strips and the surveyed incident light above the furnished ground floor.
+pub const FLOOR_REFLECTION_BIT: u32 = 1 << 28;
+/// The fitted Blender room carries two half-float UVs in the vertex color.
+pub const FITTED_ROOM_BIT: u32 = 1 << 29;
+/// Use the fitted photograph on the ground-floor boards of the shared shell.
+pub const FITTED_FLOOR_BIT: u32 = 1 << 30;
+/// A shell plaster material whose exterior faces can receive the local wall survey.
+pub const WALL_DAYLIGHT_BIT: u32 = 1 << 31;
 
 /// Material 0: the vertex colour (footprints, terrain, roads, sea).
 pub const MATERIAL_VERTEX_COLOUR: u32 = 0;

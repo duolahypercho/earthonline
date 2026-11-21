@@ -453,6 +453,9 @@ struct State {
     /// the scene meter (`--no-scene-meter`): after a cut or a turn, the frame
     /// from which a reading counts as the new view's (its first snaps the adaptation).
     meter_snap_after: Option<u32>,
+    interior_meter: Option<crate::interior_meter::InteriorMeter>,
+    exterior_camera: Option<crate::interior_meter::ExteriorCamera>,
+    frame_bloom: bool,
     /// the aerosol density the transmittance and multiple-scattering
     /// tables were built for (they depend on the medium only; rebuilt on a change).
     atmo_built: Option<[[f32; 4]; 4]>,
@@ -1162,6 +1165,9 @@ impl SkyGpu {
                 adapt: Default::default(),
                 meter_fwd: None,
                 meter_snap_after: None,
+                interior_meter: None,
+                exterior_camera: None,
+                frame_bloom: false,
                 atmo_built: None,
                 atmo_medium: [[0.0; 4]; 4],
                 hist_look: None,
@@ -1268,6 +1274,16 @@ impl SkyGpu {
             s.history_valid = false;
         }
         s.opts = o;
+    }
+
+    /// Register the daylight camera around the photographed site.
+    pub fn set_exterior_camera(&self, camera: crate::interior_meter::ExteriorCamera) {
+        self.state.lock().unwrap().exterior_camera = Some(camera);
+    }
+
+    /// Register the glazed enclosure used by the camera meter in the playable interior.
+    pub fn set_interior_meter(&self, meter: crate::interior_meter::InteriorMeter) {
+        self.state.lock().unwrap().interior_meter = Some(meter);
     }
 
     /// The world clock (seconds since the world's epoch) and the frame time
@@ -1502,8 +1518,9 @@ impl SkyGpu {
     /// unjittered camera.
     /// `scene`: the scene meter's latest reading and the display's shoulder
     /// (`--no-scene-meter`: None, the dome estimate below meters the frame).
+    /// `source_lens`: the playable house's calibrated source camera (`--blender-camera`) may take the ground floor's lens.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn update(&self, queue: &wgpu::Queue, cam: &Camera, f: &eo_look::LookFrame, terms: &eo_sky::SkyTerms, out_size: (u32, u32), depth_ok: bool, daylight: Option<&eo_look::phys::Daylight>, scene: Option<(Option<eo_sky::night::SceneMeterReading>, f64)>) -> f64 {
+    pub(crate) fn update(&self, queue: &wgpu::Queue, cam: &Camera, f: &eo_look::LookFrame, terms: &eo_sky::SkyTerms, out_size: (u32, u32), depth_ok: bool, daylight: Option<&eo_look::phys::Daylight>, scene: Option<(Option<eo_sky::night::SceneMeterReading>, f64)>, source_lens: bool) -> f64 {
         if !self.sheet_ready.swap(true, Ordering::Relaxed) {
             let sheet = eo_sky::clouds::bake_sheet(0x5eed_c10d);
             for (mip, level) in eo_sky::clouds::sheet_mips(&sheet).iter().enumerate() {
@@ -1597,7 +1614,7 @@ impl SkyGpu {
                     dirs.push(([d.x as f64, d.y as f64, d.z as f64], 1.5 - 0.5 * (x * x + y * y) as f64));
                 }
             }
-            match daylight.filter(|d| d.weight > 0.0) {
+            let sky_meter = match daylight.filter(|d| d.weight > 0.0) {
                 // the physical daylight's sky and card where it lights the frame (by its weight)
                 Some(d) => {
                     let wt = d.weight;
@@ -1611,7 +1628,11 @@ impl SkyGpu {
                     })
                 }
                 None => eo_sky::night::meter(f, &terms.weather, &dirs),
-            }
+            };
+            // the playable house's interior meter (eo-app `--house-photo`): the light the
+            // view takes in through the house's glazing, while the eye is inside it.
+            let gain = s.interior_meter.as_ref().map_or(1.0, |m| m.scene_gain(cam, f, &terms.weather, &dirs, sky_meter, terms.exposure_target));
+            sky_meter * (1. + (gain - 1.) * (1. - terms.nightness))
         } else {
             1.0
         };
@@ -1621,11 +1642,16 @@ impl SkyGpu {
             s.adapt.current = None;
         }
         // Exposure: the target (weather, night solve, the meter), filtered.
-        let mut target = terms.exposure_target * meter;
+        let mut ordinary = terms.exposure_target * meter;
         if let Some(d) = s.bore_depth {
             // in a tunnel's bore (`--tunnels`): adapted to its lighting, the meter giving way.
-            target = terms.exposure_target * crate::structures::bore_exposure_gain(f, terms, meter, d);
+            ordinary = terms.exposure_target * crate::structures::bore_exposure_gain(f, terms, meter, d);
         }
+        // the playable house's site camera (`--house-site-camera`): its registered exposure near the house.
+        let target = s.exterior_camera.as_ref().filter(|_| o.meter).map_or(ordinary, |camera| {
+            let daylight = (1.-terms.nightness)*(1.-terms.weather.profile.overcast);
+            camera.target(cam.eye, ordinary, daylight.clamp(0.,1.))
+        });
         let exposure = if o.adaptation {
             if smooth { s.adapt.step_smooth(target, f.hour, dt, camera_cut) } else { s.adapt.step(target, f.hour, dt) }
         } else {
@@ -1805,6 +1831,14 @@ impl SkyGpu {
         // (one bloom).
         let cine = o.cinematic;
         let threshold = if cine { eo_look::cinematic::grade::CINE_BLOOM_THRESHOLD_X / exposure.max(1e-3) } else if photo { eo_look::tone::PHOTO_BLOOM_THRESHOLD_X / exposure.max(1e-3) } else { 2.101 / exposure.max(1e-3) };
+        // The fitted source camera has no glare compositor. Its response is
+        // calibrated independently of the city's exterior lens.
+        let lens_weight = if source_lens {
+            s.interior_meter.as_ref().map_or(0., |m| m.ground_floor_lens(cam.eye))
+        } else { 0. };
+        let porch_lens = s.exterior_camera.as_ref().map_or(0., |c| c.porch_lens(cam.eye));
+        let glare = if o.bloom { 1. - lens_weight.max(porch_lens) } else { 0. };
+        s.frame_bloom = glare > 0.;
         let (strength, radius) = (0.26, 0.22);
         let mw = if cine { eo_look::cinematic::grade::bloom_weights().map(|v| v as f32) } else if photo { eo_look::tone::PHOTO_BLOOM_WEIGHTS.map(|v| v as f32) } else { [1.0, 0.8, 0.6, 0.4, 0.2].map(|fv: f64| ((fv + (1.2 - fv - fv) * radius) * strength) as f32) };
         let lamp_k = terms.lamp_units_per_lux;
@@ -1850,12 +1884,13 @@ impl SkyGpu {
             cluster: [CLUSTER_NEAR_M, CLUSTER_FAR_M, (0.5 * cam.fov_y_deg.to_radians()).tan(), cam.aspect],
             cam_fwd: fwd.extend(0.0).to_array(),
             cam_right: right.extend(0.0).to_array(),
-            cam_up: up.extend(0.0).to_array(),
+            cam_up: up.extend(porch_lens).to_array(),
             night: [lamps_on as f32, terms.dusk as f32, terms.nightness as f32, veh as f32],
             moon: v4(moon.dir, if o.moon_stars { terms.moon_disc } else { 0.0 }),
             stars: [if o.moon_stars { terms.star_level as f32 } else { 0.0 }, (f.hour * 15.041 * std::f64::consts::PI / 180.0) as f32, moon.illuminated as f32, if moon.waxing { 1.0 } else { 0.0 }],
             // (`--look cinematic`: z the lamp glare's angle, rad; the default's z 1 is read by nothing)
-            bloom: [threshold as f32, if cine { eo_look::cinematic::grade::CINE_BLOOM_KNEE as f32 } else if photo { eo_look::tone::PHOTO_BLOOM_KNEE as f32 } else { 0.55 }, if cine { eo_look::cinematic::grade::CINE_GLARE_ANGLE_DEG.to_radians() as f32 } else { 1.0 }, if o.bloom { 1.0 } else { 0.0 }],
+            // w: the bloom's share (0 off; under 1 where the house's source lens takes the view)
+            bloom: [threshold as f32, if cine { eo_look::cinematic::grade::CINE_BLOOM_KNEE as f32 } else if photo { eo_look::tone::PHOTO_BLOOM_KNEE as f32 } else { 0.55 }, if cine { eo_look::cinematic::grade::CINE_GLARE_ANGLE_DEG.to_radians() as f32 } else { 1.0 }, glare],
             // (the levels' weights reach the pyramid through `bloom_levels`; no shader reads these.
             // `--look cinematic`: the lamp glare's share, longest ray (px of this frame), the EV it
             // starts at and, negative (the look's mark), its EV range: sky_fx.wgsl `fx_glare`.)
@@ -2162,9 +2197,9 @@ impl SkyGpu {
                 });
             }
         };
-        let (o, parity, history_valid) = {
+        let (o, parity, history_valid, frame_bloom) = {
             let s = self.state.lock().unwrap();
-            (s.opts, s.parity, s.history_valid)
+            (s.opts, s.parity, s.history_valid, s.frame_bloom)
         };
         let depth_ok = depth_now;
         if !o.any_post() || !depth_ok {
@@ -2196,7 +2231,7 @@ impl SkyGpu {
                 pass.set_pipeline(&self.glitter_pipe);
                 pass.draw_indirect(&self.counter, 16);
                 // (`--look cinematic`) the brightest lights' glare (the same list; 6 of the 12 vertices).
-                if let (Some(p), true) = (&self.glare_pipe, o.cinematic && o.bloom) {
+                if let (Some(p), true) = (&self.glare_pipe, o.cinematic && frame_bloom) {
                     pass.set_pipeline(p);
                     pass.draw_indirect(&self.counter, 16);
                 }
@@ -2387,7 +2422,7 @@ impl SkyGpu {
                 label: Some("sky-bloom"),
                 timestamp_writes: tw(Q_SKY_BLOOM).map(|(q, b)| wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b), end_of_pass_write_index: Some(b + 1) }),
             });
-            if o.bloom {
+            if frame_bloom {
                 let bgs = &t.bloom_bgs[parity];
                 let sizes: Vec<(u32, u32)> = (0..BLOOM_LEVELS).map(|i| ((t.size.0 >> (i + 1)).max(1), (t.size.1 >> (i + 1)).max(1))).collect();
                 pass.set_pipeline(&self.bloom_pipes[0]);

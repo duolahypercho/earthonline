@@ -1,0 +1,207 @@
+{
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/fitted-dining/normal.png",
+  "bytes": 1673508,
+  "sha256": "83923a9228de71d6f00859ae88b6b6eb6ba420449e8bfccaea9505376905def6",
+  "source": "Fitted dining scene and the surveyed 21 Beaver lot",
+  "source_scene_sha256": "15ffbcf57cc8327d3326ba5a28b6fbf2ab043ff9c709dacaa881d87cd1531c50",
+  "source_glb_sha256": "b0dbb55972fcca0e61364132a732f101ed91575643dc8f1be7a6b32f1d294fcf",
+  "build": "scripts/blender-buildings/cook_beaver_fitted_room.py",
+  "attribution": "Earth Online and the credited material photographers.",
+  "license": "Project-authored model and materials; third-party photographs retain their respective licences.",
+  "credits": [
+    {
+      "source": "https://polyhaven.com/a/wood_floor_worn",
+      "attribution": "Dimitrios Savva / Poly Haven",
+      "license": "CC0-1.0",
+      "license_url": "https://polyhaven.com/license",
+      "inputs": [
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_floor_worn/wood_floor_worn_diff_1k.jpg",
+          "sha256": "db386853009b92b9edd7255b35c9f7b0d4b7de16837a7a9da8422148754bc758"
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_floor_worn/wood_floor_worn_nor_gl_1k.jpg",
+          "sha256": "f428496e5d6c726d17d9ecea29c0acd8660348630acf791cea7bdd7f3c6e262b"
+        },
+        {
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_floor_worn/wood_floor_worn_rough_1k.jpg",
+          "sha256": "9d7492db1197f1386466dfd7dd43f692446166c1433ddeebf66c10e8b226a6d0"
+        }
+      ]
+    },
+    {
+      "source": [
+        "https://polyhaven.com/a/wood_floor_worn"
+      ],
+      "attribution": [
+        "Dimitrios Savva"
+      ],
+      "license": "CC0-1.0",
+      "license_url": "https://polyhaven.com/license",
+      "inputs": [
+        {
+          "role": "albedo",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_floor_worn/wood_floor_worn_diff_1k.jpg",
+          "sha256": "db386853009b92b9edd7255b35c9f7b0d4b7de16837a7a9da8422148754bc758"
+        },
+        {
+          "role": "normal",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_floor_worn/wood_floor_worn_nor_gl_1k.jpg",
+          "sha256": "f428496e5d6c726d17d9ecea29c0acd8660348630acf791cea7bdd7f3c6e262b"
+        },
+        {
+          "role": "rough",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_floor_worn/wood_floor_worn_rough_1k.jpg",
+          "sha256": "9d7492db1197f1386466dfd7dd43f692446166c1433ddeebf66c10e8b226a6d0"
+        }
+      ]
+    },
+    {
+      "source": "https://www.metmuseum.org/art/collection/search/452588",
+      "attribution": "The Metropolitan Museum of Art. Carpet, attributed to Turkey, first half of the 19th century. Bequest of Joseph V. McMullan, 1973, 1974.149.36.",
+      "license": "CC0-1.0",
+      "license_url": "https://www.metmuseum.org/about-the-met/policies-and-documents/open-access",
+      "inputs": [
+        {
+          "role": "recto photograph",
+          "url": "https://images.metmuseum.org/CRDImages/is/original/DP220897.jpg",
+          "sha256": "2dd2e6ed8622458e0c6cae79055eb8d5c2ace7c6f20af708cc9852e6430f7859"
+        }
+      ]
+    },
+    {
+      "source": [
+        "https://polyhaven.com/a/rough_linen"
+      ],
+      "attribution": [
+        "colormass",
+        "Rico Cilliers"
+      ],
+      "license": "CC0-1.0",
+      "inputs": [
+        {
+          "asset": "rough_linen",
+          "role": "albedo",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rough_linen/rough_linen_diff_1k.jpg",
+          "sha256": "04897d7611d7390ddf5b2c6f7273f448dfc48341fdbd1f4f207fa30b331d7f57"
+        },
+        {
+          "asset": "rough_linen",
+          "role": "normal",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rough_linen/rough_linen_nor_gl_1k.jpg",
+          "sha256": "e2402166d1a489f7414814e69e1836ab672aa24e30bec2d41fea356f81687e53"
+        },
+        {
+          "asset": "rough_linen",
+          "role": "arm",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rough_linen/rough_linen_arm_1k.jpg",
+          "sha256": "e1ca6b51ed62834063253e08f8f2e23836aa00d72675b960ddd8e608d9f0c7e6"
+        }
+      ]
+    },
+    {
+      "source": [
+        "https://polyhaven.com/a/wood_floor_worn"
+      ],
+      "attribution": [
+        "Dimitrios Savva"
+      ],
+      "license": "CC0-1.0",
+      "license_url": "https://polyhaven.com/license",
+      "inputs": [
+        {
+          "asset": "wood_floor_worn",
+          "role": "albedo",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_floor_worn/wood_floor_worn_diff_1k.jpg",
+          "sha256": "db386853009b92b9edd7255b35c9f7b0d4b7de16837a7a9da8422148754bc758"
+        },
+        {
+          "asset": "wood_floor_worn",
+          "role": "normal",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_floor_worn/wood_floor_worn_nor_gl_1k.jpg",
+          "sha256": "f428496e5d6c726d17d9ecea29c0acd8660348630acf791cea7bdd7f3c6e262b"
+        },
+        {
+          "asset": "wood_floor_worn",
+          "role": "rough",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_floor_worn/wood_floor_worn_rough_1k.jpg",
+          "sha256": "9d7492db1197f1386466dfd7dd43f692446166c1433ddeebf66c10e8b226a6d0"
+        }
+      ]
+    },
+    {
+      "source": [
+        "https://polyhaven.com/a/rough_linen"
+      ],
+      "attribution": [
+        "colormass",
+        "Rico Cilliers"
+      ],
+      "license": "CC0-1.0",
+      "license_url": "https://polyhaven.com/license",
+      "inputs": [
+        {
+          "asset": "rough_linen",
+          "role": "albedo",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rough_linen/rough_linen_diff_1k.jpg",
+          "sha256": "04897d7611d7390ddf5b2c6f7273f448dfc48341fdbd1f4f207fa30b331d7f57"
+        },
+        {
+          "asset": "rough_linen",
+          "role": "normal",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rough_linen/rough_linen_nor_gl_1k.jpg",
+          "sha256": "e2402166d1a489f7414814e69e1836ab672aa24e30bec2d41fea356f81687e53"
+        },
+        {
+          "asset": "rough_linen",
+          "role": "arm",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rough_linen/rough_linen_arm_1k.jpg",
+          "sha256": "e1ca6b51ed62834063253e08f8f2e23836aa00d72675b960ddd8e608d9f0c7e6"
+        }
+      ]
+    },
+    {
+      "source": "https://polyhaven.com/a/wood_floor_worn",
+      "attribution": "Dimitrios Savva / Poly Haven",
+      "license": "CC0-1.0",
+      "license_url": "https://polyhaven.com/license",
+      "inputs": [
+        {
+          "map": "Diffuse",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/wood_floor_worn/wood_floor_worn_diff_4k.jpg",
+          "file": "wood_floor_worn_diff_4k.jpg",
+          "md5": "91e3f8b4f0176ab4dc266321c5bdcbe6",
+          "sha256": "75825ed92e497e6ecc7a16ad415fae11819989798533284cd05f1b112edc9ef2"
+        },
+        {
+          "map": "Rough",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/wood_floor_worn/wood_floor_worn_rough_4k.jpg",
+          "file": "wood_floor_worn_rough_4k.jpg",
+          "md5": "1a0c26d7aca182f6642ca9b284b81e19",
+          "sha256": "3491497dc007eb30624707c8dc46d42970dd137191e4477fef8fff473857c3d2"
+        },
+        {
+          "map": "nor_gl",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/wood_floor_worn/wood_floor_worn_nor_gl_4k.jpg",
+          "file": "wood_floor_worn_nor_gl_4k.jpg",
+          "md5": "3379c9d860cb3edd03cd2bf64689e0d1",
+          "sha256": "584b82439fbb9eda8f0e979cfe0540763d1ed1f46970a3df2046cc3a59429546"
+        }
+      ],
+      "packed_maps": [
+        {
+          "file": "worn-oak-diffuse.png",
+          "sha256": "78db874d75d88eaef70ee81148f934e9ca22c2c0a3b21b32ad980c5360f28719"
+        },
+        {
+          "file": "worn-oak-rough.png",
+          "sha256": "940fe8f0ecc0176fa1115be4cb1c45d9cef569138420dafb1e478eeeddcd269f"
+        },
+        {
+          "file": "worn-oak-nor_gl.png",
+          "sha256": "6f9ac3b360c650384cb1a8d9a29c055170cf0c85568f3b7b5e338d8ab61d8e95"
+        }
+      ]
+    }
+  ]
+}

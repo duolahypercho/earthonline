@@ -1,4 +1,4 @@
-"""Capture the mapped block at the front sash and pack its day/night reflection maps."""
+"""Capture incident day and night radiance outside a terrace window."""
 
 import argparse
 import hashlib
@@ -20,6 +20,8 @@ parser.add_argument(
     action="store_true",
     help="Generate the six native game views for each time before packing",
 )
+parser.add_argument("--rear", action="store_true", help="Bake the furnished courtyard sash")
+parser.add_argument("--house-photo", action="store_true", help="Include the surveyed tree and the furnished house in the probe")
 args = parser.parse_args()
 cache = args.source_cache.resolve()
 if cache.is_relative_to(ROOT):
@@ -27,6 +29,13 @@ if cache.is_relative_to(ROOT):
 cache.mkdir(parents=True, exist_ok=True)
 # Surveyed world coordinates of the front garden opposite the middle sash.
 eye = [-1616.52, 65.75, 1810.34]
+if args.rear:
+    # Beyond the middle rear sash, between its planter strip and the garden.
+    eye = [-1615.09, 67.47, 1829.03]
+if args.rear or args.house_photo:
+    OUT = OUT / "furniture/photo"
+OUT.mkdir(parents=True, exist_ok=True)
+sash = "rear" if args.rear else "front"
 views = [
     ("north", 0.0, 0.0),
     ("east", math.pi / 2, 0.0),
@@ -39,7 +48,7 @@ poses = [
     dict(name=name, eye=eye, yaw=yaw, pitch=pitch, fov_y_deg=90, near=0.05, far=4200.0, aspect=1.0)
     for name, yaw, pitch in views
 ]
-pose_file = cache / "front-sash-poses.json"
+pose_file = cache / f"{sash}-sash-poses.json"
 pose_file.write_text(json.dumps(poses, indent=2) + "\n")
 coords = (np.arange(512) + 0.5) / 512
 u, v = np.meshgrid(coords, coords)
@@ -57,16 +66,15 @@ owner = np.argmax(
 atlas = Image.new("RGBA", (512, 1024))
 inputs = []
 for page, (time, hour) in enumerate((("day", 12), ("night", 22))):
-    label = "sash-" + time
+    label = ("rear-sash-" if args.rear else "sash-") + time
     if args.capture:
         cmd = [
             "./target/release/eo-app",
             "--bench",
             "--segments",
             "kit_street",
-            "--beaver-house",
-            "--house-finishes",
-            "--no-house-patina",
+            *(["--house-photo", "--no-house-glazing"] if args.house_photo
+              else ["--beaver-house", "--house-finishes", "--no-house-patina"]),
             "--no-agents",
             "--no-upload-ring",
             "--upload-budget-mb",
@@ -86,7 +94,7 @@ for page, (time, hour) in enumerate((("day", 12), ("night", 22))):
             subprocess.run(
                 cmd,
                 cwd=ROOT / "native",
-                env=dict(os.environ, EO_CAPTURE_POSES=str(pose_file), EO_HLOD="0"),
+                env=dict(os.environ, EO_CAPTURE_POSES=str(pose_file), EO_HLOD="0", EO_REPO_ROOT=str(ROOT)),
                 stdout=log,
                 stderr=subprocess.STDOUT,
                 check=True,
@@ -120,7 +128,7 @@ for page, (time, hour) in enumerate((("day", 12), ("night", 22))):
             + ((1 - fx) * image[y1, x0] + fx * image[y1, x1]) * fy
         )
     atlas.paste(Image.fromarray(panorama).convert("RGBA"), (0, 512 * page))
-out = OUT / "street-reflections.png"
+out = OUT / ("yard-reflections.png" if args.rear else "street-reflections.png")
 atlas.save(out, compress_level=9)
 out.with_suffix(".provenance.json").write_text(
     json.dumps(

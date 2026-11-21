@@ -26,11 +26,12 @@ fn post_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     let dims = vec2<f32>(textureDimensions(hdr));
     var c = textureLoad(hdr, vec2<i32>(pos.xy), 0).rgb;
     c = max(c, vec3<f32>(0.0));
-    if (skyu.bloom.w > 0.5) {
-        c = c + max(textureSampleLevel(bloom_tex, bloom_samp, pos.xy / dims, 0.0).rgb, vec3<f32>(0.0)); // sky
+    if (skyu.bloom.w > 0.) {
+        c = c + skyu.bloom.w * max(textureSampleLevel(bloom_tex, bloom_samp, pos.xy / dims, 0.0).rgb, vec3<f32>(0.0)); // sky
     }
     // the camera look (look_camera.wgsl) in place of the filmic or the ACES-fit chain
-    if (look.tone2.z > 0.5) {
+    // (the playable house's source camera, `--blender-camera`, in place of both: `finish_color`)
+    if (look.tone2.z > 0.5 && !finish_blender_camera()) {
         return finish_camera(c, pos);
     }
     return finish_color(c, pos, dims);

@@ -163,8 +163,8 @@ fn photo_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
         c = vec3<f32>(0.0);
     }
     c = clamp(c, vec3<f32>(0.0), vec3<f32>(65504.0));
-    if (skyu.bloom.w > 0.5) {
-        c = c + max(textureSampleLevel(bloom_tex, ph_lin, pos.xy / dims, 0.0).rgb, vec3<f32>(0.0)); // sky
+    if (skyu.bloom.w > 0.0) {
+        c = c + skyu.bloom.w * max(textureSampleLevel(bloom_tex, ph_lin, pos.xy / dims, 0.0).rgb, vec3<f32>(0.0)); // sky (`bloom.w` its share)
     }
     // the residual fall-off (eo-look `tone::vignette_gain`).
     let a = (pos.xy / dims * 2.0 - 1.0) * photo.view.xy;

@@ -1,0 +1,140 @@
+{
+  "house_sha256": "0f567a703707bf14d2e49fd9ee1a713422faa46109fd5b42f404f5ab6bd0dc50",
+  "blender_sha256": "8fda283fcec39b2f276a1fd64abf7a89154b7c5fbb32480dbcfd95b3bcbcd970",
+  "tiles": 35,
+  "light": {
+    "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/stoop/stair-light.png",
+    "bytes": 211385,
+    "sha256": "56afcabbd63b466a9842fc1bcc7dc18646057e33d2a47b9dd43d6458a2d98af1"
+  },
+  "courses": [
+    {
+      "asset": {
+        "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/stoop/landing.glb",
+        "bytes": 33528,
+        "sha256": "545394fb1b655875842b5c243ad5d9f0c3d129b8b5432193dd340a898470d556"
+      },
+      "triangles": 780
+    },
+    {
+      "asset": {
+        "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/stoop/course-1.glb",
+        "bytes": 72768,
+        "sha256": "ff51e50af658091279dd6b16ebb769a5a563fc6257b4467f352998763900783d"
+      },
+      "triangles": 1760
+    },
+    {
+      "asset": {
+        "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/stoop/course-2.glb",
+        "bytes": 72668,
+        "sha256": "3f845d1cb44ac5b4334649c9dd8da9918caa9a0a6273f462b948d34f31b31d8b"
+      },
+      "triangles": 1760
+    },
+    {
+      "asset": {
+        "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/stoop/course-3.glb",
+        "bytes": 72020,
+        "sha256": "0869b192ed495480d576b55750a01ab8bdc16dd2d8254c32b376b578bc20edc0"
+      },
+      "triangles": 1760
+    },
+    {
+      "asset": {
+        "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/stoop/course-4.glb",
+        "bytes": 72672,
+        "sha256": "703e32d72d1f035fe5a350bf5f6ebc60cfe9d15516f0569abaadc1872b150448"
+      },
+      "triangles": 1760
+    },
+    {
+      "asset": {
+        "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/stoop/course-5.glb",
+        "bytes": 72100,
+        "sha256": "0300fc6f14c576465ff3e990f155c7cf3f91de709914746d5b6f6c4c509bdeb9"
+      },
+      "triangles": 1760
+    },
+    {
+      "asset": {
+        "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/stoop/course-6.glb",
+        "bytes": 73552,
+        "sha256": "22e14c6d9ba39cd76f540a0e1d705c813cc1509fe610eff7f36d517851bf7a03"
+      },
+      "triangles": 1760
+    }
+  ],
+  "maps": [
+    {
+      "material": "Stoop clay \u00b7 ochre kiln",
+      "asset": {
+        "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/stoop/kiln-1.png",
+        "bytes": 1073650,
+        "sha256": "1186ede691ce3e4d4035beaa116a9578598d83ae989ebded3019c90ef20271f7"
+      }
+    },
+    {
+      "material": "Stoop clay \u00b7 umber kiln",
+      "asset": {
+        "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/stoop/kiln-2.png",
+        "bytes": 1056659,
+        "sha256": "f740fcec8d3b58a1cd6ccf80b80d1903828f9af8b5500ac478b2a9fa245e3c4b"
+      }
+    }
+  ],
+  "pier_bases": [
+    {
+      "plan": [
+        [
+          4.95,
+          -0.85
+        ],
+        [
+          5.16,
+          -0.85
+        ],
+        [
+          5.16,
+          0.41500000000000004
+        ],
+        [
+          4.95,
+          0.41500000000000004
+        ]
+      ],
+      "ground": [
+        -1.0042491738928994,
+        -1.0313821314554708,
+        -1.1211477767455,
+        -1.0950100477039846
+      ]
+    },
+    {
+      "plan": [
+        [
+          6.75,
+          -0.85
+        ],
+        [
+          6.96,
+          -0.85
+        ],
+        [
+          6.96,
+          0.41500000000000004
+        ],
+        [
+          6.75,
+          0.41500000000000004
+        ]
+      ],
+      "ground": [
+        -1.2376933858334147,
+        -1.2650574414362175,
+        -1.3462928703357426,
+        -1.3199239847902198
+      ]
+    }
+  ]
+}

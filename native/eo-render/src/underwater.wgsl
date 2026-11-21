@@ -229,7 +229,7 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
         + grains * scatter * (ambient + direct * 0.25) * exp(-ext * diffuse_depth * down0 / 0.75);
     // the dive exposure (`UW_DEPTH_EXPOSURE`; 1 without it), then the display transform
     let shown = max(radiance, vec3<f32>(0.0)) * i.exposure;
-    if (look.tone2.z > 0.5) {
+    if (look.tone2.z > 0.5 && !finish_blender_camera()) {
         // the camera look (look_camera.wgsl), as the post pass finishes the drawn frame
         return finish_camera(shown, i.clip);
     }

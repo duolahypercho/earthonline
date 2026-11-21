@@ -18,6 +18,8 @@ from mathutils import Matrix, Vector
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import beaver_lighting
 import beaver_courtyard as courtyard
+import beaver_photo
+import beaver_frontage_tree
 import beaver_entry
 import beaver_furniture as furniture
 import beaver_dimensions as dimensions
@@ -26,6 +28,8 @@ ROOT = Path(__file__).resolve().parents[2]
 FINISHES = "--" in sys.argv and "--house-finishes" in sys.argv[sys.argv.index("--") + 1:]
 PATINA = "--" in sys.argv and "--house-patina" in sys.argv[sys.argv.index("--") + 1:]
 FURNITURE = "--" in sys.argv and "--house-furniture" in sys.argv[sys.argv.index("--") + 1:]
+PHOTO = "--" in sys.argv and "--house-photo" in sys.argv[sys.argv.index("--") + 1:]
+FURNITURE = FURNITURE or PHOTO
 PATINA = PATINA or FURNITURE
 FINISHES = FINISHES or PATINA
 OUT = ROOT / "public/assets/buildings/beaver-terrace"
@@ -37,17 +41,30 @@ if PATINA:
 SURFACE_DIR = OUT
 if FURNITURE:
     OUT = OUT / "furniture"
+if PHOTO:
+    OUT = OUT / "photo"
 RISE = 10 / 3
 rng = random.Random(21)
+ground_components = []
 # Box ownership is captured where geometry is emitted, before material batching.
 box_groups = []
 
 
+def furnished_point(name, point):
+    point = dimensions.furniture_point(name, point)
+    if PHOTO:
+        point = beaver_photo.furniture_placement(name, point, dimensions.GROUP.get(name))
+        point = beaver_photo.stair_point(name, point)
+    return point
+
+
 class SolidBoxes(list):
     def append(self, pair):
+        if PHOTO:
+            pair = [beaver_photo.loggia_point(room, p, RISE) for p in pair]
         if FURNITURE:
             box_groups.append(dimensions.GROUP.get(room))
-            a, b = [dimensions.furniture_point(room, p) for p in pair]
+            a, b = [furnished_point(room, p) for p in pair]
             pair = [tuple(min(v) for v in zip(a, b)), tuple(max(v) for v in zip(a, b))]
         super().append(pair)
 
@@ -57,6 +74,7 @@ bpy.ops.object.select_all(action="SELECT")
 bpy.ops.object.delete(use_global=False)
 room = "Ground"
 batches = {}
+cloth_patterns = {}
 materials = {}
 # Component insertion points in the builder's across / height / depth coordinates.
 pivots = {}
@@ -64,7 +82,7 @@ pivots = {}
 
 def part(name, x, y, z):
     if FURNITURE:
-        x, y, z = dimensions.furniture_point(name, (x, y, z))
+        x, y, z = furnished_point(name, (x, y, z))
     pivots[name] = Vector((x, -z, y))
     return name
 
@@ -138,7 +156,8 @@ if FINISHES:
     window_wood = finish("oil-rubbed-wood", "665442", 0.53)
     wrought = finish("wrought-iron", "514b43", 0.58, 0.65)
     roof_tiles = [finish("fired-clay", c, 0.83, texture=120) for c in
-                  ("ab7056", "b37c60", "a96e56", "bf8769", "a7745e", "b07b62")]
+                  (("914f37", "b36d47", "ab593e", "be805b", "a25f45", "975e46") if PHOTO else
+                   ("ab7056", "b37c60", "a96e56", "bf8769", "a7745e", "b07b62"))]
     practical = finish("opal-work-light", "f2e6cc", 0.36)
     bulb_bs = materials[practical].node_tree.nodes.get("Principled BSDF")
     bulb_bs.inputs["Emission Color"].default_value = (1.0, 0.81, 0.58, 1)
@@ -147,8 +166,10 @@ if FINISHES:
 
 def emit(mat, points, faces, smooth=False):
     """Batch by room and finish so the editable scene and GLB have few draws."""
-    if FURNITURE and room in dimensions.GROUP:
-        points = [dimensions.furniture_point(room, p) for p in points]
+    if PHOTO and room in ("workroom-storey", "upper-arched-loggia", "high-and-low-casements"):
+        points = [beaver_photo.loggia_point(room, p, RISE) for p in points]
+    if FURNITURE and (room in dimensions.GROUP or PHOTO and room.startswith(("stair-flight-", "landing-balustrade-"))):
+        points = [furnished_point(room, p) for p in points]
     vertices, polygons, flags = batches.setdefault((room, mat), ([], [], []))
     offset = len(vertices)
     vertices.extend((x, -z, y) for x, y, z in points)
@@ -248,16 +269,25 @@ def bent_tube(mat, centres, radius, axis, sides=10):
     emit(mat, points, faces, True)
 
 
-def fabric_grid(mat, columns, rows, sample, reverse=False):
+def fabric_grid(mat, columns, rows, sample, reverse=False, cut_size=None):
     """One continuous, smooth sheet. Shared vertices carry normals through the folds."""
     points = [sample(i / columns, j / rows) for j in range(rows + 1) for i in range(columns + 1)]
+    if cut_size is not None:
+        # A woven sheet keeps its yarn direction as it bends. Store metre
+        # coordinates of the flat cutting pattern until the scene receives UVs.
+        previous = batches.get((room, mat))
+        start = len(previous[0]) if previous else 0
+        pattern = cloth_patterns.setdefault((room, mat), {})
+        for j in range(rows + 1):
+            for i in range(columns + 1):
+                pattern[start + j * (columns + 1) + i] = (cut_size[0] * i / columns, cut_size[1] * j / rows)
     stride = columns + 1
     faces = [(k, k + stride, k + stride + 1, k + 1)
              for j in range(rows) for i in range(columns) for k in [j * stride + i]]
     emit(mat, points, [f[::-1] for f in faces] if reverse else faces, True)
 
 
-def cushion(mat, centre, radii):
+def cushion(mat, centre, radii, tilt=0, twist=0):
     """A softly crowned superellipsoid with subtly gathered upholstery."""
     x, y, z = centre
 
@@ -277,6 +307,22 @@ def cushion(mat, centre, radii):
                     z + radii[2] * lat * power(math.sin(a), 0.40),
                 )
             )
+    if tilt or twist:
+        # A loose back cushion flattens near its base and leans into the sash.
+        posed = []
+        for xx,yy,zz in pts:
+            dx,dy,dz = xx-x,yy-y,zz-z
+            height = dy/radii[1]
+            pinch = math.exp(-((height+.60)/.26)**2)*math.sin(dx/radii[0]*5.5)
+            dz += .010*pinch
+            yy = dy*math.cos(tilt)-dz*math.sin(tilt)
+            zz = dz*math.cos(tilt)+dy*math.sin(tilt)
+            along=dx*math.cos(twist)+zz*math.sin(twist)
+            roll=.79*twist
+            posed.append((x+along*math.cos(roll)-yy*math.sin(roll),
+                          y+max(-.163,along*math.sin(roll)+yy*math.cos(roll)),
+                          z+zz*math.cos(twist)-dx*math.sin(twist)))
+        pts = posed
     faces = [
         (j * 28 + i, (j + 1) * 28 + i, (j + 1) * 28 + (i + 1) % 28, j * 28 + (i + 1) % 28)
         for j in range(12)
@@ -312,7 +358,7 @@ def table(x, y, z, w, d, h):
 
 def chair(x, y, z):
     if FURNITURE:
-        furniture.chair(emit, box, finish, boxes, x, y, z)
+        furniture.chair(emit, box, finish, boxes, x, y, z, rush=PHOTO and room.startswith("dining-chair"))
         return
     table(x, y, z, 0.55, 0.53, 0.46)
     for a in [x + 0.05, x + 0.5]:
@@ -406,7 +452,7 @@ for level in range(3):
         floor(0, 7, 0, 13, y)
     else:
         floor(0, 5.1, 0, 13, y)
-        floor(5.1, 7, 0, 3, y)
+        floor(5.1, 7, 0, beaver_photo.STAIR_START if PHOTO else 3, y)
         floor(5.1, 7, 9, 13, y)
     for a, b in [(0, 0.14), (6.86, 7)]:
         box(plaster, (a, y, 0), (b, y + RISE, 13), True)
@@ -448,9 +494,12 @@ for level in range(3):
             # Set the sash back from the arcades. The deep sill, soffit and
             # side returns remain visible when looking uphill from the street.
             for x in (0.66,4.59):
-                box(reveal,(x,y+0.85,-0.38),(x+0.055,y+2.53,0.52))
+                box(reveal,(x,y+0.85,-0.05 if PHOTO else -0.38),(x+0.055,y+2.53,0.52))
             box(reveal,(0.66,y+0.82,-0.38),(4.645,y+0.88,0.53))
-            box(reveal,(0.66,y+2.51,-0.38),(4.645,y+2.58,0.53))
+            box(reveal,(0.66,y+2.51,-0.045 if PHOTO else -0.38),(4.645,y+2.58,0.53))
+            if PHOTO:
+                courtyard.arched_casements(emit, box, boxes, window_wood, glass, plaster, y)
+                continue
             z = 0.48
         for x in [0.69, 2, 3.32, 4.56]:
             box(window_wood if FINISHES else ivory, (x, y + 0.83, z - 0.065), (x + 0.065, y + 2.57, z + 0.18), True, 0.009)
@@ -466,31 +515,37 @@ for level in range(3):
                 box(ivory, (x, y + RISE - 0.31, -0.12), (x + 0.09, y + RISE - 0.17, 0.05), False, 0.012)
     if level < 2:
         room = part(f"stair-flight-{level + 1}", 5.10, y, 3.0)
-        ramps.append([[5.1, y, 3], [5.1, y + RISE, 9], [6.85, y + RISE, 9], [6.85, y, 3]])
+        stair_front = beaver_photo.STAIR_START if PHOTO else 3
+        ramps.append([[5.1, y, stair_front], [5.1, y + RISE, 9], [6.85, y + RISE, 9], [6.85, y, stair_front]])
         for i in range(20):
             z = 3 + 0.3 * i
             h = y + (i + 1) * RISE / 20
             box(oak, (5.1, h - 0.21, z), (6.85, h, z + 0.31), False, 0.009)
-            turned(
-                ivory,
-                5.17,
-                h,
-                z + 0.13,
-                [(0.033, 0), (0.032, 0.12), (0.021, 0.20), (0.027, 0.65), (0.033, 0.72), (0.033, 0.88)],
-                8,
-            )
-        # Long sloping walnut handrail, continuous over the nosings.
-        pts = [
-            (x, yy + offset, z)
-            for x, yy, z in [
-                (5.115, y + 0.99, 3),
-                (5.23, y + 0.99, 3),
-                (5.23, y + RISE + 0.99, 9),
-                (5.115, y + RISE + 0.99, 9),
+            if not PHOTO:
+                turned(
+                    ivory,
+                    5.17,
+                    h,
+                    z + 0.13,
+                    [(0.033, 0), (0.032, 0.12), (0.021, 0.20), (0.027, 0.65), (0.033, 0.72), (0.033, 0.88)],
+                    8,
+                )
+        if PHOTO:
+            beaver_photo.stair_joinery(emit, box, turned, bent_tube, oak, ivory, walnut, y, RISE, ramps)
+            ramps[-1] = [beaver_photo.stair_point(room, p) for p in ramps[-1]]
+        else:
+            # Long sloping walnut handrail, continuous over the nosings.
+            pts = [
+                (x, yy + offset, z)
+                for x, yy, z in [
+                    (5.115, y + 0.99, 3),
+                    (5.23, y + 0.99, 3),
+                    (5.23, y + RISE + 0.99, 9),
+                    (5.115, y + RISE + 0.99, 9),
+                ]
+                for offset in [0, 0.07]
             ]
-            for offset in [0, 0.07]
-        ]
-        emit(walnut, pts, [(0, 2, 4, 6), (1, 7, 5, 3), (0, 1, 3, 2), (2, 3, 5, 4), (4, 5, 7, 6), (6, 7, 1, 0)])
+            emit(walnut, pts, [(0, 2, 4, 6), (1, 7, 5, 3), (0, 1, 3, 2), (2, 3, 5, 4), (4, 5, 7, 6), (6, 7, 1, 0)])
         for i in range(20):
             h = y + (i + 1) * RISE / 20
             z = 3 + 0.3 * i
@@ -510,7 +565,9 @@ for level in range(3):
 
 room = part("terrace-roof", 0, 3 * RISE, 0)
 box(plaster, (0.14, 3 * RISE - 0.10, 0.15), (6.86, 3 * RISE - 0.02, 12.85))
-if FINISHES:
+if PHOTO:
+    beaver_photo.tile_roof(emit, box, stucco, window_wood, roof_tiles)
+elif FINISHES:
     # The stair wing finishes under a lower lean-to. The front living wing
     # has its own low gable, with staggered rafter tails under the eaves.
     courtyard.roof_pitch(emit, stucco, window_wood, roof_tiles, -0.15, 10.01, 2.50, 10.84, -0.63, 13.18)
@@ -533,13 +590,15 @@ if FURNITURE:
     door_bounds = beaver_entry.LEAF_BOUNDS
     door_hinge = beaver_entry.HINGE
     room = part("front-door", *door_hinge)
-    paint = finish("front-door-paint", "b3ab93", 0.62, texture=37)
-    moulding = finish("front-door-moulding", "b7b09a", 0.60, texture=37)
+    paint = finish("front-door-paint", "807f65" if PHOTO else "b3ab93", 0.62, texture=37)
+    moulding = finish("front-door-moulding", "7b7b62" if PHOTO else "b7b09a", 0.60, texture=37)
     hardware = finish("front-door-brass", "c1a171", 0.39, 0.52)
     door_materials = [paint, moulding, hardware]
     beaver_entry.panel_door(box, emit, turned, bent_tube, paint, moulding, hardware)
     room = part("entrance-casing", 5.95, 0, 0)
-    beaver_entry.door_frame(box, window_wood, ivory, stone, roof_tiles)
+    porch_tiles = ([finish("terracotta-paver", tone, .83) for tone in
+                    ("c59b87", "ca9d84", "c49783", "bf907a", "c99f8c")] if PHOTO else roof_tiles)
+    beaver_entry.door_frame(box, window_wood, ivory, stone, porch_tiles)
 else:
     door_hinge = [6.655, 0, 0.15]
     door_bounds = [[5.225, 0.012, 0.107], [6.655, 2.372, 0.193]]
@@ -584,15 +643,24 @@ if FINISHES:
     emit(window_wood,[(4.89,2.93,-0.93),(7.02,2.93,-0.93),(7.02,3.13,0.03),(4.89,3.13,0.03)],[(0,1,2,3)])
     courtyard.awning_tiles(emit,roof_tiles,4.88,7.04,-0.94,0.04,2.94,3.15)
     room = part("rounded-stair-bay", 5.955, 2.98, 0.04)
-    courtyard.stair_bay(emit,box,stucco,reveal,window_wood,glass,roof_tiles,RISE)
+    courtyard.stair_bay(emit,box,stucco,reveal,window_wood,glass,roof_tiles,RISE,photo=PHOTO)
     # The upper loggia is recessed from its outer arches.
     room = part("upper-arched-loggia",2.62,2*RISE,-0.42)
     for i in range(3):
         center = 1.315 + 1.31*i
-        courtyard.arch(emit,stucco,center,0.595,2*RISE+1.77,0.72,2*RISE+2.83,-0.405,0.056)
+        wall_front = -.058 if PHOTO else -.405
+        courtyard.arch(emit,stucco,center,0.595,2*RISE+1.77,0.72,2*RISE+2.83,wall_front,0.056)
+        if PHOTO:
+            courtyard.arch_reveal(emit,reveal,center,.595,2*RISE+1.77,.72,-.235,wall_front)
+
     for x in (0.66,1.97,3.28,4.59):
-        box(reveal,(x-0.065,2*RISE+0.78,-0.403),(x+0.065,2*RISE+2.82,0.065),False,0.015)
-        box(stucco,(x-0.089,2*RISE+1.706,-0.420),(x+0.089,2*RISE+1.79,0.065),False,0.012)
+        pier_top = 1.77 if PHOTO else 2.82
+        pier_front = -.235 if PHOTO else -.403
+        box(reveal,(x-0.065,2*RISE+0.78,pier_front),(x+0.065,2*RISE+pier_top,0.065),False,0.015)
+        if PHOTO:
+            box(stucco,(x-.066,2*RISE+1.77,-.057),(x+.066,2*RISE+2.83,.065))
+
+        box(stucco,(x-0.089,2*RISE+1.706,pier_front-.017),(x+0.089,2*RISE+1.79,0.065),False,0.012)
     box(stucco,(0.58,2*RISE+0.71,-0.44),(4.68,2*RISE+0.88,0.077),False,0.032)
     # A shallow iron balcony stands off the bedroom sash at the middle floor.
     room = part("bedroom-iron-balcony",2.62,RISE+0.79,-0.40)
@@ -651,6 +719,12 @@ if FINISHES:
     leaves = [finish("agave-leaf",tone,0.74) for tone in ("6b8b78","789a8a","91ab98","668576","809889")]
     grass = [finish("bunchgrass",tone,0.91) for tone in ("b0a379","918c65","b5ab7c","898966")]
     courtyard.dry_garden(emit,rock,reveal,gravel,rock,leaves,grass,ramps)
+    if PHOTO:
+        # Planting follows the private bed grade already used by its mulch.
+        for j,(x,z,size) in enumerate(((.56,-1.31,1.25),(1.05,-1.52,.8),(1.55,-.58,1.5),
+                (1.91,-1.23,1.14),(2.30,-1.79,1.52),(2.53,-1.30,.83),(3.54,-1.63,1.03),
+                (3.91,-1.24,1.53),(4.28,-1.07,1.22),(4.59,-.96,.74))):
+            beaver_photo.verge_clump(emit,grass,rock[j%4],x,.07-.093*x+.078*z,z,size,927+j)
 
 room = "Ground"
 room = part("upholstered-sofa", 1.04, 0, 2.70)
@@ -706,7 +780,10 @@ if FURNITURE:
 else:
     box(blue, (2.21, 0.44, 2.25), (2.65, 0.49, 2.83), False, 0.01)
 room = part("oak-dining-table", 2.375, 0, 7.575)
-table(1.7, 0, 6.7, 1.35, 1.75, 0.79)
+if PHOTO:
+    beaver_photo.farmhouse_table(box, finish, boxes)
+else:
+    table(1.7, 0, 6.7, 1.35, 1.75, 0.79)
 room = part("dining-chair", 2.375, 0, 6.345)
 chair(2.1, 0, 6.08)
 room = part("dining-chair-rear", 2.375, 0, 8.905)
@@ -719,6 +796,8 @@ if FURNITURE:
     room = part("oak-sideboard", .385, 0, 7.565)
     furniture.sideboard(emit, box, turned, finish)
 room = part("base-cabinets", 0.6, 0, 11.53)
+if PHOTO:
+    beaver_photo.prep_counter(emit, box, turned, bent_tube, finish, pottery, brass)
 box(sage, (0.16, 0, 10.36), (1.02, 0.91, 12.68), True)
 # Continuous counter with an inset sink cut through its rear section.
 for x, u, z, w in [
@@ -795,18 +874,23 @@ room = part("living-wall-shelves", .15, .92, 5.17) if FURNITURE else "Ground"
 for k in range(4):
     y = 0.92 + 0.36 * k
     box(oak, (0.15, y, 4.28), (0.52, y + 0.06, 6.06))
-    books(0.18, y + 0.065, 4.34 + k * 0.32, 3)
+    if PHOTO:
+        beaver_photo.shelf_still_life(emit, box, turned, (walnut, pottery, sage, clay, iron), k, y+.061)
+    if PHOTO and k == 2:
+        beaver_photo.trailing_plant(emit, turned, bent_tube, pottery, green, light_leaf, walnut, .37, y+.06, 5.66)
+    else:
+        books(0.18, y + 0.065, 4.34 + k * 0.32, 3)
 room = part("living-plant", 4.03, .01, .58) if FURNITURE else "Ground"
 plant(4.03, 0.01, 0.58)
 room = part("kitchen-plant", .56, 1, 12.32) if FURNITURE else "Ground"
 plant(0.56, 1.0, 12.32, 0.60)
 room = part("dining-pendant", 2.37, RISE - 0.16, 7.51)
-turned(brass, 2.37, 1.99, 7.51, [(0.38, 0), (0.35, 0.075), (0.22, 0.19), (0.075, 0.29), (0.065, 0.33)], 32)
+turned(finish("pendant-enamel","403f38",.43) if PHOTO else brass, 2.37, 1.99, 7.51, [(0.38, 0), (0.35, 0.075), (0.22, 0.19), (0.075, 0.29), (0.065, 0.33)], 32)
 turned(iron, 2.37, 2.30, 7.51, [(0.010, 0), (0.010, RISE - 2.45)], 8)
 room = part("painted-fruit-bowl", 2.39, 0.79, 7.49)
-turned(teal, 2.39, 0.79, 7.49, [(0.08, 0), (0.15, 0.06), (0.23, 0.16), (0.20, 0.16), (0.08, 0.04)], 24, closed=True)
-apple = finish("apple-skin", "a84036", 0.36, texture=110)
-pear = finish("pear-skin", "b1aa54", 0.49, texture=95)
+turned(finish("celadon-stoneware","879681",.32) if PHOTO else teal, 2.39, 0.79, 7.49, [(0.08, 0), (0.15, 0.06), (0.23, 0.16), (0.20, 0.16), (0.08, 0.04)], 24, closed=True)
+apple = finish("apple-skin", "8c4d3e" if PHOTO else "a84036", 0.36, texture=110)
+pear = finish("pear-skin", "949056" if PHOTO else "b1aa54", 0.49, texture=95)
 for i, (dx, dz, h) in enumerate([(-0.075, -0.035, 0.108), (0.076, -0.026, 0.108), (0.014, 0.069, 0.138)]):
     room = part(("red-apple", "red-apple-small", "orchard-pear")[i], 2.39 + dx, 0.79 + h - 0.06, 7.49 + dz)
     x = 2.39 + dx
@@ -859,18 +943,23 @@ for a, b in [
     ((2.60, y, 0.15), (2.74, ceiling, 2.72)),
 ]:
     box(plaster, a, b, True)
+if PHOTO:
+    beaver_photo.bedroom_joinery(box, emit, ivory, y)
 room = part("double-bed", 1.825, y, 11.35)
 for x in [0.98, 2.67]:
     for z in [10.28, 12.34]:
         box(walnut, (x - 0.045, y, z - 0.045), (x + 0.045, y + 0.10, z + 0.045), False, 0.007)
 box(walnut, (0.85, y + 0.08, 10.15), (2.80, y + 0.43, 12.48), True, 0.055)
-box(oak, (0.80, y + 0.08, 12.40), (2.85, y + 1.22, 12.54), True, 0.04)
+if PHOTO:
+    beaver_photo.upholstered_headboard(emit, box, finish, y)
+else:
+    box(oak, (0.80, y + 0.08, 12.40), (2.85, y + 1.22, 12.54), True, 0.04)
 cushion(linen, (1.825, y + 0.51, 11.30), (0.97, 0.19, 1.18))
 boxes.append([[0.86, y + 0.40, 10.16], [2.79, y + 0.67, 12.46]])
 if FINISHES:
     # A padded box-stitched coverlet. The radiused returns wrap the mattress,
     # with gathered excess at the foot. The shell has a sewn binding at its edges.
-    quilt = finish("cotton-coverlet", "87999b" if PATINA else "758f99", 0.94, texture=180)
+    quilt = finish("cotton-coverlet", "445e6b" if PHOTO else "87999b" if PATINA else "758f99", 0.94, texture=180)
     binding = finish("cotton-binding", "657e88", 0.96)
     def coverlet(u, t):
         side = 2 * u - 1
@@ -894,22 +983,44 @@ if FINISHES:
         z -= foot * (0.012 + 0.017 * math.cos(17*x + foot))
         return (x, y + h, z)
     if PATINA:
-        settled = beaver_entry.settled_coverlet()
+        settled = beaver_entry.settled_coverlet(deep_drop=PHOTO)
         def coverlet(u,t):
             x,h,z=settled(u,t)
             # Very shallow quilting remains in the stuffing once the fabric settles.
             h+=.009*(math.sin(math.pi*9*u)*math.sin(math.pi*8*t))**2
+            if PHOTO:
+                # Partially relax the supported crown. Leave the
+                # cloth simulation's full length and weight on the hanging edges.
+                support=max(0.,1-(abs(2*u-1)/.88)**6)*min(1.,t/.17)
+                h += .46*support*(.723-h)
+                return beaver_photo.bunched_linen(u, t, x, y+h, z)
             return x,y+h,z
         # The turned edge shows the softer reverse, with a round fold and two
         # uneven corners. Its underside and the hem track the settled sheet.
-        reverse=finish("cotton-turnback","c1c2b1",.96)
+        reverse=finish("cotton-turnback","f1e6d6" if PHOTO else "c1c2b1",.96)
         def turnback(u,v):
             start=.858+.055*u+.024*math.sin(u*5)
             x,h,z=coverlet(u,start+v*(1-start))
             crown=.022+.046*math.sin(math.pi*v)**.8+.009*math.sin(10*u+v)*v
             return x,h+crown,z
-        fabric_grid(reverse,60,13,turnback)
-    fabric_grid(quilt, 100, 86, coverlet)
+        if PHOTO:
+            fabric_grid(reverse, 90, 26, lambda u, v: beaver_photo.loose_top_sheet(u, v, coverlet), cut_size=(2.25, .42))
+        else:
+            fabric_grid(reverse,60,13,turnback)
+    fabric_grid(quilt, 100, 86, coverlet, cut_size=(2.25, 2.10) if PHOTO else None)
+    if PHOTO:
+        # Paired rows of broken cotton stitches follow the quilt over the foot.
+        thread=finish("cotton-binding","b5a17a",.96)
+        for seam in (.13,.34,.55,.76,.91):
+            for line in (seam,seam+.0027):
+                for k in range(122):
+                    t0=k/122
+                    edge=[]
+                    for t in (t0,t0+.0038):
+                        for side in (-.00061,.00061):
+                            x,h,z=coverlet(line+side,t)
+                            edge.append((x,h+.0011,z-.0010*(1-t)**6))
+                    emit(thread,edge,[(0,1,3,2)])
     # Corded linen binding with a rounded cross section, following the hanging hem.
     for edge in [lambda t: coverlet(0,t), lambda t: coverlet(1,t),
                  lambda t: coverlet(t,0), lambda t: coverlet(t,1)]:
@@ -951,14 +1062,30 @@ else:
         True,
     )
 for x in [1.36, 2.31]:
-    cushion(linen, (x, y + 0.75, 12.10), (0.42, 0.145, 0.255))
+    if PHOTO:
+        beaver_photo.sleeping_pillow(emit, bent_tube, linen, x, y + .81, 12.04)
+    else:
+        cushion(linen, (x, y + 0.75, 12.10), (0.42, 0.145, 0.255))
 room = part("bedside-table", 3.43, y, 12.09)
-table(3.10, y, 11.75, 0.66, 0.68, 0.62)
+if PHOTO:
+    beaver_photo.bedside_joinery(box, oak, walnut, boxes, y)
+else:
+    table(3.10, y, 11.75, 0.66, 0.68, 0.62)
+if PHOTO:
+    box(walnut, (3.14,y+.62,11.87),(3.34,y+.649,12.13),False,.005)
+    box(paper, (3.15,y+.649,11.878),(3.33,y+.671,12.122))
+    box(walnut, (3.14,y+.671,11.87),(3.34,y+.677,12.13),False,.002)
 room = part("bedside-lamp", 3.43, y + 0.62, 12.07)
-turned(brass, 3.43, y + 0.62, 12.07, [(0.13, 0), (0.12, 0.04), (0.04, 0.065), (0.032, 0.31), (0.07, 0.37)])
+if PHOTO:
+    turned(pottery, 3.43,y+.62,12.07,[(.083,0),(.108,.019),(.126,.083),(.116,.18),(.072,.24),(.046,.27),(.042,.315)],32,True)
+else:
+    turned(brass, 3.43, y + 0.62, 12.07, [(0.13, 0), (0.12, 0.04), (0.04, 0.065), (0.032, 0.31), (0.07, 0.37)])
 turned(linen, 3.43, y + 0.95, 12.07, [(0.195, 0), (0.145, 0.26), (0.115, 0.265)], 24)
 room = part("potted-plant", 0.57, y + 0.01, 9.28)
-plant(0.57, y + 0.01, 9.28, 0.85)
+if PHOTO:
+    beaver_photo.money_tree(emit, turned, bent_tube, finish, clay, .57, y+.01, 9.28)
+else:
+    plant(0.57, y + 0.01, 9.28, 0.85)
 room = part("bathtub", 0.78, y + 0.04, 2.19)
 box(pottery, (0.29, y + 0.04, 1.16), (1.27, y + 0.20, 3.23), True, 0.06)
 for x in [0.29, 1.12]:
@@ -1242,21 +1369,42 @@ if FINISHES:
     # Linen curtains hang from individual loops, with gathers spreading below
     # the header and a turned lower hem that sags between the support points.
     room = part("bedroom-curtains", 2.65, RISE+2.66, 12.61)
-    bent_tube(brass, [(0.49,RISE+2.71,12.63),(4.83,RISE+2.71,12.63)], 0.013,(0,1,0),16)
+    hardware = wrought if PHOTO else brass
+    bent_tube(hardware, [(0.49,RISE+2.71,12.63),(4.83,RISE+2.71,12.63)], 0.013,(0,1,0),16)
+    if PHOTO:
+        for end in (.49, 4.83):
+            cushion(hardware, (end, RISE + 2.71, 12.63), (.026, .023, .023))
+        for bracket in (.57, 2.66, 4.71):
+            bent_tube(hardware, [(bracket, RISE + 2.71, 12.63),
+                                 (bracket, RISE + 2.665, 12.66),
+                                 (bracket, RISE + 2.665, 12.88)], .008, (1, 0, 0), 8)
     curtain = finish("curtain-linen", "ded7c4", 0.97, texture=190)
     for panel,x0 in enumerate([0.54,4.02]):
-        def hanging(u,t):
-            fore = 1-t
-            p = math.tau*(4.35*u + 0.055*math.sin(8*u+panel) + 0.085*fore*math.sin(5*u+2*t+panel))
-            x = x0 + 0.55*u + fore**1.4*(0.10*(2*u-1) + 0.035*math.sin(3.8*u + panel))
-            z = 12.60 + (0.034 + 0.032*fore) * math.cos(p) + 0.012*math.sin(3.2*u+1.9*t+panel)
-            h = RISE+0.68 + t*1.98 + fore*(0.015*math.sin(7*u+panel)+0.012*math.cos(p))
-            return x,h,z
-        fabric_grid(curtain, 56, 30, hanging)
-        fabric_grid(curtain, 56, 3, lambda u,t: tuple(a+b for a,b in zip(hanging(u,0),(0,0.012*t,0.002*t))))
-        for i in range(6):
-            x,h,z = hanging(i/5,1)
-            bent_tube(brass, [(x,RISE+2.711+0.030*math.cos(k*math.tau/16),12.63+0.030*math.sin(k*math.tau/16)) for k in range(17)], 0.003,(1,0,0),8)
+        if PHOTO:
+            def hanging(u, t):
+                return beaver_photo.pinch_pleated_panel(u, t, panel, x0, RISE)
+            fabric_grid(curtain, 100, 43, hanging, cut_size=(1.27, 1.98))
+            # The turned hem doubles the cloth over the lower 35 mm.
+            def inner_hem(u, v):
+                x, h, z = hanging(u, v * .035 / 1.98)
+                return x, h, z + .0024 + .0016 * math.sin(math.pi * v)
+            fabric_grid(curtain, 100, 3, inner_hem, reverse=True, cut_size=(1.27, .035))
+        else:
+            def hanging(u,t):
+                fore = 1-t
+                p = math.tau*(4.35*u + 0.055*math.sin(8*u+panel) + 0.085*fore*math.sin(5*u+2*t+panel))
+                x = x0 + 0.55*u + fore**1.4*(0.10*(2*u-1) + 0.035*math.sin(3.8*u + panel))
+                z = 12.60 + (0.034 + 0.032*fore) * math.cos(p) + 0.012*math.sin(3.2*u+1.9*t+panel)
+                h = RISE+0.68 + t*1.98 + fore*(0.015*math.sin(7*u+panel)+0.012*math.cos(p))
+                return x,h,z
+            fabric_grid(curtain, 56, 30, hanging)
+            fabric_grid(curtain, 56, 3, lambda u,t: tuple(a+b for a,b in zip(hanging(u,0),(0,0.012*t,0.002*t))))
+        support_count = 8 if PHOTO else 6
+        for i in range(support_count):
+            x,h,z = hanging(i/(support_count-1),1)
+            if PHOTO:
+                bent_tube(hardware, [(x,h-.004,z), (x,h+.005,z-.004), (x,RISE+2.683,12.63)], .002, (1,0,0), 6)
+            bent_tube(hardware, [(x,RISE+2.711+0.030*math.cos(k*math.tau/16),12.63+0.030*math.sin(k*math.tau/16)) for k in range(17)], 0.003,(1,0,0),8)
 
 else:
     # A striped cotton towel, looped over the oven rail with tiny ripples.
@@ -1306,7 +1454,11 @@ for i in range(3):
     box(paint, (x + 0.035, 0.16, 12.009), (x + 0.625, 0.35, 12.019), False, 0.009)
 cushion(flax, (3.5, 0.45, 12.39), (1.13, 0.083, 0.35))
 for i in range(3):
-    cushion(stripe if i == 1 else ink, (2.83 + i * 0.63, 0.66, 12.62), (0.24, 0.21, 0.085))
+    if PHOTO:
+        cushion(stripe if i == 1 else ink, (2.80+i*.65,.692,12.58+.018*math.sin(i*2)),
+                (.22+.012*(i%2),.19+.013*i,.075), (.31,.16,.26)[i], (-.11,.15,-.20)[i])
+    else:
+        cushion(stripe if i == 1 else ink, (2.83 + i * 0.63, 0.66, 12.62), (0.24, 0.21, 0.085))
 room = part("roman-shade", 2.65, 2.65, 12.65)
 # Overlapping folds of a half-raised woven Roman shade have a visible lining and selvage.
 for i in range(5):
@@ -1379,6 +1531,9 @@ room = part("striped-table-runner", 2.40, 0.796, 7.575)
 
 def runner_surface(u, v):
     z = 6.45 + v * 2.24
+    if PHOTO:
+        # Fold the dishcloth on one side, leaving the board faces and bowl visible.
+        return (1.99+.33*u, .7905+.012*math.sin(u*9+v*2)**2+.002*math.sin(v*11)**2, 7.91+.39*v)
     end = max(6.70 - z, z - 8.45, 0.0)
     zz = min(8.45, max(6.70, z)) + (z - min(8.45, max(6.70, z))) * 0.17
     xx = 2.14 + u * 0.52 + 0.011 * math.sin(v * 10 + u * 2)
@@ -1393,7 +1548,11 @@ for i, (a, b) in enumerate(zip(edges, edges[1:])):
 for j in range(36):
     for v in [0, 1]:
         x, y, z = runner_surface(j / 35, v)
-        box(flax, (x - 0.002, y - 0.032 - 0.01 * math.sin(j * 4), z - 0.002), (x + 0.002, y, z + 0.002))
+        if PHOTO:
+            end = z + (.012 if v else -.012) * (.8+.2*math.sin(j*4))
+            box(flax,(x-.001,y,min(end,z)),(x+.001,y+.0018,max(end,z)))
+        else:
+            box(flax, (x - 0.002, y - 0.032 - 0.01 * math.sin(j * 4), z - 0.002), (x + 0.002, y, z + 0.002))
 room = "enamel-refrigerator"
 # Hand-written list under a little round fridge magnet.
 for x, y, w, h in [(1.70, 1.52, 0.18, 0.20), (1.90, 1.70, 0.13, 0.11)]:
@@ -1485,6 +1644,36 @@ bs.inputs["Emission Color"].default_value = (1, 0.77, 0.42, 1)
 bs.inputs["Emission Strength"].default_value = 2.4
 cushion(bulb, (2.37, 2.045, 7.51), (0.11, 0.087, 0.11))
 
+if PHOTO:
+    for name, x, z, size in [("rear-clay-planter", .57, 13.52, 1.18),
+                              ("rear-herb-pot", 6.32, 13.47, .87)]:
+        room = part(name, x, 0, z)
+        plant(x, 0, z, size)
+        ground_components.append({"name": name, "anchor": [x, 0, z], "box_index": len(boxes)})
+        r = .14 * size
+        boxes.append([[x-r,0,z-r],[x+r,.30*size,z+r]])
+    soil = finish("garden-topsoil", "807353", .94)
+    for j,(x,z) in enumerate(((.25,13.72),(.81,13.53),(1.35,13.67),(2.21,13.23),(2.47,13.40),
+                   (3.33,13.19),(4.42,13.31),(5.07,13.18),(5.52,13.68),(6.08,13.92),(6.51,13.24))):
+        room = part(f"rear-yard-grass-{j+1}",x,0,z)
+        beaver_photo.verge_clump(emit,grass,rock[j%4],x,.012,z,.64+.32*math.sin(4*j),421+j)
+        # A little soil heaves around each root crown.
+        turned(soil,x,.006,z,[(.079,0),(.066,.014),(.035,.020)],12,True)
+        ground_components.append({"name": room, "anchor": [x,0,z]})
+
+
+
+if PHOTO:
+    survey_position, diameter, height, dataset = beaver_frontage_tree.inventory(ROOT)
+    tree_anchor = [5.05, 0., -5.304]
+    room = part("frontage-broadleaf", *tree_anchor)
+    beaver_frontage_tree.broadleaf(emit, finish, tree_anchor, diameter, height)
+    x, _, z = tree_anchor
+    ground_components.append({"name": room, "anchor": tree_anchor, "box_index": len(boxes),
+                              "survey_xz": survey_position, "dataset": dataset,
+                              "source_record": beaver_frontage_tree.RECORD})
+    boxes.append([[x-.14,0,z-.14],[x+.14,2.65,z+.14]])
+
 component_meshes = {}
 for (room_name, mat_name), (points, faces, smooth) in batches.items():
     mesh = bpy.data.meshes.new(f"{room_name} - {mat_name}")
@@ -1498,18 +1687,44 @@ for (room_name, mat_name), (points, faces, smooth) in batches.items():
     if room_name in pivots:
         component_meshes.setdefault(room_name, []).append(obj)
 
-beaver_lighting.bake(list(bpy.context.scene.objects), RISE, detailed=FINISHES, cloth_transfer=PATINA, furniture_contact=FURNITURE,
-                     porch_source=beaver_entry.SCONCE_LIGHT if FURNITURE else (5.97, 2.27, -0.26),
-                     entry_setback=beaver_entry.SETBACK if FURNITURE else 0)
+if "--blend-only" not in sys.argv:
+    bake_meshes = list(bpy.context.scene.objects)
+    restore = (beaver_photo.metric_bake(bake_meshes, dimensions.GROUP, dimensions.ASSEMBLIES,
+               (1.3035714, -.10714286), (.13461538, 1.28846154)) if PHOTO else [])
+    beaver_lighting.bake(bake_meshes, RISE, detailed=FINISHES, cloth_transfer=PATINA, furniture_contact=FURNITURE,
+                         porch_source=beaver_entry.SCONCE_LIGHT if FURNITURE else (5.97, 2.27, -0.26),
+                         entry_setback=beaver_entry.SETBACK if FURNITURE else 0, exterior_bounce=PHOTO)
+    if PHOTO:
+        # The first two UV sets carry light transfer and contact. The coverlet
+        # also needs the position on the uncut pattern after it is draped.
+        for obj in component_meshes["double-bed"]:
+            mat_name = obj.data.materials[0].name
+            if mat_name.split("@")[0] != "cotton-coverlet":
+                continue
+            pattern = cloth_patterns[("double-bed", mat_name)]
+            width = max(u for u, v in pattern.values())
+            length = max(v for u, v in pattern.values())
+            assert len(obj.data.uv_layers) == 2
+            cut = obj.data.uv_layers.new(name="Coverlet cutting pattern")
+            for loop in obj.data.loops:
+                u, v = pattern[loop.vertex_index]
+                cut.data[loop.index].uv = (u / width, v / length)
+    for mesh, inverse in restore:
+        mesh.transform(inverse)
+        mesh.update()
 
 parser = argparse.ArgumentParser()
+parser.add_argument("--blend-only", action="store_true", help="Build the editable source scene without exporting runtime assets")
 parser.add_argument("--parts", type=Path, help="Directory outside the checkout for reusable component GLBs")
 parser.add_argument("--blend", type=Path)
 parser.add_argument("--house-finishes", action="store_true", help="Build the courtyard exterior and furnished interior variant")
 parser.add_argument("--house-patina", action="store_true", help="Build the scanned finishes, exterior joinery and mature garden")
 parser.add_argument("--render", type=Path, help="Optional kitchen photograph rendered from the editable scene")
+parser.add_argument("--house-photo", action="store_true", help="Build the tiled roof, courtyard and tailored room furnishings")
 parser.add_argument("--house-furniture", action="store_true", help="Build the sewn upholstery, wood furniture and wool rug")
 args = parser.parse_args(sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else [])
+if args.blend_only and (not args.blend or args.parts):
+    parser.error("--blend-only needs --blend and writes the assembled scene without GLB exports")
 if args.blend:
     if args.blend.resolve().is_relative_to(ROOT):
         raise ValueError("The editable Blender scene belongs in the off-repository asset store.")
@@ -1538,88 +1753,92 @@ for name, meshes in component_meshes.items():
         obj.parent = handle
     components[name] = (handle, meshes)
 
-OUT.mkdir(parents=True, exist_ok=True)
-glb = OUT / "terrace.glb"
-grain_links = []
-for mat in materials.values():
-    slot = mat.node_tree.nodes.get("Principled BSDF").inputs["Base Color"]
-    if slot.is_linked:
-        source = slot.links[0].from_socket
-        mat.node_tree.links.remove(slot.links[0])
-        grain_links.append((mat, source, slot))
-bpy.ops.export_scene.gltf(
-    filepath=str(glb),
-    export_format="GLB",
-    export_texcoords=True,
-    export_yup=True,
-    export_animations=False,
-    export_extras=False,
-)
-manifest_source = "Original Blender model generated by scripts/blender-buildings/build_beaver_terrace.py"
-if args.parts:
-    entries = []
-    for name, (root, meshes) in sorted(components.items()):
-        path = args.parts / (name + ".glb")
-        bpy.ops.object.select_all(action="DESELECT")
-        for obj in [root, *meshes]:
-            obj.select_set(True)
-        placed = root.location.copy()
-        root.location = (0, 0, 0)
-        try:
-            bpy.ops.export_scene.gltf(
-                filepath=str(path),
-                export_format="GLB",
-                use_selection=True,
-                export_texcoords=False,
-                export_yup=True,
-                export_animations=False,
-                export_extras=False,
-            )
-        finally:
-            root.location = placed
-        content = path.read_bytes()
-        entries.append(
-            {
-                "asset": path.name,
-                "sha256": hashlib.sha256(content).hexdigest(),
-                "bytes": len(content),
-                "pivot_in_house_m": [placed.x, placed.z, -placed.y],
-            }
-        )
-    (args.parts / "components.json").write_text(
-        json.dumps(
-            {
-                "source": manifest_source,
-                "license": "MIT",
-                "attribution": "Earth Online contributors",
-                "units": "metres, Y up",
-                "components": entries,
-            },
-            indent=2,
-        )
-        + "\n"
+if not args.blend_only:
+    OUT.mkdir(parents=True, exist_ok=True)
+    glb = OUT / "terrace.glb"
+    grain_links = []
+    for mat in materials.values():
+        slot = mat.node_tree.nodes.get("Principled BSDF").inputs["Base Color"]
+        if slot.is_linked:
+            source = slot.links[0].from_socket
+            mat.node_tree.links.remove(slot.links[0])
+            grain_links.append((mat, source, slot))
+    bpy.ops.export_scene.gltf(
+        filepath=str(glb),
+        export_format="GLB",
+        export_texcoords=True,
+        export_yup=True,
+        export_animations=False,
+        export_extras=False,
     )
-for mat, source, slot in grain_links:
-    mat.node_tree.links.new(source, slot)
-raw = glb.read_bytes()
-manifest = {
-    "source": manifest_source,
-    "license": "MIT",
-    "attribution": "Earth Online contributors. Siting from the recorded OpenStreetMap footprint in sf-city.json.gz.",
-    "url": "/" + glb.relative_to(ROOT / "public").as_posix(),
-    "sha256": hashlib.sha256(raw).hexdigest(),
-    "bytes": len(raw),
-    "door": {"hinge": door_hinge, "bounds": door_bounds, "materials": door_materials},
-    "boxes": boxes,
-    "ramps": ramps,
-}
-if FURNITURE:
-    manifest["metric_assemblies"] = [
-        {"anchor": anchor, "components": names,
-         "boxes": [j for j, group in enumerate(box_groups) if group == i]}
-        for i, (anchor, names) in enumerate(dimensions.ASSEMBLIES)
-    ]
-(OUT / "terrace.provenance.json").write_text(json.dumps(manifest, indent=1) + "\n")
+    manifest_source = "Original Blender model generated by scripts/blender-buildings/build_beaver_terrace.py"
+    if args.parts:
+        entries = []
+        for name, (root, meshes) in sorted(components.items()):
+            path = args.parts / (name + ".glb")
+            bpy.ops.object.select_all(action="DESELECT")
+            for obj in [root, *meshes]:
+                obj.select_set(True)
+            placed = root.location.copy()
+            root.location = (0, 0, 0)
+            try:
+                bpy.ops.export_scene.gltf(
+                    filepath=str(path),
+                    export_format="GLB",
+                    use_selection=True,
+                    export_texcoords=False,
+                    export_yup=True,
+                    export_animations=False,
+                    export_extras=False,
+                )
+            finally:
+                root.location = placed
+            content = path.read_bytes()
+            entries.append(
+                {
+                    "asset": path.name,
+                    "sha256": hashlib.sha256(content).hexdigest(),
+                    "bytes": len(content),
+                    "pivot_in_house_m": [placed.x, placed.z, -placed.y],
+                }
+            )
+        (args.parts / "components.json").write_text(
+            json.dumps(
+                {
+                    "source": manifest_source,
+                    "license": "MIT",
+                    "attribution": "Earth Online contributors",
+                    "units": "metres, Y up",
+                    "components": entries,
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+    for mat, source, slot in grain_links:
+        mat.node_tree.links.new(source, slot)
+    raw = glb.read_bytes()
+    manifest = {
+        "source": manifest_source,
+        "license": "MIT",
+        "attribution": "Earth Online contributors. Siting from the recorded OpenStreetMap footprint in sf-city.json.gz.",
+        "url": "/" + glb.relative_to(ROOT / "public").as_posix(),
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "bytes": len(raw),
+        "door": {"hinge": door_hinge, "bounds": door_bounds, "materials": door_materials},
+        "boxes": boxes,
+        "ramps": ramps,
+    }
+    if PHOTO:
+        manifest["ground_components"] = ground_components
+        manifest["rear_parcel"] = beaver_photo.rear_parcel(ROOT)
+    if FURNITURE:
+        manifest["metric_assemblies"] = [
+            {"anchor": anchor, "components": names,
+             "boxes": [j for j, group in enumerate(box_groups) if group == i]}
+            for i, (anchor, names) in enumerate(dimensions.ASSEMBLIES)
+        ]
+    (OUT / "terrace.provenance.json").write_text(json.dumps(manifest, indent=1) + "\n")
 
 
 # These objects belong to the editable review scene. The portable GLB above contains the house alone.
@@ -1662,12 +1881,15 @@ scene.render.resolution_y = 900
 scene.render.resolution_percentage = 100
 if FINISHES and (args.blend or args.render):
     bpy.context.view_layer.update()
-    beaver_lighting.dress_floor_for_blender(scene, FINISH_DIR / "floorboards.png", boards)
+    beaver_lighting.dress_floor_for_blender(scene, (OUT if PHOTO else FINISH_DIR) / "floorboards.png", boards)
 if PATINA and (args.blend or args.render):
-    beaver_entry.dress_scans(materials, SURFACE_DIR, scene, FURNITURE, door_bounds)
+    beaver_entry.dress_scans(materials, SURFACE_DIR, scene, FURNITURE, door_bounds, photo=PHOTO, cloth_patterns=cloth_patterns)
+if args.blend_only and PHOTO:
+    import beaver_blender_scene
+    beaver_blender_scene.stage(scene, ROOT, components, dimensions, ground_components)
 if args.blend:
     bpy.context.preferences.filepaths.save_version = 0
-    bpy.ops.wm.save_as_mainfile(filepath=str(args.blend.resolve()))
+    bpy.ops.wm.save_as_mainfile(filepath=str(args.blend.resolve()), compress=args.blend_only)
 if args.render:
     args.render.parent.mkdir(parents=True, exist_ok=True)
     scene.render.filepath = str(args.render.resolve())

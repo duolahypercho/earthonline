@@ -52,6 +52,30 @@ pub struct Args {
     pub house_finishes: bool,
     pub house_patina: bool,
     pub house_furniture: bool,
+    pub house_photo: bool,
+    pub house_photo_lod: bool,
+    pub house_blender_bedroom: bool,
+    pub house_mission_roof: bool,
+    pub house_dining_light: bool,
+    pub house_downstairs_light: bool,
+    pub house_table_light: bool,
+    pub house_oak_finish: bool,
+    pub house_oak_joinery: bool,
+    pub house_floor_reflections: bool,
+    pub house_fitted_dining: bool,
+    pub house_fitted_finishes: bool,
+    pub house_kitchen_light: bool,
+    pub house_window_linen: bool,
+    pub house_street_garden: bool,
+    pub house_front_daylight: bool,
+    pub house_wall_daylight: bool,
+    pub house_window_optics: bool,
+    pub house_joinery_light: bool,
+    pub house_porch_lamp: bool,
+    pub house_fired_stoop: bool,
+    pub house_site_camera: bool,
+    pub house_dining_meter: bool,
+    pub house_glazing: bool,
     pub bench: bool,
     pub start_underwater: bool,
     pub dive_site: Option<eo_render::seabed::Habitat>,
@@ -234,6 +258,30 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
         house_finishes: false,
         house_patina: false,
         house_furniture: false,
+        house_photo: false,
+        house_photo_lod: false,
+        house_blender_bedroom: false,
+        house_mission_roof: false,
+        house_dining_light: false,
+        house_downstairs_light: false,
+        house_table_light: false,
+        house_oak_finish: false,
+        house_oak_joinery: false,
+        house_floor_reflections: false,
+        house_fitted_dining: false,
+        house_fitted_finishes: false,
+        house_kitchen_light: false,
+        house_window_linen: false,
+        house_street_garden: false,
+        house_front_daylight: false,
+        house_wall_daylight: false,
+        house_window_optics: false,
+        house_joinery_light: false,
+        house_porch_lamp: false,
+        house_fired_stoop: false,
+        house_site_camera: false,
+        house_dining_meter: false,
+        house_glazing: true,
         beaver_house: false,
         bench: false,
         start_underwater: false,
@@ -341,9 +389,65 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-interior-lighting" => a.interior_lighting = false,
             "--house-finishes" => a.house_finishes = true,
             "--house-patina" => { a.house_finishes = true; a.house_patina = true; }
-            "--no-house-patina" => { a.house_patina = false; a.house_furniture = false; }
+            "--no-house-patina" => { a.house_patina = false; a.house_furniture = false; a.house_photo = false; }
             "--house-furniture" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; }
-            "--no-house-furniture" => a.house_furniture = false,
+            "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
+            "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
+            "--no-house-photo" => a.house_photo = false,
+            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" | "--house-fitted-finishes" | "--house-kitchen-light" | "--house-window-linen" | "--house-street-garden" | "--house-front-daylight" | "--house-wall-daylight" | "--house-site-camera" | "--house-window-optics" | "--house-joinery-light" | "--house-porch-lamp" | "--house-fired-stoop" => {
+                a.beaver_house = true;
+                a.house_finishes = true;
+                a.house_patina = true;
+                a.house_furniture = true;
+                a.house_photo = true;
+                match s.as_str() {
+                    "--house-dining-light" => a.house_dining_light = true,
+                    "--house-downstairs-light" => a.house_downstairs_light = true,
+                    "--house-table-light" => a.house_table_light = true,
+                    "--house-street-garden" => a.house_street_garden = true,
+                    "--house-site-camera" => a.house_site_camera = true,
+                    "--house-porch-lamp" => a.house_porch_lamp = true,
+                    "--house-fired-stoop" => a.house_fired_stoop = true,
+                    "--house-joinery-light" => a.house_joinery_light = true,
+                    "--house-window-optics" => a.house_window_optics = true,
+                    "--house-wall-daylight" => a.house_wall_daylight = true,
+                    "--house-front-daylight" => { a.house_street_garden = true; a.house_front_daylight = true; }
+                    "--house-window-linen" => { a.house_fitted_dining = true; a.house_window_linen = true; }
+                    "--house-kitchen-light" => { a.house_fitted_dining = true; a.house_kitchen_light = true; }
+                    "--house-fitted-finishes" => { a.house_fitted_dining = true; a.house_fitted_finishes = true; }
+                    "--house-fitted-dining" => a.house_fitted_dining = true,
+                    "--house-oak-finish" => a.house_oak_finish = true,
+                    "--house-dining-meter" => a.house_dining_meter = true,
+                    "--house-floor-reflections" => a.house_floor_reflections = true,
+                    "--house-oak-joinery" => a.house_oak_joinery = true,
+                    "--house-mission-roof" => a.house_mission_roof = true,
+                    _ => a.house_blender_bedroom = true,
+                }
+            }
+            "--no-house-dining-light" => a.house_dining_light = false,
+            "--no-house-downstairs-light" => a.house_downstairs_light = false,
+            "--no-house-table-light" => a.house_table_light = false,
+            "--no-house-fitted-finishes" => a.house_fitted_finishes = false,
+            "--no-house-street-garden" => a.house_street_garden = false,
+            "--no-house-site-camera" => a.house_site_camera = false,
+            "--no-house-porch-lamp" => a.house_porch_lamp = false,
+            "--no-house-fired-stoop" => a.house_fired_stoop = false,
+            "--no-house-joinery-light" => a.house_joinery_light = false,
+            "--no-house-window-optics" => a.house_window_optics = false,
+            "--no-house-wall-daylight" => a.house_wall_daylight = false,
+            "--no-house-front-daylight" => a.house_front_daylight = false,
+            "--no-house-window-linen" => a.house_window_linen = false,
+            "--no-house-kitchen-light" => a.house_kitchen_light = false,
+            "--no-house-fitted-dining" => a.house_fitted_dining = false,
+            "--no-house-oak-finish" => a.house_oak_finish = false,
+            "--no-house-dining-meter" => a.house_dining_meter = false,
+            "--no-house-floor-reflections" => a.house_floor_reflections = false,
+            "--no-house-oak-joinery" => a.house_oak_joinery = false,
+            "--no-house-mission-roof" => a.house_mission_roof = false,
+            "--no-house-blender-bedroom" => a.house_blender_bedroom = false,
+            "--house-photo-lod" => a.house_photo_lod = true,
+            "--no-house-photo-lod" => a.house_photo_lod = false,
+            "--no-house-glazing" => a.house_glazing = false,
             "--no-house-finishes" => a.house_finishes = false,
             "--no-beaver-house" => a.beaver_house = false,
             "--no-models" => a.models = false,
@@ -381,6 +485,8 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             // look
             "--time-of-day" => a.time_of_day = val()?.parse()?,
             "--shadow-map" => a.look.shadow_map = val()?.parse::<u32>()?.clamp(256, 8192),
+            "--blender-camera" => a.look.blender_camera = true,
+            "--no-blender-camera" => a.look.blender_camera = false,
             "--no-shadows" => a.look.shadows = false,
             "--no-ao" => a.look.ao = false, // no occlusion + bounce pass
             "--no-facade-age" => a.look.facade &= !eo_render::facade::RUN_AGE, // facade
@@ -662,6 +768,7 @@ pub fn bridge_detail() -> bool {
 }
 
 pub struct World {
+    pub house_layer_count: u32,
     pub house_vertex_base: usize,
     pub house: Option<Arc<house::House>>,
     pub paths: DataPaths,
@@ -874,7 +981,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         landmark_claims.extend(w.buildings_over_cuts(&rings).into_iter().map(|i| city.buildings[i].id.trim_start_matches("sf-building-").to_string()));
     }
     let finishes = (args.beaver_house && args.house_finishes)
-        .then(|| house::Finishes::load(&paths.repo_root, args.house_patina, args.house_furniture))
+        .then(|| house::Finishes::load(&paths.repo_root, args))
         .transpose()?;
     let house = if args.beaver_house {
         let record = city.buildings.iter().find(|b| house::owns(&b.id)).ok_or_else(|| anyhow::anyhow!("missing Beaver Street house footprint"))?;
@@ -914,6 +1021,9 @@ pub fn load_world(args: &Args) -> Result<World> {
         set.streets = street_world.clone();
         kit_set = Some(Arc::new(set));
     }
+    let house_has_scans = finishes.as_ref().is_some_and(|f| !f.scans.is_empty());
+    let finish_maps = finishes.map(house::Finishes::into_maps).unwrap_or_default();
+    let house_layer_count = finish_maps.len() as u32;
     let kit_prepare_ms = t.elapsed().as_secs_f64() * 1e3;
     let mut street_parts = None;
     if let Some(sw) = &street_world {
@@ -925,16 +1035,15 @@ pub fn load_world(args: &Args) -> Result<World> {
     let mut rock_material = eo_render::scene::MATERIAL_VERTEX_COLOUR;
     if let Some(kit) = kit_lib {
         // The kit bake runs beside the first frames; models and kit packs wait for it.
-        if finishes.as_ref().is_some_and(|f| !f.scans.is_empty()) {
-            house::Scan::bind(&mut authored.materials);
-        }
-        let layers = authored.materials.layers.clone();
-        // the house's scans take the layers right after the kit's bake; the rock follows them.
-        let house_scans = finishes.as_ref().map_or(0, |f| f.scans.len());
+        // the shore rock takes the layer right after the kit's bake; the house's maps follow it.
         let rock_maps = args.black_point_intertidal
             .then(|| eo_render::seabed::rock_maps::load(&paths.repo_root)).transpose()?;
+        if house_has_scans {
+            house::Scan::bind(&mut authored.materials, usize::from(rock_maps.is_some()));
+        }
+        let layers = authored.materials.layers.clone();
         if let Some(maps) = &rock_maps {
-            rock_material = eo_render::seabed::rock_maps::register(&mut authored.materials, layers.len() + house_scans, maps);
+            rock_material = eo_render::seabed::rock_maps::register(&mut authored.materials, layers.len(), maps);
         }
         let cache = cache_dir(args);
         let (tx, rx) = std::sync::mpsc::channel();
@@ -956,18 +1065,11 @@ pub fn load_world(args: &Args) -> Result<World> {
                             Err(e) => eprintln!("warning: facade atlas cell {cell} not loaded ({e:#}); {name} keeps its bake"),
                         }
                     }
-                    // the layers after the kit's bake: the house's scans, the shore rock
-                    // (`rock_maps::register` above), then the house's street reflections,
-                    // floorboards and atlas, which draw.wgsl reads from the array's end.
-                    let mut house_tail = vec![];
-                    if let Some(finishes) = finishes {
-                        maps.extend(finishes.scans.into_iter().map(|scan| scan.maps));
-                        house_tail.extend(finishes.street_reflections);
-                        house_tail.push(finishes.floorboards);
-                        house_tail.push(finishes.atlas);
-                    }
+                    // the layers after the kit's bake: the shore rock (`rock_maps::register`
+                    // above), then the house's maps (`house::Finishes::into_maps`), which
+                    // its materials address from their first layer and draw.wgsl from the array's end.
                     maps.extend(rock_maps);
-                    maps.extend(house_tail);
+                    maps.extend(finish_maps);
                     (KitUpload::build(&maps), t.elapsed().as_secs_f64() * 1e3)
                 })
                 .map_err(|e| format!("{e:#}"));
@@ -1178,7 +1280,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         smooth_terrain: args.landmarks && args.landmarks2,
     }, terrain_cuts)?;
     let house_vertex_base = scene.vertices.len();
-    if let Some(house) = &house { house.append(&mut scene, &authored.materials); }
+    if let Some(house) = &house { house.append(&mut scene, &authored.materials, args.house_photo_lod); }
     let mut dive_sites = vec![];
     if args.look.water && (args.underwater_habitats || args.cove_detail || args.dive_site.is_some() || args.capture || args.bench)
         && let (Some(data), Some(height)) = (&water, &carpet_fn)
@@ -1311,7 +1413,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         }
         None => (None, None),
     };
-    Ok(World { house_vertex_base, house, paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, dive_sites, landmarks, hlod, hlod_trees, structures, structures_drawn }) // hlod
+    Ok(World { house_layer_count, house_vertex_base, house, paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, dive_sites, landmarks, hlod, hlod_trees, structures, structures_drawn }) // hlod
 }
 
 /// the street size. `--ground-scale S` (an explicit ground-plan

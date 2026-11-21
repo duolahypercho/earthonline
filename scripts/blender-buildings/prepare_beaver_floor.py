@@ -14,7 +14,11 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "public/assets/buildings/beaver-terrace/finishes"
 parser = argparse.ArgumentParser()
 parser.add_argument("source_cache", type=Path)
-cache = parser.parse_args().source_cache.resolve()
+parser.add_argument("--house-photo", action="store_true")
+args = parser.parse_args()
+cache = args.source_cache.resolve()
+if args.house_photo:
+    OUT = OUT / "patina/furniture/photo"
 if cache.is_relative_to(ROOT):
     raise ValueError("Original texture plates belong outside the checkout.")
 cache.mkdir(parents=True, exist_ok=True)
@@ -47,9 +51,14 @@ for page, (kind, digest) in enumerate(hashes.items()):
             # while lifting knots and reducing the orange varnish cast.
             wash = ImageOps.colorize(ImageOps.grayscale(board), "#947e66", "#d4c1a4",
                                      blackpoint=42, whitepoint=207)
-            board = Image.blend(board, wash, 0.77)
+            board = Image.blend(board, wash, 0.49 if args.house_photo else 0.77)
         if kind == "rough":
-            board = Image.merge("RGB",(Image.new("L",board.size,255),board.getchannel("R"),Image.new("L",board.size,0)))
+            roughness = board.getchannel("R")
+            if args.house_photo:
+                # Satin wax fills the open grain. Preserve local roughness variation
+                # in the underlying photographed board and the broken-up reflection.
+                roughness = roughness.point(lambda value: round(48 + .48 * value))
+            board = Image.merge("RGB",(Image.new("L",board.size,255),roughness,Image.new("L",board.size,0)))
         atlas.paste(board,(0,page*512+row*64))
     sources.append({"url":url,"sha256":digest})
 path = OUT / "floorboards.png"
@@ -59,6 +68,7 @@ raw = path.read_bytes()
     "source":"https://polyhaven.com/a/wood_floor_worn","attribution":"Dimitrios Savva / Poly Haven",
     "license":"CC0-1.0","license_url":"https://polyhaven.com/license","inputs":sources,
     "build":"scripts/blender-buildings/prepare_beaver_floor.py",
-    "treatment":"Grain strips with a pale oil colour treatment and the original normal and roughness",
+    "treatment":("Board-aligned photographic grain and relief, satin wax roughness" if args.house_photo
+                 else "Grain strips with a pale oil colour treatment and the original normal and roughness"),
     "url":"/"+path.relative_to(ROOT/"public").as_posix(),"sha256":hashlib.sha256(raw).hexdigest(),"bytes":len(raw)
 },indent=2)+"\n")

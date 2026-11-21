@@ -1,0 +1,25 @@
+{
+  "source": "https://polyhaven.com/a/wood_floor_worn",
+  "attribution": "Dimitrios Savva / Poly Haven",
+  "license": "CC0-1.0",
+  "license_url": "https://polyhaven.com/license",
+  "inputs": [
+    {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_floor_worn/wood_floor_worn_diff_1k.jpg",
+      "sha256": "db386853009b92b9edd7255b35c9f7b0d4b7de16837a7a9da8422148754bc758"
+    },
+    {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_floor_worn/wood_floor_worn_nor_gl_1k.jpg",
+      "sha256": "f428496e5d6c726d17d9ecea29c0acd8660348630acf791cea7bdd7f3c6e262b"
+    },
+    {
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_floor_worn/wood_floor_worn_rough_1k.jpg",
+      "sha256": "9d7492db1197f1386466dfd7dd43f692446166c1433ddeebf66c10e8b226a6d0"
+    }
+  ],
+  "build": "scripts/blender-buildings/prepare_beaver_floor.py",
+  "treatment": "Board-aligned photographic grain and relief, satin wax roughness",
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/floorboards.png",
+  "sha256": "315b0a1f6d8408902cf2885b95d2691b1623167a27ea1ceed5fc6fa94bcd6bc5",
+  "bytes": 828411
+}

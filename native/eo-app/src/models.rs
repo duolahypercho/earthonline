@@ -206,6 +206,8 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     // the opt-in features' shader code: what is off at start is compiled out of every pipeline (stage P1;
     // `EO_SHADER_FEATURES=all`, a diagnostic: every feature's code compiled in, as before the stage).
     let features = eo_render::look::ShaderFeatures::of(&args.look, crate::structures::drawn(world).is_some(), args.structures.as_ref().is_some_and(|s| s.tunnels), args.facade_clutter > 0);
+    // the playable house's materials, lights and optics: with the house loaded (`--beaver-house`, `--house-*`).
+    let features = eo_render::look::ShaderFeatures { house: world.house.is_some(), ..features };
     let mut features = if std::env::var("EO_SHADER_FEATURES").is_ok_and(|v| v == "all") { eo_render::look::ShaderFeatures::ALL } else { features };
     for w in std::env::var("EO_SHADER_FEATURES").unwrap_or_default().split(',') {
         match w {
@@ -217,6 +219,8 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
             "shop_light" => features.shop_light = true,
             "clutter" => features.facade_clutter = true,
             "cinematic" => features.cinematic = true, // (`--look cinematic`, stage L0)
+            "house" => features.house = true,
+            "blender_camera" => features.blender_camera = true,
             _ => {}
         }
     }
@@ -239,9 +243,10 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
             groups: &groups,
             hlod_enter_m: set.hlod_enter_m,
             hlod_exit_m: set.hlod_exit_m,
+            // the kit's bake, the shore rock, then the house's maps (main.rs `load_world`)
             kit_layers: set.materials.layers.len() as u32
                 + u32::from(set.materials.by_name(eo_render::seabed::rock_maps::NAME).is_some())
-                + u32::from(args.beaver_house && args.house_finishes) * (2 + crate::house::SURFACE_LAYERS * u32::from(args.house_patina) + crate::house::FURNITURE_LAYERS * u32::from(args.house_furniture && args.house_patina)),
+                + world.house_layer_count,
             kit_res: eo_assets::kit::HIGH_RES as u32,
             color_format: format,
             sample_count: args.msaa,
@@ -252,6 +257,37 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
                 .map_or(models.object, |index| index as u32),
         },
     )?;
+    // the house's first layer in the texture array: after the kit's bake and the shore rock (main.rs `load_world`).
+    let house_first_layer = set.materials.layers.len() + usize::from(set.materials.by_name(eo_render::seabed::rock_maps::NAME).is_some());
+    r.look.kitchen_frame = world.house.as_ref().map(|house| house.kitchen_frame()).unwrap_or_default();
+    r.look.fitted_finish = world.house.as_ref().map(|house| house.fitted_finish()).unwrap_or_default();
+    r.look.oak_finish = world.house.as_ref().map(|house| house.oak_finish()).unwrap_or_default();
+    r.look.table_light = world.house.as_ref().map(|house| house.table_light()).unwrap_or_default();
+    r.look.dining_lamp = world.house.as_ref().and_then(|house| house.dining_lamp()).unwrap_or_default();
+    if let Some(house) = world.house.as_ref().filter(|house| house.front_daylight.is_some() || house.wall_daylight_layer.is_some()) {
+        r.look.front_daylight = house.front_daylight.clone();
+        r.look.wall_daylight_layer = house.wall_daylight_layer.map(|i| (house_first_layer + i) as u32);
+        r.look.enclosure_frame = house.parcel_to_world().inverse();
+    }
+    if let Some(house) = world.house.as_ref() {
+        if let Some(lamp) = house.porch_light(house_first_layer) {
+            r.look.porch_light = lamp;
+            r.look.enclosure_frame = house.parcel_to_world().inverse();
+        }
+        if let Some(optics) = &house.window_optics {
+            let previous_bytes = r.look.bytes;
+            r.look.install_window_optics(optics, args.house_window_optics && args.house_glazing)?;
+            r.bytes.textures = r.bytes.textures - previous_bytes + r.look.bytes;
+            r.look.enclosure_frame = house.parcel_to_world().inverse();
+        }
+    }
+    if let Some(camera) = world.house.as_ref().and_then(|h| h.site_camera()) {
+        r.look.sky.set_exterior_camera(camera);
+    }
+    if let Some(meter) = world.house.as_ref().and_then(|h| h.interior_meter()) {
+        r.look.enclosure_frame = meter.world_to_local();
+        r.look.sky.set_interior_meter(meter);
+    }
     r.kit_radii = eo_render::kit::DEFAULT_KIT_RADII;
     r.set_occlusion(args.perf.occlusion); // occlusion
     // the far layer's GPU side and every group's cell.

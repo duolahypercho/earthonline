@@ -116,6 +116,22 @@ struct LookUniform {
     tone2: [f32; 4],
     // the filmic transform's white balance (eo-look `tone::filmic_white_balance`), rows
     wb: [[f32; 4]; 3],
+    // the playable house at 21 Beaver Street (house.rs, fitted_finish.wgsl,
+    // window_optics.wgsl, porch_light.wgsl): all zero while it is not installed.
+    enclosure_frame: [[f32; 4]; 4],
+    dining_lamp: [f32; 4],
+    table_light: [[f32; 4]; 3],
+    oak_finish: [[f32; 4]; 3],
+    fitted_finish: [[f32; 4]; 2],
+    kitchen_frame: [[f32; 4]; 5],
+    front_daylight: crate::front_daylight::Field,
+    wall_sample: [f32; 4],
+    wall_overcast: [f32; 4],
+    window_sample: [f32; 4],
+    porch_light: [[f32; 4]; 7],
+    // x: the open sky's upward irradiance over pi (eo-look `sky_irradiance_up`; the
+    // house's measured rooms scale their sky transfer by it)
+    house_sky: [f32; 4],
     // the lighting additions (`LightingOptions`), all zero while every one is off.
     // Rows (`LX_*`; mirrored in look_common.wgsl):
     //   0      flags: x the feature bits (`LightingOptions::flags_word`, read with
@@ -141,6 +157,7 @@ pub const LOOK_LX_OFFSET: usize = std::mem::offset_of!(LookUniform, lx);
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct ShadowCullParams {
     planes: [[f32; 4]; 18],
+    camera: [f32; 4],
     object_count: u32,
     compact: u32,
     mask: u32,
@@ -184,6 +201,8 @@ fn lerp_daylight(a: &eo_look::phys::Daylight, b: &eo_look::phys::Daylight, t: f6
 /// Quality settings (`--shadow-map`, `--no-shadows`).
 #[derive(Clone, Copy, Debug)]
 pub struct LookOptions {
+    /// Apply the calibrated Blender sRGB camera to the complete displayed frame.
+    pub blender_camera: bool,
     pub shadow_map: u32,
     pub shadows: bool,
     /// scene-scale occlusion + one bounce (`--no-ao` turns it off).
@@ -236,7 +255,7 @@ pub struct LookOptions {
 
 impl Default for LookOptions {
     fn default() -> Self {
-        Self { shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_features: crate::water::FEAT_ALL, water_optics: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default } // + rooms, agent pyramid test, probe deferral // water // sky
+        Self { blender_camera: false, shadow_map: shadow::MAP_SIZE, shadows: true, ao: true, facade: crate::facade::RUN_AGE | crate::facade::RUN_DETAIL | crate::facade::RUN_ATLAS2 | crate::facade::RUN_PROBE | crate::facade::RUN_ROOMS | crate::facade::RUN_AGENT_HZB | crate::facade::RUN_PROBE_DEFER, water: true, water_features: crate::water::FEAT_ALL, water_optics: false, dive_exposure: false, cove_detail: false, cove_canopy: false, cove_sediment: false, sky: Default::default(), cc0: crate::cc0::RUN_DEFAULT, lighting: LightingOptions::OFF, shadow_slope_bias: false, grime: 0, street_life: 0, photo_finish: 0, look: eo_look::cinematic::LookProfile::Default } // + rooms, agent pyramid test, probe deferral // water // sky
     }
 }
 
@@ -441,6 +460,9 @@ pub const B_SHOP_FRONTS: u32 = 19;
 /// Group 1 binding of the atmosphere's sky-view table (the physical daylight's sky in
 /// reflections, `--no-phys-sky`; look_light.wgsl `lk_atmo_view`), after the lighting additions'.
 pub const B_ATMO_VIEW: u32 = 20;
+/// Group 1 binding of the playable house's window optics (window_optics.wgsl: its
+/// traced scene, `LookGpu::install_window_optics`; a 16-byte stand-in without it).
+pub const B_WINDOW_OPTICS: u32 = 21;
 
 /// What group 1 bindings 12-19 hold: a feature's real resources, or the
 /// 1 x 1 stand-ins made once with the look (`LookGpu::lighting_stand_ins`).
@@ -530,6 +552,20 @@ impl LightingBindings {
 }
 
 pub struct LookGpu {
+    /// World-to-building transform used by the local daylight transfer.
+    pub enclosure_frame: glam::Mat4,
+    /// World position and emitting radius of the furnished house pendant.
+    pub dining_lamp: [f32; 4],
+    pub table_light: [[f32; 4]; 3],
+    pub oak_finish: [[f32; 4]; 3],
+    pub fitted_finish: [[f32; 4]; 2],
+    pub kitchen_frame: [[f32; 4]; 5],
+    pub front_daylight: Option<crate::front_daylight::FrontDaylight>,
+    pub wall_daylight_layer: Option<u32>,
+    pub porch_light: [[f32; 4]; 7],
+    window_optics: wgpu::Buffer,
+    trace_window_glass: bool,
+    front_door_open: bool,
     pub options: LookOptions,
     pub(crate) output_format: wgpu::TextureFormat,
     object_count: u32,
@@ -595,6 +631,8 @@ pub struct LookGpu {
     /// HDR target is counted when it exists).
     pub bytes: u64,
 }
+
+pub(crate) const DISPLAY_SHADER: &str = concat!(include_str!("photo_camera_response.wgsl"), "\n", include_str!("look_finish.wgsl"));
 
 /// WGSL of the city shader: draw.wgsl + the look's shared code and lighting.
 pub fn city_shader_source() -> String {
@@ -715,14 +753,23 @@ pub struct ShaderFeatures {
     /// The aerial-perspective volume's lookup in the volume pass (`--no-ap-lut`;
     /// `SF_AP_LUT`: sky_volume.wgsl `vol_aerial`). On by default, as `phys_sky`.
     pub ap_lut: bool,
+    /// The playable house's measured materials, lights and optics (eo-app
+    /// `--beaver-house` and its `--house-*` switches; `SF_HOUSE`: draw.wgsl
+    /// `house_bit`, fitted_finish.wgsl, window_optics.wgsl, porch_light.wgsl and
+    /// their terms in look_light.wgsl). The world's: eo-app sets it with the
+    /// house loaded (`of` leaves it off).
+    pub house: bool,
+    /// The calibrated source camera's display (`--blender-camera`;
+    /// `SF_BLENDER_CAMERA`: look_finish.wgsl `finish_blender_camera`).
+    pub blender_camera: bool,
 }
 
 impl ShaderFeatures {
     /// Every feature compiled in (the shaders as before stage P1).
-    pub const ALL: Self = Self { lx_bits: u32::MAX, grime: true, street_life: true, structures: true, tunnels: true, shop_light: true, facade_clutter: true, cinematic: true, rt_gi: false, rt_reflect: false, phys_sky: true, ap_lut: true };
+    pub const ALL: Self = Self { lx_bits: u32::MAX, grime: true, street_life: true, structures: true, tunnels: true, shop_light: true, facade_clutter: true, cinematic: true, rt_gi: false, rt_reflect: false, phys_sky: true, ap_lut: true, house: true, blender_camera: true };
     /// No opt-in feature compiled in (the default frame's pipelines: the
     /// features on by default, `phys_sky` and `ap_lut`, stay in).
-    pub const NONE: Self = Self { lx_bits: 0, grime: false, street_life: false, structures: false, tunnels: false, shop_light: false, facade_clutter: false, cinematic: false, rt_gi: false, rt_reflect: false, phys_sky: true, ap_lut: true };
+    pub const NONE: Self = Self { lx_bits: 0, grime: false, street_life: false, structures: false, tunnels: false, shop_light: false, facade_clutter: false, cinematic: false, rt_gi: false, rt_reflect: false, phys_sky: true, ap_lut: true, house: false, blender_camera: false };
 
     /// The features the look's options ask for, with the world's (`structures`,
     /// `tunnels`, `facade_clutter`: eo-app's `--structures`, `--tunnels`,
@@ -741,6 +788,8 @@ impl ShaderFeatures {
             rt_reflect: o.lighting.rt_reflect,
             phys_sky: o.sky.phys_sky,
             ap_lut: o.sky.ap_lut,
+            house: false,
+            blender_camera: o.blender_camera,
         }
     }
 
@@ -795,14 +844,15 @@ impl ShaderFeatures {
         }
         l.sky.phys_sky &= self.phys_sky;
         l.sky.ap_lut &= self.ap_lut;
+        l.blender_camera &= self.blender_camera;
         l
     }
 
     /// The generated constants (look_common_source; every shader on the look's common code reads them).
     pub fn wgsl(&self) -> String {
         format!(
-            "\n// generated by look.rs ShaderFeatures::wgsl (stage P1: what is off is compiled out)\nconst SF_LX_BITS: u32 = {}u;\nconst SF_GRIME: bool = {};\nconst SF_STREET_LIFE: bool = {};\nconst SF_STRUCTURES: bool = {};\nconst SF_TUNNELS: bool = {};\nconst SF_SHOP_LIGHT: bool = {};\nconst SF_FACADE_CLUTTER: bool = {};\nconst SF_CINEMATIC: bool = {};\nconst SF_PHYS_SKY: bool = {};\nconst SF_AP_LUT: bool = {};\n",
-            self.lx_bits, self.grime, self.street_life, self.structures, self.tunnels, self.shop_light, self.facade_clutter, self.cinematic, self.phys_sky, self.ap_lut
+            "\n// generated by look.rs ShaderFeatures::wgsl (stage P1: what is off is compiled out)\nconst SF_LX_BITS: u32 = {}u;\nconst SF_GRIME: bool = {};\nconst SF_STREET_LIFE: bool = {};\nconst SF_STRUCTURES: bool = {};\nconst SF_TUNNELS: bool = {};\nconst SF_SHOP_LIGHT: bool = {};\nconst SF_FACADE_CLUTTER: bool = {};\nconst SF_CINEMATIC: bool = {};\nconst SF_PHYS_SKY: bool = {};\nconst SF_AP_LUT: bool = {};\nconst SF_HOUSE: bool = {};\nconst SF_BLENDER_CAMERA: bool = {};\n",
+            self.lx_bits, self.grime, self.street_life, self.structures, self.tunnels, self.shop_light, self.facade_clutter, self.cinematic, self.phys_sky, self.ap_lut, self.house, self.blender_camera
         )
     }
 }
@@ -870,6 +920,7 @@ pub fn city_shader_source_variant_probes(ambient: crate::ambient::ShaderLevels, 
         + "\n" + &crate::light_shadow::use_wgsl(shadow != ShadowLevels::Far && shader_features().light_shadows()) // lamp and headlight shadows; the far layer lies past the lights' clusters, and without the option the test is compiled out (lighting, stage P1)
         + &crate::landmarks::city_wgsl() // landmarks
         + "\n" + include_str!("cc0.wgsl") + &crate::cc0::wgsl_constants(crate::cc0::scoring_pitch_m()) // cc0
+        + "\n" + include_str!("fitted_finish.wgsl") + "\n" + include_str!("window_optics.wgsl") + "\n" + include_str!("porch_light.wgsl") // the playable house (`--house-*`; every term behind SF_HOUSE)
         + "\n" + include_str!("weathering.wgsl") + &crate::weathering::wgsl() // the weathering level (`--grime`; every term behind it)
         + "\n" + include_str!("street_life.wgsl") + &crate::street_life::wgsl() // street life (`--street-life`; every term behind it)
         + &crate::structures::wgsl() // the grade-separated roads' concrete (draw.wgsl kind 12)
@@ -1163,6 +1214,8 @@ impl LookGpu {
                 // the atmosphere's sky-view table (the physical daylight's sky in reflections;
                 // look_light.wgsl `lk_atmo_view`), after the lighting additions' bindings
                 entry(B_ATMO_VIEW, fs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
+                // the playable house's window optics (window_optics.wgsl), after the atmosphere view
+                entry(B_WINDOW_OPTICS, fs, sbuf(true)),
             ],
         });
         let (lighting_stand_ins, stand_in_bytes) = LightingBindings::stand_ins(device);
@@ -1178,7 +1231,8 @@ impl LookGpu {
             device,
             crate::sky::SkyInit { look_buf: &look_buf, hdr_format: HDR_FORMAT, depth_format: crate::DEPTH_FORMAT, shadow_array: &shadow_array, cmp_sampler: &cmp_sampler },
         );
-        let main_bg = [0, 1].map(|_| Self::make_main_bg(device, &main_bgl, &look_buf, &shadow_array, &cmp_sampler, &ao_dummy.0, &ao_dummy.1, &ao_sampler, &sky, &sky.dummy_hist, &lighting_stand_ins));
+        let window_optics = buffer("empty-window-optics", 16, wgpu::BufferUsages::STORAGE);
+        let main_bg = [0, 1].map(|_| Self::make_main_bg(device, &main_bgl, &look_buf, &shadow_array, &cmp_sampler, &ao_dummy.0, &ao_dummy.1, &ao_sampler, &sky, &sky.dummy_hist, &lighting_stand_ins, &window_optics));
         // the occlusion + bounce compute.
         let ao_src = format!("{}\n{}", look_common_source(), include_str!("surfaces_ao.wgsl"));
         let ao_module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("surfaces_ao.wgsl"), source: wgpu::ShaderSource::Wgsl(ao_src.into()) });
@@ -1323,7 +1377,7 @@ impl LookGpu {
         });
 
         // Post.
-        let post_src = format!("{}\n{}\n{}\n{}", look_common_source(), include_str!("look_finish.wgsl"), camera_wgsl(), include_str!("look_post.wgsl"));
+        let post_src = format!("{}\n{}\n{}\n{}", look_common_source(), DISPLAY_SHADER, camera_wgsl(), include_str!("look_post.wgsl"));
         let post_module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("look_post.wgsl"), source: wgpu::ShaderSource::Wgsl(post_src.into()) });
         let post_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("post-bgl"),
@@ -1359,7 +1413,7 @@ impl LookGpu {
         let cam_lut = camera_look::CameraLut::new(device);
         let cam_switches = CameraSwitches::from_env();
         let meter = scene_meter::SceneMeter::new(device);
-        let bytes = meter.bytes + shadow_bytes + draws_bytes + (SHADOW_COUNTER_WORDS * 4) as u64 + look_buf.size() + cull_buf.size() + view_buf.size() + sky.bytes + stand_in_bytes + cam_lut.bytes; // sky; + the lighting stand-ins; + the camera look's table
+        let bytes = meter.bytes + shadow_bytes + draws_bytes + (SHADOW_COUNTER_WORDS * 4) as u64 + look_buf.size() + cull_buf.size() + view_buf.size() + sky.bytes + stand_in_bytes + cam_lut.bytes + window_optics.size(); // sky; + the lighting stand-ins; + the camera look's table
         Self {
             sky, // sky
             sky_depth_ok: std::sync::atomic::AtomicBool::new(false), // sky
@@ -1368,6 +1422,18 @@ impl LookGpu {
             lighting_stand_ins,
             lx: Mutex::new([[0.0; 4]; LX_LEN]),
             options,
+            enclosure_frame: glam::Mat4::ZERO,
+            dining_lamp: [0.;4],
+            table_light: [[0.;4];3],
+            oak_finish: [[0.;4];3],
+            fitted_finish: [[0.;4];2],
+            kitchen_frame: [[0.;4];5],
+            front_daylight: None,
+            wall_daylight_layer: None,
+            porch_light: [[0.; 4]; 7],
+            window_optics,
+            trace_window_glass: false,
+            front_door_open: false,
             output_format: init.output_format,
             object_count: init.object_count,
             compact: init.compact,
@@ -1445,6 +1511,7 @@ impl LookGpu {
         sky: &crate::sky::SkyGpu,     // sky
         prev: &wgpu::TextureView,     // the previous resolved frame
         lighting: &LightingBindings,  // bindings 12-18
+        optics: &wgpu::Buffer,       // the house's window optics (B_WINDOW_OPTICS)
     ) -> wgpu::BindGroup {
         let [l12, l13, l14, l15, l16, l17, l18, l19] = lighting.entries();
         device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -1474,8 +1541,30 @@ impl LookGpu {
                 l18,
                 l19, // (stage N2) the shop fronts
                 wgpu::BindGroupEntry { binding: B_ATMO_VIEW, resource: wgpu::BindingResource::TextureView(sky.atmo_tables().0) },
+                wgpu::BindGroupEntry { binding: B_WINDOW_OPTICS, resource: optics.as_entire_binding() },
             ],
         })
+    }
+
+    /// The optical survey measured the entry leaf at its closed position.
+    pub fn set_front_door_angle(&mut self, radians: f32) {
+        self.front_door_open = radians != 0.;
+        self.porch_light[6][3] = radians;
+    }
+
+    /// Install the source geometry once, before the first camera update.
+    pub fn install_window_optics(&mut self, scene: &crate::window_optics::WindowOptics, trace_glass: bool) -> anyhow::Result<()> {
+        use wgpu::util::DeviceExt;
+        let bytes = scene.bytes();
+        anyhow::ensure!(bytes.len() as u64 <= self.device.limits().max_storage_buffer_binding_size as u64, "optical scene exceeds device binding limit");
+        let old_size = self.window_optics.size();
+        self.trace_window_glass = trace_glass;
+        self.window_optics = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("house-window-optics"), contents: bytes, usage: wgpu::BufferUsages::STORAGE,
+        });
+        self.bytes = self.bytes - old_size + self.window_optics.size();
+        self.rebuild_main_bg();
+        Ok(())
     }
 
     fn rebuild_main_bg(&self) {
@@ -1488,7 +1577,7 @@ impl LookGpu {
         // main_bg[p] is bound while the resolve writes history p: it reads history 1 - p.
         let bg = |p: usize| {
             let prev = self.sky.history_view(1 - p).unwrap_or_else(|| self.sky.dummy_hist.clone());
-            Self::make_main_bg(&self.device, &self.main_bgl, &self.look_buf, &self.shadow_array, &self.cmp_sampler, a, z, &self.ao_sampler, &self.sky, &prev, &lighting)
+            Self::make_main_bg(&self.device, &self.main_bgl, &self.look_buf, &self.shadow_array, &self.cmp_sampler, a, z, &self.ao_sampler, &self.sky, &prev, &lighting, &self.window_optics)
         };
         *self.main_bg.lock().unwrap() = [bg(0), bg(1)];
     }
@@ -2114,7 +2203,12 @@ impl LookGpu {
                 } else {
                     None
                 };
-                let e = self.sky.update(queue, &Camera { jitter: [0.0; 2], ..*cam }, &f, &t, out_size, self.sky_depth_ok.load(std::sync::atomic::Ordering::Relaxed), daylight.as_deref(), scene);
+                // the camera without this frame's temporal sample (its lens shift, the house's
+                // registered source camera, stays)
+                let sample = self.sky.jitter();
+                let unjittered = Camera { jitter: [cam.jitter[0] - sample[0], cam.jitter[1] - sample[1]], ..*cam };
+                let source_lens = self.options.blender_camera && self.kitchen_frame[2][1] > 0.;
+                let e = self.sky.update(queue, &unjittered, &f, &t, out_size, self.sky_depth_ok.load(std::sync::atomic::Ordering::Relaxed), daylight.as_deref(), scene, source_lens);
                 if self.scene_meter_active() {
                     // the first frame of a new view must be metered (a free readback slot)
                     self.meter.ensure_free(&self.device, self.sky.meter_snap_pending().is_some());
@@ -2204,7 +2298,7 @@ impl LookGpu {
             post1: [look.grade_brightness as f32, look.finish_balance as f32, look.finish_vibrance as f32, look.finish_vignette as f32],
             post2: [look.finish_density as f32, 1.0 / 255.0, if self.output_format.is_srgb() { 1.0 } else { 0.0 }, (frame_index % 64) as f32],
             shadow_tint: v4(look.finish_shadow_tint, 0.0),
-            highlight_tint: v4(look.finish_highlight_tint, 0.0),
+            highlight_tint: v4(look.finish_highlight_tint, f64::from(self.options.blender_camera)),
             ao_vp: ao_made.map(|m| m.0.to_cols_array_2d()).unwrap_or([[0.0; 4]; 4]),
             ao_cam: ao_made.map(|m| m.1.extend(1.0).to_array()).unwrap_or([0.0; 4]),
             ao_fwd: ao_made.map(|m| m.2.extend(0.0).to_array()).unwrap_or([0.0; 4]),
@@ -2244,6 +2338,27 @@ impl LookGpu {
             wb: tone::filmic_white_balance().map(|r| [r[0] as f32, r[1] as f32, r[2] as f32, 0.0]),
             // z: the camera look (it takes the filmic stage's place; `--no-filmic` keeps the old chain)
             tone2: [if self.sky.options().filmic { 1.0 } else { 0.0 }, tone::FILMIC_CHROMA as f32, if self.camera_look_active() { 1.0 } else { 0.0 }, eo_look::season::current()],
+            enclosure_frame: self.enclosure_frame.to_cols_array_2d(),
+            dining_lamp: self.dining_lamp,
+            table_light: self.table_light,
+            oak_finish: self.oak_finish,
+            fitted_finish: self.fitted_finish,
+            kitchen_frame: self.kitchen_frame,
+            wall_sample: [self.wall_daylight_layer.unwrap_or(0) as f32,
+                ((f.hour as f32-8.)*0.5).clamp(0.,5.), (m.profile.overcast*wx_keep) as f32, f32::from(self.front_door_open)],
+            porch_light: self.porch_light,
+            window_sample: {
+                let [a, b, t] = crate::window_optics::light_sample(f.hour as f32);
+                [f32::from(self.trace_window_glass), a, b, t]
+            },
+            wall_overcast: if self.wall_daylight_layer.is_some() || self.window_optics.size() > 16 || self.porch_light[0][3] > 0. {
+                let [r,g,b] = crate::front_daylight::overcast_radiance(&f);
+                [r,g,b,0.]
+            } else { [0.;4] },
+            front_daylight: self.front_daylight.as_ref().map_or([[[0.; 4]; 9]; 6], |light| {
+                light.at(&f, (m.profile.overcast * wx_keep) as f32)
+            }),
+            house_sky: [(f.sky_irradiance_up / std::f64::consts::PI) as f32, 0.0, 0.0, 0.0],
             lx: self.lighting_params(), // zeros while every lighting addition is off
         };
         queue.write_buffer(&self.look_buf, 0, bytemuck::bytes_of(&u));
@@ -2264,7 +2379,7 @@ impl LookGpu {
         for (c, cas) in cascades.iter().enumerate() {
             planes[c * 6..c * 6 + 6].copy_from_slice(&cas.planes);
         }
-        let p = ShadowCullParams { planes, object_count: self.object_count, compact: self.compact as u32, mask, pad: 0 };
+        let p = ShadowCullParams { planes, camera: cam.eye.extend(1.).to_array(), object_count: self.object_count, compact: self.compact as u32, mask, pad: 0 };
         queue.write_buffer(&self.cull_buf, 0, bytemuck::bytes_of(&p));
         *self.shadow_planes.lock().unwrap() = (planes, mask);
         *self.shadow_ranges.lock().unwrap() = None; // the renderer sets this update's (draw_ranges)

@@ -21,9 +21,13 @@ const ENV_SIDEWALK: i32 = 2;
 const ENV_PAINTED_METAL: i32 = 3;
 // A film of water over sand (the swash's wet band, landmarks_surface.wgsl): it reflects the environment strongly.
 const ENV_WET_FILM: i32 = 4;
-const ENV_KITCHEN: i32 = 5;
+// The house's local reflections (draw.wgsl: the kitchen's captured room, the fitted
+// finishes, the entry brass): no screen-space term or environment intensity over them.
+const ENV_LOCAL_PROBE: i32 = 5;
 // The water pass accounts for air-interface reflection on submerged terrain.
 const ENV_SUBMERGED: i32 = 6;
+// The house's waxed boards, reflecting their surveyed room (draw.wgsl `floor_reflected_room`).
+const ENV_INTERIOR_FLOOR: i32 = 7;
 // GLAZING_PROBE_ROUGHNESS_FLOOR (src/render/materials/glazing-environment.js:
 // a 4-texel footprint on the 128 px probe).
 const GLAZING_ROUGHNESS_FLOOR: f32 = 0.152;
@@ -178,18 +182,39 @@ fn lk_dfg(nv: f32, rough: f32) -> vec2<f32> {
 // the room behind kit glazing at night (rooms.wgsl), set by the city
 // shader before `look_light`: the pane's emission (kit/materials.js emissiveNode).
 var<private> rm_emit: vec3<f32>;
-// Set by the house vertices that select a local reflection, consumed only for ENV_KITCHEN.
+// Set by the house vertices that select a local reflection, consumed by enamel and waxed boards.
 var<private> room_radiance: vec3<f32>;
+var<private> oak_coated: bool;
+var<private> oak_coat_radiance: vec3<f32>;
+var<private> oak_daylight: vec3<f32>;
+var<private> oak_pendant: vec3<f32>;
+var<private> room_enclosure: f32;
+var<private> room_daylight: f32;
+var<private> measured_room: bool;
+var<private> room_diffuse: vec3<f32>;
+var<private> surface_fixture: vec3<f32>;
+var<private> dielectric_scale: f32;
+
+// Site irradiance is set by the fitted garden and exterior plaster receivers.
+var<private> front_ambient: vec3<f32>;
+var<private> measured_front: f32;
+var<private> measured_wall: f32;
+var<private> joinery_diffuse: vec4<f32>;
+var<private> porch_field: vec3<f32>;
+var<private> porch_measured: f32;
 
 fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: vec3<f32>, object: u32) -> vec4<f32> {
     var s = s_in; // sky
-    if ((m.flags & F_GLASS) == 0u && s.env <= 0) {
+    if ((m.flags & F_GLASS) == 0u && s.env <= 0 && (!SF_HOUSE || room_enclosure < 0.5)) { // (not inside the house's rooms)
         sky_wet_generic(&s, ng); // roofs, ground, walls, bodies in the rain (the street wets itself)
     }
     let n = s.n;
     let rough = s.rough;
     let diffuse = s.albedo * (1.0 - s.metal);
-    let f0 = mix(vec3<f32>(0.04), s.albedo, s.metal);
+    var f0 = mix(vec3<f32>(0.04), s.albedo, s.metal);
+    if (SF_HOUSE && dielectric_scale > 0.0) {
+        f0 = mix(vec3<f32>(0.04 * dielectric_scale), s.albedo, s.metal); // (the house's fitted cloth and oiled boards)
+    }
     let glass = (m.flags & F_GLASS) != 0u;
     // envMapIntensity class: glass, roads and the street surface (asphalt),
     // terrain (sidewalk), else painted facade.
@@ -228,9 +253,12 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     // Rim (no shadow).
     let rl = look.rim_dir.xyz;
     let rnl = max(dot(n, rl), 0.0);
-    let rim = look.rim.xyz * rnl * lm_rim_vis; // (a bridge's night: landmarks_surface.wgsl)
+    var rim = look.rim.xyz * rnl * lm_rim_vis; // (a bridge's night: landmarks_surface.wgsl)
+    if (SF_HOUSE && (room_enclosure > 0.0 || measured_wall > 0.0)) {
+        rim = rim * (1.0 - room_enclosure) * (1.0 - measured_wall); // (the house's enclosed and measured surfaces)
+    }
     direct_d = direct_d + rim * diffuse / LK_PI;
-    direct_s = direct_s + rim * lk_ggx(n, v, rl, f0, rough) * select(1.0, 0.0, s.env == ENV_WET_FILM || s.env == ENV_KITCHEN); // the rig's rim light draws no false sun in a water film
+    direct_s = direct_s + rim * lk_ggx(n, v, rl, f0, rough) * select(1.0, 0.0, s.env == ENV_WET_FILM || s.env == ENV_LOCAL_PROBE || s.env == ENV_INTERIOR_FLOOR); // the rig's rim light draws no false sun in a water film
 
     // Indirect diffuse.
     let hemi = mix(look.hemi_ground.xyz, look.hemi_sky.xyz, n.y * 0.5 + 0.5);
@@ -264,23 +292,42 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
             }
         }
     }
+    // the playable house (`--house-*`, SF_HOUSE): inside, the room's daylight transfer
+    // or its measured irradiance; outside, the measured site irradiance.
+    let indoor_field = (0.30 + 0.70 * sqrt(room_daylight)) * vec3<f32>(1.0, 0.92, 0.80);
+    if (SF_HOUSE && (measured_room || room_enclosure > 0.0 || measured_front > 0.0)) {
+        irr = select(irr * mix(vec3<f32>(1.0), indoor_field, room_enclosure), room_diffuse * LK_PI, measured_room);
+        irr = mix(irr, front_ambient, measured_front);
+    }
     let nv = max(dot(n, v), 1e-4);
     let dfg = lk_dfg(nv, rough);
     let fss = f0 * dfg.x + vec3<f32>(dfg.y);
     // the scene-scale occlusion and bounce (previous frame).
     var ao4 = vec4<f32>(0.0, 0.0, 0.0, 1.0);
-    if (frame.copy_step.z < 0.5) {
-        ao4 = ao_fetch(world); // no screen-space AO inside the probe pass
+    if (frame.copy_step.z < 0.5 && !(SF_HOUSE && measured_room)) {
+        ao4 = ao_fetch(world); // no screen-space AO inside the probe pass (nor in the house's measured rooms: their bake holds it)
+        if (SF_HOUSE && measured_front > 0.0) {
+            ao4 = vec4<f32>(ao4.rgb * (1.0 - measured_front), ao4.a); // (the house's measured site carries its share of the bounce)
+        }
     }
     let ao_vis = ao_multi_bounce(ao4.a);
-    let ao = s.ao * ao_vis;
-    let indirect_d = irr * diffuse / LK_PI * (vec3<f32>(1.0) - fss) * ao;
+    // The measured room contains the furniture and walls. Its vertex contact
+    // term resolves folds below the probe spacing; the broad screen-space
+    // visibility would darken that same lighting a second time.
+    var ao = s.ao * ao_vis;
+    if (SF_HOUSE && (measured_room || measured_front > 0.0 || measured_wall > 0.0)) {
+        ao = mix(s.ao * select(mix(ao_vis, 1., measured_front), 1., measured_room), 1., measured_wall);
+    }
+    var indirect_d = irr * diffuse / LK_PI * (vec3<f32>(1.0) - fss) * ao;
+    if (SF_HOUSE && (objects[object].kind & TABLE_LIGHT_BIT) != 0u) {
+        indirect_d += surface_fixture * diffuse * (vec3<f32>(1.0) - fss);
+    }
 
     // Indirect specular: the sky along the reflection, blurred with roughness.
     let r = reflect(-v, n);
     var rad = lk_sh(r) / LK_PI;
     let sharp = 1.0 - lk_smooth(0.15, 0.5, rough);
-    if (s.env == ENV_KITCHEN) {
+    if (s.env == ENV_LOCAL_PROBE || s.env == ENV_INTERIOR_FLOOR) {
         rad = room_radiance;
     } else if (fa_probe_on()) {
         // the scene probe is the specular environment (glass reads it
@@ -300,13 +347,18 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
             rad = mix(rad, pg_reflect(pgs, r, world, rough, glass), pgs.cover);
         }
     }
+    if (SF_HOUSE && room_enclosure > 0.0 && s.env != ENV_LOCAL_PROBE && s.env != ENV_INTERIOR_FLOOR) {
+        let local = select(indoor_field * (hemi + look.ambient.xyz + env_e * env_i) / LK_PI, room_diffuse + surface_fixture, measured_room);
+        rad = mix(rad, local, room_enclosure * smoothstep(0.18, 0.75, rough));
+    }
     let spec_occ = clamp(pow(nv + ao, exp2(-16.0 * rough - 1.0)) - 1.0 + ao, 0.0, 1.0);
     // glossy (wet) ground reflects the previous frame where its ray finds it.
     // (`--look cinematic`, stage L3) on car paint the clearcoat's sharper reflection (below)
     let coat_on = SKY_CINE_FULL && sky_coat > 0.0;
-    // the house's kitchen reflects its own captured room (draw.wgsl `kitchen_reflection`):
-    // no screen-space term, ambient volume or environment intensity over it.
-    let kitchen = s.env == ENV_KITCHEN;
+    // the house's kitchen and its other local probes reflect their own captured room
+    // (draw.wgsl `kitchen_reflection`, `floor_reflected_room`): no screen-space term,
+    // ambient volume or environment intensity over it.
+    let kitchen = s.env == ENV_LOCAL_PROBE || s.env == ENV_INTERIOR_FLOOR;
     var ssr = vec4<f32>(0.0);
     if (!kitchen) {
         ssr = sky_ssr(world, select(n, ng, coat_on), v, select(rough, sky_coat_rough, coat_on));
@@ -321,7 +373,21 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
             rad_e = rad_e * aw.x + look.hemi_ground.xyz * (env_i * aw.y / LK_PI);
         }
     }
-    let indirect_s = mix(rad_e, ssr.rgb, ssr.a) * fss * spec_occ;
+    var spec_e = mix(rad_e, ssr.rgb, ssr.a);
+    if (SF_HOUSE && measured_wall > 0.0) {
+        // Rough plaster sees the enclosing passage in its broad reflection (the house's measured walls).
+        spec_e = mix(spec_e, front_ambient / LK_PI, measured_wall * smoothstep(0.30, 0.75, rough));
+    }
+    let indirect_s = spec_e * fss * spec_occ;
+    // (the playable house, SF_HOUSE) its source-lit joinery takes its measured diffuse
+    // light in place of the rig's. The house's terms replace the rig's inputs (here and
+    // at the occlusion fetch above), so the default frame's sums stay the same
+    // expressions, bit for bit, with the house compiled in or out.
+    if (SF_HOUSE && joinery_diffuse.a > 0.) {
+        direct_d = joinery_diffuse.rgb;
+        indirect_d = vec3<f32>(0.0);
+        ao4 = vec4<f32>(vec3<f32>(0.0), ao4.a);
+    }
     // The bounce is outgoing Lambert radiance (bounce x diffuse albedo), added
     // outside the occlusion multiply as the JS adds it on the emissive slot.
     let bounce = ao4.rgb * diffuse;
@@ -334,7 +400,43 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     }
 
     var lit = direct_d + direct_s + indirect_d + indirect_s + bounce + m.emissive.rgb + rm_emit; // + the room
+    // the playable house (SF_HOUSE): the porch lamp's field
+    if SF_HOUSE && porch_field.z > 0. {
+        lit = porch_lit(lit,world,n,v,diffuse,f0,rough);
+    }
     lit = lit + sky_local_lights_ao(world, n, v, diffuse, f0, rough, ao); // street lamps, headlamps (`ao` and their shadows only with the light shadows on)
+    // the house's fitted finishes and waxed oak: their clear coats over the lit base
+    if (SF_HOUSE && (objects[object].kind & FITTED_ROOM_BIT) != 0u && m.thin_absorption>0. && measured_room) {
+        if (any(fitted_pendant_horizontal>vec3<f32>(0.))) {
+            lit += pendant_gloss(fitted_pendant_horizontal,world,n,v,rough);
+        }
+        if (m.emissive.w > 0.) {
+            let coat_rough=max(.035,m.rough_flatten);
+            let coat_nv=max(dot(ng,v),.0001);
+            let fresnel=.04+.96*pow(1.-coat_nv,5.);
+            let lut=lk_dfg(coat_nv,coat_rough);
+            var coat=fitted_coat_light*(.04*lut.x+lut.y);
+            if (nl>0.) { coat+=key*(max(dot(ng,l),0.)/nl)*lk_ggx(ng,v,l,vec3<f32>(.04),coat_rough); }
+            if (any(fitted_pendant_horizontal>vec3<f32>(0.))) {
+                coat+=pendant_gloss(fitted_pendant_horizontal,world,ng,v,coat_rough);
+            }
+            lit=lit*(1.-m.emissive.w*fresnel)+m.emissive.w*coat;
+        }
+    }
+    if (SF_HOUSE && oak_coated) {
+        let finish = look.oak_finish[1];
+        let coat_nv = max(dot(ng,v),.0001);
+        let grazing = finish.w + (1.-finish.w)*pow(1.-coat_nv,5.);
+        let dfg_coat = lk_dfg(coat_nv,finish.z);
+        var wax = oak_coat_radiance*(finish.w*dfg_coat.x+dfg_coat.y);
+        if (nl>0.) {
+            wax += key*(max(dot(ng,l),0.)/nl)*lk_ggx(ng,v,l,vec3<f32>(finish.w),finish.z);
+        }
+        if (any(oak_pendant > vec3<f32>(0.))) {
+            wax += pendant_gloss(oak_pendant,world,ng,v,finish.z);
+        }
+        lit = lit*(1.-finish.y*grazing) + finish.y*wax;
+    }
     var alpha = s.alpha;
     if (glass && m.emissive.w > 0.0) {
         // the glass's clearcoat layer (three's PhysicalLightingModel:

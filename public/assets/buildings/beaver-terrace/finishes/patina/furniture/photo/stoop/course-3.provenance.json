@@ -1,0 +1,9 @@
+{
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/stoop/course-3.glb",
+  "bytes": 72020,
+  "sha256": "0869b192ed495480d576b55750a01ab8bdc16dd2d8254c32b376b578bc20edc0",
+  "source_sha256": "3284de3df0b6eb1bd87bfee0dfff36805825a576906e7ed8aa59afbf4d2b792f",
+  "blender_sha256": "8fda283fcec39b2f276a1fd64abf7a89154b7c5fbb32480dbcfd95b3bcbcd970",
+  "license": "Project-authored Earth Online geometry.",
+  "build": "scripts/blender-buildings/cook_beaver_stoop.py"
+}

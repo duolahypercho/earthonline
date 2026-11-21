@@ -57,7 +57,8 @@ struct Look {
     // density, dither amplitude (display), output is sRGB-encoded by the target (1/0), frame index
     post2: vec4<f32>,
     shadow_tint: vec4<f32>,
-    highlight_tint: vec4<f32>,
+    highlight_tint: vec3<f32>,
+    blender_camera: f32,
     // the camera the occlusion/bounce result was made with
     // (view-projection, eye, forward), and x = result usable (1/0),
     // y = 1 / focal length in full-resolution pixels.
@@ -84,6 +85,20 @@ struct Look {
     tone2: vec4<f32>,
     // the filmic transform's white balance (daylight D55 to D65, Bradford), rows
     wb: array<vec4<f32>, 3>,
+    // the playable house at 21 Beaver Street (look.rs `LookUniform`, house.rs): all zero while it is not installed.
+    enclosure_frame: mat4x4<f32>,
+    dining_lamp: vec4<f32>,
+    table_light: array<vec4<f32>,3>,
+    oak_finish: array<vec4<f32>,3>,
+    fitted_finish: array<vec4<f32>,2>,
+    kitchen_frame: array<vec4<f32>,5>,
+    front_daylight: array<vec4<f32>,54>,
+    wall_sample: vec4<f32>, // atlas, solar sample, cloud fraction, moving entry leaf
+    wall_overcast: vec4<f32>,
+    window_sample: vec4<f32>,
+    porch_light: array<vec4<f32>,7>,
+    // x: the open sky's upward irradiance over pi (eo-look `sky_irradiance_up`)
+    house_sky: vec4<f32>,
     // the lighting additions (look.rs `LightingOptions`), all zero while every one is off.
     // Rows (look.rs `LX_*`):
     //   0      flags: x the feature bits (read `bitcast<u32>(look.lx[0].x) & LX_BIT_*`,
