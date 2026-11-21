@@ -327,7 +327,14 @@ pub fn capture_cameras(world: &World, aspect: f32, far: f32) -> Vec<(&'static st
         out.push(("municipal-pile", cam, "Municipal Pier support at the submerged bed".into()));
     }
     for site in &world.dive_sites {
-        if site.beach.is_some() {
+        if let Some(shore) = site.beach {
+            // Look down on the same patch of the shallow bed on either side
+            // of the interface. The two switch settings retain both poses.
+            for (name, height) in [("cove-bed-from-air", 0.16), ("cove-bed-from-water", -0.16)] {
+                let eye = Vec3::new(shore.x, sea() + height, shore.y - 26.0);
+                let cam = Camera { near: 0.025, far, ..Camera::new(eye, -0.42, -1.35, aspect) };
+                out.push((name, cam, "Aquatic Park shallow bed seen across the waterline".into()));
+            }
             out.push(("cove-surface", site.surface_camera(aspect, far), "Aquatic Park beach toward Municipal Pier and Black Point".into()));
             out.push(("cove-shallows", site.cove_camera(aspect, far, 0.0), "looking down the cove bank just below the surface".into()));
             out.push(("cove-basin", site.cove_camera(aspect, far, 112.0), "112 m farther offshore on the same transect".into()));

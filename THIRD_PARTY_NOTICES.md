@@ -308,3 +308,16 @@ The optional private courtyard and paved apron at 21 Beaver use the CC0 scans [P
 Rob Tuytel photographed the frontage tree’s bark. Dimitrios Savva photographed the terracotta used on the porch and steps. The optional house uses these CC0 colour, normal and roughness maps. [Bark Brown 02](https://polyhaven.com/a/bark_brown_02) · [Terracotta Floor Tiles](https://polyhaven.com/a/terracotta_floor_tiles) · [Poly Haven licence](https://polyhaven.com/license).
 
 The optional house courtyard follows parcel 3561049 from the City and County of San Francisco parcel survey, released under PDDL 1.0. [Parcels – Active and Retired](https://data.sf.gov/d/acdm-wktn) · [Source and licence](scripts/blender-buildings/sources/beaver-parcel.NOTICE.txt).
+
+The Black Point shoreline uses *Seaside Rock* by Dimitrios Savva for Poly Haven under CC0 1.0. The game ships reduced colour, normal and roughness maps from this scan. [Source](https://polyhaven.com/a/seaside_rock) · [Licence](https://polyhaven.com/license) · [Provenance](public/assets/shore/seaside-rock.provenance.json)
+
+### San Francisco Bay underwater daylight
+
+The cove daylight preview uses a regional median from USGS station 20 (37.82° N, 122.393333° W). The 2016–2021 release includes 102 nonempty positive values of `Extinction_Coefficient` at that station, one per sampling date. Their median is 0.80 m⁻¹ and the middle half range from 0.60 to 0.90 m⁻¹. The measurements describe vertical attenuation of photosynthetically active radiation in the water column. They do not measure viewing distance or establish the conditions on a particular day at Aquatic Park.
+
+Tara Schraga, Erica S. Nejad, Charles A. Martin and James E. Cloern, *USGS Measurements of Water Quality in San Francisco Bay (CA), 2016–2021*, version 4.0, March 2023. [USGS data release](https://doi.org/10.5066/F7D21WGF), [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
+
+Source SHA-256 values:
+
+- `2016_2021SanFranciscoBayWaterQualityData.csv` — `726906506c62e64b5a3e78a8c4e41100cf4e1f6f82c54a13e5adcf892639ddcf`
+- `SFBay_TableofStationLocations_v4.csv` — `55f28f5b4f706ec0b0d78feafc56be1779e665fc7e9ebd5dfc0041c8edec7726`

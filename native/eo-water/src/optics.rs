@@ -6,6 +6,10 @@
 //! water volume. The WGSL in eo-render evaluates the same formulas; the
 //! numbers it reads are generated from here (`wgsl_constants`).
 
+/// Median downwelling PAR attenuation per vertical metre, USGS station 20,
+/// 102 profiles during 2016–2021. Used as a regional proxy for the cove.
+pub const COVE_DAYLIGHT_KD: f32 = 0.80;
+
 /// `WATER_IOR`.
 pub const IOR: f64 = 1.333;
 /// `WATER_SIGMA_A` / `WATER_SIGMA_S` (clear water, per metre).

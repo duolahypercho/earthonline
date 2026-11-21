@@ -890,7 +890,7 @@ struct Volume {
     inscatter: vec3<f32>,
 };
 
-fn wo_volume(path: f32, tv: vec3<f32>, l: vec3<f32>, sun: vec3<f32>, sky_irr: vec3<f32>, sig_a: vec3<f32>, sig_s: vec3<f32>, bb_share: f32) -> Volume {
+fn wo_volume(path: f32, tv: vec3<f32>, l: vec3<f32>, sun: vec3<f32>, sky_irr: vec3<f32>, sig_a: vec3<f32>, sig_s: vec3<f32>, bb_share: f32, daylight: f32) -> Volume {
     let sig_t = sig_a + sig_s;
     let ls = wo_refracted_sun_up(l);
     let mu_s = max(ls.y, 0.1);
@@ -898,7 +898,10 @@ fn wo_volume(path: f32, tv: vec3<f32>, l: vec3<f32>, sun: vec3<f32>, sky_irr: ve
     let tview = exp(-sig_t * path);
     let sun_in = sun * (1.0 - wo_fresnel(max(l.y, 0.02), WO_IOR));
     let k_sun = sig_t * (mu_v / mu_s + 1.0);
-    let k_amb = sig_t * (mu_v / 0.75 + 1.0);
+    var k_amb = sig_t * (mu_v / 0.75 + 1.0);
+    if (daylight > 0.0) {
+        k_amb = mix(k_amb, sig_t * (mu_v * wo_daylight_ratio(sig_t, look.cove.y) + 1.0), daylight);
+    }
     let ph = wo_phase(dot(tv, ls));
     let bb = sig_s * bb_share;
     let albedo_ms = bb * (0.33 * 4.0) / (sig_a + bb);
@@ -2438,7 +2441,8 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     }
     let sun = look.key.xyz * vol_shadow;
     let sky_irr = look.hemi_sky.xyz / WG_PI;
-    var vol = wo_volume(path, tv, l, sun, sky_irr, sig_a, sig_s, bb);
+    let daylight = select(0.0, cove, look.cove.y > 0.0);
+    var vol = wo_volume(path, tv, l, sun, sky_irr, sig_a, sig_s, bb, daylight);
     // the bay is turbid (visibility under a metre): the bottom through
     // it fades within about a metre of water, so Crissy's sand is not seen
     // through the strait.
@@ -2692,9 +2696,19 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     s.terms = vec3<f32>(fres, fres * water * (1.0 - fog), fog);
     // sand under a thin sheet is wet sand (darker: water fills its pores).
     s.through = vol.tview * select(wo_underwater(bottom_depth, l), vec3<f32>(1.0), wv_feat(2u)) * k_t * (1.0 - fog) * (1.0 - 0.4 * film);
+    var bed_focus = 1.0;
     if (wu.screen.w > 0.5 && wu.flags.w > 0.5 && lk_luma(s.through) > 0.015 && l.y > 0.0) {
         let direct = shadow * (1.0 - ovc) * wg_smooth(0.0, 0.2, l.y);
-        s.through *= mix(1.0, w_caustic(p_bottom, bottom_depth, ls_up), 0.6 * direct);
+        bed_focus = w_caustic(p_bottom, bottom_depth, ls_up);
+        s.through *= mix(1.0, bed_focus, 0.6 * direct);
+    }
+    if (daylight > 0.0) {
+        let entering_sun = sun * (1.0 - wo_fresnel(l.y, WO_IOR)) * smoothstep(0.0, 0.08, l.y);
+        let ambient = w_sh(vec3<f32>(0.0, 1.0, 0.0)) * look.ambient.w * look.env_class.w + look.hemi_sky.xyz + look.ambient.xyz;
+        let share = lk_luma(entering_sun) / max(lk_luma(entering_sun + ambient), 1e-5);
+        let focus = mix(1.0, bed_focus, exp(-cove * bottom_depth * 1.5));
+        let light = wo_daylight_bed(bottom_depth, sig_a + sig_s, ls_up.y, share, focus, look.cove.y);
+        s.through = mix(s.through, vol.tview * light * k_t * (1.0 - fog) * (1.0 - 0.4 * film), daylight);
     }
     s.uv = uv_f;
     s.refl_k = fres * water * (1.0 - fog);

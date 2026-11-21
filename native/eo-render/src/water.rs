@@ -451,8 +451,8 @@ fn sea_override() -> Option<eo_water::waves::SeaState> {
 /// The water shaders' shared WGSL (constants generated from eo-water, the
 /// grid and the uniform).
 pub(crate) fn common_source(cove_detail: bool) -> String {
-    format!("{}\n{}\n{}\nconst W_COVE_DETAIL: bool = {cove_detail};\nconst W_COVE_SCALE: f32 = {:.8};\n",
-        eo_water::optics::wgsl_constants(), eo_water::surface::wgsl_constants(), include_str!("water_common.wgsl"), eo_data::groundscale::scale())
+    format!("{}\n{}\n{}\n{}\nconst W_COVE_DETAIL: bool = {cove_detail};\nconst W_COVE_SCALE: f32 = {:.8};\n",
+        eo_water::optics::wgsl_constants(), eo_water::surface::wgsl_constants(), include_str!("water_common.wgsl"), include_str!("cove_daylight.wgsl"), eo_data::groundscale::scale())
 }
 
 /// (iteration 2, current) the wind sea's amplitude gain per cascade on the

@@ -154,6 +154,8 @@ impl Flags {
                 "--no-cove-canopy" => args.look.cove_canopy = false,
                 "--cove-sediment" => { args.cove_detail = true; args.look.cove_sediment = true; }
                 "--no-cove-sediment" => args.look.cove_sediment = false,
+                "--cove-daylight" => { args.cove_detail = true; args.look.cove_daylight = true; }
+                "--no-cove-daylight" => args.look.cove_daylight = false,
                 "--cove-pile-contact" => args.cove_detail = true,
                 "--no-cove-pile-contact" => {} // resolved with the bay preview settings
                 "--black-point-intertidal" => { args.cove_detail = true; args.black_point_intertidal = true; }
