@@ -101,6 +101,7 @@ pub struct Finishes {
     fitted_maps: Vec<eo_assets::kit::BakedMaps>,
     garden: Option<street_garden::Garden>,
     garden_maps: Vec<eo_assets::kit::BakedMaps>,
+    front_daylight: Option<eo_render::front_daylight::FrontDaylight>,
     downstairs_light: bool,
     dining_meter: Option<[f32; 3]>,
     dining_camera_exposure: Option<f32>,
@@ -304,8 +305,10 @@ impl Finishes {
             let (recipe, maps) = street_garden::Garden::read(root, &photo_dir, &manifest.house_sha256)?;
             (Some(recipe), maps)
         } else { (None, vec![]) };
+        let front_daylight = garden.as_ref().filter(|_| args.house_front_daylight)
+            .map(|g| g.read_daylight(root, &photo_dir)).transpose()?;
         Ok(Self {
-            garden, garden_maps, fitted, fitted_maps, downstairs_light,
+            front_daylight, garden, garden_maps, fitted, fitted_maps, downstairs_light,
             dining_meter,
             dining_camera_exposure,
             oak_finish,
@@ -401,6 +404,7 @@ fn corners([x, y, z]: Point, [u, v, w]: Point) -> [Point; 8] {
 pub struct House {
     fitted: Option<fitted::Room>,
     garden: Option<fitted::Geometry>,
+    pub front_daylight: Option<eo_render::front_daylight::FrontDaylight>,
     origin: DVec2,
     across: DVec2,
     back: DVec2,
@@ -578,11 +582,13 @@ impl House {
         let table_light = finishes.and_then(|f| f.table_light.clone());
         let table_vertices = table_light.as_ref().map(|s| s.vertices(&model)).transpose()?.unwrap_or_default();
         let scans = finishes.map_or(0, |f| f.scans.len());
-        let garden = finishes.and_then(|f| f.garden.as_ref()).map(|g| g.load(root,materials,scans)).transpose()?;
+        let front_daylight = finishes.and_then(|f| f.front_daylight.clone());
+        let garden = finishes.and_then(|f| f.garden.as_ref())
+            .map(|g| g.load(root, materials, scans, front_daylight.is_some())).transpose()?;
         let first_fitted = scans + finishes.map_or(0, |f| f.garden_maps.len());
         let fitted = fitted_recipe.map(|r| r.load(root,materials,first_fitted)).transpose()?;
         let mut h = Self {
-            garden, fitted,
+            front_daylight, garden, fitted,
             origin: ring[1],
             across,
             back,
@@ -1009,14 +1015,17 @@ impl House {
         let p = self.origin + self.across * x + self.back * z;
         DVec3::new(p.x, self.floor + y * self.height_scale, p.y)
     }
-    pub fn interior_meter(&self) -> Option<eo_render::interior_meter::InteriorMeter> {
-        if !self.photo || self.light_transfer.is_empty() { return None; }
-        let basis = glam::Mat4::from_cols(
+    pub fn parcel_to_world(&self) -> glam::Mat4 {
+        glam::Mat4::from_cols(
             Vec3::new(self.across.x as f32, 0., self.across.y as f32).extend(0.),
             (Vec3::Y * self.height_scale as f32).extend(0.),
             Vec3::new(self.back.x as f32, 0., self.back.y as f32).extend(0.),
             self.point(0., 0., 0.).as_vec3().extend(1.),
-        );
+        )
+    }
+    pub fn interior_meter(&self) -> Option<eo_render::interior_meter::InteriorMeter> {
+        if !self.photo || self.light_transfer.is_empty() { return None; }
+        let basis = self.parcel_to_world();
         let glass = self.model.parts.iter()
             .filter(|part| self.model.materials[part.material as usize].name.starts_with("glass-door@"))
             .flat_map(|part| {

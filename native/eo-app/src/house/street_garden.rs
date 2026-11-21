@@ -17,7 +17,36 @@ pub(super) struct Garden {
     replaced: Vec<String>,
 }
 
+#[derive(Deserialize)]
+struct DaylightRecipe {
+    #[serde(flatten)]
+    data: AssetRef,
+    garden_sha256: String,
+    hours: [u8; 6],
+    across: [f32; 3],
+    depth: [f32; 2],
+}
+
 impl Garden {
+    pub fn read_daylight(
+        &self,
+        root: &Path,
+        directory: &Path,
+    ) -> Result<eo_render::front_daylight::FrontDaylight> {
+        let recipe: DaylightRecipe = serde_json::from_slice(&std::fs::read(
+            directory.join("front-daylight.provenance.json"),
+        )?)?;
+        ensure!(
+            recipe.garden_sha256 == self.model.sha256
+                && recipe.hours == [8, 10, 12, 14, 16, 18]
+                && recipe.across == [0.68, 2.62, 4.56]
+                && recipe.depth == [-1.78, -0.52],
+            "front daylight does not match the installed survey"
+        );
+        let data = glb::read_verified(&recipe.data.path(root), &recipe.data)?;
+        eo_render::front_daylight::FrontDaylight::from_bytes(&data)
+    }
+
     pub fn read(root: &Path, directory: &Path, shell: &str) -> Result<(Self, Vec<BakedMaps>)> {
         let garden: Self = serde_json::from_slice(&std::fs::read(
             directory.join("street-garden.provenance.json"),
@@ -48,7 +77,13 @@ impl Garden {
             .is_ok()
     }
 
-    pub fn load(&self, root: &Path, table: &mut MaterialTable, first: usize) -> Result<Geometry> {
+    pub fn load(
+        &self,
+        root: &Path,
+        table: &mut MaterialTable,
+        first: usize,
+        daylight: bool,
+    ) -> Result<Geometry> {
         let bytes = glb::read_verified(&self.model.path(root), &self.model)?;
         let (model, uv, visibility) = glb::cook_glb_with_visibility(&bytes, &Default::default())?;
         ensure!(
@@ -79,7 +114,11 @@ impl Garden {
                     base: [1.; 4],
                     layer: (first + i) as i32,
                     params: [1., 1., if plant { 0.65 } else { 0.82 }, 1.],
-                    flags: 0,
+                    flags: if daylight {
+                        eo_render::authored::F_FRONT_DAYLIGHT
+                    } else {
+                        0
+                    },
                     ..GpuMaterial::vertex_colour()
                 },
             );

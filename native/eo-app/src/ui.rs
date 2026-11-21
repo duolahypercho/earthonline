@@ -113,6 +113,7 @@ fn default_args() -> Args {
         house_kitchen_light: false,
         house_window_linen: false,
         house_street_garden: false,
+        house_front_daylight: false,
         house_dining_meter: false,
         house_glazing: true,
         beaver_house: false,

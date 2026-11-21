@@ -189,6 +189,10 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     r.look.oak_finish = world.house.as_ref().map(|house| house.oak_finish()).unwrap_or_default();
     r.look.table_light = world.house.as_ref().map(|house| house.table_light()).unwrap_or_default();
     r.look.dining_lamp = world.house.as_ref().and_then(|house| house.dining_lamp()).unwrap_or_default();
+    if let Some(house) = world.house.as_ref().filter(|house| house.front_daylight.is_some()) {
+        r.look.front_daylight = house.front_daylight.clone();
+        r.look.enclosure_frame = house.parcel_to_world().inverse();
+    }
     if let Some(meter) = world.house.as_ref().and_then(|h| h.interior_meter()) {
         r.look.enclosure_frame = meter.world_to_local();
         r.look.sky.set_interior_meter(meter);

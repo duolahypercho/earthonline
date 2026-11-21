@@ -82,6 +82,7 @@ fn base_args() -> Args {
         house_kitchen_light: false,
         house_window_linen: false,
         house_street_garden: false,
+        house_front_daylight: false,
         house_dining_meter: false,
         house_glazing: true,
         beaver_house: false,
@@ -152,7 +153,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
-            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" | "--house-fitted-finishes" | "--house-kitchen-light" | "--house-window-linen" | "--house-street-garden" => {
+            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" | "--house-fitted-finishes" | "--house-kitchen-light" | "--house-window-linen" | "--house-street-garden" | "--house-front-daylight" => {
                 a.beaver_house = true;
                 a.house_finishes = true;
                 a.house_patina = true;
@@ -163,6 +164,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
                     "--house-downstairs-light" => a.house_downstairs_light = true,
                     "--house-table-light" => a.house_table_light = true,
                     "--house-street-garden" => a.house_street_garden = true,
+                    "--house-front-daylight" => { a.house_street_garden = true; a.house_front_daylight = true; }
                     "--house-window-linen" => { a.house_fitted_dining = true; a.house_window_linen = true; }
                     "--house-kitchen-light" => { a.house_fitted_dining = true; a.house_kitchen_light = true; }
                     "--house-fitted-finishes" => { a.house_fitted_dining = true; a.house_fitted_finishes = true; }
@@ -180,6 +182,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-table-light" => a.house_table_light = false,
             "--no-house-fitted-finishes" => a.house_fitted_finishes = false,
             "--no-house-street-garden" => a.house_street_garden = false,
+            "--no-house-front-daylight" => a.house_front_daylight = false,
             "--no-house-window-linen" => a.house_window_linen = false,
             "--no-house-kitchen-light" => a.house_kitchen_light = false,
             "--no-house-fitted-dining" => a.house_fitted_dining = false,
@@ -1307,6 +1310,41 @@ mod house_tests {
         check_beaver_walk(true, true, true, true, true);
         let (off, _) = parse(&["--house-fitted-dining".into(),"--no-house-fitted-dining".into()]).unwrap();
         assert!(off.house_photo && !off.house_fitted_dining);
+    }
+
+    #[test]
+    fn exterior_daylight_reaches_only_the_fitted_bed_and_survives_disabled_room_light() {
+        for (enabled, room_light) in [(false, true), (true, false)] {
+            let mut flags = vec!["--house-front-daylight".to_owned()];
+            if !enabled {
+                flags.push("--no-house-front-daylight".into());
+            }
+            let (mut args, _) = parse(&flags).unwrap();
+            assert!(args.house_street_garden);
+            assert_eq!(args.house_front_daylight, enabled);
+            args.kit = false;
+            args.models = false;
+            args.landmarks = false;
+            args.interior_lighting = room_light;
+            let world = load_world(&args).unwrap();
+            let house = world.house.as_ref().unwrap();
+            assert_eq!(house.front_daylight.is_some(), enabled);
+            if !room_light {
+                assert!(house.interior_meter().is_none());
+            }
+            let local = house.parcel_to_world().inverse().transform_point3(house.point(2.62, 0.4, -1.78).as_vec3());
+            assert!(local.distance(glam::Vec3::new(2.62, 0.4, -1.78)) < 0.001);
+            let table = &world.authored.materials;
+            let mut marked = 0;
+            for obj in &world.scene.objects {
+                let idx = obj.material as usize;
+                let surveyed = table.names[idx].starts_with("21-beaver-fitted/Street garden/");
+                let receives = table.gpu[idx].flags & eo_render::authored::F_FRONT_DAYLIGHT != 0;
+                assert_eq!(receives, surveyed && enabled);
+                marked += usize::from(receives);
+            }
+            assert_eq!(marked, if enabled { 3 } else { 0 });
+        }
     }
 
     #[test]
