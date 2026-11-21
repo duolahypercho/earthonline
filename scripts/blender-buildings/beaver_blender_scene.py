@@ -9,8 +9,9 @@ import struct
 from itertools import pairwise
 from pathlib import Path
 
-import beaver_photo
+import beaver_entry_light
 import beaver_neighbours
+import beaver_photo
 import beaver_street_scene
 import bpy
 import numpy as np
@@ -1090,6 +1091,7 @@ def stage(scene, root, components, dimensions, planted):
         ob = bpy.data.objects.new(name, light)
         rig.objects.link(ob)
         ob.location = xyz
+        return ob
 
     bulb(
         "Dining pendant · opal globe",
@@ -1098,7 +1100,8 @@ def stage(scene, root, components, dimensions, planted):
         0.078,
         (1, 0.78, 0.56),
     )
-    bulb("Entry sconce", position(5.97, 2.23, -0.26), 6, 0.053, (1, 0.75, 0.51))
+    porch = bulb("Entry sconce", position(5.97, 2.23, -0.26), 6, 0.053, (1, 0.75, 0.51))
+    beaver_entry_light.fit_opal_emitter(scene, porch)
     bulb(
         "Bedside reading light",
         components["bedside-lamp"][0].location + Vector((0, 0, 0.37)),
