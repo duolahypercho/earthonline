@@ -202,6 +202,17 @@ pub fn cook_furnished_glb(
     read_pattern: bool,
     omit_mesh: Option<fn(&str) -> bool>,
 ) -> Result<(CookedModel, Vec<[f32; 2]>, Vec<f32>, CutPattern)> {
+    let filter = omit_mesh.as_ref().map(|f| f as &dyn Fn(&str) -> bool);
+    cook_furnished_glb_filtered(bytes, placements, read_pattern, filter)
+}
+
+/// Apply a selection from the installed asset manifest before any shared material batching.
+pub fn cook_furnished_glb_filtered(
+    bytes: &[u8],
+    placements: &std::collections::HashMap<String, Mat4>,
+    read_pattern: bool,
+    omit_mesh: Option<&dyn Fn(&str) -> bool>,
+) -> Result<(CookedModel, Vec<[f32; 2]>, Vec<f32>, CutPattern)> {
     let mut light = Vec::new();
     let mut contact = Vec::new();
     let mut cut = CutPattern::new();
@@ -209,7 +220,7 @@ pub fn cook_furnished_glb(
     Ok((model, light, contact, cut))
 }
 
-fn cook_mesh(bytes: &[u8], mut uv: Option<&mut Vec<[f32; 2]>>, mut visibility: Option<&mut Vec<f32>>, mut cut: Option<&mut CutPattern>, placements: Option<&std::collections::HashMap<String, Mat4>>, omit_mesh: Option<fn(&str) -> bool>) -> Result<CookedModel> {
+fn cook_mesh(bytes: &[u8], mut uv: Option<&mut Vec<[f32; 2]>>, mut visibility: Option<&mut Vec<f32>>, mut cut: Option<&mut CutPattern>, placements: Option<&std::collections::HashMap<String, Mat4>>, omit_mesh: Option<&dyn Fn(&str) -> bool>) -> Result<CookedModel> {
     let gltf = gltf::Gltf::from_slice(bytes).map_err(|e| anyhow!("glTF parse: {e}"))?;
     let blob = gltf.blob.as_deref();
     let doc = &gltf.document;
