@@ -84,6 +84,12 @@ fn base_args() -> Args {
         beaver_house: false,
         bench: false,
         start_underwater: false,
+        dive_site: None,
+        underwater_habitats: false,
+        cove_detail: false,
+        black_point_intertidal: false,
+        surface_start: false,
+        quality: Default::default(),
         frames: 720,
         warmup: 60,
         width: 1920,
@@ -91,6 +97,7 @@ fn base_args() -> Args {
         msaa: 1,
         indirect_validation: true,
         no_indirect_count: false,
+        no_count_emulation: false,
         vsync: true,
         out_dir: None,
         label: None,
@@ -126,14 +133,21 @@ fn base_args() -> Args {
         perf: Default::default(),
         landmarks: true, // landmarks
         landmarks2: true,
+        structures: None, // `--structures` (quality::Switches)
+        facade_clutter: 0, // `--facade-clutter` (quality::Switches)
     }
 }
 
 fn parse(raw: &[String]) -> Result<(Args, NetOpts)> {
     let mut a = base_args();
     let mut o = NetOpts { mode: Mode2::Window, connect: String::new(), name: "player".into(), spawn: None, cond: Conditions::NONE, frames: 16_000, seconds: 40.0, bots: 0, hud: true };
+    let mut tier = crate::quality::Switches::default(); // `--quality` and the lighting switches
     let mut it = raw.iter();
     while let Some(s) = it.next() {
+        if let Some(n) = tier.take(s, it.as_slice().first().map(String::as_str))? {
+            it.by_ref().take(n).for_each(drop); // the value it took, if any
+            continue;
+        }
         let mut val = || it.next().cloned().ok_or_else(|| anyhow!("{s} needs a value"));
         match s.as_str() {
             "--connect" => o.connect = val()?,
@@ -152,7 +166,12 @@ fn parse(raw: &[String]) -> Result<(Args, NetOpts)> {
             "--width" => a.width = val()?.parse()?,
             "--height" => a.height = val()?.parse()?,
             "--water-optics" => a.look.water_optics = true,
+            "--underwater-habitats" => a.underwater_habitats = true,
+            "--no-underwater-habitats" => a.underwater_habitats = false,
             "--no-water-optics" => a.look.water_optics = false,
+            "--dive-exposure" => a.look.dive_exposure = true,
+            "--no-dive-exposure" => a.look.dive_exposure = false,
+            "--bridge-detail" | "--no-bridge-detail" => {} // read by `crate::bridge_detail`
             "--no-vsync" => a.vsync = false,
             "--out" => a.out_dir = Some(val()?.into()),
             "--cache" => a.cache_dir = Some(val()?.into()),
@@ -173,6 +192,7 @@ fn parse(raw: &[String]) -> Result<(Args, NetOpts)> {
             other => anyhow::bail!("--connect: unknown argument {other} (see native/eo-app/src/net.rs)"),
         }
     }
+    tier.apply(&mut a);
     if o.connect.is_empty() {
         anyhow::bail!("--connect ADDR|local");
     }
@@ -186,10 +206,11 @@ fn game_world(world: &World) -> Result<Arc<GameWorld>> {
     let buildings = Arc::new(BuildingSet::from_city(&world.city, lift));
     let elevation = Arc::new(world.elevation.clone());
     let ground: Arc<dyn GroundProvider> = match &world.street {
-        Some(s) => Arc::new(eo_player::street_ground::StreetGround(s.world.clone())),
+        Some(s) => Arc::new(eo_player::street_ground::StreetGround::new(s.world.clone(), world.structures.clone())),
         None => Arc::new(ElevationGround(elevation.clone())),
     };
-    Ok(Arc::new(GameWorld::from_parts(world.city.clone(), elevation, ground, buildings, world.street.is_some())))
+    // `with_decks`: the in-process server keeps the built decks too, so its world matches a dedicated server's (`--structures`).
+    Ok(Arc::new(GameWorld::from_parts(world.city.clone(), elevation, ground, buildings, world.street.is_some(), crate::structures::options(world)).with_decks(world.structures.clone())))
 }
 
 /// A server in this process (`--connect local`), with optional bots near `around`.
@@ -202,9 +223,11 @@ struct LocalServer {
 
 impl LocalServer {
     fn start(world: &World, game: &Arc<GameWorld>, bot_count: usize, around: [f64; 2]) -> Result<Self> {
-        let source = Arc::new(eo_sim::native::load(&world.paths)?);
+        // The structure level of each way (`--structures`; empty otherwise, which leaves the sim as it was).
+        let levels = world.structures.as_ref().map(|s| s.way_levels().clone()).unwrap_or_default();
+        let source = Arc::new(eo_sim::native::load(&world.paths)?.with_levels(levels));
         let ctl = Arc::new(Mutex::new(eo_server::predict::Ctl::default()));
-        let cfg = eo_server::ServerConfig { bind: "127.0.0.1:0".into(), player_threads: 4, sim_threads: 4, streets: world.street.is_some(), ..Default::default() };
+        let cfg = eo_server::ServerConfig { bind: "127.0.0.1:0".into(), player_threads: 4, sim_threads: 4, streets: world.street.is_some(), structures: game.structures, ..Default::default() };
         let thread = eo_server::predict::spawn_server(cfg, game.clone(), source, ctl.clone());
         let addr = loop {
             if let Some(a) = ctl.lock().unwrap().addr {
@@ -214,7 +237,7 @@ impl LocalServer {
         };
         let bots = if bot_count > 0 {
             let graph = Arc::new(eo_server::bots::RoadGraph::new(eo_server::bots::bot_roads(&world.city)));
-            let cfg = eo_server::bots::BotConfig { server: addr, count: bot_count, threads: 1, spawn: eo_server::bots::Spawn::Around { x: around[0], z: around[1], radius: 120.0 }, drive_share: 0.5, drive_mps: 9.0, seed: 3, conditions: Conditions::NONE, send_hz: 30.0 };
+            let cfg = eo_server::bots::BotConfig { server: addr, count: bot_count, threads: 1, spawn: eo_server::bots::Spawn::Around { x: around[0], z: around[1], radius: 120.0 }, drive_share: 0.5, drive_mps: 9.0, seed: 3, conditions: Conditions::NONE, send_hz: 30.0, structures: game.structures };
             Some(eo_server::bots::BotRun::start(cfg, graph)?)
         } else {
             None
@@ -272,7 +295,8 @@ pub struct NetSession {
 }
 
 impl NetSession {
-    pub fn connect(game: Arc<GameWorld>, cfg: ClientConfig) -> Result<Self> {
+    pub fn connect(game: Arc<GameWorld>, mut cfg: ClientConfig) -> Result<Self> {
+        cfg.structures = game.structures; // the handshake claims this world's own grade-separated roads
         Ok(Self {
             client: NetClient::connect(cfg)?,
             pred: None,
@@ -469,6 +493,7 @@ impl NetSession {
                 }
             }
         }
+        agents.mark_bores(); // the players' bodies and cars in a tunnel's bore (`--tunnels`)
         self.net_ms += t0.elapsed().as_secs_f64() * 1e3;
     }
 
@@ -527,7 +552,7 @@ struct Offscreen {
 }
 
 fn offscreen(world: &mut World, args: &Args, eye: Vec3, process_start: Instant) -> Result<Offscreen> {
-    let opts = GpuOptions { indirect_validation: args.indirect_validation, force_no_indirect_count: args.no_indirect_count, ..Default::default() };
+    let opts = GpuOptions { indirect_validation: args.indirect_validation, force_no_indirect_count: args.no_indirect_count, force_no_count_emulation: args.no_count_emulation, ..Default::default() };
     let ctx = GpuContext::new(GpuContext::create_instance(&opts), None, opts)?;
     let format = wgpu::TextureFormat::Rgba8UnormSrgb;
     let (renderer, bases) = make_renderer(&ctx, world, args, format, false)?;
@@ -1037,7 +1062,7 @@ mod window {
         fn init(&mut self, el: &ActiveEventLoop) -> Result<()> {
             let attrs = Window::default_attributes().with_title("Earth Online native - online").with_inner_size(PhysicalSize::new(self.args.width, self.args.height));
             let window = Arc::new(el.create_window(attrs)?);
-            let opts = GpuOptions { indirect_validation: self.args.indirect_validation, force_no_indirect_count: self.args.no_indirect_count, ..Default::default() };
+            let opts = GpuOptions { indirect_validation: self.args.indirect_validation, force_no_indirect_count: self.args.no_indirect_count, force_no_count_emulation: self.args.no_count_emulation, ..Default::default() };
             let instance = GpuContext::create_instance(&opts);
             let surface = instance.create_surface(window.clone())?;
             let ctx = GpuContext::new(instance, Some(&surface), opts)?;
@@ -1135,7 +1160,7 @@ mod window {
                     Mode::Driving(i) => eo_ui::HudMode::Drive { speed_kph: (p.player.vehicles[i].forward_speed(&p.cw).abs() * 3.6) as f32 },
                 };
             }
-            g.ui.hud.hour = self.args.time_of_day as f32;
+            g.ui.hud.hour = if self.args.look.lighting.smooth_time { g.renderer.look.time_of_day() } else { self.args.time_of_day } as f32; // the drawn hour follows the clock with `--smooth-time`
             g.ui.hud.objective = Some((title, sub));
             g.ui.set_time(self.clock.elapsed().as_secs_f64());
             let _ = g.ui.prepare(&g.ctx.device, &g.ctx.queue, &mut enc, g.config.width, g.config.height, &eo_ui::Input::default());

@@ -728,6 +728,13 @@ pub struct RungMesh {
     /// (material name as drawn, its paint, its triangles), in first-use order.
     pub groups: Vec<(String, Option<u32>, Sink)>,
     pub clamped_vertices: usize,
+    /// Per group, a lit sign face's glow code (`clutter::GLOW_*`; 0 none).
+    /// Empty when no group glows (always without the facade clutter).
+    pub glow: Vec<u8>,
+    /// (stage S1) Per group, its vertices' lettering bytes (`clutter::LetterCode::bytes`:
+    /// the vertex colour and the normal's y and w in the cook), empty for a plain
+    /// group. Empty when no group is lettered (always without the facade clutter).
+    pub letters: Vec<Vec<[u8; 5]>>,
 }
 
 impl RungMesh {
@@ -739,10 +746,24 @@ impl RungMesh {
     }
 }
 
-/// Emit a rung: every part through the build clamp into one sink per material.
+/// Emit a rung: every part through the build clamp into one sink per material
+/// (and the facade clutter at the level the game draws, `clutter::level`).
 pub fn build_rung(planned: &Planned, rung: u32) -> RungMesh {
+    build_rung_with(planned, rung, crate::clutter::level())
+}
+
+/// `build_rung` with the facade clutter at `clutter_level` (0: none, the
+/// rung as before; it is added on the near and mid rungs, 0 and 2).
+pub fn build_rung_with(planned: &Planned, rung: u32, clutter_level: u8) -> RungMesh {
     let drawn = drawn_materials(planned, rung);
-    let parts = rung_parts(planned, rung);
+    let mut parts = rung_parts(planned, rung);
+    let clutter = (clutter_level > 0 && (rung == 0 || rung == 2)).then(|| crate::clutter::plan(planned, clutter_level));
+    if let Some(cp) = &clutter {
+        // the port's fire escapes the clutter draws in their place.
+        if !cp.replaced.is_empty() {
+            parts.retain(|p| !(p.kind.starts_with("fire-escape") && p.edge.is_some_and(|e| cp.replaced.contains(&e))));
+        }
+    }
     let mut clamp = Clamp::new(&planned.plan, &planned.frame);
     let mut out = RungMesh::default();
     let wall = drawn.materials.get("wall").cloned().unwrap_or_else(|| "brick-running-bond".into());
@@ -759,6 +780,9 @@ pub fn build_rung(planned: &Planned, rung: u32) -> RungMesh {
         emit_part(&mut out.groups[k].2, part, &mut clamp);
     }
     out.clamped_vertices = clamp.clamped;
+    if let Some(cp) = &clutter {
+        crate::clutter::emit(cp, rung, &drawn, &mut out);
+    }
     out
 }
 

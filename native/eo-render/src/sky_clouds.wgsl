@@ -57,7 +57,7 @@ fn cl_stratus() -> f32 {
 /// closes into a continuous deck (coverage over 0.75: the overcast, fog, drizzle, rain
 /// and storm decks), its cumulus part faded out.
 fn cl_cumulus_on() -> f32 {
-    return select(0.0, 1.0, sky_on(skyu.flags.x, SKY_CUMULUS));
+    return select(0.0, skyu.prev_eye.w, sky_on(skyu.flags.x, SKY_CUMULUS));
 }
 
 /// Whether the low deck draws at all (the march, its cloud shadows).
@@ -242,6 +242,19 @@ fn cl_ms(tau: f32, tau_near: f32, c: f32) -> f32 {
 /// space to that height (reddened, zero once the planet hides the sun there) x the sun's
 /// scale; the moon's key at night. Every cloud layer takes it.
 fn cl_sun(h_m: f32) -> vec3<f32> {
+    // `--smooth-time`: `sun_rad.w` is the clouds' handover from the sun to the
+    // moon (eo-render sky.rs `CLOUD_MOON_HANDOVER_DEG`: the moon's weight in the
+    // key, taken once the Earth's shadow has risen over the decks). While it is
+    // between 0 and 1 a cloud keeps the sun's light through the atmosphere (gone
+    // once the planet hides the sun at its height) and takes the moon's by the
+    // weight, instead of switching at a half. At 0 and 1 the lines below, as without the option.
+    let mw = skyu.sun_rad.w;
+    if (lk_lx_on(LX_BIT_SMOOTH_TIME) && mw > 0.0 && mw < 1.0) {
+        if (skyu.atmo2.x > 0.5) {
+            return vol_atmo_sun_t(h_m) * skyu.atmo2.w + skyu.sun_rad.xyz * 0.35 * mw;
+        }
+        return skyu.sun_rad.xyz * mix(1.0, 0.35, mw);
+    }
     if (skyu.atmo2.x > 0.5 && skyu.sun_rad.w < 0.5) {
         return vol_atmo_sun_t(h_m) * skyu.atmo2.w;
     }
@@ -250,8 +263,30 @@ fn cl_sun(h_m: f32) -> vec3<f32> {
     return skyu.sun_rad.xyz * select(1.0, 0.35, skyu.sun_rad.w > 0.5);
 }
 
+/// `--smooth-time`: the unit direction `t` of the way from `a` to `b` on their
+/// great circle (eo-look `blend::slerp_dir`); nearly opposite ones switch at a half.
+fn cl_slerp(a: vec3<f32>, b: vec3<f32>, t: f32) -> vec3<f32> {
+    let c = clamp(dot(a, b), -1.0, 1.0);
+    if (c > 0.9995) {
+        return normalize(mix(a, b, t));
+    }
+    let th = acos(c);
+    let s = sin(th);
+    if (s < 1e-3) {
+        return select(a, b, t > 0.5);
+    }
+    return normalize(a * (sin((1.0 - t) * th) / s) + b * (sin(t * th) / s));
+}
+
 /// The direction the clouds are lit from (the sun, or the moon when it keys).
 fn cl_light_dir() -> vec3<f32> {
+    // `--smooth-time`, mid-handover: turning from the sun's direction to the key's (the moon's) by the weight.
+    if (lk_lx_on(LX_BIT_SMOOTH_TIME) && skyu.sun_rad.w > 0.0 && skyu.sun_rad.w < 1.0) {
+        if (skyu.atmo2.x > 0.5) {
+            return cl_slerp(normalize(skyu.atmo.xyz), normalize(look.key_dir.xyz), skyu.sun_rad.w);
+        }
+        return look.key_dir.xyz;
+    }
     if (skyu.atmo2.x > 0.5 && skyu.sun_rad.w < 0.5) {
         return normalize(skyu.atmo.xyz);
     }

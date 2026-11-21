@@ -90,22 +90,27 @@ pub struct LandmarkSet {
 pub struct Options {
     /// The waterfront (waterfront.rs): the shore-edge rule, piers, the apron, the terrain press.
     pub waterfront: bool,
+    pub cove_detail: bool,
     /// The registered landmark buildings (Transamerica, Salesforce, Coit, Sutro, City Hall).
     pub buildings: bool,
     /// The bridges' night lights.
     pub lights: bool,
+    /// The Golden Gate's detail pass (golden_gate.rs): the photographed paint
+    /// tone, fluted tower legs, framed portal struts, full arch pylons, lamp
+    /// standards. A preview, off by default; `eo-app --bridge-detail` turns it on.
+    pub bridge_detail: bool,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Self { waterfront: true, buildings: true, lights: true }
+        Self { cove_detail: false, waterfront: true, buildings: true, lights: true, bridge_detail: false }
     }
 }
 
 impl Options {
     /// As the first landmarks slice built the set.
     pub fn off() -> Self {
-        Self { waterfront: false, buildings: false, lights: false }
+        Self { cove_detail: false, waterfront: false, buildings: false, lights: false, bridge_detail: false }
     }
 }
 
@@ -243,10 +248,10 @@ impl Landmark {
 }
 
 /// Build one landmark (`buildLandmark`): the generator, then its draws.
-pub fn build_landmark(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: &DeckStandards) -> Result<Landmark> {
+pub fn build_landmark(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: &DeckStandards, opts: Options) -> Result<Landmark> {
     let t0 = Instant::now();
     let built: Built = match id {
-        "golden-gate-bridge" => golden_gate::build(js, ground, ca),
+        "golden-gate-bridge" => golden_gate::build(js, ground, ca, opts.bridge_detail),
         "bay-bridge-west" => bay_bridge::build(js, ground, ca),
         // the landmark buildings (towers.rs).
         other => match crate::towers::build(other, &js.buildings[other], ground) {
@@ -328,7 +333,7 @@ impl LandmarkSet {
                         let d = ground_scale_shift(js, id);
                         let shifted = |x: f64, z: f64| height_at(x + d[0], z + d[1]);
                         let ground = if d == [0.0, 0.0] { ground_of(js, id, height_at) } else { ground_of(js, id, &shifted) };
-                        let mut l = build_landmark(js, id, &ground, std)?;
+                        let mut l = build_landmark(js, id, &ground, std, opts)?;
                         l.translate(d);
                         Ok::<Landmark, anyhow::Error>(l)
                     })
@@ -372,7 +377,8 @@ impl LandmarkSet {
             use crate::waterfront as wf;
             let rings = wf::load_pier_rings(repo_root)?;
             let piers = wf::plan_piers(&rings, &oracle, height_at, js.sea_level_y, sh.road_lift);
-            let (edges, c) = wf::classify_edges(&oracle, height_at, js.sea_level_y, &rule, &piers);
+            let (mut edges, mut c) = wf::classify_edges(&oracle, height_at, js.sea_level_y, &rule, &piers);
+            if opts.cove_detail { wf::align_municipal_edges(&mut edges, &mut c, &piers); }
             let wall_edges: Vec<[f64; 4]> = edges.iter().filter(|e| e.pier.is_none()).map(|e| [e.a[0], e.a[1], e.b[0], e.b[1]]).collect();
             // The crest on the quay's own top (renderer.js's crest over the highest ground within 8 m).
             let crest_at = |x: f64, z: f64| wf::crest_ground(height_at, x, z) + sh.road_lift + sh.crest_above_road_m;
@@ -383,6 +389,9 @@ impl LandmarkSet {
             let hex = |s: &str| crate::geometry::srgb_hex(u32::from_str_radix(s.trim_start_matches('#'), 16).unwrap_or(0x808080));
             let apron = hex(js.open_space.colors.get("path").map(|s| s.as_str()).unwrap_or("#e1e3e4"));
             let m = wf::build_meshes(&edges, &piers, &oracle, &crest_at, js.sea_level_y, 0.42, concrete, wf::UNDER_DECK_LINEAR, apron, crate::geometry::srgb_hex(fp.deck_srgb));
+            if opts.cove_detail && let Some(mesh) = wf::municipal_parapet(&piers) {
+                structures.push(Structure { cast: true, footway: false, kit: None, name: "waterfront:municipal-pier-parapet".into(), material: plain_material(0.93, 0.0, "facade-masonry"), mesh });
+            }
             piers_built = (m.decks, m.piles);
             structures.push(Structure { cast: false, footway: true, kit: None, name: "waterfront:paving".into(), material: plain_material(0.9, 0.0, "sidewalk"), mesh: m.paving });
             structures.push(Structure { cast: true, footway: false, kit: None, name: "waterfront:concrete".into(), material: Material { surface: Some("concrete".into()), ..plain_material(0.92, 0.0, "facade-masonry") }, mesh: m.concrete });
@@ -395,7 +404,8 @@ impl LandmarkSet {
                 structures.push(Structure { cast: true, footway: false, kit: Some(wf::SHED_WALL_KIT.into()), name: format!("ferry-pier-sheds-{}", fp.source_way_id), material: plain_material(0.88, 0.03, "facade-masonry"), mesh: walls_m });
                 structures.push(Structure { cast: true, footway: false, kit: Some(wf::SHED_ROOF_KIT.into()), name: format!("ferry-pier-shed-roofs-{}", fp.source_way_id), material: plain_material(0.9, 0.0, "facade-masonry"), mesh: roofs_m });
             }
-            press = Some(std::sync::Arc::new(wf::ShorePress::new(js.sea_level_y, &edges, &piers)));
+            let waterfront_press = wf::ShorePress::new(js.sea_level_y, &edges, &piers);
+            press = Some(std::sync::Arc::new(if opts.cove_detail { waterfront_press.with_municipal_pier(&piers) } else { waterfront_press }));
             census = Some(c);
             walls
         };

@@ -9,6 +9,7 @@
 //! and the vertex shader drops the trees nearer than `NEAR_M` or behind the camera.
 
 use bytemuck::{Pod, Zeroable};
+use crate::cove_canopy;
 
 pub const NEAR_M: f32 = 270.0;
 pub const FULL_M: f32 = 330.0;
@@ -24,7 +25,8 @@ pub struct FarTree {
     /// sRGB crown tint.
     pub tint: u32,
     pub seed: u32,
-    pub pad: u32,
+    /// One-based model in cove_canopy::SPECIES. Bit 4 selects a baked Black Point tree.
+    pub species: u32,
 }
 
 fn rgb(r: u8, g: u8, b: u8) -> u32 {
@@ -60,9 +62,56 @@ pub fn street_trees(js: &eo_props::JsProps, ground: &dyn Fn(f64, f64) -> f64) ->
         let h = hash(i as u32 ^ 0x51ed);
         let g = 70 + (h % 30) as u8;
         let tint = if form == "palm" { rgb(78, 96, 52) } else { rgb(52 + (h >> 8) as u8 % 16, g + 20, 40 + (h >> 16) as u8 % 14) };
-        out.push(FarTree { pos: [x as f32, ground(x, z) as f32, z as f32], height, crown, tint, seed: h, pad: 0 });
+        out.push(FarTree { pos: [x as f32, ground(x, z) as f32, z as f32], height, crown, tint, seed: h, species: match form { "pollard" => 4, "mature" => 5, "round" => 6, _ => 0 } });
     }
     out
+}
+
+fn park_tree(t: eo_landmarks::ground_cover::ParkTree) -> FarTree {
+    let (h, cr, tint) = match t.species {
+        "park-pine" => (17.0, 3.6, rgb(44, 66, 44)),
+        "park-oak" => (11.0, 5.0, rgb(62, 82, 46)),
+        _ => (13.0, 4.2, rgb(70, 92, 50)),
+    };
+    let k = t.scale.clamp(0.4, 2.0) as f32;
+    let seed = hash((t.x * 10.0) as i64 as u32 ^ ((t.z * 10.0) as i64 as u32).rotate_left(16));
+    FarTree { pos: [t.x as f32, t.y as f32, t.z as f32], height: h * k, crown: cr * k, tint, seed, species: match t.species { "park-oak" => 1, "park-pine" => 3, _ => 2 } }
+}
+
+const COVE_TREE_CAPACITY: u32 = 4096;
+
+fn black_point_bounds() -> ([f64; 2], [f64; 2]) {
+    (eo_data::groundscale::plan([-905.0, -3349.0]), eo_data::groundscale::plan([-607.0, -3100.0]))
+}
+
+/// Fill the mapped Black Point woods at the same sampling density as the near
+/// trees. A single 512 m gathering area otherwise shares its 150-tree limit
+/// between the entire hillside and the neighbouring park. Keep existing stems.
+pub fn fill_black_point(
+    trees: &mut Vec<FarTree>,
+    cover: &eo_landmarks::ground_cover::GroundCover,
+    ground: &dyn Fn(f64, f64) -> f64,
+    blocked: &dyn Fn(f64, f64) -> bool,
+) {
+    let ([x0, z0], [x1, z1]) = black_point_bounds();
+    let key = |x: f32, z: f32| (x.to_bits(), z.to_bits());
+    let mut existing = std::collections::HashSet::new();
+    for t in trees.iter().filter(|t| (x0..x1).contains(&(t.pos[0] as f64)) && (z0..z1).contains(&(t.pos[2] as f64))) {
+        existing.insert(key(t.pos[0], t.pos[2]));
+    }
+    let mut z = z0;
+    while z < z1 {
+        let mut x = x0;
+        while x < x1 {
+            for t in cover.park_trees(x, z, (x + 64.0).min(x1), (z + 64.0).min(z1), ground, blocked) {
+                if cover.tree_class_at(t.x, t.z) == 1 && existing.insert(key(t.x as f32, t.z as f32)) {
+                    trees.push(park_tree(t));
+                }
+            }
+            x += 64.0;
+        }
+        z += 64.0;
+    }
 }
 
 /// The park trees of the ground cover over [x0, x1) x [z0, z1), in 512 m blocks.
@@ -88,14 +137,7 @@ pub fn park_trees(cover: &eo_landmarks::ground_cover::GroundCover, x0: f64, z0: 
                     let mut out = vec![];
                     for &(x, z) in c {
                         for t in cover.park_trees(x, z, x + B, z + B, y_at, blocked) {
-                            let (h, cr, tint) = match t.species {
-                                "park-pine" => (17.0, 3.6, rgb(44, 66, 44)),
-                                "park-oak" => (11.0, 5.0, rgb(62, 82, 46)),
-                                _ => (13.0, 4.2, rgb(70, 92, 50)),
-                            };
-                            let k = t.scale.clamp(0.4, 2.0) as f32;
-                            let seed = hash((t.x * 10.0) as i64 as u32 ^ ((t.z * 10.0) as i64 as u32).rotate_left(16));
-                            out.push(FarTree { pos: [t.x as f32, t.y as f32, t.z as f32], height: h * k, crown: cr * k, tint, seed, pad: 0 });
+                            out.push(park_tree(t));
                         }
                     }
                     out
@@ -134,6 +176,24 @@ pub struct TreeBlock {
 pub struct FarTreeList {
     pub trees: Vec<FarTree>,
     pub blocks: Vec<TreeBlock>,
+    canopy: std::collections::VecDeque<cove_canopy::Level>,
+}
+
+impl FarTreeList {
+    pub fn bake_black_point_canopy(&mut self, root: &std::path::Path, js: &eo_props::JsProps) {
+        let ([x0, z0], [x1, z1]) = black_point_bounds();
+        match cove_canopy::bake(root, &js.consts["vegetationAtlas"]) {
+            Ok(levels) => {
+                for t in &mut self.trees {
+                    if t.species != 0 && (x0..x1).contains(&(t.pos[0] as f64)) && (z0..z1).contains(&(t.pos[2] as f64)) {
+                        t.species |= 16;
+                    }
+                }
+                self.canopy = levels;
+            }
+            Err(e) => eprintln!("Black Point canopy unavailable ({e:#}); using the distant tree silhouettes"),
+        }
+    }
 }
 
 /// Orders the trees by `BLOCK_M` block and makes the block table (on the
@@ -166,7 +226,7 @@ pub fn into_blocks(mut trees: Vec<FarTree>) -> FarTreeList {
     if let Some(b) = blocks.last() {
         trees.truncate((b.first + b.count) as usize);
     }
-    FarTreeList { trees, blocks }
+    FarTreeList { trees, blocks, canopy: Default::default() }
 }
 
 #[repr(C)]
@@ -189,6 +249,9 @@ pub const CAPACITY: u32 = 262_144;
 pub const WRITE_BYTES_PER_FRAME: usize = 512 << 10;
 
 pub struct FarTrees {
+    cove_only: bool,
+    canopy: wgpu::Texture,
+    pending_canopy: std::sync::Mutex<std::collections::VecDeque<cove_canopy::Level>>,
     pipeline: wgpu::RenderPipeline,
     bg: wgpu::BindGroup,
     params: wgpu::Buffer,
@@ -197,6 +260,8 @@ pub struct FarTrees {
     cull_params: wgpu::Buffer,
     cmd_buf: wgpu::Buffer,
     count_buf: wgpu::Buffer,
+    /// The list in the count emulation (no MULTI_DRAW_INDIRECT_COUNT), registered at attach.
+    counted: std::sync::OnceLock<crate::counted::CountedLists>,
     cull_plain: wgpu::ComputePipeline,
     cull_hzb: wgpu::ComputePipeline,
     cull_bg: wgpu::BindGroup,
@@ -209,6 +274,8 @@ pub struct FarTrees {
 }
 
 pub struct FarTreesInit<'a> {
+    pub cove_only: bool,
+    pub canopy: bool,
     pub device: &'a wgpu::Device,
     pub draw_bgl: &'a wgpu::BindGroupLayout,
     pub main_bgl: &'a wgpu::BindGroupLayout,
@@ -225,26 +292,37 @@ impl FarTrees {
         let d = i.device;
         use wgpu::BufferUsages as U;
         let buffer = |label: &str, size: u64, usage| d.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size, usage, mapped_at_creation: false });
-        let size = CAPACITY as u64 * std::mem::size_of::<FarTree>() as u64;
+        let capacity = if i.cove_only { COVE_TREE_CAPACITY } else { CAPACITY };
+        let size = capacity as u64 * std::mem::size_of::<FarTree>() as u64;
         let buf = buffer("hlod-far-trees", size, U::STORAGE | U::COPY_DST);
         let params = buffer("hlod-far-tree-params", 16, U::UNIFORM | U::COPY_DST);
         let block_bytes = MAX_BLOCKS as u64 * std::mem::size_of::<TreeBlock>() as u64;
         let block_buf = buffer("hlod-far-tree-blocks", block_bytes, U::STORAGE | U::COPY_DST);
         let cull_params = buffer("hlod-far-tree-cull-params", std::mem::size_of::<CullParams>() as u64, U::UNIFORM | U::COPY_DST);
-        let cmd_buf = buffer("hlod-far-tree-draws", MAX_BLOCKS as u64 * 16, U::STORAGE | U::INDIRECT);
-        let count_buf = buffer("hlod-far-tree-counts", 16, U::STORAGE | U::INDIRECT | U::COPY_DST);
+        let cmd_buf = buffer("hlod-far-tree-draws", MAX_BLOCKS as u64 * 16, U::STORAGE | U::INDIRECT | U::COPY_DST); // COPY_DST: the count emulation zeroes it
+        let count_buf = buffer("hlod-far-tree-counts", 16, U::STORAGE | U::INDIRECT | U::COPY_DST | U::COPY_SRC);
+        let side = if i.canopy { cove_canopy::SIDE } else { 1 };
+        let canopy = d.create_texture(&wgpu::TextureDescriptor {
+            label: Some("Black Point canopy"), size: wgpu::Extent3d { width: side, height: side, depth_or_array_layers: if i.canopy { cove_canopy::LAYERS * 2 } else { 1 } },
+            mip_level_count: if i.canopy { cove_canopy::LEVELS } else { 1 }, sample_count: 1, dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm, usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST, view_formats: &[],
+        });
+        let canopy_view = canopy.create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() });
         let vf = wgpu::ShaderStages::VERTEX_FRAGMENT;
         let bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("hlod-far-trees-bgl"),
             entries: &[
                 wgpu::BindGroupLayoutEntry { binding: 0, visibility: vf, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }, count: None },
+                wgpu::BindGroupLayoutEntry { binding: 2, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2Array, multisampled: false,
+                }, count: None },
                 wgpu::BindGroupLayoutEntry { binding: 1, visibility: vf, ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Uniform, has_dynamic_offset: false, min_binding_size: None }, count: None },
             ],
         });
         let bg = d.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("hlod-far-trees-bg"),
             layout: &bgl,
-            entries: &[wgpu::BindGroupEntry { binding: 0, resource: buf.as_entire_binding() }, wgpu::BindGroupEntry { binding: 1, resource: params.as_entire_binding() }],
+            entries: &[wgpu::BindGroupEntry { binding: 0, resource: buf.as_entire_binding() }, wgpu::BindGroupEntry { binding: 1, resource: params.as_entire_binding() }, wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&canopy_view) }],
         });
         // Cull: group 0 its own, group 1 the pyramid (the hzb variant), as the far cells' (hlod.rs).
         let cs = wgpu::ShaderStages::COMPUTE;
@@ -278,7 +356,7 @@ impl FarTrees {
         };
         let cull_plain = compute(&pm, &lay_p, "hlod_tree_cull");
         let cull_hzb = compute(&hm, &lay_h, "hlod_tree_cull (hzb)");
-        let module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("hlod_trees.wgsl"), source: wgpu::ShaderSource::Wgsl(format!("{}\n{WGSL}", crate::look::city_shader_source()).into()) });
+        let module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("hlod_trees.wgsl"), source: wgpu::ShaderSource::Wgsl(format!("{}\nconst FT_VIEWS: u32 = {}u;\nconst FT_NORMALS: i32 = {};\n{WGSL}", crate::look::city_shader_source_far(), cove_canopy::VIEWS, cove_canopy::LAYERS).into()) }); // the far layer's city shader (lighting)
         let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("hlod-far-trees-layout"), bind_group_layouts: &[Some(i.draw_bgl), Some(i.main_bgl), Some(&bgl)], immediate_size: 0 });
         let color = wgpu::ColorTargetState { format: crate::look::HDR_FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL };
         let ids = wgpu::ColorTargetState { format: crate::IDS_FORMAT, blend: None, write_mask: wgpu::ColorWrites::ALL };
@@ -316,19 +394,30 @@ impl FarTrees {
             cull_params,
             cmd_buf,
             count_buf,
+            counted: std::sync::OnceLock::new(),
             cull_plain,
             cull_hzb,
             cull_bg,
+            cove_only: i.cove_only,
+            canopy,
+            pending_canopy: Default::default(),
             count: std::sync::atomic::AtomicU32::new(0),
             blocks: std::sync::atomic::AtomicU32::new(0),
             pending: std::sync::Mutex::new(None),
-            bytes,
+            bytes: bytes + if i.canopy { cove_canopy::BYTES } else { 4 },
         }
     }
 
     /// The tree list (gathered and ordered off the render thread, `into_blocks`); written by `pump`.
-    pub fn supply(&self, list: FarTreeList) {
-        let n = list.trees.len().min(CAPACITY as usize);
+    pub fn supply(&self, mut list: FarTreeList) {
+        *self.pending_canopy.lock().unwrap() = std::mem::take(&mut list.canopy);
+        let capacity = if self.cove_only {
+            let ([x0, z0], [x1, z1]) = black_point_bounds();
+            list.trees.retain(|t| (x0..x1).contains(&(t.pos[0] as f64)) && (z0..z1).contains(&(t.pos[2] as f64)));
+            list.blocks.clear();
+            COVE_TREE_CAPACITY
+        } else { CAPACITY };
+        let n = list.trees.len().min(capacity as usize);
         let nb = list.blocks.iter().take_while(|b| (b.first + b.count) as usize <= n).count().min(MAX_BLOCKS as usize);
         let mut data = bytemuck::cast_slice(&list.trees[..n]).to_vec();
         data.extend_from_slice(bytemuck::cast_slice(&list.blocks[..nb]));
@@ -339,6 +428,19 @@ impl FarTrees {
     /// trees, then the blocks; the trees draw once all of it is written.
     /// Returns the bytes written.
     pub fn pump(&self, queue: &wgpu::Queue) -> u64 {
+        let mut uploads = self.pending_canopy.lock().unwrap();
+        let mut written = 0;
+        while uploads.front().is_some_and(|l| written + l.bytes.len() <= WRITE_BYTES_PER_FRAME) {
+            let level = uploads.pop_front().unwrap();
+            let side = cove_canopy::SIDE >> level.mip;
+            queue.write_texture(wgpu::TexelCopyTextureInfo { texture: &self.canopy, mip_level: level.mip,
+                origin: wgpu::Origin3d { x: 0, y: 0, z: level.layer }, aspect: wgpu::TextureAspect::All },
+                &level.bytes, wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(side * 4), rows_per_image: Some(side) },
+                wgpu::Extent3d { width: side, height: side, depth_or_array_layers: cove_canopy::VIEWS });
+            written += level.bytes.len();
+        }
+        drop(uploads);
+        if written != 0 { return written as u64; }
         let mut p = self.pending.lock().unwrap();
         let Some((data, at, n, nb)) = p.as_mut() else { return 0 };
         let tree_bytes = *n as usize * std::mem::size_of::<FarTree>();
@@ -386,6 +488,12 @@ impl FarTrees {
         enc.clear_buffer(&self.count_buf, 0, None);
     }
 
+    /// Put the block list (count word 0, non-indexed) in the count emulation.
+    pub fn register_counts(&self, counts: &std::sync::Arc<crate::counted::Counts>) {
+        let list = crate::counted::List { word: 0, draws: self.cmd_buf.clone(), offset: 0, stride: 16, max: MAX_BLOCKS, floor: None };
+        let _ = self.counted.set(counts.register("far-trees", &self.count_buf, vec![list]));
+    }
+
     /// Frustum, near-distance and (after the pyramid) occlusion test of every block.
     pub fn encode_cull(&self, pass: &mut wgpu::ComputePass<'_>, hzb: Option<&wgpu::BindGroup>) {
         let n = self.block_count();
@@ -408,13 +516,24 @@ impl FarTrees {
 
     /// In the city pass with the opaque city (groups 0 and 1 bound): the blocks the cull kept.
     pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
+        if self.cove_only {
+            let count = self.count();
+            if count > 0 {
+                // The grove fits in a single ordinary instanced draw on adapters
+                // without counted draws. The vertex shader handles the near fade.
+                pass.set_pipeline(&self.pipeline);
+                pass.set_bind_group(2, &self.bg, &[]);
+                pass.draw(0..6, 0..count);
+            }
+            return;
+        }
         let n = self.block_count();
         if n == 0 {
             return;
         }
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(2, &self.bg, &[]);
-        pass.multi_draw_indirect_count(&self.cmd_buf, 0, &self.count_buf, 0, n);
+        crate::counted::draw(pass, self.counted.get(), 0, &self.cmd_buf, 0, &self.count_buf, 0, n);
     }
 }
 
@@ -427,7 +546,7 @@ mod tests {
         let mut trees = vec![];
         for i in 0..500u32 {
             let (x, z) = ((i * 37 % 1000) as f32 - 500.0, (i * 91 % 700) as f32 - 350.0);
-            trees.push(FarTree { pos: [x, (i % 7) as f32, z], height: 6.0 + (i % 5) as f32, crown: 2.0, tint: 0, seed: i, pad: 0 });
+            trees.push(FarTree { pos: [x, (i % 7) as f32, z], height: 6.0 + (i % 5) as f32, crown: 2.0, tint: 0, seed: i, species: 0 });
         }
         let list = into_blocks(trees.clone());
         assert_eq!(list.trees.len(), trees.len());

@@ -100,3 +100,23 @@ fn land_cover_matches_js_decoder() {
         assert_eq!(lc.class_at(x, z), want, "({x},{z})");
     }
 }
+
+/// Every way keeps its OSM `layer` (the grade-separated roads' order), in the
+/// renderer's `Road` and the simulation's `SimRoad` alike. Counts read from
+/// sf-city.json.gz itself (every `layer` there is a numeric string).
+#[test]
+fn roads_keep_their_layer() {
+    eo_data::groundscale::pin(1.0); // the JS game this compares with is 1:1
+    let c = city();
+    let mut by_layer = std::collections::BTreeMap::<i32, usize>::new();
+    for r in &c.roads {
+        *by_layer.entry(r.layer).or_default() += 1;
+    }
+    assert_eq!(by_layer.into_iter().collect::<Vec<_>>(), vec![(-2, 4), (-1, 160), (0, 61023), (1, 684), (2, 89), (3, 49), (4, 15), (5, 1)]);
+    let sim = eo_data::sim_source::SimSource::load(&paths()).unwrap();
+    assert_eq!(sim.roads.len(), c.roads.len());
+    let layer: std::collections::HashMap<&str, i32> = c.roads.iter().map(|r| (r.id.as_str(), r.layer)).collect();
+    for r in &sim.roads {
+        assert_eq!(layer.get(r.id.as_str()), Some(&r.layer), "{}", r.id);
+    }
+}

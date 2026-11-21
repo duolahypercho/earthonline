@@ -48,6 +48,10 @@ pub const SLOT_SIDE: i32 = 8;
 pub const SLOTS: u32 = (SLOT_SIDE * SLOT_SIDE) as u32;
 /// vec4<u32> words of the grid: one header per slot, then 32 x 32 cells per slot.
 pub const GRID_VEC4: u64 = SLOTS as u64 * (1 + (CELLS * CELLS) as u64);
+/// The street-life decals' own cells (street_life.rs, `--street-life`): after
+/// the decal grid, the same 32 x 32 cells a slot, so they never take a cell
+/// entry from the wear decals. Allocated only with the level on at attach.
+pub const LIFE_GRID_VEC4: u64 = SLOTS as u64 * (CELLS * CELLS) as u64;
 pub const DECAL_VEC4: u64 = SLOTS as u64 * MAX_DECALS as u64 * 2;
 
 /// Material modes (cc0.wgsl).
@@ -273,6 +277,8 @@ pub fn wgsl_constants(scoring_m: f32) -> String {
         ("WALK_CRACK", crate::cc0_decals::DK_WALK_CRACK),
         ("TYRE", crate::cc0_decals::DK_TYRE),
         ("GRATE", crate::cc0_decals::DK_GRATE),
+        ("KERB_PAINT", crate::cc0_decals::DK_KERB_PAINT),
+        ("WALK_EDGE", crate::cc0_decals::DK_WALK_EDGE),
     ] {
         s.push_str(&format!("const CC0_DK_{k}: u32 = {v}u;\n"));
     }
@@ -532,18 +538,22 @@ impl Cc0Gpu {
         let decal = [0, 1, 2].map(|k| tex(dnames[k], FORMATS[k], ac::DECAL_RES, ac::DECAL_SETS.len() as u32));
         let mats = (material_count.max(1) * MAT_VEC4 * 16) as u64;
         let layers = ((ac::MATERIAL_SETS.len() + ac::DECAL_SETS.len()) * LAYER_VEC4 * 16) as u64;
+        // the street life's own cells after the grid, with its level on (none by default)
+        let life = crate::street_life::level() > 0;
+        let grid_vec4 = GRID_VEC4 + if life { LIFE_GRID_VEC4 } else { 0 };
         let r = Res {
             mat,
             decal,
             mats: storage(d, "cc0-mats", mats),
             layers: storage(d, "cc0-layers", layers),
-            grid: storage(d, "cc0-grid", GRID_VEC4 * 16),
+            grid: storage(d, "cc0-grid", grid_vec4 * 16),
             decals: storage(d, "cc0-decals", DECAL_VEC4 * 16),
         };
-        let bytes = 3 * (array_bytes(ac::MATERIAL_RES, ac::MATERIAL_SETS.len()) + array_bytes(ac::DECAL_RES, ac::DECAL_SETS.len())) + mats + layers + GRID_VEC4 * 16 + DECAL_VEC4 * 16;
+        let bytes = 3 * (array_bytes(ac::MATERIAL_RES, ac::MATERIAL_SETS.len()) + array_bytes(ac::DECAL_RES, ac::DECAL_SETS.len())) + mats + layers + grid_vec4 * 16 + DECAL_VEC4 * 16;
         if self.res.set(r).is_err() {
             return 0;
         }
+        LIFE_CELLS.store(life, Ordering::Relaxed);
         self.bytes.store(bytes, Ordering::Relaxed);
         DECALS_WANTED.store(self.options() & RUN_DECALS != 0, Ordering::Relaxed);
         bytes
@@ -608,6 +618,9 @@ impl Cc0Gpu {
 /// Whether street tiles place decals (set when the decal buffers are attached with decals on).
 pub static DECALS_WANTED: AtomicBool = AtomicBool::new(false);
 
+/// Whether the grid buffer holds the street life's cells (`LIFE_GRID_VEC4`; set at attach).
+pub static LIFE_CELLS: AtomicBool = AtomicBool::new(false);
+
 /// The toroidal slot of a street tile.
 pub fn slot_of(key: (i32, i32)) -> u32 {
     (key.0.rem_euclid(SLOT_SIDE) + SLOT_SIDE * key.1.rem_euclid(SLOT_SIDE)) as u32
@@ -622,6 +635,10 @@ pub fn cells_offset(slot: u32) -> u64 {
 }
 pub fn decals_offset(slot: u32) -> u64 {
     slot as u64 * MAX_DECALS as u64 * 2 * 16
+}
+/// A slot's street-life cells (after the decal grid; `LIFE_CELLS`).
+pub fn life_cells_offset(slot: u32) -> u64 {
+    (GRID_VEC4 + slot as u64 * (CELLS * CELLS) as u64) * 16
 }
 
 /// A tile slot header: tile key, decal count.

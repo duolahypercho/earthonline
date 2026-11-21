@@ -147,6 +147,74 @@ pub struct Pier {
     pub max: [f64; 2],
 }
 
+/// The National Park Service documents a continuous concrete parapet on Municipal
+/// Pier. Follow the city polygon around the breakwater, leaving its entry clear.
+/// The rail sections and post spacing are visual approximations.
+pub fn municipal_parapet(piers: &[Pier]) -> Option<crate::geometry::Frozen> {
+    let (_, pier) = municipal_pier(piers)?;
+    let mut m = MeshArrays::new("municipal-pier-parapet");
+    let top = pier.deck_y + 1.10;
+    let winding = signed_area(&pier.ring).signum();
+    let rail = crate::geometry::srgb_hex(0xb8b6a7);
+    let base = crate::geometry::srgb_hex(0x919286);
+    for (a, b) in pier.ring.iter().zip(pier.ring.iter().cycle().skip(1)) {
+        let len = (a[0] - b[0]).hypot(a[1] - b[1]);
+        if len < 0.1 || a[1].min(b[1]) > pier.max[1] - 4.0 { continue; }
+        let line = |y| ([a[0], y, a[1]], [b[0], y, b[1]]);
+        for (y, h, w, color) in [(top, 0.19, 0.30, rail), (pier.deck_y + 0.19, 0.35, 0.26, base)] {
+            let (start, end) = line(y);
+            m.beam(start, end, w, h, color);
+        }
+        // The interior row carries a longitudinal beam even along the stretches
+        // classified as filled land in the shoreline mask. The outer fascia and
+        // its short piles come from the ordinary waterfront builder.
+        let nx = -(b[1] - a[1]) * winding / len;
+        let nz = (b[0] - a[0]) * winding / len;
+        let girder = |p: &[f64; 2]| [p[0] + 1.65 * nx, pier.deck_y - 0.48, p[1] + 1.65 * nz];
+        m.beam(girder(a), girder(b), 0.85, 0.89, base);
+        let bays = (len / PIER_PILE_PITCH_M).ceil() as usize;
+        for i in 0..bays {
+            let t = (i as f64 + 0.5) / bays as f64;
+            let x = a[0] + t * (b[0] - a[0]) + 1.65 * nx;
+            let z = a[1] + t * (b[1] - a[1]) + 1.65 * nz;
+            m.box_(x, z, eo_water::SEA_LEVEL_Y - 2.0, pier.deck_y - 0.70, 0.38, 0.38, 0.0, base, crate::geometry::NO_BOTTOM);
+        }
+        let spans = (len / 2.4).ceil() as usize;
+        for i in 0..spans {
+            let t = i as f64 / spans as f64;
+            let x = a[0] + t * (b[0] - a[0]);
+            let z = a[1] + t * (b[1] - a[1]);
+            m.box_(x, z, pier.deck_y + 0.25, top, 0.13, 0.13, 0.0, rail, crate::geometry::NO_BOTTOM);
+        }
+    }
+    Some(m.freeze())
+}
+
+fn municipal_pier(piers: &[Pier]) -> Option<(usize, &Pier)> {
+    let tip = eo_data::groundscale::plan([-431.5, -3610.0]);
+    piers.iter().enumerate().find(|(_, p)| p.contains(tip[0] - 6.0, tip[1]) || (p.ring.len() > 20 && p.near(tip[0], tip[1], 5.0)))
+}
+
+/// The city's shoreline simplifies the pier curve into longer chords. Their
+/// midpoints can lie more than the ordinary 6 game metres from the surveyed
+/// pier. Use one survey cell of tolerance here so the pier is not walled as land.
+pub fn align_municipal_edges(edges: &mut [ShoreEdge], census: &mut EdgeCensus, piers: &[Pier]) {
+    let Some((index, pier)) = municipal_pier(piers) else { return; };
+    let reach = 8.0 * eo_data::groundscale::scale();
+    for e in edges.iter_mut().filter(|e| e.pier.is_none()) {
+        let x = (e.a[0] + e.b[0]) * 0.5;
+        let z = (e.a[1] + e.b[1]) * 0.5;
+        if z < pier.max[1] - reach && pier.near(x, z, reach) {
+            let length = (e.a[0] - e.b[0]).hypot(e.a[1] - e.b[1]);
+            e.pier = Some(index);
+            census.wall -= 1;
+            census.wall_m -= length;
+            census.pier += 1;
+            census.pier_m += length;
+        }
+    }
+}
+
 impl Pier {
     pub fn contains(&self, x: f64, z: f64) -> bool {
         if x < self.min[0] || x > self.max[0] || z < self.min[1] || z > self.max[1] {
@@ -422,6 +490,7 @@ pub fn press_pier_edge(sea: f64, d: f64) -> f64 {
 pub struct ShorePress {
     sea: f64,
     cell: f64,
+    municipal: Option<Pier>,
     edges: Vec<ShoreEdge>,
     edge_cells: HashMap<(i64, i64), Vec<u32>>,
     piers: Vec<(Vec<[f64; 2]>, [f64; 2], [f64; 2], f64)>,
@@ -452,14 +521,29 @@ impl ShorePress {
                 }
             }
         }
-        Self { sea, cell, edges: edges.to_vec(), edge_cells, piers: list, pier_cells }
+        Self { sea, cell, municipal: None, edges: edges.to_vec(), edge_cells, piers: list, pier_cells }
+    }
+
+    /// A LiDAR return from the pier's deck is not a seabed sounding. Keep the
+    /// existing bed wherever it is deeper, and keep the Black Point land abutment.
+    pub fn with_municipal_pier(mut self, piers: &[Pier]) -> Self {
+        self.municipal = municipal_pier(piers).map(|(_, p)| p.clone());
+        self
+    }
+
+    pub fn under_municipal_pier(&self, x: f64, z: f64) -> bool {
+        self.municipal.as_ref().is_some_and(|p| {
+            // Cover every terrain triangle touching the pier (8 m survey grid).
+            let reach = 8.0 * std::f64::consts::SQRT_2 * eo_data::groundscale::scale();
+            z < p.max[1] - reach && p.near(x, z, reach)
+        })
     }
 
     /// The terrain height at (x, z) given the carpet's `y`: under every pier
     /// deck, and pressed behind the walled and pier edges.
     pub fn press(&self, x: f64, z: f64, y: f64) -> f64 {
         let key = ((x / self.cell).floor() as i64, (z / self.cell).floor() as i64);
-        let mut out = y;
+        let mut out = if self.under_municipal_pier(x, z) { y.min(self.sea - 1.2) } else { y };
         if let Some(list) = self.pier_cells.get(&key) {
             for &i in list {
                 let (ring, mn, mx, deck) = &self.piers[i as usize];

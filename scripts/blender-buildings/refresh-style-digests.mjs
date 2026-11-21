@@ -85,25 +85,5 @@ for (const id of readdirSync(dir).sort()) {
   if (!dryRun) writeFileSync(provPath, updated);
   counts.refreshed += 1;
 }
-// Each artifacts/buildings/<id>/manifest-fragment.json records the digest of
-// that provenance.json: a record that matched the base revision follows it.
-let fragments = 0;
-for (const id of readdirSync(dir).sort()) {
-  const provRel = `public/assets/buildings/${id}/provenance.json`;
-  const fragPath = path.join(REPO, 'artifacts/buildings', id, 'manifest-fragment.json');
-  if (!existsSync(fragPath) || !existsSync(path.join(REPO, provRel))) continue;
-  const raw = readFileSync(fragPath, 'utf8');
-  const rec = JSON.parse(raw).provenance;
-  if (!rec || rec.path !== provRel || typeof rec.sha256 !== 'string') continue;
-  const before = atBase(provRel);
-  if (!before || sha256(before) !== rec.sha256) continue;
-  const nowSha = sha256(Buffer.from(readFileSync(path.join(REPO, provRel), 'utf8').replace(/\r\n/g, '\n'), 'utf8'));
-  if (nowSha === rec.sha256) continue;
-  const updated = raw.replace(`"sha256": "${rec.sha256}"`, `"sha256": "${nowSha}"`);
-  if (JSON.parse(updated).provenance.sha256 !== nowSha) throw new Error(`${id}: fragment edit did not land`);
-  if (!dryRun) writeFileSync(fragPath, updated);
-  fragments += 1;
-}
-console.log(`${dryRun ? '(dry run) ' : ''}manifest fragments following their provenance: ${fragments}`);
 console.log(`${dryRun ? '(dry run) ' : ''}refreshed ${counts.refreshed}, already current ${counts.unchanged}, stale before the edit (left) ${counts.staleBefore}, changed beyond notes (left) ${counts.notNotesOnly}, no style record ${counts.noRecord}`);
 if (stale.length) console.log(`stale records left: ${stale.length}`);

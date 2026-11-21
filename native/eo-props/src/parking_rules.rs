@@ -203,6 +203,26 @@ pub fn lap_depth(a: &[P2], b: &[P2]) -> f64 {
 }
 
 /// `quadsOverlap` (vehicle-presentation.js): touching counts.
+/// Plan distance from `p` to a convex quad (0 inside it).
+pub fn quad_distance(q: &[P2; 4], p: P2) -> f64 {
+    let mut inside = true;
+    let mut best = f64::INFINITY;
+    for i in 0..4 {
+        let (a, b) = (q[i], q[(i + 1) % 4]);
+        let (ex, ez) = (b[0] - a[0], b[1] - a[1]);
+        let l2 = (ex * ex + ez * ez).max(1e-12);
+        let t = (((p[0] - a[0]) * ex + (p[1] - a[1]) * ez) / l2).clamp(0.0, 1.0);
+        best = best.min((p[0] - a[0] - ex * t).hypot(p[1] - a[1] - ez * t));
+        // (the corners wind one way round: inside is on one side of every edge.)
+        let side = ex * (p[1] - a[1]) - ez * (p[0] - a[0]);
+        let first = (q[1][0] - q[0][0]) * (q[2][1] - q[0][1]) - (q[1][1] - q[0][1]) * (q[2][0] - q[0][0]);
+        if side * first < 0.0 {
+            inside = false;
+        }
+    }
+    if inside { 0.0 } else { best }
+}
+
 pub fn quads_overlap(a: &[P2], b: &[P2]) -> bool {
     for poly in [a, b] {
         for i in 0..poly.len() {
@@ -510,7 +530,8 @@ impl KerbRules {
         // blockIndex: every entry by 32 m cell over its spans, reach half + walk + 1.
         let mut block: HashMap<Cell, Vec<u32>> = HashMap::new();
         for (ei, e) in plan.entries.iter().enumerate() {
-            if e.points.len() < 2 {
+            // (a structure's leg into a junction, eo-street joins, is not drawn.)
+            if e.points.len() < 2 || e.structure_leg.is_some() {
                 continue;
             }
             let reach = e.half + e.walks[0].max(e.walks[1]) + 1.0;
@@ -532,7 +553,7 @@ impl KerbRules {
         {
             let mut centre: HashMap<Cell, Vec<u32>> = HashMap::new();
             for (ei, e) in plan.entries.iter().enumerate() {
-                if e.points.len() < 2 {
+                if e.points.len() < 2 || e.structure_leg.is_some() {
                     continue;
                 }
                 let reach = e.half + e.walks[0].max(e.walks[1]) + 2.0;
@@ -640,6 +661,9 @@ impl KerbRules {
         let mut footways = PolyGrid::new(16.0);
         let mut running = PolyGrid::new(16.0);
         for (ei, e) in plan.entries.iter().enumerate() {
+            if e.structure_leg.is_some() {
+                continue;
+            }
             let s0 = e.trim_start.max(0.0);
             let s1 = e.length - e.trim_end.max(0.0);
             let run = running_half[ei];
@@ -773,6 +797,12 @@ impl KerbRules {
                     continue;
                 }
                 let other = &plan.entries[oi];
+                // (the JS: a grade-separated way over the kerb does not block it.
+                // The plan never holds one: `paveGradeSeparated` is off, so no
+                // entry's segment is separated (checked). With `--structures`
+                // a deck over the kerb is not an entry either, so it never
+                // blocks it; its columns standing in the parking lane do, over
+                // their footprint plus the margin: `structure_reason`.)
                 if segs[other.road].separated {
                     continue;
                 }
@@ -1017,6 +1047,51 @@ impl KerbRules {
         self.crossovers.get(&(ei as u32, side)).is_some_and(|v| v.iter().any(|w| station + half > w[0] && station - half < w[1]))
     }
 
+    /// Not in the JS (`--structures`, stage A6): why a stall's footprint
+    /// (`corners`, a car `height` tall) may not stand under the grade-separated
+    /// roads: a column within `clearance::PROP_CLEAR_M` of it (a column in
+    /// the parking lane takes the stalls it stands in, with the margin), or a
+    /// deck, cap or approach fill lower over it than the car's roof and the
+    /// margin. None without structures.
+    pub fn structure_reason(&self, w: &PropsWorld, corners: &[P2; 4], height: f64) -> Option<&'static str> {
+        let s = w.clear_structures()?;
+        let m = crate::clearance::PROP_CLEAR_M;
+        let c = [(corners[0][0] + corners[2][0]) / 2.0, (corners[0][1] + corners[2][1]) / 2.0];
+        let half_diag = (corners[0][0] - c[0]).hypot(corners[0][1] - c[1]);
+        // the columns near it, against the footprint itself.
+        let t = eo_street::tile_key(c[0], c[1]);
+        for dz in -1..=1 {
+            for dx in -1..=1 {
+                for f in s.column_footprints((t.0 + dx, t.1 + dz)) {
+                    if (f.x - c[0]).hypot(f.z - c[1]) > half_diag + f.radius + m + 0.5 {
+                        continue;
+                    }
+                    if quad_distance(corners, [f.x, f.z]) <= f.radius + eo_structures::ENVELOPE_PAD_M + m {
+                        return Some("structure-column");
+                    }
+                }
+            }
+        }
+        // anything lower than its roof over it: along its length, its width wide.
+        let y = w.street.paved_at(c[0], c[1]).unwrap_or_else(|| w.ground(c[0], c[1]));
+        let ax = [(corners[0][0] + corners[1][0]) / 2.0, (corners[0][1] + corners[1][1]) / 2.0];
+        let bx = [(corners[2][0] + corners[3][0]) / 2.0, (corners[2][1] + corners[3][1]) / 2.0];
+        let width = (corners[0][0] - corners[1][0]).hypot(corners[0][1] - corners[1][1]);
+        for k in 0..=4 {
+            let t = k as f64 / 4.0;
+            let p = [ax[0] + (bx[0] - ax[0]) * t, ax[1] + (bx[1] - ax[1]) * t];
+            let mut low = false;
+            s.scan_obstructions(p[0], p[1], width / 2.0, &mut |o| {
+                low |= o.part != eo_structures::Part::Column && o.lo <= y + height + m && o.hi >= y;
+                !low
+            });
+            if low {
+                return Some("under-structure");
+            }
+        }
+        None
+    }
+
     /// `restrictions.footprintReason(corners, segment)`.
     pub fn footprint_reason(&self, corners: &[P2], ei: usize) -> Option<&'static str> {
         let c = &self.c;
@@ -1238,7 +1313,7 @@ fn plan_vehicle_crossovers(w: &PropsWorld, js: &ParkingJs, c: &KerbConsts, stats
     let entries = &plan.entries;
     let mut out: HashMap<(u32, i8), Vec<[f64; 2]>> = HashMap::new();
     let ramp_reach = o.curb_top_width + o.ramp_run;
-    let hosts: Vec<usize> = (0..entries.len()).filter(|&i| entries[i].class_rank >= 2 && entries[i].length > 0.5).collect();
+    let hosts: Vec<usize> = (0..entries.len()).filter(|&i| entries[i].class_rank >= 2 && entries[i].length > 0.5 && entries[i].structure_leg.is_none()).collect();
     if hosts.is_empty() {
         return out;
     }
@@ -1290,7 +1365,7 @@ fn plan_vehicle_crossovers(w: &PropsWorld, js: &ParkingJs, c: &KerbConsts, stats
     // (host, side, mid, width)
     let mut pending: Vec<(usize, i8, f64, f64)> = vec![];
     for (di, drive) in entries.iter().enumerate() {
-        if drive.class_rank != 1 || drive.points.len() < 2 {
+        if drive.class_rank != 1 || drive.points.len() < 2 || drive.structure_leg.is_some() {
             continue;
         }
         for at_start in [true, false] {

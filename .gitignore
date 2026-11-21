@@ -1,71 +1,37 @@
-[Ll]ibrary/
-[Tt]emp/
-[Oo]bj/
-[Bb]uild/
-[Bb]uilds/
-# ...but scripts/build/ holds tracked build tooling, not build output.
-# The [Bb]uild/ rule above is a Unity-template leftover and matches at
-# any depth, which would otherwise swallow it.
-!scripts/build/
-[Ll]ogs/
-[Uu]ser[Ss]ettings/
-MemoryCaptures/
-Recordings/
-*.csproj
-*.sln
-*.suo
-*.user
-*.userprefs
-*.pidb
-*.booproj
-*.svd
-*.pdb
-*.mdb
-*.opendb
-*.VC.db
 .DS_Store
 node_modules/
-dist/
-.vite/
 .qa-*
 .qa/
-.qa-playwright-profile-*/
-.verify-*.json
 public/data/sf/*.json
 !public/data/sf/sf-footprint-supplement.json
 public/data/sf/*.json.gz
-# ...except the compact city asset the canonical runtime boots from. It is
-# 5 MB, and the native build (eo-data DataPaths) finds the repo root by it and
-# will not boot without it -- so a clone needs it tracked. Its
-# source URLs, licences, attribution and SHA-256 digests are in meta.sources.
+# ...except the compact city asset the game boots from. It is 5 MB, and the
+# native build (eo-data DataPaths) finds the repo root by it and will not boot
+# without it -- so a clone needs it tracked. Its source URLs, licences,
+# attribution and SHA-256 digests are in meta.sources.
 !public/data/sf/sf-city.json.gz
-# ...and the real car parks / green areas layer (scripts/build-sf-lots-parks.mjs,
-# ODbL, 0.45 MB; attribution in sf-lots-parks.NOTICE.txt beside it). Without it
-# a clone or deploy draws no lots and no greens.
+# ...and the real car parks / green areas layer (ODbL, 0.45 MB; attribution in
+# sf-lots-parks.NOTICE.txt beside it). Without it a clone draws no lots and no
+# greens.
 !public/data/sf/sf-lots-parks.json.gz
-# ...and the world stream's footprint pack (scripts/build-sf-footprint-pack.mjs,
-# DataSF Building Footprints, PDDL-1.0, 9.6 MB; provenance in
-# sf-footprints.NOTICE.txt beside it). Without it the streamed city past the
-# boot window shows only the extract's 28,000 footprints.
+# ...and the citywide footprint pack (DataSF Building Footprints, PDDL-1.0,
+# 9.6 MB; provenance in sf-footprints.NOTICE.txt beside it).
 !public/data/sf/sf-footprints.json.gz
-# ...and the city's street storm drains (scripts/build-sf-storm-drains.mjs,
-# DataSF jtgq-b7c5, PDDL, 0.16 MB; see sf-storm-drains.NOTICE.txt). Without it
-# the detail pass falls back to its invented corner drains.
+# ...and the city's street storm drains (DataSF jtgq-b7c5, PDDL, 0.16 MB; see
+# sf-storm-drains.NOTICE.txt).
 !public/data/sf/sf-storm-drains.json.gz
-# ...and the citywide map cartography (scripts/map/build-citywide-map.mjs,
-# ODbL + PDDL, 3.5 MB; provenance in sf-map-citywide.NOTICE.txt beside it).
-# The pause map, the corner map and the GPS read it for every district past the
-# boot window; without it they fall back to the loaded district.
+# ...and the citywide map cartography (ODbL + PDDL, 3.5 MB; provenance in
+# sf-map-citywide.NOTICE.txt beside it). The pause map and the HUD radar read it.
 !public/data/sf/sf-map-citywide.json.gz
 public/data/sf/*.geojson
 public/data/sf/*.pbf
 
-# Authoritative source rasters are local build inputs, never public runtime assets.
+# Authoritative source rasters and bulk exports are local build inputs, never
+# public runtime assets.
 Data/raw/usgs-3dep/
 Data/raw/noaa-cudem/
-
-# Authoritative DataSF bulk exports are local build inputs, never public runtime assets.
 Data/raw/datasf/
+Data/raw/osm/
 
 # Local QA / session artifacts
 tmp/
@@ -88,22 +54,17 @@ public/data/reference-*.jpg
 
 # Agent, editor, and CI tooling is machine-local working material, not part of
 # the game. Each contributor brings their own; none of it is needed to build,
-# run, or verify the runtime.
+# run, or verify the game. The one exception is .github/workflows/: the
+# workflow that builds and publishes the playable downloads (Docs/PLAYING.md).
 .agents/
 skills-lock.json
 .cursor/
-# CI stays local EXCEPT the Pages deploy: GitHub only runs a workflow that is
-# committed, so the file that publishes the site has to be tracked.
-.github/
-!.github/
 .github/*
 !.github/workflows/
-.github/workflows/*
-!.github/workflows/deploy-pages.yml
 
-# Internal planning ledgers. Superseded by Docs/ for anything a contributor
-# needs; kept locally as campaign history.
+# Internal planning ledgers, kept locally as campaign history.
 goals/
+plan.md
 
 # Local-only reference-derived working material (never committed).
 .img2threejs-evidence/
@@ -123,164 +84,11 @@ artifacts/vehicles/**/*.blend
 artifacts/vehicles/**/*.png
 artifacts/vehicles/**/*.jpg
 artifacts/vehicles/**/*.jpeg
-artifacts/characters/**/*.glb
-artifacts/characters/**/*.blend
-artifacts/characters/**/*.fbx
-artifacts/characters/**/*.png
-artifacts/characters/**/*.jpg
-artifacts/characters/**/*.jpeg
 
 # Regenerable local junk: Blender autosave backups and bytecode caches.
 *.blend1
 *.pyc
 __pycache__/
-
-# Generated civic street candidate: 7.6 MB, reproducible from the locked
-# source via `npm run build:sf-civic-streets`. The report beside it is tracked.
-public/data/world/preview-artifacts/sf-civic-streets-v1/sf-civic-streets-v1.json
-
-# ---------------------------------------------------------------------------
-# Local working material: plans, goals, campaign logs, and one-off dev scripts.
-# These stay on each contributor's disk. Nothing here is needed to build, run,
-# or verify the game -- Docs/ keeps the contracts, pipelines, and reference a
-# contributor actually needs. Untrack with , never .
-# ---------------------------------------------------------------------------
-
-# Roadmaps, plans, goals, and dated campaign/audit records.
-plan.md
-Docs/EARTH_PRODUCTION_PLAN.md
-Docs/PERFORMANCE_PLAN.md
-Docs/TRAFFIC-PLAN.md
-Docs/SINGLE_PLAYER_FEEL_PLAN.md
-Docs/SLICE_GAMEPLAY_PLAN.md
-Docs/WORLD_DENSITY_PLAN.md
-Docs/VERTICAL_SLICE.md
-Docs/SF_MAP_PLATFORM_GOAL.md
-Docs/FERRY-HERO-CAMPAIGN.md
-Docs/FERRY_HERO_VISUAL_AUDIT_2026-08-10.md
-Docs/FERRY-RUNTIME-CONTRACT-AUTHORIZATION-REQUEST.md
-Docs/VISUAL_QUALITY_ROUNDS.md
-Docs/PERFORMANCE_BASELINE.md
-Docs/HERO_PERFORMANCE.md
-Docs/NPC_AAA_ANIMATION_ORCHESTRATION.md
-Docs/NPC_ANIM_SHARED_NOTES.md
-Docs/OPEN_SOURCE_ACCELERATORS.md
-Docs/OPTIONAL-NEURAL-RENDERING.md
-Docs/AGENT_PLAYTEST.md
-Docs/HUNYUAN_OFFLINE_ASSET_CANDIDATE_WORKFLOW.md
-
-# Per-round campaign scripts: capture/probe/build one-offs kept for local replay.
-# Referenced by nothing -- not package.json, not Docs, not native/, not provenance.
-scripts/capture-pass10-evidence.mjs
-scripts/capture-pass9-five.mjs
-scripts/character-assets/write-npc-recipe.mjs
-scripts/probe-pass10-cameras.mjs
-scripts/probe-pass11-cameras.mjs
-scripts/probe-pass15-financial.mjs
-scripts/qa-capture-set.mjs
-scripts/qa-dump.mjs
-scripts/qa-ferry-civilian-staging-i36.mjs
-scripts/qa-ferry-eight-card.mjs
-scripts/qa-ferry-shoreline.mjs
-scripts/qa-hero-landmark-segmented.mjs
-scripts/qa-hero-life-wardrobe-i30.mjs
-scripts/qa-iso.mjs
-scripts/qa-pass9-atmosphere.mjs
-scripts/qa-sf-map-facade-separation-i32.mjs
-scripts/qa-sf-map-preset-residency.mjs
-scripts/qa-sf-map-render-depth.mjs
-scripts/qa-sf-map-view-fill-i24b.mjs
-scripts/qa-shot.mjs
-scripts/qa-vehicles.mjs
-scripts/qa/build-earth-online-ferry-candidate-visual-review-v1.mjs
-scripts/qa/build-earth-online-ferry-candidate-visual-review-v10.mjs
-scripts/qa/build-earth-online-ferry-candidate-visual-review-v11.mjs
-scripts/qa/build-earth-online-ferry-candidate-visual-review-v12.mjs
-scripts/qa/build-earth-online-ferry-candidate-visual-review-v2.mjs
-scripts/qa/build-earth-online-ferry-candidate-visual-review-v3.mjs
-scripts/qa/build-earth-online-ferry-candidate-visual-review-v4.mjs
-scripts/qa/build-earth-online-ferry-candidate-visual-review-v5.mjs
-scripts/qa/build-earth-online-ferry-candidate-visual-review-v6.mjs
-scripts/qa/build-earth-online-ferry-candidate-visual-review-v7.mjs
-scripts/qa/build-earth-online-ferry-candidate-visual-review-v8.mjs
-scripts/qa/build-earth-online-ferry-candidate-visual-review-v9.mjs
-scripts/qa/build-earth-online-ferry-live-reference-request-v18.mjs
-scripts/qa/capture-earth-online-ferry-candidate-v10.mjs
-scripts/qa/capture-earth-online-ferry-candidate-v11.mjs
-scripts/qa/capture-earth-online-ferry-candidate-v12.mjs
-scripts/qa/capture-earth-online-ferry-candidate-v2.mjs
-scripts/qa/capture-earth-online-ferry-candidate-v3.mjs
-scripts/qa/capture-earth-online-ferry-candidate-v4.mjs
-scripts/qa/capture-earth-online-ferry-candidate-v5.mjs
-scripts/qa/capture-earth-online-ferry-candidate-v6.mjs
-scripts/qa/capture-earth-online-ferry-candidate-v7.mjs
-scripts/qa/capture-earth-online-ferry-candidate-v8.mjs
-scripts/qa/capture-earth-online-ferry-candidate-v9.mjs
-scripts/qa/capture-earth-online-ferry-terminal-evidence-v12.mjs
-scripts/qa/capture-player-hud-v2.mjs
-scripts/qa/capture-player-hud-v3.mjs
-scripts/qa/capture-world-streaming-performance-v1.mjs
-scripts/qa/life-strip-compare-v1.mjs
-scripts/qa/life-strip-v1.mjs
-scripts/qa/physics/probe-contact-evidence-v1.mjs
-scripts/qa/physics/probe-grounding-evidence-v1.mjs
-scripts/qa/probe-boot-check-v1.mjs
-scripts/qa/probe-contact-occlusion-visibility.mjs
-scripts/qa/probe-env-prefilter-v1.mjs
-scripts/qa/probe-figure-garment.mjs
-scripts/qa/probe-frame-flank-profile.mjs
-scripts/qa/probe-ground-irradiance-v1.mjs
-scripts/qa/probe-ground-luma-v1.mjs
-scripts/qa/probe-hero-sedan-dump.mjs
-scripts/qa/probe-hero-sedan-ingame.mjs
-scripts/qa/probe-hero-sedan-shot.mjs
-scripts/qa/probe-night-practical-verticals.mjs
-scripts/qa/probe-vehicle-flank-unroll.mjs
-scripts/qa/probe-vehicle-wear-delivery.mjs
-scripts/qa/street-motion-audit.mjs
-scripts/qa/street-runtime-audit.mjs
-scripts/validate-pass11-candidates.mjs
-scripts/verify/lib/player-control.mjs
-scripts/verify/life-signal-phasing.mjs
-scripts/verify/life-traffic-texture-v1.mjs
-scripts/verify/life-vehicle-signalling-contract.mjs
-scripts/verify/probe-street-paint-overhead.mjs
-scripts/verify/verify-eo-daemon-health.mjs
-scripts/verify/verify-live-environment-probe.mjs
-scripts/verify/verify-shared-reboot-terminal.mjs
-scripts/verify/verify-street-live-probe.mjs
-scripts/verify/verify-street-probe-cache.mjs
-scripts/world-assets/build-ferry-market-arcade-cc0.mjs
-scripts/world-assets/capture-ferry-sandstone-pbr.mjs
-scripts/world-tiles/build-earth-online-calistack-ferry-queue-v10.mjs
-scripts/world-tiles/build-earth-online-calistack-ferry-queue-v11.mjs
-scripts/world-tiles/build-earth-online-calistack-ferry-queue-v12.mjs
-scripts/world-tiles/build-earth-online-calistack-ferry-queue-v13.mjs
-scripts/world-tiles/build-earth-online-calistack-ferry-queue-v14.mjs
-scripts/world-tiles/build-earth-online-calistack-ferry-queue-v15.mjs
-scripts/world-tiles/build-earth-online-calistack-ferry-queue-v16.mjs
-scripts/world-tiles/build-earth-online-calistack-ferry-queue-v17.mjs
-scripts/world-tiles/build-earth-online-calistack-ferry-queue-v18.mjs
-scripts/world-tiles/build-earth-online-calistack-ferry-queue-v3.mjs
-scripts/world-tiles/build-earth-online-calistack-ferry-queue-v4.mjs
-scripts/world-tiles/build-earth-online-calistack-ferry-queue-v5.mjs
-scripts/world-tiles/build-earth-online-calistack-ferry-queue-v7.mjs
-scripts/world-tiles/build-earth-online-calistack-ferry-queue-v8.mjs
-scripts/world-tiles/build-earth-online-calistack-ferry-queue-v9.mjs
-scripts/world-tiles/build-earth-online-ferry-building-whole-span-authorization-v2.mjs
-scripts/world-tiles/build-ferry-west-preview.mjs
-scripts/world-tiles/build-sf-lod1-2m-proof-v1.mjs
-scripts/world-tiles/build-sf-lod1-4m-proof-v1.mjs
-scripts/world-tiles/build-sf-surface-conforming-stitch-proof-v1.mjs
-scripts/world-tiles/build-sf-surface-grid-ownership-proof-v1.mjs
-scripts/world-tiles/lock-usgs-3dep-terrain.mjs
-Data/raw/osm/
-
-# Raw OSM detail extract: 62 MB of source evidence, regenerated by
-# scripts/world-data/build-sf-osm-detail-v1.mjs from Data/raw/osm. Only the
-# coverage receipt beside it is tracked, per the media/provenance rule.
-public/data/world/preview-artifacts/sf-osm-detail-v1/sf-osm-detail-v1.json
-public/data/world/preview-artifacts/sf-osm-detail-v1/sf-osm-detail-v1.json.gz
 
 # Tripo-generated street props and the two generated vehicles of unconfirmed
 # origin: kept local only, not redistributed. Their provenance JSON stays

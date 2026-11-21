@@ -214,6 +214,8 @@ pub(crate) enum Action {
     Slider(&'static str),
     Preset(&'static str),
     Option(&'static str),
+    /// A world row (`settings::WORLD_OPTIONS`).
+    World(&'static str),
     Fps,
     Adaptive,
     Volume,
@@ -280,6 +282,10 @@ pub(crate) struct HudMemory {
 
 pub(crate) const HUD_MAP_SIZE: u32 = 2048;
 pub(crate) const HUD_MAP_S: f32 = 2.0;
+/// Focusable items with a hover/focus transition, enough for every screen (the
+/// pause screen on its Settings tab holds 33 with the native rows: 5 tabs, 25
+/// in the sheet, 3 tiles); an item past the slots would show no hover.
+pub(crate) const HOVER_SLOTS: usize = 48;
 pub(crate) const HUD_MAP_RECENTRE_M: f32 = 200.0;
 
 pub struct Ui {
@@ -300,7 +306,7 @@ pub struct Ui {
     pub(crate) focus: Option<usize>,
     pub(crate) hover: Option<usize>,
     /// Per focusable item: hover/focus transition progress 0..1.
-    pub(crate) hover_t: [f32; 16],
+    pub(crate) hover_t: [f32; HOVER_SLOTS],
     pub(crate) screen_t0: f64,
     pub(crate) now: f64,
     last_now: f64,
@@ -365,7 +371,7 @@ impl Ui {
             hits: Vec::with_capacity(64),
             focus: Some(0),
             hover: None,
-            hover_t: [0.0; 16],
+            hover_t: [0.0; HOVER_SLOTS],
             screen_t0: 0.0,
             now: 0.0,
             last_now: 0.0,
@@ -410,7 +416,7 @@ impl Ui {
             self.screen = s;
             self.focus = Some(0);
             self.scroll = 0.0;
-            self.hover_t = [0.0; 16];
+            self.hover_t = [0.0; HOVER_SLOTS];
             if s == Screen::Pause {
                 self.pause_tab = PauseTab::Map;
                 self.pause_view = None;
@@ -761,7 +767,7 @@ impl Ui {
             Action::Start | Action::Observe | Action::MapPane => 0,
             Action::Back => cue::BACK,
             Action::TitleSettings | Action::TitleExit | Action::PauseSettings | Action::Quit | Action::Tab(_) => cue::OPEN,
-            Action::Motion | Action::InvertY | Action::Slider(_) | Action::Preset(_) | Action::Option(_) | Action::Fps | Action::Adaptive | Action::Volume | Action::Mix(_) => cue::TOGGLE,
+            Action::Motion | Action::InvertY | Action::Slider(_) | Action::Preset(_) | Action::Option(_) | Action::World(_) | Action::Fps | Action::Adaptive | Action::Volume | Action::Mix(_) => cue::TOGGLE,
             _ => cue::CONFIRM,
         };
         self.activate(action, rect, input.mouse)
@@ -852,6 +858,11 @@ impl Ui {
             }
             Action::Option(k) => {
                 self.settings.performance.cycle(k);
+                self.save_settings();
+                return Some(Event::SettingsChanged);
+            }
+            Action::World(k) => {
+                self.settings.world.cycle(k);
                 self.save_settings();
                 return Some(Event::SettingsChanged);
             }

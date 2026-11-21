@@ -1,0 +1,128 @@
+# Playable builds of the game for Windows, macOS and Linux.
+#
+# Every pull request into main that touches the game builds and packs all
+# three (downloadable from the run's Artifacts for a week), so a PR shows it
+# still builds everywhere. Pushing a tag v* also publishes the three zips as
+# a GitHub Release:
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# The packing itself is scripts/release/package.sh; Docs/PLAYING.md is the
+# player's guide that ships inside each zip.
+name: Playable builds
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+    paths:
+      - "native/**"
+      - "public/**"
+      - "scripts/release/**"
+      - "scripts/world-data/sources/**"
+      - "Docs/PLAYING.md"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: playable-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: windows-x64
+          - os: macos-latest
+            label: macos-arm64
+          - os: ubuntu-latest
+            label: linux-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags, for the version in the archive name
+
+      - name: Linux build packages
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libasound2-dev libudev-dev
+
+      - name: Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustc --version
+
+      - name: Cargo registry cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-registry-${{ runner.os }}-${{ hashFiles('native/Cargo.lock') }}
+          restore-keys: cargo-registry-${{ runner.os }}-
+
+      - name: Build
+        working-directory: native
+        run: cargo build --release --locked -p eo-app -p eo-server
+
+      - name: Pack
+        run: bash scripts/release/package.sh ${{ matrix.label }} dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EarthOnline-${{ matrix.label }}
+          path: dist/*.zip
+          compression-level: 0 # the zip is already compressed
+          retention-days: 7
+          if-no-files-found: error
+
+  release:
+    name: Publish the release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          cat > notes.md << EOF
+          Earth Online ${TAG}: San Francisco built from open data, to walk, drive and fly through.
+
+          **Download** the zip for your computer, unzip it, and open \`play.command\` (macOS), \`play.bat\` (Windows) or \`play.sh\` (Linux). \`PLAYING.md\` in the zip has the controls, the first-start wait, and what to do if your computer blocks the program.
+
+          - Windows 10/11 (64-bit, DirectX 12 or Vulkan GPU): \`windows-x64\`
+          - macOS on Apple silicon (M1 or later): \`macos-arm64\`
+          - Linux (64-bit, Vulkan GPU, glibc of Ubuntu 24.04 or newer): \`linux-x64\`
+
+          Early development: many systems are first versions and content is missing. The first start takes several minutes and needs several gigabytes of free disk space.
+
+          The map data is © OpenStreetMap contributors (ODbL 1.0) with other open sources; see THIRD_PARTY_NOTICES.md in the zip.
+          EOF
+          gh release create "$TAG" dist/*.zip \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Earth Online $TAG" \
+            --notes-file notes.md \
+            --verify-tag

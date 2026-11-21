@@ -12,7 +12,9 @@
 // transmission and the day level and range fade. Not ported: the occupants
 // (clay figures and office partitions) and the shop trade fittings (goods
 // shelving and gondola, food, garments, studio, flowers counters): a shop
-// draws its room shell. The window frame comes from the vertex (rooms.rs).
+// draws its room shell; with `--shop-light` (stage N2) a kit shop's pane
+// draws its shop's own room by trade instead (shop_rooms.wgsl,
+// `rm_shop_pane`). The window frame comes from the vertex (rooms.rs).
 
 fn rm_h(seed: f32, salt: f32) -> f32 {
     return fract(sin(seed * 91.3458 + salt * 17.1373) * 43758.5453);
@@ -30,6 +32,26 @@ fn rm_filtered(pattern: f32, mean: f32, footprint: f32, period: f32) -> f32 {
 fn rm_filtered3(pattern: vec3<f32>, mean: vec3<f32>, footprint: f32, period: f32) -> vec3<f32> {
     return mix(pattern, mean, rm_ss(period * 0.25, period, footprint));
 }
+
+// (`--shop-light`, stage N1; shop_lights.rs) the shop's own light for the
+// room `rm_room` draws next (`rm_kit_pane` sets it, then clears it): rgb its
+// lit window's radiance, w 0 the rooms' own rule, 1 + fade its light found,
+// -(1 + fade) none (a dark shop); `fade` 0..1 over the lights' last stretch
+// of reach, where a room gives way to the rooms' own rule at its own distance.
+var<private> rm_shop_override: vec4<f32>;
+
+// (stage W5, `--street-life`; weathering.wgsl `wx_window_life_pre` sets it,
+// `wx_window` clears it) x 1 on, y the building's wear, z 1 a vacant shop, w
+// the share of a flat's windows with sill plants: `rm_room` hands what shows at
+// the glass to `wx_room_life` (sill plants, a vacant shop's taped paper).
+var<private> rm_w5: vec4<f32>;
+
+// A shop room's lit surfaces for a unit light are about 0.3 (the shell's
+// walls, floor and ceiling at the fixture's falloff, rm_room's shop palette);
+// they take half the window's mean luminance, which counts the fixtures and
+// displays seen through the glass too (the room's own glow terms, brighter).
+// INFERRED.
+const RM_SHOP_ROOM_MEAN: f32 = 0.6;
 
 struct RmOut {
     // rgb the room's albedo as the street sees it, a its share of the pane (day)
@@ -74,12 +96,20 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     let floor_lit = rm_ss(floor_phase - band / 2.0, floor_phase + band / 2.0, floor_share);
     let bay_lit = step(rm_h(seed, 42.0), 0.7);
     let lit = mix(lit_home, floor_lit * bay_lit, office);
-    let tv = step(rm_h(seed, 2.0), 0.12) * (1.0 - shop) * (1.0 - office);
+    // (`--look cinematic`, stage L2: work z the screens' share, w the clock; rooms.rs `drive_look`)
+    let cine = SF_CINEMATIC && work.z > 0.0;
+    let tv = step(rm_h(seed, 2.0), select(0.12, work.z, cine)) * (1.0 - shop) * (1.0 - office);
     let level = mix(mix(0.35, 1.35, rm_h(seed, 3.0)), mix(0.55, 0.8, rm_h(seed, 3.0)), office);
     let cool = step(rm_h(seed, 4.0), env.w - shop * 0.1);
     let temp_mix = rm_h(seed, 5.0);
     let home_color = mix(mix(RM_WARM_A, RM_WARM_B, temp_mix), mix(RM_COOL_A, RM_COOL_B, temp_mix), cool);
     var lamp_color = mix(home_color, mix(RM_OFFICE_A, RM_OFFICE_B, temp_mix), office);
+    if (cine) {
+        // the look's wider spread of homes: a low amber lamp, a cold daylight LED.
+        let roll = rm_h(seed, 44.0);
+        let spread = select(select(lamp_color, RM_CINE_DAYLIGHT, roll < RM_CINE_SPREAD.x + RM_CINE_SPREAD.y), RM_CINE_AMBER, roll < RM_CINE_SPREAD.x);
+        lamp_color = mix(lamp_color, spread, (1.0 - shop) * (1.0 - office));
+    }
 
     // ---- the box ----
     let sill = mix(0.85, 0.35, shop);
@@ -186,8 +216,19 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     let screen_x = W * 0.5;
     let screen = step(abs(px - screen_x), 0.55) * step(0.85, h_floor) * step(h_floor, 1.5) * back;
     illum = mix(illum, rm_ss(2.6, 0.0, length(vec2<f32>(px - screen_x, h_floor - 1.1))) * 0.55 + 0.05, tv);
-    lamp_color = mix(lamp_color, RM_SCREEN, tv * 0.85);
-    glow = glow * (1.0 - tv) + screen * tv * 2.4;
+    var screen_color = RM_SCREEN;
+    var flicker = 1.0;
+    if (cine) {
+        // a screen's picture: its brightness cut to cut, its colour wandering cool to warm.
+        let ph = work.w * mix(0.6, 1.4, rm_h(seed, 45.0)) + seed * 97.0;
+        flicker = 0.7 + 0.3 * sin(ph * 2.3) * sin(ph * 0.71 + 1.3);
+        screen_color = mix(RM_SCREEN, mix(vec3<f32>(0.55, 0.75, 1.0), vec3<f32>(1.0, 0.8, 0.62), 0.5 + 0.5 * sin(ph * 0.37)), 0.45);
+    }
+    lamp_color = mix(lamp_color, screen_color, tv * 0.85);
+    glow = glow * (1.0 - tv) + screen * tv * 2.4 * flicker;
+    if (cine) {
+        illum = mix(illum, illum * flicker, tv);
+    }
     let room_radiance = albedo * illum + glow;
 
     // ---- daylight ----
@@ -199,7 +240,15 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     var day_room = (albedo * day_illum + glow * max(shop, office) * 1.1) * RM_DAY_DEPTH;
 
     // ---- at the glass: curtains, blinds, sheers ----
-    let light_radiance = lamp_color * level * 0.3 * mix(1.0, 0.72, office);
+    var light_radiance = lamp_color * level * 0.3 * mix(1.0, 0.72, office);
+    // (`--shop-light`) a shop room lit by its own light (its colour and its
+    // window's luminance), or dark when its shop is closed; each room keeps the
+    // rooms' rule past its own distance in the lights' last stretch.
+    var shop_lit = -1.0;
+    if (rm_shop_override.w != 0.0 && shop > 0.5 && rm_h(seed, 77.0) >= abs(rm_shop_override.w) - 1.0) {
+        shop_lit = select(0.0, 1.0, rm_shop_override.w > 0.0);
+        light_radiance = rm_shop_override.rgb / RM_SHOP_ROOM_MEAN;
+    }
     var radiance = room_radiance * light_radiance;
     let detail = 1.0 - rm_ss(90.0, 220.0, distance);
     {
@@ -228,10 +277,12 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
         radiance = mix(radiance, radiance * 0.45 + light_radiance * 0.18, sheer_style);
         day_room = mix(day_room, day_room * 0.5 + vec3<f32>(0.25), sheer_style);
     }
-    // Soft cap on the max channel toward paneCap 0.24.
-    let peak = max(max(max(radiance.x, radiance.y), radiance.z), 1e-4);
-    let over = peak / 0.24;
-    radiance = radiance * pow(1.0 + over * over * over, -1.0 / 3.0);
+    // Soft cap on the max channel toward paneCap 0.24 (not on a shop lit by its own light).
+    if (shop_lit < 0.0) {
+        let peak = max(max(max(radiance.x, radiance.y), radiance.z), 1e-4);
+        let over = peak / 0.24;
+        radiance = radiance * pow(1.0 + over * over * over, -1.0 / 3.0);
+    }
     let fresnel = 0.04 + 0.96 * pow(1.0 - into, 5.0);
     let day_level = mix(0.62, 1.18, rm_h(seed, 3.0));
     let far = rm_ss(140.0, 420.0, distance) * 0.55;
@@ -240,13 +291,98 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     // all of it is seen through the pane (RM_DAY_THROUGH, the tinted glass's transmission).
     o.day = vec4<f32>(min(day_room * day_level * kind_gain, vec3<f32>(1.0)) * RM_DAY_THROUGH, show);
     o.night = radiance * (1.0 - fresnel) * lit * env.x * has_room;
+    if (shop_lit >= 0.0) {
+        // the light carries the dusk (sky.rs: the lamps' units times the rooms' dusk).
+        o.night = radiance * (1.0 - fresnel) * shop_lit * has_room;
+    }
+    // (stage W5's hook, `rm_w5`: rm_kit_pane hands the room to `wx_room_life`)
+    return o;
+}
+
+// (`--shop-light`, stage N1) The light of the shop behind a pane at `world`
+// (outward normal `n`) in the frame's lights (sky_lights.wgsl `lights_shops`,
+// kind SHOP_KIND), the one nearest across this front: rgb its window's
+// radiance (its colour times its candela over the glazed area it stands for,
+// in the lamps' units: the window's luminance, sky.rs), w 1; w 0: none (the
+// shop is dark, or past the clusters).
+fn rm_shop_light(world: vec3<f32>, n: vec3<f32>) -> vec4<f32> {
+    let rel = world - skyu.eye.xyz;
+    let vz = dot(rel, skyu.cam_fwd.xyz);
+    if (vz < skyu.cluster.x || vz > skyu.cluster.y) {
+        return vec4<f32>(0.0);
+    }
+    let vx = dot(rel, skyu.cam_right.xyz);
+    let vy = dot(rel, skyu.cam_up.xyz);
+    let ndc = vec2<f32>(vx / (vz * skyu.cluster.z * skyu.cluster.w), vy / (vz * skyu.cluster.z));
+    let g = skyu.lights.yzw;
+    let tx = u32(clamp((ndc.x * 0.5 + 0.5) * f32(g.x), 0.0, f32(g.x) - 1.0));
+    let ty = u32(clamp((0.5 - ndc.y * 0.5) * f32(g.y), 0.0, f32(g.y) - 1.0));
+    let tz = u32(clamp(log(vz / skyu.cluster.x) / log(skyu.cluster.y / skyu.cluster.x) * f32(g.z), 0.0, f32(g.z) - 1.0));
+    let c = (tz * g.y + ty) * g.x + tx;
+    let count = min(sky_clusters[c], SKY_CLUSTER_CAP);
+    let base = g.x * g.y * g.z + c * SKY_CLUSTER_CAP;
+    let nh = normalize(n.xz + vec2<f32>(1e-6, 0.0));
+    var best = 1e9;
+    var out = vec4<f32>(0.0);
+    for (var k = 0u; k < count; k = k + 1u) {
+        let li = sky_lights[sky_clusters[base + k]];
+        if (li.kind != SHOP_KIND) {
+            continue;
+        }
+        let lh = normalize(li.dir.xz + vec2<f32>(1e-6, 0.0));
+        let d = world - li.pos;
+        // the same front (its normal), in front of the light by about its setback (a door's
+        // recess may stand behind it), along the front within a bay or two, within the storey.
+        let ahead = dot(d.xz, lh);
+        let along = abs(dot(d.xz, vec2<f32>(-lh.y, lh.x)));
+        if (dot(nh, lh) < 0.7 || ahead < -1.0 || ahead > 1.2 || along > 4.0 || abs(d.y) > 3.0) {
+            continue;
+        }
+        let score = along + abs(ahead - 0.3) + 0.5 * abs(d.y);
+        if (score < best) {
+            best = score;
+            out = vec4<f32>(li.color * li.intensity / max(li.size, 0.25), 1.0);
+        }
+    }
+    return out;
+}
+
+// (`--shop-light`, stage N2) A kit shop pane's room by its shop's trade
+// (shop_rooms.wgsl `sr_room`, its front `f` from the table): one room behind
+// every pane of the shop, lit by the shop's own light (`rm_shop_override`:
+// its window's radiance where N1's lookup found it, dark where it did not),
+// by day seen through the glass at the day's level; a vacant shop's emptied
+// room (W5's paper goes over it, `--street-life`, in rm_kit_pane).
+fn rm_shop_pane(f: SrFront, pos: vec3<f32>, n: vec3<f32>, dir: vec3<f32>, distance: f32, work: vec4<f32>) -> RmOut {
+    var o: RmOut;
+    let into = max(dir.z, 0.02);
+    var r: SrRoom;
+    let w = max(f.s1 - f.s0, 1.0);
+    r.size = vec3<f32>(w, clamp(f.head + mix(0.45, 1.2, sr_r(f.key, 1u, 0)), 2.9, 4.8), mix(7.0, 12.0, sr_r(f.key, 2u, 0)));
+    r.fit = f.fit;
+    r.goods = f.goods;
+    r.key = f.key;
+    r.vacant = f.vacant;
+    r.work = f.work;
+    r.kind = f.kind;
+    let ro = vec3<f32>(clamp(f.x, 0.0, w), clamp(pos.y - f.floor, 0.0, r.size.y), max(f.z, 0.0));
+    let room = sr_room(ro, vec3<f32>(dir.x, dir.y, into), r, work.y, distance);
+    // (seen as the eye adapted to this window sees it: `sr_adapt`)
+    let light = select(vec3<f32>(0.0), rm_shop_override.rgb, rm_shop_override.w > 0.0) * sr_adapt(f.lum);
+    let fresnel = 0.04 + 0.96 * pow(1.0 - into, 5.0);
+    let far = rm_ss(140.0, 420.0, distance) * 0.55;
+    let show = (1.0 - fresnel) * (1.0 - far) * 0.95;
+    let day_level = mix(0.85, 1.1, sr_r(f.key, 3u, 0));
+    o.day = vec4<f32>(min(room.day * RM_DAY_DEPTH * day_level, vec3<f32>(1.0)) * RM_DAY_THROUGH, show);
+    o.night = room.night * light * (1.0 - fresnel);
     return o;
 }
 
 // The pane frame (night-interiors.js `kitRoomArgs`, `paneFrameRay`) from a kit
 // glass fragment: `pane` the vertex bytes (rooms.rs), `pos` world, `ng` the
-// geometry normal (outward), `kind` the glass's room code (1 auto, 2 shop).
-fn rm_kit_pane(pane: vec4<f32>, pos: vec3<f32>, ng: vec3<f32>, cam: vec3<f32>, kind: u32, env: vec4<f32>, work: vec4<f32>) -> RmOut {
+// geometry normal (outward), `kind` the glass's room code (1 auto, 2 shop),
+// `group` the building's LOD group (stage N2: its shops' fronts).
+fn rm_kit_pane(pane: vec4<f32>, pos: vec3<f32>, ng: vec3<f32>, cam: vec3<f32>, kind: u32, env: vec4<f32>, work: vec4<f32>, group: u32) -> RmOut {
     let b = u32(round(pane.z * 255.0));
     let qw = f32(b & 127u);
     let shop_code = f32(b >> 7u);
@@ -287,5 +423,42 @@ fn rm_kit_pane(pane: vec4<f32>, pos: vec3<f32>, ng: vec3<f32>, cam: vec3<f32>, k
     // its own bits), handed in negated.
     let switch_class = office_code + shop_code * 2.0 + (qw % 2.0) * 4.0 + (abs(nwq) % 2.0) * 8.0;
     let shop_key = select(plane_hash, -((switch_class + 0.5) / 16.0), kind == 2u);
-    return rm_room(local, size, dir, vec4<f32>(seed, shop, office, distance), vec2<f32>(shop_key, pane_bottom), env, work, true, true);
+    // (`--shop-light`, sky.rs SKY_SHOPS: the shop windows' lights placed and on)
+    // a kit shop's glass shows its own light's room within the lights' reach, from dusk on.
+    rm_shop_override = vec4<f32>(0.0);
+    if (SF_SHOP_LIGHT && (skyu.flags.x & SKY_SHOPS) != 0u && kind == 2u && env.x > 0.0) {
+        let reach = select(SHOP_REACH_NEAR, SHOP_REACH_FAR, (skyu.flags.x & SKY_SHOPS_FAR) != 0u);
+        let fade = rm_ss(SHOP_ROOM_FADE * reach, reach, length(pos - skyu.eye.xyz));
+        if (fade < 1.0) {
+            let sl = rm_shop_light(pos, n);
+            rm_shop_override = vec4<f32>(sl.rgb, select(-(1.0 + fade), 1.0 + fade, sl.w > 0.5));
+        }
+    }
+    // (`--shop-light`, stage N2; the fronts table bound) the shop's front: the one vacancy
+    // rule (the light's, W5's paper and dirt, the clutter's boards) and its trade's room.
+    var trade = false;
+    var front: SrFront;
+    if (SF_SHOP_LIGHT && (skyu.flags.x & SKY_SHOPS) != 0u && kind == 2u && lx_shop_fronts[0].y != 0u) {
+        front = sr_front(group, pos, n);
+        wx_vacant = select(0.0, 1.0, front.found && front.vacant);
+        if (rm_w5.x > 0.5) {
+            rm_w5.z = wx_vacant;
+        }
+        let reach = select(SHOP_REACH_NEAR, SHOP_REACH_FAR, (skyu.flags.x & SKY_SHOPS_FAR) != 0u);
+        // by night the shop light's decision holds for this room (N1's fade to the rooms' rule, per shop)
+        let lit_rule = rm_shop_override.w != 0.0 && sr_r(front.key, 77u, 0) >= abs(rm_shop_override.w) - 1.0;
+        trade = front.found && distance < reach && (env.x <= 0.0 || lit_rule);
+    }
+    var r: RmOut;
+    if (trade) {
+        r = rm_shop_pane(front, pos, n, dir, distance, work);
+    } else {
+        r = rm_room(local, size, dir, vec4<f32>(seed, shop, office, distance), vec2<f32>(shop_key, pane_bottom), env, work, true, true);
+    }
+    rm_shop_override = vec4<f32>(0.0);
+    if (rm_w5.x > 0.5) {
+        // stage W5 (`--street-life`, weathering.wgsl): plants on a flat's sill, a vacant shop's taped paper
+        wx_room_life(&r, local, max(size, vec2<f32>(0.05)), dir, seed, shop, office * (1.0 - shop), work.y, distance);
+    }
+    return r;
 }

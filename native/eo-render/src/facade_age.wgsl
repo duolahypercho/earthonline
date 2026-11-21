@@ -387,6 +387,16 @@ fn fa_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f
         let pa = vec3<f32>(world.x, world.y, -world.z);
         let na = vec3<f32>(ng.x, ng.y, -ng.z);
         let wo = fa_weather(w, pa, na);
+        if (wx_level() != 0u && dot(ng.xz, ng.xz) > 0.25) {
+            // weathering (`--grime`, weathering.wgsl): the graph's darkening deepened, splash-back at the foot.
+            (*s).albedo = (*s).albedo * wx_authored(wo.color, world.y - w.base_y, dot(world.xz, vec2<f32>(-ng.z, ng.x)), w.patch_seed);
+            (*s).rough = clamp((*s).rough + wo.rough, 0.03, 1.0);
+            // stage W2c: the plumes and the damp that read from a block away (not on glossy glass or metal)
+            if ((*s).rough > 0.35) {
+                wx_mid_authored(s, world, ng, w.base_y, ob.max.y, w.patch_seed, wx_fw(dpx, dpy));
+            }
+            return;
+        }
         (*s).albedo = (*s).albedo * wo.color;
         (*s).rough = clamp((*s).rough + wo.rough, 0.03, 1.0);
         return;
@@ -407,6 +417,10 @@ fn fa_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f
     let w = fa_kit(d, cls);
     let wo = fa_weather(w, world, ng);
     var color = (*s).albedo * wo.color;
+    if (wx_level() != 0u) {
+        // weathering (`--grime`): the graph's soot, grime and run-off deepened by the building's own age.
+        color = (*s).albedo * clamp(1.0 - (1.0 - wo.color) * (1.0 + 0.8 * wx_building_k(d.seed)), 0.2, 1.6);
+    }
     let rough_scale = select(1.0, clamp(d.paint * 1.5 + 0.25, 0.0, 1.0), cls == FA_AGE_RENDER);
     var rough = (*s).rough + wo.rough * rough_scale;
     var occlusion = 1.0;
@@ -479,6 +493,12 @@ fn fa_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f
         color = mix(color, vec3<f32>(0.78, 0.77, 0.73), bloom);
         rough = rough + bloom * 0.2;
     }
+    if (wx_level() != 0u) {
+        // weathering (`--grime`, weathering.wgsl): streaks, roof-edge soot, splash-back, sun fade.
+        wx_facade(&color, &rough, world, ng, along, local_y, d, cls, upright, ob.max.y, wx_fw(dpx, dpy));
+        // stage W5: old painted sashes and frames chalked and peeling, dirt on the trim's ledges, drip lines under them.
+        wx_window_trim(&color, &rough, world, ng, local_y, d, di, wx_fw(dpx, dpy));
+    }
     (*s).albedo = color;
     (*s).rough = clamp(rough, 0.03, 1.0);
     (*s).ao = clamp((*s).ao * occlusion, 0.0, 1.0);
@@ -486,8 +506,11 @@ fn fa_apply(s: ptr<function, Surface>, m: Material, world: vec3<f32>, ng: vec3<f
 
 // ---- the scene probe (probe.rs; environment-ibl.js scene bake) ----------------
 
+// FA_PROBE_SHADER (look.rs `city_shader_source_variant_probes`): false
+// compiles the single probe's lookups out of a pipeline whose frame never
+// names one (props, agents: their group 0 binds stand-ins, probe_info zero).
 fn fa_probe_on() -> bool {
-    return frame.probe_info.w > 0.5 && (fa_run() & 8u) != 0u && frame.copy_step.z < 0.5;
+    return FA_PROBE_SHADER && frame.probe_info.w > 0.5 && (fa_run() & 8u) != 0u && frame.copy_step.z < 0.5;
 }
 
 // three's cubeUV roughness -> level (mip = -2 log2(1.16 r), level 0 = the

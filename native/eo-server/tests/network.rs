@@ -280,3 +280,51 @@ fn a_client_on_another_ground_plan_is_refused() {
     assert_eq!(k, Kind::Challenge, "the server's own ground plan is challenged");
     h.stop();
 }
+
+/// a client whose grade-separated roads (`--structures`, `--tunnels`) are not
+/// the server's world's is refused at its request, the same way as another
+/// ground plan, and told the server's own; one with the server's own (here
+/// none) is challenged as usual. The real client (eo-app `--connect`) with
+/// `--structures` against this server without them ends denied.
+#[test]
+fn a_client_with_other_structures_is_refused() {
+    use eo_net::proto::{self, DenyReason, Hello, Kind};
+    use eo_structures::StructureOptions;
+    let h = Harness::start();
+    let own = proto::structures_code(world().0.structures);
+    assert_eq!(own, 0, "the harness world has no structures");
+    let sock = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    sock.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    let ask = |structures: u8, salt: u64| -> (Kind, Vec<u8>) {
+        let mut out = vec![];
+        Hello { client_salt: salt, version: proto::PROTOCOL_VERSION, ground: proto::ground_scale_ppm(), structures, token: b"dev:st".to_vec(), ..Default::default() }.write(Kind::Request, &mut out);
+        sock.send_to(&out, h.addr).unwrap();
+        let mut buf = [0u8; 1500];
+        let (n, _) = sock.recv_from(&mut buf).expect("the server answers a request");
+        let (k, mut r) = proto::peek(&buf[..n]).expect("a protocol datagram");
+        let mut rest = vec![];
+        while let Ok(b) = r.u8() {
+            rest.push(b);
+        }
+        (k, rest)
+    };
+    for (salt, other) in [(91, Some(StructureOptions { tunnels: false })), (92, Some(StructureOptions { tunnels: true }))] {
+        let (k, rest) = ask(proto::structures_code(other), salt);
+        assert_eq!(k, Kind::Deny, "{other:?} is refused");
+        assert_eq!(rest[8], DenyReason::Structures as u8);
+        assert_eq!(rest[9], own, "the denial names the server's own setting");
+    }
+    let (k, _) = ask(own, 93);
+    assert_eq!(k, Kind::Challenge, "the server's own structures setting is challenged");
+    // the real client.
+    let mut c = ClientConfig::new(h.addr, "dev:structures");
+    c.structures = Some(StructureOptions { tunnels: false });
+    let net = NetClient::connect(c).unwrap();
+    let t0 = Instant::now();
+    while net.status().phase != Phase::Denied(DenyReason::Structures as u8) {
+        assert!(t0.elapsed().as_secs_f64() < 10.0, "the client was not refused: {:?}", net.status().phase);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    drop(net);
+    h.stop();
+}

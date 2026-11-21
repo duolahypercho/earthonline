@@ -265,7 +265,7 @@ pub struct Oracle {
 
 impl Oracle {
     pub fn default_path() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("data/sf-window-oracle.json.gz")
+        eo_data::native_dir().join("eo-sim/data/sf-window-oracle.json.gz")
     }
 
     pub fn load(path: &Path) -> Result<Self> {
@@ -318,6 +318,7 @@ impl Oracle {
                     outgoing: Some(l.outgoing.clone()),
                     legal: Some(legal),
                     tile: None,
+                    level: 0,
                 }
             })
             .collect();
@@ -351,7 +352,7 @@ impl Oracle {
             .map(|f| FootNodeBuild { key: f.key.clone(), pos: [f.x, f.z], signal: f.signal_junction })
             .collect();
         let junctions = self.signals.junctions.iter().map(junction_input).collect();
-        let segments = n.segments.iter().map(|s| SegmentBuild { half: s.half, points: pts(&s.points) }).collect();
+        let segments = n.segments.iter().map(|s| SegmentBuild { half: s.half, points: pts(&s.points), level: 0 }).collect();
         let mut tiles: Vec<TileKey> = n.lanes.iter().map(|l| TileKey::of(l.points[0], l.points[1])).collect();
         tiles.sort();
         tiles.dedup();

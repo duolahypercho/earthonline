@@ -60,6 +60,11 @@ pub struct NativeSource {
     signal_tiles: HashMap<TileKey, Vec<u32>>,
     pub dims: StreetDims,
     pub timing: SignalTiming,
+    /// Structure level by OSM way id (`SimRoad::id`), from whoever builds the
+    /// grade-separated roads (eo-app's `--structures`: the structures'
+    /// `StructureWorld::way_levels`). Empty (every lane at grade, the
+    /// network exactly as without it) unless set (`with_levels`).
+    levels: HashMap<String, i8>,
 }
 
 fn vehicle_way(h: &str) -> bool {
@@ -116,7 +121,26 @@ impl NativeSource {
         for (i, s) in source.signals.iter().enumerate() {
             signal_tiles.entry(TileKey::of(s[0], s[1])).or_default().push(i as u32);
         }
-        NativeSource { roads, signals: source.signals, road_tiles, signal_tiles, dims, timing }
+        NativeSource { roads, signals: source.signals, road_tiles, signal_tiles, dims, timing, levels: HashMap::new() }
+    }
+
+    /// The same source with lane levels (`levels`: OSM way id -> structure
+    /// level; plain data, the simulation learns no deck geometry). A way on a
+    /// level other than 0 builds its lanes and carriageway on that level and
+    /// no footway. An empty table leaves everything as before.
+    pub fn with_levels(mut self, levels: HashMap<String, i8>) -> Self {
+        self.levels = levels;
+        self
+    }
+
+    /// The level table (`with_levels`).
+    pub fn levels(&self) -> &HashMap<String, i8> {
+        &self.levels
+    }
+
+    /// The structure level of a road (0 when the table does not list it).
+    fn level_of(&self, road: &SimRoad) -> i8 {
+        if self.levels.is_empty() { 0 } else { self.levels.get(&road.id).copied().unwrap_or(0) }
     }
 
     pub fn road_count(&self) -> usize {
@@ -250,15 +274,19 @@ impl NativeSource {
                         outgoing: None,
                         legal: None,
                         tile: Some(tile),
+                        level: self.level_of(road),
                     });
                     metas.push(LaneMeta { seg: si, end: end_node });
                 }
             }
         }
-        // Junction nodes in the delivery: lanes arriving per node.
+        // Junction nodes in the delivery: lanes arriving per node (at grade:
+        // a street's signal never controls a deck's lanes over it).
         let mut arriving: HashMap<(i64, i64), Vec<usize>> = HashMap::new();
         for (li, m) in metas.iter().enumerate() {
-            arriving.entry(qkey(m.end)).or_default().push(li);
+            if build.lanes[li].level == 0 {
+                arriving.entry(qkey(m.end)).or_default().push(li);
+            }
         }
         // Signals.
         let mut claimed_nodes: std::collections::HashSet<(i64, i64)> = Default::default();
@@ -423,13 +451,16 @@ impl NativeSource {
             if !want.contains(&seg_tile) {
                 continue;
             }
+            let level = self.level_of(road);
             if !(road.bridge || road.tunnel) {
-                build.segments.push(SegmentBuild { half: s.half, points: s.pts.clone() });
+                build.segments.push(SegmentBuild { half: s.half, points: s.pts.clone(), level });
             }
+            // (no walkers on a structure level: footways stay at grade.)
             if matches!(hw, "motorway" | "motorway_link" | "trunk" | "trunk_link")
                 || matches!(road.sidewalk.as_str(), "no" | "none" | "separate")
                 || road.bridge
                 || road.tunnel
+                || level != 0
             {
                 continue;
             }

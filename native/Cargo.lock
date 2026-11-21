@@ -588,8 +588,10 @@ dependencies = [
  "bytemuck",
  "eo-assets",
  "eo-data",
+ "eo-landmarks",
  "eo-sim",
  "eo-street",
+ "eo-structures",
  "glam 0.34.3",
  "gltf",
  "image-webp",
@@ -622,6 +624,7 @@ dependencies = [
  "eo-sim",
  "eo-sky",
  "eo-street",
+ "eo-structures",
  "eo-ui",
  "eo-water",
  "glam 0.34.3",
@@ -733,6 +736,7 @@ dependencies = [
  "eo-assets",
  "eo-data",
  "eo-player",
+ "eo-structures",
  "glam 0.34.3",
 ]
 
@@ -743,7 +747,9 @@ dependencies = [
  "anyhow",
  "earcut",
  "eo-data",
+ "eo-landmarks",
  "eo-street",
+ "eo-structures",
  "glam 0.34.3",
  "rapier3d",
  "serde",
@@ -757,7 +763,9 @@ dependencies = [
  "ab_glyph",
  "anyhow",
  "eo-data",
+ "eo-landmarks",
  "eo-street",
+ "eo-structures",
  "flate2",
  "png",
  "serde",
@@ -783,9 +791,11 @@ dependencies = [
  "eo-props",
  "eo-sky",
  "eo-street",
+ "eo-structures",
  "eo-water",
  "glam 0.34.3",
  "gltf",
+ "libc",
  "png",
  "pollster",
  "serde_json",
@@ -802,6 +812,7 @@ dependencies = [
  "eo-net",
  "eo-player",
  "eo-sim",
+ "eo-structures",
  "glam 0.34.3",
  "serde_json",
 ]
@@ -834,6 +845,16 @@ dependencies = [
  "flate2",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "eo-structures"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "eo-data",
+ "eo-landmarks",
+ "eo-street",
 ]
 
 [[package]]

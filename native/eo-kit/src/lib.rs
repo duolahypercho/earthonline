@@ -16,11 +16,13 @@
 //!   lod.rs         lod.js (rungs 1-2 filters, wall-band collapse, envelope)
 //!   mesh.rs        kit/build.js emitters (box, profile, plate, prism; vertex clamp)
 //!   tenancy.rs     building-metadata ground-floor units
+//!   clutter.rs     facade clutter (fire escapes, awnings, signs, services, roofs; off by default)
 
 pub mod appearance; // facade
 pub mod archetypes;
 pub mod city;
 pub mod classify;
+pub mod clutter; // facade clutter (`--facade-clutter`): fire escapes, awnings, signs, services, roof clutter
 pub mod elevation;
 pub mod frame;
 pub mod js;
@@ -46,14 +48,14 @@ pub const KIT_PORT_VERSION: &str = "eo-kit-port-v1";
 pub const KIT_SOURCE_HASH: &str = env!("KIT_SOURCE_HASH");
 
 /// The repo root: `EO_REPO_ROOT`, or the first ancestor of the working
-/// directory (or of this crate) holding `public/data/sf`.
+/// directory (or of the executable, or of this crate) holding `public/data/sf`.
 pub fn repo_root() -> Option<PathBuf> {
     static ROOT: OnceLock<Option<PathBuf>> = OnceLock::new();
     ROOT.get_or_init(|| {
         if let Ok(r) = std::env::var("EO_REPO_ROOT") {
             return Some(PathBuf::from(r));
         }
-        let starts = [std::env::current_dir().ok(), Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")))];
+        let starts = [std::env::current_dir().ok(), std::env::current_exe().ok(), Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")))];
         for start in starts.into_iter().flatten() {
             let mut d: Option<&std::path::Path> = Some(&start);
             while let Some(p) = d {
@@ -73,7 +75,7 @@ pub fn repo_root() -> Option<PathBuf> {
 pub fn kit_material_kinds() -> &'static HashMap<String, String> {
     static KINDS: OnceLock<HashMap<String, String>> = OnceLock::new();
     KINDS.get_or_init(|| {
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../eo-assets/data/kit-material-specs.json");
+        let path = eo_data::native_dir().join("eo-assets/data/kit-material-specs.json");
         let Ok(text) = std::fs::read_to_string(path) else { return HashMap::new() };
         let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else { return HashMap::new() };
         v["specs"]

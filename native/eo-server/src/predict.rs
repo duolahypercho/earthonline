@@ -148,7 +148,7 @@ pub fn script_route(game: &GameWorld) -> (Vec<[f64; 2]>, [f64; 3]) {
 /// One run: returns the measurements.
 pub fn run(game: &Arc<GameWorld>, source: &Arc<eo_sim::native::NativeSource>, cond: Conditions, seconds: f64, shove: bool) -> anyhow::Result<serde_json::Value> {
     let ctl = Arc::new(Mutex::new(Ctl::default()));
-    let cfg = ServerConfig { bind: "127.0.0.1:0".into(), player_threads: 2, sim_threads: 2, ..Default::default() };
+    let cfg = ServerConfig { bind: "127.0.0.1:0".into(), player_threads: 2, sim_threads: 2, structures: game.structures, ..Default::default() };
     let th = spawn_server(cfg.clone(), game.clone(), source.clone(), ctl.clone());
     let addr = loop {
         if let Some(a) = ctl.lock().unwrap().addr {
@@ -159,6 +159,7 @@ pub fn run(game: &Arc<GameWorld>, source: &Arc<eo_sim::native::NativeSource>, co
     let (route, spawn) = script_route(game);
     let mut cc = ClientConfig::new(addr, "dev:predict");
     cc.conditions = cond;
+    cc.structures = game.structures; // the world's own grade-separated roads
     cc.spawn = Some(SpawnHint { x: spawn[0] as f32, z: spawn[1] as f32, yaw: spawn[2] as f32, driving: false });
     let mut client = NetClient::connect(cc)?;
     let mut pred: Option<Predictor> = None;

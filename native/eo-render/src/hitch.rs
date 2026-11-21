@@ -3,8 +3,9 @@
 //! A per-thread, per-frame breakdown of the render thread's CPU work: named
 //! phases (streaming pump parts, uploads, camera uniforms, encode, finish,
 //! submit), the bytes and calls of every GPU write, the streaming events of the
-//! frame, and the thread's own CPU cycles over the frame (Windows
-//! `QueryThreadCycleTime`), so a long frame whose thread barely ran is told
+//! frame, and the thread's own CPU time over the frame (Windows
+//! `QueryThreadCycleTime`; `CLOCK_THREAD_CPUTIME_ID` on macOS and Linux),
+//! so a long frame whose thread barely ran is told
 //! apart from one that did a lot of work: wall time far above the thread's
 //! cycle time means the thread was not on a CPU (descheduled, or blocked in
 //! the driver or the OS).
@@ -331,7 +332,7 @@ pub fn try_set<T>(shared: &std::sync::Mutex<T>, v: T) {
 }
 
 // ---------------------------------------------------------------------------
-// Thread CPU cycles (Windows): how long the thread actually ran.
+// Thread CPU time (Windows cycles, POSIX thread clock): how long the thread actually ran.
 // ---------------------------------------------------------------------------
 
 #[cfg(windows)]
@@ -347,7 +348,9 @@ mod win {
     pub const THREAD_PRIORITY_HIGHEST: i32 = 2;
 }
 
-/// CPU cycles this thread has run (0 where unsupported).
+/// How much this thread has run, in a unit `cycles_per_ms` calibrates: CPU
+/// cycles on Windows, nanoseconds of thread CPU time on macOS and Linux
+/// (`CLOCK_THREAD_CPUTIME_ID`), 0 where unsupported.
 pub fn thread_cycles() -> u64 {
     #[cfg(windows)]
     {
@@ -358,7 +361,16 @@ pub fn thread_cycles() -> u64 {
         }
         c
     }
-    #[cfg(not(windows))]
+    #[cfg(unix)]
+    {
+        let mut ts = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+        // SAFETY: POSIX call writing into a valid, owned timespec.
+        if unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut ts) } != 0 {
+            return 0;
+        }
+        (ts.tv_sec as u64).wrapping_mul(1_000_000_000).wrapping_add(ts.tv_nsec as u64)
+    }
+    #[cfg(not(any(windows, unix)))]
     {
         0
     }

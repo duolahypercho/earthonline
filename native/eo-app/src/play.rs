@@ -70,6 +70,12 @@ fn base_args() -> Args {
         beaver_house: false,
         bench: false,
         start_underwater: false,
+        dive_site: None,
+        underwater_habitats: false,
+        cove_detail: false,
+        black_point_intertidal: false,
+        surface_start: false,
+        quality: Default::default(),
         frames: 720,
         warmup: 60,
         width: 1920,
@@ -77,6 +83,7 @@ fn base_args() -> Args {
         msaa: 1,
         indirect_validation: true,
         no_indirect_count: false,
+        no_count_emulation: false,
         vsync: true,
         out_dir: None,
         label: None,
@@ -113,14 +120,21 @@ fn base_args() -> Args {
         perf: Default::default(), // occlusion / hitch
         landmarks: true,          // landmarks
         landmarks2: true,
+        structures: None, // `--structures` (quality::Switches)
+        facade_clutter: 0, // `--facade-clutter` (quality::Switches)
     }
 }
 
 fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
     let mut a = base_args();
     let mut o = PlayOpts { interior_eye: true, bench: false, frames: None, segments: None, render: true, collision_threads: 2 };
+    let mut tier = crate::quality::Switches::default(); // `--quality` and the lighting switches
     let mut it = raw.iter();
     while let Some(s) = it.next() {
+        if let Some(n) = tier.take(s, it.as_slice().first().map(String::as_str))? {
+            it.by_ref().take(n).for_each(drop); // the value it took, if any
+            continue;
+        }
         let mut val = || it.next().cloned().ok_or_else(|| anyhow!("{s} needs a value"));
         match s.as_str() {
             "--play" => {}
@@ -141,7 +155,20 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-render" => o.render = false,
             "--collision-threads" => o.collision_threads = val()?.parse::<usize>()?.max(1),
             "--water-optics" => a.look.water_optics = true,
+            "--cove-detail" => a.cove_detail = true,
+            "--cove-canopy" => { a.cove_detail = true; a.look.cove_canopy = true; }
+            "--no-cove-canopy" => a.look.cove_canopy = false,
+            "--cove-sediment" => { a.cove_detail = true; a.look.cove_sediment = true; }
+            "--no-cove-sediment" => a.look.cove_sediment = false,
+            "--black-point-intertidal" => { a.cove_detail = true; a.black_point_intertidal = true; }
+            "--no-black-point-intertidal" => a.black_point_intertidal = false,
+            "--no-cove-detail" => a.cove_detail = false,
+            "--underwater-habitats" => a.underwater_habitats = true,
+            "--no-underwater-habitats" => a.underwater_habitats = false,
             "--no-water-optics" => a.look.water_optics = false,
+            "--dive-exposure" => a.look.dive_exposure = true,
+            "--no-dive-exposure" => a.look.dive_exposure = false,
+            "--bridge-detail" | "--no-bridge-detail" => {} // read by `crate::bridge_detail`
             "--width" => a.width = val()?.parse()?,
             "--height" => a.height = val()?.parse()?,
             "--msaa" => a.msaa = val()?.parse()?,
@@ -172,7 +199,9 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             other => anyhow::bail!("--play: unknown argument {other} (see native/eo-app/src/play.rs)"),
         }
     }
+    tier.apply(&mut a);
     a.bench = o.bench;
+    crate::apply_cove_look(&mut a, raw);
     Ok((a, o))
 }
 
@@ -187,7 +216,7 @@ fn collision_world(
     let lift = eo_assets::placement::PlacementConstants::load()?.construction_lift_m;
     let mut buildings = BuildingSet::from_city(&world.city, lift);
     let ground: Arc<dyn GroundProvider> = match &world.street {
-        Some(s) => Arc::new(StreetGround(s.world.clone())),
+        Some(s) => Arc::new(StreetGround::new(s.world.clone(), world.structures.clone())),
         None => Arc::new(ElevationGround(Arc::new(eo_data::ElevationGrid::load(&world.paths)?))),
     };
     if let Some(house) = &world.house {
@@ -232,7 +261,7 @@ fn percentile(v: &[f64], p: f64) -> f64 {
         return f64::NAN;
     }
     let mut s = v.to_vec();
-    s.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    s.sort_by(f64::total_cmp);
     s[((p / 100.0 * (s.len() - 1) as f64).round() as usize).min(s.len() - 1)]
 }
 
@@ -337,7 +366,7 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
     eprintln!("play bench: data at {:.0} ms, routes {:.0} ms", process_start.elapsed().as_secs_f64() * 1e3, routes_ms);
     let aspect = args.width as f32 / args.height as f32;
     // GPU (optional).
-    let gpu_opts = GpuOptions { indirect_validation: args.indirect_validation, force_no_indirect_count: args.no_indirect_count, ..Default::default() };
+    let gpu_opts = GpuOptions { indirect_validation: args.indirect_validation, force_no_indirect_count: args.no_indirect_count, force_no_count_emulation: args.no_count_emulation, ..Default::default() };
     let mut gpu_state = None;
     if opts.render {
         let ctx = GpuContext::new(GpuContext::create_instance(&gpu_opts), None, gpu_opts)?;
@@ -703,7 +732,7 @@ mod window {
         fn init(&mut self, el: &ActiveEventLoop) -> Result<()> {
             let attrs = Window::default_attributes().with_title("Earth Online native - play").with_inner_size(PhysicalSize::new(self.args.width, self.args.height));
             let window = Arc::new(el.create_window(attrs)?);
-            let opts = GpuOptions { indirect_validation: self.args.indirect_validation, force_no_indirect_count: self.args.no_indirect_count, ..Default::default() };
+            let opts = GpuOptions { indirect_validation: self.args.indirect_validation, force_no_indirect_count: self.args.no_indirect_count, force_no_count_emulation: self.args.no_count_emulation, ..Default::default() };
             let instance = GpuContext::create_instance(&opts);
             let surface = instance.create_surface(window.clone())?;
             let ctx = GpuContext::new(instance, Some(&surface), opts)?;

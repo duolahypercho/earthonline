@@ -47,6 +47,12 @@ pub const FRAME_LIGHT_CAP: u32 = 1024;
 pub const SPRITE_CAP: u32 = 32_768;
 pub const CLUSTERS: [u32; 3] = [16, 9, 24];
 pub const CLUSTER_CAP: u32 = 32;
+/// (`--look cinematic`, stage L3) The streak lights a frame (sky_streaks.wgsl
+/// `LT_STREAK_CAP`, sky_light.wgsl `SKY_STREAK_CAP`): their list's words
+/// (count + indices) follow the clusters' only with SF_CINEMATIC compiled in.
+pub const STREAK_CAP: u32 = 32;
+/// (`--weather damp`, stage L3) sky_common.wgsl `SKY_DAMP`.
+pub const SKY_DAMP_BIT: u32 = 1 << 18;
 /// Lights are shaded within this view depth (m).
 pub const CLUSTER_FAR_M: f32 = 300.0;
 pub const CLUSTER_NEAR_M: f32 = 0.5;
@@ -90,6 +96,13 @@ pub struct SkyOptions {
     /// The fair-weather cumulus field, off by default (a clear sky keeps the high sheet
     /// alone; the overcast, fog and rain decks are drawn either way); `EO_CUMULUS=1` draws it.
     pub cumulus: bool,
+    /// Enable fair-weather clouds when the camera is near Aquatic Park.
+    pub cove_cumulus: bool,
+    /// A low-deck cloud seen over the ground takes the aerial perspective of its own depth
+    /// and hides the haze behind it. Off by default until reviewed under the visual gate
+    /// (`--cloud-depth-haze` turns it on); off, the ground's whole aerial perspective is in
+    /// front of the cloud, a blue veil under the horizon, as before.
+    pub cloud_depth_haze: bool,
     pub weather: WeatherMode,
     pub seed: u32,
     /// The world clock at the first frame (seconds since the world's epoch).
@@ -97,6 +110,15 @@ pub struct SkyOptions {
     /// 0 low, 1 default, 2 high (cloud steps 12 / 18 / 28).
     pub quality: u32,
     pub moon_day: f64,
+    /// (`--shop-light 1|2`, stage N1; shop_lights.rs) the shop windows' lights:
+    /// 0 none (the frame as before), 1 within 160 m of the eye, 2 the clusters'
+    /// whole 300 m. Lit only once their placement is handed over (`set_shop_lights`).
+    pub shop_light: u8,
+    /// (`--look cinematic`, the cinematic look plan) the sky, weather and night
+    /// lights draw the cinematic look; false (the default) draws today's frame.
+    /// Set with `LookOptions::look` (eo-app quality.rs); its shader code sits
+    /// behind `SF_CINEMATIC`.
+    pub cinematic: bool,
 }
 
 impl Default for SkyOptions {
@@ -118,12 +140,16 @@ impl Default for SkyOptions {
             meter: true,
             atmosphere: true,
             contact: true,
+            cove_cumulus: false,
             cumulus: std::env::var("EO_CUMULUS").is_ok_and(|v| v == "1"),
+            cloud_depth_haze: false,
             weather: WeatherMode::Preset(eo_sky::Kind::Clear),
             seed: eo_sky::world_seed(),
             world_time_s: 0.0,
             quality: 1,
             moon_day: eo_sky::moon::DEFAULT_MOON_DAY,
+            shop_light: 0,
+            cinematic: false,
         }
     }
 }
@@ -149,7 +175,9 @@ impl SkyOptions {
             meter: false,
             atmosphere: false,
             contact: false,
+            cove_cumulus: false,
             cumulus: false,
+            cloud_depth_haze: false,
             ..Self::default()
         }
     }
@@ -160,6 +188,15 @@ impl SkyOptions {
     pub fn needs_volume(&self) -> bool {
         self.clouds || self.fog || self.shafts
     }
+    fn cumulus_weight(&self, eye: glam::Vec3) -> f32 {
+        if self.cumulus { return 1.0; }
+        if !self.cove_cumulus { return 0.0; }
+        let scale = eo_data::groundscale::scale() as f32;
+        let distance = (eye.x / scale + 400.0).hypot(eye.z / scale + 3340.0);
+        let t = ((1250.0 - distance) / 550.0).clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t)
+    }
+
     fn bits(&self) -> u32 {
         let mut b = 0;
         for (on, bit) in [
@@ -176,7 +213,9 @@ impl SkyOptions {
             (self.bloom, 1024),
             (self.sprites, 4096),
             (self.contact, 8192),
-            (self.cumulus, 16384), // SKY_CUMULUS
+            (self.cumulus || self.cove_cumulus, 16384), // SKY_CUMULUS
+            (self.cloud_depth_haze, 2048), // SKY_CLOUD_DEPTH_HAZE
+            (self.cinematic, 1 << 17), // SKY_CINEMATIC (`--look cinematic`, stage L4: the golden haze and shafts)
         ] {
             if on {
                 b |= bit;
@@ -229,7 +268,8 @@ pub struct SkyUniform {
     // x the weather's mean direct-beam transmission (the sun every pass
     // takes under a continuous deck), y the volume key's scale, z,w unused
     beam: [f32; 4],
-    // the twilight light on the clouds from the sky toward the set sun (rgb), w unused
+    // the twilight light on the clouds from the sky toward the set sun (rgb); w a
+    // tunnel bore's interior roadway irradiance (stage A8, `--tunnels`; 0 without bores)
     twi: [f32; 4],
     // the atmosphere tables (sky_atmo.wgsl): toward the sun, w the sky scale
     atmo: [f32; 4],
@@ -290,6 +330,15 @@ struct LtParams {
     /// The waterside cells: the grid corner x, z, the cell (m); columns, rows.
     water: [f32; 4],
     water_n: [u32; 4],
+    /// (lighting, `--light-shadows`) SF's 3000 K LED lamps: rgb the colour a
+    /// street lamp of the JS role takes (unit luminance), w 1 on (0: as before);
+    /// `led_key` that role's chromaticity key (largest channel 1), w the tolerance.
+    led: [f32; 4],
+    led_key: [f32; 4],
+    /// (`--shop-light`) the shop windows' lights: how many, units per candela
+    /// (the lamps' scale times the rooms' dusk; 0 without them), the drawn
+    /// hour, the eye distance they are gathered within (sky_lights.wgsl `lights_shops`).
+    shops: [f32; 4],
 }
 
 /// The mask words: the props tiles resident (STREET_TILE_M keys -128..127 on
@@ -297,6 +346,12 @@ struct LtParams {
 const TILE_WORDS: usize = 2048;
 pub const WATER_CELLS_MAX: usize = 512;
 const MASK_WORDS: usize = TILE_WORDS + WATER_CELLS_MAX * WATER_CELLS_MAX / 32;
+/// (`--look cinematic`, stage L2) the street lamp palette's grid after the
+/// waterside cells (eo-sky `cine_lamps::PaletteGrid`, a byte a cell, four a
+/// word), up to `PALETTE_CELLS_MAX` on a side; allocated only with
+/// SF_CINEMATIC compiled in.
+pub const PALETTE_CELLS_MAX: usize = 1024;
+const PALETTE_WORDS: usize = PALETTE_CELLS_MAX * PALETTE_CELLS_MAX / 4;
 
 struct Targets {
     size: (u32, u32),
@@ -313,6 +368,8 @@ struct Targets {
     ups: Vec<wgpu::TextureView>,
     /// Bind groups that depend on the scene's depth and HDR textures.
     scene: Option<(wgpu::Texture, wgpu::Texture, SceneBinds)>,
+    /// (lighting) the lit fog binding's generation the scene binds were made with.
+    lit_fog_gen: u64,
     bloom_bgs: [Vec<wgpu::BindGroup>; 2],
     bytes: u64,
 }
@@ -365,6 +422,31 @@ struct State {
     /// The props tiles resident (their mask words as last written) and the waterside grid.
     tiles: Vec<u32>,
     water: ([f32; 4], [u32; 4]),
+    /// (`--look cinematic`, stage L2) the lamp palette's grid: its cell (m; 0
+    /// none), columns, rows (`set_lamp_palette`; its corner is the waterside grid's).
+    palette: (f32, u32, u32),
+    /// `--smooth-time` (`LightingOptions::smooth_time`): no exposure snap but a
+    /// camera cut, histories kept through small weather steps (see `update`).
+    smooth: bool,
+    /// Stage A8 (`--tunnels`, `set_bore`): how far into a tunnel's bore the
+    /// eye is (None outside), and whether bores with lamps are drawn (their
+    /// lamps are lit by day too). None and false without tunnels.
+    bore_depth: Option<f64>,
+    tunnel_lamps: bool,
+    /// Whether any local light is lit this frame (street lamps, vehicle lamps or
+    /// a bore's lamps, with the lights on): the lit fog has nothing to scatter otherwise.
+    lights_live: bool,
+    /// (lighting, `--light-shadows`) the street lamps in SF's 3000 K LED colour
+    /// (`eo_sky::lights::led_street_lamp_color`): the gather's lamps, their
+    /// luminaires and the city's glow. Off: the JS role's 0xffc46a, as before.
+    led: bool,
+    /// (`--photo-finish`, stage W4: `LookOptions::photo_finish`) San Francisco's
+    /// measured air in the tables and the aerial perspective (eo-sky `photo`),
+    /// and a lens's bloom (eo-look `tone::PHOTO_BLOOM_*`). 0: as before.
+    photo: u8,
+    /// (`--shop-light`) the shop windows' lights (shop_lights.rs `GpuShopLight`)
+    /// and how many: bound with the lights at binding 12 (None: a stand-in).
+    shops: Option<(wgpu::Buffer, u32)>,
 }
 
 pub struct SkyGpu {
@@ -374,10 +456,15 @@ pub struct SkyGpu {
     pub(crate) sheet_view: wgpu::TextureView,
     sheet_ready: AtomicBool,
     _noise: wgpu::Texture,
-    noise_view: wgpu::TextureView,
+    pub(crate) noise_view: wgpu::TextureView,
     // the atmosphere tables (transmittance, multiple scattering, sky view) and their passes
     atmo_views: [wgpu::TextureView; 3],
     atmo_pipes: [wgpu::ComputePipeline; 3],
+    /// (`--photo-finish`) the same passes over the measured air's medium
+    /// (photo.rs `atmo_luts_source`), made the first time the option is on, and
+    /// the layout they share with `atmo_pipes`.
+    atmo_photo: std::sync::OnceLock<Option<[wgpu::ComputePipeline; 3]>>,
+    atmo_layout: wgpu::PipelineLayout,
     atmo_bgs: [wgpu::BindGroup; 3],
     atmo_sizes: [(u32, u32); 3],
     noise_ready: AtomicBool,
@@ -391,14 +478,16 @@ pub struct SkyGpu {
     waterside: AtomicU32,
     pub(crate) frame_lights: wgpu::Buffer,
     sprites: wgpu::Buffer,
-    counter: wgpu::Buffer,
+    pub(crate) counter: wgpu::Buffer,
     pub(crate) clusters: wgpu::Buffer,
-    lt_params: wgpu::Buffer,
+    pub(crate) lt_params: wgpu::Buffer,
     /// sky_lights.wgsl `lt_mask` (`MASK_WORDS`).
     masks: wgpu::Buffer,
     dummy_storage: wgpu::Buffer,
     lights_bgl: wgpu::BindGroupLayout,
-    lights_pipes: [wgpu::ComputePipeline; 4],
+    lights_pipes: [wgpu::ComputePipeline; 5],
+    /// (`--look cinematic`, stage L3) the streak lights' pick (sky_streaks.wgsl), made only with SF_CINEMATIC.
+    streaks_pipe: Option<wgpu::ComputePipeline>,
     noise_pipe: wgpu::ComputePipeline,
     noise_bg: wgpu::BindGroup,
     noise_down: wgpu::ComputePipeline,
@@ -417,9 +506,24 @@ pub struct SkyGpu {
     sprite_pipe: wgpu::RenderPipeline,
     /// The waterside luminaires' glitter in the sea (sky_fx.wgsl `glitter_*`).
     glitter_pipe: wgpu::RenderPipeline,
+    /// (`--look cinematic`, stage L1) the lamp glare (sky_fx.wgsl `glare_vs`), with SF_CINEMATIC compiled in.
+    glare_pipe: Option<wgpu::RenderPipeline>,
     rain_pipe: wgpu::RenderPipeline,
     /// A 1 x 1 stand-in for the previous frame before there is one.
     pub(crate) dummy_hist: wgpu::TextureView,
+    /// (lighting, `--lit-fog`) the resolve's lit fog bindings 10 and 11 while
+    /// the lit fog has no volume: a 1 x 1 x 1 3D texture and a zero buffer
+    /// (the shader reads neither without the feature's bit).
+    lit_fog_stand_in: (wgpu::TextureView, wgpu::Buffer),
+    /// The lit fog's integrated volume and its state word (`set_lit_fog_volume`),
+    /// with a generation that rebuilds the resolve's bind groups when it changes.
+    lit_fog_bind: Mutex<(u64, Option<(wgpu::TextureView, wgpu::Buffer)>)>,
+    /// (`--look cinematic`, stage L4) the far sun shadow map (`--far-shadows`) at the volume's
+    /// binding 20, for the shade in the golden haze past the cascades (`set_far_shadow_map`),
+    /// with a generation that rebuilds the volume's bind groups; a 1 x 1 stand-in without it
+    /// (the shader reads it only with SF_CINEMATIC, SKY_CINEMATIC and the far rings drawn).
+    far_shadow_bind: Mutex<(u64, Option<wgpu::TextureView>)>,
+    far_shadow_stand_in: wgpu::TextureView,
     targets: Mutex<Option<Targets>>,
     state: Mutex<State>,
     pub bytes: u64,
@@ -439,6 +543,61 @@ fn tex(device: &wgpu::Device, label: &str, size: (u32, u32), format: wgpu::Textu
         })
         .create_view(&Default::default())
 }
+
+/// (lighting, `--light-shadows`) The gather's LED lamps (`LtParams.led`,
+/// `led_key`): SF's 3000 K LED colour at unit luminance with w 1, and the JS
+/// street lamp role's chromaticity key with the tolerance a channel may differ
+/// by (sky_lights.wgsl `lt_led`).
+pub fn led_params() -> ([f32; 4], [f32; 4]) {
+    let c = eo_sky::lights::led_street_lamp_color();
+    let k = eo_sky::lights::street_lamp_chroma();
+    ([c[0] as f32, c[1] as f32, c[2] as f32, 1.0], [k[0] as f32, k[1] as f32, k[2] as f32, LED_KEY_TOLERANCE])
+}
+
+/// (`--look cinematic`, stage L2) The lights gather's constants for the
+/// look's street lamps (sky_lights.wgsl `lt_cine_*`; eo-sky `cine_lamps`):
+/// `LT_CINE` whether the code is compiled in (SF_CINEMATIC; the gather's
+/// shader does not take the look's common constants), where the palette's
+/// words start in `lt_mask`, each tint's colour (unit luminance, an eye
+/// adapted to 3000 K), the street lamp role's key, the reach in mounting
+/// heights, the axis's tilt into a light's `dir`, the fallback's cut-off and
+/// peak (kind 0's cone, read by the lit fog and the pool decals), and the
+/// props' lamp models (historic, banner) and the landmarks' mark.
+pub fn cine_lamps_wgsl(on: bool) -> String {
+    use eo_sky::cine_lamps::{LampTint, RANGE_MOUNTING_HEIGHTS};
+    let v3 = |c: [f64; 3]| format!("vec3<f32>({:.6}, {:.6}, {:.6})", c[0], c[1], c[2]);
+    let tints: Vec<String> = LampTint::ALL.iter().map(|t| v3(t.colour())).collect();
+    let k = eo_sky::lights::street_lamp_chroma();
+    let mut src = format!(
+        "\n// generated by sky.rs cine_lamps_wgsl (`--look cinematic`, stage L2)\nconst LT_CINE: bool = {on};\nconst LT_PALETTE_WORD: u32 = {MASK_WORDS}u;\nconst LT_CINE_TINTS = array<vec3<f32>, 4>({});\nconst LT_CINE_KEY: vec3<f32> = {};\nconst LT_CINE_KEY_TOL: f32 = {LED_KEY_TOLERANCE:?};\nconst LT_CINE_RANGE_MH: f32 = {RANGE_MOUNTING_HEIGHTS:?};\nconst LT_CINE_AXIS_TILT: f32 = {CINE_AXIS_TILT:?};\nconst LT_CINE_COS_CUT: f32 = {:.6};\nconst LT_CINE_COS_PEAK: f32 = {:.6};\nconst LT_MODEL_HISTORIC: u32 = {}u;\nconst LT_MODEL_BANNER: u32 = {}u;\nconst LT_LANDMARK: u32 = {}u;\n",
+        tints.join(", "),
+        v3(k),
+        eo_sky::lights::STREET_CUTOFF_DEG.to_radians().cos(),
+        eo_sky::lights::STREET_PEAK_DEG.to_radians().cos(),
+        eo_props::Model::LampHistoric as u32,
+        eo_props::Model::LampBanner as u32,
+        crate::landmarks::LIGHT_KIND_LANDMARK,
+    );
+    if on {
+        // (stage L3) the streak lights' pick (sky.rs `streaks_pipe`)
+        src += &format!("const LT_STREAK_CAP: u32 = {STREAK_CAP}u;\n");
+        src += include_str!("sky_streaks.wgsl");
+    }
+    src
+}
+
+/// (`--look cinematic`, stage L2) How far a street luminaire's `dir` leans
+/// from straight down toward its street's axis (the horizontal part's
+/// length): the axis its pool is long along (sky_light.wgsl
+/// `sky_cine_cobra`), 2.9 deg, which nothing reading `dir` as the beam
+/// (the lit fog, the lamp maps' straight-down spot) sees.
+pub const CINE_AXIS_TILT: f32 = 0.05;
+
+/// How far a light's chromaticity key may lie from the street lamp role's
+/// (per channel, its largest channel 1) for the gather to take it for a
+/// street lamp: the role's lamps carry 0xffc46a exactly (the tunnel lamps'
+/// 4000 K key differs by 0.1 and more).
+pub const LED_KEY_TOLERANCE: f32 = 0.02;
 
 /// The sea the sky passes meet (eo-water): its level, its facets' mean square
 /// slope at the water slice's reference wind (Cox & Munk 1954 as eo-water's
@@ -483,14 +642,21 @@ impl SkyGpu {
         let st = wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST;
         let uniform = buffer("sky-uniform", std::mem::size_of::<SkyUniform>() as u64, uni);
         let lamps = buffer("sky-lamps", LAMP_CAP as u64 * 64, st);
-        let frame_lights = buffer("sky-frame-lights", FRAME_LIGHT_CAP as u64 * 64, wgpu::BufferUsages::STORAGE);
+        // (COPY_SRC: the light shadows' tests read the frame's lights, light_shadow.rs)
+        let frame_lights = buffer("sky-frame-lights", FRAME_LIGHT_CAP as u64 * 64, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC);
         let sprites = buffer("sky-sprites", SPRITE_CAP as u64 * 64, wgpu::BufferUsages::STORAGE);
-        let counter = buffer("sky-light-counter", 32, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_DST);
+        // (COPY_SRC: the light shadows' tests read the frame's light count, light_shadow.rs)
+        let counter = buffer("sky-light-counter", 32, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC);
         let ncl = (CLUSTERS[0] * CLUSTERS[1] * CLUSTERS[2]) as u64;
-        let clusters = buffer("sky-clusters", ncl * (1 + CLUSTER_CAP as u64) * 4, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST);
+        // (COPY_SRC: the shop lights' tests and cards read the clusters, `lights_readback`)
+        // (`--look cinematic`, stage L3) the streak lights' count and indices after the clusters, only with the look compiled in.
+        let streak_words = if crate::look::shader_features().cinematic { 1 + STREAK_CAP as u64 } else { 0 };
+        let clusters = buffer("sky-clusters", (ncl * (1 + CLUSTER_CAP as u64) + streak_words) * 4, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC);
         let lt_params = buffer("sky-light-params", std::mem::size_of::<LtParams>() as u64, uni);
         let dummy_storage = buffer("sky-dummy-storage", 256, wgpu::BufferUsages::STORAGE);
-        let masks = buffer("sky-light-masks", MASK_WORDS as u64 * 4, st);
+        // (`--look cinematic`, stage L2) the lamp palette's words after the masks, only with the look compiled in.
+        let mask_words = MASK_WORDS + if crate::look::shader_features().cinematic { PALETTE_WORDS } else { 0 };
+        let masks = buffer("sky-light-masks", mask_words as u64 * 4, st);
         let sheet = d.create_texture(&wgpu::TextureDescriptor {
             label: Some("sky-cloud-sheet"),
             size: wgpu::Extent3d { width: SHEET_RES, height: SHEET_RES, depth_or_array_layers: 1 },
@@ -550,17 +716,19 @@ impl SkyGpu {
         // Lights.
         let lights_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("sky-lights-bgl"),
-            entries: &[entry(0, cs, ubuf), entry(1, cs, sbuf(true)), entry(2, cs, sbuf(false)), entry(3, cs, sbuf(false)), entry(4, cs, sbuf(false)), entry(5, cs, sbuf(true)), entry(6, cs, sbuf(true)), entry(7, cs, ubuf), entry(8, cs, sbuf(false)), entry(9, cs, sbuf(true)), entry(10, cs, sbuf(true)), entry(11, cs, sbuf(true))],
+            entries: &[entry(0, cs, ubuf), entry(1, cs, sbuf(true)), entry(2, cs, sbuf(false)), entry(3, cs, sbuf(false)), entry(4, cs, sbuf(false)), entry(5, cs, sbuf(true)), entry(6, cs, sbuf(true)), entry(7, cs, ubuf), entry(8, cs, sbuf(false)), entry(9, cs, sbuf(true)), entry(10, cs, sbuf(true)), entry(11, cs, sbuf(true)), entry(12, cs, sbuf(true))],
         });
         let sky_only = include_str!("sky_common.wgsl");
-        let lm = module("sky_lights.wgsl", format!("{sky_only}\n{}\nconst LT_TILE_M: f32 = {:.1};\n{}", sea_wgsl(), eo_street::STREET_TILE_M, include_str!("sky_lights.wgsl")));
+        let lm = module("sky_lights.wgsl", format!("{sky_only}\n{}\nconst LT_TILE_M: f32 = {:.1};\n{}{}{}", sea_wgsl(), eo_street::STREET_TILE_M, crate::shop_lights::wgsl(), cine_lamps_wgsl(crate::look::shader_features().cinematic), include_str!("sky_lights.wgsl")));
         let ll = layout("sky-lights-layout", &lights_bgl);
         let lights_pipes = [
             compute("lights_lamps", &ll, &lm, "lights_lamps"),
             compute("lights_agents", &ll, &lm, "lights_agents"),
             compute("lights_cluster", &ll, &lm, "lights_cluster"),
             compute("lights_props", &ll, &lm, "lights_props"),
+            compute("lights_shops", &ll, &lm, "lights_shops"), // (`--shop-light`)
         ];
+        let streaks_pipe = crate::look::shader_features().cinematic.then(|| compute("lights_streaks", &ll, &lm, "lights_streaks"));
 
         // Cloud noise (once).
         let (vol_src, noise_src) = include_str!("sky_volume.wgsl").split_once("// ---- noise module").expect("noise marker");
@@ -624,6 +792,8 @@ impl SkyGpu {
                 entry(17, cs, t2(true)),
                 entry(18, cs, t2(true)),
                 entry(19, cs, t2(true)),
+                // (`--look cinematic`, stage L4) the far sun shadow map (or its stand-in)
+                entry(20, cs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Depth, view_dimension: wgpu::TextureViewDimension::D2Array, multisampled: false }),
             ],
         });
         let atmo_src = include_str!("sky_atmo.wgsl");
@@ -717,6 +887,9 @@ impl SkyGpu {
                 entry(8, fs, samp),
                 // the atmosphere's transmittance table (the sun's disc colour)
                 entry(9, fs, t2(true)),
+                // (lighting, `--lit-fog`) the lit fog's integrated volume and its state word
+                entry(10, fs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D3, multisampled: false }),
+                entry(11, fs, sbuf(true)),
             ],
         });
         let rm = module("sky_resolve.wgsl", format!("{common}\n{}", include_str!("sky_resolve.wgsl")));
@@ -792,7 +965,35 @@ impl SkyGpu {
         let glitter_pipe = fx_pipe("sky-glitter", "glitter_vs", "glitter_fs", wgpu::BlendState { color: add, alpha: add });
         let pre = wgpu::BlendComponent { src_factor: wgpu::BlendFactor::One, dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha, operation: wgpu::BlendOperation::Add };
         let rain_pipe = fx_pipe("sky-rain", "rain_vs", "rain_fs", wgpu::BlendState { color: pre, alpha: pre });
+        // (`--look cinematic`, stage L1) the lamp glare, only with the look compiled in.
+        let glare_pipe = crate::look::shader_features().cinematic.then(|| fx_pipe("sky-glare", "glare_vs", "glare_fs", wgpu::BlendState { color: add, alpha: add }));
         let dummy_hist = tex(d, "sky-hist-stand-in", (1, 1), init.hdr_format, wgpu::TextureUsages::TEXTURE_BINDING);
+        let lit_fog_stand_in = (
+            d.create_texture(&wgpu::TextureDescriptor {
+                label: Some("sky-lit-fog-stand-in"),
+                size: wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D3,
+                format: wgpu::TextureFormat::Rgba16Float,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+            .create_view(&Default::default()),
+            buffer("sky-lit-fog-state-stand-in", 16, wgpu::BufferUsages::STORAGE),
+        );
+        let far_shadow_stand_in = d
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("sky-far-shadow-stand-in"),
+                size: wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: crate::look::SHADOW_FORMAT,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+            .create_view(&wgpu::TextureViewDescriptor { dimension: Some(wgpu::TextureViewDimension::D2Array), ..Default::default() });
         let bytes = uniform.size() + lamps.size() + frame_lights.size() + sprites.size() + counter.size() + clusters.size() + (SHEET_RES as u64).pow(2) * 4 * 4 / 3 + (NOISE_RES as u64).pow(3) * 4 * 8 / 7;
         let _ = (init.shadow_array, init.cmp_sampler);
         let bytes = bytes + masks.size() + clouds.bytes; // clouds
@@ -820,6 +1021,7 @@ impl SkyGpu {
             dummy_storage,
             lights_bgl,
             lights_pipes,
+            streaks_pipe,
             noise_pipe,
             noise_bg,
             noise_down,
@@ -830,6 +1032,8 @@ impl SkyGpu {
             recon_pipe,
             atmo_views,
             atmo_pipes,
+            atmo_photo: std::sync::OnceLock::new(),
+            atmo_layout: al,
             atmo_bgs,
             atmo_sizes,
             resolve_bgl,
@@ -840,8 +1044,13 @@ impl SkyGpu {
             fx_bg,
             sprite_pipe,
             glitter_pipe,
+            glare_pipe,
             rain_pipe,
             dummy_hist,
+            lit_fog_stand_in,
+            lit_fog_bind: Mutex::new((0, None)),
+            far_shadow_bind: Mutex::new((0, None)),
+            far_shadow_stand_in,
             targets: Mutex::new(None),
             state: Mutex::new(State {
                 opts: SkyOptions::off(),
@@ -871,9 +1080,54 @@ impl SkyGpu {
                 lights_bg0: None,
                 tiles: vec![0; TILE_WORDS],
                 water: ([0.0; 4], [0; 4]),
+                palette: (0.0, 0, 0),
+                smooth: false,
+                bore_depth: None,
+                tunnel_lamps: false,
+                lights_live: false,
+                led: false,
+                photo: 0,
+                shops: None,
             }),
             bytes,
         }
+    }
+
+    /// (lighting, `--lit-fog`; called by `LitFogGpu` when its volume is made or
+    /// dropped) the integrated volume the resolve composites and the state word
+    /// it checks (`[0]`: the frame it was last integrated in), or None for the
+    /// stand-ins. The resolve's bind groups are rebuilt at the next frame. Locks
+    /// only its own slot (safe inside `encode_after`'s `mid` hook).
+    /// (`--look cinematic`, stage L4) the far sun shadow map for the volume's binding 20
+    /// (None: the stand-in); the volume's bind groups are rebuilt at the next frame.
+    pub(crate) fn set_far_shadow_map(&self, v: Option<&wgpu::TextureView>) {
+        let mut b = self.far_shadow_bind.lock().unwrap();
+        b.0 += 1;
+        b.1 = v.cloned();
+    }
+
+    pub(crate) fn set_lit_fog_volume(&self, v: Option<(&wgpu::TextureView, &wgpu::Buffer)>) {
+        let mut b = self.lit_fog_bind.lock().unwrap();
+        b.0 += 1;
+        b.1 = v.map(|(t, s)| (t.clone(), s.clone()));
+    }
+
+    /// Whether a local light was lit at the last update (street lamps, vehicle
+    /// lamps or a bore's lamps, with the lights on): the lit fog skips its
+    /// passes otherwise (by day nothing is scattered).
+    pub(crate) fn local_lights_on(&self) -> bool {
+        self.state.lock().unwrap().lights_live
+    }
+
+    /// Stage A8 (`--tunnels`; Renderer::update, before the look's update):
+    /// how far into a tunnel's bore the eye is (None outside: the exposure
+    /// as before; inside, it adapts to the bore's lighting,
+    /// `structures::bore_exposure_gain`), and whether bores with lamps are
+    /// drawn (their lamps are lit round the clock, `LtParams.props.w`).
+    pub fn set_bore(&self, depth: Option<f64>, tunnel_lamps: bool) {
+        let mut s = self.state.lock().unwrap();
+        s.bore_depth = depth;
+        s.tunnel_lamps = tunnel_lamps;
     }
 
     /// the atmosphere tables for other passes: (sky view, transmittance),
@@ -918,8 +1172,53 @@ impl SkyGpu {
         s.dt = dt.max(0.0);
     }
 
+    /// `--smooth-time`: the exposure converges instead of snapping on a turn or
+    /// a clock jump (only a camera cut snaps it), the histories survive weather
+    /// steps under `WEATHER_RECUT_STEPS`, midnight is no clock jump, and the moon's
+    /// key weight blends the clouds' light (`SkyTerms::moon_weight`).
+    /// (lighting, `--light-shadows`) the street lamps in SF's 3000 K LED colour.
+    pub(crate) fn set_led_lamps(&self, on: bool) {
+        self.state.lock().unwrap().led = on;
+    }
+
+    pub(crate) fn set_smooth_time(&self, on: bool) {
+        self.state.lock().unwrap().smooth = on;
+    }
+
+    /// (`--photo-finish`) the level (0 off): the measured air and the lens's bloom.
+    /// The tables' passes for the measured air are made here, the first time.
+    pub(crate) fn set_photo_finish(&self, level: u8) {
+        if level > 0 {
+            self.atmo_photo_pipes();
+        }
+        self.state.lock().unwrap().photo = level;
+    }
+
+    /// (`--photo-finish`) the atmosphere tables' passes over the measured air (None:
+    /// photo.rs could not place its medium, the default passes stand in; logged once).
+    fn atmo_photo_pipes(&self) -> Option<&[wgpu::ComputePipeline; 3]> {
+        self.atmo_photo
+            .get_or_init(|| {
+                let Some(src) = crate::photo::atmo_luts_source() else {
+                    eprintln!("photo finish: sky_atmo_luts.wgsl's medium was not found; the atmosphere tables keep the default air");
+                    return None;
+                };
+                let d = &self.device;
+                let m = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("sky_atmo_luts.wgsl (photo)"), source: wgpu::ShaderSource::Wgsl(src.into()) });
+                let compute = |label: &str, e: &str| d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some(label), layout: Some(&self.atmo_layout), module: &m, entry_point: Some(e), compilation_options: Default::default(), cache: None });
+                Some([compute("sky_atmo_trans_photo", "at_trans_main"), compute("sky_atmo_ms_photo", "at_ms_main"), compute("sky_atmo_view_photo", "at_view_main")])
+            })
+            .as_ref()
+    }
+
     pub fn world_time(&self) -> f64 {
         self.state.lock().unwrap().world_s
+    }
+
+    /// The frame time each update advances the world clock by (`set_clock`;
+    /// 1/60 s by default). The probe grid's fades run on it (lighting).
+    pub fn frame_dt(&self) -> f64 {
+        self.state.lock().unwrap().dt
     }
 
     /// The weather in force (preset, or the schedule at the world clock,
@@ -971,6 +1270,26 @@ impl SkyGpu {
     /// The waterside cells: a grid of `cols` x `rows` cells of `cell` metres
     /// from `corner` (x, z), `cells` row-major (true: within the waterside
     /// reach of the shore). At most `WATER_CELLS_MAX` on a side.
+    /// (`--look cinematic`, stage L2) The street lamp palette (eo-sky
+    /// `cine_lamps::PaletteGrid`): each street's lamp colour and axis, read by
+    /// the gather where a street luminaire stands (sky_lights.wgsl
+    /// `lt_cine_street`). Its corner becomes the waterside grid's (eo-app
+    /// builds both on the elevation grid's corner). Nothing is written without
+    /// the look compiled in (the masks then have no room for it) or for a grid
+    /// over `PALETTE_CELLS_MAX` on a side. Returns whether it was kept.
+    pub fn set_lamp_palette(&self, queue: &wgpu::Queue, grid: &eo_sky::cine_lamps::PaletteGrid) -> bool {
+        if (self.masks.size() as usize) < (MASK_WORDS + PALETTE_WORDS) * 4 || grid.cols > PALETTE_CELLS_MAX || grid.rows > PALETTE_CELLS_MAX || grid.cell <= 0.0 {
+            return false;
+        }
+        let words = grid.words();
+        queue.write_buffer(&self.masks, MASK_WORDS as u64 * 4, bytemuck::cast_slice(&words[..words.len().min(PALETTE_WORDS)]));
+        let mut s = self.state.lock().unwrap();
+        s.water.0[0] = grid.corner[0] as f32;
+        s.water.0[1] = grid.corner[1] as f32;
+        s.palette = (grid.cell as f32, grid.cols as u32, grid.rows as u32);
+        true
+    }
+
     pub fn set_waterside(&self, queue: &wgpu::Queue, corner: [f64; 2], cell: f64, cols: usize, rows: usize, cells: &[bool]) {
         let (cols, rows) = (cols.min(WATER_CELLS_MAX), rows.min(WATER_CELLS_MAX));
         let mut words = vec![0u32; (cols * rows).div_ceil(32).max(1)];
@@ -1024,6 +1343,53 @@ impl SkyGpu {
         }
     }
 
+    /// (`--shop-light`, stage N1) The shop windows' lights (shop_lights.rs
+    /// `build`; replaces the set, once their placement is done): gathered each
+    /// night frame near the eye (`SkyOptions::shop_light`'s reach), lit by
+    /// their hours. An empty set binds the stand-in and gathers nothing.
+    pub fn set_shop_lights(&self, queue: &wgpu::Queue, lights: &[crate::shop_lights::GpuShopLight]) {
+        let mut s = self.state.lock().unwrap();
+        s.shops = (!lights.is_empty()).then(|| {
+            let b = self.device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("sky-shop-lights"),
+                size: (lights.len() * std::mem::size_of::<crate::shop_lights::GpuShopLight>()) as u64,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            queue.write_buffer(&b, 0, bytemuck::cast_slice(lights));
+            (b, lights.len() as u32)
+        });
+        // The light bind groups carry them: built again.
+        s.lights_bg0 = None;
+        s.agents_bg = None;
+    }
+
+    /// The shop windows' lights handed over (0 before or without them).
+    pub fn shop_light_count(&self) -> u32 {
+        self.state.lock().unwrap().shops.as_ref().map(|(_, n)| *n).unwrap_or(0)
+    }
+
+    /// The last gather's frame list (as many as it kept) and every light
+    /// cluster's list (its count, then its slots): tests and the capture
+    /// cards' census (blocks; diagnostics only).
+    pub fn lights_readback(&self, ctx: &crate::GpuContext) -> anyhow::Result<(Vec<GpuLight>, Vec<Vec<u32>>)> {
+        let copy = |b: &wgpu::Buffer| -> anyhow::Result<Vec<u8>> {
+            let staging = ctx.device.create_buffer(&wgpu::BufferDescriptor { label: Some("sky-lights-readback"), size: b.size(), usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+            let mut enc = ctx.device.create_command_encoder(&Default::default());
+            enc.copy_buffer_to_buffer(b, 0, &staging, 0, b.size());
+            ctx.queue.submit([enc.finish()]);
+            crate::read_mapped(ctx, &staging)
+        };
+        let count: Vec<u32> = bytemuck::pod_collect_to_vec(&copy(&self.counter)?);
+        let n = (count[0] as usize).min(FRAME_LIGHT_CAP as usize);
+        let lights: Vec<GpuLight> = bytemuck::pod_collect_to_vec(&copy(&self.frame_lights)?);
+        let words: Vec<u32> = bytemuck::pod_collect_to_vec(&copy(&self.clusters)?);
+        let ncl = (CLUSTERS[0] * CLUSTERS[1] * CLUSTERS[2]) as usize;
+        let cap = CLUSTER_CAP as usize;
+        let clusters = (0..ncl).map(|c| words[ncl + c * cap..ncl + c * cap + (words[c] as usize).min(cap)].to_vec()).collect();
+        Ok((lights[..n].to_vec(), clusters))
+    }
+
     /// This frame's sub-pixel jitter (NDC), zero without TAA.
     pub fn jitter(&self) -> [f32; 2] {
         let s = self.state.lock().unwrap();
@@ -1069,17 +1435,30 @@ impl SkyGpu {
         // a clock jump of a quarter hour or more is a cut too (the clouds and
         // the frame of another hour must not linger in the histories: a blue-hour
         // card taken after a golden one kept the golden clouds for its settle).
-        let jumped = s.adapt.last_hour.is_some_and(|h| (h - f.hour).abs() >= 0.25);
+        // `--smooth-time`: the clock's distance wraps at midnight (a moving clock
+        // passes it), and only a weather change of `WEATHER_RECUT_STEPS` key steps or of
+        // kind between two updates recuts the histories (a schedule's slow drift does not).
+        let smooth = s.smooth;
+        let hour_gap = |a: f64, b: f64| {
+            let d = (a - b).abs();
+            if smooth { d.rem_euclid(24.0).min(24.0 - d.rem_euclid(24.0)) } else { d }
+        };
+        let weather_moved = |a: (i64, i64, i64), b: (i64, i64, i64)| {
+            if smooth { a.2 != b.2 || (a.0 - b.0).abs() >= WEATHER_RECUT_STEPS || (a.1 - b.1).abs() >= WEATHER_RECUT_STEPS } else { a != b }
+        };
+        let jumped = s.adapt.last_hour.is_some_and(|h| hour_gap(h, f.hour) >= 0.25);
         // A change of hour or weather discards the histories for two frames (the first
         // frame after a change may still carry the last look's terms).
         let look_now = (f.hour, weather_key(&terms.weather));
-        if s.hist_look.is_some_and(|l| (l.0 - look_now.0).abs() >= 0.25 || l.1 != look_now.1) {
+        if s.hist_look.is_some_and(|l| hour_gap(l.0, look_now.0) >= 0.25 || weather_moved(l.1, look_now.1)) {
             s.recut = 2;
         }
         s.hist_look = Some(look_now);
         // the recut frames count down per encoded frame (in `encode`), not per update.
         let recut = s.recut > 0;
-        let cut = s.prev_vp.is_none() || cam.eye.distance(prev_eye) > 25.0 || jumped || recut || s.cut_hold;
+        // a camera cut: the first frame, or a move of more than 25 m (a teleport).
+        let camera_cut = s.prev_vp.is_none() || cam.eye.distance(prev_eye) > 25.0;
+        let cut = camera_cut || jumped || recut || s.cut_hold;
         s.cut_hold = cut;
         // Frames of history since the cut: the volume averages them evenly until its
         // own weight takes over (one frame no longer stands for a dozen).
@@ -1106,13 +1485,18 @@ impl SkyGpu {
         };
         let turned = s.meter_fwd.is_some_and(|p| p.dot(cam.forward()) < 0.87);
         s.meter_fwd = Some(cam.forward());
-        if cut || turned {
+        // (`--smooth-time`: neither a turn nor a clock jump resets it; `step_smooth` converges.)
+        if (cut || turned) && !smooth {
             s.adapt.current = None;
         }
         // Exposure: the target (weather, night solve, the meter), filtered.
-        let target = terms.exposure_target * meter;
+        let mut target = terms.exposure_target * meter;
+        if let Some(d) = s.bore_depth {
+            // in a tunnel's bore (`--tunnels`): adapted to its lighting, the meter giving way.
+            target = terms.exposure_target * crate::structures::bore_exposure_gain(f, terms, meter, d);
+        }
         let exposure = if o.adaptation {
-            s.adapt.step(target, f.hour, dt)
+            if smooth { s.adapt.step_smooth(target, f.hour, dt, camera_cut) } else { s.adapt.step(target, f.hour, dt) }
         } else {
             s.adapt.last_hour = Some(f.hour);
             target
@@ -1150,7 +1534,8 @@ impl SkyGpu {
         // not grow with the twilight; it shows once the sky is darker than it,
         // from nautical twilight: sun -6 .. -12 deg)
         let glow = terms.lamps_on * (1.0 - eo_look::math::smoothstep(-12.0, -6.0, f.model.sun.altitude_deg)) * w.profile.urban_glow / eo_sky::weather::CLEAR.urban_glow;
-        let pool = eo_sky::lights::street_lamp_color();
+        // (lighting, `--light-shadows`) the glow in the LED lamps' colour.
+        let pool = if s.led { eo_sky::lights::led_street_lamp_color() } else { eo_sky::lights::street_lamp_color() };
         let night_sky = {
             static N: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
             *N.get_or_init(|| eo_look::math::luminance(eo_look::sky::SkyModel::new(1.0).sky_irradiance()) / std::f64::consts::PI)
@@ -1173,7 +1558,18 @@ impl SkyGpu {
         // cumulus field bright peach. It lights the volume only as the
         // twilight fades (sun -4 .. -12 deg).
         let moon_keys = terms.moon_key > 0.0 && f.key_dir == terms.moon.dir;
-        let moon_fade = if moon_keys { eo_look::math::smoothstep(-4.0, -12.0, alt) } else { 1.0 };
+        // (`--smooth-time`: by the moon's weight in the key, which blends instead of switching.)
+        let moon_weight = if smooth { terms.moon_weight } else if moon_keys { 1.0 } else { 0.0 };
+        let moon_fade = if smooth {
+            1.0 + (eo_look::math::smoothstep(-4.0, -12.0, alt) - 1.0) * moon_weight
+        } else if moon_keys {
+            eo_look::math::smoothstep(-4.0, -12.0, alt)
+        } else {
+            1.0
+        };
+        // (`--smooth-time`: the clouds hand over to the moon only once the Earth's
+        // shadow has risen over them, `CLOUD_MOON_HANDOVER_DEG`; sky_clouds.wgsl `cl_sun`.)
+        let cloud_moon = moon_weight * (1.0 - eo_look::math::smoothstep(CLOUD_MOON_HANDOVER_DEG[1], CLOUD_MOON_HANDOVER_DEG[0], alt));
         let vkey = {
             let l = eo_look::math::luminance(f.key);
             f.key.map(|v| (v + (l - v) * neutral) * moon_fade)
@@ -1186,6 +1582,28 @@ impl SkyGpu {
         let vkey = {
             let k = eo_look::math::smoothstep(-2.0, 0.5, alt) * (1.0 - eo_look::math::smoothstep(1.5, 4.0, alt)) * (1.0 - ovc);
             [0, 1, 2].map(|i| vkey[i].max(SUNSET_CLOUD_KEY[i] * k))
+        };
+        // `--smooth-time`: the volume's light as the sun's part (its key, at least
+        // the orange above) from the sun's key direction, plus the moon's part
+        // (as above, from -4 deg) from the moon, the direction turning by their
+        // shares (`beam.yzw`, sky_volume.wgsl). Without it the volume took the
+        // surfaces' key direction, which swings to the moon at the ground's
+        // takeover while the light is still the sunset's: a step in the haze.
+        let (vkey, vol_dir) = if smooth {
+            let neutralise = |c: [f64; 3]| {
+                let l = eo_look::math::luminance(c);
+                c.map(|v| v + (l - v) * neutral)
+            };
+            let moon_rgb = eo_sky::moon::COLOR.map(|v| v * terms.moon_intensity);
+            let sun_rgb = [0, 1, 2].map(|i| (f.key[i] - moon_rgb[i]).max(0.0)); // (apply_with's key: the sun's share plus the moon)
+            let k = eo_look::math::smoothstep(-2.0, 0.5, alt) * (1.0 - eo_look::math::smoothstep(1.5, 4.0, alt)) * (1.0 - ovc);
+            let vsun = { let n = neutralise(sun_rgb); [0, 1, 2].map(|i| n[i].max(SUNSET_CLOUD_KEY[i] * k)) };
+            let vmoon = neutralise(moon_rgb).map(|v| v * eo_look::math::smoothstep(-4.0, -12.0, alt));
+            let (ls, lm) = (eo_look::math::luminance(vsun), eo_look::math::luminance(vmoon));
+            let share = if ls + lm > 0.0 { lm / (ls + lm) } else { 0.0 };
+            ([0, 1, 2].map(|i| vsun[i] + vmoon[i]), eo_look::blend::slerp_dir(eo_look::rig::key_direction(f.hour), terms.moon.dir, share))
+        } else {
+            (vkey, f.key_dir)
         };
         // The sky's light on the clouds: Preetham's irradiance is a deep blue
         // (B/R 5.8 at noon); skylight on a cloud is B/R ~1.5-2: half-way to grey.
@@ -1208,7 +1626,12 @@ impl SkyGpu {
             let h = (s[0] * s[0] + s[2] * s[2]).sqrt().max(1e-6);
             eo_look::sky::afterglow_arch([s[0] / h, 0.02, s[2] / h], s, m.ext.afterglow)
         };
-        let atmo_haze = (ATMO_HAZE * (1.0 + 2.0 * w.profile.haze)) as f32;
+        // (`--photo-finish`) San Francisco's measured air (eo-sky `photo`): the tables'
+        // aerosol (and its albedo and scale height: `atmo_photo`'s passes, photo.rs
+        // `atmo_luts_source`), the aerial perspective's extinction (`atmo3.y` below);
+        // the lens's bloom (eo-look `tone`).
+        let photo = s.photo > 0;
+        let atmo_haze = if photo { eo_sky::photo::lut_density(w.profile.haze) as f32 } else { (ATMO_HAZE * (1.0 + 2.0 * w.profile.haze)) as f32 };
         s.atmo_haze = atmo_haze;
         let fwd = cam.forward();
         let right = cam.right();
@@ -1218,19 +1641,33 @@ impl SkyGpu {
         let fall = (3.5 + 1.9 * (1.0 + rate).ln()).clamp(3.5, 9.5);
         let live_near = 0.1 + 0.9 * (rate / 25.0).sqrt();
         let live_far = ((rate - 1.5) / 18.0).clamp(0.0, 1.0);
-        let threshold = 2.101 / exposure.max(1e-3);
+        // (`--look cinematic`, stage L1) the look's bloom (eo-look `cinematic::grade`): a lower,
+        // softer threshold, a higher ceiling, the levels' weights summing to the share the
+        // cinematic post pass takes off each pixel (energy kept); over the photo finish's too
+        // (one bloom).
+        let cine = o.cinematic;
+        let threshold = if cine { eo_look::cinematic::grade::CINE_BLOOM_THRESHOLD_X / exposure.max(1e-3) } else if photo { eo_look::tone::PHOTO_BLOOM_THRESHOLD_X / exposure.max(1e-3) } else { 2.101 / exposure.max(1e-3) };
         let (strength, radius) = (0.26, 0.22);
-        let mw = [1.0, 0.8, 0.6, 0.4, 0.2].map(|fv: f64| ((fv + (1.2 - fv - fv) * radius) * strength) as f32);
+        let mw = if cine { eo_look::cinematic::grade::bloom_weights().map(|v| v as f32) } else if photo { eo_look::tone::PHOTO_BLOOM_WEIGHTS.map(|v| v as f32) } else { [1.0, 0.8, 0.6, 0.4, 0.2].map(|fv: f64| ((fv + (1.2 - fv - fv) * radius) * strength) as f32) };
         let lamp_k = terms.lamp_units_per_lux;
         let lamps_on = if o.lights { terms.lamps_on } else { 0.0 };
+        // (`--shop-light`) the shop windows' lights, once placed: lit with the rooms
+        // behind kit glass (rooms.rs `drive`'s dusk), at the lamps' units per candela.
+        let shop_n = s.shops.as_ref().filter(|_| o.shop_light > 0 && o.lights).map(|(_, n)| *n).unwrap_or(0);
+        let shop_k = if shop_n > 0 { lamp_k * crate::rooms::drive(f.model.sun.altitude_deg, f.hour).0[0] as f64 } else { 0.0 };
+        let shop_bits = if shop_n > 0 { crate::shop_lights::SKY_SHOPS | if o.shop_light >= 2 { crate::shop_lights::SKY_SHOPS_FAR } else { 0 } } else { 0 };
         let veh = if o.lights { terms.vehicle_lamps } else { 0.0 };
         let moon = terms.moon;
         let volume_ok = depth_ok && o.needs_volume();
+        // stage A8 (`--tunnels`): the bores' interior irradiance (0 without bores or lights).
+        let bore_units = if s.tunnel_lamps && o.lights { crate::structures::bore_interior_units(f, terms) } else { 0.0 };
+        // (lighting, `--lit-fog`) any local light lit this frame.
+        s.lights_live = lamps_on > 0.0 || veh > 0.0 || bore_units > 0.0;
         let u = SkyUniform {
             vp: vp.to_cols_array_2d(),
             prev_vp: prev_vp.to_cols_array_2d(),
             eye: [cam.eye.x, cam.eye.y, cam.eye.z, (world_s % 86400.0) as f32],
-            prev_eye: prev_eye.extend(1.0).to_array(),
+            prev_eye: prev_eye.extend(o.cumulus_weight(cam.eye)).to_array(),
             jitter: [s.jitter[0], s.jitter[1], s.prev_jitter[0], s.prev_jitter[1]],
             taa: [if o.taa && depth_ok { 1.0 } else { 0.0 }, if s.history_valid && !cut { s.hist_n.max(1) as f32 } else { 0.0 }, 0.1, dt.max(1e-4) as f32],
             res: [out_size.0 as f32, out_size.1 as f32, 1.0 / out_size.0.max(1) as f32, 1.0 / out_size.1.max(1) as f32],
@@ -1245,7 +1682,7 @@ impl SkyGpu {
                 if o.fog { (eo_sky::weather::MARINE_FOG_SIGMA * 0.8) as f32 } else { 0.0 },
             ],
             cloud4: [marine[0] as f32, marine[1] as f32, haze_sigma as f32, 400.0],
-            sun_rad: v4(vkey, if terms.moon_key > 0.0 && f.key_dir == moon.dir { 1.0 } else { 0.0 }),
+            sun_rad: v4(vkey, if smooth { cloud_moon } else if terms.moon_key > 0.0 && f.key_dir == moon.dir { 1.0 } else { 0.0 }),
             amb_top: v4(amb_top, glow),
             amb_base: v4(amb_base, o.cloud_steps() as f64),
             wet: [if o.wet { w.wetness as f32 } else { 0.0 }, w.puddle_fill as f32, if o.rain || o.wet { rate as f32 } else { 0.0 }, (world_s % 3600.0) as f32],
@@ -1259,12 +1696,17 @@ impl SkyGpu {
             night: [lamps_on as f32, terms.dusk as f32, terms.nightness as f32, veh as f32],
             moon: v4(moon.dir, if o.moon_stars { terms.moon_disc } else { 0.0 }),
             stars: [if o.moon_stars { terms.star_level as f32 } else { 0.0 }, (f.hour * 15.041 * std::f64::consts::PI / 180.0) as f32, moon.illuminated as f32, if moon.waxing { 1.0 } else { 0.0 }],
-            bloom: [threshold as f32, 0.55, 1.0, if o.bloom { 1.0 } else { 0.0 }],
-            bloom_w: [mw[0], mw[1], mw[2], mw[3]],
-            bloom_w2: [mw[4], 4.0, lamp_k as f32, w.profile.lamp_haze as f32],
-            flags: [o.bits(), s.frame, (o.ssr && s.history_valid && !cut) as u32, volume_ok as u32],
-            beam: [eo_sky::night::mean_beam(w) as f32, 0.0, 0.0, 0.0],
-            twi: v4(twi, 0.0),
+            // (`--look cinematic`: z the lamp glare's angle, rad; the default's z 1 is read by nothing)
+            bloom: [threshold as f32, if cine { eo_look::cinematic::grade::CINE_BLOOM_KNEE as f32 } else if photo { eo_look::tone::PHOTO_BLOOM_KNEE as f32 } else { 0.55 }, if cine { eo_look::cinematic::grade::CINE_GLARE_ANGLE_DEG.to_radians() as f32 } else { 1.0 }, if o.bloom { 1.0 } else { 0.0 }],
+            // (the levels' weights reach the pyramid through `bloom_levels`; no shader reads these.
+            // `--look cinematic`: the lamp glare's share, longest ray (px of this frame), the EV it
+            // starts at and, negative (the look's mark), its EV range: sky_fx.wgsl `fx_glare`.)
+            bloom_w: if cine { glare_params(out_size.1) } else { [mw[0], mw[1], mw[2], mw[3]] },
+            bloom_w2: [mw[4], if cine { eo_look::cinematic::grade::CINE_BLOOM_CEILING as f32 } else if photo { eo_look::tone::PHOTO_BLOOM_CEILING as f32 } else { 4.0 }, lamp_k as f32, w.profile.lamp_haze as f32],
+            flags: [o.bits() | shop_bits | if w.kind == eo_sky::Kind::Damp { SKY_DAMP_BIT } else { 0 }, s.frame, (o.ssr && s.history_valid && !cut) as u32, volume_ok as u32],
+            // yzw: `--smooth-time`'s light direction for the volume (0 without it).
+            beam: if smooth { [eo_sky::night::mean_beam(w) as f32, vol_dir[0] as f32, vol_dir[1] as f32, vol_dir[2] as f32] } else { [eo_sky::night::mean_beam(w) as f32, 0.0, 0.0, 0.0] },
+            twi: v4(twi, bore_units),
             atmo: [m.sun.x as f32, m.sun.y as f32, m.sun.z as f32, ATMO_SKY_SCALE as f32],
             atmo2: [
                 if o.atmosphere { 1.0 } else { 0.0 },
@@ -1273,7 +1715,7 @@ impl SkyGpu {
                 atmo_haze,
                 ATMO_CLOUD_SUN as f32,
             ],
-            sun_glint: sun_glint(f.hour, eo_sky::night::mean_beam(&w)),
+            sun_glint: if smooth { sun_glint_smooth(f.hour, eo_sky::night::mean_beam(&w)) } else { sun_glint(f.hour, eo_sky::night::mean_beam(&w)) },
             atmo3: {
                 // the weather's visibility over clear air's: the range fog reached 95 % at `aerial.far`
                 let far = f.aerial.far.max(100.0);
@@ -1282,7 +1724,8 @@ impl SkyGpu {
                 // pushes the range fog out): surfaces fade to the sky the volume draws behind
                 // them, not to `look.fog_color` (lighter and bluer than the grey fog bank and
                 // rain veil, so the far hills stood out of the fog in front of them).
-                [if o.atmosphere && far < far_clear * 0.97 { 1.0 } else { 0.0 }, (AP_HAZE_PER_KM * 0.001 * (1.0 + 2.0 * w.profile.haze)) as f32, f.aerial.near as f32, far as f32]
+                let ap = if photo { eo_sky::photo::ap_extinction_per_m(w.profile.haze) as f32 } else { (AP_HAZE_PER_KM * 0.001 * (1.0 + 2.0 * w.profile.haze)) as f32 };
+                [if o.atmosphere && far < far_clear * 0.97 { 1.0 } else { 0.0 }, ap, f.aerial.near as f32, far as f32]
             },
         };
         queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&u));
@@ -1294,12 +1737,19 @@ impl SkyGpu {
         // are set to the RP-8 peak (sky_lights.wgsl `lights_props`).
         let props_k = lamp_k / eo_sky::night::lamp_units_per_lux();
         let tiles_any = s.tiles.iter().any(|w| *w != 0);
+        // stage A8 (`--tunnels`): the bores' lamps' pool at the nadir (0 without bores or lights).
+        let tunnel_pool = bore_units / crate::structures::TUNNEL_POOL_OVERLAP;
         let p = LtParams {
             counts: [self.lamp_count.load(Ordering::Relaxed), agents, FRAME_LIGHT_CAP, (s.agents_bg.is_some()) as u32],
             scale: [(lamp_k * lamps_on) as f32, (lamp_k * eo_sky::photometry::LOW_BEAM_PEAK_CD * veh) as f32, 0.0, 45.0],
-            props: [(props_k * lamps_on) as f32, if tiles_any { 1.0 } else { 0.0 }, (eo_sky::photometry::LAMP_POOL_PEAK_LUX * lamp_k * lamps_on) as f32, 0.0],
-            water: s.water.0,
-            water_n: s.water.1,
+            props: [(props_k * lamps_on) as f32, if tiles_any { 1.0 } else { 0.0 }, (eo_sky::photometry::LAMP_POOL_PEAK_LUX * lamp_k * lamps_on) as f32, tunnel_pool as f32],
+            // (`--look cinematic`, stage L2) w the lamp palette's cell (0: none or the look off),
+            // the waterside's z, w its columns and rows (both unread by the gather without the look).
+            water: [s.water.0[0], s.water.0[1], s.water.0[2], if o.cinematic { s.palette.0 } else { 0.0 }],
+            water_n: [s.water.1[0], s.water.1[1], s.palette.1, s.palette.2],
+            led: if s.led { led_params().0 } else { [0.0; 4] },
+            led_key: if s.led { led_params().1 } else { [0.0; 4] },
+            shops: [shop_n as f32, shop_k as f32, f.hour.rem_euclid(24.0) as f32, crate::shop_lights::reach_m(o.shop_light) as f32],
         };
         queue.write_buffer(&self.lt_params, 0, bytemuck::bytes_of(&p));
         let bw: [[f32; 4]; BLOOM_LEVELS] = [[mw[0], 1.0, 0.0, 0.0], [mw[1], 1.0, 0.0, 0.0], [mw[2], 1.0, 0.0, 0.0], [mw[3], mw[4], 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]];
@@ -1319,7 +1769,7 @@ impl SkyGpu {
             Some((ab, mb, n)) => match s.agents_bg.as_mut() {
                 Some(a) => a.0 = n,
                 None => {
-                    let bg = self.lights_bg(Some((ab, mb)), s.props.as_ref());
+                    let bg = self.lights_bg(Some((ab, mb)), s.props.as_ref(), s.shops.as_ref().map(|x| &x.0));
                     s.agents_bg = Some((n, bg));
                 }
             },
@@ -1327,7 +1777,7 @@ impl SkyGpu {
         }
     }
 
-    fn lights_bg(&self, agents: Option<(&wgpu::Buffer, &wgpu::Buffer)>, props: Option<&(wgpu::Buffer, wgpu::Buffer)>) -> wgpu::BindGroup {
+    fn lights_bg(&self, agents: Option<(&wgpu::Buffer, &wgpu::Buffer)>, props: Option<&(wgpu::Buffer, wgpu::Buffer)>, shops: Option<&wgpu::Buffer>) -> wgpu::BindGroup {
         let d = &self.dummy_storage;
         let (ab, mb) = agents.unwrap_or((d, d));
         let (pl, pn) = props.map(|(a, b)| (a, b)).unwrap_or((d, d));
@@ -1349,6 +1799,7 @@ impl SkyGpu {
                 wgpu::BindGroupEntry { binding: 9, resource: pl.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 10, resource: pn.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 11, resource: self.masks.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 12, resource: shops.unwrap_or(d).as_entire_binding() }, // (`--shop-light`)
             ],
         })
     }
@@ -1380,7 +1831,7 @@ impl SkyGpu {
             return;
         }
         if s.agents_bg.is_none() && s.lights_bg0.is_none() {
-            s.lights_bg0 = Some(self.lights_bg(None, s.props.as_ref()));
+            s.lights_bg0 = Some(self.lights_bg(None, s.props.as_ref(), s.shops.as_ref().map(|x| &x.0)));
         }
         let bg = match &s.agents_bg {
             Some((_, bg)) => bg,
@@ -1403,8 +1854,18 @@ impl SkyGpu {
             pass.set_pipeline(&self.lights_pipes[1]);
             pass.dispatch_workgroups(agents.div_ceil(64), 1, 1);
         }
+        // (`--shop-light`) the shop windows' lights, after every other (the frame list's cap drops them first).
+        if let Some((_, n)) = s.shops.as_ref().filter(|(_, n)| *n > 0 && s.opts.shop_light > 0) {
+            pass.set_pipeline(&self.lights_pipes[4]);
+            pass.dispatch_workgroups(n.div_ceil(64), 1, 1);
+        }
         pass.set_pipeline(&self.lights_pipes[2]);
         pass.dispatch_workgroups(ncl, 1, 1);
+        // (`--look cinematic`, stage L3) the streak lights, after the clusters
+        if let (Some(p), true) = (&self.streaks_pipe, s.opts.cinematic) {
+            pass.set_pipeline(p);
+            pass.dispatch_workgroups(1, 1, 1);
+        }
     }
 
     /// The parity of the history the coming resolve writes (the city pass
@@ -1474,7 +1935,7 @@ impl SkyGpu {
                 list.push(bg(src, &mips[i], &ups[i], i));
             }
         }
-        *t = Some(Targets { size, vol, volz, full, fullz, hist, vel, _mips: mips, ups, scene: None, bloom_bgs, bytes });
+        *t = Some(Targets { size, vol, volz, full, fullz, hist, vel, _mips: mips, ups, scene: None, lit_fog_gen: 0, bloom_bgs, bytes });
         let mut s = self.state.lock().unwrap();
         s.history_valid = false;
         true
@@ -1502,7 +1963,13 @@ impl SkyGpu {
     /// After the city and occlusion passes: luminaires and rain into the HDR
     /// scene, the agents' velocity, the volume, the resolve, the bloom.
     /// Returns the parity of the history it wrote (None: nothing ran, post
-    /// reads the HDR scene).
+    /// reads the HDR scene). `mid` is called once a frame between the volume
+    /// and the resolve (the lit fog's hook), with whether the volume and the
+    /// resolve run this frame (false: they are skipped, it is called before
+    /// returning). It runs while the sky's targets are locked, so it must not
+    /// call the `SkyGpu` methods that lock them (`history_view`, `bloom_view`,
+    /// `ensure_targets`, `target_bytes`), nor anything that rebuilds the look's
+    /// main bind groups (`LookGpu::set_lighting_bindings` and the per-feature setters).
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn encode_after(
         &self,
@@ -1516,6 +1983,7 @@ impl SkyGpu {
         look: &crate::look::LookGpu,
         ts: Option<(&wgpu::QuerySet, u32)>,
         depth_now: bool,
+        mid: &mut dyn FnMut(&mut wgpu::CommandEncoder, bool),
     ) -> Option<usize> {
         let tw = |slot: u32| ts.map(|(q, b)| (q, b + slot));
         let empty = |enc: &mut wgpu::CommandEncoder, slot: u32| {
@@ -1535,6 +2003,7 @@ impl SkyGpu {
             for slot in [Q_SKY_FX, Q_SKY_VOLUME, Q_SKY_RESOLVE, Q_SKY_BLOOM] {
                 empty(enc, slot);
             }
+            mid(enc, false); // the lit fog hook (its timestamps), with nothing to composite into
             self.state.lock().unwrap().history_valid = false;
             return None;
         }
@@ -1558,6 +2027,11 @@ impl SkyGpu {
                 // The waterside ones' glitter in the sea (the same list; 6 of the 12 vertices).
                 pass.set_pipeline(&self.glitter_pipe);
                 pass.draw_indirect(&self.counter, 16);
+                // (`--look cinematic`) the brightest lights' glare (the same list; 6 of the 12 vertices).
+                if let (Some(p), true) = (&self.glare_pipe, o.cinematic && o.bloom) {
+                    pass.set_pipeline(p);
+                    pass.draw_indirect(&self.counter, 16);
+                }
             }
             if o.rain {
                 pass.set_pipeline(&self.rain_pipe);
@@ -1588,7 +2062,24 @@ impl SkyGpu {
         // Scene-dependent bind groups.
         let dt = depth.texture();
         let ht = hdr.texture();
-        if t.scene.as_ref().is_none_or(|(d, h, _)| d != dt || h != ht) {
+        // (lighting, `--lit-fog`) the lit fog's volume (or its stand-ins) at resolve bindings 10 and 11.
+        let (fog_gen, fog_bind) = {
+            let b = self.lit_fog_bind.lock().unwrap();
+            (b.0, b.1.clone())
+        };
+        // (stage L4) the far sun shadow map's generation rides in the high half of the key.
+        let (far_gen, far_bind) = {
+            let b = self.far_shadow_bind.lock().unwrap();
+            (b.0, b.1.clone())
+        };
+        let fog_gen = fog_gen.wrapping_add(far_gen << 32);
+        let far_view = far_bind.as_ref().unwrap_or(&self.far_shadow_stand_in);
+        if t.scene.as_ref().is_none_or(|(d, h, _)| d != dt || h != ht) || t.lit_fog_gen != fog_gen {
+            t.lit_fog_gen = fog_gen;
+            let (fog_view, fog_state) = match &fog_bind {
+                Some((v, b)) => (v, b),
+                None => (&self.lit_fog_stand_in.0, &self.lit_fog_stand_in.1),
+            };
             let d = &self.device;
             let volume = |p: usize| {
                 d.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -1616,6 +2107,7 @@ impl SkyGpu {
                         wgpu::BindGroupEntry { binding: 17, resource: wgpu::BindingResource::TextureView(&self.clouds.curl_view) },
                         wgpu::BindGroupEntry { binding: 18, resource: wgpu::BindingResource::TextureView(&self.clouds.shadow_view) },
                         wgpu::BindGroupEntry { binding: 19, resource: wgpu::BindingResource::TextureView(&self.clouds.blue_view) },
+                        wgpu::BindGroupEntry { binding: 20, resource: wgpu::BindingResource::TextureView(far_view) }, // (stage L4)
                     ],
                 })
             };
@@ -1654,6 +2146,8 @@ impl SkyGpu {
                         wgpu::BindGroupEntry { binding: 7, resource: wgpu::BindingResource::TextureView(&t.vel) },
                         wgpu::BindGroupEntry { binding: 8, resource: wgpu::BindingResource::Sampler(&self.lin) },
                         wgpu::BindGroupEntry { binding: 9, resource: wgpu::BindingResource::TextureView(&self.atmo_views[0]) },
+                        wgpu::BindGroupEntry { binding: 10, resource: wgpu::BindingResource::TextureView(fog_view) },
+                        wgpu::BindGroupEntry { binding: 11, resource: fog_state.as_entire_binding() },
                     ],
                 })
             };
@@ -1665,15 +2159,20 @@ impl SkyGpu {
         // the atmosphere tables, before the volume reads them.
         if o.atmosphere && o.needs_volume() {
             // The transmittance and multiple-scattering tables only when the medium changed (0.3-0.4 ms each frame otherwise).
-            let first = {
+            let (first, photo) = {
                 let mut s = self.state.lock().unwrap();
                 let rebuild = s.atmo_built != Some(s.atmo_haze);
                 s.atmo_built = Some(s.atmo_haze);
-                if rebuild { 0 } else { 2 }
+                (if rebuild { 0 } else { 2 }, s.photo > 0)
+            };
+            // (`--photo-finish`) the measured air's passes (the default passes untouched).
+            let pipes = match (photo, self.atmo_photo.get()) {
+                (true, Some(Some(p))) => p,
+                _ => &self.atmo_pipes,
             };
             let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("sky-atmosphere"), timestamp_writes: None });
             for k in first..3 {
-                pass.set_pipeline(&self.atmo_pipes[k]);
+                pass.set_pipeline(&pipes[k]);
                 pass.set_bind_group(0, &self.atmo_bgs[k], &[]);
                 pass.dispatch_workgroups(self.atmo_sizes[k].0.div_ceil(8), self.atmo_sizes[k].1.div_ceil(8), 1);
             }
@@ -1695,6 +2194,8 @@ impl SkyGpu {
                 pass.dispatch_workgroups(t.size.0.div_ceil(8), t.size.1.div_ceil(8), 1);
             }
         }
+        // the lit fog hook, between the volume and the resolve.
+        mid(enc, true);
         // Resolve into history[parity].
         {
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -1797,6 +2298,52 @@ pub fn sun_glint(hour: f64, beam: f64) -> [f32; 4] {
     [(c[0] * k) as f32, (c[1] * k) as f32, (c[2] * k) as f32, app.to_radians().sin() as f32]
 }
 
+/// `--smooth-time`: `sun_glint` with the rig's unenveloped key taken between
+/// the two rows with the sun up either side of the hour, linear in the hour,
+/// instead of from the nearest one (which stepped at each row's midpoint).
+pub fn sun_glint_smooth(hour: f64, beam: f64) -> [f32; 4] {
+    use eo_look::rig;
+    let alt = eo_look::sun::sun_direction(hour).altitude_deg;
+    let a = alt.max(-1.5);
+    let app = alt + 1.0 / ((a + 7.31 / (a + 4.4)).to_radians()).tan() / 60.0;
+    if app <= -0.27 {
+        return [0.0; 4];
+    }
+    // the rows with the sun up (as `sun_glint`'s), the nearest before and after the hour.
+    let (mut before, mut after): (Option<(f64, f64, [f64; 3])>, Option<(f64, f64, [f64; 3])>) = (None, None);
+    for r in rig::table() {
+        let s = eo_look::sun::sun_direction(r.hour).altitude_deg;
+        let e = rig::key_envelope(s) * rig::direct_beam_transmittance(s);
+        if e <= 0.02 {
+            continue;
+        }
+        let row = (r.hour, r.sun_intensity / e, r.sun_color);
+        if r.hour <= hour && before.is_none_or(|b| r.hour > b.0) {
+            before = Some(row);
+        }
+        if r.hour >= hour && after.is_none_or(|b| r.hour < b.0) {
+            after = Some(row);
+        }
+    }
+    let best = match (before, after) {
+        (Some(b), Some(n)) if n.0 > b.0 => {
+            let t = (hour - b.0) / (n.0 - b.0);
+            (b.1 + (n.1 - b.1) * t, [0, 1, 2].map(|i| b.2[i] + (n.2[i] - b.2[i]) * t))
+        }
+        (Some(b), _) => (b.1, b.2),
+        (None, Some(n)) => (n.1, n.2),
+        (None, None) => (0.0, [1.0, 1.0, 1.0]),
+    };
+    let e0 = app.max(0.0);
+    let am = 1.0 / (e0.to_radians().sin() + 0.50572 * (e0 + 6.07995).powf(-1.6364));
+    let t = 0.7f64.powf(am.powf(0.678)) * smoothstep_f(-0.27, 0.27, app);
+    let ray = [5.802e-3, 13.558e-3, 33.1e-3];
+    let g = (-ray[1] * 8.0 * am).exp();
+    let c = [0, 1, 2].map(|i| best.1[i] * (-ray[i] * 8.0 * am).exp() / g.max(1e-9));
+    let k = best.0 * t * beam;
+    [(c[0] * k) as f32, (c[1] * k) as f32, (c[2] * k) as f32, app.to_radians().sin() as f32]
+}
+
 fn smoothstep_f(a: f64, b: f64, x: f64) -> f64 {
     let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
@@ -1810,6 +2357,30 @@ pub const ATMO_CLOUD_SUN: f64 = 12.0; // 12 (8): a sunlit cumulus face was 1-1.9
 pub const AP_HAZE_PER_KM: f64 = 0.06;
 
 pub const SUNSET_CLOUD_KEY: [f64; 3] = [2.6, 1.0, 0.32];
+
+/// `--smooth-time`: the sun altitudes (degrees) between which the clouds hand
+/// their light over from the sun to the moon's key (`SkyUniform::sun_rad.w`).
+/// Without the option they switch when the moon takes the ground's key, about
+/// 0.2 deg before the sun sets, while every deck is still sunlit through the
+/// atmosphere (a step on every cloud). The Earth's shadow stands about
+/// R (sec(depression) - 1) over the ground: 1 km at -1 deg, 9 km at -3 deg,
+/// 16 km at -4 deg, so by -4 deg no deck sees the sun.
+pub const CLOUD_MOON_HANDOVER_DEG: [f64; 2] = [-1.0, -4.0];
+
+/// `--smooth-time`: a weather change recuts the histories only when its severity
+/// or wetness moved this many `weather_key` steps (1/50 each, so 0.1) between two
+/// updates, or its kind changed: a preset switched, not a schedule drifting.
+pub const WEATHER_RECUT_STEPS: i64 = 5;
+
+/// (`--look cinematic`, stage L1) the lamp glare's parameters in the sky
+/// uniform's `bloom_w` (sky_fx.wgsl `fx_glare`): its energy share, its longest
+/// ray in pixels of a frame `out_h` lines high, the EV (threshold-bright pixels'
+/// worth of light, log2) it starts at, and minus its EV range (negative: the
+/// look's mark; the default's weights there are positive).
+pub fn glare_params(out_h: u32) -> [f32; 4] {
+    use eo_look::cinematic::grade as g;
+    [g::CINE_GLARE_SHARE as f32, (g::CINE_GLARE_LENGTH_PX * out_h.max(1) as f64 / 1080.0) as f32, g::CINE_GLARE_EV[0] as f32, -((g::CINE_GLARE_EV[1] - g::CINE_GLARE_EV[0]) as f32)]
+}
 
 pub fn weather_key(w: &eo_sky::WeatherState) -> (i64, i64, i64) {
     ((w.severity * 50.0).round() as i64, (w.wetness * 50.0).round() as i64, w.kind as i64)

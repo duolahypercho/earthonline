@@ -562,6 +562,15 @@ fn wo_volume(path: f32, tv: vec3<f32>, l: vec3<f32>, sun: vec3<f32>, sky_irr: ve
 }
 
 // `underwaterLightModulation` (sun share 0.6, no caustics), clear constants.
+// Optical estimates for a sheltered, silty shoreline. Smoothly return to
+// open-bay values beyond the sampled cove. Coordinates use the city's map scale.
+fn wo_cove(xz: vec2<f32>) -> f32 {
+    if (!W_COVE_DETAIL) { return 0.0; }
+    return lk_cove_weight(xz / W_COVE_SCALE);
+}
+const WO_COVE_A = vec3<f32>(1.12, 0.93, 1.14);
+const WO_COVE_S = vec3<f32>(0.16, 0.20, 0.15);
+
 fn wo_underwater(depth: f32, l: vec3<f32>) -> vec3<f32> {
     let sig_t = vec3<f32>(0.432, 0.093, 0.059);
     let ls = refract(-l, vec3<f32>(0.0, 1.0, 0.0), 1.0 / WO_IOR);
@@ -592,8 +601,16 @@ fn w_caustic(receiver: vec3<f32>, depth: f32, sun_up: vec3<f32>) -> f32 {
 fn w_shadow(world: vec3<f32>, ng: vec3<f32>) -> f32 {
     let vd = dot(world - look.cam_pos.xyz, look.cam_fwd.xyz);
     let split = look.cascade_split;
-    if (vd >= split.z || look.key_dir.w <= 0.0) {
+    if (look.key_dir.w <= 0.0) {
         return 1.0;
+    }
+    // past the cascades the far sun shadow map (far_shadow.wgsl, `--far-shadows`): the city's shadow on the bay.
+    let far = lk_far_on();
+    if (vd >= split.z) {
+        if (!far) {
+            return 1.0;
+        }
+        return mix(1.0, lk_far_shadow(world, ng), look.key_dir.w);
     }
     var c = 0;
     if (vd > split.x) {
@@ -614,6 +631,9 @@ fn w_shadow(world: vec3<f32>, ng: vec3<f32>) -> f32 {
         + textureSampleCompareLevel(lk_shadow_map, lk_shadow_cmp, uv + vec2<f32>(-h, h), c, z)
         + textureSampleCompareLevel(lk_shadow_map, lk_shadow_cmp, uv + vec2<f32>(h, h), c, z));
     let fade = lk_smooth(split.w, split.z, vd);
+    if (far && fade > 0.0) {
+        return mix(1.0, mix(vis, lk_far_shadow(world, ng), fade), look.key_dir.w);
+    }
     return mix(1.0, mix(vis, 1.0, fade), look.key_dir.w);
 }
 
@@ -921,7 +941,14 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
             // within a few millimetres to centimetres of its level.
             let rag = mx_noise(vec3<f32>(p * 0.7, 3.3)) * 0.6 + mx_noise(vec3<f32>(p * 2.3, 1.1)) * 0.4;
             if (film > 0.5 && column < 0.012 * (rag + 0.9)) {
-                discard;
+                // Past the edge the sand shows as the frame drew it: wholly see-through
+                // (fs_copy draws the copy there, fs_blend's alpha is 0), not a discard,
+                // which left these pixels black (a black rim along the swash's edge).
+                var bare: Shade;
+                bare.through = vec3<f32>(1.0);
+                bare.uv = uv_here;
+                bare.mirror_uv = uv_here;
+                return bare;
             }
         }
     }
@@ -1076,6 +1103,20 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
         // the sea a stale blue).
         let sky_like = max(wg_smooth(0.55, 0.85, min(lp, la) / max(max(lp, la), 1e-6)), wg_smooth(0.12, 0.35, rup.y));
         dome = mix(pr, dome, sky_like);
+    } else if (pg_live()) {
+        // the probe grid (`--probe-grid`, probe_grid.wgsl) in the single probe's
+        // place: the probes round this point of the water, the same test of
+        // its sky, the drawn dome where no probe reaches.
+        let ps = pg_select(world);
+        if (ps.cover > 0.0) {
+            let lod = clamp(lx_probe_table[0].y + 2.0 * log2(max(1.16 * roughness, 1e-4)), 0.0, lx_probe_table[0].z - 1.0);
+            let pr = pg_sample(ps, rup, lod);
+            let an = lk_sky_sample(rup);
+            let lp = lk_luma(pr);
+            let la = lk_luma(an);
+            let sky_like = max(wg_smooth(0.55, 0.85, min(lp, la) / max(max(lp, la), 1e-6)), wg_smooth(0.12, 0.35, rup.y));
+            dome = mix(dome, mix(pr, dome, sky_like), ps.cover);
+        }
     }
     // the dark sea a below-horizon ray stands in for, from the sky this mirror shows.
     let sky0 = mix(dome * 0.35, dome, wg_smooth(-0.12, 0.08, r.y));
@@ -1236,9 +1277,10 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
 
     // --- the water column: refracted view ray, path to the bottom in the frame.
     let ocean = wg_ocean(world.x);
-    var sig_a = mix(WO_BAY_A, WO_COAST_A, ocean);
-    var sig_s = mix(WO_BAY_S, WO_COAST_S, ocean);
-    var bb = mix(WO_BAY_BB, WO_COAST_BB, ocean);
+    let cove = wo_cove(world.xz);
+    var sig_a = mix(mix(WO_BAY_A, WO_COAST_A, ocean), WO_COVE_A, cove);
+    var sig_s = mix(mix(WO_BAY_S, WO_COAST_S, ocean), WO_COVE_S, cove);
+    var bb = mix(mix(WO_BAY_BB, WO_COAST_BB, ocean), 0.045, cove);
     // a beach's surf zone carries churned sand: opaque grey-green to
     // tan, never clear blue (strongest inside the break, gone past 450 m).
     // (sea r3: not in a wave's rising face, which is clearer green-grey water drawn up from outside the break)
@@ -1283,7 +1325,7 @@ fn w_shade(world: vec3<f32>, base: vec2<f32>, frag: vec4<f32>, with_copy: bool) 
     // the bay is turbid (visibility under a metre): the bottom through
     // it fades within about a metre of water, so Crissy's sand is not seen
     // through the strait.
-    vol.tview = vol.tview * exp(-vec3<f32>(2.5) * path * (1.0 - wg_ocean(world.x))); // (2.5 / m: a wall under 0.5 m of bay water is barely seen)
+    vol.tview = vol.tview * exp(-vec3<f32>(2.5 * (1.0 - cove)) * path * (1.0 - wg_ocean(world.x))); // (2.5 / m: a wall under 0.5 m of bay water is barely seen)
     // under an overcast the light the body sends up is a dull grey
     // (the weather's overcast weight desaturates it and takes a third off).
     let ovc = clamp(look.wx.x, 0.0, 1.0);

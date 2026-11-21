@@ -17,117 +17,13 @@
     "storeys": "Assessor roll (assessor)"
   },
   "license": "Building geometry generated from open data (DataSF footprints, LiDAR, Assessor roll). Furniture in the fine-s*.glb storeys is decimated from the CC0 pieces listed under `furniture`.",
-  "furniture": [
-    {
-      "kind": "ceiling-lamp",
-      "source": "https://polyhaven.com/a/modern_ceiling_lamp_01",
-      "name": "Modern Ceiling Lamp 01",
-      "authors": [
-        "James Ray Cock"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "wall-sconce",
-      "source": "https://polyhaven.com/a/industrial_wall_sconce",
-      "name": "Industrial Wall Sconce",
-      "authors": [
-        "Ulan Cabanilla"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "bar-stool",
-      "source": "https://polyhaven.com/a/bar_chair_round_01",
-      "name": "Bar Chair Round 01",
-      "authors": [
-        "Dairon Sanchez"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "wine-bottles",
-      "source": "https://polyhaven.com/a/wine_bottles_01",
-      "name": "Wine Bottles 01",
-      "authors": [
-        "Rico Cilliers",
-        "Jurita Burger"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "pendant",
-      "source": "https://polyhaven.com/a/hanging_industrial_lamp",
-      "name": "Hanging Industrial Lamp",
-      "authors": [
-        "Kuutti Siitonen"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "cafe-table",
-      "source": "https://polyhaven.com/a/round_wooden_table_01",
-      "name": "Round Wooden Table 01",
-      "authors": [
-        "Ulan Cabanilla"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "cafe-chair",
-      "source": "https://polyhaven.com/a/dining_chair_02",
-      "name": "Dining Chair 02",
-      "authors": [
-        "James Ray Cock"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "plant-small",
-      "source": "https://polyhaven.com/a/potted_plant_04",
-      "name": "Potted Plant 04",
-      "authors": [
-        "James Ray Cock"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "plant-medium",
-      "source": "https://polyhaven.com/a/potted_plant_02",
-      "name": "Potted Plant 02",
-      "authors": [
-        "Rico Cilliers"
-      ],
-      "license": "CC0-1.0"
-    },
-    {
-      "kind": "frame-a",
-      "source": "https://polyhaven.com/a/hanging_picture_frame_01",
-      "name": "Hanging Picture Frame 01",
-      "authors": [
-        "James Ray Cock"
-      ],
-      "license": "CC0-1.0"
-    }
-  ],
+  "furniture": [],
   "assets": {
     "exterior": {
       "url": "/assets/buildings/sf-building-231047897/exterior.glb",
       "sha256": "d415b16ef0ccb8ec88fe1962c569730071249996dce6d9c2d1ab70890e66ca22",
       "bytes": 404608
     },
-    "interior": {
-      "url": "/assets/buildings/sf-building-231047897/interior.glb",
-      "sha256": "3a2e9bd926dd74d9523cdb28ae4ef342fe7fa56d913689f5d617f992065ed5c7",
-      "bytes": 58304
-    },
-    "fine": [
-      {
-        "storey": 0,
-        "url": "/assets/buildings/sf-building-231047897/fine-s0.glb",
-        "sha256": "3423654daa239cb3006274dc566e508cab4c5827335118bb6af0e8f48bae24dd",
-        "bytes": 81448
-      }
-    ]
+    "fine": []
   }
 }

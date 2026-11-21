@@ -6,6 +6,7 @@ struct UwView {
     @location(0) @interpolate(flat) level: f32,
     @location(1) @interpolate(flat) tilt: vec2<f32>,
     @location(2) @interpolate(flat) atmo_gain: f32,
+    @location(3) @interpolate(flat) exposure: vec3<f32>,
 };
 
 // Invert the horizontal choppiness for the point whose displaced position
@@ -28,6 +29,21 @@ fn uw_vs(@builtin(vertex_index) vi: u32) -> UwView {
     out.level = y;
     out.tilt = slope;
     out.atmo_gain = w_atmo_gain();
+    out.exposure = vec3<f32>(1.0);
+    if (UW_DEPTH_EXPOSURE) {
+        // Open the camera for the downwelling light lost between the surface and eye.
+        // Meter green-weighted luminance. Four stops of
+        // travel preserve a dark deep field. At the interface the gain is exactly one.
+        let cove = wo_cove(xz);
+        let extinction = mix(mix(WO_BAY_A + WO_BAY_S, WO_COAST_A + WO_COAST_S, wg_ocean(xz.x)), WO_COVE_A + WO_COVE_S, cove) * mix(1.0, 0.63, cove);
+        let depth = max(y - wu.cam.y, 0.0);
+        let light = exp(-extinction * depth / 0.75);
+        let meter = max(lk_luma(light), mix(1.0 / 16.0, 1.0 / 5.0, cove));
+        // Partial chromatic adaptation to the local illuminant. The view path
+        // still carries its full spectral extinction and distance-dependent cast.
+        let balance = clamp(sqrt(meter / max(light, vec3<f32>(0.015))), vec3<f32>(0.8), vec3<f32>(1.6));
+        out.exposure = min(balance / meter, vec3<f32>(16.0));
+    }
     return out;
 }
 
@@ -63,7 +79,7 @@ fn uw_air_light(p: vec3<f32>, dir: vec3<f32>) -> vec3<f32> {
 
 // Suspended grains advect with the water. Traverse only the nearby cells
 // that the ray actually enters. Turbidity hides distant grains naturally.
-fn uw_grains(origin: vec3<f32>, ray: vec3<f32>, path: f32, ext: f32) -> f32 {
+fn uw_grains(origin: vec3<f32>, ray: vec3<f32>, path: f32, ext: f32, cove_silt: f32, pixel_cone: f32) -> f32 {
     let cell_m = 0.16;
     let q = (origin - vec3<f32>(0.018, -0.006, 0.009) * wu.cam.w) / cell_m;
     var cell = floor(q);
@@ -77,9 +93,16 @@ fn uw_grains(origin: vec3<f32>, ray: vec3<f32>, path: f32, ext: f32) -> f32 {
         let v = (cell + 0.07 + 0.86 * offsets - q) * cell_m;
         let t = dot(v, ray);
         if (t > 0.08 && t < path) {
-            let r = (0.00045 + 0.00065 * seed) + 0.0006 * t;
+            // Most cove sediment is unresolved and already contributes to volume
+            // scattering. Filter the few visible aggregates over a pixel's cone
+            // and conserve their projected area as they become subpixel.
+            let aggregate = 0.00020 + 0.00062 * seed * seed;
+            let filtered = max(aggregate, t * pixel_cone);
+            let cover = aggregate / filtered;
+            let gain = mix(1.0, (0.28 + 0.16 * seed) * cover * cover, cove_silt);
+            let r = mix(0.00045 + 0.00065 * seed + 0.0006 * t, filtered, cove_silt);
             let dist = length(v - ray * t);
-            light += (1.0 - smoothstep(r * 0.2, r, dist)) * exp(-ext * t) * smoothstep(0.08, 0.18, t)
+            light += gain * (1.0 - smoothstep(r * 0.2, r, dist)) * exp(-ext * t) * smoothstep(0.08, 0.18, t)
                 * (1.0 - smoothstep(0.65, 0.9, t));
         }
         let t_next = min(next.x, min(next.y, next.z));
@@ -99,6 +122,7 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
     let near_h = wu.inv_view_proj * vec4<f32>(ndc, 1.0, 1.0);
     let to_near = near_h.xyz / near_h.w - wu.cam.xyz;
     let ray = normalize(to_near);
+    let pixel_cone = 0.5 * max(length(dpdx(ray)), length(dpdy(ray)));
     let d0 = i.level - wu.cam.y;
     let rise = ray.y - dot(i.tilt, ray.xz);
     let d_near = d0 - rise * length(to_near);
@@ -108,8 +132,11 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
     let start = select(0.0, max(d0 / min(rise, -1e-5), 0.0), d0 < 0.0);
     let origin = wu.cam.xyz + ray * start;
     let ocean = wg_ocean(origin.x);
-    let scatter = mix(WO_BAY_S, WO_COAST_S, ocean);
-    let ext = mix(WO_BAY_A, WO_COAST_A, ocean) + scatter;
+    let cove = wo_cove(origin.xz);
+    let scatter = mix(mix(WO_BAY_S, WO_COAST_S, ocean), WO_COVE_S, cove);
+    let ext = mix(mix(WO_BAY_A, WO_COAST_A, ocean), WO_COVE_A, cove) + scatter;
+    // Diffuse skylight penetrates suspended sediment farther than image contrast.
+    let diffuse_depth = mix(1.0, 0.63, cove);
     let limit = 10.0 / min(ext.r, min(ext.g, ext.b));
     let hit = w_scene_depth(uv) / max(dot(ray, wu.fwd.xyz), 1e-4);
     var path = min(max(hit - start, 0.0), limit);
@@ -132,14 +159,15 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
     // The entry hemisphere illuminates the suspended volume even in
     // bridge shadow. The diffuse irradiance includes sky and ambient fill.
     let ambient = w_sh(vec3<f32>(0.0, 1.0, 0.0)) * look.ambient.w * look.env_class.w + look.hemi_sky.xyz + look.ambient.xyz;
-    let back = scatter * mix(WO_BAY_BB, WO_COAST_BB, ocean);
+    let back = scatter * mix(mix(WO_BAY_BB, WO_COAST_BB, ocean), 0.045, cove);
     let multiple = 1.32 * back / (ext - scatter + back);
     // The same converging beam crosses the suspended material before it
     // lights the bed. Sample it within one optical mean free path of the eye.
     let scatter_t = min(0.5 * path, 1.0 / lk_luma(ext));
     let scatter_depth = mix(down0, down1, scatter_t / max(path, 1e-5));
-    let beam_focus = w_caustic(origin + ray * scatter_t, scatter_depth, sun_up);
-    let vol = ambient * (scatter * 0.25 + ext * multiple) * uw_integral(ext, path, down0, down1, 0.75)
+    // Suspended sediment blurs wave focusing as the direct beam loses coherence.
+    let beam_focus = mix(1.0, w_caustic(origin + ray * scatter_t, scatter_depth, sun_up), exp(-cove * scatter_depth * 1.5));
+    let vol = ambient * (scatter * 0.25 + ext * multiple) * uw_integral(ext, path, down0 * diffuse_depth, down1 * diffuse_depth, 0.75)
         + direct * (scatter * wo_phase(dot(ray, sun_up)) * beam_focus + ext * multiple / WG_PI)
           * uw_integral(ext, path, down0, down1, max(sun_up.y, 0.1));
     var boundary = vec3<f32>(0.0);
@@ -189,13 +217,13 @@ fn uw_fs(i: UwView) -> @location(0) vec4<f32> {
     } else if (hit - start < limit) {
         // Only the incident sunlight is focused. Keep ambient in open shade.
         let direct_share = lk_luma(direct) / max(lk_luma(direct + ambient), 1e-5);
-        let focus = w_caustic(end, down1, sun_up);
-        let incident = mix(exp(-ext * down1 / 0.75),
+        let focus = mix(1.0, w_caustic(end, down1, sun_up), exp(-cove * down1 * 1.5));
+        let incident = mix(exp(-ext * diffuse_depth * down1 / 0.75),
             exp(-ext * down1 / max(sun_up.y, 0.1)) * focus, direct_share);
         boundary = textureLoad(w_scene, vec2<i32>(i.clip.xy), 0).rgb * incident;
     }
-    let grains = uw_grains(origin, ray, path, lk_luma(ext));
+    let grains = uw_grains(origin, ray, path, lk_luma(ext), select(0.0, cove, look.cove.x > 0.0), pixel_cone);
     let radiance = boundary * exp(-ext * path) + vol
-        + grains * scatter * (ambient + direct * 0.25) * exp(-ext * down0 / 0.75);
-    return finish_color(max(radiance, vec3<f32>(0.0)), i.clip, dims);
+        + grains * scatter * (ambient + direct * 0.25) * exp(-ext * diffuse_depth * down0 / 0.75);
+    return finish_color(max(radiance, vec3<f32>(0.0)) * i.exposure, i.clip, dims);
 }

@@ -111,6 +111,8 @@ impl RoadwayIndex {
         let mut segments: HashMap<(i32, i32), Vec<u32>> = HashMap::new();
         let mut pieces = vec![];
         for (ei, e) in plan.entries.iter().enumerate() {
+            // (a structure's leg into a junction, eo-street joins, stays in:
+            // its roadway is the structure's deck, no place for a pole.)
             if e.points.len() < 2 || !(e.half > 0.0) {
                 continue;
             }
@@ -213,7 +215,7 @@ impl RoadwayIndex {
             return;
         }
         for (ei, e) in plan.entries.iter().enumerate() {
-            if e.points.len() < 2 || e.cum.len() != e.points.len() || !(e.half > 0.0) {
+            if e.points.len() < 2 || e.cum.len() != e.points.len() || !(e.half > 0.0) || e.structure_leg.is_some() {
                 continue;
             }
             let resolved = segment_kerb_ramps(e, o);

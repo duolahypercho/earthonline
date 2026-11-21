@@ -45,7 +45,7 @@ pub fn material_colour(name: &str) -> Option<[f32; 3]> {
     static MEANS: OnceLock<HashMap<String, [f32; 3]>> = OnceLock::new();
     MEANS
         .get_or_init(|| {
-            let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../eo-assets/data/kit-material-specs.json");
+            let path = eo_data::native_dir().join("eo-assets/data/kit-material-specs.json");
             let Ok(text) = std::fs::read_to_string(path) else { return HashMap::new() };
             let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else { return HashMap::new() };
             let mut out = HashMap::new();

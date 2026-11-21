@@ -439,6 +439,8 @@ pub mod perf {
     pub const BUTTON_BORDER: Color = hex(0x65727c);
     pub const BUTTON_BG: Color = hex(0x152633);
     pub const COPY: Color = hex(0xc1ccd4);
+    /// The pressed buttons' and the readouts' colour.
+    pub const ACCENT: Color = hex(0xe2ad61);
     pub const H3_SIZE: f32 = 20.0;
     pub const BUTTON_SIZE: f32 = 13.0;
     pub const SMALL_SIZE: f32 = 11.0;

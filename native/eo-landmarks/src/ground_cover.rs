@@ -222,6 +222,15 @@ pub const GROUND_SAND_DARK: Linear = [0.305, 0.275, 0.216];
 /// beach-sand.js: how far past a mapped beach the sand runs, and how near the sea it must be.
 pub const BEACH_SAND_REACH_M: f64 = 150.0;
 pub const BEACH_SAND_SHORE_M: f64 = 90.0;
+/// `beach_sand_fit`: ground lies behind a beach when the way to the beach is
+/// within 45 degrees of the way to the sea (the cosine).
+pub const BEACH_SAND_FIT_COS: f64 = 0.7;
+/// `beach_sand_fit`: the step of the shore distance's central difference (the way to the sea).
+pub const BEACH_SAND_FIT_STEP_M: f64 = 4.0;
+/// `beach_sand_fit`: how much farther off than the sea a beach behind the
+/// ground may be, and how far off the line from the beach to the sea ground
+/// in front of it may lie (a terrain cell and a half).
+pub const BEACH_SAND_FIT_SLACK_M: f64 = 12.0;
 
 struct Green {
     ring: Vec<[f64; 2]>,
@@ -234,10 +243,35 @@ struct Green {
     beds: bool,
     /// tile-ground-cover.js `treeClassOf` (0 none), for the park trees.
     tree_class: u8,
+    /// Kept ground the sand round a beach does not cover (`beach_sand_fit`):
+    /// a lawn, garden, pitch, playground or other tended green, a paved
+    /// green, inland water. Wild cover (scrub, heath, grassland, wetland,
+    /// wood: the dunes behind a beach) and an enclosing park are not.
+    own_ground: bool,
 }
+
+/// `Green::own_ground`'s tended green kinds.
+const TENDED: &[&str] = &["grass", "garden", "pitch", "playground", "golf_course", "recreation_ground", "village_green", "common", "allotments", "dog_park", "cemetery", "reservoir_covered", "construction", "brownfield"];
 
 fn in_ring(r: &[[f64; 2]], x: f64, z: f64) -> bool {
     crate::waterfront::point_in_ring(r, x, z)
+}
+
+/// The distance from (x, z) to a ring's edges and the nearest point on them.
+fn ring_nearest(r: &[[f64; 2]], x: f64, z: f64) -> (f64, [f64; 2]) {
+    let mut best = (f64::INFINITY, [x, z]);
+    for i in 0..r.len() {
+        let (a, b) = (r[i], r[(i + 1) % r.len()]);
+        let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+        let l2 = dx * dx + dz * dz;
+        let t = if l2 > 0.0 { (((x - a[0]) * dx + (z - a[1]) * dz) / l2).clamp(0.0, 1.0) } else { 0.0 };
+        let q = [a[0] + dx * t, a[1] + dz * t];
+        let d = (x - q[0]).hypot(z - q[1]);
+        if d < best.0 {
+            best = (d, q);
+        }
+    }
+    best
 }
 
 /// The greens, inland water and beaches, indexed on a coarse grid.
@@ -294,6 +328,7 @@ impl GroundCover {
                 tone,
                 beds: g.kind == "playground" && tone == Some("playSurface"),
                 tree_class,
+                own_ground: g.kind != "park" && (tone.is_none() || TENDED.contains(&g.kind.as_str())),
             });
         }
         // Inland standing water, painted after every green (no tree stands in it).
@@ -305,7 +340,7 @@ impl GroundCover {
                     mx[k] = mx[k].max(p[k]);
                 }
             }
-            list.push(Green { ring: w.polygon.clone(), holes: w.holes.clone(), min: mn, max: mx, order: (2, 0.0), tone: Some("water"), beds: false, tree_class: 0 });
+            list.push(Green { ring: w.polygon.clone(), holes: w.holes.clone(), min: mn, max: mx, order: (2, 0.0), tone: Some("water"), beds: false, tree_class: 0, own_ground: true });
         }
         let mut cells: HashMap<(i64, i64), Vec<u32>> = HashMap::new();
         for (i, g) in list.iter().enumerate() {
@@ -391,6 +426,63 @@ impl GroundCover {
             }
         }
         false
+    }
+
+    /// `beach_sand` fitted to a city shore (on unless `--no-ground-beach-fit`).
+    /// Inside a mapped beach it is the same. In the reach band round it, sand
+    /// only where the beach is this ground's shore and no kept ground is
+    /// mapped there (`Green::own_ground`: a lawn, garden, pitch, paved green
+    /// or inland water; not an enclosing park, nor the dunes' wild cover). The beach is the
+    /// shore when the point lies behind it (the beach no more than
+    /// `BEACH_SAND_FIT_SLACK_M` farther off than the sea, or the way to the
+    /// beach within 45 degrees of the way to the sea) or in front of it (between the
+    /// beach and the sea: the unmapped foreshore, where the beach's nearest
+    /// point is as far from the sea as the point and the beach together).
+    /// Beside a beach, by a seawall, a quay or a pier's root, it is neither.
+    /// `shore(x, z)`: distance to the shoreline.
+    pub fn beach_sand_fit(&self, x: f64, z: f64, shore: &dyn Fn(f64, f64) -> f64) -> bool {
+        let Some(list) = self.beach_cells.get(&((x / CELL).floor() as i64, (z / CELL).floor() as i64)) else { return false };
+        if list.iter().any(|&i| {
+            let (ring, mn, mx) = &self.beaches[i as usize];
+            x >= mn[0] && x <= mx[0] && z >= mn[1] && z <= mx[1] && in_ring(ring, x, z)
+        }) {
+            return true;
+        }
+        let s = shore(x, z);
+        if s > BEACH_SAND_SHORE_M {
+            return false;
+        }
+        for &i in list {
+            let (ring, mn, mx) = &self.beaches[i as usize];
+            if x < mn[0] - BEACH_SAND_REACH_M || x > mx[0] + BEACH_SAND_REACH_M || z < mn[1] - BEACH_SAND_REACH_M || z > mx[1] + BEACH_SAND_REACH_M {
+                continue;
+            }
+            let (d, q) = ring_nearest(ring, x, z);
+            if d > BEACH_SAND_REACH_M {
+                continue;
+            }
+            // behind the beach: the beach no farther off than the sea, or the
+            // way to it the way to the sea (down the shore distance), where it
+            // lies just past the shoreline.
+            let behind = d <= s + BEACH_SAND_FIT_SLACK_M || {
+                let h = BEACH_SAND_FIT_STEP_M;
+                let (gx, gz) = (shore(x + h, z) - shore(x - h, z), shore(x, z + h) - shore(x, z - h));
+                let gl = gx.hypot(gz);
+                gl < 1e-9 || -(gx * (q[0] - x) + gz * (q[1] - z)) / (gl * d) >= BEACH_SAND_FIT_COS
+            };
+            // in front of it: on the line from the beach to the sea (the foreshore).
+            if !behind && s + d > shore(q[0], q[1]) + BEACH_SAND_FIT_SLACK_M {
+                continue;
+            }
+            return !self.mapped_ground(x, z);
+        }
+        false
+    }
+
+    /// Whether (x, z) is mapped as kept ground (`Green::own_ground`: a lawn,
+    /// garden, pitch, playground, paved green or inland water painted there).
+    fn mapped_ground(&self, x: f64, z: f64) -> bool {
+        self.top(x, z).is_some_and(|g| g.own_ground)
     }
 
     /// tile-trees.js `plantTileTrees` over [x0, x1) x [z0, z1) (near tier): the

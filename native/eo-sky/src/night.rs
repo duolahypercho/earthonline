@@ -43,6 +43,26 @@ pub fn vehicle_lamps(sun_alt_deg: f64, w: &WeatherState) -> f64 {
     if f > 0.35 { f } else { 0.0 }
 }
 
+/// The share of the vehicle lamps' night factor over which they come on under
+/// `--smooth-time` (`vehicle_lamps_smooth`): 0.15 below the 0.35 threshold,
+/// about 1.1 deg of sun altitude, four to five clock minutes at San
+/// Francisco's latitude. Drivers do not all switch on at one instant; the
+/// street's lamps come on over a few minutes of dusk.
+pub const VEHICLE_LAMPS_RAMP: f64 = 0.15;
+
+/// `vehicle_lamps` without its step: the lamps ramp from 0 to the 0.35 they
+/// came on at over `VEHICLE_LAMPS_RAMP` of the night factor below it, and
+/// follow `vehicle_lamps` above it (`--smooth-time`).
+pub fn vehicle_lamps_smooth(sun_alt_deg: f64, w: &WeatherState) -> f64 {
+    let on = vehicle_lamps(sun_alt_deg, w);
+    if on > 0.0 {
+        return on;
+    }
+    // under the threshold (every weather floor is 0 or over it): the night factor alone.
+    let night = 1.0 - smoothstep(-3.0, 6.0, sun_alt_deg);
+    0.35 * smoothstep(0.35 - VEHICLE_LAMPS_RAMP, 0.35, night)
+}
+
 /// The ground's unlit fill irradiance (units) on an upward surface: the
 /// hemisphere's sky lobe, the ambient, the environment's diffuse at the
 /// sidewalk class, and the key on the horizontal.
@@ -171,6 +191,89 @@ pub fn target_exposure(f: &LookFrame, w: &WeatherState) -> f64 {
     day + (solved - day) * n
 }
 
+// ---------------------------------------------------------------------------
+// The cinematic look's night (`--look cinematic`, stage L1; eo-look
+// `cinematic::grade`). Nothing above changes: these are used only by the
+// cinematic path (eo-render look.rs `LookGpu::frame`).
+
+/// (`--look cinematic`) the display (0-255) of unlit ground of albedo 0.18 at
+/// full night: 3.5 (the default's 8, `NIGHT_UNLIT_DISPLAY_255`). A
+/// `CINEMATIC_DEVIATIONS` row: deep blacks so the lamp pools, windows and signs
+/// carry the frame (the plan's night target), solved through the cinematic
+/// display (its tone curve and the night key's grade).
+pub const CINE_NIGHT_UNLIT_DISPLAY_255: f64 = 3.5;
+/// (`--look cinematic`) the share of the night fill's colour removed at full
+/// night: 0.3 (the default's `frame::NIGHT_FILL_DESATURATION`, 0.6). A
+/// `CINEMATIC_DEVIATIONS` row: the unlit street keeps a cool tint.
+pub const CINE_NIGHT_FILL_DESATURATION: f64 = 0.3;
+
+/// sRGB display (0..1) of a grey of linear radiance `v` at `exposure` through
+/// the cinematic display at full night (the night key's grade, the frame's
+/// centre).
+pub fn cinematic_display_grey(v: f64, exposure: f64) -> f64 {
+    use eo_look::cinematic::grade;
+    let w = grade::key_weights(-90.0, 0.0, 0.0);
+    grade::cinematic_display([v, v, v], exposure, &w, [0.5, 0.5])[1]
+}
+
+/// (`--look cinematic`) the night solve: `night_exposure` against the
+/// cinematic display and `CINE_NIGHT_UNLIT_DISPLAY_255`, in [0.05, 5.2].
+pub fn cinematic_night_exposure(f: &LookFrame, extra_ground_units: f64) -> f64 {
+    let e = ground_fill(f, SIDEWALK_ENV) + key_on_ground(f) + extra_ground_units;
+    let radiance = 0.18 * e / std::f64::consts::PI;
+    let target = CINE_NIGHT_UNLIT_DISPLAY_255 / 255.0;
+    let (mut lo, mut hi) = (0.05, 5.2);
+    for _ in 0..40 {
+        let mid = 0.5 * (lo + hi);
+        if cinematic_display_grey(radiance, mid) < target { lo = mid } else { hi = mid }
+    }
+    0.5 * (lo + hi)
+}
+
+/// (`--look cinematic`) `target_exposure` with the cinematic night solve.
+pub fn cinematic_target_exposure(f: &LookFrame, w: &WeatherState) -> f64 {
+    let n = exposure_nightness(f.model.sun.altitude_deg);
+    let day = day_exposure(f, w);
+    if n <= 0.0 {
+        return day;
+    }
+    let solved = cinematic_night_exposure(f, 0.0);
+    day + (solved - day) * n
+}
+
+/// (`--look cinematic`) what `cinematic_target_exposure` adds to
+/// `target_exposure`: the night solve's share moved from the default solve to
+/// the cinematic one (0 by day). Added to a target that may carry other
+/// day-side changes of the look, it moves only the night's part.
+pub fn cinematic_night_shift(f: &LookFrame) -> f64 {
+    let n = exposure_nightness(f.model.sun.altitude_deg);
+    if n <= 0.0 {
+        return 0.0;
+    }
+    (cinematic_night_exposure(f, 0.0) - night_exposure(f, 0.0)) * n
+}
+
+/// (`--look cinematic`) gives the night fill back the colour the frame's
+/// `NIGHT_FILL_DESATURATION` took beyond `CINE_NIGHT_FILL_DESATURATION`
+/// (`nightness`: the terms' own; luminance kept, so the night solve's ground
+/// fill is unchanged). Call on a frame `frame::apply` has built.
+pub fn cinematic_night_fill(f: &mut LookFrame, nightness: f64) {
+    let nd = crate::frame::NIGHT_FILL_DESATURATION * nightness;
+    let nc = CINE_NIGHT_FILL_DESATURATION * nightness;
+    if nd <= 0.0 || nd >= 1.0 {
+        return;
+    }
+    // apply took c -> l + (c - l)(1 - nd); this makes it l + (c - l)(1 - nc).
+    let k = (1.0 - nc) / (1.0 - nd);
+    let back = |c: [f64; 3]| {
+        let l = luminance(c);
+        c.map(|v| (l + (v - l) * k).max(0.0))
+    };
+    f.hemi_sky = back(f.hemi_sky);
+    f.hemi_ground = back(f.hemi_ground);
+    f.ambient = back(f.ambient);
+}
+
 /// renderer.js exposure adaptation: a one-pole filter, tau 0.8 s while the
 /// exposure rises (the scene got darker), 0.3 s while it falls; snaps on a
 /// clock jump of a quarter hour or more.
@@ -198,7 +301,43 @@ impl Adaptation {
         self.current = Some(cur);
         cur
     }
+
+    /// `step` without the snaps (`--smooth-time`): neither a clock jump nor a
+    /// turn of the camera resets the exposure. Within `ADAPT_FAST_STOPS` of the
+    /// target the filter is `step`'s (0.8 s up, 0.3 s down); further off (a
+    /// turn into or away from a low sun, a change of hour) it converges with
+    /// `ADAPT_TAU_FAST_S`, still a little each frame. Only `cut` (a camera
+    /// cut: the first frame, a teleport) snaps to the target.
+    pub fn step_smooth(&mut self, target: f64, hour: f64, dt: f64, cut: bool) -> f64 {
+        self.last_hour = Some(hour);
+        let cur = match self.current {
+            Some(c) if !cut && c > 0.0 && target > 0.0 => {
+                let off = (target / c).log2().abs();
+                let tau = if off > ADAPT_FAST_STOPS {
+                    ADAPT_TAU_FAST_S
+                } else if target > c {
+                    ADAPT_TAU_RISE_S
+                } else {
+                    ADAPT_TAU_FALL_S
+                };
+                let next = c + (target - c) * (1.0 - (-dt.max(0.0) / tau).exp());
+                if (next - target).abs() < 1e-4 { target } else { next }
+            }
+            _ => target,
+        };
+        self.current = Some(cur);
+        cur
+    }
 }
+
+/// `--smooth-time`: past this many stops from its target the exposure converges
+/// with `ADAPT_TAU_FAST_S` (where `step` would have snapped on a turn or a
+/// clock jump), and with the slow filter within it.
+pub const ADAPT_FAST_STOPS: f64 = 0.5;
+/// The time constant of that convergence: 95 % of the way in 0.6 s, at most
+/// 8 % of the gap in a 60 Hz frame (a camera's auto exposure settles a cut in
+/// roughly half a second; nothing steps).
+pub const ADAPT_TAU_FAST_S: f64 = 0.2;
 
 /// the camera meter. The exposure curve above is a function of the hour
 /// and the weather only, so a view into a low sun (or toward the noon sun)

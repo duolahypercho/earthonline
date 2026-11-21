@@ -25,9 +25,17 @@ currently REJECT; see [Docs/VISUAL_QUALITY_GATE.md](Docs/VISUAL_QUALITY_GATE.md)
 
 *Screenshots will be added here.*
 
+## Download and play
+
+Ready-to-run builds for Windows, macOS (Apple silicon) and Linux are on the
+[Releases page](https://github.com/duolahypercho/earthonline/releases).
+Unzip one and open `play.bat`, `play.command` or `play.sh`.
+[Docs/PLAYING.md](Docs/PLAYING.md) covers the controls, the long first
+start, and what to do when your computer blocks an unsigned program.
+
 ## Quick start
 
-You need a stable Rust toolchain (Rust 1.85 or newer, from
+To build it yourself, you need a stable Rust toolchain (Rust 1.88 or newer, from
 [rustup](https://rustup.rs)), a C/C++ compiler, and a GPU that supports
 Vulkan, DirectX 12 or Metal. The project is developed and tested on
 Windows; Linux and macOS are untested.
@@ -73,7 +81,7 @@ See [Docs/ASSET-STORE.md](Docs/ASSET-STORE.md).
 | `public/data/sf/` | The San Francisco data the game loads, each file with a `NOTICE` |
 | `public/assets/` | Shipped models and textures, each with a provenance file |
 | `artifacts/` | Provenance and the lock file of the off-repository asset store |
-| `scripts/` | Asset-store, Blender building and character tooling, and the street-standards table |
+| `scripts/` | Asset-store, Blender building and vehicle tooling, and the street-standards table |
 | `Docs/` | Data pipeline, street standards, asset store and quality-gate documents |
 
 ## Data sources and attribution

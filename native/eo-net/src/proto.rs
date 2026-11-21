@@ -3,9 +3,9 @@
 //! Every datagram starts `MAGIC` (u32, protocol id and version) and a kind
 //! byte. Handshake (client C, server S):
 //!
-//!   C -> S  Request    { client salt, protocol version, ground plan, session token, spawn hint, resume } padded to 1000 bytes
+//!   C -> S  Request    { client salt, protocol version, ground plan, session token, spawn hint, resume, structures } padded to 1000 bytes
 //!   S -> C  Challenge  { client salt, server salt, cookie }           (no state kept on S)
-//!   C -> S  Response   { client salt, ground plan, server salt, cookie, token, spawn hint, resume } padded
+//!   C -> S  Response   { client salt, ground plan, server salt, cookie, token, spawn hint, resume, structures } padded
 //!   S -> C  Accept     { connection id, player id, resume key, rates, server tick, the player's state }
 //!        or Deny       { client salt, reason }
 //!
@@ -13,6 +13,14 @@
 //! a server whose own differs refuses the client (`DenyReason::World`), since
 //! every position and the collision world would disagree (online play would
 //! desync).
+//!
+//! The request and response also carry the client's grade-separated roads
+//! (`structures_code`: `--structures`, `--tunnels`), compared beside the
+//! ground plan: a server whose world has other ones refuses the client
+//! (`DenyReason::Structures`, with the server's own code after the reason),
+//! since decks, ramps and tunnels change the collision world and the
+//! traffic. The byte is the last field before the padding, so a hello
+//! written without it reads as 0, "none" (the setting every world had before).
 //!
 //! The request and response are padded so a spoofed source address cannot
 //! make the server send more bytes than it received (no amplification); the
@@ -45,6 +53,29 @@ pub fn ground_scale_ppm() -> u32 {
         (s * 1e6).round() as u32
     } else {
         0x8000_0000 | (((s * 1e4).round() as u32) << 15) | (h * 1e4).round() as u32
+    }
+}
+
+/// A world's grade-separated roads as the handshake carries them: 0 none,
+/// `STRUCTURES_ON` with `--structures`, plus `STRUCTURES_TUNNELS` with `--tunnels`.
+pub fn structures_code(s: Option<eo_structures::StructureOptions>) -> u8 {
+    match s {
+        None => 0,
+        Some(o) => STRUCTURES_ON | if o.tunnels { STRUCTURES_TUNNELS } else { 0 },
+    }
+}
+
+/// `structures_code` bits.
+pub const STRUCTURES_ON: u8 = 1;
+pub const STRUCTURES_TUNNELS: u8 = 2;
+
+/// A `structures_code` as the switches that give it, for messages.
+pub fn structures_switches(code: u8) -> &'static str {
+    match code {
+        0 => "no --structures",
+        STRUCTURES_ON => "--structures",
+        c if c == STRUCTURES_ON | STRUCTURES_TUNNELS => "--structures --tunnels",
+        _ => "an unknown structures setting",
     }
 }
 /// Datagram payload limit (stays under a 1280-byte IPv6 minimum MTU with headers).
@@ -124,6 +155,9 @@ pub struct Hello {
     pub version: u16,
     /// the sender's ground-plan scale, parts per million (`ground_scale_ppm`).
     pub ground: u32,
+    /// the sender's grade-separated roads (`structures_code`); on the wire
+    /// after `resume`, in what was padding (0 from a sender without it).
+    pub structures: u8,
     pub token: Vec<u8>,
     pub spawn: Option<SpawnHint>,
     pub resume: Option<Resume>,
@@ -161,6 +195,7 @@ impl Hello {
             }
             None => out.put_u8(0),
         }
+        out.put_u8(self.structures);
         if out.len() < REQUEST_PAD {
             out.resize(REQUEST_PAD, 0);
         }
@@ -176,7 +211,8 @@ impl Hello {
         let f = r.u8()?;
         let spawn = if f & 1 != 0 { Some(SpawnHint { x: r.f32()?, z: r.f32()?, yaw: r.f32()?, driving: f & 2 != 0 }) } else { None };
         let resume = if r.u8()? != 0 { Some(Resume { player_id: r.u32()?, key: r.u64()? }) } else { None };
-        Ok(Hello { client_salt, version, ground, token, spawn, resume, server_salt, cookie })
+        let structures = r.u8()?;
+        Ok(Hello { client_salt, version, ground, structures, token, spawn, resume, server_salt, cookie })
     }
 }
 
@@ -264,12 +300,21 @@ pub enum DenyReason {
     Banned = 4,
     /// the client's ground plan is not the server's.
     World = 5,
+    /// the client's grade-separated roads are not the server's; the server's
+    /// own `structures_code` follows the reason byte.
+    Structures = 6,
 }
 
 pub fn write_deny(client_salt: u64, reason: DenyReason, out: &mut Vec<u8>) {
     begin(Kind::Deny, out);
     out.put_u64(client_salt);
     out.put_u8(reason as u8);
+}
+
+/// `Deny` for `DenyReason::Structures`, with the server's own `structures_code` after the reason.
+pub fn write_deny_structures(client_salt: u64, own: u8, out: &mut Vec<u8>) {
+    write_deny(client_salt, DenyReason::Structures, out);
+    out.put_u8(own);
 }
 
 /// Connected packet prefix: magic, kind, connection id.
@@ -283,4 +328,73 @@ pub mod msg {
     pub const PLAYER_JOINED: u8 = 1;
     pub const PLAYER_LEFT: u8 = 2;
     pub const NOTICE: u8 = 3;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use eo_structures::StructureOptions;
+
+    fn hello(structures: u8) -> Hello {
+        Hello {
+            client_salt: 0x1234_5678_9abc_def0,
+            version: PROTOCOL_VERSION,
+            ground: 1_250_000,
+            structures,
+            token: b"dev:test".to_vec(),
+            spawn: Some(SpawnHint { x: 1.5, z: -2.5, yaw: 0.25, driving: true }),
+            resume: Some(Resume { player_id: 7, key: 99 }),
+            server_salt: 11,
+            cookie: 22,
+        }
+    }
+
+    #[test]
+    fn structures_codes() {
+        assert_eq!(structures_code(None), 0);
+        assert_eq!(structures_code(Some(StructureOptions { tunnels: false })), STRUCTURES_ON);
+        assert_eq!(structures_code(Some(StructureOptions { tunnels: true })), STRUCTURES_ON | STRUCTURES_TUNNELS);
+        assert_eq!(structures_switches(0), "no --structures");
+        assert_eq!(structures_switches(3), "--structures --tunnels");
+    }
+
+    #[test]
+    fn hello_carries_structures_in_what_was_padding() {
+        for kind in [Kind::Request, Kind::Response] {
+            for code in [0, STRUCTURES_ON, STRUCTURES_ON | STRUCTURES_TUNNELS] {
+                let h = hello(code);
+                let mut out = vec![];
+                h.write(kind, &mut out);
+                assert_eq!(out.len(), REQUEST_PAD);
+                let (k, mut r) = peek(&out).unwrap();
+                assert_eq!(k, kind);
+                let back = Hello::read(kind, &mut r).unwrap();
+                let want = if kind == Kind::Response { h.clone() } else { Hello { server_salt: 0, cookie: 0, ..h.clone() } };
+                assert_eq!(back, want);
+            }
+            // The setting is one byte where the padding began: the datagram with
+            // it cleared is exactly the one without structures, which is the
+            // datagram written before the field existed (resume, then zeros),
+            // and reads as "none".
+            let (mut on, mut off) = (vec![], vec![]);
+            hello(STRUCTURES_ON | STRUCTURES_TUNNELS).write(kind, &mut on);
+            hello(0).write(kind, &mut off);
+            let at = on.iter().rposition(|&b| b != 0).unwrap();
+            assert_eq!(on[at], STRUCTURES_ON | STRUCTURES_TUNNELS);
+            assert!(off[at..].iter().all(|&b| b == 0));
+            on[at] = 0;
+            assert_eq!(on, off);
+            let (_, mut r) = peek(&off).unwrap();
+            assert_eq!(Hello::read(kind, &mut r).unwrap().structures, 0);
+        }
+    }
+
+    #[test]
+    fn a_structures_denial_names_the_servers_own() {
+        let mut out = vec![];
+        write_deny_structures(42, STRUCTURES_ON, &mut out);
+        let (k, mut r) = peek(&out).unwrap();
+        assert_eq!(k, Kind::Deny);
+        assert_eq!((r.u64().unwrap(), r.u8().unwrap(), r.u8().unwrap()), (42, DenyReason::Structures as u8, STRUCTURES_ON));
+    }
 }

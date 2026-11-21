@@ -13,6 +13,7 @@ eo-assets = { path = "../eo-assets" }
 eo-data = { path = "../eo-data" }
 eo-kit = { path = "../eo-kit" }
 eo-street = { path = "../eo-street" }
+eo-structures = { path = "../eo-structures" } # structures: grade-separated roads (`--structures`)
 eo-look = { path = "../eo-look" }
 eo-agents = { path = "../eo-agents" }
 eo-props = { path = "../eo-props" } # props
@@ -27,6 +28,9 @@ glam = { version = "0.34.3", features = ["bytemuck"] }
 pollster = "1.0.1"
 wgpu = "30.0.2"
 serde_json = "1.0.154" # facade: the JS facade tables (data/facade-oracle.json)
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.191" # hitch: the thread's CPU time (clock_gettime)
 
 [dev-dependencies]
 eo-data = { path = "../eo-data" }

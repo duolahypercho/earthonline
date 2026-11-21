@@ -197,3 +197,66 @@ fn a_car_casts_a_sun_shadow_and_people_draw() {
     // 1.75 m at 4 m fills ~40 % of 180 px in height; a body is ~15-25 px wide.
     assert!(changed > 600, "person changed {changed} pixels");
 }
+
+/// A car in a tunnel's bore (eo_agents `AGENT_IN_BORE`, `--tunnels`) is lit by
+/// the bore (structures.wgsl `sx_bore_light_at`), not by the sun and sky: at
+/// noon its roof reads at the bore's interior level, far under the same car
+/// in the open; the ground beside it is unchanged.
+#[test]
+fn a_car_in_a_bore_is_lit_by_the_bore_not_the_sun() {
+    let ctx = ctx();
+    let lib = library();
+    let mut r = renderer(&ctx, &lib);
+    r.look.set_time_of_day(12.0);
+    // the sky's stages on (the clustered lights, the bore's interior level), as the app runs.
+    r.look.set_options(&ctx.device, eo_render::look::LookOptions::default());
+    // the bores' lamps lit (as a run with `--tunnels` draws them), the eye outside a bore.
+    r.look.sky.set_bore(None, true);
+    let a = r.agents.get().unwrap();
+    // before the bores' pipelines exist a bore agent is drawn as any other (the bit taken off at upload).
+    let open = car(&lib, "sedan", Vec3::ZERO, 0.3);
+    let cam = Camera::new(Vec3::new(0.0, 9.0, 9.0), 0.0, -0.75, W as f32 / H as f32);
+    a.upload(&ctx.queue, &[open]);
+    let _ = render(&ctx, &r, &cam, 12); // the exposure and the histories settled
+    let plain = render(&ctx, &r, &cam, 4);
+    a.upload(&ctx.queue, &[GpuAgent { flags: eo_agents::bore_flags(200.0), ..open }]);
+    assert!(!a.bores_drawn());
+    let unmarked = render(&ctx, &r, &cam, 4);
+    let total = |l: &[f32]| l.iter().map(|v| *v as f64).sum::<f64>();
+    assert!((total(&unmarked) - total(&plain)).abs() <= 0.002 * total(&plain), "without the bores' pipelines a bore agent draws as before: {} vs {}", total(&unmarked), total(&plain));
+    a.enable_bores();
+    let deep = GpuAgent { flags: eo_agents::bore_flags(200.0), ..open };
+    let near_portal = GpuAgent { flags: eo_agents::bore_flags(4.0), ..open };
+    a.upload(&ctx.queue, &[open]);
+    let lit = render(&ctx, &r, &cam, 4);
+    a.upload(&ctx.queue, &[deep]);
+    assert!(a.bores_drawn(), "a bore agent in the list draws the bores' pipelines");
+    let bore = render(&ctx, &r, &cam, 4);
+    a.upload(&ctx.queue, &[near_portal]);
+    let mouth = render(&ctx, &r, &cam, 4);
+    a.upload(&ctx.queue, &[]);
+    let none = render(&ctx, &r, &cam, 4);
+    assert!(!a.bores_drawn(), "no bore agent: the bores' pipelines draw nothing");
+    // the car's pixels: those it changes against the bare slab, within its outline's box on screen.
+    let (cx, cy) = project(&cam, Vec3::new(0.0, 0.8, 0.0));
+    let (ex, _) = project(&cam, Vec3::new(2.5, 0.8, 0.0));
+    let half = (ex as i32 - cx as i32).unsigned_abs().max(8);
+    let inside = |i: usize| ((i as u32 % W) as i32 - cx as i32).unsigned_abs() <= half && ((i as u32 / W) as i32 - cy as i32).unsigned_abs() <= half;
+    let body: Vec<usize> = (0..lit.len()).filter(|&i| inside(i) && (lit[i] - none[i]).abs() > 0.05 * none[i].max(1e-3)).collect();
+    let at = |l: &[f32], p: Vec3| {
+        let (x, y) = project(&cam, p);
+        l[(y.min(H - 1) * W + x.min(W - 1)) as usize]
+    };
+    println!("roof: open {:.4}, bore {:.4}, mouth {:.4}, none {:.4}; ground: {:.4} {:.4} {:.4}", at(&lit, Vec3::new(0.0, 1.45, 0.0)), at(&bore, Vec3::new(0.0, 1.45, 0.0)), at(&mouth, Vec3::new(0.0, 1.45, 0.0)), at(&none, Vec3::new(0.0, 1.45, 0.0)), at(&lit, Vec3::new(5.0, 0.0, -3.0)), at(&bore, Vec3::new(5.0, 0.0, -3.0)), at(&none, Vec3::new(5.0, 0.0, -3.0)));
+    assert!(body.len() > 400, "the car covers {} pixels", body.len());
+    let mean = |l: &[f32]| body.iter().map(|&i| l[i] as f64).sum::<f64>() / body.len() as f64;
+    let (m_lit, m_bore, m_mouth) = (mean(&lit), mean(&bore), mean(&mouth));
+    println!("car mean luminance: in the open {m_lit:.4}, 200 m into a bore {m_bore:.4}, 4 m in from a portal {m_mouth:.4} ({} px)", body.len());
+    assert!(m_bore < 0.2 * m_lit, "the car in the bore is not sunlit: {m_bore} vs {m_lit}");
+    assert!(m_bore > 1e-5, "the bore's own light reaches the car: {m_bore}");
+    assert!(m_mouth > m_bore, "the portal's daylight and the threshold zone near the mouth: {m_mouth} vs {m_bore}");
+    // the slab away from the car: the same whatever the car's flag.
+    let (x, y) = project(&cam, Vec3::new(5.0, 0.0, -3.0));
+    let k = (y.min(H - 1) * W + x.min(W - 1)) as usize;
+    assert!((lit[k] - bore[k]).abs() <= 0.02 * lit[k].max(1e-3), "the ground beside: {} vs {}", lit[k], bore[k]);
+}

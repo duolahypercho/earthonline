@@ -13,7 +13,7 @@ struct WaterU {
     field: vec4<f32>,
     // where the water draws (the terrain grid, as the flat sea did): min x, min z, max x, max z
     extent: vec4<f32>,
-    // x: debug view (EO_WATER_DEBUG), 0 off
+    // x: debug view (EO_WATER_DEBUG), 0 off; w the reach's extra run south (m, stage L5)
     screen: vec4<f32>,
     // x scene copy taken this frame (1/0), y probe on (1/0), z land mask (m below which the field is land), w FFT live (1/0)
     flags: vec4<f32>,
@@ -67,9 +67,11 @@ fn wg_axis(i: f32, r: f32) -> f32 {
 // Golden Gate and the bay toward Marin) and the east (the bay toward the East
 // Bay shore, which has no data), so from the air the sea runs on into the haze
 // instead of ending on a straight edge; the south (the peninsula's land) is
-// kept. Past its region the shore field reads its edge texels (open water).
+// kept, except under the cinematic look (stage L5: `screen.w`, water.rs
+// `CINEMATIC_SOUTH_REACH_M`; 0 otherwise). Past its region the shore field
+// reads its edge texels (open water).
 fn wg_reach() -> vec4<f32> {
-    return wu.extent + vec4<f32>(-60000.0, -60000.0, 60000.0, 0.0);
+    return wu.extent + vec4<f32>(-60000.0, -60000.0, 60000.0, wu.screen.w);
 }
 
 // Vertex spacing at local coordinate c (grid.rs `spacing_at`).

@@ -9,7 +9,8 @@
 //! the analytic building-sweep guard (`limitExteriorBuildingSweep`, which never
 //! lets the capsule advance into a footprint prism even where a collider is
 //! missing); the floor clamp (the target never below the ground under it,
-//! `containmentFloorY`); the perch lift (`PERCH_*`); the kerb step-up lift and
+//! `containmentFloorY`; with decks, the ground only where it is under the
+//! body, `CollisionWorld::floor_under`); the perch lift (`PERCH_*`); the kerb step-up lift and
 //! hold (`KERB_STEP_*`, `kerbContactToward`, `probeKerbRise`, `kerbStandsOnTop`);
 //! the swept move with snap-to-ground off while lifting or holding; landing,
 //! and the refused-fall press. `jump()` and crouch are ported.
@@ -298,7 +299,9 @@ impl Character {
         let (bx, bz, building_limited) = self.limit_building_sweep(world, d);
         d.x = bx;
         d.z = bz;
-        let target_ground = world.floor_y(self.position.x + d.x, self.position.z + d.z);
+        // (the floor under the body: one level, the ground; with decks the
+        // ground only where it is under the body, `CollisionWorld::floor_under`.)
+        let target_ground = world.floor_under(self.position.x + d.x, self.position.z + d.z, self.position.y);
         d.y = d.y.max(target_ground + self.half_extent_y() - self.position.y);
         // KERB LIP: a perched capsule still driven forward gets one lift, then a cooldown.
         if self.perch_lift_cooldown > 0 {

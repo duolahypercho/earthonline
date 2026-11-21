@@ -13,6 +13,11 @@ const AG_M_HEAD: u32 = 4096u;
 const AG_M_DRL: u32 = 8192u;
 const AG_M_REVERSE: u32 = 16384u;
 const AG_M_ATLAS: u32 = 32768u;
+// eo_agents AGENT_IN_BORE, BORE_DEPTH_SHIFT, BORE_DEPTH_QUANT (agents.rs tests them):
+// a car in a tunnel's bore and how far in from its portal.
+const AG_IN_BORE: u32 = 262144u;
+const AG_BORE_DEPTH_SHIFT: u32 = 19u;
+const AG_BORE_DEPTH_QUANT: f32 = 8.0;
 
 struct AgOut {
     @builtin(position) clip: vec4<f32>,
@@ -87,7 +92,43 @@ fn ag_lamp(flags: u32, mflags: u32, local_x: f32) -> f32 {
     return i;
 }
 
-fn ag_shade(in: AgOut) -> vec4<f32> {
+// Weathering (`--grime`, weathering.rs; reached only with the level on): a
+// car's paint dusty on the lower body up to about the wheels' tops, grimy
+// round the wheel arches, older cars' paint dull; each car its own (some
+// clean, most a little dirty, a few filthy), keyed on its colour and model.
+fn ag_weather(s: ptr<function, Surface>, local: vec3<f32>, a: AgAgent, fw: f32) {
+    let m = ag_models[a.model];
+    if (m.model_class == AG_PERSON || m.wheel_radius <= 0.05) {
+        return;
+    }
+    let hs = vec2<f32>(f32(a.color & 0xfffu), f32(a.model) + f32((a.color >> 12u) & 0xfffu) * 0.37);
+    let h = st_hash(hs + vec2<f32>(3.3, 1.7));
+    let dirt = select(select(WX_CAR_SOME, WX_CAR_FILTHY, h > 1.0 - WX_CAR_FILTHY_SHARE), WX_CAR_CLEAN, h < WX_CAR_CLEAN_SHARE);
+    let r = m.wheel_radius;
+    let y = local.y - (m.wheel[0].y - r);
+    let ragged = mix(0.5, st_noise(local.xz / 0.22 + local.y * 3.0 + h * 9.0), wx_keep(0.22, fw));
+    let dust = (1.0 - smoothstep(r * 1.2, r * 2.5, y + (ragged - 0.5) * r * 0.9)) * dirt;
+    let arch = 1.0 - smoothstep(r * 1.04, r * 1.8, min(length(local.yz - m.wheel[0].yz), length(local.yz - m.wheel[2].yz)) + (ragged - 0.5) * r * 0.5);
+    let grime = arch * (0.35 + 0.65 * dirt);
+    (*s).albedo = mix((*s).albedo, WX_CAR_DUST, clamp(dust * WX_CAR_DUST_COVER, 0.0, 1.0));
+    (*s).albedo = mix((*s).albedo, WX_CAR_GRIME, clamp(grime * WX_CAR_GRIME_COVER, 0.0, 1.0));
+    let old = smoothstep(0.45, 1.0, st_hash(hs + vec2<f32>(7.7, 2.1))) * select(0.0, 1.0, (*s).metal < 0.5 || (*s).rough > 0.2);
+    (*s).rough = clamp(mix((*s).rough, 0.85, max(dust, grime) * 0.8) + WX_CAR_DULL * old, 0.03, 1.0);
+}
+
+// A fragment's surface, its material (the lamps' glow set), the view and the
+// shading normal (`ag_shade`, `ag_shade_bore`).
+struct AgSurf {
+    s: Surface,
+    m: Material,
+    v: vec3<f32>,
+    n: vec3<f32>,
+};
+
+// `bore`: whether the pipeline draws the agents in a tunnel's bore (eo_agents
+// AGENT_IN_BORE, `--tunnels`) or every other: the fragments of the others are
+// discarded (each agent is drawn by one of the two).
+fn ag_surface(in: AgOut, bore: bool) -> AgSurf {
     var m = materials[in.material];
     let a = ag_agents[in.agent];
     let dpx = dpdx(in.world);
@@ -95,6 +136,10 @@ fn ag_shade(in: AgOut) -> vec4<f32> {
     // Derivatives first, in uniform control flow.
     let duvx = dpdx(in.uv);
     let duvy = dpdy(in.uv);
+    // (SF_TUNNELS false: no bore, no agent in one, and the test compiled out; look.rs `ShaderFeatures`)
+    if (SF_TUNNELS && ((a.flags & AG_IN_BORE) != 0u) != bore) {
+        discard;
+    }
     let v = normalize(frame.cam_pos.xyz - in.world);
     var n = normalize(in.normal);
     if (dot(in.normal, in.normal) < 1e-8) {
@@ -145,11 +190,47 @@ fn ag_shade(in: AgOut) -> vec4<f32> {
         }
     }
     let lamp = m.flags & (AG_M_TAIL | AG_M_BRAKE | AG_M_INDICATOR | AG_M_HEAD | AG_M_DRL | AG_M_REVERSE);
+    if (lamp == 0u && wx_level() != 0u) {
+        ag_weather(&s, in.local, a, wx_fw(dpx, dpy)); // weathering (`--grime`): a vehicle's body, wheels and trim
+    }
     if (lamp != 0u) {
         m.emissive = vec4<f32>(m.emissive.rgb * ag_lamp(a.flags, m.flags, in.local.x), 0.0);
     }
     s.rough = clamp(s.rough, 0.03, 1.0);
-    return look_light(s, m, v, in.world, n, 0u);
+    return AgSurf(s, m, v, n);
+}
+
+// (`--look cinematic`, stage L3; eo-sky `cine_wet`, kept equal by eo-render
+// tests/cine_wet.rs) car paint's clearcoat: a clear lacquer over the base
+// coat (automotive clearcoat GGX roughness ~0.05-0.1), the grime of
+// `--grime` (how much it roughened the paint) roughening the coat toward a
+// dull film.
+const AG_CINE_COAT_ROUGH: f32 = 0.07;
+const AG_CINE_COAT_GRIME_ROUGH: f32 = 0.35;
+
+// Every agent but those in a tunnel's bore: the city's light rig (look_light.wgsl).
+fn ag_shade(in: AgOut) -> vec4<f32> {
+    let g = ag_surface(in, false);
+    if (SF_CINEMATIC && (g.m.flags & AG_M_PAINT) != 0u && sky_on(skyu.flags.x, SKY_CINEMATIC)) {
+        let grime = clamp((g.s.rough - materials[in.material].params.x) / 0.4, 0.0, 1.0);
+        sky_coat = 1.0;
+        sky_coat_rough = mix(AG_CINE_COAT_ROUGH, AG_CINE_COAT_GRIME_ROUGH, grime);
+    }
+    return look_light(g.s, g.m, g.v, in.world, g.n, 0u);
+}
+
+// A car (or the player) in a tunnel's bore (`--tunnels`; the feed's
+// AGENT_IN_BORE), in pipelines of its own (agents.rs `bore`: agent-opaque
+// stands at the edge of what Apple's compiler takes, and a second light loop
+// beside look_light's did not compile): lit as the bore's own surfaces are
+// (structures.wgsl `sx_bore_light_at`: the clustered lights, the lined bore's
+// interreflection, the threshold zone and the portal's daylight by its depth
+// in; no sun, sky, rim or environment), its lamps' own glow added.
+fn ag_shade_bore(in: AgOut) -> vec4<f32> {
+    let g = ag_surface(in, true);
+    let d = f32(ag_agents[in.agent].flags >> AG_BORE_DEPTH_SHIFT) / AG_BORE_DEPTH_QUANT;
+    let c = sx_bore_light_at(g.s, g.m, g.v, in.world, 0u, d);
+    return vec4<f32>(c.rgb + g.m.emissive.rgb, c.a);
 }
 
 @fragment
@@ -166,6 +247,19 @@ struct AgIdsOut {
 fn agent_fs_ids(in: AgOut) -> AgIdsOut {
     var out: AgIdsOut;
     out.color = ag_shade(in);
+    out.ids = vec2<u32>(0xfffffffeu, in.material);
+    return out;
+}
+
+@fragment
+fn agent_bore_fs(in: AgOut) -> @location(0) vec4<f32> {
+    return ag_shade_bore(in);
+}
+
+@fragment
+fn agent_bore_fs_ids(in: AgOut) -> AgIdsOut {
+    var out: AgIdsOut;
+    out.color = ag_shade_bore(in);
     out.ids = vec2<u32>(0xfffffffeu, in.material);
     return out;
 }

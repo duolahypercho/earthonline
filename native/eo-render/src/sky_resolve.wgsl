@@ -18,6 +18,10 @@
 @group(0) @binding(7) var rs_vel: texture_2d<f32>;
 @group(0) @binding(8) var rs_lin: sampler;
 @group(0) @binding(9) var rs_trans: texture_2d<f32>; // the atmosphere's transmittance table
+// (lighting, `--lit-fog`) the fog lit by the local lights (lit_fog.wgsl): the in-scatter from
+// the eye to each froxel slice's far face, and [0] the frame it was integrated in.
+@group(0) @binding(10) var rs_lit_fog_vol: texture_3d<f32>;
+@group(0) @binding(11) var<storage, read> rs_lit_fog_state: array<u32>;
 
 @vertex
 fn resolve_vs(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4<f32> {
@@ -88,6 +92,47 @@ fn rs_volume(uv: vec2<f32>, dist: f32) -> vec4<f32> {
         return vec4<f32>(0.0, 0.0, 0.0, 1.0);
     }
     return acc / max(wsum, 1e-6);
+}
+
+/// (lighting, `--lit-fog`) the lamps' and headlamps' light the fog scatters
+/// toward the eye in front of a pixel at view distance `dist` (< 0: the sky,
+/// the whole volume) along `ray`: the integrated froxel volume read at the
+/// pixel's view depth (its texel k holds the light from the eye to slice k's
+/// far face; log slices over the clusters' near .. far). Added on top of the
+/// volume's result: the volume already carries this fog's extinction of the
+/// scene. Zero without the feature or when the volume was not made this frame
+/// (by day, no lights).
+fn rs_lit_fog(uv: vec2<f32>, dist: f32, ray: vec3<f32>) -> vec3<f32> {
+    if (!lk_lx_on(LX_BIT_LIT_FOG) || rs_lit_fog_state[0] != skyu.flags.y) {
+        return vec3<f32>(0.0);
+    }
+    var s = 1.0;
+    if (dist >= 0.0) {
+        let vz = max(dist * dot(ray, skyu.cam_fwd.xyz), skyu.cluster.x);
+        s = clamp(log(vz / skyu.cluster.x) / log(skyu.cluster.y / skyu.cluster.x), 0.0, 1.0);
+    }
+    // across the screen a cubic B-spline over the froxel columns (four trilinear taps, Sigg and
+    // Hadwiger 2005): bilinear over 12 px columns drew a lamp's halo as a soft square.
+    let dims = vec3<f32>(textureDimensions(rs_lit_fog_vol));
+    let w = s - 0.5 / dims.z;
+    let q = uv * dims.xy - 0.5;
+    let i = floor(q);
+    let f = q - i;
+    let f2 = f * f;
+    let f3 = f2 * f;
+    let w0 = (1.0 - 3.0 * f + 3.0 * f2 - f3) / 6.0;
+    let w1 = (4.0 - 6.0 * f2 + 3.0 * f3) / 6.0;
+    let w2 = (1.0 + 3.0 * f + 3.0 * f2 - 3.0 * f3) / 6.0;
+    let w3 = f3 / 6.0;
+    let g0 = w0 + w1;
+    let g1 = w2 + w3;
+    let t0 = (i - 0.5 + w1 / g0) / dims.xy;
+    let t1 = (i + 1.5 + w3 / g1) / dims.xy;
+    var l = textureSampleLevel(rs_lit_fog_vol, rs_lin, vec3<f32>(t0.x, t0.y, w), 0.0).rgb * (g0.x * g0.y);
+    l = l + textureSampleLevel(rs_lit_fog_vol, rs_lin, vec3<f32>(t1.x, t0.y, w), 0.0).rgb * (g1.x * g0.y);
+    l = l + textureSampleLevel(rs_lit_fog_vol, rs_lin, vec3<f32>(t0.x, t1.y, w), 0.0).rgb * (g0.x * g1.y);
+    l = l + textureSampleLevel(rs_lit_fog_vol, rs_lin, vec3<f32>(t1.x, t1.y, w), 0.0).rgb * (g1.x * g1.y);
+    return select(max(l, vec3<f32>(0.0)), vec3<f32>(0.0), any(l != l));
 }
 
 fn rs_scene(p: vec2<i32>, dims: vec2<i32>, vol: vec4<f32>) -> vec3<f32> {
@@ -212,6 +257,10 @@ fn resolve_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
             c = c + select(dc2, vec3<f32>(0.0), dl <= 0.0) * limb * smoothstep(r + px, r - px, ang) * td;
         }
     }
+    // (lighting, `--lit-fog`) the lit fog in front of the pixel (and of the sun's disc); the
+    // neighbourhood below takes it too, so the history is clipped to a box that holds it.
+    let lit = rs_lit_fog(uv, dist, ray);
+    c = c + lit;
     if (any(c != c)) {
         c = vec3<f32>(0.0);
     }
@@ -248,7 +297,7 @@ fn resolve_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                 vn = rs_volume((vec2<f32>(p + o) + 0.5) / vec2<f32>(dims), select(-1.0, dist, dn > 0.0));
             }
         }
-        let s = rs_ycocg(rs_tm(rs_scene(p + o, dims, vn)));
+        let s = rs_ycocg(rs_tm(rs_scene(p + o, dims, vn) + lit));
         m1 = m1 + s;
         m2 = m2 + s * s;
     }

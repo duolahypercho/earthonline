@@ -21,7 +21,7 @@ use crate::input::{Action, InputFrame};
 use crate::momentum::{self, Momentum};
 use crate::tuning::{self, speed};
 use crate::vehicle::{Vehicle, VehicleSpec};
-use crate::world::{CollisionWorld, layer};
+use crate::world::{CollisionWorld, LEVEL_REACH_M, layer};
 
 /// One fixed step's commands (what a network peer would send).
 #[derive(Clone, Copy, Debug, Default)]
@@ -159,10 +159,25 @@ impl Player {
         }
     }
 
-    /// Place a sedan with its road datum on the ground at (x, z).
+    /// Place a sedan with its road datum on the ground at (x, z): on the
+    /// street surface there (`surface_y`); where the ground has several
+    /// levels (decks), on the surface nearest below the player's own level
+    /// (its feet plus `LEVEL_REACH_M`), so a car put beside a player on a
+    /// deck stands on the deck and one beside a player under it on the street.
     pub fn spawn_vehicle(&mut self, world: &mut CollisionWorld, x: f64, z: f64, yaw: f64) -> usize {
-        let y = world.surface_y(x, z);
-        let v = Vehicle::spawn(world, VehicleSpec::sedan(), DVec3::new(x, y, z), yaw);
+        let y = if world.multi_level() { world.surface_below(x, z, self.character.feet().y + LEVEL_REACH_M) } else { world.surface_y(x, z) };
+        self.spawn_vehicle_on(world, DVec3::new(x, y, z), yaw)
+    }
+
+    /// Place a sedan on the surface nearest below `from` (x, reference
+    /// height, z): `CollisionWorld::surface_below` (`surface_y` on one level).
+    pub fn spawn_vehicle_below(&mut self, world: &mut CollisionWorld, from: DVec3, yaw: f64) -> usize {
+        let y = world.surface_below(from.x, from.z, from.y);
+        self.spawn_vehicle_on(world, DVec3::new(from.x, y, from.z), yaw)
+    }
+
+    fn spawn_vehicle_on(&mut self, world: &mut CollisionWorld, datum: DVec3, yaw: f64) -> usize {
+        let v = Vehicle::spawn(world, VehicleSpec::sedan(), datum, yaw);
         self.vehicles.push(v);
         self.vehicles.len() - 1
     }
@@ -369,11 +384,23 @@ impl Player {
         let flat = DQuat::from_rotation_y(yaw);
         let side = v.spec.width / 2.0 + tuning::DOOR_STATION_OUTSET_M;
         let candidates = [DVec3::new(side, 0.0, 0.0), DVec3::new(-side, 0.0, 0.0), DVec3::new(0.0, 0.0, -(v.spec.length / 2.0 + 0.8))];
+        let datum = v.datum(world);
         for local in candidates {
             let at = p + flat * local;
-            let top = world.raycast(DVec3::new(at.x, p.y + 3.0, at.z), DVec3::NEG_Y, 8.0, layer::WORLD | layer::STREET, Some(v.body));
-            let floor = world.floor_y(at.x, at.z);
-            let y = top.map(|h| h.point.y).unwrap_or(floor).max(floor);
+            let y = if world.multi_level() {
+                // several levels: the surface nearest below the car's own
+                // level at the door; one more than a level's reach under the
+                // car (past a deck's edge) is not a way out.
+                let y = world.surface_below(at.x, at.z, datum.y + LEVEL_REACH_M);
+                if y < datum.y - LEVEL_REACH_M {
+                    continue;
+                }
+                y
+            } else {
+                let top = world.raycast(DVec3::new(at.x, p.y + 3.0, at.z), DVec3::NEG_Y, 8.0, layer::WORLD | layer::STREET, Some(v.body));
+                let floor = world.floor_y(at.x, at.z);
+                top.map(|h| h.point.y).unwrap_or(floor).max(floor)
+            };
             let feet = DVec3::new(at.x, y, at.z);
             let center = Character::new(feet).position;
             let shape = Capsule::new_y(tuning::capsule::HALF_HEIGHT_M as f32, tuning::capsule::RADIUS_M as f32);

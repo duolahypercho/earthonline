@@ -33,11 +33,14 @@ pub struct ClientConfig {
     pub reconnect: bool,
     /// Input packets a second at most (the render thread may produce more steps).
     pub send_hz: f64,
+    /// This client's grade-separated roads (`--structures`, `--tunnels`), as
+    /// its collision world was built; the server refuses other ones.
+    pub structures: Option<eo_structures::StructureOptions>,
 }
 
 impl ClientConfig {
     pub fn new(server: SocketAddr, token: &str) -> Self {
-        Self { server, bind: "127.0.0.1:0".into(), token: token.as_bytes().to_vec(), spawn: None, conditions: Conditions::NONE, seed: 1, timeout_s: 3.0, reconnect: true, send_hz: 60.0 }
+        Self { server, bind: "127.0.0.1:0".into(), token: token.as_bytes().to_vec(), spawn: None, conditions: Conditions::NONE, seed: 1, timeout_s: 3.0, reconnect: true, send_hz: 60.0, structures: None }
     }
 }
 
@@ -346,7 +349,7 @@ fn run(inner: Arc<Mutex<Inner>>, link: Arc<Link>, stop: Arc<AtomicBool>, cfg: Cl
             Phase::Connecting | Phase::Reconnecting => {
                 if g.last_hello.is_none_or(|t| now - t > Duration::from_millis(100)) {
                     g.last_hello = Some(now);
-                    let hello = Hello { client_salt: g.client_salt, version: proto::PROTOCOL_VERSION, ground: proto::ground_scale_ppm(), token: cfg.token.clone(), spawn: cfg.spawn, resume: g.resume, server_salt: 0, cookie: 0 };
+                    let hello = Hello { client_salt: g.client_salt, version: proto::PROTOCOL_VERSION, ground: proto::ground_scale_ppm(), structures: proto::structures_code(cfg.structures), token: cfg.token.clone(), spawn: cfg.spawn, resume: g.resume, server_salt: 0, cookie: 0 };
                     let mut out = Vec::with_capacity(proto::REQUEST_PAD);
                     match &g.challenge {
                         Some(c) => {
@@ -406,7 +409,7 @@ fn run(inner: Arc<Mutex<Inner>>, link: Arc<Link>, stop: Arc<AtomicBool>, cfg: Cl
     }
 }
 
-fn handle(inner: &Arc<Mutex<Inner>>, _link: &Link, _cfg: &ClientConfig, data: &[u8], t0: Instant) {
+fn handle(inner: &Arc<Mutex<Inner>>, _link: &Link, cfg: &ClientConfig, data: &[u8], t0: Instant) {
     let Some((kind, mut r)) = proto::peek(data) else { return };
     let mut g = inner.lock().unwrap();
     match kind {
@@ -424,6 +427,13 @@ fn handle(inner: &Arc<Mutex<Inner>>, _link: &Link, _cfg: &ClientConfig, data: &[
                     g.phase = Phase::Denied(reason);
                     if reason == DenyReason::World as u8 {
                         eprintln!("net: the server refused this client: its ground plan (street size) is not x{} (start both with the same --ground-scale)", eo_data::groundscale::scale());
+                    }
+                    if reason == DenyReason::Structures as u8 {
+                        let theirs = r.u8().map(proto::structures_switches).unwrap_or("other structures");
+                        eprintln!(
+                            "net: the server refused this client: its world runs with {theirs}, this client with {} (start both with the same --structures and --tunnels)",
+                            proto::structures_switches(proto::structures_code(cfg.structures))
+                        );
                     }
                 }
             }

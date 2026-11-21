@@ -25,6 +25,8 @@ struct RawSimRoad {
     #[serde(default)]
     sidewalk: String,
     #[serde(default)]
+    layer: serde_json::Value,
+    #[serde(default)]
     bridge: bool,
     #[serde(default)]
     tunnel: bool,
@@ -70,6 +72,8 @@ pub struct SimRoad {
     pub sidewalk: String,
     pub bridge: bool,
     pub tunnel: bool,
+    /// The OSM `layer` tag (`crate::layer_of`): 0 at grade or untagged.
+    pub layer: i32,
     /// World metres (x east, z south), the file's precision.
     pub points: Vec<[f64; 2]>,
 }
@@ -107,6 +111,7 @@ impl SimSource {
                 sidewalk: r.sidewalk,
                 bridge: r.bridge,
                 tunnel: r.tunnel,
+                layer: crate::layer_of(&r.layer),
                 points: r.points.chunks_exact(2).map(|c| [c[0] * gs, c[1] * gs]).collect(), // * gs
             })
             .collect();

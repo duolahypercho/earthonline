@@ -86,7 +86,7 @@ fn luma(c: [f32; 3]) -> f32 {
 fn spec_colours() -> &'static HashMap<String, ([f32; 3], bool)> {
     static S: OnceLock<HashMap<String, ([f32; 3], bool)>> = OnceLock::new();
     S.get_or_init(|| {
-        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../eo-assets/data/kit-material-specs.json");
+        let path = eo_data::native_dir().join("eo-assets/data/kit-material-specs.json");
         let mut out = HashMap::new();
         let Ok(text) = std::fs::read_to_string(path) else { return out };
         let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else { return out };

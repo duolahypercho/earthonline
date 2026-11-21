@@ -127,6 +127,29 @@ const _: () = assert!(std::mem::size_of::<GpuAgent>() == 64);
 pub const AGENT_PLAYER: u32 = 1 << 16;
 /// Turn signal lamps lit this frame (the blink is decided on the CPU clock).
 pub const AGENT_BLINK_ON: u32 = 1 << 17;
+/// In a tunnel's bore (`--structures --tunnels`; the feed's `bore_at` for a
+/// car on a lane under grade): the renderer lights it as the bore's surfaces
+/// are lit (eo-render agents_draw.wgsl, structures.wgsl `sx_bore_light_at`),
+/// not by the sun and sky. Never set without bores.
+pub const AGENT_IN_BORE: u32 = 1 << 18;
+/// With `AGENT_IN_BORE`, the flags' bits from here up carry how far in the
+/// agent stands from the bore's nearer portal, in `1 / BORE_DEPTH_QUANT` m
+/// steps (saturating at the field's top: deep inside, or no portal).
+pub const BORE_DEPTH_SHIFT: u32 = 19;
+pub const BORE_DEPTH_QUANT: f64 = 8.0;
+pub const BORE_DEPTH_MAX_Q: u32 = (1 << (32 - BORE_DEPTH_SHIFT)) - 1;
+
+/// The flag bits of an agent in a bore `depth` m in from its nearer portal
+/// (`f64::INFINITY` with no portal).
+pub fn bore_flags(depth: f64) -> u32 {
+    let q = if depth.is_finite() { (depth.max(0.0) * BORE_DEPTH_QUANT).round().min(BORE_DEPTH_MAX_Q as f64) as u32 } else { BORE_DEPTH_MAX_Q };
+    AGENT_IN_BORE | (q << BORE_DEPTH_SHIFT)
+}
+
+/// The depth in from the portal that `flags` carry (None: not in a bore).
+pub fn bore_depth_of_flags(flags: u32) -> Option<f64> {
+    (flags & AGENT_IN_BORE != 0).then(|| (flags >> BORE_DEPTH_SHIFT) as f64 / BORE_DEPTH_QUANT)
+}
 
 /// Clip slots of the bake (the walk is slot 0; the others are standing clips).
 pub const CLIP_WALK: u32 = 0;

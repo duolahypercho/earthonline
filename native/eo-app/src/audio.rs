@@ -545,7 +545,7 @@ fn pct(v: &[f64], p: f64) -> f64 {
         return f64::NAN;
     }
     let mut s = v.to_vec();
-    s.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    s.sort_by(f64::total_cmp);
     s[((p / 100.0) * (s.len() - 1) as f64).round() as usize]
 }
 
@@ -654,7 +654,7 @@ fn scene_path(city: &eo_data::City, street: &eo_street::StreetWorld, s: &Scene, 
         let offs: Vec<f64> = (0..n)
             .map(|i| {
                 let mut w: Vec<f64> = out[i.saturating_sub(3)..(i + 4).min(n)].iter().map(|o| o.0).collect();
-                w.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                w.sort_by(f64::total_cmp);
                 w[w.len() / 2]
             })
             .collect();
@@ -706,7 +706,8 @@ fn render_main(raw: &[String], k: usize, process_start: Instant) -> Result<()> {
         let pre_s = 3.0;
         let speed = if s.drive { 12.0 } else { 1.4 };
         let path = scene_path(&city, &street, s, s.lead_m + speed * (seconds + pre_s) + 60.0)?;
-        let ground: Arc<dyn eo_player::world::GroundProvider> = Arc::new(eo_player::street_ground::StreetGround(street.clone()));
+        // the offline mixes walk and drive the street surface, without grade-separated roads.
+        let ground: Arc<dyn eo_player::world::GroundProvider> = Arc::new(eo_player::street_ground::StreetGround::new(street.clone(), None));
         let mut cw = eo_player::world::CollisionWorld::new(ground, buildings.clone(), 2);
         let mut start = glam::DVec3::new(path[0][0], elevation.ground(path[0][0], path[0][1]), path[0][1]);
         cw.load_blocking(start, eo_player::world::LOAD_RADIUS_M);

@@ -22,6 +22,8 @@ const ENV_PAINTED_METAL: i32 = 3;
 // A film of water over sand (the swash's wet band, landmarks_surface.wgsl): it reflects the environment strongly.
 const ENV_WET_FILM: i32 = 4;
 const ENV_KITCHEN: i32 = 5;
+// The water pass accounts for air-interface reflection on submerged terrain.
+const ENV_SUBMERGED: i32 = 6;
 // GLAZING_PROBE_ROUGHNESS_FLOOR (src/render/materials/glazing-environment.js:
 // a 4-texel footprint on the 128 px probe).
 const GLAZING_ROUGHNESS_FLOOR: f32 = 0.152;
@@ -41,16 +43,51 @@ fn lk_sh(n: vec3<f32>) -> vec3<f32> {
     return max(e, vec3<f32>(0.0));
 }
 
-// Sun visibility 0..1 at a world point (cascade by view depth, normal offset,
-// depth pull-back, 4-tap bilinear PCF, the last cascade fading out).
+// Sun visibility from cascade `c` at a world point (normal offset, depth
+// pull-back, four bilinear compares at half-texel offsets: a 3 x 3 texel
+// tent), or -1 where the point lies outside the cascade's box and `bounded`
+// asks (the probe pass sees round the camera; the blend's next cascade).
+fn lk_cascade(c: i32, world: vec3<f32>, ng: vec3<f32>, bounded: bool) -> f32 {
+    let b = look.cascade_bias[c];
+    let p = world + ng * b.x;
+    let clip = look.cascade_vp[c] * vec4<f32>(p, 1.0);
+    let uv = vec2<f32>(clip.x * 0.5 + 0.5, 0.5 - clip.y * 0.5);
+    let z = clip.z + b.y;
+    if (bounded && (any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0)) || z < 0.0 || z > 1.0)) {
+        return -1.0;
+    }
+    let texel = 1.0 / f32(textureDimensions(lk_shadow_map).x);
+    let h = 0.5 * texel;
+    return 0.25 * (textureSampleCompareLevel(lk_shadow_map, lk_shadow_cmp, uv + vec2<f32>(-h, -h), c, z)
+        + textureSampleCompareLevel(lk_shadow_map, lk_shadow_cmp, uv + vec2<f32>(h, -h), c, z)
+        + textureSampleCompareLevel(lk_shadow_map, lk_shadow_cmp, uv + vec2<f32>(-h, h), c, z)
+        + textureSampleCompareLevel(lk_shadow_map, lk_shadow_cmp, uv + vec2<f32>(h, h), c, z));
+}
+
+// Sun visibility 0..1 at a world point: the cascade by view depth, the last
+// fading out over the shadow fade (cascade_split.w to .z). With
+// `--cascade-blend` (LX_BIT_CASCADE_BLEND) a cascade hands over to the next
+// over the last LK_CASCADE_BLEND_BAND of its slice (eo-look
+// `cascade_blend_weight`) instead of switching at the split; with
+// `--far-shadows` the far map (far_shadow.wgsl) takes over in the fade and
+// past it. LK_SHADOW_* (look.rs `ShadowLevels`) say which parts a pipeline
+// compiles.
 fn lk_shadow(world: vec3<f32>, ng: vec3<f32>) -> f32 {
     var vd = dot(world - look.cam_pos.xyz, look.cam_fwd.xyz);
-    if (frame.copy_step.z > 0.5) {
+    let probe = frame.copy_step.z > 0.5;
+    if (probe) {
         vd = distance(world, look.cam_pos.xyz); // probe pass
     }
     let split = look.cascade_split;
-    if (vd >= split.z || look.key_dir.w <= 0.0) {
+    if (look.key_dir.w <= 0.0) {
         return 1.0;
+    }
+    let far = LK_SHADOW_FAR && lk_far_on();
+    if (vd >= split.z || !LK_SHADOW_CASCADES) {
+        if (!far) {
+            return 1.0;
+        }
+        return mix(1.0, lk_far_shadow(world, ng), look.key_dir.w);
     }
     var c = 0;
     if (vd > split.x) {
@@ -59,23 +96,25 @@ fn lk_shadow(world: vec3<f32>, ng: vec3<f32>) -> f32 {
     if (vd > split.y) {
         c = 2;
     }
-    let b = look.cascade_bias[c];
-    let p = world + ng * b.x;
-    let clip = look.cascade_vp[c] * vec4<f32>(p, 1.0);
-    let uv = vec2<f32>(clip.x * 0.5 + 0.5, 0.5 - clip.y * 0.5);
-    let z = clip.z + b.y;
-    // the probe pass sees round the camera; outside the cascade box is unshadowed.
-    if (frame.copy_step.z > 0.5 && (any(uv < vec2<f32>(0.0)) || any(uv > vec2<f32>(1.0)) || z < 0.0 || z > 1.0)) {
-        return 1.0;
+    var vis = lk_cascade(c, world, ng, probe);
+    if (vis < 0.0) {
+        return 1.0; // the probe pass, outside the cascade's box: unshadowed
     }
-    let texel = 1.0 / f32(textureDimensions(lk_shadow_map).x);
-    // Four bilinear compares at half-texel offsets: a 3 x 3 texel tent.
-    let h = 0.5 * texel;
-    let vis = 0.25 * (textureSampleCompareLevel(lk_shadow_map, lk_shadow_cmp, uv + vec2<f32>(-h, -h), c, z)
-        + textureSampleCompareLevel(lk_shadow_map, lk_shadow_cmp, uv + vec2<f32>(h, -h), c, z)
-        + textureSampleCompareLevel(lk_shadow_map, lk_shadow_cmp, uv + vec2<f32>(-h, h), c, z)
-        + textureSampleCompareLevel(lk_shadow_map, lk_shadow_cmp, uv + vec2<f32>(h, h), c, z));
+    if (LK_SHADOW_BLEND && c < 2 && lk_lx_on(LX_BIT_CASCADE_BLEND)) {
+        let end = select(split.x, split.y, c == 1);
+        let start = select(0.0, split.x, c == 1);
+        let t = lk_smooth(end - (end - start) * LK_CASCADE_BLEND_BAND, end, vd);
+        if (t > 0.0) {
+            let next = lk_cascade(c + 1, world, ng, true);
+            if (next >= 0.0) {
+                vis = vis + (next - vis) * t;
+            }
+        }
+    }
     let fade = lk_smooth(split.w, split.z, vd);
+    if (far && fade > 0.0) {
+        return mix(1.0, mix(vis, lk_far_shadow(world, ng), fade), look.key_dir.w);
+    }
     return mix(1.0, mix(vis, 1.0, fade), look.key_dir.w);
 }
 
@@ -133,6 +172,8 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
         cls = look.env_class.w;
     } else if (s.env == ENV_PAINTED_METAL) {
         cls = ST_ENV_PAINTED_METAL;
+    } else if (s.env == ENV_SUBMERGED) {
+        cls = 0.0;
     } else if (s.env == ENV_WET_FILM) {
         cls = 0.65 / max(look.ambient.w, 1e-3); // env_i 0.65 (at 1 the film reads as standing water)
     } else if (kind == 2u || kind == 6u || kind == 7u) {
@@ -161,10 +202,35 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     // Indirect diffuse.
     let hemi = mix(look.hemi_ground.xyz, look.hemi_sky.xyz, n.y * 0.5 + 0.5);
     var env_e = lk_sh(n);
+    // the probe grid (`--probe-grid`, probe_grid.wgsl): the two probes round
+    // the point by distance and presence, in the single probe's place (never
+    // inside the probe pass).
+    let pg = pg_live() && frame.copy_step.z < 0.5;
+    var pgs = PgSel(vec4<f32>(0.0), vec4<f32>(0.0), 0u, 0.0, 0.0);
+    if (pg) {
+        pgs = pg_select(world);
+    }
     if (fa_probe_on() && (fa_run() & 16u) != 0u) {
         env_e = fa_probe_irradiance(n); // the bound scene probe's diffuse
+    } else if (pg && pgs.cover > 0.0 && (fa_run() & 16u) != 0u) {
+        env_e = mix(env_e, pg_irradiance(pgs, n), pgs.cover); // the grid's diffuse (`--probe-yield`)
     }
-    let irr = hemi + look.ambient.xyz + env_e * env_i;
+    var irr = hemi + look.ambient.xyz + env_e * env_i;
+    // the ambient volume (`--ambient-volume`, ambient.wgsl): the sky terms
+    // by the large-scale sky visibility round the normal.
+    let amb = amb_on();
+    var av = AMB_OPEN;
+    if (amb) {
+        av = amb_sample(world, ng);
+        irr = amb_irradiance(av, n, env_e * env_i);
+        // the ground bounce (`--ground-bounce`, ambient.wgsl): light from the
+        // sunlit open ground below (look.lx[0].yzw, zero while off or at night).
+        if (AMB_SHADER_LEVELS > 0u) {
+            if (any(look.lx[0].yzw > vec3<f32>(0.0))) {
+                irr = irr + amb_bounce(amb_ground(world, ng), n, sky_cloud_transmittance(world));
+            }
+        }
+    }
     let nv = max(dot(n, v), 1e-4);
     let dfg = lk_dfg(nv, rough);
     let fss = f0 * dfg.x + vec3<f32>(dfg.y);
@@ -191,16 +257,38 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
         } else {
             rad = fa_probe_sample(r, fa_probe_lod(rough));
         }
-    } else if (sharp > 0.0) {
-        rad = mix(rad, lk_sky_sample(r), sharp);
+    } else {
+        if (sharp > 0.0) {
+            rad = mix(rad, lk_sky_sample(r), sharp);
+        }
+        if (pg && pgs.cover > 0.0) {
+            // the probe grid is the specular environment where its probes reach
+            // (glass through the glazing floor and the canyon lift).
+            rad = mix(rad, pg_reflect(pgs, r, world, rough, glass), pgs.cover);
+        }
     }
     let spec_occ = clamp(pow(nv + ao, exp2(-16.0 * rough - 1.0)) - 1.0 + ao, 0.0, 1.0);
     // glossy (wet) ground reflects the previous frame where its ray finds it.
-    if (s.env != ENV_KITCHEN) {
-        let ssr = sky_ssr(world, n, v, rough);
-        rad = mix(rad * env_i, ssr.rgb, ssr.a);
+    // (`--look cinematic`, stage L3) on car paint the clearcoat's sharper reflection (below)
+    let coat_on = SKY_CINE_FULL && sky_coat > 0.0;
+    // the house's kitchen reflects its own captured room (draw.wgsl `kitchen_reflection`):
+    // no screen-space term, ambient volume or environment intensity over it.
+    let kitchen = s.env == ENV_KITCHEN;
+    var ssr = vec4<f32>(0.0);
+    if (!kitchen) {
+        ssr = sky_ssr(world, select(n, ng, coat_on), v, select(rough, sky_coat_rough, coat_on));
     }
-    let indirect_s = rad * fss * spec_occ;
+    var rad_e = rad;
+    if (!kitchen) {
+        rad_e = rad * env_i;
+        if (amb) {
+            // the ambient volume: the environment by the sky seen along the
+            // reflection, what blocks it by its own radiance (ambient.wgsl).
+            let aw = amb_reflection(av, r);
+            rad_e = rad_e * aw.x + look.hemi_ground.xyz * (env_i * aw.y / LK_PI);
+        }
+    }
+    let indirect_s = mix(rad_e, ssr.rgb, ssr.a) * fss * spec_occ;
     // The bounce is outgoing Lambert radiance (bounce x diffuse albedo), added
     // outside the occlusion multiply as the JS adds it on the emissive slot.
     let bounce = ao4.rgb * diffuse;
@@ -213,7 +301,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     }
 
     var lit = direct_d + direct_s + indirect_d + indirect_s + bounce + m.emissive.rgb + rm_emit; // + the room
-    lit = lit + sky_local_lights(world, n, v, diffuse, f0, rough); // street lamps, headlamps
+    lit = lit + sky_local_lights_ao(world, n, v, diffuse, f0, rough, ao); // street lamps, headlamps (`ao` and their shadows only with the light shadows on)
     var alpha = s.alpha;
     if (glass && m.emissive.w > 0.0) {
         // the glass's clearcoat layer (three's PhysicalLightingModel:
@@ -230,6 +318,8 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
         var rad_c = mix(lk_sh(rc) / LK_PI, lk_sky_sample(rc), sharp_c);
         if (fa_probe_on()) {
             rad_c = fa_glazing(rc, world, ccr); // facade
+        } else if (pg && pgs.cover > 0.0) {
+            rad_c = mix(rad_c, pg_reflect(pgs, rc, world, ccr, true), pgs.cover); // the probe grid
         }
         let dfg_c = lk_dfg(nvc, ccr);
         let cc_ind = rad_c * env_i * (0.04 * dfg_c.x + dfg_c.y);
@@ -238,6 +328,29 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
             cc_dir = key * lk_ggx(ncc, v, l, vec3<f32>(0.04), ccr) / max(nl, 1e-4) * max(dot(ncc, l), 0.0);
         }
         lit = lit * (1.0 - cc * fcc) + cc * (cc_ind + cc_dir);
+    }
+    if (coat_on) {
+        // (`--look cinematic`, stage L3) car paint's clearcoat (set by
+        // agents_draw.wgsl): F0 0.04 on the geometry normal, its own
+        // roughness (grime roughens it), the base attenuated by 1 - coat x F;
+        // the sky or the probe grid along its reflection (the street where the
+        // screen-space reflection finds it), the key, and the street's lights
+        // (gathered in the clusters' loop, `sky_coat_lights`).
+        let ccr = sky_coat_rough;
+        let nvc = max(dot(ng, v), 1e-4);
+        let fcc = 0.04 + 0.96 * pow(1.0 - nvc, 5.0);
+        let rc = reflect(-v, ng);
+        var rad_c = mix(lk_sh(rc) / LK_PI, lk_sky_sample(rc), 1.0 - lk_smooth(0.15, 0.5, ccr));
+        if (pg && pgs.cover > 0.0) {
+            rad_c = mix(rad_c, pg_reflect(pgs, rc, world, ccr, false), pgs.cover);
+        }
+        rad_c = mix(rad_c * env_i, ssr.rgb, ssr.a); // the street it stands on, where the reflection finds it
+        let dfg_c = lk_dfg(nvc, ccr);
+        var cc_dir = vec3<f32>(0.0);
+        if (nl > 0.0) {
+            cc_dir = key * lk_ggx(ng, v, l, vec3<f32>(0.04), ccr) / max(nl, 1e-4) * max(dot(ng, l), 0.0);
+        }
+        lit = lit * (1.0 - sky_coat * fcc) + sky_coat * (rad_c * (0.04 * dfg_c.x + dfg_c.y) * ao + cc_dir + sky_coat_lights);
     }
     if (glass) {
         let fv = 0.04 + 0.96 * pow(1.0 - nv, 5.0);

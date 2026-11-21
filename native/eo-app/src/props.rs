@@ -53,11 +53,15 @@ pub struct Props2Args {
     pub features: u32,
     /// `--capture-props2`: the props2 capture cameras (bench `--capture`).
     pub capture: bool,
+    /// `--stand-ins` (quality.rs; the high and hyper tiers): a street-prop kind whose
+    /// GLB is absent from the checkout draws its procedural stand-in
+    /// (`eo_render::props_lib2::LibExtras::stand_ins`). Off: the grey proxies.
+    pub stand_ins: bool,
 }
 
 impl Default for Props2Args {
     fn default() -> Self {
-        Self { furniture: true, eztree: true, overhead: true, wires: true, features: eo_render::props::F_ALL, capture: false }
+        Self { furniture: true, eztree: true, overhead: true, wires: true, features: eo_render::props::F_ALL, capture: false, stand_ins: false }
     }
 }
 
@@ -66,7 +70,7 @@ impl Props2Args {
     pub fn parse_flag(&mut self, s: &str) -> bool {
         match s {
             "--no-props2" => {
-                *self = Self { furniture: false, eztree: false, overhead: false, wires: false, features: 0, capture: self.capture };
+                *self = Self { furniture: false, eztree: false, overhead: false, wires: false, features: 0, capture: self.capture, stand_ins: self.stand_ins };
             }
             "--no-furniture" => self.furniture = false,
             "--no-eztree" => self.eztree = false,
@@ -190,6 +194,10 @@ pub struct PropsRuntime {
     pub errors: Vec<String>,
     started: Instant,
     clock: f64,
+    /// The tiles holding a tunnel bore's lamps (`--tunnels`; empty
+    /// otherwise): planned with the street's tiles (a bore runs under tiles
+    /// with no street), by their distance along the bore as well as over the ground.
+    bore_tiles: HashSet<Key>,
 }
 
 impl PropsRuntime {
@@ -225,6 +233,7 @@ impl PropsRuntime {
             errors: vec![],
             started: Instant::now(),
             clock: 0.0,
+            bore_tiles: HashSet::new(),
         };
         let Some(street) = world.street.as_ref().map(|s| s.world.clone()) else {
             rt.on = false;
@@ -236,6 +245,7 @@ impl PropsRuntime {
         let paths = world.paths.clone();
         let cache = crate::cache_dir(args);
         let city = world.city.clone(); // the furniture frontage and the service drops read the loaded buildings
+        let structures = world.structures.clone(); // the grade-separated roads (`--structures`)
         let p2 = args.props2;
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::Builder::new()
@@ -258,14 +268,18 @@ impl PropsRuntime {
                         .ok();
                     let overhead_js = eo_props::overhead::OverheadJs::load().map_err(|e| eprintln!("props2: overhead export not read ({e:#})")).ok();
                     let dome = lib2::dome_standards(&ca)?;
-                    let extras = lib2::LibExtras { ez: ez.as_deref(), signs: signs.as_ref(), overhead: overhead_js.as_ref() };
+                    let extras = lib2::LibExtras { ez: ez.as_deref(), signs: signs.as_ref(), overhead: overhead_js.as_ref(), stand_ins: p2.stand_ins };
                     let lib = PropLibrary::load_full(&paths.repo_root, &js, lens, &extras, dome, cache.as_deref())?;
+                    // what stands in for an absent GLB: the procedural model (`--stand-ins`) or the grey proxy.
+                    let drawn = if p2.stand_ins { "procedural stand-in drawn (--stand-ins)" } else { "grey proxy drawn (--stand-ins draws a procedural model)" };
                     for m in &lib.missing {
-                        eprintln!("props: missing asset, proxy drawn: {m}");
+                        eprintln!("props: missing asset, {drawn}: {m}");
                     }
                     let library_ms = t_lib.elapsed().as_secs_f64() * 1e3;
-                    let source = Arc::new(eo_sim::native::load(&paths)?);
-                    let world = Arc::new(PropsWorld::new(street, js, std));
+                    // The same structure levels as the sim, so the signal junctions match it (`--structures`).
+                    let levels = structures.as_ref().map(|s| s.way_levels().clone()).unwrap_or_default();
+                    let source = Arc::new(eo_sim::native::load(&paths)?.with_levels(levels));
+                    let world = Arc::new(PropsWorld::new(street, js, std).with_structures(structures));
                     if p2.furniture || p2.eztree {
                         world.install_furniture(&city.buildings)?;
                     }
@@ -407,6 +421,7 @@ impl PropsRuntime {
                 match r {
                     Ok((g, world, source, facts)) => {
                         renderer.attach_props_gpu(g);
+                        self.bore_tiles = world.clear_structures().map(|s| s.all_tunnel_lights().iter().map(|l| eo_street::tile_key(l.pos[0], l.pos[2])).collect()).unwrap_or_default();
                         self.start_workers(world.clone(), source.clone(), facts);
                         self.world = Some(world);
                         self.source = Some(source);
@@ -433,13 +448,17 @@ impl PropsRuntime {
         for tz in cz - reach..=cz + reach {
             for tx in cx - reach..=cx + reach {
                 let k = (tx, tz);
-                if !world.street.tiles.contains_key(&k) {
+                let bore = self.bore_tiles.contains(&k);
+                if !world.street.tiles.contains_key(&k) && !bore {
                     continue;
                 }
                 // the true 3D distance to the tile's ground (nothing in a tile farther
                 // than the longest draw distance, 360 m in 3D, can be drawn; from the elevated
                 // path most of a 300 m horizontal disc is past it and was planned for nothing).
-                let d = tile_distance_3d(k, eye, |x, z| world.street.terrain.ground(x as f64, z as f64) as f32);
+                let mut d = tile_distance_3d(k, eye, |x, z| world.street.terrain.ground(x as f64, z as f64) as f32);
+                if bore {
+                    d = d.min(tile_distance_3d(k, eye, |_, _| eye.y)); // a bore's lamps, seen along the bore under the ground
+                }
                 if d <= LOAD_M || (self.slots.contains_key(&k) && d <= DROP_M) {
                     wanted.insert(k);
                 }
@@ -765,7 +784,11 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
                 _ => high,
             };
             let s = tr.scale as f32;
-            props.push(eo_props::Prop { model: Model::Tree, pos: [tr.x, tr.y, tr.z], yaw: tr.yaw, scale: [s, s, s], variant, live: Live::None });
+            let tree = eo_props::Prop { model: Model::Tree, pos: [tr.x, tr.y, tr.z], yaw: tr.yaw, scale: [s, s, s], variant, live: Live::None };
+            // Park trees keep clear of the grade-separated roads' decks, girders and columns (`--structures`; unchanged without).
+            if let Some(tree) = world.clear_prop(tree) {
+                props.push(tree);
+            }
         }
     }
     let mut instances = Vec::with_capacity(props.len());
@@ -819,26 +842,28 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
             }
         }
     }
-    // the district lights' luminaires (kept for the night lighting).
-    let lights: Vec<GpuLampLight> = if p2.furniture {
-        lights
-            .iter()
-            .map(|l| GpuLampLight {
-                pos: [l.pos[0] as f32, l.pos[1] as f32, l.pos[2] as f32],
-                range: l.range_m,
-                colour: l.colour_linear,
-                intensity: l.intensity,
-                angle: l.angle,
-                penumbra: l.penumbra,
-                decay: l.decay,
-                source_lift: l.source_lift_m,
-                kind: l.kind as u32,
-                pad: [0; 3],
-            })
-            .collect()
-    } else {
-        vec![]
-    };
+    // the district lights' luminaires (kept for the night lighting), and a
+    // tunnel bore's lamps (`--tunnels`, eo-props `PropsWorld::tunnel_lights`;
+    // none otherwise): lit round the clock in the tunnel lamps' colour
+    // (eo-render structures.rs `TUNNEL_LAMP_FLAG`), kept with `--no-furniture` too.
+    let bore: Vec<[f64; 3]> = world.tunnel_lights(key).iter().map(|l| l.pos).collect();
+    let lights: Vec<GpuLampLight> = lights
+        .iter()
+        .map(|l| (l, bore.contains(&l.pos)))
+        .filter(|(_, in_bore)| p2.furniture || *in_bore)
+        .map(|(l, in_bore)| GpuLampLight {
+            pos: [l.pos[0] as f32, l.pos[1] as f32, l.pos[2] as f32],
+            range: l.range_m,
+            colour: if in_bore { eo_render::structures::TUNNEL_LAMP_LINEAR } else { l.colour_linear },
+            intensity: l.intensity,
+            angle: l.angle,
+            penumbra: l.penumbra,
+            decay: l.decay,
+            source_lift: l.source_lift_m,
+            kind: l.kind as u32,
+            pad: [if in_bore { eo_render::structures::TUNNEL_LAMP_FLAG } else { 0 }, 0, 0],
+        })
+        .collect();
     // the street overhead of this tile.
     let t1 = Instant::now();
     let mut wires = vec![];
@@ -1042,7 +1067,7 @@ pub fn props2_poses(world: &crate::World, aspect: f32, far: f32) -> Vec<(String,
     let Ok(js) = eo_props::JsProps::load() else { return out };
     let Ok(ca) = eo_data::CaStandards::load(&world.paths) else { return out };
     let Ok(std) = eo_props::Standards::load(&ca) else { return out };
-    let pw = PropsWorld::new(street.clone(), Arc::new(js), std);
+    let pw = PropsWorld::new(street.clone(), Arc::new(js), std); // no structures: the same poses with and without `--structures`
     let _ = pw.install_furniture(&world.city.buildings);
     let plan = &street.plan;
     let ground = |x: f32, z: f32| street.surface_at(x as f64, z as f64, None) as f32;
@@ -1200,7 +1225,7 @@ pub fn capture_cameras(world: &crate::World, aspect: f32, far: f32) -> Vec<(Stri
     let Ok(js) = eo_props::JsProps::load() else { return out };
     let Ok(ca) = eo_data::CaStandards::load(&world.paths) else { return out };
     let Ok(std) = eo_props::Standards::load(&ca) else { return out };
-    let pw = PropsWorld::new(street.clone(), Arc::new(js), std);
+    let pw = PropsWorld::new(street.clone(), Arc::new(js), std); // no structures: the same cameras with and without `--structures`
     let plan = &street.plan;
     let ground = |x: f32, z: f32| street.surface_at(x as f64, z as f64, None) as f32;
     // 1. The signalised junction nearest (1600, -400) with heads.

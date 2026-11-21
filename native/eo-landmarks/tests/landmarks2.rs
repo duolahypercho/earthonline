@@ -76,6 +76,19 @@ fn the_waterfront_is_built() {
     let m = wf::build_meshes(&edges, &piers, &w.oracle, &crest, js.sea_level_y, 0.42, [0.5; 3], wf::UNDER_DECK_LINEAR, [0.7; 3], [0.1; 3]);
     println!("waterfront: {} decks, {} piles; paving {} / concrete {} / under-deck {} triangles", m.decks, m.piles, m.paving.triangles(), m.concrete.triangles(), m.under_deck.triangles());
     assert!(m.decks == piers.len() && m.piles > 5_000);
+    // Trace the parapet all the way from the Black Point approach to the
+    // curved head. This also catches accidentally picking a neighbouring pier.
+    let mut curve = edges.clone();
+    let mut tally = c.clone();
+    wf::align_municipal_edges(&mut curve, &mut tally, &piers);
+    assert_eq!(tally.pier + tally.wall, c.pier + c.wall);
+    let pier_bed = wf::ShorePress::new(js.sea_level_y, &curve, &piers).with_municipal_pier(&piers);
+    assert!(pier_bed.press(-598.0, -3546.0, 3.0) < js.sea_level_y);
+    assert_eq!(pier_bed.press(-598.0, -3546.0, -6.0), -6.0);
+    let rail = wf::municipal_parapet(&piers).expect("Municipal Pier in the city polygons");
+    for [x, z] in [[-645.5_f32, -3334.0_f32], [-598.0, -3546.0], [-437.0, -3587.5]] {
+        assert!(rail.positions.chunks_exact(3).any(|p| (p[0] - x).hypot(p[2] - z) < 7.0));
+    }
 }
 
 /// The open spaces' ground: a lawn in a park, a park the JS paves left to the
@@ -132,4 +145,106 @@ fn the_registry_holds_the_bridges_and_buildings() {
     let js = LandmarksJs::get();
     assert_eq!(js.registry.len(), 2 + eo_landmarks::towers::BUILDING_IDS.len());
     assert!(js.rules.near_m > 0.0 && js.rules.fog_cap_m > 0.0);
+}
+
+/// The beach sand fitted to the city shore (`beach_sand_fit`): Aquatic Park's
+/// mapped lawns behind the beach and the Jefferson Street quay east of the
+/// Hyde Street Pier are no longer sand (the JS reach rule spreads it there),
+/// the beach itself still is, and the sand round Ocean Beach and in Crissy
+/// Field's dune scrub stays.
+#[test]
+fn the_beach_sand_fits_the_city_shore() {
+    eo_data::groundscale::pin(1.0);
+    let w = world();
+    let cover = GroundCover::load(&w.root).unwrap();
+    let (greens, _) = eo_landmarks::plaza::load_areas(&w.root).unwrap();
+    let shore = |x: f64, z: f64| w.oracle.edge_distance(x, z, 400.0);
+    let land = |x: f64, z: f64| w.oracle.is_land(x, z);
+    // Aquatic Park: the beach polygon is sand either way.
+    let ap = w.beaches.iter().find(|b| b.osm.ends_with("224941181")).expect("Aquatic Park beach");
+    let n = ap.polygon.len() as f64;
+    let c = ap.polygon.iter().fold([0.0, 0.0], |s, p| [s[0] + p[0] / n, s[1] + p[1] / n]);
+    let inside = ap.polygon.iter().map(|p| [(p[0] + c[0]) / 2.0, (p[1] + c[1]) / 2.0]).find(|p| eo_landmarks::waterfront::point_in_ring(&ap.polygon, p[0], p[1])).expect("a point inside the beach");
+    assert!(cover.beach_sand_fit(inside[0], inside[1], &shore));
+    // Its lawns (the Maritime Garden's grass, mapped inside the park behind
+    // the beach): sand under the JS rule, lawn now.
+    let mut lawn = 0;
+    for g in greens.iter().filter(|g| g.kind == "grass" && g.polygon.iter().all(|p| p[0] > -560.0 && p[0] < -100.0 && p[1] > -3300.0 && p[1] < -3100.0)) {
+        let n = g.polygon.len() as f64;
+        let p = g.polygon.iter().fold([0.0, 0.0], |s, q| [s[0] + q[0] / n, s[1] + q[1] / n]);
+        if !eo_landmarks::waterfront::point_in_ring(&g.polygon, p[0], p[1]) || !cover.beach_sand(p[0], p[1], shore(p[0], p[1])) {
+            continue;
+        }
+        assert!(!cover.beach_sand_fit(p[0], p[1], &shore), "{} is a lawn, not sand", g.id);
+        lawn += 1;
+    }
+    assert!(lawn >= 3, "only {lawn} Aquatic Park lawns lay under the JS sand");
+    // The Jefferson Street quay east of the Hyde Street Pier: the sea's edge is
+    // the harbour's seawall, the beach off to the side.
+    let mut quay = 0;
+    for k in 0..40 {
+        let (x, z) = (-30.0 + k as f64 * 2.5, -3338.0);
+        if !land(x, z) || !cover.beach_sand(x, z, shore(x, z)) {
+            continue;
+        }
+        assert!(!cover.beach_sand_fit(x, z, &shore), "({x}, {z}) on the quay is sand");
+        quay += 1;
+    }
+    assert!(quay >= 5, "only {quay} quay points lay under the JS sand");
+    // Ocean Beach: the band round the polygon keeps (nearly all) its sand.
+    let ob = w.beaches.iter().find(|b| b.polygon.iter().any(|p| p[0] < -8000.0)).expect("Ocean Beach");
+    let (mut was, mut kept) = (0, 0);
+    for (i, p) in ob.polygon.iter().enumerate().step_by(3) {
+        let q = ob.polygon[(i + 1) % ob.polygon.len()];
+        let (dx, dz) = (q[0] - p[0], q[1] - p[1]);
+        let l = dx.hypot(dz).max(1e-6);
+        for side in [-1.0, 1.0] {
+            for off in [20.0, 50.0, 80.0] {
+                let (x, z) = (p[0] - dz / l * off * side, p[1] + dx / l * off * side);
+                if !land(x, z) || eo_landmarks::waterfront::point_in_ring(&ob.polygon, x, z) || !cover.beach_sand(x, z, shore(x, z)) {
+                    continue;
+                }
+                was += 1;
+                kept += cover.beach_sand_fit(x, z, &shore) as usize;
+            }
+        }
+    }
+    println!("Ocean Beach band: {kept} of {was} sampled sand points kept");
+    assert!(was >= 20 && kept * 10 >= was * 9, "Ocean Beach lost its sand: {kept} of {was}");
+    // Crissy Field: the dune scrub mapped behind the beach is wild cover, still sand.
+    let (mut was, mut kept) = (0, 0);
+    for g in greens.iter().filter(|g| g.kind == "scrub" && g.polygon.iter().all(|p| p[0] > -4500.0 && p[0] < -3000.0 && p[1] > -3250.0 && p[1] < -2950.0)) {
+        for p in &g.polygon {
+            let n = g.polygon.len() as f64;
+            let c = g.polygon.iter().fold([0.0, 0.0], |s, q| [s[0] + q[0] / n, s[1] + q[1] / n]);
+            let (x, z) = ((p[0] * 3.0 + c[0]) / 4.0, (p[1] * 3.0 + c[1]) / 4.0);
+            if !land(x, z) || !cover.beach_sand(x, z, shore(x, z)) {
+                continue;
+            }
+            was += 1;
+            kept += cover.beach_sand_fit(x, z, &shore) as usize;
+        }
+    }
+    println!("Crissy Field dune scrub: {kept} of {was} sampled sand points kept");
+    assert!(was >= 10 && kept * 10 >= was * 9, "Crissy Field's dunes lost their sand: {kept} of {was}");
+    // The share of Aquatic Park (the mapped park, beach and all) the two rules paint as sand.
+    let park = greens.iter().find(|g| g.id.ends_with("w32839638")).expect("Aquatic Park");
+    let b = park.polygon.iter().fold([f64::MAX, f64::MAX, f64::MIN, f64::MIN], |b, p| [b[0].min(p[0]), b[1].min(p[1]), b[2].max(p[0]), b[3].max(p[1])]);
+    let (mut n, mut js, mut fit) = (0, 0, 0);
+    let mut z = b[1];
+    while z < b[3] {
+        let mut x = b[0];
+        while x < b[2] {
+            if eo_landmarks::waterfront::point_in_ring(&park.polygon, x, z) && land(x, z) {
+                n += 1;
+                js += cover.beach_sand(x, z, shore(x, z)) as usize;
+                fit += cover.beach_sand_fit(x, z, &shore) as usize;
+            }
+            x += 4.0;
+        }
+        z += 4.0;
+    }
+    println!("Aquatic Park drawn as sand: JS rule {:.0} %, fitted {:.0} % ({n} points)", 100.0 * js as f64 / n as f64, 100.0 * fit as f64 / n as f64);
+    // (85 % and 46 % on the 2026-11 data: the beach, and the promenade behind it the park alone maps)
+    assert!(fit * 5 < js * 3, "the fitted rule still paints {fit} of Aquatic Park's {n} points sand (JS {js})");
 }

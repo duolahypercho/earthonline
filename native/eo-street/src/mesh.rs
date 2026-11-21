@@ -28,7 +28,7 @@
 //! and need no clipping. Colours are placeholder tones for this slice (the
 //! JS tints a scanned texture; no texture is drawn here), not a look.
 
-use crate::plan::{Approach, CurbStation, Entry, Frame, Node, RampWin};
+use crate::plan::{self, Approach, CurbStation, Entry, Frame, Node, RampWin};
 use crate::{Layer, StreetWorld};
 use std::f64::consts::PI;
 
@@ -72,6 +72,21 @@ fn VERGE() -> [u8; 3] {
 /// onto, metres (retaining-edge.js `RETAINING_WALL_TUCK_M`: a buried footing,
 /// so the face and the paving never part; below the paving it is not seen).
 const RETAINING_TUCK_M: f64 = 1.0;
+
+/// A stub's datum this far over the ground's own datum is on an approach
+/// embankment (`joins::StructureEnd::rise`): a side with no footway gets a
+/// bank. A drawing tolerance, not a street dimension.
+const RAISED_M: f64 = 0.02;
+
+/// A stub's end cap (`emit_stub_cap`) stands this far inside the stub, so it
+/// never shares a plane with the structure's own end face at the same end.
+/// A drawing offset, not a street dimension.
+const CAP_SET_BACK_M: f64 = 0.02;
+
+/// The kerb depression of side `k` at station `i` (0 when none recorded).
+fn mesh_dep(g: &EntryGeom, k: usize, i: usize) -> f64 {
+    g.dep[k].get(i).copied().unwrap_or(0.0)
+}
 #[allow(non_snake_case)]
 fn WHITE() -> [u8; 3] {
     pal("markingWhite")
@@ -507,9 +522,16 @@ impl StreetWorld {
         }
         // Kerb, footway, frontage and bank per side.
         let mid_s = (a.s + b.s) / 2.0;
+        // a stub raised on an approach embankment (`joins::StructureEnd::rise`):
+        // a side with no footway gets its bank from the carriageway's edge.
+        let raised = (e.structure_ends.iter().any(Option::is_some) || !e.structure_ramps.is_empty()) && (self.datum_raise(ei, i) > RAISED_M || self.datum_raise(ei, i + 1) > RAISED_M);
         for (k, side) in [(0usize, 1.0f64), (1, -1.0)] {
             let walk = e.walks[k];
             if !(walk >= o.min_sidewalk_width) {
+                if raised {
+                    let (out_a, out_b) = ([side * a.nx, side * a.nz], [side * b.nx, side * b.nz]);
+                    self.bank(m, Some(ei), a.at(side * half), da - o.gutter_depth, out_a, b.at(side * half), db - o.gutter_depth, out_b);
+                }
                 continue;
             }
             if e.walk_yield_spans[k].iter().any(|sp| mid_s >= sp[0] && mid_s <= sp[1]) {
@@ -573,10 +595,121 @@ impl StreetWorld {
             // Verge bank from the outer edge down (or up) to the carpet.
             let out_a = [side * a.nx, side * a.nz];
             let out_b = [side * b.nx, side * b.nz];
-            self.bank(m, Some(ei), a.at(side * ox_a), oy_a, out_a, b.at(side * ox_b), oy_b, out_b);
+            if self.by_leg_junction(e, mid_s) {
+                // (by a junction with a structure's leg: a face, as its corners.)
+                self.ring_edge(m, a.at(side * ox_a), oy_a, out_a, b.at(side * ox_b), oy_b, out_b, true);
+            } else {
+                self.bank(m, Some(ei), a.at(side * ox_a), oy_a, out_a, b.at(side * ox_b), oy_b, out_b);
+            }
         }
         // Lane paint along this span.
         self.emit_span_paint(m, ei, i);
+        // a stub's end at a structure (`joins`): its open section capped.
+        if e.structure_ends[0].is_some() && i == 0 && e.approach_start.is_none() {
+            self.emit_stub_cap(m, ei, 0);
+        }
+        if e.structure_ends[1].is_some() && i + 2 == g.stations.len() && e.approach_end.is_none() {
+            self.emit_stub_cap(m, ei, 1);
+        }
+    }
+
+    /// Station `s` of run `e` lies within its junction trim and a bank's
+    /// reach of an end at a junction with a structure's leg (`joins`): its
+    /// banks there would lie over the junction's pad.
+    fn by_leg_junction(&self, e: &Entry, s: f64) -> bool {
+        if self.o.structures.is_none() {
+            return false;
+        }
+        [(e.approach_start, s), (e.approach_end, e.length - s)].iter().any(|&(app, d)| {
+            app.is_some_and(|(n, a)| {
+                let node = &self.plan.nodes[n];
+                node.approaches.iter().any(|x| self.plan.entries[x.entry].structure_leg.is_some()) && d < node.approaches[a].trim + self.o.verge_reach + self.o.max_step
+            })
+        })
+    }
+
+    /// The cap over a stub's open end where it meets a structure
+    /// (`joins::StructureEnd`): a vertical face in the kerb face's concrete
+    /// over the stub's section beyond what the structure's own end face
+    /// closes (its roadway and barriers, `StructureEnd::closed`), from the
+    /// drawn surface (kerb top, ramp, footway, frontage, the bank to its
+    /// foot) down under the ground carpet, `CAP_SET_BACK_M` inside the stub.
+    fn emit_stub_cap(&self, m: &mut TileMesh, ei: usize, end: usize) {
+        let o = &self.o;
+        let e = &self.plan.entries[ei];
+        let g = &self.geoms[ei];
+        let Some(joins) = o.structures.as_ref() else { return };
+        let Some(se) = e.structure_ends[end].and_then(|j| joins.ends.get(j)) else { return };
+        let n = g.stations.len();
+        if n < 2 {
+            return;
+        }
+        let (i, j) = if end == 0 { (0, 1) } else { (n - 1, n - 2) };
+        let (f0, f1) = (g.stations[i], g.stations[j]);
+        let step = (f1.s - f0.s).abs().max(1e-6);
+        let t = (CAP_SET_BACK_M / step).min(0.5);
+        let lerp = |p: f64, q: f64| p + (q - p) * t;
+        let f = plan::Frame { s: lerp(f0.s, f1.s), x: lerp(f0.x, f1.x), z: lerp(f0.z, f1.z), nx: f0.nx, nz: f0.nz, miter: f0.miter, tx: f0.tx, tz: f0.tz };
+        let d = lerp(g.datums[i], g.datums[j]);
+        let out = if end == 0 { [-f0.tx, -f0.tz] } else { [f0.tx, f0.tz] };
+        let half = e.half;
+        let raised = self.datum_raise(ei, i) > RAISED_M;
+        for (k, side) in [(0usize, 1.0f64), (1, -1.0)] {
+            let walk = e.walks[k];
+            let drawn = walk >= o.min_sidewalk_width && !e.walk_yield_spans[k].iter().any(|sp| f.s >= sp[0] && f.s <= sp[1]);
+            if !drawn && !raised {
+                continue;
+            }
+            // (offset, top) across the section, outward from the carriageway.
+            let mut prof: Vec<(f64, f64)> = vec![(0.0, o.cross_section_y(d, 0.0, half)), (half, d - o.gutter_depth)];
+            let mut outer = (half, d - o.gutter_depth);
+            if drawn {
+                let dep = mesh_dep(g, k, i);
+                let ra = self.ramp_reach(dep);
+                prof.push((half, self.kerb_y(d, dep)));
+                prof.push((half + ra, o.sidewalk_surface_y(d, half + ra, half)));
+                let ey = o.sidewalk_surface_y(d, half + walk, half);
+                prof.push((half + walk, ey));
+                outer = (half + walk, ey);
+                let fd = self.frontage_depth(ei, &f, side, walk);
+                if fd > o.frontage_step {
+                    prof.push((half + walk, ey + o.frontage_lift));
+                    prof.push((half + walk + fd, ey + o.frontage_lift));
+                    outer = (half + walk + fd, ey + o.frontage_lift);
+                }
+            }
+            // the bank to its foot (`bank`'s graded reach).
+            let edge = f.at(side * outer.0);
+            let drop = outer.1 - (self.carpet_y(edge[0], edge[1]) - o.verge_undercut);
+            let reach = o.graded_bank_reach(drop);
+            let foot = f.at(side * (outer.0 + reach));
+            prof.push((outer.0 + reach, self.bank_foot_y(foot, outer.1, Some(ei))));
+            // clipped to what the structure's own end face leaves open.
+            let lo = se.closed.max(0.0);
+            let mut pts: Vec<(f64, f64)> = vec![];
+            for w in prof.windows(2) {
+                let ((u0, y0), (u1, y1)) = (w[0], w[1]);
+                if u1 <= lo {
+                    continue;
+                }
+                if u0 < lo && u1 > u0 {
+                    let t = (lo - u0) / (u1 - u0);
+                    pts.push((lo, y0 + (y1 - y0) * t));
+                } else if pts.is_empty() || pts.last() != Some(&(u0, y0)) {
+                    pts.push((u0, y0));
+                }
+                pts.push((u1, y1));
+            }
+            for w in pts.windows(2) {
+                let ((u0, y0), (u1, y1)) = (w[0], w[1]);
+                if (u1 - u0).abs() < 1e-4 {
+                    continue;
+                }
+                let (p0, p1) = (f.at(side * u0), f.at(side * u1));
+                let base = |p: [f64; 2], top: f64| (self.carpet_y(p[0], p[1]) - o.verge_undercut).min(top) - RETAINING_TUCK_M;
+                m.quad(Layer::CurbFace, [p3(p0, y0), p3(p1, y1), p3(p1, base(p1, y1)), p3(p0, base(p0, y0))], [CURB_FACE(); 4], Some(out));
+            }
+        }
     }
 
     fn emit_span_paint(&self, m: &mut TileMesh, ei: usize, i: usize) {
@@ -698,6 +831,9 @@ impl StreetWorld {
             let datums = self.path_datums(&path.stations, ends[path.a].1, ends[path.b].1);
             let st = &path.stations;
             let reach_full = o.curb_top_width + o.ramp_run;
+            // (a junction with a structure's leg, `joins`: no bank on its
+            // corners: the structure's walls and fill stand round it.)
+            let leg = node.approaches.iter().any(|a| self.plan.entries[a.entry].structure_leg.is_some());
             let deps: Vec<f64> = st
                 .iter()
                 .map(|s| match s.ang {
@@ -710,12 +846,16 @@ impl StreetWorld {
                 if (sa.x - sb.x).abs() < 1e-7 && (sa.z - sb.z).abs() < 1e-7 {
                     continue;
                 }
-                self.ring_span(m, sa, sb, datums[k], datums[k + 1], deps[k], deps[k + 1]);
+                self.ring_span(m, sa, sb, datums[k], datums[k + 1], deps[k], deps[k + 1], leg);
             }
         }
         // --- junction paint: crosswalk bars and limit lines. ------------------
+        // (none on a structure's leg: its mouth is the structure's own deck.)
         if node.earns_paint {
             for (i, app) in node.approaches.iter().enumerate() {
+                if self.plan.entries[app.entry].structure_leg.is_some() {
+                    continue;
+                }
                 self.emit_approach_paint(m, node, app, ends[i].1);
             }
         }
@@ -732,7 +872,7 @@ impl StreetWorld {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn ring_span(&self, m: &mut TileMesh, sa: &CurbStation, sb: &CurbStation, da: f64, db: f64, pa: f64, pb: f64) {
+    fn ring_span(&self, m: &mut TileMesh, sa: &CurbStation, sb: &CurbStation, da: f64, db: f64, pa: f64, pb: f64, leg: bool) {
         let o = &self.o;
         let off = |s: &CurbStation, d: f64| [s.x + s.out[0] * d * s.scale, s.z + s.out[1] * d * s.scale];
         let (ia, ib) = (da - o.gutter_depth, db - o.gutter_depth);
@@ -743,7 +883,7 @@ impl StreetWorld {
         let (wa, wb) = (sa.walk, sb.walk);
         if !(wa > 0.0 || wb > 0.0) {
             // A side with no footway: the bank starts at the kerb top.
-            self.bank(m, None, [sa.x, sa.z], ka, sa.out, [sb.x, sb.z], kb, sb.out);
+            self.ring_edge(m, [sa.x, sa.z], ka, sa.out, [sb.x, sb.z], kb, sb.out, leg);
             return;
         }
         let (ra, rb) = (self.ramp_reach(pa).min(wa.max(o.curb_top_width)), self.ramp_reach(pb).min(wb.max(o.curb_top_width)));
@@ -766,7 +906,22 @@ impl StreetWorld {
             );
         }
         let (wa2, wb2) = (wa.max(ra), wb.max(rb));
-        self.bank(m, None, off(sa, wa2), walk_y(da, wa2), sa.out, off(sb, wb2), walk_y(db, wb2), sb.out);
+        self.ring_edge(m, off(sa, wa2), walk_y(da, wa2), sa.out, off(sb, wb2), walk_y(db, wb2), sb.out, leg);
+    }
+
+    /// The outer edge of a corner return: its verge bank; or, at a junction
+    /// with a structure's leg (`joins`), a face in the kerb face's concrete
+    /// down under the ground carpet (the structure's own walls and fill stand
+    /// round it, where a sloped bank would lie over paving).
+    #[allow(clippy::too_many_arguments)]
+    fn ring_edge(&self, m: &mut TileMesh, a: [f64; 2], ay: f64, a_out: [f64; 2], b: [f64; 2], by: f64, b_out: [f64; 2], leg: bool) {
+        if !leg {
+            self.bank(m, None, a, ay, a_out, b, by, b_out);
+            return;
+        }
+        let foot = |p: [f64; 2], y: f64| (self.carpet_y(p[0], p[1]) - self.o.verge_undercut).min(y) - RETAINING_TUCK_M;
+        let face = [a_out[0] + b_out[0], a_out[1] + b_out[1]];
+        m.quad(Layer::CurbFace, [p3(a, ay), p3(b, by), p3(b, foot(b, by)), p3(a, foot(a, ay))], [CURB_FACE(); 4], Some(face));
     }
 
     fn emit_approach_paint(&self, m: &mut TileMesh, node: &Node, app: &Approach, _d_end: f64) {

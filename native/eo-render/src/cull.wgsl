@@ -86,6 +86,9 @@ const LOD_STREET_COARSE: u32 = 9u;
 const KIND_STREET: u32 = 6u;
 const KIND_STREET_PAINT: u32 = 7u;
 const KIND_SEA: u32 = 3u; // water
+// a grade-separated road's deck and paint, and its concrete (structures.rs; street tile roles and group kind).
+const KIND_STRUCTURE_DECK: u32 = 11u;
+const KIND_STRUCTURE: u32 = 12u;
 // roles of a landmark's draws (scene.rs); LM_NEAR_M and
 // LM_HYSTERESIS_M are appended by lib.rs from eo-landmarks' export.
 const LOD_LANDMARK_NEAR: u32 = 10u;
@@ -100,7 +103,8 @@ const LOD_LANDMARK_FAR: u32 = 11u;
 // [8] street objects drawn, [9] street triangles drawn,
 // [10] late opaque draws, [11] objects in the frustum (after LOD),
 // [12] triangles in the frustum, [13] objects drawn by the early pass,
-// [14] objects the late pass found occluded, [15] pad
+// [14] objects the late pass found occluded, [15] grade-separated road
+// triangles drawn (kinds 11 and 12, `--structures`)
 @group(0) @binding(3) var<storage, read_write> counters: array<atomic<u32>, 16>;
 @group(0) @binding(4) var<storage, read_write> groups: array<Group>;
 // 1 if the object passed the occlusion test last frame (the early
@@ -294,6 +298,10 @@ fn lod_and_frustum(i: u32, o: Object) -> vec3<u32> {
             count = o.far_index_count;
         }
     }
+    if ((o.kind & 255u) == 13u) {
+        // The dive sites contain centimetre-scale relief, hidden at distance by water.
+        visible = distance(params.cam.xyz, clamp(params.cam.xyz, o.min, o.max)) < 58.0;
+    }
     if (count == 0u) {
         visible = false;
     }
@@ -329,6 +337,8 @@ fn count_drawn(o: Object, count: u32) {
         atomicAdd(&counters[9], tris);
     } else if (kind == KIND_BUILDING && o.lod_role == LOD_FAR) {
         atomicAdd(&counters[5], 1u);
+    } else if (kind == KIND_STRUCTURE_DECK || kind == KIND_STRUCTURE) {
+        atomicAdd(&counters[15], tris);
     }
 }
 

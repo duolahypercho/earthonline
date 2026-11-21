@@ -63,7 +63,8 @@ fn probe_cull(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let o = objects[i];
-    if ((o.kind & BLEND_BIT) != 0u) {
+    // The probe draws the closed sea plane over the submerged sites.
+    if ((o.kind & BLEND_BIT) != 0u || (o.kind & 255u) == 13u) {
         return;
     }
     var first = o.first_index;

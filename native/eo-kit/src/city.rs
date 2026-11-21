@@ -19,7 +19,7 @@ pub struct KitCity {
 
 /// `native/eo-kit/data/kit-exclusions.json`: the authored registry's ids.
 pub fn load_exclusions() -> HashSet<String> {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data/kit-exclusions.json");
+    let path = eo_data::native_dir().join("eo-kit/data/kit-exclusions.json");
     let Ok(text) = std::fs::read_to_string(path) else { return HashSet::new() };
     let v: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
     v["ids"].as_array().map(|a| a.iter().filter_map(|s| s.as_str().map(|s| s.to_string())).collect()).unwrap_or_default()

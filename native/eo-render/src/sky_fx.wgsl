@@ -49,6 +49,12 @@ fn fx_pixel_m(z: f32) -> f32 {
 // ---- luminaires ----
 
 const FX_LENS_M: f32 = 0.16;
+/// (lighting, `--lit-fog`) From this share of the clusters' far depth the
+/// lamps' air light comes back as the lit fog's volume ends.
+const FX_LIT_FOG_FADE: f32 = 0.8;
+/// ... and with the eye this far (the sine of the angle) below a street
+/// luminaire's plane the volume draws all of its glow toward the eye.
+const FX_LIT_FOG_BELOW_SIN: f32 = 0.0872;
 /// The JS lamp practical's virtual source lift over the head, in head heights
 /// (`lampPracticals.sourceLiftMH`): its intensity carries the pool gain
 /// (1 + lift)^2 that keeps the nadir as an unlifted source's.
@@ -118,7 +124,17 @@ fn sprite_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -
     // Luminance of the lens: the intensity over its projected area.
     let lens = lum.w / (FX_LENS_M * FX_LENS_M * 3.14159) * (FX_LENS_M / core) * (FX_LENS_M / core);
     out.color = vec4<f32>(l.color * lens, core);
-    out.extra = vec4<f32>(halo, lum.w, 0.0, 0.0);
+    // z: (lighting, `--lit-fog`) the share of the lamp's air light the lit fog's
+    // volume already draws, not added twice: within the clusters' far depth, and
+    // for a street luminaire (kinds 0, 3: nothing above its horizontal plane) only
+    // with the eye below it (from above, the volume holds no glow toward the eye);
+    // a point light's glow every way.
+    var fogged = 0.0;
+    if (lk_lx_on(LX_BIT_LIT_FOG)) {
+        let below = select(smoothstep(0.0, FX_LIT_FOG_BELOW_SIN, (head.y - skyu.eye.y) / max(length(rel), 1e-3)), 1.0, l.kind == 2u);
+        fogged = below * (1.0 - smoothstep(FX_LIT_FOG_FADE * skyu.cluster.y, skyu.cluster.y, z));
+    }
+    out.extra = vec4<f32>(halo, lum.w, fogged, 0.0);
     return out;
 }
 
@@ -140,9 +156,107 @@ fn sprite_fs(in: FxOut) -> @location(0) vec4<f32> {
     // Air light round the lamp: forward scattering in the haze, stronger in
     // fog and rain (lamp-haze.js weather gains), falling off as 1/r^2.
     let halo = in.extra.x;
-    let a = skyu.bloom_w2.w * 0.002 * in.extra.y / (1.0 + (r * r) / (0.04 * halo * halo)) * (1.0 - smoothstep(0.5 * halo, halo, r));
+    let a = skyu.bloom_w2.w * 0.002 * in.extra.y / (1.0 + (r * r) / (0.04 * halo * halo)) * (1.0 - smoothstep(0.5 * halo, halo, r)) * (1.0 - in.extra.z);
     let lum = in.color.rgb * c + in.color.rgb / max(lk_luma(in.color.rgb), 1e-6) * a;
     return vec4<f32>(lum, 0.0);
+}
+
+// ---- (`--look cinematic`, stage L1) the lamp glare ----
+//
+// A lens's starburst and a faint halo round the brightest point lights: the
+// street lamps (kinds 0, 3), the bridges' point lights (2) and the headlamps
+// (1) whose beam faces the eye. Its own pipeline (sky.rs `glare_pipe`, made
+// only with SF_CINEMATIC compiled in, drawn only under the look with the
+// bloom on); the luminaire sprites above are untouched. A light's glare
+// grows with how many threshold-bright pixels its light is worth on the
+// sensor: its intensity toward the eye over a pixel's area at its distance
+// and the bloom's threshold (which carries the exposure): none under 2^ev0,
+// the longest rays from 2^(ev0 + range) (eo-look `cinematic::grade::CINE_GLARE_*`,
+// sky.rs `glare_params` in `bloom_w`, the rays' angle in `bloom.z`). The rays
+// and the halo carry a fixed share of that light (held at the full-length
+// light, so a near lamp's rays do not burn to white): a deterministic
+// pattern fixed to the frame, as a lens's blades are; no ghosts.
+
+/// The halo's share of the glare's light and its width (a share of the rays' length).
+const FX_GLARE_HALO_SHARE: f32 = 0.5;
+const FX_GLARE_HALO_SIGMA: f32 = 0.12;
+/// The rays' half-width across (px).
+const FX_GLARE_RAY_PX: f32 = 1.2;
+
+@vertex
+fn glare_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> FxOut {
+    var out: FxOut;
+    out.clip = vec4<f32>(0.0, 0.0, -1.0, 1.0);
+    let l = fx_lights[ii];
+    if (!SF_CINEMATIC || skyu.bloom_w.w >= 0.0 || vi >= 6u || l.kind > 3u || !sky_on(skyu.flags.x, SKY_SPRITES)) {
+        return out;
+    }
+    var head = l.pos;
+    var inten = l.intensity;
+    if (l.kind != 1u) {
+        let lum = fx_luminaire(l);
+        head = lum.xyz;
+        inten = lum.w;
+    }
+    let rel = head - skyu.eye.xyz;
+    let z = dot(rel, skyu.cam_fwd.xyz);
+    if (z < 0.5) {
+        return out;
+    }
+    if (l.kind == 1u) {
+        // a headlamp only from within its beam.
+        inten = inten * smoothstep(l.cos_outer, l.cos_inner, dot(l.dir, -normalize(rel)));
+    }
+    let px = fx_pixel_m(z);
+    let th = max(skyu.bloom.x, 1e-20);
+    // the light on the sensor in threshold-bright pixels (log2), and the glare's size.
+    let ev = log2(max(inten / (px * px * th), 1e-30));
+    let range = -skyu.bloom_w.w;
+    let g = clamp((ev - skyu.bloom_w.z) / range, 0.0, 1.0);
+    if (g <= 0.0) {
+        return out;
+    }
+    let len_px = max(skyu.bloom_w.y * g, 2.0);
+    let size = len_px * px;
+    let c = fx_corner(vi);
+    let p = head + (skyu.cam_right.xyz * c.x + skyu.cam_up.xyz * c.y) * size;
+    out.clip = fx_clip(p);
+    let pull = fx_clip(p - normalize(rel) * min(size, 2.0));
+    out.clip.z = pull.z / pull.w * out.clip.w;
+    out.uv = c * len_px;
+    // the light's sum over the sensor's pixels (radiance x pixels), held at the full length's.
+    let e = min(inten / (px * px), exp2(skyu.bloom_w.z + range) * th) * skyu.bloom_w.x;
+    out.color = vec4<f32>(l.color * e, len_px);
+    // the rays' norm (6 half rays of (1 - r/L)^2 along, a triangle of 2 x FX_GLARE_RAY_PX across:
+    // 2 L FX_GLARE_RAY_PX in all) and the halo's (a Gaussian of sigma FX_GLARE_HALO_SIGMA L).
+    let sg = FX_GLARE_HALO_SIGMA * len_px;
+    out.extra = vec4<f32>(cos(skyu.bloom.z), sin(skyu.bloom.z), (1.0 - FX_GLARE_HALO_SHARE) / (2.0 * len_px * FX_GLARE_RAY_PX), FX_GLARE_HALO_SHARE / (6.2831853 * sg * sg));
+    return out;
+}
+
+@fragment
+fn glare_fs(in: FxOut) -> @location(0) vec4<f32> {
+    let len = in.color.w;
+    let p = in.uv;
+    let r = length(p);
+    if (r >= len) {
+        return vec4<f32>(0.0);
+    }
+    var rays = 0.0;
+    for (var k = 0; k < 3; k = k + 1) {
+        // three lines, 60 deg apart, from the blades' angle.
+        let a = f32(k) * 1.0471976;
+        let ca = cos(a);
+        let sa = sin(a);
+        let dir = vec2<f32>(in.extra.x * ca - in.extra.y * sa, in.extra.y * ca + in.extra.x * sa);
+        let along = abs(dot(p, dir));
+        let across = abs(dot(p, vec2<f32>(-dir.y, dir.x)));
+        let fall = 1.0 - along / len;
+        rays = rays + max(1.0 - across / FX_GLARE_RAY_PX, 0.0) * fall * fall;
+    }
+    let sg = FX_GLARE_HALO_SIGMA * len;
+    let halo = exp(-r * r / (2.0 * sg * sg));
+    return vec4<f32>(in.color.rgb * (rays * in.extra.z + halo * in.extra.w), 0.0);
 }
 
 // ---- the waterside luminaires in the sea ----

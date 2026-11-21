@@ -14,10 +14,13 @@
 //! * `grounding` the street-front floor and the foundation skirt of buildings
 //!              (street-front-grade.js / yard-floor-rule.js /
 //!              building-foundations.js), and the grounding measurement.
+//! * `joins`    where the grade-separated roads meet the paved network
+//!              (plain data a host hands in; off by default).
 
 pub mod city;
 pub mod evidence;
 pub mod grounding;
+pub mod joins;
 pub mod material;
 pub mod mesh;
 pub mod options;
@@ -306,6 +309,10 @@ pub struct StreetWorld {
     surface_cache: Mutex<HashMap<(i32, i32), Arc<SurfaceTile>>>,
     mesh_cache: Mutex<HashMap<(i32, i32), Arc<TileMesh>>>,
     pub build_ms: f64,
+    /// Only with `StreetOptions::structures`: whether each structure end's
+    /// rise and cut (`joins::StructureEnd::rise`, `cut`) are drawn: the ramp
+    /// (cone) back at the street datum before any junction (`check_rises`).
+    rises_ok: Vec<[bool; 2]>,
     /// the shore's ground rule over the carpet (eo-water
     /// `ShoreField::press_beach`: a beach laid on its foreshore), set once the
     /// shore field is loaded, so the drawn ground, the collision ground and
@@ -315,6 +322,11 @@ pub struct StreetWorld {
 
 /// (x, z, carpet height) -> the carpet height at the shore.
 pub type ShorePress = Arc<dyn Fn(f64, f64, f64) -> f64 + Send + Sync>;
+
+/// The index of the centreline piece of run `e` starting at point `a`.
+fn seg_index(e: &plan::Entry, a: [f64; 2]) -> usize {
+    e.points.iter().position(|p| p[0] == a[0] && p[1] == a[1]).unwrap_or(0).min(e.cum.len().saturating_sub(2))
+}
 
 impl StreetWorld {
     pub fn build(o: StreetOptions, city: StreetCity, terrain: Terrain, buildings: BuildingIndex) -> Self {
@@ -329,14 +341,19 @@ impl StreetWorld {
             eprintln!("  street plan done: {:.0} ms", t0.elapsed().as_secs_f64() * 1e3);
         }
         let multi: HashSet<u64> = o.multi_lane_two_way.iter().copied().collect();
+        // (a structure leg, `plan::Entry::structure_leg`, is not drawn: no
+        // paint, no carriageway for the corridor queries, no stations.)
         let lines: Vec<Vec<paint::Line>> = plan
             .entries
             .iter()
-            .map(|e| paint::segment_markings(&city.segments[e.road], &e.highway, e.half * 2.0, e.lanes, &o, &multi))
+            .map(|e| if e.structure_leg.is_some() { vec![] } else { paint::segment_markings(&city.segments[e.road], &e.highway, e.half * 2.0, e.lanes, &o, &multi) })
             .collect();
         let mut road_cells: HashMap<(i32, i32), Vec<u32>> = HashMap::new();
         let mut road_pieces = vec![];
         for (ei, e) in plan.entries.iter().enumerate() {
+            if e.structure_leg.is_some() {
+                continue;
+            }
             for w in e.points.windows(2) {
                 let id = road_pieces.len() as u32;
                 road_pieces.push((ei as u32, w[0], w[1], e.half));
@@ -382,8 +399,10 @@ impl StreetWorld {
             surface_cache: Mutex::new(HashMap::new()),
             mesh_cache: Mutex::new(HashMap::new()),
             build_ms: 0.0,
+            rises_ok: vec![],
             shore_press: std::sync::OnceLock::new(), // sea
         };
+        w.rises_ok = w.check_rises();
         w.geoms = (0..w.plan.entries.len()).map(|ei| w.entry_geom(ei)).collect();
         let mut tiles: HashMap<(i32, i32), TileRefs> = HashMap::new();
         for (ei, g) in w.geoms.iter().enumerate() {
@@ -509,7 +528,14 @@ impl StreetWorld {
                 if ((x - px).powi(2) + (z - pz).powi(2)).sqrt() > reach + TERRAIN_CAP_MARGIN_M * eo_data::groundscale::scale() {
                     continue;
                 }
-                let y = self.ground(px, pz) + self.o.road_lift + lift;
+                let mut y = self.ground(px, pz) + self.o.road_lift + lift;
+                // a stub lowered into a tunnel's approach cut (`joins`): the
+                // carpet held under the street as drawn there.
+                if e.structure_ends.iter().any(Option::is_some) || !e.structure_ramps.is_empty() {
+                    if let Some(d) = self.geoms.get(ei as usize).and_then(|g| self.datum_at_station(g, e.cum[seg_index(e, a)] + t * (len2.sqrt()))) {
+                        y = y.min(d + lift);
+                    }
+                }
                 cap = Some(cap.map_or(y, |c: f64| c.min(y)));
             }
         }
@@ -618,7 +644,7 @@ impl StreetWorld {
         let o = &self.o;
         let e = &self.plan.entries[ei];
         let (s0, s1) = (e.s0(), e.s1());
-        if s1 - s0 < 0.02 {
+        if s1 - s0 < 0.02 || e.structure_leg.is_some() {
             return EntryGeom::default();
         }
         let mut stations = plan::build_stations(&e.points, &e.cum, s0, s1, o.max_step);
@@ -654,11 +680,110 @@ impl StreetWorld {
                 stations.push(st);
             }
         }
-        let datums: Vec<f64> = stations.iter().map(|st| self.ground(st.x, st.z) + o.road_lift).collect();
+        let mut datums: Vec<f64> = stations.iter().map(|st| self.ground(st.x, st.z) + o.road_lift).collect();
+        // an approach embankment (`joins::StructureEnd::rise`, only with
+        // `StreetOptions::structures`): a stub's datum climbs to the height
+        // its structure asks at its end, where the ramp is back at the datum
+        // before the run's other drawn end.
+        if e.structure_ends.iter().any(Option::is_some) || !e.structure_ramps.is_empty() {
+            self.raise_stub(e, &stations, &mut datums);
+        }
         let keep: Vec<bool> = (0..stations.len().saturating_sub(1)).map(|i| !e.in_yield_span((stations[i].s + stations[i + 1].s) / 2.0)).collect();
         let drawn = plan::segment_kerb_ramps(e, o);
         let dep = [0, 1].map(|k| stations.iter().map(|st| mesh::dep_at(&drawn[k], st.s)).collect::<Vec<f64>>());
         EntryGeom { stations, datums, keep, dep }
+    }
+
+    /// Which structure ends' rises are drawn: a ramp from the end at its
+    /// grade down along the stub and the runs it continues into
+    /// (`plan::Entry::structure_ramps`) that is back at the street datum
+    /// before it meets a junction or the last of those runs.
+    fn check_rises(&self) -> Vec<[bool; 2]> {
+        let Some(joins) = self.o.structures.as_ref() else { return vec![] };
+        let o = &self.o;
+        let mut ok = vec![[false; 2]; joins.ends.len()];
+        for (j, end) in joins.ends.iter().enumerate() {
+          for (which, r) in [(0usize, end.rise), (1, end.cut)] {
+            let Some(r) = r else { continue };
+            if !(r.grade > 0.0) || !r.to.is_finite() {
+                continue;
+            }
+            // the runs it climbs over, nearest first.
+            let mut runs: Vec<(usize, bool, f64)> = vec![];
+            for (ei, e) in self.plan.entries.iter().enumerate() {
+                for k in 0..2 {
+                    if e.structure_ends[k] == Some(j) {
+                        runs.push((ei, k == 0, 0.0));
+                    }
+                }
+                runs.extend(e.structure_ramps.iter().filter(|x| x.0 == j).map(|x| (ei, x.1, x.2)));
+            }
+            runs.sort_by(|a, b| a.2.total_cmp(&b.2).then(a.0.cmp(&b.0)));
+            for (q, &(ei, start, off)) in runs.iter().enumerate() {
+                let e = &self.plan.entries[ei];
+                if if start { e.approach_start.is_some() } else { e.approach_end.is_some() } {
+                    break;
+                }
+                let (s0, s1) = (e.s0(), e.s1());
+                let n = (((s1 - s0) / o.max_step).ceil() as usize).max(1);
+                let back = (0..=n).any(|i| {
+                    let s = s0 + (s1 - s0) * i as f64 / n as f64;
+                    let f = e.frame(s, false);
+                    let dist = off + if start { s } else { e.length - s };
+                    let datum = self.ground(f.x, f.z) + o.road_lift;
+                    if which == 0 { joins::ramp_datum(datum, &r, dist) <= datum } else { joins::cut_datum(datum, &r, dist) >= datum }
+                });
+                if back {
+                    ok[j][which] = true;
+                    break;
+                }
+                let far_node = if start { e.approach_end.is_some() } else { e.approach_start.is_some() };
+                if far_node || q + 1 == runs.len() {
+                    break;
+                }
+            }
+          }
+        }
+        ok
+    }
+
+    /// A run's datums raised on the ramps of the structure ends it climbs to
+    /// (`joins::StructureEnd::rise`, its own end or one ahead of it), those
+    /// `check_rises` lets stand.
+    fn raise_stub(&self, e: &plan::Entry, stations: &[plan::Frame], datums: &mut [f64]) {
+        let Some(joins) = self.o.structures.as_ref() else { return };
+        // (rise or cut, its end toward the structure, the distance to it).
+        let mut ramps: Vec<(usize, joins::Rise, bool, f64)> = vec![];
+        let mut add = |j: usize, start: bool, off: f64| {
+            for (which, r) in [(0usize, joins.ends.get(j).and_then(|x| x.rise)), (1, joins.ends.get(j).and_then(|x| x.cut))] {
+                if let (Some(r), Some(true)) = (r, self.rises_ok.get(j).map(|ok| ok[which])) {
+                    ramps.push((which, r, start, off));
+                }
+            }
+        };
+        for k in 0..2 {
+            let at_node = if k == 0 { e.approach_start.is_some() } else { e.approach_end.is_some() };
+            if let (Some(j), false) = (e.structure_ends[k], at_node) {
+                add(j, k == 0, 0.0);
+            }
+        }
+        for &(j, start, off) in &e.structure_ramps {
+            add(j, start, off);
+        }
+        for (which, r, start, off) in ramps {
+            for (d, st) in datums.iter_mut().zip(stations) {
+                let dist = off + if start { st.s } else { e.length - st.s };
+                *d = if which == 0 { joins::ramp_datum(*d, &r, dist) } else { joins::cut_datum(*d, &r, dist) };
+            }
+        }
+    }
+
+    /// The street datum a run draws at station `i` of its geometry less the
+    /// ground's own datum there (above 0 only on an approach embankment).
+    pub fn datum_raise(&self, ei: usize, i: usize) -> f64 {
+        let g = &self.geoms[ei];
+        let st = &g.stations[i];
+        g.datums[i] - (self.ground(st.x, st.z) + self.o.road_lift)
     }
 
     /// Every tile that draws streets.

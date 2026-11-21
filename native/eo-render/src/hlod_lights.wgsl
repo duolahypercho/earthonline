@@ -74,7 +74,7 @@ fn far_lamp_vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32)
     }
     let trans = 1.0 - lk_smooth(look.fog.x, look.fog.y, vd);
     let area = 3.14159265 * r_m * r_m * 0.317;
-    out.rad = l.color * (intensity / max(area, 1e-4)) * trans * fade;
+    out.rad = ls_led(l.color) * (intensity / max(area, 1e-4)) * trans * fade; // (lighting, `--light-shadows`: SF's LED lamps; as given otherwise)
     return out;
 }
 

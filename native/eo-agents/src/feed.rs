@@ -3,11 +3,19 @@
 //! picks each car's body and paint, each walker's family and clip, tilts cars
 //! to the grade under their axles, derives the front-wheel steer from the
 //! heading rate, and hands the render thread a ready `GpuAgent` array.
+//!
+//! With the grade-separated roads (`--structures`) a car whose lane is on a
+//! structure level (`eo_sim::output::level_of_flags`, 0 without them) stands
+//! on that level's deck profile (`StructureWorld::deck_at` at each axle),
+//! not on the street under it (`car_ground`). With the tunnels (`--tunnels`)
+//! a car on a lane under grade inside a bore carries `AGENT_IN_BORE` and its
+//! depth in from the portal (`in_bore`, `bore_flags`): the renderer lights it
+//! by the bore, not by the sun and sky.
 
 use crate::catalog::AgentsJs;
 use crate::library::Library;
 use crate::{AGENT_BLINK_ON, CLIP_IDLE, CLIP_PHONE, CLIP_TALK, GpuAgent, hex_packed};
-use eo_sim::output::{FLAG_CROSSING, FLAG_TURN_LEFT, FLAG_TURN_RIGHT, KIND_WALKER_BASE};
+use eo_sim::output::{FLAG_CROSSING, FLAG_LEVEL_MASK, FLAG_TURN_LEFT, FLAG_TURN_RIGHT, KIND_WALKER_BASE, level_of_flags};
 use eo_sim::world::Frame;
 use glam::Quat;
 use std::collections::HashMap;
@@ -97,6 +105,63 @@ impl Carriageways {
     }
 }
 
+/// Where a car stands: its height (the mean of its two axles') and pitch
+/// (from their difference), the car centred at (x, z) heading along the unit
+/// plan direction `f`, its axles `half_base` either side. On a structure
+/// level (`level != 0`, with `structures`) each axle stands on the deck of
+/// that level under the car's centre (`StructureWorld::deck_at`), as drawn
+/// (`deck_top`: the profile, and the street's crown blended in toward a
+/// paved end), an axle past that deck on the level's deck under it, else
+/// on the ground as before; at grade both on `ground`, so a car under a deck
+/// is never lifted onto it.
+#[allow(clippy::too_many_arguments)]
+pub fn car_ground(ground: &Ground, structures: Option<&eo_structures::StructureWorld>, level: i8, x: f64, z: f64, f: [f64; 2], half_base: f64) -> (f64, f32) {
+    let (xf, zf, xb, zb) = (x + f[0] * half_base, z + f[1] * half_base, x - f[0] * half_base, z - f[1] * half_base);
+    // the deck the car is on (at its centre): both axles on it while it is
+    // under them (a neighbouring deck of the level nearer an axle is not the
+    // car's road), on the deck as drawn (`StructureWorld::deck_top`).
+    let deck = structures.filter(|_| level != 0).and_then(|s| s.deck_at(x, z, level).map(|d| (s, d.chain)));
+    let at = |px: f64, pz: f64| -> f64 {
+        let Some((s, own)) = deck else { return ground.y(px, pz) };
+        if let Some(y) = s.deck_top(own, px, pz) {
+            return y;
+        }
+        match s.deck_at(px, pz, level) {
+            Some(d) => s.deck_top(d.chain, px, pz).unwrap_or(d.y),
+            None => ground.y(px, pz),
+        }
+    };
+    let (yf, yb) = (at(xf, zf), at(xb, zb));
+    (0.5 * (yf + yb), ((yf - yb) / (2.0 * half_base)).atan() as f32)
+}
+
+/// How far into a tunnel's bore a car stands (metres in from the nearer
+/// portal; infinite with no portal), when it does: only a car on a lane under
+/// grade (`level < 0`, the levels the bores' chains carry) is looked up, at a
+/// point a metre over its datum `y` (inside the bore's section, not on its
+/// floor's edge: `StructureWorld::bore_at`). None without structures or bores,
+/// and for every car at grade or on a deck.
+pub fn in_bore(structures: Option<&eo_structures::StructureWorld>, level: i8, x: f64, y: f64, z: f64) -> Option<f64> {
+    if level >= 0 {
+        return None;
+    }
+    let s = structures?;
+    if s.bores().is_empty() {
+        return None;
+    }
+    s.bore_at(x, y + 1.0, z).map(|h| h.depth)
+}
+
+/// The player's body or car (whose lane level nothing knows): marked
+/// `AGENT_IN_BORE` with its depth when a point a metre over its datum lies
+/// inside a tunnel's bore. Nothing without bores.
+pub fn mark_in_bore(a: &mut GpuAgent, structures: Option<&eo_structures::StructureWorld>) {
+    let Some(s) = structures.filter(|s| !s.bores().is_empty()) else { return };
+    if let Some(h) = s.bore_at(a.pos[0] as f64, a.pos[1] as f64 + 1.0, a.pos[2] as f64) {
+        a.flags |= crate::bore_flags(h.depth);
+    }
+}
+
 /// Turn signals blink at 1.5 Hz (CA Vehicle Code 24952: 60-120 flashes a minute).
 pub const BLINK_HZ: f64 = 1.5;
 /// Steer is limited to the catalogue's arcade lock.
@@ -128,7 +193,14 @@ pub struct Feeder {
     lib: Arc<Library>,
     js: AgentsJs,
     ground: Ground,
+    /// The grade-separated roads beside the ground, when the world has them
+    /// (`--structures`): cars on a structure level stand on their decks.
+    structures: Option<Arc<eo_structures::StructureWorld>>,
     seed_int: u32,
+    /// Cars the last build stood on a structure level's deck.
+    pub on_decks: usize,
+    /// Cars the last build found inside a tunnel's bore (`AGENT_IN_BORE`).
+    pub in_bores: usize,
     cars: HashMap<(usize, u32), Car>,
     walkers: HashMap<(usize, u32), Walker>,
     /// The drawn carriageways (built on the feed thread on first use).
@@ -143,8 +215,14 @@ fn fract(x: f64) -> f64 {
 }
 
 impl Feeder {
-    pub fn new(lib: Arc<Library>, ground: Ground, seed_int: u32) -> anyhow::Result<Self> {
-        Ok(Self { lib, js: AgentsJs::load()?, ground, seed_int, cars: HashMap::new(), walkers: HashMap::new(), carriageways: None, moved_to_footway: 0, last_ms: 0.0 })
+    /// `structures`: the grade-separated roads beside `ground` (None without `--structures`).
+    pub fn new(lib: Arc<Library>, ground: Ground, structures: Option<Arc<eo_structures::StructureWorld>>, seed_int: u32) -> anyhow::Result<Self> {
+        Ok(Self { lib, js: AgentsJs::load()?, ground, structures, seed_int, on_decks: 0, in_bores: 0, cars: HashMap::new(), walkers: HashMap::new(), carriageways: None, moved_to_footway: 0, last_ms: 0.0 })
+    }
+
+    /// The grade-separated roads it was given.
+    pub fn structures(&self) -> Option<&Arc<eo_structures::StructureWorld>> {
+        self.structures.as_ref()
     }
 
     /// Build the instances of one simulation frame (appended to `out`).
@@ -158,6 +236,8 @@ impl Feeder {
             }
         }
         self.moved_to_footway = 0;
+        self.on_decks = 0;
+        self.in_bores = 0;
         for (ri, r) in frame.regions.iter().enumerate() {
             let [ox, oz] = r.origin;
             for a in &r.vehicles {
@@ -193,11 +273,17 @@ impl Feeder {
                 };
                 let (x, z) = (ox + a.pos[0] as f64, oz + a.pos[2] as f64);
                 let (s, c) = (a.heading as f64).sin_cos();
-                let (fx, fz) = (s, c);
-                let yf = self.ground.y(x + fx * car.half_base, z + fz * car.half_base);
-                let yb = self.ground.y(x - fx * car.half_base, z - fz * car.half_base);
-                let y = 0.5 * (yf + yb);
-                let pitch = ((yf - yb) / (2.0 * car.half_base)).atan() as f32;
+                let level = level_of_flags(a.flags);
+                let (y, pitch) = car_ground(&self.ground, self.structures.as_deref(), level, x, z, [s, c], car.half_base);
+                if level != 0 && self.structures.is_some() {
+                    self.on_decks += 1;
+                }
+                // a car on a lane under grade inside a tunnel's bore (`--tunnels`):
+                // the renderer lights it as the bore is lit (`AGENT_IN_BORE`).
+                let bore = in_bore(self.structures.as_deref(), level, x, y, z);
+                if bore.is_some() {
+                    self.in_bores += 1;
+                }
                 // Steer from the heading rate: the bicycle model, tan(steer) = wheelbase * yaw rate / speed.
                 let dt = frame.time - car.time;
                 let mut steer = car.steer;
@@ -222,9 +308,13 @@ impl Feeder {
                 }
                 let rot = Quat::from_rotation_y(a.heading) * Quat::from_rotation_x(-pitch);
                 let spin = (a.anim as f64 / car.wheel_radius).rem_euclid(std::f64::consts::TAU) as f32;
-                let mut flags = a.flags as u32;
+                // (the level rides in the instance flags; the renderer gets the lamp flags only.)
+                let mut flags = (a.flags & !FLAG_LEVEL_MASK) as u32;
                 if blink && a.flags & (FLAG_TURN_LEFT | FLAG_TURN_RIGHT) != 0 {
                     flags |= AGENT_BLINK_ON;
+                }
+                if let Some(depth) = bore {
+                    flags |= crate::bore_flags(depth);
                 }
                 out.push(GpuAgent {
                     pos: [x as f32, y as f32, z as f32],

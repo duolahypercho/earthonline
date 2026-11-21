@@ -50,10 +50,6 @@ pub struct BuiltFrame {
 #[derive(Clone, Debug, Deserialize)]
 pub struct Assets {
     pub exterior: AssetRef,
-    #[serde(default)]
-    pub interior: Option<AssetRef>,
-    #[serde(default)]
-    pub fine: Vec<AssetRef>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -73,9 +69,6 @@ pub struct BlenderBuilding {
     pub supersedes: bool,
     #[serde(default)]
     pub stream: bool,
-    /// `false` on an exterior-only build (no interior GLBs).
-    #[serde(default)]
-    pub interior: Option<bool>,
     pub assets: Assets,
 }
 

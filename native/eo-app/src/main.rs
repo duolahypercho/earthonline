@@ -17,13 +17,19 @@ mod props; // props
 mod agents_bench;
 mod people_capture; // people
 mod bench;
+mod dive_sites;
+mod cove_bed;
 mod cc0_runtime; // the CC0 scanned sets at run time
 mod farshore; // the far terrain's load and attach
 mod models;
 mod net; // net
+mod quality; // `--quality` tiers and the lighting switches
 mod streets;
+mod street_life; // litter, graffiti, posters (`--street-life`): the level and its survey
+mod structures; // grade-separated roads (`--structures`): build and attach
 mod window;
 mod audio; // the sound (eo-audio), see audio.rs
+mod ui; // the interface (eo-ui): `--ui`, `--capture-ui`, `--ui-bench`; at the crate root so its tests run
 
 use anyhow::Result;
 use eo_assets::kit::{self, KitLibrary};
@@ -32,13 +38,13 @@ use eo_data::{CaStandards, City, DataPaths, ElevationGrid, LandCover};
 use eo_render::KitUpload;
 use eo_render::authored::AuthoredSet;
 use eo_render::kit::{KitRadii, KitSet};
-use eo_render::scene::{Scene, SceneInputs, build_scene};
+use eo_render::scene::{Scene, SceneInputs, build_scene_with_cuts};
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::mpsc::Receiver;
 use std::time::Instant;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Args {
     pub beaver_house: bool,
     pub interior_lighting: bool,
@@ -47,6 +53,14 @@ pub struct Args {
     pub house_furniture: bool,
     pub bench: bool,
     pub start_underwater: bool,
+    pub dive_site: Option<eo_render::seabed::Habitat>,
+    pub underwater_habitats: bool,
+    pub cove_detail: bool,
+    pub black_point_intertidal: bool,
+    pub surface_start: bool,
+    /// `--quality` (default medium: today's frame); expanded into `look` once
+    /// every argument is read (quality.rs), and the bench's frame budget.
+    pub quality: quality::Quality,
     pub frames: usize,
     pub warmup: usize,
     pub width: u32,
@@ -54,6 +68,8 @@ pub struct Args {
     pub msaa: u32,
     pub indirect_validation: bool,
     pub no_indirect_count: bool,
+    /// Without MULTI_DRAW_INDIRECT_COUNT (Metal): the per-slot fallback instead of the count emulation.
+    pub no_count_emulation: bool,
     pub vsync: bool,
     pub out_dir: Option<std::path::PathBuf>,
     pub label: Option<String>,
@@ -115,6 +131,14 @@ pub struct Args {
     /// the waterfront, the landmark buildings, the park ground, the beach band and the bridges' lights
     /// (`--no-landmarks2` turns them all off, the A/B).
     pub landmarks2: bool,
+    /// the grade-separated roads (`--structures`; `--tunnels` for the bores
+    /// and portals): None (the default) builds none. A world switch: client
+    /// and server must agree. Set by `quality::Switches::apply`.
+    pub structures: Option<eo_structures::StructureOptions>,
+    /// the facade clutter (`--facade-clutter [1|2]`, stage W3; eo-kit
+    /// clutter.rs): fire escapes, awnings, signs, services and roof clutter on
+    /// the kit buildings; 0 (the default) none. Set by `quality::Switches::apply`.
+    pub facade_clutter: u8,
 }
 
 /// occlusion / hitch: one `Args` field, so `play.rs` and `ui.rs` name it once.
@@ -186,7 +210,20 @@ impl Default for PerfArgs {
     }
 }
 
+fn apply_cove_look(args: &mut Args, raw: &[String]) {
+    if args.cove_detail {
+        args.look.cove_detail = true;
+        args.look.water_optics = !raw.iter().any(|s| s == "--no-water-optics");
+        args.look.dive_exposure = !raw.iter().any(|s| s == "--no-dive-exposure");
+        args.look.sky.cove_cumulus = args.look.sky.clouds;
+    }
+}
+
 fn parse_args() -> Result<Args> {
+    parse_args_from(&std::env::args().skip(1).collect::<Vec<_>>())
+}
+
+fn parse_args_from(raw: &[String]) -> Result<Args> {
     let mut a = Args {
         interior_lighting: true,
         house_finishes: false,
@@ -195,6 +232,12 @@ fn parse_args() -> Result<Args> {
         beaver_house: false,
         bench: false,
         start_underwater: false,
+        dive_site: None,
+        underwater_habitats: false,
+        cove_detail: false,
+        black_point_intertidal: false,
+        surface_start: false,
+        quality: Default::default(),
         frames: 720,
         warmup: 60,
         width: 1920,
@@ -202,6 +245,7 @@ fn parse_args() -> Result<Args> {
         msaa: 1,
         indirect_validation: true,
         no_indirect_count: false,
+        no_count_emulation: false,
         vsync: true,
         out_dir: None,
         label: None,
@@ -237,10 +281,17 @@ fn parse_args() -> Result<Args> {
         perf: Default::default(), // occlusion / hitch
         landmarks: true,          // landmarks
         landmarks2: true,
+        structures: None, // `--structures` (quality::Switches)
+        facade_clutter: 0, // `--facade-clutter` (quality::Switches)
     };
-    let mut it = std::env::args().skip(1);
+    let mut tier = quality::Switches::default(); // `--quality` and the lighting switches, applied after the loop
+    let mut it = raw.iter();
     while let Some(s) = it.next() {
-        let mut val = || it.next().ok_or_else(|| anyhow::anyhow!("{s} needs a value"));
+        if let Some(n) = tier.take(s, it.as_slice().first().map(String::as_str))? {
+            it.by_ref().take(n).for_each(drop); // the value it took, if any
+            continue;
+        }
+        let mut val = || it.next().cloned().ok_or_else(|| anyhow::anyhow!("{s} needs a value"));
         match s.as_str() {
             "--bench" => a.bench = true,
             "--frames" => a.frames = val()?.parse()?,
@@ -250,6 +301,7 @@ fn parse_args() -> Result<Args> {
             "--msaa" => a.msaa = val()?.parse()?,
             "--no-indirect-validation" => a.indirect_validation = false,
             "--no-indirect-count" => a.no_indirect_count = true,
+            "--no-count-emulation" => a.no_count_emulation = true,
             "--no-vsync" => a.vsync = false,
             "--out" => a.out_dir = Some(val()?.into()),
             "--label" => a.label = Some(val()?),
@@ -327,7 +379,7 @@ fn parse_args() -> Result<Args> {
                 let v = val()?;
                 a.look.sky.weather = match v.as_str() {
                     "schedule" | "auto" => eo_render::sky::WeatherMode::Schedule,
-                    k => eo_render::sky::WeatherMode::Preset(eo_sky::Kind::parse(k).ok_or_else(|| anyhow::anyhow!("--weather clear|overcast|fog|drizzle|rain|storm|schedule, not {k}"))?),
+                    k => eo_render::sky::WeatherMode::Preset(eo_sky::Kind::parse(k).ok_or_else(|| anyhow::anyhow!("--weather clear|overcast|fog|drizzle|rain|storm|damp|schedule, not {k}"))?),
                 }
             }
             "--weather-seed" => a.look.sky.seed = val()?.parse()?,
@@ -343,6 +395,8 @@ fn parse_args() -> Result<Args> {
             "--no-sky" => a.look.sky = eo_render::sky::SkyOptions { weather: a.look.sky.weather, ..eo_render::sky::SkyOptions::off() },
             "--no-clouds" => a.look.sky.clouds = false,
             "--no-cloud-shadows" => a.look.sky.cloud_shadows = false,
+            "--cloud-depth-haze" => a.look.sky.cloud_depth_haze = true,
+            "--no-cloud-depth-haze" => a.look.sky.cloud_depth_haze = false,
             "--no-fog" => a.look.sky.fog = false,
             "--no-shafts" => a.look.sky.shafts = false,
             "--no-moon-stars" => a.look.sky.moon_stars = false,
@@ -358,11 +412,39 @@ fn parse_args() -> Result<Args> {
             "--no-atmosphere" => a.look.sky.atmosphere = false, // the JS analytic dome instead of the atmosphere tables
             "--no-contact-shadows" => a.look.sky.contact = false,
             "--sky-shots" => {} // bench/sky_shots.rs reads it
+            "--light-shots" => {} // bench/light_shots.rs reads it (the lighting reference cards)
+            "--structures-shots" => {} // bench/structures_shots.rs reads it (the grade-separated roads' capture card)
+            "--dusk-strip" => {} // bench/light_shots.rs reads it (the drawn hour across sunset and sunrise)
             "--so-shots" => {} // so: bench/so_shots.rs reads it (the sky and ocean review cards)
             "--no-farshore" => {} // farshore.rs reads it (no far terrain)
             "--start-underwater" => a.start_underwater = true,
+            "--dive-site" => {
+                let s_site = val()?;
+                a.surface_start = false;
+                a.dive_site = Some(match s_site.as_str() {
+                    "bay" | "bay-surface" => {
+                        a.surface_start = s_site == "bay-surface";
+                        eo_render::seabed::Habitat::Eelgrass
+                    },
+                    "pacific" => eo_render::seabed::Habitat::Sand,
+                    "black-point" => eo_render::seabed::Habitat::Rocky,
+                    other => anyhow::bail!("unknown dive site {other}; choose bay, bay-surface, black-point or pacific"),
+                });
+            }
             "--water-optics" => a.look.water_optics = true,
+            "--cove-detail" => a.cove_detail = true,
+            "--cove-canopy" => { a.cove_detail = true; a.look.cove_canopy = true; }
+            "--no-cove-canopy" => a.look.cove_canopy = false,
+            "--cove-sediment" => { a.cove_detail = true; a.look.cove_sediment = true; }
+            "--no-cove-sediment" => a.look.cove_sediment = false,
+            "--black-point-intertidal" => { a.cove_detail = true; a.black_point_intertidal = true; }
+            "--no-black-point-intertidal" => a.black_point_intertidal = false,
+            "--no-cove-detail" => a.cove_detail = false,
+            "--underwater-habitats" => a.underwater_habitats = true,
+            "--no-underwater-habitats" => a.underwater_habitats = false,
             "--no-water-optics" => a.look.water_optics = false,
+            "--dive-exposure" => a.look.dive_exposure = true,
+            "--no-dive-exposure" => a.look.dive_exposure = false,
             "--no-water" => a.look.water = false, // the flat sea quad, as before
             // agents
             "--no-agents" => a.agents = false,
@@ -379,7 +461,9 @@ fn parse_args() -> Result<Args> {
             "--no-cc0-grime" => a.look.cc0 &= !eo_render::cc0::RUN_GRIME,
             "--no-cc0-stains" => a.look.cc0 &= !eo_render::cc0::RUN_STAINS,
             "--cc0-shots" => {}
+            "--clutter-shots" => {} // the facade clutter's capture card (bench/clutter_shots.rs)
             "--no-landmarks2" => a.landmarks2 = false,
+            "--bridge-detail" | "--no-bridge-detail" => {} // read where the landmark set is built (`bridge_detail`)
             "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
             s if a.props2.parse_flag(s) => {} // --no-props2, --no-furniture, --no-eztree, --no-overhead, --no-wires, --no-props2-shading, --capture-props2
             "--agents-bench" | "--agents-capture" | "--people-capture" | "--people-lineup" => {} // + --people-capture, --people-lineup
@@ -405,7 +489,7 @@ fn parse_args() -> Result<Args> {
             "--low-camera" | "--default-camera" => {}
             // read by `roofs_flags` (main) into the environment switches.
             "--no-roof-colours" | "--no-roof-contrast" | "--no-roof-parapet" | "--no-roof-patches" | "--no-roof-plant" => {}
-            "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" => {} // `roofs_flags`
+            "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" | "--no-ground-beach-fit" => {} // `roofs_flags`
             "--segments" => a.segments = Some(val()?.split(',').map(|s| s.trim().to_string()).collect()),
             // occlusion / hitch
             "--no-occlusion" => a.perf.occlusion = false,
@@ -432,18 +516,38 @@ fn parse_args() -> Result<Args> {
             }
             "-h" | "--help" => {
                 println!(
-                    "eo-app [--bench] [--frames N=720] [--warmup N=60] [--width 1920] [--height 1080] [--msaa 1|4]\n       [--no-indirect-validation] [--no-indirect-count] [--no-vsync] [--out DIR] [--label NAME] [--capture] [--far M=4200]\n       [--multiply N=1] [--check-budget] [--budget-ms 10 (self-test only)]\n       [--no-models] [--no-terrain-lod] [--no-kit] [--slice1] [--slice2] [--cache DIR] [--no-cache] [--stream-threads N=6] [--stream-radius M=inf]\n       [--kit-threads N=6] [--kit-split-materials] [--upload-budget-mb 4] [--kit-arena-vertices N] [--kit-arena-indices N] [--kit-arena-objects N]\n       [--kit-near-load M=110] [--kit-mid-load M=520] [--drive-frames N=3600]\n       [--time-of-day H=12] [--shadow-map N=3072] [--no-shadows] [--no-agents] [--agent-density N=1] [--no-rocketbox]\n       [--no-occlusion] [--occlusion-check] [--no-thread-priority] [--pace realtime|60hz|all-60hz|none] [--worst-frames N=12] [--check-max]\n       [--no-view-detail] [--view-margin-deg 35] [--view-predict-s 0.3] [--view-hold-s 2.5] [--stream-all-paths] [--full-arenas]\n       [--segments street_walk,elevated_sweep,city_overview,authored_street,kit_street,drive,turn_around,turn_around_authored]"
+                    "eo-app [--dive-site bay|bay-surface|black-point|pacific] [--cove-detail|--no-cove-detail] [--cove-canopy|--no-cove-canopy] [--cove-sediment|--no-cove-sediment] [--black-point-intertidal|--no-black-point-intertidal] [--water-optics] [--dive-exposure|--no-dive-exposure] [--underwater-habitats|--no-underwater-habitats] [--bench] [--frames N=720] [--warmup N=60] [--width 1920] [--height 1080] [--msaa 1|4]\n       [--no-indirect-validation] [--no-indirect-count] [--no-count-emulation] [--no-vsync] [--out DIR] [--label NAME] [--capture] [--far M=4200]\n       [--multiply N=1] [--check-budget] [--budget-ms 10 (self-test only)]\n       [--no-models] [--no-terrain-lod] [--no-kit] [--slice1] [--slice2] [--cache DIR] [--no-cache] [--stream-threads N=6] [--stream-radius M=inf]\n       [--kit-threads N=6] [--kit-split-materials] [--upload-budget-mb 4] [--kit-arena-vertices N] [--kit-arena-indices N] [--kit-arena-objects N]\n       [--kit-near-load M=110] [--kit-mid-load M=520] [--drive-frames N=3600]\n       [--time-of-day H=12] [--shadow-map N=3072] [--no-shadows] [--no-agents] [--agent-density N=1] [--no-rocketbox]\n       [--no-occlusion] [--occlusion-check] [--no-thread-priority] [--pace realtime|60hz|all-60hz|none] [--worst-frames N=12] [--check-max]\n       [--no-view-detail] [--view-margin-deg 35] [--view-predict-s 0.3] [--view-hold-s 2.5] [--stream-all-paths] [--full-arenas]\n       [--segments street_walk,elevated_sweep,city_overview,authored_street,kit_street,drive,turn_around,turn_around_authored]\n       (with --structures and built decks also freeway_drive,under_viaduct) [--light-shots] (capture cards; EO_LIGHT_SHOTS=a,b; EO_LIGHT_SHOTS_HOUR=H every card at another hour; EO_LIGHT_SHOTS=hero the six key views, clock held)\n       [--cc0-shots] (the scanned sets' matched cards; EO_CC0_SHOTS=a,b; EO_CC0_SHOTS_HOUR=H every card at another hour)\n       [--clutter-shots] (the facade clutter's cards: the kit and authored streets, fronts with fire escapes and shop fronts the planner dresses, a roof; the same poses with or without --facade-clutter; EO_CLUTTER_SHOTS=a,b; EO_CLUTTER_SHOTS_HOUR=H, default 15)\n       [--structures-shots] (the grade-separated roads at four places, from the street and from above, 15:00 clear; the same poses with or without --structures; EO_STRUCTURES_SHOTS=a,b; EO_STRUCTURES_SHOTS_HOUR=H another hour; EO_STRUCTURES_SHOTS_HDR=1 the scene luminance too)\n       [--dusk-strip] (40 frames a clock minute apart across sunset and sunrise at one camera, a CSV of mean luminance; with --smooth-time through the soft path)\n       (--light-shots with EO_PROBE_STRIP=path[,frames[,m a frame[,turn]]]: the reflections along a street while probe captures finish, a CSV and the frames round each)\n\nQuality and lighting (opt-in; a switch wins over the tier wherever it stands; each has a --no- form):\n       [--quality low|medium|high|hyper] (default medium, today's frame; bench budget 8 / 10 / 16.6 / 33.3 ms;\n       low: a 2048 sun map, low sky, no SSR, contact shadows, AO, shafts or bloom; high: the lighting additions but the probe grid,\n       with grime, street life, stand-ins, photo finish, facade clutter and shop light at 1 and the cinematic look; hyper: high at level 2, 48 lamps, the probe grid 2)\n       [--cascade-blend] [--far-shadows [1|2]] [--ambient-volume [1|2]] [--probe-grid [1|2]] [--light-shadows [N lamps, 16..48]]\n       [--light-shadow-moving] [--headlight-shadows [N vehicles]] [--lit-fog [1|2]]\n       (--ambient-volume: narrow streets and the ground under decks get less sky light, baked round the camera and over the city)\n       [--ground-bounce] (with --ambient-volume, on unless --no-ground-bounce: light bounced up from the sunlit ground onto deck undersides and walls facing it)\n       [--smooth-time] (the drawn hour follows the simulation's clock, the exposure converges instead of snapping)\n       (--far-shadows: sun shadows past the cascades from cached maps round the camera, 1 a 2 km ring, 2 another to the far plane; --cascade-blend: the cascades hand over in a band instead of a line)\n       (--probe-grid: reflection probes on the streets round the camera, cross-faded, read by every lit surface, 1 four of 128 px, 2 nine of 256 px)\n       (--lit-fog: the fog lit by the street lamps and headlamps, a froxel volume added by the resolve; 1 160 x 90 x 64, 2 240 x 135 x 96; nothing by day)\n       (--light-shadows: the nearest N street lamps keep a shadow map, drawn once, at most 2 new a frame, and draw in SF's 3000 K LED colour; --light-shadow-moving: the 4 nearest redrawn every frame with the traffic; --headlight-shadows: the nearest N vehicles' low beams cast shadows; nothing by day)\n       [--shadow-slope-bias] (the sun cascades' casters with a slope-scaled depth bias: no self-shadow stripes where the sun grazes a surface; high and hyper turn it on)\n       [--grime [1|2]] (surface weathering that reads: soiled walks with gum and stains, chipped kerbs and faded kerb paint, patched and sealed carriageways, washed-down facades, dusty cars; high 1, hyper 2)\n       [--street-life [1|2]] (litter, butts, leaves and grit on the walks and in the gutters; graffiti, buffed patches and posters on ground floors and freeway columns; 2 adds stickers, utility marks, pigeon droppings; high 1, hyper 2)\n       [--stand-ins] (procedural models for street-prop kinds whose GLB is absent from the checkout, instead of grey boxes; high and hyper)\n       [--photo-finish [1|2]] (a camera instead of the JS display transform: highlights pale to white on their hue, ISO noise by the scene's light, lens fall-off and lateral colour, a lens's bloom; San Francisco's measured air in the sky and the haze; 2 smoother fringes and chroma noise; high 1, hyper 2)\n       [--facade-clutter [1|2]] (fire escapes, awnings, colour-field and neon signs, roll-down shutters, bars on older ground-floor windows, downspouts, meters and conduit, chimneys, vents, dishes and aerials on the kit buildings; signs lit by night where the shop is; 2 adds window air conditioners, front dishes, scaffolding, boarded shops; high 1, hyper 2)\n       [--shop-light [1|2]] (lit shop windows at night: a light behind every kit shop window in its trade's colour, at its window's luminance, by its opening hours, spilling onto the sidewalk and lighting the fog, the room behind the glass lit or dark with it; 1 within 160 m, 2 to 300 m with two lights a window; high 1, hyper 2)\n       [--look default|cinematic] (the look profile: default is today's frame on its physical references; cinematic a graded open-world look, its departures from those references listed in CINEMATIC_DEVIATIONS; high and hyper; --no-look is --look default)\n       (a level left out is the high tier's; --probe-grid, which high leaves off, takes 1)\n\nWorld (opt-in; client and server must agree, the handshake refuses a mismatch; each has a --no- form):\n       [--structures] (grade-separated roads: freeways, ramps, road bridges, drawn and cast in three levels of detail) [--tunnels] (bores and portals, with --structures)"
                 );
                 std::process::exit(0);
             }
             other => anyhow::bail!("unknown argument {other} (try --help)"),
         }
     }
+    tier.apply(&mut a); // the tier, then the lighting switches over it
+    if a.dive_site.is_some() {
+        a.look.water_optics = !raw.iter().any(|flag| flag == "--no-water-optics");
+        a.look.dive_exposure = !raw.iter().any(|flag| flag == "--no-dive-exposure");
+        a.underwater_habitats = !raw.iter().any(|flag| flag == "--no-underwater-habitats");
+    }
+    if matches!(a.dive_site, Some(eo_render::seabed::Habitat::Eelgrass | eo_render::seabed::Habitat::Rocky)) {
+        a.cove_detail = !raw.iter().any(|s| s == "--no-cove-detail");
+        a.look.cove_canopy = a.cove_detail && !raw.iter().any(|s| s == "--no-cove-canopy");
+        a.look.cove_sediment = a.cove_detail && !raw.iter().any(|s| s == "--no-cove-sediment");
+        a.black_point_intertidal = a.cove_detail && !raw.iter().any(|s| s == "--no-black-point-intertidal");
+    }
+    apply_cove_look(&mut a, raw);
     if a.frames + a.warmup > 1024 {
         // 4 timestamp queries per frame; one query set holds at most 4096.
         anyhow::bail!("--frames + --warmup must be <= 1024 per segment");
     }
     Ok(a)
+}
+
+/// `--bridge-detail`: the Golden Gate's detail pass, a preview that is off by
+/// default (`--no-bridge-detail` keeps it off whatever else is passed).
+pub fn bridge_detail() -> bool {
+    let has = |f: &str| std::env::args().any(|a| a == f);
+    has("--bridge-detail") && !has("--no-bridge-detail")
 }
 
 pub struct World {
@@ -469,12 +573,21 @@ pub struct World {
     pub facade_detail: Option<Arc<eo_assets::facade_detail::FacadeDetail>>,
     /// the citywide shore field and the FFT spectrum (drawn unless `--no-water`).
     pub water: Option<Arc<eo_water::WaterData>>,
+    pub dive_sites: Vec<dive_sites::Site>,
     /// what the scene build added (LOD groups after the street's, the wire members).
     pub landmarks: Option<Arc<eo_render::landmarks::LandmarkStatic>>,
     /// the far layer's cells (every building drawn as a building, in one cell each).
     pub hlod: Option<Arc<eo_render::hlod_bake::HlodSet>>,
     /// the distant trees, gathered on their own thread during the load.
     pub hlod_trees: Option<Receiver<eo_render::hlod_trees::FarTreeList>>,
+    /// the grade-separated roads (`--structures` with streets; built beside
+    /// the load, structures.rs), shared by the renderer, the player's ground,
+    /// the agents' feed, the props world and the in-process server. None without the switch.
+    pub structures: Option<Arc<eo_structures::StructureWorld>>,
+    /// what the renderer draws of them (groups, materials, the static far
+    /// and coarse levels, the arena they need); None without the switch or
+    /// for an empty world.
+    pub structures_drawn: Option<Arc<eo_render::structures::StructurePrepared>>,
 }
 
 /// the JS street ground materials' scanned sets, as
@@ -535,6 +648,8 @@ pub fn load_world(args: &Args) -> Result<World> {
         let (g, p) = (elevation.clone(), paths.clone());
         // `--no-landmarks2` builds the set as the first landmarks slice did.
         let opts = if args.landmarks2 { eo_landmarks::set::Options::default() } else { eo_landmarks::set::Options::off() };
+        let opts = eo_landmarks::set::Options { bridge_detail: bridge_detail(), ..opts };
+        let opts = eo_landmarks::set::Options { cove_detail: args.cove_detail, ..opts };
         std::thread::spawn(move || -> Result<eo_landmarks::LandmarkSet> {
             let ca = CaStandards::load(&p)?;
             eo_landmarks::LandmarkSet::build_with(&p.repo_root, &|x: f64, z: f64| g.sample(x, z), &ca, opts)
@@ -562,6 +677,17 @@ pub fn load_world(args: &Args) -> Result<World> {
         Some(j) => Some(j.join().map_err(|_| anyhow::anyhow!("street world thread panicked"))??),
         None => None,
     };
+    // the grade-separated roads over the street world (`--structures`), built beside the rest of the load.
+    let mut structures_job = street_world.as_ref().and_then(|sw| structures::spawn(args.structures, sw, &city, &standards));
+    // with them the street is built again with their joins (stage A6:
+    // junction legs, capped, raised and lowered stubs): that street world is
+    // the one everything below stands on (street tiles, kit floors, terrain
+    // carpet, plazas, shore, props, player, agents), as eo-net's server
+    // builds it. Without `--structures` the first one stands, untouched.
+    let street_world = match (structures_job.as_mut(), street_world) {
+        (Some(j), Some(sw)) => Some(j.streets(sw)?),
+        (_, sw) => sw,
+    };
     // the paved plazas, planned and laid at the street world's
     // footway datum (plaza-paving.js), and the Ocean Beach and Sunset Dunes
     // seawalls on the drawn land and beach (the carpet), beside the rest of the load.
@@ -585,6 +711,12 @@ pub fn load_world(args: &Args) -> Result<World> {
     };
     // the building records the landmark buildings draw instead.
     let mut landmark_claims: HashSet<String> = if args.landmarks && args.landmarks2 { eo_landmarks::set::claimed_records() } else { HashSet::new() };
+    // stage A9 (`--tunnels`): a building over a tunnel's approach cut or portal canopy is
+    // left out as a claimed one (none without tunnels: the claims and every key as before).
+    if let Some(w) = structures_job.as_ref().and_then(|j| j.world()).filter(|w| !w.terrain_cuts().is_empty()) {
+        let rings: Vec<Vec<[f64; 2]>> = city.buildings.iter().map(|b| b.ring.iter().map(|p| [p[0] as f64, p[1] as f64]).collect()).collect();
+        landmark_claims.extend(w.buildings_over_cuts(&rings).into_iter().map(|i| city.buildings[i].id.trim_start_matches("sf-building-").to_string()));
+    }
     let finishes = (args.beaver_house && args.house_finishes)
         .then(|| house::Finishes::load(&paths.repo_root, args.house_patina, args.house_furniture))
         .transpose()?;
@@ -618,7 +750,11 @@ pub fn load_world(args: &Args) -> Result<World> {
                 }
             }
         }
-        kit_city_rx = Some(eo_render::kit::spawn_kit_city(city.clone(), paths.repo_root.clone(), set.palette.clone(), args.streets));
+        // (the joined street's tag keys its own tiles; none without `--structures`: the key is unchanged.)
+        let street_tag = street_world.as_ref().map(|w| w.o.structures_tag()).unwrap_or_default();
+        // the facade clutter the kit tiles are cooked with (`--facade-clutter`; 0: none, the tiles and their key as before).
+        eo_kit::clutter::set_level(args.facade_clutter);
+        kit_city_rx = Some(eo_render::kit::spawn_kit_city(city.clone(), paths.repo_root.clone(), set.palette.clone(), args.streets, street_tag));
         set.streets = street_world.clone();
         kit_set = Some(Arc::new(set));
     }
@@ -630,12 +766,20 @@ pub fn load_world(args: &Args) -> Result<World> {
         let pal = Some(eo_render::street::StreetPalette::new(authored.materials.street()));
         street_parts = Some(streets::prepare(sw.clone(), group_base, &mut authored, &city, pal));
     }
+    let mut rock_material = eo_render::scene::MATERIAL_VERTEX_COLOUR;
     if let Some(kit) = kit_lib {
         // The kit bake runs beside the first frames; models and kit packs wait for it.
         if finishes.as_ref().is_some_and(|f| !f.scans.is_empty()) {
             house::Scan::bind(&mut authored.materials);
         }
         let layers = authored.materials.layers.clone();
+        // the house's scans take the layers right after the kit's bake; the rock follows them.
+        let house_scans = finishes.as_ref().map_or(0, |f| f.scans.len());
+        let rock_maps = args.black_point_intertidal
+            .then(|| eo_render::seabed::rock_maps::load(&paths.repo_root)).transpose()?;
+        if let Some(maps) = &rock_maps {
+            rock_material = eo_render::seabed::rock_maps::register(&mut authored.materials, layers.len() + house_scans, maps);
+        }
         let cache = cache_dir(args);
         let (tx, rx) = std::sync::mpsc::channel();
         let repo_root = paths.repo_root.clone();
@@ -656,12 +800,18 @@ pub fn load_world(args: &Args) -> Result<World> {
                             Err(e) => eprintln!("warning: facade atlas cell {cell} not loaded ({e:#}); {name} keeps its bake"),
                         }
                     }
+                    // the layers after the kit's bake: the house's scans, the shore rock
+                    // (`rock_maps::register` above), then the house's street reflections,
+                    // floorboards and atlas, which draw.wgsl reads from the array's end.
+                    let mut house_tail = vec![];
                     if let Some(finishes) = finishes {
                         maps.extend(finishes.scans.into_iter().map(|scan| scan.maps));
-                        maps.extend(finishes.street_reflections);
-                        maps.push(finishes.floorboards);
-                        maps.push(finishes.atlas);
+                        house_tail.extend(finishes.street_reflections);
+                        house_tail.push(finishes.floorboards);
+                        house_tail.push(finishes.atlas);
                     }
+                    maps.extend(rock_maps);
+                    maps.extend(house_tail);
                     (KitUpload::build(&maps), t.elapsed().as_secs_f64() * 1e3)
                 })
                 .map_err(|e| format!("{e:#}"));
@@ -722,18 +872,36 @@ pub fn load_world(args: &Args) -> Result<World> {
         None => None,
     };
     let press = water.clone().filter(|_| args.look.water);
+    let profile = press.as_ref().filter(|_| args.cove_detail || args.capture || args.bench)
+        .map(|p| Arc::new(cove_bed::CoveBed::new(&elevation, &p.field)));
+    let cove = profile.clone().filter(|_| args.cove_detail);
     // the beach foreshore goes into the street world's carpet, which the
     // drawn ground, the collision ground (eo-player StreetGround) and the
     // agents all read, so they agree on the lowered beach.
     if let (Some(sw), Some(p)) = (&street_world, &press) {
         let p = p.clone();
-        sw.set_shore_press(Arc::new(move |x: f64, z: f64, y: f64| p.field.press_beach(x, z, y)));
+        let cove = cove.clone();
+        sw.set_shore_press(Arc::new(move |x, z, y| {
+            if let Some((h, w)) = cove.as_ref().and_then(|c| c.sample(x, z)) {
+                let old = p.field.press_ground(x, z, y);
+                return old + w * (h - old);
+            }
+            p.field.press_beach(x, z, y)
+        }));
     }
     let elev = &elevation;
     let carpet_fn: Option<Box<dyn Fn(f32, f32) -> f32 + Sync + '_>> = match (street_world.clone(), press) {
-        (Some(w), Some(p)) => Some(Box::new(move |x: f32, z: f32| p.field.press_ground_rings(x as f64, z as f64, w.carpet_vertex(x, z) as f64) as f32)), // the beach is in the carpet already
+        (Some(w), Some(p)) => Some(Box::new(move |x: f32, z: f32| {
+            let y = w.carpet_vertex(x, z);
+            if cove.as_ref().is_some_and(|c| c.sample(x as f64, z as f64).is_some()) { y }
+            else { p.field.press_ground_rings(x as f64, z as f64, y as f64) as f32 }
+        })), // the beach is in the carpet already
         (Some(w), None) => Some(Box::new(move |x: f32, z: f32| w.carpet_vertex(x, z))),
-        (None, Some(p)) => Some(Box::new(move |x: f32, z: f32| p.field.press_ground(x as f64, z as f64, elev.ground(x as f64, z as f64)) as f32)),
+        (None, Some(p)) => Some(Box::new(move |x: f32, z: f32| {
+            let (x, z) = (x as f64, z as f64);
+            let old = p.field.press_ground(x, z, elev.ground(x, z));
+            cove.as_ref().and_then(|c| c.sample(x, z)).map_or(old, |(h, w)| old + w * (h - old)) as f32
+        })),
         (None, None) => None,
     };
     // the landmark set joined before the scene build (it was done
@@ -771,6 +939,8 @@ pub fn load_world(args: &Args) -> Result<World> {
         (Some(sw), cover, true) => {
             let (sw, cover, g) = (sw.clone(), cover.clone(), (elevation.meta.origin_x, elevation.meta.origin_z, elevation.max_x(), elevation.max_z()));
             let (tx, rx) = std::sync::mpsc::channel();
+            let cove_detail = args.cove_detail;
+            let canopy_root = (cove_detail && args.look.cove_canopy).then(|| paths.repo_root.clone());
             std::thread::spawn(move || {
                 let t = Instant::now();
                 let Ok(js) = eo_props::JsProps::load() else { return };
@@ -780,13 +950,21 @@ pub fn load_world(args: &Args) -> Result<World> {
                 if let Some(cover) = &cover {
                     let sea = eo_water::SEA_LEVEL_Y;
                     let blocked = |x: f64, z: f64| sw.buildings.contains(x, z) || sw.paved_at(x, z).is_some() || sw.ground(x, z) < sea + 0.3;
-                    trees.extend(eo_render::hlod_trees::park_trees(cover, g.0, g.1, g.2, g.3, &|x, z| sw.ground(x, z), &blocked));
+                    let ground = |x, z| sw.ground(x, z);
+                    trees.extend(eo_render::hlod_trees::park_trees(cover, g.0, g.1, g.2, g.3, &ground, &blocked));
+                    if cove_detail {
+                        eo_render::hlod_trees::fill_black_point(&mut trees, cover, &ground, &blocked);
+                    }
                 }
                 if std::env::var("EO_TRACE_LOAD").is_ok() {
                     eprintln!("hlod: {} distant trees ({} street, {} park) in {:.0} ms (load thread)", trees.len(), street_n, trees.len() - street_n, t.elapsed().as_secs_f64() * 1e3);
                 }
                 // Ordered by block here, off the render thread (the GPU culls the blocks).
-                let _ = tx.send(eo_render::hlod_trees::into_blocks(trees));
+                let mut list = eo_render::hlod_trees::into_blocks(trees);
+                if let Some(root) = canopy_root {
+                    list.bake_black_point_canopy(&root, &js);
+                }
+                let _ = tx.send(list);
             });
             Some(rx)
         }
@@ -799,7 +977,9 @@ pub fn load_world(args: &Args) -> Result<World> {
     let water_field = water.clone();
     const FAR_LAND_ABOVE_SEA_M: f64 = 2.0;
     const FAR_LAND_SHORE_M: f64 = 60.0;
+    let municipal = shore_press.clone().filter(|_| args.cove_detail);
     let far_land_fn = |x: f64, z: f64| -> Option<f64> {
+        if municipal.as_ref().is_some_and(|p| p.under_municipal_pier(x, z)) { return None; }
         cover.as_ref()?;
         let w = water_field.as_deref()?;
         if w.field.signed_at(x, z) <= FAR_LAND_SHORE_M {
@@ -807,6 +987,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         }
         elev.sample(x, z).filter(|h| *h > eo_water::SEA_LEVEL_Y + FAR_LAND_ABOVE_SEA_M)
     };
+    let beach_fit = eo_render::ground2::on("beach_fit");
     let ground_tone_fn = |x: f32, z: f32| -> Option<u32> {
         let cover = cover.as_ref()?;
         let (x, z) = (x as f64, z as f64);
@@ -818,9 +999,18 @@ pub fn load_world(args: &Args) -> Result<World> {
         }
         if let Some(w) = water_field.as_deref() {
             let s = w.field.signed_at(x, z);
-            if cover.beach_sand(x, z, s.abs()) {
+            // the beach's sand round a mapped beach: kept off the lawns and paving
+            // mapped beside it and off a seawall's quay (`--no-ground-beach-fit`: the JS reach rule).
+            let sand = if beach_fit { cover.beach_sand_fit(x, z, &|x, z| w.field.signed_at(x, z).abs()) } else { cover.beach_sand(x, z, s.abs()) };
+            if sand {
                 let a = ((64.0 - s) * 1.5).round().clamp(0.0, 253.0) as u8;
                 return Some(pack(cover.sand_at(x, z), a));
+            }
+            // ground the JS rule covered with sand and the fitted one leaves
+            // (a quay, a pier's root) with no green mapped: the city's paved
+            // ground, not the land-cover class the sand hid (bare earth, sea).
+            if beach_fit && cover.tone_name_at(x, z).is_none() && cover.beach_sand(x, z, s.abs()) {
+                return Some(eo_render::scene::built_ground_color());
             }
         }
         // the open ground's measured green (yards, lots, hills), inland of the shore.
@@ -854,7 +1044,9 @@ pub fn load_world(args: &Args) -> Result<World> {
         (None, Some(sp)) => Some(Box::new(move |x: f32, z: f32| sp.press(x as f64, z as f64, elev.ground(x as f64, z as f64)) as f32)),
         (f, None) => f,
     };
-    let mut scene = build_scene(&SceneInputs { // mut (the landmarks are appended)
+    // the tunnels' open cuts and portal canopies (`--structures --tunnels`; none otherwise) cut the terrain.
+    let terrain_cuts = structures_job.as_ref().and_then(|j| j.world()).map(|w| w.as_ref());
+    let mut scene = build_scene_with_cuts(&SceneInputs { // mut (the landmarks are appended)
         city: &city,
         elevation: &elevation,
         land: land.as_ref(),
@@ -869,9 +1061,17 @@ pub fn load_world(args: &Args) -> Result<World> {
         skip_building: if landmark_claims.is_empty() { None } else { Some(&skip_claimed) },
         ground_tone: if cover.is_some() { Some(&ground_tone_fn) } else { None },
         smooth_terrain: args.landmarks && args.landmarks2,
-    })?;
+    }, terrain_cuts)?;
     let house_vertex_base = scene.vertices.len();
     if let Some(house) = &house { house.append(&mut scene, &authored.materials); }
+    let mut dive_sites = vec![];
+    if args.look.water && (args.underwater_habitats || args.cove_detail || args.dive_site.is_some() || args.capture || args.bench)
+        && let (Some(data), Some(height)) = (&water, &carpet_fn)
+    {
+        let rocky_site = (args.black_point_intertidal || args.dive_site == Some(eo_render::seabed::Habitat::Rocky)
+            || args.segments.as_ref().is_some_and(|p| p.iter().any(|n| n == "black_point_rocks"))).then_some(args.black_point_intertidal);
+        dive_sites = dive_sites::prepare(&mut scene, &data.field, elev, height.as_ref(), args.underwater_habitats, args.cove_detail, rocky_site.map(|draw| (draw, rock_material)), profile.as_deref());
+    }
     drop(carpet_fn); // water
     // the bridges (eo-landmarks, the JS generators ported) on the
     // drawn ground, appended to the static table; their LOD groups follow the street's.
@@ -978,7 +1178,15 @@ pub fn load_world(args: &Args) -> Result<World> {
         }
         Err(_) => anyhow::bail!("facade detail thread panicked"),
     };
-    Ok(World { house_vertex_base, house, paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, landmarks, hlod, hlod_trees }) // hlod
+    // the grade-separated roads (None without `--structures`); a failed build stops the load.
+    let (structures, structures_drawn) = match structures_job {
+        Some(j) => {
+            let b = j.join()?;
+            (Some(b.world), b.drawn)
+        }
+        None => (None, None),
+    };
+    Ok(World { house_vertex_base, house, paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, dive_sites, landmarks, hlod, hlod_trees, structures, structures_drawn }) // hlod
 }
 
 /// the street size. `--ground-scale S` (an explicit ground-plan
@@ -1038,6 +1246,7 @@ fn roofs_flags() {
         ("--no-ground-green", "EO_GROUND_GREEN"),
         ("--no-ground-hills", "EO_GROUND_HILLS"),
         ("--no-ground-contact", "EO_GROUND_CONTACT"),
+        ("--no-ground-beach-fit", "EO_GROUND_BEACH_FIT"),
     ] {
         if a.iter().any(|x| x == flag) {
             // SAFETY: first thing in main, before any other thread exists.
@@ -1064,8 +1273,6 @@ fn main() -> Result<()> {
     }
     // ==== end eo-player hook ====
     // ---- eo-ui (interface): --ui, --capture-ui SCREEN, --ui-bench; see ui.rs. Default paths untouched. ----
-    #[path = "ui.rs"]
-    mod ui;
     if let Some(flags) = ui::Flags::from_env() {
         return ui::run(flags, process_start);
     }

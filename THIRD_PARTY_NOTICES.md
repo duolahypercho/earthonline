@@ -124,13 +124,6 @@ source, licence and SHA-256; the program refuses a file that does not match.
   textures and meshes from ez-tree by Daniel Greenheck (MIT), and the
   ambientCG bark (CC0). Terms:
   [public/assets/vegetation/ez-vegetation-v1.LICENSE.txt](public/assets/vegetation/ez-vegetation-v1.LICENSE.txt).
-- **Characters** (`public/assets/characters/civilian-v1/`, no longer read
-  by the game): bodies, faces,
-  clothes, hair, eyes and skins are MakeHuman / MPFB system assets released
-  under CC0 1.0. Some garment, hair-cap and brow textures are
-  machine-generated edits of those CC0 textures; prompts and digests are in
-  the source manifests under `artifacts/characters/civilian-v1/`. See
-  `public/assets/characters/civilian-v1/provenance.json`.
 - **Hand-built buildings** (`public/assets/buildings/`): original geometry
   built in Blender by `scripts/blender-buildings/` from open data (DataSF
   footprints, LiDAR heights, the assessor roll). Per-building provenance
@@ -245,5 +238,7 @@ grouped by that field exactly as each crate declares it. Regenerate it after a d
 | `BSD-2-Clause OR MIT OR Apache-2.0` | 1 | mach2 0.6.0 |
 | `ISC` | 1 | libloading 0.8.9 |
 <!-- END GENERATED: cargo-licences -->
+
+The Black Point shoreline uses *Seaside Rock* by Dimitrios Savva for Poly Haven under CC0 1.0. The game ships reduced colour, normal and roughness maps from this scan. [Source](https://polyhaven.com/a/seaside_rock) · [Licence](https://polyhaven.com/license) · [Provenance](public/assets/shore/seaside-rock.provenance.json)
 
 The optional 21 Beaver sitting-room carpet uses the public-domain recto photograph of *Carpet*, attributed to Turkey, first half of the nineteenth century, Bequest of Joseph V. McMullan, 1973, accession 1974.149.36. The material builder rectifies and resamples the photograph. [The Metropolitan Museum of Art object record](https://www.metmuseum.org/art/collection/search/452588) · [The Met Open Access policy](https://www.metmuseum.org/about-the-met/policies-and-documents/open-access).

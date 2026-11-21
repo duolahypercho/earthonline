@@ -492,7 +492,11 @@ pub fn cook_tile(ctx: &CookContext, tile: u32) -> ([Pack; 2], CookStats) {
             let index_start = pack.indices.len() as u32;
             let (mut mn, mut mx) = ([f32::MAX; 3], [f32::MIN; 3]);
             let mut splits = vec![];
-            for (name, tint, sink) in &mesh.groups {
+            for (gi, (name, tint, sink)) in mesh.groups.iter().enumerate() {
+                // a lit sign face's glow code (eo-kit clutter.rs; none without `--facade-clutter`).
+                let glow = mesh.glow.get(gi).copied().unwrap_or(0) as u32;
+                // (stage S1) a lettered sign's vertex bytes (rgb, the normal's y and w; draw.wgsl `sgn_decode`).
+                let letters = mesh.letters.get(gi).filter(|l| !l.is_empty() && l.len() == sink.positions.len());
                 let base = eo_kit::pipeline::base_material_name(name);
                 let pal = match set.palette_index.get(base) {
                     Some(p) => *p,
@@ -523,6 +527,12 @@ pub fn cook_tile(ctx: &CookContext, tile: u32) -> ([Pack; 2], CookStats) {
                         let (rgb, nw) = f[k];
                         c = rgb[0] as u32 | ((rgb[1] as u32) << 8) | ((rgb[2] as u32) << 16) | ((pal as u32) << 24);
                         normal |= (nw as u32) << 24;
+                    } else if let Some(l) = letters {
+                        let b = l[k];
+                        c = b[0] as u32 | ((b[1] as u32) << 8) | ((b[2] as u32) << 16) | ((pal as u32) << 24);
+                        normal = (normal & 0x00ff_00ff) | ((b[3] as u32) << 8) | ((b[4] as u32) << 24);
+                    } else if glow != 0 {
+                        normal |= glow << 24; // draw.wgsl `fc_glow` (the w byte is free on every other kit surface)
                     }
                     pack.vertices.push(Vertex { pos, normal, color: c });
                 }
@@ -592,6 +602,14 @@ pub fn cache_path(dir: &Path, inputs_key: &str, tile: &KitTile, rung: u8) -> Pat
 
 /// The cache folder name: planner build, input data and palette.
 pub fn inputs_key(repo_root: &Path, palette: &[String], streets: bool) -> String {
+    inputs_key_with(repo_root, palette, streets, "")
+}
+
+/// `inputs_key` over a street world whose options carry `street_tag`
+/// (`eo_street::StreetOptions::structures_tag`: the structures' joins, which
+/// change the street surface near structure ends that floors and skirts
+/// stand on). An empty tag (no joins) is `inputs_key`'s key.
+pub fn inputs_key_with(repo_root: &Path, palette: &[String], streets: bool, street_tag: &str) -> String {
     let mut h = Sha256::new();
     h.update(eo_kit::KIT_PORT_VERSION.as_bytes());
     h.update(eo_kit::KIT_SOURCE_HASH.as_bytes());
@@ -606,6 +624,9 @@ pub fn inputs_key(repo_root: &Path, palette: &[String], streets: bool) -> String
         // Slice 4: floors and skirts stand on the street surface.
         h.update(eo_street::STREET_PORT_VERSION.as_bytes());
         h.update(eo_street::STREET_SOURCE_HASH.as_bytes());
+        if !street_tag.is_empty() {
+            h.update(street_tag.as_bytes()); // the structures' joins (none: the key is unchanged)
+        }
     }
     h.update(KIT_TILE_M.to_le_bytes());
     // a scaled ground plan cooks into its own folder (scale and plan
@@ -642,6 +663,21 @@ pub fn inputs_key(repo_root: &Path, palette: &[String], streets: bool) -> String
     }
     let d = h.finalize();
     d.iter().take(8).map(|b| format!("{b:02x}")).collect()
+}
+
+/// The kit tile cache folder for the planner's inputs key: the key itself,
+/// or with the facade clutter on (`eo_kit::clutter::cache_tag`, `--facade-clutter`)
+/// a key over it and the tag. Not in `inputs_key`, which the far layer's
+/// bake key also reads: the far cells do not draw the clutter.
+pub fn tile_cache_key(inputs_key: &str) -> String {
+    let tag = eo_kit::clutter::cache_tag();
+    if tag.is_empty() {
+        return inputs_key.to_string();
+    }
+    let mut h = Sha256::new();
+    h.update(inputs_key.as_bytes());
+    h.update(tag.as_bytes());
+    h.finalize().iter().take(8).map(|b| format!("{b:02x}")).collect()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -931,6 +967,7 @@ impl KitRuntime {
             let (ctx_slot, set, cache_dir) = (ctx_slot.clone(), set.clone(), cache_dir.clone());
             std::thread::spawn(move || {
                 if let Ok(Ok((city, key))) = city_rx.recv() {
+                    let key = tile_cache_key(&key);
                     *ctx_slot.lock().unwrap() = Some(Arc::new(CookContext { city, set, cache_dir, inputs_key: key }));
                 }
             });
@@ -1408,15 +1445,18 @@ impl GpuObject {
     }
 }
 
-/// Build the planner's city off the render thread (load time).
-pub fn spawn_kit_city(city: Arc<eo_data::City>, repo_root: PathBuf, palette: Vec<String>, streets: bool) -> Receiver<Result<(Arc<KitCity>, String), String>> {
+/// Build the planner's city off the render thread (load time). `street_tag`:
+/// the street world's `structures_tag` (empty without the structures' joins).
+pub fn spawn_kit_city(city: Arc<eo_data::City>, repo_root: PathBuf, palette: Vec<String>, streets: bool, street_tag: String) -> Receiver<Result<(Arc<KitCity>, String), String>> {
     let (tx, rx) = std::sync::mpsc::channel();
+    // (stage S1) the shop signs' words drawn meanwhile (with `--facade-clutter`; the renderer waits for them).
+    crate::sign_letters::start();
     std::thread::spawn(move || {
         let r = (|| {
             eo_data::roof_colours::install(&repo_root); // before the planner and the cache key read it
             let tenancy = eo_kit::tenancy::Tenancy::load(&repo_root)?;
             let kc = KitCity::build(&city, &tenancy, &eo_kit::city::load_exclusions());
-            Ok((Arc::new(kc), inputs_key(&repo_root, &palette, streets)))
+            Ok((Arc::new(kc), inputs_key_with(&repo_root, &palette, streets, &street_tag)))
         })();
         let _ = tx.send(r);
     });

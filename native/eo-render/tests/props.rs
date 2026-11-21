@@ -194,6 +194,11 @@ fn props2_dome_standards_equal_the_js() {
 }
 
 fn setup2(ctx: &GpuContext) -> (Renderer, eo_render::props_lib::PropLibrary) {
+    setup2_with(ctx, false)
+}
+
+/// `setup2`, with the procedural stand-ins for absent GLBs (`LibExtras::stand_ins`) or without.
+fn setup2_with(ctx: &GpuContext, stand_ins: bool) -> (Renderer, eo_render::props_lib::PropLibrary) {
     let (mut v, mut i, mut o) = (vec![], vec![], vec![]);
     boxed(&mut v, &mut i, &mut o, Vec3::new(-300.0, -1.0, -300.0), Vec3::new(300.0, 0.0, 300.0));
     boxed(&mut v, &mut i, &mut o, Vec3::new(-20.0, 0.0, -31.0), Vec3::new(20.0, 8.0, -30.0));
@@ -207,7 +212,7 @@ fn setup2(ctx: &GpuContext) -> (Renderer, eo_render::props_lib::PropLibrary) {
     let fonts = eo_props::sign_atlas::Fonts::system().unwrap();
     let (signs, _) = eo_props::sign_atlas::load_or_cook(&cache, &js, &fonts, &[], eo_props::sign_atlas::SIGN_FALLBACK_STREETS).unwrap();
     let oh = eo_props::overhead::OverheadJs::load().unwrap();
-    let x = LibExtras { ez: Some(&ez), signs: Some(&signs), overhead: Some(&oh) };
+    let x = LibExtras { ez: Some(&ez), signs: Some(&signs), overhead: Some(&oh), stand_ins };
     let lib = eo_render::props_lib::PropLibrary::cook_full(&paths.repo_root, &js, lens, &x, lib2::dome_standards(&ca).unwrap()).unwrap();
     r.attach_props(ctx, &lib).unwrap();
     (r, lib)
@@ -221,6 +226,52 @@ fn inst_id(model: u32, p: Vec3, scale: [f32; 3], variant: u32) -> GpuPropInstanc
 fn props2_kinds_fade_wires_lights() {
     let ctx = ctx();
     let (r, lib) = setup2(&ctx);
+    kinds_fade_wires_lights(&ctx, r, lib);
+}
+
+/// The same checks with the procedural stand-ins on (`--stand-ins`): a checkout
+/// without the hydrant GLB then has a hydrant with the GLB's level edges, so its
+/// level-0 fade band exists (without them its proxy has none).
+#[test]
+fn props2_kinds_fade_wires_lights_with_stand_ins() {
+    let ctx = ctx();
+    let (r, lib) = setup2_with(&ctx, true);
+    kinds_fade_wires_lights(&ctx, r, lib);
+}
+
+/// The stand-ins switch: off, the library is the grey proxies' (no stand-in material
+/// is pushed, an absent hydrant's levels are one proxy box); on, every absent kind with
+/// a stand-in gets three levels. The cache keys differ.
+#[test]
+fn props2_stand_ins_only_with_their_switch() {
+    let paths = eo_data::DataPaths::discover().expect("repo data");
+    let js = eo_props::JsProps::load().unwrap();
+    let ca = eo_data::CaStandards::load(&paths).unwrap();
+    let lens = ca.metric_key("signal-lens-size", "circularNewFaces").unwrap();
+    let dome = lib2::dome_standards(&ca).unwrap();
+    let oh = eo_props::overhead::OverheadJs::load().unwrap();
+    let off = LibExtras { overhead: Some(&oh), ..Default::default() };
+    let on = LibExtras { stand_ins: true, ..off };
+    assert!(!LibExtras::default().stand_ins, "off by default");
+    let lib_off = eo_render::props_lib::PropLibrary::cook_full(&paths.repo_root, &js, lens, &off, dome).unwrap();
+    let lib_on = eo_render::props_lib::PropLibrary::cook_full(&paths.repo_root, &js, lens, &on, dome).unwrap();
+    assert_ne!(eo_render::props_lib::PropLibrary::key_with(&js, &off, dome), eo_render::props_lib::PropLibrary::key_with(&js, &on, dome), "on and off cook different libraries");
+    let hydrant_absent = lib_off.missing.iter().any(|m| m.contains("hydrant"));
+    if !hydrant_absent {
+        // Every GLB of this checkout present: the switch changes nothing.
+        assert_eq!(lib_off.materials.len(), lib_on.materials.len());
+        return;
+    }
+    assert!(lib_on.materials.len() > lib_off.materials.len(), "the stand-ins push their materials only when on");
+    let h = Model::Hydrant as usize;
+    let (m_off, m_on) = (lib_off.models[h], lib_on.models[h]);
+    assert!(m_off.meshes[0] == m_off.meshes[1] && m_off.meshes[1] == m_off.meshes[2], "off: one proxy box at every level");
+    assert!(m_on.meshes[0] != m_on.meshes[1] && m_on.meshes[1] != m_on.meshes[2], "on: the stand-in's three levels");
+    assert!(m_on.lod[0] < m_off.lod[0], "on: the GLB's own level edges (off: the proxy's near ring)");
+}
+
+fn kinds_fade_wires_lights(ctx: &GpuContext, r: Renderer, lib: eo_render::props_lib::PropLibrary) {
+    let ctx = ctx;
     // A prop file left out of this checkout draws a proxy; one that is there must verify.
     let refused: Vec<&String> = lib.missing.iter().filter(|m| m.contains("refused")).collect();
     assert!(refused.is_empty(), "every props2 asset present verifies: {refused:?}");

@@ -20,7 +20,6 @@ workspace in `native/`.
 | `artifacts/` | Provenance and `ASSETS.lock.json` of the off-repository asset store | No binaries ([Docs/ASSET-STORE.md](Docs/ASSET-STORE.md)) |
 | `scripts/assets/`, `scripts/verify/` | Asset-store and vehicle tooling, the asset-lock check | Run through `npm run` |
 | `scripts/blender-buildings/` | The hand-built building pipeline | Blender, headless |
-| `scripts/character-assets/` | Character skeleton and asset contract | |
 | `scripts/world-data/sources/` | The cited California street-standards table | [Docs/CALIFORNIA-STREET-STANDARDS.md](Docs/CALIFORNIA-STREET-STANDARDS.md) |
 | `Docs/` | Data pipeline, street standards, asset store, visual gate | |
 
@@ -39,6 +38,7 @@ reviewable on its own.
 | `eo-look`, `eo-sky` | Lighting model, sky, weather and night photometry as pure functions | GPU passes |
 | `eo-water` | Shore field, ocean spectrum, water optics, surf | GPU passes |
 | `eo-landmarks`, `eo-farshore` | Bridges, waterfront, landmark towers, open-space ground; the land to the horizon | GPU passes |
+| `eo-structures` | Grade-separated roads (freeways, ramps, road bridges, tunnels): vertical profiles, deck, support and portal meshes, collision triangles | GPU passes, the street surface |
 | `eo-props` | Street furniture, signals, signs, trees, parked cars | GPU passes |
 | `eo-sim` | Traffic, signals, pedestrians, population; one fixed-step deterministic clock | Rendering, street geometry |
 | `eo-agents` | Vehicle and people libraries, motion, the simulation-to-renderer feed | Simulation truth |
@@ -92,6 +92,8 @@ for the same code and inputs.
 | Sound | `cargo test --release -p eo-audio` |
 | Renderer, materials, a pass, streaming | `cargo test --release -p eo-render -p eo-app`; `eo-app --bench --check-max`; two matched captures (below) for anything visible |
 | Anything that can cost frame time | `eo-app --bench --check-max` on an idle machine, and the cost per bench path from matched runs with and without the change |
+| A quality tier, or a feature switch a tier sets | `cargo test --release -p eo-app -p eo-ui`; `eo-app --bench --check-max --quality <tier>` for each tier that changes, against that tier's budget (native/README.md, Quality tiers), and for `hyper` also with `--structures --tunnels`; the default (`medium`) must not change |
+| Menus, settings, HUD | `cargo test --release -p eo-ui -p eo-app`; `eo-app --capture-ui <screen>` before and after, looked at; `eo-app --ui-bench` (menus 1.0 ms) |
 | Anything under `artifacts/` or `public/assets/` | `npm run verify:asset-lock`; the crate tests that load the asset |
 | Docs or rules only | Links and paths reviewed (`git ls-files`), the Markdown diff read, `git diff --check` |
 
@@ -130,8 +132,8 @@ It is not evidence about how a frame looks.
 
 ### The asset store
 
-- Pipeline source binaries (Blender scenes, vehicle and character sources,
-  texture plates) live in an off-repository object store. Only
+- Pipeline source binaries (Blender scenes, vehicle sources, texture
+  plates) live in an off-repository object store. Only
   `artifacts/ASSETS.lock.json` and the JSON and Markdown provenance beside
   the assets are tracked. `npm run assets:pull <substring>` restores what a
   task needs; a clone with nothing pulled is a valid state. See

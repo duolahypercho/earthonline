@@ -45,8 +45,188 @@ fn sky_contact_shadow(world: vec3<f32>, ng: vec3<f32>) -> f32 {
     return 1.0 - occ * 0.72 * fade * smoothstep(0.0, 0.25, dot(ng, l));
 }
 
+// ---- (`--look cinematic`, stage L2; eo-sky `cine_lamps`, its values kept
+// equal by eo-render sky.rs `the_cinematic_lamp_constants_are_eo_skys`) ----
+// A street luminaire's pool: an LED cobra head (IES type II/III) long along
+// its street (the axis its `dir` leans toward, sky_lights.wgsl
+// `lt_cine_lamp`), short across, a soft roll-off; the low beam's cut-off
+// stepped up on the kerb side and its hot spot; the local lights' specular
+// widened by the source's size and capped. Compiled out without the look.
+const SKY_CINE_COBRA_GAIN: f32 = 2.2;
+const SKY_CINE_COBRA_ALONG_COS: vec2<f32> = vec2<f32>(0.4694716, 0.1391731);
+const SKY_CINE_COBRA_ACROSS_COS: vec2<f32> = vec2<f32>(0.7431448, 0.3420201);
+const SKY_CINE_COBRA_ROUND: f32 = 0.5;
+const SKY_CINE_BEAM_CUT: vec2<f32> = vec2<f32>(0.4, 0.0);
+const SKY_CINE_BEAM_STEP: f32 = 2.0;
+const SKY_CINE_BEAM_EDGE: f32 = 0.35;
+const SKY_CINE_BEAM_GLARE: f32 = 0.031;
+const SKY_CINE_BEAM_HOT: vec2<f32> = vec2<f32>(1.5, 7.0);
+const SKY_CINE_BEAM_SPREAD: f32 = 0.18;
+const SKY_CINE_SRC_STREET: f32 = 0.3;
+const SKY_CINE_SRC_HEADLAMP: f32 = 0.09;
+const SKY_CINE_SPEC_CAP: f32 = 16.0;
+
+/// The cobra head's intensity over its nadir's toward `-l` (eo-sky `cobra_shape`).
+fn sky_cine_cobra(l: vec3<f32>, dir: vec3<f32>) -> f32 {
+    let c = l.y;
+    let ax = dir.xz;
+    var along2 = SKY_CINE_COBRA_ROUND;
+    if (dot(ax, ax) > 1e-6) {
+        let hd = -l.xz;
+        let k = dot(hd, ax);
+        along2 = k * k / max(dot(hd, hd) * dot(ax, ax), 1e-12);
+    }
+    let lo = mix(SKY_CINE_COBRA_ACROSS_COS.x, SKY_CINE_COBRA_ALONG_COS.x, along2);
+    let hi = mix(SKY_CINE_COBRA_ACROSS_COS.y, SKY_CINE_COBRA_ALONG_COS.y, along2);
+    return (1.0 + SKY_CINE_COBRA_GAIN * max(1.0 - c * c, 0.0) * along2) * smoothstep(hi, lo, c);
+}
+
+/// The low beam's vertical and horizontal shape (eo-sky `low_beam_shape`):
+/// `dep` deg below the horizontal, `h` deg right of the axis.
+fn sky_cine_low_beam(dep: f32, h: f32) -> f32 {
+    let cut = mix(SKY_CINE_BEAM_CUT.x, SKY_CINE_BEAM_CUT.y, smoothstep(0.0, SKY_CINE_BEAM_STEP, h));
+    let under = smoothstep(cut, cut + SKY_CINE_BEAM_EDGE, dep);
+    let x = (h - SKY_CINE_BEAM_HOT.x) / SKY_CINE_BEAM_HOT.y;
+    let hot = SKY_CINE_BEAM_SPREAD + (1.0 - SKY_CINE_BEAM_SPREAD) * exp(-x * x);
+    let fall = select(1.0, (2.5 / max(dep, 1e-3)) * (2.5 / max(dep, 1e-3)), dep > 2.5);
+    return mix(SKY_CINE_BEAM_GLARE, hot * fall, under);
+}
+
+// ---- (`--weather damp` and `--look cinematic`, stage L3; eo-sky `cine_wet`,
+// its values kept equal by eo-render tests/cine_wet.rs) ----
+// The damp street's drying patches (`--weather damp`, any look). Under the
+// look: wet ground darker and glossier (Lekner & Dorf: the albedo about
+// halves), and the lights' reflections on it as a water film's: an
+// anisotropic GGX lobe (F0 0.02) long along the ground toward the eye and
+// narrow across it, so lamps, headlamps and shop windows draw long streaks
+// down the road. Each streak light (the frame's brightest toward the eye,
+// sky_streaks.wgsl, its list after the clusters' in `sky_clusters`) is
+// reflected without the clusters' reach, with its luminaire's lens as the
+// floor of its emission (what the eye sees of it), its reflected radiance
+// never over the film's Fresnel times the lens's luminance (a mirror's
+// bound); the clusters keep the light's diffuse. Compiled into the street's
+// pipelines (the full variant) only with SF_CINEMATIC.
+const SKY_DAMP_DRY_FLOOR: f32 = 0.3;
+const SKY_CINE_WET_DARKEN: vec2<f32> = vec2<f32>(0.45, 0.55);
+const SKY_CINE_WET_ROUGH: vec2<f32> = vec2<f32>(0.17, 0.26);
+const SKY_CINE_STREAK_F0: f32 = 0.02;
+const SKY_CINE_STREAK_ALONG: f32 = 0.14;
+const SKY_CINE_STREAK_ACROSS: f32 = 0.02;
+const SKY_CINE_PUDDLE_ALPHA: f32 = 0.006;
+const SKY_CINE_STREAK_LENS: f32 = 0.35;
+const SKY_CINE_STREAK_HEAD_LENS: f32 = 0.06;
+const SKY_STREAK_CAP: u32 = 32u;
+/// The street's pipelines (the full shadow variant: the city, agents, wires,
+/// CC0): the props and the far layer compile none of the look's wet code.
+const SKY_CINE_FULL: bool = SF_CINEMATIC && LK_SHADOW_CASCADES && LK_SHADOW_FAR;
+
+/// (stage L3) The wet film's share at the street fragment being shaded (set
+/// by `sky_wet_street` under the look; 0 elsewhere: no streaks) and its puddle's.
+var<private> sky_streak_w: f32;
+var<private> sky_streak_pud: f32;
+/// (stage L3) Car paint's clearcoat (set by agents_draw.wgsl under the look:
+/// its share, its roughness; 0 elsewhere) and the street's lights in it (the
+/// clusters' loop gathers them for look_light's coat).
+var<private> sky_coat: f32;
+var<private> sky_coat_rough: f32;
+var<private> sky_coat_lights: vec3<f32>;
+
+/// (`--weather damp`) How much of the film is left at a point of the street
+/// an hour after rain: drying patches by noise, the crown first, the gutter
+/// and the kerb side last (`kerb` m from the kerb, < 0 none).
+fn sky_damp_left(p: vec2<f32>, kerb: f32) -> f32 {
+    let field = 0.55 * st_noise(p / 3.1 + 11.3) + 0.45 * st_noise(p / 0.9 + 7.3) + 0.35 * sky_drain(kerb);
+    return mix(SKY_DAMP_DRY_FLOOR, 1.0, smoothstep(0.3, 0.62, field));
+}
+
+/// (stage L3) The water film's anisotropic GGX (Heitz 2014; height-correlated
+/// Smith), `at` along `t`, `ab` across: the BRDF (1/sr) times n.l.
+fn sky_cine_film(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, t: vec3<f32>, at: f32, ab: f32) -> f32 {
+    let nl = dot(n, l);
+    let nv = max(dot(n, v), 1e-4);
+    if (nl <= 0.0) {
+        return 0.0;
+    }
+    let b = cross(n, t);
+    let h = normalize(l + v);
+    let th = dot(t, h) / at;
+    let bh = dot(b, h) / ab;
+    let nh = dot(n, h);
+    let dd = th * th + bh * bh + nh * nh;
+    let d = 1.0 / (LK_PI * at * ab * dd * dd);
+    let gv = nl * length(vec3<f32>(at * dot(t, v), ab * dot(b, v), nv));
+    let gl = nv * length(vec3<f32>(at * dot(t, l), ab * dot(b, l), nl));
+    let vis = 0.5 / max(gv + gl, 1e-6);
+    let f = SKY_CINE_STREAK_F0 + (1.0 - SKY_CINE_STREAK_F0) * pow(1.0 - max(dot(v, h), 0.0), 5.0);
+    return f * d * vis * nl;
+}
+
+/// (stage L3) The streak lights' reflections in the wet film at a street
+/// point (radiance): every one, whatever its distance (no reach), its
+/// emission toward the point the larger of its pool's and its lens's.
+fn sky_cine_streaks(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
+    let g = skyu.lights.yzw;
+    let base = g.x * g.y * g.z * (1u + SKY_CLUSTER_CAP);
+    let count = min(sky_clusters[base], SKY_STREAK_CAP);
+    // the tangent along the ground toward the eye (the streak's length)
+    var t = v - n * dot(v, n);
+    if (dot(t, t) < 1e-8) {
+        t = cross(n, vec3<f32>(1.0, 0.0, 0.0));
+    }
+    t = normalize(t);
+    let a_along = mix(SKY_CINE_STREAK_ALONG, SKY_CINE_PUDDLE_ALPHA, sky_streak_pud);
+    let a_across = mix(SKY_CINE_STREAK_ACROSS, SKY_CINE_PUDDLE_ALPHA, sky_streak_pud);
+    var out = vec3<f32>(0.0);
+    for (var k = 0u; k < count; k = k + 1u) {
+        let li = sky_lights[sky_clusters[base + 1u + k]];
+        let d = li.pos - world;
+        let d2 = max(dot(d, d), 0.04);
+        let dist = sqrt(d2);
+        let l = d / dist;
+        if (dot(n, l) <= 0.0) {
+            continue;
+        }
+        let ca = dot(-l, li.dir);
+        var shape = 1.0;
+        var src = SKY_CINE_SRC_STREET;
+        if (li.kind == 0u) {
+            shape = max(sky_cine_cobra(l, li.dir), SKY_CINE_STREAK_LENS);
+        } else if (li.kind == 3u) {
+            shape = max(smoothstep(li.cos_outer, li.cos_inner, ca), SKY_CINE_STREAK_LENS);
+        } else if (li.kind == 1u) {
+            let dep = asin(clamp(l.y, -1.0, 1.0)) * 57.29578;
+            let hl = normalize(vec2<f32>(-l.x, -l.z) + vec2<f32>(1e-6, 0.0));
+            let ha = normalize(vec2<f32>(li.dir.x, li.dir.z) + vec2<f32>(1e-6, 0.0));
+            let hr = vec2<f32>(-ha.y, ha.x);
+            let side = smoothstep(li.cos_outer, li.cos_inner, dot(hl, ha));
+            shape = max(sky_cine_low_beam(dep, atan2(dot(hl, hr), dot(hl, ha)) * 57.29578) * side, SKY_CINE_STREAK_HEAD_LENS * smoothstep(-0.2, 0.2, dot(hl, ha)));
+            src = SKY_CINE_SRC_HEADLAMP;
+        } else if (li.kind >= 4u) {
+            shape = smoothstep(li.cos_outer, li.cos_inner, ca);
+            src = 0.5 * sqrt(max(li.size, 0.0));
+        }
+        // the source's size widens the lobe both ways (as the clusters' specular)
+        let wide = src / (2.0 * dist);
+        let f = sky_cine_film(n, v, l, t, min(a_along + wide, 1.0), min(a_across + wide, 1.0));
+        // a mirror's bound: no more than the film's Fresnel (<= 1) times the source's luminance
+        let e = li.intensity * shape / d2;
+        out = out + li.color * e * min(f, d2 / (LK_PI * src * src));
+    }
+    return out * sky_streak_w;
+}
+
 /// The clustered city lights at a surface.
 fn sky_local_lights(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, diffuse: vec3<f32>, f0: vec3<f32>, rough: f32) -> vec3<f32> {
+    return sky_local_lights_ao(world, n, v, diffuse, f0, rough, 1.0);
+}
+
+/// `sky_local_lights` with the surface's occlusion `ao` (lighting,
+/// `--light-shadows`, `--headlight-shadows`; light_shadow.rs): while they are
+/// on, a light's record carries in its spare word its shadow map's tile + 1
+/// (or -1: no map), and each light is then multiplied by `ao` and its shadow
+/// (light_shadow_use.wgsl `ls_light_visibility`). Off, every record's word
+/// is 0 and nothing here changes.
+fn sky_local_lights_ao(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, diffuse: vec3<f32>, f0: vec3<f32>, rough: f32, ao: f32) -> vec3<f32> {
     if (!sky_on(skyu.flags.x, SKY_LIGHTS) || skyu.lights.x == 0u || frame.copy_step.z > 0.5) {
         return vec3<f32>(0.0);
     }
@@ -66,6 +246,7 @@ fn sky_local_lights(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, diffuse: vec3<
     let count = min(sky_clusters[c], SKY_CLUSTER_CAP);
     let base = g.x * g.y * g.z + c * SKY_CLUSTER_CAP;
     var out = vec3<f32>(0.0);
+    let cine = SF_CINEMATIC && sky_on(skyu.flags.x, SKY_CINEMATIC);
     for (var k = 0u; k < count; k = k + 1u) {
         let li = sky_lights[sky_clusters[base + k]];
         let d = li.pos - world;
@@ -78,6 +259,9 @@ fn sky_local_lights(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, diffuse: vec3<
         if (li.kind == 0u) {
             // A full-cutoff road luminaire: batwing toward its 60 deg peak, nothing past 75 deg.
             shape = (1.0 + 1.5 * (1.0 - ca * ca)) * smoothstep(li.cos_outer, li.cos_inner, ca);
+            if (cine) {
+                shape = sky_cine_cobra(l, li.dir); // (`--look cinematic`) the cobra head's pool
+            }
         } else if (li.kind == 1u) {
             // A low beam as UN ECE R112 shapes one: the hot spot just under
             // the cut-off (0.6-2.5 deg down), the foreground falling as
@@ -99,17 +283,56 @@ fn sky_local_lights(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, diffuse: vec3<
             let ha = normalize(vec2<f32>(li.dir.x, li.dir.z) + vec2<f32>(1e-6, 0.0));
             let side = smoothstep(li.cos_outer, li.cos_inner, dot(hl, ha));
             let near = clamp(max(dist, 0.4) / 6.5, 0.0, 1.0);
+            if (cine) {
+                // (`--look cinematic`) the cut-off stepped up on the kerb side
+                // (right of the heading: (-z, x)) and the hot spot.
+                let hr = vec2<f32>(-ha.y, ha.x);
+                vert = sky_cine_low_beam(dep, atan2(dot(hl, hr), dot(hl, ha)) * 57.29578);
+            }
             shape = vert * side * near * near;
-        } else if (li.kind == 3u) {
+        } else if (li.kind >= 3u) {
             // A props street light: the JS lamp practical's spot (three.js
-            // SpotLight: smoothstep(cos angle, cos (angle (1 - penumbra)))).
+            // SpotLight: smoothstep(cos angle, cos (angle (1 - penumbra))));
+            // a shop window's light (kind 4, `--shop-light`) its window's lobe the same way.
             shape = smoothstep(li.cos_outer, li.cos_inner, ca);
         }
         let nl = max(dot(n, l), 0.0);
-        let e = li.intensity * shape * w * w / d2 * nl;
-        if (e > 0.0) {
-            out = out + li.color * e * (diffuse / LK_PI + lk_ggx(n, v, l, f0, rough));
+        var e = li.intensity * shape * w * w / d2 * nl;
+        if (LS_SHADER && li.pad != 0.0 && e > 0.0) {
+            e = e * ao;
+            if (li.pad >= 1.0) {
+                e = e * ls_light_visibility(u32(li.pad) - 1u, world, n);
+            }
         }
+        if (e > 0.0) {
+            var re = rough;
+            if (cine) {
+                // (`--look cinematic`) the source's size widens the lobe (a shop window: half its glazed side).
+                let src = select(select(SKY_CINE_SRC_STREET, SKY_CINE_SRC_HEADLAMP, li.kind == 1u), 0.5 * sqrt(max(li.size, 0.0)), li.kind >= 4u);
+                re = sqrt(min(rough * rough + src / (2.0 * dist), 1.0));
+            }
+            var spec = lk_ggx(n, v, l, f0, re);
+            if (cine) {
+                spec = min(spec, vec3<f32>(SKY_CINE_SPEC_CAP));
+            }
+            if (SKY_CINE_FULL && sky_coat > 0.0) {
+                // (stage L3) the paint's clearcoat (look_light), its lobe widened by the
+                // source as above, bounded as a mirror (the lens's luminance x Fresnel)
+                // rather than by the spec cap: a sharp coat shows the lamp
+                let rc = sqrt(min(sky_coat_rough * sky_coat_rough + (re * re - rough * rough), 1.0));
+                let bound = d2 / (LK_PI * SKY_CINE_SRC_STREET * SKY_CINE_SRC_STREET * max(nl, 1e-3));
+                sky_coat_lights = sky_coat_lights + li.color * e * min(lk_ggx(n, v, l, vec3<f32>(0.04), rc), vec3<f32>(bound));
+            }
+            if (SKY_CINE_FULL && sky_streak_w > 0.0) {
+                // (stage L3) the wet film reflects the streak lights below; here the
+                // dry share's lobe only
+                spec = spec * (1.0 - sky_streak_w);
+            }
+            out = out + li.color * e * (diffuse / LK_PI + spec);
+        }
+    }
+    if (SKY_CINE_FULL && cine && sky_streak_w > 0.0) {
+        out = out + sky_cine_streaks(world, n, v); // (stage L3) the lights' streaks on the wet street
     }
     return out;
 }
@@ -194,15 +417,28 @@ fn sky_ripple(p: vec2<f32>) -> vec2<f32> {
 
 /// Wet the street surface (the carriageway and the walk), before lighting.
 fn sky_wet_street(s: ptr<function, Surface>, world: vec3<f32>, n_geom: vec3<f32>, kerb: f32, asphalt: bool) {
-    let w = skyu.wet.x;
+    var w = skyu.wet.x;
     if (!sky_on(skyu.flags.x, SKY_WET) || w < 0.02) {
         return;
     }
-    let darken = select(0.66, 0.58, asphalt);
-    let wet_rough = select(0.32, 0.24, asphalt);
+    if (sky_on(skyu.flags.x, SKY_DAMP)) {
+        w = w * sky_damp_left(world.xz, select(-1.0, kerb, asphalt)); // (`--weather damp`) drying patches
+    }
+    var darken = select(0.66, 0.58, asphalt);
+    var wet_rough = select(0.32, 0.24, asphalt);
+    let cine = SKY_CINE_FULL && sky_on(skyu.flags.x, SKY_CINEMATIC);
+    if (cine) {
+        // (`--look cinematic`, stage L3) the film darker and glossier
+        darken = select(SKY_CINE_WET_DARKEN.y, SKY_CINE_WET_DARKEN.x, asphalt);
+        wet_rough = select(SKY_CINE_WET_ROUGH.y, SKY_CINE_WET_ROUGH.x, asphalt);
+    }
     var pud = 0.0;
     if (n_geom.y > 0.95) {
         pud = sky_puddle(world.xz, select(-1.0, kerb, asphalt)) * w;
+    }
+    if (cine && n_geom.y > 0.7) {
+        sky_streak_w = w;
+        sky_streak_pud = pud;
     }
     (*s).albedo = (*s).albedo * mix(1.0, darken, w) * (1.0 - 0.2 * pud);
     // The film's grazing sheet (street-surface-v2-render.js: the film floor
@@ -240,6 +476,9 @@ fn sky_wet_generic(s: ptr<function, Surface>, ng: vec3<f32>) {
 /// 12 steps from 0.12 m, first 0.22 m, x1.7, scaled by range / 30 m, 6
 /// refinements, no ray above an elevation sine of 0.5). rgb radiance, a weight.
 fn sky_ssr(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, rough: f32) -> vec4<f32> {
+    if (SKY_CINE_FULL && sky_on(skyu.flags.x, SKY_CINEMATIC)) {
+        return sky_ssr_cine(world, n, v, rough); // (`--look cinematic`, stage L3)
+    }
     if (!sky_on(skyu.flags.x, SKY_SSR) || skyu.flags.z == 0u || look.ao_params.x < 0.5 || rough > 0.36 || frame.copy_step.z > 0.5) {
         return vec4<f32>(0.0);
     }
@@ -300,5 +539,106 @@ fn sky_ssr(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, rough: f32) -> vec4<f32
     c = c * min(1.0, cap / max(lk_luma(c), 1e-4));
     let edge = smoothstep(0.0, 0.05, min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y)));
     let w = edge * (1.0 - smoothstep(0.1, 0.36, rough)) * (1.0 - smoothstep(0.3, 0.5, r.y));
+    return vec4<f32>(c, w);
+}
+
+// ---- (`--look cinematic`, stage L3) the reflection on glossy ground, longer
+// and softer: up to roughness 0.5 (damp asphalt) fading from 0.3, a march of
+// 24 steps from 0.15 m x 1.32 (about 370 m at 30 m, scaled by range /
+// 30 m) that takes the first step behind the depth as its hit and refines
+// it (a long step can no longer jump a pole's thickness test), the hit's
+// colour read as 7 taps along the frame's vertical, as long as the film's
+// lobe (so signs, signals, windows and lamps streak down the street like the
+// lights' analytic streaks), and its brightness cap raised from the JS's 8
+// to 24 x the exposure (neon and lit signs keep their colour). Compiled into
+// the street's pipelines only with SF_CINEMATIC (`SKY_CINE_FULL`). ----
+const SKY_CINE_SSR_ROUGH: vec2<f32> = vec2<f32>(0.3, 0.5);
+const SKY_CINE_SSR_STEPS: i32 = 24;
+const SKY_CINE_SSR_STEP: vec2<f32> = vec2<f32>(0.15, 1.32);
+const SKY_CINE_SSR_CAP: f32 = 24.0;
+
+fn sky_ssr_cine_uv(p: vec3<f32>) -> vec3<f32> {
+    let clip = look.ao_vp * vec4<f32>(p, 1.0);
+    if (clip.w <= 1e-3) {
+        return vec3<f32>(-1.0);
+    }
+    return vec3<f32>(clip.x / clip.w * 0.5 + 0.5, 0.5 - clip.y / clip.w * 0.5, 1.0);
+}
+
+fn sky_ssr_cine(world: vec3<f32>, n: vec3<f32>, v: vec3<f32>, rough: f32) -> vec4<f32> {
+    if (!sky_on(skyu.flags.x, SKY_SSR) || skyu.flags.z == 0u || look.ao_params.x < 0.5 || rough > SKY_CINE_SSR_ROUGH.y || frame.copy_step.z > 0.5) {
+        return vec4<f32>(0.0);
+    }
+    let r = reflect(-v, n);
+    // (a car's clearcoat: its flanks too, the street and the fronts across it)
+    if (r.y > 0.6 || (n.y < 0.6 && sky_coat <= 0.0)) {
+        return vec4<f32>(0.0);
+    }
+    let dims = vec2<i32>(textureDimensions(lk_ao_z));
+    let range = length(world - skyu.eye.xyz);
+    var step = SKY_CINE_SSR_STEP.x * max(range / 30.0, 1.0);
+    var t = 0.1;
+    var t_prev = 0.0;
+    var hit = -1.0;
+    for (var i = 0; i < SKY_CINE_SSR_STEPS; i = i + 1) {
+        let p = world + r * t;
+        let q = sky_ssr_cine_uv(p);
+        if (q.z < 0.0 || any(q.xy < vec2<f32>(0.0)) || any(q.xy > vec2<f32>(1.0))) {
+            break;
+        }
+        let z = textureLoad(lk_ao_z, clamp(vec2<i32>(q.xy * vec2<f32>(dims)), vec2<i32>(0), dims - 1), 0).r;
+        let zr = dot(p - look.ao_cam.xyz, look.ao_fwd.xyz);
+        if (z > 0.0 && zr > z + 0.03) {
+            hit = t;
+            break;
+        }
+        t_prev = t;
+        t = t + step;
+        step = step * SKY_CINE_SSR_STEP.y;
+    }
+    if (hit < 0.0) {
+        return vec4<f32>(0.0);
+    }
+    var lo = t_prev;
+    var hi = hit;
+    for (var i = 0; i < 6; i = i + 1) {
+        let mid = 0.5 * (lo + hi);
+        let p = world + r * mid;
+        let q = sky_ssr_cine_uv(p);
+        let z = textureLoad(lk_ao_z, clamp(vec2<i32>(q.xy * vec2<f32>(dims)), vec2<i32>(0), dims - 1), 0).r;
+        let zr = dot(p - look.ao_cam.xyz, look.ao_fwd.xyz);
+        if (z > 0.0 && zr > z) {
+            hi = mid;
+        } else {
+            lo = mid;
+        }
+    }
+    let p = world + r * hi;
+    let q = sky_ssr_cine_uv(p);
+    // behind a thin thing (more than its thickness behind the depth there): no hit
+    let z = textureLoad(lk_ao_z, clamp(vec2<i32>(q.xy * vec2<f32>(dims)), vec2<i32>(0), dims - 1), 0).r;
+    let zr = dot(p - look.ao_cam.xyz, look.ao_fwd.xyz);
+    let thick = 0.8 + 0.06 * z;
+    let solid = 1.0 - smoothstep(thick, 2.0 * thick, zr - z);
+    if (solid <= 0.0) {
+        return vec4<f32>(0.0);
+    }
+    // the film's lobe along the frame's vertical (alpha, as a share of the frame's height)
+    let along = mix(rough * rough, mix(SKY_CINE_STREAK_ALONG, SKY_CINE_PUDDLE_ALPHA, sky_streak_pud), sky_streak_w);
+    let spread = along / max(skyu.cluster.z, 0.1);
+    var c = vec3<f32>(0.0);
+    var wsum = 0.0;
+    for (var k = -3; k <= 3; k = k + 1) {
+        let o = f32(k) / 3.0;
+        let wk = exp(-1.5 * o * o);
+        let uv = vec2<f32>(q.x, clamp(q.y + o * spread, 0.0, 1.0));
+        c = c + textureSampleLevel(sky_prev, lk_ao_samp, uv, 0.0).rgb * wk;
+        wsum = wsum + wk;
+    }
+    c = c / wsum;
+    let cap = SKY_CINE_SSR_CAP / max(look.key.w, 0.1);
+    c = c * min(1.0, cap / max(lk_luma(c), 1e-4));
+    let edge = smoothstep(0.0, 0.05, min(min(q.x, 1.0 - q.x), min(q.y, 1.0 - q.y)));
+    let w = edge * solid * (1.0 - smoothstep(SKY_CINE_SSR_ROUGH.x, SKY_CINE_SSR_ROUGH.y, rough)) * (1.0 - smoothstep(0.4, 0.6, r.y));
     return vec4<f32>(c, w);
 }

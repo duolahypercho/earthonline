@@ -247,6 +247,44 @@ pub fn dive_segment(world: &World, frames: usize, aspect: f32, far: f32) -> Opti
     })
 }
 
+/// Short, level swim through the actual starting views. Explicit segment
+/// selection also exposes the paths with the habitats off for matched timing.
+pub fn habitat_segments(world: &World, args: &crate::Args, frames: usize, aspect: f32, far: f32) -> Vec<Segment> {
+    let mut segments: Vec<Segment> = world.dive_sites.iter().filter_map(|site| {
+        let name = match site.habitat {
+            eo_render::seabed::Habitat::Eelgrass => "bay_grass",
+            eo_render::seabed::Habitat::Sand => "pacific_sand",
+            eo_render::seabed::Habitat::Rocky => "black_point_rocks",
+        };
+        if !args.underwater_habitats && !args.segments.as_ref().is_some_and(|paths| paths.iter().any(|p| p == name)) {
+            return None;
+        }
+        let cam = site.camera(aspect, far);
+        Some(Segment {
+            name, description: format!("A submerged swim across the {name} site."), frames, paced: false, streams: true,
+            camera: Box::new(move |i,n| {
+                let t = i as f32 / n.saturating_sub(1).max(1) as f32;
+                Camera { eye: cam.eye + cam.right() * (t - 0.5) * 1.2, yaw: cam.yaw + (t - 0.5)*0.32, ..cam }
+            }),
+        })
+    }).collect();
+    if (args.cove_detail || args.segments.as_ref().is_some_and(|p| p.iter().any(|n| n == "cove_descent")))
+        && let Some(&site) = world.dive_sites.iter().find(|s| s.beach.is_some()) {
+        segments.push(Segment {
+            name: "cove_descent", description: "Descend offshore from the Aquatic Park beach toward the surveyed basin.".into(),
+            frames, paced: false, streams: true,
+            camera: Box::new(move |i, n| {
+                let t = i as f32 / n.saturating_sub(1).max(1) as f32;
+                let mut camera = site.cove_camera(aspect, far, 112.0 * t);
+                // Enter through the moving surface before following the descending bed.
+                camera.eye.y += (1.0 - t * 8.0).max(0.0) * 1.1;
+                camera
+            }),
+        });
+    }
+    segments
+}
+
 /// The `capture-water-*` views: (name, camera, what it shows).
 pub fn capture_cameras(world: &World, aspect: f32, far: f32) -> Vec<(&'static str, Camera, String)> {
     let mut out = vec![];
@@ -278,6 +316,19 @@ pub fn capture_cameras(world: &World, aspect: f32, far: f32) -> Vec<(&'static st
         out.push(("bay-submerged", cam, "0.4 m under the bay surface, looking up toward the city".into()));
         let crossing = Camera { eye: Vec3::new(cam.eye.x, sea(), cam.eye.z), pitch: 0.0, ..cam };
         out.push(("bay-waterline", crossing, "at mean sea level facing the city".into()));
+    }
+    for site in &world.dive_sites {
+        if site.beach.is_some() {
+            out.push(("cove-surface", site.surface_camera(aspect, far), "Aquatic Park beach toward Municipal Pier and Black Point".into()));
+            out.push(("cove-shallows", site.cove_camera(aspect, far, 0.0), "looking down the cove bank just below the surface".into()));
+            out.push(("cove-basin", site.cove_camera(aspect, far, 112.0), "112 m farther offshore on the same transect".into()));
+        }
+        let (name, description) = match site.habitat {
+            eo_render::seabed::Habitat::Eelgrass => ("bay-grass", "near the bed in Aquatic Park Cove"),
+            eo_render::seabed::Habitat::Rocky => ("black-point-rocks", "the inhabited rock faces at the western shore of Aquatic Park Cove"),
+            eo_render::seabed::Habitat::Sand => ("pacific-ripples", "near the bed off Ocean Beach"),
+        };
+        out.push((name, site.camera(aspect, far), description.into()));
     }
     // The bay from above: 1.6 km up over the water east of the city, looking down-west.
     let eye = super::on_plan(Vec3::new(FERRY_BUILDING_SURVEYED[0] + 2600.0, 1600.0, FERRY_BUILDING_SURVEYED[1] + 900.0));
