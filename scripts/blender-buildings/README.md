@@ -151,10 +151,13 @@ never traced, saved, or read into any file here.
 The furnished three-storey house has a Blender-only authoring mode. Its shell follows
 the installed game footprint. Furniture keeps its physical dimensions and the
 individual assemblies appear as collection assets. The private lot follows the
-city parcel polygon. Surrounding walls use mapped footprints and heights with
-illustrative windows and finishes.
+city parcel polygon. The street mesh and its supporting terrain come from the
+same `eo-street` plan as the game. The surrounding roofs use the city footprint
+and height records, and distant trees follow the street-tree inventory. Bay
+windows, garage joinery and courtyard wall finishes on adjoining buildings are
+reconstructions from the design references.
 
-Use Blender 5.1 and choose a directory outside the checkout for the scene and
+Use Blender 5.1 with Cargo on the executable path and choose a directory outside the checkout for the scene and
 its renders. Set `EO_CC0_ROOT` to the optional scanned-material library to pack
 the corresponding siding, soil and roof textures into the scene.
 
@@ -171,4 +174,7 @@ bedroom, front entry and kitchen detail cameras. Each includes its daylight
 direction and exposure. The `front-door` object's **Open angle** property
 controls the leaf and attached hardware, in degrees. Its saved value is zero.
 The render command tests its swing, checks the furniture dimensions and packed
-images, and writes six Cycles renders with a verification manifest.
+images and writes a verification manifest. It also renders a standing view
+from the opposite sidewalk and a second upper view for studying the facade.
+In that last image the frontage tree keeps its shadows and reflections while
+camera rays pass through it. The regular upper view shows the inventoried tree.

@@ -10,6 +10,8 @@ from itertools import pairwise
 from pathlib import Path
 
 import beaver_photo
+import beaver_neighbours
+import beaver_street_scene
 import bpy
 import numpy as np
 from mathutils import Matrix, Vector
@@ -97,12 +99,12 @@ class MeshBatch:
             collection.objects.link(ob)
 
 
-def place_shell(scene, footprint, components, dimensions, planted, grade):
+def place_shell(scene, footprint, components, dimensions, planted, grade, plan_scale, height_scale):
     # All distances within furniture remain metric. Architecture follows the
     # game's installed footprint, including its small measured skew.
     origin = footprint[1]
-    across = (footprint[2] - origin) * 1.25 / 7
-    back = (footprint[0] - origin) * 1.25 / 13
+    across = (footprint[2] - origin) * plan_scale / 7
+    back = (footprint[0] - origin) * plan_scale / 13
     axis = across.normalized()
     side = Vector((-axis.y, axis.x))
     site = Matrix(
@@ -115,14 +117,14 @@ def place_shell(scene, footprint, components, dimensions, planted, grade):
     )
 
     def mapped(p):
-        q = (Vector(p) - origin) * 1.25
+        q = (Vector(p) - origin) * plan_scale
         return Vector((q.dot(axis), -q.dot(side)))
 
-    datum = max(grade(p) for p in footprint) * 1.25 + 0.22
+    datum = max(grade(p) for p in footprint) * height_scale + 0.22
 
     def ground(q):
-        p = origin + (axis * q.x - side * q.y) / 1.25
-        return grade(p) * 1.25 - datum
+        p = origin + (axis * q.x - side * q.y) / plan_scale
+        return grade(p) * height_scale - datum
 
     plants = {item["name"]: item for item in planted}
     scene.view_layers[0].update()
@@ -212,7 +214,7 @@ def photographic_surface(root, material, asset, metres, tint=0.0):
     return albedo
 
 
-def site_model(scene, root, city, house, mapped, ground, site):
+def site_model(scene, root, city, house, mapped, ground, site, street):
     collection = bpy.data.collections.new("Site · parcel and surrounding buildings")
     scene.collection.children.link(collection)
     soil = next(m for m in bpy.data.materials if m.name.startswith("garden-topsoil@"))
@@ -346,17 +348,23 @@ def site_model(scene, root, city, house, mapped, ground, site):
     photographic_surface(root, bitumen, "tarred_gravel", 2.2, 0.4)
     stacks = material("Context · chimney masonry", (0.246, 0.122, 0.077))
     blocks = MeshBatch()
+    surrounding = beaver_neighbours.finishes(root, material, photographic_surface)
     own = np.array(house["centroid"])
+    local_ids = {str(house["id"])}
     for b in city["detailBuildings"]:
         if b["id"] == house["id"] or np.linalg.norm(np.array(b["centroid"]) - own) > 64:
             continue
         xy = [mapped(p) for p in zip(b["points"][::2], b["points"][1::2])]
         if len(xy) < 3:
             continue
+        local_ids.add(str(b["id"]))
         mat = wallm[b["id"] % len(wallm)]
         base = max(ground(p) for p in xy)
         top = base + b["height"]
         mid = sum(xy, Vector((0.0, 0.0))) / len(xy)
+        adjoining = b["addr"] in ("23 Beaver Street", "19;19A;19B Beaver Street")
+        if adjoining:
+            beaver_neighbours.roof_vents(blocks, mid, top, surrounding[5], bitumen, 1.8)
         roof = [Vector((p.x, p.y, top)) for p in xy]
         for tri in tessellate_polygon([roof]):
             blocks.face(bitumen, [roof[i] for i in tri])
@@ -394,6 +402,14 @@ def site_model(scene, root, city, house, mapped, ground, site):
                         pt(t0, h1, depth),
                     ],
                 )
+
+            if adjoining and n.y > .82 and run.length > 3.5:
+                beaver_neighbours.frontage(blocks, pt, run.length, base, top, mid.x > 7, surrounding, trim)
+                continue
+            if adjoining and abs(n.x) > .85 and n.x * (4.5 - mid.x) > 0 and run.length > 5:
+                cement = surrounding[1][int(mid.x > 7)]
+                beaver_neighbours.courtyard_wall(blocks, pt, run.length, base, top, cement, surrounding, trim)
+                continue
 
             # Each sash occupies an actual opening. Reveals, drip, casing and
             # overlapping sashes contribute real shadows even through another window.
@@ -534,17 +550,9 @@ def site_model(scene, root, city, house, mapped, ground, site):
     # Broad receiving terrain sits underneath the actual parcel mesh.
     earth = material("Ground beyond the parcel", (0.147, 0.139, 0.116))
     photographic_surface(root, earth, "park_dirt", 3.0, 0.25)
-    land = MeshBatch()
-    for x in range(-54, 58, 4):
-        for y in range(-56, 58, 4):
-            land.face(
-                earth,
-                [
-                    (a, b, ground(Vector((a, b))) - 0.04)
-                    for a, b in ((x, y), (x + 4, y), (x + 4, y + 4), (x, y + 4))
-                ],
-            )
-    land.finish("Surrounding grade", collection)
+    beaver_street_scene.build_surface(collection, root, house["centroid"], street, mapped, ground,
+                                      [rear[0],rear[1],front[1],front[0]], earth,
+                                      material, photographic_surface)
     for obj in collection.objects:
         uv = obj.data.uv_layers.new(name="Site survey UV")
         for poly in obj.data.polygons:
@@ -556,6 +564,7 @@ def site_model(scene, root, city, house, mapped, ground, site):
                 uv.data[i].uv = (
                     (p.x, p.y) if abs(nz) > 0.6 else (p.x * ny - p.y * nx, p.z)
                 )
+    beaver_street_scene.horizon(collection, root, house["centroid"], street, mapped, ground, local_ids, material)
     orchard(collection, surface(0.30, 0.93))
     collection["footprint_source"] = "public/data/sf/sf-city.json.gz"
     collection["grade_source"] = "public/data/sf/sf-elevation.bin.gz"
@@ -901,10 +910,12 @@ def stage(scene, root, components, dimensions, planted):
         city = json.load(f)
     house = next(b for b in city["detailBuildings"] if b["addr"] == "21 Beaver Street")
     ring = [Vector(p) for p in zip(house["points"][::2], house["points"][1::2])]
+    street = beaver_street_scene.load_surface(root, house["centroid"])
     site, mapped, ground = place_shell(
-        scene, ring, components, dimensions, planted, terrain_sampler(root)
+        scene, ring, components, dimensions, planted, terrain_sampler(root),
+        street["plan_scale"], street["height_scale"],
     )
-    site_model(scene, root, city, house, mapped, ground, site)
+    site_model(scene, root, city, house, mapped, ground, site, street)
     scene.view_layers[0].update()
     dress_table(components["oak-dining-table"][1])
     dress_plaster(components, site)
@@ -1005,7 +1016,7 @@ def stage(scene, root, components, dimensions, planted):
         data = bpy.data.cameras.new(name)
         data.lens = lens
         data.clip_start = 0.025
-        data.clip_end = 300.0
+        data.clip_end = 3000.0
         ob = bpy.data.objects.new(name, data)
         rig.objects.link(ob)
         ob.location = position(*eye)
@@ -1015,9 +1026,11 @@ def stage(scene, root, components, dimensions, planted):
         return ob
 
     scene.camera = camera(
-        "01 · Upper story and roof", (10.25, 14.0, -8.8), (3.48, 5.55, 2.1), 29
+        "01 · Upper story and roof", (10.190, 15.176, -19.977), (7.937, 10.955, -11.559), 39.315
     )
-    camera("02 · Rear courtyard", (1.10, 1.88, 24.6), (3.37, 4.00, 13.2), 28)
+    scene.camera.data.shift_y = .07588
+    rear_cam = camera("02 · Rear courtyard", (2.422, .550, 26.252), (2.943, 1.374, 17.014), 27.92)
+    rear_cam.data.shift_y = .136
     dining = camera(
         "03 · Dining room", (5.014, 1.71, 2.50), (3.075, 0.247, 9.113), 32.63
     )
@@ -1103,17 +1116,17 @@ def stage(scene, root, components, dimensions, planted):
     scene.frame_start = 1
     scene.frame_end = len(cameras)
     for frame, (cam, ev) in enumerate(
-        zip(cameras, (-0.30, -0.25, 2.80, 2.78, 0.30, 2.70)), 1
+        zip(cameras, (0.17, 0.32, 2.80, 2.78, 0.30, 2.70)), 1
     ):
         incoming = (
-            (-0.70, -0.65, -0.85),
-            (0.065, 0.99, -0.68),
+            (-0.66, -0.34, -0.76),
+            (-0.58, 0.74, -0.93),
             (0.31, 0.90, -0.49),
             (0.04, 0.75, -1.05),
             (-0.55, -0.77, -0.56),
             (0.31, 0.90, -0.49),
         )[frame - 1]
-        if frame == 4:
+        if frame in (1, 2, 4):
             towards_sun = -Vector(incoming).normalized()
             sky.sun_elevation = math.asin(towards_sun.z)
             sky.sun_rotation = math.atan2(towards_sun.y, towards_sun.x)
@@ -1134,6 +1147,21 @@ def stage(scene, root, components, dimensions, planted):
     scene.render.resolution_x = 1536
     scene.render.resolution_y = 1024
     scene.render.resolution_percentage = 100
+    # Stand on the opposite sidewalk at player eye height. Keeping this camera
+    # level gives a measured street elevation with vertical window jambs.
+    walk = next(o for o in exterior.objects if o.get("street_layer") == "Sidewalk")
+    street_xy = Vector((4.1,22.1))
+    found, sidewalk, _, _ = walk.closest_point_on_mesh(Vector((*street_xy,ground(street_xy))))
+    if not found:
+        raise ValueError("Missing opposite sidewalk for the street camera")
+    eye = sidewalk + Vector((0,0,1.64))
+    street_cam = camera("07 · Opposite sidewalk", (3,1.64,-16), (3,1.64,0), 35)
+    street_cam.location = eye
+    aim = position(3.5,eye.z,.0)
+    street_cam.rotation_euler = (aim-eye).to_track_quat("-Z","Y").to_euler()
+    street_cam.data.shift_y = .168
+    street_cam["eye_height_m"] = 1.64
+    street_cam["support"] = walk.name
     scene["source_footprint"] = str(house["id"])
     scene["address"] = house["addr"]
     for screen in bpy.data.screens:

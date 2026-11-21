@@ -97,6 +97,33 @@ for bookmark, name in zip(bookmarks, names):
         }
     )
     print("Rendered", path, flush=True)
+additional = []
+street = bpy.data.objects.get("07 · Opposite sidewalk")
+if street:
+    # Render once from pavement and once from the registered roof camera. The
+    # opening view keeps the tree in the scene, including shadow and reflection.
+    scene.frame_set(1)
+    roof_marker = bookmarks[0]
+    roof_camera = roof_marker.camera
+    trees = [o for o in bpy.data.objects["frontage-broadleaf"].children if o.type == "MESH"]
+    assert trees and all(o.visible_camera for o in trees)
+    for name, camera, camera_tree in (("street",street,True),("upper-architecture",roof_camera,False)):
+        # Cycles re-evaluates camera markers at render time.
+        roof_marker.camera = camera
+        scene.frame_set(roof_marker.frame)
+        assert scene.camera == camera
+        for obj in trees:
+            obj.visible_camera = camera_tree
+        path = output / f"{name}.png"
+        scene.render.filepath = str(path)
+        bpy.ops.render.render(write_still=True)
+        assert scene.camera == camera
+        additional.append({"file": path.name, "camera": camera.name, "street_tree_in_camera": camera_tree,
+                           "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
+    for obj in trees:
+        obj.visible_camera = True
+    roof_marker.camera = roof_camera
+    scene.frame_set(roof_marker.frame)
 source = Path(bpy.data.filepath)
 report = {
     "blend": str(source),
@@ -111,5 +138,6 @@ report = {
     "latch_travel_90_deg_m": round((opened - closed).length, 4),
     "door_rest_angle_deg": door["Open angle"],
     "photos": files,
+    "additional_photos": additional,
 }
 (output / "blender-verification.json").write_text(json.dumps(report, indent=2) + "\n")
