@@ -9,9 +9,6 @@ mod planting;
 mod roof;
 mod surfaces;
 pub use surfaces::Scan;
-pub const FURNITURE_LAYERS: u32 = surfaces::FURNITURE_NAMES.len() as u32;
-pub const PHOTO_LAYERS: u32 = surfaces::SITE_NAMES.len() as u32 + 1; // includes the courtyard panorama
-pub const SURFACE_LAYERS: u32 = surfaces::NAMES.len() as u32 + 1; // includes the front-sash panorama
 use anyhow::{Result, ensure};
 pub use door::Door;
 use eo_assets::{AssetRef, CookedModel, KitLibrary};
@@ -97,6 +94,8 @@ struct RoomLight {
 
 pub struct Finishes {
     downstairs_light: bool,
+    dining_meter: Option<[f32; 3]>,
+    dining_camera_exposure: Option<f32>,
     table_light: Option<TableLight>,
     oak_finish: Option<oak::Finish>,
     dining_lamp: Option<[f32; 4]>,
@@ -105,6 +104,7 @@ pub struct Finishes {
     glazing: bool,
     furniture: bool,
     pub scans: Vec<Scan>,
+    pub floor_reflections: Option<eo_assets::kit::BakedMaps>,
     pub yard_reflections: Option<eo_assets::kit::BakedMaps>,
     pub street_reflections: Option<eo_assets::kit::BakedMaps>,
     directory: std::path::PathBuf,
@@ -193,7 +193,9 @@ impl Finishes {
         let manifest: ProbeManifest = serde_json::from_slice(&std::fs::read(
             directory.join("kitchen-reflections.provenance.json"),
         )?)?;
-        if downstairs_light || table_enabled {
+        let meter_enabled = args.house_dining_meter && args.interior_lighting && photo && furniture && patina;
+        let mut dining_meter = None;
+        if downstairs_light || table_enabled || meter_enabled {
             #[derive(Deserialize)]
             struct DownstairsLight {
                 #[serde(flatten)]
@@ -202,6 +204,9 @@ impl Finishes {
                 grid: [usize; 3],
                 atlas_row_offset: usize,
                 transfer_encoding: String,
+                mean_sky_return: f32,
+                exposure_range_ev: f32,
+                exterior_exposed_beam: f32,
             }
             let light: DownstairsLight = serde_json::from_slice(&std::fs::read(
                 directory.join("downstairs-daylight.provenance.json"),
@@ -210,11 +215,18 @@ impl Finishes {
             ensure!(light.house_sha256 == manifest.house_sha256 && light.grid == [15, 6, 33]
                 && light.atlas_row_offset == res / 2 && light.transfer_encoding == "sqrt(L/(1+L))",
                 "unexpected downstairs lighting layout");
-            let pixels = Self::read_pixels(root, &light.asset, 1)?;
-            let split = light.atlas_row_offset * res * 4;
-            // The bedroom occupies rows 0..252. The downstairs survey sits in the lower half.
-            let street = street_reflections.as_mut().ok_or_else(|| anyhow::anyhow!("missing house reflection atlas"))?;
-            street.orm[split..].copy_from_slice(&pixels[split..]);
+            if meter_enabled {
+                ensure!((0.0..1.0).contains(&light.mean_sky_return) && (0.0..8.0).contains(&light.exposure_range_ev)
+                    && light.exterior_exposed_beam > 0., "invalid ground-floor exposure calibration");
+                dining_meter = Some([light.mean_sky_return, light.exposure_range_ev, light.exterior_exposed_beam]);
+            }
+            if downstairs_light || table_enabled {
+                let pixels = Self::read_pixels(root, &light.asset, 1)?;
+                let split = light.atlas_row_offset * res * 4;
+                // The bedroom occupies rows 0..252. The downstairs survey sits in the lower half.
+                let street = street_reflections.as_mut().ok_or_else(|| anyhow::anyhow!("missing house reflection atlas"))?;
+                street.orm[split..].copy_from_slice(&pixels[split..]);
+            }
         }
         let mut table_light = if table_enabled {
             let street = street_reflections.as_mut().ok_or_else(|| anyhow::anyhow!("missing house reflection atlas"))?;
@@ -259,6 +271,12 @@ impl Finishes {
         } else {
             None
         };
+        let floor_reflections = if args.house_floor_reflections && args.interior_lighting && photo && furniture && patina {
+            Some(oak::floor_reflections(root, &directory, &manifest.house_sha256)?)
+        } else { None };
+        let dining_camera_exposure = if meter_enabled && args.look.blender_camera {
+            Some(oak::dining_exposure(&directory, &manifest.house_sha256)?)
+        } else { None };
         let mut floorboards = Self::read_maps(root, &floor, 3)?;
         let oak_finish = if args.house_oak_finish && args.interior_lighting && photo && furniture && patina {
             Some(oak::Finish::load(root, &directory, &manifest.house_sha256, &mut floorboards.orm)?)
@@ -270,6 +288,8 @@ impl Finishes {
         }
         Ok(Self {
             downstairs_light,
+            dining_meter,
+            dining_camera_exposure,
             oak_finish,
             table_light,
             dining_lamp,
@@ -279,12 +299,23 @@ impl Finishes {
             furniture,
             directory,
             scans,
+            floor_reflections,
             yard_reflections,
             street_reflections,
             manifest,
             atlas,
             floorboards,
         })
+    }
+
+    pub fn into_maps(self) -> Vec<eo_assets::kit::BakedMaps> {
+        let mut maps: Vec<_> = self.scans.into_iter().map(|scan| scan.maps).collect();
+        maps.extend(self.floor_reflections);
+        maps.extend(self.yard_reflections);
+        maps.extend(self.street_reflections);
+        maps.push(self.floorboards);
+        maps.push(self.atlas);
+        maps
     }
 
     fn read_pixels(root: &Path, asset: &AssetRef, pages: usize) -> Result<Vec<u8>> {
@@ -364,9 +395,12 @@ pub struct House {
     roof_uv: Option<roof::RoofUv>,
     room_meter: Option<[f32; 3]>,
     downstairs_light: bool,
+    dining_meter: Option<[f32; 3]>,
+    dining_camera_exposure: Option<f32>,
     table_light: Option<TableLight>,
     oak_finish: Option<oak::Finish>,
     dining_lamp: Option<[f32; 4]>,
+    floor_reflections: bool,
     probes: Option<[ProbeVolume; 2]>,
     collision: Vec<[Point; 3]>,
     steps: Vec<[Point; 2]>,
@@ -535,11 +569,14 @@ impl House {
             cut_pattern,
             roof_uv,
             room_meter,
+            dining_meter: finishes.and_then(|f| f.dining_meter),
+            dining_camera_exposure: finishes.and_then(|f| f.dining_camera_exposure),
             table_light,
             table_vertices,
             oak_finish: finishes.and_then(|f| f.oak_finish),
             downstairs_light: finishes.is_some_and(|f| f.downstairs_light),
             dining_lamp: finishes.and_then(|f| f.dining_lamp),
+            floor_reflections: finishes.is_some_and(|f| f.floor_reflections.is_some()),
             probes: finishes.map(|r| [
                 layout.probe("enamel-refrigerator", &r.manifest.probes[0]),
                 layout.probe("oven-range", &r.manifest.probes[1]),
@@ -946,6 +983,9 @@ impl House {
         if let Some([sky_return, exposure_range, exposed_beam]) = self.room_meter {
             meter.set_room_response(1, sky_return, exposure_range, exposed_beam);
         }
+        if let Some([sky_return, exposure_range, exposed_beam]) = self.dining_meter {
+            meter.set_room_camera_response(0, sky_return, exposure_range, exposed_beam, self.dining_camera_exposure);
+        }
         Some(meter)
     }
 
@@ -1046,10 +1086,15 @@ impl House {
                     let level = (h / (10.0 / 3.0)).round() as usize;
                     let row = (board as usize * 5 + paint * 3 + level) % 8;
                     let across = (row as f32 + 0.07 + 0.86 * board.fract()) / 8.0;
-                    floor_uv[i as usize] = Some([
-                        if self.photo { (x / 7.).clamp(0.,1.) } else { across },
-                        (z / 13.0).clamp(0.0, 1.0),
-                    ]);
+                    floor_uv[i as usize] = Some(if self.floor_reflections && h.abs() < 0.04 {
+                        // Preserve the source strip at each vertex. Reconstruct the lengthwise
+                        // coordinate from the unquantized parcel position in the vertex shader.
+                        let [lo, hi] = ((across * 65535.).round() as u16).to_le_bytes();
+                        [f32::from(lo) / 255., f32::from(hi) / 255.]
+                    } else {
+                        [if self.photo { (x / 7.).clamp(0.,1.) } else { across },
+                         (z / 13.0).clamp(0.0, 1.0)]
+                    });
                 }
             } else if self.patina && name.starts_with("glass-door@") {
                 // Blender batches the front and rear panes of a storey into
@@ -1242,6 +1287,9 @@ impl House {
                     o.kind |= eo_render::scene::DINING_FLOOR_LIGHT_BIT;
                 }
                 if self.photo { o.kind |= eo_render::scene::WAXED_BOARD_BIT; }
+                if self.floor_reflections && part.min[1] < 0.04 {
+                    o.kind |= eo_render::scene::FLOOR_REFLECTION_BIT;
+                }
             }
             let family = &self.model.materials[part.material as usize].name;
             if self.patina && (family.starts_with("woven-carpet@") || family == "mission-roof-clay") {

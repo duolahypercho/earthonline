@@ -76,6 +76,8 @@ fn base_args() -> Args {
         house_table_light: false,
         house_oak_finish: false,
         house_oak_joinery: false,
+        house_floor_reflections: false,
+        house_dining_meter: false,
         house_glazing: true,
         beaver_house: false,
         bench: false,
@@ -145,7 +147,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
-            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" => {
+            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" => {
                 a.beaver_house = true;
                 a.house_finishes = true;
                 a.house_patina = true;
@@ -156,6 +158,8 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
                     "--house-downstairs-light" => a.house_downstairs_light = true,
                     "--house-table-light" => a.house_table_light = true,
                     "--house-oak-finish" => a.house_oak_finish = true,
+                    "--house-dining-meter" => a.house_dining_meter = true,
+                    "--house-floor-reflections" => a.house_floor_reflections = true,
                     "--house-oak-joinery" => a.house_oak_joinery = true,
                     "--house-mission-roof" => a.house_mission_roof = true,
                     _ => a.house_blender_bedroom = true,
@@ -165,6 +169,8 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-downstairs-light" => a.house_downstairs_light = false,
             "--no-house-table-light" => a.house_table_light = false,
             "--no-house-oak-finish" => a.house_oak_finish = false,
+            "--no-house-dining-meter" => a.house_dining_meter = false,
+            "--no-house-floor-reflections" => a.house_floor_reflections = false,
             "--no-house-oak-joinery" => a.house_oak_joinery = false,
             "--no-house-mission-roof" => a.house_mission_roof = false,
             "--no-house-blender-bedroom" => a.house_blender_bedroom = false,
@@ -1144,6 +1150,48 @@ mod house_tests {
         assert_eq!(&a[96*row..122*row], &b[96*row..122*row]);
         let (off, _) = parse(&["--house-oak-joinery".into(),"--no-house-oak-joinery".into()]).unwrap();
         assert!(!off.house_oak_joinery && !off.house_table_light);
+    }
+
+    #[test]
+    fn ground_floor_reflections_upload_the_survey_on_its_four_board_materials() {
+        use eo_render::scene::{FLOOR_REFLECTION_BIT, WAXED_BOARD_BIT};
+        let (mut args, _) = parse(&["--house-floor-reflections".into(), "--house-oak-finish".into()]).unwrap();
+        args.kit = false;
+        args.models = false;
+        args.landmarks = false;
+        let world = load_world(&args).unwrap();
+        let boards: Vec<_> = world.scene.objects.iter().filter(|o| o.kind & FLOOR_REFLECTION_BIT != 0).collect();
+        assert_eq!(boards.len(), 4);
+        let floor = world.house.as_ref().unwrap().point(0.,0.,0.).y as f32;
+        for o in boards {
+            assert_ne!(o.kind & WAXED_BOARD_BIT, 0);
+            assert!(o.min[1] <= floor && o.max[1] >= floor);
+            let start = o.first_index as usize;
+            let cells = &world.scene.indices[start..start + o.index_count as usize];
+            let mut rows = std::collections::BTreeSet::new();
+            for &i in cells {
+                let vertex = world.scene.vertices[(o.base_vertex as i64 + i64::from(i)) as usize];
+                if (vertex.pos[1] - floor).abs() > 0.04 { continue; }
+                let v = (vertex.color >> 16) as f32 / 65535.;
+                let strip = 8. * v;
+                assert!((0.06..=0.94).contains(&strip.fract()));
+                rows.insert(strip as usize);
+            }
+            assert_eq!(rows.len(), 8);
+        }
+        let root = &world.paths.repo_root;
+        let maps = crate::house::Finishes::load(root, &args).unwrap().into_maps();
+        assert_eq!(world.house_layer_count as usize, maps.len());
+        let survey = &maps[maps.len()-5].orm;
+        assert!(survey.chunks_exact(4).any(|p| p[2] > p[0] && p[2] > 100));
+        args.house_floor_reflections = false;
+        let previous = crate::house::Finishes::load(root, &args).unwrap().into_maps();
+        assert_eq!(previous.len()+1, maps.len());
+        for (a, b) in maps.iter().rev().take(4).zip(previous.iter().rev()) {
+            assert_eq!(a.orm, b.orm);
+        }
+        let (disabled, _) = parse(&["--house-floor-reflections".into(),"--no-house-floor-reflections".into()]).unwrap();
+        assert!(!disabled.house_floor_reflections && disabled.house_photo);
     }
 
     #[test]

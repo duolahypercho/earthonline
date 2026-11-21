@@ -62,6 +62,7 @@ const BEDROOM_LIGHT_BIT: u32 = 8388608u;
 const DINING_FLOOR_LIGHT_BIT: u32 = 16777216u;
 const DOWNSTAIRS_LIGHT_BIT: u32 = 33554432u;
 const TABLE_LIGHT_BIT: u32 = 67108864u;
+const FLOOR_REFLECTION_BIT: u32 = 268435456u;
 const OAK_FINISH_BIT: u32 = 134217728u;
 const ENCLOSURE_TRANSFER_BIT: u32 = 131072u;
 const WAXED_BOARD_BIT: u32 = 32768u;
@@ -161,6 +162,13 @@ fn vs(
             out.ft = clamp(vec2<f32>(color.b, color.a), vec2<f32>(0.001), vec2<f32>(0.999));
         } else if ((o.kind & DOOR_SCAN_BIT) != 0u) {
             out.ft = vec2<f32>(color.a, color.b * 3.1);
+        } else if ((o.kind & FLOOR_REFLECTION_BIT) != 0u && abs((look.enclosure_frame*vec4<f32>(pos,1.)).y)<.04) {
+            let bytes = round(color.ba * 255.);
+            let strip_v = dot(bytes,vec2<f32>(1.,256.))/65535.;
+            let row = floor(strip_v*8.);
+            let depth = (look.enclosure_frame*vec4<f32>(pos,1.)).z;
+            let grain = select(1.,-1.,(u32(row)&1u)!=0u);
+            out.ft = vec2<f32>(grain*depth*.5+fract(row*.618034),strip_v);
         } else if ((o.kind & WAXED_BOARD_BIT) != 0u) {
             out.ft = vec2<f32>(color.b * 7.0, color.a * 13.0);
         } else if ((o.kind & FLOOR_SCAN_BIT) != 0u) {
@@ -759,6 +767,74 @@ fn oak_ray_uv(ray: vec3<f32>) -> vec2<f32> {
         vec2<f32>(.5 + azimuth/(2.*PI),elevation/(.5*PI));
 }
 
+// The ground-floor survey preserves the actual window, furniture and enclosure
+// seen in each view direction, separately for each lighting condition.
+fn floor_probe(angular: vec2<f32>, cell: vec2<u32>, source: u32) -> vec3<f32> {
+    let index = cell.y*4u + cell.x;
+    let tile = vec2<u32>(index % 8u, source*4u + index/8u);
+    let uv = (angular + vec2<f32>(tile)*vec2<f32>(64.,16.)) / 512.;
+    let layer = i32(textureNumLayers(kit_orm)) - 5;
+    let encoded = textureSampleLevel(kit_orm,kit_sampler,uv,layer,0.).rgb;
+    let square = encoded*encoded;
+    return square / max(1.-square,vec3<f32>(.0001));
+}
+
+fn floor_source(angular: mat4x2<f32>, near: vec2<u32>, far: vec2<u32>, f: vec2<f32>, source: u32) -> vec3<f32> {
+    let a = mix(floor_probe(angular[0],near,source),floor_probe(angular[1],vec2<u32>(far.x,near.y),source),f.x);
+    let b = mix(floor_probe(angular[2],vec2<u32>(near.x,far.y),source),floor_probe(angular[3],far,source),f.x);
+    return mix(a,b,f.y);
+}
+
+// Reproject the reflected ray onto the physical enclosure. Each probe then
+// looks at the same point on the sill, wall or ceiling as the visible board.
+fn floor_angular(hit: vec3<f32>, cell: vec2<u32>, parcel_to_world: mat2x2<f32>) -> vec2<f32> {
+    let offset = hit.xz - (vec2<f32>(cell)+.5)*vec2<f32>(7./4.,13./8.);
+    let horizontal = parcel_to_world*offset;
+    let ray = normalize(vec3<f32>(horizontal.x,(hit.y-.015)/look.enclosure_frame[1].y,horizontal.y));
+    let uv = oak_ray_uv(ray)-1.;
+    return vec2<f32>(1.+uv.x,1.+uv.y*(14./30.));
+}
+
+fn floor_reflected_room(plan: vec2<f32>, world: vec3<f32>, ray: vec3<f32>) -> vec3<f32> {
+    let grid = clamp(plan*vec2<f32>(4./7.,8./13.)-.5,vec2<f32>(0.),vec2<f32>(3.,7.));
+    let near = vec2<u32>(grid);
+    let far = min(near+1u,vec2<u32>(3u,7u));
+    let f = fract(grid);
+    let direction = (look.enclosure_frame*vec4<f32>(ray,0.)).xyz;
+    let origin = vec3<f32>(plan.x,0.,plan.y);
+    let wall = select(vec3<f32>(0.),vec3<f32>(7.,10./3.,13.),direction>vec3<f32>(0.));
+    let distances = (wall-origin)/select(vec3<f32>(1.),direction,abs(direction)>vec3<f32>(.00001));
+    let valid = select(vec3<f32>(100.),distances,(distances>vec3<f32>(.03)) & (abs(direction)>vec3<f32>(.00001)));
+    let hit = origin + direction*min(valid.x,min(valid.y,valid.z));
+    let ex = look.enclosure_frame[0].xz;
+    let ez = look.enclosure_frame[2].xz;
+    let inverse_basis = mat2x2<f32>(vec2<f32>(ez.y,-ex.y),vec2<f32>(-ez.x,ex.x))*(1./(ex.x*ez.y-ez.x*ex.y));
+    let angular = mat4x2<f32>(floor_angular(hit,near,inverse_basis),
+        floor_angular(hit,vec2<u32>(far.x,near.y),inverse_basis),
+        floor_angular(hit,vec2<u32>(near.x,far.y),inverse_basis),floor_angular(hit,far,inverse_basis));
+    var light = floor_source(angular,near,far,f,0u);
+    let sun = look.key_dir.xyz;
+    let cloud = sky_cloud_transmittance(world);
+    let clear = cloud*smoothstep(0.,.35,sun.y)*(1.-skyu.night.z);
+    if (clear < 1.) {
+        let tint = max(lk_sh(vec3<f32>(0.,1.,0.)),vec3<f32>(.00001));
+        light += floor_source(angular,near,far,f,1u)*tint*(look.hemi_sky.w/lk_luma(tint))*(1.-clear);
+    }
+    if (clear > 0.) {
+        light += floor_source(angular,near,far,f,2u)*look.key.rgb*clear;
+    }
+    if (sun.y > 0. && cloud > 0.) {
+        let back = normalize((vec4<f32>(0.,0.,1.,0.)*look.enclosure_frame).xyz);
+        let along = dot(sun,back);
+        let row = select(3u,5u,along>0.);
+        let elevation = clamp(asin(clamp(sun.y,0.,1.)),radians(25.),radians(57.));
+        let t = (elevation-radians(25.))/radians(32.);
+        light += mix(floor_source(angular,near,far,f,row),floor_source(angular,near,far,f,row+1u),t)
+               * look.key.rgb*(cloud*abs(along)/cos(elevation));
+    }
+    return light;
+}
+
 fn oak_probe(uv: vec2<f32>, tile: vec2<f32>) -> vec3<f32> {
     let layer = i32(textureNumLayers(kit_orm))-2;
     let sample = textureSampleLevel(kit_orm,kit_sampler,(uv+tile*vec2<f32>(64.,32.))/512.,layer,0.).rba;
@@ -1264,7 +1340,8 @@ fn shade(in: VOut) -> vec4<f32> {
         var uv_dx = scan_dx;
         var uv_dy = scan_dy;
         let waxed = (objects[in.object].kind & WAXED_BOARD_BIT) != 0u;
-        if (waxed) {
+        let floor_survey = (objects[in.object].kind & FLOOR_REFLECTION_BIT) != 0u && abs((look.enclosure_frame*vec4<f32>(in.world,1.)).y)<.04;
+        if (waxed && !floor_survey) {
             let board = in.ft.x / .18;
             let row = (u32(max(0.,floor(board))) * 5u + in.material) % 8u;
             let grain = select(1.,-1.,(row & 1u) != 0u);
@@ -1296,8 +1373,13 @@ fn shade(in: VOut) -> vec4<f32> {
                 dielectric_scale = .48;
             }
             s.env = ENV_INTERIOR_FLOOR;
-            room_radiance = board_reflection(in.ft,scan_dx,scan_dy,dpx,dpy,
-                reflect(-v,s.n),s.rough,select(board_ambient(in.color.rg*in.color.rg),floor_light.diffuse,measured_floor),0.);
+            if (floor_survey) {
+                let plan = (look.enclosure_frame*vec4<f32>(in.world,1.)).xz;
+                room_radiance = floor_reflected_room(plan,in.world,reflect(-v,s.n));
+            } else {
+                room_radiance = board_reflection(in.ft,scan_dx,scan_dy,dpx,dpy,
+                    reflect(-v,s.n),s.rough,select(board_ambient(in.color.rg*in.color.rg),floor_light.diffuse,measured_floor),0.);
+            }
         } else if (table_board) {
             let frame_pos = (look.enclosure_frame * vec4<f32>(in.world,1.)).xyz;
             let wood_axis = normalize((vec4<f32>(1.,0.,0.,0.) * look.enclosure_frame).xyz);

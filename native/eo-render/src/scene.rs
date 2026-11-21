@@ -110,6 +110,8 @@ pub const DOWNSTAIRS_LIGHT_BIT: u32 = 1 << 25;
 pub const TABLE_LIGHT_BIT: u32 = 1 << 26;
 /// Photographic wood and its two reflection lobes on the four dining boards.
 pub const OAK_FINISH_BIT: u32 = 1 << 27;
+/// Authored board strips and the surveyed incident light above the furnished ground floor.
+pub const FLOOR_REFLECTION_BIT: u32 = 1 << 28;
 
 /// Material 0: the vertex colour (footprints, terrain, roads, sea).
 pub const MATERIAL_VERTEX_COLOUR: u32 = 0;

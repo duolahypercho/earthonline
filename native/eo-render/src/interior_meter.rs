@@ -10,13 +10,13 @@ pub struct InteriorMeter {
     max: Vec3,
     storey: f32,
     patches: Vec<Patch>,
-    room_response: Option<RoomResponse>,
+    room_responses: BTreeMap<i32, RoomResponse>,
 }
 
 struct RoomResponse {
-    level: i32,
     sky_return: f32,
     max_gain: f32,
+    photographic_exposure: Option<f32>,
     exposed_beam: f32,
 }
 
@@ -65,7 +65,7 @@ impl InteriorMeter {
             })
             .collect();
         Self {
-            room_response: None,
+            room_responses: BTreeMap::new(),
             to_local,
             min,
             max,
@@ -118,6 +118,7 @@ impl InteriorMeter {
         weather: &eo_sky::WeatherState,
         directions: &[([f64; 3], f64)],
         sky_meter: f64,
+        outdoor_target: f64,
     ) -> f64 {
         use eo_look::math::luminance;
         use eo_sky::night::{METER_GAIN, SIDEWALK_ENV, ground_fill, key_on_ground, mean_beam};
@@ -129,10 +130,17 @@ impl InteriorMeter {
             // source camera latitude into the live outdoor meter's exposure units.
             let beam = key_on_ground(f) * mean_beam(weather);
             let daylight = (beam as f32).clamp(0.,1.);
-            let exposure_ratio = self.room_response.as_ref().map_or(1., |r| {
-                (r.exposed_beam as f64 / (beam * f.exposure * sky_meter).max(1e-5)).min(1.) as f32
+            let level = (eye.y / self.storey).floor() as i32;
+            let outside_exposure = (f.exposure * sky_meter).max(1e-5);
+            let response = self.room_responses.get(&level);
+            let exposure_ratio = response.map_or(1., |r| {
+                (r.exposed_beam as f64 / (beam * outside_exposure).max(1e-5)).min(1.) as f32
             });
-            return self.enclosed_gain(cam, daylight, exposure_ratio);
+            // The sky applies this gain to its current target. Dividing by last
+            // frame's adapted exposure feeds the lens response back into itself.
+            let photographic_gain = response.and_then(|r| r.photographic_exposure)
+                .map(|exposure| (f64::from(exposure) / (outdoor_target * sky_meter).max(1e-5)) as f32);
+            return self.enclosed_gain(cam, daylight, exposure_ratio, photographic_gain);
         }
         // Outside the parcel approach, nearer buildings may obscure this envelope.
         if range >= 35. || f.key_dir[1] <= 0. {
@@ -173,14 +181,23 @@ impl InteriorMeter {
 
     /// The calibrated source-camera latitude limits exposure when little glass is in frame.
     pub fn set_room_response(&mut self, level: i32, sky_return: f32, exposure_range: f32, exposed_beam: f32) {
-        self.room_response = Some(RoomResponse { level, sky_return, max_gain: exposure_range.exp2(), exposed_beam });
+        self.set_room_camera_response(level, sky_return, exposure_range, exposed_beam, None);
+    }
+
+    /// A registered photograph can supply the room's maximum daylight exposure.
+    /// Large windows still stop the lens down and night uses the live city meter.
+    pub fn set_room_camera_response(&mut self, level: i32, sky_return: f32, exposure_range: f32,
+                                    exposed_beam: f32, photographic_exposure: Option<f32>) {
+        self.room_responses.insert(level, RoomResponse {
+            sky_return, max_gain: exposure_range.exp2(), exposed_beam, photographic_exposure,
+        });
     }
 
     pub fn daylight_gain(&self, cam: &Camera) -> f64 {
-        self.enclosed_gain(cam, 1., 1.)
+        self.enclosed_gain(cam, 1., 1., None)
     }
 
-    fn enclosed_gain(&self, cam: &Camera, daylight: f32, exposure_ratio: f32) -> f64 {
+    fn enclosed_gain(&self, cam: &Camera, daylight: f32, exposure_ratio: f32, photographic_gain: Option<f32>) -> f64 {
         let eye = self.to_local.transform_point3(cam.eye);
         let inside = (eye - self.min).min(self.max - eye).min_element();
         if inside <= 0. {
@@ -212,10 +229,11 @@ impl InteriorMeter {
         // Log-average metering of an enclosed diffuse field and bright glazing.
         // Keep the highlights' latitude within a stop and a half.
         let mut gain = 2.0_f32.powf(1.5 * (1. - window.sqrt()));
-        if let Some(r) = &self.room_response {
+        if let Some(r) = self.room_responses.get(&level) {
             // Weighted reflected light from the visible glazing and the room.
-            let measured = ((window + (1.-window)*r.sky_return).recip().min(r.max_gain) * exposure_ratio).max(1.);
-            let y = eye.y - r.level as f32 * self.storey;
+            let available = (window + (1.-window)*r.sky_return).recip().min(r.max_gain);
+            let measured = photographic_gain.map_or(available * exposure_ratio, |cap| available.min(cap)).max(1.);
+            let y = eye.y - level as f32 * self.storey;
             let blend = (y.min(self.storey-y) / 0.35).clamp(0.,1.) * daylight;
             gain += blend * (measured-gain);
         }
@@ -277,7 +295,19 @@ mod tests {
         meter.set_room_response(1, 0.01, 2.6, 2.4);
         let upstairs = camera(eye + Vec3::Y * 3., std::f32::consts::PI-0.31);
         assert!((meter.daylight_gain(&upstairs) - 2.6_f64.exp2()).abs() < 1e-5);
-        assert!((meter.enclosed_gain(&upstairs, 0., 1.) - dark_wall).abs() < 1e-5);
+        assert!((meter.enclosed_gain(&upstairs, 0., 1., None) - dark_wall).abs() < 1e-5);
         assert!((meter.daylight_gain(&camera(eye, -0.31)) - bright_window).abs() < 1e-5);
+        meter.set_room_camera_response(0, 0.005, 2.63, 1.33, Some(2.25));
+        let downstairs = camera(eye, std::f32::consts::PI-0.31);
+        assert!((meter.enclosed_gain(&downstairs, 1., 1., Some(2.25)) - 2.25).abs() < 1e-5);
+        assert!((meter.enclosed_gain(&downstairs, 0., 1., Some(2.25)) - dark_wall).abs() < 1e-5);
+        assert!((meter.daylight_gain(&upstairs) - 2.6_f64.exp2()).abs() < 1e-5);
+        let weather = eo_sky::weather::preset(eo_sky::Kind::Clear);
+        let mut frame = eo_look::LookFrame::new(12.);
+        for previous_exposure in [0.5, 1.5, 2.25] {
+            frame.exposure = previous_exposure;
+            let gain = meter.scene_gain(&downstairs, &frame, &weather, &[], 1., 0.8);
+            assert!((0.8 * gain - 2.25).abs() < 1e-5);
+        }
     }
 }

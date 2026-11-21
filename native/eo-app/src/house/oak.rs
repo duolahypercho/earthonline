@@ -91,3 +91,80 @@ impl Finish {
         })
     }
 }
+
+/// The last four house layers keep their existing relative indices. The
+/// optional fifth layer from the end carries the floor survey in linear RGB.
+pub(super) fn floor_reflections(
+    root: &Path,
+    directory: &Path,
+    house_sha: &str,
+) -> Result<eo_assets::kit::BakedMaps> {
+    #[derive(Deserialize)]
+    struct Survey {
+        #[serde(flatten)]
+        asset: AssetRef,
+        house_sha256: String,
+        grid: [usize; 2],
+        tile_size: [usize; 2],
+        plan_metres: [usize; 2],
+        source_rows: [String; 7],
+        transfer_encoding: String,
+    }
+    let survey: Survey = serde_json::from_slice(&std::fs::read(
+        directory.join("floor-reflections.provenance.json"),
+    )?)?;
+    ensure!(
+        survey.house_sha256 == house_sha
+            && survey.grid == [4, 8]
+            && survey.tile_size == [64, 16]
+            && survey.plan_metres == [7, 13]
+            && survey.source_rows
+                == [
+                    "fixtures",
+                    "uniform-sky",
+                    "clear-sky",
+                    "front-25",
+                    "front-57",
+                    "rear-25",
+                    "rear-57"
+                ]
+            && survey.transfer_encoding == "sqrt(L/(1+L))",
+        "unexpected floor reflection survey"
+    );
+    let orm = Finishes::read_pixels(root, &survey.asset, 1)?;
+    Ok(eo_assets::kit::BakedMaps {
+        res: eo_assets::kit::HIGH_RES,
+        metres_per_tile: 1.,
+        albedo: vec![0; orm.len()],
+        normal: vec![0; orm.len()],
+        orm,
+    })
+}
+
+pub(super) fn dining_exposure(directory: &Path, house_sha: &str) -> Result<f32> {
+    #[derive(Deserialize)]
+    struct Camera {
+        source_exposure_ev: f32,
+        linear_game_units_per_source_unit: f32,
+        display_meter_gain: f32,
+        reference_game_exposure: f32,
+    }
+    #[derive(Deserialize)]
+    struct Survey {
+        house_sha256: String,
+        dining_camera: Camera,
+    }
+    let survey: Survey = serde_json::from_slice(&std::fs::read(
+        directory.join("floor-reflections.provenance.json"),
+    )?)?;
+    let c = survey.dining_camera;
+    let gain =
+        c.source_exposure_ev.exp2() / (c.linear_game_units_per_source_unit * c.display_meter_gain);
+    ensure!(
+        survey.house_sha256 == house_sha
+            && gain > 0.
+            && (gain - c.reference_game_exposure).abs() < 1e-5,
+        "invalid dining camera exposure calibration"
+    );
+    Ok(gain)
+}

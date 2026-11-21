@@ -54,6 +54,8 @@ pub struct Args {
     pub house_table_light: bool,
     pub house_oak_finish: bool,
     pub house_oak_joinery: bool,
+    pub house_floor_reflections: bool,
+    pub house_dining_meter: bool,
     pub house_glazing: bool,
     pub bench: bool,
     pub start_underwater: bool,
@@ -211,6 +213,8 @@ fn parse_args() -> Result<Args> {
         house_table_light: false,
         house_oak_finish: false,
         house_oak_joinery: false,
+        house_floor_reflections: false,
+        house_dining_meter: false,
         house_glazing: true,
         beaver_house: false,
         bench: false,
@@ -287,7 +291,7 @@ fn parse_args() -> Result<Args> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
-            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" => {
+            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" => {
                 a.beaver_house = true;
                 a.house_finishes = true;
                 a.house_patina = true;
@@ -298,6 +302,8 @@ fn parse_args() -> Result<Args> {
                     "--house-downstairs-light" => a.house_downstairs_light = true,
                     "--house-table-light" => a.house_table_light = true,
                     "--house-oak-finish" => a.house_oak_finish = true,
+                    "--house-dining-meter" => a.house_dining_meter = true,
+                    "--house-floor-reflections" => a.house_floor_reflections = true,
                     "--house-oak-joinery" => a.house_oak_joinery = true,
                     "--house-mission-roof" => a.house_mission_roof = true,
                     _ => a.house_blender_bedroom = true,
@@ -307,6 +313,8 @@ fn parse_args() -> Result<Args> {
             "--no-house-downstairs-light" => a.house_downstairs_light = false,
             "--no-house-table-light" => a.house_table_light = false,
             "--no-house-oak-finish" => a.house_oak_finish = false,
+            "--no-house-dining-meter" => a.house_dining_meter = false,
+            "--no-house-floor-reflections" => a.house_floor_reflections = false,
             "--no-house-oak-joinery" => a.house_oak_joinery = false,
             "--no-house-mission-roof" => a.house_mission_roof = false,
             "--no-house-blender-bedroom" => a.house_blender_bedroom = false,
@@ -497,6 +505,7 @@ fn parse_args() -> Result<Args> {
 }
 
 pub struct World {
+    pub house_layer_count: u32,
     pub house_vertex_base: usize,
     pub house: Option<Arc<house::House>>,
     pub paths: DataPaths,
@@ -672,6 +681,9 @@ pub fn load_world(args: &Args) -> Result<World> {
         set.streets = street_world.clone();
         kit_set = Some(Arc::new(set));
     }
+    let house_has_scans = finishes.as_ref().is_some_and(|f| !f.scans.is_empty());
+    let finish_maps = finishes.map(house::Finishes::into_maps).unwrap_or_default();
+    let house_layer_count = finish_maps.len() as u32;
     let kit_prepare_ms = t.elapsed().as_secs_f64() * 1e3;
     let mut street_parts = None;
     if let Some(sw) = &street_world {
@@ -682,7 +694,7 @@ pub fn load_world(args: &Args) -> Result<World> {
     }
     if let Some(kit) = kit_lib {
         // The kit bake runs beside the first frames; models and kit packs wait for it.
-        if finishes.as_ref().is_some_and(|f| !f.scans.is_empty()) {
+        if house_has_scans {
             house::Scan::bind(&mut authored.materials);
         }
         let layers = authored.materials.layers.clone();
@@ -706,13 +718,7 @@ pub fn load_world(args: &Args) -> Result<World> {
                             Err(e) => eprintln!("warning: facade atlas cell {cell} not loaded ({e:#}); {name} keeps its bake"),
                         }
                     }
-                    if let Some(finishes) = finishes {
-                        maps.extend(finishes.scans.into_iter().map(|scan| scan.maps));
-                        maps.extend(finishes.yard_reflections);
-                        maps.extend(finishes.street_reflections);
-                        maps.push(finishes.floorboards);
-                        maps.push(finishes.atlas);
-                    }
+                    maps.extend(finish_maps);
                     (KitUpload::build(&maps), t.elapsed().as_secs_f64() * 1e3)
                 })
                 .map_err(|e| format!("{e:#}"));
@@ -1029,7 +1035,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         }
         Err(_) => anyhow::bail!("facade detail thread panicked"),
     };
-    Ok(World { house_vertex_base, house, paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, landmarks, hlod, hlod_trees }) // hlod
+    Ok(World { house_layer_count, house_vertex_base, house, paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, landmarks, hlod, hlod_trees }) // hlod
 }
 
 /// the street size. `--ground-scale S` (an explicit ground-plan
