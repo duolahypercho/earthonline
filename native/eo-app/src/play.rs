@@ -84,6 +84,8 @@ fn base_args() -> Args {
         house_street_garden: false,
         house_front_daylight: false,
         house_wall_daylight: false,
+        house_window_optics: false,
+        house_joinery_light: false,
         house_site_camera: false,
         house_dining_meter: false,
         house_glazing: true,
@@ -155,7 +157,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
-            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" | "--house-fitted-finishes" | "--house-kitchen-light" | "--house-window-linen" | "--house-street-garden" | "--house-front-daylight" | "--house-wall-daylight" | "--house-site-camera" => {
+            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" | "--house-fitted-finishes" | "--house-kitchen-light" | "--house-window-linen" | "--house-street-garden" | "--house-front-daylight" | "--house-wall-daylight" | "--house-site-camera" | "--house-window-optics" | "--house-joinery-light" => {
                 a.beaver_house = true;
                 a.house_finishes = true;
                 a.house_patina = true;
@@ -167,6 +169,8 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
                     "--house-table-light" => a.house_table_light = true,
                     "--house-street-garden" => a.house_street_garden = true,
                     "--house-site-camera" => a.house_site_camera = true,
+                    "--house-joinery-light" => a.house_joinery_light = true,
+                    "--house-window-optics" => a.house_window_optics = true,
                     "--house-wall-daylight" => a.house_wall_daylight = true,
                     "--house-front-daylight" => { a.house_street_garden = true; a.house_front_daylight = true; }
                     "--house-window-linen" => { a.house_fitted_dining = true; a.house_window_linen = true; }
@@ -187,6 +191,8 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-fitted-finishes" => a.house_fitted_finishes = false,
             "--no-house-street-garden" => a.house_street_garden = false,
             "--no-house-site-camera" => a.house_site_camera = false,
+            "--no-house-joinery-light" => a.house_joinery_light = false,
+            "--no-house-window-optics" => a.house_window_optics = false,
             "--no-house-wall-daylight" => a.house_wall_daylight = false,
             "--no-house-front-daylight" => a.house_front_daylight = false,
             "--no-house-window-linen" => a.house_window_linen = false,
@@ -829,8 +835,9 @@ mod window {
                     door.toggle(feet);
                 }
                 if door.advance(dt, feet, &mut self.world.scene, &mut self.cw)
-                    && let Some(g) = &self.gfx
+                    && let Some(g) = &mut self.gfx
                 {
+                    g.renderer.look.set_front_door_open(!door.is_shut());
                     door.upload(&self.world.scene, &g.renderer, &g.ctx.queue);
                 }
             }
@@ -1316,6 +1323,26 @@ mod house_tests {
         check_beaver_walk(true, true, true, true, true);
         let (off, _) = parse(&["--house-fitted-dining".into(),"--no-house-fitted-dining".into()]).unwrap();
         assert!(off.house_photo && !off.house_fitted_dining);
+    }
+
+    #[test]
+    fn window_scene_follows_the_photo_house_and_glazing_switches() {
+        for (flags, expected) in [
+            (vec!["--house-window-optics"], true),
+            (vec!["--house-photo", "--house-window-optics", "--no-house-glazing"], false),
+            (vec!["--house-photo", "--house-window-optics", "--no-house-window-optics"], false),
+            (vec!["--house-joinery-light", "--no-house-glazing"], true),
+            (vec!["--house-joinery-light", "--no-house-joinery-light"], false),
+            (vec!["--house-window-optics", "--house-joinery-light", "--no-house-window-optics"], true),
+        ] {
+            let (mut args, _) = parse(&flags.iter().map(|v| v.to_string()).collect::<Vec<_>>()).unwrap();
+            args.kit = false;
+            args.models = false;
+            args.agents = false;
+            args.props = false;
+            let world = load_world(&args).unwrap();
+            assert_eq!(world.house.unwrap().window_optics.is_some(), expected);
+        }
     }
 
     #[test]

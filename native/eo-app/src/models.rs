@@ -194,6 +194,14 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
         r.look.wall_daylight_layer = house.wall_daylight_layer.map(|i| (set.materials.layers.len()+i) as u32);
         r.look.enclosure_frame = house.parcel_to_world().inverse();
     }
+    if let Some(house) = world.house.as_ref() {
+        if let Some(optics) = &house.window_optics {
+            let previous_bytes = r.look.bytes;
+            r.look.install_window_optics(optics, args.house_window_optics && args.house_glazing)?;
+            r.bytes.textures = r.bytes.textures - previous_bytes + r.look.bytes;
+            r.look.enclosure_frame = house.parcel_to_world().inverse();
+        }
+    }
     if let Some(camera) = world.house.as_ref().and_then(|h| h.site_camera()) {
         r.look.sky.set_exterior_camera(camera);
     }

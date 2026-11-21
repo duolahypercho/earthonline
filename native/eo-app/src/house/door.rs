@@ -111,7 +111,6 @@ impl Door {
         }
     }
 
-    #[cfg(test)]
     pub fn is_shut(&self) -> bool {
         self.fraction == 0.
     }

@@ -98,6 +98,8 @@ fn base_args() -> Args {
         house_street_garden: false,
         house_front_daylight: false,
         house_wall_daylight: false,
+        house_window_optics: false,
+        house_joinery_light: false,
         house_site_camera: false,
         house_dining_meter: false,
         house_glazing: true,

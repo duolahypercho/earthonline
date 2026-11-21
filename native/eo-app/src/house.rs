@@ -103,6 +103,8 @@ pub struct Finishes {
     garden_maps: Vec<eo_assets::kit::BakedMaps>,
     front_daylight: Option<eo_render::front_daylight::FrontDaylight>,
     wall_daylight: Option<eo_assets::kit::BakedMaps>,
+    window_optics: Option<Arc<eo_render::window_optics::WindowOptics>>,
+    joinery_light: bool,
     site_camera_exposure: Option<f32>,
     downstairs_light: bool,
     dining_meter: Option<[f32; 3]>,
@@ -309,12 +311,15 @@ impl Finishes {
         } else { (None, vec![]) };
         let front_daylight = garden.as_ref().filter(|_| args.house_front_daylight)
             .map(|g| g.read_daylight(root, &photo_dir)).transpose()?;
+        let window_optics = if (args.house_window_optics && glazing || args.house_joinery_light) && photo && patina && furniture {
+            Some(Arc::new(Self::read_window_optics(root, &photo_dir, &manifest.house_sha256)?))
+        } else { None };
         let camera = args.house_site_camera && args.look.blender_camera;
         let (wall_daylight, site_camera_exposure) = if (args.house_wall_daylight || camera) && photo && furniture && patina {
             Self::read_wall_daylight(root, &photo_dir, &manifest.house_sha256, args.house_wall_daylight, camera)?
         } else { (None, None) };
         Ok(Self {
-            site_camera_exposure, wall_daylight, front_daylight, garden, garden_maps, fitted, fitted_maps, downstairs_light,
+            joinery_light: args.house_joinery_light, window_optics, site_camera_exposure, wall_daylight, front_daylight, garden, garden_maps, fitted, fitted_maps, downstairs_light,
             dining_meter,
             dining_camera_exposure,
             oak_finish,
@@ -346,6 +351,33 @@ impl Finishes {
         maps.push(self.floorboards);
         maps.push(self.atlas);
         maps
+    }
+
+    fn read_window_optics(root: &Path, directory: &Path, shell: &str) -> Result<eo_render::window_optics::WindowOptics> {
+        #[derive(Deserialize)]
+        struct Recipe {
+            #[serde(flatten)]
+            asset: AssetRef,
+            house_sha256: String,
+            payload_bytes: usize,
+            encoding: String,
+            width: u32,
+            height: u32,
+        }
+        let recipe: Recipe = serde_json::from_slice(&std::fs::read(directory.join("window-optics.provenance.json"))?)?;
+        ensure!(recipe.house_sha256 == shell && recipe.encoding == "BWO1" && recipe.width == 1024
+            && recipe.height > 0 && recipe.height <= 32768, "incompatible window scene");
+        let size = (recipe.width * recipe.height * 4) as usize;
+        ensure!(recipe.payload_bytes <= size && size - recipe.payload_bytes < 4096, "invalid optical scene padding");
+        let bytes = eo_assets::glb::read_verified(&recipe.asset.path(root), &recipe.asset)?;
+        let mut reader = png::Decoder::new(std::io::Cursor::new(bytes)).read_info()?;
+        ensure!(reader.info().width == recipe.width && reader.info().height == recipe.height
+            && reader.info().color_type == png::ColorType::Rgba && reader.info().bit_depth == png::BitDepth::Eight,
+            "invalid window scene image");
+        let mut data = vec![0; size];
+        reader.next_frame(&mut data)?;
+        data.truncate(recipe.payload_bytes);
+        eo_render::window_optics::WindowOptics::from_bytes(data)
     }
 
     fn read_wall_daylight(root: &Path, directory: &Path, shell: &str, walls: bool, camera: bool) -> Result<(Option<eo_assets::kit::BakedMaps>, Option<f32>)> {
@@ -448,6 +480,7 @@ pub struct House {
     garden: Option<fitted::Geometry>,
     pub front_daylight: Option<eo_render::front_daylight::FrontDaylight>,
     pub wall_daylight_layer: Option<usize>,
+    pub window_optics: Option<Arc<eo_render::window_optics::WindowOptics>>,
     site_camera_exposure: Option<f32>,
     origin: DVec2,
     across: DVec2,
@@ -596,9 +629,28 @@ impl House {
             .materials
             .iter()
             .map(|m| {
-                finishes
+                let original = finishes
                     .and_then(|f| Scan::material(&f.scans, m, materials, !cut_pattern.is_empty()))
-                    .unwrap_or_else(|| materials.resolve(kit, m))
+                    .unwrap_or_else(|| materials.resolve(kit, m));
+                if finishes.is_some_and(|f| f.joinery_light && f.window_optics.is_some()) {
+                    let family = match m.name.split('@').next().unwrap_or("") {
+                        "oil-rubbed-wood" => 1, "sash-putty" => 2, "wrought-iron" => 3,
+                        "front-door-paint" => 4, "front-door-moulding" => 5, _ => 0,
+                    };
+                    if family != 0 {
+                        let flags = eo_render::authored::F_JOINERY_LIGHT | (family << 8);
+                        // House scan layers receive their final atlas offset after all
+                        // city materials are loaded. Keep that house-owned slot.
+                        if materials.names[original as usize].starts_with("21-beaver-scan/") {
+                            materials.gpu[original as usize].flags |= flags;
+                            return original;
+                        }
+                        let mut lit = materials.gpu[original as usize];
+                        lit.flags |= flags;
+                        return materials.named(&format!("beaver/joinery-light/{}", m.name), lit);
+                    }
+                }
+                original
             })
             .collect();
         let aggregate_material = model
@@ -634,6 +686,7 @@ impl House {
         let first_fitted = garden_base + finishes.map_or(0, |f| f.garden_maps.len());
         let fitted = fitted_recipe.map(|r| r.load(root,materials,first_fitted)).transpose()?;
         let mut h = Self {
+            window_optics: finishes.and_then(|f| f.window_optics.clone()),
             site_camera_exposure: finishes.and_then(|f| f.site_camera_exposure),
             wall_daylight_layer, front_daylight, garden, fitted,
             origin: ring[1],
