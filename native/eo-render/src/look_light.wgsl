@@ -22,6 +22,7 @@ const ENV_PAINTED_METAL: i32 = 3;
 // A film of water over sand (the swash's wet band, landmarks_surface.wgsl): it reflects the environment strongly.
 const ENV_WET_FILM: i32 = 4;
 const ENV_KITCHEN: i32 = 5;
+const ENV_INTERIOR_FLOOR: i32 = 6;
 // GLAZING_PROBE_ROUGHNESS_FLOOR (src/render/materials/glazing-environment.js:
 // a 4-texel footprint on the 128 px probe).
 const GLAZING_ROUGHNESS_FLOOR: f32 = 0.152;
@@ -108,12 +109,14 @@ fn lk_dfg(nv: f32, rough: f32) -> vec2<f32> {
 // the room behind kit glazing at night (rooms.wgsl), set by the city
 // shader before `look_light`: the pane's emission (kit/materials.js emissiveNode).
 var<private> rm_emit: vec3<f32>;
-// Set by the house vertices that select a local reflection, consumed only for ENV_KITCHEN.
+// Set by the house vertices that select a local reflection, consumed by enamel and waxed boards.
 var<private> room_radiance: vec3<f32>;
+var<private> room_enclosure: f32;
+var<private> room_daylight: f32;
 
 fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: vec3<f32>, object: u32) -> vec4<f32> {
     var s = s_in; // sky
-    if ((m.flags & F_GLASS) == 0u && s.env <= 0) {
+    if ((m.flags & F_GLASS) == 0u && s.env <= 0 && room_enclosure < 0.5) {
         sky_wet_generic(&s, ng); // roofs, ground, walls, bodies in the rain (the street wets itself)
     }
     let n = s.n;
@@ -154,9 +157,9 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     // Rim (no shadow).
     let rl = look.rim_dir.xyz;
     let rnl = max(dot(n, rl), 0.0);
-    let rim = look.rim.xyz * rnl;
+    let rim = look.rim.xyz * rnl * (1.0 - room_enclosure);
     direct_d = direct_d + rim * diffuse / LK_PI;
-    direct_s = direct_s + rim * lk_ggx(n, v, rl, f0, rough) * select(1.0, 0.0, s.env == ENV_WET_FILM || s.env == ENV_KITCHEN); // the rig's rim light draws no false sun in a water film
+    direct_s = direct_s + rim * lk_ggx(n, v, rl, f0, rough) * select(1.0, 0.0, s.env == ENV_WET_FILM || s.env == ENV_KITCHEN || s.env == ENV_INTERIOR_FLOOR); // the rig's rim light draws no false sun in a water film
 
     // Indirect diffuse.
     let hemi = mix(look.hemi_ground.xyz, look.hemi_sky.xyz, n.y * 0.5 + 0.5);
@@ -164,7 +167,9 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     if (fa_probe_on() && (fa_run() & 16u) != 0u) {
         env_e = fa_probe_irradiance(n); // the bound scene probe's diffuse
     }
-    let irr = hemi + look.ambient.xyz + env_e * env_i;
+    let sky_field = hemi + look.ambient.xyz + env_e * env_i;
+    let indoor_field = (0.30 + 0.70 * sqrt(room_daylight)) * vec3<f32>(1.0, 0.92, 0.80);
+    let irr = sky_field * mix(vec3<f32>(1.0), indoor_field, room_enclosure);
     let nv = max(dot(n, v), 1e-4);
     let dfg = lk_dfg(nv, rough);
     let fss = f0 * dfg.x + vec3<f32>(dfg.y);
@@ -181,7 +186,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     let r = reflect(-v, n);
     var rad = lk_sh(r) / LK_PI;
     let sharp = 1.0 - lk_smooth(0.15, 0.5, rough);
-    if (s.env == ENV_KITCHEN) {
+    if (s.env == ENV_KITCHEN || s.env == ENV_INTERIOR_FLOOR) {
         rad = room_radiance;
     } else if (fa_probe_on()) {
         // the scene probe is the specular environment (glass reads it
@@ -194,9 +199,13 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     } else if (sharp > 0.0) {
         rad = mix(rad, lk_sky_sample(r), sharp);
     }
+    if (room_enclosure > 0.0 && s.env != ENV_KITCHEN && s.env != ENV_INTERIOR_FLOOR) {
+        let local = indoor_field * (hemi + look.ambient.xyz + env_e * env_i) / LK_PI;
+        rad = mix(rad, local, room_enclosure * smoothstep(0.18, 0.75, rough));
+    }
     let spec_occ = clamp(pow(nv + ao, exp2(-16.0 * rough - 1.0)) - 1.0 + ao, 0.0, 1.0);
     // glossy (wet) ground reflects the previous frame where its ray finds it.
-    if (s.env != ENV_KITCHEN) {
+    if (s.env != ENV_KITCHEN && s.env != ENV_INTERIOR_FLOOR) {
         let ssr = sky_ssr(world, n, v, rough);
         rad = mix(rad * env_i, ssr.rgb, ssr.a);
     }

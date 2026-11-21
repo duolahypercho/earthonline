@@ -84,7 +84,7 @@ def contact_transfer(mesh, tree):
 
 
 def bake(objects, rise, detailed=False, cloth_transfer=False, furniture_contact=False,
-         porch_source=(5.97, 2.27, -0.26), entry_setback=0):
+         porch_source=(5.97, 2.27, -0.26), entry_setback=0, exterior_bounce=False):
     vertices, faces = [], []
     for obj in objects:
         mesh = obj.data
@@ -104,12 +104,70 @@ def bake(objects, rise, detailed=False, cloth_transfer=False, furniture_contact=
         ]
         for level in range(3)
     ]
-    lamp = [Vector((2.37 + dx, -7.51 + dz, 1.975)) for dx, dz in [(-0.12, -0.09), (0.13, -0.09), (0, 0.13)]]
+    # The installed pendant moves with its dining group. Convert its 70 cm
+    # move from physical metres to the surveyed depth used by this bake.
+    fixture_z = 7.51 - .70 / 1.295 if exterior_bounce else 7.51
+    lamp = [Vector((2.37 + dx, -fixture_z + dz, 1.975)) for dx, dz in [(-0.12, -0.09), (0.13, -0.09), (0, 0.13)]]
     work_lights = [Vector((0.64,-z,1.80)) for z in (9.55,10.10)]
     x, height, depth = porch_source
     porch_light = Vector((x, -depth, height))
     bounce_cache = {}
     direct_cache = {}
+
+    exterior_cache = {}
+
+    def reflected_daylight(point, normal):
+        """Diffuse flux reflected by the ground and adjoining sunlit masonry.
+
+        Sky visibility is already evaluated by the runtime. Only directions
+        intercepted by an exterior surface contribute to this bounce.
+        """
+        if not exterior_bounce:
+            return 0.
+        key = tuple(round(v * 6) for v in point) + tuple(round(v * 10) for v in normal)
+        if key in exterior_cache:
+            return exterior_cache[key]
+        tangent = normal.cross(Vector((0, 0, 1)) if abs(normal.z) < .85 else Vector((1, 0, 0))).normalized()
+        bitangent = normal.cross(tangent)
+        flux = 0.
+        for i in range(32):
+            r = math.sqrt((i + .5) / 32)
+            angle = i * 2.39996323
+            direction = tangent * (r * math.cos(angle)) + bitangent * (r * math.sin(angle)) + normal * math.sqrt(1-r*r)
+            hit, hn, _, _ = tree.ray_cast(point,direction,18)
+            if hit is None:
+                if direction.z < -.04:
+                    flux += .36
+            else:
+                if hn.dot(direction) > 0:
+                    hn.negate()
+                # Test the sky above the return so the recess retains its shadow.
+                up = Vector((0,0,1))
+                if tree.ray_cast(hit+hn*.008,up,16)[0] is None:
+                    flux += .42 * (.37+.63*max(hn.z,0.))
+        # An occluded return receives diffuse light from the adjoining walls.
+        # Retain this higher-order component, especially around narrow reveals.
+        result = math.sqrt(.022 + .22*flux / 32)
+        exterior_cache[key] = result
+        return result
+
+    def porch_daylight(p, n):
+        if not exterior_bounce:
+            return 0.
+        # Integrate the portal, rather than treating a moulding as an opaque
+        # screen against the entire sky. This stays continuous over the arch.
+        rect = 0.
+        for ix in range(7):
+            x = 5.16+(ix+.5)*1.59/7
+            cap = 1.92+.72*math.sqrt(max(0.,1-((x-5.955)/.795)**2))
+            for iz in range(7):
+                height = (iz+.5)*cap/7
+                delta = Vector((x,.88,height))-p
+                d2 = max(.04,delta.length_squared)
+                direction = delta.normalized()
+                rect += cap*max(n.dot(direction),0.)*max(direction.y,0.)/d2
+        projected = min(1., rect * 1.59 / (49*math.pi))
+        return math.sqrt(.018+.073*projected)
 
     def visible_energy(p, n, sources, window):
         energy = 0.0
@@ -164,6 +222,11 @@ def bake(objects, rise, detailed=False, cloth_transfer=False, furniture_contact=
         mesh = obj.data
         uv = mesh.uv_layers.new(name="Diffuse light transfer")
         component = obj.name.partition(" - ")[0]
+        if component == "frontage-broadleaf":
+            # Outdoor leaves are lit by the live sun and sky. Keep their
+            # geometry in the BVH so it shades the entrance and its glazing.
+            uv.data.foreach_set("uv", [0.0, 1.0] * len(mesh.loops))
+            continue
         sofa_cloth = furniture_contact and component in ("upholstered-sofa", "woven-lap-throw") and mesh.materials[0].name.partition("@")[0] in ("canvas-plain", "flax-linen")
         fine = sofa_cloth or cloth_transfer and mesh.materials[0].name.partition("@")[0] in ("cotton-coverlet", "cotton-turnback")
         # Compute per corner to preserve the two different normals at a hard edge.
@@ -185,7 +248,7 @@ def bake(objects, rise, detailed=False, cloth_transfer=False, furniture_contact=
                     lum = 0.
                     if dist > .09 and tree.ray_cast(point, delta.normalized(), dist-.09)[0] is None:
                         lum = min(.42, .070 * max(0., n.dot(delta.normalized())) / (dist*dist+.09))
-                    uv.data[idx].uv = (0., 1-math.sqrt(lum))
+                    uv.data[idx].uv = (porch_daylight(point, n), 1-math.sqrt(lum))
                     continue
                 if not (0.06 < point.x < 6.94 and -12.96 < point.y < -0.04 and 0 <= point.z < 3 * rise):
                     if detailed and 4.90 < point.x < 7.0 and 0.025 < point.y < 0.89 and 0 < point.z < 2.94:
@@ -195,9 +258,9 @@ def bake(objects, rise, detailed=False, cloth_transfer=False, furniture_contact=
                         # plaster. Stop the visibility ray at the globe's surface.
                         if d2 > 0.012 and tree.ray_cast(point,delta.normalized(),max(0,math.sqrt(d2)-0.094))[0] is None:
                             lamp_transfer = min(0.60,0.115*max(0,n.dot(delta.normalized()))/(d2+0.09))
-                            uv.data[idx].uv = (0,1-math.sqrt(lamp_transfer))
+                            uv.data[idx].uv = (reflected_daylight(point, n),1-math.sqrt(lamp_transfer))
                             continue
-                    uv.data[idx].uv = (0.0, 1.0)
+                    uv.data[idx].uv = (reflected_daylight(point, n), 1.0)
                     continue
                 level = min(2, int(point.z / rise))
                 key = (*(round(v * 300) for v in p), *(round(v * 80) for v in n))
@@ -209,7 +272,11 @@ def bake(objects, rise, detailed=False, cloth_transfer=False, furniture_contact=
                 uv.data[idx].uv = direct_cache[key]
         if fine:
             filter_cloth_irradiance(mesh, uv, compact=sofa_cloth)
-        if furniture_contact and (component.startswith("dining-chair") or component in (
+        outdoor_contact = exterior_bounce and component in (
+            "front-door", "arched-entry-and-lantern", "upper-arched-loggia",
+            "rear-clay-planter", "rear-herb-pot", "double-bed", "bedroom-curtains",
+        )
+        if outdoor_contact or furniture_contact and (component.startswith("dining-chair") or component in (
             "upholstered-sofa", "woven-lap-throw", "sitting-room-coffee-cup", "sitting-room-rug",
             "coffee-table", "clothbound-book", "oak-sideboard", "desk-chair", "workroom-chair",
         )):

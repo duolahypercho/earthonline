@@ -1,0 +1,40 @@
+{
+  "source": [
+    "https://polyhaven.com/a/park_dirt"
+  ],
+  "license": "CC0-1.0",
+  "license_url": "https://polyhaven.com/license",
+  "attribution": [
+    "Christopher Melani"
+  ],
+  "inputs": [
+    {
+      "asset": "park_dirt",
+      "role": "albedo",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/park_dirt/park_dirt_diff_2k.jpg",
+      "sha256": "b1eafefbd8cd3c5e295cc4bcfae743e552b029aff0cf89dd1c5b0abe43fb4223"
+    },
+    {
+      "asset": "park_dirt",
+      "role": "normal",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/park_dirt/park_dirt_nor_gl_2k.jpg",
+      "sha256": "b6b454e10994ae9d44d1a450f1d26eab51955df3fb4fabf1f70ee2f1e02257c3"
+    },
+    {
+      "asset": "park_dirt",
+      "role": "arm",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/park_dirt/park_dirt_arm_2k.jpg",
+      "sha256": "3c42f6290af1de9decd9f693a10dce1b73cbff523a0040f6bb2e60f1efbce0e6"
+    }
+  ],
+  "build": "scripts/blender-buildings/prepare_beaver_surfaces.py",
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/yard-earth.png",
+  "sha256": "ef721bd7a968e73d8ca99a6bf226cd42569401939dc1c8ce2bfbb26c4d39a909",
+  "bytes": 1859332,
+  "families": [
+    "garden-topsoil"
+  ],
+  "metres_per_tile": 1.85,
+  "normal_strength": 0.87,
+  "paint_mix": 0.13
+}

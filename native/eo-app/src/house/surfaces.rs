@@ -14,6 +14,8 @@ pub const NAMES: [&str; 5] = [
     "linen",
 ];
 
+pub const SITE_NAMES: [&str; 4] = ["apron-concrete", "yard-earth", "trunk-bark", "porch-terracotta"];
+
 pub const FURNITURE_NAMES: [&str; 2] = ["wool-carpet", "joinery"];
 
 #[derive(Deserialize)]

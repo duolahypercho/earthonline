@@ -75,6 +75,7 @@ struct Look {
     // the weather's dome (eo-look `upperFromRow`): overcast, isotropy, desaturation, directional horizon band (1/0); tint.
     wx: vec4<f32>,
     wx_tint: vec4<f32>,
+    enclosure_frame: mat4x4<f32>,
 };
 
 // wet-surface-reflection.js `skyDomeRadiance`: the sky model's horizon

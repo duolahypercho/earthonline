@@ -202,7 +202,7 @@ def painted_wood_uv(point, leaf_bounds):
     return point.z / top, (point.x - left) * 3.1 / (right - left)
 
 
-def dress_scans(materials, directory, scene, furnished, leaf_bounds):
+def dress_scans(materials, directory, scene, furnished, leaf_bounds, photo=False):
     """Pack the same photographic colour, roughness and relief into the editable scene."""
     import bpy
     import json
@@ -213,9 +213,12 @@ def dress_scans(materials, directory, scene, furnished, leaf_bounds):
     names = ["limewash", "aggregate", "fired-earth", "painted-wood", "linen"]
     if furnished:
         names += ["furniture/wool-carpet", "furniture/joinery"]
+    if photo:
+        names += ["apron-concrete", "yard-earth", "trunk-bark", "porch-terracotta"]
     for name in names:
-        spec = json.loads((directory / (name + ".provenance.json")).read_text())
-        atlas = bpy.data.images.load(str(directory / (name + ".png")), check_existing=False)
+        source = directory / "furniture/photo" if photo and name in ("limewash", "fired-earth", "apron-concrete", "yard-earth", "trunk-bark", "porch-terracotta") else directory
+        spec = json.loads((source / (name + ".provenance.json")).read_text())
+        atlas = bpy.data.images.load(str(source / (name + ".png")), check_existing=False)
         atlas.colorspace_settings.name = "Non-Color"
         w, h = atlas.size
         pixels = np.empty(w * h * 4, dtype=np.float32)

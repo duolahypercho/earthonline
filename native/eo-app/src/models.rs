@@ -173,7 +173,7 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
             groups: &groups,
             hlod_enter_m: set.hlod_enter_m,
             hlod_exit_m: set.hlod_exit_m,
-            kit_layers: set.materials.layers.len() as u32 + u32::from(args.beaver_house && args.house_finishes) * (2 + crate::house::SURFACE_LAYERS * u32::from(args.house_patina) + crate::house::FURNITURE_LAYERS * u32::from(args.house_furniture && args.house_patina)),
+            kit_layers: set.materials.layers.len() as u32 + u32::from(args.beaver_house && args.house_finishes) * (2 + crate::house::SURFACE_LAYERS * u32::from(args.house_patina) + (crate::house::FURNITURE_LAYERS + crate::house::PHOTO_LAYERS * u32::from(args.house_photo)) * u32::from(args.house_furniture && args.house_patina)),
             kit_res: eo_assets::kit::HIGH_RES as u32,
             color_format: format,
             sample_count: args.msaa,
@@ -184,6 +184,10 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
                 .map_or(models.object, |index| index as u32),
         },
     )?;
+    if let Some(meter) = world.house.as_ref().and_then(|h| h.interior_meter()) {
+        r.look.enclosure_frame = meter.world_to_local();
+        r.look.sky.set_interior_meter(meter);
+    }
     r.kit_radii = eo_render::kit::DEFAULT_KIT_RADII;
     r.set_occlusion(args.perf.occlusion); // occlusion
     // the far layer's GPU side and every group's cell.

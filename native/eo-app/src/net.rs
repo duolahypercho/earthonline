@@ -81,6 +81,8 @@ fn base_args() -> Args {
         house_finishes: false,
         house_patina: false,
         house_furniture: false,
+        house_photo: false,
+        house_glazing: true,
         beaver_house: false,
         bench: false,
         start_underwater: false,

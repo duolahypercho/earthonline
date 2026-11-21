@@ -340,6 +340,7 @@ struct State {
     adapt: eo_sky::night::Adaptation,
     /// the forward the meter last metered (a turn of more than ~30 deg snaps the adaptation, as a cut does).
     meter_fwd: Option<glam::Vec3>,
+    interior_meter: Option<crate::interior_meter::InteriorMeter>,
     /// the aerosol density the transmittance and multiple-scattering
     /// tables were built for (they depend on the medium only; rebuilt on a change).
     atmo_built: Option<f32>,
@@ -856,6 +857,7 @@ impl SkyGpu {
                 parity: 0,
                 adapt: Default::default(),
                 meter_fwd: None,
+                interior_meter: None,
                 atmo_built: None,
                 atmo_haze: 0.0,
                 hist_look: None,
@@ -907,6 +909,11 @@ impl SkyGpu {
             s.history_valid = false;
         }
         s.opts = o;
+    }
+
+    /// Register the glazed enclosure used by the camera meter in the playable interior.
+    pub fn set_interior_meter(&self, meter: crate::interior_meter::InteriorMeter) {
+        self.state.lock().unwrap().interior_meter = Some(meter);
     }
 
     /// The world clock (seconds since the world's epoch) and the frame time
@@ -1100,7 +1107,8 @@ impl SkyGpu {
                     dirs.push(([d.x as f64, d.y as f64, d.z as f64], 1.5 - 0.5 * (x * x + y * y) as f64));
                 }
             }
-            eo_sky::night::meter(f, &terms.weather, &dirs)
+            let gain = s.interior_meter.as_ref().map_or(1.0, |m| m.daylight_gain(cam));
+            eo_sky::night::meter(f, &terms.weather, &dirs) * (1. + (gain - 1.) * (1. - terms.nightness))
         } else {
             1.0
         };

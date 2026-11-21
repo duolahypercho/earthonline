@@ -80,6 +80,16 @@ pub const FRONT_SASH_BIT: u32 = 1 << 12;
 pub const LIMEWASH_BIT: u32 = 1 << 13;
 /// An entire carpet sampled once in its authored orientation.
 pub const RUG_SCAN_BIT: u32 = 1 << 14;
+/// Board-mounted room coordinates and the interior reflection of the sash.
+pub const WAXED_BOARD_BIT: u32 = 1 << 15;
+/// Private paving and aggregate receive the same outdoor bounce as the planted bed.
+pub const COURTYARD_BOUNCE_BIT: u32 = 1 << 16;
+/// Negative normal W stores near-field visibility on the enclosed side of the wall.
+pub const ENCLOSURE_TRANSFER_BIT: u32 = 1 << 17;
+/// Thin woven panels and leaves transmit the exterior daylight behind them.
+pub const THIN_FIBRE_BIT: u32 = 1 << 18;
+/// Opaque bed linen has a rough fibrous surface over a softer filling.
+pub const QUILT_FIBRE_BIT: u32 = 1 << 19;
 
 /// Material 0: the vertex colour (footprints, terrain, roads, sea).
 pub const MATERIAL_VERTEX_COLOUR: u32 = 0;

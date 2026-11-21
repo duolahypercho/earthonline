@@ -16,6 +16,7 @@ pub mod agents; // agents
 pub mod alloc;
 pub mod authored;
 pub mod camera;
+pub mod interior_meter;
 pub mod clouds; // the cloud noise, blue noise and cloud-shadow map
 pub mod cc0; // the CC0 scanned sets
 pub mod cc0_decals; // street wear decals

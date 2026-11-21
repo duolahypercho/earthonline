@@ -4,6 +4,7 @@ mod door;
 mod surfaces;
 pub use surfaces::Scan;
 pub const FURNITURE_LAYERS: u32 = surfaces::FURNITURE_NAMES.len() as u32;
+pub const PHOTO_LAYERS: u32 = surfaces::SITE_NAMES.len() as u32 + 1; // includes the courtyard panorama
 pub const SURFACE_LAYERS: u32 = surfaces::NAMES.len() as u32 + 1; // includes the front-sash panorama
 use anyhow::{Result, ensure};
 pub use door::Door;
@@ -38,6 +39,18 @@ struct Manifest {
     ramps: Vec<[Point; 4]>,
     #[serde(default)]
     metric_assemblies: Vec<dimensions::MetricAssembly>,
+    #[serde(default)]
+    ground_components: Vec<GroundComponent>,
+}
+
+#[derive(Deserialize)]
+struct GroundComponent {
+    name: String,
+    anchor: Point,
+    #[serde(default)]
+    box_index: Option<usize>,
+    #[serde(default)]
+    survey_xz: Option<[f64; 2]>,
 }
 #[derive(Deserialize)]
 struct DoorSpec {
@@ -61,8 +74,10 @@ struct ProbeManifest {
 }
 
 pub struct Finishes {
+    glazing: bool,
     furniture: bool,
     pub scans: Vec<Scan>,
+    pub yard_reflections: Option<eo_assets::kit::BakedMaps>,
     pub street_reflections: Option<eo_assets::kit::BakedMaps>,
     directory: std::path::PathBuf,
     manifest: ProbeManifest,
@@ -71,23 +86,32 @@ pub struct Finishes {
 }
 
 impl Finishes {
-    pub fn load(root: &Path, patina: bool, furniture: bool) -> Result<Self> {
+    pub fn load(root: &Path, patina: bool, furniture: bool, photo: bool, glazing: bool) -> Result<Self> {
         let directory = if patina {
             root.join(FINISH_DIR).join("patina")
         } else {
             root.join(FINISH_DIR)
         };
+        let photo_dir = directory.join("furniture/photo");
         let mut scans = if patina {
             surfaces::NAMES
                 .iter()
-                .map(|name| Scan::load(root, &directory, name))
+                .map(|name| {
+                    let source = if furniture && photo && matches!(*name, "limewash" | "fired-earth") {
+                        &photo_dir
+                    } else {
+                        &directory
+                    };
+                    Scan::load(root, source, name)
+                })
                 .collect::<Result<Vec<_>>>()?
         } else {
             vec![]
         };
         let street_reflections = if patina {
             let panorama: AssetRef = serde_json::from_slice(&std::fs::read(
-                directory.join("street-reflections.provenance.json"),
+                if photo && glazing { photo_dir.join("street-reflections.provenance.json") }
+                else { directory.join("street-reflections.provenance.json") },
             )?)?;
             Some(Self::read_maps(root, &panorama, 2)?)
         } else {
@@ -98,22 +122,41 @@ impl Finishes {
             for name in surfaces::FURNITURE_NAMES {
                 scans.push(Scan::load(root, &variant, name)?);
             }
-            variant
+            if photo {
+                for name in surfaces::SITE_NAMES {
+                    scans.push(Scan::load(root, &photo_dir, name)?);
+                }
+                photo_dir.clone()
+            } else {
+                variant
+            }
         } else {
             directory
         };
         let manifest: ProbeManifest = serde_json::from_slice(&std::fs::read(
             directory.join("kitchen-reflections.provenance.json"),
         )?)?;
+        let yard_reflections = if furniture && photo {
+            let panorama: AssetRef = serde_json::from_slice(&std::fs::read(
+                if glazing { directory.join("yard-reflections.provenance.json") }
+                else { root.join(FINISH_DIR).join("patina/street-reflections.provenance.json") },
+            )?)?;
+            Some(Self::read_maps(root, &panorama, 2)?)
+        } else {
+            None
+        };
         let floor: AssetRef = serde_json::from_slice(&std::fs::read(
-            root.join(FINISH_DIR).join("floorboards.provenance.json"),
+            if furniture && photo { photo_dir.join("floorboards.provenance.json") }
+            else { root.join(FINISH_DIR).join("floorboards.provenance.json") },
         )?)?;
         let atlas = Self::read_maps(root, &manifest.asset, 2)?;
         let floorboards = Self::read_maps(root, &floor, 3)?;
         Ok(Self {
+            glazing,
             furniture,
             directory,
             scans,
+            yard_reflections,
             street_reflections,
             manifest,
             atlas,
@@ -193,8 +236,13 @@ pub struct House {
     mortar: Vec<([Point; 4], u32)>,
     aggregate: Vec<([Point; 4], u32)>,
     aggregate_material: u32,
+    yard: Vec<([Point; 4], u32)>,
+    yard_material: u32,
+    concrete_material: u32,
     paver_material: u32,
     patina: bool,
+    photo: bool,
+    glazing: bool,
     entry: Option<DVec3>,
 }
 
@@ -232,7 +280,48 @@ impl House {
         let across = (ring[2] - ring[1]) / 7.;
         let back = (ring[0] - ring[1]) / 13.;
         let height_scale = b.height as f64 / 10.;
-        let layout = dimensions::Layout::new(&manifest.metric_assemblies, manifest.boxes.len(), across, back, height_scale)?;
+        let floor = ring
+            .iter()
+            .map(|p| ground(p.x, p.y))
+            .fold(f64::NEG_INFINITY, f64::max)
+            + 0.22;
+        let mut layout = dimensions::Layout::new(&manifest.metric_assemblies, manifest.boxes.len(), across, back, height_scale)?;
+        // The shell sits on the high corner of the footprint. Each freestanding
+        // planter instead stands on its own sampled yard grade, mesh and collider together.
+        for component in &manifest.ground_components {
+            let [x, y, z] = component.anchor;
+            let anchor = DVec3::new(x, y, z);
+            let planned = ring[1] + across * x + back * z;
+            let transform = if let Some(survey) = component.survey_xz {
+                // Use the same decimetre rounding as the DataSF street-tree loader.
+                let scale = eo_data::groundscale::scale();
+                let site = (DVec2::from(survey) * (10. * scale)).round() * 0.1;
+                let det = across.perp_dot(back);
+                let local = site - ring[1];
+                let rooted = DVec3::new(local.perp_dot(back) / det,
+                    (ground(site.x, site.y) - floor) / height_scale, across.perp_dot(local) / det);
+                // The inventory's crown and height are physical metres. Only the
+                // root follows the mapped ground plan, including at alternate scales.
+                let axis = |v: DVec2| DVec3::new(v.x, 0., v.y);
+                let site_axes = glam::DMat3::from_cols(axis(across), DVec3::Y*height_scale, axis(back));
+                let along = across.normalize();
+                let metres = glam::DMat3::from_cols(axis(along), DVec3::Y,
+                    axis(along.perp() * det.signum()));
+                glam::DMat4::from_translation(rooted) * glam::DMat4::from_mat3(site_axes.inverse()*metres)
+                    * glam::DMat4::from_translation(-anchor)
+            } else {
+                let dy = (ground(planned.x, planned.y) - floor) / height_scale - y;
+                glam::DMat4::from_translation(DVec3::Y * dy)
+            };
+            ensure!(layout.nodes.insert(component.name.clone(), transform.as_mat4()).is_none(),
+                    "duplicate grounded component {}", component.name);
+            if let Some(index) = component.box_index {
+                let slot = layout.boxes.get_mut(index)
+                    .ok_or_else(|| anyhow::anyhow!("missing planter collision box"))?;
+                ensure!(slot.is_none(), "grounded collision box already placed");
+                *slot = Some(transform);
+            }
+        }
         let furnished = finishes.is_some_and(|f| f.furniture);
         let (model, light_transfer, visibility) = if furnished {
             ensure!(!layout.nodes.is_empty(), "furnished house is missing its metric placement");
@@ -258,17 +347,20 @@ impl House {
             .iter()
             .position(|m| m.name == "decomposed-granite@b4a087")
             .map_or(0, |i| resolved[i]);
+        let photo = finishes.is_some_and(|f| f.yard_reflections.is_some());
+        let paver_family = if photo { "terracotta-paver@" } else { "fired-clay@" };
         let paver_material = model
             .materials
             .iter()
-            .position(|m| m.name.starts_with("fired-clay@"))
+            .position(|m| m.name.starts_with(paver_family))
             .filter(|_| patina)
             .map_or(0, |i| resolved[i]);
-        let floor = ring
-            .iter()
-            .map(|p| ground(p.x, p.y))
-            .fold(f64::NEG_INFINITY, f64::max)
-            + 0.22;
+        let site_material = |family: &str| model.materials.iter()
+            .position(|m| m.name.starts_with(family)).map(|i| resolved[i]);
+        let (yard_material, concrete_material) = if photo {
+            (site_material("garden-topsoil@").ok_or_else(|| anyhow::anyhow!("yard soil missing"))?,
+             site_material("cast-stone@").ok_or_else(|| anyhow::anyhow!("private apron concrete missing"))?)
+        } else { (0,0) };
         let mut h = Self {
             origin: ring[1],
             across,
@@ -293,9 +385,14 @@ impl House {
             pavers: vec![],
             mortar: vec![],
             aggregate: vec![],
+            yard: vec![],
+            yard_material,
+            concrete_material,
             aggregate_material,
             paver_material,
             patina,
+            photo,
+            glazing: finishes.is_some_and(|f| f.glazing),
             entry: None,
         };
         for ([a, b], matrix) in manifest.boxes.into_iter().zip(layout.boxes) {
@@ -348,6 +445,23 @@ impl House {
         }
         if finishes.is_some() {
             h.tile_treads();
+        }
+        if !manifest.ground_components.is_empty() {
+            // Private planting strip directly below the rear windows. Use the
+            // same terrain query as the pots so the mineral mulch follows the grade.
+            let point = |x: f64, z: f64| {
+                let site = ring[1] + across * x + back * z;
+                [x, (ground(site.x, site.y) - floor + 0.009) / height_scale, z]
+            };
+            for i in 0..24 {
+                let x = 0.12 + f64::from(i) * 6.76 / 24.;
+                let u = 0.12 + f64::from(i+1) * 6.76 / 24.;
+                for j in 0..8 {
+                    let far_edge = |col: f64| 2.16 + 0.23*(4.1*col).sin() + 0.12*(7.3*col).cos();
+                    let strip = |col, row: i32| point(col, 13. + far_edge(col)*f64::from(row)/8.);
+                    h.yard.push(([strip(x,j),strip(x,j+1),strip(u,j+1),strip(u,j)], 0xffffffff));
+                }
+            }
         }
         Ok(h)
     }
@@ -520,7 +634,7 @@ impl House {
         let mut aggregate = Vec::new();
         for (lo, hi) in [(0.10, a[0]), (b[0], 6.91)] {
             let columns = ((hi - lo) / 0.26).ceil() as usize;
-            let mut last = None;
+            let mut last: Option<(f64, f64)> = None;
             for i in 0..=columns {
                 let x = lo + (hi - lo) * i as f64 / columns as f64;
                 let rear = -0.04;
@@ -531,14 +645,24 @@ impl House {
                 if let Some((prev_x, prev_outer)) = last {
                     let grade = |xx, zz| [xx, terrain(xx, zz) + 0.006, zz];
                     for row in 0..12 {
-                        let t = row as f64 / 12.;
-                        let u = (row + 1) as f64 / 12.;
+                        let mut t = row as f64 / 12.;
+                        let mut u = (row + 1) as f64 / 12.;
+                        let (mut left, mut right) = (prev_x,x);
+                        if self.photo {
+                            // Saw cuts in the private slab stop at the surveyed sidewalk.
+                            let joint = 0.004;
+                            if (i-1) % 5 == 0 { left += joint; }
+                            if i % 5 == 0 { right -= joint; }
+                            let depth = (prev_outer - rear).abs().max(0.1);
+                            if row % 4 == 0 { t += joint/depth; }
+                            if (row+1) % 4 == 0 { u -= joint/depth; }
+                        }
                         aggregate.push((
                             [
-                                grade(prev_x, rear + (prev_outer - rear) * t),
-                                grade(x, rear + (outer - rear) * t),
-                                grade(x, rear + (outer - rear) * u),
-                                grade(prev_x, rear + (prev_outer - rear) * u),
+                                grade(left, rear + (prev_outer - rear) * t),
+                                grade(right, rear + (outer - rear) * t),
+                                grade(right, rear + (outer - rear) * u),
+                                grade(left, rear + (prev_outer - rear) * u),
                             ],
                             0xffffffff,
                         ));
@@ -574,6 +698,27 @@ impl House {
         let p = self.origin + self.across * x + self.back * z;
         DVec3::new(p.x, self.floor + y * self.height_scale, p.y)
     }
+    pub fn interior_meter(&self) -> Option<eo_render::interior_meter::InteriorMeter> {
+        if !self.photo || self.light_transfer.is_empty() { return None; }
+        let basis = glam::Mat4::from_cols(
+            Vec3::new(self.across.x as f32, 0., self.across.y as f32).extend(0.),
+            (Vec3::Y * self.height_scale as f32).extend(0.),
+            Vec3::new(self.back.x as f32, 0., self.back.y as f32).extend(0.),
+            self.point(0., 0., 0.).as_vec3().extend(1.),
+        );
+        let glass = self.model.parts.iter()
+            .filter(|part| self.model.materials[part.material as usize].name.starts_with("glass-door@"))
+            .flat_map(|part| {
+                let first = part.first_index as usize;
+                self.model.indices[first..first + part.index_count as usize].chunks_exact(3)
+            })
+            .map(|indices| [0, 1, 2].map(|i| Vec3::from_array(self.model.positions[indices[i] as usize])))
+            // Each pane is a thin closed solid. Integrate light through a single face.
+            .filter(|[a,b,c]| (*b-*a).cross(*c-*a).normalize_or_zero().z > 0.8);
+        Some(eo_render::interior_meter::InteriorMeter::new(basis,
+            Vec3::new(0.14, -0.08, 0.50), Vec3::new(6.86, 9.88, 12.86), 10. / 3., glass))
+    }
+
     pub fn contains_feet(&self, feet: DVec3) -> bool {
         let p = DVec2::new(feet.x, feet.z) - self.origin;
         let det = self.across.perp_dot(self.back);
@@ -671,7 +816,10 @@ impl House {
                     let level = (h / (10.0 / 3.0)).round() as usize;
                     let row = (board as usize * 5 + paint * 3 + level) % 8;
                     let across = (row as f32 + 0.07 + 0.86 * board.fract()) / 8.0;
-                    floor_uv[i as usize] = Some([across, (z / 13.0).clamp(0.0, 1.0)]);
+                    floor_uv[i as usize] = Some([
+                        if self.photo { (x / 7.).clamp(0.,1.) } else { across },
+                        (z / 13.0).clamp(0.0, 1.0),
+                    ]);
                 }
             } else if self.patina && name.starts_with("glass-door@") {
                 // Blender batches the front and rear panes of a storey into
@@ -680,6 +828,8 @@ impl House {
                 for &i in &self.model.indices[start..start + part.index_count as usize] {
                     if self.model.positions[i as usize][2] < 0.75 {
                         finish[i as usize] = 4;
+                    } else if self.photo && self.model.positions[i as usize][2] > 12.7 {
+                        finish[i as usize] = 5;
                     }
                 }
             } else if self.patina && plaster_finish(name) {
@@ -774,6 +924,17 @@ impl House {
                 // 64 identifies unlit authored normals. Codes 65..127 carry diffuse visibility.
                 normal = (normal & 0x00ff_ffff) | ((65 + (62. * visibility).round() as u32) << 24);
             }
+            if self.photo && self.light_transfer.get(i).is_some() {
+                // Classify each side of a wall independently. The signed normal's
+                // spare W channel keeps contact visibility on both sides of a reveal.
+                let sample = Vec3::new(x, y, z) + eo_assets::glb::unpack_normal(n) * 0.025;
+                let porch = sample.y < 2.75 && sample.x > 5.10 && sample.z < 0.50;
+                if !porch && (0.10..6.90).contains(&sample.x) && (0.05..12.96).contains(&sample.z)
+                    && (0.0..9.98).contains(&sample.y) {
+                    let visibility = (normal >> 24) as i8;
+                    normal = (normal & 0x00ff_ffff) | (u32::from((-visibility) as u8) << 24);
+                }
+            }
             scene.vertices.push(Vertex {
                 pos: self
                     .point(x.into(), y.into(), z.into())
@@ -817,6 +978,7 @@ impl House {
                     .contains(&self.model.materials[part.material as usize].name.as_str())
             {
                 o.kind |= eo_render::scene::FLOOR_SCAN_BIT;
+                if self.photo { o.kind |= eo_render::scene::WAXED_BOARD_BIT; }
             }
             if self.patina && self.model.materials[part.material as usize].name.starts_with("woven-carpet@") {
                 o.kind |= eo_render::scene::RUG_SCAN_BIT;
@@ -824,12 +986,23 @@ impl House {
             if self.patina && door_paint(&self.model.materials[part.material as usize].name) {
                 o.kind |= eo_render::scene::DOOR_SCAN_BIT;
             }
+            if self.photo && !self.light_transfer.is_empty() {
+                o.kind |= eo_render::scene::ENCLOSURE_TRANSFER_BIT;
+            }
             let family = &self.model.materials[part.material as usize].name;
+            if self.photo {
+                match family.split('@').next().unwrap_or("") {
+                    "curtain-linen" | "street-tree-foliage" => o.kind |= eo_render::scene::THIN_FIBRE_BIT,
+                    "cotton-coverlet" | "cotton-turnback" | "cotton-binding" =>
+                        o.kind |= eo_render::scene::QUILT_FIBRE_BIT,
+                    _ => {}
+                }
+            }
             o.material = self.materials[part.material as usize];
             if self.patina && plaster_finish(family) {
                 o.kind |= eo_render::scene::LIMEWASH_BIT;
             }
-            if self.patina && family.starts_with("glass-door@") && part.min[2] < 0.75 {
+            if self.patina && self.glazing && family.starts_with("glass-door@") && (part.min[2] < 0.75 || self.photo && part.max[2] > 12.7) {
                 o.kind |= eo_render::scene::FRONT_SASH_BIT;
             }
             if !self.patina && self.aggregate_material != 0 && o.material == self.aggregate_material
@@ -886,7 +1059,9 @@ impl House {
                 },
                 self.paver_material,
             ),
-            (&self.aggregate, ObjectKind::Model, self.aggregate_material),
+            (&self.aggregate, ObjectKind::Model,
+                if self.photo { self.concrete_material } else { self.aggregate_material }),
+            (&self.yard, ObjectKind::Model, self.yard_material),
         ] {
             if quads.is_empty() {
                 continue;
@@ -925,6 +1100,9 @@ impl House {
                 0,
             );
             object.material = material;
+            if self.photo && kind == ObjectKind::Model {
+                object.kind |= eo_render::scene::COURTYARD_BOUNCE_BIT;
+            }
             if !self.patina && material != 0 && material == self.aggregate_material {
                 object.kind |= eo_render::scene::GRAVEL_BIT;
             }
