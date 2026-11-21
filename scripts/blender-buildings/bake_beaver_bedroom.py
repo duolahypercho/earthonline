@@ -23,13 +23,27 @@ OUT = ROOT / "public/assets/buildings/beaver-terrace/finishes/patina/furniture/p
 SIZE = 512
 scene = bpy.context.scene
 args = argparse.ArgumentParser()
-args.add_argument("product", choices=("quilt", "light", "downstairs"))
+args.add_argument("product", choices=("quilt", "light", "downstairs", "meter"))
 args.add_argument(
     "--output-dir",
     type=Path,
     help="Alternative external directory for a verification bake",
 )
+args.add_argument("--scene", help="Use a named lighting scene from a fitted house")
+args.add_argument(
+    "--exterior-blend",
+    type=Path,
+    help="Original house scene containing the registered exterior camera",
+)
+args.add_argument(
+    "--floor-calibration",
+    type=Path,
+    help="Ground-floor calibration for the same source scene",
+)
 options = args.parse_args(sys.argv[sys.argv.index("--") + 1 :])
+if options.scene:
+    bpy.context.window.scene = bpy.data.scenes[options.scene]
+    scene = bpy.context.scene
 product = options.product
 if options.output_dir:
     if options.output_dir.resolve().is_relative_to(ROOT):
@@ -89,6 +103,66 @@ def publish(name, rgb, metadata):
         json.dumps(metadata, indent=2) + "\n"
     )
     print("Baked", name, len(png), metadata["sha256"], flush=True)
+
+
+def fitted_camera_meter():
+    if not (options.scene and options.exterior_blend and options.output_dir):
+        args.error("meter needs --scene, --exterior-blend and --output-dir")
+    scene.frame_set(3)
+    bpy.context.view_layer.update()
+    room = camera_reading(scene)
+    (sun,) = [
+        o
+        for o in scene.objects
+        if o.type == "LIGHT" and o.data.type == "SUN" and not o.hide_render
+    ]
+    direction = sun.matrix_world.to_quaternion() @ Vector((0, 0, 1))
+    beam = float(
+        sun.data.energy * np.dot(sun.data.color, [0.2126, 0.7152, 0.0722]) * direction.z
+    )
+    original = json.loads((OUT / "downstairs-daylight.provenance.json").read_text())[
+        "source_scene"
+    ]
+    with options.exterior_blend.open("rb") as source:
+        if hashlib.file_digest(source, "sha256").hexdigest() != original["sha256"]:
+            raise ValueError("Exterior reference belongs to another house survey")
+    bpy.ops.wm.open_mainfile(filepath=str(options.exterior_blend.resolve()))
+    exterior = bpy.context.scene
+    exterior.frame_set(1)
+    bpy.context.view_layer.update()
+    street = camera_reading(exterior)
+    if (
+        street["camera"] != "01 · Upper story and roof"
+        or room["exposure_ev"] <= street["exposure_ev"]
+        or beam <= 0
+    ):
+        raise ValueError(
+            "Expected the registered exterior and interior camera pair and sun above the horizon"
+        )
+    measured = {
+        "interior": room,
+        "exterior": street,
+        "interior_sun_on_horizontal_card": beam,
+        "exposure_range_ev": round(room["exposure_ev"] - street["exposure_ev"], 4),
+        "exterior_exposed_beam": round(beam * 2 ** street["exposure_ev"], 5),
+    }
+    (options.output_dir / "room-meter.json").write_text(
+        json.dumps(measured, indent=2) + "\n"
+    )
+
+
+def camera_reading(view):
+    path = Path(bpy.data.filepath)
+    with path.open("rb") as source:
+        sha = hashlib.file_digest(source, "sha256").hexdigest()
+    return {
+        "file": path.name,
+        "sha256": sha,
+        "scene": view.name,
+        "camera": view.camera.name,
+        "frame": view.frame_current,
+        "exposure_ev": view.view_settings.exposure,
+    }
 
 
 def select_only(obj):
@@ -176,19 +250,19 @@ def quilt():
     publish(
         "washed-cotton",
         np.concatenate((color, normal, orm)),
-        dict(
-            source=tile["source"],
-            license=tile["license"],
-            attribution=tile["attribution"],
-            inputs=tile["inputs"],
-            families=["cotton-coverlet"],
-            metres_per_tile=1.0,
-            normal_strength=1.0,
-            paint_mix=0.0,
-            cut_pattern=True,
-            cut_metres=[round(width, 4), round(height, 4)],
-            process="Cycles tangent normal, dyed diffuse and roughness of the Blender coverlet on its flat cutting pattern.",
-        ),
+        {
+            "source": tile["source"],
+            "license": tile["license"],
+            "attribution": tile["attribution"],
+            "inputs": tile["inputs"],
+            "families": ["cotton-coverlet"],
+            "metres_per_tile": 1.0,
+            "normal_strength": 1.0,
+            "paint_mix": 0.0,
+            "cut_pattern": True,
+            "cut_metres": [round(width, 4), round(height, 4)],
+            "process": "Cycles tangent normal, dyed diffuse and roughness of the Blender coverlet on its flat cutting pattern.",
+        },
     )
 
 
@@ -363,10 +437,16 @@ def daylight(downstairs):
     calibration_meta = {}
     if downstairs:
         practicals = [
-            o for o in scene.objects if o.type == "LIGHT" and o.data.type == "POINT"
+            o
+            for o in scene.objects
+            if o.type == "LIGHT" and o.data.type in ("POINT", "SPOT")
         ]
         practical_label = "installed-lights"
-        floor = json.loads((OUT / "dining-floor-light.provenance.json").read_text())
+        floor = json.loads(
+            (
+                options.floor_calibration or OUT / "dining-floor-light.provenance.json"
+            ).read_text()
+        )
         if (
             floor["source_scene"]["sha256"]
             != hashlib.sha256(Path(bpy.data.filepath).read_bytes()).hexdigest()
@@ -484,12 +564,19 @@ def daylight(downstairs):
     scene.frame_set(1)
     outdoor_exposure = scene.view_settings.exposure
     sky_return = float(np.dot(checks["sky"]["mean"], [0.2126, 0.7152, 0.0722]))
+    meter = {
+        "exposure_range_ev": round(room_exposure - outdoor_exposure, 4),
+        "exterior_exposed_beam": round(float(key_on_card * 2**outdoor_exposure), 5),
+    }
+    # Single-camera studies carry the original exterior reading separately.
+    # Their frame 1 is another indoor view. The fitted cooker joins the two surveys.
+    if options.scene and downstairs:
+        meter = {}
     publish(
         "downstairs-daylight" if downstairs else "bedroom-daylight",
         atlas,
         dict(
-            exposure_range_ev=round(room_exposure - outdoor_exposure, 4),
-            exterior_exposed_beam=round(float(key_on_card * 2**outdoor_exposure), 5),
+            **meter,
             mean_sky_return=round(sky_return, 6),
             source="Authored terrace and surrounding city geometry in the editable Blender scene.",
             attribution="Earth Online",
@@ -514,7 +601,9 @@ def daylight(downstairs):
     )
 
 
-if product == "quilt":
+if product == "meter":
+    fitted_camera_meter()
+elif product == "quilt":
     quilt()
 else:
     daylight(product == "downstairs")

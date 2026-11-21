@@ -44,6 +44,36 @@ def floor_roughness(scene):
     materials = {
         ob.data.materials[0] for ob in oak if ob.type == "MESH" and ob.data.materials
     }
+    fitted = [
+        o
+        for o in oak
+        if o.type == "MESH"
+        and o.data.materials
+        and o.data.materials[0].name.startswith("Worn oiled floor")
+    ]
+    if fitted:
+        if len(fitted) != 4 or len({o.data.materials[0] for o in fitted}) != 1:
+            raise ValueError(
+                "Expected four fitted floor meshes with the same photograph"
+            )
+        rough_socket = (
+            fitted[0]
+            .data.materials[0]
+            .node_tree.nodes["Principled BSDF"]
+            .inputs["Roughness"]
+        )
+        image = rough_socket.links[0].from_node.image
+        recipe = json.loads(
+            (Path(bpy.data.filepath).parent / "oak/provenance.json").read_text()
+        )
+        source = next(
+            p for p in recipe["packed_maps"] if p["file"] == "worn-oak-rough.png"
+        )
+        if hashlib.sha256(image.packed_file.data).hexdigest() != source["sha256"]:
+            raise ValueError("The fitted roughness scan does not match its source")
+        data = np.empty(len(image.pixels), np.float32)
+        image.pixels.foreach_get(data)
+        return [float(func(data[::4])) for func in (np.min, np.median, np.max)]
     values = []
     for mat in materials:
         if not mat.name.startswith("oiled-oak@"):
@@ -181,6 +211,10 @@ def survey(scene, site, calibration, store):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--floor-calibration", type=Path)
+    parser.add_argument(
+        "--scene", help="Use a named lighting scene from a fitted house"
+    )
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument(
         "--capture-to",
@@ -199,7 +233,11 @@ def main():
     if args.output_dir and dest.is_relative_to(ROOT):
         parser.error("Keep validation bakes outside the checkout")
     dest.mkdir(parents=True, exist_ok=True)
-    calibration = json.loads((DEST / "dining-floor-light.provenance.json").read_text())
+    calibration = json.loads(
+        (
+            args.floor_calibration or DEST / "dining-floor-light.provenance.json"
+        ).read_text()
+    )
     if (
         digest(Path(bpy.data.filepath)) != calibration["source_scene"]["sha256"]
         or digest(DEST / "terrace.glb") != calibration["house_sha256"]
@@ -215,6 +253,8 @@ def main():
         )
     ring = [Vector(pt) for pt in zip(building["points"][::2], building["points"][1::2])]
     site = site_basis(ring, load_surface(ROOT, building["centroid"])["plan_scale"])[3]
+    if args.scene:
+        bpy.context.window.scene = bpy.data.scenes[args.scene]
     scene = bpy.context.scene
     scene.frame_set(3)
     response = ROOT / "native/eo-render/src/photo_camera_response.wgsl"

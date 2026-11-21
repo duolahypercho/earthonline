@@ -25,6 +25,7 @@ from cook_beaver_dining import DEST, cook
 parser = argparse.ArgumentParser()
 parser.add_argument("output", type=Path)
 parser.add_argument("--install", action="store_true")
+parser.add_argument("--scene", help="Use a named lighting scene from a fitted house")
 parser.add_argument(
     "--reference-key",
     nargs=3,
@@ -40,10 +41,20 @@ out = args.output.resolve()
 if out.is_relative_to(ROOT):
     parser.error("Keep the raw light measurements outside the checkout.")
 out.mkdir(parents=True, exist_ok=True)
+if args.scene:
+    bpy.context.window.scene = bpy.data.scenes[args.scene]
 scene = bpy.context.scene
 scene.frame_set(3)
 scene.render.engine = "CYCLES"
 scene.cycles.device = "CPU"
+if args.scene and sys.platform == "darwin":
+    prefs = bpy.context.preferences.addons["cycles"].preferences
+    prefs.compute_device_type = "METAL"
+    devices = prefs.get_devices_for_type("METAL")
+    if any(d.type == "METAL" for d in devices):
+        for device in devices:
+            device.use = device.type == "METAL"
+        scene.cycles.device = "GPU"
 scene.cycles.seed = 73
 scene.cycles.use_adaptive_sampling = False
 scene.cycles.use_denoising = False
@@ -99,7 +110,11 @@ pendant = next(
     for o in scene.objects
     if o.type == "LIGHT" and o.name.startswith("Dining pendant")
 )
-source_key = bpy.data.objects["Morning sun"].data
+source_key = next(
+    o.data
+    for o in scene.objects
+    if o.type == "LIGHT" and o.data.type == "SUN" and not o.hide_render
+)
 key = np.asarray(source_key.color) * source_key.energy
 for light in scene.objects:
     if light.type == "LIGHT":
@@ -160,10 +175,17 @@ def bake(label, resolution, samples, passes=("DIRECT", "INDIRECT")):
 scene.world = unit
 bg.inputs["Strength"].default_value = 0
 sun.hide_render = True
-pendant.hide_render = False
+task_lights = [
+    o
+    for o in scene.objects
+    if o.type == "LIGHT" and o.name.startswith("Range hood task light")
+]
+for fixture in [pendant, *task_lights]:
+    fixture.hide_render = False
 bake("pendant", size, 1536)
 bake("pendant-direct", size, 512, ("DIRECT",))
-pendant.hide_render = True
+for fixture in [pendant, *task_lights]:
+    fixture.hide_render = True
 bg.inputs["Strength"].default_value = 1
 bake("uniform-sky", size, 512)
 scene.world = day_sky

@@ -1,0 +1,172 @@
+{
+  "exposure_range_ev": 2.63,
+  "exterior_exposed_beam": 2.23264,
+  "mean_sky_return": 0.004836,
+  "source": "Authored terrace and surrounding city geometry in the editable Blender scene.",
+  "attribution": "Earth Online",
+  "license": "Project-authored lighting data",
+  "house_sha256": "0f567a703707bf14d2e49fd9ee1a713422faa46109fd5b42f404f5ab6bd0dc50",
+  "fixture_units_per_source_unit": 2.6080094371717353,
+  "fixtures": {
+    "Dining pendant \u00b7 opal globe": 19.0,
+    "Entry sconce": 6.0,
+    "Bedside reading light": 5.0,
+    "Range hood task light 1": 2.0999999046325684,
+    "Range hood task light 2": 2.0999999046325684
+  },
+  "atlas_row_offset": 256,
+  "solid_probes": 89,
+  "transfer_encoding": "sqrt(L/(1+L))",
+  "sealed_probes": 41,
+  "grid": [
+    15,
+    6,
+    33
+  ],
+  "minimum": [
+    0.22,
+    0.09,
+    0.23
+  ],
+  "maximum": [
+    6.78,
+    3.118333333333333,
+    12.77
+  ],
+  "samples": 4096,
+  "optical_paths": [
+    "unit white sky, direct and indirect",
+    "unit white sun, indirect only",
+    "clear reference sky without the sun disc, per channel relative to the source sun",
+    "installed practicals and emissive materials, direct and indirect"
+  ],
+  "solar_elevation_degrees": [
+    25,
+    57
+  ],
+  "diffuse_bounces": 4,
+  "calibration": {
+    "sky": {
+      "mean": [
+        0.00559,
+        0.00471,
+        0.00387
+      ],
+      "maximum": 0.2112,
+      "open_receiver": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "front-low": {
+      "mean": [
+        0.00931,
+        0.00773,
+        0.00675
+      ],
+      "maximum": 0.6953,
+      "open_receiver": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "front-high": {
+      "mean": [
+        0.00171,
+        0.00131,
+        0.00099
+      ],
+      "maximum": 0.1348,
+      "open_receiver": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "rear-low": {
+      "mean": [
+        0.01053,
+        0.00817,
+        0.00681
+      ],
+      "maximum": 0.7016,
+      "open_receiver": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "rear-high": {
+      "mean": [
+        0.00186,
+        0.00146,
+        0.00111
+      ],
+      "maximum": 0.1426,
+      "open_receiver": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "day-sky": {
+      "mean": [
+        0.00258,
+        0.00471,
+        0.00851
+      ],
+      "maximum": 0.2857,
+      "open_receiver": [
+        0.79258,
+        1.35873,
+        2.37829
+      ]
+    },
+    "installed-lights": {
+      "mean": [
+        0.01417,
+        0.00903,
+        0.00528
+      ],
+      "maximum": 17.1124,
+      "open_receiver": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "source_scene": {
+    "file": "21 Beaver - Fitted dining room.blend",
+    "sha256": "15ffbcf57cc8327d3326ba5a28b6fbf2ab043ff9c709dacaa881d87cd1531c50"
+  },
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/fitted-dining/downstairs-daylight.png",
+  "bytes": 183333,
+  "sha256": "9f583e3a91d26db147297ad14414d6b4aa44c46a8594939f01ec41f8a594578d",
+  "build": "scripts/blender-buildings/bake_beaver_bedroom.py",
+  "camera_measurements": {
+    "interior": {
+      "file": "21 Beaver - Fitted dining room.blend",
+      "sha256": "15ffbcf57cc8327d3326ba5a28b6fbf2ab043ff9c709dacaa881d87cd1531c50",
+      "scene": "Dining \u00b7 site daylight",
+      "camera": "Dining table at 1.62 m",
+      "frame": 3,
+      "exposure_ev": 2.799999952316284
+    },
+    "exterior": {
+      "file": "21-beaver.blend",
+      "sha256": "640ab940c3b6a2aaff55a67407f909f39b5e348073af90bd038dbb3893e2dc9c",
+      "scene": "Scene",
+      "camera": "01 \u00b7 Upper story and roof",
+      "frame": 1,
+      "exposure_ev": 0.17000000178813934
+    },
+    "interior_sun_on_horizontal_card": 1.9844632035440406,
+    "exposure_range_ev": 2.63,
+    "exterior_exposed_beam": 2.23264
+  },
+  "fitted_geometry_sha256": "caa9e62c6b298a21e00f2d33fab23e1690080074c7eb4b023236f5480b21646d",
+  "install": "scripts/blender-buildings/cook_beaver_fitted_room.py --lighting"
+}
