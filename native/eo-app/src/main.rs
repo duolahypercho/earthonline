@@ -49,6 +49,8 @@ pub struct Args {
     pub dive_site: Option<eo_render::seabed::Habitat>,
     pub underwater_habitats: bool,
     pub cove_detail: bool,
+    /// the harbours' floating docks (eo-landmarks floating_docks.rs); `--no-floating-docks` leaves them out.
+    pub floating_docks: bool,
     pub black_point_intertidal: bool,
     pub black_point_rockweed: bool,
     pub cove_pile_contact: bool,
@@ -226,6 +228,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
         dive_site: None,
         underwater_habitats: false,
         cove_detail: false,
+        floating_docks: true,
         black_point_intertidal: false,
         black_point_rockweed: false,
         cove_pile_contact: false,
@@ -428,6 +431,8 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--black-point-rockweed" => { a.cove_detail = true; a.black_point_intertidal = true; a.black_point_rockweed = true; }
             "--no-black-point-rockweed" => a.black_point_rockweed = false,
             "--no-cove-detail" => a.cove_detail = false,
+            "--floating-docks" => a.floating_docks = true,
+            "--no-floating-docks" => a.floating_docks = false,
             "--underwater-habitats" => a.underwater_habitats = true,
             "--no-underwater-habitats" => a.underwater_habitats = false,
             "--no-water-optics" => a.look.water_optics = false,
@@ -636,6 +641,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         let opts = if args.landmarks2 { eo_landmarks::set::Options::default() } else { eo_landmarks::set::Options::off() };
         let opts = eo_landmarks::set::Options { bridge_detail: bridge_detail(), ..opts };
         let opts = eo_landmarks::set::Options { cove_detail: args.cove_detail, ..opts };
+        let opts = eo_landmarks::set::Options { floating_docks: opts.floating_docks && args.floating_docks, ..opts };
         std::thread::spawn(move || -> Result<eo_landmarks::LandmarkSet> {
             let ca = CaStandards::load(&p)?;
             eo_landmarks::LandmarkSet::build_with(&p.repo_root, &|x: f64, z: f64| g.sample(x, z), &ca, opts)
@@ -1047,6 +1053,9 @@ pub fn load_world(args: &Args) -> Result<World> {
                     "landmarks2: shore edges {} visited: {} wall ({:.0} m), {} pier ({:.0} m), {} beach, {} county line; {} kept that the 4 m probe alone dropped; {} pier decks, {} piles",
                     c.visited, c.wall, c.wall_m, c.pier, c.pier_m, c.beach, c.county_line, c.kept_by_far_probe, set.piers_built.0, set.piers_built.1
                 );
+            }
+            if set.docks_built.0 > 0 {
+                eprintln!("landmarks2: {} floating docks ({:.0} m), {} guide piles", set.docks_built.0, set.docks_built.2, set.docks_built.1);
             }
         }
         // The paved plazas and the promenade seawalls (built on their own thread

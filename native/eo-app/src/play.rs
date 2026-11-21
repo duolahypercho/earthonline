@@ -67,6 +67,7 @@ fn base_args() -> Args {
         dive_site: None,
         underwater_habitats: false,
         cove_detail: false,
+        floating_docks: true,
         black_point_intertidal: false,
         black_point_rockweed: false,
         cove_pile_contact: false,
@@ -152,6 +153,8 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--black-point-rockweed" => { a.cove_detail = true; a.black_point_intertidal = true; a.black_point_rockweed = true; }
             "--no-black-point-rockweed" => a.black_point_rockweed = false,
             "--no-cove-detail" => a.cove_detail = false,
+            "--floating-docks" => a.floating_docks = true,
+            "--no-floating-docks" => a.floating_docks = false,
             "--underwater-habitats" => a.underwater_habitats = true,
             "--no-underwater-habitats" => a.underwater_habitats = false,
             "--no-water-optics" => a.look.water_optics = false,

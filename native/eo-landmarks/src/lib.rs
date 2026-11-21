@@ -16,6 +16,7 @@
 
 pub mod bay_bridge;
 pub mod data;
+pub mod floating_docks;
 pub mod geometry;
 pub mod golden_gate;
 pub mod ground_cover;
