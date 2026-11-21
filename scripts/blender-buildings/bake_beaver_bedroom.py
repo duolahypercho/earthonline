@@ -1,4 +1,4 @@
-"""Bake the Cycles quilt and the upstairs room's daylight response for the Rust game."""
+"""Bake the quilt and directional room lighting from the furnished Blender scene."""
 
 import argparse
 import gzip
@@ -23,8 +23,18 @@ OUT = ROOT / "public/assets/buildings/beaver-terrace/finishes/patina/furniture/p
 SIZE = 512
 scene = bpy.context.scene
 args = argparse.ArgumentParser()
-args.add_argument("product", choices=("quilt", "light"))
-product = args.parse_args(sys.argv[sys.argv.index("--") + 1 :]).product
+args.add_argument("product", choices=("quilt", "light", "downstairs"))
+args.add_argument(
+    "--output-dir",
+    type=Path,
+    help="Alternative external directory for a verification bake",
+)
+options = args.parse_args(sys.argv[sys.argv.index("--") + 1 :])
+product = options.product
+if options.output_dir:
+    if options.output_dir.resolve().is_relative_to(ROOT):
+        args.error("The verification directory must be outside the checkout.")
+    options.output_dir.mkdir(parents=True, exist_ok=True)
 scene.frame_set(4)
 scene.render.engine = "CYCLES"
 preferences = bpy.context.preferences.addons["cycles"].preferences
@@ -35,6 +45,9 @@ if sys.platform == "darwin":
         for device in devices:
             device.use = device.type == "METAL"
         scene.cycles.device = "GPU"
+if product == "downstairs":
+    scene.frame_set(3)
+    scene.cycles.device = "CPU"
 scene.cycles.seed = 73
 scene.cycles.use_adaptive_sampling = False
 scene.cycles.use_denoising = False
@@ -60,14 +73,14 @@ def publish(name, rgb, metadata):
         b"IHDR", struct.pack(">2I5B", width, height, 8, 6, 0, 0, 0)
     )
     png += chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
-    path = OUT / (name + ".png")
+    path = (options.output_dir or OUT) / (name + ".png")
     path.write_bytes(png)
     metadata["source_scene"] = {
         "file": Path(bpy.data.filepath).name,
         "sha256": hashlib.sha256(Path(bpy.data.filepath).read_bytes()).hexdigest(),
     }
     metadata.update(
-        url="/" + path.relative_to(ROOT / "public").as_posix(),
+        url="/" + (OUT / path.name).relative_to(ROOT / "public").as_posix(),
         bytes=len(png),
         sha256=hashlib.sha256(png).hexdigest(),
         build="scripts/blender-buildings/bake_beaver_bedroom.py",
@@ -179,7 +192,63 @@ def quilt():
     )
 
 
-def daylight():
+def room_probe_mask(site, low, high, counts):
+    """Mask samples inside solid furniture before interpolating their light."""
+    nx, ny, nz = counts
+    mask = np.ones((nz, ny, nx), dtype=bool)
+    graph = bpy.context.evaluated_depsgraph_get()
+    rays = [
+        Vector(axis)
+        for axis in (
+            (1, 0, 0),
+            (-1, 0, 0),
+            (0, 1, 0),
+            (0, -1, 0),
+            (0, 0, 1),
+            (0, 0, -1),
+        )
+    ]
+    for z, pz in enumerate(np.linspace(low[2], high[2], nz)):
+        for y, py in enumerate(np.linspace(low[1], high[1], ny)):
+            for x, px in enumerate(np.linspace(low[0], high[0], nx)):
+                origin = site @ Vector((px, -pz, py))
+                exits = 0
+                for ray in rays:
+                    hit, _, normal, _, _, _ = scene.ray_cast(
+                        graph, origin, ray, distance=1.0
+                    )
+                    if hit and normal.dot(ray) > 0.02:
+                        exits += 1
+                mask[z, y, x] = exits < 3
+    if not mask.any():
+        raise ValueError("No interior probe has an unobstructed side")
+    return mask
+
+
+def fill_solid_probes(field, valid, spacing):
+    # Inside a solid the baked light is undefined. Extend the surrounding
+    # measured air values into those cells so furniture does not stamp a dark
+    # cube on the plaster. Keep every measured point in the open room intact.
+    known = valid.copy()
+    while not known.all():
+        total = np.zeros_like(field)
+        weight = np.zeros_like(known, dtype=np.float32)
+        for axis, step in enumerate(spacing):
+            for shift in (-1, 1):
+                neighbor = np.roll(known, shift, axis)
+                edge = [slice(None)] * 3
+                edge[axis] = 0 if shift == 1 else -1
+                neighbor[tuple(edge)] = False
+                w = neighbor / step**2
+                weight += w
+                total += np.roll(field, shift, axis + 1) * w[None, ..., None]
+        fill = ~known & (weight > 0)
+        field[:, fill] = total[:, fill] / weight[fill, None]
+        known |= fill
+    return field
+
+
+def daylight(downstairs):
     with gzip.open(ROOT / "public/data/sf/sf-city.json.gz", "rt") as f:
         house = next(
             b
@@ -206,13 +275,23 @@ def daylight():
 
     nx, ny, nz = 10, 6, 19
     low, high = (0.22, 10 / 3 + 0.15, 0.23), (6.78, 20 / 3 - 0.17, 12.77)
+    row_offset = 0
+    if downstairs:
+        nx, ny, nz = 15, 6, 33
+        low, high = (0.22, 0.09, 0.23), (6.78, 10 / 3 - 0.16 - 0.055, 12.77)
+        # The underside of the slab is 160 mm below the next storey. Leave
+        # 55 mm of room air above the last receiver; a coplanar bake sees plaster.
+        row_offset = SIZE // 2
+        valid = room_probe_mask(site, low, high, (nx, ny, nz))
+        spacing = [(high[i] - low[i]) / (n - 1) for i, n in ((2, nz), (1, ny), (0, nx))]
+        print("Surveyed air samples", int(valid.sum()), "of", valid.size, flush=True)
     for n in axes:
         for z in np.linspace(low[2], high[2], nz):
             for y in np.linspace(low[1], high[1], ny):
                 for x in np.linspace(low[0], high[0], nx):
                     receiver(site @ Vector((x, -z, y)), n)
     receiver(Vector((0, 0, 550)), Vector((0, 0, 1)))
-    mesh = bpy.data.meshes.new("Upstairs directional receivers")
+    mesh = bpy.data.meshes.new("Directional room receivers")
     mesh.from_pydata(points, [], faces)
     mesh.update()
     obj = bpy.data.objects.new(mesh.name, mesh)
@@ -253,22 +332,57 @@ def daylight():
     for light in scene.objects:
         if light.type == "LIGHT":
             light.hide_render = True
-    for m in bpy.data.materials:
-        if m.node_tree:
-            for node in m.node_tree.nodes:
-                if node.type == "BSDF_PRINCIPLED":
-                    slot = node.inputs["Emission Strength"]
-                    for link in list(slot.links):
-                        m.node_tree.links.remove(link)
+    emission = []
+    for material in bpy.data.materials:
+        if material.node_tree:
+            for shader in material.node_tree.nodes:
+                strength = {
+                    "BSDF_PRINCIPLED": "Emission Strength",
+                    "EMISSION": "Strength",
+                }.get(shader.type)
+                if strength:
+                    slot = shader.inputs[strength]
+                    links = material.node_tree.links
+                    emission.append(
+                        (
+                            slot,
+                            slot.default_value,
+                            [ln.from_socket for ln in slot.links],
+                            links,
+                        )
+                    )
+                    for ln in list(slot.links):
+                        links.remove(ln)
                     slot.default_value = 0
-                elif node.type == "EMISSION":
-                    for link in list(node.inputs["Strength"].links):
-                        m.node_tree.links.remove(link)
-                    node.inputs["Strength"].default_value = 0
     clear_sky = scene.world.copy()
     sky_node = next(n for n in clear_sky.node_tree.nodes if n.type == "TEX_SKY")
     sky_node.sun_disc = False
-    reading_light = bpy.data.objects["Bedside reading light"]
+    practicals = [bpy.data.objects["Bedside reading light"]]
+    practical_label = "reading-light"
+    lamp_units = 1.0
+    calibration_meta = {}
+    if downstairs:
+        practicals = [
+            o for o in scene.objects if o.type == "LIGHT" and o.data.type == "POINT"
+        ]
+        practical_label = "installed-lights"
+        floor = json.loads((OUT / "dining-floor-light.provenance.json").read_text())
+        if (
+            floor["source_scene"]["sha256"]
+            != hashlib.sha256(Path(bpy.data.filepath).read_bytes()).hexdigest()
+        ):
+            raise ValueError(
+                "The floor light calibration belongs to another furnished scene"
+            )
+        lamp_units = floor["fixture_units_per_source_unit"]
+        calibration_meta = {
+            "house_sha256": floor["house_sha256"],
+            "fixture_units_per_source_unit": lamp_units,
+            "fixtures": {o.name: o.data.energy for o in practicals},
+            "atlas_row_offset": row_offset,
+            "solid_probes": int((~valid).sum()),
+            "transfer_encoding": "sqrt(L/(1+L))",
+        }
     world = bpy.data.worlds.new("Unit outdoor radiance")
     world.use_nodes = True
     scene.world = world
@@ -279,7 +393,7 @@ def daylight():
     sun.angle = math.radians(0.53)
     lamp = bpy.data.objects.new(sun.name, sun)
     scene.collection.objects.link(lamp)
-    scene.cycles.samples = 1536
+    scene.cycles.samples = 4096 if downstairs else 1536
     scene.cycles.diffuse_bounces = 4
     scene.cycles.max_bounces = 10
     atlas = np.zeros((SIZE, SIZE, 3), np.float32)
@@ -292,13 +406,19 @@ def daylight():
             ("rear-low", -1, 25),
             ("rear-high", -1, 57),
             ("day-sky", 0, 0),
-            ("reading-light", 0, 0),
+            (practical_label, 0, 0),
         )
     ):
         background.inputs["Strength"].default_value = float(index == 0)
         scene.world = clear_sky if label == "day-sky" else world
         lamp.hide_render = not 1 <= index <= 4
-        reading_light.hide_render = label != "reading-light"
+        for light in practicals:
+            light.hide_render = label != practical_label
+        if downstairs and label == practical_label:
+            for slot, value, sockets, links in emission:
+                slot.default_value = value
+                for socket in sockets:
+                    links.new(socket, slot)
         angle = math.radians(altitude)
         incident = Vector((0, side * math.cos(angle), math.sin(angle)))
         lamp.rotation_euler = (-incident).to_track_quat("-Z", "Y").to_euler()
@@ -325,19 +445,33 @@ def daylight():
         if label == "day-sky":
             key = bpy.data.objects["Morning sun"].data
             field = field / (np.asarray(key.color) * key.energy)
-        if label == "reading-light":
-            field = field / 2.0
-        for axis in range(6):
-            y0 = (index * 6 + axis) * ny
-            for z in range(nz):
-                atlas[y0 : y0 + ny, z * nx : (z + 1) * nx] = np.sqrt(
-                    np.clip(field[axis, z], 0, 1)
-                )
-        checks[label] = dict(
-            mean=[round(float(c), 5) for c in field.mean(axis=(0, 1, 2, 3))],
-            maximum=round(float(field.max()), 4),
-            open_receiver=[round(float(c), 5) for c in calibration],
+        if label == practical_label:
+            field = field * (lamp_units / 2.0)
+        if downstairs:
+            if label == "sky":
+                # Thin overlapping mouldings can enclose a point without three
+                # outward ray hits. A white sky reaching none of its six faces
+                # identifies those sealed samples independently of lamp state.
+                sees_sky = np.max(field, axis=(0, 4)) > np.finfo(np.float32).eps
+                calibration_meta["sealed_probes"] = int((valid & ~sees_sky).sum())
+                valid &= sees_sky
+                if not valid.any():
+                    raise ValueError("The white sky did not reach the downstairs room")
+            field = fill_solid_probes(field.copy(), valid, spacing)
+        encoded = (
+            np.sqrt(field / (1 + field))
+            if downstairs
+            else np.sqrt(np.clip(field, 0, 1))
         )
+        for axis in range(6):
+            y0 = row_offset + (index * 6 + axis) * ny
+            for z in range(nz):
+                atlas[y0 : y0 + ny, z * nx : (z + 1) * nx] = encoded[axis, z]
+        checks[label] = {
+            "mean": [round(float(c), 5) for c in field.mean(axis=(0, 1, 2, 3))],
+            "maximum": round(float(field.max()), 4),
+            "open_receiver": [round(float(c), 5) for c in calibration],
+        }
         print(label, checks[label], flush=True)
     key_light = bpy.data.objects["Morning sun"]
     sun_dir = key_light.matrix_world.to_quaternion() @ Vector((0, 0, 1))
@@ -351,7 +485,7 @@ def daylight():
     outdoor_exposure = scene.view_settings.exposure
     sky_return = float(np.dot(checks["sky"]["mean"], [0.2126, 0.7152, 0.0722]))
     publish(
-        "bedroom-daylight",
+        "downstairs-daylight" if downstairs else "bedroom-daylight",
         atlas,
         dict(
             exposure_range_ev=round(room_exposure - outdoor_exposure, 4),
@@ -360,6 +494,7 @@ def daylight():
             source="Authored terrace and surrounding city geometry in the editable Blender scene.",
             attribution="Earth Online",
             license="Project-authored lighting data",
+            **calibration_meta,
             grid=[nx, ny, nz],
             minimum=low,
             maximum=high,
@@ -368,7 +503,9 @@ def daylight():
                 "unit white sky, direct and indirect",
                 "unit white sun, indirect only",
                 "clear reference sky without the sun disc, per channel relative to the source sun",
-                "physical 5 W bedside fixture, direct and indirect",
+                "installed practicals and emissive materials, direct and indirect"
+                if downstairs
+                else "physical 5 W bedside fixture, direct and indirect",
             ],
             solar_elevation_degrees=[25, 57],
             diffuse_bounces=4,
@@ -380,4 +517,4 @@ def daylight():
 if product == "quilt":
     quilt()
 else:
-    daylight()
+    daylight(product == "downstairs")
