@@ -68,8 +68,8 @@ Other folders:
 
 ## Requirements
 
-- A stable Rust toolchain that supports edition 2024 (Rust 1.85 or newer),
-  installed with [rustup](https://rustup.rs).
+- A stable Rust toolchain that supports edition 2024 and let chains (Rust
+  1.88 or newer), installed with [rustup](https://rustup.rs).
 - A GPU and driver that wgpu supports: Vulkan or DirectX 12 on Windows,
   Vulkan on Linux, Metal on macOS. The project is developed and tested on
   Windows. macOS (Metal) builds, runs the bench and runs the tests, but is
@@ -147,6 +147,35 @@ percent) impairs a client's link in both directions. `eo-server bench`,
 bandwidth on a busy street and client prediction. Clients and bots must
 use the server's `--ground-scale` and its `--structures` / `--tunnels`;
 the handshake refuses one whose world differs and says why.
+
+### Packaged builds
+
+`scripts/release/package.sh <label> [out-dir]` (after
+`cargo build --release -p eo-app -p eo-server`) packs a playable copy into
+`dist/EarthOnline-<version>-<label>.zip`: `eo-app`, `eo-server`, the
+platform's launcher from `scripts/release/launchers/` (it starts `--play`),
+[Docs/PLAYING.md](../Docs/PLAYING.md), and the files tracked at `HEAD` that
+the game reads at run time: `public/`, `native/assets/`, each crate's
+`data/`, the street-standards table and the licences. The folder keeps the
+repository's layout. A packaged build finds its files as a checkout does:
+the crates' tables, `native/assets/` and the model cache are under
+`eo_data::native_dir()`, which is the `native/` folder the binary was built
+in while that folder exists, and otherwise the `native/` folder beside the
+data root found from the working directory or the executable. The cache is
+`native/cache/` inside the game's folder unless `EO_NATIVE_CACHE` names
+another. Optional off-repository assets are never packed.
+
+[`.github/workflows/release.yml`](../.github/workflows/release.yml) builds
+and packs Windows x64, macOS arm64 and Linux x64 for every pull request into
+`main` that touches the game (the zips are the run's artifacts for a week),
+and for a pushed `v*` tag publishes them as a GitHub Release:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The builds are not code-signed; PLAYING.md tells players how to open them.
 
 ## Command-line switches
 
@@ -348,7 +377,7 @@ Experiments are not shipped defaults.
 | Variable | What |
 | --- | --- |
 | `EO_REPO_ROOT` | The repository root, if it cannot be found from the working directory |
-| `EO_NATIVE_CACHE` | The cache folder (default `native/cache/`) |
+| `EO_NATIVE_CACHE` | The cache folder (default `native/cache/`, inside the game's folder in a packaged build) |
 | `EO_UI_SETTINGS` | Where the interface keeps its settings file (default: the user's application-data folder) |
 | `EO_UI_FONT_DIR` | A font folder to use instead of the system font folder |
 | `EO_TRACE_LOAD` | Print timings of the world load |
