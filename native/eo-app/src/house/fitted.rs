@@ -1,5 +1,5 @@
 //! The measured Blender dining furniture and its native PBR texture layers.
-use super::{Finishes, House, Point, fitted_board::Board};
+use super::{Finishes, House, Point, fitted_board::Board, window_linen::Window};
 use anyhow::{Result, ensure};
 use eo_assets::{AssetRef, CookedModel, glb, kit::BakedMaps};
 use eo_render::{
@@ -75,6 +75,8 @@ pub(super) struct Recipe {
     finish: Option<FinishSurvey>,
     #[serde(skip)]
     kitchen: Option<KitchenSurvey>,
+    #[serde(skip)]
+    window: Option<(Window, usize, bool)>,
     #[serde(flatten)]
     geometry: AssetRef,
     house_sha256: String,
@@ -94,6 +96,8 @@ impl Recipe {
         shell_hash: &str,
         finishes: bool,
         kitchen: bool,
+        window: bool,
+        measured: bool,
     ) -> Result<(Self, Vec<BakedMaps>)> {
         let mut spec: Self =
             serde_json::from_slice(&std::fs::read(dir.join("fitted-room.provenance.json"))?)?;
@@ -182,12 +186,26 @@ impl Recipe {
             );
             spec.kitchen = Some(survey);
         }
+        if window {
+            let window = Window::read(dir, shell_hash, &spec.geometry.sha256)?;
+            let index = pages.len() - 1;
+            if measured {
+                pages.insert(index, Finishes::read_maps(root, &window.maps, 3)?);
+            }
+            spec.window = Some((window, index, measured));
+        }
         Ok((spec, pages))
     }
 
     pub fn load(&self, root: &Path, table: &mut MaterialTable, first_layer: usize) -> Result<Room> {
         let data = glb::read_verified(&self.geometry.path(root), &self.geometry)?;
-        let (mut model, mut uv) = glb::cook_glb_with_uv0(&data)?;
+        let (mut model, mut uv) = if self.window.is_some() {
+            let (model, uv, _, _) =
+                glb::cook_furnished_glb(&data, &Default::default(), false, Some(Window::replaces))?;
+            (model, uv)
+        } else {
+            glb::cook_glb_with_uv0(&data)?
+        };
         if let Some(survey) = &self.kitchen {
             survey.board.apply(&mut model, &mut uv)?;
         }
@@ -281,10 +299,14 @@ impl Recipe {
                 ]
             })
             .unwrap_or_default();
+        let window = self
+            .window
+            .as_ref()
+            .map(|(w, i, measure)| w.load(root, table, first_layer + i, *measure))
+            .transpose()?;
         Ok(Room {
-            model,
-            uv,
-            draws,
+            base: Geometry { model, uv, draws },
+            window,
             finish_parameters,
             kitchen_frame: self
                 .kitchen
@@ -302,13 +324,27 @@ impl Recipe {
 pub(super) struct Room {
     pub(super) kitchen_frame: [[f32; 4]; 5],
     pub(super) finish_parameters: [[f32; 4]; 2],
-    model: CookedModel,
-    uv: Vec<[f32; 2]>,
-    draws: Vec<(u32, bool, bool)>,
+    base: Geometry,
+    window: Option<Geometry>,
+}
+
+pub(super) struct Geometry {
+    pub model: CookedModel,
+    pub uv: Vec<[f32; 2]>,
+    pub draws: Vec<(u32, bool, bool)>,
 }
 
 impl Room {
     pub fn append(&self, house: &House, scene: &mut Scene, basis: Mat3) {
+        self.base.append(house, scene, basis);
+        if let Some(window) = &self.window {
+            window.append(house, scene, basis);
+        }
+    }
+}
+
+impl Geometry {
+    fn append(&self, house: &House, scene: &mut Scene, basis: Mat3) {
         let base = scene.vertices.len() as i32;
         let first = scene.indices.len() as u32;
         for ((pos, normal), uv) in self

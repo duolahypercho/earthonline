@@ -80,6 +80,7 @@ fn base_args() -> Args {
         house_fitted_dining: false,
         house_fitted_finishes: false,
         house_kitchen_light: false,
+        house_window_linen: false,
         house_dining_meter: false,
         house_glazing: true,
         beaver_house: false,
@@ -150,7 +151,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
-            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" | "--house-fitted-finishes" | "--house-kitchen-light" => {
+            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" | "--house-fitted-finishes" | "--house-kitchen-light" | "--house-window-linen" => {
                 a.beaver_house = true;
                 a.house_finishes = true;
                 a.house_patina = true;
@@ -160,6 +161,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
                     "--house-dining-light" => a.house_dining_light = true,
                     "--house-downstairs-light" => a.house_downstairs_light = true,
                     "--house-table-light" => a.house_table_light = true,
+                    "--house-window-linen" => { a.house_fitted_dining = true; a.house_window_linen = true; }
                     "--house-kitchen-light" => { a.house_fitted_dining = true; a.house_kitchen_light = true; }
                     "--house-fitted-finishes" => { a.house_fitted_dining = true; a.house_fitted_finishes = true; }
                     "--house-fitted-dining" => a.house_fitted_dining = true,
@@ -175,6 +177,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-downstairs-light" => a.house_downstairs_light = false,
             "--no-house-table-light" => a.house_table_light = false,
             "--no-house-fitted-finishes" => a.house_fitted_finishes = false,
+            "--no-house-window-linen" => a.house_window_linen = false,
             "--no-house-kitchen-light" => a.house_kitchen_light = false,
             "--no-house-fitted-dining" => a.house_fitted_dining = false,
             "--no-house-oak-finish" => a.house_oak_finish = false,
@@ -1301,6 +1304,45 @@ mod house_tests {
         check_beaver_walk(true, true, true, true, true);
         let (off, _) = parse(&["--house-fitted-dining".into(),"--no-house-fitted-dining".into()]).unwrap();
         assert!(off.house_photo && !off.house_fitted_dining);
+    }
+
+    #[test]
+    fn fitted_window_replaces_one_blind_and_binds_both_cloth_faces() {
+        for (lighting, enabled) in [(true, true), (false, true), (true, false)] {
+            let mut flags = vec!["--house-window-linen".to_owned(), "--house-fitted-finishes".to_owned(), "--house-kitchen-light".to_owned()];
+            if !enabled { flags.push("--no-house-window-linen".to_owned()); }
+            let (mut args, _) = parse(&flags).unwrap();
+            args.interior_lighting = lighting;
+            args.kit = false;
+            args.landmarks = false;
+            args.models = false;
+            let world = load_world(&args).unwrap();
+            let table = &world.authored.materials;
+            let material_name = |obj: &eo_render::scene::GpuObject| table.names[obj.material as usize].as_str();
+            let old = world.scene.objects.iter().filter(|o| material_name(o).ends_with("/Unbleached translucent Roman blind")).count();
+            let installed: Vec<_> = world.scene.objects.iter().filter(|o|material_name(o).starts_with("21-beaver-fitted/Window/")).collect();
+            assert_eq!(old,usize::from(!enabled));
+            assert_eq!(installed.len(),if enabled {4} else {0});
+            if !enabled { continue; }
+            let cloth = installed.iter().find(|o|material_name(o).ends_with("/Sun-filtering plainweave flax")).unwrap();
+            let mat = table.gpu[cloth.material as usize];
+            assert_eq!(mat.flags,0);
+            assert_eq!(mat.thin_absorption,if lighting {-1.} else {0.});
+            if lighting {
+                let pages = crate::house::Finishes::load(&world.paths.repo_root,&args).unwrap().into_maps();
+                let i = usize::try_from(mat.layer).unwrap().checked_sub(table.layers.len()).unwrap();
+                let maps = &pages[i];
+                // Each face carries eight different light sources, and the third
+                // image is neutral-centred yarn detail. A kit layer is invalid here.
+                assert_ne!(maps.albedo,maps.normal);
+                assert!(maps.albedo.chunks_exact(maps.albedo.len()/8).all(|row|row.chunks_exact(4).any(|v| v[0] > 10)));
+                assert!(mat.base[0] > 9. && mat.base[2] < -2. && mat.base[3] >= 0.99);
+                let arclengths: std::collections::BTreeSet<_> = maps.orm.chunks_exact(4).map(|p| u16::from_be_bytes([p[1],p[2]])).collect();
+                assert!(arclengths.len() > 1024);
+            } else {
+                assert_eq!(mat.layer,-1);
+            }
+        }
     }
 
     #[test]

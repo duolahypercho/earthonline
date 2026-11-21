@@ -2,6 +2,7 @@
 mod dimensions;
 mod fitted;
 mod fitted_board;
+mod window_linen;
 mod table_light;
 mod oak;
 use table_light::TableLight;
@@ -293,7 +294,7 @@ impl Finishes {
                 &mut street.orm, &mut floorboards.orm)?;
         }
         let (fitted, fitted_maps) = if fitted_enabled {
-            let (recipe, maps) = fitted::Recipe::read(root, &dining_dir, &manifest.house_sha256, args.house_fitted_finishes && args.interior_lighting, args.house_kitchen_light && args.interior_lighting)?;
+            let (recipe, maps) = fitted::Recipe::read(root, &dining_dir, &manifest.house_sha256, args.house_fitted_finishes && args.interior_lighting, args.house_kitchen_light && args.interior_lighting, args.house_window_linen, args.interior_lighting)?;
             (Some(recipe), maps)
         } else { (None, Vec::new()) };
         Ok(Self {
