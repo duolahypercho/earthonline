@@ -109,6 +109,7 @@ struct LookUniform {
     front_daylight: crate::front_daylight::Field,
     wall_sample: [f32; 4],
     wall_overcast: [f32; 4],
+    window_sample: [f32; 4],
 }
 
 #[repr(C)]
@@ -216,6 +217,9 @@ pub struct LookGpu {
     pub kitchen_frame: [[f32; 4]; 5],
     pub front_daylight: Option<crate::front_daylight::FrontDaylight>,
     pub wall_daylight_layer: Option<u32>,
+    window_optics: wgpu::Buffer,
+    trace_window_glass: bool,
+    front_door_open: bool,
     pub options: LookOptions,
     pub(crate) output_format: wgpu::TextureFormat,
     object_count: u32,
@@ -275,7 +279,7 @@ pub fn city_shader_source() -> String {
         + "\n" + include_str!("sky_light_core.wgsl") + "\n" + include_str!("sky_light.wgsl") // sky
         + &crate::landmarks::city_wgsl() // landmarks
         + "\n" + include_str!("cc0.wgsl") + &crate::cc0::wgsl_constants(crate::cc0::scoring_pitch_m()) // cc0
-        + "\n" + include_str!("fitted_finish.wgsl")
+        + "\n" + include_str!("fitted_finish.wgsl") + "\n" + include_str!("window_optics.wgsl")
 }
 
 /// look_common.wgsl with (surfaces) the street field's constants (GF_*), from
@@ -517,6 +521,7 @@ impl LookGpu {
                 entry(9, fs, sbuf(true)),
                 entry(10, fs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
                 entry(11, fs, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
+                entry(12, fs, sbuf(true)),
             ],
         });
         let ao_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -531,7 +536,8 @@ impl LookGpu {
             device,
             crate::sky::SkyInit { look_buf: &look_buf, hdr_format: HDR_FORMAT, depth_format: crate::DEPTH_FORMAT, shadow_array: &shadow_array, cmp_sampler: &cmp_sampler },
         );
-        let main_bg = [0, 1].map(|_| Self::make_main_bg(device, &main_bgl, &look_buf, &shadow_array, &cmp_sampler, &ao_dummy.0, &ao_dummy.1, &ao_sampler, &sky, &sky.dummy_hist));
+        let window_optics = buffer("empty-window-optics", 16, wgpu::BufferUsages::STORAGE);
+        let main_bg = [0, 1].map(|_| Self::make_main_bg(device, &main_bgl, &look_buf, &shadow_array, &cmp_sampler, &ao_dummy.0, &ao_dummy.1, &ao_sampler, &sky, &sky.dummy_hist, &window_optics));
         // the occlusion + bounce compute.
         let ao_src = format!("{}\n{}", look_common_source(), include_str!("surfaces_ao.wgsl"));
         let ao_module = device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("surfaces_ao.wgsl"), source: wgpu::ShaderSource::Wgsl(ao_src.into()) });
@@ -702,7 +708,7 @@ impl LookGpu {
             multiview_mask: None,
             cache: None,
         });
-        let bytes = shadow_bytes + draws_bytes + (SHADOW_COUNTER_WORDS * 4) as u64 + look_buf.size() + cull_buf.size() + view_buf.size() + sky.bytes; // sky
+        let bytes = shadow_bytes + draws_bytes + (SHADOW_COUNTER_WORDS * 4) as u64 + look_buf.size() + cull_buf.size() + view_buf.size() + sky.bytes + window_optics.size(); // sky
         Self {
             sky, // sky
             sky_depth_ok: std::sync::atomic::AtomicBool::new(false), // sky
@@ -716,6 +722,9 @@ impl LookGpu {
             kitchen_frame: [[0.;4];5],
             front_daylight: None,
             wall_daylight_layer: None,
+            window_optics,
+            trace_window_glass: false,
+            front_door_open: false,
             output_format: init.output_format,
             object_count: init.object_count,
             compact: init.compact,
@@ -777,6 +786,7 @@ impl LookGpu {
         ao_sampler: &wgpu::Sampler,
         sky: &crate::sky::SkyGpu,     // sky
         prev: &wgpu::TextureView,     // the previous resolved frame
+        optics: &wgpu::Buffer,
     ) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("look-bg"),
@@ -795,8 +805,29 @@ impl LookGpu {
                 wgpu::BindGroupEntry { binding: 9, resource: sky.clusters.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 10, resource: wgpu::BindingResource::TextureView(prev) },
                 wgpu::BindGroupEntry { binding: 11, resource: wgpu::BindingResource::Sampler(&sky.rep) },
+                wgpu::BindGroupEntry { binding: 12, resource: optics.as_entire_binding() },
             ],
         })
+    }
+
+    /// The optical survey measured the entry leaf at its closed position.
+    pub fn set_front_door_open(&mut self, open: bool) {
+        self.front_door_open = open;
+    }
+
+    /// Install the source geometry once, before the first camera update.
+    pub fn install_window_optics(&mut self, scene: &crate::window_optics::WindowOptics, trace_glass: bool) -> anyhow::Result<()> {
+        use wgpu::util::DeviceExt;
+        let bytes = scene.bytes();
+        anyhow::ensure!(bytes.len() as u64 <= self.device.limits().max_storage_buffer_binding_size as u64, "optical scene exceeds device binding limit");
+        let old_size = self.window_optics.size();
+        self.trace_window_glass = trace_glass;
+        self.window_optics = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("house-window-optics"), contents: bytes, usage: wgpu::BufferUsages::STORAGE,
+        });
+        self.bytes = self.bytes - old_size + self.window_optics.size();
+        self.rebuild_main_bg();
+        Ok(())
     }
 
     fn rebuild_main_bg(&self) {
@@ -808,7 +839,7 @@ impl LookGpu {
         // main_bg[p] is bound while the resolve writes history p: it reads history 1 - p.
         let bg = |p: usize| {
             let prev = self.sky.history_view(1 - p).unwrap_or_else(|| self.sky.dummy_hist.clone());
-            Self::make_main_bg(&self.device, &self.main_bgl, &self.look_buf, &self.shadow_array, &self.cmp_sampler, a, z, &self.ao_sampler, &self.sky, &prev)
+            Self::make_main_bg(&self.device, &self.main_bgl, &self.look_buf, &self.shadow_array, &self.cmp_sampler, a, z, &self.ao_sampler, &self.sky, &prev, &self.window_optics)
         };
         *self.main_bg.lock().unwrap() = [bg(0), bg(1)];
     }
@@ -1203,11 +1234,15 @@ impl LookGpu {
             fitted_finish: self.fitted_finish,
             kitchen_frame: self.kitchen_frame,
             wall_sample: [self.wall_daylight_layer.unwrap_or(0) as f32,
-                ((f.hour as f32-8.)*0.5).clamp(0.,5.), (m.profile.overcast*wx_keep) as f32, 0.],
-            wall_overcast: self.wall_daylight_layer.map_or([0.;4], |_| {
+                ((f.hour as f32-8.)*0.5).clamp(0.,5.), (m.profile.overcast*wx_keep) as f32, f32::from(self.front_door_open)],
+            window_sample: {
+                let [a, b, t] = crate::window_optics::light_sample(f.hour as f32);
+                [f32::from(self.trace_window_glass), a, b, t]
+            },
+            wall_overcast: if self.wall_daylight_layer.is_some() || self.window_optics.size() > 16 {
                 let [r,g,b] = crate::front_daylight::overcast_radiance(&f);
                 [r,g,b,0.]
-            }),
+            } else { [0.;4] },
             front_daylight: self.front_daylight.as_ref().map_or([[[0.; 4]; 9]; 6], |light| {
                 light.at(&f, (m.profile.overcast * wx_keep) as f32)
             }),

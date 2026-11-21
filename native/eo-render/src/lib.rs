@@ -38,6 +38,7 @@ pub mod props_lib; // props
 pub mod props_lib2;
 pub mod probe; // facade
 pub mod front_daylight;
+pub mod window_optics;
 pub mod rooms;
 pub mod sky; // sky
 pub mod street;

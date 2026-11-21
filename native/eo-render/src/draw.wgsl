@@ -53,6 +53,7 @@ const F_THIN_GLASS: u32 = 16u;
 // the street surface material (street classes in the vertex alpha).
 const F_STREET: u32 = 32u;
 const F_FRONT_DAYLIGHT: u32 = 64u;
+const F_JOINERY_LIGHT: u32 = 128u;
 const WALL_DAYLIGHT_BIT: u32 = 0x80000000u;
 const FLOOR_SCAN_BIT: u32 = 512u;
 const THIN_FIBRE_BIT: u32 = 262144u;
@@ -1733,14 +1734,22 @@ fn shade(in: VOut) -> vec4<f32> {
         let angle = in.aux.x * (2.0 * PI / 255.0);
         let rear_sash = in.color.b > 4.5 / 255.0;
         let outside = select(1.0, -1.0, rear_sash) * vec2<f32>(sin(angle),-cos(angle));
-        if (dot(v.xz,outside) <= 0.0) {
-            return look_light(s,m,v,in.world,n,in.object);
+        let outward=dot(v.xz,outside)>0.;
+        let ray=reflect(-v,n);
+        if look.window_sample.x>.5 && (outward || (window_optics[6].w&0x80000000u)!=0u) {
+            // Resolve both interfaces of a thin uncoated sheet at its outer face.
+            if dot(in.normal,v)<0. { return vec4<f32>(0.); }
+            let cos_i = clamp(dot(n,v),0.,1.);
+            let ior = 1.49;
+            let cos_t = sqrt(max(0.,1.-(1.-cos_i*cos_i)/(ior*ior)));
+            let rs=(cos_i-ior*cos_t)/max(.0001,cos_i+ior*cos_t);
+            let rp=(ior*cos_i-cos_t)/max(.0001,ior*cos_i+cos_t);
+            let reflection=.5*(rs*rs+rp*rp);
+            return vec4<f32>(window_trace(in.world+.002*ray,ray,1e8,0u).rgb, 2.*reflection/(1.+reflection));
         }
+        if !outward { return look_light(s,m,v,in.world,n,in.object); }
         let pane_layer = i32(textureNumLayers(kit_albedo)) - select(3, 4, rear_sash);
-        // The two real glass faces blend separately. Divide by opacity because
-        // the blended pass multiplies the returned radiance by alpha once.
-        // A low-opacity pane otherwise suppresses its own reflection twice.
-        let ray = reflect(-v,n);
+        // Each face blends separately when using the captured panorama.
         let uv = vec2<f32>(atan2(ray.x,-ray.z) / (2.0*PI) + 0.5,
                            clamp(0.5 - asin(clamp(ray.y,-1.0,1.0)) / PI,0.002,0.998));
         let day = textureSampleLevel(kit_albedo,kit_sampler,uv,pane_layer,0.7).rgb;
@@ -1755,6 +1764,10 @@ fn shade(in: VOut) -> vec4<f32> {
         return vec4<f32>(reflected*fresnel/alpha,alpha);
     }
     // Lighting, shadows and fog: the JS game's light rig (look_light.wgsl).
+    if (m.flags & F_JOINERY_LIGHT) != 0u && frame.copy_step.z < .5 {
+        let finish = (m.flags >> 8u) & 7u;
+        joinery_diffuse = window_trace(in.world + .012*n, -n, .024, finish);
+    }
     return look_light(s, m, v, in.world, n, in.object);
 }
 
