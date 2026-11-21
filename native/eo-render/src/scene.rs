@@ -108,6 +108,8 @@ pub const DINING_FLOOR_LIGHT_BIT: u32 = 1 << 24;
 pub const DOWNSTAIRS_LIGHT_BIT: u32 = 1 << 25;
 /// The tabletop and place settings receive the installed pendant above the wood.
 pub const TABLE_LIGHT_BIT: u32 = 1 << 26;
+/// Photographic wood and its two reflection lobes on the four dining boards.
+pub const OAK_FINISH_BIT: u32 = 1 << 27;
 
 /// Material 0: the vertex colour (footprints, terrain, roads, sea).
 pub const MATERIAL_VERTEX_COLOUR: u32 = 0;

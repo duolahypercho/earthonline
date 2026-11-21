@@ -1,6 +1,7 @@
 //! Site and collision integration for the Blender-built terrace at 21 Beaver Street.
 mod dimensions;
 mod table_light;
+mod oak;
 use table_light::TableLight;
 mod door;
 mod lod;
@@ -97,6 +98,7 @@ struct RoomLight {
 pub struct Finishes {
     downstairs_light: bool,
     table_light: Option<TableLight>,
+    oak_finish: Option<oak::Finish>,
     dining_lamp: Option<[f32; 4]>,
     mission_roof: bool,
     room_light: Option<RoomLight>,
@@ -257,9 +259,13 @@ impl Finishes {
         } else {
             None
         };
-        let floorboards = Self::read_maps(root, &floor, 3)?;
+        let mut floorboards = Self::read_maps(root, &floor, 3)?;
+        let oak_finish = if args.house_oak_finish && args.interior_lighting && photo && furniture && patina {
+            Some(oak::Finish::load(root, &directory, &manifest.house_sha256, &mut floorboards.orm)?)
+        } else { None };
         Ok(Self {
             downstairs_light,
+            oak_finish,
             table_light,
             dining_lamp,
             mission_roof,
@@ -354,6 +360,7 @@ pub struct House {
     room_meter: Option<[f32; 3]>,
     downstairs_light: bool,
     table_light: Option<TableLight>,
+    oak_finish: Option<oak::Finish>,
     dining_lamp: Option<[f32; 4]>,
     probes: Option<[ProbeVolume; 2]>,
     collision: Vec<[Point; 3]>,
@@ -525,6 +532,7 @@ impl House {
             room_meter,
             table_light,
             table_vertices,
+            oak_finish: finishes.and_then(|f| f.oak_finish),
             downstairs_light: finishes.is_some_and(|f| f.downstairs_light),
             dining_lamp: finishes.and_then(|f| f.dining_lamp),
             probes: finishes.map(|r| [
@@ -894,6 +902,10 @@ impl House {
         [a[0], b[0]].map(|x| self.point(x, b[1], a[2]))
     }
 
+    pub fn oak_finish(&self) -> [[f32; 4]; 3] {
+        self.oak_finish.map(|finish| finish.parameters).unwrap_or_default()
+    }
+
     pub fn table_light(&self) -> [[f32; 4]; 3] {
         self.table_light.as_ref().map(TableLight::uniforms).unwrap_or_default()
     }
@@ -1235,6 +1247,9 @@ impl House {
             }
             if self.photo && dining_plank(&self.model.materials[part.material as usize].name).is_some() {
                 o.kind |= eo_render::scene::TABLE_BOARD_BIT;
+                if self.oak_finish.is_some() {
+                    o.kind |= eo_render::scene::OAK_FINISH_BIT;
+                }
             }
             if self.photo && !self.light_transfer.is_empty() {
                 o.kind |= eo_render::scene::ENCLOSURE_TRANSFER_BIT;

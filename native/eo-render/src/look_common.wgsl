@@ -79,6 +79,7 @@ struct Look {
     enclosure_frame: mat4x4<f32>,
     dining_lamp: vec4<f32>,
     table_light: array<vec4<f32>,3>,
+    oak_finish: array<vec4<f32>,3>,
 };
 
 // wet-surface-reflection.js `skyDomeRadiance`: the sky model's horizon

@@ -111,6 +111,10 @@ fn lk_dfg(nv: f32, rough: f32) -> vec2<f32> {
 var<private> rm_emit: vec3<f32>;
 // Set by the house vertices that select a local reflection, consumed by enamel and waxed boards.
 var<private> room_radiance: vec3<f32>;
+var<private> oak_coated: bool;
+var<private> oak_coat_radiance: vec3<f32>;
+var<private> oak_daylight: vec3<f32>;
+var<private> oak_pendant: vec3<f32>;
 var<private> room_enclosure: f32;
 var<private> room_daylight: f32;
 var<private> measured_room: bool;
@@ -233,6 +237,20 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
 
     var lit = direct_d + direct_s + indirect_d + indirect_s + bounce + m.emissive.rgb + rm_emit; // + the room
     lit = lit + sky_local_lights(world, n, v, diffuse, f0, rough); // street lamps, headlamps
+    if (oak_coated) {
+        let finish = look.oak_finish[1];
+        let coat_nv = max(dot(ng,v),.0001);
+        let grazing = finish.w + (1.-finish.w)*pow(1.-coat_nv,5.);
+        let dfg_coat = lk_dfg(coat_nv,finish.z);
+        var wax = oak_coat_radiance*(finish.w*dfg_coat.x+dfg_coat.y);
+        if (nl>0.) {
+            wax += key*(max(dot(ng,l),0.)/nl)*lk_ggx(ng,v,l,vec3<f32>(finish.w),finish.z);
+        }
+        if (any(oak_pendant > vec3<f32>(0.))) {
+            wax += pendant_gloss(oak_pendant,world,ng,v,finish.z);
+        }
+        lit = lit*(1.-finish.y*grazing) + finish.y*wax;
+    }
     var alpha = s.alpha;
     if (glass && m.emissive.w > 0.0) {
         // the glass's clearcoat layer (three's PhysicalLightingModel:

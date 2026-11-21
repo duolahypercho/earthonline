@@ -62,6 +62,7 @@ const BEDROOM_LIGHT_BIT: u32 = 8388608u;
 const DINING_FLOOR_LIGHT_BIT: u32 = 16777216u;
 const DOWNSTAIRS_LIGHT_BIT: u32 = 33554432u;
 const TABLE_LIGHT_BIT: u32 = 67108864u;
+const OAK_FINISH_BIT: u32 = 134217728u;
 const ENCLOSURE_TRANSFER_BIT: u32 = 131072u;
 const WAXED_BOARD_BIT: u32 = 32768u;
 const COURTYARD_BOUNCE_BIT: u32 = 65536u;
@@ -747,6 +748,80 @@ fn kitchen_reflection(r: vec3<f32>, angle: f32, row: f32, rough: f32) -> vec3<f3
     return albedo * ambient / PI + day.rgb * sky + lamp.rgb * 4.0 + day.a * lk_sky_sample(r);
 }
 
+// The quarter-board probes are prefiltered separately for the scanned oak and
+// its wax. The atlas has a duplicate texel at the azimuth seam in each tile.
+fn oak_ray_uv(ray: vec3<f32>) -> vec2<f32> {
+    let depth = normalize((vec4<f32>(0.,0.,1.,0.) * look.enclosure_frame).xyz);
+    let across = vec3<f32>(depth.z,0.,-depth.x);
+    let azimuth = atan2(dot(ray,across),-dot(ray,depth));
+    let elevation = asin(clamp(ray.y,0.,1.));
+    return vec2<f32>(1.) + vec2<f32>(62.,30.) *
+        vec2<f32>(.5 + azimuth/(2.*PI),elevation/(.5*PI));
+}
+
+fn oak_probe(uv: vec2<f32>, tile: vec2<f32>) -> vec3<f32> {
+    let layer = i32(textureNumLayers(kit_orm))-2;
+    let sample = textureSampleLevel(kit_orm,kit_sampler,(uv+tile*vec2<f32>(64.,32.))/512.,layer,0.).rba;
+    let square = sample*sample;
+    return square/max(vec3<f32>(.0001),1.-square);
+}
+
+fn oak_field(uv: vec2<f32>, spatial: vec2<f32>, row: f32, lobe: f32) -> vec3<f32> {
+    let col = 4.*lobe;
+    let front = mix(oak_probe(uv,vec2<f32>(col,row)),oak_probe(uv,vec2<f32>(col+1.,row)),spatial.x);
+    let rear = mix(oak_probe(uv,vec2<f32>(col+2.,row)),oak_probe(uv,vec2<f32>(col+3.,row)),spatial.x);
+    return mix(front,rear,spatial.y);
+}
+
+fn oak_environment(uv: vec2<f32>, spatial: vec2<f32>, lobe: f32,
+                   sky: vec3<f32>, clear: f32, sun_row: f32, elevation: f32,
+                   sun_beam: vec3<f32>) -> vec3<f32> {
+    var light = oak_field(uv,spatial,0.,lobe);
+    if (clear < 1.) { light += oak_field(uv,spatial,1.,lobe)*sky*(1.-clear); }
+    if (clear > 0.) { light += oak_field(uv,spatial,2.,lobe)*look.key.rgb*clear; }
+    if (any(sun_beam > vec3<f32>(0.))) {
+        light += mix(oak_field(uv,spatial,sun_row,lobe),oak_field(uv,spatial,sun_row+1.,lobe),elevation)*sun_beam;
+    }
+    return light;
+}
+
+fn oak_day_map(plan: vec2<f32>, page: f32) -> vec3<f32> {
+    let tile = vec2<f32>(page-2.*floor(page*.5),floor(page*.5))*vec2<f32>(256.,64.);
+    let offset = vec2<f32>(0.,224.) + tile + clamp(plan,vec2<f32>(.5),vec2<f32>(255.5,63.5));
+    let layer = i32(textureNumLayers(kit_orm))-2;
+    let encoded = textureSampleLevel(kit_orm,kit_sampler,offset/512.,layer,0.).rba;
+    let sq = encoded*encoded;
+    return sq/max(vec3<f32>(.0001),1.-sq);
+}
+
+fn oak_reflections(point: vec3<f32>, world: vec3<f32>, v: vec3<f32>, base_n: vec3<f32>, coat_n: vec3<f32>, surface_light: bool) {
+    let bounds = look.oak_finish[0];
+    let spatial = clamp((point.xz-bounds.xy)/(bounds.zw-bounds.xy),vec2<f32>(0.),vec2<f32>(1.));
+    let sky_tint = max(lk_sh(vec3<f32>(0.,1.,0.)),vec3<f32>(.00001));
+    let sky = sky_tint*(look.hemi_sky.w/lk_luma(sky_tint));
+    let cloud = sky_cloud_transmittance(world);
+    let sun = look.key_dir.xyz;
+    let clear = cloud*smoothstep(0.,.35,sun.y)*(1.-skyu.night.z);
+    let elevation = clamp(asin(clamp(sun.y,0.,1.)),radians(25.),radians(57.));
+    let t = (elevation-radians(25.))/radians(32.);
+    let depth = normalize((vec4<f32>(0.,0.,1.,0.) * look.enclosure_frame).xyz);
+    let along = dot(sun,depth);
+    let side = select(3.,5.,along>0.);
+    let beam = look.key.rgb*select(0.,cloud*abs(along)/cos(elevation),sun.y>0.);
+    room_radiance = oak_environment(oak_ray_uv(reflect(-v,base_n)),spatial,0.,sky,clear,side,t,beam);
+    oak_coat_radiance = oak_environment(oak_ray_uv(reflect(-v,coat_n)),spatial,1.,sky,clear,side,t,beam);
+    oak_coated = true;
+    if (surface_light) {
+        let extent = look.oak_finish[2];
+        let plan = (point.xz-extent.xy)/(extent.zw-extent.xy)*vec2<f32>(256.,64.);
+        if (clear < 1.) { oak_daylight += oak_day_map(plan,0.)*sky*(1.-clear); }
+        if (clear > 0.) { oak_daylight += oak_day_map(plan,1.)*look.key.rgb*clear; }
+        if (any(beam>vec3<f32>(0.))) {
+            oak_daylight += mix(oak_day_map(plan,side-1.),oak_day_map(plan,side),t)*beam;
+        }
+    }
+}
+
 fn board_ambient(transfer: vec2<f32>) -> vec3<f32> {
     return vec3<f32>(.56,.41,.29) *
         (look.ambient.rgb + transfer.x*look.hemi_sky.rgb + transfer.y*vec3<f32>(1.2,.78,.46));
@@ -1180,6 +1255,7 @@ fn shade(in: VOut) -> vec4<f32> {
         if (measured_floor) { floor_light = dining_floor_light(parcel.xz,in.world); }
     }
     let table_board = (objects[in.object].kind & TABLE_BOARD_BIT) != 0u;
+    let oak_finish = (objects[in.object].kind & OAK_FINISH_BIT) != 0u;
     let floor_scan = table_board || local_scan || (objects[in.object].kind & FLOOR_SCAN_BIT) != 0u;
     if (floor_scan && (local_scan || table_board || abs(n.y) > 0.7)) {
         let layer = select(i32(textureNumLayers(kit_albedo)) - 2, m.layer, local_scan);
@@ -1204,7 +1280,7 @@ fn shade(in: VOut) -> vec4<f32> {
         if (abs(det) > 1e-10) {
             let along = normalize((dpx * uv_dy.y - dpy * uv_dx.y) * sign(det));
             let across = normalize((dpy * uv_dx.x - dpx * uv_dy.x) * sign(det));
-            let relief = select(select(1.0, m.params.z, local_scan), 0.28, table_board);
+            let relief = select(select(1.0, m.params.z, local_scan), select(0.28,look.oak_finish[1].x,oak_finish), table_board);
             s.n = normalize(n * bump.z + relief * (along * bump.x - across * bump.y));
         }
         if (cut_cotton) {
@@ -1236,13 +1312,17 @@ fn shade(in: VOut) -> vec4<f32> {
                 s.albedo *= mix(vec3<f32>(1.),vec3<f32>(.54,.37,.24),.64);
                 // Wax fills the open pores of the planed table. Keep the roughness
                 // scan, with a broader reflection than the floor varnish.
-                s.rough = clamp(.31 + .43*s.rough, .36, .67);
+                if (!oak_finish) { s.rough = clamp(.31 + .43*s.rough, .36, .67); }
                 if (n.y > .64) {
                     let local_dx = (look.enclosure_frame * vec4<f32>(dpx,0.)).xz;
                     let local_dy = (look.enclosure_frame * vec4<f32>(dpy,0.)).xz;
                     s.env = ENV_INTERIOR_FLOOR;
-                    room_radiance = board_reflection(frame_pos.xz,local_dx,local_dy,dpx,dpy,
-                        reflect(-v,s.n),s.rough,board_ambient(in.color.rg*in.color.rg),frame_pos.y);
+                    if (oak_finish) {
+                        oak_reflections(frame_pos,in.world,v,s.n,n,(objects[in.object].kind & TABLE_LIGHT_BIT) != 0u);
+                    } else {
+                        room_radiance = board_reflection(frame_pos.xz,local_dx,local_dy,dpx,dpy,
+                            reflect(-v,s.n),s.rough,board_ambient(in.color.rg*in.color.rg),frame_pos.y);
+                    }
                 }
             }
         }
@@ -1302,6 +1382,7 @@ fn shade(in: VOut) -> vec4<f32> {
                     lamps.diffuse = measured.rgb;
                     lamps.direct = look.table_light[2].rgb * (beam/look.table_light[2].r);
                     rm_emit += pendant_gloss(lamps.direct,in.world,s.n,v,s.rough);
+                    if (oak_coated) { oak_pendant = lamps.direct; }
                 }
             }
             downstairs = (table || (room_kind & DOWNSTAIRS_LIGHT_BIT) != 0u)
@@ -1311,7 +1392,12 @@ fn shade(in: VOut) -> vec4<f32> {
                 // The surface bake already includes the contact shadow. Apply
                 // near-field occlusion only to the coarse daylight component.
                 surface_fixture = lamps.diffuse;
-                room_diffuse = room_irradiance(room_point,s.n,in.world,true,table);
+                if (table && oak_coated) {
+                    // Both surveys contain the real contact shadows from the bowl and book.
+                    surface_fixture += oak_daylight;
+                } else {
+                    room_diffuse = room_irradiance(room_point,s.n,in.world,true,table);
+                }
             }
         }
         if (in.aux.z > .5 && !measured_room) {

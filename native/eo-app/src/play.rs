@@ -74,6 +74,7 @@ fn base_args() -> Args {
         house_dining_light: false,
         house_downstairs_light: false,
         house_table_light: false,
+        house_oak_finish: false,
         house_glazing: true,
         beaver_house: false,
         bench: false,
@@ -143,7 +144,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
-            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" => {
+            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" => {
                 a.beaver_house = true;
                 a.house_finishes = true;
                 a.house_patina = true;
@@ -153,6 +154,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
                     "--house-dining-light" => a.house_dining_light = true,
                     "--house-downstairs-light" => a.house_downstairs_light = true,
                     "--house-table-light" => a.house_table_light = true,
+                    "--house-oak-finish" => a.house_oak_finish = true,
                     "--house-mission-roof" => a.house_mission_roof = true,
                     _ => a.house_blender_bedroom = true,
                 }
@@ -160,6 +162,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-dining-light" => a.house_dining_light = false,
             "--no-house-downstairs-light" => a.house_downstairs_light = false,
             "--no-house-table-light" => a.house_table_light = false,
+            "--no-house-oak-finish" => a.house_oak_finish = false,
             "--no-house-mission-roof" => a.house_mission_roof = false,
             "--no-house-blender-bedroom" => a.house_blender_bedroom = false,
             "--house-photo-lod" => a.house_photo_lod = true,
@@ -1105,6 +1108,35 @@ mod house_tests {
         args.house_table_light = true;
         args.interior_lighting = false;
         assert!(atlas(&args).iter().all(|&c| c == 0));
+    }
+
+    #[test]
+    fn oak_reflections_keep_the_original_roughness_and_only_mark_the_four_boards() {
+        use eo_render::scene::{OAK_FINISH_BIT, TABLE_BOARD_BIT};
+        let (mut args, _) = parse(&["--house-oak-finish".into()]).unwrap();
+        args.kit = false;
+        args.models = false;
+        args.landmarks = false;
+        assert!(args.house_photo && !args.house_table_light && !args.house_dining_light);
+        let world = load_world(&args).unwrap();
+        let oak: Vec<_> = world.scene.objects.iter().filter(|o| o.kind & OAK_FINISH_BIT != 0).collect();
+        assert_eq!(oak.len(), 4);
+        assert!(oak.iter().all(|o| o.kind & TABLE_BOARD_BIT != 0));
+        let [bounds, material, extent] = world.house.as_ref().unwrap().oak_finish();
+        assert!(extent[0] < bounds[0] && extent[3] > bounds[3]);
+        assert!(bounds[2] > bounds[0] && bounds[3] > bounds[1]);
+        for (measured, expected) in material.into_iter().zip([1., 0.15, 0.36, 0.04]) {
+            assert!((measured-expected).abs() < 0.0001);
+        }
+        let atlas = |args: &Args| crate::house::Finishes::load(&world.paths.repo_root, args).unwrap().floorboards.orm;
+        let on = atlas(&args);
+        let (disabled, _) = parse(&["--house-oak-finish".into(), "--no-house-oak-finish".into()]).unwrap();
+        assert!(!disabled.house_oak_finish);
+        let old = atlas(&disabled);
+        assert!(on.chunks_exact(4).zip(old.chunks_exact(4)).all(|(a,b)| a[1] == b[1]));
+        assert!(on.chunks_exact(4).take(512*224).filter(|p| p[0] > 8).count() > 4096);
+        args.interior_lighting = false;
+        assert_eq!(atlas(&args), old);
     }
 
     #[test]
