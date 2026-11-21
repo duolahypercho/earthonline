@@ -102,7 +102,9 @@ def floor_roughness(scene):
     return [float(func(rough)) for func in (np.min, np.median, np.max)]
 
 
-def survey(scene, site, calibration, store):
+def survey(
+    scene, site, calibration, store, *, points=None, source_ready=None, probe_ready=None
+):
     for marker in list(scene.timeline_markers):
         scene.timeline_markers.remove(marker)
     camera = bpy.data.objects.new(
@@ -139,18 +141,19 @@ def survey(scene, site, calibration, store):
     sun.data.energy = 1
     sun.data.angle = math.radians(0.53)
     scene.collection.objects.link(sun)
-    points = [
-        site
-        @ Vector(
-            (
-                (x + 0.5) * PLAN_METRES[0] / GRID[0],
-                -(z + 0.5) * PLAN_METRES[1] / GRID[1],
-                0.015,
+    if points is None:
+        points = [
+            site
+            @ Vector(
+                (
+                    (x + 0.5) * PLAN_METRES[0] / GRID[0],
+                    -(z + 0.5) * PLAN_METRES[1] / GRID[1],
+                    0.015,
+                )
             )
-        )
-        for z in range(GRID[1])
-        for x in range(GRID[0])
-    ]
+            for z in range(GRID[1])
+            for x in range(GRID[0])
+        ]
     raw = np.empty(128 * 64 * 4, np.float32)
     with TemporaryDirectory() as temp:
         scene.render.filepath = str(Path(temp) / "incident.exr")
@@ -187,7 +190,11 @@ def survey(scene, site, calibration, store):
                     )
                 )
                 sun.rotation_euler = (-incoming).to_track_quat("-Z", "Y").to_euler()
+            if source_ready:
+                source_ready(row)
             for index, point in enumerate(points):
+                if probe_ready:
+                    probe_ready(index)
                 camera.location = point
                 bpy.ops.render.render(write_still=True)
                 image = bpy.data.images.load(
@@ -205,7 +212,8 @@ def survey(scene, site, calibration, store):
                         f"Invalid {name} radiance at floor position {index}"
                     )
                 store(row, index, rgb)
-            print("Measured floor reflections:", name, flush=True)
+            if points:
+                print("Measured room reflections:", name, flush=True)
 
 
 def main():
