@@ -265,7 +265,7 @@ pub struct Oracle {
 
 impl Oracle {
     pub fn default_path() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("data/sf-window-oracle.json.gz")
+        eo_data::native_dir().join("eo-sim/data/sf-window-oracle.json.gz")
     }
 
     pub fn load(path: &Path) -> Result<Self> {

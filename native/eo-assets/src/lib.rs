@@ -18,10 +18,11 @@ pub use kit::{KitLibrary, KitSpec};
 pub use manifest::{AssetRef, BlenderBuilding, load_blender_buildings};
 pub use placement::{Placement, PlacementConstants};
 
-/// `native/cache` beside this crate (git-ignored), or `EO_NATIVE_CACHE`.
+/// `native/cache` beside this crate (git-ignored; inside the game's folder in
+/// a packaged build), or `EO_NATIVE_CACHE`.
 pub fn default_cache_dir() -> std::path::PathBuf {
     if let Ok(p) = std::env::var("EO_NATIVE_CACHE") {
         return p.into();
     }
-    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../cache")
+    eo_data::native_dir().join("cache")
 }

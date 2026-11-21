@@ -214,7 +214,7 @@ fn finish_srgb(name: &str) -> [u8; 3] {
     static C: OnceLock<HashMap<String, [u8; 3]>> = OnceLock::new();
     let map = C.get_or_init(|| {
         let mut out = HashMap::new();
-        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../eo-assets/data/kit-material-specs.json");
+        let path = eo_data::native_dir().join("eo-assets/data/kit-material-specs.json");
         let Ok(text) = std::fs::read_to_string(path) else { return out };
         let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else { return out };
         if let Some(m) = v["specs"].as_object() {

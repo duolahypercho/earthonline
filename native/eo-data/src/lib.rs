@@ -57,6 +57,33 @@ impl DataPaths {
     }
 }
 
+/// The workspace's `native/` folder: each crate's `data/` tables,
+/// `native/assets/` and the model cache.
+///
+/// The folder this binary was built in, while it is still there (any
+/// checkout, so a build reads its own tables as before). Otherwise, for a
+/// packaged build moved to another computer (scripts/release/package.sh keeps
+/// the repository's layout), the `native/` folder under the root
+/// [`DataPaths::discover`] finds from the working directory or the executable.
+pub fn native_dir() -> PathBuf {
+    static DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        let built = Path::new(env!("CARGO_MANIFEST_DIR")).parent().map(Path::to_path_buf).unwrap_or_default();
+        pick_native_dir(built, || DataPaths::discover().ok().map(|p| p.repo_root))
+    })
+    .clone()
+}
+
+/// [`native_dir`]'s choice: `built` while it holds this workspace, else
+/// `native/` under the discovered root when there is one, else `built`
+/// (whose reads then fail and name the path).
+fn pick_native_dir(built: PathBuf, repo_root: impl FnOnce() -> Option<PathBuf>) -> PathBuf {
+    if built.join("eo-data").is_dir() {
+        return built;
+    }
+    repo_root().map(|r| r.join("native")).filter(|n| n.is_dir()).unwrap_or(built)
+}
+
 /// Read a file, gunzipping it when it starts with the gzip magic.
 pub fn read_maybe_gzip(path: &Path) -> Result<Vec<u8>> {
     let raw = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
@@ -912,5 +939,32 @@ mod layer_tests {
         for v in [json!(null), json!(""), json!("1;2"), json!("bridge"), json!(1.5), json!(true), json!([1])] {
             assert_eq!(layer_of(&v), 0, "{v}");
         }
+    }
+}
+
+#[cfg(test)]
+mod native_dir_tests {
+    use super::{native_dir, pick_native_dir};
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn a_checkout_reads_the_workspace_it_was_built_in() {
+        let built = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap().to_path_buf();
+        assert_eq!(native_dir(), built);
+        assert!(native_dir().join("eo-street/data/street-city.json.gz").is_file());
+        // the build folder wins even where a root elsewhere would be found.
+        assert_eq!(pick_native_dir(built.clone(), || Some(PathBuf::from("/elsewhere"))), built);
+    }
+
+    #[test]
+    fn a_moved_build_reads_native_beside_the_found_root() {
+        let gone = std::env::temp_dir().join("eo-native-dir-test-no-such-build/native");
+        let root = std::env::temp_dir().join(format!("eo-native-dir-test-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("native")).unwrap();
+        assert_eq!(pick_native_dir(gone.clone(), || Some(root.clone())), root.join("native"));
+        // no root found, or a root without native/: the build path, so a read names it.
+        assert_eq!(pick_native_dir(gone.clone(), || None), gone);
+        assert_eq!(pick_native_dir(gone.clone(), || Some(root.join("public"))), gone);
+        std::fs::remove_dir_all(&root).unwrap();
     }
 }

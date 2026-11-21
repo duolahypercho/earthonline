@@ -217,7 +217,7 @@ impl StreetCity {
 
     /// The exported whole-city contract shipped beside this crate.
     pub fn load() -> Result<Self> {
-        let mut c = Self::load_gz(&Path::new(env!("CARGO_MANIFEST_DIR")).join("data/street-city.json.gz"))?;
+        let mut c = Self::load_gz(&eo_data::native_dir().join("eo-street/data/street-city.json.gz"))?;
         c.apply_ground_scale();
         Ok(c)
     }
