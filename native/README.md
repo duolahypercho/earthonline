@@ -592,6 +592,16 @@ drawn terrain determine where each patch fits. The eelgrass and ripples
 are original procedural geometry inspired by descriptions of [Bay eelgrass](https://www.epa.gov/sfbay-program/priorities-subtidal)
 and [the Ocean Beach nearshore bed](https://www.spn.usace.army.mil/Portals/68/docs/P%20and%20Programs/Navigation/SF-17_EA_and_Draft_FONSI_05062025.pdf).
 
+To record the cove descent, run the following from `native/`. The game writes
+1,800 consecutive PNGs at 60 frames per second into a new directory. The
+camera, water and sky advance together. The recording uses the live rendered
+frame, including streaming and temporal effects. Run performance checks in a
+separate invocation because recording reads every frame back from the GPU.
+
+```sh
+EO_RECORD_DIVE=bench-out/cove-film ./target/release/eo-app --bench --dive-site bay --segments cove_descent --width 2560 --height 1440 --time-of-day 11 --weather clear --weather-seed 7
+```
+
 **Sky and weather.** Analytic sky and atmosphere, volumetric clouds and the
 marine layer, a weather schedule (clear to storm) with rain, wet ground and
 drying, sun shadows in cascades, moon and stars, and night lighting: street
