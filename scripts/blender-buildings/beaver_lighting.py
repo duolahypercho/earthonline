@@ -54,9 +54,10 @@ def filter_cloth_irradiance(mesh, uv, compact=False):
         uv.data[loop.index].uv = result[loop.vertex_index]
 
 
-def contact_transfer(mesh, tree):
+def contact_transfer(mesh, tree, world=None):
     """Cosine-weighted visibility out to 45 cm, baked on the assembled furniture."""
     layer = mesh.uv_layers.new(name="Near-field visibility")
+    normal_basis = world.to_3x3().inverted().transposed() if world is not None else None
     samples = []
     for i in range(48):
         r = math.sqrt((i + 0.5) / 48)
@@ -69,7 +70,11 @@ def contact_transfer(mesh, tree):
             n = mesh.corner_normals[index].vector
             key = (loop.vertex_index, *(round(v * 80) for v in n))
             if key not in cache:
-                p = mesh.vertices[loop.vertex_index].co + n * 0.0025
+                p = mesh.vertices[loop.vertex_index].co
+                if world is not None:
+                    p = world @ p
+                    n = (normal_basis @ n).normalized()
+                p = p + n * 0.0025
                 tangent = n.cross(
                     Vector((1, 0, 0)) if abs(n.z) > 0.85 else Vector((0, 0, 1))
                 ).normalized()
