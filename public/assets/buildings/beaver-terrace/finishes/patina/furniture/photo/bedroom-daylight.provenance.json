@@ -1,0 +1,136 @@
+{
+  "exposure_range_ev": 2.61,
+  "exterior_exposed_beam": 2.36761,
+  "mean_sky_return": 0.005171,
+  "source": "Authored terrace and surrounding city geometry in the editable Blender scene.",
+  "attribution": "Earth Online",
+  "license": "Project-authored lighting data",
+  "grid": [
+    10,
+    6,
+    19
+  ],
+  "minimum": [
+    0.22,
+    3.4833333333333334,
+    0.23
+  ],
+  "maximum": [
+    6.78,
+    6.496666666666667,
+    12.77
+  ],
+  "samples": 1536,
+  "optical_paths": [
+    "unit white sky, direct and indirect",
+    "unit white sun, indirect only",
+    "clear reference sky without the sun disc, per channel relative to the source sun",
+    "physical 5 W bedside fixture, direct and indirect"
+  ],
+  "solar_elevation_degrees": [
+    25,
+    57
+  ],
+  "diffuse_bounces": 4,
+  "calibration": {
+    "sky": {
+      "mean": [
+        0.00589,
+        0.00506,
+        0.00415
+      ],
+      "maximum": 0.1681,
+      "open_receiver": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "front-low": {
+      "mean": [
+        0.00849,
+        0.00689,
+        0.0058
+      ],
+      "maximum": 0.6847,
+      "open_receiver": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "front-high": {
+      "mean": [
+        0.00199,
+        0.00154,
+        0.00115
+      ],
+      "maximum": 0.1339,
+      "open_receiver": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "rear-low": {
+      "mean": [
+        0.00897,
+        0.00741,
+        0.00628
+      ],
+      "maximum": 0.6807,
+      "open_receiver": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "rear-high": {
+      "mean": [
+        0.00165,
+        0.0013,
+        0.00098
+      ],
+      "maximum": 0.1285,
+      "open_receiver": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "day-sky": {
+      "mean": [
+        0.00386,
+        0.00691,
+        0.01186
+      ],
+      "maximum": 0.3817,
+      "open_receiver": [
+        0.89586,
+        1.55179,
+        2.74539
+      ]
+    },
+    "reading-light": {
+      "mean": [
+        0.00079,
+        0.00049,
+        0.00026
+      ],
+      "maximum": 0.5461,
+      "open_receiver": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "source_scene": {
+    "file": "21-beaver.blend",
+    "sha256": "e9377ef3738244b30183d9c1c54e376cf4622165eca2e63a3a9fc3b27a842dde"
+  },
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/bedroom-daylight.png",
+  "bytes": 80409,
+  "sha256": "bebdcaeda5bc89998194f0a4160c870f46eabc19e6671fa369e0139b93f1bce5",
+  "build": "scripts/blender-buildings/bake_beaver_bedroom.py"
+}

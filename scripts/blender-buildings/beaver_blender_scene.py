@@ -99,9 +99,7 @@ class MeshBatch:
             collection.objects.link(ob)
 
 
-def place_shell(scene, footprint, components, dimensions, planted, grade, plan_scale, height_scale):
-    # All distances within furniture remain metric. Architecture follows the
-    # game's installed footprint, including its small measured skew.
+def site_basis(footprint, plan_scale):
     origin = footprint[1]
     across = (footprint[2] - origin) * plan_scale / 7
     back = (footprint[0] - origin) * plan_scale / 13
@@ -115,6 +113,14 @@ def place_shell(scene, footprint, components, dimensions, planted, grade, plan_s
             (0, 0, 0, 1),
         )
     )
+
+    return origin, axis, side, site
+
+
+def place_shell(scene, footprint, components, dimensions, planted, grade, plan_scale, height_scale):
+    # All distances within furniture remain metric. Architecture follows the
+    # game's installed footprint, including its small measured skew.
+    origin, axis, side, site = site_basis(footprint, plan_scale)
 
     def mapped(p):
         q = (Vector(p) - origin) * plan_scale

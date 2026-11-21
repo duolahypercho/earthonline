@@ -1694,6 +1694,21 @@ if "--blend-only" not in sys.argv:
     beaver_lighting.bake(bake_meshes, RISE, detailed=FINISHES, cloth_transfer=PATINA, furniture_contact=FURNITURE,
                          porch_source=beaver_entry.SCONCE_LIGHT if FURNITURE else (5.97, 2.27, -0.26),
                          entry_setback=beaver_entry.SETBACK if FURNITURE else 0, exterior_bounce=PHOTO)
+    if PHOTO:
+        # The first two UV sets carry light transfer and contact. The coverlet
+        # also needs the position on the uncut pattern after it is draped.
+        for obj in component_meshes["double-bed"]:
+            mat_name = obj.data.materials[0].name
+            if mat_name.split("@")[0] != "cotton-coverlet":
+                continue
+            pattern = cloth_patterns[("double-bed", mat_name)]
+            width = max(u for u, v in pattern.values())
+            length = max(v for u, v in pattern.values())
+            assert len(obj.data.uv_layers) == 2
+            cut = obj.data.uv_layers.new(name="Coverlet cutting pattern")
+            for loop in obj.data.loops:
+                u, v = pattern[loop.vertex_index]
+                cut.data[loop.index].uv = (u / width, v / length)
     for mesh, inverse in restore:
         mesh.transform(inverse)
         mesh.update()

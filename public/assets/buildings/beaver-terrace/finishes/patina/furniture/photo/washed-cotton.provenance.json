@@ -1,0 +1,50 @@
+{
+  "source": [
+    "https://polyhaven.com/a/rough_linen"
+  ],
+  "license": "CC0-1.0",
+  "attribution": [
+    "colormass",
+    "Rico Cilliers"
+  ],
+  "inputs": [
+    {
+      "asset": "rough_linen",
+      "role": "albedo",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rough_linen/rough_linen_diff_1k.jpg",
+      "sha256": "04897d7611d7390ddf5b2c6f7273f448dfc48341fdbd1f4f207fa30b331d7f57"
+    },
+    {
+      "asset": "rough_linen",
+      "role": "normal",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rough_linen/rough_linen_nor_gl_1k.jpg",
+      "sha256": "e2402166d1a489f7414814e69e1836ab672aa24e30bec2d41fea356f81687e53"
+    },
+    {
+      "asset": "rough_linen",
+      "role": "arm",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rough_linen/rough_linen_arm_1k.jpg",
+      "sha256": "e1ca6b51ed62834063253e08f8f2e23836aa00d72675b960ddd8e608d9f0c7e6"
+    }
+  ],
+  "families": [
+    "cotton-coverlet"
+  ],
+  "metres_per_tile": 1.0,
+  "normal_strength": 1.0,
+  "paint_mix": 0.0,
+  "cut_pattern": true,
+  "cut_metres": [
+    2.25,
+    2.1
+  ],
+  "process": "Cycles tangent normal, dyed diffuse and roughness of the Blender coverlet on its flat cutting pattern.",
+  "source_scene": {
+    "file": "21-beaver.blend",
+    "sha256": "e9377ef3738244b30183d9c1c54e376cf4622165eca2e63a3a9fc3b27a842dde"
+  },
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/washed-cotton.png",
+  "bytes": 1071835,
+  "sha256": "26cceb338f16f852950169165e5f8c73878eaf53ca4709a857df539abff9637d",
+  "build": "scripts/blender-buildings/bake_beaver_bedroom.py"
+}
