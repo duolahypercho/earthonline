@@ -390,13 +390,16 @@ fn segments(world: &World, args: &Args, aspect: f32, far: f32) -> Vec<Segment> {
         },
     ]
     .into_iter()
-    .chain(["house_bedroom", "house_roof", "house_dining", "house_garden"].into_iter().filter_map(|name| {
+    .chain(["house_bedroom", "house_roof", "house_dining", "house_garden", "house_frontage"].into_iter().filter_map(|name| {
             let selected = args.segments.as_ref()?.iter().any(|s| s == name);
             if !selected { return None; }
             let house = world.house.as_ref()?;
             let (left, right, target, description) = if name == "house_garden" {
                 (house.point(5.35, 0.98, -5.13).as_vec3(), house.point(5.72, 1.46, -3.17).as_vec3(),
                  house.point(2.89, 0.05, -1.11).as_vec3(), "Walking from the sloped approach to the stoop, facing the planted bed")
+            } else if name == "house_frontage" {
+                (house.point(-1.3, 2.7, -10.3).as_vec3(), house.point(5.35, 1.70, -6.8).as_vec3(),
+                 house.point(3.0, 4.30, 0.).as_vec3(), "Walking across the street frontage, facing the upper arcade")
             } else if name == "house_dining" {
                 (house.point(4.5,0.,2.0).as_vec3() + EYE_HEIGHT_M * Vec3::Y,
                  house.point(3.9,0.,5.2).as_vec3() + EYE_HEIGHT_M * Vec3::Y,

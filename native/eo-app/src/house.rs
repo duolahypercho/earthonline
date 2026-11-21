@@ -102,6 +102,8 @@ pub struct Finishes {
     garden: Option<street_garden::Garden>,
     garden_maps: Vec<eo_assets::kit::BakedMaps>,
     front_daylight: Option<eo_render::front_daylight::FrontDaylight>,
+    wall_daylight: Option<eo_assets::kit::BakedMaps>,
+    site_camera_exposure: Option<f32>,
     downstairs_light: bool,
     dining_meter: Option<[f32; 3]>,
     dining_camera_exposure: Option<f32>,
@@ -307,8 +309,12 @@ impl Finishes {
         } else { (None, vec![]) };
         let front_daylight = garden.as_ref().filter(|_| args.house_front_daylight)
             .map(|g| g.read_daylight(root, &photo_dir)).transpose()?;
+        let camera = args.house_site_camera && args.look.blender_camera;
+        let (wall_daylight, site_camera_exposure) = if (args.house_wall_daylight || camera) && photo && furniture && patina {
+            Self::read_wall_daylight(root, &photo_dir, &manifest.house_sha256, args.house_wall_daylight, camera)?
+        } else { (None, None) };
         Ok(Self {
-            front_daylight, garden, garden_maps, fitted, fitted_maps, downstairs_light,
+            site_camera_exposure, wall_daylight, front_daylight, garden, garden_maps, fitted, fitted_maps, downstairs_light,
             dining_meter,
             dining_camera_exposure,
             oak_finish,
@@ -331,6 +337,7 @@ impl Finishes {
 
     pub fn into_maps(self) -> Vec<eo_assets::kit::BakedMaps> {
         let mut maps: Vec<_> = self.scans.into_iter().map(|scan| scan.maps).collect();
+        maps.extend(self.wall_daylight);
         maps.extend(self.garden_maps);
         maps.extend(self.fitted_maps);
         maps.extend(self.floor_reflections);
@@ -339,6 +346,41 @@ impl Finishes {
         maps.push(self.floorboards);
         maps.push(self.atlas);
         maps
+    }
+
+    fn read_wall_daylight(root: &Path, directory: &Path, shell: &str, walls: bool, camera: bool) -> Result<(Option<eo_assets::kit::BakedMaps>, Option<f32>)> {
+        #[derive(Deserialize)]
+        struct Survey {
+            #[serde(flatten)]
+            asset: AssetRef,
+            house_sha256: String,
+            hours: [u8; 6],
+            charts: [String; 16],
+            source_exposure_ev: f32,
+            linear_game_units_per_source_unit: f32,
+            display_meter_gain: f32,
+            cell_size: usize,
+            pigment_cell_size: usize,
+            encoding: String,
+        }
+        let survey: Survey = serde_json::from_slice(&std::fs::read(directory.join("wall-daylight.provenance.json"))?)?;
+        ensure!(survey.house_sha256 == shell && survey.hours == [8,10,12,14,16,18]
+            && survey.cell_size == 64 && survey.pigment_cell_size == 128 && survey.encoding == "sqrt(L/(1+L))"
+            && survey.charts == ["Narrow side passage", "Opposite side passage", "Street wall", "Rear wall",
+                "Round stair bay", "Entry arch face", "Entry east reveal", "Entry west reveal", "Street gable",
+                "Upper casement backing", "Arcade moulding face", "First arch intrados", "Middle arch intrados",
+                "Third arch intrados", "Arcade sill underside", "Porch arch intrados"], "incompatible plaster survey");
+        let exposure = survey.source_exposure_ev.exp2() / (survey.linear_game_units_per_source_unit * survey.display_meter_gain);
+        ensure!(exposure.is_finite() && exposure > 0., "invalid exterior camera calibration");
+        let exposure = camera.then_some(exposure);
+        if !walls { return Ok((None, exposure)); }
+        let mut orm = Self::read_pixels(root, &survey.asset, 3)?;
+        let page = orm.len()/3;
+        let albedo = orm.split_off(2*page);
+        let normal = orm.split_off(page);
+        let maps = eo_assets::kit::BakedMaps { res: eo_assets::kit::HIGH_RES, metres_per_tile: 1.,
+            albedo, normal, orm };
+        Ok((Some(maps), exposure))
     }
 
     fn read_pixels(root: &Path, asset: &AssetRef, pages: usize) -> Result<Vec<u8>> {
@@ -405,6 +447,8 @@ pub struct House {
     fitted: Option<fitted::Room>,
     garden: Option<fitted::Geometry>,
     pub front_daylight: Option<eo_render::front_daylight::FrontDaylight>,
+    pub wall_daylight_layer: Option<usize>,
+    site_camera_exposure: Option<f32>,
     origin: DVec2,
     across: DVec2,
     back: DVec2,
@@ -583,12 +627,15 @@ impl House {
         let table_vertices = table_light.as_ref().map(|s| s.vertices(&model)).transpose()?.unwrap_or_default();
         let scans = finishes.map_or(0, |f| f.scans.len());
         let front_daylight = finishes.and_then(|f| f.front_daylight.clone());
+        let wall_daylight_layer = finishes.filter(|f| f.wall_daylight.is_some()).map(|_| scans);
+        let garden_base = scans + usize::from(wall_daylight_layer.is_some());
         let garden = finishes.and_then(|f| f.garden.as_ref())
-            .map(|g| g.load(root, materials, scans, front_daylight.is_some())).transpose()?;
-        let first_fitted = scans + finishes.map_or(0, |f| f.garden_maps.len());
+            .map(|g| g.load(root, materials, garden_base, front_daylight.is_some())).transpose()?;
+        let first_fitted = garden_base + finishes.map_or(0, |f| f.garden_maps.len());
         let fitted = fitted_recipe.map(|r| r.load(root,materials,first_fitted)).transpose()?;
         let mut h = Self {
-            front_daylight, garden, fitted,
+            site_camera_exposure: finishes.and_then(|f| f.site_camera_exposure),
+            wall_daylight_layer, front_daylight, garden, fitted,
             origin: ring[1],
             across,
             back,
@@ -1023,6 +1070,13 @@ impl House {
             self.point(0., 0., 0.).as_vec3().extend(1.),
         )
     }
+    const ROOM_MIN: Vec3 = Vec3::new(0.14, -0.08, 0.50);
+    const ROOM_MAX: Vec3 = Vec3::new(6.86, 9.88, 12.86);
+
+    pub fn site_camera(&self) -> Option<eo_render::interior_meter::ExteriorCamera> {
+        Some(eo_render::interior_meter::ExteriorCamera::new(self.parcel_to_world(), Self::ROOM_MIN, Self::ROOM_MAX, self.site_camera_exposure?))
+    }
+
     pub fn interior_meter(&self) -> Option<eo_render::interior_meter::InteriorMeter> {
         if !self.photo || self.light_transfer.is_empty() { return None; }
         let basis = self.parcel_to_world();
@@ -1036,7 +1090,7 @@ impl House {
             // Each pane is a thin closed solid. Integrate light through a single face.
             .filter(|[a,b,c]| (*b-*a).cross(*c-*a).normalize_or_zero().z > 0.8);
         let mut meter = eo_render::interior_meter::InteriorMeter::new(basis,
-            Vec3::new(0.14, -0.08, 0.50), Vec3::new(6.86, 9.88, 12.86), 10. / 3., glass);
+            Self::ROOM_MIN, Self::ROOM_MAX, 10. / 3., glass);
         if let Some([sky_return, exposure_range, exposed_beam]) = self.room_meter {
             meter.set_room_response(1, sky_return, exposure_range, exposed_beam);
         }
@@ -1390,6 +1444,9 @@ impl House {
                 }
             }
             o.material = self.materials[part.material as usize];
+            if self.wall_daylight_layer.is_some() && (plaster_finish(family) || family.starts_with("lime-plaster@") || family.starts_with("painted-white@")) {
+                o.kind |= eo_render::scene::WALL_DAYLIGHT_BIT;
+            }
             if self.patina && plaster_finish(family) {
                 o.kind |= eo_render::scene::LIMEWASH_BIT;
             }
