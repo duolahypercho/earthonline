@@ -453,6 +453,9 @@ struct State {
     /// the scene meter (`--no-scene-meter`): after a cut or a turn, the frame
     /// from which a reading counts as the new view's (its first snaps the adaptation).
     meter_snap_after: Option<u32>,
+    /// the frame of the last cut or turn the scene meter snapped for: no reading
+    /// older (of the view before it) sets the exposure after it.
+    meter_floor: u32,
     /// the aerosol density the transmittance and multiple-scattering
     /// tables were built for (they depend on the medium only; rebuilt on a change).
     atmo_built: Option<[[f32; 4]; 4]>,
@@ -1162,6 +1165,7 @@ impl SkyGpu {
                 adapt: Default::default(),
                 meter_fwd: None,
                 meter_snap_after: None,
+                meter_floor: 0,
                 atmo_built: None,
                 atmo_medium: [[0.0; 4]; 4],
                 hist_look: None,
@@ -1239,6 +1243,14 @@ impl SkyGpu {
     /// the frame whose scene-meter reading the exposure waits on (after a cut or a turn), if any.
     pub fn meter_snap_pending(&self) -> Option<u32> {
         self.state.lock().unwrap().meter_snap_after
+    }
+
+    /// the frame whose scene-meter reading the coming frame's exposure uses: the
+    /// one `scene_meter::LAG` frames back, never one from before the last cut or
+    /// turn (the frame after it uses that frame's own).
+    pub fn meter_reading_frame(&self) -> u32 {
+        let s = self.state.lock().unwrap();
+        s.frame.wrapping_add(1).saturating_sub(crate::look::scene_meter::LAG).max(s.meter_floor)
     }
 
     /// the frame counter `update` advances (the scene meter tags its readings with it).
@@ -1568,6 +1580,7 @@ impl SkyGpu {
             // (`--smooth-time`: only a camera cut, as below; `step_smooth` converges.)
             if camera_cut || ((cut || turned) && !smooth) {
                 s.meter_snap_after = Some(s.frame);
+                s.meter_floor = s.frame;
             }
             match reading {
                 Some(r) if s.meter_snap_after.is_none_or(|a| r.frame >= a) => {

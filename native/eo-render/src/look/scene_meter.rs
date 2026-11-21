@@ -1,6 +1,6 @@
 //! The scene meter on the GPU (`--no-scene-meter`): one compute pass over the
 //! frame post reads, binning its luminance (look_meter.wgsl), copied into a
-//! ring of readback buffers and read one or more frames late; eo-sky
+//! ring of readback buffers and read `LAG` frames late; eo-sky
 //! `night::scene_meter` turns a reading into the exposure.
 
 use eo_sky::night::{SCENE_METER_BINS, SCENE_METER_BINS_PER_EV, SCENE_METER_LO_EV, SceneMeterReading};
@@ -9,6 +9,14 @@ use std::sync::{Arc, Mutex};
 
 const RING: usize = 4;
 const HIST_BYTES: u64 = (SCENE_METER_BINS * 4) as u64;
+
+/// Frames from a frame to the reading its exposure uses (the sky's
+/// `meter_reading_frame`): always the same frame's, never the newest that
+/// happens to be mapped, so the exposure, and the frame, do not depend on how
+/// far the GPU lags (two renders of the same frames are the same). Every loop
+/// keeps two frames in flight, so that reading is normally mapped already and
+/// nothing waits; with every frame's slot back by then, every frame is metered.
+pub const LAG: u32 = 2;
 
 struct Slot {
     buf: wgpu::Buffer,
@@ -26,7 +34,8 @@ pub struct SceneMeter {
     slots: Vec<Mutex<Slot>>,
     /// bind groups for the three sources post may read (the HDR scene, history 0, 1), by size.
     binds: Mutex<Option<((u32, u32), [wgpu::BindGroup; 3])>>,
-    latest: Mutex<Option<SceneMeterReading>>,
+    /// the readings collected and not yet passed over, oldest first.
+    readings: Mutex<Vec<SceneMeterReading>>,
     pub bytes: u64,
 }
 
@@ -83,7 +92,7 @@ impl SceneMeter {
                 })
             })
             .collect();
-        Self { pipeline, bgl, uniform, hist, slots, binds: Mutex::new(None), latest: Mutex::new(None), bytes: HIST_BYTES * (RING as u64 + 1) + 16 }
+        Self { pipeline, bgl, uniform, hist, slots, binds: Mutex::new(None), readings: Mutex::new(vec![]), bytes: HIST_BYTES * (RING as u64 + 1) + 16 }
     }
 
     /// (Re)make the bind groups for the three post sources of a size.
@@ -102,13 +111,15 @@ impl SceneMeter {
         *self.binds.lock().unwrap() = Some((size, sources.map(make)));
     }
 
-    /// Collect finished readbacks (the newest becomes `latest`) and start mapping
-    /// the ones submitted since. Call once a frame before encoding. `wait_for`:
-    /// a frame whose reading the exposure is waiting on (the first of a new
-    /// view, after a cut): when it is in flight the GPU is waited on, so the
-    /// shot's exposure is set from its own frame from the next frame on,
-    /// whatever the GPU's lag (deterministic captures and tests).
-    pub fn poll(&self, device: &wgpu::Device, wait_for: Option<u32>) {
+    /// Collect finished readbacks and start mapping the ones submitted since.
+    /// Call once a frame before encoding. `need`: the frame whose reading the
+    /// coming frame's exposure uses (the sky's `meter_reading_frame`: `LAG`
+    /// frames back, or the first frame of a new view after a cut): while it
+    /// (or an older one) is in flight the GPU is waited on, so every frame's
+    /// exposure is set from that frame's reading whatever the GPU's lag, and a
+    /// new shot's from its own first frame from the next frame on
+    /// (deterministic captures and tests).
+    pub fn poll(&self, device: &wgpu::Device, need: u32) {
         let mut waiting = false;
         for s in &self.slots {
             let s = s.lock().unwrap();
@@ -118,7 +129,7 @@ impl SceneMeter {
                 let flag = s.stage.clone();
                 s.buf.slice(..).map_async(wgpu::MapMode::Read, move |r| flag.store(if r.is_ok() { 3 } else { 4 }, Ordering::Release));
             }
-            if (st == 1 || st == 2) && wait_for.is_some_and(|a| s.frame >= a) {
+            if (st == 1 || st == 2) && s.frame <= need {
                 waiting = true;
             }
         }
@@ -159,10 +170,12 @@ impl SceneMeter {
                     s.buf.unmap();
                     s.stage.store(0, Ordering::Release);
                     if hist.len() == SCENE_METER_BINS {
-                        let mut l = self.latest.lock().unwrap();
-                        if l.as_ref().is_none_or(|r| r.frame <= s.frame) {
-                            *l = Some(SceneMeterReading { hist, prior: s.prior, frame: s.frame });
-                        }
+                        let mut l = self.readings.lock().unwrap();
+                        let at = l.partition_point(|r| r.frame <= s.frame);
+                        l.insert(at, SceneMeterReading { hist, prior: s.prior, frame: s.frame });
+                        // (a few frames' worth: `reading` passes over the older ones)
+                        let extra = l.len().saturating_sub(2 * RING);
+                        l.drain(..extra);
                     }
                 }
                 4 => {
@@ -185,8 +198,14 @@ impl SceneMeter {
         queue.write_buffer(&self.uniform, 0, bytemuck::cast_slice(&[grey, avg, 0.0, 0.0]));
     }
 
-    pub fn latest(&self) -> Option<SceneMeterReading> {
-        self.latest.lock().unwrap().clone()
+    /// The reading the coming frame's exposure uses: the newest of frame `need`
+    /// or older (`poll` with the same `need` first). The older ones are passed
+    /// over for good (`need` only moves on).
+    pub fn reading(&self, need: u32) -> Option<SceneMeterReading> {
+        let mut l = self.readings.lock().unwrap();
+        let n = l.partition_point(|r| r.frame <= need);
+        l.drain(..n.saturating_sub(1));
+        l.first().filter(|r| r.frame <= need).cloned()
     }
 
     /// Meter the frame post reads (`src`: 0 the HDR scene, 1 + p history p),
