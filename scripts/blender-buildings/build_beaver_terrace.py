@@ -277,7 +277,7 @@ def fabric_grid(mat, columns, rows, sample, reverse=False):
     emit(mat, points, [f[::-1] for f in faces] if reverse else faces, True)
 
 
-def cushion(mat, centre, radii):
+def cushion(mat, centre, radii, tilt=0, twist=0):
     """A softly crowned superellipsoid with subtly gathered upholstery."""
     x, y, z = centre
 
@@ -297,6 +297,22 @@ def cushion(mat, centre, radii):
                     z + radii[2] * lat * power(math.sin(a), 0.40),
                 )
             )
+    if tilt or twist:
+        # A loose back cushion flattens near its base and leans into the sash.
+        posed = []
+        for xx,yy,zz in pts:
+            dx,dy,dz = xx-x,yy-y,zz-z
+            height = dy/radii[1]
+            pinch = math.exp(-((height+.60)/.26)**2)*math.sin(dx/radii[0]*5.5)
+            dz += .010*pinch
+            yy = dy*math.cos(tilt)-dz*math.sin(tilt)
+            zz = dz*math.cos(tilt)+dy*math.sin(tilt)
+            along=dx*math.cos(twist)+zz*math.sin(twist)
+            roll=.79*twist
+            posed.append((x+along*math.cos(roll)-yy*math.sin(roll),
+                          y+max(-.163,along*math.sin(roll)+yy*math.cos(roll)),
+                          z+zz*math.cos(twist)-dx*math.sin(twist)))
+        pts = posed
     faces = [
         (j * 28 + i, (j + 1) * 28 + i, (j + 1) * 28 + (i + 1) % 28, j * 28 + (i + 1) % 28)
         for j in range(12)
@@ -332,7 +348,7 @@ def table(x, y, z, w, d, h):
 
 def chair(x, y, z):
     if FURNITURE:
-        furniture.chair(emit, box, finish, boxes, x, y, z)
+        furniture.chair(emit, box, finish, boxes, x, y, z, rush=PHOTO and room.startswith("dining-chair"))
         return
     table(x, y, z, 0.55, 0.53, 0.46)
     for a in [x + 0.05, x + 0.5]:
@@ -468,9 +484,9 @@ for level in range(3):
             # Set the sash back from the arcades. The deep sill, soffit and
             # side returns remain visible when looking uphill from the street.
             for x in (0.66,4.59):
-                box(reveal,(x,y+0.85,-0.38),(x+0.055,y+2.53,0.52))
+                box(reveal,(x,y+0.85,-0.05 if PHOTO else -0.38),(x+0.055,y+2.53,0.52))
             box(reveal,(0.66,y+0.82,-0.38),(4.645,y+0.88,0.53))
-            box(reveal,(0.66,y+2.51,-0.38),(4.645,y+2.58,0.53))
+            box(reveal,(0.66,y+2.51,-0.045 if PHOTO else -0.38),(4.645,y+2.58,0.53))
             if PHOTO:
                 courtyard.arched_casements(emit, box, boxes, window_wood, glass, plaster, y)
                 continue
@@ -622,10 +638,19 @@ if FINISHES:
     room = part("upper-arched-loggia",2.62,2*RISE,-0.42)
     for i in range(3):
         center = 1.315 + 1.31*i
-        courtyard.arch(emit,stucco,center,0.595,2*RISE+1.77,0.72,2*RISE+2.83,-0.405,0.056)
+        wall_front = -.058 if PHOTO else -.405
+        courtyard.arch(emit,stucco,center,0.595,2*RISE+1.77,0.72,2*RISE+2.83,wall_front,0.056)
+        if PHOTO:
+            courtyard.arch_reveal(emit,reveal,center,.595,2*RISE+1.77,.72,-.235,wall_front)
+
     for x in (0.66,1.97,3.28,4.59):
-        box(reveal,(x-0.065,2*RISE+0.78,-0.403),(x+0.065,2*RISE+2.82,0.065),False,0.015)
-        box(stucco,(x-0.089,2*RISE+1.706,-0.420),(x+0.089,2*RISE+1.79,0.065),False,0.012)
+        pier_top = 1.77 if PHOTO else 2.82
+        pier_front = -.235 if PHOTO else -.403
+        box(reveal,(x-0.065,2*RISE+0.78,pier_front),(x+0.065,2*RISE+pier_top,0.065),False,0.015)
+        if PHOTO:
+            box(stucco,(x-.066,2*RISE+1.77,-.057),(x+.066,2*RISE+2.83,.065))
+
+        box(stucco,(x-0.089,2*RISE+1.706,pier_front-.017),(x+0.089,2*RISE+1.79,0.065),False,0.012)
     box(stucco,(0.58,2*RISE+0.71,-0.44),(4.68,2*RISE+0.88,0.077),False,0.032)
     # A shallow iron balcony stands off the bedroom sash at the middle floor.
     room = part("bedroom-iron-balcony",2.62,RISE+0.79,-0.40)
@@ -745,7 +770,10 @@ if FURNITURE:
 else:
     box(blue, (2.21, 0.44, 2.25), (2.65, 0.49, 2.83), False, 0.01)
 room = part("oak-dining-table", 2.375, 0, 7.575)
-table(1.7, 0, 6.7, 1.35, 1.75, 0.79)
+if PHOTO:
+    beaver_photo.farmhouse_table(box, finish, boxes)
+else:
+    table(1.7, 0, 6.7, 1.35, 1.75, 0.79)
 room = part("dining-chair", 2.375, 0, 6.345)
 chair(2.1, 0, 6.08)
 room = part("dining-chair-rear", 2.375, 0, 8.905)
@@ -758,6 +786,8 @@ if FURNITURE:
     room = part("oak-sideboard", .385, 0, 7.565)
     furniture.sideboard(emit, box, turned, finish)
 room = part("base-cabinets", 0.6, 0, 11.53)
+if PHOTO:
+    beaver_photo.prep_counter(emit, box, turned, bent_tube, finish, pottery, brass)
 box(sage, (0.16, 0, 10.36), (1.02, 0.91, 12.68), True)
 # Continuous counter with an inset sink cut through its rear section.
 for x, u, z, w in [
@@ -845,12 +875,12 @@ plant(4.03, 0.01, 0.58)
 room = part("kitchen-plant", .56, 1, 12.32) if FURNITURE else "Ground"
 plant(0.56, 1.0, 12.32, 0.60)
 room = part("dining-pendant", 2.37, RISE - 0.16, 7.51)
-turned(brass, 2.37, 1.99, 7.51, [(0.38, 0), (0.35, 0.075), (0.22, 0.19), (0.075, 0.29), (0.065, 0.33)], 32)
+turned(finish("pendant-enamel","403f38",.43) if PHOTO else brass, 2.37, 1.99, 7.51, [(0.38, 0), (0.35, 0.075), (0.22, 0.19), (0.075, 0.29), (0.065, 0.33)], 32)
 turned(iron, 2.37, 2.30, 7.51, [(0.010, 0), (0.010, RISE - 2.45)], 8)
 room = part("painted-fruit-bowl", 2.39, 0.79, 7.49)
-turned(teal, 2.39, 0.79, 7.49, [(0.08, 0), (0.15, 0.06), (0.23, 0.16), (0.20, 0.16), (0.08, 0.04)], 24, closed=True)
-apple = finish("apple-skin", "a84036", 0.36, texture=110)
-pear = finish("pear-skin", "b1aa54", 0.49, texture=95)
+turned(finish("celadon-stoneware","879681",.32) if PHOTO else teal, 2.39, 0.79, 7.49, [(0.08, 0), (0.15, 0.06), (0.23, 0.16), (0.20, 0.16), (0.08, 0.04)], 24, closed=True)
+apple = finish("apple-skin", "8c4d3e" if PHOTO else "a84036", 0.36, texture=110)
+pear = finish("pear-skin", "949056" if PHOTO else "b1aa54", 0.49, texture=95)
 for i, (dx, dz, h) in enumerate([(-0.075, -0.035, 0.108), (0.076, -0.026, 0.108), (0.014, 0.069, 0.138)]):
     room = part(("red-apple", "red-apple-small", "orchard-pear")[i], 2.39 + dx, 0.79 + h - 0.06, 7.49 + dz)
     x = 2.39 + dx
@@ -917,7 +947,7 @@ boxes.append([[0.86, y + 0.40, 10.16], [2.79, y + 0.67, 12.46]])
 if FINISHES:
     # A padded box-stitched coverlet. The radiused returns wrap the mattress,
     # with gathered excess at the foot. The shell has a sewn binding at its edges.
-    quilt = finish("cotton-coverlet", "617379" if PHOTO else "87999b" if PATINA else "758f99", 0.94, texture=180)
+    quilt = finish("cotton-coverlet", "445e6b" if PHOTO else "87999b" if PATINA else "758f99", 0.94, texture=180)
     binding = finish("cotton-binding", "657e88", 0.96)
     def coverlet(u, t):
         side = 2 * u - 1
@@ -947,6 +977,10 @@ if FINISHES:
             # Very shallow quilting remains in the stuffing once the fabric settles.
             h+=.009*(math.sin(math.pi*9*u)*math.sin(math.pi*8*t))**2
             if PHOTO:
+                # Pull the quilt smooth over its supported area. Leave the
+                # cloth simulation's full length and weight on the hanging edges.
+                support=max(0.,1-(abs(2*u-1)/.88)**6)*min(1.,t/.17)
+                h += .78*support*(.723-h)
                 return beaver_photo.bunched_linen(u, t, x, y+h, z)
             return x,y+h,z
         # The turned edge shows the softer reverse, with a round fold and two
@@ -959,6 +993,19 @@ if FINISHES:
             return x,h+crown,z
         fabric_grid(reverse,60,13,turnback)
     fabric_grid(quilt, 100, 86, coverlet)
+    if PHOTO:
+        # Paired rows of broken cotton stitches follow the quilt over the foot.
+        thread=finish("cotton-binding","7c8986",.96)
+        for seam in (.13,.34,.55,.76,.91):
+            for line in (seam,seam+.0027):
+                for k in range(122):
+                    t0=k/122
+                    edge=[]
+                    for t in (t0,t0+.0038):
+                        for side in (-.00036,.00036):
+                            x,h,z=coverlet(line+side,t)
+                            edge.append((x,h+.0011,z-.0010*(1-t)**6))
+                    emit(thread,edge,[(0,1,3,2)])
     # Corded linen binding with a rounded cross section, following the hanging hem.
     for edge in [lambda t: coverlet(0,t), lambda t: coverlet(1,t),
                  lambda t: coverlet(t,0), lambda t: coverlet(t,1)]:
@@ -1368,7 +1415,11 @@ for i in range(3):
     box(paint, (x + 0.035, 0.16, 12.009), (x + 0.625, 0.35, 12.019), False, 0.009)
 cushion(flax, (3.5, 0.45, 12.39), (1.13, 0.083, 0.35))
 for i in range(3):
-    cushion(stripe if i == 1 else ink, (2.83 + i * 0.63, 0.66, 12.62), (0.24, 0.21, 0.085))
+    if PHOTO:
+        cushion(stripe if i == 1 else ink, (2.80+i*.65,.692,12.58+.018*math.sin(i*2)),
+                (.22+.012*(i%2),.19+.013*i,.075), (.31,.16,.26)[i], (-.11,.15,-.20)[i])
+    else:
+        cushion(stripe if i == 1 else ink, (2.83 + i * 0.63, 0.66, 12.62), (0.24, 0.21, 0.085))
 room = part("roman-shade", 2.65, 2.65, 12.65)
 # Overlapping folds of a half-raised woven Roman shade have a visible lining and selvage.
 for i in range(5):
@@ -1441,6 +1492,9 @@ room = part("striped-table-runner", 2.40, 0.796, 7.575)
 
 def runner_surface(u, v):
     z = 6.45 + v * 2.24
+    if PHOTO:
+        # Fold the dishcloth on one side, leaving the board faces and bowl visible.
+        return (1.99+.33*u, .7905+.012*math.sin(u*9+v*2)**2+.002*math.sin(v*11)**2, 7.91+.39*v)
     end = max(6.70 - z, z - 8.45, 0.0)
     zz = min(8.45, max(6.70, z)) + (z - min(8.45, max(6.70, z))) * 0.17
     xx = 2.14 + u * 0.52 + 0.011 * math.sin(v * 10 + u * 2)
@@ -1455,7 +1509,11 @@ for i, (a, b) in enumerate(zip(edges, edges[1:])):
 for j in range(36):
     for v in [0, 1]:
         x, y, z = runner_surface(j / 35, v)
-        box(flax, (x - 0.002, y - 0.032 - 0.01 * math.sin(j * 4), z - 0.002), (x + 0.002, y, z + 0.002))
+        if PHOTO:
+            end = z + (.012 if v else -.012) * (.8+.2*math.sin(j*4))
+            box(flax,(x-.001,y,min(end,z)),(x+.001,y+.0018,max(end,z)))
+        else:
+            box(flax, (x - 0.002, y - 0.032 - 0.01 * math.sin(j * 4), z - 0.002), (x + 0.002, y, z + 0.002))
 room = "enamel-refrigerator"
 # Hand-written list under a little round fridge magnet.
 for x, y, w, h in [(1.70, 1.52, 0.18, 0.20), (1.90, 1.70, 0.13, 0.11)]:
@@ -1590,17 +1648,19 @@ for (room_name, mat_name), (points, faces, smooth) in batches.items():
     if room_name in pivots:
         component_meshes.setdefault(room_name, []).append(obj)
 
-bake_meshes = list(bpy.context.scene.objects)
-restore = (beaver_photo.metric_bake(bake_meshes, dimensions.GROUP, dimensions.ASSEMBLIES,
-           (1.3035714, -.10714286), (.13461538, 1.28846154)) if PHOTO else [])
-beaver_lighting.bake(bake_meshes, RISE, detailed=FINISHES, cloth_transfer=PATINA, furniture_contact=FURNITURE,
-                     porch_source=beaver_entry.SCONCE_LIGHT if FURNITURE else (5.97, 2.27, -0.26),
-                     entry_setback=beaver_entry.SETBACK if FURNITURE else 0, exterior_bounce=PHOTO)
-for mesh, inverse in restore:
-    mesh.transform(inverse)
-    mesh.update()
+if "--blend-only" not in sys.argv:
+    bake_meshes = list(bpy.context.scene.objects)
+    restore = (beaver_photo.metric_bake(bake_meshes, dimensions.GROUP, dimensions.ASSEMBLIES,
+               (1.3035714, -.10714286), (.13461538, 1.28846154)) if PHOTO else [])
+    beaver_lighting.bake(bake_meshes, RISE, detailed=FINISHES, cloth_transfer=PATINA, furniture_contact=FURNITURE,
+                         porch_source=beaver_entry.SCONCE_LIGHT if FURNITURE else (5.97, 2.27, -0.26),
+                         entry_setback=beaver_entry.SETBACK if FURNITURE else 0, exterior_bounce=PHOTO)
+    for mesh, inverse in restore:
+        mesh.transform(inverse)
+        mesh.update()
 
 parser = argparse.ArgumentParser()
+parser.add_argument("--blend-only", action="store_true", help="Build the editable source scene without exporting runtime assets")
 parser.add_argument("--parts", type=Path, help="Directory outside the checkout for reusable component GLBs")
 parser.add_argument("--blend", type=Path)
 parser.add_argument("--house-finishes", action="store_true", help="Build the courtyard exterior and furnished interior variant")
@@ -1609,6 +1669,8 @@ parser.add_argument("--render", type=Path, help="Optional kitchen photograph ren
 parser.add_argument("--house-photo", action="store_true", help="Build the tiled roof, courtyard and tailored room furnishings")
 parser.add_argument("--house-furniture", action="store_true", help="Build the sewn upholstery, wood furniture and wool rug")
 args = parser.parse_args(sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else [])
+if args.blend_only and (not args.blend or args.parts):
+    parser.error("--blend-only needs --blend and writes the assembled scene without GLB exports")
 if args.blend:
     if args.blend.resolve().is_relative_to(ROOT):
         raise ValueError("The editable Blender scene belongs in the off-repository asset store.")
@@ -1637,90 +1699,92 @@ for name, meshes in component_meshes.items():
         obj.parent = handle
     components[name] = (handle, meshes)
 
-OUT.mkdir(parents=True, exist_ok=True)
-glb = OUT / "terrace.glb"
-grain_links = []
-for mat in materials.values():
-    slot = mat.node_tree.nodes.get("Principled BSDF").inputs["Base Color"]
-    if slot.is_linked:
-        source = slot.links[0].from_socket
-        mat.node_tree.links.remove(slot.links[0])
-        grain_links.append((mat, source, slot))
-bpy.ops.export_scene.gltf(
-    filepath=str(glb),
-    export_format="GLB",
-    export_texcoords=True,
-    export_yup=True,
-    export_animations=False,
-    export_extras=False,
-)
-manifest_source = "Original Blender model generated by scripts/blender-buildings/build_beaver_terrace.py"
-if args.parts:
-    entries = []
-    for name, (root, meshes) in sorted(components.items()):
-        path = args.parts / (name + ".glb")
-        bpy.ops.object.select_all(action="DESELECT")
-        for obj in [root, *meshes]:
-            obj.select_set(True)
-        placed = root.location.copy()
-        root.location = (0, 0, 0)
-        try:
-            bpy.ops.export_scene.gltf(
-                filepath=str(path),
-                export_format="GLB",
-                use_selection=True,
-                export_texcoords=False,
-                export_yup=True,
-                export_animations=False,
-                export_extras=False,
-            )
-        finally:
-            root.location = placed
-        content = path.read_bytes()
-        entries.append(
-            {
-                "asset": path.name,
-                "sha256": hashlib.sha256(content).hexdigest(),
-                "bytes": len(content),
-                "pivot_in_house_m": [placed.x, placed.z, -placed.y],
-            }
-        )
-    (args.parts / "components.json").write_text(
-        json.dumps(
-            {
-                "source": manifest_source,
-                "license": "MIT",
-                "attribution": "Earth Online contributors",
-                "units": "metres, Y up",
-                "components": entries,
-            },
-            indent=2,
-        )
-        + "\n"
+if not args.blend_only:
+    OUT.mkdir(parents=True, exist_ok=True)
+    glb = OUT / "terrace.glb"
+    grain_links = []
+    for mat in materials.values():
+        slot = mat.node_tree.nodes.get("Principled BSDF").inputs["Base Color"]
+        if slot.is_linked:
+            source = slot.links[0].from_socket
+            mat.node_tree.links.remove(slot.links[0])
+            grain_links.append((mat, source, slot))
+    bpy.ops.export_scene.gltf(
+        filepath=str(glb),
+        export_format="GLB",
+        export_texcoords=True,
+        export_yup=True,
+        export_animations=False,
+        export_extras=False,
     )
-for mat, source, slot in grain_links:
-    mat.node_tree.links.new(source, slot)
-raw = glb.read_bytes()
-manifest = {
-    "source": manifest_source,
-    "license": "MIT",
-    "attribution": "Earth Online contributors. Siting from the recorded OpenStreetMap footprint in sf-city.json.gz.",
-    "url": "/" + glb.relative_to(ROOT / "public").as_posix(),
-    "sha256": hashlib.sha256(raw).hexdigest(),
-    "bytes": len(raw),
-    "door": {"hinge": door_hinge, "bounds": door_bounds, "materials": door_materials},
-    "boxes": boxes,
-    "ramps": ramps,
-}
-if PHOTO:
-    manifest["ground_components"] = ground_components
-if FURNITURE:
-    manifest["metric_assemblies"] = [
-        {"anchor": anchor, "components": names,
-         "boxes": [j for j, group in enumerate(box_groups) if group == i]}
-        for i, (anchor, names) in enumerate(dimensions.ASSEMBLIES)
-    ]
-(OUT / "terrace.provenance.json").write_text(json.dumps(manifest, indent=1) + "\n")
+    manifest_source = "Original Blender model generated by scripts/blender-buildings/build_beaver_terrace.py"
+    if args.parts:
+        entries = []
+        for name, (root, meshes) in sorted(components.items()):
+            path = args.parts / (name + ".glb")
+            bpy.ops.object.select_all(action="DESELECT")
+            for obj in [root, *meshes]:
+                obj.select_set(True)
+            placed = root.location.copy()
+            root.location = (0, 0, 0)
+            try:
+                bpy.ops.export_scene.gltf(
+                    filepath=str(path),
+                    export_format="GLB",
+                    use_selection=True,
+                    export_texcoords=False,
+                    export_yup=True,
+                    export_animations=False,
+                    export_extras=False,
+                )
+            finally:
+                root.location = placed
+            content = path.read_bytes()
+            entries.append(
+                {
+                    "asset": path.name,
+                    "sha256": hashlib.sha256(content).hexdigest(),
+                    "bytes": len(content),
+                    "pivot_in_house_m": [placed.x, placed.z, -placed.y],
+                }
+            )
+        (args.parts / "components.json").write_text(
+            json.dumps(
+                {
+                    "source": manifest_source,
+                    "license": "MIT",
+                    "attribution": "Earth Online contributors",
+                    "units": "metres, Y up",
+                    "components": entries,
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+    for mat, source, slot in grain_links:
+        mat.node_tree.links.new(source, slot)
+    raw = glb.read_bytes()
+    manifest = {
+        "source": manifest_source,
+        "license": "MIT",
+        "attribution": "Earth Online contributors. Siting from the recorded OpenStreetMap footprint in sf-city.json.gz.",
+        "url": "/" + glb.relative_to(ROOT / "public").as_posix(),
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "bytes": len(raw),
+        "door": {"hinge": door_hinge, "bounds": door_bounds, "materials": door_materials},
+        "boxes": boxes,
+        "ramps": ramps,
+    }
+    if PHOTO:
+        manifest["ground_components"] = ground_components
+        manifest["rear_parcel"] = beaver_photo.rear_parcel(ROOT)
+    if FURNITURE:
+        manifest["metric_assemblies"] = [
+            {"anchor": anchor, "components": names,
+             "boxes": [j for j, group in enumerate(box_groups) if group == i]}
+            for i, (anchor, names) in enumerate(dimensions.ASSEMBLIES)
+        ]
+    (OUT / "terrace.provenance.json").write_text(json.dumps(manifest, indent=1) + "\n")
 
 
 # These objects belong to the editable review scene. The portable GLB above contains the house alone.
@@ -1766,9 +1830,12 @@ if FINISHES and (args.blend or args.render):
     beaver_lighting.dress_floor_for_blender(scene, (OUT if PHOTO else FINISH_DIR) / "floorboards.png", boards)
 if PATINA and (args.blend or args.render):
     beaver_entry.dress_scans(materials, SURFACE_DIR, scene, FURNITURE, door_bounds, photo=PHOTO)
+if args.blend_only and PHOTO:
+    import beaver_blender_scene
+    beaver_blender_scene.stage(scene, ROOT, components, dimensions, ground_components)
 if args.blend:
     bpy.context.preferences.filepaths.save_version = 0
-    bpy.ops.wm.save_as_mainfile(filepath=str(args.blend.resolve()))
+    bpy.ops.wm.save_as_mainfile(filepath=str(args.blend.resolve()), compress=args.blend_only)
 if args.render:
     args.render.parent.mkdir(parents=True, exist_ok=True)
     scene.render.filepath = str(args.render.resolve())

@@ -253,3 +253,5 @@ The optional 21 Beaver sitting-room carpet uses the public-domain recto photogra
 The optional private courtyard and paved apron at 21 Beaver use the CC0 scans [Park Dirt](https://polyhaven.com/a/park_dirt) by Christopher Melani and [Concrete Floor Worn 001](https://polyhaven.com/a/concrete_floor_worn_001) by Dimitrios Savva, Rico Cilliers. [Poly Haven licence](https://polyhaven.com/license).
 
 Rob Tuytel photographed the frontage tree’s bark. Dimitrios Savva photographed the terracotta used on the porch and steps. The optional house uses these CC0 colour, normal and roughness maps. [Bark Brown 02](https://polyhaven.com/a/bark_brown_02) · [Terracotta Floor Tiles](https://polyhaven.com/a/terracotta_floor_tiles) · [Poly Haven licence](https://polyhaven.com/license).
+
+The optional house courtyard follows parcel 3561049 from the City and County of San Francisco parcel survey, released under PDDL 1.0. [Parcels – Active and Retired](https://data.sf.gov/d/acdm-wktn) · [Source and licence](scripts/blender-buildings/sources/beaver-parcel.NOTICE.txt).

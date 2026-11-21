@@ -25,6 +25,20 @@ def arch(emit, mat, center, radius, spring, rise, head, front, back):
     emit(mat, points, faces)
 
 
+def arch_reveal(emit, mat, center, radius, spring, rise, front, back):
+    """A projecting plaster return with a constant-width face around the opening."""
+    points = []
+    for i in range(33):
+        a = math.pi * i / 32
+        co, si = math.cos(a), math.sin(a)
+        x, y = center-radius*co, spring+rise*si
+        u, v = center-(radius+.061)*co, spring+(rise+.061)*si
+        points.extend(((x,y,front),(u,v,front+.012),(u,v,back),(x,y,back)))
+    faces = [(4*i+k,4*i+(k+1)%4,4*i+4+(k+1)%4,4*i+4+k)
+             for i in range(32) for k in (0,1,3)]
+    emit(mat, points, faces)
+
+
 def arched_casements(emit, box, boxes, frame, glass, plaster, floor):
     """Three independently glazed arches, recessed behind the front arcade."""
     sill, spring = floor + .86, floor + 1.77
@@ -154,7 +168,9 @@ def stair_bay(emit, box, stucco, recess, wood, glass, tiles, rise, photo=False):
         # A conical cap sheds water in pans, with separate cover tiles over the joints.
         # Shorter courses near the top let the clay follow the tighter circumference.
         rng = random.Random(2157)
-        for j in range(17):
+        # The ridge continues behind the front plane until it intersects the
+        # main roof. A half-cone would leave the upper part of its back open.
+        for j in range(34):
             pitch = math.pi / 17
             for outer, inner in ((1.10,.745), (.806,.478), (.544,.228), (.297,.025)):
                 for pan in (True, False):

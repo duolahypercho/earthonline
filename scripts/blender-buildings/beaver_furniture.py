@@ -362,7 +362,42 @@ def rug(emit, box, finish):
     emit(hem, vs, fs, True)
 
 
-def chair(emit, box, finish, boxes, x, y, z):
+def rush_seat(emit, box, finish, wood, x, y, z):
+    """Four diagonal rush fields laid over a square timber chair frame."""
+    straw = [finish("rush-seat", tone, .86) for tone in ("ad9870","b7a17c","ab916b","b3a081")]
+    rng = random.Random(327)
+    cx, cz = x+.274, z+.262
+    for i in range(38):
+        fraction = (i+.5)/38
+        a, b = .224*fraction+.009, .209*fraction+.005
+        h = y+.432+.016*fraction*fraction
+        for edge in range(4):
+            curve = []
+            for t in (0.,.16,.36,.64,.84,1.):
+                along = t*2-1
+                u,v = ((along*a,-b),(a,along*b),(-along*a,b),(-a,-along*b))[edge]
+                # A slight crown between the wrapped corners, with individual cord ridges.
+                curve.append((cx+u,h+.0024*math.sin(math.pi*t),cz+v))
+            width = .0029
+            vertices = []
+            for k,(px,py,pz) in enumerate(curve):
+                for q in range(5):
+                    ang = math.pi*q/4
+                    co = width*math.cos(ang)
+                    vertices.append((px+(co if edge%2 else 0),py+width*math.sin(ang),
+                                     pz+(co if not edge%2 else 0)))
+            faces = [(5*j+k,5*j+k+1,5*j+k+6,5*j+k+5) for j in range(5) for k in range(4)]
+            emit(rng.choice(straw),vertices,faces,True)
+    # Solid rails carry the reed mat, with lower stretchers bracing the legs.
+    for dx in (-.214,.214):
+        box(wood,(cx+dx-.014,y+.389,cz-.21),(cx+dx+.014,y+.434,cz+.209),bevel=.006)
+        box(wood,(cx+dx-.012,y+.178,cz-.214),(cx+dx+.012,y+.198,cz+.215),bevel=.007)
+    for dz in (-.192,.192):
+        box(wood,(cx-.211,y+.39,cz+dz-.016),(cx+.211,y+.433,cz+dz+.016),bevel=.005)
+        box(wood,(cx-.217,y+.196,cz+dz-.011),(cx+.217,y+.218,cz+dz+.011),bevel=.007)
+
+
+def chair(emit, box, finish, boxes, x, y, z, rush=False):
     grain = finish("furniture-oak", "a18061", 0.49)
     end = finish("furniture-oak", "8c6a4c", 0.51)
     for dx in (0.077, 0.470):
@@ -379,25 +414,28 @@ def chair(emit, box, finish, boxes, x, y, z):
                 0.020,
                 0.012,
             )
-    outline = rounded_outline(0.249, 0.229, 0.061)
-    vs = []
-    fs = []
-    n = len(outline)
-    for j in range(10):
-        f = (10 - j) / 10
-        for u, v in outline:
-            bowl = 0.020 * (1 - f * f) * (0.85 + 0.15 * v / 0.229)
-            vs.append((x + 0.274 + u * f, y + 0.454 - bowl, z + 0.262 + v * f))
-        if j:
-            for i in range(n):
-                fs.append(((j - 1) * n + i, j * n + i, j * n + (i + 1) % n, (j - 1) * n + (i + 1) % n))
-    center = len(vs)
-    vs.append((x + 0.274, y + 0.434, z + 0.262))
-    fs.extend((9 * n + i, center, 9 * n + (i + 1) % n) for i in range(n))
-    bottom = len(vs)
-    vs.extend((x + 0.274 + u * 0.99, y + 0.433, z + 0.262 + v * 0.99) for u, v in outline)
-    fs.extend((i, (i + 1) % n, bottom + (i + 1) % n, bottom + i) for i in range(n))
-    emit(grain, vs, fs, True)
+    if rush:
+        rush_seat(emit, box, finish, end, x, y, z)
+    else:
+        outline = rounded_outline(0.249, 0.229, 0.061)
+        vs = []
+        fs = []
+        n = len(outline)
+        for j in range(10):
+            f = (10 - j) / 10
+            for u, v in outline:
+                bowl = 0.020 * (1 - f * f) * (0.85 + 0.15 * v / 0.229)
+                vs.append((x + 0.274 + u * f, y + 0.454 - bowl, z + 0.262 + v * f))
+            if j:
+                for i in range(n):
+                    fs.append(((j - 1) * n + i, j * n + i, j * n + (i + 1) % n, (j - 1) * n + (i + 1) % n))
+        center = len(vs)
+        vs.append((x + 0.274, y + 0.434, z + 0.262))
+        fs.extend((9 * n + i, center, 9 * n + (i + 1) % n) for i in range(n))
+        bottom = len(vs)
+        vs.extend((x + 0.274 + u * 0.99, y + 0.433, z + 0.262 + v * 0.99) for u, v in outline)
+        fs.extend((i, (i + 1) % n, bottom + (i + 1) % n, bottom + i) for i in range(n))
+        emit(grain, vs, fs, True)
     for dx in (0.072, 0.475):
         tapered_leg(
             emit, end, (x + dx, y + 0.891, z + 0.55), (x + dx, y + 0.432, z + 0.441), 0.018, 0.022

@@ -1,0 +1,7 @@
+21 Beaver Street parcel polygon
+
+City and County of San Francisco, Parcels – Active and Retired, Assessor parcel 3561049.
+Public Domain Dedication and License (PDDL) 1.0, https://opendatacommons.org/licenses/pddl/1-0/
+Dataset: https://data.sf.gov/d/acdm-wktn
+Query: https://data.sfgov.org/resource/acdm-wktn.json?%24select=blklot%2Cshape&%24where=blklot%3D%273561049%27+and+active%3Dtrue
+SHA-256: d1f2fb5c49c0400da7129288536f2593cbd391b2a032874d4905840b5c60f981
