@@ -122,9 +122,10 @@ var<private> room_diffuse: vec3<f32>;
 var<private> surface_fixture: vec3<f32>;
 var<private> dielectric_scale: f32;
 
-// Written only by the garden material in the city draw pass.
+// Site irradiance is set by the fitted garden and exterior plaster receivers.
 var<private> front_ambient: vec3<f32>;
 var<private> measured_front: f32;
+var<private> measured_wall: f32;
 
 fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: vec3<f32>, object: u32) -> vec4<f32> {
     var s = s_in; // sky
@@ -169,7 +170,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     // Rim (no shadow).
     let rl = look.rim_dir.xyz;
     let rnl = max(dot(n, rl), 0.0);
-    let rim = look.rim.xyz * rnl * (1.0 - room_enclosure);
+    let rim = look.rim.xyz * rnl * (1.0 - room_enclosure) * (1.-measured_wall);
     direct_d = direct_d + rim * diffuse / LK_PI;
     direct_s = direct_s + rim * lk_ggx(n, v, rl, f0, rough) * select(1.0, 0.0, s.env == ENV_WET_FILM || s.env == ENV_LOCAL_PROBE || s.env == ENV_INTERIOR_FLOOR); // the rig's rim light draws no false sun in a water film
 
@@ -195,7 +196,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     // The measured room contains the furniture and walls. Its vertex contact
     // term resolves folds below the probe spacing; the broad screen-space
     // visibility would darken that same lighting a second time.
-    let ao = s.ao * select(mix(ao_vis, 1., measured_front), 1., measured_room);
+    let ao = mix(s.ao * select(mix(ao_vis, 1., measured_front), 1., measured_room), 1., measured_wall);
     var indirect_d = irr * diffuse / LK_PI * (vec3<f32>(1.0) - fss) * ao;
     if ((objects[object].kind & TABLE_LIGHT_BIT) != 0u) {
         indirect_d += surface_fixture * diffuse * (vec3<f32>(1.0) - fss);
@@ -228,6 +229,8 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
         let ssr = sky_ssr(world, n, v, rough);
         rad = mix(rad * env_i, ssr.rgb, ssr.a);
     }
+    // Rough plaster sees the enclosing passage in its broad reflection.
+    rad = mix(rad,front_ambient/LK_PI,measured_wall*smoothstep(.30,.75,rough));
     let indirect_s = rad * fss * spec_occ;
     // The bounce is outgoing Lambert radiance (bounce x diffuse albedo), added
     // outside the occlusion multiply as the JS adds it on the emissive slot.

@@ -116,6 +116,8 @@ pub const FLOOR_REFLECTION_BIT: u32 = 1 << 28;
 pub const FITTED_ROOM_BIT: u32 = 1 << 29;
 /// Use the fitted photograph on the ground-floor boards of the shared shell.
 pub const FITTED_FLOOR_BIT: u32 = 1 << 30;
+/// A shell plaster material whose exterior faces can receive the local wall survey.
+pub const WALL_DAYLIGHT_BIT: u32 = 1 << 31;
 
 /// Material 0: the vertex colour (footprints, terrain, roads, sea).
 pub const MATERIAL_VERTEX_COLOUR: u32 = 0;

@@ -4,6 +4,36 @@ use crate::camera::Camera;
 use glam::{Mat4, Vec3};
 use std::collections::BTreeMap;
 
+/// The fixed daylight exposure of the source camera at the photographed house.
+pub struct ExteriorCamera {
+    to_world: Mat4,
+    to_local: Mat4,
+    min: Vec3,
+    max: Vec3,
+    exposure: f64,
+}
+
+impl ExteriorCamera {
+    pub fn new(to_world: Mat4, min: Vec3, max: Vec3, exposure: f32) -> Self {
+        Self {
+            to_local: to_world.inverse(),
+            to_world,
+            min,
+            max,
+            exposure: exposure.into(),
+        }
+    }
+
+    pub(crate) fn target(&self, eye: Vec3, ordinary: f64, clear_day: f64) -> f64 {
+        let local = self.to_local.transform_point3(eye);
+        let delta = local - local.clamp(self.min, self.max);
+        let range = self.to_world.transform_vector3(delta).length();
+        // Share the facade meter's 20–35 m approach and 45 cm doorway transition.
+        let fade = f64::from(((35. - range) / 15.).clamp(0., 1.) * (range / 0.45).clamp(0., 1.)) * clear_day;
+        ordinary * (self.exposure / ordinary).powf(fade)
+    }
+}
+
 pub struct InteriorMeter {
     to_local: Mat4,
     min: Vec3,
@@ -258,6 +288,18 @@ impl InteriorMeter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exterior_camera_holds_the_approach_and_releases_the_room_night_and_city() {
+        let world = Mat4::from_rotation_y(0.4) * Mat4::from_scale(Vec3::new(1.3, 1., 1.2));
+        let camera = ExteriorCamera::new(world, Vec3::ZERO, Vec3::new(7.,10.,13.), 0.65);
+        let target = |depth, daylight| camera.target(world.transform_point3(Vec3::new(3.,1.6,depth)), 1.2, daylight);
+        assert!((target(-10.,1.)-0.65).abs()<1e-6);
+        assert!(target(-0.1,1.)>0.65 && target(-0.1,1.)<1.2);
+        assert_eq!(target(2.,1.),1.2);
+        assert_eq!(target(-40.,1.),1.2);
+        assert_eq!(target(-10.,0.),1.2);
+    }
 
     #[test]
     fn ground_floor_lens_blends_at_the_door_and_releases_the_stairs() {

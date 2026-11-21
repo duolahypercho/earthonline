@@ -341,6 +341,7 @@ struct State {
     /// the forward the meter last metered (a turn of more than ~30 deg snaps the adaptation, as a cut does).
     meter_fwd: Option<glam::Vec3>,
     interior_meter: Option<crate::interior_meter::InteriorMeter>,
+    exterior_camera: Option<crate::interior_meter::ExteriorCamera>,
     frame_bloom: bool,
     /// the aerosol density the transmittance and multiple-scattering
     /// tables were built for (they depend on the medium only; rebuilt on a change).
@@ -859,6 +860,7 @@ impl SkyGpu {
                 adapt: Default::default(),
                 meter_fwd: None,
                 interior_meter: None,
+                exterior_camera: None,
                 frame_bloom: false,
                 atmo_built: None,
                 atmo_haze: 0.0,
@@ -911,6 +913,11 @@ impl SkyGpu {
             s.history_valid = false;
         }
         s.opts = o;
+    }
+
+    /// Register the daylight camera around the photographed site.
+    pub fn set_exterior_camera(&self, camera: crate::interior_meter::ExteriorCamera) {
+        self.state.lock().unwrap().exterior_camera = Some(camera);
     }
 
     /// Register the glazed enclosure used by the camera meter in the playable interior.
@@ -1121,7 +1128,11 @@ impl SkyGpu {
             s.adapt.current = None;
         }
         // Exposure: the target (weather, night solve, the meter), filtered.
-        let target = terms.exposure_target * meter;
+        let ordinary = terms.exposure_target * meter;
+        let target = s.exterior_camera.as_ref().filter(|_| o.meter).map_or(ordinary, |camera| {
+            let daylight = (1.-terms.nightness)*(1.-terms.weather.profile.overcast);
+            camera.target(cam.eye, ordinary, daylight.clamp(0.,1.))
+        });
         let exposure = if o.adaptation {
             s.adapt.step(target, f.hour, dt)
         } else {

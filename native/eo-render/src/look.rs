@@ -107,6 +107,8 @@ struct LookUniform {
     fitted_finish: [[f32; 4]; 2],
     kitchen_frame: [[f32; 4]; 5],
     front_daylight: crate::front_daylight::Field,
+    wall_sample: [f32; 4],
+    wall_overcast: [f32; 4],
 }
 
 #[repr(C)]
@@ -213,6 +215,7 @@ pub struct LookGpu {
     pub fitted_finish: [[f32; 4]; 2],
     pub kitchen_frame: [[f32; 4]; 5],
     pub front_daylight: Option<crate::front_daylight::FrontDaylight>,
+    pub wall_daylight_layer: Option<u32>,
     pub options: LookOptions,
     pub(crate) output_format: wgpu::TextureFormat,
     object_count: u32,
@@ -712,6 +715,7 @@ impl LookGpu {
             fitted_finish: [[0.;4];2],
             kitchen_frame: [[0.;4];5],
             front_daylight: None,
+            wall_daylight_layer: None,
             output_format: init.output_format,
             object_count: init.object_count,
             compact: init.compact,
@@ -1198,6 +1202,12 @@ impl LookGpu {
             oak_finish: self.oak_finish,
             fitted_finish: self.fitted_finish,
             kitchen_frame: self.kitchen_frame,
+            wall_sample: [self.wall_daylight_layer.unwrap_or(0) as f32,
+                ((f.hour as f32-8.)*0.5).clamp(0.,5.), (m.profile.overcast*wx_keep) as f32, 0.],
+            wall_overcast: self.wall_daylight_layer.map_or([0.;4], |_| {
+                let [r,g,b] = crate::front_daylight::overcast_radiance(&f);
+                [r,g,b,0.]
+            }),
             front_daylight: self.front_daylight.as_ref().map_or([[[0.; 4]; 9]; 6], |light| {
                 light.at(&f, (m.profile.overcast * wx_keep) as f32)
             }),

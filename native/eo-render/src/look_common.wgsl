@@ -83,6 +83,8 @@ struct Look {
     fitted_finish: array<vec4<f32>,2>,
     kitchen_frame: array<vec4<f32>,5>,
     front_daylight: array<vec4<f32>,54>,
+    wall_sample: vec4<f32>,
+    wall_overcast: vec4<f32>,
 };
 
 // wet-surface-reflection.js `skyDomeRadiance`: the sky model's horizon

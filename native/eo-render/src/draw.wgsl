@@ -53,6 +53,7 @@ const F_THIN_GLASS: u32 = 16u;
 // the street surface material (street classes in the vertex alpha).
 const F_STREET: u32 = 32u;
 const F_FRONT_DAYLIGHT: u32 = 64u;
+const WALL_DAYLIGHT_BIT: u32 = 0x80000000u;
 const FLOOR_SCAN_BIT: u32 = 512u;
 const THIN_FIBRE_BIT: u32 = 262144u;
 const QUILT_FIBRE_BIT: u32 = 524288u;
@@ -1132,6 +1133,77 @@ fn front_sky_radiance(world: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
     return max(result, vec3<f32>(0.));
 }
 
+// Match the receiving face, including its orientation. Interior plaster often
+// shares both its material and its draw call with the street side of the wall.
+fn wall_chart(p: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
+    let height = (p.y + .16) / 11.16;
+    if (p.x>=.52 && p.x<=4.76 && p.y>=7.23 && p.y<=9.65 && p.z>=-.46 && p.z<=.48) {
+        let u = (p.x-.52)/4.24;
+        let lane = clamp(round((p.x-1.315)/1.31),0.,2.);
+        let spring = 20./3.+.72+(1.77-.86)*2.06/1.69;
+        let ell = vec2<f32>((p.x-(1.315+1.31*lane))/.595,(p.y-spring)/(.72*2.06/1.69));
+        if (p.z>=-.248 && p.z<=.068 && ell.y>=-.02 && abs(length(ell)-1.)<.09
+            && dot(n.xy,-ell)>.55) {
+            return vec3<f32>(atan2(max(0.,ell.y),-ell.x)/PI,(p.z+.235)/.291,11.+lane);
+        }
+        if (n.y<-.8 && abs(p.y-7.26)<.04) { return vec3<f32>((p.x-.55)/4.15,(p.z+.445)/.545,14.); }
+        if (n.z<-.8 && abs(p.z-.408)<.055) { return vec3<f32>(u,(p.y-7.32)/2.25,9.); }
+        if (n.z<-.55 && p.z<-.16) { return vec3<f32>(u,(p.y-7.24)/2.40,10.); }
+    }
+    if (p.y>=1.90 && p.y<=2.68 && p.z>=-.87 && p.z<=.44) {
+        let ell=vec2<f32>((p.x-5.955)/.795,(p.y-1.92)/.72);
+        if (ell.y>=-.027 && abs(length(ell)-1.)<.04 && dot(n.xy,-ell)>.7) {
+            return vec3<f32>(atan2(max(0.,ell.y),-ell.x)/PI,(p.z+.85)/1.27,15.);
+        }
+    }
+    if (abs(n.y) > .32 || height < 0. || height > 1.) {
+        return vec3<f32>(0.,0.,-1.);
+    }
+    if (n.z<-.70 && p.y>=9.95 && abs(p.z+.43)<.045) {
+        return vec3<f32>((p.x+.15)/7.30,(p.y-9.96)/1.04,8.);
+    }
+    if (p.z >= -.02 && p.z <= 13.02) {
+        if (abs(p.x) < .035 && n.x < -.92) { return vec3<f32>(p.z/13.,height,0.); }
+        if (abs(p.x-7.) < .035 && n.x > .92) { return vec3<f32>(p.z/13.,height,1.); }
+    }
+    if (abs(p.z+.05)<.047 && n.z<-.92) { return vec3<f32>(p.x/7.,height,2.); }
+    if (abs(p.z-13.04)<.05 && n.z>.92) { return vec3<f32>(p.x/7.,height,3.); }
+    let radial = vec2<f32>(p.x-5.955,(.04-p.z)/.90);
+    if (p.y>=2.97 && p.y<=10.19 && radial.y>=-.008 && abs(length(radial)-1.)<.026
+        && dot(n.xz,vec2<f32>(radial.x,-radial.y))>.89) {
+        return vec3<f32>(.5+atan2(radial.x,max(radial.y,0.))/PI,(p.y-2.98)/7.2,4.);
+    }
+    if (p.y>=-.015 && p.y<=2.93 && p.x>=4.93 && p.x<=6.98) {
+        if (abs(p.z+.85)<.03 && n.z<-.92) { return vec3<f32>((p.x-4.95)/2.01,p.y/2.92,5.); }
+        let depth = (p.z+.85)/1.27;
+        if (depth>=-.01 && depth<=1.01) {
+            if (abs(p.x-5.16)<.03 && n.x>.92) { return vec3<f32>(depth,p.y/2.92,6.); }
+            if (abs(p.x-6.75)<.03 && n.x<-.92) { return vec3<f32>(depth,p.y/2.92,7.); }
+        }
+    }
+    return vec3<f32>(0.,0.,-1.);
+}
+
+fn wall_light_row(chart: vec3<f32>, row: f32) -> vec3<f32> {
+    let xy = 64.*vec2<f32>(chart.z%8.,row) + clamp(64.*chart.xy,vec2<f32>(.5),vec2<f32>(63.5));
+    var a: vec3<f32>;
+    if (chart.z<8.) {
+        a = textureSampleLevel(kit_orm,kit_sampler,xy/512.,i32(look.wall_sample.x),0.).rgb;
+    } else {
+        a = textureSampleLevel(kit_normal,kit_sampler,xy/512.,i32(look.wall_sample.x),0.).rgb;
+    }
+    let sq = a*a;
+    return sq / max(vec3<f32>(.0001),1.-sq);
+}
+
+fn measured_wall_light(chart: vec3<f32>) -> vec3<f32> {
+    let hour = look.wall_sample.y;
+    let lo = min(4.,floor(hour));
+    let clear = mix(wall_light_row(chart,lo),wall_light_row(chart,lo+1.),hour-lo);
+    let overcast = wall_light_row(chart,6.)*look.wall_overcast.rgb;
+    return mix(clear,overcast,look.wall_sample.z)+wall_light_row(chart,7.);
+}
+
 fn shade(in: VOut) -> vec4<f32> {
     var m = materials[in.material];
     let ft_du = vec2<f32>(dpdx(in.ft.x), dpdy(in.ft.x));
@@ -1548,6 +1620,22 @@ fn shade(in: VOut) -> vec4<f32> {
             rm_emit += s.albedo * (1.0 - s.metal) * (window + pendant);
         }
     }
+    var wall_pigment = vec4<f32>(0.);
+    if ((objects[in.object].kind & WALL_DAYLIGHT_BIT) != 0u) {
+        let parcel = (look.enclosure_frame*vec4<f32>(in.world,1.)).xyz;
+        let local_n = normalize((look.enclosure_frame*vec4<f32>(n,0.)).xyz);
+        let chart = wall_chart(parcel,local_n);
+        if (chart.z >= 0.) {
+            measured_wall = smoothstep(0.,.20,look.key_dir.y)*(1.-skyu.night.z);
+            measured_front = measured_wall;
+            front_ambient = LK_PI*measured_wall_light(chart);
+            let origin = 128.*vec2<f32>(chart.z%4.,floor(chart.z/4.));
+            let uv = (origin+clamp(128.*chart.xy,vec2<f32>(.5),vec2<f32>(127.5)))/512.;
+            wall_pigment = textureSampleLevel(kit_albedo,kit_sampler,uv,i32(look.wall_sample.x),0.);
+            // The wall field already includes diffuse sky, practicals and sun bounce.
+            rm_emit *= 1.-measured_wall;
+        }
+    }
     if ((objects[in.object].kind & THIN_FIBRE_BIT) != 0u) {
         // A woven shade transmits diffuse skylight as well as direct light.
         // A single shadow query on the source-facing side keeps its folds and the
@@ -1605,6 +1693,11 @@ fn shade(in: VOut) -> vec4<f32> {
     }
     // weathering (Blender buildings) and archetype ageing (kit buildings).
     fa_apply(&s, m, in.world, n, in.object, dpx, dpy);
+    if (wall_pigment.a>.01) {
+        // The source pigment already includes its scan, plaster tint and rain streaks.
+        // Alpha is the coverage of the projection at material boundaries.
+        s.albedo = mix(s.albedo,wall_pigment.rgb/wall_pigment.a,smoothstep(.15,.9,wall_pigment.a));
+    }
     if (house_finish && !floor_scan && in.color.b > 0.5 / 255.0 && in.color.b < 2.5 / 255.0) {
         s.env = ENV_LOCAL_PROBE;
         let row = round(in.color.b * 255.0) - 1.0;
