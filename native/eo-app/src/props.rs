@@ -62,11 +62,14 @@ pub struct Props2Args {
     /// The moored boats at the floating docks' berths (eo-props `boats`); `--no-boats`
     /// (or `--no-props2`) leaves them out of the library and draws none.
     pub boats: bool,
+    /// Street props v2 (eo-props `props_v2`) in place of the v1 files; `--no-street-props-v2`
+    /// (or `--no-props2`) keeps the v1 manifest (its absent files drawn as before).
+    pub street_v2: bool,
 }
 
 impl Default for Props2Args {
     fn default() -> Self {
-        Self { furniture: true, eztree: true, overhead: true, wires: true, features: eo_render::props::F_ALL, capture: false, stand_ins: false, boats: true }
+        Self { furniture: true, eztree: true, overhead: true, wires: true, features: eo_render::props::F_ALL, capture: false, stand_ins: false, boats: true, street_v2: true }
     }
 }
 
@@ -75,7 +78,7 @@ impl Props2Args {
     pub fn parse_flag(&mut self, s: &str) -> bool {
         match s {
             "--no-props2" => {
-                *self = Self { furniture: false, eztree: false, overhead: false, wires: false, features: 0, capture: self.capture, stand_ins: self.stand_ins, boats: false };
+                *self = Self { furniture: false, eztree: false, overhead: false, wires: false, features: 0, capture: self.capture, stand_ins: self.stand_ins, boats: false, street_v2: false };
             }
             "--no-furniture" => self.furniture = false,
             "--no-eztree" => self.eztree = false,
@@ -85,6 +88,7 @@ impl Props2Args {
             }
             "--no-wires" => self.wires = false,
             "--no-boats" => self.boats = false,
+            "--no-street-props-v2" => self.street_v2 = false,
             "--no-props2-shading" => self.features = 0,
             "--no-fade" => self.features &= !eo_render::props::F_FADE,
             "--no-wind" => self.features &= !eo_render::props::F_WIND,

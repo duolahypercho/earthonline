@@ -1,0 +1,1836 @@
+{
+  "version": "street-props-v2",
+  "note": "San Francisco street furniture modelled from parameters by scripts/assets/build-street-props-v2.py in Blender: no imported, generated or traced geometry and no downloaded imagery. Dimensions from the sources listed in dimensionSources; where none was readable the v1 slot is kept (see each row's fitToSlot and deviation). Frame: glTF Y up, origin at the foot unless the row says otherwise, +X along the street, -Z toward the carriageway. Materials share one albedo and one metallic-roughness JPEG per kind; `body` is always first.",
+  "assets": {
+    "bench": {
+      "path": "public/assets/street-props/bench-v2.glb",
+      "url": "/assets/street-props/bench-v2.glb",
+      "sha256": "9155db5906329669b33b119087c458fb93425df253bd7403db04c3e63eda11d5",
+      "bytes": 125388,
+      "triangles": 1244,
+      "dimensionsM": [
+        1.09,
+        0.8441,
+        0.6109
+      ],
+      "boundsM": {
+        "min": [
+          -0.545,
+          -0.0002,
+          -0.31
+        ],
+        "max": [
+          0.545,
+          0.8439,
+          0.3009
+        ]
+      },
+      "scale": 1.0,
+      "materials": [
+        "body"
+      ],
+      "atlasPx": 512,
+      "v1Slot": {
+        "dimensionsM": [
+          1.0883,
+          0.86,
+          0.6
+        ],
+        "triangles": 2390,
+        "triangleBudget": 4780
+      },
+      "fitToSlot": {
+        "targetDimensionsM": [
+          1.0883,
+          0.86,
+          0.6
+        ],
+        "offFraction": [
+          0.0016,
+          0.0185,
+          0.0182
+        ],
+        "within5pc": [
+          true,
+          true,
+          true
+        ]
+      },
+      "source": {
+        "generator": "procedural Blender model and Cycles-baked weathering atlas (this script); no imported, generated or traced geometry",
+        "script": "scripts/assets/build-street-props-v2.py",
+        "scriptSha256": "2ce9ad0f1d30d0bfd37e57807b1b7ab0f00a088e990e730909919ae8679aa63c",
+        "blender": "4.5.3 LTS",
+        "license": "authored for this repository"
+      },
+      "group": 2,
+      "front": "-Z (street)"
+    },
+    "bikeRack": {
+      "path": "public/assets/street-props/bikeRack-v2.glb",
+      "url": "/assets/street-props/bikeRack-v2.glb",
+      "sha256": "d995e9f86e7b5ab987f8d055dc6ada6f4642663227867ce48a18dfa427df8385",
+      "bytes": 103208,
+      "triangles": 1248,
+      "dimensionsM": [
+        1.952,
+        0.9202,
+        0.727
+      ],
+      "boundsM": {
+        "min": [
+          -0.976,
+          -0.0,
+          -0.3635
+        ],
+        "max": [
+          0.976,
+          0.9202,
+          0.3635
+        ]
+      },
+      "scale": 1.0,
+      "materials": [
+        "body"
+      ],
+      "atlasPx": 512,
+      "v1Slot": {
+        "dimensionsM": [
+          1.9,
+          0.9221,
+          0.7362
+        ],
+        "triangles": 1973,
+        "triangleBudget": 3946
+      },
+      "fitToSlot": {
+        "targetDimensionsM": [
+          1.9,
+          0.9221,
+          0.7362
+        ],
+        "offFraction": [
+          0.0274,
+          0.0021,
+          0.0125
+        ],
+        "within5pc": [
+          true,
+          true,
+          true
+        ]
+      },
+      "source": {
+        "generator": "procedural Blender model and Cycles-baked weathering atlas (this script); no imported, generated or traced geometry",
+        "script": "scripts/assets/build-street-props-v2.py",
+        "scriptSha256": "2ce9ad0f1d30d0bfd37e57807b1b7ab0f00a088e990e730909919ae8679aa63c",
+        "blender": "4.5.3 LTS",
+        "license": "authored for this repository"
+      },
+      "group": 2
+    },
+    "bollard": {
+      "path": "public/assets/street-props/bollard-v2.glb",
+      "url": "/assets/street-props/bollard-v2.glb",
+      "sha256": "40fd978de3ed18ad6de13ed740a182fcedc0d057f1514745935d72a86476df5e",
+      "bytes": 47668,
+      "triangles": 526,
+      "dimensionsM": [
+        0.187,
+        0.92,
+        0.187
+      ],
+      "boundsM": {
+        "min": [
+          -0.0935,
+          0,
+          -0.0935
+        ],
+        "max": [
+          0.0935,
+          0.92,
+          0.0935
+        ]
+      },
+      "scale": 1.0,
+      "materials": [
+        "body"
+      ],
+      "atlasPx": 512,
+      "v1Slot": {
+        "dimensionsM": [
+          0.187,
+          0.92,
+          0.18
+        ],
+        "triangles": 1455,
+        "triangleBudget": 2910
+      },
+      "fitToSlot": {
+        "targetDimensionsM": [
+          0.187,
+          0.92,
+          0.18
+        ],
+        "offFraction": [
+          0.0,
+          0.0,
+          0.0389
+        ],
+        "within5pc": [
+          true,
+          true,
+          true
+        ]
+      },
+      "source": {
+        "generator": "procedural Blender model and Cycles-baked weathering atlas (this script); no imported, generated or traced geometry",
+        "script": "scripts/assets/build-street-props-v2.py",
+        "scriptSha256": "2ce9ad0f1d30d0bfd37e57807b1b7ab0f00a088e990e730909919ae8679aa63c",
+        "blender": "4.5.3 LTS",
+        "license": "authored for this repository"
+      },
+      "group": 2
+    },
+    "busStopFlag": {
+      "path": "public/assets/street-props/busStopFlag-v2.glb",
+      "url": "/assets/street-props/busStopFlag-v2.glb",
+      "sha256": "9ed1d350e0833b22cfab18896a3465d1a42a363de3f724c12b59f97a703f6688",
+      "bytes": 74164,
+      "triangles": 444,
+      "dimensionsM": [
+        0.35,
+        2.9,
+        0.1207
+      ],
+      "boundsM": {
+        "min": [
+          -0.175,
+          0,
+          -0.0837
+        ],
+        "max": [
+          0.175,
+          2.9,
+          0.037
+        ]
+      },
+      "scale": 1.0,
+      "materials": [
+        "body"
+      ],
+      "atlasPx": 512,
+      "v1Slot": {
+        "dimensionsM": [
+          0.3545,
+          2.9,
+          0.1169
+        ],
+        "triangles": 1731,
+        "triangleBudget": 3462
+      },
+      "fitToSlot": {
+        "targetDimensionsM": [
+          0.3545,
+          2.9,
+          0.1169
+        ],
+        "offFraction": [
+          0.0127,
+          0.0,
+          0.0325
+        ],
+        "within5pc": [
+          true,
+          true,
+          true
+        ]
+      },
+      "source": {
+        "generator": "procedural Blender model and Cycles-baked weathering atlas (this script); no imported, generated or traced geometry",
+        "script": "scripts/assets/build-street-props-v2.py",
+        "scriptSha256": "2ce9ad0f1d30d0bfd37e57807b1b7ab0f00a088e990e730909919ae8679aa63c",
+        "blender": "4.5.3 LTS",
+        "license": "authored for this repository"
+      },
+      "group": 3,
+      "front": "-Z (street), double-sided",
+      "anchor": "the pipe axis"
+    },
+    "cobraArm": {
+      "path": "public/assets/street-props/cobraArm-v2.glb",
+      "url": "/assets/street-props/cobraArm-v2.glb",
+      "sha256": "b192facce87d295a3dda7c5c398af2048e30e42f40aa8b1bb58c57935cbadc26",
+      "bytes": 69488,
+      "triangles": 570,
+      "dimensionsM": [
+        1.842,
+        0.672,
+        0.44
+      ],
+      "boundsM": {
+        "min": [
+          -0.012,
+          -0.21,
+          -0.22
+        ],
+        "max": [
+          1.83,
+          0.462,
+          0.22
+        ]
+      },
+      "scale": 1.0,
+      "materials": [
+        "body",
+        "lamp_glass"
+      ],
+      "atlasPx": 512,
+      "v1Slot": {
+        "dimensionsM": [
+          1.829,
+          0.6568,
+          0.4448
+        ],
+        "triangles": 452,
+        "triangleBudget": 904
+      },
+      "fitToSlot": {
+        "targetDimensionsM": [
+          1.829,
+          0.6568,
+          0.4448
+        ],
+        "offFraction": [
+          0.0071,
+          0.0231,
+          0.0108
+        ],
+        "within5pc": [
+          true,
+          true,
+          true
+        ]
+      },
+      "source": {
+        "generator": "procedural Blender model and Cycles-baked weathering atlas (this script); no imported, generated or traced geometry",
+        "script": "scripts/assets/build-street-props-v2.py",
+        "scriptSha256": "2ce9ad0f1d30d0bfd37e57807b1b7ab0f00a088e990e730909919ae8679aa63c",
+        "blender": "4.5.3 LTS",
+        "license": "authored for this repository"
+      },
+      "group": 1,
+      "consumer": "street-overhead",
+      "armM": 1.829,
+      "lights": [
+        [
+          1.45,
+          0.203,
+          -0.0
+        ]
+      ],
+      "attachNote": "origin = the arm root on the pole face; the arm points along +X over the street"
+    },
+    "hydrant": {
+      "path": "public/assets/street-props/hydrant-v2.glb",
+      "url": "/assets/street-props/hydrant-v2.glb",
+      "sha256": "f708fcfa6942fc30120a190d637149cd41da2694c5d5abe8611b1bf71621d4e1",
+      "bytes": 151436,
+      "triangles": 2064,
+      "dimensionsM": [
+        0.504,
+        0.78,
+        0.44
+      ],
+      "boundsM": {
+        "min": [
+          -0.252,
+          0,
+          -0.24
+        ],
+        "max": [
+          0.252,
+          0.78,
+          0.2
+        ]
+      },
+      "scale": 1.0,
+      "materials": [
+        "body"
+      ],
+      "atlasPx": 512,
+      "v1Slot": {
+        "dimensionsM": [
+          0.5042,
+          0.78,
+          0.44
+        ],
+        "triangles": 4182,
+        "triangleBudget": 8364
+      },
+      "fitToSlot": {
+        "targetDimensionsM": [
+          0.5042,
+          0.78,
+          0.44
+        ],
+        "offFraction": [
+          0.0004,
+          0.0,
+          0.0
+        ],
+        "within5pc": [
+          true,
+          true,
+          true
+        ]
+      },
+      "source": {
+        "generator": "procedural Blender model and Cycles-baked weathering atlas (this script); no imported, generated or traced geometry",
+        "script": "scripts/assets/build-street-props-v2.py",
+        "scriptSha256": "2ce9ad0f1d30d0bfd37e57807b1b7ab0f00a088e990e730909919ae8679aa63c",
+        "blender": "4.5.3 LTS",
+        "license": "authored for this repository"
+      },
+      "group": 2,
+      "front": "-Z (pumper toward the street)"
+    },
+    "lampBanner": {
+      "path": "public/assets/street-props/lampBanner-v2.glb",
+      "url": "/assets/street-props/lampBanner-v2.glb",
+      "sha256": "654f3ae335f376c8b26d77f4289cdba2ef068dcc67f6a76472543319fea1ff81",
+      "bytes": 108072,
+      "triangles": 1312,
+      "dimensionsM": [
+        1.39,
+        7.659,
+        3.465
+      ],
+      "boundsM": {
+        "min": [
+          -0.695,
+          0,
+          -3.28
+        ],
+        "max": [
+          0.695,
+          7.659,
+          0.185
+        ]
+      },
+      "scale": 1.0,
+      "materials": [
+        "body",
+        "lamp_glass"
+      ],
+      "atlasPx": 512,
+      "v1Slot": {
+        "dimensionsM": [
+          1.3441,
+          7.62,
+          3.51
+        ],
+        "triangles": 3035,
+        "triangleBudget": 6070
+      },
+      "fitToSlot": {
+        "targetDimensionsM": [
+          1.3441,
+          7.62,
+          3.51
+        ],
+        "offFraction": [
+          0.0341,
+          0.0051,
+          0.0128
+        ],
+        "within5pc": [
+          true,
+          true,
+          true
+        ]
+      },
+      "source": {
+        "generator": "procedural Blender model and Cycles-baked weathering atlas (this script); no imported, generated or traced geometry",
+        "script": "scripts/assets/build-street-props-v2.py",
+        "scriptSha256": "2ce9ad0f1d30d0bfd37e57807b1b7ab0f00a088e990e730909919ae8679aa63c",
+        "blender": "4.5.3 LTS",
+        "license": "authored for this repository"
+      },
+      "group": 1,
+      "lights": [
+        [
+          0.0,
+          7.4,
+          -2.9
+        ]
+      ],
+      "heightM": 7.62,
+      "lightNote": "lamp_glass centre; LAMP_HEAD.district is (height 7.40, reach 2.90)"
+    },
+    "lampCobra": {
+      "path": "public/assets/street-props/lampCobra-v2.glb",
+      "url": "/assets/street-props/lampCobra-v2.glb",
+      "sha256": "446d250a581c9fc1b4b35e20387586e00d5b8a581b4f1ea3d65bee35a1f0a457",
+      "bytes": 72712,
+      "triangles": 952,
+      "dimensionsM": [
+        0.44,
+        7.659,
+        3.465
+      ],
+      "boundsM": {
+        "min": [
+          -0.22,
+          0,
+          -3.28
+        ],
+        "max": [
+          0.22,
+          7.659,
+          0.185
+        ]
+      },
+      "scale": 1.0,
+      "materials": [
+        "body",
+        "lamp_glass"
+      ],
+      "atlasPx": 512,
+      "v1Slot": {
+        "dimensionsM": [
+          0.8818,
+          7.62,
+          3.51
+        ],
+        "triangles": 1791,
+        "triangleBudget": 3582
+      },
+      "fitToSlot": {
+        "targetDimensionsM": [
+          0.8818,
+          7.62,
+          3.51
+        ],
+        "offFraction": [
+          0.501,
+          0.0051,
+          0.0128
+        ],
+        "within5pc": [
+          false,
+          true,
+          true
+        ]
+      },
+      "source": {
+        "generator": "procedural Blender model and Cycles-baked weathering atlas (this script); no imported, generated or traced geometry",
+        "script": "scripts/assets/build-street-props-v2.py",
+        "scriptSha256": "2ce9ad0f1d30d0bfd37e57807b1b7ab0f00a088e990e730909919ae8679aa63c",
+        "blender": "4.5.3 LTS",
+        "license": "authored for this repository"
+      },
+      "group": 1,
+      "deviation": "width is the cobra head (0.44 m); the v1 0.88 m was the banner brackets left on the shared generated master",
+      "lights": [
+        [
+          0.0,
+          7.4,
+          -2.9
+        ]
+      ],
+      "heightM": 7.62,
+      "lightNote": "lamp_glass centre; LAMP_HEAD.district is (height 7.40, reach 2.90)"
+    },
+    "lampHistoric": {
+      "path": "public/assets/street-props/lampHistoric-v2.glb",
+      "url": "/assets/street-props/lampHistoric-v2.glb",
+      "sha256": "c1a707b61d57ba5dd8e95238f2b7db6ced9241d8dce5782748698119651d0532",
+      "bytes": 233844,
+      "triangles": 4902,
+      "dimensionsM": [
+        3.1459,
+        7.62,
+        0.5543
+      ],
+      "boundsM": {
+        "min": [
+          -1.573,
+          0,
+          -0.2772
+        ],
+        "max": [
+          1.573,
+          7.62,
+          0.2772
+        ]
+      },
+      "scale": 1.0,
+      "materials": [
+        "body",
+        "lamp_glass"
+      ],
+      "atlasPx": 512,
+      "v1Slot": {
+        "dimensionsM": [
+          3.1464,
+          7.62,
+          1.7
+        ],
+        "triangles": 4694,
+        "triangleBudget": 9388
+      },
+      "fitToSlot": {
+        "targetDimensionsM": [
+          3.1464,
+          7.62,
+          1.7
+        ],
+        "offFraction": [
+          0.0001,
+          0.0,
+          0.6739
+        ],
+        "within5pc": [
+          true,
+          true,
+          false
+        ]
+      },
+      "source": {
+        "generator": "procedural Blender model and Cycles-baked weathering atlas (this script); no imported, generated or traced geometry",
+        "script": "scripts/assets/build-street-props-v2.py",
+        "scriptSha256": "2ce9ad0f1d30d0bfd37e57807b1b7ab0f00a088e990e730909919ae8679aa63c",
+        "blender": "4.5.3 LTS",
+        "license": "authored for this repository"
+      },
+      "group": 1,
+      "deviation": "depth is the plinth (0.60 m); the v1 1.70 m came from the generated master's scrolls; LAMP_HEAD.column (5.12 m on the axis) still does not sit in the lanterns, as with v1",
+      "lights": [
+        [
+          -1.4,
+          6.29,
+          0.0
+        ],
+        [
+          1.4,
+          6.29,
+          0.0
+        ]
+      ],
+      "heightM": 7.62,
+      "lightNote": "lamp_glass centres; LAMP_HEAD.column (5.12 m on the post axis) does not sit in these lanterns, as with v1"
+    },
+    "lantern": {
+      "path": "public/assets/street-props/lantern-v2.glb",
+      "url": "/assets/street-props/lantern-v2.glb",
+      "sha256": "442ca70aedc344aecf08406f0c7d85ce100e9e7d943d12f22b76f756dbb49109",
+      "bytes": 134516,
+      "triangles": 1934,
+      "dimensionsM": [
+        0.45,
+        0.5465,
+        0.45
+      ],
+      "boundsM": {
+        "min": [
+          -0.225,
+          0,
+          -0.225
+        ],
+        "max": [
+          0.225,
+          0.5465,
+          0.225
+        ]
+      },
+      "scale": 1.0,
+      "materials": [
+        "body",
+        "lantern_silk"
+      ],
+      "atlasPx": 512,
+      "v1Slot": {
+        "dimensionsM": [
+          0.4505,
+          0.55,
+          0.4569
+        ],
+        "triangles": 1300,
+        "triangleBudget": 2600
+      },
+      "fitToSlot": {
+        "targetDimensionsM": [
+          0.4505,
+          0.55,
+          0.4569
+        ],
+        "offFraction": [
+          0.0011,
+          0.0063,
+          0.0151
+        ],
+        "within5pc": [
+          true,
+          true,
+          true
+        ]
+      },
+      "source": {
+        "generator": "procedural Blender model and Cycles-baked weathering atlas (this script); no imported, generated or traced geometry",
+        "script": "scripts/assets/build-street-props-v2.py",
+        "scriptSha256": "2ce9ad0f1d30d0bfd37e57807b1b7ab0f00a088e990e730909919ae8679aa63c",
+        "blender": "4.5.3 LTS",
+        "license": "authored for this repository"
+      },
+      "group": 1,
+      "consumer": "street-overhead",
+      "heightM": 0.55,
+      "attachNote": "origin = the tassel tip; the string runs through the hook at y 0.55"
+    },
+    "mailbox": {
+      "path": "public/assets/street-props/mailbox-v2.glb",
+      "url": "/assets/street-props/mailbox-v2.glb",
+      "sha256": "26eeec6c59e18dece067ab1742bd816325e5e522c05ddf076a1df87b7f221c86",
+      "bytes": 93132,
+      "triangles": 1624,
+      "dimensionsM": [
+        0.5696,
+        1.2,
+        0.4898
+      ],
+      "boundsM": {
+        "min": [
+          -0.2848,
+          0,
+          -0.225
+        ],
+        "max": [
+          0.2848,
+          1.2,
+          0.2648
+        ]
+      },
+      "scale": 1.0,
+      "materials": [
+        "body"
+      ],
+      "atlasPx": 512,
+      "v1Slot": {
+        "dimensionsM": [
+          0.5615,
+          0.8721,
+          0.48
+        ],
+        "triangles": 1339,
+        "triangleBudget": 2678
+      },
+      "fitToSlot": {
+        "targetDimensionsM": [
+          0.5615,
+          1.2,
+          0.48
+        ],
+        "offFraction": [
+          0.0144,
+          0.0,
+          0.0203
+        ],
+        "within5pc": [
+          true,
+          true,
+          true
+        ]
+      },
+      "source": {
+        "generator": "procedural Blender model and Cycles-baked weathering atlas (this script); no imported, generated or traced geometry",
+        "script": "scripts/assets/build-street-props-v2.py",
+        "scriptSha256": "2ce9ad0f1d30d0bfd37e57807b1b7ab0f00a088e990e730909919ae8679aa63c",
+        "blender": "4.5.3 LTS",
+        "license": "authored for this repository"
+      },
+      "group": 2,
+      "deviation": "height is the furniture kind's 1.20 m (v1 was shrunk to 0.87 m to fit its depth); width and depth are the v1 slot's",
+      "front": "+Z (footway)"
+    },
+    "newsBox": {
+      "path": "public/assets/street-props/newsBox-v2.glb",
+      "url": "/assets/street-props/newsBox-v2.glb",
+      "sha256": "5510027cac450121306bbec34f1ace91324c887eff82f56edb47d67075d8cc96",
+      "bytes": 106324,
+      "triangles": 1056,
+      "dimensionsM": [
+        0.604,
+        1.18,
+        0.4361
+      ],
+      "boundsM": {
+        "min": [
+          -0.302,
+          0,
+          -0.2161
+        ],
+        "max": [
+          0.302,
+          1.18,
+          0.22
+        ]
+      },
+      "scale": 1.0,
+      "materials": [
+        "body"
+      ],
+      "atlasPx": 512,
+      "v1Slot": {
+        "dimensionsM": [
+          0.5842,
+          1.18,
+          0.44
+        ],
+        "triangles": 1282,
+        "triangleBudget": 2564
+      },
+      "fitToSlot": {
+        "targetDimensionsM": [
+          0.5842,
+          1.18,
+          0.44
+        ],
+        "offFraction": [
+          0.0339,
+          0.0,
+          0.0088
+        ],
+        "within5pc": [
+          true,
+          true,
+          true
+        ]
+      },
+      "source": {
+        "generator": "procedural Blender model and Cycles-baked weathering atlas (this script); no imported, generated or traced geometry",
+        "script": "scripts/assets/build-street-props-v2.py",
+        "scriptSha256": "2ce9ad0f1d30d0bfd37e57807b1b7ab0f00a088e990e730909919ae8679aa63c",
+        "blender": "4.5.3 LTS",
+        "license": "authored for this repository"
+      },
+      "group": 2,
+      "front": "+Z (footway)"
+    },
+    "palm": {
+      "path": "public/assets/street-props/palm-v2.glb",
+      "url": "/assets/street-props/palm-v2.glb",
+      "sha256": "793dae3baa43392016190df5257fa8f70060789f2d5ab662330c1333fa143719",
+      "bytes": 517280,
+      "triangles": 6368,
+      "dimensionsM": [
+        8.7298,
+        10,
+        8.3065
+      ],
+      "boundsM": {
+        "min": [
+          -4.3649,
+          0,
+          -4.1533
+        ],
+        "max": [
+          4.3649,
+          10,
+          4.1533
+        ]
+      },
+      "scale": 1.0,
+      "materials": [
+        "body"
+      ],
+      "atlasPx": 512,
+      "v1Slot": {
+        "dimensionsM": [
+          8.7298,
+          10.0,
+          8.3065
+        ],
+        "triangles": 6939,
+        "triangleBudget": 13878
+      },
+      "fitToSlot": {
+        "targetDimensionsM": [
+          8.7298,
+          10.0,
+          8.3065
+        ],
+        "offFraction": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "within5pc": [
+          true,
+          true,
+          true
+        ]
+      },
+      "source": {
+        "generator": "procedural Blender model with a painted atlas (this script); no imported, generated or traced geometry",
+        "script": "scripts/assets/build-street-props-v2.py",
+        "scriptSha256": "2ce9ad0f1d30d0bfd37e57807b1b7ab0f00a088e990e730909919ae8679aa63c",
+        "blender": "4.5.3 LTS",
+        "license": "authored for this repository"
+      },
+      "group": 4,
+      "heightM": 10.0
+    },
+    "palmFar": {
+      "path": "public/assets/street-props/palmFar-v2.glb",
+      "url": "/assets/street-props/palmFar-v2.glb",
+      "sha256": "affd2b1070dafa24234cb01fb050c44de0b37a98a0efda722c2113e9ea218b98",
+      "bytes": 80592,
+      "triangles": 920,
+      "dimensionsM": [
+        8.2455,
+        10,
+        8.06
+      ],
+      "boundsM": {
+        "min": [
+          -4.1227,
+          0,
+          -4.03
+        ],
+        "max": [
+          4.1227,
+          10,
+          4.03
+        ]
+      },
+      "scale": 1.0,
+      "materials": [
+        "body"
+      ],
+      "atlasPx": 512,
+      "v1Slot": {
+        "dimensionsM": [
+          8.2455,
+          10.0,
+          8.06
+        ],
+        "triangles": 900,
+        "triangleBudget": 1800
+      },
+      "fitToSlot": {
+        "targetDimensionsM": [
+          8.2455,
+          10.0,
+          8.06
+        ],
+        "offFraction": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "within5pc": [
+          true,
+          true,
+          true
+        ]
+      },
+      "source": {
+        "generator": "procedural Blender model with a painted atlas (this script); no imported, generated or traced geometry",
+        "script": "scripts/assets/build-street-props-v2.py",
+        "scriptSha256": "2ce9ad0f1d30d0bfd37e57807b1b7ab0f00a088e990e730909919ae8679aa63c",
+        "blender": "4.5.3 LTS",
+        "license": "authored for this repository"
+      },
+      "group": 4,
+      "heightM": 10.0
+    },
+    "parkingMeter": {
+      "path": "public/assets/street-props/parkingMeter-v2.glb",
+      "url": "/assets/street-props/parkingMeter-v2.glb",
+      "sha256": "5abfe7532c6a0d5ae93ba7435126529016dc7692aac42ca60cea68c8fee1e8ba",
+      "bytes": 97780,
+      "triangles": 984,
+      "dimensionsM": [
+        0.325,
+        1.2511,
+        0.222
+      ],
+      "boundsM": {
+        "min": [
+          -0.1625,
+          0,
+          -0.105
+        ],
+        "max": [
+          0.1625,
+          1.2511,
+          0.117
+        ]
+      },
+      "scale": 1.0,
+      "materials": [
+        "body"
+      ],
+      "atlasPx": 512,
+      "v1Slot": {
+        "dimensionsM": [
+          0.3253,
+          1.25,
+          0.22
+        ],
+        "triangles": 1260,
+        "triangleBudget": 2520
+      },
+      "fitToSlot": {
+        "targetDimensionsM": [
+          0.3253,
+          1.25,
+          0.22
+        ],
+        "offFraction": [
+          0.0009,
+          0.0008,
+          0.0091
+        ],
+        "within5pc": [
+          true,
+          true,
+          true
+        ]
+      },
+      "source": {
+        "generator": "procedural Blender model and Cycles-baked weathering atlas (this script); no imported, generated or traced geometry",
+        "script": "scripts/assets/build-street-props-v2.py",
+        "scriptSha256": "2ce9ad0f1d30d0bfd37e57807b1b7ab0f00a088e990e730909919ae8679aa63c",
+        "blender": "4.5.3 LTS",
+        "license": "authored for this repository"
+      },
+      "group": 2,
+      "front": "+Z (footway)"
+    },
+    "payStation": {
+      "path": "public/assets/street-props/payStation-v2.glb",
+      "url": "/assets/street-props/payStation-v2.glb",
+      "sha256": "2ddc836b309479f7a337a7b7180fdb293ae372b09231c0a3001d6b729d13328e",
+      "bytes": 114920,
+      "triangles": 1188,
+      "dimensionsM": [
+        0.6,
+        1.2412,
+        0.3242
+      ],
+      "boundsM": {
+        "min": [
+          -0.3,
+          0,
+          -0.165
+        ],
+        "max": [
+          0.3,
+          1.2412,
+          0.1592
+        ]
+      },
+      "scale": 1.0,
+      "materials": [
+        "body"
+      ],
+      "atlasPx": 512,
+      "v1Slot": {
+        "dimensionsM": [
+          0.6,
+          1.2413,
+          0.32
+        ],
+        "triangles": 1189,
+        "triangleBudget": 2378
+      },
+      "fitToSlot": {
+        "targetDimensionsM": [
+          0.6,
+          1.2413,
+          0.32
+        ],
+        "offFraction": [
+          0.0,
+          0.0001,
+          0.0131
+        ],
+        "within5pc": [
+          true,
+          true,
+          true
+        ]
+      },
+      "source": {
+        "generator": "procedural Blender model and Cycles-baked weathering atlas (this script); no imported, generated or traced geometry",
+        "script": "scripts/assets/build-street-props-v2.py",
+        "scriptSha256": "2ce9ad0f1d30d0bfd37e57807b1b7ab0f00a088e990e730909919ae8679aa63c",
+        "blender": "4.5.3 LTS",
+        "license": "authored for this repository"
+      },
+      "group": 2,
+      "front": "+Z (footway)",
+      "loadStretch": [
+        0.45,
+        1.15,
+        0.7
+      ],
+      "note": "authored pre-divided by PAY_STATION_STRETCH: the renderer stretch gives 0.27 x 1.43 x 0.22 m"
+    },
+    "signPole": {
+      "path": "public/assets/street-props/signPole-v2.glb",
+      "url": "/assets/street-props/signPole-v2.glb",
+      "sha256": "dd028a5c872c4f125a092624705ab3a3cf33d9e115029576eb5d0e0c39fe6142",
+      "bytes": 62396,
+      "triangles": 336,
+      "dimensionsM": [
+        0.245,
+        2.6,
+        0.1222
+      ],
+      "boundsM": {
+        "min": [
+          -0.1225,
+          0,
+          -0.0852
+        ],
+        "max": [
+          0.1225,
+          2.6,
+          0.037
+        ]
+      },
+      "scale": 1.0,
+      "materials": [
+        "body"
+      ],
+      "atlasPx": 512,
+      "v1Slot": {
+        "dimensionsM": [
+          0.2493,
+          2.6,
+          0.1183
+        ],
+        "triangles": 1799,
+        "triangleBudget": 3598
+      },
+      "fitToSlot": {
+        "targetDimensionsM": [
+          0.2493,
+          2.6,
+          0.1183
+        ],
+        "offFraction": [
+          0.0172,
+          0.0,
+          0.033
+        ],
+        "within5pc": [
+          true,
+          true,
+          true
+        ]
+      },
+      "source": {
+        "generator": "procedural Blender model and Cycles-baked weathering atlas (this script); no imported, generated or traced geometry",
+        "script": "scripts/assets/build-street-props-v2.py",
+        "scriptSha256": "2ce9ad0f1d30d0bfd37e57807b1b7ab0f00a088e990e730909919ae8679aa63c",
+        "blender": "4.5.3 LTS",
+        "license": "authored for this repository"
+      },
+      "group": 3,
+      "front": "-Z (street)",
+      "anchor": "the pipe axis"
+    },
+    "signPost": {
+      "path": "public/assets/street-props/signPost-v2.glb",
+      "url": "/assets/street-props/signPost-v2.glb",
+      "sha256": "ff6acccbfb03f912fe2c00813e94606e84eec1579321035e613e854cb07daffb",
+      "bytes": 17164,
+      "triangles": 146,
+      "dimensionsM": [
+        0.074,
+        3.353,
+        0.0818
+      ],
+      "boundsM": {
+        "min": [
+          -0.037,
+          0,
+          -0.0352
+        ],
+        "max": [
+          0.037,
+          3.353,
+          0.0466
+        ]
+      },
+      "scale": 1.0,
+      "materials": [
+        "body"
+      ],
+      "atlasPx": 256,
+      "v1Slot": {
+        "dimensionsM": [
+          0.0743,
+          3.353,
+          0.0836
+        ],
+        "triangles": 400,
+        "triangleBudget": 800
+      },
+      "fitToSlot": {
+        "targetDimensionsM": [
+          0.0743,
+          3.353,
+          0.0836
+        ],
+        "offFraction": [
+          0.004,
+          0.0,
+          0.0217
+        ],
+        "within5pc": [
+          true,
+          true,
+          true
+        ]
+      },
+      "source": {
+        "generator": "procedural Blender model and Cycles-baked weathering atlas (this script); no imported, generated or traced geometry",
+        "script": "scripts/assets/build-street-props-v2.py",
+        "scriptSha256": "2ce9ad0f1d30d0bfd37e57807b1b7ab0f00a088e990e730909919ae8679aa63c",
+        "blender": "4.5.3 LTS",
+        "license": "authored for this repository"
+      },
+      "group": 3,
+      "consumer": "street-signs",
+      "heightM": 3.353,
+      "shaftRadiusM": 0.0302
+    },
+    "signalHead": {
+      "path": "public/assets/street-props/signalHead-v2.glb",
+      "url": "/assets/street-props/signalHead-v2.glb",
+      "sha256": "e29f75a1e38c565c5ab9189cb3565061fce80969432963040bbfeacbc755e69c",
+      "bytes": 134160,
+      "triangles": 1820,
+      "dimensionsM": [
+        0.58,
+        1.2344,
+        0.305
+      ],
+      "boundsM": {
+        "min": [
+          -0.29,
+          -0.6172,
+          -0.165
+        ],
+        "max": [
+          0.29,
+          0.6172,
+          0.14
+        ]
+      },
+      "scale": 1.0,
+      "materials": [
+        "body",
+        "lens_red",
+        "lens_amber",
+        "lens_green"
+      ],
+      "atlasPx": 512,
+      "v1Slot": {
+        "dimensionsM": [
+          0.5803,
+          1.2345,
+          0.3009
+        ],
+        "triangles": 1839,
+        "triangleBudget": 3678
+      },
+      "fitToSlot": {
+        "targetDimensionsM": [
+          0.5803,
+          1.2345,
+          0.3009
+        ],
+        "offFraction": [
+          0.0005,
+          0.0001,
+          0.0136
+        ],
+        "within5pc": [
+          true,
+          true,
+          true
+        ]
+      },
+      "source": {
+        "generator": "procedural Blender model and Cycles-baked weathering atlas (this script); no imported, generated or traced geometry",
+        "script": "scripts/assets/build-street-props-v2.py",
+        "scriptSha256": "2ce9ad0f1d30d0bfd37e57807b1b7ab0f00a088e990e730909919ae8679aa63c",
+        "blender": "4.5.3 LTS",
+        "license": "authored for this repository"
+      },
+      "group": 3,
+      "consumer": "traffic-signal-heads",
+      "lensFaceZ": 0.028,
+      "lensPlaneZ": 0.008,
+      "lensPitchM": 0.35,
+      "lensRadiusM": 0.151,
+      "lensCentres": {
+        "lens_red": [
+          0,
+          0.35,
+          0.028
+        ],
+        "lens_amber": [
+          0,
+          0.0,
+          0.028
+        ],
+        "lens_green": [
+          0,
+          -0.35,
+          0.028
+        ]
+      },
+      "note": "the visors reach z 0.140, past the lenses: a loader that puts the lens discs at max z + 0.004 draws them at the visor mouths; use lensFaceZ"
+    },
+    "transitShelter": {
+      "path": "public/assets/street-props/transitShelter-v2.glb",
+      "url": "/assets/street-props/transitShelter-v2.glb",
+      "sha256": "7b17b445e9ccab0caa9bc26e7076945b367faf371288e101fc98ecb65d3923e1",
+      "bytes": 186868,
+      "triangles": 2106,
+      "dimensionsM": [
+        3.6005,
+        2.6,
+        1.31
+      ],
+      "boundsM": {
+        "min": [
+          -1.78,
+          0,
+          -0.68
+        ],
+        "max": [
+          1.8205,
+          2.6,
+          0.63
+        ]
+      },
+      "scale": 1.0,
+      "materials": [
+        "body",
+        "glass",
+        "ad_panel"
+      ],
+      "atlasPx": 512,
+      "v1Slot": {
+        "dimensionsM": [
+          3.6005,
+          2.6,
+          1.2894
+        ],
+        "triangles": 3335,
+        "triangleBudget": 6670
+      },
+      "fitToSlot": {
+        "targetDimensionsM": [
+          3.6005,
+          2.6,
+          1.2894
+        ],
+        "offFraction": [
+          0.0,
+          0.0,
+          0.016
+        ],
+        "within5pc": [
+          true,
+          true,
+          true
+        ]
+      },
+      "source": {
+        "generator": "procedural Blender model and Cycles-baked weathering atlas (this script); no imported, generated or traced geometry",
+        "script": "scripts/assets/build-street-props-v2.py",
+        "scriptSha256": "2ce9ad0f1d30d0bfd37e57807b1b7ab0f00a088e990e730909919ae8679aa63c",
+        "blender": "4.5.3 LTS",
+        "license": "authored for this repository"
+      },
+      "group": 3,
+      "front": "-Z (open toward the street)"
+    },
+    "utilityPole": {
+      "path": "public/assets/street-props/utilityPole-v2.glb",
+      "url": "/assets/street-props/utilityPole-v2.glb",
+      "sha256": "84885e9af5aa5fdf27603cb91bd79904da317a60cad8f4df5e71b95193dfd8a7",
+      "bytes": 225028,
+      "triangles": 4036,
+      "dimensionsM": [
+        2.438,
+        11.73,
+        1.2584
+      ],
+      "boundsM": {
+        "min": [
+          -1.219,
+          -0.0,
+          -0.2188
+        ],
+        "max": [
+          1.219,
+          11.73,
+          1.0396
+        ]
+      },
+      "scale": 1.0,
+      "materials": [
+        "body"
+      ],
+      "atlasPx": 512,
+      "v1Slot": {
+        "dimensionsM": [
+          2.438,
+          11.73,
+          1.248
+        ],
+        "triangles": 3424,
+        "triangleBudget": 6848
+      },
+      "fitToSlot": {
+        "targetDimensionsM": [
+          2.438,
+          11.73,
+          1.248
+        ],
+        "offFraction": [
+          0.0,
+          0.0,
+          0.0083
+        ],
+        "within5pc": [
+          true,
+          true,
+          true
+        ]
+      },
+      "source": {
+        "generator": "procedural Blender model and Cycles-baked weathering atlas (this script); no imported, generated or traced geometry",
+        "script": "scripts/assets/build-street-props-v2.py",
+        "scriptSha256": "2ce9ad0f1d30d0bfd37e57807b1b7ab0f00a088e990e730909919ae8679aa63c",
+        "blender": "4.5.3 LTS",
+        "license": "authored for this repository"
+      },
+      "group": 3,
+      "consumer": "street-overhead",
+      "attach": [
+        {
+          "arm": 0,
+          "x": -0.94,
+          "y": 11.4978,
+          "z": -0.1492
+        },
+        {
+          "arm": 0,
+          "x": 0.94,
+          "y": 11.4978,
+          "z": -0.1492
+        },
+        {
+          "arm": 1,
+          "x": -0.94,
+          "y": 10.7867,
+          "z": -0.153
+        },
+        {
+          "arm": 1,
+          "x": 0.94,
+          "y": 10.7867,
+          "z": -0.153
+        }
+      ],
+      "heightM": 11.73,
+      "crossarmM": 2.438,
+      "hardwareFromM": 8.78,
+      "shaftRadiusM": 0.1637,
+      "consumerNote": "crossarms along X (the pass turns X across the street), insulator tops = attach"
+    },
+    "wasteBin": {
+      "path": "public/assets/street-props/wasteBin-v2.glb",
+      "url": "/assets/street-props/wasteBin-v2.glb",
+      "sha256": "735bbfbe6c9649e49710dc548a139d7227e6856cec4e5d8aa190a2eeae0d1892",
+      "bytes": 73092,
+      "triangles": 1066,
+      "dimensionsM": [
+        0.59,
+        0.94,
+        0.59
+      ],
+      "boundsM": {
+        "min": [
+          -0.295,
+          0,
+          -0.295
+        ],
+        "max": [
+          0.295,
+          0.94,
+          0.295
+        ]
+      },
+      "scale": 1.0,
+      "materials": [
+        "body"
+      ],
+      "atlasPx": 512,
+      "v1Slot": {
+        "dimensionsM": [
+          0.5905,
+          0.94,
+          0.5795
+        ],
+        "triangles": 1442,
+        "triangleBudget": 2884
+      },
+      "fitToSlot": {
+        "targetDimensionsM": [
+          0.5905,
+          0.94,
+          0.5795
+        ],
+        "offFraction": [
+          0.0008,
+          0.0,
+          0.0181
+        ],
+        "within5pc": [
+          true,
+          true,
+          true
+        ]
+      },
+      "source": {
+        "generator": "procedural Blender model and Cycles-baked weathering atlas (this script); no imported, generated or traced geometry",
+        "script": "scripts/assets/build-street-props-v2.py",
+        "scriptSha256": "2ce9ad0f1d30d0bfd37e57807b1b7ab0f00a088e990e730909919ae8679aa63c",
+        "blender": "4.5.3 LTS",
+        "license": "authored for this repository"
+      },
+      "group": 2,
+      "front": "+Z (footway)"
+    }
+  },
+  "dimensionSources": [
+    {
+      "id": "sfpw-87205-residential-pole",
+      "value": "25 ft shaft, 6 ft arm, 15 in base",
+      "url": "https://sfpublicworks.org/sites/default/files/87%2C205.pdf",
+      "usedFor": "lampCobra, lampBanner: 7.62 m overall; cobraArm: 1.829 m root to head tip (also the street-standards table entry streetlight-sf-residential-pole)"
+    },
+    {
+      "id": "sfpuc-streetlight-requirements-rev4",
+      "value": "standard poles hot-dip galvanized, no colour; 6 ft arms with cobra heads; top-mounted 7-pin twist-lock photo-eye; 3000 K LEDs; spacing about three mounting heights",
+      "url": "https://sfpuc.gov/sites/default/files/documents/20230701Streetlight-Requirements.pdf",
+      "usedFor": "lampCobra, lampBanner, cobraArm: galvanized pole and arm finish, photocell on the head, lamp_glass emissive colour"
+    },
+    {
+      "id": "sfpuc-streetlight-catalog-2022",
+      "value": "steel poles 25-30 ft with single elliptical 4/6/8 ft arms, bolt circle 10-11.5 in, 14 in base cover; round fluted tapered ornamental poles with single or dual arms; ornamental poles powder coated RAL 5011; cobra heads in grey (GY3)",
+      "url": "https://www.sfpuc.gov/sites/default/files/documents/20220201StreetlightCatalog.pdf",
+      "usedFor": "lampCobra: 0.37 m base cover, 8 ft class arm reaching the district head; lampHistoric: fluted tapered pole, dual arms, RAL 5011 steel-blue paint; cobra head grey"
+    },
+    {
+      "id": "repo-lamp-head",
+      "value": "district head 7.40 m high, 2.90 m reach; column head 5.12 m",
+      "url": "native/eo-props/data/furniture-js.json.gz (consts.lampHead)",
+      "usedFor": "lampCobra, lampBanner: lens centre at (0, 7.40, -2.90)"
+    },
+    {
+      "id": "cobrahead-size-class",
+      "value": "small cutoff cobrahead 688 x 321 x 166 mm",
+      "url": "https://cdn.shopify.com/s/files/1/1916/1697/files/lumark-rc-cobrahead-led.pdf",
+      "usedFor": "cobra head proportions; the head is drawn at the large-head class (0.80 x 0.44 x 0.23 m) that the v1 cobraArm slot (0.4448 m wide) holds"
+    },
+    {
+      "id": "sfpw-banner-rules",
+      "value": "banners at most 36 in wide by 72 in long; not hung from the light arm",
+      "url": "https://mail.sfpublicworks.org/sites/default/files/Banner_Permit_Application.pdf",
+      "usedFor": "lampBanner: two 0.54 x 1.44 m banners on shaft brackets below the arm"
+    },
+    {
+      "id": "sfmta-bike-rack-spec",
+      "value": "2 in tube, 5 x 6 in flanges of 3/8 in plate, hot-dip galvanized (ASTM A123); circular rack 36 in wide, 18 in flange centres",
+      "url": "https://SFMTA.com/sites/default/files/reports-and-documents/2017/12/standard_bicycle_rack_specification.pdf",
+      "usedFor": "bikeRack: flange plates, galvanized finish"
+    },
+    {
+      "id": "sf-better-streets-bike-racks",
+      "value": "every element at least 2 in diameter; racks at least 3 ft on centre; inverted U preferred for sidewalks",
+      "url": "https://sfbetterstreets.org/find-project-types/streetscape-elements/street-furniture-overview/bicycle-racks/index.html",
+      "usedFor": "bikeRack: 2 in NPS tube, 0.90 m centres"
+    },
+    {
+      "id": "asme-b36-10-pipe",
+      "value": "NPS 2 = 2.375 in (60.3 mm) OD; NPS 6 = 6.625 in (168.3 mm) OD",
+      "url": "https://www.engineeringtoolbox.com/asme-steel-pipes-sizes-d_42.html",
+      "usedFor": "signPost, signPole, busStopFlag, parkingMeter post, bikeRack tube (r 0.0302 m); bollard body (r 0.084 m)"
+    },
+    {
+      "id": "ada-2010-903",
+      "value": "bench seat 17-19 in above ground (903.5); back support to 18 in min above seat (903.4)",
+      "url": "https://www.access-board.gov/ada/#ada-903",
+      "usedFor": "bench: seat top 0.475 m"
+    },
+    {
+      "id": "usps-collection-box-history",
+      "value": "street collection boxes dark blue since 1970-71; the high-density box 25 x 34-5/8 x 52-3/8 in",
+      "url": "https://about.usps.com/who/profile/history/pdf/mail-collection-boxes.pdf",
+      "usedFor": "mailbox: dark blue paint; height kept under the high-density box"
+    },
+    {
+      "id": "repo-furniture-kinds",
+      "value": "mailbox kind 1.20 m tall, 0.42 / 0.24 m half extents; payStation 1.50 m; lampHistoric 0.62 / 0.32 m",
+      "url": "native/eo-props/data/furniture-js.json.gz (kinds)",
+      "usedFor": "mailbox: 1.20 m height (the v1 GLB was shrunk to 0.87 m to fit its depth)"
+    },
+    {
+      "id": "sfpuc-awss-hydrants",
+      "value": "high-pressure hydrant tops painted blue, black or red by pressure zone",
+      "url": "https://www.sfpuc.gov/sites/default/files/documents/Firefighting-Water-System-Fact-Sheet-02.24.2026.pdf",
+      "usedFor": "hydrant: white body, blue bonnet and caps"
+    },
+    {
+      "id": "wikipedia-awss",
+      "value": "large white hydrants with tops colour-coded by zone",
+      "url": "https://en.wikipedia.org/wiki/San_Francisco_Fire_Department_Auxiliary_Water_Supply_System",
+      "usedFor": "hydrant: white body"
+    },
+    {
+      "id": "sfpw-trash-can",
+      "value": "green public trash can, renaissance style; more than 2,800 cans",
+      "url": "https://sfpublicworks.org/node/21835",
+      "usedFor": "wasteBin: dark green receptacle; size from the v1 slot"
+    },
+    {
+      "id": "sf-better-streets-transit-shelters",
+      "value": "shelters 3-7 ft wide and 8 ft 6 in to 16 ft 6 in long",
+      "url": "https://sfbetterstreets.org/find-project-types/streetscape-elements/street-furniture-overview/transit-shelters/",
+      "usedFor": "transitShelter: 3.60 x 1.29 m inside that range"
+    },
+    {
+      "id": "sfmta-improved-shelters",
+      "value": "standard shelter: 2-6 seats, roof, information kiosk and an ad panel",
+      "url": "https://sfmta.com/accessibility-strategy-needs-assessment-2024/muni-capital-projects/35-improved-bus-stop-amenities",
+      "usedFor": "transitShelter: bench, arrival sign, route-map frame, ad panel"
+    },
+    {
+      "id": "nacto-small-shelter",
+      "value": "shelters typically 4 ft deep",
+      "url": "https://nacto.org/publication/transit-street-design-guide/station-stop-elements/stop-elements/small-transit-shelter/",
+      "usedFor": "transitShelter: 1.29 m deep"
+    },
+    {
+      "id": "ca-mutcd-signal-lens",
+      "value": "12 in signal indications",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-4e-a11y.pdf",
+      "usedFor": "signalHead: lens radius 0.150 m (also street-standards entry signal-lens-size)"
+    },
+    {
+      "id": "ca-mutcd-backplate-border",
+      "value": "yellow retroreflective backplate border 1-3 in",
+      "url": "https://dot.ca.gov/-/media/dot-media/programs/safety-programs/documents/ca-mutcd/2026/2026-camutcd-2026-4d-a11y.pdf",
+      "usedFor": "signalHead: 2 in yellow border (street-standards entry signal-backplate-border)"
+    },
+    {
+      "id": "repo-signal-hardware",
+      "value": "lens pitch 0.35 m, housing half height 0.53 m",
+      "url": "native/eo-render/src/props_lib.rs (lens stack) and eo-props signalHardware.headHalfHeightM",
+      "usedFor": "signalHead: three 0.35 m sections centred on the middle lens"
+    },
+    {
+      "id": "ansi-o5-1-class-chart",
+      "value": "Class 2 minimum top circumference 25 in",
+      "url": "https://www.conradfp.com/pdf/ANSI-chart.pdf",
+      "usedFor": "utilityPole: top radius 0.101 m"
+    },
+    {
+      "id": "45ft-class2-pole-sheet",
+      "value": "45 ft Class 2: 25 in at the top, 40.5 in 6 ft from the butt",
+      "url": "https://www.ledlightingsupply.com/utility-poles/wood-poles-by-class",
+      "usedFor": "utilityPole: ground-line radius 0.164 m"
+    },
+    {
+      "id": "rus-1728h-701-crossarm",
+      "value": "8 ft distribution crossarm",
+      "url": "USDA RUS Bulletin 1728H-701 (as cited by the v1 build)",
+      "usedFor": "utilityPole: 2.438 m crossarms"
+    },
+    {
+      "id": "v1-utility-pole",
+      "value": "45 ft pole 38.5 ft (11.73 m) above grade; wire seats",
+      "url": "public/assets/street-props/street-props-v1.provenance.json (utilityPole)",
+      "usedFor": "utilityPole: 11.73 m height, crossarm seats at 11.4978 and 10.7867 m kept so the overhead wiring is unchanged"
+    },
+    {
+      "id": "ncstate-phoenix-canariensis",
+      "value": "trunk 2-3 ft across with diamond leaf-base scars; up to 100 leaves, each up to 15 ft",
+      "url": "https://plants.ces.ncsu.edu/plants/phoenix-canariensis",
+      "usedFor": "palm, palmFar: 0.9 m trunk, 4.2-4.8 m fronds"
+    },
+    {
+      "id": "ufifas-st439",
+      "value": "40-60 ft tall, 20-25 ft spread",
+      "url": "https://edis.ifas.ufl.edu/publication/ST439",
+      "usedFor": "palm: crown spread kept to the 8.7 m slot"
+    },
+    {
+      "id": "sfmta-meter-replacement",
+      "value": "single-space meters and multi-space pay stations; meter heads replaced on the existing poles",
+      "url": "https://www.sfmta.com/projects/citywide-parking-meter-replacement",
+      "usedFor": "parkingMeter, payStation: forms; sizes from the v1 slots (no published drawing found)"
+    },
+    {
+      "id": "inferred",
+      "value": "INFERRED",
+      "url": "",
+      "usedFor": "lantern size (v1 modelling size), news racks, bollard band, bus-stop yellow band and flag layout, sign plate layout, colours not listed above"
+    }
+  ],
+  "referencePhotosPending": [
+    {
+      "kinds": [
+        "hydrant"
+      ],
+      "url": "https://commons.wikimedia.org/wiki/File:Auxiliary_Water_Supply_System_fire_hydrant.JPG",
+      "author": "Fredful",
+      "license": "CC BY-SA 4.0",
+      "shows": "1909 AWSS hydrant at 17th and Folsom",
+      "status": "candidate: not downloaded; needs the owner's approval before any download"
+    },
+    {
+      "kinds": [
+        "lampHistoric"
+      ],
+      "url": "https://commons.wikimedia.org/wiki/File:Path_of_Gold_streetlight_at_Kearny_%26_Market_(2008).jpg",
+      "author": "Centpacrr",
+      "license": "CC BY-SA 3.0",
+      "shows": "a Path of Gold standard at Kearny and Market",
+      "status": "candidate: not downloaded; needs the owner's approval before any download"
+    },
+    {
+      "kinds": [
+        "lampHistoric"
+      ],
+      "url": "https://commons.wikimedia.org/wiki/File:San_Francisco_-_Path_of_Gold_Light_Standard_detail_view_(2012).png",
+      "author": "Goran Crnkovic",
+      "license": "CC BY-SA 2.0",
+      "shows": "the top of a Path of Gold standard, close",
+      "status": "candidate: not downloaded; needs the owner's approval before any download"
+    },
+    {
+      "kinds": [
+        "lantern"
+      ],
+      "url": "https://commons.wikimedia.org/wiki/File:Chinatown_lanterns,_San_Francisco,_San_Francisco,_USA_(DSC09152).jpg",
+      "author": "Tetiana Stepanets",
+      "license": "CC BY-SA 4.0",
+      "shows": "strung lanterns over a Chinatown street",
+      "status": "candidate: not downloaded; needs the owner's approval before any download"
+    },
+    {
+      "kinds": [
+        "lantern"
+      ],
+      "url": "https://commons.wikimedia.org/wiki/File:San_Francisco_-_Chinatown_Lantern_(1098847954).jpg",
+      "author": "David Ohmer",
+      "license": "CC BY 2.0",
+      "shows": "one Chinatown lantern, close",
+      "status": "candidate: not downloaded; needs the owner's approval before any download"
+    },
+    {
+      "kinds": [
+        "parkingMeter"
+      ],
+      "url": "https://commons.wikimedia.org/wiki/File:Credit_Card_Parking_Meter_San_Francisco_SFMTA_6013951224.jpg",
+      "author": "Tony Webster",
+      "license": "CC BY-SA 4.0",
+      "shows": "an SFMTA single-space meter in SoMa",
+      "status": "candidate: not downloaded; needs the owner's approval before any download"
+    },
+    {
+      "kinds": [
+        "utilityPole",
+        "cobraArm"
+      ],
+      "url": "https://commons.wikimedia.org/wiki/File:Utility_pole_in_the_Parkside_District,_September_2018.JPG",
+      "author": "Pi.1415926535",
+      "license": "CC BY-SA 3.0",
+      "shows": "a distribution pole in the Parkside",
+      "status": "candidate: not downloaded; needs the owner's approval before any download"
+    },
+    {
+      "kinds": [
+        "utilityPole"
+      ],
+      "url": "https://commons.wikimedia.org/wiki/File:Heavily_augmented_pole_-_San_Francisco,_CA.jpg",
+      "author": "Daderot",
+      "license": "CC0",
+      "shows": "a wood pole with its added hardware",
+      "status": "candidate: not downloaded; needs the owner's approval before any download"
+    },
+    {
+      "kinds": [
+        "transitShelter"
+      ],
+      "url": "https://commons.wikimedia.org/wiki/File:Muni_shelter_at_14th_Avenue_and_Quintara,_September_2017.JPG",
+      "author": "Pi.1415926535",
+      "license": "CC BY-SA 3.0",
+      "shows": "a Muni shelter at 14th Avenue and Quintara",
+      "status": "candidate: not downloaded; needs the owner's approval before any download"
+    },
+    {
+      "kinds": [
+        "transitShelter"
+      ],
+      "url": "https://commons.wikimedia.org/wiki/File:Shelter_at_17th_Street_and_Castro_station,_September_2007.jpg",
+      "author": "Goodshoped35110s",
+      "license": "Public domain",
+      "shows": "the shelter at 17th Street and Castro",
+      "status": "candidate: not downloaded; needs the owner's approval before any download"
+    },
+    {
+      "kinds": [
+        "palm",
+        "palmFar"
+      ],
+      "url": "https://commons.wikimedia.org/wiki/File:Phoenix_canariensis_SF.jpg",
+      "author": "Eric in SF",
+      "license": "CC BY-SA 4.0",
+      "shows": "the Canary Island date palms of the Embarcadero promenade",
+      "status": "candidate: not downloaded; needs the owner's approval before any download"
+    },
+    {
+      "kinds": [
+        "palm"
+      ],
+      "url": "https://commons.wikimedia.org/wiki/File:Phoenix_canariensis_on_Union_Square_San_Francisco.jpg",
+      "author": "Stilfehler",
+      "license": "CC BY-SA 4.0",
+      "shows": "a Canary Island date palm on Union Square, from below",
+      "status": "candidate: not downloaded; needs the owner's approval before any download"
+    }
+  ],
+  "materialNames": {
+    "body": "every ordinary part",
+    "lamp_glass": "lamp glass / refractor; emissiveFactor is the 3000 K night colour, to be scaled by the lamp state",
+    "lens_red/lens_amber/lens_green": "signal lenses (unlit tint); the renderer lights them",
+    "glass": "shelter glazing, alpha 0.35 (BLEND)",
+    "ad_panel": "shelter poster faces (plain tones, no artwork)",
+    "lantern_silk": "the lantern body, for a lit-lantern treatment"
+  }
+}

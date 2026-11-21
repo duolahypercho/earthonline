@@ -476,7 +476,9 @@ fn load_glb(out: &mut Out, repo: &std::path::Path, js: &JsProps, name: &str) -> 
     let prop = js.street_prop(name).ok()?;
     match read_glb(repo, prop) {
         Ok(mut g) => {
-            if let Some((_, _, rgb)) = g.maps[0].as_mut() {
+            // (a v2 file's colours are as authored: no load-time repaint)
+            let v2 = eo_props::props_v2::active().is_some_and(|v| v.is_v2(prop));
+            if let Some((_, _, rgb)) = g.maps[0].as_mut().filter(|_| !v2) {
                 repaint(name, rgb);
             }
             if name == "payStation" {
@@ -522,15 +524,30 @@ fn glb_model(out: &mut Out, repo: &std::path::Path, js: &JsProps, name: &str, id
     let diag = ((mx[0] - mn[0]).powi(2) + (mx[1] - mn[1]).powi(2) + (mx[2] - mn[2]).powi(2)).sqrt();
     add_mesh(&mut out.b, m, &g.positions, &g.normals, &g.uvs, &g.indices);
     let m0 = out.finish();
-    let (p1, n1, u1, i1) = cluster(&g, diag / 24.0);
-    add_mesh(&mut out.b, m, &p1, &n1, &u1, &i1);
-    let m1 = out.finish();
-    let (p2, n2, u2, i2) = cluster(&g, diag / 9.0);
-    add_mesh(&mut out.b, m, &p2, &n2, &u2, &i2);
-    let m2 = out.finish();
+    // A v2 file (eo_props::props_v2) is built to the v1 slot's budget and keeps its thin
+    // members (lamp arms, crossarms) that clustering erases: level 1 is the file itself, and
+    // level 2 as well for a light file (the cobra and banner lamps' arms past 75 m).
+    let v2 = js.street_prop(name).ok().is_some_and(|p| eo_props::props_v2::active().is_some_and(|v| v.is_v2(p)));
+    let m1 = if v2 {
+        m0
+    } else {
+        let (p1, n1, u1, i1) = cluster(&g, diag / 24.0);
+        add_mesh(&mut out.b, m, &p1, &n1, &u1, &i1);
+        out.finish()
+    };
+    let m2 = if v2 && g.indices.len() / 3 <= V2_FAR_FULL_TRIANGLES {
+        m0
+    } else {
+        let (p2, n2, u2, i2) = cluster(&g, diag / 9.0);
+        add_mesh(&mut out.b, m, &p2, &n2, &u2, &i2);
+        out.finish()
+    };
     out.set(id, [m0, m1, m2], lod, cast, 0.0);
     true
 }
+
+/// A v2 file up to this many triangles is its own far level (no clustering).
+const V2_FAR_FULL_TRIANGLES: usize = 2000;
 
 /// `streamedFurnitureCascades`: under 1.2 m the near cascade only, under 4 m the near two, else all.
 fn cascades_for(height: f32) -> u32 {

@@ -616,6 +616,8 @@ pub fn cache_dir(args: &Args) -> Option<std::path::PathBuf> {
 }
 
 pub fn load_world(args: &Args) -> Result<World> {
+    // street props v2 (`--no-street-props-v2`): before anything reads the props manifest.
+    eo_props::props_v2::set_street_props_v2(args.props && args.props2.street_v2);
     let street_plan = args.streets.then(streets::spawn_plan);
     let paths = DataPaths::discover()?;
     let street_maps_job = args.streets.then(|| spawn_street_maps(paths.repo_root.clone(), cache_dir(args)));

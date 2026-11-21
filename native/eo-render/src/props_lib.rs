@@ -235,11 +235,17 @@ pub(crate) fn read_glb(repo: &Path, prop: &eo_props::data::StreetProp) -> Result
     let mut g = Glb { positions: vec![], normals: vec![], uvs: vec![], indices: vec![], maps: [None, None, None] };
     let scene = gltf.default_scene().or_else(|| gltf.scenes().next()).ok_or_else(|| anyhow!("no scene"))?;
     let mut stack: Vec<(gltf::Node, glam::Mat4)> = scene.nodes().map(|n| (n, glam::Mat4::IDENTITY)).collect();
+    // A v2 file's blended primitives (the shelter's glazing) are left out: this loader draws
+    // one opaque material, and an opaque pane would stand as a grey wall.
+    let skip_blend = eo_props::props_v2::active().is_some_and(|v| v.is_v2(prop));
     while let Some((node, parent)) = stack.pop() {
         let m = parent * glam::Mat4::from_cols_array_2d(&node.transform().matrix());
         if let Some(mesh) = node.mesh() {
             let nm = glam::Mat3::from_mat4(m).inverse().transpose();
             for prim in mesh.primitives() {
+                if skip_blend && prim.material().alpha_mode() == gltf::material::AlphaMode::Blend {
+                    continue;
+                }
                 let r = prim.reader(|b| if b.index() == 0 { Some(blob) } else { None });
                 let base = g.positions.len() as u32;
                 let pos: Vec<[f32; 3]> = r.read_positions().ok_or_else(|| anyhow!("no positions"))?.collect();
@@ -635,7 +641,17 @@ impl PropLibrary {
         set(&mut models, Model::MastArm, [n - 2, n - 1, n - 1], [40.0, 160.0, 400.0, 400.0], [0.5, 0.0, 0.0], 0.6, 2);
         // Vehicle head: the JS GLB body (or a box), three lenses on its face.
         let lens_r = (lens_dia_m / 2.0) as f32;
+        // A v2 head (eo_props::props_v2) gives its lens face: its visors reach past the lenses.
+        let v2_face = js.street_prop("signalHead").ok().and_then(|p| eo_props::props_v2::active().filter(|v| v.is_v2(p)).and_then(|v| v.lens_face_z()));
         let (face_z, mid_y) = match &head {
+            Some((g, _)) if v2_face.is_some() => {
+                let (mut y0, mut y1) = (f32::MAX, f32::MIN);
+                for p in &g.positions {
+                    y0 = y0.min(p[1]);
+                    y1 = y1.max(p[1]);
+                }
+                (v2_face.unwrap_or_default() as f32 + 0.004, (y0 + y1) / 2.0)
+            }
             Some((g, _)) => {
                 let (mut zmax, mut y0, mut y1) = (f32::MIN, f32::MAX, f32::MIN);
                 for p in &g.positions {

@@ -30,6 +30,7 @@ pub mod eztree;
 pub mod furniture;
 pub mod overhead;
 pub mod pads;
+pub mod props_v2; // street props v2 (eo-app `--no-street-props-v2`)
 pub mod parking;
 pub mod parking_rules;
 pub mod roadway;

@@ -284,7 +284,10 @@ impl OverheadJs {
         let v: Value = serde_json::from_str(&s).context("overhead-js.json")?;
         let sources: BTreeMap<String, String> = serde_json::from_value(v["sources"].clone())?;
         let sign_variants: Vec<SignVariant> = serde_json::from_value(v["consts"]["signVariants"].clone())?;
-        let seats: Vec<Seat> = serde_json::from_value(v["consts"]["utilityPole"]["attach"].clone())?;
+        // street props v2 (eo-app `--no-street-props-v2`): the v2 pole's seats, shaft and hardware height.
+        let mut consts = v["consts"].clone();
+        crate::props_v2::apply_overhead(&mut consts)?;
+        let seats: Vec<Seat> = serde_json::from_value(consts["utilityPole"]["attach"].clone())?;
         let mut tables = v["tables"].clone();
         // groundscale (the street size, 1.25 by default): the streetcar track samples at
         // their scaled positions (the observed overlays read only their axis direction).
@@ -293,7 +296,7 @@ impl OverheadJs {
                 eo_data::groundscale::scale_json_numbers(&mut tables["streetcar"][k]);
             }
         }
-        Ok(Self { sources, consts: v["consts"].clone(), tables, sign_variants, seats })
+        Ok(Self { sources, consts, tables, sign_variants, seats })
     }
     /// `STREET_OVERHEAD[key]`.
     pub fn h(&self, key: &str) -> f64 {
