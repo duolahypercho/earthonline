@@ -93,6 +93,7 @@ struct RoomLight {
 }
 
 pub struct Finishes {
+    downstairs_light: bool,
     dining_lamp: Option<[f32; 4]>,
     mission_roof: bool,
     room_light: Option<RoomLight>,
@@ -119,6 +120,7 @@ impl Finishes {
         let photo_dir = directory.join("furniture/photo");
         let blender_bedroom = args.house_blender_bedroom && photo && furniture && patina;
         let dining_light = args.house_dining_light && args.interior_lighting && photo && furniture && patina;
+        let downstairs_light = args.house_downstairs_light && args.interior_lighting && photo && furniture && patina;
         let mission_roof = args.house_mission_roof && photo && furniture && patina;
         let mut scans = if patina {
             surfaces::NAMES
@@ -145,7 +147,7 @@ impl Finishes {
         } else {
             None
         };
-        let street_reflections = if patina {
+        let mut street_reflections = if patina {
             let panorama: AssetRef = serde_json::from_slice(&std::fs::read(
                 if photo && glazing { photo_dir.join("street-reflections.provenance.json") }
                 else { directory.join("street-reflections.provenance.json") },
@@ -185,6 +187,29 @@ impl Finishes {
         let manifest: ProbeManifest = serde_json::from_slice(&std::fs::read(
             directory.join("kitchen-reflections.provenance.json"),
         )?)?;
+        if downstairs_light {
+            #[derive(Deserialize)]
+            struct DownstairsLight {
+                #[serde(flatten)]
+                asset: AssetRef,
+                house_sha256: String,
+                grid: [usize; 3],
+                atlas_row_offset: usize,
+                transfer_encoding: String,
+            }
+            let light: DownstairsLight = serde_json::from_slice(&std::fs::read(
+                directory.join("downstairs-daylight.provenance.json"),
+            )?)?;
+            let res = eo_assets::kit::HIGH_RES;
+            ensure!(light.house_sha256 == manifest.house_sha256 && light.grid == [15, 6, 33]
+                && light.atlas_row_offset == res / 2 && light.transfer_encoding == "sqrt(L/(1+L))",
+                "unexpected downstairs lighting layout");
+            let pixels = Self::read_pixels(root, &light.asset, 1)?;
+            let split = light.atlas_row_offset * res * 4;
+            // The bedroom occupies rows 0..252. The downstairs survey sits in the lower half.
+            let street = street_reflections.as_mut().ok_or_else(|| anyhow::anyhow!("missing house reflection atlas"))?;
+            street.orm[split..].copy_from_slice(&pixels[split..]);
+        }
         let mut yard_reflections = if furniture && photo {
             let panorama: AssetRef = serde_json::from_slice(&std::fs::read(
                 if glazing { directory.join("yard-reflections.provenance.json") }
@@ -226,6 +251,7 @@ impl Finishes {
         };
         let floorboards = Self::read_maps(root, &floor, 3)?;
         Ok(Self {
+            downstairs_light,
             dining_lamp,
             mission_roof,
             room_light,
@@ -316,6 +342,7 @@ pub struct House {
     cut_pattern: eo_assets::glb::CutPattern,
     roof_uv: Option<roof::RoofUv>,
     room_meter: Option<[f32; 3]>,
+    downstairs_light: bool,
     dining_lamp: Option<[f32; 4]>,
     probes: Option<[ProbeVolume; 2]>,
     collision: Vec<[Point; 3]>,
@@ -483,6 +510,7 @@ impl House {
             cut_pattern,
             roof_uv,
             room_meter,
+            downstairs_light: finishes.is_some_and(|f| f.downstairs_light),
             dining_lamp: finishes.and_then(|f| f.dining_lamp),
             probes: finishes.map(|r| [
                 layout.probe("enamel-refrigerator", &r.manifest.probes[0]),
@@ -1184,6 +1212,9 @@ impl House {
             }
             if self.photo && !self.light_transfer.is_empty() {
                 o.kind |= eo_render::scene::ENCLOSURE_TRANSFER_BIT;
+                if self.downstairs_light && part.min[1] < 10. / 3. + 0.03 && part.max[1] >= 0. {
+                    o.kind |= eo_render::scene::DOWNSTAIRS_LIGHT_BIT;
+                }
             }
             if self.photo {
                 match family.split('@').next().unwrap_or("") {

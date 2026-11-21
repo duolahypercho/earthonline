@@ -72,6 +72,7 @@ fn base_args() -> Args {
         house_blender_bedroom: false,
         house_mission_roof: false,
         house_dining_light: false,
+        house_downstairs_light: false,
         house_glazing: true,
         beaver_house: false,
         bench: false,
@@ -141,7 +142,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
-            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" => {
+            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" => {
                 a.beaver_house = true;
                 a.house_finishes = true;
                 a.house_patina = true;
@@ -149,11 +150,13 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
                 a.house_photo = true;
                 match s.as_str() {
                     "--house-dining-light" => a.house_dining_light = true,
+                    "--house-downstairs-light" => a.house_downstairs_light = true,
                     "--house-mission-roof" => a.house_mission_roof = true,
                     _ => a.house_blender_bedroom = true,
                 }
             }
             "--no-house-dining-light" => a.house_dining_light = false,
+            "--no-house-downstairs-light" => a.house_downstairs_light = false,
             "--no-house-mission-roof" => a.house_mission_roof = false,
             "--no-house-blender-bedroom" => a.house_blender_bedroom = false,
             "--house-photo-lod" => a.house_photo_lod = true,
@@ -1059,6 +1062,39 @@ mod house_tests {
         let original = crate::house::Finishes::load(&world.paths.repo_root, &off).unwrap();
         assert!(original.atlas.orm.iter().all(|&b| b==0));
         assert!(original.yard_reflections.unwrap().orm.iter().all(|&b| b==0));
+    }
+
+    #[test]
+    fn furnished_floors_share_separate_rows_in_the_light_atlas() {
+        use eo_render::scene::{DOWNSTAIRS_LIGHT_BIT, ENCLOSURE_TRANSFER_BIT};
+        let (mut args, _) = parse(&["--house-downstairs-light".into(), "--house-blender-bedroom".into()]).unwrap();
+        args.kit = false;
+        args.models = false;
+        args.landmarks = false;
+        let world = load_world(&args).unwrap();
+        let mut marked = world.scene.objects.iter().filter(|o| o.kind & DOWNSTAIRS_LIGHT_BIT != 0).peekable();
+        assert!(marked.peek().is_some());
+        assert!(marked.all(|o| o.kind & ENCLOSURE_TRANSFER_BIT != 0));
+        let rows = |args: &Args| {
+            crate::house::Finishes::load(&world.paths.repo_root, args).unwrap()
+                .street_reflections.unwrap().orm
+        };
+        let both = rows(&args);
+        let half = both.len() / 2;
+        args.house_downstairs_light = false;
+        let upstairs = rows(&args);
+        assert_eq!(&both[..half], &upstairs[..half]);
+        assert!(both[half..].chunks_exact(4).any(|c| c[0] > 8 && c[1] > 8));
+        assert!(!upstairs[half..].chunks_exact(4).any(|c| c[..3] != [0; 3]));
+        args.house_downstairs_light = true;
+        args.house_blender_bedroom = false;
+        let ground = rows(&args);
+        assert_eq!(&both[half..], &ground[half..]);
+        assert!(ground[..half].iter().all(|&c| c == 0));
+        args.interior_lighting = false;
+        assert!(rows(&args).iter().all(|&c| c == 0));
+        let (off, _) = parse(&["--house-downstairs-light".into(), "--no-house-downstairs-light".into()]).unwrap();
+        assert!(off.house_photo && !off.house_downstairs_light);
     }
 
     #[test]

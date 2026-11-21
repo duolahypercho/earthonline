@@ -60,6 +60,7 @@ const ENTRY_BRASS_BIT: u32 = 2097152u;
 const CUT_COTTON_BIT: u32 = 4194304u;
 const BEDROOM_LIGHT_BIT: u32 = 8388608u;
 const DINING_FLOOR_LIGHT_BIT: u32 = 16777216u;
+const DOWNSTAIRS_LIGHT_BIT: u32 = 33554432u;
 const ENCLOSURE_TRANSFER_BIT: u32 = 131072u;
 const WAXED_BOARD_BIT: u32 = 32768u;
 const COURTYARD_BOUNCE_BIT: u32 = 65536u;
@@ -810,29 +811,44 @@ fn floor_daylight(world: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
 // Each row of the atlas is a hemisphere integral under one incident source.
 // X/Y interpolate in hardware. The two Z slices remain separate to avoid
 // filtering between adjacent tiles or between two lighting conditions.
-fn bedroom_axis(grid: vec3<f32>, axis: u32, source: u32, layer: i32) -> vec3<f32> {
+fn room_axis(grid: vec3<f32>, axis: u32, source: u32, layer: i32, slices: vec2<f32>) -> vec3<f32> {
     let z = floor(grid.z);
     let row = 6u * (6u * source + axis);
-    let texel = vec2<f32>(grid.x + 10. * z, grid.y + f32(row)) + .5;
+    let texel = vec2<f32>(grid.x + slices.x * z, grid.y + f32(row)) + .5;
     let a = textureSampleLevel(kit_orm, kit_sampler, texel / 512., layer, 0.).rgb;
     let b = textureSampleLevel(kit_orm, kit_sampler,
-        (texel + vec2<f32>(10. * min(1.,18.-z),0.)) / 512., layer, 0.).rgb;
-    return mix(a * a, b * b, fract(grid.z));
+        (texel + vec2<f32>(slices.x * min(1.,slices.y-z),0.)) / 512., layer, 0.).rgb;
+    let aa = a*a;
+    let bb = b*b;
+    if (grid.y >= 256.) {
+        // The downstairs probes include the near field of real emitters.
+        return mix(aa/max(1.-aa,vec3<f32>(.0001)),bb/max(1.-bb,vec3<f32>(.0001)),fract(grid.z));
+    }
+    return mix(aa, bb, fract(grid.z));
 }
 
-fn bedroom_basis(grid: vec3<f32>, n: vec3<f32>, source: u32, layer: i32) -> vec3<f32> {
+fn room_basis(grid: vec3<f32>, n: vec3<f32>, source: u32, layer: i32, slices: vec2<f32>) -> vec3<f32> {
     let direction = vec3<u32>(select(1u,0u,n.x>=0.), select(3u,2u,n.y>=0.), select(5u,4u,n.z>=0.));
     let w = n*n;
-    return w.x * bedroom_axis(grid,direction.x,source,layer)
-         + w.y * bedroom_axis(grid,direction.y,source,layer)
-         + w.z * bedroom_axis(grid,direction.z,source,layer);
+    if (grid.y >= 256.) {
+        if (w.y > .99999) { return room_axis(grid,direction.y,source,layer,slices); }
+        if (w.x > .99999) { return room_axis(grid,direction.x,source,layer,slices); }
+        if (w.z > .99999) { return room_axis(grid,direction.z,source,layer,slices); }
+    }
+    return w.x * room_axis(grid,direction.x,source,layer,slices)
+         + w.y * room_axis(grid,direction.y,source,layer,slices)
+         + w.z * room_axis(grid,direction.z,source,layer,slices);
 }
 
-fn bedroom_diffuse(point: vec3<f32>, world_normal: vec3<f32>, world: vec3<f32>) -> vec3<f32> {
-    // Grid dimensions, sample centres and source order are recorded by the baker.
-    let limits = vec3<f32>(.22, 10./3.+.15, .23);
-    let extent = vec3<f32>(6.78, 20./3.-.17, 12.77) - limits;
-    let grid = clamp((point-limits)/extent, vec3<f32>(0.), vec3<f32>(1.)) * vec3<f32>(9.,5.,18.);
+fn room_irradiance(point: vec3<f32>, world_normal: vec3<f32>, world: vec3<f32>, downstairs: bool) -> vec3<f32> {
+    // Each floor has six vertical samples per hemisphere. The denser downstairs
+    // slices occupy the lower half of the same linear atlas.
+    let minimum = vec3<f32>(.22, select(10./3.+.15,.09,downstairs), .23);
+    let maximum = vec3<f32>(6.78, select(20./3.-.17,10./3.-.16-.055,downstairs), 12.77);
+    let slices = select(vec2<f32>(10.,18.),vec2<f32>(15.,32.),downstairs);
+    var grid = clamp((point-minimum)/(maximum-minimum), vec3<f32>(0.), vec3<f32>(1.))
+        * vec3<f32>(slices.x-1.,5.,slices.y);
+    grid.y += select(0.,256.,downstairs);
     let x = normalize((vec4<f32>(1.,0.,0.,0.) * look.enclosure_frame).xyz);
     let z = vec3<f32>(-x.z,0.,x.x);
     let n = vec3<f32>(dot(world_normal,x),world_normal.y,dot(world_normal,z));
@@ -844,16 +860,16 @@ fn bedroom_diffuse(point: vec3<f32>, world_normal: vec3<f32>, world: vec3<f32>) 
     let sky = sky_tint * (look.hemi_sky.w / lk_luma(sky_tint));
     let cloud = sky_cloud_transmittance(world);
     let clear = cloud * smoothstep(0.,.35,look.key_dir.y) * (1.-skyu.night.z);
-    let diffuse_sky = mix(bedroom_basis(grid,n,0u,layer) * sky,
-                          bedroom_basis(grid,n,5u,layer) * look.key.rgb, clear);
-    var light = diffuse_sky + 2. * bedroom_basis(grid,n,6u,layer);
+    let diffuse_sky = mix(room_basis(grid,n,0u,layer,slices) * sky,
+                          room_basis(grid,n,5u,layer,slices) * look.key.rgb, clear);
+    var light = diffuse_sky + 2. * room_basis(grid,n,6u,layer,slices);
     let sun = look.key_dir.xyz;
     let along = dot(sun,z);
     if (sun.y > 0. && abs(along) > .01) {
         let elevation = asin(clamp(sun.y,0.,1.));
         let t = clamp((elevation-radians(25.))/radians(32.),0.,1.);
         let low = select(1u,3u,along>0.);
-        let solar = mix(bedroom_basis(grid,n,low,layer),bedroom_basis(grid,n,low+1u,layer),t);
+        let solar = mix(room_basis(grid,n,low,layer,slices),room_basis(grid,n,low+1u,layer,slices),t);
         let projected = abs(along)/max(.01,cos(clamp(elevation,radians(25.),radians(57.))));
         light += solar * look.key.rgb * projected * cloud;
     }
@@ -1237,6 +1253,15 @@ fn shade(in: VOut) -> vec4<f32> {
         // the outdoor field by the room's sky visibility instead of adding it twice.
         room_enclosure = in.aux.z;
         room_daylight = transfer.x;
+        var downstairs = false;
+        if ((objects[in.object].kind & DOWNSTAIRS_LIGHT_BIT) != 0u && in.aux.z > .5) {
+            let room_point = (look.enclosure_frame * vec4<f32>(in.world + .025*n,1.)).xyz;
+            downstairs = room_point.y >= 0. && room_point.y < 10./3.;
+            if (downstairs) {
+                measured_room = true;
+                room_diffuse = room_irradiance(room_point, s.n, in.world, true);
+            }
+        }
         if (in.aux.z > .5 && !measured_room) {
             rm_emit += s.albedo * (1.-s.metal) * floor_daylight(in.world, s.n) / PI;
         }
@@ -1244,8 +1269,10 @@ fn shade(in: VOut) -> vec4<f32> {
         let pendant = transfer.y * vec3<f32>(1.55, 1.05, 0.56);
         if (measured_room) {
             // Direct sunlight still comes from the current cascaded shadow map.
-            room_diffuse = bedroom_diffuse(bedroom_point, s.n, in.world);
-            rm_emit += s.albedo * (1.0 - s.metal) * pendant;
+            if (!downstairs) {
+                room_diffuse = room_irradiance(bedroom_point, s.n, in.world, false);
+                rm_emit += s.albedo * (1.0 - s.metal) * pendant;
+            }
         } else {
             rm_emit += s.albedo * (1.0 - s.metal) * (window + pendant);
         }
