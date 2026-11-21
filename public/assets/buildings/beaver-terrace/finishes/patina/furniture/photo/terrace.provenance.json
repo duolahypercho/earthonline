@@ -3,8 +3,8 @@
  "license": "MIT",
  "attribution": "Earth Online contributors. Siting from the recorded OpenStreetMap footprint in sf-city.json.gz.",
  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/terrace.glb",
- "sha256": "cc263de77d4f6f3aa838c06e995103c8e69e81e23e495a78c5c58c98eadd5243",
- "bytes": 34118220,
+ "sha256": "bdf5162a2b6fe535bd23894a0e5ee9ac85c9ec696b87c9c72acf687357107bc7",
+ "bytes": 35080976,
  "door": {
   "hinge": [
    6.31697247706422,
@@ -2060,18 +2060,6 @@
   ],
   [
    [
-    3.0432500000000005,
-    3.8041333333333336,
-    11.8352
-   ],
-   [
-    3.59105,
-    3.8789333333333333,
-    12.4336
-   ]
-  ],
-  [
-   [
     3.0764500000000004,
     3.3333333333333335,
     11.8704
@@ -3839,7 +3827,7 @@
     0,
     13.52
    ],
-   "box_index": 187
+   "box_index": 186
   },
   {
    "name": "rear-herb-pot",
@@ -3848,7 +3836,7 @@
     0,
     13.47
    ],
-   "box_index": 188
+   "box_index": 187
   },
   {
    "name": "rear-yard-grass-1",
@@ -3945,7 +3933,7 @@
     0.0,
     -5.304
    ],
-   "box_index": 189,
+   "box_index": 188,
    "survey_xz": [
     -1291.6,
     1443.3
@@ -4067,9 +4055,9 @@
     158,
     159,
     160,
+    182,
     183,
-    184,
-    185
+    184
    ]
   },
   {
@@ -4087,8 +4075,7 @@
     166,
     167,
     168,
-    169,
-    170
+    169
    ]
   },
   {
@@ -4103,9 +4090,9 @@
     "desk-books"
    ],
    "boxes": [
+    176,
     177,
-    178,
-    179
+    178
    ]
   },
   {
@@ -4118,11 +4105,11 @@
     "bathtub"
    ],
    "boxes": [
+    170,
     171,
     172,
     173,
-    174,
-    175
+    174
    ]
   },
   {
@@ -4135,7 +4122,7 @@
     "washstand"
    ],
    "boxes": [
-    176
+    175
    ]
   },
   {
@@ -4148,8 +4135,8 @@
     "stocked-bookcase"
    ],
    "boxes": [
-    180,
-    181
+    179,
+    180
    ]
   },
   {
@@ -4162,7 +4149,7 @@
     "workroom-chair"
    ],
    "boxes": [
-    182
+    181
    ]
   },
   {
@@ -4197,7 +4184,7 @@
     "window-seat"
    ],
    "boxes": [
-    186
+    185
    ]
   },
   {

@@ -97,54 +97,54 @@
   "inputs": [
     {
       "view": "capture-rear-sash-day-north.png",
-      "sha256": "03780cfdbe1201393ba5d7f52e8380dd1f815ef32c8f7694ee751ecbf42bdc5d"
+      "sha256": "fa2e9fb6a6c111bc1b7921f8d15e10796edb5981c115171d0a63c4ca427a6656"
     },
     {
       "view": "capture-rear-sash-day-east.png",
-      "sha256": "624bb8f77f3b9552d8b4d426033359c61d38c37e9e8922413260791fd83e196c"
+      "sha256": "be73c8101e18fae472f522a4ecabbe5ab1994df199c85a0cd3d6430369c80287"
     },
     {
       "view": "capture-rear-sash-day-south.png",
-      "sha256": "5335b3857e65c26149c7d077148ca516234548b8743db292b267acea19189898"
+      "sha256": "f0b0da74c77dde2a3610142157d578b80a19c6dfffe190916b952b8c060ebf82"
     },
     {
       "view": "capture-rear-sash-day-west.png",
-      "sha256": "3d347cfd396ab37b47912265b57182cec1f691a7126983c2043239a9f3031f39"
+      "sha256": "9208f1a2a9cc9b049026087cd61c0724d0190703781b7448b93a3c97be171b4b"
     },
     {
       "view": "capture-rear-sash-day-up.png",
-      "sha256": "57ba6b52bbbc7212ed045cd5838d49962de0a2e13bf14a82a2bcb94a91bff771"
+      "sha256": "5277b4b8a7e4d40e5b1f23a8d55b180337a352b4442800ea7a1e59657ca99a2a"
     },
     {
       "view": "capture-rear-sash-day-down.png",
-      "sha256": "dc6610c3e6a8bc41a6321cdcd3b714960e1b9ef4824f0d9ed5fc7f1fe7b53848"
+      "sha256": "c147eb4ae266ef34f8902fc6f0ba4c14ef98bf68a6d64e3897d0dacaebc04a8d"
     },
     {
       "view": "capture-rear-sash-night-north.png",
-      "sha256": "5d500ecc783476be04e9f09d08032a78636a1b9c67aab63c75629f25e6eff352"
+      "sha256": "1bdb8d35c39059ad0a4701f01f4fe10ac675a7cf811b9ab854587333a49d3fce"
     },
     {
       "view": "capture-rear-sash-night-east.png",
-      "sha256": "731fda4557fd21ec734f206171e5bb767bee9b85b4fc39676b03d5fd2ac6f390"
+      "sha256": "b5da6bbc057ed877a89e407118e56067b5c49c05d695ba2408fcade14f855557"
     },
     {
       "view": "capture-rear-sash-night-south.png",
-      "sha256": "e22b12c3321bfd518a9de72ed9c6b181353be6957c8cec2f1772811d508d428a"
+      "sha256": "136037aa07123d6e6dc10379d11b7604f449360d59962d5bff22096a133d7bf5"
     },
     {
       "view": "capture-rear-sash-night-west.png",
-      "sha256": "5bd2793fe6f0c2d08de6f5d20a51904bcfe1602d6337cdd5a1fff5446b4efe9e"
+      "sha256": "ed3f8cc6f76005cb6c6948a8982070be5469b00e0b66a69fc31515892120857c"
     },
     {
       "view": "capture-rear-sash-night-up.png",
-      "sha256": "9729278d0d638e59590398db06bbc1fe1841686eedffcd69e6ffbe4ff2256692"
+      "sha256": "779490376d525d2d2b6928db71339945982d211dc9fed6861587d1eb0538edcb"
     },
     {
       "view": "capture-rear-sash-night-down.png",
-      "sha256": "3c73213b1d521d795964470ddbd924e97c439243aaf501904d6ab3953fbb3f38"
+      "sha256": "76945efb00dd41a92f99dc607eaec391d36a00ebc72b8e7c86b74368e5e9b4f9"
     }
   ],
   "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/yard-reflections.png",
-  "sha256": "5a1f222deccc9178746fc8e7a8d1fde30fb8974b267bc28322d0f7b99d0744ed",
-  "bytes": 630609
+  "sha256": "1ff25cfb8580fbc9b1cbd819d4f5546b9899dab0c3387efa88494001afd091e1",
+  "bytes": 629506
 }
