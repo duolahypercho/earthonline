@@ -65,6 +65,7 @@ pub struct Args {
     pub house_window_optics: bool,
     pub house_joinery_light: bool,
     pub house_porch_lamp: bool,
+    pub house_fired_stoop: bool,
     pub house_site_camera: bool,
     pub house_dining_meter: bool,
     pub house_glazing: bool,
@@ -235,6 +236,7 @@ fn parse_args() -> Result<Args> {
         house_window_optics: false,
         house_joinery_light: false,
         house_porch_lamp: false,
+        house_fired_stoop: false,
         house_site_camera: false,
         house_dining_meter: false,
         house_glazing: true,
@@ -313,7 +315,7 @@ fn parse_args() -> Result<Args> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
-            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" | "--house-fitted-finishes" | "--house-kitchen-light" | "--house-window-linen" | "--house-street-garden" | "--house-front-daylight" | "--house-wall-daylight" | "--house-site-camera" | "--house-window-optics" | "--house-joinery-light" | "--house-porch-lamp" => {
+            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" | "--house-fitted-finishes" | "--house-kitchen-light" | "--house-window-linen" | "--house-street-garden" | "--house-front-daylight" | "--house-wall-daylight" | "--house-site-camera" | "--house-window-optics" | "--house-joinery-light" | "--house-porch-lamp" | "--house-fired-stoop" => {
                 a.beaver_house = true;
                 a.house_finishes = true;
                 a.house_patina = true;
@@ -326,6 +328,7 @@ fn parse_args() -> Result<Args> {
                     "--house-street-garden" => a.house_street_garden = true,
                     "--house-site-camera" => a.house_site_camera = true,
                     "--house-porch-lamp" => a.house_porch_lamp = true,
+                    "--house-fired-stoop" => a.house_fired_stoop = true,
                     "--house-joinery-light" => a.house_joinery_light = true,
                     "--house-window-optics" => a.house_window_optics = true,
                     "--house-wall-daylight" => a.house_wall_daylight = true,
@@ -349,6 +352,7 @@ fn parse_args() -> Result<Args> {
             "--no-house-street-garden" => a.house_street_garden = false,
             "--no-house-site-camera" => a.house_site_camera = false,
             "--no-house-porch-lamp" => a.house_porch_lamp = false,
+            "--no-house-fired-stoop" => a.house_fired_stoop = false,
             "--no-house-joinery-light" => a.house_joinery_light = false,
             "--no-house-window-optics" => a.house_window_optics = false,
             "--no-house-wall-daylight" => a.house_wall_daylight = false,

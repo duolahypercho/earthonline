@@ -346,6 +346,10 @@ impl Room {
 
 impl Geometry {
     pub(super) fn append(&self, house: &House, scene: &mut Scene, basis: Mat3) {
+        self.append_at(house, scene, basis, glam::Vec3::ZERO);
+    }
+
+    pub(super) fn append_at(&self, house: &House, scene: &mut Scene, basis: Mat3, offset: glam::Vec3) {
         let base = scene.vertices.len() as i32;
         let first = scene.indices.len() as u32;
         for (i, ((pos, normal), uv)) in self
@@ -356,6 +360,7 @@ impl Geometry {
             .zip(&self.uv)
             .enumerate()
         {
+            let pos = glam::Vec3::from(*pos) + offset;
             let blocked = self.visibility.get(i).map_or(0, |v| {
                 ((v - 1.) * 127.).round() as i8 as u8
             });
@@ -371,7 +376,7 @@ impl Geometry {
         }
         scene.indices.extend_from_slice(&self.model.indices);
         for part in &self.model.parts {
-            let (min, max) = house.bounds(part.min, part.max);
+            let (min, max) = house.bounds((glam::Vec3::from(part.min)+offset).to_array(), (glam::Vec3::from(part.max)+offset).to_array());
             let mut obj = GpuObject::new(
                 ObjectKind::Model,
                 min,

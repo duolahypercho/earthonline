@@ -87,6 +87,7 @@ fn base_args() -> Args {
         house_window_optics: false,
         house_joinery_light: false,
         house_porch_lamp: false,
+        house_fired_stoop: false,
         house_site_camera: false,
         house_dining_meter: false,
         house_glazing: true,
@@ -158,7 +159,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
-            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" | "--house-fitted-finishes" | "--house-kitchen-light" | "--house-window-linen" | "--house-street-garden" | "--house-front-daylight" | "--house-wall-daylight" | "--house-site-camera" | "--house-window-optics" | "--house-joinery-light" | "--house-porch-lamp" => {
+            "--house-blender-bedroom" | "--house-mission-roof" | "--house-dining-light" | "--house-downstairs-light" | "--house-table-light" | "--house-oak-finish" | "--house-oak-joinery" | "--house-floor-reflections" | "--house-dining-meter" | "--house-fitted-dining" | "--house-fitted-finishes" | "--house-kitchen-light" | "--house-window-linen" | "--house-street-garden" | "--house-front-daylight" | "--house-wall-daylight" | "--house-site-camera" | "--house-window-optics" | "--house-joinery-light" | "--house-porch-lamp" | "--house-fired-stoop" => {
                 a.beaver_house = true;
                 a.house_finishes = true;
                 a.house_patina = true;
@@ -171,6 +172,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
                     "--house-street-garden" => a.house_street_garden = true,
                     "--house-site-camera" => a.house_site_camera = true,
                     "--house-porch-lamp" => a.house_porch_lamp = true,
+                    "--house-fired-stoop" => a.house_fired_stoop = true,
                     "--house-joinery-light" => a.house_joinery_light = true,
                     "--house-window-optics" => a.house_window_optics = true,
                     "--house-wall-daylight" => a.house_wall_daylight = true,
@@ -194,6 +196,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-street-garden" => a.house_street_garden = false,
             "--no-house-site-camera" => a.house_site_camera = false,
             "--no-house-porch-lamp" => a.house_porch_lamp = false,
+            "--no-house-fired-stoop" => a.house_fired_stoop = false,
             "--no-house-joinery-light" => a.house_joinery_light = false,
             "--no-house-window-optics" => a.house_window_optics = false,
             "--no-house-wall-daylight" => a.house_wall_daylight = false,
@@ -1329,6 +1332,35 @@ mod house_tests {
     }
 
     #[test]
+    fn fired_stoop_follows_installed_grade_with_its_own_materials() {
+        for enabled in [false, true] {
+            let mut flags=vec!["--house-fired-stoop".into()];
+            if !enabled { flags.push("--no-house-fired-stoop".into()); }
+            let (mut args,_)=parse(&flags).unwrap();
+            args.kit=false;
+            args.models=false;
+            args.agents=false;
+            let world=load_world(&args).unwrap();
+            let house=world.house.as_ref().unwrap();
+            let table=&world.authored.materials;
+            let installed: Vec<_>=world.scene.objects.iter().filter(|o|
+                table.names[o.material as usize].starts_with("21-beaver-fitted/Entrance/")).collect();
+            assert_eq!(installed.is_empty(), !enabled);
+            if enabled {
+                let materials: std::collections::BTreeSet<_> = installed.iter().map(|o|o.material).collect();
+                assert_eq!(materials.len(),2);
+                assert!(materials.iter().all(|s|table.gpu[*s as usize].layer>=0));
+                assert!(installed.iter().all(|o|o.kind & eo_render::scene::FITTED_ROOM_BIT != 0));
+                let (_, door) = collision_world(&world, 2).unwrap();
+                assert!(door.unwrap().is_shut());
+                let origin = house.point(5.95,0.,0.);
+                let depths: Vec<_>=installed.iter().map(|o|o.min[1] as f64-origin.y).collect();
+                assert!(depths.iter().any(|h|h.abs()<0.04) && depths.iter().any(|h|*h < -0.5));
+            }
+        }
+    }
+
+    #[test]
     fn porch_switch_uses_the_emitting_shade_and_its_own_atlas_layer() {
         for (walls, enabled) in [(false, true), (true, true), (true, false)] {
             let mut flags = ["--house-porch-lamp", "--house-street-garden", "--no-interior-lighting"]
@@ -1672,6 +1704,7 @@ mod house_tests {
         args.house_furniture = furniture;
         args.house_photo = photo;
         args.house_fitted_dining = fitted;
+        args.house_fired_stoop = fitted;
         args.house_photo_lod = photo;
         args.beaver_house = true;
         args.kit = false;

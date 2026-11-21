@@ -10,6 +10,7 @@ mod door;
 mod lod;
 mod planting;
 mod porch;
+mod stoop;
 mod street_garden;
 mod roof;
 mod surfaces;
@@ -101,6 +102,8 @@ pub struct Finishes {
     fitted: Option<fitted::Recipe>,
     fitted_maps: Vec<eo_assets::kit::BakedMaps>,
     garden: Option<street_garden::Garden>,
+    stoop: Option<stoop::Recipe>,
+    stoop_maps: Vec<eo_assets::kit::BakedMaps>,
     garden_maps: Vec<eo_assets::kit::BakedMaps>,
     front_daylight: Option<eo_render::front_daylight::FrontDaylight>,
     wall_daylight: Option<eo_assets::kit::BakedMaps>,
@@ -316,6 +319,10 @@ impl Finishes {
         let window_optics = if (args.house_window_optics && glazing || args.house_joinery_light) && photo && patina && furniture {
             Some(Arc::new(Self::read_window_optics(root, &photo_dir, &manifest.house_sha256)?))
         } else { None };
+        let (stoop, stoop_maps) = if args.house_fired_stoop && photo && patina && furniture {
+            let (recipe,maps)=stoop::Recipe::read(root,&photo_dir,&manifest.house_sha256)?;
+            (Some(recipe),maps)
+        } else { (None,Vec::new()) };
         let porch_light = if args.house_porch_lamp && photo && patina && furniture {
             Some(porch::Lamp::read(root, &photo_dir, &manifest.house_sha256)?)
         } else { None };
@@ -324,7 +331,7 @@ impl Finishes {
             Self::read_wall_daylight(root, &photo_dir, &manifest.house_sha256, args.house_wall_daylight, camera)?
         } else { (None, None) };
         Ok(Self {
-            porch_light, joinery_light: args.house_joinery_light, window_optics, site_camera_exposure, wall_daylight, front_daylight, garden, garden_maps, fitted, fitted_maps, downstairs_light,
+            stoop, stoop_maps, porch_light, joinery_light: args.house_joinery_light, window_optics, site_camera_exposure, wall_daylight, front_daylight, garden, garden_maps, fitted, fitted_maps, downstairs_light,
             dining_meter,
             dining_camera_exposure,
             oak_finish,
@@ -350,6 +357,7 @@ impl Finishes {
         maps.extend(self.wall_daylight);
         maps.extend(self.porch_light.map(|(_, maps)| maps));
         maps.extend(self.garden_maps);
+        maps.extend(self.stoop_maps);
         maps.extend(self.fitted_maps);
         maps.extend(self.floor_reflections);
         maps.extend(self.yard_reflections);
@@ -484,6 +492,7 @@ fn corners([x, y, z]: Point, [u, v, w]: Point) -> [Point; 8] {
 pub struct House {
     fitted: Option<fitted::Room>,
     garden: Option<fitted::Geometry>,
+    stoop: Option<stoop::Stoop>,
     pub front_daylight: Option<eo_render::front_daylight::FrontDaylight>,
     pub wall_daylight_layer: Option<usize>,
     porch_light: Option<(porch::Lamp, usize)>,
@@ -618,6 +627,7 @@ impl House {
             ensure!(!layout.nodes.is_empty(), "furnished house is missing its metric placement");
             let garden = finishes.and_then(|f| f.garden.as_ref());
             let skip = |name: &str| (mission_roof && roof::old_clay(name))
+                || (finishes.is_some_and(|f| f.stoop.is_some()) && stoop::Stoop::replaces(name))
                 || (fitted_recipe.is_some() && fitted::replaced(name))
                 || garden.is_some_and(|g| g.replaces(name));
             let (model, uv, contact, pattern) = eo_assets::glb::cook_furnished_glb_filtered(
@@ -631,6 +641,12 @@ impl House {
         } else {
             (eo_assets::glb::cook_glb(&raw)?, Vec::new(), Vec::new())
         };
+        if let Some(recipe) = finishes.and_then(|f| f.stoop.as_ref()) {
+            recipe.extend_piers(&mut model, |x,z| {
+                let site=ring[1]+across*x+back*z;
+                ((ground(site.x,site.y)-floor-0.06)/height_scale).min(-0.005)
+            });
+        }
         let roof_uv = mission_roof.then(|| roof::install(root, &dir, &mut model)).transpose()?;
         let resolved: Vec<u32> = model
             .materials
@@ -699,12 +715,14 @@ impl House {
         let garden_base = after_wall + usize::from(porch_light.is_some());
         let garden = finishes.and_then(|f| f.garden.as_ref())
             .map(|g| g.load(root, materials, garden_base, front_daylight.is_some())).transpose()?;
-        let first_fitted = garden_base + finishes.map_or(0, |f| f.garden_maps.len());
+        let first_stoop = garden_base + finishes.map_or(0, |f| f.garden_maps.len());
+        let stoop = finishes.and_then(|f| f.stoop.as_ref()).map(|r|r.load(root,materials,first_stoop)).transpose()?;
+        let first_fitted = first_stoop + finishes.map_or(0, |f| f.stoop_maps.len());
         let fitted = fitted_recipe.map(|r| r.load(root,materials,first_fitted)).transpose()?;
         let mut h = Self {
             window_optics: finishes.and_then(|f| f.window_optics.clone()),
             site_camera_exposure: finishes.and_then(|f| f.site_camera_exposure),
-            porch_light, wall_daylight_layer, front_daylight, garden, fitted,
+            stoop, porch_light, wall_daylight_layer, front_daylight, garden, fitted,
             origin: ring[1],
             across,
             back,
@@ -810,7 +828,17 @@ impl House {
         {
             h.approach(street, ground);
         }
-        if finishes.is_some() {
+        if let Some(stoop)=&h.stoop {
+            for plan in stoop.pier_plans() {
+                let top = plan.map(|[x,z]| [x,0.,z]);
+                let bottom = plan.map(|[x,z]| {
+                    let p = h.point(x,0.,z);
+                    [x, ((ground(p.x,p.z)-p.y-0.06)/h.height_scale).min(-0.005), z]
+                });
+                let min = bottom.iter().map(|v| v[1]).fold(f64::INFINITY, f64::min);
+                h.solid_box([plan[0][0], min, plan[0][1]], top[2]);
+            }
+        } else if finishes.is_some() {
             h.tile_treads();
         }
         if let Some(parcel) = manifest.rear_parcel {
@@ -1648,6 +1676,7 @@ impl House {
         }
         if let Some(fit) = &self.fitted { fit.append(self,scene,normals); }
         if let Some(garden) = &self.garden { garden.append(self, scene, normals); }
+        if let Some(stoop) = &self.stoop { stoop.append(self,scene,normals); }
         self.planting.append(scene);
         if self.photo && detail_lod { lod::install(scene, objects); }
         scene.stats.objects += scene.objects.len() - objects;
