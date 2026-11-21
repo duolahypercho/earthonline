@@ -1,0 +1,91 @@
+{
+  "source_scene_sha256": "cc5e59c299fb2863516147ab729ecf5267073e5d4587f5744ff0b28a998d9f42",
+  "design_image_sha256": "7f708644a9a71a39f295b30b82a02674ff0ff37174b3eca21822805ecd70f627",
+  "units": "metres in the metric Blender house; Z up",
+  "fit_camera_xyz_heading_tilt_lens_shift": [
+    6.28100504,
+    -3.89812968,
+    1.62,
+    -1.80585179,
+    -0.00144556,
+    33.8954031,
+    -0.09941938
+  ],
+  "previous_table_center": [
+    3.4933,
+    -9.11055
+  ],
+  "table_center": [
+    4.290523,
+    -8.467106
+  ],
+  "table_rotation_rad": 1.73554241,
+  "bowl_center": [
+    4.224995,
+    -8.615116,
+    0.75
+  ],
+  "linen_center": [
+    3.893628,
+    -8.301524,
+    0.75
+  ],
+  "pendant_bottom": [
+    4.244275,
+    -8.446434,
+    1.943903
+  ],
+  "image_size": [
+    920,
+    518
+  ],
+  "table_corner_picks": [
+    [
+      465.0,
+      297.0
+    ],
+    [
+      622.0,
+      285.0
+    ],
+    [
+      836.0,
+      335.0
+    ],
+    [
+      620.0,
+      359.0
+    ]
+  ],
+  "reserved_corner": 1,
+  "wood_scan_inputs": [
+    {
+      "map": "Diffuse",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/wood_floor_worn/wood_floor_worn_diff_4k.jpg",
+      "file": "wood_floor_worn_diff_4k.jpg",
+      "md5": "91e3f8b4f0176ab4dc266321c5bdcbe6",
+      "sha256": "75825ed92e497e6ecc7a16ad415fae11819989798533284cd05f1b112edc9ef2"
+    },
+    {
+      "map": "Rough",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/wood_floor_worn/wood_floor_worn_rough_4k.jpg",
+      "file": "wood_floor_worn_rough_4k.jpg",
+      "md5": "1a0c26d7aca182f6642ca9b284b81e19",
+      "sha256": "3491497dc007eb30624707c8dc46d42970dd137191e4477fef8fff473857c3d2"
+    },
+    {
+      "map": "nor_gl",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/4k/wood_floor_worn/wood_floor_worn_nor_gl_4k.jpg",
+      "file": "wood_floor_worn_nor_gl_4k.jpg",
+      "md5": "3379c9d860cb3edd03cd2bf64689e0d1",
+      "sha256": "584b82439fbb9eda8f0e979cfe0540763d1ed1f46970a3df2046cc3a59429546"
+    }
+  ],
+  "design_daylight": {
+    "azimuth_from_rear_degrees": -24.0,
+    "elevation_degrees": 18.0,
+    "solar_diameter_degrees": 0.53,
+    "front_diffuse_watts": 48,
+    "camera_exposure_ev": 3.55
+  }
+}
