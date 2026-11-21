@@ -66,7 +66,7 @@ const GRAVEL_BIT: u32 = 1024u;
 const DOOR_SCAN_BIT: u32 = 2048u;
 const FRONT_SASH_BIT: u32 = 4096u;
 const LIMEWASH_BIT: u32 = 8192u;
-const RUG_SCAN_BIT: u32 = 16384u;
+const LOCAL_UV_SCAN_BIT: u32 = 16384u;
 const PI: f32 = 3.14159265;
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -138,7 +138,7 @@ fn vs(
         out.color = color.rgb;
         if ((o.kind & CUT_COTTON_BIT) != 0u) {
             out.ft = vec2<f32>(color.b, color.a);
-        } else if ((o.kind & (RUG_SCAN_BIT | TABLE_BOARD_BIT)) != 0u) {
+        } else if ((o.kind & (LOCAL_UV_SCAN_BIT | TABLE_BOARD_BIT)) != 0u) {
             out.ft = clamp(vec2<f32>(color.b, color.a), vec2<f32>(0.001), vec2<f32>(0.999));
         } else if ((o.kind & DOOR_SCAN_BIT) != 0u) {
             out.ft = vec2<f32>(color.a, color.b * 3.1);
@@ -1068,7 +1068,7 @@ fn shade(in: VOut) -> vec4<f32> {
         }
     }
     let cut_cotton = (objects[in.object].kind & CUT_COTTON_BIT) != 0u;
-    let local_scan = cut_cotton || (objects[in.object].kind & (DOOR_SCAN_BIT | RUG_SCAN_BIT)) != 0u;
+    let local_scan = cut_cotton || (objects[in.object].kind & (DOOR_SCAN_BIT | LOCAL_UV_SCAN_BIT)) != 0u;
     var bedroom_point = vec3<f32>(0.);
     if ((objects[in.object].kind & BEDROOM_LIGHT_BIT) != 0u && in.aux.z > .5) {
         bedroom_point = (look.enclosure_frame * vec4<f32>(in.world + .025*n,1.)).xyz;

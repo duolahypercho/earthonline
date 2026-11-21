@@ -3,6 +3,7 @@ mod dimensions;
 mod door;
 mod lod;
 mod planting;
+mod roof;
 mod surfaces;
 pub use surfaces::Scan;
 pub const FURNITURE_LAYERS: u32 = surfaces::FURNITURE_NAMES.len() as u32;
@@ -92,6 +93,7 @@ struct RoomLight {
 }
 
 pub struct Finishes {
+    mission_roof: bool,
     room_light: Option<RoomLight>,
     glazing: bool,
     furniture: bool,
@@ -105,7 +107,7 @@ pub struct Finishes {
 }
 
 impl Finishes {
-    pub fn load(root: &Path, patina: bool, furniture: bool, photo: bool, glazing: bool, blender_bedroom: bool) -> Result<Self> {
+    pub fn load(root: &Path, patina: bool, furniture: bool, photo: bool, glazing: bool, blender_bedroom: bool, mission_roof: bool) -> Result<Self> {
         let directory = if patina {
             root.join(FINISH_DIR).join("patina")
         } else {
@@ -113,6 +115,7 @@ impl Finishes {
         };
         let photo_dir = directory.join("furniture/photo");
         let blender_bedroom = blender_bedroom && photo && furniture && patina;
+        let mission_roof = mission_roof && photo && furniture && patina;
         let mut scans = if patina {
             surfaces::NAMES
                 .iter()
@@ -162,6 +165,9 @@ impl Finishes {
                 for name in surfaces::SITE_NAMES {
                     scans.push(Scan::load(root, &photo_dir, name)?);
                 }
+                if mission_roof {
+                    scans.push(Scan::load(root, &photo_dir, "mission-clay")?);
+                }
                 if blender_bedroom {
                     scans.insert(0, Scan::load(root, &photo_dir, "washed-cotton")?);
                 }
@@ -191,6 +197,7 @@ impl Finishes {
         let atlas = Self::read_maps(root, &manifest.asset, 2)?;
         let floorboards = Self::read_maps(root, &floor, 3)?;
         Ok(Self {
+            mission_roof,
             room_light,
             glazing,
             furniture,
@@ -277,6 +284,7 @@ pub struct House {
     light_transfer: Vec<[f32; 2]>,
     visibility: Vec<f32>,
     cut_pattern: eo_assets::glb::CutPattern,
+    roof_uv: Option<roof::RoofUv>,
     room_meter: Option<[f32; 3]>,
     probes: Option<[ProbeVolume; 2]>,
     collision: Vec<[Point; 3]>,
@@ -379,16 +387,14 @@ impl House {
         let room_meter = finishes.and_then(|f| f.room_light.as_ref())
             .map(|light| [light.mean_sky_return, light.exposure_range_ev, light.exterior_exposed_beam]);
         let mut cut_pattern = eo_assets::glb::CutPattern::new();
-        let (model, light_transfer, visibility) = if furnished {
+        let mission_roof = finishes.is_some_and(|f| f.mission_roof);
+        let (mut model, light_transfer, visibility) = if furnished {
             ensure!(!layout.nodes.is_empty(), "furnished house is missing its metric placement");
-            let (model, uv, contact) = if room_meter.is_some() {
-                let (model, light, contact, pattern) =
-                    eo_assets::glb::cook_glb_with_cut_pattern(&raw, &layout.nodes)?;
-                cut_pattern = pattern;
-                (model, light, contact)
-            } else {
-                eo_assets::glb::cook_glb_with_visibility(&raw, &layout.nodes)?
-            };
+            let skip = mission_roof.then_some(roof::old_clay as fn(&str) -> bool);
+            let (model, uv, contact, pattern) = eo_assets::glb::cook_furnished_glb(
+                &raw, &layout.nodes, room_meter.is_some(), skip,
+            )?;
+            cut_pattern = pattern;
             if interior_lighting { (model, uv, contact) } else { (model, vec![], vec![]) }
         } else if interior_lighting {
             let (model, uv) = eo_assets::glb::cook_glb_with_uv0(&raw)?;
@@ -396,6 +402,7 @@ impl House {
         } else {
             (eo_assets::glb::cook_glb(&raw)?, Vec::new(), Vec::new())
         };
+        let roof_uv = mission_roof.then(|| roof::install(root, &dir, &mut model)).transpose()?;
         let resolved: Vec<u32> = model
             .materials
             .iter()
@@ -443,6 +450,7 @@ impl House {
             light_transfer,
             visibility,
             cut_pattern,
+            roof_uv,
             room_meter,
             probes: finishes.map(|r| [
                 layout.probe("enamel-refrigerator", &r.manifest.probes[0]),
@@ -1060,6 +1068,10 @@ impl House {
                 normal |= 0x4000_0000;
                 color = (color & 0xffff) | (u32::from(u) << 16) | (u32::from(v) << 24);
             }
+            if let Some([u,v]) = self.roof_uv.as_ref().and_then(|roof| roof.get(i)) {
+                normal |= 0x4000_0000;
+                color = u32::from(u) << 16 | u32::from(v) << 24;
+            }
             if let Some(visibility) = self.visibility.get(i) {
                 // 64 identifies unlit authored normals. Codes 65..127 carry diffuse visibility.
                 normal = (normal & 0x00ff_ffff) | ((65 + (62. * visibility).round() as u32) << 24);
@@ -1120,8 +1132,9 @@ impl House {
                 o.kind |= eo_render::scene::FLOOR_SCAN_BIT;
                 if self.photo { o.kind |= eo_render::scene::WAXED_BOARD_BIT; }
             }
-            if self.patina && self.model.materials[part.material as usize].name.starts_with("woven-carpet@") {
-                o.kind |= eo_render::scene::RUG_SCAN_BIT;
+            let family = &self.model.materials[part.material as usize].name;
+            if self.patina && (family.starts_with("woven-carpet@") || family == "mission-roof-clay") {
+                o.kind |= eo_render::scene::LOCAL_UV_SCAN_BIT;
             }
             if self.patina && door_paint(&self.model.materials[part.material as usize].name) {
                 o.kind |= eo_render::scene::DOOR_SCAN_BIT;
@@ -1132,7 +1145,6 @@ impl House {
             if self.photo && !self.light_transfer.is_empty() {
                 o.kind |= eo_render::scene::ENCLOSURE_TRANSFER_BIT;
             }
-            let family = &self.model.materials[part.material as usize].name;
             if self.photo {
                 match family.split('@').next().unwrap_or("") {
                     "front-door-brass" => o.kind |= eo_render::scene::ENTRY_BRASS_BIT,

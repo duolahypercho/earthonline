@@ -390,17 +390,23 @@ fn segments(world: &World, args: &Args, aspect: f32, far: f32) -> Vec<Segment> {
         },
     ]
     .into_iter()
-    .chain(args.segments.as_deref()
-        .filter(|names| names.iter().any(|name| name == "house_bedroom"))
-        .and_then(|_| world.house.as_ref())
-        .map(|house| {
-            let storey = 10. / 3.;
-            let left = house.point(4.0, storey, 8.1).as_vec3() + EYE_HEIGHT_M * Vec3::Y;
-            let right = house.point(4.7, storey, 8.8).as_vec3() + EYE_HEIGHT_M * Vec3::Y;
-            let target = house.point(2.3,storey+0.72,11.8).as_vec3();
-            Segment {
-                name: "house_bedroom",
-                description: "Standing inside the upstairs terrace, moving past the foot of the bed toward the rear sash".into(),
+    .chain(["house_bedroom", "house_roof"].into_iter().filter_map(|name| {
+            let selected = args.segments.as_ref()?.iter().any(|s| s == name);
+            if !selected { return None; }
+            let house = world.house.as_ref()?;
+            let (left, right, target, description) = if name == "house_roof" {
+                (house.point(9.6, 12.8, -5.6).as_vec3(), house.point(7.7, 12.0, -3.7).as_vec3(),
+                 house.point(5.0, 10.65, 0.7).as_vec3(), "Moving over the rounded bay and along the Mission tile courses")
+            } else {
+                let storey = 10. / 3.;
+                (house.point(4.0, storey, 8.1).as_vec3() + EYE_HEIGHT_M * Vec3::Y,
+                 house.point(4.7, storey, 8.8).as_vec3() + EYE_HEIGHT_M * Vec3::Y,
+                 house.point(2.3,storey+0.72,11.8).as_vec3(),
+                 "Standing inside the upstairs terrace, moving past the foot of the bed toward the rear sash")
+            };
+            Some(Segment {
+                name,
+                description: description.into(),
                 camera: Box::new(move |i, n| {
                     let t = i as f32 / n.max(1) as f32;
                     let eye = left.lerp(right,t);
@@ -408,7 +414,7 @@ fn segments(world: &World, args: &Args, aspect: f32, far: f32) -> Vec<Segment> {
                     Camera { far, ..Camera::new(eye,yaw_of(d),d.y.asin(),aspect) }
                 }),
                 frames, paced: false, streams: false,
-            }
+            })
         }))
     .chain(street_bench::sidewalk_segment(world, frames, aspect, far))
     .chain(water_bench::waterfront_segment(world, frames, aspect, far)) // water

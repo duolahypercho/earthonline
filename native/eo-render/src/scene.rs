@@ -80,8 +80,10 @@ pub const DOOR_SCAN_BIT: u32 = 1 << 11;
 pub const FRONT_SASH_BIT: u32 = 1 << 12;
 /// Mineral plaster with locally baked exposure to splash and runoff.
 pub const LIMEWASH_BIT: u32 = 1 << 13;
-/// An entire carpet sampled once in its authored orientation.
-pub const RUG_SCAN_BIT: u32 = 1 << 14;
+/// Use the authored UVs of a local photographic surface.
+pub const LOCAL_UV_SCAN_BIT: u32 = 1 << 14;
+/// The original whole-carpet consumer of the local UV scan.
+pub const RUG_SCAN_BIT: u32 = LOCAL_UV_SCAN_BIT;
 /// Board-mounted room coordinates and the interior reflection of the sash.
 pub const WAXED_BOARD_BIT: u32 = 1 << 15;
 /// Private paving and aggregate receive the same outdoor bounce as the planted bed.

@@ -166,13 +166,13 @@ struct PrimOut {
 
 /// Parse a (verified) GLB and flatten it.
 pub fn cook_glb(bytes: &[u8]) -> Result<CookedModel> {
-    cook_mesh(bytes, None, None, None, None)
+    cook_mesh(bytes, None, None, None, None, None)
 }
 
 /// Return the first texture coordinates in the same vertex order as the cooked mesh.
 pub fn cook_glb_with_uv0(bytes: &[u8]) -> Result<(CookedModel, Vec<[f32; 2]>)> {
     let mut uv = Vec::new();
-    let model = cook_mesh(bytes, Some(&mut uv), None, None, None)?;
+    let model = cook_mesh(bytes, Some(&mut uv), None, None, None, None)?;
     Ok((model, uv))
 }
 
@@ -181,7 +181,7 @@ pub fn cook_glb_with_uv0(bytes: &[u8]) -> Result<(CookedModel, Vec<[f32; 2]>)> {
 pub fn cook_glb_with_visibility(bytes: &[u8], placements: &std::collections::HashMap<String, Mat4>) -> Result<(CookedModel, Vec<[f32; 2]>, Vec<f32>)> {
     let mut uv = Vec::new();
     let mut visibility = Vec::new();
-    let model = cook_mesh(bytes, Some(&mut uv), Some(&mut visibility), None, Some(placements))?;
+    let model = cook_mesh(bytes, Some(&mut uv), Some(&mut visibility), None, Some(placements), None)?;
     Ok((model, uv, visibility))
 }
 
@@ -191,14 +191,25 @@ pub type CutPattern = std::collections::HashMap<u32, [u8; 2]>;
 pub fn cook_glb_with_cut_pattern(
     bytes: &[u8], placements: &std::collections::HashMap<String, Mat4>,
 ) -> Result<(CookedModel, Vec<[f32; 2]>, Vec<f32>, CutPattern)> {
+    cook_furnished_glb(bytes, placements, true, None)
+}
+
+/// Cook selected architectural meshes before material batching. Placement and
+/// lighting attributes use the same vertex order as the surviving primitives.
+pub fn cook_furnished_glb(
+    bytes: &[u8],
+    placements: &std::collections::HashMap<String, Mat4>,
+    read_pattern: bool,
+    omit_mesh: Option<fn(&str) -> bool>,
+) -> Result<(CookedModel, Vec<[f32; 2]>, Vec<f32>, CutPattern)> {
     let mut light = Vec::new();
     let mut contact = Vec::new();
     let mut cut = CutPattern::new();
-    let model = cook_mesh(bytes, Some(&mut light), Some(&mut contact), Some(&mut cut), Some(placements))?;
+    let model = cook_mesh(bytes, Some(&mut light), Some(&mut contact), read_pattern.then_some(&mut cut), Some(placements), omit_mesh)?;
     Ok((model, light, contact, cut))
 }
 
-fn cook_mesh(bytes: &[u8], mut uv: Option<&mut Vec<[f32; 2]>>, mut visibility: Option<&mut Vec<f32>>, mut cut: Option<&mut CutPattern>, placements: Option<&std::collections::HashMap<String, Mat4>>) -> Result<CookedModel> {
+fn cook_mesh(bytes: &[u8], mut uv: Option<&mut Vec<[f32; 2]>>, mut visibility: Option<&mut Vec<f32>>, mut cut: Option<&mut CutPattern>, placements: Option<&std::collections::HashMap<String, Mat4>>, omit_mesh: Option<fn(&str) -> bool>) -> Result<CookedModel> {
     let gltf = gltf::Gltf::from_slice(bytes).map_err(|e| anyhow!("glTF parse: {e}"))?;
     let blob = gltf.blob.as_deref();
     let doc = &gltf.document;
@@ -226,6 +237,9 @@ fn cook_mesh(bytes: &[u8], mut uv: Option<&mut Vec<[f32; 2]>>, mut visibility: O
             stack.push((child, world));
         }
         let Some(mesh) = node.mesh() else { continue };
+        if omit_mesh.is_some_and(|omit| omit(node.name().unwrap_or_default())) {
+            continue;
+        }
         if is_shadow_proxy(node.name()) {
             model.dropped_shadow_nodes += 1;
             for p in mesh.primitives() {

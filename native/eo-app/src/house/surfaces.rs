@@ -68,7 +68,7 @@ impl Scan {
         }
         let surface = GpuMaterial {
             base,
-            flags: if super::door_paint(&mat.name) || family == "woven-carpet" || cut_pattern && family == "cotton-coverlet" {
+            flags: if super::door_paint(&mat.name) || matches!(family, "woven-carpet" | "mission-roof-clay") || cut_pattern && family == "cotton-coverlet" {
                 0
             } else {
                 F_TEXTURED

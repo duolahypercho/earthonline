@@ -48,6 +48,7 @@ pub struct Args {
     pub house_photo: bool,
     pub house_photo_lod: bool,
     pub house_blender_bedroom: bool,
+    pub house_mission_roof: bool,
     pub house_glazing: bool,
     pub bench: bool,
     pub start_underwater: bool,
@@ -199,6 +200,7 @@ fn parse_args() -> Result<Args> {
         house_photo: false,
         house_photo_lod: false,
         house_blender_bedroom: false,
+        house_mission_roof: false,
         house_glazing: true,
         beaver_house: false,
         bench: false,
@@ -275,14 +277,19 @@ fn parse_args() -> Result<Args> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
-            "--house-blender-bedroom" => {
+            "--house-blender-bedroom" | "--house-mission-roof" => {
                 a.beaver_house = true;
                 a.house_finishes = true;
                 a.house_patina = true;
                 a.house_furniture = true;
                 a.house_photo = true;
-                a.house_blender_bedroom = true;
+                if s == "--house-mission-roof" {
+                    a.house_mission_roof = true;
+                } else {
+                    a.house_blender_bedroom = true;
+                }
             }
+            "--no-house-mission-roof" => a.house_mission_roof = false,
             "--no-house-blender-bedroom" => a.house_blender_bedroom = false,
             "--house-photo-lod" => a.house_photo_lod = true,
             "--no-house-photo-lod" => a.house_photo_lod = false,
@@ -608,7 +615,7 @@ pub fn load_world(args: &Args) -> Result<World> {
     // the building records the landmark buildings draw instead.
     let mut landmark_claims: HashSet<String> = if args.landmarks && args.landmarks2 { eo_landmarks::set::claimed_records() } else { HashSet::new() };
     let finishes = (args.beaver_house && args.house_finishes)
-        .then(|| house::Finishes::load(&paths.repo_root, args.house_patina, args.house_furniture, args.house_photo, args.house_glazing, args.house_blender_bedroom))
+        .then(|| house::Finishes::load(&paths.repo_root, args.house_patina, args.house_furniture, args.house_photo, args.house_glazing, args.house_blender_bedroom, args.house_mission_roof))
         .transpose()?;
     let house = if args.beaver_house {
         let record = city.buildings.iter().find(|b| house::owns(&b.id)).ok_or_else(|| anyhow::anyhow!("missing Beaver Street house footprint"))?;

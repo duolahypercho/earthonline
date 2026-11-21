@@ -70,6 +70,7 @@ fn base_args() -> Args {
         house_photo: false,
         house_photo_lod: false,
         house_blender_bedroom: false,
+        house_mission_roof: false,
         house_glazing: true,
         beaver_house: false,
         bench: false,
@@ -139,14 +140,19 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-furniture" => { a.house_furniture = false; a.house_photo = false; }
             "--house-photo" => { a.beaver_house = true; a.house_finishes = true; a.house_patina = true; a.house_furniture = true; a.house_photo = true; }
             "--no-house-photo" => a.house_photo = false,
-            "--house-blender-bedroom" => {
+            "--house-blender-bedroom" | "--house-mission-roof" => {
                 a.beaver_house = true;
                 a.house_finishes = true;
                 a.house_patina = true;
                 a.house_furniture = true;
                 a.house_photo = true;
-                a.house_blender_bedroom = true;
+                if s == "--house-mission-roof" {
+                    a.house_mission_roof = true;
+                } else {
+                    a.house_blender_bedroom = true;
+                }
             }
+            "--no-house-mission-roof" => a.house_mission_roof = false,
             "--no-house-blender-bedroom" => a.house_blender_bedroom = false,
             "--house-photo-lod" => a.house_photo_lod = true,
             "--no-house-photo-lod" => a.house_photo_lod = false,
@@ -1013,6 +1019,37 @@ mod house_tests {
         assert!(coords.contains(&0) && coords.contains(&0xffff));
         let (off, _) = parse(&["--house-blender-bedroom".to_owned(), "--no-house-blender-bedroom".to_owned()]).unwrap();
         assert!(off.house_photo && !off.house_blender_bedroom);
+    }
+
+    #[test]
+    fn mission_roof_replaces_only_the_high_clay_and_packs_its_firing_patches() {
+        use eo_render::scene::LOCAL_UV_SCAN_BIT;
+        let (mut args, _) = parse(&["--house-mission-roof".into()]).unwrap();
+        args.kit = false;
+        args.models = false;
+        args.landmarks = false;
+        let world = load_world(&args).unwrap();
+        let floor = world.house.as_ref().unwrap().point(0., 0., 0.).y as f32;
+        let names = &world.authored.materials.names;
+        let roof = world.scene.objects.iter().find(|o|
+            names.get(o.material as usize).is_some_and(|s| s.ends_with("/mission-roof-clay"))
+        ).expect("expected the installed clay roof");
+        assert!(roof.min[1] > floor + 9.8 && roof.max[1] < floor + 11.5);
+        assert_ne!(roof.kind & LOCAL_UV_SCAN_BIT, 0);
+        let start = roof.first_index as usize;
+        let cells: std::collections::BTreeSet<_> = world.scene.indices[start..start+roof.index_count as usize]
+            .iter().map(|&i| {
+                let v = world.scene.vertices[(roof.base_vertex as i64+i64::from(i)) as usize];
+                ((v.color >> 22) & 3, v.color >> 30)
+            }).collect();
+        assert_eq!(cells.len(), 16, "all fired clay samples must reach the renderer");
+        let old: Vec<_> = world.scene.objects.iter().filter(|o|
+            names.get(o.material as usize).is_some_and(|s| s.contains("/fired-clay@"))
+        ).collect();
+        assert!(!old.is_empty() && old.iter().all(|o| o.max[1] < floor + 4.0),
+                "the original porch awning must survive on its own");
+        let (disabled, _) = parse(&["--house-mission-roof".into(), "--no-house-mission-roof".into()]).unwrap();
+        assert!(disabled.house_photo && !disabled.house_mission_roof);
     }
 
     fn check_beaver_walk(finishes: bool, patina: bool, furniture: bool, photo: bool) {
