@@ -237,6 +237,23 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
 
     var lit = direct_d + direct_s + indirect_d + indirect_s + bounce + m.emissive.rgb + rm_emit; // + the room
     lit = lit + sky_local_lights(world, n, v, diffuse, f0, rough); // street lamps, headlamps
+    if ((objects[object].kind & FITTED_ROOM_BIT) != 0u && m.thin_absorption>0. && measured_room) {
+        if (any(fitted_pendant_horizontal>vec3<f32>(0.))) {
+            lit += pendant_gloss(fitted_pendant_horizontal,world,n,v,rough);
+        }
+        if (m.emissive.w > 0.) {
+            let coat_rough=max(.035,m.rough_flatten);
+            let coat_nv=max(dot(ng,v),.0001);
+            let fresnel=.04+.96*pow(1.-coat_nv,5.);
+            let lut=lk_dfg(coat_nv,coat_rough);
+            var coat=fitted_coat_light*(.04*lut.x+lut.y);
+            if (nl>0.) { coat+=key*(max(dot(ng,l),0.)/nl)*lk_ggx(ng,v,l,vec3<f32>(.04),coat_rough); }
+            if (any(fitted_pendant_horizontal>vec3<f32>(0.))) {
+                coat+=pendant_gloss(fitted_pendant_horizontal,world,ng,v,coat_rough);
+            }
+            lit=lit*(1.-m.emissive.w*fresnel)+m.emissive.w*coat;
+        }
+    }
     if (oak_coated) {
         let finish = look.oak_finish[1];
         let coat_nv = max(dot(ng,v),.0001);

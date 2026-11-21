@@ -1561,7 +1561,13 @@ fn shade(in: VOut) -> vec4<f32> {
             let local = (look.enclosure_frame*vec4<f32>(in.world+.022*n,1.)).xyz;
             room_enclosure = 1.;
             measured_room = true;
-            room_diffuse = room_irradiance(local,s.n,in.world,true,false);
+            if (m.thin_absorption > 0.) {
+                let point = (look.enclosure_frame*vec4<f32>(in.world,1.)).xyz;
+                s.env=ENV_LOCAL_PROBE;
+                fitted_light(point,in.ft,in.world,v,n,s,m);
+            } else {
+                room_diffuse = room_irradiance(local,s.n,in.world,true,false);
+            }
         }
     }
     // weathering (Blender buildings) and archetype ageing (kit buildings).

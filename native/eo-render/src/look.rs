@@ -104,6 +104,7 @@ struct LookUniform {
     dining_lamp: [f32; 4],
     table_light: [[f32; 4]; 3],
     oak_finish: [[f32; 4]; 3],
+    fitted_finish: [[f32; 4]; 2],
 }
 
 #[repr(C)]
@@ -207,6 +208,7 @@ pub struct LookGpu {
     pub dining_lamp: [f32; 4],
     pub table_light: [[f32; 4]; 3],
     pub oak_finish: [[f32; 4]; 3],
+    pub fitted_finish: [[f32; 4]; 2],
     pub options: LookOptions,
     pub(crate) output_format: wgpu::TextureFormat,
     object_count: u32,
@@ -266,6 +268,7 @@ pub fn city_shader_source() -> String {
         + "\n" + include_str!("sky_light_core.wgsl") + "\n" + include_str!("sky_light.wgsl") // sky
         + &crate::landmarks::city_wgsl() // landmarks
         + "\n" + include_str!("cc0.wgsl") + &crate::cc0::wgsl_constants(crate::cc0::scoring_pitch_m()) // cc0
+        + "\n" + include_str!("fitted_finish.wgsl")
 }
 
 /// look_common.wgsl with (surfaces) the street field's constants (GF_*), from
@@ -702,6 +705,7 @@ impl LookGpu {
             dining_lamp: [0.;4],
             table_light: [[0.;4];3],
             oak_finish: [[0.;4];3],
+            fitted_finish: [[0.;4];2],
             output_format: init.output_format,
             object_count: init.object_count,
             compact: init.compact,
@@ -1186,6 +1190,7 @@ impl LookGpu {
             dining_lamp: self.dining_lamp,
             table_light: self.table_light,
             oak_finish: self.oak_finish,
+            fitted_finish: self.fitted_finish,
         };
         queue.write_buffer(&self.look_buf, 0, bytemuck::bytes_of(&u));
         let mut planes = [[0f32; 4]; 18];
