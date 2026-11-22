@@ -13,6 +13,7 @@ eo-data = { path = "../eo-data" }
 eo-landmarks = { path = "../eo-landmarks" } # structures: the landmark bridges' decks
 eo-street = { path = "../eo-street" }
 eo-structures = { path = "../eo-structures" } # structures: grade-separated roads (`--structures`)
+eo-water = { path = "../eo-water" } # harbour: the drawn sea the boats float on
 glam = "0.34.3"
 rapier3d = { version = "0.36.1", features = ["enhanced-determinism"] }
 serde = { version = "1.0.229", features = ["derive"] }
