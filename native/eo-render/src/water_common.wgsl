@@ -185,9 +185,11 @@ fn wg_smooth(e0: f32, e1: f32, x: f32) -> f32 {
     return t * t * (3.0 - 2.0 * t);
 }
 
-// (iteration 2) an iteration-2 water part is on (eo-water switches.rs bits)
+// (iteration 2) an iteration-2 water part is on (eo-water switches.rs bits):
+// `W_GG2`, the parts in force compiled in (water.rs `common_source`; the
+// uniform's `wv_gg2.y` carries the same bits), so an untaken branch is compiled out
 fn wg_gg2(bit: u32) -> bool {
-    return (u32(wu.wv_gg2.y + 0.5) & bit) != 0u;
+    return (W_GG2 & bit) != 0u;
 }
 
 // (iteration 2, exposure) the exposure here, set by the water pass for the
@@ -340,7 +342,9 @@ fn wv_ripple(x: f32) -> f32 {
     return clamp(mix(0.15, 1.0, smoothstep(1.0, 6.0, u)) + 0.5 * smoothstep(8.0, 17.0, u), 0.15, 1.5);
 }
 
-// a shading feature is on (water.rs `FEAT_*`: 1 the slope-variance BRDF, 2 the body's optics, 4 the foam cover)
+// a shading feature is on (water.rs `FEAT_*`: 1 the slope-variance BRDF, 2 the body's optics, 4 the foam cover):
+// `W_FEAT`, the features in force compiled in (water.rs `common_source`; the
+// uniform's `screen.z` carries the same bits), so an untaken branch is compiled out
 fn wv_feat(bit: u32) -> bool {
-    return (u32(wu.screen.z + 0.5) & bit) != 0u;
+    return (W_FEAT & bit) != 0u;
 }

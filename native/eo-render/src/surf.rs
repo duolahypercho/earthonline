@@ -107,12 +107,15 @@ pub struct SurfGpu {
     stats: Mutex<SurfStats>,
 }
 
-/// The strip's shader: the water's common part, the look, the sea and its surf, then surf.wgsl.
+/// The strip's shader: the water's common part, the look, the sea and its surf, then surf.wgsl
+/// (every shading feature and the parts this process runs with compiled in).
 pub fn shader_source() -> String {
-    shader_source_with_cove(false)
+    shader_source_with_cove(false, crate::water::FEAT_ALL, eo_water::switches::on())
 }
 
-fn shader_source_with_cove(cove_detail: bool) -> String {
+/// `features`, `parts`: the sea's shading features and parts in force (`WaterGpu::shader_bits`),
+/// compiled in as the sea's own pipelines have them (water.rs `common_source`).
+fn shader_source_with_cove(cove_detail: bool, features: u32, parts: u32) -> String {
     format!(
         "{}
 {}
@@ -121,7 +124,7 @@ fn shader_source_with_cove(cove_detail: bool) -> String {
 {}
 {}
 {}",
-        crate::water::common_source(cove_detail),
+        crate::water::common_source(cove_detail, features, parts),
         crate::look::look_common_source(),
         include_str!("sky_light_core.wgsl"),
         crate::look::LOOK_EXT_WGSL, // group 1 bindings 12-18
@@ -245,7 +248,8 @@ impl SurfGpu {
                 wgpu::BindGroupEntry { binding: 4, resource: axis_buf.as_entire_binding() },
             ],
         });
-        let src = shader_source_with_cove(look.options.cove_detail);
+        let (features, parts) = water.shader_bits();
+        let src = shader_source_with_cove(look.options.cove_detail, features, parts);
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("surf.wgsl"), source: wgpu::ShaderSource::Wgsl(src.into()) });
         let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("surf"), bind_group_layouts: &[Some(water.surf_layout()), Some(look.main_bind_group_layout()), Some(&bgl)], immediate_size: 0 });
         let premul = wgpu::BlendState {

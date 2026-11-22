@@ -1185,7 +1185,12 @@ sees; the frame's own geometry is projected across the sea plane
 (pixel-projected reflection) for decks, cables and the skyline. At the shore
 the beach sheet fades into the sand, a seawall sends the chop back
 (clapotis), and piers on piles stand over the sea (`eo-water` `field`
-`PIERS_OVER_WATER`). `--no-water` draws a flat sea plane.
+`PIERS_OVER_WATER`). `--no-water` draws a flat sea plane. The shading
+features and the strait's parts in force (the `--no-water-*` switches,
+`--no-gg2-water`, `--no-gg3-water` and their members) are compiled into the
+sea's and the surf strip's shaders as constants (eo-render
+`water::common_source`), so the code of a feature that is off, and the
+earlier path a feature that is on replaces, is not in the pipeline at all.
 
 Run `./target/release/eo-app --water-optics --start-underwater` for the
 submerged fly camera. Hold Ctrl for fine movement, E to surface and Q to
