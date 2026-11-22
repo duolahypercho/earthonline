@@ -1245,16 +1245,16 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let mut probe_pass = vec![]; // facade
         let mut sky_passes: [Vec<f64>; 6] = Default::default(); // the sky passes, then the cloud-shadow map
         let (mut water_fft, mut water_copy, mut water_pass) = (vec![], vec![], vec![]); // water
-        let (mut water_ppr, mut scene_meter) = (vec![], vec![]); // the gap's projected-reflection pass, the scene meter
+        let (mut water_ppr, mut scene_meter, mut wire_overlay) = (vec![], vec![], vec![]); // the gap's projected-reflection pass, the scene meter, the bridges' wire overlay
         // each pass's serial share: its end minus the previous pass's end in the frame's
         // order (Apple GPUs start a pass's clock while earlier passes still run, so
         // begin-to-end windows overlap; the serial shares add up to the frame).
-        const SERIAL: [(&str, u32); 19] = [
+        const SERIAL: [(&str, u32); 20] = [
             ("cull", 0), ("shadow_cull", eo_render::look::Q_SHADOW_CULL), ("shadow_depth", eo_render::look::Q_SHADOW_DRAW), ("probe", eo_render::Q_PROBE),
             ("cloud_shadow", eo_render::sky::Q_CLOUD_SHADOW), ("sky_lights", eo_render::sky::Q_SKY_LIGHTS), ("city", 2), ("pyramid_late_cull", eo_render::Q_OCCLUSION),
             ("late_city", eo_render::Q_LATE_DRAW), ("water_fft", eo_render::Q_WATER_FFT), ("water_copy_and_ppr", eo_render::Q_WATER_PPR), ("water_and_glass", eo_render::Q_WATER),
             ("ao", eo_render::look::Q_AO), ("sky_fx_and_velocity", eo_render::sky::Q_SKY_FX), ("sky_volume", eo_render::sky::Q_SKY_VOLUME), ("sky_resolve", eo_render::sky::Q_SKY_RESOLVE),
-            ("sky_bloom", eo_render::sky::Q_SKY_BLOOM), ("scene_meter", eo_render::Q_SCENE_METER), ("post", eo_render::look::Q_POST),
+            ("sky_bloom", eo_render::sky::Q_SKY_BLOOM), ("wire_overlay", eo_render::Q_WIRE_OVERLAY), ("scene_meter", eo_render::Q_SCENE_METER), ("post", eo_render::look::Q_POST),
         ];
         let mut serial: Vec<Vec<f64>> = vec![vec![]; SERIAL.len()];
         let (mut occ_ms, mut late_draw, mut early_draw) = (vec![], vec![], vec![]); // occlusion
@@ -1289,6 +1289,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 let (qr, qm) = (eo_render::Q_WATER_PPR as usize, eo_render::Q_SCENE_METER as usize);
                 water_ppr.push(ms(ts[b + qr], ts[b + qr + 1]));
                 scene_meter.push(ms(ts[b + qm], ts[b + qm + 1]));
+                let qwo = eo_render::Q_WIRE_OVERLAY as usize;
+                wire_overlay.push(ms(ts[b + qwo], ts[b + qwo + 1]));
                 water_pass.push(ms(ts[b + qw], ts[b + qw + 1]));
                 // Frame order: cull, shadow cull, shadow depth, city (early), pyramid + late cull, city (late) + sky, AO, post.
                 // A post end before the cull begin (a timestamp the GPU did not write; seen on
@@ -1337,6 +1339,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 "water_copy_ms (the frame copy: the gap before the water pass)": summary(&water_copy),
                 "water_ppr_pass_ms (the projected reflection, inside that gap)": summary(&water_ppr),
                 "scene_meter_pass_ms (the reflected-light meter's histogram, before post)": summary(&scene_meter),
+                "wire_overlay_pass_ms (the bridges' wires over the resolved frame, before the scene meter)": summary(&wire_overlay),
                 "water_pass_ms (the sea, then the glass drawn after it)": summary(&water_pass),
                 "shadow_casters_drawn_per_frame (3 cascades summed)": summary(&shadow_cmds),
                 "shadow_triangles_drawn_per_frame (3 cascades summed)": summary(&shadow_tris),
@@ -1512,6 +1515,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 ("gpu_water_copy", water_copy[k]),
                 ("gpu_water_ppr", water_ppr[k]),
                 ("gpu_scene_meter", scene_meter[k]),
+                ("gpu_wire_overlay", wire_overlay[k]),
                 ("gpu_water_and_glass", water_pass[k]),
                 // every timed pass of the frame, and what no pass accounts for
                 ("gpu_probe", probe_pass[k]),
