@@ -32,11 +32,13 @@ pub const SEED_INT: u32 = 1;
 pub struct AgentOpts {
     pub on: bool,
     pub density: u32,
+    /// `--car-detail` (0 as before): the library's far bodies and the renderer's vehicle tiers.
+    pub car_detail: u8,
 }
 
 impl Default for AgentOpts {
     fn default() -> Self {
-        Self { on: true, density: 1 }
+        Self { on: true, density: 1, car_detail: 0 }
     }
 }
 
@@ -110,7 +112,7 @@ impl AgentRuntime {
     }
 
     fn start_mode(world: &World, args: &Args, focus: [f64; 3], remote_mode: bool) -> Self {
-        let opts = AgentOpts { on: args.agents, density: args.agent_density };
+        let opts = AgentOpts { on: args.agents, density: args.agent_density, car_detail: args.car_detail };
         let ground = match &world.street {
             Some(s) => Ground::Street(s.world.clone()),
             None => Ground::Elevation(Arc::new(world.elevation.clone())),
@@ -147,11 +149,13 @@ impl AgentRuntime {
         let cache = crate::cache_dir(args);
         // the Rocketbox people unless `--no-rocketbox` (or no copy at EO_PEOPLE_ROOT): then none.
         let people = if args.rocketbox { eo_agents::library::PeopleSource::from_env() } else { eo_agents::library::PeopleSource::Off };
+        // (`--car-detail`) each body's far slot its own simplified body instead of three boxes.
+        let cook = eo_agents::library::CookOptions { far_body: opts.car_detail > 0 };
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::Builder::new()
             .name("eo-agents-load".into())
             .spawn(move || {
-                let _ = tx.send(Library::load_with(&repo, cache.as_deref(), &people).map_err(|e| format!("{e:#}")));
+                let _ = tx.send(Library::load_opts(&repo, cache.as_deref(), &people, cook).map_err(|e| format!("{e:#}")));
             })
             .expect("spawn agent library loader");
         rt.lib_rx = Some(rx);
@@ -220,7 +224,7 @@ impl AgentRuntime {
                 self.lib_rx = None;
                 match r {
                     Ok(lib) => {
-                        if let Err(e) = renderer.attach_agents(ctx, &lib) {
+                        if let Err(e) = renderer.attach_agents_with(ctx, &lib, self.opts.car_detail) {
                             self.errors.push(format!("agent renderer: {e:#}"));
                             eprintln!("agents: renderer failed: {e:#}");
                         }

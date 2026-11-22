@@ -2,15 +2,19 @@
 //!
 //! A tier expands to settings once every argument has been read
 //! (`Switches::apply`); a per-feature switch given anywhere on the line wins
-//! over the tier. `medium` is today's frame and expands to nothing, so
-//! `--quality medium` is the same as no flag.
+//! over the tier. `medium` is the default, so `--quality medium` is the same
+//! as no flag; it expands to the street look (`--grime 1`, `--stand-ins`,
+//! `--surveyed-furniture`, `--tree-basins`), which the owner approved as the default on
+//! 2026-11-20 after the citywide street audit, with `--tree-basins`;
+//! `--no-grime`, `--no-stand-ins`, `--no-surveyed-furniture` and
+//! `--no-tree-basins` give the frame before it.
 //!
 //! | Tier | Sets |
 //! | --- | --- |
-//! | low | `--shadow-map 2048`, `--no-ssr`, `--no-contact-shadows`, `--sky-quality low`, `--no-ao`, `--no-shafts`, `--no-bloom` |
-//! | medium | nothing |
-//! | high | `--cascade-blend`, `--far-shadows 1`, `--ambient-volume 1` (with `--ground-bounce`), `--light-shadows 16`, `--headlight-shadows 2`, `--lit-fog 1`, `--smooth-time`, `--shadow-slope-bias`, `--grime 1`, `--street-life 1`, `--stand-ins`, `--photo-finish 1`, `--facade-clutter 1`, `--shop-light 1`, `--look cinematic` |
-//! | hyper | high, then `--shadow-map 4096`, `--sky-quality high`, `--far-shadows 2`, `--ambient-volume 2`, `--probe-grid 2`, `--light-shadows 48`, `--light-shadow-moving`, `--headlight-shadows 8`, `--lit-fog 2`, `--grime 2`, `--street-life 2`, `--photo-finish 2`, `--facade-clutter 2`, `--shop-light 2`, `--look cinematic` |
+//! | low | `--shadow-map 2048`, `--no-ssr`, `--no-contact-shadows`, `--sky-quality low`, `--no-ao`, `--no-shafts`, `--no-bloom`, `--surveyed-furniture`, `--tree-basins` |
+//! | medium | `--grime 1`, `--stand-ins`, `--surveyed-furniture`, `--tree-basins` (the street look, made the default with the owner's approval of 2026-11-20) |
+//! | high | `--cascade-blend`, `--far-shadows 1`, `--ambient-volume 1` (with `--ground-bounce`), `--light-shadows 16`, `--headlight-shadows 2`, `--lit-fog 1`, `--smooth-time`, `--shadow-slope-bias`, `--grime 1`, `--street-life 1`, `--stand-ins`, `--photo-finish 1`, `--facade-clutter 1`, `--shop-light 1`, `--car-detail 1`, `--surveyed-furniture`, `--tree-basins`, `--look cinematic` |
+//! | hyper | high, then `--shadow-map 4096`, `--sky-quality high`, `--far-shadows 2`, `--ambient-volume 2`, `--probe-grid 2`, `--light-shadows 48`, `--light-shadow-moving`, `--headlight-shadows 8`, `--lit-fog 2`, `--grime 2`, `--street-life 2`, `--photo-finish 2`, `--facade-clutter 2`, `--shop-light 2`, `--car-detail 2`, `--surveyed-furniture`, `--tree-basins`, `--look cinematic` |
 //!
 //! Each tier has its own frame budget for the bench's checks (`budget_ms`).
 //! The tiers are tuned to those budgets on the bench paths (stage T2): the
@@ -60,6 +64,20 @@
 //! eye, 2 out to the light clusters' 300 m with two lights a window) is a
 //! night setting the high (1) and hyper (2) tiers turn on, as `--grime`: no
 //! value takes 1, `--no-shop-light` turns it off wherever it stands.
+//! `--surveyed-furniture` (eo-props `furniture::surveyed_first`: the hashed
+//! furniture walk leaves empty a slot it gives to a kind rare on SF footways,
+//! and one it gives to a street-commerce kind away from a trading frontage;
+//! `Props2Args::surveyed_furniture`) is on in every tier;
+//! `--no-surveyed-furniture` gives the JS walk as ported.
+//! `--tree-basins` (eo-props `basins`: a soil and mulch basin under each street
+//! tree on a footway, sized by the footway from Director's Order 187,246;
+//! `Props2Args::tree_basins`) is on in every tier; `--no-tree-basins` gives
+//! the trees standing on bare paving as before.
+//! `--car-detail [1|2]` (the cars' detail: the far slot a simplified body
+//! instead of three boxes, eo-agents `far_body`, and the nearest cars kept at
+//! full detail further out, eo-render `Tiers::with_car_detail`; `Args::car_detail`)
+//! is a detail setting the high (1) and hyper (2) tiers turn on, as `--grime`:
+//! no value takes 1, `--no-car-detail` turns it off wherever it stands.
 //! `--look default|cinematic` (the look profile, the cinematic look plan's
 //! stage L0; `LookOptions::look` and `SkyOptions::cinematic`, eo-look
 //! `cinematic`: a graded open-world tone, grade and light palette whose
@@ -107,12 +125,18 @@ pub struct Tier {
     pub street_life: Option<u8>,
     /// `--stand-ins` (`Props2Args::stand_ins`, procedural models for absent prop GLBs).
     pub stand_ins: Option<bool>,
+    /// `--surveyed-furniture` (`Props2Args::surveyed_furniture`, eo-props `furniture::surveyed_first`).
+    pub surveyed_furniture: Option<bool>,
+    /// `--tree-basins` (`Props2Args::tree_basins`, eo-props `basins`).
+    pub tree_basins: Option<bool>,
     /// `--photo-finish` (`LookOptions::photo_finish`, the camera, the air, the lens: 1 high, 2 hyper).
     pub photo_finish: Option<u8>,
     /// `--facade-clutter` (`Args::facade_clutter`, fire escapes, awnings, signs, services: 1 high, 2 hyper).
     pub facade_clutter: Option<u8>,
     /// `--shop-light` (`SkyOptions::shop_light`, lit shop windows at night: 1 high, 2 hyper).
     pub shop_light: Option<u8>,
+    /// `--car-detail` (`Args::car_detail`, far bodies and nearer full-detail cars: 1 high, 2 hyper).
+    pub car_detail: Option<u8>,
     /// `--look` (`LookOptions::look`, the look profile: cinematic in high and hyper).
     pub look: Option<LookProfile>,
     pub lighting: LightingOptions,
@@ -161,12 +185,13 @@ impl Quality {
     /// What the tier sets. The sky quality and the shadow map only where they
     /// differ from the defaults (the default sky quality is 1, the map 3072).
     pub fn tier(self) -> Tier {
-        let none = Tier { shadow_map: None, ssr: None, contact_shadows: None, sky_quality: None, shadow_slope_bias: None, ao: None, shafts: None, bloom: None, grime: None, street_life: None, stand_ins: None, photo_finish: None, facade_clutter: None, shop_light: None, look: None, lighting: LightingOptions::OFF };
+        let none = Tier { shadow_map: None, ssr: None, contact_shadows: None, sky_quality: None, shadow_slope_bias: None, ao: None, shafts: None, bloom: None, grime: None, street_life: None, stand_ins: None, surveyed_furniture: None, tree_basins: None, photo_finish: None, facade_clutter: None, shop_light: None, car_detail: None, look: None, lighting: LightingOptions::OFF };
         let high = LightingOptions { cascade_blend: true, far_shadows: 1, ambient_volume: 1, probe_grid: 0, light_shadows: 1, light_shadow_moving: false, headlight_shadows: 2, lit_fog: 1, smooth_time: true, ground_bounce: true };
         match self {
-            Quality::Low => Tier { shadow_map: Some(2048), ssr: Some(false), contact_shadows: Some(false), sky_quality: Some(0), ao: Some(false), shafts: Some(false), bloom: Some(false), ..none },
-            Quality::Medium => none,
-            Quality::High => Tier { shadow_slope_bias: Some(true), grime: Some(1), street_life: Some(1), stand_ins: Some(true), photo_finish: Some(1), facade_clutter: Some(1), shop_light: Some(1), look: Some(LookProfile::Cinematic), lighting: high, ..none },
+            Quality::Low => Tier { shadow_map: Some(2048), ssr: Some(false), contact_shadows: Some(false), sky_quality: Some(0), ao: Some(false), shafts: Some(false), bloom: Some(false), surveyed_furniture: Some(true), tree_basins: Some(true), ..none },
+            // the street look, the default since the owner's approval of 2026-11-20 (citywide street audit).
+            Quality::Medium => Tier { grime: Some(1), stand_ins: Some(true), surveyed_furniture: Some(true), tree_basins: Some(true), ..none },
+            Quality::High => Tier { shadow_slope_bias: Some(true), grime: Some(1), street_life: Some(1), stand_ins: Some(true), surveyed_furniture: Some(true), tree_basins: Some(true), photo_finish: Some(1), facade_clutter: Some(1), shop_light: Some(1), car_detail: Some(1), look: Some(LookProfile::Cinematic), lighting: high, ..none },
             Quality::Hyper => Tier {
                 shadow_map: Some(4096),
                 sky_quality: Some(2),
@@ -174,9 +199,12 @@ impl Quality {
                 grime: Some(2),
                 street_life: Some(2),
                 stand_ins: Some(true),
+                surveyed_furniture: Some(true),
+                tree_basins: Some(true),
                 photo_finish: Some(2),
                 facade_clutter: Some(2),
                 shop_light: Some(2),
+                car_detail: Some(2),
                 look: Some(LookProfile::Cinematic),
                 lighting: LightingOptions { far_shadows: 2, ambient_volume: 2, probe_grid: 2, light_shadows: 3, light_shadow_moving: true, headlight_shadows: 8, lit_fog: 2, ..high },
                 ..none
@@ -209,12 +237,18 @@ pub struct Switches {
     street_life: Option<u8>,
     // procedural stand-ins for absent street-prop GLBs (`--stand-ins`, `--no-stand-ins`).
     stand_ins: Option<bool>,
+    // the surveyed-first furniture walk (`--surveyed-furniture`, `--no-surveyed-furniture`).
+    surveyed_furniture: Option<bool>,
+    // the street trees' basins (`--tree-basins`, `--no-tree-basins`).
+    tree_basins: Option<bool>,
     // the photographic finish (`--photo-finish [1|2]`, `--no-photo-finish`; wins over the tier).
     photo_finish: Option<u8>,
     // the facade clutter (`--facade-clutter [1|2]`, `--no-facade-clutter`; wins over the tier).
     facade_clutter: Option<u8>,
     // the lit shop windows (`--shop-light [1|2]`, `--no-shop-light`; wins over the tier).
     shop_light: Option<u8>,
+    // the cars' detail (`--car-detail [1|2]`, `--no-car-detail`; wins over the tier).
+    car_detail: Option<u8>,
     // the look profile (`--look default|cinematic`, `--no-look`; wins over the tier).
     look: Option<LookProfile>,
     // the world switches (no tier sets them).
@@ -335,6 +369,14 @@ impl Switches {
                 self.stand_ins = Some(flag == "--stand-ins");
                 0
             }
+            "--surveyed-furniture" | "--no-surveyed-furniture" => {
+                self.surveyed_furniture = Some(flag == "--surveyed-furniture");
+                0
+            }
+            "--tree-basins" | "--no-tree-basins" => {
+                self.tree_basins = Some(flag == "--tree-basins");
+                0
+            }
             "--photo-finish" => {
                 let (v, n) = level(flag, next, Quality::High.tier().photo_finish.unwrap_or(1))?;
                 self.photo_finish = Some(v);
@@ -360,6 +402,15 @@ impl Switches {
             }
             "--no-shop-light" => {
                 self.shop_light = Some(0);
+                0
+            }
+            "--car-detail" => {
+                let (v, n) = level(flag, next, Quality::High.tier().car_detail.unwrap_or(1))?;
+                self.car_detail = Some(v);
+                n
+            }
+            "--no-car-detail" => {
+                self.car_detail = Some(0);
                 0
             }
             "--look" => {
@@ -467,6 +518,12 @@ impl Switches {
         if let Some(v) = self.stand_ins.or(t.stand_ins) {
             a.props2.stand_ins = v;
         }
+        if let Some(v) = self.surveyed_furniture.or(t.surveyed_furniture) {
+            a.props2.surveyed_furniture = v;
+        }
+        if let Some(v) = self.tree_basins.or(t.tree_basins) {
+            a.props2.tree_basins = v;
+        }
         if let Some(v) = self.photo_finish.or(t.photo_finish) {
             a.look.photo_finish = v;
         }
@@ -475,6 +532,9 @@ impl Switches {
         }
         if let Some(v) = self.shop_light.or(t.shop_light) {
             a.look.sky.shop_light = v;
+        }
+        if let Some(v) = self.car_detail.or(t.car_detail) {
+            a.car_detail = v;
         }
         if let Some(v) = self.look.or(t.look) {
             // the profile and the sky's copy of it (the sky passes read `SkyOptions` alone).
@@ -541,6 +601,30 @@ pub fn street_life_json(args: &Args) -> serde_json::Value {
         "trees": s.trees,
         "structures": s.structures,
     })
+}
+
+/// The bench JSON's top-level `car_detail` object (`--car-detail`): the level and
+/// the vehicle tiers it sets (eo-render `Tiers::with_car_detail`), whether the
+/// agents are drawn or not.
+pub fn car_detail_json(args: &Args) -> serde_json::Value {
+    let tiers = eo_agents::catalog::AgentsJs::load().ok().map(|js| eo_render::agents::Tiers::from_js(&js).with_car_detail(args.car_detail));
+    serde_json::json!({
+        "on": args.car_detail > 0,
+        "level": args.car_detail,
+        "far_body": args.car_detail > 0,
+        "vehicle_radius_m": tiers.map(|t| t.veh_radius),
+        "vehicle_cap_lod0_lod1": tiers.map(|t| [t.veh_cap[0], t.veh_cap[1]]),
+    })
+}
+
+/// The bench JSON's top-level `surveyed_furniture` object (`--surveyed-furniture`).
+pub fn surveyed_furniture_json(args: &Args) -> serde_json::Value {
+    serde_json::json!({ "on": args.props2.surveyed_furniture, "rare_kinds": eo_props::furniture::RARE_KINDS, "commerce_kinds": eo_props::furniture::COMMERCE_KINDS })
+}
+
+/// The bench JSON's top-level `tree_basins` object (`--tree-basins`).
+pub fn tree_basins_json(args: &Args) -> serde_json::Value {
+    serde_json::json!({ "on": args.props2.tree_basins })
 }
 
 /// The bench JSON's top-level `stand_ins` object (`--stand-ins`).
@@ -620,7 +704,9 @@ mod tests {
         assert!(same(&parse(&["--bench", "--frames", "30"]), &parse(&["--quality", "medium", "--bench", "--frames", "30"])));
         assert!(same(&parse(&["--bench", "--no-ssr"]), &parse(&["--bench", "--no-ssr", "--quality", "medium"])));
         let t = Quality::Medium.tier();
-        assert_eq!(t, Tier { shadow_map: None, ssr: None, contact_shadows: None, sky_quality: None, shadow_slope_bias: None, ao: None, shafts: None, bloom: None, grime: None, street_life: None, stand_ins: None, photo_finish: None, facade_clutter: None, shop_light: None, look: None, lighting: LightingOptions::OFF });
+        // medium is the street look (the owner's approval of 2026-11-20) and nothing else.
+        assert_eq!(t, Tier { shadow_map: None, ssr: None, contact_shadows: None, sky_quality: None, shadow_slope_bias: None, ao: None, shafts: None, bloom: None, grime: Some(1), street_life: None, stand_ins: Some(true), surveyed_furniture: Some(true), tree_basins: Some(true), photo_finish: None, facade_clutter: None, shop_light: None, car_detail: None, look: None, lighting: LightingOptions::OFF });
+        assert_eq!((none.look.grime, none.props2.stand_ins, none.props2.surveyed_furniture), (1, true, true), "no flag is the street look");
     }
 
     #[test]
@@ -644,18 +730,21 @@ mod tests {
             LightingOptions { cascade_blend: true, far_shadows: 2, ambient_volume: 2, probe_grid: 2, light_shadows: 3, light_shadow_moving: true, headlight_shadows: 8, lit_fog: 2, smooth_time: true, ground_bounce: true }
         );
         assert_eq!(hyper.quality, Quality::Hyper);
-        // no tier entry equals a default (it would be a no-op that hides a mistake).
+        // no tier entry equals a default (it would be a no-op that hides a mistake); the street look's
+        // entries against the untiered values (grime 0, the grey proxies, the walk as ported), since
+        // the default tier is medium and medium sets them.
         for q in Quality::ALL {
             let t = q.tier();
             assert!(t.shadow_map != Some(d.look.shadow_map) && t.ssr != Some(d.look.sky.ssr) && t.contact_shadows != Some(d.look.sky.contact) && t.sky_quality != Some(d.look.sky.quality), "{q:?}");
             assert!(t.shadow_slope_bias != Some(d.look.shadow_slope_bias), "{q:?}");
             assert!(t.ao != Some(d.look.ao) && t.shafts != Some(d.look.sky.shafts) && t.bloom != Some(d.look.sky.bloom), "{q:?}");
-            assert!(t.grime != Some(d.look.grime), "{q:?}");
+            assert!(t.grime != Some(0), "{q:?}");
             assert!(t.street_life != Some(d.look.street_life), "{q:?}");
-            assert!(t.stand_ins != Some(d.props2.stand_ins), "{q:?}");
+            assert!(t.stand_ins != Some(false) && t.surveyed_furniture != Some(false) && t.tree_basins != Some(false), "{q:?}");
             assert!(t.photo_finish != Some(d.look.photo_finish), "{q:?}");
             assert!(t.facade_clutter != Some(d.facade_clutter), "{q:?}");
             assert!(t.shop_light != Some(d.look.sky.shop_light), "{q:?}");
+            assert!(t.car_detail != Some(d.car_detail), "{q:?}");
         }
         let budgets: Vec<f64> = Quality::ALL.iter().map(|q| q.budget_ms()).collect();
         assert_eq!(budgets, vec![8.0, 10.0, 16.6, 33.3]);
@@ -783,11 +872,12 @@ mod tests {
     }
 
     #[test]
-    fn grime_comes_with_high_and_hyper_and_its_switch_wins() {
-        assert_eq!(parse(&[]).look.grime, 0, "off by default");
+    fn grime_comes_with_medium_high_and_hyper_and_its_switch_wins() {
+        assert_eq!(parse(&[]).look.grime, 1, "on by default (medium, the street look)");
         for (line, want) in [
             (&["--quality", "low"][..], 0),
-            (&["--quality", "medium"], 0),
+            (&["--quality", "medium"], 1),
+            (&["--no-grime"], 0),
             (&["--quality", "high"], 1),
             (&["--quality", "hyper"], 2),
             (&["--grime"], 1),
@@ -804,12 +894,14 @@ mod tests {
         assert!(parse(&["--grime", "--bench"]).bench);
         let raw = |line: &[&str]| crate::parse_args_from(&line.iter().map(|s| s.to_string()).collect::<Vec<_>>());
         assert!(raw(&["--grime", "3"]).is_err(), "a level past 2 is refused");
-        // a surface setting, not a lighting addition: nothing else moves, and `--no-grime` alone is no flag.
+        // a surface setting, not a lighting addition: nothing else moves, and `--no-grime` is the default less the grime.
         let mut a = parse(&["--bench", "--grime", "2"]);
         assert_eq!(a.look.lighting, LightingOptions::OFF);
-        a.look.grime = 0;
+        a.look.grime = 1;
         assert!(same(&a, &parse(&["--bench"])));
-        assert!(same(&parse(&["--no-grime", "--bench"]), &parse(&["--bench"])));
+        let mut n = parse(&["--no-grime", "--bench"]);
+        n.look.grime = 1;
+        assert!(same(&n, &parse(&["--bench"])));
         // the frame switches carry it in their own bits: none at 0.
         assert_eq!(eo_render::facade::grime_bits(0), 0);
         assert_eq!(eo_render::facade::grime_bits(1) & !eo_render::facade::RUN_GRIME_MASK, 0);
@@ -841,7 +933,7 @@ mod tests {
         assert!(raw(&["--street-life", "3"]).is_err(), "a level past 2 is refused");
         // a surface setting of its own: nothing else moves (not the grime), and `--no-street-life` alone is no flag.
         let mut a = parse(&["--bench", "--street-life", "2"]);
-        assert_eq!((a.look.lighting, a.look.grime), (LightingOptions::OFF, 0));
+        assert_eq!((a.look.lighting, a.look.grime), (LightingOptions::OFF, 1));
         a.look.street_life = 0;
         assert!(same(&a, &parse(&["--bench"])));
         assert!(same(&parse(&["--no-street-life", "--bench"]), &parse(&["--bench"])));
@@ -855,11 +947,12 @@ mod tests {
     }
 
     #[test]
-    fn stand_ins_come_with_high_and_hyper_and_their_switch_wins() {
-        assert!(!parse(&[]).props2.stand_ins, "off by default: the grey proxies");
+    fn stand_ins_come_with_medium_high_and_hyper_and_their_switch_wins() {
+        assert!(parse(&[]).props2.stand_ins, "on by default (medium, the street look)");
         for (line, want) in [
             (&["--quality", "low"][..], false),
-            (&["--quality", "medium"], false),
+            (&["--quality", "medium"], true),
+            (&["--no-stand-ins"], false),
             (&["--quality", "high"], true),
             (&["--quality", "hyper"], true),
             (&["--stand-ins"], true),
@@ -870,10 +963,52 @@ mod tests {
         ] {
             assert_eq!(parse(line).props2.stand_ins, want, "{line:?}");
         }
-        let mut a = parse(&["--bench", "--stand-ins"]);
-        a.props2.stand_ins = false;
-        assert!(same(&a, &parse(&["--bench"])));
-        assert!(same(&parse(&["--no-stand-ins", "--bench"]), &parse(&["--bench"])));
+        let mut n = parse(&["--no-stand-ins", "--bench"]);
+        n.props2.stand_ins = true;
+        assert!(same(&n, &parse(&["--bench"])), "--no-stand-ins moves nothing else");
+    }
+
+    #[test]
+    fn tree_basins_come_with_every_tier_and_their_switch_wins() {
+        assert!(parse(&[]).props2.tree_basins, "on by default");
+        for (line, want) in [
+            (&["--quality", "low"][..], true),
+            (&["--quality", "hyper"], true),
+            (&["--no-tree-basins"], false),
+            (&["--no-tree-basins", "--quality", "high"], false), // wherever it stands
+            (&["--no-tree-basins", "--tree-basins"], true),
+            (&["--no-tree-basins", "--no-props2"], false),
+        ] {
+            assert_eq!(parse(line).props2.tree_basins, want, "{line:?}");
+        }
+        let mut n = parse(&["--no-tree-basins", "--bench"]);
+        n.props2.tree_basins = true;
+        assert!(same(&n, &parse(&["--bench"])), "--no-tree-basins moves nothing else");
+        assert_eq!(tree_basins_json(&parse(&[]))["on"].as_bool(), Some(true));
+    }
+
+    #[test]
+    fn surveyed_furniture_comes_with_every_tier_and_its_switch_wins() {
+        assert!(parse(&[]).props2.surveyed_furniture, "on by default");
+        for (line, want) in [
+            (&["--quality", "low"][..], true),
+            (&["--quality", "medium"], true),
+            (&["--quality", "high"], true),
+            (&["--quality", "hyper"], true),
+            (&["--no-surveyed-furniture"], false),
+            (&["--quality", "hyper", "--no-surveyed-furniture"], false),
+            (&["--no-surveyed-furniture", "--quality", "high"], false), // wherever it stands
+            (&["--no-surveyed-furniture", "--surveyed-furniture"], true), // the last wins
+            (&["--no-surveyed-furniture", "--no-props2"], false), // the props2 switches leave it
+        ] {
+            assert_eq!(parse(line).props2.surveyed_furniture, want, "{line:?}");
+        }
+        let mut n = parse(&["--no-surveyed-furniture", "--bench"]);
+        n.props2.surveyed_furniture = true;
+        assert!(same(&n, &parse(&["--bench"])), "--no-surveyed-furniture moves nothing else");
+        let j = surveyed_furniture_json(&parse(&[]));
+        assert_eq!(j["on"].as_bool(), Some(true));
+        assert!(j["rare_kinds"].as_array().unwrap().iter().any(|k| k == "bollard"));
     }
 
     #[test]
@@ -938,7 +1073,7 @@ mod tests {
         assert!(raw(&["--photo-finish", "3"]).is_err(), "a level past 2 is refused");
         // a finish of its own: nothing else moves, and `--no-photo-finish` alone is no flag.
         let mut a = parse(&["--bench", "--photo-finish", "2"]);
-        assert_eq!((a.look.lighting, a.look.grime, a.look.street_life), (LightingOptions::OFF, 0, 0));
+        assert_eq!((a.look.lighting, a.look.grime, a.look.street_life), (LightingOptions::OFF, 1, 0));
         a.look.photo_finish = 0;
         assert!(same(&a, &parse(&["--bench"])));
         assert!(same(&parse(&["--no-photo-finish", "--bench"]), &parse(&["--bench"])));
@@ -972,13 +1107,53 @@ mod tests {
         assert!(raw(&["--facade-clutter", "3"]).is_err(), "a level past 2 is refused");
         // a world detail of its own: nothing else moves, and `--no-facade-clutter` alone is no flag.
         let mut a = parse(&["--bench", "--facade-clutter", "2"]);
-        assert_eq!((a.look.lighting, a.look.grime, a.look.street_life), (LightingOptions::OFF, 0, 0));
+        assert_eq!((a.look.lighting, a.look.grime, a.look.street_life), (LightingOptions::OFF, 1, 0));
         a.facade_clutter = 0;
         assert!(same(&a, &parse(&["--bench"])));
         assert!(same(&parse(&["--no-facade-clutter", "--bench"]), &parse(&["--bench"])));
         let j = facade_clutter_json(&parse(&["--facade-clutter", "2"]));
         assert_eq!((j["on"].as_bool(), j["level"].as_u64()), (Some(true), Some(2)));
         assert_eq!(facade_clutter_json(&parse(&[]))["on"].as_bool(), Some(false));
+    }
+
+    #[test]
+    fn car_detail_comes_with_high_and_hyper_and_its_switch_wins() {
+        assert_eq!(parse(&[]).car_detail, 0, "off by default");
+        for (line, want) in [
+            (&["--quality", "low"][..], 0),
+            (&["--quality", "medium"], 0),
+            (&["--quality", "high"], 1),
+            (&["--quality", "hyper"], 2),
+            (&["--car-detail"], 1),
+            (&["--car-detail", "2"], 2),
+            (&["--car-detail", "0"], 0),
+            (&["--quality", "hyper", "--car-detail", "1"], 1),
+            (&["--car-detail", "1", "--quality", "hyper"], 1), // wherever it stands
+            (&["--quality", "high", "--no-car-detail"], 0),
+            (&["--no-car-detail", "--quality", "hyper"], 0),
+            (&["--car-detail", "--bench"], 1), // no value: the high level, the next switch parsed as a switch
+        ] {
+            assert_eq!(parse(line).car_detail, want, "{line:?}");
+        }
+        assert!(parse(&["--car-detail", "--bench"]).bench);
+        let raw = |line: &[&str]| crate::parse_args_from(&line.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        assert!(raw(&["--car-detail", "3"]).is_err(), "a level past 2 is refused");
+        // a detail of its own: nothing else moves, and `--no-car-detail` alone is no flag.
+        let mut a = parse(&["--bench", "--car-detail", "2"]);
+        assert_eq!((a.look.lighting, a.look.grime, a.facade_clutter), (LightingOptions::OFF, 1, 0));
+        a.car_detail = 0;
+        assert!(same(&a, &parse(&["--bench"])));
+        assert!(same(&parse(&["--no-car-detail", "--bench"]), &parse(&["--bench"])));
+        // the bench JSON's record: level 0 keeps the browser build's tiers, each level widens them.
+        let (off, one, two) = (car_detail_json(&parse(&[])), car_detail_json(&parse(&["--car-detail"])), car_detail_json(&parse(&["--car-detail", "2"])));
+        assert_eq!((off["on"].as_bool(), off["far_body"].as_bool()), (Some(false), Some(false)));
+        assert_eq!((two["on"].as_bool(), two["level"].as_u64()), (Some(true), Some(2)));
+        let caps = |j: &serde_json::Value| j["vehicle_cap_lod0_lod1"].as_array().unwrap().iter().map(|v| v.as_u64().unwrap()).collect::<Vec<_>>();
+        let radii = |j: &serde_json::Value| j["vehicle_radius_m"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect::<Vec<_>>();
+        assert_eq!(caps(&off), vec![2, 10], "level 0: the JS overlay's caps");
+        assert!(caps(&off).iter().zip(caps(&one)).all(|(a, b)| a < &b) && caps(&one).iter().zip(caps(&two)).all(|(a, b)| a < &b));
+        assert!(radii(&off)[..3].iter().zip(&radii(&one)[..3]).all(|(a, b)| a < b) && radii(&one)[..3].iter().zip(&radii(&two)[..3]).all(|(a, b)| a < b));
+        assert_eq!(radii(&off)[3], radii(&two)[3], "the far slot ends where it did");
     }
 
     #[test]
@@ -1033,7 +1208,7 @@ mod tests {
         assert!(raw(&["--shop-light", "3"]).is_err(), "a level past 2 is refused");
         // a night setting of its own: nothing else moves, and `--no-shop-light` alone is no flag.
         let mut a = parse(&["--bench", "--shop-light", "2"]);
-        assert_eq!((a.look.lighting, a.look.grime, a.look.street_life, a.look.photo_finish), (LightingOptions::OFF, 0, 0, 0));
+        assert_eq!((a.look.lighting, a.look.grime, a.look.street_life, a.look.photo_finish), (LightingOptions::OFF, 1, 0, 0));
         a.look.sky.shop_light = 0;
         assert!(same(&a, &parse(&["--bench"])));
         assert!(same(&parse(&["--no-shop-light", "--bench"]), &parse(&["--bench"])));

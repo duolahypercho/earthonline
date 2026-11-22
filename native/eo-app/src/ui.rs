@@ -276,6 +276,7 @@ fn default_args() -> Args {
         landmarks2: true,
         structures: None, // `--structures` (quality::Switches)
         facade_clutter: 0, // `--facade-clutter` (quality::Switches)
+        car_detail: 0, // `--car-detail` (quality::Switches)
     }
 }
 
@@ -1327,8 +1328,9 @@ mod tests {
         assert_eq!((l.shadow_map, l.sky.quality, l.shadow_slope_bias, l.photo_finish), (h.shadow_map, h.sky.quality, true, 2));
         let g = l.lighting;
         assert_eq!((g.cascade_blend, g.light_shadows, g.light_shadow_moving, g.headlight_shadows, g.lit_fog, g.smooth_time), (true, 3, true, 8, 2, true));
-        // ... what is placed at start waits, and what is attached at start stays off.
-        assert_eq!((l.grime, l.street_life, l.sky.shop_light), (0, 0, 0));
+        // ... what is placed at start waits (medium's own: its grime, since medium is the street look), and what is attached at start stays off.
+        assert_eq!((l.grime, l.street_life, l.sky.shop_light), (m.grime, 0, 0));
+        assert_eq!(m.grime, 1);
         assert_eq!((g.far_shadows, g.ambient_volume, g.probe_grid, g.ground_bounce), (0, 0, 0, false));
         // started at hyper, medium chosen: medium's frame but for what is placed at start; the attached go off.
         let l = live_look(&h, &m);

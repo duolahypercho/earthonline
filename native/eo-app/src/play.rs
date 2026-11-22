@@ -119,6 +119,7 @@ fn base_args() -> Args {
         landmarks2: true,
         structures: None, // `--structures` (quality::Switches)
         facade_clutter: 0, // `--facade-clutter` (quality::Switches)
+        car_detail: 0, // `--car-detail` (quality::Switches)
     }
 }
 
