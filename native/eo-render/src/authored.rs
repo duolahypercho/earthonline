@@ -189,6 +189,8 @@ impl MaterialTable {
             if spec.kind == "glass" && thin.is_none() {
                 // the room behind kit glazing (NIGHT_INTERIOR_KIT_GLASS; thin glass draws none).
                 flags |= crate::rooms::kit_glass_room(name) << crate::rooms::ROOM_SHIFT;
+                // the pane's visible transmittance (rooms.rs `pane_transmittance`; none: as before).
+                flags |= crate::rooms::pane_tv_flags(name);
             }
             let g = GpuMaterial {
                 base: [tint[0] as f32, tint[1] as f32, tint[2] as f32, opacity as f32],

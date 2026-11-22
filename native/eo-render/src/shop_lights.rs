@@ -509,12 +509,16 @@ pub fn front_at(table: &[[u32; 4]], group: u32, pos: [f32; 3], n: [f32; 3]) -> O
     let (first, count) = ((e >> 8) as usize, (e & 255) as usize);
     let nl = (n[0] * n[0] + n[2] * n[2]).sqrt().max(1e-6);
     let (nx, nz) = (n[0] / nl, n[2] / nl);
+    // where two fronts meet at a corner (each reaching `FRONT_END_M` past its
+    // end windows), the pane belongs to the one it faces most squarely; the first of equals.
+    let (mut best, mut found) = (-2.0f32, None);
     for r in first..first + count {
         let a = table[h[2] as usize + 2 * r];
         let b = table[h[2] as usize + 2 * r + 1];
         let turn = (a[3] & 0xffff) as f32 / HEADING_STEPS as f32 * std::f32::consts::TAU;
         let (rx, rz) = (turn.cos(), turn.sin());
-        if rx * nx + rz * nz < FRONT_FACING as f32 {
+        let facing = rx * nx + rz * nz;
+        if facing < FRONT_FACING as f32 || facing <= best {
             continue;
         }
         let q = [pos[0] - f32::from_bits(a[0]), pos[2] - f32::from_bits(a[1])];
@@ -523,9 +527,10 @@ pub fn front_at(table: &[[u32; 4]], group: u32, pos: [f32; 3], n: [f32; 3]) -> O
         if off.abs() > FRONT_PLANE_M as f32 || s < f32::from_bits(b[0]) || s > f32::from_bits(b[1]) {
             continue;
         }
-        return Some([a, b]);
+        best = facing;
+        found = Some([a, b]);
     }
-    None
+    found
 }
 
 /// The fronts table on the GPU (look.rs `set_shop_fronts`); None when empty.

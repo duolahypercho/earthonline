@@ -16,12 +16,32 @@
 //!   accents, a few deeper colours; value and saturation vary more than hue.
 //!   The tint written is target / primer (a multiply of at most 1).
 //! * Victorian rows and Edwardian flats keep the period paint the port draws
-//!   (already varied: charcoal, navy, sage, teal, oxblood) on the neutral
-//!   primer at the luminance of their finish; Chinatown's paint stays.
+//!   (already varied: charcoal, navy, sage, teal, oxblood). *Period primer*
+//!   (on by default): the paint is the colour it names, on the primer, its
+//!   value moved as a palette draw's is (`pick`): a paint's albedo is its
+//!   light reflectance value (a white house paint's LRV is about 80-90, a
+//!   charcoal's about 10), whatever the boards under it. Off
+//!   (`EO_PERIOD_PAINT=off`, eo-app `--no-period-paint`): the paint at the
+//!   luminance of its finish, as before (a white Victorian on wood siding then
+//!   drew at 0.36). Chinatown's paint stays.
 //! * Every other painted finish on the building without a paint (a recess, a
 //!   bulkhead) takes the neutral grey of its old colour's luminance, so
 //!   nothing turns brighter than before unless a palette says so. The
 //!   blind-wall (`+fenestrated`) twin of a painted finish takes its paint.
+//!
+//! * *Body chroma* (on by default): a wall body's paint is held to CIELAB
+//!   chroma `WALL_CHROMA_MAX` (25), its lightness and hue kept. The city's
+//!   painted bodies are whites, creams, greys, pastels and muted period
+//!   colours; strong colour is the trim's, a balcony's, an awning's and a
+//!   sign's (SF Planning, Chinatown Area Plan and its design guidelines:
+//!   colour as accent on balconies, eaves and trim). The port's Chinatown
+//!   fronts drew whole walls in its accent paints (scarlet #b0453c, C* 50;
+//!   gold #d9b24a, C* 58), the toy-town look of the round-1 aerials; capped,
+//!   they read as the dusty brick red, ochre and sage of the real streets.
+//!   A Chinatown front's accent paint goes on its trim (cornices, sills,
+//!   surrounds), its body takes the apartment palette's paint.
+//!   Off (`EO_WALL_CHROMA=off`, eo-app `--no-wall-chroma`): uncapped, the
+//!   accent on the whole wall.
 //!
 //! Switch: `EO_WALL_PAINT=off` (eo-app `--no-wall-paint`): no primer, the
 //! port's tints. On, `cache_tag` names the kit tile cache folder.
@@ -60,7 +80,83 @@ pub fn enabled() -> bool {
 
 /// A tag for the kit tile cache key (empty when off: the key is today's).
 pub fn cache_tag() -> String {
-    if enabled() { format!("wall-paint-v{VERSION}{}", crate::presidio::cache_tag()) } else { String::new() }
+    if enabled() {
+        format!(
+            "wall-paint-v{VERSION}{}{}{}",
+            if period_primer() { "-period-primer" } else { "" },
+            if chroma_cap() { format!("-chroma{WALL_CHROMA_MAX}") } else { String::new() },
+            crate::presidio::cache_tag()
+        )
+    } else {
+        String::new()
+    }
+}
+
+/// The most CIELAB chroma (C*ab) a wall body's paint draws.
+pub const WALL_CHROMA_MAX: u32 = 25;
+
+/// The body chroma cap (`EO_WALL_CHROMA=off`: uncapped).
+pub fn chroma_cap() -> bool {
+    !matches!(std::env::var("EO_WALL_CHROMA").as_deref(), Ok("off") | Ok("0"))
+}
+
+// CIE 1976 L*a*b* of linear sRGB (D65 white, the sRGB primaries' matrix of IEC 61966-2-1).
+fn lab_f(t: f32) -> f32 {
+    const D: f32 = 6.0 / 29.0;
+    if t > D * D * D { t.cbrt() } else { t / (3.0 * D * D) + 4.0 / 29.0 }
+}
+
+fn lab_finv(t: f32) -> f32 {
+    const D: f32 = 6.0 / 29.0;
+    if t > D { t * t * t } else { 3.0 * D * D * (t - 4.0 / 29.0) }
+}
+
+const WHITE_D65: [f32; 3] = [0.950_47, 1.0, 1.088_83];
+
+/// Linear sRGB to CIELAB (L* 0-100).
+pub fn cielab(c: [f32; 3]) -> [f32; 3] {
+    let x = 0.412_456_4 * c[0] + 0.357_576_1 * c[1] + 0.180_437_5 * c[2];
+    let y = 0.212_672_9 * c[0] + 0.715_152_2 * c[1] + 0.072_175 * c[2];
+    let z = 0.019_333_9 * c[0] + 0.119_192 * c[1] + 0.950_304_1 * c[2];
+    let (fx, fy, fz) = (lab_f(x / WHITE_D65[0]), lab_f(y / WHITE_D65[1]), lab_f(z / WHITE_D65[2]));
+    [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)]
+}
+
+/// CIELAB to linear sRGB (unclamped).
+pub fn cielab_to_linear(l: [f32; 3]) -> [f32; 3] {
+    let fy = (l[0] + 16.0) / 116.0;
+    let fx = fy + l[1] / 500.0;
+    let fz = fy - l[2] / 200.0;
+    let (x, y, z) = (lab_finv(fx) * WHITE_D65[0], lab_finv(fy) * WHITE_D65[1], lab_finv(fz) * WHITE_D65[2]);
+    [3.240_454_2 * x - 1.537_138_5 * y - 0.498_531_4 * z, -0.969_266 * x + 1.876_010_8 * y + 0.041_556 * z, 0.055_643_4 * x - 0.204_025_9 * y + 1.057_225_2 * z]
+}
+
+/// A colour held to `max` CIELAB chroma, its L* and hue kept.
+pub fn capped_chroma(c: [f32; 3], max: f32) -> [f32; 3] {
+    let mut l = cielab(c);
+    let ch = l[1].hypot(l[2]);
+    if ch <= max {
+        return c;
+    }
+    l[1] *= max / ch;
+    l[2] *= max / ch;
+    cielab_to_linear(l).map(|v| v.clamp(0.0, 1.0))
+}
+
+/// A wall body's tint (on the primer) with its drawn colour's chroma capped.
+fn capped_tint(t: u32) -> u32 {
+    if !chroma_cap() {
+        return t;
+    }
+    let p = lin(PRIMER_SRGB);
+    let drawn = hex_linear(t);
+    let drawn = [0, 1, 2].map(|k| drawn[k] * p[k]);
+    on_primer(capped_chroma(drawn, WALL_CHROMA_MAX as f32))
+}
+
+/// The timber rows' period paint drawn on the primer (`EO_PERIOD_PAINT=off`: at its finish's luminance).
+pub fn period_primer() -> bool {
+    !matches!(std::env::var("EO_PERIOD_PAINT").as_deref(), Ok("off") | Ok("0"))
 }
 
 fn lin(c: [u8; 3]) -> [f32; 3] {
@@ -274,17 +370,34 @@ pub fn apply(c: &Classified, materials: &BTreeMap<String, String>, own_tints: bo
     let district = c.civic.as_ref().and_then(|v| v.district.as_deref());
     let mut out = Tints::new();
     // The wall finish: the palette's paint, or the port's paint on the primer.
+    // A Chinatown front's accent paint on its trim, the body from the apartment palette (the chroma rule).
+    let accent_on_trim = chinatown && chroma_cap() && PAINTED_FINISHES.contains(&wall_base.as_str());
+    if accent_on_trim {
+        let accent = tints.get(&wall_base).copied().map(hex_linear);
+        let trim = materials.get("trim").map(|t| base_material_name(t).to_string());
+        if let (Some(accent), Some(trim)) = (accent, trim) {
+            let own = crate::roof_measured::material_colour(&trim).unwrap_or([0.6; 3]);
+            let want = capped_chroma(accent, 2.0 * WALL_CHROMA_MAX as f32);
+            out.insert(trim, linear_hex([0, 1, 2].map(|k| (want[k] / own[k].max(1e-3)).clamp(0.0, 1.0))));
+        }
+    }
     if PAINTED_FINISHES.contains(&wall_base.as_str()) {
         let own = finish_colour(&wall_base).unwrap_or(lin(PRIMER_SRGB));
         let t = match palette {
-            Some(p) if !chinatown => on_primer(pick(p, district, c.seed)),
+            Some(p) if !chinatown || accent_on_trim => on_primer(pick(p, district, c.seed)),
+            None if period_primer() => {
+                // The period paint as the colour it names, its value moved as a palette draw's.
+                let paint = tints.get(&wall_base).copied().map(hex_linear).unwrap_or([1.0; 3]);
+                let v = 0.82 + 0.16 * unit(c.seed, "value");
+                on_primer(paint.map(|x| x * v))
+            }
             _ => {
                 let paint = tints.get(&wall_base).copied().map(hex_linear).unwrap_or([1.0; 3]);
                 let n = neutral_of(own);
                 on_primer([0, 1, 2].map(|k| paint[k] * n[k]))
             }
         };
-        out.insert(wall_base.clone(), t);
+        out.insert(wall_base.clone(), capped_tint(t));
     }
     // Every other painted finish the building draws: its own paint (or none)
     // on the neutral grey of its old colour.
@@ -365,6 +478,64 @@ mod tests {
     fn districts_shift_the_mix() {
         let deep = |d: &str| (0..5000).filter(|s| rc::oklab(pick(&STUCCO, Some(d), hash_seed(&format!("d{s}"))))[0] < 0.75).count();
         assert!(deep("Mission") > deep("Marina") * 3 / 2, "Mission {} Marina {}", deep("Mission"), deep("Marina"));
+    }
+
+    #[test]
+    fn a_period_paint_draws_its_own_colour_on_the_primer() {
+        if !enabled() || !period_primer() {
+            return;
+        }
+        let c = Classified { archetype: "victorian-row", seed: 77, ..Default::default() };
+        let mats: BTreeMap<String, String> = [("wall".to_string(), "wood-siding".to_string())].into();
+        // White (no tint) and charcoal period paint on wood siding.
+        for (paint, lo, hi) in [(None, 0.6, 0.9), (Some(0x5c6066u32), 0.07, 0.13)] {
+            let mut tints = Tints::new();
+            if let Some(p) = paint {
+                tints.insert("wood-siding".into(), p);
+            }
+            apply(&c, &mats, true, &mut tints);
+            let drawn = luma([0, 1, 2].map(|k| hex_linear(tints["wood-siding"])[k] * lin(PRIMER_SRGB)[k]));
+            assert!(drawn > lo && drawn < hi, "{paint:?}: {drawn}");
+        }
+    }
+
+    #[test]
+    fn cielab_round_trips_and_the_cap_holds_lightness_and_hue() {
+        let c = lin([0xb0, 0x45, 0x3c]); // the port's Chinatown scarlet
+        let l = cielab(c);
+        assert!(l[1].hypot(l[2]) > 45.0, "{l:?}");
+        let back = cielab_to_linear(l);
+        for k in 0..3 {
+            assert!((back[k] - c[k]).abs() < 1e-4);
+        }
+        let capped = cielab(capped_chroma(c, 25.0));
+        assert!((capped[1].hypot(capped[2]) - 25.0).abs() < 0.5, "{capped:?}");
+        assert!((capped[0] - l[0]).abs() < 0.5);
+        assert!((capped[2].atan2(capped[1]) - l[2].atan2(l[1])).abs() < 0.02);
+        // A pale paint is untouched.
+        let pale = lin([236, 237, 234]);
+        assert_eq!(capped_chroma(pale, 25.0), pale);
+        // White on D65 is L* 100, a* b* 0.
+        let w = cielab([1.0; 3]);
+        assert!((w[0] - 100.0).abs() < 0.01 && w[1].abs() < 0.01 && w[2].abs() < 0.01, "{w:?}");
+    }
+
+    #[test]
+    fn a_chinatown_front_is_held_to_the_body_chroma() {
+        if !enabled() || !chroma_cap() {
+            return;
+        }
+        let c = Classified { archetype: "bay-window-apartment", seed: 9, ..Default::default() };
+        let mats: BTreeMap<String, String> = [("wall".to_string(), "painted-stucco".to_string())].into();
+        for paint in [0xb0453cu32, 0x4f8a6b, 0xd9b24a, 0x3f7f86] {
+            let mut tints: Tints = [("painted-stucco".to_string(), paint)].into();
+            apply(&c, &mats, true, &mut tints);
+            let p = lin(PRIMER_SRGB);
+            let t = hex_linear(tints["painted-stucco"]);
+            let drawn = [0, 1, 2].map(|k| t[k] * p[k]);
+            let l = cielab(drawn);
+            assert!(l[1].hypot(l[2]) <= WALL_CHROMA_MAX as f32 + 1.5, "{paint:06x}: {l:?}");
+        }
     }
 
     #[test]

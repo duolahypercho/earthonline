@@ -177,6 +177,7 @@ pub fn classify_loaded(rec: &LoadedRecord) -> Option<Classified> {
     c.record_id = rec.id.clone();
     // the Presidio rule: on the post and on no assessor parcel (the federal land has none)
     c.presidio = rec.presidio && c.civic.is_none();
+    crate::typology::reclassify(&mut c);
     Some(c)
 }
 
@@ -636,7 +637,8 @@ const ROOF_WEIGHTS_COMMERCIAL: [(&str, f64); 6] =
 const ROOF_WEIGHTS_RESIDENTIAL: [(&str, f64); 6] =
     [("membrane-white", 0.06), ("membrane-light-grey", 0.12), ("membrane-silver", 0.1), ("membrane-aged", 0.17), ("cap-sheet-grey", 0.2), ("tar-gravel", 0.35)];
 
-fn roof_finish(id: &str) -> (&'static str, Option<u32>) {
+/// A roof finish id's material and tint (`ROOF_FINISHES`).
+pub fn roof_finish(id: &str) -> (&'static str, Option<u32>) {
     match id {
         "membrane-white" => ("membrane-roof", None),
         "membrane-light-grey" => ("membrane-roof", Some(0xdcdad5)),
@@ -699,6 +701,15 @@ pub fn drawn_materials(planned: &Planned, rung: u32) -> DrawnMaterials {
     // the wall paint per building on a neutral primer (wall_paint.rs; EO_WALL_PAINT=off: the port's tints).
     if crate::wall_paint::enabled() {
         crate::wall_paint::apply(c, &materials, matches!(plan.extra.get("tints"), Some(J::Object(_))), &mut tints);
+    }
+    // a stone or precast face's per-building tone (typology.rs: a tower's stone), not a paint.
+    if let Some(J::Object(st)) = plan.extra.get("stoneTints") {
+        for (name, t) in st {
+            if let Some(t) = tint_of(t) {
+                tints.insert(name.clone(), t);
+                tints.insert(format!("{name}{FENESTRATED_SUFFIX}"), t);
+            }
+        }
     }
     // the Presidio and GGNRA rule (presidio.rs): off-white paint, red tile on the low roofs
     let tiled = crate::presidio::apply(c.presidio, &plan.id, c.archetype, c.storeys, c.seed, &mut materials, &mut tints);

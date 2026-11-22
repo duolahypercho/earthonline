@@ -242,6 +242,7 @@ mod tests {
         sets.push(("cinematic".into(), look::ShaderFeatures { cinematic: true, ..none })); // (`--look cinematic`, stage L0)
         sets.push(("house".into(), look::ShaderFeatures { house: true, ..none })); // (the playable house, `--house-*`)
         sets.push(("blender camera".into(), look::ShaderFeatures { blender_camera: true, ..none })); // (`--blender-camera`)
+        sets.push(("no far facade".into(), look::ShaderFeatures { far_facade: false, ..none })); // (`--no-far-facade`)
         sets
     }
 

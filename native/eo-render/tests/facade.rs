@@ -13,6 +13,7 @@ use serde_json::Value;
 #[test]
 fn kit_appearance_matches_the_js() {
     eo_data::groundscale::pin(1.0); // the JS game this compares with is 1:1
+    eo_kit::typology::pin(false); // ... and draws the port's one window module per archetype
     let root = eo_kit::repo_root().expect("repo root");
     let (_city, kc) = eo_kit::city::KitCity::load(&root).expect("city");
     let by_id: std::collections::HashMap<&str, usize> = kc.records.iter().enumerate().map(|(i, r)| (r.id.as_str(), i)).collect();
