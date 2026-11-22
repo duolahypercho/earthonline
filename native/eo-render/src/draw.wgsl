@@ -1574,6 +1574,8 @@ fn shade(in: VOut) -> vec4<f32> {
         if (sx_in_bore(in.object)) {
             return sx_bore_light(ss, m, v, in.world, in.object); // a tunnel bore's roadway (structures.wgsl)
         }
+        // (`--far-street-light`) past the frame's lamp lights, the street lit from its lamps' pools.
+        rm_emit = ss.albedo * lk_far_street_light(in.world, frame.cam_pos.xyz);
         return look_light(ss, m, v, in.world, n, in.object);
     }
     if (CITY_CLASS == CITY_STREET) {
@@ -2268,6 +2270,11 @@ fn shade(in: VOut) -> vec4<f32> {
         // (the playable house) source-lit joinery: its baked finish traced through the windows
         let finish = (m.flags >> 8u) & 7u;
         joinery_diffuse = window_trace(in.world + .012*n, -n, .024, finish);
+    }
+    // (`--far-street-light`) past the frame's lamp lights, a street lit from its lamps' pools.
+    let street_kind = objects[in.object].kind & 255u;
+    if (street_kind == 6u || street_kind == 7u || street_kind == 2u) {
+        rm_emit += s.albedo * lk_far_street_light(in.world, frame.cam_pos.xyz);
     }
     return look_light(s, m, v, in.world, n, in.object);
 }

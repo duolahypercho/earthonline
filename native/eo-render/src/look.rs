@@ -500,6 +500,9 @@ pub const B_ATMO_VIEW: u32 = 20;
 /// Group 1 binding of the playable house's window optics (window_optics.wgsl: its
 /// traced scene, `LookGpu::install_window_optics`; a 16-byte stand-in without it).
 pub const B_WINDOW_OPTICS: u32 = 21;
+/// Group 1 binding of the street lamps' pools on the ground (`--far-street-light`,
+/// sky.rs `bake_lamp_map`; look_light.wgsl `lk_lamp_map`).
+pub const B_LAMP_MAP: u32 = 22;
 
 /// What group 1 bindings 12-19 hold: a feature's real resources, or the
 /// 1 x 1 stand-ins made once with the look (`LookGpu::lighting_stand_ins`).
@@ -1356,6 +1359,8 @@ impl LookGpu {
                 entry(B_ATMO_VIEW, fs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
                 // the playable house's window optics (window_optics.wgsl), after the atmosphere view
                 entry(B_WINDOW_OPTICS, fs, sbuf(true)),
+                // the street lamps' pools on the ground (look_light.wgsl `lk_lamp_map`)
+                entry(B_LAMP_MAP, fs, wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false }),
             ],
         });
         let (lighting_stand_ins, stand_in_bytes) = LightingBindings::stand_ins(device);
@@ -1685,6 +1690,7 @@ impl LookGpu {
                 l19, // (stage N2) the shop fronts
                 wgpu::BindGroupEntry { binding: B_ATMO_VIEW, resource: wgpu::BindingResource::TextureView(sky.atmo_tables().0) },
                 wgpu::BindGroupEntry { binding: B_WINDOW_OPTICS, resource: optics.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: B_LAMP_MAP, resource: wgpu::BindingResource::TextureView(&sky.lamp_map_view) },
             ],
         })
     }

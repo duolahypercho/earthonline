@@ -42,6 +42,60 @@ pub const Q_SKY_BLOOM: u32 = 30;
 pub const Q_CLOUD_SHADOW: u32 = 32;
 
 pub const LAMP_CAP: u32 = 65_536;
+
+/// (`--far-street-light`, on unless `--no-far-street-light`) past the frame's lamp
+/// lights' reach a street is lit from a map of every placed lamp's pool on the
+/// ground (`bake_lamp_map`): lux every `LAMP_MAP_TEXEL_M` over a square of
+/// `LAMP_MAP_SIZE` texels from `LAMP_MAP_ORIGIN_M` (x and z), read by draw.wgsl
+/// past `LAMP_MAP_NEAR_M` from the eye (look_light.wgsl `LK_LAMP_MAP_*`).
+pub const LAMP_MAP_SIZE: u32 = 3072;
+pub const LAMP_MAP_TEXEL_M: f32 = 8.0;
+pub const LAMP_MAP_ORIGIN_M: f32 = -12_288.0;
+pub const LAMP_MAP_NEAR_M: f32 = 280.0;
+
+pub fn far_street_light_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| !std::env::args().any(|a| a == "--no-far-street-light"))
+}
+
+/// Each lamp's illuminance on the ground (lux) summed into the map: its
+/// batwing (sky_light.wgsl's street head, `eo_sky::lights::street_lamp_lux`'s
+/// shape) from its head's height (`candela / LAMP_POOL_PEAK_LUX`, the pool's
+/// nadir the RP-8 peak), inverse square, the ground's cosine, out to the cobra
+/// head's reach (`RANGE_MOUNTING_HEIGHTS`) under the shader's window.
+pub fn bake_lamp_map(lamps: &[LampLight]) -> Vec<f32> {
+    let n = LAMP_MAP_SIZE as usize;
+    let mut map = vec![0.0f32; n * n];
+    for l in lamps {
+        if l.kind != LampKind::Street || l.candela <= 0.0 {
+            continue;
+        }
+        let h = (l.candela / eo_sky::photometry::LAMP_POOL_PEAK_LUX).sqrt();
+        let range = h * eo_sky::cine_lamps::RANGE_MOUNTING_HEIGHTS;
+        let (fx, fz) = (((l.pos[0] as f32 - LAMP_MAP_ORIGIN_M) / LAMP_MAP_TEXEL_M) as f64, ((l.pos[2] as f32 - LAMP_MAP_ORIGIN_M) / LAMP_MAP_TEXEL_M) as f64);
+        let rt = range / LAMP_MAP_TEXEL_M as f64;
+        let (x0, x1) = ((fx - rt).floor().max(0.0) as usize, ((fx + rt).ceil() as usize).min(n - 1));
+        let (z0, z1) = ((fz - rt).floor().max(0.0) as usize, ((fz + rt).ceil() as usize).min(n - 1));
+        if fx + rt < 0.0 || fz + rt < 0.0 || x0 > n - 1 || z0 > n - 1 {
+            continue;
+        }
+        for z in z0..=z1 {
+            for x in x0..=x1 {
+                let (dx, dz) = ((x as f64 + 0.5 - fx) * LAMP_MAP_TEXEL_M as f64, (z as f64 + 0.5 - fz) * LAMP_MAP_TEXEL_M as f64);
+                let r = (dx * dx + dz * dz).sqrt();
+                if r >= range {
+                    continue;
+                }
+                let d2 = h * h + r * r;
+                let cos_t = h / d2.sqrt();
+                let shape = (1.0 + 1.5 * (1.0 - cos_t * cos_t)) * eo_look::math::smoothstep(l.cos_outer, l.cos_inner, cos_t);
+                let w = 1.0 - (r / range).powi(4);
+                map[z * n + x] += (l.candela * shape / d2 * cos_t * w * w) as f32;
+            }
+        }
+    }
+    map
+}
 pub const FRAME_LIGHT_CAP: u32 = 1024;
 /// Luminaires drawn a frame (near and far; sky_lights.wgsl LT_SPRITE_CAP).
 pub const SPRITE_CAP: u32 = 32_768;
@@ -537,6 +591,9 @@ pub struct SkyGpu {
     pub(crate) rep: wgpu::Sampler,
     lin: wgpu::Sampler,
     lamps: wgpu::Buffer,
+    /// (`--far-street-light`) the lamps' pools on the ground, lux (`bake_lamp_map`; 1 x 1 while off).
+    lamp_map: wgpu::Texture,
+    pub(crate) lamp_map_view: wgpu::TextureView,
     lamp_count: AtomicU32,
     /// Of them, by the water.
     waterside: AtomicU32,
@@ -720,6 +777,18 @@ impl SkyGpu {
         let st = wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST;
         let uniform = buffer("sky-uniform", std::mem::size_of::<SkyUniform>() as u64, uni);
         let lamps = buffer("sky-lamps", LAMP_CAP as u64 * 64, st);
+        let map_n = if far_street_light_enabled() { LAMP_MAP_SIZE } else { 1 };
+        let lamp_map = d.create_texture(&wgpu::TextureDescriptor {
+            label: Some("sky-lamp-map"),
+            size: wgpu::Extent3d { width: map_n, height: map_n, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::R16Float,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let lamp_map_view = lamp_map.create_view(&wgpu::TextureViewDescriptor::default());
         // (COPY_SRC: the light shadows' tests read the frame's lights, light_shadow.rs)
         let frame_lights = buffer("sky-frame-lights", FRAME_LIGHT_CAP as u64 * 64, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC);
         let sprites = buffer("sky-sprites", SPRITE_CAP as u64 * 64, wgpu::BufferUsages::STORAGE);
@@ -1127,6 +1196,8 @@ impl SkyGpu {
             rep,
             lin,
             lamps,
+            lamp_map,
+            lamp_map_view,
             lamp_count: AtomicU32::new(0),
             waterside: AtomicU32::new(0),
             frame_lights,
@@ -1407,6 +1478,17 @@ impl SkyGpu {
             queue.write_buffer(&self.lamps, 0, bytemuck::cast_slice(&gpu));
         }
         self.lamp_count.store(n as u32, Ordering::Relaxed);
+        if far_street_light_enabled() {
+            // (`--far-street-light`) the pools on the ground, for the streets past the frame's lights.
+            let map: Vec<u16> = bake_lamp_map(&lamps[..n]).into_iter().map(crate::ambient_bake::f16_bits).collect();
+            let side = LAMP_MAP_SIZE;
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo { texture: &self.lamp_map, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+                bytemuck::cast_slice(&map),
+                wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(side * 2), rows_per_image: Some(side) },
+                wgpu::Extent3d { width: side, height: side, depth_or_array_layers: 1 },
+            );
+        }
         n
     }
 
@@ -1990,7 +2072,14 @@ impl SkyGpu {
                 let c = decks.cirrus();
                 [c.alt_m as f32, c.opacity as f32, 0.0, 0.0]
             },
-            spare: [0.0; 4],
+            // (`--far-street-light`) the far streets' lamp light: rgb the lamps' colour (unit
+            // luminance; SF's LED under the lighting's `led`) x units per lux x lamps on, w on.
+            spare: {
+                let c = if s.led { let l = led_params().0; [l[0] as f64, l[1] as f64, l[2] as f64] } else { eo_sky::lights::street_lamp_color() };
+                let k = lamp_k * lamps_on;
+                let on = far_street_light_enabled() && k > 0.0;
+                [(c[0] * k) as f32, (c[1] * k) as f32, (c[2] * k) as f32, if on { 1.0 } else { 0.0 }]
+            },
         };
         queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&u));
         s.bloom_terms = [u.bloom[0], u.bloom[1], u.bloom_w2[1], u.bloom[3]];
@@ -2662,4 +2751,30 @@ pub fn glare_params(out_h: u32) -> [f32; 4] {
 
 pub fn weather_key(w: &eo_sky::WeatherState) -> (i64, i64, i64) {
     ((w.severity * 50.0).round() as i64, (w.wetness * 50.0).round() as i64, w.kind as i64)
+}
+
+#[cfg(test)]
+mod lamp_map_tests {
+    use super::*;
+
+    #[test]
+    fn the_shaders_lamp_map_constants_are_the_bakes() {
+        let src = include_str!("look_light.wgsl");
+        for (k, v) in [("LK_LAMP_MAP_SIZE", LAMP_MAP_SIZE as f32), ("LK_LAMP_MAP_TEXEL_M", LAMP_MAP_TEXEL_M), ("LK_LAMP_MAP_ORIGIN_M", LAMP_MAP_ORIGIN_M), ("LK_LAMP_MAP_NEAR_M", LAMP_MAP_NEAR_M)] {
+            assert!(src.contains(&format!("const {k}: f32 = {v:?};")), "{k} is not {v}");
+        }
+    }
+
+    #[test]
+    fn a_lamps_pool_lands_in_the_map_at_its_foot() {
+        let h = 8.84;
+        let l = LampLight { pos: [100.0, h, -40.0], candela: eo_sky::photometry::nadir_candela_for_pool(h), color: [1.0; 3], range: h * 2.6, dir: [0.0, -1.0, 0.0], cos_outer: 75f64.to_radians().cos(), cos_inner: 60f64.to_radians().cos(), kind: LampKind::Street };
+        let map = bake_lamp_map(&[l]);
+        let n = LAMP_MAP_SIZE as usize;
+        let at = |x: f32, z: f32| map[((z - LAMP_MAP_ORIGIN_M) / LAMP_MAP_TEXEL_M) as usize * n + ((x - LAMP_MAP_ORIGIN_M) / LAMP_MAP_TEXEL_M) as usize];
+        let foot = at(100.0, -40.0);
+        assert!(foot > 20.0 && foot < 40.0, "the pool's nadir near the RP-8 peak (30 lx): {foot}");
+        assert!(at(116.0, -40.0) > 2.0 && at(116.0, -40.0) < foot, "16 m out lit, less: {}", at(116.0, -40.0));
+        assert_eq!(at(160.0, -40.0), 0.0, "past the reach, dark");
+    }
 }
