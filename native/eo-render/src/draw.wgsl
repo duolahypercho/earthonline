@@ -187,7 +187,7 @@ fn vs(
         out.aux = vec2<f32>(color.a * 255.0, -1.0);
         house_z = 0.0;
     }
-    if (kind == 4u && out.aux.y > 0.49) {
+    if (SF_HOUSE && kind == 4u && out.aux.y > 0.49) {
         // The house builder stores window and fixture transfer in R and G.
         out.color = color.rgb;
         if (house_bit(o.kind, CUT_COTTON_BIT)) {
@@ -1584,7 +1584,8 @@ fn shade(in: VOut) -> vec4<f32> {
     s.env = -1;
     // a kit vertex carries raw bytes (see vs): the paint decodes here.
     let kit_object = (objects[in.object].kind & 255u) == 5u;
-    let house_finish = (objects[in.object].kind & 255u) == 4u && in.aux.y > 0.49;
+    // (the house builder's finishes: a model vertex's normal w over 0.49 comes from it alone, SF_HOUSE)
+    let house_finish = SF_HOUSE && (objects[in.object].kind & 255u) == 4u && in.aux.y > 0.49;
     let interior_transfer = house_finish && in.aux.y > 64.5 / 127.0;
     var vcol = select(in.color, vec3<f32>(1.0), house_finish);
     if (kit_object) {
@@ -1792,7 +1793,7 @@ fn shade(in: VOut) -> vec4<f32> {
     if (fc_on) {
         rm_emit = rm_emit + fc.emit * fc_lit(fc.q, fc.n, fc.roll) * select(1.0, FC_CINE_SIGN_GAIN, SF_CINEMATIC && sky_on(skyu.flags.x, SKY_CINEMATIC));
     }
-    if ((objects[in.object].kind & GRAVEL_BIT) != 0u) {
+    if (house_bit(objects[in.object].kind, GRAVEL_BIT)) {
         // Granitic fines and larger chips share one world-space surface across
         // the authored bed and the site mesh. Fade subpixel grain at distance.
         let uv = in.world.xz;
@@ -1808,7 +1809,7 @@ fn shade(in: VOut) -> vec4<f32> {
         s.n = normalize(n-vec3<f32>(gradient.x,0.0,gradient.y)*chip_detail*0.58);
         s.rough = 0.95;
     }
-    if ((objects[in.object].kind & LIMEWASH_BIT) != 0u) {
+    if (house_bit(objects[in.object].kind, LIMEWASH_BIT)) {
         let exposure = clamp((in.color.b * 255.0 - 3.0) / 55.0, 0.0, 1.0);
         if (house_bit(objects[in.object].kind, COURTYARD_BOUNCE_BIT)) {
             let stain = exposure * st_noise(in.world.xy*5.5);
@@ -1818,7 +1819,7 @@ fn shade(in: VOut) -> vec4<f32> {
         }
     }
     let cut_cotton = house_bit(objects[in.object].kind, CUT_COTTON_BIT);
-    let local_scan = cut_cotton || (objects[in.object].kind & (DOOR_SCAN_BIT | LOCAL_UV_SCAN_BIT)) != 0u;
+    let local_scan = cut_cotton || house_bit(objects[in.object].kind, DOOR_SCAN_BIT | LOCAL_UV_SCAN_BIT);
     var bedroom_point = vec3<f32>(0.);
     if (house_bit(objects[in.object].kind, BEDROOM_LIGHT_BIT) && vo_house_z(in) > .5) {
         bedroom_point = (look.enclosure_frame * vec4<f32>(in.world + .025*n,1.)).xyz;
@@ -1834,7 +1835,7 @@ fn shade(in: VOut) -> vec4<f32> {
     let table_board = house_bit(objects[in.object].kind, TABLE_BOARD_BIT);
     let oak_finish = house_bit(objects[in.object].kind, OAK_FINISH_BIT);
     let joinery = table_board && look.table_light[1].w > 0.;
-    let floor_scan = table_board || local_scan || (objects[in.object].kind & FLOOR_SCAN_BIT) != 0u;
+    let floor_scan = table_board || local_scan || house_bit(objects[in.object].kind, FLOOR_SCAN_BIT);
     if (floor_scan && (local_scan || table_board || abs(n.y) > 0.7)) {
         var layer = select(i32(textureNumLayers(kit_albedo)) - 2, m.layer, local_scan);
         var uv = in.ft;
@@ -2166,7 +2167,7 @@ fn shade(in: VOut) -> vec4<f32> {
     if ((cc0_terrain || (bed_surface && in.aux.y > 0.5)) && look.cove.x > 0.0 && in.world.y < LM_SEA_LEVEL_Y + 0.035) {
         lm_cove_sediment(&s, in.world, n, dpx, dpy);
     }
-    let street_pane = (objects[in.object].kind & FRONT_SASH_BIT) != 0u && in.color.b > 3.5/255.0;
+    let street_pane = house_bit(objects[in.object].kind, FRONT_SASH_BIT) && in.color.b > 3.5/255.0;
     if (street_pane && frame.copy_step.z < 0.5) {
         let angle = in.aux.x * (2.0 * PI / 255.0);
         let rear_sash = in.color.b > 4.5 / 255.0;
