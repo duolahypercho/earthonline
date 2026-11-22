@@ -92,6 +92,9 @@ struct Face {
     resolved: Resolved,
 }
 
+/// A face's index in a font collection (.ttc), carried with the variations.
+const COLLECTION_INDEX: &str = "\0ttc";
+
 /// System font folders, in lookup order.
 fn font_dirs() -> Vec<PathBuf> {
     let mut v = vec![];
@@ -144,6 +147,21 @@ fn resolve_family(name: &str, weight: u16, stretch: u16, dirs: &[PathBuf]) -> Op
                 _ => "seguibl.ttf",
             };
             find(dirs, &[file, "segoeui.ttf"]).map(|p| (p, vec![]))
+        }
+        // macOS ships the stacks' first families as collections (Avenir Next.ttc,
+        // Avenir Next Condensed.ttc): the face for a weight is its index in the
+        // collection (Regular 7, Medium 5, Demi Bold 2, Bold 0, Heavy 8, Ultra Light 10).
+        "avenir next" | "avenir next condensed" => {
+            let file = if name.eq_ignore_ascii_case("avenir next") { "Avenir Next.ttc" } else { "Avenir Next Condensed.ttc" };
+            let index = match weight {
+                0..=250 => 10.0,
+                251..=450 => 7.0,
+                451..=550 => 5.0,
+                551..=650 => 2.0,
+                651..=800 => 0.0,
+                _ => 8.0,
+            };
+            find(dirs, &[file]).map(|p| (p, vec![(COLLECTION_INDEX, index)]))
         }
         "arial narrow" => find(dirs, if bold { &["ARIALNB.TTF", "arialnb.ttf"] } else { &["ARIALN.TTF", "arialn.ttf"] }).map(|p| (p, vec![])),
         "consolas" | "ui-monospace" | "monospace" => find(dirs, if bold { &["consolab.ttf"] } else { &["consola.ttf"] }).map(|p| (p, vec![])),
@@ -316,9 +334,10 @@ impl TextSystem {
                 b
             }
         };
-        let mut font = FontVec::try_from_vec(bytes).unwrap_or_else(|e| panic!("parse {}: {e}", path.display()));
+        let index = vars.iter().find(|(t, _)| *t == COLLECTION_INDEX).map(|(_, i)| *i as u32).unwrap_or(0);
+        let mut font = FontVec::try_from_vec_and_index(bytes, index).unwrap_or_else(|e| panic!("parse {} (face {index}): {e}", path.display()));
         let mut applied = vec![];
-        for (tag, value) in &vars {
+        for (tag, value) in vars.iter().filter(|(t, _)| *t != COLLECTION_INDEX) {
             let t: [u8; 4] = tag.as_bytes().try_into().unwrap();
             if font.set_variation(&t, *value) {
                 applied.push((tag.to_string(), *value));

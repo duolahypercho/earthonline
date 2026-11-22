@@ -449,7 +449,7 @@ pub fn run(io: &mut Io, dir: &Path, timeout: f64) -> Result<()> {
         );
         info.insert("resolved".into(), shots::pose_json(&gf, world, &cam, None));
         info.insert("character".into(), json!(c.extras.first().map(|a| json!({ "feet": a.pos, "speed_mps": a.speed, "model": a.model }))));
-        let shot = Shot { name: name.clone(), cam, hour: c.hour, weather: WeatherMode::Preset(c.weather), focus, info, extras: c.extras.clone(), notes: unmet.clone() };
+        let shot = Shot { name: name.clone(), cam, hour: c.hour, weather: WeatherMode::Preset(c.weather), focus, info, extras: c.extras.clone(), notes: unmet.clone(), photo: None, subject: None };
         io.agents.hide_near = c.hide_near.clone();
         shots::shoot(io, &common, &shot, dir, timeout)?;
         io.agents.hide_near.clear();

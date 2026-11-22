@@ -5,6 +5,11 @@
 //!   eo-app --capture-ui SCREEN       offscreen 1920x1080 PNG, no window:
 //!                                    title | loading | pause | settings | hud | map | all,
 //!                                    and (not in all) settings-hyper | settings-world | pause-settings
+//!                                    | photo | photo-look
+//!                                    (photo: photo mode's panel over a frame through its
+//!                                    pipeline, the Camera page with focus peaking on; photo-look:
+//!                                    its Look page, monochrome through its contrast filter; with
+//!                                    `--no-photo-mode`, the HUD frame it replaces)
 //!   eo-app --ui-bench                HUD on over the street walk, plus each full-screen
 //!                                    menu; prints the UI's own cost with PASS/FAIL
 //!
@@ -165,6 +170,7 @@ impl Flags {
                 "--no-vsync" => args.vsync = false,
                 "--no-props" => args.props = false, // props in the UI's street
                 "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
+                "--no-photo-mode" | "--no-dof" => {} // read by photo.rs
                 s if args.props2.parse_flag(s) => {}
                 // read by main's `groundscale_flags`.
                 "--ground-scale" | "--height-scale" | "--people-scale" | "--vehicle-scale" => {
@@ -523,7 +529,7 @@ fn capture(args: &Args, list: &[String], process_start: Instant) -> Result<()> {
     let dir = out_dir(args);
     std::fs::create_dir_all(&dir)?;
     let off = offscreen(&ctx);
-    let want_hud = list.iter().any(|s| s.starts_with("hud"));
+    let want_hud = list.iter().any(|s| s.starts_with("hud") || s.starts_with("photo"));
     // The world (for the street under the HUD) or just the city data (menus).
     let mut street = if want_hud { Some(Street::new(&ctx, args, process_start)?) } else { None };
     let paths = eo_data::DataPaths::discover()?;
@@ -601,22 +607,54 @@ fn capture(args: &Args, list: &[String], process_start: Instant) -> Result<()> {
                 ui.hud.mode = if name == "hud-drive" { HudMode::Drive { speed_kph: 42.0 } } else { HudMode::OnFoot };
                 ui.set_screen_age(0.0);
             }
-            other => anyhow::bail!("--capture-ui: unknown screen {other} (title, loading, pause, settings, hud, hud-drive, map, all; settings-hyper, settings-world, pause-settings)"),
+            "photo" | "photo-look" => {
+                ui.set_screen(Screen::Hud);
+                ui.hud.mode = HudMode::OnFoot;
+                ui.set_screen_age(0.0);
+            }
+            other => anyhow::bail!("--capture-ui: unknown screen {other} (title, loading, pause, settings, hud, hud-drive, map, photo, photo-look, all; settings-hyper, settings-world, pause-settings)"),
         }
         let age_t0 = t0;
         ui_frames(&ctx, &mut ui, age_t0, 3);
         let mut enc = ctx.device.create_command_encoder(&Default::default());
-        if name.starts_with("hud") {
+        if name.starts_with("hud") || name.starts_with("photo") {
             let s = street.as_mut().unwrap();
-            let cam = s.camera(0.0, 0.0, args.far);
+            let mut cam = s.camera(0.0, 0.0, args.far);
+            // photo mode: a 50 mm lens looking down the street at f/2.8, focused 12 m out; the
+            // Camera page open on focus peaking (on: the 12 m plane's edges marked), or the Look
+            // page on monochrome's contrast filter.
+            let photo = (name.starts_with("photo") && crate::photo::enabled()).then(|| {
+                let mut m = crate::photo::PhotoMode::new(false, args.time_of_day);
+                m.enter(&cam, cam.eye.as_dvec3() + glam::DVec3::new(0.0, -0.27, 0.0));
+                m.focal_mm = 50.0;
+                m.focus = crate::photo::Focus::Manual;
+                m.focus_m = 12.0;
+                m.step(&crate::photo::Feed { held: &Default::default(), mouse: [0.0, 0.0], dt: 10.0, aspect: W as f64 / H as f64, anchor: m.anchor, cw: None });
+                if name == "photo-look" {
+                    m.grade = eo_render::photo_mode::Grade::Monochrome;
+                    m.grain = m.grade.look().grain;
+                    m.set_tab(1);
+                    m.select_row(3);
+                } else {
+                    m.peaking = true;
+                    m.select_row(7);
+                }
+                m
+            });
+            if let Some(m) = &photo {
+                cam = m.camera(W as f64 / H as f64, args.far);
+                s.renderer.photo_mode.set(Some(eo_render::photo_mode::PhotoParams { accumulate: eo_render::photo_mode::SHOT_FRAMES, animate_grain: false, ..m.params() }));
+                ui.photo = Some(m.panel(W as f64 / H as f64));
+            }
             settle(&ctx, &s.renderer, &s.world, &mut s.models, &cam, 600.0)?;
             s.settle_props(&ctx, cam.eye, 600.0)?;
-            for _ in 0..2 {
+            for _ in 0..if photo.is_some() { 64 } else { 2 } {
                 s.renderer.update(&ctx.queue, &cam);
                 let mut e = ctx.device.create_command_encoder(&Default::default());
                 s.renderer.encode(&mut e, &off.srgb, None, &s.targets.depth, None);
                 ctx.queue.submit([e.finish()]);
             }
+            s.renderer.photo_mode.set(None);
             // Show the HUD a moment after it changed (chips and the objective are up).
             ui.set_time(age_t0 + 0.6);
             ui.prepare(&ctx.device, &ctx.queue, &mut enc, W, H, &Input::default());
@@ -627,6 +665,7 @@ fn capture(args: &Args, list: &[String], process_start: Instant) -> Result<()> {
         }
         ui.draw(&ctx.device, &mut enc, &off.unorm, format, None);
         ctx.queue.submit([enc.finish()]);
+        ui.photo = None;
         let path = dir.join(format!("capture-ui-{name}.png"));
         save_png(&ctx, &off.color, &path)?;
         println!("wrote {}", path.display());

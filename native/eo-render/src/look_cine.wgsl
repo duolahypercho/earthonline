@@ -12,7 +12,8 @@
 @group(0) @binding(8) var<uniform> cine: Cine;
 
 struct Cine {
-    // x the bloom's share of the bright part (eo-look `CINE_BLOOM_SHARE`); yzw unused
+    // x the bloom's share of the bright part (eo-look `CINE_BLOOM_SHARE`); y 1 where photo
+    // mode added the bloom before this pass (compiled out without it: SF_PHOTO_MODE); zw unused
     bloom: vec4<f32>,
     // x the display vignette, y the table's scale, z its offset (a texel centre); w unused
     grade: vec4<f32>,
@@ -75,8 +76,9 @@ fn cine_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     c = clamp(c, vec3<f32>(0.0), vec3<f32>(65504.0));
     // the bloom, energy kept: the pixel gives up the share of its bright part
     // the pyramid spreads (the levels' weights sum to that share, sky.rs).
-    // (`bloom.w` its share: under 1 where the playable house's source lens takes the view)
-    if (skyu.bloom.w > 0.0) {
+    // (`bloom.w` its share: under 1 where the playable house's source lens takes the view;
+    // photo mode's output carries the bloom already, added the same way: photo_mode.wgsl)
+    if (skyu.bloom.w > 0.0 && !(SF_PHOTO_MODE && cine.bloom.y > 0.5)) {
         let b = max(textureSampleLevel(bloom_tex, ph_lin, pos.xy / dims, 0.0).rgb, vec3<f32>(0.0));
         c = max(c - skyu.bloom.w * cine.bloom.x * cn_bright(c), vec3<f32>(0.0)) + skyu.bloom.w * b;
     }

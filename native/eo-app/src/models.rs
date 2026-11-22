@@ -208,6 +208,8 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     let features = eo_render::look::ShaderFeatures::of(&args.look, crate::structures::drawn(world).is_some(), args.structures.as_ref().is_some_and(|s| s.tunnels), args.facade_clutter > 0);
     // the playable house's materials, lights and optics: with the house loaded (`--beaver-house`, `--house-*`).
     let features = eo_render::look::ShaderFeatures { house: world.house.is_some(), ..features };
+    // photo mode's term in a shared pass (the cinematic look's bloom), unless `--no-photo-mode`.
+    let features = eo_render::look::ShaderFeatures { photo_mode: crate::photo::enabled(), ..features };
     let mut features = if std::env::var("EO_SHADER_FEATURES").is_ok_and(|v| v == "all") { eo_render::look::ShaderFeatures::ALL } else { features };
     for w in std::env::var("EO_SHADER_FEATURES").unwrap_or_default().split(',') {
         match w {
@@ -221,6 +223,7 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
             "cinematic" => features.cinematic = true, // (`--look cinematic`, stage L0)
             "house" => features.house = true,
             "blender_camera" => features.blender_camera = true,
+            "photo_mode" => features.photo_mode = true,
             _ => {}
         }
     }
@@ -290,6 +293,7 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     }
     r.kit_radii = eo_render::kit::DEFAULT_KIT_RADII;
     r.set_occlusion(args.perf.occlusion); // occlusion
+    r.photo_mode.options.dof = crate::photo::dof_enabled(); // photo mode's depth of field (`--no-dof`)
     // the far layer's GPU side and every group's cell.
     let mut far_layer = false;
     if let Some(h) = &world.hlod {

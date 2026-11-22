@@ -369,6 +369,7 @@ mod tests {
             near: 0.05,
             far: 100.,
             jitter: [0.; 2],
+            roll: 0.,
         };
         let ray = to_world.transform_vector3(Vec3::Z);
         let front = meter.facade_normal(Vec3::new(0., 1.5, -2.), ray).unwrap();

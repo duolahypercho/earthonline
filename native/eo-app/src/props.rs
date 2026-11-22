@@ -1331,7 +1331,7 @@ pub fn read_poses(path: &std::path::Path) -> anyhow::Result<Vec<CapturePose>> {
             .map(|v| serde_json::from_value::<[f32; 2]>(v.clone())).transpose()?.unwrap_or([0.; 2]);
         Ok(CapturePose {
             name: p["name"].as_str().unwrap_or("pose").to_string(),
-            camera: eo_render::camera::Camera { eye: Vec3::new(f(&e[0]), f(&e[1]), f(&e[2])), yaw: f(&p["yaw"]), pitch: f(&p["pitch"]), fov_y_deg: f(&p["fov_y_deg"]), near: f(&p["near"]), far: f(&p["far"]), aspect: f(&p["aspect"]), jitter: projection_shift },
+            camera: eo_render::camera::Camera { eye: Vec3::new(f(&e[0]), f(&e[1]), f(&e[2])), yaw: f(&p["yaw"]), pitch: f(&p["pitch"]), fov_y_deg: f(&p["fov_y_deg"]), near: f(&p["near"]), far: f(&p["far"]), aspect: f(&p["aspect"]), jitter: projection_shift, roll: 0.0 },
             player,
         })
     }).collect()

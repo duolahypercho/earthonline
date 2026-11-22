@@ -34,7 +34,9 @@ use std::sync::Mutex;
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable, Debug, Default, PartialEq)]
 pub struct CineUniform {
-    /// x the bloom's share of the bright part; yzw unused.
+    /// x the bloom's share of the bright part; y 1 where photo mode added the
+    /// bloom before this pass (its bind groups, `bind_group_over`; the test is
+    /// compiled out with `--no-photo-mode`: `SF_PHOTO_MODE`); zw unused.
     pub bloom: [f32; 4],
     /// x the display vignette, y the table's coordinate scale, z its offset; w unused.
     pub grade: [f32; 4],
@@ -91,6 +93,8 @@ pub struct CineGpu {
     pub(crate) pipeline: wgpu::RenderPipeline,
     bgl: wgpu::BindGroupLayout,
     uniform: wgpu::Buffer,
+    /// the same, the bloom marked as added upstream (photo mode's bind groups).
+    uniform_upstream: wgpu::Buffer,
     /// the photo finish's uniform for this pass (zeros with the photo finish off: no lens).
     photo: wgpu::Buffer,
     lut: wgpu::Texture,
@@ -138,6 +142,7 @@ impl CineGpu {
         });
         let buffer = |label, size| device.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size, usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
         let uniform = buffer("cine-uniform", std::mem::size_of::<CineUniform>() as u64);
+        let uniform_upstream = buffer("cine-uniform-photo-mode", std::mem::size_of::<CineUniform>() as u64);
         let photo = buffer("cine-photo-uniform", std::mem::size_of::<crate::photo::PhotoUniform>() as u64);
         let n = grade::LUT_SIZE as u32;
         let lut = device.create_texture(&wgpu::TextureDescriptor {
@@ -158,28 +163,34 @@ impl CineGpu {
             ..Default::default()
         });
         let keys = grade::GRADE_KEYS.iter().map(grade::bake_lut).collect();
-        Self { pipeline, bgl, uniform, photo, lut, lut_view, sampler, keys, last: Mutex::new(None), uploads: Default::default() }
+        Self { pipeline, bgl, uniform, uniform_upstream, photo, lut, lut_view, sampler, keys, last: Mutex::new(None), uploads: Default::default() }
     }
 
     /// One bind group per post source (the HDR scene, the resolved history 0, 1).
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn bind_groups(&self, device: &wgpu::Device, look: &wgpu::Buffer, srcs: [&wgpu::TextureView; 3], sky: &wgpu::Buffer, bloom: &wgpu::TextureView, sampler: &wgpu::Sampler) -> [wgpu::BindGroup; 3] {
-        srcs.map(|src| {
-            device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("cine-bg"),
-                layout: &self.bgl,
-                entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: look.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(src) },
-                    wgpu::BindGroupEntry { binding: 2, resource: sky.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(bloom) },
-                    wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::Sampler(sampler) },
-                    wgpu::BindGroupEntry { binding: 5, resource: self.photo.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 6, resource: wgpu::BindingResource::TextureView(&self.lut_view) },
-                    wgpu::BindGroupEntry { binding: 7, resource: wgpu::BindingResource::Sampler(&self.sampler) },
-                    wgpu::BindGroupEntry { binding: 8, resource: self.uniform.as_entire_binding() },
-                ],
-            })
+        srcs.map(|src| self.bind_group_over(device, look, src, sky, bloom, sampler, false))
+    }
+
+    /// A bind group over one source; `upstream`: the bloom was added before
+    /// this pass (photo mode's output), which then adds none and keeps the
+    /// pixel's bright part.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn bind_group_over(&self, device: &wgpu::Device, look: &wgpu::Buffer, src: &wgpu::TextureView, sky: &wgpu::Buffer, bloom: &wgpu::TextureView, sampler: &wgpu::Sampler, upstream: bool) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(if upstream { "cine-bg-photo-mode" } else { "cine-bg" }),
+            layout: &self.bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: look.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(src) },
+                wgpu::BindGroupEntry { binding: 2, resource: sky.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(bloom) },
+                wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::Sampler(sampler) },
+                wgpu::BindGroupEntry { binding: 5, resource: self.photo.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 6, resource: wgpu::BindingResource::TextureView(&self.lut_view) },
+                wgpu::BindGroupEntry { binding: 7, resource: wgpu::BindingResource::Sampler(&self.sampler) },
+                wgpu::BindGroupEntry { binding: 8, resource: if upstream { &self.uniform_upstream } else { &self.uniform }.as_entire_binding() },
+            ],
         })
     }
 
@@ -190,6 +201,8 @@ impl CineGpu {
     /// Returns whether it was.
     pub(crate) fn write(&self, queue: &wgpu::Queue, photo: Option<&crate::photo::PhotoUniform>, sun_alt_deg: f64, hour: f64, overcast: f64) -> bool {
         queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&CineUniform::new()));
+        let upstream = CineUniform::new();
+        queue.write_buffer(&self.uniform_upstream, 0, bytemuck::bytes_of(&CineUniform { bloom: [upstream.bloom[0], 1.0, 0.0, 0.0], ..upstream }));
         queue.write_buffer(&self.photo, 0, bytemuck::bytes_of(&photo.copied().unwrap_or_default()));
         let w = grade::key_weights(sun_alt_deg, hour, overcast);
         let mut last = self.last.lock().unwrap();
@@ -222,7 +235,7 @@ impl CineGpu {
     /// Bytes of its table and uniforms.
     pub fn bytes(&self) -> u64 {
         let n = grade::LUT_SIZE as u64;
-        n * n * n * 8 + self.uniform.size() + self.photo.size()
+        n * n * n * 8 + self.uniform.size() + self.uniform_upstream.size() + self.photo.size()
     }
 }
 
@@ -233,14 +246,21 @@ mod tests {
 
     #[test]
     fn the_shader_validates_and_its_uniform_matches() {
-        let src = shader_source();
-        let module = naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("look_cine.wgsl: {}", e.emit_to_string(&src)));
-        naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all()).validate(&module).expect("look_cine.wgsl validates");
-        let (_, ty) = module.types.iter().find(|(_, t)| t.name.as_deref() == Some("Cine")).expect("Cine struct");
-        let naga::TypeInner::Struct { span, .. } = &ty.inner else { panic!("Cine is a struct") };
-        assert_eq!(*span as usize, std::mem::size_of::<CineUniform>());
-        for entry in ["photo_vs", "cine_fs"] {
-            assert!(module.entry_points.iter().any(|e| e.name == entry), "{entry}");
+        // (with photo mode's bloom test compiled in and out: `SF_PHOTO_MODE`)
+        for photo_mode in [true, false] {
+            let f = crate::look::ShaderFeatures { photo_mode, ..crate::look::ShaderFeatures::ALL };
+            crate::look::with_shader_features(f, || {
+                let src = shader_source();
+                assert!(src.contains(&format!("const SF_PHOTO_MODE: bool = {photo_mode};")));
+                let module = naga::front::wgsl::parse_str(&src).unwrap_or_else(|e| panic!("look_cine.wgsl: {}", e.emit_to_string(&src)));
+                naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::all()).validate(&module).expect("look_cine.wgsl validates");
+                let (_, ty) = module.types.iter().find(|(_, t)| t.name.as_deref() == Some("Cine")).expect("Cine struct");
+                let naga::TypeInner::Struct { span, .. } = &ty.inner else { panic!("Cine is a struct") };
+                assert_eq!(*span as usize, std::mem::size_of::<CineUniform>());
+                for entry in ["photo_vs", "cine_fs"] {
+                    assert!(module.entry_points.iter().any(|e| e.name == entry), "{entry}");
+                }
+            });
         }
     }
 

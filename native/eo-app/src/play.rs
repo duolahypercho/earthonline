@@ -269,6 +269,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-streets" => a.streets = false,
             "--no-agents" => a.agents = false, // agents
             "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
+            "--no-photo-mode" | "--no-dof" => {} // read by photo.rs
             "--no-rocketbox" => a.rocketbox = false, // people
             "--no-props" => a.props = false, // props
             s if a.props2.parse_flag(s) => {}
@@ -765,6 +766,8 @@ mod window {
         audio: crate::audio::AudioRuntime, // the device (`--no-audio`, `--audio-null`)
         props: crate::props::PropsRuntime,
         pacer: eo_render::pace::WaitPacer, // the driver's submission spike, taken in the swapchain wait
+        /// the photo mode panel (made the first time photo mode opens).
+        ui: Option<eo_ui::Ui>,
     }
 
     struct App {
@@ -772,6 +775,8 @@ mod window {
         world: World,
         args: Args,
         gfx: Option<Gfx>,
+        /// photo mode (P), None with `--no-photo-mode`.
+        photo: Option<crate::photo::PhotoMode>,
         cw: CollisionWorld,
         door: Option<crate::house::Door>,
         player: Player,
@@ -804,6 +809,7 @@ mod window {
             world,
             args: args.clone(),
             gfx: None,
+            photo: crate::photo::enabled().then(|| crate::photo::PhotoMode::new(false, args.time_of_day)),
             cw,
             door,
             player,
@@ -845,7 +851,7 @@ mod window {
             let props = crate::props::PropsRuntime::start(&self.world, &self.args);
             let pacer = eo_render::pace::WaitPacer::new(self.args.perf.submit_pacing);
             let audio = crate::audio::AudioRuntime::start(&self.world, eo_audio::Output::Device); // audio
-            self.gfx = Some(Gfx { window, surface, config, ctx, renderer, targets, models, agents, visual: Default::default(), audio, props, pacer });
+            self.gfx = Some(Gfx { window, surface, config, ctx, renderer, targets, models, agents, visual: Default::default(), audio, props, pacer, ui: None });
             Ok(())
         }
 
@@ -868,32 +874,47 @@ mod window {
             let aspect = self.gfx.as_ref().map(|g| g.config.width as f64 / g.config.height.max(1) as f64).unwrap_or(16.0 / 9.0);
             // Player: input, fixed steps, collision streaming, camera.
             let t0 = Instant::now();
-            let frame = self.map.resolve(&mut self.raw, dt, false);
-            let interact = std::mem::take(&mut self.interact_requested)
-                || frame.tapped(eo_player::input::Action::Interact);
-            if let Some(door) = &mut self.door {
-                let feet = self.player.position(&self.cw);
-                if self.player.mode == Mode::OnFoot && interact {
-                    door.toggle(feet);
+            let photo_on = self.photo.as_ref().is_some_and(|p| p.on);
+            // photo mode freezes the player's input and the local world (time stands still: the door too).
+            let wdt = if photo_on { 0.0 } else { dt };
+            if !photo_on {
+                let frame = self.map.resolve(&mut self.raw, dt, false);
+                let interact = std::mem::take(&mut self.interact_requested)
+                    || frame.tapped(eo_player::input::Action::Interact);
+                if let Some(door) = &mut self.door {
+                    let feet = self.player.position(&self.cw);
+                    if self.player.mode == Mode::OnFoot && interact {
+                        door.toggle(feet);
+                    }
+                    if door.advance(dt, feet, &mut self.world.scene, &mut self.cw)
+                        && let Some(g) = &mut self.gfx
+                    {
+                        g.renderer.look.set_front_door_angle(door.opening_angle());
+                        door.upload(&self.world.scene, &g.renderer, &g.ctx.queue);
+                    }
                 }
-                if door.advance(dt, feet, &mut self.world.scene, &mut self.cw)
-                    && let Some(g) = &mut self.gfx
-                {
-                    g.renderer.look.set_front_door_angle(door.opening_angle());
-                    door.upload(&self.world.scene, &g.renderer, &g.ctx.queue);
-                }
+                self.player.look(frame.look_yaw, frame.look_pitch);
+                let input = StepInput::from_frame(&frame);
+                self.player.advance(&mut self.cw, &input, dt);
             }
-            self.player.look(frame.look_yaw, frame.look_pitch);
-            let input = StepInput::from_frame(&frame);
-            self.player.advance(&mut self.cw, &input, dt);
             let pos = self.player.position(&self.cw);
             self.cw.pump(pos);
-            let view = player_view(&mut self.player, &self.cw, &self.world, self.interior_eye, dt, aspect);
+            let mut view = player_view(&mut self.player, &self.cw, &self.world, self.interior_eye, wdt, aspect);
             let ms = t0.elapsed().as_secs_f64() * 1e3;
             self.player_ms_max = self.player_ms_max.max(ms);
             self.player_ms_sum += ms;
             let Some(g) = self.gfx.as_mut() else { return };
-            let cam = to_camera(&view, aspect as f32, self.args.far);
+            let mut cam = to_camera(&view, aspect as f32, self.args.far);
+            if let (Some(ph), true) = (self.photo.as_mut(), photo_on) {
+                let mouse = [std::mem::take(&mut self.raw.mouse_dx), std::mem::take(&mut self.raw.mouse_dy)];
+                ph.step(&crate::photo::Feed { held: &self.raw.held, mouse, dt, aspect, anchor: crate::photo::anchor_of(pos), cw: Some(&self.cw) });
+                if let Some(h) = ph.hour_to_set() {
+                    g.renderer.look.set_time_of_day(h); // local only
+                }
+                g.renderer.photo_mode.set(Some(ph.params()));
+                cam = ph.camera(aspect, self.args.far);
+                view.body_visible = true; // the player is in the picture
+            }
             let (acquired, _) = g.pacer.around(&g.ctx.device, &g.ctx.queue, || g.surface.get_current_texture());
             let surf = match acquired {
                 wgpu::CurrentSurfaceTexture::Success(t) | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
@@ -907,10 +928,10 @@ mod window {
             if let Err(e) = g.models.pump(&g.ctx, &g.renderer, &self.world, cam.eye) {
                 eprintln!("model streaming: {e:#}");
             }
-            g.props.pump(&g.ctx, &g.renderer, &mut g.models.uploads, cam.eye, Some(g.agents.sim_time), dt);
+            g.props.pump(&g.ctx, &g.renderer, &mut g.models.uploads, cam.eye, Some(g.agents.sim_time), wdt);
             g.agents.parked = g.props.parked_agents(g.agents.lib.as_deref(), cam.eye).to_vec();
-            g.agents.set_player(&mut g.visual, &self.player, &self.cw, view.body_visible, dt); // agents
-            g.agents.pump(&g.ctx, &g.renderer, [pos.x, pos.z, self.player.yaw], dt);
+            g.agents.set_player(&mut g.visual, &self.player, &self.cw, view.body_visible, wdt); // agents
+            g.agents.pump(&g.ctx, &g.renderer, [pos.x, pos.z, self.player.yaw], wdt);
             g.audio.frame(crate::audio::FrameIn::player(&view, dt, &self.player, &self.cw, &mut g.agents, &g.renderer, &self.world.elevation)); // audio
             g.renderer.update(&g.ctx.queue, &cam);
             let mut enc = g.ctx.device.create_command_encoder(&Default::default());
@@ -919,9 +940,30 @@ mod window {
                 None => (&tv, None),
             };
             g.renderer.encode(&mut enc, attach, resolve, &g.targets.depth, None);
+            if let (Some(ph), true) = (self.photo.as_ref(), photo_on) {
+                // the photo panel over the picture (never in a saved photo).
+                let ui = g.ui.get_or_insert_with(|| {
+                    let mut u = eo_ui::Ui::new(&g.ctx.device, &g.ctx.queue, Some(&self.world.paths.repo_root), None, None);
+                    u.set_screen(eo_ui::Screen::Hud);
+                    u
+                });
+                ui.photo = Some(ph.panel(aspect));
+                ui.set_time(self.process_start.elapsed().as_secs_f64());
+                let _ = ui.prepare(&g.ctx.device, &g.ctx.queue, &mut enc, g.config.width, g.config.height, &eo_ui::Input::default());
+                ui.draw(&g.ctx.device, &mut enc, &tv, g.config.format, None);
+            }
             eo_render::pace::submit(&g.ctx.queue, [enc.finish()]); // counted
             g.window.pre_present_notify();
             g.ctx.queue.present(surf);
+            if let Some(ph) = self.photo.as_mut() {
+                if let Some(scale) = ph.request.take() {
+                    let r = crate::photo::capture(&g.ctx, &g.renderer, &cam, (g.config.width, g.config.height), g.config.format, scale, ph.describe(&cam));
+                    match r {
+                        Ok(p) => ph.say(format!("Saved {}", p.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default())),
+                        Err(e) => ph.say(format!("Not saved: {e:#}")),
+                    }
+                }
+            }
             self.fps_frames += 1;
             let el = self.fps_t.elapsed().as_secs_f64();
             if el >= 1.0 {
@@ -936,7 +978,7 @@ mod window {
                     .map_or("", |d| d.action_hint());
                 let bed_hint = if self.player.mode == Mode::OnFoot && self.world.house.as_ref().is_some_and(|h| h.by_bed(pos)) { " - R: sleep until 07:00" } else { "" };
                 g.window.set_title(&format!(
-                    "Earth Online native - play - {:.0} fps - {mode} {:.1} m/s - player {:.2} ms avg / {:.2} max - F: car, V: new car, Esc: mouse{door_hint}{bed_hint}",
+                    "Earth Online native - play - {:.0} fps - {mode} {:.1} m/s - player {:.2} ms avg / {:.2} max - F: car, V: new car, P: photo mode, Esc: mouse{door_hint}{bed_hint}",
                     self.fps_frames as f64 / el,
                     speed,
                     self.player_ms_sum / self.fps_frames.max(1) as f64,
@@ -946,6 +988,26 @@ mod window {
                 self.player_ms_max = 0.0;
                 self.player_ms_sum = 0.0;
                 self.fps_t = Instant::now();
+            }
+        }
+
+        /// P: enter or leave photo mode.
+        fn toggle_photo(&mut self) {
+            let (Some(ph), Some(g)) = (self.photo.as_mut(), self.gfx.as_ref()) else { return };
+            if ph.on {
+                if let Some(h) = ph.leave() {
+                    g.renderer.look.set_time_of_day(h); // the game's hour again
+                }
+                g.renderer.photo_mode.set(None);
+            } else {
+                let aspect = g.config.width as f64 / g.config.height.max(1) as f64;
+                // the game's view (in the house, the eye camera) and its hour (slept or not).
+                let view = player_view(&mut self.player, &self.cw, &self.world, self.interior_eye, 0.0, aspect);
+                let cam = to_camera(&view, aspect as f32, self.args.far);
+                ph.game_hour = g.renderer.look.time_of_day();
+                ph.enter(&cam, crate::photo::anchor_of(self.player.position(&self.cw)));
+                self.raw.held.clear();
+                self.interact_requested = false;
             }
         }
 
@@ -1017,8 +1079,17 @@ mod window {
                         let name = format!("{code:?}");
                         match event.state {
                             ElementState::Pressed => {
+                                let photo_on = self.photo.as_ref().is_some_and(|p| p.on);
+                                if (code == crate::photo::TOGGLE && !event.repeat && self.photo.is_some()) || (code == KeyCode::Escape && photo_on) {
+                                    self.toggle_photo();
+                                    return;
+                                }
+                                if photo_on && self.photo.as_mut().is_some_and(|p| p.key(code)) {
+                                    return;
+                                }
                                 // A quick tap may start and finish between redraws.
-                                if code == KeyCode::KeyE && !event.repeat {
+                                // (in photo mode E flies the camera up: no interaction)
+                                if code == KeyCode::KeyE && !event.repeat && !photo_on {
                                     self.interact_requested = true;
                                 }
                                 if code == KeyCode::Escape {
@@ -1029,7 +1100,8 @@ mod window {
                                     }
                                     return;
                                 }
-                                if code == KeyCode::KeyR && !event.repeat && self.player.mode == Mode::OnFoot {
+                                // (photo mode holds the player and the hour: no sleeping)
+                                if code == KeyCode::KeyR && !event.repeat && self.player.mode == Mode::OnFoot && !photo_on {
                                     if let (Some(house), Some(g)) = (&self.world.house, &self.gfx) {
                                         if house.by_bed(self.player.character.feet()) {
                                             g.renderer.look.set_time_of_day(7.0);
@@ -1037,7 +1109,7 @@ mod window {
                                         }
                                     }
                                 }
-                                if code == KeyCode::KeyV && !event.repeat {
+                                if code == KeyCode::KeyV && !event.repeat && !photo_on {
                                     self.spawn_car_ahead();
                                 }
                                 self.raw.held.insert(name);
@@ -1046,6 +1118,15 @@ mod window {
                                 self.raw.held.remove(&name);
                             }
                         }
+                    }
+                }
+                WindowEvent::MouseWheel { delta, .. } => {
+                    if let Some(ph) = self.photo.as_mut().filter(|p| p.on) {
+                        let n = match delta {
+                            winit::event::MouseScrollDelta::LineDelta(_, y) => y as f64,
+                            winit::event::MouseScrollDelta::PixelDelta(p) => p.y / 40.0,
+                        };
+                        ph.wheel(n);
                     }
                 }
                 WindowEvent::RedrawRequested => self.redraw(),
