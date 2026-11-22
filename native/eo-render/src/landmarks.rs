@@ -305,6 +305,8 @@ pub fn append(scene: &mut Scene, set: &LandmarkSet, materials: &mut MaterialTabl
             let mat = materials.named(&format!("landmark:{}:{}", l.id, d.key), gm);
             let m = &d.mesh;
             if d.material.wire {
+                // the wire shader takes its material as never glass (landmarks_wire.wgsl `lm_wire2_fs`).
+                assert!(gm.flags & (F_GLASS | crate::authored::F_THIN_GLASS) == 0, "landmark {}: a wire draw ({}) with a glass material", l.id, d.key);
                 let (axes, dirs, radii) = (m.axes.as_ref().unwrap(), m.dirs.as_ref().unwrap(), m.radii.as_ref().unwrap());
                 let base = out.wire_vertices.len() as u32;
                 // the west span's suspender ropes carry its LEDs (alpha 0: lm_wire2_fs's mark).
@@ -951,14 +953,15 @@ impl LandmarksGpu {
                     ty: wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None },
                     count: None,
                 },
-                // the sky-view table and its sampler (the overlay's aerial perspective).
+                // the sky-view table and its sampler (the overlay's aerial perspective; its
+                // zenith gain is read in the vertex stage, `lm_atmo_gain`).
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                     ty: wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: true }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false },
                     count: None,
                 },
-                wgpu::BindGroupLayoutEntry { binding: 2, visibility: wgpu::ShaderStages::FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None },
+                wgpu::BindGroupLayoutEntry { binding: 2, visibility: wgpu::ShaderStages::VERTEX_FRAGMENT, ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering), count: None },
             ],
         });
         let lin = d.create_sampler(&wgpu::SamplerDescriptor {

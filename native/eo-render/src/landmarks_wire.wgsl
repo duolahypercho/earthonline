@@ -192,6 +192,9 @@ struct LmWire2Out {
     @location(3) @interpolate(flat) radius: f32,
     @location(4) color: vec4<f32>,
     @location(5) @interpolate(flat) material: u32,
+    // the atmosphere tables' gain toward the look's zenith (`lm_atmo_gain`:
+    // the same for every vertex of a frame), read once a vertex, not twice a pixel.
+    @location(6) @interpolate(flat) atmo_gain: f32,
 };
 
 @vertex
@@ -243,6 +246,10 @@ fn lm_wire2_vs(
     out.radius = radius;
     out.color = vec4<f32>(srgb_decode(color.rgb), color.a);
     out.material = material;
+    out.atmo_gain = 1.0;
+    if (LM_AIR_ON && skyu.flags.w == 1u && skyu.atmo2.x > 0.5) {
+        out.atmo_gain = lm_atmo_gain();
+    }
     return out;
 }
 
@@ -292,16 +299,23 @@ fn lm_led_bands(p: vec3<f32>, along: f32, t: f32) -> f32 {
     return clamp(on, 0.0, 1.0);
 }
 
+/// The gain that holds the atmosphere tables to the look's zenith
+/// (`lm_atmo_sky`): the tables' zenith luminance against the geometric mean
+/// of the look's dome and its own zenith, clamped. It depends on the frame
+/// alone, so the vertex stage reads it (`LmWire2Out::atmo_gain`).
+fn lm_atmo_gain() -> f32 {
+    let z = textureSampleLevel(lm_at_view, lm_at_lin, at_view_uv(vec3<f32>(0.0, 1.0, 0.0), skyu.atmo.xyz), 0.0).rgb;
+    let lz = dot(z, vec3<f32>(0.2126, 0.7152, 0.0722));
+    let tgt = sqrt(lk_luma(lk_sky_dome(vec3<f32>(0.0, 1.0, 0.0))) * dot(look.dome_zenith.xyz, vec3<f32>(0.2126, 0.7152, 0.0722)));
+    return clamp(tgt / max(lz, 1e-9), 0.2 * skyu.atmo.w, 400.0 * skyu.atmo.w);
+}
+
 /// The sky toward a direction from the atmosphere tables, as the volume
 /// draws it (sky_volume.wgsl `vol_atmo_sky`: the tables held to the look's
 /// zenith, the lowest 4 deg capped, green-led hues neutralised; the
 /// near-sun and twilight corrections are left out: the members' in-scatter
 /// looks toward the horizon, not at the sun).
-fn lm_atmo_sky(d: vec3<f32>) -> vec3<f32> {
-    let z = textureSampleLevel(lm_at_view, lm_at_lin, at_view_uv(vec3<f32>(0.0, 1.0, 0.0), skyu.atmo.xyz), 0.0).rgb;
-    let lz = dot(z, vec3<f32>(0.2126, 0.7152, 0.0722));
-    let tgt = sqrt(lk_luma(lk_sky_dome(vec3<f32>(0.0, 1.0, 0.0))) * dot(look.dome_zenith.xyz, vec3<f32>(0.2126, 0.7152, 0.0722)));
-    let g_look = clamp(tgt / max(lz, 1e-9), 0.2 * skyu.atmo.w, 400.0 * skyu.atmo.w);
+fn lm_atmo_sky(d: vec3<f32>, g_look: f32) -> vec3<f32> {
     var c = textureSampleLevel(lm_at_view, lm_at_lin, at_view_uv(d, skyu.atmo.xyz), 0.0).rgb * g_look;
     if (d.y > -0.02 && d.y < 0.0698) {
         let hd4 = sqrt(max(1.0 - d.y * d.y, 1e-6));
@@ -324,7 +338,7 @@ fn lm_atmo_sky(d: vec3<f32>) -> vec3<f32> {
 /// The members are drawn after that composite, so without it a rope 2 km
 /// off took no haze while the tower it hangs from took the volume's: the
 /// rope drew darker and more saturated than its own tower.
-fn lm_aerial(dir: vec3<f32>, dist: f32, eye_y: f32) -> vec4<f32> {
+fn lm_aerial(dir: vec3<f32>, dist: f32, eye_y: f32, g_look: f32) -> vec4<f32> {
     let dh = dir.y * dist;
     let dens = sky_path_density(dh);
     let ray = AT_RAY * 0.001 * exp(-max(eye_y + 0.5 * dh, 0.0) / 8000.0);
@@ -338,16 +352,22 @@ fn lm_aerial(dir: vec3<f32>, dist: f32, eye_y: f32) -> vec4<f32> {
     let wv = skyu.atmo3.x * (1.0 - exp(-3.0 * dist * inside / max(skyu.atmo3.w, 1.0)));
     let t = exp(-tau);
     let dh_dir = normalize(vec3<f32>(dir.x, max(abs(dir.y), 0.03), dir.z));
-    var col = lk_sky_dome(dh_dir);
+    // the dome and the tables toward `dh_dir`, each read once (the clear-air
+    // colour and the veil's both take them).
+    let dome = lk_sky_dome(dh_dir);
+    var cs = vec3<f32>(0.0);
     if (skyu.atmo2.x > 0.5) {
-        col = mix(col, lm_atmo_sky(dh_dir), skyu.atmo2.y);
+        cs = lm_atmo_sky(dh_dir, g_look);
+    }
+    var col = dome;
+    if (skyu.atmo2.x > 0.5) {
+        col = mix(col, cs, skyu.atmo2.y);
     }
     let tl = dot(t, vec3<f32>(0.2126, 0.7152, 0.0722));
     let cw0 = mix(skyu.amb_base.xyz, skyu.amb_top.xyz, 0.5) * 0.9;
-    let cl = dot(lk_sky_dome(dh_dir), vec3<f32>(0.2126, 0.7152, 0.0722));
+    let cl = dot(dome, vec3<f32>(0.2126, 0.7152, 0.0722));
     var colw = mix(cw0, vec3<f32>(cl) * vec3<f32>(0.98, 1.0, 1.02), 0.7) * 0.6;
     if (skyu.atmo2.x > 0.5) {
-        let cs = lm_atmo_sky(dh_dir);
         colw = mix(colw, mix(vec3<f32>(cl), cs, skyu.atmo2.y), above_top);
     } else {
         colw = mix(colw, vec3<f32>(cl) * vec3<f32>(0.99, 1.0, 1.01), above_top);
@@ -434,7 +454,11 @@ fn lm_wire2_fs(in: LmWire2Out) -> @location(0) vec4<f32> {
     }
     let facing = normalize(a - dir * dot(a, dir));
     let on_axis = in.axis + dir * dot(in.world - in.axis, dir);
-    let m = materials[in.material];
+    var m = materials[in.material];
+    // A wire member's material is never glass (landmarks.rs `append` asserts
+    // it): with the bits known clear, look_light's glazing and clearcoat
+    // branches compile out of this pipeline (the output is the same).
+    m.flags = m.flags & ~(F_GLASS | F_THIN_GLASS);
     var s: Surface;
     s.albedo = in.color.rgb;
     s.rough = clamp(m.params.x, 0.03, 1.0);
@@ -476,7 +500,7 @@ fn lm_wire2_fs(in: LmWire2Out) -> @location(0) vec4<f32> {
         // the volume's aerial perspective at the member's distance, as the resolve lays it on the scene.
         let rel = p - cam;
         let dist = length(rel);
-        let ap = lm_aerial(rel / max(dist, 1e-3), dist, cam.y);
+        let ap = lm_aerial(rel / max(dist, 1e-3), dist, cam.y, in.atmo_gain);
         c = c * ap.a + ap.rgb;
     }
     return vec4<f32>(c, clamp(cov, 0.0, 1.0));
