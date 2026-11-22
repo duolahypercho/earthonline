@@ -155,6 +155,35 @@ pub fn display_grey(v: f64, exposure: f64) -> f64 {
 /// them, a day-for-night look; the lamp pools and windows now carry the scene.
 pub const NIGHT_UNLIT_DISPLAY_255: f64 = 8.0;
 
+/// `--night-lift` (on unless `--no-night-lift`, read once): the night solved
+/// a stop brighter, as night photographs of the city and the reference
+/// frames show it, after the owner found the darker night's city light
+/// unreal (2026-11-22): unlit ground of albedo 0.18 at display 14 (the
+/// darker night's 8; the JS 16), the brightest at which an 18 % card under a
+/// street lamp's pool stays within photographic middle grey +-1 EV
+/// (photometric.rs `night_lamps_against_rp8`, 159 of its 161). The fill, the
+/// lamps and their lux scale are as before: everything is one exposure step.
+pub const NIGHT_LIFT_UNLIT_DISPLAY_255: f64 = 14.0;
+/// (`--night-lift`, `--look cinematic`) the cinematic night's unlit ground at 7 (its 3.5 doubled).
+pub const CINE_NIGHT_LIFT_UNLIT_DISPLAY_255: f64 = 7.0;
+
+pub fn night_lift() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| !std::env::args().any(|a| a == "--no-night-lift"))
+}
+
+/// The unlit display target the night solve uses: `NIGHT_LIFT_UNLIT_DISPLAY_255`
+/// under `--night-lift`, else `NIGHT_UNLIT_DISPLAY_255`.
+pub fn unlit_display_255() -> f64 {
+    if night_lift() { NIGHT_LIFT_UNLIT_DISPLAY_255 } else { NIGHT_UNLIT_DISPLAY_255 }
+}
+
+/// The cinematic night's unlit target: `CINE_NIGHT_LIFT_UNLIT_DISPLAY_255` under
+/// `--night-lift`, else `CINE_NIGHT_UNLIT_DISPLAY_255`.
+pub fn cine_unlit_display_255() -> f64 {
+    if night_lift() { CINE_NIGHT_LIFT_UNLIT_DISPLAY_255 } else { CINE_NIGHT_UNLIT_DISPLAY_255 }
+}
+
 /// The night solve: the exposure in [0.3, 5.2] that shows unlit ground of
 /// albedo 0.18 at display `NIGHT_UNLIT_DISPLAY_255` (sky-atmosphere.js solves for 16, 32 bisections). This
 /// port solves against the delivered display transform (three's ACES with
@@ -163,7 +192,7 @@ pub const NIGHT_UNLIT_DISPLAY_255: f64 = 8.0;
 pub fn night_exposure(f: &LookFrame, extra_ground_units: f64) -> f64 {
     let e = ground_fill(f, SIDEWALK_ENV) + key_on_ground(f) + extra_ground_units;
     let radiance = 0.18 * e / std::f64::consts::PI;
-    let target = NIGHT_UNLIT_DISPLAY_255 / 255.0;
+    let target = unlit_display_255() / 255.0;
     let (mut lo, mut hi) = (0.3, 5.2); // from 0.3 (0.9)
     for _ in 0..32 {
         let mid = 0.5 * (lo + hi);
@@ -281,7 +310,7 @@ pub fn cinematic_display_grey(v: f64, exposure: f64) -> f64 {
 pub fn cinematic_night_exposure(f: &LookFrame, extra_ground_units: f64) -> f64 {
     let e = ground_fill(f, SIDEWALK_ENV) + key_on_ground(f) + extra_ground_units;
     let radiance = 0.18 * e / std::f64::consts::PI;
-    let target = CINE_NIGHT_UNLIT_DISPLAY_255 / 255.0;
+    let target = cine_unlit_display_255() / 255.0;
     let (mut lo, mut hi) = (0.05, 5.2);
     for _ in 0..40 {
         let mid = 0.5 * (lo + hi);

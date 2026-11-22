@@ -521,7 +521,7 @@ selection:
 | World additions (opt-in) | `--no-structures`, `--no-tunnels` (the last of a switch and its `--no-` form wins; `eo-server` takes them too) |
 | Weather | `--no-rain`, `--no-wet`, `--no-wind` |
 | Camera finish | `--no-taa`, `--no-bloom`, `--no-adaptation`, `--no-ev100`, `--no-filmic`, `--no-ssr` |
-| Camera look and exposure | `--no-gg2-camera` (all three below), `--no-camera-look`, `--no-scene-meter`, `--no-lamp-photocell` |
+| Camera look and exposure | `--no-gg2-camera` (all three below), `--no-camera-look`, `--no-scene-meter`, `--no-lamp-photocell`, `--no-night-lift` (the darker night of 2026-11-17: unlit ground at 8/255, not 14) |
 | Daylight and sky | `--no-gg2-daylight` (all of these), `--no-ground-albedo`, `--no-photo-date`, `--no-clear-sky-state`, `--no-cirrus`; reserved, nothing reads them yet: `--no-terminator-bias`, `--no-spectral-sky` |
 | Golden Gate, fourth pass | `--no-bridges4` (all of these), `--no-bridge-shade2`, `--no-bridge-dielectric`, `--no-bridge-haunch`, `--no-bridge-bracing`, `--no-bridge-pylons`, `--no-bridge-arch2`, `--no-bridge-fender2`, `--no-bridge-crest`, `--no-bridge-collar` |
 | Strait water | `--no-gg2-water` (all of these), `--no-water-exposure`, `--no-water-current`, `--no-water-lean` (drawn from the `high` tier up, `--water-lean` below it), `--no-water-ppr-blur`, `--no-beach-profiles`, `--no-water-streak-caps`, `--no-water-far-calm`, `--no-baker-surf`; reserved: `--no-swash-line` |

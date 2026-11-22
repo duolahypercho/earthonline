@@ -706,7 +706,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-facade-typology" | "--no-wall-chroma" | "--no-roof-neutral" | "--no-far-roofs" => {}
             // the Golden Gate photo-realism pass's switches, each read by its crate from the command line
             // (the bridges' own are in eo_landmarks::suspension::SWITCHES, above).
-            "--no-gg2-camera" | "--no-camera-look" | "--no-scene-meter" | "--no-lamp-photocell" => {} // read by its crate (the camera)
+            "--no-gg2-camera" | "--no-camera-look" | "--no-scene-meter" | "--no-lamp-photocell" | "--no-night-lift" => {} // read by its crate (the camera)
             "--no-gg2-daylight" | "--no-ground-albedo" | "--no-photo-date" | "--no-cirrus" | "--no-clear-sky-state" | "--no-terminator-bias" | "--no-spectral-sky" => {} // read by its crate (the daylight)
             "--no-gg2-water" | "--no-water-exposure" | "--no-water-current" | "--no-water-ppr-blur" | "--no-beach-profiles" | "--no-water-streak-caps" | "--no-water-far-calm" | "--no-baker-surf" | "--no-swash-line" => {} // read by its crate (the water)
             "--no-gg2-ground" | "--no-beach-sand-limit" | "--no-sand-albedo" | "--no-rocks" | "--no-riprap" | "--no-pier-lines" | "--no-ground-steps" | "--no-season-seam" => {} // read by its crate (the shore ground)

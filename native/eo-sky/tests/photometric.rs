@@ -101,11 +101,11 @@ fn night_lamps_against_rp8() {
     println!("  grey card: unlit {unlit:.1} (JS solve 16), under the lamp {pool:.1}, 16 m out {between:.1}");
     let uni = report(&ph::STREET_UNIFORMITY_MAX_MIN, (e_fill / k + peak) / (e_fill / k + mid.min(peak)));
     let card = report(&ph::GREY_CARD_MIDDLE, pool);
-    // the unlit card at `night::NIGHT_UNLIT_DISPLAY_255` (8, the JS solves for 16):
-    // a departure the owner approved on 2026-11-17 ("Yes, darker nights"). Unlit ground
-    // is lit by the night sky and a little spill, so it shows at ~0.18-0.25 x the city's
-    // night sky (~26/255): 8/255. The tolerance is the one the 16 had.
-    assert!((unlit - night::NIGHT_UNLIT_DISPLAY_255).abs() < 1.5, "unlit ground at {unlit}");
+    // the unlit card at the night solve's target: `night::NIGHT_LIFT_UNLIT_DISPLAY_255`
+    // (14) under `--night-lift`, the brightest the grey card under the lamp allows, or
+    // the owner-approved darker night's `NIGHT_UNLIT_DISPLAY_255` (8, 2026-11-17) with
+    // `--no-night-lift`; the JS solves for 16. The tolerance is the one the 16 had.
+    assert!((unlit - night::unlit_display_255()).abs() < 1.5, "unlit ground at {unlit}");
     assert!(uni && card);
 }
 
