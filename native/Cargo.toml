@@ -2,6 +2,9 @@
 resolver = "2"
 members = ["eo-data", "eo-assets", "eo-kit", "eo-street", "eo-render", "eo-app", "eo-sim", "eo-player", "eo-ui", "eo-look", "eo-agents", "eo-props", "eo-net", "eo-server", "eo-water", "eo-sky", "eo-landmarks", "eo-audio", "eo-farshore", "eo-structures"]
 
+[workspace.package]
+license = "FSL-1.1-ALv2"
+
 [profile.release]
 debug = 1
 

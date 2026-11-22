@@ -2,6 +2,7 @@
 name = "eo-app"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Earth Online native slice: windowed fly-through and offscreen --bench"
 publish = false
 

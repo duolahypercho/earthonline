@@ -2,6 +2,7 @@
 name = "eo-ui"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Earth Online interface on wgpu: title, loading, pause, settings, HUD and map, with the JS game's design tokens"
 publish = false
 

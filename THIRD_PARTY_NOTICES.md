@@ -1,6 +1,6 @@
 # Third-party notices
 
-Earth Online's own code is MIT licensed (see [LICENSE](LICENSE)). This file
+Earth Online's own code is FSL-1.1-ALv2 licensed (see [LICENSE](LICENSE)). This file
 lists the third-party code, data and assets the project ships or reads, with
 their licences and where the full terms and provenance are kept. It keeps
 only what the records in this repository support; entries that could not be

@@ -2,6 +2,7 @@
 name = "eo-landmarks"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Earth Online native (landmarks): the JS game's bridges, shore edges, piers and open spaces as plain meshes, ported from its generators. No GPU."
 publish = false
 

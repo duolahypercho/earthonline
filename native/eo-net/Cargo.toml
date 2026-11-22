@@ -2,6 +2,7 @@
 name = "eo-net"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Earth Online online foundation: UDP transport with its own reliability and ordering, the session handshake, snapshot replication (interest, delta compression, quantisation, bandwidth budget), client prediction, reconciliation and interpolation (no GPU)"
 publish = false
 

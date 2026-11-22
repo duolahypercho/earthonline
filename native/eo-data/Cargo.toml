@@ -2,6 +2,7 @@
 name = "eo-data"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Loaders for Earth Online's San Francisco data files"
 publish = false
 

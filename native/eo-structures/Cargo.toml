@@ -2,6 +2,7 @@
 name = "eo-structures"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Earth Online grade-separated roads (freeways, ramps, road bridges, tunnels): vertical profiles, deck, support and portal meshes, collision triangles (no GPU)"
 publish = false
 

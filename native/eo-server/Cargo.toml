@@ -2,6 +2,7 @@
 name = "eo-server"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Earth Online headless authoritative server: the simulation regions, every player's controller, interest-managed snapshots over UDP, scripted bot clients and the server bench (no GPU)"
 publish = false
 

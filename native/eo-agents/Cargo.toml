@@ -2,6 +2,7 @@
 name = "eo-agents"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Moving things on screen: the simulated cars and people and the player, as GPU-ready meshes, skeletal animation and per-frame instances (no GPU code)"
 
 [dependencies]

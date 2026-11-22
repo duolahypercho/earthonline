@@ -127,16 +127,32 @@ Earth Online.
 
 ## Licence
 
-The source code is MIT licensed; see [LICENSE](LICENSE).
+The source code is licensed under the
+[Functional Source License, Version 1.1, ALv2 Future License](LICENSE)
+(FSL-1.1-ALv2). The LICENSE file is the binding text; in short:
+
+- You may use, copy, modify and redistribute the code for any purpose
+  except a competing use: making it available to others in a commercial
+  product or service that substitutes for Earth Online or offers the same
+  or substantially similar functionality. Internal use, non-commercial
+  education and non-commercial research are expressly permitted.
+- Each version also becomes available under the Apache License 2.0 two
+  years after it is published.
+- For a use the licence does not permit, ask the copyright holder for a
+  separate commercial licence.
+
+Earlier versions of this repository were published under the MIT licence,
+and copies of those versions stay under it.
 
 Third-party work keeps its own terms, recorded in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Two points matter before
 you redistribute:
 
-- **The map data is not MIT.** The OpenStreetMap-derived files in
-  `public/data/sf/` are licensed under the ODbL 1.0, which is share-alike
-  for derived databases: if you publish a modified version of that data,
-  you must publish it under the ODbL too. It does not apply to your code.
+- **The map data is not under the code licence.** The OpenStreetMap-derived
+  files in `public/data/sf/` are licensed under the ODbL 1.0, which is
+  share-alike for derived databases: if you publish a modified version of
+  that data, you must publish it under the ODbL too. The ODbL does not
+  apply to your code.
 - **Assets carry mixed licences** (CC0, MIT, CC BY and others), and a few
   are marked unconfirmed in the notices. Check an asset's provenance file
   before you reuse it on its own.

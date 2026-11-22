@@ -2,7 +2,7 @@
   "name": "san-francisco-realtime",
   "private": true,
   "version": "0.1.0",
-  "license": "MIT",
+  "license": "FSL-1.1-ALv2",
   "type": "module",
   "scripts": {
     "assets:lock": "node scripts/assets/build-lock.mjs",

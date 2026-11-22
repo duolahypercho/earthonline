@@ -2,6 +2,7 @@
 name = "eo-sky"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Earth Online native: sky, weather, night and camera-finish models as pure functions (weather schedule, cloud decks, moon, night practicals, exposure, photometric references, street lamp records). No GPU."
 publish = false
 
