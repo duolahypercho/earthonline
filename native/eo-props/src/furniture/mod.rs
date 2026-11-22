@@ -439,6 +439,44 @@ struct TreeRec {
 // the furniture world
 // ---------------------------------------------------------------------------
 
+/// The surveyed-first walk (`--surveyed-furniture`; off: the JS walk as ported).
+///
+/// The JS fills the gaps between surveyed items with a hashed walk that picks
+/// kinds by weight, the same on a residential block as on a shopping street:
+/// over a citywide sample of 265 tiles it stands 4,486 bollards, 1,588
+/// planters, 1,717 bins, 1,305 benches and 1,045 post boxes, and on the
+/// citywide audit (eo-app `EO_CAPTURE_STREETS`) a bollard is on 13 of 24
+/// streets. The surveys of what stands on SF's kerbs (stops, trees, meters,
+/// hydrants, benches, bins, post boxes, bike racks) cover only part of the
+/// city, so the walk must still fill in; with this on it fills in what a
+/// San Francisco footway has: a slot the walk gives to a kind rare on SF
+/// footways (`RARE_KINDS`: bollards, planters, barricades, scaffolding,
+/// newsracks) stays empty, and one it gives to a street-commerce kind
+/// (`COMMERCE_KINDS`: benches, bins, post boxes, bike racks, café sets,
+/// sandwich boards) stays empty unless the frontage there trades (retail, a
+/// shop, a ground-floor use, a trade usage). An emptied slot is stepped over
+/// as a placed item would be, with the same one draw, so the walk's later
+/// draws line up with the JS walk's; where the JS stepped only 1.6 m past a
+/// placement that failed, the other hashed kinds thin a little (hydrants by
+/// about a sixth on that sample, to about one every 170 m of footway). A
+/// corner keeps its forced sign pole and its hashed hydrant but not its
+/// hashed bollard. Surveyed and observed items are placed as before.
+static SURVEYED_FIRST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Kinds rare on San Francisco footways: a walk slot given to one stays empty under `--surveyed-furniture`.
+pub const RARE_KINDS: [&str; 5] = ["bollard", "planter", "barricade", "scaffold", "newsBox"];
+/// Street-commerce kinds: a walk slot given to one stays empty away from a trading frontage under `--surveyed-furniture`.
+pub const COMMERCE_KINDS: [&str; 6] = ["bench", "wasteBin", "mailbox", "bikeRack", "cafeSet", "sandwichBoard"];
+
+/// Set before the furniture world is built (eo-app, from `--surveyed-furniture`).
+pub fn set_surveyed_first(on: bool) {
+    SURVEYED_FIRST.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn surveyed_first() -> bool {
+    SURVEYED_FIRST.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 pub struct Furniture {
     pub js: FurnitureJs,
     pub kinds: Vec<KindSpec>,
@@ -458,6 +496,9 @@ pub struct Furniture {
     pub lamp_through_m: f64,
     /// Refuse a seat inside a drawn footprint the JS index lacks (on; `EO_FURNITURE_PACK_GUARD=0` turns it off).
     pub guard_pack: bool,
+    /// `--surveyed-furniture` (`surveyed_first()` when the world was built): the hashed walk
+    /// invents nothing the city surveys and none of the rare kinds (`SURVEYED_FIRST_DROP`).
+    pub surveyed_first: bool,
     lamp_colour: [f32; 3],
     node_cache: Mutex<HashMap<u32, Arc<Vec<Item>>>>,
     entry_cache: Mutex<HashMap<u32, Arc<EntryFurniture>>>,
@@ -603,6 +644,7 @@ impl Furniture {
             dist_ways,
             lamp_through_m: w.std.throughway_min,
             guard_pack: std::env::var("EO_FURNITURE_PACK_GUARD").map(|v| v != "0").unwrap_or(true),
+            surveyed_first: surveyed_first(),
             lamp_colour,
             node_cache: Mutex::new(HashMap::new()),
             entry_cache: Mutex::new(HashMap::new()),
@@ -1265,7 +1307,8 @@ impl<'a> Walk<'a> {
         if hash % 5 == 0 {
             wanted.push("hydrant");
         }
-        if hash % 3 == 0 {
+        // (`--surveyed-furniture`) the corner's hashed bollard: none.
+        if hash % 3 == 0 && !self.f.surveyed_first {
             wanted.push("bollard");
         }
         let dir = if app.at_start { 1.0 } else { -1.0 };
@@ -1420,6 +1463,14 @@ impl<'a> Walk<'a> {
                 continue;
             };
             let kr = f.kinds[k].radius;
+            // (`--surveyed-furniture`) a rare kind's slot, and a street-commerce kind's away from a
+            // trading frontage, stay empty: the walk steps on as if the item stood there, with the
+            // same one draw a placement spends, so its later draws (every other item) are as before.
+            if f.surveyed_first && self.sf_drops(k, frontage) {
+                let step = (kr * 2.0 + 0.5).max(0.9) + base_pitch * pitch_scale * (if at_corner { 0.75 } else { 1.0 }) * (0.6 + rng.next() * 0.7);
+                station += if at_corner { (kr * 2.0 + 0.35).max(step * corner_pitch) } else { step };
+                continue;
+            }
             if self.place(&sc, self.spec(station, k)).is_some() {
                 last_at.insert(k, station);
                 last_placed = Some(k);
@@ -1429,6 +1480,23 @@ impl<'a> Walk<'a> {
                 station += 1.6 + rng.next();
             }
         }
+    }
+
+    /// (`--surveyed-furniture`) Whether the walk's choice of kind `k` with this frontage is left empty.
+    fn sf_drops(&self, k: usize, frontage: Option<u32>) -> bool {
+        let f = self.f;
+        let id = f.kinds[k].id.as_str();
+        if RARE_KINDS.contains(&id) {
+            return true;
+        }
+        if !COMMERCE_KINDS.contains(&id) {
+            return false;
+        }
+        let b = &f.buildings;
+        let trades = frontage.map(|i| &b.recs[i as usize]).is_some_and(|r| {
+            r.retail || r.shop || r.use_.is_some() || r.usage.is_some_and(|u| f.js.consts.frontage_trade_usages.iter().any(|x| x == &b.usages[u as usize]))
+        });
+        !trades
     }
 
     /// `chooseKind(state, context, draw)`.
