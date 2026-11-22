@@ -1,14 +1,16 @@
 //! the people's motion: the Rocketbox people's own clips for standing
 //! still, and walk styles from 100STYLE, cooked into baked joint-matrix tables.
 //!
-//! Sources, outside the repository, each file checked against its manifest
-//! (byte length + SHA-256) before it is parsed; nothing in them runs:
-//!   * `EO_PEOPLE_MOTIONS_ROOT` (no default):
+//! Sources, not in Git (`scripts/setup-assets.py` fetches them into
+//! `<repo>/external/`; each variable below names another folder instead),
+//! each file checked against its manifest (byte length + SHA-256) before it
+//! is parsed; nothing in them runs:
+//!   * `external/people-motions`, or `EO_PEOPLE_MOTIONS_ROOT`:
 //!     CodePawl's `rocketbox-motions-glb`, `objects/` tier, pinned in
 //!     `assets/rocketbox-motions-manifest.json`: the 326 in-place clips of the
 //!     Microsoft Rocketbox library (MIT), each on a Rocketbox avatar's own
 //!     80-bone copy of the Bip01 skeleton.
-//!   * `EO_PEOPLE_STYLES_ROOT` (no default):
+//!   * `external/people-styles`, or `EO_PEOPLE_STYLES_ROOT`:
 //!     CodePawl's `100style-glb`, `skeleton/` tier, pinned in
 //!     `assets/100style-manifest.json`: the forward walks of the `STYLES`
 //!     below on the 23-joint source skeleton (CC BY 4.0, The 100STYLE Dataset
@@ -63,8 +65,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-pub const CLIPS_ROOT_ENV: &str = "EO_PEOPLE_MOTIONS_ROOT";
-pub const STYLES_ROOT_ENV: &str = "EO_PEOPLE_STYLES_ROOT";
+pub const CLIPS_ROOT_ENV: &str = eo_data::external::PEOPLE_MOTIONS.env;
+pub const STYLES_ROOT_ENV: &str = eo_data::external::PEOPLE_STYLES.env;
 /// `--no-rocketbox-motions` as an environment switch (children of a test inherit it).
 pub const OFF_ENV: &str = "EO_NO_ROCKETBOX_MOTIONS";
 /// Bump when this cook changes (part of the agent library's cache key).
@@ -266,17 +268,25 @@ pub struct MotionRoots {
 }
 
 impl MotionRoots {
-    /// The roots the environment names that hold a copy
-    /// (`LICENSES.md` and the tier folder); none when switched off.
+    /// The motion folders this run ([`MotionRoots::folders`]) that hold a
+    /// copy (`LICENSES.md` and the tier folder); none when switched off.
     pub fn from_env() -> Self {
         if !enabled() {
             return Self::default();
         }
-        let pick = |env: &str, tier: &str| -> Option<PathBuf> {
-            let p = std::env::var_os(env).filter(|v| !v.is_empty()).map(PathBuf::from)?;
+        let (clips, styles) = Self::folders();
+        let pick = |p: Option<PathBuf>, tier: &str| -> Option<PathBuf> {
+            let p = p?;
             (p.join("LICENSES.md").is_file() && p.join(tier).is_dir()).then_some(p)
         };
-        Self { clips: pick(CLIPS_ROOT_ENV, "objects"), styles: pick(STYLES_ROOT_ENV, "skeleton") }
+        Self { clips: pick(clips, "objects"), styles: pick(styles, "skeleton") }
+    }
+
+    /// Where the clips and the walks are looked for: the folders
+    /// `EO_PEOPLE_MOTIONS_ROOT` and `EO_PEOPLE_STYLES_ROOT` name, else
+    /// `<repo>/external/people-motions` and `<repo>/external/people-styles`.
+    pub fn folders() -> (Option<PathBuf>, Option<PathBuf>) {
+        (eo_data::external::PEOPLE_MOTIONS.root(), eo_data::external::PEOPLE_STYLES.root())
     }
 
     pub fn any(&self) -> bool {
@@ -960,6 +970,20 @@ pub fn walk_step(m: &MotionMeta, w: &mut WalkerMotion, pool: usize, id: u32, gai
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The motion folders are `<repo>/external/people-motions` and
+    /// `people-styles` unless their variables name others.
+    #[test]
+    fn motion_folders_default_to_external() {
+        let repo = eo_data::DataPaths::discover().expect("the repository").repo_root;
+        let (clips, styles) = MotionRoots::folders();
+        for (env, dir, got) in [(CLIPS_ROOT_ENV, "people-motions", clips), (STYLES_ROOT_ENV, "people-styles", styles)] {
+            match std::env::var_os(env).filter(|v| !v.is_empty()) {
+                Some(v) => assert_eq!(got, Some(PathBuf::from(v)), "{env}"),
+                None => assert_eq!(got, Some(repo.join("external").join(dir)), "{env}"),
+            }
+        }
+    }
 
     fn meta() -> MotionMeta {
         let mut m = MotionMeta { walk: "100style".into(), walk_frames: WALK_FRAMES, ..Default::default() };

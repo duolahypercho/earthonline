@@ -358,7 +358,10 @@ impl AudioRuntime {
         let _ = eo_audio::WORKER_STARTED.set(eo_render::hitch::worker_started);
         let root = eo_audio::bank::Bank::root_from_env();
         if output != Output::Off && root.is_none() {
-            eprintln!("audio: no sound bank (EO_AUDIO_ROOT not set or holds no copy; silent)");
+            eprintln!("audio: no sound bank (no copy at {}; silent)", eo_data::external::AUDIO.looked_in());
+        }
+        if let (true, Some(r)) = (output != Output::Off, &root) {
+            eprintln!("audio: sound bank from {}", r.display());
         }
         let engine = Engine::start(output, root);
         let (tx, rx) = std::sync::mpsc::channel();
@@ -693,7 +696,7 @@ fn render_main(raw: &[String], k: usize, process_start: Instant) -> Result<()> {
     let street: Arc<eo_street::StreetWorld> = crate::streets::spawn(crate::streets::spawn_plan(), &city, &elevation).join().map_err(|_| anyhow!("street thread"))??;
     let land = eo_data::LandCover::load(&paths).ok();
     let grid = PlaceGrid::build(&city, land.as_ref());
-    let root = eo_audio::bank::Bank::root_from_env().ok_or_else(|| anyhow!("no sound bank (EO_AUDIO_ROOT not set or holds no copy)"))?;
+    let root = eo_audio::bank::Bank::root_from_env().ok_or_else(|| anyhow!("no sound bank (no copy at {})", eo_data::external::AUDIO.looked_in()))?;
     let bank = Arc::new(eo_audio::bank::Bank::load(&eo_audio::bank::Manifest::embedded()?, &root));
     if !bank.errors.is_empty() {
         anyhow::bail!("{} clips refused: {:?}", bank.errors.len(), &bank.errors[..bank.errors.len().min(3)]);

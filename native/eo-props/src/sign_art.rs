@@ -1,11 +1,13 @@
 //! authoritative sign artwork and an open sign font for the sign
-//! atlases, read from OUTSIDE the repository and verified.
+//! atlases, read from a folder Git does not track, and verified.
 //!
 //! * **Provenance**: `eo-props/data/sign-art-manifest.json` (written by
 //!   `native/tools/fetch-sign-art.mjs`) lists every downloaded file with its
 //!   source URL (and the ZIP entry it came from), its licence or
 //!   public-domain basis, the retrieval date, its size and SHA-256. Files are
-//!   read from the folder `EO_SIGN_ART_ROOT` names (no default). Every file
+//!   read from `<repo>/external/sign-art` (git-ignored, filled by
+//!   `scripts/setup-assets.py`), or the folder `EO_SIGN_ART_ROOT` names
+//!   instead. Every file
 //!   is read and its SHA-256 compared with the manifest before anything is
 //!   drawn; one missing or different file and [`SignArt::load`] fails, the
 //!   caller keeps today's drawings (the browser game's canvas port in
@@ -99,9 +101,10 @@ impl Manifest {
     }
 }
 
-/// The folder `EO_SIGN_ART_ROOT` names; None when it is not set (the drawn faces stay).
+/// The art's folder this run: the one `EO_SIGN_ART_ROOT` names, else
+/// `<repo>/external/sign-art`; None when neither is known (the drawn faces stay).
 pub fn root() -> Option<PathBuf> {
-    std::env::var_os("EO_SIGN_ART_ROOT").filter(|v| !v.is_empty()).map(PathBuf::from)
+    eo_data::external::SIGN_ART.root()
 }
 
 /// The manifest's files, read and checked against their SHA-256 (all or nothing).
@@ -186,13 +189,13 @@ impl SignArt {
     /// folder is missing or any file fails its check: the drawings stay.
     pub fn load_default() -> Option<Self> {
         let Some(r) = root() else {
-            eprintln!("eo-props: official sign art not used (EO_SIGN_ART_ROOT is not set); the sign atlases keep the drawn faces");
+            eprintln!("eo-props: official sign art not used (no sign art folder: {}); the sign atlases keep the drawn faces", eo_data::external::SIGN_ART.looked_in());
             return None;
         };
         match Self::load(&r) {
             Ok(a) => Some(a),
             Err(e) => {
-                eprintln!("eo-props: official sign art not used ({e:#}); the sign atlases keep the drawn faces (fetch it with `node native/tools/fetch-sign-art.mjs`, or point EO_SIGN_ART_ROOT at it)");
+                eprintln!("eo-props: official sign art not used ({e:#}); the sign atlases keep the drawn faces (fetch it with `python3 scripts/setup-assets.py --only sign-art`, or point EO_SIGN_ART_ROOT at a copy)");
                 None
             }
         }

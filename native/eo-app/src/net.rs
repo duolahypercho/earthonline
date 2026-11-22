@@ -216,6 +216,7 @@ fn parse(raw: &[String]) -> Result<(Args, NetOpts)> {
             }
             "--low-camera" | "--default-camera" => {}
             s if eo_landmarks::suspension::SWITCHES.contains(&s) => {} // eo_landmarks::suspension::features
+            "--no-external" => {} // main's `external_flag`
             other => anyhow::bail!("--connect: unknown argument {other} (see native/eo-app/src/net.rs)"),
         }
     }

@@ -1,7 +1,8 @@
 //! the Rocketbox clips and the 100STYLE walks on the Rocketbox
-//! people. The checks that read the copies (`EO_PEOPLE_ROOT`,
-//! `EO_PEOPLE_MOTIONS_ROOT`, `EO_PEOPLE_STYLES_ROOT`) are skipped without
-//! them. `-- --nocapture` prints what was measured.
+//! people. The checks that read the copies (in `<repo>/external/people`,
+//! `people-motions` and `people-styles`, or the folders `EO_PEOPLE_ROOT`,
+//! `EO_PEOPLE_MOTIONS_ROOT` and `EO_PEOPLE_STYLES_ROOT` name) are skipped
+//! without them. `-- --nocapture` prints what was measured.
 
 use eo_agents::motion::{self, Family, Manifest, ROLES, STYLES};
 use eo_agents::rocketbox::{self, BakeSrc, BipSkeleton, JOINTS};

@@ -9,10 +9,12 @@ confirmed from those records are marked **Unconfirmed**.
 The repository has three kinds of third-party material:
 
 1. **Shipped**: files tracked in this repository.
-2. **Read when present**: optional content the program reads from a folder
-   outside the repository. The repository holds only a manifest that pins
-   each file by size and SHA-256; the files themselves are fetched from
-   their source and are not redistributed here.
+2. **Read when present**: optional content the program reads from the
+   git-ignored `external/` folder at the repository root (or from a folder
+   an environment variable names). The repository holds only a manifest
+   that pins each file by size and SHA-256; the files themselves are
+   downloaded from their source by `scripts/setup-assets.py`, are never
+   committed, and are not redistributed here.
 3. **Dependencies**: Rust crates fetched by Cargo at build time.
 
 No source, agency or author listed here endorses Earth Online.
@@ -176,8 +178,11 @@ for the props and other vehicles in traffic.
 
 ## Read when present (not in the repository)
 
-These are fetched from their source into a folder outside the repository;
-the manifests named here pin every file.
+These are downloaded from their source into `external/` by
+`scripts/setup-assets.py` and never committed; the manifests named here pin
+every file. The aerial imagery and the Golden Gate survey set are not part
+of that setup: the imagery is fetched by its own tool, and the survey set is
+read from the folder `EO_SURVEY_ROOT` names.
 
 - **Microsoft Rocketbox Avatar Library**: MIT License, Copyright (c) 2020
   Microsoft, https://github.com/microsoft/Microsoft-Rocketbox. The avatars

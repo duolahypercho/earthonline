@@ -393,7 +393,7 @@ pub fn run(io: &mut Io, dir: &Path, timeout: f64) -> Result<()> {
     let people = io.people_drawable();
     let agents_on = io.agents.opts.on;
     let lib = io.agents.lib.clone();
-    let no_people = "no pedestrians: the optional people assets (EO_PEOPLE_ROOT, EO_PEOPLE_MOTIONS_ROOT, EO_PEOPLE_STYLES_ROOT) are absent or do not match their manifests, or --no-rocketbox; the simulation's people are not drawn".to_string();
+    let no_people = "no pedestrians: the optional people assets (external/people, people-motions and people-styles, or EO_PEOPLE_ROOT, EO_PEOPLE_MOTIONS_ROOT, EO_PEOPLE_STYLES_ROOT) are absent or do not match their manifests, or --no-rocketbox; the simulation's people are not drawn".to_string();
     let no_traffic = "no traffic: --no-agents".to_string();
     let mut cards: Vec<Card> = vec![];
     let card = |number: u8, name: &'static str, hour: f64, weather: Kind, place, unmet: Vec<String>| Card { number, name, hour, weather, place, unmet, extras: vec![], hide_near: vec![], sub: None };

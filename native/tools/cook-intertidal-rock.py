@@ -1,6 +1,10 @@
 """Pack the pinned coastal scan into the three texture layers used by the game.
 
-python3 native/tools/cook-intertidal-rock.py /path/to/external/cc0
+python3 native/tools/cook-intertidal-rock.py external/cc0
+
+The source is the CC0 store: `<repo>/external/cc0` (filled by
+`scripts/setup-assets.py`) or a copy outside the repository (the folder
+EO_CC0_ROOT names). Every other folder inside the repository is refused.
 """
 import argparse
 import hashlib
@@ -15,9 +19,14 @@ SIZE = 512
 ROLES = ("albedo", "normal", "arm")
 
 
+def check_root(root):
+    """`root` (resolved) is `<repo>/external/cc0` or outside the repository."""
+    if (root == REPO or REPO in root.parents) and root != (REPO / "external" / "cc0").resolve():
+        raise ValueError("use the external CC0 store (<repo>/external/cc0, or a copy outside the repository)")
+
+
 def cook(root):
-    if root == REPO or REPO in root.parents:
-        raise ValueError("use the external CC0 store")
+    check_root(root)
     manifest = json.loads((REPO / "native/assets/cc0-manifest.json").read_text())
     source = next(a for a in manifest["assets"] if a["id"] == "seaside_rock")
     inputs = []

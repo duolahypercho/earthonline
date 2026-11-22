@@ -63,7 +63,7 @@ pub const REVETMENT_BOX_SURVEYED: [f64; 4] = [-5200.0, -4000.0, -4480.0, -3300.0
 
 /// The stones' albedo: the mean linear albedo of the CC0 scan each draws
 /// with (Poly Haven `seaside_rock` and `granite_wall`, 2k diffuse maps under
-/// `EO_CC0_ROOT`, provenance in native/assets/cc0-manifest.json), so the
+/// `external/cc0` or `EO_CC0_ROOT`, provenance in native/assets/cc0-manifest.json), so the
 /// scan's detail sits on its own measured tone: the boulders' dark sea-worn
 /// rock (luminance 0.056) and the armour's quarried granite (0.129).
 pub const BOULDER_ALBEDO: Rgb = [0.0637, 0.0546, 0.0403];

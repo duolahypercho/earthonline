@@ -244,7 +244,8 @@ fn is_ring(t: &FarTerrain) -> bool {
 }
 
 /// The outer ring for this process: from the cache (`<cache>/farshore/outer-<key>.eofs`),
-/// else cooked from `EO_DEM_ROOT`'s tiles (and cached), else None (no ring: the
+/// else cooked from the DEM folder's tiles (`eo_farshore::dem_root`: `external/dem`
+/// or the folder `EO_DEM_ROOT` names; cached), else None (no ring: the
 /// inner cook's rim is skirted to the horizon instead).
 pub fn load_or_bake(cache: Option<&Path>) -> Result<Option<FarTerrain>> {
     let file = cache.map(|c| c.join("farshore").join(format!("outer-{}.eofs", cache_key())));
@@ -258,12 +259,12 @@ pub fn load_or_bake(cache: Option<&Path>) -> Result<Option<FarTerrain>> {
         }
     }
     let Some(dem) = eo_farshore::dem_root() else {
-        eprintln!("farshore: no outer ring: EO_DEM_ROOT is not set and no cooked ring is cached");
+        eprintln!("farshore: no outer ring: no DEM folder ({}) and no cooked ring is cached", eo_data::external::DEM.looked_in());
         return Ok(None);
     };
     let manifest = DemManifest::get();
     if manifest.tiles.iter().any(|t| !dem.join(&t.file).is_file()) {
-        eprintln!("farshore: no outer ring: the DEM tiles are not all under {}", dem.display());
+        eprintln!("farshore: no outer ring: the DEM tiles are not all under {} (fetch them with `python3 scripts/setup-assets.py --only dem`, or set EO_DEM_ROOT)", dem.display());
         return Ok(None);
     }
     let t = bake(&dem)?;

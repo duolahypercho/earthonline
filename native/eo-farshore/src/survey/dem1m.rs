@@ -155,7 +155,7 @@ mod tests {
     /// The tiles open, the headland at Battery Spencer stands well above the
     /// sea (a plausibility range, 100-180 m), the strait under the bridge has
     /// no land height, and the 1 m height agrees with the far shore's
-    /// independent 1 arc-second DEM there within 15 m (EO_DEM_ROOT, if set).
+    /// independent 1 arc-second DEM there within 15 m (when the DEM folder, `external/dem` or EO_DEM_ROOT, holds it).
     #[test]
     fn heights_at_the_headland_and_the_strait() {
         let Some(root) = super::super::tests::root_or_skip("dem1m") else { return };

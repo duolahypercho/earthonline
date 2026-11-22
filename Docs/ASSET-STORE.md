@@ -13,9 +13,10 @@ runtime reads, so the binaries live in an object store and only
 beside them stays in Git.
 
 This store is separate from the optional runtime content (people, motions,
-scanned surfaces, sound, sign art, far-shore terrain), which is fetched from
-its original source; see
-[native/README.md](../native/README.md#optional-off-repository-assets).
+scanned surfaces, sound, sign art, far-shore terrain), which
+`scripts/setup-assets.py` downloads from its original source into the
+git-ignored `external/` folder; see
+[native/README.md](../native/README.md#optional-assets).
 
 ## Layout
 

@@ -163,7 +163,7 @@ impl AgentRuntime {
         }
         let repo = world.paths.repo_root.clone();
         let cache = crate::cache_dir(args);
-        // the Rocketbox people unless `--no-rocketbox` (or no copy at EO_PEOPLE_ROOT): then none.
+        // the Rocketbox people unless `--no-rocketbox` (or no copy in the people folder: external/people or EO_PEOPLE_ROOT): then none.
         let people = if args.rocketbox { eo_agents::library::PeopleSource::from_env() } else { eo_agents::library::PeopleSource::Off };
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::Builder::new()

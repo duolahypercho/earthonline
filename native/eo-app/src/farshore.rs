@@ -1,6 +1,6 @@
 //! the far terrain's load (on its own thread beside the world
 //! load: the cooked file from the cache, else cooked from the USGS DEM in
-//! `EO_DEM_ROOT`, else none) and its attach to the renderer. `--no-farshore`
+//! `external/dem` or the folder `EO_DEM_ROOT` names, else none) and its attach to the renderer. `--no-farshore`
 //! or `EO_FARSHORE=0` leaves it out (the "before" of every comparison).
 
 use std::path::{Path, PathBuf};

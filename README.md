@@ -36,13 +36,16 @@ start, and what to do when your computer blocks an unsigned program.
 ## Quick start
 
 To build it yourself, you need a stable Rust toolchain (Rust 1.88 or newer, from
-[rustup](https://rustup.rs)), a C/C++ compiler, and a GPU that supports
-Vulkan, DirectX 12 or Metal. The project is developed and tested on
-Windows; Linux and macOS are untested.
+[rustup](https://rustup.rs)), a C/C++ compiler, a GPU that supports
+Vulkan, DirectX 12 or Metal, and Python 3 for the one-time asset
+download. The project is developed and tested on Windows; Linux and macOS
+are untested.
 
 ```sh
 git clone <repository-url> earth-online
-cd earth-online/native
+cd earth-online
+python3 scripts/setup-assets.py            # once: the optional assets into external/ (about 2 GB)
+cd native
 cargo run --release -p eo-app              # fly through the city
 cargo run --release -p eo-app -- --play    # walk and drive
 cargo run --release -p eo-app -- --ui      # with the title screen and HUD
@@ -53,15 +56,20 @@ cooked into `native/cache/` (several gigabytes), and later starts read that
 cache.
 
 Everything needed to run is in the repository. Street people, sound, the
-scanned CC0 surfaces, official sign art and the far-shore relief need
-optional folders outside the repository, each fetched from its source and
-named by an environment variable (`EO_PEOPLE_ROOT`,
-`EO_PEOPLE_MOTIONS_ROOT` and `EO_PEOPLE_STYLES_ROOT` for people,
-`EO_AUDIO_ROOT`, `EO_CC0_ROOT`, `EO_SIGN_ART_ROOT`, `EO_DEM_ROOT`). Without
-them the game still runs, and those features are off. See
-[native/README.md](native/README.md#optional-off-repository-assets) for what
-each one adds and how to get it, and for every command-line switch,
-environment variable and test.
+scanned CC0 surfaces, official sign art and the far-shore relief come from
+open sources and are too large for Git (about 2 GB):
+`python3 scripts/setup-assets.py` downloads them once into `external/` at
+the repository root, a git-ignored folder, checking every file against the
+manifest in the repository that pins it, and the game reads them from
+there. It needs Python 3 and nothing else; running it again fetches only
+what is missing. Never commit anything under `external/`. Without these
+files the game still runs, and those features are off. An environment
+variable per set (`EO_PEOPLE_ROOT`, `EO_PEOPLE_MOTIONS_ROOT` and
+`EO_PEOPLE_STYLES_ROOT` for people, `EO_AUDIO_ROOT`, `EO_CC0_ROOT`,
+`EO_SIGN_ART_ROOT`, `EO_DEM_ROOT`) points the game at another copy. See
+[native/README.md](native/README.md#optional-assets) for what each set adds
+and where it comes from, and for every command-line switch, environment
+variable and test.
 
 The source binaries of the asset pipelines (Blender scenes and similar)
 are in a separate optional store that the game never reads. If you work on
@@ -80,8 +88,9 @@ See [Docs/ASSET-STORE.md](Docs/ASSET-STORE.md).
 | `native/` | The Cargo workspace: the game, its crates and tests ([native/README.md](native/README.md)) |
 | `public/data/sf/` | The San Francisco data the game loads, each file with a `NOTICE` |
 | `public/assets/` | Shipped models and textures, each with a provenance file |
+| `external/` | The optional open assets, downloaded by `scripts/setup-assets.py`; git-ignored, never committed |
 | `artifacts/` | Provenance and the lock file of the off-repository asset store |
-| `scripts/` | Asset-store, Blender building and vehicle tooling, and the street-standards table |
+| `scripts/` | The optional-asset setup (`setup-assets.py`), asset-store, Blender building and vehicle tooling, and the street-standards table |
 | `Docs/` | Data pipeline, street standards, asset store and quality-gate documents |
 
 ## Data sources and attribution
