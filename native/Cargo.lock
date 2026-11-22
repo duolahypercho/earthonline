@@ -888,6 +888,7 @@ dependencies = [
  "eo-data",
  "eo-farshore",
  "flate2",
+ "libm",
  "serde",
  "serde_json",
  "sha2",
