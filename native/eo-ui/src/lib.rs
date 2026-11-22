@@ -18,6 +18,7 @@
 
 pub mod draw;
 pub mod map;
+pub mod photo; // the photo mode panel
 mod screens;
 pub mod settings;
 pub mod text;
@@ -362,6 +363,9 @@ pub struct Ui {
     pub(crate) fmt: String,
     /// the cues since the host last took them (`take_cues`).
     pub cues: u32,
+    /// photo mode's panel: while set, it is drawn in place of the HUD.
+    pub photo: Option<photo::PhotoPanel>,
+    last_photo: Option<photo::PhotoPanel>,
 }
 
 impl Ui {
@@ -428,6 +432,8 @@ impl Ui {
             stats: UiStats::default(),
             fmt: String::with_capacity(64),
             cues: 0, // audio
+            photo: None,
+            last_photo: None,
         }
     }
 
@@ -538,6 +544,10 @@ impl Ui {
             }
         }
         if self.screen == Screen::Hud && (self.last_hud.as_ref() != Some(&self.hud) || self.tags != self.last_tags || self.tag_avoid != self.last_avoid) {
+            self.dirty = true;
+        }
+        if self.photo != self.last_photo {
+            self.last_photo = self.photo.clone();
             self.dirty = true;
         }
         self.update_maps(device, queue, enc);
@@ -701,7 +711,14 @@ impl Ui {
             avoid: &self.tag_avoid,
             chrome: self.hud_chrome,
         };
-        screens::build(&mut p, &mut ctx);
+        match (&self.photo, self.screen) {
+            // photo mode hides the HUD.
+            (Some(panel), Screen::Hud) => {
+                photo::draw(&mut p, self.vp, panel);
+                ctx.animating = false;
+            }
+            _ => screens::build(&mut p, &mut ctx),
+        }
         self.animating = ctx.animating;
         self.pause_pane = ctx.pause_pane;
     }

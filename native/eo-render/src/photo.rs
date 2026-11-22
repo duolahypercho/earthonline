@@ -139,19 +139,22 @@ impl PhotoGpu {
     /// One bind group per post source (the HDR scene, the resolved history 0, 1).
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn bind_groups(&self, device: &wgpu::Device, look: &wgpu::Buffer, srcs: [&wgpu::TextureView; 3], sky: &wgpu::Buffer, bloom: &wgpu::TextureView, sampler: &wgpu::Sampler) -> [wgpu::BindGroup; 3] {
-        srcs.map(|src| {
-            device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("photo-bg"),
-                layout: &self.bgl,
-                entries: &[
-                    wgpu::BindGroupEntry { binding: 0, resource: look.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(src) },
-                    wgpu::BindGroupEntry { binding: 2, resource: sky.as_entire_binding() },
-                    wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(bloom) },
-                    wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::Sampler(sampler) },
-                    wgpu::BindGroupEntry { binding: 5, resource: self.uniform.as_entire_binding() },
-                ],
-            })
+        srcs.map(|src| self.bind_group_over(device, look, src, sky, bloom, sampler))
+    }
+
+    /// A bind group over one source (photo mode's output: `LookGpu::post_binds`).
+    pub(crate) fn bind_group_over(&self, device: &wgpu::Device, look: &wgpu::Buffer, src: &wgpu::TextureView, sky: &wgpu::Buffer, bloom: &wgpu::TextureView, sampler: &wgpu::Sampler) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("photo-bg"),
+            layout: &self.bgl,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: look.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(src) },
+                wgpu::BindGroupEntry { binding: 2, resource: sky.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(bloom) },
+                wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::Sampler(sampler) },
+                wgpu::BindGroupEntry { binding: 5, resource: self.uniform.as_entire_binding() },
+            ],
         })
     }
 

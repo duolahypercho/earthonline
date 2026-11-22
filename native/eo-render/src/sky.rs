@@ -456,6 +456,8 @@ struct State {
     interior_meter: Option<crate::interior_meter::InteriorMeter>,
     exterior_camera: Option<crate::interior_meter::ExteriorCamera>,
     frame_bloom: bool,
+    /// the uniform's bloom terms this frame (`bloom_terms`).
+    bloom_terms: [f32; 4],
     /// the frame of the last cut or turn the scene meter snapped for: no reading
     /// older (of the view before it) sets the exposure after it.
     meter_floor: u32,
@@ -1171,6 +1173,7 @@ impl SkyGpu {
                 interior_meter: None,
                 exterior_camera: None,
                 frame_bloom: false,
+                bloom_terms: [0.0; 4],
                 meter_floor: 0,
                 atmo_built: None,
                 atmo_medium: [[0.0; 4]; 4],
@@ -1945,6 +1948,7 @@ impl SkyGpu {
             spare: [0.0; 4],
         };
         queue.write_buffer(&self.uniform, 0, bytemuck::bytes_of(&u));
+        s.bloom_terms = [u.bloom[0], u.bloom[1], u.bloom_w2[1], u.bloom[3]];
         // The lights' scales: candela -> irradiance units, on with the lamps.
         let agents = s.agents_bg.as_ref().map(|a| a.0).unwrap_or(0);
         // The props lamps carry the JS practical's intensity in the JS's light
@@ -2165,6 +2169,14 @@ impl SkyGpu {
     /// The previous resolved frame (the city pass's reflection source) for a parity.
     pub(crate) fn history_view(&self, p: usize) -> Option<wgpu::TextureView> {
         self.targets.lock().unwrap().as_ref().map(|t| t.hist[p].clone())
+    }
+
+    /// The bloom's prefilter threshold, knee and ceiling and its share as the
+    /// last `update` wrote them (the uniform's `bloom.x`, `bloom.y`,
+    /// `bloom_w2.y`, `bloom.w`; zeros before the first): photo mode adds the
+    /// bloom as post would (photo_mode.rs `PostBloom`).
+    pub(crate) fn bloom_terms(&self) -> [f32; 4] {
+        self.state.lock().unwrap().bloom_terms
     }
 
     /// The bloom result (up level 0).

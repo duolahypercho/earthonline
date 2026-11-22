@@ -210,6 +210,8 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     let features = eo_render::look::ShaderFeatures { house: world.house.is_some(), ..features };
     // other players' ground contact: in an online session that draws it (net.rs, `--no-player-contact`).
     let features = eo_render::look::ShaderFeatures { player_contact: args.player_contact, ..features };
+    // photo mode's term in a shared pass (the cinematic look's bloom), unless `--no-photo-mode`.
+    let features = eo_render::look::ShaderFeatures { photo_mode: crate::photo::enabled(), ..features };
     let mut features = if std::env::var("EO_SHADER_FEATURES").is_ok_and(|v| v == "all") { eo_render::look::ShaderFeatures::ALL } else { features };
     for w in std::env::var("EO_SHADER_FEATURES").unwrap_or_default().split(',') {
         match w {
@@ -224,6 +226,7 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
             "house" => features.house = true,
             "blender_camera" => features.blender_camera = true,
             "player_contact" => features.player_contact = true,
+            "photo_mode" => features.photo_mode = true,
             _ => {}
         }
     }
@@ -293,6 +296,7 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     }
     r.kit_radii = eo_render::kit::DEFAULT_KIT_RADII;
     r.set_occlusion(args.perf.occlusion); // occlusion
+    r.photo_mode.options.dof = crate::photo::dof_enabled(); // photo mode's depth of field (`--no-dof`)
     // the far layer's GPU side and every group's cell.
     let mut far_layer = false;
     if let Some(h) = &world.hlod {

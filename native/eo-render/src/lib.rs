@@ -44,6 +44,7 @@ pub mod look;
 pub mod occlusion; // occlusion
 pub mod pace;
 pub mod photo; // the photographic finish's post pass (`--photo-finish`, stage W4)
+pub mod photo_mode; // photo mode: depth of field and its finish
 pub mod cine_post; // the cinematic look's post pass (`--look cinematic`, stage L1)
 pub mod props; // props
 pub mod props_lib; // props
@@ -528,6 +529,8 @@ pub struct Renderer {
     ranges: Option<std::sync::Mutex<draw_ranges::DrawRanges>>,
     /// this frame's ranges of the camera's opaque list and transparent list (slots), set by `update`.
     frame_ranges: std::sync::Mutex<Option<(draw_ranges::Ranges, draw_ranges::Ranges)>>,
+    /// photo mode's depth of field and finish (photo_mode.rs); nothing runs until a photo is set.
+    pub photo_mode: photo_mode::PhotoModeGpu,
 }
 
 /// a frame that uploads this much (a quarter of the default 4 MiB budget)
@@ -1205,6 +1208,7 @@ impl Renderer {
             rt_reflect,
             ranges: (!ctx.compaction() && n == 1 && pace::draw_ranges_on()).then(|| std::sync::Mutex::new(draw_ranges::DrawRanges::new(&objects, hlod::HlodOptions::from_env().on))),
             frame_ranges: std::sync::Mutex::new(None),
+            photo_mode: photo_mode::PhotoModeGpu::new(&ctx.device, &ctx.queue), // photo mode
         })
     }
 
@@ -1937,6 +1941,8 @@ impl Renderer {
             self.look.sky.set_bore(s.eye_bore_depth(cam.eye), true); // a tunnel's bore (`--tunnels`): its exposure and lamps
         }
         self.look.update(queue, cam, frame.copy_step[0]); // look
+        // photo mode (nothing without a photo set), after the look: this frame's exposure and bloom.
+        self.photo_mode.update(queue, cam, self.look.out_size(), self.look.post_bloom(), self.look.sky.drawn_exposure().unwrap_or(1.0));
         if let Some(r) = &self.ranges {
             // each cascade's list in the blocks its cull can fill (look.rs `encode_shadows_with`).
             let (planes, mask) = self.look.shadow_cull_planes();
@@ -2117,6 +2123,8 @@ impl Renderer {
         // the bridges' wire members over the resolved frame (single-sample depth only), not in the glass pass.
         let wire_overlay = !self.debug_ids && depth.texture().sample_count() == 1 && self.landmarks.get().is_some_and(|l| l.overlay());
         let keep_depth = keep_depth || wire_overlay;
+        // photo mode's depth of field reads it after the sky passes.
+        let keep_depth = keep_depth || (self.photo_mode.active() && depth.texture().usage().contains(wgpu::TextureUsages::TEXTURE_BINDING) && depth.texture().sample_count() == 1);
         let draw_bg = self.draw_bg.lock().unwrap()[self.probe.front().0].clone(); // the front cube's
         let frame_ranges = self.frame_ranges.lock().unwrap().clone(); // (fixed-slot lists) this frame's ranges
         // with occlusion on the city is two passes, the early
@@ -2434,7 +2442,9 @@ impl Renderer {
             self.look.bind_main_resolved(&mut pass);
             l.draw_overlay(&mut pass);
         }
-        self.look.encode_post_with_water(enc, output, ts, water.filter(|_| self.look.options.water_optics).map(|w| (w, self.probe.front().0)));
+        // photo mode (nothing without a photo set): depth of field and its finish over the frame post reads, read by post in its place.
+        let photo_mode = self.photo_mode.encode(enc, &self.look, depth, &hdr, (output.texture().width(), output.texture().height()));
+        self.look.encode_post_with_water(enc, output, ts, water.filter(|_| self.look.options.water_optics).map(|w| (w, self.probe.front().0)), photo_mode.as_ref());
         if let Some(c) = &self.counts {
             c.encode_copies(enc); // this frame's counts, read back for the next bounds
         }

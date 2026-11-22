@@ -24,6 +24,7 @@ mod farshore; // the far terrain's load and attach
 mod ground_tone; // the terrain's vertex tone and the far land (the scene build's closures)
 mod models;
 mod net; // net
+mod photo; // photo mode (--play, --connect; `--no-photo-mode`, `--no-dof`)
 mod quality; // `--quality` tiers and the lighting switches
 mod streets;
 mod street_life; // litter, graffiti, posters (`--street-life`): the level and its survey
@@ -644,6 +645,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-rail-polish" => eo_landmarks::features::set_rail_polish(false), // the rails' worn band at 0.4 / 0.65, no sealant joints, as before
             "--no-furniture-models" => eo_render::props_lib2::furniture_models::set_enabled(false), // missing-GLB furniture as boxes, as before
             "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
+            "--no-photo-mode" | "--no-dof" | "--photo-bench" => {} // read by photo.rs (and the bench, `--photo-bench`)
             s if a.props2.parse_flag(s) => {} // --no-props2, --no-furniture, --no-eztree, --no-overhead, --no-wires, --no-props2-shading, --capture-props2
             "--agents-bench" | "--agents-capture" | "--people-capture" | "--people-lineup" => {} // + --people-capture, --people-lineup
             "--no-rocketbox" => a.rocketbox = false, // people
