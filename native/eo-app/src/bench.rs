@@ -726,9 +726,17 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         // settles (the decks drift with the clock, and a pose's settle takes as many frames
         // as its streaming needs, so two runs met different clouds at one pose).
         let hold_sky = std::env::var_os("EO_CAPTURE_HOLD_SKY").is_some_and(|v| v == "1");
-        for crate::props::CapturePose { name, camera: cam, player } in poses {
+        // `EO_CAPTURE_PROPS_CLOCK_STEP=s`: pose k at k s on to the world clock (the water's waves and
+        // the boats riding them, eo-app boats.rs) and the props clock (the trees' sway), so a list of one
+        // pose repeated shows them move; else both stand still.
+        let props_step = std::env::var("EO_CAPTURE_PROPS_CLOCK_STEP").ok().and_then(|v| v.parse::<f64>().ok());
+        for (k, crate::props::CapturePose { name, camera: cam, player }) in poses.into_iter().enumerate() {
             if hold_sky {
                 renderer.look.sky.set_clock(args.look.sky.world_time_s, 0.0);
+            }
+            if let Some(step) = props_step {
+                props.set_clock(k as f64 * step);
+                renderer.look.sky.set_clock(args.look.sky.world_time_s + k as f64 * step, 0.0);
             }
             let refresh_player = player.is_some() || !agents.extras.is_empty();
             agents.extras.clear();

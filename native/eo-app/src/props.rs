@@ -111,6 +111,7 @@ impl Props2Args {
             }
             "--no-wires" => self.wires = false,
             "--no-boats" => self.boats = false,
+            "--no-boat-motion" => self.features &= !eo_render::props::F_AFLOAT,
             "--no-street-props-v2" => self.street_v2 = false,
             "--no-props2-shading" => self.features = 0,
             "--no-fade" => self.features &= !eo_render::props::F_FADE,
@@ -241,6 +242,8 @@ pub struct PropsRuntime {
     /// The moored boats waiting for the props renderer, then their block of the arena (at, n).
     boats_pending: Vec<GpuPropInstance>,
     boat_block: (u32, u32),
+    /// The boats' poses each frame (boats.rs; None with `--no-boat-motion` or no fleet: at rest).
+    boat_motion: Option<crate::boats::BoatMotion>,
     /// The tiles holding a tunnel bore's lamps (`--tunnels`; empty
     /// otherwise): planned with the street's tiles (a bore runs under tiles
     /// with no street), by their distance along the bore as well as over the ground.
@@ -286,7 +289,14 @@ impl PropsRuntime {
             bore_tiles: HashSet::new(),
             boats_pending: vec![],
             boat_block: (0, 0),
+            boat_motion: None,
         };
+        if let (Some(f), Some(w)) = (&world.fleet, &world.water) {
+            if args.props2.boats && args.props2.features & eo_render::props::F_AFLOAT != 0 {
+                let models = world.fleet_bodies.iter().map(|&b| lib2::BOAT_BASE + b as u32).collect();
+                rt.boat_motion = Some(crate::boats::BoatMotion::new(f.clone(), models, w.clone()));
+            }
+        }
         let Some(street) = world.street.as_ref().map(|s| s.world.clone()) else {
             rt.on = false;
             return rt;
@@ -312,7 +322,7 @@ impl PropsRuntime {
         let city = world.city.clone(); // the furniture frontage and the service drops read the loaded buildings
         let structures = world.structures.clone(); // the grade-separated roads (`--structures`)
         let p2 = args.props2;
-        let berths = world.berths.clone(); // the floating docks' berths, where the boats lie
+        let (fleet, fleet_bodies) = (world.fleet.clone(), world.fleet_bodies.clone()); // the moored boats (main.rs)
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::Builder::new()
             .name("eo-props-load".into())
@@ -335,7 +345,7 @@ impl PropsRuntime {
                     let overhead_js = eo_props::overhead::OverheadJs::load().map_err(|e| eprintln!("props2: overhead export not read ({e:#})")).ok();
                     let dome = lib2::dome_standards(&ca)?;
                     // the moored boats' bodies (`--no-boats`, or no berths: none, and the library as before them).
-                    let bodies = (p2.boats && !berths.is_empty())
+                    let bodies = (p2.boats && fleet.is_some())
                         .then(|| eo_props::boats::load_bodies(&paths.repo_root).map_err(|e| eprintln!("props: boats not drawn ({e:#})")).ok())
                         .flatten();
                     let extras = lib2::LibExtras { ez: ez.as_deref(), signs: signs.as_ref(), overhead: overhead_js.as_ref(), stand_ins: p2.stand_ins, boats: bodies.as_deref() };
@@ -380,29 +390,17 @@ impl PropsRuntime {
                     let facts = LibFacts { species: lib.tree_species.len(), tree_dims: lib.tree_dims.clone(), sign_variants: overhead_js.as_ref().map(|o| o.sign_variants.len()).unwrap_or(0), veg };
                     // one boat per occupied berth, its waterline on the still sea (where the docks float),
                     // bow along the berth's heading (the model's +Z turned by yaw lies along (sin yaw, cos yaw)).
-                    let boats: Vec<GpuPropInstance> = match &bodies {
-                        Some(b) => {
-                            let sea = eo_landmarks::data::LandmarksJs::get().sea_level_y as f32;
-                            let drawn = |i: usize| lib.models.get(lib2::BOAT_BASE as usize + i).is_some_and(|m| m.meshes[0] != eo_render::props_lib::NONE);
-                            eo_props::boats::moor(&berths, b)
-                                .into_iter()
-                                .filter(|m| drawn(m.body))
-                                .map(|m| GpuPropInstance {
-                                    pos: [m.pos[0] as f32, sea, m.pos[1] as f32],
-                                    yaw: (std::f64::consts::FRAC_PI_2 - m.heading) as f32,
-                                    scale: [1.0; 3],
-                                    model: lib2::BOAT_BASE + m.body as u32,
-                                    variant: 0,
-                                    lamp: 0,
-                                    slope: 0.0,
-                                    pad: 0,
-                                })
-                                .collect()
+                    // the fleet at rest, in its order (eo-app boats.rs poses it each frame unless `--no-boat-motion`);
+                    // a body whose files are missing draws nothing (its model has no mesh).
+                    let boats: Vec<GpuPropInstance> = match (&bodies, &fleet) {
+                        (Some(_), Some(f)) => {
+                            let models: Vec<u32> = fleet_bodies.iter().map(|&b| lib2::BOAT_BASE + b as u32).collect();
+                            crate::boats::rest_instances(f, &models)
                         }
-                        None => vec![],
+                        _ => vec![],
                     };
                     if !boats.is_empty() {
-                        eprintln!("props2: {} boats moored in {} berths", boats.len(), berths.len());
+                        eprintln!("props2: {} boats moored", boats.len());
                     }
                     eprintln!("props2: library ready in {library_ms:.0} ms ({} meshes, {} tree species, {} sign variants)", lib.meshes.len(), facts.species, facts.sign_variants);
                     Ok(Loaded { world, lib, source, facts, wire_look, boats })
@@ -585,6 +583,11 @@ impl PropsRuntime {
                     self.boat_block = (at, n);
                 }
                 None => self.errors.push("props: instance arena full (boats)".into()),
+            }
+        }
+        if self.boat_block.1 > 0 {
+            if let Some(bm) = self.boat_motion.as_mut() {
+                bm.update(ctx, renderer, self.boat_block, eye);
             }
         }
         eo_render::hitch::try_set(&self.camera, eye); // never wait for a worker's lock
@@ -862,6 +865,24 @@ impl PropsRuntime {
             }
         }
         r.outbox.flush(&r.pending); // try_lock only
+    }
+
+    /// The sea the boats float on (the physics floats its bodies on the same), once built.
+    pub fn boat_sea(&self) -> Option<std::sync::Arc<eo_player::harbour::Sea>> {
+        self.boat_motion.as_ref().and_then(|b| b.sea())
+    }
+
+    /// The poses the physics' boat bodies have this frame (eo-player `Harbour::poses`).
+    pub fn set_boat_physics(&mut self, poses: Vec<(usize, glam::DVec3, glam::DQuat)>) {
+        if let Some(b) = self.boat_motion.as_mut() {
+            b.set_physics(poses);
+        }
+    }
+
+    /// Set the props clock (the boats' motion, the trees' sway) for the frames that
+    /// follow without a simulation time (the bench's `EO_CAPTURE_PROPS_CLOCK_STEP`).
+    pub fn set_clock(&mut self, t: f64) {
+        self.clock = t;
     }
 
     /// The parked cars to draw this frame, nearest first within the JS rings'

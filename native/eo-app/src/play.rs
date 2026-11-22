@@ -1018,6 +1018,25 @@ mod window {
                 // F (VehicleToggle): with --car-door-animation a quick tap between redraws too; the
                 // demo avatar's animated entry or exit when it can start (car_access.rs), else F as before.
                 input.vehicle_toggle |= std::mem::take(&mut self.vehicle_toggle_requested);
+                // the moored boats near the player: bodies on the drawn sea (eo-player `harbour`), its clock the water's.
+                if let Some(g) = self.gfx.as_ref() {
+                    if let (Some(fleet), Some(sea)) = (self.world.fleet.clone(), g.props.boat_sea()) {
+                        let clock = g.renderer.water_clock();
+                        match self.cw.harbour.as_mut() {
+                            None => self.cw.set_harbour(fleet, sea, clock),
+                            Some(h) => {
+                                if !Arc::ptr_eq(&h.sea, &sea) {
+                                    h.sea = sea;
+                                }
+                                if (h.time - clock).abs() > 0.1 {
+                                    h.time = clock;
+                                }
+                            }
+                        }
+                    }
+                }
+                let feet = self.player.position(&self.cw);
+                self.cw.stream_harbour(feet);
                 if self.car_door_animation {
                     let library = self.gfx.as_ref().and_then(|g| g.agents.lib.as_deref());
                     self.car_access.advance(&mut self.player, &mut self.cw, library, input, dt);
@@ -1055,6 +1074,9 @@ mod window {
             g.models.set_camera(cam.eye);
             if let Err(e) = g.models.pump(&g.ctx, &g.renderer, &self.world, cam.eye) {
                 eprintln!("model streaming: {e:#}");
+            }
+            if let Some(h) = self.cw.harbour.as_ref() {
+                g.props.set_boat_physics(h.poses(&self.cw.physics));
             }
             g.props.pump(&g.ctx, &g.renderer, &mut g.models.uploads, cam.eye, Some(g.agents.sim_time), wdt);
             g.agents.parked = g.props.parked_agents(g.agents.lib.as_deref(), cam.eye).to_vec();
