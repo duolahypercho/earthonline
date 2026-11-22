@@ -164,6 +164,7 @@ pub fn ground_tone<'a>(cover: Option<&'a GroundCover>, water: Option<&'a WaterDa
     let far_land_fn = far_land(cover, water, elev, municipal);
     // the sand fitted to the mapped beach (`--no-ground-beach-fit`: the JS reach rule).
     let beach_fit = eo_render::ground2::on("beach_fit");
+    let open_ground = eo_render::ground2::OpenGroundSettings::from_env();
     let sand_limit = eo_landmarks::features::shore_ground("beach-sand-limit");
     let season_seam = eo_landmarks::features::shore_ground("season-seam");
     let dryness = eo_render::farshore::season_dryness() as f64;
@@ -211,7 +212,7 @@ pub fn ground_tone<'a>(cover: Option<&'a GroundCover>, water: Option<&'a WaterDa
         let park = cover.tone_name_at(x, z).and_then(|n| cover.tone_at(x, z).map(|c| (n, c)));
         let class = land.map(|l| l.class_at(x, z)).unwrap_or(0);
         let shore = water.map(|w| w.field.signed_at(x, z).abs());
-        if let Some(c) = eo_render::ground2::open_ground(x, z, class, park, shore, elev.sample(x, z).map(|h| h - eo_water::SEA_LEVEL_Y), slope) {
+        if let Some(c) = open_ground.sample(x, z, class, park, shore, elev.sample(x, z).map(|h| h - eo_water::SEA_LEVEL_Y), slope) {
             return Some(pack(c, 255));
         }
         cover.tone_at(x, z).map(|c| pack(c, 255))
