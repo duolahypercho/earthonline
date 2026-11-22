@@ -60,7 +60,7 @@ pub struct AgentFrameStats {
 pub struct AgentRuntime {
     pub opts: AgentOpts,
     pub lib: Option<Arc<Library>>,
-    lib_rx: Option<Receiver<Result<Library, String>>>,
+    lib_rx: Option<Receiver<Result<(Library, Option<String>), String>>>,
     sim_rx: Option<Receiver<Result<(SimWorld, Arc<eo_sim::native::NativeSource>), String>>>,
     /// The corridor layer's hour (written from the look's time of day each pump).
     corridor_hour: Option<Arc<AtomicU64>>,
@@ -79,6 +79,7 @@ pub struct AgentRuntime {
     scratch: Vec<GpuAgent>,
     /// Instances the caller adds this frame (the player and the player's car).
     pub extras: Vec<GpuAgent>,
+    test_rows: Vec<[f32; 4]>,
     /// the parked cars near the camera (static instances, set each frame).
     pub parked: Vec<GpuAgent>,
     pub started: Instant,
@@ -150,6 +151,7 @@ impl AgentRuntime {
             last_corridor_steps: 0,
             scratch: vec![],
             extras: vec![],
+            test_rows: vec![],
             parked: vec![], // props
             hide_near: vec![],
             remap_people: vec![],
@@ -168,13 +170,20 @@ impl AgentRuntime {
         }
         let repo = world.paths.repo_root.clone();
         let cache = crate::cache_dir(args);
+        let test_character = args.test_character.clone();
         // the Rocketbox people unless `--no-rocketbox` (or no copy in the people folder: external/people or EO_PEOPLE_ROOT): then none.
         let people = if args.rocketbox { eo_agents::library::PeopleSource::from_env() } else { eo_agents::library::PeopleSource::Off };
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::Builder::new()
             .name("eo-agents-load".into())
             .spawn(move || {
-                let _ = tx.send(Library::load_with(&repo, cache.as_deref(), &people).map_err(|e| format!("{e:#}")));
+                let loaded = Library::load_with(&repo, cache.as_deref(), &people).map(|mut lib| {
+                    let issue = test_character.as_ref().and_then(|selection| {
+                        lib.install_test_player(selection).err().map(|e| format!("test character {}: {e:#}", selection.id))
+                    });
+                    (lib, issue)
+                });
+                let _ = tx.send(loaded.map_err(|e| format!("{e:#}")));
             })
             .expect("spawn agent library loader");
         rt.lib_rx = Some(rx);
@@ -263,7 +272,14 @@ impl AgentRuntime {
             if let Ok(r) = rx.try_recv() {
                 self.lib_rx = None;
                 match r {
-                    Ok(lib) => {
+                    Ok((lib, issue)) => {
+                        if let Some(issue) = issue {
+                            eprintln!("agents: {issue}");
+                            self.errors.push(issue);
+                        }
+                        if let Some(body) = &lib.test_player {
+                            eprintln!("agents: loaded test character {} with {} clips", lib.meta.model_names[body.model as usize], body.rig.clip_count());
+                        }
                         if let Err(e) = renderer.attach_agents(ctx, &lib) {
                             self.errors.push(format!("agent renderer: {e:#}"));
                             eprintln!("agents: renderer failed: {e:#}");
@@ -397,7 +413,8 @@ impl AgentRuntime {
                     &self.scratch
                 };
                 st.uploaded = g.upload(&ctx.queue, list);
-                st.upload_bytes = st.uploaded * std::mem::size_of::<GpuAgent>();
+                st.upload_bytes = st.uploaded * std::mem::size_of::<GpuAgent>()
+                    + g.upload_test_player(&ctx.queue, &self.test_rows);
             }
         }
         st.cpu_ms = t0.elapsed().as_secs_f64() * 1e3;
@@ -437,9 +454,33 @@ impl AgentRuntime {
 
     /// The player's body and cars as this frame's extra instances (`--play`).
     pub fn set_player(&mut self, visual: &mut PlayerVisual, player: &eo_player::Player, cw: &eo_player::world::CollisionWorld, body_visible: bool, dt: f64) {
+        self.set_player_with_car_access(visual, player, cw, body_visible, dt, None);
+    }
+
+    pub fn set_player_with_car_access(&mut self, visual: &mut PlayerVisual, player: &eo_player::Player, cw: &eo_player::world::CollisionWorld, body_visible: bool, dt: f64, transfer: Option<&crate::car_access::Frame>) {
         self.extras.clear();
+        self.test_rows.clear();
         if let Some(lib) = &self.lib {
-            visual.instances(lib, player, cw, body_visible, dt, &mut self.extras);
+            let mut test_drawn = None;
+            if let Some(body) = &lib.test_player {
+                let posed = match transfer {
+                    Some(frame) => Some(visual.test.car_frame(body, frame)),
+                    None => visual.test.frame(body, player, cw, body_visible, dt as f32),
+                };
+                if let Some((rows, instance)) = posed {
+                    self.test_rows.extend_from_slice(rows);
+                    self.extras.push(instance);
+                    if player.mode == eo_player::Mode::OnFoot {
+                        test_drawn = Some((instance.pos.map(f64::from), f64::from(body.height)));
+                    }
+                }
+            }
+            let door = transfer.map(|frame| (frame.vehicle, frame.door));
+            visual.instances_with_door(lib, player, cw, body_visible && lib.test_player.is_none(), dt, &mut self.extras, door);
+            if test_drawn.is_some() {
+                // the demo avatar stands in for the pool body on a landmark deck too (eo-render deck_rooms.rs).
+                eo_render::deck_rooms::set_player(test_drawn);
+            }
         }
         self.mark_bores();
     }
@@ -462,6 +503,25 @@ impl AgentRuntime {
         for a in &mut self.extras {
             eo_agents::feed::mark_in_bore(a, self.structures.as_deref());
         }
+    }
+
+    pub fn capture_player(&mut self, feet: [f64; 3], yaw: f64, time: f32) -> Result<GpuAgent> {
+        self.test_rows.clear();
+        let lib = self.lib.as_ref().ok_or_else(|| anyhow::anyhow!("player scale reference requires the agent library"))?;
+        if let Some(body) = &lib.test_player {
+            let mut pose = eo_agents::test_characters::Pose::default();
+            let clip = body.preview.unwrap_or_else(|| body.rig.idle());
+            pose.sample(&body.rig, clip, time.clamp(0.0, body.rig.seconds(clip)), body.preview.is_some(), 1.0);
+            self.test_rows = pose.rows;
+            Ok(body.instance(feet.map(|v| v as f32), glam::Quat::from_rotation_y(yaw as f32)))
+        } else {
+            eo_agents::feed::player_body(lib, feet, yaw, 0.0, 0.0, f64::from(time))
+                .ok_or_else(|| anyhow::anyhow!("no verified player avatar available for scale reference"))
+        }
+    }
+
+    pub fn clear_test_pose(&mut self) {
+        self.test_rows.clear();
     }
 
     /// The camera as the simulation's focus: (x, z, view yaw atan2(dx, dz)).
@@ -497,6 +557,7 @@ pub struct PlayerVisual {
     pub phase: f64,
     pub spins: Vec<f64>,
     pub time: f64,
+    test: crate::test_characters::Playback,
 }
 
 /// The player's car body (src/vehicles/hero-sedan-glb.js `HERO_SEDAN_ASSET`: the sedan LOD0).
@@ -506,6 +567,10 @@ pub const PLAYER_CAR_PAINT: &str = "#a8332b";
 
 impl PlayerVisual {
     pub fn instances(&mut self, lib: &Library, player: &eo_player::Player, cw: &eo_player::world::CollisionWorld, body_visible: bool, dt: f64, out: &mut Vec<GpuAgent>) {
+        self.instances_with_door(lib, player, cw, body_visible, dt, out, None);
+    }
+
+    fn instances_with_door(&mut self, lib: &Library, player: &eo_player::Player, cw: &eo_player::world::CollisionWorld, body_visible: bool, dt: f64, out: &mut Vec<GpuAgent>, door: Option<(usize, f32)>) {
         use eo_player::Mode;
         self.time += dt;
         let height = lib.meta.family_heights.first().copied().unwrap_or(1.75) as f64;
@@ -528,7 +593,10 @@ impl PlayerVisual {
             let datum = v.datum(cw);
             let steer = v.controller.wheels().first().map(|w| w.steering as f64).unwrap_or(0.0);
             let braking = v.controls.brake > 0.0 || v.controls.handbrake;
-            if let Some(c) = eo_agents::feed::player_car(lib, PLAYER_CAR_BODY, [datum.x, datum.y, datum.z], [rot.x, rot.y, rot.z, rot.w], self.spins[k], steer, speed, braking, PLAYER_CAR_PAINT) {
+            if let Some(mut c) = eo_agents::feed::player_car(lib, PLAYER_CAR_BODY, [datum.x, datum.y, datum.z], [rot.x, rot.y, rot.z, rot.w], self.spins[k], steer, speed, braking, PLAYER_CAR_PAINT) {
+                if let Some((i, fraction)) = door && i == k {
+                    c.clip_phase = fraction;
+                }
                 out.push(c);
             }
         }

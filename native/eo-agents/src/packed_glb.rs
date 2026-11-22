@@ -237,8 +237,7 @@ impl Glb {
             .collect())
     }
 
-    /// The image a texture samples (`EXT_texture_webp` source, else `source`), as RGBA8.
-    pub fn texture_rgba(&self, texture: usize) -> Result<(u32, u32, Vec<u8>)> {
+    pub(crate) fn texture_bytes(&self, texture: usize) -> Result<(&str, Cow<'_, [u8]>)> {
         let t = self.arr("textures").get(texture).ok_or_else(|| anyhow!("texture {texture} missing"))?;
         let src = t.get("extensions").and_then(|e| e.get("EXT_texture_webp")).and_then(|w| uint(w, "source")).or_else(|| uint(t, "source")).ok_or_else(|| anyhow!("texture {texture} without a source"))?;
         let im = self.arr("images").get(src).ok_or_else(|| anyhow!("image {src} missing"))?;
@@ -246,10 +245,15 @@ impl Glb {
             bail!("image {src} names an external URI");
         }
         let bv = uint(im, "bufferView").ok_or_else(|| anyhow!("image {src} without a buffer view"))?;
-        let bytes = self.view(bv)?;
-        match im.get("mimeType").and_then(|m| m.as_str()).unwrap_or("") {
+        Ok((im.get("mimeType").and_then(|m| m.as_str()).unwrap_or(""), self.view(bv)?))
+    }
+
+    /// The image a texture samples (`EXT_texture_webp` source, else `source`), as RGBA8.
+    pub fn texture_rgba(&self, texture: usize) -> Result<(u32, u32, Vec<u8>)> {
+        let (mime, bytes) = self.texture_bytes(texture)?;
+        match mime {
             "image/webp" => decode_webp(&bytes),
-            m => bail!("image {src}: {m} is not decoded here"),
+            m => bail!("texture {texture}: {m} is not decoded here"),
         }
     }
 }

@@ -120,6 +120,8 @@ pub struct AgentsGpu {
     vbuf: wgpu::Buffer,
     ibuf: wgpu::Buffer,
     agents: wgpu::Buffer,
+    bones: wgpu::Buffer,
+    test_palette_offset: Option<u64>,
     params: wgpu::Buffer,
     frame: wgpu::Buffer,
     counts: wgpu::Buffer,
@@ -235,7 +237,7 @@ impl AgentsGpu {
         let ibuf = init("agent-indices", bytemuck::cast_slice(&lib.indices), U::INDEX | U::STORAGE);
         let meshes = init("agent-meshes", bytemuck::cast_slice(&lib.meshes), U::STORAGE);
         let models = init("agent-models", bytemuck::cast_slice(&lib.models), U::STORAGE);
-        let bones = init("agent-bones", bytemuck::cast_slice(&lib.bones), U::STORAGE);
+        let bones = init("agent-bones", bytemuck::cast_slice(&lib.bones), U::STORAGE | U::COPY_DST);
         let materials = init("agent-materials", bytemuck::cast_slice(&lib.materials), U::STORAGE);
         // One object entry: the look's material class "painted" (draw.wgsl kind 0).
         let objects = init("agent-object", &[0u8; 64], U::STORAGE);
@@ -569,12 +571,14 @@ impl AgentsGpu {
             mesh_count,
             model_count: lib.models.len() as u32,
             tiers: Tiers::from_js(&js),
-            clip_frames: lib.meta.clip_frames,
+            clip_frames: lib.meta.clip_frames.map(|frames| frames.max(1)),
             clip_base: lib.meta.clip_base,
             lamps: ([tail.0, tail.1, brake.0, brake.1], [head.0, head.1, ind.0, ind.1], js.hero_lamp_day_running_floor as f32),
             vbuf,
             ibuf,
             agents,
+            bones,
+            test_palette_offset: lib.test_player.as_ref().map(|player| u64::from(player.palette) * 48),
             params,
             frame,
             counts,
@@ -611,6 +615,16 @@ impl AgentsGpu {
 
     pub fn enabled(&self) -> bool {
         self.enabled.load(Ordering::Relaxed)
+    }
+
+    pub fn upload_test_player(&self, queue: &wgpu::Queue, rows: &[[f32; 4]]) -> usize {
+        let Some(offset) = self.test_palette_offset else { return 0 };
+        let bytes = bytemuck::cast_slice(rows);
+        if !bytes.is_empty() {
+            debug_assert_eq!(offset + bytes.len() as u64, self.bones.size());
+            queue.write_buffer(&self.bones, offset, bytes);
+        }
+        bytes.len()
     }
 
     /// This frame's agents (at most `AGENT_CAPACITY`; the rest are dropped).

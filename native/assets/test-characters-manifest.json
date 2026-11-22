@@ -1,0 +1,380 @@
+{
+  "source": "test/ar_rifle_demo/public",
+  "provenance": "characters/SOURCE.md",
+  "credit": "Earth Online civilian bodies (MakeHuman/MPFB system assets, CC0-1.0). The Tripo player is user-supplied and for local use only. Animation packs are authored in the source projects.",
+  "roster": [
+    {
+      "id": "tripo",
+      "body": "characters/tripo-player-ue5.glb",
+      "packs": [
+        "tripo"
+      ]
+    },
+    {
+      "id": "civilian-m-01-player",
+      "body": "characters/civilian-m-01-player-ue5.glb",
+      "packs": [
+        "civilian"
+      ]
+    },
+    {
+      "id": "civilian-police-m-hero",
+      "body": "characters/civilian-police-m-hero-ue5.glb",
+      "packs": [
+        "civilian"
+      ]
+    },
+    {
+      "id": "civilian-m-03-hero",
+      "body": "characters/civilian-m-03-hero-ue5.glb",
+      "packs": [
+        "civilian"
+      ]
+    },
+    {
+      "id": "civilian-f-02-hero",
+      "body": "characters/civilian-f-02-hero-ue5.glb",
+      "packs": [
+        "civilian"
+      ]
+    },
+    {
+      "id": "motorcycle-rider",
+      "body": "characters/civilian-m-01-player.glb",
+      "packs": [
+        "motorcycle"
+      ]
+    },
+    {
+      "id": "motorcycle-passenger",
+      "body": "characters/civilian-f-02-hero.glb",
+      "packs": [
+        "motorcycle"
+      ]
+    }
+  ],
+  "packs": {
+    "tripo": [
+      "characters/rifle-motion-tripo-v1.glb",
+      "characters/vehicle-motion-tripo-v1.glb"
+    ],
+    "civilian": [
+      "characters/rifle-motion-ue5-v1.glb",
+      "characters/vehicle-motion-ue5-v1.glb"
+    ],
+    "motorcycle": [
+      "vehicles/sport_motorcycle_rider_motion.glb"
+    ]
+  },
+  "files": {
+    "characters/civilian-f-02-hero-ue5.glb": {
+      "bytes": 4997820,
+      "sha256": "086a650e40426e7a64ccff503445a93b720f1df8a78cd390d5d357ed0a82ca47"
+    },
+    "characters/civilian-f-02-hero.glb": {
+      "bytes": 4985140,
+      "sha256": "d384ed3c9be137944278dbd771e4cd4389d42174b5be23b463549aa3108c250b"
+    },
+    "characters/civilian-m-01-player-ue5.glb": {
+      "bytes": 12871292,
+      "sha256": "575e03deeafedd8e3d4ac802d2911687453087ff2e540a48707cdb01f2b1e7d5"
+    },
+    "characters/civilian-m-01-player.glb": {
+      "bytes": 12858620,
+      "sha256": "bfcb2cdf9c6edd17e8a0f56abe2b00762a2b1a4b964d26c409b0b862ad9a984a"
+    },
+    "characters/civilian-m-03-hero-ue5.glb": {
+      "bytes": 5134812,
+      "sha256": "7fbb22e0c89633b3f3565c6f9aaed970fc266ad8b8e47187676a597d2a63faf2"
+    },
+    "characters/civilian-police-m-hero-ue5.glb": {
+      "bytes": 4834904,
+      "sha256": "a838c57d77baadb7d49fdebb9bcbd7c3e16cd2fbfc4f8d57c5d446eed53133a8"
+    },
+    "characters/rifle-motion-tripo-v1.glb": {
+      "bytes": 6466760,
+      "sha256": "8884fe38aaf0c8e6d50125deb8cf506eeaf9c11d04a141d07f4733a764c159b2",
+      "clips": [
+        "swap-shotgun-rifle",
+        "reload-shotgun-start",
+        "reload-shotgun-shell",
+        "reload-shotgun-end",
+        "reload-shotgun-end-pump",
+        "shotgun-pump",
+        "shotgun-aim-level",
+        "shotgun-aim-up",
+        "shotgun-aim-down",
+        "rifle-idle",
+        "rifle-hold-low",
+        "rifle-hold-high",
+        "rifle-walk-f",
+        "rifle-walk-fl",
+        "rifle-walk-l",
+        "rifle-walk-bl",
+        "rifle-walk-b",
+        "rifle-walk-br",
+        "rifle-walk-r",
+        "rifle-walk-fr",
+        "rifle-jog-f",
+        "rifle-jog-fl",
+        "rifle-jog-l",
+        "rifle-jog-bl",
+        "rifle-jog-b",
+        "rifle-jog-br",
+        "rifle-jog-r",
+        "rifle-jog-fr",
+        "rifle-sprint",
+        "rifle-pivot-l45",
+        "rifle-pivot-l90",
+        "rifle-pivot-l135",
+        "rifle-pivot-l180",
+        "rifle-pivot-r45",
+        "rifle-pivot-r90",
+        "rifle-pivot-r135",
+        "rifle-pivot-r180",
+        "rifle-walk-start",
+        "rifle-jog-start",
+        "rifle-walk-stop-0",
+        "rifle-walk-stop-1",
+        "rifle-walk-stop-2",
+        "rifle-walk-stop-3",
+        "rifle-walk-stop-4",
+        "rifle-walk-stop-5",
+        "rifle-walk-stop-6",
+        "rifle-walk-stop-7",
+        "rifle-jog-stop-0",
+        "rifle-jog-stop-1",
+        "rifle-jog-stop-2",
+        "rifle-jog-stop-3",
+        "rifle-jog-stop-4",
+        "rifle-jog-stop-5",
+        "rifle-jog-stop-6",
+        "rifle-jog-stop-7",
+        "rifle-run-turn-l",
+        "rifle-run-turn-r",
+        "rifle-crouch-idle",
+        "rifle-crouch-walk-f",
+        "rifle-crouch-walk-fl",
+        "rifle-crouch-walk-l",
+        "rifle-crouch-walk-bl",
+        "rifle-crouch-walk-b",
+        "rifle-crouch-walk-br",
+        "rifle-crouch-walk-r",
+        "rifle-crouch-walk-fr",
+        "rifle-crouch-down",
+        "rifle-crouch-up",
+        "swap-rifle-shotgun",
+        "reload-rifle-tac",
+        "reload-rifle-empty",
+        "rifle-aim-level",
+        "rifle-aim-up",
+        "rifle-aim-down",
+        "hit-light-f",
+        "hit-light-b",
+        "hit-light-l",
+        "hit-light-r",
+        "hit-heavy-f",
+        "hit-heavy-b"
+      ]
+    },
+    "characters/rifle-motion-tripo-v1.json": {
+      "bytes": 142783,
+      "sha256": "fa292674cfd795fad19ec570c19026496054abd59c28cc624fb9989b1a1cb933"
+    },
+    "characters/rifle-motion-ue5-v1.glb": {
+      "bytes": 6670732,
+      "sha256": "745d90ca42223ebe534f66f675ddcf2651e1a564cebe8cffa19c83c3116a0e97",
+      "clips": [
+        "swap-shotgun-rifle",
+        "reload-shotgun-start",
+        "reload-shotgun-shell",
+        "reload-shotgun-end",
+        "reload-shotgun-end-pump",
+        "shotgun-pump",
+        "shotgun-aim-level",
+        "shotgun-aim-up",
+        "shotgun-aim-down",
+        "rifle-idle",
+        "rifle-hold-low",
+        "rifle-hold-high",
+        "rifle-walk-f",
+        "rifle-walk-fl",
+        "rifle-walk-l",
+        "rifle-walk-bl",
+        "rifle-walk-b",
+        "rifle-walk-br",
+        "rifle-walk-r",
+        "rifle-walk-fr",
+        "rifle-jog-f",
+        "rifle-jog-fl",
+        "rifle-jog-l",
+        "rifle-jog-bl",
+        "rifle-jog-b",
+        "rifle-jog-br",
+        "rifle-jog-r",
+        "rifle-jog-fr",
+        "rifle-sprint",
+        "rifle-pivot-l45",
+        "rifle-pivot-l90",
+        "rifle-pivot-l135",
+        "rifle-pivot-l180",
+        "rifle-pivot-r45",
+        "rifle-pivot-r90",
+        "rifle-pivot-r135",
+        "rifle-pivot-r180",
+        "rifle-walk-start",
+        "rifle-jog-start",
+        "rifle-walk-stop-0",
+        "rifle-walk-stop-1",
+        "rifle-walk-stop-2",
+        "rifle-walk-stop-3",
+        "rifle-walk-stop-4",
+        "rifle-walk-stop-5",
+        "rifle-walk-stop-6",
+        "rifle-walk-stop-7",
+        "rifle-jog-stop-0",
+        "rifle-jog-stop-1",
+        "rifle-jog-stop-2",
+        "rifle-jog-stop-3",
+        "rifle-jog-stop-4",
+        "rifle-jog-stop-5",
+        "rifle-jog-stop-6",
+        "rifle-jog-stop-7",
+        "rifle-run-turn-l",
+        "rifle-run-turn-r",
+        "rifle-crouch-idle",
+        "rifle-crouch-walk-f",
+        "rifle-crouch-walk-fl",
+        "rifle-crouch-walk-l",
+        "rifle-crouch-walk-bl",
+        "rifle-crouch-walk-b",
+        "rifle-crouch-walk-br",
+        "rifle-crouch-walk-r",
+        "rifle-crouch-walk-fr",
+        "rifle-crouch-down",
+        "rifle-crouch-up",
+        "swap-rifle-shotgun",
+        "reload-rifle-tac",
+        "reload-rifle-empty",
+        "rifle-aim-level",
+        "rifle-aim-up",
+        "rifle-aim-down",
+        "hit-light-f",
+        "hit-light-b",
+        "hit-light-l",
+        "hit-light-r",
+        "hit-heavy-f",
+        "hit-heavy-b"
+      ]
+    },
+    "characters/rifle-motion-ue5-v1.json": {
+      "bytes": 142256,
+      "sha256": "68d11754c48f3275e437dd50dbfd0a4c46653b753a8764789d476db9575547c4"
+    },
+    "characters/tripo-player-ue5.glb": {
+      "bytes": 4267504,
+      "sha256": "75a5372b40262c81405e7193a2d647d9b0777f9ea402da12b8db5cfca45d05af"
+    },
+    "characters/vehicle-motion-tripo-v1.glb": {
+      "bytes": 2781500,
+      "sha256": "8ca1fb64bbd58c751bfbb8e995a83fc612ce40b69faf7b990fa6503871bdf62b",
+      "clips": [
+        "car-drive",
+        "car-steer-l",
+        "car-steer-r",
+        "car-look-back",
+        "heli-fly",
+        "heli-cyclic-f",
+        "heli-cyclic-b",
+        "heli-cyclic-l",
+        "heli-cyclic-r",
+        "heli-collective-up",
+        "heli-collective-down",
+        "heli-pedal-l",
+        "heli-pedal-r",
+        "car-enter",
+        "car-exit",
+        "heli-enter",
+        "heli-exit",
+        "car-bail",
+        "bail-roll",
+        "heli-jump",
+        "fall",
+        "land-roll",
+        "land-hard",
+        "para-pickup",
+        "para-deploy",
+        "para-hang",
+        "para-steer-l",
+        "para-steer-r",
+        "para-flare",
+        "para-land"
+      ]
+    },
+    "characters/vehicle-motion-tripo-v1.json": {
+      "bytes": 232311,
+      "sha256": "6e1edcd251448a7cfc329a2b088a5f98fbbd662276c6be1b44b890cabda5e6e4"
+    },
+    "characters/vehicle-motion-ue5-v1.glb": {
+      "bytes": 2874440,
+      "sha256": "b25424c03f6e3f1684445ee8a7a5decc881698074d5d6a0ab4e69a0c75c7fdd6",
+      "clips": [
+        "car-drive",
+        "car-steer-l",
+        "car-steer-r",
+        "car-look-back",
+        "heli-fly",
+        "heli-cyclic-f",
+        "heli-cyclic-b",
+        "heli-cyclic-l",
+        "heli-cyclic-r",
+        "heli-collective-up",
+        "heli-collective-down",
+        "heli-pedal-l",
+        "heli-pedal-r",
+        "car-enter",
+        "car-exit",
+        "heli-enter",
+        "heli-exit",
+        "car-bail",
+        "bail-roll",
+        "heli-jump",
+        "fall",
+        "land-roll",
+        "land-hard",
+        "para-pickup",
+        "para-deploy",
+        "para-hang",
+        "para-steer-l",
+        "para-steer-r",
+        "para-flare",
+        "para-land"
+      ]
+    },
+    "characters/vehicle-motion-ue5-v1.json": {
+      "bytes": 220269,
+      "sha256": "fa4414f749d5248e54bb5d6f0ad72355fbeef2575b5dc71761bf027b66ca34d1"
+    },
+    "vehicles/sport_motorcycle_rider_motion.glb": {
+      "bytes": 507992,
+      "sha256": "13f0718a8911078b0e1adf8447cf8960a11fcd6c1fd73885fa91ed3f4a087cb1",
+      "clips": [
+        "idle",
+        "walk",
+        "run",
+        "ride_rider",
+        "ride_passenger",
+        "crash_fall",
+        "get_up",
+        "mount_rider_left",
+        "dismount_rider_left",
+        "mount_rider_right",
+        "dismount_rider_right",
+        "mount_passenger_left",
+        "dismount_passenger_left",
+        "mount_passenger_right",
+        "dismount_passenger_right"
+      ]
+    }
+  }
+}

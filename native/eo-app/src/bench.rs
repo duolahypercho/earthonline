@@ -730,12 +730,17 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             }
             let refresh_player = player.is_some() || !agents.extras.is_empty();
             agents.extras.clear();
+            agents.clear_test_pose();
             if let Some(p) = player {
-                let lib = agents.lib.as_ref().ok_or_else(|| anyhow!("player scale reference requires the people library"))?;
-                let body = eo_agents::feed::player_body(lib, p.feet, p.yaw, 0., 0., 0.)
-                    .ok_or_else(|| anyhow!("no verified player avatar available for scale reference"))?;
+                if args.test_character.is_some() {
+                    anyhow::ensure!(agents.lib.as_ref().is_some_and(|lib| lib.test_player.is_some()),
+                        "requested test character failed to load: {:?}", agents.errors);
+                }
+                let body = agents.capture_player(p.feet, p.yaw, p.time)?;
+                let lib = agents.lib.as_ref().expect("capture has an agent library");
+                let height = lib.test_player.as_ref().map(|p| p.height).or_else(|| lib.meta.family_heights.first().copied());
                 agents.extras.push(body);
-                println!("scale reference {name}: {} at {:?}, model height {:?} m, people scale {}", lib.meta.model_names[lib.meta.player_model as usize], p.feet, lib.meta.family_heights.first(), body.scale);
+                println!("scale reference {name}: {} at {:?}, model height {height:?} m, people scale {}", lib.meta.model_names[body.model as usize], p.feet, body.scale);
             }
             settle_p(&ctx, &renderer, &world, &mut models, Some(&mut props), &cam, 600.0)?;
             crate::props::sync_parked(&ctx, &renderer, &mut props, &mut agents, &cam);
@@ -2336,7 +2341,7 @@ fn clear_path_frame(seg: &Segment, i: usize, total: usize) -> (usize, Option<Str
     }
 }
 
-fn capture(
+pub(crate) fn capture(
     ctx: &GpuContext,
     renderer: &Renderer,
     color: &wgpu::Texture,

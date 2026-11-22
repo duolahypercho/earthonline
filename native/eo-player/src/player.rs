@@ -408,8 +408,8 @@ impl Player {
         crate::lift::fade(self.lift)
     }
 
-    /// Enter the nearest car within the interaction range.
-    pub fn try_enter(&mut self, world: &CollisionWorld) -> bool {
+    /// The nearest car within the interaction range.
+    pub fn nearby_vehicle(&self, world: &CollisionWorld) -> Option<usize> {
         let feet = self.character.feet();
         let mut best: Option<(usize, f64)> = None;
         for (i, v) in self.vehicles.iter().enumerate() {
@@ -423,10 +423,67 @@ impl Player {
                 best = Some((i, d));
             }
         }
-        let Some((i, _)) = best else { return false };
+        best.map(|(i, _)| i)
+    }
+
+    /// Enter the nearest car within the interaction range.
+    pub fn try_enter(&mut self, world: &CollisionWorld) -> bool {
+        let Some(i) = self.nearby_vehicle(world) else { return false };
+        self.enter_vehicle(i);
+        true
+    }
+
+    /// Take control of the car selected at the start of a local entry animation.
+    pub fn enter_vehicle(&mut self, i: usize) {
         self.mode = Mode::Driving(i);
         self.drive_cam = DriveCamera::default();
         self.momentum.reset();
+    }
+
+    /// Find clear standing room at a vehicle door station, on the actual walkable surface.
+    pub fn vehicle_footing(&self, world: &CollisionWorld, i: usize, at: DVec3) -> Option<DVec3> {
+        let v = self.vehicles.get(i)?;
+        let (p, _) = v.pose(world);
+        let y = if world.multi_level() {
+            // several levels: the surface nearest below the car's own level
+            // at the door; one more than a level's reach under the car (past
+            // a deck's edge) is not a way out.
+            let datum = v.datum(world);
+            let y = world.surface_below(at.x, at.z, datum.y + LEVEL_REACH_M);
+            if y < datum.y - LEVEL_REACH_M {
+                return None;
+            }
+            y
+        } else {
+            let top = world.raycast(DVec3::new(at.x, p.y + 3.0, at.z), DVec3::NEG_Y, 8.0, layer::WORLD | layer::STREET, Some(v.body));
+            let floor = world.floor_y(at.x, at.z);
+            top.map(|h| h.point.y).unwrap_or(floor).max(floor)
+        };
+        let feet = DVec3::new(at.x, y, at.z);
+        let center = Character::new(feet).position;
+        let shape = Capsule::new_y(tuning::capsule::HALF_HEIGHT_M as f32, tuning::capsule::RADIUS_M as f32);
+        let pose = Pose::from_translation(Vector::new(center.x as f32, center.y as f32 + 0.02, center.z as f32));
+        let f = QueryFilter::default().groups(InteractionGroups::new(Group::ALL, layer::WORLD | layer::STREET | layer::VEHICLE, InteractionTestMode::And));
+        world.physics.intersect_shape(pose, &shape, f).next().is_none().then_some(feet)
+    }
+
+    fn leave_vehicle(&mut self, feet: DVec3, yaw: f64) {
+        self.character.teleport_feet(feet);
+        self.momentum.reset();
+        self.mode = Mode::OnFoot;
+        self.yaw = yaw;
+        self.on_foot_cam.seed(feet, self.last_camera_distance);
+    }
+
+    /// Return controls to the walker at an animated exit point after rechecking it.
+    pub fn exit_vehicle_at(&mut self, world: &CollisionWorld, i: usize, at: DVec3, yaw: f64) -> bool {
+        if self.mode != Mode::Driving(i) {
+            return false;
+        }
+        let Some(feet) = self.vehicle_footing(world, i, at) else { return false };
+        self.leave_vehicle(feet, yaw);
+        self.facing_yaw = yaw;
+        self.ground_speed = 0.0;
         true
     }
 
@@ -439,37 +496,11 @@ impl Player {
         let flat = DQuat::from_rotation_y(yaw);
         let side = v.spec.width / 2.0 + tuning::DOOR_STATION_OUTSET_M;
         let candidates = [DVec3::new(side, 0.0, 0.0), DVec3::new(-side, 0.0, 0.0), DVec3::new(0.0, 0.0, -(v.spec.length / 2.0 + 0.8))];
-        let datum = v.datum(world);
         for local in candidates {
-            let at = p + flat * local;
-            let y = if world.multi_level() {
-                // several levels: the surface nearest below the car's own
-                // level at the door; one more than a level's reach under the
-                // car (past a deck's edge) is not a way out.
-                let y = world.surface_below(at.x, at.z, datum.y + LEVEL_REACH_M);
-                if y < datum.y - LEVEL_REACH_M {
-                    continue;
-                }
-                y
-            } else {
-                let top = world.raycast(DVec3::new(at.x, p.y + 3.0, at.z), DVec3::NEG_Y, 8.0, layer::WORLD | layer::STREET, Some(v.body));
-                let floor = world.floor_y(at.x, at.z);
-                top.map(|h| h.point.y).unwrap_or(floor).max(floor)
-            };
-            let feet = DVec3::new(at.x, y, at.z);
-            let center = Character::new(feet).position;
-            let shape = Capsule::new_y(tuning::capsule::HALF_HEIGHT_M as f32, tuning::capsule::RADIUS_M as f32);
-            let pose = Pose::from_translation(Vector::new(center.x as f32, center.y as f32 + 0.02, center.z as f32));
-            let f = QueryFilter::default().groups(InteractionGroups::new(Group::ALL, layer::WORLD | layer::STREET | layer::VEHICLE, InteractionTestMode::And));
-            if world.physics.intersect_shape(pose, &shape, f).next().is_some() {
-                continue;
+            if let Some(feet) = self.vehicle_footing(world, i, p + flat * local) {
+                self.leave_vehicle(feet, yaw);
+                return true;
             }
-            self.character.teleport_feet(feet);
-            self.momentum.reset();
-            self.mode = Mode::OnFoot;
-            self.yaw = yaw;
-            self.on_foot_cam.seed(feet, self.last_camera_distance);
-            return true;
         }
         false
     }

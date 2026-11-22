@@ -302,6 +302,9 @@ switch it does not take.
 | `--house-photo-lod` / `--no-house-photo-lod` | With the optional furnished house enabled, use a reduced mesh for material parts more than 120 m from the camera. Foliage and architectural detail retain their full geometry at the house. Disabled by default. |
 | `--no-interior-lighting` | Disable the baked window and pendant light contribution in the Beaver Street house. |
 | `--play` | The player instead of the free camera |
+| `--test-character ID` / `--no-test-character` | Opt in to a demo avatar in `--play`, or restore the standard avatar. See [Demo characters](#demo-characters). |
+| `--test-clip NAME`, `--list-test-clips` | Preview a named animation on the selected demo avatar, or print the roster and clip names. |
+| `--car-door-animation` / `--no-car-door-animation` | In local play with a main demo avatar, use the paired entry and exit clips and the sedan's driver-door hinge when pressing F. |
 | `--ui` | The interface shell: title, loading, HUD, pause menu |
 | `--connect ADDR\|local` | Online client (with `--name`, `--spawn x,z,heading`) |
 | `--bench` | Offscreen timing run over scripted camera paths; prints and writes JSON to `bench-out/` |
@@ -498,6 +501,8 @@ selection:
 | Bridge detail | `--bridge-detail` enables the Golden Gate detail preview (a darker paint tone, ribbed tower legs, framed portal struts, full arch pylons, lamp standards), each part drawn only where the bridges' own passes (Bridges, below) leave it as exported; left out, the preview is off. `--no-bridge-detail` is not its off form: it is the bridges' own detail switch (Bridges), so with both the preview's legs and portal struts stand in for that pass |
 | Landmark decks | `--no-landmark-access` (the decks, their lifts and the tower bands and tower tops they take over; the collision world without them; the rooms' camera meter and the player's deck occlusion, whose shader terms compile out, `SF_LANDMARK_ACCESS`) |
 | People | `--no-rocketbox`, `--no-rocketbox-motions` (either one: no people) |
+| Demo player avatar | `--no-test-character` |
+| Driver-door animation | `--no-car-door-animation` |
 | Props | `--no-props2`, `--no-furniture`, `--no-eztree`, `--no-wires`, `--no-overhead`, `--no-lamp-sprites`, `--no-stand-ins`, `--no-furniture-models` (a furniture kind whose GLB is not in the checkout draws as a 0.3 m box at its height, not its model drawn in code), `--no-street-props-v2` (the v1 street-prop files the JS lists, drawn as proxies or stand-ins where the checkout lacks them, as before the v2 models) |
 | Bridges | `--no-bridges2` (all of these), `--no-bridge-scale`, `--no-bridge-paint`, `--no-bridge-detail`, `--no-bridge-wires`, `--no-bridge-night`; the second pass: `--no-bridges3` (all of its), `--no-bridge-air`, `--no-bridge-finish`, `--no-bridge-members`, `--no-bridge-floods`, `--no-bridge-curtain` |
 | Harbours | `--no-floating-docks` (no floats along the harbours' pier lines, and so no berths or boats), `--no-boats` (the floats without the moored boats; `--no-props2` also leaves them out) |
@@ -872,6 +877,7 @@ variables count.
 | `EO_PEOPLE_ROOT` | `external/people` | Rocketbox avatars | The game |
 | `EO_PEOPLE_MOTIONS_ROOT` | `external/people-motions` | Rocketbox motion clips | The game |
 | `EO_PEOPLE_STYLES_ROOT` | `external/people-styles` | 100STYLE walking styles | The game |
+| `EO_TEST_CHARACTERS_ROOT` | none | The local test demo's `public` directory: the demo avatars and motion packs (`assets/test-characters-manifest.json`) | The game with `--test-character` |
 | `EO_CC0_ROOT` | `external/cc0` | Scanned CC0 texture sets (Poly Haven, ambientCG) | The game, `tools/fetch-cc0.mjs` |
 | `EO_AUDIO_ROOT` | `external/audio` | Sound clips | The game |
 | `EO_SIGN_ART_ROOT` | `external/sign-art` | Official sign art and the sign font | The game, `tools/fetch-sign-art.mjs` |
@@ -980,6 +986,49 @@ draws grey boxes for those props (procedural models of them with
 The source binaries of the asset pipelines (Blender scenes, vehicle
 sources) are a separate, optional store; the game never reads
 them. See [Docs/ASSET-STORE.md](../Docs/ASSET-STORE.md).
+
+## Demo characters
+
+From `native/`, with the test demo in the sibling `test` directory:
+
+```sh
+export EO_TEST_CHARACTERS_ROOT=../../test/ar_rifle_demo/public
+./target/release/eo-app --list-test-clips
+./target/release/eo-app --play --test-character tripo --car-door-animation
+./target/release/eo-app --play --test-character civilian-m-01-player --test-clip car-enter
+```
+
+The five main demo avatars each have 110 clips. The motorcycle rider and
+passenger use the demo's original rigs and its 15-clip rider pack. In local
+play the avatars follow the existing controller. The main rigs use
+directional walking and jogging, sprinting, crouching, falling, landing,
+seated driving, steering and looking back. The motorcycle rigs use their
+idle, walk and run on foot.
+
+With `--car-door-animation`, press F beside the stopped sedan's driver
+door to enter, and press F again when stopped to exit. The driver and door
+share the authored timing. Controls return after the door closes. Leave
+room to stand beside the driver door. Where the animated entry or exit
+cannot start (away from the driver door, the car moving, on a lift ride),
+F enters or leaves the car at once as without the switch. Photo mode holds
+it as it holds the rest of play. Both switches are local play only:
+`--connect` takes neither, and the network sends no avatar or door state.
+
+`--test-clip` plays any clip from the chosen avatar's catalogue, including its
+authored root motion. Motorcycle, helicopter, parachute and weapon-handling
+poses are available through this preview.
+For a fixed frame in an `EO_CAPTURE_POSES` capture, set `player.time` in
+seconds along with `player.feet` and `player.yaw`.
+
+Use `--play --bench --segments car_access --test-character tripo --car-door-animation`
+to exercise both F presses in sequence. Add `--capture --out DIR` for
+fixed-camera frames before entry, with the door open, and after exit.
+
+The loader verifies byte counts and SHA-256 hashes from
+[`assets/test-characters-manifest.json`](assets/test-characters-manifest.json).
+Regenerate that manifest with
+[`tools/write-test-character-manifest.mjs`](tools/write-test-character-manifest.mjs)
+against the source demo's `public` directory.
 
 ## What is drawn
 

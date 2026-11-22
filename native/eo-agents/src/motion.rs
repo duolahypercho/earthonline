@@ -378,7 +378,15 @@ pub fn rest_nodes(g: &Glb) -> Vec<RestNode> {
 /// The first animation of a GLB, channels by node name (LINEAR keys; the
 /// sampler data checked: equal counts, finite, increasing times).
 pub fn glb_clip(g: &Glb, name: &str) -> Result<Clip> {
-    let a = g.json.get("animations").and_then(|a| a.as_array()).and_then(|a| a.first()).ok_or_else(|| anyhow!("{name}: no animation"))?;
+    let clip = read_glb_clip(g, 0, name)?;
+    if clip.duration <= 0.0 {
+        bail!("{name}: an empty clip");
+    }
+    Ok(clip)
+}
+
+pub(crate) fn read_glb_clip(g: &Glb, index: usize, name: &str) -> Result<Clip> {
+    let a = g.json.get("animations").and_then(|a| a.as_array()).and_then(|a| a.get(index)).ok_or_else(|| anyhow!("{name}: no animation"))?;
     let samplers = a.get("samplers").and_then(|s| s.as_array()).ok_or_else(|| anyhow!("{name}: no samplers"))?;
     let nodes = g.nodes();
     let mut clip = Clip { name: name.to_string(), ..Default::default() };
@@ -437,7 +445,7 @@ pub fn glb_clip(g: &Glb, name: &str) -> Result<Clip> {
         let node_name = nodes[node].get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
         clip.channels.push(Channel { node: node_name, path, times, values });
     }
-    if clip.channels.is_empty() || !(clip.duration > 0.0) {
+    if clip.channels.is_empty() {
         bail!("{name}: an empty clip");
     }
     Ok(clip)

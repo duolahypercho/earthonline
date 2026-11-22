@@ -1136,6 +1136,34 @@ struct Planes {
     cutout: Vec<bool>,
 }
 
+/// Cook a glTF material already laid out in one atlas. Share the crowd's
+/// texture format so the player can use the same material and shadow passes.
+pub(crate) fn material_atlas(
+    maps: [(u32, u32, Vec<u8>); 3],
+    masked: bool,
+    orm_factors: [f32; 3],
+) -> Atlas {
+    let [albedo, normal, orm] = maps;
+    let lut = srgb_lut();
+    let resize = |(w, h, rgba): (u32, u32, Vec<u8>), srgb| {
+        resample(&rgba, w, h, ATLAS_RES, srgb, &lut)
+    };
+    let mut albedo = resize(albedo, true);
+    if !masked {
+        for texel in &mut albedo {
+            texel[3] = 1.0;
+        }
+    }
+    let normal = resize(normal, false).into_iter().map(|[r, g, b, _]| {
+        (Vec3::new(r, g, b) * 2.0 - Vec3::ONE).normalize_or(Vec3::Z).to_array()
+    }).collect();
+    let orm = resize(orm, false).into_iter().map(|[r, g, b, _]| {
+        [1.0 + (r - 1.0) * orm_factors[0], g * orm_factors[1], b * orm_factors[2]]
+    }).collect();
+    let cutout = vec![masked; albedo.len()];
+    compress_planes(Planes { albedo, normal, orm, cutout })
+}
+
 fn build_planes(g: &Glb, regions: &HashMap<String, Region>) -> Result<Planes> {
     let n = (ATLAS_RES * ATLAS_RES) as usize;
     let lut = srgb_lut();

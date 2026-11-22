@@ -164,8 +164,16 @@ source, licence and SHA-256; the program refuses a file that does not match.
 ### Not distributed
 
 These are kept locally, untracked and ignored by Git, and are not part of
-the repository or any release. Without them the game draws simple proxies
-for the props and other vehicles in traffic.
+the repository or any release. Without the optional prop and vehicle
+models the game draws simple proxies for those objects.
+
+The optional demo avatars and motions load from a local copy of
+`test/ar_rifle_demo/public`. The four civilian bodies and the motorcycle
+variants use the MakeHuman / MPFB source described above. The Tripo
+avatar is user-supplied for local use. The animation packs are authored in
+the demo projects. Source files and hashes are listed in
+[`native/assets/test-characters-manifest.json`](native/assets/test-characters-manifest.json).
+The demo's `characters/SOURCE.md` records the asset origins.
 
 - 22 street-prop models made with a text-to-3D service, whose output terms
   are not recorded: `bench`, `bikeRack`, `bollard`, `busStopFlag`,

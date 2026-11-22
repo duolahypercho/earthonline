@@ -55,7 +55,7 @@ struct AgModel {
     skeleton: u32,
     joints: u32,
     wheel_radius: f32,
-    pad: vec4<u32>,
+    driver_door: vec4<f32>,
 };
 
 struct AgMesh {
@@ -67,7 +67,7 @@ struct AgMesh {
     // first joint matrix of the mesh's skeleton bake, joints
     skeleton: u32,
     joints: u32,
-    pad: u32,
+    live_palette: u32,
 };
 
 const AG_PERSON: u32 = 1u;

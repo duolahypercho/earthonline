@@ -11,6 +11,8 @@
 static ALLOC: eo_render::alloc::EoAlloc = eo_render::alloc::EoAlloc;
 
 mod agents; // agents
+mod test_characters;
+mod car_access;
 mod house;
 mod play;
 mod props; // props
@@ -155,6 +157,7 @@ pub struct Args {
     pub agent_density: u32,
     /// the Rocketbox people walk the streets when the people folder (external/people, or EO_PEOPLE_ROOT) holds a copy; `--no-rocketbox` draws no people.
     pub rocketbox: bool,
+    pub test_character: Option<eo_agents::test_characters::Selection>,
     /// street props, trees and parked cars (`--no-props` turns them off).
     pub props: bool,
     /// the furniture kinds, ez-tree trees, overhead, wires and their shading (`--no-props2` etc.).
@@ -269,6 +272,7 @@ fn parse_args() -> Result<Args> {
 
 /// `parse_args` over the given arguments (the program name left out).
 fn parse_args_from(raw: &[String]) -> Result<Args> {
+    let mut test_character = test_characters::Options::default();
     let mut a = Args {
         interior_lighting: true,
         house_finishes: false,
@@ -349,6 +353,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
         agents: true, // agents
         agent_density: 1,
         rocketbox: true, // people
+        test_character: None,
         props: true, // props
         props2: Default::default(),
         perf: Default::default(), // occlusion / hitch
@@ -759,8 +764,10 @@ eo-app --clip FILE.json --out DIR [--width W --height H] [--shots-only a,b] [any
        offscreen: moving clips at 60 Hz of wall time along camera paths, every 60 / fps-th frame written as DIR/<name>/NNNN.png;\n\
        FILE.json holds {{\"name\", \"seconds\", \"fps\", \"time_of_day\", \"fov\", \"keys\": [{{\"t\", \"eye\": [x, y, z], \"look_at\": [x, y, z]}}]}} (bench/clip.rs)."
                 );
+                println!("       [--play --test-character ID [--test-clip NAME] [--car-door-animation]] [--no-test-character] [--list-test-clips]");
                 std::process::exit(0);
             }
+            flag if test_character.parse(flag, &mut val)? => {}
             other => anyhow::bail!("unknown argument {other} (try --help)"),
         }
     }
@@ -789,6 +796,7 @@ eo-app --clip FILE.json --out DIR [--width W --height H] [--shots-only a,b] [any
         // 4 timestamp queries per frame; one query set holds at most 4096.
         anyhow::bail!("--frames + --warmup must be <= 1024 per segment");
     }
+    a.test_character = test_character.selection(a.agents)?;
     Ok(a)
 }
 
@@ -1552,6 +1560,9 @@ fn external_flag() {
 }
 
 fn main() -> Result<()> {
+    if std::env::args().nth(1).as_deref() == Some("--list-test-clips") {
+        return test_characters::list();
+    }
     groundscale_flags()?;
     roofs_flags();
     external_flag();
