@@ -166,6 +166,11 @@ pub struct Args {
     /// clutter.rs): fire escapes, awnings, signs, services and roof clutter on
     /// the kit buildings; 0 (the default) none. Set by `quality::Switches::apply`.
     pub facade_clutter: u8,
+    /// other players' ground contact is drawn (`--connect` without
+    /// `--no-player-contact` or `--no-remote-bodies`; net.rs): its shader
+    /// code is compiled in (`ShaderFeatures::player_contact`). False
+    /// everywhere else.
+    pub player_contact: bool,
 }
 
 /// occlusion / hitch: one `Args` field, so `play.rs` and `ui.rs` name it once.
@@ -338,6 +343,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
         landmarks2: true,
         structures: None, // `--structures` (quality::Switches)
         facade_clutter: 0, // `--facade-clutter` (quality::Switches)
+        player_contact: false, // set by net.rs (`--connect`)
     };
     let mut tier = quality::Switches::default(); // `--quality` and the lighting switches, applied after the loop
     // `--scene-cards` renders at 2560 x 1440 unless a size is given.

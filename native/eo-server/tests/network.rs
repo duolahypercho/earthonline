@@ -6,7 +6,10 @@
 //! * a client whose link goes dark reconnects and resumes the same player;
 //! * two clients near each other see each other's player where it is, and
 //!   the same traffic: at any server tick both hold, every car and walker
-//!   they both see has the same state.
+//!   they both see has the same state;
+//! * presence at a landmark: each knows the other's name, sees its emote,
+//!   both draw the same sky, and a fast trip lands the traveller at the
+//!   viewpoint for both (the server validates it and refuses a bad one).
 
 use eo_net::client::{ClientConfig, Event, NetClient, Phase};
 use eo_net::game::{GameWorld, rebuild_player};
@@ -60,6 +63,7 @@ struct Player {
     last_ack: u32,
     accepts: Vec<(u32, bool)>,
     out: Vec<(u32, eo_net::wire::NetInput)>,
+    reliable: Vec<Vec<u8>>,
 }
 
 impl Player {
@@ -68,7 +72,7 @@ impl Player {
         c.conditions = cond;
         c.spawn = Some(SpawnHint { x: spawn[0] as f32, z: spawn[1] as f32, yaw: spawn[2] as f32, driving: false });
         c.timeout_s = 2.0;
-        Self { net: NetClient::connect(c).unwrap(), pred: None, last_ack: 0, accepts: vec![], out: vec![] }
+        Self { net: NetClient::connect(c).unwrap(), pred: None, last_ack: 0, accepts: vec![], out: vec![], reliable: vec![] }
     }
 
     fn frame(&mut self, input: &StepInput, yaw: f64, dt: f64) {
@@ -89,7 +93,7 @@ impl Player {
                         p.correct(&c);
                     }
                 }
-                Event::Reliable(_) => {}
+                Event::Reliable(m) => self.reliable.push(m),
             }
         }
         let Some(p) = self.pred.as_mut() else { return };
@@ -327,4 +331,58 @@ fn a_client_with_other_structures_is_refused() {
     }
     drop(net);
     h.stop();
+}
+
+/// Two friends at a landmark: names, an emote, the same sky, and a fast trip.
+#[test]
+fn friends_share_names_emotes_the_sky_and_a_fast_trip() {
+    use eo_net::presence::{Emote, unpack_anim, viewpoints};
+    use eo_net::proto::{TravelReply, TravelResult, msg, read_roster};
+    let h = Harness::start();
+    let a_spawn = *SPAWN;
+    let b_spawn = [SPAWN[0] + 5.0, SPAWN[1] + 1.0, -1.5708];
+    let mut a = Player::connect(h.addr, "ada", Conditions::profile_80ms(), a_spawn);
+    let mut b = Player::connect(h.addr, "bo", Conditions::profile_80ms(), b_spawn);
+    wait_connected(&mut [&mut a, &mut b]);
+    run_frames(&mut [&mut a, &mut b], 1.5, |_, _| (StepInput::default(), 0.0));
+    let (ida, idb) = (a.net.player_id(), b.net.player_id());
+    // Names: each has heard of the other (whoever joined first).
+    let names = |p: &Player| -> HashMap<u32, String> { p.reliable.iter().filter_map(|m| read_roster(m)).filter(|r| r.0).map(|r| (r.1, r.2)).collect() };
+    assert_eq!(names(&a).get(&idb).map(String::as_str), Some("bo"), "ada knows bo's name");
+    assert_eq!(names(&b).get(&ida).map(String::as_str), Some("ada"), "bo knows ada's name");
+    // Bo waves; Ada sees it on bo's player.
+    b.net.command(vec![msg::EMOTE, Emote::Wave as u8]);
+    run_frames(&mut [&mut a, &mut b], 1.0, |_, _| (StepInput::default(), 0.0));
+    let v = a.net.view(Instant::now()).unwrap();
+    let e = v.b.entities.iter().find(|e| e.0 == net_id(CLASS_PLAYER, idb)).unwrap();
+    assert_eq!(unpack_anim(e.1.anim).0, Emote::Wave, "ada sees bo wave");
+    // The same sky: the two headers of one server tick carry the same clock.
+    let (va, vb) = (a.net.view(Instant::now()).unwrap(), b.net.view(Instant::now()).unwrap());
+    let (sa, sb) = (va.b.header.sky.hour_after(0.0), vb.b.header.sky.hour_after((va.b.header.tick as f64 - vb.b.header.tick as f64) / 60.0));
+    assert!(eo_net::presence::hour_delta(sa, sb).abs() < 1e-6 && va.b.header.sky.weather == vb.b.header.sky.weather, "one sky: {sa} h against {sb} h");
+    // A trip to nowhere is refused; one to Coit Tower lands bo at the viewpoint for both.
+    let coit = viewpoints().unwrap().iter().position(|v| v.id == "coit-tower").unwrap() as u16;
+    b.net.command(vec![msg::TRAVEL, 0xFF, 0x7F]);
+    b.net.command(vec![msg::TRAVEL, coit as u8, (coit >> 8) as u8]);
+    run_frames(&mut [&mut a, &mut b], 3.0, |_, _| (StepInput::default(), 0.0));
+    let replies: Vec<TravelReply> = b.reliable.iter().filter_map(|m| TravelReply::read(m)).collect();
+    assert!(replies.iter().any(|r| r.result == TravelResult::Unknown), "an unknown viewpoint is refused: {replies:?}");
+    let ok = replies.iter().find(|r| r.result == TravelResult::Accepted).expect("the trip to Coit Tower is accepted");
+    let feet = b.pred.as_ref().unwrap().player.character.feet();
+    let d = (feet.x - ok.arrival[0] as f64).hypot(feet.z - ok.arrival[1] as f64);
+    assert!(d < 0.5, "bo stands {d:.2} m from the arrival point");
+    // Ada follows; there she sees bo where he stands, beside her on the ring, not in her.
+    a.net.command(vec![msg::TRAVEL, coit as u8, (coit >> 8) as u8]);
+    run_frames(&mut [&mut a, &mut b], 3.0, |_, _| (StepInput::default(), 0.0));
+    let v = a.net.view(Instant::now()).unwrap();
+    let e = v.b.entities.iter().find(|e| e.0 == net_id(CLASS_PLAYER, idb)).expect("ada, at Coit Tower too, holds bo");
+    let seen = e.1.pos();
+    assert!((seen[0] - feet.x).hypot(seen[2] - feet.z) < 1.0, "ada sees bo at Coit Tower");
+    let fa = a.pred.as_ref().unwrap().player.character.feet();
+    let apart = (fa.x - feet.x).hypot(fa.z - feet.z);
+    assert!(apart > 0.8 && apart < 12.0, "the two arrive {apart:.2} m apart");
+    // The emote ended with the trip, and no input was lost on the way.
+    assert_eq!(unpack_anim(e.1.anim).0, Emote::None);
+    let st = h.stop();
+    println!("presence: names, a wave, one sky, a trip of {:.0} m; server {st}", (feet.x - b_spawn[0]).hypot(feet.z - b_spawn[1]));
 }

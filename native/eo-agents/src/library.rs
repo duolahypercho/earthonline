@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 /// Bump when the cooked layout or the cook changes.
-pub const COOK_VERSION: u32 = 5; // 4 -> 5 (people moved by the Rocketbox clips and 100STYLE walks only)
+pub const COOK_VERSION: u32 = 6; // 5 -> 6 (the selfie's phone, `Meta::phone_model`)
 const MAGIC: &[u8; 4] = b"EOAL";
 /// People tiers in LOD slot order.
 pub const PERSON_TIERS: [&str; LODS] = ["hero", "near", "mid", "far"];
@@ -62,6 +62,13 @@ pub struct Meta {
     pub people_groups: u32,
     /// the slots' layout and each person's walk (empty: today's layout).
     pub motion: crate::motion::MotionMeta,
+    /// The phone a player's selfie holds (`rig::phone`), a model of its own
+    /// (no traffic or parked pool reads it).
+    pub phone_model: Option<u32>,
+    /// The ground-contact patch under another player's feet, shins and
+    /// hips (`rig::contacts`), appended after loading (`Library::add_contact_model`):
+    /// it is not cooked, so the cache is the same with or without it.
+    pub contact_model: Option<u32>,
 }
 
 /// where the street people come from.
@@ -228,6 +235,7 @@ impl Library {
                 match read_cache(&p) {
                     Ok(mut lib) => {
                         lib.from_cache = true;
+                        lib.add_contact_model();
                         lib.load_ms = t.elapsed().as_secs_f64() * 1e3;
                         lib.cache_path = Some(p);
                         say_people(&lib, people, &motions);
@@ -247,9 +255,40 @@ impl Library {
                 lib.cache_path = Some(p);
             }
         }
+        lib.add_contact_model();
         lib.load_ms = t.elapsed().as_secs_f64() * 1e3;
         say_people(&lib, people, &motions);
         Ok(lib)
+    }
+
+    /// Append the ground-contact patch (`rig::contact_body`) as a model of
+    /// its own, every level of detail the same quad, where the cull can still
+    /// address another mesh. Idempotent.
+    pub fn add_contact_model(&mut self) {
+        if self.meta.contact_model.is_some() || self.meshes.len() >= MAX_MESHES {
+            return;
+        }
+        let b = crate::rig::contact_body();
+        let mat0 = self.materials.len() as u32;
+        self.materials.extend_from_slice(&b.materials);
+        let base = self.vertices.len() as i32;
+        for v in &b.vertices {
+            let mut v = *v;
+            v.tag = (v.tag & !0xffff) | (mat0 + (v.tag & 0xffff));
+            self.vertices.push(v);
+        }
+        let first = self.indices.len() as u32;
+        self.indices.extend_from_slice(&b.opaque);
+        let glass_first = self.indices.len() as u32;
+        self.indices.extend_from_slice(&b.glass);
+        self.meshes.push(GpuMesh { first_index: first, index_count: b.opaque.len() as u32, glass_first, glass_count: b.glass.len() as u32, base_vertex: base, pad: [0; 3] });
+        self.meta.mesh_triangles.push(b.triangles);
+        let mesh = self.meshes.len() as u32 - 1;
+        let m = self.models.len() as u32;
+        // The quad spans [-1, 1] in x and z; the instance scale is its half size in metres.
+        self.models.push(GpuModel { meshes: [mesh; LODS], wheel: [[0.0; 4]; 4], center: [0.0; 3], radius: std::f32::consts::SQRT_2, class: CLASS_VEHICLE, skeleton: 0, joints: 0, wheel_radius: 0.0, pad: [0; 4] });
+        self.meta.model_names.push("contact".into());
+        self.meta.contact_model = Some(m);
     }
 
     pub fn model(&self, name: &str) -> Option<u32> {
@@ -385,6 +424,19 @@ pub fn cook_full(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions
             eprintln!("agents: people are not drawn: {why}");
             b.lib.meta.people_fallback = Some(why);
         }
+    }
+    // The selfie's phone (`rig::phone_body`): the same slab at every level
+    // of detail, after the people (it takes none of their mesh budget) and
+    // only where the cull can address it.
+    if b.lib.meshes.len() < MAX_MESHES {
+        let pb = crate::rig::phone_body();
+        let mesh = b.body(&pb);
+        let c = [(pb.min[0] + pb.max[0]) / 2.0, (pb.min[1] + pb.max[1]) / 2.0, (pb.min[2] + pb.max[2]) / 2.0];
+        let r = (0..3).map(|k| (pb.max[k] - pb.min[k]).powi(2)).sum::<f32>().sqrt() / 2.0;
+        let m = b.lib.models.len() as u32;
+        b.lib.models.push(GpuModel { meshes: [mesh; LODS], wheel: [[0.0; 4]; 4], center: c, radius: r, class: CLASS_VEHICLE, skeleton: 0, joints: 0, wheel_radius: 0.0, pad: [0; 4] });
+        b.lib.meta.model_names.push("phone".into());
+        b.lib.meta.phone_model = Some(m);
     }
     b.lib.meta.atlas_res = atlas_res;
     if b.lib.indices.is_empty() {
@@ -580,7 +632,7 @@ fn motion_sources(roots: &MotionRoots, meta: &mut crate::motion::MotionMeta) -> 
     let clips = (|| -> Result<HashMap<String, crate::motion::RbClip>> {
         let m = Manifest::clips()?;
         m.read(clips_root, "LICENSES.md").context("the copy's LICENSES.md")?;
-        let mut ids: Vec<&str> = ROLES.iter().flat_map(|r| [r.female, r.male]).collect();
+        let mut ids: Vec<&str> = ROLES.iter().flat_map(|r| r.clips()).collect();
         ids.sort_unstable();
         ids.dedup();
         let loaded: Vec<Result<crate::motion::RbClip>> = std::thread::scope(|s| ids.iter().map(|id| s.spawn(|| load_rb_clip(clips_root, &m, id))).collect::<Vec<_>>().into_iter().map(|h| h.join().expect("motion clip thread")).collect());
@@ -642,12 +694,13 @@ fn bake_groups(skels: &[&rocketbox::BipSkeleton], female: &[bool], mo: &MotionSo
     let mut strides: Vec<Vec<Option<(f32, f32)>>> = vec![];
     for (g, sk) in skels.iter().enumerate() {
         let clip_of = |r: usize| mo.clips.get(if female[g] { ROLES[r].female } else { ROLES[r].male });
+        let layer_of = |r: usize| ROLES[r].layer(female[g]).and_then(|(id, _)| mo.clips.get(id));
         let relaxed = clip_of(0).and_then(|c| rocketbox::relaxed_hands(sk, c, &ROLES[0]).ok());
         let srcs: Option<Vec<BakeSrc>> = segs
             .iter()
             .map(|s| match s.kind {
                 SegKind::Style(i) => Some(BakeSrc::Style { cycle: &mo.styles[i] }),
-                SegKind::Role(r) => clip_of(r).map(|clip| BakeSrc::Clip { clip, role: &ROLES[r], frames: s.frames }),
+                SegKind::Role(r) => clip_of(r).map(|clip| BakeSrc::Clip { clip, role: &ROLES[r], frames: s.frames, layer: layer_of(r) }),
             })
             .collect();
         match srcs.ok_or_else(|| anyhow!("a role's clip is missing")).and_then(|srcs| rocketbox::bake_list(sk, &srcs, relaxed.as_deref())) {
@@ -665,6 +718,7 @@ fn bake_groups(skels: &[&rocketbox::BipSkeleton], female: &[bool], mo: &MotionSo
     meta.walk = "100style".into();
     meta.standing = "rocketbox".into();
     meta.group_female = female.to_vec();
+    meta.group_bind = skels.iter().map(|sk| sk.pos.iter().map(|p| p.to_array()).collect()).collect();
     meta.walk_frames = crate::motion::WALK_FRAMES;
     meta.styles = mo.styles.iter().map(|c| StyleMeta { name: c.name.clone(), phone: c.phone, seconds: c.seconds, stride: c.stride, speed: c.speed, from_s: c.from_s, stride_scale: c.stride_scale }).collect();
     for (g, sk) in skels.iter().enumerate() {

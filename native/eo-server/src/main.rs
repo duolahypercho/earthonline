@@ -1,7 +1,8 @@
 //! eo-server: the headless authoritative server, its bot clients and its benches.
 //!
 //!   eo-server [--bind 127.0.0.1:47800] [--snapshot-hz 20] [--budget-kbps 96] [--net-sim RTT,JITTER,LOSS] [--no-streets]
-//!   eo-server bots --connect ADDR --count N [--around X,Z,R] [--drive 0.5] [--drive-mps 12] [--seconds S] [--threads 4]
+//!   eo-server bots --connect ADDR --count N [--around X,Z,R | --landmarks] [--drive 0.5] [--drive-mps 12] [--seconds S] [--threads 4]
+//!       (--landmarks: the bots walk up to the landmark viewpoints, emote, and move on by fast travel)
 //!   eo-server bench [--bots 1,16,64,256] [--seconds 20] [--warmup 8] [--out DIR]
 //!   eo-server bandwidth [--seconds 20] [--out DIR]
 //!   eo-server predict [--seconds 40] [--net-sim 80,20,2] [--out DIR]
@@ -161,9 +162,18 @@ fn bot_config(f: &Flags, server: std::net::SocketAddr) -> Result<BotConfig> {
             let v: Vec<f64> = s.split(',').map(|x| x.trim().parse()).collect::<Result<_, _>>()?;
             Spawn::Around { x: v[0], z: v[1], radius: v.get(2).copied().unwrap_or(100.0) }
         }
+        None if f.has("--landmarks") => Spawn::Landmarks,
         None => Spawn::Spread,
     };
+    let visits = if matches!(spawn, Spawn::Landmarks) {
+        let paths = eo_data::DataPaths::discover()?;
+        let city = eo_data::City::load(&paths)?;
+        eo_server::bots::landmark_visits(&eo_data::geo::GeoFrame::of_city(&city.meta), f.num("--count", 16usize), f.num("--seed", 7u64))?
+    } else {
+        vec![]
+    };
     Ok(BotConfig {
+        visits,
         server,
         count: f.num("--count", 16usize),
         threads: f.num("--threads", 4usize),

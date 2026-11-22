@@ -744,6 +744,8 @@ dependencies = [
  "eo-player",
  "eo-structures",
  "glam 0.34.3",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

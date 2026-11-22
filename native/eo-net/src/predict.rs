@@ -26,6 +26,9 @@ pub const STEP_S: f64 = eo_player::tuning::FIXED_STEP_S;
 pub const SMOOTH_S: f64 = 0.1;
 /// Fixed steps one drawn frame may catch up at most.
 pub const MAX_STEPS_PER_FRAME: usize = 8;
+/// A correction that moves the player farther than this is an arrival (fast
+/// travel): drawn at once, not glided over the city.
+pub const TELEPORT_M: f64 = 30.0;
 
 struct Hist {
     seq: u32,
@@ -43,6 +46,8 @@ pub struct PredictStats {
     pub error_mm: Vec<f64>,
     /// The visible jump each correction would have made, m (before smoothing).
     pub correction_m: Vec<f64>,
+    /// Corrections that were arrivals (no smoothing).
+    pub arrivals: u64,
 }
 
 pub struct Predictor {
@@ -138,12 +143,43 @@ impl Predictor {
         let t0 = Instant::now();
         let before = self.player.position(&self.cw) + self.smooth;
         self.player.set_state(&mut self.cw, &state);
+        // A state somewhere this world has no ground yet (an arrival): its
+        // tiles in, and the broad phase told, before the first replayed step.
+        let at = self.player.position(&self.cw);
+        if self.cw.ensure_step_tiles(at) > 0 {
+            self.cw.physics.detect_collisions(&(), &());
+        }
+        let replayed = self.replay_after(c.seq);
+        let after = self.player.position(&self.cw);
+        if std::env::var_os("EO_NET_DEBUG").is_some() {
+            eprintln!("client: correction {} at seq {} (state pos {:?}), replayed {replayed} to seq {}, before {before:?} after {after:?}", c.id, c.seq, state.character.position, self.seq);
+        }
+        self.finish_correction(c, before, after, replayed, t0)
+    }
+
+    /// An arrival prepared off the render thread: the player rebuilt from
+    /// the correction's state in a world already loaded round it
+    /// (`game::rebuild_player`), then every later input replayed there.
+    pub fn adopt(&mut self, player: Player, cw: CollisionWorld, c: &Correction) -> Option<f64> {
+        if c.id == 0 || (c.id.wrapping_sub(self.applied) as i16) <= 0 {
+            return None;
+        }
+        let t0 = Instant::now();
+        let before = self.player.position(&self.cw) + self.smooth;
+        self.player = player;
+        self.cw = cw;
+        let replayed = self.replay_after(c.seq);
+        let after = self.player.position(&self.cw);
+        self.finish_correction(c, before, after, replayed, t0)
+    }
+
+    fn replay_after(&mut self, seq: u32) -> u64 {
         let mut replayed = 0;
         for h in self.history.iter_mut() {
-            if h.seq < c.seq {
+            if h.seq < seq {
                 continue;
             }
-            if h.seq == c.seq {
+            if h.seq == seq {
                 // The server's own state at that input is what the client now holds for it.
                 h.pos_mm = check_of(h.seq, &self.player, &self.cw).pos_mm;
                 continue;
@@ -152,11 +188,16 @@ impl Predictor {
             h.pos_mm = check_of(h.seq, &self.player, &self.cw).pos_mm;
             replayed += 1;
         }
-        let after = self.player.position(&self.cw);
-        if std::env::var_os("EO_NET_DEBUG").is_some() {
-            eprintln!("client: correction {} at seq {} (state pos {:?}), replayed {replayed} to seq {}, before {before:?} after {after:?}", c.id, c.seq, state.character.position, self.seq);
-        }
+        replayed
+    }
+
+    fn finish_correction(&mut self, c: &Correction, before: DVec3, after: DVec3, replayed: u64, t0: Instant) -> Option<f64> {
         self.smooth = before - after;
+        if self.smooth.length() > TELEPORT_M {
+            // An arrival: a cut, not a glide over the city.
+            self.smooth = DVec3::ZERO;
+            self.stats.arrivals += 1;
+        }
         self.applied = c.id;
         let jump = self.smooth.length();
         self.stats.corrections += 1;
