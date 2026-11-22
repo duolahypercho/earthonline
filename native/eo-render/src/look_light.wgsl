@@ -334,7 +334,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     let r = reflect(-v, n);
     var rad = lk_sh(r) / LK_PI;
     let sharp = 1.0 - lk_smooth(0.15, 0.5, rough);
-    if (s.env == ENV_LOCAL_PROBE || s.env == ENV_INTERIOR_FLOOR) {
+    if (SF_HOUSE && (s.env == ENV_LOCAL_PROBE || s.env == ENV_INTERIOR_FLOOR)) { // (only the house's surfaces take these classes)
         rad = room_radiance;
     } else if (fa_probe_on()) {
         // the scene probe is the specular environment (glass reads it
@@ -365,7 +365,7 @@ fn look_light(s_in: Surface, m: Material, v: vec3<f32>, world: vec3<f32>, ng: ve
     // the house's kitchen and its other local probes reflect their own captured room
     // (draw.wgsl `kitchen_reflection`, `floor_reflected_room`): no screen-space term,
     // ambient volume or environment intensity over it.
-    let kitchen = s.env == ENV_LOCAL_PROBE || s.env == ENV_INTERIOR_FLOOR;
+    let kitchen = SF_HOUSE && (s.env == ENV_LOCAL_PROBE || s.env == ENV_INTERIOR_FLOOR);
     var ssr = vec4<f32>(0.0);
     if (!kitchen) {
         ssr = sky_ssr(world, select(n, ng, coat_on), v, select(rough, sky_coat_rough, coat_on));

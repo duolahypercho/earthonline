@@ -62,7 +62,8 @@ struct CullParams {
     street: vec4<f32>,
     // the camera's clip matrix (the one the city pass draws with)
     view_proj: mat4x4<f32>,
-    // x = 1 two-phase occlusion culling on, y = late opaque list base (slots)
+    // x = 1 two-phase occlusion culling on, y = late opaque list base (slots),
+    // z = 1 the flat sea quad stands down, w = 1 the city's opaque classes split (`city_class`)
     occ: vec4<u32>,
     // the bounded lists' guards (bounds.rs): the camera's frustum widened by
     // WIDE_DEG a side, and x the ring's reach, y the near sphere, z 1 to count them.
@@ -114,12 +115,27 @@ const LOD_LANDMARK_FAR: u32 = 11u;
 // triangles drawn (kinds 11 and 12, `--structures`),
 // [16] opaque / [17] transparent objects LOD-selected in the widened frustum or
 // the near sphere, [18] opaque / [19] transparent LOD-selected within the ring
-// (the bounded draws' guards, bounds.rs; counted only with `params.guard.z` 1)
-@group(0) @binding(3) var<storage, read_write> counters: array<atomic<u32>, 20>;
+// (the bounded draws' guards, bounds.rs; counted only with `params.guard.z` 1),
+// with the city's opaque classes split (`params.occ.w` 1, lib.rs `CityClasses`):
+// [20] street early, [21] street late, [22] landmark early, [23] landmark late
+// draws (the general class keeps [0] and [10])
+@group(0) @binding(3) var<storage, read_write> counters: array<atomic<u32>, 24>;
 @group(0) @binding(4) var<storage, read_write> groups: array<Group>;
 // 1 if the object passed the occlusion test last frame (the early
 // pass draws exactly these); rewritten by the late pass every frame.
 @group(0) @binding(5) var<storage, read_write> visible_last: array<u32>;
+// the material table (draw.wgsl's): its flags sort the opaque objects into the
+// city's classes (`city_class`).
+struct Material {
+    base: vec4<f32>,
+    emissive: vec4<f32>,
+    params: vec4<f32>,
+    layer: i32,
+    flags: u32,
+    rough_flatten: f32,
+    thin_absorption: f32,
+};
+@group(0) @binding(9) var<storage, read> materials: array<Material>;
 // the hierarchical Z of this frame's early depth (late pass only;
 // its own bind group so the early pass and LOD pass do not need it).
 @group(1) @binding(0) var hzb: texture_2d<f32>;
@@ -392,6 +408,34 @@ fn count_drawn(o: Object, count: u32) {
     }
 }
 
+// The city's opaque class of an object with the classes split (params.occ.w;
+// lib.rs `CityClasses`, draw.wgsl `CITY_CLASS`), from its material as draw.wgsl
+// `shade` reads it: 1 the street surface (F_STREET), 2 a landmark's surface
+// kinds (`lm_kind`), 0 the rest (and every kit rung, whose vertices pick their
+// own materials from the kit palette, none of these). Not split: 0.
+fn city_class(o: Object) -> u32 {
+    if (params.occ.w == 0u || (o.kind & 255u) == KIND_KIT) {
+        return 0u;
+    }
+    let f = materials[o.material].flags;
+    if ((f & CC_F_STREET) != 0u) {
+        return 1u;
+    }
+    if ((((f >> CC_LM_SURFACE_SHIFT) & 7u) | ((f >> CC_LM_SURFACE_HIGH_SHIFT) & 8u)) != 0u) {
+        return 2u;
+    }
+    return 0u;
+}
+
+// A class's list: its count word and its first slot (the early list; + 1 and
+// the next region for the late one). Class 0 is the early / late opaque list.
+fn class_word(c: u32, late: bool) -> u32 {
+    return CC_CLASS_WORD + 2u * (c - 1u) + select(0u, 1u, late);
+}
+fn class_base(c: u32, late: bool) -> u32 {
+    return (3u + 2u * (c - 1u) + select(0u, 1u, late)) * params.blend_base;
+}
+
 // The early pass (and, with occlusion off, the only pass): LOD + frustum,
 // then with occlusion on only the objects that passed the occlusion test
 // last frame are drawn now (opaque only; glass waits for the late pass).
@@ -425,7 +469,13 @@ fn cull(@builtin(global_invocation_id) gid: vec3<u32>) {
             atomicAdd(&counters[11], 1u);
             atomicAdd(&counters[12], count / 3u);
         }
-        let slot = atomicAdd(&counters[list], 1u) + select(0u, params.blend_base, blend);
+        let c = select(city_class(o), 0u, blend);
+        var slot = 0u;
+        if (c != 0u) {
+            slot = atomicAdd(&counters[class_word(c, false)], 1u) + class_base(c, false);
+        } else {
+            slot = atomicAdd(&counters[list], 1u) + select(0u, params.blend_base, blend);
+        }
         write_cmd(slot, count, 1u, first, o.base_vertex, i);
     } else {
         // Slot i in the opaque list, slot i - blend_first in the transparent
@@ -483,8 +533,11 @@ fn cull_late(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     var slot = 0u;
+    let c = select(city_class(o), 0u, blend);
     if (blend) {
         slot = atomicAdd(&counters[1], 1u) + params.blend_base;
+    } else if (c != 0u) {
+        slot = atomicAdd(&counters[class_word(c, true)], 1u) + class_base(c, true);
     } else {
         slot = atomicAdd(&counters[10], 1u) + params.occ.y;
     }

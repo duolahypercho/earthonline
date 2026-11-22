@@ -85,6 +85,15 @@ fn house_bit(word: u32, bit: u32) -> bool {
     return SF_HOUSE && (word & bit) != 0u;
 }
 const PI: f32 = 3.14159265;
+// The city's opaque classes (look.rs `CITY_CLASS`, lib.rs `CityClasses`): one
+// pipeline for every object (CITY_ALL: the glass, the probe, the fallback
+// lists), or, with the classes split, one a class, each compiling out the
+// others' surfaces: the street surface (F_STREET), a landmark's surface kinds
+// (`lm_kind`), and the rest. cull.wgsl `city_class` sorts the objects.
+const CITY_ALL: u32 = 0u;
+const CITY_GENERAL: u32 = 1u;
+const CITY_STREET: u32 = 2u;
+const CITY_LANDMARK: u32 = 3u;
 
 @group(0) @binding(0) var<uniform> frame: Frame;
 @group(0) @binding(1) var<storage, read> objects: array<Object>;
@@ -117,14 +126,15 @@ struct VOut {
     @location(4) @interpolate(flat) object: u32,
     // x the vertex alpha byte (street class), y the normal's w
     // (street: distance to the kerb line / 6.35 m, negative when none).
-    @location(5) aux: vec3<f32>,
+    @location(5) aux: vec2<f32>,
     // the position relative to the eye (small numbers: its screen
     // derivatives are smooth where the world position's are not).
     @location(6) rel: vec3<f32>,
     // (bays along the wall, storeys up it) on an envelope wall, else 0.
     @location(7) ft: vec2<f32>,
-    @location(8) table_fixture: vec4<f32>,
-    @location(9) table_reverse: vec4<f32>,
+    // HOUSE_VARYINGS (look.rs `draw_wgsl`: the playable house's enclosure and
+    // table light, interpolated only with SF_HOUSE; read through `vo_house_z`,
+    // `vo_table_fixture`, `vo_table_reverse`, written through `vo_set_house`)
 };
 
 fn srgb_decode(c: vec3<f32>) -> vec3<f32> {
@@ -141,7 +151,7 @@ fn vs(
     let o = objects[inst];
     var out: VOut;
     var pos = pos_in + copy_offset(o.copy);
-    if ((o.kind & 255u) == 13u && color.a > 0.0) {
+    if (SF_SEABED && (o.kind & 255u) == 13u && color.a > 0.0) {
         // Alpha is flex from root to tip. Both current components wrap with the sky clock.
         let phase = dot(pos.xz, vec2<f32>(0.85, 0.54));
         let clock = skyu.wet.w * (6.2831853 / 6.0);
@@ -155,19 +165,21 @@ fn vs(
     out.normal = normal.xyz;
     out.material = o.material;
     let enclosed = house_bit(o.kind, ENCLOSURE_TRANSFER_BIT) && normal.w < -0.50;
-    out.aux = vec3<f32>(color.a * 255.0, select(normal.w, -normal.w, enclosed), select(0.0, 1.0, enclosed));
-    out.table_fixture = vec4<f32>(0.);
-    out.table_reverse = vec4<f32>(0.);
+    out.aux = vec2<f32>(color.a * 255.0, select(normal.w, -normal.w, enclosed));
+    // (the playable house's varyings, SF_HOUSE: `vo_set_house` below)
+    var house_z = select(0.0, 1.0, enclosed);
+    var table_fixture = vec4<f32>(0.);
+    var table_reverse = vec4<f32>(0.);
     if (house_bit(o.kind, TABLE_LIGHT_BIT) && normal.w < 0. && normal.w > -.5) {
         // Each split mesh normal was metered in Blender. Interpolate physical
         // radiance across the triangle after decoding the four stored channels.
         let cell = vec2<i32>(256,0) + vec2<i32>(round(color.rg*255.));
         let encoded = textureLoad(kit_orm,cell,i32(textureNumLayers(kit_orm))-3,0);
-        out.table_fixture = encoded*encoded/max(1.-encoded*encoded,vec4<f32>(.0001));
+        table_fixture = encoded*encoded/max(1.-encoded*encoded,vec4<f32>(.0001));
         let reverse = textureLoad(kit_orm,cell+vec2<i32>(0,96),i32(textureNumLayers(kit_orm))-3,0);
-        out.table_reverse = reverse*reverse/max(1.-reverse*reverse,vec4<f32>(.0001));
+        table_reverse = reverse*reverse/max(1.-reverse*reverse,vec4<f32>(.0001));
         out.aux.y = 64./127.-normal.w;
-        out.aux.z = 2.;
+        house_z = 2.;
     }
     out.rel = pos - frame.cam_pos.xyz; // cc0
     out.ft = vec2<f32>(0.0);
@@ -181,9 +193,10 @@ fn vs(
         // its wear in aux.x (structures.rs `encode_concrete`); the tint is the material's.
         out.ft = sx_decode(color, normal.w);
         out.color = vec3<f32>(1.0);
-        out.aux = vec3<f32>(color.a * 255.0, -1.0, 0.0);
+        out.aux = vec2<f32>(color.a * 255.0, -1.0);
+        house_z = 0.0;
     }
-    if (kind == 4u && out.aux.y > 0.49) {
+    if (SF_HOUSE && kind == 4u && out.aux.y > 0.49) {
         // The house builder stores window and fixture transfer in R and G.
         out.color = color.rgb;
         if (house_bit(o.kind, CUT_COTTON_BIT)) {
@@ -233,6 +246,7 @@ fn vs(
         }
     }
     out.object = inst;
+    vo_set_house(&out, house_z, table_fixture, table_reverse);
     return out;
 }
 
@@ -1523,7 +1537,8 @@ fn shade(in: VOut) -> vec4<f32> {
     }
     // Solid sand and shells keep their outward normal across a grazing crest.
     // A ribbon of eelgrass, like the other thin geometry, shades both sides.
-    let seabed = (objects[in.object].kind & 255u) == 13u;
+    // (the sea bed's habitats, compiled in only with seabed objects in the world: SF_SEABED)
+    let seabed = SF_SEABED && (objects[in.object].kind & 255u) == 13u;
     let tissue_tag = in.aux.y * 127.0;
     let rockweed = seabed && tissue_tag >= 31.5 && tissue_tag <= 63.5;
     let bed_surface = seabed && in.aux.x < 0.01 && !rockweed;
@@ -1551,12 +1566,18 @@ fn shade(in: VOut) -> vec4<f32> {
     if SF_HOUSE && look.porch_light[0].w > 0. && frame.copy_step.z < .5 {
         porch_field = porch_irradiance(in.world, n);
     }
-    if ((m.flags & F_STREET) != 0u) {
+    // (look.rs `CITY_CLASS`) with the city's opaque classes split, the street
+    // surface has a pipeline of its own and the others compile it out.
+    let street_class = select(CITY_CLASS == CITY_STREET, (m.flags & F_STREET) != 0u, CITY_CLASS == CITY_ALL);
+    if (street_class) {
         let ss = street_surface(in, n, dpx, dpy);
         if (sx_in_bore(in.object)) {
             return sx_bore_light(ss, m, v, in.world, in.object); // a tunnel bore's roadway (structures.wgsl)
         }
         return look_light(ss, m, v, in.world, n, in.object);
+    }
+    if (CITY_CLASS == CITY_STREET) {
+        return vec4<f32>(0.0); // (never reached: the street class draws only the street material)
     }
     if (SF_STRUCTURES && (objects[in.object].kind & 255u) == 12u) {
         // a grade-separated road's concrete (structures.wgsl; none without `--structures`: SF_STRUCTURES).
@@ -1579,7 +1600,8 @@ fn shade(in: VOut) -> vec4<f32> {
     s.env = -1;
     // a kit vertex carries raw bytes (see vs): the paint decodes here.
     let kit_object = (objects[in.object].kind & 255u) == 5u;
-    let house_finish = (objects[in.object].kind & 255u) == 4u && in.aux.y > 0.49;
+    // (the house builder's finishes: a model vertex's normal w over 0.49 comes from it alone, SF_HOUSE)
+    let house_finish = SF_HOUSE && (objects[in.object].kind & 255u) == 4u && in.aux.y > 0.49;
     let interior_transfer = house_finish && in.aux.y > 64.5 / 127.0;
     var vcol = select(in.color, vec3<f32>(1.0), house_finish);
     if (kit_object) {
@@ -1639,7 +1661,7 @@ fn shade(in: VOut) -> vec4<f32> {
     } else if (cc0_terrain && !cc0_sand) {
         cc0_ground(&s, in.world, n, dpx, dpy);
     }
-    if (lm_kind(m.flags) != 0u) {
+    if (CITY_CLASS != CITY_GENERAL && lm_kind(m.flags) != 0u) { // (the landmark class's own pipeline, or the one pipeline)
         lm_surface(&s, m, in.world, n, dpx, dpy); // landmark-surface.js, the seawall's concrete
     } else if ((m.flags & LM_F_WET_GROUND) != 0u && (objects[in.object].kind & 255u) == 1u) {
         if (in.aux.x < 253.5) {
@@ -1687,7 +1709,7 @@ fn shade(in: VOut) -> vec4<f32> {
         let z = sqrt(max(0.0, 1.0 - dot(xy, xy)));
         let str = m.params.z;
         s.n = normalize(fr.t * (xy.x * str) + fr.b * (xy.y * str) + fr.n * z);
-    } else if ((m.flags & F_TEXTURED) != 0u && ((objects[in.object].kind & 255u) != 13u || mineral)) {
+    } else if ((m.flags & F_TEXTURED) != 0u && (!seabed || mineral)) {
         // Triplanar in world space, `params.w` repeats per metre.
         let k = m.params.w;
         let p = in.world * k;
@@ -1787,7 +1809,7 @@ fn shade(in: VOut) -> vec4<f32> {
     if (fc_on) {
         rm_emit = rm_emit + fc.emit * fc_lit(fc.q, fc.n, fc.roll) * select(1.0, FC_CINE_SIGN_GAIN, SF_CINEMATIC && sky_on(skyu.flags.x, SKY_CINEMATIC));
     }
-    if ((objects[in.object].kind & GRAVEL_BIT) != 0u) {
+    if (house_bit(objects[in.object].kind, GRAVEL_BIT)) {
         // Granitic fines and larger chips share one world-space surface across
         // the authored bed and the site mesh. Fade subpixel grain at distance.
         let uv = in.world.xz;
@@ -1803,7 +1825,7 @@ fn shade(in: VOut) -> vec4<f32> {
         s.n = normalize(n-vec3<f32>(gradient.x,0.0,gradient.y)*chip_detail*0.58);
         s.rough = 0.95;
     }
-    if ((objects[in.object].kind & LIMEWASH_BIT) != 0u) {
+    if (house_bit(objects[in.object].kind, LIMEWASH_BIT)) {
         let exposure = clamp((in.color.b * 255.0 - 3.0) / 55.0, 0.0, 1.0);
         if (house_bit(objects[in.object].kind, COURTYARD_BOUNCE_BIT)) {
             let stain = exposure * st_noise(in.world.xy*5.5);
@@ -1813,9 +1835,9 @@ fn shade(in: VOut) -> vec4<f32> {
         }
     }
     let cut_cotton = house_bit(objects[in.object].kind, CUT_COTTON_BIT);
-    let local_scan = cut_cotton || (objects[in.object].kind & (DOOR_SCAN_BIT | LOCAL_UV_SCAN_BIT)) != 0u;
+    let local_scan = cut_cotton || house_bit(objects[in.object].kind, DOOR_SCAN_BIT | LOCAL_UV_SCAN_BIT);
     var bedroom_point = vec3<f32>(0.);
-    if (house_bit(objects[in.object].kind, BEDROOM_LIGHT_BIT) && in.aux.z > .5) {
+    if (house_bit(objects[in.object].kind, BEDROOM_LIGHT_BIT) && vo_house_z(in) > .5) {
         bedroom_point = (look.enclosure_frame * vec4<f32>(in.world + .025*n,1.)).xyz;
         measured_room = bedroom_point.y > 10./3. && bedroom_point.y < 20./3.;
     }
@@ -1829,7 +1851,7 @@ fn shade(in: VOut) -> vec4<f32> {
     let table_board = house_bit(objects[in.object].kind, TABLE_BOARD_BIT);
     let oak_finish = house_bit(objects[in.object].kind, OAK_FINISH_BIT);
     let joinery = table_board && look.table_light[1].w > 0.;
-    let floor_scan = table_board || local_scan || (objects[in.object].kind & FLOOR_SCAN_BIT) != 0u;
+    let floor_scan = table_board || local_scan || house_bit(objects[in.object].kind, FLOOR_SCAN_BIT);
     if (floor_scan && (local_scan || table_board || abs(n.y) > 0.7)) {
         var layer = select(i32(textureNumLayers(kit_albedo)) - 2, m.layer, local_scan);
         var uv = in.ft;
@@ -1919,7 +1941,7 @@ fn shade(in: VOut) -> vec4<f32> {
                         oak_reflections(frame_pos,in.world,v,s.n,n,house_bit(objects[in.object].kind, TABLE_LIGHT_BIT));
                     } else {
                         room_radiance = board_reflection(frame_pos.xz,local_dx,local_dy,dpx,dpy,
-                            reflect(-v,s.n),s.rough,select(board_ambient(in.color.rg*in.color.rg),in.table_fixture.rgb,joinery),frame_pos.y);
+                            reflect(-v,s.n),s.rough,select(board_ambient(in.color.rg*in.color.rg),vo_table_fixture(in).rgb,joinery),frame_pos.y);
                     }
                 }
             }
@@ -1958,11 +1980,11 @@ fn shade(in: VOut) -> vec4<f32> {
         let transfer = in.color.rg * in.color.rg;
         // Window and fixture transfer already include a diffuse bounce. Weight
         // the outdoor field by the room's sky visibility instead of adding it twice.
-        room_enclosure = min(in.aux.z,1.);
+        room_enclosure = min(vo_house_z(in),1.);
         room_daylight = transfer.x;
         var downstairs = false;
         let room_kind = objects[in.object].kind;
-        if (house_bit(room_kind, DOWNSTAIRS_LIGHT_BIT | TABLE_LIGHT_BIT) && in.aux.z > .5) {
+        if (house_bit(room_kind, DOWNSTAIRS_LIGHT_BIT | TABLE_LIGHT_BIT) && vo_house_z(in) > .5) {
             let room_point = (look.enclosure_frame * vec4<f32>(in.world + .025*n,1.)).xyz;
             var top = false;
             var table = false;
@@ -1970,9 +1992,9 @@ fn shade(in: VOut) -> vec4<f32> {
             if (house_bit(room_kind, TABLE_LIGHT_BIT)) {
                 let local = (look.enclosure_frame * vec4<f32>(in.world,1.)).xyz;
                 top = table_board && n.y>.85 && abs(local.y-look.table_light[0].w)<.004;
-                table = top || in.aux.z > 1.5;
+                table = top || vo_house_z(in) > 1.5;
                 if (table) {
-                    var measured = select(in.table_reverse,in.table_fixture,dot(in.normal,v)>=0.);
+                    var measured = select(vo_table_reverse(in),vo_table_fixture(in),dot(in.normal,v)>=0.);
                     var beam = measured.a * max(0.,normalize(look.dining_lamp.xyz-in.world).y);
                     if (top) {
                         measured = oak_incident(local);
@@ -1999,7 +2021,7 @@ fn shade(in: VOut) -> vec4<f32> {
                 }
             }
         }
-        if (SF_HOUSE && in.aux.z > .5 && !measured_room) {
+        if (SF_HOUSE && vo_house_z(in) > .5 && !measured_room) {
             rm_emit += s.albedo * (1.-s.metal) * floor_daylight(in.world, s.n) / PI;
         }
         let window = 0.76 * transfer.x * (look.hemi_sky.rgb + look.key.rgb * max(look.key_dir.y, 0.0));
@@ -2158,10 +2180,10 @@ fn shade(in: VOut) -> vec4<f32> {
         }
     }
 
-    if ((cc0_terrain || (bed_surface && in.aux.y > 0.5)) && look.cove.x > 0.0 && in.world.y < LM_SEA_LEVEL_Y + 0.035) {
+    if (SF_COVE_SEDIMENT && (cc0_terrain || (bed_surface && in.aux.y > 0.5)) && look.cove.x > 0.0 && in.world.y < LM_SEA_LEVEL_Y + 0.035) { // (`--cove-sediment`)
         lm_cove_sediment(&s, in.world, n, dpx, dpy);
     }
-    let street_pane = (objects[in.object].kind & FRONT_SASH_BIT) != 0u && in.color.b > 3.5/255.0;
+    let street_pane = house_bit(objects[in.object].kind, FRONT_SASH_BIT) && in.color.b > 3.5/255.0;
     if (street_pane && frame.copy_step.z < 0.5) {
         let angle = in.aux.x * (2.0 * PI / 255.0);
         let rear_sash = in.color.b > 4.5 / 255.0;

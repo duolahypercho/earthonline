@@ -246,6 +246,8 @@ mod tests {
         sets.push(("photo mode".into(), look::ShaderFeatures { photo_mode: true, ..none })); // (photo mode, `--no-photo-mode`)
         sets.push(("landmark access".into(), look::ShaderFeatures { landmark_access: true, ..none })); // (the landmark decks; `--no-landmark-access`)
         sets.push(("no far facade".into(), look::ShaderFeatures { far_facade: false, ..none })); // (`--no-far-facade`)
+        sets.push(("seabed".into(), look::ShaderFeatures { seabed: true, ..none })); // (the sea bed's habitats)
+        sets.push(("cove sediment".into(), look::ShaderFeatures { cove_sediment: true, ..none })); // (`--cove-sediment`)
         sets
     }
 
@@ -278,6 +280,32 @@ mod tests {
         assert_eq!(look::shader_features(), look::ShaderFeatures::ALL, "the scope ends with its body; unset, every feature is in");
     }
 
+    /// The split city pass's class shaders (lib.rs `CityClasses`) parse and
+    /// validate, each with its class's line in place of the one shader's.
+    #[test]
+    fn the_city_class_shaders_compose() {
+        for class in [look::CITY_GENERAL, look::CITY_STREET, look::CITY_LANDMARK] {
+            let src = look::city_shader_source_class(class);
+            assert!(src.contains(&format!("const CITY_CLASS: u32 = {class}u;")) && !src.contains("const CITY_CLASS: u32 = 0u;"), "class {class}");
+            parse(&format!("class {class}"), &src);
+        }
+        assert!(look::city_shader_source().contains("const CITY_CLASS: u32 = 0u;"), "the one shader keeps every class");
+    }
+
+    /// The playable house's nine varyings (draw.wgsl `VOut`, look.rs
+    /// `draw_wgsl`) are interpolated with the house compiled in only.
+    #[test]
+    fn the_house_varyings_ride_only_with_the_house() {
+        for house in [false, true] {
+            let src = look::with_shader_features(look::ShaderFeatures { house, ..look::ShaderFeatures::NONE }, look::city_shader_source);
+            for field in ["@location(8) house_z: f32", "@location(9) table_fixture: vec4<f32>", "@location(10) table_reverse: vec4<f32>"] {
+                assert_eq!(src.contains(field), house, "house {house}: {field}");
+            }
+            assert!(src.contains("@location(5) aux: vec2<f32>"), "the street's two aux values stay");
+            parse(&format!("house {house}"), &src);
+        }
+    }
+
     #[test]
     fn shader_features_follow_the_options_and_limit_them() {
         let o = look::LookOptions::default();
@@ -291,7 +319,7 @@ mod tests {
             ..o
         };
         let f = look::ShaderFeatures::of(&on, true, true, true);
-        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, house: false, blender_camera: false, player_contact: false, photo_mode: false, landmark_access: false, ..look::ShaderFeatures::ALL }); // (the look profile is its own, below; the house and the landmark decks are the world's, set by eo-app; the source camera its own; the players' contact the online session's; photo mode the app's)
+        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, house: false, blender_camera: false, player_contact: false, photo_mode: false, landmark_access: false, seabed: false, cove_sediment: false, ..look::ShaderFeatures::ALL }); // (the look profile is its own, below; the house and the landmark decks are the world's, set by eo-app; the source camera its own; the players' contact the online session's; photo mode the app's)
         assert!(look::ShaderFeatures::of(&look::LookOptions { blender_camera: true, ..o }, false, false, false).blender_camera, "the source camera follows its option");
         assert!(!look::ShaderFeatures::NONE.limit(&look::LookOptions { blender_camera: true, ..o }).blender_camera, "compiled out, the source camera stays off");
         let same = |a: &look::LookOptions, b: &look::LookOptions| format!("{a:?}") == format!("{b:?}"); // (LookOptions has no PartialEq)
