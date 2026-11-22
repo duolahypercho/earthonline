@@ -179,57 +179,74 @@ pub fn yard_tone(green_share: f64, built: f64, class: u8, x: f64, z: f64, contac
     c.map(|v| v * k)
 }
 
-/// The open ground's colour at a drawn terrain vertex (linear), or None to
-/// keep the colour it had. `park`: the mapped green's tone name and colour
-/// there (`GroundCover::tone_name_at` / `tone_at`); `class`: WorldCover;
-/// `shore_m`: distance to the nearest shoreline; `above_sea_m`: ground height
-/// over the sea; `slope`: the ground's gradient (rise over run).
-pub fn open_ground(x: f64, z: f64, class: u8, park: Option<(&str, Linear)>, shore_m: Option<f64>, above_sea_m: Option<f64>, slope: f64) -> Option<Linear> {
-    let (green_on, hills_on, contact_on) = (on("green"), on("hills"), on("contact"));
-    if !(green_on || hills_on || contact_on) {
-        return None;
+/// Open-ground switches shared by the workers building one scene.
+pub struct OpenGroundSettings {
+    green: bool,
+    hills: bool,
+    contact: bool,
+}
+
+impl OpenGroundSettings {
+    pub fn from_env() -> Self {
+        Self { green: on("green"), hills: on("hills"), contact: on("contact") }
     }
-    if shore_m.is_some_and(|s| s < SHORE_KEEP_M) || above_sea_m.is_none_or(|h| h < SEA_KEEP_M) {
-        return None;
-    }
-    let g = grid()?;
-    let s = eo_data::groundscale::scale();
-    let (sx, sz) = (x / s, z / s);
-    let share = sample(g, sx, sz, false);
-    let built = sample(g, sx, sz, true).unwrap_or(0.0);
-    match park {
-        Some((name, tone)) => {
-            if !hills_on {
-                return None;
-            }
-            let (green, keep) = match name {
-                "grass" => (tone, 1.0 - smoothstep(LAWN_FLAT, LAWN_SLOPE, slope)),
-                "understory" | "wildScrub" => (hex(GROVE), 0.0),
-                "wildGrass" | "dryGrass" => (hex(SCRUB), 0.0),
-                _ => return None, // sand, bare, rock, lids, courts, play, water, paving: as mapped
-            };
-            Some(mix(hill_tone(share.unwrap_or(class_green(class)), green, x, z), tone, keep))
+
+    /// The open ground's colour at a drawn terrain vertex (linear), or None to
+    /// keep the colour it had. `park`: the mapped green's tone name and colour
+    /// there (`GroundCover::tone_name_at` / `tone_at`); `class`: WorldCover;
+    /// `shore_m`: distance to the nearest shoreline; `above_sea_m`: ground height
+    /// over the sea; `slope`: the ground's gradient (rise over run).
+    pub fn sample(&self, x: f64, z: f64, class: u8, park: Option<(&str, Linear)>, shore_m: Option<f64>, above_sea_m: Option<f64>, slope: f64) -> Option<Linear> {
+        if !(self.green || self.hills || self.contact) {
+            return None;
         }
-        None => {
-            if class == BUILT_UP || built > 0.08 {
-                if !(green_on || contact_on) {
+        if shore_m.is_some_and(|s| s < SHORE_KEEP_M) || above_sea_m.is_none_or(|h| h < SEA_KEEP_M) {
+            return None;
+        }
+        let g = grid()?;
+        let s = eo_data::groundscale::scale();
+        let (sx, sz) = (x / s, z / s);
+        let share = sample(g, sx, sz, false);
+        let built = sample(g, sx, sz, true).unwrap_or(0.0);
+        match park {
+            Some((name, tone)) => {
+                if !self.hills {
                     return None;
                 }
-                if !green_on {
-                    // Contact alone: the old built-up ground, darkened.
-                    let old = hex([150, 146, 136]);
-                    return Some(old.map(|v| v * (1.0 - CONTACT_MAX * built)));
+                let (green, keep) = match name {
+                    "grass" => (tone, 1.0 - smoothstep(LAWN_FLAT, LAWN_SLOPE, slope)),
+                    "understory" | "wildScrub" => (hex(GROVE), 0.0),
+                    "wildGrass" | "dryGrass" => (hex(SCRUB), 0.0),
+                    _ => return None, // sand, bare, rock, lids, courts, play, water, paving: as mapped
+                };
+                Some(mix(hill_tone(share.unwrap_or(class_green(class)), green, x, z), tone, keep))
+            }
+            None => {
+                if class == BUILT_UP || built > 0.08 {
+                    if !(self.green || self.contact) {
+                        return None;
+                    }
+                    if !self.green {
+                        // Contact alone: the old built-up ground, darkened.
+                        let old = hex([150, 146, 136]);
+                        return Some(old.map(|v| v * (1.0 - CONTACT_MAX * built)));
+                    }
+                    let share = share?;
+                    Some(yard_tone(share, built, class, x, z, self.contact))
+                } else if matches!(class, 10 | 20 | 30 | 100) && self.hills {
+                    let green = if class == TREES { hex(GROVE) } else { hex(SCRUB) };
+                    Some(hill_tone(share.unwrap_or(class_green(class)), green, x, z))
+                } else {
+                    None
                 }
-                let share = share?;
-                Some(yard_tone(share, built, class, x, z, contact_on))
-            } else if matches!(class, 10 | 20 | 30 | 100) && hills_on {
-                let green = if class == TREES { hex(GROVE) } else { hex(SCRUB) };
-                Some(hill_tone(share.unwrap_or(class_green(class)), green, x, z))
-            } else {
-                None
             }
         }
     }
+}
+
+/// Sample a single point using the current ground switches.
+pub fn open_ground(x: f64, z: f64, class: u8, park: Option<(&str, Linear)>, shore_m: Option<f64>, above_sea_m: Option<f64>, slope: f64) -> Option<Linear> {
+    OpenGroundSettings::from_env().sample(x, z, class, park, shore_m, above_sea_m, slope)
 }
 
 /// The far ground's paving branch in `cc0_ground_sets` (WGSL constant).
