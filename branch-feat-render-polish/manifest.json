@@ -1,0 +1,54 @@
+{
+ "base": "main (f5db93b5)",
+ "after": "feat/render-polish (0edb8ddb)",
+ "pairs": [
+  {
+   "name": "Downtown towers at sunset (18.6 h)",
+   "before": "before/towers-sunset.jpg",
+   "after": "after/towers-sunset.jpg",
+   "diff": "diff/towers-sunset.png",
+   "changedPercent": 10.19,
+   "note": "office windows no longer light while the sun is up: the chequerboard is gone"
+  },
+  {
+   "name": "Downtown towers at dusk (19.4 h)",
+   "before": "before/towers-dusk.jpg",
+   "after": "after/towers-dusk.jpg",
+   "diff": "diff/towers-dusk.png",
+   "changedPercent": 13.5,
+   "note": "far towers: lit floors as offices, warmer lamps, crown lines"
+  },
+  {
+   "name": "Financial District at night, 700 m",
+   "before": "before/fidi-night.jpg",
+   "after": "after/fidi-night.jpg",
+   "diff": "diff/fidi-night.png",
+   "changedPercent": 63.85,
+   "note": "office floors with ceiling glow and desks instead of white tiles; night lift"
+  },
+  {
+   "name": "Downtown from the air at night",
+   "before": "before/aerial-night.jpg",
+   "after": "after/aerial-night.jpg",
+   "diff": "diff/aerial-night.png",
+   "changedPercent": 69.63,
+   "note": "far streets lit from the lamp map; night lift"
+  },
+  {
+   "name": "Castro Street at 18th, night (high)",
+   "before": "before/castro-night.jpg",
+   "after": "after/castro-night.jpg",
+   "diff": "diff/castro-night.png",
+   "changedPercent": 63.39,
+   "note": "night lift; wider lamp pools"
+  },
+  {
+   "name": "Visual gate card 6: night street (default quality)",
+   "before": "before/night-street.jpg",
+   "after": "after/night-street.jpg",
+   "diff": "diff/night-street.png",
+   "changedPercent": 28.57,
+   "note": "night lift; props lamps as cobra heads"
+  }
+ ]
+}

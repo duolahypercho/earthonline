@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 178" width="680" height="178" role="img" aria-label="elevated_sweep frame time (median): before 6.26, after 6.32, +1.0%, within noise">
+<style>
+svg{--bg:#FFFFFF;--ink:#16161A;--muted:#5E5E66;--line:#E4E4E7;--b:#A1A1AA;--a:#16161A;--good:#0A7A45;--bad:#C8321C;--flat:#5E5E66;font-family:-apple-system,"Segoe UI",system-ui,sans-serif}
+@media (prefers-color-scheme:dark){svg{--bg:#0D1117;--ink:#F0F0F0;--muted:#9BA1A9;--line:#30363D;--b:#545B64;--a:#E6E6E6;--good:#3FB97A;--bad:#FF6A4D;--flat:#9BA1A9}}
+.bg{fill:var(--bg);stroke:var(--line)}.t{fill:var(--ink);font-size:16px;font-weight:600}.u{fill:var(--muted);font-size:13px}
+.lab{fill:var(--muted);font-size:13px}.val{fill:var(--ink);font-size:13px;font-variant-numeric:tabular-nums}
+.b{fill:var(--b)}.a{fill:var(--a)}.rng{stroke:var(--muted);stroke-width:1.5;fill:none}
+.pill{fill:var(--flat);opacity:.14}.chg{fill:var(--flat);font-size:13px;font-weight:600}.axis{stroke:var(--line)}
+</style>
+<rect class="bg" x=".5" y=".5" width="679" height="177" rx="10"/>
+<text class="t" x="20" y="34">elevated_sweep frame time (median)<tspan class="u"> · ms · lower is better</tspan></text>
+<rect class="pill" x="484" y="16" width="176" height="28" rx="14"/>
+<text class="chg" x="572" y="35" text-anchor="middle">+1.0% ≈ within noise</text>
+<path class="axis" d="M84 60V162"/>
+<text class="lab" x="76" y="90" text-anchor="end">Before</text>
+<rect class="b" x="84" y="70" width="414.1" height="30" rx="5"/>
+<path class="rng" d="M493.3 85.0H510.2M493.3 78.0v14M510.2 78.0v14"/>
+<text class="val" x="520.2" y="90">6.26 · n=5</text>
+<text class="lab" x="76" y="138" text-anchor="end">After</text>
+<rect class="a" x="84" y="118" width="418.3" height="30" rx="5"/>
+<path class="rng" d="M500.1 133.0H513.6M500.1 126.0v14M513.6 126.0v14"/>
+<text class="val" x="523.6" y="138">6.32 · n=5</text>
+</svg>

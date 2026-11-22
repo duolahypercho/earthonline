@@ -1,0 +1,131 @@
+{
+  "title": "Frame time on the bench paths: no measurable change",
+  "machine": "the owner's Mac (Apple silicon, macOS 27.2), release build, shared with other sessions",
+  "metrics": [
+    {
+      "name": "street_walk frame time (median)",
+      "unit": "ms",
+      "better": "lower",
+      "command": "eo-app --bench --segments street_walk,elevated_sweep,city_overview,night_kit_street,night_waterfront (default quality, external assets set; main and branch alternated, 5 runs each)",
+      "before": [
+        5.075,
+        4.909,
+        4.77,
+        4.764,
+        5.017
+      ],
+      "after": [
+        4.895,
+        4.764,
+        4.754,
+        4.773,
+        4.745
+      ],
+      "beforeMedian": 4.909,
+      "afterMedian": 4.764,
+      "changePercent": -3.0,
+      "verdict": "within noise",
+      "chart": "charts/street-walk-frame-time-median.svg"
+    },
+    {
+      "name": "elevated_sweep frame time (median)",
+      "unit": "ms",
+      "better": "lower",
+      "command": "eo-app --bench --segments street_walk,elevated_sweep,city_overview,night_kit_street,night_waterfront (default quality, external assets set; main and branch alternated, 5 runs each)",
+      "before": [
+        6.443,
+        6.26,
+        6.187,
+        6.188,
+        6.361
+      ],
+      "after": [
+        6.495,
+        6.321,
+        6.324,
+        6.29,
+        6.347
+      ],
+      "beforeMedian": 6.26,
+      "afterMedian": 6.324,
+      "changePercent": 1.0,
+      "verdict": "within noise",
+      "chart": "charts/elevated-sweep-frame-time-median.svg"
+    },
+    {
+      "name": "city_overview frame time (median)",
+      "unit": "ms",
+      "better": "lower",
+      "command": "eo-app --bench --segments street_walk,elevated_sweep,city_overview,night_kit_street,night_waterfront (default quality, external assets set; main and branch alternated, 5 runs each)",
+      "before": [
+        8.8,
+        8.446,
+        8.451,
+        8.543,
+        8.725
+      ],
+      "after": [
+        8.814,
+        8.558,
+        8.542,
+        8.571,
+        8.578
+      ],
+      "beforeMedian": 8.543,
+      "afterMedian": 8.571,
+      "changePercent": 0.3,
+      "verdict": "within noise",
+      "chart": "charts/city-overview-frame-time-median.svg"
+    },
+    {
+      "name": "night_kit_street frame time (median)",
+      "unit": "ms",
+      "better": "lower",
+      "command": "eo-app --bench --segments street_walk,elevated_sweep,city_overview,night_kit_street,night_waterfront (default quality, external assets set; main and branch alternated, 5 runs each)",
+      "before": [
+        5.453,
+        5.087,
+        5.046,
+        5.075,
+        5.111
+      ],
+      "after": [
+        5.194,
+        5.053,
+        5.111,
+        5.08,
+        5.291
+      ],
+      "beforeMedian": 5.087,
+      "afterMedian": 5.111,
+      "changePercent": 0.5,
+      "verdict": "within noise",
+      "chart": "charts/night-kit-street-frame-time-median.svg"
+    },
+    {
+      "name": "night_waterfront frame time (median)",
+      "unit": "ms",
+      "better": "lower",
+      "command": "eo-app --bench --segments street_walk,elevated_sweep,city_overview,night_kit_street,night_waterfront (default quality, external assets set; main and branch alternated, 5 runs each)",
+      "before": [
+        6.665,
+        6.378,
+        6.385,
+        6.387,
+        6.501
+      ],
+      "after": [
+        6.553,
+        6.348,
+        6.41,
+        6.399,
+        6.44
+      ],
+      "beforeMedian": 6.387,
+      "afterMedian": 6.41,
+      "changePercent": 0.4,
+      "verdict": "within noise",
+      "chart": "charts/night-waterfront-frame-time-median.svg"
+    }
+  ]
+}
