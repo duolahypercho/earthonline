@@ -95,7 +95,7 @@ use crate::Args;
 use anyhow::{Result, anyhow, bail};
 use eo_render::look::{LightingOptions, LookProfile};
 
-/// The quality tier (`--quality`); `Medium` is the default and today's frame.
+/// The quality tier (`--quality`); `Medium` is the default (the street look).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Quality {
     Low,

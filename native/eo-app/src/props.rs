@@ -1442,11 +1442,6 @@ mod capture_pose_tests {
     }
 }
 
-/// the `--capture-props2` poses, chosen from the placement (the same with and
-/// without the props2 flags): a signalised junction from 18 m back on its approach, a
-/// tree-lined street, a kerb with a hydrant and parked cars, a street with lights and
-/// overhead wires, a sign plate close up (each near the SoMa or Inner Sunset oracle
-/// window centres), plus the existing props cameras.
 /// The citywide street audit (`EO_CAPTURE_STREETS=N` with `--capture-props2`):
 /// up to `n` street-level views spread over the whole map, so a change to the
 /// street is judged across the city and not at one corner. The street plan's
@@ -1517,6 +1512,11 @@ pub fn street_audit_poses(world: &crate::World, aspect: f32, far: f32, n: usize)
     out
 }
 
+/// the `--capture-props2` poses, chosen from the placement (the same with and
+/// without the props2 flags): a signalised junction from 18 m back on its approach, a
+/// tree-lined street, a kerb with a hydrant and parked cars, a street with lights and
+/// overhead wires, a sign plate close up (each near the SoMa or Inner Sunset oracle
+/// window centres), plus the existing props cameras.
 pub fn props2_poses(world: &crate::World, aspect: f32, far: f32) -> Vec<(String, eo_render::camera::Camera, String)> {
     let mut out = vec![];
     let Some(street) = world.street.as_ref().map(|s| s.world.clone()) else { return out };

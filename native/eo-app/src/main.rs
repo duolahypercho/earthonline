@@ -91,7 +91,7 @@ pub struct Args {
     pub black_point_rockweed: bool,
     pub cove_pile_contact: bool,
     pub surface_start: bool,
-    /// `--quality` (default medium: today's frame); expanded into `look` once
+    /// `--quality` (default medium: the street look); expanded into `look` once
     /// every argument is read (quality.rs), and the bench's frame budget.
     pub quality: quality::Quality,
     pub frames: usize,
