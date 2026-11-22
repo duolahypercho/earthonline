@@ -1209,7 +1209,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let stats: Vec<u32> = eo_render::scene::cast_u32(&stats_bytes);
         let word = |i: usize, k: usize| stats[i * COUNTER_WORDS + k] as f64;
         let range = args.warmup..total;
-        let drawn_objects: Vec<f64> = range.clone().map(|i| word(i, 0) + word(i, 1) + word(i, 10)).collect(); // + late opaque
+        let drawn_objects: Vec<f64> = range.clone().map(|i| word(i, 0) + word(i, 1) + word(i, 10) + (0..4).map(|k| word(i, eo_render::CLASS_WORD as usize + k)).sum::<f64>()).collect(); // + late opaque, + the city's classes
         // what the frustum + LOD pass would draw, and the early pass's share.
         let frustum_objects: Vec<f64> = range.clone().map(|i| word(i, 11)).collect();
         let frustum_tris: Vec<f64> = range.clone().map(|i| word(i, 12)).collect();

@@ -85,6 +85,15 @@ fn house_bit(word: u32, bit: u32) -> bool {
     return SF_HOUSE && (word & bit) != 0u;
 }
 const PI: f32 = 3.14159265;
+// The city's opaque classes (look.rs `CITY_CLASS`, lib.rs `CityClasses`): one
+// pipeline for every object (CITY_ALL: the glass, the probe, the fallback
+// lists), or, with the classes split, one a class, each compiling out the
+// others' surfaces: the street surface (F_STREET), a landmark's surface kinds
+// (`lm_kind`), and the rest. cull.wgsl `city_class` sorts the objects.
+const CITY_ALL: u32 = 0u;
+const CITY_GENERAL: u32 = 1u;
+const CITY_STREET: u32 = 2u;
+const CITY_LANDMARK: u32 = 3u;
 
 @group(0) @binding(0) var<uniform> frame: Frame;
 @group(0) @binding(1) var<storage, read> objects: array<Object>;
@@ -1557,12 +1566,18 @@ fn shade(in: VOut) -> vec4<f32> {
     if SF_HOUSE && look.porch_light[0].w > 0. && frame.copy_step.z < .5 {
         porch_field = porch_irradiance(in.world, n);
     }
-    if ((m.flags & F_STREET) != 0u) {
+    // (look.rs `CITY_CLASS`) with the city's opaque classes split, the street
+    // surface has a pipeline of its own and the others compile it out.
+    let street_class = select(CITY_CLASS == CITY_STREET, (m.flags & F_STREET) != 0u, CITY_CLASS == CITY_ALL);
+    if (street_class) {
         let ss = street_surface(in, n, dpx, dpy);
         if (sx_in_bore(in.object)) {
             return sx_bore_light(ss, m, v, in.world, in.object); // a tunnel bore's roadway (structures.wgsl)
         }
         return look_light(ss, m, v, in.world, n, in.object);
+    }
+    if (CITY_CLASS == CITY_STREET) {
+        return vec4<f32>(0.0); // (never reached: the street class draws only the street material)
     }
     if (SF_STRUCTURES && (objects[in.object].kind & 255u) == 12u) {
         // a grade-separated road's concrete (structures.wgsl; none without `--structures`: SF_STRUCTURES).
@@ -1646,7 +1661,7 @@ fn shade(in: VOut) -> vec4<f32> {
     } else if (cc0_terrain && !cc0_sand) {
         cc0_ground(&s, in.world, n, dpx, dpy);
     }
-    if (lm_kind(m.flags) != 0u) {
+    if (CITY_CLASS != CITY_GENERAL && lm_kind(m.flags) != 0u) { // (the landmark class's own pipeline, or the one pipeline)
         lm_surface(&s, m, in.world, n, dpx, dpy); // landmark-surface.js, the seawall's concrete
     } else if ((m.flags & LM_F_WET_GROUND) != 0u && (objects[in.object].kind & 255u) == 1u) {
         if (in.aux.x < 253.5) {

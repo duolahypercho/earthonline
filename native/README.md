@@ -542,7 +542,7 @@ selection:
 | Flora 2 (Battery Spencer knoll, Baker bluff rock and boulders) | `--no-flora2` (all of these: the flora pass's output), `--no-knoll-ground`, `--no-knoll-relief`, `--no-bluff-rock`, `--no-boulder-surf` |
 | Surf and bathymetry | `--no-gg3-water` (all of these), `--no-bathymetry`, `--no-surf-break`, `--no-swash-foam`, `--no-obstacle-foam`, `--no-water-body2`; reserved: `--no-ppr-dash` |
 | Golden Gate, fifth pass | `--no-gg3-bridge` or `--no-bridges5` (all of these), `--no-paint-brdf2`, `--no-paint-weathering`, `--no-concrete2`, `--no-leg-cells`, `--no-cable-detail` |
-| Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count`, `--no-count-emulation`, `--no-bounded-draws` (wins over the opt-in `--bounded-draws`; see [What is drawn](#what-is-drawn)) |
+| Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count`, `--no-count-emulation`, `--no-bounded-draws` (wins over the opt-in `--bounded-draws`; see [What is drawn](#what-is-drawn)), `--no-city-classes` (the city's opaque pass as one pipeline and one list pair, as before the split) |
 | Interface and sound | `--no-hud`, `--no-audio`, `--audio-null` (mix to a null output), `--no-settings-apply` (`--ui`: the settings file does not reach the renderer or the world) |
 | Optional assets | `--no-external` (read each set only from the folder its variable names, not from `external/`: the output before that folder was read) |
 | Online (`--connect`) | `--no-remote-bodies` (other players drawn as before: first walk style and idle, linear path, no emotes or phone, street people may wear a player's body), `--no-name-tags` (no tags, no tag depth probe), `--no-player-contact` (no ground contact under their bodies, and its shading compiled out of the agents' shaders: `SF_PLAYER_CONTACT`), `--no-shared-sky` (the client's own hour and weather) |
@@ -1086,6 +1086,17 @@ frame's count zeroed to empty draws. The paths, in this precedence
    object, issued in conservative blocks of 64 slots (`--no-draw-ranges`:
    every slot), with the far layer's own fixed-size lists and no occlusion
    or probe.
+
+With compacted lists (1 and 2) the city's opaque pass is split by class
+(eo-render `CityClasses`): the cull sorts each opaque object by its
+material into the street surface, a landmark's surface kinds or the rest,
+each with its own early and late list, and each list is drawn with a
+pipeline that compiles only its class's surface code. One fragment shader
+holding every surface cost every pixel the whole shader on Apple's GPU;
+each object takes the same code in its class's pipeline, so the frame is
+the same. `--no-city-classes` keeps one pipeline and one list pair; the
+glass, the scene probe, the bounded draws and the fixed-slot lists keep
+it too.
 
 **Hand-built buildings.** Several hundred buildings are modelled in Blender
 from DataSF footprints, LiDAR heights and the assessor roll

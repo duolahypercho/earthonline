@@ -280,6 +280,18 @@ mod tests {
         assert_eq!(look::shader_features(), look::ShaderFeatures::ALL, "the scope ends with its body; unset, every feature is in");
     }
 
+    /// The split city pass's class shaders (lib.rs `CityClasses`) parse and
+    /// validate, each with its class's line in place of the one shader's.
+    #[test]
+    fn the_city_class_shaders_compose() {
+        for class in [look::CITY_GENERAL, look::CITY_STREET, look::CITY_LANDMARK] {
+            let src = look::city_shader_source_class(class);
+            assert!(src.contains(&format!("const CITY_CLASS: u32 = {class}u;")) && !src.contains("const CITY_CLASS: u32 = 0u;"), "class {class}");
+            parse(&format!("class {class}"), &src);
+        }
+        assert!(look::city_shader_source().contains("const CITY_CLASS: u32 = 0u;"), "the one shader keeps every class");
+    }
+
     /// The playable house's nine varyings (draw.wgsl `VOut`, look.rs
     /// `draw_wgsl`) are interpolated with the house compiled in only.
     #[test]
