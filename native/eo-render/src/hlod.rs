@@ -283,6 +283,9 @@ struct CullParams {
     counts: [u32; 4],
     /// The camera, and in w the cell -> district band's start (a district chunk wholly nearer, its cell resident, draws nothing).
     cam: [f32; 4],
+    /// the bounded list's guards (bounds.rs): the widened frustum, and x the ring's reach, y 1 to count them, z the near sphere.
+    wide: [[f32; 4]; 6],
+    guard: [f32; 4],
 }
 
 // ---------------------------------------------------------------------------
@@ -372,9 +375,10 @@ impl HlodGpu {
         let index_buf = buf("hlod-indices", o.indices as u64 * 4, U::INDEX | U::COPY_DST);
         let cell_buf = buf("hlod-cells", MAX_CELLS as u64 * std::mem::size_of::<GpuCell>() as u64, U::STORAGE | U::COPY_DST);
         let params_buf = buf("hlod-cull-params", std::mem::size_of::<CullParams>() as u64, U::UNIFORM | U::COPY_DST);
-        // COPY_DST: the count emulation and the fallback (`clear`) zero its slots
+        // COPY_DST: the count emulation, the bounded draws and the fallback (`clear`) zero its slots
         let cmd_buf = buf("hlod-draws", MAX_CELLS as u64 * 20, U::STORAGE | U::INDIRECT | U::COPY_DST);
-        let count_buf = buf("hlod-counts", 16, U::STORAGE | U::INDIRECT | U::COPY_SRC | U::COPY_DST);
+        // [0] commands, [1] triangles, [2] in the frustum, [3] occluded, [4] [5] the bounded list's guards
+        let count_buf = buf("hlod-counts", 32, U::STORAGE | U::INDIRECT | U::COPY_SRC | U::COPY_DST);
         let layers = o.pages.max(1);
         let bc = d.features().contains(wgpu::Features::TEXTURE_COMPRESSION_BC);
         PAGES_BC.store(bc, Ordering::Relaxed);
@@ -527,13 +531,20 @@ impl HlodGpu {
         }
     }
 
+    /// The most entries the cull can draw this frame: every entry written
+    /// resident (with indices) so far, plus a margin for entries written
+    /// after the encode and before its submit, in whole 64s.
+    pub fn resident_bound(&self) -> u32 {
+        (self.live_entries() + 64).next_multiple_of(64).min(MAX_CELLS)
+    }
+
     pub fn total_bytes(&self) -> u64 {
         self.bytes.iter().sum()
     }
 
     /// The frame's camera (the city pass's jittered clip matrix and its planes).
     pub fn update(&self, queue: &wgpu::Queue, view_proj: glam::Mat4, planes: [[f32; 4]; 6], eye: Vec3) {
-        let p = CullParams { planes, view_proj: view_proj.to_cols_array_2d(), counts: [MAX_CELLS, 0, 0, 0], cam: [eye.x, eye.y, eye.z, if self.chunk_skip.load(Ordering::Relaxed) { self.far_a } else { -1.0 }] };
+        let p = CullParams { planes, view_proj: view_proj.to_cols_array_2d(), counts: [MAX_CELLS, 0, 0, 0], cam: [eye.x, eye.y, eye.z, if self.chunk_skip.load(Ordering::Relaxed) { self.far_a } else { -1.0 }], wide: [[0.0; 4]; 6], guard: [0.0; 4] };
         queue.write_buffer(&self.params_buf, 0, bytemuck::bytes_of(&p));
         if self.fallback {
             // the commands the cull can append this frame: the kept entries in
@@ -544,12 +555,35 @@ impl HlodGpu {
         }
     }
 
-    pub fn clear(&self, enc: &mut wgpu::CommandEncoder) {
+    /// The bounded list's guards for this frame (after `update`): the widened
+    /// frustum's planes and the ring's reach (bounds.rs).
+    pub fn set_guard(&self, queue: &wgpu::Queue, wide: [[f32; 4]; 6], reach: f32) {
+        let at = std::mem::offset_of!(CullParams, wide) as u64;
+        let mut words = [0f32; 28];
+        for (k, p) in wide.iter().enumerate() {
+            words[k * 4..k * 4 + 4].copy_from_slice(p);
+        }
+        words[24] = reach;
+        words[25] = 1.0;
+        words[26] = crate::bounds::NEAR_M;
+        queue.write_buffer(&self.params_buf, at, bytemuck::cast_slice(&words));
+    }
+
+    /// The cull's counters: [0] commands, [1] triangles, [2] in the frustum, [3] occluded, [4] [5] the bounded list's guards.
+    pub fn counter_buffer(&self) -> &wgpu::Buffer {
+        &self.count_buf
+    }
+
+    /// `bound`: the bounded list's commands, emptied before the cull appends (bounds.rs).
+    pub fn clear(&self, enc: &mut wgpu::CommandEncoder, bound: Option<u32>) {
         enc.clear_buffer(&self.count_buf, 0, None);
         let live = self.frame_bound() as u64;
         if self.fallback && live > 0 {
             // The slots the cull leaves empty draw nothing (index count 0).
             enc.clear_buffer(&self.cmd_buf, 0, Some(live * 20));
+        }
+        if let Some(b) = bound.filter(|_| !self.fallback) {
+            crate::clear_list(enc, &self.cmd_buf, 0, b, crate::DRAW_ARGS_BYTES);
         }
     }
 
@@ -591,8 +625,10 @@ impl HlodGpu {
         pass.dispatch_workgroups(MAX_CELLS.div_ceil(64), 1, 1);
     }
 
-    /// In the city pass (its groups 0 and 1 bound): every entry the cull kept.
-    pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
+    /// In the city pass (its groups 0 and 1 bound): every entry the cull kept
+    /// (`bound`: the bounded draws' commands, bounds.rs; None: the count
+    /// emulation's bound or the indirect count).
+    pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>, bound: Option<u32>) {
         pass.set_pipeline(&self.draw_pipeline);
         pass.set_bind_group(2, &self.draw_bg, &[]);
         pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
@@ -606,8 +642,8 @@ impl HlodGpu {
             }
             return;
         }
-        // (the count emulation's bound when `register_counts` put the list in it)
-        crate::counted::draw_indexed(pass, self.counted.get(), 0, &self.cmd_buf, 0, &self.count_buf, 0, MAX_CELLS);
+        // (the bounded draws' `bound`, else the count emulation's when `register_counts` put the list in it)
+        crate::draw_compacted(pass, bound, self.counted.get(), 0, &self.cmd_buf, 0, &self.count_buf, 0, MAX_CELLS);
     }
 
     /// The last frame's counters (blocking; tests and bench reports): entries

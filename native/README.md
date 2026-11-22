@@ -533,7 +533,7 @@ selection:
 | Flora 2 (Battery Spencer knoll, Baker bluff rock and boulders) | `--no-flora2` (all of these: the flora pass's output), `--no-knoll-ground`, `--no-knoll-relief`, `--no-bluff-rock`, `--no-boulder-surf` |
 | Surf and bathymetry | `--no-gg3-water` (all of these), `--no-bathymetry`, `--no-surf-break`, `--no-swash-foam`, `--no-obstacle-foam`, `--no-water-body2`; reserved: `--no-ppr-dash` |
 | Golden Gate, fifth pass | `--no-gg3-bridge` or `--no-bridges5` (all of these), `--no-paint-brdf2`, `--no-paint-weathering`, `--no-concrete2`, `--no-leg-cells`, `--no-cable-detail` |
-| Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count`, `--no-count-emulation` |
+| Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count`, `--no-count-emulation`, `--no-bounded-draws` (wins over the opt-in `--bounded-draws`; see [What is drawn](#what-is-drawn)) |
 | Interface and sound | `--no-hud`, `--no-audio`, `--audio-null` (mix to a null output), `--no-settings-apply` (`--ui`: the settings file does not reach the renderer or the world) |
 | Optional assets | `--no-external` (read each set only from the folder its variable names, not from `external/`: the output before that folder was read) |
 | Online (`--connect`) | `--no-remote-bodies` (other players drawn as before: first walk style and idle, linear path, no emotes or phone, street people may wear a player's body), `--no-name-tags` (no tags, no tag depth probe), `--no-player-contact` (no ground contact under their bodies, and its shading compiled out of the agents' shaders: `SF_PLAYER_CONTACT`), `--no-shared-sky` (the client's own hour and weather) |
@@ -995,14 +995,38 @@ loaded for what the camera can see, with a lighter level around it.
 
 The culled lists are compacted on the GPU and drawn with the count the cull
 wrote (`MULTI_DRAW_INDIRECT_COUNT`). Metal has no such draw, and wgpu turns a
-multi-draw there into one CPU draw call per slot, so without the feature
-the lists are still compacted and drawn to a bound read back from their
-counts a few frames late (`eo-render/src/counted.rs`): every list's recent
-peak plus headroom, the slots past this frame's count zeroed, the whole list
-after a camera cut or when a count outran its bound. `--no-count-emulation`
-keeps the older uncompacted fallback (one draw per object slot, no
-occlusion, no far layer, no water); `--no-indirect-count` selects the
-emulation on an adapter that has the feature.
+multi-draw there into one CPU draw call per slot, so without the feature a
+list is drawn to a bound the CPU knows when it encodes, its slots past this
+frame's count zeroed to empty draws. The paths, in this precedence
+(`GpuContext::draw_lists`, named in the bench JSON's `draw_lists`):
+
+1. The indirect count, wherever the adapter has it (`--no-indirect-count`
+   skips it on an adapter that has the feature).
+2. The count emulation, Metal's default (`eo-render/src/counted.rs`): the
+   lists are still compacted and each is drawn to a bound read back from
+   its counts a few frames late: its recent peak plus half again and 256
+   commands. After a camera cut, before the first read-back or when a count
+   outran its bound, a conservative cull is submitted and waited for to
+   measure the bound.
+3. The bounded draws, opt-in with `--bounded-draws` on top of 2
+   (`eo-render/src/bounds.rs`; `--no-bounded-draws` wins wherever it stands
+   and gives 2): every cull also counts guards, the objects in a frustum
+   widened by 20 degrees a side plus a 40 m sphere, and every object within
+   the far distance plus a margin that follows the camera's speed; a list is
+   drawn to the guard its newest read-back covers (a turn under 10 degrees,
+   or a move within the margin), never waited for, and at its capacity with
+   no usable read-back or for 60 frames after an overflow. It bounds the
+   city's lists, the sun cascades, the far layer and the distant trees, and
+   the scene probe's faces from a count pass per capture. The far sun shadow
+   map's lists and, with `--probe-grid`, the probe's keep 2's bounds. On
+   matched bench runs (Apple M-series) it drew 2 to 3.4 times the
+   emulation's city commands on the street paths and cost up to 0.9 ms more
+   CPU a frame there; it was faster only on `city_overview`, so it stays
+   opt-in. The sea's patches are one instanced draw in every path.
+4. `--no-count-emulation` keeps the uncompacted fallback: one slot per
+   object, issued in conservative blocks of 64 slots (`--no-draw-ranges`:
+   every slot), with the far layer's own fixed-size lists and no occlusion
+   or probe.
 
 **Hand-built buildings.** Several hundred buildings are modelled in Blender
 from DataSF footprints, LiDAR heights and the assessor roll

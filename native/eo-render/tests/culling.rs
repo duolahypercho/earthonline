@@ -7,9 +7,10 @@ use eo_render::{GpuContext, GpuOptions, Renderer, TERRAIN_LOD_DISTANCE_M, wgpu};
 use glam::Vec3;
 
 /// `force_no_indirect_count` without the adapter's count draws; `force_no_count_emulation`
-/// then the per-slot fallback instead of the count emulation.
-fn ctx(force_no_indirect_count: bool, force_no_count_emulation: bool) -> GpuContext {
-    let opts = GpuOptions { force_no_indirect_count, force_no_count_emulation, ..Default::default() };
+/// then the per-slot fallback instead of the count emulation; `bounded_draws` the
+/// emulation's lists bounded by the culls' guards (bounds.rs).
+fn ctx(force_no_indirect_count: bool, force_no_count_emulation: bool, bounded_draws: bool) -> GpuContext {
+    let opts = GpuOptions { force_no_indirect_count, force_no_count_emulation, bounded_draws, ..Default::default() };
     GpuContext::new(GpuContext::create_instance(&opts), None, opts).expect("a GPU adapter is required for the culling test")
 }
 
@@ -30,8 +31,8 @@ fn cube(c: Vec3, tag: u32, verts: &mut Vec<Vertex>, objects: &mut Vec<GpuObject>
     ));
 }
 
-fn run(force_no_indirect_count: bool, force_no_count_emulation: bool) {
-    let ctx = ctx(force_no_indirect_count, force_no_count_emulation);
+fn run(force_no_indirect_count: bool, force_no_count_emulation: bool, bounded_draws: bool) {
+    let ctx = ctx(force_no_indirect_count, force_no_count_emulation, bounded_draws);
     // Camera at the origin looking north (-z).
     let cam = Camera::new(Vec3::new(0.0, 2.0, 0.0), 0.0, 0.0, 16.0 / 9.0);
     let mut verts = vec![];
@@ -92,18 +93,57 @@ fn run(force_no_indirect_count: bool, force_no_count_emulation: bool) {
 
 #[test]
 fn planted_offscreen_objects_are_culled_compacted_path() {
-    run(false, false);
+    run(false, false, false);
 }
 
 /// The compacted lists without the adapter's count draws (the Metal path).
 #[test]
 fn planted_offscreen_objects_are_culled_emulated_path() {
-    run(true, false);
+    run(true, false, false);
+}
+
+/// The compacted lists drawn to the bounds of the culls' guards (`--bounded-draws`).
+#[test]
+fn planted_offscreen_objects_are_culled_bounded_path() {
+    run(true, false, true);
 }
 
 #[test]
 fn planted_offscreen_objects_are_culled_fallback_path() {
-    run(true, true);
+    run(true, true, false);
+}
+
+/// The bounded lists' guards (bounds.rs) hold the frustum's objects: the cull
+/// counts every LOD-selected object within the ring and, of those, every one
+/// in the widened frustum, and the visible ones are among them.
+#[test]
+fn bounded_lists_count_their_guards() {
+    let ctx = ctx(true, false, true);
+    let cam = Camera::new(Vec3::new(0.0, 2.0, 0.0), 0.0, 0.0, 16.0 / 9.0);
+    let mut verts = vec![];
+    let mut objects = vec![];
+    // ahead (3), 10 degrees off the frustum's side (in the widened one), behind
+    // within the near sphere, behind past it, beyond the ring.
+    cube(Vec3::new(0.0, 2.0, -10.0), 0, &mut verts, &mut objects);
+    cube(Vec3::new(0.0, 2.0, -100.0), 1, &mut verts, &mut objects);
+    cube(Vec3::new(5.0, 2.0, -1000.0), 2, &mut verts, &mut objects);
+    let side = (40.9f32 + 10.0).to_radians();
+    cube(Vec3::new(side.sin() * 200.0, 2.0, -side.cos() * 200.0), 3, &mut verts, &mut objects);
+    cube(Vec3::new(0.0, 2.0, 20.0), 4, &mut verts, &mut objects);
+    cube(Vec3::new(0.0, 2.0, 300.0), 5, &mut verts, &mut objects);
+    cube(Vec3::new(0.0, 2.0, -6000.0), 6, &mut verts, &mut objects);
+    let indices: Vec<u32> = (0..64).map(|i| i % 8).collect();
+    let r = Renderer::from_parts(&ctx, &verts, &indices, &objects, wgpu::TextureFormat::Rgba8UnormSrgb, 1).unwrap();
+    if !r.bounded {
+        eprintln!("bounded_lists_count_their_guards: the adapter draws with the indirect count; the guards are not counted");
+        return;
+    }
+    let out = r.cull_readback(&ctx, &cam).unwrap();
+    assert_eq!(out.draw_count(), 3, "drawn");
+    assert_eq!(out.counters[16], 5, "wide guard: the 3 in view, the one 10 degrees off, the one behind inside the near sphere");
+    assert_eq!(out.counters[18], 6, "ring guard: all but the one past the far plane plus the margin");
+    let fb = r.frame_bounds().expect("bounds planned");
+    assert_eq!(fb.city[0], r.object_count, "no sample yet: drawn at capacity");
 }
 
 /// Whole real city at the bench spawn and from the air: the GPU's visible
@@ -134,7 +174,7 @@ fn real_city_gpu_cull_matches_cpu_reference() {
         smooth_terrain: false,
     })
     .unwrap();
-    let ctx = ctx(false, false);
+    let ctx = ctx(false, false, false);
     let r = Renderer::new(&ctx, &scene, wgpu::TextureFormat::Rgba8UnormSrgb, 1).unwrap();
     // the spawn and the overview point on the shipped (scaled) plan.
     let sp = eo_data::groundscale::plan([1539.0, -366.0]);
@@ -171,7 +211,7 @@ fn real_city_gpu_cull_matches_cpu_reference() {
 
 #[test]
 fn cold_start_and_camera_cut_bound_both_opaque_lists() {
-    let ctx = ctx(true, false);
+    let ctx = ctx(true, false, false);
     let mut vertices = Vec::new();
     let mut objects = Vec::new();
     for (z, count) in [(-50.0, 64), (50.0, 700), (-10_000.0, 2048)] {

@@ -79,6 +79,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             indirect_validation: args.indirect_validation,
             force_no_indirect_count: args.no_indirect_count,
             force_no_count_emulation: args.no_count_emulation,
+            bounded_draws: args.bounded_draws,
             ..Default::default()
         },
         gfx: None,

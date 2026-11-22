@@ -179,6 +179,7 @@ fn base_args() -> Args {
         indirect_validation: true,
         no_indirect_count: false,
         no_count_emulation: false,
+        bounded_draws: false,
         vsync: true,
         out_dir: None,
         label: None,
@@ -1260,7 +1261,7 @@ struct Offscreen {
 }
 
 fn offscreen(world: &mut World, args: &Args, eye: Vec3, process_start: Instant) -> Result<Offscreen> {
-    let opts = GpuOptions { indirect_validation: args.indirect_validation, force_no_indirect_count: args.no_indirect_count, force_no_count_emulation: args.no_count_emulation, ..Default::default() };
+    let opts = GpuOptions { indirect_validation: args.indirect_validation, force_no_indirect_count: args.no_indirect_count, force_no_count_emulation: args.no_count_emulation, bounded_draws: args.bounded_draws, ..Default::default() };
     let ctx = GpuContext::new(GpuContext::create_instance(&opts), None, opts)?;
     let format = wgpu::TextureFormat::Rgba8UnormSrgb;
     let (renderer, bases) = make_renderer(&ctx, world, args, format, false)?;
@@ -1792,7 +1793,7 @@ mod window {
         fn init(&mut self, el: &ActiveEventLoop) -> Result<()> {
             let attrs = Window::default_attributes().with_title("Earth Online native - online").with_inner_size(PhysicalSize::new(self.args.width, self.args.height));
             let window = Arc::new(el.create_window(attrs)?);
-            let opts = GpuOptions { indirect_validation: self.args.indirect_validation, force_no_indirect_count: self.args.no_indirect_count, force_no_count_emulation: self.args.no_count_emulation, ..Default::default() };
+            let opts = GpuOptions { indirect_validation: self.args.indirect_validation, force_no_indirect_count: self.args.no_indirect_count, force_no_count_emulation: self.args.no_count_emulation, bounded_draws: self.args.bounded_draws, ..Default::default() };
             let instance = GpuContext::create_instance(&opts);
             let surface = instance.create_surface(window.clone())?;
             let ctx = GpuContext::new(instance, Some(&surface), opts)?;
