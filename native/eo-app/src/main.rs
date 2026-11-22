@@ -895,6 +895,12 @@ pub fn cache_dir(args: &Args) -> Option<std::path::PathBuf> {
 }
 
 pub fn load_world(args: &Args) -> Result<World> {
+    // Each world build starts its own terrain workers. Let unit tests share
+    // the machine by constructing one world at a time.
+    #[cfg(test)]
+    static WORLD_BUILD: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    #[cfg(test)]
+    let _build_guard = WORLD_BUILD.lock().unwrap_or_else(|error| error.into_inner());
     // street props v2 (`--no-street-props-v2`): before anything reads the props manifest.
     eo_props::props_v2::set_street_props_v2(args.props && args.props2.street_v2);
     let street_plan = args.streets.then(streets::spawn_plan);
