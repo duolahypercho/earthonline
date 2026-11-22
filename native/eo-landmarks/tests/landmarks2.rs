@@ -248,3 +248,44 @@ fn the_beach_sand_fits_the_city_shore() {
     // (85 % and 46 % on the 2026-11 data: the beach, and the promenade behind it the park alone maps)
     assert!(fit * 5 < js * 3, "the fitted rule still paints {fit} of Aquatic Park's {n} points sand (JS {js})");
 }
+
+/// The harbours' floating docks (floating_docks.rs) from the map's pier lines:
+/// Hyde Street Harbor's two main walks and their fingers are floats, the
+/// Aquatic Park breakwater (a decked pier) is not, and the docks offer
+/// berths a boat can lie in, over open water and clear of every float.
+#[test]
+fn the_harbour_docks_float_and_offer_berths() {
+    use eo_landmarks::floating_docks as fd;
+    eo_data::groundscale::pin(1.0);
+    let w = world();
+    let js = LandmarksJs::get();
+    let h = |x: f64, z: f64| w.elevation.sample(x, z);
+    let rings = wf::load_pier_rings(&w.root).unwrap();
+    let piers = wf::plan_piers(&rings, &w.oracle, &h, js.sea_level_y, js.shore.road_lift);
+    let lines = fd::load_pier_lines(&w.root).unwrap();
+    let docks = fd::plan_docks(&lines, &w.oracle, &piers);
+    // Hyde Street Harbor, between the Hyde Street Pier and Pier 45.
+    let in_harbour = |p: [f64; 2]| p[0] > -230.0 && p[0] < -30.0 && p[1] > -3600.0 && p[1] < -3450.0;
+    let here: Vec<&fd::Dock> = docks.iter().filter(|d| d.line.iter().all(|p| in_harbour(*p))).collect();
+    let (mains, fingers) = (here.iter().filter(|d| d.main).count(), here.iter().filter(|d| !d.main).count());
+    println!("{} docks citywide; Hyde Street Harbor: {mains} main walks, {fingers} fingers", docks.len());
+    assert!(mains >= 2 && fingers >= 15, "{mains} main walks, {fingers} fingers");
+    // Every float is over open water and off the decked piers.
+    for d in &docks {
+        let m = d.line[d.line.len() / 2];
+        assert!(w.oracle.is_water(m[0], m[1]), "a float at {m:?} on land");
+        assert!(d.line.len() >= 2 && (fd::FINGER_W_M..=fd::MAIN_WALK_W_M).contains(&d.width));
+    }
+    let t = std::time::Instant::now();
+    let berths = fd::plan_berths(&docks, &|x, z| w.oracle.is_water(x, z));
+    println!("plan_berths: {:.0} ms", t.elapsed().as_secs_f64() * 1e3);
+    let here_b: Vec<&fd::Berth> = berths.iter().filter(|b| in_harbour(b.centre)).collect();
+    println!("{} berths citywide, {} in Hyde Street Harbor", berths.len(), here_b.len());
+    assert!(here_b.len() >= 20, "{} berths in Hyde Street Harbor", here_b.len());
+    assert!(berths.iter().all(|b| b.beam >= 1.0 && b.length > 2.0 && w.oracle.is_water(b.centre[0], b.centre[1])));
+    if let Ok(p) = std::env::var("EO_DUMP_BERTHS") {
+        let v: Vec<serde_json::Value> = berths.iter().map(|b| serde_json::json!({"c": b.centre, "h": b.heading, "l": b.length, "b": b.beam, "f": b.finger})).collect();
+        let d: Vec<serde_json::Value> = docks.iter().map(|d| serde_json::json!({"line": d.line, "w": d.width})).collect();
+        std::fs::write(p, serde_json::to_string(&serde_json::json!({"berths": v, "docks": d})).unwrap()).unwrap();
+    }
+}

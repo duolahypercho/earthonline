@@ -165,6 +165,7 @@ fn base_args() -> Args {
         dive_site: None,
         underwater_habitats: false,
         cove_detail: false,
+        floating_docks: true,
         black_point_intertidal: false,
         black_point_rockweed: false,
         cove_pile_contact: false,

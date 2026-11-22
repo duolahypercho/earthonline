@@ -81,6 +81,8 @@ pub struct Args {
     pub dive_site: Option<eo_render::seabed::Habitat>,
     pub underwater_habitats: bool,
     pub cove_detail: bool,
+    /// the harbours' floating docks (eo-landmarks floating_docks.rs); `--no-floating-docks` leaves them out.
+    pub floating_docks: bool,
     pub black_point_intertidal: bool,
     pub black_point_rockweed: bool,
     pub cove_pile_contact: bool,
@@ -293,6 +295,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
         dive_site: None,
         underwater_habitats: false,
         cove_detail: false,
+        floating_docks: true,
         black_point_intertidal: false,
         black_point_rockweed: false,
         cove_pile_contact: false,
@@ -590,6 +593,8 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--black-point-rockweed" => { a.cove_detail = true; a.black_point_intertidal = true; a.black_point_rockweed = true; }
             "--no-black-point-rockweed" => a.black_point_rockweed = false,
             "--no-cove-detail" => a.cove_detail = false,
+            "--floating-docks" => a.floating_docks = true,
+            "--no-floating-docks" => a.floating_docks = false,
             "--underwater-habitats" => a.underwater_habitats = true,
             "--no-underwater-habitats" => a.underwater_habitats = false,
             "--no-water-optics" => a.look.water_optics = false,
@@ -814,6 +819,9 @@ pub struct World {
     /// and coarse levels, the arena they need); None without the switch or
     /// for an empty world.
     pub structures_drawn: Option<Arc<eo_render::structures::StructurePrepared>>,
+    /// the berths along the harbours' floating docks (eo-landmarks), where the
+    /// props draw the moored boats; empty without the docks.
+    pub berths: Arc<Vec<eo_landmarks::floating_docks::Berth>>,
 }
 
 /// the JS street ground materials' scanned sets, as
@@ -848,6 +856,8 @@ pub fn cache_dir(args: &Args) -> Option<std::path::PathBuf> {
 }
 
 pub fn load_world(args: &Args) -> Result<World> {
+    // street props v2 (`--no-street-props-v2`): before anything reads the props manifest.
+    eo_props::props_v2::set_street_props_v2(args.props && args.props2.street_v2);
     let street_plan = args.streets.then(streets::spawn_plan);
     let paths = DataPaths::discover()?;
     let street_maps_job = args.streets.then(|| spawn_street_maps(paths.repo_root.clone(), cache_dir(args)));
@@ -876,6 +886,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         let opts = if args.landmarks2 { eo_landmarks::set::Options::default() } else { eo_landmarks::set::Options::off() };
         let opts = eo_landmarks::set::Options { bridge_detail: bridge_detail(), ..opts };
         let opts = eo_landmarks::set::Options { cove_detail: args.cove_detail, ..opts };
+        let opts = eo_landmarks::set::Options { floating_docks: opts.floating_docks && args.floating_docks, ..opts };
         std::thread::spawn(move || -> Result<eo_landmarks::LandmarkSet> {
             let ca = CaStandards::load(&p)?;
             eo_landmarks::LandmarkSet::build_with(&p.repo_root, &|x: f64, z: f64| g.sample(x, z), &ca, opts)
@@ -1307,8 +1318,10 @@ pub fn load_world(args: &Args) -> Result<World> {
     drop(far_land_fn);
     // the bridges (eo-landmarks, the JS generators ported) on the
     // drawn ground, appended to the static table; their LOD groups follow the street's.
+    let mut berths = Vec::new();
     let landmarks = if let Some(mut set) = landmark_set {
         let t = Instant::now();
+        berths = std::mem::take(&mut set.berths);
         if std::env::var("EO_TRACE_LOAD").is_ok() {
             eprintln!("landmarks: waited {landmark_wait_ms:.0} ms for the bridge and wall thread (before the scene build)");
             if let Some(c) = &set.census {
@@ -1316,6 +1329,9 @@ pub fn load_world(args: &Args) -> Result<World> {
                     "landmarks2: shore edges {} visited: {} wall ({:.0} m), {} pier ({:.0} m), {} beach, {} county line; {} kept that the 4 m probe alone dropped; {} pier decks, {} piles",
                     c.visited, c.wall, c.wall_m, c.pier, c.pier_m, c.beach, c.county_line, c.kept_by_far_probe, set.piers_built.0, set.piers_built.1
                 );
+            }
+            if set.docks_built.0 > 0 {
+                eprintln!("landmarks2: {} floating docks ({:.0} m), {} guide piles", set.docks_built.0, set.docks_built.2, set.docks_built.1);
             }
         }
         // The paved plazas and the promenade seawalls (built on their own thread
@@ -1421,7 +1437,7 @@ pub fn load_world(args: &Args) -> Result<World> {
         }
         None => (None, None),
     };
-    Ok(World { house_layer_count, house_vertex_base, house, paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, dive_sites, landmarks, hlod, hlod_trees, structures, structures_drawn }) // hlod
+    Ok(World { house_layer_count, house_vertex_base, house, paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, dive_sites, landmarks, hlod, hlod_trees, structures, structures_drawn, berths: Arc::new(berths) }) // hlod
 }
 
 /// the street size. `--ground-scale S` (an explicit ground-plan

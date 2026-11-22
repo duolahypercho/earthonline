@@ -23,12 +23,14 @@
 //! (`PropsWorld::plan_tile`), pure and deterministic: nothing depends on the
 //! camera or on which tiles were asked before.
 
+pub mod boats; // moored boats at the floating docks' berths (eo-app `--no-boats`)
 pub mod clearance;
 pub mod data;
 pub mod eztree;
 pub mod furniture;
 pub mod overhead;
 pub mod pads;
+pub mod props_v2; // street props v2 (eo-app `--no-street-props-v2`)
 pub mod parking;
 pub mod parking_rules;
 pub mod roadway;

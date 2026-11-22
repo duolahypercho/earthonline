@@ -52,7 +52,13 @@ pub const OH_CORNER_SIGN: u32 = OH_BASE + 5;
 pub const OH_LANTERN: u32 = OH_BASE + 6;
 pub const OH_SIGN_BASE: u32 = OH_BASE + 7;
 pub const MAX_SIGN_VARIANTS: u32 = 32;
-pub const RENDER_MODEL_COUNT: usize = (vegetation_models::VEG_BASE + vegetation_models::COUNT) as usize;
+/// The moored boats (`eo_props::boats::BODIES` order), after the vegetation models
+/// (which follow the sign variants).
+pub const BOAT_BASE: u32 = vegetation_models::VEG_BASE + vegetation_models::COUNT;
+pub const RENDER_MODEL_COUNT: usize = (BOAT_BASE + eo_props::boats::BODIES.len() as u32) as usize;
+/// The boats' level edges (metres): full body to 70 m, the reduced one to 260 m, the
+/// silhouette to 3 km (a 10 m hull is a few pixels there).
+pub const BOAT_LOD: [f32; 4] = [70.0, 260.0, 0.0, 3000.0];
 /// Nominal size of the cabinet mesh (width X, height, depth Z), the JS `signalCabinetNear` shell.
 pub const CABINET_NOMINAL: [f32; 3] = [0.74, 1.43, 0.5];
 /// The fraction of a level's edge distance over which two levels cross-fade (dithered).
@@ -84,6 +90,9 @@ pub struct LibExtras<'a> {
     /// With every GLB present it changes nothing. `PropLibrary::key_with`
     /// hashes it only when on.
     pub stand_ins: bool,
+    /// The moored boats' bodies (`eo_props::boats`; eo-app `--no-boats` leaves them out):
+    /// render models `BOAT_BASE + i`, the three levels from the body's three GLBs.
+    pub boats: Option<&'a [eo_props::boats::Body]>,
 }
 
 /// What `cook_extras` reports back to the library.
@@ -474,7 +483,9 @@ fn load_glb(out: &mut Out, repo: &std::path::Path, js: &JsProps, name: &str) -> 
     let prop = js.street_prop(name).ok()?;
     match read_glb(repo, prop) {
         Ok(mut g) => {
-            if let Some((_, _, rgb)) = g.maps[0].as_mut() {
+            // (a v2 file's colours are as authored: no load-time repaint)
+            let v2 = eo_props::props_v2::active().is_some_and(|v| v.is_v2(prop));
+            if let Some((_, _, rgb)) = g.maps[0].as_mut().filter(|_| !v2) {
                 repaint(name, rgb);
             }
             if name == "payStation" {
@@ -520,15 +531,30 @@ fn glb_model(out: &mut Out, repo: &std::path::Path, js: &JsProps, name: &str, id
     let diag = ((mx[0] - mn[0]).powi(2) + (mx[1] - mn[1]).powi(2) + (mx[2] - mn[2]).powi(2)).sqrt();
     add_mesh(&mut out.b, m, &g.positions, &g.normals, &g.uvs, &g.indices);
     let m0 = out.finish();
-    let (p1, n1, u1, i1) = cluster(&g, diag / 24.0);
-    add_mesh(&mut out.b, m, &p1, &n1, &u1, &i1);
-    let m1 = out.finish();
-    let (p2, n2, u2, i2) = cluster(&g, diag / 9.0);
-    add_mesh(&mut out.b, m, &p2, &n2, &u2, &i2);
-    let m2 = out.finish();
+    // A v2 file (eo_props::props_v2) is built to the v1 slot's budget and keeps its thin
+    // members (lamp arms, crossarms) that clustering erases: level 1 is the file itself, and
+    // level 2 as well for a light file (the cobra and banner lamps' arms past 75 m).
+    let v2 = js.street_prop(name).ok().is_some_and(|p| eo_props::props_v2::active().is_some_and(|v| v.is_v2(p)));
+    let m1 = if v2 {
+        m0
+    } else {
+        let (p1, n1, u1, i1) = cluster(&g, diag / 24.0);
+        add_mesh(&mut out.b, m, &p1, &n1, &u1, &i1);
+        out.finish()
+    };
+    let m2 = if v2 && g.indices.len() / 3 <= V2_FAR_FULL_TRIANGLES {
+        m0
+    } else {
+        let (p2, n2, u2, i2) = cluster(&g, diag / 9.0);
+        add_mesh(&mut out.b, m, &p2, &n2, &u2, &i2);
+        out.finish()
+    };
     out.set(id, [m0, m1, m2], lod, cast, 0.0);
     true
 }
+
+/// A v2 file up to this many triangles is its own far level (no clustering).
+const V2_FAR_FULL_TRIANGLES: usize = 2000;
 
 /// `streamedFurnitureCascades`: under 1.2 m the near cascade only, under 4 m the near two, else all.
 fn cascades_for(height: f32) -> u32 {
@@ -987,7 +1013,52 @@ pub(crate) fn cook_extras(out: &mut Out, repo: &std::path::Path, js: &JsProps, x
     }
     // --- the Golden Gate's vegetation and hill rock (nothing draws until the app plants it).
     vegetation_models::cook(out, x.ez, m_bark, m_leaf);
+    if let Some(bodies) = x.boats {
+        cook_boats(out, repo, bodies);
+    }
     info
+}
+
+/// The moored boats: per body, its three GLBs as levels 0..2 (each file digest-checked),
+/// on the boats' atlas (one texture layer while the bodies share its bytes, as built).
+/// A body with a file missing or refused is left out (its berths stay empty).
+fn cook_boats(out: &mut Out, repo: &std::path::Path, bodies: &[eo_props::boats::Body]) {
+    let mut atlases: Vec<(Vec<u8>, u32)> = vec![]; // (albedo bytes, material)
+    for (i, body) in bodies.iter().enumerate().take(eo_props::boats::BODIES.len()) {
+        let read: Result<Vec<Glb>, String> = body.lods.iter().map(|l| read_glb(repo, l).map_err(|e| format!("{} ({e:#})", l.path))).collect();
+        let glbs = match read {
+            Ok(g) => g,
+            Err(e) => {
+                out.missing.push(format!("boat {}: {e}", body.name));
+                continue;
+            }
+        };
+        let albedo = glbs[0].maps[0].as_ref().map(|m| m.2.clone()).unwrap_or_default();
+        let m = match atlases.iter().find(|a| a.0 == albedo) {
+            Some(a) => a.1,
+            None => {
+                let g = &glbs[0];
+                let flat_n = flat_layer([128, 128, 255, 255], AUX_RES);
+                let flat_orm = flat_layer([255, 255, 0, 255], AUX_RES);
+                let white = flat_layer([255; 4], ALBEDO_RES);
+                let map = |k: usize, res: u32, d: &Vec<u8>| match &g.maps[k] {
+                    Some((w, h, rgb)) => resample(*w, *h, rgb, 3, res),
+                    None => d.clone(),
+                };
+                out.layers.push([map(0, ALBEDO_RES, &white), map(1, AUX_RES, &flat_n), map(2, AUX_RES, &flat_orm)]);
+                let m = glb_mat(out.materials, out.layers.len() as i32 - 1);
+                atlases.push((albedo, m));
+                m
+            }
+        };
+        let mut ids = [0u32; 3];
+        for (k, g) in glbs.iter().enumerate() {
+            add_mesh(&mut out.b, m, &g.positions, &g.normals, &g.uvs, &g.indices);
+            ids[k] = out.finish();
+        }
+        out.set(BOAT_BASE + i as u32, ids, BOAT_LOD, cascades_for(body.height as f32), 0.0);
+        out.sources.push(format!("boat {}: {} (sha256 {})", body.name, body.lods[0].path, &body.lods[0].sha256[..12]));
+    }
 }
 
 struct PlateSpec {

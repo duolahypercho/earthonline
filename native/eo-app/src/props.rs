@@ -47,6 +47,8 @@ struct VegRing {
     outbox: eo_render::hitch::Outbox<Key>,
     slots: HashMap<Key, Slot>,
 }
+/// The moored boats' one upload (with `TAG_PROPS`): never a tile's, so never cancelled with one.
+pub const TAG_BOATS: u64 = 1 << 56;
 /// Tiles load within this of the camera (3D distance to the tile's ground
 /// rectangle) and drop past the second: the street trees' far ring (the
 /// JS window ring is 260 m; past it only silhouettes) with margin.
@@ -75,11 +77,17 @@ pub struct Props2Args {
     /// GLB is absent from the checkout draws its procedural stand-in
     /// (`eo_render::props_lib2::LibExtras::stand_ins`). Off: the grey proxies.
     pub stand_ins: bool,
+    /// The moored boats at the floating docks' berths (eo-props `boats`); `--no-boats`
+    /// (or `--no-props2`) leaves them out of the library and draws none.
+    pub boats: bool,
+    /// Street props v2 (eo-props `props_v2`) in place of the v1 files; `--no-street-props-v2`
+    /// (or `--no-props2`) keeps the v1 manifest (its absent files drawn as before).
+    pub street_v2: bool,
 }
 
 impl Default for Props2Args {
     fn default() -> Self {
-        Self { furniture: true, eztree: true, overhead: true, wires: true, features: eo_render::props::F_ALL, capture: false, stand_ins: false }
+        Self { furniture: true, eztree: true, overhead: true, wires: true, features: eo_render::props::F_ALL, capture: false, stand_ins: false, boats: true, street_v2: true }
     }
 }
 
@@ -88,7 +96,7 @@ impl Props2Args {
     pub fn parse_flag(&mut self, s: &str) -> bool {
         match s {
             "--no-props2" => {
-                *self = Self { furniture: false, eztree: false, overhead: false, wires: false, features: 0, capture: self.capture, stand_ins: self.stand_ins };
+                *self = Self { furniture: false, eztree: false, overhead: false, wires: false, features: 0, capture: self.capture, stand_ins: self.stand_ins, boats: false, street_v2: false };
             }
             "--no-furniture" => self.furniture = false,
             "--no-eztree" => self.eztree = false,
@@ -97,6 +105,8 @@ impl Props2Args {
                 self.wires = false;
             }
             "--no-wires" => self.wires = false,
+            "--no-boats" => self.boats = false,
+            "--no-street-props-v2" => self.street_v2 = false,
             "--no-props2-shading" => self.features = 0,
             "--no-fade" => self.features &= !eo_render::props::F_FADE,
             "--no-wind" => self.features &= !eo_render::props::F_WIND,
@@ -181,6 +191,7 @@ struct Loaded {
     source: Arc<eo_sim::native::NativeSource>,
     facts: LibFacts,
     wire_look: eo_render::props::WireLook,
+    boats: Vec<GpuPropInstance>,
 }
 
 pub struct PropsRuntime {
@@ -222,6 +233,9 @@ pub struct PropsRuntime {
     pub errors: Vec<String>,
     started: Instant,
     clock: f64,
+    /// The moored boats waiting for the props renderer, then their block of the arena (at, n).
+    boats_pending: Vec<GpuPropInstance>,
+    boat_block: (u32, u32),
     /// The tiles holding a tunnel bore's lamps (`--tunnels`; empty
     /// otherwise): planned with the street's tiles (a bore runs under tiles
     /// with no street), by their distance along the bore as well as over the ground.
@@ -265,6 +279,8 @@ impl PropsRuntime {
             started: Instant::now(),
             clock: 0.0,
             bore_tiles: HashSet::new(),
+            boats_pending: vec![],
+            boat_block: (0, 0),
         };
         let Some(street) = world.street.as_ref().map(|s| s.world.clone()) else {
             rt.on = false;
@@ -291,6 +307,7 @@ impl PropsRuntime {
         let city = world.city.clone(); // the furniture frontage and the service drops read the loaded buildings
         let structures = world.structures.clone(); // the grade-separated roads (`--structures`)
         let p2 = args.props2;
+        let berths = world.berths.clone(); // the floating docks' berths, where the boats lie
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::Builder::new()
             .name("eo-props-load".into())
@@ -312,7 +329,11 @@ impl PropsRuntime {
                         .ok();
                     let overhead_js = eo_props::overhead::OverheadJs::load().map_err(|e| eprintln!("props2: overhead export not read ({e:#})")).ok();
                     let dome = lib2::dome_standards(&ca)?;
-                    let extras = lib2::LibExtras { ez: ez.as_deref(), signs: signs.as_ref(), overhead: overhead_js.as_ref(), stand_ins: p2.stand_ins };
+                    // the moored boats' bodies (`--no-boats`, or no berths: none, and the library as before them).
+                    let bodies = (p2.boats && !berths.is_empty())
+                        .then(|| eo_props::boats::load_bodies(&paths.repo_root).map_err(|e| eprintln!("props: boats not drawn ({e:#})")).ok())
+                        .flatten();
+                    let extras = lib2::LibExtras { ez: ez.as_deref(), signs: signs.as_ref(), overhead: overhead_js.as_ref(), stand_ins: p2.stand_ins, boats: bodies.as_deref() };
                     let lib = PropLibrary::load_full(&paths.repo_root, &js, lens, &extras, dome, cache.as_deref())?;
                     // what stands in for an absent GLB: the procedural model (`--stand-ins`) or the grey proxy.
                     let drawn = if p2.stand_ins { "procedural stand-in drawn (--stand-ins)" } else { "grey proxy drawn (--stand-ins draws a procedural model)" };
@@ -348,8 +369,34 @@ impl PropsRuntime {
                         Arc::new(vegetation::VegGround::new(g, world.street.clone(), land, veg_water, veg_switches, &paths.repo_root))
                     });
                     let facts = LibFacts { species: lib.tree_species.len(), tree_dims: lib.tree_dims.clone(), sign_variants: overhead_js.as_ref().map(|o| o.sign_variants.len()).unwrap_or(0), veg };
+                    // one boat per occupied berth, its waterline on the still sea (where the docks float),
+                    // bow along the berth's heading (the model's +Z turned by yaw lies along (sin yaw, cos yaw)).
+                    let boats: Vec<GpuPropInstance> = match &bodies {
+                        Some(b) => {
+                            let sea = eo_landmarks::data::LandmarksJs::get().sea_level_y as f32;
+                            let drawn = |i: usize| lib.models.get(lib2::BOAT_BASE as usize + i).is_some_and(|m| m.meshes[0] != eo_render::props_lib::NONE);
+                            eo_props::boats::moor(&berths, b)
+                                .into_iter()
+                                .filter(|m| drawn(m.body))
+                                .map(|m| GpuPropInstance {
+                                    pos: [m.pos[0] as f32, sea, m.pos[1] as f32],
+                                    yaw: (std::f64::consts::FRAC_PI_2 - m.heading) as f32,
+                                    scale: [1.0; 3],
+                                    model: lib2::BOAT_BASE + m.body as u32,
+                                    variant: 0,
+                                    lamp: 0,
+                                    slope: 0.0,
+                                    pad: 0,
+                                })
+                                .collect()
+                        }
+                        None => vec![],
+                    };
+                    if !boats.is_empty() {
+                        eprintln!("props2: {} boats moored in {} berths", boats.len(), berths.len());
+                    }
                     eprintln!("props2: library ready in {library_ms:.0} ms ({} meshes, {} tree species, {} sign variants)", lib.meshes.len(), facts.species, facts.sign_variants);
-                    Ok(Loaded { world, lib, source, facts, wire_look })
+                    Ok(Loaded { world, lib, source, facts, wire_look, boats })
                 })();
                 let _ = tx.send(r.map_err(|e| format!("{e:#}")));
             })
@@ -466,7 +513,8 @@ impl PropsRuntime {
                         // built on a thread of its own, never on this one.
                         let init = renderer.props_init(ctx);
                         let (tx, rx) = std::sync::mpsc::channel();
-                        let Loaded { world, lib, source, facts, wire_look } = l;
+                        let Loaded { world, lib, source, facts, wire_look, boats } = l;
+                        self.boats_pending = boats;
                         let features = self.p2.features;
                         std::thread::Builder::new()
                             .name("eo-props-gpu".into())
@@ -515,6 +563,21 @@ impl PropsRuntime {
         }
         let Some(world) = self.world.clone() else { return };
         let Some(gpu) = renderer.props.get() else { return };
+        // The moored boats: one block of the arena for the whole run (no tile holds them;
+        // the berths are drawn out to the boats' last level edge, past the tiles' reach).
+        if !self.boats_pending.is_empty() {
+            let boats = std::mem::take(&mut self.boats_pending);
+            let n = boats.len() as u32;
+            match self.alloc.alloc(n) {
+                Some(at) => {
+                    let job = Job::new(TAG_PROPS | TAG_BOATS, vec![Write { target: Target::PropInstances, offset: at as u64 * 48, data: Data::Bytes(bytemuck::cast_slice(&boats).to_vec()) }], vec![]);
+                    self.stats.bytes_queued += job.bytes();
+                    uploads.push(job);
+                    self.boat_block = (at, n);
+                }
+                None => self.errors.push("props: instance arena full (boats)".into()),
+            }
+        }
         eo_render::hitch::try_set(&self.camera, eye); // never wait for a worker's lock
         eo_render::hitch::try_set(&self.view, renderer.view_cone()); // request order only
         // Wanted tiles.
@@ -548,7 +611,7 @@ impl PropsRuntime {
             for k in &gone_set {
                 self.outbox.cancel(*k);
             }
-            uploads.cancel(|tag| tag & TAG_PROPS == 0 || tag & (eo_render::kit::TAG_KIT | eo_render::street::TAG_STREET | (1 << 60) | (1 << 61) | TAG_FINE | TAG_MID) != 0 || !gone_set.contains(&untag(tag)));
+            uploads.cancel(|tag| tag & TAG_PROPS == 0 || tag & (eo_render::kit::TAG_KIT | eo_render::street::TAG_STREET | (1 << 60) | (1 << 61) | TAG_FINE | TAG_MID | TAG_BOATS) != 0 || !gone_set.contains(&untag(tag)));
             for k in gone {
                 if let Some(Slot::Resident { at, n, lamps, wire_at, wire_n, light_at, light_n, .. }) = self.slots.remove(&k) {
                     let empty = vec![EMPTY; n as usize];
@@ -665,6 +728,9 @@ impl PropsRuntime {
         // the high-water marks are the end of the highest resident range
         // (the allocator's `peak` is a count, which a fragmented arena can exceed).
         let (mut end, mut wend, mut lend) = (0u32, 0u32, 0u32);
+        if self.boat_block.1 > 0 {
+            end = self.boat_block.0 + self.boat_block.1;
+        }
         for s in self.slots.values().chain(self.rings.iter().flat_map(|r| r.slots.values())) {
             if let Slot::Resident { at, n, wire_at, wire_n, light_at, light_n, .. } = s {
                 if *n > 0 {

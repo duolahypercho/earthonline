@@ -212,7 +212,7 @@ fn setup2_with(ctx: &GpuContext, stand_ins: bool) -> (Renderer, eo_render::props
     let fonts = eo_props::sign_atlas::Fonts::system().unwrap();
     let (signs, _) = eo_props::sign_atlas::load_or_cook(&cache, &js, &fonts, &[], eo_props::sign_atlas::SIGN_FALLBACK_STREETS).unwrap();
     let oh = eo_props::overhead::OverheadJs::load().unwrap();
-    let x = LibExtras { ez: Some(&ez), signs: Some(&signs), overhead: Some(&oh), stand_ins };
+    let x = LibExtras { ez: Some(&ez), signs: Some(&signs), overhead: Some(&oh), stand_ins, boats: None };
     let lib = eo_render::props_lib::PropLibrary::cook_full(&paths.repo_root, &js, lens, &x, lib2::dome_standards(&ca).unwrap()).unwrap();
     r.attach_props(ctx, &lib).unwrap();
     (r, lib)
@@ -362,4 +362,33 @@ fn kinds_fade_wires_lights(ctx: &GpuContext, r: Renderer, lib: eo_render::props_
     assert_eq!(&got[1..3], &lights, "the lights are where the tile's range put them");
     let count: Vec<u32> = bytemuck::pod_collect_to_vec(&read(p.light_count_buffer(), 16));
     assert_eq!(count[0], 3, "the light count is the high-water mark");
+}
+
+#[test]
+fn props2_boats_cook_only_with_their_bodies() {
+    let paths = eo_data::DataPaths::discover().expect("repo data");
+    let js = eo_props::JsProps::load().unwrap();
+    let ca = eo_data::CaStandards::load(&paths).unwrap();
+    let lens = ca.metric_key("signal-lens-size", "circularNewFaces").unwrap();
+    let dome = lib2::dome_standards(&ca).unwrap();
+    let bodies = eo_props::boats::load_bodies(&paths.repo_root).unwrap();
+    let off = LibExtras::default();
+    let on = LibExtras { boats: Some(&bodies), ..off };
+    assert!(LibExtras::default().boats.is_none(), "off by default");
+    assert_ne!(PropLibrary::key_with(&js, &off, dome), PropLibrary::key_with(&js, &on, dome), "on and off cook different libraries");
+    let lib_off = PropLibrary::cook_full(&paths.repo_root, &js, lens, &off, dome).unwrap();
+    let lib_on = PropLibrary::cook_full(&paths.repo_root, &js, lens, &on, dome).unwrap();
+    assert!(lib_on.missing.iter().all(|m| !m.starts_with("boat ")), "every boat file read: {:?}", lib_on.missing);
+    assert_eq!(lib_on.meshes.len(), lib_off.meshes.len() + 3 * eo_props::boats::BODIES.len(), "three levels per body");
+    assert!(lib_on.meshes.len() <= 256, "the cull pass takes 256 meshes");
+    for (i, b) in bodies.iter().enumerate() {
+        let id = lib2::BOAT_BASE as usize + i;
+        assert!(lib_off.models[id].meshes[0] == eo_render::props_lib::NONE, "off: no {} model", b.name);
+        let m = lib_on.models[id];
+        assert!(m.meshes[0] != m.meshes[1] && m.meshes[1] != m.meshes[2], "{}: three levels", b.name);
+        assert!(lib_on.triangles(m.meshes[0]) > lib_on.triangles(m.meshes[2]), "{}: the far level is the lighter", b.name);
+        assert_eq!(m.lod, lib2::BOAT_LOD);
+        // The bounding sphere holds the hull (half its length) and reaches the masthead.
+        assert!(m.radius >= b.loa as f32 / 2.0 - 0.05 && m.radius < (b.loa + b.height + b.draft) as f32, "{}: radius {}", b.name, m.radius);
+    }
 }

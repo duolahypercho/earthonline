@@ -156,6 +156,8 @@ impl Flags {
                 "--black-point-rockweed" => { args.cove_detail = true; args.black_point_intertidal = true; args.black_point_rockweed = true; }
                 "--no-black-point-rockweed" => args.black_point_rockweed = false,
                 "--no-cove-detail" => args.cove_detail = false,
+                "--floating-docks" => args.floating_docks = true,
+                "--no-floating-docks" => args.floating_docks = false,
                 "--underwater-habitats" => args.underwater_habitats = true,
                 "--no-underwater-habitats" => args.underwater_habitats = false,
                 "--no-water-optics" => args.look.water_optics = false,
@@ -253,6 +255,7 @@ fn default_args() -> Args {
         dive_site: None,
         underwater_habitats: false,
         cove_detail: false,
+        floating_docks: true,
         black_point_intertidal: false,
         black_point_rockweed: false,
         cove_pile_contact: false,

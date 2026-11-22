@@ -86,6 +86,13 @@ pub struct LandmarkSet {
     /// pier decks and piles built.
     pub piers_built: (usize, usize),
     municipal_feet: Vec<(usize, crate::waterfront::PileFeet)>,
+    /// the harbours' floating docks (floating_docks.rs) as planned: where the
+    /// boats tie up. Empty with `floating_docks` off.
+    pub docks: Vec<crate::floating_docks::Dock>,
+    /// floating docks and their guide piles built, and their length (m).
+    pub docks_built: (usize, usize, f64),
+    /// the berths along the floating docks (`floating_docks::plan_berths`), where the boats lie.
+    pub berths: Vec<crate::floating_docks::Berth>,
 }
 
 /// what the set builds beyond the first landmarks slice. All on
@@ -95,6 +102,8 @@ pub struct Options {
     /// The waterfront (waterfront.rs): the shore-edge rule, piers, the apron, the terrain press.
     pub waterfront: bool,
     pub cove_detail: bool,
+    /// The harbours' floating docks (floating_docks.rs), with the waterfront.
+    pub floating_docks: bool,
     /// The registered landmark buildings (Transamerica, Salesforce, Coit, Sutro, City Hall).
     pub buildings: bool,
     /// The bridges' night lights.
@@ -116,14 +125,14 @@ impl Default for Options {
     /// starts (`--no-towers2`: `EO_TOWERS2=off`, `--no-skyline`: `EO_SKYLINE=off`).
     fn default() -> Self {
         let on = |var: &str| std::env::var(var).map(|v| v != "off").unwrap_or(true);
-        Self { cove_detail: false, waterfront: true, buildings: true, lights: true, bridge_detail: false, towers2: on("EO_TOWERS2"), skyline: on("EO_SKYLINE") }
+        Self { cove_detail: false, waterfront: true, floating_docks: true, buildings: true, lights: true, bridge_detail: false, towers2: on("EO_TOWERS2"), skyline: on("EO_SKYLINE") }
     }
 }
 
 impl Options {
     /// As the first landmarks slice built the set.
     pub fn off() -> Self {
-        Self { cove_detail: false, waterfront: false, buildings: false, lights: false, bridge_detail: false, towers2: false, skyline: false }
+        Self { cove_detail: false, waterfront: false, floating_docks: false, buildings: false, lights: false, bridge_detail: false, towers2: false, skyline: false }
     }
 }
 
@@ -697,6 +706,7 @@ impl LandmarkSet {
 
         let mut railing_landmark: Option<Landmark> = None;
         let (mut press, mut census, mut piers_built) = (None, None, (0usize, 0usize));
+        let (mut docks, mut docks_built, mut berths) = (Vec::new(), (0usize, 0usize, 0.0f64), Vec::new());
         let walls = if !opts.waterfront {
             let walls = crate::shore::city_walls(&sh.seawall, js.sea_level_y, &oracle, height_at, &top_at, js.sea_level_y - sh.bottom_below_sea_m, &rule, wall_colour);
             if let Some(deck) = crate::shore::ferry_pier_deck(&fp.outline, lift, thick, js.sea_level_y, &elev, &|x, z| oracle.is_water(x, z)) {
@@ -766,6 +776,15 @@ impl LandmarkSet {
                 if g.triangles() > 0 {
                     structures.push(Structure { cast: true, footway: false, kit: Some(wf::RAILING_KIT.into()), name: "waterfront:pier-guard".into(), material: plain_material(0.5, 0.0, "painted-metal"), mesh: g.freeze() });
                 }
+            }
+            // the harbours' floating docks: the pier lines over open water, off the decked piers.
+            if opts.floating_docks {
+                let lines = crate::floating_docks::load_pier_lines(repo_root)?;
+                docks = crate::floating_docks::plan_docks(&lines, &oracle, &piers);
+                let dm = crate::floating_docks::build_meshes(&docks, js.sea_level_y);
+                docks_built = (dm.docks, dm.piles, dm.length_m);
+                berths = crate::floating_docks::plan_berths(&docks, &|x, z| oracle.is_water(x, z));
+                structures.push(Structure { cast: true, footway: false, kit: None, name: "waterfront:floating-docks".into(), material: plain_material(0.92, 0.0, "facade-masonry"), mesh: dm.mesh });
             }
             structures.push(Structure { cast: false, footway: true, kit: None, name: "waterfront:paving".into(), material: plain_material(0.9, 0.0, "sidewalk"), mesh: m.paving });
             if opts.cove_detail {
@@ -861,6 +880,9 @@ impl LandmarkSet {
             census,
             piers_built,
             municipal_feet,
+            docks,
+            docks_built,
+            berths,
         })
     }
 
