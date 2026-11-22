@@ -763,15 +763,20 @@ def paint_generic(name, w, h):
         rgb = base('bdb9ae' if name == 'deck_white' else 'c2b498', 0.05)
         dots = ((np.arange(h)[:, None] % 4 < 2) & (np.arange(w)[None, :] % 4 < 2)).astype(float)
         rgb *= (1 - 0.05 * dots)[..., None]
-        rgb = mix(rgb, grime, np.clip((fbm(h, w, (2, 2), 4, rng) - 0.45) * 1.0, 0, 0.18))
+        rgb = mix(rgb, grime, np.clip((fbm(h, w, (2, 2), 4, rng) - 0.4) * 1.0, 0, 0.3))
+        # green-grey mildew in the non-skid where the deck stays damp
+        rgb = mix(rgb, hexc('74745e'), np.clip((fbm(h, w, (6, 6), 3, rng) - 0.6) * 2.0, 0, 0.25))
         rough[:] = 0.88
     elif name in ('gel_white', 'gel_cream', 'gel_navy'):
         col = {'gel_white': 'c8c6bc', 'gel_cream': 'cbbf9f', 'gel_navy': '23293a'}[name]
         rgb = base(col, 0.05)
         if name == 'gel_navy':
             rgb = mix(rgb, hexc('4d5363'), np.clip((n1 - 0.4) * 1.8, 0, 0.55))
-        rgb = mix(rgb, grime, 0.3 * streak_mask(h, w, rng, 14, (1.0, 2.5), (0.2, 0.8)))
-        rough[:] = 0.7 + 0.08 * n2
+        if name != 'gel_navy':
+            # oxidised gelcoat: chalky, yellowed blotches
+            rgb = mix(rgb, hexc('aca794'), np.clip((fbm(h, w, (2, 3), 4, rng) - 0.4) * 1.6, 0, 0.35))
+        rgb = mix(rgb, grime, 0.45 * streak_mask(h, w, rng, 18, (2.0, 5.0), (0.2, 0.8)))
+        rough[:] = 0.8 + 0.06 * n2
     elif name == 'teak':
         rgb = base('857a69', 0.06)
         seam = (np.arange(h)[:, None] % 16 < 1.5).astype(float) * np.ones((1, w))
@@ -788,6 +793,7 @@ def paint_generic(name, w, h):
         seams = (np.arange(w)[None, :] % 42 < 1.5) * np.ones((h, 1))
         rgb = mix(rgb, hexc('1d222c' if name == 'canvas_navy' else '6e604a'), seams * 0.5)
         rgb = mix(rgb, grime, 0.3 * streak_mask(h, w, rng, 10, (2, 6), (0.2, 0.6)))
+        rgb = mix(rgb, hexc('3f4034'), (fbm(h, w, (24, 24), 2, rng) > 0.7) * 0.3)  # mildew spots
         rough[:] = 0.95
     elif name in ('af_red', 'af_black'):
         rgb = base('5c1e17' if name == 'af_red' else '1c1e22', 0.1)
@@ -795,11 +801,11 @@ def paint_generic(name, w, h):
         rough[:] = 0.93
     elif name in ('paint_white', 'paint_cream'):
         rgb = base('c6c4ba' if name == 'paint_white' else 'c8bb98', 0.05)
-        rust = streak_mask(h, w, rng, 12, (1, 3), (0.15, 0.7), strength=(0.5, 1.0))
-        rgb = mix(rgb, hexc('7a4a28'), rust * 0.75)
+        rust = streak_mask(h, w, rng, 6, (1, 2.5), (0.1, 0.4), strength=(0.4, 0.9))
+        rgb = mix(rgb, hexc('7a4a28'), rust * 0.3)
         rgb = mix(rgb, grime, 0.35 * streak_mask(h, w, rng, 16, (2, 5), (0.3, 0.9)))
-        chips = (fbm(h, w, (28, 28), 2, rng) > 0.76).astype(float)
-        rgb = mix(rgb, hexc('7a766c'), chips * 0.45)
+        chips = (fbm(h, w, (28, 28), 2, rng) > 0.8).astype(float)
+        rgb = mix(rgb, hexc('7a766c'), chips * 0.3)
         rough[:] = 0.8 + 0.1 * rust
     elif name in ('paint_blue', 'paint_red', 'paint_green'):
         col = {'paint_blue': '1d3e6b', 'paint_red': '6e1e16', 'paint_green': '1f3628'}[name]
@@ -812,7 +818,7 @@ def paint_generic(name, w, h):
     elif name == 'deck_grey':
         rgb = base('6e706a', 0.08)
         rgb = mix(rgb, hexc('3d3a33'), np.clip((n1 - 0.45) * 1.6, 0, 0.6))
-        rgb = mix(rgb, hexc('6a3f22'), (fbm(h, w, (12, 12), 3, rng) > 0.68) * 0.5)
+        rgb = mix(rgb, hexc('6a3f22'), (fbm(h, w, (12, 12), 3, rng) > 0.72) * 0.3)
         rough[:] = 0.9
     elif name == 'rust_steel':
         rgb = base('5a3220', 0.12)
@@ -863,7 +869,7 @@ def paint_generic(name, w, h):
         rough[:] = 0.95
     elif name in ('fender_navy', 'fender_white'):
         rgb = base('1f2a44' if name == 'fender_navy' else 'bdbcb4', 0.06)
-        rgb = mix(rgb, grime, np.clip((n1 - 0.4) * 1.3, 0, 0.4))
+        rgb = mix(rgb, grime, np.clip((n1 - 0.35) * 1.3, 0, 0.55))
         rough[:] = 0.62
     else:
         raise KeyError(name)
@@ -924,7 +930,7 @@ def paint_hull(body, w, h):
     n_streaks = int(c.get('streaks', 5) * (x1 - x0))
     sources = list(c.get('sources', [])) + list(rng.uniform(x0 + 0.4, x1 - 0.3, n_streaks))
     for k, xs0 in enumerate(sources):
-        broad = k % 4 == 0
+        broad = k % c.get('broad_every', 4) == 0
         wd = rng.uniform(0.10, 0.25) if broad else rng.uniform(0.008, 0.03)
         L = rng.uniform(0.25, 1.0) * max(float(np.max(sheer)), 0.4)
         top = c.get('streak_top', 0.02)
@@ -938,8 +944,8 @@ def paint_hull(body, w, h):
         rr = c['rust']
         rm = np.zeros((h, w))
         for k, (xs0, d0) in enumerate(rr['sources']):
-            wd = rng.uniform(0.03, 0.09)
-            L = rng.uniform(0.35, 1.1)
+            wd = rng.uniform(*rr.get('width', (0.03, 0.09)))
+            L = rng.uniform(*rr.get('len', (0.35, 1.1)))
             d = rel - d0
             prof = np.clip(1 - d / L, 0, 1) ** 0.6 * (d >= -0.01)
             xc = xs0 + 0.012 * np.sin(Z * 17 + k)
@@ -952,6 +958,13 @@ def paint_hull(body, w, h):
         lo, hi, col = c['boot']
         rgb = mix(rgb, hexc(col) * (1 + 0.08 * (mott - .5))[..., None], band(lo, hi, Z))
     af_top = c.get('af_top', 0.03)
+    if c.get('stain'):
+        # the brown tide stain above the waterline, over the boot stripe, heaviest at the bow
+        st = c['stain']
+        up = np.clip(1 - (Z - af_top) / st.get('height', 0.22), 0, 1) * (Z >= af_top - 0.01)
+        along = st.get('base', 0.3) + (1 - st.get('base', 0.3)) * np.exp(-(X / st.get('reach', 2.4)) ** 2)
+        tex = 0.55 + 0.45 * fbm(h, w, (3, 40), 4, rng)
+        rgb = mix(rgb, hexc(st.get('col', '7a6342')), up ** 1.5 * along * tex * st['amount'])
     if c.get('af'):
         af = np.empty((h, w, 3))
         af[:] = hexc(c['af'])
@@ -1404,13 +1417,19 @@ def sail_body(variant):
     k = solve_depth(sail_tables, target)
     H = sail_tables(k)
     if variant == 'a':
-        paint = dict(top='c9c7bd', mottle=0.05, boot=(0.03, 0.12, '1e2b4a'), af='1e2026',
-                     bands=[(0.10, 0.17, '1e2b4a'), (0.20, 0.215, '1e2b4a')], streaks=6, lowgrime=0.35,
-                     sources=[3.0, 4.2, 4.6, 5.2, 7.2])
+        paint = dict(top='c9c7bd', mottle=0.09, chalk=0.45, chalk_col='a59f8b', rough=0.82, boot=(0.03, 0.12, '1e2b4a'),
+                     af='1e2026', bands=[(0.10, 0.17, '1e2b4a'), (0.20, 0.215, '1e2b4a')], streaks=11, grime_amt=0.62,
+                     lowgrime=0.45, sources=[3.0, 4.2, 4.6, 5.2, 7.2],
+                     rust=dict(sources=[(x, 0.02) for x in (1.0, 2.8, 4.1, 4.3, 6.4, 8.2)], amount=0.35,
+                               len=(0.08, 0.3), width=(0.01, 0.03)),
+                     stain=dict(amount=0.9, col='6b5434', height=0.3, reach=2.6, base=0.35), broad_every=2)
     else:
-        paint = dict(top='202638', mottle=0.07, chalk=0.45, chalk_col='4f5566', boot=(0.03, 0.09, 'c7c3b5'),
-                     af='5a1d16', bands=[(0.10, 0.125, 'b9b3a0')], streaks=5, grime='8c8878', grime_amt=0.35,
-                     lowgrime=0.25, low_col='6c6a5c', sources=[3.0, 4.2, 4.6, 7.2])
+        paint = dict(top='202638', mottle=0.07, chalk=0.6, chalk_col='4f5566', rough=0.85, boot=(0.03, 0.09, 'c7c3b5'),
+                     af='5a1d16', bands=[(0.10, 0.125, 'b9b3a0')], streaks=7, grime='8c8878', grime_amt=0.4,
+                     lowgrime=0.3, low_col='6c6a5c', sources=[3.0, 4.2, 4.6, 7.2],
+                     rust=dict(sources=[(x, 0.02) for x in (1.0, 2.8, 4.1, 4.3, 6.4, 8.2)], amount=0.3,
+                               len=(0.08, 0.3), width=(0.01, 0.03)),
+                     stain=dict(amount=0.4, col='6e5a3e', height=0.2, reach=2.4, base=0.3), broad_every=2)
     meta = dict(cls='34 ft fin-keel masthead sloop, moored', sources=['sail-c34', 'sail-c34-tallrig', 'sail-airdraft'],
                 published=dict(loaM=10.52, lwlM=9.09, beamM=3.58, draftM=1.70, displacementKg=5420),
                 underwaterDepthScale=round(k, 4))
@@ -1616,11 +1635,19 @@ def motor_body(variant):
     H = motor_tables(k)
     win = [(2.6, 5.8, 0.30, 0.50, '16191c'), (6.4, 6.75, 0.33, 0.48, '16191c'), (7.1, 7.45, 0.33, 0.48, '16191c')]
     if variant == 'a':
-        paint = dict(top='cac8be', mottle=0.05, boot=(0.04, 0.14, '1e2b4a'), af='1e2026', windows=win,
-                     bands=[(0.12, 0.20, '1e2b4a')], streaks=5, lowgrime=0.35, sources=[4.0, 6.0, 9.7])
+        paint = dict(top='cac8be', mottle=0.09, chalk=0.45, chalk_col='a59f8b', rough=0.82, boot=(0.04, 0.14, '1e2b4a'),
+                     af='1e2026', windows=win, bands=[(0.12, 0.20, '1e2b4a')], streaks=11, grime_amt=0.62, lowgrime=0.45,
+                     sources=[4.0, 6.0, 9.7],
+                     rust=dict(sources=[(x, 0.02) for x in (1.2, 3.0, 6.1, 9.6)], amount=0.3, len=(0.08, 0.3),
+                               width=(0.01, 0.03)),
+                     stain=dict(amount=0.9, col='6b5434', height=0.32, reach=3.0, base=0.35), broad_every=2)
     else:
-        paint = dict(top='cbbfa0', mottle=0.06, boot=(0.04, 0.12, '2a3a33'), af='5a1d16', windows=win,
-                     bands=[(0.12, 0.17, '2a3a33')], streaks=6, lowgrime=0.4, low_col='5a5040', sources=[4.0, 6.0, 9.7])
+        paint = dict(top='cbbfa0', mottle=0.09, chalk=0.38, chalk_col='a0957b', rough=0.82, boot=(0.04, 0.12, '2a3a33'),
+                     af='5a1d16', windows=win, bands=[(0.12, 0.17, '2a3a33')], streaks=11, grime_amt=0.62, lowgrime=0.45,
+                     low_col='5a5040', sources=[4.0, 6.0, 9.7],
+                     rust=dict(sources=[(x, 0.02) for x in (1.2, 3.0, 6.1, 9.6)], amount=0.3, len=(0.08, 0.3),
+                               width=(0.01, 0.03)),
+                     stain=dict(amount=0.85, col='6b5434', height=0.32, reach=3.0, base=0.35), broad_every=2)
     meta = dict(cls='42 ft flybridge sport sedan, moored', sources=['motor-c42ss', 'motor-sedanbridge'],
                 published=dict(loaM=13.28, beamM=4.24, draftM=1.17, airDraftM=5.92, displacementKg=15263),
                 underwaterDepthScale=round(k, 4), swimPlatformM=MOTOR_PLATFORM, bowPulpitM=MOTOR_PULPIT)
@@ -1971,15 +1998,15 @@ def fish_body(variant):
     chain = [(x, 0.05) for x in (5.55, 6.25, 7.1, 9.4, 11.6)]
     if variant == 'a':
         paint = dict(top='c4c2b8', mottle=0.06, boot=(0.04, 0.30, '1d3e6b'), af='5c1e17',
-                     bands=[(0.04, 0.55, '1d3e6b')], streaks=7, grime_amt=0.5, lowgrime=0.35,
-                     rust=dict(sources=scup + chain, amount=0.85),
-                     wear=dict(under='8a5a3a', line=0.62, thresh=0.53), streak_top=0.55)
+                     bands=[(0.04, 0.55, '1d3e6b')], streaks=7, grime_amt=0.4, lowgrime=0.35,
+                     rust=dict(sources=scup + chain, amount=0.3, len=(0.12, 0.45), width=(0.02, 0.05)),
+                     wear=dict(under='8a5a3a', line=0.62, thresh=0.66), streak_top=0.55)
     else:
         paint = dict(top='1c2a20', mottle=0.08, chalk=0.3, chalk_col='3e4a40', boot=(0.04, 0.08, 'b8b19c'),
                      af='5c1e17', bands=[(0.04, 0.50, 'bdb49a')], planks=0.14, streaks=6, grime='8a8573',
                      grime_amt=0.35, lowgrime=0.3, low_col='59584a',
-                     rust=dict(sources=scup + chain, amount=0.9),
-                     wear=dict(under='6a4a30', line=0.58, thresh=0.44), streak_top=0.50)
+                     rust=dict(sources=scup + chain, amount=0.5, len=(0.2, 0.7), width=(0.025, 0.07)),
+                     wear=dict(under='6a4a30', line=0.58, thresh=0.5), streak_top=0.50)
     meta = dict(cls="40 ft troller-crabber, Fisherman's Wharf", sources=['fish-co26-003', 'fish-cr26-008', 'fish-hullform',
                                                                        'crab-pot'],
                 published=dict(loaM=12.19, beamM=3.81, draftM=1.75, note='class figures 40x12x6.8 ft and 43x14.5x6.5 ft'))
