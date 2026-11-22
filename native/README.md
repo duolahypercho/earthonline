@@ -780,10 +780,13 @@ records the tier and budget under `settings` and every lighting option under
 A feature that is off at start has its shader code compiled out of every
 pipeline (eo-render `look::ShaderFeatures`, chosen from the switches before
 the renderer is made): the lighting additions, `--grime`, `--street-life`,
-`--structures`, `--tunnels`, `--shop-light`, `--facade-clutter`, `--look cinematic` (`SF_CINEMATIC`) and the
-playable house (`SF_HOUSE`: its terms, its varyings and its finishes' runtime branches). With
-none of them the frame costs what it cost before they existed; with one on,
-its code is the code it ran before, so its output is the same.
+`--structures`, `--tunnels`, `--shop-light`, `--facade-clutter`,
+`--look cinematic` (`SF_CINEMATIC`), the playable house (`SF_HOUSE`: its
+terms, its varyings and its finishes' runtime branches), the sea bed's
+habitats (`SF_SEABED`, with a seabed object in the world) and
+`--cove-sediment` (`SF_COVE_SEDIMENT`). With none of them the frame costs
+what it cost before they existed; with one on, its code is the code it ran
+before, so its output is the same.
 
 | Tier | Sets | Budget (ms) |
 | --- | --- | ---: |

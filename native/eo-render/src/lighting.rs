@@ -246,6 +246,8 @@ mod tests {
         sets.push(("photo mode".into(), look::ShaderFeatures { photo_mode: true, ..none })); // (photo mode, `--no-photo-mode`)
         sets.push(("landmark access".into(), look::ShaderFeatures { landmark_access: true, ..none })); // (the landmark decks; `--no-landmark-access`)
         sets.push(("no far facade".into(), look::ShaderFeatures { far_facade: false, ..none })); // (`--no-far-facade`)
+        sets.push(("seabed".into(), look::ShaderFeatures { seabed: true, ..none })); // (the sea bed's habitats)
+        sets.push(("cove sediment".into(), look::ShaderFeatures { cove_sediment: true, ..none })); // (`--cove-sediment`)
         sets
     }
 
@@ -305,7 +307,7 @@ mod tests {
             ..o
         };
         let f = look::ShaderFeatures::of(&on, true, true, true);
-        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, house: false, blender_camera: false, player_contact: false, photo_mode: false, landmark_access: false, ..look::ShaderFeatures::ALL }); // (the look profile is its own, below; the house and the landmark decks are the world's, set by eo-app; the source camera its own; the players' contact the online session's; photo mode the app's)
+        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, house: false, blender_camera: false, player_contact: false, photo_mode: false, landmark_access: false, seabed: false, cove_sediment: false, ..look::ShaderFeatures::ALL }); // (the look profile is its own, below; the house and the landmark decks are the world's, set by eo-app; the source camera its own; the players' contact the online session's; photo mode the app's)
         assert!(look::ShaderFeatures::of(&look::LookOptions { blender_camera: true, ..o }, false, false, false).blender_camera, "the source camera follows its option");
         assert!(!look::ShaderFeatures::NONE.limit(&look::LookOptions { blender_camera: true, ..o }).blender_camera, "compiled out, the source camera stays off");
         let same = |a: &look::LookOptions, b: &look::LookOptions| format!("{a:?}") == format!("{b:?}"); // (LookOptions has no PartialEq)

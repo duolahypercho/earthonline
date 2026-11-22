@@ -214,6 +214,8 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     let features = eo_render::look::ShaderFeatures { photo_mode: crate::photo::enabled(), ..features };
     // the landmark decks' rooms and the player on them: with the decks built (`--no-landmark-access` builds none).
     let features = eo_render::look::ShaderFeatures { landmark_access: world.landmarks.as_ref().is_some_and(|l| l.access), ..features };
+    // the sea bed's habitats (`--underwater-habitats`, `--cove-detail`, `--black-point-intertidal`): with a seabed object in the world.
+    let features = eo_render::look::ShaderFeatures { seabed: objects.iter().any(|o| o.kind & 255 == eo_render::scene::ObjectKind::Seabed as u32), ..features };
     let mut features = if std::env::var("EO_SHADER_FEATURES").is_ok_and(|v| v == "all") { eo_render::look::ShaderFeatures::ALL } else { features };
     for w in std::env::var("EO_SHADER_FEATURES").unwrap_or_default().split(',') {
         match w {
@@ -230,6 +232,8 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
             "player_contact" => features.player_contact = true,
             "photo_mode" => features.photo_mode = true,
             "landmark_access" => features.landmark_access = true,
+            "seabed" => features.seabed = true,
+            "cove_sediment" => features.cove_sediment = true,
             _ => {}
         }
     }

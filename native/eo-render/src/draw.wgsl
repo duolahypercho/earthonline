@@ -142,7 +142,7 @@ fn vs(
     let o = objects[inst];
     var out: VOut;
     var pos = pos_in + copy_offset(o.copy);
-    if ((o.kind & 255u) == 13u && color.a > 0.0) {
+    if (SF_SEABED && (o.kind & 255u) == 13u && color.a > 0.0) {
         // Alpha is flex from root to tip. Both current components wrap with the sky clock.
         let phase = dot(pos.xz, vec2<f32>(0.85, 0.54));
         let clock = skyu.wet.w * (6.2831853 / 6.0);
@@ -1528,7 +1528,8 @@ fn shade(in: VOut) -> vec4<f32> {
     }
     // Solid sand and shells keep their outward normal across a grazing crest.
     // A ribbon of eelgrass, like the other thin geometry, shades both sides.
-    let seabed = (objects[in.object].kind & 255u) == 13u;
+    // (the sea bed's habitats, compiled in only with seabed objects in the world: SF_SEABED)
+    let seabed = SF_SEABED && (objects[in.object].kind & 255u) == 13u;
     let tissue_tag = in.aux.y * 127.0;
     let rockweed = seabed && tissue_tag >= 31.5 && tissue_tag <= 63.5;
     let bed_surface = seabed && in.aux.x < 0.01 && !rockweed;
@@ -1693,7 +1694,7 @@ fn shade(in: VOut) -> vec4<f32> {
         let z = sqrt(max(0.0, 1.0 - dot(xy, xy)));
         let str = m.params.z;
         s.n = normalize(fr.t * (xy.x * str) + fr.b * (xy.y * str) + fr.n * z);
-    } else if ((m.flags & F_TEXTURED) != 0u && ((objects[in.object].kind & 255u) != 13u || mineral)) {
+    } else if ((m.flags & F_TEXTURED) != 0u && (!seabed || mineral)) {
         // Triplanar in world space, `params.w` repeats per metre.
         let k = m.params.w;
         let p = in.world * k;
@@ -2164,7 +2165,7 @@ fn shade(in: VOut) -> vec4<f32> {
         }
     }
 
-    if ((cc0_terrain || (bed_surface && in.aux.y > 0.5)) && look.cove.x > 0.0 && in.world.y < LM_SEA_LEVEL_Y + 0.035) {
+    if (SF_COVE_SEDIMENT && (cc0_terrain || (bed_surface && in.aux.y > 0.5)) && look.cove.x > 0.0 && in.world.y < LM_SEA_LEVEL_Y + 0.035) { // (`--cove-sediment`)
         lm_cove_sediment(&s, in.world, n, dpx, dpy);
     }
     let street_pane = house_bit(objects[in.object].kind, FRONT_SASH_BIT) && in.color.b > 3.5/255.0;
