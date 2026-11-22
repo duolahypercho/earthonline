@@ -101,7 +101,7 @@ pub const DRAW_ARGS_BYTES: u64 = 20;
 /// shadow depth begin/end, post begin/end, (surfaces) AO begin/end, then
 /// (occlusion) pyramid + late cull begin/end and late city pass begin/end.
 /// Post is the last pass executed whatever its slot.
-pub const QUERIES_PER_FRAME: u32 = 38; // +4 (Q_WATER_PPR, Q_SCENE_METER, slots 34-37) // +2 (sky::Q_CLOUD_SHADOW, slots 32-33) // +10 (sky::Q_SKY_*, slots 22-31) // water: +4 (Q_WATER_FFT, Q_WATER) // facade: +2 for the scene probe (Q_PROBE) // surfaces: +2 for the AO pass (look::Q_AO); +4
+pub const QUERIES_PER_FRAME: u32 = 40; // +2 (Q_WIRE_OVERLAY, slots 38-39) // +4 (Q_WATER_PPR, Q_SCENE_METER, slots 34-37) // +2 (sky::Q_CLOUD_SHADOW, slots 32-33) // +10 (sky::Q_SKY_*, slots 22-31) // water: +4 (Q_WATER_FFT, Q_WATER) // facade: +2 for the scene probe (Q_PROBE) // surfaces: +2 for the AO pass (look::Q_AO); +4
 /// timestamp slots of the pyramid + late cull pass and the late city pass.
 pub const Q_OCCLUSION: u32 = 12;
 pub const Q_LATE_DRAW: u32 = 14;
@@ -115,6 +115,10 @@ pub const Q_WATER: u32 = 20;
 pub const Q_WATER_PPR: u32 = 34;
 /// the scene meter's histogram pass (before post).
 pub const Q_SCENE_METER: u32 = 36;
+/// the bridges' wire overlay over the resolved frame (after the sky's bloom,
+/// before the scene meter and post). Untimed, its GPU time landed in the
+/// serial share of the next timed pass, the scene meter's (post's without it).
+pub const Q_WIRE_OVERLAY: u32 = 38;
 /// Counter words (see cull.wgsl): opaque draws, blend draws, triangles, model
 /// parts drawn, model triangles, footprint stand-ins drawn, kit objects, kit
 /// triangles, street objects, street triangles, (occlusion) late opaque draws,
@@ -2799,13 +2803,19 @@ impl Renderer {
                 label: Some("landmark-wires-overlay"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment { view: &target, depth_slice: None, resolve_target: None, ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store } })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment { view: depth, depth_ops: Some(wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store }), stencil_ops: None }),
-                timestamp_writes: None,
+                timestamp_writes: ts.map(|(q, b)| wgpu::RenderPassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b + Q_WIRE_OVERLAY), end_of_pass_write_index: Some(b + Q_WIRE_OVERLAY + 1) }),
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
             pass.set_bind_group(0, &draw_bg, &[]);
             self.look.bind_main_resolved(&mut pass);
             l.draw_overlay(&mut pass);
+        } else if let Some((q, b)) = ts {
+            // the slot is written every frame (an empty pass)
+            enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("landmark-wires-overlay (off)"),
+                timestamp_writes: Some(wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b + Q_WIRE_OVERLAY), end_of_pass_write_index: Some(b + Q_WIRE_OVERLAY + 1) }),
+            });
         }
         // photo mode (nothing without a photo set): depth of field and its finish over the frame post reads, read by post in its place.
         let photo_mode = self.photo_mode.encode(enc, &self.look, depth, &hdr, (output.texture().width(), output.texture().height()));
