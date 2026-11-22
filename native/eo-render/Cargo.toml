@@ -2,6 +2,7 @@
 name = "eo-render"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "GPU-driven wgpu renderer for the Earth Online native slice"
 publish = false
 

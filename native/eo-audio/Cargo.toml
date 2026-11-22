@@ -2,6 +2,7 @@
 name = "eo-audio"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Earth Online native: the sound system (bank, real-time mixer with 3D sources, buses, Doppler and a voice limit; device, null and offline outputs) and the city's sound director. No GPU."
 publish = false
 

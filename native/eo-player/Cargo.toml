@@ -2,6 +2,7 @@
 name = "eo-player"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Earth Online player: on-foot controller, cameras, driving and the tile-streamed collision world (no GPU)"
 publish = false
 

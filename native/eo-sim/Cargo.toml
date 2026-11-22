@@ -2,6 +2,7 @@
 name = "eo-sim"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Headless world simulation for Earth Online: traffic, signals, pedestrians, population streaming"
 publish = false
 

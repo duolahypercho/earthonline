@@ -2,6 +2,7 @@
 name = "eo-water"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Earth Online native (water): the JS game's shoreline oracle, shore field, FFT ocean spectrum, wind field, water optics and shore collar as pure functions"
 publish = false
 

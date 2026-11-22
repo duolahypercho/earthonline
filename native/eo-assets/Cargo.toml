@@ -2,6 +2,7 @@
 name = "eo-assets"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Earth Online native: hash-verified building GLBs, the binary model cache, the authored kit materials and building placement"
 publish = false
 

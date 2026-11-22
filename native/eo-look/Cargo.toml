@@ -2,6 +2,7 @@
 name = "eo-look"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Earth Online native: the JS game's lighting model as pure functions (sun, sky, aerial perspective, light rig, exposure, tone curve, grade, shadow cascades)"
 publish = false
 

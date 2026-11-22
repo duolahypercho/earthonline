@@ -2,6 +2,7 @@
 name = "eo-kit"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Earth Online native: Rust port of the browser game's archetype (kit) building planner, its LOD rungs and mesh emission"
 publish = false
 

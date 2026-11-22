@@ -2,6 +2,7 @@
 name = "eo-props"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "Earth Online native: what stands on and beside the street (signals, signs, trees, tactile pads, parked cars), placed by a Rust port of the browser game's rules. No GPU."
 publish = false
 

@@ -2,6 +2,7 @@
 name = "eo-farshore"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
 description = "farshore: the distant terrain around the city, cooked from USGS 3DEP elevation"
 publish = false
 
