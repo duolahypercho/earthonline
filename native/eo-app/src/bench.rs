@@ -601,6 +601,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         indirect_validation: args.indirect_validation,
         force_no_indirect_count: args.no_indirect_count,
         force_no_count_emulation: args.no_count_emulation,
+        bounded_draws: args.bounded_draws,
         ..Default::default()
     };
     let ctx = GpuContext::new(GpuContext::create_instance(&opts), None, opts)?;
@@ -980,6 +981,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let mut warmup = args.warmup;
         let mut cam_last = 0;
         let mut idle_ms = 0.0; // the last frame's wait for the GPU (prepay included)
+        let bounds_before = renderer.bound_stats(); // (`--bounded-draws`) the bounded lists over this path (warm-up included)
+        let counted_before = renderer.counts.as_ref().map(|c| c.stats()); // (the count emulation) its lists over this path, the same way
         let seg_start = Instant::now();
         for i in 0..total {
             let cam_i = if realtime { (seg_start.elapsed().as_secs_f64() / FRAME_PERIOD_S) as usize } else { i };
@@ -1789,8 +1792,40 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             percentile(&kit_tris, 50.0),
             percentile(&kit_tris, 95.0),
         );
-        // the far layer after the path, and its last frame's counters (entries drawn, triangles, entries in the frustum, entries occluded).
         let mut report = report;
+        // (`--bounded-draws`) the bounded lists over the path: commands drawn, guards used, overflows.
+        if let (Some(now), Some(before)) = (renderer.bound_stats(), &bounds_before) {
+            let lists: Vec<(&str, eo_render::bounds::BoundStats)> = now.iter().zip(before.iter()).map(|((n, a), (_, b))| (*n, a.since(b))).collect();
+            let total_cmds = lists.iter().map(|(_, s)| s.drawn as f64).sum::<f64>() / lists[0].1.frames.max(1) as f64;
+            let overflows: u64 = lists.iter().map(|(_, s)| s.overflows).sum();
+            let at_cap: u64 = lists.iter().map(|(_, s)| s.at_capacity).sum();
+            println!(
+                "    bounded lists (no indirect count; warm-up included): {:.0} commands/frame in all ({}), list-frames at capacity {at_cap}, overflows {overflows}",
+                total_cmds,
+                lists.iter().filter(|(_, s)| s.frames > 0).map(|(n, s)| format!("{n} {:.0}", s.drawn as f64 / s.frames as f64)).collect::<Vec<_>>().join(", ")
+            );
+            report["bounded_lists"] = json!(lists.iter().map(|(n, s)| (n.to_string(), s.json())).collect::<serde_json::Map<String, serde_json::Value>>());
+        }
+        // (the count emulation) per emulated count buffer, each list's mean bound a frame over the path (warm-up included).
+        if let (Some(now), Some(before)) = (renderer.counts.as_ref().map(|c| c.stats()), &counted_before) {
+            let per: Vec<(&str, Vec<f64>, u64)> = now
+                .iter()
+                .map(|a| {
+                    let b = before.iter().find(|b| b.label == a.label);
+                    let frames = a.frames - b.map_or(0, |b| b.frames);
+                    let mean = a.encoded.iter().enumerate().map(|(k, &e)| (e - b.and_then(|b| b.encoded.get(k).copied()).unwrap_or(0)) as f64 / frames.max(1) as f64).collect();
+                    (a.label, mean, a.overflows - b.map_or(0, |b| b.overflows))
+                })
+                .collect();
+            if !per.is_empty() {
+                println!(
+                    "    count emulation (warm-up included): mean bound a frame {}",
+                    per.iter().map(|(l, m, o)| format!("{l} [{}] overflows {o}", m.iter().map(|v| format!("{v:.0}")).collect::<Vec<_>>().join(", "))).collect::<Vec<_>>().join("; ")
+                );
+            }
+            report["count_emulation_path"] = json!(per.iter().map(|(l, m, o)| json!({ "label": l, "mean_bounds": m, "overflows": o })).collect::<Vec<_>>());
+        }
+        // the far layer after the path, and its last frame's counters (entries drawn, triangles, entries in the frustum, entries occluded).
         report["fixed_slot_lists"] = fixed_slot_json;
         report["gpu_serial_ms"] = gpu_serial; // each pass's end minus the previous pass's end (frame order), median // without multi-draw-indirect-count: slots issued (draw_ranges) and held, per frame
         report["hlod_after"] = json!(models.hlod.as_ref().map(|h| h.stats_json()));
@@ -1835,6 +1870,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             "multi_draw_indirect_count_used": renderer.compact && ctx.indirect_count,
             "lists_compacted": renderer.compact,
             "count_emulation": renderer.counts.is_some(),
+            // how the lists were drawn (eo-render `GpuContext::draw_lists`): indirect-count, count-emulation, bounded or slots
+            "draw_lists": ctx.draw_lists(),
             // per emulated count buffer: read-backs, overflows (a count past its bound), frames drawn whole, bounds
             "count_emulation_lists": renderer.counts.as_ref().map(|c| c.stats().iter().map(|s| serde_json::json!({
                 "label": s.label, "readbacks": s.readbacks, "overflows": s.overflows, "full_frames": s.full_frames,

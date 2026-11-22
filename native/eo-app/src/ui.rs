@@ -265,6 +265,7 @@ fn default_args() -> Args {
         indirect_validation: true,
         no_indirect_count: false,
         no_count_emulation: false,
+        bounded_draws: false,
         vsync: true,
         out_dir: None,
         label: None,

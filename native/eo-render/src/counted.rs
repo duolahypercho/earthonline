@@ -29,7 +29,8 @@
 //! probe captures its faces again).
 //!
 //! Off (`--no-count-emulation`) the renderer keeps its uncompacted fallback,
-//! as before the emulation.
+//! as before the emulation. With `--bounded-draws` (bounds.rs) the lists that
+//! count guards are not registered here; the rest still are.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -76,6 +77,10 @@ pub struct Stats {
     pub bounds: Vec<u32>,
     pub peak_counts: Vec<u32>,
     pub peak_bounds: Vec<u32>,
+    /// Encoded frames, and per list the sum of the bounds they were encoded
+    /// with (the commands a frame that draws the list issues; bench reports).
+    pub frames: u64,
+    pub encoded: Vec<u64>,
 }
 
 // Read-back stages (as the water's read-back): free, copied in an encoder,
@@ -165,7 +170,7 @@ impl Counts {
             history: VecDeque::new(),
             full_left: 0,
             overflow_pending: false,
-            stats: Stats { label, bounds: full, peak_counts: vec![0; n], peak_bounds: vec![0; n], ..Default::default() },
+            stats: Stats { label, bounds: full, peak_counts: vec![0; n], peak_bounds: vec![0; n], encoded: vec![0; n], ..Default::default() },
         });
         CountedLists { counts: self.clone(), id: st.entries.len() - 1 }
     }
@@ -314,6 +319,10 @@ impl Counts {
             }
             for (peak, bound) in e.stats.peak_bounds.iter_mut().zip(&e.stats.bounds) {
                 *peak = (*peak).max(*bound);
+            }
+            e.stats.frames += 1;
+            for (sum, bound) in e.stats.encoded.iter_mut().zip(&e.stats.bounds) {
+                *sum += *bound as u64;
             }
             e.full_left = e.full_left.saturating_sub(1);
             let bounds = e.stats.bounds.clone();

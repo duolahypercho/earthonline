@@ -43,6 +43,16 @@ struct ShadowCull {
     // bit c: cascade c is refreshed this frame
     mask: u32,
     pad1: u32,
+    // the bounded lists' guard (bounds.rs, look.rs): the light basis, the eye
+    // in it (w 1: count the guard), per cascade the box round the eye (x half
+    // side, y reach below the eye along the light, z above it).
+    light: array<vec4<f32>, 3>,
+    eye_l: vec4<f32>,
+    guard: array<vec4<f32>, 3>,
+    // the wide guard: per cascade its own box grown by what a small turn moves
+    // it (x, y centre, z half side; then z from, to), light space
+    wide: array<vec4<f32>, 3>,
+    wide_z: array<vec4<f32>, 3>,
 };
 
 const LOD_NEAR: u32 = 1u;
@@ -57,8 +67,37 @@ const BLEND_BIT: u32 = 256u;
 @group(0) @binding(1) var<storage, read> objects: array<Object>;
 @group(0) @binding(2) var<storage, read> groups: array<Group>;
 @group(0) @binding(3) var<storage, read_write> draws: array<u32>;
-// [0..3) commands per cascade, [3..6) triangles per cascade
-@group(0) @binding(4) var<storage, read_write> counters: array<atomic<u32>, 8>;
+// [0..3) commands per cascade, [3..6) triangles per cascade, [6..8) pad,
+// [8..11) per cascade its casters in the ring guard box, [11..14) in the wide
+// guard box (bounds.rs), [14..16) pad
+@group(0) @binding(4) var<storage, read_write> counters: array<atomic<u32>, 16>;
+
+// an object's box in light space: centre and half extents.
+fn light_box(o: Object) -> array<vec3<f32>, 2> {
+    let ctr = (o.min + o.max) * 0.5;
+    let ext = (o.max - o.min) * 0.5;
+    let lx = sp.light[0].xyz;
+    let ly = sp.light[1].xyz;
+    let lz = sp.light[2].xyz;
+    return array<vec3<f32>, 2>(vec3<f32>(dot(ctr, lx), dot(ctr, ly), dot(ctr, lz)), vec3<f32>(dot(ext, abs(lx)), dot(ext, abs(ly)), dot(ext, abs(lz))));
+}
+
+// whether an object's box meets cascade c's ring guard box (light space round the eye).
+fn in_guard(lb: array<vec3<f32>, 2>, c: u32) -> bool {
+    let g = sp.guard[c];
+    let p = lb[0] - sp.eye_l.xyz;
+    let e = lb[1];
+    return abs(p.x) <= g.x + e.x && abs(p.y) <= g.x + e.y && p.z + e.z >= -g.y && p.z - e.z <= g.z;
+}
+
+// whether it meets cascade c's wide guard box.
+fn in_wide(lb: array<vec3<f32>, 2>, c: u32) -> bool {
+    let w = sp.wide[c];
+    let z = sp.wide_z[c];
+    let p = lb[0];
+    let e = lb[1];
+    return abs(p.x - w.x) <= w.z + e.x && abs(p.y - w.y) <= w.z + e.y && p.z + e.z >= z.x && p.z - e.z <= z.y;
+}
 
 fn write_cmd(slot: u32, count: u32, instances: u32, first: u32, base_vertex: i32, object: u32) {
     let b = slot * 5u;
@@ -134,6 +173,15 @@ fn shadow_cull(@builtin(global_invocation_id) gid: vec3<u32>) {
             continue;
         }
         var inside = select(select(caster, mid_caster, c == 1u), far_caster, c == 2u);
+        if (inside && sp.eye_l.w == 1.0) {
+            let lb = light_box(o);
+            if (in_guard(lb, c)) {
+                atomicAdd(&counters[8u + c], 1u);
+            }
+            if (in_wide(lb, c)) {
+                atomicAdd(&counters[11u + c], 1u);
+            }
+        }
         if (inside) {
             for (var p = 0u; p < 6u; p = p + 1u) {
                 let pl = sp.planes[c * 6u + p];

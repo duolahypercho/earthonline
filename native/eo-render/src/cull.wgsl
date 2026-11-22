@@ -12,6 +12,9 @@
 //        otherwise every object keeps slot i in both lists with
 //        instance_count 0 or 1 (multi_draw_indexed_indirect fallback).
 //        first_instance carries the object index for the vertex shader.
+//        Without the indirect count the compacted lists are drawn with a
+//        bounded fixed count (bounds.rs); the cull then also counts the
+//        bounds' guards (`count_guards`).
 
 struct Object {
     min: vec3<f32>,
@@ -61,6 +64,10 @@ struct CullParams {
     view_proj: mat4x4<f32>,
     // x = 1 two-phase occlusion culling on, y = late opaque list base (slots)
     occ: vec4<u32>,
+    // the bounded lists' guards (bounds.rs): the camera's frustum widened by
+    // WIDE_DEG a side, and x the ring's reach, y the near sphere, z 1 to count them.
+    wide: array<vec4<f32>, 6>,
+    guard: vec4<f32>,
 };
 
 // made with the pyramid (occlusion.rs): the depth target's size.
@@ -104,8 +111,11 @@ const LOD_LANDMARK_FAR: u32 = 11u;
 // [10] late opaque draws, [11] objects in the frustum (after LOD),
 // [12] triangles in the frustum, [13] objects drawn by the early pass,
 // [14] objects the late pass found occluded, [15] grade-separated road
-// triangles drawn (kinds 11 and 12, `--structures`)
-@group(0) @binding(3) var<storage, read_write> counters: array<atomic<u32>, 16>;
+// triangles drawn (kinds 11 and 12, `--structures`),
+// [16] opaque / [17] transparent objects LOD-selected in the widened frustum or
+// the near sphere, [18] opaque / [19] transparent LOD-selected within the ring
+// (the bounded draws' guards, bounds.rs; counted only with `params.guard.z` 1)
+@group(0) @binding(3) var<storage, read_write> counters: array<atomic<u32>, 20>;
 @group(0) @binding(4) var<storage, read_write> groups: array<Group>;
 // 1 if the object passed the occlusion test last frame (the early
 // pass draws exactly these); rewritten by the late pass every frame.
@@ -270,9 +280,9 @@ fn write_cmd(slot: u32, count: u32, instances: u32, first: u32, base_vertex: i32
     draws[b + 4u] = object;
 }
 
-// what the LOD role and the frustum say about object i (shared by
-// the early and late passes): x = visible, y = first index, z = index count.
-fn lod_and_frustum(i: u32, o: Object) -> vec3<u32> {
+// what the LOD role says about object i, before the frustum: x = selected,
+// y = first index, z = index count.
+fn lod_select(i: u32, o: Object) -> vec3<u32> {
     var first = o.first_index;
     var count = o.index_count;
     var visible = true;
@@ -314,16 +324,51 @@ fn lod_and_frustum(i: u32, o: Object) -> vec3<u32> {
     if ((o.kind & 255u) == KIND_SEA && params.occ.z == 1u) {
         visible = false;
     }
-    if (visible) {
+    return vec3<u32>(select(0u, 1u, visible), first, count);
+}
+
+fn in_frustum(o: Object) -> bool {
+    for (var p = 0u; p < 6u; p = p + 1u) {
+        let pl = params.planes[p];
+        let v = select(o.min, o.max, pl.xyz >= vec3<f32>(0.0));
+        if (dot(pl.xyz, v) + pl.w < 0.0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// what the LOD role and the frustum say about object i (shared by
+// the early and late passes): x = visible, y = first index, z = index count.
+fn lod_and_frustum(i: u32, o: Object) -> vec3<u32> {
+    let l = lod_select(i, o);
+    let visible = l.x == 1u && in_frustum(o);
+    return vec3<u32>(select(0u, 1u, visible), l.y, l.z);
+}
+
+// the bounded lists' guards (bounds.rs) of a LOD-selected object: within the
+// ring's reach of the eye ([18] / [19]), and of those, within the near sphere
+// or the widened frustum ([16] / [17]); opaque and transparent apart.
+fn count_guards(o: Object, blend: bool) {
+    let d = distance(clamp(params.cam.xyz, o.min, o.max), params.cam.xyz);
+    if (d > params.guard.x) {
+        return;
+    }
+    let k = select(0u, 1u, blend);
+    atomicAdd(&counters[18u + k], 1u);
+    var wide = true;
+    if (d > params.guard.y) {
         for (var p = 0u; p < 6u; p = p + 1u) {
-            let pl = params.planes[p];
+            let pl = params.wide[p];
             let v = select(o.min, o.max, pl.xyz >= vec3<f32>(0.0));
             if (dot(pl.xyz, v) + pl.w < 0.0) {
-                visible = false;
+                wide = false;
             }
         }
     }
-    return vec3<u32>(select(0u, 1u, visible), first, count);
+    if (wide) {
+        atomicAdd(&counters[16u + k], 1u);
+    }
 }
 
 // Counters of a drawn object (kind and triangles).
@@ -357,11 +402,14 @@ fn cull(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let o = objects[i];
-    let lf = lod_and_frustum(i, o);
-    var visible = lf.x == 1u;
-    let first = lf.y;
-    let count = lf.z;
+    let ls = lod_select(i, o);
     let blend = (o.kind & BLEND_BIT) != 0u;
+    if (ls.x == 1u && params.guard.z == 1.0) {
+        count_guards(o, blend);
+    }
+    var visible = ls.x == 1u && in_frustum(o);
+    let first = ls.y;
+    let count = ls.z;
     let list = select(0u, 1u, blend);
     if (params.compact == 1u) {
         if (!visible) {
