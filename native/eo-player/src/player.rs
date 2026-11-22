@@ -286,7 +286,7 @@ impl Player {
                 }
             }
         }
-        world.physics.step();
+        world.step_physics();
         if let Mode::Driving(i) = self.mode {
             // The body rides in the seat.
             let d = self.vehicles[i].datum(world);
