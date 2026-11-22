@@ -81,6 +81,8 @@ pub struct PropMaterial {
 /// Material flags (props_types.wgsl).
 pub const P_TEX: u32 = 1 << 8;
 pub const P_CUT: u32 = 1 << 9;
+/// The tree basin's level-0 fringe past its cut edge (unit panel; props_draw.wgsl `pr_basin_spill`).
+pub const BASIN_FRINGE: f32 = 0.1;
 pub const P_LENS: u32 = 1 << 10;
 pub const P_PED_HAND: u32 = 1 << 11;
 pub const P_PED_WALK: u32 = 1 << 12;
@@ -839,6 +841,32 @@ impl PropLibrary {
         }
         let n = meshes.len() as u32;
         set(&mut models, Model::TactilePad, [n - 1, n - 1, n - 1], [60.0, 90.0, 120.0, 120.0], [0.0, 0.0, 0.0], 0.75, 0);
+        // Tree basin (eo-props `basins.rs`, `--tree-basins`): a unit panel (x across the walk,
+        // z along the kerb, -0.5..0.5) facing up, flush with the walk, drawn by the cutout
+        // pipeline: the bed is the shader's (props_draw.wgsl `pr_basin`: soil, clods, grit,
+        // roots, leaf litter, the cut edge's shade), and at level 0 a fringe of
+        // `BASIN_FRINGE` past the cut edge keeps only the crumbs and leaves spilled onto the
+        // walk. Levels 1 and 2 are the bed alone. The vertex colour is the bed's mean.
+        {
+            let soil = srgb_hex("#4f4a44");
+            let up = [0.0f32, 1.0, 0.0];
+            let quad = |b: &mut Builder, r: f32| {
+                let base = b.v.len() as u32;
+                for (x, z) in [(-r, -r), (r, -r), (r, r), (-r, r)] {
+                    b.vert([x, 0.0, z], up, [x + 0.5, z + 0.5], soil, m_pad);
+                }
+                b.tri(true, base, base + 2, base + 1);
+                b.tri(true, base, base + 3, base + 2);
+            };
+            quad(&mut b, 0.5 + BASIN_FRINGE);
+            finish(&mut b, &mut meshes, &mut all_v, &mut all_i);
+            quad(&mut b, 0.5);
+            finish(&mut b, &mut meshes, &mut all_v, &mut all_i);
+            quad(&mut b, 0.5);
+            finish(&mut b, &mut meshes, &mut all_v, &mut all_i);
+        }
+        let n = meshes.len() as u32;
+        set(&mut models, Model::TreeBasin, [n - 3, n - 2, n - 1], [35.0, 70.0, 110.0, 110.0], [0.0, 0.0, 0.0], (0.5 + BASIN_FRINGE) * std::f32::consts::SQRT_2, 0);
 
         // the furniture kinds, the ez-tree trees and the overhead.
         let alpha_test = atlas["alphaTest"].as_f64().unwrap_or(0.42) as f32;

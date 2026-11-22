@@ -1493,6 +1493,7 @@ impl Renderer {
         if self.props.get().is_none() {
             let p = props::PropsGpu::new(&self.props_init(ctx), lib)?;
             let _ = self.props.set(p);
+            self.bind_props_cc0();
         }
         Ok(())
     }
@@ -1513,6 +1514,7 @@ impl Renderer {
     /// attach a props renderer built elsewhere (once; later calls are ignored).
     pub fn attach_props_gpu(&self, p: props::PropsGpu) {
         let _ = self.props.set(p);
+        self.bind_props_cc0();
     }
 
     /// build the sea over its shore field and spectrum (once; later calls are ignored).
@@ -1610,6 +1612,15 @@ impl Renderer {
     pub fn cc0_finish(&self, queue: &wgpu::Queue, mats: &[[f32; 4]], layers: &[[f32; 4]]) {
         self.cc0.finish(queue, mats, layers);
         self.rebuild_draw_bgs(&self.look.device);
+        self.bind_props_cc0();
+    }
+
+    /// the street props' group 0 with the CC0 sets (the tree basins' soil), once they are on.
+    fn bind_props_cc0(&self) {
+        if let (true, Some(p)) = (self.cc0.is_on(), self.props.get()) {
+            let b = self.cc0.bind();
+            p.bind_cc0(&self.look.device, &b.mat, &self.cc0.sampler, &b.layers);
+        }
     }
 
     /// the runtime switches (`facade::RUN_*`).
@@ -1774,6 +1785,7 @@ impl Renderer {
             a.update(queue, cam, &self.look, 0.0); // agents
         }
         if let Some(p) = self.props.get() {
+            p.set_cc0_run(self.cc0.run_bits()); // the tree basins' soil scan
             p.update(queue, cam, &self.look, occlusion && self.compact); // props
         }
         if let Some(w) = self.water.get() {

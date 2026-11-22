@@ -108,6 +108,346 @@ fn pr_face_uv(tile: vec4<f32>, local: vec3<f32>) -> vec2<f32> {
     return vec2<f32>(tile.x + s.x * tile.z, 1.0 - (tile.y + s.y * tile.w));
 }
 
+// ---- tree basins (eo-props `basins.rs`, `--tree-basins`) ----
+// The bed is drawn here in the basin's own metres (x across the walk, y along
+// the kerb): the scanned CC0 `park_dirt` soil where the scanned sets are on
+// (a fresh patch of it in every basin, its detail round the basin's tone),
+// else drawn grain, clods, grit and a few stones; over it damp patches and
+// the watered ground round the trunk, the root flare, leaf litter piled
+// against the cut edge, a cigarette end now and then, moss where it stays
+// damp, and the shade line where the soil meets the walk's cut face. Past the cut edge (the L0
+// mesh's fringe, drawn by the cutout pipeline) only the crumbs and leaves
+// kicked onto the walk are kept. Every term fades by the pixel's footprint.
+// Tones are authored (INFERRED) near neutral: the look's grading lifts the
+// warmth of dark tones (a #3a342e bed rendered 5.7:1 red to blue in sun).
+const PR_BASIN_TRUNK_STEP_M: f32 = 0.05; // eo-props basins::TRUNK_STEP_M
+const PR_BASIN_DRY: vec3<f32> = vec3<f32>(0.092, 0.082, 0.072);
+const PR_BASIN_DAMP: vec3<f32> = vec3<f32>(0.045, 0.040, 0.036);
+const PR_BASIN_ROOT: vec3<f32> = vec3<f32>(0.062, 0.054, 0.046);
+const PR_BASIN_MOSS: vec3<f32> = vec3<f32>(0.040, 0.050, 0.026);
+
+// the trunk's offset across the basin (local X, m): the variant's bits 11-14 and sign bit 15.
+fn pr_basin_trunk(inst: PrInstance) -> f32 {
+    let k = f32((inst.variant >> 11u) & 15u) * PR_BASIN_TRUNK_STEP_M;
+    return select(k, -k, (inst.variant & 0x8000u) != 0u);
+}
+
+// A layer of lumps (clods or stones): one in a cell (`p`, cells) with
+// probability `density`, an irregular dome inside its own cell, so no network of cell
+// edges. xy the surface gradient (per m), z the cavity at its foot, w its share; `k` its
+// footprint fade.
+fn pr_lumps(p: vec2<f32>, salt: f32, per_m: f32, height_m: f32, density: f32, k: f32) -> vec4<f32> {
+    let id = floor(p);
+    if (k <= 0.0 || st_hash(id + vec2<f32>(salt, 43.0)) >= density) {
+        return vec4<f32>(0.0);
+    }
+    let centre = vec2<f32>(0.3) + 0.4 * vec2<f32>(st_hash(id + vec2<f32>(salt, 47.0)), st_hash(id + vec2<f32>(53.0, salt)));
+    let d = p - id - centre;
+    let dist = max(length(d), 1e-4);
+    let a = atan2(d.y, d.x);
+    let w = st_hash(id + vec2<f32>(salt, 59.0)) * 6.2832;
+    let r = mix(0.12, 0.26, st_hash(id + vec2<f32>(61.0, salt))) * (1.0 + 0.2 * sin(a * 3.0 + w) + 0.1 * sin(a * 5.0 + w * 1.7));
+    let t = dist / r;
+    // h = height (1 - t^2) inside: dh/d(dist) = -2 height t / r.
+    let inside = 1.0 - smoothstep(0.92, 1.0, t);
+    let grad = (d / dist) * (-2.0 * height_m * min(t, 1.0) / r) * per_m;
+    let cavity = smoothstep(1.45, 1.0, t) * step(1.0, t);
+    return vec4<f32>(grad * inside * k, cavity * k, inside * k);
+}
+
+struct PrLeaf {
+    cover: f32,
+    tone: vec3<f32>,
+    // the leaf's tilt (its surface gradient), how far toward its curled edge the pixel is, its midrib.
+    tilt: vec2<f32>,
+    curl: f32,
+    rib: f32,
+};
+
+// One layer of fallen leaves over the basin and the walk round it (`q` m, `off` the basin's
+// pattern offset): cells of `cell_m`, each a pointed oval at its own angle, the topmost
+// covering one. A leaf lies where its centre's density lets it: `base` on the bed, up to
+// `pile` within 0.16 m of the cut edge, `spill` just past it, none further out.
+fn pr_leaves(q: vec2<f32>, off: vec2<f32>, half: vec2<f32>, cell_m: f32, salt: f32, base: f32, pile: f32, spill: f32, fw: f32) -> PrLeaf {
+    var o: PrLeaf;
+    o.cover = 0.0;
+    o.tone = vec3<f32>(0.0);
+    o.tilt = vec2<f32>(0.0);
+    o.curl = 0.0;
+    o.rib = 0.0;
+    let p = (q + off) / cell_m;
+    let i = floor(p);
+    let fwc = max(fw / cell_m, 1e-4);
+    var best = 2.0;
+    for (var y = -1; y <= 1; y = y + 1) {
+        for (var x = -1; x <= 1; x = x + 1) {
+            let id = i + vec2<f32>(f32(x), f32(y));
+            let h = vec4<f32>(st_hash(id + vec2<f32>(salt, 3.3)), st_hash(id + vec2<f32>(7.7, salt)), st_hash(id + vec2<f32>(salt, 5.1)), st_hash(id + vec2<f32>(2.9, salt)));
+            let centre = id + vec2<f32>(0.2) + 0.6 * vec2<f32>(st_hash(id + vec2<f32>(salt, 11.0)), st_hash(id + vec2<f32>(13.0, salt)));
+            let cq = centre * cell_m - off;
+            let ed = min(half.x - abs(cq.x), half.y - abs(cq.y));
+            var dens = mix(base, pile, 1.0 - smoothstep(0.0, 0.16, ed));
+            if (ed < 0.0) {
+                dens = spill * (1.0 - smoothstep(0.0, 0.08, -ed));
+            }
+            if (h.x >= dens) {
+                continue;
+            }
+            let a = h.y * 6.2832;
+            let r = p - centre;
+            let u = r.x * cos(a) + r.y * sin(a);
+            let v = -r.x * sin(a) + r.y * cos(a);
+            let len = mix(0.3, 0.5, h.z);
+            let t = u / len;
+            if (abs(t) >= 1.0) {
+                continue;
+            }
+            // narrow to broad, pointed or blunt, and some broken (a bite of noise out of them).
+            let blunt = st_hash(id + vec2<f32>(salt, 37.0));
+            let half_w = len * mix(0.22, 0.6, h.w) * pow(max(1.0 - t * t, 0.0), mix(1.0, 0.55, blunt)) * (1.0 + 0.3 * t);
+            var cover = clamp((half_w - abs(v)) / fwc + 0.5, 0.0, 1.0);
+            if (st_hash(id + vec2<f32>(41.0, salt)) < 0.45) {
+                cover = cover * smoothstep(0.38, 0.46, st_noise(r * 9.0 + id * 3.7));
+            }
+            // the lowest hash lies on top.
+            if (cover <= 0.0 || h.x >= best) {
+                continue;
+            }
+            best = h.x;
+            o.cover = cover;
+            let k = st_hash(id + vec2<f32>(salt, 17.0));
+            // mostly old and dull: dark and decayed, brown, a dry tan, a yellowed one now and then,
+            // each dusted with the soil.
+            var tone = vec3<f32>(0.042, 0.037, 0.032);
+            if (k > 0.4) {
+                tone = vec3<f32>(0.08, 0.064, 0.05);
+            }
+            if (k > 0.76) {
+                tone = vec3<f32>(0.125, 0.105, 0.082);
+            }
+            if (k > 0.95) {
+                tone = vec3<f32>(0.14, 0.122, 0.07);
+            }
+            o.tone = mix(tone * mix(0.8, 1.15, st_hash(id + vec2<f32>(23.0, salt))), PR_BASIN_DRY, mix(0.15, 0.5, st_hash(id + vec2<f32>(salt, 19.0))));
+            o.tilt = (vec2<f32>(st_hash(id + vec2<f32>(salt, 29.0)), st_hash(id + vec2<f32>(31.0, salt))) - 0.5) * 0.7;
+            o.curl = smoothstep(0.55, 1.0, abs(v) / max(half_w, 1e-4));
+            o.rib = (1.0 - smoothstep(0.0, max(0.035 * len, fwc), abs(v))) * (1.0 - smoothstep(0.7, 1.0, abs(t)));
+        }
+    }
+    return o;
+}
+
+// The root flare at `d` from the trunk (m): five roots wandering out 0.12-0.5 m, half
+// buried and tapering (3.5 to 1 cm half width), under a low mound. x the height (m),
+// y the roots' cover (antialiased by `fw`).
+fn pr_root_h(d: vec2<f32>, seed: f32, fw: f32) -> vec2<f32> {
+    let rr = length(d);
+    let phase = atan2(d.y, d.x) * 5.0 + (st_noise(vec2<f32>(rr * 6.0, seed)) - 0.5) * 2.0 + seed * 6.2832;
+    let n = round(phase / 6.2832);
+    let root = n - 5.0 * floor(n / 5.0);
+    let reach = mix(0.12, 0.5, st_hash(vec2<f32>(root, seed)));
+    let hw = mix(0.035, 0.01, clamp(rr / reach, 0.0, 1.0));
+    let lat = abs(phase - n * 6.2832) / 5.0 * rr;
+    let x = clamp(lat / hw, 0.0, 1.0);
+    let out = 1.0 - smoothstep(reach * 0.75, reach, rr);
+    let h = sqrt(1.0 - x * x) * hw * 0.5 * out + 0.012 * (1.0 - smoothstep(0.05, 0.4, rr));
+    return vec2<f32>(h, clamp((hw * 0.9 - lat) / max(fw, 1e-4) + 0.5, 0.0, 1.0) * out);
+}
+
+// Past the cut edge: the crumbs and leaves on the walk. cover, then the tone.
+fn pr_basin_spill(q: vec2<f32>, off: vec2<f32>, half: vec2<f32>, ed: f32, fw: f32) -> PrLeaf {
+    var o = pr_leaves(q, off, half, 0.1, 1.0, 0.0, 0.35, 0.15, fw);
+    // crumbs (3-9 mm) within 6 cm of the edge in patches, gone where a pixel spans one.
+    let per = 70.0;
+    let p = (q + off) * per;
+    let id = floor(p);
+    let patchy = smoothstep(0.4, 0.75, st_noise((q + off) * 9.0));
+    let spill = (1.0 - smoothstep(0.0, 0.06, -ed)) * (1.0 - smoothstep(0.004, 0.01, fw)) * patchy;
+    if (st_hash(id + vec2<f32>(3.0, 61.0)) < spill * 0.5) {
+        let centre = id + vec2<f32>(0.3) + 0.4 * vec2<f32>(st_hash(id + vec2<f32>(67.0, 1.0)), st_hash(id + vec2<f32>(1.0, 71.0)));
+        let r = mix(0.1, 0.32, pow(st_hash(id + vec2<f32>(73.0, 5.0)), 2.0));
+        let crumb = clamp((r - length(p - centre)) / max(fw * per, 1e-4) + 0.5, 0.0, 1.0);
+        if (crumb > o.cover) {
+            o.cover = crumb;
+            o.tone = PR_BASIN_DRY * mix(1.0, 1.5, st_hash(id + vec2<f32>(79.0, 2.0)));
+            o.tilt = vec2<f32>(0.0);
+            o.curl = 0.3;
+            o.rib = 0.0;
+        }
+    }
+    return o;
+}
+
+struct PrBasinAt {
+    q: vec2<f32>,
+    dqx: vec2<f32>,
+    dqy: vec2<f32>,
+    off: vec2<f32>,
+    half: vec2<f32>,
+    ed: f32,
+    fw: f32,
+    seed: f32,
+};
+
+fn pr_basin_at(inst: PrInstance, local: vec3<f32>, dlx: vec3<f32>, dly: vec3<f32>) -> PrBasinAt {
+    var a: PrBasinAt;
+    let sc = vec2<f32>(inst.scale.x, inst.scale.z);
+    a.q = local.xz * sc;
+    a.dqx = dlx.xz * sc;
+    a.dqy = dly.xz * sc;
+    a.half = sc * 0.5;
+    a.fw = max(length(abs(a.dqx) + abs(a.dqy)), 1e-5);
+    a.seed = fract(dot(inst.pos.xz, vec2<f32>(0.0173, 0.0219))) * 61.0;
+    a.off = vec2<f32>(a.seed, a.seed * 0.7);
+    a.ed = min(a.half.x - abs(a.q.x), a.half.y - abs(a.q.y));
+    return a;
+}
+
+// the cutout test: past the cut edge only the spilled crumbs and leaves.
+fn pr_basin_cut(inst: PrInstance, local: vec3<f32>, dlx: vec3<f32>, dly: vec3<f32>) -> bool {
+    let a = pr_basin_at(inst, local, dlx, dly);
+    return a.ed >= 0.0 || pr_basin_spill(a.q, a.off, a.half, a.ed, a.fw).cover >= 0.5;
+}
+
+fn pr_basin(s: ptr<function, Surface>, inst: PrInstance, local: vec3<f32>, dlx: vec3<f32>, dly: vec3<f32>) {
+    let a = pr_basin_at(inst, local, dlx, dly);
+    let qs = a.q + a.off;
+    var g = vec2<f32>(0.0);
+    var tn = vec2<f32>(0.0);
+    var albedo = PR_BASIN_DRY;
+    var rough = 0.95;
+    var ao = 1.0;
+    let tc = vec2<f32>(pr_basin_trunk(inst), 0.0);
+    let dt = a.q - tc;
+    let rr = length(dt);
+    // the scanned soil (CC0 `park_dirt`) where the sets are on, else the drawn one.
+    let scan = cc0_on(CC0_RUN_GROUND);
+    if (a.ed < 0.0) {
+        let o = pr_basin_spill(a.q, a.off, a.half, a.ed, a.fw);
+        albedo = o.tone * (1.0 - 0.3 * o.curl) * (1.0 - 0.25 * o.rib);
+        g = o.tilt;
+        rough = 0.8;
+    } else {
+        // damp patches, the watered ground round the trunk, the edge.
+        let m = st_noise(qs * 2.3) * 0.6 + st_noise(qs * 6.1 + vec2<f32>(3.1)) * 0.4;
+        let damp = clamp(smoothstep(0.5, 0.78, m) * select(0.6, 0.35, scan) + (1.0 - smoothstep(0.12, 0.5, rr)) * 0.4 + (1.0 - smoothstep(0.0, 0.06, a.ed)) * 0.25, 0.0, 1.0);
+        let tone = mix(PR_BASIN_DRY, PR_BASIN_DAMP, damp);
+        if (scan) {
+            // the scan's detail round the basin's tone (half its own colour variation),
+            // a fresh patch of it in every basin; its relief in cc0_ground_apply's frame.
+            let l = CC0_L_PARK_DIRT;
+            let inv = cc0_linv(l);
+            let t = cc0_tap((a.q + a.off * 1.9) * inv, a.dqx * inv, a.dqy * inv, l);
+            let rel = t.alb.rgb / max(cc0_lmean(l).rgb, vec3<f32>(1e-3));
+            albedo = tone * max(mix(vec3<f32>(dot(rel, CC0_LUMA)), rel, 0.5), vec3<f32>(0.0));
+            rough = clamp(t.rough / max(cc0_lmisc(l).x, 0.05) * mix(0.95, 0.82, damp), 0.3, 1.0);
+            ao = clamp(t.ao / max(cc0_lmisc(l).y, 0.05), 0.3, 1.0);
+            tn = t.n;
+        } else {
+            albedo = tone * mix(0.85, 1.12, st_noise(qs * 11.0));
+            rough = mix(0.97, 0.84, damp);
+            // mottled grain (2.5 and 1.2 cm) with its relief, fading as a pixel spans it.
+            let gk = 1.0 - smoothstep(0.3, 0.8, a.fw * 80.0);
+            if (gk > 0.0) {
+                let gp = qs * 80.0;
+                let g0 = st_noise(gp);
+                let gx = st_noise(gp + vec2<f32>(0.35, 0.0));
+                let gy = st_noise(gp + vec2<f32>(0.0, 0.35));
+                g = g + vec2<f32>(gx - g0, gy - g0) / 0.35 * 80.0 * 0.0012 * gk;
+                albedo = albedo * mix(1.0, mix(0.78, 1.2, g0 * 0.6 + st_noise(qs * 40.0) * 0.4), gk);
+            }
+            // clods and a few stones of decomposed granite.
+            let c1 = pr_lumps(qs * 14.0, 1.0, 14.0, 0.008, 0.35, 1.0 - smoothstep(0.2, 0.6, a.fw * 14.0));
+            let c2 = pr_lumps(qs * 40.0 + vec2<f32>(0.5), 2.0, 40.0, 0.003, 0.45, 1.0 - smoothstep(0.25, 0.7, a.fw * 40.0));
+            let st = pr_lumps(qs * 24.0 + vec2<f32>(0.25), 3.0, 24.0, 0.004, 0.1, 1.0 - smoothstep(0.25, 0.7, a.fw * 24.0));
+            g = g + c1.xy + c2.xy * (1.0 - c1.w) + st.xy * (1.0 - c1.w);
+            ao = ao * (1.0 - 0.2 * c1.z) * (1.0 - 0.12 * c2.z) * (1.0 - 0.2 * st.z);
+            albedo = albedo * mix(1.0, 1.12, c1.w) * mix(1.0, 1.06, c2.w);
+            albedo = mix(albedo, vec3<f32>(0.15, 0.142, 0.128) * mix(0.75, 1.15, st_noise(qs * 90.0)), st.w * (1.0 - c1.w));
+            rough = mix(rough, 0.6, st.w * (1.0 - c1.w));
+            // grit: grains of sand and perlite, light or dark.
+            let sp = qs * 160.0;
+            let gid = floor(sp);
+            let sk = 1.0 - smoothstep(0.3, 0.8, a.fw * 160.0);
+            if (sk > 0.0 && st_hash(gid + vec2<f32>(83.0, 3.0)) > 0.9) {
+                let gc = gid + vec2<f32>(0.3) + 0.4 * vec2<f32>(st_hash(gid + vec2<f32>(89.0, 7.0)), st_hash(gid + vec2<f32>(7.0, 97.0)));
+                let grain = clamp((0.28 - length(sp - gc)) / max(a.fw * 160.0, 1e-4) + 0.5, 0.0, 1.0) * sk;
+                let light = st_hash(gid + vec2<f32>(101.0, 9.0)) > 0.35;
+                albedo = mix(albedo, select(vec3<f32>(0.025, 0.023, 0.021), vec3<f32>(0.21, 0.2, 0.185), light), grain);
+            }
+        }
+        // the root flare: a low mound and the roots breaking the surface near the trunk.
+        if (rr < 0.65) {
+            let e = 0.003;
+            let h0 = pr_root_h(dt, a.seed, a.fw);
+            let hx = pr_root_h(dt + vec2<f32>(e, 0.0), a.seed, a.fw).x;
+            let hy = pr_root_h(dt + vec2<f32>(0.0, e), a.seed, a.fw).x;
+            g = g + vec2<f32>(hx - h0.x, hy - h0.x) / e;
+            // the bark, streaked along the root and dusted with the soil it breaks through.
+            let bark = h0.y;
+            let streak = st_noise(vec2<f32>(rr * 14.0, atan2(dt.y, dt.x) * 40.0) + vec2<f32>(a.seed)) * 0.6 + st_noise(vec2<f32>(rr * 60.0, atan2(dt.y, dt.x) * 90.0)) * 0.4;
+            let dust = smoothstep(0.35, 0.7, st_noise(dt * 45.0 + vec2<f32>(a.seed * 2.0))) * 0.6;
+            albedo = mix(albedo, mix(PR_BASIN_ROOT * mix(0.7, 1.3, streak), albedo, dust), bark);
+            rough = mix(rough, 0.9, bark);
+            tn = tn * (1.0 - bark * (1.0 - dust));
+        }
+        // moss where the soil stays damp against the cut face.
+        let moss = smoothstep(0.62, 0.8, st_noise(qs * 7.0 + vec2<f32>(5.0))) * (1.0 - smoothstep(0.02, 0.16, a.ed)) * (0.4 + 0.6 * damp);
+        albedo = mix(albedo, PR_BASIN_MOSS * mix(0.8, 1.2, st_noise(qs * 60.0)), moss);
+        // a cigarette end now and then (one cell in three of 45 cm), gone where a pixel spans its width.
+        let bp = qs / 0.45;
+        let bid = floor(bp);
+        let bk = 1.0 - smoothstep(0.002, 0.005, a.fw);
+        if (bk > 0.0 && st_hash(bid + vec2<f32>(107.0, 11.0)) < 0.33) {
+            let bc = (bid + vec2<f32>(0.25) + 0.5 * vec2<f32>(st_hash(bid + vec2<f32>(109.0, 1.0)), st_hash(bid + vec2<f32>(3.0, 113.0)))) * 0.45;
+            let ang = st_hash(bid + vec2<f32>(127.0, 5.0)) * 6.2832;
+            let d = qs - bc;
+            let u = d.x * cos(ang) + d.y * sin(ang);
+            let v = -d.x * sin(ang) + d.y * cos(ang);
+            let len = mix(0.008, 0.013, st_hash(bid + vec2<f32>(131.0, 7.0)));
+            let w = length(vec2<f32>(max(abs(u) - len, 0.0), v));
+            let butt = clamp((0.0038 - w) / a.fw + 0.5, 0.0, 1.0) * bk;
+            let paper = select(vec3<f32>(0.3, 0.19, 0.1), vec3<f32>(0.38, 0.36, 0.33), u > -len * 0.35);
+            albedo = mix(albedo, paper, butt);
+            rough = mix(rough, 0.7, butt);
+            tn = tn * (1.0 - butt);
+            g = g + vec2<f32>(-sin(ang), cos(ang)) * clamp(v / 0.0038, -1.0, 1.0) * 0.8 * butt;
+        }
+        // leaf litter, piled against the cut edge (the scan has its own fine litter: fewer).
+        let lk = 1.0 - smoothstep(0.02, 0.06, a.fw);
+        let l1 = pr_leaves(a.q, a.off, a.half, 0.1, 1.0, select(0.07, 0.015, scan), select(0.6, 0.35, scan), 0.15, a.fw);
+        let l2 = pr_leaves(a.q, a.off * 1.3, a.half, 0.075, 2.0, select(0.05, 0.0, scan), select(0.6, 0.25, scan), 0.0, a.fw);
+        var lf = l1;
+        if (l2.cover > 0.0) {
+            lf = l2;
+        }
+        let lc = lf.cover * lk;
+        if (lc > 0.0) {
+            albedo = mix(albedo, lf.tone * (1.0 - 0.35 * lf.curl) * (1.0 - 0.3 * lf.rib), lc);
+            g = mix(g, lf.tilt, lc);
+            tn = tn * (1.0 - lc);
+            rough = mix(rough, 0.78, lc);
+            ao = mix(ao, 1.0 - 0.3 * lf.curl, lc);
+        }
+        // the soil meets the walk's cut face a little low: its shade, and the trunk's foot.
+        let edge = smoothstep(0.0, 0.035, a.ed);
+        ao = ao * mix(0.45, 1.0, edge) * mix(0.6, 1.0, smoothstep(0.0, 0.12, rr - 0.08));
+        albedo = albedo * mix(0.72, 1.0, smoothstep(0.0, 0.022, a.ed));
+    }
+    let t = pr_rot(inst.yaw, vec3<f32>(1.0, 0.0, 0.0));
+    let b = pr_rot(inst.yaw, vec3<f32>(0.0, 0.0, 1.0));
+    // the scan's relief (u across, image-up along -y), then the drawn relief's gradient.
+    let n0 = (*s).n;
+    let ns = normalize(t * tn.x - b * tn.y + n0 * sqrt(max(0.0, 1.0 - dot(tn, tn))));
+    let n = normalize(ns - t * g.x - b * g.y);
+    if (all(n == n)) {
+        (*s).n = n;
+    }
+    (*s).albedo = albedo;
+    (*s).rough = rough;
+    (*s).ao = ao;
+}
+
 fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
     var m = materials[in.material];
     let inst = pr_instances[in.inst];
@@ -201,6 +541,9 @@ fn pr_shade(in: PrOut, front: bool) -> vec4<f32> {
             }
         }
     }
+    if (inst.model == PR_TREE_BASIN) {
+        pr_basin(&s, inst, in.local, dlx, dly);
+    }
     m.emissive = vec4<f32>(0.0);
     if ((m.flags & PR_LENS) != 0u) {
         // Lens radiance solved in the tone mapper's units (SIGNAL_LENS_TONE_INPUT):
@@ -250,9 +593,19 @@ fn pr_cut(in: PrOut) {
     let m = materials[in.material];
     let duvx = dpdx(in.uv);
     let duvy = dpdy(in.uv);
+    let dlx = dpdx(in.local);
+    let dly = dpdy(in.local);
+    let inst = pr_instances[in.inst];
     var a = 1.0;
+    if (inst.model == PR_TREE_BASIN) {
+        // a tree basin: the bed, and past its cut edge the spilled crumbs and leaves only.
+        if (!pr_basin_cut(inst, in.local, dlx, dly)) {
+            discard;
+        }
+        return;
+    }
     if ((m.flags & PR_PLATE) != 0u) {
-        let tile = pr_face_tile(pr_instances[in.inst].variant);
+        let tile = pr_face_tile(inst.variant);
         if (tile.z > 0.0) {
             a = textureSampleLevel(pr_big, kit_sampler, pr_face_uv(tile, in.local), 1, 0.0).a;
         }

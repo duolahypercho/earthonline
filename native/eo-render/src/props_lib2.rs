@@ -2501,6 +2501,21 @@ fn signal_head_stand_in(out: &mut Out, pm: &PMats, cx: &StandInCtx) {
 mod stand_in_tests {
     use super::*;
 
+    #[test]
+    fn the_shaders_model_ids_are_the_enums() {
+        let src = include_str!("props_types.wgsl");
+        for (name, m) in [("PR_TACTILE_PAD", Model::TactilePad), ("PR_TREE_BASIN", Model::TreeBasin)] {
+            assert!(src.contains(&format!("const {name}: u32 = {}u;", m as u32)), "{name} is not Model::{m:?}");
+        }
+        // the basin's trunk offset the shader decodes is the one eo-props encodes.
+        let draw = include_str!("props_draw.wgsl");
+        assert!(draw.contains(&format!("const PR_BASIN_TRUNK_STEP_M: f32 = {};", eo_props::basins::TRUNK_STEP_M)), "PR_BASIN_TRUNK_STEP_M is not basins::TRUNK_STEP_M");
+        for (slope, x) in [(0.0, 0.0), (-0.12, 0.35), (0.3, -0.6)] {
+            let v = eo_props::basins::encode(slope, x);
+            assert!((eo_props::basins::slope_of(v) - slope).abs() < 1e-3 && (eo_props::basins::trunk_of(v) - x).abs() <= eo_props::basins::TRUNK_STEP_M / 2.0);
+        }
+    }
+
     const KINDS: [&str; 22] = [
         "hydrant", "parkingMeter", "payStation", "signPole", "bollard", "wasteBin", "bikeRack", "newsBox", "mailbox", "lampHistoric", "lampBanner", "lampCobra", "bench", "transitShelter", "busStopFlag", "cafeSet", "sandwichBoard", "utilityBox", "utilityPole", "cobraArm", "lantern", "palm",
     ];
