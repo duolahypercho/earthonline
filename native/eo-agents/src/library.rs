@@ -12,7 +12,7 @@ use crate::catalog::{AgentsJs, read_verified};
 use crate::motion::MotionRoots;
 use crate::people::{Atlas, CookedTier};
 use crate::rocketbox;
-use crate::vehicles::{CookedBody, LampColours, box_body, cook_body};
+use crate::vehicles::{CookedBody, FAR_BODY_ERROR_M, FAR_BODY_TRIANGLES, FAR_BODY_VERSION, LampColours, box_body, cook_body, far_body};
 use crate::{AgentMaterial, AgentVertex, CLASS_PERSON, CLASS_VEHICLE, CLIPS, GpuMesh, GpuModel, LODS, M_ATLAS, NO_MESH};
 use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
@@ -81,6 +81,16 @@ impl PeopleSource {
             None => PeopleSource::Off,
         }
     }
+}
+
+/// What the cook makes beyond the sources themselves.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CookOptions {
+    /// `--car-detail`: each body's far slot (LOD 3) is `far_body`, its coarsest
+    /// cooked LOD past LOD 0 (LOD 2, else LOD 1) simplified to `FAR_BODY_ERROR_M`, instead of the
+    /// three-box stand-in. Off: the box, and the library and its cache key
+    /// are as before.
+    pub far_body: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -166,10 +176,17 @@ impl Builder {
 
 /// The cache key: every source digest, the JS export and the cook version
 /// (and, for the Rocketbox people, their manifest, motions and cook versions).
-fn cache_key(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions: &MotionRoots) -> String {
+fn cache_key(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions: &MotionRoots, opts: CookOptions) -> String {
     let mut h = Sha256::new();
     h.update(COOK_VERSION.to_le_bytes());
     h.update(crate::catalog::AGENTS_JS.as_bytes());
+    // (`--car-detail`) the far bodies; nothing added without them, so that key is as before.
+    if opts.far_body {
+        h.update(b"far-body");
+        h.update(FAR_BODY_VERSION.to_le_bytes());
+        h.update(FAR_BODY_ERROR_M.to_le_bytes());
+        h.update((FAR_BODY_TRIANGLES as u64).to_le_bytes());
+    }
     // Which vehicle files this checkout holds (a body left out of it is not drawn).
     for b in js.vehicles.values() {
         for l in &b.lods {
@@ -216,11 +233,16 @@ impl Library {
 
     /// `load` with the people source chosen by the caller (`--no-rocketbox`).
     pub fn load_with(repo_root: &Path, cache_dir: Option<&Path>, people: &PeopleSource) -> Result<Self> {
+        Self::load_opts(repo_root, cache_dir, people, CookOptions::default())
+    }
+
+    /// `load_with` and the cook options (`--car-detail`: the far bodies).
+    pub fn load_opts(repo_root: &Path, cache_dir: Option<&Path>, people: &PeopleSource, opts: CookOptions) -> Result<Self> {
         let t = Instant::now();
         let js = AgentsJs::load()?;
         // the Rocketbox clips and the 100STYLE walks, when present and not switched off.
         let motions = if matches!(people, PeopleSource::Rocketbox(_)) { MotionRoots::from_env() } else { MotionRoots::default() };
-        let key = cache_key(repo_root, &js, people, &motions);
+        let key = cache_key(repo_root, &js, people, &motions, opts);
         if let Some(dir) = cache_dir {
             let p = cache_path(dir, &key);
             if p.exists() {
@@ -235,7 +257,7 @@ impl Library {
                 }
             }
         }
-        let mut lib = cook_full(repo_root, &js, people, &motions)?;
+        let mut lib = cook_opts(repo_root, &js, people, &motions, opts)?;
         // a library without its people is not cached (the next start tries them again).
         if let Some(dir) = cache_dir.filter(|_| lib.meta.people_fallback.is_none() && lib.meta.motion.fallback.is_empty()) {
             let p = cache_path(dir, &key);
@@ -271,6 +293,11 @@ pub fn cook_with(repo_root: &Path, js: &AgentsJs, people: &PeopleSource) -> Resu
 
 /// `cook_with`, the Rocketbox people moved by `motions`.
 pub fn cook_full(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions: &MotionRoots) -> Result<Library> {
+    cook_opts(repo_root, js, people, motions, CookOptions::default())
+}
+
+/// `cook_full` with the cook options (`--car-detail`: the far bodies).
+pub fn cook_opts(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions: &MotionRoots, opts: CookOptions) -> Result<Library> {
     let lamps = LampColours::from_js(js);
     // Vehicles: every LOD of every body, on worker threads.
     let jobs: Vec<(String, usize, crate::catalog::Lod)> =
@@ -330,7 +357,12 @@ pub fn cook_full(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions
                 None => b.body(&boxed),
             };
         }
-        meshes[3] = b.body(&boxed);
+        // The far slot: the three boxes, or (`--car-detail`) the coarsest cooked
+        // LOD past LOD 0 simplified (LOD 2, else LOD 1; a body with LOD 0 alone keeps the box).
+        meshes[3] = match (opts.far_body, lods[2].as_ref().or(lods[1].as_ref())) {
+            (true, Some(src)) => b.body(&far_body(src, FAR_BODY_TRIANGLES, FAR_BODY_ERROR_M)),
+            _ => b.body(&boxed),
+        };
         let pivots = lods.iter().flatten().next().map(|c| c.pivots).unwrap_or_default();
         let mut wheel = [[0f32; 4]; 4];
         for (w, p) in pivots.iter().enumerate() {

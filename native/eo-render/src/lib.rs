@@ -1476,8 +1476,13 @@ impl Renderer {
 
     /// build the agent renderer over a loaded library (once; later calls are ignored).
     pub fn attach_agents(&self, ctx: &GpuContext, lib: &eo_agents::library::Library) -> Result<()> {
+        self.attach_agents_with(ctx, lib, 0)
+    }
+
+    /// `attach_agents` with the vehicle tiers' level (`--car-detail`; 0 as `attach_agents`).
+    pub fn attach_agents_with(&self, ctx: &GpuContext, lib: &eo_agents::library::Library, car_detail: u8) -> Result<()> {
         if self.agents.get().is_none() {
-            let a = agents::AgentsGpu::new(ctx, &self.look, lib, self.sample_count, self.debug_ids, &self.occlusion.late_bgl)?; // + the pyramid's layout
+            let a = agents::AgentsGpu::new(ctx, &self.look, lib, self.sample_count, self.debug_ids, &self.occlusion.late_bgl, car_detail)?; // + the pyramid's layout
             let _ = self.agents.set(a);
         }
         Ok(())

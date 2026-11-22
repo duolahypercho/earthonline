@@ -71,6 +71,24 @@ impl Tiers {
             ped_cap: [c.budget.skinned, c.budget.skinned, c.budget.instanced, c.budget.far],
         }
     }
+
+    /// The vehicle tiers under `--car-detail LEVEL` (0: as `from_js`, the
+    /// browser build's overlay budget of 2 full bodies and 10 LOD 1 bodies).
+    /// The JS caps were set for a browser's draw budget; the native renderer
+    /// draws the agents with one multi-draw per list, so the nearest cars can
+    /// keep their full body further out and more of them at once. Level 1:
+    /// LOD 0 within 30 m (at most 6), LOD 1 within 90 m (at most 24), LOD 2 to
+    /// 220 m, the far body to 400 m; level 2: 40 m (12), 120 m (40), 260 m,
+    /// 400 m. The far slot is the simplified body (eo-agents `far_body`) the
+    /// library cooks under the same switch. People are as before.
+    pub fn with_car_detail(self, level: u8) -> Self {
+        let (veh_radius, near) = match level {
+            0 => return self,
+            1 => ([30.0, 90.0, 220.0, 400.0], [6, 24]),
+            _ => ([40.0, 120.0, 260.0, 400.0], [12, 40]),
+        };
+        Tiers { veh_radius, veh_cap: [near[0], near[1], u32::MAX / 2, u32::MAX / 2], ..self }
+    }
 }
 
 #[repr(C)]
@@ -213,7 +231,8 @@ impl AgentPipes {
 
 impl AgentsGpu {
     /// `late_bgl`: the occlusion pyramid's bind group layout (`OcclusionGpu::late_bgl`).
-    pub fn new(ctx: &GpuContext, look: &LookGpu, lib: &Library, sample_count: u32, debug_ids: bool, late_bgl: &wgpu::BindGroupLayout) -> Result<Self> {
+    /// `car_detail`: the vehicle tiers' level (`Tiers::with_car_detail`, `--car-detail`; 0 as before).
+    pub fn new(ctx: &GpuContext, look: &LookGpu, lib: &Library, sample_count: u32, debug_ids: bool, late_bgl: &wgpu::BindGroupLayout, car_detail: u8) -> Result<Self> {
         let d = &ctx.device;
         let q = &ctx.queue;
         let js = eo_agents::catalog::AgentsJs::load()?;
@@ -568,7 +587,7 @@ impl AgentsGpu {
             count: AtomicU32::new(0),
             mesh_count,
             model_count: lib.models.len() as u32,
-            tiers: Tiers::from_js(&js),
+            tiers: Tiers::from_js(&js).with_car_detail(car_detail),
             clip_frames: lib.meta.clip_frames,
             clip_base: lib.meta.clip_base,
             lamps: ([tail.0, tail.1, brake.0, brake.1], [head.0, head.1, ind.0, ind.1], js.hero_lamp_day_running_floor as f32),
@@ -605,6 +624,11 @@ impl AgentsGpu {
     }
 
     /// Agents on or off (off: no pass runs, nothing is drawn).
+    /// The distance tiers and caps in use (`--car-detail` for the vehicles).
+    pub fn tiers(&self) -> Tiers {
+        self.tiers
+    }
+
     pub fn set_enabled(&self, on: bool) {
         self.enabled.store(on, Ordering::Relaxed);
     }

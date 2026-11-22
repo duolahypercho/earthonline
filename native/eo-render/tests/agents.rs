@@ -148,6 +148,42 @@ fn gpu_cull_draws_the_frustum_and_caps_the_near_tier() {
     assert_eq!(cmds[2 * n + m.meshes[0] as usize][1], 0, "no LOD0 caster");
 }
 
+/// `--car-detail 1`: the library's far slot is each body's own simplified
+/// body (in the same mesh slots, so the people's mesh budget is as before),
+/// a car 300 m out draws it, and the six near sedans all keep LOD0 (cap 6)
+/// where level 0 keeps two.
+#[test]
+fn car_detail_draws_a_far_body_and_keeps_more_near_cars_whole() {
+    let ctx = ctx();
+    let paths = eo_data::DataPaths::discover().expect("repo data");
+    let people = eo_agents::library::PeopleSource::from_env();
+    let opts = eo_agents::library::CookOptions { far_body: true };
+    let lib = Library::load_opts(&paths.repo_root, Some(&eo_assets::default_cache_dir()), &people, opts).expect("agent library with far bodies");
+    let boxed = library();
+    assert_eq!(lib.meshes.len(), boxed.meshes.len(), "the far bodies take the boxes' mesh slots");
+    let (m, mb) = (lib.models[lib.model("sedan").unwrap() as usize], boxed.models[boxed.model("sedan").unwrap() as usize]);
+    let (far, bx, lod2) = (lib.triangles(m.meshes[3]), boxed.triangles(mb.meshes[3]), lib.triangles(m.meshes[2]));
+    assert!(far > 10 * bx && far < lod2, "far body {far} triangles: more than the box's {bx}, fewer than LOD 2's {lod2}");
+    // Six sedans 8-18 m ahead and one 300 m out, the camera looking north.
+    let cam = Camera::new(Vec3::new(0.0, 1.7, 0.0), 0.0, 0.0, W as f32 / H as f32);
+    let mut list: Vec<GpuAgent> = (0..6).map(|k| car(&lib, "sedan", Vec3::new(-6.0 + k as f32 * 2.5, 0.0, -8.0 - k as f32 * 2.0), 0.0)).collect();
+    list.push(car(&lib, "sedan", Vec3::new(0.0, 0.0, -300.0), 0.0));
+    let lods = |level: u8, lib: &Library| {
+        let (mut v, mut i, mut o) = (vec![], vec![], vec![]);
+        slab(&mut v, &mut i, &mut o);
+        let r = Renderer::from_parts(&ctx, &v, &i, &o, wgpu::TextureFormat::Rgba8UnormSrgb, 1).unwrap();
+        r.attach_agents_with(&ctx, lib, level).unwrap();
+        let a = r.agents.get().unwrap();
+        a.upload(&ctx.queue, &list);
+        render(&ctx, &r, &cam, 1);
+        let cmds = a.commands_readback(&ctx).unwrap();
+        let m = lib.models[lib.model("sedan").unwrap() as usize];
+        (0..4).map(|k| cmds[m.meshes[k] as usize][1]).collect::<Vec<_>>()
+    };
+    assert_eq!(lods(0, &boxed), vec![2, 4, 0, 1], "level 0: two at LOD0, four at LOD1, the far car in the far slot");
+    assert_eq!(lods(1, &lib), vec![6, 0, 0, 1], "level 1: all six at LOD0, the far car in the far slot");
+}
+
 #[test]
 fn a_car_casts_a_sun_shadow_and_people_draw() {
     let ctx = ctx();
