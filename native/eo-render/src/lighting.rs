@@ -278,6 +278,20 @@ mod tests {
         assert_eq!(look::shader_features(), look::ShaderFeatures::ALL, "the scope ends with its body; unset, every feature is in");
     }
 
+    /// The playable house's nine varyings (draw.wgsl `VOut`, look.rs
+    /// `draw_wgsl`) are interpolated with the house compiled in only.
+    #[test]
+    fn the_house_varyings_ride_only_with_the_house() {
+        for house in [false, true] {
+            let src = look::with_shader_features(look::ShaderFeatures { house, ..look::ShaderFeatures::NONE }, look::city_shader_source);
+            for field in ["@location(8) house_z: f32", "@location(9) table_fixture: vec4<f32>", "@location(10) table_reverse: vec4<f32>"] {
+                assert_eq!(src.contains(field), house, "house {house}: {field}");
+            }
+            assert!(src.contains("@location(5) aux: vec2<f32>"), "the street's two aux values stay");
+            parse(&format!("house {house}"), &src);
+        }
+    }
+
     #[test]
     fn shader_features_follow_the_options_and_limit_them() {
         let o = look::LookOptions::default();

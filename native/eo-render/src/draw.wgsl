@@ -117,14 +117,15 @@ struct VOut {
     @location(4) @interpolate(flat) object: u32,
     // x the vertex alpha byte (street class), y the normal's w
     // (street: distance to the kerb line / 6.35 m, negative when none).
-    @location(5) aux: vec3<f32>,
+    @location(5) aux: vec2<f32>,
     // the position relative to the eye (small numbers: its screen
     // derivatives are smooth where the world position's are not).
     @location(6) rel: vec3<f32>,
     // (bays along the wall, storeys up it) on an envelope wall, else 0.
     @location(7) ft: vec2<f32>,
-    @location(8) table_fixture: vec4<f32>,
-    @location(9) table_reverse: vec4<f32>,
+    // HOUSE_VARYINGS (look.rs `draw_wgsl`: the playable house's enclosure and
+    // table light, interpolated only with SF_HOUSE; read through `vo_house_z`,
+    // `vo_table_fixture`, `vo_table_reverse`, written through `vo_set_house`)
 };
 
 fn srgb_decode(c: vec3<f32>) -> vec3<f32> {
@@ -155,19 +156,21 @@ fn vs(
     out.normal = normal.xyz;
     out.material = o.material;
     let enclosed = house_bit(o.kind, ENCLOSURE_TRANSFER_BIT) && normal.w < -0.50;
-    out.aux = vec3<f32>(color.a * 255.0, select(normal.w, -normal.w, enclosed), select(0.0, 1.0, enclosed));
-    out.table_fixture = vec4<f32>(0.);
-    out.table_reverse = vec4<f32>(0.);
+    out.aux = vec2<f32>(color.a * 255.0, select(normal.w, -normal.w, enclosed));
+    // (the playable house's varyings, SF_HOUSE: `vo_set_house` below)
+    var house_z = select(0.0, 1.0, enclosed);
+    var table_fixture = vec4<f32>(0.);
+    var table_reverse = vec4<f32>(0.);
     if (house_bit(o.kind, TABLE_LIGHT_BIT) && normal.w < 0. && normal.w > -.5) {
         // Each split mesh normal was metered in Blender. Interpolate physical
         // radiance across the triangle after decoding the four stored channels.
         let cell = vec2<i32>(256,0) + vec2<i32>(round(color.rg*255.));
         let encoded = textureLoad(kit_orm,cell,i32(textureNumLayers(kit_orm))-3,0);
-        out.table_fixture = encoded*encoded/max(1.-encoded*encoded,vec4<f32>(.0001));
+        table_fixture = encoded*encoded/max(1.-encoded*encoded,vec4<f32>(.0001));
         let reverse = textureLoad(kit_orm,cell+vec2<i32>(0,96),i32(textureNumLayers(kit_orm))-3,0);
-        out.table_reverse = reverse*reverse/max(1.-reverse*reverse,vec4<f32>(.0001));
+        table_reverse = reverse*reverse/max(1.-reverse*reverse,vec4<f32>(.0001));
         out.aux.y = 64./127.-normal.w;
-        out.aux.z = 2.;
+        house_z = 2.;
     }
     out.rel = pos - frame.cam_pos.xyz; // cc0
     out.ft = vec2<f32>(0.0);
@@ -181,7 +184,8 @@ fn vs(
         // its wear in aux.x (structures.rs `encode_concrete`); the tint is the material's.
         out.ft = sx_decode(color, normal.w);
         out.color = vec3<f32>(1.0);
-        out.aux = vec3<f32>(color.a * 255.0, -1.0, 0.0);
+        out.aux = vec2<f32>(color.a * 255.0, -1.0);
+        house_z = 0.0;
     }
     if (kind == 4u && out.aux.y > 0.49) {
         // The house builder stores window and fixture transfer in R and G.
@@ -233,6 +237,7 @@ fn vs(
         }
     }
     out.object = inst;
+    vo_set_house(&out, house_z, table_fixture, table_reverse);
     return out;
 }
 
@@ -1815,7 +1820,7 @@ fn shade(in: VOut) -> vec4<f32> {
     let cut_cotton = house_bit(objects[in.object].kind, CUT_COTTON_BIT);
     let local_scan = cut_cotton || (objects[in.object].kind & (DOOR_SCAN_BIT | LOCAL_UV_SCAN_BIT)) != 0u;
     var bedroom_point = vec3<f32>(0.);
-    if (house_bit(objects[in.object].kind, BEDROOM_LIGHT_BIT) && in.aux.z > .5) {
+    if (house_bit(objects[in.object].kind, BEDROOM_LIGHT_BIT) && vo_house_z(in) > .5) {
         bedroom_point = (look.enclosure_frame * vec4<f32>(in.world + .025*n,1.)).xyz;
         measured_room = bedroom_point.y > 10./3. && bedroom_point.y < 20./3.;
     }
@@ -1919,7 +1924,7 @@ fn shade(in: VOut) -> vec4<f32> {
                         oak_reflections(frame_pos,in.world,v,s.n,n,house_bit(objects[in.object].kind, TABLE_LIGHT_BIT));
                     } else {
                         room_radiance = board_reflection(frame_pos.xz,local_dx,local_dy,dpx,dpy,
-                            reflect(-v,s.n),s.rough,select(board_ambient(in.color.rg*in.color.rg),in.table_fixture.rgb,joinery),frame_pos.y);
+                            reflect(-v,s.n),s.rough,select(board_ambient(in.color.rg*in.color.rg),vo_table_fixture(in).rgb,joinery),frame_pos.y);
                     }
                 }
             }
@@ -1958,11 +1963,11 @@ fn shade(in: VOut) -> vec4<f32> {
         let transfer = in.color.rg * in.color.rg;
         // Window and fixture transfer already include a diffuse bounce. Weight
         // the outdoor field by the room's sky visibility instead of adding it twice.
-        room_enclosure = min(in.aux.z,1.);
+        room_enclosure = min(vo_house_z(in),1.);
         room_daylight = transfer.x;
         var downstairs = false;
         let room_kind = objects[in.object].kind;
-        if (house_bit(room_kind, DOWNSTAIRS_LIGHT_BIT | TABLE_LIGHT_BIT) && in.aux.z > .5) {
+        if (house_bit(room_kind, DOWNSTAIRS_LIGHT_BIT | TABLE_LIGHT_BIT) && vo_house_z(in) > .5) {
             let room_point = (look.enclosure_frame * vec4<f32>(in.world + .025*n,1.)).xyz;
             var top = false;
             var table = false;
@@ -1970,9 +1975,9 @@ fn shade(in: VOut) -> vec4<f32> {
             if (house_bit(room_kind, TABLE_LIGHT_BIT)) {
                 let local = (look.enclosure_frame * vec4<f32>(in.world,1.)).xyz;
                 top = table_board && n.y>.85 && abs(local.y-look.table_light[0].w)<.004;
-                table = top || in.aux.z > 1.5;
+                table = top || vo_house_z(in) > 1.5;
                 if (table) {
-                    var measured = select(in.table_reverse,in.table_fixture,dot(in.normal,v)>=0.);
+                    var measured = select(vo_table_reverse(in),vo_table_fixture(in),dot(in.normal,v)>=0.);
                     var beam = measured.a * max(0.,normalize(look.dining_lamp.xyz-in.world).y);
                     if (top) {
                         measured = oak_incident(local);
@@ -1999,7 +2004,7 @@ fn shade(in: VOut) -> vec4<f32> {
                 }
             }
         }
-        if (SF_HOUSE && in.aux.z > .5 && !measured_room) {
+        if (SF_HOUSE && vo_house_z(in) > .5 && !measured_room) {
             rm_emit += s.albedo * (1.-s.metal) * floor_daylight(in.world, s.n) / PI;
         }
         let window = 0.76 * transfer.x * (look.hemi_sky.rgb + look.key.rgb * max(look.key_dir.y, 0.0));
