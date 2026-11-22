@@ -1299,6 +1299,16 @@ mod window {
 mod house_tests {
     use super::*;
 
+    /// The tests that load the whole world take turns. Each load holds several
+    /// GB and spawns its own worker threads; run in parallel (the test
+    /// harness's default), a dozen of them at once drove the machine into a
+    /// kernel spinlock-timeout panic (2026-11-21, panic-full reports naming
+    /// this test binary, four reboots). A poisoned lock (a failed test) still
+    /// lets the next test run.
+    fn world_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    }
     #[test]
     fn beaver_street_to_bed_and_top_floor() {
         check_beaver_walk(false, false, false, false, false);
@@ -1326,6 +1336,7 @@ mod house_tests {
 
     #[test]
     fn blender_bedroom_reads_its_cut_pattern_and_directional_light() {
+        let _world = world_lock(); // (one whole-world load at a time: see world_lock)
         use eo_render::scene::{BEDROOM_LIGHT_BIT, CUT_COTTON_BIT};
         let (args, _) = parse(&["--house-blender-bedroom".to_owned()]).unwrap();
         let mut args = args;
@@ -1348,6 +1359,7 @@ mod house_tests {
 
     #[test]
     fn dining_light_registers_the_two_pages_on_the_installed_floor() {
+        let _world = world_lock(); // (one whole-world load at a time: see world_lock)
         use eo_render::scene::{DINING_FLOOR_LIGHT_BIT, FLOOR_SCAN_BIT};
         let (mut args, _) = parse(&["--house-dining-light".into()]).unwrap();
         args.kit = false;
@@ -1379,6 +1391,7 @@ mod house_tests {
 
     #[test]
     fn table_survey_lights_the_board_and_place_settings_independently_of_the_floor() {
+        let _world = world_lock(); // (one whole-world load at a time: see world_lock)
         use eo_render::scene::{DINING_FLOOR_LIGHT_BIT, TABLE_BOARD_BIT, TABLE_LIGHT_BIT};
         let (mut args, _) = parse(&["--house-table-light".into()]).unwrap();
         assert!(args.house_photo && !args.house_downstairs_light && !args.house_dining_light);
@@ -1419,6 +1432,7 @@ mod house_tests {
 
     #[test]
     fn cut_face_material_and_edge_meters_preserve_the_place_settings_and_roughness() {
+        let _world = world_lock(); // (one whole-world load at a time: see world_lock)
         use eo_render::scene::{TABLE_BOARD_BIT, TABLE_LIGHT_BIT};
         let (mut args, _) = parse(&["--house-oak-finish".into(), "--house-table-light".into(),
             "--house-oak-joinery".into()]).unwrap();
@@ -1452,6 +1466,7 @@ mod house_tests {
 
     #[test]
     fn ground_floor_reflections_upload_the_survey_on_its_four_board_materials() {
+        let _world = world_lock(); // (one whole-world load at a time: see world_lock)
         use eo_render::scene::{FLOOR_REFLECTION_BIT, WAXED_BOARD_BIT};
         let (mut args, _) = parse(&["--house-floor-reflections".into(), "--house-oak-finish".into()]).unwrap();
         args.kit = false;
@@ -1494,6 +1509,7 @@ mod house_tests {
 
     #[test]
     fn oak_reflections_keep_the_original_roughness_and_only_mark_the_four_boards() {
+        let _world = world_lock(); // (one whole-world load at a time: see world_lock)
         use eo_render::scene::{OAK_FINISH_BIT, TABLE_BOARD_BIT};
         let (mut args, _) = parse(&["--house-oak-finish".into()]).unwrap();
         args.kit = false;
@@ -1523,6 +1539,7 @@ mod house_tests {
 
     #[test]
     fn furnished_floors_share_separate_rows_in_the_light_atlas() {
+        let _world = world_lock(); // (one whole-world load at a time: see world_lock)
         use eo_render::scene::{DOWNSTAIRS_LIGHT_BIT, ENCLOSURE_TRANSFER_BIT};
         let (mut args, _) = parse(&["--house-downstairs-light".into(), "--house-blender-bedroom".into()]).unwrap();
         args.kit = false;
@@ -1556,6 +1573,7 @@ mod house_tests {
 
     #[test]
     fn mission_roof_replaces_only_the_high_clay_and_packs_its_firing_patches() {
+        let _world = world_lock(); // (one whole-world load at a time: see world_lock)
         use eo_render::scene::LOCAL_UV_SCAN_BIT;
         let (mut args, _) = parse(&["--house-mission-roof".into()]).unwrap();
         args.kit = false;
@@ -1594,6 +1612,7 @@ mod house_tests {
 
     #[test]
     fn fired_stoop_follows_installed_grade_with_its_own_materials() {
+        let _world = world_lock(); // (one whole-world load at a time: see world_lock)
         for enabled in [false, true] {
             let mut flags=vec!["--house-fired-stoop".into()];
             if !enabled { flags.push("--no-house-fired-stoop".into()); }
@@ -1623,6 +1642,7 @@ mod house_tests {
 
     #[test]
     fn porch_switch_uses_the_emitting_shade_and_its_own_atlas_layer() {
+        let _world = world_lock(); // (one whole-world load at a time: see world_lock)
         for (walls, enabled) in [(false, true), (true, true), (true, false)] {
             let mut flags = ["--house-porch-lamp", "--house-street-garden", "--no-interior-lighting"]
                 .map(str::to_owned).to_vec();
@@ -1659,6 +1679,7 @@ mod house_tests {
 
     #[test]
     fn window_scene_follows_the_photo_house_and_glazing_switches() {
+        let _world = world_lock(); // (one whole-world load at a time: see world_lock)
         for (flags, expected) in [
             (vec!["--house-window-optics"], true),
             (vec!["--house-photo", "--house-window-optics", "--no-house-glazing"], false),
@@ -1679,6 +1700,7 @@ mod house_tests {
 
     #[test]
     fn plaster_survey_keeps_the_fitted_atlases_and_camera_independent() {
+        let _world = world_lock(); // (one whole-world load at a time: see world_lock)
         for (walls, camera) in [(true,false),(false,true),(true,true),(false,false)] {
             let mut flags = ["--house-wall-daylight","--house-site-camera","--blender-camera",
                 "--house-front-daylight","--house-fitted-dining","--no-interior-lighting"]
@@ -1713,6 +1735,7 @@ mod house_tests {
 
     #[test]
     fn exterior_daylight_reaches_only_the_fitted_bed_and_survives_disabled_room_light() {
+        let _world = world_lock(); // (one whole-world load at a time: see world_lock)
         for (enabled, room_light) in [(false, true), (true, false)] {
             let mut flags = vec!["--house-front-daylight".to_owned()];
             if !enabled {
@@ -1748,6 +1771,7 @@ mod house_tests {
 
     #[test]
     fn street_garden_preserves_the_entry_and_the_fitted_room_maps() {
+        let _world = world_lock(); // (one whole-world load at a time: see world_lock)
         let common = [
             "--house-window-linen",
             "--house-fitted-finishes",
@@ -1835,6 +1859,7 @@ mod house_tests {
 
     #[test]
     fn fitted_window_replaces_one_blind_and_binds_both_cloth_faces() {
+        let _world = world_lock(); // (one whole-world load at a time: see world_lock)
         for (lighting, enabled) in [(true, true), (false, true), (true, false)] {
             let mut flags = vec!["--house-window-linen".to_owned(), "--house-fitted-finishes".to_owned(), "--house-kitchen-light".to_owned()];
             if !enabled { flags.push("--no-house-window-linen".to_owned()); }
@@ -1874,6 +1899,7 @@ mod house_tests {
 
     #[test]
     fn fitted_kitchen_light_binds_the_tile_wall_and_both_sides_of_the_pendant() {
+        let _world = world_lock(); // (one whole-world load at a time: see world_lock)
         for (switches, kitchen, dining) in [
             (vec!["--house-kitchen-light"], true, false),
             (vec!["--house-kitchen-light", "--house-fitted-finishes"], true, true),
@@ -1922,6 +1948,7 @@ mod house_tests {
 
     #[test]
     fn fitted_finishes_bind_the_registered_coats_and_restore_the_prior_room() {
+        let _world = world_lock(); // (one whole-world load at a time: see world_lock)
         let (mut args, _) = parse(&["--house-fitted-finishes".into()]).unwrap();
         assert!(args.house_fitted_dining && args.house_fitted_finishes);
         args.kit = false;
@@ -1959,6 +1986,7 @@ mod house_tests {
     }
 
     fn check_beaver_walk(finishes: bool, patina: bool, furniture: bool, photo: bool, fitted: bool) {
+        let _world = world_lock(); // (one whole-world load at a time: see world_lock)
         let mut args = base_args();
         args.house_finishes = finishes;
         args.house_patina = patina;
