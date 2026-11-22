@@ -663,8 +663,10 @@ render-thread time on golden_gate, plus wgpu's indirect-validation pass
 before the water pass. The bench also reports `fixed_slot_lists` (slots
 issued per frame), `gpu_serial_ms` (each pass's end minus the previous
 pass's end, which adds up to the frame; begin-to-end pass windows overlap
-on Apple GPUs), the PPR and scene-meter passes, and a budget verdict of
-"not run" when no standard path ran.
+on Apple GPUs), the PPR and scene-meter passes, the bridges' wire overlay
+(`wire_overlay`, drawn after the bloom; untimed, its time was counted in
+the scene meter's share), and a budget verdict of "not run" when no
+standard path ran.
 
 The photo-date sky (`--no-gg3-sky`, eo-look `season`): `--no-photo-season`
 keeps round 2's season curve, read once at load, instead of the cited
