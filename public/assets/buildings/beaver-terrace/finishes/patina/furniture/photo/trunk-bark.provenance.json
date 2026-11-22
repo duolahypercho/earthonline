@@ -1,0 +1,40 @@
+{
+  "source": [
+    "https://polyhaven.com/a/bark_brown_02"
+  ],
+  "license": "CC0-1.0",
+  "license_url": "https://polyhaven.com/license",
+  "attribution": [
+    "Rob Tuytel"
+  ],
+  "inputs": [
+    {
+      "asset": "bark_brown_02",
+      "role": "albedo",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/bark_brown_02/bark_brown_02_diff_2k.jpg",
+      "sha256": "285051e34826ace29f4ab438ad35cc1201b2aae0a6157a5f3c0bf6667bbc539e"
+    },
+    {
+      "asset": "bark_brown_02",
+      "role": "normal",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/bark_brown_02/bark_brown_02_nor_gl_2k.jpg",
+      "sha256": "aaba4529c3167a7811b4dbf5b4327d054a166c2fc8ea08ebd249a2692adace41"
+    },
+    {
+      "asset": "bark_brown_02",
+      "role": "arm",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/bark_brown_02/bark_brown_02_arm_2k.jpg",
+      "sha256": "d04abcb75755426cb9ae4f3190d5149f631ac35d100b921caeb565e44cd7365a"
+    }
+  ],
+  "build": "scripts/blender-buildings/prepare_beaver_surfaces.py",
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/trunk-bark.png",
+  "sha256": "dc9b8830fa4589150e73b7389d0dfdd7c48f42bfc27b768c4b552a62ab9de711",
+  "bytes": 1895030,
+  "families": [
+    "street-tree-bark"
+  ],
+  "metres_per_tile": 1.0,
+  "normal_strength": 0.82,
+  "paint_mix": 0.12
+}

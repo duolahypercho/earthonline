@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // download the CC0 texture sets the native renderer reads (Poly Haven and
-// ambientCG only, CC0 1.0) into a folder OUTSIDE the repository and write the
-// provenance manifest `native/assets/cc0-manifest.json` (per file: source,
-// asset id, page, authors as the site lists them, licence, resolution,
-// download URL, bytes, SHA-256).
+// ambientCG only, CC0 1.0) into `<repo>/external/cc0` (git-ignored) or a
+// folder outside the repository, and write the provenance manifest
+// `native/assets/cc0-manifest.json` (per file: source, asset id, page,
+// authors as the site lists them, licence, resolution, download URL, bytes,
+// SHA-256).
 //
 //   node native/tools/fetch-cc0.mjs --root <folder> [--dry-run] [--manifest-only]   # or EO_CC0_ROOT
 //
@@ -14,14 +15,18 @@
 // archive tool; nothing downloaded is ever executed. Re-running skips files
 // already present with the size the API reports.
 //
-// The renderer reads the root from EO_CC0_ROOT (no default)
-// and refuses any file whose SHA-256 differs from the manifest.
+// Inside the repository the only target is `<repo>/external/cc0`
+// (target-folder.mjs); every other folder in it is refused. The renderer reads
+// `<repo>/external/cc0`, or the folder EO_CC0_ROOT names, and refuses any file
+// whose SHA-256 differs from the manifest. `python3 scripts/setup-assets.py
+// --only cc0` fills a clone from the manifest as it is, without Node.
 
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { checkTarget } from './target-folder.mjs';
 
 const UA = 'cc0-asset-fetch/1.0';
 const here = dirname(fileURLToPath(import.meta.url));
@@ -69,7 +74,7 @@ const POLYHAVEN = [
   ['forest_floor', 'ground under trees'],
   ['coast_sand_04', 'dry beach sand'],
   ['damp_beach_sand', 'wet beach sand'],
-  ['seaside_rock', 'riprap and shore rock (fetched; not drawn: no surface of the port is riprap)'],
+  ['seaside_rock', 'shore rock; a reduced scan ships with the Black Point intertidal habitat'],
 ];
 // [id, resolution, use]
 const AMBIENTCG = [
@@ -150,17 +155,14 @@ function acgRole(name) {
 }
 
 async function main() {
+  checkTarget(root, 'cc0');
   mkdirSync(root, { recursive: true });
-  const repo = resolve(here, '..', '..').toLowerCase();
-  const r = root.toLowerCase();
-  if (r === repo || r.startsWith(repo + sep)) {
-    throw new Error(`refusing to download into the repository (${root})`);
-  }
   const assets = [];
   let total = 0;
   // An asset already in the manifest whose every file is present with the
   // recorded size and SHA-256 is kept as recorded: no request is made for it.
-  const previous = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')).assets || [] : [];
+  const previousManifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : {};
+  const previous = previousManifest.assets || [];
   const kept = (source, id, use) => {
     const a = previous.find((p) => p.source === source && p.id === id);
     if (!a || !a.files?.length) return null;
@@ -262,7 +264,9 @@ async function main() {
       else index.push({ path: rel(p), bytes: statSync(p).size, sha256: sha256(p) });
     }
   };
+  // Texture-only stores may omit the optional selection thumbnails and API listings.
   if (existsSync(indexDir)) walk(indexDir);
+  else index.push(...(previousManifest.index || []));
   const indexBytes = index.reduce((s, f) => s + f.bytes, 0);
   const manifest = {
     schema: 'eo-cc0-manifest-v1',

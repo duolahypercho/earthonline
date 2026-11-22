@@ -284,7 +284,10 @@ impl OverheadJs {
         let v: Value = serde_json::from_str(&s).context("overhead-js.json")?;
         let sources: BTreeMap<String, String> = serde_json::from_value(v["sources"].clone())?;
         let sign_variants: Vec<SignVariant> = serde_json::from_value(v["consts"]["signVariants"].clone())?;
-        let seats: Vec<Seat> = serde_json::from_value(v["consts"]["utilityPole"]["attach"].clone())?;
+        // street props v2 (eo-app `--no-street-props-v2`): the v2 pole's seats, shaft and hardware height.
+        let mut consts = v["consts"].clone();
+        crate::props_v2::apply_overhead(&mut consts)?;
+        let seats: Vec<Seat> = serde_json::from_value(consts["utilityPole"]["attach"].clone())?;
         let mut tables = v["tables"].clone();
         // groundscale (the street size, 1.25 by default): the streetcar track samples at
         // their scaled positions (the observed overlays read only their axis direction).
@@ -293,7 +296,7 @@ impl OverheadJs {
                 eo_data::groundscale::scale_json_numbers(&mut tables["streetcar"][k]);
             }
         }
-        Ok(Self { sources, consts: v["consts"].clone(), tables, sign_variants, seats })
+        Ok(Self { sources, consts, tables, sign_variants, seats })
     }
     /// `STREET_OVERHEAD[key]`.
     pub fn h(&self, key: &str) -> f64 {
@@ -830,6 +833,12 @@ impl Overhead {
                 mapped: code & 8 != 0,
             }));
             lantern_way.push(way.is_some_and(|id| lantern_ways.contains(&id)));
+            // (a structure's leg into a junction, eo-street joins, is not drawn: no wires on it.)
+            if e.structure_leg.is_some() {
+                *wired.last_mut().unwrap() = None;
+                *dist.last_mut().unwrap() = None;
+                *lantern_way.last_mut().unwrap() = false;
+            }
         }
         let mut o = Self {
             js: js.clone(),
@@ -916,7 +925,7 @@ fn build_streetcar(h: &H, js: &OverheadJs, w: &PropsWorld) -> (Vec<Vec<TrackRun>
         let mut runs_of: Vec<Vec<TrackRun>> = Vec::with_capacity(w.street.plan.entries.len());
         for e in &w.street.plan.entries {
             let mut out = vec![];
-            let ok = e.points.len() >= 2 && e.cum.len() == e.points.len();
+            let ok = e.points.len() >= 2 && e.cum.len() == e.points.len() && e.structure_leg.is_none();
             let total = if ok { e.cum[e.cum.len() - 1] } else { 0.0 };
             let run_start = total.min(e.trim_start.max(0.0));
             let run_end = run_start.max(total - e.trim_end.max(0.0));
@@ -1080,7 +1089,7 @@ impl Overhead {
             [end_key(name, e.points[0]), end_key(name, e.points[e.points.len() - 1])]
         };
         for (ei, e) in entries.iter().enumerate() {
-            if self.street_name(w, ei).is_empty() || e.points.len() < 2 {
+            if self.street_name(w, ei).is_empty() || e.points.len() < 2 || e.structure_leg.is_some() {
                 continue;
             }
             let into = if self.dist[ei].is_some() { &mut strung } else { &mut underground };
@@ -2678,7 +2687,20 @@ pub fn shared(w: &PropsWorld) -> Arc<Overhead> {
     install(w, buildings).expect("overhead index")
 }
 
-/// Everything the street overhead stands in one 128 m street tile (owned by position).
+/// Everything the street overhead stands in one 128 m street tile (owned by
+/// position); with the grade-separated roads (`--structures`), kept clear
+/// of them (`clearance::clear_overhead`). The shared index and its caches
+/// never see the structures: a world without them gets what it always did.
 pub fn plan_tile(w: &PropsWorld, key: (i32, i32)) -> OverheadTile {
-    shared(w).plan_tile(w, key)
+    plan_tile_stats(w, key).0
+}
+
+/// `plan_tile`, with what keeping clear of the structures did there.
+pub fn plan_tile_stats(w: &PropsWorld, key: (i32, i32)) -> (OverheadTile, crate::clearance::ClearStats) {
+    let mut t = shared(w).plan_tile(w, key);
+    let mut stats = crate::clearance::ClearStats::default();
+    if let Some(s) = w.clear_structures() {
+        crate::clearance::clear_overhead(w, s, key, &mut t, &mut stats);
+    }
+    (t, stats)
 }

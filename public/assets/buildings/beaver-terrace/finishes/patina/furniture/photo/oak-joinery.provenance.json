@@ -1,0 +1,83 @@
+{
+  "source": "The eight cut faces and installed light on the four original Blender dining boards.",
+  "license": "Project-authored lighting data",
+  "attribution": "Earth Online",
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/oak-joinery.png",
+  "build": "scripts/blender-buildings/bake_beaver_table.py --joinery",
+  "source_scene": {
+    "file": "21-beaver.blend",
+    "sha256": "640ab940c3b6a2aaff55a67407f909f39b5e348073af90bd038dbb3893e2dc9c"
+  },
+  "house_sha256": "0f567a703707bf14d2e49fd9ee1a713422faa46109fd5b42f404f5ab6bd0dc50",
+  "sha256": "57cf61c891d74c32730a02ac659391abbabc0f36a50bdc99fb46acbc3afe8367",
+  "bytes": 46488,
+  "minimum": [
+    1.8391205072402954,
+    0.754,
+    6.63322639465332
+  ],
+  "maximum": [
+    3.194490432739258,
+    0.9783699865341187,
+    7.435353755950928
+  ],
+  "tabletop_height_m": 0.75,
+  "surfaces": [
+    {
+      "mesh": "oak-dining-table - dining-board-3@9b7959",
+      "material": "dining-board-3@9b7959",
+      "first_index": 0,
+      "index_count": 948,
+      "vertex_count": 568,
+      "atlas_start": 0
+    },
+    {
+      "mesh": "oak-dining-table - dining-board-2@957356",
+      "material": "dining-board-2@957356",
+      "first_index": 0,
+      "index_count": 948,
+      "vertex_count": 544,
+      "atlas_start": 568
+    },
+    {
+      "mesh": "oak-dining-table - dining-board-1@927151",
+      "material": "dining-board-1@927151",
+      "first_index": 0,
+      "index_count": 948,
+      "vertex_count": 516,
+      "atlas_start": 1112
+    },
+    {
+      "mesh": "oak-dining-table - dining-board-0@997a5b",
+      "material": "dining-board-0@997a5b",
+      "first_index": 0,
+      "index_count": 948,
+      "vertex_count": 518,
+      "atlas_start": 1628
+    }
+  ],
+  "surface_vertices": 2146,
+  "fixture_units_per_source_unit": 2.6080094371717353,
+  "lamp_parcel_xyz": [
+    2.5118002891540527,
+    1.9600000381469727,
+    6.969527244567871
+  ],
+  "lamp_radius_m": 0.07800000160932541,
+  "lamp_linear_rgb": [
+    1.0,
+    0.7799999713897705,
+    0.5600000023841858
+  ],
+  "samples": 2048,
+  "diffuse_bounces": 4,
+  "transfer_encoding": "sqrt(L/(1+L))",
+  "channels": "Two cut-face base colours, followed by front and reverse fixture RGB and direct pendant red.",
+  "board_bottom_m": 0.7158228158950806,
+  "cut_map": [
+    512,
+    48
+  ],
+  "cut_encoding": "sqrt(linear RGB)",
+  "lamp_first_row": 96
+}

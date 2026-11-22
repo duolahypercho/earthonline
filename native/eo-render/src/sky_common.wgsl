@@ -9,7 +9,7 @@ struct Sky {
     prev_vp: mat4x4<f32>,
     // xyz eye, w world seconds (wrapped to a day)
     eye: vec4<f32>,
-    prev_eye: vec4<f32>,
+    prev_eye: vec4<f32>, // xyz previous eye, w fair-weather cumulus density
     // xy this frame's jitter (NDC), zw the last frame's
     jitter: vec4<f32>,
     // x TAA on, y history valid (the frames of history since the last cut, 0 = none), z blend (new frame weight), w frame dt (s)
@@ -42,7 +42,7 @@ struct Sky {
     lights: vec4<u32>,
     // cluster near m, far m, tan(fov_y / 2), aspect
     cluster: vec4<f32>,
-    // camera basis for the clusters (forward, right, up)
+    // Camera basis for the clusters. cam_up.w blends to the registered porch lens.
     cam_fwd: vec4<f32>,
     cam_right: vec4<f32>,
     cam_up: vec4<f32>,
@@ -75,6 +75,24 @@ struct Sky {
     // past the rig's horizon envelope (sea glint): rgb in key units (as `look.key`), w the
     // refracted elevation's sine. Zero once the disc's upper limb has set.
     sun_glint: vec4<f32>,
+    // the physical daylight (eo-look `phys`): rgb a white sun at the top of the atmosphere x the
+    // Sun's colour, in look units (the sky tables are per unit solar illuminance), w its weight
+    // (0: the tables keep the look's dome anchor, `vol_atmo_gain`)
+    atmo4: vec4<f32>,
+    // the medium the tables integrate: x aerosol scattering, y aerosol absorption (1/km at the
+    // ground, 550 nm, x the haze), z the aerosol's scale height (km), w the aerial-perspective
+    // volume on (1/0)
+    atmo_m: vec4<f32>,
+    // rgb the aerosol's spectral factor per channel, w the aerial-perspective volume's reach (km)
+    atmo_s: vec4<f32>,
+    // rgb Rayleigh scattering at sea level (1/km), w its scale height (km)
+    atmo_r: vec4<f32>,
+    // rgb ozone's peak absorption (1/km), w unused
+    atmo_o: vec4<f32>,
+    // the second high deck (eo_sky::clouds::Decks::cirrus): x height (m), y opacity; unread
+    cirrus: vec4<f32>,
+    // spare; zero
+    spare: vec4<f32>,
 };
 
 const SKY_CLOUDS: u32 = 1u;
@@ -92,6 +110,17 @@ const SKY_SPRITES: u32 = 4096u;
 const SKY_CONTACT: u32 = 8192u;
 // the fair-weather cumulus field (off by default: `EO_CUMULUS=1`, sky.rs `SkyOptions::cumulus`)
 const SKY_CUMULUS: u32 = 16384u;
+// a low-deck cloud over the ground hazed by its own depth (`--cloud-depth-haze`, off by
+// default; off, the ground's whole aerial perspective is in front of it, as before; sky.rs
+// `SkyOptions::cloud_depth_haze`)
+const SKY_CLOUD_DEPTH_HAZE: u32 = 2048u;
+// the cinematic look (`--look cinematic`, sky.rs `SkyOptions::cinematic`; the cinematic look
+// plan's stage L4): the golden haze and the shade in it (sky_volume.wgsl `vol_aerial`, the
+// shafts); its code is compiled out with SF_CINEMATIC.
+const SKY_CINEMATIC: u32 = 131072u;
+// the damp street (`--weather damp`, stage L3; sky.rs `SKY_DAMP_BIT`): the film's drying
+// patches (sky_light.wgsl `sky_damp_left`); never set by another weather.
+const SKY_DAMP: u32 = 262144u;
 
 /// World metres one cloud-sheet tile spans (eo-sky clouds.rs).
 const SKY_LOW_TILE: f32 = 3200.0;

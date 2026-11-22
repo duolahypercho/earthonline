@@ -6,7 +6,10 @@
 //! * a client whose link goes dark reconnects and resumes the same player;
 //! * two clients near each other see each other's player where it is, and
 //!   the same traffic: at any server tick both hold, every car and walker
-//!   they both see has the same state.
+//!   they both see has the same state;
+//! * presence at a landmark: each knows the other's name, sees its emote,
+//!   both draw the same sky, and a fast trip lands the traveller at the
+//!   viewpoint for both (the server validates it and refuses a bad one).
 
 use eo_net::client::{ClientConfig, Event, NetClient, Phase};
 use eo_net::game::{GameWorld, rebuild_player};
@@ -60,6 +63,7 @@ struct Player {
     last_ack: u32,
     accepts: Vec<(u32, bool)>,
     out: Vec<(u32, eo_net::wire::NetInput)>,
+    reliable: Vec<Vec<u8>>,
 }
 
 impl Player {
@@ -68,7 +72,7 @@ impl Player {
         c.conditions = cond;
         c.spawn = Some(SpawnHint { x: spawn[0] as f32, z: spawn[1] as f32, yaw: spawn[2] as f32, driving: false });
         c.timeout_s = 2.0;
-        Self { net: NetClient::connect(c).unwrap(), pred: None, last_ack: 0, accepts: vec![], out: vec![] }
+        Self { net: NetClient::connect(c).unwrap(), pred: None, last_ack: 0, accepts: vec![], out: vec![], reliable: vec![] }
     }
 
     fn frame(&mut self, input: &StepInput, yaw: f64, dt: f64) {
@@ -89,7 +93,7 @@ impl Player {
                         p.correct(&c);
                     }
                 }
-                Event::Reliable(_) => {}
+                Event::Reliable(m) => self.reliable.push(m),
             }
         }
         let Some(p) = self.pred.as_mut() else { return };
@@ -161,6 +165,32 @@ fn loss_reorder_and_duplicates_lose_no_input_and_keep_prediction_exact() {
     assert!(st.snapshots_lost > 0, "the link lost snapshots (the test means something)");
     assert_eq!(stood, 0, "no input had to be stood in for: every one arrived through the resends");
     assert!(run as i64 >= pred.seq as i64 - 30, "the server ran {run} of {} inputs", pred.seq);
+    assert!(pred.stats.error_mm.len() > 100);
+    assert!(pred.stats.error_mm.iter().all(|e| *e == 0.0), "the prediction matched the server at every acknowledged input");
+    assert_eq!(pred.stats.corrections, 0);
+}
+
+/// A landmark lift over UDP: a client at Coit Tower's entrance taps interact
+/// (the input's button), rides up, taps again and rides down; the server runs
+/// the ride from the same inputs, so the prediction never needs a correction.
+#[test]
+fn a_landmark_lift_rides_over_the_network_with_no_correction() {
+    let (g, _) = world();
+    let l = g.buildings.decks.lifts.iter().find(|l| l.name.contains("Coit")).expect("the Coit Tower lift").clone();
+    let h = Harness::start();
+    let mut p = Player::connect(h.addr, "rider", Conditions::NONE, [l.bottom.x, l.bottom.z, l.bottom_yaw]);
+    wait_connected(&mut [&mut p]);
+    let tap = |t: f64, at: f64| t >= at && t < at + 0.02;
+    run_frames(&mut [&mut p], 3.6, |_, t| (StepInput { interact: tap(t, 1.0), ..Default::default() }, l.bottom_yaw));
+    let up = p.pred.as_ref().unwrap().player.position(&p.pred.as_ref().unwrap().cw);
+    run_frames(&mut [&mut p], 3.6, |_, t| (StepInput { interact: tap(t, 0.5), ..Default::default() }, l.top_yaw));
+    run_frames(&mut [&mut p], 1.5, |_, _| (StepInput::default(), 0.0));
+    let pred = p.pred.as_ref().unwrap();
+    let down = pred.player.position(&pred.cw);
+    let _ = h.stop();
+    println!("over UDP: up at {up:?} (top stop {:?}), down at {down:?}; corrections {}, acknowledged inputs {}", l.top, pred.stats.corrections, pred.stats.error_mm.len());
+    assert!((up - l.top).length() < 1.0, "the ride up did not reach the gallery: {up:?}");
+    assert!((down.x - l.bottom.x).hypot(down.z - l.bottom.z) < 1.0, "the ride down did not reach the entrance: {down:?}");
     assert!(pred.stats.error_mm.len() > 100);
     assert!(pred.stats.error_mm.iter().all(|e| *e == 0.0), "the prediction matched the server at every acknowledged input");
     assert_eq!(pred.stats.corrections, 0);
@@ -279,4 +309,106 @@ fn a_client_on_another_ground_plan_is_refused() {
     let (k, _) = ask(own, 78);
     assert_eq!(k, Kind::Challenge, "the server's own ground plan is challenged");
     h.stop();
+}
+
+/// a client whose grade-separated roads (`--structures`, `--tunnels`) are not
+/// the server's world's is refused at its request, the same way as another
+/// ground plan, and told the server's own; one with the server's own (here
+/// none) is challenged as usual. The real client (eo-app `--connect`) with
+/// `--structures` against this server without them ends denied.
+#[test]
+fn a_client_with_other_structures_is_refused() {
+    use eo_net::proto::{self, DenyReason, Hello, Kind};
+    use eo_structures::StructureOptions;
+    let h = Harness::start();
+    let own = proto::structures_code(world().0.structures);
+    assert_eq!(own, 0, "the harness world has no structures");
+    let sock = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    sock.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+    let ask = |structures: u8, salt: u64| -> (Kind, Vec<u8>) {
+        let mut out = vec![];
+        Hello { client_salt: salt, version: proto::PROTOCOL_VERSION, ground: proto::ground_scale_ppm(), structures, token: b"dev:st".to_vec(), ..Default::default() }.write(Kind::Request, &mut out);
+        sock.send_to(&out, h.addr).unwrap();
+        let mut buf = [0u8; 1500];
+        let (n, _) = sock.recv_from(&mut buf).expect("the server answers a request");
+        let (k, mut r) = proto::peek(&buf[..n]).expect("a protocol datagram");
+        let mut rest = vec![];
+        while let Ok(b) = r.u8() {
+            rest.push(b);
+        }
+        (k, rest)
+    };
+    for (salt, other) in [(91, Some(StructureOptions { tunnels: false })), (92, Some(StructureOptions { tunnels: true }))] {
+        let (k, rest) = ask(proto::structures_code(other), salt);
+        assert_eq!(k, Kind::Deny, "{other:?} is refused");
+        assert_eq!(rest[8], DenyReason::Structures as u8);
+        assert_eq!(rest[9], own, "the denial names the server's own setting");
+    }
+    let (k, _) = ask(own, 93);
+    assert_eq!(k, Kind::Challenge, "the server's own structures setting is challenged");
+    // the real client.
+    let mut c = ClientConfig::new(h.addr, "dev:structures");
+    c.structures = Some(StructureOptions { tunnels: false });
+    let net = NetClient::connect(c).unwrap();
+    let t0 = Instant::now();
+    while net.status().phase != Phase::Denied(DenyReason::Structures as u8) {
+        assert!(t0.elapsed().as_secs_f64() < 10.0, "the client was not refused: {:?}", net.status().phase);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    drop(net);
+    h.stop();
+}
+
+/// Two friends at a landmark: names, an emote, the same sky, and a fast trip.
+#[test]
+fn friends_share_names_emotes_the_sky_and_a_fast_trip() {
+    use eo_net::presence::{Emote, unpack_anim, viewpoints};
+    use eo_net::proto::{TravelReply, TravelResult, msg, read_roster};
+    let h = Harness::start();
+    let a_spawn = *SPAWN;
+    let b_spawn = [SPAWN[0] + 5.0, SPAWN[1] + 1.0, -1.5708];
+    let mut a = Player::connect(h.addr, "ada", Conditions::profile_80ms(), a_spawn);
+    let mut b = Player::connect(h.addr, "bo", Conditions::profile_80ms(), b_spawn);
+    wait_connected(&mut [&mut a, &mut b]);
+    run_frames(&mut [&mut a, &mut b], 1.5, |_, _| (StepInput::default(), 0.0));
+    let (ida, idb) = (a.net.player_id(), b.net.player_id());
+    // Names: each has heard of the other (whoever joined first).
+    let names = |p: &Player| -> HashMap<u32, String> { p.reliable.iter().filter_map(|m| read_roster(m)).filter(|r| r.0).map(|r| (r.1, r.2)).collect() };
+    assert_eq!(names(&a).get(&idb).map(String::as_str), Some("bo"), "ada knows bo's name");
+    assert_eq!(names(&b).get(&ida).map(String::as_str), Some("ada"), "bo knows ada's name");
+    // Bo waves; Ada sees it on bo's player.
+    b.net.command(vec![msg::EMOTE, Emote::Wave as u8]);
+    run_frames(&mut [&mut a, &mut b], 1.0, |_, _| (StepInput::default(), 0.0));
+    let v = a.net.view(Instant::now()).unwrap();
+    let e = v.b.entities.iter().find(|e| e.0 == net_id(CLASS_PLAYER, idb)).unwrap();
+    assert_eq!(unpack_anim(e.1.anim).0, Emote::Wave, "ada sees bo wave");
+    // The same sky: the two headers of one server tick carry the same clock.
+    let (va, vb) = (a.net.view(Instant::now()).unwrap(), b.net.view(Instant::now()).unwrap());
+    let (sa, sb) = (va.b.header.sky.hour_after(0.0), vb.b.header.sky.hour_after((va.b.header.tick as f64 - vb.b.header.tick as f64) / 60.0));
+    assert!(eo_net::presence::hour_delta(sa, sb).abs() < 1e-6 && va.b.header.sky.weather == vb.b.header.sky.weather, "one sky: {sa} h against {sb} h");
+    // A trip to nowhere is refused; one to Coit Tower lands bo at the viewpoint for both.
+    let coit = viewpoints().unwrap().iter().position(|v| v.id == "coit-tower").unwrap() as u16;
+    b.net.command(vec![msg::TRAVEL, 0xFF, 0x7F]);
+    b.net.command(vec![msg::TRAVEL, coit as u8, (coit >> 8) as u8]);
+    run_frames(&mut [&mut a, &mut b], 3.0, |_, _| (StepInput::default(), 0.0));
+    let replies: Vec<TravelReply> = b.reliable.iter().filter_map(|m| TravelReply::read(m)).collect();
+    assert!(replies.iter().any(|r| r.result == TravelResult::Unknown), "an unknown viewpoint is refused: {replies:?}");
+    let ok = replies.iter().find(|r| r.result == TravelResult::Accepted).expect("the trip to Coit Tower is accepted");
+    let feet = b.pred.as_ref().unwrap().player.character.feet();
+    let d = (feet.x - ok.arrival[0] as f64).hypot(feet.z - ok.arrival[1] as f64);
+    assert!(d < 0.5, "bo stands {d:.2} m from the arrival point");
+    // Ada follows; there she sees bo where he stands, beside her on the ring, not in her.
+    a.net.command(vec![msg::TRAVEL, coit as u8, (coit >> 8) as u8]);
+    run_frames(&mut [&mut a, &mut b], 3.0, |_, _| (StepInput::default(), 0.0));
+    let v = a.net.view(Instant::now()).unwrap();
+    let e = v.b.entities.iter().find(|e| e.0 == net_id(CLASS_PLAYER, idb)).expect("ada, at Coit Tower too, holds bo");
+    let seen = e.1.pos();
+    assert!((seen[0] - feet.x).hypot(seen[2] - feet.z) < 1.0, "ada sees bo at Coit Tower");
+    let fa = a.pred.as_ref().unwrap().player.character.feet();
+    let apart = (fa.x - feet.x).hypot(fa.z - feet.z);
+    assert!(apart > 0.8 && apart < 12.0, "the two arrive {apart:.2} m apart");
+    // The emote ended with the trip, and no input was lost on the way.
+    assert_eq!(unpack_anim(e.1.anim).0, Emote::None);
+    let st = h.stop();
+    println!("presence: names, a wave, one sky, a trip of {:.0} m; server {st}", (feet.x - b_spawn[0]).hypot(feet.z - b_spawn[1]));
 }

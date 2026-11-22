@@ -12,6 +12,10 @@
 //! * `pads`     detectable-warning pads on the kerb ramps the street cuts.
 //! * `parking`  parked cars along the kerb (`planParkedVehicles`).
 //! * `roadway`  the shared roadway / ramp index those rules ask.
+//! * `clearance` with the grade-separated roads (`--structures`): nothing
+//!              placed pierces a deck, girder, bent or barrier, the columns
+//!              keep cars and furniture off their footprint, and the built
+//!              freeway decks get barrier-mounted luminaires.
 //!
 //! Every California number comes from `eo_data::CaStandards` (`caMetric`);
 //! every JS design value from `data/props-js.json.gz`
@@ -19,15 +23,20 @@
 //! (`PropsWorld::plan_tile`), pure and deterministic: nothing depends on the
 //! camera or on which tiles were asked before.
 
+pub mod basins; // street tree basins (`--tree-basins`)
+pub mod boats; // moored boats at the floating docks' berths (eo-app `--no-boats`)
+pub mod clearance;
 pub mod data;
 pub mod eztree;
 pub mod furniture;
 pub mod overhead;
 pub mod pads;
+pub mod props_v2; // street props v2 (eo-app `--no-street-props-v2`)
 pub mod parking;
 pub mod parking_rules;
 pub mod roadway;
 pub mod sign_atlas;
+pub mod shop_lettering; // the shop signs' words from the system's fonts (eo-kit `--facade-clutter`, stage S1)
 pub mod signals;
 pub mod signs;
 pub mod trees;
@@ -99,9 +108,13 @@ pub enum Model {
     PosterHoarding = 32,
     PedSignalPost = 33,
     SignalCabinet = 34,
+    /// A street tree's basin (`basins.rs`, `--tree-basins`): a flat panel, `scale` = (across
+    /// the walk, 1, along the kerb), local +Z along the kerb; `variant` = the grade along
+    /// the kerb as mm per m + 1000 (props_types.wgsl `PR_TREE_BASIN` tilts it, as the pad).
+    TreeBasin = 35,
 }
 
-pub const MODEL_COUNT: usize = 35;
+pub const MODEL_COUNT: usize = 36;
 
 impl Model {
     /// The model a street-furniture kind (`STREET_FURNITURE_KINDS` id) draws as; None for the
@@ -201,6 +214,9 @@ pub struct Standards {
     pub detectable_warning_depth: f64,
     pub no_parking_driveway: f64,
     pub no_parking_daylighting: f64,
+    /// Street tree basins (`street-tree-basin-sf`, Director's Order 187,246): per sidewalk
+    /// class (the surveyed width it starts at, the basin across the walk, along the kerb), m.
+    pub tree_basin: [[f64; 3]; 4],
 }
 
 impl Standards {
@@ -217,6 +233,15 @@ impl Standards {
             detectable_warning_depth: ca.metric_key("detectable-warning-size", "depthMin")?,
             no_parking_driveway: ca.metric("no-parking-driveway")?,
             no_parking_daylighting: ca.metric_key("no-parking-crosswalk-daylighting", "approachSide")?,
+            tree_basin: {
+                let k = |key: &str| ca.metric_key("street-tree-basin-sf", key);
+                [
+                    [k("minSidewalkForTrees")?, k("basinAcrossWalk7ft6")?, k("basinAlongWalk7ft6")?],
+                    [k("walk11ft")?, k("basinAcrossWalk11")?, k("basinAlongWalk11")?],
+                    [k("walk12ft")?, k("basinAcrossWalk12")?, k("basinAlongWalk12")?],
+                    [k("walk13ft")?, k("basinAcrossWalk13")?, k("basinAlongWalk13")?],
+                ]
+            },
         })
     }
 }
@@ -234,6 +259,10 @@ pub struct Band {
 
 pub struct PropsWorld {
     pub street: Arc<StreetWorld>,
+    /// The grade-separated roads over the street, when the world has them
+    /// (`--structures`; `with_structures`): the props keep clear of them
+    /// (`clearance`). None, or an empty world, places what it always did.
+    pub structures: Option<Arc<eo_structures::StructureWorld>>,
     pub js: Arc<JsProps>,
     pub std: Standards,
     pub roadway: RoadwayIndex,
@@ -249,8 +278,15 @@ pub struct PropsWorld {
     pub(crate) kerb_rules: std::sync::OnceLock<parking_rules::KerbRules>,
     /// The ribbon each list tree belongs to (nearest centreline), computed once.
     tree_owner: Mutex<HashMap<u32, u32>>,
+    /// `--tree-basins` (`basins::tree_basins()` when the world was built): a basin under each street tree.
+    pub tree_basins: bool,
     /// The street-furniture walk's world (built on first use). // props2
     furniture: std::sync::OnceLock<Arc<furniture::Furniture>>,
+    /// With structures: the clearance's sizes, each signalised junction
+    /// kept clear, and the deck luminaires by tile (built on first use).
+    clear_dims: std::sync::OnceLock<clearance::Dims>,
+    clear_nodes: Mutex<HashMap<u32, Arc<signals::ClearedNode>>>,
+    deck_lamps: std::sync::OnceLock<HashMap<(i32, i32), Vec<clearance::DeckLamp>>>,
     pub build_ms: f64,
 }
 
@@ -294,6 +330,7 @@ impl PropsWorld {
         }
         let mut w = Self {
             street,
+            structures: None,
             js,
             std,
             roadway,
@@ -307,11 +344,22 @@ impl PropsWorld {
             mouths: std::sync::OnceLock::new(),
             kerb_rules: std::sync::OnceLock::new(),
             tree_owner: Mutex::new(HashMap::new()),
+            tree_basins: basins::tree_basins(),
             furniture: std::sync::OnceLock::new(),
+            clear_dims: std::sync::OnceLock::new(),
+            clear_nodes: Mutex::new(HashMap::new()),
+            deck_lamps: std::sync::OnceLock::new(),
             build_ms: 0.0,
         };
         w.build_ms = t0.elapsed().as_secs_f64() * 1e3;
         w
+    }
+
+    /// The same world over the grade-separated roads `structures` (None
+    /// without `--structures`). Set before anything is placed.
+    pub fn with_structures(mut self, structures: Option<Arc<eo_structures::StructureWorld>>) -> Self {
+        self.structures = structures;
+        self
     }
 
     /// Every street tile key with anything to place.
@@ -319,8 +367,95 @@ impl PropsWorld {
         self.street.tile_keys()
     }
 
+    /// The grade-separated roads the props keep clear of: Some only for a
+    /// world with something built (`clearance`).
+    pub fn clear_structures(&self) -> Option<&eo_structures::StructureWorld> {
+        self.structures.as_deref().filter(|s| !s.is_empty())
+    }
+
+    /// The sizes the clearance reads (built on first use).
+    pub fn clear_dims(&self) -> &clearance::Dims {
+        self.clear_dims.get_or_init(|| clearance::Dims::new(self))
+    }
+
+    /// The luminaires on the built freeway decks (`--structures`), by the
+    /// tile of their foot: the landmark deck rule (`eo_landmarks::lights`:
+    /// both edges, every `DECK_PITCH_M` from half a pitch in, the head
+    /// `DECK_HEAD_M` over the deck), each a district cobra head on a pole
+    /// standing on the barrier top (`StructureWorld::barrier_at`), scaled so
+    /// its head is there, with the district lights' own luminaire record
+    /// (`Furniture::luminaire`), so it lights through the same lamp list;
+    /// none where a barrier is left out (a merge) or another deck is in the
+    /// way. Empty without structures.
+    /// The lights of the tunnel bores in one tile (stage A7: only with a
+    /// structure world built with `--tunnels`; none otherwise), as district
+    /// luminaires (`Furniture::luminaire`, the cobra head's optics) hung
+    /// under each bore's crown (`StructureWorld::tunnel_lights`), aimed down
+    /// at its roadway: what `plan_tile` puts in `TilePlacement::lights` with
+    /// the street's own. A host that lights them by day too (a tunnel is lit
+    /// round the clock) finds them here.
+    pub fn tunnel_lights(&self, key: (i32, i32)) -> Vec<furniture::LampLight> {
+        let Some(s) = self.clear_structures() else { return vec![] };
+        let f = self.furniture();
+        s.tunnel_lights(key).into_iter().map(|l| f.luminaire(l.pos, [l.pos[0], l.floor, l.pos[2]], l.pos[1] - l.floor, Model::LampCobra)).collect()
+    }
+
+    pub fn deck_lamps(&self) -> &HashMap<(i32, i32), Vec<clearance::DeckLamp>> {
+        self.deck_lamps.get_or_init(|| match self.clear_structures() {
+            Some(s) => clearance::place_deck_lamps(self, s),
+            None => HashMap::new(),
+        })
+    }
+
+    /// One signalised junction kept clear of the structures (cached).
+    fn cleared_node(&self, s: &eo_structures::StructureWorld, ni: u32) -> Arc<signals::ClearedNode> {
+        if let Some(c) = self.clear_nodes.lock().unwrap().get(&ni) {
+            return c.clone();
+        }
+        let c = Arc::new(signals::plan_node_clear(self, s, ni as usize));
+        let mut m = self.clear_nodes.lock().unwrap();
+        if m.len() > 8192 {
+            m.clear();
+        }
+        m.entry(ni).or_insert(c).clone()
+    }
+
+    /// The signal poles the clearance dropped or cut down at the signalised
+    /// junctions of a tile and its neighbours (what the overhead hung on
+    /// them goes too). Empty without structures.
+    pub fn signal_changes_near(&self, key: (i32, i32)) -> Vec<signals::PoleChange> {
+        let Some(s) = self.clear_structures() else { return vec![] };
+        let mut out = vec![];
+        for dz in -1..=1 {
+            for dx in -1..=1 {
+                for &ni in self.signal_nodes.get(&(key.0 + dx, key.1 + dz)).map(|v| v.as_slice()).unwrap_or(&[]) {
+                    out.extend(self.cleared_node(s, ni).changes.iter().copied());
+                }
+            }
+        }
+        out
+    }
+
+    /// One item kept clear of the structures (`clearance::clear_prop`): as
+    /// it is, smaller (a tree), or None (dropped); as it is without
+    /// structures. For items placed outside this crate (eo-app's park trees).
+    pub fn clear_prop(&self, p: Prop) -> Option<Prop> {
+        match self.clear_structures() {
+            Some(s) => clearance::clear_prop(s, self.clear_dims(), &p, &mut clearance::ClearStats::default()),
+            None => Some(p),
+        }
+    }
+
     /// Everything placed in one 128 m street tile (owned by position).
     pub fn plan_tile(&self, key: (i32, i32)) -> TilePlacement {
+        self.plan_tile_stats(key).0
+    }
+
+    /// `plan_tile`, with what keeping clear of the structures did there
+    /// (`clearance::ClearStats`; nothing without structures).
+    pub fn plan_tile_stats(&self, key: (i32, i32)) -> (TilePlacement, clearance::ClearStats) {
+        let clear = self.clear_structures();
+        let mut stats = clearance::ClearStats::default();
         let mut out = TilePlacement::default();
         let inside = |x: f64, z: f64| eo_street::tile_key(x, z) == key;
         // Ribbon props (trees, pads, parked cars) from every ribbon near the tile.
@@ -348,11 +483,24 @@ impl PropsWorld {
         }
         if let Some(nodes) = self.signal_nodes.get(&key) {
             for &ni in nodes {
-                signals::plan_node(self, ni as usize, &mut out.props);
+                match clear {
+                    Some(s) => {
+                        let c = self.cleared_node(s, ni);
+                        out.props.extend(c.props.iter().copied());
+                        stats.add(&c.stats);
+                    }
+                    None => signals::plan_node(self, ni as usize, &mut out.props),
+                }
             }
         }
-        out.props.extend(signs::plan_tile(self, key));
-        out
+        match clear {
+            Some(s) => {
+                out.props.extend(signs::plan_tile_clear(self, s, key));
+                clearance::clear_tile(self, s, key, &mut out, &mut stats);
+            }
+            None => out.props.extend(signs::plan_tile(self, key)),
+        }
+        (out, stats)
     }
 
     fn entry_props(&self, ei: u32) -> Arc<EntryProps> {
@@ -365,6 +513,10 @@ impl PropsWorld {
         // the furniture walk (trees, palms and every other kind, lamps with their lights).
         let fe = self.furniture().entry(self, ei as usize);
         ep.props.extend(fe.props.iter().copied());
+        // (`--tree-basins`) a basin under each street tree and palm on this ribbon's footways.
+        if self.tree_basins {
+            basins::entry_basins(self, e, &fe.props, &mut ep.props);
+        }
         ep.lights.extend(fe.lights.iter().copied());
         ep.parked = parking::plan_entry(self, ei as usize);
         let ep = Arc::new(ep);

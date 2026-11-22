@@ -1,0 +1,12 @@
+[package]
+name = "eo-structures"
+version = "0.1.0"
+edition = "2024"
+description = "Earth Online grade-separated roads (freeways, ramps, road bridges, tunnels): vertical profiles, deck, support and portal meshes, collision triangles (no GPU)"
+publish = false
+
+[dependencies]
+anyhow = "1.0.104"
+eo-data = { path = "../eo-data" }
+eo-landmarks = { path = "../eo-landmarks" }
+eo-street = { path = "../eo-street" }

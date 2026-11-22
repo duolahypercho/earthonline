@@ -81,6 +81,8 @@ pub struct PropMaterial {
 /// Material flags (props_types.wgsl).
 pub const P_TEX: u32 = 1 << 8;
 pub const P_CUT: u32 = 1 << 9;
+/// The tree basin's level-0 fringe past its cut edge (unit panel; props_draw.wgsl `pr_basin_spill`).
+pub const BASIN_FRINGE: f32 = 0.1;
 pub const P_LENS: u32 = 1 << 10;
 pub const P_PED_HAND: u32 = 1 << 11;
 pub const P_PED_WALK: u32 = 1 << 12;
@@ -212,7 +214,7 @@ pub(crate) fn srgb_hex(h: &str) -> [u8; 3] {
     [(v >> 16) as u8, (v >> 8) as u8, v as u8]
 }
 
-fn srgb_to_linear(c: f32) -> f32 {
+pub(crate) fn srgb_to_linear(c: f32) -> f32 {
     if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
 }
 
@@ -235,11 +237,17 @@ pub(crate) fn read_glb(repo: &Path, prop: &eo_props::data::StreetProp) -> Result
     let mut g = Glb { positions: vec![], normals: vec![], uvs: vec![], indices: vec![], maps: [None, None, None] };
     let scene = gltf.default_scene().or_else(|| gltf.scenes().next()).ok_or_else(|| anyhow!("no scene"))?;
     let mut stack: Vec<(gltf::Node, glam::Mat4)> = scene.nodes().map(|n| (n, glam::Mat4::IDENTITY)).collect();
+    // A v2 file's blended primitives (the shelter's glazing) are left out: this loader draws
+    // one opaque material, and an opaque pane would stand as a grey wall.
+    let skip_blend = eo_props::props_v2::active().is_some_and(|v| v.is_v2(prop));
     while let Some((node, parent)) = stack.pop() {
         let m = parent * glam::Mat4::from_cols_array_2d(&node.transform().matrix());
         if let Some(mesh) = node.mesh() {
             let nm = glam::Mat3::from_mat4(m).inverse().transpose();
             for prim in mesh.primitives() {
+                if skip_blend && prim.material().alpha_mode() == gltf::material::AlphaMode::Blend {
+                    continue;
+                }
                 let r = prim.reader(|b| if b.index() == 0 { Some(blob) } else { None });
                 let base = g.positions.len() as u32;
                 let pos: Vec<[f32; 3]> = r.read_positions().ok_or_else(|| anyhow!("no positions"))?.collect();
@@ -392,7 +400,7 @@ pub(crate) fn flat_layer(rgba: [u8; 4], res: u32) -> Vec<u8> {
     rgba.iter().copied().cycle().take((res * res * 4) as usize).collect()
 }
 
-fn decode_png(bytes: &[u8]) -> Result<(usize, usize, Vec<u8>)> {
+pub(crate) fn decode_png(bytes: &[u8]) -> Result<(usize, usize, Vec<u8>)> {
     let mut dec = png::Decoder::new(std::io::Cursor::new(bytes));
     dec.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
     let mut r = dec.read_info()?;
@@ -423,6 +431,16 @@ impl PropLibrary {
         h.update(eo_props::data::PROPS_JS_GZ);
         h.update(include_bytes!("props_lib.rs"));
         h.update(include_bytes!("props_lib2.rs"));
+        // the procedural furniture kinds (and whether they draw: `--no-furniture-models`).
+        h.update(include_bytes!("props_lib2/furniture_models.rs"));
+        h.update(include_bytes!("props_lib2/vegetation_models.rs"));
+        h.update([crate::props_lib2::furniture_models::enabled() as u8]);
+        // the meadow's materials follow `--no-blade-shading` (vegetation_models.rs).
+        h.update([eo_landmarks::vegetation::grass2().blade_shading as u8]);
+        // the scrub's models follow the flora pass (`--no-scrub-species`, vegetation_models.rs).
+        h.update([eo_landmarks::flora::flora().species as u8]);
+        // (and their species' forms and colours, eo_landmarks::flora::SPECIES).
+        h.update(include_bytes!("../../eo-landmarks/src/flora.rs"));
         for p in js.street_props.values() {
             h.update(p.sha256.as_bytes());
         }
@@ -436,6 +454,19 @@ impl PropLibrary {
                 h.update(bytemuck::cast_slice(&m.mesh.indices));
             }
         }
+        if let Some(ez) = x.ez {
+            // the coastal species' builds (vegetation_models.rs).
+            for id in eo_props::eztree::COASTAL_TREES.iter().chain(eo_props::eztree::COASTAL_SHRUBS.iter()) {
+                for tier in ["near", "coarse", "distant"] {
+                    if let Some(m) = ez.get(id, tier, 0) {
+                        h.update(id.as_bytes());
+                        h.update(bytemuck::cast_slice(&m.positions));
+                        h.update(bytemuck::cast_slice(&m.colors));
+                        h.update(bytemuck::cast_slice(&m.indices));
+                    }
+                }
+            }
+        }
         if let Some(s) = x.signs {
             h.update(&s.faces.rgba);
             h.update(bytemuck::cast_slice(&s.faces.tiles));
@@ -443,6 +474,17 @@ impl PropLibrary {
         }
         if x.overhead.is_some() {
             h.update(eo_props::overhead::OVERHEAD_JS_GZ);
+        }
+        // The stand-ins (`LibExtras::stand_ins`) only when on: off, the key is over the same
+        // inputs as before the switch (its source bytes above changed with it anyway).
+        if x.stand_ins {
+            h.update(b"stand-ins");
+        }
+        // The boats only when drawn (`--no-boats`: the key over the inputs before them).
+        if let Some(bodies) = x.boats {
+            for l in bodies.iter().flat_map(|b| b.lods.iter()) {
+                h.update(l.sha256.as_bytes());
+            }
         }
         h.finalize().iter().take(12).map(|b| format!("{b:02x}")).collect()
     }
@@ -455,7 +497,8 @@ impl PropLibrary {
     /// `dome`: `DETECTABLE_WARNING_PAD` (base diameter, height, pitch max, depth), from `caMetric`.
     pub fn load_full(repo: &Path, js: &JsProps, lens_dia_m: f64, x: &crate::props_lib2::LibExtras, dome: [f32; 4], cache_dir: Option<&Path>) -> Result<Self> {
         // A checkout without some prop files cooks (and caches) a library of its own.
-        let absent: String = js.street_props.values().map(|p| if repo.join(&p.path).is_file() { '1' } else { '0' }).collect();
+        let boat_files = x.boats.unwrap_or_default().iter().flat_map(|b| b.lods.iter());
+        let absent: String = js.street_props.values().chain(boat_files).map(|p| if repo.join(&p.path).is_file() { '1' } else { '0' }).collect();
         let tag = if absent.contains('0') { format!("-{absent}") } else { String::new() };
         let path = cache_dir.map(|d| d.join("props").join(format!("{}{tag}.eopl", Self::key_with(js, x, dome))));
         if let Some(p) = &path {
@@ -623,7 +666,17 @@ impl PropLibrary {
         set(&mut models, Model::MastArm, [n - 2, n - 1, n - 1], [40.0, 160.0, 400.0, 400.0], [0.5, 0.0, 0.0], 0.6, 2);
         // Vehicle head: the JS GLB body (or a box), three lenses on its face.
         let lens_r = (lens_dia_m / 2.0) as f32;
+        // A v2 head (eo_props::props_v2) gives its lens face: its visors reach past the lenses.
+        let v2_face = js.street_prop("signalHead").ok().and_then(|p| eo_props::props_v2::active().filter(|v| v.is_v2(p)).and_then(|v| v.lens_face_z()));
         let (face_z, mid_y) = match &head {
+            Some((g, _)) if v2_face.is_some() => {
+                let (mut y0, mut y1) = (f32::MAX, f32::MIN);
+                for p in &g.positions {
+                    y0 = y0.min(p[1]);
+                    y1 = y1.max(p[1]);
+                }
+                (v2_face.unwrap_or_default() as f32 + 0.004, (y0 + y1) / 2.0)
+            }
             Some((g, _)) => {
                 let (mut zmax, mut y0, mut y1) = (f32::MIN, f32::MAX, f32::MIN);
                 for p in &g.positions {
@@ -811,6 +864,32 @@ impl PropLibrary {
         }
         let n = meshes.len() as u32;
         set(&mut models, Model::TactilePad, [n - 1, n - 1, n - 1], [60.0, 90.0, 120.0, 120.0], [0.0, 0.0, 0.0], 0.75, 0);
+        // Tree basin (eo-props `basins.rs`, `--tree-basins`): a unit panel (x across the walk,
+        // z along the kerb, -0.5..0.5) facing up, flush with the walk, drawn by the cutout
+        // pipeline: the bed is the shader's (props_draw.wgsl `pr_basin`: soil, clods, grit,
+        // roots, leaf litter, the cut edge's shade), and at level 0 a fringe of
+        // `BASIN_FRINGE` past the cut edge keeps only the crumbs and leaves spilled onto the
+        // walk. Levels 1 and 2 are the bed alone. The vertex colour is the bed's mean.
+        {
+            let soil = srgb_hex("#4f4a44");
+            let up = [0.0f32, 1.0, 0.0];
+            let quad = |b: &mut Builder, r: f32| {
+                let base = b.v.len() as u32;
+                for (x, z) in [(-r, -r), (r, -r), (r, r), (-r, r)] {
+                    b.vert([x, 0.0, z], up, [x + 0.5, z + 0.5], soil, m_pad);
+                }
+                b.tri(true, base, base + 2, base + 1);
+                b.tri(true, base, base + 3, base + 2);
+            };
+            quad(&mut b, 0.5 + BASIN_FRINGE);
+            finish(&mut b, &mut meshes, &mut all_v, &mut all_i);
+            quad(&mut b, 0.5);
+            finish(&mut b, &mut meshes, &mut all_v, &mut all_i);
+            quad(&mut b, 0.5);
+            finish(&mut b, &mut meshes, &mut all_v, &mut all_i);
+        }
+        let n = meshes.len() as u32;
+        set(&mut models, Model::TreeBasin, [n - 3, n - 2, n - 1], [35.0, 70.0, 110.0, 110.0], [0.0, 0.0, 0.0], (0.5 + BASIN_FRINGE) * std::f32::consts::SQRT_2, 0);
 
         // the furniture kinds, the ez-tree trees and the overhead.
         let alpha_test = atlas["alphaTest"].as_f64().unwrap_or(0.42) as f32;

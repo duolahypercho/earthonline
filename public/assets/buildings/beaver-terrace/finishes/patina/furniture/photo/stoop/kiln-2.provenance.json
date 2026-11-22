@@ -1,0 +1,45 @@
+{
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/stoop/kiln-2.png",
+  "bytes": 1056659,
+  "sha256": "f740fcec8d3b58a1cd6ccf80b80d1903828f9af8b5500ac478b2a9fa245e3c4b",
+  "source": {
+    "files": [
+      {
+        "file": "kiln-1-color.png",
+        "sha256": "af48e1e6032b942d77e1cfc52a3f1201dcd7573ac046d960dde926dc7a9f82f3"
+      },
+      {
+        "file": "kiln-1-normal.png",
+        "sha256": "218a46be34acfce67f411343b5441e99dc229b41e77099b152685eba98d8db0f"
+      },
+      {
+        "file": "kiln-1-orm.png",
+        "sha256": "453c37890b787a614875e8fadf61e77ca222ffb8f5d1551589bb341392db7e01"
+      },
+      {
+        "file": "kiln-2-color.png",
+        "sha256": "c488cca6f49e8f3cc7b2efa3b9735892cf92d09c86524d4c9ad70490a739ad18"
+      },
+      {
+        "file": "kiln-2-normal.png",
+        "sha256": "5a0f072fea443b43067e5fa47aa353419bbc39da67dc2c9c885704d9ab0c12f6"
+      },
+      {
+        "file": "kiln-2-orm.png",
+        "sha256": "7201bd595c5ff3a001c2411b11e8b512015fb52bbab57535ab22a3e843d84b0e"
+      }
+    ],
+    "inputs": {
+      "diff": "dd1adc1d35618db8fd58f2d22b51242bc570dc83c23518a1100d3570dfe05559",
+      "nor_gl": "7378375dd7d7ec01a33bce4fc679f8a10fad4085746c7ad698724e8ca1113807",
+      "arm": "6a44f0a0cec7caab1f7fa0753a958dfd087d8a4dc7003b6fe394aa12b21040eb"
+    },
+    "scan": "Terracotta Floor Tiles",
+    "artist": "Dimitrios Savva",
+    "license": "CC0-1.0",
+    "url": "https://polyhaven.com/a/terracotta_floor_tiles",
+    "authored": "Kiln tones, mineral bloom and worn edges composed for the Beaver Street house.",
+    "build": "scripts/blender-buildings/prepare_beaver_stoop.py"
+  },
+  "build": "scripts/blender-buildings/cook_beaver_stoop.py"
+}

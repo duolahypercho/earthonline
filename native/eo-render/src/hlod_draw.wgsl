@@ -147,6 +147,16 @@ fn hl_h3(a: u32, b: i32, c: u32) -> f32 {
     return f32(hl_u(a ^ hl_u(bitcast<u32>(b) ^ hl_u(c))) >> 8u) / 16777216.0;
 }
 
+// Stage W2c (`--grime`, weathering.wgsl): each far building its own age and
+// paint, as the kit buildings nearer have (wx_building_k, the paint blocks):
+// a tone and a warm or cool cast a little off its neighbours', a little
+// darker on the whole as the weathered near ones. No base band: the far
+// layer's vertices carry no height over the building's floor, and its bake
+// (hlod_bake.rs, hashed into the far cache's key) is left as it is.
+fn hl_age(g: u32) -> vec3<f32> {
+    return vec3<f32>(0.8 + 0.3 * hl_h3(g, 7, 101u)) * mix(vec3<f32>(1.04, 1.0, 0.94), vec3<f32>(0.95, 1.0, 1.05), hl_h3(g, 11, 211u));
+}
+
 // the night's office structure (hlod.rs NIGHT_*): within a lit floor a
 // tenant's run of bays is lit with this chance, and in it a window with this one;
 // a dark floor keeps a few late windows.
@@ -406,6 +416,9 @@ fn hl_shade(in: HlOut) -> vec4<f32> {
                 glass = cov;
             }
         }
+    }
+    if (wx_level() != 0u && !roofish) {
+        albedo = albedo * mix(vec3<f32>(1.0), hl_age(in.group), 1.0 - glass); // weathering (`--grime`): each building its own tone
     }
     var s: Surface;
     s.albedo = albedo;

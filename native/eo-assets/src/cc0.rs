@@ -1,14 +1,15 @@
-//! the CC0 texture sets (Poly Haven, ambientCG) the renderer reads from
-//! OUTSIDE the repository, verified, decoded and block-compressed once.
+//! the CC0 texture sets (Poly Haven, ambientCG) the renderer reads from a
+//! folder Git does not track, verified, decoded and block-compressed once.
 //!
 //! * **Provenance**: `native/assets/cc0-manifest.json` (written by
 //!   `native/tools/fetch-cc0.mjs`) lists every downloaded file with its source,
 //!   asset page, authors as the site lists them, licence, resolution,
-//!   download URL, size and SHA-256. Files are read from the folder
-//!   `EO_CC0_ROOT` names (no default). A file is decoded only after its
-//!   SHA-256 equals the manifest's; nothing is copied into the repository.
-//!   Without the folder (a clone without the downloads) `available()` is
-//!   false and the renderer keeps its own materials.
+//!   download URL, size and SHA-256. Files are read from
+//!   `<repo>/external/cc0` (git-ignored, filled by `scripts/setup-assets.py`),
+//!   or from the folder `EO_CC0_ROOT` names instead. A file is decoded only
+//!   after its SHA-256 equals the manifest's; nothing is tracked by Git.
+//!   Without the downloads `available()` is false and the renderer keeps its
+//!   own materials.
 //! * **Cook**: each set becomes three square maps of `res` px with a mip
 //!   chain down to 4 x 4: albedo (BC7, sRGB; decals carry their opacity in
 //!   alpha), tangent normal (BC5, OpenGL +y up), and RHM (BC7: R roughness,
@@ -113,9 +114,10 @@ impl Cc0Manifest {
     }
 }
 
-/// The folder `EO_CC0_ROOT` names; None when it is not set (the sets are then not used).
+/// The sets' folder this run: the one `EO_CC0_ROOT` names, else
+/// `<repo>/external/cc0`; None when neither is known (the sets are then not used).
 pub fn root() -> Option<PathBuf> {
-    std::env::var_os("EO_CC0_ROOT").filter(|v| !v.is_empty()).map(PathBuf::from)
+    eo_data::external::CC0.root()
 }
 
 /// Where cooked sets are cached: `EO_CC0_CACHE`, else `cc0/` under the
@@ -682,6 +684,16 @@ pub fn all_sets() -> Vec<(SetKind, u32, SetDef)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The sets' folder is `<repo>/external/cc0` unless EO_CC0_ROOT names another.
+    #[test]
+    fn root_defaults_to_external() {
+        let repo = eo_data::DataPaths::discover().expect("the repository").repo_root;
+        match std::env::var_os("EO_CC0_ROOT").filter(|v| !v.is_empty()) {
+            Some(v) => assert_eq!(root(), Some(PathBuf::from(v))),
+            None => assert_eq!(root(), Some(repo.join("external").join("cc0"))),
+        }
+    }
 
     #[test]
     fn manifest_names_every_set_with_cc0_licence_and_digests() {

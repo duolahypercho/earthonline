@@ -36,7 +36,9 @@ struct ProbeCull {
     object_count: u32,
     // a kit building farther than this (to its bounds) is drawn as its footprint box
     kit_box_m: f32,
-    pad1: u32,
+    // the bounded list's guard (bounds.rs): objects selected within this of the
+    // capture point (0: not counted, without the bounded draws)
+    guard_reach: f32,
     pad2: u32,
 };
 
@@ -53,18 +55,23 @@ const BLEND_BIT: u32 = 256u;
 @group(0) @binding(1) var<storage, read> objects: array<Object>;
 @group(0) @binding(2) var<storage, read> groups: array<Group>;
 @group(0) @binding(3) var<storage, read_write> draws: array<u32>;
-// [0] commands, [1] triangles
-@group(0) @binding(4) var<storage, read_write> counters: array<atomic<u32>, 4>;
+// [0] commands, [1] triangles, [2] the bounded list's guard (bounds.rs): every
+// object this cull selects within `guard_reach`, whatever the face, [3] pad,
+// [4..10) per face what it draws (`probe_count`), [10..12) pad
+@group(0) @binding(4) var<storage, read_write> counters: array<atomic<u32>, 12>;
+// the six faces' planes of the capture (`probe_count`).
+struct ProbeFaces {
+    planes: array<vec4<f32>, 36>,
+};
+@group(0) @binding(5) var<uniform> pf: ProbeFaces;
 
-@compute @workgroup_size(64)
-fn probe_cull(@builtin(global_invocation_id) gid: vec3<u32>) {
-    let i = gid.x;
-    if (i >= pc.object_count) {
-        return;
-    }
+// what the probe draws of object i before the face's frustum: x selected
+// (LOD, not transparent, within the far distance), y first index, z index count.
+fn probe_select(i: u32) -> vec3<u32> {
     let o = objects[i];
-    if ((o.kind & BLEND_BIT) != 0u) {
-        return;
+    // The probe draws the closed sea plane over the submerged sites.
+    if ((o.kind & BLEND_BIT) != 0u || (o.kind & 255u) == 13u) {
+        return vec3<u32>(0u);
     }
     var first = o.first_index;
     var count = o.index_count;
@@ -86,17 +93,51 @@ fn probe_cull(@builtin(global_invocation_id) gid: vec3<u32>) {
     } else if (o.lod_role == 10u || o.lod_role == 11u) {
         // the camera's near/far switch (scene.rs LOD_LANDMARK_*).
         visible = (groups[o.lod_group].detailed == 1u) == (o.lod_role == 10u);
+    } else if (o.lod_role == 12u) {
+        if (distance(pc.cam.xyz, clamp(pc.cam.xyz, o.min, o.max)) > 120.) {
+            first = o.far_first_index;
+            count = o.far_index_count;
+        }
     } else if (o.lod_role == LOD_TERRAIN) {
         first = o.far_first_index;
         count = o.far_index_count;
     }
     if (count == 0u || !visible) {
-        return;
+        return vec3<u32>(0u);
     }
     let c = clamp(pc.cam.xyz, o.min, o.max);
-    if (distance(c, pc.cam.xyz) > pc.cam.w) {
+    let d = distance(c, pc.cam.xyz);
+    if (pc.guard_reach > 0.0 && d <= pc.guard_reach) {
+        atomicAdd(&counters[2], 1u);
+    }
+    if (d > pc.cam.w) {
+        return vec3<u32>(0u);
+    }
+    return vec3<u32>(1u, first, count);
+}
+
+fn in_planes(o: Object, base: u32) -> bool {
+    for (var p = 0u; p < 6u; p = p + 1u) {
+        let pl = pf.planes[base + p];
+        let v = select(o.min, o.max, pl.xyz >= vec3<f32>(0.0));
+        if (dot(pl.xyz, v) + pl.w < 0.0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+@compute @workgroup_size(64)
+fn probe_cull(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let i = gid.x;
+    if (i >= pc.object_count) {
         return;
     }
+    let s = probe_select(i);
+    if (s.x == 0u) {
+        return;
+    }
+    let o = objects[i];
     for (var p = 0u; p < 6u; p = p + 1u) {
         let pl = pc.planes[p];
         let v = select(o.min, o.max, pl.xyz >= vec3<f32>(0.0));
@@ -106,10 +147,29 @@ fn probe_cull(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let slot = atomicAdd(&counters[0], 1u);
     let b = slot * 5u;
-    draws[b] = count;
+    draws[b] = s.z;
     draws[b + 1u] = 1u;
-    draws[b + 2u] = first;
+    draws[b + 2u] = s.y;
     draws[b + 3u] = bitcast<u32>(o.base_vertex);
     draws[b + 4u] = i;
-    atomicAdd(&counters[1], count / 3u);
+    atomicAdd(&counters[1], s.z / 3u);
+}
+
+// the bounded list's exact count (bounds.rs): once a capture starts, what
+// each of its six faces will draw ([4 + face]), read back before the faces.
+@compute @workgroup_size(64)
+fn probe_count(@builtin(global_invocation_id) gid: vec3<u32>) {
+    let i = gid.x;
+    if (i >= pc.object_count) {
+        return;
+    }
+    if (probe_select(i).x == 0u) {
+        return;
+    }
+    let o = objects[i];
+    for (var f = 0u; f < 6u; f = f + 1u) {
+        if (in_planes(o, f * 6u)) {
+            atomicAdd(&counters[4u + f], 1u);
+        }
+    }
 }

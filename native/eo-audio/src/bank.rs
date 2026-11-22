@@ -1,8 +1,9 @@
 //! The sound bank: the clips the game plays, listed with their provenance in
 //! `native/assets/audio-manifest.json` (written by
 //! `native/tools/write-audio-manifest.mjs` from the automatic screen), read
-//! from the folder `EO_AUDIO_ROOT` names (no default) and refused unless
-//! each file's length and SHA-256 match the manifest.
+//! from `<repo>/external/audio` (git-ignored, filled by
+//! `scripts/setup-assets.py`) or the folder `EO_AUDIO_ROOT` names instead,
+//! and refused unless each file's length and SHA-256 match the manifest.
 //!
 //! Streaming or in memory is decided per clip by length: clips longer than
 //! `stream_over_s` (the ambience, rain and wind beds) stay on disk and are
@@ -18,7 +19,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 pub const MANIFEST_JSON: &str = include_str!("../../assets/audio-manifest.json");
-pub const ROOT_ENV: &str = "EO_AUDIO_ROOT";
+pub const ROOT_ENV: &str = eo_data::external::AUDIO.env;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct ManifestClip {
@@ -122,9 +123,14 @@ impl Bank {
         self.clips.get(id as usize)
     }
 
-    /// The root `EO_AUDIO_ROOT` names; None when it is not set or holds no copy.
+    /// The bank's folder this run: the one `EO_AUDIO_ROOT` names, else `<repo>/external/audio`.
+    pub fn folder() -> Option<PathBuf> {
+        eo_data::external::AUDIO.root()
+    }
+
+    /// The bank's folder ([`Bank::folder`]) when it holds a copy (its `MANIFEST.tsv`); else None.
     pub fn root_from_env() -> Option<PathBuf> {
-        let p = std::env::var_os(ROOT_ENV).filter(|v| !v.is_empty()).map(PathBuf::from)?;
+        let p = Self::folder()?;
         p.join("MANIFEST.tsv").is_file().then_some(p)
     }
 
@@ -259,4 +265,19 @@ pub fn decode_mono_i16<R: std::io::Read>(mut reader: hound::WavReader<R>, max_fr
         }
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The bank's folder is `<repo>/external/audio` unless EO_AUDIO_ROOT names another.
+    #[test]
+    fn folder_defaults_to_external() {
+        let repo = eo_data::DataPaths::discover().expect("the repository").repo_root;
+        match std::env::var_os(ROOT_ENV).filter(|v| !v.is_empty()) {
+            Some(v) => assert_eq!(Bank::folder(), Some(PathBuf::from(v))),
+            None => assert_eq!(Bank::folder(), Some(repo.join("external").join("audio"))),
+        }
+    }
 }

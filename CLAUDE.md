@@ -38,7 +38,8 @@ the two differ, AGENTS.md wins.
   change per bench path.
 - **Kill switches.** Every visual feature has a `--no-<feature>` switch that
   restores the previous output; a new feature adds one.
-- **Paths.** Never hard-code an absolute path; off-repository content is
-  found through environment variables.
+- **Paths.** Optional assets live in the git-ignored `external/` folder,
+  filled by `python3 scripts/setup-assets.py`; environment variables
+  override it. Never hard-code an absolute path.
 - **Neutral text.** Never name a commercial game, studio or publisher in any
   tracked file, commit or issue.

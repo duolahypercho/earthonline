@@ -1,0 +1,133 @@
+{
+  "source": "Furnished 21 Beaver Street Blender scene, fixed lamp, windows, architecture and furniture.",
+  "attribution": "Earth Online",
+  "license": "Project-authored lighting data",
+  "source_scene": {
+    "file": "21 Beaver - Fitted dining room.blend",
+    "sha256": "15ffbcf57cc8327d3326ba5a28b6fbf2ab043ff9c709dacaa881d87cd1531c50"
+  },
+  "build": "scripts/blender-buildings/bake_beaver_dining.py --install",
+  "house_sha256": "0f567a703707bf14d2e49fd9ee1a713422faa46109fd5b42f404f5ab6bd0dc50",
+  "parcel_extent": [
+    7,
+    13
+  ],
+  "receiver_height_m": 0.006799713380634785,
+  "lamp_power_w": 19.0,
+  "lamp_radius_m": 0.07800000160932541,
+  "lamp_parcel_xyz": [
+    3.1021952629089355,
+    1.9889029264450073,
+    6.5215325355529785
+  ],
+  "lamp_linear_rgb": [
+    1.0,
+    0.7799999713897705,
+    0.5600000023841858
+  ],
+  "source_key_rgb": [
+    3.0,
+    2.5199999809265137,
+    2.0399999618530273
+  ],
+  "reference_game_key_rgb": [
+    8.578525065436741,
+    6.391368085084845,
+    4.8897760046858645
+  ],
+  "diffuse_bounces": 4,
+  "seed": 73,
+  "measurements": {
+    "pendant": {
+      "resolution": 512,
+      "samples": 1536,
+      "maximum": 0.15331809222698212,
+      "mean": [
+        0.011255139485001564,
+        0.007660167757421732,
+        0.004650285933166742
+      ]
+    },
+    "pendant-direct": {
+      "resolution": 512,
+      "samples": 512,
+      "maximum": 0.06790615618228912,
+      "mean": [
+        0.0054960427805781364,
+        0.004286950454115868,
+        0.003077789908275008
+      ]
+    },
+    "uniform-sky": {
+      "resolution": 512,
+      "samples": 512,
+      "maximum": 0.1712336540222168,
+      "mean": [
+        0.004348282236605883,
+        0.0038653253577649593,
+        0.0033663760405033827
+      ]
+    },
+    "clear-sky": {
+      "resolution": 512,
+      "samples": 512,
+      "maximum": 0.3023492395877838,
+      "mean": [
+        0.0071393284015357494,
+        0.01177474670112133,
+        0.01863541640341282
+      ]
+    },
+    "front-25": {
+      "resolution": 256,
+      "samples": 384,
+      "maximum": 0.2874847948551178,
+      "mean": [
+        0.010307594202458858,
+        0.009438828565180302,
+        0.00881582498550415
+      ]
+    },
+    "front-57": {
+      "resolution": 256,
+      "samples": 384,
+      "maximum": 0.05778362229466438,
+      "mean": [
+        0.0015796193620190024,
+        0.0013593931216746569,
+        0.0011704827193170786
+      ]
+    },
+    "rear-25": {
+      "resolution": 256,
+      "samples": 384,
+      "maximum": 0.2826145589351654,
+      "mean": [
+        0.014617864042520523,
+        0.013218400999903679,
+        0.012329986318945885
+      ]
+    },
+    "rear-57": {
+      "resolution": 256,
+      "samples": 384,
+      "maximum": 0.05368034169077873,
+      "mean": [
+        0.001477991696447134,
+        0.0012435452081263065,
+        0.00102217064704746
+      ]
+    }
+  },
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/fitted-dining/dining-floor-light.png",
+  "bytes": 587246,
+  "sha256": "4e81bf067d16fe4135e024961f879b72d33f8821d00479eec20732a81aeb5abf",
+  "fixture_units_per_source_unit": 2.6080094371717353,
+  "pages": [
+    "Lamp RGB in native linear units (divided by two); direct red lamp radiance in alpha at the same scale.",
+    "Clear sky RGB relative to the source key; alpha packs four 256 by 128 indirect solar fields above a 512 by 256 diffuse sky field."
+  ],
+  "encoding": "Square root of diffuse exitant radiance on a neutral white Lambertian receiver.",
+  "fitted_geometry_sha256": "caa9e62c6b298a21e00f2d33fab23e1690080074c7eb4b023236f5480b21646d",
+  "install": "scripts/blender-buildings/cook_beaver_fitted_room.py --lighting"
+}

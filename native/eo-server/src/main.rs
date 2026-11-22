@@ -1,7 +1,8 @@
 //! eo-server: the headless authoritative server, its bot clients and its benches.
 //!
 //!   eo-server [--bind 127.0.0.1:47800] [--snapshot-hz 20] [--budget-kbps 96] [--net-sim RTT,JITTER,LOSS] [--no-streets]
-//!   eo-server bots --connect ADDR --count N [--around X,Z,R] [--drive 0.5] [--drive-mps 12] [--seconds S] [--threads 4]
+//!   eo-server bots --connect ADDR --count N [--around X,Z,R | --landmarks] [--drive 0.5] [--drive-mps 12] [--seconds S] [--threads 4]
+//!       (--landmarks: the bots walk up to the landmark viewpoints, emote, and move on by fast travel)
 //!   eo-server bench [--bots 1,16,64,256] [--seconds 20] [--warmup 8] [--out DIR]
 //!   eo-server bandwidth [--seconds 20] [--out DIR]
 //!   eo-server predict [--seconds 40] [--net-sim 80,20,2] [--out DIR]
@@ -12,13 +13,18 @@
 //! (the ground heights; default: they follow the plan); a client on other
 //! heights is refused too.
 //!
+//! The server forms (and `bots`) also take `--structures` / `--no-structures`
+//! and `--tunnels` / `--no-tunnels` (the grade-separated roads; tunnels only
+//! with structures; the last of a switch and its `--no-` form wins), as
+//! eo-app does; a client or bot with other ones is refused at the handshake.
+//!
 //! Everything binds 127.0.0.1 unless told otherwise; nothing here opens a
 //! firewall port or changes a system setting.
 
 use anyhow::{Result, anyhow};
 use eo_net::link::Conditions;
 use eo_server::bots::{BotConfig, BotRun, RoadGraph, Spawn, bot_roads};
-use eo_server::{Server, ServerConfig, load, sys};
+use eo_server::{Server, ServerConfig, load_with, sys};
 use serde_json::json;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -51,6 +57,15 @@ impl Flags {
     fn num<T: std::str::FromStr>(&self, name: &str, d: T) -> T {
         self.get(name).and_then(|v| v.parse().ok()).unwrap_or(d)
     }
+    /// `on` / `off` (a switch and its `--no-` form): the last one given wins.
+    fn switch(&self, on: &str, off: &str, d: bool) -> bool {
+        self.args.iter().rev().find(|a| *a == on || *a == off).map_or(d, |a| a == on)
+    }
+    /// `--structures` / `--no-structures` and `--tunnels` / `--no-tunnels`
+    /// (tunnels only with structures), as eo-app reads them.
+    fn structures(&self) -> Option<eo_structures::StructureOptions> {
+        self.switch("--structures", "--no-structures", false).then(|| eo_structures::StructureOptions { tunnels: self.switch("--tunnels", "--no-tunnels", false) })
+    }
 }
 
 fn out_dir(f: &Flags) -> std::path::PathBuf {
@@ -68,6 +83,7 @@ fn server_config(f: &Flags) -> Result<ServerConfig> {
         c.conditions = Conditions::parse(&s).ok_or_else(|| anyhow!("--net-sim RTT,JITTER,LOSS"))?;
     }
     c.streets = !f.has("--no-streets");
+    c.structures = f.structures();
     Ok(c)
 }
 
@@ -105,7 +121,7 @@ fn main() -> Result<()> {
 fn serve_main(f: &Flags) -> Result<()> {
     let cfg = server_config(f)?;
     let t = Instant::now();
-    let (game, source) = load(cfg.streets)?;
+    let (game, source) = load_with(cfg.streets, cfg.structures)?;
     eprintln!("eo-server: world loaded in {:.1} s", t.elapsed().as_secs_f64());
     let mut server = Server::start(cfg, game, source)?;
     eprintln!("eo-server: listening on {} (UDP)", server.addr());
@@ -146,9 +162,18 @@ fn bot_config(f: &Flags, server: std::net::SocketAddr) -> Result<BotConfig> {
             let v: Vec<f64> = s.split(',').map(|x| x.trim().parse()).collect::<Result<_, _>>()?;
             Spawn::Around { x: v[0], z: v[1], radius: v.get(2).copied().unwrap_or(100.0) }
         }
+        None if f.has("--landmarks") => Spawn::Landmarks,
         None => Spawn::Spread,
     };
+    let visits = if matches!(spawn, Spawn::Landmarks) {
+        let paths = eo_data::DataPaths::discover()?;
+        let city = eo_data::City::load(&paths)?;
+        eo_server::bots::landmark_visits(&eo_data::geo::GeoFrame::of_city(&city.meta), f.num("--count", 16usize), f.num("--seed", 7u64))?
+    } else {
+        vec![]
+    };
     Ok(BotConfig {
+        visits,
         server,
         count: f.num("--count", 16usize),
         threads: f.num("--threads", 4usize),
@@ -161,6 +186,7 @@ fn bot_config(f: &Flags, server: std::net::SocketAddr) -> Result<BotConfig> {
             None => Conditions::NONE,
         },
         send_hz: f.num("--send-hz", 30.0),
+        structures: f.structures(),
     })
 }
 
@@ -197,6 +223,12 @@ struct Measured {
 
 /// Run a server with `bots` (in a child process) and measure it.
 fn measure(cfg: ServerConfig, game: Arc<eo_net::game::GameWorld>, source: Arc<eo_sim::native::NativeSource>, bot_args: &[String], warmup_s: f64, seconds: f64, label: &str) -> Result<Measured> {
+    // the bots claim the world's own grade-separated roads (else the handshake refuses them).
+    let structures: Vec<&str> = match game.structures {
+        Some(o) if o.tunnels => vec!["--structures", "--tunnels"],
+        Some(_) => vec!["--structures"],
+        None => vec![],
+    };
     let mut server = Server::start(cfg.clone(), game, source)?;
     let addr = server.addr();
     let exe = std::env::current_exe()?;
@@ -205,6 +237,7 @@ fn measure(cfg: ServerConfig, game: Arc<eo_net::game::GameWorld>, source: Arc<eo
         .arg("--connect")
         .arg(addr.to_string())
         .args(bot_args)
+        .args(structures)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .spawn()?;
@@ -320,7 +353,7 @@ fn bench_main(f: &Flags) -> Result<()> {
     let warmup: f64 = f.num("--warmup", 8.0);
     let cfg = server_config(f)?;
     let t = Instant::now();
-    let (game, source) = load(cfg.streets)?;
+    let (game, source) = load_with(cfg.streets, cfg.structures)?;
     eprintln!("bench: world loaded in {:.1} s", t.elapsed().as_secs_f64());
     let mut reports = vec![];
     for n in counts {
@@ -356,7 +389,7 @@ fn bench_main(f: &Flags) -> Result<()> {
 fn bandwidth_main(f: &Flags) -> Result<()> {
     let seconds: f64 = f.num("--seconds", 20.0);
     let cfg = server_config(f)?;
-    let (game, source) = load(cfg.streets)?;
+    let (game, source) = load_with(cfg.streets, cfg.structures)?;
     let mut reports = vec![];
     let at = eo_data::groundscale::plan([1539.0, -366.0]); // the spawn on the scaled plan
     let around = format!("{},{},80", at[0], at[1]);
@@ -394,7 +427,7 @@ fn bandwidth_main(f: &Flags) -> Result<()> {
 fn predict_main(f: &Flags) -> Result<()> {
     let seconds: f64 = f.num("--seconds", 40.0);
     let cfg = server_config(f)?;
-    let (game, source) = load(cfg.streets)?;
+    let (game, source) = load_with(cfg.streets, cfg.structures)?;
     let mut reports = vec![];
     let profiles: Vec<(String, Conditions)> = match f.get("--net-sim") {
         Some(s) => vec![(format!("net_sim_{s}"), Conditions::parse(&s).ok_or_else(|| anyhow!("--net-sim"))?)],

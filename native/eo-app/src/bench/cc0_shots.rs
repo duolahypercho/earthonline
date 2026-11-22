@@ -4,7 +4,8 @@
 //! 260 at noon and golden hour, sidewalk_walk frame 195, one close wall per
 //! finish class (fix3's walls), the asphalt, kerb and sidewalk up close, a
 //! plaza, a park, a beach, the seawalls, a pier deck and the city from above.
-//! `EO_CC0_SHOTS=a,b` limits the set. Files: `capture-cc0-<label>-<shot>.png`.
+//! `EO_CC0_SHOTS=a,b` limits the set; `EO_CC0_SHOTS_HOUR=H` takes every card
+//! at that hour. Files: `capture-cc0-<label>-<shot>.png`.
 
 use super::{EYE_HEIGHT_M, Segment, capture, kit_street, on_plan, settle_p, yaw_of};
 use crate::{Args, World};
@@ -190,10 +191,13 @@ pub fn run(
     let to = on_plan(Vec3::new(1800.0, 0.0, -1200.0)) - from;
     let above = Camera { far: far.max(9000.0), ..Camera::new(from, yaw_of(to), (to.y / Vec3::new(to.x, 0.0, to.z).length()).atan(), aspect) };
     list.push(("above-noon".into(), above, 12.0, "the city from over the western hills toward downtown".into()));
+    // `EO_CC0_SHOTS_HOUR=H`: every card at that hour (unset: each card's own).
+    let hour_over = std::env::var("EO_CC0_SHOTS_HOUR").ok().and_then(|v| v.parse::<f64>().ok());
     for (name, cam, hour, what) in list {
         if !want(&name) {
             continue;
         }
+        let hour = hour_over.unwrap_or(hour);
         renderer.look.set_time_of_day(hour);
         settle_p(ctx, renderer, world, models, Some(&mut *props), &cam, 600.0)?;
         crate::props::sync_parked(ctx, renderer, props, agents, &cam);

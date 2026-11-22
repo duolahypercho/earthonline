@@ -28,6 +28,23 @@ pub const SPIKE_PERIOD: u64 = 1023;
 pub const SPIKE_MS: f64 = 1.8;
 /// Tiny submissions are made only this close to the predicted spike.
 pub const HUNT_WINDOW: u64 = 128;
+
+/// The frame-budget track's switch names: `--no-gg3-perf` (its roll-up),
+/// `--no-gg3` (every round-3 track's roll-up at once) and the parts:
+/// `--no-draw-ranges` (the fixed-slot draw lists issued whole, `draw_ranges`).
+/// eo-app accepts them; this crate reads them.
+pub const GG3_SWITCHES: &[&str] = &["--no-gg3-perf", "--no-gg3", "--no-draw-ranges"];
+
+/// whether a switch of this track's is on the command line (`name` or a roll-up).
+fn perf_switch_off(name: &str) -> bool {
+    std::env::args().any(|a| a == name || a == "--no-gg3-perf" || a == "--no-gg3")
+}
+
+/// The fixed-slot lists drawn in conservative ranges (`--no-draw-ranges`: whole, as before).
+pub fn draw_ranges_on() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| !perf_switch_off("--no-draw-ranges"))
+}
 /// Tiny submissions made past the predicted spike before giving up (the
 /// count drifts by one now and then: a submission made outside `submit`).
 const LATE_SLACK: u64 = 2;

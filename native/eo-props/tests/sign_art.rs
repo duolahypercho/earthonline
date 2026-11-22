@@ -21,10 +21,10 @@ fn tmp(name: &str) -> PathBuf {
     d
 }
 
-/// The art when `EO_SIGN_ART_ROOT` holds the downloads; None (the test says so) otherwise.
+/// The art when its folder (`external/sign-art`, or `EO_SIGN_ART_ROOT`) holds the downloads; None (the test says so) otherwise.
 fn art_here() -> Option<SignArt> {
     let Some(root) = art::root() else {
-        eprintln!("skipped: EO_SIGN_ART_ROOT is not set");
+        eprintln!("skipped: no sign art folder: {}", eo_data::external::SIGN_ART.looked_in());
         return None;
     };
     match SignArt::load(&root) {
@@ -33,6 +33,16 @@ fn art_here() -> Option<SignArt> {
             eprintln!("skipped: no verified sign art at {} ({e:#})", root.display());
             None
         }
+    }
+}
+
+/// The art's folder is `<repo>/external/sign-art` unless EO_SIGN_ART_ROOT names another.
+#[test]
+fn art_folder_defaults_to_external() {
+    let repo = eo_data::DataPaths::discover().expect("the repository").repo_root;
+    match std::env::var_os("EO_SIGN_ART_ROOT").filter(|v| !v.is_empty()) {
+        Some(v) => assert_eq!(art::root(), Some(PathBuf::from(v))),
+        None => assert_eq!(art::root(), Some(repo.join("external").join("sign-art"))),
     }
 }
 

@@ -1,0 +1,45 @@
+{
+  "source": "scripts/blender-buildings/bake_beaver_reflections.py, ray cast against terrace.glb",
+  "house_sha256": "0f567a703707bf14d2e49fd9ee1a713422faa46109fd5b42f404f5ab6bd0dc50",
+  "license": "MIT",
+  "attribution": "Earth Online contributors",
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/kitchen-reflections.png",
+  "sha256": "a3118f9e0c8f3dd95b322f6e639235d905f60d7d3020ca67740b3cfbaba4948b",
+  "bytes": 267802,
+  "probes": [
+    {
+      "at": [
+        1.414,
+        0.8188000000000001,
+        11.9088
+      ],
+      "min": [
+        1.16,
+        0.0,
+        11.823
+      ],
+      "max": [
+        2.24,
+        1.9964,
+        12.8214
+      ]
+    },
+    {
+      "at": [
+        0.8638560000000001,
+        1.0212,
+        10.092
+      ],
+      "min": [
+        0.088224,
+        0.0,
+        9.408
+      ],
+      "max": [
+        0.898176,
+        1.2604000000000002,
+        10.704
+      ]
+    }
+  ]
+}

@@ -138,7 +138,20 @@ fn tower_stack(height: f64, random: &mut Rng) -> Stack {
 }
 
 /// The glazed elevations (edge indices), longest first, capped at four.
+///
+/// With the facade typology on (typology.rs), every face that is not on a lot
+/// line is glazed (`typology::glaze_every_face`): a tower is windowed on all
+/// its exposed sides; only a party wall stands blind. The port's cap of four
+/// left a many-sided tower (a chamfered or stepped plan, 12-48 edges) with
+/// twenty-storey blank stone faces between its four longest sides.
 fn glazed_edges(frame: &Frame) -> Vec<usize> {
+    if crate::typology::glaze_every_face() {
+        let mut ordered: Vec<&Edge> = frame.edges.iter().filter(|e| !e.party && e.length >= MIN_FALLBACK_EDGE_M).collect();
+        ordered.sort_by(|a, b| b.length.partial_cmp(&a.length).unwrap_or(std::cmp::Ordering::Equal).then(a.index.cmp(&b.index)));
+        if !ordered.is_empty() {
+            return ordered.into_iter().map(|e| e.index).collect();
+        }
+    }
     let mut ordered: Vec<&Edge> = frame.edges.iter().filter(|e| !e.party && e.length >= MIN_FALLBACK_EDGE_M).collect();
     ordered.sort_by(|a, b| {
         let d = b.length - a.length;
@@ -210,9 +223,30 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
     let drawn_crown = CROWN_FINISHES[(random.next() * CROWN_FINISHES.len() as f64).floor() as usize];
     let drawn_base = BASE_FINISHES[(random.next() * BASE_FINISHES.len() as f64).floor() as usize];
     let prewar = (c.template == "downtown-tower" && c.variant == "prewar") || c.template == "art-deco-midrise";
-    let family_key = if prewar { "prewar-masonry" } else { drawn_family };
-    let fam = family(family_key);
-    let crown_finish = if prewar { "cast-stone" } else { drawn_crown };
+    let port_family = if prewar { "prewar-masonry" } else { drawn_family };
+    // The facade system per tower (typology.rs; off: the family's own module).
+    let system = crate::typology::tower(c, port_family);
+    let family_key = system.as_ref().map(|t| t.family).unwrap_or(port_family);
+    let mut fam = family(family_key);
+    if let Some(t) = &system {
+        fam = Family {
+            wall: t.wall,
+            spandrel: t.spandrel,
+            glass: t.glass,
+            reveal: t.reveal,
+            spandrel_band: t.spandrel_band,
+            pier_width: t.pier_width,
+            pier_projection: t.pier_projection,
+            pier_spacing: t.pier_spacing,
+            band_projection: t.band_projection,
+        };
+    }
+    // A granite-clad tower (typology.rs `granite-bay`) carries its stone to the
+    // top: the crown band and the coping in the tower's own granite, not a
+    // light cast stone (555 California's parapet and roof edge are the same
+    // dark carnelian granite as its bays).
+    let granite = system.as_ref().is_some_and(|t| t.system == "granite-bay");
+    let crown_finish = if granite { fam.wall } else if prewar { "cast-stone" } else { drawn_crown };
     let base_finish = if prewar { "limestone-ashlar" } else { drawn_base };
     let retail = c.has_retail_ground;
 
@@ -243,7 +277,8 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
     let mut ground_plan = Map::new();
     for edge in &frame.edges {
         if !facades.contains(&edge.index) {
-            by_edge.insert(edge.index.to_string(), json!("blind"));
+            // A blind side on a lot line (typology.rs on) is a party wall in its own finish: exposed brick on a prewar tower, cast concrete on a later one.
+            by_edge.insert(edge.index.to_string(), if system.is_some() && edge.party { json!({ "window": "blind", "wallSlot": "party" }) } else { json!("blind") });
             continue;
         }
         let end_pier = 1.1f64.min(0.1f64.max(edge.length * 0.05));
@@ -290,7 +325,7 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
     }
 
     let storeys: Vec<J> = stack.storeys.iter().map(|h| json!({ "height": h })).collect();
-    json!({
+    let mut spec = json!({
         "id": format!("sf-archetype-{}", c.seed),
         "seed": c.seed,
         "height": c.height,
@@ -302,10 +337,10 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
             "wall": fam.wall,
             "spandrel": fam.spandrel,
             "parapet": crown_finish,
-            "coping": "cast-stone",
+            "coping": if granite { fam.wall } else { "cast-stone" },
             "base": base_finish,
             "bulkhead": base_finish,
-            "trim": "cast-stone-trim",
+            "trim": system.as_ref().map(|t| t.trim).unwrap_or("cast-stone-trim"),
             "glass": fam.glass,
             "frame": "anodized-aluminium",
             "storefront": "anodized-aluminium",
@@ -342,8 +377,24 @@ pub fn spec(c: &Classified, frame: &Frame) -> J {
             "groundPlan": ground_plan,
             "arcade": prewar,
             "penthouse": frame.polygon.len() <= 12 && frame.area >= 220.0,
+            "system": system.as_ref().map(|t| json!(t.system)).unwrap_or(J::Null),
+            "stoneTints": system.as_ref().and_then(|t| t.stone_tint.map(|k| {
+                let mut m = Map::new();
+                for name in [t.wall, t.spandrel, t.trim] {
+                    if !name.starts_with("glass") && !matches!(name, "anodized-aluminium" | "painted-steel-mid" | "perforated-metal" | "painted-steel-light") {
+                        m.insert(name.to_string(), json!(k));
+                    }
+                }
+                J::Object(m)
+            })).unwrap_or(J::Null),
         },
-    })
+    });
+    // the party walls' finish (typology.rs on): exposed brick on a prewar tower, cast concrete on a later one.
+    if system.is_some() {
+        let party = if family_key == "prewar-masonry" { "brick-common-bond" } else { "concrete-precast" };
+        set(obj_mut(&mut spec, "materials"), "party", json!(party));
+    }
+    spec
 }
 
 /// `archInfill` from stucco-row.js (private copy, see the file comment).
@@ -578,6 +629,34 @@ pub fn detail(plan: &mut Plan, frame: &Frame, spec: &J) {
             "facadeEdges": meta.at("facadeEdges"),
             "entryEdge": meta.at("entryEdge"),
             "garage": garage,
+            "system": meta.at("system"),
         }),
     );
+    // the stone's per-tower tone (typology.rs), drawn after the paint (pipeline.rs `drawn_materials`).
+    if let Some(t) = meta.get_nn("stoneTints").filter(|v| v.is_object()) {
+        plan.extra.insert("stoneTints".into(), t.clone());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::frame::{footprint_frame, FrameOptions};
+
+    #[test]
+    fn a_many_sided_tower_is_glazed_on_every_face_off_a_lot_line() {
+        if !crate::typology::glaze_every_face() {
+            return;
+        }
+        // A chamfered 40 m square: four 30 m sides and four 7 m corners.
+        let pts = [(-15.0, -20.0), (15.0, -20.0), (20.0, -15.0), (20.0, 15.0), (15.0, 20.0), (-15.0, 20.0), (-20.0, 15.0), (-20.0, -15.0)];
+        let polygon: Vec<P2> = pts.iter().map(|&(x, z)| P2 { x, z }).collect();
+        let mut frame = footprint_frame(&polygon, 0, &FrameOptions::default()).expect("frame");
+        assert_eq!(frame.edges.len(), 8);
+        assert_eq!(glazed_edges(&frame).len(), 8, "the port's cap of four left the corners blind");
+        frame.edges[2].party = true;
+        let g = glazed_edges(&frame);
+        assert_eq!(g.len(), 7);
+        assert!(!g.contains(&2), "a party wall stays blind");
+    }
 }

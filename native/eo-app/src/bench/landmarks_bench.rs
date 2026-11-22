@@ -164,7 +164,87 @@ pub fn segments(world: &World, frames: usize, aspect: f32, far: f32) -> Vec<Segm
         }
         None => eprintln!("landmarks: Union Square not found; the park path left out"),
     }
+    for w in &GROUND_WALKS {
+        if named_on_command_line(w.name) {
+            out.push(ground_walk(world, w, frames, aspect, far));
+        }
+    }
     out
+}
+
+/// A short walk over open ground at a Golden Gate photo spot (the vegetation,
+/// ground, rock and water costs where they are drawn): `WALK_GROUND_M` from
+/// `from` (game x, z; the eye on the drawn ground) along `dir`, looking along
+/// it with a +-20 degree sweep. Not in the default set: a walk runs only when
+/// `--segments` names it.
+struct GroundWalk {
+    name: &'static str,
+    what: &'static str,
+    from: [f32; 2],
+    dir: [f32; 2],
+}
+
+/// Metres walked on a ground walk.
+const WALK_GROUND_M: f32 = 60.0;
+
+/// A heading (degrees, 0 north (-z), 90 east (+x)) as a ground direction (x, z).
+const fn heading(sin: f32, cos: f32) -> [f32; 2] {
+    [sin, -cos]
+}
+
+/// The four walks at the photo views' eyes (`views-r3.json`): the headland
+/// along its camera's forward (0.601, 0, 0.795), the others along their
+/// cameras' headings (sin and cos of 343, 9 and 314 degrees).
+const GROUND_WALKS: [GroundWalk; 4] = [
+    GroundWalk { name: "headland", what: "Battery Spencer's slab on the Marin headland, toward the bridge", from: [-6836.85, -6849.47], dir: [0.601, 0.795] },
+    GroundWalk { name: "bluff", what: "the bluff east of the south anchorage, heading 343", from: [-6093.05, -4174.17], dir: heading(-0.292_371_7, 0.956_304_8) },
+    GroundWalk { name: "baker", what: "the north end of Baker Beach, heading 9", from: [-6752.5, -3033.87], dir: heading(0.156_434_5, 0.987_688_3) },
+    GroundWalk { name: "crissy_beach", what: "the Crissy Field beach, heading 314", from: [-5040.51, -3745.69], dir: heading(-0.719_339_8, 0.694_658_4) },
+];
+
+/// Whether `--segments` lists `name` (the ground walks are opt-in).
+fn named_on_command_line(name: &str) -> bool {
+    let a: Vec<String> = std::env::args().collect();
+    a.windows(2).any(|w| w[0] == "--segments" && w[1].split(',').any(|s| s.trim() == name))
+}
+
+fn ground_walk(world: &World, w: &GroundWalk, frames: usize, aspect: f32, far: f32) -> Segment {
+    let dir = Vec3::new(w.dir[0], 0.0, w.dir[1]).normalize();
+    let from = Vec3::new(w.from[0], 0.0, w.from[1]);
+    let eyes: Vec<Vec3> = (0..=1024)
+        .map(|i| {
+            let p = from + dir * WALK_GROUND_M * i as f32 / 1024.0;
+            Vec3::new(p.x, ground(world, p.x, p.z).max(sea()) + EYE_HEIGHT_M, p.z)
+        })
+        .collect();
+    let (a, b) = (eyes[0], eyes[1024]);
+    let target = from + dir * 2000.0;
+    walk_segment(
+        w.name,
+        format!("eye {EYE_HEIGHT_M} m above the drawn ground at {}, {WALK_GROUND_M} m from ({:.1}, {:.1}, {:.1}) to ({:.1}, {:.1}, {:.1}), looking along the walk with a +-20 degree sweep", w.what, a.x, a.y, a.z, b.x, b.y, b.z),
+        eyes,
+        target,
+        20.0,
+        frames,
+        aspect,
+        far,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ground_walk_headings_are_unit_and_point_where_named() {
+        let yaw = |d: [f32; 2]| d[0].atan2(-d[1]).to_degrees().rem_euclid(360.0);
+        for (w, deg) in GROUND_WALKS.iter().zip([142.9f32, 343.0, 9.0, 314.0]) {
+            // the headland's is its camera forward's level part (0.997 long; the walk normalizes it).
+            let n = (w.dir[0] * w.dir[0] + w.dir[1] * w.dir[1]).sqrt();
+            assert!((n - 1.0).abs() < 5e-3, "{}: |dir| {n}", w.name);
+            assert!((yaw(w.dir) - deg).abs() < 0.1, "{}: heading {} not {deg}", w.name, yaw(w.dir));
+        }
+    }
 }
 
 /// A green's area centroid and its south-west-most corner (sf-lots-parks), by the JS carpet's id.
@@ -252,6 +332,56 @@ pub fn capture_cameras(world: &World, aspect: f32, far: f32) -> Vec<(&'static st
     let eye = Vec3::new(landing.x + 1500.0 * g, 1600.0, landing.z + 1900.0 * g);
     out.push(("bay-aerial", Camera { far: far.max(9000.0), ..look_at(eye, Vec3::new(w3.x - 700.0 * g, 0.0, w3.z + 200.0 * g), aspect, far) }, "the bay, the Bay Bridge and the city front from 1.6 km up".to_string()));
     out.extend(landmarks2_cameras(world, aspect, far));
+    out.extend(golden_gate_spots(world, aspect, far));
+    out
+}
+
+/// Camera far plane of the Golden Gate views that look the length of the
+/// strait or across the bay to the city.
+const LONG_VIEW_FAR_M: f32 = 14_000.0;
+
+/// The Golden Gate from the places it is photographed from. Each place is an
+/// offset in surveyed metres (x east, z south) from the south tower, laid on
+/// the scaled plan; the shore eyes are stepped onto the shore field.
+fn golden_gate_spots(world: &World, aspect: f32, far: f32) -> Vec<(&'static str, Camera, String)> {
+    let mut out = vec![];
+    let gg = &eo_landmarks::LandmarksJs::get().golden_gate;
+    let (south, mid) = golden_gate();
+    let g = super::gsf();
+    let dim = |k: &str| gg.dimensions[k].as_f64().unwrap_or(0.0) as f32;
+    let (deck_y, top_y) = (sea() + dim("roadwayAtTowerM"), sea() + dim("towerAboveWaterM"));
+    let off = |dx: f32, dz: f32| south + Vec3::new(dx, 0.0, dz) * g;
+    let stand = |q: Vec3| Vec3::new(q.x, ground(world, q.x, q.z).max(sea()) + EYE_HEIGHT_M, q.z);
+    let north = south + (mid - south) * 2.0;
+
+    // The shore east of the south anchorage, 10 m inland of the water: the arch, the side span and the south tower from below.
+    if let Some(q) = shore_point(world, off(260.0, 487.0), Vec3::NEG_Z, 10.0) {
+        let at = south + (v2(gg.supports["archNorth"].centre) - south) * 0.5;
+        out.push(("golden-gate-fort-point", look_at(stand(q), Vec3::new(at.x, deck_y, at.z), aspect, far), "the Golden Gate's south tower and side span from the shore east of the south anchorage, eye 1.7 m".to_string()));
+    }
+    // The shore at the west end of Crissy Field, about 870 m from the south tower: the whole bridge.
+    if let Some(q) = shore_point(world, off(606.0, 622.0), Vec3::NEG_Z, 4.0) {
+        out.push(("golden-gate-wharf", look_at(stand(q), Vec3::new(south.x, deck_y, south.z), aspect, far), "the Golden Gate from the shore at the west end of Crissy Field, eye 1.7 m".to_string()));
+    }
+    // Baker Beach, 2 km south-south-west of the south tower: the bridge end on, through a long lens.
+    if let Some(q) = shore_point(world, off(-430.0, 2010.0), Vec3::NEG_X, 12.0) {
+        let at = south + (mid - south) * 0.6;
+        let cam = Camera { fov_y_deg: 20.0, far: far.max(LONG_VIEW_FAR_M), ..look_at(stand(q), Vec3::new(at.x, deck_y, at.z), aspect, far) };
+        out.push(("golden-gate-baker-beach", cam, "the Golden Gate from the sand of Baker Beach, eye 1.7 m, a 20 degree lens".to_string()));
+    }
+    // The bluff east of the south anchorage, above the shore road: along the bridge's east side.
+    {
+        let eye = stand(off(130.0, 560.0));
+        out.push(("golden-gate-bluff", look_at(eye, Vec3::new(south.x, deck_y + 40.0, south.z), aspect, far.max(LONG_VIEW_FAR_M)), "the Golden Gate's arch, side span and towers from the bluff east of its south anchorage, eye 1.7 m over the ground".to_string()));
+    }
+    // Over the Marin headland north-west of the north tower, level with the
+    // tower tops (the far terrain is not sampled here): the bridge and the city behind it.
+    {
+        let e = off(-343.0, -1536.0);
+        let at = north + (mid - north) * 0.5;
+        let cam = look_at(Vec3::new(e.x, top_y, e.z), Vec3::new(at.x, deck_y, at.z), aspect, far.max(LONG_VIEW_FAR_M));
+        out.push(("golden-gate-headland", cam, format!("the Golden Gate and the city from over the Marin headland north-west of the north tower, eye {top_y:.0} m (the tower tops)")));
+    }
     out
 }
 

@@ -9,8 +9,13 @@ publish = false
 anyhow = "1.0.104"
 earcut = "0.4.12"
 eo-data = { path = "../eo-data" }
+eo-landmarks = { path = "../eo-landmarks" } # structures: the landmark bridges' decks
 eo-street = { path = "../eo-street" }
+eo-structures = { path = "../eo-structures" } # structures: grade-separated roads (`--structures`)
 glam = "0.34.3"
 rapier3d = { version = "0.36.1", features = ["enhanced-determinism"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+
+[dev-dependencies]
+eo-landmarks = { path = "../eo-landmarks" } # tests: the real landmark decks (access.rs)

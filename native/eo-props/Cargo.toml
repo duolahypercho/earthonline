@@ -9,6 +9,8 @@ publish = false
 anyhow = "1.0.104"
 eo-data = { path = "../eo-data" }
 eo-street = { path = "../eo-street" }
+eo-structures = { path = "../eo-structures" } # structures: decks the props keep clear of (`--structures`)
+eo-landmarks = { path = "../eo-landmarks" } # structures: the landmark deck luminaire rule (head height, pitch)
 flate2 = "1.1.11"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"

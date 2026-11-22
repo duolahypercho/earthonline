@@ -6,7 +6,10 @@
 // every group's level): a building casts at exactly the level it is drawn.
 // Casters: buildings, Blender model parts and kit buildings (and any kind
 // added later); not the ground (terrain, roads, sea, the street surface and
-// its paint: kinds 1, 2, 3, 6, 7 receive only), and nothing transparent.
+// its paint: kinds 1, 2, 3, 6, 7 receive only; a grade-separated road's deck
+// surface and paint, kind 11, likewise), and nothing transparent. A
+// grade-separated road's concrete (kind 12) casts at the level its tile's
+// group shows.
 
 struct Object {
     min: vec3<f32>,
@@ -34,11 +37,22 @@ struct Group {
 
 struct ShadowCull {
     planes: array<vec4<f32>, 18>,
+    camera: vec4<f32>,
     object_count: u32,
     compact: u32,
     // bit c: cascade c is refreshed this frame
     mask: u32,
     pad1: u32,
+    // the bounded lists' guard (bounds.rs, look.rs): the light basis, the eye
+    // in it (w 1: count the guard), per cascade the box round the eye (x half
+    // side, y reach below the eye along the light, z above it).
+    light: array<vec4<f32>, 3>,
+    eye_l: vec4<f32>,
+    guard: array<vec4<f32>, 3>,
+    // the wide guard: per cascade its own box grown by what a small turn moves
+    // it (x, y centre, z half side; then z from, to), light space
+    wide: array<vec4<f32>, 3>,
+    wide_z: array<vec4<f32>, 3>,
 };
 
 const LOD_NEAR: u32 = 1u;
@@ -46,14 +60,44 @@ const LOD_FAR: u32 = 2u;
 const LOD_TERRAIN: u32 = 3u;
 const LOD_KIT_NEAR: u32 = 4u;
 const LOD_KIT_BOX: u32 = 6u;
+const LOD_STREET_NEAR: u32 = 7u;
 const BLEND_BIT: u32 = 256u;
 
 @group(0) @binding(0) var<uniform> sp: ShadowCull;
 @group(0) @binding(1) var<storage, read> objects: array<Object>;
 @group(0) @binding(2) var<storage, read> groups: array<Group>;
 @group(0) @binding(3) var<storage, read_write> draws: array<u32>;
-// [0..3) commands per cascade, [3..6) triangles per cascade
-@group(0) @binding(4) var<storage, read_write> counters: array<atomic<u32>, 8>;
+// [0..3) commands per cascade, [3..6) triangles per cascade, [6..8) pad,
+// [8..11) per cascade its casters in the ring guard box, [11..14) in the wide
+// guard box (bounds.rs), [14..16) pad
+@group(0) @binding(4) var<storage, read_write> counters: array<atomic<u32>, 16>;
+
+// an object's box in light space: centre and half extents.
+fn light_box(o: Object) -> array<vec3<f32>, 2> {
+    let ctr = (o.min + o.max) * 0.5;
+    let ext = (o.max - o.min) * 0.5;
+    let lx = sp.light[0].xyz;
+    let ly = sp.light[1].xyz;
+    let lz = sp.light[2].xyz;
+    return array<vec3<f32>, 2>(vec3<f32>(dot(ctr, lx), dot(ctr, ly), dot(ctr, lz)), vec3<f32>(dot(ext, abs(lx)), dot(ext, abs(ly)), dot(ext, abs(lz))));
+}
+
+// whether an object's box meets cascade c's ring guard box (light space round the eye).
+fn in_guard(lb: array<vec3<f32>, 2>, c: u32) -> bool {
+    let g = sp.guard[c];
+    let p = lb[0] - sp.eye_l.xyz;
+    let e = lb[1];
+    return abs(p.x) <= g.x + e.x && abs(p.y) <= g.x + e.y && p.z + e.z >= -g.y && p.z - e.z <= g.z;
+}
+
+// whether it meets cascade c's wide guard box.
+fn in_wide(lb: array<vec3<f32>, 2>, c: u32) -> bool {
+    let w = sp.wide[c];
+    let z = sp.wide_z[c];
+    let p = lb[0];
+    let e = lb[1];
+    return abs(p.x - w.x) <= w.z + e.x && abs(p.y - w.y) <= w.z + e.y && p.z + e.z >= z.x && p.z - e.z <= z.y;
+}
 
 fn write_cmd(slot: u32, count: u32, instances: u32, first: u32, base_vertex: i32, object: u32) {
     let b = slot * 5u;
@@ -73,7 +117,14 @@ fn shadow_cull(@builtin(global_invocation_id) gid: vec3<u32>) {
     }
     let o = objects[i];
     let kind = o.kind & 255u;
-    let base_caster = (o.kind & BLEND_BIT) == 0u && kind != 1u && kind != 2u && kind != 3u && kind != 6u && kind != 7u && o.index_count > 0u;
+    var first = o.first_index;
+    var count = o.index_count;
+    // (the playable house, `--house-photo-lod`) an authored detail's coarse mesh past 120 m.
+    if (o.lod_role == 12u && distance(sp.camera.xyz, clamp(sp.camera.xyz, o.min, o.max)) > 120.) {
+        first = o.far_first_index;
+        count = o.far_index_count;
+    }
+    let base_caster = (o.kind & BLEND_BIT) == 0u && kind != 1u && kind != 2u && kind != 3u && kind != 6u && kind != 7u && kind != 11u && count > 0u;
     var caster = base_caster;
     // Kit buildings in the outer cascades (5-10 cm texels) cast with their
     // reduced rung when it is resident, else their footprint box: the shadow
@@ -98,13 +149,21 @@ fn shadow_cull(@builtin(global_invocation_id) gid: vec3<u32>) {
         caster = false;
         mid_caster = false;
         far_caster = false;
+    } else if (o.lod_role >= LOD_STREET_NEAR && o.lod_role <= LOD_STREET_NEAR + 2u) {
+        // street tile roles (near, far, coarse): only the level the group
+        // shows casts (cull.wgsl ran first and set it). Inert for the street
+        // itself, which never casts (kinds 6 and 7 above); the structures'
+        // concrete (kind 12) casts.
+        caster = base_caster && groups[o.lod_group].level == o.lod_role - LOD_STREET_NEAR;
+        mid_caster = caster;
+        far_caster = caster;
     } else if (o.lod_role == 10u || o.lod_role == 11u) {
         // the near draws cast while the landmark is near (the JS's one
         // shadow draw); the far item, the skirt and open ground (kind 10) never.
         caster = base_caster && kind == 9u && o.lod_role == 10u && groups[o.lod_group].detailed == 1u;
         mid_caster = caster;
         far_caster = caster;
-    } else if (kind == 10u) {
+    } else if (kind == 10u || kind == 13u) {
         caster = false; // open ground receives only
         mid_caster = false;
         far_caster = false;
@@ -114,6 +173,15 @@ fn shadow_cull(@builtin(global_invocation_id) gid: vec3<u32>) {
             continue;
         }
         var inside = select(select(caster, mid_caster, c == 1u), far_caster, c == 2u);
+        if (inside && sp.eye_l.w == 1.0) {
+            let lb = light_box(o);
+            if (in_guard(lb, c)) {
+                atomicAdd(&counters[8u + c], 1u);
+            }
+            if (in_wide(lb, c)) {
+                atomicAdd(&counters[11u + c], 1u);
+            }
+        }
         if (inside) {
             for (var p = 0u; p < 6u; p = p + 1u) {
                 let pl = sp.planes[c * 6u + p];
@@ -126,14 +194,14 @@ fn shadow_cull(@builtin(global_invocation_id) gid: vec3<u32>) {
         if (sp.compact == 1u) {
             if (inside) {
                 let slot = atomicAdd(&counters[c], 1u);
-                write_cmd(c * n + slot, o.index_count, 1u, o.first_index, o.base_vertex, i);
-                atomicAdd(&counters[3u + c], o.index_count / 3u);
+                write_cmd(c * n + slot, count, 1u, first, o.base_vertex, i);
+                atomicAdd(&counters[3u + c], count / 3u);
             }
         } else {
-            write_cmd(c * n + i, o.index_count, select(0u, 1u, inside), o.first_index, o.base_vertex, i);
+            write_cmd(c * n + i, count, select(0u, 1u, inside), first, o.base_vertex, i);
             if (inside) {
                 atomicAdd(&counters[c], 1u);
-                atomicAdd(&counters[3u + c], o.index_count / 3u);
+                atomicAdd(&counters[3u + c], count / 3u);
             }
         }
     }

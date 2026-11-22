@@ -21,7 +21,7 @@
 //! is replaced, as `heroLampState` drives the lens); a body without its own
 //! brake material lights the tail lamps for the brake (`max(tail, brake)`).
 
-use crate::{AgentMaterial, AgentVertex, F_BLEND, F_GLASS, M_BRAKE, M_DRL, M_HEAD, M_INDICATOR, M_PAINT, M_REVERSE, M_TAIL, hex_linear, tag};
+use crate::{AgentMaterial, AgentVertex, F_BLEND, F_GLASS, M_BRAKE, M_DRL, M_HEAD, M_INDICATOR, M_PAINT, M_REVERSE, M_TAIL, PART_DRIVER_DOOR, hex_linear, tag};
 use anyhow::{Result, anyhow, bail};
 use glam::{Mat3, Mat4, Vec3};
 use std::collections::BTreeMap;
@@ -36,10 +36,25 @@ pub struct CookedBody {
     pub materials: Vec<AgentMaterial>,
     /// Wheel pivots FL, FR, RL, RR (None when the rig lacks one).
     pub pivots: [Option<[f32; 3]>; 4],
+    pub driver_door: Option<DriverDoor>,
     pub min: [f32; 3],
     pub max: [f32; 3],
     pub triangles: u32,
     pub material_names: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct DriverDoor {
+    pub axis: [f32; 3],
+    pub pivot_and_angle: [f32; 4],
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Hinge {
+    hinge_axis: [f32; 3],
+    open_sign: f32,
+    open_limit_radians: f32,
 }
 
 pub const WHEELS: [&str; 4] = ["Wheel_FL", "Wheel_FR", "Wheel_RL", "Wheel_RR"];
@@ -117,21 +132,32 @@ pub fn cook_body(bytes: &[u8], lamps: &LampColours) -> Result<CookedBody> {
     let mut mat_index: BTreeMap<usize, u32> = BTreeMap::new();
     let default_mat = AgentMaterial { base: [0.5, 0.5, 0.5, 1.0], params: [0.6, 0.0, 0.0, 0.0], layer: -1, ..Default::default() };
     let scene = doc.default_scene().or_else(|| doc.scenes().next()).ok_or_else(|| anyhow!("no scene"))?;
-    // (node, parent world, wheel tag inherited)
+    // (node, parent world, moving-part tag inherited)
     let mut stack: Vec<(gltf::Node, Mat4, u32)> = scene.nodes().map(|n| (n, Mat4::IDENTITY, 0)).collect();
     let (mut mn, mut mx) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
     while let Some((node, parent, inherited)) = stack.pop() {
         let world = parent * Mat4::from_cols_array_2d(&node.transform().matrix());
         let name = node.name().unwrap_or("");
-        let mut wheel = inherited;
+        let mut part = inherited;
         if let Some(w) = WHEELS.iter().position(|w| *w == name) {
             out.pivots[w] = Some(world.transform_point3(Vec3::ZERO).to_array());
-            wheel = 5 + w as u32; // steer-only until a Spin node below
+            part = 5 + w as u32; // steer-only until a Spin node below
         } else if let Some(w) = WHEELS.iter().position(|w| name == format!("{w}_Spin")) {
-            wheel = 1 + w as u32;
+            part = 1 + w as u32;
+        } else if name == "Door_FL"
+            && let Some(extras) = node.extras()
+            && let Ok(hinge) = serde_json::from_str::<Hinge>(extras.get())
+        {
+            let axis = world.transform_vector3(Vec3::from_array(hinge.hinge_axis)).normalize_or_zero();
+            let angle = hinge.open_sign * hinge.open_limit_radians;
+            if axis.is_finite() && axis != Vec3::ZERO && angle.is_finite() && angle != 0.0 {
+                let pivot = world.transform_point3(Vec3::ZERO);
+                out.driver_door = Some(DriverDoor { axis: axis.to_array(), pivot_and_angle: pivot.extend(angle).to_array() });
+                part = PART_DRIVER_DOOR;
+            }
         }
         for child in node.children() {
-            stack.push((child, world, wheel));
+            stack.push((child, world, part));
         }
         if name.starts_with("shadow-proxy") {
             continue;
@@ -167,7 +193,7 @@ pub fn cook_body(bytes: &[u8], lamps: &LampColours) -> Result<CookedBody> {
                 mn = mn.min(wp);
                 mx = mx.max(wp);
                 let n = normals.as_ref().map(|n| normal_m * Vec3::from(n[i])).unwrap_or(Vec3::Y);
-                out.vertices.push(AgentVertex { pos: wp.to_array(), normal: pack_normal(n), uv: [0, 0], joints: [0; 4], weights: [0; 4], tag: tag(local, wheel) });
+                out.vertices.push(AgentVertex { pos: wp.to_array(), normal: pack_normal(n), uv: [0, 0], joints: [0; 4], weights: [0; 4], tag: tag(local, part) });
             }
             let indices: Vec<u32> = match reader.read_indices() {
                 Some(ix) => ix.into_u32().map(|i| i + base).collect(),
@@ -219,5 +245,122 @@ pub fn box_body(min: [f32; 3], max: [f32; 3]) -> CookedBody {
     cuboid([x0, y_sill, z0], [x1, y_belt, z1], 0);
     let zl = z1 - z0;
     cuboid([x0 * 0.94, y_belt, z0 + zl * 0.2], [x1 * 0.94, max[1], z1 - zl * 0.25], 1);
+    b
+}
+
+/// The far body's geometric error (`--car-detail`): the simplifier may move
+/// the surface by at most this many metres. The far slot starts at 220 m
+/// under `--car-detail 1` (260 m under 2), where a metre is about 4.9 px of
+/// a 1080 px frame at the game's 52 degree field: 0.2 m is about a pixel
+/// there. Over the shipped fleet this keeps 1,080-1,800 of LOD 2's
+/// 5,380-6,000 triangles (eo-agents tests/far_body.rs prints each body).
+pub const FAR_BODY_ERROR_M: f32 = 0.2;
+/// Bump when `far_body` changes what it makes (it is part of the library's cache key).
+pub const FAR_BODY_VERSION: u32 = 1;
+/// The far body's triangle budget, shared among its material runs by their
+/// share of the source's; the error (`FAR_BODY_ERROR_M`) binds first on the
+/// shipped fleet, so this only caps a denser body.
+pub const FAR_BODY_TRIANGLES: usize = 600;
+/// A material run this small is kept whole in the far body (lamp lenses, badges).
+pub const FAR_BODY_KEEP_TRIANGLES: usize = 24;
+
+/// A far body made from a finer cooked LOD (the far slot under `--car-detail`,
+/// in place of `box_body`): each run of triangles that shares a vertex tag
+/// (material and wheel part) is simplified on its own with meshopt, toward
+/// its share of `target_triangles` but never past `max_error_m` from the
+/// source surface, so paint, glass, lamps and tyres keep their materials and
+/// the wheels still spin about their pivots. The vertices are the source's
+/// own (the simplifier only picks among them), compacted to the ones still
+/// used. Bounds, pivots and the material table are the source's.
+/// Deterministic: the same source gives the same body.
+pub fn far_body(src: &CookedBody, target_triangles: usize, max_error_m: f32) -> CookedBody {
+    // Triangles grouped by their first vertex's tag, in the order the tags first appear.
+    let groups = |list: &[u32]| {
+        let mut order: Vec<u32> = vec![];
+        let mut by_tag: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
+        for t in list.chunks_exact(3) {
+            let tag = src.vertices[t[0] as usize].tag;
+            by_tag.entry(tag).or_insert_with(|| {
+                order.push(tag);
+                vec![]
+            });
+            by_tag.get_mut(&tag).unwrap().extend_from_slice(t);
+        }
+        order.into_iter().map(|t| by_tag.remove(&t).unwrap()).collect::<Vec<_>>()
+    };
+    // The bodies are built from panel-cut pieces whose borders an
+    // edge-collapse simplifier may not move (it kept ~45 % of LOD 2 even at a
+    // 0.3 m error), so each group is clustered instead (meshopt's sloppy
+    // simplifier, which ignores topology) down to the error. A group of at
+    // most `FAR_BODY_KEEP_TRIANGLES` (a lamp lens, a badge) is kept whole, so
+    // the lamps still light at night. The clustering runs over every vertex
+    // it is handed, so each group gets a vertex buffer of its own vertices
+    // alone (else it would pick another material's vertex), and its error is
+    // relative to that buffer's extent.
+    let total = ((src.opaque.len() + src.glass.len()) / 3).max(1);
+    let simplify = |list: &[u32]| -> Vec<u32> {
+        let mut out = vec![];
+        for g in groups(list) {
+            let n = g.len() / 3;
+            if n <= FAR_BODY_KEEP_TRIANGLES {
+                out.extend_from_slice(&g);
+                continue;
+            }
+            // the group's own vertices (local index -> source index) and its indices into them.
+            let mut local: BTreeMap<u32, u32> = BTreeMap::new();
+            let mut back: Vec<u32> = vec![];
+            let li: Vec<u32> = g
+                .iter()
+                .map(|&i| {
+                    *local.entry(i).or_insert_with(|| {
+                        back.push(i);
+                        back.len() as u32 - 1
+                    })
+                })
+                .collect();
+            let pos: Vec<[f32; 3]> = back.iter().map(|&i| src.vertices[i as usize].pos).collect();
+            let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
+            for p in &pos {
+                for k in 0..3 {
+                    lo[k] = lo[k].min(p[k]);
+                    hi[k] = hi[k].max(p[k]);
+                }
+            }
+            let extent = (0..3).map(|k| hi[k] - lo[k]).fold(0.0f32, f32::max).max(1e-3);
+            let Ok(adapter) = meshopt::VertexDataAdapter::new(bytemuck::cast_slice(&pos), std::mem::size_of::<[f32; 3]>(), 0) else {
+                out.extend_from_slice(&g);
+                continue;
+            };
+            let want = (n * target_triangles).div_ceil(total).max(FAR_BODY_KEEP_TRIANGLES);
+            let s = meshopt::simplify_sloppy(&li, &adapter, want * 3, max_error_m / extent, None);
+            if s.is_empty() {
+                out.extend_from_slice(&g);
+            } else {
+                out.extend(s.iter().map(|&l| back[l as usize]));
+            }
+        }
+        out
+    };
+    let (opaque, glass) = (simplify(&src.opaque), simplify(&src.glass));
+    // Keep the vertices still used, in first-use order.
+    let mut remap = vec![u32::MAX; src.vertices.len()];
+    let mut b = CookedBody { materials: src.materials.clone(), material_names: src.material_names.clone(), pivots: src.pivots, min: src.min, max: src.max, ..Default::default() };
+    let mut take = |list: &[u32], vertices: &mut Vec<AgentVertex>| -> Vec<u32> {
+        list.iter()
+            .map(|&i| {
+                if remap[i as usize] == u32::MAX {
+                    remap[i as usize] = vertices.len() as u32;
+                    vertices.push(src.vertices[i as usize]);
+                }
+                remap[i as usize]
+            })
+            .collect()
+    };
+    b.opaque = take(&opaque, &mut b.vertices);
+    b.glass = take(&glass, &mut b.vertices);
+    b.triangles = ((b.opaque.len() + b.glass.len()) / 3) as u32;
+    if b.opaque.is_empty() {
+        return box_body(src.min, src.max);
+    }
     b
 }

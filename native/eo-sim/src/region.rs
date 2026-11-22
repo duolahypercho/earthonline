@@ -971,6 +971,7 @@ impl Region {
                 car_z: &self.fleet.z,
                 car_yaw: &self.fleet.yaw,
                 car_speed: &self.fleet.spd,
+                car_level: &self.fleet.level,
             };
             self.crowd.step(&wctx, dt, parity);
         }
@@ -1004,6 +1005,8 @@ impl Region {
             if c.far {
                 flags |= FLAG_FAR;
             }
+            // (its structure level, 0 at grade: no bits without a level table.)
+            flags |= crate::output::level_flags(self.fleet.level[i]);
             out.vehicles.push(AgentInstance {
                 pos: [(self.fleet.x[i] - origin[0]) as f32, 0.0, (self.fleet.z[i] - origin[1]) as f32],
                 heading: self.fleet.yaw[i] as f32,

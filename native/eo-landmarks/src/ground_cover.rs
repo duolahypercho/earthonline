@@ -72,6 +72,14 @@ pub fn far_land_tone(class: u8, x: f64, z: f64) -> Linear {
     [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]
 }
 
+/// A named tone pair (`pair`) mixed by the ground mottle at (x, z), linear; None for an unknown name.
+pub fn named_tone(name: &str, x: f64, z: f64) -> Option<Linear> {
+    let (a, b) = pair(name)?;
+    let (a, b) = (hex(a), hex(b));
+    let t = ground_mottle(x, z);
+    Some([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t])
+}
+
 /// `greenSurfaceTone(g)`: the surveyed surface a green's own ground takes, or None.
 pub fn surface_tone(g: &Area) -> Option<&'static str> {
     match g.ground.as_str() {
@@ -219,9 +227,66 @@ pub fn installed() -> Option<&'static std::sync::Arc<GroundCover>> {
 /// city-tile-derive.js `GROUND_SAND` / `GROUND_SAND_DARK` (linear).
 pub const GROUND_SAND: Linear = [0.366, 0.337, 0.275];
 pub const GROUND_SAND_DARK: Linear = [0.305, 0.275, 0.216];
+/// The dry beach sand's broadband albedo (`--no-sand-albedo`: the JS tones
+/// above, whose mean luminance is 0.31): Ångström's pyranometer measurement
+/// of dry sand, 0.182 (wet: 0.091), as tabulated in J. Lekner and M. C. Dorf,
+/// "Why some things are darker when wet", Applied Optics 27, 1278 (1988).
+/// The JS pair keeps its hue and mottle and is scaled to this mean luminance.
+pub const DRY_SAND_ALBEDO: f64 = 0.182;
+/// Wet over dry sand albedo, the same measurement: 0.091 / 0.182.
+pub const WET_SAND_RATIO: f64 = 0.5;
+
+/// San Francisco tide station 9414290 (Golden Gate), NOAA CO-OPS datums,
+/// epoch 1983-2001 (api.tidesandcurrents.noaa.gov mdapi `datums`, metres on
+/// station datum): MHHW 3.602, MHW 3.416, MSL 2.773. Real metres over mean
+/// sea level (drawn at the height scale). The beach's strand line lies at the
+/// higher high water and the sand stays damp below the high water
+/// (eo-render cc0.rs `shore_ground_wgsl`); the shore's stones carry the same
+/// stain and wetting (rocks.rs `tide_tone`). The one definition both read.
+pub const MHW_OVER_MSL_M: f64 = 3.416 - 2.773;
+pub const MHHW_OVER_MSL_M: f64 = 3.602 - 2.773;
+
+/// Sand stops at the beach (`--no-beach-sand-limit`): the steepest ground,
+/// rise over run across 12 m of the drawn grid (eo-app ground_tone
+/// `slope_at`), that still carries sand. Derived from the 1 m 3DEP DEM
+/// through the 8 m elevation grid: the 99th percentile of that slope at the
+/// terrain vertices inside the mapped beaches (OSM `natural=beach`), 0.356
+/// (eo-app ground_tone `the_sand_limits_match_the_mapped_beaches`
+/// re-measures it). The ground plan and the heights are both scaled 1.25, so
+/// the slope is the surveyed one. The sand limit (eo-app ground_tone) and the
+/// cliff-toe boulders (rocks.rs) both read it.
+pub const SAND_SLOPE_MAX: f64 = 0.36;
+/// The steepest ground a park tree stands on (rise over run across 12 m):
+/// tan 42 degrees, the near tier's coastal-stand limit (`vegetation::plant_coarse`),
+/// INFERRED (steeper faces on the bluffs are bare rock or scrub).
+pub const TREE_SLOPE_MAX: f64 = 0.90;
+/// The berm crest, surveyed metres over the sea: the highest ground the
+/// beach sand reaches (eo-app ground_tone `BERM_CREST_SURVEYED_M`, derived
+/// there from the mapped beaches; a test in eo-app keeps the two equal).
+pub const SAND_BERM_SURVEYED_M: f64 = 12.5;
+
+fn luma(c: Linear) -> f64 {
+    0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+}
+
+/// The factor that takes the JS sand pair to `DRY_SAND_ALBEDO` (the mean of
+/// its two tones' luminance, as the mottle mixes them half and half).
+pub fn sand_albedo_scale() -> f64 {
+    DRY_SAND_ALBEDO / (0.5 * (luma(GROUND_SAND) + luma(GROUND_SAND_DARK)))
+}
+
 /// beach-sand.js: how far past a mapped beach the sand runs, and how near the sea it must be.
 pub const BEACH_SAND_REACH_M: f64 = 150.0;
 pub const BEACH_SAND_SHORE_M: f64 = 90.0;
+/// `beach_sand_fit`: ground lies behind a beach when the way to the beach is
+/// within 45 degrees of the way to the sea (the cosine).
+pub const BEACH_SAND_FIT_COS: f64 = 0.7;
+/// `beach_sand_fit`: the step of the shore distance's central difference (the way to the sea).
+pub const BEACH_SAND_FIT_STEP_M: f64 = 4.0;
+/// `beach_sand_fit`: how much farther off than the sea a beach behind the
+/// ground may be, and how far off the line from the beach to the sea ground
+/// in front of it may lie (a terrain cell and a half).
+pub const BEACH_SAND_FIT_SLACK_M: f64 = 12.0;
 
 struct Green {
     ring: Vec<[f64; 2]>,
@@ -234,10 +299,35 @@ struct Green {
     beds: bool,
     /// tile-ground-cover.js `treeClassOf` (0 none), for the park trees.
     tree_class: u8,
+    /// Kept ground the sand round a beach does not cover (`beach_sand_fit`):
+    /// a lawn, garden, pitch, playground or other tended green, a paved
+    /// green, inland water. Wild cover (scrub, heath, grassland, wetland,
+    /// wood: the dunes behind a beach) and an enclosing park are not.
+    own_ground: bool,
 }
+
+/// `Green::own_ground`'s tended green kinds.
+const TENDED: &[&str] = &["grass", "garden", "pitch", "playground", "golf_course", "recreation_ground", "village_green", "common", "allotments", "dog_park", "cemetery", "reservoir_covered", "construction", "brownfield"];
 
 fn in_ring(r: &[[f64; 2]], x: f64, z: f64) -> bool {
     crate::waterfront::point_in_ring(r, x, z)
+}
+
+/// The distance from (x, z) to a ring's edges and the nearest point on them.
+fn ring_nearest(r: &[[f64; 2]], x: f64, z: f64) -> (f64, [f64; 2]) {
+    let mut best = (f64::INFINITY, [x, z]);
+    for i in 0..r.len() {
+        let (a, b) = (r[i], r[(i + 1) % r.len()]);
+        let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+        let l2 = dx * dx + dz * dz;
+        let t = if l2 > 0.0 { (((x - a[0]) * dx + (z - a[1]) * dz) / l2).clamp(0.0, 1.0) } else { 0.0 };
+        let q = [a[0] + dx * t, a[1] + dz * t];
+        let d = (x - q[0]).hypot(z - q[1]);
+        if d < best.0 {
+            best = (d, q);
+        }
+    }
+    best
 }
 
 /// The greens, inland water and beaches, indexed on a coarse grid.
@@ -294,6 +384,7 @@ impl GroundCover {
                 tone,
                 beds: g.kind == "playground" && tone == Some("playSurface"),
                 tree_class,
+                own_ground: g.kind != "park" && (tone.is_none() || TENDED.contains(&g.kind.as_str())),
             });
         }
         // Inland standing water, painted after every green (no tree stands in it).
@@ -305,7 +396,7 @@ impl GroundCover {
                     mx[k] = mx[k].max(p[k]);
                 }
             }
-            list.push(Green { ring: w.polygon.clone(), holes: w.holes.clone(), min: mn, max: mx, order: (2, 0.0), tone: Some("water"), beds: false, tree_class: 0 });
+            list.push(Green { ring: w.polygon.clone(), holes: w.holes.clone(), min: mn, max: mx, order: (2, 0.0), tone: Some("water"), beds: false, tree_class: 0, own_ground: true });
         }
         let mut cells: HashMap<(i64, i64), Vec<u32>> = HashMap::new();
         for (i, g) in list.iter().enumerate() {
@@ -393,6 +484,127 @@ impl GroundCover {
         false
     }
 
+    /// `beach_sand` fitted to a city shore (on unless `--no-ground-beach-fit`).
+    /// Inside a mapped beach it is the same. In the reach band round it, sand
+    /// only where the beach is this ground's shore and no kept ground is
+    /// mapped there (`Green::own_ground`: a lawn, garden, pitch, paved green
+    /// or inland water; not an enclosing park, nor the dunes' wild cover). The beach is the
+    /// shore when the point lies behind it (the beach no more than
+    /// `BEACH_SAND_FIT_SLACK_M` farther off than the sea, or the way to the
+    /// beach within 45 degrees of the way to the sea) or in front of it (between the
+    /// beach and the sea: the unmapped foreshore, where the beach's nearest
+    /// point is as far from the sea as the point and the beach together).
+    /// Beside a beach, by a seawall, a quay or a pier's root, it is neither.
+    /// `shore(x, z)`: distance to the shoreline.
+    pub fn beach_sand_fit(&self, x: f64, z: f64, shore: &dyn Fn(f64, f64) -> f64) -> bool {
+        let Some(list) = self.beach_cells.get(&((x / CELL).floor() as i64, (z / CELL).floor() as i64)) else { return false };
+        if list.iter().any(|&i| {
+            let (ring, mn, mx) = &self.beaches[i as usize];
+            x >= mn[0] && x <= mx[0] && z >= mn[1] && z <= mx[1] && in_ring(ring, x, z)
+        }) {
+            return true;
+        }
+        let s = shore(x, z);
+        if s > BEACH_SAND_SHORE_M {
+            return false;
+        }
+        for &i in list {
+            let (ring, mn, mx) = &self.beaches[i as usize];
+            if x < mn[0] - BEACH_SAND_REACH_M || x > mx[0] + BEACH_SAND_REACH_M || z < mn[1] - BEACH_SAND_REACH_M || z > mx[1] + BEACH_SAND_REACH_M {
+                continue;
+            }
+            let (d, q) = ring_nearest(ring, x, z);
+            if d > BEACH_SAND_REACH_M {
+                continue;
+            }
+            // behind the beach: the beach no farther off than the sea, or the
+            // way to it the way to the sea (down the shore distance), where it
+            // lies just past the shoreline.
+            let behind = d <= s + BEACH_SAND_FIT_SLACK_M || {
+                let h = BEACH_SAND_FIT_STEP_M;
+                let (gx, gz) = (shore(x + h, z) - shore(x - h, z), shore(x, z + h) - shore(x, z - h));
+                let gl = gx.hypot(gz);
+                gl < 1e-9 || -(gx * (q[0] - x) + gz * (q[1] - z)) / (gl * d) >= BEACH_SAND_FIT_COS
+            };
+            // in front of it: on the line from the beach to the sea (the foreshore).
+            if !behind && s + d > shore(q[0], q[1]) + BEACH_SAND_FIT_SLACK_M {
+                continue;
+            }
+            return !self.mapped_ground(x, z);
+        }
+        false
+    }
+
+    /// Whether (x, z) is mapped as kept ground (`Green::own_ground`: a lawn,
+    /// garden, pitch, playground, paved green or inland water painted there).
+    fn mapped_ground(&self, x: f64, z: f64) -> bool {
+        self.top(x, z).is_some_and(|g| g.own_ground)
+    }
+
+    /// Whether (x, z) lies inside a mapped beach's ring (OSM `natural=beach`),
+    /// not merely within `BEACH_SAND_REACH_M` of one.
+    pub fn in_mapped_beach(&self, x: f64, z: f64) -> bool {
+        let Some(list) = self.beach_cells.get(&((x / CELL).floor() as i64, (z / CELL).floor() as i64)) else { return false };
+        list.iter().any(|&i| {
+            let (ring, mn, mx) = &self.beaches[i as usize];
+            x >= mn[0] && x <= mx[0] && z >= mn[1] && z <= mx[1] && in_ring(ring, x, z)
+        })
+    }
+
+    /// Whether (x, z) lies within `BEACH_SAND_REACH_M` of a mapped beach (at
+    /// any distance from the sea): the cliffs and bluffs over the beaches.
+    pub fn near_mapped_beach(&self, x: f64, z: f64) -> bool {
+        let Some(list) = self.beach_cells.get(&((x / CELL).floor() as i64, (z / CELL).floor() as i64)) else { return false };
+        list.iter().any(|&i| {
+            let (ring, mn, mx) = &self.beaches[i as usize];
+            let r = BEACH_SAND_REACH_M;
+            x >= mn[0] - r && x <= mx[0] + r && z >= mn[1] - r && z <= mx[1] + r && (in_ring(ring, x, z) || crate::waterfront::ring_distance(ring, x, z) <= r)
+        })
+    }
+
+    /// Whether a tree may stand at (x, z) on the drawn ground `y_at`: not
+    /// inside a mapped beach, not on the cliff over one (the sand limit's
+    /// band: steeper than `SAND_SLOPE_MAX` across 12 m within
+    /// `BEACH_SAND_REACH_M` of a mapped beach, eo-app ground_tone), not on a
+    /// face steeper than [`TREE_SLOPE_MAX`] anywhere, and not on the sand the
+    /// ground tone draws past a mapped beach's ring ([`GroundCover::beach_sand`]
+    /// by the shore distance `vegetation::shore_distance`, no steeper than
+    /// `SAND_SLOPE_MAX` and no higher than the berm crest: ground_tone's
+    /// `sand_holds` without its seaward walk).
+    pub fn tree_ground_ok(&self, x: f64, z: f64, y_at: &dyn Fn(f64, f64) -> f64) -> bool {
+        if self.in_mapped_beach(x, z) {
+            return false;
+        }
+        let slope = (y_at(x + 6.0, z) - y_at(x - 6.0, z)).hypot(y_at(x, z + 6.0) - y_at(x, z - 6.0)) / 12.0;
+        if !slope.is_finite() {
+            return true;
+        }
+        if slope > TREE_SLOPE_MAX || (slope > SAND_SLOPE_MAX && self.near_mapped_beach(x, z)) {
+            return false;
+        }
+        !crate::vegetation::shore_distance(x, z).is_some_and(|s| self.on_beach_sand(x, z, s, y_at(x, z)))
+    }
+
+    /// Whether the ground tone draws beach sand at (x, z) on ground no steeper
+    /// than `SAND_SLOPE_MAX` (the caller's test): [`GroundCover::beach_sand`]
+    /// at the shore distance `shore_m`, and the ground `y` (drawn) no higher
+    /// over the sea than the berm crest ([`SAND_BERM_SURVEYED_M`] at the height scale).
+    pub fn on_beach_sand(&self, x: f64, z: f64, shore_m: f64, y: f64) -> bool {
+        (y - eo_water::SEA_LEVEL_Y) / eo_data::groundscale::height_scale().max(1e-6) <= SAND_BERM_SURVEYED_M && self.beach_sand(x, z, shore_m)
+    }
+
+    /// The largest park green (OSM `leisure=park`) whose ring holds (px, pz):
+    /// its index for [`GroundCover::in_green`].
+    pub fn largest_park_holding(&self, px: f64, pz: f64) -> Option<usize> {
+        let area = |r: &[[f64; 2]]| (0..r.len()).map(|i| r[i][0] * r[(i + 1) % r.len()][1] - r[(i + 1) % r.len()][0] * r[i][1]).sum::<f64>().abs() / 2.0;
+        self.greens.iter().enumerate().filter(|(_, g)| g.order.0 == 0 && g.ring.len() >= 3 && in_ring(&g.ring, px, pz)).max_by(|a, b| area(&a.1.ring).total_cmp(&area(&b.1.ring))).map(|(i, _)| i)
+    }
+
+    /// Whether (x, z) lies in green `i`'s ring (its holes left out).
+    pub fn in_green(&self, i: usize, x: f64, z: f64) -> bool {
+        self.greens.get(i).is_some_and(|g| x >= g.min[0] && x <= g.max[0] && z >= g.min[1] && z <= g.max[1] && in_ring(&g.ring, x, z) && !g.holes.iter().any(|h| h.len() >= 3 && in_ring(h, x, z)))
+    }
+
     /// tile-trees.js `plantTileTrees` over [x0, x1) x [z0, z1) (near tier): the
     /// world-anchored 14 m lattice jittered by `hash2`, a tree where the green
     /// painted there has a tree class, its rule's chance (times the grove
@@ -434,6 +646,11 @@ impl GroundCover {
                 if !y.is_finite() {
                     continue;
                 }
+                // round 3 (`--no-cliff-rock-cover`): no park tree on a mapped beach, on the
+                // cliff over one or on a face too steep for a tree (both tiers read this lattice).
+                if crate::vegetation::gg3().cliff_rock_cover && !self.tree_ground_ok(x, z, y_at) {
+                    continue;
+                }
                 let n = rule.species.len();
                 let pick = ((tree_hash(ix, iz, 4) * n as f64).floor() as usize) % n;
                 let scale = rule.scale[0] + tree_hash(ix, iz, 5) * (rule.scale[1] - rule.scale[0]);
@@ -447,9 +664,34 @@ impl GroundCover {
         out.into_iter().map(|(t, _)| t).collect()
     }
 
-    /// The beach sand's colour at (x, z): `GROUND_SAND` to `GROUND_SAND_DARK` by the mottle.
+    /// The beach sand's colour at (x, z): `GROUND_SAND` to `GROUND_SAND_DARK`
+    /// by the mottle, scaled to the measured dry-sand albedo (`sand_albedo_scale`)
+    /// unless `--no-sand-albedo`.
     pub fn sand_at(&self, x: f64, z: f64) -> Linear {
-        let t = ground_mottle(x, z);
-        [0, 1, 2].map(|k| GROUND_SAND[k] + (GROUND_SAND_DARK[k] - GROUND_SAND[k]) * t)
+        sand_tone(x, z, crate::features::shore_ground("sand-albedo"))
+    }
+}
+
+/// `GroundCover::sand_at` with the albedo switch given.
+pub fn sand_tone(x: f64, z: f64, measured: bool) -> Linear {
+    let t = ground_mottle(x, z);
+    let k = if measured { sand_albedo_scale() } else { 1.0 };
+    [0, 1, 2].map(|i| (GROUND_SAND[i] + (GROUND_SAND_DARK[i] - GROUND_SAND[i]) * t) * k)
+}
+
+#[cfg(test)]
+mod sand_tests {
+    use super::*;
+
+    #[test]
+    fn the_sand_has_the_measured_albedo() {
+        // mean over the mottle: the measured dry albedo; the JS tones without the switch
+        let mean = |on: bool| (0..400).map(|i| luma(sand_tone(i as f64 * 7.3, i as f64 * 3.1, on))).sum::<f64>() / 400.0;
+        assert!((mean(true) - DRY_SAND_ALBEDO).abs() < 0.015, "{}", mean(true));
+        assert!((mean(false) - 0.31).abs() < 0.02, "{}", mean(false));
+        assert_eq!(sand_tone(5.0, 9.0, false)[0], GROUND_SAND[0] + (GROUND_SAND_DARK[0] - GROUND_SAND[0]) * ground_mottle(5.0, 9.0));
+        // the hue is the JS pair's
+        let (a, b) = (sand_tone(5.0, 9.0, true), sand_tone(5.0, 9.0, false));
+        assert!((a[0] / a[2] - b[0] / b[2]).abs() < 1e-9);
     }
 }

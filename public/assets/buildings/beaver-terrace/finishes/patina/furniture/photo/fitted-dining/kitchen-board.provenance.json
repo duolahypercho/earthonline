@@ -1,0 +1,55 @@
+{
+  "material": "oiled-oak@ae906f",
+  "source_part": "chopping-board - oiled-oak@ae906f",
+  "local_from_parcel": [
+    [
+      1.3079755306243896,
+      -0.0,
+      0.02862507849931717,
+      -0.6117873787879944
+    ],
+    [
+      -0.0,
+      0.0,
+      -1.2951608896255493,
+      11.701949119567871
+    ],
+    [
+      0.0,
+      1.0,
+      0.0,
+      -0.9200000166893005
+    ]
+  ],
+  "min": [
+    -0.017159998416900635,
+    -0.19349956512451172,
+    0.0
+  ],
+  "size": [
+    0.03431999683380127,
+    0.38700008392333984,
+    0.34960001707077026
+  ],
+  "widths": [
+    340,
+    86,
+    86
+  ],
+  "roughness": 0.6200000047683716,
+  "license": "Project-authored wood material",
+  "attribution": "Earth Online",
+  "source_scene_sha256": "15ffbcf57cc8327d3326ba5a28b6fbf2ab043ff9c709dacaa881d87cd1531c50",
+  "camera_glare": 0.0,
+  "triangles": 188,
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/fitted-dining/kitchen-board.png",
+  "bytes": 351902,
+  "sha256": "102fe0b8488e97d3f37c545c1b4fd95eeb3d209f4d59cd3db57a0175ec2f40a4",
+  "source": "The actual chopping board's six oak faces, procedural pigment and tangent-space bump from the fitted source.",
+  "survey": {
+    "file": "kitchen-board-survey.npz",
+    "sha256": "0109f7ec5e04870fe284f74f0fa9040d38d24c86110aac28aec032d03d8415cb"
+  },
+  "fitted_geometry_sha256": "caa9e62c6b298a21e00f2d33fab23e1690080074c7eb4b023236f5480b21646d",
+  "build": "scripts/blender-buildings/cook_beaver_kitchen_light.py"
+}

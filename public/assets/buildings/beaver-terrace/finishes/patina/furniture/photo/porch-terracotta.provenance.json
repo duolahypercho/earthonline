@@ -1,0 +1,40 @@
+{
+  "source": [
+    "https://polyhaven.com/a/terracotta_floor_tiles"
+  ],
+  "license": "CC0-1.0",
+  "license_url": "https://polyhaven.com/license",
+  "attribution": [
+    "Dimitrios Savva"
+  ],
+  "inputs": [
+    {
+      "asset": "terracotta_floor_tiles",
+      "role": "albedo",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/terracotta_floor_tiles/terracotta_floor_tiles_diff_2k.jpg",
+      "sha256": "dd1adc1d35618db8fd58f2d22b51242bc570dc83c23518a1100d3570dfe05559"
+    },
+    {
+      "asset": "terracotta_floor_tiles",
+      "role": "normal",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/terracotta_floor_tiles/terracotta_floor_tiles_nor_gl_2k.jpg",
+      "sha256": "7378375dd7d7ec01a33bce4fc679f8a10fad4085746c7ad698724e8ca1113807"
+    },
+    {
+      "asset": "terracotta_floor_tiles",
+      "role": "arm",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/terracotta_floor_tiles/terracotta_floor_tiles_arm_2k.jpg",
+      "sha256": "6a44f0a0cec7caab1f7fa0753a958dfd087d8a4dc7003b6fe394aa12b21040eb"
+    }
+  ],
+  "build": "scripts/blender-buildings/prepare_beaver_surfaces.py",
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/porch-terracotta.png",
+  "sha256": "6f84ab2ae93c0ff656caa136c210f36eb68b64fc559622e089a0adfaa6831f87",
+  "bytes": 1151824,
+  "families": [
+    "terracotta-paver"
+  ],
+  "metres_per_tile": 0.36,
+  "normal_strength": 0.64,
+  "paint_mix": 0.14
+}

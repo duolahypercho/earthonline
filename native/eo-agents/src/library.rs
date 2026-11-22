@@ -12,7 +12,7 @@ use crate::catalog::{AgentsJs, read_verified};
 use crate::motion::MotionRoots;
 use crate::people::{Atlas, CookedTier};
 use crate::rocketbox;
-use crate::vehicles::{CookedBody, LampColours, box_body, cook_body};
+use crate::vehicles::{CookedBody, FAR_BODY_ERROR_M, FAR_BODY_TRIANGLES, FAR_BODY_VERSION, LampColours, box_body, cook_body, far_body};
 use crate::{AgentMaterial, AgentVertex, CLASS_PERSON, CLASS_VEHICLE, CLIPS, GpuMesh, GpuModel, LODS, M_ATLAS, NO_MESH};
 use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 /// Bump when the cooked layout or the cook changes.
-pub const COOK_VERSION: u32 = 5; // 4 -> 5 (people moved by the Rocketbox clips and 100STYLE walks only)
+pub const COOK_VERSION: u32 = 7; // -> 7 (the selfie's phone, `Meta::phone_model`, and the vehicles' driver-door rig; each had taken 6 apart)
 const MAGIC: &[u8; 4] = b"EOAL";
 /// People tiers in LOD slot order.
 pub const PERSON_TIERS: [&str; LODS] = ["hero", "near", "mid", "far"];
@@ -62,25 +62,43 @@ pub struct Meta {
     pub people_groups: u32,
     /// the slots' layout and each person's walk (empty: today's layout).
     pub motion: crate::motion::MotionMeta,
+    /// The phone a player's selfie holds (`rig::phone`), a model of its own
+    /// (no traffic or parked pool reads it).
+    pub phone_model: Option<u32>,
+    /// The ground-contact patch under another player's feet, shins and
+    /// hips (`rig::contacts`), appended after loading (`Library::add_contact_model`):
+    /// it is not cooked, so the cache is the same with or without it.
+    pub contact_model: Option<u32>,
 }
 
 /// where the street people come from.
 #[derive(Clone, Debug, PartialEq)]
 pub enum PeopleSource {
-    /// No people (`--no-rocketbox`, or no copy at `EO_PEOPLE_ROOT`).
+    /// No people (`--no-rocketbox`, or no copy in the people folder).
     Off,
     /// The Rocketbox avatars under this root (no people if they cannot be cooked).
     Rocketbox(PathBuf),
 }
 
 impl PeopleSource {
-    /// `EO_PEOPLE_ROOT` when it holds a copy, else no people.
+    /// The people folder (`<repo>/external/people`, or the one `EO_PEOPLE_ROOT`
+    /// names) when it holds a copy, else no people.
     pub fn from_env() -> Self {
         match rocketbox::root_from_env() {
             Some(p) => PeopleSource::Rocketbox(p),
             None => PeopleSource::Off,
         }
     }
+}
+
+/// What the cook makes beyond the sources themselves.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CookOptions {
+    /// `--car-detail`: each body's far slot (LOD 3) is `far_body`, its coarsest
+    /// cooked LOD past LOD 0 (LOD 2, else LOD 1) simplified to `FAR_BODY_ERROR_M`, instead of the
+    /// three-box stand-in. Off: the box, and the library and its cache key
+    /// are as before.
+    pub far_body: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -92,6 +110,7 @@ pub struct Library {
     pub models: Vec<GpuModel>,
     pub bones: Vec<[f32; 4]>,
     pub atlases: Vec<Atlas>,
+    pub test_player: Option<crate::test_characters::PlayerBody>,
     pub meta: Meta,
     /// How it was loaded (not cached).
     pub from_cache: bool,
@@ -136,7 +155,7 @@ impl Builder {
             glass_first,
             glass_count: b.glass.len() as u32,
             base_vertex: base,
-            pad: [0; 3],
+            pad: b.driver_door.map_or([0; 3], |door| door.axis.map(f32::to_bits)),
         });
         self.lib.meta.mesh_triangles.push(b.triangles);
         self.lib.meshes.len() as u32 - 1
@@ -166,10 +185,17 @@ impl Builder {
 
 /// The cache key: every source digest, the JS export and the cook version
 /// (and, for the Rocketbox people, their manifest, motions and cook versions).
-fn cache_key(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions: &MotionRoots) -> String {
+fn cache_key(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions: &MotionRoots, opts: CookOptions) -> String {
     let mut h = Sha256::new();
     h.update(COOK_VERSION.to_le_bytes());
     h.update(crate::catalog::AGENTS_JS.as_bytes());
+    // (`--car-detail`) the far bodies; nothing added without them, so that key is as before.
+    if opts.far_body {
+        h.update(b"far-body");
+        h.update(FAR_BODY_VERSION.to_le_bytes());
+        h.update(FAR_BODY_ERROR_M.to_le_bytes());
+        h.update((FAR_BODY_TRIANGLES as u64).to_le_bytes());
+    }
     // Which vehicle files this checkout holds (a body left out of it is not drawn).
     for b in js.vehicles.values() {
         for l in &b.lods {
@@ -207,35 +233,81 @@ pub fn cache_path(cache_dir: &Path, key: &str) -> PathBuf {
 }
 
 impl Library {
+    /// Append the selected local player after loading the normal agent cache.
+    /// The cache contains only the city library and the original player fallback.
+    pub fn install_test_player(&mut self, selection: &crate::test_characters::Selection) -> Result<()> {
+        use crate::test_characters::{PlayerBody, Pose};
+        use glam::Vec3;
+
+        anyhow::ensure!(self.test_player.is_none() && self.meshes.len() < MAX_MESHES, "no free agent mesh for the test player");
+        let body = crate::test_characters::cook(selection)?;
+        let preview = selection.preview.as_deref().map(|name| body.rig.clip(name).expect("verified preview name"));
+        let mut bind = Pose::default();
+        bind.sample(&body.rig, preview.unwrap_or_else(|| body.rig.idle()), 0.0, preview.is_some(), 1.0);
+        let palette = (self.bones.len() / 3) as u32;
+        let joints = (bind.rows.len() / 3) as u32;
+        self.bones.extend(bind.rows);
+        let layer = self.atlases.len() as i32;
+        self.meta.atlas_res = body.atlas.res;
+        self.atlases.push(body.atlas);
+
+        let model = self.models.len() as u32;
+        let min = Vec3::from(body.tier.min);
+        let max = Vec3::from(body.tier.max);
+        // Include the reach of the authored transitions when culling previews.
+        let radius = (max - min).length() * 0.5 + 3.0;
+        let mut builder = Builder { lib: std::mem::take(self), mat_ids: HashMap::new() };
+        let material = builder.material(&AgentMaterial {
+            base: [1.0; 4], params: [1.0, 0.0, body.normal_strength, 0.0], layer, flags: M_ATLAS, ..Default::default()
+        });
+        let mesh = builder.tier(&body.tier, material, palette, joints);
+        builder.lib.meshes[mesh as usize].pad[2] = 1; // renderer reads one live palette
+        builder.lib.models.push(GpuModel {
+            meshes: [mesh; LODS], class: CLASS_PERSON, skeleton: palette, joints, radius,
+            center: ((min + max) * 0.5).to_array(), ..Default::default()
+        });
+        builder.lib.meta.model_names.push(selection.id.clone());
+        builder.lib.test_player = Some(PlayerBody { rig: body.rig, model, palette, preview, height: max.y - min.y });
+        *self = builder.lib;
+        Ok(())
+    }
+
     /// Load from the cache, else cook from the GLBs (and write the cache).
-    /// The street people are the Rocketbox people when a copy is at
-    /// `EO_PEOPLE_ROOT`, else there are none.
+    /// The street people are the Rocketbox people when the people folder
+    /// holds a copy (`rocketbox::root_from_env`), else there are none.
     pub fn load(repo_root: &Path, cache_dir: Option<&Path>) -> Result<Self> {
         Self::load_with(repo_root, cache_dir, &PeopleSource::from_env())
     }
 
     /// `load` with the people source chosen by the caller (`--no-rocketbox`).
     pub fn load_with(repo_root: &Path, cache_dir: Option<&Path>, people: &PeopleSource) -> Result<Self> {
+        Self::load_opts(repo_root, cache_dir, people, CookOptions::default())
+    }
+
+    /// `load_with` and the cook options (`--car-detail`: the far bodies).
+    pub fn load_opts(repo_root: &Path, cache_dir: Option<&Path>, people: &PeopleSource, opts: CookOptions) -> Result<Self> {
         let t = Instant::now();
         let js = AgentsJs::load()?;
         // the Rocketbox clips and the 100STYLE walks, when present and not switched off.
         let motions = if matches!(people, PeopleSource::Rocketbox(_)) { MotionRoots::from_env() } else { MotionRoots::default() };
-        let key = cache_key(repo_root, &js, people, &motions);
+        let key = cache_key(repo_root, &js, people, &motions, opts);
         if let Some(dir) = cache_dir {
             let p = cache_path(dir, &key);
             if p.exists() {
                 match read_cache(&p) {
                     Ok(mut lib) => {
                         lib.from_cache = true;
+                        lib.add_contact_model();
                         lib.load_ms = t.elapsed().as_secs_f64() * 1e3;
                         lib.cache_path = Some(p);
+                        say_people(&lib, people, &motions);
                         return Ok(lib);
                     }
                     Err(e) => eprintln!("agents: cache {} refused ({e:#}); cooking again", p.display()),
                 }
             }
         }
-        let mut lib = cook_full(repo_root, &js, people, &motions)?;
+        let mut lib = cook_opts(repo_root, &js, people, &motions, opts)?;
         // a library without its people is not cached (the next start tries them again).
         if let Some(dir) = cache_dir.filter(|_| lib.meta.people_fallback.is_none() && lib.meta.motion.fallback.is_empty()) {
             let p = cache_path(dir, &key);
@@ -245,8 +317,40 @@ impl Library {
                 lib.cache_path = Some(p);
             }
         }
+        lib.add_contact_model();
         lib.load_ms = t.elapsed().as_secs_f64() * 1e3;
+        say_people(&lib, people, &motions);
         Ok(lib)
+    }
+
+    /// Append the ground-contact patch (`rig::contact_body`) as a model of
+    /// its own, every level of detail the same quad, where the cull can still
+    /// address another mesh. Idempotent.
+    pub fn add_contact_model(&mut self) {
+        if self.meta.contact_model.is_some() || self.meshes.len() >= MAX_MESHES {
+            return;
+        }
+        let b = crate::rig::contact_body();
+        let mat0 = self.materials.len() as u32;
+        self.materials.extend_from_slice(&b.materials);
+        let base = self.vertices.len() as i32;
+        for v in &b.vertices {
+            let mut v = *v;
+            v.tag = (v.tag & !0xffff) | (mat0 + (v.tag & 0xffff));
+            self.vertices.push(v);
+        }
+        let first = self.indices.len() as u32;
+        self.indices.extend_from_slice(&b.opaque);
+        let glass_first = self.indices.len() as u32;
+        self.indices.extend_from_slice(&b.glass);
+        self.meshes.push(GpuMesh { first_index: first, index_count: b.opaque.len() as u32, glass_first, glass_count: b.glass.len() as u32, base_vertex: base, pad: [0; 3] });
+        self.meta.mesh_triangles.push(b.triangles);
+        let mesh = self.meshes.len() as u32 - 1;
+        let m = self.models.len() as u32;
+        // The quad spans [-1, 1] in x and z; the instance scale is its half size in metres.
+        self.models.push(GpuModel { meshes: [mesh; LODS], wheel: [[0.0; 4]; 4], center: [0.0; 3], radius: std::f32::consts::SQRT_2, class: CLASS_VEHICLE, skeleton: 0, joints: 0, wheel_radius: 0.0, driver_door: [0.0; 4] });
+        self.meta.model_names.push("contact".into());
+        self.meta.contact_model = Some(m);
     }
 
     pub fn model(&self, name: &str) -> Option<u32> {
@@ -255,6 +359,19 @@ impl Library {
 
     pub fn triangles(&self, mesh: u32) -> u32 {
         self.meta.mesh_triangles.get(mesh as usize).copied().unwrap_or(0)
+    }
+}
+
+/// One line when the people are drawn: which folders they came from.
+fn say_people(lib: &Library, people: &PeopleSource, motions: &MotionRoots) {
+    if let ("rocketbox", PeopleSource::Rocketbox(root), Some(clips), Some(styles)) = (lib.meta.people_source.as_str(), people, &motions.clips, &motions.styles) {
+        eprintln!(
+            "agents: people drawn ({}): Rocketbox avatars from {}, clips from {}, walks from {}",
+            if lib.from_cache { "from the cache" } else { "cooked" },
+            root.display(),
+            clips.display(),
+            styles.display()
+        );
     }
 }
 
@@ -271,6 +388,11 @@ pub fn cook_with(repo_root: &Path, js: &AgentsJs, people: &PeopleSource) -> Resu
 
 /// `cook_with`, the Rocketbox people moved by `motions`.
 pub fn cook_full(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions: &MotionRoots) -> Result<Library> {
+    cook_opts(repo_root, js, people, motions, CookOptions::default())
+}
+
+/// `cook_full` with the cook options (`--car-detail`: the far bodies).
+pub fn cook_opts(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions: &MotionRoots, opts: CookOptions) -> Result<Library> {
     let lamps = LampColours::from_js(js);
     // Vehicles: every LOD of every body, on worker threads.
     let jobs: Vec<(String, usize, crate::catalog::Lod)> =
@@ -330,7 +452,12 @@ pub fn cook_full(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions
                 None => b.body(&boxed),
             };
         }
-        meshes[3] = b.body(&boxed);
+        // The far slot: the three boxes, or (`--car-detail`) the coarsest cooked
+        // LOD past LOD 0 simplified (LOD 2, else LOD 1; a body with LOD 0 alone keeps the box).
+        meshes[3] = match (opts.far_body, lods[2].as_ref().or(lods[1].as_ref())) {
+            (true, Some(src)) => b.body(&far_body(src, FAR_BODY_TRIANGLES, FAR_BODY_ERROR_M)),
+            _ => b.body(&boxed),
+        };
         let pivots = lods.iter().flatten().next().map(|c| c.pivots).unwrap_or_default();
         let mut wheel = [[0f32; 4]; 4];
         for (w, p) in pivots.iter().enumerate() {
@@ -340,7 +467,8 @@ pub fn cook_full(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions
         let c = [(min[0] + max[0]) / 2.0, (min[1] + max[1]) / 2.0, (min[2] + max[2]) / 2.0];
         let r = ((max[0] - min[0]).powi(2) + (max[1] - min[1]).powi(2) + (max[2] - min[2]).powi(2)).sqrt() / 2.0;
         let m = b.lib.models.len() as u32;
-        b.lib.models.push(GpuModel { meshes, wheel, center: c, radius: r, class: CLASS_VEHICLE, skeleton: 0, joints: 0, wheel_radius: body.wheel_radius_m as f32, pad: [0; 4] });
+        let driver_door = lods.iter().flatten().find_map(|lod| lod.driver_door).map_or([0.0; 4], |door| door.pivot_and_angle);
+        b.lib.models.push(GpuModel { meshes, wheel, center: c, radius: r, class: CLASS_VEHICLE, skeleton: 0, joints: 0, wheel_radius: body.wheel_radius_m as f32, driver_door });
         b.lib.meta.model_names.push(id.clone());
         b.lib.meta.vehicle_models.insert(id.clone(), m);
     }
@@ -365,10 +493,23 @@ pub fn cook_full(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions
             }
         }
         PeopleSource::Off => {
-            let why = format!("no Rocketbox people (set {} to a copy of them, and {} and {} to their motions)", rocketbox::ROOT_ENV, crate::motion::CLIPS_ROOT_ENV, crate::motion::STYLES_ROOT_ENV);
+            let why = format!("no Rocketbox people (--no-rocketbox, or no copy at {})", eo_data::external::PEOPLE.looked_in());
             eprintln!("agents: people are not drawn: {why}");
             b.lib.meta.people_fallback = Some(why);
         }
+    }
+    // The selfie's phone (`rig::phone_body`): the same slab at every level
+    // of detail, after the people (it takes none of their mesh budget) and
+    // only where the cull can address it.
+    if b.lib.meshes.len() < MAX_MESHES {
+        let pb = crate::rig::phone_body();
+        let mesh = b.body(&pb);
+        let c = [(pb.min[0] + pb.max[0]) / 2.0, (pb.min[1] + pb.max[1]) / 2.0, (pb.min[2] + pb.max[2]) / 2.0];
+        let r = (0..3).map(|k| (pb.max[k] - pb.min[k]).powi(2)).sum::<f32>().sqrt() / 2.0;
+        let m = b.lib.models.len() as u32;
+        b.lib.models.push(GpuModel { meshes: [mesh; LODS], wheel: [[0.0; 4]; 4], center: c, radius: r, class: CLASS_VEHICLE, skeleton: 0, joints: 0, wheel_radius: 0.0, driver_door: [0.0; 4] });
+        b.lib.meta.model_names.push("phone".into());
+        b.lib.meta.phone_model = Some(m);
     }
     b.lib.meta.atlas_res = atlas_res;
     if b.lib.indices.is_empty() {
@@ -500,7 +641,7 @@ fn cook_rocketbox(b: &mut Builder, root: &Path, motions: &MotionRoots) -> Result
         let c = [(mn[0] + mx[0]) / 2.0, (mn[1] + mx[1]) / 2.0, (mn[2] + mx[2]) / 2.0];
         let r = ((mx[0] - mn[0]).powi(2) + (mx[1] - mn[1]).powi(2) + (mx[2] - mn[2]).powi(2)).sqrt() / 2.0 + 0.3;
         let m = b.lib.models.len() as u32;
-        b.lib.models.push(GpuModel { meshes, wheel: [[0.0; 4]; 4], center: c, radius: r, class: CLASS_PERSON, skeleton: at, joints: rocketbox::JOINTS.len() as u32, wheel_radius: 0.0, pad: [0; 4] });
+        b.lib.models.push(GpuModel { meshes, wheel: [[0.0; 4]; 4], center: c, radius: r, class: CLASS_PERSON, skeleton: at, joints: rocketbox::JOINTS.len() as u32, wheel_radius: 0.0, driver_door: [0.0; 4] });
         b.lib.meta.model_names.push(av.id.clone());
         b.lib.meta.people_models.push(m);
         b.lib.meta.family_heights.push(av.height);
@@ -555,16 +696,16 @@ struct MotionSources {
 
 /// Both motion sources, or why the people cannot move.
 fn motion_sources(roots: &MotionRoots, meta: &mut crate::motion::MotionMeta) -> Result<MotionSources> {
-    use crate::motion::{CLIPS_ROOT_ENV, Manifest, ROLES, STYLES, STYLES_ROOT_ENV, load_rb_clip};
+    use crate::motion::{Manifest, ROLES, STYLES, load_rb_clip};
     if !crate::motion::enabled() {
         bail!("the Rocketbox motions are switched off (--no-rocketbox-motions), and nothing else moves the people");
     }
-    let clips_root = roots.clips.as_ref().ok_or_else(|| anyhow!("no Rocketbox motion clips ({CLIPS_ROOT_ENV} is not set or holds no copy)"))?;
-    let styles_root = roots.styles.as_ref().ok_or_else(|| anyhow!("no 100STYLE walks ({STYLES_ROOT_ENV} is not set or holds no copy)"))?;
+    let clips_root = roots.clips.as_ref().ok_or_else(|| anyhow!("no Rocketbox motion clips: no copy at {}", eo_data::external::PEOPLE_MOTIONS.looked_in()))?;
+    let styles_root = roots.styles.as_ref().ok_or_else(|| anyhow!("no 100STYLE walks: no copy at {}", eo_data::external::PEOPLE_STYLES.looked_in()))?;
     let clips = (|| -> Result<HashMap<String, crate::motion::RbClip>> {
         let m = Manifest::clips()?;
         m.read(clips_root, "LICENSES.md").context("the copy's LICENSES.md")?;
-        let mut ids: Vec<&str> = ROLES.iter().flat_map(|r| [r.female, r.male]).collect();
+        let mut ids: Vec<&str> = ROLES.iter().flat_map(|r| r.clips()).collect();
         ids.sort_unstable();
         ids.dedup();
         let loaded: Vec<Result<crate::motion::RbClip>> = std::thread::scope(|s| ids.iter().map(|id| s.spawn(|| load_rb_clip(clips_root, &m, id))).collect::<Vec<_>>().into_iter().map(|h| h.join().expect("motion clip thread")).collect());
@@ -626,12 +767,13 @@ fn bake_groups(skels: &[&rocketbox::BipSkeleton], female: &[bool], mo: &MotionSo
     let mut strides: Vec<Vec<Option<(f32, f32)>>> = vec![];
     for (g, sk) in skels.iter().enumerate() {
         let clip_of = |r: usize| mo.clips.get(if female[g] { ROLES[r].female } else { ROLES[r].male });
+        let layer_of = |r: usize| ROLES[r].layer(female[g]).and_then(|(id, _)| mo.clips.get(id));
         let relaxed = clip_of(0).and_then(|c| rocketbox::relaxed_hands(sk, c, &ROLES[0]).ok());
         let srcs: Option<Vec<BakeSrc>> = segs
             .iter()
             .map(|s| match s.kind {
                 SegKind::Style(i) => Some(BakeSrc::Style { cycle: &mo.styles[i] }),
-                SegKind::Role(r) => clip_of(r).map(|clip| BakeSrc::Clip { clip, role: &ROLES[r], frames: s.frames }),
+                SegKind::Role(r) => clip_of(r).map(|clip| BakeSrc::Clip { clip, role: &ROLES[r], frames: s.frames, layer: layer_of(r) }),
             })
             .collect();
         match srcs.ok_or_else(|| anyhow!("a role's clip is missing")).and_then(|srcs| rocketbox::bake_list(sk, &srcs, relaxed.as_deref())) {
@@ -649,6 +791,7 @@ fn bake_groups(skels: &[&rocketbox::BipSkeleton], female: &[bool], mo: &MotionSo
     meta.walk = "100style".into();
     meta.standing = "rocketbox".into();
     meta.group_female = female.to_vec();
+    meta.group_bind = skels.iter().map(|sk| sk.pos.iter().map(|p| p.to_array()).collect()).collect();
     meta.walk_frames = crate::motion::WALK_FRAMES;
     meta.styles = mo.styles.iter().map(|c| StyleMeta { name: c.name.clone(), phone: c.phone, seconds: c.seconds, stride: c.stride, speed: c.speed, from_s: c.from_s, stride_scale: c.stride_scale }).collect();
     for (g, sk) in skels.iter().enumerate() {
@@ -773,5 +916,5 @@ pub fn read_cache(path: &Path) -> Result<Library> {
         let bc = [take(payload, &mut at)?.to_vec(), take(payload, &mut at)?.to_vec(), take(payload, &mut at)?.to_vec()];
         atlases.push(Atlas { res, maps, bc, bc_levels });
     }
-    Ok(Library { vertices, indices, meshes, materials, models, bones, atlases, meta, from_cache: true, load_ms: 0.0, cache_path: None })
+    Ok(Library { vertices, indices, meshes, materials, models, bones, atlases, test_player: None, meta, from_cache: true, load_ms: 0.0, cache_path: None })
 }

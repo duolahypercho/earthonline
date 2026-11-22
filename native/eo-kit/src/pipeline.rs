@@ -45,6 +45,8 @@ pub struct LoadedRecord {
     pub amenity: String,
     pub year_built: f64,
     pub tenancy: Vec<TenancyUnit>,
+    /// On the Presidio without an assessor parcel's join (presidio.rs; set by `KitCity::build`).
+    pub presidio: bool,
 }
 
 /// The source record's fields (eo-data `Building` + tags), in JS terms.
@@ -146,6 +148,7 @@ pub fn loaded_record(src: &SourceRecord, tenancy: Vec<TenancyUnit>) -> LoadedRec
         amenity: src.amenity.to_string(),
         year_built: 1900.0,
         tenancy,
+        presidio: false,
     }
 }
 
@@ -172,6 +175,9 @@ pub fn classify_loaded(rec: &LoadedRecord) -> Option<Classified> {
     };
     let mut c = classify::classify(&input);
     c.record_id = rec.id.clone();
+    // the Presidio rule: on the post and on no assessor parcel (the federal land has none)
+    c.presidio = rec.presidio && c.civic.is_none();
+    crate::typology::reclassify(&mut c);
     Some(c)
 }
 
@@ -631,7 +637,8 @@ const ROOF_WEIGHTS_COMMERCIAL: [(&str, f64); 6] =
 const ROOF_WEIGHTS_RESIDENTIAL: [(&str, f64); 6] =
     [("membrane-white", 0.06), ("membrane-light-grey", 0.12), ("membrane-silver", 0.1), ("membrane-aged", 0.17), ("cap-sheet-grey", 0.2), ("tar-gravel", 0.35)];
 
-fn roof_finish(id: &str) -> (&'static str, Option<u32>) {
+/// A roof finish id's material and tint (`ROOF_FINISHES`).
+pub fn roof_finish(id: &str) -> (&'static str, Option<u32>) {
     match id {
         "membrane-white" => ("membrane-roof", None),
         "membrane-light-grey" => ("membrane-roof", Some(0xdcdad5)),
@@ -695,6 +702,18 @@ pub fn drawn_materials(planned: &Planned, rung: u32) -> DrawnMaterials {
     if crate::wall_paint::enabled() {
         crate::wall_paint::apply(c, &materials, matches!(plan.extra.get("tints"), Some(J::Object(_))), &mut tints);
     }
+    // a stone or precast face's per-building tone (typology.rs: a tower's stone), not a paint.
+    if let Some(J::Object(st)) = plan.extra.get("stoneTints") {
+        for (name, t) in st {
+            if let Some(t) = tint_of(t) {
+                tints.insert(name.clone(), t);
+                tints.insert(format!("{name}{FENESTRATED_SUFFIX}"), t);
+            }
+        }
+    }
+    // the Presidio and GGNRA rule (presidio.rs): off-white paint, red tile on the low roofs
+    let tiled = crate::presidio::apply(c.presidio, &plan.id, c.archetype, c.storeys, c.seed, &mut materials, &mut tints);
+    let skip = skip || tiled;
     let mut finish = None;
     if !skip {
         if let Some(id) = roof_finish_id_for(c.archetype, c.seed) {
@@ -728,6 +747,13 @@ pub struct RungMesh {
     /// (material name as drawn, its paint, its triangles), in first-use order.
     pub groups: Vec<(String, Option<u32>, Sink)>,
     pub clamped_vertices: usize,
+    /// Per group, a lit sign face's glow code (`clutter::GLOW_*`; 0 none).
+    /// Empty when no group glows (always without the facade clutter).
+    pub glow: Vec<u8>,
+    /// (stage S1) Per group, its vertices' lettering bytes (`clutter::LetterCode::bytes`:
+    /// the vertex colour and the normal's y and w in the cook), empty for a plain
+    /// group. Empty when no group is lettered (always without the facade clutter).
+    pub letters: Vec<Vec<[u8; 5]>>,
 }
 
 impl RungMesh {
@@ -739,10 +765,24 @@ impl RungMesh {
     }
 }
 
-/// Emit a rung: every part through the build clamp into one sink per material.
+/// Emit a rung: every part through the build clamp into one sink per material
+/// (and the facade clutter at the level the game draws, `clutter::level`).
 pub fn build_rung(planned: &Planned, rung: u32) -> RungMesh {
+    build_rung_with(planned, rung, crate::clutter::level())
+}
+
+/// `build_rung` with the facade clutter at `clutter_level` (0: none, the
+/// rung as before; it is added on the near and mid rungs, 0 and 2).
+pub fn build_rung_with(planned: &Planned, rung: u32, clutter_level: u8) -> RungMesh {
     let drawn = drawn_materials(planned, rung);
-    let parts = rung_parts(planned, rung);
+    let mut parts = rung_parts(planned, rung);
+    let clutter = (clutter_level > 0 && (rung == 0 || rung == 2)).then(|| crate::clutter::plan(planned, clutter_level));
+    if let Some(cp) = &clutter {
+        // the port's fire escapes the clutter draws in their place.
+        if !cp.replaced.is_empty() {
+            parts.retain(|p| !(p.kind.starts_with("fire-escape") && p.edge.is_some_and(|e| cp.replaced.contains(&e))));
+        }
+    }
     let mut clamp = Clamp::new(&planned.plan, &planned.frame);
     let mut out = RungMesh::default();
     let wall = drawn.materials.get("wall").cloned().unwrap_or_else(|| "brick-running-bond".into());
@@ -759,6 +799,9 @@ pub fn build_rung(planned: &Planned, rung: u32) -> RungMesh {
         emit_part(&mut out.groups[k].2, part, &mut clamp);
     }
     out.clamped_vertices = clamp.clamped;
+    if let Some(cp) = &clutter {
+        crate::clutter::emit(cp, rung, &drawn, &mut out);
+    }
     out
 }
 

@@ -1,6 +1,6 @@
 # Off-repo asset store
 
-`artifacts/tripo`, `artifacts/vehicles` and `artifacts/characters` hold pipeline
+`artifacts/tripo` and `artifacts/vehicles` hold pipeline
 **source and intermediates**: text-to-3D output for street props, Blender
 scenes, texture plates. The game never loads any of it. What ships is the
 derived copy under `public/assets/`, which the native build reads and
@@ -13,9 +13,10 @@ runtime reads, so the binaries live in an object store and only
 beside them stays in Git.
 
 This store is separate from the optional runtime content (people, motions,
-scanned surfaces, sound, sign art, far-shore terrain), which is fetched from
-its original source; see
-[native/README.md](../native/README.md#optional-off-repository-assets).
+scanned surfaces, sound, sign art, far-shore terrain), which
+`scripts/setup-assets.py` downloads from its original source into the
+git-ignored `external/` folder; see
+[native/README.md](../native/README.md#optional-assets).
 
 ## Layout
 
@@ -77,7 +78,7 @@ only what a given task needs.
 
 ## Rules
 
-- Never `git add` a `.glb`, `.blend`, `.fbx` or texture plate under those three
+- Never `git add` a `.glb`, `.blend`, `.fbx` or texture plate under those two
   trees. `.gitignore` blocks the known cases and `verify:asset-lock` fails if
   one slips through another path.
 - `.blend1` (Blender autosave) and `.pyc` are regenerable junk: ignored,

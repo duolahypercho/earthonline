@@ -60,6 +60,11 @@ pub struct NativeSource {
     signal_tiles: HashMap<TileKey, Vec<u32>>,
     pub dims: StreetDims,
     pub timing: SignalTiming,
+    /// Structure level by OSM way id (`SimRoad::id`), from whoever builds the
+    /// grade-separated roads (eo-app's `--structures`: the structures'
+    /// `StructureWorld::way_levels`). Empty (every lane at grade, the
+    /// network exactly as without it) unless set (`with_levels`).
+    levels: HashMap<String, i8>,
 }
 
 fn vehicle_way(h: &str) -> bool {
@@ -116,7 +121,26 @@ impl NativeSource {
         for (i, s) in source.signals.iter().enumerate() {
             signal_tiles.entry(TileKey::of(s[0], s[1])).or_default().push(i as u32);
         }
-        NativeSource { roads, signals: source.signals, road_tiles, signal_tiles, dims, timing }
+        NativeSource { roads, signals: source.signals, road_tiles, signal_tiles, dims, timing, levels: HashMap::new() }
+    }
+
+    /// The same source with lane levels (`levels`: OSM way id -> structure
+    /// level; plain data, the simulation learns no deck geometry). A way on a
+    /// level other than 0 builds its lanes and carriageway on that level and
+    /// no footway. An empty table leaves everything as before.
+    pub fn with_levels(mut self, levels: HashMap<String, i8>) -> Self {
+        self.levels = levels;
+        self
+    }
+
+    /// The level table (`with_levels`).
+    pub fn levels(&self) -> &HashMap<String, i8> {
+        &self.levels
+    }
+
+    /// The structure level of a road (0 when the table does not list it).
+    fn level_of(&self, road: &SimRoad) -> i8 {
+        if self.levels.is_empty() { 0 } else { self.levels.get(&road.id).copied().unwrap_or(0) }
     }
 
     pub fn road_count(&self) -> usize {
@@ -250,15 +274,19 @@ impl NativeSource {
                         outgoing: None,
                         legal: None,
                         tile: Some(tile),
+                        level: self.level_of(road),
                     });
                     metas.push(LaneMeta { seg: si, end: end_node });
                 }
             }
         }
-        // Junction nodes in the delivery: lanes arriving per node.
+        // Junction nodes in the delivery: lanes arriving per node (at grade:
+        // a street's signal never controls a deck's lanes over it).
         let mut arriving: HashMap<(i64, i64), Vec<usize>> = HashMap::new();
         for (li, m) in metas.iter().enumerate() {
-            arriving.entry(qkey(m.end)).or_default().push(li);
+            if build.lanes[li].level == 0 {
+                arriving.entry(qkey(m.end)).or_default().push(li);
+            }
         }
         // Signals.
         let mut claimed_nodes: std::collections::HashSet<(i64, i64)> = Default::default();
@@ -423,13 +451,16 @@ impl NativeSource {
             if !want.contains(&seg_tile) {
                 continue;
             }
+            let level = self.level_of(road);
             if !(road.bridge || road.tunnel) {
-                build.segments.push(SegmentBuild { half: s.half, points: s.pts.clone() });
+                build.segments.push(SegmentBuild { half: s.half, points: s.pts.clone(), level });
             }
+            // (no walkers on a structure level: footways stay at grade.)
             if matches!(hw, "motorway" | "motorway_link" | "trunk" | "trunk_link")
                 || matches!(road.sidewalk.as_str(), "no" | "none" | "separate")
                 || road.bridge
                 || road.tunnel
+                || level != 0
             {
                 continue;
             }
@@ -546,4 +577,147 @@ pub fn tiles_around(x: f64, z: f64, radius: f64) -> Vec<TileKey> {
         }
     }
     out
+}
+
+/// One directed run of a named road for the corridor layer (`corridor`): its
+/// centreline in travel order, the lanes it carries that way, their width,
+/// the posted speed (the survey's `maxspeed`), and per point whether the way
+/// after it is a tunnel or a bridge.
+#[derive(Clone, Debug)]
+pub struct Chain {
+    pub points: Vec<P2>,
+    pub lanes: u32,
+    pub lane_w: f64,
+    pub speed_mps: Option<f64>,
+    pub tunnel: Vec<bool>,
+    pub bridge: Vec<bool>,
+    pub names: Vec<String>,
+}
+
+impl NativeSource {
+    /// Drop the roads `pred` picks (the corridor layer drives them instead), so
+    /// the local simulation never places a car on them.
+    pub fn without_roads(&mut self, pred: impl Fn(&SimRoad) -> bool) -> usize {
+        let before = self.roads.len();
+        self.roads.retain(|r| !pred(r));
+        self.road_tiles.clear();
+        for (i, r) in self.roads.iter().enumerate() {
+            for t in tiles_of_polyline(&r.points) {
+                self.road_tiles.entry(t).or_default().push(i as u32);
+            }
+        }
+        before - self.roads.len()
+    }
+
+    /// The directed runs of the vehicle ways named in `names`: every way split
+    /// into its directions of travel (one-way tags respected), joined end to
+    /// start where they share a vertex, the straightest continuation first;
+    /// each run as long as the joins allow. Runs shorter than `min_len_m` are left out.
+    pub fn chains(&self, names: &[&str], min_len_m: f64) -> Vec<Chain> {
+        struct Edge {
+            road: usize,
+            pts: Vec<P2>,
+            lanes: u32,
+        }
+        let mut edges: Vec<Edge> = vec![];
+        for (ri, r) in self.roads.iter().enumerate() {
+            if !names.iter().any(|n| r.name == *n) || r.points.len() < 2 {
+                continue;
+            }
+            let n = r.lanes.unwrap_or(if r.oneway == Oneway::Both { 2 } else { 1 }).max(1);
+            let (fwd, back) = match r.oneway {
+                Oneway::Forward => (n, 0),
+                Oneway::Reverse => (0, n),
+                Oneway::Both => ((n + 1) / 2, (n / 2).max(1)),
+            };
+            if fwd > 0 {
+                edges.push(Edge { road: ri, pts: r.points.clone(), lanes: fwd });
+            }
+            if back > 0 {
+                edges.push(Edge { road: ri, pts: r.points.iter().rev().copied().collect(), lanes: back });
+            }
+        }
+        let mut starts: HashMap<(i64, i64), Vec<usize>> = HashMap::new();
+        let mut ends: HashMap<(i64, i64), usize> = HashMap::new();
+        for (i, e) in edges.iter().enumerate() {
+            starts.entry(qkey(e.pts[0])).or_default().push(i);
+            *ends.entry(qkey(e.pts[e.pts.len() - 1])).or_default() += 1;
+        }
+        let dir = |a: P2, b: P2| {
+            let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+            let l = dx.hypot(dz).max(1e-9);
+            [dx / l, dz / l]
+        };
+        let mut used = vec![false; edges.len()];
+        // sources first (no way arrives at their start), then whatever is left (loops).
+        let mut order: Vec<usize> = (0..edges.len()).filter(|&i| !ends.contains_key(&qkey(edges[i].pts[0]))).collect();
+        order.extend(0..edges.len());
+        let mut out = vec![];
+        for first in order {
+            if used[first] {
+                continue;
+            }
+            let mut cur = first;
+            let mut points: Vec<P2> = vec![];
+            let mut tunnel = vec![];
+            let mut bridge = vec![];
+            let mut lanes = vec![];
+            let mut speeds = vec![];
+            let mut road_names: Vec<String> = vec![];
+            loop {
+                used[cur] = true;
+                let e = &edges[cur];
+                let r = &self.roads[e.road];
+                let skip = if points.is_empty() { 0 } else { 1 };
+                for p in &e.pts[skip..] {
+                    points.push(*p);
+                    tunnel.push(r.tunnel);
+                    bridge.push(r.bridge);
+                }
+                let len: f64 = e.pts.windows(2).map(|w| geom::hypot(w[1][0] - w[0][0], w[1][1] - w[0][1])).sum();
+                lanes.push((e.lanes, len));
+                if let Some(v) = geom::parse_posted_speed_mps(&r.maxspeed) {
+                    speeds.push((v, len));
+                }
+                if !road_names.contains(&r.name) {
+                    road_names.push(r.name.clone());
+                }
+                let n = e.pts.len();
+                let d = dir(e.pts[n - 2], e.pts[n - 1]);
+                let next = starts.get(&qkey(e.pts[n - 1])).and_then(|c| {
+                    c.iter().copied().filter(|&k| !used[k]).max_by(|&a, &b| {
+                        let da = dir(edges[a].pts[0], edges[a].pts[1]);
+                        let db = dir(edges[b].pts[0], edges[b].pts[1]);
+                        (d[0] * da[0] + d[1] * da[1]).total_cmp(&(d[0] * db[0] + d[1] * db[1]))
+                    })
+                });
+                // no U-turns onto the other direction of the same street.
+                match next {
+                    Some(k) if {
+                        let dk = dir(edges[k].pts[0], edges[k].pts[1]);
+                        d[0] * dk[0] + d[1] * dk[1] > -0.5
+                    } =>
+                    {
+                        cur = k
+                    }
+                    _ => break,
+                }
+            }
+            let total: f64 = points.windows(2).map(|w| geom::hypot(w[1][0] - w[0][0], w[1][1] - w[0][1])).sum();
+            if total < min_len_m {
+                continue;
+            }
+            // the lane count carried over most of the run; the speed as posted over most of it.
+            let mode = |v: &[(f64, f64)]| v.iter().fold(None::<(f64, f64)>, |m, &(x, l)| {
+                let w: f64 = v.iter().filter(|(y, _)| *y == x).map(|(_, l)| l).sum();
+                let _ = l;
+                if m.is_none_or(|(_, mw)| w > mw) { Some((x, w)) } else { m }
+            });
+            let lanes_f: Vec<(f64, f64)> = lanes.iter().map(|&(n, l)| (n as f64, l)).collect();
+            let n = mode(&lanes_f).map(|(x, _)| x as u32).unwrap_or(1);
+            let first_road = &self.roads[edges[first].road];
+            out.push(Chain { points, lanes: n, lane_w: self.lane_width(first_road), speed_mps: mode(&speeds).map(|(x, _)| x), tunnel, bridge, names: road_names });
+        }
+        out
+    }
 }

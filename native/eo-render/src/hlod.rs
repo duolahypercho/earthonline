@@ -36,7 +36,7 @@ use bytemuck::{Pod, Zeroable};
 use glam::Vec3;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicUsize, Ordering};
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -61,6 +61,41 @@ pub const HLOD_LEVEL: u32 = 4;
 /// building's LOD group, so two far buildings meeting at a pixel are told
 /// apart (hlod_draw.wgsl `hlod_fs_ids`). Not an object-table index.
 pub const FAR_ID_BASE: u32 = 0xC000_0000;
+
+/// How the far layer is drawn (set when it is attached; every shot's
+/// manifest names it through `HlodOptions::path`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FarPath {
+    /// Not attached to the renderer (yet, or the adapter lacks multi-draw-indirect-count and `--no-far-fallback`).
+    NotAttached,
+    /// The compacted lists (`multi_draw_indexed_indirect_count`).
+    Compact,
+    /// Fixed-size lists without the count (`multi_draw_indexed_indirect`; one draw for the trees).
+    Fallback,
+}
+
+/// Metres the fallback's CPU frustum count grows each box by (hlod_cull.wgsl
+/// tests the same boxes with the same planes in f32; the margin covers rounding).
+pub const FALLBACK_MARGIN_M: f32 = 1.0;
+
+/// The cull's frustum test (hlod_cull.wgsl), the box grown by `margin`.
+pub fn in_frustum(planes: &[[f32; 4]; 6], mn: [f32; 3], mx: [f32; 3], margin: f32) -> bool {
+    planes.iter().all(|pl| {
+        let v = [0, 1, 2].map(|k| if pl[k] >= 0.0 { mx[k] + margin } else { mn[k] - margin });
+        pl[0] * v[0] + pl[1] * v[1] + pl[2] * v[2] + pl[3] >= 0.0
+    })
+}
+
+/// `FarPath` as attached (0 not attached, 1 compact, 2 fallback).
+pub static DRAW_PATH: AtomicU8 = AtomicU8::new(0);
+
+pub fn draw_path() -> FarPath {
+    match DRAW_PATH.load(Ordering::Relaxed) {
+        1 => FarPath::Compact,
+        2 => FarPath::Fallback,
+        _ => FarPath::NotAttached,
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HlodOptions {
@@ -90,6 +125,8 @@ pub struct HlodOptions {
     /// and a tower's panes tilted panel by panel with the city reflected below the horizon (`--no-tower-panels`).
     pub night: bool,
     pub panels: bool,
+    /// How the far layer is drawn (as attached when this was read; not an option).
+    pub path: FarPath,
 }
 
 impl Default for HlodOptions {
@@ -113,6 +150,7 @@ impl Default for HlodOptions {
             tower_glass: true,
             night: true,
             panels: true,
+            path: FarPath::NotAttached,
         }
     }
 }
@@ -140,6 +178,7 @@ impl HlodOptions {
     /// From the command line (see `FLAGS`) and `EO_HLOD=0`.
     pub fn from_env() -> Self {
         let mut o = Self::default();
+        o.path = draw_path();
         if std::env::var("EO_HLOD").is_ok_and(|v| v == "0") {
             o.on = false;
         }
@@ -244,6 +283,9 @@ struct CullParams {
     counts: [u32; 4],
     /// The camera, and in w the cell -> district band's start (a district chunk wholly nearer, its cell resident, draws nothing).
     cam: [f32; 4],
+    /// the bounded list's guards (bounds.rs): the widened frustum, and x the ring's reach, y 1 to count them, z the near sphere.
+    wide: [[f32; 4]; 6],
+    guard: [f32; 4],
 }
 
 // ---------------------------------------------------------------------------
@@ -262,6 +304,8 @@ pub struct HlodInit<'a> {
     pub sample_count: u32,
     pub debug_ids: bool,
     pub opts: HlodOptions,
+    /// No multi-draw-indirect-count: a fixed-size list (`draw`).
+    pub fallback: bool,
 }
 
 pub struct HlodGpu {
@@ -272,6 +316,8 @@ pub struct HlodGpu {
     params_buf: wgpu::Buffer,
     cmd_buf: wgpu::Buffer,
     count_buf: wgpu::Buffer,
+    /// The list in the count emulation (no MULTI_DRAW_INDIRECT_COUNT), registered at attach.
+    counted: std::sync::OnceLock<crate::counted::CountedLists>,
     cull_plain: wgpu::ComputePipeline,
     cull_hzb: wgpu::ComputePipeline,
     cull_bg: wgpu::BindGroup,
@@ -286,6 +332,16 @@ pub struct HlodGpu {
     far_a: f32,
     /// The cull drops the district chunks the resident cells draw instead (off: tests).
     chunk_skip: AtomicBool,
+    /// Without multi-draw-indirect-count: the cull still appends its commands,
+    /// and the pass draws the first `live` slots (zeroed each frame) without a count.
+    fallback: bool,
+    /// Table entries the cull can keep (resident, with indices).
+    live: AtomicU32,
+    /// Each entry's box while the cull can keep it (the CPU mirror `live` counts).
+    live_set: Mutex<Vec<Option<([f32; 3], [f32; 3])>>>,
+    /// Of those, the ones inside this frame's frustum (a box test as the
+    /// cull's, its boxes grown by `FALLBACK_MARGIN_M`): no frame has more commands.
+    frame_live: AtomicU32,
     device: wgpu::Device,
 }
 
@@ -319,8 +375,10 @@ impl HlodGpu {
         let index_buf = buf("hlod-indices", o.indices as u64 * 4, U::INDEX | U::COPY_DST);
         let cell_buf = buf("hlod-cells", MAX_CELLS as u64 * std::mem::size_of::<GpuCell>() as u64, U::STORAGE | U::COPY_DST);
         let params_buf = buf("hlod-cull-params", std::mem::size_of::<CullParams>() as u64, U::UNIFORM | U::COPY_DST);
-        let cmd_buf = buf("hlod-draws", MAX_CELLS as u64 * 20, U::STORAGE | U::INDIRECT);
-        let count_buf = buf("hlod-counts", 16, U::STORAGE | U::INDIRECT | U::COPY_SRC | U::COPY_DST);
+        // COPY_DST: the count emulation, the bounded draws and the fallback (`clear`) zero its slots
+        let cmd_buf = buf("hlod-draws", MAX_CELLS as u64 * 20, U::STORAGE | U::INDIRECT | U::COPY_DST);
+        // [0] commands, [1] triangles, [2] in the frustum, [3] occluded, [4] [5] the bounded list's guards
+        let count_buf = buf("hlod-counts", 32, U::STORAGE | U::INDIRECT | U::COPY_SRC | U::COPY_DST);
         let layers = o.pages.max(1);
         let bc = d.features().contains(wgpu::Features::TEXTURE_COMPRESSION_BC);
         PAGES_BC.store(bc, Ordering::Relaxed);
@@ -374,6 +432,7 @@ impl HlodGpu {
             d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some(label), layout: Some(l), module: m, entry_point: Some("hlod_cull"), compilation_options: Default::default(), cache: None })
         };
         let cull_plain = compute(&pm, &lay_p, "hlod_cull");
+        DRAW_PATH.store(if i.fallback { 2 } else { 1 }, Ordering::Relaxed);
         let cull_hzb = compute(&hm, &lay_h, "hlod_cull (hzb)");
         // Draw: groups 0 and 1 the city's, group 2 the far layer's.
         let vs = wgpu::ShaderStages::VERTEX;
@@ -403,7 +462,7 @@ impl HlodGpu {
                 wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::Sampler(&sampler) },
             ],
         });
-        let dm = module("hlod_draw.wgsl", format!("{}\n{}{DRAW_WGSL}", crate::look::city_shader_source(), far_constants_wgsl(&i.opts))); // + the switches
+        let dm = module("hlod_draw.wgsl", format!("{}\n{}{DRAW_WGSL}", crate::look::city_shader_source_far(), far_constants_wgsl(&i.opts))); // + the switches // the far layer's city shader (lighting: the ambient plane only)
         let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("hlod-draw-layout"), bind_group_layouts: &[Some(i.draw_bgl), Some(i.main_bgl), Some(&draw_bgl)], immediate_size: 0 });
         let attrs = [
             wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x3, offset: 0, shader_location: 0 },
@@ -452,6 +511,7 @@ impl HlodGpu {
             params_buf,
             cmd_buf,
             count_buf,
+            counted: std::sync::OnceLock::new(),
             cull_plain,
             cull_hzb,
             cull_bg,
@@ -463,8 +523,19 @@ impl HlodGpu {
             bytes,
             far_a: o.far_band[0],
             chunk_skip: AtomicBool::new(true),
+            fallback: i.fallback,
+            live: AtomicU32::new(0),
+            live_set: Mutex::new(vec![None; MAX_CELLS as usize]),
+            frame_live: AtomicU32::new(0),
             device: d.clone(),
         }
+    }
+
+    /// The most entries the cull can draw this frame: every entry written
+    /// resident (with indices) so far, plus a margin for entries written
+    /// after the encode and before its submit, in whole 64s.
+    pub fn resident_bound(&self) -> u32 {
+        (self.live_entries() + 64).next_multiple_of(64).min(MAX_CELLS)
     }
 
     pub fn total_bytes(&self) -> u64 {
@@ -473,12 +544,63 @@ impl HlodGpu {
 
     /// The frame's camera (the city pass's jittered clip matrix and its planes).
     pub fn update(&self, queue: &wgpu::Queue, view_proj: glam::Mat4, planes: [[f32; 4]; 6], eye: Vec3) {
-        let p = CullParams { planes, view_proj: view_proj.to_cols_array_2d(), counts: [MAX_CELLS, 0, 0, 0], cam: [eye.x, eye.y, eye.z, if self.chunk_skip.load(Ordering::Relaxed) { self.far_a } else { -1.0 }] };
+        let p = CullParams { planes, view_proj: view_proj.to_cols_array_2d(), counts: [MAX_CELLS, 0, 0, 0], cam: [eye.x, eye.y, eye.z, if self.chunk_skip.load(Ordering::Relaxed) { self.far_a } else { -1.0 }], wide: [[0.0; 4]; 6], guard: [0.0; 4] };
         queue.write_buffer(&self.params_buf, 0, bytemuck::bytes_of(&p));
+        if self.fallback {
+            // the commands the cull can append this frame: the kept entries in
+            // the frustum (boxes grown, so the count is never below the GPU's).
+            let set = self.live_set.lock().unwrap();
+            let n = set.iter().flatten().filter(|(mn, mx)| in_frustum(&planes, *mn, *mx, FALLBACK_MARGIN_M)).count();
+            self.frame_live.store(n as u32, Ordering::Relaxed);
+        }
     }
 
-    pub fn clear(&self, enc: &mut wgpu::CommandEncoder) {
+    /// The bounded list's guards for this frame (after `update`): the widened
+    /// frustum's planes and the ring's reach (bounds.rs).
+    pub fn set_guard(&self, queue: &wgpu::Queue, wide: [[f32; 4]; 6], reach: f32) {
+        let at = std::mem::offset_of!(CullParams, wide) as u64;
+        let mut words = [0f32; 28];
+        for (k, p) in wide.iter().enumerate() {
+            words[k * 4..k * 4 + 4].copy_from_slice(p);
+        }
+        words[24] = reach;
+        words[25] = 1.0;
+        words[26] = crate::bounds::NEAR_M;
+        queue.write_buffer(&self.params_buf, at, bytemuck::cast_slice(&words));
+    }
+
+    /// The cull's counters: [0] commands, [1] triangles, [2] in the frustum, [3] occluded, [4] [5] the bounded list's guards.
+    pub fn counter_buffer(&self) -> &wgpu::Buffer {
+        &self.count_buf
+    }
+
+    /// `bound`: the bounded list's commands, emptied before the cull appends (bounds.rs).
+    pub fn clear(&self, enc: &mut wgpu::CommandEncoder, bound: Option<u32>) {
         enc.clear_buffer(&self.count_buf, 0, None);
+        let live = self.frame_bound() as u64;
+        if self.fallback && live > 0 {
+            // The slots the cull leaves empty draw nothing (index count 0).
+            enc.clear_buffer(&self.cmd_buf, 0, Some(live * 20));
+        }
+        if let Some(b) = bound.filter(|_| !self.fallback) {
+            crate::clear_list(enc, &self.cmd_buf, 0, b, crate::DRAW_ARGS_BYTES);
+        }
+    }
+
+    /// The fallback's slots this frame: the count, at most the list's length.
+    fn frame_bound(&self) -> u32 {
+        self.frame_live.load(Ordering::Relaxed).min(MAX_CELLS)
+    }
+
+    /// Commands the fallback draws a frame (the entries the cull can keep).
+    pub fn live_entries(&self) -> u32 {
+        self.live.load(Ordering::Relaxed)
+    }
+
+    /// Put the cell list (count word 0) in the count emulation.
+    pub fn register_counts(&self, counts: &std::sync::Arc<crate::counted::Counts>) {
+        let list = crate::counted::List { word: 0, draws: self.cmd_buf.clone(), offset: 0, stride: crate::DRAW_ARGS_BYTES, max: MAX_CELLS, floor: None };
+        let _ = self.counted.set(counts.register("far-cells", &self.count_buf, vec![list]));
     }
 
     /// Whether the cull drops the district chunks the resident cells draw
@@ -503,13 +625,25 @@ impl HlodGpu {
         pass.dispatch_workgroups(MAX_CELLS.div_ceil(64), 1, 1);
     }
 
-    /// In the city pass (its groups 0 and 1 bound): every entry the cull kept.
-    pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
+    /// In the city pass (its groups 0 and 1 bound): every entry the cull kept
+    /// (`bound`: the bounded draws' commands, bounds.rs; None: the count
+    /// emulation's bound or the indirect count).
+    pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>, bound: Option<u32>) {
         pass.set_pipeline(&self.draw_pipeline);
         pass.set_bind_group(2, &self.draw_bg, &[]);
         pass.set_vertex_buffer(0, self.vertex_buf.slice(..));
         pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint32);
-        pass.multi_draw_indexed_indirect_count(&self.cmd_buf, 0, &self.count_buf, 0, MAX_CELLS);
+        if self.fallback {
+            // No count on the GPU: the cull's commands are compacted to the
+            // front of the list, and every slot up to this frame's bound is drawn (the rest zeroed).
+            let live = self.frame_bound();
+            if live > 0 {
+                pass.multi_draw_indexed_indirect(&self.cmd_buf, 0, live);
+            }
+            return;
+        }
+        // (the bounded draws' `bound`, else the count emulation's when `register_counts` put the list in it)
+        crate::draw_compacted(pass, bound, self.counted.get(), 0, &self.cmd_buf, 0, &self.count_buf, 0, MAX_CELLS);
     }
 
     /// The last frame's counters (blocking; tests and bench reports): entries
@@ -529,6 +663,28 @@ impl HlodGpu {
 
     pub fn write_entry(&self, queue: &wgpu::Queue, entry: u32, c: &GpuCell) {
         queue.write_buffer(&self.cell_buf, entry as u64 * std::mem::size_of::<GpuCell>() as u64, bytemuck::bytes_of(c));
+        // the cull keeps a resident entry with indices (hlod_cull.wgsl)
+        let keep = (c.flags & ENTRY_RESIDENT != 0 && c.index_count > 0).then_some((c.min, c.max));
+        let mut set = self.live_set.lock().unwrap();
+        if let Some(was) = set.get_mut(entry as usize) {
+            match (was.is_some(), keep.is_some()) {
+                (false, true) => {
+                    self.live.fetch_add(1, Ordering::Relaxed);
+                    // written after this frame's count: counted until the next `update`
+                    self.frame_live.fetch_add(1, Ordering::Relaxed);
+                }
+                (true, false) => {
+                    self.live.fetch_sub(1, Ordering::Relaxed);
+                }
+                (true, true) if *was != keep => {
+                    // a kept entry with a new box: this frame's count used the
+                    // old one, so count it again (an extra slot is zeroed)
+                    self.frame_live.fetch_add(1, Ordering::Relaxed);
+                }
+                _ => {}
+            }
+            *was = keep;
+        }
     }
 }
 
@@ -629,6 +785,47 @@ pub struct HlodStats {
     pub updates: u64,
 }
 
+/// The optional shore material is registered after all building materials.
+/// Exclude its row from the cache identity, keeping the live palette indexed
+/// exactly as the GPU sees it. Landmark colours after that row keep their order.
+fn building_cache_key(
+    kit_key: &str,
+    colours: &hlod_bake::MaterialColours,
+    authored: &AuthoredSet,
+    bake: &hlod_bake::BakeOptions,
+) -> String {
+    let building_colours = authored.materials.by_name(crate::seabed::rock_maps::NAME).map(|rock| {
+        let mut palette = colours.clone();
+        palette.rgb.remove(rock as usize);
+        palette.glass.remove(rock as usize);
+        palette
+    });
+    hlod_bake::inputs_key(kit_key, building_colours.as_ref().unwrap_or(colours), authored, bake)
+}
+
+#[cfg(test)]
+mod building_cache_tests {
+    use super::*;
+    use crate::authored::GpuMaterial;
+
+    #[test]
+    fn shoreline_scan_reuses_the_city_cache_and_retains_building_colour_changes() {
+        let key = |rock: bool, red: f32| {
+            let mut authored = AuthoredSet::empty();
+            let building = GpuMaterial { base: [red, 0.4, 0.3, 1.0], ..GpuMaterial::vertex_colour() };
+            authored.materials.named("building", building);
+            if rock {
+                authored.materials.named(crate::seabed::rock_maps::NAME, GpuMaterial::vertex_colour());
+            }
+            authored.materials.named("landmark", GpuMaterial::vertex_colour());
+            let palette = hlod_bake::MaterialColours::new(&authored.materials.gpu, &[]);
+            building_cache_key("city", &palette, &authored, &hlod_bake::BakeOptions::default())
+        };
+        assert_eq!(key(false, 0.2), key(true, 0.2));
+        assert_ne!(key(true, 0.2), key(true, 0.3));
+    }
+}
+
 /// What the bakes read, apart from the planner's city and the material colours (which arrive later).
 pub struct HlodInputs {
     pub set: Arc<HlodSet>,
@@ -689,7 +886,7 @@ impl HlodRuntime {
                 // the far layer bakes the scaled city; the scale and the ground
                 // plan's version are in its key (the kit key carries them too; scale 1: unchanged).
                 // + the far roof features (all off: the key as before)
-                let key = hlod_bake::inputs_key(&format!("{kit_key}{}{}", eo_data::groundscale::cache_tag(), eo_data::roof_colours::far_cache_tag()), &colours, &inp.authored, &bake);
+                let key = building_cache_key(&format!("{kit_key}{}{}", eo_data::groundscale::cache_tag(), eo_data::roof_colours::far_cache_tag()), &colours, &inp.authored, &bake);
                 *slot.lock().unwrap() = Some(Arc::new(BakeContext {
                     set: inp.set,
                     kit: inp.kit,
@@ -1017,7 +1214,7 @@ impl HlodRuntime {
             self.flags_dirty = true;
         }
         if self.flags_dirty {
-            queue.write_buffer(&renderer.hlod_flags_buf, 0, bytemuck::cast_slice(&self.flags));
+            renderer.write_hlod_flags(queue, &self.flags); // (+ the CPU copy the fixed-slot lists' ranges read)
             bytes += self.flags.len() as u64 * 4;
             self.flags_dirty = false;
         }
@@ -1126,8 +1323,9 @@ impl HlodRuntime {
 
     /// Why `settled` is false (for a settle that timed out).
     pub fn unsettled(&self) -> String {
+        let count = |s: DState| self.dstate.iter().filter(|&&d| d == s).count();
         format!(
-            "far layer: inputs {}, cells pending {}, districts pending {}, in flight {}, uploads {}, cells wanted {} resident {}, districts resident {} of {}",
+            "far layer: inputs {}, cells pending {}, districts pending {}, in flight {}, uploads {}, cells wanted {} resident {}, districts resident {} of {} (requested {}; idle {}, queued {}, uploading {}, failed {})",
             self.ctx().is_some(),
             self.pending.lock().unwrap().len(),
             self.pending_districts.lock().unwrap().len(),
@@ -1136,7 +1334,12 @@ impl HlodRuntime {
             self.slots.len(),
             self.stats.resident_cells,
             self.stats.resident_districts,
-            self.districts.len()
+            self.districts.len(),
+            self.districts_requested,
+            count(DState::Idle),
+            count(DState::Requested),
+            count(DState::Uploading),
+            count(DState::Failed),
         )
     }
 

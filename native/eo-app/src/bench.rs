@@ -120,19 +120,27 @@ fn yaw_of(dir: Vec3) -> f32 {
 }
 
 mod cc0_shots; // cc0
+mod clutter_shots; // the facade clutter's capture card (`--clutter-shots`)
 mod fix3_shots;
 mod gs_shots;
 mod hlod_shots; // hlod
+mod hero_views; // the key views (`--light-shots`, EO_LIGHT_SHOTS=hero; the cinematic look plan's stage L0)
 mod far_shots;
 mod landmarks_bench; // landmarks
+mod light_shots; // the lighting reference cards (`--light-shots`)
 mod occlusion_check; // occlusion
 mod sky_shots; // sky
 mod so_shots; // the sky and ocean review cards
 mod street_bench;
+mod structures_bench; // the grade-separated roads' paths (`--structures`)
+mod structures_shots; // the grade-separated roads' capture card (`--structures-shots`)
 mod view_bench;
 mod water_bench; // water
 pub(crate) use water_bench::dive_camera;
 mod sign_shots; // signs
+mod scene_cards; // the visual gate's eight scene cards (`--scene-cards`)
+mod clip; // moving clips along camera paths (`--clip FILE.json`)
+mod shots; // offscreen geo-referenced shots (`--shots FILE.json`)
 
 struct Segment {
     name: &'static str,
@@ -390,10 +398,57 @@ fn segments(world: &World, args: &Args, aspect: f32, far: f32) -> Vec<Segment> {
         },
     ]
     .into_iter()
+    .chain(["house_bedroom", "house_roof", "house_dining", "house_garden", "house_frontage", "house_windows", "house_porch"].into_iter().filter_map(|name| {
+            let selected = args.segments.as_ref()?.iter().any(|s| s == name);
+            if !selected { return None; }
+            let house = world.house.as_ref()?;
+            let (left, right, target, description) = if name == "house_garden" {
+                (house.point(5.35, 0.98, -5.13).as_vec3(), house.point(5.72, 1.46, -3.17).as_vec3(),
+                 house.point(2.89, 0.05, -1.11).as_vec3(), "Walking from the sloped approach to the stoop, facing the planted bed")
+            } else if name == "house_porch" {
+                (house.point(4.6,0.,-3.6).as_vec3() + EYE_HEIGHT_M*Vec3::Y,
+                 house.point(5.9,0.,-0.70).as_vec3() + EYE_HEIGHT_M*Vec3::Y,
+                 house.point(5.37,1.78,0.17).as_vec3(), "Approaching the fitted porch lamp and closed entrance")
+            } else if name == "house_windows" {
+                (house.point(-1.98, 1.73, -7.26).as_vec3(), house.point(5.66, 1.73, -5.56).as_vec3(),
+                 house.point(2.75, 5.12, 0.062).as_vec3(), "Crossing the approach while following the tree reflection in the upstairs sash")
+            } else if name == "house_frontage" {
+                (house.point(-1.3, 2.7, -10.3).as_vec3(), house.point(5.35, 1.70, -6.8).as_vec3(),
+                 house.point(3.0, 4.30, 0.).as_vec3(), "Walking across the street frontage, facing the upper arcade")
+            } else if name == "house_dining" {
+                (house.point(4.5,0.,2.0).as_vec3() + EYE_HEIGHT_M * Vec3::Y,
+                 house.point(3.9,0.,5.2).as_vec3() + EYE_HEIGHT_M * Vec3::Y,
+                 house.point(2.4,0.52,7.6).as_vec3(),
+                 "Approaching the dining table with the pendant-lit floor in view")
+            } else if name == "house_roof" {
+                (house.point(9.6, 12.8, -5.6).as_vec3(), house.point(7.7, 12.0, -3.7).as_vec3(),
+                 house.point(5.0, 10.65, 0.7).as_vec3(), "Moving over the rounded bay and along the Mission tile courses")
+            } else {
+                let storey = 10. / 3.;
+                (house.point(4.0, storey, 8.1).as_vec3() + EYE_HEIGHT_M * Vec3::Y,
+                 house.point(4.7, storey, 8.8).as_vec3() + EYE_HEIGHT_M * Vec3::Y,
+                 house.point(2.3,storey+0.72,11.8).as_vec3(),
+                 "Standing inside the upstairs terrace, moving past the foot of the bed toward the rear sash")
+            };
+            Some(Segment {
+                name,
+                description: description.into(),
+                camera: Box::new(move |i, n| {
+                    let t = i as f32 / n.max(1) as f32;
+                    let eye = left.lerp(right,t);
+                    let d = (target-eye).normalize();
+                    Camera { far, ..Camera::new(eye,yaw_of(d),d.y.asin(),aspect) }
+                }),
+                frames, paced: false, streams: false,
+            })
+        }))
     .chain(street_bench::sidewalk_segment(world, frames, aspect, far))
     .chain(water_bench::waterfront_segment(world, frames, aspect, far)) // water
     .chain(water_bench::bay_segment(world, frames, aspect, far)) // water
     .chain(water_bench::dive_segment(world, frames, aspect, far))
+    .chain(water_bench::habitat_segments(world, args, frames, aspect, far))
+    .chain(structures_bench::freeway_drive_segment(world, frames, aspect, far)) // structures: None without built decks
+    .chain(structures_bench::under_viaduct_segment(world, frames, aspect, far))
     .chain(so_shots::surf_segment(world, frames, aspect, far)) // opt-in (EO_SURF_BENCH=1), Ocean Beach's surf in view
     .chain(landmarks_bench::segments(world, frames, aspect, far)) // landmarks
     .chain(view_bench::turn_segments(world, frames, args.warmup, aspect, far))
@@ -411,17 +466,60 @@ const REALTIME_FRAME_CAP: usize = 16;
 /// Frames per timestamp query set (a set holds at most 4096 queries).
 const TS_FRAMES: usize = (4096 / QUERIES_PER_FRAME) as usize;
 
+/// Timestamp query sets per path, used in turn: each is resolved as soon as
+/// its `TS_FRAMES` frames are encoded, then reused. Metal keeps at most 32 sets
+/// alive (each is a counter sample buffer; one more loses the device), and the
+/// realtime drive draws thousands of frames.
+const TS_RING: usize = 4;
+
+/// Bytes one resolved set of `per_frame` queries a frame takes in a resolve
+/// target (resolve offsets are 256-byte aligned).
+fn ts_chunk_stride(per_frame: u32) -> u64 {
+    (per_frame as u64 * TS_FRAMES as u64 * 8).div_ceil(256) * 256
+}
+
+/// The timestamps of the first `chunks` sets resolved into `target` at
+/// `stride` bytes each (the alignment padding dropped).
+fn read_resolved(ctx: &GpuContext, target: &wgpu::Buffer, chunks: usize, per_frame: u32, stride: u64) -> Result<Vec<u64>> {
+    let bytes = chunks as u64 * stride;
+    if bytes == 0 {
+        return Ok(vec![]);
+    }
+    let read = ctx.device.create_buffer(&wgpu::BufferDescriptor { label: Some("ts-read"), size: bytes, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+    let mut enc = ctx.device.create_command_encoder(&Default::default());
+    enc.copy_buffer_to_buffer(target, 0, &read, 0, bytes);
+    eo_render::pace::submit(&ctx.queue, [enc.finish()]); // counted
+    let raw = read_mapped(ctx, &read)?;
+    let n = per_frame as usize * TS_FRAMES * 8;
+    Ok(raw.chunks(stride as usize).flat_map(|c| c[..n].chunks_exact(8).map(|b| u64::from_le_bytes(b.try_into().unwrap()))).collect())
+}
+
 /// The whole-frame target at 1920x1080 on the reference desktop GPU.
 pub const FRAME_BUDGET_MS: f64 = 10.0;
+/// set by the device-lost callback (`run`).
+static DEVICE_LOST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// Segments the budget check enforces (median frame total).
 const STANDARD_SEGMENTS: &[&str] = &["street_walk", "elevated_sweep", "authored_street", "kit_street", "sidewalk_walk"];
+
+/// The budget check's verdict: "not run" when none of `STANDARD_SEGMENTS` ran,
+/// else PASS or FAIL over the ones that did.
+fn budget_verdict(ran: &[&str], failures: &[String]) -> &'static str {
+    if ran.is_empty() {
+        "not run"
+    } else if failures.is_empty() {
+        "PASS"
+    } else {
+        "FAIL"
+    }
+}
 
 fn percentile(v: &[f64], p: f64) -> f64 {
     if v.is_empty() {
         return f64::NAN;
     }
     let mut s = v.to_vec();
-    s.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    s.sort_by(f64::total_cmp);
     let rank = (p / 100.0 * (s.len() - 1) as f64).round() as usize;
     s[rank.min(s.len() - 1)]
 }
@@ -442,6 +540,7 @@ fn settle_p(ctx: &GpuContext, renderer: &Renderer, world: &World, models: &mut M
     let t = Instant::now();
     models.set_camera(cam.eye);
     let mut last = Instant::now(); // the view clock moves with the wall while settling
+    let mut next_note_s = 60.0; // a long settle says what it waits on once a minute
     loop {
         let now = Instant::now();
         renderer.observe_view(cam, Some(view_bench::advance((now - last).as_secs_f64())));
@@ -453,15 +552,21 @@ fn settle_p(ctx: &GpuContext, renderer: &Renderer, world: &World, models: &mut M
         // Keep the GPU fed so the LOD state follows (and queued writes land).
         renderer.update(&ctx.queue, cam);
         eo_render::pace::submit_tick(&ctx.device, &ctx.queue); // always counted (an empty submit counts only with queued writes)
+        // (`--rt-gi`) the traced scene round the camera built before a frame is drawn (nothing without the pass).
+        let rt_ready = renderer.rt_prepare();
         // Reclaim finished submissions' staging memory, as a presenting loop would.
         let _ = ctx.device.poll(wgpu::PollType::Poll);
-        if models.settled() && props.as_deref().is_none_or(|p| p.settled()) { // props
+        if models.settled() && props.as_deref().is_none_or(|p| p.settled()) && renderer.ambient.settled() && rt_ready { // props // the ambient volume (lighting)
             break;
         }
         if t.elapsed().as_secs_f64() > timeout_s {
             // say what never settled instead of passing silently.
-            eprintln!("settle: timed out after {timeout_s:.0} s at eye ({:.0}, {:.0}, {:.0}): {}", cam.eye.x, cam.eye.y, cam.eye.z, models.unsettled());
+            eprintln!("settle: timed out after {timeout_s:.0} s at eye ({:.0}, {:.0}, {:.0}): {}, props settled {} {}", cam.eye.x, cam.eye.y, cam.eye.z, models.unsettled(), props.as_deref().is_none_or(|p| p.settled()), renderer.ambient.unsettled());
             break;
+        }
+        if t.elapsed().as_secs_f64() > next_note_s {
+            eprintln!("settle: still waiting after {next_note_s:.0} s: {}, props settled {} {}", models.unsettled(), props.as_deref().is_none_or(|p| p.settled()), renderer.ambient.unsettled());
+            next_note_s += 60.0;
         }
         std::thread::sleep(std::time::Duration::from_millis(1));
     }
@@ -470,6 +575,7 @@ fn settle_p(ctx: &GpuContext, renderer: &Renderer, world: &World, models: &mut M
 }
 
 pub fn run(args: &Args, process_start: Instant) -> Result<()> {
+    shots::preflight()?; // a shots file that does not parse stops here, before the world loads
     // the render thread above normal (workers lower themselves when started).
     let raised = args.perf.thread_priority && hitch::raise_render_thread();
     eo_render::alloc::claim_render_thread(); // this thread allocates from a heap no worker takes
@@ -494,6 +600,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     let opts = GpuOptions {
         indirect_validation: args.indirect_validation,
         force_no_indirect_count: args.no_indirect_count,
+        force_no_count_emulation: args.no_count_emulation,
+        bounded_draws: args.bounded_draws,
         ..Default::default()
     };
     let ctx = GpuContext::new(GpuContext::create_instance(&opts), None, opts)?;
@@ -530,7 +638,18 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     if let Some(only) = &args.segments {
         segs.retain(|s| only.iter().any(|o| o == s.name));
     }
-    let first_cam = (segs[0].camera)(0, args.warmup + segs[0].frames);
+    let dive_recording = std::env::var_os("EO_RECORD_DIVE").map(std::path::PathBuf::from);
+    if let Some(dir) = &dive_recording {
+        anyhow::ensure!(segs.len() == 1 && segs[0].name == "cove_descent", "EO_RECORD_DIVE needs --dive-site bay --segments cove_descent");
+        anyhow::ensure!(!args.perf.check_max && !args.check_budget && !args.capture && !args.perf.occlusion_check, "record the dive separately from checks and still captures");
+        // Each take owns a new directory so a failed retry cannot mix two films.
+        if let Some(parent) = dir.parent().filter(|p| !p.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::create_dir(dir)?;
+    }
+    // `--shots` / `--scene-cards`: stream in at the first shot, not at the first path.
+    let first_cam = shots::first_camera(&world, args, aspect)?.unwrap_or_else(|| (segs[0].camera)(0, args.warmup + segs[0].frames));
     let mut models = ModelRuntime::start(&mut world, args, bases, first_cam.eye, process_start);
     // the simulation, feed and agent library, live while the paths run.
     let mut agents = crate::agents::AgentRuntime::start(&world, args, crate::agents::AgentRuntime::focus_of(first_cam.eye, first_cam.forward()));
@@ -578,6 +697,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 let mut list = vec![];
                 if std::env::var_os("EO_CAPTURE_SIGNS").is_some() {
                     list.extend(sign_shots::poses(&world, aspect, args.far)); // the sign capture card instead
+                } else if let Some(n) = std::env::var("EO_CAPTURE_STREETS").ok().and_then(|v| v.trim().parse::<usize>().ok()) {
+                    list.extend(crate::props::street_audit_poses(&world, aspect, args.far, n)); // the citywide street audit instead
                 } else {
                     for (seg_name, frame) in [("kit_street", 260usize), ("sidewalk_walk", 195)] {
                         if let Some(seg) = segs.iter().find(|s| s.name == seg_name) {
@@ -601,15 +722,27 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             }
         };
         let label = args.label.as_deref().unwrap_or("props2");
+        // `EO_CAPTURE_HOLD_SKY=1`: every pose at the `--world-time` clock, held while it
+        // settles (the decks drift with the clock, and a pose's settle takes as many frames
+        // as its streaming needs, so two runs met different clouds at one pose).
+        let hold_sky = std::env::var_os("EO_CAPTURE_HOLD_SKY").is_some_and(|v| v == "1");
         for crate::props::CapturePose { name, camera: cam, player } in poses {
+            if hold_sky {
+                renderer.look.sky.set_clock(args.look.sky.world_time_s, 0.0);
+            }
             let refresh_player = player.is_some() || !agents.extras.is_empty();
             agents.extras.clear();
+            agents.clear_test_pose();
             if let Some(p) = player {
-                let lib = agents.lib.as_ref().ok_or_else(|| anyhow!("player scale reference requires the people library"))?;
-                let body = eo_agents::feed::player_body(lib, p.feet, p.yaw, 0., 0., 0.)
-                    .ok_or_else(|| anyhow!("no verified player avatar available for scale reference"))?;
+                if args.test_character.is_some() {
+                    anyhow::ensure!(agents.lib.as_ref().is_some_and(|lib| lib.test_player.is_some()),
+                        "requested test character failed to load: {:?}", agents.errors);
+                }
+                let body = agents.capture_player(p.feet, p.yaw, p.time)?;
+                let lib = agents.lib.as_ref().expect("capture has an agent library");
+                let height = lib.test_player.as_ref().map(|p| p.height).or_else(|| lib.meta.family_heights.first().copied());
                 agents.extras.push(body);
-                println!("scale reference {name}: {} at {:?}, model height {:?} m, people scale {}", lib.meta.model_names[lib.meta.player_model as usize], p.feet, lib.meta.family_heights.first(), body.scale);
+                println!("scale reference {name}: {} at {:?}, model height {height:?} m, people scale {}", lib.meta.model_names[body.model as usize], p.feet, body.scale);
             }
             settle_p(&ctx, &renderer, &world, &mut models, Some(&mut props), &cam, 600.0)?;
             crate::props::sync_parked(&ctx, &renderer, &mut props, &mut agents, &cam);
@@ -619,7 +752,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             }
             let p = dir.join(format!("capture-{label}-{name}.png"));
             capture(&ctx, &renderer, &color, attach, resolve, &targets.depth, &cam, &p)?;
-            println!("wrote {}", p.display());
+            let lighting = renderer.look.frame();
+            println!("wrote {} (exposure {:.6}, key {:?})", p.display(), lighting.exposure, lighting.key);
         }
         return Ok(());
     }
@@ -659,10 +793,30 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let dir = args.out_dir.clone().unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bench-out"));
         return cc0_shots::run(&ctx, &renderer, &world, &mut models, &mut props, &mut agents, &segs, args, &color, attach, resolve, &targets, &dir, args.label.as_deref().unwrap_or("cc0"));
     }
+    // `--clutter-shots` writes the facade clutter's capture card instead of the timing.
+    if clutter_shots::requested() {
+        let dir = args.out_dir.clone().unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bench-out"));
+        return clutter_shots::run(&ctx, &renderer, &world, &mut models, &mut props, &mut agents, &segs, args, &color, attach, resolve, &targets, &dir, args.label.as_deref().unwrap_or("clutter"));
+    }
     // `--sky-shots` writes the sky slice's capture set instead of the timing.
     if sky_shots::requested() {
         let dir = args.out_dir.clone().unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bench-out"));
         return sky_shots::run(&ctx, &renderer, &world, &mut models, &mut props, &mut agents, &segs, args, &color, attach, resolve, &targets, &dir, args.label.as_deref().unwrap_or("shots"));
+    }
+    // `--structures-shots` writes the grade-separated roads' capture card instead of the timing.
+    if structures_shots::requested() {
+        let dir = args.out_dir.clone().unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bench-out"));
+        return structures_shots::run(&ctx, &renderer, &world, &mut models, &mut props, &mut agents, args, &color, attach, resolve, &targets, &dir, args.label.as_deref().unwrap_or("structures"));
+    }
+    // `--light-shots` writes the lighting reference cards instead of the timing.
+    if light_shots::requested() {
+        let dir = args.out_dir.clone().unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bench-out"));
+        return light_shots::run(&ctx, &renderer, &world, &mut models, &mut props, &mut agents, &segs, args, &color, attach, resolve, &targets, &dir, args.label.as_deref().unwrap_or("light"));
+    }
+    // `--dusk-strip` writes the drawn hour's dusk and dawn strips (with or without `--smooth-time`) instead of the timing.
+    if light_shots::strip_requested() {
+        let dir = args.out_dir.clone().unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bench-out"));
+        return light_shots::run_strip(&ctx, &renderer, &world, &mut models, &mut props, &mut agents, &segs, args, &color, attach, resolve, &targets, &dir, args.label.as_deref().unwrap_or("strip"));
     }
     // `--so-shots` writes the sky and ocean review cards instead of the timing.
     if so_shots::requested() {
@@ -684,6 +838,12 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let dir = args.out_dir.clone().unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bench-out"));
         return hlod_shots::run(&ctx, &renderer, &world, &mut models, &mut props, &mut agents, &segs, args, &color, attach, resolve, &targets, &dir, args.label.as_deref().unwrap_or("shots"));
     }
+    // `--shots FILE.json` and `--scene-cards` write their settled shots instead of the timing.
+    if let Some(mode) = shots::requested() {
+        let dir = args.out_dir.clone().unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bench-out").join(mode.default_dir()));
+        let mut io = shots::Io { ctx: &ctx, renderer: &renderer, world: &world, models: &mut models, props: &mut props, agents: &mut agents, args, color: &color, attach, resolve, targets: &targets };
+        return shots::run(&mut io, mode, &dir);
+    }
     // `--occlusion-check` runs the ground-truth test instead of the timing.
     if args.perf.occlusion_check {
         if args.msaa != 1 {
@@ -702,18 +862,58 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         return Ok(());
     }
 
+    // a lost device (a GPU fault or timeout) fails every later submission silently and the
+    // next wait reports a "submission index" error: say what happened, and when, instead.
+    {
+        let t0 = Instant::now();
+        ctx.device.set_device_lost_callback(move |r, m| {
+            DEVICE_LOST.store(true, std::sync::atomic::Ordering::Relaxed);
+            eprintln!("bench: the GPU device was lost {:.1} s into the run ({r:?}: {m})", t0.elapsed().as_secs_f64());
+        });
+    }
+    // `--photo-bench`: every path through photo mode's pipeline, at the depth
+    // of field's heaviest (photo.rs `bench_params`), for its frame cost (A/B with `--no-dof`).
+    if crate::photo::bench_requested() {
+        renderer.photo_mode.set(Some(crate::photo::bench_params()));
+        eprintln!("photo-bench: photo mode on every path ({:?}; depth of field {})", crate::photo::bench_params(), if crate::photo::dof_enabled() { "on" } else { "off (--no-dof)" });
+        // the passes' own GPU time at each path's first camera, settled (with and without the depth of field).
+        let mut costs = serde_json::Map::new();
+        for seg in &segs {
+            let cam = (seg.camera)(0, args.warmup + seg.frames);
+            settle_p(&ctx, &renderer, &world, &mut models, Some(&mut props), &cam, 600.0)?;
+            let c = crate::photo::gpu_cost(&ctx, &renderer, attach, resolve, &targets.depth, &cam, 120);
+            println!("photo-bench [{}] {w} x {h}: photo passes GPU {}", seg.name, c);
+            costs.insert(seg.name.to_string(), c);
+        }
+        // and one saved photo at twice the size (the window's capture path, offscreen), when a photos folder is set.
+        if std::env::var("EO_PHOTOS_DIR").is_ok() {
+            let cam = (segs[0].camera)(0, args.warmup + segs[0].frames);
+            match crate::photo::capture(&ctx, &renderer, &cam, (w, h), format, 2, serde_json::json!({ "bench": true })) {
+                Ok(p) => println!("photo-bench: a 2x capture saved to {}", p.display()),
+                Err(e) => println!("photo-bench: the 2x capture failed: {e:#}"),
+            }
+        }
+        let dir = args.out_dir.clone().unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bench-out"));
+        std::fs::create_dir_all(&dir)?;
+        std::fs::write(dir.join(format!("photo-cost-{}.json", args.label.as_deref().unwrap_or("default"))), serde_json::to_string_pretty(&serde_json::Value::Object(costs))?)?;
+    }
     let period_ns = ctx.queue.get_timestamp_period() as f64;
     let mut seg_reports = vec![];
     let mut budget_failures: Vec<String> = vec![];
     let mut max_failures: Vec<String> = vec![]; // hitch
-    let budget_ms = args.budget_ms.unwrap_or(FRAME_BUDGET_MS);
+    // the tier's budget (medium: FRAME_BUDGET_MS), unless `--budget-ms` says otherwise.
+    let budget_ms = args.budget_ms.unwrap_or(args.quality.budget_ms());
+    let budget_note = format!("[quality {}, budget {budget_ms} ms{}]", args.quality.name(), if args.budget_ms.is_some() { " from --budget-ms" } else { "" });
+    // the standard segments that ran (the budget line says "not run" when none did).
+    let mut standard_ran: Vec<&str> = vec![];
     let cw = COUNTER_WORDS as u64 * 4;
     let mut kit_after_paths = vec![];
     for seg in &segs {
         // camera positions along the path; with `Pace::Realtime` the
         // drive's camera follows the wall clock and frames are rendered back
         // to back, so more frames than positions are drawn (up to `total`).
-        let path_frames = args.warmup + seg.frames;
+        // The waterfront review card is 30 seconds of consecutive 60 Hz camera positions.
+        let path_frames = if dive_recording.is_some() { 30 * 60 } else { args.warmup + seg.frames };
         let (paced, realtime) = match args.perf.pace {
             crate::Pace::Realtime => (false, seg.paced),
             crate::Pace::Hz60 => (seg.paced, false),
@@ -731,9 +931,11 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let path_t0 = view_bench::clock();
         let streams = seg.streams || args.perf.stream_all_paths;
         let mut vd_caps = view_bench::capture_frames(seg.name);
+        // a ring of `TS_RING` sets, resolved per `TS_FRAMES` frames into one target.
         let chunks = total.div_ceil(TS_FRAMES);
+        let ring = chunks.min(TS_RING);
         let qsets: Vec<wgpu::QuerySet> = if ctx.timestamps {
-            (0..chunks)
+            (0..ring)
                 .map(|_| ctx.device.create_query_set(&wgpu::QuerySetDescriptor { label: Some("frame-timestamps"), ty: wgpu::QueryType::Timestamp, count: QUERIES_PER_FRAME * TS_FRAMES as u32 }))
                 .collect()
         } else {
@@ -742,10 +944,38 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         // the props' own passes (cascade cull, casters, wires), a query set beside each.
         let pq = eo_render::props::QUERIES_PER_FRAME;
         let props_qsets: Vec<wgpu::QuerySet> = if ctx.timestamps && renderer.props.get().is_some() {
-            (0..chunks).map(|_| ctx.device.create_query_set(&wgpu::QuerySetDescriptor { label: Some("props-timestamps"), ty: wgpu::QueryType::Timestamp, count: pq * TS_FRAMES as u32 })).collect()
+            (0..ring).map(|_| ctx.device.create_query_set(&wgpu::QuerySetDescriptor { label: Some("props-timestamps"), ty: wgpu::QueryType::Timestamp, count: pq * TS_FRAMES as u32 })).collect()
         } else {
             vec![]
         };
+        // the lighting additions' passes, a query set beside each, only with one of them on
+        // (all off, the frame records no lighting pass and the bench runs as before).
+        let lq = eo_render::lighting::QUERIES_PER_FRAME;
+        let lighting_qsets: Vec<wgpu::QuerySet> = if ctx.timestamps && args.look.lighting.any() {
+            (0..ring).map(|_| ctx.device.create_query_set(&wgpu::QuerySetDescriptor { label: Some("lighting-timestamps"), ty: wgpu::QueryType::Timestamp, count: lq * TS_FRAMES as u32 })).collect()
+        } else {
+            vec![]
+        };
+        let (ts_stride, pr_stride, li_stride) = (ts_chunk_stride(QUERIES_PER_FRAME), ts_chunk_stride(pq), ts_chunk_stride(lq));
+        let resolve_target = |label: &'static str, stride: u64, on: bool| {
+            on.then(|| ctx.device.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: chunks.max(1) as u64 * stride, usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC, mapped_at_creation: false }))
+        };
+        let ts_resolve = resolve_target("ts-resolve", ts_stride, !qsets.is_empty());
+        let pr_resolve = resolve_target("props-ts-resolve", pr_stride, !props_qsets.is_empty());
+        let li_resolve = resolve_target("lighting-ts-resolve", li_stride, !lighting_qsets.is_empty());
+        // set `k` (frames k * TS_FRAMES ..) resolved into the targets, its ring slot free again.
+        let resolve_chunk = |enc: &mut wgpu::CommandEncoder, k: usize| {
+            if let Some(t) = &ts_resolve {
+                enc.resolve_query_set(&qsets[k % ring], 0..QUERIES_PER_FRAME * TS_FRAMES as u32, t, k as u64 * ts_stride);
+            }
+            if let Some(t) = &pr_resolve {
+                enc.resolve_query_set(&props_qsets[k % ring], 0..pq * TS_FRAMES as u32, t, k as u64 * pr_stride);
+            }
+            if let Some(t) = &li_resolve {
+                enc.resolve_query_set(&lighting_qsets[k % ring], 0..lq * TS_FRAMES as u32, t, k as u64 * li_stride);
+            }
+        };
+        let mut resolved = 0usize;
         let stats_buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("stats-readback"),
             size: total as u64 * cw,
@@ -775,6 +1005,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let mut pump_bytes = Vec::with_capacity(total);
         let mut starts = Vec::with_capacity(total + 1);
         let mut subs: Vec<wgpu::SubmissionIndex> = Vec::with_capacity(total);
+        // (fixed-slot lists) the slots issued per frame and the slots the lists hold (eo-render draw_ranges).
+        let mut range_slots: Vec<(f64, f64)> = Vec::with_capacity(total);
         // per-frame breakdown, the thread's on-CPU time, the wait for
         // the frame two back, and (EO_HITCH_ALLOC=1) the allocator's blocks.
         let mut traces: Vec<FrameRecord> = Vec::with_capacity(total);
@@ -782,6 +1014,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let mut warmup = args.warmup;
         let mut cam_last = 0;
         let mut idle_ms = 0.0; // the last frame's wait for the GPU (prepay included)
+        let bounds_before = renderer.bound_stats(); // (`--bounded-draws`) the bounded lists over this path (warm-up included)
+        let counted_before = renderer.counts.as_ref().map(|c| c.stats()); // (the count emulation) its lists over this path, the same way
         let seg_start = Instant::now();
         for i in 0..total {
             let cam_i = if realtime { (seg_start.elapsed().as_secs_f64() / FRAME_PERIOD_S) as usize } else { i };
@@ -812,7 +1046,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             if i >= 2 {
                 ctx.device
                     .poll(wgpu::PollType::Wait { submission_index: Some(subs[i - 2].clone()), timeout: None })
-                    .map_err(|e| anyhow!("{e}"))?;
+                    .map_err(|e| if DEVICE_LOST.load(std::sync::atomic::Ordering::Relaxed) { anyhow!("[{}] the GPU device was lost before frame {i} (see the line above): {e}", seg.name) } else { anyhow!("{e}") })?;
             }
             let wait_ms = tw.elapsed().as_secs_f64() * 1e3;
             let overran = prepay.submissions > 0 && wait_ms < PREPAY_FREE_WAIT_MS;
@@ -849,12 +1083,19 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             if let Some(w) = renderer.water.get() {
                 w.set_time(cam_i as f64 * FRAME_PERIOD_S); // the sea's clock follows the path's
             }
+            if dive_recording.is_some() {
+                renderer.look.sky.set_clock(args.look.sky.world_time_s + cam_i as f64 * FRAME_PERIOD_S, 0.0);
+            }
             hitch::timed(hitch::Phase::CameraUpdate, || renderer.update(&ctx.queue, &cam));
             let enc_span = hitch::span(hitch::Phase::Encode);
             let mut enc = ctx.device.create_command_encoder(&Default::default());
-            let ts = qsets.get(i / TS_FRAMES).map(|q| (q, QUERIES_PER_FRAME * (i % TS_FRAMES) as u32));
+            let slot = (!qsets.is_empty()).then(|| (i / TS_FRAMES) % ring);
+            let ts = slot.map(|k| (&qsets[k], QUERIES_PER_FRAME * (i % TS_FRAMES) as u32));
             if let Some(p) = renderer.props.get() {
-                p.set_timestamps(props_qsets.get(i / TS_FRAMES).map(|q| (q.clone(), pq * (i % TS_FRAMES) as u32)));
+                p.set_timestamps(slot.filter(|_| !props_qsets.is_empty()).map(|k| (props_qsets[k].clone(), pq * (i % TS_FRAMES) as u32)));
+            }
+            if !lighting_qsets.is_empty() {
+                renderer.set_lighting_timestamps(slot.map(|k| (lighting_qsets[k].clone(), lq * (i % TS_FRAMES) as u32)));
             }
             renderer.encode(&mut enc, attach, resolve, &targets.depth, ts);
             enc.copy_buffer_to_buffer(renderer.counter_buffer(), 0, &stats_buf, i as u64 * cw, cw);
@@ -862,7 +1103,14 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             if let Some(w) = renderer.water.get().filter(|_| renderer.water_active()) {
                 enc.copy_buffer_to_buffer(w.counter_buffer(), 0, &water_stats_buf, i as u64 * 16, 16); // water
             }
+            if i % TS_FRAMES == TS_FRAMES - 1 && slot.is_some() {
+                resolve_chunk(&mut enc, i / TS_FRAMES); // its frames are all encoded: resolve, free the slot
+                resolved = i / TS_FRAMES + 1;
+            }
             drop(enc_span);
+            if let Some((issued, slots)) = renderer.draw_range_stats() {
+                range_slots.push((issued as f64, slots as f64));
+            }
             let cmd = hitch::timed(hitch::Phase::Finish, || enc.finish());
             let t1 = Instant::now();
             subs.push(hitch::timed(hitch::Phase::Submit, || eo_render::pace::submit(&ctx.queue, [cmd]))); // counted
@@ -874,6 +1122,12 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             encode_ms.push((t1 - tp).as_secs_f64() * 1e3);
             submit_ms.push((t2 - t1).as_secs_f64() * 1e3);
             cpu_ms.push((t2 - t0).as_secs_f64() * 1e3 + charged_ms); // + a prepay the wait did not absorb
+            if let Some(dir) = &dive_recording {
+                // Capture exactly the submitted frame. The still-camera path below
+                // settles the same view repeatedly, which advances temporal effects.
+                write_capture(&ctx, &color, &dir.join(format!("frame-{cam_i:04}.png")))?;
+                continue;
+            }
             // what is on screen at a lower level than its zone wants (outside the frame's timing).
             vd.frame(&world, &models, &cam, cam_i as f64 * FRAME_PERIOD_S * 1e3, pf.bytes, cam_i >= args.warmup);
             if vd_caps.first().is_some_and(|&f| cam_i >= f) {
@@ -887,7 +1141,17 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 println!("wrote {} (path frame {f}, drawn at frame {cam_i}: the streaming state of that moment)", p.display());
             }
         }
+        if !qsets.is_empty() && resolved < cpu_ms.len().div_ceil(TS_FRAMES) {
+            // the last set, partly used.
+            let mut enc = ctx.device.create_command_encoder(&Default::default());
+            resolve_chunk(&mut enc, resolved);
+            eo_render::pace::submit(&ctx.queue, [enc.finish()]); // counted
+        }
         ctx.device.poll(wgpu::PollType::wait_indefinitely()).map_err(|e| anyhow!("{e}"))?;
+        if let Some(dir) = &dive_recording {
+            println!("recorded {path_frames} consecutive cove frames at 60 Hz in {}", dir.display());
+            return Ok(());
+        }
         starts.push(Instant::now());
         view_bench::set_clock(path_t0 + cam_last as f64 * FRAME_PERIOD_S);
         let vd_json = vd.finish(&models, &props, args.perf.view_detail.enabled);
@@ -895,22 +1159,13 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         if let Some(p) = renderer.props.get() {
             p.set_timestamps(None);
         }
+        renderer.set_lighting_timestamps(None); // the path's sets are dropped with it
         // frames actually drawn (realtime: as many as the clock allowed).
         let total = cpu_ms.len();
         // the props' own passes, per measured frame.
         let (mut pr_cull, mut pr_casters, mut pr_wires) = (vec![], vec![], vec![]);
-        if !props_qsets.is_empty() {
-            let mut ts: Vec<u64> = vec![];
-            for q in props_qsets.iter().take(total.div_ceil(TS_FRAMES)) {
-                let n = pq * TS_FRAMES as u32;
-                let resolve_buf = ctx.device.create_buffer(&wgpu::BufferDescriptor { label: Some("props-ts-resolve"), size: n as u64 * 8, usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC, mapped_at_creation: false });
-                let read_buf = ctx.device.create_buffer(&wgpu::BufferDescriptor { label: Some("props-ts-read"), size: n as u64 * 8, usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
-                let mut enc = ctx.device.create_command_encoder(&Default::default());
-                enc.resolve_query_set(q, 0..n, &resolve_buf, 0);
-                enc.copy_buffer_to_buffer(&resolve_buf, 0, &read_buf, 0, n as u64 * 8);
-                eo_render::pace::submit(&ctx.queue, [enc.finish()]); // counted
-                ts.extend(read_mapped(&ctx, &read_buf)?.chunks_exact(8).map(|c| u64::from_le_bytes(c.try_into().unwrap())));
-            }
+        if let Some(target) = &pr_resolve {
+            let ts = read_resolved(&ctx, target, total.div_ceil(TS_FRAMES), pq, pr_stride)?;
             let ms = |a: u64, b: u64| if b >= a { (b - a) as f64 * period_ns / 1e6 } else { 0.0 };
             for i in warmup.min(total)..total {
                 let b = i * pq as usize;
@@ -920,6 +1175,25 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                     pr_wires.push(ms(ts[b + 4], ts[b + 5]));
                 }
             }
+        }
+        // the lighting additions' passes, per measured frame (empty spans for those off).
+        let mut li_passes: Vec<Vec<f64>> = vec![vec![]; eo_render::lighting::PASSES.len()];
+        if let Some(target) = &li_resolve {
+            let ts = read_resolved(&ctx, target, total.div_ceil(TS_FRAMES), lq, li_stride)?;
+            let ms = |a: u64, b: u64| if b >= a { (b - a) as f64 * period_ns / 1e6 } else { 0.0 };
+            for i in warmup.min(total)..total {
+                let b = i * lq as usize;
+                if b + lq as usize <= ts.len() {
+                    for (k, (_, q)) in eo_render::lighting::PASSES.iter().enumerate() {
+                        li_passes[k].push(ms(ts[b + *q as usize], ts[b + *q as usize + 1]));
+                    }
+                }
+            }
+        }
+        let mut lighting_passes = serde_json::Map::new();
+        lighting_passes.insert("on".into(), json!(!lighting_qsets.is_empty()));
+        for (k, (name, _)) in eo_render::lighting::PASSES.iter().enumerate() {
+            lighting_passes.insert((*name).into(), summary(&li_passes[k]));
         }
         if realtime {
             println!(
@@ -935,7 +1209,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let stats: Vec<u32> = eo_render::scene::cast_u32(&stats_bytes);
         let word = |i: usize, k: usize| stats[i * COUNTER_WORDS + k] as f64;
         let range = args.warmup..total;
-        let drawn_objects: Vec<f64> = range.clone().map(|i| word(i, 0) + word(i, 1) + word(i, 10)).collect(); // + late opaque
+        let drawn_objects: Vec<f64> = range.clone().map(|i| word(i, 0) + word(i, 1) + word(i, 10) + (0..4).map(|k| word(i, eo_render::CLASS_WORD as usize + k)).sum::<f64>()).collect(); // + late opaque, + the city's classes
         // what the frustum + LOD pass would draw, and the early pass's share.
         let frustum_objects: Vec<f64> = range.clone().map(|i| word(i, 11)).collect();
         let frustum_tris: Vec<f64> = range.clone().map(|i| word(i, 12)).collect();
@@ -951,6 +1225,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let kit_tris: Vec<f64> = range.clone().map(|i| word(i, 7)).collect();
         let street_objs: Vec<f64> = range.clone().map(|i| word(i, 8)).collect();
         let street_tris: Vec<f64> = range.clone().map(|i| word(i, 9)).collect();
+        let structure_tris: Vec<f64> = range.clone().map(|i| word(i, 15)).collect(); // the grade-separated roads (0 without them)
         let sstats: Vec<u32> = eo_render::scene::cast_u32(&read_mapped(&ctx, &shadow_stats_buf)?);
         let sw = eo_render::look::SHADOW_COUNTER_WORDS;
         let shadow_cmds: Vec<f64> = range.clone().map(|i| (0..3).map(|c| sstats[i * sw + c] as f64).sum()).collect();
@@ -962,6 +1237,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let water_frames = renderer.water.get().map(|w| w.stats()).zip(water_before).map(|(a, b)| (a.frames - b.frames, a.fft_frames - b.fft_frames, a.copy_frames - b.copy_frames, a.fogged_frames - b.fogged_frames));
 
         let mut gpu = json!(null);
+        let mut gpu_serial = json!(null);
         let mut gpu_total_ms = vec![];
         let (mut cull, mut draw) = (vec![], vec![]);
         let (mut sh_cull, mut sh_draw, mut post) = (vec![], vec![], vec![]);
@@ -969,33 +1245,26 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         let mut probe_pass = vec![]; // facade
         let mut sky_passes: [Vec<f64>; 6] = Default::default(); // the sky passes, then the cloud-shadow map
         let (mut water_fft, mut water_copy, mut water_pass) = (vec![], vec![], vec![]); // water
+        let (mut water_ppr, mut scene_meter, mut wire_overlay) = (vec![], vec![], vec![]); // the gap's projected-reflection pass, the scene meter, the bridges' wire overlay
+        // each pass's serial share: its end minus the previous pass's end in the frame's
+        // order (Apple GPUs start a pass's clock while earlier passes still run, so
+        // begin-to-end windows overlap; the serial shares add up to the frame).
+        const SERIAL: [(&str, u32); 20] = [
+            ("cull", 0), ("shadow_cull", eo_render::look::Q_SHADOW_CULL), ("shadow_depth", eo_render::look::Q_SHADOW_DRAW), ("probe", eo_render::Q_PROBE),
+            ("cloud_shadow", eo_render::sky::Q_CLOUD_SHADOW), ("sky_lights", eo_render::sky::Q_SKY_LIGHTS), ("city", 2), ("pyramid_late_cull", eo_render::Q_OCCLUSION),
+            ("late_city", eo_render::Q_LATE_DRAW), ("water_fft", eo_render::Q_WATER_FFT), ("water_copy_and_ppr", eo_render::Q_WATER_PPR), ("water_and_glass", eo_render::Q_WATER),
+            ("ao", eo_render::look::Q_AO), ("sky_fx_and_velocity", eo_render::sky::Q_SKY_FX), ("sky_volume", eo_render::sky::Q_SKY_VOLUME), ("sky_resolve", eo_render::sky::Q_SKY_RESOLVE),
+            ("sky_bloom", eo_render::sky::Q_SKY_BLOOM), ("wire_overlay", eo_render::Q_WIRE_OVERLAY), ("scene_meter", eo_render::Q_SCENE_METER), ("post", eo_render::look::Q_POST),
+        ];
+        let mut serial: Vec<Vec<f64>> = vec![vec![]; SERIAL.len()];
         let (mut occ_ms, mut late_draw, mut early_draw) = (vec![], vec![], vec![]); // occlusion
-        if !qsets.is_empty() {
-            let mut ts: Vec<u64> = vec![];
-            for q in qsets.iter().take(total.div_ceil(TS_FRAMES)) {
-                let n = QUERIES_PER_FRAME * TS_FRAMES as u32;
-                let resolve_buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("ts-resolve"),
-                    size: n as u64 * 8,
-                    usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
-                    mapped_at_creation: false,
-                });
-                let read_buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("ts-read"),
-                    size: n as u64 * 8,
-                    usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-                    mapped_at_creation: false,
-                });
-                let mut enc = ctx.device.create_command_encoder(&Default::default());
-                enc.resolve_query_set(q, 0..n, &resolve_buf, 0);
-                enc.copy_buffer_to_buffer(&resolve_buf, 0, &read_buf, 0, n as u64 * 8);
-                eo_render::pace::submit(&ctx.queue, [enc.finish()]); // counted
-                let bytes = read_mapped(&ctx, &read_buf)?;
-                ts.extend(bytes.chunks_exact(8).map(|c| u64::from_le_bytes(c.try_into().unwrap())));
-            }
+        if let Some(target) = &ts_resolve {
+            let ts = read_resolved(&ctx, target, total.div_ceil(TS_FRAMES), QUERIES_PER_FRAME, ts_stride)?;
             let ms = |a: u64, b: u64| b.wrapping_sub(a) as f64 * period_ns / 1e6;
             let (qo, ql) = (eo_render::Q_OCCLUSION as usize, eo_render::Q_LATE_DRAW as usize); // occlusion
-            for i in args.warmup..total {
+            // the frames with timestamps (a realtime path may draw more than its sets time).
+            let timed = total.min(ts.len() / QUERIES_PER_FRAME as usize);
+            for i in args.warmup..timed {
                 let b = i * QUERIES_PER_FRAME as usize;
                 cull.push(ms(ts[b], ts[b + 1]));
                 // the city is the early pass + the late pass.
@@ -1017,16 +1286,35 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 let (qf, qw) = (eo_render::Q_WATER_FFT as usize, eo_render::Q_WATER as usize);
                 water_fft.push(ms(ts[b + qf], ts[b + qf + 1]));
                 water_copy.push(ms(ts[b + qf + 1], ts[b + qw]));
+                let (qr, qm) = (eo_render::Q_WATER_PPR as usize, eo_render::Q_SCENE_METER as usize);
+                water_ppr.push(ms(ts[b + qr], ts[b + qr + 1]));
+                scene_meter.push(ms(ts[b + qm], ts[b + qm + 1]));
+                let qwo = eo_render::Q_WIRE_OVERLAY as usize;
+                wire_overlay.push(ms(ts[b + qwo], ts[b + qwo + 1]));
                 water_pass.push(ms(ts[b + qw], ts[b + qw + 1]));
                 // Frame order: cull, shadow cull, shadow depth, city (early), pyramid + late cull, city (late) + sky, AO, post.
-                gpu_total_ms.push(ms(ts[b], ts[b + 9]));
+                // A post end before the cull begin (a timestamp the GPU did not write; seen on
+                // Metal) leaves the frame untimed (NaN): its total is its wall interval.
+                gpu_total_ms.push(if ts[b + 9] >= ts[b] { ms(ts[b], ts[b + 9]) } else { f64::NAN });
+                let mut prev = ts[b];
+                for (k, &(_, q)) in SERIAL.iter().enumerate() {
+                    let end = ts[b + q as usize + 1];
+                    // (a pass that ended before the one before it counts 0)
+                    let d = if end.wrapping_sub(prev) as i64 > 0 { ms(prev, end) } else { 0.0 };
+                    serial[k].push(d);
+                    prev = prev.max(end);
+                }
             }
             let probe_json = {
                 let p = renderer.probe.stats(); // facade
                 json!({ "captures": p.captures, "faces": p.faces, "transfer": p.transfer, "frames_per_capture": p.last_capture_frames, "look_transfer_in_use": renderer.look.transfer() })
             };
+            let serial_json: serde_json::Map<String, serde_json::Value> = SERIAL.iter().zip(&serial).map(|((n, _), v)| (n.to_string(), json!(percentile(v, 50.0)))).collect();
+            println!("  GPU serial shares (median ms, end minus the previous pass's end): {}", SERIAL.iter().zip(&serial).map(|((n, _), v)| format!("{n} {:.2}", percentile(v, 50.0))).collect::<Vec<_>>().join(", "));
+            gpu_serial = json!(serial_json);
             gpu = json!({
-                "frame_ms_cull_begin_to_post_end": summary(&gpu_total_ms),
+                "frame_ms_cull_begin_to_post_end": summary(&gpu_total_ms.iter().copied().filter(|g| g.is_finite()).collect::<Vec<_>>()),
+                "frames_untimed (timestamps out of order)": gpu_total_ms.iter().filter(|g| !g.is_finite()).count(),
                 "cull_pass_ms (lod + cull dispatches)": summary(&cull),
                 "draw_pass_ms (city + sky into HDR)": summary(&draw),
                 "occlusion_early_draw_ms": summary(&early_draw),
@@ -1049,6 +1337,9 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 // water
                 "water_fft_pass_ms (FFT when water was seen lately, + the patch cull without occlusion)": summary(&water_fft),
                 "water_copy_ms (the frame copy: the gap before the water pass)": summary(&water_copy),
+                "water_ppr_pass_ms (the projected reflection, inside that gap)": summary(&water_ppr),
+                "scene_meter_pass_ms (the reflected-light meter's histogram, before post)": summary(&scene_meter),
+                "wire_overlay_pass_ms (the bridges' wires over the resolved frame, before the scene meter)": summary(&wire_overlay),
                 "water_pass_ms (the sea, then the glass drawn after it)": summary(&water_pass),
                 "shadow_casters_drawn_per_frame (3 cascades summed)": summary(&shadow_cmds),
                 "shadow_triangles_drawn_per_frame (3 cascades summed)": summary(&shadow_tris),
@@ -1058,14 +1349,14 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         // begin -> draw end), summed per frame as if nothing overlapped.
         let cpu_meas = &cpu_ms[args.warmup..];
         let frame_total: Vec<f64> =
-            if gpu_total_ms.is_empty() { interval_ms.clone() } else { cpu_meas.iter().zip(&gpu_total_ms).map(|(c, g)| c + g).collect() };
+            if gpu_total_ms.is_empty() { interval_ms.clone() } else { cpu_meas.iter().zip(&gpu_total_ms).zip(&interval_ms).map(|((c, g), w)| if g.is_finite() { c + g } else { *w }).collect() };
         let (tot_med, tot_p95, tot_max) = (percentile(&frame_total, 50.0), percentile(&frame_total, 95.0), percentile(&frame_total, 100.0));
         let verdict = |v: f64| if v < budget_ms { "PASS" } else { "FAIL" };
         let enc_m = &encode_ms[args.warmup..];
         let sub_m = &submit_ms[args.warmup..];
         let pump_m = &pump_ms[args.warmup..];
         let pump_b = &pump_bytes[args.warmup..];
-        let worst = frame_total.iter().enumerate().max_by(|a, b| a.1.partial_cmp(b.1).unwrap()).map(|(k, _)| k).unwrap_or(0);
+        let worst = frame_total.iter().enumerate().max_by(|a, b| a.1.total_cmp(b.1)).map(|(k, _)| k).unwrap_or(0);
         let budget = json!({
             "budget_ms": budget_ms,
             "frame_total_definition": if gpu_total_ms.is_empty() { "wall interval (no timestamps)" } else { "CPU (streaming pump + encode + submit) + GPU cull-begin..draw-end, summed per frame" },
@@ -1106,8 +1397,9 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             },
         });
         println!(
-            "\n[{}] BUDGET {budget_ms} ms: frame total median {tot_med:.3} [{}]  p95 {tot_p95:.3} [{}]  MAX {tot_max:.3} [{}]\n    split (median ms): GPU cull {:.3}, GPU draw {:.3}, CPU pump {:.3}, CPU encode {:.3}, CPU submit {:.3}; uploads/frame median {:.0} B, max {:.0} B",
+            "\n[{}] BUDGET {budget_ms} ms (quality {}): frame total median {tot_med:.3} [{}]  p95 {tot_p95:.3} [{}]  MAX {tot_max:.3} [{}]\n    split (median ms): GPU cull {:.3}, GPU draw {:.3}, CPU pump {:.3}, CPU encode {:.3}, CPU submit {:.3}; uploads/frame median {:.0} B, max {:.0} B",
             seg.name,
+            args.quality.name(),
             verdict(tot_med),
             verdict(tot_p95),
             verdict(tot_max),
@@ -1221,6 +1513,9 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 ("gpu_post", post[k]),
                 ("gpu_water_fft", water_fft[k]), // water
                 ("gpu_water_copy", water_copy[k]),
+                ("gpu_water_ppr", water_ppr[k]),
+                ("gpu_scene_meter", scene_meter[k]),
+                ("gpu_wire_overlay", wire_overlay[k]),
                 ("gpu_water_and_glass", water_pass[k]),
                 // every timed pass of the frame, and what no pass accounts for
                 ("gpu_probe", probe_pass[k]),
@@ -1234,7 +1529,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 ("gpu_props_casters", pr_casters.get(k).copied().unwrap_or(0.0)),
                 ("gpu_props_wires", pr_wires.get(k).copied().unwrap_or(0.0)),
             ];
-            let timed: f64 = v.iter().map(|p| p.1).sum();
+            let timed: f64 = v.iter().map(|p| p.1).sum::<f64>() - water_ppr[k]; // (the PPR pass lies inside the water gap)
             v.push(("gpu_untimed (agents compute/casters, gaps, other processes)", (gpu_total_ms[k] - timed).max(0.0)));
             v.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
             v
@@ -1377,8 +1672,11 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             "shortest_wait_after_taken_spike_ms": if min_wait_after.is_finite() { json!(min_wait_after) } else { json!(null) },
             "prepays_charged_to_their_frame": charged,
         });
-        if STANDARD_SEGMENTS.contains(&seg.name) && tot_med >= budget_ms {
-            budget_failures.push(format!("{} median {tot_med:.3} ms", seg.name));
+        if STANDARD_SEGMENTS.contains(&seg.name) {
+            standard_ran.push(seg.name);
+            if tot_med >= budget_ms {
+                budget_failures.push(format!("{} median {tot_med:.3} ms", seg.name));
+            }
         }
         // the MAX check (every path), enforced with --check-max.
         if tot_max >= budget_ms {
@@ -1398,6 +1696,15 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             })
         });
         kit_after_paths.push(json!({ "after": seg.name, "kit": kit_now }));
+        let fixed_slot_json = if range_slots.is_empty() {
+            json!(null)
+        } else {
+            let from = args.warmup.min(range_slots.len());
+            json!({
+                "slots_issued_per_frame": summary(&range_slots[from..].iter().map(|r| r.0).collect::<Vec<_>>()),
+                "slots_in_the_lists_per_frame": summary(&range_slots[from..].iter().map(|r| r.1).collect::<Vec<_>>()),
+            })
+        };
         let mut report = json!({
             "name": seg.name,
             "budget": budget,
@@ -1417,6 +1724,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             "gpu": gpu,
             "objects_drawn_per_frame": summary(&drawn_objects),
             "transparent_objects_drawn_per_frame": summary(&drawn_blend),
+            // without multi-draw-indirect-count: slots the fixed-slot lists issued (draw_ranges) and held, per frame
             "triangles_drawn_per_frame": summary(&drawn_tris),
             "model_parts_drawn_per_frame": summary(&model_parts),
             "model_triangles_drawn_per_frame": summary(&model_tris),
@@ -1431,6 +1739,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             "water": {
                 "on": renderer.water_active(),
                 "water_optics": args.look.water_optics,
+                "bridge_detail": crate::bridge_detail(),
                 "patches_drawn_per_frame": summary(&water_drawn),
                 "patches_in_frustum_per_frame": summary(&water_frustum),
                 "patches_culled_land_per_frame": summary(&water_land),
@@ -1467,8 +1776,33 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 "worst_frames": worst_frames,
             },
         });
+        report["water"]["underwater_habitats"] = args.underwater_habitats.into();
+        report["water"]["dive_exposure"] = args.look.dive_exposure.into();
         report["view_detail"] = vd_json; // outside the json! above: its recursion limit
+        report["lighting_passes_ms"] = serde_json::Value::Object(lighting_passes); // on: whether this path timed them
+        if let Some(r) = renderer.rt_gi() {
+            // (`--rt-gi`) what was traced on this path so far (cumulative over the run's paths).
+            report["rt_gi"] = r.stats().json();
+        }
+        if let Some(r) = renderer.rt_reflect() {
+            report["rt_reflect"] = r.stats().json();
+        }
+        if let Some(s) = renderer.rt_scene() {
+            report["rt_scene"] = s.stats().json();
+        }
+        if renderer.structures.get().is_some() {
+            // the grade-separated roads (`--structures`; absent without them).
+            report["structures"] = json!({
+                "triangles_drawn_per_frame": summary(&structure_tris),
+                "near_after": models.structures.as_ref().map(structures_bench::stats_json),
+            });
+        }
         println!("  street objects/frame   median {:.0}  p95 {:.0}  (street triangles median {:.0}, p95 {:.0})", percentile(&street_objs, 50.0), percentile(&street_objs, 95.0), percentile(&street_tris, 50.0), percentile(&street_tris, 95.0));
+        if range_slots.len() > args.warmup {
+            let m: Vec<f64> = range_slots[args.warmup..].iter().map(|r| r.0).collect();
+            let all: Vec<f64> = range_slots[args.warmup..].iter().map(|r| r.1).collect();
+            println!("  fixed-slot draws/frame median {:.0}  p95 {:.0}  of {:.0} slots in the lists (draw_ranges)", percentile(&m, 50.0), percentile(&m, 95.0), percentile(&all, 50.0));
+        }
         println!(
             "\n[{}] {} frames after {} warm-up (settle {:.0} ms)\n  CPU pump+encode+submit ms median {:.3}  p95 {:.3}  max {:.3}\n  wall ms/frame          median {:.3}  p95 {:.3}\n  GPU ms (cull->draw)    median {}  p95 {}\n  objects drawn/frame    median {:.0}  p95 {:.0}  (transparent median {:.0})\n  triangles drawn/frame  median {:.0}  p95 {:.0}\n  model parts/frame      median {:.0}  (model triangles median {:.0}, footprint stand-ins median {:.0})\n  kit objects/frame      median {:.0}  p95 {:.0}  (kit triangles median {:.0}, p95 {:.0})",
             seg.name,
@@ -1495,8 +1829,44 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             percentile(&kit_tris, 50.0),
             percentile(&kit_tris, 95.0),
         );
-        // the far layer after the path, and its last frame's counters (entries drawn, triangles, entries in the frustum, entries occluded).
         let mut report = report;
+        // (`--bounded-draws`) the bounded lists over the path: commands drawn, guards used, overflows.
+        if let (Some(now), Some(before)) = (renderer.bound_stats(), &bounds_before) {
+            let lists: Vec<(&str, eo_render::bounds::BoundStats)> = now.iter().zip(before.iter()).map(|((n, a), (_, b))| (*n, a.since(b))).collect();
+            let total_cmds = lists.iter().map(|(_, s)| s.drawn as f64).sum::<f64>() / lists[0].1.frames.max(1) as f64;
+            let overflows: u64 = lists.iter().map(|(_, s)| s.overflows).sum();
+            let at_cap: u64 = lists.iter().map(|(_, s)| s.at_capacity).sum();
+            println!(
+                "    bounded lists (no indirect count; warm-up included): {:.0} commands/frame in all ({}), list-frames at capacity {at_cap}, overflows {overflows}",
+                total_cmds,
+                lists.iter().filter(|(_, s)| s.frames > 0).map(|(n, s)| format!("{n} {:.0}", s.drawn as f64 / s.frames as f64)).collect::<Vec<_>>().join(", ")
+            );
+            report["bounded_lists"] = json!(lists.iter().map(|(n, s)| (n.to_string(), s.json())).collect::<serde_json::Map<String, serde_json::Value>>());
+        }
+        // (the count emulation) per emulated count buffer, each list's mean bound a frame over the path (warm-up included).
+        if let (Some(now), Some(before)) = (renderer.counts.as_ref().map(|c| c.stats()), &counted_before) {
+            let per: Vec<(&str, Vec<f64>, u64, [u64; 2])> = now
+                .iter()
+                .map(|a| {
+                    let b = before.iter().find(|b| b.label == a.label);
+                    let frames = a.frames - b.map_or(0, |b| b.frames);
+                    let mean = a.encoded.iter().enumerate().map(|(k, &e)| (e - b.and_then(|b| b.encoded.get(k).copied()).unwrap_or(0)) as f64 / frames.max(1) as f64).collect();
+                    // (the motion-aware bounds) frames with the late lists at their own reserve, and with an exact early bound
+                    let tight = [a.steady_frames - b.map_or(0, |b| b.steady_frames), a.chained_frames - b.map_or(0, |b| b.chained_frames)];
+                    (a.label, mean, a.overflows - b.map_or(0, |b| b.overflows), tight)
+                })
+                .collect();
+            if !per.is_empty() {
+                println!(
+                    "    count emulation (warm-up included): mean bound a frame {}",
+                    per.iter().map(|(l, m, o, t)| format!("{l} [{}] overflows {o} steady {} chained {}", m.iter().map(|v| format!("{v:.0}")).collect::<Vec<_>>().join(", "), t[0], t[1])).collect::<Vec<_>>().join("; ")
+                );
+            }
+            report["count_emulation_path"] = json!(per.iter().map(|(l, m, o, t)| json!({ "label": l, "mean_bounds": m, "overflows": o, "steady_frames": t[0], "chained_frames": t[1] })).collect::<Vec<_>>());
+        }
+        // the far layer after the path, and its last frame's counters (entries drawn, triangles, entries in the frustum, entries occluded).
+        report["fixed_slot_lists"] = fixed_slot_json;
+        report["gpu_serial_ms"] = gpu_serial; // each pass's end minus the previous pass's end (frame order), median // without multi-draw-indirect-count: slots issued (draw_ranges) and held, per frame
         report["hlod_after"] = json!(models.hlod.as_ref().map(|h| h.stats_json()));
         report["hlod_last_frame"] = json!(renderer.hlod.get().map(|h| h.readback(&ctx.queue)));
         seg_reports.push(report);
@@ -1536,7 +1906,17 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         "adapter": { "name": info.name, "backend": format!("{:?}", info.backend), "device_type": format!("{:?}", info.device_type), "driver": info.driver, "driver_info": info.driver_info },
         "features": {
             "multi_draw_indirect_count_available": ctx.adapter_features.contains(wgpu::Features::MULTI_DRAW_INDIRECT_COUNT),
-            "multi_draw_indirect_count_used": renderer.compact,
+            "multi_draw_indirect_count_used": renderer.compact && ctx.indirect_count,
+            "lists_compacted": renderer.compact,
+            "count_emulation": renderer.counts.is_some(),
+            // how the lists were drawn (eo-render `GpuContext::draw_lists`): indirect-count, count-emulation, bounded or slots
+            "draw_lists": ctx.draw_lists(),
+            // per emulated count buffer: read-backs, overflows (a count past its bound), frames drawn whole, bounds
+            "count_emulation_lists": renderer.counts.as_ref().map(|c| c.stats().iter().map(|s| serde_json::json!({
+                "label": s.label, "readbacks": s.readbacks, "overflows": s.overflows, "full_frames": s.full_frames,
+                "steady_frames": s.steady_frames, "chained_frames": s.chained_frames,
+                "bounds_now": s.bounds, "peak_counts": s.peak_counts, "peak_bounds": s.peak_bounds,
+            })).collect::<Vec<_>>()),
             "indirect_first_instance": ctx.first_instance,
             "texture_arrays_used": true,
             "timestamp_query": ctx.timestamps,
@@ -1558,6 +1938,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             "fog_near_far_m": [renderer.look.frame().aerial.near, renderer.look.frame().aerial.far],
             "shadow_map": renderer.look.options.shadow_map,
             "shadows": renderer.look.options.shadows,
+            "shadow_slope_bias": renderer.look.options.shadow_slope_bias,
             "cascades_far_m_and_texel_m": renderer.look.cascade_summary(),
             "hdr_target_bytes": renderer.look.hdr_bytes(),
         },
@@ -1620,7 +2001,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             "process_start_to_first_path_settled": streamed_ms,
         },
         "segments": seg_reports,
-        "budget_check": { "budget_ms": budget_ms, "enforced_on": STANDARD_SEGMENTS, "rule": "median frame total (CPU pump+encode+submit + GPU) under the budget", "failures": budget_failures },
+        "budget_check": { "budget_ms": budget_ms, "enforced_on": STANDARD_SEGMENTS, "ran": standard_ran, "verdict": budget_verdict(&standard_ran, &budget_failures), "rule": "median frame total (CPU pump+encode+submit + GPU) under the budget", "failures": budget_failures },
         // every path's worst frame against the budget (enforced with --check-max).
         "max_check": { "budget_ms": budget_ms, "enforced": args.perf.check_max, "failures": max_failures },
     });
@@ -1644,6 +2025,15 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         streamed_ms,
         CAVEAT
     );
+    if let Some(c) = &renderer.counts {
+        // the count emulation (no MULTI_DRAW_INDIRECT_COUNT): what every list drew against its count.
+        for s in c.stats() {
+            println!(
+                "count emulation [{}]: {} read-backs, {} overflows (a count past its bound), {} frames drawn whole; peak count {:?}, peak bound {:?}, bound now {:?}",
+                s.label, s.readbacks, s.overflows, s.full_frames, s.peak_counts, s.peak_bounds, s.bounds
+            );
+        }
+    }
     let dir = args.out_dir.clone().unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bench-out"));
     std::fs::create_dir_all(&dir)?;
     let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs();
@@ -1660,13 +2050,54 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         "model_arena": models.model_arena_use(),
         "model_slots_all": [set.vertex_capacity, set.index_capacity],
     });
+    // the quality tier and the budget the checks used; every lighting option.
+    out["settings"]["quality"] = json!(args.quality.name());
+    out["settings"]["budget_ms"] = json!(budget_ms);
+    out["lighting"] = crate::quality::lighting_json(args);
+    out["rt"] = crate::quality::rt_json(args, &renderer); // (`--rt-gi`, `--rt-reflect`) whether the passes ran, their settings and what they traced
+    out["grime"] = crate::quality::grime_json(args); // surface weathering (`--grime`)
+    out["street_life"] = crate::quality::street_life_json(args); // litter, graffiti, posters (`--street-life`)
+    out["stand_ins"] = crate::quality::stand_ins_json(args); // procedural models for absent prop GLBs (`--stand-ins`)
+    out["surveyed_furniture"] = crate::quality::surveyed_furniture_json(args); // the furniture walk's mode (`--surveyed-furniture`)
+    out["tree_basins"] = crate::quality::tree_basins_json(args); // the street trees' basins (`--tree-basins`)
+    out["car_detail"] = crate::quality::car_detail_json(args); // far bodies and nearer full-detail cars (`--car-detail`)
+    out["photo_finish"] = crate::quality::photo_finish_json(args); // the camera, the air, the lens (`--photo-finish`)
+    out["facade_clutter"] = crate::quality::facade_clutter_json(args); // fire escapes, awnings, signs (`--facade-clutter`)
+    out["shop_light"] = crate::quality::shop_light_json(args, eo_render::shop_lights::census().as_ref()); // lit shop windows (`--shop-light`)
+    out["look_profile"] = crate::quality::look_profile_json(args); // the look profile (`--look cinematic`)
+    if renderer.far_shadow.attached() {
+        // the far sun shadow maps (`--far-shadows`): rings, bytes, what they drew over the run.
+        let s = renderer.far_shadow.stats();
+        out["far_shadow"] = json!({
+            "rings": renderer.far_shadow.rings(), "map_px": eo_render::far_shadow::FAR_MAP_SIZE, "ring_radius_m": eo_render::far_shadow::FAR_RING_RADIUS_M,
+            "bytes": renderer.far_shadow.bytes(), "tiles_per_map": eo_render::far_shadow::SLICES,
+            "redraws_started": s.redraws_started, "maps_completed": s.maps_completed, "tiles_drawn": s.tiles_drawn,
+            "for_sun": s.for_sun, "for_camera": s.for_camera, "for_first": s.for_first, "for_overflow": s.for_overflow,
+        });
+    }
+    if renderer.probe_grid.attached() {
+        // the probe grid (`--probe-grid`): its size and what it captured over the run (cadence: frames a cube).
+        out["probe_grid"] = light_shots::probe_grid_json(&renderer);
+    }
+    if args.look.lighting.lit_fog > 0 {
+        // the lit fog (`--lit-fog`): its froxels, bytes, frames run and skipped (no lamp lit).
+        out["lit_fog"] = light_shots::lit_fog_json(&renderer);
+    }
+    if args.look.lighting.light_shadows > 0 || args.look.lighting.headlight_shadows > 0 {
+        // the lamp and headlight shadows (`--light-shadows`, `--headlight-shadows`): the atlas, its bytes, frames run and skipped (no lamp lit).
+        out["light_shadows"] = light_shots::light_shadows_stats_json(&renderer);
+    }
+    out["structures"] = crate::structures::json(args, &world); // the grade-separated roads (`--structures`)
     std::fs::write(&path, serde_json::to_string_pretty(&out)?)?;
     println!("wrote {}", path.display());
     audio.final_report(); // audio
-    if budget_failures.is_empty() {
-        println!("budget check: PASS (median frame total under {budget_ms} ms on {STANDARD_SEGMENTS:?})");
+    if standard_ran.is_empty() {
+        // nothing it enforces ran: no verdict (a PASS here would claim paths that were not measured)
+        println!("budget check: not run (none of {STANDARD_SEGMENTS:?} ran) {budget_note}");
+    } else if budget_failures.is_empty() {
+        println!("budget check: PASS (median frame total under {budget_ms} ms on {standard_ran:?} of {STANDARD_SEGMENTS:?}) {budget_note}");
     } else {
-        println!("budget check: FAIL {budget_failures:?}");
+        println!("budget check: FAIL {budget_failures:?} {budget_note}");
     }
     if ms.max_pump_bytes > args.upload_budget {
         println!("upload budget: largest frame {} B over the {} B budget", ms.max_pump_bytes, args.upload_budget);
@@ -1795,15 +2226,15 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         }
     }
     if max_failures.is_empty() {
-        println!("max check: PASS (every path's worst frame under {budget_ms} ms)");
+        println!("max check: PASS (every path's worst frame under {budget_ms} ms) {budget_note}");
     } else {
-        println!("max check: FAIL {max_failures:?}");
+        println!("max check: FAIL {max_failures:?} {budget_note}");
     }
     if args.check_budget && !budget_failures.is_empty() {
-        anyhow::bail!("frame budget exceeded: {budget_failures:?}");
+        anyhow::bail!("frame budget exceeded: {budget_failures:?} {budget_note}");
     }
     if args.perf.check_max && !max_failures.is_empty() {
-        anyhow::bail!("worst frame over the budget: {max_failures:?}");
+        anyhow::bail!("worst frame over the budget: {max_failures:?} {budget_note}");
     }
     Ok(())
 }
@@ -1922,7 +2353,7 @@ fn clear_path_frame(seg: &Segment, i: usize, total: usize) -> (usize, Option<Str
     }
 }
 
-fn capture(
+pub(crate) fn capture(
     ctx: &GpuContext,
     renderer: &Renderer,
     color: &wgpu::Texture,
@@ -1936,6 +2367,46 @@ fn capture(
         // a frame from inside a building, or against a wall, shows its back faces or a blank wall, not the street.
         println!("capture: BLOCKED VIEW: {why} at eye ({:.1}, {:.1}, {:.1}) for {}", cam.eye.x, cam.eye.y, cam.eye.z, path.display());
     }
+    // Two frames: the first settles the LOD hysteresis for this camera.
+    // twenty: the scene probe captures at most one cube face a frame
+    // (six faces and the levels after a move of more than 16 m; a face waits
+    // on a frame that refreshes a middle or far cascade), so with two frames
+    // every capture reflected the probe of the previous camera, often a
+    // kilometre away; the occlusion/bounce history settles with it.
+    // (lighting) The probe grid (`--probe-grid`): its set at this camera is
+    // captured and faded in first (nine probes of six faces take more than
+    // twenty frames). EO_CAPTURE_SETTLE_PROBE=1: the single probe's capture
+    // at this camera finishes first too (matched pairs with and without the
+    // grid). Without either, nothing more is drawn here.
+    let single = std::env::var_os("EO_CAPTURE_SETTLE_PROBE").is_some();
+    for _ in 0..eo_render::probe_grid::SETTLE_FRAMES_MAX {
+        if renderer.probe_grid.settled() && !(single && renderer.probe.capturing()) {
+            break;
+        }
+        draw(ctx, renderer, attach, resolve, depth, cam);
+    }
+    for _ in 0..20 {
+        draw(ctx, renderer, attach, resolve, depth, cam);
+    }
+    write_capture(ctx, color, path)
+}
+
+/// The offscreen colour target written to `path` as a PNG.
+fn write_capture(ctx: &GpuContext, color: &wgpu::Texture, path: &std::path::Path) -> Result<()> {
+    let rgba = read_color(ctx, color)?;
+    write_png(path, color.width(), color.height(), &rgba)
+}
+
+/// Draw `cam` once into the offscreen target.
+fn draw(ctx: &GpuContext, renderer: &Renderer, attach: &wgpu::TextureView, resolve: Option<&wgpu::TextureView>, depth: &wgpu::TextureView, cam: &Camera) {
+    renderer.update(&ctx.queue, cam);
+    let mut enc = ctx.device.create_command_encoder(&Default::default());
+    renderer.encode(&mut enc, attach, resolve, depth, None);
+    eo_render::pace::submit(&ctx.queue, [enc.finish()]); // counted
+}
+
+/// The offscreen colour target read back, tightly packed RGBA8 rows.
+fn read_color(ctx: &GpuContext, color: &wgpu::Texture) -> Result<Vec<u8>> {
     let (w, h) = (color.width(), color.height());
     let row = (w * 4).div_ceil(256) * 256;
     let buf = ctx.device.create_buffer(&wgpu::BufferDescriptor {
@@ -1944,18 +2415,6 @@ fn capture(
         usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
-    // Two frames: the first settles the LOD hysteresis for this camera.
-    // twenty: the scene probe captures at most one cube face a frame
-    // (six faces and the levels after a move of more than 16 m; a face waits
-    // on a frame that refreshes a middle or far cascade), so with two frames
-    // every capture reflected the probe of the previous camera, often a
-    // kilometre away; the occlusion/bounce history settles with it.
-    for _ in 0..20 {
-        renderer.update(&ctx.queue, cam);
-        let mut enc = ctx.device.create_command_encoder(&Default::default());
-        renderer.encode(&mut enc, attach, resolve, depth, None);
-        eo_render::pace::submit(&ctx.queue, [enc.finish()]); // counted
-    }
     let mut enc = ctx.device.create_command_encoder(&Default::default());
     enc.copy_texture_to_buffer(
         color.as_image_copy(),
@@ -1968,11 +2427,16 @@ fn capture(
     for y in 0..h as usize {
         rgba.extend_from_slice(&bytes[y * row as usize..y * row as usize + w as usize * 4]);
     }
+    Ok(rgba)
+}
+
+/// Write tightly packed RGBA8 rows as a PNG.
+fn write_png(path: &std::path::Path, w: u32, h: u32, rgba: &[u8]) -> Result<()> {
     let file = std::io::BufWriter::new(std::fs::File::create(path)?);
     let mut enc = png::Encoder::new(file, w, h);
     enc.set_color(png::ColorType::Rgba);
     enc.set_depth(png::BitDepth::Eight);
-    enc.write_header()?.write_image_data(&rgba)?;
+    enc.write_header()?.write_image_data(rgba)?;
     Ok(())
 }
 
@@ -1996,4 +2460,16 @@ const PREPAY_FREE_WAIT_MS: f64 = eo_render::pace::PREPAY_FREE_WAIT_MS; // one va
 
 fn fmt_opt(v: &[f64], p: f64) -> String {
     if v.is_empty() { "n/a".into() } else { format!("{:.3}", percentile(v, p)) }
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use super::budget_verdict;
+
+    #[test]
+    fn the_budget_line_has_no_verdict_when_no_standard_segment_ran() {
+        assert_eq!(budget_verdict(&[], &[]), "not run");
+        assert_eq!(budget_verdict(&["street_walk"], &[]), "PASS");
+        assert_eq!(budget_verdict(&["street_walk"], &["street_walk median 12.000 ms".into()]), "FAIL");
+    }
 }

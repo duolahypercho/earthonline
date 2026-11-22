@@ -111,6 +111,10 @@ impl Door {
         }
     }
 
+    pub fn opening_angle(&self) -> f32 {
+        Self::angle(self.fraction) as f32
+    }
+
     #[cfg(test)]
     pub fn is_shut(&self) -> bool {
         self.fraction == 0.

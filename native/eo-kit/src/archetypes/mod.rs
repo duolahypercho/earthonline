@@ -24,8 +24,16 @@ pub mod soma_warehouse;
 pub mod stucco_row;
 pub mod victorian_row;
 
-/// The spec for an archetype id.
+/// The spec for an archetype id, its window module drawn per building
+/// (typology.rs; `EO_FACADE_TYPOLOGY=off`: as the port writes it).
 pub fn spec_for(archetype: &str, c: &Classified, frame: &Frame) -> J {
+    let mut spec = port_spec_for(archetype, c, frame);
+    crate::typology::vary(c, &mut spec);
+    spec
+}
+
+/// The spec for an archetype id as the port writes it.
+pub fn port_spec_for(archetype: &str, c: &Classified, frame: &Frame) -> J {
     match archetype {
         crate::classify::BAY_WINDOW_APARTMENT => bay_window_apartment::spec(c, frame),
         crate::classify::MIDCENTURY_STUCCO => midcentury_stucco::spec(c, frame),

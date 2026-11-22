@@ -38,6 +38,123 @@ pub struct SkyTerms {
     /// isotropy, desaturation and tint off) as bright at the zenith as the clear
     /// sky of the hour: the sky seen from above the marine layer (1 otherwise).
     pub above_fog_gain: f64,
+    /// 0..1: how far the key has gone over from the sun to the moon (`apply`:
+    /// 0 or 1, the moon taking over outright; `apply_with` smooth: the blend
+    /// weight, `moon_key_weight`).
+    pub moon_weight: f64,
+    /// The moon's key (luminance, the scene's key units; 0 with the moon down or by
+    /// day): `apply` adds it to the sun's key or keys with it alone.
+    pub moon_intensity: f64,
+    /// the physical daylight's share of the frame (eo-look `phys`; 0 without
+    /// it, `apply_daylight`), and the day's EV100 when the incident meter sets
+    /// the exposure (`apply_ev100`; None with the JS curve).
+    pub daylight_weight: f64,
+    pub ev100: Option<f64>,
+}
+
+/// What `apply_with` changes from `apply` (all off: `apply`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FrameOptions {
+    /// `--smooth-time`: the rig rows through a monotone cubic
+    /// (`eo_look::rig::Interp::MonotoneCubic`), the sun and moon keys blended
+    /// (`moon_key_weight`) instead of switched, and the vehicle lamps ramped on
+    /// (`night::vehicle_lamps_smooth`) instead of stepping on at 0.35.
+    pub smooth: bool,
+    /// `--look cinematic` (the cinematic look plan, stage L4): the sun's
+    /// colour by altitude, the directional sky fill, the rim cut back and a
+    /// darker evening exposure (`apply_cinematic_*`,
+    /// eo-look `golden`). False: today's frame, bit for bit.
+    pub cinematic: bool,
+}
+
+impl FrameOptions {
+    pub const SMOOTH: Self = Self { smooth: true, cinematic: false };
+
+    /// The rig interpolation these options ask for.
+    pub fn interp(&self) -> eo_look::rig::Interp {
+        if self.smooth { eo_look::rig::Interp::MonotoneCubic } else { eo_look::rig::Interp::Linear }
+    }
+}
+
+/// The sun altitudes (degrees) across which the key goes over from the sun
+/// to the moon (`moon_key_weight`): civil twilight, from sunset (0 deg) to
+/// -6 deg (Spitschan, Aguirre, Brainard & Sweeney 2016, Sci. Rep. 6:26756,
+/// the twilight phases; reference sheet 3.2). Over it the light falls about
+/// 200 x (759 lx at 0 deg to 3.4 lx at -6 deg, Schlyter), so the handover
+/// takes the twilight's own half hour at San Francisco's latitude instead of
+/// the minute and a half a weight on the two keys' ratio gave (the sun's key
+/// runs to nothing within a degree of the horizon).
+pub const MOON_KEY_TWILIGHT_DEG: [f64; 2] = [0.0, -6.0];
+
+/// The moon's weight in the key (`--smooth-time`): a smoothstep on the
+/// sun's altitude across civil twilight (`MOON_KEY_TWILIGHT_DEG`: 0 with
+/// the sun up, 1 from -6 deg down), times the moon's own rise through the
+/// altitudes at which it starts to key (`moon::KEY_MIN_ALTITUDE_DEG` to
+/// 3 deg above it, the ramp `moon_on` takes), so a moon rising at night
+/// takes the key over smoothly too; 0 with no moon key.
+pub fn moon_key_weight(moon_i: f64, sun_alt_deg: f64, moon_alt_deg: f64) -> f64 {
+    if !(moon_i > 0.0) {
+        return 0.0;
+    }
+    let [up, down] = MOON_KEY_TWILIGHT_DEG;
+    smoothstep(up, down, sun_alt_deg) * smoothstep(moon::KEY_MIN_ALTITUDE_DEG, moon::KEY_MIN_ALTITUDE_DEG + 3.0, moon_alt_deg)
+}
+
+/// `look_frame` with options (`FrameOptions::default()` is `look_frame`).
+pub fn look_frame_with(c: &Conditions, transfer: Option<f64>, o: FrameOptions) -> (LookFrame, SkyTerms) {
+    let mut f = base_frame_with(c, transfer, o);
+    let t = apply_with(&mut f, c, o);
+    (f, t)
+}
+
+/// `base_frame` with options (the rig's interpolation).
+pub fn base_frame_with(c: &Conditions, transfer: Option<f64>, o: FrameOptions) -> LookFrame {
+    LookFrame::with_sky_profile_interp(c.hour, transfer, weather::sky_profile(&c.weather.profile), o.interp())
+}
+
+/// `look_frame_from` with options; equal to `look_frame_with`.
+pub fn look_frame_from_with(base: &LookFrame, c: &Conditions, transfer: Option<f64>, o: FrameOptions) -> (LookFrame, SkyTerms) {
+    let mut f = base.retarget_interp(transfer, o.interp());
+    let t = apply_with(&mut f, c, o);
+    (f, t)
+}
+
+/// Two frames' terms `t` (0..1) of the way from `a` to `b` (keyframes a
+/// clock minute apart under the same weather, `--smooth-time`): numbers
+/// linear, the moon's direction through a slerp; the weather, the decks and
+/// the moon's waxing are `a`'s (the same weather and night on both sides).
+pub fn blend_terms(a: &SkyTerms, b: &SkyTerms, t: f64) -> SkyTerms {
+    let t = t.clamp(0.0, 1.0);
+    let m = |x: f64, y: f64| x + (y - x) * t;
+    SkyTerms {
+        weather: a.weather,
+        decks: a.decks,
+        moon: Moon {
+            dir: eo_look::blend::slerp_dir(a.moon.dir, b.moon.dir, t),
+            altitude_deg: m(a.moon.altitude_deg, b.moon.altitude_deg),
+            phase_angle_deg: m(a.moon.phase_angle_deg, b.moon.phase_angle_deg),
+            illuminated: m(a.moon.illuminated, b.moon.illuminated),
+            waxing: a.moon.waxing,
+        },
+        moon_disc: m(a.moon_disc, b.moon_disc),
+        moon_key: m(a.moon_key, b.moon_key),
+        star_level: m(a.star_level, b.star_level),
+        lamps_on: m(a.lamps_on, b.lamps_on),
+        dusk: m(a.dusk, b.dusk),
+        nightness: m(a.nightness, b.nightness),
+        vehicle_lamps: m(a.vehicle_lamps, b.vehicle_lamps),
+        exposure_target: m(a.exposure_target, b.exposure_target),
+        lamp_units_per_lux: m(a.lamp_units_per_lux, b.lamp_units_per_lux),
+        fill_scale: m(a.fill_scale, b.fill_scale),
+        above_fog_gain: m(a.above_fog_gain, b.above_fog_gain),
+        moon_weight: m(a.moon_weight, b.moon_weight),
+        moon_intensity: m(a.moon_intensity, b.moon_intensity),
+        daylight_weight: m(a.daylight_weight, b.daylight_weight),
+        ev100: match (a.ev100, b.ev100) {
+            (Some(x), Some(y)) => Some(m(x, y)),
+            (x, y) => x.or(y),
+        },
+    }
 }
 
 /// `NIGHT_KEY_CEILING`: the moon key never exceeds 0.02 (sky-atmosphere.js).
@@ -60,6 +177,79 @@ pub const LOW_SUN_HORIZON_LIFT: f64 = 0.25;
 pub const AFTERGLOW_OVER_ZENITH: f64 = 4.0;
 /// the share of the night fill's colour removed at full night.
 pub const NIGHT_FILL_DESATURATION: f64 = 0.6;
+
+/// (`--look cinematic`, stage L4) the sun's key in eo-look `golden::sun_colour`
+/// of its altitude, its luminance kept (the rig table's intensity, envelope
+/// and beam): a whiter noon and a golden-to-red low sun. The moon's key is
+/// added after this, untouched.
+pub fn apply_cinematic_key(f: &mut LookFrame) {
+    let l = luminance(f.key);
+    f.key = eo_look::golden::sun_colour(f.model.sun.altitude_deg).map(|v| v * l);
+}
+
+/// (`--look cinematic`, stage L4) by day, `golden::directional_sky_share` of
+/// the fill moves from the rig's constant sky lobe and ambient to the sky's
+/// own directional irradiance (the upper dome, `golden::upper_sky_sh`), added
+/// to the diffuse environment so a face toward a low sun's glowing west is
+/// warm and one toward the east blue, an upward face's fill kept
+/// (`golden::directional_split`); the environment's
+/// intensity is the shader's x the sidewalk's class (`night::SIDEWALK_ENV`),
+/// so the unlit ground's fill the camera meter and the night solve read
+/// (`night::ground_fill`) is kept exactly (with the painted and asphalt
+/// classes' mean the meter saw ~9 % less fill and took the frame down with it).
+/// The rim keeps `golden::RIM_KEEP`, the rest moved into the sky lobe at what
+/// it gave an upward face. Both fade out as the sun sets (3 deg up to 1 deg down).
+pub fn apply_cinematic_fill(f: &mut LookFrame, nightness: f64) {
+    // (with the sun up: from 1 deg down to 3 deg up, as the exposure; the blue hour is left as it is)
+    let day = (1.0 - nightness).clamp(0.0, 1.0) * smoothstep(-1.0, 3.0, f.model.sun.altitude_deg);
+    if day <= 0.0 {
+        return;
+    }
+    // the rim's removed share moves into the hemisphere's sky lobe at what it gave an upward
+    // face (its 28 deg elevation: x sin 28 deg), so the ground in shade keeps its light (cut
+    // outright, ~20 % of the shaded ground's fill at golden hour went with it); a wall turned
+    // from the sun keeps half of that where the rim gave it ~cos 28 deg.
+    let cut = (1.0 - eo_look::golden::RIM_KEEP) * day;
+    let up_share = f.rim_dir[1].max(0.0);
+    for i in 0..3 {
+        f.hemi_sky[i] += f.rim[i] * cut * up_share;
+    }
+    f.rim = f.rim.map(|v| v * (1.0 - cut));
+    let env = f.rig.environment_intensity * night::SIDEWALK_ENV;
+    if !(env > 1e-9) {
+        return;
+    }
+    let upper = eo_look::golden::upper_sky_sh(&f.model);
+    let (k, s) = eo_look::golden::directional_split(f.hemi_sky, f.ambient, &upper, eo_look::golden::directional_sky_share(f.model.sun.altitude_deg));
+    let s = 1.0 + (s - 1.0) * day;
+    let k = k * day / env;
+    f.hemi_sky = f.hemi_sky.map(|v| v * s);
+    f.ambient = f.ambient.map(|v| v * s);
+    for (c, u) in f.env_sh.iter_mut().zip(upper.iter()) {
+        for ch in 0..3 {
+            c[ch] += u[ch] * k;
+        }
+    }
+}
+
+/// (`--look cinematic`, stage L4) the exposure target with the day curve's
+/// adaptation at `golden::EXPOSURE_ADAPTATION` instead of the JS's 0.20:
+/// the day part of the target x (curve / anchor)^(0.12 / 0.20 - 1), where
+/// `curve` is the base frame's `recommended_exposure` (the anchor at noon, so
+/// noon is unchanged; 1.30 -> ~1.24 at 18.5 h), faded out as the sun sets
+/// (from 3 deg up to 1 deg down: the blue hour is left as it is). The night
+/// solve's share is left as it is.
+pub fn cinematic_exposure(f: &LookFrame, w: &WeatherState, target: f64, curve: f64) -> f64 {
+    let n = night::exposure_nightness(f.model.sun.altitude_deg);
+    if n >= 1.0 {
+        return target;
+    }
+    let ratio = (curve / eo_look::rig::EXPOSURE_ANCHOR).max(1.0);
+    let g = ratio.powf(eo_look::golden::EXPOSURE_ADAPTATION / eo_look::rig::EXPOSURE_ADAPTATION - 1.0);
+    let g = 1.0 + (g - 1.0) * smoothstep(-1.0, 3.0, f.model.sun.altitude_deg);
+    let day = night::day_exposure(f, w);
+    target + day * (g - 1.0) * (1.0 - n)
+}
 
 /// The look frame of an hour under a weather (the weather's sky model, the
 /// JS rig table), with `apply` done.
@@ -91,11 +281,21 @@ pub fn look_frame_from(base: &LookFrame, c: &Conditions, transfer: Option<f64>) 
 /// ambient are scaled here by the dome's energy (the environment's diffuse
 /// already comes from the weather's sky). Pure.
 pub fn apply(f: &mut LookFrame, c: &Conditions) -> SkyTerms {
+    apply_with(f, c, FrameOptions::default())
+}
+
+/// `apply` with options (`FrameOptions::default()` is `apply`).
+pub fn apply_with(f: &mut LookFrame, c: &Conditions, opts: FrameOptions) -> SkyTerms {
     let w = c.weather;
     let p = w.profile;
     let alt = f.model.sun.altitude_deg;
     let nightness = night::nightness(alt);
     let o = p.overcast;
+    // (`--look cinematic`, stage L4) the base frame's day curve, before the target replaces it.
+    let curve_exposure = f.exposure;
+    if opts.cinematic {
+        apply_cinematic_key(f);
+    }
     // Fill: by day the dome's energy relative to clear (environment-ibl.js
     // `brightness`); at night the deck reflects the city's glow back
     // (`urbanGlow` rises from 0.6 clear to 1.2 in a storm), half of it.
@@ -167,6 +367,9 @@ pub fn apply(f: &mut LookFrame, c: &Conditions) -> SkyTerms {
             f.ambient[i] *= 1.0 - nightness;
         }
     }
+    if opts.cinematic {
+        apply_cinematic_fill(f, nightness);
+    }
     // The moon (sky-atmosphere.js `lunarKey`): 0.35 x the night sky's
     // irradiance x the phase's flux x the beam, under a clear sky, at most
     // 0.02, keying the scene above 3 deg; colour [0.94, 0.95, 1.0].
@@ -177,12 +380,28 @@ pub fn apply(f: &mut LookFrame, c: &Conditions) -> SkyTerms {
     let moon_on = smoothstep(moon::KEY_MIN_ALTITUDE_DEG, moon::KEY_MIN_ALTITUDE_DEG + 3.0, m.altitude_deg) * nightness;
     let moon_i = (moon::KEY_SKY_SHARE * f.sky_irradiance_up * flux * t * clear_sky).min(NIGHT_KEY_CEILING) * moon_on;
     let sun_key = luminance(f.key);
-    if moon_i > sun_key && moon_i > 0.0 {
+    let mut moon_weight = 0.0;
+    if opts.smooth {
+        // the keys blended by the moon's weight (the sun's altitude across
+        // civil twilight): before the takeover the moon adds to the sun's key
+        // (as below), after it the moon is the key; the directions turn
+        // through a slerp and the shadow follows the weight.
+        let wm = moon_key_weight(moon_i, alt, m.altitude_deg);
+        if moon_i > 0.0 {
+            let moon_key = moon::COLOR.map(|v| v * moon_i);
+            f.key = [0, 1, 2].map(|i| f.key[i] * (1.0 - wm) + moon_key[i]);
+            f.key_dir = eo_look::blend::slerp_dir(f.key_dir, m.dir, wm);
+            f.rim_dir = eo_look::blend::slerp_dir(f.rim_dir, eo_look::rig::rim_direction(m.dir), wm);
+            f.shadow_strength += (0.55 * moon_on * clear_sky - f.shadow_strength) * wm;
+        }
+        moon_weight = wm;
+    } else if moon_i > sun_key && moon_i > 0.0 {
         f.key_dir = m.dir;
         f.key = moon::COLOR.map(|v| v * moon_i);
         f.rim_dir = eo_look::rig::rim_direction(m.dir);
         // Moonlight casts soft, weak shadows.
         f.shadow_strength = 0.55 * moon_on * clear_sky;
+        moon_weight = 1.0;
     } else if moon_i > 0.0 {
         f.key = [0, 1, 2].map(|i| f.key[i] + moon::COLOR[i] * moon_i);
     }
@@ -257,7 +476,10 @@ pub fn apply(f: &mut LookFrame, c: &Conditions) -> SkyTerms {
     } else {
         1.0
     };
-    let exposure_target = night::target_exposure(f, &w);
+    let mut exposure_target = night::target_exposure(f, &w);
+    if opts.cinematic {
+        exposure_target = cinematic_exposure(f, &w, exposure_target, curve_exposure);
+    }
     f.exposure = exposure_target;
     let night_level = f.model.field.night;
     SkyTerms {
@@ -270,12 +492,67 @@ pub fn apply(f: &mut LookFrame, c: &Conditions) -> SkyTerms {
         lamps_on: night::lamps_on(alt),
         dusk: night::dusk(alt),
         nightness,
-        vehicle_lamps: night::vehicle_lamps(alt, &w),
+        vehicle_lamps: if opts.smooth { night::vehicle_lamps_smooth(alt, &w) } else { night::vehicle_lamps(alt, &w) },
         exposure_target,
         lamp_units_per_lux: night::lamp_units_per_lux() * lamp_scale,
         fill_scale,
         above_fog_gain,
+        moon_weight,
+        moon_intensity: moon_i,
+        daylight_weight: 0.0,
+        ev100: None,
     }
+}
+
+/// The haze density the physical daylight is integrated at for a weather:
+/// the clear coastal medium x (1 + 2 haze), as the GPU's tables take it.
+pub fn daylight_density(w: &WeatherState) -> f64 {
+    1.0 + 2.0 * w.profile.haze
+}
+
+/// The physical daylight's weight for a frame's sun and weather (eo-look `phys::weather_weight`).
+pub fn daylight_weight(f: &LookFrame, w: &WeatherState) -> f64 {
+    eo_look::phys::weather_weight(f.model.sun.altitude_deg, w.profile.overcast)
+}
+
+/// Light a frame `look_frame_from` built with the physical daylight
+/// (`--no-phys-sky` leaves the rig's light): eo-look `phys::apply` by the
+/// daylight's weight, the weather's dome brightness and tint on its diffuse
+/// share as `apply` puts them on the rig's fill. The exposure target is
+/// left to `apply_ev100` (or stays the JS curve's).
+pub fn apply_daylight(f: &mut LookFrame, t: &mut SkyTerms, d: &eo_look::phys::Daylight) {
+    let p = t.weather.profile;
+    let mut d2 = d.clone();
+    let grade = |c: [f64; 3]| [0, 1, 2].map(|i| c[i] * p.tint[i] * p.brightness);
+    d2.env_sh = d.env_sh.map(grade);
+    eo_look::phys::apply(f, &d2);
+    t.daylight_weight = d.weight;
+}
+
+/// The night without the rig's rim light (`--no-night-shaping` keeps it): the
+/// browser game's rig carries a rim of 0.3-0.45 units at full night (four to five
+/// times the night sky's own fill on a wall), aimed 28 deg up opposite the key's
+/// heading, a stand-in for moonlight that lit every wall facing it as a uniform
+/// grey-blue glow (card 6's white wall read as lit by day). At night an unlit
+/// surface is lit by the sky's glow (the hemisphere and the environment) and the
+/// practicals (street and vehicle lamps, windows, shop spill) alone; the moon,
+/// when it is up, keys the scene through `apply`. The rim fades with `nightness`.
+pub fn apply_night_shaping(f: &mut LookFrame, t: &SkyTerms) {
+    let k = 1.0 - t.nightness.clamp(0.0, 1.0);
+    f.rim = f.rim.map(|v| v * k);
+}
+
+/// Set the frame's exposure from an incident-light meter (EV100) while the
+/// sun is up (`--no-ev100` keeps the JS curve): `night::target_exposure_ev100`
+/// on the frame's own horizontal illuminance.
+pub fn apply_ev100(f: &mut LookFrame, t: &mut SkyTerms) {
+    let w = &t.weather;
+    let e_h = night::horizontal_illuminance(f, w, t.daylight_weight);
+    let weight = eo_look::phys::weight(f.model.sun.altitude_deg);
+    let e = night::target_exposure_ev100(f, w, e_h, weight);
+    t.exposure_target = e;
+    f.exposure = e;
+    t.ev100 = Some(night::ev100_day_exposure(e_h).0);
 }
 
 #[cfg(test)]
@@ -302,6 +579,112 @@ mod hitch2_tests {
                     assert!(close(ta.exposure_target, tb.exposure_target) && close(ta.fill_scale, tb.fill_scale) && close(ta.lamp_units_per_lux, tb.lamp_units_per_lux), "{kind:?} {hour} {t:?}: terms");
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod cinematic_golden_tests {
+    //! (`--look cinematic`, stage L4) the golden hour on the frame.
+    use super::*;
+
+    const CINE: FrameOptions = FrameOptions { smooth: false, cinematic: true };
+
+    fn clear(hour: f64) -> Conditions {
+        Conditions { hour, weather: weather::preset(crate::Kind::Clear), moon_day: 3.0 }
+    }
+
+    #[test]
+    fn the_default_options_are_todays_frame() {
+        assert!(!FrameOptions::default().cinematic && !FrameOptions::SMOOTH.cinematic);
+        for hour in [7.0, 12.0, 18.5, 21.0] {
+            let c = clear(hour);
+            let (a, ta) = look_frame(&c, Some(0.8));
+            let (b, tb) = look_frame_with(&c, Some(0.8), FrameOptions::default());
+            assert_eq!((a.key, a.rim, a.hemi_sky, a.ambient, a.env_sh, a.exposure), (b.key, b.rim, b.hemi_sky, b.ambient, b.env_sh, b.exposure));
+            assert_eq!(ta.exposure_target, tb.exposure_target);
+        }
+    }
+
+    #[test]
+    fn the_golden_hour_is_deterministic_and_the_same_on_both_paths() {
+        for kind in [crate::Kind::Clear, crate::Kind::Overcast, crate::Kind::Fog] {
+            for hour in [9.0, 12.0, 18.5, 19.0] {
+                let c = Conditions { hour, weather: weather::preset(kind), moon_day: 3.0 };
+                for smooth in [false, true] {
+                    let o = FrameOptions { smooth, cinematic: true };
+                    let (a, ta) = look_frame_with(&c, Some(0.9), o);
+                    let (b, tb) = look_frame_with(&c, Some(0.9), o);
+                    assert_eq!((a.key, a.rim, a.hemi_sky, a.ambient, a.env_sh, a.exposure), (b.key, b.rim, b.hemi_sky, b.ambient, b.env_sh, b.exposure), "{kind:?} {hour}: determinism");
+                    assert_eq!(ta.exposure_target, tb.exposure_target);
+                    // a probe's new transfer re-solves the fill from the base, as the full rebuild
+                    let base = base_frame_with(&c, Some(0.4), o);
+                    let (r, tr) = look_frame_from_with(&base, &c, Some(0.9), o);
+                    let close = |x: f64, y: f64| (x - y).abs() <= 1e-9 * x.abs().max(y.abs()).max(1e-6);
+                    let close3 = |x: [f64; 3], y: [f64; 3]| (0..3).all(|i| close(x[i], y[i]));
+                    assert!(close3(a.key, r.key) && close3(a.hemi_sky, r.hemi_sky) && close3(a.ambient, r.ambient) && (0..9).all(|k| close3(a.env_sh[k], r.env_sh[k])), "{kind:?} {hour}: the base path");
+                    assert!(close(ta.exposure_target, tr.exposure_target), "{kind:?} {hour}: exposure on the base path");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_hours_separate_and_noon_keeps_its_light() {
+        let (d12, _) = look_frame(&clear(12.0), None);
+        let (c12, _) = look_frame_with(&clear(12.0), None, CINE);
+        let (d185, _) = look_frame(&clear(18.5), None);
+        let (c185, _) = look_frame_with(&clear(18.5), None, CINE);
+        let rb = |k: [f64; 3]| k[0] / k[2];
+        // the key's luminance kept, a whiter noon and a warmer golden hour
+        // (the knots' luminance is 1 to their four decimals)
+        assert!((luminance(c12.key) / luminance(d12.key) - 1.0).abs() < 3e-3 && (luminance(c185.key) / luminance(d185.key) - 1.0).abs() < 3e-3);
+        assert!(rb(c12.key) < 1.25 && rb(d12.key) > 1.7, "noon red/blue {} (today {})", rb(c12.key), rb(d12.key));
+        assert!(rb(c185.key) / rb(c12.key) > 3.0, "golden over noon {} (today {})", rb(c185.key) / rb(c12.key), rb(d185.key) / rb(d12.key));
+        // noon's exposure unchanged, golden hour's darker
+        assert_eq!(c12.exposure, d12.exposure);
+        assert!(c185.exposure < 0.97 * d185.exposure && c185.exposure > 0.9 * d185.exposure, "18.5 h exposure {} (today {})", c185.exposure, d185.exposure);
+        // the fill at noon: the ground and the walls' mean within a few % of today's
+        let fill = |f: &LookFrame, n: [f64; 3]| {
+            let env = f.rig.environment_intensity * night::SIDEWALK_ENV;
+            luminance(f.hemi_sky) * (0.5 * n[1] + 0.5) + luminance(f.hemi_ground) * (0.5 - 0.5 * n[1]) + luminance(f.ambient) + luminance(eo_look::sh_eval(&f.env_sh, n)) * env
+        };
+        let up = [0.0, 1.0, 0.0];
+        assert!((fill(&c12, up) / fill(&d12, up) - 1.0).abs() < 0.06, "noon ground x{}", fill(&c12, up) / fill(&d12, up));
+        let walls = |f: &LookFrame| eo_look::golden::FILL_NORMALS[1..].iter().map(|n| fill(f, *n)).sum::<f64>();
+        assert!((walls(&c12) / walls(&d12) - 1.0).abs() < 0.06, "noon walls x{}", walls(&c12) / walls(&d12));
+        // golden hour: a wall toward the sun warmer and brighter than one away from it, which is bluer
+        let s = c185.model.sun;
+        let h = s.x.hypot(s.z);
+        let (sun, anti) = ([s.x / h, 0.0, s.z / h], [-s.x / h, 0.0, -s.z / h]);
+        let e = |f: &LookFrame, n: [f64; 3]| eo_look::sh_eval(&f.env_sh, n);
+        assert!(luminance(e(&c185, sun)) > 4.0 * luminance(e(&c185, anti)));
+        assert!(rb(e(&c185, sun)) > 1.1 && rb(e(&c185, anti)) < 0.9, "sunward {:?} away {:?}", e(&c185, sun), e(&c185, anti));
+        // the rim cut back by day
+        assert!((luminance(c185.rim) / luminance(d185.rim) - eo_look::golden::RIM_KEEP).abs() < 1e-9);
+    }
+
+    #[test]
+    fn the_unlit_grounds_fill_the_meter_reads_is_kept() {
+        // (the camera meter and the night solve read `night::ground_fill`: the directional fill keeps it)
+        for hour in [8.0, 12.0, 16.0, 18.5, 18.9] {
+            let (d, _) = look_frame(&clear(hour), Some(0.7));
+            let (c, _) = look_frame_with(&clear(hour), Some(0.7), CINE);
+            // (plus the rim's removed share on an upward face, which the shader's ground had from the rim)
+            let day = (1.0 - night::nightness(d.model.sun.altitude_deg)) * smoothstep(-1.0, 3.0, d.model.sun.altitude_deg);
+            let moved = luminance(d.rim) * (1.0 - eo_look::golden::RIM_KEEP) * day * d.rim_dir[1].max(0.0);
+            let (a, b) = (night::ground_fill(&d, night::SIDEWALK_ENV) + moved, night::ground_fill(&c, night::SIDEWALK_ENV));
+            assert!((b / a - 1.0).abs() < 1e-9, "{hour}: {b} vs {a}");
+        }
+    }
+
+    #[test]
+    fn the_night_is_left_to_the_night() {
+        for hour in [21.0, 22.0, 3.0] {
+            let (d, td) = look_frame(&clear(hour), None);
+            let (c, tc) = look_frame_with(&clear(hour), None, CINE);
+            assert_eq!((d.key, d.rim, d.hemi_sky, d.hemi_ground, d.ambient, d.env_sh), (c.key, c.rim, c.hemi_sky, c.hemi_ground, c.ambient, c.env_sh), "{hour}");
+            assert_eq!(td.exposure_target, tc.exposure_target, "{hour}");
         }
     }
 }

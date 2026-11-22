@@ -492,7 +492,11 @@ pub fn cook_tile(ctx: &CookContext, tile: u32) -> ([Pack; 2], CookStats) {
             let index_start = pack.indices.len() as u32;
             let (mut mn, mut mx) = ([f32::MAX; 3], [f32::MIN; 3]);
             let mut splits = vec![];
-            for (name, tint, sink) in &mesh.groups {
+            for (gi, (name, tint, sink)) in mesh.groups.iter().enumerate() {
+                // a lit sign face's glow code (eo-kit clutter.rs; none without `--facade-clutter`).
+                let glow = mesh.glow.get(gi).copied().unwrap_or(0) as u32;
+                // (stage S1) a lettered sign's vertex bytes (rgb, the normal's y and w; draw.wgsl `sgn_decode`).
+                let letters = mesh.letters.get(gi).filter(|l| !l.is_empty() && l.len() == sink.positions.len());
                 let base = eo_kit::pipeline::base_material_name(name);
                 let pal = match set.palette_index.get(base) {
                     Some(p) => *p,
@@ -523,6 +527,12 @@ pub fn cook_tile(ctx: &CookContext, tile: u32) -> ([Pack; 2], CookStats) {
                         let (rgb, nw) = f[k];
                         c = rgb[0] as u32 | ((rgb[1] as u32) << 8) | ((rgb[2] as u32) << 16) | ((pal as u32) << 24);
                         normal |= (nw as u32) << 24;
+                    } else if let Some(l) = letters {
+                        let b = l[k];
+                        c = b[0] as u32 | ((b[1] as u32) << 8) | ((b[2] as u32) << 16) | ((pal as u32) << 24);
+                        normal = (normal & 0x00ff_00ff) | ((b[3] as u32) << 8) | ((b[4] as u32) << 24);
+                    } else if glow != 0 {
+                        normal |= glow << 24; // draw.wgsl `fc_glow` (the w byte is free on every other kit surface)
                     }
                     pack.vertices.push(Vertex { pos, normal, color: c });
                 }
@@ -592,6 +602,14 @@ pub fn cache_path(dir: &Path, inputs_key: &str, tile: &KitTile, rung: u8) -> Pat
 
 /// The cache folder name: planner build, input data and palette.
 pub fn inputs_key(repo_root: &Path, palette: &[String], streets: bool) -> String {
+    inputs_key_with(repo_root, palette, streets, "")
+}
+
+/// `inputs_key` over a street world whose options carry `street_tag`
+/// (`eo_street::StreetOptions::structures_tag`: the structures' joins, which
+/// change the street surface near structure ends that floors and skirts
+/// stand on). An empty tag (no joins) is `inputs_key`'s key.
+pub fn inputs_key_with(repo_root: &Path, palette: &[String], streets: bool, street_tag: &str) -> String {
     let mut h = Sha256::new();
     h.update(eo_kit::KIT_PORT_VERSION.as_bytes());
     h.update(eo_kit::KIT_SOURCE_HASH.as_bytes());
@@ -606,6 +624,9 @@ pub fn inputs_key(repo_root: &Path, palette: &[String], streets: bool) -> String
         // Slice 4: floors and skirts stand on the street surface.
         h.update(eo_street::STREET_PORT_VERSION.as_bytes());
         h.update(eo_street::STREET_SOURCE_HASH.as_bytes());
+        if !street_tag.is_empty() {
+            h.update(street_tag.as_bytes()); // the structures' joins (none: the key is unchanged)
+        }
     }
     h.update(KIT_TILE_M.to_le_bytes());
     // a scaled ground plan cooks into its own folder (scale and plan
@@ -623,6 +644,11 @@ pub fn inputs_key(repo_root: &Path, palette: &[String], streets: bool) -> String
     let paint = eo_kit::wall_paint::cache_tag();
     if !paint.is_empty() {
         h.update(paint.as_bytes());
+    }
+    // the kit's facade typology and roof rules (eo_kit::rules_cache_tag; all off: the key is unchanged).
+    let rules = eo_kit::rules_cache_tag();
+    if !rules.is_empty() {
+        h.update(rules.as_bytes());
     }
     for p in palette {
         h.update(p.as_bytes());
@@ -642,6 +668,21 @@ pub fn inputs_key(repo_root: &Path, palette: &[String], streets: bool) -> String
     }
     let d = h.finalize();
     d.iter().take(8).map(|b| format!("{b:02x}")).collect()
+}
+
+/// The kit tile cache folder for the planner's inputs key: the key itself,
+/// or with the facade clutter on (`eo_kit::clutter::cache_tag`, `--facade-clutter`)
+/// a key over it and the tag. Not in `inputs_key`, which the far layer's
+/// bake key also reads: the far cells do not draw the clutter.
+pub fn tile_cache_key(inputs_key: &str) -> String {
+    let tag = eo_kit::clutter::cache_tag();
+    if tag.is_empty() {
+        return inputs_key.to_string();
+    }
+    let mut h = Sha256::new();
+    h.update(inputs_key.as_bytes());
+    h.update(tag.as_bytes());
+    h.finalize().iter().take(8).map(|b| format!("{b:02x}")).collect()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -871,11 +912,17 @@ pub struct KitRuntime {
     tile_y: Arc<Vec<[f32; 2]>>,
     hold: crate::view_detail::ViewHold<u32>,
     pub near_out_of_view: usize,
+    /// resident packs the last `update` found no longer wanted (evicted
+    /// EVICTIONS_PER_FRAME a frame): what an earlier camera left behind.
+    pub stale_resident: usize,
     /// the near packs' own part of the arena (None: one arena for
     /// both rungs, as before), and whether a part freed space since a pack was
     /// deferred (near, mid).
     near_pool: Option<NearPool>,
     freed: [bool; 2],
+    /// (`--rt-gi`) each uploading pack's buildings as acceleration-structure
+    /// geometries, handed to the renderer when the pack is resident.
+    rt_pending: HashMap<(u32, u8), (Vec<crate::rt_scene::RtGeom>, Vec3, Vec3)>,
 }
 
 impl KitRuntime {
@@ -931,6 +978,7 @@ impl KitRuntime {
             let (ctx_slot, set, cache_dir) = (ctx_slot.clone(), set.clone(), cache_dir.clone());
             std::thread::spawn(move || {
                 if let Ok(Ok((city, key))) = city_rx.recv() {
+                    let key = tile_cache_key(&key);
                     *ctx_slot.lock().unwrap() = Some(Arc::new(CookContext { city, set, cache_dir, inputs_key: key }));
                 }
             });
@@ -1004,8 +1052,10 @@ impl KitRuntime {
             tile_y,
             hold: Default::default(),
             near_out_of_view: 0,
+            stale_resident: 0,
             near_pool: None,
             freed: [false; 2],
+            rt_pending: HashMap::new(),
         }
     }
 
@@ -1095,6 +1145,7 @@ impl KitRuntime {
             })
             .map(|(k, _)| *k)
             .collect();
+        self.stale_resident = evictable;
         if !gone.is_empty() {
             let gone_set: HashSet<(u32, u8)> = gone.iter().copied().collect();
             for k in &gone_set {
@@ -1114,6 +1165,7 @@ impl KitRuntime {
                     }
                     Some(Slot::Uploading(a)) => {
                         self.free(a);
+                        self.rt_pending.remove(&k);
                         self.stats.packs_dropped_unneeded += 1;
                     }
                     _ => {}
@@ -1152,7 +1204,7 @@ impl KitRuntime {
                 crate::upload::bury(Box::new(a)); // a whole pack (MBs) is not freed on the render thread
                 continue;
             }
-            match self.make_job(&mut a) {
+            match self.make_job(&mut a, renderer.rt_scene_live()) {
                 Some((job, alloc)) => {
                     self.slots.insert(key, Slot::Uploading(alloc));
                     uploads.push(job);
@@ -1208,7 +1260,7 @@ impl KitRuntime {
         Some((v + base[0], i + base[1], o + base[2], pooled))
     }
 
-    fn make_job(&mut self, a: &mut PackArrival) -> Option<(Job, Alloc)> {
+    fn make_job(&mut self, a: &mut PackArrival, rt_gi: bool) -> Option<(Job, Alloc)> {
         let objects_needed: u32 =
             if self.split_materials { a.pack.buildings.iter().map(|b| b.splits.len() as u32).sum() } else { a.pack.buildings.len() as u32 };
         let (v, i, o, pooled) = self.alloc_ranges(a.pack.rung == RUNG_NEAR, a.nv, a.ni, objects_needed)?;
@@ -1234,6 +1286,27 @@ impl KitRuntime {
             } else {
                 objects.push(mk(b.index_start, b.index_count));
             }
+        }
+        if rt_gi {
+            // (`--rt-gi`) one geometry a building, its range in the arena.
+            let (mut mn, mut mx) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+            let geoms = pack
+                .buildings
+                .iter()
+                .map(|b| {
+                    mn = mn.min(Vec3::from(b.min));
+                    mx = mx.max(Vec3::from(b.max));
+                    crate::rt_scene::RtGeom {
+                        base_vertex: ar.vertex_base + v + b.vertex_start,
+                        vertex_count: b.vertex_count,
+                        first_index: ar.index_base + i + b.index_start,
+                        index_count: b.index_count / 3 * 3,
+                        material: self.set.palette_base,
+                        kind: ObjectKind::Kit as u32,
+                    }
+                })
+                .collect();
+            self.rt_pending.insert((pack.tile, pack.rung), (geoms, mn, mx));
         }
         let vsize = std::mem::size_of::<Vertex>() as u64;
         let osize = std::mem::size_of::<GpuObject>() as u64;
@@ -1285,6 +1358,7 @@ impl KitRuntime {
 
     fn evict(&mut self, renderer: &crate::Renderer, queue: &wgpu::Queue, key: (u32, u8), a: Alloc) {
         crate::hitch::count(crate::hitch::Event::Eviction, 1); // hitch
+        renderer.rt_remove(crate::rt_scene::RtKey::Kit(key.0, key.1)); // (`--rt-gi`) out of the traced set this frame
         // Not ready first, then the objects emptied; the ranges are reused only
         // by later writes, which the queue orders after the frames in flight.
         self.set_ready(key.0, key.1, false);
@@ -1338,6 +1412,9 @@ impl KitRuntime {
             let key = (((tag >> 8) & 0xffff_ffff) as u32, (tag & 0xff) as u8);
             let Some(Slot::Uploading(a)) = self.slots.remove(&key) else { continue };
             self.slots.insert(key, Slot::Resident(a));
+            if let Some((g, mn, mx)) = self.rt_pending.remove(&key) {
+                renderer.rt_add(crate::rt_scene::RtKey::Kit(key.0, key.1), g, mn, mx); // (`--rt-gi`) traced from the next encode
+            }
             crate::hitch::mark(crate::hitch::Mark::KitPackResident, 1);
             self.set_ready(key.0, key.1, true);
             self.write_groups(renderer, queue, key.0);
@@ -1408,15 +1485,18 @@ impl GpuObject {
     }
 }
 
-/// Build the planner's city off the render thread (load time).
-pub fn spawn_kit_city(city: Arc<eo_data::City>, repo_root: PathBuf, palette: Vec<String>, streets: bool) -> Receiver<Result<(Arc<KitCity>, String), String>> {
+/// Build the planner's city off the render thread (load time). `street_tag`:
+/// the street world's `structures_tag` (empty without the structures' joins).
+pub fn spawn_kit_city(city: Arc<eo_data::City>, repo_root: PathBuf, palette: Vec<String>, streets: bool, street_tag: String) -> Receiver<Result<(Arc<KitCity>, String), String>> {
     let (tx, rx) = std::sync::mpsc::channel();
+    // (stage S1) the shop signs' words drawn meanwhile (with `--facade-clutter`; the renderer waits for them).
+    crate::sign_letters::start();
     std::thread::spawn(move || {
         let r = (|| {
             eo_data::roof_colours::install(&repo_root); // before the planner and the cache key read it
             let tenancy = eo_kit::tenancy::Tenancy::load(&repo_root)?;
             let kc = KitCity::build(&city, &tenancy, &eo_kit::city::load_exclusions());
-            Ok((Arc::new(kc), inputs_key(&repo_root, &palette, streets)))
+            Ok((Arc::new(kc), inputs_key_with(&repo_root, &palette, streets, &street_tag)))
         })();
         let _ = tx.send(r);
     });

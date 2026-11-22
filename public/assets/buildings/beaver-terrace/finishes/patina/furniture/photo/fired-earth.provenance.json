@@ -1,0 +1,41 @@
+{
+  "source": [
+    "https://polyhaven.com/a/clay_roof_tiles_02"
+  ],
+  "license": "CC0-1.0",
+  "license_url": "https://polyhaven.com/license",
+  "attribution": [
+    "Amal Kumar"
+  ],
+  "inputs": [
+    {
+      "asset": "clay_roof_tiles_02",
+      "role": "albedo",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/clay_roof_tiles_02/clay_roof_tiles_02_diff_2k.jpg",
+      "sha256": "570e1878985993bf81433d785b4fa2d4ab9f6d32447706193089b11ff0851731"
+    },
+    {
+      "asset": "clay_roof_tiles_02",
+      "role": "normal",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/clay_roof_tiles_02/clay_roof_tiles_02_nor_gl_2k.jpg",
+      "sha256": "762e2f18ba063fe3c587955be9f8a0a6e8e75cee4057e188970d1ec70a880194"
+    },
+    {
+      "asset": "clay_roof_tiles_02",
+      "role": "arm",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/clay_roof_tiles_02/clay_roof_tiles_02_arm_2k.jpg",
+      "sha256": "8e7cb954ebff60591bb19fb950f6e85727793caca16077bc2b42222e050efbb7"
+    }
+  ],
+  "build": "scripts/blender-buildings/prepare_beaver_surfaces.py",
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/fired-earth.png",
+  "sha256": "67176c0570232eaf429aace97b4c399430db63e484c1d164c9ef58ab8b3904a3",
+  "bytes": 305412,
+  "families": [
+    "fired-clay",
+    "terracotta"
+  ],
+  "metres_per_tile": 0.61,
+  "normal_strength": 0.42,
+  "paint_mix": 0.88
+}

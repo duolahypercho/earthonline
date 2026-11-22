@@ -1758,23 +1758,147 @@
       "id": "driveway-apron-sf",
       "topic": "driveways",
       "value": {
-        "flareEachSideIn": 18,
-        "apronDepthIn": 36,
-        "lipIn": 1,
-        "curbTransitionMaxFt": 5
+        "lip": 1,
+        "apronDepthApprox": 36,
+        "flareEachSide": 18,
+        "curbHeightTransition": 18,
+        "fullCurbBeforeSawcutMin": 6,
+        "curbReplaceToJointMax": 60
       },
       "unit": "in",
       "metricValue": {
-        "flareEachSide": 0.457,
-        "apronDepth": 0.914,
         "lip": 0.025,
-        "curbTransitionMax": 1.524
+        "apronDepthApprox": 0.914,
+        "flareEachSide": 0.457,
+        "curbHeightTransition": 0.457,
+        "fullCurbBeforeSawcutMin": 0.152,
+        "curbReplaceToJointMax": 1.524
       },
-      "condition": "SF driveway apron within the curb/sidewalk edge (approx. 36 in deep)",
-      "source": "SF Public Works Standard Plan 87,171",
-      "section": "Plan view, Section A-A, Front view",
+      "condition": "SF standard driveway. Depressed curb 1 in above the gutter across the opening; the apron rises from the curb line to meet the existing sidewalk flag line about 36 in back (Section A-A, marked NOT TO SCALE); 18 in flares each side in plan; along the curb the 6 in curb drops to the lip over 18 in after at least 6 in of full curb. The sheet's 5 ft MAX is how far the curb is replaced back to an existing joint (Note 2), not a transition (an earlier reading of this entry took it for one, and its metric keys did not mirror its value keys). Apron surface slope and apron cross slope are NOT stated",
+      "source": "SF Public Works Standard Plan 87,171 Driveway Construction (approved 2007-04-30, notes rev. 2012-12-10); lip and wings restated in the SFPW Application for Street Improvement Permit (rev. 2025-02-05), p. 4",
+      "section": "View from Roadway, Plan View, Section A-A, Front View, Note 2",
       "url": "https://sfpublicworks.org/sites/default/files/DPW%20updated%20standard%20driveway%20plan.pdf",
-      "quote": "18\" ... 36\" APPROX.",
+      "quote": "APPROX. 36\" NOT TO SCALE",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "driveway-width-sf-bsp",
+      "topic": "driveways",
+      "value": {
+        "residentialCutMax": 7,
+        "wingEach": 1.5,
+        "residentialTotalMax": 10,
+        "truckLoadingCutMax": 8,
+        "truckLoadingTotalMax": 11,
+        "twoWayMax": 18,
+        "industrialTwoWayMax": 24
+      },
+      "unit": "ft",
+      "metricValue": {
+        "residentialCutMax": 2.134,
+        "wingEach": 0.457,
+        "residentialTotalMax": 3.048,
+        "truckLoadingCutMax": 2.438,
+        "truckLoadingTotalMax": 3.353,
+        "twoWayMax": 5.486,
+        "industrialTwoWayMax": 7.315
+      },
+      "condition": "SF maximum curb-cut widths at the curb (residential: 7 ft at street level with 1 1/2 ft wings, 10 ft in all; SF Planning's Guidelines for Adding Garages and Curb Cuts, p. 4 and note 5, give the same 7 ft and 18 in transitions, 10 ft maximum). Whether the two-way 18 ft and 24 ft values include wings is not stated",
+      "source": "San Francisco Better Streets Plan (adopted Dec 2010), design guidelines at sfbetterstreets.org",
+      "section": "Driveways, Design Guidelines",
+      "url": "https://sfbetterstreets.org/design-guidelines/driveways/index.html",
+      "quote": "not be wider than 7 feet with 1 1/2 foot wings",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "street-tree-basin-sf",
+      "topic": "street trees",
+      "value": {
+        "minSidewalkForTrees": 7.5,
+        "walk11ft": 11,
+        "walk12ft": 12,
+        "walk13ft": 13,
+        "minUnobstructedSidewalk": 4,
+        "basinAcrossWalk7ft6": 3,
+        "basinAlongWalk7ft6": 4,
+        "basinAcrossWalk11": 3,
+        "basinAlongWalk11": 4,
+        "basinAcrossWalk12": 4,
+        "basinAlongWalk12": 4,
+        "basinAcrossWalk13": 5,
+        "basinAlongWalk13": 5,
+        "curbFaceToBasinWalk11": 2,
+        "clearPathWalk11": 6,
+        "curbToTrunkAngledParkingMin": 3
+      },
+      "unit": "ft",
+      "metricValue": {
+        "minSidewalkForTrees": 2.286,
+        "walk11ft": 3.353,
+        "walk12ft": 3.658,
+        "walk13ft": 3.962,
+        "minUnobstructedSidewalk": 1.219,
+        "basinAcrossWalk7ft6": 0.914,
+        "basinAlongWalk7ft6": 1.219,
+        "basinAcrossWalk11": 0.914,
+        "basinAlongWalk11": 1.219,
+        "basinAcrossWalk12": 1.219,
+        "basinAlongWalk12": 1.219,
+        "basinAcrossWalk13": 1.524,
+        "basinAlongWalk13": 1.524,
+        "curbFaceToBasinWalk11": 0.61,
+        "clearPathWalk11": 1.829,
+        "curbToTrunkAngledParkingMin": 0.914
+      },
+      "condition": "Standard minimum tree basins for sidewalks at least the named width (face of curb to property line), parallel or no parking; 'across' is perpendicular to the curb. On sidewalks from 7 ft 6 in the basin meets the back of the curb (about 0.5 ft from its face, INFERRED: not dimensioned); from 11 ft it stands 2 ft from the face of curb with a 6 ft clear path. Angled or perpendicular parking: 3x4 / 4x4 / 5x5 ft at 10 / 13 / 14 ft sidewalks, the trunk at least 3 ft from the curb. Surface flush with the sidewalk; decomposed granite or mulch allowed; grates strongly discouraged; cobble or brick edging at grade allowed (Sec. V, Tree basin surface and design, p. 12). Conflicts: the Public Works FY25-26 planting application gives a 3x3 ft minimum and a 4x6 or 5x5 ft maximum; the Better Streets Plan gives 2x4 ft for 6.5-7.5 ft sidewalks",
+      "source": "SF Public Works Director's Order No. 187,246 (2018-03-19), under Public Works Code Article 16",
+      "section": "Sec. V.B.i-v, pp. 10-11 (diagrams); Tree basin surface and design i, iii, p. 12",
+      "url": "https://sfpublicworks.org/sites/default/files/187246_Public%20Works%20Director%27s%20Order%20on%20Tree%20Planting.pdf",
+      "quote": "The diagrams below list minimum tree basin standards.",
+      "applicability": "local agency standard",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "street-tree-spacing-sf",
+      "topic": "street trees",
+      "value": {
+        "smallOnCenter": [
+          15,
+          20
+        ],
+        "mediumOnCenter": [
+          20,
+          25
+        ],
+        "largeOnCenter": 35,
+        "streetLightSmall": 9,
+        "streetLightMedium": 15,
+        "streetLightLarge": 21,
+        "hydrant": 5
+      },
+      "unit": "ft",
+      "metricValue": {
+        "smallOnCenter": [
+          4.572,
+          6.096
+        ],
+        "mediumOnCenter": [
+          6.096,
+          7.62
+        ],
+        "largeOnCenter": 10.668,
+        "streetLightSmall": 2.743,
+        "streetLightMedium": 4.572,
+        "streetLightLarge": 6.401,
+        "hydrant": 1.524
+      },
+      "condition": "Street tree spacing on centre by mature crown (small under 20 ft, medium 20-35 ft, large over 35 ft); clearances measured from the basin centre to a street light and a hydrant. Development projects plant one 24-in box tree per 20 ft of frontage (Public Works Code 806(d)(2) as enacted by Ord. 119-15; the current codified text was not re-read)",
+      "source": "SF Public Works Director's Order No. 187,246 (2018-03-19)",
+      "section": "Sec. IV.A, p. 4; Sec. IV.B tables, pp. 5-6",
+      "url": "https://sfpublicworks.org/sites/default/files/187246_Public%20Works%20Director%27s%20Order%20on%20Tree%20Planting.pdf",
+      "quote": "should be planted 15 to 20 feet on center",
       "applicability": "local agency standard",
       "confidence": "primary-source-checked"
     },
@@ -2679,6 +2803,20 @@
       "url": "https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?lawCode=VEH&sectionNum=22349",
       "quote": "no person may drive a vehicle upon a highway at a speed ...",
       "applicability": "binding statewide",
+      "confidence": "primary-source-checked"
+    },
+    {
+      "id": "following-time-gap",
+      "topic": "traffic rules",
+      "value": 3,
+      "unit": "s",
+      "metricValue": 3,
+      "condition": "Following distance behind the vehicle ahead, counted as time; the driver handbook's rule (CVC 21703 itself sets no number: 'reasonable and prudent'). The corridor traffic's car-following time gap",
+      "source": "California Driver's Handbook, California DMV (dmv.ca.gov, read 2026-11-18)",
+      "section": "Section 8: Safe Driving, Tailgating (Following Too Closely)",
+      "url": "https://www.dmv.ca.gov/portal/?p=35434",
+      "quote": "Use the three-second rule to ensure a safe following distance and avoid a collision.",
+      "applicability": "guidance",
       "confidence": "primary-source-checked"
     },
     {

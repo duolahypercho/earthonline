@@ -224,9 +224,9 @@ impl RoofTable {
 }
 
 /// This workspace's `native/assets` folder (beside the crates; the same folder
-/// as `<repo root>/native/assets` in the repository).
+/// as `<repo root>/native/assets` in the repository and in a packaged build).
 pub fn native_assets() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../assets")
+    crate::native_dir().join("assets")
 }
 
 /// Where the table is read from: `EO_ROOF_COLOURS=<path>` overrides, `off`

@@ -7,7 +7,9 @@
 //!    terrain extent, "wholly over land" from the shore field's max pyramid,
 //!    and with occlusion on the city's hierarchical-Z test inside the city's
 //!    own pyramid pass (the water is never drawn into that depth: a receiver,
-//!    not an occluder). Survivors become instances of one indexed patch mesh.
+//!    not an occluder). Survivors are listed for ONE instanced indirect draw
+//!    (its instance count written by the cull), so the sea needs no
+//!    multi-draw-indirect-count and draws on every adapter.
 //! 2. **FFT** (`water_fft.wgsl`, two dispatches), only while water within
 //!    `GATE_NEAR_M` was drawn in the last `SEEN_HOLD_FRAMES` frames (the cull's
 //!    counters, read back without waiting).
@@ -50,8 +52,93 @@ pub const SEEN_HOLD_FRAMES: u64 = 30;
 /// spectrum a few frames stale does not show, and the mirror falls back to the
 /// sky and probe (a sliver of the bay down a street 3 km off costs nothing).
 pub const GATE_NEAR_M: f32 = 1500.0;
+/// The water's shading features (each with its kill switch; all on by default,
+/// `LookOptions::water_features`):
+/// - `FEAT_BRDF` (`--no-water-brdf`): the slope variance the pixel does not
+///   resolve taken from the sea state's own spectrum and the Cox-Munk total
+///   (what the cascades lose to the footprint goes to the BRDF, so the far
+///   bay keeps its roughness), the Fresnel averaged over the visible facets
+///   (Bruneton et al. 2010) and a Beckmann sun lobe of that variance.
+/// - `FEAT_BODY` (`--no-water-body`): the water-leaving radiance from the
+///   bay's and the coast's inherent optical properties (eo-water `optics`
+///   `deep_rrs`) under the irradiance the city is lit with.
+/// - `FEAT_FOAM` (`--no-water-foam-cover`): whitecaps cover what the
+///   Monahan and O'Muircheartaigh fit gives (eo-water `FOAM_OVER_TOTAL`), and
+///   a pixel that spans several foam texels shows their mean, not one texel.
+/// - `FEAT_INSTANCED` (`--no-water-instanced`): the pass draws on an adapter
+///   without multi-draw-indirect-count (its patches are one instanced
+///   indirect draw); off, it needs the count as before, and without it the
+///   flat sea quad draws.
+/// - `FEAT_GLINT` (`--no-water-glint`): the sun's glints counted per pixel
+///   (a Poisson count of the facets that mirror the sun's disc, from the
+///   slope distribution), so the glitter path tapers and feathers by itself
+///   and merges into a sheen far off; each pixel's glint held under a
+///   screen-referred ceiling (no fireflies) and the water's output kept finite.
+/// - `FEAT_TURBID` (`--no-water-turbid`): the body's reflectance and
+///   attenuation integrated over the visible spectrum for the bay's sediment
+///   (eo-water `BAY_TURBID_IOP`) and the coast.
+/// - `FEAT_SHORE` (`--no-water-shore`): the shoreline contact: the waterline
+///   fades over the last decimetres of column, foam lines where the water
+///   meets a wall, a pier or a pile, the water darkened against them.
+/// - `FEAT_FOAM_LIT` (`--no-water-foam-lit`): whitecaps as lit, lacy foam
+///   (a coverage-threshold dissolve of bubble cells, wind-aligned residual
+///   streaks, each crest its own size) at measured foam albedo under the
+///   light the city is lit with.
+/// - `FEAT_PPR` (`--no-water-ppr`): the frame's own geometry projected across
+///   the sea plane (pixel-projected reflection), so the bridge decks, cables
+///   and the skyline stand in the water; the march stays for what it misses.
+/// - `FEAT_WIND` (`--no-water-wind-texture`): cat's-paw gust patches, the
+///   tidal current's rough water through the Golden Gate and a rotated
+///   re-read of the chop cascade against the wind's ribbons.
+/// - `FEAT_GRAZE` (`--no-water-grazing`): the sky reflection integrated over
+///   the unresolved facets the eye sees (each tilt's own Fresnel and sky), so
+///   a grazing view's far water mirrors the bright low sky as it should.
+pub const FEAT_BRDF: u32 = 1;
+pub const FEAT_BODY: u32 = 2;
+pub const FEAT_FOAM: u32 = 4;
+pub const FEAT_INSTANCED: u32 = 8;
+pub const FEAT_GLINT: u32 = 16;
+pub const FEAT_TURBID: u32 = 32;
+pub const FEAT_SHORE: u32 = 64;
+pub const FEAT_FOAM_LIT: u32 = 128;
+pub const FEAT_PPR: u32 = 256;
+pub const FEAT_WIND: u32 = 512;
+pub const FEAT_GRAZE: u32 = 1024;
+pub const FEAT_ALL: u32 = FEAT_BRDF | FEAT_BODY | FEAT_FOAM | FEAT_INSTANCED | FEAT_GLINT | FEAT_TURBID | FEAT_SHORE | FEAT_FOAM_LIT | FEAT_PPR | FEAT_WIND | FEAT_GRAZE;
+
 /// The cull's counters: drawn, in the frustum, land, occluded, nearest drawn (m), pad.
 const COUNT_BYTES: u64 = 32;
+/// Under the cinematic look (stage L5) the sea's reach (water_common.wgsl
+/// `wg_reach`) runs this much further south too, as it does west, north and
+/// east: the South Bay and the Pacific off the peninsula are the sea's, the
+/// peninsula's land hides it by depth (`set_south_reach`).
+pub const CINEMATIC_SOUTH_REACH_M: f32 = 60_000.0;
+/// Under the cinematic look (stage L5) the sea pass stands down for distance
+/// past this view depth (all its water at least this far: a camera 3.5 km or
+/// more up), and the far layer draws the water in its place, inside the city
+/// grid too (farshore.wgsl `fs_vs`, the sheet). The fog in use (2e7 m with
+/// the volume's aerial perspective) alone would never skip it: from the
+/// overview's 8 km the sea pass then cost 1.1 ms of GPU at high (15.6 ->
+/// 16.7 ms, over the tier's 16.6), for waves no pixel resolves up there.
+pub const CINEMATIC_SEA_LOD_M: f32 = 3_000.0;
+
+/// All water is past the fog's far end (`fog_far`, view depth): a point in the
+/// frustum lies within the half-diagonal angle of the view axis, so its view
+/// depth (what the range fog reads) is at least its distance times that
+/// angle's cosine, and no water is nearer than the camera's height over the
+/// displaced surface. When even that bound is past the fog's far end every
+/// water pixel would be the fog colour, which the fogged seabed behind it
+/// already is: the sea pass draws nothing (`update`).
+pub fn sea_fogged(cam: &Camera, fog_far: f32) -> bool {
+    let sea = eo_water::SEA_LEVEL_Y as f32;
+    let half_diag = ((cam.fov_y_deg.to_radians() * 0.5).tan() * (1.0 + cam.aspect * cam.aspect).sqrt()).atan();
+    (cam.eye.y - sea - BOX_M).max(0.0) * half_diag.cos() >= fog_far
+}
+
+/// After them in the same buffer, the sea's one DrawIndexedIndirect (its
+/// instance count the patches drawn, counted by the cull), then pad.
+const DRAW_ARGS_OFFSET: u64 = 32;
+const COUNT_BUF_BYTES: u64 = 64;
 
 const PATCH_COUNT: u32 = eo_water::grid::PATCHES * eo_water::grid::PATCHES;
 const N: u32 = eo_water::spectrum::N as u32;
@@ -96,6 +183,26 @@ struct WaterUniform {
     wv_sea: [f32; 4],
     // x storm 0..1, y the sine groundswell's gain (0: the spectrum carries the swell), z/w 0
     wv_misc: [f32; 4],
+    // per cascade, the GPU spectrum's mean square slope (eo-water Plan `mss_gpu`, before each place's amplitude)
+    wv_mss: [f32; 4],
+    // (iteration 2) the exposure field's frame: origin x, z, 1 / extent x, z
+    wv_expo: [f32; 4],
+    // (iteration 2) x the tidal current (m/s, + flood), y the parts on (eo-water switches), z 1 with an exposure field
+    wv_gg2: [f32; 4],
+    // (iteration 2) per cascade, the wind sea's amplitude on the tidal jet (`doppler_gain`)
+    wv_dop: [f32; 4],
+    // (iteration 2, exposure) the fetch factors and wind ratios the bay's wind sea is tabulated at
+    // (eo-water waves.rs `EXPO_FETCH_NODES`, `EXPO_WIND_NODES`), and per wind node g, fetch node b
+    // (at 8 g + b) the bay's amplitude per cascade there (`Plan::expo_amp`)
+    wv_xn: [[f32; 4]; 2],
+    wv_gn: [[f32; 4]; 2],
+    wv_xa: [[f32; 4]; 64],
+    // (iteration 3) the extra field's frame (eo-water extra.rs): origin x, z, 1 / extent x, z;
+    // the identity (0, 0, 1, 1) without a field
+    wv_extra: [f32; 4],
+    // x the sea's reach's extra run south (m; `CINEMATIC_SOUTH_REACH_M` under the
+    // cinematic look, stage L5, else 0: water_common.wgsl `wg_reach`); y, z, w 0
+    reach: [f32; 4],
 }
 
 #[repr(C)]
@@ -188,6 +295,8 @@ struct State {
     near_waterline: bool,
     /// All water is past the fog's far end this frame: nothing drawn.
     fogged: bool,
+    /// The reach's extra run south (m; 0, or `CINEMATIC_SOUTH_REACH_M` under the cinematic look).
+    south_m: f32,
     active: bool,
     always: bool,
     stats: WaterStats,
@@ -196,6 +305,8 @@ struct State {
     // the sea in force, its plan, and this frame's work
     sea_in: SeaInput,
     sea_key: Option<[i64; 4]>,
+    /// (iteration 2) the day of the year the plan was made for (the station's wind by month).
+    sea_day: f64,
     plan: Option<eo_water::waves::Plan>,
     /// The spectrum must be rebuilt on the GPU this frame.
     init: bool,
@@ -217,14 +328,18 @@ struct State {
     /// a plan being built off the render thread (the hour or the
     /// weather moved; captures build it in place).
     plan_job: Option<std::thread::JoinHandle<([i64; 4], eo_water::waves::Plan)>>,
+    /// the visible foam over the whitecap fit the plans are made with (`FEAT_FOAM`).
+    foam_over: f64,
 }
 
 /// a plan's GPU-side numbers.
 #[derive(Clone, Copy)]
 struct PlanGpu {
     step: FftParams,
-    wv: [[f32; 4]; 4],
+    wv: [[f32; 4]; 5],
     spec: SpecParams,
+    // (exposure) `Plan::expo_amp`, at 8 g + b
+    xa: [[f32; 4]; 64],
 }
 
 impl PlanGpu {
@@ -233,8 +348,9 @@ impl PlanGpu {
         let f4 = |v: [f64; 4]| v.map(|x| x as f32);
         Self {
             step: WaterGpu::step_params(plan, 0.0, 0.0),
-            wv: [f4(plan.amp_bay), f4(plan.amp_pac), [st.bay.u10 as f32, st.pacific.u10 as f32, plan.cover[1] as f32, plan.cover[0] as f32], [st.storm as f32, 0.0, 0.0, 0.0]],
+            wv: [f4(plan.amp_bay), f4(plan.amp_pac), [st.bay.u10 as f32, st.pacific.u10 as f32, plan.cover[1] as f32, plan.cover[0] as f32], [st.storm as f32, 0.0, 0.0, 0.0], f4(plan.mss_gpu)],
             spec: SpecParams::from(plan.spec_params()),
+            xa: std::array::from_fn(|i| f4(plan.expo_amp[i / 8][i % 8])),
         }
     }
 }
@@ -259,8 +375,9 @@ pub struct WaterGpu {
     field_view: wgpu::TextureView,
     detail_view: wgpu::TextureView,
     index_buf: wgpu::Buffer,
-    visible_patches: wgpu::Buffer,
-    patch_draw: wgpu::Buffer,
+    /// indices of one patch (16 x 16 quads).
+    index_count: u32,
+    draw_buf: wgpu::Buffer,
     count_buf: wgpu::Buffer,
     cull_plain: wgpu::ComputePipeline,
     cull_hzb: wgpu::ComputePipeline,
@@ -268,6 +385,7 @@ pub struct WaterGpu {
     draw_copy: wgpu::RenderPipeline,
     draw_blend: wgpu::RenderPipeline,
     submerged: Option<(wgpu::RenderPipeline, eo_water::field::ShoreField)>,
+    fallback_dive: std::sync::atomic::AtomicBool,
     /// the spray pass (water_spray.wgsl).
     spray: wgpu::RenderPipeline,
     draw_bgl: wgpu::BindGroupLayout,
@@ -275,6 +393,13 @@ pub struct WaterGpu {
     clamp: wgpu::Sampler,
     probe_sampler: wgpu::Sampler,
     scene: Mutex<Option<(u32, u32, wgpu::Texture, wgpu::TextureView)>>,
+    /// (ppr) the projected reflection's target buffer (one u32 per pixel of the
+    /// frame; 16 bytes while `FEAT_PPR` is off) and its pass.
+    ppr: Mutex<Option<(u32, u32, wgpu::Buffer)>>,
+    ppr_bgl: wgpu::BindGroupLayout,
+    ppr_pipe: wgpu::ComputePipeline,
+    /// the projection's bind group, made when the depth or the buffer is new.
+    ppr_bg: Mutex<Option<(wgpu::Texture, wgpu::Buffer, wgpu::BindGroup)>>,
     /// per probe front cube, both made when the depth or the frame copy is new.
     draw_bg: Mutex<Option<(wgpu::Texture, wgpu::Texture, [wgpu::BindGroup; 2])>>,
     readbacks: Mutex<Vec<Readback>>,
@@ -282,10 +407,23 @@ pub struct WaterGpu {
     extent: [f32; 4],
     field_frame: [f32; 4],
     on: std::sync::atomic::AtomicBool,
+    /// the shading features in force (`FEAT_*`, from `LookOptions::water_features`).
+    features: u32,
+    /// (iteration 2) the exposure field (a 1 x 1 stand-in without one) and its frame.
+    expo_view: wgpu::TextureView,
+    expo_frame: [f32; 4],
+    expo_on: bool,
+    /// (iteration 3) the extra field (eo-water `extra`; a 1 x 1 zero texture without one) and its frame.
+    extra_view: wgpu::TextureView,
+    extra_frame: [f32; 4],
+    /// (iteration 2) the beaches' measured slopes are in the exposure texture's A.
+    slopes_on: bool,
+    /// (iteration 2) the parts on (eo-water `switches`).
+    gg2: u32,
 }
 
 /// `EO_WATER_DEBUG`: the water pass draws its terms instead of the water (diagnostics).
-fn debug_mode() -> f32 {
+pub(crate) fn debug_mode() -> f32 {
     static MODE: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
     *MODE.get_or_init(|| std::env::var("EO_WATER_DEBUG").ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0))
 }
@@ -310,11 +448,74 @@ fn sea_override() -> Option<eo_water::waves::SeaState> {
     })
 }
 
-/// The water shaders' shared WGSL (constants generated from eo-water, the
-/// grid and the uniform).
-fn common_source() -> String {
-    format!("{}\n{}\n{}", eo_water::optics::wgsl_constants(), eo_water::surface::wgsl_constants(), include_str!("water_common.wgsl"))
+/// What the water's shaders compile in as constants (`common_source`), all
+/// fixed for the life of the pipelines: the shading features (`FEAT_*`), the
+/// iteration-2 and -3 parts (eo-water `switches`), the debug view
+/// (`EO_WATER_DEBUG`, 0 off) and the submerged camera's wave optics
+/// (`--water-optics`). The uniform still carries the same values.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ShaderBits {
+    pub features: u32,
+    pub parts: u32,
+    pub debug: f32,
+    pub optics: bool,
 }
+
+/// The water shaders' shared WGSL (constants generated from eo-water, the
+/// grid and the uniform), with `bits` compiled in (`W_FEAT`, `W_GG2`,
+/// `W_DEBUG`, `W_OPTICS`: water_common.wgsl `wv_feat`, `wg_gg2`, water.wgsl):
+/// each gate is a constant, so the branch a run does not take (a feature's
+/// code when it is off, the earlier path its switch restores when it is on,
+/// the debug views, the wave optics' terms) is compiled out. Gated on the
+/// uniform instead, every pixel of the sea carried all of that code in its
+/// registers (measured, golden_gate: the water pass 6.2 ms against 1.6 ms
+/// with the features and parts as constants, the output unchanged).
+pub(crate) fn common_source(cove_detail: bool, bits: ShaderBits) -> String {
+    format!(
+        "{}\n{}\n{}\n{}\nconst W_COVE_DETAIL: bool = {cove_detail};\nconst W_COVE_SCALE: f32 = {:.8};\nconst W_FEAT: u32 = {}u;\nconst W_GG2: u32 = {}u;\nconst W_DEBUG: f32 = {:.3};\nconst W_OPTICS: bool = {};\n",
+        eo_water::optics::wgsl_constants(),
+        eo_water::surface::wgsl_constants(),
+        include_str!("water_common.wgsl"),
+        include_str!("cove_daylight.wgsl"),
+        eo_data::groundscale::scale(),
+        bits.features,
+        bits.parts,
+        bits.debug,
+        bits.optics
+    )
+}
+
+/// (iteration 2, current) the wind sea's amplitude gain per cascade on the
+/// Golden Gate's tidal jet for a current (m/s, + flood): wave action conserved
+/// on a current along the waves (Longuet-Higgins and Stewart 1961, J. Fluid
+/// Mech. 10(4), 529: a/a0 = c0 / sqrt(c (c + 2U)), c = c0 (1 + sqrt(1 + 4U/c0)) / 2,
+/// deep water), for each cascade's middle wavelength and the bay's wind sea
+/// (`waves::BAY_DIR`) against the flood's axis (`climate::current_axis_deg`).
+/// Against the ebb the short waves steepen toward blocking and break: the gain
+/// is held to `DOPPLER_MAX` (INFERRED: past it the crests spill). Cascade 0
+/// (the swell) and 3 (the ripples, which the wind remakes in seconds) keep 1.
+pub fn doppler_gain(current: f64) -> [f64; 4] {
+    use eo_water::waves::{BAY_DIR, CUT_M};
+    let a = eo_water::climate::current_axis_deg().to_radians();
+    let flood = (a.sin(), -a.cos()); // compass to (x east, z south)
+    let u = current * (flood.0 * BAY_DIR.cos() + flood.1 * BAY_DIR.sin());
+    let mut g = [1.0; 4];
+    for (c, gc) in g.iter_mut().enumerate().take(3).skip(1) {
+        let lam = (CUT_M[c] * CUT_M[c + 1]).sqrt();
+        let c0 = (9.81 * lam / std::f64::consts::TAU).sqrt();
+        let q = 1.0 + 4.0 * u / c0;
+        *gc = if q <= 0.0 {
+            DOPPLER_MAX
+        } else {
+            let cc = 0.5 * c0 * (1.0 + q.sqrt());
+            (c0 / (cc * (cc + 2.0 * u)).max(1e-6).sqrt()).clamp(0.5, DOPPLER_MAX)
+        };
+    }
+    g
+}
+
+/// (current) the most the ebb steepens the wind sea (INFERRED: see `doppler_gain`).
+pub const DOPPLER_MAX: f64 = 2.0;
 
 impl WaterGpu {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, look: &crate::look::LookGpu, late_bgl: &wgpu::BindGroupLayout, init: &WaterInit) -> Self {
@@ -464,16 +665,91 @@ impl WaterGpu {
         );
         bytes += (detail_size * detail_size * 8) as u64;
         let detail_view = detail_tex.create_view(&Default::default());
+        // (iteration 2, exposure) the sea's exposure (eo-water exposure.rs), RGBA8,
+        // clamp-sampled; a 1 x 1 stand-in without one (the shader then keeps the ramp)
+        // the parts the command line keeps, less those the quality tier leaves out (`LookOptions::water_parts_off`).
+        let gg2 = eo_water::switches::on() & !look.options.water_parts_off;
+        let expo = eo_water::exposure::installed().filter(|_| gg2 & eo_water::switches::EXPOSURE != 0);
+        // (beach profiles) each beach's slope in A, as 55 x the slope / 10 (water.wgsl `w_surf_k`)
+        let slopes = eo_water::beaches::installed().filter(|_| gg2 & eo_water::switches::BEACH_PROFILES != 0);
+        let (ew, eh, mut etex): (u32, u32, Vec<[u8; 4]>) = match (expo, slopes) {
+            (Some(e), _) => (e.width as u32, e.height as u32, e.texels.clone()),
+            (None, Some(_)) => {
+                let d = eo_water::exposure::DOMAIN;
+                let (w, h) = (((d[2] - d[0]) / eo_water::exposure::CELL_M).round() as u32, ((d[3] - d[1]) / eo_water::exposure::CELL_M).round() as u32);
+                (w, h, vec![[0, 128, 255, 255]; (w * h) as usize])
+            }
+            (None, None) => (1, 1, vec![[0, 128, 255, 255]]),
+        };
+        let (eorigin, ecell) = (expo.map_or([eo_water::exposure::DOMAIN[0], eo_water::exposure::DOMAIN[1]], |e| e.origin), expo.map_or(eo_water::exposure::CELL_M, |e| e.cell_m));
+        if let Some(v) = slopes {
+            let fallback = eo_water::field::BEACH_FORESHORE_SLOPE;
+            for j in 0..eh as usize {
+                for i in 0..ew as usize {
+                    let (x, z) = (eorigin[0] + (i as f64 + 0.5) * ecell, eorigin[1] + (j as f64 + 0.5) * ecell);
+                    let k = eo_water::beaches::slope_at(v, x, z, fallback) / fallback;
+                    etex[j * ew as usize + i][3] = ((k / 10.0).clamp(0.0, 1.0) * 255.0).round() as u8;
+                }
+            }
+        }
+        let expo_tex = d.create_texture(&wgpu::TextureDescriptor {
+            label: Some("water-exposure"),
+            size: wgpu::Extent3d { width: ew, height: eh, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo { texture: &expo_tex, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+            bytemuck::cast_slice(&etex),
+            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(ew * 4), rows_per_image: Some(eh) },
+            wgpu::Extent3d { width: ew, height: eh, depth_or_array_layers: 1 },
+        );
+        bytes += (ew * eh * 4) as u64;
+        let expo_view = expo_tex.create_view(&Default::default());
+        let expo_on = expo.is_some();
+        let slopes_on = slopes.is_some();
+        let expo_frame = if expo_on || slopes_on { [eorigin[0] as f32, eorigin[1] as f32, (1.0 / (ew as f64 * ecell)) as f32, (1.0 / (eh as f64 * ecell)) as f32] } else { [0.0; 4] };
+        // (iteration 3) the extra field (eo-water extra.rs), RGBA16F: none yet, so a 1 x 1
+        // zero texel and the identity frame; bound to every pipeline of group 0, read by none.
+        let extra = eo_water::extra::field().filter(|f| f.width > 0 && f.height > 0 && f.texels.len() == f.width * f.height);
+        let (xw, xh, xtex): (u32, u32, &[[u16; 4]]) = match extra {
+            Some(f) => (f.width as u32, f.height as u32, &f.texels),
+            None => (1, 1, &[[0u16; 4]]),
+        };
+        let extra_tex = d.create_texture(&wgpu::TextureDescriptor {
+            label: Some("water-extra"),
+            size: wgpu::Extent3d { width: xw, height: xh, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba16Float,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo { texture: &extra_tex, mip_level: 0, origin: wgpu::Origin3d::ZERO, aspect: wgpu::TextureAspect::All },
+            bytemuck::cast_slice(xtex),
+            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(xw * 8), rows_per_image: Some(xh) },
+            wgpu::Extent3d { width: xw, height: xh, depth_or_array_layers: 1 },
+        );
+        bytes += (xw * xh * 8) as u64;
+        let extra_view = extra_tex.create_view(&Default::default());
+        let extra_frame = extra.map_or(eo_water::extra::IDENTITY_FRAME, |f| f.frame()).map(|v| v as f32);
 
         // The grid: one shared index list and a compact stream of visible patch IDs.
         let idx = eo_water::grid::patch_indices();
         let index_buf = buffer("water-patch-indices", (idx.len() * 4) as u64, wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST);
         queue.write_buffer(&index_buf, 0, bytemuck::cast_slice(&idx));
-        let visible_patches = buffer("water-visible-patches", PATCH_COUNT as u64 * 4, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::VERTEX);
-        let patch_draw = buffer("water-patch-draw", crate::DRAW_ARGS_BYTES, wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_DST);
-        queue.write_buffer(&patch_draw, 0, bytemuck::cast_slice(&[idx.len() as u32, 0, 0, 0, 0]));
-        let count_buf = buffer("water-counts", COUNT_BYTES, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST);
-        bytes += idx.len() as u64 * 4 + visible_patches.size() + patch_draw.size() + COUNT_BYTES;
+        let index_count = idx.len() as u32;
+        // the patches drawn this frame (one u32 per patch, the vertex shader's
+        // `w_patches`); the counters and the one indirect draw after them.
+        let draw_buf = buffer("water-patch-list", PATCH_COUNT as u64 * 4, wgpu::BufferUsages::STORAGE);
+        let count_buf = buffer("water-counts", COUNT_BUF_BYTES, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST);
+        bytes += idx.len() as u64 * 4 + PATCH_COUNT as u64 * 4 + COUNT_BUF_BYTES;
 
         // Patch cull: with the city's pyramid (group 1) and without.
         let tex_unfiltered = wgpu::BindingType::Texture { sample_type: wgpu::TextureSampleType::Float { filterable: false }, view_dimension: wgpu::TextureViewDimension::D2, multisampled: false };
@@ -486,12 +762,12 @@ impl WaterGpu {
             layout: &cull_bgl,
             entries: &[
                 wgpu::BindGroupEntry { binding: 0, resource: uniform_buf.as_entire_binding() },
-                wgpu::BindGroupEntry { binding: 1, resource: visible_patches.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: draw_buf.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 2, resource: count_buf.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&land_view) },
             ],
         });
-        let common = common_source();
+        let common = common_source(look.options.cove_detail, ShaderBits { features: look.options.water_features, parts: gg2, debug: debug_mode(), optics: look.options.water_optics });
         let plain_src = format!("{common}\n{}\nfn patch_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return false; }}\n", include_str!("water_cull.wgsl"));
         let hzb_src = format!(
             "{common}\n{}\nstruct HzbInfo {{ screen: vec4<f32> }};\n@group(1) @binding(0) var hzb: texture_2d<f32>;\n@group(1) @binding(1) var<uniform> hzb_info: HzbInfo;\n{}\nfn patch_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return hzb_occluded(mn, mx, wu.view_proj, hzb_info.screen.xy); }}\n",
@@ -510,9 +786,7 @@ impl WaterGpu {
         let vf = wgpu::ShaderStages::VERTEX_FRAGMENT;
         let tex = |sample_type, view_dimension| wgpu::BindingType::Texture { sample_type, view_dimension, multisampled: false };
         let filt = wgpu::TextureSampleType::Float { filterable: true };
-        let draw_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("water-draw-bgl"),
-            entries: &[
+        let mut draw_entries = vec![
                 entry(0, vf, ubuf),
                 entry(1, vf, tex(filt, wgpu::TextureViewDimension::D2)),
                 entry(2, vf, tex(filt, wgpu::TextureViewDimension::D2Array)),
@@ -527,11 +801,40 @@ impl WaterGpu {
                 // the sky slice's atmosphere tables (sky view, transmittance)
                 entry(11, vf, tex(filt, wgpu::TextureViewDimension::D2)),
                 entry(12, fs, tex(filt, wgpu::TextureViewDimension::D2)),
+                // the patch list the cull wrote (the vertex shader's `w_patches`)
+                entry(13, vf, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }),
+                // (ppr) the projected reflection's sources (water_ppr.wgsl)
+                entry(14, fs, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: true }, has_dynamic_offset: false, min_binding_size: None }),
+                // (iteration 2) the exposure field
+                entry(15, vf, tex(filt, wgpu::TextureViewDimension::D2)),
+                // (iteration 3) the extra field and its sampler (eo-water extra.rs; read by nothing yet)
+                entry(18, vf, tex(filt, wgpu::TextureViewDimension::D2)),
+                entry(19, vf, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
+        ];
+        if look.options.water_optics {
+            // (submerged camera) the camera look's table and sampler (look_camera.wgsl), so a
+            // submerged frame finishes through the same transform as the post pass.
+            draw_entries.push(entry(16, fs, tex(filt, wgpu::TextureViewDimension::D3)));
+            draw_entries.push(entry(17, fs, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)));
+        }
+        let draw_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor { label: Some("water-draw-bgl"), entries: &draw_entries });
+        // (ppr) the projection pass: the uniform, the opaque depth, the target buffer.
+        let cs = wgpu::ShaderStages::COMPUTE;
+        let ppr_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("water-ppr-bgl"),
+            entries: &[
+                entry(0, cs, ubuf),
+                entry(1, cs, tex(wgpu::TextureSampleType::Depth, wgpu::TextureViewDimension::D2)),
+                entry(2, cs, wgpu::BindingType::Buffer { ty: wgpu::BufferBindingType::Storage { read_only: false }, has_dynamic_offset: false, min_binding_size: None }),
             ],
         });
-        let draw_src = format!("{common}\n{}\n{}\n{}\n{}", crate::look::look_common_source(), include_str!("sky_light_core.wgsl"), include_str!("water.wgsl"), include_str!("water_surf.wgsl")) + include_str!("water_spray.wgsl"); // + the spray, the cloud shadow and the fog depth
+        let ppr_module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("water_ppr.wgsl"), source: wgpu::ShaderSource::Wgsl(format!("{common}\n{}", include_str!("water_ppr.wgsl")).into()) });
+        let ppr_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("water-ppr"), bind_group_layouts: &[Some(&ppr_bgl)], immediate_size: 0 });
+        let ppr_pipe = d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor { label: Some("ppr_project"), layout: Some(&ppr_layout), module: &ppr_module, entry_point: Some("ppr_project"), compilation_options: Default::default(), cache: None });
+        let draw_src = format!("{common}\n{}\n{}\n{}\n{}\n{}", crate::look::look_common_source(), include_str!("sky_light_core.wgsl"), crate::look::LOOK_EXT_WGSL, include_str!("water.wgsl"), include_str!("water_surf.wgsl")) + include_str!("water_spray.wgsl") + "\n" + crate::far_shadow::WGSL + "\n" + &crate::probe_grid::wgsl(true); // + the spray, the cloud shadow and the fog depth; + group 1 bindings 12-18; + the far sun shadow map's lookup and the probe grid's (lighting)
         let draw_src = if look.options.water_optics {
-            draw_src + include_str!("look_finish.wgsl") + include_str!("underwater.wgsl")
+            // + the dive exposure's switch, the display transforms (look.rs `DISPLAY_SHADER`, the camera look at group 0 bindings 16, 17)
+            draw_src + &format!("\nconst UW_DEPTH_EXPOSURE: bool = {};\n", look.options.dive_exposure) + crate::look::DISPLAY_SHADER + &crate::look::camera_wgsl_at(0, 16, 17) + include_str!("underwater.wgsl")
         } else {
             draw_src
         };
@@ -541,16 +844,7 @@ impl WaterGpu {
             d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(entry),
                 layout: Some(&draw_layout),
-                vertex: wgpu::VertexState {
-                    module: &draw_module,
-                    entry_point: Some("vs"),
-                    compilation_options: Default::default(),
-                    buffers: &[Some(wgpu::VertexBufferLayout {
-                        array_stride: 4,
-                        step_mode: wgpu::VertexStepMode::Instance,
-                        attributes: &wgpu::vertex_attr_array![0 => Uint32],
-                    })],
-                },
+                vertex: wgpu::VertexState { module: &draw_module, entry_point: Some("vs"), compilation_options: Default::default(), buffers: &[] },
                 primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleList, cull_mode: None, ..Default::default() },
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: crate::DEPTH_FORMAT,
@@ -655,8 +949,8 @@ impl WaterGpu {
             field_view,
             detail_view,
             index_buf,
-            visible_patches,
-            patch_draw,
+            index_count,
+            draw_buf,
             count_buf,
             cull_plain,
             cull_hzb,
@@ -664,12 +958,17 @@ impl WaterGpu {
             draw_copy,
             draw_blend,
             submerged,
+            fallback_dive: std::sync::atomic::AtomicBool::new(false),
             spray,
             draw_bgl,
             repeat: sampler("water-repeat", wgpu::AddressMode::Repeat),
             clamp: sampler("water-clamp", wgpu::AddressMode::ClampToEdge),
             probe_sampler: sampler("water-probe", wgpu::AddressMode::ClampToEdge),
             scene: Mutex::new(None),
+            ppr: Mutex::new(None),
+            ppr_bgl,
+            ppr_pipe,
+            ppr_bg: Mutex::new(None),
             draw_bg: Mutex::new(None),
             readbacks: Mutex::new(readbacks),
             state: Mutex::new(State {
@@ -684,12 +983,14 @@ impl WaterGpu {
                 fft_ever: false,
                 near_waterline: false,
                 fogged: false,
+                south_m: 0.0,
                 active: false,
                 always: false,
                 stats: Default::default(),
                 slot: None,
                 sea_in: SeaInput::Weather { hour: 16.0, wind: [0.0, 0.0], severity: 0.0 },
                 sea_key: None,
+                sea_day: f64::NAN,
                 plan: None,
                 init: false,
                 reset_foam: false,
@@ -700,10 +1001,19 @@ impl WaterGpu {
                 plan_gpu: None,
                 plan_job: None,
                 spray: false,
+                foam_over: if look.options.water_features & FEAT_FOAM != 0 { eo_water::waves::FOAM_OVER_TOTAL } else { eo_water::waves::FOAM_OVER_ACTIVE },
             }),
             extent: init.extent,
             field_frame: [fld.origin[0] as f32, fld.origin[1] as f32, fld.size[0] as f32, fld.size[1] as f32],
             on: std::sync::atomic::AtomicBool::new(true),
+            features: look.options.water_features,
+            expo_view,
+            expo_frame,
+            expo_on,
+            extra_view,
+            extra_frame,
+            slopes_on,
+            gg2,
         }
     }
 
@@ -713,6 +1023,22 @@ impl WaterGpu {
     }
     pub fn on(&self) -> bool {
         self.on.load(Ordering::Relaxed)
+    }
+    /// the pass may draw without multi-draw-indirect-count (`FEAT_INSTANCED`).
+    /// What the sea's shaders compile in (`common_source`), for the surf
+    /// strip's, which shares them.
+    pub(crate) fn shader_bits(&self) -> ShaderBits {
+        ShaderBits { features: self.features, parts: self.gg2, debug: debug_mode(), optics: self.submerged.is_some() }
+    }
+
+    pub fn instanced(&self) -> bool {
+        self.features & FEAT_INSTANCED != 0
+    }
+
+    /// The sea's reach past the terrain grid to the south (m; stage L5: 0 by
+    /// default, `CINEMATIC_SOUTH_REACH_M` under the cinematic look).
+    pub fn set_south_reach(&self, m: f32) {
+        self.state.lock().unwrap().south_m = m;
     }
 
     /// The water clock (seconds), the time the spectrum and the collar run on.
@@ -771,11 +1097,15 @@ impl WaterGpu {
         let (state, key) = match st.sea_in {
             SeaInput::Weather { hour, wind, severity } => {
                 let key = waves::quantise(hour, wind, severity);
-                if st.sea_key == Some(key) && st.plan.is_some() {
+                // (iteration 2) the station's wind by the day of the year
+                let day = eo_look::sun::day_of_year().round();
+                if st.sea_key == Some(key) && st.plan.is_some() && st.sea_day == day {
                     return;
                 }
+                st.sea_day = day;
                 let (h, w, sev) = waves::unquantise(key);
-                (waves::sea_state(h, w, sev), key)
+                let on = eo_water::switches::on();
+                (waves::sea_state_on(day, h, w, sev, on & eo_water::switches::EXPOSURE != 0, on & eo_water::switches::STREAK_CAPS != 0), key)
             }
             SeaInput::Fixed(s) => {
                 if st.plan.as_ref().is_some_and(|p| p.state == s) {
@@ -786,13 +1116,18 @@ impl WaterGpu {
         };
         if st.plan.is_none() || st.always || matches!(st.sea_in, SeaInput::Fixed(_)) {
             st.plan_job = None;
-            Self::install_plan(st, key, waves::Plan::new(&state));
+            Self::install_plan(st, key, waves::Plan::with_foam(&state, st.foam_over));
         } else if st.plan_job.is_none() {
-            st.plan_job = Some(std::thread::spawn(move || (key, waves::Plan::new(&state))));
+            let over = st.foam_over;
+            st.plan_job = Some(std::thread::spawn(move || (key, waves::Plan::with_foam(&state, over))));
         }
     }
 
     fn install_plan(st: &mut State, key: [i64; 4], plan: eo_water::waves::Plan) {
+        if std::env::var("EO_WATER_LOG").is_ok_and(|v| v == "1") {
+            let s = &plan.state;
+            eprintln!("water: sea plan key {key:?} day {}: bay U10 {:.2} m/s Hs {:.2} m, Pacific U10 {:.2} m/s, swell Hs {:.2} m, amp bay {:?}", st.sea_day, s.bay.u10, s.bay.hs(), s.pacific.u10, s.swell.hs, plan.amp_bay);
+        }
         st.sea_key = Some(key);
         st.plan_gpu = Some(PlanGpu::of(&plan));
         st.plan = Some(plan);
@@ -857,6 +1192,37 @@ impl WaterGpu {
     /// this frame's group-0 bind group (made by `encode_draw`), for the surf strip's pass.
     pub fn surf_bind_group(&self, probe_front: usize) -> Option<wgpu::BindGroup> {
         self.draw_bg.lock().unwrap().as_ref().map(|c| c.2[probe_front].clone())
+    }
+
+    // On a device using fixed draw slots, keep the normal land renderer until
+    // the dive camera reaches water. Both media at the waterline then use
+    // the same displaced surface and the same opaque frame copy.
+    pub(crate) fn locate_fallback_dive(&self, cam: &Camera) {
+        let wet = self.submerged.as_ref().is_some_and(|(_, field)|
+            field.signed_at(cam.eye.x as f64, cam.eye.z as f64) > MASK_M as f64);
+        self.fallback_dive.store(wet, Ordering::Relaxed);
+    }
+
+    /// The sky and skyline that a sheltered water surface reflects are in air.
+    /// Share the cove's above-water cube while swimming. Nearby receivers and
+    /// their reflections still come from this frame's exact screen positions.
+    pub(crate) fn cove_reflection_eye(&self, eye: glam::Vec3) -> glam::Vec3 {
+        let sea = eo_water::SEA_LEVEL_Y as f32;
+        let scale = eo_data::groundscale::scale() as f32;
+        let x = eye.x / scale;
+        let z = eye.z / scale;
+        let edge = ((x + 625.0) / 48.0).min((-150.0 - x) / 48.0)
+            .min((z + 3620.0) / 64.0).min((-3110.0 - z) / 40.0);
+        let w = edge.min((sea + 8.0 - eye.y) / 5.0).clamp(0.0, 1.0);
+        if w == 0.0 || !self.submerged.as_ref().is_some_and(|(_, f)| f.signed_at(eye.x as f64, eye.z as f64) > 0.0) {
+            return eye;
+        }
+        let anchor = glam::Vec3::new(-365.0 * scale, sea + 1.7, -3250.0 * scale);
+        eye.lerp(anchor, w * w * (3.0 - 2.0 * w))
+    }
+
+    pub(crate) fn fallback_dive(&self) -> bool {
+        self.fallback_dive.load(Ordering::Relaxed)
     }
 
     pub(crate) fn draw_submerged(&self, pass: &mut wgpu::RenderPass<'_>, look: &crate::look::LookGpu, front: usize) {
@@ -951,14 +1317,8 @@ impl WaterGpu {
                 Some(s) => frame.saturating_sub(s) <= SEEN_HOLD_FRAMES,
                 None => st.stats.readbacks == 0,
             };
-        // A point in the frustum lies within the half-diagonal angle of the view
-        // axis, so its view depth (what the range fog reads) is at least its
-        // distance times that angle's cosine, and no water is nearer than the
-        // camera's height over the displaced surface. When even that bound is
-        // past the fog's far end every water pixel would be the fog colour,
-        // which the fogged seabed behind it already is: draw nothing.
-        let half_diag = ((cam.fov_y_deg.to_radians() * 0.5).tan() * (1.0 + cam.aspect * cam.aspect).sqrt()).atan();
-        st.fogged = (cam.eye.y - sea - BOX_M).max(0.0) * half_diag.cos() >= fog_far;
+        // all water past the fog's far end: draw nothing (`sea_fogged`).
+        st.fogged = sea_fogged(cam, fog_far);
         if st.fft != (recent && !st.fogged) {
             crate::hitch::mark(crate::hitch::Mark::WaterFftFlip, 1);
         }
@@ -980,6 +1340,11 @@ impl WaterGpu {
         planes[4] = [0.0, 0.0, 0.0, 1.0];
         let s = &eo_water::waves::SIZES; // the sea state's cascades
         let pg = st.plan_gpu.expect("waves: a plan");
+        // (iteration 2, current) the tidal current at the Gate for the sea's hour and the day
+        let current = match st.sea_in {
+            SeaInput::Weather { hour, .. } if self.gg2 & eo_water::switches::CURRENT != 0 => eo_water::climate::tidal_current(eo_look::sun::day_of_year(), hour),
+            _ => 0.0,
+        };
         let u = WaterUniform {
             view_proj: vp.to_cols_array_2d(),
             inv_view_proj: vp.inverse().to_cols_array_2d(),
@@ -989,7 +1354,7 @@ impl WaterGpu {
             field: self.field_frame,
             extent: self.extent,
             // x: EO_WATER_DEBUG (1: foam / column / shore distance; 2: beach / surf / collar), 0 off
-            screen: [debug_mode(), crate::surf::hands_over(), self.submerged.is_some() as u32 as f32, 0.0], // y 1 while the surf strip draws (water_surf.wgsl `surf_cover`)
+            screen: [debug_mode(), crate::surf::hands_over(), self.features as f32, self.submerged.is_some() as u32 as f32], // y 1 while the surf strip draws (water_surf.wgsl `surf_cover`); z the shading features (`FEAT_*`); w 1 with the submerged camera's wave optics (`--water-optics`)
             flags: [st.copy as u32 as f32, probe.is_some() as u32 as f32, MASK_M, st.fft_ever as u32 as f32],
             sizes: [s[0] as f32, s[1] as f32, s[2] as f32, s[3] as f32],
             probe: { let p = probe.unwrap_or_default(); [p.x, p.y, p.z, BEACH_MASK_M] },
@@ -999,9 +1364,18 @@ impl WaterGpu {
             wv_pac: pg.wv[1],
             wv_sea: pg.wv[2],
             wv_misc: pg.wv[3],
+            wv_mss: pg.wv[4],
+            wv_expo: self.expo_frame,
+            wv_gg2: [current as f32, self.gg2 as f32, self.expo_on as u32 as f32, self.slopes_on as u32 as f32],
+            wv_dop: doppler_gain(current).map(|g| g as f32),
+            wv_xn: { let n = eo_water::waves::EXPO_FETCH_NODES.map(|v| v as f32); [[n[0], n[1], n[2], n[3]], [n[4], n[5], n[6], n[7]]] },
+            wv_gn: { let n = eo_water::waves::EXPO_WIND_NODES.map(|v| v as f32); [[n[0], n[1], n[2], n[3]], [n[4], n[5], n[6], n[7]]] },
+            wv_xa: pg.xa,
+            wv_extra: self.extra_frame,
+            reach: [st.south_m, 0.0, 0.0, 0.0],
         };
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&u));
-        queue.write_buffer(&self.count_buf, 0, bytemuck::cast_slice(&[0u32, 0, 0, 0, u32::MAX, 0, 0, 0]));
+        queue.write_buffer(&self.count_buf, 0, bytemuck::cast_slice(&[0u32, 0, 0, 0, u32::MAX, 0, 0, 0, self.index_count, 0, 0, 0, 0, 0, 0, 0]));
         st.steps = 0;
         st.reset_foam = false;
         st.spray = spray_on() && st.fft_ever && !st.fogged && pg.wv[2][0].max(pg.wv[2][1]) > SPRAY_WIND_MS;
@@ -1115,8 +1489,10 @@ impl WaterGpu {
         probe_views: [&wgpu::TextureView; 2], // both cubes (bind groups made once, a capture flips the index)
         probe_front: usize,
         ts: Option<(&wgpu::QuerySet, u32)>,
+        ts_ppr: Option<(&wgpu::QuerySet, u32)>,
         then: impl FnOnce(&mut wgpu::RenderPass<'_>),
     ) {
+        let ppr_tw = ts_ppr.map(|(q, b)| wgpu::ComputePassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b), end_of_pass_write_index: Some(b + 1) });
         let (copy, slot, fogged, spray) = {
             let st = self.state.lock().unwrap();
             (st.copy, st.slot, st.fogged, st.spray)
@@ -1145,16 +1521,53 @@ impl WaterGpu {
             }
             (s.2.clone(), s.3.clone())
         };
+        // (ppr) the target buffer at the depth's size (16 bytes while the feature is off)
+        let ppr_on = self.features & FEAT_PPR != 0;
+        let (dw, dh) = (depth.texture().width(), depth.texture().height());
+        let ppr_buf = {
+            let mut pb = self.ppr.lock().unwrap();
+            if pb.as_ref().is_none_or(|p| p.0 != dw || p.1 != dh) {
+                let size = if ppr_on { dw as u64 * dh as u64 * 4 } else { 16 };
+                let b = self.device.create_buffer(&wgpu::BufferDescriptor { label: Some("water-ppr"), size, usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+                *pb = Some((dw, dh, b));
+            }
+            pb.as_ref().unwrap().2.clone()
+        };
+        if copy && ppr_on && !fogged {
+            let pbg = {
+                let mut cache = self.ppr_bg.lock().unwrap();
+                let dt = depth.texture();
+                if cache.as_ref().is_none_or(|(d, b, _)| d != dt || *b != ppr_buf) {
+                    crate::hitch::mark(crate::hitch::Mark::BindGroupCreated, 2);
+                    let g = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("water-ppr-bg"),
+                        layout: &self.ppr_bgl,
+                        entries: &[
+                            wgpu::BindGroupEntry { binding: 0, resource: self.uniform_buf.as_entire_binding() },
+                            wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(depth) },
+                            wgpu::BindGroupEntry { binding: 2, resource: ppr_buf.as_entire_binding() },
+                        ],
+                    });
+                    *cache = Some((dt.clone(), ppr_buf.clone(), g));
+                }
+                cache.as_ref().unwrap().2.clone()
+            };
+            enc.clear_buffer(&ppr_buf, 0, None);
+            let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("water-ppr"), timestamp_writes: ppr_tw });
+            pass.set_pipeline(&self.ppr_pipe);
+            pass.set_bind_group(0, &pbg, &[]);
+            pass.dispatch_workgroups(dw.div_ceil(8), dh.div_ceil(8), 1);
+        } else if ppr_tw.is_some() {
+            enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("water-ppr (none)"), timestamp_writes: ppr_tw });
+        }
         let bg = {
             let mut cache = self.draw_bg.lock().unwrap();
             let dt = depth.texture();
             let stale = cache.as_ref().is_none_or(|(d, s, _)| d != dt || *s != scene_view.0);
             if stale {
                 crate::hitch::mark(crate::hitch::Mark::BindGroupCreated, 2);
-                let g = probe_views.map(|probe_view| self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("water-draw-bg"),
-                    layout: &self.draw_bgl,
-                    entries: &[
+                let g = probe_views.map(|probe_view| {
+                    let mut entries = vec![
                         wgpu::BindGroupEntry { binding: 0, resource: self.uniform_buf.as_entire_binding() },
                         wgpu::BindGroupEntry { binding: 1, resource: wgpu::BindingResource::TextureView(&self.field_view) },
                         wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&self.disp_view) },
@@ -1168,17 +1581,23 @@ impl WaterGpu {
                         wgpu::BindGroupEntry { binding: 10, resource: wgpu::BindingResource::TextureView(&self.detail_view) },
                         wgpu::BindGroupEntry { binding: 11, resource: wgpu::BindingResource::TextureView(look.sky.atmo_tables().0) },
                         wgpu::BindGroupEntry { binding: 12, resource: wgpu::BindingResource::TextureView(look.sky.atmo_tables().1) },
-                    ],
-                }));
+                        wgpu::BindGroupEntry { binding: 13, resource: self.draw_buf.as_entire_binding() },
+                        wgpu::BindGroupEntry { binding: 14, resource: ppr_buf.as_entire_binding() },
+                        wgpu::BindGroupEntry { binding: 15, resource: wgpu::BindingResource::TextureView(&self.expo_view) },
+                        wgpu::BindGroupEntry { binding: 18, resource: wgpu::BindingResource::TextureView(&self.extra_view) },
+                        wgpu::BindGroupEntry { binding: 19, resource: wgpu::BindingResource::Sampler(&self.clamp) },
+                    ];
+                    if self.submerged.is_some() {
+                        let (lut, samp) = look.camera_lut();
+                        entries.push(wgpu::BindGroupEntry { binding: 16, resource: wgpu::BindingResource::TextureView(lut) });
+                        entries.push(wgpu::BindGroupEntry { binding: 17, resource: wgpu::BindingResource::Sampler(samp) });
+                    }
+                    self.device.create_bind_group(&wgpu::BindGroupDescriptor { label: Some("water-draw-bg"), layout: &self.draw_bgl, entries: &entries })
+                });
                 *cache = Some((dt.clone(), scene_view.0.clone(), g)); // one per probe cube
             }
             cache.as_ref().unwrap().2[probe_front].clone()
         };
-        if !fogged {
-            // The cull appended exactly this many IDs. All other indirect
-            // arguments are static, including first_instance = 0.
-            enc.copy_buffer_to_buffer(&self.count_buf, 0, &self.patch_draw, 4, 4);
-        }
         {
             let tw = ts.map(|(q, b)| wgpu::RenderPassTimestampWrites { query_set: q, beginning_of_pass_write_index: Some(b), end_of_pass_write_index: Some(b + 1) });
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -1200,8 +1619,7 @@ impl WaterGpu {
                 pass.set_bind_group(0, &bg, &[]);
                 look.bind_main(&mut pass);
                 pass.set_index_buffer(self.index_buf.slice(..), wgpu::IndexFormat::Uint32);
-                pass.set_vertex_buffer(0, self.visible_patches.slice(..));
-                pass.draw_indexed_indirect(&self.patch_draw, 0);
+                pass.draw_indexed_indirect(&self.count_buf, DRAW_ARGS_OFFSET); // every patch the cull kept, one instance each
                 if spray {
                     // the spray, same bind groups
                     pass.set_pipeline(&self.spray);

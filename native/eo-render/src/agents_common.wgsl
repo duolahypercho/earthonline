@@ -25,9 +25,17 @@ struct AgPose {
     agent: u32,
 };
 
+fn ag_rotate_axis(v: vec3<f32>, axis: vec3<f32>, cs: f32, sn: f32) -> vec3<f32> {
+    return v * cs + cross(axis, v) * sn + axis * dot(axis, v) * (1.0 - cs);
+}
+
 // One joint's skinning matrix, rows r0..r2, blended over two frames of the
 // walk and two of the standing clip.
-fn ag_joint_rows(base: u32, joints: u32, j: u32, wf0: u32, wf1: u32, wt: f32, cf0: u32, cf1: u32, ct: f32, ww: f32) -> mat3x4<f32> {
+fn ag_joint_rows(base: u32, joints: u32, j: u32, wf0: u32, wf1: u32, wt: f32, cf0: u32, cf1: u32, ct: f32, ww: f32, live: bool) -> mat3x4<f32> {
+    if (live) {
+        let at = (base + j) * 3u;
+        return mat3x4<f32>(ag_bones[at], ag_bones[at + 1u], ag_bones[at + 2u]);
+    }
     var r: mat3x4<f32>;
     for (var k = 0u; k < 3u; k = k + 1u) {
         let w0 = ag_bones[(base + wf0 * joints + j) * 3u + k];
@@ -74,7 +82,7 @@ fn ag_pose(entry: u32, pos: vec3<f32>, normal: vec3<f32>, joints: vec4<u32>, wei
         for (var i = 0u; i < 4u; i = i + 1u) {
             let w = weights[i];
             if (w > 0.0) {
-                let r = ag_joint_rows(base, jn, joints[i], wb + wf0, wb + wf1, wt, cf0, cf1, ct, ww);
+                let r = ag_joint_rows(base, jn, joints[i], wb + wf0, wb + wf1, wt, cf0, cf1, ct, ww, mesh.live_palette != 0u);
                 sp = sp + w * vec3<f32>(dot(r[0], p4), dot(r[1], p4), dot(r[2], p4));
                 sn = sn + w * vec3<f32>(dot(r[0], n4), dot(r[1], n4), dot(r[2], n4));
             }
@@ -82,8 +90,17 @@ fn ag_pose(entry: u32, pos: vec3<f32>, normal: vec3<f32>, joints: vec4<u32>, wei
         p = sp * a.scale;
         n = sn;
     } else {
-        let wheel = (tag >> 16u) & 255u;
-        if (wheel > 0u) {
+        let part = (tag >> 16u) & 255u;
+        if (part == 9u && a.clip_phase > 0.0) {
+            let mesh = ag_meshes[m.meshes[lod]];
+            let axis = bitcast<vec3<f32>>(vec3<u32>(mesh.skeleton, mesh.joints, mesh.live_palette));
+            let angle = a.clip_phase * m.driver_door.w;
+            let cs = cos(angle);
+            let sn = sin(angle);
+            p = m.driver_door.xyz + ag_rotate_axis(p - m.driver_door.xyz, axis, cs, sn);
+            n = ag_rotate_axis(n, axis, cs, sn);
+        } else if (part > 0u && part < 9u) {
+            let wheel = part;
             let wi = (wheel - 1u) % 4u;
             let piv = m.wheel[wi].xyz;
             var q = p - piv;

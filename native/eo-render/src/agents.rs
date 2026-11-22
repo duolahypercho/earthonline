@@ -71,6 +71,24 @@ impl Tiers {
             ped_cap: [c.budget.skinned, c.budget.skinned, c.budget.instanced, c.budget.far],
         }
     }
+
+    /// The vehicle tiers under `--car-detail LEVEL` (0: as `from_js`, the
+    /// browser build's overlay budget of 2 full bodies and 10 LOD 1 bodies).
+    /// The JS caps were set for a browser's draw budget; the native renderer
+    /// draws the agents with one multi-draw per list, so the nearest cars can
+    /// keep their full body further out and more of them at once. Level 1:
+    /// LOD 0 within 30 m (at most 6), LOD 1 within 90 m (at most 24), LOD 2 to
+    /// 220 m, the far body to 400 m; level 2: 40 m (12), 120 m (40), 260 m,
+    /// 400 m. The far slot is the simplified body (eo-agents `far_body`) the
+    /// library cooks under the same switch. People are as before.
+    pub fn with_car_detail(self, level: u8) -> Self {
+        let (veh_radius, near) = match level {
+            0 => return self,
+            1 => ([30.0, 90.0, 220.0, 400.0], [6, 24]),
+            _ => ([40.0, 120.0, 260.0, 400.0], [12, 40]),
+        };
+        Tiers { veh_radius, veh_cap: [near[0], near[1], u32::MAX / 2, u32::MAX / 2], ..self }
+    }
 }
 
 #[repr(C)]
@@ -120,6 +138,8 @@ pub struct AgentsGpu {
     vbuf: wgpu::Buffer,
     ibuf: wgpu::Buffer,
     agents: wgpu::Buffer,
+    bones: wgpu::Buffer,
+    test_palette_offset: Option<u64>,
     params: wgpu::Buffer,
     frame: wgpu::Buffer,
     counts: wgpu::Buffer,
@@ -139,18 +159,82 @@ pub struct AgentsGpu {
     view_bg: wgpu::BindGroup,
     opaque: wgpu::RenderPipeline,
     glass: wgpu::RenderPipeline,
+    /// (`--tunnels`) the agents in a tunnel's bore drawn by pipelines of their
+    /// own (agents_draw.wgsl `agent_bore_fs`: opaque, glass), made by
+    /// `enable_bores` when the world has bores; and whether this frame's
+    /// agents hold one (eo_agents `AGENT_IN_BORE`, `upload`). None and false
+    /// without bores: nothing more is drawn.
+    bore: std::sync::OnceLock<[wgpu::RenderPipeline; 2]>,
+    bore_live: AtomicBool,
+    pipes: AgentPipes,
     /// the velocity pipeline (single-sample renderers) and the model table the light gather reads.
     velocity: Option<wgpu::RenderPipeline>,
     models_buf: wgpu::Buffer,
     shadow: wgpu::RenderPipeline,
     timing: Mutex<Option<(wgpu::QuerySet, u32)>>,
+    /// (lighting) the buffers and group 2 the lamp and headlight shadow maps' agent casters read.
+    pub(crate) casters: crate::light_shadow::Casters,
     /// GPU bytes allocated here.
     pub bytes: u64,
 }
 
+/// What the agents' draw pipelines are made of (agent-opaque, agent-glass;
+/// and, on demand, the bores' pair).
+struct AgentPipes {
+    device: wgpu::Device,
+    module: wgpu::ShaderModule,
+    layout: wgpu::PipelineLayout,
+    sample_count: u32,
+    debug_ids: bool,
+}
+
+impl AgentPipes {
+    const ATTRS: [wgpu::VertexAttribute; 6] = [
+        wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x3, offset: 0, shader_location: 0 },
+        wgpu::VertexAttribute { format: wgpu::VertexFormat::Snorm8x4, offset: 12, shader_location: 1 },
+        wgpu::VertexAttribute { format: wgpu::VertexFormat::Unorm16x2, offset: 16, shader_location: 2 },
+        wgpu::VertexAttribute { format: wgpu::VertexFormat::Uint8x4, offset: 20, shader_location: 3 },
+        wgpu::VertexAttribute { format: wgpu::VertexFormat::Unorm8x4, offset: 24, shader_location: 4 },
+        wgpu::VertexAttribute { format: wgpu::VertexFormat::Uint32, offset: 28, shader_location: 5 },
+    ];
+
+    /// A camera pipeline over the agent vertices with fragment entry `fs` (`blend`: the glass list's).
+    fn make(&self, label: &str, fs: &str, blend: bool) -> wgpu::RenderPipeline {
+        let d = &self.device;
+        let stride = std::mem::size_of::<AgentVertex>() as u64;
+        let color = wgpu::ColorTargetState { format: crate::look::HDR_FORMAT, blend: blend.then_some(wgpu::BlendState::ALPHA_BLENDING), write_mask: wgpu::ColorWrites::ALL };
+        let ids = wgpu::ColorTargetState { format: IDS_FORMAT, blend: None, write_mask: if blend { wgpu::ColorWrites::empty() } else { wgpu::ColorWrites::ALL } };
+        let targets_ids = [Some(color.clone()), Some(ids)];
+        let targets = [Some(color)];
+        d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some(label),
+            layout: Some(&self.layout),
+            vertex: wgpu::VertexState {
+                module: &self.module,
+                entry_point: Some("agent_vs"),
+                compilation_options: Default::default(),
+                buffers: &[Some(wgpu::VertexBufferLayout { array_stride: stride, step_mode: wgpu::VertexStepMode::Vertex, attributes: &Self::ATTRS })],
+            },
+            primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleList, cull_mode: None, ..Default::default() },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: Some(!blend),
+                depth_compare: Some(if blend { wgpu::CompareFunction::GreaterEqual } else { wgpu::CompareFunction::Greater }),
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multisample: wgpu::MultisampleState { count: self.sample_count, ..Default::default() },
+            fragment: Some(wgpu::FragmentState { module: &self.module, entry_point: Some(fs), compilation_options: Default::default(), targets: if self.debug_ids { &targets_ids } else { &targets } }),
+            multiview_mask: None,
+            cache: None,
+        })
+    }
+}
+
 impl AgentsGpu {
     /// `late_bgl`: the occlusion pyramid's bind group layout (`OcclusionGpu::late_bgl`).
-    pub fn new(ctx: &GpuContext, look: &LookGpu, lib: &Library, sample_count: u32, debug_ids: bool, late_bgl: &wgpu::BindGroupLayout) -> Result<Self> {
+    /// `car_detail`: the vehicle tiers' level (`Tiers::with_car_detail`, `--car-detail`; 0 as before).
+    pub fn new(ctx: &GpuContext, look: &LookGpu, lib: &Library, sample_count: u32, debug_ids: bool, late_bgl: &wgpu::BindGroupLayout, car_detail: u8) -> Result<Self> {
         let d = &ctx.device;
         let q = &ctx.queue;
         let js = eo_agents::catalog::AgentsJs::load()?;
@@ -167,11 +251,12 @@ impl AgentsGpu {
             d.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: size.max(16).next_multiple_of(16), usage, mapped_at_creation: false })
         };
         use wgpu::BufferUsages as U;
-        let vbuf = init("agent-vertices", bytemuck::cast_slice(&lib.vertices), U::VERTEX);
-        let ibuf = init("agent-indices", bytemuck::cast_slice(&lib.indices), U::INDEX);
+        // (also read as storage by the lamp and headlight shadow maps' casters, light_shadow.rs)
+        let vbuf = init("agent-vertices", bytemuck::cast_slice(&lib.vertices), U::VERTEX | U::STORAGE);
+        let ibuf = init("agent-indices", bytemuck::cast_slice(&lib.indices), U::INDEX | U::STORAGE);
         let meshes = init("agent-meshes", bytemuck::cast_slice(&lib.meshes), U::STORAGE);
         let models = init("agent-models", bytemuck::cast_slice(&lib.models), U::STORAGE);
-        let bones = init("agent-bones", bytemuck::cast_slice(&lib.bones), U::STORAGE);
+        let bones = init("agent-bones", bytemuck::cast_slice(&lib.bones), U::STORAGE | U::COPY_DST);
         let materials = init("agent-materials", bytemuck::cast_slice(&lib.materials), U::STORAGE);
         // One object entry: the look's material class "painted" (draw.wgsl kind 0).
         let objects = init("agent-object", &[0u8; 64], U::STORAGE);
@@ -400,7 +485,8 @@ impl AgentsGpu {
         });
         let draw_src = format!(
             "{}\n{}\n{}\n{}\n{}",
-            crate::look::city_shader_source(),
+            // the city's full set but the single probe's lookups (their frame never names one; lighting: room for the probe grid)
+            crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Full, crate::look::ShadowLevels::Full, false),
             include_str!("agents_types.wgsl"),
             include_str!("agents_common.wgsl"),
             include_str!("agents_draw.wgsl"),
@@ -412,48 +498,10 @@ impl AgentsGpu {
             bind_group_layouts: &[Some(&draw_bgl), Some(look.main_bind_group_layout()), Some(&data_bgl)],
             immediate_size: 0,
         });
-        let attrs = [
-            wgpu::VertexAttribute { format: wgpu::VertexFormat::Float32x3, offset: 0, shader_location: 0 },
-            wgpu::VertexAttribute { format: wgpu::VertexFormat::Snorm8x4, offset: 12, shader_location: 1 },
-            wgpu::VertexAttribute { format: wgpu::VertexFormat::Unorm16x2, offset: 16, shader_location: 2 },
-            wgpu::VertexAttribute { format: wgpu::VertexFormat::Uint8x4, offset: 20, shader_location: 3 },
-            wgpu::VertexAttribute { format: wgpu::VertexFormat::Unorm8x4, offset: 24, shader_location: 4 },
-            wgpu::VertexAttribute { format: wgpu::VertexFormat::Uint32, offset: 28, shader_location: 5 },
-        ];
+        let pipes = AgentPipes { device: d.clone(), module: draw_module.clone(), layout: draw_layout.clone(), sample_count, debug_ids };
+        let attrs = AgentPipes::ATTRS;
         let stride = std::mem::size_of::<AgentVertex>() as u64;
-        let make = |label: &str, blend: bool| {
-            let color = wgpu::ColorTargetState { format: crate::look::HDR_FORMAT, blend: blend.then_some(wgpu::BlendState::ALPHA_BLENDING), write_mask: wgpu::ColorWrites::ALL };
-            let ids = wgpu::ColorTargetState { format: IDS_FORMAT, blend: None, write_mask: if blend { wgpu::ColorWrites::empty() } else { wgpu::ColorWrites::ALL } };
-            let targets_ids = [Some(color.clone()), Some(ids)];
-            let targets = [Some(color)];
-            d.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some(label),
-                layout: Some(&draw_layout),
-                vertex: wgpu::VertexState {
-                    module: &draw_module,
-                    entry_point: Some("agent_vs"),
-                    compilation_options: Default::default(),
-                    buffers: &[Some(wgpu::VertexBufferLayout { array_stride: stride, step_mode: wgpu::VertexStepMode::Vertex, attributes: &attrs })],
-                },
-                primitive: wgpu::PrimitiveState { topology: wgpu::PrimitiveTopology::TriangleList, cull_mode: None, ..Default::default() },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: DEPTH_FORMAT,
-                    depth_write_enabled: Some(!blend),
-                    depth_compare: Some(if blend { wgpu::CompareFunction::GreaterEqual } else { wgpu::CompareFunction::Greater }),
-                    stencil: Default::default(),
-                    bias: Default::default(),
-                }),
-                multisample: wgpu::MultisampleState { count: sample_count, ..Default::default() },
-                fragment: Some(wgpu::FragmentState {
-                    module: &draw_module,
-                    entry_point: Some(if debug_ids { "agent_fs_ids" } else { "agent_fs" }),
-                    compilation_options: Default::default(),
-                    targets: if debug_ids { &targets_ids } else { &targets },
-                }),
-                multiview_mask: None,
-                cache: None,
-            })
-        };
+        let make = |label: &str, blend: bool| pipes.make(label, if debug_ids { "agent_fs_ids" } else { "agent_fs" }, blend);
         let opaque = make("agent-opaque", false);
         let glass = make("agent-glass", true);
         // the agents' screen motion for the temporal resolve (single-sample, no ids).
@@ -533,19 +581,23 @@ impl AgentsGpu {
         let lamp = |k: &str| js.hero_lamp.get(k).map(|l| (l.day as f32, l.night as f32)).unwrap_or((0.0, 0.0));
         let (tail, brake, head, ind) = (lamp("tail"), lamp("brake"), lamp("head"), lamp("indicator"));
         let bytes = [&vbuf, &ibuf, &meshes, &models, &bones, &materials, &objects, &agents, &params, &params_c, &frame, &records, &visible, &counts, &hist, &cmds, &stats].iter().map(|b| b.size()).sum::<u64>() + tex_bytes;
+        // (lighting) what the lamp and headlight shadow maps draw the agents with.
+        let casters = crate::light_shadow::Casters { vertices: vbuf.clone(), indices: ibuf.clone(), instances: agents.clone(), models: models.clone(), meshes: meshes.clone(), data_bgl: data_bgl.clone(), data_bg: data_bg.clone() };
         Ok(Self {
             enabled: AtomicBool::new(true),
             active: AtomicBool::new(false),
             count: AtomicU32::new(0),
             mesh_count,
             model_count: lib.models.len() as u32,
-            tiers: Tiers::from_js(&js),
-            clip_frames: lib.meta.clip_frames,
+            tiers: Tiers::from_js(&js).with_car_detail(car_detail),
+            clip_frames: lib.meta.clip_frames.map(|frames| frames.max(1)),
             clip_base: lib.meta.clip_base,
             lamps: ([tail.0, tail.1, brake.0, brake.1], [head.0, head.1, ind.0, ind.1], js.hero_lamp_day_running_floor as f32),
             vbuf,
             ibuf,
             agents,
+            bones,
+            test_palette_offset: lib.test_player.as_ref().map(|player| u64::from(player.palette) * 48),
             params,
             frame,
             counts,
@@ -563,12 +615,21 @@ impl AgentsGpu {
             view_bg,
             opaque,
             glass,
+            bore: std::sync::OnceLock::new(),
+            bore_live: AtomicBool::new(false),
+            pipes,
             velocity,                // sky
             models_buf: models.clone(), // sky
             shadow,
             timing: Mutex::new(None),
+            casters,
             bytes,
         })
+    }
+
+    /// The distance tiers and caps in use (`--car-detail` for the vehicles).
+    pub fn tiers(&self) -> Tiers {
+        self.tiers
     }
 
     /// Agents on or off (off: no pass runs, nothing is drawn).
@@ -580,14 +641,48 @@ impl AgentsGpu {
         self.enabled.load(Ordering::Relaxed)
     }
 
+    pub fn upload_test_player(&self, queue: &wgpu::Queue, rows: &[[f32; 4]]) -> usize {
+        let Some(offset) = self.test_palette_offset else { return 0 };
+        let bytes = bytemuck::cast_slice(rows);
+        if !bytes.is_empty() {
+            debug_assert_eq!(offset + bytes.len() as u64, self.bones.size());
+            queue.write_buffer(&self.bones, offset, bytes);
+        }
+        bytes.len()
+    }
+
     /// This frame's agents (at most `AGENT_CAPACITY`; the rest are dropped).
     pub fn upload(&self, queue: &wgpu::Queue, agents: &[GpuAgent]) -> usize {
         let n = agents.len().min(AGENT_CAPACITY as usize);
+        // (`--tunnels`) agents in a bore: drawn by the bores' pipelines when they exist; without
+        // them (never enabled) the bit is taken off, so agent-opaque draws them as before.
+        let bored = agents[..n].iter().any(|a| a.flags & eo_agents::AGENT_IN_BORE != 0);
         if n > 0 {
-            queue.write_buffer(&self.agents, 0, bytemuck::cast_slice(&agents[..n]));
+            if bored && self.bore.get().is_none() {
+                let plain: Vec<GpuAgent> = agents[..n].iter().map(|a| GpuAgent { flags: a.flags & !(eo_agents::AGENT_IN_BORE | (eo_agents::BORE_DEPTH_MAX_Q << eo_agents::BORE_DEPTH_SHIFT)), ..*a }).collect();
+                queue.write_buffer(&self.agents, 0, bytemuck::cast_slice(&plain));
+            } else {
+                queue.write_buffer(&self.agents, 0, bytemuck::cast_slice(&agents[..n]));
+            }
         }
         self.count.store(n as u32, Ordering::Relaxed);
+        self.bore_live.store(bored && self.bore.get().is_some(), Ordering::Relaxed);
         n
+    }
+
+    /// (`--tunnels`) The pipelines that draw the agents in a tunnel's bore
+    /// (once; the app calls it when its world has bores). Until then, and
+    /// without bores, nothing of them is made or drawn.
+    pub fn enable_bores(&self) {
+        self.bore.get_or_init(|| {
+            let fs = if self.pipes.debug_ids { "agent_bore_fs_ids" } else { "agent_bore_fs" };
+            [self.pipes.make("agent-bore-opaque", fs, false), self.pipes.make("agent-bore-glass", fs, true)]
+        });
+    }
+
+    /// Whether the bores' pipelines exist and this frame's agents hold one in a bore.
+    pub fn bores_drawn(&self) -> bool {
+        self.bore.get().is_some() && self.bore_live.load(Ordering::Relaxed)
     }
 
     pub fn count(&self) -> u32 {
@@ -626,11 +721,11 @@ impl AgentsGpu {
             lamp_misc: [night, self.lamps.2, seconds.rem_euclid(3600.0) as f32, 0.0],
             // before the shadows the cascades, and the camera only
             // without an occlusion pass this frame.
-            misc: [if self.camera_late.load(Ordering::Relaxed) { 0b1110 } else { 0b1111 }, 0, 0, 0],
+            misc: [if self.camera_late.load(Ordering::Relaxed) { 0b1110 } else { 0b1111 }, 1, 0, 0],
             view_proj: vp.to_cols_array_2d(),
         };
         queue.write_buffer(&self.params, 0, bytemuck::bytes_of(&p));
-        let pc = AgParams { misc: [0b0001, 0, 0, 0], ..p }; // after the pyramid, the camera
+        let pc = AgParams { misc: [0b0001, 1, 0, 0], ..p }; // after the pyramid, the camera (y: corridor boxes to the far plane)
         queue.write_buffer(&self.params_c, 0, bytemuck::bytes_of(&pc));
         let f = AgFrame {
             view_proj: vp.to_cols_array_2d(),
@@ -639,7 +734,8 @@ impl AgentsGpu {
             sun_color: [1.0, 1.0, 1.0, 0.0],
             ambient_sky: [0.0; 4],
             ambient_ground: [0.0; 4],
-            copy_step: [0.0; 4],
+            // y: the weathering level's switch bits only (`--grime`; 0 by default), read by agents_draw.wgsl's cars.
+            copy_step: [0.0, crate::facade::grime_bits(look.options.grime) as f32, 0.0, 0.0],
         };
         queue.write_buffer(&self.frame, 0, bytemuck::bytes_of(&f));
     }
@@ -746,6 +842,11 @@ impl AgentsGpu {
         pass.set_vertex_buffer(0, self.vbuf.slice(..));
         pass.set_index_buffer(self.ibuf.slice(..), wgpu::IndexFormat::Uint32);
         pass.multi_draw_indexed_indirect(&self.cmds, 0, self.mesh_count);
+        // (`--tunnels`) the same list again for the agents in a bore (the first draw discarded them).
+        if let Some(b) = self.bore.get().filter(|_| self.bore_live.load(Ordering::Relaxed)) {
+            pass.set_pipeline(&b[0]);
+            pass.multi_draw_indexed_indirect(&self.cmds, 0, self.mesh_count);
+        }
     }
 
     /// the agent instances, the model table and how many agents are live (the lights' gather reads them).
@@ -781,6 +882,10 @@ impl AgentsGpu {
         pass.set_vertex_buffer(0, self.vbuf.slice(..));
         pass.set_index_buffer(self.ibuf.slice(..), wgpu::IndexFormat::Uint32);
         pass.multi_draw_indexed_indirect(&self.cmds, self.mesh_count as u64 * DRAW_ARGS_BYTES, self.mesh_count);
+        if let Some(b) = self.bore.get().filter(|_| self.bore_live.load(Ordering::Relaxed)) {
+            pass.set_pipeline(&b[1]);
+            pass.multi_draw_indexed_indirect(&self.cmds, self.mesh_count as u64 * DRAW_ARGS_BYTES, self.mesh_count);
+        }
     }
 
     /// The command lists as the last cull wrote them (tests; blocks): camera
@@ -807,4 +912,17 @@ impl AgentsGpu {
 
     /// Slots per model (vehicles: LOD0-2 + box; hero, near, mid, far).
     pub const LOD_SLOTS: usize = LODS;
+}
+
+#[cfg(test)]
+mod tests {
+    /// agents_draw.wgsl's bore constants are eo-agents' (`AGENT_IN_BORE`, the depth's shift and steps).
+    #[test]
+    fn the_shaders_bore_flags_are_the_feeds() {
+        let src = include_str!("agents_draw.wgsl");
+        assert!(src.contains(&format!("const AG_IN_BORE: u32 = {}u;", eo_agents::AGENT_IN_BORE)), "AG_IN_BORE");
+        assert!(src.contains(&format!("const AG_BORE_DEPTH_SHIFT: u32 = {}u;", eo_agents::BORE_DEPTH_SHIFT)), "AG_BORE_DEPTH_SHIFT");
+        assert!(src.contains(&format!("const AG_BORE_DEPTH_QUANT: f32 = {:.1};", eo_agents::BORE_DEPTH_QUANT)), "AG_BORE_DEPTH_QUANT");
+        assert_eq!(eo_agents::AGENT_IN_BORE & (eo_agents::AGENT_PLAYER | eo_agents::AGENT_BLINK_ON | 0xffff), 0, "a bit of its own");
+    }
 }

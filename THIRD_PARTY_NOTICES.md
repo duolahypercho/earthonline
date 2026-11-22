@@ -9,10 +9,12 @@ confirmed from those records are marked **Unconfirmed**.
 The repository has three kinds of third-party material:
 
 1. **Shipped**: files tracked in this repository.
-2. **Read when present**: optional content the program reads from a folder
-   outside the repository. The repository holds only a manifest that pins
-   each file by size and SHA-256; the files themselves are fetched from
-   their source and are not redistributed here.
+2. **Read when present**: optional content the program reads from the
+   git-ignored `external/` folder at the repository root (or from a folder
+   an environment variable names). The repository holds only a manifest
+   that pins each file by size and SHA-256; the files themselves are
+   downloaded from their source by `scripts/setup-assets.py`, are never
+   committed, and are not redistributed here.
 3. **Dependencies**: Rust crates fetched by Cargo at build time.
 
 No source, agency or author listed here endorses Earth Online.
@@ -44,6 +46,29 @@ MIT License, Copyright (c) 2024 Daniel Greenheck. Full text:
 Parts of the water model in `native/eo-water/` are ported from tidewater.
 MIT License, Copyright (c) 2026 DRG Software Solutions LLC. Full text:
 [native/eo-water/LICENSE-tidewater.md](native/eo-water/LICENSE-tidewater.md).
+
+### ACES 2.0 output transform (port)
+
+`native/eo-look/src/tone/aces2.rs` is a Rust translation of the Academy
+Color Encoding System 2.0 reference CTL (aces-aswf/aces-core and
+aces-output), Copyright Contributors to the ACES Project, Apache License 2.0
+([LICENSES/Apache-2.0.txt](LICENSES/Apache-2.0.txt)). The source commit,
+file digests and the changes made are in
+[native/eo-look/data/camera/ACES.NOTICE.txt](native/eo-look/data/camera/ACES.NOTICE.txt).
+
+### Weather and tide data in the native crates
+
+- **NOAA / National Weather Service ASOS METAR reports** of San Francisco
+  International Airport (KSFO), 2014-2023, as archived by the Iowa
+  Environmental Mesonet (Iowa State University): public domain (U.S.
+  Government work). Summarised in
+  `native/eo-look/data/ksfo-clear-day-sky.csv`; source, query and digests in
+  its `.NOTICE.txt`.
+- **NOAA National Ocean Service CO-OPS**, station 9414290 hourly wind and
+  current station SFB1203 harmonic constants: public domain (U.S.
+  Government work). Summarised in
+  `native/eo-water/data/golden-gate-climate.json`; source and digests in its
+  `.NOTICE.txt`.
 
 ## Fonts
 
@@ -124,13 +149,6 @@ source, licence and SHA-256; the program refuses a file that does not match.
   textures and meshes from ez-tree by Daniel Greenheck (MIT), and the
   ambientCG bark (CC0). Terms:
   [public/assets/vegetation/ez-vegetation-v1.LICENSE.txt](public/assets/vegetation/ez-vegetation-v1.LICENSE.txt).
-- **Characters** (`public/assets/characters/civilian-v1/`, no longer read
-  by the game): bodies, faces,
-  clothes, hair, eyes and skins are MakeHuman / MPFB system assets released
-  under CC0 1.0. Some garment, hair-cap and brow textures are
-  machine-generated edits of those CC0 textures; prompts and digests are in
-  the source manifests under `artifacts/characters/civilian-v1/`. See
-  `public/assets/characters/civilian-v1/provenance.json`.
 - **Hand-built buildings** (`public/assets/buildings/`): original geometry
   built in Blender by `scripts/blender-buildings/` from open data (DataSF
   footprints, LiDAR heights, the assessor roll). Per-building provenance
@@ -146,8 +164,16 @@ source, licence and SHA-256; the program refuses a file that does not match.
 ### Not distributed
 
 These are kept locally, untracked and ignored by Git, and are not part of
-the repository or any release. Without them the game draws simple proxies
-for the props and other vehicles in traffic.
+the repository or any release. Without the optional prop and vehicle
+models the game draws simple proxies for those objects.
+
+The optional demo avatars and motions load from a local copy of
+`test/ar_rifle_demo/public`. The four civilian bodies and the motorcycle
+variants use the MakeHuman / MPFB source described above. The Tripo
+avatar is user-supplied for local use. The animation packs are authored in
+the demo projects. Source files and hashes are listed in
+[`native/assets/test-characters-manifest.json`](native/assets/test-characters-manifest.json).
+The demo's `characters/SOURCE.md` records the asset origins.
 
 - 22 street-prop models made with a text-to-3D service, whose output terms
   are not recorded: `bench`, `bikeRack`, `bollard`, `busStopFlag`,
@@ -160,8 +186,11 @@ for the props and other vehicles in traffic.
 
 ## Read when present (not in the repository)
 
-These are fetched from their source into a folder outside the repository;
-the manifests named here pin every file.
+These are downloaded from their source into `external/` by
+`scripts/setup-assets.py` and never committed; the manifests named here pin
+every file. The aerial imagery and the Golden Gate survey set are not part
+of that setup: the imagery is fetched by its own tool, and the survey set is
+read from the folder `EO_SURVEY_ROOT` names.
 
 - **Microsoft Rocketbox Avatar Library**: MIT License, Copyright (c) 2020
   Microsoft, https://github.com/microsoft/Microsoft-Rocketbox. The avatars
@@ -192,6 +221,28 @@ the manifests named here pin every file.
 - **USGS 3DEP 1 arc-second DEM** for the far shore: public domain.
   Manifest: `native/assets/dem-manifest.json`.
 - **USDA NAIP aerial imagery** for the roof survey tool: public domain.
+- **The Golden Gate survey set** (`EO_SURVEY_ROOT`; read by the
+  `eo_farshore::survey` readers). Manifest, with path, bytes and SHA-256 per
+  file and each group's attribution: `native/assets/survey-manifest.json`
+  (written by `native/tools/survey-manifest.mjs`).
+  - **U.S. Geological Survey, 3D Elevation Program**, 1 m DEM GeoTIFFs
+    (projects CA_SanFrancisco_B23 and CA_NoCal_Wildfires_B5b_QL1_2018):
+    public domain (U.S. Government work). Credit: U.S. Geological Survey,
+    3D Elevation Program.
+  - **NOAA NCEI CUDEM** 1/9 arc-second topobathymetric tiles: public domain
+    (U.S. Government work). Cite as: Cooperative Institute for Research in
+    Environmental Sciences (CIRES) at the University of Colorado, Boulder,
+    2014, https://doi.org/10.25921/ds9v-ky35. Not for navigation; NOAA and
+    NCEI give no warranty and do not endorse this product.
+  - **USDA NAIP orthoimagery** (0.6 m RGB), through the USGS National Map
+    image service: public domain (U.S. Government work,
+    https://www.usa.gov/publicdomain/label/1.0/). Credit: Imagery: USDA NAIP,
+    via the U.S. Geological Survey National Map.
+  - **Poly Haven** scanned rocks and plants (glTF models and their 2k
+    texture maps): CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/);
+    no attribution required, credited to Poly Haven (polyhaven.com).
+  - The USGS lidar point clouds listed in the download were not fetched; the
+    manifest records them as such.
 
 The sign art and sign font are pinned, with source URL, licence basis and
 digest per file, in `native/eo-props/data/sign-art-manifest.json`. No
@@ -210,7 +261,7 @@ trademark or brand logo is drawn on any sign face.
 
 The optional 21 Beaver Street floor finish uses Dimitrios Savva’s *Wood Floor Worn* for Poly Haven, released under CC0 1.0. Eight board strips were cropped from the diffuse, OpenGL normal and roughness maps. The [material provenance](public/assets/buildings/beaver-terrace/finishes/floorboards.provenance.json) records the original files and their checksums. [Asset](https://polyhaven.com/a/wood_floor_worn) · [Licence](https://polyhaven.com/license)
 
-The weathered 21 Beaver Street variant uses six CC0 photographic materials from Poly Haven. Amal Kumar photographed *Clay Roof Tiles 02*, Rob Tuytel created *Plaster Grey 04*, Dimitrios Savva created *White Stucco 02* and *Wood Floor Worn*, Charlotte Baglioni created *Gravel Floor 03*, and colormass and Rico Cilliers produced *Rough Linen*. The [surface manifests](public/assets/buildings/beaver-terrace/finishes/patina) list each input and its SHA-256. [CC0 licence](https://polyhaven.com/license)
+The weathered 21 Beaver Street variant uses six CC0 photographic materials from Poly Haven. Amal Kumar photographed *Clay Roof Tiles 02*, Rob Tuytel created *Plaster Grey 04*, Dimitrios Savva created *White Stucco 02* and *Wood Floor Worn*, Charlotte Baglioni created *Gravel Floor 03*, and colormass and Rico Cilliers produced *Rough Linen*. The [surface manifests](public/assets/buildings/beaver-terrace/finishes/patina) list each input and its SHA-256. The optional fitted roof samples sixteen individual tile faces from Kumar’s scan for its [clay material](public/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/mission-clay.provenance.json). [CC0 licence](https://polyhaven.com/license)
 
 ## Rust crate licences
 
@@ -246,4 +297,27 @@ grouped by that field exactly as each crate declares it. Regenerate it after a d
 | `ISC` | 1 | libloading 0.8.9 |
 <!-- END GENERATED: cargo-licences -->
 
+The Black Point shoreline uses *Seaside Rock* by Dimitrios Savva for Poly Haven under CC0 1.0. The game ships reduced colour, normal and roughness maps from this scan. [Source](https://polyhaven.com/a/seaside_rock) · [Licence](https://polyhaven.com/license) · [Provenance](public/assets/shore/seaside-rock.provenance.json)
+
 The optional 21 Beaver sitting-room carpet uses the public-domain recto photograph of *Carpet*, attributed to Turkey, first half of the nineteenth century, Bequest of Joseph V. McMullan, 1973, accession 1974.149.36. The material builder rectifies and resamples the photograph. [The Metropolitan Museum of Art object record](https://www.metmuseum.org/art/collection/search/452588) · [The Met Open Access policy](https://www.metmuseum.org/about-the-met/policies-and-documents/open-access).
+
+- The private frontage tree uses the City and County of San Francisco street-tree inventory (DataSF dataset `tkzw-k3nq`, PDDL 1.0). The original mesh follows the position, height and crown recorded in the existing city data. [Street Tree List](https://data.sfgov.org/d/tkzw-k3nq).
+
+The optional private courtyard and paved apron at 21 Beaver use the CC0 scans [Park Dirt](https://polyhaven.com/a/park_dirt) by Christopher Melani, [Leafy Grass](https://polyhaven.com/a/leafy_grass) by Charlotte Baglioni and [Concrete Floor Worn 001](https://polyhaven.com/a/concrete_floor_worn_001) by Dimitrios Savva, Rico Cilliers. [Poly Haven licence](https://polyhaven.com/license).
+
+Rob Tuytel photographed the frontage tree’s bark. Dimitrios Savva photographed the terracotta used on the porch and steps. The optional house uses these CC0 colour, normal and roughness maps. [Bark Brown 02](https://polyhaven.com/a/bark_brown_02) · [Terracotta Floor Tiles](https://polyhaven.com/a/terracotta_floor_tiles) · [Poly Haven licence](https://polyhaven.com/license).
+
+The optional house courtyard follows parcel 3561049 from the City and County of San Francisco parcel survey, released under PDDL 1.0. [Parcels – Active and Retired](https://data.sf.gov/d/acdm-wktn) · [Source and licence](scripts/blender-buildings/sources/beaver-parcel.NOTICE.txt).
+
+The Black Point shoreline uses *Seaside Rock* by Dimitrios Savva for Poly Haven under CC0 1.0. The game ships reduced colour, normal and roughness maps from this scan. [Source](https://polyhaven.com/a/seaside_rock) · [Licence](https://polyhaven.com/license) · [Provenance](public/assets/shore/seaside-rock.provenance.json)
+
+### San Francisco Bay underwater daylight
+
+The cove daylight preview uses a regional median from USGS station 20 (37.82° N, 122.393333° W). The 2016–2021 release includes 102 nonempty positive values of `Extinction_Coefficient` at that station, one per sampling date. Their median is 0.80 m⁻¹ and the middle half range from 0.60 to 0.90 m⁻¹. The measurements describe vertical attenuation of photosynthetically active radiation in the water column. They do not measure viewing distance or establish the conditions on a particular day at Aquatic Park.
+
+Tara Schraga, Erica S. Nejad, Charles A. Martin and James E. Cloern, *USGS Measurements of Water Quality in San Francisco Bay (CA), 2016–2021*, version 4.0, March 2023. [USGS data release](https://doi.org/10.5066/F7D21WGF), [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
+
+Source SHA-256 values:
+
+- `2016_2021SanFranciscoBayWaterQualityData.csv` — `726906506c62e64b5a3e78a8c4e41100cf4e1f6f82c54a13e5adcf892639ddcf`
+- `SFBay_TableofStationLocations_v4.csv` — `55f28f5b4f706ec0b0d78feafc56be1779e665fc7e9ebd5dfc0041c8edec7726`

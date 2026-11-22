@@ -414,7 +414,7 @@ fn steps_up_real_kerbs_onto_the_drawn_sidewalk_and_back_down() {
     // straight across to the sidewalk beyond its kerb, at many streets.
     let c = city();
     let sg = streets();
-    let sw = sg.0.clone();
+    let sw = sg.world.clone();
     let mut world = CollisionWorld::new(sg.clone(), c.buildings.clone(), 4);
     let route = routes::walk_route(&c.city, &c.elevation);
     let total = routes::polyline_length(&route.path);

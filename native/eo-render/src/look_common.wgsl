@@ -57,7 +57,8 @@ struct Look {
     // density, dither amplitude (display), output is sRGB-encoded by the target (1/0), frame index
     post2: vec4<f32>,
     shadow_tint: vec4<f32>,
-    highlight_tint: vec4<f32>,
+    highlight_tint: vec3<f32>,
+    blender_camera: f32,
     // the camera the occlusion/bounce result was made with
     // (view-projection, eye, forward), and x = result usable (1/0),
     // y = 1 / focal length in full-resolution pixels.
@@ -75,7 +76,66 @@ struct Look {
     // the weather's dome (eo-look `upperFromRow`): overcast, isotropy, desaturation, directional horizon band (1/0); tint.
     wx: vec4<f32>,
     wx_tint: vec4<f32>,
+    // x is the inverse ground-plan scale for submerged cove sediment; zero when disabled.
+    cove: vec4<f32>,
+    // the filmic display transform (eo-look `tone::filmic_curve`): contrast a, shoulder d, b, c
+    tone: vec4<f32>,
+    // x filmic on (1/0), y the chroma gain (Oklab), z the camera look on (1/0),
+    // w the season's dryness (eo_look::season::current, 0 green .. 1 golden; unread)
+    tone2: vec4<f32>,
+    // the filmic transform's white balance (daylight D55 to D65, Bradford), rows
+    wb: array<vec4<f32>, 3>,
+    // the playable house at 21 Beaver Street (look.rs `LookUniform`, house.rs): all zero while it is not installed.
+    enclosure_frame: mat4x4<f32>,
+    dining_lamp: vec4<f32>,
+    table_light: array<vec4<f32>,3>,
+    oak_finish: array<vec4<f32>,3>,
+    fitted_finish: array<vec4<f32>,2>,
+    kitchen_frame: array<vec4<f32>,5>,
+    front_daylight: array<vec4<f32>,54>,
+    wall_sample: vec4<f32>, // atlas, solar sample, cloud fraction, moving entry leaf
+    wall_overcast: vec4<f32>,
+    window_sample: vec4<f32>,
+    porch_light: array<vec4<f32>,7>,
+    // x: the open sky's upward irradiance over pi (eo-look `sky_irradiance_up`)
+    house_sky: vec4<f32>,
+    // the landmark decks (deck_rooms.rs, landmarks_deck.wgsl): the room
+    // the player stands in (min xyz, w its sky visibility, < 0 none; max
+    // xyz), and the player's feet (xyz, w the body's height, 0 none).
+    deck_room_min: vec4<f32>,
+    deck_room_max: vec4<f32>,
+    deck_player: vec4<f32>,
+    // the lighting additions (look.rs `LightingOptions`), all zero while every one is off.
+    // Rows (look.rs `LX_*`):
+    //   0      flags: x the feature bits (read `bitcast<u32>(look.lx[0].x) & LX_BIT_*`,
+    //          or `lk_lx_on`), y z w the ground bounce's sun exitance (ambient.wgsl; 0: off)
+    //   1-8    far shadow (far_shadow.wgsl): per ring (rows 1-4, 5-8) three
+    //          affine rows of world -> its map's clip space and a params row
+    //   9      far shadow params
+    //   10-11  ambient volume: origin, scale, plane mapping
+    //   12     probe grid params
+    //   13     light shadow params
+    //   14     smooth time params
+    //   15     spare
+    lx: array<vec4<f32>, 16>,
 };
+
+// The feature bits of `look.lx[0].x` (look.rs `LX_BIT_*`).
+const LX_BIT_CASCADE_BLEND: u32 = 1u;
+const LX_BIT_FAR_SHADOWS: u32 = 2u;
+const LX_BIT_AMBIENT_VOLUME: u32 = 4u;
+const LX_BIT_PROBE_GRID: u32 = 8u;
+const LX_BIT_LIGHT_SHADOWS: u32 = 16u;
+const LX_BIT_HEADLIGHT_SHADOWS: u32 = 32u;
+const LX_BIT_LIT_FOG: u32 = 64u;
+const LX_BIT_SMOOTH_TIME: u32 = 128u;
+
+// Whether a lighting addition is on this frame (`bit`: one of LX_BIT_*).
+// SF_LX_BITS (look.rs `ShaderFeatures`) are the additions compiled in: one
+// off at start folds to false here and its code leaves the pipeline.
+fn lk_lx_on(bit: u32) -> bool {
+    return (SF_LX_BITS & bit) != 0u && (bitcast<u32>(look.lx[0].x) & bit) != 0u;
+}
 
 // wet-surface-reflection.js `skyDomeRadiance`: the sky model's horizon
 // and zenith radiance mixed on the direction's elevation, clamped at the
@@ -89,6 +149,13 @@ fn lk_js_dome(d: vec3<f32>) -> vec3<f32> {
 
 const LK_PI: f32 = 3.14159265;
 const LK_DEG: f32 = 0.0174532925;
+
+// Mapped Aquatic Park district, feathered toward the open Bay. Input in map metres.
+fn lk_cove_weight(p: vec2<f32>) -> f32 {
+    let lo = smoothstep(vec2<f32>(-725.0, -3750.0), vec2<f32>(-635.0, -3620.0), p);
+    let hi = 1.0 - smoothstep(vec2<f32>(-150.0, -3150.0), vec2<f32>(-65.0, -3030.0), p);
+    return lo.x * lo.y * hi.x * hi.y;
+}
 
 fn lk_luma(c: vec3<f32>) -> f32 {
     return dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));

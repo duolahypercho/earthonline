@@ -6,7 +6,7 @@ use crate::map::{MapView, StreetIndex};
 use crate::settings::{self, Settings};
 use crate::text::{Stack, TextStyle};
 use crate::theme::{self, Bezier, Color, Len, Viewport, hud, pause, perf, rgba, title};
-use crate::{Action, Hit, HudMemory, HudMode, HudState, Loading, PauseTab, Screen, TitleView, WeaponKind};
+use crate::{Action, Hit, HudMemory, HudMode, HudState, Loading, NameTag, PauseTab, Screen, TitleView, WeaponKind};
 use std::fmt::Write as _;
 
 pub(crate) struct MapRefs<'a> {
@@ -32,7 +32,7 @@ pub(crate) struct Ctx<'a> {
     pub mem: &'a mut HudMemory,
     pub hits: &'a mut Vec<Hit>,
     pub focus: Option<usize>,
-    pub hover_t: &'a [f32; 16],
+    pub hover_t: &'a [f32; crate::HOVER_SLOTS],
     pub scroll: f32,
     pub ready: bool,
     pub reduced_motion: bool,
@@ -43,6 +43,10 @@ pub(crate) struct Ctx<'a> {
     /// Where the pause map's image goes (read back by the Ui).
     pub pause_pane: Rect,
     pub fmt: &'a mut String,
+    /// The other players' name tags, and whether the HUD's plates are drawn.
+    pub tags: &'a [NameTag],
+    pub avoid: &'a [[f32; 4]],
+    pub chrome: bool,
 }
 
 impl Ctx<'_> {
@@ -85,7 +89,112 @@ pub(crate) fn build(p: &mut Painter, c: &mut Ctx) {
     match c.screen {
         Screen::Title | Screen::Loading => title_screen(p, c),
         Screen::Pause => pause_screen(p, c),
-        Screen::Hud => hud_screen(p, c),
+        Screen::Hud => {
+            name_tags(p, c);
+            if c.chrome {
+                hud_screen(p, c);
+            }
+        }
+    }
+}
+
+/// A name tag's plate: the HUD's surface ink at 70 % (legible over a bright
+/// sky or a white facade), a 1 px light hairline round it, the name in the
+/// HUD's ink and the second line a little dimmer.
+const TAG_PLATE: Color = rgba(6, 10, 16, 0.70);
+const TAG_EDGE: Color = rgba(237, 245, 251, 0.34);
+const TAG_LEADER: Color = rgba(237, 245, 251, 0.78);
+const TAG_DETAIL: Color = rgba(237, 245, 251, 0.86);
+
+/// One tag's plate as laid out.
+struct TagBox {
+    rect: Rect,
+    name_size: f32,
+    detail_size: f32,
+}
+
+fn radius_of(b: &TagBox) -> f32 {
+    (b.name_size * 0.62).min(b.rect.h * 0.5)
+}
+
+fn tag_box(p: &mut Painter, t: &NameTag) -> TagBox {
+    let fs = t.size.clamp(7.0, 40.0);
+    let ds = t.detail_size.clamp(7.0, 40.0);
+    let ts = st(Stack::HudSans, 600, fs).tracking(0.02);
+    let mut w = p.text_width(&t.name, ts);
+    if let Some(d) = &t.detail {
+        w = w.max(p.text_width(d, st(Stack::HudSans, 500, ds).tracking(0.03)));
+    }
+    let (padx, pady) = (fs * 0.6, fs * 0.28);
+    let h = fs * 1.2 + if t.detail.is_some() { ds * 1.18 } else { 0.0 } + 2.0 * pady;
+    TagBox { rect: Rect::new(t.x - w * 0.5 - padx, 0.0, w + 2.0 * padx, h), name_size: fs, detail_size: ds }
+}
+
+/// Name tags over the other players. Laid out nearest first: each plate
+/// sits over its head point with a small pointer down to it; one that would
+/// cover a plate already placed or someone else's face (`Ctx::avoid`) tries
+/// the places beside and above (up to three plates up), nearest first, and
+/// draws a 1 px leader line down to its head; with no place clear of the
+/// faces it takes one clear of the other plates; with none of those either
+/// it is left out. Drawn farthest first, so the nearest is on top.
+fn name_tags(p: &mut Painter, c: &mut Ctx) {
+    let mut order: Vec<usize> = (0..c.tags.len()).filter(|&i| c.tags[i].alpha > 0.01 && c.tags[i].x.is_finite() && c.tags[i].y.is_finite()).collect();
+    order.sort_by(|&a, &b| c.tags[a].depth.total_cmp(&c.tags[b].depth));
+    let mut placed: Vec<(usize, TagBox, bool)> = vec![];
+    let gap = 2.0;
+    let over = |a: &Rect, b: [f32; 4]| a.x < b[2] + gap && b[0] < a.x + a.w + gap && a.y < b[3] + gap && b[1] < a.y + a.h + gap;
+    for i in order {
+        let t = &c.tags[i];
+        let mut b = tag_box(p, t);
+        let point = b.name_size * 0.34;
+        let home = Rect::new(b.rect.x, t.y - point - b.rect.h, b.rect.w, b.rect.h);
+        let (w, h) = (b.rect.w, b.rect.h + gap);
+        let mut cands = vec![(0.0, 0.0)];
+        for k in 0..4 {
+            let up = -(k as f32) * h;
+            for dx in [0.0, 0.62 * w + gap, -(0.62 * w + gap)] {
+                if k > 0 || dx != 0.0 {
+                    cands.push((dx, up));
+                }
+            }
+        }
+        cands.sort_by(|a, b| (a.0.hypot(a.1)).total_cmp(&b.0.hypot(b.1)));
+        let free_of_tags = |r: &Rect| !placed.iter().any(|(_, q, _)| over(r, [q.rect.x, q.rect.y, q.rect.right(), q.rect.bottom()]));
+        let free_of_faces = |r: &Rect| !c.avoid.iter().any(|f| *f != t.head && over(r, *f));
+        let at = |d: &(f32, f32)| home.translate(d.0, d.1);
+        let Some(d) = cands.iter().find(|d| free_of_tags(&at(d)) && free_of_faces(&at(d))).or_else(|| cands.iter().find(|d| free_of_tags(&at(d)))) else { continue };
+        b.rect = at(d);
+        placed.push((i, b, d.0 != 0.0 || d.1 != 0.0));
+    }
+    for (i, b, moved) in placed.iter().rev() {
+        let t = &c.tags[*i];
+        let r = b.rect;
+        p.opacity = t.alpha.min(1.0);
+        let point = b.name_size * 0.34;
+        if *moved {
+            // The leader: from the plate's lower edge (above the head where it can) down to the point over the head.
+            let lx = t.x.clamp(r.x + radius_of(b), r.right() - radius_of(b));
+            p.polyline(&[[lx, r.bottom()], [t.x, t.y - 1.0]], 1.0, false, TAG_LEADER);
+            p.ellipse(t.x, t.y, 1.6, 1.6, 0.0, TAG_LEADER);
+        } else {
+            p.polygon(&[[t.x - point, r.bottom() - 0.5], [t.x + point, r.bottom() - 0.5], [t.x, r.bottom() + point]], TAG_PLATE);
+        }
+        let radius = radius_of(b);
+        p.rrect(r, radius, TAG_PLATE);
+        p.rrect_stroke(r, radius, 1.0, TAG_EDGE);
+        let pady = b.name_size * 0.28;
+        let ts = st(Stack::HudSans, 600, b.name_size).tracking(0.02);
+        let nw = p.text_width(&t.name, ts);
+        let base = p.text.baseline(ts, r.y + pady, 1.2);
+        let cx = r.x + r.w * 0.5;
+        p.text(cx - nw * 0.5, base, &t.name, ts, hud::INK);
+        if let Some(d) = &t.detail {
+            let ds = st(Stack::HudSans, 500, b.detail_size).tracking(0.03);
+            let dw = p.text_width(d, ds);
+            let base = p.text.baseline(ds, r.y + pady + b.name_size * 1.2, 1.18);
+            p.text(cx - dw * 0.5, base, d, ds, TAG_DETAIL);
+        }
+        p.opacity = 1.0;
     }
 }
 
@@ -301,7 +410,9 @@ fn title_screen(p: &mut Painter, c: &mut Ctx) {
         match c.title_view {
             TitleView::Main => menu_list(p, c, x0, rail_top, !starting),
             TitleView::Settings => {
-                let panel_h = rail_h;
+                // (native) the panel ends at the content's bottom edge, above the credit line,
+                // and scrolls inside: 62dvh from `min_top` would run off a 16:9 screen.
+                let panel_h = rail_h.min(content_bottom - rail_top);
                 title_settings_panel(p, c, x0, rail_top, rail_w, panel_h)
             }
             TitleView::Exit => {
@@ -455,7 +566,7 @@ fn back_button(p: &mut Painter, c: &mut Ctx, x: f32, y: f32, stack: Stack) -> f3
 }
 
 /// `.eo-menu__view[data-menu-view="settings"]`: heading, then the shared
-/// graphics block and the title's own rows, scrolled inside 62dvh.
+/// graphics and world blocks and the title's own rows, scrolled inside 62dvh.
 fn title_settings_panel(p: &mut Painter, c: &mut Ctx, x: f32, top: f32, w: f32, h: f32) {
     let pad = c.len(title::SETTINGS_PANEL_PAD);
     p.rect(Rect::new(x, top, w, h), title::SURFACE_STRONG);
@@ -472,6 +583,7 @@ fn title_settings_panel(p: &mut Painter, c: &mut Ctx, x: f32, top: f32, w: f32, 
     p.rect(Rect::new(ix, y, 3.5 * 16.0, 2.0), title::ACCENT);
     y += 2.0 + 1.6 * 16.0;
     y += graphics_block(p, c, ix, y, iw, Stack::TitleSans);
+    y += world_block(p, c, ix, y, iw, Stack::TitleSans);
     // Background motion.
     let on = c.settings.background_motion;
     y += title_setting_row(p, c, ix, y, iw, "Background motion", if on { "On" } else { "Off" }, Action::Motion);
@@ -540,7 +652,7 @@ fn title_slider(p: &mut Painter, c: &mut Ctx, x: f32, y: f32, w: f32, label: &st
 /// `installPerformanceSettings` markup with `performance-settings.css`:
 /// the Graphics block both menus share. Returns its height.
 fn graphics_block(p: &mut Painter, c: &mut Ctx, x: f32, top: f32, w: f32, stack: Stack) -> f32 {
-    let accent = theme::hex(0xe2ad61);
+    let accent = perf::ACCENT;
     let body = st(stack, 400, perf::BUTTON_SIZE);
     let small = st(stack, 400, perf::SMALL_SIZE);
     let lh_normal = 1.33;
@@ -591,12 +703,17 @@ fn graphics_block(p: &mut Painter, c: &mut Ctx, x: f32, top: f32, w: f32, stack:
     for (key, label, _) in settings::GRAPHICS_OPTIONS {
         y += 16.0;
         let v = c.settings.performance.get(key);
-        let pressed = v == "on" || v == "high" || v == "smaa" || v == "native";
+        let pressed = v == "on" || v == "high" || v == "smaa" || v == "native" || v == "hyper";
         y += toggle_row(p, c, x, y, w, label, settings::option_label(v), pressed, Action::Option(key), body, accent);
         y += 8.0 - 8.0;
+        // (native) what the row changes at once and what waits for a restart.
+        if let Some(note) = settings::option_note(key) {
+            y += 8.0;
+            y += paragraph(p, x, y, w, note, small, 1.5, perf::COPY);
+        }
     }
     y += 8.0;
-    y += paragraph(p, x, y, w, "High, Medium and Low change these together. Turn any one down on its own for a custom mix.", small, 1.5, perf::COPY);
+    y += paragraph(p, x, y, w, "Hyper real, High, Medium and Low change these together. Turn any one down on its own for a custom mix.", small, 1.5, perf::COPY);
     y += paragraph(
         p,
         x,
@@ -612,6 +729,31 @@ fn graphics_block(p: &mut Painter, c: &mut Ctx, x: f32, top: f32, w: f32, stack:
     y += toggle_row(p, c, x, y, w, "Show FPS", if fps { "On" } else { "Off" }, fps, Action::Fps, body, accent);
     y += 8.0;
     y += paragraph(p, x, y, w, "Saved on this device and applied in the city.", small, 1.5, perf::COPY);
+    y += 22.0;
+    p.rect(Rect::new(x, y, w, 1.0), perf::RULE);
+    y += 1.0 + 28.0;
+    y - top
+}
+
+/// (native) The World block both menus share, after Graphics: what the city
+/// is built with, not how it is drawn (no preset touches it). Returns its height.
+fn world_block(p: &mut Painter, c: &mut Ctx, x: f32, top: f32, w: f32, stack: Stack) -> f32 {
+    let body = st(stack, 400, perf::BUTTON_SIZE);
+    let small = st(stack, 400, perf::SMALL_SIZE);
+    let h3 = st(stack, 400, perf::H3_SIZE);
+    let lh_normal = 1.33;
+    let mut y = top;
+    let b = p.text.baseline(h3, y, lh_normal);
+    p.text(x, b, "World", h3, perf::INK);
+    y += h3.size * lh_normal + 14.0;
+    for (key, label, _) in settings::WORLD_OPTIONS {
+        let v = c.settings.world.get(key);
+        y += toggle_row(p, c, x, y, w, label, settings::option_label(v), v != "off", Action::World(key), body, perf::ACCENT);
+        if let Some(note) = settings::option_note(key) {
+            y += 8.0;
+            y += paragraph(p, x, y, w, note, small, 1.5, perf::COPY);
+        }
+    }
     y += 22.0;
     p.rect(Rect::new(x, y, w, 1.0), perf::RULE);
     y += 1.0 + 28.0;
@@ -945,7 +1087,7 @@ fn pause_slider(p: &mut Painter, c: &mut Ctx, x: f32, y: f32, w: f32, label: &st
 }
 
 /// The pause Settings sheet: audio (master and sound effects drive eo-audio; radio and dialogue have nothing to play yet), the shared graphics
-/// block, controls.
+/// and world blocks, controls.
 fn pause_settings(p: &mut Painter, c: &mut Ctx, r: Rect) {
     let screen = [c.vp.w, c.vp.h];
     p.set_scissor(Some(r), screen);
@@ -976,6 +1118,7 @@ fn pause_settings(p: &mut Painter, c: &mut Ctx, r: Rect) {
     }
     y += 28.0;
     y += graphics_block(p, c, x, y, w, Stack::Pause);
+    y += world_block(p, c, x, y, w, Stack::Pause);
     heading(p, &mut y, "Controls");
     for (key, label) in settings::INPUT_SLIDERS {
         let v = c.settings.input.value(key);

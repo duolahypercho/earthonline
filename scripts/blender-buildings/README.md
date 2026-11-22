@@ -145,3 +145,36 @@ never traced, saved, or read into any file here.
   id (`<slug>-blender-<script digest>-<style digest>`, plus `-ext` for an
   exterior-only build) changes whenever either
   does; editing `build_building.py` means rebuilding every installed building.
+
+## 21 Beaver Street in Blender
+
+The furnished three-storey house has a Blender-only authoring mode. Its shell follows
+the installed game footprint. Furniture keeps its physical dimensions and the
+individual assemblies appear as collection assets. The private lot follows the
+city parcel polygon. The street mesh and its supporting terrain come from the
+same `eo-street` plan as the game. The surrounding roofs use the city footprint
+and height records, and distant trees follow the street-tree inventory. Bay
+windows, garage joinery and courtyard wall finishes on adjoining buildings are
+reconstructions from the design references.
+
+Use Blender 5.1 with Cargo on the executable path and choose a directory outside the checkout for the scene and
+its renders. Set `EO_CC0_ROOT` to the optional scanned-material library to pack
+the corresponding siding, soil and roof textures into the scene.
+
+```sh
+blender --background --factory-startup --python-exit-code 1 \
+  --python scripts/blender-buildings/build_beaver_terrace.py -- \
+  --house-photo --blend-only --blend "$BEAVER_STUDY/21-beaver.blend"
+blender --background "$BEAVER_STUDY/21-beaver.blend" --python-exit-code 1 \
+  --python scripts/blender-buildings/render_beaver_studies.py -- "$BEAVER_STUDY/renders"
+```
+
+Timeline frames 1 through 6 select the roof, courtyard, dining room, upstairs
+bedroom, front entry and kitchen detail cameras. Each includes its daylight
+direction and exposure. The `front-door` object's **Open angle** property
+controls the leaf and attached hardware, in degrees. Its saved value is zero.
+The render command tests its swing, checks the furniture dimensions and packed
+images and writes a verification manifest. It also renders a standing view
+from the opposite sidewalk and a second upper view for studying the facade.
+In that last image the frontage tree keeps its shadows and reflections while
+camera rays pass through it. The regular upper view shows the inventoried tree.

@@ -308,3 +308,107 @@ fn submerged_camera_obeys_depth_critical_angle_and_shore() {
     let dry = view(-180.0, 0.5, 1.4);
     assert!((center(&on, dry) - center(&off, dry)).abs() < 2.0, "submerged optics on dry land");
 }
+
+// (iteration 3) The water shader's constants that mirror eo-water's: the swell
+// period the bathymetry's arrival time is counted in, and the clear-day swell
+// height the obstacle foam reads (water_common.wgsl `WB_PERIOD_S`, `WB_HS_CLEAR`).
+#[test]
+fn the_bathymetry_constants_match_eo_water() {
+    let src = include_str!("../src/water_common.wgsl");
+    let read = |name: &str| -> f64 {
+        let line = src.lines().find(|l| l.starts_with(&format!("const {name}: f32 = "))).unwrap_or_else(|| panic!("{name} not in water_common.wgsl"));
+        line.split('=').nth(1).unwrap().trim().trim_end_matches(';').parse().unwrap()
+    };
+    assert_eq!(read("WB_PERIOD_S"), eo_water::bathymetry::PERIOD_S);
+    assert_eq!(read("WB_HS_CLEAR"), eo_water::waves::SWELL_HS[0]);
+    // the switch bits the shader tests (water.wgsl, water_surf.wgsl) are eo-water's
+    let shader = [include_str!("../src/water.wgsl"), include_str!("../src/water_surf.wgsl"), include_str!("../src/water_common.wgsl")].concat();
+    for (bit, name) in [(eo_water::switches::BATHYMETRY, "256u"), (eo_water::switches::SURF_BREAK, "512u"), (eo_water::switches::SWASH_FOAM, "1024u"), (eo_water::switches::OBSTACLE_FOAM, "2048u"), (eo_water::switches::BODY2, "4096u")] {
+        assert_eq!(format!("{bit}u"), name);
+        assert!(shader.contains(&format!("wg_gg3({name})")), "{name}");
+    }
+}
+
+// (iteration 3, obstacle foam) the extra field's layout and the wake's flood
+// heading as the shader reads them (water_common.wgsl `wb_layer` halves the
+// texture into two layers; water.wgsl picks the flood or the ebb wake by the
+// current's sign along the same heading eo-water extra.rs cooks it on).
+#[test]
+fn the_obstacle_layer_matches_eo_water() {
+    assert_eq!(eo_water::extra::LAYERS, 2);
+    let common = include_str!("../src/water_common.wgsl");
+    assert!(common.contains("let v = clamp(uv.y * 0.5, hh, 0.5 - hh) + 0.5 * layer;"));
+    let water = include_str!("../src/water.wgsl");
+    let [fx, fz] = eo_water::extra::WAKE_FLOW;
+    assert!(water.contains(&format!("let flow = vec2<f32>({fx}, {fz}) * sign(cur);")), "the shader's flood heading is not ({fx}, {fz})");
+}
+
+/// Read the irradiance calculated by the same WGSL function used by the
+/// surface and submerged passes. A wave can focus only the collimated share.
+#[test]
+fn cove_bed_daylight_keeps_the_measured_vertical_loss_across_the_waterline() {
+    let ctx = ctx();
+    let d = &ctx.device;
+    let code = format!(
+        "{}\nconst KD: f32 = {};\n{}",
+        include_str!("../src/cove_daylight.wgsl"),
+        eo_water::optics::COVE_DAYLIGHT_KD,
+        r#"
+        @group(0) @binding(0) var<storage,read_write> light: array<vec4<f32>, 4>;
+        @compute @workgroup_size(1)
+        fn check() {
+            let neutral = vec3<f32>(1.2);
+            light[0] = vec4<f32>(wo_daylight_bed(0., neutral, 0.75, 0.7, 1., KD), 0.);
+            light[1] = vec4<f32>(wo_daylight_bed(3.5, neutral, 0.75, 0.7, 1., KD), 0.);
+            light[2] = vec4<f32>(wo_daylight_bed(3.5, neutral, 0.75, 0.7, 2., KD), 0.);
+            light[3] = vec4<f32>(wo_daylight_bed(1., vec3<f32>(1.28,1.13,1.29), 0.8, 0.0, 1., KD), 0.);
+        }"#
+    );
+    let module = d.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("cove daylight measurement"),
+        source: wgpu::ShaderSource::Wgsl(code.into()),
+    });
+    let pipeline = d.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: None,
+        layout: None,
+        module: &module,
+        entry_point: Some("check"),
+        compilation_options: Default::default(),
+        cache: None,
+    });
+    let buffer = |usage| {
+        d.create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: 64,
+            usage,
+            mapped_at_creation: false,
+        })
+    };
+    let out = buffer(wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC);
+    let read = buffer(wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST);
+    let bg = d.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: None,
+        layout: &pipeline.get_bind_group_layout(0),
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: out.as_entire_binding(),
+        }],
+    });
+    let mut enc = d.create_command_encoder(&Default::default());
+    {
+        let mut pass = enc.begin_compute_pass(&Default::default());
+        pass.set_pipeline(&pipeline);
+        pass.set_bind_group(0, &bg, &[]);
+        pass.dispatch_workgroups(1, 1, 1);
+    }
+    enc.copy_buffer_to_buffer(&out, 0, &read, 0, 64);
+    ctx.queue.submit([enc.finish()]);
+    let bytes = read_mapped(&ctx, &read).unwrap();
+    let value = |i: usize| f32::from_le_bytes(bytes[4 * i..4 * i + 4].try_into().unwrap());
+    let near = (-(eo_water::optics::COVE_DAYLIGHT_KD)).exp();
+    let deep = (-3.5 * eo_water::optics::COVE_DAYLIGHT_KD).exp();
+    assert!((value(0) - 1.).abs() < 1e-5);
+    assert!((value(4) - deep).abs() < 1e-5);
+    assert!((value(8) - deep - 0.7 * (-1.2_f32 * 3.5 / 0.75).exp()).abs() < 1e-5);
+    assert!(value(12) < near && value(13) > near && value(14) < near);
+}

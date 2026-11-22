@@ -30,6 +30,19 @@ struct FarU {
     misc: vec4<f32>,
     // the sea's grid this frame (eo-water grid): centre x, z, half size, drawn (1/0)
     sea: vec4<f32>,
+    // the cinematic look (stage L5; 0 otherwise): x water everywhere outside the drawn sea,
+    // y the skirt to the horizon, z the outer ring under this layer's rim, w the skirt's length (game m)
+    ring: vec4<f32>,
+    // the outer ring's texture: origin x, z (surveyed m), 1 / (texel x width), 1 / (texel x height)
+    otex: vec4<f32>,
+    // this layer's extent on the plan (game m): min x, min z, max x, max z
+    ext: vec4<f32>,
+    // x the cook's rim taper (surveyed m), y its sea floor (game y), z log2(outer texel / this texel),
+    // w the sea sheet inside the city grid (1/0)
+    rim: vec4<f32>,
+    // x 1: the grass's dryness is the look's per-frame season (look.tone2.w, the date in
+    // force), 0: misc.x (read at load); y, z, w unused
+    season: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> fu: FarU;
@@ -37,6 +50,7 @@ struct FarU {
 @group(0) @binding(2) var fs_class: texture_2d<f32>;
 @group(0) @binding(3) var fs_samp: sampler;
 @group(0) @binding(4) var fs_shape: texture_2d<f32>; // sky visibility, valley
+@group(0) @binding(5) var fs_outer: texture_2d<f32>; // the outer ring's heights (stage L5, the cinematic look)
 
 @group(1) @binding(0) var<uniform> look: Look;
 
@@ -55,7 +69,44 @@ fn fs_lift(y: f32) -> f32 {
 }
 
 fn fs_h(p: vec2<f32>, mip: f32) -> f32 {
-    return fs_lift(textureSampleLevel(fs_height, fs_samp, fs_uv(p), mip).r);
+    var y = textureSampleLevel(fs_height, fs_samp, fs_uv(p), mip).r;
+    if (SF_CINEMATIC && fu.ring.z > 0.5) {
+        // Under the cinematic look the outer ring carries on past this cook, so the
+        // cook's rim (its last rim.x m fall to the sea floor) hands over to the ring's
+        // heights instead: baked = floor + (h - floor) t, so baked + (1 - t)(ring - floor)
+        // is h t + ring (1 - t), the ring's height exactly at the edge.
+        let q = p / fu.frame.x;
+        let e0 = fu.tex.xy;
+        let e1 = fu.tex.xy + 1.0 / fu.tex.zw;
+        let d = min(min(q.x - e0.x, e1.x - q.x), min(q.y - e0.y, e1.y - q.y));
+        if (d < fu.rim.x) {
+            let t = smoothstep(0.0, fu.rim.x, d);
+            let o = textureSampleLevel(fs_outer, fs_samp, (q - fu.otex.xy) * fu.otex.zw, max(mip - fu.rim.z, 0.0)).r;
+            y = y + (1.0 - t) * (o - fu.rim.y);
+        }
+    }
+    return fs_lift(y);
+}
+
+// The skirt (stage L5): the outermost layer's edge vertices moved ring.w further
+// out, so the edge row of quads carries its edge heights (clamped samples) on to
+// the horizon: open sea past a sea edge, land past a land edge.
+fn fs_skirt(p: vec2<f32>) -> vec2<f32> {
+    let e = fu.ext;
+    let k = fu.ring.w;
+    let tol = 0.5 * fu.lod.x;
+    var q = p;
+    if (p.x <= e.x + tol) {
+        q.x = e.x - k;
+    } else if (p.x >= e.z - tol) {
+        q.x = e.z + k;
+    }
+    if (p.y <= e.y + tol) {
+        q.y = e.y - k;
+    } else if (p.y >= e.w - tol) {
+        q.y = e.w + k;
+    }
+    return q;
 }
 
 fn fs_hash(p: vec2<f32>) -> f32 {
@@ -103,7 +154,16 @@ fn fs_vs(@location(0) g: vec2<u32>, @location(1) inst: vec4<f32>) -> FsOut {
     // and wherever the sea's grid does not reach this frame (it is 4.4 km round
     // a camera near the water, so the bay between it and a far shore showed the sky).
     let in_sea = fu.sea.w > 0.5 && in_reach && all(abs(pm - fu.sea.xy) <= vec2<f32>(fu.sea.z));
-    let own_water = !in_sea && ((pm.x >= fu.reach.x && pm.x <= fu.reach.z && pm.y < fu.grid.w + 60000.0) || in_reach);
+    var own_water = !in_sea && ((pm.x >= fu.reach.x && pm.x <= fu.reach.z && pm.y < fu.grid.w + 60000.0) || in_reach);
+    var wp = pm;
+    if (SF_CINEMATIC && fu.ring.x > 0.5) {
+        // stage L5: every point the sea does not draw this frame is this layer's water
+        // (farshore.rs `sea_draws_at`): no void past the reach, nor where the sea pass is skipped.
+        own_water = !in_sea;
+        if (fu.ring.y > 0.5) {
+            wp = fs_skirt(pm);
+        }
+    }
     var y = h;
     if (own_water) {
         y = max(h, fu.frame.z);
@@ -112,11 +172,20 @@ fn fs_vs(@location(0) g: vec2<u32>, @location(1) inst: vec4<f32>) -> FsOut {
     if (inside && !(own_water && h <= fu.frame.z)) {
         y = y - FS_TUCK;
     }
-    var o: FsOut;
-    let world = vec3<f32>(pm.x, y, pm.y);
-    o.clip = fu.view_proj * vec4<f32>(world, 1.0);
     let margin = 2.0 * fu.lod.x;
-    let deep = all(pm > fu.grid.xy + vec2<f32>(margin)) && all(pm < fu.grid.zw - vec2<f32>(margin));
+    var deep = all(pm > fu.grid.xy + vec2<f32>(margin)) && all(pm < fu.grid.zw - vec2<f32>(margin));
+    if (SF_CINEMATIC && fu.rim.w > 0.5 && inside && d < fu.cam.w * 0.99) {
+        // stage L5, the sea pass stood down for distance: inside the city grid (within the
+        // far plane, where the city draws its own ground) this layer is a sheet at sea level
+        // in true depth, over the city's seabed and under its land (the land's vertices a
+        // hand under the sea level), so the bay reads as water from the air, the waterline
+        // where the city's own shore crosses the sea level.
+        y = select(fu.frame.z - 0.1, fu.frame.z, h <= fu.frame.z);
+        deep = false;
+    }
+    var o: FsOut;
+    let world = vec3<f32>(wp.x, y, wp.y);
+    o.clip = fu.view_proj * vec4<f32>(world, 1.0);
     o.clip.z = select(max(o.clip.z, FS_DEPTH_K), FS_DEPTH_K, deep);
     o.world = world;
     o.hr = vec2<f32>(h, select(1.0, 0.0, own_water));
@@ -177,7 +246,23 @@ fn fs_fog(world: vec3<f32>) -> f32 {
 // Distant water this layer draws itself (lakes, and the bay past the sea's reach):
 // the sky in the mirror at the water's Fresnel over a dark body, the sun's glint.
 fn fs_water(world: vec3<f32>, v: vec3<f32>, irr: vec3<f32>) -> vec3<f32> {
-    let n = vec3<f32>(0.0, 1.0, 0.0);
+    var n = vec3<f32>(0.0, 1.0, 0.0);
+    if (SF_CINEMATIC && fu.ring.x > 0.5) {
+        // stage L5: the wind sea's slopes in the far water (two octaves of value noise,
+        // ~70 m and ~20 m, faded out by the pixel's footprint), so the sky in the mirror
+        // and the glint break up as the sea pass's do instead of one flat sheet.
+        let fp = length(world - fu.cam.xyz) * fu.misc.y;
+        var g = vec2<f32>(0.0);
+        for (var k = 0; k < 2; k = k + 1) {
+            let sc = select(70.0, 20.0, k == 1);
+            let q = world.xz / sc + vec2<f32>(f32(k) * 13.0, 7.0);
+            let e = 0.35;
+            let gx = fs_noise(q + vec2<f32>(e, 0.0)) - fs_noise(q - vec2<f32>(e, 0.0));
+            let gz = fs_noise(q + vec2<f32>(0.0, e)) - fs_noise(q - vec2<f32>(0.0, e));
+            g = g + vec2<f32>(gx, gz) * (1.0 - smoothstep(0.25 * sc, 1.0 * sc, fp));
+        }
+        n = normalize(vec3<f32>(-g.x * 0.12, 1.0, -g.y * 0.12));
+    }
     let nv = max(dot(n, v), 0.02);
     // as the sea draws its far water: a wind-roughened surface reflects sky
     // from a few degrees higher than the mirror direction, and its grazing
@@ -240,7 +325,7 @@ fn fs_fs(i: FsOut) -> @location(0) vec4<f32> {
         let n1 = fs_noise(p / 700.0);
         let n2 = fs_noise(p / 190.0 + vec2<f32>(17.0, 3.0));
         let n3 = fs_noise(p / 60.0 + vec2<f32>(5.0, 41.0));
-        let dry = fu.misc.x;
+        let dry = mix(fu.misc.x, look.tone2.w, fu.season.x);
         let flat_n = max(length(n.xz), 1e-4);
         let north = clamp(-n.z / flat_n, -1.0, 1.0) * smoothstep(0.05, 0.3, slope);
         // ravines and north faces carry oak, bay and redwood; ridgelines stay open

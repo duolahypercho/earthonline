@@ -56,7 +56,12 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     }
     let world = load_world(args)?;
     let aspect = args.width as f32 / args.height as f32;
-    let cam = if args.start_underwater {
+    let cam = if let Some(habitat) = args.dive_site {
+        let site = world.dive_sites.iter().find(|s| s.habitat == habitat)
+            .ok_or_else(|| anyhow::anyhow!("the requested dive site requires water and a shallow, submerged bed"))?;
+        if args.surface_start && site.beach.is_none() { anyhow::bail!("the cove beach waterline is unavailable"); }
+        if args.surface_start { site.surface_camera(aspect, args.far) } else { site.camera(aspect, args.far) }
+    } else if args.start_underwater {
         crate::bench::dive_camera(&world, aspect, args.far)
             .ok_or_else(|| anyhow::anyhow!("the underwater start requires an open-water point above the bay bed"))?
     } else {
@@ -73,6 +78,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         opts: GpuOptions {
             indirect_validation: args.indirect_validation,
             force_no_indirect_count: args.no_indirect_count,
+            force_no_count_emulation: args.no_count_emulation,
+            bounded_draws: args.bounded_draws,
             ..Default::default()
         },
         gfx: None,

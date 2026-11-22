@@ -323,6 +323,8 @@ pub struct SnapHeader {
     /// The newest `InputPacket::ping_ms` and how long the server held it (ms).
     pub echo_ms: u16,
     pub hold_ms: u16,
+    /// The server's hour and weather at `tick` (`presence::SkyClock`).
+    pub sky: crate::presence::SkyClock,
 }
 
 impl SnapHeader {
@@ -339,6 +341,7 @@ impl SnapHeader {
         }
         w.bit(self.own.check.driving);
         w.write(self.you, 32);
+        self.sky.write(w);
         match &self.correction {
             Some(c) => {
                 w.bit(true);
@@ -362,6 +365,7 @@ impl SnapHeader {
         let pos_mm = [r.read(32)? as i32, r.read(32)? as i32, r.read(32)? as i32];
         let driving = r.bit()?;
         let you = r.read(32)?;
+        let sky = crate::presence::SkyClock::read(r)?;
         let correction = if r.bit()? {
             let id = r.read(16)? as u16;
             let seq = r.read(32)?;
@@ -370,7 +374,7 @@ impl SnapHeader {
         } else {
             None
         };
-        Ok(SnapHeader { seq, baseline, tick, sim_time, own: Own { ack_input, check: crate::wire::Check { seq: ack_input, pos_mm, driving } }, correction, you, echo_ms, hold_ms })
+        Ok(SnapHeader { seq, baseline, tick, sim_time, own: Own { ack_input, check: crate::wire::Check { seq: ack_input, pos_mm, driving } }, correction, you, echo_ms, hold_ms, sky })
     }
 }
 
@@ -492,7 +496,7 @@ impl Replicator {
                 j += 1;
             }
         }
-        let budget_bits = (budget_bytes as u32).saturating_mul(8).saturating_sub(HEADER_BITS + header.correction.as_ref().map_or(0, |c| c.state.len() as u32 * 8));
+        let budget_bits = (budget_bytes as u32).saturating_mul(8).saturating_sub(HEADER_BITS + header.sky.bits() + header.correction.as_ref().map_or(0, |c| c.state.len() as u32 * 8));
         let mut order: Vec<usize> = (0..cands.len()).collect();
         order.sort_by(|&a, &b| (cands[b].must as u8).cmp(&(cands[a].must as u8)).then(cands[b].prio.total_cmp(&cands[a].prio)));
         let mut take = vec![false; cands.len()];
@@ -705,6 +709,28 @@ pub fn show(id: u32, s: &QState) -> Shown {
 /// The world between two snapshots: `a` at tick `ta`, `b` at `tb`, at render
 /// tick `t` (beyond `tb`: extrapolated along heading and speed, at most `max_ahead` ticks).
 pub fn interpolate(a: &Decoded, b: &Decoded, t: f64, max_ahead: f64, out: &mut Vec<Shown>) {
+    interpolate_smooth(None, a, b, None, t, max_ahead, out);
+}
+
+fn find(d: &Decoded, id: u32) -> Option<QState> {
+    d.entities.binary_search_by_key(&id, |e| e.0).ok().map(|i| d.entities[i].1)
+}
+
+/// A cubic Hermite step from `p0` (tangent `m0`) to `p1` (tangent `m1`), tangents in units per span.
+fn hermite(p0: f64, p1: f64, m0: f64, m1: f64, u: f64) -> f64 {
+    let (u2, u3) = (u * u, u * u * u);
+    (2.0 * u3 - 3.0 * u2 + 1.0) * p0 + (u3 - 2.0 * u2 + u) * m0 + (-2.0 * u3 + 3.0 * u2) * p1 + (u3 - u2) * m1
+}
+
+/// As `interpolate`, and the other players move on a C1 path: a cubic
+/// Hermite through `a` and `b` whose tangents are the finite differences
+/// over the snapshots either side (`pa` before `a`, `pb` after `b`; a
+/// missing one is taken as a straight line), so a walker's velocity does not
+/// step at every snapshot (20 a second) and its feet do not tick. Height
+/// stays linear (a kerb step must not overshoot), the emote byte is taken
+/// from the nearer snapshot, and an arrival by fast travel (`ARRIVED`) or a
+/// jump of 40 m is drawn where it is.
+pub fn interpolate_smooth(pa: Option<&Decoded>, a: &Decoded, b: &Decoded, pb: Option<&Decoded>, t: f64, max_ahead: f64, out: &mut Vec<Shown>) {
     out.clear();
     let (ta, tb) = (a.header.tick as f64, b.header.tick as f64);
     let span = (tb - ta).max(1e-6);
@@ -739,6 +765,35 @@ pub fn interpolate(a: &Decoded, b: &Decoded, t: f64, max_ahead: f64, out: &mut V
                 if u < 0.5 {
                     s.flags = sa.flags;
                     s.kind = sa.kind;
+                }
+                if class_of(*id) == CLASS_PLAYER {
+                    // The emote byte is not a phase.
+                    s.anim = if u < 0.5 { sa.anim } else { show(*id, sb).anim };
+                    if sb.flags & crate::presence::flag::ARRIVED != 0 && sa.flags & crate::presence::flag::ARRIVED == 0 {
+                        // Arrived by fast travel between the two: no glide across the city.
+                        s.pos = show(*id, sb).pos;
+                    } else {
+                        let qa = sa.pos;
+                        let qb = show(*id, sb).pos;
+                        let span = tb - ta;
+                        let near = |d: Option<&Decoded>, from: [f64; 3]| -> Option<([f64; 3], f64)> {
+                            let d = d?;
+                            let q = find(d, *id)?.pos();
+                            let far = (q[0] - from[0]).hypot(q[2] - from[2]);
+                            (far < 40.0).then_some((q, d.header.tick as f64))
+                        };
+                        // Tangents per span: (b - pa) / (tb - tpa) * span, (pb - a) / (tpb - ta) * span.
+                        let m0 = match near(pa, qa) {
+                            Some((q, tq)) if ta - tq > 0.5 => [(qb[0] - q[0]) / (tb - tq) * span, (qb[2] - q[2]) / (tb - tq) * span],
+                            _ => [qb[0] - qa[0], qb[2] - qa[2]],
+                        };
+                        let m1 = match near(pb, qb) {
+                            Some((q, tq)) if tq - tb > 0.5 => [(q[0] - qa[0]) / (tq - ta) * span, (q[2] - qa[2]) / (tq - ta) * span],
+                            _ => [qb[0] - qa[0], qb[2] - qa[2]],
+                        };
+                        s.pos[0] = hermite(qa[0], qb[0], m0[0], m1[0], u);
+                        s.pos[2] = hermite(qa[2], qb[2], m0[1], m1[1], u);
+                    }
                 }
             }
         } else if ahead > 0.0 && class_of(*id) != CLASS_PLAYER_CAR {

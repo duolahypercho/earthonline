@@ -202,7 +202,7 @@ def painted_wood_uv(point, leaf_bounds):
     return point.z / top, (point.x - left) * 3.1 / (right - left)
 
 
-def dress_scans(materials, directory, scene, furnished, leaf_bounds):
+def dress_scans(materials, directory, scene, furnished, leaf_bounds, photo=False, cloth_patterns=None):
     """Pack the same photographic colour, roughness and relief into the editable scene."""
     import bpy
     import json
@@ -213,9 +213,13 @@ def dress_scans(materials, directory, scene, furnished, leaf_bounds):
     names = ["limewash", "aggregate", "fired-earth", "painted-wood", "linen"]
     if furnished:
         names += ["furniture/wool-carpet", "furniture/joinery"]
+    if photo:
+        names += ["apron-concrete", "yard-earth", "trunk-bark", "porch-terracotta"]
+    patterns = cloth_patterns or {}
     for name in names:
-        spec = json.loads((directory / (name + ".provenance.json")).read_text())
-        atlas = bpy.data.images.load(str(directory / (name + ".png")), check_existing=False)
+        source = directory / "furniture/photo" if photo and name in ("limewash", "fired-earth", "apron-concrete", "yard-earth", "trunk-bark", "porch-terracotta") else directory
+        spec = json.loads((source / (name + ".provenance.json")).read_text())
+        atlas = bpy.data.images.load(str(source / (name + ".png")), check_existing=False)
         atlas.colorspace_settings.name = "Non-Color"
         w, h = atlas.size
         pixels = np.empty(w * h * 4, dtype=np.float32)
@@ -243,6 +247,7 @@ def dress_scans(materials, directory, scene, furnished, leaf_bounds):
             uv = mesh.uv_layers.get(uv_name) or mesh.uv_layers.new(name=uv_name)
             points = [obj.matrix_world @ vertex.co for vertex in mesh.vertices]
             metres = spec["metres_per_tile"]
+            pattern = patterns.get((obj.parent.name, mesh.materials[0].name)) if obj.parent else None
             if family == "woven-carpet":
                 x0, x1 = min(p.x for p in points), max(p.x for p in points)
                 y0, y1 = min(p.y for p in points), max(p.y for p in points)
@@ -251,8 +256,11 @@ def dress_scans(materials, directory, scene, furnished, leaf_bounds):
                 axis = max(range(3), key=lambda j: abs(normal[j]))
                 pair = ((1, 2), (0, 2), (0, 1))[axis]
                 for loop in poly.loop_indices:
-                    p = points[mesh.loops[loop].vertex_index]
-                    if family == "woven-carpet":
+                    index = mesh.loops[loop].vertex_index
+                    p = points[index]
+                    if pattern and index in pattern:
+                        coords = tuple(c / metres for c in pattern[index])
+                    elif family == "woven-carpet":
                         coords = ((y1-p.y)/(y1-y0), 1-(p.x-x0)/(x1-x0))
                     elif name == "painted-wood":
                         coords = painted_wood_uv(p, leaf_bounds)
@@ -322,7 +330,7 @@ def stair_rail(tube, box, turned, iron, fastener):
     tube(iron, path, 0.026, (1, 0, 0), 18)
 
 
-def settled_coverlet():
+def settled_coverlet(deep_drop=False):
     """Drape quilted cloth on a temporary collision mattress, then sample its rest mesh."""
     import bpy
     from mathutils import Vector
@@ -347,6 +355,11 @@ def settled_coverlet():
             # turned back. This extra length can gather freely below the foot.
             x = 0.61 + 2.47 * u + 0.078 * (1 - t) * math.sin(2.9 * t + 2 * u)
             z = 9.80 + 2.18 * t + 0.15 * u - 0.19 * u * u * t + 0.035 * math.sin(5 * u + 1.8 * t)
+            # The larger cut has a longer drop at the foot of the bed and a
+            # loose corner on the sleeper's left, with the head pins unchanged.
+            if deep_drop:
+                x += .058 * (2*u-1) * (1-.7*t) + .035*u**3*(1-t)**2
+                z -= (.045 + .032*u**2)*(1-t)**2
             relief = 0.029 * math.sin(17 * u + 3.1 * t) * math.sin(math.pi * t)
             ridge = 0.10 * math.exp(-(((t - 0.23 - 0.22 * u) / 0.089) ** 2)) * (1 - 0.65 * u)
             points.append((x, -z, 0.745 + relief + ridge + 0.025 * math.sin(math.pi * u)))
@@ -379,8 +392,9 @@ def settled_coverlet():
         scene.frame_set(f)
     current = cloth.evaluated_get(bpy.context.evaluated_depsgraph_get())
     result = [Vector((v.co.x, v.co.z, -v.co.y)) for v in current.data.vertices]
-    if min(v.y for v in result) < 0.09 or max(v.y for v in result) > 1.5:
-        raise ValueError("Coverlet did not settle on the mattress")
+    low, high = min(v.y for v in result), max(v.y for v in result)
+    if low < 0.09 or high > 1.5:
+        raise ValueError(f"Coverlet did not settle on the mattress: {low:.3f} to {high:.3f} metres")
     for obj in (cloth, bed):
         data = obj.data
         bpy.data.objects.remove(obj, do_unlink=True)

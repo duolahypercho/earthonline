@@ -1,0 +1,37 @@
+{
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/window-optics.png",
+  "sha256": "320301f27c6f17ed6f9527cdb77f6f55b041ec668d3d8595ac6db46475d866d9",
+  "bytes": 77582436,
+  "house_sha256": "0f567a703707bf14d2e49fd9ee1a713422faa46109fd5b42f404f5ab6bd0dc50",
+  "source_scene_sha256": "ddc4fd6a8e4d08ebaae75e1f6877b4d62e647102272694b298300b52847b312f",
+  "survey_sha256": "3c8dedc2e09c85588264519c26ac9b35ada103601b31b303f9a19c6379e3aa9a",
+  "height": 27895,
+  "width": 1024,
+  "payload_bytes": 114254448,
+  "triangles": 2106683,
+  "vertices": 2145790,
+  "hours": [
+    8.5,
+    12.0,
+    17.0,
+    22.0
+  ],
+  "sky_dimensions": [
+    160,
+    80
+  ],
+  "includes_rooms": true,
+  "room_survey_sha256": "9c4039247ea0ef206d49dedf1851c198c5de96a381bf769fdf0498b7cdb9a023",
+  "source_notices": [
+    "public/assets/buildings/beaver-terrace/terrace.provenance.json",
+    "public/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/street-garden.provenance.json",
+    "public/data/sf/sf-footprints.NOTICE.txt",
+    "public/data/sf/sf-elevation.NOTICE.txt",
+    "scripts/blender-buildings/sources/beaver-parcel.NOTICE.txt",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "encoding": "BWO1",
+  "attribution": "Earth Online contributors. Source mesh and lighting of the furnished 21 Beaver Street model. Sources for street and neighbouring geometry are recorded in the street context and garden provenance.",
+  "license": "Project-authored geometry and light measurements, MIT. Existing surveyed city inputs retain their recorded licences.",
+  "build": "scripts/blender-buildings/cook_beaver_window_optics.py"
+}

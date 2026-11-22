@@ -1,0 +1,84 @@
+{
+  "source": "Furnished 21 Beaver timber, installed lamps, sky and sun through the sashes.",
+  "attribution": "Earth Online",
+  "license": "Project-authored lighting data",
+  "build": "scripts/blender-buildings/bake_beaver_oak.py",
+  "source_scene": {
+    "file": "21-beaver.blend",
+    "sha256": "640ab940c3b6a2aaff55a67407f909f39b5e348073af90bd038dbb3893e2dc9c"
+  },
+  "house_sha256": "0f567a703707bf14d2e49fd9ee1a713422faa46109fd5b42f404f5ab6bd0dc50",
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/oak-reflection.png",
+  "sha256": "3805f604d4f6539cd8fc9479fb76c609d946b55d3e640633f4981e292a5ba580",
+  "bytes": 197704,
+  "probe_rectangle": [
+    2.001764898300171,
+    6.729481678009034,
+    3.0318460416793824,
+    7.339098472595214
+  ],
+  "probe_height_m": 0.756,
+  "source_rows": [
+    "fixtures",
+    "uniform-sky",
+    "clear-sky",
+    "front-25",
+    "front-57",
+    "rear-25",
+    "rear-57"
+  ],
+  "tabletop_bounds": [
+    1.8391205072402954,
+    6.63322639465332,
+    3.194490432739258,
+    7.435353755950928
+  ],
+  "daylight_map": [
+    256,
+    64
+  ],
+  "daylight_first_row": 224,
+  "tile_size": [
+    64,
+    32
+  ],
+  "base_roughness": 0.41568630933761597,
+  "normal_strength": 1.0,
+  "coat_weight": 0.15000000596046448,
+  "coat_roughness": 0.36000001430511475,
+  "coat_ior": 1.5,
+  "projection": "azimuth and elevation above the oak, horizontal wrap and vertical clamp",
+  "transfer_encoding": "sqrt(L/(1+L))",
+  "samples": 192,
+  "filter_samples": 512,
+  "source_means": [
+    0.0762318,
+    0.0781837,
+    0.0714978,
+    0.0666862,
+    0.0021422,
+    0.0022305,
+    0.0021678,
+    0.001572,
+    0.0022351,
+    0.0022888,
+    0.0022761,
+    0.0015743,
+    0.00145,
+    0.0016104,
+    0.0013707,
+    0.0011231,
+    0.0003204,
+    0.0003803,
+    0.0002789,
+    0.0002784,
+    0.0018851,
+    0.0019408,
+    0.0022949,
+    0.0024298,
+    0.0003667,
+    0.0003444,
+    0.0004313,
+    0.0003981
+  ]
+}

@@ -84,6 +84,10 @@ pub struct Frozen {
     pub radii: Option<Vec<f32>>,
     pub min_y: f64,
     pub max_y: f64,
+    /// A landmark deck's interior surfaces only (access_sky.rs): each
+    /// vertex's baked sky visibility, 0..1, which the city shader spends on
+    /// its indirect light; None elsewhere (the open sky).
+    pub sky: Option<Vec<f32>>,
 }
 
 impl Frozen {
@@ -124,6 +128,17 @@ impl MeshArrays {
 
     pub fn vertex_count(&self) -> u32 {
         (self.positions.len() / 3) as u32
+    }
+    /// One vertex with its own normal (a smooth surface's), returning its index.
+    pub fn vertex(&mut self, p: V3, n: V3, c: Rgb) -> u32 {
+        let i = self.vertex_count();
+        self.push_vertex(p, normalise(n), c);
+        self.push_axis(1);
+        i
+    }
+    /// A triangle of vertices already pushed (`vertex`).
+    pub fn tri_idx(&mut self, a: u32, b: u32, c: u32) {
+        self.indices.extend_from_slice(&[a, b, c]);
     }
     pub fn triangles(&self) -> usize {
         self.indices.len() / 3
@@ -390,6 +405,7 @@ impl MeshArrays {
             radii: self.wire.then(|| f(&self.radii)),
             min_y: self.min_y,
             max_y: self.max_y,
+            sky: None,
         }
     }
 }

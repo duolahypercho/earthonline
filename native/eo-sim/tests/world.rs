@@ -172,3 +172,79 @@ fn native_signal_plans_obey_ca_mutcd() {
     eprintln!("{} native junctions, {checked} phases checked", net.junctions.len());
     assert!(checked > 50);
 }
+
+/// Every byte of every agent record of every region.
+fn records(world: &World) -> Vec<u8> {
+    world.regions.iter().flat_map(|r| bytemuck::cast_slice::<AgentInstance, u8>(&r.out.vehicles).iter().chain(bytemuck::cast_slice::<AgentInstance, u8>(&r.out.walkers)).copied().collect::<Vec<u8>>()).collect()
+}
+
+#[test]
+fn a_level_table_of_ways_at_grade_changes_nothing() {
+    // (stage A5: lanes take their structure level from a table of way ids; a
+    // table that leaves every way at grade, empty or listing them all at 0,
+    // is the network and the world without one, byte for byte, every step.)
+    let paths = eo_data::DataPaths::discover().unwrap();
+    let every: std::collections::HashMap<String, i8> = eo_data::sim_source::SimSource::load(&paths).unwrap().roads.into_iter().map(|r| (r.id, 0)).collect();
+    let listed = native::load(&paths).unwrap().with_levels(every);
+    let empty = native::load(&paths).unwrap().with_levels(Default::default());
+    assert!(source().levels().is_empty() && empty.levels().is_empty() && listed.levels().len() > 1000);
+    let make = |src: &NativeSource| {
+        let mut net = Network::new(src.timing.clone());
+        net.add(src.build(&native::tiles_around(SOMA[0], SOMA[1], 600.0)));
+        assert!(net.lanes.iter().all(|l| l.level == 0));
+        let mut world = World::new(net);
+        world.regions.push(Region::new(&world.net, 0, RegionConfig::game_default(1), focus_at(*SOMA, 0.0)));
+        world
+    };
+    let mut worlds = [make(source()), make(&empty), make(&listed)];
+    for s in 0..1200 {
+        for w in worlds.iter_mut() {
+            w.set_focus(0, focus_at(*SOMA, s as f64 / 60.0));
+            w.step();
+        }
+        if s % 60 == 0 {
+            let a = records(&worlds[0]);
+            assert!(!a.is_empty());
+            assert_eq!(a, records(&worlds[1]), "step {s}: an empty level table changed the world");
+            assert_eq!(a, records(&worlds[2]), "step {s}: a table of ways at grade changed the world");
+        }
+    }
+    assert_eq!(records(&worlds[0]), records(&worlds[2]));
+}
+
+/// The corridor layer keeps every posted second, however the posts are
+/// batched (the regions drop what `MAX_STEPS_PER_ADVANCE` cannot catch up):
+/// two worlds fed the same 2 s, one a frame at a time and one in a lump,
+/// draw the same corridor traffic.
+#[test]
+fn the_corridor_layer_replays_however_the_time_is_posted() {
+    use eo_sim::corridor::{Corridors, Params, Travel, WaySpec};
+    let way = WaySpec {
+        name: "test".into(),
+        points: vec![[0.0, 10.0, 0.0], [0.0, 10.0, -3000.0]],
+        lanes: vec![1.8, 5.4],
+        speed_mps: 20.0,
+        flow_vph: [2500.0; 24],
+        mix: [0.9, 0.02, 0.06, 0.02],
+        travel: Travel::Vehicles,
+        hidden: vec![],
+        handover: false,
+        next: None,
+    };
+    let world = || {
+        let mut w = World::new(Network::new(source().timing.clone()));
+        w.corridors = Some(Corridors::new(vec![way.clone()], Params::with_time_gap(3.0), 4));
+        w
+    };
+    let (mut a, mut b) = (world(), world());
+    for _ in 0..120 {
+        a.advance(1.0 / 60.0);
+    }
+    b.advance(1.5);
+    b.advance(0.5);
+    assert_eq!(a.corridor_steps, 120);
+    assert_eq!(b.corridor_steps, 120);
+    let (ca, cb) = (a.corridors.as_ref().unwrap(), b.corridors.as_ref().unwrap());
+    assert!(!ca.out.is_empty());
+    assert_eq!(ca.out, cb.out);
+}

@@ -46,7 +46,7 @@ pub(crate) fn percentile(v: &[f64], p: f64) -> f64 {
         return f64::NAN;
     }
     let mut s = v.to_vec();
-    s.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    s.sort_by(f64::total_cmp);
     s[((p / 100.0 * (s.len() - 1) as f64).round() as usize).min(s.len() - 1)]
 }
 
@@ -128,7 +128,7 @@ fn settle(g: &Gpu, world: &World, models: &mut ModelRuntime, cam: &Camera) -> Re
 
 pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     let mut world = load_world(args)?;
-    let opts = GpuOptions { indirect_validation: args.indirect_validation, force_no_indirect_count: args.no_indirect_count, ..Default::default() };
+    let opts = GpuOptions { indirect_validation: args.indirect_validation, force_no_indirect_count: args.no_indirect_count, force_no_count_emulation: args.no_count_emulation, bounded_draws: args.bounded_draws, ..Default::default() };
     let ctx = GpuContext::new(GpuContext::create_instance(&opts), None, opts)?;
     let format = wgpu::TextureFormat::Rgba8UnormSrgb;
     let (renderer, bases) = make_renderer(&ctx, &world, args, format, false)?;
@@ -669,7 +669,7 @@ fn player_captures(g: &Gpu, world: &mut World, args: &Args, models: &mut ModelRu
     let lift = eo_assets::placement::PlacementConstants::load()?.construction_lift_m;
     let buildings = Arc::new(BuildingSet::from_city(&world.city, lift));
     let ground: Arc<dyn GroundProvider> = match &world.street {
-        Some(s) => Arc::new(StreetGround(s.world.clone())),
+        Some(s) => Arc::new(StreetGround::new(s.world.clone(), world.structures.clone())),
         None => Arc::new(ElevationGround(Arc::new(world.elevation.clone()))),
     };
     let mut cw = CollisionWorld::new(ground, buildings, 2);

@@ -75,7 +75,10 @@ fn near_and_far_switch_on_the_gpu() {
             // Twice: the switch has hysteresis; the second frame reads the first's state.
             r.cull_readback(&ctx, &cam).unwrap();
             let out = r.cull_readback(&ctx, &cam).unwrap();
-            let drawn: Vec<u32> = out.draws.iter().take(out.counters[0] as usize).map(|d| d[4]).collect();
+            // the drawn commands: the readback's compacted list holds only
+            // them; the uncompacted fallback (no multi-draw-indirect-count)
+            // holds one slot per object, an undrawn one with no instance.
+            let drawn: Vec<u32> = out.draws.iter().filter(|d| d[1] > 0).map(|d| d[4]).collect();
             let near = drawn.iter().filter(|&&i| scene.objects[i as usize].lod_group == li as u32 && scene.objects[i as usize].lod_role == LOD_LANDMARK_NEAR).count();
             let far = drawn.iter().filter(|&&i| scene.objects[i as usize].lod_group == li as u32 && scene.objects[i as usize].lod_role == LOD_LANDMARK_FAR).count();
             counts.push((d, near, far));
@@ -88,6 +91,28 @@ fn near_and_far_switch_on_the_gpu() {
         "objects {}, near {} / far {} / wire {} triangles; wall chunks {} (near {} / far {} triangles), always {}",
         st.objects, st.near_triangles, st.far_triangles, st.wire_triangles, set.walls.len(), st.wall_near_triangles, st.wall_far_triangles, st.always_triangles
     );
+}
+
+/// The surface kinds ride in material flag bits 25-27 and, for the fourth
+/// bit, 31 (`surface_flags`): every kind has its own bits, none touches the
+/// landmark, wet-ground, floodlight or vertex-colour flags, and the authored
+/// facade (7) and the Golden Gate's far item (8) stay apart.
+#[test]
+fn the_surface_kinds_keep_their_own_flag_bits() {
+    use eo_render::landmarks::*;
+    let others = F_LANDMARK | F_WET_GROUND | F_LM_FLOOD | eo_render::authored::F_VERTEX_COLOUR;
+    let mut seen = std::collections::HashSet::new();
+    for k in 0..=SURFACE_FLOODLIT_FAR {
+        let f = surface_flags(k);
+        assert_eq!(f & others, 0, "kind {k}");
+        assert!(seen.insert(f), "kind {k} has its own bits");
+    }
+    assert_ne!(SURFACE_AUTHORED, SURFACE_FLOODLIT_FAR);
+    // the decks' glazing (`DRAW_GLASS_PANE`): the glass and blend bits, none of the landmark words.
+    let pane = eo_render::authored::F_GLASS | eo_render::authored::F_BLEND;
+    assert_eq!(pane & (others | surface_flags(15)), 0, "the glass pane's bits");
+    assert_eq!(surface_code(Some("authored")), SURFACE_AUTHORED);
+    assert!(landmarks_constants_wgsl().contains(&format!("const LM_SURFACE_HIGH_SHIFT: u32 = {SURFACE_HIGH_SHIFT}u;")));
 }
 
 #[test]

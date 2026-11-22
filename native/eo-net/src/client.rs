@@ -33,11 +33,14 @@ pub struct ClientConfig {
     pub reconnect: bool,
     /// Input packets a second at most (the render thread may produce more steps).
     pub send_hz: f64,
+    /// This client's grade-separated roads (`--structures`, `--tunnels`), as
+    /// its collision world was built; the server refuses other ones.
+    pub structures: Option<eo_structures::StructureOptions>,
 }
 
 impl ClientConfig {
     pub fn new(server: SocketAddr, token: &str) -> Self {
-        Self { server, bind: "127.0.0.1:0".into(), token: token.as_bytes().to_vec(), spawn: None, conditions: Conditions::NONE, seed: 1, timeout_s: 3.0, reconnect: true, send_hz: 60.0 }
+        Self { server, bind: "127.0.0.1:0".into(), token: token.as_bytes().to_vec(), spawn: None, conditions: Conditions::NONE, seed: 1, timeout_s: 3.0, reconnect: true, send_hz: 60.0, structures: None }
     }
 }
 
@@ -87,6 +90,9 @@ pub enum Event {
 /// The world to draw this frame: two snapshots and where between them.
 #[derive(Clone)]
 pub struct View {
+    /// The snapshot before `a` and the one after `b`, when held (the other players' smooth path).
+    pub pa: Option<Arc<Decoded>>,
+    pub pb: Option<Arc<Decoded>>,
     pub a: Arc<Decoded>,
     pub b: Arc<Decoded>,
     /// Render tick (server ticks, fractional).
@@ -240,6 +246,16 @@ impl NetClient {
         g.dirty = true;
     }
 
+    /// Send an application message on the reliable channel (an emote, a
+    /// fast-travel request: `proto::msg`); it rides the next input packets.
+    pub fn command(&self, m: Vec<u8>) {
+        let mut g = self.inner.lock().unwrap();
+        if g.phase == Phase::Connected {
+            g.conn.send_reliable(m);
+            g.dirty = true;
+        }
+    }
+
     pub fn take_events(&self) -> Vec<Event> {
         self.inner.lock().unwrap().events.drain(..).collect()
     }
@@ -278,15 +294,18 @@ impl NetClient {
             return None;
         }
         // a.tick <= tick < b.tick; before the oldest: the oldest; past the newest: extrapolate from it.
-        let (a, b) = match g.frames.iter().rposition(|f| f.header.tick as f64 <= tick) {
-            None => (g.frames[0].clone(), g.frames[0].clone()),
-            Some(i) if i + 1 < n => (g.frames[i].clone(), g.frames[i + 1].clone()),
-            Some(i) => (g.frames[i.saturating_sub(1)].clone(), g.frames[i].clone()),
+        let (ia, ib) = match g.frames.iter().rposition(|f| f.header.tick as f64 <= tick) {
+            None => (0, 0),
+            Some(i) if i + 1 < n => (i, i + 1),
+            Some(i) => (i.saturating_sub(1), i),
         };
+        let (a, b) = (g.frames[ia].clone(), g.frames[ib].clone());
+        let pa = ia.checked_sub(1).map(|i| g.frames[i].clone());
+        let pb = g.frames.get(ib + 1).cloned();
         let (ta, tb) = (a.header.tick as f64, b.header.tick as f64);
         let u = if tb > ta { ((tick - ta) / (tb - ta)).clamp(0.0, 1.0) } else { 0.0 };
         let sim_time = if tick > tb { b.header.sim_time + (tick - tb) / proto::TICK_HZ as f64 } else { a.header.sim_time + (b.header.sim_time - a.header.sim_time) * u };
-        Some(View { a, b, tick, sim_time })
+        Some(View { pa, pb, a, b, tick, sim_time })
     }
 
     pub fn player_id(&self) -> u32 {
@@ -346,7 +365,7 @@ fn run(inner: Arc<Mutex<Inner>>, link: Arc<Link>, stop: Arc<AtomicBool>, cfg: Cl
             Phase::Connecting | Phase::Reconnecting => {
                 if g.last_hello.is_none_or(|t| now - t > Duration::from_millis(100)) {
                     g.last_hello = Some(now);
-                    let hello = Hello { client_salt: g.client_salt, version: proto::PROTOCOL_VERSION, ground: proto::ground_scale_ppm(), token: cfg.token.clone(), spawn: cfg.spawn, resume: g.resume, server_salt: 0, cookie: 0 };
+                    let hello = Hello { client_salt: g.client_salt, version: proto::PROTOCOL_VERSION, ground: proto::ground_scale_ppm(), structures: proto::structures_code(cfg.structures), token: cfg.token.clone(), spawn: cfg.spawn, resume: g.resume, server_salt: 0, cookie: 0 };
                     let mut out = Vec::with_capacity(proto::REQUEST_PAD);
                     match &g.challenge {
                         Some(c) => {
@@ -406,7 +425,7 @@ fn run(inner: Arc<Mutex<Inner>>, link: Arc<Link>, stop: Arc<AtomicBool>, cfg: Cl
     }
 }
 
-fn handle(inner: &Arc<Mutex<Inner>>, _link: &Link, _cfg: &ClientConfig, data: &[u8], t0: Instant) {
+fn handle(inner: &Arc<Mutex<Inner>>, _link: &Link, cfg: &ClientConfig, data: &[u8], t0: Instant) {
     let Some((kind, mut r)) = proto::peek(data) else { return };
     let mut g = inner.lock().unwrap();
     match kind {
@@ -424,6 +443,13 @@ fn handle(inner: &Arc<Mutex<Inner>>, _link: &Link, _cfg: &ClientConfig, data: &[
                     g.phase = Phase::Denied(reason);
                     if reason == DenyReason::World as u8 {
                         eprintln!("net: the server refused this client: its ground plan (street size) is not x{} (start both with the same --ground-scale)", eo_data::groundscale::scale());
+                    }
+                    if reason == DenyReason::Structures as u8 {
+                        let theirs = r.u8().map(proto::structures_switches).unwrap_or("other structures");
+                        eprintln!(
+                            "net: the server refused this client: its world runs with {theirs}, this client with {} (start both with the same --structures and --tunnels)",
+                            proto::structures_switches(proto::structures_code(cfg.structures))
+                        );
                     }
                 }
             }

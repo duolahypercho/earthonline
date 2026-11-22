@@ -14,3 +14,7 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"
 tiff = { version = "0.10", default-features = false, features = ["lzw", "deflate"] }
+# the survey readers (src/survey): the NAIP tiles' and the scans' JPEGs, the scans' glTF and their LOD chains
+jpeg-decoder = { version = "0.3.2", default-features = false }
+gltf = { version = "1.4.1", default-features = false, features = ["utils", "names", "KHR_materials_emissive_strength"] }
+meshopt = "0.7.0"

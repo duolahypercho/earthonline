@@ -1,0 +1,40 @@
+{
+  "source": [
+    "https://polyhaven.com/a/clay_roof_tiles_02"
+  ],
+  "license": "CC0-1.0",
+  "attribution": [
+    "Amal Kumar"
+  ],
+  "inputs": [
+    {
+      "asset": "clay_roof_tiles_02",
+      "role": "albedo",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/clay_roof_tiles_02/clay_roof_tiles_02_diff_2k.jpg",
+      "sha256": "570e1878985993bf81433d785b4fa2d4ab9f6d32447706193089b11ff0851731"
+    },
+    {
+      "asset": "clay_roof_tiles_02",
+      "role": "normal",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/clay_roof_tiles_02/clay_roof_tiles_02_nor_gl_2k.jpg",
+      "sha256": "762e2f18ba063fe3c587955be9f8a0a6e8e75cee4057e188970d1ec70a880194"
+    },
+    {
+      "asset": "clay_roof_tiles_02",
+      "role": "arm",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/clay_roof_tiles_02/clay_roof_tiles_02_arm_2k.jpg",
+      "sha256": "8e7cb954ebff60591bb19fb950f6e85727793caca16077bc2b42222e050efbb7"
+    }
+  ],
+  "families": [
+    "mission-roof-clay"
+  ],
+  "metres_per_tile": 1.0,
+  "normal_strength": 0.48,
+  "paint_mix": 0.0,
+  "process": "Sixteen individual kiln faces, scan normals high-passed to remove the original tile curvature.",
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/mission-clay.png",
+  "bytes": 872884,
+  "sha256": "79a76006cd77e4cdf6f7c7798d7802a71077c15099dc2ffa5a48b81e8e013a8e",
+  "build": "scripts/blender-buildings/build_beaver_mission_roof.py --runtime"
+}

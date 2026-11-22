@@ -60,6 +60,13 @@ pub const QUERIES_PER_FRAME: u32 = 6;
 pub const WIRE_CAPACITY: u32 = 196_608;
 /// lamp light slots.
 pub const LIGHT_CAPACITY: u32 = 16_384;
+/// (`--look cinematic`, stage L2) A lit signal lens at full night over its
+/// tone-solved radiance (the default's ~0.6 of the display's white, under the
+/// look's bloom threshold): 3.5 x puts the lens's core over the threshold
+/// (eo-look `CINE_BLOOM_THRESHOLD_X` 0.9), so a signal bleeds into the bloom
+/// as the reference's red and green heads do (sheet 7.1, 7.2); the hue-keeping
+/// shoulder holds its colour. Ramped in with the lamps (`night::lamps_on`).
+pub const CINE_SIGNAL_LENS_GAIN: f32 = 3.5;
 /// props2 feature bits (PrParams.mode.z).
 pub const F_FADE: u32 = 1;
 pub const F_WIND: u32 = 2;
@@ -146,6 +153,13 @@ struct PrFrame {
     copy_step: [f32; 4],
 }
 
+/// props_types.wgsl with the vegetation's range and thinning ahead of it
+/// (`props_lib2::vegetation_models::thin_wgsl`): every shader that composes
+/// props_types.wgsl takes it from here (light_shadow.rs's props variant too).
+pub(crate) fn pr_types_src() -> String {
+    format!("{}\n{}", crate::props_lib2::vegetation_models::thin_wgsl(), include_str!("props_types.wgsl"))
+}
+
 /// What building a `PropsGpu` needs from the renderer (clones: wgpu handles are shared).
 #[derive(Clone)]
 pub struct PropsInit {
@@ -202,6 +216,12 @@ pub struct PropsGpu {
     cull_s: [wgpu::ComputePipeline; 3],
     cull_c: [wgpu::ComputePipeline; 3],
     draw_bg: wgpu::BindGroup,
+    /// group 0 again with the CC0 scanned sets in bindings 17-20 and 22 (once they are on the
+    /// GPU, `bind_cc0`): the tree basins' soil (props_draw.wgsl `pr_basin`).
+    draw_bg_cc0: std::sync::OnceLock<wgpu::BindGroup>,
+    draw_parts: DrawParts,
+    /// the CC0 switches the props' frame carries (`set_cc0_run`; 0 until `bind_cc0`).
+    cc0_run: AtomicU32,
     data_bg: wgpu::BindGroup,
     view_bg: wgpu::BindGroup,
     opaque: wgpu::RenderPipeline,
@@ -222,6 +242,8 @@ pub struct PropsGpu {
     wire_look: WireLook,
     // lamp lights for the night lighting (kept, not read yet).
     lights: wgpu::Buffer,
+    /// (lighting) the buffers and group 2 the lamp and headlight shadow maps' prop casters read.
+    pub(crate) casters: crate::light_shadow::Casters,
     light_count: wgpu::Buffer,
     timing: Mutex<Option<(wgpu::QuerySet, u32)>>,
     alpha_test: f32,
@@ -294,6 +316,54 @@ fn preserve_coverage(chain: &mut [Vec<u8>], res: usize, test: f32) {
     }
 }
 
+/// What the props' group 0 binds, kept so it can be bound again with the CC0 sets.
+struct DrawParts {
+    layout: wgpu::BindGroupLayout,
+    frame: wgpu::Buffer,
+    objects: wgpu::Buffer,
+    materials: wgpu::Buffer,
+    kit: [wgpu::TextureView; 3],
+    sampler: wgpu::Sampler,
+    probe: wgpu::TextureView,
+    probe_sh: wgpu::Buffer,
+    /// the CC0 stand-ins: a one-texel array and a small table.
+    cc0_tex: wgpu::TextureView,
+    cc0_layers: wgpu::Buffer,
+}
+
+impl DrawParts {
+    fn bind(&self, d: &wgpu::Device, label: &str, cc0: Option<(&[wgpu::TextureView; 3], &wgpu::Sampler, &wgpu::Buffer)>) -> wgpu::BindGroup {
+        fn tv(binding: u32, v: &wgpu::TextureView) -> wgpu::BindGroupEntry<'_> {
+            wgpu::BindGroupEntry { binding, resource: wgpu::BindingResource::TextureView(v) }
+        }
+        let (mat, samp, layers) = match cc0 {
+            Some((m, s, l)) => ([&m[0], &m[1], &m[2]], s, l),
+            None => ([&self.cc0_tex, &self.cc0_tex, &self.cc0_tex], &self.sampler, &self.cc0_layers),
+        };
+        d.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(label),
+            layout: &self.layout,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: self.frame.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: self.objects.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 2, resource: self.materials.as_entire_binding() },
+                tv(3, &self.kit[0]),
+                tv(4, &self.kit[1]),
+                tv(5, &self.kit[2]),
+                wgpu::BindGroupEntry { binding: 6, resource: wgpu::BindingResource::Sampler(&self.sampler) },
+                tv(14, &self.probe),
+                wgpu::BindGroupEntry { binding: 15, resource: wgpu::BindingResource::Sampler(&self.sampler) },
+                wgpu::BindGroupEntry { binding: 16, resource: self.probe_sh.as_entire_binding() },
+                tv(17, mat[0]),
+                tv(18, mat[1]),
+                tv(19, mat[2]),
+                wgpu::BindGroupEntry { binding: 20, resource: wgpu::BindingResource::Sampler(samp) },
+                wgpu::BindGroupEntry { binding: 22, resource: layers.as_entire_binding() },
+            ],
+        })
+    }
+}
+
 impl PropsGpu {
     /// Build on any thread (pipelines, buffers, texture mips): `init` from `Renderer::props_init`.
     pub fn new(pi: &PropsInit, lib: &PropLibrary) -> Result<Self> {
@@ -311,8 +381,9 @@ impl PropsGpu {
             d.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some(label), contents: &contents, usage })
         };
         let empty = |label: &str, size: u64, usage: wgpu::BufferUsages| d.create_buffer(&wgpu::BufferDescriptor { label: Some(label), size: size.max(16).next_multiple_of(16), usage, mapped_at_creation: false });
-        let vbuf = init("prop-vertices", bytemuck::cast_slice(&lib.vertices), U::VERTEX);
-        let ibuf = init("prop-indices", bytemuck::cast_slice(&lib.indices), U::INDEX);
+        // (also read as storage by the lamp and headlight shadow maps' casters, light_shadow.rs)
+        let vbuf = init("prop-vertices", bytemuck::cast_slice(&lib.vertices), U::VERTEX | U::STORAGE);
+        let ibuf = init("prop-indices", bytemuck::cast_slice(&lib.indices), U::INDEX | U::STORAGE);
         let meshes = init("prop-meshes", bytemuck::cast_slice(&lib.meshes), U::STORAGE);
         let models = init("prop-models", bytemuck::cast_slice(&lib.models), U::STORAGE);
         let materials = init("prop-materials", bytemuck::cast_slice(&lib.materials), U::STORAGE);
@@ -422,12 +493,12 @@ impl PropsGpu {
         };
         let cull_bg_s = cull_bg(&params_s, "prop-cull-bg-pre");
         let cull_bg_c = cull_bg(&params_c, "prop-cull-bg-camera");
-        let plain_src = format!("{}\n{}\nfn pr_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return false; }}\n", include_str!("props_types.wgsl"), include_str!("props_cull.wgsl"));
+        let plain_src = format!("{}\n{}\nfn pr_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return false; }}\n", pr_types_src(), include_str!("props_cull.wgsl"));
         let hzb_tail = format!(
             "struct HzbInfo {{ screen: vec4<f32> }};\n@group(1) @binding(0) var hzb: texture_2d<f32>;\n@group(1) @binding(1) var<uniform> hzb_info: HzbInfo;\n{}\nfn pr_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return hzb_occluded(mn, mx, pr.view_proj, hzb_info.screen.xy); }}\n",
             crate::occlusion::OCCLUSION_WGSL
         );
-        let hzb_src = format!("{}\n{}\n{hzb_tail}", include_str!("props_types.wgsl"), include_str!("props_cull.wgsl"));
+        let hzb_src = format!("{}\n{}\n{hzb_tail}", pr_types_src(), include_str!("props_cull.wgsl"));
         let plain_mod = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("props_cull.wgsl"), source: wgpu::ShaderSource::Wgsl(plain_src.into()) });
         let hzb_mod = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("props_cull.wgsl (hzb)"), source: wgpu::ShaderSource::Wgsl(hzb_src.into()) });
         let lay_s = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("prop-cull-layout"), bind_group_layouts: &[Some(&cull_bgl)], immediate_size: 0 });
@@ -487,6 +558,13 @@ impl PropsGpu {
                 tex(14, fs),
                 entry(15, fs, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
                 entry(16, fs, sbuf(true)),
+                // the CC0 material sets and their layer table (cc0.wgsl bindings 17-20, 22): the
+                // tree basins' soil scan; stand-ins until `bind_cc0`.
+                tex(17, fs),
+                tex(18, fs),
+                tex(19, fs),
+                entry(20, fs, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
+                entry(22, fs, sbuf(true)),
             ],
         });
         let probe_stand_in = d.create_texture(&wgpu::TextureDescriptor {
@@ -501,23 +579,30 @@ impl PropsGpu {
         });
         let probe_view = view(&probe_stand_in);
         let probe_sh = empty("prop-probe-sh-stand-in", 160, U::STORAGE);
-        let draw_bg = d.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("prop-draw-bg"),
-            layout: &draw_bgl,
-            entries: &[
-                bge(0, &frame),
-                bge(1, &objects),
-                bge(2, &materials),
-                wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&av) },
-                wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(&nv) },
-                wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(&ov) },
-                wgpu::BindGroupEntry { binding: 6, resource: wgpu::BindingResource::Sampler(&sampler) },
-                wgpu::BindGroupEntry { binding: 14, resource: wgpu::BindingResource::TextureView(&probe_view) },
-                wgpu::BindGroupEntry { binding: 15, resource: wgpu::BindingResource::Sampler(&sampler) },
-                wgpu::BindGroupEntry { binding: 16, resource: probe_sh.as_entire_binding() },
-            ],
+        let cc0_stand_in = d.create_texture(&wgpu::TextureDescriptor {
+            label: Some("prop-cc0-stand-in"),
+            size: wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
         });
-        let draw_src = format!("{}\n{}\n{}", crate::look::city_shader_source(), include_str!("props_types.wgsl"), include_str!("props_draw.wgsl"));
+        let draw_parts = DrawParts {
+            layout: draw_bgl.clone(),
+            frame: frame.clone(),
+            objects: objects.clone(),
+            materials: materials.clone(),
+            kit: [av.clone(), nv.clone(), ov.clone()],
+            sampler: sampler.clone(),
+            probe: probe_view,
+            probe_sh,
+            cc0_tex: view(&cc0_stand_in),
+            cc0_layers: empty("prop-cc0-layers-stand-in", 64, U::STORAGE),
+        };
+        let draw_bg = draw_parts.bind(d, "prop-draw-bg", None);
+        let draw_src = format!("{}\n{}\n{}", crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Plane, crate::look::ShadowLevels::Near, false), pr_types_src(), include_str!("props_draw.wgsl")); // the ambient volume's plane only, no single-probe lookups (their frame names none; lighting: ambient::ShaderLevels, room for the probe grid)
         let draw_mod = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("props_draw.wgsl"), source: wgpu::ShaderSource::Wgsl(draw_src.into()) });
         let draw_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("prop-draw-layout"),
@@ -585,7 +670,7 @@ impl PropsGpu {
                 resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding { buffer: &pi.shadow_views, offset: 0, size: Some(std::num::NonZeroU64::new(80).unwrap()) }),
             }],
         });
-        let shadow_src = format!("{}\n{}", include_str!("props_types.wgsl"), include_str!("props_shadow.wgsl"));
+        let shadow_src = format!("{}\n{}", pr_types_src(), include_str!("props_shadow.wgsl"));
         let shadow_mod = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("props_shadow.wgsl"), source: wgpu::ShaderSource::Wgsl(shadow_src.into()) });
         let shadow_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("prop-shadow-layout"), bind_group_layouts: &[Some(&view_bgl), None, Some(&data_bgl)], immediate_size: 0 });
         let shadow_attrs = [attrs[0], attrs[2], attrs[4], attrs[5]];
@@ -625,9 +710,9 @@ impl PropsGpu {
             wsrc[a..b].to_string()
         };
         let head = wsrc.split("#ifdef_cull").next().unwrap_or("");
-        let wire_cull_plain = format!("{}\n{head}\n{}\nfn pr_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return false; }}\n", include_str!("props_types.wgsl"), section("cull"));
-        let wire_cull_hzb = format!("{}\n{head}\n{}\n{hzb_tail}", include_str!("props_types.wgsl"), section("cull"));
-        let wire_draw_src = format!("{}\n{}\n{head}\n{}", crate::look::look_common_source(), include_str!("props_types.wgsl"), section("draw"));
+        let wire_cull_plain = format!("{}\n{head}\n{}\nfn pr_occluded(mn: vec3<f32>, mx: vec3<f32>) -> bool {{ return false; }}\n", pr_types_src(), section("cull"));
+        let wire_cull_hzb = format!("{}\n{head}\n{}\n{hzb_tail}", pr_types_src(), section("cull"));
+        let wire_draw_src = format!("{}\n{}\n{head}\n{}\n{}", crate::look::look_common_source(), pr_types_src(), section("draw"), crate::look::LOOK_EXT_WGSL); // + group 1 bindings 12-18
         let wire_cull_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("prop-wire-cull-bgl"),
             entries: &[entry(0, cs, ubuf), entry(1, cs, sbuf(true)), entry(2, cs, sbuf(false)), entry(3, cs, sbuf(false))],
@@ -682,6 +767,8 @@ impl PropsGpu {
             + b1
             + b2
             + b3;
+        // (lighting) what the lamp and headlight shadow maps draw the props with.
+        let casters = crate::light_shadow::Casters { vertices: vbuf.clone(), indices: ibuf.clone(), instances: instances.clone(), models: models.clone(), meshes: meshes.clone(), data_bgl: data_bgl.clone(), data_bg: data_bg.clone() };
         Ok(Self {
             enabled: AtomicBool::new(true),
             active: AtomicBool::new(false),
@@ -710,6 +797,9 @@ impl PropsGpu {
             cull_s,
             cull_c,
             draw_bg,
+            draw_bg_cc0: std::sync::OnceLock::new(),
+            draw_parts,
+            cc0_run: AtomicU32::new(0),
             data_bg,
             view_bg,
             opaque,
@@ -728,6 +818,7 @@ impl PropsGpu {
             wire_pipe,
             wire_look: WireLook::default(),
             lights,
+            casters,
             light_count,
             timing: Mutex::new(None),
             alpha_test: lib.alpha_test,
@@ -736,6 +827,18 @@ impl PropsGpu {
             dome: lib.dome,
             bytes,
         })
+    }
+
+    /// Bind the CC0 material sets (once they are all on the GPU; later calls are ignored).
+    pub fn bind_cc0(&self, d: &wgpu::Device, mat: &[wgpu::TextureView; 3], sampler: &wgpu::Sampler, layers: &wgpu::Buffer) {
+        if self.draw_bg_cc0.get().is_none() {
+            let _ = self.draw_bg_cc0.set(self.draw_parts.bind(d, "prop-draw-bg-cc0", Some((mat, sampler, layers))));
+        }
+    }
+
+    /// The CC0 switches (`cc0::Cc0Gpu::run_bits`) for the next `update`: none until `bind_cc0`.
+    pub fn set_cc0_run(&self, bits: u32) {
+        self.cc0_run.store(if self.draw_bg_cc0.get().is_some() { bits } else { 0 }, Ordering::Relaxed);
     }
 
     /// Props on or off (off: no pass runs, nothing is drawn).
@@ -825,8 +928,11 @@ impl PropsGpu {
     pub fn update(&self, queue: &wgpu::Queue, cam: &Camera, look: &LookGpu, occlusion: bool) {
         let vp = cam.view_proj();
         let planes = frustum_planes(vp).map(|p| p.to_array());
-        let exposure = look.frame().exposure.max(1e-6) as f32;
-        let aces = *self.lens_scale.lock().unwrap();
+        let lf = look.frame();
+        let exposure = lf.exposure.max(1e-6) as f32;
+        // (`--look cinematic`, stage L2) at night a lit signal's lens bright enough to bloom (`CINE_SIGNAL_LENS_GAIN`).
+        let lens_gain = if look.options.look.is_cinematic() { 1.0 + (CINE_SIGNAL_LENS_GAIN - 1.0) * eo_sky::night::lamps_on(lf.model.sun.altitude_deg) as f32 } else { 1.0 };
+        let aces = *self.lens_scale.lock().unwrap() * lens_gain;
         let counts = [self.high_water(), self.mesh_count, INSTANCE_CAPACITY, self.model_count];
         let feat = self.features.load(Ordering::Relaxed);
         let t = f32::from_bits(self.time_bits.load(Ordering::Relaxed));
@@ -862,7 +968,7 @@ impl PropsGpu {
             sun_color: [1.0, 1.0, 1.0, 0.0],
             ambient_sky: [0.0; 4],
             ambient_ground: [0.0; 4],
-            copy_step: [0.0; 4],
+            copy_step: [0.0, 0.0, 0.0, self.cc0_run.load(Ordering::Relaxed) as f32],
         };
         queue.write_buffer(&self.frame, 0, bytemuck::bytes_of(&f));
     }
@@ -993,7 +1099,7 @@ impl PropsGpu {
         if !self.active.load(Ordering::Relaxed) {
             return;
         }
-        pass.set_bind_group(0, &self.draw_bg, &[]);
+        pass.set_bind_group(0, self.draw_bg_cc0.get().unwrap_or(&self.draw_bg), &[]);
         look.bind_main(pass);
         pass.set_bind_group(2, &self.data_bg, &[]);
         pass.set_vertex_buffer(0, self.vbuf.slice(..));

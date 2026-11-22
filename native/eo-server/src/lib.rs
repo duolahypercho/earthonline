@@ -11,6 +11,15 @@
 //!      what is near it (interest grid, delta against its acknowledged
 //!      baseline, its bandwidth share), built and sent in parallel.
 //!
+//! Presence (`eo_net::presence`): the server owns the sky clock (hour, its
+//! rate and the weather, in every snapshot header, so friends see the same
+//! sunset), each player's emote (asked for on the reliable channel, held
+//! until the player moves) and fast travel to the landmark viewpoints (a
+//! request validated here: a known viewpoint, on foot, not too soon; the
+//! arrival lands half a second later as a whole-state correction, so both
+//! ends have time to stream the ground there). Joining players get the
+//! roster of names; everyone hears of a join and a leave.
+//!
 //! The player's step is the client's step (`eo_net::game::step_player`):
 //! the server runs exactly the inputs the client predicted with, in order,
 //! so the two agree; the client's position check after each packet's
@@ -27,11 +36,12 @@ pub mod tiles;
 use eo_net::auth::{Account, Authenticator, DevTokens};
 use eo_net::bits::{ByteReader, PutLe};
 use eo_net::conn::Connection;
-use eo_net::game::{GameWorld, check_of, spawn_player, step_player};
+use eo_net::game::{GameWorld, arrival_state, check_of, spawn_player, step_player};
+use eo_net::presence::{Emote, SkyClock, Viewpoint, flag, pack_anim};
 use eo_net::interest::{Grid, Radii};
 use eo_net::link::{Conditions, Link};
 use eo_net::pool::Pool;
-use eo_net::proto::{self, Accept, Challenge, DenyReason, Hello, Kind, MTU, Resume};
+use eo_net::proto::{self, Accept, Challenge, DenyReason, Hello, Kind, MTU, Resume, TravelReply, TravelResult};
 use eo_net::snapshot::{self, CLASS_CAR, CLASS_PLAYER, CLASS_PLAYER_CAR, CLASS_WALKER, Correction, Desired, Own, QState, Replicator, SnapHeader, net_id, q_angle, q_pos, q_speed};
 use eo_net::wire::{Check, InputPacket, NetInput, write_player_state};
 use eo_player::world::CollisionWorld;
@@ -54,6 +64,10 @@ pub struct ServerConfig {
     pub radii: Radii,
     pub conditions: Conditions,
     pub streets: bool,
+    /// The grade-separated roads the world is loaded with (`--structures`,
+    /// `--tunnels`; `load`). The handshake compares a client's against the
+    /// loaded world's own (`GameWorld::structures`).
+    pub structures: Option<eo_structures::StructureOptions>,
     pub max_players: usize,
     pub seed: u32,
     /// A dropped player keeps its body this long for a reconnect.
@@ -67,6 +81,14 @@ pub struct ServerConfig {
     pub tile_threads: usize,
     /// Where a player spawns when it gives no hint (the bench spawn on Folsom).
     pub default_spawn: [f64; 3],
+    /// The sky clock at start: hour of the day, game hours per real hour,
+    /// weather (`presence::weather_code`) and the weather schedule's seed.
+    pub hour: f64,
+    pub day_rate: f64,
+    pub weather: u8,
+    pub weather_seed: u32,
+    /// Seconds between two fast-travel trips of one player.
+    pub travel_cooldown_s: f64,
 }
 
 impl Default for ServerConfig {
@@ -79,6 +101,7 @@ impl Default for ServerConfig {
             radii: Radii::default(),
             conditions: Conditions::NONE,
             streets: true,
+            structures: None,
             max_players: 512,
             seed: 1,
             resume_grace_s: 30.0,
@@ -92,6 +115,12 @@ impl Default for ServerConfig {
                 let p = eo_data::groundscale::plan([1539.0, -366.0]);
                 [p[0], p[1], 0.0]
             },
+            // The game's default hour (eo-render's `DEFAULT_HOUR`), the real day's pace, clear.
+            hour: 12.0,
+            day_rate: 1.0,
+            weather: 0,
+            weather_seed: 1,
+            travel_cooldown_s: 5.0,
         }
     }
 }
@@ -111,6 +140,9 @@ pub struct SessionStats {
     sec_start: Option<Instant>,
     pub step_ns: u64,
     pub entities: usize,
+    pub emotes: u64,
+    pub arrivals: u64,
+    pub travel_refused: u64,
 }
 
 /// One player (online, or offline within its grace period).
@@ -142,6 +174,17 @@ pub struct Session {
     pub nudge: Option<DVec3>,
     /// The newest input packet's timestamp and when it arrived (echoed for ping).
     ping_echo: Option<(u16, Instant)>,
+    /// The emote held (shown to everyone), how many have started, and the tick a timed one ends.
+    pub emote: Emote,
+    emote_count: u8,
+    emote_until: Option<u32>,
+    /// Reliable messages from the client, handled once a tick.
+    inbox: Vec<Vec<u8>>,
+    /// A fast-travel trip under way: viewpoint, arrival (x, z, yaw), the tick it lands.
+    pub travel: Option<(u16, [f64; 3], u32)>,
+    last_travel: Option<u32>,
+    /// Ticks until which the player entity carries `flag::ARRIVED`.
+    arrived_until: u32,
 }
 
 const PLAYER_BLOCK_CARS: u32 = 16;
@@ -152,8 +195,13 @@ impl Session {
     }
 
     /// Run the inputs that arrived, in sequence (tokens limit a client to real time plus a burst).
-    fn run(&mut self, now: Instant, gap_s: f64) {
+    fn run(&mut self, now: Instant, gap_s: f64, tick: u32) {
         let t0 = Instant::now();
+        if let Some((_, at, due)) = self.travel {
+            if tick.wrapping_sub(due) < 0x8000_0000 {
+                self.arrive(at, tick);
+            }
+        }
         self.tokens = (self.tokens + 1.0).min(30.0);
         let mut ran = 0;
         while self.tokens >= 1.0 {
@@ -170,7 +218,7 @@ impl Session {
                 self.gap_since = None;
                 self.stats.inputs_stood_in += 1;
                 let mut i = self.last_input;
-                i.buttons &= !(eo_net::wire::button::JUMP | eo_net::wire::button::VEHICLE_TOGGLE);
+                i.buttons &= !eo_net::wire::button::TAPS;
                 i
             } else {
                 break;
@@ -215,7 +263,30 @@ impl Session {
             self.pos = self.player.position(&self.cw);
             self.cw.pump(self.pos);
         }
+        // An emote ends when the player walks off, gets in a car, or its time is up.
+        if self.emote != Emote::None && (self.player.ground_speed > 0.6 || matches!(self.player.mode, Mode::Driving(_)) || self.emote_until.is_some_and(|t| tick.wrapping_sub(t) < 0x8000_0000)) {
+            self.emote = Emote::None;
+            self.emote_until = None;
+        }
         self.stats.step_ns = t0.elapsed().as_nanos() as u64;
+    }
+
+    /// Land a fast-travel trip: the arrival state (on the ground there, still,
+    /// the cars beside), sent to the client as a whole-state correction.
+    fn arrive(&mut self, at: [f64; 3], tick: u32) {
+        let s = arrival_state(&self.player, &mut self.cw, at[0], at[1], at[2]);
+        self.player.set_state(&mut self.cw, &s);
+        self.travel = None;
+        self.last_travel = Some(tick);
+        self.arrived_until = tick.wrapping_add(30);
+        self.emote = Emote::None;
+        self.pos = self.player.position(&self.cw);
+        self.corr_id = self.corr_id.wrapping_add(1).max(1);
+        let mut state = Vec::with_capacity(512);
+        write_player_state(&self.player.state(&self.cw), &mut state);
+        self.correction = Some(Correction { id: self.corr_id, seq: self.last_seq, state });
+        self.stats.corrections_sent += 1;
+        self.stats.arrivals += 1;
     }
 
     fn take_packet(&mut self, p: InputPacket, arrived: Instant) {
@@ -298,6 +369,14 @@ pub struct Server {
     io: Option<std::thread::JoinHandle<()>>,
     pub game: Arc<GameWorld>,
     pub tiles: Arc<tiles::SharedTiles>,
+    /// The sky clock as last set, and the tick it was set at.
+    sky0: SkyClock,
+    sky_tick0: u32,
+    /// The landmark viewpoints fast travel may go to, the frame that places
+    /// them, and how many have arrived at each (their place on its ring).
+    pub viewpoints: Vec<Viewpoint>,
+    gf: eo_data::geo::GeoFrame,
+    arrivals: Vec<u32>,
     auth: Box<dyn Authenticator>,
     secret: [u64; 2],
     pub sessions: Vec<Session>,
@@ -367,7 +446,16 @@ impl Server {
         let tiles = tiles::SharedTiles::start(game.ground.clone(), game.buildings.clone(), cfg.tile_threads);
         let regions = Regions::new(source, cfg.seed, cfg.sim_threads.saturating_sub(1));
         let pool = Pool::new(cfg.player_threads.saturating_sub(1), "eo-server-work");
+        let viewpoints = eo_net::presence::viewpoints()?;
+        let gf = eo_data::geo::GeoFrame::of_city(&game.city.meta);
+        let sky0 = SkyClock { hour: cfg.hour.rem_euclid(24.0), rate: cfg.day_rate.max(0.0), weather: cfg.weather, seed: cfg.weather_seed, epoch: 0 };
+        let arrivals = vec![0; viewpoints.len()];
         Ok(Self {
+            sky0,
+            sky_tick0: 0,
+            viewpoints,
+            gf,
+            arrivals,
             cfg,
             link,
             rx,
@@ -411,6 +499,77 @@ impl Server {
         self.sessions.iter_mut().find(|s| s.player_id == player_id)
     }
 
+    /// The sky clock now (the hour advanced at its rate since it was set).
+    pub fn sky(&self) -> SkyClock {
+        let secs = self.tick.wrapping_sub(self.sky_tick0) as f64 / proto::TICK_HZ as f64;
+        SkyClock { hour: self.sky0.hour_after(secs), ..self.sky0 }
+    }
+
+    /// Set the sky clock (an admin or a capture): every client cuts to it.
+    pub fn set_sky(&mut self, hour: f64, rate: f64, weather: u8, seed: u32) {
+        let epoch = self.sky0.epoch.wrapping_add(1);
+        self.sky0 = SkyClock { hour: hour.rem_euclid(24.0), rate: rate.max(0.0), weather, seed, epoch };
+        self.sky_tick0 = self.tick;
+    }
+
+    /// The commands each client sent since the last tick: emotes, fast travel.
+    fn commands(&mut self) {
+        let tick = self.tick;
+        let cooldown = (self.cfg.travel_cooldown_s * proto::TICK_HZ as f64) as u32;
+        for i in 0..self.sessions.len() {
+            let inbox = std::mem::take(&mut self.sessions[i].inbox);
+            for m in inbox {
+                let Some((&k, body)) = m.split_first() else { continue };
+                match k {
+                    proto::msg::EMOTE => {
+                        let s = &mut self.sessions[i];
+                        let e = Emote::from_u8(body.first().copied().unwrap_or(0));
+                        if matches!(s.player.mode, Mode::Driving(_)) || s.travel.is_some() {
+                            continue;
+                        }
+                        s.emote = e;
+                        s.emote_count = s.emote_count.wrapping_add(1) & 0x0F;
+                        s.emote_until = (e.seconds() > 0.0).then(|| tick.wrapping_add((e.seconds() * proto::TICK_HZ as f64) as u32));
+                        s.stats.emotes += 1;
+                    }
+                    proto::msg::TRAVEL => {
+                        let vi = body.get(..2).map(|b| u16::from_le_bytes([b[0], b[1]])).unwrap_or(u16::MAX);
+                        let s = &self.sessions[i];
+                        let result = if vi as usize >= self.viewpoints.len() {
+                            TravelResult::Unknown
+                        } else if matches!(s.player.mode, Mode::Driving(_)) {
+                            TravelResult::Driving
+                        } else if s.travel.is_some() || s.player.lift.is_some() {
+                            TravelResult::Busy
+                        } else if s.last_travel.is_some_and(|t| tick.wrapping_sub(t) < cooldown) {
+                            TravelResult::Cooldown
+                        } else {
+                            TravelResult::Accepted
+                        };
+                        let mut reply = TravelReply { viewpoint: vi, result, arrival: [0.0; 3], tick: 0 };
+                        if result == TravelResult::Accepted {
+                            let k = self.arrivals[vi as usize];
+                            self.arrivals[vi as usize] = k.wrapping_add(1);
+                            let at = self.viewpoints[vi as usize].arrival(&self.gf, k % 12);
+                            // Half a second for both ends to stream the ground there.
+                            let due = tick.wrapping_add(proto::TICK_HZ / 2);
+                            let s = &mut self.sessions[i];
+                            s.travel = Some((vi, at, due));
+                            s.emote = Emote::None;
+                            s.cw.pump(DVec3::new(at[0], 0.0, at[1]));
+                            reply.arrival = [at[0] as f32, at[1] as f32, at[2] as f32];
+                            reply.tick = due;
+                        } else {
+                            self.sessions[i].stats.travel_refused += 1;
+                        }
+                        self.sessions[i].conn.send_reliable(reply.write());
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
     /// Run ticks at 60 Hz until `stop` (sleeping between them).
     pub fn run(&mut self, stop: &AtomicBool) {
         let dt = Duration::from_secs_f64(1.0 / proto::TICK_HZ as f64);
@@ -440,8 +599,10 @@ impl Server {
             self.handle(&d, a, at);
         }
         self.pump_joining();
+        self.commands();
         let t1 = Instant::now();
         let gap = self.cfg.input_gap_s;
+        let tick = self.tick;
         // Players step on the pool; a network tile waiting to be admitted is
         // admitted beside them on its own thread (they share nothing).
         let pending = self.regions.take_build();
@@ -449,7 +610,7 @@ impl Server {
         let step_players = |sessions: &mut Vec<Session>| {
             pool.for_each_mut(sessions, |_, s| {
                 if s.online {
-                    s.run(t1, gap);
+                    s.run(t1, gap, tick);
                 }
             })
         };
@@ -506,7 +667,13 @@ impl Server {
         }
         let grace = self.cfg.resume_grace_s;
         let before = self.sessions.len();
+        let gone: Vec<u32> = self.sessions.iter().filter(|s| !(s.online || s.offline_since.is_none_or(|t| (now - t).as_secs_f64() < grace))).map(|s| s.player_id).collect();
         self.sessions.retain(|s| s.online || s.offline_since.is_none_or(|t| (now - t).as_secs_f64() < grace));
+        for id in &gone {
+            for s in self.sessions.iter_mut().filter(|s| s.online) {
+                s.conn.send_reliable(proto::roster_left(*id));
+            }
+        }
         if self.sessions.len() != before {
             self.stats.left += (before - self.sessions.len()) as u64;
             self.reindex();
@@ -535,6 +702,10 @@ impl Server {
                     // a client on another ground plan would desync.
                     proto::write_deny(h.client_salt, DenyReason::World, &mut out);
                     self.stats.denied += 1;
+                } else if h.structures != proto::structures_code(self.game.structures) {
+                    // a client with other grade-separated roads collides and drives on another world.
+                    proto::write_deny_structures(h.client_salt, proto::structures_code(self.game.structures), &mut out);
+                    self.stats.denied += 1;
                 } else {
                     let server_salt = keyed(self.secret, &[addr_bits(&addr), h.client_salt, 1]) | 1;
                     let cookie = keyed(self.secret, &[addr_bits(&addr), h.client_salt, server_salt, 2]);
@@ -547,7 +718,7 @@ impl Server {
                     return;
                 }
                 let Ok(h) = Hello::read(Kind::Response, &mut r) else { return };
-                if h.ground != proto::ground_scale_ppm() {
+                if h.ground != proto::ground_scale_ppm() || h.structures != proto::structures_code(self.game.structures) {
                     return; // refused at its request
                 }
                 if h.cookie != keyed(self.secret, &[addr_bits(&addr), h.client_salt, h.server_salt, 2]) || h.server_salt != keyed(self.secret, &[addr_bits(&addr), h.client_salt, 1]) | 1 {
@@ -599,7 +770,10 @@ impl Server {
                 if s.addr != addr {
                     return;
                 }
-                let Ok(Some(_)) = s.conn.receive(&mut r) else { return };
+                let Ok(Some((_, msgs))) = s.conn.receive(&mut r) else { return };
+                if s.inbox.len() + msgs.len() <= 64 {
+                    s.inbox.extend(msgs);
+                }
                 match kind {
                     Kind::Input => {
                         if let Ok(p) = InputPacket::read(r.rest()) {
@@ -666,6 +840,9 @@ impl Server {
         for k in ready.into_iter().rev() {
             let mut j = self.joining.swap_remove(k);
             let (player, cars) = spawn_player(&mut j.cw, j.spawn[0], j.spawn[1], j.spawn[2], j.driving);
+            // From here the player's world streams in lockstep: what it holds at a step
+            // follows the body, not how fast the shared cookers ran (as the client's does).
+            j.cw.lockstep = true;
             let player_id = self.next_player;
             self.next_player += 1;
             let resume_key = keyed(self.secret, &[player_id as u64, j.connection, 3]);
@@ -677,12 +854,12 @@ impl Server {
             self.link.send(&out, j.addr);
             let pos = player.position(&j.cw);
             let mut conn = Connection::new();
-            conn.send_reliable({
-                let mut m = vec![proto::msg::PLAYER_JOINED];
-                m.put_u32(player_id);
-                m.extend_from_slice(j.account.display_name.as_bytes());
-                m
-            });
+            // The roster: this player first (its own name), then everyone already in; and they hear of it.
+            conn.send_reliable(proto::roster_joined(player_id, &j.account.display_name));
+            for o in self.sessions.iter_mut().filter(|o| o.online) {
+                conn.send_reliable(proto::roster_joined(o.player_id, &o.account.display_name));
+                o.conn.send_reliable(proto::roster_joined(player_id, &j.account.display_name));
+            }
             self.sessions.push(Session {
                 player_id,
                 account: j.account,
@@ -709,6 +886,13 @@ impl Server {
                 pos,
                 nudge: None,
                 ping_echo: None,
+                emote: Emote::None,
+                emote_count: 0,
+                emote_until: None,
+                inbox: vec![],
+                travel: None,
+                last_travel: None,
+                arrived_until: 0,
             });
             self.stats.joined += 1;
             self.reindex();
@@ -754,11 +938,12 @@ impl Server {
             }
         }
         for s in &self.sessions {
-            player_entities(s, &mut ents);
+            player_entities(s, self.tick, &mut ents);
         }
         self.grid.rebuild(self.regions.zone, ents);
         let tick = self.tick;
         let sim_time = self.regions.world.time;
+        let sky = self.sky();
         let budget = self.cfg.budget_bytes_per_s / self.cfg.snapshot_hz.max(1) as usize;
         let (grid, radii, link) = (&self.grid, self.cfg.radii, &self.link);
         let scratch: Mutex<Vec<Vec<Desired>>> = Mutex::new(vec![]);
@@ -772,7 +957,7 @@ impl Server {
             let own = Own { ack_input: s.last_seq, check: check_of(s.last_seq, &s.player, &s.cw) };
             let correction = if s.client_applied != s.corr_id { s.correction.clone() } else { None };
             let (echo_ms, hold_ms) = s.ping_echo.map(|(e, at)| (e, at.elapsed().as_millis().min(65535) as u16)).unwrap_or((0, 0));
-            let header = SnapHeader { tick, sim_time, own, correction, you, echo_ms, hold_ms, ..Default::default() };
+            let header = SnapHeader { tick, sim_time, own, correction, you, echo_ms, hold_ms, sky, ..Default::default() };
             let (body, st) = s.rep.build(header, &desired, budget);
             scratch.lock().unwrap().push(desired);
             s.stats.snapshots += 1;
@@ -797,10 +982,28 @@ impl Server {
 }
 
 /// A player's body and cars as entities.
-fn player_entities(s: &Session, ents: &mut Vec<(u32, QState)>) {
+/// A player's body and car paint (the entity's `kind`): from the account,
+/// so a player keeps the same body every session and every client draws
+/// the same one (not from the session's player id, which depends on the
+/// order of joining).
+pub fn look_of(a: &eo_net::auth::Account) -> u8 {
+    (a.id % 251) as u8
+}
+
+fn player_entities(s: &Session, tick: u32, ents: &mut Vec<(u32, QState)>) {
     let p = &s.player;
     let driving = matches!(p.mode, Mode::Driving(_));
     let feet = p.character.feet();
+    let mut more = 0u16;
+    if p.ground_speed > eo_player::tuning::speed::WALK_MPS * 1.5 {
+        more |= flag::SPRINT;
+    }
+    if !p.character.grounded && !driving {
+        more |= flag::AIRBORNE;
+    }
+    if s.arrived_until.wrapping_sub(tick) < 0x8000_0000 && s.arrived_until != tick {
+        more |= flag::ARRIVED;
+    }
     ents.push((
         net_id(CLASS_PLAYER, s.player_id),
         QState {
@@ -809,8 +1012,9 @@ fn player_entities(s: &Session, ents: &mut Vec<(u32, QState)>) {
             z: q_pos(feet.z),
             yaw: q_angle(p.facing_yaw),
             speed: q_speed(p.ground_speed),
-            kind: (s.player_id % 251) as u8,
-            flags: driving as u16 | (p.character.crouched as u16) << 1 | (!s.online as u16) << 2,
+            kind: look_of(&s.account),
+            flags: driving as u16 | (p.character.crouched as u16) << 1 | (!s.online as u16) << 2 | more,
+            anim: pack_anim(s.emote, s.emote_count),
             ..Default::default()
         },
     ));
@@ -830,7 +1034,7 @@ fn player_entities(s: &Session, ents: &mut Vec<(u32, QState)>) {
                 yaw: q_angle(yaw),
                 tilt: q_angle(pitch) as u32 | (q_angle(roll) as u32) << 16,
                 speed: q_speed(v.forward_speed(&s.cw)),
-                kind: (s.player_id % 251) as u8,
+                kind: look_of(&s.account),
                 flags: braking as u16 | (driven as u16) << 1,
                 steer: (steer / 0.6 * 127.0).round().clamp(-127.0, 127.0) as i8,
                 ..Default::default()
@@ -876,14 +1080,25 @@ impl Drop for Server {
 
 /// Load what a server needs (the city physics world and the simulation source).
 pub fn load(streets: bool) -> anyhow::Result<(Arc<GameWorld>, Arc<eo_sim::native::NativeSource>)> {
+    load_with(streets, None)
+}
+
+/// As `load`, with the grade-separated roads (`ServerConfig::structures`) in
+/// the world; the simulation's lanes then take their levels from them
+/// (`GameWorld::way_levels`, as eo-app's own sim and `--connect local`
+/// server do), so the cars on a deck are on its level. Without them the
+/// table is empty and the source is as `load`'s.
+pub fn load_with(streets: bool, structures: Option<eo_structures::StructureOptions>) -> anyhow::Result<(Arc<GameWorld>, Arc<eo_sim::native::NativeSource>)> {
     let paths = eo_data::DataPaths::discover()?;
     let (g, s) = std::thread::scope(|sc| {
         let p2 = paths.clone();
         let src = sc.spawn(move || eo_sim::native::load(&p2));
-        let g = GameWorld::load(&paths, streets);
+        let g = GameWorld::load_with(&paths, streets, structures);
         (g, src.join().expect("simulation source thread"))
     });
-    Ok((Arc::new(g?), Arc::new(s?)))
+    let g = g?;
+    let s = s?.with_levels(g.way_levels());
+    Ok((Arc::new(g), Arc::new(s)))
 }
 
 /// Make the reader for a packet (tests).

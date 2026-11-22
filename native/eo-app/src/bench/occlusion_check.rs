@@ -188,7 +188,7 @@ pub fn run(ctx: &GpuContext, renderer: &Renderer, world: &World, models: &mut Mo
         return Err(anyhow!("--occlusion-check needs a renderer made with debug ids"));
     }
     if !renderer.compact {
-        return Err(anyhow!("--occlusion-check needs MULTI_DRAW_INDIRECT_COUNT (occlusion is off without it)"));
+        return Err(anyhow!("--occlusion-check needs the compacted lists (MULTI_DRAW_INDIRECT_COUNT or its emulation; occlusion is off without them)"));
     }
     let t = targets(ctx, w, h);
     let mut cameras = vec![];
@@ -204,6 +204,9 @@ pub fn run(ctx: &GpuContext, renderer: &Renderer, world: &World, models: &mut Mo
             let mut opposite = cam;
             opposite.yaw += std::f32::consts::PI;
             renderer.probe.set_frozen(false); // facade
+            renderer.ambient.set_frozen(false); // the ambient volume (lighting; idle without --ambient-volume)
+            renderer.far_shadow.set_frozen(false); // the far sun shadow maps (lighting; idle without --far-shadows)
+            renderer.probe_grid.set_frozen(false); // the probe grid (lighting; idle without --probe-grid)
             settle(ctx, renderer, world, models, &cam, 600.0)?;
             // finish any scene-probe capture at this camera, then hold it,
             // so every render below sees the same environment.
@@ -213,7 +216,25 @@ pub fn run(ctx: &GpuContext, renderer: &Renderer, world: &World, models: &mut Mo
                 }
                 render(ctx, renderer, &t, &cam);
             }
+            // finish any far sun shadow map redraw at this camera, then hold the maps (lighting).
+            let far_level = renderer.look.options.lighting.far_shadows;
+            for _ in 0..2 * eo_render::far_shadow::SLICES {
+                if renderer.far_shadow.settled(far_level) {
+                    break;
+                }
+                render(ctx, renderer, &t, &cam);
+            }
+            // capture and fade in the probe grid's set at this camera, then hold it (lighting).
+            for _ in 0..eo_render::probe_grid::SETTLE_FRAMES_MAX {
+                if renderer.probe_grid.settled() {
+                    break;
+                }
+                render(ctx, renderer, &t, &cam);
+            }
             renderer.probe.set_frozen(true);
+            renderer.ambient.set_frozen(true); // no re-centring or upload between the compared frames
+            renderer.far_shadow.set_frozen(true); // no redraw or swap of the far maps either
+            renderer.probe_grid.set_frozen(true); // no capture or fade of the probe grid either
             // Ground truth, twice (the second measures draw-order ties alone).
             renderer.set_occlusion(false);
             render(ctx, renderer, &t, &cam);
@@ -326,6 +347,9 @@ pub fn run(ctx: &GpuContext, renderer: &Renderer, world: &World, models: &mut Mo
         }
     }
     renderer.probe.set_frozen(false); // facade
+    renderer.ambient.set_frozen(false); // the ambient volume (lighting)
+    renderer.far_shadow.set_frozen(false); // the far sun shadow maps (lighting)
+    renderer.probe_grid.set_frozen(false); // the probe grid (lighting)
     renderer.set_occlusion(true);
     println!(
         "\nocclusion check: {} cameras x 3 histories, {} visible objects in all; visible but not drawn {}; id pixels that differ {} (not depth ties {}); same-object pixels: output colour over {COLOR_TOLERANCE}/255 {}, HDR not bit-equal {}: {}",

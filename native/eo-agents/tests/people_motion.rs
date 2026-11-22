@@ -1,7 +1,8 @@
 //! the Rocketbox clips and the 100STYLE walks on the Rocketbox
-//! people. The checks that read the copies (`EO_PEOPLE_ROOT`,
-//! `EO_PEOPLE_MOTIONS_ROOT`, `EO_PEOPLE_STYLES_ROOT`) are skipped without
-//! them. `-- --nocapture` prints what was measured.
+//! people. The checks that read the copies (in `<repo>/external/people`,
+//! `people-motions` and `people-styles`, or the folders `EO_PEOPLE_ROOT`,
+//! `EO_PEOPLE_MOTIONS_ROOT` and `EO_PEOPLE_STYLES_ROOT` name) are skipped
+//! without them. `-- --nocapture` prints what was measured.
 
 use eo_agents::motion::{self, Family, Manifest, ROLES, STYLES};
 use eo_agents::rocketbox::{self, BakeSrc, BipSkeleton, JOINTS};
@@ -82,12 +83,12 @@ fn manifests_pin_the_sources() {
     let c = Manifest::clips().unwrap();
     assert_eq!(c.files.iter().filter(|f| f.path.starts_with("objects/")).count(), 326, "every Rocketbox in-place clip is listed");
     for r in ROLES {
-        for id in [r.female, r.male] {
+        for id in r.clips() {
             assert!(c.file(&motion::clip_file(id)).is_some(), "{id} has no digest");
         }
         assert!(r.fps * r.seconds >= 60.0 && r.slot >= 1 && r.slot <= 3, "{}", r.name);
     }
-    for f in [Family::Idle, Family::Wait, Family::Talk, Family::Listen, Family::Call, Family::Text] {
+    for f in [Family::Idle, Family::Wait, Family::Talk, Family::Listen, Family::Call, Family::Text, Family::Wave, Family::Point, Family::Sit, Family::Photo] {
         assert!(ROLES.iter().any(|r| r.family == f), "no loop for {f:?}");
     }
     let s = Manifest::styles().unwrap();
@@ -130,7 +131,7 @@ fn clips_and_walks_on_every_group() {
     let Some(cp) = copies() else { return };
     let cm = Manifest::clips().unwrap();
     let sm = Manifest::styles().unwrap();
-    let mut ids: Vec<&str> = ROLES.iter().flat_map(|r| [r.female, r.male]).collect();
+    let mut ids: Vec<&str> = ROLES.iter().flat_map(|r| r.clips()).collect();
     ids.sort_unstable();
     ids.dedup();
     let clips: Vec<motion::RbClip> = ids.iter().map(|id| motion::load_rb_clip(&cp.clips, &cm, id).unwrap_or_else(|e| panic!("{id}: {e:#}"))).collect();
@@ -146,7 +147,7 @@ fn clips_and_walks_on_every_group() {
         let mut srcs: Vec<BakeSrc> = styles.iter().map(|c| BakeSrc::Style { cycle: c }).collect();
         let role_frames: Vec<u32> = ROLES.iter().map(|r| (r.seconds * r.fps).round() as u32 + 1).collect();
         for (r, role) in ROLES.iter().enumerate() {
-            srcs.push(BakeSrc::Clip { clip: clip(if female { role.female } else { role.male }), role, frames: role_frames[r] });
+            srcs.push(BakeSrc::Clip { clip: clip(if female { role.female } else { role.male }), role, frames: role_frames[r], layer: role.layer(female).map(|(id, _)| clip(id)) });
         }
         let b = rocketbox::bake_list(sk, &srcs, Some(&relaxed)).unwrap();
         assert!(b.rows.iter().all(|r| r.iter().all(|x| x.is_finite())));
@@ -197,6 +198,50 @@ fn clips_and_walks_on_every_group() {
                         }
                         if role.family == Family::Call {
                             assert!(median(ear.clone()) < 0.12, "{id} {}: the knuckles are {:.3} m from the ear", role.name, median(ear));
+                        }
+                        // The players' emotes hold the pose they are named for over most of the loop.
+                        let share = |ok: &dyn Fn(usize) -> bool| frames.clone().filter(|f| ok(*f)).count() as f32 / n as f32;
+                        let head = |f: usize| at(&b.rows, sk, f, idx("Bip01 Head"));
+                        let hand = |f: usize, s: &str| at(&b.rows, sk, f, idx(&format!("Bip01 {s} Hand")));
+                        let pel = |f: usize| at(&b.rows, sk, f, pelvis);
+                        let reach = |f: usize, s: &str| (hand(f, s) - pel(f)).x.hypot((hand(f, s) - pel(f)).z);
+                        let eyes = |f: usize| (at(&b.rows, sk, f, idx("Bip01 LEye")) + at(&b.rows, sk, f, idx("Bip01 REye"))) * 0.5;
+                        // The index finger's bend (degrees between its first and last segments) against the middle finger's.
+                        let bend3 = |f: usize, n: &str| {
+                            let (a0, a1, a2) = (at(&b.rows, sk, f, idx(&format!("Bip01 R Finger{n}"))), at(&b.rows, sk, f, idx(&format!("Bip01 R Finger{n}1"))), at(&b.rows, sk, f, idx(&format!("Bip01 R Finger{n}2"))));
+                            let h = at(&b.rows, sk, f, idx("Bip01 R Hand"));
+                            (a0 - h).normalize().angle_between((a2 - a1).normalize()).to_degrees()
+                        };
+                        let held = match role.family {
+                            // One hand up (the right, above the head), the other down by the hip, the forearm swinging.
+                            Family::Wave => {
+                                let lateral: Vec<f32> = frames.clone().map(|f| (hand(f, "R") - head(f)).x).collect();
+                                let swing = lateral.iter().cloned().fold(f32::MIN, f32::max) - lateral.iter().cloned().fold(f32::MAX, f32::min);
+                                println!("  {name:<11} the waving hand swings {swing:.2} m across");
+                                assert!(swing > 0.12, "{id} wave: the hand swings only {swing:.2} m");
+                                Some(("the right hand above the head, the left below the pelvis", share(&|f| hand(f, "R").y > head(f).y && hand(f, "L").y < pel(f).y)))
+                            }
+                            Family::Point => {
+                                let (ix, mid) = (median(frames.clone().map(|f| bend3(f, "1")).collect()), median(frames.clone().map(|f| bend3(f, "2")).collect()));
+                                println!("  {name:<11} index bent {ix:.0} deg, middle {mid:.0} deg");
+                                assert!(ix < 30.0 && mid > ix + 60.0, "{id} point: index {ix:.0} deg, middle {mid:.0} deg");
+                                Some(("an arm held out 0.5 m at shoulder height", share(&|f| ["L", "R"].iter().any(|s| reach(f, s) > 0.5 && hand(f, s).y > head(f).y - 0.35))))
+                            }
+                            // The selfie: the right hand 0.3 to 0.6 m from the eyes, out in front, within 0.2 m of their height, the left down.
+                            Family::Photo => Some(("the phone hand held out before the face", {
+                                let d: Vec<Vec3> = frames.clone().map(|f| hand(f, "R") - eyes(f)).collect();
+                                println!("  {name:<11} the phone hand from the eyes: {:+.2} right, {:+.2} up, {:+.2} ahead (median)", -median(d.iter().map(|v| v.x).collect()), median(d.iter().map(|v| v.y).collect()), median(d.iter().map(|v| v.z).collect()));
+                                share(&|f| {
+                                let d = hand(f, "R") - eyes(f);
+                                (0.3..0.6).contains(&d.length()) && d.z > 0.15 && d.y.abs() < 0.2 && hand(f, "L").y < pel(f).y
+                            })
+                            })),
+                            Family::Sit => Some(("the pelvis 0.2 m under standing", share(&|f| pel(f).y < sk.pos[pelvis].y - 0.2))),
+                            _ => None,
+                        };
+                        if let Some((what, k)) = held {
+                            println!("  {name:<11} {what}: {:.0} % of the loop", k * 100.0);
+                            assert!(k >= 0.6, "{id} {}: {what} in only {:.0} % of the loop", role.name, k * 100.0);
                         }
                         // The seam: no bigger a step than the loop's own.
                         let step = |f: usize| -> f32 { (0..JOINTS.len()).map(|k| (at(&b.rows, sk, f + 1, k) - at(&b.rows, sk, f, k)).length()).fold(0.0, f32::max) };
@@ -251,7 +296,7 @@ fn plain_walks_look_ahead() {
     let pitch = |v: Vec3| v.z.atan2(v.y).to_degrees();
     let (pel, neck, head) = (idx("Bip01 Pelvis"), idx("Bip01 Neck"), idx("Bip01 Head"));
     let eye = idx("Bip01 LEye");
-    let bi = rocketbox::bake_list(sk, &[BakeSrc::Clip { clip: &idle, role: &ROLES[0], frames: 101 }], None).unwrap();
+    let bi = rocketbox::bake_list(sk, &[BakeSrc::Clip { clip: &idle, role: &ROLES[0], frames: 101, layer: None }], None).unwrap();
     let lean = |rows: &[[f32; 4]], n: usize| -> (f32, f32) {
         let t: f32 = (0..n).map(|f| pitch(at(rows, sk, f, neck) - at(rows, sk, f, pel))).sum::<f32>() / n as f32;
         let h: f32 = (0..n).map(|f| pitch(at(rows, sk, f, eye) - at(rows, sk, f, head))).sum::<f32>() / n as f32;

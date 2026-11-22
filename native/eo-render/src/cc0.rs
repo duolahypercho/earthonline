@@ -48,6 +48,10 @@ pub const SLOT_SIDE: i32 = 8;
 pub const SLOTS: u32 = (SLOT_SIDE * SLOT_SIDE) as u32;
 /// vec4<u32> words of the grid: one header per slot, then 32 x 32 cells per slot.
 pub const GRID_VEC4: u64 = SLOTS as u64 * (1 + (CELLS * CELLS) as u64);
+/// The street-life decals' own cells (street_life.rs, `--street-life`): after
+/// the decal grid, the same 32 x 32 cells a slot, so they never take a cell
+/// entry from the wear decals. Allocated only with the level on at attach.
+pub const LIFE_GRID_VEC4: u64 = SLOTS as u64 * (CELLS * CELLS) as u64;
 pub const DECAL_VEC4: u64 = SLOTS as u64 * MAX_DECALS as u64 * 2;
 
 /// Material modes (cc0.wgsl).
@@ -61,6 +65,31 @@ pub const MODE_SAND: u32 = 5; // a sand sheet: dry and wet sand by height over t
 pub const DRIVE_NONE: u32 = 0;
 pub const DRIVE_PAINT: u32 = 1;
 pub const DRIVE_WEAR: u32 = 2;
+
+/// The terrain surface pass's material sets, after the shared ones (layer
+/// `MATERIAL_SETS.len() + k`, CC0_L_<ID>): the CC0 coastal rock scan the
+/// steep ground draws (`--no-terrain-materials`: not loaded, the arrays as
+/// before). Not in `layer_of`: no other material draws them.
+pub const TERRAIN_SETS: [ac::SetDef; 1] = [ac::SetDef { id: "seaside_rock", kind: ac::SetKind::Material, scale: ac::Scale::Site, rough_default: 0.8 }];
+
+/// Whether the terrain's sets are loaded (the terrain materials are on).
+pub fn terrain_sets_on() -> bool {
+    eo_landmarks::features::gg3_ground("terrain-materials")
+}
+
+/// Material array layers: the shared sets, then the terrain's when on.
+pub fn material_layers() -> usize {
+    ac::MATERIAL_SETS.len() + if terrain_sets_on() { TERRAIN_SETS.len() } else { 0 }
+}
+
+/// Every set the runtime loads: eo-assets `all_sets`, then the terrain's.
+pub fn all_sets() -> Vec<(ac::SetKind, u32, ac::SetDef)> {
+    let mut v = ac::all_sets();
+    if terrain_sets_on() {
+        v.extend(TERRAIN_SETS.iter().enumerate().map(|(k, d)| (ac::SetKind::Material, (ac::MATERIAL_SETS.len() + k) as u32, *d)));
+    }
+    v
+}
 
 pub fn layer_of(id: &str) -> Option<u32> {
     ac::MATERIAL_SETS.iter().position(|d| d.id == id).map(|i| i as u32)
@@ -134,6 +163,13 @@ pub fn structure_class(key: &str) -> Option<ClassUse> {
     if key == "seawall" || key.contains("seawall") || key == "structure:waterfront:concrete" {
         return Some(cu("wood_textured_concrete", None, MODE_DETAIL, DRIVE_NONE, 0.8, 0.0, 0.3, 0.8));
     }
+    // the shore's rock (eo-landmarks rocks.rs): the armour's quarried stone and the boulders, the scan's detail round the vertex tone
+    if key == "structure:shore-rocks:armour" {
+        return Some(cu("granite_wall", None, MODE_DETAIL, DRIVE_NONE, 1.0, 0.0, 0.4, 0.9));
+    }
+    if key == "structure:shore-rocks:boulders" {
+        return Some(cu("seaside_rock", None, MODE_DETAIL, DRIVE_NONE, 1.0, 0.0, 0.4, 0.9));
+    }
     if key.contains("ferry-pier-deck") {
         return Some(cu("concrete_wall_008", None, MODE_DETAIL, DRIVE_NONE, 0.8, 0.0, 0.3, 0.8));
     }
@@ -183,7 +219,9 @@ pub fn material_table(mt: &MaterialTable, kit_means: &[[f32; 3]], layers: &[Laye
     let mut mapped = 0;
     for (i, g) in mt.gpu.iter().enumerate() {
         let name = mt.names.get(i).map(|s| s.as_str()).unwrap_or("");
-        let base = name.split('@').next().unwrap_or("");
+        // (`<finish>*<k>~<c>`: a kit finish drawn k times larger, its scan's variation times c.)
+        let (base, rep, contrast) = crate::authored::kit_repeat(name.split('@').next().unwrap_or(""));
+        let (rep, contrast) = (rep as f32, contrast as f32);
         let textured_kit = g.flags & F_TEXTURED != 0 && g.flags & F_GLASS == 0 && g.layer >= 0;
         let (c, kit_mean) = if textured_kit {
             match (kit_class(base), kit_means.get(g.layer as usize)) {
@@ -210,13 +248,82 @@ pub fn material_table(mt: &MaterialTable, kit_means: &[[f32; 3]], layers: &[Laye
         let la_info = &layers[la as usize];
         let ma = mul(la);
         let mb = lb.map(mul).unwrap_or(ma);
-        v[i * MAT_VEC4] = [la as f32, lb.map(|l| l as f32).unwrap_or(-1.0), 1.0 / la_info.size_m[0], 1.0 / la_info.size_m[1]];
+        v[i * MAT_VEC4] = [la as f32, lb.map(|l| l as f32).unwrap_or(-1.0), 1.0 / (la_info.size_m[0] * rep), 1.0 / (la_info.size_m[1] * rep)];
         v[i * MAT_VEC4 + 1] = [ma[0], ma[1], ma[2], (c.mode | c.drive << 4) as f32];
-        v[i * MAT_VEC4 + 2] = [mb[0], mb[1], mb[2], c.normal];
-        v[i * MAT_VEC4 + 3] = [c.pom_m, c.grime, c.contrast, lb.map(|l| 1.0 / layers[l as usize].size_m[0]).unwrap_or(0.0)];
+        // (A scaled finish is dressed stone at a larger course, not a larger rough
+        // block: its relief keeps the scan's height, so its slopes ease by the scale.)
+        v[i * MAT_VEC4 + 2] = [mb[0], mb[1], mb[2], c.normal / rep.sqrt()];
+        v[i * MAT_VEC4 + 3] = [c.pom_m, c.grime, c.contrast * contrast, lb.map(|l| 1.0 / (layers[l as usize].size_m[0] * rep)).unwrap_or(0.0)];
         mapped += 1;
     }
     (v, mapped)
+}
+
+/// The Golden Gate tide station's high waters over mean sea level, real
+/// metres (NOAA 9414290; one definition, in eo-landmarks ground_cover, which
+/// the shore's stones read too).
+pub use eo_landmarks::ground_cover::{MHHW_OVER_MSL_M, MHW_OVER_MSL_M};
+
+/// The shore ground pass's sand constants (shore_surface.wgsl `lm_beach`,
+/// cc0.wgsl `cc0_beach`): on (`--no-sand-albedo` off), the measured wet-sand
+/// ratio, the tide's high-water heights over the sea at the drawn height
+/// scale (the ground over the sea is drawn `height_scale` times its height),
+/// and the foreshore's slope the bands' height is read on (eo-water
+/// `BEACH_FORESHORE_SLOPE`, the slope the carpet lays the beach at: rise over
+/// run in the drawn world).
+pub fn shore_ground_wgsl(on: bool, height_scale: f64) -> String {
+    format!(
+        "const GG2_SAND: bool = {on};\nconst GG2_WET_SAND_RATIO: f32 = {:.4};\nconst GG2_SAND_MHW_M: f32 = {:.4};\nconst GG2_SAND_MHHW_M: f32 = {:.4};\nconst GG2_FORESHORE_SLOPE: f32 = {:.6};\n",
+        eo_landmarks::ground_cover::WET_SAND_RATIO,
+        MHW_OVER_MSL_M * height_scale,
+        MHHW_OVER_MSL_M * height_scale,
+        eo_water::field::BEACH_FORESHORE_SLOPE
+    )
+}
+
+/// The Fort Point seawall's coursed granite (`lm_seawall`; `--no-riprap` off
+/// with the armour in front of it): the walls inside the revetment's box
+/// (eo-landmarks rocks.rs `REVETMENT_BOX_SURVEYED`, drawn at the ground
+/// plan), granite ashlar in courses of `ASHLAR_COURSE_M` and blocks of
+/// `ASHLAR_BLOCK_M` (INFERRED: 2 ft courses, 4-6 ft stones, no survey of the
+/// 1869 wall's coursing was read), drawn at the height and plan scales, in the
+/// granite scan's mean albedo (rocks.rs `ARMOUR_ALBEDO`).
+pub const ASHLAR_COURSE_M: f64 = 0.61;
+pub const ASHLAR_BLOCK_M: [f64; 2] = [1.22, 1.83];
+
+pub fn ashlar_wgsl(on: bool, plan: f64, hs: f64) -> String {
+    let b = eo_landmarks::rocks::REVETMENT_BOX_SURVEYED.map(|v| v * plan);
+    let g = eo_landmarks::rocks::ARMOUR_ALBEDO;
+    format!(
+        "const GG2_ASHLAR: bool = {on};\nconst GG2_ASHLAR_BOX: vec4<f32> = vec4<f32>({:.2}, {:.2}, {:.2}, {:.2});\nconst GG2_ASHLAR_COURSE_M: f32 = {:.4};\nconst GG2_ASHLAR_BLOCK_M: vec2<f32> = vec2<f32>({:.4}, {:.4});\nconst GG2_GRANITE: vec3<f32> = vec3<f32>({:.4}, {:.4}, {:.4});\n",
+        b[0], b[1], b[2], b[3], ASHLAR_COURSE_M * hs, ASHLAR_BLOCK_M[0] * plan, ASHLAR_BLOCK_M[1] * plan, g[0], g[1], g[2]
+    )
+}
+
+/// The terrain-surface pass's switches as WGSL constants (eo-landmarks
+/// `features::gg3_ground`; each `--no-<name>` restores the round-2 output):
+/// `GG3_FACET_FIX` (draw.wgsl `shade`'s normal orientation).
+/// `GG3_MATERIALS` (cc0.wgsl `gg3_terrain`, with the grass in the far
+/// layer's green and golden albedos, farshore.rs, by the season).
+pub fn gg3_ground_wgsl(on: &dyn Fn(&str) -> bool) -> String {
+    let (g, y) = (crate::farshore::FAR_GRASS_GREEN, crate::farshore::FAR_GRASS_GOLDEN);
+    format!(
+        "const GG3_FACET_FIX: bool = {};\nconst GG3_SAND2: bool = {};\nconst GG3_SAND_SLOPE_FULL: f32 = {:.4};\nconst GG3_MATERIALS: bool = {};\nconst GG3_GRASS_GREEN: vec3<f32> = vec3<f32>({:.4}, {:.4}, {:.4});\nconst GG3_GRASS_GOLDEN: vec3<f32> = vec3<f32>({:.4}, {:.4}, {:.4});\nconst GG3_MATERIAL_ALPHA: f32 = {:.1};\n",
+        on("facet-normal-fix"),
+        on("sand-detail2"),
+        crate::scene::terrain_detail::SAND_SLOPE_FULL,
+        on("terrain-materials"),
+        g[0], g[1], g[2], y[0], y[1], y[2],
+        crate::scene::terrain_detail::MATERIAL_ALPHA as f32
+    ) + &format!(
+        // the second flora pass (eo_landmarks::flora2): the knoll's and the bluff's codes in
+        // the grass byte (terrain_detail.rs `knoll_material`, `Materials::material`).
+        "const FL2_KNOLL: bool = {};\nconst FL2_BLUFF: bool = {};\nconst FL2_KNOLL_RELIEF: bool = {};\nconst FL2_BLUFF_GRASS: f32 = {:.3};\n",
+        eo_landmarks::flora2::flora2().knoll,
+        eo_landmarks::flora2::flora2().bluff_rock,
+        eo_landmarks::flora2::flora2().relief,
+        eo_landmarks::flora2::BLUFF_GRASS,
+    )
 }
 
 /// WGSL constants: switches, layer indices, the decal grid's layout, the
@@ -224,6 +331,9 @@ pub fn material_table(mt: &MaterialTable, kit_means: &[[f32; 3]], layers: &[Laye
 pub fn wgsl_constants(scoring_m: f32) -> String {
     let mut s = String::from("\n// generated by cc0.rs wgsl_constants\n");
     s.push_str(&crate::ground2::wgsl_constants()); // the paving branch of cc0_ground_sets
+    s.push_str(&shore_ground_wgsl(eo_landmarks::features::shore_ground("sand-albedo"), eo_data::groundscale::height_scale()));
+    s.push_str(&ashlar_wgsl(eo_landmarks::features::shore_ground("riprap"), eo_data::groundscale::scale(), eo_data::groundscale::height_scale()));
+    s.push_str(&gg3_ground_wgsl(&|n| eo_landmarks::features::gg3_ground(n)));
     for (k, v) in [
         ("ON", RUN_ON),
         ("WALLS", RUN_WALLS),
@@ -243,7 +353,11 @@ pub fn wgsl_constants(scoring_m: f32) -> String {
     for (i, d) in ac::DECAL_SETS.iter().enumerate() {
         s.push_str(&format!("const CC0_D_{}: i32 = {i};\n", d.id.to_uppercase()));
     }
-    s.push_str(&format!("const CC0_MAT_LAYERS: u32 = {}u;\n", ac::MATERIAL_SETS.len()));
+    for (k, d) in TERRAIN_SETS.iter().enumerate() {
+        // (a layer index past the arrays when the terrain's sets are off: never sampled then, GG3_MATERIALS false)
+        s.push_str(&format!("const CC0_L_{}: i32 = {};\n", d.id.to_uppercase(), ac::MATERIAL_SETS.len() + k));
+    }
+    s.push_str(&format!("const CC0_MAT_LAYERS: u32 = {}u;\n", material_layers()));
     s.push_str(&format!(
         "const CC0_SLOT_SIDE: i32 = {SLOT_SIDE};\nconst CC0_SLOTS: u32 = {SLOTS}u;\nconst CC0_CELLS: u32 = {}u;\nconst CC0_MAX_DECALS: u32 = {}u;\nconst CC0_TILE_M: f32 = {:.1};\n",
         CELLS,
@@ -273,6 +387,8 @@ pub fn wgsl_constants(scoring_m: f32) -> String {
         ("WALK_CRACK", crate::cc0_decals::DK_WALK_CRACK),
         ("TYRE", crate::cc0_decals::DK_TYRE),
         ("GRATE", crate::cc0_decals::DK_GRATE),
+        ("KERB_PAINT", crate::cc0_decals::DK_KERB_PAINT),
+        ("WALK_EDGE", crate::cc0_decals::DK_WALK_EDGE),
     ] {
         s.push_str(&format!("const CC0_DK_{k}: u32 = {v}u;\n"));
     }
@@ -528,22 +644,26 @@ impl Cc0Gpu {
         };
         let names = ["cc0-albedo", "cc0-normal", "cc0-rhm"];
         let dnames = ["cc0-decal-albedo", "cc0-decal-normal", "cc0-decal-rhm"];
-        let mat = [0, 1, 2].map(|k| tex(names[k], FORMATS[k], ac::MATERIAL_RES, ac::MATERIAL_SETS.len() as u32));
+        let mat = [0, 1, 2].map(|k| tex(names[k], FORMATS[k], ac::MATERIAL_RES, material_layers() as u32));
         let decal = [0, 1, 2].map(|k| tex(dnames[k], FORMATS[k], ac::DECAL_RES, ac::DECAL_SETS.len() as u32));
         let mats = (material_count.max(1) * MAT_VEC4 * 16) as u64;
-        let layers = ((ac::MATERIAL_SETS.len() + ac::DECAL_SETS.len()) * LAYER_VEC4 * 16) as u64;
+        let layers = ((material_layers() + ac::DECAL_SETS.len()) * LAYER_VEC4 * 16) as u64;
+        // the street life's own cells after the grid, with its level on (none by default)
+        let life = crate::street_life::level() > 0;
+        let grid_vec4 = GRID_VEC4 + if life { LIFE_GRID_VEC4 } else { 0 };
         let r = Res {
             mat,
             decal,
             mats: storage(d, "cc0-mats", mats),
             layers: storage(d, "cc0-layers", layers),
-            grid: storage(d, "cc0-grid", GRID_VEC4 * 16),
+            grid: storage(d, "cc0-grid", grid_vec4 * 16),
             decals: storage(d, "cc0-decals", DECAL_VEC4 * 16),
         };
-        let bytes = 3 * (array_bytes(ac::MATERIAL_RES, ac::MATERIAL_SETS.len()) + array_bytes(ac::DECAL_RES, ac::DECAL_SETS.len())) + mats + layers + GRID_VEC4 * 16 + DECAL_VEC4 * 16;
+        let bytes = 3 * (array_bytes(ac::MATERIAL_RES, material_layers()) + array_bytes(ac::DECAL_RES, ac::DECAL_SETS.len())) + mats + layers + grid_vec4 * 16 + DECAL_VEC4 * 16;
         if self.res.set(r).is_err() {
             return 0;
         }
+        LIFE_CELLS.store(life, Ordering::Relaxed);
         self.bytes.store(bytes, Ordering::Relaxed);
         DECALS_WANTED.store(self.options() & RUN_DECALS != 0, Ordering::Relaxed);
         bytes
@@ -554,7 +674,7 @@ impl Cc0Gpu {
         if !self.attached() {
             return (0, 0, 0);
         }
-        let mat = 3 * array_bytes(ac::MATERIAL_RES, ac::MATERIAL_SETS.len());
+        let mat = 3 * array_bytes(ac::MATERIAL_RES, material_layers());
         let dec = 3 * array_bytes(ac::DECAL_RES, ac::DECAL_SETS.len());
         let total = self.bytes.load(Ordering::Relaxed);
         (mat, dec, total.saturating_sub(mat + dec))
@@ -608,6 +728,9 @@ impl Cc0Gpu {
 /// Whether street tiles place decals (set when the decal buffers are attached with decals on).
 pub static DECALS_WANTED: AtomicBool = AtomicBool::new(false);
 
+/// Whether the grid buffer holds the street life's cells (`LIFE_GRID_VEC4`; set at attach).
+pub static LIFE_CELLS: AtomicBool = AtomicBool::new(false);
+
 /// The toroidal slot of a street tile.
 pub fn slot_of(key: (i32, i32)) -> u32 {
     (key.0.rem_euclid(SLOT_SIDE) + SLOT_SIDE * key.1.rem_euclid(SLOT_SIDE)) as u32
@@ -622,6 +745,10 @@ pub fn cells_offset(slot: u32) -> u64 {
 }
 pub fn decals_offset(slot: u32) -> u64 {
     slot as u64 * MAX_DECALS as u64 * 2 * 16
+}
+/// A slot's street-life cells (after the decal grid; `LIFE_CELLS`).
+pub fn life_cells_offset(slot: u32) -> u64 {
+    (GRID_VEC4 + slot as u64 * (CELLS * CELLS) as u64) * 16
 }
 
 /// A tile slot header: tile key, decal count.
@@ -679,7 +806,26 @@ mod tests {
             assert!(c.b.is_none_or(|b| layer_of(b).is_some()));
         }
         assert!(wgsl_constants(0.914).contains("CC0_L_WOODSIDING009"));
+        assert!(wgsl_constants(0.914).contains("const GG2_SAND: bool"));
         assert_eq!(slot_of((-1, -1)), 63);
         assert_eq!(slot_of((8, 0)), 0);
+    }
+
+    #[test]
+    fn the_tide_heights_are_drawn_at_the_height_scale() {
+        // MHW 0.643 m and MHHW 0.829 m over mean sea level, x 1.25 drawn
+        let w = shore_ground_wgsl(true, 1.25);
+        assert!((MHW_OVER_MSL_M - 0.643).abs() < 1e-9 && (MHHW_OVER_MSL_M - 0.829).abs() < 1e-9);
+        assert!(w.contains("GG2_SAND_MHW_M: f32 = 0.80"), "{w}");
+        assert!(w.contains("GG2_SAND_MHHW_M: f32 = 1.03"), "{w}");
+        assert!(w.contains("GG2_WET_SAND_RATIO: f32 = 0.5000"));
+        assert!(shore_ground_wgsl(false, 1.25).contains("GG2_SAND: bool = false"));
+        // the bands read the carpet's foreshore (1:55): the high water 44 m drawn from the shoreline
+        assert!(w.contains("GG2_FORESHORE_SLOPE: f32 = 0.018182"), "{w}");
+        assert!((MHW_OVER_MSL_M * 1.25 / eo_water::field::BEACH_FORESHORE_SLOPE - 44.2).abs() < 0.1);
+        // the ashlar's courses at the height scale, its blocks at the plan
+        let a = ashlar_wgsl(true, 1.25, 1.25);
+        assert!(a.contains("GG2_ASHLAR_COURSE_M: f32 = 0.7625"), "{a}");
+        assert!(a.contains("vec2<f32>(1.5250, 2.2875)"), "{a}");
     }
 }

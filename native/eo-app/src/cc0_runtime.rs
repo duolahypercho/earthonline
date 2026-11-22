@@ -25,7 +25,7 @@ pub fn availability(ctx: &GpuContext) -> Result<(), String> {
     if !ctx.bc {
         return Err("the adapter has no BC texture compression".into());
     }
-    let root = ac::root().ok_or_else(|| "EO_CC0_ROOT is not set".to_string())?;
+    let root = ac::root().ok_or_else(|| eo_data::external::CC0.looked_in())?;
     ac::available(&root).map_err(|e| format!("{} ({e:#})", root.display()))
 }
 
@@ -33,7 +33,7 @@ pub fn availability(ctx: &GpuContext) -> Result<(), String> {
 pub fn say_unavailable(e: &str) {
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| {
-        eprintln!("cc0: the CC0 texture sets are not used: {e}. The renderer keeps its own materials (fetch them with `node native/tools/fetch-cc0.mjs`, or point EO_CC0_ROOT at them).")
+        eprintln!("cc0: the CC0 texture sets are not used: {e}. The renderer keeps its own materials (fetch them with `python3 scripts/setup-assets.py --only cc0`, or point EO_CC0_ROOT at a copy).")
     });
 }
 
@@ -85,7 +85,7 @@ pub struct Cc0Runtime {
 
 impl Cc0Runtime {
     pub fn start(cache: Option<std::path::PathBuf>, started: Instant) -> Self {
-        let sets = Arc::new(ac::all_sets());
+        let sets = Arc::new(rc::all_sets()); // the shared sets, then the terrain's
         let total = sets.len();
         let (tx, rx) = std::sync::mpsc::sync_channel::<Arrival>(2);
         let next = Arc::new(AtomicUsize::new(0));
@@ -118,7 +118,7 @@ impl Cc0Runtime {
             received: 0,
             uploaded: 0,
             in_queue: 0,
-            mats: vec![Default::default(); ac::MATERIAL_SETS.len()],
+            mats: vec![Default::default(); rc::material_layers()],
             decals: vec![Default::default(); ac::DECAL_SETS.len()],
             finished: false,
             failed: false,

@@ -6,7 +6,7 @@ use eo_assets::cc0;
 
 fn main() -> anyhow::Result<()> {
     let Some(root) = cc0::root() else {
-        println!("cc0: not available (EO_CC0_ROOT is not set)");
+        println!("cc0: not available ({})", eo_data::external::CC0.looked_in());
         return Ok(());
     };
     if let Err(e) = cc0::available(&root) {

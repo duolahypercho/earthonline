@@ -31,7 +31,7 @@ fn signed(world: &World, x: f32, z: f32) -> Option<f32> {
     world.water.as_ref().map(|w| w.field.signed_at(x as f64, z as f64) as f32)
 }
 
-fn ground(world: &World, x: f32, z: f32) -> f32 {
+pub(super) fn ground(world: &World, x: f32, z: f32) -> f32 {
     match &world.street {
         Some(s) => s.world.surface_at(x as f64, z as f64, None) as f32,
         None => world.elevation.ground(x as f64, z as f64) as f32,
@@ -41,7 +41,7 @@ fn ground(world: &World, x: f32, z: f32) -> f32 {
 /// The Embarcadero's points nearest the Ferry Building, as a polyline sorted
 /// along it (both carriageways' points, ordered on their principal axis), and
 /// that axis (pointing south-east, away from the Ferry Building's north).
-fn embarcadero(world: &World) -> (Vec<Vec3>, Vec3) {
+pub(super) fn embarcadero(world: &World) -> (Vec<Vec3>, Vec3) {
     let fb = glam::Vec2::from(ferry_building());
     let mut pts: Vec<glam::Vec2> = world
         .city
@@ -87,7 +87,7 @@ fn embarcadero(world: &World) -> (Vec<Vec3>, Vec3) {
 
 /// From a road point, the promenade: walk toward the water until the shore
 /// is `inland` metres away; returns that point and the unit direction to the water.
-fn promenade_point(world: &World, p: Vec3, along: Vec3, inland: f32) -> Option<(Vec3, Vec3)> {
+pub(super) fn promenade_point(world: &World, p: Vec3, along: Vec3, inland: f32) -> Option<(Vec3, Vec3)> {
     let n = Vec3::new(-along.z, 0.0, along.x);
     let s_plus = signed(world, p.x + n.x * 120.0, p.z + n.z * 120.0)?;
     let s_minus = signed(world, p.x - n.x * 120.0, p.z - n.z * 120.0)?;
@@ -101,7 +101,7 @@ fn promenade_point(world: &World, p: Vec3, along: Vec3, inland: f32) -> Option<(
     None
 }
 
-fn polyline_at(path: &[Vec3], s: f32) -> (Vec3, Vec3) {
+pub(super) fn polyline_at(path: &[Vec3], s: f32) -> (Vec3, Vec3) {
     let mut left = s.max(0.0);
     for w in path.windows(2) {
         let d = w[1] - w[0];
@@ -121,7 +121,7 @@ fn polyline_at(path: &[Vec3], s: f32) -> (Vec3, Vec3) {
 const WALK_CENTRE_SE_M: f32 = 320.0;
 
 /// The road point (arc length) nearest a world point.
-fn arc_nearest(road: &[Vec3], p: Vec3) -> f32 {
+pub(super) fn arc_nearest(road: &[Vec3], p: Vec3) -> f32 {
     let mut best = (f32::MAX, 0.0f32);
     let mut acc = 0.0;
     for w in road.windows(2) {
@@ -247,6 +247,44 @@ pub fn dive_segment(world: &World, frames: usize, aspect: f32, far: f32) -> Opti
     })
 }
 
+/// Short, level swim through the actual starting views. Explicit segment
+/// selection also exposes the paths with the habitats off for matched timing.
+pub fn habitat_segments(world: &World, args: &crate::Args, frames: usize, aspect: f32, far: f32) -> Vec<Segment> {
+    let mut segments: Vec<Segment> = world.dive_sites.iter().filter_map(|site| {
+        let name = match site.habitat {
+            eo_render::seabed::Habitat::Eelgrass => "bay_grass",
+            eo_render::seabed::Habitat::Sand => "pacific_sand",
+            eo_render::seabed::Habitat::Rocky => "black_point_rocks",
+        };
+        if !args.underwater_habitats && !args.segments.as_ref().is_some_and(|paths| paths.iter().any(|p| p == name)) {
+            return None;
+        }
+        let cam = site.camera(aspect, far);
+        Some(Segment {
+            name, description: format!("A submerged swim across the {name} site."), frames, paced: false, streams: true,
+            camera: Box::new(move |i,n| {
+                let t = i as f32 / n.saturating_sub(1).max(1) as f32;
+                Camera { eye: cam.eye + cam.right() * (t - 0.5) * 1.2, yaw: cam.yaw + (t - 0.5)*0.32, ..cam }
+            }),
+        })
+    }).collect();
+    if (args.cove_detail || args.segments.as_ref().is_some_and(|p| p.iter().any(|n| n == "cove_descent")))
+        && let Some(&site) = world.dive_sites.iter().find(|s| s.beach.is_some()) {
+        segments.push(Segment {
+            name: "cove_descent", description: "Descend offshore from the Aquatic Park beach toward the surveyed basin.".into(),
+            frames, paced: false, streams: true,
+            camera: Box::new(move |i, n| {
+                let t = i as f32 / n.saturating_sub(1).max(1) as f32;
+                let mut camera = site.cove_camera(aspect, far, 112.0 * t);
+                // Enter through the moving surface before following the descending bed.
+                camera.eye.y += (1.0 - t * 8.0).max(0.0) * 1.1;
+                camera
+            }),
+        });
+    }
+    segments
+}
+
 /// The `capture-water-*` views: (name, camera, what it shows).
 pub fn capture_cameras(world: &World, aspect: f32, far: f32) -> Vec<(&'static str, Camera, String)> {
     let mut out = vec![];
@@ -278,6 +316,35 @@ pub fn capture_cameras(world: &World, aspect: f32, far: f32) -> Vec<(&'static st
         out.push(("bay-submerged", cam, "0.4 m under the bay surface, looking up toward the city".into()));
         let crossing = Camera { eye: Vec3::new(cam.eye.x, sea(), cam.eye.z), pitch: 0.0, ..cam };
         out.push(("bay-waterline", crossing, "at mean sea level facing the city".into()));
+    }
+    // Beside the cove-facing pile row at the northwest curve. The submerged
+    // camera sits above the bed and looks through the gap beside the support.
+    if world.dive_sites.iter().any(|s| s.cove_detail && s.beach.is_some()) {
+        let centre = super::on_plan(Vec3::new(-626.461, 0.0, -3535.113));
+        let eye = centre + Vec3::new(-1.5, sea() - 1.61, -0.55);
+        let dir = Vec3::new(1.5, -0.04, 0.55).normalize();
+        let cam = Camera { near: 0.045, far, fov_y_deg: 60.0, ..Camera::new(eye, yaw_of(dir), dir.y.asin(), aspect) };
+        out.push(("municipal-pile", cam, "Municipal Pier support at the submerged bed".into()));
+    }
+    for site in &world.dive_sites {
+        if let Some(shore) = site.beach {
+            // Look down on the same patch of the shallow bed on either side
+            // of the interface. The two switch settings retain both poses.
+            for (name, height) in [("cove-bed-from-air", 0.16), ("cove-bed-from-water", -0.16)] {
+                let eye = Vec3::new(shore.x, sea() + height, shore.y - 26.0);
+                let cam = Camera { near: 0.025, far, ..Camera::new(eye, -0.42, -1.35, aspect) };
+                out.push((name, cam, "Aquatic Park shallow bed seen across the waterline".into()));
+            }
+            out.push(("cove-surface", site.surface_camera(aspect, far), "Aquatic Park beach toward Municipal Pier and Black Point".into()));
+            out.push(("cove-shallows", site.cove_camera(aspect, far, 0.0), "looking down the cove bank just below the surface".into()));
+            out.push(("cove-basin", site.cove_camera(aspect, far, 112.0), "112 m farther offshore on the same transect".into()));
+        }
+        let (name, description) = match site.habitat {
+            eo_render::seabed::Habitat::Eelgrass => ("bay-grass", "near the bed in Aquatic Park Cove"),
+            eo_render::seabed::Habitat::Rocky => ("black-point-rocks", "the inhabited rock faces at the western shore of Aquatic Park Cove"),
+            eo_render::seabed::Habitat::Sand => ("pacific-ripples", "near the bed off Ocean Beach"),
+        };
+        out.push((name, site.camera(aspect, far), description.into()));
     }
     // The bay from above: 1.6 km up over the water east of the city, looking down-west.
     let eye = super::on_plan(Vec3::new(FERRY_BUILDING_SURVEYED[0] + 2600.0, 1600.0, FERRY_BUILDING_SURVEYED[1] + 900.0));

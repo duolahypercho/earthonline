@@ -11,12 +11,16 @@ eo-assets = { path = "../eo-assets" }
 eo-data = { path = "../eo-data" }
 eo-sim = { path = "../eo-sim" }
 eo-street = { path = "../eo-street" }
+eo-structures = { path = "../eo-structures" } # structures: decks and tunnels the lanes run on (`--structures`)
 glam = "0.34.3"
 image-webp = "0.2.4" # people: the Rocketbox WebP maps
-gltf = { version = "1.4.1", default-features = false, features = ["utils", "names", "KHR_materials_emissive_strength"] }
+gltf = { version = "1.4.1", default-features = false, features = ["utils", "names", "extras", "KHR_materials_emissive_strength"] }
 meshopt = "0.7.0" # people: EXT_meshopt_compression
 png = "0.18.1"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"
 texpresso = "2.0.2" # people: BC atlases
+
+[dev-dependencies]
+eo-landmarks = { path = "../eo-landmarks" } # tests: the landmark decks a real-city structures build reads

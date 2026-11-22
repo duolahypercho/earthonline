@@ -25,36 +25,6 @@
       "sha256": "f6611e54b773dbe27ee0feee53455aeb12d8649a819e878dd3af4be7f70a8ba9",
       "bytes": 391500
     },
-    "interior": {
-      "url": "/assets/buildings/sf-building-261111917/interior.glb",
-      "sha256": "8ebebad3963e7f8f2f57b67ddcdf873dec545a3c1ea693c75348f3205163d30f",
-      "bytes": 185092
-    },
-    "fine": [
-      {
-        "storey": 0,
-        "url": "/assets/buildings/sf-building-261111917/fine-s0.glb",
-        "sha256": "bbc89b2b7d195a8e565effee4877524f10549fab6aa7a6de27bea55b6c76ac32",
-        "bytes": 20828
-      },
-      {
-        "storey": 1,
-        "url": "/assets/buildings/sf-building-261111917/fine-s1.glb",
-        "sha256": "cc3cc7348cb4c4f5900757096137c7810afd51ce3b5276ad6fdf4d0dc04f31d2",
-        "bytes": 80428
-      },
-      {
-        "storey": 2,
-        "url": "/assets/buildings/sf-building-261111917/fine-s2.glb",
-        "sha256": "fe522e15c220a72229c40e90816173575b03150b9f1f958baf69d7f0b784eaf0",
-        "bytes": 80400
-      },
-      {
-        "storey": 3,
-        "url": "/assets/buildings/sf-building-261111917/fine-s3.glb",
-        "sha256": "b76ad9d7b5d03eedfdf864c2e72585a9b73404640dfc638b8677aa8b934df230",
-        "bytes": 80416
-      }
-    ]
+    "fine": []
   }
 }

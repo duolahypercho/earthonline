@@ -129,6 +129,9 @@ pub struct WalkCtx<'a> {
     pub car_z: &'a [f64],
     pub car_yaw: &'a [f64],
     pub car_speed: &'a [f64],
+    /// Each car's structure level (`Fleet::level`): walkers at grade wait
+    /// only for cars at grade.
+    pub car_level: &'a [i8],
 }
 
 /// `cadenceForSpeed(speed)` at the reference height, steps/s (gait-activity-contract.js).
@@ -415,7 +418,7 @@ fn clear_of_traffic(ctx: &WalkCtx, link: &[P2; 2], crossing_seconds: f64) -> boo
     let half_span = geom::hypot(link[1][0] - link[0][0], link[1][1] - link[0][1]) / 2.0;
     for k in 0..ctx.car_x.len() {
         let speed = ctx.car_speed[k];
-        if speed <= 1.0 {
+        if speed <= 1.0 || ctx.car_level.get(k).is_some_and(|&l| l != 0) {
             continue;
         }
         let dx = mx - ctx.car_x[k];

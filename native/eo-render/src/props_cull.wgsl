@@ -50,8 +50,9 @@ struct PrSphere {
 
 fn pr_sphere(i: PrInstance, m: PrModel) -> PrSphere {
     var s: PrSphere;
-    s.c = i.pos + pr_rot(i.yaw, m.center * i.scale);
-    s.r = m.radius * max(max(i.scale.x, i.scale.y), i.scale.z);
+    let v = pr_veg_scale(i);
+    s.c = i.pos + pr_rot(i.yaw, m.center * i.scale * v);
+    s.r = m.radius * max(max(i.scale.x, i.scale.y), i.scale.z) * v * (1.0 + length(pr_veg_grad(i)));
     return s;
 }
 
@@ -151,18 +152,22 @@ fn classify(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let m = pr_models[inst.model];
+    if (pr_veg_scale(inst) <= 0.0) {
+        return; // thinned out at this distance (vegetation)
+    }
     let s = pr_sphere(inst, m);
     let d = max(distance(s.c, pr.cam.xyz) - s.r, 0.0);
     if (d >= m.lod.w) {
         return;
     }
-    let lod = pr_lod_of(m, d);
+    let dl = pr_lod_dist(inst, d);
+    let lod = pr_lod_of(m, dl);
     if ((pr.mode.x & 1u) != 0u && pr_in_camera(s)) {
         let r = vec3<f32>(s.r);
         if (!pr_occluded(s.c - r, s.c + r)) {
             let mesh = pr_mesh_at(m, lod);
             if (mesh != PR_NONE) {
-                let f = pr_fade(m, lod, d);
+                let f = pr_fade(m, lod, dl);
                 if (f.x == 0u) {
                     pr_records[i * PR_VIEWS] = pr_take(0u, mesh);
                 } else {
@@ -269,7 +274,8 @@ fn scatter(@builtin(global_invocation_id) gid: vec3<u32>) {
         let m = pr_models[inst.model];
         let s = pr_sphere(inst, m);
         let d = max(distance(s.c, pr.cam.xyz) - s.r, 0.0);
-        fade_word = pr_fade(m, pr_lod_of(m, d), d).x << 17u;
+        let dl = pr_lod_dist(inst, d);
+        fade_word = pr_fade(m, pr_lod_of(m, dl), dl).x << 17u;
     }
     for (var v = 0u; v < PR_VIEWS; v = v + 1u) {
         if ((pr.mode.x & (1u << v)) == 0u) {

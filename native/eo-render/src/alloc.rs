@@ -25,6 +25,10 @@
 //! The process heap is left to the OS, the CRT and the GPU driver. Each block
 //! carries a 16-byte header (where it came from, and the offset to its base),
 //! so any thread can free any block.
+//!
+//! Elsewhere `EoAlloc` is the system allocator, and the heaps, lists and
+//! classes below are unused.
+#![cfg_attr(not(windows), allow(dead_code))]
 
 use std::alloc::{GlobalAlloc, Layout};
 use std::cell::Cell;

@@ -12,6 +12,9 @@
 //        otherwise every object keeps slot i in both lists with
 //        instance_count 0 or 1 (multi_draw_indexed_indirect fallback).
 //        first_instance carries the object index for the vertex shader.
+//        Without the indirect count the compacted lists are drawn with a
+//        bounded fixed count (bounds.rs); the cull then also counts the
+//        bounds' guards (`count_guards`).
 
 struct Object {
     min: vec3<f32>,
@@ -59,8 +62,13 @@ struct CullParams {
     street: vec4<f32>,
     // the camera's clip matrix (the one the city pass draws with)
     view_proj: mat4x4<f32>,
-    // x = 1 two-phase occlusion culling on, y = late opaque list base (slots)
+    // x = 1 two-phase occlusion culling on, y = late opaque list base (slots),
+    // z = 1 the flat sea quad stands down, w = 1 the city's opaque classes split (`city_class`)
     occ: vec4<u32>,
+    // the bounded lists' guards (bounds.rs): the camera's frustum widened by
+    // WIDE_DEG a side, and x the ring's reach, y the near sphere, z 1 to count them.
+    wide: array<vec4<f32>, 6>,
+    guard: vec4<f32>,
 };
 
 // made with the pyramid (occlusion.rs): the depth target's size.
@@ -86,6 +94,9 @@ const LOD_STREET_COARSE: u32 = 9u;
 const KIND_STREET: u32 = 6u;
 const KIND_STREET_PAINT: u32 = 7u;
 const KIND_SEA: u32 = 3u; // water
+// a grade-separated road's deck and paint, and its concrete (structures.rs; street tile roles and group kind).
+const KIND_STRUCTURE_DECK: u32 = 11u;
+const KIND_STRUCTURE: u32 = 12u;
 // roles of a landmark's draws (scene.rs); LM_NEAR_M and
 // LM_HYSTERESIS_M are appended by lib.rs from eo-landmarks' export.
 const LOD_LANDMARK_NEAR: u32 = 10u;
@@ -100,12 +111,31 @@ const LOD_LANDMARK_FAR: u32 = 11u;
 // [8] street objects drawn, [9] street triangles drawn,
 // [10] late opaque draws, [11] objects in the frustum (after LOD),
 // [12] triangles in the frustum, [13] objects drawn by the early pass,
-// [14] objects the late pass found occluded, [15] pad
-@group(0) @binding(3) var<storage, read_write> counters: array<atomic<u32>, 16>;
+// [14] objects the late pass found occluded, [15] grade-separated road
+// triangles drawn (kinds 11 and 12, `--structures`),
+// [16] opaque / [17] transparent objects LOD-selected in the widened frustum or
+// the near sphere, [18] opaque / [19] transparent LOD-selected within the ring
+// (the bounded draws' guards, bounds.rs; counted only with `params.guard.z` 1),
+// with the city's opaque classes split (`params.occ.w` 1, lib.rs `CityClasses`):
+// [20] street early, [21] street late, [22] landmark early, [23] landmark late
+// draws (the general class keeps [0] and [10])
+@group(0) @binding(3) var<storage, read_write> counters: array<atomic<u32>, 24>;
 @group(0) @binding(4) var<storage, read_write> groups: array<Group>;
 // 1 if the object passed the occlusion test last frame (the early
 // pass draws exactly these); rewritten by the late pass every frame.
 @group(0) @binding(5) var<storage, read_write> visible_last: array<u32>;
+// the material table (draw.wgsl's): its flags sort the opaque objects into the
+// city's classes (`city_class`).
+struct Material {
+    base: vec4<f32>,
+    emissive: vec4<f32>,
+    params: vec4<f32>,
+    layer: i32,
+    flags: u32,
+    rough_flatten: f32,
+    thin_absorption: f32,
+};
+@group(0) @binding(9) var<storage, read> materials: array<Material>;
 // the hierarchical Z of this frame's early depth (late pass only;
 // its own bind group so the early pass and LOD pass do not need it).
 @group(1) @binding(0) var hzb: texture_2d<f32>;
@@ -266,9 +296,9 @@ fn write_cmd(slot: u32, count: u32, instances: u32, first: u32, base_vertex: i32
     draws[b + 4u] = object;
 }
 
-// what the LOD role and the frustum say about object i (shared by
-// the early and late passes): x = visible, y = first index, z = index count.
-fn lod_and_frustum(i: u32, o: Object) -> vec3<u32> {
+// what the LOD role says about object i, before the frustum: x = selected,
+// y = first index, z = index count.
+fn lod_select(i: u32, o: Object) -> vec3<u32> {
     var first = o.first_index;
     var count = o.index_count;
     var visible = true;
@@ -286,6 +316,11 @@ fn lod_and_frustum(i: u32, o: Object) -> vec3<u32> {
     } else if (o.lod_role == LOD_LANDMARK_NEAR || o.lod_role == LOD_LANDMARK_FAR) {
         // the near draws or the far item, by the group's switch.
         visible = (groups[o.lod_group].detailed == 1u) == (o.lod_role == LOD_LANDMARK_NEAR);
+    } else if (o.lod_role == 12u) {
+        if (distance(params.cam.xyz, clamp(params.cam.xyz, o.min, o.max)) > 120.) {
+            first = o.far_first_index;
+            count = o.far_index_count;
+        }
     } else if (o.lod_role == LOD_TERRAIN) {
         // Camera to the tile box.
         let c = clamp(params.cam.xyz, o.min, o.max);
@@ -294,6 +329,10 @@ fn lod_and_frustum(i: u32, o: Object) -> vec3<u32> {
             count = o.far_index_count;
         }
     }
+    if ((o.kind & 255u) == 13u) {
+        // The dive sites contain centimetre-scale relief, hidden at distance by water.
+        visible = distance(params.cam.xyz, clamp(params.cam.xyz, o.min, o.max)) < 58.0;
+    }
     if (count == 0u) {
         visible = false;
     }
@@ -301,16 +340,51 @@ fn lod_and_frustum(i: u32, o: Object) -> vec3<u32> {
     if ((o.kind & 255u) == KIND_SEA && params.occ.z == 1u) {
         visible = false;
     }
-    if (visible) {
+    return vec3<u32>(select(0u, 1u, visible), first, count);
+}
+
+fn in_frustum(o: Object) -> bool {
+    for (var p = 0u; p < 6u; p = p + 1u) {
+        let pl = params.planes[p];
+        let v = select(o.min, o.max, pl.xyz >= vec3<f32>(0.0));
+        if (dot(pl.xyz, v) + pl.w < 0.0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// what the LOD role and the frustum say about object i (shared by
+// the early and late passes): x = visible, y = first index, z = index count.
+fn lod_and_frustum(i: u32, o: Object) -> vec3<u32> {
+    let l = lod_select(i, o);
+    let visible = l.x == 1u && in_frustum(o);
+    return vec3<u32>(select(0u, 1u, visible), l.y, l.z);
+}
+
+// the bounded lists' guards (bounds.rs) of a LOD-selected object: within the
+// ring's reach of the eye ([18] / [19]), and of those, within the near sphere
+// or the widened frustum ([16] / [17]); opaque and transparent apart.
+fn count_guards(o: Object, blend: bool) {
+    let d = distance(clamp(params.cam.xyz, o.min, o.max), params.cam.xyz);
+    if (d > params.guard.x) {
+        return;
+    }
+    let k = select(0u, 1u, blend);
+    atomicAdd(&counters[18u + k], 1u);
+    var wide = true;
+    if (d > params.guard.y) {
         for (var p = 0u; p < 6u; p = p + 1u) {
-            let pl = params.planes[p];
+            let pl = params.wide[p];
             let v = select(o.min, o.max, pl.xyz >= vec3<f32>(0.0));
             if (dot(pl.xyz, v) + pl.w < 0.0) {
-                visible = false;
+                wide = false;
             }
         }
     }
-    return vec3<u32>(select(0u, 1u, visible), first, count);
+    if (wide) {
+        atomicAdd(&counters[16u + k], 1u);
+    }
 }
 
 // Counters of a drawn object (kind and triangles).
@@ -329,7 +403,37 @@ fn count_drawn(o: Object, count: u32) {
         atomicAdd(&counters[9], tris);
     } else if (kind == KIND_BUILDING && o.lod_role == LOD_FAR) {
         atomicAdd(&counters[5], 1u);
+    } else if (kind == KIND_STRUCTURE_DECK || kind == KIND_STRUCTURE) {
+        atomicAdd(&counters[15], tris);
     }
+}
+
+// The city's opaque class of an object with the classes split (params.occ.w;
+// lib.rs `CityClasses`, draw.wgsl `CITY_CLASS`), from its material as draw.wgsl
+// `shade` reads it: 1 the street surface (F_STREET), 2 a landmark's surface
+// kinds (`lm_kind`), 0 the rest (and every kit rung, whose vertices pick their
+// own materials from the kit palette, none of these). Not split: 0.
+fn city_class(o: Object) -> u32 {
+    if (params.occ.w == 0u || (o.kind & 255u) == KIND_KIT) {
+        return 0u;
+    }
+    let f = materials[o.material].flags;
+    if ((f & CC_F_STREET) != 0u) {
+        return 1u;
+    }
+    if ((((f >> CC_LM_SURFACE_SHIFT) & 7u) | ((f >> CC_LM_SURFACE_HIGH_SHIFT) & 8u)) != 0u) {
+        return 2u;
+    }
+    return 0u;
+}
+
+// A class's list: its count word and its first slot (the early list; + 1 and
+// the next region for the late one). Class 0 is the early / late opaque list.
+fn class_word(c: u32, late: bool) -> u32 {
+    return CC_CLASS_WORD + 2u * (c - 1u) + select(0u, 1u, late);
+}
+fn class_base(c: u32, late: bool) -> u32 {
+    return (3u + 2u * (c - 1u) + select(0u, 1u, late)) * params.blend_base;
 }
 
 // The early pass (and, with occlusion off, the only pass): LOD + frustum,
@@ -342,11 +446,14 @@ fn cull(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     let o = objects[i];
-    let lf = lod_and_frustum(i, o);
-    var visible = lf.x == 1u;
-    let first = lf.y;
-    let count = lf.z;
+    let ls = lod_select(i, o);
     let blend = (o.kind & BLEND_BIT) != 0u;
+    if (ls.x == 1u && params.guard.z == 1.0) {
+        count_guards(o, blend);
+    }
+    var visible = ls.x == 1u && in_frustum(o);
+    let first = ls.y;
+    let count = ls.z;
     let list = select(0u, 1u, blend);
     if (params.compact == 1u) {
         if (!visible) {
@@ -362,7 +469,13 @@ fn cull(@builtin(global_invocation_id) gid: vec3<u32>) {
             atomicAdd(&counters[11], 1u);
             atomicAdd(&counters[12], count / 3u);
         }
-        let slot = atomicAdd(&counters[list], 1u) + select(0u, params.blend_base, blend);
+        let c = select(city_class(o), 0u, blend);
+        var slot = 0u;
+        if (c != 0u) {
+            slot = atomicAdd(&counters[class_word(c, false)], 1u) + class_base(c, false);
+        } else {
+            slot = atomicAdd(&counters[list], 1u) + select(0u, params.blend_base, blend);
+        }
         write_cmd(slot, count, 1u, first, o.base_vertex, i);
     } else {
         // Slot i in the opaque list, slot i - blend_first in the transparent
@@ -420,8 +533,11 @@ fn cull_late(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     var slot = 0u;
+    let c = select(city_class(o), 0u, blend);
     if (blend) {
         slot = atomicAdd(&counters[1], 1u) + params.blend_base;
+    } else if (c != 0u) {
+        slot = atomicAdd(&counters[class_word(c, true)], 1u) + class_base(c, true);
     } else {
         slot = atomicAdd(&counters[10], 1u) + params.occ.y;
     }

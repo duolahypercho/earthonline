@@ -1,0 +1,16 @@
+{
+  "source": "Original modeled roof, independently fitted to the 21 Beaver parcel.",
+  "license": "MIT",
+  "attribution": "Earth Online contributors",
+  "profile": "https://www.mca-tile.com/our-product/classic-tapered-mission/",
+  "source_scene": {
+    "file": "21-beaver.blend",
+    "sha256": "e9377ef3738244b30183d9c1c54e376cf4622165eca2e63a3a9fc3b27a842dde"
+  },
+  "tiles": 3828,
+  "triangles": 140580,
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/mission-roof.glb",
+  "bytes": 6856664,
+  "sha256": "8ea4ad64875d8dd51ec13a3e10b53293ac76d57ca69fc395be0ad0b7722fb89b",
+  "build": "scripts/blender-buildings/build_beaver_mission_roof.py --runtime"
+}

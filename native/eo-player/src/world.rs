@@ -19,16 +19,29 @@
 //!   WORLD layer;
 //! * street surface, kerb tops and kerb faces when a [`GroundProvider`] supplies
 //!   them (`surface_tile`): tops on the STREET layer, faces on WORLD, as the JS
-//!   street cross-section colliders are.
+//!   street cross-section colliders are; with the grade-separated roads
+//!   (`--structures`, `street_ground.rs`) also their deck tops (STREET) and
+//!   concrete (WORLD), and the ground has several levels
+//!   (`GroundProvider::multi_level`): `surface_below` and `floor_under` then
+//!   find the surface nearest below a body, where `surface_y` and `floor_y`
+//!   answer for the ground.
 //!
 //! Tiles are keyed by integer cell (`TileKey`), 128 m square, cooked on worker
 //! threads (sampling, earcut, Rapier's trimesh BVH build: everything except the
 //! insertion) and handed to the owner thread, which inserts a bounded number
-//! per frame. Tiles past the drop radius are removed. Nothing in a tile depends
-//! on any other tile, so the keying scales to any number of tiles; for a world
-//! bigger than f32 metres allow (the whole Earth) the key gains a region and
-//! each region its own origin (not needed for one city: SF spans 20 km, which
-//! f32 holds to about a millimetre).
+//! per frame. Tiles past the drop radius are removed. With several levels
+//! (`--structures`) every world inserts and drops them on one canonical
+//! schedule, set by the streaming centre's path alone (`pump_canonical`), so
+//! a server's fed world and a client's own hand out the same collider handles
+//! and solve a body's contacts in the same order. A lockstep world (a
+//! networked player's, `CollisionWorld::lockstep`) inserts and drops them
+//! before each authoritative step instead (`ensure_step_tiles`; with several
+//! levels on the same canonical schedule), so the server's and the client's
+//! follow the body's step path, not the frames or the cookers. Nothing in a
+//! tile depends on any other tile, so the keying scales to any number of
+//! tiles; for a world bigger than f32 metres allow (the whole Earth) the key
+//! gains a region and each region its own origin (not needed for one city:
+//! SF spans 20 km, which f32 holds to about a millimetre).
 
 use glam::DVec3;
 use rapier3d::parry::query::ShapeCastOptions;
@@ -46,6 +59,25 @@ pub const TILE_SIZE_M: f64 = 128.0;
 pub const LOAD_RADIUS_M: f64 = 160.0;
 /// And dropped past this.
 pub const DROP_RADIUS_M: f64 = 260.0;
+/// With several levels (`CollisionWorld::pump_canonical`) tiles are asked
+/// for this far beyond the load radius, so a tile is cooked before it is
+/// due and the canonical schedule never waits on a worker in play: three
+/// seconds at 32 m/s. INFERRED (a streaming margin).
+pub const PREFETCH_M: f64 = 96.0;
+
+/// The canonical order of tiles about a centre: nearest first, then by key.
+fn canonical(a: &TileKey, b: &TileKey, c: (f64, f64)) -> std::cmp::Ordering {
+    a.distance_to(c.0, c.1).total_cmp(&b.distance_to(c.0, c.1)).then(a.cmp(b))
+}
+
+/// The reach of one authoritative fixed step: every tile whose rectangle
+/// lies within this of the body is resident before the step runs
+/// (`CollisionWorld::ensure_step_tiles`). A step reads the building prisms of
+/// the tiles within its sweep plus 64 m (`prisms_near`, a footprint is keyed
+/// by its centroid), the car moves at most 1 m a step at its 60 m/s top speed
+/// and the exit probe looks a car's width beside it: 96 m holds all of that
+/// with a margin and stays inside the `LOAD_RADIUS_M` the stream prefetches.
+pub const STEP_RADIUS_M: f64 = 96.0;
 
 /// Collision layers (`PHYSICS_LAYERS` in src/simulation/physics/core/layers.js, the subset used here).
 pub mod layer {
@@ -96,7 +128,31 @@ pub trait GroundProvider: Send + Sync {
     fn surface_tile(&self, _key: TileKey) -> Option<SurfaceMesh> {
         None
     }
+    /// True when walkable surfaces stand over other walkable surfaces (the
+    /// decks of the grade-separated roads, `--structures`): the collision
+    /// world's level queries (`CollisionWorld::surface_below`,
+    /// `floor_under`) then look for the surface nearest below a body instead
+    /// of the one over the ground. False (one level, today's queries) unless
+    /// a provider says otherwise.
+    fn multi_level(&self) -> bool {
+        false
+    }
+    /// The floor of a cut through the ground at (x, z), where the ground is
+    /// cut away (a tunnel's approach cut, `--tunnels`): the heightfield has
+    /// no cells there and the floor queries read this height instead. None
+    /// (no cut) unless a provider says otherwise.
+    fn terrain_cut(&self, _x: f64, _z: f64) -> Option<f64> {
+        None
+    }
 }
+
+/// How far over a body's feet (or a car's road datum) a surface beside it
+/// still counts as its own level when the ground has several
+/// (`GroundProvider::multi_level`): the reach `CollisionWorld::surface_y`
+/// has always searched over the floor (a kerb, a ramp, a car put a few
+/// metres up a 30 % hill). Every deck clears the street under it by far
+/// more (`structure-vertical-clearance-local` plus the deck's depth).
+pub const LEVEL_REACH_M: f64 = 3.0;
 
 /// The elevation grid as a ground provider (`sf-elevation.bin.gz`, bilinear).
 pub struct ElevationGround(pub Arc<eo_data::ElevationGrid>);
@@ -120,6 +176,79 @@ pub struct BuildingSet {
     pub by_tile: HashMap<TileKey, Vec<u32>>,
     /// Metres the drawn shells stand above bare terrain (moves the prism top).
     pub ground_lift_m: f64,
+    /// landmark access: the walkable decks, their lifts and the prisms they open.
+    pub decks: Arc<Decks>,
+}
+
+/// One landmark deck's collision: walkable floors (STREET layer) and its
+/// railings, glazing and cores (WORLD layer), world metres. Every world
+/// holds them from its creation (`CollisionWorld::new`, `fed`), not by tile,
+/// so a lift's far stop is solid the step it is reached on a server and on
+/// every client alike, whatever their tiles' streaming has done.
+#[derive(Clone, Debug, Default)]
+pub struct DeckPart {
+    pub name: String,
+    pub walk: Vec<[[f64; 3]; 3]>,
+    pub barrier: Vec<[[f64; 3]; 3]>,
+}
+
+/// Building prisms whose footprint centroid lies within `radius_m` of
+/// `centre` are open between `y0` and `y1` (a deck stands inside them there):
+/// both the prism collider and the analytic building guard are split.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PrismCut {
+    pub centre: [f64; 2],
+    pub radius_m: f64,
+    pub y0: f64,
+    pub y1: f64,
+}
+
+/// A lift between a ground entrance and a deck: feet and the camera yaw
+/// (the player's convention, forward = (sin yaw, 0, cos yaw)) at each stop.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LiftDef {
+    pub name: String,
+    pub bottom: DVec3,
+    pub bottom_yaw: f64,
+    pub top: DVec3,
+    pub top_yaw: f64,
+}
+
+/// Everything landmark access adds to the collision world (empty: none).
+#[derive(Clone, Debug, Default)]
+pub struct Decks {
+    pub parts: Vec<DeckPart>,
+    pub cuts: Vec<PrismCut>,
+    pub lifts: Vec<LiftDef>,
+}
+
+impl Decks {
+    /// The vertical spans of a prism from `base_y` to `top_y` left by the cuts
+    /// that reach its footprint centroid (`ax`, `az`).
+    pub fn spans(&self, ax: f64, az: f64, base_y: f64, top_y: f64) -> Vec<(f64, f64)> {
+        let mut spans = vec![(base_y, top_y)];
+        for c in &self.cuts {
+            if (ax - c.centre[0]).hypot(az - c.centre[1]) > c.radius_m {
+                continue;
+            }
+            let mut next = Vec::with_capacity(spans.len() + 1);
+            for (a, b) in spans {
+                if c.y1 <= a || c.y0 >= b {
+                    next.push((a, b));
+                    continue;
+                }
+                if c.y0 > a {
+                    next.push((a, c.y0));
+                }
+                if c.y1 < b {
+                    next.push((c.y1, b));
+                }
+            }
+            spans = next;
+        }
+        spans.retain(|(a, b)| b - a > 0.01);
+        spans
+    }
 }
 
 impl BuildingSet {
@@ -134,7 +263,13 @@ impl BuildingSet {
             let cz = b.ring.iter().map(|p| p[1]).sum::<f64>() / n;
             by_tile.entry(TileKey::of(cx, cz)).or_default().push(i as u32);
         }
-        Self { buildings, by_tile, ground_lift_m }
+        Self { buildings, by_tile, ground_lift_m, decks: Arc::new(Decks::default()) }
+    }
+
+    /// The same buildings with landmark decks (their lifts, the prisms they open).
+    pub fn with_decks(mut self, decks: Decks) -> Self {
+        self.decks = Arc::new(decks);
+        self
     }
 
     /// Every merged building of the city (`City::buildings`).
@@ -171,6 +306,11 @@ pub struct TileHeights {
     pub n: usize,
     /// Row-major by z then x: `h[iz * n + ix]`.
     pub h: Vec<f32>,
+    /// Cells left out of the heightfield (a tunnel's cut through the ground,
+    /// `GroundProvider::terrain_cut`), row-major by z then x over the `n - 1`
+    /// cells: the cut's floor, NaN where the cell is kept. Empty when no cell
+    /// is cut.
+    pub cut: Vec<f32>,
 }
 
 impl TileHeights {
@@ -185,6 +325,11 @@ impl TileHeights {
         }
         let j = (fx.floor() as usize).min(self.n - 2);
         let i = (fz.floor() as usize).min(self.n - 2);
+        if let Some(&f) = self.cut.get(i * (self.n - 1) + j) {
+            if f.is_finite() {
+                return Some(f as f64);
+            }
+        }
         let u = fx - j as f64;
         let v = fz - i as f64;
         let y = |iz: usize, ix: usize| self.h[iz * self.n + ix] as f64;
@@ -271,13 +416,45 @@ pub fn cook_tile(key: TileKey, ground: &dyn GroundProvider, buildings: &Building
     }
     let mut colliders = vec![];
     let mut triangles = cells * cells * 2;
-    let hf = ColliderBuilder::heightfield(Array2::new(n, n, data), Vector::new(span as f32, 1.0, span as f32)) // span
+    // the cells a tunnel's cut leaves out (any corner in a cut; `--tunnels`
+    // only: without one this is the old heightfield, built the old way).
+    let corner_cut: Vec<Option<f64>> = (0..n * n).map(|k| ground.terrain_cut(x0 + (k % n) as f64 * spacing, z0 + (k / n) as f64 * spacing)).collect();
+    let mut cut = vec![];
+    if corner_cut.iter().any(Option::is_some) {
+        cut = vec![f32::NAN; cells * cells];
+        for iz in 0..cells {
+            for ix in 0..cells {
+                let corners = [iz * n + ix, iz * n + ix + 1, (iz + 1) * n + ix, (iz + 1) * n + ix + 1];
+                let floor = corners.iter().filter_map(|&k| corner_cut[k]).fold(f64::INFINITY, f64::min);
+                if floor.is_finite() {
+                    cut[iz * cells + ix] = floor as f32;
+                }
+            }
+        }
+    }
+    let shape = Vector::new(span as f32, 1.0, span as f32);
+    let hf = if cut.is_empty() {
+        ColliderBuilder::heightfield(Array2::new(n, n, data), shape) // span
+    } else {
+        // parry's cells: row i along z, column j along x.
+        let mut field = HeightField::new(Array2::new(n, n, data), shape);
+        for iz in 0..cells {
+            for ix in 0..cells {
+                if cut[iz * cells + ix].is_finite() {
+                    field.set_cell_status(iz, ix, HeightFieldCellStatus::CELL_REMOVED);
+                    triangles -= 2;
+                }
+            }
+        }
+        ColliderBuilder::new(SharedShape::new(field))
+    };
+    let hf = hf
         .translation(Vector::new((x0 + span / 2.0) as f32, 0.0, (z0 + span / 2.0) as f32))
         .friction(tuning::world::TERRAIN_FRICTION)
         .collision_groups(InteractionGroups::new(layer::WORLD, Group::ALL, InteractionTestMode::And))
         .build();
     colliders.push(hf);
-    let heights = Arc::new(TileHeights { origin: [x0, z0], spacing, n, h });
+    let heights = Arc::new(TileHeights { origin: [x0, z0], spacing, n, h, cut });
 
     // Building prisms.
     let mut prisms = vec![];
@@ -310,24 +487,6 @@ pub fn cook_tile(key: TileKey, ground: &dyn GroundProvider, buildings: &Building
             if tri_out.is_empty() {
                 continue;
             }
-            let base = verts.len() as u32;
-            for y in [base_y, top_y] {
-                for p in ring {
-                    verts.push(Vector::new((p[0] - cx) as f32, y as f32, (p[1] - cz) as f32));
-                }
-            }
-            let nn = n as u32;
-            for t in tri_out.chunks_exact(3) {
-                // Floor and roof; Rapier's trimesh is two-sided for queries.
-                tris.push([base + t[0], base + t[1], base + t[2]]);
-                tris.push([base + nn + t[2], base + nn + t[1], base + nn + t[0]]);
-            }
-            for e in 0..nn {
-                let a = e;
-                let b2 = (e + 1) % nn;
-                tris.push([base + a, base + b2, base + nn + b2]);
-                tris.push([base + a, base + nn + b2, base + nn + a]);
-            }
             let mut min = [f64::MAX; 2];
             let mut max = [f64::MIN; 2];
             for p in ring {
@@ -336,7 +495,29 @@ pub fn cook_tile(key: TileKey, ground: &dyn GroundProvider, buildings: &Building
                 max[0] = max[0].max(p[0]);
                 max[1] = max[1].max(p[1]);
             }
-            prisms.push(Prism { ring: ring.clone(), base_y, top_y, min, max });
+            // landmark access: a deck inside the footprint opens the prism there.
+            let spans = if buildings.decks.cuts.is_empty() { vec![(base_y, top_y)] } else { buildings.decks.spans(ax, az, base_y, top_y) };
+            for (base_y, top_y) in spans {
+                let base = verts.len() as u32;
+                for y in [base_y, top_y] {
+                    for p in ring {
+                        verts.push(Vector::new((p[0] - cx) as f32, y as f32, (p[1] - cz) as f32));
+                    }
+                }
+                let nn = n as u32;
+                for t in tri_out.chunks_exact(3) {
+                    // Floor and roof; Rapier's trimesh is two-sided for queries.
+                    tris.push([base + t[0], base + t[1], base + t[2]]);
+                    tris.push([base + nn + t[2], base + nn + t[1], base + nn + t[0]]);
+                }
+                for e in 0..nn {
+                    let a = e;
+                    let b2 = (e + 1) % nn;
+                    tris.push([base + a, base + b2, base + nn + b2]);
+                    tris.push([base + a, base + nn + b2, base + nn + a]);
+                }
+                prisms.push(Prism { ring: ring.clone(), base_y, top_y, min, max });
+            }
         }
     }
     if !tris.is_empty() {
@@ -521,8 +702,24 @@ pub struct CollisionWorld {
     pub stats: StreamStats,
     /// At most this many tiles are inserted per pump (the rest wait a frame).
     pub insert_per_pump: usize,
+    /// LOCKSTEP: what the world holds at each fixed step is a function of
+    /// where the body has been, never of how fast the cookers ran. `pump`
+    /// then only requests and collects cooked tiles; `ensure_step_tiles`
+    /// (before every authoritative step) inserts the tiles within
+    /// `STEP_RADIUS_M`, waiting for a cook that is late, and drops the tiles
+    /// past `DROP_RADIUS_M`, both in key order (with several levels, on the
+    /// canonical schedule: `pump_canonical`). A client and the server
+    /// stepping the same inputs, or a client replaying them after a
+    /// correction, see the same colliders however loaded the machine is.
+    pub lockstep: bool,
+    /// Longest wait for a late cook in `ensure_step_tiles`, ms, and how many
+    /// steps waited at all.
+    pub step_wait_ms_max: f64,
+    pub step_waits: u64,
     /// Removed tiles go here to be freed on another thread (None when fed: shared shapes are freed in place).
     graveyard: Option<Sender<(Vec<Collider>, Arc<TileHeights>, Arc<Vec<Prism>>)>>,
+    /// The ground has walkable surfaces over others (`GroundProvider::multi_level`).
+    multi_level: bool,
 }
 
 /// A freestanding box whose pose can change without recooking its city tile.
@@ -554,17 +751,55 @@ impl MovableBox {
     }
 }
 
-fn new_physics() -> PhysicsWorld {
+fn new_physics(decks: &Decks) -> PhysicsWorld {
     let mut physics = PhysicsWorld::new();
     physics.gravity = Vector::new(0.0, -tuning::GRAVITY_MPS2 as f32, 0.0);
     physics.integration_parameters.dt = tuning::FIXED_STEP_S as f32;
     physics.integration_parameters.num_solver_iterations = tuning::SOLVER_ITERATIONS;
+    // landmark access: every deck, from the start, in the same order on every world.
+    for c in deck_colliders(decks) {
+        physics.insert_collider(c, None);
+    }
     physics
+}
+
+/// The decks' colliders: per part a walkable trimesh (STREET) and a barrier
+/// trimesh (WORLD), each about its own centre (f32 holds the city to a millimetre).
+pub fn deck_colliders(decks: &Decks) -> Vec<Collider> {
+    let mut out = vec![];
+    for part in &decks.parts {
+        for (list, group) in [(&part.walk, layer::STREET), (&part.barrier, layer::WORLD)] {
+            if list.is_empty() {
+                continue;
+            }
+            let n = (list.len() * 3) as f64;
+            let cx = list.iter().flatten().map(|p| p[0]).sum::<f64>() / n;
+            let cz = list.iter().flatten().map(|p| p[2]).sum::<f64>() / n;
+            let mut v = Vec::with_capacity(list.len() * 3);
+            let mut ix = Vec::with_capacity(list.len());
+            for t in list.iter() {
+                let b = v.len() as u32;
+                for p in t {
+                    v.push(v3([p[0] - cx, p[1], p[2] - cz]));
+                }
+                ix.push([b, b + 1, b + 2]);
+            }
+            if let Ok(b) = ColliderBuilder::trimesh(v, ix) {
+                out.push(
+                    b.translation(Vector::new(cx as f32, 0.0, cz as f32))
+                        .friction(tuning::world::TERRAIN_FRICTION)
+                        .collision_groups(InteractionGroups::new(group, Group::ALL, InteractionTestMode::And))
+                        .build(),
+                );
+            }
+        }
+    }
+    out
 }
 
 impl CollisionWorld {
     pub fn new(ground: Arc<dyn GroundProvider>, buildings: Arc<BuildingSet>, threads: usize) -> Self {
-        let physics = new_physics();
+        let physics = new_physics(&buildings.decks);
         let cooker = TileCooker::start(ground.clone(), buildings.clone(), threads);
         let (graveyard, rx) = channel::<(Vec<Collider>, Arc<TileHeights>, Arc<Vec<Prism>>)>();
         std::thread::Builder::new()
@@ -575,12 +810,20 @@ impl CollisionWorld {
                 }
             })
             .expect("spawn tile graveyard");
-        Self { physics, ground, buildings, cooker: Some(cooker), feed: None, resident: HashMap::new(), requested: HashSet::new(), pending: vec![], stats: StreamStats::default(), insert_per_pump: 1, graveyard: Some(graveyard) }
+        let multi_level = ground.multi_level();
+        Self { physics, ground, buildings, cooker: Some(cooker), feed: None, resident: HashMap::new(), requested: HashSet::new(), pending: vec![], stats: StreamStats::default(), insert_per_pump: 1, lockstep: false, step_wait_ms_max: 0.0, step_waits: 0, graveyard: Some(graveyard), multi_level }
     }
 
     /// a world whose tiles come from a shared feed (no threads of its own).
     pub fn fed(ground: Arc<dyn GroundProvider>, buildings: Arc<BuildingSet>, feed: Arc<dyn TileFeed>) -> Self {
-        Self { physics: new_physics(), ground, buildings, cooker: None, feed: Some(feed), resident: HashMap::new(), requested: HashSet::new(), pending: vec![], stats: StreamStats::default(), insert_per_pump: 1, graveyard: None }
+        let multi_level = ground.multi_level();
+        Self { physics: new_physics(&buildings.decks), ground, buildings, cooker: None, feed: Some(feed), resident: HashMap::new(), requested: HashSet::new(), pending: vec![], stats: StreamStats::default(), insert_per_pump: 1, lockstep: false, step_wait_ms_max: 0.0, step_waits: 0, graveyard: None, multi_level }
+    }
+
+    /// The ground has walkable surfaces over others (decks, `--structures`):
+    /// the level queries pick the surface nearest below a body.
+    pub fn multi_level(&self) -> bool {
+        self.multi_level
     }
 
     fn wanted(x: f64, z: f64, radius: f64) -> Vec<TileKey> {
@@ -600,7 +843,14 @@ impl CollisionWorld {
 
     /// Owner-thread streaming: request what is near `center`, insert what has
     /// been cooked (bounded), drop what is far. Returns the ms spent here.
+    /// With several levels (`multi_level`) the tiles are inserted on the
+    /// canonical schedule instead (`pump_canonical`). A lockstep world only
+    /// requests and collects here, with one level or several: its tiles go
+    /// in and out in `ensure_step_tiles`, on the body's step path.
     pub fn pump(&mut self, center: DVec3) -> f64 {
+        if self.multi_level {
+            return self.pump_canonical(center);
+        }
         let t = Instant::now();
         let want = Self::wanted(center.x, center.z, LOAD_RADIUS_M);
         if let Some(feed) = &self.feed {
@@ -625,7 +875,9 @@ impl CollisionWorld {
         // Nearest first.
         self.pending.sort_by(|a, b| b.key.distance_to(center.x, center.z).partial_cmp(&a.key.distance_to(center.x, center.z)).unwrap());
         let mut inserted = 0;
-        while inserted < self.insert_per_pump {
+        // Lockstep: the cooked tiles wait in `pending` for `ensure_step_tiles`.
+        let budget = if self.lockstep { 0 } else { self.insert_per_pump };
+        while inserted < budget {
             let Some(b) = self.pending.pop() else { break };
             self.requested.remove(&b.key);
             if b.key.distance_to(center.x, center.z) > DROP_RADIUS_M || self.resident.contains_key(&b.key) {
@@ -636,24 +888,74 @@ impl CollisionWorld {
         }
         // Drop far tiles, one per pump (and forget far requests). The removed
         // colliders (heightfield and trimesh buffers) are freed off-thread.
-        let far = self.resident.keys().copied().filter(|k| k.distance_to(center.x, center.z) > DROP_RADIUS_M).max_by(|a, b| a.distance_to(center.x, center.z).partial_cmp(&b.distance_to(center.x, center.z)).unwrap());
+        let far = if self.lockstep { None } else { self.resident.keys().copied().filter(|k| k.distance_to(center.x, center.z) > DROP_RADIUS_M).max_by(|a, b| a.distance_to(center.x, center.z).partial_cmp(&b.distance_to(center.x, center.z)).unwrap()) };
         if let Some(k) = far {
-            let tr = Instant::now();
-            if let Some(r) = self.resident.remove(&k) {
-                let mut gone = Vec::with_capacity(r.colliders.len());
-                for h in r.colliders {
-                    if let Some(c) = self.physics.remove_collider(h) {
-                        gone.push(c);
-                    }
-                }
-                if let Some(g) = &self.graveyard {
-                    let _ = g.send((gone, r.heights, r.prisms));
-                }
-                self.stats.tiles_removed += 1;
-            }
-            self.stats.remove_ms_max = self.stats.remove_ms_max.max(tr.elapsed().as_secs_f64() * 1e3);
+            self.remove_tile(k);
         }
         let keep: HashSet<TileKey> = Self::wanted(center.x, center.z, DROP_RADIUS_M).into_iter().collect();
+        self.requested.retain(|k| keep.contains(k));
+        if let Some(cooker) = &self.cooker {
+            cooker.cancel_except(&keep);
+        }
+        let resident = &self.resident;
+        self.pending.retain(|b| keep.contains(&b.key) && !resident.contains_key(&b.key));
+        self.stats.tiles_resident = self.resident.len();
+        let ms = t.elapsed().as_secs_f64() * 1e3;
+        self.stats.pump_ms_max = self.stats.pump_ms_max.max(ms);
+        ms
+    }
+
+    /// `pump` with the grade-separated roads: a body can touch concrete of
+    /// several tiles at once (a deck's barrier crosses a tile seam), and the
+    /// physics solves contacts in the order of the colliders' handles, which
+    /// the world hands out in insertion order (reusing the slots of removed
+    /// ones); so that a server's fed world and a client's own agree contact
+    /// for contact, every world inserts and removes tiles on a schedule that
+    /// depends only on the path of `center`, never on when a worker finished
+    /// a tile: each pump inserts the nearest due tiles (inside the load
+    /// radius, not resident; nearest first, then by key), at most
+    /// `insert_per_pump`, waiting for one not yet cooked (tiles are asked
+    /// for `PREFETCH_M` beyond the load radius, so they are cooked long
+    /// before they are due), and drops the farthest tile past the drop
+    /// radius (then by key) (`canonical_move`). A lockstep world makes that
+    /// move before each authoritative step instead (`ensure_step_tiles`), at
+    /// the body's position, which is where the pump after the step before
+    /// makes it in a world that is not lockstep: the two keep the same tiles
+    /// in the same order, step for step.
+    fn pump_canonical(&mut self, center: DVec3) -> f64 {
+        let t = Instant::now();
+        let c = (center.x, center.z);
+        let ask: Vec<TileKey> = Self::wanted(c.0, c.1, LOAD_RADIUS_M + PREFETCH_M)
+            .into_iter()
+            .filter(|k| !self.resident.contains_key(k) && !self.pending.iter().any(|b| b.key == *k))
+            .collect();
+        if let Some(feed) = &self.feed {
+            for k in ask {
+                match feed.fetch(k, c) {
+                    Some(b) => {
+                        self.requested.remove(&k);
+                        self.pending.push(b);
+                    }
+                    None => {
+                        self.requested.insert(k);
+                    }
+                }
+            }
+        } else if let Some(cooker) = &self.cooker {
+            let missing: Vec<TileKey> = ask.into_iter().filter(|k| !self.requested.contains(k)).collect();
+            if !missing.is_empty() {
+                self.requested.extend(missing.iter().copied());
+                cooker.request(&missing, c);
+            }
+            while let Ok(b) = cooker.rx.try_recv() {
+                self.requested.remove(&b.key);
+                self.pending.push(b);
+            }
+        }
+        if !self.lockstep {
+            self.canonical_move(c);
+        }
+        let keep: HashSet<TileKey> = Self::wanted(c.0, c.1, DROP_RADIUS_M.max(LOAD_RADIUS_M + PREFETCH_M)).into_iter().collect();
         self.requested.retain(|k| keep.contains(k));
         if let Some(cooker) = &self.cooker {
             cooker.cancel_except(&keep);
@@ -663,6 +965,166 @@ impl CollisionWorld {
         let ms = t.elapsed().as_secs_f64() * 1e3;
         self.stats.pump_ms_max = self.stats.pump_ms_max.max(ms);
         ms
+    }
+
+    /// One move of the canonical schedule about `c` (`pump_canonical`): the
+    /// nearest due tiles (inside the load radius, not resident; nearest
+    /// first, then by key), at most `insert_per_pump`, inserted (waiting for
+    /// one not yet cooked), and the farthest tile past the drop radius (then
+    /// by key) dropped. Returns the tiles inserted.
+    fn canonical_move(&mut self, c: (f64, f64)) -> usize {
+        let mut inserted = 0;
+        let mut due: Vec<TileKey> = Self::wanted(c.0, c.1, LOAD_RADIUS_M).into_iter().filter(|k| !self.resident.contains_key(k)).collect();
+        due.sort_by(|a, b| canonical(a, b, c));
+        for k in due.into_iter().take(self.insert_per_pump) {
+            if let Some(b) = self.take_cooked(k, c) {
+                self.insert(b);
+                inserted += 1;
+            }
+        }
+        let far = self.resident.keys().copied().filter(|k| k.distance_to(c.0, c.1) > DROP_RADIUS_M).max_by(|a, b| canonical(a, b, c));
+        if let Some(k) = far {
+            self.remove_tile(k);
+        }
+        inserted
+    }
+
+    /// Tile `k` cooked: from the pending ones, else waited for (asked for
+    /// now if it never was). None only when no cooker or feed is left.
+    fn take_cooked(&mut self, k: TileKey, c: (f64, f64)) -> Option<BuiltTile> {
+        if let Some(i) = self.pending.iter().position(|b| b.key == k) {
+            self.requested.remove(&k);
+            return Some(self.pending.swap_remove(i));
+        }
+        if let Some(feed) = self.feed.clone() {
+            loop {
+                if let Some(b) = feed.fetch(k, c) {
+                    self.requested.remove(&k);
+                    return Some(b);
+                }
+                std::thread::sleep(std::time::Duration::from_micros(200));
+            }
+        }
+        let cooker = self.cooker.as_ref()?;
+        if !self.requested.contains(&k) {
+            self.requested.insert(k);
+            cooker.request(&[k], c);
+        }
+        loop {
+            let b = cooker.rx.recv().ok()?;
+            self.requested.remove(&b.key);
+            if b.key == k {
+                return Some(b);
+            }
+            self.pending.push(b);
+        }
+    }
+
+    fn remove_tile(&mut self, k: TileKey) {
+        let tr = Instant::now();
+        if let Some(r) = self.resident.remove(&k) {
+            let mut gone = Vec::with_capacity(r.colliders.len());
+            for h in r.colliders {
+                if let Some(c) = self.physics.remove_collider(h) {
+                    gone.push(c);
+                }
+            }
+            if let Some(g) = &self.graveyard {
+                let _ = g.send((gone, r.heights, r.prisms));
+            }
+            self.stats.tiles_removed += 1;
+        }
+        self.stats.remove_ms_max = self.stats.remove_ms_max.max(tr.elapsed().as_secs_f64() * 1e3);
+    }
+
+    /// Before an authoritative fixed step at `center` (the body): every tile
+    /// within `STEP_RADIUS_M` resident, waiting for the cook of any that is
+    /// not ready yet (normally none: the stream asked for them 64 m earlier),
+    /// inserted in key order; in a lockstep world, the tiles past
+    /// `DROP_RADIUS_M` removed, in key order. With several levels a lockstep
+    /// world first makes the canonical schedule's move at `center`
+    /// (`canonical_move`, as `pump_canonical` makes it in a world that is not
+    /// lockstep) and drops on that schedule. No physics step is taken (the
+    /// tiles that arrive here lie 95 m or more from the body, so the step
+    /// cannot touch them before the next one). Returns the tiles inserted.
+    ///
+    /// Why: without it the colliders at a step depend on how fast the
+    /// worker threads cooked relative to the stepping. A replay that runs
+    /// faster than real time (a correction, a test) or a loaded machine
+    /// steps the body over tiles that are not resident yet in one run and
+    /// are in another, and the two runs part (tens of metres, measured with
+    /// a 40 ms cook: `eo-server` `determinism`).
+    pub fn ensure_step_tiles(&mut self, center: DVec3) -> usize {
+        let (x, z) = (center.x, center.z);
+        let mut inserted = 0;
+        if self.lockstep && self.multi_level {
+            inserted += self.canonical_move((x, z));
+        }
+        let want = Self::wanted(x, z, STEP_RADIUS_M); // row by row: a fixed key order
+        let missing: Vec<TileKey> = want.into_iter().filter(|k| !self.resident.contains_key(k)).collect();
+        if !missing.is_empty() {
+            let t = Instant::now();
+            let mut got: Vec<Option<BuiltTile>> = missing
+                .iter()
+                .map(|k| {
+                    let i = self.pending.iter().position(|b| b.key == *k)?;
+                    Some(self.pending.swap_remove(i))
+                })
+                .collect();
+            let mut waited = false;
+            let mut asked = Instant::now() - std::time::Duration::from_secs(10);
+            while got.iter().any(Option::is_none) {
+                if let Some(feed) = self.feed.clone() {
+                    for (k, g) in missing.iter().zip(got.iter_mut()) {
+                        if g.is_none() {
+                            *g = feed.fetch(*k, (x, z));
+                        }
+                    }
+                    if got.iter().any(Option::is_none) {
+                        waited = true;
+                        std::thread::sleep(std::time::Duration::from_micros(200));
+                    }
+                } else if let Some(cooker) = &self.cooker {
+                    // (Re)ask for what is neither cooked nor known to be queued; once a second
+                    // ask again for all of it (a request the stream cancelled meanwhile).
+                    if asked.elapsed().as_secs_f64() > 1.0 {
+                        let ask: Vec<TileKey> = missing.iter().zip(&got).filter(|(_, g)| g.is_none()).map(|(k, _)| *k).collect();
+                        self.requested.extend(ask.iter().copied());
+                        cooker.request(&ask, (x, z));
+                        asked = Instant::now();
+                    }
+                    waited = true;
+                    match cooker.rx.recv_timeout(std::time::Duration::from_millis(250)) {
+                        Ok(b) => match missing.iter().position(|k| *k == b.key) {
+                            Some(i) if got[i].is_none() => got[i] = Some(b),
+                            _ => self.pending.push(b),
+                        },
+                        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                        Err(_) => break,
+                    }
+                } else {
+                    break;
+                }
+            }
+            for b in got.into_iter().flatten() {
+                self.requested.remove(&b.key);
+                self.insert(b);
+                inserted += 1;
+            }
+            if waited {
+                self.step_waits += 1;
+                self.step_wait_ms_max = self.step_wait_ms_max.max(t.elapsed().as_secs_f64() * 1e3);
+            }
+        }
+        if self.lockstep && !self.multi_level {
+            let mut far: Vec<TileKey> = self.resident.keys().copied().filter(|k| k.distance_to(x, z) > DROP_RADIUS_M).collect();
+            far.sort_unstable();
+            for k in far {
+                self.remove_tile(k);
+            }
+        }
+        self.stats.tiles_resident = self.resident.len();
+        inserted
     }
 
     fn insert(&mut self, b: BuiltTile) {
@@ -679,50 +1141,78 @@ impl CollisionWorld {
         self.stats.insert_ms_max = self.stats.insert_ms_max.max(t.elapsed().as_secs_f64() * 1e3);
     }
 
-    /// Block until every tile within `radius` of `center` is resident (setup and tests).
+    /// Block until every tile within `radius` of `center` is resident (setup
+    /// and tests). With several levels (`multi_level`) they are inserted in
+    /// the canonical order (nearest first, then by key) whatever order they
+    /// were cooked in.
     pub fn load_blocking(&mut self, center: DVec3, radius: f64) {
         let want = Self::wanted(center.x, center.z, radius);
-        if let Some(feed) = self.feed.clone() {
-            // wait on the shared feed.
-            loop {
-                for k in &want {
-                    if !self.resident.contains_key(k) {
-                        if let Some(b) = feed.fetch(*k, (center.x, center.z)) {
-                            self.insert(b);
-                        }
-                    }
+        if self.multi_level && (self.feed.is_some() || self.cooker.is_some()) {
+            let c = (center.x, center.z);
+            let mut due: Vec<TileKey> = want.iter().copied().filter(|k| !self.resident.contains_key(k)).collect();
+            due.sort_by(|a, b| canonical(a, b, c));
+            // (asked for all at once, so they cook side by side.)
+            if let Some(cooker) = &self.cooker {
+                let missing: Vec<TileKey> = due.iter().copied().filter(|k| !self.requested.contains(k) && !self.pending.iter().any(|b| b.key == *k)).collect();
+                self.requested.extend(missing.iter().copied());
+                cooker.request(&missing, c);
+            }
+            for k in due {
+                if let Some(b) = self.take_cooked(k, c) {
+                    self.insert(b);
                 }
-                if want.iter().all(|k| self.resident.contains_key(k)) {
-                    break;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(1));
             }
             self.stats.tiles_resident = self.resident.len();
             self.physics.step();
             return;
         }
-        if self.cooker.is_none() {
-            return;
-        }
-        let missing: Vec<TileKey> = want.iter().copied().filter(|k| !self.resident.contains_key(k) && !self.requested.contains(k)).collect();
-        self.requested.extend(missing.iter().copied());
-        self.cooker.as_ref().unwrap().request(&missing, (center.x, center.z));
-        loop {
-            for i in (0..self.pending.len()).rev() {
-                if want.contains(&self.pending[i].key) {
-                    let b = self.pending.swap_remove(i);
-                    self.requested.remove(&b.key);
-                    if !self.resident.contains_key(&b.key) {
-                        self.insert(b);
+        // Every tile cooked first, then inserted in `want`'s fixed order: the
+        // order the cooks finish in varies from run to run, and the colliders'
+        // handles (and so the solver's contact order) follow the insertion order.
+        let mut got: HashMap<TileKey, BuiltTile> = HashMap::new();
+        if let Some(feed) = self.feed.clone() {
+            // wait on the shared feed.
+            loop {
+                for k in &want {
+                    if !self.resident.contains_key(k) && !got.contains_key(k) {
+                        if let Some(b) = feed.fetch(*k, (center.x, center.z)) {
+                            got.insert(*k, b);
+                        }
                     }
                 }
+                if want.iter().all(|k| self.resident.contains_key(k) || got.contains_key(k)) {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(1));
             }
-            if want.iter().all(|k| self.resident.contains_key(k)) {
-                break;
+        } else if self.cooker.is_some() {
+            let missing: Vec<TileKey> = want.iter().copied().filter(|k| !self.resident.contains_key(k) && !self.requested.contains(k)).collect();
+            self.requested.extend(missing.iter().copied());
+            self.cooker.as_ref().unwrap().request(&missing, (center.x, center.z));
+            loop {
+                for i in (0..self.pending.len()).rev() {
+                    if want.contains(&self.pending[i].key) {
+                        let b = self.pending.swap_remove(i);
+                        self.requested.remove(&b.key);
+                        if !self.resident.contains_key(&b.key) {
+                            got.insert(b.key, b);
+                        }
+                    }
+                }
+                if want.iter().all(|k| self.resident.contains_key(k) || got.contains_key(k)) {
+                    break;
+                }
+                match self.cooker.as_ref().unwrap().rx.recv() {
+                    Ok(b) => self.pending.push(b),
+                    Err(_) => break,
+                }
             }
-            match self.cooker.as_ref().unwrap().rx.recv() {
-                Ok(b) => self.pending.push(b),
-                Err(_) => break,
+        } else {
+            return;
+        }
+        for k in &want {
+            if let Some(b) = got.remove(k) {
+                self.insert(b);
             }
         }
         self.stats.tiles_resident = self.resident.len();
@@ -753,6 +1243,52 @@ impl CollisionWorld {
             Some(h) => h.point.y.max(floor),
             None => floor,
         }
+    }
+
+    /// The walkable surface nearest below `from_y` at (x, z) (the body's
+    /// height plus a margin, `LEVEL_REACH_M`): a deck where the point is on
+    /// one, the street under it where it is under one. Walkable is the
+    /// street layer (street, kerb tops, deck tops: the first hit of a ray down
+    /// from `from_y`) and the ground heightfield (the floor, when it is under
+    /// `from_y`), whichever is higher; never a building roof or the
+    /// structures' concrete (a barrier top, or the inside of a girder a
+    /// reference height may start in). Where the ground stands over `from_y`
+    /// (under the terrain: a future tunnel) the street layer under it, else
+    /// the floor. One level (no structures): `surface_y`, exactly.
+    pub fn surface_below(&self, x: f64, z: f64, from_y: f64) -> f64 {
+        if !self.multi_level {
+            return self.surface_y(x, z);
+        }
+        let floor = self.floor_y(x, z);
+        match self.street_below(x, z, from_y, floor) {
+            Some(y) if floor <= from_y => y.max(floor),
+            Some(y) => y,
+            None => floor,
+        }
+    }
+
+    /// The height a body moving to (x, z) is never let below (the on-foot
+    /// controller's floor clamp, `containmentFloorY`): the floor where it is
+    /// under `from_y` (the capsule's centre); where the ground stands over
+    /// `from_y` (a body under the terrain, in a future tunnel: the old clamp
+    /// would push it up through the ground) the street layer's surface under
+    /// it, or no clamp (`NEG_INFINITY`). On a deck the floor is the ground
+    /// far below and the deck's own collider holds the body; under a deck
+    /// the floor is the street's ground as before. One level: `floor_y`.
+    pub fn floor_under(&self, x: f64, z: f64, from_y: f64) -> f64 {
+        let floor = self.floor_y(x, z);
+        if !self.multi_level || floor <= from_y {
+            return floor;
+        }
+        self.street_below(x, z, from_y, floor).unwrap_or(f64::NEG_INFINITY)
+    }
+
+    /// The first street-layer hit (street, kerb tops, deck tops) of a ray
+    /// down from `from_y` to just under the floor (or `LEVEL_REACH_M` under
+    /// `from_y` where the floor is over it).
+    fn street_below(&self, x: f64, z: f64, from_y: f64, floor: f64) -> Option<f64> {
+        let to = floor.min(from_y - LEVEL_REACH_M) - 0.5;
+        self.raycast(DVec3::new(x, from_y, z), DVec3::NEG_Y, from_y - to, layer::STREET, None).map(|h| h.point.y)
     }
 
     /// Prisms of the resident tiles around (x, z) within `reach`.

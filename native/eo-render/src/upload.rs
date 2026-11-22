@@ -47,6 +47,13 @@ pub enum Target {
     /// the street decal grid (headers, cells) and the decal records (byte offsets).
     Cc0Grid,
     Cc0Decals,
+    /// one tile of the ambient volume (`ambient::AmbientGpu::write`): level,
+    /// tile index; the whole tile's layers in one write, never split (with
+    /// the ground bounce, a second write at the sky part's byte offset holds
+    /// its ground layers).
+    AmbientVolume { level: u8, x: i16, z: i16 },
+    /// a box of the ambient volume's citywide plane (texels), in one write.
+    AmbientPlane { x: u16, z: u16, w: u16, h: u16 },
 }
 
 /// A write's payload, owned in its natural type so nothing is copied on the
@@ -228,7 +235,7 @@ impl UploadQueue {
                 let w = &job.bulk[job.next];
                 let remain = w.data.bytes().len() - job.at;
                 match w.target {
-                    Target::Texture { .. } | Target::Cc0Texture { .. } => {
+                    Target::Texture { .. } | Target::Cc0Texture { .. } | Target::AmbientVolume { .. } | Target::AmbientPlane { .. } => {
                         // whole rows, as many as the budget has room
                         // for (one at least): a mip larger than the budget
                         // goes over several pumps instead of in one.
@@ -376,7 +383,7 @@ impl UploadQueue {
                 let Some((rows, dst)) = plan else {
                     // A texture of another shape, or bytes the GPU copy cannot take: written here, as before.
                     let w = &job.bulk[job.next];
-                    let texture = matches!(w.target, Target::Texture { .. } | Target::Cc0Texture { .. });
+                    let texture = matches!(w.target, Target::Texture { .. } | Target::Cc0Texture { .. } | Target::AmbientVolume { .. } | Target::AmbientPlane { .. });
                     if texture && remain as u64 > left && st.bytes + staged_bytes > 0 {
                         break 'jobs;
                     }
@@ -395,8 +402,12 @@ impl UploadQueue {
                 let take = rows.bytes();
                 let arc = job.cur.get_or_insert_with(|| Arc::new(std::mem::replace(&mut job.bulk[job.next].data, Data::Bytes(Vec::new())))).clone();
                 let tw = std::time::Instant::now();
+                let src = matches!(target, Target::Object).then(|| arc.clone()); // the renderer's CPU copy of the table follows
                 if !stager.stage(job.id, arc, rows, dst) {
                     break 'jobs; // every chunk is in flight: the rest waits for a later pump
+                }
+                if let Some(src) = src {
+                    renderer.note_object_write(offset + job.at as u64, &src.bytes()[job.at..job.at + take as usize]);
                 }
                 crate::hitch::note_write_to(crate::hitch_target(target), take, tw.elapsed().as_secs_f64() * 1e3);
                 staged_bytes += take;

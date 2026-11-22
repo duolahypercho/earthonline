@@ -1,0 +1,175 @@
+{
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/street-garden.glb",
+  "sha256": "05e6b5cceba5a98495e1067bbae7799f1f995b1faeb7979e2fe84e18c1f4fe47",
+  "bytes": 9416256,
+  "maps": [
+    {
+      "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/street-garden-granite.png",
+      "sha256": "2eea6806c1656575c802c085e5bc3fa67e6fd5f26125fc4c9d46aacc55af98d9",
+      "bytes": 1914441
+    },
+    {
+      "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/street-garden-weathered.png",
+      "sha256": "82926aec2b3de22fdab05a1008a7fb3503abb9cad7d612665d8295c546fcd6b1",
+      "bytes": 1093467
+    },
+    {
+      "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/street-garden-agave.png",
+      "sha256": "04a028c939a2ab0a07d42c9e7cb75ebae0fe97ce7f4db468fa4c34420c317edc",
+      "bytes": 729443
+    }
+  ],
+  "materials": [
+    "Granite mulch with fines",
+    "Weathered planter render",
+    "Agave wax, fibres and seed"
+  ],
+  "triangles": 187198,
+  "house_sha256": "0f567a703707bf14d2e49fd9ee1a713422faa46109fd5b42f404f5ab6bd0dc50",
+  "source_scene_sha256": "93a911c5796cd1e75445b8fc27dc90bd9476fe4dabdcb6cbc2b6489fc3a78b91",
+  "portable_sha256": "6b7f0ce8f664afb525c2f23e46c5c9d0ed2a40c69c9f68b447912efa007b1a06",
+  "replaced": [
+    "front-dry-garden - agave-leaf@668576",
+    "front-dry-garden - agave-leaf@6b8b78",
+    "front-dry-garden - agave-leaf@789a8a",
+    "front-dry-garden - agave-leaf@91ab98",
+    "front-dry-garden - bunchgrass@898966",
+    "front-dry-garden - bunchgrass@918c65",
+    "front-dry-garden - bunchgrass@b0a379",
+    "front-dry-garden - bunchgrass@b5ab7c",
+    "front-dry-garden - decomposed-granite@b4a087",
+    "front-dry-garden - float-finish-stucco@d5c6aa",
+    "front-dry-garden - garden-stone@928578",
+    "front-dry-garden - garden-stone@a79881",
+    "front-dry-garden - garden-stone@b9a68d",
+    "front-dry-garden - garden-stone@c6b49b"
+  ],
+  "credits": {
+    "materials": [
+      {
+        "name": "Agave wax, fibres and seed",
+        "maps": {
+          "pigment": {
+            "file": "Agave wax, fibres and seed - pigment.png",
+            "sha256": "57d5b792424a0007b76065659d41829f9db7693c8f72276e5cdff73d091ce1e8"
+          },
+          "normal": {
+            "file": "Agave wax, fibres and seed - normal.png",
+            "sha256": "55c83db1888dfb250e767970bbe42d0192b03abff356c102046f409561a4c3c7"
+          },
+          "orm": {
+            "file": "Agave wax, fibres and seed - orm.png",
+            "sha256": "8ab3f11e566452a1e3b5fda3e7983ffd3888960e0d46612466b03d07efb21a88"
+          }
+        }
+      },
+      {
+        "name": "Weathered planter render",
+        "maps": {
+          "pigment": {
+            "file": "Weathered planter render - pigment.png",
+            "sha256": "ad5752beee33e0dc967678ce3564c010aa5bb8ce86c7f8d30cbe89fb22e253fc"
+          },
+          "normal": {
+            "file": "Weathered planter render - normal.png",
+            "sha256": "e7125d5325b32e81d0a78d0765bf07111ef16d3307a947c3620d53e419cff8e3"
+          },
+          "orm": {
+            "file": "Weathered planter render - orm.png",
+            "sha256": "44a5f64c47aa01adf68d49f8ea79d5065c6bb8527fe9bfb9a470ab607cd1f908"
+          }
+        }
+      },
+      {
+        "name": "Granite mulch with fines",
+        "maps": {
+          "pigment": {
+            "file": "Granite mulch with fines - pigment.png",
+            "sha256": "f8faf2fe76e09dcef5f92afbdbaa415cb2317005c75df1f8208de9845e371459"
+          },
+          "normal": {
+            "file": "Granite mulch with fines - normal.png",
+            "sha256": "ee19cc88fa28c89264910d64f6a11749d4a234b68d437ee874364c596aa9f29d"
+          },
+          "orm": {
+            "file": "Granite mulch with fines - orm.png",
+            "sha256": "ea8246dfc07c01a8751dbc4bd844af9a476c0c42c17f8d0d8e66ffa69a9543e4"
+          }
+        }
+      }
+    ],
+    "inputs": [
+      {
+        "asset": "concrete_floor_worn_001",
+        "role": "albedo",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_floor_worn_001/concrete_floor_worn_001_diff_2k.jpg",
+        "sha256": "e29b45cdcd6d02fae3c087c456196ffa750779a9b62e7071aa3831dc322a0cc4"
+      },
+      {
+        "asset": "concrete_floor_worn_001",
+        "role": "normal",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_floor_worn_001/concrete_floor_worn_001_nor_gl_2k.jpg",
+        "sha256": "3b782137e34d63fd59b2e92b4e27b2ee4d082caf9dd23f00dc7ab4da5513daef"
+      },
+      {
+        "asset": "concrete_floor_worn_001",
+        "role": "arm",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/concrete_floor_worn_001/concrete_floor_worn_001_arm_2k.jpg",
+        "sha256": "f239a75b8b816ceb85058933b6115e0fcd92e4709e9210e2b4f834f47d9fa7c6"
+      },
+      {
+        "asset": "gravel_floor_03",
+        "role": "albedo",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/gravel_floor_03/gravel_floor_03_diff_2k.jpg",
+        "sha256": "06465933a54619900230fe85bff4c29f83fd3237a76b600e9845def4a206aece"
+      },
+      {
+        "asset": "gravel_floor_03",
+        "role": "normal",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/gravel_floor_03/gravel_floor_03_nor_gl_2k.jpg",
+        "sha256": "27367a648385db57d6650c2a52c993245be084c1ca57686ba44a52925187d491"
+      },
+      {
+        "asset": "gravel_floor_03",
+        "role": "arm",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/gravel_floor_03/gravel_floor_03_arm_2k.jpg",
+        "sha256": "b8d007c6e75dee029b411f5f5ce96063a983f85469fcc5afe07ecd272c4e5398"
+      },
+      {
+        "asset": "park_dirt",
+        "role": "albedo",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/park_dirt/park_dirt_diff_2k.jpg",
+        "sha256": "b1eafefbd8cd3c5e295cc4bcfae743e552b029aff0cf89dd1c5b0abe43fb4223"
+      },
+      {
+        "asset": "park_dirt",
+        "role": "normal",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/park_dirt/park_dirt_nor_gl_2k.jpg",
+        "sha256": "b6b454e10994ae9d44d1a450f1d26eab51955df3fb4fabf1f70ee2f1e02257c3"
+      },
+      {
+        "asset": "park_dirt",
+        "role": "arm",
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/park_dirt/park_dirt_arm_2k.jpg",
+        "sha256": "3c42f6290af1de9decd9f693a10dce1b73cbff523a0040f6bb2e60f1efbce0e6"
+      }
+    ],
+    "attribution": [
+      "Charlotte Baglioni",
+      "Christopher Melani",
+      "Dimitrios Savva",
+      "Rico Cilliers"
+    ],
+    "source": [
+      "https://polyhaven.com/a/concrete_floor_worn_001",
+      "https://polyhaven.com/a/gravel_floor_03",
+      "https://polyhaven.com/a/park_dirt"
+    ],
+    "license": "Project-authored pigment, leaf normals and geometry. Mineral and earth photographs CC0-1.0."
+  },
+  "construction_references": [
+    "https://landscapeplants.oregonstate.edu/plants/agave-parryi",
+    "https://ucanr.edu/site/mg-sonoma/muhlenbergia-rigens-deer-grass"
+  ],
+  "build": "scripts/blender-buildings/cook_beaver_street_garden.py"
+}

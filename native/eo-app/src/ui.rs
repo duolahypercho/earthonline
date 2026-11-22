@@ -3,12 +3,31 @@
 //!
 //!   eo-app --ui                      windowed: title, boot progress, HUD over the fly-through, pause
 //!   eo-app --capture-ui SCREEN       offscreen 1920x1080 PNG, no window:
-//!                                    title | loading | pause | settings | hud | map | all
+//!                                    title | loading | pause | settings | hud | map | all,
+//!                                    and (not in all) settings-hyper | settings-world | pause-settings
+//!                                    | photo | photo-look
+//!                                    (photo: photo mode's panel over a frame through its
+//!                                    pipeline, the Camera page with focus peaking on; photo-look:
+//!                                    its Look page, monochrome through its contrast filter; with
+//!                                    `--no-photo-mode`, the HUD frame it replaces)
 //!   eo-app --ui-bench                HUD on over the street walk, plus each full-screen
 //!                                    menu; prints the UI's own cost with PASS/FAIL
 //!
 //! Also read: --out DIR, --frames N, --warmup N, --no-cache, --cache DIR,
-//! --no-models, --no-kit (the rest keep the app's defaults).
+//! --no-models, --no-kit, --no-shadows, `--quality` and every switch it sets
+//! (quality.rs; the rest keep the app's defaults).
+//!
+//! The settings screen drives the window (`--ui` only; the captures and the
+//! bench never read the player's file). At start the stored "Lighting and
+//! detail" tier, "Sun shadows" off and "Grade-separated roads" apply as if
+//! `--quality TIER`, `--no-shadows` and `--structures [--tunnels]` were written
+//! first on the line, so every switch given on the line wins (the last
+//! `--quality`, a feature's own switch wherever it stands, the last of
+//! `--structures` / `--no-structures`). A fresh install's record changes
+//! nothing. A change in the menu reaches the running renderer where the
+//! feature allows (`live_look`); the rest waits for a restart, as the rows'
+//! notes say. `--no-settings-apply` leaves the renderer and the world as the
+//! line alone sets them (the frame before the settings drove it).
 
 use crate::models::{ModelRuntime, make_renderer};
 use crate::{Args, World, load_world};
@@ -26,6 +45,13 @@ pub const MENU_BUDGET_MS: f64 = 1.0;
 const W: u32 = 1920;
 const H: u32 = 1080;
 const EYE_M: f32 = 1.7;
+/// `--capture-ui settings-world`: the title panel's scroll that shows the World block.
+const SETTINGS_WORLD_SCROLL: f32 = 1100.0;
+/// `--capture-ui settings-hyper`: the title panel's scroll that shows the presets, the
+/// "Lighting and detail" row and its note (the panel ends above the credit line, stage T2).
+const SETTINGS_HYPER_SCROLL: f32 = 140.0;
+/// `--capture-ui pause-settings`: the pause sheet's scroll that shows the graphics block's first rows.
+const PAUSE_SETTINGS_SCROLL: f32 = 560.0;
 
 #[derive(Clone, Debug)]
 pub enum Mode {
@@ -37,6 +63,22 @@ pub enum Mode {
 pub struct Flags {
     pub mode: Mode,
     args: Args,
+    /// The command line, to expand the settings over again when they change.
+    raw: Vec<String>,
+    /// Whether the stored settings drive the renderer and the world (`settings_apply`).
+    apply: bool,
+}
+
+/// What the stored settings set, as the switches they stand for, written
+/// before the line's own (so the line's win): the tier, and the roads.
+fn stored_switches(s: &eo_ui::settings::Settings) -> Vec<(&'static str, Option<&str>)> {
+    let mut v = vec![("--quality", Some(s.performance.lighting.as_str()))];
+    match s.world.structures.as_str() {
+        "on" => v.push(("--structures", None)),
+        "tunnels" => v.extend([("--structures", None), ("--tunnels", None)]),
+        _ => {}
+    }
+    v
 }
 
 impl Flags {
@@ -50,11 +92,44 @@ impl Flags {
         Some(Self::parse(&raw))
     }
 
+    /// The line, and in the `--ui` window the player's stored settings under it.
     fn parse(raw: &[String]) -> Result<Flags> {
+        let flags = Self::parse_with(raw, None)?;
+        if !flags.apply {
+            return Ok(flags);
+        }
+        let stored = eo_ui::settings::default_path().map(|p| eo_ui::settings::Settings::load(&p)).unwrap_or_default();
+        Self::parse_with(raw, Some(&stored))
+    }
+
+    /// Only the `--ui` window applies the stored settings (the captures and
+    /// the bench never read them), and not with `--no-settings-apply`.
+    fn settings_apply(mode: &Mode, raw: &[String]) -> bool {
+        matches!(mode, Mode::Window) && !raw.iter().any(|a| a == "--no-settings-apply")
+    }
+
+    /// The line with `stored` (the settings screen's record) applied under it:
+    /// its tier, "Sun shadows" and roads as switches written before the line's.
+    fn parse_with(raw: &[String], stored: Option<&eo_ui::settings::Settings>) -> Result<Flags> {
         let mut args = default_args();
         let mut mode = Mode::Window;
+        let mut tier = crate::quality::Switches::default(); // `--quality` and the lighting switches
+        if let Some(s) = stored {
+            for (flag, value) in stored_switches(s) {
+                if let Err(e) = tier.take(flag, value) {
+                    eprintln!("settings: {flag} {} from the settings file not applied: {e:#}", value.unwrap_or(""));
+                }
+            }
+            if s.performance.shadows == "off" {
+                args.look.shadows = false; // "Sun shadows" off: `--no-shadows`
+            }
+        }
         let mut it = raw.iter();
         while let Some(s) = it.next() {
+            if let Some(n) = tier.take(s, it.as_slice().first().map(String::as_str))? {
+                it.by_ref().take(n).for_each(drop); // the value it took, if any
+                continue;
+            }
             let mut val = || it.next().cloned().ok_or_else(|| anyhow!("{s} needs a value"));
             match s.as_str() {
                 "--ui" => {}
@@ -71,11 +146,36 @@ impl Flags {
                 "--no-cache" => args.no_cache = true,
                 "--no-models" => args.models = false,
                 "--no-kit" => args.kit = false,
+                "--no-shadows" => args.look.shadows = false,
+                "--no-settings-apply" => {} // read by `settings_apply`
                 "--water-optics" => args.look.water_optics = true,
+                "--cove-detail" => args.cove_detail = true,
+                "--cove-canopy" => { args.cove_detail = true; args.look.cove_canopy = true; }
+                "--no-cove-canopy" => args.look.cove_canopy = false,
+                "--cove-sediment" => { args.cove_detail = true; args.look.cove_sediment = true; }
+                "--no-cove-sediment" => args.look.cove_sediment = false,
+                "--cove-daylight" => { args.cove_detail = true; args.look.cove_daylight = true; }
+                "--no-cove-daylight" => args.look.cove_daylight = false,
+                "--cove-pile-contact" => args.cove_detail = true,
+                "--no-cove-pile-contact" => {} // resolved with the bay preview settings
+                "--black-point-intertidal" => { args.cove_detail = true; args.black_point_intertidal = true; }
+                "--no-black-point-intertidal" => args.black_point_intertidal = false,
+                "--black-point-rockweed" => { args.cove_detail = true; args.black_point_intertidal = true; args.black_point_rockweed = true; }
+                "--no-black-point-rockweed" => args.black_point_rockweed = false,
+                "--no-cove-detail" => args.cove_detail = false,
+                "--floating-docks" => args.floating_docks = true,
+                "--no-floating-docks" => args.floating_docks = false,
+                "--underwater-habitats" => args.underwater_habitats = true,
+                "--no-underwater-habitats" => args.underwater_habitats = false,
                 "--no-water-optics" => args.look.water_optics = false,
+                "--dive-exposure" => args.look.dive_exposure = true,
+                "--no-dive-exposure" => args.look.dive_exposure = false,
+                "--bridge-detail" | "--no-bridge-detail" => {} // read by `crate::bridge_detail`
                 "--no-vsync" => args.vsync = false,
                 "--no-props" => args.props = false, // props in the UI's street
+                "--no-landmark-access" => args.landmark_access = false, // the landmark decks
                 "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
+                "--no-photo-mode" | "--no-dof" => {} // read by photo.rs
                 s if args.props2.parse_flag(s) => {}
                 // read by main's `groundscale_flags`.
                 "--ground-scale" | "--height-scale" | "--people-scale" | "--vehicle-scale" => {
@@ -84,11 +184,47 @@ impl Flags {
                 "--low-camera" | "--default-camera" => {}
                 "--no-roof-colours" | "--no-roof-contrast" | "--no-roof-parapet" | "--no-roof-patches" | "--no-roof-plant" => {} // main's `roofs_flags`
                 "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" => {} // main's `roofs_flags`
+                s if eo_landmarks::suspension::SWITCHES.contains(&s) => {} // eo_landmarks::suspension::features
+                "--no-external" => {} // main's `external_flag`
                 other => anyhow::bail!("unknown argument {other} with --ui (see native/eo-app/src/ui.rs)"),
             }
         }
-        Ok(Flags { mode, args })
+        tier.apply(&mut args);
+        crate::apply_cove_look(&mut args, raw);
+        let apply = Self::settings_apply(&mode, raw);
+        Ok(Flags { mode, args, raw: raw.to_vec(), apply })
     }
+}
+
+/// What a running renderer takes of `wanted` (the settings' look, expanded as
+/// at start), given the look it started with (`start`). At once: the sun's
+/// shadows (on and off, the map size, the slope bias), the sky's stages and
+/// quality, SSR, contact shadows, the cascade blend, lamp and headlight
+/// shadows (their atlas follows the options each frame), the lit fog (its
+/// volume too), the smooth clock and the photo finish (its pass is made the
+/// first time). What is placed or cooked at start keeps its start value
+/// until a restart: the weathering's decals (`grime`), the street life's
+/// placement, the shop windows' placement (and, outside the look, the facade
+/// clutter, the stand-ins and the roads). The far shadows, the ambient
+/// volume and the probe grid are attached once, at start, at its level:
+/// they go off at once, and come back only at that level (the ground bounce
+/// with the volume). (Stage P1) A lighting feature that was off at start has
+/// its shader code compiled out of the pipelines (eo-render
+/// `look::ShaderFeatures`): the cascade blend, lamp and headlight shadows,
+/// lit fog and the smooth clock come on only after a restart; started on, they
+/// go off and on again at once.
+pub(crate) fn live_look(start: &eo_render::look::LookOptions, wanted: &eo_render::look::LookOptions) -> eo_render::look::LookOptions {
+    let mut l = *wanted;
+    l.grime = start.grime;
+    l.street_life = start.street_life;
+    l.sky.shop_light = start.sky.shop_light;
+    let attached = |s: u8, w: u8| if w == 0 { 0 } else { s };
+    l.lighting.far_shadows = attached(start.lighting.far_shadows, wanted.lighting.far_shadows);
+    l.lighting.ambient_volume = attached(start.lighting.ambient_volume, wanted.lighting.ambient_volume);
+    l.lighting.probe_grid = attached(start.lighting.probe_grid, wanted.lighting.probe_grid);
+    l.lighting.ground_bounce = start.lighting.ground_bounce && l.lighting.ambient_volume > 0;
+    // (stage P1) a feature off at start has its shader code compiled out: it comes on after a restart.
+    eo_render::look::shader_features().limit(&l)
 }
 
 /// The app's defaults (`parse_args` in main.rs with no flags).
@@ -98,9 +234,42 @@ fn default_args() -> Args {
         house_finishes: false,
         house_patina: false,
         house_furniture: false,
+        house_photo: false,
+        house_photo_lod: false,
+        house_blender_bedroom: false,
+        house_mission_roof: false,
+        house_dining_light: false,
+        house_downstairs_light: false,
+        house_table_light: false,
+        house_oak_finish: false,
+        house_oak_joinery: false,
+        house_floor_reflections: false,
+        house_fitted_dining: false,
+        house_fitted_finishes: false,
+        house_kitchen_light: false,
+        house_window_linen: false,
+        house_street_garden: false,
+        house_front_daylight: false,
+        house_wall_daylight: false,
+        house_window_optics: false,
+        house_joinery_light: false,
+        house_porch_lamp: false,
+        house_fired_stoop: false,
+        house_site_camera: false,
+        house_dining_meter: false,
+        house_glazing: true,
         beaver_house: false,
         bench: false,
         start_underwater: false,
+        dive_site: None,
+        underwater_habitats: false,
+        cove_detail: false,
+        floating_docks: true,
+        black_point_intertidal: false,
+        black_point_rockweed: false,
+        cove_pile_contact: false,
+        surface_start: false,
+        quality: Default::default(),
         frames: 720,
         warmup: 60,
         width: W,
@@ -108,6 +277,8 @@ fn default_args() -> Args {
         msaa: 1,
         indirect_validation: true,
         no_indirect_count: false,
+        no_count_emulation: false,
+        bounded_draws: false,
         vsync: true,
         out_dir: None,
         label: None,
@@ -139,18 +310,24 @@ fn default_args() -> Args {
         agents: true, // agents
         agent_density: 1,
         rocketbox: true, // people
+        test_character: None,
         props: true, // props
         props2: Default::default(),
         perf: Default::default(), // occlusion / hitch
         landmarks: true,          // landmarks
         landmarks2: true,
+        structures: None, // `--structures` (quality::Switches)
+        facade_clutter: 0, // `--facade-clutter` (quality::Switches)
+        player_contact: false, // set by net.rs (`--connect`)
+        landmark_access: true,
+        car_detail: 0, // `--car-detail` (quality::Switches)
     }
 }
 
 pub fn run(flags: Result<Flags>, process_start: Instant) -> Result<()> {
     let flags = flags?;
     match flags.mode.clone() {
-        Mode::Window => window::run(&flags.args, process_start),
+        Mode::Window => window::run(&flags, process_start),
         Mode::Capture(list) => capture(&flags.args, &list, process_start),
         Mode::Bench => bench(&flags.args, process_start),
     }
@@ -364,7 +541,7 @@ fn capture(args: &Args, list: &[String], process_start: Instant) -> Result<()> {
     let dir = out_dir(args);
     std::fs::create_dir_all(&dir)?;
     let off = offscreen(&ctx);
-    let want_hud = list.iter().any(|s| s.starts_with("hud"));
+    let want_hud = list.iter().any(|s| s.starts_with("hud") || s.starts_with("photo"));
     // The world (for the street under the HUD) or just the city data (menus).
     let mut street = if want_hud { Some(Street::new(&ctx, args, process_start)?) } else { None };
     let paths = eo_data::DataPaths::discover()?;
@@ -385,6 +562,7 @@ fn capture(args: &Args, list: &[String], process_start: Instant) -> Result<()> {
     for name in list {
         let t0 = 100.0;
         ui.set_time(t0);
+        ui.settings = eo_ui::settings::Settings::default(); // every screen at the defaults (settings-hyper sets its own)
         match name.as_str() {
             "title" => {
                 ui.set_screen(Screen::Title);
@@ -404,6 +582,26 @@ fn capture(args: &Args, list: &[String], process_start: Instant) -> Result<()> {
                 ui.set_scroll(300.0);
                 ui.set_screen_age(3.2);
             }
+            "settings-hyper" | "settings-world" => {
+                // The panel's top with Hyper real chosen and the roads with tunnels
+                // (the presets, the Lighting and detail row and its note), or
+                // scrolled to the World block at the defaults.
+                if name == "settings-hyper" {
+                    ui.settings.performance.apply_preset("hyper");
+                    ui.settings.world.structures = "tunnels".into();
+                }
+                ui.set_screen(Screen::Title);
+                ui.set_title_view(TitleView::Settings);
+                ui.set_scroll(if name == "settings-hyper" { SETTINGS_HYPER_SCROLL } else { SETTINGS_WORLD_SCROLL });
+                ui.set_screen_age(3.2);
+            }
+            "pause-settings" => {
+                // The pause sheet scrolled to its graphics block.
+                ui.set_screen(Screen::Pause);
+                ui.set_pause_tab(PauseTab::Settings);
+                ui.set_scroll(PAUSE_SETTINGS_SCROLL);
+                ui.set_screen_age(1.0);
+            }
             "pause" => {
                 ui.set_screen(Screen::Pause);
                 ui.set_pause_tab(PauseTab::Map);
@@ -421,22 +619,54 @@ fn capture(args: &Args, list: &[String], process_start: Instant) -> Result<()> {
                 ui.hud.mode = if name == "hud-drive" { HudMode::Drive { speed_kph: 42.0 } } else { HudMode::OnFoot };
                 ui.set_screen_age(0.0);
             }
-            other => anyhow::bail!("--capture-ui: unknown screen {other} (title, loading, pause, settings, hud, hud-drive, map, all)"),
+            "photo" | "photo-look" => {
+                ui.set_screen(Screen::Hud);
+                ui.hud.mode = HudMode::OnFoot;
+                ui.set_screen_age(0.0);
+            }
+            other => anyhow::bail!("--capture-ui: unknown screen {other} (title, loading, pause, settings, hud, hud-drive, map, photo, photo-look, all; settings-hyper, settings-world, pause-settings)"),
         }
         let age_t0 = t0;
         ui_frames(&ctx, &mut ui, age_t0, 3);
         let mut enc = ctx.device.create_command_encoder(&Default::default());
-        if name.starts_with("hud") {
+        if name.starts_with("hud") || name.starts_with("photo") {
             let s = street.as_mut().unwrap();
-            let cam = s.camera(0.0, 0.0, args.far);
+            let mut cam = s.camera(0.0, 0.0, args.far);
+            // photo mode: a 50 mm lens looking down the street at f/2.8, focused 12 m out; the
+            // Camera page open on focus peaking (on: the 12 m plane's edges marked), or the Look
+            // page on monochrome's contrast filter.
+            let photo = (name.starts_with("photo") && crate::photo::enabled()).then(|| {
+                let mut m = crate::photo::PhotoMode::new(false, args.time_of_day);
+                m.enter(&cam, cam.eye.as_dvec3() + glam::DVec3::new(0.0, -0.27, 0.0));
+                m.focal_mm = 50.0;
+                m.focus = crate::photo::Focus::Manual;
+                m.focus_m = 12.0;
+                m.step(&crate::photo::Feed { held: &Default::default(), mouse: [0.0, 0.0], dt: 10.0, aspect: W as f64 / H as f64, anchor: m.anchor, cw: None });
+                if name == "photo-look" {
+                    m.grade = eo_render::photo_mode::Grade::Monochrome;
+                    m.grain = m.grade.look().grain;
+                    m.set_tab(1);
+                    m.select_row(3);
+                } else {
+                    m.peaking = true;
+                    m.select_row(7);
+                }
+                m
+            });
+            if let Some(m) = &photo {
+                cam = m.camera(W as f64 / H as f64, args.far);
+                s.renderer.photo_mode.set(Some(eo_render::photo_mode::PhotoParams { accumulate: eo_render::photo_mode::SHOT_FRAMES, animate_grain: false, ..m.params() }));
+                ui.photo = Some(m.panel(W as f64 / H as f64));
+            }
             settle(&ctx, &s.renderer, &s.world, &mut s.models, &cam, 600.0)?;
             s.settle_props(&ctx, cam.eye, 600.0)?;
-            for _ in 0..2 {
+            for _ in 0..if photo.is_some() { 64 } else { 2 } {
                 s.renderer.update(&ctx.queue, &cam);
                 let mut e = ctx.device.create_command_encoder(&Default::default());
                 s.renderer.encode(&mut e, &off.srgb, None, &s.targets.depth, None);
                 ctx.queue.submit([e.finish()]);
             }
+            s.renderer.photo_mode.set(None);
             // Show the HUD a moment after it changed (chips and the objective are up).
             ui.set_time(age_t0 + 0.6);
             ui.prepare(&ctx.device, &ctx.queue, &mut enc, W, H, &Input::default());
@@ -447,6 +677,7 @@ fn capture(args: &Args, list: &[String], process_start: Instant) -> Result<()> {
         }
         ui.draw(&ctx.device, &mut enc, &off.unorm, format, None);
         ctx.queue.submit([enc.finish()]);
+        ui.photo = None;
         let path = dir.join(format!("capture-ui-{name}.png"));
         save_png(&ctx, &off.color, &path)?;
         println!("wrote {}", path.display());
@@ -462,7 +693,7 @@ fn pct(v: &[f64], p: f64) -> f64 {
         return f64::NAN;
     }
     let mut s = v.to_vec();
-    s.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    s.sort_by(f64::total_cmp);
     s[((p / 100.0 * (s.len() - 1) as f64).round() as usize).min(s.len() - 1)]
 }
 
@@ -733,6 +964,10 @@ mod window {
     struct App {
         world: World,
         args: Args,
+        /// The command line and whether the stored settings apply (`Flags`), to
+        /// expand a change in the menu as the start did (`apply_settings`).
+        raw: Vec<String>,
+        settings_apply: bool,
         gfx: Option<Gfx>,
         cam: Camera,
         keys: std::collections::HashSet<KeyCode>,
@@ -744,7 +979,12 @@ mod window {
         loading_since: Option<Instant>,
     }
 
-    pub fn run(args: &Args, process_start: Instant) -> Result<()> {
+    pub fn run(flags: &Flags, process_start: Instant) -> Result<()> {
+        let args = &flags.args;
+        if flags.apply {
+            let s = args.structures.as_ref().map(|s| if s.tunnels { "on, with tunnels" } else { "on" }).unwrap_or("off");
+            eprintln!("settings: quality {}, sun shadows {}, grade-separated roads {s} (the settings file under the line's switches; --no-settings-apply ignores it)", args.quality.name(), if args.look.shadows { "on" } else { "off" });
+        }
         let world = load_world(args)?;
         let spawn = crate::bench::spawn();
         let ground = world.elevation.ground(spawn[0] as f64, spawn[1] as f64) as f32;
@@ -753,6 +993,8 @@ mod window {
         let mut app = App {
             world,
             args: args.clone(),
+            raw: flags.raw.clone(),
+            settings_apply: flags.apply,
             gfx: None,
             cam,
             keys: Default::default(),
@@ -765,6 +1007,31 @@ mod window {
         };
         event_loop.run_app(&mut app)?;
         Ok(())
+    }
+
+    /// A change in the settings screen on the running renderer: the record
+    /// expanded under the line as at start (`Flags::parse_with`), then what a
+    /// running renderer takes of it (`live_look`); the rest waits for a
+    /// restart, as the rows' notes say.
+    fn apply_settings(raw: &[String], start: &Args, s: &eo_ui::settings::Settings, renderer: &mut Renderer, device: &wgpu::Device) {
+        let wanted = match Flags::parse_with(raw, Some(s)) {
+            Ok(f) => f.args,
+            Err(e) => {
+                eprintln!("settings: not applied: {e:#}");
+                return;
+            }
+        };
+        let look = live_look(&start.look, &wanted.look);
+        // `LookOptions` has no PartialEq; its Debug form names every field and value.
+        if format!("{look:?}") == format!("{:?}", renderer.look.options) {
+            return;
+        }
+        renderer.look.set_options(device, look);
+        eprintln!(
+            "settings: quality {}, sun shadows {} on the running renderer (placed and cooked detail, far shadows, ambient light, street reflections, lamp shadows and lit fog coming on when the game started without them, and the roads take effect after restart)",
+            wanted.quality.name(),
+            if look.shadows { "on" } else { "off" }
+        );
     }
 
     impl App {
@@ -889,6 +1156,9 @@ mod window {
             g.ui.draw(&g.ctx.device, &mut enc, &ui_view, ui_format, None);
             if event == Some(Event::SettingsChanged) {
                 g.audio.set_volume(&g.ui.settings); // audio
+                if self.settings_apply {
+                    apply_settings(&self.raw, &self.args, &g.ui.settings, &mut g.renderer, &g.ctx.device);
+                }
             }
             let cues = g.ui.take_cues(); // audio
             g.audio.frame(crate::audio::FrameIn::interface(&self.cam, dt as f64, &g.renderer, &self.world.elevation, g.ui.screen, cues)); // audio
@@ -1010,5 +1280,150 @@ mod window {
                 g.window.request_redraw();
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::quality::Quality;
+    use eo_render::look::LookOptions;
+    use eo_structures::StructureOptions;
+    use eo_ui::settings::Settings;
+
+    fn line(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    fn args(v: &[&str], stored: Option<&Settings>) -> Args {
+        Flags::parse_with(&line(v), stored).unwrap_or_else(|e| panic!("{v:?}: {e:#}")).args
+    }
+
+    /// `Args` has no PartialEq; its Debug form names every field and value.
+    fn same(a: &Args, b: &Args) -> bool {
+        format!("{a:?}") == format!("{b:?}")
+    }
+
+    fn dbg(l: &LookOptions) -> String {
+        format!("{l:?}")
+    }
+
+    /// A stored record: the default's, with these three rows.
+    fn stored(tier: &str, shadows: &str, roads: &str) -> Settings {
+        let mut s = Settings::default();
+        s.performance.lighting = tier.into();
+        s.performance.shadows = shadows.into();
+        s.world.structures = roads.into();
+        s
+    }
+
+    #[test]
+    fn a_fresh_install_changes_nothing() {
+        let d = Settings::default();
+        for v in [&["--ui"][..], &["--ui", "--no-kit"], &["--ui", "--quality", "high"]] {
+            assert!(same(&args(v, Some(&d)), &args(v, None)), "{v:?}");
+        }
+        assert_eq!(args(&["--ui"], Some(&d)).quality, Quality::Medium);
+    }
+
+    #[test]
+    fn the_stored_tier_expands_as_quality_does() {
+        for q in Quality::ALL {
+            let a = args(&["--ui"], Some(&stored(q.name(), "on", "off")));
+            assert_eq!(a.quality, q);
+            assert!(same(&a, &args(&["--ui", "--quality", q.name()], None)), "{q:?}");
+        }
+        // each preset: its tier, and Low's "Sun shadows" off as `--no-shadows`.
+        for p in eo_ui::settings::presets() {
+            let mut s = Settings::default();
+            s.performance.apply_preset(p.key);
+            let mut want = vec!["--ui", "--quality", p.fields.lighting.as_str()];
+            if p.fields.shadows == "off" {
+                want.push("--no-shadows");
+            }
+            assert!(same(&args(&["--ui"], Some(&s)), &args(&want, None)), "{}", p.key);
+        }
+        let off = args(&["--ui"], Some(&stored("medium", "off", "off")));
+        assert!(!off.look.shadows);
+        assert!(same(&off, &args(&["--ui", "--no-shadows"], None)));
+        assert!(args(&["--ui"], Some(&stored("medium", "on", "off"))).look.shadows);
+    }
+
+    #[test]
+    fn a_switch_on_the_line_wins_over_the_stored_settings() {
+        let hyper = stored("hyper", "on", "tunnels");
+        // the line's `--quality`, wherever it stands.
+        assert_eq!(args(&["--ui", "--quality", "low"], Some(&hyper)).quality, Quality::Low);
+        assert!(same(&args(&["--quality", "medium", "--ui"], Some(&stored("hyper", "on", "off"))), &args(&["--ui"], None)));
+        // a feature's own switch over the stored tier; the rest of the tier stays.
+        for v in [&["--ui", "--no-grime", "--far-shadows", "1"][..], &["--no-grime", "--ui", "--far-shadows", "1"]] {
+            let a = args(v, Some(&hyper));
+            assert_eq!((a.quality, a.look.grime, a.look.lighting.far_shadows, a.look.lighting.lit_fog, a.facade_clutter), (Quality::Hyper, 0, 1, 2, 2), "{v:?}");
+        }
+        assert_eq!(args(&["--ui", "--no-facade-clutter"], Some(&hyper)).facade_clutter, 0);
+        // the roads: the line's last word.
+        assert_eq!(args(&["--ui", "--no-structures"], Some(&hyper)).structures, None);
+        assert_eq!(args(&["--ui", "--no-tunnels"], Some(&hyper)).structures, Some(StructureOptions { tunnels: false }));
+        assert_eq!(args(&["--ui", "--structures", "--tunnels"], Some(&stored("medium", "on", "off"))).structures, Some(StructureOptions { tunnels: true }));
+    }
+
+    #[test]
+    fn the_roads_row_is_the_world_switches_and_nothing_else() {
+        for (roads, want) in [("off", None), ("on", Some(false)), ("tunnels", Some(true))] {
+            let a = args(&["--ui"], Some(&stored("medium", "on", roads)));
+            assert_eq!(a.structures.as_ref().map(|s| s.tunnels), want, "{roads}");
+            let mut b = a.clone();
+            b.structures = None;
+            assert!(same(&b, &args(&["--ui"], None)), "{roads}: nothing else moves");
+        }
+        // no tier sets the roads.
+        for q in Quality::ALL {
+            assert_eq!(args(&["--ui"], Some(&stored(q.name(), "on", "off"))).structures, None);
+        }
+    }
+
+    #[test]
+    fn only_the_window_reads_the_settings_file() {
+        let apply = |v: &[&str]| Flags::parse_with(&line(v), None).unwrap().apply;
+        assert!(apply(&["--ui"]));
+        assert!(!apply(&["--ui", "--no-settings-apply"]));
+        assert!(!apply(&["--capture-ui", "settings"]));
+        assert!(!apply(&["--ui", "--capture-ui", "all"]));
+        assert!(!apply(&["--ui-bench"]));
+    }
+
+    #[test]
+    fn a_change_in_the_menu_applies_live_where_the_feature_allows() {
+        let look = |q: &str| args(&["--ui", "--quality", q], None).look;
+        // the same options: nothing moves.
+        for q in Quality::ALL {
+            assert_eq!(dbg(&live_look(&look(q.name()), &look(q.name()))), dbg(&look(q.name())), "{q:?}");
+        }
+        let (m, hi, h) = (look("medium"), look("high"), look("hyper"));
+        // started at medium, Hyper real chosen: the live features take hyper's values ...
+        let l = live_look(&m, &h);
+        assert_eq!((l.shadow_map, l.sky.quality, l.shadow_slope_bias, l.photo_finish), (h.shadow_map, h.sky.quality, true, 2));
+        let g = l.lighting;
+        assert_eq!((g.cascade_blend, g.light_shadows, g.light_shadow_moving, g.headlight_shadows, g.lit_fog, g.smooth_time), (true, 3, true, 8, 2, true));
+        // ... what is placed at start waits (medium's own: its grime, since medium is the street look), and what is attached at start stays off.
+        assert_eq!((l.grime, l.street_life, l.sky.shop_light), (m.grime, 0, 0));
+        assert_eq!(m.grime, 1);
+        assert_eq!((g.far_shadows, g.ambient_volume, g.probe_grid, g.ground_bounce), (0, 0, 0, false));
+        // started at hyper, medium chosen: medium's frame but for what is placed at start; the attached go off.
+        let l = live_look(&h, &m);
+        assert_eq!((l.grime, l.street_life, l.sky.shop_light), (2, 2, 2));
+        let mut rest = l;
+        (rest.grime, rest.street_life, rest.sky.shop_light) = (m.grime, m.street_life, m.sky.shop_light);
+        assert_eq!(dbg(&rest), dbg(&m));
+        // started at high, Hyper real chosen: the attached keep the level they were attached at
+        // (the probe grid is hyper's alone, stage T2: not attached at high, it stays off).
+        let g = live_look(&hi, &h).lighting;
+        assert_eq!((g.far_shadows, g.ambient_volume, g.probe_grid, g.ground_bounce), (1, 1, 0, true));
+        let g = live_look(&look("high"), &look("high")).lighting;
+        assert_eq!(g.probe_grid, 0);
+        // "Sun shadows" off and on again at once.
+        let off = args(&["--ui"], Some(&stored("high", "off", "off"))).look;
+        assert!(!live_look(&hi, &off).shadows);
+        assert!(live_look(&off, &hi).shadows);
     }
 }

@@ -120,6 +120,10 @@ pub struct Fleet {
     pub z: Vec<f64>,
     pub yaw: Vec<f64>,
     pub spd: Vec<f64>,
+    /// The structure level of each car's lane (`Lane::level`; the lane it
+    /// is turning onto while cornering): cars on different levels never
+    /// block or see each other, and only cars at grade meet people.
+    pub level: Vec<i8>,
     leader_gap: Vec<f64>,
     leader_len: Vec<f64>,
     cross_gap: Vec<f64>,
@@ -246,6 +250,7 @@ impl Fleet {
         self.z.push(0.0);
         self.yaw.push(0.0);
         self.spd.push(0.0);
+        self.level.push(0);
         self.leader_gap.push(f64::INFINITY);
         self.leader_len.push(4.0);
         self.cross_gap.push(f64::INFINITY);
@@ -345,6 +350,7 @@ impl Fleet {
         }
         let car = self.cars.swap_remove(i);
         let pose = [self.x.swap_remove(i), self.z.swap_remove(i), self.yaw.swap_remove(i), self.spd.swap_remove(i)];
+        self.level.swap_remove(i);
         self.leader_gap.swap_remove(i);
         self.leader_len.swap_remove(i);
         self.cross_gap.swap_remove(i);
@@ -388,7 +394,8 @@ impl Fleet {
         let yaw = dx.atan2(dz);
         const INSERT_MARGIN: f64 = 0.30; // QUEUE_SEPARATION.insertMargin
         for (j, o) in self.cars.iter().enumerate() {
-            if j == me {
+            // (a body on another structure level is no obstacle.)
+            if j == me || self.level[j] != l.level {
                 continue;
             }
             if o.lane == lane && !o.cornering() {
@@ -497,6 +504,7 @@ impl Fleet {
         self.z[i] = z;
         self.yaw[i] = yaw;
         self.spd[i] = car.speed;
+        self.level[i] = net.lanes[car.lane as usize].level;
     }
 
     fn sort_key(lane: LaneId, arc: f64) -> u64 {
@@ -588,10 +596,10 @@ impl Fleet {
             let (z0, z1) = (z.min(z + fz * look) - 8.0, z.max(z + fz * look) + 8.0);
             let mut best = f64::INFINITY;
             let cars = &self.cars;
-            let (xs, zs, yaws) = (&self.x, &self.z, &self.yaw);
+            let (xs, zs, yaws, levels) = (&self.x, &self.z, &self.yaw, &self.level);
             grid.query(x0, z0, x1, z1, |j| {
                 let j = j as usize;
-                if j == i || cars[j].lane == c.lane {
+                if j == i || cars[j].lane == c.lane || levels[j] != levels[i] {
                     return;
                 }
                 let o = &cars[j];
@@ -620,7 +628,12 @@ impl Fleet {
             let (x0, x1) = (x.min(x + fx * reach) - half, x.max(x + fx * reach) + half);
             let (z0, z1) = (z.min(z + fz * reach) - half, z.max(z + fz * reach) + half);
             let mut best = f64::INFINITY;
+            // (people walk at grade: a car on a deck or in a tunnel meets none.)
+            let at_grade = self.level[i] == 0;
             walker_grid.query(x0, z0, x1, z1, |w| {
+                if !at_grade {
+                    return;
+                }
                 let w = w as usize;
                 let dx = walkers_x[w] - x;
                 let dz = walkers_z[w] - z;
@@ -637,7 +650,7 @@ impl Fleet {
             // Occupied crosswalks the car's path crosses within the yield lookahead
             // (`occupiedCrossingHold`): stop with the nose short of the band.
             let mut hold = f64::INFINITY;
-            if !bands.is_empty() && !c.cornering() {
+            if !bands.is_empty() && !c.cornering() && at_grade {
                 let lane = &net.lanes[c.lane as usize];
                 let look = 22.0 + c.len / 2.0;
                 let mut travelled = 0.0;
@@ -1450,4 +1463,91 @@ fn yields_to(c: &Car, o: &Car) -> bool {
         return theirs > mine;
     }
     o.id < c.id
+}
+
+#[cfg(test)]
+mod level_tests {
+    //! Two lanes crossing at one point (x = 0, z = 0) with no node between
+    //! them, as a deck crosses a street: on different structure levels the
+    //! cars on them never block or see each other; on one level they do.
+
+    use super::*;
+    use crate::geom::{LaneRole, P2};
+    use crate::network::{LaneBuild, NetworkBuild, TileKey};
+    use crate::standards::{SignalTiming, Standards};
+
+    fn crossing(upper: i8) -> Network {
+        let standards = Standards::load(&eo_data::DataPaths::discover().unwrap()).unwrap();
+        let mut net = Network::new(SignalTiming::from_standards(&standards).unwrap());
+        let lane = |key: &str, pts: Vec<P2>, level: i8| LaneBuild {
+            key: key.into(),
+            segment: key.into(),
+            street: key.into(),
+            highway: "primary".into(),
+            role: LaneRole::Through,
+            painted_through_mapped: false,
+            width: 3.5,
+            start_node: pts[0],
+            end_node: *pts.last().unwrap(),
+            points: pts,
+            max_speed: 13.0,
+            control: ControlKind::None,
+            outgoing: None,
+            legal: None,
+            tile: Some(TileKey { x: 0, z: 0 }),
+            level,
+        };
+        net.add(NetworkBuild {
+            tiles: vec![TileKey { x: 0, z: 0 }],
+            lanes: vec![lane("street", vec![[-200.0, 0.0], [200.0, 0.0]], 0), lane("deck", vec![[0.0, -200.0], [0.0, 200.0]], upper)],
+            ..Default::default()
+        });
+        net
+    }
+
+    /// A car on the street 6 m short of the crossing at 10 m/s, one on the
+    /// deck standing at it: each one's cross-corridor gap, after a sense.
+    fn gaps(net: &Network) -> (Fleet, [f64; 2]) {
+        let (street, deck) = (net.lane_by_key("street").unwrap(), net.lane_by_key("deck").unwrap());
+        let mut fleet = Fleet::default();
+        let mut rng = Mulberry32::new(7);
+        assert!(fleet.spawn(net, &[street], &mut rng, 7) && fleet.spawn(net, &[deck], &mut rng, 7));
+        fleet.place(net, 0, street, 194.0, 10.0);
+        fleet.place(net, 1, deck, 200.0, 0.0);
+        let grid = crate::grid::Grid::new(PERSON_CELL_M);
+        fleet.sense(net, &[], &[], &grid, &[]);
+        let g = [fleet.cross_gap[0], fleet.cross_gap[1]];
+        (fleet, g)
+    }
+
+    #[test]
+    fn cars_on_two_levels_never_block_or_see_each_other() {
+        // one level: the street car sees the deck car in its corridor, and
+        // may not be set down where it stands.
+        let flat = crossing(0);
+        let (fleet, g) = gaps(&flat);
+        assert_eq!(fleet.level, vec![0, 0]);
+        assert!(g[0].is_finite() || g[1].is_finite(), "{g:?}");
+        let street = flat.lane_by_key("street").unwrap();
+        assert!(fleet.insert_blocked(&flat, street, 200.0, 0));
+        // two levels: neither sees the other, and the street car may stand under the deck car.
+        let two = crossing(1);
+        let (fleet, g) = gaps(&two);
+        assert_eq!(fleet.level, vec![0, 1]);
+        assert!(g[0].is_infinite() && g[1].is_infinite(), "{g:?}");
+        let street = two.lane_by_key("street").unwrap();
+        assert!(!fleet.insert_blocked(&two, street, 200.0, 0));
+        // the instance flags carry the level; nothing else changes with it.
+        assert_eq!(crate::output::level_of_flags(crate::output::level_flags(fleet.level[1])), 1);
+        // a deck car meets no walker on the street under it.
+        let mut fleet = fleet;
+        let mut grid = crate::grid::Grid::new(PERSON_CELL_M);
+        let (wx, wz) = (vec![0.0, 6.0], vec![-1.0, 0.0]);
+        grid.build(&wx, &wz, PERSON_CELL_M, |_| true);
+        let deck = two.lane_by_key("deck").unwrap();
+        fleet.place(&two, 1, deck, 194.0, 10.0);
+        fleet.sense(&two, &wx, &wz, &grid, &[]);
+        assert!(fleet.person_gap[1].is_infinite(), "deck car's person gap {}", fleet.person_gap[1]);
+        assert!(fleet.person_gap[0].is_finite(), "street car's person gap {}", fleet.person_gap[0]);
+    }
 }

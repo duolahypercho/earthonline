@@ -16,6 +16,7 @@ root = Path(__file__).resolve().parents[2]
 surfaces = root / "public/assets/buildings/beaver-terrace/finishes/patina"
 parser = argparse.ArgumentParser()
 parser.add_argument("destination", type=Path)
+parser.add_argument("--house-photo", action="store_true", help="Export every installed metric furnishing, including the kitchen and bedroom")
 args = parser.parse_args(sys.argv[sys.argv.index("--") + 1 :])
 destination = args.destination.resolve()
 if destination.is_relative_to(root):
@@ -39,10 +40,17 @@ parts = (
     "desk-chair",
     "workroom-chair",
 )
+if args.house_photo:
+    from beaver_dimensions import GROUP
+    parts += tuple(name for name in GROUP if name not in parts)
 lookup = {}
 provenance = []
-for name in ("painted-wood", "linen", "furniture/wool-carpet", "furniture/joinery"):
-    manifest = json.loads((surfaces / (name + ".provenance.json")).read_text())
+scans = ["painted-wood", "linen", "furniture/wool-carpet", "furniture/joinery"]
+if args.house_photo:
+    scans.append("fired-earth")
+for name in scans:
+    directory = surfaces / "furniture/photo" if args.house_photo and name == "fired-earth" else surfaces
+    manifest = json.loads((directory / (name + ".provenance.json")).read_text())
     provenance.append({k: manifest[k] for k in ("source", "license", "attribution", "sha256")})
     for family in manifest["families"]:
         lookup[family] = (name, manifest)

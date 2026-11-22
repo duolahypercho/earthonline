@@ -26,7 +26,11 @@ pub mod library;
 pub mod motion;
 pub mod packed_glb; // people
 pub mod people;
+pub mod pose_edit; // the players' emotes, edited at the bake
+pub mod remote; // other players' bodies (online)
+pub mod rig; // where a drawn body's head and hands are (name tags, the selfie's phone)
 pub mod rocketbox; // people
+pub mod test_characters;
 pub mod vehicles;
 
 use bytemuck::{Pod, Zeroable};
@@ -36,7 +40,7 @@ use bytemuck::{Pod, Zeroable};
 /// `tag`: bits 0..16 material index (into `Library::materials`), bits 16..24
 /// the wheel part (0 none; 1..=4 a spinning part of wheel FL, FR, RL, RR,
 /// which also steers on the front axle; 5..=8 a steer-only part of the same
-/// wheel, the caliper), bits 24..32 reserved.
+/// wheel, the caliper), 9 the driver's door, bits 24..32 reserved.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Pod, Zeroable, PartialEq)]
 pub struct AgentVertex {
@@ -51,6 +55,7 @@ pub struct AgentVertex {
 const _: () = assert!(std::mem::size_of::<AgentVertex>() == 32);
 
 pub const WHEEL_NONE: u32 = 0;
+pub const PART_DRIVER_DOOR: u32 = 9;
 
 pub fn tag(material: u32, wheel: u32) -> u32 {
     (material & 0xffff) | ((wheel & 0xff) << 16)
@@ -66,6 +71,7 @@ pub struct GpuMesh {
     pub glass_first: u32,
     pub glass_count: u32,
     pub base_vertex: i32,
+    /// Character palette metadata or the body-space door axis as float bits.
     pub pad: [u32; 3],
 }
 
@@ -91,7 +97,8 @@ pub struct GpuModel {
     pub skeleton: u32,
     pub joints: u32,
     pub wheel_radius: f32,
-    pub pad: [u32; 4],
+    /// Driver-door hinge position in body space and signed maximum angle.
+    pub driver_door: [f32; 4],
 }
 const _: () = assert!(std::mem::size_of::<GpuModel>() == 128);
 
@@ -115,7 +122,7 @@ pub struct GpuAgent {
     pub steer: f32,
     pub speed: f32,
     pub scale: f32,
-    /// People: phase 0..1 of the standing clip; with
+    /// Vehicles: driver-door opening fraction. People: phase 0..1 of the standing clip; with
     /// standing loops, the place in the slot's frames (`MotionMeta::clip_phase`).
     pub clip_phase: f32,
     /// People: the standing clip (`CLIP_*`).
@@ -127,6 +134,36 @@ const _: () = assert!(std::mem::size_of::<GpuAgent>() == 64);
 pub const AGENT_PLAYER: u32 = 1 << 16;
 /// Turn signal lamps lit this frame (the blink is decided on the CPU clock).
 pub const AGENT_BLINK_ON: u32 = 1 << 17;
+/// In a tunnel's bore (`--structures --tunnels`; the feed's `bore_at` for a
+/// car on a lane under grade): the renderer lights it as the bore's surfaces
+/// are lit (eo-render agents_draw.wgsl, structures.wgsl `sx_bore_light_at`),
+/// not by the sun and sky. Never set without bores.
+pub const AGENT_IN_BORE: u32 = 1 << 18;
+/// A corridor vehicle or walker (eo-sim `corridor`): the box rung is drawn
+/// past the near tiers out to the corridor's far distance (eo-render
+/// agents_types.wgsl `AG_CORRIDOR`).
+pub const AGENT_CORRIDOR: u32 = 1 << 19;
+/// With `AGENT_IN_BORE`, the flags' bits from here up carry how far in the
+/// agent stands from the bore's nearer portal, in `1 / BORE_DEPTH_QUANT` m
+/// steps (saturating at the field's top: deep inside, or no portal). The
+/// field sits above `AGENT_CORRIDOR`: twelve bits at four steps a metre reach
+/// 1023 m, past the middle of the city's longest bore.
+pub const BORE_DEPTH_SHIFT: u32 = 20;
+pub const BORE_DEPTH_QUANT: f64 = 4.0;
+pub const BORE_DEPTH_MAX_Q: u32 = (1 << (32 - BORE_DEPTH_SHIFT)) - 1;
+const _: () = assert!(AGENT_CORRIDOR & (AGENT_PLAYER | AGENT_BLINK_ON | AGENT_IN_BORE | (BORE_DEPTH_MAX_Q << BORE_DEPTH_SHIFT)) == 0);
+
+/// The flag bits of an agent in a bore `depth` m in from its nearer portal
+/// (`f64::INFINITY` with no portal).
+pub fn bore_flags(depth: f64) -> u32 {
+    let q = if depth.is_finite() { (depth.max(0.0) * BORE_DEPTH_QUANT).round().min(BORE_DEPTH_MAX_Q as f64) as u32 } else { BORE_DEPTH_MAX_Q };
+    AGENT_IN_BORE | (q << BORE_DEPTH_SHIFT)
+}
+
+/// The depth in from the portal that `flags` carry (None: not in a bore).
+pub fn bore_depth_of_flags(flags: u32) -> Option<f64> {
+    (flags & AGENT_IN_BORE != 0).then(|| (flags >> BORE_DEPTH_SHIFT) as f64 / BORE_DEPTH_QUANT)
+}
 
 /// Clip slots of the bake (the walk is slot 0; the others are standing clips).
 pub const CLIP_WALK: u32 = 0;
@@ -164,6 +201,10 @@ pub const M_REVERSE: u32 = 1 << 14;
 pub const M_ATLAS: u32 = 1 << 15;
 /// The rim finish multiplies this material (VehicleAlloy).
 pub const M_RIM: u32 = 1 << 16;
+/// A ground-contact patch (`rig::contact_body`): the glass pass darkens the
+/// ground under it by the share of its light one box of a body takes away
+/// (eo-render `agents_draw.wgsl` `ag_contact`).
+pub const M_CONTACT: u32 = 1 << 20;
 
 /// sRGB byte to linear.
 pub fn srgb_to_linear(c: f32) -> f32 {

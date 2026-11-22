@@ -14,6 +14,8 @@ pub const NAMES: [&str; 5] = [
     "linen",
 ];
 
+pub const SITE_NAMES: [&str; 4] = ["apron-concrete", "yard-earth", "trunk-bark", "porch-terracotta"];
+
 pub const FURNITURE_NAMES: [&str; 2] = ["wool-carpet", "joinery"];
 
 #[derive(Deserialize)]
@@ -24,6 +26,8 @@ struct Spec {
     metres_per_tile: f32,
     normal_strength: f32,
     paint_mix: f32,
+    #[serde(default)]
+    cut_pattern: bool,
 }
 
 pub struct Scan {
@@ -47,12 +51,16 @@ impl Scan {
         scans: &[Self],
         mat: &CookedMaterial,
         table: &mut MaterialTable,
+        cut_pattern: bool,
     ) -> Option<u32> {
         let family = mat.name.split('@').next()?;
         let (slot, scan) = scans
             .iter()
             .enumerate()
-            .find(|(_, scan)| scan.spec.families.iter().any(|f| f == family))?;
+            .find(|(_, scan)| {
+                (cut_pattern || !scan.spec.cut_pattern)
+                    && scan.spec.families.iter().any(|f| f == family)
+            })?;
         let paint = scan.spec.paint_mix;
         let mut base = [1.; 4];
         for (c, source) in base[..3].iter_mut().zip(&mat.base_color) {
@@ -60,7 +68,7 @@ impl Scan {
         }
         let surface = GpuMaterial {
             base,
-            flags: if super::door_paint(&mat.name) || family == "woven-carpet" {
+            flags: if super::door_paint(&mat.name) || matches!(family, "woven-carpet" | "mission-roof-clay") || cut_pattern && family == "cotton-coverlet" {
                 0
             } else {
                 F_TEXTURED
@@ -77,12 +85,37 @@ impl Scan {
         Some(table.named(&format!("21-beaver-scan/{}", mat.name), surface))
     }
 
-    pub fn bind(table: &mut MaterialTable) {
-        let first = table.layers.len() as i32;
+    /// Rebase the house's layers onto the texture array: they follow the kit's
+    /// bake and the `between` layers placed after it (the shore rock).
+    pub fn bind(table: &mut MaterialTable, between: usize) {
+        let first = (table.layers.len() + between) as i32;
         for (name, material) in table.names.iter().zip(&mut table.gpu) {
-            if name.starts_with("21-beaver-scan/") {
+            if name.starts_with("21-beaver-fitted/") && material.thin_absorption > 0. {
+                material.params[3] += first as f32;
+            }
+            if name.starts_with("21-beaver-scan/") || name.starts_with("21-beaver-fitted/") && material.layer >= 0 {
                 material.layer += first;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bind_places_the_house_layers_after_the_shore_rock() {
+        let mut table = MaterialTable::new();
+        table.layers = vec!["kit-a".into(), "kit-b".into()];
+        let scan = table.named("21-beaver-scan/limewash", GpuMaterial { layer: 0, ..GpuMaterial::vertex_colour() });
+        let fitted = table.named("21-beaver-fitted/Oak", GpuMaterial { layer: 3, thin_absorption: 1., params: [0., 0., 0., 4.], ..GpuMaterial::vertex_colour() });
+        let unmapped = table.named("21-beaver-fitted/Cord", GpuMaterial { layer: -1, ..GpuMaterial::vertex_colour() });
+        Scan::bind(&mut table, 1);
+        // two kit layers, the rock's, then the house's own from 0
+        assert_eq!(table.gpu[scan as usize].layer, 3);
+        assert_eq!(table.gpu[fitted as usize].layer, 6);
+        assert_eq!(table.gpu[fitted as usize].params[3], 7.);
+        assert_eq!(table.gpu[unmapped as usize].layer, -1, "a fitted part without maps keeps none");
     }
 }

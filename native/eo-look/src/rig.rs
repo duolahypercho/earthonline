@@ -193,6 +193,159 @@ pub fn rig_at(hour: f64) -> Rig {
     }
 }
 
+/// How the rig's quarter-hour rows are interpolated between them.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Interp {
+    /// Linear between the bracketing rows: the JS, and every default.
+    #[default]
+    Linear,
+    /// A monotone cubic through the same rows (`--smooth-time`): every row is
+    /// still met exactly, and the slope no longer jumps at each quarter hour
+    /// (a drawn hour that follows the clock showed the jump as a change of
+    /// pace in the light every 15 minutes).
+    MonotoneCubic,
+}
+
+/// The tangent at a row of a monotone cubic through evenly spaced values,
+/// from the secants before and after it (per row step): 0 at an extremum or
+/// a flat neighbour, else the mean secant held to 3 x the smaller one. With
+/// both tangents of an interval within 3 x its secant and of its sign, the
+/// Hermite cubic is monotone on it (Fritsch & Carlson, SIAM J. Numer. Anal.
+/// 17(2), 1980, the square 0 <= alpha, beta <= 3 inside their region).
+pub fn monotone_tangent(d_prev: f64, d_next: f64) -> f64 {
+    if d_prev * d_next <= 0.0 {
+        return 0.0;
+    }
+    let m = 0.5 * (d_prev + d_next);
+    let cap = 3.0 * d_prev.abs().min(d_next.abs());
+    m.signum() * m.abs().min(cap)
+}
+
+/// The monotone cubic through `y[1]` (t = 0) and `y[2]` (t = 1) of four
+/// evenly spaced rows `y[0..4]`; exactly `y[1]` at 0 and `y[2]` at 1.
+pub fn monotone_cubic(y: [f64; 4], t: f64) -> f64 {
+    let d = [y[1] - y[0], y[2] - y[1], y[3] - y[2]];
+    let (m1, m2) = (monotone_tangent(d[0], d[1]), monotone_tangent(d[1], d[2]));
+    let (t2, t3) = (t * t, t * t * t);
+    let h00 = 2.0 * t3 - 3.0 * t2 + 1.0;
+    let h10 = t3 - 2.0 * t2 + t;
+    let h01 = -2.0 * t3 + 3.0 * t2;
+    let h11 = t3 - t2;
+    h00 * y[1] + h10 * m1 + h01 * y[2] + h11 * m2
+}
+
+/// The rows around an hour for a cubic: (row before, row, row after, the one
+/// after that, weight within the pair). The table runs 0..24 h; it wraps
+/// (row n-1 is 24 h, row 0's neighbour before is 23.75 h).
+pub fn cubic_rows(n: usize, hours: impl Fn(usize) -> f64, hour: f64) -> ([usize; 4], f64) {
+    let h = wrap_hour(hour);
+    let i = ((h / 0.25).floor() as usize).min(n - 2);
+    let w = clamp((h - hours(i)) / (hours(i + 1) - hours(i)), 0.0, 1.0);
+    let periodic = (hours(n - 1) - hours(0) - 24.0).abs() < 1e-9;
+    let prev = match (i, periodic) {
+        (0, true) => n - 2,
+        (0, false) => 0,
+        _ => i - 1,
+    };
+    let next = match (i + 2 >= n, periodic) {
+        (true, true) => 1,
+        (true, false) => n - 1,
+        _ => i + 2,
+    };
+    ([prev, i, i + 1, next], w)
+}
+
+/// Scalars of a `Rig`, in `pack` order.
+pub const RIG_VALUES: usize = 28;
+
+fn row_values(r: &RigRow) -> [f64; RIG_VALUES] {
+    let env = |k: &str| r.env_map_intensity.get(k).copied().unwrap_or(1.0);
+    let s = if r.analytic_diffuse_yield > 1e-9 { (r.environment_diffuse_yield / r.analytic_diffuse_yield).clamp(0.0, 1.0) } else { 1.0 };
+    let [sc, hs, hg, ac, rc] = [r.sun_color, r.hemi_sky, r.hemi_ground, r.ambient_color, r.rim_color];
+    [
+        sc[0], sc[1], sc[2], r.sun_intensity, hs[0], hs[1], hs[2], hg[0], hg[1], hg[2], r.hemi_intensity, ac[0], ac[1], ac[2], r.ambient_intensity, rc[0], rc[1], rc[2], r.rim_intensity, r.environment_intensity,
+        env("facade-painted"), env("facade-glass"), env("asphalt"), env("sidewalk"), r.light_rig_sun_scale, r.shadow_intensity, r.exposure, s,
+    ]
+}
+
+impl Rig {
+    /// Every scalar of the rig, in a fixed order (`unpack` reverses it).
+    pub fn pack(&self) -> [f64; RIG_VALUES] {
+        let [sc, hs, hg, ac, rc] = [self.sun_color, self.hemi_sky, self.hemi_ground, self.ambient_color, self.rim_color];
+        [
+            sc[0], sc[1], sc[2], self.sun_intensity, hs[0], hs[1], hs[2], hg[0], hg[1], hg[2], self.hemi_intensity, ac[0], ac[1], ac[2], self.ambient_intensity, rc[0], rc[1], rc[2], self.rim_intensity,
+            self.environment_intensity, self.env_painted, self.env_glass, self.env_asphalt, self.env_ground, self.light_rig_sun_scale, self.shadow_intensity, self.table_exposure, self.env_diffuse_scale,
+        ]
+    }
+
+    pub fn unpack(v: &[f64; RIG_VALUES]) -> Self {
+        Rig {
+            sun_color: [v[0], v[1], v[2]],
+            sun_intensity: v[3],
+            hemi_sky: [v[4], v[5], v[6]],
+            hemi_ground: [v[7], v[8], v[9]],
+            hemi_intensity: v[10],
+            ambient_color: [v[11], v[12], v[13]],
+            ambient_intensity: v[14],
+            rim_color: [v[15], v[16], v[17]],
+            rim_intensity: v[18],
+            environment_intensity: v[19],
+            env_painted: v[20],
+            env_glass: v[21],
+            env_asphalt: v[22],
+            env_ground: v[23],
+            light_rig_sun_scale: v[24],
+            shadow_intensity: v[25],
+            table_exposure: v[26],
+            env_diffuse_scale: v[27],
+        }
+    }
+
+    /// Linear between two rigs (the soft path's keyframes, a clock minute apart).
+    pub fn lerp(a: &Rig, b: &Rig, t: f64) -> Rig {
+        let (pa, pb) = (a.pack(), b.pack());
+        Rig::unpack(&std::array::from_fn(|k| mix(pa[k], pb[k], t)))
+    }
+}
+
+/// `rig_at` with the rows interpolated by `interp` (`Linear` is `rig_at`).
+pub fn rig_at_interp(hour: f64, interp: Interp) -> Rig {
+    if interp == Interp::Linear {
+        return rig_at(hour);
+    }
+    let t = table();
+    let (rows, w) = cubic_rows(t.len(), |k| t[k].hour, hour);
+    let v = rows.map(|k| row_values(&t[k]));
+    Rig::unpack(&std::array::from_fn(|c| monotone_cubic([v[0][c], v[1][c], v[2][c], v[3][c]], w)))
+}
+
+/// `rig_at_transfer` with the hour rows interpolated by `interp` (the
+/// transfer stays linear; `Linear` is `rig_at_transfer`).
+pub fn rig_at_transfer_interp(hour: f64, transfer: f64, interp: Interp) -> Rig {
+    if interp == Interp::Linear {
+        return rig_at_transfer(hour, transfer);
+    }
+    let g = transfer_grid();
+    let mut r = rig_at_interp(hour, interp);
+    let n = g.rows.len();
+    let (rows, wh) = cubic_rows(n, |k| g.rows[k][0][0], hour);
+    let t = transfer.clamp(g.transfers[0], *g.transfers.last().unwrap());
+    let j = g.transfers.iter().rposition(|v| *v <= t).unwrap_or(0).min(g.transfers.len() - 2);
+    let wt = clamp((t - g.transfers[j]) / (g.transfers[j + 1] - g.transfers[j]).max(1e-9), 0.0, 1.0);
+    let at = |c: usize| {
+        let y = rows.map(|i| mix(g.rows[i][j][c], g.rows[i][j + 1][c], wt));
+        monotone_cubic(y, wh)
+    };
+    r.sun_intensity = at(3);
+    r.hemi_intensity = at(4);
+    r.ambient_intensity = at(5);
+    r.rim_intensity = at(6);
+    r.environment_intensity = at(7);
+    r.hemi_ground = [at(8), at(9), at(10)];
+    r.env_diffuse_scale = t;
+    r
+}
+
 /// `keyEnvelope`: the key's smoothstep through 0..4 degrees of solar altitude.
 pub fn key_envelope(altitude_deg: f64) -> f64 {
     smoothstep(0.0, 4.0, altitude_deg)
@@ -258,6 +411,29 @@ pub fn key_direction(hour: f64) -> [f64; 3] {
     let d = [s.x * w + moon[0] * (1.0 - w), s.y * w + moon[1] * (1.0 - w), s.z * w + moon[2] * (1.0 - w)];
     let l = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
     if l < 1e-4 { moon } else { [d[0] / l, d[1] / l, d[2] / l] }
+}
+
+/// `--smooth-time`'s rim for `key_direction(hour)`: while the key blends from
+/// the sun to its anti-solar stand-in (sun -6..0 deg) it passes overhead and
+/// its heading, so `rim_direction`'s, turns half a circle at once (a step at
+/// dawn and at dusk without a moon: the rim lit one side of a street, then the
+/// other). Here the rim turns over the top instead, through the same weight;
+/// equal to `rim_direction(key_direction(hour))` with the sun up or 6 deg down.
+pub fn rim_direction_smooth(hour: f64) -> [f64; 3] {
+    let s = sun_direction(hour);
+    let h = s.x.hypot(s.z);
+    let key = key_direction(hour);
+    if h <= 1e-6 {
+        return rim_direction(key);
+    }
+    let edge = clamp((s.altitude_deg + 6.0) / 6.0, 0.0, 1.0);
+    let w = edge * edge * (3.0 - 2.0 * edge);
+    if w >= 1.0 || w <= 0.0 {
+        return rim_direction(key);
+    }
+    // the stand-in's heading is the sun's turned half round.
+    let standin_rim = rim_direction([-s.x, 0.0, -s.z]);
+    crate::blend::slerp_dir(standin_rim, rim_direction([s.x, 0.0, s.z]), w)
 }
 
 /// The rim (`aimRimOppositeKey`): opposite the key's heading, 28 degrees up.

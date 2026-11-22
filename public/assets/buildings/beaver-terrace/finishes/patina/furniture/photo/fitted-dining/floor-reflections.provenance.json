@@ -1,0 +1,57 @@
+{
+  "source": "Incident radiance above the floorboards of the furnished 21 Beaver Street house.",
+  "attribution": "Earth Online",
+  "license": "Project-authored lighting data",
+  "build": "scripts/blender-buildings/bake_beaver_floor_gloss.py",
+  "incident_panoramas": {
+    "file": "floor-incident.npy",
+    "sha256": "fa47c428f2f40f9d52c7ad7dbf6178af8ed396d70a077a59ace0595474f7a181"
+  },
+  "source_scene": {
+    "file": "21 Beaver - Fitted dining room.blend",
+    "sha256": "15ffbcf57cc8327d3326ba5a28b6fbf2ab043ff9c709dacaa881d87cd1531c50"
+  },
+  "house_sha256": "0f567a703707bf14d2e49fd9ee1a713422faa46109fd5b42f404f5ab6bd0dc50",
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/fitted-dining/floor-reflections.png",
+  "sha256": "71e608d39436d1428933526953d6193b2e29ffa37391974779bf748ae933d13d",
+  "bytes": 211692,
+  "grid": [
+    4,
+    8
+  ],
+  "plan_metres": [
+    7,
+    13
+  ],
+  "survey_height_m": 0.015,
+  "tile_size": [
+    64,
+    16
+  ],
+  "source_rows": [
+    "fixtures",
+    "uniform-sky",
+    "clear-sky",
+    "front-25",
+    "front-57",
+    "rear-25",
+    "rear-57"
+  ],
+  "transfer_encoding": "sqrt(L/(1+L))",
+  "roughness_range_and_median": [
+    0.4078431725502014,
+    0.4705882668495178,
+    0.5490196347236633
+  ],
+  "dining_camera": {
+    "source_exposure_ev": 2.799999952316284,
+    "linear_game_units_per_source_unit": 2.6080094371717353,
+    "display_response_sha256": "6379f2bdde2244d7e1f207f44b5f12448d969d3f73b5db000d73cf8aafac3b26",
+    "display_meter_gain": 1.186593301,
+    "reference_game_exposure": 2.2504684186743966
+  },
+  "samples": 64,
+  "hemisphere_filter_samples": 256,
+  "fitted_geometry_sha256": "caa9e62c6b298a21e00f2d33fab23e1690080074c7eb4b023236f5480b21646d",
+  "install": "scripts/blender-buildings/cook_beaver_fitted_room.py --lighting"
+}

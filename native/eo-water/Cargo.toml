@@ -7,6 +7,7 @@ publish = false
 
 [dependencies]
 eo-data = { path = "../eo-data" } # groundscale: the ground-plan scale
+eo-farshore = { path = "../eo-farshore" } # the survey readers (eo_farshore::survey)
 anyhow = "1.0.104"
 flate2 = "1.1.11"
 serde = { version = "1.0.229", features = ["derive"] }

@@ -38,6 +38,10 @@ pub enum Kind {
     Drizzle,
     Rain,
     Storm,
+    /// A street an hour after rain (`--weather damp`, cinematic look plan
+    /// stage L3; not in the JS and never produced by the schedule): the
+    /// ground film and puddles left behind, no rain falling, a clearing deck.
+    Damp,
 }
 
 impl Kind {
@@ -49,6 +53,7 @@ impl Kind {
             Kind::Drizzle => "drizzle",
             Kind::Rain => "rain",
             Kind::Storm => "storm",
+            Kind::Damp => "damp",
         }
     }
     pub fn parse(s: &str) -> Option<Self> {
@@ -59,6 +64,7 @@ impl Kind {
             "drizzle" => Kind::Drizzle,
             "rain" => Kind::Rain,
             "storm" => Kind::Storm,
+            "damp" => Kind::Damp,
             _ => return None,
         })
     }
@@ -107,6 +113,9 @@ pub fn atmos(kind: Kind) -> [f64; 3] {
         Kind::Drizzle => [6.0, 0.013, 0.78],
         Kind::Rain => [7.5, 0.016, 0.76],
         Kind::Storm => [9.0, 0.02, 0.7],
+        // (`--weather damp`) air washed by the rain but still humid: between
+        // clear and overcast (INFERRED, no JS bucket).
+        Kind::Damp => DAMP_ATMOS,
     }
 }
 
@@ -183,8 +192,19 @@ pub const DRIZZLE: Profile = p(0.85, 0.35, 0.38, 0.12, 1.0, 0.82, [0.99, 1.0, 1.
 pub const RAIN: Profile = p(0.95, 0.5, 0.26, 0.07, 1.0, 0.86, [0.985, 1.0, 1.02], 1.1, 0.8, [0.95, 0.98, 0.5], [0.42, 0.56], 0.40, 1.4, MARINE_FOG_SIGMA * 0.2, [7.5, 0.016, 0.76]);
 pub const STORM: Profile = p(1.0, 0.65, 0.13, 0.03, 1.0, 0.8, [0.95, 1.0, 0.965], 1.2, 0.55, [0.98, 0.99, 0.6], [0.32, 0.45], 0.50, 1.25, MARINE_FOG_SIGMA * 0.15, [9.0, 0.02, 0.7]);
 
+/// (`--weather damp`, stage L3) The bucket's air: turbidity, Mie, Mie g.
+pub const DAMP_ATMOS: [f64; 3] = [3.2, 0.008, 0.78];
+/// (`--weather damp`, stage L3) The overcast left after rain, thinning: a
+/// low deck (coverage 0.9, lit from below by the city at night more faintly
+/// than overcast's: urban glow 0.55), a high sheet thinner than overcast's, a little mist
+/// (visibility 0.8 / 0.95 of clear's, lamp haze between overcast's and
+/// drizzle's), no continuous deck and no marine layer. INFERRED from the JS
+/// buckets around it (OVERCAST, DRIZZLE); no JS profile exists.
+pub const DAMP: Profile = p(0.8, 0.7, 0.8, 0.4, 0.0, 0.55, [0.99, 1.0, 1.01], 0.55, 1.0, [0.9, 0.7, 0.6], [0.8, 0.95], 0.22, 1.3, 0.0, DAMP_ATMOS);
+
 pub fn profile(kind: Kind) -> Profile {
     match kind {
+        Kind::Damp => DAMP,
         Kind::Clear => CLEAR,
         Kind::Fog => FOG,
         Kind::Overcast => OVERCAST,
@@ -457,6 +477,15 @@ impl Ground {
     }
 }
 
+/// (`--weather damp`, stage L3) The ground film an hour after rain (mm): a
+/// thin continuous film, wetness 1 - exp(-0.11 / 0.08) = 0.75 (the brief's
+/// 0.08-0.12 mm; the JS evaporation would have dried it sooner, so this is
+/// a preset, not the schedule's state).
+pub const DAMP_FILM_MM: f64 = 0.11;
+/// (`--weather damp`) The puddles' fill: the gutters and low spots still
+/// standing, the crown drained.
+pub const DAMP_PUDDLE_FILL: f64 = 0.45;
+
 /// What the renderer reads: the weather at one instant.
 #[derive(Clone, Copy, Debug)]
 pub struct WeatherState {
@@ -472,6 +501,19 @@ pub struct WeatherState {
     /// 0..1 lightning flash and its distance (m), storm only.
     pub flash: f64,
     pub flash_distance_m: f64,
+    /// The game day of the world clock, `floor(world_s / 86400)` (0 for a
+    /// preset without a clock): a clear day's sky is drawn per game day
+    /// (clouds.rs `drawn_state`).
+    pub day: u32,
+    /// The world clock the state was taken at (s; 0 for a preset without a
+    /// clock): a clear day's sky changes to the next game day's over the end
+    /// of the world clock's day (clouds.rs `sky_mix`).
+    pub clock_s: f64,
+}
+
+/// The game day of a world clock (s).
+pub fn game_day(world_s: f64) -> u32 {
+    (world_s.max(0.0) / 86400.0).floor().min(u32::MAX as f64) as u32
 }
 
 /// The visual profile along the severity axis: the rung buckets clear, fog,
@@ -557,6 +599,8 @@ pub fn state_at(seed: u32, world_s: f64) -> WeatherState {
         gust: s.gust_factor,
         flash,
         flash_distance_m: flash_d,
+        day: game_day(world_s),
+        clock_s: world_s,
     }
 }
 
@@ -564,6 +608,8 @@ pub fn state_at(seed: u32, world_s: f64) -> WeatherState {
 /// `WEATHER_PRESETS`: drizzle 0.5 mm/h, rain 6 mm/h with a 0.19 mm film,
 /// storm 22 mm/h with 0.4 mm and wind (11.5, 4.2); fog its 0.01 mm film).
 /// Puddles stand as after a long rain (fill 0.6) in rain and storm.
+/// `damp` (stage L3): no rain, the film `DAMP_FILM_MM` and puddles
+/// `DAMP_PUDDLE_FILL` of a street an hour after rain, a light breeze.
 pub fn preset(kind: Kind) -> WeatherState {
     let (rate, film, puddle, wind, severity): (f64, f64, f64, [f64; 2], f64) = match kind {
         Kind::Clear => (0.0, 0.0, 0.0, [0.0, 0.0], 0.0),
@@ -572,6 +618,7 @@ pub fn preset(kind: Kind) -> WeatherState {
         Kind::Drizzle => (0.5, 0.0508, 0.1, [2.0, 0.5], 2.0),
         Kind::Rain => (6.0, 0.19, 0.6, [4.4, 1.1], 3.2),
         Kind::Storm => (22.0, 0.4, 0.9, [11.5, 4.2], 4.0),
+        Kind::Damp => (0.0, DAMP_FILM_MM, DAMP_PUDDLE_FILL, [1.2, 0.5], 0.5),
     };
     WeatherState {
         severity,
@@ -584,7 +631,16 @@ pub fn preset(kind: Kind) -> WeatherState {
         gust: 1.0,
         flash: 0.0,
         flash_distance_m: 0.0,
+        day: 0,
+        clock_s: 0.0,
     }
+}
+
+/// A preset on the game day of a world clock (`preset` is day 0). The
+/// renderer's preset weather should come from this so a clear day's sky is
+/// drawn afresh each game day (eo-render sky.rs `weather_of`: a hand-off).
+pub fn preset_at(kind: Kind, world_s: f64) -> WeatherState {
+    WeatherState { day: game_day(world_s), clock_s: world_s, ..preset(kind) }
 }
 
 #[cfg(test)]
@@ -640,6 +696,28 @@ mod tests {
             g.step(0.0, 0.0, 1.0);
         }
         assert!(g.wetness() < 0.05, "wetness 30 min after the rain {}", g.wetness());
+    }
+
+    #[test]
+    fn the_damp_street_is_wet_with_no_rain_and_is_its_own_kind() {
+        let d = preset(Kind::Damp);
+        assert_eq!(Kind::parse("damp"), Some(Kind::Damp));
+        assert_eq!(Kind::Damp.name(), "damp");
+        assert_eq!(d.kind, Kind::Damp);
+        assert_eq!(d.rain_mm_h, 0.0, "no rain falling (no drops, no ripples)");
+        assert_eq!(d.flash, 0.0);
+        assert!((0.6..0.8).contains(&d.wetness), "wetness {}", d.wetness);
+        assert!((0.3..0.5).contains(&d.puddle_fill), "puddles {}", d.puddle_fill);
+        assert_eq!(d.profile.continuous, 0.0, "a breaking deck, no continuous rain deck");
+        assert!(d.profile.overcast < OVERCAST.overcast && d.profile.overcast > CLEAR.overcast);
+        // drier than the rain preset, wetter than drizzle's
+        assert!(d.wetness < preset(Kind::Rain).wetness && d.wetness > preset(Kind::Drizzle).wetness);
+        // a pure function: the same every call
+        let e = preset(Kind::Damp);
+        assert_eq!((d.wetness, d.puddle_fill, d.severity, d.wind), (e.wetness, e.puddle_fill, e.severity, e.wind));
+        // the other presets are unchanged by its arrival
+        assert_eq!(preset(Kind::Rain).rain_mm_h, 6.0);
+        assert_eq!(profile(Kind::Overcast), OVERCAST);
     }
 
     #[test]

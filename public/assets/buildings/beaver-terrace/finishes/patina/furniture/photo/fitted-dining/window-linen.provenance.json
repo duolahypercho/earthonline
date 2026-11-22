@@ -1,0 +1,73 @@
+{
+  "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/fitted-dining/window-linen.glb",
+  "sha256": "c8c656fe09324781526cb7875f4f81d3729e4931d070994dc970018a69a58ee7",
+  "bytes": 682460,
+  "maps": {
+    "url": "/assets/buildings/beaver-terrace/finishes/patina/furniture/photo/fitted-dining/window-linen.png",
+    "sha256": "37910bbb64e0efe96e49e668702759f2111165bf2efc7b5bdb99c8dfaf1283a8",
+    "bytes": 718735
+  },
+  "house_sha256": "0f567a703707bf14d2e49fd9ee1a713422faa46109fd5b42f404f5ab6bd0dc50",
+  "fitted_geometry_sha256": "caa9e62c6b298a21e00f2d33fab23e1690080074c7eb4b023236f5480b21646d",
+  "source_scene_sha256": "1913955de8ef36f457a36a9ea1b358623e810356856ec6483e970f78ffd4e500",
+  "source_glb_sha256": "d29c66792ad189396d0f84bb6b29990160cee2c225d98db61d8976db4f6bf4a2",
+  "survey_sha256": "af2498d4fa1a9c9f67c47c467cf3bc03da8ddf2d164bd1cfb27e95a7bc1917a4",
+  "design_image_sha256": "7f708644a9a71a39f295b30b82a02674ff0ff37174b3eca21822805ecd70f627",
+  "source_sun": [
+    0.2198326140642166,
+    -0.6028464436531067,
+    0.7669743299484253
+  ],
+  "weave": [
+    10.367346679820514,
+    -0.10367346448092259,
+    -2.9488752289386615,
+    1.0
+  ],
+  "triangles": 23566,
+  "materials": [
+    "Sun-filtering plainweave flax",
+    "Dark woven cotton lift tape",
+    "Unbleached lift cord",
+    "Rubbed brass lift rings"
+  ],
+  "credits": [
+    {
+      "asset": "rough_linen",
+      "role": "albedo",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rough_linen/rough_linen_diff_1k.jpg",
+      "sha256": "04897d7611d7390ddf5b2c6f7273f448dfc48341fdbd1f4f207fa30b331d7f57"
+    },
+    {
+      "asset": "rough_linen",
+      "role": "normal",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rough_linen/rough_linen_nor_gl_1k.jpg",
+      "sha256": "e2402166d1a489f7414814e69e1836ab672aa24e30bec2d41fea356f81687e53"
+    },
+    {
+      "asset": "rough_linen",
+      "role": "arm",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rough_linen/rough_linen_arm_1k.jpg",
+      "sha256": "e1ca6b51ed62834063253e08f8f2e23836aa00d72675b960ddd8e608d9f0c7e6"
+    }
+  ],
+  "attribution": [
+    "colormass",
+    "Rico Cilliers"
+  ],
+  "license": "Project-authored geometry and textiles with CC0 linen photographs.",
+  "source_url": [
+    "https://polyhaven.com/a/rough_linen"
+  ],
+  "sources": [
+    "fixtures",
+    "uniform-sky",
+    "clear-sky",
+    "front-25",
+    "front-57",
+    "rear-25",
+    "rear-57",
+    "site-noon-sun"
+  ],
+  "build": "scripts/blender-buildings/cook_beaver_window_linen.py"
+}

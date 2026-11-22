@@ -45,7 +45,8 @@ pub fn entry_cells(w: &PropsWorld) -> &HashMap<(i32, i32), Vec<u32>> {
     w.snap_cells.get_or_init(|| {
         let mut cells: HashMap<(i32, i32), Vec<u32>> = HashMap::new();
         for (ei, e) in w.street.plan.entries.iter().enumerate() {
-            if e.points.len() < 2 || !(e.half > 0.0) {
+            // (a structure's leg into a junction, eo-street joins, is not drawn.)
+            if e.points.len() < 2 || !(e.half > 0.0) || e.structure_leg.is_some() {
                 continue;
             }
             let pad = e.half + e.walks[0].max(e.walks[1]) + reach;
@@ -69,6 +70,13 @@ pub fn entry_cells(w: &PropsWorld) -> &HashMap<(i32, i32), Vec<u32>> {
 /// `createStreetSignKerbSnap(plan, { postRadiusM })` applied to one listed point:
 /// the seat, or None (dropped). `paved` refuses a seat with no drawn paving.
 pub fn snap(w: &PropsWorld, x: f64, z: f64, edge_m: f64, post_r: f64, paved: bool) -> Option<(f64, f64, f64)> {
+    snap_with(w, x, z, edge_m, post_r, paved, &|_, _| true)
+}
+
+/// `snap` refusing every seat `free` does not take too (the listed point
+/// and each kerb seat tried): `--structures` keeps a post off the columns
+/// and out of the decks (`plan_tile_clear`).
+pub fn snap_with(w: &PropsWorld, x: f64, z: f64, edge_m: f64, post_r: f64, paved: bool, free: &dyn Fn(f64, f64) -> bool) -> Option<(f64, f64, f64)> {
     let typical = w.std.sign_lateral_typical;
     let limited = w.std.sign_lateral_limited;
     let reach = w.js.num("streetSigns", "snapReachM");
@@ -76,7 +84,7 @@ pub fn snap(w: &PropsWorld, x: f64, z: f64, edge_m: f64, post_r: f64, paved: boo
     let r = post_r.max(0.0);
     let edge = r.max(edge_m);
     let clear = |x: f64, z: f64, clear_m: f64| {
-        w.roadway.hit(x, z, clear_m).is_none() && !w.roadway.ramp_hit(x, z, r) && (!paved || w.street.paved_at(x, z).is_some())
+        w.roadway.hit(x, z, clear_m).is_none() && !w.roadway.ramp_hit(x, z, r) && (!paved || w.street.paved_at(x, z).is_some()) && free(x, z)
     };
     let clear_m = edge + limited;
     if clear(x, z, clear_m) {
@@ -161,6 +169,14 @@ pub fn plan_tile(w: &PropsWorld, key: (i32, i32)) -> Vec<Prop> {
     plan_posts(w, key, true).into_iter().flat_map(|p| p.props).collect()
 }
 
+/// `plan_tile` with every post kept clear of the grade-separated roads `s`
+/// (`--structures`, stage A6): the kerb snap moves a post whose seat is on
+/// a column or under a deck too low for it to the nearest clear seat along
+/// its kerb, and drops it where none is.
+pub fn plan_tile_clear(w: &PropsWorld, s: &eo_structures::StructureWorld, key: (i32, i32)) -> Vec<Prop> {
+    plan_posts_with(w, key, true, Some(s)).into_iter().flat_map(|p| p.props).collect()
+}
+
 pub struct PlacedPost {
     pub index: u32,
     pub listed: [f64; 2],
@@ -172,6 +188,11 @@ pub struct PlacedPost {
 }
 
 pub fn plan_posts(w: &PropsWorld, key: (i32, i32), paved: bool) -> Vec<PlacedPost> {
+    plan_posts_with(w, key, paved, None)
+}
+
+/// `plan_posts`, the posts kept clear of `structures` when given (`plan_tile_clear`).
+pub fn plan_posts_with(w: &PropsWorld, key: (i32, i32), paved: bool, structures: Option<&eo_structures::StructureWorld>) -> Vec<PlacedPost> {
     let inv = &w.js.signs;
     let cell = SIGN_CELL_M(&w.js);
     let post_r = w.js.consts["signPostRadiusM"].as_f64().unwrap_or(0.0);
@@ -216,7 +237,19 @@ pub fn plan_posts(w: &PropsWorld, key: (i32, i32), paved: bool) -> Vec<PlacedPos
             continue;
         }
         let edge = stack.iter().fold(0.0f64, |m, p| m.max(p.1 / 2.0));
-        let Some((x, z, moved)) = snap(w, lx, lz, edge, post_r, paved) else { continue };
+        let top = w.std.sign_mount_min.max(w.std.sign_mount_secondary_min + lower) + stack[0].2;
+        let seat = match structures {
+            None => snap(w, lx, lz, edge, post_r, paved),
+            Some(s) => {
+                // the post and its widest plate, from the ground to its top.
+                let free = |x: f64, z: f64| {
+                    let g = w.ground(x, z);
+                    !crate::clearance::blocked(s, &crate::clearance::Extent { x, z, r: edge.max(post_r), y0: g, y1: g + top }, None)
+                };
+                snap_with(w, lx, lz, edge, post_r, paved, &free)
+            }
+        };
+        let Some((x, z, moved)) = seat else { continue };
         // F3: a post repeating every plate of a post placed within 0.9 m.
         let (gx, gz) = ((x / MERGE_M).floor() as i64, (z / MERGE_M).floor() as i64);
         let repeats = (-1..=1).any(|di| {
@@ -237,7 +270,6 @@ pub fn plan_posts(w: &PropsWorld, key: (i32, i32), paved: bool) -> Vec<PlacedPos
             continue;
         }
         let ground = w.ground(x, z);
-        let top = w.std.sign_mount_min.max(w.std.sign_mount_secondary_min + lower) + stack[0].2;
         let mut cursor = top;
         let mut plates = vec![];
         let mut props = vec![];

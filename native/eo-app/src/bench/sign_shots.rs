@@ -24,7 +24,7 @@ pub fn poses(world: &crate::World, aspect: f32, far: f32) -> Vec<(String, Camera
     let Ok(js) = eo_props::JsProps::load() else { return out };
     let Ok(ca) = eo_data::CaStandards::load(&world.paths) else { return out };
     let Ok(std) = eo_props::Standards::load(&ca) else { return out };
-    let pw = PropsWorld::new(street.clone(), Arc::new(js), std);
+    let pw = PropsWorld::new(street.clone(), Arc::new(js), std); // no structures: the same poses with and without `--structures`
     let _ = pw.install_furniture(&world.city.buildings);
     let _ = eo_props::overhead::install(&pw, eo_props::overhead::DropBuilding::from_city(&world.city.buildings));
     let soma = eo_data::groundscale::plan([1600.0f64, -400.0]); // on the scaled plan

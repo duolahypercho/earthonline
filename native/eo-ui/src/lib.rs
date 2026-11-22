@@ -18,6 +18,7 @@
 
 pub mod draw;
 pub mod map;
+pub mod photo; // the photo mode panel
 mod screens;
 pub mod settings;
 pub mod text;
@@ -178,6 +179,30 @@ impl Default for HudState {
     }
 }
 
+/// A label over another player (online). The host decides where it hangs
+/// (`x`, `y`: the point over the head it points at, window pixels), how far
+/// away the head is (`depth`, metres: the nearer tag keeps its place and is
+/// drawn on top), how opaque (distance fade, occlusion) and how large it is;
+/// the HUD lays the tags out: a tag that would cover a nearer one moves up
+/// out of its way and keeps a 1 px leader line down to its head, and one
+/// with no room left is not drawn. Drawn under the HUD's plates.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NameTag {
+    pub x: f32,
+    pub y: f32,
+    pub depth: f32,
+    pub name: String,
+    /// A second line inside the plate (what the player is doing: "waving"), or none.
+    pub detail: Option<String>,
+    pub alpha: f32,
+    /// The name's text size, window pixels; the second line is `detail_size`.
+    pub size: f32,
+    pub detail_size: f32,
+    /// Its own player's head on screen (x0, y0, x1, y1): the one face in
+    /// `Ui::tag_avoid` its plate may cover.
+    pub head: [f32; 4],
+}
+
 /// Boot progress (`setLoadingStatus` in title-menu.js).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Loading {
@@ -214,6 +239,8 @@ pub(crate) enum Action {
     Slider(&'static str),
     Preset(&'static str),
     Option(&'static str),
+    /// A world row (`settings::WORLD_OPTIONS`).
+    World(&'static str),
     Fps,
     Adaptive,
     Volume,
@@ -280,6 +307,10 @@ pub(crate) struct HudMemory {
 
 pub(crate) const HUD_MAP_SIZE: u32 = 2048;
 pub(crate) const HUD_MAP_S: f32 = 2.0;
+/// Focusable items with a hover/focus transition, enough for every screen (the
+/// pause screen on its Settings tab holds 33 with the native rows: 5 tabs, 25
+/// in the sheet, 3 tiles); an item past the slots would show no hover.
+pub(crate) const HOVER_SLOTS: usize = 48;
 pub(crate) const HUD_MAP_RECENTRE_M: f32 = 200.0;
 
 pub struct Ui {
@@ -295,12 +326,23 @@ pub struct Ui {
     settings_path: Option<PathBuf>,
     pub loading: Loading,
     pub hud: HudState,
+    /// Name tags over the other players (the HUD screen draws them).
+    pub tags: Vec<NameTag>,
+    last_tags: Vec<NameTag>,
+    /// Faces on screen (x0, y0, x1, y1: the other players' and the street
+    /// people's heads) a tag's plate keeps off, moving aside or up with a
+    /// leader line (a plate never sits on someone else's face).
+    pub tag_avoid: Vec<[f32; 4]>,
+    last_avoid: Vec<[f32; 4]>,
+    /// The HUD's plates (radar, objective, clock); false leaves only the
+    /// name tags (captures of a scene, a photo).
+    pub hud_chrome: bool,
     pub(crate) hud_mem: HudMemory,
     pub(crate) hits: Vec<Hit>,
     pub(crate) focus: Option<usize>,
     pub(crate) hover: Option<usize>,
     /// Per focusable item: hover/focus transition progress 0..1.
-    pub(crate) hover_t: [f32; 16],
+    pub(crate) hover_t: [f32; HOVER_SLOTS],
     pub(crate) screen_t0: f64,
     pub(crate) now: f64,
     last_now: f64,
@@ -321,6 +363,9 @@ pub struct Ui {
     pub(crate) fmt: String,
     /// the cues since the host last took them (`take_cues`).
     pub cues: u32,
+    /// photo mode's panel: while set, it is drawn in place of the HUD.
+    pub photo: Option<photo::PhotoPanel>,
+    last_photo: Option<photo::PhotoPanel>,
 }
 
 impl Ui {
@@ -361,11 +406,16 @@ impl Ui {
             settings_path,
             loading: Loading::default(),
             hud: HudState::default(),
+            tags: vec![],
+            last_tags: vec![],
+            tag_avoid: vec![],
+            last_avoid: vec![],
+            hud_chrome: true,
             hud_mem: HudMemory::default(),
             hits: Vec::with_capacity(64),
             focus: Some(0),
             hover: None,
-            hover_t: [0.0; 16],
+            hover_t: [0.0; HOVER_SLOTS],
             screen_t0: 0.0,
             now: 0.0,
             last_now: 0.0,
@@ -382,6 +432,8 @@ impl Ui {
             stats: UiStats::default(),
             fmt: String::with_capacity(64),
             cues: 0, // audio
+            photo: None,
+            last_photo: None,
         }
     }
 
@@ -410,7 +462,7 @@ impl Ui {
             self.screen = s;
             self.focus = Some(0);
             self.scroll = 0.0;
-            self.hover_t = [0.0; 16];
+            self.hover_t = [0.0; HOVER_SLOTS];
             if s == Screen::Pause {
                 self.pause_tab = PauseTab::Map;
                 self.pause_view = None;
@@ -491,7 +543,11 @@ impl Ui {
                 moving = true;
             }
         }
-        if self.screen == Screen::Hud && self.last_hud.as_ref() != Some(&self.hud) {
+        if self.screen == Screen::Hud && (self.last_hud.as_ref() != Some(&self.hud) || self.tags != self.last_tags || self.tag_avoid != self.last_avoid) {
+            self.dirty = true;
+        }
+        if self.photo != self.last_photo {
+            self.last_photo = self.photo.clone();
             self.dirty = true;
         }
         self.update_maps(device, queue, enc);
@@ -504,6 +560,8 @@ impl Ui {
             self.dirty = false;
             if self.screen == Screen::Hud {
                 self.last_hud = Some(self.hud.clone());
+                self.last_tags.clone_from(&self.tags);
+                self.last_avoid.clone_from(&self.tag_avoid);
             }
         }
         self.write_globals(queue);
@@ -649,8 +707,18 @@ impl Ui {
             animating: false,
             pause_pane: Rect::new(0.0, 0.0, 0.0, 0.0),
             fmt: &mut self.fmt,
+            tags: &self.tags,
+            avoid: &self.tag_avoid,
+            chrome: self.hud_chrome,
         };
-        screens::build(&mut p, &mut ctx);
+        match (&self.photo, self.screen) {
+            // photo mode hides the HUD.
+            (Some(panel), Screen::Hud) => {
+                photo::draw(&mut p, self.vp, panel);
+                ctx.animating = false;
+            }
+            _ => screens::build(&mut p, &mut ctx),
+        }
         self.animating = ctx.animating;
         self.pause_pane = ctx.pause_pane;
     }
@@ -761,7 +829,7 @@ impl Ui {
             Action::Start | Action::Observe | Action::MapPane => 0,
             Action::Back => cue::BACK,
             Action::TitleSettings | Action::TitleExit | Action::PauseSettings | Action::Quit | Action::Tab(_) => cue::OPEN,
-            Action::Motion | Action::InvertY | Action::Slider(_) | Action::Preset(_) | Action::Option(_) | Action::Fps | Action::Adaptive | Action::Volume | Action::Mix(_) => cue::TOGGLE,
+            Action::Motion | Action::InvertY | Action::Slider(_) | Action::Preset(_) | Action::Option(_) | Action::World(_) | Action::Fps | Action::Adaptive | Action::Volume | Action::Mix(_) => cue::TOGGLE,
             _ => cue::CONFIRM,
         };
         self.activate(action, rect, input.mouse)
@@ -852,6 +920,11 @@ impl Ui {
             }
             Action::Option(k) => {
                 self.settings.performance.cycle(k);
+                self.save_settings();
+                return Some(Event::SettingsChanged);
+            }
+            Action::World(k) => {
+                self.settings.world.cycle(k);
                 self.save_settings();
                 return Some(Event::SettingsChanged);
             }

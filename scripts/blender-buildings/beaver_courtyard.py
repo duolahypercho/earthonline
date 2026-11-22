@@ -25,6 +25,55 @@ def arch(emit, mat, center, radius, spring, rise, head, front, back):
     emit(mat, points, faces)
 
 
+def arch_reveal(emit, mat, center, radius, spring, rise, front, back):
+    """A projecting plaster return with a constant-width face around the opening."""
+    points = []
+    for i in range(33):
+        a = math.pi * i / 32
+        co, si = math.cos(a), math.sin(a)
+        x, y = center-radius*co, spring+rise*si
+        u, v = center-(radius+.061)*co, spring+(rise+.061)*si
+        points.extend(((x,y,front),(u,v,front+.012),(u,v,back),(x,y,back)))
+    faces = [(4*i+k,4*i+(k+1)%4,4*i+4+(k+1)%4,4*i+4+k)
+             for i in range(32) for k in (0,1,3)]
+    emit(mat, points, faces)
+
+
+def arched_casements(emit, box, boxes, frame, glass, plaster, floor):
+    """Three independently glazed arches, recessed behind the front arcade."""
+    sill, spring = floor + .86, floor + 1.77
+    rad, rise, rail = .595, .72, .047
+    front, back = .408, .502
+    centres = [1.315 + 1.31 * i for i in range(3)]
+    # The backing wall closes the gaps between the casements from indoors.
+    for left, right in zip([.66] + [c + rad for c in centres],
+                           [c - rad for c in centres] + [4.645]):
+        box(plaster, (left, sill, front), (right, floor + 2.55, back))
+    for centre in centres:
+        arch(emit, plaster, centre, rad, spring, rise, floor + 2.55, front, back)
+        left, right = centre - rad, centre + rad
+        for x in (left, right - rail):
+            box(frame, (x, sill, front-.009), (x + rail, spring, back), bevel=.003)
+        for h, width in ((sill, rail), (spring - .17, .032)):
+            box(frame, (left + rail, h, front), (right - rail, h + width, back), bevel=.003)
+        box(frame, (centre-.014, sill+rail, front+.005),
+            (centre+.014, spring+rise-rail, back-.008), bevel=.002)
+        # Concentric elliptical arcs define the shaped timber and the actual pane edge.
+        rim, panes = [], []
+        for i in range(33):
+            a = math.pi * i / 32
+            co, si = math.cos(a), math.sin(a)
+            x, h = centre-rad*co, spring+rise*si
+            u, v = centre-(rad-rail)*co, spring+(rise-rail)*si
+            rim.extend(((x,h,front-.009), (u,v,front-.009), (u,v,back), (x,h,back)))
+            panes.extend(((u,sill+rail,.459),(u,v,.459),(u,v,.465),(u,sill+rail,.465)))
+        for mat, points in ((frame,rim), (glass,panes)):
+            faces = [(4*i+k,4*i+(k+1)%4,4*i+4+(k+1)%4,4*i+4+k)
+                     for i in range(32) for k in range(4)]
+            emit(mat, points, faces)
+    boxes.append([[.66,sill,front],[4.645,floor+2.55,back]])
+
+
 def roof_pitch(emit, plaster, lining, clay, x0, y0, x1, y1, front, rear):
     """One roof slope, closed at the gable, with overlapping barrel tiles.
     Tiles alternate convex covers and concave pans. Every front course has a
@@ -74,7 +123,7 @@ def awning_tiles(emit, clay, left, right, front, rear, low, high):
         emit(clay[(j*7+2)%len(clay)],points,[(k,k+1,k+10,k+9) for k in range(8)],True)
 
 
-def stair_bay(emit, box, stucco, recess, wood, glass, tiles, rise):
+def stair_bay(emit, box, stucco, recess, wood, glass, tiles, rise, photo=False):
     """A half-round bay with two glazed arched openings and a radial clay cap."""
     cx = 5.955
     rx, rz = 1.00, 0.90
@@ -115,6 +164,32 @@ def stair_bay(emit, box, stucco, recess, wood, glass, tiles, rise):
         for h in (sill, spring):
             box(wood,(left,h,-0.47),(right,h+0.035,-0.44))
     strip(wood, [curve(a,10.14) for a in angles], [curve(a,10.235,1.086) for a in angles], True)
+    if photo:
+        # A conical cap sheds water in pans, with separate cover tiles over the joints.
+        # Shorter courses near the top let the clay follow the tighter circumference.
+        rng = random.Random(2157)
+        # The ridge continues behind the front plane until it intersects the
+        # main roof. A half-cone would leave the upper part of its back open.
+        for j in range(34):
+            pitch = math.pi / 17
+            for outer, inner in ((1.10,.745), (.806,.478), (.544,.228), (.297,.025)):
+                for pan in (True, False):
+                    center = -math.pi/2 + (j + (.50 if pan else 0.)) * pitch
+                    tone = rng.choice(tiles)
+                    rings = []
+                    for r, lift in ((outer,.012),(inner,0.)):
+                        row = []
+                        for k in range(9):
+                            t = k/8
+                            a = center + (t-.5) * pitch * (1.02 if pan else .51)
+                            bulge = math.sin(math.pi*t)
+                            h = 10.21 + (1.09-r)*.68 + lift
+                            h += (.019*(1-bulge) if pan else .028 + .066*r**.65*bulge)
+                            row.append(curve(a,h,r))
+                        rings.append(row)
+                    strip(tone,*rings,True)
+                    strip(tone,[(x,h-.016,z) for x,h,z in rings[0]],rings[0],True)
+        return
     # The channels taper toward the centre and overlap downhill in two courses.
     for j in range(22):
         start = -math.pi/2 + j*math.pi/22
