@@ -63,6 +63,15 @@ pub struct BridgeFeatures {
     /// pixels on screen, so a receding curtain sums to its true mean cover
     /// (a partition of unity) instead of beating in moire bands.
     pub curtain: bool,
+    /// `--no-bridge-wire-sky`: the wires' aerial perspective (`air`) takes its
+    /// sky colours (the dome's and the atmosphere tables' toward the member)
+    /// at the vertices of each member's segment and interpolates them along
+    /// it, its distance terms per pixel (eo-render landmarks_wire.wgsl
+    /// `lm_aerial_sky`, `lm_aerial_over`). Read per pixel beside look_light,
+    /// they were most of the overlay's GPU time (bench golden_gate: about
+    /// 1.8 ms against 0.3); the frame differs by a level of the display on
+    /// some wire pixels. Off, the colours are read per pixel, as before.
+    pub wire_sky: bool,
     /// `--no-bridge-shade2`: the Golden Gate's painted members in the one
     /// paint (no `DARK` bake on the struts, fins, bracing and floor beams),
     /// and the baked occlusion replaced by the sky the deck and the opposite
@@ -158,6 +167,7 @@ impl BridgeFeatures {
         members: true,
         floods: true,
         curtain: true,
+        wire_sky: true,
         shade2: true,
         dielectric: true,
         haunch: true,
@@ -189,6 +199,7 @@ impl BridgeFeatures {
         members: false,
         floods: false,
         curtain: false,
+        wire_sky: false,
         shade2: false,
         dielectric: false,
         haunch: false,
@@ -238,6 +249,7 @@ impl BridgeFeatures {
             members: !has3("--no-bridge-members"),
             floods: !has3("--no-bridge-floods"),
             curtain: !has3("--no-bridge-curtain"),
+            wire_sky: keep("--no-bridge-wire-sky"),
             shade2: !has4("--no-bridge-shade2"),
             dielectric: !has4("--no-bridge-dielectric"),
             haunch: !has4("--no-bridge-haunch"),
@@ -301,6 +313,7 @@ pub const SWITCHES: &[&str] = &[
     "--no-bridge-members",
     "--no-bridge-floods",
     "--no-bridge-curtain",
+    "--no-bridge-wire-sky",
     "--no-bridge-shade2",
     "--no-bridge-dielectric",
     "--no-bridge-haunch",

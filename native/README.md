@@ -508,7 +508,7 @@ selection:
 | Demo player avatar | `--no-test-character` |
 | Driver-door animation | `--no-car-door-animation` |
 | Props | `--no-props2`, `--no-furniture`, `--no-eztree`, `--no-wires`, `--no-overhead`, `--no-lamp-sprites`, `--no-stand-ins`, `--no-surveyed-furniture`, `--no-tree-basins`, `--no-furniture-models` (a furniture kind whose GLB is not in the checkout draws as a 0.3 m box at its height, not its model drawn in code), `--no-street-props-v2` (the v1 street-prop files the JS lists, drawn as proxies or stand-ins where the checkout lacks them, as before the v2 models) |
-| Bridges | `--no-bridges2` (all of these), `--no-bridge-scale`, `--no-bridge-paint`, `--no-bridge-detail`, `--no-bridge-wires`, `--no-bridge-night`; the second pass: `--no-bridges3` (all of its), `--no-bridge-air`, `--no-bridge-finish`, `--no-bridge-members`, `--no-bridge-floods`, `--no-bridge-curtain` |
+| Bridges | `--no-bridges2` (all of these), `--no-bridge-scale`, `--no-bridge-paint`, `--no-bridge-detail`, `--no-bridge-wires`, `--no-bridge-night`; the second pass: `--no-bridges3` (all of its), `--no-bridge-air`, `--no-bridge-finish`, `--no-bridge-members`, `--no-bridge-floods`, `--no-bridge-curtain`; `--no-bridge-wire-sky` (the wire overlay reads its aerial perspective's sky colours per pixel, as before, instead of per vertex) |
 | Harbours | `--no-floating-docks` (no floats along the harbours' pier lines, and so no berths or boats), `--no-boats` (the floats without the moored boats; `--no-props2` also leaves them out) |
 | Buildings | `--no-facade-detail`, `--no-facade-age`, `--no-rooms`, `--no-room-frames`, `--no-room-dim`, `--no-roof-colours`, `--no-roof-plant`, `--no-roof-parapet`, `--no-roof-patches`, `--no-roof-neutral`, `--no-wall-paint`, `--no-period-paint`, `--no-wall-chroma`, `--no-facade-typology`, `--no-room-blind-runs`, `--no-pane-transmittance`, `--no-far-facade`, `--no-far-roofs` |
 | Landmarks | `--no-landmarks2`, `--no-towers2` (the five landmark buildings as the JS export's generators built them), `--no-skyline` (the named skyline towers back to the kit), `--no-towers3` (the landmark buildings' and skyline towers' third pass off: the lit band in place of the projector floodlights, the previous glazing, night windows and crown, base truss, Coit shaft, City Hall granite and Sutro lattice, and the groves), `--no-grove` (the tree canopy of Pioneer Park round Coit Tower and of Mount Sutro round Sutro Tower off), `--no-towers4` (the fourth pass off, the third's output: Salesforce's crown fins, sunshades and perforated panels with Day for Night's walkers, the facades' fin and reveal sun shadows, spandrel and pier finishes, 555 California's carnelian, the coated-aluminium spires and braces, City Hall's gold leaf and drum floods, and the groves' summit clearing, species forms, forest floor and Coit loop lamps) |
@@ -1243,7 +1243,11 @@ standards and the west span's floor system and laced tower bracing
 (`--no-bridge-members`); lights the Golden Gate towers by their placed
 floods above and below the roadway and plays the suspender LEDs in bands
 (`--no-bridge-floods`); and veils a receding suspender curtain at its mean
-cover (`--no-bridge-curtain`).
+cover (`--no-bridge-curtain`). The wires' aerial perspective takes its sky
+colours (the dome's and the atmosphere tables' toward the member) at each
+segment's ends and its distance terms per pixel (`--no-bridge-wire-sky`
+reads the colours per pixel, as before: the overlay then costs about
+1.8 ms of GPU time on the golden_gate path instead of about 0.3).
 Eight landmarks can be entered (`eo-landmarks/src/access.rs`, every height
 cited there): Coit Tower's gallery in its glazed arcade, Salesforce Tower's
 glazed top floor, the Transamerica Pyramid's 48th-floor room under the

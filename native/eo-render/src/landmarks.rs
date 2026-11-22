@@ -982,7 +982,9 @@ impl LandmarksGpu {
             ],
         });
         let round = ROUND_WIRES.load(std::sync::atomic::Ordering::Relaxed);
-        let src = format!("{}\nconst LM_WIRE_ROUND: bool = {round};\n{}", crate::look::city_shader_source(), include_str!("landmarks_wire.wgsl"));
+        // (`BridgeFeatures::wire_sky`) the overlay's aerial sky colours per vertex.
+        let sky_vertex = eo_landmarks::suspension::features().wire_sky;
+        let src = format!("{}\nconst LM_WIRE_ROUND: bool = {round};\nconst LM_WIRE_AERIAL_VERTEX: bool = {sky_vertex};\n{}", crate::look::city_shader_source(), include_str!("landmarks_wire.wgsl"));
         let module = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("landmarks_wire.wgsl"), source: wgpu::ShaderSource::Wgsl(src.into()) });
         let layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor { label: Some("landmark-wires-layout"), bind_group_layouts: &[Some(w.draw_bgl), Some(w.main_bgl), Some(&bgl)], immediate_size: 0 });
         let attrs = [

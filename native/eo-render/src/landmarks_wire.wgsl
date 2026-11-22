@@ -195,6 +195,10 @@ struct LmWire2Out {
     // the atmosphere tables' gain toward the look's zenith (`lm_atmo_gain`:
     // the same for every vertex of a frame), read once a vertex, not twice a pixel.
     @location(6) @interpolate(flat) atmo_gain: f32,
+    // (`LM_WIRE_AERIAL_VERTEX`) the aerial perspective's sky colours toward
+    // the vertex's axis point (`lm_aerial_sky`), interpolated along the segment.
+    @location(7) ap_colc: vec3<f32>,
+    @location(8) ap_colw: vec3<f32>,
 };
 
 @vertex
@@ -247,8 +251,16 @@ fn lm_wire2_vs(
     out.color = vec4<f32>(srgb_decode(color.rgb), color.a);
     out.material = material;
     out.atmo_gain = 1.0;
+    out.ap_colc = vec3<f32>(0.0);
+    out.ap_colw = vec3<f32>(0.0);
     if (LM_AIR_ON && skyu.flags.w == 1u && skyu.atmo2.x > 0.5) {
         out.atmo_gain = lm_atmo_gain();
+        if (LM_WIRE_AERIAL_VERTEX) {
+            let rel = axis - skyu.eye.xyz;
+            let sky = lm_aerial_sky(rel / max(length(rel), 1e-3), skyu.eye.y, out.atmo_gain);
+            out.ap_colc = sky.colc;
+            out.ap_colw = sky.colw;
+        }
     }
     return out;
 }
@@ -339,18 +351,20 @@ fn lm_atmo_sky(d: vec3<f32>, g_look: f32) -> vec3<f32> {
 /// off took no haze while the tower it hangs from took the volume's: the
 /// rope drew darker and more saturated than its own tower.
 fn lm_aerial(dir: vec3<f32>, dist: f32, eye_y: f32, g_look: f32) -> vec4<f32> {
-    let dh = dir.y * dist;
-    let dens = sky_path_density(dh);
-    let ray = AT_RAY * 0.001 * exp(-max(eye_y + 0.5 * dh, 0.0) / 8000.0);
+    return lm_aerial_over(dir, dist, eye_y, lm_aerial_sky(dir, eye_y, g_look));
+}
+
+/// `lm_aerial`'s sky colours toward a view direction: the clear air's
+/// in-scatter colour (`colc`) and the weather veil's (`colw`). They depend on
+/// the direction and the eye's height alone; the distance terms are
+/// `lm_aerial_over`'s.
+struct LmAerialSky {
+    colc: vec3<f32>,
+    colw: vec3<f32>,
+};
+
+fn lm_aerial_sky(dir: vec3<f32>, eye_y: f32, g_look: f32) -> LmAerialSky {
     let above_top = smoothstep(skyu.cloud0.y, skyu.cloud0.y + 100.0, eye_y);
-    let tau = (ray + vec3<f32>(skyu.atmo3.y * dens)) * dist;
-    let ptop = skyu.cloud0.y;
-    let y1 = eye_y + dh;
-    let lo_y = min(eye_y, y1);
-    let hi_y = max(eye_y, y1);
-    let inside = select(clamp((ptop - lo_y) / max(hi_y - lo_y, 1e-3), 0.0, 1.0), 1.0, hi_y <= ptop);
-    let wv = skyu.atmo3.x * (1.0 - exp(-3.0 * dist * inside / max(skyu.atmo3.w, 1.0)));
-    let t = exp(-tau);
     let dh_dir = normalize(vec3<f32>(dir.x, max(abs(dir.y), 0.03), dir.z));
     // the dome and the tables toward `dh_dir`, each read once (the clear-air
     // colour and the veil's both take them).
@@ -363,7 +377,6 @@ fn lm_aerial(dir: vec3<f32>, dist: f32, eye_y: f32, g_look: f32) -> vec4<f32> {
     if (skyu.atmo2.x > 0.5) {
         col = mix(col, cs, skyu.atmo2.y);
     }
-    let tl = dot(t, vec3<f32>(0.2126, 0.7152, 0.0722));
     let cw0 = mix(skyu.amb_base.xyz, skyu.amb_top.xyz, 0.5) * 0.9;
     let cl = dot(dome, vec3<f32>(0.2126, 0.7152, 0.0722));
     var colw = mix(cw0, vec3<f32>(cl) * vec3<f32>(0.98, 1.0, 1.02), 0.7) * 0.6;
@@ -372,8 +385,26 @@ fn lm_aerial(dir: vec3<f32>, dist: f32, eye_y: f32, g_look: f32) -> vec4<f32> {
     } else {
         colw = mix(colw, vec3<f32>(cl) * vec3<f32>(0.99, 1.0, 1.01), above_top);
     }
-    let colc = mix(col, colw, skyu.atmo3.x);
-    return vec4<f32>(colc * (1.0 - tl) * (1.0 - wv) + colw * wv, tl * (1.0 - wv));
+    return LmAerialSky(mix(col, colw, skyu.atmo3.x), colw);
+}
+
+/// `lm_aerial` over a view distance with its sky colours: the clear air's
+/// and the veil's optical depth (the height-thinned haze, the cloud deck's
+/// share of the path) and the in-scatter they lay over the member.
+fn lm_aerial_over(dir: vec3<f32>, dist: f32, eye_y: f32, sky: LmAerialSky) -> vec4<f32> {
+    let dh = dir.y * dist;
+    let dens = sky_path_density(dh);
+    let ray = AT_RAY * 0.001 * exp(-max(eye_y + 0.5 * dh, 0.0) / 8000.0);
+    let tau = (ray + vec3<f32>(skyu.atmo3.y * dens)) * dist;
+    let ptop = skyu.cloud0.y;
+    let y1 = eye_y + dh;
+    let lo_y = min(eye_y, y1);
+    let hi_y = max(eye_y, y1);
+    let inside = select(clamp((ptop - lo_y) / max(hi_y - lo_y, 1e-3), 0.0, 1.0), 1.0, hi_y <= ptop);
+    let wv = skyu.atmo3.x * (1.0 - exp(-3.0 * dist * inside / max(skyu.atmo3.w, 1.0)));
+    let t = exp(-tau);
+    let tl = dot(t, vec3<f32>(0.2126, 0.7152, 0.0722));
+    return vec4<f32>(sky.colc * (1.0 - tl) * (1.0 - wv) + sky.colw * wv, tl * (1.0 - wv));
 }
 
 /// Where a member looks up its sun shadow (`BridgeFeatures::air`): its
@@ -500,7 +531,14 @@ fn lm_wire2_fs(in: LmWire2Out) -> @location(0) vec4<f32> {
         // the volume's aerial perspective at the member's distance, as the resolve lays it on the scene.
         let rel = p - cam;
         let dist = length(rel);
-        let ap = lm_aerial(rel / max(dist, 1e-3), dist, cam.y, in.atmo_gain);
+        var ap: vec4<f32>;
+        if (LM_WIRE_AERIAL_VERTEX) {
+            // (eo-landmarks `BridgeFeatures::wire_sky`) the sky colours from the
+            // segment's ends, interpolated; the distance terms at this pixel.
+            ap = lm_aerial_over(rel / max(dist, 1e-3), dist, cam.y, LmAerialSky(in.ap_colc, in.ap_colw));
+        } else {
+            ap = lm_aerial(rel / max(dist, 1e-3), dist, cam.y, in.atmo_gain);
+        }
         c = c * ap.a + ap.rgb;
     }
     return vec4<f32>(c, clamp(cov, 0.0, 1.0));

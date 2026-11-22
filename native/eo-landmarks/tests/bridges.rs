@@ -16,6 +16,7 @@ fn every_switch_turns_its_feature_off() {
     assert!(!one("--no-bridge-detail").detail && one("--no-bridge-detail").night);
     assert!(!one("--no-bridge-wires").wires && one("--no-bridge-wires").detail);
     assert!(!one("--no-bridge-night").night && one("--no-bridge-night").scale);
+    assert!(!one("--no-bridge-wire-sky").wire_sky && one("--no-bridge-wire-sky").wires && one("--no-bridge-wire-sky").air);
     for s in SWITCHES.iter().chain(eo_landmarks::suspension::GG3_SWITCHES) {
         assert_ne!(BridgeFeatures::from_args(&[*s]), BridgeFeatures::ALL, "{s} turns something off");
     }
