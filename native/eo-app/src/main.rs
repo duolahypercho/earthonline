@@ -19,6 +19,7 @@ mod props; // props
 mod agents_bench;
 mod people_capture; // people
 mod bench;
+mod boats; // the moored boats' poses each frame (on the drawn sea, the physics near the player)
 mod dive_sites;
 mod cove_bed;
 mod cc0_runtime; // the CC0 scanned sets at run time
@@ -864,6 +865,11 @@ pub struct World {
     /// the berths along the harbours' floating docks (eo-landmarks), where the
     /// props draw the moored boats; empty without the docks.
     pub berths: Arc<Vec<eo_landmarks::floating_docks::Berth>>,
+    /// The boats in those berths (eo-props `boats::moor`) as the physics floats them
+    /// (eo-player `harbour`), and each one's body (`eo_props::boats::BODIES`); None
+    /// without boats (`--no-boats`, `--no-props2`, no berths).
+    pub fleet: Option<Arc<eo_player::harbour::Fleet>>,
+    pub fleet_bodies: Arc<Vec<usize>>,
 }
 
 /// the JS street ground materials' scanned sets, as
@@ -1479,7 +1485,27 @@ pub fn load_world(args: &Args) -> Result<World> {
         }
         None => (None, None),
     };
-    Ok(World { house_layer_count, house_vertex_base, house, paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, dive_sites, landmarks, hlod, hlod_trees, structures, structures_drawn, berths: Arc::new(berths) }) // hlod
+    // the moored boats: which lies in each berth (eo-props `boats`), as the physics floats them (eo-player `harbour`).
+    let (fleet, fleet_bodies) = match (args.props && args.props2.boats && !berths.is_empty()).then(|| eo_props::boats::load_bodies(&paths.repo_root)) {
+        Some(Ok(bodies)) => {
+            let moored = eo_props::boats::moor(&berths, &bodies);
+            let boats = moored
+                .iter()
+                .map(|m| {
+                    let b = &bodies[m.body];
+                    eo_player::harbour::Moored { hull: eo_player::harbour::Hull { loa: b.loa, beam: b.beam, mass_kg: b.mass_kg }, pos: m.pos, heading: m.heading }
+                })
+                .collect();
+            let sea_y = eo_landmarks::data::LandmarksJs::get().sea_level_y;
+            (Some(Arc::new(eo_player::harbour::Fleet { boats, sea_y })), Arc::new(moored.iter().map(|m| m.body).collect()))
+        }
+        Some(Err(e)) => {
+            eprintln!("boats: not moored ({e:#})");
+            (None, Arc::new(vec![]))
+        }
+        None => (None, Arc::new(vec![])),
+    };
+    Ok(World { house_layer_count, house_vertex_base, house, paths, city, elevation, scene, authored: Arc::new(authored), kit_rx, kit: kit_set, kit_city_rx, street, load_ms, street_maps, facade_detail, water, dive_sites, landmarks, hlod, hlod_trees, structures, structures_drawn, berths: Arc::new(berths), fleet, fleet_bodies }) // hlod
 }
 
 /// the street size. `--ground-scale S` (an explicit ground-plan
