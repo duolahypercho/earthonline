@@ -130,6 +130,9 @@ pub struct HlodOptions {
     /// desks' silhouettes, tenants at their own colour and level, floors
     /// half lit for the cleaners, blinds part down; not one flat tile per window.
     pub tower_night: bool,
+    /// a tall tower's crown lit at night (`--no-tower-crowns`, hlod_draw.wgsl
+    /// `hl_tower_crown`): floodlit top storeys, some with an LED line at the parapet.
+    pub tower_crowns: bool,
     /// How the far layer is drawn (as attached when this was read; not an option).
     pub path: FarPath,
 }
@@ -156,6 +159,7 @@ impl Default for HlodOptions {
             night: true,
             panels: true,
             tower_night: true,
+            tower_crowns: true,
             path: FarPath::NotAttached,
         }
     }
@@ -163,7 +167,7 @@ impl Default for HlodOptions {
 
 impl HlodOptions {
     /// The flags eo-app's parser lets through: (flag, takes a value).
-    pub const FLAGS: [(&'static str, bool); 16] = [
+    pub const FLAGS: [(&'static str, bool); 17] = [
         ("--no-hlod", false),
         ("--no-hlod-districts", false),
         ("--no-hlod-lamps", false),
@@ -180,6 +184,7 @@ impl HlodOptions {
         ("--no-far-night", false),
         ("--no-tower-panels", false),
         ("--no-tower-night", false),
+        ("--no-tower-crowns", false),
     ];
 
     /// From the command line (see `FLAGS`) and `EO_HLOD=0`.
@@ -220,6 +225,9 @@ impl HlodOptions {
         }
         if args.iter().any(|a| a == "--no-tower-night") {
             o.tower_night = false;
+        }
+        if args.iter().any(|a| a == "--no-tower-crowns") {
+            o.tower_crowns = false;
         }
         if let Some(r) = val("--hlod-radius") {
             o.load_m = r as f32;
@@ -268,7 +276,8 @@ const FL_TOWER: bool = {};
 const FL_NIGHT: bool = {};
 const FL_PANELS: bool = {};
 const FL_TOWER_NIGHT: bool = {};
-", glass && o.windows, glass && o.tower_glass, o.night, glass && o.tower_glass && o.panels, o.night && o.tower_night)
+const FL_TOWER_CROWNS: bool = {};
+", glass && o.windows, glass && o.tower_glass, o.night, glass && o.tower_glass && o.panels, o.night && o.tower_night, o.night && o.tower_crowns)
 }
 
 /// One entry of the GPU cell table (48 bytes): a cell or a district.
@@ -320,6 +329,9 @@ pub struct HlodInit<'a> {
 }
 
 pub struct HlodGpu {
+    /// Per LOD group its building's lowest and highest drawn point (world y),
+    /// for the crowns (`--tower-crowns`); written as its far meshes arrive.
+    pub top_buf: wgpu::Buffer,
     pub vertex_buf: wgpu::Buffer,
     pub index_buf: wgpu::Buffer,
     pub cell_buf: wgpu::Buffer,
@@ -448,11 +460,18 @@ impl HlodGpu {
         // Draw: groups 0 and 1 the city's, group 2 the far layer's.
         let vs = wgpu::ShaderStages::VERTEX;
         let fs = wgpu::ShaderStages::FRAGMENT;
+        let top_buf = d.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("hlod-group-top"),
+            size: (i.state_buf.size() * 2).max(8),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         let draw_bgl = d.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("hlod-draw-bgl"),
             entries: &[
                 entry(0, vs | fs, st(true)),
                 entry(1, vs, st(true)),
+                entry(4, fs, st(true)),
                 wgpu::BindGroupLayoutEntry {
                     binding: 2,
                     visibility: fs,
@@ -471,6 +490,7 @@ impl HlodGpu {
                 wgpu::BindGroupEntry { binding: 1, resource: i.state_buf.as_entire_binding() },
                 wgpu::BindGroupEntry { binding: 2, resource: wgpu::BindingResource::TextureView(&page_view) },
                 wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::Sampler(&sampler) },
+                wgpu::BindGroupEntry { binding: 4, resource: top_buf.as_entire_binding() },
             ],
         });
         let dm = module("hlod_draw.wgsl", format!("{}\n{}{DRAW_WGSL}", crate::look::city_shader_source_far(), far_constants_wgsl(&i.opts))); // + the switches // the far layer's city shader (lighting: the ambient plane only)
@@ -517,6 +537,7 @@ impl HlodGpu {
         Self {
             vertex_buf,
             index_buf,
+            top_buf,
             cell_buf,
             pages,
             params_buf,
@@ -875,6 +896,33 @@ pub struct HlodRuntime {
     started: Instant,
     pub stats: HlodStats,
     no_space: HashSet<u32>,
+    /// each LOD group's drawn span so far (`write_group_tops`).
+    group_tops: HashMap<u32, [f32; 2]>,
+}
+
+/// Each building's lowest and highest drawn point in a far mesh's vertices
+/// (`HlodVertex`: 28 bytes, y at 4, the group at 24), written into the
+/// per-group table the crowns read (`HlodGpu::top_buf`): the geometry's own
+/// top, so a crown sits at the roofline the far layer draws.
+/// `seen` keeps each group's widest span over every mesh that drew it (a
+/// district's simplified form is lower than its cell's: the union is written).
+fn write_group_tops(queue: &wgpu::Queue, top_buf: &wgpu::Buffer, seen: &mut HashMap<u32, [f32; 2]>, vbytes: &[u8]) {
+    let mut span: HashMap<u32, [f32; 2]> = HashMap::new();
+    for v in vbytes.chunks_exact(std::mem::size_of::<HlodVertex>()) {
+        let y = f32::from_le_bytes([v[4], v[5], v[6], v[7]]);
+        let g = u32::from_le_bytes([v[24], v[25], v[26], v[27]]);
+        let e = span.entry(g).or_insert([f32::MAX, f32::MIN]);
+        *e = [e[0].min(y), e[1].max(y)];
+    }
+    let cap = top_buf.size() / 8;
+    for (g, t) in span {
+        let e = seen.entry(g).or_insert(t);
+        let u = [e[0].min(t[0]), e[1].max(t[1])];
+        if (g as u64) < cap && (u != *e || u == t) {
+            queue.write_buffer(top_buf, g as u64 * 8, bytemuck::cast_slice(&u));
+        }
+        *e = u;
+    }
 }
 
 impl HlodRuntime {
@@ -1020,6 +1068,7 @@ impl HlodRuntime {
             started,
             stats,
             no_space: HashSet::new(),
+            group_tops: HashMap::new(),
         }
     }
 
@@ -1136,6 +1185,7 @@ impl HlodRuntime {
                         crate::upload::bury(Box::new((cell, vbytes, ibytes, mips)));
                         continue;
                     }
+                    write_group_tops(queue, &gpu.top_buf, &mut self.group_tops, &vbytes); // (`--tower-crowns`) each building's drawn top
                     if let Some(u) = self.make_cell_upload(entry, counts, vbytes, ibytes, mips, (cell.min, cell.max)) {
                         self.slots.insert(entry, Slot::Uploading);
                         self.uploads.push_back(u);
@@ -1145,6 +1195,7 @@ impl HlodRuntime {
                 Msg::District { index, mesh, ms, counts, vbytes, ibytes, chunks } => {
                     self.stats.district_ms_sum += ms;
                     self.stats.district_buildings += mesh.buildings as u64;
+                    write_group_tops(queue, &gpu.top_buf, &mut self.group_tops, &vbytes); // (`--tower-crowns`) each building's drawn top
                     match self.make_district_upload(index, &mesh, counts, vbytes, ibytes, &chunks) {
                         Some(u) => {
                             self.dstate[index] = DState::Uploading;

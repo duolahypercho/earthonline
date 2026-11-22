@@ -29,6 +29,8 @@ struct HlCellD {
 
 @group(2) @binding(0) var<storage, read> hl_cells_d: array<HlCellD>;
 @group(2) @binding(1) var<storage, read> hl_group_state: array<u32>;
+// per LOD group its building's lowest and highest drawn point (world y; hlod.rs `top_buf`, `--tower-crowns`).
+@group(2) @binding(4) var<storage, read> hl_group_top: array<vec2<f32>>;
 @group(2) @binding(2) var hl_pages: texture_2d_array<f32>;
 @group(2) @binding(3) var hl_sampler: sampler;
 
@@ -207,8 +209,12 @@ fn hl_night_windows(in: HlOut, world: vec3<f32>, n: vec3<f32>, glass: f32, dpx: 
     let cell = i32(floor(along / bay));
     let hb = hl_h3(g, 0, 11u);
     let base = skyu.bloom_w2.z * 25.0 / LK_PI * dusk;
+    var crown = vec3<f32>(0.0);
+    if (tower && FL_TOWER_CROWNS) {
+        crown = hl_tower_crown(in, world, n, fy, base);
+    }
     if (tower && FL_TOWER_NIGHT) {
-        return hl_tower_night(in, world, n, glass, fx, fy, bay, storey, grid.z, along, fl, cell, g, gf, hb, base);
+        return crown + hl_tower_night(in, world, n, glass, fx, fy, bay, storey, grid.z, along, fl, cell, g, gf, hb, base);
     }
     if (tower) {
         let p_floor = clamp(look.rooms_work.x / 0.7 * 2.6 * hb * hb, 0.0, 0.92);
@@ -229,7 +235,7 @@ fn hl_night_windows(in: HlOut, world: vec3<f32>, n: vec3<f32>, glass: f32, dpx: 
         let cool = step(hl_h3(gf, fl * 131 + seg, 7u), HL_OFFICE_COOL_SHARE);
         let mean_col = mix(HL_OFFICE_WARM, HL_OFFICE_COOL, HL_OFFICE_COOL_SHARE);
         let col = mix(mix(HL_OFFICE_WARM, HL_OFFICE_COOL, cool), mean_col, max(a2, a3));
-        return col * (glass * k * level * base);
+        return crown + col * (glass * k * level * base);
     }
     let occ = clamp(look.rooms_env.y * (0.35 + 1.3 * hb), 0.0, 0.95);
     let h = hl_h3(gf, fl * 977 + cell, 8u);
@@ -253,16 +259,16 @@ fn hl_night_windows(in: HlOut, world: vec3<f32>, n: vec3<f32>, glass: f32, dpx: 
 // blinds part down, glowing evenly. Each level of detail gives way to its mean
 // as it shrinks under a pixel (the fixtures, the profile, the window, the run,
 // the storey), so a far tower holds its tone without shimmer.
-const HL_TN_PROFILE_MEAN: f32 = 0.78;
+const HL_TN_PROFILE_MEAN: f32 = 0.62;
 // the lit floor's light on the inside of its spandrel and frames, as a share of the glass's.
 const HL_TN_SPANDREL: f32 = 0.07;
-const HL_TN_WARM: vec3<f32> = vec3<f32>(1.0, 0.70, 0.44);
+const HL_TN_WARM: vec3<f32> = vec3<f32>(1.0, 0.66, 0.38);
 const HL_TN_NEUTRAL: vec3<f32> = vec3<f32>(1.0, 0.86, 0.70);
 const HL_TN_COOL: vec3<f32> = vec3<f32>(0.84, 0.91, 1.0);
 fn hl_tower_night(in: HlOut, world: vec3<f32>, n: vec3<f32>, glass: f32, fx: f32, fy: f32, bay: f32, storey: f32, phase: f32, along: f32, fl: i32, cell: i32, g: u32, gf: u32, hb: f32, base: f32) -> vec3<f32> {
     let share = look.rooms_work.x / 0.7;
     // the floor: lit, half lit (cleaners: a few warm runs at a quarter), or dark.
-    let p_lit = clamp(share * 2.6 * hb * hb + 0.08, 0.0, 0.9);
+    let p_lit = clamp(share * 2.6 * hb * hb + 0.1 + 0.12 * hb, 0.0, 0.9);
     let p_dim = clamp(0.22 * (1.0 - p_lit) * (0.4 + share), 0.0, 0.3);
     let fh = hl_h3(g, fl, 1u);
     let floor_lit = step(fh, p_lit);
@@ -274,8 +280,8 @@ fn hl_tower_night(in: HlOut, world: vec3<f32>, n: vec3<f32>, glass: f32, fx: f32
     let seg = i32(floor(seg_pos));
     let sk = fl * 131 + seg;
     let seg_lit = floor_lit * step(hl_h3(gf, sk, 4u), 0.8) + floor_dim * step(hl_h3(gf, sk, 4u), 0.3);
-    let seg_level = mix(0.75, 1.2, hl_h3(gf, sk, 12u)) * mix(floor_level, 0.24, floor_dim);
-    let t = hl_h3(gf, sk, 7u);
+    let seg_level = mix(0.6, 1.0, hl_h3(gf, sk, 12u)) * mix(floor_level, 0.24, floor_dim);
+    let t = hl_h3(gf, sk, 7u) * hl_h3(gf, sk, 7u); // most office lamps warm (3,000-3,500 K), a few cool
     let warmth = select(t, 0.15 * t, floor_dim > 0.5); // the cleaners' few lamps warm
     var col = mix(mix(HL_TN_WARM, HL_TN_NEUTRAL, smoothstep(0.0, 0.45, warmth)), HL_TN_COOL, smoothstep(0.45, 1.0, warmth));
     // a window in a lit run: nearly all, a few dark (a meeting room, a vacant desk).
@@ -294,6 +300,10 @@ fn hl_tower_night(in: HlOut, world: vec3<f32>, n: vec3<f32>, glass: f32, fx: f32
     let blind_to = select(0.0, mix(0.25, 0.8, hl_h3(gf, sk, 14u)), hl_h3(gf, sk, 15u) < 0.35);
     profile = mix(profile, 0.38, step(1.0 - blind_to, v));
     // every level to its mean as it shrinks under a pixel.
+    // the slab and spandrel between the head of one floor's glass and the next sill stay dark
+    // (a curtain wall's glass covers them too: its atlas has no wall there).
+    let slab = smoothstep(0.62, 0.68, up) * (1.0 - smoothstep(0.97, 1.0, up));
+    profile = profile * mix(1.0, 0.1, slab);
     profile = mix(profile, HL_TN_PROFILE_MEAN, smoothstep(0.12, 0.35, fy / storey));
     let v_win = win_on;
     let v_seg = seg_lit * 0.9 + (1.0 - floor_lit - floor_dim) * 0.02;
@@ -310,6 +320,51 @@ fn hl_tower_night(in: HlOut, world: vec3<f32>, n: vec3<f32>, glass: f32, fx: f32
     let ks = mix(mix(v_seg, v_floor, a2), v_bld, a3);
     let spandrel = select(0.0, (1.0 - glass) * HL_TN_SPANDREL * ks, abs(n.y) < 0.3);
     return col * ((glass * k * profile + spandrel) * level * base);
+}
+
+// (`--tower-crowns`, hlod.rs `tower_crowns`) a tall tower's crown at night:
+// most towers over `HL_CROWN_MIN_M` floodlight their top storeys from a setback
+// (brightest low in the band, fading up it), in warm or cool white, a few in
+// colour, and some draw an LED line along the parapet. By the building's own
+// base and top (`hl_group_top`). INFERRED from night photographs of the
+// skyline (lit crowns on most of its tall towers).
+const HL_CROWN_MIN_M: f32 = 70.0;
+const HL_CROWN_SHARE: f32 = 0.6;
+fn hl_tower_crown(in: HlOut, world: vec3<f32>, n: vec3<f32>, fy: f32, base: f32) -> vec3<f32> {
+    let bt = hl_group_top[in.group];
+    let height = bt.y - bt.x;
+    if (height < HL_CROWN_MIN_M || abs(n.y) > 0.3 || base <= 0.0) {
+        return vec3<f32>(0.0);
+    }
+    let g = in.group;
+    if (hl_h3(g, 0, 21u) > HL_CROWN_SHARE) {
+        return vec3<f32>(0.0);
+    }
+    let depth = bt.y - world.y;
+    if (depth < -0.25) {
+        return vec3<f32>(0.0); // over the building's known top: not its crown
+    }
+    let band = clamp(height * mix(0.02, 0.05, hl_h3(g, 0, 22u)), 3.0, 9.0);
+    // the floodlit band: from its foot (the lamps' setback) up to the parapet, brightest low.
+    let foot = smoothstep(band, band * 0.75, depth);
+    let wash = foot * mix(1.0, 0.55, clamp(1.0 - depth / band, 0.0, 1.0));
+    let roll = hl_h3(g, 0, 23u);
+    var col = vec3<f32>(1.0, 0.82, 0.62); // warm white
+    if (roll > 0.55) { col = vec3<f32>(0.86, 0.92, 1.0); } // cool white
+    if (roll > 0.8) { col = vec3<f32>(0.35, 0.62, 1.0); } // blue
+    if (roll > 0.9) { col = vec3<f32>(0.3, 1.0, 0.72); } // teal green
+    // an LED line along the parapet on some, and a second a storey down on some: each the
+    // share of the pixel's vertical footprint the line covers (a box filter: sharp near, its
+    // area spread over the pixel far, nothing a pixel away from it).
+    let led_on = step(hl_h3(g, 0, 24u), 0.75);
+    let led_w = 0.35;
+    let lo = depth - 0.5 * fy;
+    let hi = depth + 0.5 * fy;
+    let cover1 = max(0.0, min(led_w, hi) - max(0.0, lo)) / max(fy, 1e-3);
+    let cover2 = max(0.0, min(4.0 + 0.5 * led_w, hi) - max(4.0 - 0.5 * led_w, lo)) / max(fy, 1e-3);
+    let led = led_on * min(cover1, 1.0);
+    let led2 = led_on * step(hl_h3(g, 0, 25u), 0.4) * min(cover2, 1.0);
+    return col * base * (0.05 * wash + 1.6 * (led + 0.7 * led2));
 }
 
 // a tower's panes are not one mirror. Each storey (and a little each
