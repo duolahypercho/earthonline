@@ -491,6 +491,46 @@ fn wx_paint_wear(s: ptr<function, Surface>, world: vec3<f32>, fw: f32, age: f32)
     (*s).rough = mix(mix((*s).rough, 0.72, soil), 0.85, chip) - 0.08 * tyre;
 }
 
+// Worn coloured pavement (`--area-paint`, weathering.rs `AREA_*`): a marking
+// as wide as a lane (a green bike lane), `an` across it 0-1 and `g` that
+// coordinate's world-xz gradient (1 / its width): faded a little toward grey,
+// an even film of dust heavier at its edges, soft darker streaks along the
+// wheel path down its middle, fine aggregate specks, chips at its edges only.
+fn wx_area_paint(s: ptr<function, Surface>, world: vec3<f32>, an: f32, g: vec2<f32>, dpx: vec3<f32>, dpy: vec3<f32>) {
+    let fw = wx_fw(dpx, dpy);
+    let gl = max(length(g), 1e-4);
+    let w = 1.0 / gl;
+    let along = vec2<f32>(-g.y, g.x) / gl;
+    let u = dot(world.xz, along);
+    let x = clamp(an, 0.0, 1.0) * w;
+    let age = smoothstep(0.2, 0.8, st_noise(world.xz / 17.0 + 2.9));
+    let road = CC0_ASPHALT_TINT * CC0_ASPHALT_ALBEDO;
+    var a = (*s).albedo;
+    // the sun's slow fade toward grey.
+    let grey = vec3<f32>(dot(a, vec3<f32>(0.2126, 0.7152, 0.0722)));
+    a = mix(a, grey, WX_AREA_FADE * age * (0.8 + 0.4 * st_noise(world.xz / 6.0 + 3.3)));
+    // an even film of road dust, gathered at the edges.
+    let edge = 1.0 - smoothstep(0.0, 0.25, min(x, w - x));
+    a = a * (1.0 - mix(WX_AREA_SOIL, WX_AREA_SOIL_OLD, age) - WX_AREA_EDGE_DIRT * edge);
+    // the wheel path down the middle: soft streaks along the travel.
+    let path = 1.0 - smoothstep(0.15, 0.45, abs(x - 0.5 * w));
+    let st = st_noise(vec2<f32>(u / 3.0, x / 0.06) + 5.5) * 0.7 + st_noise(vec2<f32>(u / 0.9, x / 0.025) + 2.1) * 0.3;
+    let tyre = path * mix(0.5, smoothstep(0.35, 0.75, st), wx_keep(0.06, fw));
+    a = a * (1.0 - WX_AREA_TYRE * tyre * (0.5 + 0.5 * age));
+    // the aggregate through the worn binder, at half the lines' share.
+    let share = 0.5 * mix(WX_PAINT_SPECK, WX_PAINT_SPECK_OLD, age);
+    let sp = st_noise(world.xz / 0.011 + 3.9);
+    let speck = mix(share, smoothstep(1.0 - share - 0.03, 1.0 - share + 0.03, sp), wx_keep(0.011, fw));
+    a = mix(a, road * 1.3, speck);
+    // a few chips, at the edges only.
+    let cshare = mix(WX_PAINT_CHIP, WX_PAINT_CHIP_OLD, age) * edge;
+    let cn = st_noise(world.xz / 0.045 + 1.7) * 0.7 + st_noise(world.xz / 0.013 + 5.2) * 0.3;
+    let chip = mix(cshare, smoothstep(1.0 - cshare - 0.02, 1.0 - cshare + 0.02, cn), wx_keep(0.045, fw));
+    a = mix(a, road, chip);
+    (*s).albedo = a;
+    (*s).rough = clamp(mix((*s).rough, 0.8, 0.3 * age) + 0.3 * chip - 0.06 * tyre, 0.03, 1.0);
+}
+
 // ---- buildings --------------------------------------------------------------
 
 // Each building its own age: a few freshly repainted, most as their wear

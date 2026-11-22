@@ -1641,9 +1641,19 @@ fn shade(in: VOut) -> vec4<f32> {
                 // worn paint inside the geometric marking (an ambientCG road-line scan as the wear mask only).
                 // (`--grime`) the scan's holes toned down: the markings' own wear (`wx_paint`) does the wearing.
                 let scan_bare = select(1.0, WX_PAINT_SCAN_BARE, wx_level() != 0u && paint_kind == 7u && !WX_STREET_V1);
-                cc0_paint_wear(&s, in.world, in.rel, in.aux.y * 6.35, cc0_drx, cc0_dry, scan_bare);
+                // (`--area-paint`) a marking as wide as a lane is an area of colour, worn as one.
+                let gp = wx_kerb_grad();
+                let gg = dot(gp, gp);
+                let area = WX_AREA_PAINT && paint_kind == 7u && gg > 0.0 && gg < 1.0 / (WX_AREA_MIN_W * WX_AREA_MIN_W);
+                if (!area) {
+                    cc0_paint_wear(&s, in.world, in.rel, in.aux.y * 6.35, cc0_drx, cc0_dry, scan_bare);
+                }
                 if (wx_level() != 0u && paint_kind == 7u) {
-                    wx_paint(&s, in.world, dpx, dpy); // weathering (`--grime`): faded, chipped markings
+                    if (area) {
+                        wx_area_paint(&s, in.world, in.aux.y * 6.35, gp, dpx, dpy);
+                    } else {
+                        wx_paint(&s, in.world, dpx, dpy); // weathering (`--grime`): faded, chipped markings
+                    }
                 }
             } else {
                 s.rough = ST_CONCRETE_ROUGHNESS;

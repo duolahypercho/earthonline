@@ -529,6 +529,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-rooms" => a.look.facade &= !eo_render::facade::RUN_ROOMS, // no room behind kit glazing
             "--no-room-frames" | "--no-room-dim" | "--no-room-blind-runs" | "--no-pane-transmittance" | "--no-room-lit-runs" => {} // read by eo_render::rooms (wgsl_constants, pane_tv_flags)
             "--no-lamp-spread" => {} // read by eo_render::sky::lamp_spread_enabled
+            "--no-area-paint" => {} // read by eo_render::weathering::area_paint
             // near kit buildings as their envelope box ("box"), or the box with the shader-only facade ("shader").
             "--facade-test" => match val()?.as_str() {
                 "box" => eo_render::kit::FACADE_TEST.store(1, std::sync::atomic::Ordering::Relaxed),
