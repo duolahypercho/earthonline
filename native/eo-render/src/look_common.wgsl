@@ -99,6 +99,12 @@ struct Look {
     porch_light: array<vec4<f32>,7>,
     // x: the open sky's upward irradiance over pi (eo-look `sky_irradiance_up`)
     house_sky: vec4<f32>,
+    // the landmark decks (deck_rooms.rs, landmarks_deck.wgsl): the room
+    // the player stands in (min xyz, w its sky visibility, < 0 none; max
+    // xyz), and the player's feet (xyz, w the body's height, 0 none).
+    deck_room_min: vec4<f32>,
+    deck_room_max: vec4<f32>,
+    deck_player: vec4<f32>,
     // the lighting additions (look.rs `LightingOptions`), all zero while every one is off.
     // Rows (look.rs `LX_*`):
     //   0      flags: x the feature bits (read `bitcast<u32>(look.lx[0].x) & LX_BIT_*`,

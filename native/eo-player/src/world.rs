@@ -176,6 +176,79 @@ pub struct BuildingSet {
     pub by_tile: HashMap<TileKey, Vec<u32>>,
     /// Metres the drawn shells stand above bare terrain (moves the prism top).
     pub ground_lift_m: f64,
+    /// landmark access: the walkable decks, their lifts and the prisms they open.
+    pub decks: Arc<Decks>,
+}
+
+/// One landmark deck's collision: walkable floors (STREET layer) and its
+/// railings, glazing and cores (WORLD layer), world metres. Every world
+/// holds them from its creation (`CollisionWorld::new`, `fed`), not by tile,
+/// so a lift's far stop is solid the step it is reached on a server and on
+/// every client alike, whatever their tiles' streaming has done.
+#[derive(Clone, Debug, Default)]
+pub struct DeckPart {
+    pub name: String,
+    pub walk: Vec<[[f64; 3]; 3]>,
+    pub barrier: Vec<[[f64; 3]; 3]>,
+}
+
+/// Building prisms whose footprint centroid lies within `radius_m` of
+/// `centre` are open between `y0` and `y1` (a deck stands inside them there):
+/// both the prism collider and the analytic building guard are split.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PrismCut {
+    pub centre: [f64; 2],
+    pub radius_m: f64,
+    pub y0: f64,
+    pub y1: f64,
+}
+
+/// A lift between a ground entrance and a deck: feet and the camera yaw
+/// (the player's convention, forward = (sin yaw, 0, cos yaw)) at each stop.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LiftDef {
+    pub name: String,
+    pub bottom: DVec3,
+    pub bottom_yaw: f64,
+    pub top: DVec3,
+    pub top_yaw: f64,
+}
+
+/// Everything landmark access adds to the collision world (empty: none).
+#[derive(Clone, Debug, Default)]
+pub struct Decks {
+    pub parts: Vec<DeckPart>,
+    pub cuts: Vec<PrismCut>,
+    pub lifts: Vec<LiftDef>,
+}
+
+impl Decks {
+    /// The vertical spans of a prism from `base_y` to `top_y` left by the cuts
+    /// that reach its footprint centroid (`ax`, `az`).
+    pub fn spans(&self, ax: f64, az: f64, base_y: f64, top_y: f64) -> Vec<(f64, f64)> {
+        let mut spans = vec![(base_y, top_y)];
+        for c in &self.cuts {
+            if (ax - c.centre[0]).hypot(az - c.centre[1]) > c.radius_m {
+                continue;
+            }
+            let mut next = Vec::with_capacity(spans.len() + 1);
+            for (a, b) in spans {
+                if c.y1 <= a || c.y0 >= b {
+                    next.push((a, b));
+                    continue;
+                }
+                if c.y0 > a {
+                    next.push((a, c.y0));
+                }
+                if c.y1 < b {
+                    next.push((c.y1, b));
+                }
+            }
+            spans = next;
+        }
+        spans.retain(|(a, b)| b - a > 0.01);
+        spans
+    }
 }
 
 impl BuildingSet {
@@ -190,7 +263,13 @@ impl BuildingSet {
             let cz = b.ring.iter().map(|p| p[1]).sum::<f64>() / n;
             by_tile.entry(TileKey::of(cx, cz)).or_default().push(i as u32);
         }
-        Self { buildings, by_tile, ground_lift_m }
+        Self { buildings, by_tile, ground_lift_m, decks: Arc::new(Decks::default()) }
+    }
+
+    /// The same buildings with landmark decks (their lifts, the prisms they open).
+    pub fn with_decks(mut self, decks: Decks) -> Self {
+        self.decks = Arc::new(decks);
+        self
     }
 
     /// Every merged building of the city (`City::buildings`).
@@ -408,24 +487,6 @@ pub fn cook_tile(key: TileKey, ground: &dyn GroundProvider, buildings: &Building
             if tri_out.is_empty() {
                 continue;
             }
-            let base = verts.len() as u32;
-            for y in [base_y, top_y] {
-                for p in ring {
-                    verts.push(Vector::new((p[0] - cx) as f32, y as f32, (p[1] - cz) as f32));
-                }
-            }
-            let nn = n as u32;
-            for t in tri_out.chunks_exact(3) {
-                // Floor and roof; Rapier's trimesh is two-sided for queries.
-                tris.push([base + t[0], base + t[1], base + t[2]]);
-                tris.push([base + nn + t[2], base + nn + t[1], base + nn + t[0]]);
-            }
-            for e in 0..nn {
-                let a = e;
-                let b2 = (e + 1) % nn;
-                tris.push([base + a, base + b2, base + nn + b2]);
-                tris.push([base + a, base + nn + b2, base + nn + a]);
-            }
             let mut min = [f64::MAX; 2];
             let mut max = [f64::MIN; 2];
             for p in ring {
@@ -434,7 +495,29 @@ pub fn cook_tile(key: TileKey, ground: &dyn GroundProvider, buildings: &Building
                 max[0] = max[0].max(p[0]);
                 max[1] = max[1].max(p[1]);
             }
-            prisms.push(Prism { ring: ring.clone(), base_y, top_y, min, max });
+            // landmark access: a deck inside the footprint opens the prism there.
+            let spans = if buildings.decks.cuts.is_empty() { vec![(base_y, top_y)] } else { buildings.decks.spans(ax, az, base_y, top_y) };
+            for (base_y, top_y) in spans {
+                let base = verts.len() as u32;
+                for y in [base_y, top_y] {
+                    for p in ring {
+                        verts.push(Vector::new((p[0] - cx) as f32, y as f32, (p[1] - cz) as f32));
+                    }
+                }
+                let nn = n as u32;
+                for t in tri_out.chunks_exact(3) {
+                    // Floor and roof; Rapier's trimesh is two-sided for queries.
+                    tris.push([base + t[0], base + t[1], base + t[2]]);
+                    tris.push([base + nn + t[2], base + nn + t[1], base + nn + t[0]]);
+                }
+                for e in 0..nn {
+                    let a = e;
+                    let b2 = (e + 1) % nn;
+                    tris.push([base + a, base + b2, base + nn + b2]);
+                    tris.push([base + a, base + nn + b2, base + nn + a]);
+                }
+                prisms.push(Prism { ring: ring.clone(), base_y, top_y, min, max });
+            }
         }
     }
     if !tris.is_empty() {
@@ -668,17 +751,55 @@ impl MovableBox {
     }
 }
 
-fn new_physics() -> PhysicsWorld {
+fn new_physics(decks: &Decks) -> PhysicsWorld {
     let mut physics = PhysicsWorld::new();
     physics.gravity = Vector::new(0.0, -tuning::GRAVITY_MPS2 as f32, 0.0);
     physics.integration_parameters.dt = tuning::FIXED_STEP_S as f32;
     physics.integration_parameters.num_solver_iterations = tuning::SOLVER_ITERATIONS;
+    // landmark access: every deck, from the start, in the same order on every world.
+    for c in deck_colliders(decks) {
+        physics.insert_collider(c, None);
+    }
     physics
+}
+
+/// The decks' colliders: per part a walkable trimesh (STREET) and a barrier
+/// trimesh (WORLD), each about its own centre (f32 holds the city to a millimetre).
+pub fn deck_colliders(decks: &Decks) -> Vec<Collider> {
+    let mut out = vec![];
+    for part in &decks.parts {
+        for (list, group) in [(&part.walk, layer::STREET), (&part.barrier, layer::WORLD)] {
+            if list.is_empty() {
+                continue;
+            }
+            let n = (list.len() * 3) as f64;
+            let cx = list.iter().flatten().map(|p| p[0]).sum::<f64>() / n;
+            let cz = list.iter().flatten().map(|p| p[2]).sum::<f64>() / n;
+            let mut v = Vec::with_capacity(list.len() * 3);
+            let mut ix = Vec::with_capacity(list.len());
+            for t in list.iter() {
+                let b = v.len() as u32;
+                for p in t {
+                    v.push(v3([p[0] - cx, p[1], p[2] - cz]));
+                }
+                ix.push([b, b + 1, b + 2]);
+            }
+            if let Ok(b) = ColliderBuilder::trimesh(v, ix) {
+                out.push(
+                    b.translation(Vector::new(cx as f32, 0.0, cz as f32))
+                        .friction(tuning::world::TERRAIN_FRICTION)
+                        .collision_groups(InteractionGroups::new(group, Group::ALL, InteractionTestMode::And))
+                        .build(),
+                );
+            }
+        }
+    }
+    out
 }
 
 impl CollisionWorld {
     pub fn new(ground: Arc<dyn GroundProvider>, buildings: Arc<BuildingSet>, threads: usize) -> Self {
-        let physics = new_physics();
+        let physics = new_physics(&buildings.decks);
         let cooker = TileCooker::start(ground.clone(), buildings.clone(), threads);
         let (graveyard, rx) = channel::<(Vec<Collider>, Arc<TileHeights>, Arc<Vec<Prism>>)>();
         std::thread::Builder::new()
@@ -696,7 +817,7 @@ impl CollisionWorld {
     /// a world whose tiles come from a shared feed (no threads of its own).
     pub fn fed(ground: Arc<dyn GroundProvider>, buildings: Arc<BuildingSet>, feed: Arc<dyn TileFeed>) -> Self {
         let multi_level = ground.multi_level();
-        Self { physics: new_physics(), ground, buildings, cooker: None, feed: Some(feed), resident: HashMap::new(), requested: HashSet::new(), pending: vec![], stats: StreamStats::default(), insert_per_pump: 1, lockstep: false, step_wait_ms_max: 0.0, step_waits: 0, graveyard: None, multi_level }
+        Self { physics: new_physics(&buildings.decks), ground, buildings, cooker: None, feed: Some(feed), resident: HashMap::new(), requested: HashSet::new(), pending: vec![], stats: StreamStats::default(), insert_per_pump: 1, lockstep: false, step_wait_ms_max: 0.0, step_waits: 0, graveyard: None, multi_level }
     }
 
     /// The ground has walkable surfaces over others (decks, `--structures`):

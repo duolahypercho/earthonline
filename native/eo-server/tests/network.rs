@@ -170,6 +170,32 @@ fn loss_reorder_and_duplicates_lose_no_input_and_keep_prediction_exact() {
     assert_eq!(pred.stats.corrections, 0);
 }
 
+/// A landmark lift over UDP: a client at Coit Tower's entrance taps interact
+/// (the input's button), rides up, taps again and rides down; the server runs
+/// the ride from the same inputs, so the prediction never needs a correction.
+#[test]
+fn a_landmark_lift_rides_over_the_network_with_no_correction() {
+    let (g, _) = world();
+    let l = g.buildings.decks.lifts.iter().find(|l| l.name.contains("Coit")).expect("the Coit Tower lift").clone();
+    let h = Harness::start();
+    let mut p = Player::connect(h.addr, "rider", Conditions::NONE, [l.bottom.x, l.bottom.z, l.bottom_yaw]);
+    wait_connected(&mut [&mut p]);
+    let tap = |t: f64, at: f64| t >= at && t < at + 0.02;
+    run_frames(&mut [&mut p], 3.6, |_, t| (StepInput { interact: tap(t, 1.0), ..Default::default() }, l.bottom_yaw));
+    let up = p.pred.as_ref().unwrap().player.position(&p.pred.as_ref().unwrap().cw);
+    run_frames(&mut [&mut p], 3.6, |_, t| (StepInput { interact: tap(t, 0.5), ..Default::default() }, l.top_yaw));
+    run_frames(&mut [&mut p], 1.5, |_, _| (StepInput::default(), 0.0));
+    let pred = p.pred.as_ref().unwrap();
+    let down = pred.player.position(&pred.cw);
+    let _ = h.stop();
+    println!("over UDP: up at {up:?} (top stop {:?}), down at {down:?}; corrections {}, acknowledged inputs {}", l.top, pred.stats.corrections, pred.stats.error_mm.len());
+    assert!((up - l.top).length() < 1.0, "the ride up did not reach the gallery: {up:?}");
+    assert!((down.x - l.bottom.x).hypot(down.z - l.bottom.z) < 1.0, "the ride down did not reach the entrance: {down:?}");
+    assert!(pred.stats.error_mm.len() > 100);
+    assert!(pred.stats.error_mm.iter().all(|e| *e == 0.0), "the prediction matched the server at every acknowledged input");
+    assert_eq!(pred.stats.corrections, 0);
+}
+
 #[test]
 fn a_client_that_loses_its_link_reconnects_as_the_same_player() {
     let h = Harness::start();

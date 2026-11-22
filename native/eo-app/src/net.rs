@@ -217,6 +217,7 @@ fn base_args() -> Args {
         structures: None, // `--structures` (quality::Switches)
         facade_clutter: 0, // `--facade-clutter` (quality::Switches)
         player_contact: false, // below, from `Presence`
+        landmark_access: true,
     }
 }
 
@@ -283,6 +284,7 @@ fn parse(raw: &[String]) -> Result<(Args, NetOpts)> {
             "--no-kit" => a.kit = false,
             "--no-models" => a.models = false,
             "--no-props" => a.props = false,
+            "--no-landmark-access" => a.landmark_access = false, // the landmark decks and lifts (a local server follows)
             "--no-agents" => a.agents = false,
             "--no-rocketbox" => a.rocketbox = false, // people
             "--no-thread-priority" => a.perf.thread_priority = false,
@@ -310,9 +312,14 @@ fn parse(raw: &[String]) -> Result<(Args, NetOpts)> {
 }
 
 /// The collision world and its parts, as `--play` builds them (the server builds the same).
-fn game_world(world: &World) -> Result<Arc<GameWorld>> {
+fn game_world(world: &World, access: bool) -> Result<Arc<GameWorld>> {
     let lift = eo_assets::placement::PlacementConstants::load()?.construction_lift_m;
-    let buildings = Arc::new(BuildingSet::from_city(&world.city, lift));
+    let mut set = BuildingSet::from_city(&world.city, lift);
+    if access {
+        // the landmarks' decks and lifts: the same as the server's (eo-net `GameWorld::load`).
+        set = set.with_decks(eo_net::game::landmark_decks(&world.elevation));
+    }
+    let buildings = Arc::new(set);
     let elevation = Arc::new(world.elevation.clone());
     let ground: Arc<dyn GroundProvider> = match &world.street {
         Some(s) => Arc::new(eo_player::street_ground::StreetGround::new(s.world.clone(), world.structures.clone())),
@@ -1341,7 +1348,7 @@ fn bench(args: &Args, o: &NetOpts, process_start: Instant) -> Result<()> {
     eo_render::alloc::claim_render_thread();
     eo_render::hitch::set_worker_priority_lowered(args.perf.thread_priority);
     let mut world = load_world(args)?;
-    let game = game_world(&world)?;
+    let game = game_world(&world, args.landmark_access)?;
     let (route, spawn) = eo_server::predict::script_route(&game);
     let spawn = o.spawn.unwrap_or(spawn);
     let (addr, local) = server_addr(&world, &game, o, [spawn[0], spawn[1]])?;
@@ -1589,7 +1596,7 @@ fn capture_spots(world: &World) -> ([f64; 3], [f64; 3]) {
 
 fn capture(args: &Args, o: &NetOpts, process_start: Instant) -> Result<()> {
     let mut world = load_world(args)?;
-    let game = game_world(&world)?;
+    let game = game_world(&world, args.landmark_access)?;
     let (sa, sb) = capture_spots(&world);
     let (addr, local) = server_addr(&world, &game, o, [sa[0], sa[1]])?;
     let mut a = NetSession::connect(game.clone(), client_config(addr, "ada", o, sa, 11))?;
@@ -1727,6 +1734,7 @@ mod window {
         ui: eo_ui::Ui,
         pacer: eo_render::pace::WaitPacer, // the driver's submission spike, taken in the swapchain wait
         probe: TagProbe,
+        fade: crate::fade::Fade, // the landmark lift's fade
     }
 
     struct App {
@@ -1751,7 +1759,7 @@ mod window {
 
     pub fn run(args: &Args, o: &NetOpts, process_start: Instant) -> Result<()> {
         let world = load_world(args)?;
-        let game = game_world(&world)?;
+        let game = game_world(&world, args.landmark_access)?;
         let s = crate::bench::spawn();
         let spawn = o.spawn.unwrap_or([s[0] as f64, s[1] as f64, 0.0]);
         let (addr, local) = server_addr(&world, &game, o, [spawn[0], spawn[1]])?;
@@ -1810,7 +1818,8 @@ mod window {
             ui.set_screen(eo_ui::Screen::Hud);
             let pacer = eo_render::pace::WaitPacer::new(self.args.perf.submit_pacing);
             let probe = TagProbe::new(&ctx.device);
-            self.gfx = Some(Gfx { window, surface, config, ctx, renderer, targets, models, agents, props, ui, pacer, probe });
+            let fade = crate::fade::Fade::new(&ctx.device, format);
+            self.gfx = Some(Gfx { window, surface, config, ctx, renderer, targets, models, agents, props, ui, pacer, probe, fade });
             Ok(())
         }
 
@@ -1898,6 +1907,10 @@ mod window {
             g.renderer.encode(&mut enc, &view, None, &g.targets.depth, None);
             // The heads under the name tags, tested against this frame's depth.
             let probed = if s.presence.tags { g.probe.encode(&g.ctx.device, &g.ctx.queue, &mut enc, &g.targets.depth, &s.probe_asks) } else { None };
+            // a landmark lift ride: the predicted player's fade (the server runs the same ride);
+            // photo mode's free camera is not faded, and its frozen input cannot ride (no prompt).
+            g.fade.draw(&mut enc, &view, if photo_on { 0.0 } else { s.pred.as_ref().map(|p| p.player.lift_fade()).unwrap_or(0.0) });
+            g.ui.hud.prompt = if photo_on { None } else { s.pred.as_ref().and_then(|p| p.player.lift_prompt(&p.cw)).map(|p| ("E".to_string(), crate::fade::prompt_text(&p))) };
             // HUD: the connection state and ping in the objective chip.
             let (title, sub) = s.hud();
             if let Some(p) = s.pred.as_ref() {
@@ -2233,7 +2246,7 @@ mod net_shots {
         let path = o.shots.clone().unwrap();
         let file: Value = serde_json::from_slice(&std::fs::read(&path).with_context(|| format!("read {}", path.display()))?)?;
         let mut world = load_world(args)?;
-        let game = game_world(&world)?;
+        let game = game_world(&world, args.landmark_access)?;
         let gf = eo_data::geo::GeoFrame::of_city(&world.city.meta);
         let vps = eo_net::presence::viewpoints()?;
         let mut scenes = vec![];

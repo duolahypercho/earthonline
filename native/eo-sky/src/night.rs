@@ -445,6 +445,70 @@ pub fn meter_with(f: &LookFrame, dirs: &[([f64; 3], f64)], card: f64, sky: &dyn 
     1.0 + (c - 1.0) * (1.0 - n)
 }
 
+/// The most the meter opens up for a camera inside a room (eo-render
+/// `deck_rooms`: a landmark deck's room), 2.3 EV. A reflected-light
+/// meter pointed into a room lit through its windows opens up until the
+/// room's surfaces read toward middle grey and the windows go bright (an
+/// office's 500 lx against a clear sky's 20 klx of diffuse light outside is
+/// over 5 EV); held to 2.3 EV (INFERRED: the windows keep some of their
+/// view, as a bracketed interior with a view is exposed, instead of
+/// clipping to white).
+pub const METER_ROOM_MAX: f64 = 5.0;
+
+/// `meter` for a camera inside a room: a direction whose third member is
+/// `Some(k)` meets the room's own surfaces, not the sky or the open ground,
+/// and counts as an 18 % card in k of the open ground's fill (k: the room's
+/// mean sky visibility, eo-landmarks access_sky.rs, its sun share
+/// included); a direction with None leaves through an opening and counts as
+/// `meter` counts it. The exposure may also rise, up to 1 plus the room's
+/// weighted share of the directions times (`METER_ROOM_MAX` - 1), so a
+/// view out of a window that shows a strip of sill keeps the open view's
+/// exposure; with no room direction this is `meter`. Pure.
+///
+/// This corrects the dome-estimate meter only (`--no-scene-meter`): the
+/// scene meter reads the drawn frame, the room's own surfaces in it.
+pub fn meter_room(f: &LookFrame, w: &WeatherState, dirs: &[([f64; 3], f64, Option<f64>)]) -> f64 {
+    let card = 0.18 * (key_on_ground(f) * mean_beam(w) + ground_fill(f, SIDEWALK_ENV)) / std::f64::consts::PI;
+    let room_card = 0.18 * ground_fill(f, SIDEWALK_ENV) / std::f64::consts::PI;
+    meter_room_with(f, dirs, card, room_card, &|d| luminance(f.model.dome(d)))
+}
+
+/// `meter_room` for a card of luminance `card`, the room's card `room_card`
+/// (the open ground's fill without the sun's beam, before the room's sky
+/// visibility) and the sky as the frame draws it (`sky`), as `meter_with`
+/// is `meter`'s: the physical daylight's sky and card where it lights the
+/// frame. With no room direction this is `meter_with`, bit for bit.
+pub fn meter_room_with(f: &LookFrame, dirs: &[([f64; 3], f64, Option<f64>)], card: f64, room_card: f64, sky: &dyn Fn([f64; 3]) -> f64) -> f64 {
+    if dirs.iter().all(|d| d.2.is_none()) {
+        let open: Vec<([f64; 3], f64)> = dirs.iter().map(|d| (d.0, d.1)).collect();
+        return meter_with(f, &open, card, sky);
+    }
+    let n = nightness(f.model.sun.altitude_deg);
+    if n >= 1.0 {
+        return 1.0;
+    }
+    if card <= 0.0 {
+        return 1.0;
+    }
+    let (mut sum, mut wsum, mut wroom) = (0.0, 0.0, 0.0);
+    for (d, wt, k) in dirs {
+        let v = match k {
+            Some(k) => {
+                wroom += wt;
+                room_card.max(0.0) * k.clamp(0.0, 1.0)
+            }
+            None if d[1] > 0.0 => sky(*d).min(card * METER_CEILING),
+            None => card,
+        };
+        sum += v * wt;
+        wsum += wt;
+    }
+    let mean = sum / wsum.max(1e-9);
+    let ceiling = 1.0 + (METER_ROOM_MAX - 1.0) * (wroom / wsum.max(1e-9));
+    let c = (METER_KEY * card / mean.max(1e-9)).powf(METER_GAIN).clamp(METER_FLOOR, ceiling);
+    1.0 + (c - 1.0) * (1.0 - n)
+}
+
 /// The illuminance on a horizontal surface (look units, luminance) the frame
 /// lights it with: the key x the weather's mean beam, the hemisphere's sky
 /// lobe, the ambient and the diffuse environment, the environment at the

@@ -244,6 +244,7 @@ mod tests {
         sets.push(("blender camera".into(), look::ShaderFeatures { blender_camera: true, ..none })); // (`--blender-camera`)
         sets.push(("player contact".into(), look::ShaderFeatures { player_contact: true, ..none })); // (`--connect`: other players' ground contact)
         sets.push(("photo mode".into(), look::ShaderFeatures { photo_mode: true, ..none })); // (photo mode, `--no-photo-mode`)
+        sets.push(("landmark access".into(), look::ShaderFeatures { landmark_access: true, ..none })); // (the landmark decks; `--no-landmark-access`)
         sets
     }
 
@@ -289,7 +290,7 @@ mod tests {
             ..o
         };
         let f = look::ShaderFeatures::of(&on, true, true, true);
-        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, house: false, blender_camera: false, player_contact: false, photo_mode: false, ..look::ShaderFeatures::ALL }); // (the look profile is its own, below; the house is the world's, set by eo-app; the source camera its own; the players' contact the online session's)
+        assert_eq!(f, look::ShaderFeatures { lx_bits: 0xFF, cinematic: false, house: false, blender_camera: false, player_contact: false, photo_mode: false, landmark_access: false, ..look::ShaderFeatures::ALL }); // (the look profile is its own, below; the house and the landmark decks are the world's, set by eo-app; the source camera its own; the players' contact the online session's; photo mode the app's)
         assert!(look::ShaderFeatures::of(&look::LookOptions { blender_camera: true, ..o }, false, false, false).blender_camera, "the source camera follows its option");
         assert!(!look::ShaderFeatures::NONE.limit(&look::LookOptions { blender_camera: true, ..o }).blender_camera, "compiled out, the source camera stays off");
         let same = |a: &look::LookOptions, b: &look::LookOptions| format!("{a:?}") == format!("{b:?}"); // (LookOptions has no PartialEq)

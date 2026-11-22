@@ -58,6 +58,13 @@ pub(crate) fn with_origin(mut m: Material, y: f64) -> Material {
 }
 
 pub fn transamerica(site: &Value, g: &GroundGrid) -> Out {
+    transamerica_opened(site, g, false)
+}
+
+/// `transamerica`; `open` (landmark access, access.rs) leaves out the top
+/// level's walls and windows, which the observation room draws with real
+/// openings (as towers.rs `transamerica_opened`).
+pub fn transamerica_opened(site: &Value, g: &GroundGrid, open: bool) -> Out {
     let d = &site["dimensions"];
     let fr = &site["frame"];
     let (cx, cz, u, v, fhalf) = (n(fr, "cx"), n(fr, "cz"), v2(&fr["u"]), v2(&fr["v"]), n(fr, "half"));
@@ -119,6 +126,9 @@ pub fn transamerica(site: &Value, g: &GroundGrid) -> Out {
     }
     levels.push(spire_y);
     for i in 0..levels.len() - 1 {
+        if open && i == levels.len() - 2 {
+            continue;
+        }
         let (y0, y1) = (levels[i], levels[i + 1]);
         precast.loft(&square(half(y0)), base + y0, &square(half(y1)), base + y1, precast_c, false);
         let yw0 = y0 + (y1 - y0 - band) / 2.0;
@@ -171,7 +181,9 @@ pub fn transamerica(site: &Value, g: &GroundGrid) -> Out {
             y += floor_m;
         }
     }
-    let far_levels = [0.0, top0, 60.0, 120.0, spire_y];
+    // opened, the far item stops under the top level (the observation room draws it at every distance).
+    let far_top = if open { levels[levels.len() - 2] } else { spire_y };
+    let far_levels = [0.0, top0, 60.0, 120.0, far_top];
     for i in 0..far_levels.len() - 1 {
         far.loft(&square(half(far_levels[i])), base + far_levels[i], &square(half(far_levels[i + 1])), base + far_levels[i + 1], precast_c, false);
     }
@@ -209,6 +221,15 @@ pub const SALESFORCE_PEARL_SRGB: u32 = 0xd9dcde;
 pub(crate) const SALESFORCE_CROWN_P: f64 = 2.4;
 
 pub fn salesforce(site: &Value, g: &GroundGrid) -> Out {
+    salesforce_opened(site, g, false)
+}
+
+/// `salesforce`; `open` (landmark access, access.rs) leaves out the top
+/// floor's vision glass (towers.rs's storey: `topFloorM` over `floors`, the
+/// band under its 0.6 m spandrel), which the observation level draws as open
+/// glazing; the shaft and its far item are split round it (as towers.rs
+/// `salesforce_opened`).
+pub fn salesforce_opened(site: &Value, g: &GroundGrid, open: bool) -> Out {
     let d = &site["dimensions"];
     // The fins' and sunshades' 'pearlescent metal' (Pelli Clarke Pelli) and
     // the crown's white screen: neutral to cool whites, INFERRED (the
@@ -236,9 +257,22 @@ pub fn salesforce(site: &Value, g: &GroundGrid) -> Out {
     // The shaft tapers straight: a few lofts carry it, the facade's fins and
     // sunshades are the shader's (the vertex colour is the fins' pearl).
     let shaft = 8;
+    // the top floor's vision glass (opened: left to the observation level).
+    let floors = n(d, "floors");
+    let (vis0, vis1) = ((floors - 1.0) * top_floor / floors, (floors - 1.0) * top_floor / floors + top_floor / floors - 0.6);
+    // a span of the shaft as drawn: whole, or (opened) the parts under and over that band.
+    let around = |y0: f64, y1: f64| -> Vec<(f64, f64)> {
+        if open && y0 < vis1 && y1 > vis0 {
+            [(y0, vis0.max(y0)), (vis1.min(y1), y1)].into_iter().filter(|(a, b)| b > a).collect()
+        } else {
+            vec![(y0, y1)]
+        }
+    };
     for k in 0..shaft {
         let (y0, y1) = (top_floor * k as f64 / shaft as f64, top_floor * (k + 1) as f64 / shaft as f64);
-        glass.loft(&at(y0), base + y0 - if k == 0 { 0.5 } else { 0.0 }, &at(y1), base + y1, fin_c, false);
+        for (a, b) in around(y0, y1) {
+            glass.loft(&at(a), base + a - if k == 0 && a == y0 { 0.5 } else { 0.0 }, &at(b), base + b, fin_c, false);
+        }
     }
     // The crown, denser toward its rounded top.
     let bands = 18;
@@ -251,7 +285,7 @@ pub fn salesforce(site: &Value, g: &GroundGrid) -> Out {
     let top = at(h_total);
     crown.loft(&top, base + h_total, &scale_ring(&top, cx, cz, 0.9), base + h_total, crown_c, false);
     crown.prism(&scale_ring(&top, cx, cz, 0.9), base + h_total - 6.0, base + h_total - 0.2, gap, true, false);
-    for (y0, y1) in [(0.0, 100.0), (100.0, 200.0), (200.0, top_floor)] {
+    for (y0, y1) in [(0.0, 100.0), (100.0, 200.0), (200.0, top_floor)].into_iter().flat_map(|(y0, y1)| around(y0, y1)) {
         far.loft(&at(y0), base + y0, &at(y1), base + y1, fin_c, false);
     }
     let fb = 6;
@@ -277,7 +311,13 @@ pub fn salesforce(site: &Value, g: &GroundGrid) -> Out {
 }
 
 pub fn coit(site: &Value, g: &GroundGrid) -> Out {
-    let mut o = crate::towers::coit(site, g);
+    coit_opened(site, g, false)
+}
+
+/// `coit`; `open` (landmark access): towers.rs `coit_opened`, the
+/// belvedere's band and painted openings left to the gallery's arcade.
+pub fn coit_opened(site: &Value, g: &GroundGrid, open: bool) -> Out {
+    let mut o = crate::towers::coit_opened(site, g, open);
     let base = o.stats["baseY"].as_f64().unwrap_or(0.0);
     let top = o.stats["topY"].as_f64().unwrap_or(base + 60.0);
     o.version = format!("{}+towers2", o.version);
@@ -481,22 +521,34 @@ pub fn sutro(site: &Value, g: &GroundGrid) -> Out {
 /// The second generator of a registered landmark building, by id, with
 /// the third pass when the switches leave it on (`crate::towers3_on`).
 pub fn build(id: &str, site: &Value, g: &GroundGrid) -> Option<Out> {
+    build_opened(id, site, g, false)
+}
+
+/// `build`; `open`: the bands the landmark-access decks replace are left
+/// out (Coit's belvedere, Salesforce's top-floor glass, Transamerica's top
+/// level), in whichever pass builds the building.
+pub fn build_opened(id: &str, site: &Value, g: &GroundGrid, open: bool) -> Option<Out> {
     if crate::towers3_on() {
         // the third pass, and the fourth over it unless `--no-towers4`.
-        return crate::towers3::build_v(id, site, g, crate::towers4_on());
+        return crate::towers3::build_v_opened(id, site, g, crate::towers4_on(), open);
     }
-    build_v(id, site, g, false)
+    build_v_opened(id, site, g, false, open)
 }
 
 /// `build` with the third pass on or off (`v3`; off: the previous output).
 pub fn build_v(id: &str, site: &Value, g: &GroundGrid, v3: bool) -> Option<Out> {
+    build_v_opened(id, site, g, v3, false)
+}
+
+/// `build_v`, opened for the landmark-access decks with `open`.
+pub fn build_v_opened(id: &str, site: &Value, g: &GroundGrid, v3: bool, open: bool) -> Option<Out> {
     if v3 {
-        return crate::towers3::build_v(id, site, g, false);
+        return crate::towers3::build_v_opened(id, site, g, false, open);
     }
     Some(match id {
-        "transamerica-pyramid" => transamerica(site, g),
-        "salesforce-tower" => salesforce(site, g),
-        "coit-tower" => coit(site, g),
+        "transamerica-pyramid" => transamerica_opened(site, g, open),
+        "salesforce-tower" => salesforce_opened(site, g, open),
+        "coit-tower" => coit_opened(site, g, open),
         "sutro-tower" => sutro(site, g),
         "city-hall" => city_hall(site, g),
         _ => return None,

@@ -93,6 +93,8 @@ pub struct LandmarkSet {
     pub docks_built: (usize, usize, f64),
     /// the berths along the floating docks (`floating_docks::plan_berths`), where the boats lie.
     pub berths: Vec<crate::floating_docks::Berth>,
+    /// the walkable landmark decks drawn (access.rs; None with `Options::access` off).
+    pub access: Option<std::sync::Arc<crate::access::AccessSet>>,
 }
 
 /// what the set builds beyond the first landmarks slice. All on
@@ -117,6 +119,9 @@ pub struct Options {
     pub towers2: bool,
     /// The named skyline towers (skyline.rs; `eo-app --no-skyline`: the kit draws them).
     pub skyline: bool,
+    /// The landmarks' walkable decks (access.rs): their floors, railings,
+    /// glazing and lamps, and the tower bands they open (`--no-landmark-access`).
+    pub access: bool,
 }
 
 impl Default for Options {
@@ -125,14 +130,14 @@ impl Default for Options {
     /// starts (`--no-towers2`: `EO_TOWERS2=off`, `--no-skyline`: `EO_SKYLINE=off`).
     fn default() -> Self {
         let on = |var: &str| std::env::var(var).map(|v| v != "off").unwrap_or(true);
-        Self { cove_detail: false, waterfront: true, floating_docks: true, buildings: true, lights: true, bridge_detail: false, towers2: on("EO_TOWERS2"), skyline: on("EO_SKYLINE") }
+        Self { cove_detail: false, waterfront: true, floating_docks: true, buildings: true, lights: true, bridge_detail: false, towers2: on("EO_TOWERS2"), skyline: on("EO_SKYLINE"), access: true }
     }
 }
 
 impl Options {
     /// As the first landmarks slice built the set.
     pub fn off() -> Self {
-        Self { cove_detail: false, waterfront: false, floating_docks: false, buildings: false, lights: false, bridge_detail: false, towers2: false, skyline: false }
+        Self { cove_detail: false, waterfront: false, floating_docks: false, buildings: false, lights: false, bridge_detail: false, towers2: false, skyline: false, access: false }
     }
 }
 
@@ -541,15 +546,23 @@ pub fn build_landmark(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: &Deck
 /// `build_landmark`, also with the lights a generator carries: the landmark
 /// buildings come from their second generators (towers2.rs) when `opts.towers2`.
 pub fn build_landmark_with(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: &DeckStandards, opts: Options) -> Result<(Landmark, Vec<LandmarkLight>)> {
+    build_landmark_opened(js, id, ground, ca, opts, false)
+}
+
+/// `build_landmark_with`; `open`: the bands the access decks replace are left
+/// out (the bridges' `build_opened`; the buildings' towers.rs, towers2.rs or
+/// towers3.rs `build_opened`, whichever generator `opts.towers2` and the
+/// passes' switches pick).
+pub fn build_landmark_opened(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: &DeckStandards, opts: Options, open: bool) -> Result<(Landmark, Vec<LandmarkLight>)> {
     let t0 = Instant::now();
     // the materials a second generator gives its own groups (in place of the registry's).
     let mut own: Vec<(String, Material)> = Vec::new();
     let mut lights: Vec<LandmarkLight> = Vec::new();
     let built: Built = match id {
-        "golden-gate-bridge" => golden_gate::build_with(js, ground, ca, opts.bridge_detail),
-        "bay-bridge-west" => bay_bridge::build(js, ground, ca),
-        // the landmark buildings (towers.rs; towers2.rs).
-        other => match if opts.towers2 { crate::towers2::build(other, &js.buildings[other], ground) } else { crate::towers::build(other, &js.buildings[other], ground) } {
+        "golden-gate-bridge" => golden_gate::build_opened(js, ground, ca, opts.bridge_detail, open),
+        "bay-bridge-west" => bay_bridge::build_opened(js, ground, ca, open),
+        // the landmark buildings (towers.rs; towers2.rs), opened for the decks with `open`.
+        other => match if opts.towers2 { crate::towers2::build_opened(other, &js.buildings[other], ground, open) } else { crate::towers::build_opened(other, &js.buildings[other], ground, open) } {
             Some(o) => {
                 own = o.materials;
                 lights = o.lights;
@@ -648,7 +661,7 @@ impl LandmarkSet {
                         let d = ground_scale_shift(js, id);
                         let shifted = |x: f64, z: f64| height_at(x + d[0], z + d[1]);
                         let ground = if d == [0.0, 0.0] { ground_of(js, id, height_at) } else { ground_of(js, id, &shifted) };
-                        let (mut l, mut lights) = build_landmark_with(js, id, &ground, std, opts)?;
+                        let (mut l, mut lights) = build_landmark_opened(js, id, &ground, std, opts, opts.access && opts.buildings)?;
                         l.translate(d);
                         for k in &mut lights {
                             k.pos[0] += d[0];
@@ -867,6 +880,16 @@ impl LandmarkSet {
             Vec::new()
         };
         landmarks.extend(railing_landmark);
+        // the walkable decks (access.rs) on the grounds the landmarks stand on.
+        let (mut lights, mut structures) = (lights, structures);
+        let access = if opts.access && opts.buildings {
+            let a = crate::access::AccessSet::build(height_at);
+            structures.extend(a.structures());
+            lights.extend(a.lights());
+            Some(std::sync::Arc::new(a))
+        } else {
+            None
+        };
         Ok(Self {
             landmarks,
             lights,
@@ -883,6 +906,7 @@ impl LandmarkSet {
             docks,
             docks_built,
             berths,
+            access,
         })
     }
 

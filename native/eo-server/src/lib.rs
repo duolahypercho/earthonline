@@ -218,7 +218,7 @@ impl Session {
                 self.gap_since = None;
                 self.stats.inputs_stood_in += 1;
                 let mut i = self.last_input;
-                i.buttons &= !(eo_net::wire::button::JUMP | eo_net::wire::button::VEHICLE_TOGGLE);
+                i.buttons &= !eo_net::wire::button::TAPS;
                 i
             } else {
                 break;
@@ -539,7 +539,7 @@ impl Server {
                             TravelResult::Unknown
                         } else if matches!(s.player.mode, Mode::Driving(_)) {
                             TravelResult::Driving
-                        } else if s.travel.is_some() {
+                        } else if s.travel.is_some() || s.player.lift.is_some() {
                             TravelResult::Busy
                         } else if s.last_travel.is_some_and(|t| tick.wrapping_sub(t) < cooldown) {
                             TravelResult::Cooldown

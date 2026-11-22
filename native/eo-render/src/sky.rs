@@ -1267,6 +1267,21 @@ impl SkyGpu {
         self.state.lock().unwrap().frame
     }
 
+    /// A new shot (eo-app `--shots`, its clock stopped): the exposure
+    /// meters afresh instead of adapting from the last shot's (a camera's
+    /// first frame after a cut), so a view does not inherit the exposure
+    /// of a room shot taken a few metres away. With the scene meter, as
+    /// after a cut: only a reading of the coming frames (the new shot's)
+    /// counts, and its first snaps the adaptation.
+    pub fn snap_adaptation(&self) {
+        let mut s = self.state.lock().unwrap();
+        s.adapt.current = None;
+        s.meter_fwd = None;
+        let next = s.frame.wrapping_add(1);
+        s.meter_snap_after = Some(next);
+        s.meter_floor = next;
+    }
+
     /// the exposure the last frame was drawn with (the target, metered and adapted), None before the first.
     pub fn drawn_exposure(&self) -> Option<f64> {
         let s = self.state.lock().unwrap();
@@ -1630,20 +1645,36 @@ impl SkyGpu {
                     dirs.push(([d.x as f64, d.y as f64, d.z as f64], 1.5 - 0.5 * (x * x + y * y) as f64));
                 }
             }
+            // inside a landmark deck's room (deck_rooms.rs; none with `--no-landmark-access`),
+            // a direction that meets the room's own surfaces meters them, not the sky or the open ground
+            // (the dome estimate's correction only: the scene meter above reads the room in the frame,
+            // as it does the house's rooms; the house's interior meter below is 1 away from the house).
+            let e = cam.eye;
+            let room = crate::deck_rooms::classify([e.x as f64, e.y as f64, e.z as f64], &dirs.iter().map(|d| d.0).collect::<Vec<_>>());
+            let room_dirs = room.map(|k| dirs.iter().zip(k).map(|(d, k)| (d.0, d.1, k)).collect::<Vec<_>>());
             let sky_meter = match daylight.filter(|d| d.weight > 0.0) {
                 // the physical daylight's sky and card where it lights the frame (by its weight)
                 Some(d) => {
                     let wt = d.weight;
-                    let card_js = 0.18 * (eo_sky::night::key_on_ground(f) * eo_sky::night::mean_beam(&terms.weather) + eo_sky::night::ground_fill(f, eo_sky::night::SIDEWALK_ENV)) / std::f64::consts::PI;
+                    let beam = eo_sky::night::key_on_ground(f) * eo_sky::night::mean_beam(&terms.weather);
+                    let card_js = 0.18 * (beam + eo_sky::night::ground_fill(f, eo_sky::night::SIDEWALK_ENV)) / std::f64::consts::PI;
                     let card_ph = 0.18 * eo_sky::night::horizontal_illuminance(f, &terms.weather, wt) / std::f64::consts::PI;
                     let card = card_js + (card_ph - card_js) * wt;
                     let eye_m = cam.eye.y as f64;
-                    eo_sky::night::meter_with(f, &dirs, card, &|dd| {
+                    let sky = |dd: [f64; 3]| {
                         let js = eo_look::math::luminance(f.model.dome(dd));
                         js + (eo_look::math::luminance(d.sky(dd, eye_m)) - js) * wt
-                    })
+                    };
+                    match &room_dirs {
+                        // a room's card: the card without the sun's beam (the room's sky visibility scales it)
+                        Some(rd) => eo_sky::night::meter_room_with(f, rd, card, card - 0.18 * beam / std::f64::consts::PI, &sky),
+                        None => eo_sky::night::meter_with(f, &dirs, card, &sky),
+                    }
                 }
-                None => eo_sky::night::meter(f, &terms.weather, &dirs),
+                None => match &room_dirs {
+                    Some(rd) => eo_sky::night::meter_room(f, &terms.weather, rd),
+                    None => eo_sky::night::meter(f, &terms.weather, &dirs),
+                },
             };
             // the playable house's interior meter (eo-app `--house-photo`): the light the
             // view takes in through the house's glazing, while the eye is inside it.

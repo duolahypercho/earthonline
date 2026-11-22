@@ -41,7 +41,9 @@ pub const MAGIC: u32 = 0x454F_4E01;
 /// 2: the handshake carries the ground plan (groundscale).
 /// 3: snapshots carry the server's sky clock; player entities their emote
 /// and more state flags; emote and fast-travel commands, the player roster.
-pub const PROTOCOL_VERSION: u16 = 3;
+/// 4: inputs carry 16 button bits (the lift's interact tap) and the player
+/// state a landmark lift ride.
+pub const PROTOCOL_VERSION: u16 = 4;
 
 /// this process's ground-plan scale in parts per million (the
 /// handshake's ground plan; 1,250,000 by default). hills: when the ground
@@ -354,7 +356,7 @@ pub enum TravelResult {
     Driving = 2,
     /// Too soon after the last one.
     Cooldown = 3,
-    /// One already under way.
+    /// One already under way (or a landmark lift ride).
     Busy = 4,
 }
 

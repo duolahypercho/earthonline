@@ -459,6 +459,11 @@ struct Ctx<'a> {
     cable_detail: bool,
     /// The opt-in detail pass (`set::Options::bridge_detail`; see `DETAIL_ORANGE_SRGB`).
     bridge_detail: bool,
+    /// Landmark access (access.rs) draws the east sidewalk's railing.
+    east_railing_by_deck: bool,
+    /// Landmark access (access.rs) draws the south tower's top: its leg-top
+    /// decks and the saddle housings on them (the `members` pass leaves its own out there).
+    south_top_by_deck: bool,
 }
 
 /// A portal strut's casing (`BridgeFeatures::haunch`): which exported strut,
@@ -1140,6 +1145,8 @@ impl Ctx<'_> {
                 gap: &|a, b| self.in_tower_zone(a, b),
                 colours: DeckColours { asphalt: k.asphalt, sidewalk: k.sidewalk, soffit: self.soffit(), barrier: k.barrier, white: k.white, yellow: k.yellow, rail: k.orange },
                 markings: true,
+                // the east sidewalk's railing is the landmark deck's (access.rs) when it is built.
+                outer_railing_elsewhere: self.east_railing_by_deck.then_some(1.0),
             },
         );
     }
@@ -1604,6 +1611,9 @@ impl Ctx<'_> {
         let top = w + num(d, "towerAboveWaterM");
         let last = g.leg_stages.iter().fold(g.leg_stages[0], |a, s| if s[1] > a[1] { *s } else { a });
         for tc in [0.0, p.l] {
+            if tc == 0.0 && self.south_top_by_deck {
+                continue;
+            }
             for sgn in [-1.0, 1.0] {
                 suspension::saddle_housing(orange, self.tower_frame, tc, sgn * self.site.half_plane, top, last[3] / 2.0 * 0.92, last[2] / 2.0 * 0.95, SADDLE_PLINTH_M * h, k.orange);
             }
@@ -1858,6 +1868,22 @@ pub fn lamp_stations(g: &GoldenGate, plan: &Plan) -> Vec<f64> {
     out
 }
 
+/// The steel's paint as drawn (`BridgeFeatures::paint`, `paint2`; with
+/// `bridge_detail` and the cited paint off the detail pass's darker tone;
+/// else the export's): the bridge's, and the landmark decks' on it (access.rs).
+pub fn paint_orange(d: &serde_json::Value, features: &suspension::BridgeFeatures, bridge_detail: bool) -> Rgb {
+    if features.paint && features.paint2 {
+        international_orange2()
+    } else if features.paint {
+        srgb_hex(INTERNATIONAL_ORANGE_SRGB)
+    } else if bridge_detail {
+        // (`bridge_detail`, the cited paint off) the detail pass's darker tone.
+        srgb_hex(DETAIL_ORANGE_SRGB)
+    } else {
+        srgb_hex(hex(d, "orangeSrgb"))
+    }
+}
+
 /// `buildGoldenGateBridge`.
 pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built {
     build_with(js, ground, ca, false)
@@ -1866,6 +1892,13 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
 /// `build` with the opt-in detail pass (`set::Options::bridge_detail`; see
 /// `DETAIL_ORANGE_SRGB`) on or off.
 pub fn build_with(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards, bridge_detail: bool) -> Built {
+    build_opened(js, ground, ca, bridge_detail, false)
+}
+
+/// `build_with`; `open` (landmark access, access.rs): the east sidewalk's
+/// railing and the south tower's saddle housings are left to the decks,
+/// which draw the real picket railing and the walkable tower top.
+pub fn build_opened(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards, bridge_detail: bool, open: bool) -> Built {
     let features = suspension::features();
     let gd = data(js);
     let g = &gd;
@@ -1877,16 +1910,7 @@ pub fn build_with(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards, bri
     let offset = |c: f64| site.centre_offset(c);
     let mut frame = Frame::new(site.axis_point(0.0, 0.0), site.axis);
     frame.offset = Some(&offset);
-    let orange = if features.paint && features.paint2 {
-        international_orange2()
-    } else if features.paint {
-        srgb_hex(INTERNATIONAL_ORANGE_SRGB)
-    } else if bridge_detail {
-        // (`bridge_detail`, the cited paint off) the detail pass's darker tone.
-        srgb_hex(DETAIL_ORANGE_SRGB)
-    } else {
-        srgb_hex(hex(d, "orangeSrgb"))
-    };
+    let orange = paint_orange(d, &features, bridge_detail);
     let concrete = concrete_colours(js, &features);
     let k = Colours {
         orange,
@@ -1904,7 +1928,7 @@ pub fn build_with(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards, bri
     };
     let tower_zone_half = tower_zone_half(g);
     let tower_frame = Frame::new(site.axis_point(0.0, 0.0), site.axis);
-    let ctx = Ctx { g, d, site: &site, plan: &plan, frame: &frame, tower_frame: &tower_frame, ground: &ground_at, k, yaw: site.axis[1].atan2(site.axis[0]), water: js.sea_level_y, tower_zone_half, h: structure_scale(), detail: features.detail, wires: features.wires, members: features.members, haunch: features.haunch, bracing: features.bracing, pylons: features.pylons, arch2: features.arch2, fender2: features.fender2, collar: features.collar, leg_cells: features.leg_cells, cable_detail: features.cable_detail, bridge_detail };
+    let ctx = Ctx { g, d, site: &site, plan: &plan, frame: &frame, tower_frame: &tower_frame, ground: &ground_at, k, yaw: site.axis[1].atan2(site.axis[0]), water: js.sea_level_y, tower_zone_half, h: structure_scale(), detail: features.detail, wires: features.wires, members: features.members, haunch: features.haunch, bracing: features.bracing, pylons: features.pylons, arch2: features.arch2, fender2: features.fender2, collar: features.collar, leg_cells: features.leg_cells, cable_detail: features.cable_detail, bridge_detail, east_railing_by_deck: open, south_top_by_deck: open };
     let mut orange_m = MeshArrays::new("golden-gate-bridge:orange");
     let mut deck_m = MeshArrays::new("golden-gate-bridge:deck");
     let mut concrete_m = MeshArrays::new("golden-gate-bridge:concrete");

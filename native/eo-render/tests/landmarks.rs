@@ -75,7 +75,10 @@ fn near_and_far_switch_on_the_gpu() {
             // Twice: the switch has hysteresis; the second frame reads the first's state.
             r.cull_readback(&ctx, &cam).unwrap();
             let out = r.cull_readback(&ctx, &cam).unwrap();
-            let drawn: Vec<u32> = out.draws.iter().take(out.counters[0] as usize).map(|d| d[4]).collect();
+            // the drawn commands: the readback's compacted list holds only
+            // them; the uncompacted fallback (no multi-draw-indirect-count)
+            // holds one slot per object, an undrawn one with no instance.
+            let drawn: Vec<u32> = out.draws.iter().filter(|d| d[1] > 0).map(|d| d[4]).collect();
             let near = drawn.iter().filter(|&&i| scene.objects[i as usize].lod_group == li as u32 && scene.objects[i as usize].lod_role == LOD_LANDMARK_NEAR).count();
             let far = drawn.iter().filter(|&&i| scene.objects[i as usize].lod_group == li as u32 && scene.objects[i as usize].lod_role == LOD_LANDMARK_FAR).count();
             counts.push((d, near, far));
@@ -105,6 +108,9 @@ fn the_surface_kinds_keep_their_own_flag_bits() {
         assert!(seen.insert(f), "kind {k} has its own bits");
     }
     assert_ne!(SURFACE_AUTHORED, SURFACE_FLOODLIT_FAR);
+    // the decks' glazing (`DRAW_GLASS_PANE`): the glass and blend bits, none of the landmark words.
+    let pane = eo_render::authored::F_GLASS | eo_render::authored::F_BLEND;
+    assert_eq!(pane & (others | surface_flags(15)), 0, "the glass pane's bits");
     assert_eq!(surface_code(Some("authored")), SURFACE_AUTHORED);
     assert!(landmarks_constants_wgsl().contains(&format!("const LM_SURFACE_HIGH_SHIFT: u32 = {SURFACE_HIGH_SHIFT}u;")));
 }

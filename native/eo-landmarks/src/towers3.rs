@@ -329,10 +329,16 @@ pub const TRUSS_PROW_M: f64 = 0.85;
 pub const TRANSAMERICA_PRECAST_SRGB: u32 = 0xcfcdc8;
 
 pub fn transamerica(site: &Value, g: &GroundGrid) -> Out {
+    transamerica_opened(site, g, false)
+}
+
+/// `transamerica`; `open` (landmark access): towers2.rs
+/// `transamerica_opened`'s top level left to the observation room.
+pub fn transamerica_opened(site: &Value, g: &GroundGrid, open: bool) -> Out {
     let mut site = site.clone();
     site["dimensions"]["precastSrgb"] = serde_json::json!(TRANSAMERICA_PRECAST_SRGB);
     let site = &site;
-    let mut o = crate::towers2::transamerica(site, g);
+    let mut o = crate::towers2::transamerica_opened(site, g, open);
     let d = &site["dimensions"];
     let fr = &site["frame"];
     let (cx, cz, u, v, fhalf) = (n(fr, "cx"), n(fr, "cz"), v2(&fr["u"]), v2(&fr["v"]), n(fr, "half"));
@@ -417,7 +423,13 @@ pub fn transamerica(site: &Value, g: &GroundGrid) -> Out {
 pub const SALESFORCE_FIN_ROUGHNESS: f64 = 0.35;
 
 pub fn salesforce(site: &Value, g: &GroundGrid) -> Out {
-    let mut o = crate::towers2::salesforce(site, g);
+    salesforce_opened(site, g, false)
+}
+
+/// `salesforce`; `open` (landmark access): towers2.rs `salesforce_opened`'s
+/// top-floor vision glass left to the observation level.
+pub fn salesforce_opened(site: &Value, g: &GroundGrid, open: bool) -> Out {
+    let mut o = crate::towers2::salesforce_opened(site, g, open);
     let origin = o.stats["baseY"].as_f64().unwrap_or(0.0);
     for key in ["glass", "far"] {
         if let Some((_, m)) = o.materials.iter_mut().find(|(k, _)| k == key) {
@@ -434,6 +446,13 @@ pub const COIT_FLUTE_DEPTH_M: f64 = 0.45;
 pub const COIT_RIB_SHARE: f64 = 0.34;
 
 pub fn coit(site: &Value, g: &GroundGrid) -> Out {
+    coit_opened(site, g, false)
+}
+
+/// `coit`; `open` (landmark access, access.rs) leaves out the belvedere's
+/// solid band and its painted openings, which the gallery draws as a real
+/// arcade, and the far item's band there (as towers.rs `coit_opened`).
+pub fn coit_opened(site: &Value, g: &GroundGrid, open: bool) -> Out {
     let d = &site["dimensions"];
     let concrete_c = hex(d, "concreteSrgb");
     let shade = concrete_c.map(|c| c * 0.82);
@@ -486,10 +505,12 @@ pub fn coit(site: &Value, g: &GroundGrid) -> Out {
             concrete.quad(pt(t0, ra - s0, ya), pt(t1, ra - s1, ya), pt(t1, rb - s1, yb), pt(t0, rb - s0, yb), concrete_c);
         }
     }
-    concrete.lathe(cx, cz, &[[r1, bel0], [r1, bel1]], 48, shade, None, None);
+    if !open {
+        concrete.lathe(cx, cz, &[[r1, bel0], [r1, bel1]], 48, shade, None, None);
+    }
     let cornice_r = r1 + 0.7;
     concrete.lathe(cx, cz, &[[r1, bel1], [cornice_r, bel1], [cornice_r, bel1 + cornice_m], [lr + 0.6, bel1 + cornice_m], [0.0, bel1 + cornice_m + 0.01]], 48, concrete_c, None, None);
-    let arches = n(d, "arches");
+    let arches = if open { 0.0 } else { n(d, "arches") };
     for k in 0..arches as i64 {
         let a0 = ((k as f64 + 0.18) / arches) * PI * 2.0;
         let a1 = ((k as f64 + 0.82) / arches) * PI * 2.0;
@@ -510,7 +531,14 @@ pub fn coit(site: &Value, g: &GroundGrid) -> Out {
         let p = |a: f64, y: f64| [cx + a.cos() * r, y, cz - a.sin() * r];
         openings.quad(p(a0, l0 + 0.6), p(a1, l0 + 0.6), p(a1, top - 1.2), p(a0, top - 1.2), opening);
     }
-    far.lathe(cx, cz, &[[r0, base], [r1, bel1], [cornice_r, bel1], [cornice_r, bel1 + cornice_m], [lr, bel1 + cornice_m], [lr, top], [0.0, top]], 16, concrete_c, None, None);
+    if open {
+        // the far item leaves the belvedere's band to the gallery's arcade (drawn at every distance).
+        let r_bel0 = r0 + ((r1 - r0) * (bel0 - base)) / (bel1 - base);
+        far.lathe(cx, cz, &[[r0, base], [r_bel0, bel0]], 16, concrete_c, None, None);
+        far.lathe(cx, cz, &[[r1, bel1], [cornice_r, bel1], [cornice_r, bel1 + cornice_m], [lr, bel1 + cornice_m], [lr, top], [0.0, top]], 16, concrete_c, None, None);
+    } else {
+        far.lathe(cx, cz, &[[r0, base], [r1, bel1], [cornice_r, bel1], [cornice_r, bel1 + cornice_m], [lr, bel1 + cornice_m], [lr, top], [0.0, top]], 16, concrete_c, None, None);
+    }
     let mut materials = vec![];
     if let Some(m) = registry_material("coit-tower", "concrete") {
         materials.push(("concrete".into(), with_rig(&m, "coit-tower", base)));
@@ -754,20 +782,26 @@ pub fn build(id: &str, site: &Value, g: &GroundGrid) -> Option<Out> {
 
 /// `build` with the fourth pass on or off (`v4`; off: the third pass alone).
 pub fn build_v(id: &str, site: &Value, g: &GroundGrid, v4: bool) -> Option<Out> {
+    build_v_opened(id, site, g, v4, false)
+}
+
+/// `build_v`; `open`: the bands the landmark-access decks replace are left
+/// out (Coit's belvedere, Salesforce's top-floor glass, Transamerica's top level).
+pub fn build_v_opened(id: &str, site: &Value, g: &GroundGrid, v4: bool, open: bool) -> Option<Out> {
     if v4 {
         return Some(match id {
-            "transamerica-pyramid" => transamerica4(site, g),
-            "salesforce-tower" => salesforce4(site, g),
+            "transamerica-pyramid" => transamerica4_opened(site, g, open),
+            "salesforce-tower" => salesforce4_opened(site, g, open),
             "city-hall" => city_hall4(site, g),
-            "coit-tower" => coit(site, g),
+            "coit-tower" => coit_opened(site, g, open),
             "sutro-tower" => sutro(site, g),
             _ => return None,
         });
     }
     Some(match id {
-        "transamerica-pyramid" => transamerica(site, g),
-        "salesforce-tower" => salesforce(site, g),
-        "coit-tower" => coit(site, g),
+        "transamerica-pyramid" => transamerica_opened(site, g, open),
+        "salesforce-tower" => salesforce_opened(site, g, open),
+        "coit-tower" => coit_opened(site, g, open),
         "sutro-tower" => sutro(site, g),
         "city-hall" => city_hall(site, g),
         _ => return None,
@@ -786,7 +820,12 @@ pub const SPIRE4_ROUGHNESS: f64 = crate::skyline::METAL4_ROUGHNESS;
 pub const SPIRE4_METALNESS: f64 = crate::skyline::METAL4_METALNESS;
 
 pub fn transamerica4(site: &Value, g: &GroundGrid) -> Out {
-    let mut o = transamerica(site, g);
+    transamerica4_opened(site, g, false)
+}
+
+/// `transamerica4`, opened for the landmark-access deck with `open` (`transamerica_opened`).
+pub fn transamerica4_opened(site: &Value, g: &GroundGrid, open: bool) -> Out {
+    let mut o = transamerica_opened(site, g, open);
     // the spire's vertex colour (the export's metalSrgb) to aluminium's F0.
     if let Some((_, f)) = o.groups.iter_mut().find(|(k, _)| k == "metal") {
         for c in f.colors.chunks_exact_mut(3) {
@@ -874,8 +913,13 @@ fn offset_ring(ring: &[[f64; 2]], c: [f64; 2], d: f64) -> Vec<[f64; 2]> {
 }
 
 pub fn salesforce4(site: &Value, g: &GroundGrid) -> Out {
+    salesforce4_opened(site, g, false)
+}
+
+/// `salesforce4`, opened for the landmark-access deck with `open` (`salesforce_opened`).
+pub fn salesforce4_opened(site: &Value, g: &GroundGrid, open: bool) -> Out {
     use crate::geometry::{scale_ring, srgb_hex};
-    let mut o = salesforce(site, g);
+    let mut o = salesforce_opened(site, g, open);
     let d = &site["dimensions"];
     let fin_c = srgb_hex(crate::towers2::SALESFORCE_PEARL_SRGB);
     let well_c = srgb_hex(CROWN_WELL_SRGB);

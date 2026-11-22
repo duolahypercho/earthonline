@@ -171,6 +171,7 @@ impl Flags {
                 "--bridge-detail" | "--no-bridge-detail" => {} // read by `crate::bridge_detail`
                 "--no-vsync" => args.vsync = false,
                 "--no-props" => args.props = false, // props in the UI's street
+                "--no-landmark-access" => args.landmark_access = false, // the landmark decks
                 "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
                 "--no-photo-mode" | "--no-dof" => {} // read by photo.rs
                 s if args.props2.parse_flag(s) => {}
@@ -314,6 +315,7 @@ fn default_args() -> Args {
         structures: None, // `--structures` (quality::Switches)
         facade_clutter: 0, // `--facade-clutter` (quality::Switches)
         player_contact: false, // set by net.rs (`--connect`)
+        landmark_access: true,
     }
 }
 

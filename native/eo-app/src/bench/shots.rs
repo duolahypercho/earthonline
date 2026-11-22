@@ -208,11 +208,13 @@ pub struct Spec {
     /// photo mode: the shot through its pipeline, and a person in it.
     pub photo: Option<PhotoSpec>,
     pub subject: Option<SubjectSpec>,
+    /// A person standing in the shot (the player's body): feet, game metres, and the compass heading faced.
+    pub person: Option<(DVec3, f64)>,
     /// The entry as written.
     pub input: Value,
 }
 
-const SHOT_KEYS: &[&str] = &["name", "geo", "lat", "lon", "alt", "range", "heading", "tilt", "fov", "eye", "yaw", "pitch", "look_at", "far", "time_of_day", "day_of_year", "sky", "sky_oktas", "game_day", "world_time_s", "calendar", "weather", "what", "note", "water_clock", "photo", "subject"];
+const SHOT_KEYS: &[&str] = &["name", "geo", "lat", "lon", "alt", "range", "heading", "tilt", "fov", "eye", "yaw", "pitch", "look_at", "far", "time_of_day", "day_of_year", "sky", "sky_oktas", "game_day", "world_time_s", "calendar", "weather", "what", "note", "water_clock", "photo", "subject", "person"];
 
 // ---------------------------------------------------------------------------
 // Photo mode's shots.
@@ -483,7 +485,17 @@ pub fn parse_specs(v: &Value) -> Result<Vec<Spec>> {
         if photo.as_ref().is_some_and(|p| matches!(p.focus, FocusSpec::Subject)) && subject.is_none() {
             bail!("shot \"{name}\": photo focus \"subject\" needs a \"subject\"");
         }
-        out.push(Spec { name, pose, fov, far, hour, day, sky, game_day, sky_oktas, world_time, live_calendar, weather, what, water_clock, photo, subject, input: e.clone() });
+        // `"person": {"feet": [x, y, z], "heading": degrees}`: the player's body standing there.
+        let person = match o.get("person") {
+            None | Some(Value::Null) => None,
+            Some(Value::Object(p)) => {
+                let feet = p.get("feet").and_then(Value::as_array).filter(|a| a.len() == 3 && a.iter().all(|x| x.as_f64().is_some_and(f64::is_finite))).map(|a| DVec3::new(a[0].as_f64().unwrap(), a[1].as_f64().unwrap(), a[2].as_f64().unwrap()));
+                let Some(feet) = feet else { bail!("shot \"{name}\": \"person\" needs \"feet\": [x, y, z]") };
+                Some((feet, num(p, "heading")?.unwrap_or(0.0)))
+            }
+            Some(_) => bail!("shot \"{name}\": \"person\" is not an object"),
+        };
+        out.push(Spec { name, pose, fov, far, hour, day, sky, game_day, sky_oktas, world_time, live_calendar, weather, what, water_clock, photo, subject, person, input: e.clone() });
     }
     if out.is_empty() {
         bail!("no shots");
@@ -1126,6 +1138,8 @@ pub fn shoot(io: &mut Io, common: &Map<String, Value>, shot: &Shot, dir: &Path, 
     if let Some(w) = io.renderer.water.get() {
         w.set_time(shot.info.get("water_clock_s").and_then(Value::as_f64).unwrap_or(WATER_CLOCK_S));
     }
+    // each shot meters afresh (its clock is stopped: an exposure carried from the last shot never adapts).
+    io.renderer.look.sky.snap_adaptation();
     let agents = io.place_agents(shot.focus);
     io.agents.extras = shot.extras.clone();
     let settle = io.settle(&cam, timeout_s)?;
@@ -1221,7 +1235,22 @@ pub fn run(io: &mut Io, mode: Mode, dir: &Path) -> Result<()> {
                     }
                     io.agents.hide_near = vec![([feet[0] as f32, feet[1] as f32, feet[2] as f32], 0.9)];
                 }
+                if let Some((feet, heading)) = spec.person {
+                    // The player's body (the first pool person), standing; the simulated people near it hidden.
+                    let h = heading.to_radians();
+                    let body = io.agents.lib.as_deref().and_then(|l| eo_agents::feed::player_body(l, feet.to_array(), h.sin().atan2(-h.cos()), 0.0, 0.0, 0.0));
+                    shot.info.insert("person".into(), json!({ "feet": feet.to_array(), "heading_deg": heading, "drawn": body.is_some() }));
+                    if body.is_none() {
+                        shot.notes.push("no person: the agent library has no people (the optional people assets are absent)".into());
+                    }
+                    // the body on a landmark deck: its contact occlusion and the room's light (eo-render deck_rooms.rs).
+                    let height = io.agents.lib.as_deref().and_then(|l| l.meta.family_heights.first().copied()).unwrap_or(1.75) as f64;
+                    eo_render::deck_rooms::set_player(body.is_some().then_some((feet.to_array(), height)));
+                    shot.extras.extend(body);
+                    io.agents.hide_near.push((feet.as_vec3().to_array(), 0.8));
+                }
                 shoot(io, &common, &shot, dir, timeout)?;
+                eo_render::deck_rooms::set_player(None);
                 io.agents.hide_near.clear();
                 n += 1;
             }
