@@ -22,6 +22,7 @@ mod cove_bed;
 mod cc0_runtime; // the CC0 scanned sets at run time
 mod farshore; // the far terrain's load and attach
 mod ground_tone; // the terrain's vertex tone and the far land (the scene build's closures)
+mod fade; // the landmark lift's fade and prompt
 mod models;
 mod net; // net
 mod quality; // `--quality` tiers and the lighting switches
@@ -166,6 +167,9 @@ pub struct Args {
     /// clutter.rs): fire escapes, awnings, signs, services and roof clutter on
     /// the kit buildings; 0 (the default) none. Set by `quality::Switches::apply`.
     pub facade_clutter: u8,
+    /// the landmarks' walkable decks, their lifts and the tower bands they open
+    /// (`--no-landmark-access` builds the landmarks as before, with no decks).
+    pub landmark_access: bool,
 }
 
 /// occlusion / hitch: one `Args` field, so `play.rs` and `ui.rs` name it once.
@@ -338,6 +342,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
         landmarks2: true,
         structures: None, // `--structures` (quality::Switches)
         facade_clutter: 0, // `--facade-clutter` (quality::Switches)
+        landmark_access: true,
     };
     let mut tier = quality::Switches::default(); // `--quality` and the lighting switches, applied after the loop
     // `--scene-cards` renders at 2560 x 1440 unless a size is given.
@@ -632,6 +637,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-facade-relief" => eo_landmarks::features::set_ferry_building_relief(false), // the Ferry Building's second pass, as before
             "--no-rail-polish" => eo_landmarks::features::set_rail_polish(false), // the rails' worn band at 0.4 / 0.65, no sealant joints, as before
             "--no-furniture-models" => eo_render::props_lib2::furniture_models::set_enabled(false), // missing-GLB furniture as boxes, as before
+            "--no-landmark-access" => a.landmark_access = false, // the landmark decks (eo-landmarks access.rs)
             "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
             s if a.props2.parse_flag(s) => {} // --no-props2, --no-furniture, --no-eztree, --no-overhead, --no-wires, --no-props2-shading, --capture-props2
             "--agents-bench" | "--agents-capture" | "--people-capture" | "--people-lineup" => {} // + --people-capture, --people-lineup
@@ -865,7 +871,7 @@ pub fn load_world(args: &Args) -> Result<World> {
     let landmark_job = args.landmarks.then(|| {
         let (g, p) = (elevation.clone(), paths.clone());
         // `--no-landmarks2` builds the set as the first landmarks slice did.
-        let opts = if args.landmarks2 { eo_landmarks::set::Options::default() } else { eo_landmarks::set::Options::off() };
+        let opts = if args.landmarks2 { eo_landmarks::set::Options { access: args.landmark_access, ..Default::default() } } else { eo_landmarks::set::Options::off() };
         let opts = eo_landmarks::set::Options { bridge_detail: bridge_detail(), ..opts };
         let opts = eo_landmarks::set::Options { cove_detail: args.cove_detail, ..opts };
         std::thread::spawn(move || -> Result<eo_landmarks::LandmarkSet> {

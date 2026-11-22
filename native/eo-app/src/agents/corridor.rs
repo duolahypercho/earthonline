@@ -499,6 +499,7 @@ mod tests {
             gap: &|_, _| false,
             colours: DeckColours { asphalt: [0.0; 3], sidewalk: [0.0; 3], soffit: [0.0; 3], barrier: [0.0; 3], white, yellow, rail: [0.0; 3] },
             markings: true,
+            outer_railing_elsewhere: None,
         };
         road_deck(&mut deck, &mut rail, &frame, &ca, &spec);
         // each stripe's centre across the deck, on the +s side (the lanes' side).

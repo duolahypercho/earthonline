@@ -2199,6 +2199,19 @@ fn shade(in: VOut) -> vec4<f32> {
         let transmission = vec3<f32>(0.14, 0.19, 0.07) * exp(-mm * vec3<f32>(0.65, 0.45, 1.15));
         rm_emit = transmission * incoming / LK_PI;
     }
+    // a landmark deck's interior (eo-landmarks access_sky.rs): the sky it
+    // sees through its openings, baked per vertex into the alpha byte (255:
+    // none), on the indirect light only (the sun's cascades cast the patches);
+    // and the player's body on a deck: its contact occlusion (landmarks_deck.wgsl).
+    // (`SF_LANDMARK_ACCESS`: compiled out with `--no-landmark-access`.)
+    let lm_kind = objects[in.object].kind & 255u;
+    if (SF_LANDMARK_ACCESS && (lm_kind == 9u || lm_kind == 10u)) {
+        if (in.aux.x < 254.5) {
+            s.ao = s.ao * (in.aux.x / 254.0);
+        }
+        s.ao = s.ao * deck_player_occlusion(in.world, n);
+    }
+
     // Lighting, shadows and fog: the JS game's light rig (look_light.wgsl).
     if (sx_in_bore(in.object)) {
         return sx_bore_light(s, m, v, in.world, in.object); // a tunnel bore's paint and luminaire (structures.wgsl)

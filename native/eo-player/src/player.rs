@@ -41,6 +41,8 @@ pub struct StepInput {
     pub analog_steer: bool,
     pub handbrake: bool,
     pub look_behind: bool,
+    /// A tap of the interact action: ride a landmark lift from its stop (lift.rs).
+    pub interact: bool,
 }
 
 impl StepInput {
@@ -59,6 +61,7 @@ impl StepInput {
             analog_steer: f.steer.abs() > 0.0 && f.steer.abs() < 0.999,
             handbrake: f.held(Action::Handbrake),
             look_behind: f.held(Action::LookBehind),
+            interact: f.tapped(Action::Interact),
         }
     }
 }
@@ -81,6 +84,8 @@ pub struct PlayerState {
     pub driving: Option<u32>,
     pub ticks: u64,
     pub vehicles: Vec<crate::vehicle::VehicleState>,
+    /// A landmark lift ride in progress.
+    pub lift: Option<crate::lift::LiftRide>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -134,6 +139,8 @@ pub struct Player {
     pub vehicles: Vec<Vehicle>,
     pub mode: Mode,
     pub ticks: u64,
+    /// A landmark lift ride in progress (lift.rs).
+    pub lift: Option<crate::lift::LiftRide>,
     accumulator: f64,
     last_camera_distance: f64,
 }
@@ -154,6 +161,7 @@ impl Player {
             vehicles: vec![],
             mode: Mode::OnFoot,
             ticks: 0,
+            lift: None,
             accumulator: 0.0,
             last_camera_distance: camera::on_foot::walk_distance(), // walk_distance()
         }
@@ -212,6 +220,7 @@ impl Player {
             self.fixed_step(world, &i);
             i.jump = false;
             i.vehicle_toggle = false;
+            i.interact = false;
             n += 1;
         }
         n
@@ -220,6 +229,36 @@ impl Player {
     /// One 1/60 s step of the player and the physics world.
     pub fn fixed_step(&mut self, world: &mut CollisionWorld, input: &StepInput) {
         let dt = tuning::FIXED_STEP_S;
+        // A landmark lift: the ride holds the body still; it changes stops in the dark.
+        if self.lift.is_none() && input.interact && self.mode == Mode::OnFoot {
+            if let Some((i, up)) = crate::lift::stop_near(&world.buildings.decks.lifts, self.character.feet()) {
+                self.lift = Some(crate::lift::LiftRide { lift: i as u32, up, step: 0 });
+                self.momentum.reset();
+            }
+        }
+        if let Some(mut r) = self.lift {
+            r.step += 1;
+            if r.step == crate::lift::MOVE_STEP {
+                if let Some(l) = world.buildings.decks.lifts.get(r.lift as usize) {
+                    let (feet, yaw) = crate::lift::arrival(world, l, r.up);
+                    self.character.teleport_feet(feet);
+                    self.yaw = yaw;
+                    self.facing_yaw = yaw;
+                    self.on_foot_cam.seed(feet, self.last_camera_distance);
+                }
+            }
+            self.momentum.reset();
+            self.sprint_held_s = 0.0;
+            self.sprint = 0.0;
+            self.ground_speed = 0.0;
+            self.lift = (r.step < crate::lift::RIDE_STEPS).then_some(r);
+            for v in &mut self.vehicles {
+                v.park(world);
+            }
+            world.physics.step();
+            self.ticks += 1;
+            return;
+        }
         if input.vehicle_toggle {
             match self.mode {
                 Mode::OnFoot => {
@@ -322,6 +361,7 @@ impl Player {
             },
             ticks: self.ticks,
             vehicles: self.vehicles.iter().map(|v| v.state(world)).collect(),
+            lift: self.lift,
         }
     }
 
@@ -348,9 +388,24 @@ impl Player {
         }
         self.mode = mode;
         self.ticks = s.ticks;
+        self.lift = s.lift;
         for (v, vs) in self.vehicles.iter_mut().zip(&s.vehicles) {
             v.set_state(world, vs);
         }
+    }
+
+    /// The lift prompt: on foot at a lift's stop, not riding.
+    pub fn lift_prompt(&self, world: &CollisionWorld) -> Option<crate::lift::LiftPrompt> {
+        if self.lift.is_some() || self.mode != Mode::OnFoot {
+            return None;
+        }
+        let lifts = &world.buildings.decks.lifts;
+        crate::lift::stop_near(lifts, self.character.feet()).map(|(i, up)| crate::lift::LiftPrompt { name: lifts[i].name.clone(), up })
+    }
+
+    /// The screen's darkness of a lift ride this step (0 clear, 1 black).
+    pub fn lift_fade(&self) -> f64 {
+        crate::lift::fade(self.lift)
     }
 
     /// Enter the nearest car within the interaction range.

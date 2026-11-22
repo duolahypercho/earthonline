@@ -37,6 +37,7 @@ mod cove_canopy;
 pub mod hlod_trees; // hlod
 pub mod kit;
 pub mod landmarks; // landmarks
+pub mod deck_rooms; // the landmark decks' rooms: the camera meter's room and the player on a deck (look uniform)
 pub mod light_shadow; // the lamp and headlight shadow hook (lighting)
 pub mod lighting; // the lighting additions' timestamp set and slots
 pub mod lit_fog; // the lit fog hook (lighting)

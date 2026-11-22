@@ -54,6 +54,7 @@ pub struct Predictor {
     acc: f64,
     tap_jump: bool,
     tap_toggle: bool,
+    tap_interact: bool,
     /// Drawn offset left by the last correction (decays to zero).
     pub smooth: DVec3,
     /// The newest correction applied.
@@ -63,7 +64,7 @@ pub struct Predictor {
 
 impl Predictor {
     pub fn new(player: Player, cw: CollisionWorld, seq: u32) -> Self {
-        Self { player, cw, seq, history: VecDeque::new(), acc: 0.0, tap_jump: false, tap_toggle: false, smooth: DVec3::ZERO, applied: 0, stats: PredictStats::default() }
+        Self { player, cw, seq, history: VecDeque::new(), acc: 0.0, tap_jump: false, tap_toggle: false, tap_interact: false, smooth: DVec3::ZERO, applied: 0, stats: PredictStats::default() }
     }
 
     /// Reset to a player rebuilt from the state the server sent (a reconnect),
@@ -84,12 +85,14 @@ impl Predictor {
         self.acc += dt.clamp(0.0, 0.25);
         self.tap_jump |= input.jump;
         self.tap_toggle |= input.vehicle_toggle;
+        self.tap_interact |= input.interact;
         let mut n = 0;
         while self.acc >= STEP_S - 1e-9 {
             self.acc -= STEP_S;
             let mut s = *input;
             s.jump = std::mem::take(&mut self.tap_jump);
             s.vehicle_toggle = std::mem::take(&mut self.tap_toggle);
+            s.interact = std::mem::take(&mut self.tap_interact);
             let q = NetInput::quantize(&s, self.player.yaw);
             self.seq = self.seq.wrapping_add(1);
             step_player(&mut self.player, &mut self.cw, &q);

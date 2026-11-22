@@ -49,6 +49,12 @@ fn base_y(ring: &[[f64; 2]], g: &GroundGrid) -> f64 {
 }
 
 pub fn transamerica(site: &Value, g: &GroundGrid) -> Out {
+    transamerica_opened(site, g, false)
+}
+
+/// `transamerica`; `open` (landmark access, access.rs) leaves out the top
+/// level's walls and windows, which the observation room draws with real openings.
+pub fn transamerica_opened(site: &Value, g: &GroundGrid, open: bool) -> Out {
     let d = &site["dimensions"];
     let fr = &site["frame"];
     let (cx, cz, u, v, fhalf) = (n(fr, "cx"), n(fr, "cz"), v2(&fr["u"]), v2(&fr["v"]), n(fr, "half"));
@@ -98,6 +104,9 @@ pub fn transamerica(site: &Value, g: &GroundGrid) -> Out {
     }
     levels.push(spire_y);
     for i in 0..levels.len() - 1 {
+        if open && i == levels.len() - 2 {
+            continue;
+        }
         let (y0, y1) = (levels[i], levels[i + 1]);
         precast.loft(&square(half(y0)), base + y0, &square(half(y1)), base + y1, precast_c, false);
         let yw0 = y0 + (y1 - y0 - band) / 2.0;
@@ -151,7 +160,9 @@ pub fn transamerica(site: &Value, g: &GroundGrid) -> Out {
             y += floor_m;
         }
     }
-    let far_levels = [0.0, top0, 60.0, 120.0, spire_y];
+    // the far item stops under the opened top level (the observation room draws it at every distance).
+    let far_top = if open { levels[levels.len() - 2] } else { spire_y };
+    let far_levels = [0.0, top0, 60.0, 120.0, far_top];
     for i in 0..far_levels.len() - 1 {
         far.loft(&square(half(far_levels[i])), base + far_levels[i], &square(half(far_levels[i + 1])), base + far_levels[i + 1], precast_c, false);
     }
@@ -168,6 +179,12 @@ pub fn transamerica(site: &Value, g: &GroundGrid) -> Out {
 }
 
 pub fn salesforce(site: &Value, g: &GroundGrid) -> Out {
+    salesforce_opened(site, g, false)
+}
+
+/// `salesforce`; `open` (landmark access, access.rs) leaves out the top
+/// floor's vision glass, which the observation level draws as open glazing.
+pub fn salesforce_opened(site: &Value, g: &GroundGrid, open: bool) -> Out {
     let d = &site["dimensions"];
     let (glass_c, spandrel, crown_c, gap) = (hex(d, "glassSrgb"), hex(d, "spandrelSrgb"), hex(d, "crownSrgb"), hex(d, "crownGapSrgb"));
     let ring = pairs(&flat(&site["record"]["points"]));
@@ -187,7 +204,9 @@ pub fn salesforce(site: &Value, g: &GroundGrid) -> Out {
         let y0 = f as f64 * floor;
         let y1 = y0 + floor - 0.6;
         let y2 = y0 + floor;
-        glass.loft(&at(y0), base + y0, &at(y1), base + y1, glass_c, false);
+        if !(open && f == floors as i64 - 1) {
+            glass.loft(&at(y0), base + y0, &at(y1), base + y1, glass_c, false);
+        }
         glass.loft(&at(y1), base + y1, &at(y2), base + y2, spandrel, false);
     }
     let bands = 16.0;
@@ -201,7 +220,14 @@ pub fn salesforce(site: &Value, g: &GroundGrid) -> Out {
     let top = at(h_total);
     crown.loft(&top, base + h_total, &scale_ring(&top, cx, cz, 0.92), base + h_total, crown_c, false);
     crown.prism(&scale_ring(&top, cx, cz, 0.92), base + h_total - 6.0, base + h_total - 0.5, gap, true, false);
-    for (y0, y1, c) in [(0.0, 100.0, glass_c), (100.0, 200.0, glass_c), (200.0, top_floor, glass_c), (top_floor, h_total, crown_c)] {
+    // opened, the far item leaves the top floor's vision glass to the observation level (drawn at every distance).
+    let (vis0, vis1) = ((floors - 1.0) * floor, (floors - 1.0) * floor + floor - 0.6);
+    let far_bands: Vec<(f64, f64, Rgb)> = if open {
+        vec![(0.0, 100.0, glass_c), (100.0, 200.0, glass_c), (200.0, vis0, glass_c), (vis1, top_floor, glass_c), (top_floor, h_total, crown_c)]
+    } else {
+        vec![(0.0, 100.0, glass_c), (100.0, 200.0, glass_c), (200.0, top_floor, glass_c), (top_floor, h_total, crown_c)]
+    };
+    for (y0, y1, c) in far_bands {
         far.loft(&at(y0), base + y0, &at(y1), base + y1, c, y1 == h_total);
     }
     Out {
@@ -214,6 +240,12 @@ pub fn salesforce(site: &Value, g: &GroundGrid) -> Out {
 }
 
 pub fn coit(site: &Value, g: &GroundGrid) -> Out {
+    coit_opened(site, g, false)
+}
+
+/// `coit`; `open` (landmark access, access.rs) leaves out the belvedere's
+/// solid band and its painted openings, which the gallery draws as a real arcade.
+pub fn coit_opened(site: &Value, g: &GroundGrid, open: bool) -> Out {
     let d = &site["dimensions"];
     let concrete_c = hex(d, "concreteSrgb");
     let shade = concrete_c.map(|c| c * 0.82);
@@ -242,10 +274,12 @@ pub fn coit(site: &Value, g: &GroundGrid) -> Out {
         rows.push([r0 + ((r1 - r0) * (y - base)) / (bel1 - base), y]);
     }
     concrete.lathe(cx, cz, &rows, (flutes_n * 4.0) as usize, concrete_c, Some(&flutes), None);
-    concrete.lathe(cx, cz, &[[r1, bel0], [r1, bel1]], 48, shade, None, None);
+    if !open {
+        concrete.lathe(cx, cz, &[[r1, bel0], [r1, bel1]], 48, shade, None, None);
+    }
     let cornice_r = r1 + 0.7;
     concrete.lathe(cx, cz, &[[r1, bel1], [cornice_r, bel1], [cornice_r, bel1 + cornice_m], [lr + 0.6, bel1 + cornice_m], [0.0, bel1 + cornice_m + 0.01]], 48, concrete_c, None, None);
-    let arches = n(d, "arches");
+    let arches = if open { 0.0 } else { n(d, "arches") };
     for k in 0..arches as i64 {
         let a0 = ((k as f64 + 0.18) / arches) * PI * 2.0;
         let a1 = ((k as f64 + 0.82) / arches) * PI * 2.0;
@@ -266,7 +300,14 @@ pub fn coit(site: &Value, g: &GroundGrid) -> Out {
         let p = |a: f64, y: f64| [cx + a.cos() * r, y, cz - a.sin() * r];
         openings.quad(p(a0, l0 + 0.6), p(a1, l0 + 0.6), p(a1, top - 1.2), p(a0, top - 1.2), opening);
     }
-    far.lathe(cx, cz, &[[r0, base], [r1, bel1], [cornice_r, bel1], [cornice_r, bel1 + cornice_m], [lr, bel1 + cornice_m], [lr, top], [0.0, top]], 16, concrete_c, None, None);
+    if open {
+        // the far item leaves the belvedere's band to the gallery's arcade (drawn at every distance).
+        let r_bel0 = r0 + ((r1 - r0) * (bel0 - base)) / (bel1 - base);
+        far.lathe(cx, cz, &[[r0, base], [r_bel0, bel0]], 16, concrete_c, None, None);
+        far.lathe(cx, cz, &[[r1, bel1], [cornice_r, bel1], [cornice_r, bel1 + cornice_m], [lr, bel1 + cornice_m], [lr, top], [0.0, top]], 16, concrete_c, None, None);
+    } else {
+        far.lathe(cx, cz, &[[r0, base], [r1, bel1], [cornice_r, bel1], [cornice_r, bel1 + cornice_m], [lr, bel1 + cornice_m], [lr, top], [0.0, top]], 16, concrete_c, None, None);
+    }
     Out {
         version: site["version"].as_str().unwrap_or("").into(),
         groups: vec![("concrete".into(), concrete.freeze()), ("openings".into(), openings.freeze())],
@@ -678,10 +719,16 @@ pub fn city_hall(site: &Value, g: &GroundGrid) -> Out {
 
 /// The generator of a registered landmark building, by id.
 pub fn build(id: &str, site: &Value, g: &GroundGrid) -> Option<Out> {
+    build_opened(id, site, g, false)
+}
+
+/// `build`; `open`: the bands the landmark-access decks replace are left out
+/// (Coit's belvedere, Salesforce's top-floor glass, Transamerica's top level).
+pub fn build_opened(id: &str, site: &Value, g: &GroundGrid, open: bool) -> Option<Out> {
     Some(match id {
-        "transamerica-pyramid" => transamerica(site, g),
-        "salesforce-tower" => salesforce(site, g),
-        "coit-tower" => coit(site, g),
+        "transamerica-pyramid" => transamerica_opened(site, g, open),
+        "salesforce-tower" => salesforce_opened(site, g, open),
+        "coit-tower" => coit_opened(site, g, open),
         "sutro-tower" => sutro(site, g),
         "city-hall" => city_hall(site, g),
         _ => return None,

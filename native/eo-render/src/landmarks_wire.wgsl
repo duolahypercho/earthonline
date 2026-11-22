@@ -59,8 +59,16 @@ fn lm_wire_vs(
     return out;
 }
 
+struct LmWireFrag {
+    @location(0) color: vec4<f32>,
+    // LM_WIRE_ROUND (landmarks.rs `ROUND_WIRES`): the depth of the point on
+    // the view ray nearest the member's axis, not the envelope prism's, so a
+    // railing in front hides a rope behind it; else the prism's own depth.
+    @builtin(frag_depth) depth: f32,
+};
+
 @fragment
-fn lm_wire_fs(in: LmWireOut) -> @location(0) vec4<f32> {
+fn lm_wire_fs(in: LmWireOut) -> LmWireFrag {
     let cam = frame.cam_pos.xyz;
     // Metres per pixel at the fragment's depth: depth x |d ndc_y / d pixel| / P11
     // (the NDC derivative is 2 / the target height; P11 is the length of the
@@ -83,18 +91,40 @@ fn lm_wire_fs(in: LmWireOut) -> @location(0) vec4<f32> {
     }
     let opacity = clamp(in.radius / max(drawn, 1e-5), 0.0, 1.0);
     let facing = normalize(to_eye - dir * dot(to_eye, dir));
+    var out: LmWireFrag;
+    out.depth = in.clip.z;
+    var nrm = facing;
+    if (LM_WIRE_ROUND) {
+        // the nearest points of the view ray and the axis (two lines).
+        let b = dot(ray, dir);
+        let w0 = cam - in.axis;
+        let den = max(1.0 - b * b, 1e-6);
+        let t = (b * dot(dir, w0) - dot(ray, w0)) / den;
+        let p = cam + ray * max(t, 0.0);
+        let q = in.axis + dir * dot(p - in.axis, dir);
+        let pc = frame.view_proj * vec4<f32>(p, 1.0);
+        out.depth = clamp(pc.z / max(pc.w, 1e-6), 0.0, 1.0);
+        // a cylinder's normal where the ray crosses it, `u` of the drawn radius off the axis.
+        let u = clamp(miss / max(drawn, 1e-5), 0.0, 1.0);
+        let lat = p - q;
+        let ll = length(lat);
+        if (ll > 1e-6) {
+            nrm = normalize(facing * sqrt(max(1.0 - u * u, 0.0)) + (lat / ll) * u);
+        }
+    }
     let m = materials[in.material];
     var s: Surface;
     s.albedo = in.color;
     s.rough = clamp(m.params.x, 0.03, 1.0);
     s.metal = m.params.y;
     s.ao = 1.0;
-    s.n = facing;
+    s.n = nrm;
     s.alpha = opacity;
     s.env = ENV_PAINTED_METAL;
     let v = normalize(cam - in.world);
-    let c = look_light(s, m, v, in.world, facing, 0u);
-    return vec4<f32>(c.rgb, opacity);
+    let c = look_light(s, m, v, in.world, nrm, 0u);
+    out.color = vec4<f32>(c.rgb, opacity);
+    return out;
 }
 
 // ---- the wire members after the atmosphere (`BridgeFeatures::wires`) ----
@@ -194,6 +224,16 @@ fn lm_wire2_vs(
     }
     let p = axis + (pos - axis) * (need / drawn0);
     out.clip = vp * vec4<f32>(p, 1.0);
+    if (LM_WIRE_ROUND) {
+        // (landmark access, landmarks.rs `ROUND_WIRES`) tested at the depth of
+        // the member's axis, not of its widened prism's near face (a metre and
+        // more in front of it), so a deck's railing in front of a rope hides
+        // it; set per vertex (no fragment depth: the test stays early).
+        let ac = vp * vec4<f32>(axis, 1.0);
+        if (ac.w > 0.05 && out.clip.w > 0.05) {
+            out.clip.z = min(out.clip.z, clamp(ac.z / ac.w, 0.0, 1.0) * out.clip.w);
+        }
+    }
     if (!(radius > 0.0)) {
         out.clip = vec4<f32>(0.0);
     }

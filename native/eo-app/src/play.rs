@@ -148,6 +148,7 @@ fn base_args() -> Args {
         landmarks2: true,
         structures: None, // `--structures` (quality::Switches)
         facade_clutter: 0, // `--facade-clutter` (quality::Switches)
+        landmark_access: true,
     }
 }
 
@@ -271,6 +272,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
             "--no-rocketbox" => a.rocketbox = false, // people
             "--no-props" => a.props = false, // props
+            "--no-landmark-access" => a.landmark_access = false, // the landmark decks and lifts
             s if a.props2.parse_flag(s) => {}
             "--no-thread-priority" => a.perf.thread_priority = false, // hitch
             "--no-submit-pacing" => a.perf.submit_pacing = false,
@@ -301,9 +303,14 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
 fn collision_world(
     world: &World,
     threads: usize,
+    access: bool,
 ) -> Result<(CollisionWorld, Option<crate::house::Door>)> {
     let lift = eo_assets::placement::PlacementConstants::load()?.construction_lift_m;
     let mut buildings = BuildingSet::from_city(&world.city, lift);
+    if access {
+        // the landmarks' decks and lifts (eo-landmarks access.rs), as a server's world has them.
+        buildings = buildings.with_decks(eo_net::game::landmark_decks(&world.elevation));
+    }
     let ground: Arc<dyn GroundProvider> = match &world.street {
         Some(s) => Arc::new(StreetGround::new(s.world.clone(), world.structures.clone())),
         None => Arc::new(ElevationGround(Arc::new(eo_data::ElevationGrid::load(&world.paths)?))),
@@ -497,7 +504,7 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
         let lead = if driving { 500.0 } else { 450.0 };
         let frames = opts.frames.unwrap_or(if driving { 3600 } else { 7200 });
         let path = from_arc(&path, (steep_s - lead).max(0.0));
-        let (mut cw, _door) = collision_world(&world, opts.collision_threads)?;
+        let (mut cw, _door) = collision_world(&world, opts.collision_threads, args.landmark_access)?;
         let mut start = DVec3::new(path[0][0], world.elevation.ground(path[0][0], path[0][1]), path[0][1]);
         let t_spawn = Instant::now();
         cw.load_blocking(start, pworld::LOAD_RADIUS_M);
@@ -765,6 +772,7 @@ mod window {
         audio: crate::audio::AudioRuntime, // the device (`--no-audio`, `--audio-null`)
         props: crate::props::PropsRuntime,
         pacer: eo_render::pace::WaitPacer, // the driver's submission spike, taken in the swapchain wait
+        fade: crate::fade::Fade, // the landmark lift's fade
     }
 
     struct App {
@@ -789,7 +797,7 @@ mod window {
 
     pub fn run(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
         let world = load_world(args)?;
-        let (mut cw, door) = collision_world(&world, opts.collision_threads)?;
+        let (mut cw, door) = collision_world(&world, opts.collision_threads, args.landmark_access)?;
         let s = crate::bench::spawn(); // the spawn on the scaled plan
         let mut feet = DVec3::new(s[0] as f64, world.elevation.ground(s[0] as f64, s[1] as f64), s[1] as f64);
         if let Some(h) = &world.house { feet = h.entry_position(); }
@@ -845,7 +853,8 @@ mod window {
             let props = crate::props::PropsRuntime::start(&self.world, &self.args);
             let pacer = eo_render::pace::WaitPacer::new(self.args.perf.submit_pacing);
             let audio = crate::audio::AudioRuntime::start(&self.world, eo_audio::Output::Device); // audio
-            self.gfx = Some(Gfx { window, surface, config, ctx, renderer, targets, models, agents, visual: Default::default(), audio, props, pacer });
+            let fade = crate::fade::Fade::new(&ctx.device, format);
+            self.gfx = Some(Gfx { window, surface, config, ctx, renderer, targets, models, agents, visual: Default::default(), audio, props, pacer, fade });
             Ok(())
         }
 
@@ -884,7 +893,8 @@ mod window {
                 }
             }
             self.player.look(frame.look_yaw, frame.look_pitch);
-            let input = StepInput::from_frame(&frame);
+            // the interact tap (a quick one between redraws too) also rides a landmark lift from its stop.
+            let input = StepInput { interact, ..StepInput::from_frame(&frame) };
             self.player.advance(&mut self.cw, &input, dt);
             let pos = self.player.position(&self.cw);
             self.cw.pump(pos);
@@ -919,6 +929,7 @@ mod window {
                 None => (&tv, None),
             };
             g.renderer.encode(&mut enc, attach, resolve, &g.targets.depth, None);
+            g.fade.draw(&mut enc, &tv, self.player.lift_fade()); // a landmark lift ride
             eo_render::pace::submit(&g.ctx.queue, [enc.finish()]); // counted
             g.window.pre_present_notify();
             g.ctx.queue.present(surf);
@@ -935,8 +946,10 @@ mod window {
                     .filter(|d| self.player.mode == Mode::OnFoot && d.in_reach(pos))
                     .map_or("", |d| d.action_hint());
                 let bed_hint = if self.player.mode == Mode::OnFoot && self.world.house.as_ref().is_some_and(|h| h.by_bed(pos)) { " - R: sleep until 07:00" } else { "" };
+                // a landmark lift's stop: the prompt leads the title (the play window has no HUD).
+                let prompt = self.player.lift_prompt(&self.cw).map(|p| format!("E: {} - ", crate::fade::prompt_text(&p))).unwrap_or_default();
                 g.window.set_title(&format!(
-                    "Earth Online native - play - {:.0} fps - {mode} {:.1} m/s - player {:.2} ms avg / {:.2} max - F: car, V: new car, Esc: mouse{door_hint}{bed_hint}",
+                    "{prompt}Earth Online native - play - {:.0} fps - {mode} {:.1} m/s - player {:.2} ms avg / {:.2} max - F: car, V: new car, E: lift, Esc: mouse{door_hint}{bed_hint}",
                     self.fps_frames as f64 / el,
                     speed,
                     self.player_ms_sum / self.fps_frames.max(1) as f64,
@@ -1387,7 +1400,7 @@ mod house_tests {
                 assert_eq!(materials.len(),2);
                 assert!(materials.iter().all(|s|table.gpu[*s as usize].layer>=0));
                 assert!(installed.iter().all(|o|o.kind & eo_render::scene::FITTED_ROOM_BIT != 0));
-                let (_, door) = collision_world(&world, 2).unwrap();
+                let (_, door) = collision_world(&world, 2, false).unwrap();
                 assert!(door.unwrap().is_shut());
                 let origin = house.point(5.95,0.,0.);
                 let depths: Vec<_>=installed.iter().map(|o|o.min[1] as f64-origin.y).collect();
@@ -1771,7 +1784,7 @@ mod house_tests {
             assert!(!panes.is_empty(), "the front windows lost their reflection");
             assert!(panes.iter().all(|o| o.kind & BLEND_BIT != 0), "glass must still transmit the furnished rooms");
         }
-        let (mut cw, door) = collision_world(&world, 2).unwrap();
+        let (mut cw, door) = collision_world(&world, 2, false).unwrap();
         let mut door = door.unwrap();
         assert!(door.is_shut());
         if furniture {

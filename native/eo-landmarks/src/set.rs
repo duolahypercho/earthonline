@@ -83,6 +83,8 @@ pub struct LandmarkSet {
     /// pier decks and piles built.
     pub piers_built: (usize, usize),
     municipal_feet: Vec<(usize, crate::waterfront::PileFeet)>,
+    /// the walkable landmark decks drawn (access.rs; None with `Options::access` off).
+    pub access: Option<std::sync::Arc<crate::access::AccessSet>>,
 }
 
 /// what the set builds beyond the first landmarks slice. All on
@@ -100,18 +102,21 @@ pub struct Options {
     /// tone, fluted tower legs, framed portal struts, full arch pylons, lamp
     /// standards. A preview, off by default; `eo-app --bridge-detail` turns it on.
     pub bridge_detail: bool,
+    /// The landmarks' walkable decks (access.rs): their floors, railings,
+    /// glazing and lamps, and the tower bands they open (`--no-landmark-access`).
+    pub access: bool,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Self { cove_detail: false, waterfront: true, buildings: true, lights: true, bridge_detail: false }
+        Self { cove_detail: false, waterfront: true, buildings: true, lights: true, bridge_detail: false, access: true }
     }
 }
 
 impl Options {
     /// As the first landmarks slice built the set.
     pub fn off() -> Self {
-        Self { cove_detail: false, waterfront: false, buildings: false, lights: false, bridge_detail: false }
+        Self { cove_detail: false, waterfront: false, buildings: false, lights: false, bridge_detail: false, access: false }
     }
 }
 
@@ -504,12 +509,17 @@ impl Landmark {
 
 /// Build one landmark (`buildLandmark`): the generator, then its draws.
 pub fn build_landmark(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: &DeckStandards, opts: Options) -> Result<Landmark> {
+    build_landmark_opened(js, id, ground, ca, opts, false)
+}
+
+/// `build_landmark`; `open`: the tower bands the access decks replace are left out (towers.rs `build_opened`).
+pub fn build_landmark_opened(js: &LandmarksJs, id: &str, ground: &GroundGrid, ca: &DeckStandards, opts: Options, open: bool) -> Result<Landmark> {
     let t0 = Instant::now();
     let built: Built = match id {
-        "golden-gate-bridge" => golden_gate::build_with(js, ground, ca, opts.bridge_detail),
-        "bay-bridge-west" => bay_bridge::build(js, ground, ca),
+        "golden-gate-bridge" => golden_gate::build_opened(js, ground, ca, opts.bridge_detail, open),
+        "bay-bridge-west" => bay_bridge::build_opened(js, ground, ca, open),
         // the landmark buildings (towers.rs).
-        other => match crate::towers::build(other, &js.buildings[other], ground) {
+        other => match crate::towers::build_opened(other, &js.buildings[other], ground, open) {
             Some(o) => Built { id: other.into(), version: o.version, groups: o.groups, far: o.far, skirt: Frozen::default(), colliders: o.colliders, stats: o.stats },
             None => anyhow::bail!("eo-landmarks: no generator for {other}"),
         },
@@ -599,7 +609,7 @@ impl LandmarkSet {
                         let d = ground_scale_shift(js, id);
                         let shifted = |x: f64, z: f64| height_at(x + d[0], z + d[1]);
                         let ground = if d == [0.0, 0.0] { ground_of(js, id, height_at) } else { ground_of(js, id, &shifted) };
-                        let mut l = build_landmark(js, id, &ground, std, opts)?;
+                        let mut l = build_landmark_opened(js, id, &ground, std, opts, opts.access && opts.buildings)?;
                         l.translate(d);
                         Ok::<Landmark, anyhow::Error>(l)
                     })
@@ -779,6 +789,16 @@ impl LandmarkSet {
         };
         let mut landmarks = landmarks;
         landmarks.extend(railing_landmark);
+        // the walkable decks (access.rs) on the grounds the landmarks stand on.
+        let (mut lights, mut structures) = (lights, structures);
+        let access = if opts.access && opts.buildings {
+            let a = crate::access::AccessSet::build(height_at);
+            structures.extend(a.structures());
+            lights.extend(a.lights());
+            Some(std::sync::Arc::new(a))
+        } else {
+            None
+        };
         Ok(Self {
             landmarks,
             lights,
@@ -791,6 +811,7 @@ impl LandmarkSet {
             census,
             piers_built,
             municipal_feet,
+            access,
         })
     }
 

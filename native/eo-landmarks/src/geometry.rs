@@ -84,6 +84,10 @@ pub struct Frozen {
     pub radii: Option<Vec<f32>>,
     pub min_y: f64,
     pub max_y: f64,
+    /// A landmark deck's interior surfaces only (access_sky.rs): each
+    /// vertex's baked sky visibility, 0..1, which the city shader spends on
+    /// its indirect light; None elsewhere (the open sky).
+    pub sky: Option<Vec<f32>>,
 }
 
 impl Frozen {
@@ -401,6 +405,7 @@ impl MeshArrays {
             radii: self.wire.then(|| f(&self.radii)),
             min_y: self.min_y,
             max_y: self.max_y,
+            sky: None,
         }
     }
 }

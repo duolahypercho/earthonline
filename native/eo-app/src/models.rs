@@ -208,6 +208,8 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
     let features = eo_render::look::ShaderFeatures::of(&args.look, crate::structures::drawn(world).is_some(), args.structures.as_ref().is_some_and(|s| s.tunnels), args.facade_clutter > 0);
     // the playable house's materials, lights and optics: with the house loaded (`--beaver-house`, `--house-*`).
     let features = eo_render::look::ShaderFeatures { house: world.house.is_some(), ..features };
+    // the landmark decks' rooms and the player on them: with the decks built (`--no-landmark-access` builds none).
+    let features = eo_render::look::ShaderFeatures { landmark_access: world.landmarks.as_ref().is_some_and(|l| l.access), ..features };
     let mut features = if std::env::var("EO_SHADER_FEATURES").is_ok_and(|v| v == "all") { eo_render::look::ShaderFeatures::ALL } else { features };
     for w in std::env::var("EO_SHADER_FEATURES").unwrap_or_default().split(',') {
         match w {
@@ -221,6 +223,7 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
             "cinematic" => features.cinematic = true, // (`--look cinematic`, stage L0)
             "house" => features.house = true,
             "blender_camera" => features.blender_camera = true,
+            "landmark_access" => features.landmark_access = true,
             _ => {}
         }
     }
@@ -252,9 +255,11 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
             sample_count: args.msaa,
             multiplier: args.multiply,
             debug_ids,
-            // Hand-placed house panes can precede the streamed model arena.
+            // Hand-placed house panes and the landmark decks' glazing (eo-render landmarks.rs
+            // `blend_first`) can precede the streamed model arena.
             blend_first_object: world.scene.objects.iter().position(|o| o.kind & eo_render::scene::BLEND_BIT != 0)
-                .map_or(models.object, |index| index as u32),
+                .map_or(models.object, |index| index as u32)
+                .min(world.landmarks.as_ref().and_then(|l| l.blend_first).unwrap_or(u32::MAX)),
         },
     )?;
     // the house's first layer in the texture array: after the kit's bake and the shore rock (main.rs `load_world`).
@@ -346,6 +351,8 @@ pub fn make_renderer(ctx: &GpuContext, world: &World, args: &Args, format: wgpu:
         }
     }
     if let Some(l) = &world.landmarks {
+        // the wire members round and depth-true with the landmark decks (`--no-landmark-access`: as before).
+        eo_render::landmarks::ROUND_WIRES.store(args.landmark_access, std::sync::atomic::Ordering::Relaxed);
         r.bytes.vertex += r.attach_landmark_wires(ctx, &l.wire_vertices, &l.wire_indices); // the wire members
     }
     // the sea over the terrain grid's extent (where the flat sea quad was).

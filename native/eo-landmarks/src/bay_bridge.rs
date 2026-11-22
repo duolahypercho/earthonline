@@ -179,8 +179,10 @@ fn frame_rect(f: &Frame, c: f64, s: f64, half_along: f64, half_across: f64) -> V
     [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0], [-1.0, 1.0]].iter().map(|[a, b]| f.point(c + a * half_along, s + b * half_across)).collect()
 }
 
+/// `first_top_by_deck` (landmark access, access.rs): the first tower's (W2's)
+/// top is the deck's, which draws its saddle housings; the `members` pass leaves its own out there.
 #[allow(clippy::too_many_arguments)]
-fn towers(js: &LandmarksJs, p: &Plan, f: &Frame, k: &Colours, h: f64, ground: &dyn Fn(f64, f64) -> f64, steel: &mut MeshArrays, concrete: &mut MeshArrays, skirt: &mut MeshArrays, far: &mut MeshArrays) {
+fn towers(js: &LandmarksJs, p: &Plan, f: &Frame, k: &Colours, h: f64, ground: &dyn Fn(f64, f64) -> f64, steel: &mut MeshArrays, concrete: &mut MeshArrays, skirt: &mut MeshArrays, far: &mut MeshArrays, first_top_by_deck: bool) {
     let b = &data(js);
     let m = crate::golden_gate::structure_scale();
     let detail = crate::suspension::features().detail;
@@ -190,7 +192,7 @@ fn towers(js: &LandmarksJs, p: &Plan, f: &Frame, k: &Colours, h: f64, ground: &d
     let pier_top = w + num(d, "pierTopAboveWaterM");
     let floor = w + NEAR_FLOOR_ABOVE_SEA_M;
     let truss_depth = num(d, "trussDepthM");
-    for (_, [cx, cz], tc) in &p.towers {
+    for (ti, (_, [cx, cz], tc)) in p.towers.iter().enumerate() {
         let (cx, cz, tc) = (*cx, *cz, *tc);
         let bed = ground(cx, cz).min(w - 2.0);
         let [along, across] = pair(d, "pierPlanM");
@@ -248,7 +250,7 @@ fn towers(js: &LandmarksJs, p: &Plan, f: &Frame, k: &Colours, h: f64, ground: &d
         }
         steel.beam(f.P(tc, -h, top - 3.5 * m), f.P(tc, h, top - 3.5 * m), 4.0 * m, 7.0 * m, k.steel);
         far.beam(f.P(tc, -h, top - 3.5 * m), f.P(tc, h, top - 3.5 * m), 4.0 * m, 7.0 * m, k.steel);
-        if members {
+        if members && !(ti == 0 && first_top_by_deck) {
             // the cable saddles' housings over the legs' tops (the saddle `saddleBelowTopM` under the top).
             let [_, wd, dp] = TIERS[TIERS.len() - 1];
             for s in [-h, h] {
@@ -401,6 +403,12 @@ fn end_portals(js: &LandmarksJs, p: &Plan, f: &Frame, k: &Colours, h: f64, cable
 
 /// `buildBayBridgeWest`.
 pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built {
+    build_opened(js, ground, ca, false)
+}
+
+/// `build`; `open` (landmark access, access.rs): the W2 tower's top is the
+/// deck's (its saddle housings with it).
+pub fn build_opened(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards, open: bool) -> Built {
     let features = crate::suspension::features();
     let bd = data(js);
     let b = &bd;
@@ -435,7 +443,7 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
     let gap = |c0: f64, c1: f64| centres.iter().any(|&t| c1 > t - zone_half && c0 < t + zone_half);
     let cables = cable_runs(js, &p);
 
-    towers(js, &p, &f, &k, h, &ground_at, &mut steel, &mut concrete, &mut skirt, &mut far);
+    towers(js, &p, &f, &k, h, &ground_at, &mut steel, &mut concrete, &mut skirt, &mut far, open);
     center_anchorage(js, &p, &f, &k, h, &cables, &ground_at, &mut concrete, &mut steel, &mut skirt, &mut far);
     suspension::main_cables(&mut wires, &mut far, &f, &cables.runs, &CableSpec { half_plane: h, diameter: num(d, "cableDiameterM"), colour: k.steel, far_beams: !features.wires });
     let suspenders = suspension::suspender_pairs(
@@ -493,6 +501,7 @@ pub fn build(js: &LandmarksJs, ground: &GroundGrid, ca: &DeckStandards) -> Built
                 gap: &|_, _| false,
                 colours,
                 markings: true,
+                outer_railing_elsewhere: None,
             },
         );
     }

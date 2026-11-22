@@ -9,6 +9,7 @@ publish = false
 anyhow = "1.0.104"
 eo-assets = { path = "../eo-assets" }
 eo-data = { path = "../eo-data" }
+eo-landmarks = { path = "../eo-landmarks" } # landmark access: the decks a server and its clients share
 eo-player = { path = "../eo-player" }
 eo-structures = { path = "../eo-structures" } # structures: the handshake's world setting
 glam = "0.34.3"

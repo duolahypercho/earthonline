@@ -125,11 +125,13 @@ Fly-through (default):
 | C or Ctrl | Crouch | Look behind (C) |
 | Space | Jump | Handbrake |
 | F | Enter a car within reach | Get out |
+| E | At a landmark's lift stop: ride up to its deck, or back down | |
 | V | Place a new car ahead (a test helper) | |
 | Esc | Release the mouse; press again to quit | |
 
 The title bar shows the frame rate, and in `--play` the mode, speed and the
-player step time.
+player step time; at a lift stop it starts with the lift's prompt (in
+`--connect` the prompt is the HUD's).
 
 ### Online
 
@@ -321,7 +323,10 @@ digits, `-`, `_`, `.`; it names the files) and one pose:
 - Optional: `fov` (degrees, default 52, the game camera's), `far` (metres;
   default `--far` if given, else 20000 m so a view across the city is not
   cut short), `time_of_day`, `weather` (`clear`, `overcast`, `fog`,
-  `drizzle`, `rain`, `storm`), `what`, and keys starting with `_` (comments).
+  `drizzle`, `rain`, `storm`), `what`, `person` (`{"feet": [x, y, z],
+  "heading": degrees}`: the player's body standing there, the simulated
+  people beside it hidden; `eo-landmarks`' `access_shots` example writes one
+  such shot per landmark deck), and keys starting with `_` (comments).
   Any other key is an error.
 
 Latitude, longitude and height go to game coordinates through
@@ -394,6 +399,7 @@ selection:
 | Black Point rockweed | `--black-point-rockweed` models forked blades with raised midribs and thickened tips on the rocky habitat. `--no-black-point-rockweed` uses the original ribbons. Blade margins transmit more backlight than the thicker rib. The geometry follows the form described by [Stanford’s Hopkins Marine Station](https://seanet.stanford.edu/brown) and the habitat reported by a [central Bay shoreline survey](https://escholarship.org/uc/item/8jt3v8mk). Individual plants are illustrative. |
 | Dive exposure | `--dive-exposure` compensates for the loss of downwelling light at the eye. `--no-dive-exposure` restores the original exposure |
 | Bridge detail | `--bridge-detail` enables the Golden Gate detail preview (a darker paint tone, ribbed tower legs, framed portal struts, full arch pylons, lamp standards), each part drawn only where the bridges' own passes (Bridges, below) leave it as exported; left out, the preview is off. `--no-bridge-detail` is not its off form: it is the bridges' own detail switch (Bridges), so with both the preview's legs and portal struts stand in for that pass |
+| Landmark decks | `--no-landmark-access` (the decks, their lifts and the tower bands and tower tops they take over; the collision world without them; the rooms' camera meter and the player's deck occlusion, whose shader terms compile out, `SF_LANDMARK_ACCESS`) |
 | People | `--no-rocketbox`, `--no-rocketbox-motions` (either one: no people) |
 | Props | `--no-props2`, `--no-furniture`, `--no-eztree`, `--no-wires`, `--no-overhead`, `--no-lamp-sprites`, `--no-stand-ins`, `--no-furniture-models` (a furniture kind whose GLB is not in the checkout draws as a 0.3 m box at its height, not its model drawn in code) |
 | Bridges | `--no-bridges2` (all of these), `--no-bridge-scale`, `--no-bridge-paint`, `--no-bridge-detail`, `--no-bridge-wires`, `--no-bridge-night`; the second pass: `--no-bridges3` (all of its), `--no-bridge-air`, `--no-bridge-finish`, `--no-bridge-members`, `--no-bridge-floods`, `--no-bridge-curtain` |
@@ -1005,6 +1011,29 @@ standards and the west span's floor system and laced tower bracing
 floods above and below the roadway and plays the suspender LEDs in bands
 (`--no-bridge-floods`); and veils a receding suspender curtain at its mean
 cover (`--no-bridge-curtain`).
+Eight landmarks can be entered (`eo-landmarks/src/access.rs`, every height
+cited there): Coit Tower's gallery in its glazed arcade, Salesforce Tower's
+glazed top floor, the Transamerica Pyramid's 48th-floor room under the
+spire, the Golden Gate Bridge's east sidewalk along the span and the south
+tower's top, the Bay Bridge's W2 tower top, Sutro Tower's upper platform and
+City Hall's lantern gallery. Each deck is drawn (floor, railings or glazing,
+parapets, lamps) and is in the collision world with the same geometry, and a
+lift at the ground entrance takes the player up and down (E, a short fade).
+The enclosed decks' interiors carry a baked sky visibility through their
+openings (`access_sky.rs`), the camera meter opens up inside them
+(`eo-render/src/deck_rooms.rs`; on the dome-estimate meter,
+`--no-scene-meter`: the scene meter reads the room in the drawn frame),
+and on a deck the player's body occludes the floor's indirect light
+(`landmarks_deck.wgsl`). With the decks the Golden Gate leaves its east
+sidewalk railing and its south tower's saddle housings, and the west span
+its W2 tower's, to the decks, which stand on the bridges as drawn (their
+scaled heights and paint); the decks' rope sockets give way to the
+bridges' own.
+The ride is part of the player's fixed step and state, so a server runs it
+from the same input (protocol 3 carries the tap) and the client agrees bit
+for bit. The Ferry Building's clock-tower balcony is not built
+(`ferry_building.rs` draws the tower, not yet a deck on it); Twin Peaks'
+summit is open ground the player already walks.
 
 **Traffic and people.** `eo-sim` runs traffic on the street graph with
 signals and junction rules, and pedestrians on the sidewalks and crossings,

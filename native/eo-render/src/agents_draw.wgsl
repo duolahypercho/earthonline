@@ -210,7 +210,11 @@ const AG_CINE_COAT_GRIME_ROUGH: f32 = 0.35;
 
 // Every agent but those in a tunnel's bore: the city's light rig (look_light.wgsl).
 fn ag_shade(in: AgOut) -> vec4<f32> {
-    let g = ag_surface(in, false);
+    var g = ag_surface(in, false);
+    if (SF_LANDMARK_ACCESS) {
+        // in a landmark deck's room, the room's sky (landmarks_deck.wgsl).
+        g.s.ao = g.s.ao * deck_room_vis(in.world);
+    }
     if (SF_CINEMATIC && (g.m.flags & AG_M_PAINT) != 0u && sky_on(skyu.flags.x, SKY_CINEMATIC)) {
         let grime = clamp((g.s.rough - materials[in.material].params.x) / 0.4, 0.0, 1.0);
         sky_coat = 1.0;
