@@ -13,6 +13,18 @@
 //! * contrast (`EO_ROOF_CONTRAST=off`, `--no-roof-contrast`): a roof whose
 //!   lightness sits within 0.08 (OKLab) of its walls is moved 0.08 away from
 //!   them, keeping its hue, so a roof reads as a roof against its own walls.
+//! * neutral (`EO_ROOF_NEUTRAL=off`, `--no-roof-neutral`): the measurement's
+//!   lightness is kept and its colour cast taken off. NAIP is natural-colour
+//!   orthoimagery balanced for appearance, not surface reflectance (USDA FSA
+//!   NAIP information sheet: 4-band imagery, no atmospheric correction), and
+//!   over the city its roofs carry the path radiance's blue-violet cast: over
+//!   the table's confident entries the mean OKLab (a, b) is (+0.0023,
+//!   -0.0029), magenta-blue, which under the warm sun drew a pink-lavender
+//!   city of roofs. Flat roofs are white or grey membranes, grey cap sheet,
+//!   gravel ballast and dark bitumen, all near neutral (a gravel or aged
+//!   membrane slightly warm); a measured warm hue (OKLab hue 15-95 degrees,
+//!   chroma over 0.025: clay tile, a red-brown composition roof, rusted
+//!   metal) keeps its hue with its chroma held to `ROOF_WARM_CHROMA_MAX`.
 
 use crate::pipeline::Tints;
 use eo_data::roof_colours::{self as rc, RoofMeasure};
@@ -69,6 +81,48 @@ pub fn material_colour(name: &str) -> Option<[f32; 3]> {
         .copied()
 }
 
+/// OKLab chroma a warm measured roof keeps at most (a weathered clay barrel
+/// tile, sRGB about #a8735b, is about 0.08).
+pub const ROOF_WARM_CHROMA_MAX: f32 = 0.08;
+/// The slight warm b of a neutral roof (OKLab): gravel ballast and aged
+/// membranes are warm greys, not blue ones.
+pub const ROOF_NEUTRAL_B: f32 = 0.003;
+
+/// The measured roof colour without the imagery's cast (see the module
+/// notes); unchanged with `EO_ROOF_NEUTRAL=off`.
+pub fn neutral(target: [f32; 3]) -> [f32; 3] {
+    if !feature_on("neutral") {
+        return target;
+    }
+    let mut l = rc::oklab(target);
+    let c = l[1].hypot(l[2]);
+    let h = l[2].atan2(l[1]).to_degrees();
+    if c > 0.025 && (15.0..=95.0).contains(&h) {
+        let k = (ROOF_WARM_CHROMA_MAX / c).min(1.0);
+        l[1] *= k;
+        l[2] *= k;
+    } else {
+        l[1] = 0.0;
+        l[2] = ROOF_NEUTRAL_B * (l[0] / 0.65).min(1.0);
+    }
+    rc::oklab_to_linear(l).map(|v| v.clamp(0.0, 1.0))
+}
+
+/// The colour a roof is drawn toward: the measurement without its cast,
+/// moved off its walls when the two are close.
+pub fn target(m: &RoofMeasure, wall: Option<[f32; 3]>) -> [f32; 3] {
+    let mut target = neutral(rc::rgb8_linear(m.rgb));
+    if feature_on("contrast") {
+        target = separated(target, wall);
+    }
+    target
+}
+
+/// A tag for the kit tile cache key: the neutral rule when on.
+pub fn cache_tag() -> String {
+    if rc::table().is_some() && feature_on("neutral") { "roof-neutral-v1".into() } else { String::new() }
+}
+
 /// How much of the measurement a roof takes, from its confidence.
 pub fn weight(confidence: f32) -> f32 {
     ((confidence - 0.25) / 0.35).clamp(0.0, 1.0)
@@ -98,10 +152,7 @@ pub fn apply(materials: &mut BTreeMap<String, String>, tints: &mut Tints, m: &Ro
         let t = tints.get(&n).copied().map(hex_linear).unwrap_or([1.0; 3]);
         [c[0] * t[0], c[1] * t[1], c[2] * t[2]]
     });
-    let mut target = rc::rgb8_linear(m.rgb);
-    if feature_on("contrast") {
-        target = separated(target, wall);
-    }
+    let target = target(m, wall);
     if flat_finish {
         let asphalt = material_colour("asphalt-roof").map(rc::oklab).map(|l| l[0]).unwrap_or(0.4);
         let name = if rc::oklab(target)[0] > asphalt + 0.06 { "membrane-roof" } else { "asphalt-roof" };
@@ -145,7 +196,8 @@ mod tests {
         let t = hex_linear(tints["membrane-roof"]);
         let mean = material_colour("membrane-roof").unwrap();
         let got = [t[0] * mean[0], t[1] * mean[1], t[2] * mean[2]];
-        let want = rc::rgb8_linear([150, 152, 155]);
+        // the measurement, its imagery cast taken off (`neutral`; as measured with it off).
+        let want = neutral(rc::rgb8_linear([150, 152, 155]));
         for k in 0..3 {
             assert!((got[k] - want[k]).abs() < 0.01, "{got:?} {want:?}");
         }
@@ -166,6 +218,24 @@ mod tests {
         let mut tints = Tints::new();
         apply(&mut mats, &mut tints, &measure([60, 60, 60], 1.0), false);
         assert!(tints.is_empty());
+    }
+
+    #[test]
+    fn the_imagery_cast_is_taken_off_and_warm_roofs_keep_their_hue() {
+        if !feature_on("neutral") {
+            return;
+        }
+        // A lavender grey (the mean cast) goes neutral at its own lightness.
+        let lav = rc::rgb8_linear([168, 162, 172]);
+        let n = rc::oklab(neutral(lav));
+        assert!((n[0] - rc::oklab(lav)[0]).abs() < 1e-3);
+        assert!(n[1].abs() < 1e-3 && n[2] >= 0.0 && n[2] <= ROOF_NEUTRAL_B + 1e-4, "{n:?}");
+        // A clay tile roof keeps its hue, its chroma held.
+        let tile = rc::rgb8_linear([180, 97, 63]);
+        let t = rc::oklab(neutral(tile));
+        let o = rc::oklab(tile);
+        assert!((t[2].atan2(t[1]) - o[2].atan2(o[1])).abs() < 0.01);
+        assert!(t[1].hypot(t[2]) <= ROOF_WARM_CHROMA_MAX + 1e-3);
     }
 
     #[test]

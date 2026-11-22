@@ -1752,7 +1752,15 @@ fn shade(in: VOut) -> vec4<f32> {
             wx_window_life_pre(vec4<f32>(in.color, in.aux.y), in.world, ng_out, in.object, room); // stage W5 (`--street-life`, weathering.wgsl): the wall beside, sill plants, a vacant shop
         }
         let r = rm_kit_pane(vec4<f32>(in.color, in.aux.y), in.world, ng_out, frame.cam_pos.xyz, room, look.rooms_env, look.rooms_work, objects[in.object].lod_group); // + the building's group: its shop fronts (stage N2, `--shop-light`)
-        s.albedo = mix(s.albedo, r.day.xyz, r.day.w);
+        // By day the room is lit through the pane and seen back through it:
+        // its share goes as the glass's Tv squared against the clear unit's
+        // (rooms.rs `pane_transmittance`; no Tv bits: as before).
+        var through = 1.0;
+        if (RM_PANE_TV) { // (`--no-pane-transmittance` compiles it out)
+            let tv = f32((m.flags >> RM_PANE_TV_SHIFT) & 15u) / 15.0;
+            through = select(1.0, min(tv * tv / (RM_PANE_TV_REFERENCE * RM_PANE_TV_REFERENCE), 1.0), tv > 0.0);
+        }
+        s.albedo = mix(s.albedo, r.day.xyz * through, r.day.w);
         s.metal = mix(s.metal, s.metal * 0.3, r.day.w);
         // A blended pane's room reads at full strength after the blend (1 / opacity, floored at 0.25).
         let transmission = select(1.0, 1.0 / max(0.25, m.base.a), (m.flags & F_BLEND) != 0u);
@@ -2141,7 +2149,11 @@ fn shade(in: VOut) -> vec4<f32> {
         ft_facade(&s, &m, in.world, normalize(in.normal), in.ft, ft_du, in.object, cc0_drx, cc0_dry);
     }
     if ((objects[in.object].kind & 255u) == 0u) {
-        rm_emit = rm_emit + sky_far_windows(in.world, n, in.object, dpx, dpy); // lit windows on the far boxes
+        if (SF_FAR_FACADE && fb_on(in)) {
+            rm_emit = rm_emit + fb_apply(&s, in, n, v, dpx, dpy, cc0_daux * 127.0); // the far box's facade (far_box.wgsl; `--no-far-facade` compiles it out)
+        } else {
+            rm_emit = rm_emit + sky_far_windows(in.world, n, in.object, dpx, dpy); // lit windows on the far boxes
+        }
     }
 
     if ((cc0_terrain || (bed_surface && in.aux.y > 0.5)) && look.cove.x > 0.0 && in.world.y < LM_SEA_LEVEL_Y + 0.035) {

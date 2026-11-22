@@ -24,6 +24,7 @@ pub mod counted; // the count-driven draws where MULTI_DRAW_INDIRECT_COUNT is mi
 pub mod cc0; // the CC0 scanned sets
 pub mod cc0_decals; // street wear decals
 pub mod facade; // facade
+pub mod far_box; // the far box's facade
 pub mod far_shadow; // the far sun shadow hook (lighting)
 pub mod far_city; // the far layer's fallback draw path and the built city's switches
 pub mod ground2; // the open ground from the measured ground-green table

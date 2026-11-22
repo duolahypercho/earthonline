@@ -24,6 +24,7 @@ pub mod city;
 pub mod classify;
 pub mod clutter; // facade clutter (`--facade-clutter`): fire escapes, awnings, signs, services, roof clutter
 pub mod elevation;
+pub mod far_facade; // the far box's facade from the archetype's own spec
 pub mod frame;
 pub mod js;
 pub mod lod;
@@ -37,7 +38,15 @@ pub mod row_house;
 pub mod shop_ground;
 pub mod street;
 pub mod tenancy;
+pub mod typology; // the window module and a tower's facade system per building
 pub mod wall_paint; // the wall paint per building on a neutral primer
+
+/// The kit's rule switches for the tile cache key (typology, the measured
+/// roofs' neutral rule; the wall paint has its own `wall_paint::cache_tag`):
+/// empty with all of them off.
+pub fn rules_cache_tag() -> String {
+    [typology::cache_tag(), roof_measured::cache_tag()].into_iter().filter(|t| !t.is_empty()).collect::<Vec<_>>().join("+")
+}
 
 use std::collections::HashMap;
 use std::path::PathBuf;

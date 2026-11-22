@@ -245,6 +245,7 @@ mod tests {
         sets.push(("player contact".into(), look::ShaderFeatures { player_contact: true, ..none })); // (`--connect`: other players' ground contact)
         sets.push(("photo mode".into(), look::ShaderFeatures { photo_mode: true, ..none })); // (photo mode, `--no-photo-mode`)
         sets.push(("landmark access".into(), look::ShaderFeatures { landmark_access: true, ..none })); // (the landmark decks; `--no-landmark-access`)
+        sets.push(("no far facade".into(), look::ShaderFeatures { far_facade: false, ..none })); // (`--no-far-facade`)
         sets
     }
 

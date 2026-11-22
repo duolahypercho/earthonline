@@ -765,10 +765,7 @@ fn roof_measure(ctx: &BakeContext, b: u32) -> Option<(eo_data::roof_colours::Roo
 
 /// the roof colour toward the measured one (moved off the walls' lightness when close).
 fn measured_roof(old: [f32; 3], wall: [f32; 3], m: &eo_data::roof_colours::RoofMeasure, w: f32) -> [f32; 3] {
-    let mut target = eo_data::roof_colours::rgb8_linear(m.rgb);
-    if eo_kit::roof_measured::feature_on("contrast") {
-        target = eo_kit::roof_measured::separated(target, Some(wall));
-    }
+    let target = eo_kit::roof_measured::target(m, Some(wall)); // the imagery's cast off (EO_ROOF_NEUTRAL)
     [0, 1, 2].map(|k| old[k] + (target[k] - old[k]) * w)
 }
 
@@ -779,7 +776,7 @@ fn roof_patch(m: &eo_data::roof_colours::RoofMeasure, w: f32) -> Option<([f32; 3
     if !eo_data::roof_colours::feature_on("patches") || w < 0.5 || m.second_share < 0.15 || len < 0.15 {
         return None;
     }
-    Some((eo_data::roof_colours::rgb8_linear(m.second), [d[0] / len, d[1] / len], m.second_share.min(0.6)))
+    Some((eo_kit::roof_measured::neutral(eo_data::roof_colours::rgb8_linear(m.second)), [d[0] / len, d[1] / len], m.second_share.min(0.6)))
 }
 
 /// rung 2 roof plant kinds of which the largest two per building are kept in the far mesh.

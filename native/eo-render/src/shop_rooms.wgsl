@@ -105,12 +105,15 @@ fn sr_front(group: u32, pos: vec3<f32>, n: vec3<f32>) -> SrFront {
     let first = e >> 8u;
     let count = e & 255u;
     let nh = n.xz / max(length(n.xz), 1e-6);
+    // where two fronts meet at a corner, the pane belongs to the one it faces most squarely (the first of equals).
+    var best = -2.0;
     for (var r = 0u; r < count; r = r + 1u) {
         let a = lx_shop_fronts[h.z + 2u * (first + r)];
         let b = lx_shop_fronts[h.z + 2u * (first + r) + 1u];
         let turn = f32(a.w & 0xffffu) / SR_HEADING_STEPS * 6.2831853;
         let rn = vec2<f32>(cos(turn), sin(turn));
-        if (dot(rn, nh) < SR_FACING) {
+        let facing = dot(rn, nh);
+        if (facing < SR_FACING || facing <= best) {
             continue;
         }
         let q = pos.xz - vec2<f32>(bitcast<f32>(a.x), bitcast<f32>(a.y));
@@ -121,6 +124,7 @@ fn sr_front(group: u32, pos: vec3<f32>, n: vec3<f32>) -> SrFront {
         if (abs(off) > SR_PLANE || s < s0 || s > s1) {
             continue;
         }
+        best = facing;
         f.found = true;
         f.s0 = s0;
         f.s1 = s1;
@@ -136,7 +140,6 @@ fn sr_front(group: u32, pos: vec3<f32>, n: vec3<f32>) -> SrFront {
         f.work = ((b.z >> 14u) & 1u) != 0u;
         f.key = b.w;
         f.lum = f32((b.z >> 16u) & 255u);
-        return f;
     }
     return f;
 }

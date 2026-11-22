@@ -509,7 +509,7 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-atlas2" => a.look.facade &= !eo_render::facade::RUN_ATLAS2, // facade
             "--no-probe" => a.look.facade &= !eo_render::facade::RUN_PROBE, // facade
             "--no-rooms" => a.look.facade &= !eo_render::facade::RUN_ROOMS, // no room behind kit glazing
-            "--no-room-frames" | "--no-room-dim" => {} // read by eo_render::rooms::wgsl_constants
+            "--no-room-frames" | "--no-room-dim" | "--no-room-blind-runs" | "--no-pane-transmittance" => {} // read by eo_render::rooms (wgsl_constants, pane_tv_flags)
             // near kit buildings as their envelope box ("box"), or the box with the shader-only facade ("shader").
             "--facade-test" => match val()?.as_str() {
                 "box" => eo_render::kit::FACADE_TEST.store(1, std::sync::atomic::Ordering::Relaxed),
@@ -678,6 +678,11 @@ fn parse_args_from(raw: &[String]) -> Result<Args> {
             "--no-roof-colours" | "--no-roof-contrast" | "--no-roof-parapet" | "--no-roof-patches" | "--no-roof-plant" => {}
             "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" | "--no-ground-beach-fit" => {} // `roofs_flags`
             "--no-external" => {} // read by `external_flag` (main): the optional sets only from their variables
+            "--no-far-facade" => {} // `roofs_flags`: the far boxes as before (eo-render far_box.rs)
+            "--no-period-paint" => {} // `roofs_flags`: the timber rows' period paint at its finish's luminance (eo-kit wall_paint.rs)
+            // `roofs_flags`: one window module per archetype (eo-kit typology.rs), uncapped wall chroma
+            // (wall_paint.rs), the measured roofs' cast kept (roof_measured.rs), the far box's flat cap (far_box.rs).
+            "--no-facade-typology" | "--no-wall-chroma" | "--no-roof-neutral" | "--no-far-roofs" => {}
             // the Golden Gate photo-realism pass's switches, each read by its crate from the command line
             // (the bridges' own are in eo_landmarks::suspension::SWITCHES, above).
             "--no-gg2-camera" | "--no-camera-look" | "--no-scene-meter" | "--no-lamp-photocell" => {} // read by its crate (the camera)
@@ -1502,6 +1507,12 @@ fn roofs_flags() {
         ("--no-roof-patches", "EO_ROOF_PATCHES"),
         ("--no-roof-plant", "EO_ROOF_PLANT"),
         ("--no-wall-paint", "EO_WALL_PAINT"),
+        ("--no-far-facade", "EO_FAR_FACADE"),
+        ("--no-period-paint", "EO_PERIOD_PAINT"),
+        ("--no-facade-typology", "EO_FACADE_TYPOLOGY"),
+        ("--no-wall-chroma", "EO_WALL_CHROMA"),
+        ("--no-roof-neutral", "EO_ROOF_NEUTRAL"),
+        ("--no-far-roofs", "EO_FAR_ROOFS"),
         ("--no-ground-green", "EO_GROUND_GREEN"),
         ("--no-ground-hills", "EO_GROUND_HILLS"),
         ("--no-ground-contact", "EO_GROUND_CONTACT"),

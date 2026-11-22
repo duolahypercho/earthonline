@@ -501,7 +501,7 @@ selection:
 | Props | `--no-props2`, `--no-furniture`, `--no-eztree`, `--no-wires`, `--no-overhead`, `--no-lamp-sprites`, `--no-stand-ins`, `--no-furniture-models` (a furniture kind whose GLB is not in the checkout draws as a 0.3 m box at its height, not its model drawn in code), `--no-street-props-v2` (the v1 street-prop files the JS lists, drawn as proxies or stand-ins where the checkout lacks them, as before the v2 models) |
 | Bridges | `--no-bridges2` (all of these), `--no-bridge-scale`, `--no-bridge-paint`, `--no-bridge-detail`, `--no-bridge-wires`, `--no-bridge-night`; the second pass: `--no-bridges3` (all of its), `--no-bridge-air`, `--no-bridge-finish`, `--no-bridge-members`, `--no-bridge-floods`, `--no-bridge-curtain` |
 | Harbours | `--no-floating-docks` (no floats along the harbours' pier lines, and so no berths or boats), `--no-boats` (the floats without the moored boats; `--no-props2` also leaves them out) |
-| Buildings | `--no-facade-detail`, `--no-facade-age`, `--no-rooms`, `--no-room-frames`, `--no-room-dim`, `--no-roof-colours`, `--no-roof-plant`, `--no-roof-parapet`, `--no-roof-patches`, `--no-wall-paint` |
+| Buildings | `--no-facade-detail`, `--no-facade-age`, `--no-rooms`, `--no-room-frames`, `--no-room-dim`, `--no-roof-colours`, `--no-roof-plant`, `--no-roof-parapet`, `--no-roof-patches`, `--no-roof-neutral`, `--no-wall-paint`, `--no-period-paint`, `--no-wall-chroma`, `--no-facade-typology`, `--no-room-blind-runs`, `--no-pane-transmittance`, `--no-far-facade`, `--no-far-roofs` |
 | Landmarks | `--no-landmarks2`, `--no-towers2` (the five landmark buildings as the JS export's generators built them), `--no-skyline` (the named skyline towers back to the kit), `--no-towers3` (the landmark buildings' and skyline towers' third pass off: the lit band in place of the projector floodlights, the previous glazing, night windows and crown, base truss, Coit shaft, City Hall granite and Sutro lattice, and the groves), `--no-grove` (the tree canopy of Pioneer Park round Coit Tower and of Mount Sutro round Sutro Tower off), `--no-towers4` (the fourth pass off, the third's output: Salesforce's crown fins, sunshades and perforated panels with Day for Night's walkers, the facades' fin and reveal sun shadows, spandrel and pier finishes, 555 California's carnelian, the coated-aluminium spires and braces, City Hall's gold leaf and drum floods, and the groves' summit clearing, species forms, forest floor and Coit loop lamps) |
 | Ground | `--no-ground-hills`, `--no-ground-green`, `--no-ground-contact`, `--no-ground-beach-fit` (the sand round a mapped beach spreads as the JS rule does: over lawns and paving mapped beside it and along a seawall's quay), `--no-terrain-lod` |
 | Water | `--no-water` (the flat sea plane), `--no-water-instanced` (the pass needs multi-draw-indirect-count, as before; without it the flat sea plane), `--no-water-brdf` (the earlier Fresnel, roughness, sun lobe and reflection march), `--no-water-body` (the earlier body colour), `--no-water-foam-cover` (the earlier whitecap cover and foam sampling), `--no-water-glint` (the earlier hashed sparkle), `--no-water-turbid` (the earlier three-wavelength body), `--no-water-shore` (the earlier waterline, wall collar and the lift under piers), `--no-water-foam-lit` (the earlier whitecap shapes and foam light), `--no-water-ppr` (the reflection march alone), `--no-water-wind-texture` (no gust patches, tidal current or rotated chop), `--no-water-grazing` (one mean Fresnel times the sky in one direction) |
@@ -1014,8 +1014,19 @@ under `public/assets/buildings/`, placed by the modules in
 `eo-kit` from its footprint, height, district and use: an archetype, a
 street front, storeys and bays, shop fronts, roof plant, materials. Plans
 are meshed per 128 m tile at several levels, cooked on worker threads and
-cached. Facades carry a detail atlas, weathering and age, window rooms
-behind the glass, and roofs coloured from the measured aerial table. With
+cached. Each building draws its own window module (bay pitch, window
+width, sill and head), and a tower its own facade system (unitised or
+stick curtain wall, ribbon, punched or finned precast, masonry piers) with
+its glass coating and stone tone, known towers their recorded one
+(`eo-kit` `typology`), glazed on every face off a lot line; Queen Anne
+rows carry their front gable, a "Victorian" front taller than a Victorian
+house is drawn as an apartment house, and the timber rows take the city's
+pastels with white trim (the Postcard Row a pastel each). Wall bodies are
+held to a muted chroma, with a Chinatown front's accent on its trim.
+Facades carry a detail atlas, weathering and age, window rooms behind the
+glass (an office's blinds by tenant run, seen through the pane's own
+visible transmittance), and roofs coloured from the measured aerial table
+with the imagery's colour cast taken off. With
 `--facade-clutter` (opt-in; the `high` and `hyper` tiers) they carry what
 people live with: fire escapes on the older apartment fronts, awnings, signs
 carrying generic words of the shop's trade in system fonts (lit by night,
@@ -1027,7 +1038,16 @@ base, chimneys, vents, dishes and aerials on the roofs (`eo-kit/src/clutter.rs`)
 prepared ahead of time: 256 m neighbourhood cells with a facade atlas, then
 2,048 m districts with flat facade colours, with distant lit windows and
 distant trees. The level is chosen per building on the GPU, so one draw per
-cell covers the buildings that are far in this frame.
+cell covers the buildings that are far in this frame. Where the far layer is
+not drawn, a building past its own levels is its footprint box, drawn by the
+city shader with its archetype's facade (`eo-kit` `far_facade`, `eo-render`
+`far_box`): storeys, window bays, glass, frames, spandrels, shop fronts,
+cornices and crowns, the kit's paint, and the measured roof colour, with
+the coping round the roof's edge, the roof plant (packaged units, stair
+bulkheads, elevator overruns, a tower's penthouse) as boxes, a curtain
+wall's panes a little out of plane, and the lot rhythm of a footprint over
+several lots. `--no-far-facade` draws the plain boxes again and compiles the
+facade's shader code out (`SF_FAR_FACADE`).
 
 **Terrain.** The 8 m elevation grid in 256 m tiles with a coarse far level,
 tinted by land cover and the open-space ground (greens, sand, park trees).
