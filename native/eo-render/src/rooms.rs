@@ -401,6 +401,13 @@ impl RoomFixes {
 /// twilight ends at -6) (INFERRED).
 pub const JS_DUSK_RAMP: (f64, f64) = (2.0, 16.0);
 pub const LIT_DUSK_RAMP: (f64, f64) = (-4.0, 6.0);
+
+/// The windows' dusk ramp in use (`LIT_DUSK_RAMP` under `--room-lit-runs`); the
+/// shop lights' gather takes it too (sky.rs), so a shop lights its walk and its
+/// window together.
+pub fn dusk_ramp() -> (f64, f64) {
+    if RoomFixes::get().lit_runs { LIT_DUSK_RAMP } else { JS_DUSK_RAMP }
+}
 /// `--room-lit-runs`: an office floor's tenant run is lit with this chance, and
 /// a window in a lit run with this one (rooms.wgsl `RM_RUN_LIT`, `RM_LIT_IN_RUN`) (INFERRED).
 pub const RUN_LIT: f32 = 0.7;
@@ -432,7 +439,7 @@ pub const CINE_DAYLIGHT_SHARE: f64 = 0.08;
 /// clock in seconds (the screens' flicker); work z 0 marks the default.
 /// Under `--room-lit-runs` (`RoomFixes::lit_runs`) the dusk goes by `LIT_DUSK_RAMP`.
 pub fn drive_look(sun_altitude_deg: f64, hour: f64, smooth: bool, cinematic: bool) -> ([f32; 4], [f32; 4]) {
-    let ramp = if RoomFixes::get().lit_runs { LIT_DUSK_RAMP } else { JS_DUSK_RAMP };
+    let ramp = dusk_ramp();
     let (mut env, mut work) = if smooth { drive_smooth_ramp(sun_altitude_deg, hour, ramp) } else { drive_ramp(sun_altitude_deg, hour, ramp) };
     if cinematic {
         env[1] = (env[1] as f64 * CINE_OCCUPANCY_GAIN).min(0.95) as f32;

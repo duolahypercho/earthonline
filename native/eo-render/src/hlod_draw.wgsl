@@ -209,12 +209,8 @@ fn hl_night_windows(in: HlOut, world: vec3<f32>, n: vec3<f32>, glass: f32, dpx: 
     let cell = i32(floor(along / bay));
     let hb = hl_h3(g, 0, 11u);
     let base = skyu.bloom_w2.z * 25.0 / LK_PI * dusk;
-    var crown = vec3<f32>(0.0);
-    if (tower && FL_TOWER_CROWNS) {
-        crown = hl_tower_crown(in, world, n, fy, base);
-    }
     if (tower && FL_TOWER_NIGHT) {
-        return crown + hl_tower_night(in, world, n, glass, fx, fy, bay, storey, grid.z, along, fl, cell, g, gf, hb, base);
+        return hl_tower_night(in, world, n, glass, fx, fy, bay, storey, grid.z, along, fl, cell, g, gf, hb, base);
     }
     if (tower) {
         let p_floor = clamp(look.rooms_work.x / 0.7 * 2.6 * hb * hb, 0.0, 0.92);
@@ -235,7 +231,7 @@ fn hl_night_windows(in: HlOut, world: vec3<f32>, n: vec3<f32>, glass: f32, dpx: 
         let cool = step(hl_h3(gf, fl * 131 + seg, 7u), HL_OFFICE_COOL_SHARE);
         let mean_col = mix(HL_OFFICE_WARM, HL_OFFICE_COOL, HL_OFFICE_COOL_SHARE);
         let col = mix(mix(HL_OFFICE_WARM, HL_OFFICE_COOL, cool), mean_col, max(a2, a3));
-        return crown + col * (glass * k * level * base);
+        return col * (glass * k * level * base);
     }
     let occ = clamp(look.rooms_env.y * (0.35 + 1.3 * hb), 0.0, 0.95);
     let h = hl_h3(gf, fl * 977 + cell, 8u);
@@ -570,6 +566,11 @@ fn hl_shade(in: HlOut) -> vec4<f32> {
     m.rough_flatten = 0.0;
     m.thin_absorption = 0.0;
     rm_emit = hl_windows(in, in.world, n, glass, dpx, dpy);
+    // (`--tower-crowns`) a tall tower's crown, on its glass and its opaque wall alike.
+    if (FL_TOWER_CROWNS && (in.flags & HL_TOWER) != 0u && !roofish && sky_on(skyu.flags.x, SKY_LIGHTS) && look.rooms_env.x > 0.0) {
+        let crown_base = skyu.bloom_w2.z * 25.0 / LK_PI * look.rooms_env.x;
+        rm_emit = rm_emit + hl_tower_crown(in, in.world, n, abs(dpx.y) + abs(dpy.y), crown_base);
+    }
     if (FL_GLASS && !roofish) {
         rm_emit = rm_emit + hl_glass_sky(in, n_pane, v, glass); // the tilted pane
     }

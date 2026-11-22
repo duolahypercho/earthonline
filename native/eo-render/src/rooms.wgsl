@@ -67,6 +67,8 @@ struct RmOut {
 // cool share); work: (office share, pixel angle).
 // An office pane's tenant run (rm_kit_pane sets it before rm_room; below 0: none).
 var<private> rm_run_seed: f32;
+// (`--room-lit-runs`) the office tenant run whose lights this pane shares, from the pane's centre (-1: none).
+var<private> rm_lit_seed: f32;
 
 fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4<f32>, floor_key: vec2<f32>, env: vec4<f32>, work: vec4<f32>, day_mode: bool, night_mode: bool) -> RmOut {
     var o: RmOut;
@@ -99,9 +101,9 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     let floor_lit = rm_ss(floor_phase - band / 2.0, floor_phase + band / 2.0, floor_share);
     var bay_lit = step(rm_h(seed, 42.0), 0.7);
     // (`--room-lit-runs`) an office tenant's run is lit or dark together; in a lit run nearly every window.
-    let run_on = RM_LIT_RUNS && rm_run_seed >= 0.0 && office > 0.5;
+    let run_on = RM_LIT_RUNS && rm_lit_seed >= 0.0 && office > 0.5;
     if (run_on) {
-        bay_lit = step(rm_h(rm_run_seed, 43.0), RM_RUN_LIT) * step(rm_h(seed, 42.0), RM_LIT_IN_RUN);
+        bay_lit = step(rm_h(rm_lit_seed, 43.0), RM_RUN_LIT) * step(rm_h(seed, 42.0), RM_LIT_IN_RUN);
     }
     let lit = mix(lit_home, floor_lit * bay_lit, office);
     // (`--look cinematic`, stage L2: work z the screens' share, w the clock; rooms.rs `drive_look`)
@@ -110,7 +112,7 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     var level = mix(mix(0.35, 1.35, rm_h(seed, 3.0)), mix(0.55, 0.8, rm_h(seed, 3.0)), office);
     if (run_on) {
         // the run's own level (a dimmed floor, a bright open plan), a little per window.
-        level = mix(0.35, 1.0, rm_h(rm_run_seed, 3.0)) * mix(0.88, 1.08, rm_h(seed, 3.0));
+        level = mix(0.35, 1.0, rm_h(rm_lit_seed, 3.0)) * mix(0.88, 1.08, rm_h(seed, 3.0));
     }
     let cool = step(rm_h(seed, 4.0), env.w - shop * 0.1);
     let temp_mix = rm_h(seed, 5.0);
@@ -118,8 +120,8 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     var lamp_color = mix(home_color, mix(RM_OFFICE_A, RM_OFFICE_B, temp_mix), office);
     if (run_on) {
         // the run's own lamps: warm 3,300 K, neutral 4,000 K or cool 5,000-6,000 K.
-        let roll = rm_h(rm_run_seed, 5.0);
-        lamp_color = select(select(mix(RM_OFFICE_A, RM_OFFICE_B, rm_h(rm_run_seed, 6.0)), RM_COOL_A, roll < 0.55), RM_WARM_B, roll < 0.2);
+        let roll = rm_h(rm_lit_seed, 5.0);
+        lamp_color = select(select(mix(RM_OFFICE_A, RM_OFFICE_B, rm_h(rm_lit_seed, 6.0)), RM_COOL_A, roll < 0.55), RM_WARM_B, roll < 0.2);
     }
     if (cine) {
         // the look's wider spread of homes: a low amber lamp, a cold daylight LED.
@@ -303,7 +305,7 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     if (shop_lit < 0.0) {
         let peak = max(max(max(radiance.x, radiance.y), radiance.z), 1e-4);
         // (`--room-lit-runs`) an office run's own cap, so lit runs differ in brightness.
-        let cap = select(0.24, 0.24 * mix(0.5, 1.0, rm_h(rm_run_seed, 46.0)), run_on);
+        let cap = select(0.24, 0.24 * mix(0.5, 1.0, rm_h(rm_lit_seed, 46.0)), run_on);
         let over = peak / cap;
         radiance = radiance * pow(1.0 + over * over * over, -1.0 / 3.0);
     }
@@ -443,12 +445,21 @@ fn rm_kit_pane(pane: vec4<f32>, pos: vec3<f32>, ng: vec3<f32>, cam: vec3<f32>, k
     let heading = floor(nw.x * 8.0 + 0.5) * 0.37 + floor(nw.z * 8.0 + 0.5) * 0.71;
     let plane_hash = fract(sin(plane_off * 0.1031 + heading) * 43758.5453);
     let pane_bottom = pos.y - local.y;
-    if ((RM_BLIND_RUNS || RM_LIT_RUNS) && office > 0.5) {
+    if (RM_BLIND_RUNS && office > 0.5) {
         // the tenant run: 3-7 room cells of 3.6 m along this facade plane's floor.
         let fl = floor(pos.y / 3.6);
         let run = 3.0 + floor(5.0 * fract(sin(plane_hash * 91.7 + fl * 12.9898) * 43758.5453));
         let along = floor(floor(dot(pos, tangent) / 3.6) / run);
         rm_run_seed = fract(sin(plane_hash * 37.1 + fl * 78.233 + along * 4.719) * 43758.5453);
+    }
+    rm_lit_seed = -1.0;
+    if (RM_LIT_RUNS && office > 0.5) {
+        // (`--room-lit-runs`) the same run, taken at the pane's centre: a pane is lit or dark whole.
+        let mid = corner + tangent * (0.5 * size.x) + vec3<f32>(0.0, 0.5 * size.y, 0.0);
+        let fl = floor(mid.y / 3.6);
+        let run = 3.0 + floor(5.0 * fract(sin(plane_hash * 91.7 + fl * 12.9898) * 43758.5453));
+        let along = floor(floor(dot(mid, tangent) / 3.6) / run);
+        rm_lit_seed = fract(sin(plane_hash * 37.1 + fl * 78.233 + along * 4.719) * 43758.5453);
     }
     // A forced shop glass carries its building's switch class in the kind
     // signs and the size parity (not packed here: one class per window from

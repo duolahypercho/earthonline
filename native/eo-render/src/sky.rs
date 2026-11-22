@@ -47,11 +47,10 @@ pub const LAMP_CAP: u32 = 65_536;
 /// lights' reach a street is lit from a map of every placed lamp's pool on the
 /// ground (`bake_lamp_map`): lux every `LAMP_MAP_TEXEL_M` over a square of
 /// `LAMP_MAP_SIZE` texels from `LAMP_MAP_ORIGIN_M` (x and z), read by draw.wgsl
-/// past `LAMP_MAP_NEAR_M` from the eye (look_light.wgsl `LK_LAMP_MAP_*`).
+/// where the clustered lights stop (look_light.wgsl `LK_LAMP_MAP_*`, `lk_far_street_light`).
 pub const LAMP_MAP_SIZE: u32 = 3072;
 pub const LAMP_MAP_TEXEL_M: f32 = 8.0;
 pub const LAMP_MAP_ORIGIN_M: f32 = -12_288.0;
-pub const LAMP_MAP_NEAR_M: f32 = 280.0;
 
 pub fn far_street_light_enabled() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
@@ -1989,7 +1988,7 @@ impl SkyGpu {
         // (`--shop-light`) the shop windows' lights, once placed: lit with the rooms
         // behind kit glass (rooms.rs `drive`'s dusk), at the lamps' units per candela.
         let shop_n = s.shops.as_ref().filter(|_| o.shop_light > 0 && o.lights).map(|(_, n)| *n).unwrap_or(0);
-        let shop_k = if shop_n > 0 { lamp_k * crate::rooms::drive(f.model.sun.altitude_deg, f.hour).0[0] as f64 } else { 0.0 };
+        let shop_k = if shop_n > 0 { lamp_k * crate::rooms::drive_ramp(f.model.sun.altitude_deg, f.hour, crate::rooms::dusk_ramp()).0[0] as f64 } else { 0.0 };
         let shop_bits = if shop_n > 0 { crate::shop_lights::SKY_SHOPS | if o.shop_light >= 2 { crate::shop_lights::SKY_SHOPS_FAR } else { 0 } } else { 0 };
         let veh = if o.lights { terms.vehicle_lamps } else { 0.0 };
         let moon = terms.moon;
@@ -2760,7 +2759,7 @@ mod lamp_map_tests {
     #[test]
     fn the_shaders_lamp_map_constants_are_the_bakes() {
         let src = include_str!("look_light.wgsl");
-        for (k, v) in [("LK_LAMP_MAP_SIZE", LAMP_MAP_SIZE as f32), ("LK_LAMP_MAP_TEXEL_M", LAMP_MAP_TEXEL_M), ("LK_LAMP_MAP_ORIGIN_M", LAMP_MAP_ORIGIN_M), ("LK_LAMP_MAP_NEAR_M", LAMP_MAP_NEAR_M)] {
+        for (k, v) in [("LK_LAMP_MAP_SIZE", LAMP_MAP_SIZE as f32), ("LK_LAMP_MAP_TEXEL_M", LAMP_MAP_TEXEL_M), ("LK_LAMP_MAP_ORIGIN_M", LAMP_MAP_ORIGIN_M)] {
             assert!(src.contains(&format!("const {k}: f32 = {v:?};")), "{k} is not {v}");
         }
     }
