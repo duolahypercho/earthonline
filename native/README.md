@@ -162,6 +162,9 @@ switch it does not take.
 | `--house-furniture` / `--no-house-furniture` | Opt in to the furnished 21 Beaver house with sewn sofa cushions, a wool carpet, a six-seat dining table, a sideboard, and a wood coffee table. Furniture and its collision use physical metres inside the surveyed footprint. The indoor camera follows the standing or crouching character’s eye height in play mode. Use `--no-house-eye-camera` to retain the chase camera. An `EO_CAPTURE_POSES` entry can include `"player": {"feet": [x, y, z], "yaw": 0}` to pose the loaded game avatar as a scale reference. Reuse the previous sitting room with `--house-patina --no-house-furniture`. The [material builder](../scripts/blender-buildings/prepare_beaver_furniture.py) verifies the rug photograph and timber scans. Pass `-- --house-furniture` to the house builder and kitchen reflection baker. Run [the furniture exporter](../scripts/blender-buildings/export_beaver_furniture_parts.py) against the saved Blender file to export the fifteen loose furniture and prop GLBs and the hinge-pivoted front door with embedded materials. The closed door measures 0.96 × 2.05 m on site and opens with E from the recessed landing or hall. |
 | `--no-interior-lighting` | Disable the baked window and pendant light contribution in the Beaver Street house. |
 | `--play` | The player instead of the free camera |
+| `--test-character ID` / `--no-test-character` | Opt in to a demo avatar in `--play`, or restore the standard avatar. See [Demo characters](#demo-characters). |
+| `--test-clip NAME`, `--list-test-clips` | Preview a named animation on the selected demo avatar, or print the roster and clip names. |
+| `--car-door-animation` / `--no-car-door-animation` | In local play with a main demo avatar, use the paired entry and exit clips and the sedan's driver-door hinge when pressing F. |
 | `--ui` | The interface shell: title, loading, HUD, pause menu |
 | `--connect ADDR\|local` | Online client (with `--name`, `--spawn x,z,heading`) |
 | `--bench` | Offscreen timing run over scripted camera paths; prints and writes JSON to `bench-out/` |
@@ -211,6 +214,8 @@ selection:
 | Content | `--no-models`, `--no-kit`, `--no-streets`, `--no-props`, `--no-agents`, `--no-landmarks`, `--no-water`, `--no-farshore`, `--no-sky` |
 | Water optics | `--water-optics` enables the preview, `--no-water-optics` restores the original water shading |
 | People | `--no-rocketbox`, `--no-rocketbox-motions` (either one: no people) |
+| Demo player avatar | `--no-test-character` |
+| Driver-door animation | `--no-car-door-animation` |
 | Props | `--no-props2`, `--no-furniture`, `--no-eztree`, `--no-wires`, `--no-overhead`, `--no-lamp-sprites` |
 | Buildings | `--no-facade-detail`, `--no-facade-age`, `--no-rooms`, `--no-room-frames`, `--no-room-dim`, `--no-roof-colours`, `--no-roof-plant`, `--no-roof-parapet`, `--no-roof-patches`, `--no-wall-paint` |
 | Ground | `--no-ground-hills`, `--no-ground-green`, `--no-ground-contact`, `--no-terrain-lod` |
@@ -258,6 +263,7 @@ is turned off, the log says so in one line, and the game runs without it.
 | `EO_PEOPLE_ROOT` | Rocketbox avatars | The game |
 | `EO_PEOPLE_MOTIONS_ROOT` | Rocketbox motion clips | The game |
 | `EO_PEOPLE_STYLES_ROOT` | 100STYLE walking styles | The game |
+| `EO_TEST_CHARACTERS_ROOT` | Local test demo's `public` directory | The game with `--test-character` |
 | `EO_CC0_ROOT` | Scanned CC0 texture sets (Poly Haven, ambientCG) | The game, `tools/fetch-cc0.mjs` |
 | `EO_AUDIO_ROOT` | Sound clips | The game |
 | `EO_SIGN_ART_ROOT` | Official sign art and the sign font | The game, `tools/fetch-sign-art.mjs` |
@@ -339,6 +345,45 @@ draws simple stand-ins for those props and other vehicles in traffic.
 The source binaries of the asset pipelines (Blender scenes, vehicle and
 character sources) are a separate, optional store; the game never reads
 them. See [Docs/ASSET-STORE.md](../Docs/ASSET-STORE.md).
+
+## Demo characters
+
+From `native/`, with the test demo in the sibling `test` directory:
+
+```sh
+export EO_TEST_CHARACTERS_ROOT=../../test/ar_rifle_demo/public
+./target/release/eo-app --list-test-clips
+./target/release/eo-app --play --test-character tripo --car-door-animation
+./target/release/eo-app --play --test-character civilian-m-01-player --test-clip car-enter
+```
+
+The five main demo avatars each have 110 clips. The motorcycle rider and
+passenger use the demo's original rigs and its 15-clip rider pack. In local
+play the avatars follow the existing controller. The main rigs use
+directional walking and jogging, sprinting, crouching, falling, landing,
+seated driving, steering and looking back. The motorcycle rigs use their
+idle, walk and run on foot.
+
+With `--car-door-animation`, press F beside the stopped sedan's driver
+door to enter, and press F again when stopped to exit. The driver and door
+share the authored timing. Controls return after the door closes. Leave
+room to stand beside the driver door.
+
+`--test-clip` plays any clip from the chosen avatar's catalogue, including its
+authored root motion. Motorcycle, helicopter, parachute and weapon-handling
+poses are available through this preview.
+For a fixed frame in an `EO_CAPTURE_POSES` capture, set `player.time` in
+seconds along with `player.feet` and `player.yaw`.
+
+Use `--play --bench --segments car_access --test-character tripo --car-door-animation`
+to exercise both F presses in sequence. Add `--capture --out DIR` for
+fixed-camera frames before entry, with the door open, and after exit.
+
+The loader verifies byte counts and SHA-256 hashes from
+[`assets/test-characters-manifest.json`](assets/test-characters-manifest.json).
+Regenerate that manifest with
+[`tools/write-test-character-manifest.mjs`](tools/write-test-character-manifest.mjs)
+against the source demo's `public` directory.
 
 ## What is drawn
 

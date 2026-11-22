@@ -13,10 +13,9 @@
 //! 6 m ahead of you (a play-mode helper, not a JS binding). The title bar
 //! shows fps, mode, speed and the player step time.
 //!
-//! (agents) The player's body (the first pool person, hidden when the camera rig
-//! says `body_visible = false` and while driving) and the player's cars are
-//! drawn by the agent renderer, with the simulated traffic and people around
-//! the player (`--no-agents`: none of it).
+//! The agent renderer draws the player, cars and surrounding traffic. The
+//! standard player body comes from the pedestrian pool. Use
+//! `--test-character ID` to select one of the demo avatars.
 //!
 //! Bench flags: `--frames N` (3600 per path), `--segments walk_player,drive_player`,
 //! `--no-render` (player only, no GPU), `--collision-threads N` (2), and the
@@ -43,6 +42,7 @@ const PLAYER_HITCH_BUDGET_MS: f64 = 2.0;
 
 struct PlayOpts {
     interior_eye: bool,
+    car_door_animation: bool,
     bench: bool,
     /// Frames per path (default: walk 7200, drive 3600).
     frames: Option<usize>,
@@ -108,6 +108,7 @@ fn base_args() -> Args {
         agents: true, // agents
         agent_density: 1,
         rocketbox: true, // people
+        test_character: None,
         props: true, // props
         props2: Default::default(),
         perf: Default::default(), // occlusion / hitch
@@ -118,12 +119,15 @@ fn base_args() -> Args {
 
 fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
     let mut a = base_args();
-    let mut o = PlayOpts { interior_eye: true, bench: false, frames: None, segments: None, render: true, collision_threads: 2 };
+    let mut test_character = crate::test_characters::Options::default();
+    let mut o = PlayOpts { interior_eye: true, car_door_animation: false, bench: false, frames: None, segments: None, render: true, collision_threads: 2 };
     let mut it = raw.iter();
     while let Some(s) = it.next() {
         let mut val = || it.next().cloned().ok_or_else(|| anyhow!("{s} needs a value"));
         match s.as_str() {
             "--play" => {}
+            "--car-door-animation" => o.car_door_animation = true,
+            "--no-car-door-animation" => o.car_door_animation = false,
             "--house-eye-camera" => o.interior_eye = true,
             "--no-house-eye-camera" => o.interior_eye = false,
             "--beaver-house" => a.beaver_house = true,
@@ -136,6 +140,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-house-finishes" => a.house_finishes = false,
             "--no-beaver-house" => a.beaver_house = false,
             "--bench" => o.bench = true,
+            "--capture" => a.capture = true,
             "--frames" => o.frames = Some(val()?.parse()?),
             "--segments" => o.segments = Some(val()?.split(',').map(|s| s.trim().to_string()).collect()),
             "--no-render" => o.render = false,
@@ -155,6 +160,7 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--no-agents" => a.agents = false, // agents
             "--no-audio" | "--audio-null" => {} // read by audio::AudioRuntime::start
             "--no-rocketbox" => a.rocketbox = false, // people
+            "--no-rocketbox-motions" => eo_agents::motion::set_enabled(false),
             "--no-props" => a.props = false, // props
             s if a.props2.parse_flag(s) => {}
             "--no-thread-priority" => a.perf.thread_priority = false, // hitch
@@ -169,10 +175,20 @@ fn parse(raw: &[String]) -> Result<(Args, PlayOpts)> {
             "--low-camera" | "--default-camera" => {}
             "--no-roof-colours" | "--no-roof-contrast" | "--no-roof-parapet" | "--no-roof-patches" | "--no-roof-plant" => {} // main's `roofs_flags`
             "--no-wall-paint" | "--no-ground-green" | "--no-ground-hills" | "--no-ground-contact" => {} // main's `roofs_flags`
+            flag if test_character.parse(flag, &mut val)? => {}
             other => anyhow::bail!("--play: unknown argument {other} (see native/eo-app/src/play.rs)"),
         }
     }
     a.bench = o.bench;
+    a.test_character = test_character.selection(a.agents)?;
+    if o.car_door_animation {
+        let selected = a.test_character.as_ref().filter(|selected| selected.preview.is_none());
+        let has_clips = eo_agents::test_characters::catalogue()?.into_iter().any(|(id, clips)| {
+            selected.is_some_and(|selected| selected.id == id)
+                && ["car-enter", "car-exit"].iter().all(|name| clips.iter().any(|clip| clip == name))
+        });
+        anyhow::ensure!(has_clips && o.render, "--car-door-animation needs a demo avatar with both car clips and live rendering");
+    }
     Ok((a, o))
 }
 
@@ -366,18 +382,27 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
     let mut visual = crate::agents::PlayerVisual::default();
     let mut reports = vec![];
     let mut verdicts = vec![];
-    for name in ["walk_player", "drive_player"] {
+    for name in ["walk_player", "drive_player", "car_access"] {
+        let access_path = name == "car_access";
         if let Some(only) = &opts.segments {
             if !only.iter().any(|s| s == name) {
                 continue;
             }
+        } else if access_path {
+            continue;
         }
         let driving = name == "drive_player";
+        if access_path {
+            anyhow::ensure!(opts.render && args.test_character.is_some(), "car_access needs a rendered demo avatar");
+        }
+        const ACCESS_ENTER: usize = 1;
+        const ACCESS_EXIT: usize = 240;
+        const ACCESS_FRAMES: usize = 450;
         let (path, steep_s) = uphill_route(&walk.path, &world.elevation);
         // Start far enough before the steepest stretch that the path crosses
         // several blocks on the level and then climbs it.
         let lead = if driving { 500.0 } else { 450.0 };
-        let frames = opts.frames.unwrap_or(if driving { 3600 } else { 7200 });
+        let frames = opts.frames.unwrap_or(if access_path { ACCESS_FRAMES } else if driving { 3600 } else { 7200 });
         let path = from_arc(&path, (steep_s - lead).max(0.0));
         let (mut cw, _door) = collision_world(&world, opts.collision_threads)?;
         let mut start = DVec3::new(path[0][0], world.elevation.ground(path[0][0], path[0][1]), path[0][1]);
@@ -387,6 +412,16 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
         start.y = cw.surface_y(start.x, start.z);
         let yaw0 = (path[1][0] - path[0][0]).atan2(path[1][1] - path[0][1]);
         let mut player = Player::new(start, yaw0);
+        if access_path {
+            let car = player.spawn_vehicle(&mut cw, start.x, start.z, yaw0);
+            let q = glam::DQuat::from_rotation_y(yaw0);
+            let side = start + q * DVec3::new(1.55, 0.0, 0.14) * eo_data::groundscale::vehicles();
+            let feet = player.vehicle_footing(&cw, car, side).ok_or_else(|| anyhow!("car_access: driver's side is blocked"))?;
+            player.character.teleport_feet(feet);
+            for _ in 0..90 {
+                player.fixed_step(&mut cw, &StepInput::default());
+            }
+        }
         if driving {
             player.spawn_vehicle(&mut cw, path[0][0], path[0][1], yaw0);
             let side = start + DVec3::new(yaw0.cos() * 3.0, 0.0, -yaw0.sin() * 3.0);
@@ -403,7 +438,14 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
         let mut drive_pilot = DrivePilot::new(path.clone(), 50.0 / 3.6);
         let dt = eo_player::tuning::FIXED_STEP_S;
         // Settle the renderer at the start.
-        let first = to_camera(&player_view(&mut player, &cw, &world, args.house_finishes && args.house_furniture && opts.interior_eye, dt, aspect as f64), aspect, args.far);
+        let first = if access_path {
+            let at = player.vehicles[0].datum(&cw) + DVec3::Y * 0.8;
+            let eye = at + glam::DQuat::from_rotation_y(yaw0) * DVec3::new(4.5, 1.05, 1.8);
+            let forward = (at - eye).normalize();
+            Camera { far: args.far, fov_y_deg: 45.0, ..Camera::new(eye.as_vec3(), forward.x.atan2(-forward.z) as f32, forward.y.asin() as f32, aspect) }
+        } else {
+            to_camera(&player_view(&mut player, &cw, &world, args.house_finishes && args.house_furniture && opts.interior_eye, dt, aspect as f64), aspect, args.far)
+        };
         let mut settle_ms = 0.0;
         if let Some((ctx, renderer, _c, _view, _targets, models)) = &mut gpu_state {
             let g = Gpu { ctx, renderer };
@@ -422,6 +464,15 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
             if let Some(rt) = agents_rt.as_mut() {
                 rt.restart_sim(&world, [first.eye.x as f64, first.eye.z as f64, 0.0], args.agent_density); // around this path's start
                 rt.wait_ready(ctx, renderer, [first.eye.x as f64, first.eye.z as f64, 0.0], 300.0);
+                if access_path {
+                    // Keep the fixed-camera comparison clear of passing traffic.
+                    let datum = player.vehicles[0].datum(&cw).as_vec3().to_array();
+                    rt.hide_near = vec![(datum, 3.0)];
+                }
+                if args.test_character.is_some() {
+                    anyhow::ensure!(rt.lib.as_ref().is_some_and(|lib| lib.test_player.is_some()),
+                        "requested test character failed to load: {:?}", rt.errors);
+                }
             }
         }
         let inserted0 = cw.stats.tiles_inserted;
@@ -442,6 +493,13 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
         let mut camera_ms = Vec::with_capacity(frames);
         let mut subs: Vec<wgpu::SubmissionIndex> = vec![];
         let mut pacer = eo_render::pace::WaitPacer::new(args.perf.submit_pacing);
+        let mut car_access = crate::car_access::CarAccess::default();
+        let mut max_door = [0.0f32; 2];
+        let mut got_in = false;
+        let capture_dir = args.out_dir.clone().unwrap_or_else(|| std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../bench-out"));
+        if access_path && args.capture {
+            std::fs::create_dir_all(&capture_dir)?;
+        }
         for i in 0..frames {
             let mut charged_ms = 0.0; // a prepay the wait did not absorb
             if let Some((ctx, ..)) = &gpu_state {
@@ -454,8 +512,22 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
             let pf0 = eo_render::hitch::process_page_faults(); // hitch
             let c0 = eo_render::hitch::thread_cycles(); // hitch
             let t0 = Instant::now();
-            let input = if driving { drive_pilot.input(&player, &cw) } else { walk_pilot.input(&mut player, &cw) };
-            player.advance(&mut cw, &input, dt);
+            let input = if access_path {
+                StepInput { vehicle_toggle: i == ACCESS_ENTER || i == ACCESS_EXIT, handbrake: true, ..Default::default() }
+            } else if driving {
+                drive_pilot.input(&player, &cw)
+            } else {
+                walk_pilot.input(&mut player, &cw)
+            };
+            if access_path && opts.car_door_animation {
+                let lib = agents_rt.as_ref().and_then(|rt| rt.lib.as_deref());
+                car_access.advance(&mut player, &mut cw, lib, input, dt);
+            } else {
+                player.advance(&mut cw, &input, dt);
+            }
+            if access_path {
+                got_in |= matches!(player.mode, Mode::Driving(_));
+            }
             let pos = player.position(&cw);
             let tp = Instant::now();
             cw.pump(pos);
@@ -463,7 +535,7 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
             let view = player_view(&mut player, &cw, &world, args.house_finishes && args.house_furniture && opts.interior_eye, dt, aspect as f64);
             let t1 = Instant::now();
             let ran = eo_render::hitch::on_cpu_ms(c0, eo_render::hitch::thread_cycles()); // hitch
-            player_off_cpu.push(((t1 - t0).as_secs_f64() * 1e3 - ran).max(0.0));
+            player_off_cpu.push(if ran.is_finite() { ((t1 - t0).as_secs_f64() * 1e3 - ran).max(0.0) } else { f64::NAN });
             player_faults.push(eo_render::hitch::process_page_faults().saturating_sub(pf0) as f64);
             player_ran.push(ran);
             player_ms.push((t1 - t0).as_secs_f64() * 1e3);
@@ -482,18 +554,27 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
             if i % 10 == 0 {
                 track.push(pos);
             }
-            if let Some((ctx, renderer, _c, tv, targets, models)) = &mut gpu_state {
-                let cam = to_camera(&view, aspect, args.far);
+            if let Some((ctx, renderer, color, tv, targets, models)) = &mut gpu_state {
+                let cam = if access_path { first.clone() } else { to_camera(&view, aspect, args.far) };
                 models.set_camera(cam.eye);
                 models.pump(ctx, renderer, &world, cam.eye)?;
                 if let (Some(p), Some(rt)) = (props_rt.as_mut(), agents_rt.as_mut()) {
                     // tiles, lamps on the simulation clock, parked cars to the agents.
                     p.pump(ctx, renderer, &mut models.uploads, cam.eye, Some(rt.sim_time), dt);
                     rt.parked = p.parked_agents(rt.lib.as_deref(), cam.eye).to_vec();
+                    if let Some(&(center, radius)) = rt.hide_near.first() {
+                        rt.parked.retain(|a| (a.pos[0] - center[0]).hypot(a.pos[2] - center[2]) >= radius + 2.5);
+                    }
                 }
                 if let Some(rt) = agents_rt.as_mut() {
                     // agents
-                    rt.set_player(&mut visual, &player, &cw, view.body_visible, dt);
+                    let transfer = rt.lib.as_ref().and_then(|lib| lib.test_player.as_ref())
+                        .and_then(|body| car_access.frame(&player, &cw, body));
+                    if let Some(frame) = &transfer {
+                        let stage = usize::from(i >= ACCESS_EXIT);
+                        max_door[stage] = max_door[stage].max(frame.door);
+                    }
+                    rt.set_player_with_car_access(&mut visual, &player, &cw, access_path || view.body_visible, dt, transfer.as_ref());
                     rt.pump(ctx, renderer, [pos.x, pos.z, player.yaw], dt);
                 }
                 renderer.update(&ctx.queue, &cam);
@@ -504,14 +585,26 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
                 };
                 renderer.encode(&mut enc, attach, resolve, &targets.depth, None);
                 subs.push(eo_render::pace::submit(&ctx.queue, [enc.finish()])); // counted
+                if access_path && args.capture && matches!(i, 0 | 67 | 225 | 299 | 440) {
+                    let path = capture_dir.join(format!("car-access-{i:03}.png"));
+                    crate::bench::capture(ctx, renderer, color, attach, resolve, &targets.depth, &cam, &path)?;
+                    println!("wrote {}", path.display());
+                }
             }
             frame_cpu_ms.push(t0.elapsed().as_secs_f64() * 1e3 + charged_ms);
-            if (driving && drive_pilot.done()) || (!driving && walk_pilot.done()) {
+            if !access_path && ((driving && drive_pilot.done()) || (!driving && walk_pilot.done())) {
                 break;
             }
         }
         if let Some((ctx, ..)) = &gpu_state {
             ctx.device.poll(wgpu::PollType::wait_indefinitely()).map_err(|e| anyhow!("{e}"))?;
+        }
+        if access_path && frames >= ACCESS_FRAMES {
+            anyhow::ensure!(got_in && player.mode == Mode::OnFoot && !car_access.is_active(),
+                "car_access: the two F taps must reach driving and return to foot");
+            anyhow::ensure!(!opts.car_door_animation || max_door.iter().all(|&fraction| fraction > 0.9),
+                "car_access: both transitions must fully open the driver door: {max_door:?}");
+            println!("car access: door maxima {max_door:?}, reached driving and back on foot");
         }
         let distance: f64 = track.windows(2).map(|w| (w[1] - w[0]).length()).sum();
         let climbed = track.iter().map(|p| p.y).fold(f64::MIN, f64::max) - track.iter().map(|p| p.y).fold(f64::MAX, f64::min);
@@ -562,6 +655,8 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
             },
         );
         // the longest step: did the thread run, or wait?
+        let on_cpu_samples: Vec<_> = player_ran.iter().copied().filter(|ms| ms.is_finite()).collect();
+        let off_cpu_samples: Vec<_> = player_off_cpu.iter().copied().filter(|ms| ms.is_finite()).collect();
         let worst = player_ms.iter().enumerate().max_by(|a, b| a.1.partial_cmp(b.1).unwrap()).map(|(k, _)| k).unwrap_or(0);
         println!(
             "  hitch: longest step frame {worst}: {:.3} ms wall, thread ran {:.3} ms, process page faults during it {:.0} (median a step {:.0}) (fixed step {:.3}, collision {:.3}, camera {:.3}); off-CPU time per step median {:.3} / max {:.3} ms; thread priority {}",
@@ -572,8 +667,8 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
             step_ms.get(worst).copied().unwrap_or(f64::NAN),
             pump_ms.get(worst).copied().unwrap_or(f64::NAN),
             camera_ms.get(worst).copied().unwrap_or(f64::NAN),
-            percentile(&player_off_cpu, 50.0),
-            percentile(&player_off_cpu, 100.0),
+            percentile(&off_cpu_samples, 50.0),
+            percentile(&off_cpu_samples, 100.0),
             eo_render::hitch::thread_priority(),
         );
         verdicts.push((name, pass_med && pass_max));
@@ -601,8 +696,8 @@ fn bench(args: &Args, opts: &PlayOpts, process_start: Instant) -> Result<()> {
             "frames_feet_under_ground": under_ground,
             "frames_four_wheels_down": four_wheels,
             // hitch
-            "player_step_on_cpu_ms": summary(&player_ran),
-            "player_step_off_cpu_ms": summary(&player_off_cpu),
+            "player_step_on_cpu_ms": summary(&on_cpu_samples),
+            "player_step_off_cpu_ms": summary(&off_cpu_samples),
             "longest_step": { "frame": worst, "wall_ms": player_ms.get(worst), "ran_ms": player_ran.get(worst), "fixed_step_ms": step_ms.get(worst), "collision_pump_ms": pump_ms.get(worst), "camera_ms": camera_ms.get(worst) },
             "thread_priority": eo_render::hitch::thread_priority(),
         }));
@@ -646,6 +741,8 @@ mod window {
 
     struct App {
         interior_eye: bool,
+        car_door_animation: bool,
+        car_access: crate::car_access::CarAccess,
         world: World,
         args: Args,
         gfx: Option<Gfx>,
@@ -655,6 +752,7 @@ mod window {
         map: ActionMap,
         raw: RawInput,
         interact_requested: bool,
+        vehicle_toggle_requested: bool,
         looking: bool,
         last: Instant,
         fps_frames: u32,
@@ -678,6 +776,8 @@ mod window {
         let event_loop = EventLoop::new()?;
         let mut app = App {
             interior_eye: args.house_finishes && args.house_furniture && opts.interior_eye,
+            car_door_animation: opts.car_door_animation,
+            car_access: Default::default(),
             world,
             args: args.clone(),
             gfx: None,
@@ -687,6 +787,7 @@ mod window {
             map: ActionMap::default(),
             raw: RawInput::default(),
             interact_requested: false,
+            vehicle_toggle_requested: false,
             looking: false,
             last: Instant::now(),
             fps_frames: 0,
@@ -750,7 +851,7 @@ mod window {
                 || frame.tapped(eo_player::input::Action::Interact);
             if let Some(door) = &mut self.door {
                 let feet = self.player.position(&self.cw);
-                if self.player.mode == Mode::OnFoot && interact {
+                if self.player.mode == Mode::OnFoot && !self.car_access.is_active() && interact {
                     door.toggle(feet);
                 }
                 if door.advance(dt, feet, &mut self.world.scene, &mut self.cw)
@@ -760,8 +861,14 @@ mod window {
                 }
             }
             self.player.look(frame.look_yaw, frame.look_pitch);
-            let input = StepInput::from_frame(&frame);
-            self.player.advance(&mut self.cw, &input, dt);
+            let mut input = StepInput::from_frame(&frame);
+            input.vehicle_toggle |= std::mem::take(&mut self.vehicle_toggle_requested);
+            if self.car_door_animation {
+                let library = self.gfx.as_ref().and_then(|g| g.agents.lib.as_deref());
+                self.car_access.advance(&mut self.player, &mut self.cw, library, input, dt);
+            } else {
+                self.player.advance(&mut self.cw, &input, dt);
+            }
             let pos = self.player.position(&self.cw);
             self.cw.pump(pos);
             let view = player_view(&mut self.player, &self.cw, &self.world, self.interior_eye, dt, aspect);
@@ -785,7 +892,9 @@ mod window {
             }
             g.props.pump(&g.ctx, &g.renderer, &mut g.models.uploads, cam.eye, Some(g.agents.sim_time), dt);
             g.agents.parked = g.props.parked_agents(g.agents.lib.as_deref(), cam.eye).to_vec();
-            g.agents.set_player(&mut g.visual, &self.player, &self.cw, view.body_visible, dt); // agents
+            let transfer = g.agents.lib.as_ref().and_then(|lib| lib.test_player.as_ref())
+                .and_then(|body| self.car_access.frame(&self.player, &self.cw, body));
+            g.agents.set_player_with_car_access(&mut g.visual, &self.player, &self.cw, view.body_visible, dt, transfer.as_ref());
             g.agents.pump(&g.ctx, &g.renderer, [pos.x, pos.z, self.player.yaw], dt);
             g.audio.frame(crate::audio::FrameIn::player(&view, dt, &self.player, &self.cw, &mut g.agents, &g.renderer, &self.world.elevation)); // audio
             g.renderer.update(&g.ctx.queue, &cam);
@@ -801,10 +910,13 @@ mod window {
             self.fps_frames += 1;
             let el = self.fps_t.elapsed().as_secs_f64();
             if el >= 1.0 {
-                let (mode, speed) = match self.player.mode {
+                let (mut mode, speed) = match self.player.mode {
                     Mode::OnFoot => ("on foot", self.player.ground_speed),
                     Mode::Driving(i) => ("driving", self.player.vehicles[i].forward_speed(&self.cw).abs()),
                 };
+                if self.car_access.is_active() {
+                    mode = if self.player.mode == Mode::OnFoot { "entering car" } else { "exiting car" };
+                }
                 let door_hint = self
                     .door
                     .as_ref()
@@ -826,7 +938,7 @@ mod window {
         }
 
         fn spawn_car_ahead(&mut self) {
-            if self.player.mode != Mode::OnFoot {
+            if self.player.mode != Mode::OnFoot || self.car_access.is_active() {
                 return;
             }
             let f = self.player.character.feet();
@@ -870,6 +982,7 @@ mod window {
                 WindowEvent::Focused(false) => {
                     self.raw.held = HashSet::new();
                     self.interact_requested = false;
+                    self.vehicle_toggle_requested = false;
                     self.set_looking(false);
                 }
                 WindowEvent::MouseInput { state, button, .. } => {
@@ -897,6 +1010,9 @@ mod window {
                                 if code == KeyCode::KeyE && !event.repeat {
                                     self.interact_requested = true;
                                 }
+                                if code == KeyCode::KeyF && !event.repeat && self.car_door_animation {
+                                    self.vehicle_toggle_requested = true;
+                                }
                                 if code == KeyCode::Escape {
                                     if self.looking {
                                         self.set_looking(false);
@@ -905,7 +1021,7 @@ mod window {
                                     }
                                     return;
                                 }
-                                if code == KeyCode::KeyR && !event.repeat && self.player.mode == Mode::OnFoot {
+                                if code == KeyCode::KeyR && !event.repeat && self.player.mode == Mode::OnFoot && !self.car_access.is_active() {
                                     if let (Some(house), Some(g)) = (&self.world.house, &self.gfx) {
                                         if house.by_bed(self.player.character.feet()) {
                                             g.renderer.look.set_time_of_day(7.0);

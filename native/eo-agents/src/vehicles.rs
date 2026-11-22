@@ -21,7 +21,7 @@
 //! is replaced, as `heroLampState` drives the lens); a body without its own
 //! brake material lights the tail lamps for the brake (`max(tail, brake)`).
 
-use crate::{AgentMaterial, AgentVertex, F_BLEND, F_GLASS, M_BRAKE, M_DRL, M_HEAD, M_INDICATOR, M_PAINT, M_REVERSE, M_TAIL, hex_linear, tag};
+use crate::{AgentMaterial, AgentVertex, F_BLEND, F_GLASS, M_BRAKE, M_DRL, M_HEAD, M_INDICATOR, M_PAINT, M_REVERSE, M_TAIL, PART_DRIVER_DOOR, hex_linear, tag};
 use anyhow::{Result, anyhow, bail};
 use glam::{Mat3, Mat4, Vec3};
 use std::collections::BTreeMap;
@@ -36,10 +36,25 @@ pub struct CookedBody {
     pub materials: Vec<AgentMaterial>,
     /// Wheel pivots FL, FR, RL, RR (None when the rig lacks one).
     pub pivots: [Option<[f32; 3]>; 4],
+    pub driver_door: Option<DriverDoor>,
     pub min: [f32; 3],
     pub max: [f32; 3],
     pub triangles: u32,
     pub material_names: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct DriverDoor {
+    pub axis: [f32; 3],
+    pub pivot_and_angle: [f32; 4],
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Hinge {
+    hinge_axis: [f32; 3],
+    open_sign: f32,
+    open_limit_radians: f32,
 }
 
 pub const WHEELS: [&str; 4] = ["Wheel_FL", "Wheel_FR", "Wheel_RL", "Wheel_RR"];
@@ -117,21 +132,32 @@ pub fn cook_body(bytes: &[u8], lamps: &LampColours) -> Result<CookedBody> {
     let mut mat_index: BTreeMap<usize, u32> = BTreeMap::new();
     let default_mat = AgentMaterial { base: [0.5, 0.5, 0.5, 1.0], params: [0.6, 0.0, 0.0, 0.0], layer: -1, ..Default::default() };
     let scene = doc.default_scene().or_else(|| doc.scenes().next()).ok_or_else(|| anyhow!("no scene"))?;
-    // (node, parent world, wheel tag inherited)
+    // (node, parent world, moving-part tag inherited)
     let mut stack: Vec<(gltf::Node, Mat4, u32)> = scene.nodes().map(|n| (n, Mat4::IDENTITY, 0)).collect();
     let (mut mn, mut mx) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
     while let Some((node, parent, inherited)) = stack.pop() {
         let world = parent * Mat4::from_cols_array_2d(&node.transform().matrix());
         let name = node.name().unwrap_or("");
-        let mut wheel = inherited;
+        let mut part = inherited;
         if let Some(w) = WHEELS.iter().position(|w| *w == name) {
             out.pivots[w] = Some(world.transform_point3(Vec3::ZERO).to_array());
-            wheel = 5 + w as u32; // steer-only until a Spin node below
+            part = 5 + w as u32; // steer-only until a Spin node below
         } else if let Some(w) = WHEELS.iter().position(|w| name == format!("{w}_Spin")) {
-            wheel = 1 + w as u32;
+            part = 1 + w as u32;
+        } else if name == "Door_FL"
+            && let Some(extras) = node.extras()
+            && let Ok(hinge) = serde_json::from_str::<Hinge>(extras.get())
+        {
+            let axis = world.transform_vector3(Vec3::from_array(hinge.hinge_axis)).normalize_or_zero();
+            let angle = hinge.open_sign * hinge.open_limit_radians;
+            if axis.is_finite() && axis != Vec3::ZERO && angle.is_finite() && angle != 0.0 {
+                let pivot = world.transform_point3(Vec3::ZERO);
+                out.driver_door = Some(DriverDoor { axis: axis.to_array(), pivot_and_angle: pivot.extend(angle).to_array() });
+                part = PART_DRIVER_DOOR;
+            }
         }
         for child in node.children() {
-            stack.push((child, world, wheel));
+            stack.push((child, world, part));
         }
         if name.starts_with("shadow-proxy") {
             continue;
@@ -167,7 +193,7 @@ pub fn cook_body(bytes: &[u8], lamps: &LampColours) -> Result<CookedBody> {
                 mn = mn.min(wp);
                 mx = mx.max(wp);
                 let n = normals.as_ref().map(|n| normal_m * Vec3::from(n[i])).unwrap_or(Vec3::Y);
-                out.vertices.push(AgentVertex { pos: wp.to_array(), normal: pack_normal(n), uv: [0, 0], joints: [0; 4], weights: [0; 4], tag: tag(local, wheel) });
+                out.vertices.push(AgentVertex { pos: wp.to_array(), normal: pack_normal(n), uv: [0, 0], joints: [0; 4], weights: [0; 4], tag: tag(local, part) });
             }
             let indices: Vec<u32> = match reader.read_indices() {
                 Some(ix) => ix.into_u32().map(|i| i + base).collect(),

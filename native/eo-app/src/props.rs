@@ -1009,6 +1009,8 @@ pub fn pose_json(name: &str, c: &eo_render::camera::Camera, what: &str) -> serde
 pub struct ScaleReference {
     pub feet: [f64; 3],
     pub yaw: f64,
+    #[serde(default)]
+    pub time: f32,
 }
 
 pub struct CapturePose {

@@ -139,6 +139,7 @@ fn default_args() -> Args {
         agents: true, // agents
         agent_density: 1,
         rocketbox: true, // people
+        test_character: None,
         props: true, // props
         props2: Default::default(),
         perf: Default::default(), // occlusion / hitch

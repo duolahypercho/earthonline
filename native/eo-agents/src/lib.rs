@@ -27,6 +27,7 @@ pub mod motion;
 pub mod packed_glb; // people
 pub mod people;
 pub mod rocketbox; // people
+pub mod test_characters;
 pub mod vehicles;
 
 use bytemuck::{Pod, Zeroable};
@@ -36,7 +37,7 @@ use bytemuck::{Pod, Zeroable};
 /// `tag`: bits 0..16 material index (into `Library::materials`), bits 16..24
 /// the wheel part (0 none; 1..=4 a spinning part of wheel FL, FR, RL, RR,
 /// which also steers on the front axle; 5..=8 a steer-only part of the same
-/// wheel, the caliper), bits 24..32 reserved.
+/// wheel, the caliper), 9 the driver's door, bits 24..32 reserved.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Pod, Zeroable, PartialEq)]
 pub struct AgentVertex {
@@ -51,6 +52,7 @@ pub struct AgentVertex {
 const _: () = assert!(std::mem::size_of::<AgentVertex>() == 32);
 
 pub const WHEEL_NONE: u32 = 0;
+pub const PART_DRIVER_DOOR: u32 = 9;
 
 pub fn tag(material: u32, wheel: u32) -> u32 {
     (material & 0xffff) | ((wheel & 0xff) << 16)
@@ -66,6 +68,7 @@ pub struct GpuMesh {
     pub glass_first: u32,
     pub glass_count: u32,
     pub base_vertex: i32,
+    /// Character palette metadata or the body-space door axis as float bits.
     pub pad: [u32; 3],
 }
 
@@ -91,7 +94,8 @@ pub struct GpuModel {
     pub skeleton: u32,
     pub joints: u32,
     pub wheel_radius: f32,
-    pub pad: [u32; 4],
+    /// Driver-door hinge position in body space and signed maximum angle.
+    pub driver_door: [f32; 4],
 }
 const _: () = assert!(std::mem::size_of::<GpuModel>() == 128);
 
@@ -115,7 +119,7 @@ pub struct GpuAgent {
     pub steer: f32,
     pub speed: f32,
     pub scale: f32,
-    /// People: phase 0..1 of the standing clip; with
+    /// Vehicles: driver-door opening fraction. People: phase 0..1 of the standing clip; with
     /// standing loops, the place in the slot's frames (`MotionMeta::clip_phase`).
     pub clip_phase: f32,
     /// People: the standing clip (`CLIP_*`).

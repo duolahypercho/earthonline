@@ -121,6 +121,7 @@ fn base_args() -> Args {
         agents: true,
         agent_density: 1,
         rocketbox: true, // people
+        test_character: None,
         props: true,
         props2: Default::default(),
         perf: Default::default(),

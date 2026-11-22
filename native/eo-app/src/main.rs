@@ -11,6 +11,8 @@
 static ALLOC: eo_render::alloc::EoAlloc = eo_render::alloc::EoAlloc;
 
 mod agents; // agents
+mod test_characters;
+mod car_access;
 mod house;
 mod play;
 mod props; // props
@@ -104,6 +106,7 @@ pub struct Args {
     pub agent_density: u32,
     /// the Rocketbox people walk the streets when a copy is at EO_PEOPLE_ROOT; `--no-rocketbox` draws no people.
     pub rocketbox: bool,
+    pub test_character: Option<eo_agents::test_characters::Selection>,
     /// street props, trees and parked cars (`--no-props` turns them off).
     pub props: bool,
     /// the furniture kinds, ez-tree trees, overhead, wires and their shading (`--no-props2` etc.).
@@ -187,6 +190,7 @@ impl Default for PerfArgs {
 }
 
 fn parse_args() -> Result<Args> {
+    let mut test_character = test_characters::Options::default();
     let mut a = Args {
         interior_lighting: true,
         house_finishes: false,
@@ -232,6 +236,7 @@ fn parse_args() -> Result<Args> {
         agents: true, // agents
         agent_density: 1,
         rocketbox: true, // people
+        test_character: None,
         props: true, // props
         props2: Default::default(),
         perf: Default::default(), // occlusion / hitch
@@ -434,8 +439,10 @@ fn parse_args() -> Result<Args> {
                 println!(
                     "eo-app [--bench] [--frames N=720] [--warmup N=60] [--width 1920] [--height 1080] [--msaa 1|4]\n       [--no-indirect-validation] [--no-indirect-count] [--no-vsync] [--out DIR] [--label NAME] [--capture] [--far M=4200]\n       [--multiply N=1] [--check-budget] [--budget-ms 10 (self-test only)]\n       [--no-models] [--no-terrain-lod] [--no-kit] [--slice1] [--slice2] [--cache DIR] [--no-cache] [--stream-threads N=6] [--stream-radius M=inf]\n       [--kit-threads N=6] [--kit-split-materials] [--upload-budget-mb 4] [--kit-arena-vertices N] [--kit-arena-indices N] [--kit-arena-objects N]\n       [--kit-near-load M=110] [--kit-mid-load M=520] [--drive-frames N=3600]\n       [--time-of-day H=12] [--shadow-map N=3072] [--no-shadows] [--no-agents] [--agent-density N=1] [--no-rocketbox]\n       [--no-occlusion] [--occlusion-check] [--no-thread-priority] [--pace realtime|60hz|all-60hz|none] [--worst-frames N=12] [--check-max]\n       [--no-view-detail] [--view-margin-deg 35] [--view-predict-s 0.3] [--view-hold-s 2.5] [--stream-all-paths] [--full-arenas]\n       [--segments street_walk,elevated_sweep,city_overview,authored_street,kit_street,drive,turn_around,turn_around_authored]"
                 );
+                println!("       [--play --test-character ID [--test-clip NAME] [--car-door-animation]] [--no-test-character] [--list-test-clips]");
                 std::process::exit(0);
             }
+            flag if test_character.parse(flag, &mut val)? => {}
             other => anyhow::bail!("unknown argument {other} (try --help)"),
         }
     }
@@ -443,6 +450,7 @@ fn parse_args() -> Result<Args> {
         // 4 timestamp queries per frame; one query set holds at most 4096.
         anyhow::bail!("--frames + --warmup must be <= 1024 per segment");
     }
+    a.test_character = test_character.selection(a.agents)?;
     Ok(a)
 }
 
@@ -1047,6 +1055,9 @@ fn roofs_flags() {
 }
 
 fn main() -> Result<()> {
+    if std::env::args().nth(1).as_deref() == Some("--list-test-clips") {
+        return test_characters::list();
+    }
     groundscale_flags()?;
     roofs_flags();
     let process_start = Instant::now();

@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 /// Bump when the cooked layout or the cook changes.
-pub const COOK_VERSION: u32 = 5; // 4 -> 5 (people moved by the Rocketbox clips and 100STYLE walks only)
+pub const COOK_VERSION: u32 = 6; // Vehicle models include their driver-door rig.
 const MAGIC: &[u8; 4] = b"EOAL";
 /// People tiers in LOD slot order.
 pub const PERSON_TIERS: [&str; LODS] = ["hero", "near", "mid", "far"];
@@ -92,6 +92,7 @@ pub struct Library {
     pub models: Vec<GpuModel>,
     pub bones: Vec<[f32; 4]>,
     pub atlases: Vec<Atlas>,
+    pub test_player: Option<crate::test_characters::PlayerBody>,
     pub meta: Meta,
     /// How it was loaded (not cached).
     pub from_cache: bool,
@@ -136,7 +137,7 @@ impl Builder {
             glass_first,
             glass_count: b.glass.len() as u32,
             base_vertex: base,
-            pad: [0; 3],
+            pad: b.driver_door.map_or([0; 3], |door| door.axis.map(f32::to_bits)),
         });
         self.lib.meta.mesh_triangles.push(b.triangles);
         self.lib.meshes.len() as u32 - 1
@@ -207,6 +208,45 @@ pub fn cache_path(cache_dir: &Path, key: &str) -> PathBuf {
 }
 
 impl Library {
+    /// Append the selected local player after loading the normal agent cache.
+    /// The cache contains only the city library and the original player fallback.
+    pub fn install_test_player(&mut self, selection: &crate::test_characters::Selection) -> Result<()> {
+        use crate::test_characters::{PlayerBody, Pose};
+        use glam::Vec3;
+
+        anyhow::ensure!(self.test_player.is_none() && self.meshes.len() < MAX_MESHES, "no free agent mesh for the test player");
+        let body = crate::test_characters::cook(selection)?;
+        let preview = selection.preview.as_deref().map(|name| body.rig.clip(name).expect("verified preview name"));
+        let mut bind = Pose::default();
+        bind.sample(&body.rig, preview.unwrap_or_else(|| body.rig.idle()), 0.0, preview.is_some(), 1.0);
+        let palette = (self.bones.len() / 3) as u32;
+        let joints = (bind.rows.len() / 3) as u32;
+        self.bones.extend(bind.rows);
+        let layer = self.atlases.len() as i32;
+        self.meta.atlas_res = body.atlas.res;
+        self.atlases.push(body.atlas);
+
+        let model = self.models.len() as u32;
+        let min = Vec3::from(body.tier.min);
+        let max = Vec3::from(body.tier.max);
+        // Include the reach of the authored transitions when culling previews.
+        let radius = (max - min).length() * 0.5 + 3.0;
+        let mut builder = Builder { lib: std::mem::take(self), mat_ids: HashMap::new() };
+        let material = builder.material(&AgentMaterial {
+            base: [1.0; 4], params: [1.0, 0.0, body.normal_strength, 0.0], layer, flags: M_ATLAS, ..Default::default()
+        });
+        let mesh = builder.tier(&body.tier, material, palette, joints);
+        builder.lib.meshes[mesh as usize].pad[2] = 1; // renderer reads one live palette
+        builder.lib.models.push(GpuModel {
+            meshes: [mesh; LODS], class: CLASS_PERSON, skeleton: palette, joints, radius,
+            center: ((min + max) * 0.5).to_array(), ..Default::default()
+        });
+        builder.lib.meta.model_names.push(selection.id.clone());
+        builder.lib.test_player = Some(PlayerBody { rig: body.rig, model, palette, preview, height: max.y - min.y });
+        *self = builder.lib;
+        Ok(())
+    }
+
     /// Load from the cache, else cook from the GLBs (and write the cache).
     /// The street people are the Rocketbox people when a copy is at
     /// `EO_PEOPLE_ROOT`, else there are none.
@@ -340,7 +380,8 @@ pub fn cook_full(repo_root: &Path, js: &AgentsJs, people: &PeopleSource, motions
         let c = [(min[0] + max[0]) / 2.0, (min[1] + max[1]) / 2.0, (min[2] + max[2]) / 2.0];
         let r = ((max[0] - min[0]).powi(2) + (max[1] - min[1]).powi(2) + (max[2] - min[2]).powi(2)).sqrt() / 2.0;
         let m = b.lib.models.len() as u32;
-        b.lib.models.push(GpuModel { meshes, wheel, center: c, radius: r, class: CLASS_VEHICLE, skeleton: 0, joints: 0, wheel_radius: body.wheel_radius_m as f32, pad: [0; 4] });
+        let driver_door = lods.iter().flatten().find_map(|lod| lod.driver_door).map_or([0.0; 4], |door| door.pivot_and_angle);
+        b.lib.models.push(GpuModel { meshes, wheel, center: c, radius: r, class: CLASS_VEHICLE, skeleton: 0, joints: 0, wheel_radius: body.wheel_radius_m as f32, driver_door });
         b.lib.meta.model_names.push(id.clone());
         b.lib.meta.vehicle_models.insert(id.clone(), m);
     }
@@ -500,7 +541,7 @@ fn cook_rocketbox(b: &mut Builder, root: &Path, motions: &MotionRoots) -> Result
         let c = [(mn[0] + mx[0]) / 2.0, (mn[1] + mx[1]) / 2.0, (mn[2] + mx[2]) / 2.0];
         let r = ((mx[0] - mn[0]).powi(2) + (mx[1] - mn[1]).powi(2) + (mx[2] - mn[2]).powi(2)).sqrt() / 2.0 + 0.3;
         let m = b.lib.models.len() as u32;
-        b.lib.models.push(GpuModel { meshes, wheel: [[0.0; 4]; 4], center: c, radius: r, class: CLASS_PERSON, skeleton: at, joints: rocketbox::JOINTS.len() as u32, wheel_radius: 0.0, pad: [0; 4] });
+        b.lib.models.push(GpuModel { meshes, wheel: [[0.0; 4]; 4], center: c, radius: r, class: CLASS_PERSON, skeleton: at, joints: rocketbox::JOINTS.len() as u32, wheel_radius: 0.0, driver_door: [0.0; 4] });
         b.lib.meta.model_names.push(av.id.clone());
         b.lib.meta.people_models.push(m);
         b.lib.meta.family_heights.push(av.height);
@@ -773,5 +814,5 @@ pub fn read_cache(path: &Path) -> Result<Library> {
         let bc = [take(payload, &mut at)?.to_vec(), take(payload, &mut at)?.to_vec(), take(payload, &mut at)?.to_vec()];
         atlases.push(Atlas { res, maps, bc, bc_levels });
     }
-    Ok(Library { vertices, indices, meshes, materials, models, bones, atlases, meta, from_cache: true, load_ms: 0.0, cache_path: None })
+    Ok(Library { vertices, indices, meshes, materials, models, bones, atlases, test_player: None, meta, from_cache: true, load_ms: 0.0, cache_path: None })
 }
