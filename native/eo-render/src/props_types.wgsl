@@ -71,6 +71,12 @@ const PR_F_WIND: u32 = 2u;
 const PR_F_LEAF: u32 = 4u;
 const PR_F_DOMES: u32 = 8u;
 const PR_F_SIGNS: u32 = 16u;
+// Boats afloat (eo-app `--no-boat-motion` clears it): an instance whose `pad` has
+// PR_AFLOAT_BIT carries its hull's roll and pitch on the sea, 1e-4 rad each: roll
+// in bits 0..15, pitch in bits 16..30, both signed (eo-props `boats::afloat_word`;
+// the pose is the physics', eo-player `harbour`). Its heave is in its height.
+const PR_F_AFLOAT: u32 = 64u;
+const PR_AFLOAT_BIT: u32 = 0x80000000u;
 // a visible word: instance index (17 bits) | fade (8 bits) << 17.
 const PR_INDEX_MASK: u32 = 0x1ffffu;
 
@@ -124,8 +130,43 @@ fn pr_veg_scale(i: PrInstance) -> f32 {
     return s * min(inverseSqrt(keep), t.z);
 }
 
+fn pr_afloat_on(i: PrInstance) -> bool {
+    return (pr.mode.z & PR_F_AFLOAT) != 0u && (i.pad & PR_AFLOAT_BIT) != 0u;
+}
+
+// A moored boat's pose on the sea (x roll about its bow axis, local +Z; y pitch
+// about its beam, local +X; radians), as the instance's word carries it.
+fn pr_afloat(i: PrInstance) -> vec3<f32> {
+    let r = i32(i.pad & 0xffffu);
+    let p = i32((i.pad >> 16u) & 0x7fffu);
+    let roll = f32(select(r, r - 65536, r >= 32768)) * 1e-4;
+    let pitch = f32(select(p, p - 32768, p >= 16384)) * 1e-4;
+    return vec3<f32>(roll, pitch, 0.0);
+}
+
+// a local direction or point turned by the boat's roll (about +Z), then its pitch (about +X).
+fn pr_afloat_turn(a: vec3<f32>, v: vec3<f32>) -> vec3<f32> {
+    let cr = cos(a.x);
+    let sr = sin(a.x);
+    let r = vec3<f32>(v.x * cr - v.y * sr, v.x * sr + v.y * cr, v.z);
+    let cp = cos(a.y);
+    let sp = sin(a.y);
+    return vec3<f32>(r.x, r.y * cp - r.z * sp, r.y * sp + r.z * cp);
+}
+
+// a local normal as the instance turns it (a boat afloat: its roll and pitch).
+fn pr_local_dir(i: PrInstance, n: vec3<f32>) -> vec3<f32> {
+    if (pr_afloat_on(i)) {
+        return pr_afloat_turn(pr_afloat(i), n);
+    }
+    return n;
+}
+
 fn pr_local(i: PrInstance, p: vec3<f32>) -> vec3<f32> {
     var l = p * i.scale * pr_veg_scale(i);
+    if (pr_afloat_on(i)) {
+        return pr_afloat_turn(pr_afloat(i), l);
+    }
     if (i.model == PR_TACTILE_PAD || i.model == PR_TREE_BASIN) {
         // The pad takes the ramp's running slope along its depth; a tree basin the street's grade along the kerb.
         l.y = l.y + l.z * i.slope;

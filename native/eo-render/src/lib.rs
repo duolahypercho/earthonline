@@ -2029,6 +2029,12 @@ impl Renderer {
         self.sample_count == 1 && !self.debug_ids && self.farshore.get().is_some()
     }
 
+    /// The water's clock now (s): the time its waves are drawn at (eo-player's boats float on the same sea).
+    pub fn water_clock(&self) -> f64 {
+        let clock = if self.look.options.water_optics { self.look.sky.world_time() } else { 0.0 };
+        self.water.get().map_or(clock, |w| w.clock(clock))
+    }
+
     /// the sea is drawn by the water pass this frame (attached, on, and
     /// on the path it needs: single-sample, no debug ids; its patches are one
     /// instanced indirect draw, so it needs no multi-draw-indirect-count unless

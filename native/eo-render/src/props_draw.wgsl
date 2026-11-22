@@ -73,7 +73,7 @@ fn prop_vs(
     var out: PrOut;
     out.clip = frame.view_proj * vec4<f32>(world, 1.0);
     out.world = world;
-    var nw = pr_rot(inst.yaw, normal.xyz / max(inst.scale, vec3<f32>(1e-3)));
+    var nw = pr_rot(inst.yaw, pr_local_dir(inst, normal.xyz / max(inst.scale, vec3<f32>(1e-3))));
     // the slope shear's inverse transpose (pr_veg_grad).
     let g = pr_veg_grad(inst);
     nw = vec3<f32>(nw.x - g.x * nw.y, nw.y, nw.z - g.y * nw.y);

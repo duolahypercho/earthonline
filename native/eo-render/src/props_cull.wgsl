@@ -53,6 +53,9 @@ fn pr_sphere(i: PrInstance, m: PrModel) -> PrSphere {
     let v = pr_veg_scale(i);
     s.c = i.pos + pr_rot(i.yaw, m.center * i.scale * v);
     s.r = m.radius * max(max(i.scale.x, i.scale.y), i.scale.z) * v * (1.0 + length(pr_veg_grad(i)));
+    if (pr_afloat_on(i)) {
+        s.r = s.r * 1.12; // a boat's roll and pitch turn it about its waterline (`pr_afloat`)
+    }
     return s;
 }
 

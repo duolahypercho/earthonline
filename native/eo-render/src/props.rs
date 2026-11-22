@@ -73,7 +73,9 @@ pub const F_WIND: u32 = 2;
 pub const F_LEAF: u32 = 4;
 pub const F_DOMES: u32 = 8;
 pub const F_SIGNS: u32 = 16;
-pub const F_ALL: u32 = 31;
+/// Moored boats ride the harbour's chop (props_types.wgsl `pr_afloat`; eo-app `--no-boat-motion`).
+pub const F_AFLOAT: u32 = 64;
+pub const F_ALL: u32 = 31 | F_AFLOAT;
 /// A slot no instance uses (its model is out of range).
 pub const EMPTY: GpuPropInstance = GpuPropInstance { pos: [0.0; 3], yaw: 0.0, scale: [0.0; 3], model: u32::MAX, variant: 0, lamp: 0, slope: 0.0, pad: 0 };
 
