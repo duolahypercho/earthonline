@@ -144,12 +144,69 @@ pub const SNAKE_ALBEDO: [f64; 2] = [0.03, 0.065];
 pub const SNAKE_ROUGH: [f64; 2] = [0.55, 0.72];
 pub const SNAKE_FAR_M: f64 = 170.0;
 
+/// The road's cracks (`wx_cracks`, the default under `--grime`; the network
+/// above, `wx_snakes`, only under the diagnostic `EO_GRIME_STREET_V1=1`).
+/// San Francisco's carriageways are mostly asphalt laid over an older
+/// concrete base, so they crack where the slabs below meet: transverse cracks
+/// a slab length apart and longitudinal ones at the lane joints and wheel
+/// paths, rather than a polygon net. The crack cell is stretched along the
+/// road (`CRACK_CELL_M`: along, across; a slab of the 1900-1950 base,
+/// INFERRED), only a share of its edges are cracks (`CRACK_SHOWN`), and of
+/// those a share are sealed (`CRACK_SEALED`); the rest are open hairlines
+/// (`CRACK_HAIR_HALF_M`, 4-12 mm wide where the edges have ravelled)
+/// darkened by their own shadow (`CRACK_HAIR_DARK`), with a faint dark
+/// ravelled margin (`CRACK_RAVEL`). A sealed crack is a bead of binder
+/// (`CRACK_BEAD_HALF_M`: an overband laid 2-3 in wide, INFERRED) with the
+/// squeegee's thin film either side (`CRACK_FILM`: its reach as a multiple of
+/// the bead, `CRACK_FILM_COVER` its opacity); the binder is black when fresh
+/// and greys as it oxidises and takes the road's dust (`CRACK_ALBEDO`, fresh
+/// and aged, against aged asphalt's 0.10-0.15 of sheet 2.1), most of it
+/// aged (`CRACK_AGED_SHARE`). Drawn within `SNAKE_FAR_M`.
+pub const CRACK_CELL_M: [f64; 2] = [5.5, 2.2];
+pub const CRACK_SHOWN: f64 = 0.72;
+pub const CRACK_SEALED: f64 = 0.58;
+pub const CRACK_HAIR_HALF_M: f64 = 0.004;
+pub const CRACK_HAIR_DARK: f64 = 0.6;
+/// An open crack's ravelled edge: a faint darker band this many times the
+/// crack's half-width, at this darkening (loose fines and held dirt).
+pub const CRACK_RAVEL: [f64; 2] = [5.0, 0.26];
+pub const CRACK_BEAD_HALF_M: f64 = 0.03;
+pub const CRACK_FILM: f64 = 2.4;
+pub const CRACK_FILM_COVER: f64 = 0.3;
+pub const CRACK_ALBEDO: [f64; 2] = [0.035, 0.08];
+pub const CRACK_AGED_SHARE: f64 = 0.75;
+
+/// `EO_GRIME_STREET_V1=1` (a diagnostic): the street keeps the weathering
+/// `--grime` drew before the road's cracks (`wx_cracks`) and the markings'
+/// wear (`wx_paint`'s streaks, `PAINT_*`) were redrawn: the crack network
+/// (`wx_snakes`) and the flaked paint, for matched A/B captures on one build.
+/// Read once, when the shaders are built.
+pub fn street_v1() -> bool {
+    std::env::var("EO_GRIME_STREET_V1").is_ok_and(|v| v == "1")
+}
+
 /// Extra oil darkening down the lane centres (over the decal's own) and the
 /// gutter pan's grime. INFERRED from the reference's notes.
 pub const OIL_EXTRA: f64 = 0.4;
 pub const GUTTER_DARK: f64 = 0.3;
 /// Marking paint flaked to bare asphalt at most this share (an old line).
+/// Only under `EO_GRIME_STREET_V1=1`; the markings' wear is `PAINT_*` below.
 pub const PAINT_BARE: f64 = 0.8;
+/// The markings' wear (`wx_paint`): SF's markings are thermoplastic, which
+/// does not flake off in big holes but soils (the road's dust and tyre
+/// rubber: a grey film, `PAINT_SOIL` young and old), is blackened and
+/// polished in long streaks where tyres run along it (`PAINT_TYRE`, the
+/// streaks' darkening), wears through to its aggregate in fine specks
+/// (`PAINT_SPECK`: their share, young and old) and loses a few small chips to
+/// the road (`PAINT_CHIP`). Under `--grime` the scanned road-line mask's
+/// holes and dark marks (cc0.wgsl `cc0_paint_wear`; the scan repeats along
+/// the line, so its marks would too) are kept at `PAINT_SCAN_BARE` of their
+/// depth. INFERRED from the reference's notes on worn crossings.
+pub const PAINT_SOIL: [f64; 2] = [0.16, 0.42];
+pub const PAINT_TYRE: f64 = 0.45;
+pub const PAINT_SPECK: [f64; 2] = [0.1, 0.3];
+pub const PAINT_CHIP: [f64; 2] = [0.015, 0.08];
+pub const PAINT_SCAN_BARE: f64 = 0.3;
 
 /// Facades: per building, the share left fresh (repainted lately) and the
 /// share filthy, and their weathering gains. INFERRED ("no two neighbours
@@ -409,6 +466,8 @@ pub fn wgsl() -> String {
     s.push_str(&format!("const WX_RUN_SHIFT: u32 = {}u;\n", crate::facade::RUN_GRIME_SHIFT));
     // the street's kerb distance is encoded to 6.35 m (street.rs): patches stay inside it.
     s.push_str("const WX_KD_MAX: f32 = 6.3;\n");
+    // the road's cracks and the markings' wear, or the earlier ones under `EO_GRIME_STREET_V1=1`.
+    s.push_str(&format!("const WX_STREET_V1: bool = {};\n", street_v1()));
     let a = sun_axis();
     for (k, v) in [
         ("WX_WALK_FOLD", walk_fold()),
@@ -453,9 +512,31 @@ pub fn wgsl() -> String {
         ("WX_SNAKE_ROUGH", SNAKE_ROUGH[0]),
         ("WX_SNAKE_ROUGH_AGED", SNAKE_ROUGH[1]),
         ("WX_SNAKE_FAR", SNAKE_FAR_M),
+        ("WX_CRACK_ALONG_M", CRACK_CELL_M[0]),
+        ("WX_CRACK_ACROSS_M", CRACK_CELL_M[1]),
+        ("WX_CRACK_SHOWN", CRACK_SHOWN),
+        ("WX_CRACK_SEALED", CRACK_SEALED),
+        ("WX_CRACK_HAIR_M", CRACK_HAIR_HALF_M),
+        ("WX_CRACK_HAIR_DARK", CRACK_HAIR_DARK),
+        ("WX_CRACK_RAVEL", CRACK_RAVEL[0]),
+        ("WX_CRACK_RAVEL_DARK", CRACK_RAVEL[1]),
+        ("WX_CRACK_BEAD_M", CRACK_BEAD_HALF_M),
+        ("WX_CRACK_FILM", CRACK_FILM),
+        ("WX_CRACK_FILM_COVER", CRACK_FILM_COVER),
+        ("WX_CRACK_ALBEDO", CRACK_ALBEDO[0]),
+        ("WX_CRACK_ALBEDO_AGED", CRACK_ALBEDO[1]),
+        ("WX_CRACK_AGED_SHARE", CRACK_AGED_SHARE),
         ("WX_OIL_EXTRA", OIL_EXTRA),
         ("WX_GUTTER_DARK", GUTTER_DARK),
         ("WX_PAINT_BARE", PAINT_BARE),
+        ("WX_PAINT_SOIL", PAINT_SOIL[0]),
+        ("WX_PAINT_SOIL_OLD", PAINT_SOIL[1]),
+        ("WX_PAINT_TYRE", PAINT_TYRE),
+        ("WX_PAINT_SPECK", PAINT_SPECK[0]),
+        ("WX_PAINT_SPECK_OLD", PAINT_SPECK[1]),
+        ("WX_PAINT_CHIP", PAINT_CHIP[0]),
+        ("WX_PAINT_CHIP_OLD", PAINT_CHIP[1]),
+        ("WX_PAINT_SCAN_BARE", PAINT_SCAN_BARE),
         ("WX_BLDG_FRESH_SHARE", BLDG_FRESH_SHARE),
         ("WX_BLDG_FRESH", BLDG_FRESH),
         ("WX_BLDG_HEAVY_SHARE", BLDG_HEAVY_SHARE),
@@ -588,6 +669,31 @@ pub fn wgsl() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_cracks_and_worn_markings_are_physical() {
+        // Cracks stretched along the road; an open crack under a centimetre, a
+        // sealant bead an overband's 2-3 in, its film wider; binder no lighter
+        // than aged asphalt (0.10-0.15, sheet 2.1), fresher blacker.
+        assert!(CRACK_CELL_M[0] > 2.0 * CRACK_CELL_M[1] && CRACK_CELL_M[1] > 1.5);
+        assert!(CRACK_HAIR_HALF_M * 2.0 * 1.5 <= 0.012 && CRACK_HAIR_HALF_M * CRACK_RAVEL[0] < CRACK_BEAD_HALF_M * 1.5);
+        assert!(CRACK_BEAD_HALF_M * 2.0 >= 0.05 && CRACK_BEAD_HALF_M * 2.0 <= 0.0762 && CRACK_FILM > 1.0 && CRACK_FILM_COVER < 0.5);
+        assert!(CRACK_ALBEDO[0] < CRACK_ALBEDO[1] && CRACK_ALBEDO[1] < 0.1);
+        for share in [CRACK_SHOWN, CRACK_SEALED, CRACK_AGED_SHARE, CRACK_HAIR_DARK, CRACK_RAVEL[1]] {
+            assert!(share > 0.0 && share < 1.0, "{share}");
+        }
+        // Worn thermoplastic: soiled and speckled more as it ages, chipped little, never a big hole.
+        assert!(PAINT_SOIL[0] < PAINT_SOIL[1] && PAINT_SOIL[1] < 0.5);
+        assert!(PAINT_SPECK[0] < PAINT_SPECK[1] && PAINT_SPECK[1] < 0.5);
+        assert!(PAINT_CHIP[0] < PAINT_CHIP[1] && PAINT_CHIP[1] < 0.15 && PAINT_CHIP[1] < PAINT_BARE);
+        assert!(PAINT_TYRE > 0.0 && PAINT_TYRE < 0.6 && PAINT_SCAN_BARE > 0.0 && PAINT_SCAN_BARE < 1.0);
+        // the shader gets them, and the diagnostic's switch (off unless EO_GRIME_STREET_V1=1).
+        let src = wgsl();
+        for k in ["WX_CRACK_ALONG_M", "WX_CRACK_BEAD_M", "WX_CRACK_RAVEL_DARK", "WX_PAINT_SOIL_OLD", "WX_PAINT_SCAN_BARE"] {
+            assert!(src.contains(&format!("const {k}: f32 = ")), "{k}");
+        }
+        assert!(src.contains(&format!("const WX_STREET_V1: bool = {};", street_v1())));
+    }
 
     #[test]
     fn the_walk_lands_in_the_measured_band() {

@@ -310,6 +310,94 @@ fn wx_snakes(s: ptr<function, Surface>, world: vec3<f32>, fw: f32, dist: f32) {
     (*s).rough = mix((*s).rough, mix(WX_SNAKE_ROUGH, WX_SNAKE_ROUGH_AGED, age), k);
 }
 
+// The road's cracks (weathering.rs `CRACK_*`): where an old concrete base's
+// slabs meet under the asphalt, transverse cracks a slab apart and
+// longitudinal ones along the lanes. A jittered cell net stretched along the
+// road (`g`, the kerb gradient: across the carriageway; its sign made the
+// same on both sides of the centre line, world z on a junction pad), only a
+// share of its edges cracked, in runs; of those some sealed (a bead of binder
+// with the squeegee's thin film either side, black fresh, dusty grey aged)
+// and the rest open hairlines in their own shadow. Each filtered to its cover
+// once under a pixel.
+fn wx_cracks(s: ptr<function, Surface>, world: vec3<f32>, g: vec2<f32>, fw: f32, dist: f32) {
+    let far = 1.0 - smoothstep(WX_SNAKE_FAR * 0.6, WX_SNAKE_FAR, dist);
+    // cracked stretches of pavement and sound ones.
+    let present = smoothstep(0.12, 0.3, st_noise(world.xz / (WX_CRACK_ALONG_M * 3.0) + 17.0));
+    if (present * far <= 0.0) {
+        return;
+    }
+    var n = vec2<f32>(0.0, 1.0);
+    let gl = length(g);
+    if (gl > 0.3) {
+        n = g / gl;
+        if (n.y < 0.0 || (n.y == 0.0 && n.x < 0.0)) {
+            n = -n;
+        }
+    }
+    let t = vec2<f32>(n.y, -n.x);
+    // the crack's own wiggle: a decimetre meander and a finer kink (m).
+    let wig = (vec2<f32>(st_noise(world.xz / 0.9 + 1.9), st_noise(world.xz / 0.9 + 6.2)) - 0.5) * 0.16 + (vec2<f32>(st_noise(world.xz / 0.21 + 4.4), st_noise(world.xz / 0.21 + 8.8)) - 0.5) * 0.04;
+    let x = world.xz + wig;
+    let cell = vec2<f32>(WX_CRACK_ALONG_M, WX_CRACK_ACROSS_M);
+    let p = vec2<f32>(dot(x, t), dot(x, n)) / cell;
+    let base = floor(p);
+    var f1 = 1e9;
+    var f2 = 1e9;
+    var c1 = vec2<f32>(0.0);
+    var c2 = vec2<f32>(0.0);
+    for (var j = -1; j <= 1; j = j + 1) {
+        for (var i = -1; i <= 1; i = i + 1) {
+            let c = base + vec2<f32>(f32(i), f32(j));
+            let pt = c + 0.2 + 0.6 * vec2<f32>(st_hash(c + vec2<f32>(3.1, 7.3)), st_hash(c + vec2<f32>(9.7, 1.3)));
+            // nearest in metres, so the stretched cells' edges are their true bisectors.
+            let dm = (p - pt) * cell;
+            let dd = dot(dm, dm);
+            if (dd < f1) {
+                f2 = f1;
+                c2 = c1;
+                f1 = dd;
+                c1 = pt;
+            } else if (dd < f2) {
+                f2 = dd;
+                c2 = pt;
+            }
+        }
+    }
+    // distance (m) to the bisector of the two nearest points, measured in metres.
+    let a = c1 * cell;
+    let b = c2 * cell;
+    let pm = p * cell;
+    let e = normalize(b - a + vec2<f32>(1e-6, 0.0));
+    let d = abs(dot(pm - 0.5 * (a + b), e));
+    // this crack (the pair of cells): cracked at all, sealed or open, and broken into runs.
+    let h = st_hash(floor(c1 * 7.0) + floor(c2 * 7.0) * 1.37 + vec2<f32>(5.5, 2.2));
+    let shown = step(1.0 - WX_CRACK_SHOWN, h);
+    let sealed = step(1.0 - WX_CRACK_SEALED, fract(h * 13.71));
+    let runs = smoothstep(0.16, 0.28, st_noise(world.xz / 2.3 + 11.0));
+    let on = present * far * shown * runs;
+    if (on <= 0.0) {
+        return;
+    }
+    if (sealed > 0.5) {
+        let hw = WX_CRACK_BEAD_M * (0.7 + 0.6 * st_noise(world.xz / 0.6));
+        let bead = wx_band(d, hw, fw);
+        let film = wx_band(d, hw * WX_CRACK_FILM, fw) * WX_CRACK_FILM_COVER * (0.6 + 0.8 * st_noise(world.xz / 0.35 + 2.0));
+        let k = clamp(max(bead, film), 0.0, 1.0) * on;
+        let age = step(1.0 - WX_CRACK_AGED_SHARE, fract(h * 7.31)) * (0.6 + 0.4 * st_noise(world.xz / 3.0 + 5.7));
+        let tone = mix(WX_CRACK_ALBEDO, WX_CRACK_ALBEDO_AGED, age);
+        // binder over the road: its own tone, but never lighter than the road under it.
+        (*s).albedo = mix((*s).albedo, min((*s).albedo, vec3<f32>(tone)), k);
+        (*s).rough = mix((*s).rough, mix(WX_SNAKE_ROUGH, WX_SNAKE_ROUGH_AGED, age), k);
+    } else {
+        // an open crack: a hairline whose width wanders, darkened by its shadow.
+        let hw = WX_CRACK_HAIR_M * (0.5 + 1.0 * st_noise(world.xz / 0.4 + 3.3));
+        let k = wx_band(d, hw, fw) * on;
+        let ravel = wx_band(d, hw * WX_CRACK_RAVEL, fw) * on * (0.5 + st_noise(world.xz / 0.25 + 6.6));
+        (*s).albedo = (*s).albedo * (1.0 - WX_CRACK_HAIR_DARK * k) * (1.0 - WX_CRACK_RAVEL_DARK * clamp(ravel, 0.0, 1.0));
+        (*s).rough = min(1.0, (*s).rough + 0.1 * k);
+    }
+}
+
 // The carriageway, junction pads and gutter pans worn and patched.
 fn wx_road(s: ptr<function, Surface>, world: vec3<f32>, rel: vec3<f32>, cls: u32, kd: f32, g: vec2<f32>, fw: f32) {
     let dist = length(rel);
@@ -327,7 +415,11 @@ fn wx_road(s: ptr<function, Surface>, world: vec3<f32>, rel: vec3<f32>, cls: u32
         }
     }
     if (dist < WX_SNAKE_FAR) {
-        wx_snakes(s, world, fw, dist);
+        if (WX_STREET_V1) {
+            wx_snakes(s, world, fw, dist);
+        } else {
+            wx_cracks(s, world, g, fw, dist);
+        }
     }
 }
 
@@ -350,12 +442,53 @@ fn wx_street(s: ptr<function, Surface>, world: vec3<f32>, rel: vec3<f32>, cls: u
 fn wx_paint(s: ptr<function, Surface>, world: vec3<f32>, dpx: vec3<f32>, dpy: vec3<f32>) {
     let fw = wx_fw(dpx, dpy);
     let age = smoothstep(0.2, 0.8, st_noise(world.xz / 17.0 + 2.9));
+    if (!WX_STREET_V1) {
+        wx_paint_wear(s, world, fw, age);
+        return;
+    }
     let ch = st_noise(world.xz / 0.08 + 1.7) * 0.55 + st_noise(world.xz / 0.31 + 7.1) * 0.45;
     let lo = 0.66 - 0.3 * age;
     let bare_near = smoothstep(lo, lo + 0.08, ch);
     let bare = mix(0.1 + 0.45 * age, bare_near, wx_keep(0.08, fw)) * WX_PAINT_BARE;
     (*s).albedo = mix((*s).albedo * (1.0 - 0.3 * age), CC0_ASPHALT_TINT * CC0_ASPHALT_ALBEDO, clamp(bare, 0.0, 1.0));
     (*s).rough = mix((*s).rough, 0.85, clamp(bare + 0.3 * age, 0.0, 1.0));
+}
+
+// Worn thermoplastic (weathering.rs `PAINT_*`): soiled, blackened and
+// polished in long tyre streaks along the line (its run: across from the
+// marking's own across coordinate, which `wx_kerb_grad` reads in this pass),
+// worn through to its aggregate in fine specks, a few small chips to the
+// road. Each term filtered to its mean once under a pixel.
+fn wx_paint_wear(s: ptr<function, Surface>, world: vec3<f32>, fw: f32, age: f32) {
+    var along = vec2<f32>(1.0, 0.0);
+    let g = wx_kerb_grad();
+    let gl = length(g);
+    if (gl > 0.05) {
+        along = vec2<f32>(-g.y, g.x) / gl;
+    }
+    let across = vec2<f32>(-along.y, along.x);
+    let u = dot(world.xz, along);
+    let v = dot(world.xz, across);
+    let road = CC0_ASPHALT_TINT * CC0_ASPHALT_ALBEDO;
+    // soil: a grey film, patchy over a metre.
+    let soil = mix(WX_PAINT_SOIL, WX_PAINT_SOIL_OLD, age) * (0.7 + 0.6 * st_noise(world.xz / 1.3 + 4.1));
+    var a = (*s).albedo * (1.0 - soil);
+    // tyre streaks: long and narrow along the line, a few centimetres across.
+    let st = st_noise(vec2<f32>(u / 1.8, v / 0.08) + 7.7) * 0.65 + st_noise(vec2<f32>(u / 0.6, v / 0.03) + 1.3) * 0.35;
+    let tyre = mix(0.22, smoothstep(0.52, 0.82, st), wx_keep(0.08, fw)) * (0.5 + 0.5 * age);
+    a = a * (1.0 - WX_PAINT_TYRE * tyre);
+    // the aggregate through the worn binder: sub-centimetre specks of the road's tone.
+    let share = mix(WX_PAINT_SPECK, WX_PAINT_SPECK_OLD, age);
+    let sp = st_noise(world.xz / 0.011 + 3.9);
+    let speck = mix(share, smoothstep(1.0 - share - 0.03, 1.0 - share + 0.03, sp), wx_keep(0.011, fw));
+    a = mix(a, road * 1.3, speck);
+    // a few chips to the road.
+    let cshare = mix(WX_PAINT_CHIP, WX_PAINT_CHIP_OLD, age);
+    let cn = st_noise(world.xz / 0.045 + 1.7) * 0.7 + st_noise(world.xz / 0.013 + 5.2) * 0.3;
+    let chip = mix(cshare, smoothstep(1.0 - cshare - 0.02, 1.0 - cshare + 0.02, cn), wx_keep(0.045, fw));
+    a = mix(a, road, chip);
+    (*s).albedo = a;
+    (*s).rough = mix(mix((*s).rough, 0.72, soil), 0.85, chip) - 0.08 * tyre;
 }
 
 // ---- buildings --------------------------------------------------------------

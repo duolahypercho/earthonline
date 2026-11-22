@@ -352,6 +352,7 @@ Experiments are not shipped defaults.
 | `EO_TRACE_LOAD` | Print timings of the world load |
 | `EO_CUMULUS` | `1` draws the fair-weather cumulus field under a clear sky (off by default; the overcast, fog and rain decks are drawn either way) |
 | `EO_CAPTURE_HOLD_SKY` | `1` holds the sky's clock at `--world-time` for every pose of an `EO_CAPTURE_POSES` file, so the drifting clouds are the same in two runs (matched captures) |
+| `EO_GRIME_STREET_V1` | `1` (a diagnostic) keeps the street weathering `--grime` drew before the road's cracks and the markings' wear were redrawn (the polygon crack network, the flaked paint, the scan's full holes), for matched A/B captures on one build |
 
 The locations of the optional off-repository assets are read from the
 variables below.
