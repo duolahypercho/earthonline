@@ -125,6 +125,11 @@ pub struct HlodOptions {
     /// and a tower's panes tilted panel by panel with the city reflected below the horizon (`--no-tower-panels`).
     pub night: bool,
     pub panels: bool,
+    /// a lit office floor seen as an office (`--no-tower-night`, hlod_draw.wgsl
+    /// `hl_tower_night`): the ceiling's glow and its fixture rows over the
+    /// desks' silhouettes, tenants at their own colour and level, floors
+    /// half lit for the cleaners, blinds part down; not one flat tile per window.
+    pub tower_night: bool,
     /// How the far layer is drawn (as attached when this was read; not an option).
     pub path: FarPath,
 }
@@ -150,6 +155,7 @@ impl Default for HlodOptions {
             tower_glass: true,
             night: true,
             panels: true,
+            tower_night: true,
             path: FarPath::NotAttached,
         }
     }
@@ -157,7 +163,7 @@ impl Default for HlodOptions {
 
 impl HlodOptions {
     /// The flags eo-app's parser lets through: (flag, takes a value).
-    pub const FLAGS: [(&'static str, bool); 15] = [
+    pub const FLAGS: [(&'static str, bool); 16] = [
         ("--no-hlod", false),
         ("--no-hlod-districts", false),
         ("--no-hlod-lamps", false),
@@ -173,6 +179,7 @@ impl HlodOptions {
         ("--no-tower-glass", false),
         ("--no-far-night", false),
         ("--no-tower-panels", false),
+        ("--no-tower-night", false),
     ];
 
     /// From the command line (see `FLAGS`) and `EO_HLOD=0`.
@@ -210,6 +217,9 @@ impl HlodOptions {
         }
         if args.iter().any(|a| a == "--no-tower-panels") {
             o.panels = false;
+        }
+        if args.iter().any(|a| a == "--no-tower-night") {
+            o.tower_night = false;
         }
         if let Some(r) = val("--hlod-radius") {
             o.load_m = r as f32;
@@ -257,7 +267,8 @@ const FL_WINDOWS: bool = {};
 const FL_TOWER: bool = {};
 const FL_NIGHT: bool = {};
 const FL_PANELS: bool = {};
-", glass && o.windows, glass && o.tower_glass, o.night, glass && o.tower_glass && o.panels)
+const FL_TOWER_NIGHT: bool = {};
+", glass && o.windows, glass && o.tower_glass, o.night, glass && o.tower_glass && o.panels, o.night && o.tower_night)
 }
 
 /// One entry of the GPU cell table (48 bytes): a cell or a district.

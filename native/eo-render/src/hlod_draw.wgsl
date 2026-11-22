@@ -207,6 +207,9 @@ fn hl_night_windows(in: HlOut, world: vec3<f32>, n: vec3<f32>, glass: f32, dpx: 
     let cell = i32(floor(along / bay));
     let hb = hl_h3(g, 0, 11u);
     let base = skyu.bloom_w2.z * 25.0 / LK_PI * dusk;
+    if (tower && FL_TOWER_NIGHT) {
+        return hl_tower_night(in, world, n, glass, fx, fy, bay, storey, grid.z, along, fl, cell, g, gf, hb, base);
+    }
     if (tower) {
         let p_floor = clamp(look.rooms_work.x / 0.7 * 2.6 * hb * hb, 0.0, 0.92);
         let floor_lit = step(hl_h3(g, fl, 1u), p_floor);
@@ -237,6 +240,76 @@ fn hl_night_windows(in: HlOut, world: vec3<f32>, n: vec3<f32>, glass: f32, dpx: 
     let k = mix(lit, occ, a);
     let level = 0.6 + 0.8 * hl_h3(gf, fl * 977 + cell, 10u);
     return col * (glass * k * mix(level, 1.0, a) * base);
+}
+
+// (`--tower-night`, hlod.rs `tower_night`) a tower's lit office floors seen as
+// offices. A floor is lit (by the office share and the tower's own activity,
+// as above), half lit for the cleaners (a dim, warm few runs) or dark; in a lit
+// floor a tenant's run (6-18 m) is lit or dark at its own lamp colour (a
+// continuous 3,000-5,000 K, not two) and level. Behind the vision glass the
+// room reads as a room: the ceiling's glow and its fixture rows near the head
+// of the glass, the desks', screens' and partitions' dark silhouettes along
+// the sill, the light falling off toward the run's ends; some runs with their
+// blinds part down, glowing evenly. Each level of detail gives way to its mean
+// as it shrinks under a pixel (the fixtures, the profile, the window, the run,
+// the storey), so a far tower holds its tone without shimmer.
+const HL_TN_PROFILE_MEAN: f32 = 0.78;
+// the lit floor's light on the inside of its spandrel and frames, as a share of the glass's.
+const HL_TN_SPANDREL: f32 = 0.07;
+const HL_TN_WARM: vec3<f32> = vec3<f32>(1.0, 0.70, 0.44);
+const HL_TN_NEUTRAL: vec3<f32> = vec3<f32>(1.0, 0.86, 0.70);
+const HL_TN_COOL: vec3<f32> = vec3<f32>(0.84, 0.91, 1.0);
+fn hl_tower_night(in: HlOut, world: vec3<f32>, n: vec3<f32>, glass: f32, fx: f32, fy: f32, bay: f32, storey: f32, phase: f32, along: f32, fl: i32, cell: i32, g: u32, gf: u32, hb: f32, base: f32) -> vec3<f32> {
+    let share = look.rooms_work.x / 0.7;
+    // the floor: lit, half lit (cleaners: a few warm runs at a quarter), or dark.
+    let p_lit = clamp(share * 2.6 * hb * hb + 0.08, 0.0, 0.9);
+    let p_dim = clamp(0.22 * (1.0 - p_lit) * (0.4 + share), 0.0, 0.3);
+    let fh = hl_h3(g, fl, 1u);
+    let floor_lit = step(fh, p_lit);
+    let floor_dim = step(p_lit, fh) * step(fh, p_lit + p_dim);
+    let floor_level = mix(0.65, 1.0, hl_h3(g, fl, 6u));
+    // the tenant's run.
+    let seg_len = mix(6.0, 18.0, hl_h3(g, fl, 2u));
+    let seg_pos = along / seg_len + hl_h3(g, fl, 3u);
+    let seg = i32(floor(seg_pos));
+    let sk = fl * 131 + seg;
+    let seg_lit = floor_lit * step(hl_h3(gf, sk, 4u), 0.8) + floor_dim * step(hl_h3(gf, sk, 4u), 0.3);
+    let seg_level = mix(0.75, 1.2, hl_h3(gf, sk, 12u)) * mix(floor_level, 0.24, floor_dim);
+    let t = hl_h3(gf, sk, 7u);
+    let warmth = select(t, 0.15 * t, floor_dim > 0.5); // the cleaners' few lamps warm
+    var col = mix(mix(HL_TN_WARM, HL_TN_NEUTRAL, smoothstep(0.0, 0.45, warmth)), HL_TN_COOL, smoothstep(0.45, 1.0, warmth));
+    // a window in a lit run: nearly all, a few dark (a meeting room, a vacant desk).
+    let wh = hl_h3(gf, fl * 977 + cell, 5u);
+    let win_on = seg_lit * step(wh, 0.9) + (1.0 - floor_lit - floor_dim) * step(wh, 0.02);
+    // the room behind the glass, by height within the storey (0 the sill, 1 the head).
+    let up = fract(world.y / storey - phase);
+    let v = clamp(up / 0.62, 0.0, 1.0);
+    let ceiling = 0.6 + 0.5 * smoothstep(0.5, 0.97, v);
+    let desks = mix(0.5 + 0.25 * hl_h3(gf, fl * 977 + cell, 13u), 1.0, smoothstep(0.18, 0.4, v));
+    let fixtures = 1.0 + 0.9 * hl_pulse(along / 1.8 + 0.3, 0.32, fx / 1.8) * smoothstep(0.82, 0.97, v);
+    // the run's ends a little dimmer (its lamps stop at the partition).
+    let run_edge = mix(0.75, 1.0, smoothstep(0.0, 0.18, min(fract(seg_pos), 1.0 - fract(seg_pos))));
+    var profile = ceiling * desks * mix(fixtures, 1.0 + 0.9 * 0.32 * 0.4, smoothstep(0.2, 0.5, fx / 1.8)) * run_edge;
+    // blinds part down over some runs: an even, dimmer glow over their share of the glass.
+    let blind_to = select(0.0, mix(0.25, 0.8, hl_h3(gf, sk, 14u)), hl_h3(gf, sk, 15u) < 0.35);
+    profile = mix(profile, 0.38, step(1.0 - blind_to, v));
+    // every level to its mean as it shrinks under a pixel.
+    profile = mix(profile, HL_TN_PROFILE_MEAN, smoothstep(0.12, 0.35, fy / storey));
+    let v_win = win_on;
+    let v_seg = seg_lit * 0.9 + (1.0 - floor_lit - floor_dim) * 0.02;
+    let v_floor = floor_lit * 0.8 * 0.9 + floor_dim * 0.3 * 0.9 + (1.0 - floor_lit - floor_dim) * 0.02;
+    let v_bld = p_lit * 0.8 * 0.9 + p_dim * 0.3 * 0.9 + (1.0 - p_lit - p_dim) * 0.02;
+    let a1 = smoothstep(0.25, 0.6, fx / bay);
+    let a2 = smoothstep(0.25, 0.6, fx / seg_len);
+    let a3 = smoothstep(0.45, 1.0, fy / storey);
+    let k = mix(mix(mix(v_win, v_seg, a1), v_floor, a2), v_bld, a3);
+    let level = mix(seg_level, 0.8, max(a2, a3));
+    let mean_col = mix(HL_TN_NEUTRAL, HL_TN_COOL, 0.35);
+    col = mix(col, mean_col, max(a2, a3));
+    // the lit run's light on the spandrel and frames between its panes (a lit floor reads as one band).
+    let ks = mix(mix(v_seg, v_floor, a2), v_bld, a3);
+    let spandrel = select(0.0, (1.0 - glass) * HL_TN_SPANDREL * ks, abs(n.y) < 0.3);
+    return col * ((glass * k * profile + spandrel) * level * base);
 }
 
 // a tower's panes are not one mirror. Each storey (and a little each
