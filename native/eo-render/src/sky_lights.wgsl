@@ -289,6 +289,10 @@ fn lights_lamps(@builtin(global_invocation_id) gid: vec3<u32>) {
         return;
     }
     l.intensity = l.intensity * lt.scale.x;
+    if (LT_LAMP_SPREAD && l.kind == 0u) {
+        // (`--lamp-spread`) the cobra head's reach (`size`: the head's height).
+        l.range = l.size * LT_CINE_RANGE_MH;
+    }
     if (lt_cine_on() && l.kind == 0u && lt_cine_key(l.color)) {
         // (`--look cinematic`) its street's colour, axis and reach (`size`: the head's height).
         lt_cine_lamp(&l, l.pos, l.size, 4u, false);
@@ -332,6 +336,18 @@ fn lights_props(@builtin(global_invocation_id) gid: vec3<u32>) {
     l.kind = 3u;
     l.size = p.source_lift;
     l.pad = 0.0;
+    if (LT_LAMP_SPREAD && !lt_cine_on() && !tunnel && p.kind != LT_LANDMARK && p.source_lift > 0.0 && lt_cine_key(p.colour)) {
+        // (`--lamp-spread`) the fallback's type III cobra head (kind 0) at its own
+        // head: the batwing over the street, its nadir the RP-8 peak as before.
+        let h = p.source_lift / LT_JS_SOURCE_LIFT_MH;
+        l.pos = p.pos;
+        l.intensity = lt.props.z * h * h;
+        l.kind = 0u;
+        l.size = h;
+        l.cos_outer = LT_CINE_COS_CUT;
+        l.cos_inner = LT_CINE_COS_PEAK;
+        l.range = h * LT_CINE_RANGE_MH;
+    }
     if (lt_cine_on() && !tunnel && p.kind != LT_LANDMARK && p.source_lift > 0.0 && lt_cine_key(p.colour)) {
         // (`--look cinematic`) a cobra head (kind 0) at its own head, its
         // nadir the RP-8 peak as before; the historic and banner heads warm
