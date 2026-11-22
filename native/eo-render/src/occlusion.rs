@@ -84,6 +84,9 @@ pub struct OcclusionGpu {
     msaa: bool,
     hzb: Mutex<Option<Hzb>>,
     device: wgpu::Device,
+    /// Times the flags were forgotten (`reset`): the count emulation's late
+    /// lists keep their floor in the frame after one (counted.rs `ViewStep`).
+    resets: std::sync::atomic::AtomicU64,
 }
 
 impl OcclusionGpu {
@@ -145,7 +148,7 @@ impl OcclusionGpu {
         };
         let first_pipeline = pipeline("hzb_first", &first_bgl);
         let down_pipeline = pipeline("hzb_down", &down_bgl);
-        Self { vis_buf, first_pipeline, down_pipeline, first_bgl, down_bgl, late_bgl, msaa, hzb: Mutex::new(None), device: device.clone() }
+        Self { vis_buf, first_pipeline, down_pipeline, first_bgl, down_bgl, late_bgl, msaa, hzb: Mutex::new(None), device: device.clone(), resets: Default::default() }
     }
 
     /// Make the pyramid for `depth` unless it exists (first frame, or the
@@ -247,5 +250,11 @@ impl OcclusionGpu {
     pub fn reset(&self, queue: &wgpu::Queue) {
         let zeros = vec![0u8; self.vis_buf.size() as usize];
         queue.write_buffer(&self.vis_buf, 0, &zeros);
+        self.resets.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Times the flags were forgotten so far.
+    pub fn resets(&self) -> u64 {
+        self.resets.load(std::sync::atomic::Ordering::Relaxed)
     }
 }

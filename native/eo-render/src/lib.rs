@@ -189,6 +189,21 @@ impl CityClasses {
 /// asynchronous read-backs describe the new view.
 pub const COUNT_CUT_M: f32 = 30.0;
 pub const COUNT_CUT_COS: f32 = 0.0;
+
+/// The rotation (radians) from camera `a`'s view to `b`'s: the larger of the
+/// angles its forward and its right turned through (a turn about the view
+/// axis moves the right, a look straight down turning its yaw).
+pub fn view_turn(a: &Camera, b: &Camera) -> f32 {
+    let angle = |u: glam::Vec3, v: glam::Vec3| u.cross(v).length().atan2(u.dot(v));
+    angle(a.forward(), b.forward()).max(angle(a.right(), b.right()))
+}
+
+/// Whether two cameras project the same way (field of view, aspect, clip
+/// planes, roll, optical centre): only their pose differs.
+pub fn same_lens(a: &Camera, b: &Camera) -> bool {
+    a.fov_y_deg == b.fov_y_deg && a.aspect == b.aspect && a.near == b.near && a.far == b.far && a.roll == b.roll && a.jitter == b.jitter
+}
+
 /// Terrain tiles further than this (camera to tile box) draw their coarse level.
 pub const TERRAIN_LOD_DISTANCE_M: f32 = 1200.0;
 
@@ -613,8 +628,13 @@ pub struct Renderer {
     pub counts: Option<std::sync::Arc<counted::Counts>>,
     /// The opaque, transparent and late opaque lists in the emulation.
     main_lists: Option<counted::CountedLists>,
-    /// The last update's camera (eye, forward): a jump is a cut for the emulation.
-    last_view: std::sync::Mutex<Option<(glam::Vec3, glam::Vec3)>>,
+    /// The last update's camera, and the writes counted then (`vis_writes`):
+    /// a jump is a cut for the emulation; the step, the motion-aware bounds'
+    /// (counted.rs `ViewStep`).
+    last_view: std::sync::Mutex<Option<(Camera, u64)>>,
+    /// Writes that can change what the cull selects (objects, their groups,
+    /// the far layer's residency, any streamed bytes; counted.rs `ViewStep::quiet`).
+    vis_writes: std::sync::atomic::AtomicU64,
     /// The far layer draws without the compacted lists (an adapter without
     /// multi-draw-indirect-count, unless `--no-far-fallback`): fixed-size
     /// lists, see `hlod::HlodGpu::draw` and `hlod_trees::FarTrees::draw`.
@@ -1376,6 +1396,7 @@ impl Renderer {
             counts,
             main_lists,
             last_view: std::sync::Mutex::new(None),
+            vis_writes: std::sync::atomic::AtomicU64::new(0),
             far_fallback: !ctx.compaction() && far_city::FarCity::from_env().fallback,
             color_format: init.color_format,
             sample_count: init.sample_count,
@@ -1578,6 +1599,7 @@ impl Renderer {
 
     /// the CPU copy of the object table follows a write of the GPU table (bytes at `offset`).
     pub fn note_object_write(&self, offset: u64, data: &[u8]) {
+        self.note_vis_write();
         if let Some(r) = &self.ranges {
             r.lock().unwrap().write(offset, data);
         }
@@ -1686,6 +1708,7 @@ impl Renderer {
 
     /// each LOD group's far cell (`hlod_bake::NO_CELL`: none), written once.
     pub fn write_hlod_map(&self, queue: &wgpu::Queue, group_cell: &[u32]) {
+        self.note_vis_write();
         let n = (self.hlod_map_buf.size() / 4) as usize;
         let words: Vec<u32> = (0..n).map(|g| group_cell.get(g).copied().unwrap_or(u32::MAX)).collect();
         queue.write_buffer(&self.hlod_map_buf, 0, bytemuck::cast_slice(&words));
@@ -1721,6 +1744,7 @@ impl Renderer {
     /// repeated for every stress copy.
     pub fn write(&self, queue: &wgpu::Queue, target: upload::Target, offset: u64, data: &[u8]) {
         let t = std::time::Instant::now(); // hitch
+        self.note_vis_write();
         self.frame_upload_bytes.fetch_add(data.len() as u64, std::sync::atomic::Ordering::Relaxed);
         self.write_untimed(queue, target, offset, data);
         hitch::note_write_to(hitch_target(target), data.len() as u64, t.elapsed().as_secs_f64() * 1e3); // hitch // hitch2: per target
@@ -1764,6 +1788,19 @@ impl Renderer {
     /// upload stager's copies), counted like a write for the probe deferral.
     pub fn note_streamed(&self, bytes: u64) {
         self.frame_upload_bytes.fetch_add(bytes, std::sync::atomic::Ordering::Relaxed);
+        if bytes > 0 {
+            self.note_vis_write();
+        }
+    }
+
+    /// A write that can change what the cull selects (counted.rs `ViewStep::quiet`).
+    pub fn note_vis_write(&self) {
+        self.vis_writes.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Such writes so far.
+    pub fn vis_writes(&self) -> u64 {
+        self.vis_writes.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// the device (the upload stager makes its chunks with it).
@@ -1887,6 +1924,7 @@ impl Renderer {
     }
 
     pub fn set_group_ready(&self, queue: &wgpu::Queue, group: u32, ready: bool) {
+        self.note_vis_write();
         let at = group as u64 * std::mem::size_of::<GpuLodGroup>() as u64 + 16;
         queue.write_buffer(&self.group_buf, at, bytemuck::bytes_of(&(ready as u32)));
     }
@@ -2075,6 +2113,7 @@ impl Renderer {
 
     /// Overwrite one object's material on the GPU only (tests: a planted swap).
     pub fn debug_set_object_material(&self, queue: &wgpu::Queue, object: u32, material: u32) {
+        self.note_vis_write();
         let at = object as u64 * std::mem::size_of::<GpuObject>() as u64 + 44;
         queue.write_buffer(&self.object_buf, at, bytemuck::bytes_of(&material));
         self.note_object_write(at, bytemuck::bytes_of(&material));
@@ -2105,13 +2144,21 @@ impl Renderer {
             // a cut (the camera moved CUT_M or turned past CUT_COS since the last
             // update): recover bounds for the new view while read-backs catch up.
             let fwd = cam.forward();
+            let writes = self.vis_writes() + self.occlusion.resets();
             let mut last = self.last_view.lock().unwrap();
-            if last.is_some_and(|(e, f)| e.distance(cam.eye) > COUNT_CUT_M || f.dot(fwd) < COUNT_CUT_COS) {
+            if last.is_some_and(|(p, _)| p.eye.distance(cam.eye) > COUNT_CUT_M || p.forward().dot(fwd) < COUNT_CUT_COS) {
                 c.force_full();
             }
-            *last = Some((cam.eye, fwd));
+            // what changed since the last update (the motion-aware bounds).
+            let step = last.map(|(p, seen)| counted::ViewStep {
+                turn: view_turn(&p, cam),
+                step: p.eye.distance(cam.eye),
+                quiet: seen == writes && same_lens(&p, cam),
+                occlusion: occlusion && self.compact,
+            });
+            *last = Some((*cam, writes));
             drop(last);
-            c.begin_frame(); // the emulated lists' bounds for this frame, from the counts read back
+            c.begin_frame(step); // the emulated lists' bounds for this frame, from the counts read back
             if self.probe_grid.active(&self.look) {
                 if self.probe.take_face_overflow() {
                     self.probe_grid.redo(); // the grid's face missed objects: capture again (lighting)
@@ -2526,6 +2573,9 @@ impl Renderer {
         ts: Option<(&wgpu::QuerySet, u32)>,
     ) {
         if let Some(c) = &self.counts {
+            if self.last_view.lock().unwrap().is_some_and(|(_, seen)| seen != self.vis_writes() + self.occlusion.resets()) {
+                c.relax(); // written since the update: no motion-aware bound this frame
+            }
             c.encode_zero(enc);
         }
         self.encode_bounded_clears(enc); // (the bounded draws) the city's lists to their bounds
@@ -3072,6 +3122,7 @@ impl Renderer {
 
     /// set the per-cell residency words directly (tests; the far layer's streamer writes them otherwise).
     pub fn write_hlod_flags(&self, queue: &wgpu::Queue, flags: &[u32]) {
+        self.note_vis_write();
         queue.write_buffer(&self.hlod_flags_buf, 0, bytemuck::cast_slice(flags));
         if let Some(r) = &self.ranges {
             r.lock().unwrap().set_hlod_flags(flags); // the kit boxes' rule (draw_ranges)

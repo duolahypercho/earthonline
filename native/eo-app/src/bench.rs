@@ -1845,22 +1845,24 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
         }
         // (the count emulation) per emulated count buffer, each list's mean bound a frame over the path (warm-up included).
         if let (Some(now), Some(before)) = (renderer.counts.as_ref().map(|c| c.stats()), &counted_before) {
-            let per: Vec<(&str, Vec<f64>, u64)> = now
+            let per: Vec<(&str, Vec<f64>, u64, [u64; 2])> = now
                 .iter()
                 .map(|a| {
                     let b = before.iter().find(|b| b.label == a.label);
                     let frames = a.frames - b.map_or(0, |b| b.frames);
                     let mean = a.encoded.iter().enumerate().map(|(k, &e)| (e - b.and_then(|b| b.encoded.get(k).copied()).unwrap_or(0)) as f64 / frames.max(1) as f64).collect();
-                    (a.label, mean, a.overflows - b.map_or(0, |b| b.overflows))
+                    // (the motion-aware bounds) frames with the late lists at their own reserve, and with an exact early bound
+                    let tight = [a.steady_frames - b.map_or(0, |b| b.steady_frames), a.chained_frames - b.map_or(0, |b| b.chained_frames)];
+                    (a.label, mean, a.overflows - b.map_or(0, |b| b.overflows), tight)
                 })
                 .collect();
             if !per.is_empty() {
                 println!(
                     "    count emulation (warm-up included): mean bound a frame {}",
-                    per.iter().map(|(l, m, o)| format!("{l} [{}] overflows {o}", m.iter().map(|v| format!("{v:.0}")).collect::<Vec<_>>().join(", "))).collect::<Vec<_>>().join("; ")
+                    per.iter().map(|(l, m, o, t)| format!("{l} [{}] overflows {o} steady {} chained {}", m.iter().map(|v| format!("{v:.0}")).collect::<Vec<_>>().join(", "), t[0], t[1])).collect::<Vec<_>>().join("; ")
                 );
             }
-            report["count_emulation_path"] = json!(per.iter().map(|(l, m, o)| json!({ "label": l, "mean_bounds": m, "overflows": o })).collect::<Vec<_>>());
+            report["count_emulation_path"] = json!(per.iter().map(|(l, m, o, t)| json!({ "label": l, "mean_bounds": m, "overflows": o, "steady_frames": t[0], "chained_frames": t[1] })).collect::<Vec<_>>());
         }
         // the far layer after the path, and its last frame's counters (entries drawn, triangles, entries in the frustum, entries occluded).
         report["fixed_slot_lists"] = fixed_slot_json;
@@ -1912,6 +1914,7 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
             // per emulated count buffer: read-backs, overflows (a count past its bound), frames drawn whole, bounds
             "count_emulation_lists": renderer.counts.as_ref().map(|c| c.stats().iter().map(|s| serde_json::json!({
                 "label": s.label, "readbacks": s.readbacks, "overflows": s.overflows, "full_frames": s.full_frames,
+                "steady_frames": s.steady_frames, "chained_frames": s.chained_frames,
                 "bounds_now": s.bounds, "peak_counts": s.peak_counts, "peak_bounds": s.peak_bounds,
             })).collect::<Vec<_>>()),
             "indirect_first_instance": ctx.first_instance,

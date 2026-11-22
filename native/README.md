@@ -542,7 +542,7 @@ selection:
 | Flora 2 (Battery Spencer knoll, Baker bluff rock and boulders) | `--no-flora2` (all of these: the flora pass's output), `--no-knoll-ground`, `--no-knoll-relief`, `--no-bluff-rock`, `--no-boulder-surf` |
 | Surf and bathymetry | `--no-gg3-water` (all of these), `--no-bathymetry`, `--no-surf-break`, `--no-swash-foam`, `--no-obstacle-foam`, `--no-water-body2`; reserved: `--no-ppr-dash` |
 | Golden Gate, fifth pass | `--no-gg3-bridge` or `--no-bridges5` (all of these), `--no-paint-brdf2`, `--no-paint-weathering`, `--no-concrete2`, `--no-leg-cells`, `--no-cable-detail` |
-| Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count`, `--no-count-emulation`, `--no-bounded-draws` (wins over the opt-in `--bounded-draws`; see [What is drawn](#what-is-drawn)), `--no-city-classes` (the city's opaque pass as one pipeline and one list pair, as before the split) |
+| Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count`, `--no-count-emulation`, `--no-bounded-draws` (wins over the opt-in `--bounded-draws`; see [What is drawn](#what-is-drawn)), `--no-city-classes` (the city's opaque pass as one pipeline and one list pair, as before the split), `--no-motion-bounds` (the count emulation's late opaque lists always floored by their early lists' bounds and the early lists at their reserve, as before the motion-aware bounds) |
 | Interface and sound | `--no-hud`, `--no-audio`, `--audio-null` (mix to a null output), `--no-settings-apply` (`--ui`: the settings file does not reach the renderer or the world) |
 | Optional assets | `--no-external` (read each set only from the folder its variable names, not from `external/`: the output before that folder was read) |
 | Online (`--connect`) | `--no-remote-bodies` (other players drawn as before: first walk style and idle, linear path, no emotes or phone, street people may wear a player's body), `--no-name-tags` (no tags, no tag depth probe), `--no-player-contact` (no ground contact under their bodies, and its shading compiled out of the agents' shaders: `SF_PLAYER_CONTACT`), `--no-shared-sky` (the client's own hour and weather) |
@@ -1079,7 +1079,17 @@ frame's count zeroed to empty draws. The paths, in this precedence
    its counts a few frames late: its recent peak plus half again and 256
    commands. After a camera cut, before the first read-back or when a count
    outran its bound, a conservative cull is submitted and waited for to
-   measure the bound.
+   measure the bound. A late opaque list is floored by its early list's
+   bound (after a fast turn every visible object can be late), except in a
+   frame where only a small rotation can change what is visible: the eye
+   still, the same lens, nothing streamed or written that selects objects,
+   the occlusion on in this frame and the last, a fresh read-back, and a
+   turn under 2 degrees and no larger than one the read-backs saw; there it
+   takes its own reserve. An early list is drawn to the smaller of its
+   reserve and an exact bound: the early pass draws only what the last late
+   pass found visible, so its count is at most the newest read-back's early
+   and late counts plus the late bounds of the frames encoded since
+   (`--no-motion-bounds` keeps the floor and the reserves, as before).
 3. The bounded draws, opt-in with `--bounded-draws` on top of 2
    (`eo-render/src/bounds.rs`; `--no-bounded-draws` wins wherever it stands
    and gives 2): every cull also counts guards, the objects in a frustum

@@ -213,3 +213,44 @@ fn hidden_boxes_are_culled_and_visible_ones_drawn() {
 fn hidden_boxes_are_culled_with_msaa() {
     check(4);
 }
+
+/// The motion-aware bounds (eo-render counted.rs, the count emulation only):
+/// a camera turning half a degree a frame inside a ring of 7200 boxes draws its
+/// late opaque list to the list's own reserve, under the early list's bound,
+/// and the early list to its exact bound; every box in view is drawn in every
+/// frame and no list overflows. `--no-motion-bounds` keeps the late list on
+/// its floor, as before.
+#[test]
+fn a_slow_turn_keeps_the_late_list_tight_and_draws_every_box() {
+    let ctx = ctx();
+    if ctx.indirect_count || !ctx.count_emulation {
+        eprintln!("a_slow_turn_keeps_the_late_list_tight_and_draws_every_box: the adapter draws with the indirect count; no emulated bounds");
+        return;
+    }
+    let (mut verts, mut indices, mut objects) = (vec![], vec![], vec![]);
+    // twenty a degree: enough in view that the exact early bound is under the reserve.
+    for k in 0..7200 {
+        let a = k as f32 * std::f32::consts::TAU / 7200.0;
+        let c = Vec3::new(a.sin() * 60.0, 2.0, -a.cos() * 60.0);
+        boxed(c - Vec3::splat(0.02), c + Vec3::splat(0.02), &mut verts, &mut indices, &mut objects);
+    }
+    let s = Scene { verts, indices, objects, wall: 0, front: 0, peek: 0, straddle: 0, hidden: [0; 3] };
+    for motion in [true, false] {
+        let r = eo_render::counted::MotionBounds::with(motion, || renderer(&ctx, &s, 1, false));
+        for f in 0..120 {
+            let cam = Camera::new(Vec3::new(0.0, 2.0, 0.0), (f as f32 * 0.5).to_radians(), 0.0, W as f32 / H as f32);
+            let fr = frame(&ctx, &r, &cam, 1);
+            assert_eq!(fr.counters[14], 0, "nothing hides a box in the ring");
+            assert_eq!(fr.drawn.len() as u32, fr.counters[11], "frame {f} (motion bounds {motion}): every box in the frustum is drawn");
+        }
+        let city = r.counts.as_ref().unwrap().stats().into_iter().find(|s| s.label == "city").unwrap();
+        assert_eq!(city.overflows, 0, "{city:?}");
+        if motion {
+            assert!(city.steady_frames > 20 && city.chained_frames > 20, "{city:?}");
+            assert!(city.bounds[2] < city.bounds[0], "the late list under the early one's bound: {city:?}");
+        } else {
+            assert_eq!((city.steady_frames, city.chained_frames), (0, 0), "{city:?}");
+            assert!(city.bounds[2] >= city.bounds[0], "the late list floored by the early one: {city:?}");
+        }
+    }
+}
