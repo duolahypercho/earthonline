@@ -9,6 +9,7 @@
 //!   `interest`  64 m cells keyed by zone, per-class radii with hysteresis
 //!   `game`      the shared player rules (spawn, the one authoritative step)
 //!   `predict`   client prediction and reconciliation
+//!   `presence`  emotes and states a player shows, the shared sky clock, the landmark viewpoints
 //!   `client`    the client's network thread
 //!   `pool`      the server's worker pool
 //!
@@ -24,6 +25,7 @@ pub mod interest;
 pub mod link;
 pub mod pool;
 pub mod predict;
+pub mod presence;
 pub mod proto;
 pub mod snapshot;
 pub mod wire;

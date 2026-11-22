@@ -178,6 +178,30 @@ impl Default for HudState {
     }
 }
 
+/// A label over another player (online). The host decides where it hangs
+/// (`x`, `y`: the point over the head it points at, window pixels), how far
+/// away the head is (`depth`, metres: the nearer tag keeps its place and is
+/// drawn on top), how opaque (distance fade, occlusion) and how large it is;
+/// the HUD lays the tags out: a tag that would cover a nearer one moves up
+/// out of its way and keeps a 1 px leader line down to its head, and one
+/// with no room left is not drawn. Drawn under the HUD's plates.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NameTag {
+    pub x: f32,
+    pub y: f32,
+    pub depth: f32,
+    pub name: String,
+    /// A second line inside the plate (what the player is doing: "waving"), or none.
+    pub detail: Option<String>,
+    pub alpha: f32,
+    /// The name's text size, window pixels; the second line is `detail_size`.
+    pub size: f32,
+    pub detail_size: f32,
+    /// Its own player's head on screen (x0, y0, x1, y1): the one face in
+    /// `Ui::tag_avoid` its plate may cover.
+    pub head: [f32; 4],
+}
+
 /// Boot progress (`setLoadingStatus` in title-menu.js).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Loading {
@@ -301,6 +325,17 @@ pub struct Ui {
     settings_path: Option<PathBuf>,
     pub loading: Loading,
     pub hud: HudState,
+    /// Name tags over the other players (the HUD screen draws them).
+    pub tags: Vec<NameTag>,
+    last_tags: Vec<NameTag>,
+    /// Faces on screen (x0, y0, x1, y1: the other players' and the street
+    /// people's heads) a tag's plate keeps off, moving aside or up with a
+    /// leader line (a plate never sits on someone else's face).
+    pub tag_avoid: Vec<[f32; 4]>,
+    last_avoid: Vec<[f32; 4]>,
+    /// The HUD's plates (radar, objective, clock); false leaves only the
+    /// name tags (captures of a scene, a photo).
+    pub hud_chrome: bool,
     pub(crate) hud_mem: HudMemory,
     pub(crate) hits: Vec<Hit>,
     pub(crate) focus: Option<usize>,
@@ -367,6 +402,11 @@ impl Ui {
             settings_path,
             loading: Loading::default(),
             hud: HudState::default(),
+            tags: vec![],
+            last_tags: vec![],
+            tag_avoid: vec![],
+            last_avoid: vec![],
+            hud_chrome: true,
             hud_mem: HudMemory::default(),
             hits: Vec::with_capacity(64),
             focus: Some(0),
@@ -497,7 +537,7 @@ impl Ui {
                 moving = true;
             }
         }
-        if self.screen == Screen::Hud && self.last_hud.as_ref() != Some(&self.hud) {
+        if self.screen == Screen::Hud && (self.last_hud.as_ref() != Some(&self.hud) || self.tags != self.last_tags || self.tag_avoid != self.last_avoid) {
             self.dirty = true;
         }
         self.update_maps(device, queue, enc);
@@ -510,6 +550,8 @@ impl Ui {
             self.dirty = false;
             if self.screen == Screen::Hud {
                 self.last_hud = Some(self.hud.clone());
+                self.last_tags.clone_from(&self.tags);
+                self.last_avoid.clone_from(&self.tag_avoid);
             }
         }
         self.write_globals(queue);
@@ -655,6 +697,9 @@ impl Ui {
             animating: false,
             pause_pane: Rect::new(0.0, 0.0, 0.0, 0.0),
             fmt: &mut self.fmt,
+            tags: &self.tags,
+            avoid: &self.tag_avoid,
+            chrome: self.hud_chrome,
         };
         screens::build(&mut p, &mut ctx);
         self.animating = ctx.animating;

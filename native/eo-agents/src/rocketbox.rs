@@ -337,8 +337,10 @@ impl BipSkeleton {
 
 /// what one stretch of a table is sampled from, in table order.
 pub enum BakeSrc<'a> {
-    /// A Rocketbox clip on the avatar's own nodes: a `motion::ROLES` loop, `frames` stored (closed).
-    Clip { clip: &'a RbClip, role: &'a Role, frames: u32 },
+    /// A Rocketbox clip on the avatar's own nodes: a `motion::ROLES` loop,
+    /// `frames` stored (closed), its `edit` applied (`layer`: the edit's other
+    /// take, `Role::layer`, for this skeleton).
+    Clip { clip: &'a RbClip, role: &'a Role, frames: u32, layer: Option<&'a RbClip> },
     /// A 100STYLE gait cycle, retargeted (`WALK_FRAMES + 1` stored, closed).
     Style { cycle: &'a StyleCycle },
 }
@@ -410,6 +412,23 @@ fn clip_frames(sk: &BipSkeleton, c: &RbClip, role: &Role, frames: u32) -> Result
     }
     out.push(out[0].clone());
     Ok(out)
+}
+
+/// One instant of a Rocketbox clip on this avatar's nodes, `t` seconds after the take's start.
+fn clip_pose_at(sk: &BipSkeleton, c: &RbClip, t: f32) -> Result<Pose> {
+    let index: HashMap<&str, usize> = sk.nodes.iter().enumerate().map(|(i, n)| (n.name.as_str(), i)).collect();
+    let order = crate::motion::topo_nodes(&sk.nodes);
+    let pelvis = sk.node_of[0].ok_or_else(|| anyhow!("no pelvis node"))?;
+    let mut root = pelvis;
+    while let Some(p) = sk.nodes[root].parent {
+        root = p;
+    }
+    let ratio = if c.root_y > 0.1 && root != pelvis { sk.nodes[root].t.y / c.root_y } else { 1.0 };
+    if c.clip.duration < c.start + t {
+        bail!("{} lasts {:.1} s, an edit reads it at {:.1} s", c.id, c.clip.duration, c.start + t);
+    }
+    let (r, pt) = crate::motion::rb_local(c, &sk.nodes, &index, c.start + t, pelvis, ratio);
+    Ok(pose_of_nodes(sk, &order, &r, pelvis, pt))
 }
 
 /// the fingers' rotations relative to their parent joint in
@@ -643,7 +662,21 @@ pub fn bake_list(sk: &BipSkeleton, srcs: &[BakeSrc], relaxed: Option<&[Quat]>) -
     let mut out = Baked { rows: vec![], lifts: vec![], strides: vec![] };
     for src in srcs {
         let frames = match src {
-            BakeSrc::Clip { clip, role, frames } => clip_frames(sk, clip, role, *frames)?,
+            BakeSrc::Clip { clip, role, frames, layer } => {
+                let mut out = clip_frames(sk, clip, role, *frames)?;
+                if role.edit != crate::motion::Edit::None {
+                    // The edit's other take at its instant (the wave's raised arm).
+                    let other = match (layer, role.layer(clip.id.starts_with("f-"))) {
+                        (Some(c), Some((_, at))) => Some(clip_pose_at(sk, c, at)?.1),
+                        _ => None,
+                    };
+                    let n = out.len();
+                    for (i, (p, q)) in out.iter_mut().enumerate() {
+                        crate::pose_edit::apply(sk, &role.edit, p, q, i, n, other.as_deref());
+                    }
+                }
+                out
+            }
             BakeSrc::Style { cycle } => style_frames(sk, cycle, relaxed)?,
         };
         let lift = lift_of(sk, &frames);

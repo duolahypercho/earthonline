@@ -26,6 +26,9 @@ pub mod library;
 pub mod motion;
 pub mod packed_glb; // people
 pub mod people;
+pub mod pose_edit; // the players' emotes, edited at the bake
+pub mod remote; // other players' bodies (online)
+pub mod rig; // where a drawn body's head and hands are (name tags, the selfie's phone)
 pub mod rocketbox; // people
 pub mod vehicles;
 
@@ -194,6 +197,10 @@ pub const M_REVERSE: u32 = 1 << 14;
 pub const M_ATLAS: u32 = 1 << 15;
 /// The rim finish multiplies this material (VehicleAlloy).
 pub const M_RIM: u32 = 1 << 16;
+/// A ground-contact patch (`rig::contact_body`): the glass pass darkens the
+/// ground under it by the share of its light one box of a body takes away
+/// (eo-render `agents_draw.wgsl` `ag_contact`).
+pub const M_CONTACT: u32 = 1 << 20;
 
 /// sRGB byte to linear.
 pub fn srgb_to_linear(c: f32) -> f32 {

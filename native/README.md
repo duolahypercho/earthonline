@@ -177,6 +177,39 @@ git push origin v0.1.0
 
 The builds are not code-signed; PLAYING.md tells players how to open them.
 
+Presence at landmarks (`eo_net::presence`): the server owns the hour, how
+fast it runs and the weather, and every snapshot carries them (a client
+eases toward the server's clock, so friends see the same sunset;
+`--time-of-day`, `--day-rate` and `--weather` set a local server's).
+Other players are drawn as Rocketbox people in their account's body,
+moved from their replicated speed and state (walk; stop with the feet
+closing together; step through a turn on the spot; emotes), on a smooth
+path through the snapshots, and no street person is drawn in a player's
+body. The emotes are edited at the bake (`eo_agents::pose_edit`): a
+one-arm wave with the forearm swinging, a point with the index finger out
+and the head turned along the arm, a selfie with a phone in the hand
+(`eo_agents::rig`), and a crouch. The ground under each body darkens
+where the body takes light from it (`eo_agents::rig::contacts`): each
+shoe, each shin and thigh and a crouch's seat is a box, and a patch on
+the ground around it takes away the share of the sky the box hides (its
+exact view factor) and, a few centimetres from a sole, the sun it blocks,
+out of the light the renderer puts there (eo-render `agents_draw.wgsl`
+`ag_contact`, in the agents' glass pass; none in a tunnel's bore, where the
+bore's own light draws the body). Name tags hang over each head as it is
+drawn, fade with distance (opaque to 12 m, 0.35 at 25 m, gone at 40 m),
+hide behind buildings and, from a GPU depth probe of the frame, behind
+anything nearer than the head (a passer-by, a pole, another player), and
+step aside or up with a leader line rather than cover another tag or a
+face. In the window, 1 to 4 wave, point, crouch and take a selfie, 0
+stops, and T fast-travels to the next landmark viewpoint
+(`assets/landmark-viewpoints.json`; the server checks the request and
+lands the player there half a second later).
+
+```sh
+./target/release/eo-server bots --connect 127.0.0.1:47800 --count 12 --landmarks   # bots that walk up to the viewpoints, emote, travel on
+./target/release/eo-app --connect local --net-shots scenes.json --out DIR --width 1600 --height 900 [--pair-before DIR2]   # landmark captures (eo-app/src/net.rs); DIR2: the same instants with --no-remote-bodies --no-name-tags
+```
+
 ## Command-line switches
 
 `eo-app --help` prints the main bench and streaming options. The most useful
@@ -430,6 +463,7 @@ selection:
 | Golden Gate, fifth pass | `--no-gg3-bridge` or `--no-bridges5` (all of these), `--no-paint-brdf2`, `--no-paint-weathering`, `--no-concrete2`, `--no-leg-cells`, `--no-cable-detail` |
 | Visibility and streaming | `--no-occlusion`, `--no-view-detail`, `--no-upload-ring`, `--no-submit-pacing`, `--no-indirect-count`, `--no-count-emulation` |
 | Interface and sound | `--no-hud`, `--no-audio`, `--audio-null` (mix to a null output), `--no-settings-apply` (`--ui`: the settings file does not reach the renderer or the world) |
+| Online (`--connect`) | `--no-remote-bodies` (other players drawn as before: first walk style and idle, linear path, no emotes or phone, street people may wear a player's body), `--no-name-tags` (no tags, no tag depth probe), `--no-player-contact` (no ground contact under their bodies, and its shading compiled out of the agents' shaders: `SF_PLAYER_CONTACT`), `--no-shared-sky` (the client's own hour and weather) |
 
 A new visual feature should come with its own switch, defaulting to on only
 once it has been reviewed.
@@ -1070,7 +1104,10 @@ What the tests cover, in short:
   stop the walker, a long walk and drive over the hills stay on the ground;
   server and client agree bit for bit (with `--structures` on the joined
   street, and with `--tunnels` on the tiles the bores' cuts hollow out:
-  `eo-server` `structures`).
+  `eo-server` `structures`), and a replay lands where the first run did
+  however slowly the collision tiles cook (every authoritative step has the
+  tiles it reaches resident first: `CollisionWorld::ensure_step_tiles`);
+  names, emotes, the sky clock and fast travel reach every client.
 - **Grade-separated roads** (`eo-structures`, `eo-street`, `eo-player`,
   `eo-props`): clearance, grade and end heights, meshes and the clearance
   envelope (`eo-structures`); the joins' junction legs, caps and raised and
@@ -1103,18 +1140,17 @@ What the tests cover, in short:
 
 ### Known failing tests
 
-Three tests fail today. They are open defects, not flaky tests; do not
+Two tests fail today. They are open defects, not flaky tests; do not
 loosen them to make them pass.
 
 | Test | What fails |
 | --- | --- |
-| `eo-server` `determinism::a_client_rewound_to_a_server_state_replays_to_the_same_place` | A client rewound to a server state does not replay to exactly the same place (rewind determinism) |
 | `eo-street` `surface::street_surface_is_closed_and_on_its_section` | Two walkable surfaces fight in one place at more probes than the test allows |
 | `eo-street` `surface::verge_banks_stay_off_the_paving` | Some verge banks reach onto the paving |
 
 ## Known issues
 
-- The three failing tests above.
+- The two failing tests above.
 - Some content and behaviour of the earlier browser game is not ported yet:
   general building interiors, mantling and swimming, the car's full handling
   model, gamepad input in the window, and more. General building interiors

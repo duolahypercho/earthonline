@@ -12,3 +12,5 @@ eo-data = { path = "../eo-data" }
 eo-player = { path = "../eo-player" }
 eo-structures = { path = "../eo-structures" } # structures: the handshake's world setting
 glam = "0.34.3"
+serde = { version = "1.0.229", features = ["derive"] } # the landmark viewpoint table
+serde_json = "1.0.154"

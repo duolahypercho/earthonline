@@ -1,0 +1,48 @@
+{
+  "version": "landmark-viewpoints-v1",
+  "about": "Named places a visitor stands at a landmark: fast travel arrives here (eo-server validates the index), bots walk here, and the landmark-access work may read the same table. Each point is WGS84 latitude and longitude, converted to game metres through eo_data::geo (the city projection and the ground-plan scale). heading_deg is the compass bearing a visitor faces on arrival (0 north, 90 east). spread_m is the radius arrivals are spread over so friends do not stand in one another.",
+  "projection": "lat = 37.778 - z / 110574, lon = -122.4194 + x / 87986.24747640654 (sf-city.json.gz meta, surveyed metres at 1:1)",
+  "licence": "Coordinates derived from OpenStreetMap data in public/data/sf/sf-city.json.gz (ODbL 1.0, (c) OpenStreetMap contributors); see public/data/sf/sf-city.json.gz.NOTICE.txt",
+  "viewpoints": [
+    {
+      "id": "coit-tower",
+      "name": "Coit Tower",
+      "place": "Pioneer Park, the parking circle at the top of Telegraph Hill Boulevard",
+      "lat": 37.802798,
+      "lon": -122.405921,
+      "heading_deg": 171.5,
+      "spread_m": 4.0,
+      "source": "Centroid of the closed loop of OSM way 'Telegraph Hill Boulevard' (the five-point service loop in sf-city.json.gz roads), surveyed (1186.0, -2742.0) m; facing the centroid of OSM building 28824850 'Coit Tower' (1193.0, -2695.4) m, 47 m away"
+    },
+    {
+      "id": "ferry-building",
+      "name": "Ferry Building",
+      "place": "The Embarcadero promenade in front of the clock tower",
+      "lat": 37.795337,
+      "lon": -122.393787,
+      "heading_deg": 54.5,
+      "spread_m": 3.0,
+      "source": "6 m out from the clock-tower bay of OSM building 558731934 'San Francisco Ferry Building' (the west facade segment (2246, -1938) to (2271, -1903) m), between it and the OSM cycleway 913953321 along The Embarcadero; facing the facade (its inward normal)"
+    },
+    {
+      "id": "twin-peaks",
+      "name": "Twin Peaks",
+      "place": "Christmas Tree Point",
+      "lat": 37.754613,
+      "lon": -122.446950,
+      "heading_deg": 45.0,
+      "spread_m": 4.0,
+      "source": "Centroid of the loop of OSM ways 60430757 and 1529986056 'Christmas Tree Point Road', surveyed (-2424, 2586) m; facing the Financial District (bearing to surveyed (2300, -2100) m)"
+    },
+    {
+      "id": "crissy-field",
+      "name": "Crissy Field",
+      "place": "Golden Gate Promenade, facing the bridge",
+      "lat": 37.804932,
+      "lon": -122.466726,
+      "heading_deg": 304.0,
+      "spread_m": 4.0,
+      "source": "Vertex (-4164, -2978) m of OSM way 25319425 'Golden Gate Promenade'; facing the bridge's south tower (bearing to 37.8107 N, 122.4776 W)"
+    }
+  ]
+}

@@ -148,6 +148,7 @@ fn base_args() -> Args {
         landmarks2: true,
         structures: None, // `--structures` (quality::Switches)
         facade_clutter: 0, // `--facade-clutter` (quality::Switches)
+        player_contact: false, // set by net.rs (`--connect`)
     }
 }
 
