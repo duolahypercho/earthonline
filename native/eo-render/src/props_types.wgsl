@@ -63,6 +63,8 @@ const PR_SIGNAL_HEAD: u32 = 2u;
 const PR_PED_HEAD: u32 = 3u;
 const PR_SIGN_PLATE: u32 = 5u;
 const PR_TACTILE_PAD: u32 = 8u;
+// eo-props `Model::TreeBasin` (`--tree-basins`): tilted along the kerb (its local +Z) as the pad is along its depth.
+const PR_TREE_BASIN: u32 = 35u;
 // props2 features (PrParams.mode.z).
 const PR_F_FADE: u32 = 1u;
 const PR_F_WIND: u32 = 2u;
@@ -124,8 +126,8 @@ fn pr_veg_scale(i: PrInstance) -> f32 {
 
 fn pr_local(i: PrInstance, p: vec3<f32>) -> vec3<f32> {
     var l = p * i.scale * pr_veg_scale(i);
-    if (i.model == PR_TACTILE_PAD) {
-        // The pad takes the ramp's running slope along its depth.
+    if (i.model == PR_TACTILE_PAD || i.model == PR_TREE_BASIN) {
+        // The pad takes the ramp's running slope along its depth; a tree basin the street's grade along the kerb.
         l.y = l.y + l.z * i.slope;
     }
     return l;

@@ -1224,7 +1224,9 @@ fn cc0_kerb_grime(s: ptr<function, Surface>, p: vec2<f32>, gx: vec2<f32>, gy: ve
 // scan's stripe interior is mirrored at its own scale (a 4-6 in line), so a
 // wide bar repeats it rather than stretching it. Cracks darken the paint,
 // the bare gaps show the asphalt, more on older lines (a slow field).
-fn cc0_paint_wear(s: ptr<function, Surface>, world: vec3<f32>, rel: vec3<f32>, an: f32, dpx: vec3<f32>, dpy: vec3<f32>) {
+// `bare_k` scales the scan's holes and its dark cracks (1 as scanned; `--grime`
+// keeps less of them: the scan repeats along the line, so its marks would too).
+fn cc0_paint_wear(s: ptr<function, Surface>, world: vec3<f32>, rel: vec3<f32>, an: f32, dpx: vec3<f32>, dpy: vec3<f32>, bare_k: f32) {
     if (!cc0_on(CC0_RUN_DECALS) || an < 0.0) {
         return;
     }
@@ -1257,8 +1259,8 @@ fn cc0_paint_wear(s: ptr<function, Surface>, world: vec3<f32>, rel: vec3<f32>, a
     let li = CC0_D_ROADLINES004;
     let t = textureSampleGrad(cc0_dalbedo, cc0_samp, uv, li, gxu, gyu);
     let age = smoothstep(0.25, 0.85, st_noise(world.xz / 9.0 + 4.7));
-    let crack = clamp(1.0 - dot(t.rgb, CC0_LUMA) / max(cc0_dmean(li).w, 0.05), 0.0, 1.0) * (0.4 + 0.6 * age);
-    let bare = (1.0 - t.a) * age;
+    let crack = clamp(1.0 - dot(t.rgb, CC0_LUMA) / max(cc0_dmean(li).w, 0.05), 0.0, 1.0) * (0.4 + 0.6 * age) * bare_k;
+    let bare = (1.0 - t.a) * age * bare_k;
     let fade = 1.0 - smoothstep(CC0_EXTRA_FAR * 0.6, CC0_EXTRA_FAR, dist);
     (*s).albedo = mix((*s).albedo * (1.0 - 0.45 * crack * fade), CC0_ASPHALT_TINT * CC0_ASPHALT_ALBEDO, clamp(bare * 0.9 * fade, 0.0, 1.0));
     (*s).rough = mix((*s).rough, 0.85, clamp(max(bare, crack * 0.5) * fade, 0.0, 1.0));

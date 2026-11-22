@@ -1617,7 +1617,9 @@ fn shade(in: VOut) -> vec4<f32> {
                 s.rough = ST_PAINT_ROUGHNESS;
                 s.env = ENV_PAINTED_METAL;
                 // worn paint inside the geometric marking (an ambientCG road-line scan as the wear mask only).
-                cc0_paint_wear(&s, in.world, in.rel, in.aux.y * 6.35, cc0_drx, cc0_dry);
+                // (`--grime`) the scan's holes toned down: the markings' own wear (`wx_paint`) does the wearing.
+                let scan_bare = select(1.0, WX_PAINT_SCAN_BARE, wx_level() != 0u && paint_kind == 7u && !WX_STREET_V1);
+                cc0_paint_wear(&s, in.world, in.rel, in.aux.y * 6.35, cc0_drx, cc0_dry, scan_bare);
                 if (wx_level() != 0u && paint_kind == 7u) {
                     wx_paint(&s, in.world, dpx, dpy); // weathering (`--grime`): faded, chipped markings
                 }

@@ -196,7 +196,7 @@ pub fn extents(d: &Dims, p: &Prop, out: &mut Vec<Extent>) {
             out.push(Extent::new(x, z, TRUNK_R_M, y, y + h));
             out.push(Extent::new(x, z, PALM_CROWN * h, y + 0.8 * h, y + h));
         }
-        Model::TactilePad => out.push(Extent::new(x, z, sc(0).max(sc(2)) / 2.0, y, y + 0.05)),
+        Model::TactilePad | Model::TreeBasin => out.push(Extent::new(x, z, sc(0).max(sc(2)) / 2.0, y, y + 0.05)),
         Model::LampHistoric | Model::LampBanner | Model::LampCobra => {
             let (head, reach) = d.lamp_head(p);
             let kind_h = d.kinds[p.model as usize].map(|k| k.1).unwrap_or(7.62) * sc(1);

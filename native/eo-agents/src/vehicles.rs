@@ -247,3 +247,120 @@ pub fn box_body(min: [f32; 3], max: [f32; 3]) -> CookedBody {
     cuboid([x0 * 0.94, y_belt, z0 + zl * 0.2], [x1 * 0.94, max[1], z1 - zl * 0.25], 1);
     b
 }
+
+/// The far body's geometric error (`--car-detail`): the simplifier may move
+/// the surface by at most this many metres. The far slot starts at 220 m
+/// under `--car-detail 1` (260 m under 2), where a metre is about 4.9 px of
+/// a 1080 px frame at the game's 52 degree field: 0.2 m is about a pixel
+/// there. Over the shipped fleet this keeps 1,080-1,800 of LOD 2's
+/// 5,380-6,000 triangles (eo-agents tests/far_body.rs prints each body).
+pub const FAR_BODY_ERROR_M: f32 = 0.2;
+/// Bump when `far_body` changes what it makes (it is part of the library's cache key).
+pub const FAR_BODY_VERSION: u32 = 1;
+/// The far body's triangle budget, shared among its material runs by their
+/// share of the source's; the error (`FAR_BODY_ERROR_M`) binds first on the
+/// shipped fleet, so this only caps a denser body.
+pub const FAR_BODY_TRIANGLES: usize = 600;
+/// A material run this small is kept whole in the far body (lamp lenses, badges).
+pub const FAR_BODY_KEEP_TRIANGLES: usize = 24;
+
+/// A far body made from a finer cooked LOD (the far slot under `--car-detail`,
+/// in place of `box_body`): each run of triangles that shares a vertex tag
+/// (material and wheel part) is simplified on its own with meshopt, toward
+/// its share of `target_triangles` but never past `max_error_m` from the
+/// source surface, so paint, glass, lamps and tyres keep their materials and
+/// the wheels still spin about their pivots. The vertices are the source's
+/// own (the simplifier only picks among them), compacted to the ones still
+/// used. Bounds, pivots and the material table are the source's.
+/// Deterministic: the same source gives the same body.
+pub fn far_body(src: &CookedBody, target_triangles: usize, max_error_m: f32) -> CookedBody {
+    // Triangles grouped by their first vertex's tag, in the order the tags first appear.
+    let groups = |list: &[u32]| {
+        let mut order: Vec<u32> = vec![];
+        let mut by_tag: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
+        for t in list.chunks_exact(3) {
+            let tag = src.vertices[t[0] as usize].tag;
+            by_tag.entry(tag).or_insert_with(|| {
+                order.push(tag);
+                vec![]
+            });
+            by_tag.get_mut(&tag).unwrap().extend_from_slice(t);
+        }
+        order.into_iter().map(|t| by_tag.remove(&t).unwrap()).collect::<Vec<_>>()
+    };
+    // The bodies are built from panel-cut pieces whose borders an
+    // edge-collapse simplifier may not move (it kept ~45 % of LOD 2 even at a
+    // 0.3 m error), so each group is clustered instead (meshopt's sloppy
+    // simplifier, which ignores topology) down to the error. A group of at
+    // most `FAR_BODY_KEEP_TRIANGLES` (a lamp lens, a badge) is kept whole, so
+    // the lamps still light at night. The clustering runs over every vertex
+    // it is handed, so each group gets a vertex buffer of its own vertices
+    // alone (else it would pick another material's vertex), and its error is
+    // relative to that buffer's extent.
+    let total = ((src.opaque.len() + src.glass.len()) / 3).max(1);
+    let simplify = |list: &[u32]| -> Vec<u32> {
+        let mut out = vec![];
+        for g in groups(list) {
+            let n = g.len() / 3;
+            if n <= FAR_BODY_KEEP_TRIANGLES {
+                out.extend_from_slice(&g);
+                continue;
+            }
+            // the group's own vertices (local index -> source index) and its indices into them.
+            let mut local: BTreeMap<u32, u32> = BTreeMap::new();
+            let mut back: Vec<u32> = vec![];
+            let li: Vec<u32> = g
+                .iter()
+                .map(|&i| {
+                    *local.entry(i).or_insert_with(|| {
+                        back.push(i);
+                        back.len() as u32 - 1
+                    })
+                })
+                .collect();
+            let pos: Vec<[f32; 3]> = back.iter().map(|&i| src.vertices[i as usize].pos).collect();
+            let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
+            for p in &pos {
+                for k in 0..3 {
+                    lo[k] = lo[k].min(p[k]);
+                    hi[k] = hi[k].max(p[k]);
+                }
+            }
+            let extent = (0..3).map(|k| hi[k] - lo[k]).fold(0.0f32, f32::max).max(1e-3);
+            let Ok(adapter) = meshopt::VertexDataAdapter::new(bytemuck::cast_slice(&pos), std::mem::size_of::<[f32; 3]>(), 0) else {
+                out.extend_from_slice(&g);
+                continue;
+            };
+            let want = (n * target_triangles).div_ceil(total).max(FAR_BODY_KEEP_TRIANGLES);
+            let s = meshopt::simplify_sloppy(&li, &adapter, want * 3, max_error_m / extent, None);
+            if s.is_empty() {
+                out.extend_from_slice(&g);
+            } else {
+                out.extend(s.iter().map(|&l| back[l as usize]));
+            }
+        }
+        out
+    };
+    let (opaque, glass) = (simplify(&src.opaque), simplify(&src.glass));
+    // Keep the vertices still used, in first-use order.
+    let mut remap = vec![u32::MAX; src.vertices.len()];
+    let mut b = CookedBody { materials: src.materials.clone(), material_names: src.material_names.clone(), pivots: src.pivots, min: src.min, max: src.max, ..Default::default() };
+    let mut take = |list: &[u32], vertices: &mut Vec<AgentVertex>| -> Vec<u32> {
+        list.iter()
+            .map(|&i| {
+                if remap[i as usize] == u32::MAX {
+                    remap[i as usize] = vertices.len() as u32;
+                    vertices.push(src.vertices[i as usize]);
+                }
+                remap[i as usize]
+            })
+            .collect()
+    };
+    b.opaque = take(&opaque, &mut b.vertices);
+    b.glass = take(&glass, &mut b.vertices);
+    b.triangles = ((b.opaque.len() + b.glass.len()) / 3) as u32;
+    if b.opaque.is_empty() {
+        return box_body(src.min, src.max);
+    }
+    b
+}

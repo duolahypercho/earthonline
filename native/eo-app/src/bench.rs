@@ -697,6 +697,8 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
                 let mut list = vec![];
                 if std::env::var_os("EO_CAPTURE_SIGNS").is_some() {
                     list.extend(sign_shots::poses(&world, aspect, args.far)); // the sign capture card instead
+                } else if let Some(n) = std::env::var("EO_CAPTURE_STREETS").ok().and_then(|v| v.trim().parse::<usize>().ok()) {
+                    list.extend(crate::props::street_audit_poses(&world, aspect, args.far, n)); // the citywide street audit instead
                 } else {
                     for (seg_name, frame) in [("kit_street", 260usize), ("sidewalk_walk", 195)] {
                         if let Some(seg) = segs.iter().find(|s| s.name == seg_name) {
@@ -2049,6 +2051,9 @@ pub fn run(args: &Args, process_start: Instant) -> Result<()> {
     out["grime"] = crate::quality::grime_json(args); // surface weathering (`--grime`)
     out["street_life"] = crate::quality::street_life_json(args); // litter, graffiti, posters (`--street-life`)
     out["stand_ins"] = crate::quality::stand_ins_json(args); // procedural models for absent prop GLBs (`--stand-ins`)
+    out["surveyed_furniture"] = crate::quality::surveyed_furniture_json(args); // the furniture walk's mode (`--surveyed-furniture`)
+    out["tree_basins"] = crate::quality::tree_basins_json(args); // the street trees' basins (`--tree-basins`)
+    out["car_detail"] = crate::quality::car_detail_json(args); // far bodies and nearer full-detail cars (`--car-detail`)
     out["photo_finish"] = crate::quality::photo_finish_json(args); // the camera, the air, the lens (`--photo-finish`)
     out["facade_clutter"] = crate::quality::facade_clutter_json(args); // fire escapes, awnings, signs (`--facade-clutter`)
     out["shop_light"] = crate::quality::shop_light_json(args, eo_render::shop_lights::census().as_ref()); // lit shop windows (`--shop-light`)

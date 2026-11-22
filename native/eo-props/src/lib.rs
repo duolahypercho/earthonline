@@ -23,6 +23,7 @@
 //! (`PropsWorld::plan_tile`), pure and deterministic: nothing depends on the
 //! camera or on which tiles were asked before.
 
+pub mod basins; // street tree basins (`--tree-basins`)
 pub mod boats; // moored boats at the floating docks' berths (eo-app `--no-boats`)
 pub mod clearance;
 pub mod data;
@@ -107,9 +108,13 @@ pub enum Model {
     PosterHoarding = 32,
     PedSignalPost = 33,
     SignalCabinet = 34,
+    /// A street tree's basin (`basins.rs`, `--tree-basins`): a flat panel, `scale` = (across
+    /// the walk, 1, along the kerb), local +Z along the kerb; `variant` = the grade along
+    /// the kerb as mm per m + 1000 (props_types.wgsl `PR_TREE_BASIN` tilts it, as the pad).
+    TreeBasin = 35,
 }
 
-pub const MODEL_COUNT: usize = 35;
+pub const MODEL_COUNT: usize = 36;
 
 impl Model {
     /// The model a street-furniture kind (`STREET_FURNITURE_KINDS` id) draws as; None for the
@@ -209,6 +214,9 @@ pub struct Standards {
     pub detectable_warning_depth: f64,
     pub no_parking_driveway: f64,
     pub no_parking_daylighting: f64,
+    /// Street tree basins (`street-tree-basin-sf`, Director's Order 187,246): per sidewalk
+    /// class (the surveyed width it starts at, the basin across the walk, along the kerb), m.
+    pub tree_basin: [[f64; 3]; 4],
 }
 
 impl Standards {
@@ -225,6 +233,15 @@ impl Standards {
             detectable_warning_depth: ca.metric_key("detectable-warning-size", "depthMin")?,
             no_parking_driveway: ca.metric("no-parking-driveway")?,
             no_parking_daylighting: ca.metric_key("no-parking-crosswalk-daylighting", "approachSide")?,
+            tree_basin: {
+                let k = |key: &str| ca.metric_key("street-tree-basin-sf", key);
+                [
+                    [k("minSidewalkForTrees")?, k("basinAcrossWalk7ft6")?, k("basinAlongWalk7ft6")?],
+                    [k("walk11ft")?, k("basinAcrossWalk11")?, k("basinAlongWalk11")?],
+                    [k("walk12ft")?, k("basinAcrossWalk12")?, k("basinAlongWalk12")?],
+                    [k("walk13ft")?, k("basinAcrossWalk13")?, k("basinAlongWalk13")?],
+                ]
+            },
         })
     }
 }
@@ -261,6 +278,8 @@ pub struct PropsWorld {
     pub(crate) kerb_rules: std::sync::OnceLock<parking_rules::KerbRules>,
     /// The ribbon each list tree belongs to (nearest centreline), computed once.
     tree_owner: Mutex<HashMap<u32, u32>>,
+    /// `--tree-basins` (`basins::tree_basins()` when the world was built): a basin under each street tree.
+    pub tree_basins: bool,
     /// The street-furniture walk's world (built on first use). // props2
     furniture: std::sync::OnceLock<Arc<furniture::Furniture>>,
     /// With structures: the clearance's sizes, each signalised junction
@@ -325,6 +344,7 @@ impl PropsWorld {
             mouths: std::sync::OnceLock::new(),
             kerb_rules: std::sync::OnceLock::new(),
             tree_owner: Mutex::new(HashMap::new()),
+            tree_basins: basins::tree_basins(),
             furniture: std::sync::OnceLock::new(),
             clear_dims: std::sync::OnceLock::new(),
             clear_nodes: Mutex::new(HashMap::new()),
@@ -493,6 +513,10 @@ impl PropsWorld {
         // the furniture walk (trees, palms and every other kind, lamps with their lights).
         let fe = self.furniture().entry(self, ei as usize);
         ep.props.extend(fe.props.iter().copied());
+        // (`--tree-basins`) a basin under each street tree and palm on this ribbon's footways.
+        if self.tree_basins {
+            basins::entry_basins(self, e, &fe.props, &mut ep.props);
+        }
         ep.lights.extend(fe.lights.iter().copied());
         ep.parked = parking::plan_entry(self, ei as usize);
         let ep = Arc::new(ep);

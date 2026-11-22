@@ -220,6 +220,7 @@ fn base_args() -> Args {
         facade_clutter: 0, // `--facade-clutter` (quality::Switches)
         player_contact: false, // below, from `Presence`
         landmark_access: true,
+        car_detail: 0, // `--car-detail` (quality::Switches)
     }
 }
 

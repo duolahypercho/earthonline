@@ -216,6 +216,12 @@ pub struct PropsGpu {
     cull_s: [wgpu::ComputePipeline; 3],
     cull_c: [wgpu::ComputePipeline; 3],
     draw_bg: wgpu::BindGroup,
+    /// group 0 again with the CC0 scanned sets in bindings 17-20 and 22 (once they are on the
+    /// GPU, `bind_cc0`): the tree basins' soil (props_draw.wgsl `pr_basin`).
+    draw_bg_cc0: std::sync::OnceLock<wgpu::BindGroup>,
+    draw_parts: DrawParts,
+    /// the CC0 switches the props' frame carries (`set_cc0_run`; 0 until `bind_cc0`).
+    cc0_run: AtomicU32,
     data_bg: wgpu::BindGroup,
     view_bg: wgpu::BindGroup,
     opaque: wgpu::RenderPipeline,
@@ -307,6 +313,54 @@ fn preserve_coverage(chain: &mut [Vec<u8>], res: usize, test: f32) {
         for p in m.chunks_exact_mut(4) {
             p[3] = (p[3] as f32 * s).round().clamp(0.0, 255.0) as u8;
         }
+    }
+}
+
+/// What the props' group 0 binds, kept so it can be bound again with the CC0 sets.
+struct DrawParts {
+    layout: wgpu::BindGroupLayout,
+    frame: wgpu::Buffer,
+    objects: wgpu::Buffer,
+    materials: wgpu::Buffer,
+    kit: [wgpu::TextureView; 3],
+    sampler: wgpu::Sampler,
+    probe: wgpu::TextureView,
+    probe_sh: wgpu::Buffer,
+    /// the CC0 stand-ins: a one-texel array and a small table.
+    cc0_tex: wgpu::TextureView,
+    cc0_layers: wgpu::Buffer,
+}
+
+impl DrawParts {
+    fn bind(&self, d: &wgpu::Device, label: &str, cc0: Option<(&[wgpu::TextureView; 3], &wgpu::Sampler, &wgpu::Buffer)>) -> wgpu::BindGroup {
+        fn tv(binding: u32, v: &wgpu::TextureView) -> wgpu::BindGroupEntry<'_> {
+            wgpu::BindGroupEntry { binding, resource: wgpu::BindingResource::TextureView(v) }
+        }
+        let (mat, samp, layers) = match cc0 {
+            Some((m, s, l)) => ([&m[0], &m[1], &m[2]], s, l),
+            None => ([&self.cc0_tex, &self.cc0_tex, &self.cc0_tex], &self.sampler, &self.cc0_layers),
+        };
+        d.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(label),
+            layout: &self.layout,
+            entries: &[
+                wgpu::BindGroupEntry { binding: 0, resource: self.frame.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 1, resource: self.objects.as_entire_binding() },
+                wgpu::BindGroupEntry { binding: 2, resource: self.materials.as_entire_binding() },
+                tv(3, &self.kit[0]),
+                tv(4, &self.kit[1]),
+                tv(5, &self.kit[2]),
+                wgpu::BindGroupEntry { binding: 6, resource: wgpu::BindingResource::Sampler(&self.sampler) },
+                tv(14, &self.probe),
+                wgpu::BindGroupEntry { binding: 15, resource: wgpu::BindingResource::Sampler(&self.sampler) },
+                wgpu::BindGroupEntry { binding: 16, resource: self.probe_sh.as_entire_binding() },
+                tv(17, mat[0]),
+                tv(18, mat[1]),
+                tv(19, mat[2]),
+                wgpu::BindGroupEntry { binding: 20, resource: wgpu::BindingResource::Sampler(samp) },
+                wgpu::BindGroupEntry { binding: 22, resource: layers.as_entire_binding() },
+            ],
+        })
     }
 }
 
@@ -504,6 +558,13 @@ impl PropsGpu {
                 tex(14, fs),
                 entry(15, fs, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
                 entry(16, fs, sbuf(true)),
+                // the CC0 material sets and their layer table (cc0.wgsl bindings 17-20, 22): the
+                // tree basins' soil scan; stand-ins until `bind_cc0`.
+                tex(17, fs),
+                tex(18, fs),
+                tex(19, fs),
+                entry(20, fs, wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering)),
+                entry(22, fs, sbuf(true)),
             ],
         });
         let probe_stand_in = d.create_texture(&wgpu::TextureDescriptor {
@@ -518,22 +579,29 @@ impl PropsGpu {
         });
         let probe_view = view(&probe_stand_in);
         let probe_sh = empty("prop-probe-sh-stand-in", 160, U::STORAGE);
-        let draw_bg = d.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("prop-draw-bg"),
-            layout: &draw_bgl,
-            entries: &[
-                bge(0, &frame),
-                bge(1, &objects),
-                bge(2, &materials),
-                wgpu::BindGroupEntry { binding: 3, resource: wgpu::BindingResource::TextureView(&av) },
-                wgpu::BindGroupEntry { binding: 4, resource: wgpu::BindingResource::TextureView(&nv) },
-                wgpu::BindGroupEntry { binding: 5, resource: wgpu::BindingResource::TextureView(&ov) },
-                wgpu::BindGroupEntry { binding: 6, resource: wgpu::BindingResource::Sampler(&sampler) },
-                wgpu::BindGroupEntry { binding: 14, resource: wgpu::BindingResource::TextureView(&probe_view) },
-                wgpu::BindGroupEntry { binding: 15, resource: wgpu::BindingResource::Sampler(&sampler) },
-                wgpu::BindGroupEntry { binding: 16, resource: probe_sh.as_entire_binding() },
-            ],
+        let cc0_stand_in = d.create_texture(&wgpu::TextureDescriptor {
+            label: Some("prop-cc0-stand-in"),
+            size: wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
         });
+        let draw_parts = DrawParts {
+            layout: draw_bgl.clone(),
+            frame: frame.clone(),
+            objects: objects.clone(),
+            materials: materials.clone(),
+            kit: [av.clone(), nv.clone(), ov.clone()],
+            sampler: sampler.clone(),
+            probe: probe_view,
+            probe_sh,
+            cc0_tex: view(&cc0_stand_in),
+            cc0_layers: empty("prop-cc0-layers-stand-in", 64, U::STORAGE),
+        };
+        let draw_bg = draw_parts.bind(d, "prop-draw-bg", None);
         let draw_src = format!("{}\n{}\n{}", crate::look::city_shader_source_variant_probes(crate::ambient::ShaderLevels::Plane, crate::look::ShadowLevels::Near, false), pr_types_src(), include_str!("props_draw.wgsl")); // the ambient volume's plane only, no single-probe lookups (their frame names none; lighting: ambient::ShaderLevels, room for the probe grid)
         let draw_mod = d.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some("props_draw.wgsl"), source: wgpu::ShaderSource::Wgsl(draw_src.into()) });
         let draw_layout = d.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -729,6 +797,9 @@ impl PropsGpu {
             cull_s,
             cull_c,
             draw_bg,
+            draw_bg_cc0: std::sync::OnceLock::new(),
+            draw_parts,
+            cc0_run: AtomicU32::new(0),
             data_bg,
             view_bg,
             opaque,
@@ -756,6 +827,18 @@ impl PropsGpu {
             dome: lib.dome,
             bytes,
         })
+    }
+
+    /// Bind the CC0 material sets (once they are all on the GPU; later calls are ignored).
+    pub fn bind_cc0(&self, d: &wgpu::Device, mat: &[wgpu::TextureView; 3], sampler: &wgpu::Sampler, layers: &wgpu::Buffer) {
+        if self.draw_bg_cc0.get().is_none() {
+            let _ = self.draw_bg_cc0.set(self.draw_parts.bind(d, "prop-draw-bg-cc0", Some((mat, sampler, layers))));
+        }
+    }
+
+    /// The CC0 switches (`cc0::Cc0Gpu::run_bits`) for the next `update`: none until `bind_cc0`.
+    pub fn set_cc0_run(&self, bits: u32) {
+        self.cc0_run.store(if self.draw_bg_cc0.get().is_some() { bits } else { 0 }, Ordering::Relaxed);
     }
 
     /// Props on or off (off: no pass runs, nothing is drawn).
@@ -885,7 +968,7 @@ impl PropsGpu {
             sun_color: [1.0, 1.0, 1.0, 0.0],
             ambient_sky: [0.0; 4],
             ambient_ground: [0.0; 4],
-            copy_step: [0.0; 4],
+            copy_step: [0.0, 0.0, 0.0, self.cc0_run.load(Ordering::Relaxed) as f32],
         };
         queue.write_buffer(&self.frame, 0, bytemuck::bytes_of(&f));
     }
@@ -1016,7 +1099,7 @@ impl PropsGpu {
         if !self.active.load(Ordering::Relaxed) {
             return;
         }
-        pass.set_bind_group(0, &self.draw_bg, &[]);
+        pass.set_bind_group(0, self.draw_bg_cc0.get().unwrap_or(&self.draw_bg), &[]);
         look.bind_main(pass);
         pass.set_bind_group(2, &self.data_bg, &[]);
         pass.set_vertex_buffer(0, self.vbuf.slice(..));

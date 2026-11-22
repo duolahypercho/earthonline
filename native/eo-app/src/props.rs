@@ -77,6 +77,11 @@ pub struct Props2Args {
     /// GLB is absent from the checkout draws its procedural stand-in
     /// (`eo_render::props_lib2::LibExtras::stand_ins`). Off: the grey proxies.
     pub stand_ins: bool,
+    /// `--surveyed-furniture` (quality.rs; every tier): the furniture walk invents nothing
+    /// the city surveys and none of the rare kinds (eo-props `furniture::surveyed_first`).
+    pub surveyed_furniture: bool,
+    /// `--tree-basins` (quality.rs; every tier): a basin under each street tree (eo-props `basins`).
+    pub tree_basins: bool,
     /// The moored boats at the floating docks' berths (eo-props `boats`); `--no-boats`
     /// (or `--no-props2`) leaves them out of the library and draws none.
     pub boats: bool,
@@ -87,7 +92,7 @@ pub struct Props2Args {
 
 impl Default for Props2Args {
     fn default() -> Self {
-        Self { furniture: true, eztree: true, overhead: true, wires: true, features: eo_render::props::F_ALL, capture: false, stand_ins: false, boats: true, street_v2: true }
+        Self { furniture: true, eztree: true, overhead: true, wires: true, features: eo_render::props::F_ALL, capture: false, stand_ins: false, surveyed_furniture: false, tree_basins: false, boats: true, street_v2: true }
     }
 }
 
@@ -96,7 +101,7 @@ impl Props2Args {
     pub fn parse_flag(&mut self, s: &str) -> bool {
         match s {
             "--no-props2" => {
-                *self = Self { furniture: false, eztree: false, overhead: false, wires: false, features: 0, capture: self.capture, stand_ins: self.stand_ins, boats: false, street_v2: false };
+                *self = Self { furniture: false, eztree: false, overhead: false, wires: false, features: 0, capture: self.capture, stand_ins: self.stand_ins, surveyed_furniture: self.surveyed_furniture, tree_basins: self.tree_basins, boats: false, street_v2: false };
             }
             "--no-furniture" => self.furniture = false,
             "--no-eztree" => self.eztree = false,
@@ -344,7 +349,11 @@ impl PropsRuntime {
                     // The same structure levels as the sim, so the signal junctions match it (`--structures`).
                     let levels = structures.as_ref().map(|s| s.way_levels().clone()).unwrap_or_default();
                     let source = Arc::new(eo_sim::native::load(&paths)?.with_levels(levels));
+                    // the tree basins (`--tree-basins`), read when the world is made, and the furniture
+                    // walk's mode (`--surveyed-furniture`), read when its furniture is installed.
+                    eo_props::basins::set_tree_basins(p2.tree_basins);
                     let world = Arc::new(PropsWorld::new(street, js, std).with_structures(structures));
+                    eo_props::furniture::set_surveyed_first(p2.surveyed_furniture);
                     if p2.furniture || p2.eztree {
                         world.install_furniture(&city.buildings)?;
                     }
@@ -1142,11 +1151,15 @@ fn cook(world: &PropsWorld, source: &eo_sim::native::NativeSource, junctions: &M
     vegetation::instances(&plants, &mut instances, &mut extra_counts);
     for p in &props {
         // the walk's kinds (hydrants ... signal cabinets) are `--no-furniture`'s.
-        if (p.model as u32) >= Model::Hydrant as u32 && !p2.furniture {
+        if (p.model as u32) >= Model::Hydrant as u32 && p.model != Model::TreeBasin && !p2.furniture {
             continue;
         }
         *counts.entry(p.model).or_insert(0) += 1;
-        let slope = if p.model == Model::TactilePad { (p.variant as f32 - 1000.0) / 1000.0 } else { 0.0 };
+        let slope = match p.model {
+            Model::TactilePad => (p.variant as f32 - 1000.0) / 1000.0,
+            Model::TreeBasin => eo_props::basins::slope_of(p.variant) as f32,
+            _ => 0.0,
+        };
         let (model, scale) = match p.model {
             // a species' ez-tree (scale = the JS item's scale, heightScale, scale on the metre mesh), or
             // with `--no-eztree` the card tree at that species' size (crown diameter, height, crown diameter).
@@ -1434,6 +1447,76 @@ mod capture_pose_tests {
 /// tree-lined street, a kerb with a hydrant and parked cars, a street with lights and
 /// overhead wires, a sign plate close up (each near the SoMa or Inner Sunset oracle
 /// window centres), plus the existing props cameras.
+/// The citywide street audit (`EO_CAPTURE_STREETS=N` with `--capture-props2`):
+/// up to `n` street-level views spread over the whole map, so a change to the
+/// street is judged across the city and not at one corner. The street plan's
+/// extent is cut into a grid of about `n` cells; in each, the longest drawn
+/// run (no structure leg, at least 60 m) of a class taken in turn (arterial,
+/// collector, residential; any if the cell has none of it) is seen from its
+/// wider footway, a third of the way along, at eye height, looking 35 m on
+/// along it and a little down. Deterministic: the same plan gives the same
+/// views, so two runs (with and without a change) are matched.
+pub fn street_audit_poses(world: &crate::World, aspect: f32, far: f32, n: usize) -> Vec<(String, eo_render::camera::Camera, String)> {
+    let mut out = vec![];
+    let Some(street) = world.street.as_ref().map(|s| s.world.clone()) else { return out };
+    let plan = &street.plan;
+    let ground = |x: f64, z: f64| street.surface_at(x, z, None) as f32;
+    let class_of = |h: &str| match h {
+        "motorway" | "trunk" | "primary" | "secondary" | "motorway_link" | "trunk_link" | "primary_link" | "secondary_link" => 0,
+        "tertiary" | "tertiary_link" | "unclassified" => 1,
+        "residential" | "living_street" => 2,
+        _ => 3,
+    };
+    let drawn: Vec<usize> = (0..plan.entries.len()).filter(|&i| plan.entries[i].structure_leg.is_none() && plan.entries[i].length >= 60.0 && class_of(&plan.entries[i].highway) < 3).collect();
+    if drawn.is_empty() || n == 0 {
+        return out;
+    }
+    let mid = |e: &eo_street::plan::Entry| e.points[e.points.len() / 2];
+    let (mut lo, mut hi) = ([f64::MAX; 2], [f64::MIN; 2]);
+    for &i in &drawn {
+        let p = mid(&plan.entries[i]);
+        for k in 0..2 {
+            lo[k] = lo[k].min(p[k]);
+            hi[k] = hi[k].max(p[k]);
+        }
+    }
+    let g = (n as f64).sqrt().ceil().max(1.0) as usize;
+    let cell = |p: [f64; 2]| -> usize {
+        let cx = (((p[0] - lo[0]) / (hi[0] - lo[0]).max(1.0)) * g as f64).floor().clamp(0.0, g as f64 - 1.0) as usize;
+        let cz = (((p[1] - lo[1]) / (hi[1] - lo[1]).max(1.0)) * g as f64).floor().clamp(0.0, g as f64 - 1.0) as usize;
+        cz * g + cx
+    };
+    let mut cells: Vec<Vec<usize>> = vec![vec![]; g * g];
+    for &i in &drawn {
+        cells[cell(mid(&plan.entries[i]))].push(i);
+    }
+    let names = ["arterial", "collector", "residential"];
+    let mut k = 0usize;
+    for (c, list) in cells.iter().enumerate() {
+        if out.len() >= n || list.is_empty() {
+            continue;
+        }
+        let want = c % 3;
+        let longest = |f: &dyn Fn(&eo_street::plan::Entry) -> bool| list.iter().copied().filter(|&i| f(&plan.entries[i])).max_by(|&a, &b| plan.entries[a].length.total_cmp(&plan.entries[b].length));
+        let Some(ei) = longest(&|e| class_of(&e.highway) == want).or_else(|| longest(&|_| true)) else { continue };
+        let e = &plan.entries[ei];
+        let s = (e.trim_start + (e.length - e.trim_start - e.trim_end).max(0.0) * 0.35).clamp(0.0, e.length);
+        let f = eo_props::station_at(e, s, false);
+        // the wider footway's middle (+n is walks[0]); on the carriageway by the kerb where there is none.
+        let (side, walk) = if e.walks[0] >= e.walks[1] { (1.0, e.walks[0]) } else { (-1.0, e.walks[1]) };
+        let u = if walk >= 1.0 { side * (e.half + walk * 0.5) } else { side * e.half * 0.6 };
+        let (ex, ez) = (f.x + f.nx * u, f.z + f.nz * u);
+        let eye = Vec3::new(ex as f32, ground(ex, ez) + 1.7, ez as f32);
+        let ahead = eo_props::station_at(e, (s + 35.0).min(e.length), false);
+        let (ax, az) = (ahead.x + ahead.nx * u * 0.3, ahead.z + ahead.nz * u * 0.3);
+        let at = Vec3::new(ax as f32, ground(ax, az) + 0.9, az as f32);
+        let cls = names[class_of(&e.highway).min(2)];
+        out.push((format!("street-{k:02}-{cls}"), look_at(eye, at, far, aspect), format!("ribbon {} ({}, {} lanes, {:.0} m half-width) at ({:.0}, {:.0}), audit cell {c} of {}", e.id, e.highway, e.lanes, e.half, ex, ez, g * g)));
+        k += 1;
+    }
+    out
+}
+
 pub fn props2_poses(world: &crate::World, aspect: f32, far: f32) -> Vec<(String, eo_render::camera::Camera, String)> {
     let mut out = vec![];
     let Some(street) = world.street.as_ref().map(|s| s.world.clone()) else { return out };
@@ -1441,7 +1524,11 @@ pub fn props2_poses(world: &crate::World, aspect: f32, far: f32) -> Vec<(String,
     let Ok(ca) = eo_data::CaStandards::load(&world.paths) else { return out };
     let Ok(std) = eo_props::Standards::load(&ca) else { return out };
     let pw = PropsWorld::new(street.clone(), Arc::new(js), std); // no structures: the same poses with and without `--structures`
+    // the walk as ported, so the poses are the same with and without `--surveyed-furniture`.
+    let mode = eo_props::furniture::surveyed_first();
+    eo_props::furniture::set_surveyed_first(false);
     let _ = pw.install_furniture(&world.city.buildings);
+    eo_props::furniture::set_surveyed_first(mode);
     let plan = &street.plan;
     let ground = |x: f32, z: f32| street.surface_at(x as f64, z as f64, None) as f32;
     let soma = eo_data::groundscale::plan([1600.0f64, -400.0]); // on the scaled plan
