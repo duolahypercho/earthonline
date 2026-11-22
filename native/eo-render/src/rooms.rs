@@ -326,14 +326,17 @@ pub fn wgsl_constants() -> String {
     // the switches of the room fixes (see `RoomFixes`).
     let f = RoomFixes::from_args();
     s.push_str(&format!(
-        "const RM_FRAMES: bool = {};\nconst RM_DAY_DEPTH: f32 = {:?};\nconst RM_DAY_THROUGH: f32 = {:?};\nconst RM_BLIND_RUNS: bool = {};\nconst RM_PANE_TV: bool = {};\nconst RM_PANE_TV_SHIFT: u32 = {}u;\nconst RM_PANE_TV_REFERENCE: f32 = {:?};\n",
+        "const RM_FRAMES: bool = {};\nconst RM_DAY_DEPTH: f32 = {:?};\nconst RM_DAY_THROUGH: f32 = {:?};\nconst RM_BLIND_RUNS: bool = {};\nconst RM_PANE_TV: bool = {};\nconst RM_PANE_TV_SHIFT: u32 = {}u;\nconst RM_PANE_TV_REFERENCE: f32 = {:?};\nconst RM_LIT_RUNS: bool = {};\nconst RM_RUN_LIT: f32 = {:?};\nconst RM_LIT_IN_RUN: f32 = {:?};\n",
         f.frames,
         if f.dim { DAY_DEPTH } else { 1.0 },
         if f.dim { DAY_THROUGH } else { 1.0 },
         f.blind_runs,
         f.pane_tv,
         PANE_TV_SHIFT,
-        PANE_TV_REFERENCE
+        PANE_TV_REFERENCE,
+        f.lit_runs,
+        RUN_LIT,
+        LIT_IN_RUN
     ));
     s
 }
@@ -351,13 +354,20 @@ pub fn wgsl_constants() -> String {
 /// cell (the scatter of pale cells over a dark tower) (`--no-room-blind-runs`).
 /// What a pane lets through goes by its glass (`pane_transmittance`), so a
 /// tinted or reflective tower reads dark and its blinds faint, as through
-/// real tinted glass (`--no-pane-transmittance`).
+/// real tinted glass (`--no-pane-transmittance`). Lit windows come on through
+/// civil twilight, not from 16 degrees of sun (`LIT_DUSK_RAMP`), and an office
+/// lights by tenant: a run of room cells along a floor is lit or dark
+/// together, at the run's own lamp colour and level, instead of a coin per
+/// window at one near-white level (the chequerboard of lit and black cells
+/// over a tower at dusk); a dark pane keeps its glass's reflection as the
+/// light fades (`--no-room-lit-runs`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RoomFixes {
     pub frames: bool,
     pub dim: bool,
     pub blind_runs: bool,
     pub pane_tv: bool,
+    pub lit_runs: bool,
 }
 
 pub const DAY_DEPTH: f32 = 0.5;
@@ -373,9 +383,28 @@ impl RoomFixes {
             dim: !args.iter().any(|a| a == "--no-room-dim"),
             blind_runs: !args.iter().any(|a| a == "--no-room-blind-runs"),
             pane_tv: !args.iter().any(|a| a == "--no-pane-transmittance"),
+            lit_runs: !args.iter().any(|a| a == "--no-room-lit-runs"),
         }
     }
+
+    /// `from_args`, read once.
+    pub fn get() -> Self {
+        static F: std::sync::OnceLock<RoomFixes> = std::sync::OnceLock::new();
+        *F.get_or_init(Self::from_args)
+    }
 }
+
+/// The sun altitudes (degrees) over which the windows' dusk goes from 0 to 1:
+/// as ported (`nightInteriors`, from 16 degrees down to 2), and under
+/// `--room-lit-runs` from 6 degrees down to -4 (the lamps behind the glass
+/// read only once the sunlit street is in shadow and the sky dims; civil
+/// twilight ends at -6) (INFERRED).
+pub const JS_DUSK_RAMP: (f64, f64) = (2.0, 16.0);
+pub const LIT_DUSK_RAMP: (f64, f64) = (-4.0, 6.0);
+/// `--room-lit-runs`: an office floor's tenant run is lit with this chance, and
+/// a window in a lit run with this one (rooms.wgsl `RM_RUN_LIT`, `RM_LIT_IN_RUN`) (INFERRED).
+pub const RUN_LIT: f32 = 0.7;
+pub const LIT_IN_RUN: f32 = 0.94;
 
 /// `--smooth-time`: the offices' night share comes back to full over this
 /// long before 07:00 (`drive_smooth`), where `drive` steps from its night
@@ -401,8 +430,10 @@ pub const CINE_DAYLIGHT_SHARE: f64 = 0.08;
 /// `smooth`), and under the cinematic look (`cinematic`) the occupancy raised
 /// by `CINE_OCCUPANCY_GAIN` (to 0.95), work z the screens' share and w the
 /// clock in seconds (the screens' flicker); work z 0 marks the default.
+/// Under `--room-lit-runs` (`RoomFixes::lit_runs`) the dusk goes by `LIT_DUSK_RAMP`.
 pub fn drive_look(sun_altitude_deg: f64, hour: f64, smooth: bool, cinematic: bool) -> ([f32; 4], [f32; 4]) {
-    let (mut env, mut work) = if smooth { drive_smooth(sun_altitude_deg, hour) } else { drive(sun_altitude_deg, hour) };
+    let ramp = if RoomFixes::get().lit_runs { LIT_DUSK_RAMP } else { JS_DUSK_RAMP };
+    let (mut env, mut work) = if smooth { drive_smooth_ramp(sun_altitude_deg, hour, ramp) } else { drive_ramp(sun_altitude_deg, hour, ramp) };
     if cinematic {
         env[1] = (env[1] as f64 * CINE_OCCUPANCY_GAIN).min(0.95) as f32;
         work[2] = CINE_TV_SHARE as f32;
@@ -415,7 +446,12 @@ pub fn drive_look(sun_altitude_deg: f64, hour: f64, smooth: bool, cinematic: boo
 /// to its full value over `OFFICE_MORNING_RAMP_H` before it; everything else
 /// is `drive`'s.
 pub fn drive_smooth(sun_altitude_deg: f64, hour: f64) -> ([f32; 4], [f32; 4]) {
-    let (env, mut work) = drive(sun_altitude_deg, hour);
+    drive_smooth_ramp(sun_altitude_deg, hour, JS_DUSK_RAMP)
+}
+
+/// `drive_smooth` with the dusk over `ramp` (sun altitudes, degrees).
+pub fn drive_smooth_ramp(sun_altitude_deg: f64, hour: f64, ramp: (f64, f64)) -> ([f32; 4], [f32; 4]) {
+    let (env, mut work) = drive_ramp(sun_altitude_deg, hour, ramp);
     let dusk = env[0] as f64;
     if dusk > 0.0 {
         let since = (((hour - 18.0) % 24.0) + 24.0) % 24.0;
@@ -433,11 +469,16 @@ pub fn drive_smooth(sun_altitude_deg: f64, hour: f64) -> ([f32; 4], [f32; 4]) {
 /// model: env = (dusk, occupancy, shop occupancy, cool share), work =
 /// (office share, pixel angle).
 pub fn drive(sun_altitude_deg: f64, hour: f64) -> ([f32; 4], [f32; 4]) {
+    drive_ramp(sun_altitude_deg, hour, JS_DUSK_RAMP)
+}
+
+/// `drive` with the dusk over `ramp` (sun altitudes, degrees: full at the first, none from the second).
+pub fn drive_ramp(sun_altitude_deg: f64, hour: f64, ramp: (f64, f64)) -> ([f32; 4], [f32; 4]) {
     let ss = |a: f64, b: f64, x: f64| {
         let t = ((x - a) / (b - a)).clamp(0.0, 1.0);
         t * t * (3.0 - 2.0 * t)
     };
-    let dusk = 1.0 - ss(2.0, 16.0, sun_altitude_deg);
+    let dusk = 1.0 - ss(ramp.0, ramp.1, sun_altitude_deg);
     let wrap = |x: f64| ((x % 24.0) + 24.0) % 24.0;
     let bell = |centre: f64, width: f64| {
         let mut d = wrap(hour - centre).abs();

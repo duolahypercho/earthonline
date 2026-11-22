@@ -97,16 +97,30 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     let floor_phase = rm_h(fract(floor_key.x + storey * 0.6180339), 41.0);
     let floor_share = min(work.x / 0.7, 1.0);
     let floor_lit = rm_ss(floor_phase - band / 2.0, floor_phase + band / 2.0, floor_share);
-    let bay_lit = step(rm_h(seed, 42.0), 0.7);
+    var bay_lit = step(rm_h(seed, 42.0), 0.7);
+    // (`--room-lit-runs`) an office tenant's run is lit or dark together; in a lit run nearly every window.
+    let run_on = RM_LIT_RUNS && rm_run_seed >= 0.0 && office > 0.5;
+    if (run_on) {
+        bay_lit = step(rm_h(rm_run_seed, 43.0), RM_RUN_LIT) * step(rm_h(seed, 42.0), RM_LIT_IN_RUN);
+    }
     let lit = mix(lit_home, floor_lit * bay_lit, office);
     // (`--look cinematic`, stage L2: work z the screens' share, w the clock; rooms.rs `drive_look`)
     let cine = SF_CINEMATIC && work.z > 0.0;
     let tv = step(rm_h(seed, 2.0), select(0.12, work.z, cine)) * (1.0 - shop) * (1.0 - office);
-    let level = mix(mix(0.35, 1.35, rm_h(seed, 3.0)), mix(0.55, 0.8, rm_h(seed, 3.0)), office);
+    var level = mix(mix(0.35, 1.35, rm_h(seed, 3.0)), mix(0.55, 0.8, rm_h(seed, 3.0)), office);
+    if (run_on) {
+        // the run's own level (a dimmed floor, a bright open plan), a little per window.
+        level = mix(0.35, 1.0, rm_h(rm_run_seed, 3.0)) * mix(0.88, 1.08, rm_h(seed, 3.0));
+    }
     let cool = step(rm_h(seed, 4.0), env.w - shop * 0.1);
     let temp_mix = rm_h(seed, 5.0);
     let home_color = mix(mix(RM_WARM_A, RM_WARM_B, temp_mix), mix(RM_COOL_A, RM_COOL_B, temp_mix), cool);
     var lamp_color = mix(home_color, mix(RM_OFFICE_A, RM_OFFICE_B, temp_mix), office);
+    if (run_on) {
+        // the run's own lamps: warm 3,300 K, neutral 4,000 K or cool 5,000-6,000 K.
+        let roll = rm_h(rm_run_seed, 5.0);
+        lamp_color = select(select(mix(RM_OFFICE_A, RM_OFFICE_B, rm_h(rm_run_seed, 6.0)), RM_COOL_A, roll < 0.55), RM_WARM_B, roll < 0.2);
+    }
     if (cine) {
         // the look's wider spread of homes: a low amber lamp, a cold daylight LED.
         let roll = rm_h(seed, 44.0);
@@ -288,7 +302,9 @@ fn rm_room(local_in: vec2<f32>, size: vec2<f32>, dir: vec3<f32>, seed_kind: vec4
     // Soft cap on the max channel toward paneCap 0.24 (not on a shop lit by its own light).
     if (shop_lit < 0.0) {
         let peak = max(max(max(radiance.x, radiance.y), radiance.z), 1e-4);
-        let over = peak / 0.24;
+        // (`--room-lit-runs`) an office run's own cap, so lit runs differ in brightness.
+        let cap = select(0.24, 0.24 * mix(0.5, 1.0, rm_h(rm_run_seed, 46.0)), run_on);
+        let over = peak / cap;
         radiance = radiance * pow(1.0 + over * over * over, -1.0 / 3.0);
     }
     let fresnel = 0.04 + 0.96 * pow(1.0 - into, 5.0);
@@ -427,7 +443,7 @@ fn rm_kit_pane(pane: vec4<f32>, pos: vec3<f32>, ng: vec3<f32>, cam: vec3<f32>, k
     let heading = floor(nw.x * 8.0 + 0.5) * 0.37 + floor(nw.z * 8.0 + 0.5) * 0.71;
     let plane_hash = fract(sin(plane_off * 0.1031 + heading) * 43758.5453);
     let pane_bottom = pos.y - local.y;
-    if (RM_BLIND_RUNS && office > 0.5) {
+    if ((RM_BLIND_RUNS || RM_LIT_RUNS) && office > 0.5) {
         // the tenant run: 3-7 room cells of 3.6 m along this facade plane's floor.
         let fl = floor(pos.y / 3.6);
         let run = 3.0 + floor(5.0 * fract(sin(plane_hash * 91.7 + fl * 12.9898) * 43758.5453));

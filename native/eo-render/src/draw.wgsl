@@ -1785,7 +1785,9 @@ fn shade(in: VOut) -> vec4<f32> {
             through = select(1.0, min(tv * tv / (RM_PANE_TV_REFERENCE * RM_PANE_TV_REFERENCE), 1.0), tv > 0.0);
         }
         s.albedo = mix(s.albedo, r.day.xyz * through, r.day.w);
-        s.metal = mix(s.metal, s.metal * 0.3, r.day.w);
+        // (`--room-lit-runs`) a dark pane keeps its glass's reflection as the light fades.
+        let keep_reflection = select(0.0, look.rooms_env.x, RM_LIT_RUNS);
+        s.metal = mix(s.metal, s.metal * 0.3, r.day.w * (1.0 - keep_reflection));
         // A blended pane's room reads at full strength after the blend (1 / opacity, floored at 0.25).
         let transmission = select(1.0, 1.0 / max(0.25, m.base.a), (m.flags & F_BLEND) != 0u);
         rm_emit = r.night * transmission;
